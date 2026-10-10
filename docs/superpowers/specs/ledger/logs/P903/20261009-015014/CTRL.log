@@ -1,0 +1,31 @@
+=== RUN   TestCustomerJourney_NewCustomerIsStranger
+--- PASS: TestCustomerJourney_NewCustomerIsStranger (0.00s)
+=== RUN   TestCustomerJourney_Transition
+--- PASS: TestCustomerJourney_Transition (0.00s)
+=== RUN   TestCustomerJourney_InvalidStage
+--- PASS: TestCustomerJourney_InvalidStage (0.00s)
+=== RUN   TestCustomerJourney_AutoTagOnTransition
+--- PASS: TestCustomerJourney_AutoTagOnTransition (0.00s)
+=== RUN   TestCustomerJourney_Touch
+--- PASS: TestCustomerJourney_Touch (0.00s)
+=== RUN   TestCustomerJourney_ListByStage
+--- PASS: TestCustomerJourney_ListByStage (0.00s)
+=== RUN   TestCustomerJourney_AutoDetectSleeping
+--- PASS: TestCustomerJourney_AutoDetectSleeping (0.00s)
+=== RUN   TestCustomerJourney_ListByStageSeesWritesFromAnotherInstance
+--- PASS: TestCustomerJourney_ListByStageSeesWritesFromAnotherInstance (0.00s)
+=== RUN   TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage
+--- PASS: TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage (0.00s)
+=== RUN   TestCustomerJourney_ListByStageIndexKeepsOneEntryPerCustomerPerStage
+--- PASS: TestCustomerJourney_ListByStageIndexKeepsOneEntryPerCustomerPerStage (0.00s)
+=== RUN   TestCustomerJourney_ListByStageOrderIsIndependentOfWriteOrder
+--- PASS: TestCustomerJourney_ListByStageOrderIsIndependentOfWriteOrder (0.00s)
+=== RUN   TestCustomerJourney_ListByStageFallsBackToLocalViewWhenIndexFails
+[90m2026-10-09T01:50:18+08:00[0m [33mWRN[0m [1mjourney.ListByStage(lead) 阶段索引读失败，退回本实例视图: context deadline exceeded[0m [36mcomponent=[0muser-server
+--- PASS: TestCustomerJourney_ListByStageFallsBackToLocalViewWhenIndexFails (0.00s)
+=== RUN   TestCustomerJourney_AutoDetectSleepingIndexesNewStage
+--- PASS: TestCustomerJourney_AutoDetectSleepingIndexesNewStage (0.00s)
+=== RUN   TestCustomerJourneySendTracker_NilService
+--- PASS: TestCustomerJourneySendTracker_NilService (0.00s)
+PASS
+ok  	hivemtk-user/internal/service	1.015s

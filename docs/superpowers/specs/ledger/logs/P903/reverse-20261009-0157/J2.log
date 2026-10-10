@@ -1,0 +1,8 @@
+--- FAIL: TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage (0.00s)
+    customer_journey_stage_index_test.go:62: 客户已离开 lead，仍出现在 lead 名单里: [cust_moves]
+[90m2026-10-09T02:10:34+08:00[0m [33mWRN[0m [1mjourney.ListByStage(lead) 阶段索引读失败，退回本实例视图: context deadline exceeded[0m [36mcomponent=[0muser-server
+--- FAIL: TestCustomerJourney_AutoDetectSleepingIndexesNewStage (0.00s)
+    customer_journey_stage_index_test.go:165: 客户已沉睡，仍留在 won 名单里: [cust_sleep]
+FAIL
+FAIL	hivemtk-user/internal/service	0.765s
+FAIL

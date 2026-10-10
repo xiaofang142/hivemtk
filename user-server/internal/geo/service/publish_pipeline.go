@@ -17,7 +17,6 @@ const (
 	PlatformXhs    = "xiaohongshu"
 	PlatformZhihu  = "zhihu"
 	PlatformCSDN   = "csdn"
-	PlatformWechat = "wechat"
 	PlatformMedium = "medium"
 	PlatformDevTo  = "devto"
 

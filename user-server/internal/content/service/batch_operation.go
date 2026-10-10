@@ -40,9 +40,8 @@ func NewBatchOperationService() *BatchOperationService {
 type ImportType string
 
 const (
-	ImportTypeClue    ImportType = "clue"
-	ImportTypeUser    ImportType = "user"
-	ImportTypeAccount ImportType = "account"
+	ImportTypeClue ImportType = "clue"
+	ImportTypeUser ImportType = "user"
 )
 
 // ImportError 导入错误

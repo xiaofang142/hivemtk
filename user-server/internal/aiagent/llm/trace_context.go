@@ -26,13 +26,10 @@ func init() { _db.RegisterExtraModels(&TraceEvent{}) }
 type TraceSpanKind string
 
 const (
-	TraceSpanKindLLMCall   TraceSpanKind = "llm_call"
-	TraceSpanKindToolCall  TraceSpanKind = "tool_call"
-	TraceSpanKindDBOp      TraceSpanKind = "db_op"
-	TraceSpanKindLog       TraceSpanKind = "log"
-	TraceSpanKindRAGQuery  TraceSpanKind = "rag_query"
-	TraceSpanKindAgent     TraceSpanKind = "agent"
-	TraceSpanKindWebSocket TraceSpanKind = "websocket"
+	TraceSpanKindLLMCall  TraceSpanKind = "llm_call"
+	TraceSpanKindToolCall TraceSpanKind = "tool_call"
+	TraceSpanKindDBOp     TraceSpanKind = "db_op"
+	TraceSpanKindLog      TraceSpanKind = "log"
 )
 
 // TraceEvent 全链路追踪事件（对应 trace_events 表）

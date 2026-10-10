@@ -111,8 +111,14 @@ const rules = {
 const handleLogin = async () => {
   if (!loginFormRef.value) return
 
+  // 校验不通过时 validate() 是 reject 一个字段集合，不是 Error：
+  // 它和"口令错/服务端挂了"必须分开。此前一起落进下面的 catch，空表单点登录会同时
+  // 打出一条 console.error 和一个"登录失败"红条——行内已经写了"请输入用户名"，
+  // 再弹一次失败是把用户的漏填报成了系统故障。
+  const passed = await loginFormRef.value.validate().catch(() => false)
+  if (!passed) return
+
   try {
-    await loginFormRef.value.validate()
     loading.value = true
 
     const response = await usersApi.login(loginForm)

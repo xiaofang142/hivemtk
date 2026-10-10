@@ -9,7 +9,6 @@ import (
 // 短信送达状态
 const (
 	SmsStatusPending   = "pending"
-	SmsStatusSending   = "sending"
 	SmsStatusSent      = "sent"
 	SmsStatusDelivered = "delivered"
 	SmsStatusFailed    = "failed"

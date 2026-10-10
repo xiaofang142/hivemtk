@@ -1,0 +1,4 @@
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/mut_journey_qpFG4Z/J0probe.go:37:28: undefined: MUT_J0probe_undefined
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL

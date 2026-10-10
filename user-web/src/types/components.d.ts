@@ -24,7 +24,6 @@ declare module 'vue' {
     CollaborativeChatInput: typeof import('./../components/CollaborativeChatInput.vue')['default']
     Collection: typeof import('@element-plus/icons-vue')['Collection']
     ConnectionIndicator: typeof import('./../components/ConnectionIndicator.vue')['default']
-    CrossPlatformPublisher: typeof import('./../components/cards/CrossPlatformPublisher.vue')['default']
     Document: typeof import('@element-plus/icons-vue')['Document']
     DouyinCardPreview: typeof import('./../components/DouyinCardPreview.vue')['default']
     Edit: typeof import('@element-plus/icons-vue')['Edit']

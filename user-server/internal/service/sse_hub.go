@@ -27,7 +27,6 @@ const (
 	SSEHeartbeatInterval = 15 * time.Second
 	SSEMaxConnPerIP      = 5
 	SSEClientBufferSize  = 100
-	SSEWriteTimeout      = 30 * time.Second
 )
 
 // SSEEvent SSE 事件

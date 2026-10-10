@@ -24,19 +24,17 @@ import (
 
 // 消息中台 - 业务错误码
 var (
-	ErrMessageHubInvalidPlatform   = errors.New("invalid platform")
-	ErrMessageHubInvalidMsgID      = errors.New("invalid msg_id")
-	ErrMessageHubInvalidContent    = errors.New("invalid content")
-	ErrMessageHubInvalidAccount    = errors.New("invalid account_id")
-	ErrMessageHubInvalidDirection  = errors.New("invalid direction")
-	ErrMessageHubInvalidMsgType    = errors.New("invalid msg_type")
-	ErrMessageHubEmptyMerchant     = errors.New("user_id is required")
-	ErrMessageHubTooLarge          = errors.New("content too large")
-	ErrMessageHubIdempotent        = errors.New("duplicate message (idempotent)")
-	ErrMessageHubQueueFull         = errors.New("queue is full")
-	ErrMessageHubStreamNotFound    = errors.New("stream not found")
-	ErrMessageHubPartitionMismatch = errors.New("partition mismatch")
-	ErrMessageHubInvalidStatus     = errors.New("invalid status")
+	ErrMessageHubInvalidPlatform  = errors.New("invalid platform")
+	ErrMessageHubInvalidMsgID     = errors.New("invalid msg_id")
+	ErrMessageHubInvalidContent   = errors.New("invalid content")
+	ErrMessageHubInvalidAccount   = errors.New("invalid account_id")
+	ErrMessageHubInvalidDirection = errors.New("invalid direction")
+	ErrMessageHubInvalidMsgType   = errors.New("invalid msg_type")
+	ErrMessageHubEmptyMerchant    = errors.New("user_id is required")
+	ErrMessageHubTooLarge         = errors.New("content too large")
+	ErrMessageHubIdempotent       = errors.New("duplicate message (idempotent)")
+	ErrMessageHubQueueFull        = errors.New("queue is full")
+	ErrMessageHubInvalidStatus    = errors.New("invalid status")
 )
 
 var messageHubPlatforms = map[string]bool{
@@ -174,7 +172,6 @@ const (
 	MessageHubDefaultIdemTTL    = 24 * time.Hour
 	MessageHubDefaultMaxContent = 64 * 1024
 	MessageHubDefaultQueueSize  = 10000
-	MessageHubStreamKeyPrefix   = "msg:hub:stream:"
 	MessageHubIdemKeyPrefix     = "msg:hub:idem:"
 )
 

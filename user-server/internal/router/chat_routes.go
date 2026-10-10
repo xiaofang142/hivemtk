@@ -39,6 +39,9 @@ func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *s
 	chatPublic.POST("/sessions/:session_id/transfer", ctrl.RequestHumanTransfer)
 	chatPublic.POST("/sessions/:session_id/close", ctrl.CloseSession)
 	chatPublic.POST("/sessions/:session_id/rate", ctrl.RateSession)
+	// 访客从 recent-closed 列表点开更早的会话时，先换回该会话的 visitor_token，
+	// 否则这条会话上的 history/offline/close/rate 会全部 403。
+	chatPublic.POST("/sessions/:session_id/token", ctrl.ExchangeSessionToken)
 
 	chatPublic.GET("/agents/available", ctrl.CountAvailableAgents)
 

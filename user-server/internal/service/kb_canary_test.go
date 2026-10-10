@@ -222,7 +222,7 @@ func TestKBCanary_TwoVersionsCoexistAndRollbackNeedsNoReingest(t *testing.T) {
 	kb := newKBForCacheTest(t, database, "kb-canary-e2e")
 
 	cacheSvc := ragcache.NewFAQAnswerCacheService(
-		ragcache.NewPGAnswerCacheStore(database), ragcache.NewPGKBMetaReader(database), 0)
+		ragcache.NewPGAnswerCacheStore(database), ragcache.NewPGKBMetaReader(database), 0, 0)
 	kbIDStr := strconv.FormatUint(uint64(kb.ID), 10)
 
 	// 找一个进灰度、一个留稳定组的 OneID（percent=50，扫几十个必有）。

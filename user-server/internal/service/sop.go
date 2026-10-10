@@ -34,8 +34,6 @@ type SOPService struct {
 }
 
 const (
-	SOPStatusPending = "pending"
-
 	SOPStatusRunning = "running"
 
 	SOPStatusSuccess = "success"

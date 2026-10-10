@@ -21,7 +21,6 @@ const (
 	StopReasonNone           StopReason = ""
 	StopReasonLoopLimit      StopReason = "loop_limit"
 	StopReasonTimeLimit      StopReason = "time_limit"
-	StopReasonTokenLimit     StopReason = "token_limit"
 	StopReasonCostLimit      StopReason = "cost_limit"
 	StopReasonApprovalDenied StopReason = "approval_denied"
 	StopReasonCompleted      StopReason = "completed"

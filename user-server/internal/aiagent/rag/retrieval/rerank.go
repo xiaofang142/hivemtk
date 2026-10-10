@@ -93,10 +93,7 @@ func NewLocalRerankerWithConfig(cfg *RerankConfig) *LocalReranker {
 //
 // 通过 RERANK_MODEL 环境变量或 config.yaml 切换；BaseURL 不变。
 const (
-	RerankModelBgeBase  = "bge-reranker-base"
-	RerankModelBgeLarge = "bge-reranker-large"
-	RerankModelBgeV2M3  = "bge-reranker-v2-m3"
-	rerankScoreFloor    = 0.3
+	rerankScoreFloor = 0.3
 )
 
 // DefaultRerankConfig 读取重排配置（配置文件为准，其次环境变量，最后内置默认）

@@ -17,7 +17,6 @@ const (
 	ReminderAfterSaleCare ReminderType = "after_sale_care"
 	ReminderRepurchase    ReminderType = "repurchase"
 	ReminderReactivation  ReminderType = "reactivation"
-	ReminderBirthday      ReminderType = "birthday"
 	ReminderCustom        ReminderType = "custom"
 )
 

@@ -10,11 +10,23 @@ import (
 	"os"
 	"testing"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/storage/storagetest"
 )
 
+// visitorTokenTestSecret 测试用访客 token HMAC 密钥（仅测试，非生产密钥）。
+// 与 internal/service/main_test.go 用的是同一枚：装配腿里的控制器会真的签发
+// visitor_token，密钥为空时那些口只会得到一句"生成 visitor_token 失败"，
+// 读起来像归属校验坏了。
+const visitorTokenTestSecret = "hivemtk-test-visitor-token-secret-0123456789"
+
 // TestMain router 包测试统一入口
 func TestMain(m *testing.M) {
+	if cfg := config.GetAppConfig(); cfg.Security.VisitorTokenSecret == "" {
+		cfg.Security.VisitorTokenSecret = visitorTokenTestSecret
+		config.SetAppConfig(&cfg)
+	}
+
 	restoreStorageRoots := storagetest.Install()
 
 	code := m.Run()

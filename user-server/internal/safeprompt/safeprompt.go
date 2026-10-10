@@ -21,10 +21,9 @@ import (
 type ViolationKind string
 
 const (
-	KindJailbreakPrefix  ViolationKind = "jailbreak_prefix"
-	KindPII              ViolationKind = "pii"
-	KindForbiddenWord    ViolationKind = "forbidden_word"
-	KindSensitiveKeyword ViolationKind = "sensitive_keyword"
+	KindJailbreakPrefix ViolationKind = "jailbreak_prefix"
+	KindPII             ViolationKind = "pii"
+	KindForbiddenWord   ViolationKind = "forbidden_word"
 )
 
 // Violation 单条命中。

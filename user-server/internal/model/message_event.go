@@ -3,22 +3,19 @@ package model
 import "time"
 
 const (
-	ChannelWeb       = "web"
-	ChannelTelegram  = "telegram"
-	ChannelWhatsApp  = "whatsapp"
-	ChannelXHS       = "xiaohongshu"
-	ChannelWeCom     = "wecom"
-	ChannelXianyu    = "xianyu"
-	ChannelDouyin    = "douyin"
-	ChannelKuaishou  = "kuaishou"
-	ChannelTikTok    = "tiktok"
-	ChannelSMS       = "sms"
-	ChannelEmail     = "email"
-	ChannelFeishu    = "feishu"
-	ChannelDingTalk  = "dingtalk"
-	ChannelQQ        = "qq"
-	ChannelPersonal  = "personal_wx"
-	ChannelInstagram = "instagram"
+	ChannelWeb      = "web"
+	ChannelTelegram = "telegram"
+	ChannelWhatsApp = "whatsapp"
+	ChannelXHS      = "xiaohongshu"
+	ChannelWeCom    = "wecom"
+	ChannelXianyu   = "xianyu"
+	ChannelDouyin   = "douyin"
+	ChannelKuaishou = "kuaishou"
+	ChannelTikTok   = "tiktok"
+	ChannelEmail    = "email"
+	ChannelFeishu   = "feishu"
+	ChannelDingTalk = "dingtalk"
+	ChannelQQ       = "qq"
 )
 
 // 消息类型
@@ -35,9 +32,6 @@ const (
 
 const (
 	SenderTypeCustomer = "customer"
-	SenderTypeAI       = "ai"
-	SenderTypeSystem   = "system"
-	SenderTypeAgent    = "agent"
 )
 
 // MessageEvent 渠道接入消息中台统一消息标准

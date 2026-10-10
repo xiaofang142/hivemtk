@@ -4,17 +4,12 @@ import "context"
 
 // 售后类型
 const (
-	AfterSaleRefund   = "refund"
-	AfterSaleReturn   = "return"
-	AfterSaleExchange = "exchange"
+	AfterSaleRefund = "refund"
 )
 
 // 售后状态（本系统侧记录，真实状态由电商回写）
 const (
-	AfterSalePending    = "pending"
-	AfterSaleProcessing = "processing"
-	AfterSaleDone       = "done"
-	AfterSaleRejected   = "rejected"
+	AfterSalePending = "pending"
 )
 
 // AfterSaleRequest 发起售后请求（客服侧发起，动作回写电商）。

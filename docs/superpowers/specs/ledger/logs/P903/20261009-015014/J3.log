@@ -1,0 +1,6 @@
+--- FAIL: TestCustomerJourney_ListByStageIndexKeepsOneEntryPerCustomerPerStage (0.00s)
+    customer_journey_stage_index_test.go:92: 同一客户在同一阶段的索引条目应有 1 条，实际 11 条（互动在推索引）
+[90m2026-10-09T01:50:44+08:00[0m [33mWRN[0m [1mjourney.ListByStage(lead) 阶段索引读失败，退回本实例视图: context deadline exceeded[0m [36mcomponent=[0muser-server
+FAIL
+FAIL	hivemtk-user/internal/service	0.757s
+FAIL

@@ -84,7 +84,6 @@ const (
 	WorkflowExecWaiting    = "waiting"
 	WorkflowExecTerminated = "terminated"
 
-	WorkflowNodePending   = "pending"
 	WorkflowNodeRunning   = "running"
 	WorkflowNodeCompleted = "completed"
 	WorkflowNodeFailed    = "failed"

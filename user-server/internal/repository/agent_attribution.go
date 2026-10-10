@@ -70,18 +70,22 @@ func (r *AgentAttributionRepository) AggregateSessionsByAgent(ctx context.Contex
 }
 
 // AggregateCSATByAgent 按agent聚合时间窗口内的 CSAT 评分
+//
+// 坐席归属只存在于 customer_sessions（csat_surveys 从来没有 agent_id 列）：
+// 早先按 cs.agent_id 取列会让这条 SQL 直接报 42703，而调用方把错误降级成"无 CSAT 数据"，
+// 于是坐席绩效页的均分/回收数长期静默为 0，看不出是坏了。
 func (r *AgentAttributionRepository) AggregateCSATByAgent(ctx context.Context, start, end time.Time) ([]CSATAggRow, error) {
 	var rows []CSATAggRow
 	if err := r.db.WithContext(ctx).
 		Table("csat_surveys cs").
 		Select(`
-			cs.agent_id,
+			sess.agent_id,
 			AVG(cs.score) as avg_score,
 			COUNT(*) as responded
 		`).
 		Joins("JOIN customer_sessions sess ON sess.session_id = cs.session_id").
-		Where("cs.status = 'responded' AND cs.score > 0 AND sess.created_at BETWEEN ? AND ?", start, end).
-		Group("cs.agent_id").
+		Where("cs.status = 'responded' AND cs.score > 0 AND sess.agent_id > 0 AND sess.created_at BETWEEN ? AND ?", start, end).
+		Group("sess.agent_id").
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}

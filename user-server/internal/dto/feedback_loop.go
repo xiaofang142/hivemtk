@@ -35,7 +35,6 @@ type FeedbackEventType string
 const (
 	FBEventTypeExplicit FeedbackEventType = "explicit"
 	FBEventTypeImplicit FeedbackEventType = "implicit"
-	FBEventTypeChampion FeedbackEventType = "champion"
 )
 
 // CollectRequest 反馈采集请求（外部 → FeedbackCollector）

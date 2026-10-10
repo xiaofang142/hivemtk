@@ -66,7 +66,7 @@ type ABExperiment struct {
 // NewABExperiment 构造并启动异步落库 worker（db 为 nil 时纯内存模式）
 func NewABExperiment(db *gorm.DB, bufferSize int) *ABExperiment {
 	if bufferSize <= 0 {
-		bufferSize = AbExposureBuffer
+		bufferSize = AbExposureBufferSize(context.Background())
 	}
 	a := &ABExperiment{
 		exposureRepo: repository.NewABExposureRepositoryWithDB(db),
@@ -181,7 +181,7 @@ var (
 // InitABExperiment 全局初始化（main 装配阶段调用一次）
 func InitABExperiment(db *gorm.DB) *ABExperiment {
 	abExperimentOnce.Do(func() {
-		abExperiment = NewABExperiment(db, AbExposureBuffer)
+		abExperiment = NewABExperiment(db, AbExposureBufferSize(context.Background()))
 	})
 	return abExperiment
 }

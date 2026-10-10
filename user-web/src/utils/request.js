@@ -100,6 +100,30 @@ function clearAuthAndGoLogin() {
   redirectTo('/login')
 }
 
+// 取这条请求实际带出去的令牌（axios v1 的 config.headers 是 AxiosHeaders 实例）
+function bearerSentWith(config) {
+  const headers = config && config.headers
+  if (!headers) return ''
+  let raw = ''
+  if (typeof headers.get === 'function') raw = headers.get('Authorization') || ''
+  if (!raw) raw = headers.Authorization || headers.authorization || ''
+  raw = String(raw)
+  return raw.startsWith('Bearer ') ? raw.slice(7).trim() : ''
+}
+
+// 401 说的是"这把令牌不被认"，不是"此刻 localStorage 里这把不被认"。
+// 迟到的响应（用户在这条请求返回之前已经重新登录）会把刚换到的新令牌连带会话一起抹掉，
+// 表现为"登录成功后过一会儿又被踢回登录页"；没带令牌的请求（访客端点自己回 401）
+// 更不该动站点的登录态。第一个 401 清完令牌后 localStorage 就空了，
+// 并发的其余 401 因此既不再重复清、也不再弹第二条"登录已过期"。
+function expireSession(sentWith) {
+  const current = localStorage.getItem('token')
+  if (!current) return false
+  if (!sentWith || sentWith !== current) return false
+  clearAuthAndGoLogin()
+  return true
+}
+
 const addInterceptors = () => {
   request.interceptors.request.use(
     (config) => {
@@ -187,14 +211,14 @@ const addInterceptors = () => {
         const bizCode = data && data.code
 
         switch (status) {
-          case 401:
-            // 401 一律清凭据跳登录：silent 请求只是不弹提示，
-            // token 已过期时保留它只会造成后续请求反复失败
-            if (!silent) {
+          case 401: {
+            // 只有"存储里这把令牌正是被打回的那把"才清凭据跳登录。
+            // silent 请求同样要清——token 已过期时留着它只会让后续请求反复失败。
+            if (expireSession(bearerSentWith(config)) && !silent) {
               showToast(t('http.loginExpired'))
             }
-            clearAuthAndGoLogin()
             break
+          }
           case 403:
             if (!silent) showToast(t('http.accessDenied'))
             break

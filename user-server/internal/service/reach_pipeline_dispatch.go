@@ -1,7 +1,7 @@
 package service
 
 // reach_pipeline_dispatch.go 渠道投递：真实发送器注入、按渠道分发
-// （sender 注入 / bridge 通道 / stub 消息 ID）与发送结果跟踪写回。
+// （sender 注入 / 未注入时只有 bridge 那几条还能出网，其余一律判失败）与发送结果跟踪写回。
 
 import (
 	"context"
@@ -57,10 +57,6 @@ func (s *ReachPipelineService) dispatchOutbound(ctx context.Context, job *model.
 	}
 
 	now := time.Now().UnixNano()
-	id := fmt.Sprintf("msg_%s_%s_%d", job.Channel, job.CustomerID, now)
-	if len(id) > 50 {
-		id = id[:50]
-	}
 	bridgeChannels := map[string]bool{
 		"douyin": true, "kuaishou": true, "xiaohongshu": true,
 		"tiktok": true, "xianyu": true,
@@ -95,15 +91,12 @@ func (s *ReachPipelineService) dispatchOutbound(ctx context.Context, job *model.
 		}
 		return mid, nil
 	}
-	if job.Payload == nil {
-		job.Payload = model.JSONMap{}
-	}
-	job.Payload["_last_send"] = map[string]any{
-		"message_id": id,
-		"channel":    job.Channel,
-		"sent_at":    time.Now().Format(time.RFC3339),
-	}
-	return id, nil
+	// 没装真实发送器时，只有上面那几条 bridge 渠道还能自己出网（走包级 DeliverBridgeOutbound，
+	// 不依赖注入的 sender）；其余渠道在这里没有任何出口。
+	// 旧实现在这里编一个 "msg_渠道_客户_纳秒" 的假消息号并回成功：作业被记成已投递，
+	// 假号还会被 trackSendResult 抄进 _tracking，运营台把它当平台回执看。
+	// 没出网就不能说发过，这里必须失败，让作业停在可重跑的失败态。
+	return "", fmt.Errorf("channel %s 没有装配真实发送器，本条没有出网", job.Channel)
 }
 
 func (s *ReachPipelineService) trackSendResult(ctx context.Context, job *model.ReachJob, _ StepResult) error {

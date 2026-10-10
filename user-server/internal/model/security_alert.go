@@ -55,9 +55,6 @@ func (SecurityAlert) TableName() string {
 // 告警类型常量
 const (
 	AlertTypeAbnormalLogin   = "abnormal_login"
-	AlertTypeBruteForce      = "brute_force"
 	AlertTypeDeviceChange    = "device_change"
-	AlertTypeLocationChange  = "location_change"
 	AlertTypeFrequentFailure = "frequent_failure"
-	AlertTypeAbnormalTime    = "abnormal_time"
 )

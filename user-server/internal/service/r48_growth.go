@@ -29,11 +29,6 @@ import (
 type WebhookSubscription = model.WebhookSubscription
 
 // Webhook 事件常量
-const (
-	WebhookEventMessageCreated = "message.created"
-	WebhookEventSessionCreated = "session.created"
-	WebhookEventSessionClosed  = "session.closed"
-)
 
 var webhookOutClient = &http.Client{Timeout: 5 * time.Second}
 

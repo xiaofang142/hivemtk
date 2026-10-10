@@ -110,13 +110,16 @@ func TestIntegrationReachAdapter_SentinelErrors(t *testing.T) {
 	if !errors.Is(err, ErrChannelNotImplemented) {
 		t.Errorf("Recall 应返回 ErrChannelNotImplemented, got %v", err)
 	}
+	// 账号读侧从"恒 not implemented"变成真读表之后，sms 这类渠道的答案不再是
+	// 「这条路没实现」，而是「这个渠道没有账号这一层」——两类错误不能混用，
+	// 判据与用例见 reach_account_reader_test.go。
 	_, err = a.AccountHealth(context.Background(), "sms", "1")
-	if !errors.Is(err, ErrChannelNotImplemented) {
-		t.Errorf("AccountHealth 应返回 ErrChannelNotImplemented, got %v", err)
+	if !errors.Is(err, ErrChannelNoAccountDimension) {
+		t.Errorf("AccountHealth(sms) 应返回 ErrChannelNoAccountDimension, got %v", err)
 	}
 	_, err = a.ListAccounts(context.Background(), "sms")
-	if !errors.Is(err, ErrChannelNotImplemented) {
-		t.Errorf("ListAccounts 应返回 ErrChannelNotImplemented, got %v", err)
+	if !errors.Is(err, ErrChannelNoAccountDimension) {
+		t.Errorf("ListAccounts(sms) 应返回 ErrChannelNoAccountDimension, got %v", err)
 	}
 }
 

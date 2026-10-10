@@ -68,39 +68,53 @@ func (r *CSATSurveyRepository) SubmitResponse(ctx context.Context, sessionID str
 }
 
 // MarkSent 标记已发送
+//
+// 已回收评分（status=responded）的调查单**不得**被推回 sent：会话再次关闭/手动重触发
+// 会再走一次 Trigger→MarkSent，原实现无条件覆写状态，于是 score/responded_at 还留着、
+// status 回到 sent——而 Stats 与差评列表都按 status='responded' 过滤，
+// 结果是客户明明打了分，看板上那一条凭空消失（库里实测到 2 条这种行）。
+// 评分一旦回收就是既成事实，重触发只补发邀请，不改回收状态。
 func (r *CSATSurveyRepository) MarkSent(ctx context.Context, sessionID string) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).
 		Model(&model.CSATSurvey{}).
-		Where("session_id = ?", sessionID).
+		Where("session_id = ? AND status <> ?", sessionID, model.CSATStatusResponded).
 		Updates(map[string]any{"status": model.CSATStatusSent, "sent_at": now}).Error
 }
 
 // Stats 总体统计（均值/总数/分布）
-func (r *CSATSurveyRepository) Stats(ctx context.Context) (map[string]any, error) {
+//
+// since 为 nil 表示全量；非 nil 时按业务日边界下推：调查单总数看 created_at，
+// 已回收/均值/分布看 responded_at（"本月收到的评分"），两者口径不同属刻意。
+func (r *CSATSurveyRepository) Stats(ctx context.Context, since *time.Time) (map[string]any, error) {
 	var total, responded int64
 	var avgScore *float64
-	if err := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).Count(&total).Error; err != nil {
+	countQ := r.db.WithContext(ctx).Model(&model.CSATSurvey{})
+	respondedQ := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).Where("status = ?", model.CSATStatusResponded)
+	distQ := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).Where("status = ?", model.CSATStatusResponded)
+	if since != nil {
+		countQ = countQ.Where("created_at >= ?", *since)
+		respondedQ = respondedQ.Where("responded_at >= ?", *since)
+		distQ = distQ.Where("responded_at >= ?", *since)
+	}
+	if err := countQ.Count(&total).Error; err != nil {
 		return nil, err
 	}
-	q := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).Where("status = ?", model.CSATStatusResponded)
-	if err := q.Count(&responded).Error; err != nil {
+	if err := respondedQ.Count(&responded).Error; err != nil {
 		return nil, err
 	}
-	if err := q.Select("COALESCE(AVG(score), 0)").Scan(&avgScore).Error; err != nil {
+	if err := respondedQ.Select("COALESCE(AVG(score), 0)").Scan(&avgScore).Error; err != nil {
 		return nil, err
 	}
-	type distRow struct {
-		Score int   `json:"score"`
-		Count int64 `json:"count"`
-	}
-	var dist []distRow
-	if err := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).
+	var dist []CSATDistRow
+	if err := distQ.
 		Select("score, COUNT(*) AS count").
-		Where("status = ?", model.CSATStatusResponded).
 		Group("score").Order("score ASC").
 		Scan(&dist).Error; err != nil {
 		return nil, err
+	}
+	if dist == nil {
+		dist = []CSATDistRow{}
 	}
 	avg := 0.0
 	if avgScore != nil {
@@ -139,16 +153,35 @@ func (r *CSATSurveyRepository) Trend(ctx context.Context, days int) ([]map[strin
 	return out, err
 }
 
+// CSATDistRow 评分分布的一档（星级 → 回收数）。
+// 导出是为了让服务层能在 Stats 的 map 载荷里按类型取回它、派生好评率与差评数。
+type CSATDistRow struct {
+	Score int   `json:"score"`
+	Count int64 `json:"count"`
+}
+
+// NegativeRow 差评行：调查单本体 + 会话上的坐席/客户名。
+// 管理端差评列表要回答"这个差评是谁接的、哪个客户给的"，
+// 而名字只存在于 customer_sessions，所以一次 LEFT JOIN 取回，不留给前端二跳。
+type NegativeRow struct {
+	model.CSATSurvey
+	AgentName string `json:"agent_name"`
+	UserName  string `json:"user_name"`
+}
+
 // ListNegative 差评列表（score <= threshold）
-func (r *CSATSurveyRepository) ListNegative(ctx context.Context, threshold int, limit int) ([]*model.CSATSurvey, error) {
+func (r *CSATSurveyRepository) ListNegative(ctx context.Context, threshold int, limit int) ([]NegativeRow, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	var list []*model.CSATSurvey
+	var list []NegativeRow
 	err := r.db.WithContext(ctx).
-		Where("status = ? AND score <= ?", model.CSATStatusResponded, threshold).
-		Order("created_at DESC").
+		Table("csat_surveys cs").
+		Select("cs.*, COALESCE(sess.agent_name, '') AS agent_name, COALESCE(sess.user_name, '') AS user_name").
+		Joins("LEFT JOIN customer_sessions sess ON sess.session_id = cs.session_id").
+		Where("cs.status = ? AND cs.score <= ?", model.CSATStatusResponded, threshold).
+		Order("cs.responded_at DESC").
 		Limit(limit).
-		Find(&list).Error
+		Scan(&list).Error
 	return list, err
 }

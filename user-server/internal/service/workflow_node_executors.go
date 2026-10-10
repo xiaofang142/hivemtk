@@ -349,6 +349,10 @@ func toFloat64(v any) (float64, bool) {
 }
 
 // SubflowNodeExecutor 子流程节点执行器
+//
+// orchestrator 由 RegisterWorkflowNodeExecutors 在装配点注入（见 workflow_node_executor.go）。
+// 它是这份执行器唯一的行为分叉：nil 时只能记成"completed + 跳过原因"，
+// 非 nil 才真去递归跑子工作流，所以装配点漏传不会报错、只会让执行记录说谎。
 type SubflowNodeExecutor struct {
 	orchestrator *WorkflowOrchestratorService
 }

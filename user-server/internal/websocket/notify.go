@@ -9,18 +9,13 @@ const (
 	TypeNewSession    = "new_session"
 	TypeNewMessage    = "new_message"
 	TypeSessionUpdate = "session_update"
-	TypeAgentStatus   = "agent_status"
-	TypeAISuggestion  = "ai_suggestion"
-	TypeHeartbeat     = "heartbeat"
 
-	TypeWelcome         = "welcome"
-	TypeMessage         = "message"
-	TypeAgentJoined     = "agent_joined"
-	TypeSessionClosed   = "session_closed"
-	TypeAITyping        = "ai_typing"
-	TypeError           = "error"
-	TypePong            = "pong"
-	TypeOfflineMessages = "offline_messages"
+	TypeWelcome     = "welcome"
+	TypeMessage     = "message"
+	TypeAgentJoined = "agent_joined"
+	TypeAITyping    = "ai_typing"
+	TypeError       = "error"
+	TypePong        = "pong"
 )
 
 // SendToAgent 发送消息给指定客服（坐席 ID 为 uint）

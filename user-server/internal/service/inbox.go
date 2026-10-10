@@ -28,21 +28,13 @@ import (
 var (
 	ErrInboxEmptyMerchant = errors.New("user_id is required")
 
-	ErrInboxInvalidPlatform = errors.New("invalid platform")
-
-	ErrInboxInvalidAccount = errors.New("invalid account_id")
-
 	ErrInboxInvalidCustomer = errors.New("invalid customer_id")
 
 	ErrInboxInvalidAssignTo = errors.New("invalid assign_to")
 
 	ErrInboxInvalidAction = errors.New("invalid assignment action")
 
-	ErrInboxConversationExist = errors.New("conversation already exists for this account/customer")
-
 	ErrInboxConversationMissing = errors.New("conversation not found")
-
-	ErrInboxInvalidStatus = errors.New("invalid conversation status")
 
 	ErrInboxRepoNotReady = errors.New("inbox repository not ready")
 )
@@ -614,7 +606,7 @@ func (s *InboxService) Reconcile(ctx context.Context, mode string) (*ReconcileRe
 	res := &ReconcileResult{Mode: mode}
 	switch mode {
 	case ReconcileModeOverdue:
-		threshold := time.Now().Add(-InboxOverdueThreshold)
+		threshold := time.Now().Add(-InboxOverdueWindow(ctx))
 		due, err := s.inboxRepo.FindOverdueConversations(ctx, threshold, 0)
 		if err != nil {
 			return nil, err
@@ -973,7 +965,7 @@ func (s *InboxService) pickStaff(ctx context.Context, candidates []string) (stri
 			minIdx = i
 		}
 	}
-	if loads[minIdx] >= InboxDefaultStaffLoadLimit {
+	if loads[minIdx] >= InboxStaffLoadLimit(ctx) {
 		return "", fmt.Errorf("all staff at capacity")
 	}
 	return candidates[minIdx], nil

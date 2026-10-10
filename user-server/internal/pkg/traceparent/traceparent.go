@@ -26,8 +26,6 @@ import (
 
 const (
 	HeaderName     = "traceparent"
-	HeaderState    = "tracestate"
-	HeaderLegacy   = "X-Trace-Id"
 	CurrentVersion = "00"
 	TraceIDHexLen  = 32
 	SpanIDHexLen   = 16

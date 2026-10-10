@@ -11,8 +11,6 @@ type MemoryLayer string
 const (
 	MemoryLayerShortTerm MemoryLayer = "L1_short_term"
 	MemoryLayerLongTerm  MemoryLayer = "L2_long_term"
-	MemoryLayerSOPState  MemoryLayer = "L3_sop_state"
-	MemoryLayerBusiness  MemoryLayer = "L4_business"
 )
 
 // MemoryItem 统一记忆条目（L1/L2/L4 通用）

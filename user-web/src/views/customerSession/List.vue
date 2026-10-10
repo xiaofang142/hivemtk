@@ -349,6 +349,8 @@
 // 数据流/操作逻辑拆分至 ./composables/{useSessionFilters,useSessionList,useSessionActions}.js
 // 右栏客户 360° 与黑名单弹窗拆分至 ./components/{CustomerProfilePanel,BlacklistDialog}.vue
 import { ref, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { MagicStick, User, ChatLineSquare, Warning } from '@element-plus/icons-vue'
 import { getMyAgent, getOnlineAgents } from '@/api/customerService.js'
 import { getSessions } from '@/api/customerSession.js'
@@ -361,6 +363,8 @@ import CustomerProfilePanel from './components/CustomerProfilePanel.vue'
 import BlacklistDialog from './components/BlacklistDialog.vue'
 
 // —— 共享状态:会话数据源 + 输入框内容(列表/操作/聊天多个职责共同读写) ——
+// 深链入口：CSAT 看板的「查看会话」等按钮以 ?session_id= 打开本页，需在列表就位后选中它
+const route = useRoute()
 const sessions = ref([])
 const inputMsg = ref('')
 
@@ -405,9 +409,13 @@ const insertTemplate = () => {
 }
 
 // 会话列表加载(容器层保留:多个 composables 通过回调依赖此函数)
-const loadSessions = async () => {
+// 必须写成**函数声明**而非 const 箭头函数：上面 `setReload(loadSessions)` 在声明之前执行，
+// const 的暂时性死区会在 setup 阶段抛 ReferenceError，整页（含右侧面板/输入区）随之崩渲染。
+// params 只给深链那一支用（见 fetchDeepLinkSession）：默认档不带参数＝后端默认一页 20 条，
+// 坐席日常看的也就是这一页，不该为了一个入口把整页列表换成几百条。
+async function loadSessions(params) {
   try {
-    const res = await getSessions()
+    const res = await getSessions(params)
     const list = Array.isArray(res) ? res : (res?.list || []);
     sessions.value = list.map((s) => ({
       id: s.id,
@@ -427,10 +435,40 @@ const loadSessions = async () => {
     console.error('加载会话列表失败:', e)
     sessions.value = []
   }
-};
+}
+
+// 深链指定的会话按 sessionId（业务会话号）或 id（自增主键）两种口径匹配：
+// CSAT 看板带的是 csat_surveys.session_id，联表用的也是 customer_sessions.session_id。
+const findSessionByDeepLinkId = (deepLinkId) => sessions.value.find(
+  (s) => String(s.sessionId) === String(deepLinkId) || String(s.id) === String(deepLinkId)
+)
+
+// 深链指定的会话大概率不在日常那一页里：实测本实例会话总数 227、列表首页只有 20 条，
+// 而排序是 priority DESC / last_message_at DESC —— 问卷回收发生在会话结束**之后**，
+// 差评对应的老会话正好排在后面。原先只搜首页、搜不到就只打一行 console.warn，
+// 于是从看板点「查看会话」会打开一个既没选中任何东西、也不说为什么的空页面。
+// 所以这里按深链专用的一页宽列表再找一次（后端 page_size 无上限，实测 500 条 178 KB / 7 ms），
+// 找不到则明确告诉用户，而不是留一个"点了没反应"。
+const DEEP_LINK_SCAN_PAGE_SIZE = 500
+async function fetchDeepLinkSession(deepLinkId) {
+  const first = findSessionByDeepLinkId(deepLinkId)
+  if (first) return first
+  await loadSessions({ page: 1, page_size: DEEP_LINK_SCAN_PAGE_SIZE })
+  return findSessionByDeepLinkId(deepLinkId) || null
+}
 
 onMounted(async () => {
   await loadSessions()
+  const deepLinkId = route.query?.session_id
+  if (deepLinkId) {
+    const hit = await fetchDeepLinkSession(deepLinkId)
+    if (hit) {
+      await selectSession(hit)
+    } else {
+      console.warn('[customerSession] 深链指定的会话不在当前列表内:', deepLinkId)
+      ElMessage.warning(`未找到会话 ${deepLinkId}，它可能已不在可加载的会话范围内`)
+    }
+  }
   await Promise.all([loadAllTags(), loadQuickReplies()]);
   try {
     const res = await getMyAgent()

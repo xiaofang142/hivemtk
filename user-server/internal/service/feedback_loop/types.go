@@ -167,7 +167,6 @@ var (
 	ErrInvalidInput         = errors.New("feedback_loop: invalid input")
 	ErrNoArms               = errors.New("feedback_loop: no arms for experiment")
 	ErrInsufficientSamples  = errors.New("feedback_loop: insufficient samples for iteration")
-	ErrExperimentNotFound   = errors.New("feedback_loop: experiment not found")
 	ErrActivePromptNotFound = errors.New("feedback_loop: no active prompt for sop node")
 	ErrDispatcherNotConfig  = errors.New("feedback_loop: llm dispatcher not configured")
 	ErrEmbedderNotConfig    = errors.New("feedback_loop: embedder not configured")

@@ -255,8 +255,12 @@ func AppendWorkflowSideEffect(ctx *WorkflowExecContext, effect string) {
 	ctx.Execution.Context["_side_effects"] = existing
 }
 
-// RegisterWorkflowNodeExecutors 注册 4 种工作流节点执行器
-func RegisterWorkflowNodeExecutors(registry *WorkflowNodeExecutorRegistry) {
+// RegisterWorkflowNodeExecutors 注册 4 种工作流节点执行器。
+//
+// orch 是子流程节点的执行入口：SubflowNodeExecutor 靠它递归跑子工作流，
+// 传 nil 会让 subflow 节点"记成已完成但什么都没跑"（Execute 的兜底分支就是这么写的）。
+// 装配顺序上 svc 先于 registry 构造，且 orch 只在运行时被调用，所以这里直接收 svc 不成环。
+func RegisterWorkflowNodeExecutors(registry *WorkflowNodeExecutorRegistry, orch *WorkflowOrchestratorService) {
 	if registry == nil {
 		return
 	}
@@ -271,5 +275,5 @@ func RegisterWorkflowNodeExecutors(registry *WorkflowNodeExecutorRegistry) {
 	reg(&TriggerNodeExecutor{})
 	reg(&ActionNodeExecutor{})
 	reg(&ConditionNodeExecutor{})
-	reg(&SubflowNodeExecutor{})
+	reg(NewSubflowNodeExecutor(orch))
 }

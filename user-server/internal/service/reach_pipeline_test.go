@@ -24,9 +24,33 @@ func setupReachTestDB(t *testing.T) *gorm.DB {
 	)
 }
 
+// reachStubSender 测试用发送器：把"这条确实出过网"变成可断言的字面值 sent_{渠道}。
+//
+// 为什么每个要走完整状态机的用例都得装一个：dispatchOutbound 在没有发送器时对非 bridge
+// 渠道直接判失败（旧实现是编一个 msg_ 开头的假号再回成功，那等于让作业停在"已投递"）。
+// 装在这里而不是让各用例自己装，是为了让"发出去了"成为夹具的前提，而不是某个用例的运气。
+type reachStubSender struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (s *reachStubSender) SendReach(_ context.Context, channel, _, to, _ string) (string, error) {
+	s.mu.Lock()
+	s.calls = append(s.calls, channel+"|"+to)
+	s.mu.Unlock()
+	return "sent_" + channel, nil
+}
+
+func (s *reachStubSender) sentTo() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.calls...)
+}
+
 func newReachTestService(t *testing.T) (*ReachPipelineService, *gorm.DB) {
 	db := setupReachTestDB(t)
 	svc := NewReachPipelineService(db)
+	svc.SetReachSender(&reachStubSender{})
 	return svc, db
 }
 
@@ -1079,8 +1103,11 @@ func TestRunStep_MessageGen(t *testing.T) {
 }
 
 // V3 整改：StepSend 现在按 channel 路由，必须指定合法 channel + customer_id。
+// 这里显式装发送器：没装的话这一步该判失败（见 TestDispatchOutbound_WithoutSenderRefuses），
+// 本用例断言的是"装好之后这一步交回发送器给的消息号"。
 func TestRunStep_Send(t *testing.T) {
 	svc := NewReachPipelineService(nil)
+	svc.SetReachSender(&reachStubSender{})
 	job := &model.ReachJob{
 		Channel:    "wecom",
 		CustomerID: "user-1",
@@ -1089,8 +1116,8 @@ func TestRunStep_Send(t *testing.T) {
 	if !res.Success {
 		t.Errorf("expected success, got %v", res)
 	}
-	if res.Output["message_id"] == nil {
-		t.Errorf("expected message_id in output, got %v", res.Output)
+	if res.Output["message_id"] != "sent_wecom" {
+		t.Errorf("message_id 应是发送器交回的号，got %v", res.Output["message_id"])
 	}
 }
 
@@ -1779,46 +1806,80 @@ func TestDispatchOutbound_EmptyCustomerID(t *testing.T) {
 	}
 }
 
-func TestDispatchOutbound_ImplementedChannels(t *testing.T) {
+func TestDispatchOutbound_SenderBackedChannels(t *testing.T) {
 	svc := NewReachPipelineService(nil)
+	stub := &reachStubSender{}
+	svc.SetReachSender(stub)
 	channels := []string{"wecom", "feishu", "telegram", "whatsapp", "sms", "email", "card", "dingtalk"}
 	for _, ch := range channels {
 		job := &model.ReachJob{Channel: ch, CustomerID: "u-1"}
 		mid, err := svc.dispatchOutbound(context.Background(), job)
 		if err != nil {
-			t.Errorf("channel %s: unexpected error: %v", ch, err)
+			t.Errorf("渠道 %s: unexpected error: %v", ch, err)
 			continue
 		}
-		if mid == "" {
-			t.Errorf("channel %s: expected non-empty message_id", ch)
+		if mid != "sent_"+ch {
+			t.Errorf("渠道 %s: 消息号应来自发送器（sent_%s），got %q", ch, ch, mid)
 		}
+	}
+	if got := stub.sentTo(); len(got) != len(channels) {
+		t.Errorf("发送器被调用 %d 次，want %d：有一条渠道没走到发送器", len(got), len(channels))
 	}
 }
 
-func TestDispatchOutbound_UnimplementedChannels(t *testing.T) {
+func TestDispatchOutbound_BridgeChannelsAttemptOutboxWithoutSender(t *testing.T) {
 	svc := NewReachPipelineService(nil)
 	channels := []string{"douyin", "kuaishou", "xiaohongshu"}
 	for _, ch := range channels {
 		job := &model.ReachJob{Channel: ch, CustomerID: "u-1"}
 		_, err := svc.dispatchOutbound(context.Background(), job)
 		if err == nil {
-			t.Errorf("channel %s: expected explicit error (V3 待接入), got nil", ch)
+			t.Errorf("渠道 %s: 外发台没接线时应当报错，got nil", ch)
+			continue
+		}
+		// 这条分支证明的是：bridge 那几条不依赖注入的 sender，走的是包级外发台。
+		// 外发台没接时它必须把原因说出来，而不是落进"没有发送器"那句通用错误里。
+		if !strings.Contains(err.Error(), "bridge") {
+			t.Errorf("渠道 %s: 失败原因应指向 bridge 外发台，读起来才不像装配点漏装: %v", ch, err)
 		}
 	}
 }
 
-func TestDispatchOutbound_MessageIDFormat(t *testing.T) {
+// TestDispatchOutbound_WithoutSenderRefuses 没装发送器的非 bridge 渠道必须失败，
+// 并且不许在 payload 里留下任何"投递过"的痕迹：旧实现会编一个 msg_ 开头的假号写进
+// _last_send，再由 trackSendResult 抄进 _tracking 给运营台当回执。
+func TestDispatchOutbound_WithoutSenderRefuses(t *testing.T) {
 	svc := NewReachPipelineService(nil)
+	job := &model.ReachJob{Channel: "wecom", CustomerID: "u-1"}
+	mid, err := svc.dispatchOutbound(context.Background(), job)
+	if err == nil {
+		t.Fatalf("没装发送器却回了成功，消息号=%q", mid)
+	}
+	if !strings.Contains(err.Error(), "没有装配真实发送器") {
+		t.Errorf("错误应说清是发送器没装，got: %v", err)
+	}
+	if _, ok := job.Payload["_last_send"]; ok {
+		t.Errorf("失败的一律不许写 _last_send，实际 payload=%v", job.Payload)
+	}
+}
+
+func TestDispatchOutbound_SenderMessageIDLandsInPayload(t *testing.T) {
+	svc := NewReachPipelineService(nil)
+	svc.SetReachSender(&reachStubSender{})
 	job := &model.ReachJob{Channel: "wecom", CustomerID: "u-1"}
 	mid, err := svc.dispatchOutbound(context.Background(), job)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(mid, "msg_wecom_u-1_") {
-		t.Errorf("expected message_id prefix msg_wecom_u-1_, got %q", mid)
+	last, ok := job.Payload["_last_send"].(map[string]any)
+	if !ok {
+		t.Fatalf("发送过的作业要留 _last_send，实际 payload=%v", job.Payload)
 	}
-	if len(mid) > 50 {
-		t.Errorf("message_id exceeds 50 chars (UnifiedMessage varchar(50) limit): %q (len=%d)", mid, len(mid))
+	if last["message_id"] != mid {
+		t.Errorf("_last_send.message_id=%v，与返回值 %q 不一致", last["message_id"], mid)
+	}
+	if last["channel"] != "wecom" {
+		t.Errorf("_last_send.channel=%v, want wecom", last["channel"])
 	}
 }
 

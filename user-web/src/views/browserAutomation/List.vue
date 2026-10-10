@@ -2,7 +2,7 @@
   <div class="page">
     <div class="toolbar">
       <el-button type="primary" icon="Plus" @click="$router.push('/browser-automation/tasks/create')">新建任务</el-button>
-      <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px" @change="load">
+      <el-select v-model="query.status" placeholder="状态" clearable style="width: 140px" @change="onFilterChange">
         <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
       </el-select>
     </div>
@@ -77,6 +77,14 @@ const hostDialog = reactive({ visible: false })
 let pollTimer = null
 
 const unpack = (res) => res?.data ?? res
+
+// 换筛选条件是一次新的查询，不是同一批数据的下一页：不回到第 1 页时，
+// 筛完停在自己正在看的那一页，列表空了而分页条还留着——读起来像「这个状态下没有任务」。
+// 分页条自己只在总页数变小往下夹，条件变严但总页数没变的那一档它不管。
+function onFilterChange() {
+  query.page = 1
+  load()
+}
 
 async function load() {
   loading.value = true

@@ -155,11 +155,15 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 
 func (s *EmailService) smtpSend(ctx context.Context, acc *EmailAccount, to, subject, content string, attachments []string) (string, error) {
 	// 附件在这条路径上挂不上：下面是手写的单部件 text/html 报文，没有 multipart 能力。
-	// 今天它确实没收到过附件，但这条前提不在看得见的位置：EmailService.Send 的调用点里
-	// 六个传字面 nil，proactive reach 那条注册函数也只被 sendEmail 以 nil 调用；剩下三处是
-	// 变量透传，而读 reach service registry 的只有 ProductionReachAdapter —— 它没有任何构造点。
-	// 谁把那个 adapter 装上、或给 Send 加一个带附件的新调用，附件就会在这里静默丢掉：
-	// 正解是走 email/service.EmailSendService，那条经 mail 包的本站附件解析器。
+	// 今天它确实没收到过附件，但这条前提不在看得见的位置，所以在这里把账算清。
+	// Send 的非测试调用点共 7 处，其中 6 处传字面 nil（本包的 auth.go、r48_growth.go、
+	// system_user.go、password_reset.go，controller/r44_gap_endpoints.go，以及 alert_checker.go
+	// 里那个 EmailSender 抽象的调用点，它的实现就是本类型），第 7 处是 proactive reach 的
+	// 注册闭包（proactive_reach.go 的 SetEmailRegistry 回调）原样透传形参，
+	// 而它唯一的产出方 sendEmail 在同一文件里也传字面 nil。
+	// 给 Send 加一个真带附件的调用，附件就会在这里静默丢掉：正解是走
+	// email/service.EmailSendService，那条经 pkg/mail 的本站附件解析器会真挂上，
+	// 挂不上也会出声（见 attachmentPaths）。
 	_ = attachments
 	addr := net.JoinHostPort(acc.Host, strconv.Itoa(acc.Port))
 	from := acc.FromAddr

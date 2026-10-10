@@ -1,0 +1,67 @@
+REPO=/tmp/p904gate/hivemtk
+BASE_MD5=32adb1153bab147bb882b0fb9f5448ff
+LOGDIR=/tmp/p904gate/hivemtk/docs/superpowers/specs/ledger/logs/P903/20261009-015014
+
+=== J0probe：-overlay 通路自证（期望编译红，红因印出 undefined: MUT_J0probe_undefined） ===
+[J0probe] landed_marker=MUT_J0probe_sentinel
+[J0probe] rc=1
+# hivemtk-user/internal/service [hivemtk-user/internal/service.test]
+/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/mut_journey_qpFG4Z/J0probe.go:37:28: undefined: MUT_J0probe_undefined
+FAIL	hivemtk-user/internal/service [build failed]
+FAIL
+
+=== 控制组（不带 overlay，须绿） ===
+[CTRL] rc=0 fail=0 pass=14
+ok  	hivemtk-user/internal/service	1.015s
+
+=== J1: 退回只扫本实例 L1 ===
+[J1] landed_marker=MUT-J1
+[J1] rc=1 fail=3 pass=0
+FAIL
+FAIL	hivemtk-user/internal/service	0.747s
+FAIL
+--- FAIL: TestCustomerJourney_ListByStageSeesWritesFromAnotherInstance (0.00s)
+--- FAIL: TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage (0.00s)
+--- FAIL: TestCustomerJourney_AutoDetectSleepingIndexesNewStage (0.00s)
+
+=== J2: 成员不做权威回读 ===
+[J2] landed_marker=MUT-J2
+[J2] rc=1 fail=2 pass=0
+FAIL
+FAIL	hivemtk-user/internal/service	0.751s
+FAIL
+--- FAIL: TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage (0.00s)
+--- FAIL: TestCustomerJourney_AutoDetectSleepingIndexesNewStage (0.00s)
+
+=== J3: 去掉哨兵短路 ===
+[J3] landed_marker=MUT-J3
+[J3] rc=1 fail=1 pass=0
+FAIL
+FAIL	hivemtk-user/internal/service	0.757s
+FAIL
+--- FAIL: TestCustomerJourney_ListByStageIndexKeepsOneEntryPerCustomerPerStage (0.00s)
+
+=== J4: 名单不排序 ===
+[J4] landed_marker=MUT-J4
+[J4] rc=1 fail=1 pass=0
+FAIL
+FAIL	hivemtk-user/internal/service	0.759s
+FAIL
+--- FAIL: TestCustomerJourney_ListByStageOrderIsIndependentOfWriteOrder (0.00s)
+
+=== J5: 索引读失败回空表 ===
+[J5] landed_marker=MUT-J5
+[J5] rc=1 fail=1 pass=0
+FAIL
+FAIL	hivemtk-user/internal/service	0.719s
+FAIL
+--- FAIL: TestCustomerJourney_ListByStageFallsBackToLocalViewWhenIndexFails (0.00s)
+
+=== 还原后复测控制组（不带 overlay 仍须绿） ===
+[POST-CTRL] rc=0 fail=0 pass=14
+ok  	hivemtk-user/internal/service	0.524s
+TREE_MD5=32adb1153bab147bb882b0fb9f5448ff BASE=32adb1153bab147bb882b0fb9f5448ff UNCHANGED=yes
+TALLY killed=5 survived=0 wrong_kill=0 broken=0 (共 5 刀)
+SUMMARY J1=1 J2=1 J3=1 J4=1 J5=1 (1＝杀；0＝存活；7＝杀错判据；6＝装架坏；8＝夹具/环境缺)
+LOGDIR=/tmp/p904gate/hivemtk/docs/superpowers/specs/ledger/logs/P903/20261009-015014
+RESULT=OK killed=5/5（J0probe 自证通路 + 前后控制组各 6 枚绑定用例绿）

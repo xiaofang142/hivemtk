@@ -25,13 +25,11 @@ const (
 type StreamEvent string
 
 const (
-	EventChunk           StreamEvent = "chunk"
 	EventTriggerDetected StreamEvent = "trigger_detected"
 	EventJSONComplete    StreamEvent = "json_complete"
 	EventParseError      StreamEvent = "parse_error"
 	EventToolExecuted    StreamEvent = "tool_executed"
 	EventReassembleReady StreamEvent = "reassemble_ready"
-	EventStreamEnd       StreamEvent = "stream_end"
 	EventTimeout         StreamEvent = "timeout"
 )
 

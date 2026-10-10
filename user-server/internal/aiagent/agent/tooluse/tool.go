@@ -80,7 +80,6 @@ const (
 	ToolErrApprovalDenied   = "TOOL_APPROVAL_DENIED"
 	ToolErrDNCBlocked       = "TOOL_DNC_BLOCKED"
 	ToolErrCircuitOpen      = "TOOL_CIRCUIT_OPEN"
-	ToolErrNotFound         = "TOOL_NOT_FOUND"
 	ToolErrInternal         = "TOOL_INTERNAL"
 )
 

@@ -497,6 +497,10 @@ audit:
 	@python3 scripts/check-ci-pg-capacity.py --repo .
 	@echo "── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──"
 	@python3 scripts/check-env-coverage.py
+	@echo "── 参数中心登记的每条动态参数要么真有人读、要么文案自己承认未接线（接线后不撤标注也红）──"
+	@python3 scripts/check-config-param-readpoints.py
+	@echo "── 已清零的假性未完成资产（假回执/假状态/零装配点）不得长回来 ──"
+	@bash scripts/check-cleared-fake-assets.sh --repo .
 	@echo "── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──"
 	@python3 scripts/check-test-nil-deref.py
 	@echo "── 协程体不得直读「测试会改写」的包级注入点（进协程前快照成本地值）──"

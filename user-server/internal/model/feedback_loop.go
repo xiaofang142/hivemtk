@@ -40,18 +40,14 @@ func (FeedbackEvent) TableName() string { return "feedback_events" }
 // 回款两键（T-P8-02）：collection 的 reward 由 computeReward 按金额缩放，
 // collection_lost 走 flat -1.0；两者都不进 bandit reflux（无 arm 上下文，见 reflux 四键过滤）。
 const (
-	FeedbackSignalLike           = "like"
-	FeedbackSignalDislike        = "dislike"
-	FeedbackSignalRating         = "rating"
-	FeedbackSignalComplaint      = "complaint"
-	FeedbackSignalConversion     = "conversion"
-	FeedbackSignalReplyRate      = "reply_rate"
-	FeedbackSignalDuration       = "duration"
-	FeedbackSignalTransfer       = "transfer"
-	FeedbackSignalChampionMark   = "champion_mark"
-	FeedbackSignalScriptAdopt    = "script_adopt"
-	FeedbackSignalCollection     = "collection"
-	FeedbackSignalCollectionLost = "collection_lost"
+	FeedbackSignalLike         = "like"
+	FeedbackSignalDislike      = "dislike"
+	FeedbackSignalRating       = "rating"
+	FeedbackSignalComplaint    = "complaint"
+	FeedbackSignalConversion   = "conversion"
+	FeedbackSignalReplyRate    = "reply_rate"
+	FeedbackSignalTransfer     = "transfer"
+	FeedbackSignalChampionMark = "champion_mark"
 )
 
 // FeedbackEventType 反馈事件类型常量
@@ -229,7 +225,6 @@ const (
 const (
 	BanditExperimentTypePrompt     = "prompt"
 	BanditExperimentTypeSOPVariant = "sop_variant"
-	BanditExperimentTypeScript     = "script"
 )
 
 // PromptABTest Prompt A/B 测试配置与结果
@@ -260,9 +255,7 @@ func (PromptABTest) TableName() string { return "prompt_ab_tests" }
 
 // PromptABTestStatus A/B 测试状态常量
 const (
-	PromptABTestStatusDraft      = "draft"
 	PromptABTestStatusRunning    = "running"
-	PromptABTestStatusPaused     = "paused"
 	PromptABTestStatusCompleted  = "completed"
 	PromptABTestStatusRolledBack = "rolled_back"
 )

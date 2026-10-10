@@ -46,7 +46,6 @@ type MessageRole string
 const (
 	MessageRoleUser      MessageRole = "user"
 	MessageRoleAssistant MessageRole = "assistant"
-	MessageRoleSystem    MessageRole = "system"
 )
 
 // Response 回复结构

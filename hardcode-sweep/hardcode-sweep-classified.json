@@ -1,0 +1,7562 @@
+{
+  "summary": {
+    "FIELD_LIT": 460,
+    "TUNABLE": 338,
+    "INFRA": 8,
+    "PROTOCOL": 20,
+    "DEPLOY": 13
+  },
+  "rows": [
+    {
+      "file": "cmd/api/main.go",
+      "line": 524,
+      "name": "AGENT_RUNTIME_BUS_ENABLED",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "cmd/api/serve_unix.go",
+      "line": 21,
+      "name": "DefaultHammerTime",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "cmd/api/serve_unix.go",
+      "line": 27,
+      "name": "ReadHeaderTimeout",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "cmd/api/serve_unix.go",
+      "line": 28,
+      "name": "IdleTimeout",
+      "value": "120",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 63,
+      "name": "Empathy",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 65,
+      "name": "Empathy",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 67,
+      "name": "Empathy",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 69,
+      "name": "Empathy",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 71,
+      "name": "Empathy",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 76,
+      "name": "Enthusiasm",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 78,
+      "name": "Enthusiasm",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 80,
+      "name": "Enthusiasm",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 82,
+      "name": "Enthusiasm",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 84,
+      "name": "Enthusiasm",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 86,
+      "name": "Enthusiasm",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 98,
+      "name": "Patience",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 100,
+      "name": "Patience",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 102,
+      "name": "Patience",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 104,
+      "name": "Patience",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 111,
+      "name": "Clarity",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 113,
+      "name": "Clarity",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 115,
+      "name": "Clarity",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/alignment_stage.go",
+      "line": 121,
+      "name": "Politeness",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/asset_bundle_loader.go",
+      "line": 42,
+      "name": "HistoryLimit",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/asset_bundle_loader.go",
+      "line": 45,
+      "name": "RAGTopK",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/asset_bundle_loader.go",
+      "line": 50,
+      "name": "IncludeMerchantVars",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/asset_bundle_loader.go",
+      "line": 51,
+      "name": "StripFewShotJSON",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/gatekeeper_stage.go",
+      "line": 87,
+      "name": "HandoffToHuman",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/inference_cycle.go",
+      "line": 315,
+      "name": "HandoffToHuman",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/inference_types.go",
+      "line": 112,
+      "name": "CrisisLevel",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/inference_types.go",
+      "line": 113,
+      "name": "CrisisLevel",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/inference_types.go",
+      "line": 114,
+      "name": "CrisisLevel",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/inference_types.go",
+      "line": 115,
+      "name": "CrisisLevel",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 69,
+      "name": "SkipLLM",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 72,
+      "name": "Confidence",
+      "value": "0.95",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 81,
+      "name": "Confidence",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 90,
+      "name": "Confidence",
+      "value": "0.75",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 98,
+      "name": "Confidence",
+      "value": "0.80",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 106,
+      "name": "Confidence",
+      "value": "0.70",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 114,
+      "name": "Confidence",
+      "value": "0.70",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 122,
+      "name": "Confidence",
+      "value": "0.78",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/planner_stage.go",
+      "line": 130,
+      "name": "Confidence",
+      "value": "0.55",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 116,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 119,
+      "name": "OverallScore",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 146,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 169,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 192,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/runtime/reviewer_stage.go",
+      "line": 215,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/circuit_breaker.go",
+      "line": 173,
+      "name": "BackoffMultiplier",
+      "value": "2.0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/circuit_breaker.go",
+      "line": 176,
+      "name": "MaxCooldown",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/customer_tools.go",
+      "line": 641,
+      "name": "HasRFMMin",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/customer_tools.go",
+      "line": 645,
+      "name": "HasRFMMax",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/executor.go",
+      "line": 115,
+      "name": "DefaultTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/executor.go",
+      "line": 239,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/knowledge_tools.go",
+      "line": 242,
+      "name": "Hit",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/knowledge_tools.go",
+      "line": 560,
+      "name": "DocCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/knowledge_tools.go",
+      "line": 561,
+      "name": "ChunkCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/knowledge_tools.go",
+      "line": 564,
+      "name": "SearchCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/loop_guard.go",
+      "line": 48,
+      "name": "CostDriftFactor",
+      "value": "5.0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/loop_guard.go",
+      "line": 97,
+      "name": "MaxRepeatCount",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/loop_guard.go",
+      "line": 100,
+      "name": "WindowSize",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/loop_guard.go",
+      "line": 103,
+      "name": "MaxTraces",
+      "value": "10000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/provider.go",
+      "line": 211,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/risk_gate.go",
+      "line": 114,
+      "name": "WouldDeny",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/risk_gate.go",
+      "line": 120,
+      "name": "WouldDeny",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/risk_gate.go",
+      "line": 128,
+      "name": "WouldDeny",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/risk_gate.go",
+      "line": 145,
+      "name": "Allowed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/tool_router.go",
+      "line": 59,
+      "name": "FailThreshold",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/tool_router.go",
+      "line": 62,
+      "name": "CooldownDuration",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/agent/tooluse/tool_router.go",
+      "line": 65,
+      "name": "DefaultToolCost",
+      "value": "0.001",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/embedding/embedding.go",
+      "line": 32,
+      "name": "DefaultDimension",
+      "value": "1024",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/embedding/embedding.go",
+      "line": 35,
+      "name": "SourceDim",
+      "value": "16384",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/embedding/embedding.go",
+      "line": 39,
+      "name": "MinNGram",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/embedding/embedding.go",
+      "line": 40,
+      "name": "MaxNGram",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/eval/dialogue_gold.go",
+      "line": 85,
+      "name": "ActionSkipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/eval/dialogue_gold.go",
+      "line": 96,
+      "name": "Composite",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/eval/dialogue_gold.go",
+      "line": 174,
+      "name": "ActionMatchRate",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/eval/judge_calibration.go",
+      "line": 22,
+      "name": "MinCalibrationSamples",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/eval/judge_calibration.go",
+      "line": 25,
+      "name": "KappaThreshold",
+      "value": "0.6",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/eval/ragas.go",
+      "line": 12,
+      "name": "FaithfulnessTarget",
+      "value": "0.90",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/eval/ragas.go",
+      "line": 13,
+      "name": "ContextPrecisionTarget",
+      "value": "0.80",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/eval/ragas.go",
+      "line": 144,
+      "name": "Faithfulness",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/eval/ragas.go",
+      "line": 156,
+      "name": "AnswerRelevancy",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/controller/knowledge_workspace.go",
+      "line": 465,
+      "name": "TopK",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/controller/knowledge_workspace.go",
+      "line": 468,
+      "name": "Threshold",
+      "value": "0.6",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_document.go",
+      "line": 38,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_document.go",
+      "line": 102,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_document.go",
+      "line": 105,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_import_log.go",
+      "line": 38,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_import_log.go",
+      "line": 41,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_merchant.go",
+      "line": 45,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_merchant.go",
+      "line": 48,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_merchant.go",
+      "line": 179,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_merchant.go",
+      "line": 182,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_openapi.go",
+      "line": 43,
+      "name": "Enabled",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_search_log.go",
+      "line": 40,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/repository/knowledge_search_log.go",
+      "line": 43,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/constants.go",
+      "line": 154,
+      "name": "DefaultPageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/constants.go",
+      "line": 157,
+      "name": "DefaultFrequencyPenalty",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/constants.go",
+      "line": 160,
+      "name": "DefaultPresencePenalty",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/knowledge_merchant_feedback.go",
+      "line": 79,
+      "name": "HasRating",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/knowledge_merchant_playground.go",
+      "line": 66,
+      "name": "TopK",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/knowledge_merchant_playground.go",
+      "line": 69,
+      "name": "SimilarityThreshold",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/knowledge_merchant_playground.go",
+      "line": 72,
+      "name": "SimilarityThreshold",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/rag_config.go",
+      "line": 97,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/rag_config.go",
+      "line": 104,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/knowledge/service/rag_config.go",
+      "line": 110,
+      "name": "IsActive",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/dispatcher.go",
+      "line": 115,
+      "name": "Version",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/aiagent/llm/dispatcher_dispatch.go",
+      "line": 170,
+      "name": "Logprobs",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/dispatcher_dispatch.go",
+      "line": 174,
+      "name": "TopLogprobs",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/llm/dispatcher_dispatch.go",
+      "line": 283,
+      "name": "JSONMode",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/embedding.go",
+      "line": 284,
+      "name": "EMBEDDING_ALLOW_FALLBACK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/llm.go",
+      "line": 557,
+      "name": "MaxRetries",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/llm.go",
+      "line": 560,
+      "name": "RequestTimeout",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/llm.go",
+      "line": 566,
+      "name": "MaxTokens",
+      "value": "2048",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 32,
+      "name": "DefaultHealthCheckInterval",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 33,
+      "name": "DefaultFailureThreshold",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 34,
+      "name": "DefaultCircuitOpenDuration",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 35,
+      "name": "DefaultHealthCheckTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 334,
+      "name": "ConsecutiveFailures",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 401,
+      "name": "ConsecutiveFailures",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/provider_failover.go",
+      "line": 416,
+      "name": "ConsecutiveFailures",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/llm/react_adapter.go",
+      "line": 50,
+      "name": "IsFinal",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/cache/answer_cache_model.go",
+      "line": 21,
+      "name": "DefaultSemanticThreshold",
+      "value": "0.95",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/customer_service/dialog_manager.go",
+      "line": 35,
+      "name": "DefaultMaxHistoryLength",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/customer_service/dialog_manager.go",
+      "line": 38,
+      "name": "DefaultSessionTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/customer_service/dialog_manager.go",
+      "line": 41,
+      "name": "SessionCleanupInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/customer_service/dialog_manager.go",
+      "line": 379,
+      "name": "Confidence",
+      "value": "0.6",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/bge_m3_vectorizer.go",
+      "line": 23,
+      "name": "BGEM3DefaultDimension",
+      "value": "1024",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/bge_m3_vectorizer.go",
+      "line": 94,
+      "name": "BatchSize",
+      "value": "32",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/bge_m3_vectorizer.go",
+      "line": 97,
+      "name": "RequestTimeout",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/bge_m3_vectorizer.go",
+      "line": 100,
+      "name": "MaxRetries",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/hybrid_searcher.go",
+      "line": 481,
+      "name": "Score",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/llm_chat_intent.go",
+      "line": 184,
+      "name": "Confidence",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/llm_chat_intent.go",
+      "line": 187,
+      "name": "Confidence",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/pgvector_index_ops.go",
+      "line": 18,
+      "name": "HNSWM",
+      "value": "16",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/pgvector_index_ops.go",
+      "line": 21,
+      "name": "HNSWEfConstruction",
+      "value": "200",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/pgvector_index_ops.go",
+      "line": 24,
+      "name": "HNSWEfSearch",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/query_rewriter.go",
+      "line": 109,
+      "name": "CacheHit",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/query_rewriter.go",
+      "line": 124,
+      "name": "CacheHit",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/rerank.go",
+      "line": 183,
+      "name": "RERANK_ENABLED",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/three_tier.go",
+      "line": 128,
+      "name": "FromCache",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/translation_cache.go",
+      "line": 16,
+      "name": "TranslationCacheTTLDefault",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/aiagent/rag/retrieval/translation_cache.go",
+      "line": 22,
+      "name": "TranslationCacheMaxEntriesDefault",
+      "value": "100000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/app/approval_wiring.go",
+      "line": 243,
+      "name": "ApprovalShadow",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/app/approval_wiring.go",
+      "line": 261,
+      "name": "ApprovalShadow",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/app/approval_wiring.go",
+      "line": 265,
+      "name": "ApprovalShadow",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/app/collection_wiring.go",
+      "line": 182,
+      "name": "Assembled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/collection_wiring.go",
+      "line": 191,
+      "name": "ReachGateChecked",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/app/integration_reach_adapter.go",
+      "line": 889,
+      "name": "DailyRemain",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/integration_reach_adapter.go",
+      "line": 898,
+      "name": "DailyRemain",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/order_draft_wiring.go",
+      "line": 415,
+      "name": "Assembled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/permission_wiring.go",
+      "line": 129,
+      "name": "RiskEnforce",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/app/reach_gate_wiring.go",
+      "line": 479,
+      "name": "DependencyUnmet",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/reach_tool_wiring.go",
+      "line": 37,
+      "name": "QuietHoursEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/sales_engine_factory.go",
+      "line": 115,
+      "name": "ConfidenceThreshold",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/tool_audit_wiring.go",
+      "line": 156,
+      "name": "HasStats",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/app/tool_circuit_breaker_wiring.go",
+      "line": 185,
+      "name": "CircuitBreakerShadow",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/bridge/account_repo.go",
+      "line": 116,
+      "name": "IsPrimary",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/bridge/account_repo.go",
+      "line": 117,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/bridge/handler_http.go",
+      "line": 37,
+      "name": "HTTPPollingMaxTimeout",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/bridge/handler_http.go",
+      "line": 38,
+      "name": "HTTPPollingDefaultTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/bridge/handler_http.go",
+      "line": 39,
+      "name": "HTTPIngestMaxBodySize",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/bridge/handler_http.go",
+      "line": 40,
+      "name": "HTTPIngestMaxMessages",
+      "value": "200",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/bridge/handler_http.go",
+      "line": 655,
+      "name": "Duplicate",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/bridge/sse.go",
+      "line": 55,
+      "name": "SSEDefaultHeartbeatInterval",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/bridge/sse.go",
+      "line": 56,
+      "name": "SSEDefaultMaxStreamDuration",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/bridge/sse.go",
+      "line": 57,
+      "name": "SSEMaxBacklogEvents",
+      "value": "1000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/bridge/sse.go",
+      "line": 58,
+      "name": "SSEBusBufferSize",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/browser_automation/repository/profile_health.go",
+      "line": 58,
+      "name": "Blocked",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/browser_automation/service/executor.go",
+      "line": 1662,
+      "name": "ChromeTabID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/browser_automation/service/task.go",
+      "line": 142,
+      "name": "LoopCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/browser_automation/service/task.go",
+      "line": 145,
+      "name": "TimeoutSec",
+      "value": "120",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/core/core.go",
+      "line": 26,
+      "name": "DefaultHTTPTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/qq/qq.go",
+      "line": 38,
+      "name": "QQMessageMaxLen",
+      "value": "2000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/qq/qq.go",
+      "line": 404,
+      "name": "CallbackOpVerify",
+      "value": "13",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 25,
+      "name": "TGMessageMaxLength",
+      "value": "4096",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 26,
+      "name": "TGInlineRowsMax",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 27,
+      "name": "TGInlineButtonsPerRowMax",
+      "value": "8",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 122,
+      "name": "ReplyToMessageID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 124,
+      "name": "DisableMarkdownConversion",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/channelbot/telegram/telegram.go",
+      "line": 464,
+      "name": "ALLOW_INSECURE_TELEGRAM_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/channelgw/protocol.go",
+      "line": 15,
+      "name": "ProtocolVersionV1",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/channelgw/protocol.go",
+      "line": 16,
+      "name": "ProtocolVersionV2",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 15,
+      "name": "DefaultDBPortDev",
+      "value": "8232",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 17,
+      "name": "DefaultDBPortDocker",
+      "value": "8202",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 25,
+      "name": "DefaultLLMPort",
+      "value": "8207",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 29,
+      "name": "DefaultEmbeddingPort",
+      "value": "8208",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 33,
+      "name": "DefaultRerankPort",
+      "value": "8209",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/ports.go",
+      "line": 39,
+      "name": "DefaultLayaPort",
+      "value": "8210",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/config/server.go",
+      "line": 584,
+      "name": "Dimension",
+      "value": "1024",
+      "kind": "go_num",
+      "bucket": "INFRA",
+      "why": "检索/向量维度参数，改动需重建索引"
+    },
+    {
+      "file": "internal/content/controller/ai_content.go",
+      "line": 183,
+      "name": "IsFavorite",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/content/controller/template_market.go",
+      "line": 152,
+      "name": "IsOfficial",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/content/service/ai_content.go",
+      "line": 350,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/content/service/batch_operation.go",
+      "line": 76,
+      "name": "LazyQuotes",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/content/service/marketing_flow_action.go",
+      "line": 713,
+      "name": "MARKETING_WEBHOOK_ALLOW_INSECURE",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 196,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 202,
+      "name": "Temperature",
+      "value": "0.7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 205,
+      "name": "MaxTokens",
+      "value": "800",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 208,
+      "name": "RAGTopK",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 211,
+      "name": "ConfidenceThreshold",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 214,
+      "name": "EnableRAG",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 217,
+      "name": "EnableScriptMatch",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 220,
+      "name": "EnableHumanizePolish",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/ai_agent.go",
+      "line": 223,
+      "name": "EnablePlaybook",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/asset_bundle.go",
+      "line": 328,
+      "name": "RAGMessages",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/asset_market.go",
+      "line": 56,
+      "name": "PLATFORM_ENABLED",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/clue.go",
+      "line": 41,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/clue.go",
+      "line": 44,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/dingtalk_app_account.go",
+      "line": 144,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/douyin_card.go",
+      "line": 115,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/douyin_card.go",
+      "line": 118,
+      "name": "PageSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_jobs.go",
+      "line": 47,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_jobs.go",
+      "line": 50,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_list.go",
+      "line": 53,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_list.go",
+      "line": 56,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_list.go",
+      "line": 176,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/email_list.go",
+      "line": 179,
+      "name": "Size",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/glossary.go",
+      "line": 67,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/glossary.go",
+      "line": 70,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/kuaishou_card.go",
+      "line": 116,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/kuaishou_card.go",
+      "line": 119,
+      "name": "PageSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/proactive_reach.go",
+      "line": 161,
+      "name": "DryRun",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/qq_account.go",
+      "line": 139,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/sso.go",
+      "line": 20,
+      "name": "SSOCookieTTL",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/telegram_account.go",
+      "line": 342,
+      "name": "WebhookEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/upload.go",
+      "line": 22,
+      "name": "MaxUploadSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/controller/upload.go",
+      "line": 89,
+      "name": "EnableVirusScan",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/upload.go",
+      "line": 93,
+      "name": "EnableVirusScan",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/xianyu_card.go",
+      "line": 103,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/controller/xianyu_card.go",
+      "line": 106,
+      "name": "PageSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 5,
+      "name": "CodeSuccess",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 6,
+      "name": "CodeParamInvalid",
+      "value": "4000",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 7,
+      "name": "CodeUnauthorized",
+      "value": "4001",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 8,
+      "name": "CodeForbidden",
+      "value": "4003",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 9,
+      "name": "CodeNotFound",
+      "value": "4004",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 10,
+      "name": "CodeConflict",
+      "value": "4009",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 11,
+      "name": "CodeInternal",
+      "value": "5000",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 12,
+      "name": "CodePlatformUnavail",
+      "value": "5001",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 13,
+      "name": "CodeAssetNotFound",
+      "value": "6001",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 14,
+      "name": "CodeAssetDup",
+      "value": "6002",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 15,
+      "name": "CodeAssetInvalid",
+      "value": "6003",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 16,
+      "name": "CodeSyncFailed",
+      "value": "6004",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/domain/errors/codes.go",
+      "line": 17,
+      "name": "CodeLoaderFallback",
+      "value": "6005",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/email/service/email_drain_worker.go",
+      "line": 23,
+      "name": "DefaultEmailDrainInterval",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/email/service/email_list.go",
+      "line": 158,
+      "name": "IsRead",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/email/service/email_send.go",
+      "line": 37,
+      "name": "EmailPendingTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/email/service/email_send.go",
+      "line": 44,
+      "name": "EmailSendingStaleAfter",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/etl/document_text.go",
+      "line": 112,
+      "name": "Strict",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/controller/geo_site.go",
+      "line": 53,
+      "name": "Active",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/alert.go",
+      "line": 40,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/alert.go",
+      "line": 43,
+      "name": "Limit",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/competitor.go",
+      "line": 67,
+      "name": "Priority",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/entity_extractor.go",
+      "line": 104,
+      "name": "Confidence",
+      "value": "0.8",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/opportunity.go",
+      "line": 137,
+      "name": "HasSOVData",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 148,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 200,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 257,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 292,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 426,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 466,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 678,
+      "name": "SuccessCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 681,
+      "name": "FailCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 718,
+      "name": "SuccessCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/push.go",
+      "line": 721,
+      "name": "FailCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/search_probe.go",
+      "line": 325,
+      "name": "MaxProbeSampleRounds",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/verification.go",
+      "line": 106,
+      "name": "BrandMentioned",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/geo/service/visibility.go",
+      "line": 78,
+      "name": "Days",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/visibility.go",
+      "line": 109,
+      "name": "Visibility",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/geo/service/visibility.go",
+      "line": 152,
+      "name": "Change",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/visibility.go",
+      "line": 153,
+      "name": "ChangePct",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/geo/service/visibility.go",
+      "line": 162,
+      "name": "Days",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/middleware/body_limit.go",
+      "line": 30,
+      "name": "DefaultMaxJSONBodyMB",
+      "value": "8",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/model/customer_rfm.go",
+      "line": 113,
+      "name": "RecoveryDefaultMaxAttempts",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/model/email_send.go",
+      "line": 22,
+      "name": "EmailStatusPending",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/email_send.go",
+      "line": 23,
+      "name": "EmailStatusSent",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/email_send.go",
+      "line": 24,
+      "name": "EmailStatusFailed",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/email_send.go",
+      "line": 25,
+      "name": "EmailStatusSending",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/email_send.go",
+      "line": 26,
+      "name": "EmailStatusExpired",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/opportunity.go",
+      "line": 260,
+      "name": "OpportunityWinProbabilityMax",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/model/sms_tracking.go",
+      "line": 70,
+      "name": "MaxRetry",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/monitor/monitor.go",
+      "line": 430,
+      "name": "HasAbnormal",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/ab_experiment.go",
+      "line": 79,
+      "name": "IsControl",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/ab_experiment.go",
+      "line": 134,
+      "name": "IsControl",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/ab_stats.go",
+      "line": 81,
+      "name": "Confidence",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/ab_stats.go",
+      "line": 83,
+      "name": "IsWinner",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/churn_prediction.go",
+      "line": 465,
+      "name": "DaysSincePurchase",
+      "value": "9999",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/ops/service/conversion_funnel.go",
+      "line": 111,
+      "name": "Rate",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/conversion_funnel.go",
+      "line": 118,
+      "name": "DropRate",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/ops/service/custom_report_export.go",
+      "line": 16,
+      "name": "CSVExportMaxRows",
+      "value": "30000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/ops/service/performance_testing.go",
+      "line": 38,
+      "name": "Concurrency",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/ops/service/performance_testing.go",
+      "line": 41,
+      "name": "DurationSec",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/cron/emaillistcron.go",
+      "line": 130,
+      "name": "IsSend",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/cron/emaillistcron.go",
+      "line": 131,
+      "name": "IsSuccess",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/cron/emaillistcron.go",
+      "line": 207,
+      "name": "IsSend",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/db/db.go",
+      "line": 98,
+      "name": "MaxOpenConns",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/featureflag/flag.go",
+      "line": 34,
+      "name": "PollInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/kbrelease/kbrelease.go",
+      "line": 285,
+      "name": "RetiredVersion",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/mail/mail.go",
+      "line": 21,
+      "name": "ImplicitTLSPort",
+      "value": "465",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/mail/mail.go",
+      "line": 106,
+      "name": "Port",
+      "value": "587",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/mail/mail.go",
+      "line": 107,
+      "name": "SSL",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/mail/mail.go",
+      "line": 109,
+      "name": "Port",
+      "value": "587",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/mail/mail.go",
+      "line": 112,
+      "name": "SSL",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/pagination/cursor.go",
+      "line": 14,
+      "name": "CursorPageSize",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/security/visitor_token.go",
+      "line": 14,
+      "name": "DefaultVisitorTokenTTL",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 72,
+      "name": "Window",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 142,
+      "name": "AllowedFailure",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 143,
+      "name": "Remaining",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 144,
+      "name": "BudgetUsed",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 148,
+      "name": "Remaining",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/sla/slo.go",
+      "line": 149,
+      "name": "BudgetUsed",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/sso/oidc.go",
+      "line": 139,
+      "name": "HTTPTimeout",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/testutil/testdb.go",
+      "line": 322,
+      "name": "POSTGRES_TEST_PORT",
+      "value": "8232",
+      "kind": "go_num",
+      "bucket": "DEPLOY",
+      "why": "部署配置（env/yaml），不进参数中心"
+    },
+    {
+      "file": "internal/pkg/textutil/truncate.go",
+      "line": 8,
+      "name": "DefaultMaxBytes",
+      "value": "8192",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/tgbot/tgbot.go",
+      "line": 70,
+      "name": "DisableWebPagePreview",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/tgbot/tgbot.go",
+      "line": 138,
+      "name": "DisableWebPagePreview",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/traceparent/traceparent.go",
+      "line": 32,
+      "name": "TraceIDHexLen",
+      "value": "32",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/pkg/traceparent/traceparent.go",
+      "line": 33,
+      "name": "SpanIDHexLen",
+      "value": "16",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/pkg/utils/account/account.go",
+      "line": 115,
+      "name": "Timeout",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 12,
+      "name": "ShortTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 15,
+      "name": "MediumTimeout",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 18,
+      "name": "DefaultHTTPTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 21,
+      "name": "LongTimeout",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 27,
+      "name": "CronShortTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 30,
+      "name": "CronMediumTimeout",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 33,
+      "name": "CronLongTimeout",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 36,
+      "name": "CronVeryLongTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 39,
+      "name": "CronExtraLongTimeout",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 45,
+      "name": "EmailSendTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 48,
+      "name": "DingtalkTimeout",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 51,
+      "name": "WebhookTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 54,
+      "name": "SmsTrackerTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 57,
+      "name": "RagMetricsTimeout",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/constants.go",
+      "line": 60,
+      "name": "SopStepTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/logger/logger.go",
+      "line": 77,
+      "name": "MaxSizeMB",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/pagination/pagination.go",
+      "line": 28,
+      "name": "MaxPageSize",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/pagination/pagination.go",
+      "line": 31,
+      "name": "DefaultPageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/pagination/pagination.go",
+      "line": 34,
+      "name": "DefaultPage",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/pagination.go",
+      "line": 46,
+      "name": "MaxPageSizeAdmin",
+      "value": "1000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/pagination.go",
+      "line": 48,
+      "name": "MaxPageSizeUser",
+      "value": "200",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/recover.go",
+      "line": 211,
+      "name": "InitialInterval",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/recover.go",
+      "line": 212,
+      "name": "MaxInterval",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/pkg/utils/recover.go",
+      "line": 213,
+      "name": "MaxElapsedTime",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 16,
+      "name": "UserStatusType",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 17,
+      "name": "UserStatusType",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 23,
+      "name": "OrderStatusType",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 24,
+      "name": "OrderStatusType",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 25,
+      "name": "OrderStatusType",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 34,
+      "name": "AccountStatusType",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 35,
+      "name": "AccountStatusType",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 41,
+      "name": "SmlistType",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 42,
+      "name": "SmlistType",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 43,
+      "name": "SmlistType",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/pkg/utils/type/type.go",
+      "line": 44,
+      "name": "SmlistType",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/platform/contributor_client.go",
+      "line": 83,
+      "name": "CONTRIBUTOR_DEV",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/platform/contributor_client.go",
+      "line": 87,
+      "name": "CONTRIBUTOR_DEV",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/repository/asset_bundle_repo.go",
+      "line": 140,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/asset_bundle_repo.go",
+      "line": 143,
+      "name": "Size",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/chat_channel.go",
+      "line": 117,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/chat_channel.go",
+      "line": 120,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/confidence_repositories.go",
+      "line": 73,
+      "name": "IsActive",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/customer_session.go",
+      "line": 24,
+      "name": "DefaultSessionActiveTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/repository/feedback_loop.go",
+      "line": 326,
+      "name": "ID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/feedback_loop.go",
+      "line": 328,
+      "name": "IsActive",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/feedback_loop.go",
+      "line": 329,
+      "name": "ExecutionCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/feedback_loop.go",
+      "line": 330,
+      "name": "SuccessCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/humanize_repositories.go",
+      "line": 129,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/lead_mining_config.go",
+      "line": 48,
+      "name": "ID",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/local_asset_repo.go",
+      "line": 97,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/local_asset_repo.go",
+      "line": 100,
+      "name": "Size",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox.go",
+      "line": 202,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox.go",
+      "line": 205,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox_conversation.go",
+      "line": 235,
+      "name": "UnreadCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox_conversation_query.go",
+      "line": 16,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox_conversation_query.go",
+      "line": 19,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/message_hub_inbox_outbound.go",
+      "line": 22,
+      "name": "MaxOutboundPushAttempts",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/repository/notification.go",
+      "line": 59,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/notification.go",
+      "line": 62,
+      "name": "Size",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/repository/telegram_polling_lock.go",
+      "line": 20,
+      "name": "PollingLockStaleThreshold",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/router/router.go",
+      "line": 175,
+      "name": "HandleMethodNotAllowed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/security/network_exposure_guard.go",
+      "line": 68,
+      "name": "REQUIRE_PRIVATE_NETWORK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/security/network_exposure_guard.go",
+      "line": 69,
+      "name": "REQUIRE_PRIVATE_NETWORK",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ab_experiment.go",
+      "line": 25,
+      "name": "AbExposureBuffer",
+      "value": "1024",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/agent_attribution.go",
+      "line": 62,
+      "name": "PeriodDays",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/agent_co_pilot.go",
+      "line": 108,
+      "name": "AutoApproved",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/agent_co_pilot.go",
+      "line": 114,
+      "name": "AutoApproved",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/agent_co_pilot.go",
+      "line": 120,
+      "name": "AutoApproved",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/agent_co_pilot.go",
+      "line": 125,
+      "name": "AutoApproved",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/agent_status.go",
+      "line": 18,
+      "name": "HeartbeatOfflineTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/agent_status.go",
+      "line": 21,
+      "name": "HeartbeatMonitorInterval",
+      "value": "time.Minute",
+      "kind": "duration",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/agent_status.go",
+      "line": 55,
+      "name": "MaxSessions",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 96,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 102,
+      "name": "Temperature",
+      "value": "0.7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 105,
+      "name": "MaxTokens",
+      "value": "2048",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 108,
+      "name": "RAGTopK",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 111,
+      "name": "ConfidenceThreshold",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 114,
+      "name": "EnableRAG",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 117,
+      "name": "EnableScriptMatch",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 120,
+      "name": "EnableHumanizePolish",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 123,
+      "name": "EnablePlaybook",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 262,
+      "name": "Enabled",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_agent_domain.go",
+      "line": 318,
+      "name": "Enabled",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ai_tagger.go",
+      "line": 284,
+      "name": "Confidence",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/alert_dispatcher.go",
+      "line": 15,
+      "name": "AlertDispatchBufferSize",
+      "value": "64",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/alert_dispatcher.go",
+      "line": 17,
+      "name": "AlertDispatchDedupeWindow",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/alert_dispatcher.go",
+      "line": 19,
+      "name": "AlertDispatchWorkers",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/alert_rule.go",
+      "line": 71,
+      "name": "WindowSeconds",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/alert_rule.go",
+      "line": 74,
+      "name": "CooldownSeconds",
+      "value": "300",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/anomaly_login_detector.go",
+      "line": 137,
+      "name": "AuditLogged",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/anomaly_login_detector.go",
+      "line": 147,
+      "name": "InboxCreated",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/anomaly_login_detector.go",
+      "line": 157,
+      "name": "EmailDispatched",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/approval_request.go",
+      "line": 42,
+      "name": "DefaultApprovalRequestTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/approval_request.go",
+      "line": 43,
+      "name": "MaxApprovalRequestTTL",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/approval_sweep.go",
+      "line": 27,
+      "name": "DefaultApprovalSweepInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/asset_bundle.go",
+      "line": 106,
+      "name": "MaxHistoryMessages",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/asset_bundle_submit.go",
+      "line": 18,
+      "name": "PLATFORM_ENABLED",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/audience_selector.go",
+      "line": 26,
+      "name": "DefaultAudienceLimit",
+      "value": "200",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/audience_selector.go",
+      "line": 29,
+      "name": "MaxAudienceLimit",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/audience_selector.go",
+      "line": 144,
+      "name": "Truncated",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/audience_selector.go",
+      "line": 157,
+      "name": "Truncated",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/audience_selector.go",
+      "line": 169,
+      "name": "Truncated",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/bad_case.go",
+      "line": 57,
+      "name": "BadCaseDefaultPageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/bad_case.go",
+      "line": 380,
+      "name": "PageSize",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/bad_case.go",
+      "line": 463,
+      "name": "BadCaseDefaultExportLimit",
+      "value": "200",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/behavioral_humanize.go",
+      "line": 119,
+      "name": "EnableMessageSplit",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/bridge_offline_replay.go",
+      "line": 303,
+      "name": "BridgeOutboundOrphanDefaultTTL",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/bridge_offline_replay.go",
+      "line": 365,
+      "name": "SkippedDisabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/bridge_offline_replay.go",
+      "line": 381,
+      "name": "ProbeMissing",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 263,
+      "name": "Retryable",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 279,
+      "name": "Retryable",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 287,
+      "name": "Retryable",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 291,
+      "name": "Retryable",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 300,
+      "name": "Retryable",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/channel_error.go",
+      "line": 305,
+      "name": "Retryable",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 94,
+      "name": "CollectionGraceDays",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 96,
+      "name": "CollectionEscalateAfterDays",
+      "value": "14",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 98,
+      "name": "CollectionReminderWindow",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 104,
+      "name": "CollectionEscalateWindow",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 108,
+      "name": "CollectionEscalateResponseWindow",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/collection_job.go",
+      "line": 493,
+      "name": "SkippedByStage",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/confidence/ab_testing.go",
+      "line": 89,
+      "name": "BootstrapN",
+      "value": "10000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/confidence/signal_collector.go",
+      "line": 50,
+      "name": "CtxRelev",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/config_param.go",
+      "line": 110,
+      "name": "BridgeOnlineGraceDefault",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/context_budget.go",
+      "line": 72,
+      "name": "BudgetRAG",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/customer.go",
+      "line": 78,
+      "name": "DefaultLimit",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/customer.go",
+      "line": 80,
+      "name": "MaxLimit",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/customer.go",
+      "line": 81,
+      "name": "DefaultPage",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/customer_journey.go",
+      "line": 684,
+      "name": "TotalCustomers",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/customer_journey.go",
+      "line": 791,
+      "name": "StepRate",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/customer_rfm.go",
+      "line": 601,
+      "name": "IsActive",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/customer_rfm.go",
+      "line": 605,
+      "name": "RDays1",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/service/customer_service_plus.go",
+      "line": 22,
+      "name": "EditLockTTL",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/customer_session_takeover.go",
+      "line": 132,
+      "name": "AgentID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/dingtalk_app.go",
+      "line": 489,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/dingtalk_app.go",
+      "line": 492,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/dingtalk_app.go",
+      "line": 520,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/dingtalk_app.go",
+      "line": 523,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 57,
+      "name": "HealthScoreSwitchThreshold",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 58,
+      "name": "HealthScoreHealthy",
+      "value": "80",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 59,
+      "name": "HealthScoreWarn",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 60,
+      "name": "ConsecutiveFailureLimit",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 61,
+      "name": "HealthCheckTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 62,
+      "name": "HealthLogRetentionDays",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 260,
+      "name": "DNSOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/domain_health.go",
+      "line": 270,
+      "name": "HTTPOk",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/domain_pool.go",
+      "line": 254,
+      "name": "Status",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/domain_pool.go",
+      "line": 269,
+      "name": "IsActive",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/domain_pool.go",
+      "line": 270,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/domain_pool.go",
+      "line": 301,
+      "name": "ConsecutiveFailures",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/domain_pool.go",
+      "line": 302,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/douyin_lead_miner.go",
+      "line": 124,
+      "name": "IsAIReply",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/email_open_tracker.go",
+      "line": 38,
+      "name": "EmailOpenPixelMaxAge",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/email_tracking.go",
+      "line": 248,
+      "name": "OpenRate",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/email_tracking.go",
+      "line": 249,
+      "name": "ClickRate",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feature_flag.go",
+      "line": 25,
+      "name": "FeatureFlagStaleDays",
+      "value": "14",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feature_flag.go",
+      "line": 217,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feature_flag.go",
+      "line": 223,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 163,
+      "name": "Score",
+      "value": "50.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 409,
+      "name": "IsBottleneck",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 488,
+      "name": "Priority",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 496,
+      "name": "Priority",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 505,
+      "name": "Priority",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 511,
+      "name": "Priority",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_learning.go",
+      "line": 519,
+      "name": "Priority",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 37,
+      "name": "MinSamplesForExploit",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 40,
+      "name": "ExplorationFloor",
+      "value": "0.10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 43,
+      "name": "TrafficCeiling",
+      "value": "0.60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 46,
+      "name": "ConvergenceThreshold",
+      "value": "0.95",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 49,
+      "name": "MinSamplesForPromote",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/bandit_allocator.go",
+      "line": 52,
+      "name": "PosteriorSamples",
+      "value": "1000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/champion_dialogue_analyzer.go",
+      "line": 38,
+      "name": "MinReward",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_loop/champion_dialogue_analyzer.go",
+      "line": 41,
+      "name": "ClusterSimThreshold",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/champion_dialogue_analyzer.go",
+      "line": 44,
+      "name": "MinClusterSize",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/champion_dialogue_analyzer.go",
+      "line": 47,
+      "name": "TopKPerCluster",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/champion_dialogue_analyzer.go",
+      "line": 50,
+      "name": "MaxDialoguesPerRun",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/feedback_collector.go",
+      "line": 38,
+      "name": "QueueSize",
+      "value": "1000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/feedback_collector.go",
+      "line": 41,
+      "name": "FlushInterval",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/feedback_collector.go",
+      "line": 44,
+      "name": "BatchSize",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/prompt_iterator.go",
+      "line": 29,
+      "name": "MinSamplesForIteration",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/prompt_iterator.go",
+      "line": 35,
+      "name": "CandidatesPerRun",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/prompt_iterator.go",
+      "line": 95,
+      "name": "Alpha",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_loop/prompt_iterator.go",
+      "line": 96,
+      "name": "Beta",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feedback_loop/sop_auto_optimizer.go",
+      "line": 31,
+      "name": "AutoApplyPriority",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/sop_auto_optimizer.go",
+      "line": 34,
+      "name": "RollbackDropThreshold",
+      "value": "0.20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/sop_auto_optimizer.go",
+      "line": 37,
+      "name": "RollbackComplaintRatio",
+      "value": "0.50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feedback_loop/sop_auto_optimizer.go",
+      "line": 40,
+      "name": "ABTestDuration",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/feishu.go",
+      "line": 55,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feishu.go",
+      "line": 440,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feishu.go",
+      "line": 464,
+      "name": "WebhookEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/feishu.go",
+      "line": 465,
+      "name": "AIAgentEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/feishu.go",
+      "line": 831,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/group_silence.go",
+      "line": 23,
+      "name": "GroupSilenceReviveAfter",
+      "value": "72",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/group_silence.go",
+      "line": 25,
+      "name": "GroupSilenceDeadAfter",
+      "value": "168",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_escalation.go",
+      "line": 22,
+      "name": "HumanLockReasonTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_escalation.go",
+      "line": 25,
+      "name": "HumanLockDefaultTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_escalation.go",
+      "line": 27,
+      "name": "LockExpiryCheckInterval",
+      "value": "time.Minute",
+      "kind": "duration",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_task.go",
+      "line": 76,
+      "name": "MaxHumanTaskHandoffSlaMinutes",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_task.go",
+      "line": 98,
+      "name": "DefaultHumanTaskHandoffSlaMinutes",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_task_sla_job.go",
+      "line": 38,
+      "name": "DefaultHumanTaskSLAInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/human_task_sla_job.go",
+      "line": 42,
+      "name": "DefaultHumanTaskSLAWindow",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 16,
+      "name": "DefaultThreshold",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 19,
+      "name": "DefaultBoundaryLow",
+      "value": "0.70",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 22,
+      "name": "DefaultBoundaryHigh",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 25,
+      "name": "DefaultSampleRate",
+      "value": "0.10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 28,
+      "name": "DefaultMaxRetry",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 154,
+      "name": "Passed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 164,
+      "name": "Passed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 175,
+      "name": "Passed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize/service.go",
+      "line": 197,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize_init.go",
+      "line": 60,
+      "name": "HumanizeEvaluatorEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize_init.go",
+      "line": 71,
+      "name": "HumanizeEvaluatorEnabled",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize_init.go",
+      "line": 72,
+      "name": "MTK_HUMANIZE_EVAL_DISABLED",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/humanize_init.go",
+      "line": 78,
+      "name": "HumanizeEvaluatorEnabled",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox.go",
+      "line": 60,
+      "name": "InboxOverdueThreshold",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox.go",
+      "line": 140,
+      "name": "InboxDefaultStaffLoadLimit",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 30,
+      "name": "InboxLockTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 32,
+      "name": "InboxAILockTTL",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 34,
+      "name": "InboxPendingTTL",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 38,
+      "name": "IngestLockTTL",
+      "value": "25",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 42,
+      "name": "InboxContentDedupTTL",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 49,
+      "name": "InboxOutboundEchoWindow",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 51,
+      "name": "InboxReplyWindow",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 53,
+      "name": "InboxBackfillFutureTolerance",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 57,
+      "name": "InboxAIProcessingTTL",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 59,
+      "name": "RecheckDelayAfterRelease",
+      "value": "800",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 99,
+      "name": "IsGroup",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 471,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 472,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 507,
+      "name": "HumanLocked",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 508,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 522,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 523,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 548,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 551,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 562,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 583,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 592,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 604,
+      "name": "QueuedForAI",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 949,
+      "name": "TriggeredAI",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 966,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 967,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 975,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 976,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 985,
+      "name": "HumanLocked",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 986,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1000,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1001,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1024,
+      "name": "Accepted",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1027,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1033,
+      "name": "QueuedForAI",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress.go",
+      "line": 1038,
+      "name": "QueuedForAI",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/inbox_ingress_outbound.go",
+      "line": 164,
+      "name": "InboxOutboundClaimTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/integration_template.go",
+      "line": 42,
+      "name": "BuiltIn",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/integration_template.go",
+      "line": 85,
+      "name": "BuiltIn",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/integration_template.go",
+      "line": 149,
+      "name": "ID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/integration_template.go",
+      "line": 166,
+      "name": "ID",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/intent_metrics.go",
+      "line": 13,
+      "name": "WeakTruthMinConfidence",
+      "value": "0.9",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/intent_recognition.go",
+      "line": 46,
+      "name": "IntentEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/intent_recognition.go",
+      "line": 977,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/intent_recognition.go",
+      "line": 1032,
+      "name": "Enabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/intent_recognition_fine.go",
+      "line": 362,
+      "name": "Confidence",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/intent_recognition_fine.go",
+      "line": 365,
+      "name": "Confidence",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/kb_canary.go",
+      "line": 199,
+      "name": "CanaryPercent",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/kb_connector_pull.go",
+      "line": 19,
+      "name": "ConnectorPullMaxPagesDefault",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/kb_connector_pull.go",
+      "line": 20,
+      "name": "ConnectorPullMaxPagesCap",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/kb_connectors.go",
+      "line": 231,
+      "name": "OK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/knowledge_base.go",
+      "line": 111,
+      "name": "Version",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "PROTOCOL",
+      "why": "协议/错误码/枚举常量"
+    },
+    {
+      "file": "internal/service/kuaishou_card_stats.go",
+      "line": 115,
+      "name": "Limit",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/layer.go",
+      "line": 116,
+      "name": "SkipLLM",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/layer.go",
+      "line": 147,
+      "name": "SkipLLM",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/layer.go",
+      "line": 174,
+      "name": "SkipLLM",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/layer.go",
+      "line": 190,
+      "name": "SkipLLM",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/layer.go",
+      "line": 208,
+      "name": "SkipLLM",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/llm_failover.go",
+      "line": 161,
+      "name": "IsCanary",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/llm_routing.go",
+      "line": 206,
+      "name": "QualityScore",
+      "value": "0.8",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/llm_routing.go",
+      "line": 209,
+      "name": "MaxRPM",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/llm_routing.go",
+      "line": 487,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/llm_routing.go",
+      "line": 495,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/login_risk.go",
+      "line": 146,
+      "name": "ShouldAlert",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/login_risk.go",
+      "line": 147,
+      "name": "ShouldForceMFA",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/logistics_port_adapter.go",
+      "line": 36,
+      "name": "Found",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/logistics_port_adapter.go",
+      "line": 44,
+      "name": "Configured",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/logistics_port_adapter.go",
+      "line": 48,
+      "name": "Realtime",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 73,
+      "name": "Opportunity",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 75,
+      "name": "Outreach",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 77,
+      "name": "Quote",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 79,
+      "name": "Bill",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 81,
+      "name": "Payment",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 83,
+      "name": "Collection",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 151,
+      "name": "LTCConfigCacheTTL",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 157,
+      "name": "LTCConfigMaxBytes",
+      "value": "8",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 603,
+      "name": "Degraded",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 609,
+      "name": "Degraded",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 619,
+      "name": "Degraded",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 692,
+      "name": "AuditWritten",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 717,
+      "name": "Degraded",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 846,
+      "name": "Opportunity",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 848,
+      "name": "Outreach",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 850,
+      "name": "Quote",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 852,
+      "name": "Bill",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 854,
+      "name": "Payment",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/ltc_config.go",
+      "line": 856,
+      "name": "Collection",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/memory_system.go",
+      "line": 31,
+      "name": "L1WindowSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/memory_system.go",
+      "line": 32,
+      "name": "L1TTLHours",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/memory_system.go",
+      "line": 33,
+      "name": "L4MaxPerCust",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/message_hub.go",
+      "line": 174,
+      "name": "MessageHubDefaultIdemTTL",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/message_hub.go",
+      "line": 175,
+      "name": "MessageHubDefaultMaxContent",
+      "value": "64",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/message_hub.go",
+      "line": 176,
+      "name": "MessageHubDefaultQueueSize",
+      "value": "10000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/mfa.go",
+      "line": 226,
+      "name": "MFAEnabled",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/mfa.go",
+      "line": 265,
+      "name": "MFAEnabled",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/notification.go",
+      "line": 48,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/notification.go",
+      "line": 51,
+      "name": "Size",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/obs_config.go",
+      "line": 102,
+      "name": "IsDefault",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/openapi.go",
+      "line": 116,
+      "name": "Enabled",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/openapi.go",
+      "line": 118,
+      "name": "Enabled",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/opportunity_convert.go",
+      "line": 356,
+      "name": "AuditWritten",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/order_draft.go",
+      "line": 246,
+      "name": "DefaultExpiry",
+      "value": "7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/order_draft.go",
+      "line": 515,
+      "name": "Quantity",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/order_draft.go",
+      "line": 654,
+      "name": "OrderProvisional",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/order_draft_sweep.go",
+      "line": 31,
+      "name": "DefaultOrderDraftSweepInterval",
+      "value": "6",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/payment.go",
+      "line": 479,
+      "name": "Transited",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 208,
+      "name": "Score",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 211,
+      "name": "Score",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 585,
+      "name": "DefaultPersonaThreshold",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 587,
+      "name": "DefaultPersonaMaxRetry",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 625,
+      "name": "AttemptCount",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 659,
+      "name": "Passed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 665,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 673,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 678,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/persona_evaluator.go",
+      "line": 690,
+      "name": "Passed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/qq_account.go",
+      "line": 44,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/r44_gap_services.go",
+      "line": 577,
+      "name": "Delivered",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/r44_gap_services.go",
+      "line": 646,
+      "name": "Delivered",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_eval_auto.go",
+      "line": 55,
+      "name": "MaxQuestions",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_eval_auto.go",
+      "line": 164,
+      "name": "Hit",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/rag_eval_auto.go",
+      "line": 171,
+      "name": "Recall",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 20,
+      "name": "RagHealthDefaultWindow",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 25,
+      "name": "RagHealthWeightRetrieval",
+      "value": "0.10",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 26,
+      "name": "RagHealthWeightRecall",
+      "value": "0.30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 27,
+      "name": "RagHealthWeightEmbedding",
+      "value": "0.15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 28,
+      "name": "RagHealthWeightCoverage",
+      "value": "0.15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 29,
+      "name": "RagHealthWeightPerformance",
+      "value": "0.15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 30,
+      "name": "RagHealthWeightAlerts",
+      "value": "0.15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 138,
+      "name": "Score",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/rag_health.go",
+      "line": 141,
+      "name": "Score",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/rag_metrics.go",
+      "line": 22,
+      "name": "RagMetricsAggregationInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_metrics.go",
+      "line": 23,
+      "name": "RagMetricsBatchSize",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_metrics.go",
+      "line": 24,
+      "name": "RagMetricsFlushInterval",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_metrics.go",
+      "line": 25,
+      "name": "RagMetricsLowRecallDefault",
+      "value": "0.3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_recall_monitor.go",
+      "line": 20,
+      "name": "RagRecallMonitorDefaultInterval",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/rag_recall_monitor.go",
+      "line": 21,
+      "name": "RagRecallMonitorDefaultWindow",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 23,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 26,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 32,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 35,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 44,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 47,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 52,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 55,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 61,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 64,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 74,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 77,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 86,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 89,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 98,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 103,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 106,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_pipeline_steps.go",
+      "line": 110,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 47,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 54,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 65,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 78,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 79,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 85,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 94,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 98,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 99,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 106,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 109,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 110,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 117,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 143,
+      "name": "Deferred",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 146,
+      "name": "Deferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 155,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 156,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 167,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 170,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 191,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 223,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 242,
+      "name": "MaxAttempts",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 297,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 303,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 304,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 315,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 316,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 321,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 334,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 335,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 342,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 345,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 357,
+      "name": "Skipped",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 358,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 364,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 367,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 378,
+      "name": "Success",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/reach_send_pipeline_steps.go",
+      "line": 381,
+      "name": "Success",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/recovery_queue_worker.go",
+      "line": 476,
+      "name": "DryRun",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_engine.go",
+      "line": 268,
+      "name": "TransferredToHuman",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_engine.go",
+      "line": 417,
+      "name": "Polished",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_engine.go",
+      "line": 468,
+      "name": "HumanizePassed",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/sales_engine_parallel.go",
+      "line": 240,
+      "name": "TransferredToHuman",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_playbook.go",
+      "line": 94,
+      "name": "UseCount",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_playbook.go",
+      "line": 95,
+      "name": "SuccessCount",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sales_workbench.go",
+      "line": 371,
+      "name": "AvgDealAmount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/script_ab.go",
+      "line": 25,
+      "name": "ScriptABAttributionHours",
+      "value": "48",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/script_ab.go",
+      "line": 100,
+      "name": "SplitA",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/session_assignment.go",
+      "line": 177,
+      "name": "Priority",
+      "value": "2",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/session_assignment.go",
+      "line": 241,
+      "name": "Temperature",
+      "value": "0.7",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/session_assignment.go",
+      "line": 242,
+      "name": "MaxTokens",
+      "value": "500",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/short_link.go",
+      "line": 206,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/short_link.go",
+      "line": 209,
+      "name": "PageSize",
+      "value": "10",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/short_link.go",
+      "line": 272,
+      "name": "Length",
+      "value": "6",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 296,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 304,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 315,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 325,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 405,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 441,
+      "name": "Transferred",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 454,
+      "name": "AIReplied",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 635,
+      "name": "AIReplied",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 789,
+      "name": "DNCBlocked",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/smart_cs_orchestrator.go",
+      "line": 1001,
+      "name": "AIReplyCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 91,
+      "name": "Intent",
+      "value": "0.3",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 97,
+      "name": "Intent",
+      "value": "0.8",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 100,
+      "name": "Intent",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 104,
+      "name": "Skills",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 110,
+      "name": "Skills",
+      "value": "0.7",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 118,
+      "name": "Capacity",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/smart_router.go",
+      "line": 120,
+      "name": "Capacity",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sms_tracking.go",
+      "line": 173,
+      "name": "IsRetryable",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sms_tracking.go",
+      "line": 233,
+      "name": "DeliveryRate",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sms_tracking.go",
+      "line": 234,
+      "name": "FailureRate",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sop_compensation.go",
+      "line": 124,
+      "name": "MaxAttempts",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_compensation.go",
+      "line": 127,
+      "name": "PerCompensationTTL",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_compensation.go",
+      "line": 130,
+      "name": "TotalTimeout",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sop_compensation.go",
+      "line": 133,
+      "name": "MaxPlansKept",
+      "value": "512",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_dispatcher.go",
+      "line": 205,
+      "name": "WorkerCount",
+      "value": "16",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_dispatcher.go",
+      "line": 208,
+      "name": "QueueCapacity",
+      "value": "1000",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_dispatcher.go",
+      "line": 211,
+      "name": "LLMConcurrency",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sop_dispatcher.go",
+      "line": 556,
+      "name": "AttemptCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sop_dispatcher.go",
+      "line": 589,
+      "name": "AttemptCount",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sop_heatmap.go",
+      "line": 114,
+      "name": "DropRate",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sop_heatmap.go",
+      "line": 131,
+      "name": "DropRate",
+      "value": "1.0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/sse_hub.go",
+      "line": 27,
+      "name": "SSEHeartbeatInterval",
+      "value": "15",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sse_hub.go",
+      "line": 28,
+      "name": "SSEMaxConnPerIP",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sse_hub.go",
+      "line": 29,
+      "name": "SSEClientBufferSize",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/sse_hub.go",
+      "line": 30,
+      "name": "SSEWriteTimeout",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/system_config.go",
+      "line": 37,
+      "name": "MaxUsers",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/system_config.go",
+      "line": 40,
+      "name": "MaxUploadSizeMB",
+      "value": "50",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/system_user.go",
+      "line": 170,
+      "name": "Status",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/telegram_gate.go",
+      "line": 432,
+      "name": "Authorized",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/telegram_gate.go",
+      "line": 441,
+      "name": "Authorized",
+      "value": "false",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/telegram_polling_lock.go",
+      "line": 30,
+      "name": "PollingLockHeartbeatInterval",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/tiktok_card.go",
+      "line": 150,
+      "name": "Page",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/tiktok_card.go",
+      "line": 153,
+      "name": "PageSize",
+      "value": "20",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/tiktok_card.go",
+      "line": 192,
+      "name": "DomainID",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/trace_learning/aggregator.go",
+      "line": 38,
+      "name": "HasAbnormal",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/trace_learning/evaluator.go",
+      "line": 67,
+      "name": "Score",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/trace_learning/evaluator.go",
+      "line": 70,
+      "name": "Score",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/tuning.go",
+      "line": 104,
+      "name": "IsActive",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 99,
+      "name": "Confidence",
+      "value": "0.82",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 107,
+      "name": "Confidence",
+      "value": "0.88",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 115,
+      "name": "Confidence",
+      "value": "0.95",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 123,
+      "name": "Confidence",
+      "value": "0.75",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 131,
+      "name": "Confidence",
+      "value": "0.85",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/typing_predict.go",
+      "line": 139,
+      "name": "Confidence",
+      "value": "0.35",
+      "kind": "go_num",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 489,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 496,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 514,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 573,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 586,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 597,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 655,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 666,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook.go",
+      "line": 676,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook_ai.go",
+      "line": 53,
+      "name": "Processed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook_channel_douyin.go",
+      "line": 217,
+      "name": "ALLOW_INSECURE_WEBHOOK",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 54,
+      "name": "WebhookDedupTTL",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 56,
+      "name": "WebhookWorkerCount",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 58,
+      "name": "WebhookQueueSize",
+      "value": "512",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 60,
+      "name": "WebhookRateLimit",
+      "value": "30",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 62,
+      "name": "WebhookRateBurst",
+      "value": "60",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 64,
+      "name": "WebhookMaxRetries",
+      "value": "3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_dedup.go",
+      "line": 66,
+      "name": "WebhookReplyConcurrency",
+      "value": "32",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/webhook_recovery.go",
+      "line": 71,
+      "name": "Processed",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "TUNABLE",
+      "why": "功能开关，应入 feature_flags 或 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 25,
+      "name": "WeComHealthScoreNormal",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 26,
+      "name": "WeComHealthScoreWarning",
+      "value": "70",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 27,
+      "name": "WeComHealthScoreCritical",
+      "value": "40",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 28,
+      "name": "WeComHealthScoreBanned",
+      "value": "0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 39,
+      "name": "WeComDefaultWeight",
+      "value": "100",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 45,
+      "name": "WeComErrorRateDegradeThreshold",
+      "value": "0.3",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/wecom_account_health.go",
+      "line": 46,
+      "name": "WeComQuotaDegradeThreshold",
+      "value": "0.9",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 25,
+      "name": "TierMinRatePerMin",
+      "value": "12.0",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 27,
+      "name": "TierDayCap",
+      "value": "250",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 29,
+      "name": "TierDayWindow",
+      "value": "24",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 90,
+      "name": "TierQuotaMarketing",
+      "value": "1",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 91,
+      "name": "TierQuotaUtility",
+      "value": "4",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 130,
+      "name": "QualityDowngradeFactor",
+      "value": "0.5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 249,
+      "name": "MinPerMinute",
+      "value": "12",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/whatsapp_tier.go",
+      "line": 251,
+      "name": "DayCap",
+      "value": "250",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/service/workflow_node_executors.go",
+      "line": 14,
+      "name": "MaxSubflowDepth",
+      "value": "5",
+      "kind": "go_num",
+      "bucket": "TUNABLE",
+      "why": "阈值/上限/超时/批量，应入 config_params"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 196,
+      "name": "Initialized",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 281,
+      "name": "Initialized",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 288,
+      "name": "Initialized",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 289,
+      "name": "HasAdmin",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 299,
+      "name": "Initialized",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    },
+    {
+      "file": "internal/system/install/install.go",
+      "line": 300,
+      "name": "HasAdmin",
+      "value": "true",
+      "kind": "bool",
+      "bucket": "FIELD_LIT",
+      "why": "业务数据字段/条件值，非阈值"
+    }
+  ]
+}

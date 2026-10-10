@@ -39,17 +39,6 @@ func BuildPrivateMessageTools(deps PrivateMessageToolDeps) []Tool {
 	}
 }
 
-// RegisterPrivateMessageTools 注册私信工具（CategoryPrivateMessage）
-func RegisterPrivateMessageTools(registry *ToolRegistry, deps PrivateMessageToolDeps) error {
-	tools := BuildPrivateMessageTools(deps)
-	for _, t := range tools {
-		if err := registry.Register(t); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type openPrivateSessionTool struct {
 	BaseTool
 	sessionPort portcontract.SessionPort

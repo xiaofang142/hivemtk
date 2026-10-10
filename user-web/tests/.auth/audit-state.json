@@ -1,0 +1,22 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:8211",
+      "localStorage": [
+        {
+          "name": "system_initialized",
+          "value": "true"
+        },
+        {
+          "name": "token",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMjEiLCJ1c2VybmFtZSI6ImUyZV9hZG1pbiIsInJvbGUiOiJhZG1pbiIsImlzcyI6Im1hcmtldGluZy1zeXN0ZW0iLCJleHAiOjE3OTE1NDM5NjUsIm5iZiI6MTc5MTQ1NzU2NSwiaWF0IjoxNzkxNDU3NTY1fQ.tjdEJssHPSkKzDtAM7TOZbBj5t_nOYbpM-XwKskp2aE"
+        },
+        {
+          "name": "user_info",
+          "value": "{\"id\":21,\"username\":\"e2e_admin\",\"email\":\"e2e_admin@local.test\",\"role\":\"admin\"}"
+        }
+      ]
+    }
+  ]
+}

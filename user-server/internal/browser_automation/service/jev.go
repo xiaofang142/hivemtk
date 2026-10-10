@@ -193,26 +193,26 @@ type jevChoiceRecord struct {
 
 // validateChoice 校验（照抄 jev-ultrafast/model.py validate_choice 五项）：
 // ①choice∈ids ②probs 键集合==ids ③值∈[0,1]有限 ④sum≈1(±0.02) ⑤choice==argmax。
-// 非法 → error，调用方回退 Brain（"Invalid TypeSafe response; no action executed"）。
+// 非法 → error，调用方回退 Brain（"invalid TypeSafe response; no action executed"）。
 func validateChoice(rec jevChoiceRecord, ids []string) error {
 	want := map[string]bool{}
 	for _, id := range ids {
 		want[id] = true
 	}
 	if !want[rec.Choice] {
-		return fmt.Errorf("Invalid TypeSafe response; no action executed: choice %q 不在候选集内", rec.Choice)
+		return fmt.Errorf("invalid TypeSafe response; no action executed: choice %q 不在候选集内", rec.Choice)
 	}
 	if len(rec.Probabilities) != len(want) {
-		return fmt.Errorf("Invalid TypeSafe response; no action executed: probabilities 键数 %d != 候选数 %d", len(rec.Probabilities), len(want))
+		return fmt.Errorf("invalid TypeSafe response; no action executed: probabilities 键数 %d != 候选数 %d", len(rec.Probabilities), len(want))
 	}
 	sum := 0.0
 	best, bestP := "", math.Inf(-1)
 	for k, p := range rec.Probabilities {
 		if !want[k] {
-			return fmt.Errorf("Invalid TypeSafe response; no action executed: probabilities 含未知键 %q", k)
+			return fmt.Errorf("invalid TypeSafe response; no action executed: probabilities 含未知键 %q", k)
 		}
 		if math.IsNaN(p) || math.IsInf(p, 0) || p < 0 || p > 1 {
-			return fmt.Errorf("Invalid TypeSafe response; no action executed: 概率值非法 %q=%v", k, p)
+			return fmt.Errorf("invalid TypeSafe response; no action executed: 概率值非法 %q=%v", k, p)
 		}
 		sum += p
 		if p > bestP {
@@ -220,10 +220,10 @@ func validateChoice(rec jevChoiceRecord, ids []string) error {
 		}
 	}
 	if math.Abs(sum-1.0) > 0.02 {
-		return fmt.Errorf("Invalid TypeSafe response; no action executed: 概率和 %v 偏离 1 超过 0.02", sum)
+		return fmt.Errorf("invalid TypeSafe response; no action executed: 概率和 %v 偏离 1 超过 0.02", sum)
 	}
 	if best != rec.Choice {
-		return fmt.Errorf("Invalid TypeSafe response; no action executed: choice %q 不是 argmax %q", rec.Choice, best)
+		return fmt.Errorf("invalid TypeSafe response; no action executed: choice %q 不是 argmax %q", rec.Choice, best)
 	}
 	return nil
 }
@@ -456,7 +456,7 @@ func jevDecisionFromAnswers(out jevChoiceAnswers, opIDs, clickIDs, typeIDs []str
 	if dec.Operation == jevOpClick {
 		// 无可点候选时 JEV 仍选 CLICK = 幻觉目标，回退（不执行）。
 		if len(clickIDs) == 0 {
-			return zero, fmt.Errorf("Invalid TypeSafe response; no action executed: 无可点元素却选中 CLICK")
+			return zero, fmt.Errorf("invalid TypeSafe response; no action executed: 无可点元素却选中 CLICK")
 		}
 		if err := validateChoice(out.ClickTarget, clickIDs); err != nil {
 			return zero, err
@@ -466,7 +466,7 @@ func jevDecisionFromAnswers(out jevChoiceAnswers, opIDs, clickIDs, typeIDs []str
 	if dec.Operation == jevOpTypeText {
 		// 无可输入候选时 JEV 仍选 TYPE_TEXT = 幻觉目标，回退（不执行）。
 		if len(typeIDs) == 0 {
-			return zero, fmt.Errorf("Invalid TypeSafe response; no action executed: 无可输入元素却选中 TYPE_TEXT")
+			return zero, fmt.Errorf("invalid TypeSafe response; no action executed: 无可输入元素却选中 TYPE_TEXT")
 		}
 		if err := validateChoice(out.TypeTarget, typeIDs); err != nil {
 			return zero, err
@@ -610,15 +610,15 @@ func decisionToSteps(dec JevDecision, text string) (stepsJSON []byte, done bool,
 	switch dec.Operation {
 	case jevOpClick:
 		if dec.Target == "" {
-			return nil, false, "", fmt.Errorf("Invalid TypeSafe response; no action executed: CLICK 无目标")
+			return nil, false, "", fmt.Errorf("invalid TypeSafe response; no action executed: CLICK 无目标")
 		}
 		items = []dto.StepItem{{Action: "click", Target: dec.Target}}
 	case jevOpTypeText:
 		if dec.Target == "" {
-			return nil, false, "", fmt.Errorf("Invalid TypeSafe response; no action executed: TYPE_TEXT 无目标")
+			return nil, false, "", fmt.Errorf("invalid TypeSafe response; no action executed: TYPE_TEXT 无目标")
 		}
 		if strings.TrimSpace(text) == "" {
-			return nil, false, "", fmt.Errorf("Invalid TypeSafe response; no action executed: TYPE_TEXT 任务无文案")
+			return nil, false, "", fmt.Errorf("invalid TypeSafe response; no action executed: TYPE_TEXT 任务无文案")
 		}
 		items = []dto.StepItem{{Action: "type", Target: dec.Target, Value: text}}
 	case jevOpScrollDown:
@@ -632,7 +632,7 @@ func decisionToSteps(dec JevDecision, text string) (stepsJSON []byte, done bool,
 	case jevOpBlocked:
 		return nil, false, "JEV 判定无可推进操作（BLOCKED），目标未达成", nil
 	default:
-		return nil, false, "", fmt.Errorf("Invalid TypeSafe response; no action executed: 未知 operation %q", dec.Operation)
+		return nil, false, "", fmt.Errorf("invalid TypeSafe response; no action executed: 未知 operation %q", dec.Operation)
 	}
 	blob, err := json.Marshal(items)
 	if err != nil {

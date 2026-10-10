@@ -29,21 +29,8 @@ import (
 // GlossaryCategory 术语分类
 type GlossaryCategory string
 
-const (
-	GlossaryCategoryBrand    GlossaryCategory = "brand"
-	GlossaryCategorySKU      GlossaryCategory = "sku"
-	GlossaryCategoryLogistic GlossaryCategory = "logistic"
-	GlossaryCategoryPolicy   GlossaryCategory = "policy"
-	GlossaryCategoryOther    GlossaryCategory = "other"
-)
-
 // GlossaryStatus 术语状态
 type GlossaryStatus string
-
-const (
-	GlossaryStatusActive   GlossaryStatus = "active"
-	GlossaryStatusInactive GlossaryStatus = "inactive"
-)
 
 // Glossary 多语言术语表（保护 SKU/价格/品牌名不被 LLM 翻译）
 //

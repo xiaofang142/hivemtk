@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -285,6 +286,46 @@ func (ctrl *ChatPublicController) GetRecentClosedSessions(c *gin.Context) {
 		return
 	}
 	response.SuccessWithList(c, sessions, int64(len(sessions)))
+}
+
+// ExchangeSessionToken 访客为历史会话列表里的某一条会话换回 visitor_token
+// POST /api/chat/public/sessions/:session_id/token
+//
+// 为什么要有这个端点：visitor_token 只随 OpenSession 返回，而 OpenSession 只会命中
+// "最近活跃的那一条"。访客从 recent-closed 列表点开更早的会话时，前端带的是别的会话的
+// token ⇒ 该会话的历史消息/关闭/评价全部 403（访客看到的是"点进去是空的"）。
+//
+// 安全：归属校验按 (platform=web_embed, account_id=channel, user_id=visitor) 三列全等，
+// 换不到他人会话的 token；不属于当前访客时回**同一个** 403 文案，不区分"不存在"与"无权"，
+// 免得这个端点变成会话 ID 探活器。
+//
+// 403 只给"归属不成立"：密钥缺失/库出错这类服务端故障必须回 5xx，不能伪装成权限问题——
+// 前端对 403 是静默 catch，故障被报成 403 时访客只会看到"点开的会话是空的"。
+func (ctrl *ChatPublicController) ExchangeSessionToken(c *gin.Context) {
+	sessionID := c.Param("session_id")
+	channelID := resolveChannelID(c, nil)
+	visitorID := c.GetHeader("X-Chat-Visitor-Id")
+	if visitorID == "" {
+		visitorID = c.Query("visitor_id")
+	}
+	if visitorID == "" || sessionID == "" {
+		response.Error(c, http.StatusBadRequest, "参数不完整")
+		return
+	}
+
+	token, err := ctrl.visitorSvc.ExchangeVisitorToken(c.Request.Context(), channelID, visitorID, sessionID)
+	if err != nil {
+		if errors.Is(err, service.ErrVisitorSessionNotOwned) {
+			response.Error(c, http.StatusForbidden, "会话不存在或无权访问")
+			return
+		}
+		logger.Ctx(c.Request.Context()).Err(err).
+			Str("session_id", sessionID).
+			Msg("[chat/public] 访客换回会话 visitor_token 失败（服务端故障，非归属问题）")
+		response.Error(c, http.StatusInternalServerError, "服务暂时不可用，请稍后重试")
+		return
+	}
+	response.Success(c, gin.H{"visitor_token": token}, "ok")
 }
 
 // GetOfflineMessages 拉取访客离线期间的坐席/AI 回复消息

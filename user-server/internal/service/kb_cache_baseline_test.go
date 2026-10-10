@@ -37,7 +37,7 @@ func TestKBCacheBaseline_TodayKeyShapeRoundTrips(t *testing.T) {
 	kbIDStr := strconv.FormatUint(uint64(kbID), 10)
 
 	cacheSvc := ragcache.NewFAQAnswerCacheService(
-		ragcache.NewPGAnswerCacheStore(database), ragcache.NewPGKBMetaReader(database), 0)
+		ragcache.NewPGAnswerCacheStore(database), ragcache.NewPGKBMetaReader(database), 0, 0)
 	// 与生产写入完全同参：PromptVersion 就是这个常量串。
 	if err := cacheSvc.Store(ctx, ragcache.StoreRequest{
 		KBID: kbIDStr, PromptVersion: "v1", QueryVector: kbCacheBaselineVec(),

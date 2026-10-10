@@ -38,7 +38,6 @@ func (UserMFA) TableName() string {
 // MFAType 常量
 const (
 	MFATypeTOTP = "totp"
-	MFATypeHOTP = "hotp"
 )
 
 // BeforeCreate GORM 钩子

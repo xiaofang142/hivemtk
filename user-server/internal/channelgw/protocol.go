@@ -21,7 +21,6 @@ const (
 const (
 	FrameRegister       = "register"
 	FrameRegisterReject = "register_rejected"
-	FrameRegistered     = "registered"
 	FrameInbound        = "inbound_message"
 	FrameHistory        = "history"
 	FramePong           = "pong"

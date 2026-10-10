@@ -5,14 +5,6 @@ import "context"
 // LogisticsTrackStatus 物流轨迹节点状态
 type LogisticsTrackStatus string
 
-const (
-	LogisticsStatusShipped   LogisticsTrackStatus = "shipped"
-	LogisticsStatusInTransit LogisticsTrackStatus = "in_transit"
-	LogisticsStatusDelivered LogisticsTrackStatus = "delivered"
-	LogisticsStatusException LogisticsTrackStatus = "exception"
-	LogisticsStatusUnknown   LogisticsTrackStatus = "unknown"
-)
-
 // LogisticsTrackView 单条物流轨迹节点（最新在前）
 type LogisticsTrackView struct {
 	Time        string `json:"time"`

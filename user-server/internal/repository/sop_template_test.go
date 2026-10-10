@@ -272,7 +272,7 @@ func TestSOPTemplateRepository_MatchByAgent_StrictOneToOne(t *testing.T) {
 	}
 }
 
-// ListByKB / ListShared / ListByAgent 测试
+// ListShared / ListByAgent 测试
 func TestSOPTemplateRepository_AgentIsolation_Lists(t *testing.T) {
 	repo, _, done := setupSOPRepoWithTX(t)
 	defer done()
@@ -307,14 +307,6 @@ func TestSOPTemplateRepository_AgentIsolation_Lists(t *testing.T) {
 	}
 	if len(aList) != 2 {
 		t.Errorf("ListByAgent(agentA) expected 2, got %d", len(aList))
-	}
-
-	kbList, err := repo.ListByKB(ctx, 999, agentA, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(kbList) != 2 {
-		t.Errorf("ListByKB(agentA) expected 2, got %d", len(kbList))
 	}
 }
 

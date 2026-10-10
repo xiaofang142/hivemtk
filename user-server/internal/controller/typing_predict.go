@@ -54,13 +54,13 @@ func (c *TypingPredictController) Predict(ctx *gin.Context) {
 // SSEStream SSE 推送模式（可选，用于高实时性场景）
 // GET /api/chat/typing-predict/sse?session_id=xxx
 //
-// 实现说明：
-// 与既有 SSEDashboard 不同，这里采用长轮询式 SSE——
-// 客户端连接后发送心跳，服务端暂存请求，
-// 后端通过 SSEPub 注入预测结果并推送。
+// 实现说明：这条端点只产出两帧——连上时的 connected，与每 30s 一帧的 ping。
+// 没有第三个生产者：预测结果不会从这条流里出来，本包和 service 层都没有
+// 按 session_id 往这里推送的入口，所以客户端收到"连接活着"不等于"有预测可取"。
+// 预测的实际通路是 POST /chat/typing-predict/predict 的同步返回。
 //
-// 为简化实现，本版本 SSE 仅推送心跳，实际预测走 POST /predict 同步返回。
-// 这样避免了跨 goroutine 的连接管理复杂度，但仍预留了 SSE 端点。
+// 要把它变成真推送，需要补一个按 session_id 分组的发布端，并在下面的 select
+// 里加上它的 channel；在补齐之前，前端不要订阅这条流来等结果（当前无消费者）。
 func (c *TypingPredictController) SSEStream(ctx *gin.Context) {
 	sessionID := ctx.Query("session_id")
 	if sessionID == "" {
@@ -79,8 +79,8 @@ func (c *TypingPredictController) SSEStream(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := fmt.Fprintf(ctx.Writer, "event: connected\ndata: {\"session_id\":\"%s\",\"timestamp\":%d}\n\n",
-		sessionID, time.Now().Unix()); err != nil {
+	connected, _ := json.Marshal(map[string]any{"session_id": sessionID, "timestamp": time.Now().Unix()})
+	if _, err := fmt.Fprintf(ctx.Writer, "event: connected\ndata: %s\n\n", connected); err != nil {
 		return
 	}
 	flusher.Flush()

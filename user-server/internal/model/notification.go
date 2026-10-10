@@ -39,7 +39,6 @@ func (n *Notification) TableName() string {
 const (
 	NotificationTypeInfo         = "info"
 	NotificationTypeWarning      = "warning"
-	NotificationTypeError        = "error"
 	NotificationTypeSuccess      = "success"
 	NotificationTypeAnnouncement = "announcement"
 )

@@ -36,8 +36,6 @@ const (
 
 	IngestLockTTL = 25 * time.Second
 
-	InboxContentDedupKey = "hivemtk:dedup:content:"
-
 	InboxContentDedupTTL = 5 * time.Minute
 
 	InboxSenderContentDedupKey = "hivemtk:dedup:sender-content:"

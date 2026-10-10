@@ -9,7 +9,14 @@
     />
 
     <div class="offline-banner" v-if="offlineBannerCount > 0">
-      <span><svg class="offline-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> 您有 {{ offlineBannerCount }} 条未读消息</span>
+      <span><svg class="offline-ico" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> {{ $t('您有 {n} 条未读消息', { n: offlineBannerCount }) }}</span>
+      <button @click="showOfflineList = true">{{ $t('查看') }}</button>
+    </div>
+
+    <!-- 没有未读、但有历史会话时也要给入口：列表数据在挂载时就取回来了
+         （loadOfflineSessions），只挂在未读横幅上等于老访客永远点不到"历史会话"。 -->
+    <div class="offline-banner" v-if="offlineBannerCount === 0 && offlineSessions.length > 0">
+      <span>{{ $t('历史会话') }} · {{ offlineSessions.length }}</span>
       <button @click="showOfflineList = true">{{ $t('查看') }}</button>
     </div>
 
@@ -236,7 +243,7 @@ const openSession = async (resume = true) => {
 const loadHistory = async () => {
   if (!sessionId.value) return
   try {
-    const res = await chatApi.getMessages(sessionId.value, 1, 50, effectiveChannelId.value, visitorId.value)
+    const res = await chatApi.getMessages(sessionId.value, 1, 50, effectiveChannelId.value, visitorId.value, visitorToken.value)
     const list = res?.data?.list || res?.list || []
     const real = list.filter(m => m.sender_type !== 'system')
     if (real.length > 0) {
@@ -386,7 +393,7 @@ const onTransfer = () => {}
 const submitRating = async () => {
   if (rating.value === 0) return
   try {
-    await chatApi.rateSession(sessionId.value, rating.value, ratingComment.value, effectiveChannelId.value, visitorId.value)
+    await chatApi.rateSession(sessionId.value, rating.value, ratingComment.value, effectiveChannelId.value, visitorId.value, visitorToken.value)
     showRating.value = false
     rating.value = 0
     ratingComment.value = ''
@@ -408,8 +415,29 @@ const loadOfflineSessions = async () => {
 
 const resumeSession = async (s) => {
   showOfflineList.value = false
-  sessionId.value = s.session_id
   messages.value = []
+  // 先换回**这条会话自己的** visitor_token，再切 sessionId。
+  // token 是签在 (channel, visitor, session) 三元组上的无状态 HMAC，而 openSession 只
+  // 会给"最近活跃的那一条"签发；从 recent-closed 列表点开更早的会话时手上带的是别的
+  // 会话的 token ⇒ 这一列会话级调用（messages / offline-messages / close / rate）会全部
+  // 403。真机走查实测到过：点列表项 → 窗口是空的；点右上角 × → /close 回 403。
+  // 换证失败时**不切 sessionId**：否则窗口指向一条操作不了的会话，而"结束会话"那一步是
+  // catch 掉的静默失败，访客只会以为界面坏了。
+  try {
+    const res = await chatApi.exchangeSessionToken(s.session_id, effectiveChannelId.value, visitorId.value)
+    const token = res?.data?.visitor_token || res?.visitor_token || ''
+    if (!token) throw new Error('响应里没有 visitor_token')
+    visitorToken.value = token
+  } catch (err) {
+    console.warn('获取历史会话凭证失败：', err)
+    messages.value.push({
+      sender_type: 'system',
+      content: i18n.global.t('历史会话加载失败，请稍后重试'),
+      created_at: new Date().toISOString()
+    })
+    return
+  }
+  sessionId.value = s.session_id
   await loadHistory()
   connectWebSocket()
 }
@@ -420,7 +448,7 @@ const onClose = async () => {
   }
   if (sessionId.value) {
     try {
-      await chatApi.closeSession(sessionId.value, effectiveChannelId.value, visitorId.value)
+      await chatApi.closeSession(sessionId.value, effectiveChannelId.value, visitorId.value, visitorToken.value)
     } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
   emit('close')

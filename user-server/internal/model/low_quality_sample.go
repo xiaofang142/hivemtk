@@ -7,15 +7,6 @@ import (
 // LowQualitySampleType 低质样本类型
 type LowQualitySampleType string
 
-const (
-	LowQualitySamplePersona        LowQualitySampleType = "persona"
-	LowQualitySampleCompliance     LowQualitySampleType = "compliance"
-	LowQualitySampleNaturalness    LowQualitySampleType = "naturalness"
-	LowQualitySampleRelevance      LowQualitySampleType = "relevance"
-	LowQualitySampleManualReview   LowQualitySampleType = "manual_review"
-	LowQualitySampleRetryExhausted LowQualitySampleType = "retry_exhausted"
-)
-
 type LowQualitySample struct {
 	ID               uint64               `gorm:"primaryKey;autoIncrement" json:"id"`
 	CustomerID       string               `gorm:"type:varchar(64);index" json:"customer_id"`

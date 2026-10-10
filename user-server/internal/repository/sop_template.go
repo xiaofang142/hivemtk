@@ -125,28 +125,6 @@ func (r *SOPTemplateRepository) MatchByAgent(ctx context.Context, agentID uint, 
 	return tpls, err
 }
 
-// ListByKB 按知识库 ID 列出 (: 查某 KB 下挂载的 SOP 模板)
-//
-// 简化实现: 直接按 agent_id 过滤 (KBType=sop 假设)
-// 完整实现需 JOIN agent_kb_bindings + knowledge_bases, 此处保留简化
-func (r *SOPTemplateRepository) ListByKB(ctx context.Context, kbID uint, agentID uint, limit int) ([]model.SOPTemplate, error) {
-	if limit <= 0 || limit > 1000 {
-		limit = 200
-	}
-	var tpls []model.SOPTemplate
-	q := r.db.WithContext(ctx).
-		Where("enabled = ?", true).
-		Order("id DESC").
-		Limit(limit)
-	if agentID > 0 {
-		q = q.Where("agent_id = ?", agentID)
-	}
-	if err := q.Find(&tpls).Error; err != nil {
-		return nil, err
-	}
-	return tpls, nil
-}
-
 // ListShared 列出全部共享 SOP 模板 (agent_id IS NULL)
 func (r *SOPTemplateRepository) ListShared(ctx context.Context, limit int) ([]model.SOPTemplate, error) {
 	if limit <= 0 || limit > 1000 {

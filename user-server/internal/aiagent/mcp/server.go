@@ -45,10 +45,7 @@ const (
 	ErrCodeInvalidRequest = -32600
 	ErrCodeMethodNotFound = -32601
 	ErrCodeInvalidParams  = -32602
-	ErrCodeInternal       = -32603
 	// MCP 自定义错误码
-	ErrCodeToolNotFound   = -32000
-	ErrCodeToolExecFailed = -32001
 	ErrCodeNotInitialized = -32002
 	ErrCodeAlreadyInit    = -32003
 )

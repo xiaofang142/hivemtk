@@ -13,6 +13,16 @@
       </el-space>
     </div>
 
+    <el-alert v-if="loadError" type="error" :closable="false" show-icon style="margin-top: 12px">
+      <template #title>
+        {{ session ? '最新状态读取失败，下方是刷新前的残留内容' : '这条会话读不到，本页没有在监控任何东西' }}：{{ loadError }}
+      </template>
+      <el-space style="margin-top: 6px">
+        <el-button size="small" type="primary" @click="retryLoad">重试</el-button>
+        <el-button size="small" @click="goTasks">返回任务列表</el-button>
+      </el-space>
+    </el-alert>
+
     <el-card v-if="gate" header="待确认的写操作（放行的仅此一份内容）" style="margin-top: 12px">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="步骤序号">第 {{ gate?.step_index }} 步</el-descriptions-item>
@@ -46,7 +56,7 @@
       </div>
     </el-card>
 
-    <el-card header="步骤执行" style="margin-top: 12px">
+    <el-card v-if="session" header="步骤执行" style="margin-top: 12px">
       <el-table :data="steps" v-loading="loading">
         <el-table-column type="expand">
           <template #default="{ row }">
@@ -96,7 +106,7 @@
       </el-table>
     </el-card>
 
-    <el-card style="margin-top: 12px">
+    <el-card v-if="session" style="margin-top: 12px">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span>命令流（append-only 审计：command 下发 / event 回包 / judge 验收；✓=该帧结论成立、✗=不成立、—=此帧不携带结论）</span>
@@ -157,12 +167,14 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getBrowserSession, getBrowserSessionSteps, stopBrowserSession, confirmBrowserSession, getBrowserConfirmGate, getBrowserSessionLogs, exportBrowserSessionAudit, interpretConfirmResult } from '@/api/browserAutomation'
 import { durationText, sessionDurationText } from './durationText'
 
 const route = useRoute()
+const router = useRouter()
+const goTasks = () => router.push('/browser-automation/tasks')
 const sessionId = computed(() => route.params.id)
 const session = ref(null)
 const gate = ref(null)
@@ -265,6 +277,24 @@ let pollTimer = null
 
 const unpack = (res) => res?.data ?? res
 
+// 会话读不到时这一页本来会永远空转：轮询的终止条件写在 session 上，
+// 而 session 正因为读不到才是空的 —— 于是每 2s 两次 404、每轮一条未捕获异常，
+// 页面空白，用户看不出它到底在监控什么。404 的会话不会自己变回来；
+// 网络抖光是暂时的，所以只连续失败若干轮才收，收掉之后还给用户一个「重试」。
+const POLL_FAILURE_LIMIT = 3
+const loadError = ref('')
+let pollFailures = 0
+
+const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null } }
+const startPolling = () => { if (!pollTimer) pollTimer = setInterval(load, 2000) }
+
+function retryLoad() {
+  pollFailures = 0
+  loadError.value = ''
+  startPolling()
+  load()
+}
+
 async function load() {
   loading.value = steps.value.length === 0
   try {
@@ -277,10 +307,17 @@ async function load() {
     const list = unpack(stRes)
     steps.value = Array.isArray(list) ? list : list?.list || []
     loadGate()
+    pollFailures = 0
+    loadError.value = ''
     // 终态停止轮询
-    if (session.value && ['completed', 'failed', 'stopped'].includes(session.value.status)) {
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-    }
+    if (session.value && ['completed', 'failed', 'stopped'].includes(session.value.status)) stopPolling()
+  } catch (e) {
+    // 拦截器已经把服务端原因弹成 toast（同文案 2.5s 内去重），这里只补两件它不做的：
+    // 把「本页当前读不到」写在页面上，以及让空转停下来。异常不再往外抛，
+    // 否则每个轮询周期都在控制台留一条未捕获 rejection。
+    loadError.value = String(e?.message || e)
+    pollFailures += 1
+    if (e?.status === 404 || pollFailures >= POLL_FAILURE_LIMIT) stopPolling()
   } finally {
     loading.value = false
   }
@@ -307,8 +344,22 @@ async function loadGate() {
 let gateLoading = false
 
 async function onStop() {
-  await stopBrowserSession(sessionId.value, '用户手动中断')
-  ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
+  try {
+    const res = await stopBrowserSession(sessionId.value, '用户手动中断')
+    const data = unpack(res)
+    if (data?.stopped) {
+      ElMessage.success('停止请求已发送——将在当前步骤执行完成后生效（步边界收敛，最长 ≈ 当前步超时）')
+    } else {
+      // 服务端对同一条命令回答的是「没有在跑的执行协程」（200 + stopped:false）。
+      // 把它播报成「请求已发送」，用户就会等一次永远不会来的收口——而这条会话仍按
+      // created/active 占着并发闸（CountRunningByUser），下一次下发会被判「已有任务执行中」。
+      // 既然没有协程在跑，轮询也等不来任何变化，一并停掉。
+      stopPolling()
+      ElMessage.warning('服务端确认这条会话已不在执行中，未发送停止请求；它停在半途属于残留会话，需要清理后并发闸才会放开')
+    }
+  } catch {
+    // 拦截器已经把服务端原因弹成 toast；这里接住它，只为了让停止失败不留下未捕获异常
+  }
   load()
 }
 
@@ -361,9 +412,9 @@ async function onExport() {
 
 onMounted(() => {
   load()
-  pollTimer = setInterval(load, 2000)
+  startPolling()
 })
-onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
+onBeforeUnmount(stopPolling)
 </script>
 
 <style scoped>

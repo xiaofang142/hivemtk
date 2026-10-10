@@ -2681,10 +2681,6 @@
   },
   {
     "method": "POST",
-    "path": "/cards/cross-publish"
-  },
-  {
-    "method": "POST",
     "path": "/channels/bind"
   },
   {

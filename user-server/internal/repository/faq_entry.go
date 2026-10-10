@@ -118,31 +118,6 @@ func (r *FAQRepository) listEnabledForAgent(ctx context.Context, agentID uint, l
 	return entries, nil
 }
 
-// ListByKB 按知识库 ID 列出 (: 查某 KB 下挂载的 FAQ 条目)
-//
-// 通过 JOIN agent_kb_bindings + knowledge_bases 确定 (KBID, KBType=faq) 关联的 FAQ
-//
-// 实现: KBID -> agent_id (via knowledge_bases.owner_agent_id) -> faq_entries.agent_id
-//
-// 简化实现: 直接按 agent_id 过滤 (KBType=faq 假设)
-func (r *FAQRepository) ListByKB(ctx context.Context, kbID uint, agentID uint, limit int) ([]model.FAQEntry, error) {
-	if limit <= 0 || limit > 1000 {
-		limit = 200
-	}
-	var entries []model.FAQEntry
-	q := r.db.WithContext(ctx).
-		Where("enabled = ?", true).
-		Order("id DESC").
-		Limit(limit)
-	if agentID > 0 {
-		q = q.Where("agent_id = ?", agentID)
-	}
-	if err := q.Find(&entries).Error; err != nil {
-		return nil, err
-	}
-	return entries, nil
-}
-
 // ListShared 列出全部共享 FAQ (agent_id IS NULL)
 func (r *FAQRepository) ListShared(ctx context.Context, limit int) ([]model.FAQEntry, error) {
 	if limit <= 0 || limit > 1000 {

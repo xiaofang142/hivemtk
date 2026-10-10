@@ -38,7 +38,8 @@ func TestWorkflowRetryPolicy_BackoffCappedAtMax(t *testing.T) {
 // 3. Registry 注册 & 获取
 func TestWorkflowExecutorRegistry_RegisterAndGet(t *testing.T) {
 	r := NewWorkflowNodeExecutorRegistry()
-	RegisterWorkflowNodeExecutors(r)
+	orch := &WorkflowOrchestratorService{}
+	RegisterWorkflowNodeExecutors(r, orch)
 
 	got, err := r.Get(context.Background(), WorkflowNodeTypeTrigger)
 	if err != nil {
@@ -51,6 +52,20 @@ func TestWorkflowExecutorRegistry_RegisterAndGet(t *testing.T) {
 	all := r.AllRegistered(context.Background())
 	if len(all) != 4 {
 		t.Errorf("registered count=%d want=4 (got=%v)", len(all), all)
+	}
+
+	// 装配点漏传编排器时，subflow 节点会把"什么都没跑"记成 completed（见上一条用例的兜底分支），
+	// 而注册处是唯一决定运行时那份实例的地方，所以在这里钉住它拿到的是非 nil。
+	sub, err := r.Get(context.Background(), WorkflowNodeTypeSubflow)
+	if err != nil {
+		t.Fatalf("Get(subflow) err: %v", err)
+	}
+	sf, ok := sub.(*SubflowNodeExecutor)
+	if !ok {
+		t.Fatalf("subflow 执行器类型=%T，装配点换实现时这条判据得跟着改而不是删", sub)
+	}
+	if sf.orchestrator == nil {
+		t.Errorf("注册进 registry 的 subflow 执行器没拿到编排器：编辑器里的「子流程」节点会静默跳过却标成已完成")
 	}
 }
 
@@ -190,8 +205,10 @@ func TestConditionNodeExecutor_NoMatchFallsToDefault(t *testing.T) {
 	}
 }
 
-// 9. SubflowNodeExecutor 写入 _subflow_invoked 标记
-func TestSubflowNodeExecutor_InvokesSubflow(t *testing.T) {
+// 9. SubflowNodeExecutor 在没有编排器时走兜底分支：标成 completed、写 _subflow_invoked、
+// 但仍什么都没跑。这条用例只验这个兜底形状（名字以前叫 InvokesSubflow，其实恰恰相反，
+// 真调用在下一条用例里）。
+func TestSubflowNodeExecutor_WithoutOrchestratorSkips(t *testing.T) {
 	exec := &model.WorkflowExecution{WorkflowID: "wf-sub", Version: 1, Context: model.JSONMap{}}
 	wctx := &WorkflowExecContext{
 		Execution:  exec,
@@ -208,6 +225,9 @@ func TestSubflowNodeExecutor_InvokesSubflow(t *testing.T) {
 	}
 	if res.Output["_subflow_invoked"] != "sub-wf-2" {
 		t.Errorf("_subflow_invoked=%v want=sub-wf-2", res.Output["_subflow_invoked"])
+	}
+	if res.Output["_skipped_reason"] == nil {
+		t.Errorf("兜底分支必须自报没跑的原因，否则执行记录看上去就是一次真投递")
 	}
 	if len(res.SideEffects) == 0 {
 		t.Errorf("expect side-effect key recorded")

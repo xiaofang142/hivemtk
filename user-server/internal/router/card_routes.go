@@ -11,14 +11,6 @@ import (
 
 func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
-	crossPubCtrl := controller.NewCardCrossPublishController(
-		service.NewDouyinCardService(gormDB),
-		service.NewKuaishouCardService(gormDB),
-		service.NewXiaohongshuCardService(gormDB),
-		service.NewXianyuCardService(gormDB),
-	)
-	auth.POST("/cards/cross-publish", middleware.RequirePermission("cards.write"), crossPubCtrl.CrossPublish)
-
 	douyinCardCtrl := controller.NewDouyinCardController(service.NewDouyinCardService(gormDB))
 	auth.GET("/douyin-card/list", douyinCardCtrl.GetList)
 	auth.POST("/douyin-card", middleware.RequirePermission("cards.write"), douyinCardCtrl.Create)

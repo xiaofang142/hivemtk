@@ -29,7 +29,27 @@ const (
 	// jwtRevokeTTL 必须 **>** DefaultJWTConfig.ExpiresHours（24h），
 	// 与 jwtBlacklistTTL 同口径；否则水位线会先于待作废令牌消失。
 	jwtRevokeTTL = 25 * time.Hour
+	// revocationCacheBudget 是水位线读写的**独立**时间预算（见 detachedRevocationCtx）。
+	// 取值只需覆盖"缓存正常但抖动"的量级（本地 Redis 读亚毫秒级）；
+	// 真正的缓存不可用仍会在预算到期后回到 fail-closed 口径。
+	revocationCacheBudget = 2 * time.Second
 )
+
+// detachedRevocationCtx 把水位线的读写与**调用方（HTTP 请求）的取消链**解绑。
+//
+// 为什么必须解绑：客户端在 SPA 路由切换/重复请求时随时会 abort 掉受保护请求，
+// Gin 的 request ctx 随即 context.Canceled。而吊销判定是"这个令牌还能不能用"的**权威读**，
+// 它失败与"该用户已被吊销"是两件事——原实现把前者落进 default 分支 fail-closed 判成后者，
+// 于是"浏览器取消了请求"表现为"合法令牌被 401 拒绝"，前端收到 401 清 token 打回登录页，
+// 用户被无端登出（实测 user_id=21 连续 5 次 context canceled → 整批页面踢回 #/login）。
+// 同一件事发生在写侧更糟：禁用/改密请求被客户端取消 ⇒ 水位线没写进去 ⇒ 该用户旧令牌
+// 在最长 24h 内仍然可用，正是这套机制要堵的洞。
+//
+// 因此读写都带自己的预算跑完（口径同 IsJWTBlacklisted 用 context.Background）；
+// 用 WithoutCancel 而非 Background 是为了保住 ctx 上的 trace 值，审计链不断。
+func detachedRevocationCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), revocationCacheBudget)
+}
 
 func revokeKey(userID uint) string {
 	return jwtRevokeKeyPrefix + strconv.FormatUint(uint64(userID), 10)
@@ -51,7 +71,9 @@ func RevokeUserTokens(ctx context.Context, userID uint) {
 	}
 	key := revokeKey(userID)
 	cutoff := time.Now().Unix()
-	if err := cache.GetGlobalCache().Set(ctx, key, strconv.FormatInt(cutoff, 10), jwtRevokeTTL); err != nil {
+	wctx, cancel := detachedRevocationCtx(ctx)
+	defer cancel()
+	if err := cache.GetGlobalCache().Set(wctx, key, strconv.FormatInt(cutoff, 10), jwtRevokeTTL); err != nil {
 		logger.Errorf("RevokeUserTokens 写缓存失败（该用户旧令牌将退化为最长 24h 自然过期）user_id=%d: %v", userID, err)
 	}
 }
@@ -61,8 +83,9 @@ func RevokeUserTokens(ctx context.Context, userID uint) {
 // 三态口径与 IsSessionLockedForHuman 一致：
 //   - 读成功：按水位线比较；
 //   - key 不存在（redis.Nil / cache.ErrCacheMiss）：该用户从未触发吊销 ⇒ 未作废；
-//   - 其它错误（缓存故障）：**fail-closed 判为已作废**，与 IsJWTBlacklisted 同口径
-//     （缓存故障时受保护请求本就已全部拒绝，不引入新的可用性风险）。
+//   - 其它错误（缓存故障／自己的读预算到期）：**fail-closed 判为已作废**，与
+//     IsJWTBlacklisted 同口径（缓存故障时受保护请求本就已全部拒绝，不引入新的可用性风险）。
+//     注意调用方 ctx 被取消（客户端 abort）**不在**这一类：见 detachedRevocationCtx。
 //
 // issuedAt 为 nil（令牌没有 iat）时，只要存在水位线即判失效——无法证明它签发于吊销之后。
 func IsTokenRevoked(ctx context.Context, userID uint, issuedAt *jwt.NumericDate) bool {
@@ -70,7 +93,9 @@ func IsTokenRevoked(ctx context.Context, userID uint, issuedAt *jwt.NumericDate)
 		return false
 	}
 	key := revokeKey(userID)
-	val, err := cache.GetGlobalCache().Get(ctx, key)
+	rctx, cancel := detachedRevocationCtx(ctx)
+	defer cancel()
+	val, err := cache.GetGlobalCache().Get(rctx, key)
 	switch {
 	case err == nil:
 		cutoff, convErr := strconv.ParseInt(val, 10, 64)

@@ -21,7 +21,7 @@ func setupWorkflowOrchestratorRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	svc := service.NewWorkflowOrchestratorService(versionRepo, execRepo, nodeExecRepo)
 
 	registry := service.NewWorkflowNodeExecutorRegistry()
-	service.RegisterWorkflowNodeExecutors(registry)
+	service.RegisterWorkflowNodeExecutors(registry, svc)
 	dispatcher := service.NewWorkflowDispatcher(versionRepo, execRepo, nodeExecRepo, registry, nil)
 	dispatcher.Start(context.Background())
 	svc.SetDispatcher(dispatcher)

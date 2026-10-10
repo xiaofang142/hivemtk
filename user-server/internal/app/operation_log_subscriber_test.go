@@ -147,11 +147,17 @@ func TestOperationLogSubscriber_EndToEnd(t *testing.T) {
 		},
 	})
 
-	waitForLogCondition(t, func() bool {
+	// 异步落库没有确定时刻：等不到就要说清是"一行都没写"还是"写了不止一行"，
+	// 交给下一条 First 只会剩一句 record not found（0 行与 2 行在它嘴里长得一样）。
+	if !waitForLogCondition(t, func() bool {
 		var count int64
 		database.Model(&model.OperationLog{}).Count(&count)
 		return count == 1
-	}, 500*time.Millisecond)
+	}, 5*time.Second) {
+		var count int64
+		database.Model(&model.OperationLog{}).Count(&count)
+		t.Fatalf("5s 内没等到订阅者写入的那一行，当前行数=%d", count)
+	}
 
 	var log model.OperationLog
 	if err := database.First(&log).Error; err != nil {
@@ -213,13 +219,14 @@ func (r *testLogRepo) UpdateNewValue(ctx context.Context, id uint, newValue stri
 		Update("new_value", newValue).Error
 }
 
-func waitForLogCondition(t *testing.T, cond func() bool, timeout time.Duration) {
+func waitForLogCondition(t *testing.T, cond func() bool, timeout time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if cond() {
-			return
+			return true
 		}
 		time.Sleep(time.Millisecond)
 	}
+	return false
 }

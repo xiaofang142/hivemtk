@@ -16,11 +16,6 @@ const (
 // AlertRuleStatus 告警规则状态
 type AlertRuleStatus string
 
-const (
-	AlertRuleStatusActive   AlertRuleStatus = "active"
-	AlertRuleStatusInactive AlertRuleStatus = "inactive"
-)
-
 // AlertChannel 告警通知渠道
 type AlertChannel string
 

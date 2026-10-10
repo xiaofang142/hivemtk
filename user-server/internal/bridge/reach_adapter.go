@@ -122,9 +122,6 @@ func (a *BridgeReachAdapter) AccountHealth(ctx context.Context, channel, account
 	return a.inner.AccountHealth(ctx, channel, accountID)
 }
 
-// GlobalBridgeReachAdapter 占位全局（reach_sender_wiring.go 引用）
-var GlobalBridgeReachAdapter *BridgeReachAdapter
-
 func (a *BridgeReachAdapter) ListAccounts(ctx context.Context, channel string) ([]tooluse.AccountInfo, error) {
 	return a.inner.ListAccounts(ctx, channel)
 }

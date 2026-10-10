@@ -5,21 +5,8 @@ import "time"
 // HumanizeEvaluatorType 评估器类型
 type HumanizeEvaluatorType string
 
-const (
-	HumanizeEvaluatorRule   HumanizeEvaluatorType = "rule"
-	HumanizeEvaluatorLLM    HumanizeEvaluatorType = "llm"
-	HumanizeEvaluatorHybrid HumanizeEvaluatorType = "hybrid"
-)
-
 // HumanizeSampleStrategy 采样策略
 type HumanizeSampleStrategy string
-
-const (
-	HumanizeSampleFull           HumanizeSampleStrategy = "full"
-	HumanizeSampleBoundary       HumanizeSampleStrategy = "boundary"
-	HumanizeSampleSampled        HumanizeSampleStrategy = "sampled"
-	HumanizeSampleSampledMonitor HumanizeSampleStrategy = "sampled_monitor"
-)
 
 // HumanizeScore 拟人度评估主表（对应 humanize_scores 表）
 //
@@ -148,9 +135,3 @@ func (ABTestStat) TableName() string { return "ab_test_stats" }
 // LowQualitySampleType 扩展常量（新增类型）
 //
 // 复用 low_quality_samples 表的 sample_type 字段，仅追加枚举值，不修改表结构
-const (
-	LowQualitySampleNaturalnessLow    LowQualitySampleType = "naturalness_low"
-	LowQualitySamplePersuasivenessLow LowQualitySampleType = "persuasiveness_low"
-	LowQualitySampleChampionDistance  LowQualitySampleType = "champion_distance"
-	LowQualitySampleABTestLoser       LowQualitySampleType = "ab_test_loser"
-)

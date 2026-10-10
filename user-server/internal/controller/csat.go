@@ -47,9 +47,9 @@ func (c *CSATController) Trigger(ctx *gin.Context) {
 	response.Success(ctx, survey, "调查已触发")
 }
 
-// Stats GET /api/csat/stats
+// Stats GET /api/csat/stats?window=month|week|7d|30d（缺省=全量）
 func (c *CSATController) Stats(ctx *gin.Context) {
-	stats, err := c.svc.Stats(ctx.Request.Context())
+	stats, err := c.svc.Stats(ctx.Request.Context(), ctx.Query("window"))
 	if HandleServiceError(ctx, err) {
 		return
 	}

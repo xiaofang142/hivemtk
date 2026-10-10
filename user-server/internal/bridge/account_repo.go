@@ -169,6 +169,14 @@ func isOnlineByLastSync(ctx context.Context, lastSyncAt *time.Time, status strin
 	return now.Sub(*lastSyncAt) < runtimeOnlineGraceWindow(ctx)
 }
 
+// IsAccountRowOnline 判定一条已经读出来的桥接账号行此刻是否收得到下行。
+//
+// 导出只为一件事：让包外的读侧（触达工具的账号健康查询）与包内的三个读侧走同一份判据。
+// 各写一份秒数就会量出两个不同的"在线数"，而运维拿哪一份都对不上另两份。
+func IsAccountRowOnline(ctx context.Context, lastSyncAt *time.Time, status string) bool {
+	return isOnlineByLastSync(ctx, lastSyncAt, status, time.Now())
+}
+
 func (r *BridgeAccountRepository) ListByUser(ctx context.Context, userID uint) ([]BridgeAccountView, error) {
 	var accs []model.BridgeAccount
 	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("id desc").Find(&accs).Error; err != nil {

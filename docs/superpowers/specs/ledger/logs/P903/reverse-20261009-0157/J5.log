@@ -1,0 +1,6 @@
+[90m2026-10-09T02:10:59+08:00[0m [33mWRN[0m [1mjourney.ListByStage(lead) 阶段索引读失败，退回本实例视图: context deadline exceeded[0m [36mcomponent=[0muser-server
+--- FAIL: TestCustomerJourney_ListByStageFallsBackToLocalViewWhenIndexFails (0.00s)
+    customer_journey_stage_index_test.go:142: 索引故障应退回本实例视图，实际=[]
+FAIL
+FAIL	hivemtk-user/internal/service	0.754s
+FAIL

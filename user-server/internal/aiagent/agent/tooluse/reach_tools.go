@@ -489,14 +489,17 @@ func NewReachCardSendTool(deps ReachToolDeps) *ReachCardSendTool {
 			NameVal:        "reach.card.send",
 			RiskVal:        RiskHighWrite,
 			CategoryVal:    CategoryReach,
-			DescriptionVal: "发送客户卡片（如抖音卡片、快手卡片）。支持指定渠道和卡片模板。",
+			DescriptionVal: "发送客户卡片（抖音/快手/小红书/tiktok/闲鱼后台配好的卡片模板，按短链发到会话）。",
 			ParamsVal: ToolParameters{
 				Type: "object",
 				Properties: map[string]ToolParam{
 					"channel": {
 						Type:        "string",
 						Description: "目标渠道",
-						Enum:        []string{"douyin", "kuaishou", "wecom", "weixin"},
+						// 只有这五个渠道有卡片模板表。此前枚举里的 wecom/weixin 恒失败
+						// （企微/公众号没有"卡片模板"这一层），而 xiaohongshu/tiktok/xianyu
+						// 明明可发却没进枚举——模型只能按枚举挑，等于关掉了三条能力。
+						Enum: []string{"douyin", "kuaishou", "xiaohongshu", "tiktok", "xianyu"},
 					},
 					"account_id":       {Type: "string", Description: "发送账号 ID"},
 					"external_user_id": {Type: "string", Description: "接收方 ID"},

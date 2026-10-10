@@ -19,14 +19,7 @@ const (
 // 统一管理各业务模块推送的消息类型字符串，
 // 避免散落在调用方导致命名不一致。
 const (
-	MsgTypeNewSession    = "new_session"
-	MsgTypeNewMessage    = "new_message"
-	MsgTypeSessionUpdate = "session_update"
-	MsgTypeAgentStatus   = "agent_status"
-	MsgTypeAISuggestion  = "ai_suggestion"
-	MsgTypeHeartbeat     = "heartbeat"
-	MsgTypeSOP           = "sop_message"
-	MsgTypeError         = "error"
+	MsgTypeSOP = "sop_message"
 )
 
 const (

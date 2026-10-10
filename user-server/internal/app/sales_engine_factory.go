@@ -137,6 +137,10 @@ func BuildSmartOrchestrator(engine *service.SalesEngine, kbRepo *repository.Know
 	// Bad Case 自动标记器（T-P8-03）：全局底座同样由 router.Setup 里的 InitBadCaseRuntime
 	// 装配，这里只负责挂。没装配时挂的是 nil ⇒ 低质回答不留痕，回答路径与本卡之前逐字一致。
 	attachBadCaseMarker(o)
+
+	// 语义答案缓存：四样零件都在，缺的一直是装配（详见 faq_cache_wiring.go）。
+	// 参数 cache.faq_answer_enabled 默认 false，关着时不挂 ⇒ 与挂载前逐字一致。
+	attachFAQAnswerCache(o, gormDB)
 	return o
 }
 
@@ -151,17 +155,8 @@ func RegisterAgentReachTools(gormDB *gorm.DB) {
 	logger.Info("[agent] ✅ 触达工具（含 reach.web.send 网页客服）已真实接入全局注册中心")
 }
 
-// registerAgentPrivateMessageTools 将「私信工具」注册到全局注册中心。
-// 私信模块（CustomerSessionService）是智能体对话域载体：被动模式读取/回复会话，
-// 主动模式由智能体开启私信会话与用户链接。详见 （双模式）。
-//
-// 调用方：router.Setup()
-func RegisterAgentPrivateMessageTools(gormDB *gorm.DB) {
-	sessionSvc := service.NewCustomerSessionServiceWithDB(gormDB)
-	deps := tooluse.NewPrivateMessageToolDepsWithPort(service.NewSessionPortAdapter(sessionSvc))
-	if err := tooluse.RegisterPrivateMessageTools(tooluse.GetGlobalRegistry(), deps); err != nil {
-		logger.Errorf("[agent] 注册私信工具失败（pm.* 将不可用）：%v", err)
-		return
-	}
-	logger.Info("[agent] ✅ 私信工具（pm.session.open/read/message.send）已接入全局注册中心")
-}
+// 私信工具（pm.session.open/read/message.send）不在这里注册：
+// 生产装配走 app.PrivateMessageToolProvider.Provide()（tool_provider_wiring.go），
+// 由 registerAllAgentToolsViaProviders 统一批量注册。本文件里曾有一个
+// RegisterAgentPrivateMessageTools 做同一件事并在注释里自称"调用方：router.Setup()"，
+// 实测全仓（含测试）零调用点，已删；留着只会让人以为 pm.* 有两条装配路径。

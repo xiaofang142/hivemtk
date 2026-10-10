@@ -359,3 +359,8 @@ docs/superpowers/specs/ledger/logs/R22-closefinal/merge-run*/lint-user-web.log
 docs/superpowers/specs/ledger/logs/R22-phaseE/merge/lint-user-web.log
 docs/superpowers/specs/ledger/logs/R22-lanes/service-channelgw-gate-full.log
 docs/superpowers/specs/ledger/logs/R22-lanes/service-full-mut-batchecho.log
+# mut_journey_stage_index_p903.sh（T-P9-03 阶段索引五刀电池）的取证轮次：一对两行。
+# 现数口径同上方「四条一组」那段：以 !docs...logs/<轮次>/ 形状的行数
+# 与 logs/ 下的轮次目录数对齐（本批加行后两侧同增 1；电池跑完才有目录，先加行的窗口内差 1 属预期）。
+!docs/superpowers/specs/ledger/logs/P903/
+!docs/superpowers/specs/ledger/logs/P903/**/*.log

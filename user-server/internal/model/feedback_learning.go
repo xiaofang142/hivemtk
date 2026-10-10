@@ -73,7 +73,6 @@ const (
 	NodeOutcomeSuccess   = "success"
 	NodeOutcomeAbandoned = "abandoned"
 	NodeOutcomeFailed    = "failed"
-	NodeOutcomePending   = "pending"
 )
 
 // OptimizationSuggestion 优化建议

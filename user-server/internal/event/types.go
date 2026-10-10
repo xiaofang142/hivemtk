@@ -7,10 +7,6 @@ import "time"
 const (
 	TopicOperationLog = "operation.log"
 
-	TopicHealthReport = "health.report"
-
-	TopicCustomerMerged = "customer.merged"
-
 	TopicCustomerMessageReceived = "customer.message.received"
 
 	TopicKnowledgeDocumentChanged = "knowledge.document.changed"

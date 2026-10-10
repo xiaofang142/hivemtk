@@ -31,7 +31,6 @@ const (
 	DeadLetterReplaying    DeadLetterStatus = "replaying"
 	DeadLetterReplayed     DeadLetterStatus = "replayed"
 	DeadLetterReplayFailed DeadLetterStatus = "replay_failed"
-	DeadLetterDiscarded    DeadLetterStatus = "discarded"
 )
 
 // DeadLetterQueue 死信队列（内存实现）

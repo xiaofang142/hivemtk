@@ -21,7 +21,13 @@ import (
 //   - Type:   知识库类型 (faq / rag / sop)
 //   - OwnerType: 所有者类型 (private=智能体私有, shared=共享)
 //   - OwnerAgentID: 当 OwnerType=private 时, 指向所属智能体 (外键 ai_agents.id, 可空)
-//   - MemberCount / DocCount: 冗余统计字段 (用于列表展示, 实际从内容表 COUNT)
+//   - MemberCount / DocCount: 冗余统计列，但今天没有任何写入路径维护它们：仓储 Update
+//     只是把读到的原值写回，更新请求体里没有这两格，内容表增删也不回写；而三个内容表与
+//     KB 行之间没有外键（见下方"版本口径" a 段），按单个 KB COUNT 也算不出来。
+//     唯一消费方是 service.GetKBStats 把 DocCount 当 item_count 交给抽屉页，
+//     所以那一格恒为建行时的值。要复核这条事实别信这里的数字，自己现取：
+//     select count(*) as kb, count(*) filter (where member_count=0 and doc_count=0) as both_zero
+//     from knowledge_bases; 本机现测两列相等（即全为 0），同期内容表是万级行数。
 //   - Enabled: 用 *bool 避免 GORM v2 零值问题
 //   - Version / CanaryEnabled / CanaryPercent: 答案缓存的版本与灰度路由，见下方"版本口径"
 //

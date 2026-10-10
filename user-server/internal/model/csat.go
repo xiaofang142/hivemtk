@@ -23,7 +23,6 @@ func (CSATSurvey) TableName() string { return "csat_surveys" }
 
 // CSAT 状态枚举
 const (
-	CSATStatusPending   = "pending"
 	CSATStatusSent      = "sent"
 	CSATStatusResponded = "responded"
 )

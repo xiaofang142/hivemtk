@@ -396,8 +396,7 @@ const (
 	EventGroupMessage = "GROUP_MESSAGE_CREATE"
 	// EventC2CMessage 单聊事件。曾误写为 C2C_AT_MESSAGE_CREATE（官方无此事件名），
 	// 后果是所有单聊客户消息在 ToInbound 的 default 分支被静默丢弃。
-	EventC2CMessage    = "C2C_MESSAGE_CREATE"
-	EventDirectMessage = "DIRECT_MESSAGE_CREATE"
+	EventC2CMessage = "C2C_MESSAGE_CREATE"
 )
 
 // CallbackOp 回调操作码（webhook 通道关注 op=13 地址验证）

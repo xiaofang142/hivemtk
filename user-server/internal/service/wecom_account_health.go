@@ -36,8 +36,6 @@ const (
 	WeComLoginOffline = "offline"
 	WeComLoginBanned  = "banned"
 
-	WeComDefaultWeight = 100
-
 	// WeComErrorRateDegradeThreshold / WeComQuotaDegradeThreshold 为 fallback 默认值（DB 驱动）
 	// 运行时通过 GlobalConfigParam() 按 group=wecom 读取 DB 参数：
 	//   wecom.error_rate_degrade → WeComErrorRateDegradeThreshold (fallback)

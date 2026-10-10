@@ -23,7 +23,10 @@ const api = vi.hoisted(() => ({
   interpretConfirmResult: vi.fn()
 }))
 vi.mock('@/api/browserAutomation', () => api)
-vi.mock('vue-router', () => ({ useRoute: () => ({ params: { id: '88' } }) }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ params: { id: '88' } }),
+  useRouter: () => ({ push: vi.fn() }),
+}))
 
 import Monitor from '@/views/browserAutomation/Monitor.vue'
 

@@ -41,7 +41,6 @@ const (
 	DelayedStatusPending = "pending"
 	DelayedStatusSending = "sending"
 	DelayedStatusSent    = "sent"
-	DelayedStatusExpired = "expired"
 	// DelayedStatusSuperseded 重投前发现会话已被回复（人工或后续 AI），这条旧内容不再补投
 	DelayedStatusSuperseded = "superseded"
 	// DelayedStatusFailed 重投次数用尽仍失败，保留行与 last_error 作为终态证据

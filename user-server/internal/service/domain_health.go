@@ -56,10 +56,8 @@ type HealthCheckResult struct {
 const (
 	HealthScoreSwitchThreshold = 30
 	HealthScoreHealthy         = 80
-	HealthScoreWarn            = 60
 	ConsecutiveFailureLimit    = 3
 	HealthCheckTimeout         = 5 * time.Second
-	HealthLogRetentionDays     = 30
 )
 
 type domainHealthService struct {

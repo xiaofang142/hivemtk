@@ -296,7 +296,6 @@ func auditEntryToRecord(e AuditEntry) ToolCallAuditRecord {
 type AlertLevel string
 
 const (
-	AlertInfo     AlertLevel = "info"
 	AlertWarning  AlertLevel = "warning"
 	AlertCritical AlertLevel = "critical"
 )

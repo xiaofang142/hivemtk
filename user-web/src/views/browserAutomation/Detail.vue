@@ -126,6 +126,22 @@
       <HostInstallGuide />
     </el-dialog>
   </div>
+
+  <!-- id 来自 URL，用户完全可能带着一条已删任务的链接进来（列表页删掉再后退）。
+       旧写法在这时什么都不渲染：白屏既没说读不到、也没给退路。 -->
+  <div v-else-if="loadError" class="page">
+    <el-alert type="error" :closable="false" show-icon>
+      <template #title>这条任务读不到：{{ loadError }}</template>
+      <div class="error-actions">
+        <el-button size="small" type="primary" @click="load">重试</el-button>
+        <el-button size="small" @click="router.push('/browser-automation/tasks')">返回任务列表</el-button>
+      </div>
+    </el-alert>
+  </div>
+
+  <div v-else class="page">
+    <el-skeleton :rows="6" animated />
+  </div>
 </template>
 
 <script setup>
@@ -147,6 +163,7 @@ const task = ref(null)
 const sessions = ref([])
 const receipts = ref([])
 const cron = ref(null)
+const loadError = ref('')
 const newCronExpr = ref('*/5 * * * *')
 const newCronTz = ref('Asia/Shanghai')
 const hostDialog = reactive({ visible: false })
@@ -159,11 +176,31 @@ const cronBlocked = computed(() => !!cron.value?.enabled && !RUNNABLE_STATUS.inc
 
 async function load() {
   const id = route.params.id
-  const res = await getBrowserTask(id)
+  loadError.value = ''
+  let res
+  try {
+    res = await getBrowserTask(id)
+  } catch (e) {
+    // 主干读不到就没有主干可渲染。旧写法这里直接把异常抛出去：页面停在 v-if="task" 之外，
+    // 于是一片空白、没有原因、也没有退路（id 是从 URL 来的，用户完全可能带着一个已删的 id 进来）。
+    loadError.value = String(e?.message || e)
+    task.value = null
+    return
+  }
   task.value = unpack(res)
-  const sRes = await listBrowserTaskSessions(id, { limit: 20 })
-  const sData = unpack(sRes)
-  sessions.value = sData?.list || []
+  if (!task.value) {
+    loadError.value = '服务端没有返回这条任务'
+    return
+  }
+
+  // 以下三条是旁支，各自兜住自己的失败：任务详情已经拿到了，任何一条读失败都不该
+  // 再把这一页拖回空白，也不该在控制台留一条未捕获的 rejection。
+  try {
+    const sRes = await listBrowserTaskSessions(id, { limit: 20 })
+    sessions.value = unpack(sRes)?.list || []
+  } catch {
+    sessions.value = []
+  }
 
   // 回执读取失败不许拖垮整页：会话历史与触发器是这一页的主干，
   // 而回执只是验收面——它读不到时应该显示「暂无」而不是白屏。
@@ -175,10 +212,14 @@ async function load() {
     receipts.value = []
   }
 
-  const cRes = await listBrowserCron()
-  const cList = unpack(cRes)
-  const list = Array.isArray(cList) ? cList : cList?.list || []
-  cron.value = list.find((c) => c.task_id === Number(id)) || null
+  try {
+    const cRes = await listBrowserCron()
+    const cList = unpack(cRes)
+    const list = Array.isArray(cList) ? cList : cList?.list || []
+    cron.value = list.find((c) => c.task_id === Number(id)) || null
+  } catch {
+    cron.value = null
+  }
 }
 
 async function onRun() {
@@ -247,4 +288,5 @@ onMounted(load)
 .page { padding: 16px; }
 .header { display: flex; justify-content: space-between; align-items: center; }
 .cron-warn { color: #e6a23c; font-size: 12px; line-height: 1.6; margin-top: 8px; }
+.error-actions { margin-top: 8px; display: flex; gap: 8px; }
 </style>

@@ -13,7 +13,7 @@ import (
 // KnowledgeDocumentRepository 知识库文档仓储(产品维度)
 //
 // 按智能体隔离改造
-//   - 新增 ListByAgent / ListShared / ListByKB / MatchByAgent
+//   - 新增 ListByAgent / ListShared / MatchByAgent
 //   - ListWithFilter 新增 AgentID 字段 (nil=不过滤, &0=仅共享, &X=该智能体)
 //   - 严格隔离语义: agentID > 0 仅匹配 (agent_id=X OR agent_id IS NULL) AND enabled
 //   - 共享 = agent_id IS NULL, 由显式白名单控制
@@ -170,25 +170,6 @@ func (r *KnowledgeDocumentRepository) ListShared(ctx context.Context, limit int)
 		Limit(limit).
 		Find(&docs).Error
 	return docs, err
-}
-
-// ListByKB 按知识库 ID 列出 (: 查某 KB 下挂载的知识库文档)
-//
-// 简化实现: 直接按 agent_id 过滤 (KBType=rag 假设)
-// 完整实现需 JOIN agent_kb_bindings + knowledge_bases, 此处保留简化
-func (r *KnowledgeDocumentRepository) ListByKB(ctx context.Context, kbID uint, agentID uint, limit int) ([]*model.KnowledgeDocument, error) {
-	if limit <= 0 || limit > 1000 {
-		limit = 200
-	}
-	q := r.db.WithContext(ctx).Where("status = ?", 1)
-	if agentID > 0 {
-		q = q.Where("agent_id = ?", agentID)
-	}
-	var docs []*model.KnowledgeDocument
-	if err := q.Order("id DESC").Limit(limit).Find(&docs).Error; err != nil {
-		return nil, err
-	}
-	return docs, nil
 }
 
 // MatchByAgent 按智能体严格 1:1 匹配 (: 强 1对1 改造)

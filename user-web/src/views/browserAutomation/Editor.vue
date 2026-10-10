@@ -1,6 +1,10 @@
 <template>
   <div class="page">
     <h2>{{ isEdit ? '编辑任务' : '新建任务' }}</h2>
+    <el-alert v-if="taskLoadError" type="error" :closable="false" show-icon style="max-width: 860px; margin-bottom: 12px">
+      <template #title>这条任务读不到，下面摊开的是空白默认值而不是它的内容：{{ taskLoadError }}</template>
+      <el-button size="small" style="margin-top: 6px" @click="router.push('/browser-automation/tasks')">返回任务列表</el-button>
+    </el-alert>
     <el-form :model="form" label-width="120px" style="max-width: 860px">
       <el-form-item label="名称" required>
         <el-input v-model="form.name" maxlength="256" />
@@ -137,7 +141,7 @@
 
       <el-form-item v-if="form.task_type === 'workflow'" label="依赖前置任务">
         <el-select v-model="form.depends_on_task_id" clearable placeholder="选择已发布任务" style="width: 300px">
-          <el-option v-for="t in readyTasks" :key="t.id" :label="`#${t.id} ${t.name}`" :value="t.id" />
+          <el-option v-for="t in depOptions" :key="t.id" :label="depLabel(t)" :value="t.id" />
         </el-select>
         <el-select v-if="form.depends_on_task_id" v-model="form.depends_on_mode" style="width: 160px; margin-left: 12px">
           <el-option label="前置完成 (all_done)" value="all_done" />
@@ -159,13 +163,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getBrowserTask, createBrowserTask, updateBrowserTask, listBrowserTasks, listPlatforms,
-  listBrowserCron, createBrowserCron, updateBrowserCron,
+  listBrowserCron, createBrowserCron, updateBrowserCron, setBrowserTaskDependency,
 } from '@/api/browserAutomation'
 
 const route = useRoute()
 const router = useRouter()
 const isEdit = computed(() => !!route.params.id)
 const saving = ref(false)
+const taskLoadError = ref('')
 const readyTasks = ref([])
 const platforms = ref([])
 
@@ -209,6 +214,17 @@ const form = ref({
 })
 
 const triggers = ref([])
+// 进页面时那条依赖长什么样：保存只发差异，不发「表单里恰好有这个字段」。
+// 不存这一份快照就没法区分「用户把前置任务从 A 换成 B」和「用户根本没碰这一项」，
+// 而不区分就会让每次保存都顺带写一次依赖接口（包括把工作流依赖清掉的意外写法）。
+const loadedDep = ref({ id: null, mode: 'all_done' })
+// 已存的前置不在「已发布任务」候选里时的真实身份（名称+状态），见 ensureDepOption
+const depOption = ref(null)
+const depOptions = computed(() => {
+  if (!depOption.value) return readyTasks.value
+  if (readyTasks.value.some((t) => t.id === depOption.value.id)) return readyTasks.value
+  return [depOption.value, ...readyTasks.value]
+})
 const existingTrigger = computed(() => {
   const id = Number(route.params.id)
   return triggers.value.find((c) => c.task_id === id) || null
@@ -253,12 +269,37 @@ function onPlatformChange(pid) {
 const unpack = (res) => res?.data ?? res
 const asList = (data) => (Array.isArray(data) ? data : data?.list || [])
 
+// 候选项只列「就绪」的任务（执行入口只认这一档），但已存的前置未必还在这档里：
+// 它可能已经跑成 done/failed 或被退回 draft。此时下拉只剩一个裸 id，
+// 用户看不出这条工作流挂在谁身上，也就无从判断这次到底该不该改。
+const depLabel = (t) => (t.status && t.status !== 'ready' ? `#${t.id} ${t.name}（${t.status}，非就绪）` : `#${t.id} ${t.name}`)
+
+async function ensureDepOption() {
+  const id = form.value.depends_on_task_id
+  if (!id || readyTasks.value.some((t) => t.id === id)) return
+  try {
+    const t = unpack(await getBrowserTask(id))
+    depOption.value = t ? { id: t.id, name: t.name, status: t.status } : { id, name: '前置任务读不到', status: '' }
+  } catch {
+    // 读不到本身就是一条要显出来的信息：默默不显示，等于替用户把这条依赖藏了
+    depOption.value = { id, name: '已删除或无权限', status: '' }
+  }
+}
+
 async function loadTask() {
   if (!isEdit.value) return
-  const res = await getBrowserTask(route.params.id)
-  const t = unpack(res)
+  let t
+  try {
+    t = unpack(await getBrowserTask(route.params.id))
+  } catch (e) {
+    // 读不到却照旧往下走 = 摊开一张空白表单让用户当成「这条任务就长这样」去编辑，
+    // 最后一次保存打回那个不存在的 id。把原因写在页面上，比拦掉这一页有用。
+    taskLoadError.value = String(e?.message || e)
+    return
+  }
   if (t) {
     form.value = { ...form.value, ...t, steps: Array.isArray(t.steps) ? t.steps.map((s) => ({ ...emptyStep(), ...s })) : [] }
+    loadedDep.value = { id: t.depends_on_task_id ?? null, mode: t.depends_on_mode || 'all_done' }
   }
   // 表达式来自触发器接口而不是任务列：编辑 cron 任务时界面必须显示"它现在到底按什么跑"，
   // 空着显示再让用户重打一遍，等于把已有的排程藏起来。
@@ -292,13 +333,33 @@ async function reconcileTrigger(taskId) {
   return null
 }
 
+// 依赖只有 PUT /tasks/:id/dependency 这一扇门：UpdateBrowserTaskReq 里没有这两列，
+// PUT 请求体带上 depends_on_task_id 服务端根本不读（controller 的 mutator 逐字段拷，
+// 没拷的就是丢弃），于是「编辑工作流依赖」这个动作在保存成功后其实什么都没发生——
+// 界面显示换好了，下一次执行仍按旧前置判。归属/自环/检环也都只写在那一扇门里，
+// 所以这里调它，而不是给 PUT 补一份会漏校验的写侧。
+async function reconcileDependency(taskId) {
+  if (!isEdit.value) return
+  // 类型不是 workflow 时，界面上根本没有这一项（v-if 把它藏了）——留在服务端的依赖就成了
+  // 「看不见的闸」：下一次执行照旧按前置拒掉，而用户在页面上找不到任何依赖的痕迹。
+  // 与类型改走 cron 时服务端回收触发器同判据：显示上没有，就得真的没有。
+  const next = form.value.task_type === 'workflow' ? (form.value.depends_on_task_id ?? null) : null
+  const mode = form.value.depends_on_mode || 'all_done'
+  if (next === loadedDep.value.id && (next == null || mode === loadedDep.value.mode)) return
+  if (next == null) {
+    await setBrowserTaskDependency(taskId, { depends_on_task_id: null })
+    return
+  }
+  await setBrowserTaskDependency(taskId, { depends_on_task_id: next, depends_on_mode: mode })
+}
+
 async function save() {
   saving.value = true
   try {
     const payload = { ...form.value }
     delete payload.cron_expr
     delete payload.cron_tz
-    if (payload.depends_on_task_id == null) { delete payload.depends_on_task_id }
+    if (payload.depends_on_task_id == null || payload.task_type !== 'workflow') { delete payload.depends_on_task_id }
     let taskId = Number(route.params.id)
     if (isEdit.value) {
       await updateBrowserTask(route.params.id, payload)
@@ -316,6 +377,15 @@ async function save() {
       router.push('/browser-automation/tasks')
       return
     }
+    // 依赖必须排在任务本体之后：那一扇门是「读整行—改两列—回写整行」，
+    // 先写依赖再把这次刚存的名字/步骤盖回去，等于两次保存互相吃字段。
+    try {
+      await reconcileDependency(taskId)
+    } catch (e) {
+      ElMessage.warning(`任务已保存，但依赖关系没存上：${String(e?.message || e)}`)
+      router.push('/browser-automation/tasks')
+      return
+    }
     ElMessage.success('已保存')
     router.push('/browser-automation/tasks')
   } catch (e) {
@@ -327,10 +397,14 @@ async function save() {
 
 onMounted(async () => {
   await loadTask()
-  // workflow 依赖选择列表
-  const res = await listBrowserTasks({ status: 'ready', limit: 100 })
-  const data = res?.data ?? res
-  readyTasks.value = data?.list || []
+  // workflow 依赖选择列表：这一句裸 await 挂过一次「读不到已发布任务」，
+  // 后面的平台注册表就再也不会被读到——一处旁支失败拖垮整页。各自兜住。
+  try {
+    readyTasks.value = asList(unpack(await listBrowserTasks({ status: 'ready', limit: 100 })))
+  } catch {
+    readyTasks.value = []
+  }
+  await ensureDepOption()
   // 平台注册表（L3 实时读取）
   try {
     const pres = await listPlatforms()

@@ -53,11 +53,14 @@ def _secret(name, *aliases):
 
 
 DB = dict(
+    # 端口/用户/库名接受本仓 .env 的既有键名作别名：§2 的调用口径就是「set -a && . ./.env」，
+    # 只认 HIVEMTK_* 时那份 .env 会把连接打到默认 8232 上（本机 user_db 实监听 8202），
+    # 报出来的红长得像"数据库挂了"，其实是脚本没读到这里已配置的值。
     host=os.environ.get("HIVEMTK_DB_HOST", "127.0.0.1"),
-    port=int(os.environ.get("HIVEMTK_DB_PORT", "8232")),
-    user=os.environ.get("HIVEMTK_DB_USER", "admin"),
+    port=int(os.environ.get("HIVEMTK_DB_PORT") or os.environ.get("DB_PORT") or "8232"),
+    user=os.environ.get("HIVEMTK_DB_USER") or os.environ.get("POSTGRES_USER") or "admin",
     password=_secret("HIVEMTK_DB_PASSWORD", "POSTGRES_PASSWORD"),
-    dbname=os.environ.get("HIVEMTK_DB_NAME", "user_db"),
+    dbname=os.environ.get("HIVEMTK_DB_NAME") or os.environ.get("USER_DB_NAME") or "user_db",
 )
 ADMIN_USER = os.environ.get("HIVEMTK_ADMIN", "e2e_admin")
 ADMIN_PASS = _secret("HIVEMTK_ADMIN_PASS")
@@ -131,6 +134,36 @@ def qexec(sql, params=()):
         conn.close()
 
 
+_SENSITIVE_KEYS = {"password", "passwd", "pwd", "secret", "api_key", "apikey",
+                   "authorization", "token", "access_token", "refresh_token", "id_token",
+                   "bridge_token", "x-bridge-token", "client_secret", "app_secret"}
+
+
+def _mask(value, depth=0):
+    """把凭证类字段的**值**就地遮掉，键名与其余字段一个都不少。
+
+    【入参】会把请求体原样打进 stdout，【返回】会把响应体前 300 字符打进去，
+    而整轮输出要落进取证日志、取证日志随卡进 ledger ⇒ 登录口令和登录响应里的
+    JWT 会一起进版本库。这条线只能在打印之前断掉，字段名照旧可读（AC① 要的是
+    「发了哪些字段」，不是「发了哪个值」）。
+    """
+    if depth > 12:
+        return "***[嵌套过深,整体省略]"
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            key = k.strip().lower() if isinstance(k, str) else k
+            if key in _SENSITIVE_KEYS:
+                n = len(v) if isinstance(v, str) else 0
+                out[k] = "***" if not n else "***[%d chars]" % n
+            else:
+                out[k] = _mask(v, depth + 1)
+        return out
+    if isinstance(value, list):
+        return [_mask(v, depth + 1) for v in value]
+    return value
+
+
 class APIClient:
     def __init__(self, token=None, bridge_token=None):
         self.s = requests.Session()
@@ -158,13 +191,19 @@ class APIClient:
         if expect_code is not None:
             want_codes.add(expect_code)
         print(f"\n--- {desc} ---")
-        print(f"【入参】{method} {path}" + (f" params={params}" if params else "") + (f" body={json.dumps(body, ensure_ascii=False)[:200]}" if body else ""))
+        print(f"【入参】{method} {path}"
+              + (f" params={_mask(params)}" if params else "")
+              + (f" body={json.dumps(_mask(body), ensure_ascii=False)[:200]}" if body else ""))
         try:
             r = self.s.request(method, url, json=body, params=params, timeout=kw.pop("timeout", 30), **kw)
         except requests.RequestException as e:
             check(f"{desc}", False, f"请求异常: {e}")
             return None, False
-        print(f"【返回】HTTP {r.status_code} {r.text[:300]}")
+        try:
+            echo = json.dumps(_mask(r.json()), ensure_ascii=False)
+        except ValueError:
+            echo = r.text
+        print(f"【返回】HTTP {r.status_code} {echo[:300]}")
         print(f"【预期】HTTP {list(ok_status)}"
               + (f" 响应体 code={sorted(want_codes, key=str)}" if want_codes else " 响应体 code 不限"))
         code_ok = r.status_code in ok_status

@@ -13,7 +13,6 @@ import (
 
 // 补偿状态常量
 const (
-	CompensationStatusPending   = "pending"
 	CompensationStatusRunning   = "running"
 	CompensationStatusCompleted = "completed"
 	CompensationStatusFailed    = "failed"

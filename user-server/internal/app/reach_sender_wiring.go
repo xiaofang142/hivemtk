@@ -2,13 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/bridge"
-	"hivemtk-user/internal/dto"
-	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
 	"gorm.io/gorm"
@@ -21,13 +19,14 @@ type pipelineReachSender struct {
 
 var _ service.ReachSender = (*pipelineReachSender)(nil)
 
-// newPipelineReachSender 构造调度器真实发送器；构造失败返回 nil（由调度器降级为占位发送）。
+// NewPipelineReachSender 构造调度器的真实发送器：inner 负责 telegram/whatsapp/feishu/web/
+// wecom/dingtalk/sms/email/wechat，bridge 负责抖音/快手/小红书/tiktok/闲鱼。
+//
+// 这里刻意不返回 nil，也没有"构造失败就降级成占位发送"那一档：NewIntegrationReachAdapterFromDB
+// 在 db 为 nil 时交回的是零值 adapter，各渠道方法对自己那条回哨兵错。调度器因此永远拿到一个
+// 会老实报错的发送器，而不是一个把没出网的作业记成已投递的替身。
 func NewPipelineReachSender(db *gorm.DB) *pipelineReachSender {
 	inner := NewIntegrationReachAdapterFromDB(db)
-	if inner == nil {
-		logger.Warnf("[reach_pipeline] 构造触达发送器失败，触达调度将降级为占位发送")
-		return nil
-	}
 	return &pipelineReachSender{
 		inner:  inner,
 		bridge: bridge.NewBridgeReachAdapter(inner, GetBridgeIngressSvc()),
@@ -54,6 +53,13 @@ func (p *pipelineReachSender) SendReach(ctx context.Context, channel, accountID,
 		return p.inner.SendEmail(ctx, to, "触达消息", content, nil)
 	case "wechat":
 		return p.inner.SendWeixin(ctx, to, "text", content)
+	case "card":
+		// 卡片在批量管道里发不出去，缺的是参数而不是实现：SendCard 要 card_id
+		// （卡片后台的数字 id），而 ReachSender 这条端口只递 (渠道, 账号, 收件人, 文本)，
+		// 文本由 prepareContent 拼出来，装不了一个数字 id。单条卡片外发走 reach.card.send
+		// 工具那条（它有 card_id 的来源）。管道要支持卡片，得先定"card_id 从 job 的哪格来"，
+		// 在那之前这里必须报错：调度器不能把没出网的作业记成已投递。
+		return "", errors.New("card: 批量管道没有 card_id 的来源，卡片外发请走 reach.card.send 工具")
 	case "douyin", "kuaishou", "xiaohongshu", "tiktok", "xianyu":
 		if p.bridge == nil {
 			return "", fmt.Errorf("bridge 适配器未接线，无法触达渠道 %s", channel)
@@ -74,108 +80,14 @@ func (p *pipelineReachSender) SendReach(ctx context.Context, channel, accountID,
 	return "", fmt.Errorf("unsupported channel: %s", channel)
 }
 
-func RegisterAllReachServices(db *gorm.DB) {
-	registry := tooluse.GlobalServiceRegistry()
-
-	registry.RegisterSMS(&smsLikeAdapter{svc: service.NewSmsService(repository.NewSmsRepository())})
-
-	registry.RegisterEmail(&emailLikeAdapter{svc: service.NewEmailService(db)})
-
-	wecomSvc := service.NewWeComIntegrationService(db)
-	registry.RegisterWeCom(&weComLikeAdapter{svc: wecomSvc})
-
-	feishuSvc := service.NewFeishuIntegrationService(db)
-	registry.RegisterFeishu(&feishuLikeAdapter{svc: feishuSvc})
-
-	tgSvc := service.NewTelegramIntegrationService(db)
-	registry.RegisterTelegram(&telegramLikeAdapter{svc: tgSvc})
-
-	waSvc := service.NewWhatsAppCloudIntegrationService(db)
-	registry.RegisterWhatsApp(&whatsAppLikeAdapter{svc: waSvc})
-
-	dtSvc := service.NewDingTalkService()
-	registry.RegisterDingTalk(&dingTalkLikeAdapter{svc: dtSvc})
-
+// RegisterWeixinSender 把公众号发送服务交给 tooluse 层的全局注册中心。
+//
+// 只剩这一条走注册中心：IntegrationReachAdapter.SendWeixin 要用 service 包的公众号服务，
+// 而 tooluse 不能反向 import service（会成环），所以由装配点注入一次实现、由适配器读取。
+// 其余渠道的发送服务由 NewIntegrationReachAdapterFromDB 按 db 自己构造，不经过这里。
+func RegisterWeixinSender(db *gorm.DB) {
 	wechatSvc := service.NewWechatService(db)
-	registry.RegisterWechat(&wechatLikeAdapter{svc: wechatSvc})
-
-	tooluse.RegisterBridgeOutboundDeliver(func(ctx context.Context, channel, accountID, conversationID, msgType, content, mediaURL string) error {
-		return service.DeliverBridgeOutbound(ctx, channel, accountID, conversationID, msgType, content, mediaURL)
-	})
-
-	logger.Infof("[ReachAdapter] 全渠道 service 已注册到 tooluse.GlobalServiceRegistry")
-}
-
-type smsLikeAdapter struct {
-	svc service.SmsService
-}
-
-func (a *smsLikeAdapter) Send(ctx context.Context, phone, content, templateID string, params map[string]string) (string, error) {
-	if err := a.svc.SendSms(ctx, &dto.SmsSendRequest{
-		Phone: phone, Content: content,
-	}); err != nil {
-		return "", err
-	}
-	return "sms_out", nil
-}
-
-type emailLikeAdapter struct {
-	svc *service.EmailService
-}
-
-func (a *emailLikeAdapter) Send(ctx context.Context, accountID uint, to, subject, content string, attachments []string) (string, error) {
-	return a.svc.Send(ctx, accountID, to, subject, content, attachments)
-}
-
-type weComLikeAdapter struct {
-	svc *service.WeComIntegrationService
-}
-
-func (a *weComLikeAdapter) SendMessage(ctx context.Context, accountID uint, externalUserID, msgType, content string, isAIReply bool, agent string) (string, error) {
-	_, err := a.svc.SendMessage(ctx, &service.WeComSendRequest{
-		AccountID:      accountID,
-		ExternalUserID: externalUserID,
-		MsgType:        msgType,
-		Content:        content,
-		IsAIReply:      isAIReply,
-		AIAgent:        agent,
-	})
-	if err != nil {
-		return "", err
-	}
-	return "wecom_out", nil
-}
-
-type feishuLikeAdapter struct {
-	svc *service.FeishuIntegrationService
-}
-
-func (a *feishuLikeAdapter) SendMessage(ctx context.Context, accountID uint, openID, content, receiveIDType string) error {
-	return a.svc.SendMessage(ctx, accountID, openID, content, receiveIDType, "")
-}
-
-type telegramLikeAdapter struct {
-	svc *service.TelegramIntegrationService
-}
-
-func (a *telegramLikeAdapter) SendMessage(ctx context.Context, accountID uint, chatID int64, content string) error {
-	return a.svc.SendMessage(ctx, accountID, chatID, content)
-}
-
-type whatsAppLikeAdapter struct {
-	svc *service.WhatsAppCloudIntegrationService
-}
-
-func (a *whatsAppLikeAdapter) SendMessage(ctx context.Context, accountID uint, toPhone, content string) error {
-	return a.svc.SendMessage(ctx, accountID, toPhone, content)
-}
-
-type dingTalkLikeAdapter struct {
-	svc *service.DingTalkService
-}
-
-func (a *dingTalkLikeAdapter) SendRobot(ctx context.Context, webhookOrToken, secret, msgType, content string) (string, error) {
-	return a.svc.SendRobot(ctx, webhookOrToken, secret, msgType, content)
+	tooluse.GlobalServiceRegistry().RegisterWechat(&wechatLikeAdapter{svc: wechatSvc})
 }
 
 type wechatLikeAdapter struct {

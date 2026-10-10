@@ -55,8 +55,6 @@ var (
 
 	ErrSendRateLimited = errors.New("send rate limited")
 
-	ErrSendAllChannelFailed = errors.New("all channels failed (primary + fallback)")
-
 	ErrSendInsufficientCost = errors.New("insufficient balance for send")
 
 	ErrSendChannelNotConfig = errors.New("channel adapter not configured")

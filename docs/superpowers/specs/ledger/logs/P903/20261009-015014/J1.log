@@ -1,0 +1,10 @@
+--- FAIL: TestCustomerJourney_ListByStageSeesWritesFromAnotherInstance (0.00s)
+    customer_journey_stage_index_test.go:44: 另一份实例写的复购期客户没被查出来: got=[]
+--- FAIL: TestCustomerJourney_ListByStageDropsMemberThatLeftTheStage (0.00s)
+    customer_journey_stage_index_test.go:62: 客户已离开 lead，仍出现在 lead 名单里: [cust_moves]
+    customer_journey_stage_index_test.go:69: 换阶段写在另一份实例上，本份查不到: []
+--- FAIL: TestCustomerJourney_AutoDetectSleepingIndexesNewStage (0.00s)
+    customer_journey_stage_index_test.go:162: 自动转入的沉睡阶段没进索引（另一份实例查不到）: []
+FAIL
+FAIL	hivemtk-user/internal/service	0.747s
+FAIL

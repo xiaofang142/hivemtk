@@ -18,13 +18,8 @@ const (
 const (
 	ReasonFAQHit            = "faq_hit"
 	ReasonSOPHit            = "sop_hit"
-	ReasonConfidenceHigh    = "confidence_high"
-	ReasonConfidenceLow     = "confidence_low"
 	ReasonFallback          = "fallback"
 	ReasonLayer1Disabled    = "layer1_disabled"
-	ReasonNoFAQ             = "no_faq"
-	ReasonNoSOP             = "no_sop"
-	ReasonIntentUnknown     = "intent_unknown"
 	ReasonLowConfidenceSkip = "low_confidence_skip"
 )
 
@@ -85,11 +80,10 @@ type SOPTemplate struct {
 
 // StreamChunkType 取值
 const (
-	ChunkTypeStart  = "start"
-	ChunkTypeDelta  = "delta"
-	ChunkTypeFinal  = "final"
-	ChunkTypeError  = "error"
-	ChunkTypeCancel = "cancel"
+	ChunkTypeStart = "start"
+	ChunkTypeDelta = "delta"
+	ChunkTypeFinal = "final"
+	ChunkTypeError = "error"
 )
 
 // StreamChunk WebSocket 流式输出

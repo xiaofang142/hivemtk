@@ -1,7 +1,9 @@
 package service
 
 // reach_pipeline.go 触达流水线核心：步骤/状态常量、错误定义、限流与重试配置类型、
-// ReachPipelineService 服务结构与构造、Pipeline CRUD、步骤校验与全局单例。
+// ReachPipelineService 服务结构与构造、Pipeline CRUD、步骤校验。
+// 本服务没有全局单例：每个装配点各自 NewReachPipelineService(db)，
+// 旧版这里的 Init/Get 一对函数在全仓没有任何调用点，Get 只会永远返回 nil，已删除。
 // 按流水线阶段拆分的其余文件：
 //   - reach_pipeline_alert.go     任务终态告警回调
 //   - reach_pipeline_job.go       任务入队与生命周期管理、统计
@@ -364,20 +366,4 @@ func (s *ReachPipelineService) validateSteps(ctx context.Context, steps []string
 		return fmt.Errorf("%w: must include send step", ErrReachInvalidSteps)
 	}
 	return nil
-}
-
-var (
-	reachOnce     sync.Once
-	reachInstance *ReachPipelineService
-)
-
-func GetReachPipelineService() *ReachPipelineService {
-	return reachInstance
-}
-
-func InitReachPipelineService(db *gorm.DB) *ReachPipelineService {
-	reachOnce.Do(func() {
-		reachInstance = NewReachPipelineService(db)
-	})
-	return reachInstance
 }

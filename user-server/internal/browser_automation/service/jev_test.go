@@ -92,8 +92,8 @@ func TestValidateChoice(t *testing.T) {
 	for _, c := range cases {
 		if err := validateChoice(c.rec, ids); err == nil {
 			t.Fatalf("%s 应被拒绝", c.name)
-		} else if !strings.Contains(err.Error(), "Invalid TypeSafe response") {
-			t.Fatalf("%s 错误文案应带 Invalid TypeSafe response，got %v", c.name, err)
+		} else if !strings.Contains(err.Error(), "invalid TypeSafe response") {
+			t.Fatalf("%s 错误文案应带 invalid TypeSafe response，got %v", c.name, err)
 		}
 	}
 }

@@ -80,7 +80,7 @@ func (f *fakeKBMeta) GetKBUpdatedAt(context.Context, string) (time.Time, error) 
 var base = time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)
 
 func newTestService(store Store, kb KBMetaReader) *FAQAnswerCacheService {
-	svc := NewFAQAnswerCacheService(store, kb, DefaultSemanticThreshold)
+	svc := NewFAQAnswerCacheService(store, kb, DefaultSemanticThreshold, 0)
 	fixed := base
 	svc.SetNowFunc(func() time.Time { return fixed })
 	return svc
@@ -294,10 +294,87 @@ func TestCosineSimilarity_PureCases(t *testing.T) {
 }
 
 func TestNewFAQAnswerCacheService_ThresholdNeverLoosened(t *testing.T) {
-	if s := NewFAQAnswerCacheService(&fakeStore{}, &fakeKBMeta{}, 0.90); s.threshold != DefaultSemanticThreshold {
+	if s := NewFAQAnswerCacheService(&fakeStore{}, &fakeKBMeta{}, 0.90, 0); s.threshold != DefaultSemanticThreshold {
 		t.Errorf("threshold 0.90 must be clamped to 0.95, got %f", s.threshold)
 	}
-	if s := NewFAQAnswerCacheService(&fakeStore{}, &fakeKBMeta{}, 0.97); s.threshold != 0.97 {
+	if s := NewFAQAnswerCacheService(&fakeStore{}, &fakeKBMeta{}, 0.97, 0); s.threshold != 0.97 {
 		t.Errorf("tighter threshold 0.97 allowed, got %f", s.threshold)
+	}
+}
+
+// TestLookup_TTLExpiry cache.faq_ttl 的读取侧语义：超龄条目既不算命中，也当场删掉，
+// 而不是留在库里等下一条相同查询再判一遍。ttl=0 是"不按时间过期"那一档，
+// 只靠知识库 updated_at 失效（挂载前的唯一口径），所以它必须自成一格。
+func TestLookup_TTLExpiry(t *testing.T) {
+	vec, _ := cosPair(0.9999)
+	key := testKB + "|" + testPV + "|" + vecKey(vec)
+
+	newSvc := func(store Store, ttl time.Duration) *FAQAnswerCacheService {
+		svc := NewFAQAnswerCacheService(store, &fakeKBMeta{updatedAt: base}, DefaultSemanticThreshold, ttl)
+		fixed := base
+		svc.SetNowFunc(func() time.Time { return fixed })
+		return svc
+	}
+	storeWithAge := func(age time.Duration) *fakeStore {
+		return &fakeStore{exact: map[string]*Entry{
+			key: {ID: 7, KBID: testKB, PromptVersion: testPV, QueryVector: vec, Answer: testAns,
+				CreatedAt: base.Add(-age), KBUpdatedAt: base},
+		}}
+	}
+	lookup := func(svc *FAQAnswerCacheService) *LookupResult {
+		t.Helper()
+		res, err := svc.Lookup(context.Background(), LookupRequest{KBID: testKB, PromptVersion: testPV, QueryVector: vec})
+		if err != nil {
+			t.Fatalf("Lookup: %v", err)
+		}
+		return res
+	}
+
+	ttl := 10 * time.Minute
+
+	if res := lookup(newSvc(storeWithAge(time.Minute), ttl)); res.Tier != TierExact {
+		t.Errorf("1 分钟前的条目在未超龄（ttl=%s）时应当命中，got tier=%s", ttl, res.Tier)
+	}
+
+	store := storeWithAge(11 * time.Minute)
+	if res := lookup(newSvc(store, ttl)); res.Tier != TierMiss {
+		t.Errorf("11 分钟前的条目在 ttl=%s 下应当按未命中处理，got tier=%s answer=%q", ttl, res.Tier, res.Answer)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != 7 {
+		t.Errorf("超龄条目应当被物理删除，deleted=%v", store.deleted)
+	}
+
+	old := storeWithAge(100 * 24 * time.Hour)
+	if res := lookup(newSvc(old, 0)); res.Tier != TierExact {
+		t.Errorf("ttl=0 表示不按时间过期，100 天前的条目仍应命中，got tier=%s", res.Tier)
+	}
+	if len(old.deleted) != 0 {
+		t.Errorf("ttl=0 时不该有任何删除动作，deleted=%v", old.deleted)
+	}
+}
+
+// TestLookup_TierExactCarriesFullSimilarity Tier1 的判据是向量逐位相等，相似度按定义就是 1。
+//
+// 为什么单独一格：调用方（智能体编排器）拿 Similarity 过置信度阈值，Tier1 交回 0 会让
+// "同一条问题问第二遍"这种最该命中的场景一律落到语义层甚至未命中，等于精确层没有消费者。
+func TestLookup_TierExactCarriesFullSimilarity(t *testing.T) {
+	vec, _ := cosPair(0.9999)
+	store := &fakeStore{exact: map[string]*Entry{
+		testKB + "|" + testPV + "|" + vecKey(vec): {
+			ID: 1, KBID: testKB, PromptVersion: testPV, QueryVector: vec, Answer: testAns,
+			CreatedAt: base, KBUpdatedAt: base,
+		},
+	}}
+	svc := newTestService(store, &fakeKBMeta{updatedAt: base})
+
+	res, err := svc.Lookup(context.Background(), LookupRequest{KBID: testKB, PromptVersion: testPV, QueryVector: vec})
+	if err != nil {
+		t.Fatalf("Lookup: %v", err)
+	}
+	if res.Tier != TierExact {
+		t.Fatalf("期望 Tier1 精确命中，got tier=%s", res.Tier)
+	}
+	if math.Abs(res.Similarity-1) > 1e-9 {
+		t.Errorf("精确命中的相似度应为 1（逐位相等），got %.6f —— 置信度门会把它当最不可信的一条丢掉", res.Similarity)
 	}
 }

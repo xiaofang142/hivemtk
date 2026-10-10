@@ -284,6 +284,14 @@ func (s *VisitorChatService) OpenSession(ctx context.Context, req *VisitorOpenSe
 	}, nil
 }
 
+// ErrVisitorSessionNotOwned 访客侧按 session_id 定位会话时的**归属拒绝**哨兵。
+//
+// 为什么是一个可判定的哨兵而不是就地 errors.New：控制器要把"这条会话不是你的"
+// （403，访客该看到统一文案、不区分存在性）与"服务端自己没配好/库出错了"
+// （500，不能伪装成权限问题）分开。合成一句 403 的代价是真机上一旦 HMAC 密钥缺失或
+// 库抖动，访客读到的是"无权访问"，而前端对 403 是静默 catch ⇒ 界面看起来像坏了。
+var ErrVisitorSessionNotOwned = errors.New("会话不存在或无权访问")
+
 // GetSessionByVisitorSessionID 访客通过 session_id 获取会话（仅校验归属）
 //
 // channelID 入参既可能是 channel_id 也可能是 app_key
@@ -291,17 +299,41 @@ func (s *VisitorChatService) OpenSession(ctx context.Context, req *VisitorOpenSe
 func (s *VisitorChatService) GetSessionByVisitorSessionID(ctx context.Context, channelID, visitorID, sessionID string) (*model.CustomerSession, error) {
 	channel, err := s.resolveChannel(ctx, channelID)
 	if err != nil {
-		return nil, errors.New("会话不存在或无权访问")
+		return nil, ErrVisitorSessionNotOwned
 	}
 	session, err := s.sessionRepo.GetBySessionIDPlatformAccountUser(ctx,
 		sessionID, model.PlatformWebEmbed, channel.ChannelID, visitorID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("会话不存在或无权访问")
+			return nil, ErrVisitorSessionNotOwned
 		}
 		return nil, err
 	}
 	return session, nil
+}
+
+// ExchangeVisitorToken 访客为**既有会话**换回一枚 visitor_token。
+//
+// 为什么需要：visitor_token 是签在 (channel, visitor, session) 三元组上的无状态 HMAC，
+// 原先只有 OpenSession 会签发，而 OpenSession 只返回"最近活跃的那一条"。访客从
+// `GET /sessions/recent-closed` 列表里点开任意一条历史会话时，前端手上仍然握着另一条
+// 会话的 token，于是这条会话上的每一次会话级调用（历史消息、离线消息、关闭、评价）
+// 都被 validateVisitorTokenOrAbort 挡成 403 —— 表现是"点开历史会话是空的、结束会话没反应"。
+//
+// 安全边界：归属校验完全复用 GetSessionByVisitorSessionID，即
+// (platform=web_embed, account_id=归一化后的 channel_id, user_id=visitor_id) 三列全等；
+// 换不到别人会话的 token。签名用的三元组与归属查询用的是**同一批**已校验值，
+// 因此签出的 token 天然能通过后续校验。
+func (s *VisitorChatService) ExchangeVisitorToken(ctx context.Context, channelID, visitorID, sessionID string) (string, error) {
+	session, err := s.GetSessionByVisitorSessionID(ctx, channelID, visitorID, sessionID)
+	if err != nil {
+		return "", err
+	}
+	token, err := GenerateVisitorToken(session.AccountID, visitorID, session.SessionID)
+	if err != nil {
+		return "", fmt.Errorf("生成 visitor_token 失败: %w", err)
+	}
+	return token, nil
 }
 
 // VisitorSendMessageRequest 访客发送消息请求

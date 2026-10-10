@@ -13,6 +13,7 @@ type FAQAnswerCacheService struct {
 	store     Store
 	kbMeta    KBMetaReader
 	threshold float64
+	maxAge    time.Duration
 	now       func() time.Time
 }
 
@@ -20,7 +21,9 @@ type FAQAnswerCacheService struct {
 //
 // threshold 传 0 时使用 DefaultSemanticThreshold (0.95)；
 // 按 RT-2 契约只允许调紧（更接近 1），传大于 0.95 的值合法。
-func NewFAQAnswerCacheService(store Store, kbMeta KBMetaReader, threshold float64) *FAQAnswerCacheService {
+// maxAge 是条目的最长可用时间，命中前超过它就删掉该行并按未命中处理；
+// 传 0 表示不按时间过期（只靠知识库 updated_at 失效）。
+func NewFAQAnswerCacheService(store Store, kbMeta KBMetaReader, threshold float64, maxAge time.Duration) *FAQAnswerCacheService {
 	if threshold <= 0 {
 		threshold = DefaultSemanticThreshold
 	}
@@ -31,6 +34,7 @@ func NewFAQAnswerCacheService(store Store, kbMeta KBMetaReader, threshold float6
 		store:     store,
 		kbMeta:    kbMeta,
 		threshold: threshold,
+		maxAge:    maxAge,
 		now:       time.Now,
 	}
 }
@@ -50,7 +54,10 @@ func (s *FAQAnswerCacheService) Lookup(ctx context.Context, req LookupRequest) (
 		ragRecallTotal.WithLabel("tier1", "false").Inc()
 	} else if e != nil && s.fresh(ctx, e) {
 		ragRecallTotal.WithLabel("tier1", "true").Inc()
-		return &LookupResult{Tier: TierExact, Answer: e.Answer}, nil
+		// Tier1 的判据就是向量逐位相等，相似度按定义是 1。留 0 的话，
+		// 拿 Similarity 做置信度判断的调用方会把精确命中一律当成"最不可信的一条"丢掉
+		// （编排器就是这么用的，接线时实测到这条分支从来没有被采用过）。
+		return &LookupResult{Tier: TierExact, Answer: e.Answer, Similarity: 1}, nil
 	} else {
 		ragRecallTotal.WithLabel("tier1", "false").Inc()
 	}
@@ -131,7 +138,15 @@ func (s *FAQAnswerCacheService) CanCache(answer string, fromKnowledgeBase bool) 
 	return true, ""
 }
 
+// fresh 命中资格校验：先看条目有没有过期，再看知识库有没有在它之后被改过。
+// 两种都算"这行不能再用了"，所以都物理删除，而不是每次都重新判一遍。
 func (s *FAQAnswerCacheService) fresh(ctx context.Context, e *Entry) bool {
+	if s.maxAge > 0 && s.now().Sub(e.CreatedAt) > s.maxAge {
+		age := s.now().Sub(e.CreatedAt)
+		logger.Debugf("[ragcache] entry expired, drop it: id=%d kb_id=%s age=%s max_age=%s", e.ID, e.KBID, age, s.maxAge)
+		s.drop(ctx, e)
+		return false
+	}
 	if s.kbMeta == nil {
 		return true
 	}
@@ -143,12 +158,16 @@ func (s *FAQAnswerCacheService) fresh(ctx context.Context, e *Entry) bool {
 	}
 	if cur.After(e.KBUpdatedAt) {
 		logger.Infof("[ragcache] kb updated since cached, invalidate entry id=%d kb_id=%s", e.ID, e.KBID)
-		if err := s.store.Delete(ctx, e.ID); err != nil {
-			logger.Warnf("[ragcache] delete stale entry failed: %v", err)
-		}
+		s.drop(ctx, e)
 		return false
 	}
 	return true
+}
+
+func (s *FAQAnswerCacheService) drop(ctx context.Context, e *Entry) {
+	if err := s.store.Delete(ctx, e.ID); err != nil {
+		logger.Warnf("[ragcache] delete stale entry failed: %v", err)
+	}
 }
 
 var refusalKeywords = []string{

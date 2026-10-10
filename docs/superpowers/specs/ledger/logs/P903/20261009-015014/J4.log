@@ -1,0 +1,10 @@
+--- FAIL: TestCustomerJourney_ListByStageOrderIsIndependentOfWriteOrder (0.00s)
+    customer_journey_stage_index_test.go:124: 正序写入: 第 0 位 = "cust_c"，期望 "cust_a"（名单没排序或排序没生效）
+    customer_journey_stage_index_test.go:124: 正序写入: 第 1 位 = "cust_a"，期望 "cust_b"（名单没排序或排序没生效）
+    customer_journey_stage_index_test.go:124: 正序写入: 第 2 位 = "cust_b"，期望 "cust_c"（名单没排序或排序没生效）
+    customer_journey_stage_index_test.go:124: 倒序写入: 第 0 位 = "cust_b"，期望 "cust_a"（名单没排序或排序没生效）
+    customer_journey_stage_index_test.go:124: 倒序写入: 第 1 位 = "cust_a"，期望 "cust_b"（名单没排序或排序没生效）
+[90m2026-10-09T01:50:53+08:00[0m [33mWRN[0m [1mjourney.ListByStage(lead) 阶段索引读失败，退回本实例视图: context deadline exceeded[0m [36mcomponent=[0muser-server
+FAIL
+FAIL	hivemtk-user/internal/service	0.759s
+FAIL

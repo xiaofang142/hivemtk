@@ -89,7 +89,6 @@ const moduleNames = [
   "role",
   "permission",
   "glossary", 'i18nStats',
-  "crossPublish",
   "ops",
   "geoTools",
   "analytics",
@@ -178,7 +177,6 @@ const pathToModule = {
   'sop-template': 'sopTemplateKb',
   'ops-overview': 'ops',
   'sales-cockpit': 'ops',
-  'cards': 'crossPublish',
   'workflow-orchestrator': 'workflowOrchestrator',
   'geo-tools': 'geoTools',
   'geo': 'geoTools',
@@ -260,7 +258,12 @@ router.beforeEach(async (to, from, next) => {
   }
 
   if (routeLoaded) {
-    next({ path: to.path, replace: true })
+    // 必须带上 query 与 hash：这一支是"模块刚装好，重新走一次导航"，只给 path 等于把
+    // 深链参数抹了。实测（真实例 + 真浏览器）新开页 http://…/#/customerSession/list?session_id=X
+    // 落地后地址栏是 #/customerSession/list（参数没了），于是 CSAT 看板「查看会话」
+    // 永远选不中那条会话——页面里再怎么写都白写。同一个会话里第二次进这一页才保留参数，
+    // 因为那时 routeLoaded 已经是 false，不会重定向。
+    next({ path: to.path, query: to.query, hash: to.hash, replace: true })
   } else {
     if (to.matched.length === 0) {
       next({ name: 'NotFound', replace: true })

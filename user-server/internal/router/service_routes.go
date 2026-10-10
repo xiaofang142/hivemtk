@@ -336,11 +336,9 @@ func setupReachPipelineRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	if hook := service.NewHTTPAlertHook(os.Getenv("ALERT_WEBHOOK_URL")); hook != nil {
 		reachSvc.SetAlertHook(hook)
 	}
-	if sender := app.NewPipelineReachSender(db); sender != nil {
-		reachSvc.SetReachSender(sender)
-	}
+	reachSvc.SetReachSender(app.NewPipelineReachSender(db))
 
-	app.RegisterAllReachServices(db)
+	app.RegisterWeixinSender(db)
 	reachSvc.StartDispatcher(context.Background(), 15*time.Second)
 	reachCtrl := controller.NewReachPipelineController(reachSvc)
 
