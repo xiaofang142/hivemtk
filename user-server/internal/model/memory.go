@@ -17,7 +17,7 @@ const (
 type MemoryItem struct {
 	ID         uint        `gorm:"primaryKey;autoIncrement" json:"id"`
 	Layer      MemoryLayer `gorm:"type:varchar(32);not null;index" json:"layer"`
-	SessionID string `gorm:"type:varchar(120);index" json:"session_id"`
+	SessionID  string      `gorm:"type:varchar(120);index" json:"session_id"`
 	CustomerID string      `gorm:"type:varchar(64);index" json:"customer_id"`
 	ItemType   string      `gorm:"type:varchar(32);index" json:"item_type"`
 	Content    string      `gorm:"type:text;not null" json:"content"`
@@ -37,7 +37,7 @@ func (MemoryItem) TableName() string { return "memory_items" }
 // SOPStateMemory L3 SOP 状态记忆（独立于 sop_executions，按 session 维度）
 type SOPStateMemory struct {
 	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	SessionID string `gorm:"type:varchar(120);index" json:"session_id"`
+	SessionID   string         `gorm:"type:varchar(120);index" json:"session_id"`
 	CustomerID  string         `gorm:"type:varchar(64);not null;index" json:"customer_id"`
 	SOPID       uint           `gorm:"not null;index" json:"sop_id"`
 	ExecutionID uint           `gorm:"index" json:"execution_id"`
