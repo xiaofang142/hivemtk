@@ -400,6 +400,9 @@ func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 		admin.POST("/fallback", llmCtrl.UpdateSceneRouting)
 	}
 
+	admin.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
+	admin.PUT("/llm/embedding-config", controller.UpdateEmbeddingConfig)
+	auth.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
 	auth.GET("/llm/models", llmCtrl.ListModels)
 	auth.GET("/llm/models/:name", llmCtrl.GetModel)
 	auth.GET("/llm/strategies", llmCtrl.ListStrategies)
