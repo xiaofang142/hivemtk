@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
 	textutil "hivemtk-user/internal/pkg/utils/text"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -480,6 +481,19 @@ func estimateRequestTokens(req DispatchRequest) int {
 	return total
 }
 
+// fanOutStrategies 是已实现的 fan-out 策略集合；准入校验与下面的分派共用这一份名单，
+// 免得加了新策略却忘了改校验（或反之）。
+var fanOutStrategies = []string{"fastest", "vote"}
+
+func fanOutStrategyImplemented(strategy string) bool {
+	for _, s := range fanOutStrategies {
+		if s == strategy {
+			return true
+		}
+	}
+	return false
+}
+
 func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, route *ScenarioRoute, candidates []string) (*DispatchResult, error) {
 	strategy := "fastest"
 	timeout := 5 * time.Second
@@ -488,6 +502,12 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 	}
 	if req.FanOut.Timeout > 0 {
 		timeout = req.FanOut.Timeout
+	}
+
+	// 准入校验排在并发发起**之前**：原先非法 strategy 要先把两路真请求打完（花钱、吃限流额度、
+	// 等 timeout），结果全部丢掉再报 "not implemented"。
+	if !fanOutStrategyImplemented(strategy) {
+		return nil, fmt.Errorf("fan-out strategy %q 不支持（已实现：%s）", strategy, strings.Join(fanOutStrategies, "、"))
 	}
 
 	fanCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -519,7 +539,8 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 		}(i, provider)
 	}
 
-	if strategy == "fastest" {
+	switch strategy {
+	case "fastest":
 		var lastErr error
 		for i := 0; i < maxConcurrent; i++ {
 			select {
@@ -534,9 +555,7 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 			}
 		}
 		return nil, lastErr
-	}
-
-	if strategy == "vote" {
+	case "vote":
 		results := make([]*DispatchResult, 0, maxConcurrent)
 		var lastErr error
 		for i := 0; i < maxConcurrent; i++ {
@@ -567,9 +586,11 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 			}
 		}
 		return results[0], nil
+	default:
+		// 正常走不到：上面的准入校验用同一份名单先挡过。留着是为了「往 fanOutStrategies
+		// 里加了新名字却忘了实现分支」时报错，而不是静默按 vote 执行。
+		return nil, fmt.Errorf("fan-out strategy %q 在名单内但未实现分派分支", strategy)
 	}
-
-	return nil, fmt.Errorf("fan-out strategy %q not implemented", strategy)
 }
 
 var fanoutVoteEnabledGetter = func() bool { return false }
