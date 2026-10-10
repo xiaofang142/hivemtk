@@ -1,5 +1,5 @@
 import { getOutbox, ackOutbox } from './http-ingest.js';
-import { sanitizeForDisplay } from './sanitize.js';
+import { sanitizeForDisplay, stripMarkdownForDM } from './sanitize.js';
 import { contentHash } from './types.js';
 import { BRIDGE_THREE_CHANNEL, RATE_LIMIT_DEFAULTS, BRIDGE_PROTOCOL_V2, DEFAULT_USER_SERVER, outboundStepTimeoutMs } from './constants.js';
 import { createLogger } from './logger.js';
@@ -349,7 +349,10 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     const raw = m.content || '';
     if (!raw) continue; 
     // XSS 防护：净化内容（控制长度、去控制字符）
-    const safeContent = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;
+    // Markdown 剥除（与服务端 bridge_outbound_markdown.go 双保险）：纯文本输入框
+    // 直发前再剥一遍语法标记，服务端旧版本/离线重放旧信封时仍有兜底。
+    const dmText = sanitizeForDisplay ? sanitizeForDisplay(raw) : raw;
+    const safeContent = stripMarkdownForDM ? stripMarkdownForDM(dmText) : dmText;
     if (!groups.has(convId)) groups.set(convId, []);
     groups.get(convId).push({ msg: m, sanitized: safeContent });
   }
