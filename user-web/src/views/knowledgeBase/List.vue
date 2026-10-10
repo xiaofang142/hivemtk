@@ -24,28 +24,22 @@
 
     
     <el-row :gutter="20" class="stat-row" v-if="stats">
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-label">当前类型总数</div>
           <div class="stat-value">{{ stats.total ?? 0 }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-label">已启用</div>
           <div class="stat-value text-success">{{ stats.enabled ?? 0 }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="8">
         <el-card shadow="never" class="stat-card">
           <div class="stat-label">关联智能体</div>
           <div class="stat-value text-primary">{{ totalAgentBindings }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">文档/条目数</div>
-          <div class="stat-value text-info">{{ totalItems }}</div>
         </el-card>
       </el-col>
     </el-row>
@@ -106,11 +100,6 @@
         <el-table-column label="类型" width="120" align="center">
           <template #default="{ row }">
             <el-tag :type="getTypeTagType(row.kb_type)" size="small">{{ getTypeLabel(row.kb_type) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="条目数" width="100" align="center">
-          <template #default="{ row }">
-            <span>{{ row.item_count ?? row.doc_count ?? 0 }}</span>
           </template>
         </el-table-column>
         <el-table-column label="关联智能体" width="120" align="center">
@@ -255,10 +244,9 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const stats = ref(null)
-const totalAgentBindings = ref(0)
-const totalItems = ref(0)
+    const totalAgentBindings = ref(0)
 
-const filter = ref({
+    const filter = ref({
   keyword: '',
   status: null
 })
@@ -399,10 +387,6 @@ const loadList = async (type) => {
       enabled: enriched.filter((x) => x.status === 1).length
     };
     totalAgentBindings.value = enriched.reduce((s, x) => s + (x.agent_count || 0), 0)
-    totalItems.value = enriched.reduce(
-      (s, x) => s + (x.item_count ?? x.doc_count ?? 0),
-      0
-    )
   } catch (e) {
     list.value = []
     total.value = 0

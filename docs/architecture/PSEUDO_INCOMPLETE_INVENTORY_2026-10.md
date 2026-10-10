@@ -268,9 +268,13 @@
 
 ### B3 知识库内容归属（A11 的另一半）
 
-> **状态（2026-10-09 I16 复测）：并行泳道执行中，本泳道不碰。**
-> 工作区实况：`internal/model/knowledge_base.go`、`internal/dto/knowledge_base.go`、`internal/repository/faq_entry.go`、
-> `internal/service/kb_cache_baseline_test.go`、`kb_canary_test.go` 与 app 侧 kb wiring 均为 M/??，归属口径正在该泳道成形。
+> **状态（2026-10-10 I30 复测）：KB 泳道已收口登记，本泳道复核确认并做前端诚实化。**
+> 泳道 `c1a38963` 已在 `internal/model/knowledge_base.go` 顶部注释诚实登记：MemberCount/DocCount
+> 冗余统计列无写入路径（恒 0）、三内容表（faq_entries/sop_templates/knowledge_documents）与
+> KB 行无外键。本卡复核确认 `service/knowledge_base.go` GetKBStats 的 item_count/hit_count
+> 恒 0 属实，执行 B3 选项2（摘假统计列）：后端 GetKBStats 移除 item_count/hit_count 假键
+> 只留 agent_count；前端 KBDrawer 两格改「未接入」占位、List.vue 摘「条目数」列与顶部卡。
+> 真统计需内容表加 kb_id 外键+回填（数据迁移+产品口径评审），属产品决策，本卡不碰。
 
 内容表（faq/sop/documents）与 `knowledge_bases` 行没有外键；`hit_count` 恒 0 且前端仍在传
 无人读取的 `kb_id`。要么给内容表加 `kb_id` 外键并回填（数据迁移 + 归属口径评审），

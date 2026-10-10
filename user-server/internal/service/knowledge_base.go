@@ -132,7 +132,14 @@ func (s *KnowledgeBaseService) GetKB(ctx context.Context, id uint) (*model.Knowl
 	return s.repo.GetByID(ctx, id)
 }
 
-// GetKBStats 知识库统计（前端 KBDrawer 抽屉: item_count/agent_count/hit_count）
+// GetKBStats 知识库统计（前端 KBDrawer 抽屉）。
+//
+// 只返回可证真的 agent_count（agent_kb_bindings 反查）。
+// item_count / hit_count 不再返回假 0：三个内容表（faq_entries / sop_templates /
+// knowledge_documents）与 knowledge_bases 行之间没有外键，按单个 KB 无法算出条目数，
+// 且 KB 行上的 DocCount 是无人维护的冗余列（恒为建行值 0，见 model/knowledge_base.go
+// 顶部字段说明）。要做真统计需先给内容表加 kb_id 外键并回填（数据迁移 + 归属口径评审，
+// PSEUDO B3）；在此之前前端不展示这两格，而不是展示恒 0 的假数。
 func (s *KnowledgeBaseService) GetKBStats(ctx context.Context, id uint) (map[string]int64, error) {
 	kb, err := s.GetKB(ctx, id)
 	if err != nil {
@@ -142,9 +149,7 @@ func (s *KnowledgeBaseService) GetKBStats(ctx context.Context, id uint) (map[str
 		return nil, nil
 	}
 	stats := map[string]int64{
-		"item_count":  int64(kb.DocCount),
 		"agent_count": 0,
-		"hit_count":   0,
 	}
 	if s.bindingRepo != nil {
 		bindings, err := s.bindingRepo.ListByKB(ctx, id)

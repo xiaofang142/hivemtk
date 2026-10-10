@@ -57,7 +57,8 @@
             <el-col :span="8">
               <div class="mini-stat">
                 <div class="mini-stat-label">{{ statsLabel.item }}</div>
-                <div class="mini-stat-value">{{ stats.item_count }}</div>
+                <div class="mini-stat-value">{{ stats.item_count ?? '—' }}</div>
+                <div class="mini-stat-hint">未接入</div>
               </div>
             </el-col>
             <el-col :span="8">
@@ -69,7 +70,8 @@
             <el-col :span="8">
               <div class="mini-stat">
                 <div class="mini-stat-label">总命中次数</div>
-                <div class="mini-stat-value text-success">{{ stats.hit_count }}</div>
+                <div class="mini-stat-value text-success">{{ stats.hit_count ?? '—' }}</div>
+                <div class="mini-stat-hint">未接入</div>
               </div>
             </el-col>
           </el-row>
@@ -200,7 +202,7 @@ const loadingAgents = ref(false)
 const loadingItems = ref(false)
 const agentBindings = ref([])
 const itemsPreview = ref([])
-const stats = ref({ item_count: 0, agent_count: 0, hit_count: 0 })
+const stats = ref({ agent_count: 0 })
 
 const drawerTitle = computed(() => {
   if (!props.kbData) return '知识库详情'
@@ -293,9 +295,7 @@ const loadStats = async () => {
     const res = await getKBStats(props.kbData.id).catch(() => null)
     if (res) {
       stats.value = {
-        item_count: res.item_count ?? res.doc_count ?? stats.value.item_count,
-        agent_count: res.agent_count ?? stats.value.agent_count,
-        hit_count: res.hit_count ?? 0
+        agent_count: res.agent_count ?? stats.value.agent_count
       }
     }
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
@@ -320,9 +320,6 @@ const loadItemsPreview = async () => {
       .catch(() => null)
     const list = Array.isArray(res) ? res : res?.list || res?.items || []
     itemsPreview.value = list.slice(0, 20)
-    if (stats.value.item_count === 0) {
-      stats.value.item_count = list.length
-    }
   } catch {
     itemsPreview.value = []
   } finally {
@@ -385,6 +382,11 @@ watch(
   font-weight: 600;
   margin-top: 4px;
   color: #303133;
+}
+.mini-stat-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #c0c4cc;
 }
 .text-primary {
   color: #409eff;
