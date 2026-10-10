@@ -38,8 +38,6 @@ func maskConfig(cfg string) string {
 
 var kbAdminSvc = func() *service.ExternalKBConnectorAdminService { return service.NewExternalKBConnectorAdminService() }
 
-func kbReady() bool { return kbAdminSvc().Ready() }
-
 func parseUintOrZero(s string) uint {
 	n, err := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
 	if err != nil {

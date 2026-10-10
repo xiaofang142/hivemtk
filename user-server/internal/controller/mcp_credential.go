@@ -32,8 +32,6 @@ type mcpCredentialRow struct {
 // ListMCPCredentials GET /api/mcp/credentials
 var mcpAdminSvc = func() *service.McpCredentialAdminService { return service.NewMcpCredentialAdminService() }
 
-func mcpReady() bool { return mcpAdminSvc().Ready() }
-
 func ListMCPCredentials(ctx *gin.Context) {
 	if !mcpAdminSvc().Ready() {
 		response.Error(ctx, http.StatusServiceUnavailable, "db 未就绪")

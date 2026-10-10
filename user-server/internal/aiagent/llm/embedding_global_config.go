@@ -3,11 +3,10 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"sync"
 	"time"
 
-	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -16,7 +15,7 @@ import (
 //
 // 背景：本地推理栈（llama.cpp bge-m3）在 2GB 小内存服务器上跑不动，而
 // DefaultConfig 只认 config.yaml / 环境变量——改提供商要登服务器改 .env 重启。
-// 本文件把「全局 embedding 指向」搬进 system_config_kv（key = embedding_global），
+// 本文件把「全局 embedding 指向」写入 system_config_kv（key = embedding_global，经 SystemConfigKVRepository），
 // 管理端 API 在线改，DefaultConfig 在内置默认之前读取覆盖。
 //
 // 优先级（高→低）：
@@ -55,14 +54,9 @@ func GetGlobalEmbeddingOverride() *GlobalEmbeddingOverride {
 	if cached != nil && time.Since(at) < embeddingOverrideCacheTTL {
 		return cached
 	}
-	g := db.GetDB()
-	if g == nil {
-		return nil
-	}
-	var raw string
-	if err := g.WithContext(context.Background()).
-		Raw("SELECT value FROM system_config_kv WHERE key = ?", embeddingGlobalKVKey).
-		Scan(&raw).Error; err != nil || raw == "" {
+	kv := repository.NewSystemConfigKVRepository()
+	raw, err := kv.Get(context.Background(), embeddingGlobalKVKey)
+	if err != nil || raw == "" {
 		return nil
 	}
 	var out GlobalEmbeddingOverride
@@ -91,18 +85,12 @@ func SetGlobalEmbeddingOverride(o *GlobalEmbeddingOverride) error {
 	if err != nil {
 		return err
 	}
-	g := db.GetDB()
-	if g == nil {
-		return errors.New("embedding 全局配置: db 未就绪")
+	kv := repository.NewSystemConfigKVRepository()
+	if _, err = kv.Upsert(context.Background(), embeddingGlobalKVKey, string(blob)); err != nil {
+		return err
 	}
-	err = g.WithContext(context.Background()).Exec(
-		"INSERT INTO system_config_kv (key, value, updated_at) VALUES (?, ?, NOW()) "+
-			"ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at",
-		embeddingGlobalKVKey, string(blob)).Error
-	if err == nil {
-		embeddingOverrideMu.Lock()
-		embeddingOverrideCache = nil
-		embeddingOverrideMu.Unlock()
-	}
-	return err
+	embeddingOverrideMu.Lock()
+	embeddingOverrideCache = nil
+	embeddingOverrideMu.Unlock()
+	return nil
 }
