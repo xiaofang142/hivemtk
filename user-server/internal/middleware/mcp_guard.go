@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"hivemtk-user/internal/repository/scope"
 	"os"
 	"strings"
 	"sync"
@@ -84,19 +85,26 @@ func MCPGuard() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
-			scope, ok, expired, reason := verifyMCPCredentialPair(ctx, clientID, apiKey)
+			credScope, ok, expired, reason := verifyMCPCredentialPair(ctx, clientID, apiKey)
 			if !ok {
 				// 鉴权失败也落审计：出事要能回答"谁在什么时候拿错钥匙撞门"。
-				mcpRecordAuthAudit(ctx, clientID, scope.KeyID, reason, c.ClientIP())
+				mcpRecordAuthAudit(ctx, clientID, credScope.KeyID, reason, c.ClientIP())
 				response.Error(c, 401, mcpAuthFailMessage(expired, reason))
 				c.Abort()
 				return
 			}
 			// 把"这把凭证是谁、能用哪些工具"落到上下文：MCP 入口按 tools 过滤与越权拒绝。
 			c.Set(MCPCtxClientID, clientID)
-			c.Set(MCPCtxCredentialID, scope.ID)
-			c.Set(MCPCtxKeyID, scope.KeyID)
-			c.Set(MCPCtxAllowedTools, scope.AllowedTools)
+			c.Set(MCPCtxCredentialID, credScope.ID)
+			c.Set(MCPCtxKeyID, credScope.KeyID)
+			c.Set(MCPCtxAllowedTools, credScope.AllowedTools)
+			// 多租户 P0：MCP 工具调用沿凭证绑定账户继承团队（服务端强制隔离）。
+			// 未绑定凭证 = 存量语义 = 平台侧直通（P1 收紧为强制绑定）。
+			teamInfo := scope.TeamInfo{TeamID: credScope.OwnerTeamID, Platform: credScope.OwnerPlatform}
+			if credScope.OwnerTeamID == 0 && !credScope.OwnerPlatform {
+				teamInfo.Platform = true
+			}
+			injectTeamScopeCtx(c, teamInfo)
 			c.Next()
 			return
 		}
@@ -201,6 +209,20 @@ var (
 		}
 		return &cred, nil
 	}
+	// mcpOwnerLookup 凭证绑定账户的租户身份查询（seam，测试注入假实现）。
+	// 未绑定（ownerUserID=nil）由 resolveMCPOwnerScope 直接短路。
+	mcpOwnerLookup = func(ctx context.Context, ownerUserID uint) (teamID uint, isPlatformAdmin bool, err error) {
+		g := db.GetDB()
+		if g == nil {
+			return 0, false, gorm.ErrInvalidDB
+		}
+		var u model.SystemUser
+		if err := g.WithContext(ctx).Select("team_id", "role").
+			First(&u, ownerUserID).Error; err != nil {
+			return 0, false, err
+		}
+		return u.TeamID, u.Role == model.SystemUserRoleAdmin, nil
+	}
 )
 
 // mcpAuthAuditSink 鉴权失败审计落库（seam，测试注入假实现；生产走 repository，
@@ -243,6 +265,9 @@ type mcpCredCacheEntry struct {
 	clientID     string
 	allowedTools string
 	credEnabled  bool
+	// ownerTeamID / ownerIsAdmin 凭证绑定账户的租户身份（未绑定=0/false）
+	ownerTeamID  uint
+	ownerIsAdmin bool
 	// keyExpiresAt 钥匙独立过期（legacy=与 credExpiresAt 同源，回填时已复制）
 	keyExpiresAt  *time.Time
 	credExpiresAt *time.Time // 凭证过期
@@ -281,6 +306,12 @@ type mcpCredScope struct {
 	ID           uint
 	KeyID        uint
 	AllowedTools string
+	// OwnerTeamID / OwnerPlatform 凭证绑定账户的团队身份（多租户 P0）：
+	// MCP 工具调用沿账户侧继承团队——绑定后业务数据按 owner 团队过滤，
+	// owner 是平台管理员则直通全量。未绑定凭证 = 存量行为（平台侧直通，
+	// "谁拿到都能用"的语义在租户维度不变；P1 起收紧为强制绑定）。
+	OwnerTeamID   uint
+	OwnerPlatform bool
 }
 
 // mcpAuthFailMessage 失败原因 → 对外措辞。过期 vs 无效 vs 状态类分开：
@@ -300,6 +331,19 @@ func mcpAuthFailMessage(expired bool, reason string) string {
 	default:
 		return "Client ID 或 API Key 无效（或已停用）"
 	}
+}
+
+// resolveMCPOwnerScope 解析凭证绑定账户的租户身份（best-effort：
+// 查询失败按未绑定=平台侧直通处理，不让 owner 查询故障放大成全量 401）。
+func resolveMCPOwnerScope(ctx context.Context, ownerUserID *uint) (teamID uint, isPlatformAdmin bool) {
+	if ownerUserID == nil || *ownerUserID == 0 {
+		return 0, false
+	}
+	teamID, isPlatform, err := mcpOwnerLookup(ctx, *ownerUserID)
+	if err != nil {
+		return 0, false
+	}
+	return teamID, isPlatform
 }
 
 func mcpKeyHash(apiKey string) string {
@@ -403,6 +447,7 @@ func verifyMCPKeyEntry(ctx context.Context, keyHash, apiKey string, now time.Tim
 			credExpiresAt: cred.ExpiresAt,
 			expires:       now.Add(mcpCredCacheTTL),
 		}
+		entry.ownerTeamID, entry.ownerIsAdmin = resolveMCPOwnerScope(ctx, cred.OwnerUserID)
 		mcpCredMu.Lock()
 		if mcpCredCache == nil {
 			mcpCredCache = map[string]mcpCredCacheEntry{}
@@ -417,7 +462,8 @@ func verifyMCPKeyEntry(ctx context.Context, keyHash, apiKey string, now time.Tim
 // judgeMCPCredEntry 按缓存行裁决：过期判据永远以"当前时刻"为准
 // （TTL 60s 内被续期最多晚 60s 生效，可接受；先过期后续期的窗口绝不能放行）。
 func judgeMCPCredEntry(entry mcpCredCacheEntry, apiKey string, now time.Time) (mcpCredScope, bool, bool, string) {
-	scope := mcpCredScope{ID: entry.credentialID, KeyID: entry.keyID, AllowedTools: entry.allowedTools}
+	scope := mcpCredScope{ID: entry.credentialID, KeyID: entry.keyID, AllowedTools: entry.allowedTools,
+		OwnerTeamID: entry.ownerTeamID, OwnerPlatform: entry.ownerIsAdmin}
 	if entry.keyExpiresAt != nil && now.After(*entry.keyExpiresAt) {
 		return scope, false, true, mcpReasonExpired
 	}

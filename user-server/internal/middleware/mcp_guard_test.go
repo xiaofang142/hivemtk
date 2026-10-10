@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"hivemtk-user/internal/repository/scope"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -425,4 +426,64 @@ func postMCPBody(t *testing.T, r *gin.Engine, headers map[string]string) (int, s
 	}
 	r.ServeHTTP(rec, req)
 	return rec.Code, rec.Body.String()
+}
+
+// TestMCPGuard_KeyTable_OwnerTeamInjected 多租户 P0：绑定凭证的 MCP 调用
+// 沿 owner 账户继承团队（ctx 三态语义由 scope 层保证，这里钉注入这一环）。
+func TestMCPGuard_KeyTable_OwnerTeamInjected(t *testing.T) {
+	fut := time.Now().Add(24 * time.Hour)
+	cred := credFixture(&fut, "")
+	cred.ID = 7
+	ownerID := uint(42)
+	cred.OwnerUserID = &ownerID
+
+	teamProbe := func() *gin.Engine {
+		gin.SetMode(gin.TestMode)
+		r := gin.New()
+		r.POST("/api/mcp", MCPGuard(), func(c *gin.Context) {
+			info, _ := scope.TeamInfoFromCtx(c.Request.Context())
+			c.JSON(http.StatusOK, gin.H{"team_id": info.TeamID, "platform": info.Platform})
+		})
+		return r
+	}
+
+	withSeams(t, nil, nil)
+	keys := map[string]*model.MCPCredentialKey{hashOf("ka"): keyFixture(11, 7, "ka", model.MCPKeyStatusActive, nil)}
+	var audits []*model.MCPCallAudit
+	withKeySeam(t, keys, map[uint]*model.MCPCredential{7: cred}, &audits)
+	oldOwner := mcpOwnerLookup
+	mcpOwnerLookup = func(_ context.Context, uid uint) (uint, bool, error) {
+		if uid == ownerID {
+			return 5, false, nil
+		}
+		return 0, false, gorm.ErrRecordNotFound
+	}
+	t.Cleanup(func() { mcpOwnerLookup = oldOwner })
+	r := teamProbe()
+
+	// ① owner 归属团队 5 → 调用 ctx 团队 5（MCP 工具里的业务查询按团队 5 过滤）。
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "ka")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"team_id":5`) {
+		t.Errorf("绑定凭证应继承 owner 团队 5，got %d %s", rec.Code, rec.Body.String())
+	}
+
+	// ② owner 是平台管理员 → 平台直通。
+	// 先清缓存：①已把该钥匙的 owner 身份（团队5）缓存进 entry，TTL 60s 内
+	// 不清则②拿到的还是旧身份——生产上 owner 变更走 InvalidateMCPCredentialCache。
+	resetMCPCaches()
+	mcpOwnerLookup = func(_ context.Context, uid uint) (uint, bool, error) {
+		return 0, true, nil
+	}
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/mcp", nil)
+	req.Header.Set("X-Client-Id", "mcp-test-1")
+	req.Header.Set("X-API-Key", "ka")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"platform":true`) {
+		t.Errorf("owner 为平台管理员应直通，got %d %s", rec.Code, rec.Body.String())
+	}
 }
