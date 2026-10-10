@@ -1762,7 +1762,15 @@
     "resultConversion": "转化数",
     "resultRate": "转化率",
     "noResults": "暂无结果",
-    "delete": "删除"
+    "delete": "删除",
+    "advanced": "高级分析",
+    "advStats": "统计检验",
+    "advBayes": "贝叶斯检验",
+    "advSequential": "序贯检验",
+    "advCuped": "CUPED 方差削减",
+    "advDiagnostics": "运行诊断",
+    "advEmpty": "点击上方按钮加载对应分析结果",
+    "advFailed": "加载失败"
   },
   "systemUser": {
     "title": "人员管理",

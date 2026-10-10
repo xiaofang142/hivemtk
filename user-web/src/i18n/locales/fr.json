@@ -1757,7 +1757,15 @@
     "resultConversion": "Conversions",
     "resultRate": "Conversion Rate",
     "noResults": "No results yet",
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "advanced": "Analyse avancée",
+    "advStats": "Test de significativité",
+    "advBayes": "Test bayésien",
+    "advSequential": "Test séquentiel",
+    "advCuped": "Réduction de variance CUPED",
+    "advDiagnostics": "Diagnostics d'exécution",
+    "advEmpty": "Cliquez sur un bouton ci-dessus pour charger le résultat d'analyse",
+    "advFailed": "Échec du chargement"
   },
   "systemUser": {
     "title": "Personnel Management",

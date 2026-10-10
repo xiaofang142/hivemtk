@@ -1856,7 +1856,15 @@
     "variantName": "[AR] Variant Name",
     "weight": "[AR] Weight",
     "winner": "[AR] Winner",
-    "delete": "حذف"
+    "delete": "حذف",
+    "advanced": "تحليل متقدم",
+    "advStats": "اختبار الدلالة",
+    "advBayes": "اختبار بايزي",
+    "advSequential": "اختبار متتالي",
+    "advCuped": "تقليل تباين CUPED",
+    "advDiagnostics": "تشخيص التشغيل",
+    "advEmpty": "انقر على أحد الأزرار أعلاه لتحميل نتيجة التحليل",
+    "advFailed": "فشل التحميل"
   },
   "关联 AI 工具": "[AR] Related AI Tools",
   "发送邮件": "[AR] Send Email",

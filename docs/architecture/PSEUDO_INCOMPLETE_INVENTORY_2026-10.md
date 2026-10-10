@@ -334,6 +334,19 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   验证：`check-ci-gate-paths.py` 绿（15 份工作流/41 门站点）、其用例 `check-ci-gate-paths.test.sh` 全过、
   `check_workflow_refs.py` 绿、两门本地实跑 rc=0、YAML 解析通过。
 
+### B8 前端 AB 高级分析 API 模块零消费者（2026-10-09 I17 已处置）
+
+- 原判断：`user-web/src/api/abExperimentPlus.js`（19 行、6 导出）全仓零消费（src+tests grep 全 0）= 死模块。
+- 复测：后端 6 端点全真实——`business_routes.go:191` feature-flags/:key/eval-log + `:214-218`
+  stats/diagnostics/cuped/sequential-test/bayesian-test；控制器 `ops/controller/ab_experiment.go`，
+  频率派 z 检验在 `ops/service/ab_experiment.go:379`。不是后端假码，是前端「写好没接」。
+- **已处置（I17，接线）**：`views/abExperiment/List.vue` 详情弹窗结果表后加「高级分析」区
+  （5 按钮按需加载 + `el-descriptions` kv 渲染）消费 5 条 AB 端点；
+  `getFeatureEvalLog` 删（feature-flags eval-log 无任何页面承接、无 featureFlag 视图，端点留后端）；
+  9 语言 ab 段各 +8 键（build 键检查非基准缺失阈值 50，只加 zh 必红）；
+  `tests/unit/api_abExperimentPlus.test.js` 6 用例锁路径/方法/参数 + 导出集恰 5 回魂锁。
+- 验证：定向 6/6、全量 44 文件/506 用例全绿、`npm run build` rc=0（缺失回基线 8）、三门禁绿。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。

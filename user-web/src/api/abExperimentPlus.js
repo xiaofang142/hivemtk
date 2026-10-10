@@ -14,6 +14,3 @@ export const sequentialTest = (id, alpha = 0.05) =>
 
 export const bayesianTest = (id) =>
   http.post(`/api/ab-experiments/${id}/bayesian-test`, {});
-
-export const getFeatureEvalLog = (key, userId) =>
-  http.get(`/api/feature-flags/${encodeURIComponent(key)}/eval-log`, { user_id: userId });

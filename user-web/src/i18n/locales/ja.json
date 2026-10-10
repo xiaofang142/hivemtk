@@ -1856,7 +1856,15 @@
     "variantName": "[JA] Variant Name",
     "weight": "[JA] Weight",
     "winner": "[JA] Winner",
-    "delete": "削除"
+    "delete": "削除",
+    "advanced": "高度分析",
+    "advStats": "有意性検定",
+    "advBayes": "ベイズ検定",
+    "advSequential": "逐次検定",
+    "advCuped": "CUPED 分散削減",
+    "advDiagnostics": "実行診断",
+    "advEmpty": "上のボタンをクリックして分析結果を読み込む",
+    "advFailed": "読み込みに失敗しました"
   },
   "关联 AI 工具": "[JA] Related AI Tools",
   "发送邮件": "[JA] Send Email",

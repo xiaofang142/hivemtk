@@ -1757,7 +1757,15 @@
     "resultConversion": "Conversions",
     "resultRate": "Conversion Rate",
     "noResults": "No results yet",
-    "delete": "Удалить"
+    "delete": "Удалить",
+    "advanced": "Расширенный анализ",
+    "advStats": "Проверка значимости",
+    "advBayes": "Байесовский тест",
+    "advSequential": "Последовательный тест",
+    "advCuped": "Снижение дисперсии CUPED",
+    "advDiagnostics": "Диагностика запуска",
+    "advEmpty": "Нажмите кнопку выше, чтобы загрузить результат анализа",
+    "advFailed": "Не удалось загрузить"
   },
   "systemUser": {
     "title": "Personnel Management",

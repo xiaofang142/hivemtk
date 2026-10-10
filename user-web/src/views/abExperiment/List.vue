@@ -164,6 +164,24 @@
             </template>
           </el-table-column>
         </el-table>
+
+        <div class="results-title">{{ t('ab.advanced') }}</div>
+        <div class="adv-actions">
+          <el-button size="small" :loading="advLoading === 'stats'" @click="loadAdv('stats')">{{ t('ab.advStats') }}</el-button>
+          <el-button size="small" :loading="advLoading === 'bayes'" @click="loadAdv('bayes')">{{ t('ab.advBayes') }}</el-button>
+          <el-button size="small" :loading="advLoading === 'seq'" @click="loadAdv('seq')">{{ t('ab.advSequential') }}</el-button>
+          <el-button size="small" :loading="advLoading === 'cuped'" @click="loadAdv('cuped')">{{ t('ab.advCuped') }}</el-button>
+          <el-button size="small" :loading="advLoading === 'diag'" @click="loadAdv('diag')">{{ t('ab.advDiagnostics') }}</el-button>
+        </div>
+        <div v-if="advError" class="adv-error">{{ t('ab.advFailed') }}：{{ advError }}</div>
+        <el-descriptions v-if="advResult" :column="1" border size="small" class="adv-result">
+          <el-descriptions-item v-for="(val, key) in advResult" :key="key" :label="String(key)">
+            <span v-if="val === null || val === undefined || val === ''">-</span>
+            <span v-else-if="typeof val === 'object'">{{ JSON.stringify(val) }}</span>
+            <span v-else>{{ val }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div v-else-if="!advLoading" class="adv-empty">{{ t('ab.advEmpty') }}</div>
       </template>
     </el-dialog>
   </div>
@@ -183,6 +201,13 @@ import {
   getExperimentDetail,
   getExperimentResults,
 } from '@/api/abExperiment.js'
+import {
+  getExperimentWithStats,
+  getExperimentDiagnostics,
+  getExperimentWithCUPED,
+  sequentialTest,
+  bayesianTest,
+} from '@/api/abExperimentPlus.js'
 
 const { t } = useI18n()
 
@@ -199,6 +224,10 @@ const results = ref([])
 const resultsLoading = ref(false)
 
 const stats = reactive({ running: 0, completed: 0, winner: 0, totalUsers: 0 })
+
+const advLoading = ref('')
+const advResult = ref(null)
+const advError = ref('')
 
 const createForm = reactive({
   name: '',
@@ -406,11 +435,35 @@ async function showDetail(row) {
   detailDialogVisible.value = true
   resultsLoading.value = true
   results.value = []
+  advResult.value = null
+  advError.value = ''
+  advLoading.value = ''
   try {
     const res = await getExperimentResults(row.id)
     results.value = Array.isArray(res) ? res : (res.list || [])
   } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
     resultsLoading.value = false
+  }
+}
+
+async function loadAdv(kind) {
+  if (!detailData.value) return
+  advLoading.value = kind
+  advError.value = ''
+  advResult.value = null
+  const id = detailData.value.id
+  try {
+    let res
+    if (kind === 'stats') res = await getExperimentWithStats(id)
+    else if (kind === 'bayes') res = await bayesianTest(id)
+    else if (kind === 'seq') res = await sequentialTest(id)
+    else if (kind === 'cuped') res = await getExperimentWithCUPED(id)
+    else if (kind === 'diag') res = await getExperimentDiagnostics(id)
+    advResult.value = res || {}
+  } catch (e) {
+    advError.value = e && e.message ? e.message : String(e)
+  } finally {
+    advLoading.value = ''
   }
 }
 
@@ -439,4 +492,8 @@ onActivated(() => {
 .variants { display: flex; flex-direction: column; gap: 8px; }
 .variant-row { display: flex; align-items: center; gap: 12px; }
 .results-title { font-weight: 600; margin: 16px 0 8px; }
+.adv-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.adv-result { margin-top: 8px; }
+.adv-empty { color: #909399; font-size: 13px; }
+.adv-error { color: #f56c6c; font-size: 13px; margin-bottom: 8px; }
 </style>
