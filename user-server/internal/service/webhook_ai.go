@@ -33,7 +33,8 @@ func (s *WebhookService) retryWithBackoff(ctx context.Context, job *webhookJob, 
 		logger.Ctx(ctx).Error().Str("event", job.event.EventID).Msg("[Webhook] non-retryable channel error, giving up immediately")
 		return
 	}
-	for i := 0; i < WebhookMaxRetries; i++ {
+	retries := webhookMaxRetries(ctx)
+	for i := 0; i < retries; i++ {
 
 		if i >= len(delays) {
 			i = len(delays) - 1
@@ -478,7 +479,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			"message": map[string]any{"content": p.Content, "sender": p.Sender},
 		}).
 		Expected("AI 编排器生成回复并决策（自动回复 / 转人工 / 接管）")
-	for attempt := 0; attempt <= WebhookMaxRetries; attempt++ {
+	for attempt := 0; attempt <= webhookMaxRetries(ctx); attempt++ {
 		result, err = s.smartOrchestrator.HandleIncomingWithAgent(ctx, in, agentCtx)
 		if err == nil {
 			break

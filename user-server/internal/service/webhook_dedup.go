@@ -50,6 +50,8 @@ type tokenBucket struct {
 	lastAccess time.Time
 }
 
+// 七个常量的含义与取值影响见 config_param_seeds.go 的 webhook 组。它们现在只是兜底值：
+// 运行时读的是 webhook_runtime_params.go 里的参数中心/注入函数。
 const (
 	WebhookDedupTTL = 5 * time.Minute
 
@@ -143,7 +145,7 @@ func (s *WebhookService) isDuplicate(ctx context.Context, eventID string) bool {
 		return false
 	}
 	key := "mtk:webhook:dedup:" + eventID
-	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", WebhookDedupTTL)
+	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", webhookDedupTTL(ctx))
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("event_id", eventID).Msg("[webhook] dedup 后端异常，放行")
 		return false
@@ -164,10 +166,13 @@ func (s *WebhookService) allowRate(ctx context.Context, key string) bool {
 	}
 	b, ok := s.rlBuckets[key]
 	if !ok {
+		// 令牌桶按 key 懒构造，桶只在内存里存活到清理器收走它为止，所以改参数对
+		// 后续新建的桶立即生效，已存在的桶继续用旧值——限流本来就不追求瞬切。
+		burst := webhookRateBurst(ctx)
 		b = &tokenBucket{
-			capacity:   WebhookRateBurst,
-			refillRate: float64(WebhookRateLimit),
-			tokens:     float64(WebhookRateBurst),
+			capacity:   burst,
+			refillRate: float64(webhookRateLimit(ctx)),
+			tokens:     float64(burst),
 			lastRefill: time.Now(),
 			lastAccess: time.Now(),
 		}

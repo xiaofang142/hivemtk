@@ -527,5 +527,32 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "geo", Key: "default_visibility_days", Name: "可见性趋势默认天数",
 			Description: "AI 可见性趋势查询在调用方没给 days 时的默认时间窗（天）。注意它不是上限：days 大于 365 仍会被夹到 365（一次要回 365 行按引擎的聚合，是查询成本闸，不随默认值一起放大）。改小会让环比对比的样本不足（不足 2 天直接无环比）",
 			ValueType:   "int", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("365"), Step: strPtr("1")},
+		// ── webhook 组：回调处理的并发、限流与重试 ────────────────────────
+		// 七个常量原先散在 webhook_dedup.go / webhook.go / webhook_ai.go 三处。
+		// 优先级链：env > 本组 > 常量兜底；env 保留为部署层应急开关。
+		// 生效时机分两类：dedup_ttl / rate_limit / rate_burst / max_retries 是每请求读，
+		// 改完立即生效；worker_count / queue_size / reply_concurrency 在
+		// NewWebhookService 里构造，标 Restart=true 只对下次启动生效。
+		{Group: "webhook", Key: "dedup_ttl", Name: "webhook 事件去重窗口",
+			Description: "同一 event_id 的 webhook 回调在多长时间内视为重复事件并直接丢弃（秒）。平台重试/客户端重发都靠它兜住，写小会出现「同一条消息进来两次」的重复处理，写大＝一次内容相同的重复回放被压掉的时间更长（配错时的症状是消息莫名丢失，且只在重试时复现）",
+			ValueType:   "duration", DefaultValue: "300", Min: strPtr("10"), Max: strPtr("86400"), Step: strPtr("10"), Restart: false},
+		{Group: "webhook", Key: "rate_limit", Name: "webhook 每账号令牌桶速率",
+			Description: "单个账号（或来源 key）的令牌桶每秒补充令牌数，即持续允许的回调速率（次/秒）。写大＝平台侧抖动/重试风暴直接打到下游处理，写小＝正常批量事件被限流丢弃（客户消息延迟几分钟才出现）。默认 30 次/秒远高于人工消息速率，主要防脚本刷量",
+			ValueType:   "int", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("100000"), Step: strPtr("1"), Restart: false},
+		{Group: "webhook", Key: "rate_burst", Name: "webhook 每账号令牌桶容量",
+			Description: "单个账号令牌桶的桶容量（次），即可容忍的瞬时突发量。写大＝一次洪峰全部放行，下游瞬时压力全吃；写小＝洪峰被削平成限流丢弃（客户连发几条只收到前几条）。要与 rate_limit 搭配看：容量小于速率等于没有缓冲",
+			ValueType:   "int", DefaultValue: "60", Min: strPtr("1"), Max: strPtr("100000"), Step: strPtr("1"), Restart: false},
+		{Group: "webhook", Key: "worker_count", Name: "webhook 处理 worker 数",
+			Description: "从回调队列取任务并发处理的 goroutine 数。写大＝CPU/下游依赖被打满（表现为下游超时成串）；写小＝队列堆积、回调处理延迟。构造期读一次，改完需重启才生效",
+			ValueType:   "int", DefaultValue: "4", Min: strPtr("1"), Max: strPtr("256"), Step: strPtr("1"), Restart: true},
+		{Group: "webhook", Key: "queue_size", Name: "webhook 回调队列容量",
+			Description: "回调任务队列的 channel 容量（条）。写大＝洪峰时更多任务在内存里排队（重启全丢）；写小＝队列满时新回调被直接丢弃（客户消息彻底不到达）。构造期读一次，改完需重启才生效",
+			ValueType:   "int", DefaultValue: "512", Min: strPtr("1"), Max: strPtr("1000000"), Step: strPtr("1"), Restart: true},
+		{Group: "webhook", Key: "reply_concurrency", Name: "webhook 回复并发闸",
+			Description: "同时允许进行的 AI 回复数（信号量容量）。这是防 LLM 侧被打满的总闸。写大＝LLM 侧并发超限触发限流/降级（表现为回复大面积失败）；写小＝回复排队，客户等待变长。构造期读一次，改完需重启才生效",
+			ValueType:   "int", DefaultValue: "32", Min: strPtr("1"), Max: strPtr("10000"), Step: strPtr("1"), Restart: true},
+		{Group: "webhook", Key: "max_retries", Name: "webhook 失败重试次数",
+			Description: "渠道投递失败后的重试轮数（不含首投）。写大＝下游长时间不可用时会一直重试，占用 worker 与令牌；写小＝一次瞬时失败就放弃（客户收不到回复）。只对「可重试」错误生效，不可重试错误立即放弃。注意与 agent_llm.max_retries 区分：那一条管 LLM 调用本身的重试，本条目管渠道出网投递",
+			ValueType:   "int", DefaultValue: "3", Min: strPtr("0"), Max: strPtr("20"), Step: strPtr("1"), Restart: false},
 	}
 }
