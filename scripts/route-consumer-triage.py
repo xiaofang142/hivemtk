@@ -39,9 +39,11 @@
 
 ## 自检
 `--self-check` 用内存里的控制组验提取器与口径本身：五枚正向（quoted / bare /
-真实数字 id / Go 模板占位 / 落地页）+ 四枚负向——① 无证据的串必须判入"三面全不命中"，
+真实数字 id / Go 模板占位 / 落地页）+ 五枚负向——① 无证据的串必须判入"三面全不命中"，
 ② 只有真进了扫描面的串才算证据，③ 三面都不吃 `.json`（路由转储当证据＝自证循环），
-④ 门的注码夹具（`mut_*`）、取证器自身、探针结果表必须被排除，而冒烟输入清单与落地页模板照常算证据。
+④ 门的注码夹具（`mut_*`）、取证器自身、探针结果表必须被排除，而冒烟输入清单与落地页模板照常算证据，
+⑤ 模块／文件系统路径（`@/api/x` 打包器别名、`../x` 相对 import、`~/x` home 别名）必须什么都抽不出来，
+  而同一个串写成 `http.post('/api/material')` 必须照常抽出（极性对：只测"挡得住"会退化成"什么都挡"）。
 任何一枚不成立就退非零：工具的读数先要能被它自己否掉，才允许拿去当别人的输入。
 """
 
@@ -83,6 +85,18 @@ NON_CONSUMER_PREFIXES = ("mut_",)
 
 def is_non_consumer_file(name):
     return name in NON_CONSUMER_NAMES or name.startswith(NON_CONSUMER_PREFIXES)
+
+
+# 「写了路径字面量但不是调用方」的第二种形态，这次在 token 级而不在文件级：
+# 匹配到的路径前一个字符是 `@`／`.`／`~` ⇒ 它属于模块或文件系统路径，不是 HTTP 路径——
+#   `@/api/x` 是打包器别名（Vite 里指 `user-web/src/api/x.js`，import 说明符，从不发请求）；
+#   `./x`／`../x` 是相对 import 或本地路径（实测还捞得到安全用例里的 `/../../etc/passwd`）；
+#   `~/x` 是 home／别名。
+# 真实调用的写法前一个字符只会是引号、反引号或 `}`（`http.get('/api/x')`、`` `${base}/api/x` ``），
+# 不会被这条挡掉；而同一个文件里两种 token 可以并存（`MaterialLibrary.vue` 既有
+# `from '@/api/material'` 也可能有 `http.post('/api/material')`），所以这一族不能像
+# NON_CONSUMER_* 那样按整份文件一刀切。两侧都由第 10 枚自检控制守着。
+MODULE_SPEC_PREV = {"@", ".", "~"}
 
 FACES = {
     "client": {
@@ -126,6 +140,9 @@ def extract_tokens(text):
     """把一段源码里的路径串抽出来并归一成形状集合；清洗不掉的段直接弃整个 token（宁漏不误判成有人调）。"""
     shapes = set()
     for m in PATH_TOKEN_RE.finditer(text):
+        # 前一个字符是 `@`/`.`/`~` ⇒ 这个 token 是模块或文件系统路径，不是 HTTP 路径（见上面注释）
+        if m.start() and text[m.start() - 1] in MODULE_SPEC_PREV:
+            continue
         raw = m.group(0)
         for cut in ("?", "#", "&"):
             raw = raw.split(cut)[0]
@@ -239,7 +256,7 @@ def dump_routes_via_go(root, out_path):
 
 
 def self_check():
-    """九枚控制：五枚正向必须命中期望形状，四枚负向必须证明"不该算证据的东西没被算进来"。
+    """十枚控制：五枚正向必须命中期望形状，五枚负向必须证明"不该算证据的东西没被算进来"。
 
     返回 (退码, 控制总数, 失败数)——读数要能被写进取证产物的身份行里，
     只回一个 0/1 就没人知道这轮究竟验了几枚。
@@ -300,6 +317,22 @@ def self_check():
     else:
         print("  ✓ 负向控制之四：`mut_*` 锚点、取证器自身、探针结果表被排除，"
               "而冒烟输入清单与落地页模板照常算证据")
+    # 负向之五（token 级）：模块／文件系统路径不是 HTTP 调用。`@/api/x` 是打包器别名、
+    # `../x` 是相对 import、`~/x` 是 home 别名，三形都必须**什么都抽不出来**；
+    # 同一串以引号直接当 URL 用必须照常抽出——这条判据是极性的，只测"挡得住"会退化成"什么都挡"。
+    checks += 1
+    alias_cases = ["import api from '@/api/material'",
+                   "import { x } from '../../../../packages/browser-core/index.js'",
+                   "const p = '~/api/material/upload'"]
+    leaked_alias = {src: sorted(extract_tokens(src)) for src in alias_cases
+                    if extract_tokens(src)}
+    real_call = extract_tokens("http.post('/api/material', fd)")
+    if leaked_alias or "/api/material" not in real_call:
+        print(f"  ✗ 负向控制之五：token 级模块路径规则坏了（放过 {leaked_alias} · 真实调用读出 {sorted(real_call)}）")
+        failed += 1
+    else:
+        print("  ✓ 负向控制之五：`@/api/x`／`../x`／`~/x` 这类模块与文件系统路径不算消费方，"
+              "而 `http.post('/api/material')` 照常算")
     print(f"自检：{checks} 枚控制，失败 {failed} 枚")
     return (1 if failed else 0), checks, failed
 

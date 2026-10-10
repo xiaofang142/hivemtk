@@ -54,7 +54,7 @@
 | 项 | 2026-10-11 现测 | 结论 |
 |---|---|---|
 | 5 个「删除」项（`NewAIAgentController` / `NewChannelAgentBindingController` / `NewCustomerServiceAgentController` / `NewCustomerServiceControllerWithService` / `NewPromptControllerWithService`） | 全树 Go 源码 grep 裸名：**零命中**。在用的是 `…WithService` 三胞胎（`router.go:708/:712/:715` 构造，定义在 `ai_agent.go:22/:457/:597`）与普通版（`NewCustomerServiceController`、`NewPromptController`）。普通版今天的位置：`service_routes.go:74` 与 `business_routes.go:342`（上表写的 `:324` 是 2026-10-08 的行号，此后该文件有别的注册在它前面） | ✅ 已删，`git log --all -S'func NewAIAgentController('` 命中 `7256777d` |
-| `NewDashboardSSEController` | 已接线：`service_routes.go:262 setupSSEDashboardRoutes` → `:273` 构造 → `:274-276` 注册三个 GET。今天的路由表里 `GET /api/dashboards/{stream,snapshot,metrics}` 三行都在（在库事实源 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-030703/live_routes.tsv:388/:390/:391`，由 `user-server/internal/router/route_surface_dump_test.go` 现装配导出；此前引用的 `/tmp/r80-routes.tsv:387/:389/:390` 是同一路由表的无表头版，行号差 1 即表头那一行），消费档位 **weak**（无精确消费方，靠前缀匹配；名册行 `bucket-weak.tsv:37-39`，可单条否证：`python3 scripts/route-consumer-triage.py --routes <同上> --why "GET /api/dashboards/stream"`）。接线本身有常驻守护 `dashboard_sse_wiring_test.go:41` 断言源码里存在该构造 | ✅ 已接线（`7256777d`）；三行仍是 weak，属「有路由、无客户端」——不是僵尸候选，是待前端接入 |
+| `NewDashboardSSEController` | 已接线：`service_routes.go:262 setupSSEDashboardRoutes` → `:273` 构造 → `:274-276` 注册三个 GET。今天的路由表里 `GET /api/dashboards/{stream,snapshot,metrics}` 三行都在（在库事实源 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-033621/live_routes.tsv:388/:390/:391`，由 `user-server/internal/router/route_surface_dump_test.go` 现装配导出；此前引用的 `/tmp/r80-routes.tsv:387/:389/:390` 是同一路由表的无表头版，行号差 1 即表头那一行），消费档位 **weak**（无精确消费方，靠前缀匹配；名册行 `bucket-weak.tsv:34-36`，可单条否证：`python3 scripts/route-consumer-triage.py --routes <同上> --why "GET /api/dashboards/stream"`）。接线本身有常驻守护 `dashboard_sse_wiring_test.go:41` 断言源码里存在该构造 | ✅ 已接线（`7256777d`）；三行仍是 weak，属「有路由、无客户端」——不是僵尸候选，是待前端接入 |
 | `GetQualityMetrics` | 全树零命中 | ✅ 已删（`516405fa`） |
 | `ClickRedirect` 注释 | `email_tracking.go:69-76` 已改成不漂移的版本，并写明**为什么不能**接受 `?url=`（开放重定向出口），路由在 `:183` | ✅ 已改（附带把「缺失时兜底 query」这条路径判为不该存在） |
 | `NewUserController`（def `user.go:17`） | 非测试构造点仍为 0，`user_test.go` 里 18 处构造（现测 `grep -c "NewUserController()"` = 18）。`UserController` 的 7 个 handler（`user.go:21/:38/:51/:68/:86/:99/:118`＝GetUserList/GetUser/CreateUser/UpdateUser/DeleteUser/UpdatePassword/Login）在 `internal/router/` 全树无任何注册点 ⇒ 整块是「测试自造的面」 | ⏸ 不删、不接线，理由见下 |
@@ -274,11 +274,12 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   现测：带 env `--- PASS`＋「导出 1740 行路由表」，不带 env `--- SKIP`，`gofmt -l` 空，`go vet` rc=0，
   同一次跑里原有三枚守卫用例仍 PASS。
 - **分诊器进库**：`scripts/route-consumer-triage.py`（新增）。三面（client／ops／self-page）＋四档，
-  `--self-check` 9 枚控制，`--why "METHOD PATH"` 可把单条路由的判档依据与证据出处摊开，全量跑会先执行控制、
+  `--self-check` 10 枚控制（五正向＋五负向），`--why "METHOD PATH"` 可把单条路由的判档依据与证据出处摊开，全量跑会先执行控制、
   **任一失败就不写名册**。
-- **现测读数**（轮次 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-030703/`）：
-  client 1036 · ops/self-page 278 · weak 205 · none 221，合计 1740＝路由表行数（计数器对不上就退 1）；
-  distinct (方法,处理器) 1454 · `/api/` 1721 行。与旧快照的差值是**口径差**（旧版把兄弟仓库 `hivemtk-platform/platform-web/src`、
+- **现测读数**（当前有效轮次 `docs/superpowers/specs/ledger/logs/RouteTriage/20261011-033621/`；
+  前一轮 `20261011-030703/` 因取证器缺陷已作废，见下「取证器缺陷之二」，它留在树里只为留住差值证据）：
+  client 1035 · ops/self-page 279 · weak 143 · none 283，合计 1740＝路由表行数（计数器对不上就退 1）；
+  distinct (方法,处理器) 1454 · `/api/` 1721 行。扫描面 687／299／6 份，抽出形状 1324／1781／7 个。与旧快照的差值是**口径差**（旧版把兄弟仓库 `hivemtk-platform/platform-web/src`、
   `platform-contributor/src` 记进 client、把工作区根 `scripts/`、`cold-start/` 记进 ops；新版只扫本仓库，
   否则 clean clone 跑不出同一份），**逐条归因本轮没做**，所以只报方向与量级。
   事实源内容两侧同一：`diff <(tail -n +2 live_routes.tsv) /tmp/r80-routes.tsv` 空输出、退 0，只差表头一行。
@@ -304,6 +305,34 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   修法＝非消费方排除表＋第 9 枚控制；注码验证：清空 `NON_CONSUMER_NAMES`/`NON_CONSUMER_PREFIXES` 后
   `--self-check` 退 1 并点名 4 项「该排没排」，还原后 md5 与基线一致。
   **排除前后四档名册 `diff` 逐字未变** ⇒ 这条修复在这一版数据上只改证据出处、不改档位（数据性质，不是保证）。
+- **取证器缺陷之二（这一条改了档位，且是已发布名册的读数错）**：`@/api/x`、`../x`、`~/x` 三类 token 是
+  **打包器别名／相对 import／home 别名**，不是 HTTP 调用，却被抽成 `/api/x` 形状记进消费面。
+  发现路径不是设计出来的，是反向量出来的：为核 BACKLOG 里「断链 API ~200」那格的空档，把两侧形状集合求差集，
+  才看见 client 面 489 个形状只有 import 说明符供着。已发布轮次（`20261011-030703`）因此**同时**错在两处：
+  ① `POST /api/material` 被判 client，依据是 `user-web/src/views/system/MaterialLibrary.vue:204` 的
+  `} from '@/api/material'`——而该模块真实调用面是 `user-web/src/api/material.js:4-40` 的
+  `/api/material/list|upload|categories|selector|stats|${id}/usage`，**没有任何一处调裸 `/api/material`**
+  （同一个 `UploadMaterial` 处理器双注册在 `POST /api/material` 与 `POST /api/material/upload`，前端只走后一条）；
+  ② **62 条路由只因同族有 `@/api/<模块>` 而被记成"有弱证据"**，从删除候选名册里被藏掉了。
+  修法＝token 级前一字符判位（`MODULE_SPEC_PREV = {"@",".","~"}`，`scripts/route-consumer-triage.py:99`）＋第 10 枚控制
+  （极性对：三种别名写法必须抽出**空集合**，而 `http.post('/api/material')` 必须照常抽出；只测"挡得住"会退化成"什么都挡"）。
+  注码验证：把 `MODULE_SPEC_PREV` 置空 ⇒ `--self-check` 打 `✗ 负向控制之五` 并**退 1**，还原后 md5 与基线一致（`a564da79…`）。
+  差值用**同一棵主树＋同一份事实源**跑两版取证器现算（`git show HEAD:scripts/route-consumer-triage.py` 那份 md5 `e3090a93…`）：
+  形状 client 1813→1324（−489）、ops 1871→1781（−90）、self-page 7→7，合计挡掉 **579 个形状**；
+  四档 client 1036→1035、ops 278→279、weak 205→143、none 221→283，合计仍 1740。
+  逐条档位差（按键集对齐现算，不是计数差）：**63 行换档，只有两种去向**——`weak→none` 62 行、`client→ops` 1 行；
+  62 行按业务族分布 `/api/email*` 19、`/api/geo*` 18、`/api/sms*` 16、`/api/system*` 5、`/api/chat*` 2、`/api/oneid*` 2。
+  被挡形状的归属也逐条看过：client 侧被挡 489 个的首段分布是 `views` 233／`api` 129／`src` 41／`components` 29／
+  `utils` 27／`core` 18／`constants` 17 等，全是模块说明符；ops 侧 90 个含 `/../../etc/passwd` 这类**安全用例载荷**
+  与 `/www/go/hivemtk`（`~/Documents/...` 展开）；唯一可疑串 `/api/yyy` 现读为
+  `user-web/tests/audit/map_page_api.py:39` 注释里那句「import X from '@/api/yyy'」的模式描述，不是调用。
+  **副作用要把话说在最前**：这 62 行里有 8 行的消费方天然静态不可见——
+  `GET /api/email/track/open/:token`（像素）、`GET /api/email/track/click/:token`（302）、
+  `POST /api/email/track/webhook/postmark|sendcloud`、`POST /api/sms/delivery/webhook`、`POST /api/sms/webhook/inbound`、
+  `POST /api/email/unsubscribe/confirm|resubscribe`（收件人在邮件里点的链接）。
+  像素与短链的 URL 是 `user-server/internal/service/email_open_tracker.go:68`、`email_tracking.go:68` **运行时拼进邮件正文**的，
+  仓里没有任何前端／模板串能命中它——「三面全不命中」对这一族**必然是假阴性**，正是本工具末行提醒的第②类。
+  确定性：新取证器连跑两趟（第二趟 `--out /tmp`，不往证据树落第二轮），五份产物逐字节相同、事实源 md5 仍 `f2565b69…`。
 
 ### (3) 门的产物归属轴自己逮到了这一族（顺带补装架）
 
@@ -355,3 +384,28 @@ D2 / E / F 登记在册不吞：E 中「分渠道验签」属安全项，与 A �
   与本轮报告的入口不同类不同泳道，只登记。
 - **`sop_state_memories.session_id` 的 `not null`**：属 schema 取舍决策，`20ed9fbd` 里点名过，未擅改。
 - **四刀「真杀」仍需要一个会编 Go 的 bash 3.2 执行点**、**`make audit` 整链在 CI 里无执行点**：沿用第五十六轮的在册判定，本轮没有新增执行点。
+
+### (7) 反向那一趟量出来的三条真断链候选与一处静默错数据（本轮未擅改，理由在册）
+
+修完取证器的 token 级缺陷后，顺手把**反方向**（前端有串、路由表无对应）也现算了一遍：
+client 面 1324 个形状里 **499** 个在路由表无精确对应，其中 `/api/` 前缀 **9** 个（旧取证器同一棵树读成 119 个，
+`@/api/<模块>` 这类 import 说明符全在这一侧虚高过）。9 个逐条读原文（每条都能被 `grep -n` 与 `--why` 否证）：
+
+| 串 | 出处 | 定性 |
+|---|---|---|
+| `/api/main.go` | `user-web/bridge/src/popup/index.js:35` 注释里的源码路径 | **假阳性**（不是 URL） |
+| `/api/ai-productivity` | `user-web/src/views/salesWorkbench/Index.vue:453` 界面提示文案字面串 | **假阳性**（文案，不是调用） |
+| `/api/approvals`、`/api/followups`、`/api/inbox`、`/api/sales-workbench` | 各 api 模块的 **base 常量**（如 `user-web/src/api/approval.js:12`），真实调用是 `` `${base}/pending` `` 模板拼接 | **提取器无法把变量拼回去** ⇒ 不是断链；路由表里这四个前缀分别有 2/5/18/4 行注册 |
+| `/api/knowledge` | `user-web/src/views/knowledgeBase/KBDrawer.vue:310` 直接 `http.get(url, {kb_id…})`，`url` 三支之一 | **真断链**：路由表 `GET /api/knowledge` **0 行**（该引擎 `HandleMethodNotAllowed=true` ⇒ 404），而同支的 `/api/faqs`、`/api/sop-templates` 都存在 |
+| `/api/webhook/qq/*` | `user-web/src/views/qq/account.vue:11` 与 `:265` 让用户把 QQ 开放平台回调地址配成 `{域名}/api/webhook/qq/{账号ID}` | **缺整条回调口**：路由表里 qq 只有 `/api/qq/accounts*` 7 行 CRUD／验签测试口，无一条 webhook；其余 5 渠道都有 `GET /api/webhook/{dingtalk,feishu,wechat,wecom,whatsapp}/:account_id`（`live_routes.tsv:966/967/970/971/972`）⇒ **用户照提示配了必然收不到消息** |
+| `/api/ws/bridge` | `user-web/bridge/src/core/constants.js:18` 的常量，且该文件注释自己写着"在服务端从未注册过" | 与在册的 `/api/ws/agent` 那格同族（WS 面，`Setup()` 里 `/ws/chat` 也零行） |
+
+**另查出一处"不报错但显示错数据"**：`KBDrawer.vue:310-312` 三支预览都把 `kb_id` 当查询参数发，而
+`FAQController.List`（`user-server/internal/controller/faq.go`）只读 `keyword/category/intent/enabled`＋分页，
+`sop_template.go` 同样不含 `kb_id`（两文件 `grep -rn kb_id` 现读 0 命中，正控制＝文件确实存在）
+⇒ 抽屉里"这个知识库的条目预览"实际显示的是**不分库的全量列表**，rag 那一支则直接 404。
+
+**本轮不擅自修的理由（与 `docs/architecture/ZOMBIE_API_TRIAGE.md` ③ 类同口径）**：补 `/api/knowledge` 的 rag 列表口
+要定"按 kb 过滤文档"的契约归属（前端改打 `/api/knowledge/documents` 还是后端给 `FAQFilter`/`List` 加 `kb_id`），
+补 QQ 回调口是**新增一条无鉴权写口**并要定验签口径——两者都是产品/安全拍板面，不是"发现即修"的代码缺陷；
+且一次动 3 渠道 × 5 张卡的对称面会重演上一轮被驳回的整站改造。已按上面坐标登记，判据全部可在本树复算。

@@ -1,0 +1,7 @@
+基线字节：仓库 HEAD b6a32c7cb1b7c407008bfaaf6e9a41d26645390e
+取证器 scripts/route-consumer-triage.py md5 a564da79da77e78d484b025e621bc4f9
+事实源 docs/superpowers/specs/ledger/logs/RouteTriage/20261011-033621/live_routes.tsv md5 f2565b6919405ef65ef2d96aed1c184a
+复现命令：python3 scripts/route-consumer-triage.py
+读数：路由 1740 行 · client 1035 · ops/self-page 279 · weak 143 · none 283 · distinct (方法,处理器) 1454 · /api/ 1721
+口径自检：10 枚控制，失败 0 枚
+落盘时间：2026-10-11T03:36:24+0800
