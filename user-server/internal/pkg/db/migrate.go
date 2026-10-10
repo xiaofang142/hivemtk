@@ -325,6 +325,16 @@ func allModels() []any {
 		&model.ChurnScore{},
 		&model.ClueEngagementEvent{},
 		&model.ClueScore{},
+		// ConfigParam（表 config_params）：参数中心主表。SeedConfigParams 启动即
+		// First() 探测它——漏登记时全新部署建不出表，seed 直接失败，**参数中心
+		// 全量失效**（所有 Get* 走代码兜底值，意图锚点预计算、线索阈值等整批降级）。
+		// 审计表 ConfigParamAuditLog 在下面有登记，主表历史上只靠开发库遗留存在。
+		// MCPCredential（表 mcp_credentials）：MCP 工具入口的 ClientID+APIKey 凭证对。
+		&model.MCPCredential{},
+		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
+		&model.ExternalKBConnector{},
+		&model.ExternalKBSyncItem{},
+		&model.ConfigParam{},
 		&model.ConfigParamAuditLog{},
 		&model.CustomerChannel{},
 		// HumanTask（表 human_tasks）：T-P3-03 / N-9 统一人工待办，三类 kind 共用一张表。

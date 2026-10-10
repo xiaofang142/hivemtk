@@ -26,8 +26,9 @@ vi.mock('../src/core/http-ingest.js', async (importOriginal) => {
   return { ...actual, getOutbox: vi.fn(), ackOutbox: vi.fn() };
 });
 vi.mock('../src/core/sanitize.js', () => ({
-  sanitizeForDisplay: (t) => t,
-}));
+    sanitizeForDisplay: (t) => t,
+    stripMarkdownForDM: (t) => t,
+  }));
 vi.mock('../src/core/sse-fetch-client.js', () => ({
   connectSSE: vi.fn(async () => { throw new Error('net down'); }),
   getLastEventID: vi.fn(() => ''),

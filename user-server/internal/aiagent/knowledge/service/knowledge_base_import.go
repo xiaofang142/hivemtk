@@ -128,6 +128,44 @@ func (s *KnowledgeBaseService) ImportDocument(ctx context.Context, title string,
 	}, nil
 }
 
+// IngestLocalFile 连接器入口：把已在本地磁盘的文件导入知识库（复用
+// ImportDocument 的落库+异步处理流程，绕过 multipart 上传）。
+// ext 必须带点（如 ".pdf"）且在白名单内；size 为 0 时自动 stat。
+func (s *KnowledgeBaseService) IngestLocalFile(ctx context.Context, title, filePath, ext string) (uint, error) {
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	ext = strings.ToLower(ext)
+	allowed := map[string]bool{".pdf": true, ".docx": true, ".doc": true, ".txt": true, ".md": true}
+	if !allowed[ext] {
+		return 0, fmt.Errorf("不支持的文件类型: %s", ext)
+	}
+	size, err := getFileSize(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("读取文件失败: %w", err)
+	}
+	if size > MaxUploadFileSize() {
+		return 0, fmt.Errorf("文件过大: %d 字节, 上限 %d MB", size, MaxUploadFileSize()>>20)
+	}
+	if title == "" {
+		title = strings.TrimSuffix(filepath.Base(filePath), ext)
+	}
+	doc := &model.KBDocument{
+		Title:    title,
+		FilePath: filePath,
+		FileSize: size,
+		FileType: ext,
+		Status:   model.KBDocumentStatusPending,
+	}
+	if err := s.db.WithContext(ctx).Create(doc).Error; err != nil {
+		return 0, fmt.Errorf("保存文档记录失败: %w", err)
+	}
+	async.RunWithTimeout(ctx, AsyncProcessingTimeout(), func(procCtx context.Context) {
+		s.processDocumentAsync(procCtx, doc.ID, filePath)
+	})
+	return doc.ID, nil
+}
+
 func (s *KnowledgeBaseService) processDocumentAsync(ctx context.Context, documentID uint, filePath string) {
 	bgCtx := ctx
 	defer func() {

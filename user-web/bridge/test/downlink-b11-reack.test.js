@@ -31,7 +31,10 @@ vi.mock('../src/core/http-ingest.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, getOutbox: vi.fn(), ackOutbox: vi.fn() };
 });
-vi.mock('../src/core/sanitize.js', () => ({ sanitizeForDisplay: (t) => t }));
+vi.mock('../src/core/sanitize.js', () => ({
+    sanitizeForDisplay: (t) => t,
+    stripMarkdownForDM: (t) => t,
+  }));
 
 // 与 batch3-sse-stop 同款：connectSSE 悬挂并把 opts 交出来，测试即可主动投喂 onMessage。
 let live = null;

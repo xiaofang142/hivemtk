@@ -197,6 +197,8 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 
 	extraHigh, extraMedium := adapter.ExtraKeywords()
 	score, signals, isOpp := DetectUnifiedIntent(t, extraHigh, extraMedium)
+	// LLM 复核：行业无关判别（词库结果仅作兜底），失败回落关键词结果
+	score, signals, isOpp = refineLeadWithLLM(ctx, t, score, signals, isOpp)
 	chatLabel := adapter.ChatLabel(groupTitle)
 	leadTag := adapter.LeadTag(isOpp)
 	desc := FormatUnifiedLeadDesc(adapter.DescPrefix(), leadTag, chatLabel, t, score, signals)

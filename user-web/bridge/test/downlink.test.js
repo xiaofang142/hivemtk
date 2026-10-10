@@ -24,8 +24,9 @@ vi.mock('../src/core/http-ingest.js', () => ({
   ackOutbox: vi.fn(),
 }));
 vi.mock('../src/core/sanitize.js', () => ({
-  sanitizeForDisplay: (t) => t,
-}));
+    sanitizeForDisplay: (t) => t,
+    stripMarkdownForDM: (t) => t,
+  }));
 
 import { pollDownlink, initDownlink } from '../src/core/downlink.js';
 import { getOutbox, ackOutbox } from '../src/core/http-ingest.js';
