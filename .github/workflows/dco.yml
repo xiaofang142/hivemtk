@@ -16,11 +16,12 @@
 #   |------|---------------|--------------|-----------|
 #   | PR   | 硬阻断        | 硬阻断       | 硬阻断    |
 #   | push | 警告（不阻断）| 警告         | 警告      |
-#   理由：本仓现有历史 30 个 commit **零个**带 Signed-off-by（实测），
+#   理由：存量历史带 Signed-off-by 的极少（2026-10-10 实测 1573 笔中 20 笔），
 #   若 push 侧直接照抄 PR 的硬阻断，第一次直推就会把这条线永久锁死——
 #   补触发面的目的是让闸跑起来，不是让闸变成没人能过的墙。
 #   存量历史不回填 signoff（改写历史属禁止动作，见 CLAUDE.md 规则0）；
 #   建议新提交起 `git commit -s`，等 push 侧也升为硬阻断时自然就已合规。
+#   口径复核：`git log --format=%B | grep -cE '^Signed-off-by: '`（分档判据见 CONTRIBUTING.md §2.6）。
 #
 # 参考：
 #   - https://developercertificate.org/

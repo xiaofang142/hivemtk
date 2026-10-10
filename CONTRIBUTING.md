@@ -53,15 +53,41 @@ curl http://localhost:8204/health
 ### 2.4 测试
 
 - 后端 API：`make test-go`（= `cd user-server && go test ./... -count=1`）+ `scripts/regression_test.sh`（端到端 smoke）
-- 前端 UI：使用 Playwright，详见 `tests/ui/user/`
+- 前端 UI：使用 Playwright，配置 `user-web/playwright.config.js`，用例在 `user-web/tests/e2e/`
 - 推理栈连通性：`make inference-host-test`（宿主机推理栈端到端 smoke test）
 
 ### 2.5 提交流程
 
-1. 从 `main` 创建特性分支：`git checkout -b feature/<name>`
-2. 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)
-3. 推送前自测：`make inference-host-test`（推理栈端到端 smoke test）
-4. 推送并创建 Merge Request
+主干分支是 **`master`**（本仓不存在 `main`）。
+
+- **内部成员**：直推 `master`（项目约定不走 PR 评审合并，见 CLAUDE.md 规则0），推
+  `gitee-upstream`（Gitee）与 `upstream`（GitHub）双远端。
+- **外部贡献者**：从 `master` 创建特性分支 `git checkout -b feature/<name>`，提交后开 PR。
+
+两条路径的提交都要遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)
+与下面的签名要求；推送前自测 `make inference-host-test`。
+
+### 2.6 提交签名（DCO）与 commit 校验
+
+每笔提交须带 `Signed-off-by: Name <email>`（[Developer Certificate of Origin](https://developercertificate.org/)）：
+
+```bash
+git config user.name  "Your Name"
+git config user.email "you@example.com"
+git commit -s -m "feat(api): ..."   # -s 追加 Signed-off-by 行
+```
+
+CI 的 `dco.yml` 对三类判据按**事件分档**执行，两种事件下判据内容完全相同、只有阻断强度不同：
+
+| 判据 | PR | 直推 `master` |
+|------|----|--------------|
+| `Signed-off-by` 存在 | 硬阻断 | 警告 |
+| subject 符合 Conventional Commits | 硬阻断 | 警告 |
+| body ≥ 10 字符 | 硬阻断 | 警告 |
+
+直推侧只警告的理由：存量历史里带签名的极少（2026-10-10 实测 `git log --format=%B | grep -cE '^Signed-off-by: '`
+= 20 / 1573 笔，近 30 笔才有 11 笔），而改写历史属禁止动作——闸门要先能跑起来，
+才不会变成没人能过的墙。**新提交请一律 `-s`**，待直推侧升为硬阻断时自然合规。
 
 ## 3. 反馈与支持
 
