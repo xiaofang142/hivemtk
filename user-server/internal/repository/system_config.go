@@ -17,6 +17,11 @@ type SystemConfigRepository interface {
 	PingDB(ctx context.Context) bool
 }
 
+// ErrSystemConfigStoreUnavailable 表示没装配数据库句柄。
+// 与 gorm.ErrRecordNotFound 分开：前者是"没指对库"（装配问题），后者是"库里还没这行"（业务状态）。
+// 合成一种的话，运维把上传上限调大不生效时看到的是"没配置过"，真相是"库没指对"，查不到根因。
+var ErrSystemConfigStoreUnavailable = errors.New("system_config: 未装配数据库句柄")
+
 type systemConfigRepo struct {
 	db *gorm.DB
 }
@@ -27,6 +32,12 @@ func NewSystemConfigRepository() SystemConfigRepository {
 }
 
 func (r *systemConfigRepo) GetConfig(ctx context.Context) (*model.SystemConfig, error) {
+	// 句柄可能没装配（装配顺序不对，或测试里还没 SetDB）。gorm.DB 是 nil 时
+	// WithContext 直接空指针崩，而崩在这里等于把"读不到配置"伪装成"进程挂了"。
+	// 上传上限这条链路现在每次上传都会走一遍，更不能崩——返回 error 让调用方兜底。
+	if r == nil || r.db == nil {
+		return nil, ErrSystemConfigStoreUnavailable
+	}
 	var config model.SystemConfig
 	err := r.db.WithContext(ctx).First(&config).Error
 	if err != nil {

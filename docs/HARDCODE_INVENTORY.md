@@ -82,6 +82,14 @@ P0 判据 = 「改了以后**一定**有人想改，而且改错会出事」。�
 **上传链路一处都不读**。也就是说运维把「上传大小上限」改成 200MB，页面显示保存成功，
 实际上传永远被 10MB 拦死。这不是「没登记」，是**已登记、已暴露 UI、已落库，就是没人读**——比僵尸参数更隐蔽。
 
+> **✅ 已于 2026-10-10 修复（阶段 0.5，commit 见 `git log --grep=MaxUploadSizeMB`）**：
+> 上传链路改成 **env `UPLOAD_MAX_SIZE` > 库里的 `system_config.max_upload_size_mb` > 10MB 代码兜底**。
+> 配套：`SystemConfigService.ResolveUploadMaxBytes` 只认"行真实存在且 > 0"的值（不走 `GetConfig`，
+> 否则读失败时它的 `defaultConfig()` 会拿 50MB 顶上，等于把存量站点从 10MB 悄悄放宽 5 倍）；
+> `systemConfigRepo.GetConfig` 加 nil 句柄哨兵错，避免上传链路因装配问题崩进程。
+> **仍未收敛**：前端 `MaterialLibrary.vue:323 maxSize = 10` 第三份副本 → 阶段 3.3；
+> JSON body 上限 `middleware/body_limit.go:30` → 阶段 2a。
+
 同类：JSON body 上限 `middleware/body_limit.go:30 DefaultMaxJSONBodyMB=8`。
 
 **② Webhook 验签降级开关（14 处重复）**

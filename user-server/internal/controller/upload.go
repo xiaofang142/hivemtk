@@ -3,8 +3,10 @@ package controller
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/storage"
 	"io"
 	"net/http"
@@ -76,15 +78,37 @@ var DefaultUploadConfig = UploadConfig{
 	CheckMagicNumber: true,
 }
 
+// resolveMaxUploadBytes 是"从库里取上传上限"的取值口，做成包级变量是为了能打桩。
+// 优先级链里唯一的变量就是库里那个值，真去造一行 DB 记录会把用例绑死在 fixture 上；
+// 而且这条链（env > 库 > 兜底）恰恰是最容易改错顺序的地方，必须能单独测。
+var resolveMaxUploadBytes = func(ctx context.Context) int64 {
+	return service.NewSystemConfigService().ResolveUploadMaxBytes(ctx)
+}
+
+// resolveUploadMaxSize 定出本次上传真正生效的上限（字节）。
+// 优先级：env UPLOAD_MAX_SIZE > 库里的系统配置（system_config.max_upload_size_mb）> 代码兜底。
+//
+// env 排第一是历史行为（容器化部署靠它临时覆盖），保持不动。
+// 中间这层是这次补上的接线：过去「系统配置」页改上传上限能存进库、能显示"保存成功"，
+// 但上传链路一处都不读它，实际永远是 10MB——运维把上限调成 200MB 也是白调。
+// 代码兜底 10MB 必须保留：没有配置行的存量站点不能因为这次接线就突然放宽 5 倍。
+func resolveUploadMaxSize(ctx context.Context) int64 {
+	if envMaxSize := os.Getenv("UPLOAD_MAX_SIZE"); envMaxSize != "" {
+		if size := parseInt64(envMaxSize); size > 0 {
+			return size
+		}
+	}
+	if size := resolveMaxUploadBytes(ctx); size > 0 {
+		return size
+	}
+	return MaxUploadSize
+}
+
 // UploadFile 文件上传 - 安全加固版本
 func UploadFile(ctx *gin.Context) {
 	config := DefaultUploadConfig
+	config.MaxSize = resolveUploadMaxSize(ctx)
 
-	if envMaxSize := os.Getenv("UPLOAD_MAX_SIZE"); envMaxSize != "" {
-		if size := parseInt64(envMaxSize); size > 0 {
-			config.MaxSize = size
-		}
-	}
 	if envVirusScan := os.Getenv("UPLOAD_VIRUS_SCAN"); envVirusScan == "true" {
 		config.EnableVirusScan = true
 	}

@@ -158,15 +158,21 @@ type DictionaryTransition struct { // 表 dictionary_transitions：状态机
 
 ### 阶段 0：前置修复（阻塞项，必须先做）
 
-| # | 动作 | 验收 |
-| --- | --- | --- |
-| 0.1 | 对齐 `config_param_test.go` 的 `defaultParamDefsWant = 114` 与脚本实测 115 | `go test ./internal/service/ -run TestSeedConfigParams` 绿 |
-| 0.2 | 修 `validateValue` 的 `duration` 分支：`ParseDuration` 失败不应 `return nil`，应按"秒数 float"解析并继续校验（与 `GetDuration` 的读取口径对齐） | 新增用例：非法 duration + 设了 min/max → 拒绝写入 |
-| 0.3 | 修索引漂移：要么把 gorm tag 改成单列 `uniqueIndex` 与实际一致，要么写 migration 把它改成 `(param_group,key)` 复合。**倾向后者**（复合索引更符合设计意图，且 key 命名不用再带 group 前缀） | migration 幂等可重跑；`TestDefaultParamDefsKeysGloballyUnique` 按新口径改写 |
-| 0.4 | 修 `NewSystemConfigKVRepository()` nil DB panic → 改 nil-safe 或全量改用 `WithDB` 装配 | `TestFallbackNilDB` 覆盖 |
-| 0.5 | 修 `MaxUploadSizeMB` 无人读的实证 bug：`upload.go` 改读 `system_config.MaxUploadSizeMB`（保留 `MaxUploadSize` 常量为兜底） | 上传 11MB 文件在配置调大后成功；API 验证通过 |
+> **进度（2026-10-10）：0.1 ~ 0.5 全部完成并已提交。**
+
+| # | 动作 | 验收 | 状态 |
+| --- | --- | --- | --- |
+| 0.1 | 对齐 `config_param_test.go` 的 `defaultParamDefsWant = 114` 与脚本实测 115 | `go test ./internal/service/ -run TestSeedConfigParams` 绿 | ✅ |
+| 0.2 | 修 `validateValue` 的 `duration` 分支：`ParseDuration` 失败不应 `return nil`，应按"秒数 float"解析并继续校验（与 `GetDuration` 的读取口径对齐） | 新增用例：非法 duration + 设了 min/max → 拒绝写入 | ✅ 另抽出 `parseDurationSeconds` 供读写两侧共用；min/max 自身解析失败不再吞错；删掉「无 min/max 就早退」导致类型校验被跳过的口子 |
+| 0.3 | 修索引漂移：要么把 gorm tag 改成单列 `uniqueIndex` 与实际一致，要么写 migration 把它改成 `(param_group,key)` 复合。**倾向后者**（复合索引更符合设计意图，且 key 命名不用再带 group 前缀） | migration 幂等可重跑；`TestDefaultParamDefsKeysGloballyUnique` 按新口径改写 | ✅ 核实发现 migration v3.47.0 早已注册（`initial_schema.go:207`），漂移只在存量库；真正没闭环的是审计行只记 key（已加 `param_group` 列）、唯一性用例盯单列比库更严（已按 `(group,key)` 改写）、seed 失败只 `Warnf`（已改为逐条 Error + 汇总返回 error） |
+| 0.4 | 修 `NewSystemConfigKVRepository()` nil DB panic → 改 nil-safe 或全量改用 `WithDB` 装配 | `TestFallbackNilDB` 覆盖 | ✅ 三方法统一返回哨兵错 `ErrKVStoreUnavailable`；`browser_automation_routes.go:38` 改走 `WithDB` 装配 |
+| 0.5 | 修 `MaxUploadSizeMB` 无人读的实证 bug：`upload.go` 改读 `system_config.MaxUploadSizeMB`（保留 `MaxUploadSize` 常量为兜底） | 上传 11MB 文件在配置调大后成功；API 验证通过 | ✅ 优先级链 env > 库 > 10MB 兜底，逐格钉死在 `upload_maxsize_test.go` |
 
 > 0.5 单独列，因为它是**已暴露给运维却完全不生效**的配置，比 72 条僵尸更值得优先修。
+> 0.5 落地时确认的一处取舍：`ResolveUploadMaxBytes` 刻意**不**走 `GetConfig`——那条路读不到行时
+> 会拿 `defaultConfig()` 的 50MB 顶上，而上传链路真正生效的兜底是 10MB；跟着走等于把存量站点
+> 的上限悄悄放宽 5 倍。50MB 与 `middleware/body_limit.go:36` 注释声明的「本仓最大合法单文件 50MB」一致，
+> 说明 10MB 才是那个偏离产品意图的硬编码。
 
 ### 阶段一：72 条僵尸参数接线（投入产出比最高）
 
