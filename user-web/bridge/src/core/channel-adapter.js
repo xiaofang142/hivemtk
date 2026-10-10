@@ -578,9 +578,23 @@ export class BaseAdapter {
     if (!target || !target.el) {
       if (cid.startsWith('conv:')) {
         const name = cid.slice('conv:'.length);
-        target = list.find((c) => c && c.name && c.name === name)
-              || list.find((c) => c && c.name && name && c.name.includes(name))
-              || target;
+        // 昵称派生 id 的匹配顺序：精确等值 → 双向包含。包含匹配命中多个不同列表项时
+        // 视为歧义，宁可不发也不能点到错误的会话（find 顺序取首个曾导致 A 的文案
+        // 被发进 B 的会话——昵称互为子串或改昵后残留旧名都会命中多项）。
+        const exacts = list.filter((c) => c && c.el && c.name && c.name === name);
+        if (exacts.length > 0) {
+          target = exacts[0];
+        } else {
+          const partials = list.filter((c) => c && c.el && c.name && name
+            && (c.name.includes(name) || name.includes(c.name)));
+          const uniqEls = new Set(partials.map((c) => c.el));
+          if (partials.length === 1 || (partials.length > 1 && uniqEls.size === 1)) {
+            target = partials[0];
+          } else if (partials.length > 1) {
+            throttledWarn(this.log, `openConvAmbig:${name}`, WARN_THROTTLE_MS,
+              `会话昵称「${name}」模糊匹配到 ${uniqEls.size} 个不同会话项，拒绝切换防误发`, null);
+          }
+        }
       }
     }
     if (!target || !target.el) {

@@ -1872,5 +1872,7 @@
   "短信列表": "[AR] SMS List",
   "管理工具": "[AR] Manage Tools",
   "追踪信息": "[AR] Trace Info",
-  "选择知识库": "[AR] Select Knowledge Base"
+  "选择知识库": "[AR] Select Knowledge Base",
+  "历史会话加载失败，请稍后重试": "فشل تحميل سجل المحادثات، يرجى المحاولة لاحقًا",
+  "您有 {n} 条未读消息": "لديك {n} رسالة غير مقروءة"
 }

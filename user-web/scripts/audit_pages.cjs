@@ -47,10 +47,10 @@ const all = routes.filter(r => (seen.has(r.path) ? false : (seen.add(r.path), tr
     page.off('console', onConsole); page.off('pageerror', onPageErr); page.off('response', onResp);
     try {
       row.toasts = await page.$$eval('.el-message', els => els.map(e => e.innerText.trim()).filter(Boolean));
-    } catch(e) {}
+    } catch(e) { /* 采集失败：字段留空，页面继续审计 */ }
     try {
       row.text = await page.evaluate(() => document.body.innerText);
-    } catch(e) {}
+    } catch(e) { /* 采集失败：字段留空，页面继续审计 */ }
   }
   await browser.close();
   fs.writeFileSync(OUT, JSON.stringify(report));

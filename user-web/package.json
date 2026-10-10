@@ -48,7 +48,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@intlify/unplugin-vue-i18n": "^11.2.5",
+    "@intlify/bundle-utils": "^11.2.5",
     "@playwright/test": "^1.61.1",
     "@storybook/addon-a11y": "^8.0.0",
     "@storybook/addon-essentials": "^8.0.0",
@@ -69,6 +69,9 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "tinymce": "7.9.3"
+    "tinymce": "7.9.3",
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8",
+    "uuid": "^11.1.1"
   }
 }
