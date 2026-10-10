@@ -5,7 +5,29 @@ import (
 	"sort"
 
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/service"
 )
+
+// defaultTrendDays 调用方没给时间窗时的默认天数，数据源是 config_params 的
+// geo.default_visibility_days。走直连而不造 provider seam：本包已 import
+// internal/service（llm.go、keyword_pipeline.go），不存在反向依赖问题。
+//
+// 原来的 30 是写死在 `q.Days <= 0 || q.Days > 365` 这一个条件里的，也就是
+// "没给"和"给超了"共用同一个兜底值。现在拆开：没给走参数中心，给超了仍夹到 365
+// —— 上限是查询成本闸（一次要回 365 行按引擎的聚合），不该跟着默认值一起被调大。
+//
+// 读不到参数中心时回落编译期默认 30，与改造前逐字节一致。
+func defaultTrendDays(ctx context.Context) int {
+	const fallback = 30
+	if ctx == nil {
+		return fallback
+	}
+	days := service.GlobalConfigParam().GetInt(ctx, "geo", "default_visibility_days", fallback)
+	if days <= 0 {
+		return fallback
+	}
+	return days
+}
 
 // VisibilityService AI 可见性趋势分析服务
 //
@@ -74,8 +96,11 @@ type EngineCompareResult struct {
 
 // GetTrend 可见性趋势 + 环比（周环比：各取 days/2 对半对比；不足 2 天无环比）
 func (s *VisibilityService) GetTrend(ctx context.Context, q TrendQuery) (*VisibilityTrendResult, error) {
-	if q.Days <= 0 || q.Days > 365 {
-		q.Days = 30
+	if q.Days <= 0 {
+		q.Days = defaultTrendDays(ctx)
+	}
+	if q.Days > 365 {
+		q.Days = 365
 	}
 	stats, err := s.dailyRepo.GetTrend(ctx, q.Engine, "", q.Intent, q.Days)
 	if err != nil {
@@ -158,8 +183,11 @@ func (s *VisibilityService) GetTrend(ctx context.Context, q TrendQuery) (*Visibi
 // GetEngineCompare 引擎维度对比：整体概览 + 每引擎可见率/负面/引用 + 单日拆分。
 // 运营用它回答「哪个 AI 引擎看得见我、哪个引擎在说坏话、该优先补哪个引擎的内容」。
 func (s *VisibilityService) GetEngineCompare(ctx context.Context, q TrendQuery) (*EngineCompareResult, error) {
-	if q.Days <= 0 || q.Days > 365 {
-		q.Days = 30
+	if q.Days <= 0 {
+		q.Days = defaultTrendDays(ctx)
+	}
+	if q.Days > 365 {
+		q.Days = 365
 	}
 	summary, err := s.GetTrend(ctx, q)
 	if err != nil {

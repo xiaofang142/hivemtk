@@ -43,6 +43,48 @@ const (
 	audienceSourceRFM   = "rfm"
 )
 
+// ---- 阶段三 3.1：圈选默认值与硬上限接进参数中心（sales.audience_default_limit /
+// sales.audience_max_limit）。这两个数是一对而不是一个：默认值决定"运营没填 limit
+// 时一轮圈多少人"，上限决定"填爆了也夹到这里"。只接其中一个都会让另一个仍是
+// 编译期常量，运维在参数中心看到的数字与真实行为脱节。
+var (
+	audienceDefaultLimitProvider = func() int { return DefaultAudienceLimit }
+	audienceMaxLimitProvider     = func() int { return MaxAudienceLimit }
+)
+
+// SetAudienceDefaultLimitProvider 注入圈选默认值读取口。传 nil 视为不注入。
+func SetAudienceDefaultLimitProvider(fn func() int) {
+	if fn != nil {
+		audienceDefaultLimitProvider = fn
+	}
+}
+
+// SetAudienceMaxLimitProvider 注入圈选硬上限读取口。传 nil 视为不注入。
+func SetAudienceMaxLimitProvider(fn func() int) {
+	if fn != nil {
+		audienceMaxLimitProvider = fn
+	}
+}
+
+// EffectiveAudienceDefaultLimit 未写 limit 时一轮圈多少人。
+// 非正数回落编译期默认值：0 会让每一轮都圈到空名单，而空名单在 Reasons 上表现为
+// no_match，看起来像"条件太严"而不是"默认值被改坏了"。
+func EffectiveAudienceDefaultLimit() int {
+	if v := audienceDefaultLimitProvider(); v > 0 {
+		return v
+	}
+	return DefaultAudienceLimit
+}
+
+// EffectiveAudienceMaxLimit 圈选硬上限。
+// 非正数回落编译期默认值，理由同上：上限被改成 0 等于所有轮次都截断到空。
+func EffectiveAudienceMaxLimit() int {
+	if v := audienceMaxLimitProvider(); v > 0 {
+		return v
+	}
+	return MaxAudienceLimit
+}
+
 // TriggerConfig 上的三个键。前端目前没有任何写入方（本轮实测：user-web/src 里
 // trigger_config 零引用），所以这三把键的**唯一**生产者就是运营在 SOP 配置里手填的 JSON，
 // 以及调度器自己写的 audience_preview。
@@ -68,10 +110,10 @@ func (c AudienceConfig) HasCondition() bool {
 // limit 归一化：未写走默认，写大了夹到硬上限。
 func (c AudienceConfig) limit() int {
 	if c.Limit <= 0 {
-		return DefaultAudienceLimit
+		return EffectiveAudienceDefaultLimit()
 	}
-	if c.Limit > MaxAudienceLimit {
-		return MaxAudienceLimit
+	if max := EffectiveAudienceMaxLimit(); c.Limit > max {
+		return max
 	}
 	return c.Limit
 }

@@ -45,6 +45,31 @@ const (
 	l4EvictScanLimit          = 1000
 )
 
+// ---- 阶段三 3.1：L1 短期记忆 TTL 接进参数中心（memory.l1_ttl_hours） ----
+// L1 是"这一轮对话里刚发生的事"，TTL 决定一条消息在短期层活多久。
+// 它同时是召回窗口：调大让多轮对话的上下文更连贯，调小让旧消息更快沉到 L4 长期层。
+// 24h 与单会话的常见跨度相当，所以默认值本身是"一天内不丢上下文"的口径。
+
+// l1TTLHoursProvider 数据源是 config_params 的 memory.l1_ttl_hours（单位小时）。
+var l1TTLHoursProvider = func() time.Duration { return L1TTLHours }
+
+// SetL1TTLHoursProvider 注入 L1 TTL 读取口。传 nil 视为不注入。
+func SetL1TTLHoursProvider(fn func() time.Duration) {
+	if fn != nil {
+		l1TTLHoursProvider = fn
+	}
+}
+
+// EffectiveL1TTLHours 当前生效的 L1 短期记忆 TTL。
+// 非正数回落编译期默认值：0 会让每条刚写入的短期消息立即过期，
+// 短期召回永远空手，而症状是"AI 突然不记得上一句"，很难联想到是 TTL 被改坏。
+func EffectiveL1TTLHours() time.Duration {
+	if v := l1TTLHoursProvider(); v > 0 {
+		return v
+	}
+	return L1TTLHours
+}
+
 var (
 	memorySystemOnce sync.Once
 	memorySystem     *MemorySystem
@@ -98,7 +123,7 @@ func (m *MemorySystem) L1Append(ctx context.Context, sessionID, customerID, role
 	if m.memoryRepo == nil {
 		return nil
 	}
-	exp := time.Now().Add(L1TTLHours)
+	exp := time.Now().Add(EffectiveL1TTLHours())
 	item := &model.MemoryItem{
 		Layer:      model.MemoryLayerShortTerm,
 		SessionID:  sessionID,

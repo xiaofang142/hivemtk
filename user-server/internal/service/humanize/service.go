@@ -51,6 +51,93 @@ const DefaultSampleRate = 0.10
 // DefaultMaxRetry 最大重生成次数
 const DefaultMaxRetry = 3
 
+// ---- 以下四项是阶段三 3.1 的接线：与 DefaultThreshold 同属「拟人度评估」一组旋钮 ----
+//
+// DefaultThreshold 已在阶段 1.2 接为 confidence.humanize_default_threshold，
+// 剩下 boundary/sample_rate/max_retry 三项散在这里没人读参数中心。
+// 合起来才是完整的一组：阈值决定「谁算不达标」，边界决定「哪些算边缘样本值得送 LLM」，
+// 采样率决定「边缘样本里送多少」，重试次数决定「不达标时重写几轮」。
+// 四项各占一个键而不是合成一张 JSON：运维在参数中心页面上是逐项调、逐项看审计的。
+
+// boundaryLowProvider 数据源是 config_params 的 confidence.humanize_boundary_low。
+var boundaryLowProvider = func() float64 { return DefaultBoundaryLow }
+
+// SetBoundaryLowProvider 注入边界样本下界读取口。传 nil 视为不注入。
+func SetBoundaryLowProvider(fn func() float64) {
+	if fn != nil {
+		boundaryLowProvider = fn
+	}
+}
+
+// EffectiveBoundaryLow 当前生效的边界样本下界（含）。
+// 非 [0,1) 的值回落编译期默认值：负下界会让所有文本都算边缘样本（全部送 LLM，
+// 费用与延迟同时失控），≥1 则一个都没有（LLM 复核形同关闭）。
+func EffectiveBoundaryLow() float64 {
+	if v := boundaryLowProvider(); v >= 0 && v < 1 {
+		return v
+	}
+	return DefaultBoundaryLow
+}
+
+// boundaryHighProvider 数据源是 config_params 的 confidence.humanize_boundary_high。
+var boundaryHighProvider = func() float64 { return DefaultBoundaryHigh }
+
+// SetBoundaryHighProvider 注入边界样本上界读取口。传 nil 视为不注入。
+func SetBoundaryHighProvider(fn func() float64) {
+	if fn != nil {
+		boundaryHighProvider = fn
+	}
+}
+
+// EffectiveBoundaryHigh 当前生效的边界样本上界（不含）。
+// 非 (0,1] 的值回落编译期默认值：0 同样让「边缘样本」这个概念消失。
+func EffectiveBoundaryHigh() float64 {
+	if v := boundaryHighProvider(); v > 0 && v <= 1 {
+		return v
+	}
+	return DefaultBoundaryHigh
+}
+
+// sampleRateProvider 数据源是 config_params 的 confidence.humanize_sample_rate。
+var sampleRateProvider = func() float64 { return DefaultSampleRate }
+
+// SetSampleRateProvider 注入 LLM 采样率读取口。传 nil 视为不注入。
+func SetSampleRateProvider(fn func() float64) {
+	if fn != nil {
+		sampleRateProvider = fn
+	}
+}
+
+// EffectiveSampleRate 当前生效的采样率，落在 [0,1]。
+// 0 是合法值（语义是「一个都不送 LLM」，纯规则打分），所以下界含 0；
+// 越界与负值回落默认值——负采样率在下面的按比例挑选里会算出负数个数。
+func EffectiveSampleRate() float64 {
+	if v := sampleRateProvider(); v >= 0 && v <= 1 {
+		return v
+	}
+	return DefaultSampleRate
+}
+
+// maxRetryProvider 数据源是 config_params 的 confidence.humanize_max_retry。
+var maxRetryProvider = func() int { return DefaultMaxRetry }
+
+// SetMaxRetryProvider 注入最大重生成次数读取口。传 nil 视为不注入。
+func SetMaxRetryProvider(fn func() int) {
+	if fn != nil {
+		maxRetryProvider = fn
+	}
+}
+
+// EffectiveMaxRetry 当前生效的最大重生成次数。
+// 非正数回落编译期默认值：0 会让「不达标就重写」这条路径一步都不走，
+// 但调度侧是按次数预算 LLM 调用的，静默变 0 会让预算模型与真实行为脱节。
+func EffectiveMaxRetry() int {
+	if v := maxRetryProvider(); v > 0 {
+		return v
+	}
+	return DefaultMaxRetry
+}
+
 // HumanizeEvalService 主编排服务
 type HumanizeEvalService struct {
 	ruleScorer      HumanizeEvaluator
@@ -81,10 +168,10 @@ func NewHumanizeEvalService(
 		scoreRepo:       scoreRepo,
 		sampleCollector: sampleCollector,
 		threshold:       EffectiveThreshold(),
-		sampleRate:      DefaultSampleRate,
-		boundaryLow:     DefaultBoundaryLow,
-		boundaryHigh:    DefaultBoundaryHigh,
-		maxRetry:        DefaultMaxRetry,
+		sampleRate:      EffectiveSampleRate(),
+		boundaryLow:     EffectiveBoundaryLow(),
+		boundaryHigh:    EffectiveBoundaryHigh(),
+		maxRetry:        EffectiveMaxRetry(),
 		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }

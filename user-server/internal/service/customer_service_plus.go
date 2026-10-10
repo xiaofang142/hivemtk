@@ -21,6 +21,32 @@ import (
 // EditLockTTL 会话编辑锁 TTL（协作碰撞检测）
 const EditLockTTL = 5 * time.Minute
 
+// ---- 阶段三 3.1：编辑锁 TTL 接进参数中心（misc.edit_lock_ttl） ----
+// 这把锁的语义是"两个坐席同时打开同一会话时，后看到的那位被劝退"。
+// TTL 同时承担两件事：抢占后的独占时长，以及持锁人异常退出（关浏览器/断网）后的
+// 自愈时间——锁表没有后台清理线程，全靠 ExpiresAt 过期。
+// 所以调它是在"协作碰撞检测的灵敏度"与"坐席被锁在门外的时长"之间取舍，不是纯调优。
+
+// editLockTTLProvider 数据源是 config_params 的 misc.edit_lock_ttl。
+var editLockTTLProvider = func() time.Duration { return EditLockTTL }
+
+// SetEditLockTTLProvider 注入编辑锁 TTL 读取口。传 nil 视为不注入。
+func SetEditLockTTLProvider(fn func() time.Duration) {
+	if fn != nil {
+		editLockTTLProvider = fn
+	}
+}
+
+// EffectiveEditLockTTL 当前生效的编辑锁 TTL。
+// 非正数回落编译期默认值：0 会让锁在写下的瞬间就过期，协作碰撞检测整套失效，
+// 而且外表看不出来（接口照常返回"抢到了"）。
+func EffectiveEditLockTTL() time.Duration {
+	if v := editLockTTLProvider(); v > 0 {
+		return v
+	}
+	return EditLockTTL
+}
+
 // EditLock 会话编辑锁条目
 type EditLock struct {
 	SessionID string    `json:"session_id"`
@@ -72,7 +98,7 @@ func (s *CustomerServicePlusService) AcquireEditLock(_ context.Context, sessionI
 	if cur, ok := s.locks[sessionID]; ok && cur.ExpiresAt.After(now) && cur.Holder != holder {
 		return cur, false
 	}
-	lock := EditLock{SessionID: sessionID, Holder: holder, ExpiresAt: now.Add(EditLockTTL)}
+	lock := EditLock{SessionID: sessionID, Holder: holder, ExpiresAt: now.Add(EffectiveEditLockTTL())}
 	s.locks[sessionID] = lock
 	return lock, true
 }

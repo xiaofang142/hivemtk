@@ -166,7 +166,23 @@ func TestFallbackNilDB(t *testing.T) {
 // （38ea7489）加进种子时没同步这里，所以 134 → 实际 136 → 138 一次对平。
 // 顺带说明下面那条循环判据为什么改成"只有 string 允许空默认值"：
 // 计数那格的 Fatalf 一直先炸，循环从没跑到过，industry_profile 的空默认因此被藏了很久。
-const defaultParamDefsWant = 138
+//
+// 2026-10-10（第七次，阶段三 3.1 第一批）：+9 = 拟人度评估剩下三个边界 + 圈选一对 +
+// 编辑锁 TTL + 短期记忆 TTL + 可见性趋势默认天数。
+//   - confidence.humanize_boundary_low / boundary_high / sample_rate / max_retry：
+//     DefaultThreshold 早在 1.2 就已接上，这四条是与它同一套判据的其余旋钮
+//     （阈值定「谁算不达标」、边界定「哪些算边缘样本值得送 LLM」、采样率定「其中送
+//     多少」、重试定「重写几轮」），一直散在 humanize/service.go 里没人读参数中心。
+//     三个 float 的合法区间并不相同：boundary_low 是 [0,1)、boundary_high 是 (0,1]、
+//     sample_rate 是 [0,1]（0 = 一个都不送 LLM，是合法语义）。
+//   - sales.audience_default_limit / audience_max_limit：成对出现，只接一个会让另一个
+//     仍是编译期常量。默认值决定「运营没填 limit 时一轮圈多少人」，上限是并发闸。
+//   - misc.edit_lock_ttl：这把锁没有后台清理线程，TTL 同时是持锁人异常退出后的自愈时间，
+//     所以调它是在协作灵敏度与坐席被锁时长之间取舍，不是纯调优。
+//   - memory.l1_ttl_hours：短期记忆存活秒数，同时是多轮召回的窗口。
+//   - geo.default_visibility_days：拆分原 `q.Days <= 0 || q.Days > 365` 那一个条件
+//     得来的两个语义——没给走参数中心，给超了仍夹 365（查询成本闸，不随默认值放大）。
+const defaultParamDefsWant = 147
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
