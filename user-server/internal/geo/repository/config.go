@@ -62,10 +62,6 @@ type geoPlatformAccountRepo struct {
 	db *gorm.DB
 }
 
-func NewGeoPlatformAccountRepository() GeoPlatformAccountRepository {
-	return &geoPlatformAccountRepo{db: _db.GetDB()}
-}
-
 // NewGeoPlatformAccountRepositoryWithDB 创建指定数据库连接的实例（用于测试）
 func NewGeoPlatformAccountRepositoryWithDB(db *gorm.DB) GeoPlatformAccountRepository {
 	return &geoPlatformAccountRepo{db: db}
@@ -133,10 +129,6 @@ type GeoPublishRecordRepository interface {
 
 type geoPublishRecordRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoPublishRecordRepository() GeoPublishRecordRepository {
-	return &geoPublishRecordRepo{db: _db.GetDB()}
 }
 
 // NewGeoPublishRecordRepositoryWithDB 创建指定数据库连接的实例（用于测试）

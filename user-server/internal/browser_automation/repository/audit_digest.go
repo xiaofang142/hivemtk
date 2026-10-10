@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -23,10 +22,6 @@ type BrowserAuditDigestRepository interface {
 
 type browserAuditDigestRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserAuditDigestRepository() BrowserAuditDigestRepository {
-	return &browserAuditDigestRepo{db: _db.GetDB()}
 }
 
 func NewBrowserAuditDigestRepositoryWithDB(db *gorm.DB) BrowserAuditDigestRepository {

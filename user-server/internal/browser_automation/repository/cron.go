@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -27,10 +26,6 @@ type BrowserCronTriggerRepository interface {
 
 type browserCronTriggerRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserCronTriggerRepository() BrowserCronTriggerRepository {
-	return &browserCronTriggerRepo{db: _db.GetDB()}
 }
 
 // NewBrowserCronTriggerRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

@@ -7,7 +7,6 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"strconv"
@@ -181,10 +180,6 @@ func NewInboxIngressServiceWithDB(db *gorm.DB, c cache.Cache) *InboxIngressServi
 	}
 }
 
-func (s *InboxIngressService) TriggerChannel(ctx context.Context) <-chan string {
-	return s.triggerCh
-}
-
 func (s *InboxIngressService) SetAITrigger(t AITrigger) {
 	s.aiTrigger = t
 }
@@ -320,24 +315,6 @@ func (m *inboxHumanLockExpiryManager) checkExpired(ctx context.Context, c cache.
 		m.mu.Unlock()
 		logger.Infof("[Inbox] session=%s 人工锁已超时释放，AI 恢复服务", sid)
 	}
-}
-
-func StartInboxHumanLockExpiryChecker(ctx context.Context, c cache.Cache, interval time.Duration) {
-	if interval <= 0 {
-		interval = time.Minute
-	}
-	utils.SafeGo(ctx, "inbox.lock_expiry_checker", func(ctx context.Context) {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				getInboxLockMgr().checkExpired(ctx, c)
-			}
-		}
-	})
 }
 
 func (s *InboxIngressService) tryAcquireAILock(ctx context.Context, sessionID string) (bool, error) { //nolint:unused //// 仅被 *_test.go 引用，生产路径未用

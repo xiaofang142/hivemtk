@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	_db "hivemtk-user/internal/pkg/db"
-
 	"gorm.io/gorm"
 )
 
@@ -26,10 +24,6 @@ func (AbExposure) TableName() string { return "ab_exposures" }
 // ABExposureRepository AB 曝光记录仓库
 type ABExposureRepository struct {
 	db *gorm.DB
-}
-
-func NewABExposureRepository() *ABExposureRepository {
-	return &ABExposureRepository{db: _db.GetDB()}
 }
 
 func NewABExposureRepositoryWithDB(db *gorm.DB) *ABExposureRepository {

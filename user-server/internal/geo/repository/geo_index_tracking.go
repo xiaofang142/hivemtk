@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -23,14 +22,6 @@ type GeoIndexTrackingRepository interface {
 
 type geoIndexTrackingRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoIndexTrackingRepository() GeoIndexTrackingRepository {
-	return &geoIndexTrackingRepo{db: _db.GetDB()}
-}
-
-func NewGeoIndexTrackingRepositoryWithDB(db *gorm.DB) GeoIndexTrackingRepository {
-	return &geoIndexTrackingRepo{db: db}
 }
 
 func (r *geoIndexTrackingRepo) Upsert(tracking *model.GeoIndexTracking) error {

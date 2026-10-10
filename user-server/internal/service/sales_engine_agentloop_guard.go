@@ -122,10 +122,6 @@ func (g *agentLoopGuard) ChargeEstimated(estimatedTokens int, estimatedCostUSD f
 	}
 }
 
-func (g *agentLoopGuard) ChargeSettle(actualTokens int, actualCostUSD float64) {
-	g.charge(actualTokens, actualCostUSD)
-}
-
 func (g *agentLoopGuard) costDrifted() bool {
 	if len(g.iterCosts) < 6 {
 		return false
@@ -198,10 +194,6 @@ func (g *agentLoopGuard) ObserveState(assistantContent string, toolContents []st
 		}
 	}
 	return stopReasonStateLoop
-}
-
-func (g *agentLoopGuard) Iteration(i int) {
-	g.iterationCount = i
 }
 
 func (g *agentLoopGuard) Finish() agentLoopStopReason {

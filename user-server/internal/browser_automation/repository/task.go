@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -38,10 +37,6 @@ type BrowserTaskRepository interface {
 
 type browserTaskRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserTaskRepository() BrowserTaskRepository {
-	return &browserTaskRepo{db: _db.GetDB()}
 }
 
 // NewBrowserTaskRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

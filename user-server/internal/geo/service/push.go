@@ -484,10 +484,6 @@ type ToutiaoPusher struct {
 	cli  *http.Client
 }
 
-func NewToutiaoPusher(site string) *ToutiaoPusher {
-	return &ToutiaoPusher{Site: site, cli: newHTTPClient()}
-}
-
 func (p *ToutiaoPusher) Name() string { return "toutiao" }
 
 func (p *ToutiaoPusher) Push(ctx context.Context, urls []string) ([]PushResult, error) {

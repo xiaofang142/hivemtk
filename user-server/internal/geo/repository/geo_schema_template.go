@@ -2,7 +2,6 @@ package repository
 
 import (
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -20,14 +19,6 @@ type GeoSchemaTemplateRepository interface {
 
 type geoSchemaTemplateRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoSchemaTemplateRepository() GeoSchemaTemplateRepository {
-	return &geoSchemaTemplateRepo{db: _db.GetDB()}
-}
-
-func NewGeoSchemaTemplateRepositoryWithDB(db *gorm.DB) GeoSchemaTemplateRepository {
-	return &geoSchemaTemplateRepo{db: db}
 }
 
 func (r *geoSchemaTemplateRepo) Create(tpl *model.GeoSchemaTemplate) error {

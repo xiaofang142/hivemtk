@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -23,14 +22,6 @@ type GeoSiteRepository interface {
 
 type geoSiteRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoSiteRepository() GeoSiteRepository {
-	return &geoSiteRepo{db: _db.GetDB()}
-}
-
-func NewGeoSiteRepositoryWithDB(db *gorm.DB) GeoSiteRepository {
-	return &geoSiteRepo{db: db}
 }
 
 func (r *geoSiteRepo) Create(site *model.GeoSite) error {

@@ -33,8 +33,6 @@ func (AllowAllChecker) IsApproved(ctx context.Context, toolName, accountIDorOwne
 	return true
 }
 
-func NewAllowAllChecker() ApprovalChecker { return AllowAllChecker{} }
-
 var coldOutreachNameSegs = map[string]bool{
 	"batch":       true,
 	"schedule":    true,

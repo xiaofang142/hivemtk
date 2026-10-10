@@ -155,9 +155,3 @@ func init() {
 	traceCleanupCron = NewMessageTraceCleanupTask(repo)
 	traceCleanupCron.Start(context.Background())
 }
-
-func StopMessageTraceCleanupCron(ctx context.Context) {
-	if traceCleanupCron != nil {
-		traceCleanupCron.Stop(ctx)
-	}
-}

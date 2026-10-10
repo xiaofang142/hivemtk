@@ -7,7 +7,6 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tgbot"
 	logger "hivemtk-user/internal/pkg/utils/logger"
-	_type "hivemtk-user/internal/pkg/utils/type"
 	"hivemtk-user/internal/service"
 	"sync"
 
@@ -31,33 +30,6 @@ var (
 	globalAccounts = make(map[string]accountData)
 	dictLock       sync.RWMutex
 )
-
-func InitAllAccount() error {
-	accountSer := service.NewAccountService()
-
-	accountList, err := accountSer.GetAccountList(context.Background())
-	if err != nil {
-		return err
-	}
-	for _, account := range accountList {
-		botName, err := InitOneAccount(account)
-		if err != nil {
-			logger.Info(fmt.Sprintf("初始化账号ID %s 失败: %s", account.ID, err.Error()))
-			if e := accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusInactive, err.Error()); e != nil {
-				logger.Warnf("更新账号失活状态失败 ID=%s: %v", account.ID, e)
-			}
-		} else {
-			logger.Info(fmt.Sprintf("初始化账号ID %s 成功: %s", account.ID, botName))
-			if e := accountSer.UpdateAccountStatusById(context.Background(), account.ID, _type.AccountStatusActive, ""); e != nil {
-				logger.Warnf("更新账号激活状态失败 ID=%s: %v", account.ID, e)
-			}
-			if e := accountSer.UpdateAccountTgNameById(context.Background(), account.ID, botName); e != nil {
-				logger.Warnf("更新账号 TgName 失败 ID=%s: %v", account.ID, e)
-			}
-		}
-	}
-	return nil
-}
 
 func InitOneAccount(account *model.Account) (string, error) {
 	bot, err := tgbot.InitTGBot(account.TgBotToken, account.GroupID, account.ProxyEnableProxy, account.ProxyProtoclo, account.ProxyHost, account.ProxyPort)

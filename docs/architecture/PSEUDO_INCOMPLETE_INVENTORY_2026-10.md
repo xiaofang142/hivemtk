@@ -347,6 +347,23 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
   `tests/unit/api_abExperimentPlus.test.js` 6 用例锁路径/方法/参数 + 导出集恰 5 回魂锁。
 - 验证：定向 6/6、全量 44 文件/506 用例全绿、`npm run build` rc=0（缺失回基线 8）、三门禁绿。
 
+### B9 后端零引用导出孤岛（2026-10-10 I19 已处置）
+
+- 原判断：B6（I14）删的是「整竖零消费者」的产码文件；本轮把口径收到**符号级**——
+  `user-server/internal/**` 非测试 Go 文件的导出符号，全仓（含 `_test.go` 与工作区未提交 WIP）
+  严格零引用（声明行恰 1 次 + 其余 0 次）者即孤岛。
+- 读数：宽松条件约 500（含同文件路由注册假阳性）→ 严格条件 68；排除他泳道 M 文件
+  `reach_tools.go` 的 2 个后，**实删 66 个符号 / 44 个干净文件**（详见改进清单 §五 I19）。
+- 大头：`browser_automation/repository` 9 个未接线构造器、`geo/repository` 17 个
+  （含五对 `WithDB` 双构造器——一对里有一个在用另一个零引用是典型「写了没换」形态）、
+  `asset_resolver.go` 六个列表方法等。
+- **已处置（I19，删除）**：仅删函数、类型/接口保留；`go build`+`go vet`（含全部测试文件编译）
+  rc=0 证明无活引用；过程中自写删除器在单行函数上越界吃掉
+  `decorator_approval.go` 的包级 `var coldOutreachNameSegs`（被 `IsColdOutreachTool` 使用），
+  build 当轮打红、当即恢复并全量审计其余 65 处无第二例——**教训：删函数必须以
+  gofmt 结构或 `^}` 专属终止符为准，map/struct 字面量的第 0 列 `}` 不是函数结尾**。
+- 边界：零引用**类型**未扫未删（本轮只到函数）；`reach_tools.go` 2 符号待 reach 泳道收口后复扫。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。

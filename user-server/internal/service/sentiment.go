@@ -53,31 +53,6 @@ var negativeWords = map[string]struct{}{
 	"绝望": {}, "打击": {}, "困难": {}, "棘手": {}, "痛": {},
 }
 
-func DetectSentiment(text string) SentimentResult {
-	res := SentimentResult{Label: "neutral"}
-	tokens := tokenize(text)
-	for _, t := range tokens {
-		if _, ok := positiveWords[t]; ok {
-			res.Positive++
-		}
-		if _, ok := negativeWords[t]; ok {
-			res.Negative++
-		}
-	}
-	total := res.Positive + res.Negative
-	res.Neutral = len(tokens) - total
-	if total == 0 {
-		res.Label = "neutral"
-	} else if res.Positive > res.Negative {
-		res.Label = "positive"
-	} else if res.Negative > res.Positive {
-		res.Label = "negative"
-	} else {
-		res.Label = "neutral"
-	}
-	return res
-}
-
 func tokenize(text string) []string {
 	text = strings.ToLower(strings.TrimSpace(text))
 	if text == "" {

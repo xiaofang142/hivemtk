@@ -37,21 +37,6 @@ type MarketingWorkflow struct {
 	KPI      map[string]interface{}   `json:"kpi"`
 }
 
-func ResolveActiveWorkflow(ctx context.Context) (*MarketingWorkflow, bool) {
-	if workflowAssetResolverFunc == nil {
-		return nil, false
-	}
-	raw, ok := workflowAssetResolverFunc(ctx)
-	if !ok || len(raw) == 0 {
-		return nil, false
-	}
-	var w MarketingWorkflow
-	if err := json.Unmarshal(raw, &w); err != nil {
-		return nil, false
-	}
-	return &w, true
-}
-
 type MarketingFlowService struct {
 	flowRepo         *repository.MarketingFlowRepository
 	executionRepo    *repository.FlowExecutionRepository

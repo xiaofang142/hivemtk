@@ -2,7 +2,6 @@ package repository
 
 import (
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -18,10 +17,6 @@ type GeoWorkflowRepository interface {
 
 type geoWorkflowRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoWorkflowRepository() GeoWorkflowRepository {
-	return &geoWorkflowRepo{db: _db.GetDB()}
 }
 
 func NewGeoWorkflowRepositoryWithDB(db *gorm.DB) GeoWorkflowRepository {
@@ -64,10 +59,6 @@ type geoWorkflowExecRepo struct {
 	db *gorm.DB
 }
 
-func NewGeoWorkflowExecutionRepository() GeoWorkflowExecutionRepository {
-	return &geoWorkflowExecRepo{db: _db.GetDB()}
-}
-
 func NewGeoWorkflowExecutionRepositoryWithDB(db *gorm.DB) GeoWorkflowExecutionRepository {
 	return &geoWorkflowExecRepo{db: db}
 }
@@ -108,10 +99,6 @@ type GeoWorkflowTemplateRepository interface {
 
 type geoWorkflowTplRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoWorkflowTemplateRepository() GeoWorkflowTemplateRepository {
-	return &geoWorkflowTplRepo{db: _db.GetDB()}
 }
 
 func NewGeoWorkflowTemplateRepositoryWithDB(db *gorm.DB) GeoWorkflowTemplateRepository {

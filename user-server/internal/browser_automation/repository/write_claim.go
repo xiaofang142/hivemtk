@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -31,10 +30,6 @@ type BrowserWriteClaimRepository interface {
 
 type browserWriteClaimRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserWriteClaimRepository() BrowserWriteClaimRepository {
-	return &browserWriteClaimRepo{db: _db.GetDB()}
 }
 
 // NewBrowserWriteClaimRepositoryWithDB 显式注入 gormDB（路由装配与测试用）

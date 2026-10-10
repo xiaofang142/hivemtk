@@ -240,12 +240,6 @@ func DefaultThirdPartyRateLimitSpec(channel string) RateLimitSpec {
 	return RateLimitSpec{}
 }
 
-func NewDefaultRateLimitedPipelineConfig(adapter ChannelAdapter) SendPipelineConfig {
-	cfg := DefaultSendPipelineConfig(adapter)
-	cfg.RateLimiter = NewMemorySendRateLimiter()
-	return cfg
-}
-
 func NewDefaultRateLimitedPipelineConfigWithCache(adapter ChannelAdapter) SendPipelineConfig {
 	cfg := DefaultSendPipelineConfig(adapter)
 	if gl := NewGCRARateLimiterFromGlobalCache(); gl != nil {

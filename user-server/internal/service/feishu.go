@@ -407,10 +407,6 @@ func (s *FeishuIntegrationService) RefreshAccessToken(ctx context.Context, acc *
 	return err
 }
 
-func (s *FeishuIntegrationService) GetAccessTokenForTest(ctx context.Context, acc *model.FeishuAccount) (string, error) {
-	return s.getAccessToken(ctx, acc)
-}
-
 type TelegramService struct {
 	accRepo *repository.TelegramAccountRepository
 }

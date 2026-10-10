@@ -38,16 +38,6 @@ var DefaultTokenBudgetConfig = TokenBudgetConfig{
 	MaxTokensPerRequest: 8000,
 }
 
-func NewTokenBudget(config TokenBudgetConfig) *TokenBudget {
-	return &TokenBudget{
-		maxPerSession: config.MaxPerSession,
-		windowSize:    time.Minute,
-		maxPerWindow:  config.MaxPerMinute,
-		windowStart:   time.Now(),
-		windowHistory: make([]windowRecord, 0, 60),
-	}
-}
-
 func (b *TokenBudget) Consume(tokens int64) error {
 	if tokens <= 0 {
 		return nil
@@ -183,13 +173,6 @@ type TokenBudgetStats struct {
 	WindowStartTime time.Time `json:"window_start_time"`
 }
 
-func (s TokenBudgetStats) UsageRate() float64 {
-	if s.MaxPerSession <= 0 {
-		return 0
-	}
-	return float64(s.UsedPerSession) / float64(s.MaxPerSession) * 100
-}
-
 type BudgetExceededError struct {
 	Reason    string `json:"reason"`
 	Limit     int64  `json:"limit"`
@@ -208,9 +191,4 @@ func (e *BudgetExceededError) Error() string {
 	default:
 		return fmt.Sprintf("token budget exceeded: %s", e.Reason)
 	}
-}
-
-func IsBudgetError(err error) bool {
-	_, ok := err.(*BudgetExceededError)
-	return ok
 }

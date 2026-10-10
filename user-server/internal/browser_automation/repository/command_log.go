@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -34,10 +33,6 @@ var ErrPruneCutoffSourceRequired = errors.New("browser command log prune require
 
 type browserCommandLogRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserCommandLogRepository() BrowserCommandLogRepository {
-	return &browserCommandLogRepo{db: _db.GetDB()}
 }
 
 func NewBrowserCommandLogRepositoryWithDB(db *gorm.DB) BrowserCommandLogRepository {

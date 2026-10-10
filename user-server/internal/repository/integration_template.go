@@ -29,10 +29,6 @@ func NewIntegrationTemplateRepository() IntegrationTemplateRepository {
 	return &integrationTemplateRepo{db: _db.GetDB()}
 }
 
-func NewIntegrationTemplateRepositoryWithDB(db *gorm.DB) IntegrationTemplateRepository {
-	return &integrationTemplateRepo{db: db}
-}
-
 func (r *integrationTemplateRepo) Create(ctx context.Context, t *model.IntegrationTemplate) error {
 	if t.Code == "" {
 		return errors.New("模板编码不能为空")

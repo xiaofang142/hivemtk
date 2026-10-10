@@ -25,10 +25,6 @@ func NewLeadMiningConfigRepository() LeadMiningConfigRepository {
 	return &leadMiningConfigRepo{db: _db.GetDB()}
 }
 
-func NewLeadMiningConfigRepositoryWithDB(db *gorm.DB) LeadMiningConfigRepository {
-	return &leadMiningConfigRepo{db: db}
-}
-
 func (r *leadMiningConfigRepo) GetSingleton(ctx context.Context) (*model.LeadMiningConfig, error) {
 	var c model.LeadMiningConfig
 	err := r.db.WithContext(ctx).First(&c, "id = ?", 1).Error

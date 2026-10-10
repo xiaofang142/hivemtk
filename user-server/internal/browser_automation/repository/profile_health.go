@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -22,10 +21,6 @@ type BrowserProfileHealthRepository interface {
 
 type browserProfileHealthRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserProfileHealthRepository() BrowserProfileHealthRepository {
-	return &browserProfileHealthRepo{db: _db.GetDB()}
 }
 
 // NewBrowserProfileHealthRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

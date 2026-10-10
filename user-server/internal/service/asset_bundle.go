@@ -554,10 +554,6 @@ func resolveLocalAssetSystemPrompt(data []byte) string {
 	return ""
 }
 
-func (s *AssetBundleService) ListBundles(ctx context.Context, f repository.AssetBundleFilter) ([]*model.AssetBundle, int64, error) {
-	return s.repo.List(ctx, f)
-}
-
 func (s *AssetBundleService) ListBundlesWithParams(
 
 	ctx context.Context,

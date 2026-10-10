@@ -103,10 +103,6 @@ type FeishuCustomerRepository struct {
 	db *gorm.DB
 }
 
-func NewFeishuCustomerRepository() *FeishuCustomerRepository {
-	return &FeishuCustomerRepository{db: _db.GetDB()}
-}
-
 func (r *FeishuCustomerRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	if db != nil {
 		r.db = db
@@ -115,22 +111,6 @@ func (r *FeishuCustomerRepository) SetDB(ctx context.Context, db *gorm.DB) {
 
 func (r *FeishuCustomerRepository) Create(ctx context.Context, c *model.FeishuCustomer) error {
 	return r.db.Create(c).Error
-}
-
-func (r *FeishuCustomerRepository) GetByOpenID(ctx context.Context, accountID uint, openID string) (*model.FeishuCustomer, error) {
-	var c model.FeishuCustomer
-	if err := r.db.Where("account_id = ? AND open_id = ?", accountID, openID).First(&c).Error; err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (r *FeishuCustomerRepository) GetByUnionID(ctx context.Context, unionID string) (*model.FeishuCustomer, error) {
-	var c model.FeishuCustomer
-	if err := r.db.Where("union_id = ?", unionID).First(&c).Error; err != nil {
-		return nil, err
-	}
-	return &c, nil
 }
 
 func (r *FeishuCustomerRepository) Update(ctx context.Context, c *model.FeishuCustomer) error {

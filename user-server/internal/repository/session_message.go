@@ -163,19 +163,6 @@ func (r *SessionMessageRepository) ListAllBySessionID(ctx context.Context, sessi
 	return rows, nil
 }
 
-func (r *SessionMessageRepository) ListTranscriptBySession(ctx context.Context, sessionID string, limit int) ([]*model.SessionMessage, error) {
-	if limit <= 0 || limit > 2000 {
-		limit = 2000
-	}
-	var rows []*model.SessionMessage
-	err := r.db.WithContext(ctx).
-		Where("session_id = ? AND is_internal = ?", sessionID, false).
-		Order("created_at ASC").
-		Limit(limit).
-		Find(&rows).Error
-	return rows, err
-}
-
 // ListOfflineBySessionID 拉取访客离线期间未投递的坐席/AI 回复消息
 //
 // 离线消息定义（与 service.GetOfflineMessages 一致）：

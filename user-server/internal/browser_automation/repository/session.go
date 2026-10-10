@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -46,10 +45,6 @@ type ExtractedJSON = []byte
 
 type browserSessionRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserSessionRepository() BrowserSessionRepository {
-	return &browserSessionRepo{db: _db.GetDB()}
 }
 
 // NewBrowserSessionRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

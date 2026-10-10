@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -39,10 +38,6 @@ type StepResultJSON = []byte
 
 type browserStepRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserStepRepository() BrowserStepRepository {
-	return &browserStepRepo{db: _db.GetDB()}
 }
 
 // NewBrowserStepRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

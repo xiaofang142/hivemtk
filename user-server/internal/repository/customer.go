@@ -118,17 +118,6 @@ func (r *customerRepository) GetByPhone(ctx context.Context, phone string) (*mod
 	return &customer, nil
 }
 
-func (r *customerRepository) GetByPhoneHash(ctx context.Context, phoneHash string) (*model.Customer, error) {
-	var customer model.Customer
-	if err := dbFromCtx(ctx).First(&customer, "phone_hash = ?", phoneHash).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &customer, nil
-}
-
 func (r *customerRepository) GetByEmail(ctx context.Context, email string) (*model.Customer, error) {
 	var customer model.Customer
 	if err := dbFromCtx(ctx).First(&customer, "email = ?", email).Error; err != nil {

@@ -40,13 +40,6 @@ type cardAccessService struct {
 	uvStatsRepo repository.DailyCardUVStatsRepository
 }
 
-func NewCardAccessService(db *gorm.DB) CardAccessService {
-	return &cardAccessService{
-		accessRepo:  repository.NewCardAccessRepository(db),
-		uvStatsRepo: repository.NewDailyCardUVStatsRepository(db),
-	}
-}
-
 func (s *cardAccessService) RecordAccess(ctx context.Context, cardID uint, cardType string, ip, ua, referer string) error {
 	access := &model.CardAccess{
 		CardID:     cardID,

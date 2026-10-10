@@ -2,7 +2,6 @@ package repository
 
 import (
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -22,14 +21,6 @@ type GeoPusherConfigRepository interface {
 
 type geoPusherConfigRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoPusherConfigRepository() GeoPusherConfigRepository {
-	return &geoPusherConfigRepo{db: _db.GetDB()}
-}
-
-func NewGeoPusherConfigRepositoryWithDB(db *gorm.DB) GeoPusherConfigRepository {
-	return &geoPusherConfigRepo{db: db}
 }
 
 func (r *geoPusherConfigRepo) Create(cfg *model.GeoPusherConfig) error {

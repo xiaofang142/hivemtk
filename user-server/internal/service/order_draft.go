@@ -146,10 +146,6 @@ type OrderDraftService struct {
 	defaultExpiry time.Duration
 }
 
-func (s *OrderDraftService) SetScriptConversionHook(hook func(ctx context.Context, oneID, conversationID, outcome string)) {
-	s.scriptConversionHook = hook
-}
-
 // OrderDraftConfig 草稿服务配置
 type OrderDraftConfig struct {
 	DefaultExpiry time.Duration

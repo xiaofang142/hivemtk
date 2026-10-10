@@ -18,22 +18,6 @@ import (
 	"hivemtk-user/internal/pkg/tracing"
 )
 
-func (s *InboxIngressService) ListFailedOutbound(ctx context.Context, channel, accountID string) ([]*model.MessageHub, error) {
-	if s.hubRepo == nil {
-		return nil, nil
-	}
-	list, _, err := s.hubRepo.ListByHubQuery(ctx, repository.HubListQuery{
-		Platform:  channel,
-		AccountID: accountID,
-		Direction: "outbound",
-		Status:    model.BridgeAckStatusFailed,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return list, nil
-}
-
 // MarkOutboundDelivered 将离线补发成功的出站消息标记为已送达，
 // 避免重复补发与坐席 UI 长期显示 failed。
 func (s *InboxIngressService) MarkOutboundDelivered(ctx context.Context, hub *model.MessageHub) error {
@@ -131,27 +115,6 @@ func (s *InboxIngressService) ListPendingOutbound(ctx context.Context, channel, 
 		Status:    "pending",
 		OrderBy:   "id ASC",
 		PageSize:  50,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return list, nil
-}
-
-func (s *InboxIngressService) ListPendingOutboundLimit(ctx context.Context, channel, accountID string, limit int) ([]*model.MessageHub, error) {
-	if s.hubRepo == nil {
-		return nil, nil
-	}
-	if limit <= 0 {
-		limit = 50
-	}
-	list, _, err := s.hubRepo.ListByHubQuery(ctx, repository.HubListQuery{
-		Platform:  channel,
-		AccountID: accountID,
-		Direction: "outbound",
-		Status:    "pending",
-		OrderBy:   "id ASC",
-		PageSize:  limit,
 	})
 	if err != nil {
 		return nil, err

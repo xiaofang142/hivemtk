@@ -47,13 +47,6 @@ func New(db *gorm.DB, dispatcher *llm.Dispatcher, cfg Config) *Service {
 	return &Service{repo: repository.NewTraceLearningRepository(db), dispatcher: dispatcher, cfg: cfg}
 }
 
-func (s *Service) EvaluateTrace(ctx context.Context, traceID string, dryRun bool) (*model.TraceEvalLog, error) {
-	if s.repo == nil {
-		return nil, fmt.Errorf("db nil")
-	}
-	return s.evaluateTraceOn(ctx, s.repo.GetDB(), traceID, dryRun)
-}
-
 func (s *Service) evaluateTraceOn(ctx context.Context, db *gorm.DB, traceID string, dryRun bool) (*model.TraceEvalLog, error) {
 	ctx = ensureCtx(ctx)
 	agg, err := AggregateTrace(ctx, db, traceID)

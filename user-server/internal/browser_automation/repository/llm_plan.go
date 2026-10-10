@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/browser_automation/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -23,10 +22,6 @@ type BrowserLLMPlanRepository interface {
 
 type browserLLMPlanRepo struct {
 	db *gorm.DB
-}
-
-func NewBrowserLLMPlanRepository() BrowserLLMPlanRepository {
-	return &browserLLMPlanRepo{db: _db.GetDB()}
 }
 
 // NewBrowserLLMPlanRepositoryWithDB 显式注入 gormDB（路由装配用，测试可替换）

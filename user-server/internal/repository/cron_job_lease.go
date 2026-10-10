@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -23,10 +22,6 @@ var ErrInvalidCronLeaseArgs = errors.New("cron lease: job_name 与 workerID 均�
 // CronJobLeaseRepository 后台任务跨进程租约仓库
 type CronJobLeaseRepository struct {
 	db *gorm.DB
-}
-
-func NewCronJobLeaseRepository() *CronJobLeaseRepository {
-	return &CronJobLeaseRepository{db: _db.GetDB()}
 }
 
 func NewCronJobLeaseRepositoryWithDB(db *gorm.DB) *CronJobLeaseRepository {

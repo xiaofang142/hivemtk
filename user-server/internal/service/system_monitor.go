@@ -119,11 +119,6 @@ func NewSystemMonitorService() *SystemMonitorService {
 	}
 }
 
-func NewSystemMonitorServiceWithRepo(repo repository.SystemStatsRepository) *SystemMonitorService {
-	startResourceSampling()
-	return &SystemMonitorService{statsRepo: repo}
-}
-
 func (s *SystemMonitorService) GetSystemStats(ctx context.Context) (map[string]any, error) {
 	totalUsers, _ := s.statsRepo.CountSystemUsers(ctx)
 	totalOrders, _ := s.statsRepo.CountOrders(ctx)

@@ -78,15 +78,6 @@ func (r *AssetResolver) activeAssetID(ctx context.Context, assetType string) (st
 	return aid, true
 }
 
-func (r *AssetResolver) GetActivePersona(ctx context.Context) (*AgentPersona, bool) {
-	if aid, ok := r.activeAssetID(ctx, "agent_persona"); ok {
-		if p, err := r.agent.LoadPersona(ctx, aid); err == nil {
-			return p, true
-		}
-	}
-	return nil, false
-}
-
 func (r *AssetResolver) GetActiveScript(ctx context.Context) (*SalesScript, bool) {
 	if aid, ok := r.activeAssetID(ctx, "sales_script"); ok {
 		if s, err := r.script.LoadScript(ctx, aid); err == nil {
@@ -141,24 +132,4 @@ func (r *AssetResolver) LoadPlan(ctx context.Context, assetID string) (*ABTestPl
 
 func (r *AssetResolver) LoadWorkflow(ctx context.Context, assetID string) (*MarketingWorkflow, error) {
 	return r.workflow.LoadWorkflow(ctx, assetID)
-}
-
-func (r *AssetResolver) ListPersonas(ctx context.Context) ([]*AgentPersona, error) {
-	return r.agent.ListAllPersonas(ctx)
-}
-
-func (r *AssetResolver) ListScripts(ctx context.Context) ([]*SalesScript, error) {
-	return r.script.ListAllScripts(ctx)
-}
-
-func (r *AssetResolver) ListSOPs(ctx context.Context) ([]*IndustrySOP, error) {
-	return r.sop.ListAllSOPs(ctx)
-}
-
-func (r *AssetResolver) ListPlans(ctx context.Context) ([]*ABTestPlan, error) {
-	return r.abtest.ListAllPlans(ctx)
-}
-
-func (r *AssetResolver) ListWorkflows(ctx context.Context) ([]*MarketingWorkflow, error) {
-	return r.workflow.ListAllWorkflows(ctx)
 }

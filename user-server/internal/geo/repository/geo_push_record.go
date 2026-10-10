@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 )
@@ -21,14 +20,6 @@ type GeoPushRecordRepository interface {
 
 type geoPushRecordRepo struct {
 	db *gorm.DB
-}
-
-func NewGeoPushRecordRepository() GeoPushRecordRepository {
-	return &geoPushRecordRepo{db: _db.GetDB()}
-}
-
-func NewGeoPushRecordRepositoryWithDB(db *gorm.DB) GeoPushRecordRepository {
-	return &geoPushRecordRepo{db: db}
 }
 
 func (r *geoPushRecordRepo) CreateBatch(records []*model.GeoPushRecord) error {

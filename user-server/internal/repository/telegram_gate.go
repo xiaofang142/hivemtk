@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -14,10 +13,6 @@ import (
 // TelegramGroupGateRepository TG 群组管控网关仓库
 type TelegramGroupGateRepository struct {
 	db *gorm.DB
-}
-
-func NewTelegramGroupGateRepository() *TelegramGroupGateRepository {
-	return &TelegramGroupGateRepository{db: _db.GetDB()}
 }
 
 func NewTelegramGroupGateRepositoryWithDB(db *gorm.DB) *TelegramGroupGateRepository {
@@ -81,10 +76,6 @@ func (r *TelegramGroupGateRepository) ListEnabled(ctx context.Context) ([]*model
 // TelegramGroupMemberRepository TG 群成员验证台账仓库
 type TelegramGroupMemberRepository struct {
 	db *gorm.DB
-}
-
-func NewTelegramGroupMemberRepository() *TelegramGroupMemberRepository {
-	return &TelegramGroupMemberRepository{db: _db.GetDB()}
 }
 
 func NewTelegramGroupMemberRepositoryWithDB(db *gorm.DB) *TelegramGroupMemberRepository {

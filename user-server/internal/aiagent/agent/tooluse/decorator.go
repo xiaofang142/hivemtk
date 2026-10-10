@@ -134,31 +134,6 @@ func BuildChainWithBreakerDecorator(
 	)
 }
 
-func BuildChainWithCircuitBreakerAndValidator(
-	handler ToolHandler,
-	checker PermissionChecker,
-	limiter RateLimiter,
-	circuitBreaker *CircuitBreakerRegistry,
-	registry *ToolRegistry,
-	policy RetryPolicy,
-	timeout time.Duration,
-	logger AuditLogger,
-	costTracker CostTracker,
-) ToolHandler {
-	chain := []ToolDecorator{
-		PermissionDecorator(checker),
-		RateLimitDecorator(limiter),
-	}
-	if circuitBreaker != nil {
-		chain = append(chain, CircuitBreakerDecorator(circuitBreaker))
-	}
-	if registry != nil {
-		chain = append(chain, ParamValidatorDecorator(registry))
-	}
-	chain = append(chain, RetryDecorator(policy), TimeoutDecorator(timeout), AuditDecorator(logger, costTracker))
-	return ChainDecorators(handler, chain...)
-}
-
 func (NoOpPermissionChecker) Check(ctx context.Context, toolName string, tc *ToolContext) error {
 	return nil
 }
