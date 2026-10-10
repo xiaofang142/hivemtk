@@ -24,6 +24,14 @@
 | F-10 | 大量页面显示异常（6 个视图数据恒空/恒失败） | axios 拦截器已解包 `{code,data}` 直接 resolve 内层，视图按原始信封取值 `res?.data?.list` | AutomationHub/AbStats/Connectors/followups-Today/oneid-Conflicts/leadMining-Index 统一 `res?.data ?? res` | npm build + eslint 0 err |
 | F-11 | 后台前端 agent 报告里 git 操作失败一次 | cwd 漂移到 user-server | 主 Agent 约定：所有 git/npm 操作显式 cd 仓库根 | — |
 
+## 已修复（2026-10-11 P1 轮）
+
+| # | 失败 | 根因 | 修复 | 回归 |
+|---|---|---|---|---|
+| F-12 | mcp_credentials.api_key_hash 镜像/清空在生产 PG 失效 | char(64) 把空串填充成 64 空格，`== ""` 恒 false（无 PG 的本机测试抓不到） | 服务层统一 TrimSpace 口径 | PG 隧道实测（SSH 隧道连阿里云测试库） |
+| F-13 | 审计异步器断言竞态 | 后台 flush 循环与测试排空共享队列，行被取走未落账 | enqueued 收敛判据 + FlushMCPAuditForTest 确定性等待 | 同上 |
+| F-14 | 全量并发 + SSH 隧道下 TestE2E_KnowledgeIndexFlow / TestD14_5 假红 | 资源型 flake（单跑/合跑均绿） | 记录在案；观察 CI 复现情况 | 单跑+合跑验证 |
+
 ## 已豁免（带理由）
 
 | # | 项 | 理由 |
