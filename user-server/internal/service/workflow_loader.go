@@ -37,27 +37,6 @@ func (l *WorkflowLoader) LoadWorkflow(ctx context.Context, workflowID string) (*
 	return loadDefaultWorkflow(workflowID)
 }
 
-func (l *WorkflowLoader) ListAllWorkflows(ctx context.Context) ([]*MarketingWorkflow, error) {
-	var result []*MarketingWorkflow
-	rows, _ := ListAssetsFromDB("marketing_workflow")
-	seen := map[string]bool{}
-	for _, r := range rows {
-		var w MarketingWorkflow
-		if err := json.Unmarshal(r.Data, &w); err == nil {
-			w.ID = r.AssetID
-			w.Name = r.Name
-			result = append(result, &w)
-			seen[w.ID] = true
-		}
-	}
-	for id, w := range defaultWorkflows() {
-		if !seen[id] {
-			result = append(result, w)
-		}
-	}
-	return result, nil
-}
-
 func loadDefaultWorkflow(id string) (*MarketingWorkflow, error) {
 	if w, ok := defaultWorkflows()[id]; ok {
 		return w, nil

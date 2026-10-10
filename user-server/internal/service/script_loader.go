@@ -37,27 +37,6 @@ func (l *ScriptLoader) LoadScript(ctx context.Context, scriptID string) (*SalesS
 	return loadDefaultScript(scriptID)
 }
 
-func (l *ScriptLoader) ListAllScripts(ctx context.Context) ([]*SalesScript, error) {
-	var result []*SalesScript
-	rows, _ := ListAssetsFromDB("sales_script")
-	seen := map[string]bool{}
-	for _, r := range rows {
-		var s SalesScript
-		if err := json.Unmarshal(r.Data, &s); err == nil {
-			s.ID = r.AssetID
-			s.Name = r.Name
-			result = append(result, &s)
-			seen[s.ID] = true
-		}
-	}
-	for id, s := range defaultScripts() {
-		if !seen[id] {
-			result = append(result, s)
-		}
-	}
-	return result, nil
-}
-
 func loadDefaultScript(id string) (*SalesScript, error) {
 	if s, ok := defaultScripts()[id]; ok {
 		return s, nil

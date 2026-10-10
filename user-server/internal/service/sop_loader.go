@@ -44,27 +44,6 @@ func (l *SOPLoader) LoadSOP(ctx context.Context, sopID string) (*IndustrySOP, er
 	return loadDefaultSOP(sopID)
 }
 
-func (l *SOPLoader) ListAllSOPs(ctx context.Context) ([]*IndustrySOP, error) {
-	var result []*IndustrySOP
-	rows, _ := ListAssetsFromDB("industry_sop")
-	seen := map[string]bool{}
-	for _, r := range rows {
-		var s IndustrySOP
-		if err := json.Unmarshal(r.Data, &s); err == nil {
-			s.ID = r.AssetID
-			s.Name = r.Name
-			result = append(result, &s)
-			seen[s.ID] = true
-		}
-	}
-	for id, s := range defaultSOPs() {
-		if !seen[id] {
-			result = append(result, s)
-		}
-	}
-	return result, nil
-}
-
 func loadDefaultSOP(id string) (*IndustrySOP, error) {
 	if s, ok := defaultSOPs()[id]; ok {
 		return s, nil

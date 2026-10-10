@@ -22,16 +22,6 @@ func (m *e2eMockSender) SendMessage(_ context.Context, _ uint, _ int64, _ string
 	return m.err
 }
 
-func (m *e2eMockSender) SendWA(_ context.Context, _ uint, _, _ string) error {
-	atomic.AddInt32(&m.count, 1)
-	return m.err
-}
-
-func (m *e2eMockSender) SendFeishuMsg(_ context.Context, _ uint, _, _ string) error {
-	atomic.AddInt32(&m.count, 1)
-	return m.err
-}
-
 type e2eMockReachAdapter struct {
 	*e2eMockSender
 	telegramCalls int32

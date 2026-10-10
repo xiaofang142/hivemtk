@@ -411,6 +411,20 @@ service 包仅存的 2 条测试失败均归因他人进行中未提交 WIP（se
 - **已处置（I22，删除）**：全量 build rc=0、本卡 5 包 vet rc=0、gofmt 空、11 名 git grep 归零、五门 rc=0。
 - 方法论：扫描器按包收词会漏跨文件/跨行用点，**权威兜底必须 git grep 全语料**；`init` 永不入候选；死簇连带清恒假分支与孤儿 import。
 
+### B13 零引用方法与 card_access 死簇（2026-10-10 I24 已处置）
+
+- 源流：B9 竖第五段（函数 I19→类型 I20→var/const I21→未导出 I22→**方法 I24**）。
+- 读数：11502 方法 receiver-aware 扫描→19 零引用→剔 9 个**外部接口满足假阳性**
+  （测试桩给 gin.ResponseWriter / http.CloseNotifier / go-redis.Hook 供件，删即编译红）
+  →真死 10 方法（4×ListAll* 批量入口+2×e2e 旧名）+ **card_access 全链死簇 4 整文件 466 行**
+  （service 零构造零注入→repository 两接口→repo test→model（无 AutoMigrate 登记）；
+  与 I20 已删的 CardAccessService 接口合起来=从未接线的完整假实现）。
+- **已处置（I24，删除）**：全量 build rc=0、定向 vet 4 包 rc=0、repository+app 两包测试 ok、
+  删除名工作区 grep 归零、五门 rc=0。
+- 方法面方法论：token 级扫描**看不见包外语料**——涉测试桩/适配器必须人工核「赋值链
+  是否喂给外部接口」；同尾名（CardStatsResponse 撞 14 个 dto 尾名）复扫必须带词边界。
+- 边界：KEEP 9 方法登记为扫描器结构性盲区，方法面再扫需 receiver-aware+赋值链核验。
+
 ## 3. C 类：已诚实登记、不再谎报（保留资产，改掉说法）
 
 - `IntegrationReachAdapter.Recall` 与 bridge 的撤回拒绝（A9）。

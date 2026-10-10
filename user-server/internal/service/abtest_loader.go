@@ -43,27 +43,6 @@ func (l *ABTestLoader) LoadPlan(ctx context.Context, planID string) (*ABTestPlan
 	return loadDefaultABTest(planID)
 }
 
-func (l *ABTestLoader) ListAllPlans(ctx context.Context) ([]*ABTestPlan, error) {
-	var result []*ABTestPlan
-	rows, _ := ListAssetsFromDB("ab_test_plan")
-	seen := map[string]bool{}
-	for _, r := range rows {
-		var p ABTestPlan
-		if err := json.Unmarshal(r.Data, &p); err == nil {
-			p.ID = r.AssetID
-			p.Name = r.Name
-			result = append(result, &p)
-			seen[p.ID] = true
-		}
-	}
-	for id, p := range defaultABTests() {
-		if !seen[id] {
-			result = append(result, p)
-		}
-	}
-	return result, nil
-}
-
 func loadDefaultABTest(id string) (*ABTestPlan, error) {
 	if p, ok := defaultABTests()[id]; ok {
 		return p, nil
