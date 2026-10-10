@@ -66,6 +66,7 @@ help:
 	@echo ""
 	@echo "【代码质量】"
 	@echo "  make lint                 - golangci-lint 架构护栏"
+	@echo "  make lint-config-verify   - 校验 .golangci.yml 本身（JSON Schema，重试 3 次）"
 	@echo "  make vet                  - go vet"
 	@echo "  make test-go              - go test ./..."
 	@echo "  make go-cache-trim        - Go 构建缓存按分配量封顶（默认 dry-run；CAP=8 APPLY=1 才删）"
@@ -344,7 +345,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets
+.PHONY: lint lint-config-verify lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets
 
 # 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
 # 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
@@ -378,6 +379,38 @@ lint-version-check:
 # 架构护栏：分层依赖方向 + depguard 规则（提交前必跑）
 lint: lint-install lint-version-check
 	cd user-server && golangci-lint run ./...
+
+# 配置文件自身的校验门：写歪时唯一会出声的地方，所以它不能摘。
+# 为什么单独成一步并自带重试：v2.10.0 的 `golangci-lint config verify` 要先 HTTPS
+# 拉一次 JSON Schema（URL 由版本号拼出来，二进制里没有离线开关；配置文件顶部也不能
+# 声明 `$schema` 指向本地文件——实测写 `$schema:` 会被 v2 schema 判成
+# "additional properties '$schema' not allowed"）。原先这一步由 golangci-lint-action
+# 内部的 verify 顺带完成，一次请求不重试：实测出现过 runner 侧
+# `context deadline exceeded` 把整个 static-gates 作业带红，而同一份 .golangci.yml
+# 在前两笔提交上都校验通过——红因是网络抖动，不是配置。
+# 为什么不干脆 verify:false：`golangci-lint run` 对未知配置键是静默忽略的。实测在
+# run: 块里塞一行 totallyBogusKey: 1，config verify 退 3 并点名该键，run 却照常
+# 输出 "0 issues."——配置写歪时 depguard 可以无声失效，能报警的只有这道门。
+# 重试只吸收抖动：真配置错三次都红，每次的红因都由命令原样打出来。
+# ⚠️ 本 recipe 里读 shell 变量必须写 $${attempt}：`${attempt}` 会被 make 先展开成
+# 它自己的（空）变量，于是退出条件 [ "" -ge 3 ] 恒为假——三次上限根本不开火，
+# 配置真错时这里会无限重试。
+lint-config-verify: lint-install lint-version-check
+	@cd user-server; \
+	attempt=1; \
+	while true; do \
+		if golangci-lint config verify; then \
+			echo "OK: .golangci.yml 通过 JSON Schema 校验（第 $${attempt} 次尝试）"; \
+			exit 0; \
+		fi; \
+		echo "WARN: 第 $${attempt} 次 config verify 未通过（红因见上一条命令输出）"; \
+		if [ "$${attempt}" -ge 3 ]; then \
+			echo "FAIL: .golangci.yml 三次校验均未通过"; \
+			exit 1; \
+		fi; \
+		attempt=$$((attempt + 1)); \
+		sleep 3; \
+	done
 
 vet:
 	cd user-server && go vet ./...

@@ -30,6 +30,10 @@ on:
       # 少了任何一行，改判据/改夹具的提交就不重跑这道门（同一口井：#63 那次教训）。
       - 'scripts/check-ci-pg-capacity.py'
       - 'scripts/check-ci-pg-capacity.test.sh'
+      # `make fmt-check` 与 `make lint-config-verify` 两步的判据就写在仓根 Makefile 的配方里：
+      # Makefile 不进触发面 ⇒ "只改这两道门的配方"的提交根本不重跑它们。
+      # 由 scripts/check-ci-gate-paths.py 第 4 条判据常驻守着（含 pull_request 那份镜像）。
+      - 'Makefile'
       - '.github/workflows/user-server-ci.yml'
   pull_request:
     branches: [master, main]
@@ -51,6 +55,8 @@ on:
       - 'scripts/test-nil-deref.baseline'
       - 'scripts/check-ci-pg-capacity.py'
       - 'scripts/check-ci-pg-capacity.test.sh'
+      # 与上面 push 段同因：`make fmt-check`／`make lint-config-verify` 的判据在 Makefile 里。
+      - 'Makefile'
       - '.github/workflows/user-server-ci.yml'
 
 # ============================================================================
@@ -206,6 +212,33 @@ jobs:
         # 现在直接调 Makefile 里那份修好的实现：**同一份判据，不再有两处口径**。
         run: make fmt-check
 
+      - name: 安装 golangci-lint（装一次，下面两步共用同一份二进制）
+        # 拆成「装 / 校验配置 / 跑分析」三步的原因：action 的 verify（默认 true）在
+        # 分析前要用**一次不重试的 HTTPS 请求**去拉
+        # https://golangci-lint.run/jsonschema/golangci.v<版本>.jsonschema.json。
+        # 实测 2026-10-11 master tip 上本作业整步红：
+        #   failing loading "...golangci.v2.10.jsonschema.json": context deadline exceeded
+        # 而同一份 user-server/.golangci.yml 在前两笔提交上该校验均为绿 ——
+        # 红的是 runner 到 golangci-lint.run 的网络抖动，代码侧无事可修。
+        # 装好的二进制对后续步骤可见：action 源码 src/run.ts 在 installOnly 提前返回
+        # **之前**执行 core.addPath(path.dirname(binPath))，所以下面的 make 与
+        # install-mode: none 都走 PATH，不再各装一份。
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.10.0
+          install-only: true
+          working-directory: user-server
+
+      - name: golangci-lint 配置校验（JSON Schema，上限 3 次）
+        # 判据与"为什么不干脆 verify: false"全写在 Makefile 的 lint-config-verify
+        # 注释里（要点：`golangci-lint run` 对配置里的未知键静默忽略，实测退 3 报错的
+        # 只有 config verify，run 照样打 "0 issues."——摘掉这道门等于给 depguard
+        # 留一条无声失效的路）。上限 3 次只吸收网络抖动，真配置错三次都红。
+        # 版本 pin 只保留在上面安装步骤那一处：Makefile 的 lint-version-check 用
+        # awk 取 workflow 里**第一条** `version: vA.B.C` 与本机制品对账，
+        # 出现第二份 pin 会让它对着一个不再被使用的值把关。
+        run: make lint-config-verify
+
       - name: golangci-lint（架构护栏 depguard）
         # P0-1：分层依赖方向护栏，规则见 user-server/.golangci.yml
         # 2026-09-19 审计（第二十五轮）：version v2.1.6 → v2.10.0。
@@ -223,7 +256,8 @@ jobs:
         # ≥ 目标 1.26，config 加载不会再 exit 3。
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.10.0
+          install-mode: none
+          verify: false
           working-directory: user-server
           args: --timeout=10m
 
