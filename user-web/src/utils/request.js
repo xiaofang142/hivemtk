@@ -231,9 +231,16 @@ const addInterceptors = () => {
           case 500:
           case 502:
           case 503:
-          case 504:
-            if (!silent) showToast(t('http.serverError'))
+          case 504: {
+            // 5xx 里有一大类是"后端已经说清了原因"的：例如 order-drafts 的 fail-closed 503
+            // 会带着"服务未装配 + 该翻哪个开关"的 message。原先这里一律替换成通用文案
+            // 「服务器内部错误」，把值班唯一需要的那句话吞掉了（实测线上 /dashboard/drafts
+            // 页面只弹一句通用错误，运维看不出是开关没开）。有服务端 message 就用它，
+            // 完全没有才回落到通用文案。
+            const serverMsg = extractServerMessage(data, '')
+            if (!silent) showToast(serverMsg || t('http.serverError'))
             break
+          }
           default:
             if (!silent) showToast(msg)
         }

@@ -15,7 +15,6 @@ AI_DEBOUNCE_SECONDS	待补文档（第三十五轮登记为债）；读取点 us
 ALERT_EMAIL_ENABLED	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
 ALERT_EMAIL_RECIPIENTS	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
 ALERT_WEBHOOK_URL	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
-ALLOWED_WS_ORIGINS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/ws_origin.go
 AUTO_LOGIN_ENABLED	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/admin.go
 BRAIN_TOKEN_BUDGET	待补文档（第三十五轮登记为债）；读取点 user-server/internal/browser_automation/service/brain_constants.go
 BROWSER_AUDIT_RETENTION_DAYS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/browser_automation/service/retention.go
