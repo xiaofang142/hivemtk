@@ -29,11 +29,18 @@ func (c *AuthController) PublicConfig(ctx *gin.Context) {
 	cfg, err := service.NewSystemConfigService().GetConfig(ctx.Request.Context())
 	if err != nil {
 		// 读失败按保守值返回：站点名空、注册关闭——前端隐藏入口而非误开放
-		response.Success(ctx, gin.H{"site_name": "", "enable_register": false}, "ok")
+		response.Success(ctx, gin.H{"site_name": "", "enable_register": false, "register_mode": ""}, "ok")
 		return
+	}
+	mode := cfg.RegisterMode
+	if mode == "" {
+		mode = service.RegisterModeDefaultTeam
 	}
 	response.Success(ctx, gin.H{
 		"site_name":       cfg.Name,
 		"enable_register": cfg.EnableRegister,
+		// 注册准入模式（SaaS P2）：default_team/create_team/invite——
+		// 登录页注册表单据此渲染 邀请码/团队名 输入位
+		"register_mode": mode,
 	}, "ok")
 }

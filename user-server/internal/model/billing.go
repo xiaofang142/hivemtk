@@ -22,6 +22,10 @@ type BillingPlan struct {
 	// PriceCents 月付价格（分）；YearlyPriceCents 年付价格（分）
 	PriceCents       int64 `gorm:"column:price_cents;not null;default:0" json:"price_cents"`
 	YearlyPriceCents int64 `gorm:"column:yearly_price_cents;not null;default:0" json:"yearly_price_cents"`
+	// PriceMode 计费方式（支持组合）：flat=固定月价（PriceCents）；
+	// per_seat=按人头（PerSeatCents × 当期成员数）。混合计费 = 两类方案各出一单。
+	PriceMode    string `gorm:"column:price_mode;type:varchar(16);not null;default:flat" json:"price_mode"`
+	PerSeatCents int64  `gorm:"column:per_seat_cents;not null;default:0" json:"per_seat_cents"`
 	// MaxUsers 团队成员数上限（0=不限）；MaxMessagesMonthly 月消息量上限（0=不限）
 	MaxUsers           int   `gorm:"column:max_users;not null;default:0" json:"max_users"`
 	MaxMessagesMonthly int64 `gorm:"column:max_messages_monthly;not null;default:0" json:"max_messages_monthly"`

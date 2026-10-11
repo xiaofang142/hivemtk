@@ -68,7 +68,18 @@ type RegisterRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Phone    string `json:"phone,omitempty"`
 	RealName string `json:"real_name,omitempty"`
+	// InviteCode 邀请码（invite 模式必填；default_team 模式可选=加入指定团队）
+	InviteCode string `json:"invite_code,omitempty"`
+	// TeamName 注册即建团队模式下的团队名（create_team 模式；空=自动命名）
+	TeamName string `json:"team_name,omitempty"`
 }
+
+// 注册准入模式（system_config.register_mode）。
+const (
+	RegisterModeDefaultTeam = "default_team"
+	RegisterModeCreateTeam  = "create_team"
+	RegisterModeInvite      = "invite"
+)
 
 // AuthService 认证服务
 type AuthService struct {
@@ -362,24 +373,68 @@ func (s *AuthService) Register(ctx context.Context, req *RegisterRequest) (*Logi
 		return nil, ErrEmailExists
 	}
 
-	// 多租户 P0：自助注册归入「默认团队」（P2 起改为注册即建团队），
-	// role=user + 无团队在隔离开启后等于什么都看不到——注册兜底归属必须在这里定。
-	teamID := EnsureDefaultTeamID(ctx)
+	// 多租户准入（SaaS P2）：按 register_mode 三分——
+	//   create_team：注册即建团队（注册人=team_admin，满足"每个团队有自己的管理员"）；
+	//   invite：必须持有效邀请码，按码归团队；
+	//   default_team：归默认团队（邀请码可选，持码=加入指定团队）。
+	registerMode := s.registerMode(ctx)
+	var targetTeamID uint
+	var newTeam *model.Team
+	userRole := model.SystemUserRoleUser
+
+	switch registerMode {
+	case RegisterModeCreateTeam:
+		teamName := strings.TrimSpace(req.TeamName)
+		if teamName == "" {
+			teamName = username + " 的团队"
+		}
+		newTeam = &model.Team{Name: teamName, Plan: model.TeamPlanFree,
+			Status: model.TeamStatusActive, BrandName: teamName}
+		userRole = model.SystemUserRoleTeamAdmin
+	case RegisterModeInvite:
+		if strings.TrimSpace(req.InviteCode) == "" {
+			return nil, errors.New("本站注册需要邀请码")
+		}
+	}
+	if strings.TrimSpace(req.InviteCode) != "" && registerMode != RegisterModeCreateTeam {
+		invRepo := repository.NewInviteCodeRepo()
+		inv, err := invRepo.Consume(ctx, strings.TrimSpace(req.InviteCode))
+		if err != nil {
+			return nil, err
+		}
+		targetTeamID = inv.TeamID
+	}
+	if targetTeamID == 0 && registerMode != RegisterModeCreateTeam {
+		targetTeamID = EnsureDefaultTeamID(ctx)
+	}
+
 	user := &model.SystemUser{
 		Username:  username,
 		Password:  password,
 		Email:     email,
 		Phone:     strings.TrimSpace(req.Phone),
 		RealName:  strings.TrimSpace(req.RealName),
-		Role:      model.SystemUserRoleUser,
-		TeamID:    teamID,
-		DataScope: model.DefaultDataScopeForRole(model.SystemUserRoleUser),
+		Role:      userRole,
+		TeamID:    targetTeamID,
+		DataScope: model.DefaultDataScopeForRole(userRole),
 		Status:    1,
 		Enabled:   true,
+	}
+	if registerMode == RegisterModeCreateTeam {
+		// 团队与用户互相锁定归属：先建团队，建完用户回填主管理员
+		if err := repository.NewTeamRepository().Create(ctx, newTeam); err != nil {
+			return nil, errors.New("创建团队失败: " + err.Error())
+		}
+		user.TeamID = newTeam.ID
 	}
 	if err := s.systemUserRepo.Create(ctx, user); err != nil {
 		logger.Error(err, "Register 创建用户失败: "+username)
 		return nil, errors.New("注册失败: " + err.Error())
+	}
+	if newTeam != nil {
+		// 回填团队主管理员（注册人=团队管理员）
+		_ = repository.NewTeamRepository().Update(ctx, newTeam.ID,
+			map[string]any{"owner_user_id": user.ID})
 	}
 
 	if user.Email != "" {
@@ -482,4 +537,17 @@ func (s *AuthService) InitAdmin(ctx context.Context, username, password, email s
 
 	logger.Info("InitAdmin 超管创建成功: " + username)
 	return nil
+}
+
+// registerMode 读注册准入模式（缺省/读失败回落 default_team——旧行为最稳）。
+func (s *AuthService) registerMode(ctx context.Context) string {
+	cfg, err := NewSystemConfigService().GetConfig(ctx)
+	if err != nil || cfg == nil || cfg.RegisterMode == "" {
+		return RegisterModeDefaultTeam
+	}
+	switch cfg.RegisterMode {
+	case RegisterModeCreateTeam, RegisterModeInvite, RegisterModeDefaultTeam:
+		return cfg.RegisterMode
+	}
+	return RegisterModeDefaultTeam
 }

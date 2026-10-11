@@ -16,6 +16,9 @@
           <el-table v-loading="plansLoading" :data="plans" border size="small">
             <el-table-column prop="code" label="编码" width="110" />
             <el-table-column prop="name" label="名称" width="120" />
+            <el-table-column label="计费方式" width="90">
+              <template #default="{ row }">{{ row.price_mode === 'per_seat' ? '按人头' : '固定' }}</template>
+            </el-table-column>
             <el-table-column label="月付" width="100">
               <template #default="{ row }">¥{{ (row.price_cents / 100).toFixed(2) }}</template>
             </el-table-column>
@@ -142,8 +145,17 @@
         <el-form-item label="名称">
           <el-input v-model="planForm.name" maxlength="60" />
         </el-form-item>
-        <el-form-item label="月付（元）">
+        <el-form-item label="计费方式">
+          <el-radio-group v-model="planForm.price_mode">
+            <el-radio value="flat">固定月价</el-radio>
+            <el-radio value="per_seat">按人头</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="planForm.price_mode === 'flat'" label="月付（元）">
           <el-input-number v-model="planForm.priceYuan" :min="0" :precision="2" style="width: 160px" />
+        </el-form-item>
+        <el-form-item v-if="planForm.price_mode === 'per_seat'" label="人头单价（元/人/月）">
+          <el-input-number v-model="planForm.seatYuan" :min="0" :precision="2" style="width: 160px" />
         </el-form-item>
         <el-form-item label="年付（元）">
           <el-input-number v-model="planForm.yearlyYuan" :min="0" :precision="2" style="width: 160px" />
@@ -329,8 +341,8 @@ const openPlanDialog = (row) => {
   planEditing.value = !!row
   planEditingId.value = row?.id || 0
   planForm.value = row
-    ? { code: row.code, name: row.name, priceYuan: row.price_cents / 100, yearlyYuan: row.yearly_price_cents / 100, max_users: row.max_users, max_messages_monthly: row.max_messages_monthly, status: row.status, remark: row.remark || '' }
-    : { code: '', name: '', priceYuan: 0, yearlyYuan: 0, max_users: 0, max_messages_monthly: 0, status: 'active', remark: '' }
+    ? { code: row.code, name: row.name, price_mode: row.price_mode || 'flat', priceYuan: row.price_cents / 100, seatYuan: (row.per_seat_cents || 0) / 100, yearlyYuan: row.yearly_price_cents / 100, max_users: row.max_users, max_messages_monthly: row.max_messages_monthly, status: row.status, remark: row.remark || '' }
+    : { code: '', name: '', price_mode: 'flat', priceYuan: 0, seatYuan: 0, yearlyYuan: 0, max_users: 0, max_messages_monthly: 0, status: 'active', remark: '' }
   planDialogVisible.value = true
 }
 
@@ -340,6 +352,8 @@ const savePlan = async () => {
     const payload = {
       code: planForm.value.code,
       name: planForm.value.name,
+      price_mode: planForm.value.price_mode || 'flat',
+      per_seat_cents: Math.round((planForm.value.seatYuan || 0) * 100),
       price_cents: Math.round((planForm.value.priceYuan || 0) * 100),
       yearly_price_cents: Math.round((planForm.value.yearlyYuan || 0) * 100),
       max_users: planForm.value.max_users || 0,

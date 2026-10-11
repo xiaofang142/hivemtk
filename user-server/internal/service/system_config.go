@@ -98,6 +98,7 @@ func (s *SystemConfigService) defaultConfig(ctx context.Context) *model.SystemCo
 		ICPRecord:            "",
 		PoliceRecord:         "",
 		EnableRegister:       true,
+		RegisterMode:         "default_team",
 		EnableEmailMarketing: true,
 		EnableRAG:            true,
 		MaintenanceMode:      false,

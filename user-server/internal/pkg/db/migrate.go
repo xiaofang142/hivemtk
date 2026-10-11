@@ -374,6 +374,8 @@ func allModels() []any {
 		&model.TeamSubscription{},
 		&model.BillingRecord{},
 		&rbac.RolePermission{},
+		// InviteCode（SaaS P2 准入）：漏登记 = 邀请码模式一开就 500。
+		&model.InviteCode{},
 		// ExternalKBConnector / ExternalKBSyncItem：第三方知识库连接器与同步幂等明细。
 		&model.ExternalKBConnector{},
 		&model.ExternalKBSyncItem{},

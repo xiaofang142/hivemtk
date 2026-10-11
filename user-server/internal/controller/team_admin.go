@@ -100,17 +100,19 @@ func UpdateTeam(ctx *gin.Context) {
 		return
 	}
 	var req struct {
-		Name        *string `json:"name"`
-		Plan        *string `json:"plan"`
-		Status      *string `json:"status"`
-		Remark      *string `json:"remark"`
-		OwnerUserID *uint   `json:"owner_user_id"`
+		Name         *string `json:"name"`
+		Plan         *string `json:"plan"`
+		Status       *string `json:"status"`
+		Remark       *string `json:"remark"`
+		OwnerUserID  *uint   `json:"owner_user_id"`
+		BrandName    *string `json:"brand_name"`
+		BrandLogoURL *string `json:"brand_logo_url"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "请求体解析失败: "+err.Error())
 		return
 	}
-	t, err := svc.Update(ctx.Request.Context(), id, req.Name, req.Plan, req.Status, req.Remark, req.OwnerUserID)
+	t, err := svc.Update(ctx.Request.Context(), id, req.Name, req.Plan, req.Status, req.Remark, req.OwnerUserID, req.BrandName, req.BrandLogoURL)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return

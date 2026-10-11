@@ -160,8 +160,15 @@ func (s *BillingAdminService) CreateRecord(ctx context.Context, teamID, planID u
 	if months <= 0 {
 		months = 1
 	}
+	// 组合计费出单口径：flat=月价×月数；per_seat=人头单价×当期成员数×月数。
 	if amountCents == 0 {
-		amountCents = plan.PriceCents * int64(months)
+		switch plan.PriceMode {
+		case "per_seat":
+			cnt, _ := s.teams.CountMembers(ctx, teamID)
+			amountCents = plan.PerSeatCents * int64(cnt) * int64(months)
+		default:
+			amountCents = plan.PriceCents * int64(months)
+		}
 	}
 	row := &model.BillingRecord{
 		TeamID: teamID, PlanCode: plan.Code, AmountCents: amountCents,

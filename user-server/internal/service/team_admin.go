@@ -91,7 +91,7 @@ func (s *TeamAdminService) Create(ctx context.Context, name, plan, remark string
 }
 
 // Update 名称/档位/状态/主管理员/备注（部分更新，nil=不动）。
-func (s *TeamAdminService) Update(ctx context.Context, id uint, name, plan, status, remark *string, ownerUserID *uint) (*model.Team, error) {
+func (s *TeamAdminService) Update(ctx context.Context, id uint, name, plan, status, remark *string, ownerUserID *uint, brandName, brandLogoURL *string) (*model.Team, error) {
 	t, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -117,6 +117,12 @@ func (s *TeamAdminService) Update(ctx context.Context, id uint, name, plan, stat
 	}
 	if ownerUserID != nil {
 		updates["owner_user_id"] = *ownerUserID
+	}
+	if brandName != nil {
+		updates["brand_name"] = *brandName
+	}
+	if brandLogoURL != nil {
+		updates["brand_logo_url"] = *brandLogoURL
 	}
 	if len(updates) == 0 {
 		return t, nil

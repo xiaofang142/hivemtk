@@ -292,6 +292,14 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		teamAuth.GET("/team/users", controller.MyTeamUsers)
 		teamAuth.PUT("/team/users/:userId/role", controller.SetMyTeamUserRole)
 		teamAuth.GET("/team/billing", controller.MyTeamBilling)
+		// 邀请码（SaaS P2 准入）：团队管理员发/管本团队的码
+		teamAuth.GET("/team/invite-codes", controller.MyTeamInvites)
+		teamAuth.POST("/team/invite-codes", controller.CreateMyTeamInvite)
+		teamAuth.POST("/team/invite-codes/:codeId/disable", controller.DisableMyTeamInvite)
+		// 平台管理员面（任意团队发码/停码）
+		authPlainAdmin.GET("/manage/teams/:id/invite-codes", controller.ListTeamInvites)
+		authPlainAdmin.POST("/manage/teams/:id/invite-codes", controller.CreateTeamInvite)
+		authPlainAdmin.POST("/manage/teams/:id/invite-codes/:codeId/disable", controller.DisableTeamInvite)
 		// MCP 调用审计与 Skill 注册表（2026-10-10）：凭证对的口径与上组一致
 		// （authPlainAdmin + AdminAuthMiddleware）。两项此前只有"签发了哪些凭证"，
 		// 现在补上"谁调了什么工具、成没成"与"有哪些 Skill、绑定哪把凭证"。

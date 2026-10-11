@@ -20,10 +20,14 @@ type Team struct {
 	// OwnerUserID 团队主管理员（system_users.id，可 NULL=暂无）
 	OwnerUserID *uint `gorm:"column:owner_user_id;index" json:"owner_user_id"`
 	// MemberCount 成员数（非持久化列，TeamRepository.List 聚合填充）
-	MemberCount int64     `gorm:"-" json:"member_count"`
-	Remark      string    `gorm:"type:varchar(255)" json:"remark"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	MemberCount int64  `gorm:"-" json:"member_count"`
+	Remark      string `gorm:"type:varchar(255)" json:"remark"`
+	// BrandName / BrandLogoURL 团队品牌（SaaS P2）：登录页/团队页展示位，
+	// 平台级品牌仍在 system_config（LogoURL/SiteName）——团队级只在自身触达面生效。
+	BrandName    string    `gorm:"column:brand_name;type:varchar(64)" json:"brand_name"`
+	BrandLogoURL string    `gorm:"column:brand_logo_url;type:varchar(500)" json:"brand_logo_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func (Team) TableName() string { return "teams" }

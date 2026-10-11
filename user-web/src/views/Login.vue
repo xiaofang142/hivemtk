@@ -73,6 +73,17 @@
             <el-form-item prop="email">
               <el-input v-model="loginForm.email" :placeholder="t('core.login.emailPlaceholder')" prefix-icon="Message" size="large" />
             </el-form-item>
+            <el-form-item v-if="registerMode === 'invite' || registerMode === 'default_team'">
+              <el-input
+                v-model="registerForm.invite_code"
+                :placeholder="registerMode === 'invite' ? '邀请码（必填）' : '邀请码（选填，填了加入对应团队）'"
+                prefix-icon="Ticket"
+                size="large"
+              />
+            </el-form-item>
+            <el-form-item v-if="registerMode === 'create_team'">
+              <el-input v-model="registerForm.team_name" placeholder="团队名称（注册即创建你的团队）" prefix-icon="OfficeBuilding" size="large" />
+            </el-form-item>
           </div>
 
           <div class="register-switch">
@@ -118,6 +129,9 @@ const loginForm = reactive({
 // 自助注册：开关由公开配置 /api/public/config 提供（未登录可取）
 const mode = ref('login')
 const enableRegister = ref(false)
+const registerMode = ref('default_team')
+const registerMetaReady = ref(false)
+const registerForm = reactive({ invite_code: '', team_name: '' })
 const switchMode = (m) => { mode.value = m }
 
 const handleRegister = async () => {
@@ -132,7 +146,9 @@ const handleRegister = async () => {
     await http.post('/api/auth/register', {
       username: loginForm.username,
       password: loginForm.password,
-      email: loginForm.email
+      email: loginForm.email,
+      invite_code: registerForm.invite_code || undefined,
+      team_name: registerForm.team_name || undefined
     })
     ElMessage.success(t('core.login.registerSuccess'))
     mode.value = 'login'
@@ -156,6 +172,8 @@ onMounted(() => {
     .then((res) => {
       const data = res?.data ?? res
       enableRegister.value = !!data?.enable_register
+      registerMode.value = data?.mode || 'default_team'
+      registerMetaReady.value = true
     })
     .catch(() => { enableRegister.value = false })
 })

@@ -3,8 +3,8 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>团队管理（租户）</span>
-          <el-button type="primary" size="small" @click="openCreate">新建团队</el-button>
+          <span>{{ isPlatform ? '团队管理（租户）' : '我的团队' }}</span>
+          <el-button v-if="isPlatform" type="primary" size="small" @click="openCreate">新建团队</el-button>
         </div>
       </template>
 
@@ -12,11 +12,40 @@
         type="info"
         :closable="false"
         show-icon
-        title="超级管理员专属：全量管理所有团队。团队管理员（team_admin）只能在「我的团队」里管本团队成员；成员调拨后该用户旧令牌立即作废，需重新登录。"
+        :title="isPlatform
+          ? '超级管理员视角：全量管理所有团队。成员调拨后该用户旧令牌立即作废，需重新登录。'
+          : '团队管理员视角：仅本团队（服务端强制）。可管理成员、生成邀请码、查看订阅与账单。'"
         style="margin-bottom: 12px"
       />
 
-      <el-table v-loading="loading" :data="rows" border size="small">
+      <!-- 团队管理员：本团队信息 + 订阅账单卡 -->
+      <template v-if="!isPlatform">
+        <el-descriptions v-if="myTeam" :column="3" border size="small" style="margin-bottom: 12px">
+          <el-descriptions-item label="团队名称">{{ myTeam.name }}</el-descriptions-item>
+          <el-descriptions-item label="计费档位">{{ myTeam.plan }}</el-descriptions-item>
+          <el-descriptions-item label="品牌名">{{ myTeam.brand_name || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="备注" :span="3">{{ myTeam.remark || '—' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-descriptions v-if="myBilling" :column="3" border size="small" style="margin-bottom: 12px" title="订阅与账单">
+          <el-descriptions-item label="当前方案">{{ myBilling.subscription?.plan_code || '未订阅' }}</el-descriptions-item>
+          <el-descriptions-item label="到期时间">{{ fmtTime(myBilling.subscription?.ends_at) }}</el-descriptions-item>
+          <el-descriptions-item label="自动续费">{{ myBilling.subscription?.auto_renew ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="最近账单" :span="3">
+            <template v-if="(myBilling.records || []).length">
+              <el-tag
+                v-for="r in myBilling.records.slice(0, 5)"
+                :key="r.id"
+                size="small"
+                :type="r.status === 'paid' ? 'success' : r.status === 'pending' ? 'warning' : 'info'"
+                style="margin-right: 6px"
+              >¥{{ (r.amount_cents / 100).toFixed(2) }}（{{ { pending: '应收', paid: '已收', void: '作废' }[r.status] }}）</el-tag>
+            </template>
+            <span v-else class="muted">暂无账单</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </template>
+
+      <el-table v-if="isPlatform" v-loading="loading" :data="rows" border size="small">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="团队名称" min-width="140" />
         <el-table-column label="计费档位" width="100">
@@ -106,6 +135,33 @@
         <el-input v-model="moveUserId" placeholder="输入用户 ID 调入本团队" style="width: 220px" size="small" />
         <el-button type="primary" size="small" :loading="moving" @click="doMove">调入成员</el-button>
       </div>
+      <div style="margin-bottom: 16px">
+        <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px">
+          <span style="font-weight: 600">邀请码</span>
+          <el-button size="small" type="primary" plain @click="generateInvite">生成邀请码</el-button>
+        </div>
+        <el-table v-if="invites.length" :data="invites" border size="small">
+          <el-table-column label="邀请码" min-width="140">
+            <template #default="{ row }"><code>{{ row.code }}</code></template>
+          </el-table-column>
+          <el-table-column label="已用/上限" width="100">
+            <template #default="{ row }">{{ row.used_count }}/{{ row.max_uses || '∞' }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
+                {{ row.status === 'active' ? '可用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button v-if="row.status === 'active'" size="small" type="warning" plain @click="disableInvite(row)">停用</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-else class="muted">暂无邀请码</div>
+      </div>
       <el-table v-loading="membersLoading" :data="members" border size="small">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="username" label="用户名" min-width="120" />
@@ -145,9 +201,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { teamAdminApi } from '@/api/teamAdmin'
+import { teamAdminApi, myTeamApi } from '@/api/teamAdmin'
+import { http } from '@/utils/request'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 const rows = ref([])
 const loading = ref(false)
@@ -170,7 +230,36 @@ const moving = ref(false)
 
 const fmtTime = (v) => (v ? String(v).replace('T', ' ').slice(0, 19) : '—')
 
+// 多租户角色自适应（合并 MyTeam）：admin=平台全量；team_admin=仅本团队
+const isPlatform = computed(() => userStore.role === 'admin')
+const myTeam = ref(null)
+const myBilling = ref(null)
+const memberPage = ref(1)
+const memberTotal = ref(0)
+// 邀请码（管理员抽屉按团队 / 团队管理员本团队）
+const invites = ref([])
+const invitesLoading = ref(false)
+
 const load = async () => {
+  if (!isPlatform.value) {
+    // 团队管理员：本团队详情 + 成员 + 订阅账单
+    try {
+      const res = await myTeamApi.detail()
+      myTeam.value = (res?.data ?? res ?? {}).team ?? null
+    } catch { myTeam.value = null }
+    try {
+      const res = await myTeamApi.members({ page: memberPage.value, size })
+      const data = res?.data ?? res ?? {}
+      members.value = data.list ?? []
+      memberTotal.value = data.total ?? 0
+    } catch { members.value = [] }
+    try {
+      const res = await http.get('/api/team/billing')
+      myBilling.value = res?.data ?? res ?? null
+    } catch { myBilling.value = null }
+    await loadInvites()
+    return
+  }
   loading.value = true
   try {
     const res = await teamAdminApi.list({ page: page.value, size })
@@ -246,6 +335,7 @@ const openMembers = (row) => {
   current.value = row
   membersVisible.value = true
   loadMembers()
+  loadInvites()
 }
 
 const loadMembers = async () => {
@@ -259,13 +349,70 @@ const loadMembers = async () => {
   }
 }
 
+// 邀请码：平台管理员按团队 / 团队管理员本团队
+const loadInvites = async () => {
+  invitesLoading.value = true
+  try {
+    const res = isPlatform.value && current.value.id
+      ? await http.get(`/api/manage/teams/${current.value.id}/invite-codes`)
+      : await http.get('/api/team/invite-codes')
+    invites.value = (res?.data ?? res ?? {}).list ?? []
+  } catch {
+    invites.value = []
+  } finally {
+    invitesLoading.value = false
+  }
+}
+
+const generateInvite = async () => {
+  const teamID = isPlatform.value ? current.value.id : null
+  if (isPlatform.value && !teamID) return
+  const { value } = await ElMessageBox.prompt(
+    '有效期（天，留空=永久）', '生成邀请码', {
+      inputPlaceholder: '7',
+      inputPattern: /^\d*$/,
+      inputErrorMessage: '请输入数字'
+    }).catch(() => ({ value: null }))
+  if (value === null) return
+  const days = Number(value) || 0
+  try {
+    const res = isPlatform.value
+      ? await http.post(`/api/manage/teams/${teamID}/invite-codes`, { expires_days: days })
+      : await http.post('/api/team/invite-codes', { expires_days: days })
+    const code = (res?.data ?? res ?? {})?.invite?.code
+    ElMessage.success(`邀请码已生成：${code}`)
+    await loadInvites()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '生成失败')
+  }
+}
+
+const disableInvite = async (row) => {
+  try {
+    if (isPlatform.value) {
+      await http.post(`/api/manage/teams/${current.value.id}/invite-codes/${row.id}/disable`)
+    } else {
+      await http.post(`/api/team/invite-codes/${row.id}/disable`)
+    }
+    ElMessage.success('已停用')
+    await loadInvites()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '操作失败')
+  }
+}
+
 const setRole = async (row, role) => {
   const label = role === 'team_admin' ? '设为团队管理员' : '撤为普通成员'
   await ElMessageBox.confirm(`确认将用户「${row.username}」${label}？`, '确认', { type: 'warning' })
   try {
-    await teamAdminApi.setMemberRole(current.value.id, row.id, role)
+    if (isPlatform.value) {
+      await teamAdminApi.setMemberRole(current.value.id, row.id, role)
+    } else {
+      await myTeamApi.setMemberRole(row.id, role)
+    }
     ElMessage.success('已更新')
     await loadMembers()
+    if (!isPlatform.value) await load()
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '操作失败')
   }
