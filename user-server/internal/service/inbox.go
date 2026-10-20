@@ -825,7 +825,27 @@ func (s *InboxService) GetMessagesByConversation(ctx context.Context, conversati
 
 	var hubs []*model.MessageHub
 	if s.hubRepo != nil {
-		hubs, _ = s.hubRepo.ListByConversationContext(ctx, conv.Platform, conv.AccountID, conv.CustomerID)
+		ctxHubs, _ := s.hubRepo.ListByConversationContext(ctx, conv.Platform, conv.AccountID, conv.CustomerID)
+		seenHubIDs := make(map[uint]struct{}, len(ctxHubs))
+		for _, h := range ctxHubs {
+			if h == nil {
+				continue
+			}
+			seenHubIDs[h.ID] = struct{}{}
+			hubs = append(hubs, h)
+		}
+		if conv.ConversationID != "" {
+			convHubs, _ := s.hubRepo.ListByConversationID(ctx, conv.ConversationID)
+			for _, h := range convHubs {
+				if h == nil {
+					continue
+				}
+				if _, exists := seenHubIDs[h.ID]; !exists {
+					seenHubIDs[h.ID] = struct{}{}
+					hubs = append(hubs, h)
+				}
+			}
+		}
 	}
 
 	var sms []*model.SessionMessage

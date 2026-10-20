@@ -300,7 +300,7 @@ func (s *messagesSeeder) buildMessageHub(accounts []model.PlatformAccount, ctx *
 			ReceiverName:   fmt.Sprintf("客服%d号", (i%3)+1),
 			Content:        content,
 			MediaURL:       fmt.Sprintf("https://example.com/seed/hub-media-%d", i+1),
-			ConversationID: fmt.Sprintf("seed-conv-%d", (i%8)+1),
+			ConversationID: fmt.Sprintf("seed-conv-%d", (i%15)+1),
 			IsGroup:        isGroup,
 			GroupID: func() string {
 				if isGroup {

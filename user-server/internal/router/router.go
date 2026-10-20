@@ -182,7 +182,13 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	})
 
 	r.Use(corsMiddleware())
-	r.Use(gin.Recovery())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		logger.Errorf("[PanicRecovery] path=%s err=%v", c.Request.URL.Path, recovered)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"code":    500,
+			"message": "服务器内部错误",
+		})
+	}))
 
 	// 全局请求体封顶（R19）：注册位置必须在**任何会读 body 的中间件与鉴权之前** ——
 	// gin 的引擎级 Use 只对注册它之后登记的路由生效，晚一步就等于给已注册的路由留口子。

@@ -462,8 +462,18 @@ func NewCustomerServiceAgentService() *CustomerServiceAgentService {
 //
 // 注意：所有持久化操作走 repo（含 agentStatusRepo）。
 func NewCustomerServiceAgentServiceViaPort(agentSvc *AIAgentService) *CustomerServiceAgentService {
+	repo := repository.NewCustomerServiceAgentRepository()
+	repo.SetDB(context.Background(), repository.GetDB())
+	agentRepo := repository.NewAIAgentRepository()
+	agentRepo.SetDB(context.Background(), repository.GetDB())
+	if agentSvc == nil {
+		agentSvc = NewAIAgentService()
+	}
 	return &CustomerServiceAgentService{
-		agentSvc: agentSvc,
+		repo:            repo,
+		agentRepo:       agentRepo,
+		agentSvc:        agentSvc,
+		agentStatusRepo: repository.NewAgentStatusRepository(),
 	}
 }
 

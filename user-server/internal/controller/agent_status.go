@@ -88,7 +88,17 @@ func (c *AgentStatusController) GetMyAgent(ctx *gin.Context) {
 		userID = uint(v)
 	case int:
 		userID = uint(v)
+	case int64:
+		userID = uint(v)
+	case string:
+		if parsed, err := strconv.ParseUint(v, 10, 64); err == nil {
+			userID = uint(parsed)
+		}
 	default:
+		response.Error(ctx, http.StatusUnauthorized, "无效的用户标识", "")
+		return
+	}
+	if userID == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "无效的用户标识", "")
 		return
 	}

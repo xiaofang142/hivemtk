@@ -129,6 +129,20 @@ func (r *MessageHubRepository) ListByConversationContext(ctx context.Context, pl
 	return hubs, nil
 }
 
+func (r *MessageHubRepository) ListByConversationID(ctx context.Context, conversationID string) ([]*model.MessageHub, error) {
+	if r == nil || r.db == nil || conversationID == "" {
+		return nil, nil
+	}
+	var hubs []*model.MessageHub
+	if err := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("conversation_id = ?", conversationID).
+		Where(undeliveredOutboundCond, undeliveredOutboundArgs...).
+		Find(&hubs).Error; err != nil {
+		return nil, err
+	}
+	return hubs, nil
+}
+
 func (r *MessageHubRepository) FindNullConversationIDRows(ctx context.Context) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil {
 		return nil, nil

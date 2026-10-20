@@ -688,7 +688,9 @@ const TOTYPE_MAP = { human: '人工', sop: 'SOP', ai: 'AI' }
 const toTypeLabel = (v) => (TOTYPE_MAP[v] ? t(TOTYPE_MAP[v]) : (v || '-'))
 
 const isImage = (msg) =>
-  (msg.content_type === 'image' || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(msg.media_url || '')) && !!msg.media_url
+  (msg.content_type === 'image' || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(msg.media_url || '')) &&
+  !!msg.media_url &&
+  !String(msg.media_url).includes('example.com/seed/')
 
 // outbound: hub 表 direction 字段在 GetMessages 输出中没有直接暴露，
 // 通过 is_ai_reply 或 sender 与账号无关的客服侧推断；这里以 sender_id 等于会话账号 id 视为坐席侧
@@ -730,6 +732,10 @@ const fetchConversations = async () => {
     const data = res?.data || res || {}
     conversations.value = data.list || []
     pagination.total = data.total || 0
+    if (!currentConv.value && conversations.value.length > 0) {
+      currentConv.value = conversations.value[0]
+      fetchThread()
+    }
   } catch (e) {
     console.error('[inbox] fetchConversations', e)
   } finally {
