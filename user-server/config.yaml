@@ -94,8 +94,8 @@ inference:
   profile: dev
   embedding:
     mode: local
-    base_url: "http://127.0.0.1:8208/v1"
-    model: "bge-m3"
+    base_url: "${EMBEDDING_BASE_URL:http://127.0.0.1:8208/v1}"
+    model: "${EMBEDDING_MODEL:bge-m3}"
     dimension: 1024
     allow_fallback: false
   rerank:
@@ -110,20 +110,17 @@ inference:
     model: "${RERANK_MODEL:bge-reranker-v2-m3}"
     enabled: true
   llm:
-    # 2026-09-10：本地 llama-server(8207) 已下线省资源，LLM 统一走 freeapi 线上网关。
-    # 该网关是本机回环进程（127.0.0.1:8787），不是公网直连，故仍满足上方
-    # 「cloud_providers 必须为空」基线；产码识别点见 internal/geo/service/search_probe.go:209。
-    # 注意：provider/路由真相源在 llm_providers/llm_routing_rules 表（DB 覆盖本节），
-    # 本节 base_url 仅作 default provider 与 humanize 评估器检测的兜底值。
+    # 方案 2B（云端 DeepSeek 对话 + 本地纯 CPU 向量库模式，0 MiB 显存占用）：
+    # 通过环境变量 LLM_BASE_URL / LLM_MODEL / LLM_API_KEY 注入，不落明文密钥。
     mode: remote
-    base_url: "http://127.0.0.1:8787/v1"
-    model: "step-3.7-flash"
+    base_url: "${LLM_BASE_URL:https://api.deepseek.com/v1}"
+    model: "${LLM_MODEL:deepseek-chat}"
     temperature: 0.7
     max_tokens: 1024
     timeout_seconds: 720
     max_retries: 1
-    primary_provider: ""
-    api_key: ""
+    primary_provider: "${LLM_PRIMARY_PROVIDER:deepseek}"
+    api_key: "${LLM_API_KEY:}"
     cloud_providers: []
 
 # ============================================================

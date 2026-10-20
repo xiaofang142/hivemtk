@@ -76,12 +76,17 @@ export const usePermissionStore = defineStore('permission', () => {
     menusLoading.value = false
   }
 
+  const EXTRA_ALLOWED_PATHS = ['/kb/connectors', '/cap/matrix', '/mcp/credentials']
+
   // canAccessPath 路由守卫：路径是否在授权菜单内（超管放行）
   // 精确匹配或前缀匹配（带页目录下的深链，如 /browser-automation/tasks/create）
   const canAccessPath = (path) => {
     if (allAccess.value || role.value === 'admin') return true
     if (!menusLoaded.value) return true // 未加载（如公开页）不拦截，由调用方先 ensureMenus
     if (!path) return true
+    for (const p of EXTRA_ALLOWED_PATHS) {
+      if (path === p || path.startsWith(p + '/')) return true
+    }
     for (const p of menuPaths.value) {
       if (path === p || path.startsWith(p + '/')) return true
     }
