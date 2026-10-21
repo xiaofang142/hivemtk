@@ -213,66 +213,66 @@
 
 | # | 状态 | 文件 | 注释块 | 注释行 | doc块 | 行内块 |
 |---|---|---|---|---|---|---|
-| 1 | [ ] | `cmd/api/main.go` | 43 | 152 | 43 | 0 |
-| 2 | [ ] | `cmd/api/serve_unix.go` | 4 | 14 | 4 | 0 |
-| 3 | [ ] | `cmd/api/serve_windows.go` | 2 | 4 | 2 | 0 |
-| 4 | [ ] | `cmd/bridge-mock/main.go` | 1 | 25 | 1 | 0 |
-| 5 | [ ] | `cmd/embedding-server/main.go` | 7 | 33 | 7 | 0 |
-| 6 | [ ] | `cmd/eval-trace/main.go` | 0 | 0 | 0 | 0 |
-| 7 | [ ] | `cmd/gen-module-bindings/main.go` | 3 | 36 | 3 | 0 |
-| 8 | [ ] | `cmd/gen-module-route-patterns/main.go` | 2 | 22 | 2 | 0 |
-| 9 | [ ] | `cmd/geo-run/main.go` | 1 | 1 | 1 | 0 |
-| 10 | [ ] | `cmd/importfaq/main.go` | 1 | 22 | 1 | 0 |
-| 11 | [ ] | `cmd/minttoken/main.go` | 0 | 0 | 0 | 0 |
-| 12 | [ ] | `cmd/nm-host/main.go` | 45 | 102 | 45 | 0 |
-| 13 | [ ] | `cmd/perf/main.go` | 1 | 13 | 1 | 0 |
-| 14 | [ ] | `cmd/pwtool/main.go` | 3 | 8 | 3 | 0 |
-| 15 | [ ] | `cmd/routeinspect/main.go` | 0 | 0 | 0 | 0 |
-| 16 | [ ] | `cmd/seed/main.go` | 6 | 47 | 6 | 0 |
-| 17 | [ ] | `cmd/seed/seed_ai_agents.go` | 3 | 23 | 3 | 0 |
-| 18 | [ ] | `cmd/seed/seed_assets.go` | 2 | 11 | 2 | 0 |
-| 19 | [ ] | `cmd/seed/seed_clues.go` | 2 | 7 | 2 | 0 |
-| 20 | [ ] | `cmd/seed/seed_customers.go` | 9 | 18 | 9 | 0 |
-| 21 | [ ] | `cmd/seed/seed_faq_sop.go` | 19 | 41 | 19 | 0 |
-| 22 | [ ] | `cmd/seed/seed_helpers.go` | 15 | 32 | 15 | 0 |
-| 23 | [ ] | `cmd/seed/seed_llm_logs.go` | 9 | 19 | 9 | 0 |
-| 24 | [ ] | `cmd/seed/seed_messages.go` | 2 | 8 | 2 | 0 |
-| 25 | [ ] | `cmd/seed/seed_rag_product.go` | 5 | 23 | 5 | 0 |
-| 26 | [ ] | `cmd/seed/seed_reach.go` | 1 | 15 | 1 | 0 |
-| 27 | [ ] | `cmd/seed/seed_sessions.go` | 6 | 6 | 6 | 0 |
-| 28 | [ ] | `cmd/seed/seed_stats.go` | 9 | 27 | 9 | 0 |
-| 29 | [ ] | `cmd/seed/seed_users.go` | 6 | 25 | 6 | 0 |
-| 30 | [ ] | `cmd/seedkw/main.go` | 0 | 0 | 0 | 0 |
-| 31 | [ ] | `cmd/syncscripts/main.go` | 1 | 10 | 1 | 0 |
-| 32 | [ ] | `internal/aiagent/agent/lifecycle/active.go` | 18 | 49 | 18 | 0 |
-| 33 | [ ] | `internal/aiagent/agent/lifecycle/lifecycle.go` | 10 | 38 | 10 | 0 |
-| 34 | [ ] | `internal/aiagent/agent/portcontract/aftersale.go` | 5 | 9 | 5 | 0 |
-| 35 | [ ] | `internal/aiagent/agent/portcontract/asset_bundle.go` | 9 | 36 | 9 | 0 |
-| 36 | [ ] | `internal/aiagent/agent/portcontract/customer.go` | 4 | 19 | 4 | 0 |
-| 37 | [ ] | `internal/aiagent/agent/portcontract/doc.go` | 1 | 27 | 1 | 0 |
-| 38 | [ ] | `internal/aiagent/agent/portcontract/followup.go` | 2 | 12 | 2 | 0 |
-| 39 | [ ] | `internal/aiagent/agent/portcontract/journey_reach.go` | 3 | 9 | 3 | 0 |
-| 40 | [ ] | `internal/aiagent/agent/portcontract/logistics.go` | 9 | 10 | 9 | 0 |
-| 41 | [ ] | `internal/aiagent/agent/portcontract/order.go` | 2 | 7 | 2 | 0 |
-| 42 | [ ] | `internal/aiagent/agent/portcontract/session.go` | 3 | 11 | 3 | 0 |
-| 43 | [ ] | `internal/aiagent/agent/portcontract/tool_result.go` | 4 | 6 | 4 | 0 |
-| 44 | [ ] | `internal/aiagent/agent/runtime/alignment_stage.go` | 7 | 9 | 7 | 0 |
-| 45 | [ ] | `internal/aiagent/agent/runtime/asset_bundle_loader.go` | 4 | 13 | 4 | 0 |
-| 46 | [ ] | `internal/aiagent/agent/runtime/chat_history_redis.go` | 4 | 26 | 4 | 0 |
-| 47 | [ ] | `internal/aiagent/agent/runtime/context.go` | 28 | 30 | 28 | 0 |
-| 48 | [ ] | `internal/aiagent/agent/runtime/dataflow_orchestrator.go` | 19 | 31 | 19 | 0 |
-| 49 | [ ] | `internal/aiagent/agent/runtime/event_subscriber.go` | 2 | 10 | 2 | 0 |
-| 50 | [ ] | `internal/aiagent/agent/runtime/gatekeeper_stage.go` | 11 | 29 | 11 | 0 |
-| 51 | [ ] | `internal/aiagent/agent/runtime/global.go` | 3 | 4 | 3 | 0 |
-| 52 | [ ] | `internal/aiagent/agent/runtime/idempotency.go` | 6 | 17 | 6 | 0 |
-| 53 | [ ] | `internal/aiagent/agent/runtime/inference_checkpoint.go` | 14 | 32 | 14 | 0 |
-| 54 | [ ] | `internal/aiagent/agent/runtime/inference_cycle.go` | 20 | 46 | 20 | 0 |
-| 55 | [ ] | `internal/aiagent/agent/runtime/inference_types.go` | 20 | 25 | 20 | 0 |
-| 56 | [ ] | `internal/aiagent/agent/runtime/intent_extractor.go` | 3 | 10 | 3 | 0 |
-| 57 | [ ] | `internal/aiagent/agent/runtime/local_llm_client.go` | 4 | 18 | 4 | 0 |
-| 58 | [ ] | `internal/aiagent/agent/runtime/perception_stage.go` | 12 | 20 | 12 | 0 |
-| 59 | [ ] | `internal/aiagent/agent/runtime/planner_stage.go` | 6 | 6 | 6 | 0 |
-| 60 | [ ] | `internal/aiagent/agent/runtime/publisher.go` | 4 | 19 | 4 | 0 |
+| 1 | [x] | `cmd/api/main.go` | 43 → 25 | 152 (160) → 56 | 43 → 25 | 0 |
+| 2 | [x] | `cmd/api/serve_unix.go` | 4 → 4 | 14 → 9 | 4 → 4 | 0 |
+| 3 | [x] | `cmd/api/serve_windows.go` | 2 → 2 | 4 → 4 | 2 → 2 | 0 |
+| 4 | [x] | `cmd/bridge-mock/main.go` | 1 → 1 | 25 → 25 | 1 → 1 | 0 |
+| 5 | [x] | `cmd/embedding-server/main.go` | 7 → 7 | 33 → 21 | 7 → 7 | 0 |
+| 6 | [x] | `cmd/eval-trace/main.go` | 0 → 0 | 0 → 0 | 0 → 0 | 0 |
+| 7 | [x] | `cmd/gen-module-bindings/main.go` | 3 → 3 | 36 → 11 | 3 → 3 | 0 |
+| 8 | [x] | `cmd/gen-module-route-patterns/main.go` | 2 → 2 | 22 → 8 | 2 → 2 | 0 |
+| 9 | [x] | `cmd/geo-run/main.go` | 1 → 0 | 1 → 0 | 1 → 0 | 0 |
+| 10 | [x] | `cmd/importfaq/main.go` | 1 → 1 | 22 → 20 | 1 → 1 | 0 |
+| 11 | [x] | `cmd/minttoken/main.go` | 0 → 0 | 0 → 0 | 0 → 0 | 0 |
+| 12 | [x] | `cmd/nm-host/main.go` | 45 → 45 | 102 → 82 | 45 → 45 | 0 |
+| 13 | [x] | `cmd/perf/main.go` | 1 → 1 | 13 → 13 | 1 → 1 | 0 |
+| 14 | [x] | `cmd/pwtool/main.go` | 3 → 3 | 8 → 8 | 3 → 3 | 0 |
+| 15 | [x] | `cmd/routeinspect/main.go` | 0 → 0 | 0 → 0 | 0 → 0 | 0 |
+| 16 | [x] | `cmd/seed/main.go` | 6 → 6 | 47 → 43 | 6 → 6 | 0 |
+| 17 | [x] | `cmd/seed/seed_ai_agents.go` | 3 → 3 | 23 → 23 | 3 → 3 | 0 |
+| 18 | [x] | `cmd/seed/seed_assets.go` | 2 → 1 | 11 → 10 | 2 → 1 | 0 |
+| 19 | [x] | `cmd/seed/seed_clues.go` | 2 → 1 | 7 → 6 | 2 → 1 | 0 |
+| 20 | [x] | `cmd/seed/seed_customers.go` | 9 → 8 | 18 → 17 | 9 → 8 | 0 |
+| 21 | [x] | `cmd/seed/seed_faq_sop.go` | 19 → 19 | 41 → 31 | 19 → 19 | 0 |
+| 22 | [x] | `cmd/seed/seed_helpers.go` | 15 → 15 | 32 → 24 | 15 → 15 | 0 |
+| 23 | [x] | `cmd/seed/seed_llm_logs.go` | 9 → 6 | 19 → 16 | 9 → 6 | 0 |
+| 24 | [x] | `cmd/seed/seed_messages.go` | 2 → 1 | 8 → 7 | 2 → 1 | 0 |
+| 25 | [x] | `cmd/seed/seed_rag_product.go` | 5 → 5 | 23 → 10 | 5 → 5 | 0 |
+| 26 | [x] | `cmd/seed/seed_reach.go` | 1 → 1 | 15 → 15 | 1 → 1 | 0 |
+| 27 | [x] | `cmd/seed/seed_sessions.go` | 6 → 6 | 6 → 6 | 6 → 6 | 0 |
+| 28 | [x] | `cmd/seed/seed_stats.go` | 9 → 4 | 27 → 10 | 9 → 4 | 0 |
+| 29 | [x] | `cmd/seed/seed_users.go` | 6 → 5 | 25 → 20 | 6 → 5 | 0 |
+| 30 | [x] | `cmd/seedkw/main.go` | 0 → 0 | 0 → 0 | 0 → 0 | 0 |
+| 31 | [x] | `cmd/syncscripts/main.go` | 1 → 1 | 10 → 5 | 1 → 1 | 0 |
+| 32 | [x] | `internal/aiagent/agent/lifecycle/active.go` | 18 → 14 | 49 → 26 | 18 → 14 | 0 |
+| 33 | [x] | `internal/aiagent/agent/lifecycle/lifecycle.go` | 10 → 10 | 38 → 16 | 10 → 10 | 0 |
+| 34 | [x] | `internal/aiagent/agent/portcontract/aftersale.go` | 5 → 3 | 9 → 4 | 5 → 3 | 0 |
+| 35 | [x] | `internal/aiagent/agent/portcontract/asset_bundle.go` | 9 → 9 | 36 → 15 | 9 → 9 | 0 |
+| 36 | [x] | `internal/aiagent/agent/portcontract/customer.go` | 4 → 4 | 19 → 6 | 4 → 4 | 0 |
+| 37 | [x] | `internal/aiagent/agent/portcontract/doc.go` | 1 → 1 | 27 → 8 | 1 → 1 | 0 |
+| 38 | [x] | `internal/aiagent/agent/portcontract/followup.go` | 2 → 2 | 12 → 3 | 2 → 2 | 0 |
+| 39 | [x] | `internal/aiagent/agent/portcontract/journey_reach.go` | 3 → 3 | 9 → 4 | 3 → 3 | 0 |
+| 40 | [x] | `internal/aiagent/agent/portcontract/logistics.go` | 9 → 5 | 10 → 6 | 9 → 5 | 0 |
+| 41 | [x] | `internal/aiagent/agent/portcontract/order.go` | 2 → 2 | 7 → 3 | 2 → 2 | 0 |
+| 42 | [x] | `internal/aiagent/agent/portcontract/session.go` | 3 → 3 | 11 → 4 | 3 → 3 | 0 |
+| 43 | [x] | `internal/aiagent/agent/portcontract/tool_result.go` | 4 → 3 | 6 → 4 | 4 → 3 | 0 |
+| 44 | [x] | `internal/aiagent/agent/runtime/alignment_stage.go` | 7 → 2 | 9 → 2 | 7 → 2 | 0 |
+| 45 | [x] | `internal/aiagent/agent/runtime/asset_bundle_loader.go` | 4 → 3 | 13 → 4 | 4 → 3 | 0 |
+| 46 | [x] | `internal/aiagent/agent/runtime/chat_history_redis.go` | 4 → 4 | 26 → 6 | 4 → 4 | 0 |
+| 47 | [x] | `internal/aiagent/agent/runtime/context.go` | 28 → 8 | 30 → 9 | 28 → 8 | 0 |
+| 48 | [x] | `internal/aiagent/agent/runtime/dataflow_orchestrator.go` | 19 → 8 | 31 → 9 | 19 → 8 | 0 |
+| 49 | [x] | `internal/aiagent/agent/runtime/event_subscriber.go` | 2 → 2 | 10 → 3 | 2 → 2 | 0 |
+| 50 | [x] | `internal/aiagent/agent/runtime/gatekeeper_stage.go` | 11 → 5 | 29 → 9 | 11 → 5 | 0 |
+| 51 | [x] | `internal/aiagent/agent/runtime/global.go` | 3 → 3 | 4 → 3 | 3 → 3 | 0 |
+| 52 | [x] | `internal/aiagent/agent/runtime/idempotency.go` | 6 → 5 | 17 → 10 | 6 → 5 | 0 |
+| 53 | [x] | `internal/aiagent/agent/runtime/inference_checkpoint.go` | 14 → 13 | 32 → 20 | 14 → 13 | 0 |
+| 54 | [x] | `internal/aiagent/agent/runtime/inference_cycle.go` | 20 → 6 | 46 → 8 | 20 → 6 | 0 |
+| 55 | [x] | `internal/aiagent/agent/runtime/inference_types.go` | 20 → 5 | 25 → 5 | 20 → 5 | 0 |
+| 56 | [x] | `internal/aiagent/agent/runtime/intent_extractor.go` | 3 → 3 | 10 → 4 | 3 → 3 | 0 |
+| 57 | [x] | `internal/aiagent/agent/runtime/local_llm_client.go` | 4 → 3 | 18 → 5 | 4 → 3 | 0 |
+| 58 | [x] | `internal/aiagent/agent/runtime/perception_stage.go` | 12 → 3 | 20 → 4 | 12 → 3 | 0 |
+| 59 | [x] | `internal/aiagent/agent/runtime/planner_stage.go` | 6 → 1 | 6 → 1 | 6 → 1 | 0 |
+| 60 | [x] | `internal/aiagent/agent/runtime/publisher.go` | 4 → 3 | 19 → 4 | 4 → 3 | 0 |
 | 61 | [ ] | `internal/aiagent/agent/runtime/publisher_knowledge.go` | 5 | 18 | 5 | 0 |
 | 62 | [ ] | `internal/aiagent/agent/runtime/reviewer_stage.go` | 5 | 5 | 5 | 0 |
 | 63 | [ ] | `internal/aiagent/agent/runtime/runtime.go` | 3 | 4 | 3 | 0 |
