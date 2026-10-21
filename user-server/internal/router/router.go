@@ -867,7 +867,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupCompetitorFeatureRoutes(auth)
 
-		setupFrontendAliases(auth, systemAdmin, r, gormDB)
+		setupFrontendAliases(auth, r, gormDB)
 	}
 
 	webhookCtrl := controller.NewWebhookController(webhookSvc)
