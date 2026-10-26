@@ -151,3 +151,41 @@ cd user-server && CGO_ENABLED=0 go build -o /private/var/folders/xw/pd_rr_z54w38
 | A19 qqBot 同一 id off/on 不一致 | ⏳ 未修：需核对该行 `owner_user_id` 与 `guardChannelAccountOwnership` 在 off 模式的分支（疑似历史数据归属 + off 绕过归属判定） | 现象已记录：`GET /api/qq/accounts/1` off=404 / on=200 |
 
 - 单测：`go test ./internal/content/controller ./internal/controller ./internal/repository ./internal/middleware -run 'Marketing|MCP|Obs|Clue|Integration|Module'` 全绿。
+
+## 7. 2026-10-26 晚复跑（当前 HEAD + B2 撤回文案修复）
+
+> 触发：按 `docs/任务总表-2026-10-24.md` 收口后的一次性回归。环境与 §1 不同，**不改**上一轮结论，只作独立读数。
+
+| 项 | 值 |
+|---|---|
+| 二进制 | 当前 HEAD 源码 `CGO_ENABLED=0 go build ./cmd/api`（含本轮 `message_hub_recall.go` 文案去重修复） |
+| 后端 | `127.0.0.1:8424`（off）/ `127.0.0.1:8425`（on），DB `8202/user_db`，Redis `8203` |
+| 旗子 | `FF_LTC_ORDER_DRAFT_DB=on`、`FF_LTC_APPROVAL_RESUME=on`（仅本实例；off/on 各一份） |
+| 账号 | `uit_admin` / `Hive@Test123`（system_users id=26，tenant 1，admin） |
+| 脚本 | `scripts/api_verify_full.py <seg>`，`HIVEMTK_BASE=http://127.0.0.1:8424` |
+
+| 段 | 读数 | 红项 | 归因 |
+|---|---|---|---|
+| api | **1745/1745 (100%)** | — | 上一轮 5 条 503（followups / order-drafts）在 `FF_LTC_ORDER_DRAFT_DB=on` 后全部转绿，与台账 §7.1 的旗子梯度一致 |
+| ltc | **38/38 (100%)** | — | `FF_LTC_APPROVAL_RESUME=on`；两条降级注记同上一轮（无出站能力 / L12 首跳无 HTTP 入口） |
+| billing | 11/12 (91%) | B3 支付状态直查 | 平台侧未按本轮租户注册/回填 `merchant_api_secret`，属双栈环境前提（台账 §10 的 49/49 是隔离双栈专用环境，不是本实例） |
+| chain | 15/17 (88%) | S5.1 / S6.1 | 本机无 chat LLM（8208 只有 bge-m3 embedding，无 `/v1/chat/completions`），AI 回复腿不产生 |
+
+### 7.1 本轮代码改动（一条）
+
+`internal/service/message_hub_recall.go`：`classifyRecallFailure` 在拼接原因前先对齐哨兵文案前缀。
+修前前端收到 `recall not supported for channel: recall not supported for channel（桥接渠道 …）`，
+修后 `recall not supported for channel（桥接渠道 …）`；`errors.Is` 仍可判 `ErrMessageHubRecallNotSupported`。
+回归：`TestMessageHubServiceRecall/端口哨兵文案不在前端文案里复读`；`go test ./internal/service -run TestMessageHubServiceRecall` 绿。
+
+### 7.2 撤回接口分类实测（8424，admin token）
+
+| 入参 | HTTP | code | message |
+|---|---|---|---|
+| `POST /api/message-hub/1350/recall`（telegram，超 48h） | 409 | `DUPLICATE_ENTRY_3003` | `recall window expired（窗口 48h0m0s）` |
+| `POST /api/message-hub/1392/recall`（入站） | 400 | `INVALID_PARAM_1001` | `only outbound messages can be recalled` |
+| `POST /api/message-hub/99999999/recall` | 404 | `NOT_FOUND_1002` | `消息不存在` |
+| `POST /api/message-hub/1383/recall`（douyin 桥接） | 409 | `DUPLICATE_ENTRY_3003` | `recall not supported for channel（桥接渠道 msgID 是合成键，不是平台消息标识）` |
+
+观察项（未改）：409 在通用响应层一律映射成 `DUPLICATE_ENTRY_3003`，语义上「窗口过期/渠道不支持」与「重复条目」不对应；前端目前只用 message 文案，不影响展示，登记待通用错误码表扩容时一并处理。
+

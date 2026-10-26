@@ -163,3 +163,50 @@
 | Docs Link Check | 已随 `a0aa75da` 修复并通过 | — |
 | Lint（含电池控制组） | 已随 `f0d1973c`（ESLint）与 `dfd8504c`（bash3.2 `$VAR（`）修复并通过 | — |
 | ci-bridge | 已随 `60895bfc`（navigator getter-only）修复并通过（73 文件/898 通过） | — |
+
+## 8. 2026-10-26 晚复跑（ego lite 真点，off + SaaS 两形态）
+
+> 触发：`docs/任务总表-2026-10-24.md` 收口后的一次性 UI 回归。浏览器按全局规则走 ego lite（space 13），不是 Playwright 新 profile。
+
+| 项 | 值 |
+|---|---|
+| 前端 | `127.0.0.1:8211`（→8424 off）/ `127.0.0.1:8212`（→8425 on），`USER_SERVER_PORT` 分别指向 |
+| 后端 | 当前 HEAD 源码构建；旗子同 API 轮（`FF_LTC_ORDER_DRAFT_DB=on`、`FF_LTC_APPROVAL_RESUME=on`） |
+| 账号 | `uit_admin` / `Hive@Test123`；off 直接登录，on 留空租户代码登录 |
+| 取证 | DOM 快照 + 逐行单元格文本；截图在 `/tmp/ego-ui-1026/*.png` |
+
+### 8.1 B2 撤回（本轮重点）
+
+| 步骤 | 结果 |
+|---|---|
+| 出站已读行「撤回」按钮 | 仅在 `direction === 'outbound' && !recalled_at` 时出现（入站行无按钮） |
+| 二次确认 | `确定撤回消息 #1383（抖音）？撤回后平台侧那条消息会被删除，此操作不可撤销。` 取消/撤回两键 |
+| 渠道不支持（douyin 桥接） | 顶部 warning：`recall not supported for channel（桥接渠道 msgID 是合成键，不是平台消息标识）` —— **修复前这句哨兵文案会复读两遍**（本轮已修，见 API 报告 §7.1） |
+| 失败留痕 | 打开 #1383 详情，「撤回状态 = 上次撤回失败」（`recall_error` 落库并在抽屉展示） |
+| 终态渲染 | 临时把该行 `recalled_at` 置为 now（测后已还原为空）：刷新后状态列 `已撤回 已读`，操作列「撤回」按钮消失；详情显示「已撤回（时间）」 |
+
+> 成功出网路径未验：本机无 Telegram/飞书/企微凭据，且可撤窗口（TG 48h）内的行不存在。属环境前提，不记缺陷。
+
+### 8.2 上一轮遗留项复核
+
+| # | 复核读数 |
+|---|---|
+| F4 profile 角色措辞 | off=`管理员`，on=`商户管理员` —— 已按 `tenant_mode` 分形态，不再泄漏 |
+| F6 AI 工具页头 | `管理 1 个 AI 工具` / `工具总数 1`，与列表 1 行一致 —— 硬编码 40 已消除 |
+| F1 导览文案 | 本轮未再触发（引导页首次进即关），无「查询/搜索」错位复现 |
+| i18n（reachPipeline） | 三个 tab `Pipeline 管理 / 任务监控 / 统计分析`，页内 `reachPipeline.*` 原始 key 泄漏 **0** 处 |
+
+### 8.3 各页复跑
+
+| 路由 | off | on | 备注 |
+|---|---|---|---|
+| `/messageHub/list` | 20 行，无失败提示 | 20 行，同 | 含撤回列与详情抽屉 |
+| `/notifications` | 20 行，表头 状态/类型/来源/标题/内容/时间/操作；标签 `警告/系统` | 20 行，统计卡 `20 总消息 / 0 未读` | 004 的 source/level 展示在位 |
+| `/reachPipeline/list` | 7 行 / 14 卡，无原始 key | 未单独跑 | W-1 基线未回退 |
+| `/aiAgent/tools` | 1 行，页头 1 | 未单独跑 | F6 复核 |
+| `/profile` | 模块 4 卡，角色「管理员」 | 角色「商户管理员」 | F4 复核 |
+| `/dashboardScreen/list` | 7 卡，无错误 | 未单独跑 | — |
+| `/aiProductivity/list` | 未单独跑 | 正常渲染（无 0/0 空报告提示） | A4/A7 修复未回退 |
+
+> 本轮未逐条覆盖 244 条路由；`router-list.md` 的进度列不回退，新增读数只针对上表与 B2。
+

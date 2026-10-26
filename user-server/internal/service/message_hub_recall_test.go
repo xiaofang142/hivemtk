@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -197,6 +199,27 @@ func TestMessageHubServiceRecall(t *testing.T) {
 		}
 		if stored.RecallError != "" {
 			t.Fatalf("成功后 recall_error 未清空: %q", stored.RecallError)
+		}
+	})
+
+	t.Run("端口哨兵文案不在前端文案里复读", func(t *testing.T) {
+		// internal/app 的习惯写法是 `fmt.Errorf("%w（具体原因）", ErrRecallNotSupported)`，
+		// 两个包的哨兵文案逐字相同。service 若直接 `%w: %v`，前端会收到
+		// "recall not supported for channel: recall not supported for channel（…）"。
+		db := setupRecallTestDB(t)
+		row := seedRecallRow(t, db, "douyin", "mh-dup", "outbound")
+		portErr := fmt.Errorf("%w（桥接渠道 msgID 是合成键，不是平台消息标识）", ErrMessageHubRecallNotSupported)
+		svc := newRecallSvc(db, &fakeRecaller{err: &RecallFailure{Kind: RecallKindNotSupported, Err: portErr}})
+
+		_, err := svc.Recall(ctx, row.ID)
+		if !errors.Is(err, ErrMessageHubRecallNotSupported) {
+			t.Fatalf("err = %v, want ErrMessageHubRecallNotSupported", err)
+		}
+		if n := strings.Count(err.Error(), ErrMessageHubRecallNotSupported.Error()); n != 1 {
+			t.Fatalf("哨兵文案复读 %d 次: %q", n, err.Error())
+		}
+		if !strings.Contains(err.Error(), "桥接渠道") {
+			t.Fatalf("具体原因丢了: %q", err.Error())
 		}
 	})
 }

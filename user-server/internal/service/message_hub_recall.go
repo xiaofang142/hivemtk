@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -187,10 +188,30 @@ func classifyRecallFailure(err error) error {
 	if errors.As(err, &f) {
 		switch f.Kind {
 		case RecallKindNotSupported:
-			return fmt.Errorf("%w: %v", ErrMessageHubRecallNotSupported, f.Err)
+			return fmt.Errorf("%w%s", ErrMessageHubRecallNotSupported, reasonSuffix(f.Err, ErrMessageHubRecallNotSupported))
 		case RecallKindWindowExpired:
-			return fmt.Errorf("%w: %v", ErrMessageHubRecallWindowExpired, f.Err)
+			return fmt.Errorf("%w%s", ErrMessageHubRecallWindowExpired, reasonSuffix(f.Err, ErrMessageHubRecallWindowExpired))
 		}
 	}
 	return fmt.Errorf("%w: %v", ErrMessageHubRecallFailed, err)
+}
+
+// reasonSuffix 给哨兵错拼"具体原因"时去掉重复的哨兵文案。
+//
+// 端口实现方（internal/app）的习惯写法是 `fmt.Errorf("%w（具体原因）", ErrRecallNotSupported)`，
+// 而两个包的哨兵文案逐字相同（都叫 "recall not supported for channel"）。
+// 直接 `%w: %v` 会把这句话印两遍：
+//
+//	recall not supported for channel: recall not supported for channel（桥接渠道 …）
+//
+// 前端拿到的就是这句复读。这里对齐前缀后只保留一次，同时仍用 %w 保住 errors.Is。
+func reasonSuffix(err error, sentinel error) string {
+	if err == nil || sentinel == nil {
+		return ""
+	}
+	msg := err.Error()
+	if strings.HasPrefix(msg, sentinel.Error()) {
+		return strings.TrimPrefix(msg, sentinel.Error())
+	}
+	return ": " + msg
 }
