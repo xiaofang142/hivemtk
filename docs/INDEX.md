@@ -152,6 +152,6 @@
 | [contribute/CODEBASE_MAP.md](contribute/CODEBASE_MAP.md) | 代码地图（按层定位） |
 | [contribute/CODE_COLLABORATION.md](contribute/CODE_COLLABORATION.md) | 协作与改动边界 |
 | [marketing-features/GEO_MODULE_DESIGN.md](marketing-features/GEO_MODULE_DESIGN.md) | GEO 模块设计说明 |
-| [bridge/BRIDGE-ARCHITECTURE-REVIEW.md](bridge/BRIDGE-ARCHITECTURE-REVIEW.md) | 浏览器桥接架构复核结论 |
+| `bridge/BRIDGE-ARCHITECTURE-REVIEW.md` | 浏览器桥接架构复核结论（**本地文档**：`docs/bridge/` 已被 `.gitignore` 排除、不入库，故此处不给链接，避免 CI 断链门红） |
 | [operations/WhatsApp-库替换方案-2026-10-24.md](operations/WhatsApp-库替换方案-2026-10-24.md) | WhatsApp 弃维护库替换方案（**未完成**：文内声明未替换前不得宣称已换库） |
 | [architecture/adr/ADR-016-telegram-group-gate-policy.md](architecture/adr/ADR-016-telegram-group-gate-policy.md) | ADR-016 Telegram 社群门控三项口径 |
