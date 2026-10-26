@@ -79,3 +79,17 @@ Go 编译器看不见另一侧，所以**改一边的 json tag，两边都能编
   机器上跑一次 `make wire-contract`。
 - **只覆盖四条通道**（开户登记/心跳/订单/模块下发）。其它同名模型不在判据里，也不打算在。
 - **`any` 与 `map[string]any` 内部不比对**：`params` / `options` 这类开放结构只能保证"键在"。
+
+---
+
+## 本目录下的另一份合同（手写，不参与生成与判据）
+
+[`message-hub-recall.md`](message-hub-recall.md)：消息撤回 `POST /api/message-hub/:id/recall`
+的请求/响应/幂等/错误码口径（OPEN_ITEMS B2）。它与上面这份清单是两件事：
+
+- `cross-repo-wire.json` 管**跨仓数据结构**，生成 + 判据（改一边另一边的键静默丢失）；
+- `message-hub-recall.md` 管**一条链的行为契约**（同进程 HTTP 契约 + 渠道外部 API 契约），
+  手写，由 `internal/service/message_hub_recall_test.go` 等用例复算。
+
+把撤回登记在这里的理由是它常被误读成"平台端要反向调用租户端"——事实上这条链两端
+都不经过 `hivemtk-platform`，它只与渠道（TG/飞书/企微）打交道。详见该文件 §1。

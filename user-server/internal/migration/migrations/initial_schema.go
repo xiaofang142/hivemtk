@@ -287,4 +287,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// （FAQ/SOP/文档）的多对多绑定，UNIQUE(kb_id,item_type,item_id) 租户内唯一。
 	// 无回填：存量内容与 KB 的 owner agent 交集≈0，绑定由管理端点显式登记。
 	register(NewKBItemBindingMigration(db))
+	// v3.86.0（B2 撤回状态格）：message_hub 加 recalled_at / recall_error——
+	// 平台撤回通道早已接通，缺的是本地回执，导致重复撤回会重复出网。
+	// 无回填：历史行的撤回状态保持"未知"，不猜成"没撤过"。
+	register(NewMessageHubRecallMigration(db))
 }

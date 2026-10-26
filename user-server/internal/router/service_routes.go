@@ -163,7 +163,10 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 
 	// 消息中心（message-hub）同理：全量跨账号消息读口，仅管理员可用
 	// （菜单 messageHub 本就限 admin/manager，这里把 API 层补上同一道闸）。
-	messageHubCtrl := controller.NewMessageHubController(service.NewMessageHubService())
+	// 撤回端口（B2）按 db 装配：拿到句柄才装 —— 未装配时端点回 503，
+	// 而不是回一句"撤回失败"（见 app/message_hub_recall_wiring.go）。
+	messageHubCtrl := controller.NewMessageHubController(
+		service.NewMessageHubService().WithReachRecaller(app.NewMessageHubReachRecaller(db)))
 	hub := auth.Group("/message-hub", middleware.RequireAdminMiddleware())
 	hub.POST("/push", messageHubCtrl.Push)
 	hub.POST("/push-batch", messageHubCtrl.PushBatch)
@@ -173,6 +176,9 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	hub.GET("/platforms", messageHubCtrl.Platforms)
 	hub.GET("/:id", messageHubCtrl.GetByID)
 	hub.POST("/:id/read", messageHubCtrl.MarkRead)
+	// 撤回挂在 :id/recall（与 :id/read 同形）：撤回对象是**一行**消息，
+	// 不是"某个会话里的某条平台号"，按主键寻址才不会跨账号撤错。
+	hub.POST("/:id/recall", messageHubCtrl.Recall)
 
 	inboxIngressCtrl := controller.NewInboxIngressController(service.NewInboxIngressService())
 	// lock-human 的 session_id 走 body 寻址，行级守卫的登记表只认路径参数扫不到它，

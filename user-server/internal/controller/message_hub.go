@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"runtime/debug"
@@ -173,6 +174,47 @@ func (c *MessageHubController) GetByID(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, msg, "获取成功")
+}
+
+// @Summary      撤回已发出的消息
+// @Tags      message-hub
+// @Router    /api/message-hub/{id}/recall [post]
+// Recall 撤回一条出站消息（平台撤回 + 本地置终态，重复调用幂等）。
+//
+// 状态码口径（与 service 的分类一一对应，不合并成一句"失败"）：
+//   - 200：撤掉了；或这一行本来就已经是终态（already_recalled=true）
+//   - 400：入站行不是撤回对象（客户发来的消息我们没有平台凭据去删）
+//   - 404：这一行不存在
+//   - 409：这个渠道没有主动撤回通道（WA / 桥接渠道）或已过平台窗口 —— 等也没用
+//   - 502：出网失败（网络/平台业务码拒绝/凭据缺失）—— 可能再试一次就行
+//   - 503：撤回端口未装配
+func (c *MessageHubController) Recall(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的ID")
+		return
+	}
+	res, err := c.svc.Recall(ctx.Request.Context(), uint(id))
+	if err != nil {
+		switch {
+		case errors.Is(err, service.ErrMessageHubRowNotFound):
+			response.NotFound(ctx, "消息不存在")
+		case errors.Is(err, service.ErrMessageHubRecallInbound):
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+		case errors.Is(err, service.ErrMessageHubRecallNotSupported),
+			errors.Is(err, service.ErrMessageHubRecallWindowExpired):
+			// 409 而不是 400：请求本身没写错，是"这个对象/这个时点做不到"。
+			// 前端据此显示可解释文案（换人工去平台里删 / 窗口已过），
+			// 而不是笼统的"参数错误"。
+			response.Error(ctx, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrMessageHubRecallUnavailable):
+			response.Error(ctx, http.StatusServiceUnavailable, err.Error())
+		default:
+			response.ErrorFromDB(ctx, err, err.Error())
+		}
+		return
+	}
+	response.Success(ctx, res, "撤回成功")
 }
 
 // @Summary      标记已读成功

@@ -14,7 +14,16 @@
 2. **主战场是 user-server**：Go 1.26 + Gin + GORM + pgvector，**3243 个 `.go` 文件**、**183 个 Controller**、**374 个 Service**、**195 个 Repository**、**168 个 Model**、**1137 条路由注册**。五层架构（Router→Controller→Service→Repository→Model）在目录与命名上基本落地，`handler` 包零命中（与仓库 `CLAUDE.md` 一致）。
 3. **端间通信共 7 条主通道**：访客聊天（chat/public + WS）、渠道扩展桥（bridge）、渠道网关 WS（channelgw）、外部渠道 Webhook、平台心跳/安装/模块/资产市场/LLM 代理、MCP 工具入口、前端静态托管。详见 §4。
 4. **主要问题不是"缺能力"，而是"文档漂移"**：多处既有架构文档与代码现状不一致（WS 是否弃用、推理栈端口/模型、Go 版本、模块计数）。这些漂移会让后来者按错的图施工，已在 §5 逐条论证、并在 §6 修复。
-5. **真实能力缺口 2 处**：`/ws/chat` 路由**从未注册**（死代码，`internal/router/ws.go` 自认）；平台撤回（Recall）在 `integration_reach_adapter.go` 仍是恒错 stub（`docs/OPEN_ITEMS.md（历史台账已归档）` B2 已登记）。前者已在本轮**只读论证 + 文档如实标注**，后者属跨渠道新功能，登记为待开发。
+5. **原判"真实能力缺口 2 处"，现只剩 1 处**（2026-10-18 读数，2026-10-26 订正）：
+   - `/ws/chat` 路由**从未注册**（死代码，`internal/router/ws.go` 自认）—— 仍开放，本轮只做**只读论证 + 文档如实标注**。
+   - ~~平台撤回（Recall）在 `integration_reach_adapter.go` 仍是恒错 stub~~ ⇒ **这条说法本身是错的，且现状已闭环**。
+     如实订正：撤回的**渠道分派从来不是 stub**（TG `deleteMessage` / 飞书 `DELETE messages` / 企微 `recall`，
+     各带窗口；WA 与桥接渠道是**有意**报 `ErrRecallNotSupported`，因为没有平台通道），
+     当时真正缺的是三样东西——**本地回执**（撤完行上看不出）、**幂等**（重复请求会重复出网）、
+     **HTTP 入口**。B2 已在 2026-10-26 补齐：`message_hub.recalled_at/recall_error`（迁移 `v3.86.0`）+
+     `POST /api/message-hub/:id/recall` + user-web 撤回入口，合同见
+     `user-server/docs/contracts/message-hub-recall.md`。
+
 
 ---
 

@@ -76,6 +76,7 @@ help:
 	@echo "  make lint-config-verify   - 校验 .golangci.yml 本身（JSON Schema，重试 3 次）"
 	@echo "  make vet                  - go vet"
 	@echo "  make test-go              - go test ./..."
+	@echo "  make test-service         - 只跑 internal/service（该包实测 648s，默认 600s 会超时，故 -timeout 30m）"
 	@echo "  make go-cache-trim        - Go 构建缓存按分配量封顶（默认 dry-run；CAP=8 APPLY=1 才删）"
 
 # =============================================================================
@@ -363,7 +364,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-config-verify lint-install lint-install-force lint-version-check vet test-go fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets wire-contract
+.PHONY: lint lint-config-verify lint-install lint-install-force lint-version-check vet test-go test-service fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets wire-contract
 
 # 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
 # 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
@@ -477,6 +478,19 @@ fmt-check:
 # （全量耗时数倍拉长，本地不适用）。
 test-go:
 	cd user-server && go test ./... -count=1 -p 1 -timeout 900s
+
+# 单跑 `internal/service` 一包。
+#
+# 存在的理由是一条**实测**：这一包全量单独跑要 648.6s（2026-10-26 本机 `-p 1`），
+# 而 `go test ./internal/service` 不带 -timeout 时用的是 Go 默认的 10m0s，差 48 秒
+# 就 `panic: test timed out`。也就是说"直接敲 go test 看这一包"这个动作本身是红的，
+# 与代码好不好无关 —— CI 侧早就在用 -timeout 2400s（user-server-ci.yml），只有
+# 手工跑没跟上的那一条会误报。
+#
+# 30m 是宽余量（648.6s ≈ 11m；3 倍），不是"跑得慢就多给点"：
+# 这一包的用例多数要真连测试库并串行认领槽位，机器负载波动会成倍放大。
+test-service:
+	cd user-server && go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 跨端线上契约清单（SaaS 审计 A10）
 #

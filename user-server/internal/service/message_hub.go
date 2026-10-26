@@ -212,6 +212,9 @@ type MessageHubService struct {
 	maxContent  int
 	subscribers []MessageSubscriber
 	subMu       sync.RWMutex
+	// recaller 平台撤回端口（B2）。nil = 未装配 ⇒ 撤回端点回 503，
+	// 绝不在没有端口时假装撤回成功（见 message_hub_recall.go 文件头）。
+	recaller ReachRecaller
 }
 
 type hubStream struct {

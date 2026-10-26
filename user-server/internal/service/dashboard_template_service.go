@@ -41,11 +41,6 @@ type DashboardTemplateUpsertReq struct {
 	Widgets     string `json:"widgets"`
 }
 
-var validDashboardTemplateStatuses = map[string]bool{
-	model.DashboardTemplateStatusDraft:     true,
-	model.DashboardTemplateStatusPublished: true,
-}
-
 func (s *DashboardTemplateService) Create(ctx context.Context, createdBy uint, req *DashboardTemplateUpsertReq) (*model.DashboardTemplate, error) {
 	tpl, err := s.normalize(req)
 	if err != nil {

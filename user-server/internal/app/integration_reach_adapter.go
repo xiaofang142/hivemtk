@@ -565,31 +565,70 @@ func (a *IntegrationReachAdapter) Recall(ctx context.Context, channel, msgID str
 	if err := a.db.WithContext(ctx).Where("msg_id = ?", msgID).First(&hub).Error; err != nil {
 		return fmt.Errorf("recall(%s): 查 message_hub 无此行: %w", channel, ErrHubKeyNotFound)
 	}
+	return a.RecallHub(ctx, &hub)
+}
+
+// RecallHub 按**已定位的 hub 行**执行平台撤回（B2 的端口实现）。
+//
+// 与 Recall(ctx, channel, msgID) 的分工：那个入口按 msg_id 自己回查一行，是给工具
+// （reach.recall，参数只有渠道与消息键）用的；这个入口直接吃行，是给
+// /api/message-hub/:id/recall 用的 —— 撤回端点已经按主键定位到具体一行，
+// 再按 msg_id 回查一次是**多一次读且可能读错行**：msg_id 的唯一索引是
+// (platform, msg_id, conversation_id, direction) 四元组，单按 msg_id 查
+// 在有同键异方向/异会话行时会挑到任意一条。
+//
+// 失败一律回 *service.RecallFailure（带 Kind），因为调用方（service 层）不能
+// import 本包：分类在这里做，翻译成 HTTP 码的那一步在 service/controller。
+func (a *IntegrationReachAdapter) RecallHub(ctx context.Context, hub *model.MessageHub) error {
+	if hub == nil {
+		return &service.RecallFailure{Kind: service.RecallKindChannelError, Err: errors.New("nil hub row")}
+	}
+	if bridge.IsBridgeChannel(hub.Platform) {
+		return &service.RecallFailure{
+			Kind: service.RecallKindNotSupported,
+			Err:  fmt.Errorf("%w（桥接渠道 msgID 是合成键，不是平台消息标识）", ErrRecallNotSupported),
+		}
+	}
+	if a.db == nil {
+		return &service.RecallFailure{Kind: service.RecallKindChannelError, Err: ErrIntegrationServiceNotConfigured}
+	}
 	win, ok := recallWindow(hub.Platform)
 	if !ok {
-		return fmt.Errorf("recall(%s): 渠道 %s 无平台主动撤回: %w", channel, hub.Platform, ErrRecallNotSupported)
+		return &service.RecallFailure{
+			Kind: service.RecallKindNotSupported,
+			Err:  fmt.Errorf("%w（渠道 %s 无平台主动撤回）", ErrRecallNotSupported, hub.Platform),
+		}
 	}
 	if time.Since(hub.SentAt) > win {
-		return fmt.Errorf("recall(%s): 已超过 %s 撤回窗口: %w", channel, win, ErrRecallWindowExpired)
+		return &service.RecallFailure{
+			Kind: service.RecallKindWindowExpired,
+			Err:  fmt.Errorf("%w（窗口 %s）", ErrRecallWindowExpired, win),
+		}
 	}
 	var err error
 	switch hub.Platform {
 	case "telegram":
-		err = a.recallTelegram(ctx, &hub)
+		err = a.recallTelegram(ctx, hub)
 	case "feishu":
-		err = a.recallFeishu(ctx, &hub)
+		err = a.recallFeishu(ctx, hub)
 	case "wecom":
-		err = a.recallWeCom(ctx, &hub)
+		err = a.recallWeCom(ctx, hub)
 	case "whatsapp":
-		return fmt.Errorf("recall(%s): WhatsApp Cloud API 无主动撤回接口（仅用户侧 revoke 通知）: %w", channel, ErrRecallNotSupported)
+		return &service.RecallFailure{
+			Kind: service.RecallKindNotSupported,
+			Err:  fmt.Errorf("%w（WhatsApp Cloud API 无主动撤回接口，仅用户侧 revoke 通知）", ErrRecallNotSupported),
+		}
 	default:
-		return fmt.Errorf("recall(%s): %w", channel, ErrChannelNotImplemented)
+		return &service.RecallFailure{
+			Kind: service.RecallKindNotSupported,
+			Err:  fmt.Errorf("%w（渠道 %s）", ErrChannelNotImplemented, hub.Platform),
+		}
 	}
 	if err != nil {
-		logger.Ctx(ctx).Error().Err(err).Str("channel", channel).Str("msg_id", msgID).Msg("reach recall failed")
-		return fmt.Errorf("recall(%s): %w", channel, err)
+		logger.Ctx(ctx).Error().Err(err).Str("channel", hub.Platform).Str("msg_id", hub.MsgID).Msg("reach recall failed")
+		return &service.RecallFailure{Kind: service.RecallKindChannelError, Err: err}
 	}
-	logger.Ctx(ctx).Info().Str("channel", channel).Str("msg_id", msgID).Msg("reach recall ok")
+	logger.Ctx(ctx).Info().Str("channel", hub.Platform).Str("msg_id", hub.MsgID).Msg("reach recall ok")
 	return nil
 }
 

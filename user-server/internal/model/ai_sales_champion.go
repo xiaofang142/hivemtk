@@ -52,9 +52,21 @@ type MessageHub struct {
 	// 复合索引 (platform, account_id, platform_msg_id) 由迁移 v3.82.0 建——模型
 	// **有意**不用 index 标签（同 v3.81.0 教训：链路 Down 会删掉 AutoMigrate
 	// 在用的索引，判"越权删除在用索引"）。
-	PlatformMsgID string         `gorm:"type:varchar(100)" json:"platform_msg_id,omitempty"`
-	CreatedAt     time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	PlatformMsgID string `gorm:"type:varchar(100)" json:"platform_msg_id,omitempty"`
+	// RecalledAt / RecallError（B2，2026-10-26）：平台撤回的结果格。
+	//
+	// 为什么不在 Status 上再加一个 'recalled'：Status 记的是**发送**状态机
+	// （pending→sent/delivered/send_failed），描述"平台有没有把这条发出去"；
+	// 撤回是"发出去之后有没有撤掉"，是另一个维度。两件事挤进一列会出现
+	// "撤回了但发送状态被抹成 recalled" 这种把投递事实抹掉的写法，而且
+	// UpdateDeliveryStatus 的乱序回执保护（send_failed 不回翻）也就跟着失效。
+	//
+	// RecalledAt 非空 = 平台已确认撤回（终态，幂等判据）；RecallError 只记最近一次
+	// 失败原因，成功时清空——留着它才能回答"点过撤回但没成，为什么"。
+	RecalledAt  *time.Time     `json:"recalled_at,omitempty"`
+	RecallError string         `gorm:"type:varchar(200);not null;default:''" json:"recall_error,omitempty"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MessageHub) TableName() string { return "message_hub" }
