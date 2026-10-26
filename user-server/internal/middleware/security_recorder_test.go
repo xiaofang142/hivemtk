@@ -152,9 +152,9 @@ func TestSecurityRecorder_AsyncFlushRacesWithRecording(t *testing.T) {
 			securityFailureMu.Unlock()
 			go func() {
 				defer func() {
-					securityFailureMu.Lock()
-					securityFailureFlushing = false
-					securityFailureMu.Unlock()
+					// 与生产腿走同一扇门（endSecurityFlush），否则这条 -race 腿钉住的
+					// 是"测试自己写全局"，而不是线上那条收尾路径。
+					endSecurityFlush()
 				}()
 				_ = flushSecurityAccessFailures(deltas)
 			}()

@@ -39,6 +39,23 @@ var (
 	securityFailureFlushing = false
 )
 
+// endSecurityFlush 把"正在刷盘"标志归零（刷盘协程收尾与测试夹具共用这一条路径）。
+//
+// 为什么单独成一扇门，而不是在协程体里直接写 `securityFailureFlushing = false`：
+// scripts/check-async-global-read.py（R27 门）判的是"协程体内出现**测试会改写**的
+// 包级全局名"这一形状。securityFailureFlushing 正是这类全局 —— 用例把它当夹具
+// 反复置位/归零（security_recorder_test.go），而刷盘协程在锁外跑 Merge；体内直写
+// 意味着用例 A 残留的刷盘协程可能踩到用例 B 刚做完的初始化，那既是 DATA RACE
+// 也是跨用例串味（门禁文档里 7418e489 那条真红就是同一形状）。
+//
+// 收进这里之后：名字不再出现在任何协程体里，锁仍是同一把 securityFailureMu，
+// 调用路径与语义逐字不变（锁内只做一次赋值，不调用任何取到的函数值）。
+func endSecurityFlush() {
+	securityFailureMu.Lock()
+	securityFailureFlushing = false
+	securityFailureMu.Unlock()
+}
+
 // InitSecurityRecorder 装配记录器（router.Setup 调用一次；db==nil 时静默不装——
 // 记录是尽力而为的遥测，没有库时 JWT 验签行为完全不变）。
 func InitSecurityRecorder(db *gorm.DB) {
@@ -90,9 +107,10 @@ func recordAuthFailure(kind string, c *gin.Context) {
 				if r := recover(); r != nil {
 					logger.Errorf("[security-recorder] flush panic recovered: %v", r)
 				}
-				securityFailureMu.Lock()
-				securityFailureFlushing = false
-				securityFailureMu.Unlock()
+				// 经 accessor 归零，不在协程体里直写全局（R27 门，见 endSecurityFlush
+				// 的注释）：锁与语义不变，变的是"用例 A 的异步体不再可能读到
+				// 用例 B 装上去的夹具值"。
+				endSecurityFlush()
 			}()
 			_ = flushSecurityAccessFailures(d)
 		}(deltas)
