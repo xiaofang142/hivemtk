@@ -59,7 +59,7 @@ const shellText = readFileSync(distIndex, 'utf-8')
 // 背景（2026-10-23 事故）：它被当成「指向已下线域名的死代码」删过一次并发布上线，
 // 右下角客服整块消失——而当时构建、断言、发布全部是绿的：没有任何门禁看这一项。
 // 浮动 SDK 由 work.xapptool.cn 提供（实测 200 / 11984 B），是**在服能力**，不是死代码。
-// 判定规约与在服依赖清单见仓库外 ~/Documents/www/go/deploy/README.md §9。
+// 判定规约与在服依赖清单见 ~/Documents/www/go/hivemtk/deploy/README.md §9（deploy/ 不入 git）。
 // 这里只断言「壳里还挂着」两件事：配置全局 + SDK 地址；两者缺一，浮标就加载不出来。
 // 断言对象是 dist/index.html 而不是源文件——改名/重构 index.html 时，只要产物里少了就拦。
 const WIDGET_MARKERS = [

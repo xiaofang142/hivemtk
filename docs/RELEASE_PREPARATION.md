@@ -15,7 +15,7 @@
 - **发布一律手工，仓库内无发布脚本**（2026-10-23：`scripts/deploy-user.sh` / `scripts/post_deploy_check.sh` 已删除）：本地构建 → 上传到线上服务器指定目录 → 重启服务。官网发布步骤见 `website/README.md`「发布」章节；后端发布见本文 §发布流程。
 - **线上主机**：`101.35.252.112:57122`（`~/.ssh/config` 别名 `mtk-prod`），站点/服务根 `/www/wwwroot/hivemtk/{website,user-web,user-server,platform-web,platform-contributor,platform-server}`；HTTPS 证书在宝塔（`/www/server/panel/vhost/cert/xapptool.cn/`）；数据库是同机容器 `mtk-postgres`(127.0.0.1:8202) / `mtk-redis`(127.0.0.1:8203)，平台端 `mtk-platform-postgres`(8201)。
 - **仓内没有 systemd unit、没有生效的 nginx 配置、没有 CI 部署任务**——进程守护与反代由站点自建，仓内只有模板（`docs/operations/reverse-proxy/*.template`）。
-- **在服外部依赖（别当死代码删）**：官网 `website/index.html` 内联注入 `https://work.xapptool.cn/embed/marketing-chat-widget.iife.js`（右下角客服，2026-10-23 实测 200/11984B）。判死规约、依赖清单与发布后自查命令见仓库外 `~/Documents/www/go/deploy/README.md` §9。
+- **在服外部依赖（别当死代码删）**：官网 `website/index.html` 内联注入 `https://work.xapptool.cn/embed/marketing-chat-widget.iife.js`（右下角客服，2026-10-23 实测 200/11984B）。判死规约、依赖清单与发布后自查命令见 `~/Documents/www/go/hivemtk/deploy/README.md` §9（`deploy/` 已于 2026-10-26 迁入工作区根，不入 git）。
 - 平台端对用户端是**可选接入**：`PLATFORM_ENABLED=true` 才启用，默认关。
 
 ---
