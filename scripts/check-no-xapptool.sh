@@ -1,10 +1,27 @@
 #!/usr/bin/env bash
 # =============================================================
-# check-no-xapptool.sh —— 防回流闸：仓库内不得再出现已下线的 xapptool.cn 线上域
+# check-no-xapptool.sh —— 防回流闸：仓库内不得再出现**已下线的主机名**
 #
 # 背景：hive / hiveuser / hiveuserapi / hivepaltform(api) / hivecontributor 所在服务器
 # 已于 2026-09 到期且不续费（见 docs/superpowers/specs/2026-09-21-offline-deployment-design.md）。
-# 本闸把"任何地方别再把它当默认值或示例"固化成可跑判据。
+# 本闸把这些**死主机名**固化成可跑判据。
+#
+# ── 判据边界修订（2026-10-26）───────────────────────────────────────────
+# 本闸原先的 PATTERN 是裸 `xapptool\.cn`，前提是"整个 xapptool.cn 都已下线"。
+# 该前提**已被现状推翻**，实测证据（同日复核，可在任何有网的机器上复现）：
+#   · `dig +short xapptool.cn` → 101.35.252.112；`curl -I https://xapptool.cn/` → HTTP/2 200
+#   · 同一台机器上在服：work / workapi / manage / manageapi / developer 五个子域，
+#     由仓库外的 deploy/ 套件发布与巡检（deploy/deploy.conf 的 DOMAIN=xapptool.cn）
+#   · 官网右下角客服浮标**运行期依赖** https://work.xapptool.cn/embed/marketing-chat-widget.iife.js
+#     （2026-10-23 实测 200 / 11984B），website/scripts/postbuild.mjs 有构建门强制它在产物里
+# 结论：裸域与在服子域是**活的生产依赖**，不是死域。旧判据把它们一并判死，直接后果是
+# 2026-10-23 那次事故——浮标被当成"指向已下线域名的死代码"删掉并发布，线上客服整块消失。
+# 因此判据收窄到真正死掉的东西：六个 hive* 主机名 + 旧服务器 IP 118.25.236.101。
+# 这次收窄不是"放宽到不报警"，是**把枪口从活人身上移开**：下面两条判据同时仍有牙——
+#   · 死主机名/死 IP 一旦回流（任何文件、含 .env 形状文件）立刻红；
+#   · 活域被写进运行期默认常量由 user-server/internal/config/ports_test.go 的
+#     NoRetiredOnlineDomain 用例看住；活域从产物里消失由 website 的构建门看住。
+# 若将来 xapptool.cn 真的整体下线，把 PATTERN 改回裸域即可，别删本闸。
 #
 # 覆盖面口径（务必知道本闸摸不到什么，勿当全量保证）：
 #   枚举源 = 两条并起来、**剥掉 find 的 ./ 前缀之后** sort -z -u 去重
@@ -35,7 +52,8 @@
 #   扫描范围是**调用时所在的这一个 git 仓**（hivemtk 或 hivemtk-platform，取决于你在哪个仓里跑它）：
 #   两仓要各跑一次才都进账，跑一次只证明一个仓。白名单是仓内相对路径，
 #   下面这组是 hivemtk 侧的例外，platform 侧当前实测 0 命中、无需例外条目。
-#   website 迁入本仓后才会进本仓账（届时命中数会跳一批，那是覆盖面扩大，不是有人回退）。
+#   website 已于本轮迁入本仓，其 `xapptool.cn` 命中属**在服生产域**，不在本闸判据内
+#   （见上文判据边界修订）；这里的账只统计死主机名与旧 IP。
 #
 # 例外白名单（只放"改写等于伪造取证"的历史事实，不放偷懒没改的文案）：
 #   设计文档与实施计划自身必然指名旧域（要能核对才知道改了谁），故入白名单。
@@ -44,8 +62,8 @@
 #   白名单只豁免这几个具体路径，不豁免 scripts/ 或 docs/ 目录，新增违规照样拦。
 #   GEO 站点归属用例（crawler_visit_selfsite_test.go）的断言对象就是"已下线域名不再算自家、
 #   不再享有 A 级静态映射"，夹具必须指名那个域；换成任意别的死域等于把要防的那次回流改成防不住。
-#   website/deploy.sh 同属"检测器自引用"：它的产物校验步要在 dist 里 grep 出那个域才能拦，
-#   拦下后还要把域名印在报错文案里；改写等于拆掉这道产物门。
+#   website/deploy.sh 原先因"产物校验要在 dist 里 grep 出那个域"入白名单；判据收窄后
+#   它只含在服域、不再命中，白名单条目已移除——留着反而会给死主机名回流留一道暗门。
 #
 # 反向测试：scripts/check-no-xapptool.test.sh（注入违规必须让命中数 +1、撤掉必须回基线）
 # =============================================================
@@ -62,7 +80,10 @@ if [[ -z "$ROOT" ]]; then
 fi
 cd "$ROOT"
 
-PATTERN='xapptool\.cn'
+# 判据：只拦真正死掉的主机名与旧服务器 IP（长名在前，避免 -E 交替先吃短名再回溯失败）。
+# 反例（必须仍然红）：hive.xapptool.cn / hiveuserapi.xapptool.cn / 118.25.236.101
+# 正例（不该再红）：https://work.xapptool.cn/embed/... / https://xapptool.cn/
+PATTERN='(hivepaltformapi|hivecontributor|hivepaltform|hiveuserapi|hiveuser|hive)\.xapptool\.cn|118\.25\.236\.101'
 
 # NUL 分隔的待扫清单落盘一次：既要喂给 xargs，又要先数出扫描文件数做枚举自证，
 # 用进程替换两遍读会漏（管道只能消费一次）。
@@ -77,7 +98,6 @@ WHITELIST=(
   "scripts/check-no-xapptool.sh"
   "scripts/check-no-xapptool.test.sh"
   "user-server/internal/geo/repository/crawler_visit_selfsite_test.go"
-  "website/deploy.sh"
 )
 
 is_whitelisted() {
@@ -143,5 +163,5 @@ hits="$(printf '%s\n' "$MATCHES" | wc -l | tr -d ' ')"
 # 只印 file:line，丢掉命中行正文——②会把 .env 这类含口令的文件扫进来，
 # 原文透传等于把口令打进 CI 日志。代价：路径含冒号时截错，本仓无此类文件名。
 printf '%s\n' "$MATCHES" | cut -d: -f1,2
-echo "FAIL no-xapptool: $hits hit(s) 仍指向已下线线上域" >&2
+echo "FAIL no-xapptool: $hits hit(s) 仍指向已下线主机名（hive*.xapptool.cn / 118.25.236.101）" >&2
 exit 1

@@ -45,7 +45,10 @@ trap 'rm -f "$TMP" "$TMP_CN"' EXIT
 # 叠加 set -e 就在"基线为 0"这一支直接掐死脚本（正是迁移完成后该绿的场景）。
 read_count() {
   local n
-  n="$( { grep -E '^FAIL no-xapptool: [0-9]+ hit\(s\)' "$1" || true; } | head -1 | tr -dc '0-9')"
+  # 只取摘要行里 "no-xapptool: " 之后紧跟的那个数，再截一次数字段。
+  # 不能用 `tr -dc '0-9'` 扫整行：那会把摘要行**文案里的数字**一起拼进来
+  # （2026-10-26 实测：文案出现旧 IP 后，真实 1 处被读成 111825236101）。
+  n="$( { grep -oE '^FAIL no-xapptool: [0-9]+ hit\(s\)' "$1" || true; } | head -1 | grep -oE '[0-9]+' | head -1)"
   printf '%s\n' "${n:-0}"
 }
 
