@@ -12,7 +12,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
-	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,7 +38,7 @@ func setupTestSmsDB(t *testing.T) *gorm.DB {
 
 func setupSmsController() *SmsController {
 	repo := repository.NewSmsRepository()
-	svc := service.NewSmsService(repo)
+	svc := smssvc.NewSmsService(repo)
 	return NewSmsController(svc)
 }
 
@@ -1416,7 +1416,7 @@ func TestSMSController_SendSMS_MergedInvalidJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	smsRepo := repository.NewSmsRepository()
-	ctrl := NewSmsController(service.NewSmsService(smsRepo))
+	ctrl := NewSmsController(smssvc.NewSmsService(smsRepo))
 	ctrl.RegisterRoutes(router.Group("/sms"))
 
 	req, _ := http.NewRequest("POST", "/sms/sms/send", bytes.NewReader([]byte("bad")))
@@ -1435,7 +1435,7 @@ func TestSMSController_GetList_MergedSuccess(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	smsRepo := repository.NewSmsRepository()
-	ctrl := NewSmsController(service.NewSmsService(smsRepo))
+	ctrl := NewSmsController(smssvc.NewSmsService(smsRepo))
 	ctrl.RegisterRoutes(router.Group("/sms"))
 
 	req, _ := http.NewRequest("GET", "/sms/sms/list?page=1&page_size=10", nil)

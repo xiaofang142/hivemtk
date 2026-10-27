@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	smssvc "hivemtk-user/internal/service/sms"
 	"testing"
 
 	"hivemtk-user/internal/model"
@@ -205,7 +206,7 @@ func TestDoNotContact_SmsUnsubscribe_Integration(t *testing.T) {
 	)
 
 	smsRepo := repository.NewSmsUnsubscribeRepository(database)
-	smsSvc := NewSmsUnsubscribeService(smsRepo)
+	smsSvc := smssvc.NewSmsUnsubscribeService(smsRepo)
 	dncSvc := NewDoNotContactService(repository.NewCustomerDoNotContactRepository(database))
 	dncSvc.SetPhoneResolver(func(ctx context.Context, phone string) string { return "" })
 	smsSvc.SetDoNotContact(dncSvc)

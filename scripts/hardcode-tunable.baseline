@@ -4,6 +4,54 @@
 # 来源：hardcode-sweep/hardcode-sweep-classified.json 的 TUNABLE 归类；刷新命令：
 #   python3 scripts/check-hardcode-tunable.py --refresh-baseline
 # 刷新前先确认这次是「把该收口的收口了」而不是「想把这笔从门里摘出去」。
+# ── B1-a（2026-10-24）：桥接选择器健康度的四个常量，刻意**不入库** ────────────
+# 判据：参数中心的语义是「运维改了就应改变系统行为」，而这四个是**两端协议形状**
+# 与**请求边界**，单边可调只会让扩展与服务端的判定互相打架：
+#   SelectorHealthMinAttempts      —— 与扩展侧 SELECTOR_HEALTH_DEFAULTS.minAttempts 同值。
+#                                     单边调高 ⇒ 服务端判 warming、扩展自检页判 broken，
+#                                     同一现象两个结论；要调必须同时发扩展版本。
+#   SelectorHealthMaxItemsPerReport / SelectorHealthMaxDeltaPerReport
+#                                  —— 上报请求的形状上限（字段数/单次增量）。它们是
+#                                     防脏数据与防撑爆写入的闸，不是运维旋钮；写成参数
+#                                     等于允许把闸开到无限。
+#   BridgeSelectorHealthListLimit  —— 运营面单次读取行数上限，与 bridgeAccountListLimit
+#                                     同一类（表规模由「渠道×字段」收敛，正常十几行）。
+# 真要调整判定敏感度，调的是 `bridge.selector_health_degraded_below`（**已入库**，
+# 每请求热读、改完即时生效），那是唯一该由运维动的阈值。
+# ── 2026-10-24 geo：分析口径与请求护栏常量（「不用入库」的理由）──────────────
+#   ContentFormatAttributionSampleFloor —— 「内容形态归因」报表的**样本量下限**：
+#     低于它的分组读数在报告里标 SampleSizeHint、结论不予采信。它定义的是
+#     「什么算能下结论」，是统计口径的一部分——按环境调它等于同一份报表对不同人
+#     给出不同结论，而报表是给人做决策用的。改口径走需求变更 + 回归
+#     （decision_analytics_a12_test.go 断言它 ≥1），不是运维调参。
+#   BatchGenerateMaxKeywords —— 批量生成的**单批上限**，即同步接口的契约护栏：
+#     超限截断并在 truncated_to 回传（前端据此提示「只生成了 N 条」），
+#     是 dto / BFF / 前端三处共识的请求形状。调高＝把 HTTP 连接当任务队列用
+#     （无进度持久化、无取消）；真要大批量走 keyword_pipeline cron。契约常量不参数化。
+# ── 2026-10-24 T3 观测看板（007）：DashboardDefaultWindow 刻意不入库 ──────────
+# 它是 GET /api/observability/dashboard 的 window 查询参数在非法值时的**回落默认**
+# （24h/7d/30d 三档取值之外的兜底 7d），与 windowDuration/normalizeWindow 共同构成
+# 对外 API 的取值契约：调它等于对同一批调用方改协议默认，不是运维调参。要调默认
+# 档位走需求变更 + 契约回归（route 面与看板快照测试），与「参数中心热读阈值」不同域。
+# ── 2026-10-24 T4 知识库冷启动：爬取配额 4 旋钮暂登记为债 ─────────────────────
+# 均出自 docs/architecture/design/T4-kb-coldstart.md §8.2 的固定配额/护栏，随
+# feature T4（一）（二）首次落地，当前写死在 kb_crawler.go 的 const 块里。
+# 「为什么暂不入库」：T4 爬取管道仍在特性交付中（服务 seam 与装配面持续演进），
+# 参数中心 knowledge 组的接线属特性收口项，由特性提交继续完成；本表先按设计文档
+# §8.2 口径登记默认值，防止新增旋钮门误挡在途特性。接线时应改走
+# knowledge/service/constants.go 的 Default*() accessor + GetInt 兜底范式。
+# ── 2026-10-24 T2 答案引用溯源（da7bb38d）：引用契约常量刻意不入库 ─────────────
+# 三者定义的是「答案引用面板」这条对外响应契约的形状，不是运维阈值：
+#   CitationCountMax —— 引用透传条数上限（FAQ top3）。调大＝把引用面板变成
+#     检索 dump（design §6.3 泛化防护的配对护栏）；调小＝同一前端卡片少一个来源。
+#     它是 dto / service / 前端三处共识的响应形状，改它走需求变更，不是调参。
+#   CitationSnippetMax —— chunk 摘要截断长度（阶段二 chunk 引用 snippet 字段）。
+#     ChunkCitation.Snippet 按它截断，前端渲染引用原文时按「固定 500 字」排版。
+#   FAQAnswerSummaryMax —— FAQ 卡片答案摘要长度（Answer 字段前 200 字），
+#     与前端「标准答案摘要」卡片的展示契约一致。
+# AssetStoreSubmitLimit —— 资产市场 7 天提审限额（44be691d T5 批）。
+# 对齐 Chrome Web Store 新账号审核配额（10 件/7 天），属对外平台契约值而非调优旋钮：
+# 调大等于替贡献者向平台超限提交，必然被平台侧拒绝。豁免入库，留基线说明。
 ABTestDuration
 AIAgentEnabled
 AIReplied
@@ -16,15 +64,18 @@ AlertDispatchBufferSize
 AlertDispatchDedupeWindow
 AlertDispatchWorkers
 ApprovalShadow
+AssetStoreSubmitLimit
 AutoApplyPriority
 BackoffMultiplier
 BadCaseDefaultExportLimit
 BadCaseDefaultPageSize
+BatchGenerateMaxKeywords
 BatchSize
 BootstrapN
 BrandMentioned
 BridgeOnlineGraceDefault
 BridgeOutboundOrphanDefaultTTL
+BridgeSelectorHealthListLimit
 CONTRIBUTOR_DEV
 CSVExportMaxRows
 CallbackOpVerify
@@ -33,6 +84,8 @@ CandidatesPerRun
 Change
 ChangePct
 CircuitBreakerShadow
+CitationCountMax
+CitationSnippetMax
 Clarity
 ClusterSimThreshold
 Collection
@@ -45,6 +98,7 @@ Concurrency
 ConnectorPullMaxPagesCap
 ConnectorPullMaxPagesDefault
 ConsecutiveFailureLimit
+ContentFormatAttributionSampleFloor
 ContextPrecisionTarget
 ConvergenceThreshold
 CooldownSeconds
@@ -56,6 +110,7 @@ CronShortTimeout
 CronVeryLongTimeout
 DNCBlocked
 DNSOK
+DashboardDefaultWindow
 DayCap
 Days
 DaysSincePurchase
@@ -150,6 +205,7 @@ EmbRetryCooldownDefault
 Empathy
 Enthusiasm
 ExplorationFloor
+FAQAnswerSummaryMax
 FailCount
 FeatureFlagStaleDays
 FewShotMinCosDefault
@@ -200,7 +256,9 @@ MARKETING_WEBHOOK_ALLOW_INSECURE
 MaxApprovalRequestTTL
 MaxAttempts
 MaxAudienceLimit
+MaxConsecutiveFailBatch
 MaxCooldown
+MaxDailyCrawlPages
 MaxDialoguesPerRun
 MaxDownloadFileBytes
 MaxHumanTaskHandoffSlaMinutes
@@ -217,8 +275,10 @@ MaxQuestions
 MaxRPM
 MaxRepeatCount
 MaxRetries
+MaxRetryPerBatch
 MaxSessions
 MaxSizeMB
+MaxSourcesPerTenant
 MaxTokens
 MaxTraces
 MaxUploadSize
@@ -284,6 +344,9 @@ SSEMaxBacklogEvents
 SSEMaxConnPerIP
 SSOCookieTTL
 ScriptABAttributionHours
+SelectorHealthMaxDeltaPerReport
+SelectorHealthMaxItemsPerReport
+SelectorHealthMinAttempts
 SessionCleanupInterval
 ShortTimeout
 SimilarityThreshold
@@ -331,67 +394,4 @@ Window
 WindowSeconds
 WindowSize
 WorkerCount
-
-# ── B1-a（2026-10-24）：桥接选择器健康度的四个常量，刻意**不入库** ────────────
-# 判据：参数中心的语义是「运维改了就应改变系统行为」，而这四个是**两端协议形状**
-# 与**请求边界**，单边可调只会让扩展与服务端的判定互相打架：
-#   SelectorHealthMinAttempts      —— 与扩展侧 SELECTOR_HEALTH_DEFAULTS.minAttempts 同值。
-#                                     单边调高 ⇒ 服务端判 warming、扩展自检页判 broken，
-#                                     同一现象两个结论；要调必须同时发扩展版本。
-#   SelectorHealthMaxItemsPerReport / SelectorHealthMaxDeltaPerReport
-#                                  —— 上报请求的形状上限（字段数/单次增量）。它们是
-#                                     防脏数据与防撑爆写入的闸，不是运维旋钮；写成参数
-#                                     等于允许把闸开到无限。
-#   BridgeSelectorHealthListLimit  —— 运营面单次读取行数上限，与 bridgeAccountListLimit
-#                                     同一类（表规模由「渠道×字段」收敛，正常十几行）。
-# 真要调整判定敏感度，调的是 `bridge.selector_health_degraded_below`（**已入库**，
-# 每请求热读、改完即时生效），那是唯一该由运维动的阈值。
-BridgeSelectorHealthListLimit
-SelectorHealthMaxDeltaPerReport
-SelectorHealthMaxItemsPerReport
-SelectorHealthMinAttempts
-# ── 2026-10-24 geo：分析口径与请求护栏常量（「不用入库」的理由）──────────────
-#   ContentFormatAttributionSampleFloor —— 「内容形态归因」报表的**样本量下限**：
-#     低于它的分组读数在报告里标 SampleSizeHint、结论不予采信。它定义的是
-#     「什么算能下结论」，是统计口径的一部分——按环境调它等于同一份报表对不同人
-#     给出不同结论，而报表是给人做决策用的。改口径走需求变更 + 回归
-#     （decision_analytics_a12_test.go 断言它 ≥1），不是运维调参。
-#   BatchGenerateMaxKeywords —— 批量生成的**单批上限**，即同步接口的契约护栏：
-#     超限截断并在 truncated_to 回传（前端据此提示「只生成了 N 条」），
-#     是 dto / BFF / 前端三处共识的请求形状。调高＝把 HTTP 连接当任务队列用
-#     （无进度持久化、无取消）；真要大批量走 keyword_pipeline cron。契约常量不参数化。
-ContentFormatAttributionSampleFloor
-BatchGenerateMaxKeywords
-# ── 2026-10-24 T3 观测看板（007）：DashboardDefaultWindow 刻意不入库 ──────────
-# 它是 GET /api/observability/dashboard 的 window 查询参数在非法值时的**回落默认**
-# （24h/7d/30d 三档取值之外的兜底 7d），与 windowDuration/normalizeWindow 共同构成
-# 对外 API 的取值契约：调它等于对同一批调用方改协议默认，不是运维调参。要调默认
-# 档位走需求变更 + 契约回归（route 面与看板快照测试），与「参数中心热读阈值」不同域。
-DashboardDefaultWindow
-# ── 2026-10-24 T4 知识库冷启动：爬取配额 4 旋钮暂登记为债 ─────────────────────
-# 均出自 docs/architecture/design/T4-kb-coldstart.md §8.2 的固定配额/护栏，随
-# feature T4（一）（二）首次落地，当前写死在 kb_crawler.go 的 const 块里。
-# 「为什么暂不入库」：T4 爬取管道仍在特性交付中（服务 seam 与装配面持续演进），
-# 参数中心 knowledge 组的接线属特性收口项，由特性提交继续完成；本表先按设计文档
-# §8.2 口径登记默认值，防止新增旋钮门误挡在途特性。接线时应改走
-# knowledge/service/constants.go 的 Default*() accessor + GetInt 兜底范式。
-MaxSourcesPerTenant
-MaxDailyCrawlPages
-MaxConsecutiveFailBatch
-MaxRetryPerBatch
-# ── 2026-10-24 T2 答案引用溯源（da7bb38d）：引用契约常量刻意不入库 ─────────────
-# 三者定义的是「答案引用面板」这条对外响应契约的形状，不是运维阈值：
-#   CitationCountMax —— 引用透传条数上限（FAQ top3）。调大＝把引用面板变成
-#     检索 dump（design §6.3 泛化防护的配对护栏）；调小＝同一前端卡片少一个来源。
-#     它是 dto / service / 前端三处共识的响应形状，改它走需求变更，不是调参。
-#   CitationSnippetMax —— chunk 摘要截断长度（阶段二 chunk 引用 snippet 字段）。
-#     ChunkCitation.Snippet 按它截断，前端渲染引用原文时按「固定 500 字」排版。
-#   FAQAnswerSummaryMax —— FAQ 卡片答案摘要长度（Answer 字段前 200 字），
-#     与前端「标准答案摘要」卡片的展示契约一致。
-CitationCountMax
-CitationSnippetMax
-FAQAnswerSummaryMax
-# AssetStoreSubmitLimit —— 资产市场 7 天提审限额（44be691d T5 批）。
-# 对齐 Chrome Web Store 新账号审核配额（10 件/7 天），属对外平台契约值而非调优旋钮：
-# 调大等于替贡献者向平台超限提交，必然被平台侧拒绝。豁免入库，留基线说明。
-AssetStoreSubmitLimit
+XianyuReportTokenTTL

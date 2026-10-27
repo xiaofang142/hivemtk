@@ -7,12 +7,20 @@
 # 换成全局 accessor，宽口径门按形状抓到 3 个文件的差额（ai_agent.go +1、inbox_scope.go 与
 # tiktok_card.go 各 +1；message_hub.go 的唯一命中已在改写中变成注释）⇒ 本表按现树补登，
 # 实测同数＝42 处 / 24 个文件。登记只是承认存量，不是认可这种写法。
+# 2026-10-27 复核：树内实测 **33 处 / 22 个文件**（上两行合计口径与现树不符，按现值订正）。
+# trace_learning/adjuster.go 的两处 `repo.GetDB() == nil` 已改为仓储 `DBReady()` 就绪探针（句柄判断
+# 收回仓储内部，不再经 service 取句柄）；feedback 系四文件（H4 域）按既有口径补登——它们用同一
+# 连接构造兄弟仓储/在启动期装配，收口需构造注入，登记同样只是承认存量。
 存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 存量：service 直接取 DB 句柄，收口需改构造注入（三个构造器各取 1–2 处：NewAIAgentService/NewChannelAgentBindingService/NewCustomerServiceAgentService）
 user-server/internal/service/customer_session.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/customer_session_scope.go	2	存量：service 经 sessionRepo.GetDB 取句柄做只读作用域过滤（RBAC 隔离批次新增，同 R22 口径待收口为构造注入）
 user-server/internal/service/data_export.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/faq.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/feedback_learning.go	2	存量：服务用同一连接构造两个 SOP 仓储（W-2 H4 域，收口需构造注入）
+user-server/internal/service/feedback_learning_cron.go	2	存量：cron 用同一连接构造 SOP 仓储（W-2 H4 域，收口需构造注入）
+user-server/internal/service/feedback_loop_cron.go	1	存量：cron 构造期取全局库句柄装配两仓储（W-2 H4 域，收口需构造注入）
+user-server/internal/service/feedback_loop_init.go	2	存量：启动期装配反馈组件时取全局库句柄（W-2 H4 域，收口需构造注入）
 user-server/internal/service/inbox.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/inbox_ingress.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/inbox_scope.go	1	存量：作用域过滤直接查 system_users 表，走的是全局库句柄，收口需改构造注入

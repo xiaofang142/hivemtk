@@ -1,8 +1,9 @@
-package service
+package sms
 
 import (
 	"context"
 	"errors"
+	"hivemtk-user/internal/identity"
 	"strings"
 	"time"
 
@@ -90,7 +91,7 @@ func (s *SmsTrackingService) RecordDeliveryReport(ctx context.Context, req *Deli
 		existing.IsRetryable = isRetryable
 		existing.Provider = req.Provider
 		if req.Phone != "" {
-			existing.Phone = NormalizePhone(req.Phone)
+			existing.Phone = identity.NormalizePhone(req.Phone)
 		}
 		if req.JobID != "" {
 			existing.JobID = req.JobID
@@ -107,7 +108,7 @@ func (s *SmsTrackingService) RecordDeliveryReport(ctx context.Context, req *Deli
 
 	record := &model.SmsDeliveryStatus{
 		MessageID:   req.MessageID,
-		Phone:       NormalizePhone(req.Phone),
+		Phone:       identity.NormalizePhone(req.Phone),
 		JobID:       req.JobID,
 		Provider:    req.Provider,
 		Status:      status,
@@ -212,7 +213,7 @@ func (s *SmsTrackingService) ListPhoneStatuses(ctx context.Context, phone string
 	if limit < 1 || limit > 500 {
 		limit = 20
 	}
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	return s.repo.ListStatusesByPhone(ctx, phone, page, limit)
 }
 

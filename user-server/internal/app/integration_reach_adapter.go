@@ -25,6 +25,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 )
 
 type IntegrationReachAdapter struct {
@@ -38,7 +39,7 @@ type IntegrationReachAdapter struct {
 	web      *service.CustomerSessionService
 	wecom    *service.WeComIntegrationService
 	dingtalk *service.DingTalkService
-	sms      service.SmsService
+	sms      smssvc.SmsService
 	email    *email.EmailSendService
 }
 
@@ -97,7 +98,7 @@ func NewIntegrationReachAdapterFromDB(db *gorm.DB) *IntegrationReachAdapter {
 		web:      service.NewCustomerSessionService(),
 		wecom:    service.NewWeComIntegrationService(),
 		dingtalk: service.NewDingTalkService(),
-		sms:      service.NewSmsService(repository.NewSmsRepository()),
+		sms:      smssvc.NewSmsService(repository.NewSmsRepository()),
 		email:    email.NewEmailSendService(),
 	}
 }

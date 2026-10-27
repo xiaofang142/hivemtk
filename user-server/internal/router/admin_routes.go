@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -121,8 +122,8 @@ func wirePublicDependencies(db *gorm.DB) publicDeps {
 	return publicDeps{
 		knowledgeMerchantCtrl:  knowledgectrl.NewKnowledgeMerchantController(),
 		emailUnsubscribeCtrl:   controller.NewEmailUnsubscribeController(service.NewEmailUnsubscribeService(emailUnsubscribeRepo)),
-		smsUnsubscribeCtrl:     controller.NewSmsUnsubscribeController(service.NewSmsUnsubscribeService(smsUnsubscribeRepo)),
-		smsDeliveryTrackerCtrl: controller.NewSmsDeliveryTrackerController(service.NewSmsDeliveryTrackerService(nil, nil)),
+		smsUnsubscribeCtrl:     controller.NewSmsUnsubscribeController(smssvc.NewSmsUnsubscribeService(smsUnsubscribeRepo)),
+		smsDeliveryTrackerCtrl: controller.NewSmsDeliveryTrackerController(smssvc.NewSmsDeliveryTrackerService(nil, nil)),
 		emailOpenTrackerCtrl:   controller.NewEmailOpenTrackerController(service.NewEmailOpenTrackerService(nil, nil)),
 		emailTrackingCtrl:      controller.NewEmailTrackingController(service.NewEmailTrackingService(repository.NewEmailTrackingRepository(db))),
 		inboxIngressCtrl:       controller.NewInboxIngressController(service.NewInboxIngressService()),

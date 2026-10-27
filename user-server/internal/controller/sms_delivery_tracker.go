@@ -6,18 +6,18 @@ import (
 	"time"
 
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 )
 
 // SmsDeliveryTrackerController 短信到达率追踪控制器
 type SmsDeliveryTrackerController struct {
-	svc *service.SmsDeliveryTrackerService
+	svc *smssvc.SmsDeliveryTrackerService
 }
 
 // NewSmsDeliveryTrackerController 创建控制器
-func NewSmsDeliveryTrackerController(svc *service.SmsDeliveryTrackerService) *SmsDeliveryTrackerController {
+func NewSmsDeliveryTrackerController(svc *smssvc.SmsDeliveryTrackerService) *SmsDeliveryTrackerController {
 	return &SmsDeliveryTrackerController{svc: svc}
 }
 
@@ -28,7 +28,7 @@ func NewSmsDeliveryTrackerController(svc *service.SmsDeliveryTrackerService) *Sm
 // @Produce      json
 // @Param start query string false "起始时间（RFC3339 或）"
 // @Param        end    query  string  false  "结束时间（默认 now）"
-// @Success      200    {object}  service.DeliveryRateMetrics
+// @Success      200    {object}  smssvc.DeliveryRateMetrics
 // @Router       /api/sms/delivery/metrics [get]
 func (c *SmsDeliveryTrackerController) GetMetrics(ctx *gin.Context) {
 	if c.svc == nil {
@@ -129,7 +129,7 @@ func (c *SmsDeliveryTrackerController) GetCarrier(ctx *gin.Context) {
 // @Router       /api/sms/delivery/carrier/{phone} [get]
 func (c *SmsDeliveryTrackerController) DetectCarrierByPrefix(ctx *gin.Context) {
 	phone := ctx.Param("phone")
-	carrier := service.DetectCarrierFromPhone(phone)
+	carrier := smssvc.DetectCarrierFromPhone(phone)
 	response.Success(ctx, gin.H{
 		"phone":   phone,
 		"carrier": carrier,
@@ -177,7 +177,7 @@ func (c *SmsDeliveryTrackerController) Webhook(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "租户标识无效："+err.Error())
 		return
 	}
-	report := &service.ProviderDeliveryReport{
+	report := &smssvc.ProviderDeliveryReport{
 		MessageID:   req.MessageID,
 		Phone:       req.Phone,
 		JobID:       req.JobID,
@@ -188,7 +188,7 @@ func (c *SmsDeliveryTrackerController) Webhook(ctx *gin.Context) {
 		ErrorMsg:    req.ErrorMsg,
 		SentAt:      req.SentAt,
 		DeliveredAt: req.DeliveredAt,
-		RawPayload:  service.MarshalReport(req),
+		RawPayload:  smssvc.MarshalReport(req),
 	}
 	if err := c.svc.RecordFromProvider(requestCtx, report); err != nil {
 		response.ErrorFromDB(ctx, err, "记录回执失败："+err.Error())

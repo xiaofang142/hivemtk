@@ -21,6 +21,9 @@ func NewCustomToolController() *CustomToolController {
 	return &CustomToolController{svc: service.NewCustomToolService()}
 }
 
+// @Summary      导入自定义工具
+// @Tags      custom-tool
+// @Router    /api/custom-tools/import [post]
 // Import POST /api/custom-tools/import
 func (c *CustomToolController) Import(ctx *gin.Context) {
 	var in service.ImportInput
@@ -36,6 +39,9 @@ func (c *CustomToolController) Import(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"tool_count": n, "record": rec}, "导入成功")
 }
 
+// @Summary      自定义工具列表
+// @Tags      custom-tool
+// @Router    /api/custom-tools [get]
 // List GET /api/custom-tools
 func (c *CustomToolController) List(ctx *gin.Context) {
 	out, err := c.svc.List(ctx.Request.Context())
@@ -46,6 +52,9 @@ func (c *CustomToolController) List(ctx *gin.Context) {
 	response.Success(ctx, out, "获取成功")
 }
 
+// @Summary      删除自定义工具
+// @Tags      custom-tool
+// @Router    /api/custom-tools/{id} [delete]
 // Delete DELETE /api/custom-tools/:id
 func (c *CustomToolController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)

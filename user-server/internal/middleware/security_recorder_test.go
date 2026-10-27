@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/securitytelemetry"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 
@@ -59,7 +60,7 @@ func TestSecurityRecorderFlushMergesIntoKV(t *testing.T) {
 	if day.Kinds[model.SecurityAccessKindTokenInvalid] != 1 {
 		t.Fatalf("token_invalid 应计 1 次，实际 %v", day.Kinds)
 	}
-	top := payload.TopPaths(5)
+	top := securitytelemetry.TopPaths(payload, 5)
 	if len(top) == 0 || top[0] != "/api/system" {
 		t.Fatalf("路径应截两段前缀 /api/system，实际 %v", top)
 	}

@@ -1,7 +1,8 @@
-package service
+package sms
 
 import (
 	"context"
+	"hivemtk-user/internal/identity"
 	"strings"
 	"testing"
 
@@ -362,9 +363,9 @@ func TestSmsUnsubscribe_NormalizePhone(t *testing.T) {
 		{"abc", "abc"},
 	}
 	for _, c := range cases {
-		got := NormalizePhone(c.input)
+		got := identity.NormalizePhone(c.input)
 		if got != c.expect {
-			t.Errorf("NormalizePhone(%q) = %q, want %q", c.input, got, c.expect)
+			t.Errorf("identity.NormalizePhone(%q) = %q, want %q", c.input, got, c.expect)
 		}
 	}
 }

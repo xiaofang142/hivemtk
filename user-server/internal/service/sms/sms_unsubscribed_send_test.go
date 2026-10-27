@@ -1,4 +1,4 @@
-package service
+package sms
 
 // sms_unsubscribed_send_test.go —— 退订号码的发送结果必须是"没发"，不能是"发成功了"（T-P5-04 第 4 片）。
 //
@@ -10,7 +10,7 @@ package service
 // 这比没有数据更糟：它是有方向错的数。
 //
 // 判据的口径与整条 LTC 外发链一致：**退订 = 命中 DNC**，不是"渠道故障"。
-// 所以这里返回 ErrDoNotContact 而不是一个新造的第三类错误 ——
+// 所以这里返回 reach.ErrDoNotContact 而不是一个新造的第三类错误 ——
 // 队列侧与节点侧早已按这个哨兵分好处置（cancelled / skipped，且**不烧幂等键**），
 // 造新哨兵等于要求那两处各加一个分支，漏一个就变成"退订的人被重试三次"。
 //
@@ -22,6 +22,7 @@ package service
 import (
 	"context"
 	"errors"
+	"hivemtk-user/internal/pkg/reach"
 	"strings"
 	"testing"
 	"time"
@@ -84,7 +85,7 @@ func TestSmsSendUnsubscribedPhoneIsNotReportedAsSent(t *testing.T) {
 	if err == nil {
 		t.Fatal("退订号码的 SendSms 返回了 nil ⇒ 调用方会把「一条都没发」记成「已发送」")
 	}
-	if !errors.Is(err, ErrDoNotContact) {
+	if !errors.Is(err, reach.ErrDoNotContact) {
 		t.Errorf("必须命中 DNC 哨兵（队列与节点按它分处置），实得 %v", err)
 	}
 	var n int64
@@ -109,7 +110,7 @@ func TestSmsSendSubscribedPhoneIsNotMarkedDoNotContact(t *testing.T) {
 
 	err := newSmsSendSvc(database).SendSms(context.Background(),
 		&dto.SmsSendRequest{Phone: "13900002222", Content: "您好，这是外联内容"})
-	if errors.Is(err, ErrDoNotContact) {
+	if errors.Is(err, reach.ErrDoNotContact) {
 		t.Errorf("号码没退订却报 DNC ⇒ 整个渠道被这句锁死：%v", err)
 	}
 }
@@ -128,7 +129,7 @@ func TestSmsResendToUnsubscribedPhoneIsBlocked(t *testing.T) {
 	}
 
 	err := newSmsSendSvc(database).ResendSms(context.Background(), rec.ID)
-	if !errors.Is(err, ErrDoNotContact) {
+	if !errors.Is(err, reach.ErrDoNotContact) {
 		t.Fatalf("退订号码的重发必须命中 DNC，实得 %v", err)
 	}
 	var back model.SmsRecord
@@ -149,7 +150,7 @@ func TestSmsResendToSubscribedPhoneIsNotMarkedDoNotContact(t *testing.T) {
 	}
 
 	err := newSmsSendSvc(database).ResendSms(context.Background(), rec.ID)
-	if errors.Is(err, ErrDoNotContact) {
+	if errors.Is(err, reach.ErrDoNotContact) {
 		t.Errorf("号码没退订却报 DNC：%v", err)
 	}
 }

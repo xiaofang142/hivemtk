@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"hivemtk-user/internal/pkg/tenant"
-	"math"
 	"net/url"
 	"os"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -354,9 +354,8 @@ func (s *EmailTrackingService) baseURL(ctx context.Context) string {
 	return config.GetServerBaseURL()
 }
 
-func round2(v float64) float64 {
-	return math.Round(v*100) / 100
-}
+// round2 保留本包私有名给既有调用点；实现已下沉 pkg/utils（按域拆包后子包共用）。
+func round2(v float64) float64 { return utils.Round2(v) }
 
 // tenantIDFromCtx 签发侧租户提取（specs/001-saas-multi-tenant T025；0 = off 模式）
 func tenantIDFromCtx(ctx context.Context) uint {

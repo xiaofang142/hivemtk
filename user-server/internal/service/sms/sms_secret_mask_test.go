@@ -1,4 +1,4 @@
-package service
+package sms
 
 // 契约：短信通道密钥**读出去是掩码，写回来时掩码被当成"没改"**。
 //

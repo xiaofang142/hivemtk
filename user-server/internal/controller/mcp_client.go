@@ -22,6 +22,9 @@ func NewMCPClientController() *MCPClientController {
 	return &MCPClientController{svc: service.NewMCPClientService()}
 }
 
+// @Summary      注册 MCP 服务
+// @Tags      mcp-client
+// @Router    /api/mcp-servers [post]
 // Create POST /api/mcp-servers
 func (c *MCPClientController) Create(ctx *gin.Context) {
 	var req service.MCPImportInput
@@ -37,6 +40,9 @@ func (c *MCPClientController) Create(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"server": row, "tool_count": tools}, "已保存")
 }
 
+// @Summary      MCP 服务列表
+// @Tags      mcp-client
+// @Router    /api/mcp-servers [get]
 // List GET /api/mcp-servers
 func (c *MCPClientController) List(ctx *gin.Context) {
 	rows, err := c.svc.List(ctx.Request.Context())
@@ -47,6 +53,9 @@ func (c *MCPClientController) List(ctx *gin.Context) {
 	response.Success(ctx, rows, "获取成功")
 }
 
+// @Summary      删除 MCP 服务
+// @Tags      mcp-client
+// @Router    /api/mcp-servers/{id} [delete]
 // Delete DELETE /api/mcp-servers/:id
 func (c *MCPClientController) Delete(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
@@ -64,6 +73,9 @@ func (c *MCPClientController) Delete(ctx *gin.Context) {
 	response.Success(ctx, nil, "已删除")
 }
 
+// @Summary      启停 MCP 服务
+// @Tags      mcp-client
+// @Router    /api/mcp-servers/{id}/enabled [put]
 // SetEnabled PUT /api/mcp-servers/:id/enabled
 func (c *MCPClientController) SetEnabled(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
@@ -86,6 +98,9 @@ func (c *MCPClientController) SetEnabled(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"server": row, "tool_count": tools}, "已更新")
 }
 
+// @Summary      测试 MCP 服务连通性
+// @Tags      mcp-client
+// @Router    /api/mcp-servers/{id}/test [get]
 // Test GET /api/mcp-servers/:id/test
 func (c *MCPClientController) Test(ctx *gin.Context) {
 	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)

@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -198,17 +199,17 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 func setupSmsRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	smsRepo := repository.NewSmsRepository()
-	smsCtrl := controller.NewSmsController(service.NewSmsService(smsRepo))
+	smsCtrl := controller.NewSmsController(smssvc.NewSmsService(smsRepo))
 	smsCtrl.RegisterRoutes(auth)
 
 	smsUnsubscribeRepo := repository.NewSmsUnsubscribeRepository(gormDB)
 	smsUnsubscribeCtrl := controller.NewSmsUnsubscribeController(
-		service.NewSmsUnsubscribeService(smsUnsubscribeRepo),
+		smssvc.NewSmsUnsubscribeService(smsUnsubscribeRepo),
 	)
 	smsUnsubscribeCtrl.RegisterRoutes(nil, auth)
 
 	smsDeliveryTrackerCtrl := controller.NewSmsDeliveryTrackerController(
-		service.NewSmsDeliveryTrackerService(nil, nil),
+		smssvc.NewSmsDeliveryTrackerService(nil, nil),
 	)
 	smsDeliveryTrackerCtrl.RegisterRoutes(nil, auth)
 }

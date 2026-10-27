@@ -6,10 +6,7 @@
 // （JWT 401 五类），读取方是 service/security_overview.go（安全总览端点）。
 package model
 
-import (
-	"encoding/json"
-	"sort"
-)
+import "encoding/json"
 
 // SecurityAccessFailureKVKey platform_config_kv 里的聚合键。
 const SecurityAccessFailureKVKey = "security_access_failures_v1"
@@ -51,85 +48,4 @@ func ParseSecurityAccessFailurePayload(raw string) *SecurityAccessFailurePayload
 		p.Days = map[string]*SecurityAccessFailureDay{}
 	}
 	return p
-}
-
-// Add 计入一次失败（date=YYYY-MM-DD，pathPrefix 已截好的两段前缀）。
-func (p *SecurityAccessFailurePayload) Add(date, kind, pathPrefix string) {
-	day := p.Days[date]
-	if day == nil {
-		day = &SecurityAccessFailureDay{Kinds: map[string]int64{}, Paths: map[string]int64{}}
-		p.Days[date] = day
-	}
-	if kind != "" {
-		day.Kinds[kind]++
-	}
-	if pathPrefix != "" {
-		day.Paths[pathPrefix]++
-	}
-}
-
-// Merge 把另一份载荷（通常是本进程待刷增量）并进当前载荷。
-func (p *SecurityAccessFailurePayload) Merge(other *SecurityAccessFailurePayload) {
-	if other == nil {
-		return
-	}
-	for date, day := range other.Days {
-		for kind, n := range day.Kinds {
-			for i := int64(0); i < n; i++ {
-				p.Add(date, kind, "")
-			}
-		}
-		for path, n := range day.Paths {
-			for i := int64(0); i < n; i++ {
-				p.Add(date, "", path)
-			}
-		}
-	}
-}
-
-// Prune 只保留最近 keepDays 天（按日期字符串倒序保留；日期串即字典序）。
-func (p *SecurityAccessFailurePayload) Prune(keepDays int) {
-	if keepDays <= 0 || len(p.Days) <= keepDays {
-		return
-	}
-	dates := make([]string, 0, len(p.Days))
-	for d := range p.Days {
-		dates = append(dates, d)
-	}
-	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
-	for _, d := range dates[keepDays:] {
-		delete(p.Days, d)
-	}
-}
-
-// TopPaths 返回按次数降序的前 n 个路径前缀。
-func (p *SecurityAccessFailurePayload) TopPaths(n int) []string {
-	type kv struct {
-		k string
-		v int64
-	}
-	all := map[string]int64{}
-	for _, day := range p.Days {
-		for path, cnt := range day.Paths {
-			all[path] += cnt
-		}
-	}
-	list := make([]kv, 0, len(all))
-	for k, v := range all {
-		list = append(list, kv{k, v})
-	}
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].v != list[j].v {
-			return list[i].v > list[j].v
-		}
-		return list[i].k < list[j].k
-	})
-	out := make([]string, 0, n)
-	for i, item := range list {
-		if i >= n {
-			break
-		}
-		out = append(out, item.k)
-	}
-	return out
 }

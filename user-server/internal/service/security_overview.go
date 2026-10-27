@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/securitytelemetry"
 	"hivemtk-user/internal/repository"
 )
 
@@ -130,7 +131,7 @@ func (s *SecurityOverviewService) unauthorizedAccess(ctx context.Context) *Secur
 	if day := payload.Days[today]; day != nil {
 		seg.Today = day.Kinds
 	}
-	seg.TopPaths = payload.TopPaths(5)
+	seg.TopPaths = securitytelemetry.TopPaths(payload, 5)
 	for _, day := range payload.Days {
 		for _, n := range day.Kinds {
 			seg.WeekTotal += n

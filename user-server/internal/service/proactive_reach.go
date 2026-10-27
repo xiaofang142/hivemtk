@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	smssvc "hivemtk-user/internal/service/sms"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/reach"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -31,8 +33,10 @@ var (
 // 就等于把控制流建在日志字符串上——改一句措辞就会静默改变队列行为。
 // 包装后 Error() 前缀与原来逐字一致，字符串匹配的既有调用方不受影响。
 var (
-	// ErrDoNotContact 命中全局退订标志位：该收件人不可再外发
-	ErrDoNotContact = errors.New("do-not-contact")
+	// ErrDoNotContact 命中全局退订标志位：该收件人不可再外发。
+	// 值已下沉到 internal/pkg/reach（按域拆包时子包要能直接引用，见该包注释）；
+	// 这里保留别名，既有调用点与本包内 errors.Is 判据不变。
+	ErrDoNotContact = reach.ErrDoNotContact
 	// ErrReachCooldown 冷却期内已发过：稍后可重试
 	ErrReachCooldown = errors.New("cooldown")
 	// ErrReachApprovalDenied 未获外发授权：与 DNC 相反，它是**可补的**（加白名单即可重发），
@@ -947,7 +951,7 @@ func BindProactiveReachSenders(svc *ProactiveReachService, senders ProactiveReac
 	}
 
 	svc.SetSMSRegistry(func() (func(ctx context.Context, phone, content, templateID string, params map[string]string) (string, error), error) {
-		smsSvc := NewSmsService(repository.NewSmsRepository())
+		smsSvc := smssvc.NewSmsService(repository.NewSmsRepository())
 		return func(ctx context.Context, phone, content, templateID string, params map[string]string) (string, error) {
 			if err := smsSvc.SendSms(ctx, &dto.SmsSendRequest{Phone: phone, Content: content}); err != nil {
 				return "", err

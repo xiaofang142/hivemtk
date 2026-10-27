@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/securitytelemetry"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -79,7 +80,7 @@ func recordAuthFailure(kind string, c *gin.Context) {
 		securityFailureMu.Unlock()
 		return // 未装配：遥测缺席不影响验签主链
 	}
-	securityFailureDeltas.Add(time.Now().Format("2006-01-02"), kind, pathPrefixOf(c.Request.URL.Path))
+	securitytelemetry.Add(securityFailureDeltas, time.Now().Format("2006-01-02"), kind, pathPrefixOf(c.Request.URL.Path))
 	shouldFlush := false
 	if !securityFailureFlushing && (securityFailureDeltasCount() >= securityFlushThreshold ||
 		time.Since(securityFailureLastFlsh) >= securityFlushInterval) {
@@ -148,8 +149,8 @@ func flushSecurityAccessFailures(deltas *model.SecurityAccessFailurePayload) err
 		return err
 	}
 	payload := model.ParseSecurityAccessFailurePayload(raw)
-	payload.Merge(deltas)
-	payload.Prune(securityKeepDays)
+	securitytelemetry.Merge(payload, deltas)
+	securitytelemetry.Prune(payload, securityKeepDays)
 	bts, err := json.Marshal(payload)
 	if err != nil {
 		return err

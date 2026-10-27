@@ -1,4 +1,4 @@
-package service
+package sms
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/httpclient"
+	"hivemtk-user/internal/pkg/reach"
 	"hivemtk-user/internal/repository"
 	"io"
 	"net/http"
@@ -314,7 +315,7 @@ func (s *smsService) SendSms(ctx context.Context, req *dto.SmsSendRequest) error
 		// 这里返回哨兵而不是 nil：nil 会被每一个调用方读成"发成功了"
 		// （外发链据此记成功、烧幂等键、把这条算进送达率分母）。错误串不带手机号，理由见
 		// service/proactive_reach.go 里同一族哨兵的注释——这条串会落进队列台账。
-		return bizerr.Wrap(bizerr.CodeParamInvalid, "该号码已在短信退订名单里，未向渠道提交任何内容", ErrDoNotContact)
+		return bizerr.Wrap(bizerr.CodeParamInvalid, "该号码已在短信退订名单里，未向渠道提交任何内容", reach.ErrDoNotContact)
 	}
 	config, err := s.repo.GetConfig(ctx)
 	if err != nil {
@@ -641,7 +642,7 @@ func (s *smsService) ResendSms(ctx context.Context, id uint) error {
 	// 而这里直连 dispatchToProvider，绕过了 SendSms 那道检查。
 	// 放在改状态之前：拦下时不该在台账上留一条"正在发"。
 	if s.unsub().IsUnsubscribed(ctx, record.Phone) {
-		return bizerr.Wrap(bizerr.CodeParamInvalid, "该号码已在短信退订名单里，重发同样不提交给渠道", ErrDoNotContact)
+		return bizerr.Wrap(bizerr.CodeParamInvalid, "该号码已在短信退订名单里，重发同样不提交给渠道", reach.ErrDoNotContact)
 	}
 
 	record.Status = "sending"

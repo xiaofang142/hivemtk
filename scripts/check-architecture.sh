@@ -474,8 +474,10 @@ for f in $(find "$TARGET/internal/repository" -name "*.go" ! -name '*_test.go' 2
       # 不是数据访问方法，此前把它们误报为缺 ctx（agent_kb_binding.go 2 条假红）。
       # 2026-10-25 再补：Bound/Connected 是「句柄是否已注入」纯状态探针（r.db != nil，
       # 不触 DB），与 Available/IsNil 同类——给纯谓词加 ctx 是仪式不是透传。
+      # 2026-10-27 补：DBReady 同属就绪探针（service 用它替代 repo.GetDB() == nil，
+      # 把句柄判断收回仓储内部），同样不触 DB。
       case "$method_name" in
-        Available|IsNil|GetDB|SetDB|DialectName|Error|Is|Unwrap|Bound|Connected)
+        Available|IsNil|GetDB|SetDB|DialectName|Error|Is|Unwrap|Bound|Connected|DBReady)
           continue
           ;;
       esac

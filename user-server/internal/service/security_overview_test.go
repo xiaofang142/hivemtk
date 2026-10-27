@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/securitytelemetry"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 )
@@ -46,8 +47,8 @@ func TestSecurityOverviewAggregates(t *testing.T) {
 
 	// 401 遥测 kv 行。
 	payload := model.NewSecurityAccessFailurePayload()
-	payload.Add(now.Format("2006-01-02"), model.SecurityAccessKindTokenInvalid, "")
-	payload.Add(now.Format("2006-01-02"), model.SecurityAccessKindTokenMissing, "/api/system")
+	securitytelemetry.Add(payload, now.Format("2006-01-02"), model.SecurityAccessKindTokenInvalid, "")
+	securitytelemetry.Add(payload, now.Format("2006-01-02"), model.SecurityAccessKindTokenMissing, "/api/system")
 	kvRaw, _ := json.Marshal(payload)
 	kvRepo := repository.NewPlatformConfigKVRepositoryWithDB(database)
 	if _, err := kvRepo.Upsert(context.Background(), model.SecurityAccessFailureKVKey, string(kvRaw)); err != nil {

@@ -1,8 +1,10 @@
-package service
+package sms
 
 import (
 	"context"
 	"errors"
+	"hivemtk-user/internal/identity"
+	"hivemtk-user/internal/service/dnc"
 	"strings"
 	"time"
 
@@ -34,11 +36,11 @@ var smsUnsubscribeKeywords = []string{
 type SmsUnsubscribeService struct {
 	repo repository.SmsUnsubscribeRepository
 
-	dnc *DoNotContactService
+	dnc *dnc.DoNotContactService
 }
 
 // SetDoNotContact 注入全局退订标志位服务（不注入时按需懒加载默认实现）
-func (s *SmsUnsubscribeService) SetDoNotContact(dnc *DoNotContactService) {
+func (s *SmsUnsubscribeService) SetDoNotContact(dnc *dnc.DoNotContactService) {
 	s.dnc = dnc
 }
 
@@ -53,7 +55,7 @@ func NewSmsUnsubscribeService(repo repository.SmsUnsubscribeRepository) *SmsUnsu
 // UnsubscribePhone 记录手机号退订请求
 // 重复退订幂等：若已存在退订记录，更新退订时间和原因
 func (s *SmsUnsubscribeService) UnsubscribePhone(ctx context.Context, phone, reason, msgID, keyword string) error {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return errors.New("phone 不能为空")
 	}
@@ -92,19 +94,19 @@ func (s *SmsUnsubscribeService) UnsubscribePhone(ctx context.Context, phone, rea
 }
 
 func (s *SmsUnsubscribeService) syncGlobalDoNotContact(ctx context.Context, phone string) {
-	dnc := s.dnc
-	if dnc == nil {
-		dnc = NewDoNotContactService(nil)
-		s.dnc = dnc
+	svc := s.dnc
+	if svc == nil {
+		svc = dnc.NewDoNotContactService(nil)
+		s.dnc = svc
 	}
-	if err := dnc.BlockFromPhone(ctx, phone, model.DNCSourceSMSKeyword); err != nil {
+	if err := svc.BlockFromPhone(ctx, phone, model.DNCSourceSMSKeyword); err != nil {
 		logger.Errorf("[DNC] 短信退订同步全局标志位失败 phone=%s: %v", phone, err)
 	}
 }
 
 // IsUnsubscribed 检查手机号是否已退订（发送前必须调用）
 func (s *SmsUnsubscribeService) IsUnsubscribed(ctx context.Context, phone string) bool {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return false
 	}
@@ -125,7 +127,7 @@ func (s *SmsUnsubscribeService) IsUnsubscribed(ctx context.Context, phone string
 // 仓储层对此照实回 gorm.ErrRecordNotFound（删一条不存在的记录就是没删到，
 // 静默回成功会让真正的空操作无从辨别），由这一层把「0 行」翻译成幂等成功。
 func (s *SmsUnsubscribeService) ResubscribePhone(ctx context.Context, phone string) error {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return errors.New("phone 不能为空")
 	}
@@ -143,7 +145,7 @@ func (s *SmsUnsubscribeService) ResubscribePhone(ctx context.Context, phone stri
 // 解析用户回复内容，若命中退订关键词则自动加入退订名单
 // 返回值 matchedKeyword：命中的关键词（未命中时为空字符串）
 func (s *SmsUnsubscribeService) ProcessUnsubscribeReply(ctx context.Context, phone, replyContent, msgID string) (matchedKeyword string, err error) {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return "", errors.New("phone 不能为空")
 	}

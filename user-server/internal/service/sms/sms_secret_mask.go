@@ -1,4 +1,4 @@
-package service
+package sms
 
 // 短信通道密钥的「掩码」口径（读侧脱敏 / 写侧认掩码）。
 //

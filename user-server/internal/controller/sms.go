@@ -7,18 +7,18 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 )
 
 // SmsController 短信控制器
 type SmsController struct {
-	service service.SmsService
+	service smssvc.SmsService
 }
 
 // NewSmsController 创建短信控制器
-func NewSmsController(service service.SmsService) *SmsController {
+func NewSmsController(service smssvc.SmsService) *SmsController {
 	return &SmsController{service: service}
 }
 
@@ -558,16 +558,16 @@ func (c *SmsController) StopJob(ctx *gin.Context) {
 
 // maskSMSConfig 短信通道密钥出参脱敏。
 //
-// 掩码口径与写侧判定共用 service.SmsSecretMask（见 service/sms_secret_mask.go）：
+// 掩码口径与写侧判定共用 smssvc.SmsSecretMask（见 service/sms_secret_mask.go）：
 // 读侧产出"掩码前缀 + 末 4 位"，写侧按**前缀**认得它 ⇒ 保留原值。
 // 两边必须同一个口径，否则前端把掩码原样提交回来就会把真凭证覆盖掉
 // （前端确实这么干：user-web/src/views/sms/Config.vue 把 GET 整份结果塞进表单）。
 func maskSMSConfig(config *dto.SmsConfigResponse) {
 	mask := func(v string) string {
 		if len(v) <= 4 {
-			return service.SmsSecretMask
+			return smssvc.SmsSecretMask
 		}
-		return service.SmsSecretMask + v[len(v)-4:]
+		return smssvc.SmsSecretMask + v[len(v)-4:]
 	}
 	config.Aliyun.AccessKeyId = mask(config.Aliyun.AccessKeyId)
 	config.Aliyun.AccessKeySecret = mask(config.Aliyun.AccessKeySecret)

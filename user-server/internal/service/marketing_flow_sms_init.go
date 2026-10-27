@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	smssvc "hivemtk-user/internal/service/sms"
 	"sync"
 
 	contentsvc "hivemtk-user/internal/content/service"
@@ -14,7 +15,7 @@ import (
 
 var (
 	smsSvcOnce     sync.Once
-	smsSvcInstance SmsService
+	smsSvcInstance smssvc.SmsService
 	smsSvcInitErr  error
 )
 
@@ -22,9 +23,9 @@ func init() {
 	contentsvc.SetSmsSender(lazySendSms)
 }
 
-func initSmsService() (SmsService, error) {
+func initSmsService() (smssvc.SmsService, error) {
 	smsSvcOnce.Do(func() {
-		smsSvcInstance = NewSmsService(repository.NewSmsRepository())
+		smsSvcInstance = smssvc.NewSmsService(repository.NewSmsRepository())
 		if smsSvcInstance == nil {
 			smsSvcInitErr = errors.New("初始化短信服务失败：仓储创建返回 nil")
 		}

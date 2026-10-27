@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,11 +22,11 @@ import (
 //   - DELETE /api/sms/unsubscribe/:phone     删除退订号码（重新订阅）
 //   - GET  /api/sms/unsubscribe/export       导出退订名单（CSV）
 type SmsUnsubscribeController struct {
-	svc *service.SmsUnsubscribeService
+	svc *smssvc.SmsUnsubscribeService
 }
 
 // NewSmsUnsubscribeController 创建短信退订控制器
-func NewSmsUnsubscribeController(svc *service.SmsUnsubscribeService) *SmsUnsubscribeController {
+func NewSmsUnsubscribeController(svc *smssvc.SmsUnsubscribeService) *SmsUnsubscribeController {
 	return &SmsUnsubscribeController{svc: svc}
 }
 

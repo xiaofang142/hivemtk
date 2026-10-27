@@ -1,10 +1,11 @@
-package service
+package sms
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hivemtk-user/internal/identity"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +65,7 @@ func NewSmsDeliveryTrackerService(tracking *SmsTrackingService, repo repository.
 // 真实生产应使用第三方号段库（如 https://github.com/ls0f/phone）
 // 此处为不引入新依赖的简化版本，覆盖主流号段。
 func DetectCarrierFromPhone(phone string) model.SmsCarrier {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if len(phone) < 7 {
 		return model.SmsCarrierUnknown
 	}
@@ -96,7 +97,7 @@ func hasPrefix(prefix string, candidates []string) bool {
 //  2. 与内存缓存的"上一次运营商"对比
 //  3. 若发生变化 → 写入 sms_number_portability_logs
 func (s *SmsDeliveryTrackerService) DetectAndRecordPortability(ctx context.Context, phone, webhookCarrier string) error {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return errors.New("phone 不能为空")
 	}
@@ -202,7 +203,7 @@ func (s *SmsDeliveryTrackerService) loadCarrierCache(ctx context.Context) {
 
 // GetCurrentCarrier 查询号码当前归属运营商
 func (s *SmsDeliveryTrackerService) GetCurrentCarrier(ctx context.Context, phone string) model.SmsCarrier {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	s.carrierMu.RLock()
 	if c, ok := s.carrierCache[phone]; ok {
 		s.carrierMu.RUnlock()
@@ -228,7 +229,7 @@ func (s *SmsDeliveryTrackerService) ListPortabilityRecords(ctx context.Context, 
 		limit = 20
 	}
 
-	rows, total, err := s.deliveryRepo.ListPortability(ctx, NormalizePhone(phone), page, limit)
+	rows, total, err := s.deliveryRepo.ListPortability(ctx, identity.NormalizePhone(phone), page, limit)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -253,7 +254,7 @@ type SmsBlacklistRecord struct {
 //   - 用户回复 TD 退订   → business 级黑名单
 //   - 内容审核违规       → content / regulatory 级
 func (s *SmsDeliveryTrackerService) RecordBlacklistEvent(ctx context.Context, phone, errorCode, errorMsg, jobID, messageID string) {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return
 	}
@@ -328,8 +329,8 @@ func (s *SmsDeliveryTrackerService) GetDeliveryRateMetrics(ctx context.Context, 
 	m.Failed = row.Failed
 	m.Retryable = row.Retryable
 	if m.TotalSent > 0 {
-		m.DeliveryRate = round2(float64(m.Delivered) / float64(m.TotalSent) * 100)
-		m.FailureRate = round2(float64(m.Failed+m.Retryable) / float64(m.TotalSent) * 100)
+		m.DeliveryRate = utils.Round2(float64(m.Delivered) / float64(m.TotalSent) * 100)
+		m.FailureRate = utils.Round2(float64(m.Failed+m.Retryable) / float64(m.TotalSent) * 100)
 	}
 
 	blacklisted, _ := s.deliveryRepo.CountBlacklisted(ctx, start, end)
@@ -347,7 +348,7 @@ func (s *SmsDeliveryTrackerService) GetDeliveryRateMetrics(ctx context.Context, 
 				Failed:    cr.Failed,
 			}
 			if cr.Total > 0 {
-				cs.DeliveryRate = round2(float64(cr.Delivered) / float64(cr.Total) * 100)
+				cs.DeliveryRate = utils.Round2(float64(cr.Delivered) / float64(cr.Total) * 100)
 			}
 			m.ByCarrier[cr.Provider] = cs
 		}

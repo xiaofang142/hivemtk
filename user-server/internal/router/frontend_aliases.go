@@ -13,6 +13,7 @@ import (
 	opsctrl "hivemtk-user/internal/ops/controller"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -251,7 +252,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/email/smtps/list", emailSmtpCtrl.GetEmailSmtpList)
 	doReg("GET", "/email/smtps/:id", emailSmtpCtrl.GetEmailSmtp)
 
-	smsCtrl := controller.NewSmsController(service.NewSmsService(repository.NewSmsRepository()))
+	smsCtrl := controller.NewSmsController(smssvc.NewSmsService(repository.NewSmsRepository()))
 	doReg("GET", "/sms/records", smsCtrl.GetSmsList)
 	doReg("GET", "/sms/records/list", smsCtrl.GetSmsList)
 

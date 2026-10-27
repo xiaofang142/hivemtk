@@ -32,6 +32,14 @@ func (r *TraceLearningRepository) GetDB() *gorm.DB {
 	return r.db
 }
 
+// DBReady 就绪探针：句柄是否已装配（不暴露 *gorm.DB 给 service）。
+//
+// 调用方只想知道"能不能读库"，与 repository.DBReady() 同一语义，区别是这里
+// 看的是本仓储绑定的那份连接（测试可注入独立库，不被全局句柄状态误导）。
+func (r *TraceLearningRepository) DBReady() bool {
+	return r != nil && r.db != nil
+}
+
 // UpsertAttemptedEvalLog 幂等写评估审计（trace_id 命中即跳过）
 func (r *TraceLearningRepository) UpsertAttemptedEvalLog(ctx context.Context, log *model.TraceEvalLog) error {
 	return r.db.WithContext(ctx).Where("trace_id = ?", log.TraceID).Assign(*log).FirstOrCreate(log).Error

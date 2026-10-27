@@ -1,4 +1,4 @@
-package service
+package dnc
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -103,7 +104,7 @@ func (s *DoNotContactService) Block(ctx context.Context, oneID, channel, source 
 // 优先通过 customer 表反查 one_id；无法反查时降级用 "phone:"+phone 归一键
 // （见 PhoneOneIDPrefix 注释），保证号码维度仍被拦截。
 func (s *DoNotContactService) BlockFromPhone(ctx context.Context, phone, source string) error {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return errors.New("phone 不能为空")
 	}
@@ -183,7 +184,7 @@ func (s *DoNotContactService) BackfillFromSMSUnsubscribe(ctx context.Context) (i
 }
 
 func (s *DoNotContactService) blockFromPhoneCounted(ctx context.Context, phone, source string) (bool, error) {
-	phone = NormalizePhone(phone)
+	phone = identity.NormalizePhone(phone)
 	if phone == "" {
 		return false, errors.New("phone 不能为空")
 	}

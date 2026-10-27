@@ -44,7 +44,7 @@ func weightAction(score int, bad bool, safety float64, safetyPresent bool, cfg C
 func AdjustWeights(ctx context.Context, repo *repository.TraceLearningRepository, chunkIDs []string, res EvalResult, cfg Config) ([]AdjustedChunk, error) {
 	ctx = ensureCtx(ctx)
 	ids := dedupeParseIDs(chunkIDs)
-	if len(ids) == 0 || repo == nil || repo.GetDB() == nil {
+	if len(ids) == 0 || repo == nil || !repo.DBReady() {
 		return nil, nil
 	}
 	safety, safetyPresent := res.Dimensions["safety"]
@@ -77,7 +77,7 @@ func weightFnFor(action string, cfg Config) repository.TLWeightFn {
 func PreviewAdjustments(ctx context.Context, repo *repository.TraceLearningRepository, chunkIDs []string, res EvalResult, cfg Config) ([]AdjustedChunk, error) {
 	ctx = ensureCtx(ctx)
 	ids := dedupeParseIDs(chunkIDs)
-	if len(ids) == 0 || repo == nil || repo.GetDB() == nil {
+	if len(ids) == 0 || repo == nil || !repo.DBReady() {
 		return nil, nil
 	}
 	safety, safetyPresent := res.Dimensions["safety"]

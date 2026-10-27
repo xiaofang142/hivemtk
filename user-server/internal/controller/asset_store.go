@@ -84,6 +84,9 @@ func (ctrl *AssetStoreController) RegisterAdminRoutes(g *gin.RouterGroup) {
 	g.GET("/attribution", ctrl.Attribution)
 }
 
+// @Summary      创建资产上架条目
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/listings [post]
 // CreateListing POST /listings
 func (ctrl *AssetStoreController) CreateListing(c *gin.Context) {
 	var req struct {
@@ -107,6 +110,9 @@ func (ctrl *AssetStoreController) CreateListing(c *gin.Context) {
 	response.Success(c, l, "ok")
 }
 
+// @Summary      提交资产上架审核
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/listings/{id}/submit [post]
 // Submit POST /listings/:id/submit
 func (ctrl *AssetStoreController) Submit(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -120,6 +126,9 @@ func (ctrl *AssetStoreController) Submit(c *gin.Context) {
 	response.Success(c, gin.H{"status": model.AssetListingSubmitted}, "ok")
 }
 
+// @Summary      资产上架状态流转
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/listings/{id}/transition [post]
 // Transition POST /listings/:id/transition（贡献者侧仅 suspended→draft 退回等合法链路）
 func (ctrl *AssetStoreController) Transition(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -140,6 +149,9 @@ func (ctrl *AssetStoreController) Transition(c *gin.Context) {
 	response.Success(c, gin.H{"status": req.To}, "ok")
 }
 
+// @Summary      查询上架资产版本列表
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/listings/{id}/versions [get]
 // Versions GET /listings/:id/versions
 func (ctrl *AssetStoreController) Versions(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -154,6 +166,9 @@ func (ctrl *AssetStoreController) Versions(c *gin.Context) {
 	response.Success(c, out, "ok")
 }
 
+// @Summary      查询上架资产状态
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/listings/{id}/status [get]
 // Status GET /listings/:id/status
 func (ctrl *AssetStoreController) Status(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -168,6 +183,9 @@ func (ctrl *AssetStoreController) Status(c *gin.Context) {
 	response.Success(c, gin.H{"versions": versions}, "ok")
 }
 
+// @Summary      对已购资产评分
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/rate [post]
 // Rate POST /rate
 func (ctrl *AssetStoreController) Rate(c *gin.Context) {
 	var req struct {
@@ -187,6 +205,9 @@ func (ctrl *AssetStoreController) Rate(c *gin.Context) {
 	response.Success(c, nil, "ok")
 }
 
+// @Summary      提交资产举报
+// @Tags      asset-store
+// @Router    /api/v1/asset-store/report [post]
 // Report POST /report
 func (ctrl *AssetStoreController) Report(c *gin.Context) {
 	var req struct {
@@ -206,6 +227,9 @@ func (ctrl *AssetStoreController) Report(c *gin.Context) {
 	response.Success(c, rep, "ok")
 }
 
+// @Summary      资产审核队列
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/review-queue [get]
 // ReviewQueue GET /review-queue
 func (ctrl *AssetStoreController) ReviewQueue(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -218,6 +242,9 @@ func (ctrl *AssetStoreController) ReviewQueue(c *gin.Context) {
 	response.Success(c, gin.H{"items": out, "total": total}, "ok")
 }
 
+// @Summary      审核通过并发布资产
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/listings/{id}/approve [post]
 // Approve POST /listings/:id/approve（经 auto_check/manual_review 前置校验由状态机把关）
 func (ctrl *AssetStoreController) Approve(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -231,6 +258,9 @@ func (ctrl *AssetStoreController) Approve(c *gin.Context) {
 	response.Success(c, gin.H{"status": model.AssetListingPublished}, "ok")
 }
 
+// @Summary      审核驳回资产上架（须填理由）
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/listings/{id}/reject [post]
 // Reject POST /listings/:id/reject（必填 reason）
 func (ctrl *AssetStoreController) Reject(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -251,6 +281,9 @@ func (ctrl *AssetStoreController) Reject(c *gin.Context) {
 	response.Success(c, gin.H{"status": model.AssetListingRejected}, "ok")
 }
 
+// @Summary      下架已发布资产
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/listings/{id}/suspend [post]
 // Suspend POST /listings/:id/suspend
 func (ctrl *AssetStoreController) Suspend(c *gin.Context) {
 	id, ok := listingIDParam(c)
@@ -268,6 +301,9 @@ func (ctrl *AssetStoreController) Suspend(c *gin.Context) {
 	response.Success(c, gin.H{"status": model.AssetListingSuspended}, "ok")
 }
 
+// @Summary      资产举报列表
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/reports [get]
 // Reports GET /reports
 func (ctrl *AssetStoreController) Reports(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -280,6 +316,9 @@ func (ctrl *AssetStoreController) Reports(c *gin.Context) {
 	response.Success(c, gin.H{"items": items, "total": total}, "ok")
 }
 
+// @Summary      处理资产举报
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/reports/{id}/handle [post]
 // HandleReport POST /reports/:id/handle
 func (ctrl *AssetStoreController) HandleReport(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -299,6 +338,9 @@ func (ctrl *AssetStoreController) HandleReport(c *gin.Context) {
 	response.Success(c, nil, "ok")
 }
 
+// @Summary      资产归因报表
+// @Tags      asset-store
+// @Router    /api/v1/asset-admin/attribution [get]
 // Attribution GET /attribution?period=YYYY-MM
 func (ctrl *AssetStoreController) Attribution(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
