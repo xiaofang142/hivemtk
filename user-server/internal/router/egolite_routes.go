@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -19,13 +20,18 @@ import (
 // 端点总表：
 //   - GET  /api/egolite/runner-ws          runner WS（eg_ token，免 JWT）
 //   - GET  /api/egolite/runner/status      连接状态（用户看自己 / admin 全量）
-//   - POST /api/egolite/runner/token/reset eg_ token 轮换（admin）
+//   - GET  /api/egolite/runner/tokens      我的 runner 令牌列表（只回 hint，不回明文）
+//   - POST /api/egolite/runner/tokens      签发令牌（明文仅此一次返回）
+//   - POST /api/egolite/runner/tokens/:id/revoke 撤销令牌（立即失效）
+//   - POST /api/egolite/runner/token/reset eg_ 兜底 token 轮换（admin，老部署兼容）
 //   - POST /api/egolite/flows              保存草稿（保存即扫描）
 //   - GET  /api/egolite/flows              流程列表
 //   - GET  /api/egolite/flows/:id          流程详情（含扫描报告）
 //   - POST /api/egolite/flows/:id/rescan   重新扫描
 //   - POST /api/egolite/flows/:id/publish  发布版本
 //   - POST /api/egolite/flows/:id/submit   提交平台审核
+//   - POST /api/egolite/flows/:id/dry-run  试跑（draft 通道，过扫描门）
+//   - DELETE /api/egolite/flows/:id        删除流程
 //   - POST /api/egolite/executions         下发执行（draft=flow 试跑 / market=资产执行）
 //   - GET  /api/egolite/executions         执行列表
 //   - GET  /api/egolite/executions/:id     执行详情
@@ -37,6 +43,7 @@ import (
 //   - POST /api/egolite/admin/assets/pack       平台端发布：直接发脚本包（admin）
 //   - GET  /api/egolite/admin/assets            平台端资产全量列表（admin，含 offline）
 //   - POST /api/egolite/admin/assets/:id/offline 平台端资产下线（admin）
+//   - GET  /api/egolite/admin/flows        审核工作台：跨用户按状态列流程（admin）
 //
 // 「平台端」= 本实例管理端（role=admin），**不经 platform-server / PLATFORM_ENABLED /
 // binary_asset 通道**：发布 = 往 egolite_assets 写一行，用户端立即可见可执行。
@@ -50,6 +57,9 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	evRepo := egolite.NewEgoEventRepositoryWithDB(gormDB)
 	flowRepo := egolite.NewEgoFlowRepositoryWithDB(gormDB)
 	assetRepo := egolite.NewEgoAssetRepositoryWithDB(gormDB)
+	tokenRepo := egolite.NewEgoRunnerTokenRepositoryWithDB(gormDB)
+	// 统一鉴权单点：令牌行（每用户多条）优先，KV 双候选兜底（老部署兼容）
+	runnerAuth := egolite.NewEgoTokenAuthenticator(tokenRepo, kvRepo)
 
 	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
@@ -65,13 +75,13 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	egolite.EnsureEgoTokenExists(context.Background(), kvRepo)
 
 	// 资产清单拉取（T3：runner 侧 SyncPull 等价）。鉴权同 runner-ws：eg_ token 即身份——
-	// 拉的是「该 token 归属用户自己发布的流程」，token 内嵌 userID 由 ValidateEgoToken 解析。
+	// 清单 = 已发布目录资产 + 该 token 归属用户自己的 published 流程。
 	engine.GET("/api/egolite/assets/pull", func(c *gin.Context) {
 		tok := c.Query("token")
 		if tok == "" {
 			tok = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
 		}
-		userID, ok := egolite.ValidateEgoToken(c.Request.Context(), kvRepo, tok)
+		userID, ok := runnerAuth.Authenticate(c.Request.Context(), tok)
 		if !ok {
 			c.JSON(401, gin.H{"code": 1, "msg": "runner token 无效"})
 			return
@@ -86,6 +96,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 
 	// runner WS（不过 JWT——token 即身份，host-ws 同形状）
 	wsHandler := egolite.NewEgoRunnerWSHandler(registry, kvRepo)
+	wsHandler.SetTokenRepository(tokenRepo)
 	wsHandler.AttachEventSink(execSvc)
 	engine.GET("/api/egolite/runner-ws", wsHandler.Handle)
 
@@ -108,9 +119,42 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			isAdmin := c.GetString("role") == "admin"
 			response2(c, registry.StatusFor(userID, isAdmin), "ok")
 		})
+		// ---- runner 令牌（每用户多条；明文仅在签发那一刻返回一次）----
+		// 多用户各自 runner 的前提：KV 单值 token 只能绑一个 userID，第二台 runner
+		// 连上就是顶号。行表让"每个用户把自己的浏览器接进基座"成立。
+		eg.GET("/runner/tokens", func(c *gin.Context) {
+			list, err := tokenRepo.ListByUser(c.Request.Context(), currentUID(c))
+			if err != nil {
+				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
+		})
+		eg.POST("/runner/tokens", func(c *gin.Context) {
+			var body struct {
+				Label string `json:"label"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			plain, rec, err := tokenRepo.Issue(c.Request.Context(), currentUID(c), body.Label)
+			if err != nil {
+				c.JSON(500, gin.H{"code": 1, "msg": "签发失败: " + err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": plain, "token_hint": rec.TokenHint, "id": rec.ID},
+				"msg": "令牌只显示这一次，请立即复制到 runner 配置"})
+		})
+		eg.POST("/runner/tokens/:id/revoke", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			if err := tokenRepo.Revoke(c.Request.Context(), uint(id), currentUID(c)); err != nil {
+				c.JSON(400, gin.H{"code": 1, "msg": "令牌不存在或已撤销"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "msg": "已撤销；该令牌立即失效"})
+		})
+		// 兼容口径：轮换 KV 兜底 token（老部署/单机自用；admin 限定）
 		eg.POST("/runner/token/reset", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {
-				c.JSON(403, gin.H{"code": 1, "msg": "仅管理员可轮换 runner token"})
+				c.JSON(403, gin.H{"code": 1, "msg": "仅管理员可轮换兜底 runner token"})
 				return
 			}
 			tok, err := egolite.RotateEgoToken(c.Request.Context(), kvRepo, 0)
@@ -119,7 +163,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": tok},
-				"msg": "已重置；旧 token 仍可用，直到下一次重置"})
+				"msg": "已重置兜底 token；旧值仍可用，直到下一次重置"})
 		})
 
 		// ---- 流程域 ----
@@ -178,6 +222,34 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": f})
+		})
+		// 试跑（draft 通道）：过扫描门后建执行——用户写脚本时唯一的"先看看效果"路径
+		eg.POST("/flows/:id/dry-run", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Params     json.RawMessage `json:"params"`
+				SpaceName  string          `json:"space_name"`
+				TimeoutSec int             `json:"timeout_sec"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			e, err := flowSvc.DryRun(c.Request.Context(), currentUID(c), uint(id), body.Params, body.SpaceName, body.TimeoutSec)
+			if err != nil {
+				status := 400
+				if err == egolite.ErrConcurrencyGate {
+					status = 429
+				}
+				c.JSON(status, gin.H{"code": 1, "msg": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": e})
+		})
+		eg.DELETE("/flows/:id", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			if err := flowRepo.Delete(c.Request.Context(), uint(id), currentUID(c)); err != nil {
+				c.JSON(404, gin.H{"code": 1, "msg": "流程不存在"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "msg": "已删除"})
 		})
 		eg.POST("/flows/:id/submit", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -318,6 +390,17 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": a})
+			})
+			// 审核工作台：跨用户按状态列流程（status 省略=全量，submitted=待审）
+			egAdmin.GET("/flows", func(c *gin.Context) {
+				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+				list, total, err := flowRepo.ListByStatus(c.Request.Context(), c.Query("status"), page, size)
+				if err != nil {
+					c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
 			})
 			egAdmin.GET("/assets", func(c *gin.Context) {
 				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))

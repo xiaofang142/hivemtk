@@ -620,6 +620,9 @@ func allModels() []any {
 		// 资产目录表（平台端发布 → 用户端使用 → 下发执行的中间事实源）：
 		// user-server 自包含，不经 platform-server / binary_asset 通道。
 		&model.EgoliteAsset{},
+		// runner 令牌表（每用户多条，只存 sha256）：漏登记 ⇒ 签发/校验全挂，
+		// 表现是"所有 runner 都连不上"，fail-visible。
+		&model.EgoliteRunnerToken{},
 	}
 }
 

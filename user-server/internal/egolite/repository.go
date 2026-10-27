@@ -231,6 +231,8 @@ type EgoFlowRepository interface {
 	GetByID(ctx context.Context, id uint) (*model.EgoliteFlow, error)
 	Update(ctx context.Context, id, userID uint, sets map[string]any) error
 	ListByUser(ctx context.Context, userID uint, page, pageSize int) ([]*model.EgoliteFlow, int64, error)
+	// ListByStatus 管理端按状态读（审核工作台：submitted 清单；空状态 = 全量）
+	ListByStatus(ctx context.Context, status string, page, pageSize int) ([]*model.EgoliteFlow, int64, error)
 	Delete(ctx context.Context, id, userID uint) error
 }
 
@@ -295,6 +297,28 @@ func (r *egoFlowRepo) ListByUser(ctx context.Context, userID uint, page, pageSiz
 	var list []*model.EgoliteFlow
 	err := r.db.WithContext(ctx).Where("user_id = ?", userID).
 		Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	return list, total, err
+}
+
+// ListByStatus 管理端按状态读（审核工作台：submitted 清单；空状态 = 全量）。
+// 刻意不带 user_id 过滤：审核的对象就是"别人的流程"，带归属过滤等于看不见任何东西。
+func (r *egoFlowRepo) ListByStatus(ctx context.Context, status string, page, pageSize int) ([]*model.EgoliteFlow, int64, error) {
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
+	}
+	if page <= 0 {
+		page = 1
+	}
+	q := r.db.WithContext(ctx).Model(&model.EgoliteFlow{})
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []*model.EgoliteFlow
+	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
 	return list, total, err
 }
 

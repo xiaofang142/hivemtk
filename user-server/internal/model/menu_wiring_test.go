@@ -154,3 +154,45 @@ func TestMenuWiring_RegistryKeysAndPathsUnique(t *testing.T) {
 	t.Logf("菜单注册表 %d 个节点（带 Path %d 个，其中叶子 %d 个、叶子 path 去重后 %d 个），key 全部唯一",
 		len(all), pathNodes, leafCount, len(pathSeen))
 }
+
+// TestMenuWiring_EgoLiteLegRows ego-lite 腿的 5 个入口必须都在 browserAutomation 下、
+// 路径与前端路由模块一致、归属同一付费模块（不新增模块条目）。
+//
+// 为什么单独立一条：本轮（2026-10-27 收口轮）的验收点就是"页面/接口/菜单三者同时存在"，
+// 而历史两次事故（007、013）都是"接口通了、侧栏没有入口"。这里把 5 条一次钉住，
+// 其中 egoAssets / egoAssetAdmin 两条是同轮新增，另 3 条此前只有菜单行、语言包缺标题
+// （menuRegistry_routes.test.js 当场红了）——路径写错的代价是点进去 NotFound。
+func TestMenuWiring_EgoLiteLegRows(t *testing.T) {
+	want := map[string]string{
+		"egoFlows":      "/browser-automation/ego/flows",
+		"egoExecutions": "/browser-automation/ego/executions",
+		"egoRunner":     "/browser-automation/ego/runner",
+		"egoAssets":     "/browser-automation/ego/assets",
+		"egoAssetAdmin": "/browser-automation/ego/assets/admin",
+	}
+	for key, path := range want {
+		node, parent, hits := menuNodeWithParent(key)
+		if hits != 1 {
+			t.Errorf("%s 菜单行应恰好 1 条，实际 %d 条", key, hits)
+			continue
+		}
+		if node.Path != path {
+			t.Errorf("%s 的 path 是 %q，应为 %q（src/router/modules/browserAutomation.js）", key, node.Path, path)
+		}
+		if parent == nil || parent.Key != "browserAutomation" {
+			t.Errorf("%s 的父分组不是 browserAutomation：ego 腿属于同一个付费能力的第二种执行腿", key)
+		}
+		if owner := OwnerOfMenuKey(key); owner != ModuleBrowserAutomation {
+			t.Errorf("%s 归属模块是 %q，应为 %q：ego 腿不新增收费模块条目", key, owner, ModuleBrowserAutomation)
+		}
+	}
+	// 发布台只给 admin（用户端橱窗是 egoAssets，发布即上架、不能开放给坐席）
+	node, _, _ := menuNodeWithParent("egoAssetAdmin")
+	if node == nil || len(node.Roles) != 1 || !hasRole(node.Roles, "admin") {
+		t.Errorf("egoAssetAdmin 的角色应恰为 [admin]，实际 %v", node.Roles)
+	}
+	node, _, _ = menuNodeWithParent("egoAssets")
+	if node == nil || len(node.Roles) != 0 {
+		t.Errorf("egoAssets 不应限制角色（继承父节点的 admin/manager），实际 %v", node.Roles)
+	}
+}

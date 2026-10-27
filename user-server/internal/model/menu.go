@@ -328,6 +328,10 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "egoFlows", Title: "我的流程", Icon: "Document", Path: "/browser-automation/ego/flows"},
 					{Key: "egoExecutions", Title: "执行监控", Icon: "DataLine", Path: "/browser-automation/ego/executions"},
 					{Key: "egoRunner", Title: "Runner 状态", Icon: "Cpu", Path: "/browser-automation/ego/runner"},
+					// 资产目录（自包含：发布 = 往本实例 egolite_assets 写一行，不经任何外部平台）
+					{Key: "egoAssets", Title: "资产中心", Icon: "Shop", Path: "/browser-automation/ego/assets"},
+					// 平台端 = 本实例管理端；Roles 收窄到 admin（用户端橱窗是 egoAssets）
+					{Key: "egoAssetAdmin", Title: "资产发布台", Icon: "Upload", Path: "/browser-automation/ego/assets/admin", Roles: []string{"admin"}},
 				},
 			},
 			{

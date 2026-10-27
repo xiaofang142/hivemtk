@@ -188,3 +188,26 @@ const (
 )
 
 func (EgoliteAsset) TableName() string { return "egolite_assets" }
+
+// EgoliteRunnerToken 每用户 runner 令牌（多用户各自一台 runner 的必备前提）。
+//
+// 为什么不是 KV 单值：KV 那个 eg_ token 只能绑定**一个** userID，第二个用户的 runner
+// 一连上就是顶号——「每个用户把自己的浏览器接进基座」这件事就退化成单人功能。
+// 本表把 token 变成「用户 × 若干条」的实体，并把轮换/撤销从"覆盖写"升级为行状态。
+//
+// 安全纪律：只存 sha256（明文仅在签发那一刻返回一次），校验走摘要查表——
+// 库被读走也拿不到可用 token；撤销即 revoked_at 置位（不删行，留审计）。
+type EgoliteRunnerToken struct {
+	TenantID uint `gorm:"not null;default:1;uniqueIndex:uq_ego_rtoken_hash,priority:1" json:"tenant_id"`
+
+	ID         uint       `gorm:"primaryKey" json:"id"`
+	UserID     uint       `gorm:"index;not null" json:"user_id"`
+	TokenHash  string     `gorm:"size:64;not null;uniqueIndex:uq_ego_rtoken_hash,priority:2" json:"-"` // sha256(明文)，永不返回
+	TokenHint  string     `gorm:"size:24;not null" json:"token_hint"`                                 // 展示用前缀（eg_12_ab…），不足以复原
+	Label      string     `gorm:"size:64" json:"label"`                                               // 设备备注（"办公室 Mac"）
+	LastSeenAt *time.Time `json:"last_seen_at"`
+	RevokedAt  *time.Time `json:"revoked_at"`
+	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (EgoliteRunnerToken) TableName() string { return "egolite_runner_tokens" }

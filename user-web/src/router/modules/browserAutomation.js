@@ -50,6 +50,39 @@ export default [
         name: 'BrowserAutomationStatus',
         component: () => import('@/views/browserAutomation/Status.vue'),
         meta: { title: 'Host 状态', requiresAuth: true }
+      },
+      // ---- ego-lite 腿（个人 ego-browser 执行；与上面 NM Host 腿并存）----
+      {
+        path: 'ego/flows',
+        name: 'EgoFlows',
+        component: () => import('@/views/browserAutomation/ego/Flows.vue'),
+        meta: { title: '我的流程', requiresAuth: true }
+      },
+      {
+        path: 'ego/executions',
+        name: 'EgoExecutions',
+        component: () => import('@/views/browserAutomation/ego/Executions.vue'),
+        meta: { title: '执行监控', requiresAuth: true }
+      },
+      {
+        path: 'ego/runner',
+        name: 'EgoRunner',
+        component: () => import('@/views/browserAutomation/ego/Runner.vue'),
+        meta: { title: 'Runner 状态', requiresAuth: true }
+      },
+      {
+        // 用户端橱窗（published 资产）
+        path: 'ego/assets',
+        name: 'EgoAssets',
+        component: () => import('@/views/browserAutomation/ego/Assets.vue'),
+        meta: { title: '资产中心', requiresAuth: true }
+      },
+      {
+        // 平台端 = 本实例管理端（发布/下线/审核），角色由后端 admin 中间件兜底
+        path: 'ego/assets/admin',
+        name: 'EgoAssetAdmin',
+        component: () => import('@/views/browserAutomation/ego/AssetAdmin.vue'),
+        meta: { title: '资产发布台', requiresAuth: true, roles: ['admin'] }
       }
     ]
   }

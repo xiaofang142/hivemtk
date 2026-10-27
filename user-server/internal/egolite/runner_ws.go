@@ -49,14 +49,22 @@ var runnerUpgrader = websocket.Upgrader{
 type EgoRunnerWSHandler struct {
 	registry *EgoRunnerRegistry
 	kvRepo   hrepo.PlatformConfigKVRepository
+	auth     *egoTokenAuthenticator // 统一鉴权（令牌行优先，KV 兜底）
 	loopback func(*gin.Context) bool // 可注入便于测试；生产用形态开关
 	sink     EventSink               // 事件接收器（执行域服务；AttachEventSink 注入）
 }
 
 func NewEgoRunnerWSHandler(registry *EgoRunnerRegistry, kvRepo hrepo.PlatformConfigKVRepository) *EgoRunnerWSHandler {
 	h := &EgoRunnerWSHandler{registry: registry, kvRepo: kvRepo}
+	h.auth = NewEgoTokenAuthenticator(nil, kvRepo)
 	h.loopback = h.loopbackIfConfigured
 	return h
+}
+
+// SetTokenRepository 接入每用户令牌表（多用户各自 runner 的正常路径）。
+// 不放进构造器是为了让既有装配与测试保持可用：nil ⇒ 纯 KV 兼容模式。
+func (h *EgoRunnerWSHandler) SetTokenRepository(repo EgoRunnerTokenRepository) {
+	h.auth = NewEgoTokenAuthenticator(repo, h.kvRepo)
 }
 
 // loopbackIfConfigured 形态开关读 KV（egolite_runner_loopback_only）。
@@ -81,7 +89,7 @@ func (h *EgoRunnerWSHandler) Handle(ctx *gin.Context) {
 	// ① token 门（eg_ 前缀，复用 host_token 的 KV+轮换+常量时间比较机制，
 	// 前缀区分见 service.EgoToken 常量；fail-closed：未配置即拒）
 	token := extractRunnerToken(ctx)
-	userID, ok := ValidateEgoToken(ctx.Request.Context(), h.kvRepo, token)
+	userID, ok := h.auth.Authenticate(ctx.Request.Context(), token)
 	if !ok {
 		ctx.String(http.StatusUnauthorized, "runner token 无效")
 		return

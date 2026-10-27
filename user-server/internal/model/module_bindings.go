@@ -354,10 +354,10 @@ var ModuleMenuBindings = map[string][]string{
 		"abExperiment", "churnPrediction",
 	},
 
-	// ========== browser-automation：浏览器自动化（5 节点）==========
+	// ========== browser-automation：浏览器自动化（10 节点）==========
 	ModuleBrowserAutomation: {
 		"browserAutomation", "baTasks", "baCreate", "baCron", "baStatus",
-		"egoFlows", "egoExecutions", "egoRunner",
+		"egoFlows", "egoExecutions", "egoRunner", "egoAssets", "egoAssetAdmin",
 	},
 
 	// ========== geo：GEO 智能优化（30 节点）==========
