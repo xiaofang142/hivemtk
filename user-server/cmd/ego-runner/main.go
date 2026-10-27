@@ -47,12 +47,13 @@ import (
 // ---------- 配置（~/.hivemtk/ego_runner.conf，key=value 行，同 nm_host.conf 形状） ----------
 
 type runnerConf struct {
-	ServerURL    string // ws(s)://host:8204
-	Token        string // eg_<userID>_<rand>
-	WorkspaceDir string // learnings workspace 根（EGO_BROWSER_AGENT_WORKSPACE 指向）
-	DeviceID     string // 首次安装生成，持久化
-	EgoBin       string // ego-browser 可执行文件路径
-	LoopbackOnly bool   // 形态甲标记（调研 §6.5；runner 侧仅记录与自检提示）
+	ServerURL     string // ws(s)://host:8204
+	Token         string // eg_<userID>_<rand>
+	WorkspaceDir  string // learnings workspace 根（EGO_BROWSER_AGENT_WORKSPACE 指向）
+	DeviceID      string // 首次安装生成，持久化
+	EgoBin        string // ego-browser 可执行文件路径
+	EgoServerName string // 可选：--ego-server-name（E3：官方唯一跨实例选择手段，多实例并存时防连错）
+	LoopbackOnly  bool   // 形态甲标记（调研 §6.5；runner 侧仅记录与自检提示）
 }
 
 func confPath() string {
@@ -103,6 +104,8 @@ func loadConf() (*runnerConf, error) {
 			c.DeviceID = v
 		case "ego_bin":
 			c.EgoBin = v
+		case "ego_server_name":
+			c.EgoServerName = v
 		case "loopback_only":
 			c.LoopbackOnly = v == "true"
 		}
@@ -184,9 +187,10 @@ type runner struct {
 }
 
 type execContext struct {
-	spec     taskSpec
-	cancel   context.CancelFunc
-	exitCode int
+	spec         taskSpec
+	cancel       context.CancelFunc
+	exitCode     int
+	decisionPath string // 事前阻塞确认闸的裁决文件（allow/deny 由 confirm 帧写入；每执行独立临时目录）
 }
 
 func (r *runner) send(ev eventLine) {
@@ -238,6 +242,9 @@ func (r *runner) runTask(spec taskSpec) {
 		return
 	}
 	defer cleanup()
+	// 裁决文件与脚本同目录（assembleScript 的执行级临时目录）：路径可由脚本路径确定性派生，
+	// 不改 assembleScript 签名——目录每执行独立创建，天然无跨执行残留/伪造面。
+	ec.decisionPath = confirmDecisionPath(script)
 
 	code, errOut := r.execEgo(ctx, spec, script)
 	r.send(eventLine{Type: "done", Execution: spec.ExecutionID, ExitCode: code, Stderr: truncate(errOut, 2000)})
@@ -297,10 +304,13 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 	// 只到 spec 就丢了，表现为"UI 填的参数脚本收不到"，静默降级成默认值。
 	//
 	// 契约（资产脚本可用）：
-	//   __EXEC__        本次执行键（ego-<row>-<ms>，脚本打点可回填）
-	//   __PARAMS__      调用方参数（JSON 对象；未传为 {}）
-	//   __SPACE_NAME__  space 名（空串=不指定，脚本自行起名）；同名的 space 会续跑，
-	//                   这是多轮任务的唯一衔接点（每轮新进程，变量不持久）
+	//   __EXEC__            本次执行键（ego-<row>-<ms>，脚本打点可回填）
+	//   __PARAMS__          调用方参数（JSON 对象；未传为 {}）
+	//   __SPACE_NAME__      space 名（空串=不指定，脚本自行起名）；同名的 space 会续跑，
+	//                       这是多轮任务的唯一衔接点（每轮新进程，变量不持久）
+	//   __CONFIRM_FILE__    事前阻塞确认闸的裁决文件（每执行独立临时目录，无残留面）
+	//   __CONFIRM_TTL_SEC__ 确认等待上限（秒）；到期按拒绝，与服务端看门狗同口径
+	//   __awaitConfirm__    写提交点前调用：false=用户拒绝或确认超时，脚本必须立即收口
 	paramsJSON := "{}"
 	if len(spec.Params) > 0 {
 		var probe any
@@ -308,22 +318,61 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 			paramsJSON = string(spec.Params)
 		}
 	}
+	ttlSec := spec.ConfirmTTL
+	if ttlSec <= 0 {
+		ttlSec = egoConfirmDefTTLSec
+	}
+	p := filepath.Join(dir, "flow-round01.mjs")
+	decisionPath := confirmDecisionPath(p)
 	preamble := fmt.Sprintf(
 		"// ego-runner assembled @%s execution=%s origin=%s round=%d\n"+
 			"const __EXEC__ = %q;\n"+
 			"const __PARAMS__ = %s;\n"+
-			"const __SPACE_NAME__ = %q;\n",
+			"const __SPACE_NAME__ = %q;\n"+
+			"const __CONFIRM_FILE__ = %q;\n"+
+			"const __CONFIRM_TTL_SEC__ = %d;\n"+
+			confirmHelperJS,
 		time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.Round,
-		spec.ExecutionID, paramsJSON, spec.SpaceName)
+		spec.ExecutionID, paramsJSON, spec.SpaceName, decisionPath, ttlSec)
 	script := preamble + entrySrc
 
-	p := filepath.Join(dir, "flow-round01.mjs")
 	if err := os.WriteFile(p, []byte(script), 0o600); err != nil {
 		cleanup()
 		return "", nil, err
 	}
 	return p, cleanup, nil
 }
+
+const egoConfirmDefTTLSec = 300
+
+const confirmDecisionFile = "confirm-decision.json"
+
+// confirmDecisionPath 裁决文件路径（与脚本同目录，路径由脚本路径确定性派生）
+func confirmDecisionPath(scriptPath string) string {
+	return filepath.Join(filepath.Dir(scriptPath), confirmDecisionFile)
+}
+
+// confirmHelperJS 注入 round 脚本的事前阻塞确认闸 helper。
+// 只认 decision==="allow" 为放行（fail-close）：文件损坏/半写/未知值一律不放行；
+// TTL 到期返回 false，由脚本自行收口（进程被 runner kill 是兜底，不是依赖）。
+const confirmHelperJS = `// —— 事前阻塞写确认闸（HiveMTK runner 注入；契约见 specs/014-egolite-blocking-confirm-gate）——
+// 写提交点前调用：if (!(await __awaitConfirm__("动作名"))) { ...收口，不得继续写... }
+// 未调用本函数的脚本保持既有行为（乐观执行 + 服务端可杀死）。
+async function __awaitConfirm__(label) {
+  console.log(JSON.stringify({ type: "confirm", action: String(label ?? ""), execution: __EXEC__, ts: Date.now() }));
+  const { readFile } = await import("node:fs/promises");
+  const deadline = Date.now() + Math.max(1, __CONFIRM_TTL_SEC__) * 1000;
+  while (Date.now() < deadline) {
+    try {
+      const d = JSON.parse(await readFile(__CONFIRM_FILE__, "utf8"));
+      if (d.decision === "allow") return true;
+      if (d.decision === "deny") return false;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return false;
+}
+`
 
 // eventTypeFromPayload 从脚本打印的 JSON 行里取事件类型。
 //
@@ -355,7 +404,7 @@ func eventTypeFromPayload(raw json.RawMessage) string {
 // （探针 pid 稳定复现 unset）——资产分发改为 SyncPull 直接解包到物理目录
 // ~/.local/share/ego/ego-skills/learnings/{site}/，脚本内以物理路径访问（实测可读）。
 func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) (int, string) {
-	cmd := exec.CommandContext(ctx, r.conf.EgoBin, "nodejs")
+	cmd := exec.CommandContext(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
 	script, err := os.Open(scriptPath)
 	if err != nil {
 		r.send(eventLine{Type: "error", Execution: spec.ExecutionID, Stderr: "打开脚本失败: " + err.Error()})
@@ -479,6 +528,16 @@ func (r *runner) connect(ctx context.Context) error {
 	return nil
 }
 
+// egoNodeArgs 组装 ego-browser 的 argv：--ego-server-name 必须前置在 nodejs 子命令之前
+// （官方 CLI 唯一跨实例选择手段，调用机制调研 E3；多实例并存时防连错实例）。
+func egoNodeArgs(c *runnerConf) []string {
+	args := make([]string, 0, 2)
+	if c.EgoServerName != "" {
+		args = append(args, "--ego-server-name="+c.EgoServerName)
+	}
+	return append(args, "nodejs")
+}
+
 func probeEgoVersion(egoBin string) string {
 	out, err := exec.Command(egoBin, "--version").Output()
 	if err != nil {
@@ -524,6 +583,9 @@ func main() {
 	if *check {
 		fmt.Printf("server_url=%s\nworkspace=%s\ndevice_id=%s\nloopback_only=%v\n",
 			c.ServerURL, c.WorkspaceDir, c.DeviceID, c.LoopbackOnly)
+		if c.EgoServerName != "" {
+			fmt.Printf("ego_server_name=%s（多实例并存时按名连接）\n", c.EgoServerName)
+		}
 		fmt.Printf("ego-browser: %s (%s)\n", c.EgoBin, probeEgoVersion(c.EgoBin))
 		if _, err := os.Stat(c.WorkspaceDir); err != nil {
 			fmt.Printf("⚠️ workspace 不存在（安装资产后自动创建）: %s\n", c.WorkspaceDir)
@@ -595,44 +657,81 @@ func readLoop(r *runner, ctx context.Context, once bool) {
 			return
 		}
 		_ = r.conn.SetReadDeadline(time.Now().Add(pongWait))
+		// 分型解帧（specs/014 D5）：此前把 spec 直接解成 taskSpec，confirm 帧的
+		// decision 字段不是 taskSpec 成员，解帧即丢——allow/deny 永远到不了裁决文件。
 		var frame struct {
-			Type string   `json:"type"`
-			Spec taskSpec `json:"spec"`
+			Type string          `json:"type"`
+			Spec json.RawMessage `json:"spec"`
 		}
 		if err := r.conn.ReadJSON(&frame); err != nil {
 			return
 		}
 		switch frame.Type {
 		case "task_spec":
-			go r.runTask(frame.Spec)
+			var spec taskSpec
+			if err := json.Unmarshal(frame.Spec, &spec); err == nil {
+				go r.runTask(spec)
+			}
 		case "ping":
 			r.send(eventLine{Type: "pong"})
 		case "abort":
+			var a struct {
+				ExecutionID string `json:"execution_id"`
+			}
+			_ = json.Unmarshal(frame.Spec, &a)
 			r.currentMu.Lock()
-			if r.current != nil && r.current.spec.ExecutionID == frame.Spec.ExecutionID {
+			if r.current != nil && execKeyMatches(r.current.spec.ExecutionID, a.ExecutionID) {
 				r.current.cancel()
 			}
 			r.currentMu.Unlock()
 		case "confirm":
-			// 服务端裁决（allow/deny）转发给在途执行：deny=取消执行进程
-			//（fail-close：拒绝即终止本轮）；allow=继续（脚本在 confirm 事件行后自行推进）。
-			r.currentMu.Lock()
-			if r.current != nil && r.current.spec.ExecutionID == frame.Spec.ExecutionID {
-				var d struct {
-					Decision string `json:"decision"`
-				}
-				_ = json.Unmarshal(frame.Spec.Params, &d)
-				if d.Decision == "deny" {
-					r.current.cancel() // fail-close：拒绝即终止本轮
-				}
+			var cf struct {
+				ExecutionID string `json:"execution_id"`
+				Decision    string `json:"decision"`
 			}
-			r.currentMu.Unlock()
+			_ = json.Unmarshal(frame.Spec, &cf)
+			r.handleConfirmFrame(cf.ExecutionID, cf.Decision)
 		}
 		if once && frame.Type == "task_spec" {
 			// PoC 模式：跑完一个任务即退出（便于脚本化验收）
 			time.Sleep(2 * time.Second)
 			return
 		}
+	}
+}
+
+// execKeyMatches 服务端下行键（EgoExecKey，ego-<row>）与 dispatch 键（ego-<row>-<ms>）的匹配。
+// 此前精确相等必假——abort/confirm 帧在 runner 侧被静默丢弃，进程照跑（specs/014 R2-1）。
+// 前缀必须含 "-" 分隔：ego-91 不得命中 ego-9-123。
+func execKeyMatches(dispatched, frameID string) bool {
+	if dispatched == "" || frameID == "" {
+		return false
+	}
+	return dispatched == frameID || strings.HasPrefix(dispatched, frameID+"-")
+}
+
+// handleConfirmFrame 服务端裁决落地（specs/014 D2/D3）：
+//
+//	allow → 写裁决文件，脚本轮询到后自行放行（事前阻塞的放行通道）；
+//	deny  → 写裁决文件（让脚本有机会打出 ok:false 审计行）+ cancel（fail-close，既有语义）。
+//
+// 其余 decision 值不动作（fail-close：不认识的裁决不能当放行用）。
+func (r *runner) handleConfirmFrame(execID, decision string) {
+	r.currentMu.Lock()
+	defer r.currentMu.Unlock()
+	if r.current == nil || !execKeyMatches(r.current.spec.ExecutionID, execID) {
+		return
+	}
+	switch decision {
+	case "allow":
+		if r.current.decisionPath != "" {
+			_ = os.WriteFile(r.current.decisionPath, []byte(`{"decision":"allow"}`), 0o600)
+		}
+	case "deny":
+		if r.current.decisionPath != "" {
+			_ = os.WriteFile(r.current.decisionPath, []byte(`{"decision":"deny"}`), 0o600)
+		}
+		r.current.cancel()
 	}
 }
 

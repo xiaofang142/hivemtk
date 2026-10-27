@@ -109,14 +109,19 @@ func (s *EgoFlowService) DryRun(ctx context.Context, userID, flowID uint, params
 	if f.Script == "" {
 		return nil, fmt.Errorf("flow 脚本为空")
 	}
+	// 决策 4 同口径（specs/014 T008）：声明了写动作的试跑同样逐步确认——
+	// 客户端不可自行关闭；与 market 分支「资产 writes 非空 ⇒ 强制 require」对齐。
+	confirmPolicy := "none"
+	var writes []string
+	if json.Unmarshal(f.WritesJSON, &writes) == nil && len(writes) > 0 {
+		confirmPolicy = "require"
+	}
 	return s.execSvc.Start(ctx, userID, StartRequest{
-		Origin:    "draft",
-		FlowID:    flowID,
-		Params:    params,
-		SpaceName: spaceName,
-		// 试跑强制 confirm（决策 4：用户侧步级审计；未声明 writes 的读流也走 require——
-		// 不对：读流无写步无需 confirm。定案：试跑 confirm_policy 按 flow.writes 是否非空决定）
-		ConfirmPolicy: "none",
+		Origin:        "draft",
+		FlowID:        flowID,
+		Params:        params,
+		SpaceName:     spaceName,
+		ConfirmPolicy: confirmPolicy,
 		TimeoutSec:    timeoutSec,
 	})
 }

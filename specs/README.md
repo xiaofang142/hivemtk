@@ -14,6 +14,7 @@
 | 005 | [005-reach-compliance-policy/](005-reach-compliance-policy/) | 主动触达合规策略（E1） | 已交付 |
 | 006 | [006-wave2-gates-and-selector-health/](006-wave2-gates-and-selector-health/) | Wave2 门禁与选择器健康 | lane 在途 |
 | 009 | [009-docs-and-i18n-closeout/](009-docs-and-i18n-closeout/) | F1 文档分层 + F3 国际化收口 + C4 多租户文档口径 | 本 lane |
+| 014 | [014-egolite-blocking-confirm-gate/](014-egolite-blocking-confirm-gate/) | ego-lite 腿收口：事前阻塞写确认闸（decision 文件握手）+ runner 接线杂项（server-name 透传/键匹配/分型解帧） | 已交付 |
 
 > 注：目录下另有 `007-observability-and-channel-health/`、`012-module-contract-registry/` 为并发 lane
 > 在途（未提交），不在本索引登记范围，待其 delivery 收口后自行补录。

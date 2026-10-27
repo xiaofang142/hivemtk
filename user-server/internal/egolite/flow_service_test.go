@@ -188,3 +188,38 @@ func TestFlowRescanUpdatesVerdict(t *testing.T) {
 		t.Fatal("良性重扫应通过")
 	}
 }
+
+// specs/014 T008：dry-run 的 confirm_policy 由 flow.writes 派生（决策 4 同口径，
+// 客户端不可关闭）——声明写动作 ⇒ require；纯读流保持 none。
+func TestDryRunConfirmPolicyDerivedFromWrites(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newFlowEnv(t)
+
+	fRead, _, err := svc.Save(ctx, 7, 0, SaveRequest{
+		Name: "读流", Domains: []string{"github.com"}, Script: benignScript,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eRead, err := svc.DryRun(ctx, 7, fRead.ID, nil, "ws-dry-read", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eRead.ConfirmPolicy != "none" {
+		t.Errorf("未声明 writes 的试跑应 none，got %s", eRead.ConfirmPolicy)
+	}
+
+	fWrite, _, err := svc.Save(ctx, 7, 0, SaveRequest{
+		Name: "写流", Domains: []string{"github.com"}, Writes: []string{"comment"}, Script: benignScript,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eWrite, err := svc.DryRun(ctx, 7, fWrite.ID, nil, "ws-dry-write", 60)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eWrite.ConfirmPolicy != "require" {
+		t.Errorf("声明 writes 的试跑必须强制 require（客户端不可关闭），got %s", eWrite.ConfirmPolicy)
+	}
+}

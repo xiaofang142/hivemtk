@@ -362,6 +362,11 @@ func (s *EgoExecutionService) WatchdogSweep(ctx context.Context) (int, error) {
 		if err := s.execRepo.TransitionState(ctx, e.ID, []string{model.EgoExecWaitingConfirm},
 			model.EgoExecStopped, map[string]any{"ended_at": now, "fail_reason": "确认超时（confirm TTL 到期，按拒绝处理）"}); err == nil {
 			swept++
+			// fail-close 要落到进程：TTL 判停必须让 runner 停掉在途 ego 执行（specs/014 D8），
+			// 否则脚本还在轮询空转占住 space。conn 不在线时静默——脚本侧 TTL 自停兜底。
+			if conn, online := s.registry.GetConn(e.UserID); online {
+				_ = conn.SendSpec(map[string]any{"type": "abort", "spec": map[string]any{"execution_id": EgoExecKey(e.ID)}})
+			}
 		}
 	}
 	timeoutOverdue, err := s.execRepo.ListTimeoutOverdue(ctx, now)
