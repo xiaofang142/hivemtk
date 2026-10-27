@@ -25,6 +25,10 @@ var (
 	ErrExecStateConflict = errors.New("执行状态不允许该操作")
 	// ErrConcurrencyGate 并发闸（每用户同时在途执行上限，task.go CountRunningByUser 同纪律）
 	ErrConcurrencyGate = errors.New("在途执行已达上限，请等待当前执行结束或停止它")
+	// ErrAssetNotFound 资产不存在/已下线/未过扫（三者同响应，不暴露上下线状态）
+	ErrAssetNotFound = errors.New("资产不存在或已下线")
+	// ErrAssetUnavailable 装配缺陷：market 通道没有资产目录可校验（fail-closed）
+	ErrAssetUnavailable = errors.New("资产目录不可用（服务装配异常）")
 )
 
 // ---------- 执行 ----------
@@ -223,6 +227,8 @@ func (r *egoEventRepo) ListByExecution(ctx context.Context, executionID uint, li
 type EgoFlowRepository interface {
 	Create(ctx context.Context, f *model.EgoliteFlow) error
 	GetForUser(ctx context.Context, id, userID uint) (*model.EgoliteFlow, error)
+	// GetByID 管理端审核读（跨用户；审核工作台按流程号取，不看归属）
+	GetByID(ctx context.Context, id uint) (*model.EgoliteFlow, error)
 	Update(ctx context.Context, id, userID uint, sets map[string]any) error
 	ListByUser(ctx context.Context, userID uint, page, pageSize int) ([]*model.EgoliteFlow, int64, error)
 	Delete(ctx context.Context, id, userID uint) error
@@ -243,6 +249,18 @@ func (r *egoFlowRepo) GetForUser(ctx context.Context, id, userID uint) (*model.E
 	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).First(&f).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrExecutionNotFound // 同响应防枚举
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (r *egoFlowRepo) GetByID(ctx context.Context, id uint) (*model.EgoliteFlow, error) {
+	var f model.EgoliteFlow
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&f).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrExecutionNotFound
 	}
 	if err != nil {
 		return nil, err

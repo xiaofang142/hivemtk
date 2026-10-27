@@ -11,10 +11,11 @@ import (
 
 // 执行域状态机测试（真 PG；testutil 按 CI 纪律不可达即 Fatal/Skip 同族行为）。
 
-func newExecTestEnv(t *testing.T) (EgoExecutionRepository, EgoEventRepository, EgoFlowRepository, *EgoRunnerRegistry, *EgoExecutionService) {
+func newExecTestEnv(t *testing.T) (EgoExecutionRepository, EgoEventRepository, EgoFlowRepository, EgoAssetRepository, *EgoRunnerRegistry, *EgoExecutionService) {
 	t.Helper()
 	db := testutil.NewTestDB(t,
 		&model.EgoliteExecution{}, &model.EgoEventLog{}, &model.EgoliteFlow{}, &model.EgoliteWriteClaim{},
+		&model.EgoliteAsset{},
 	)
 	if db == nil {
 		t.Fatal("测试库不可用")
@@ -22,14 +23,15 @@ func newExecTestEnv(t *testing.T) (EgoExecutionRepository, EgoEventRepository, E
 	execRepo := NewEgoExecutionRepositoryWithDB(db)
 	evRepo := NewEgoEventRepositoryWithDB(db)
 	flowRepo := NewEgoFlowRepositoryWithDB(db)
+	assetRepo := NewEgoAssetRepositoryWithDB(db)
 	registry := NewEgoRunnerRegistry()
-	svc := NewEgoExecutionService(execRepo, evRepo, flowRepo, registry)
-	return execRepo, evRepo, flowRepo, registry, svc
+	svc := NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
+	return execRepo, evRepo, flowRepo, assetRepo, registry, svc
 }
 
 func TestExecutionStateTransitionAtomic(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, _, _ := newExecTestEnv(t)
+	execRepo, _, _, _, _, _ := newExecTestEnv(t)
 
 	e := &model.EgoliteExecution{UserID: 1, Origin: "draft", State: model.EgoExecCreated}
 	if err := execRepo.Create(ctx, e); err != nil {
@@ -61,7 +63,7 @@ func TestExecutionStateTransitionAtomic(t *testing.T) {
 
 func TestConcurrencyGate(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, registry, svc := newExecTestEnv(t)
+	execRepo, _, _, _, registry, svc := newExecTestEnv(t)
 
 	// 模拟两个在途
 	for i := 0; i < 2; i++ {
@@ -81,7 +83,7 @@ func TestConcurrencyGate(t *testing.T) {
 
 func TestStartValidation(t *testing.T) {
 	ctx := context.Background()
-	_, _, _, _, svc := newExecTestEnv(t)
+	_, _, _, _, _, svc := newExecTestEnv(t)
 
 	cases := []struct {
 		name string
@@ -101,7 +103,7 @@ func TestStartValidation(t *testing.T) {
 
 func TestIngestEventAdvancesStateMachine(t *testing.T) {
 	ctx := context.Background()
-	execRepo, evRepo, flowRepo, registry, svc := newExecTestEnv(t)
+	execRepo, evRepo, flowRepo, _, registry, svc := newExecTestEnv(t)
 
 	// flow + execution 落库
 	f := &model.EgoliteFlow{UserID: 3, Name: "t", DomainsJSON: []byte(`["github.com"]`), Script: "console.log(1)", Status: model.EgoFlowDraft}
@@ -169,7 +171,7 @@ func TestIngestEventAdvancesStateMachine(t *testing.T) {
 
 func TestIngestEventOwnershipCheck(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, _, svc := newExecTestEnv(t)
+	execRepo, _, _, _, _, svc := newExecTestEnv(t)
 	e := &model.EgoliteExecution{UserID: 5, Origin: "draft", State: model.EgoExecRunning}
 	if err := execRepo.Create(ctx, e); err != nil {
 		t.Fatal(err)
@@ -190,7 +192,7 @@ func TestIngestEventOwnershipCheck(t *testing.T) {
 
 func TestAbortAndDenyFlow(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, _, svc := newExecTestEnv(t)
+	execRepo, _, _, _, _, svc := newExecTestEnv(t)
 
 	e := &model.EgoliteExecution{UserID: 9, Origin: "draft", State: model.EgoExecWaitingConfirm}
 	if err := execRepo.Create(ctx, e); err != nil {
@@ -212,7 +214,7 @@ func TestAbortAndDenyFlow(t *testing.T) {
 
 func TestWatchdogSweepsConfirmTTLAndTimeout(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, _, svc := newExecTestEnv(t)
+	execRepo, _, _, _, _, svc := newExecTestEnv(t)
 
 	// waiting_confirm 且 updated_at 已老于 TTL（ConfirmTTLSec=1s，updated_at 由 Create 写 now——
 	// 直接手工把 updated_at 拨老）
@@ -250,7 +252,7 @@ func TestWatchdogSweepsConfirmTTLAndTimeout(t *testing.T) {
 
 func TestRunnerDisconnectFailsActive(t *testing.T) {
 	ctx := context.Background()
-	execRepo, _, _, _, svc := newExecTestEnv(t)
+	execRepo, _, _, _, _, svc := newExecTestEnv(t)
 	for _, st := range []string{model.EgoExecRunning, model.EgoExecDispatching, model.EgoExecCompleted} {
 		e := &model.EgoliteExecution{UserID: 13, Origin: "draft", State: st}
 		if err := execRepo.Create(ctx, e); err != nil {

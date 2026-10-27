@@ -617,6 +617,9 @@ func allModels() []any {
 		&model.EgoEventLog{},
 		&model.EgoliteFlow{},
 		&model.EgoliteWriteClaim{},
+		// 资产目录表（平台端发布 → 用户端使用 → 下发执行的中间事实源）：
+		// user-server 自包含，不经 platform-server / binary_asset 通道。
+		&model.EgoliteAsset{},
 	}
 }
 

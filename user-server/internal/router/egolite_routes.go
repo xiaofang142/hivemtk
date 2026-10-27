@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/egolite"
+	"hivemtk-user/internal/middleware"
 	hrepo "hivemtk-user/internal/repository"
 )
 
@@ -31,6 +32,14 @@ import (
 //   - GET  /api/egolite/executions/:id/events 事件日志（Monitor 页面数据源，T4）
 //   - POST /api/egolite/executions/:id/abort   停止
 //   - POST /api/egolite/executions/:id/confirm 用户确认/拒绝（写操作闸）
+//   - GET  /api/egolite/assets             资产目录橱窗（用户端，只有 published 可见）
+//   - POST /api/egolite/admin/assets/publish    平台端发布：审核用户流程 → 目录条目（admin）
+//   - POST /api/egolite/admin/assets/pack       平台端发布：直接发脚本包（admin）
+//   - GET  /api/egolite/admin/assets            平台端资产全量列表（admin，含 offline）
+//   - POST /api/egolite/admin/assets/:id/offline 平台端资产下线（admin）
+//
+// 「平台端」= 本实例管理端（role=admin），**不经 platform-server / PLATFORM_ENABLED /
+// binary_asset 通道**：发布 = 往 egolite_assets 写一行，用户端立即可见可执行。
 //
 // 后台任务：确认 TTL + 硬超时看门狗（60s 扫描周期）。
 func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.DB) {
@@ -40,9 +49,11 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	execRepo := egolite.NewEgoExecutionRepositoryWithDB(gormDB)
 	evRepo := egolite.NewEgoEventRepositoryWithDB(gormDB)
 	flowRepo := egolite.NewEgoFlowRepositoryWithDB(gormDB)
+	assetRepo := egolite.NewEgoAssetRepositoryWithDB(gormDB)
 
-	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, registry)
+	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
+	assetSvc := egolite.NewEgoAssetCatalog(assetRepo, flowRepo)
 
 	// 断连钩子：该用户全部非终态执行判 failed（FailActiveByUser）。
 	// 独立实现实例——绝不复用 host-ws 的 FailRunningByUser（那是 browser_sessions 语义）。
@@ -65,7 +76,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			c.JSON(401, gin.H{"code": 1, "msg": "runner token 无效"})
 			return
 		}
-		assets, err := egolite.ListPublishedForUser(c.Request.Context(), flowRepo, userID)
+		assets, err := egolite.ListInstallableForUser(c.Request.Context(), flowRepo, assetRepo, userID)
 		if err != nil {
 			c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
 			return
@@ -260,6 +271,74 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
 		})
+
+		// ---- 资产目录：用户端橱窗 ----
+		// 只有 published + 扫描通过可见（offline 不出门）；执行侧仍以
+		// POST /executions {origin:"market"} 为唯一发起口（服务端再校验一次）。
+		eg.GET("/assets", func(c *gin.Context) {
+			list, err := assetSvc.PublicList(c.Request.Context())
+			if err != nil {
+				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
+		})
+
+		// ---- 资产目录：平台端（= 本实例管理端，不依赖 platform-server） ----
+		// 发布即"上架"：写 egolite_assets 一行（脚本快照 + 扫描结论 + sha256），
+		// runner 下次拉清单即可见；用户点它就跑，闭环在 user-server 内。
+		egAdmin := eg.Group("/admin", middleware.RequireAdminMiddleware())
+		{
+			// 审核发布（用户流程 submitted → 复扫 → 目录条目）
+			egAdmin.POST("/assets/publish", func(c *gin.Context) {
+				var body struct {
+					FlowID uint `json:"flow_id"`
+				}
+				if err := c.ShouldBindJSON(&body); err != nil || body.FlowID == 0 {
+					c.JSON(400, gin.H{"code": 1, "msg": "flow_id 必填"})
+					return
+				}
+				a, err := assetSvc.PublishFromFlow(c.Request.Context(), currentUID(c), body.FlowID)
+				if err != nil {
+					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": a})
+			})
+			// 直接发布脚本包（自包含通道：官方/基线资产）
+			egAdmin.POST("/assets/pack", func(c *gin.Context) {
+				var req egolite.PackPublishRequest
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				a, err := assetSvc.PublishFromPack(c.Request.Context(), currentUID(c), req)
+				if err != nil {
+					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": a})
+			})
+			egAdmin.GET("/assets", func(c *gin.Context) {
+				page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+				list, total, err := assetSvc.AdminList(c.Request.Context(), page, size)
+				if err != nil {
+					c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
+			})
+			egAdmin.POST("/assets/:id/offline", func(c *gin.Context) {
+				id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+				a, err := assetSvc.Offline(c.Request.Context(), uint(id))
+				if err != nil {
+					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": a})
+			})
+		}
 	}
 }
 

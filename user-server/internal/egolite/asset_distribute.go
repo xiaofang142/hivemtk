@@ -19,13 +19,16 @@ import (
 // 不穿透到内嵌 Node——因此分发**不走 env 重定向**，而是 runner 拉取清单后
 // 直接写物理目录（F13）。
 //
-// 分发对象两类：
-//  1. 用户自己 published 的 flow（本文件，服务端打包 → runner 落盘 → market 执行）；
-//  2. 平台下发的 egolite_skill 资产包（走平台 binary_asset 通道，签名验证见 asset_sign.go）。
+// 分发对象两类，都在 user-server 内自包含（不碰 platform-server / binary_asset）：
+//  1. 资产目录条目（egolite_assets，管理端发布 → 全租户可见，source=flow|pack）；
+//  2. 用户自己 published 的 flow（本文件，服务端打包 → runner 落盘 → market 执行）。
 //
-// 本文件只做 ①（服务端唯一事实源是 egolite_flows 表），且刻意做成**幂等清单**：
-// runner 每次拉全量清单，按 sha256 比对本地已装版本，只写变化项——不做增量协议，
-// 因为清单规模是「一个用户的流程数」（十位级），增量协议的复杂度换不来收益。
+// 本文件刻意做成**幂等清单**：runner 每次拉全量清单，按 sha256 比对本地已装版本，
+// 只写变化项——不做增量协议，因为清单规模是「目录资产 + 一个用户的流程数」
+// （十位级），增量协议的复杂度换不来收益。
+//
+// 同名冲突纪律：目录资产优先于用户自己的同 slug 流程（目录资产是审核过的版本，
+// 且执行侧 asset_id 就是 asset_code，覆盖它等于让"点了 A 跑了 B"）。
 
 // InstallableAsset 可安装资产（runner 侧落盘输入；形状即 runner 的安装契约）
 type InstallableAsset struct {
@@ -33,10 +36,14 @@ type InstallableAsset struct {
 	Name       string   `json:"name"`
 	Version    int      `json:"version"`
 	Domains    []string `json:"domains"`
+	Writes     []string `json:"writes"`
 	Entry      string   `json:"entry"`       // tools 下相对路径（如 searchRepos.js）
 	Script     string   `json:"script"`      // 入口脚本全文
 	ScriptHash string   `json:"script_hash"` // sha256(script)，runner 比对本地已装
-	FlowID     uint     `json:"flow_id"`
+	Source     string   `json:"source"`      // flow（用户流程）/ pack（目录资产）
+	FlowID     uint     `json:"flow_id"`     // 用户流程来源时的 flow 号（目录资产为 0）
+	AssetID    string   `json:"asset_id"`    // 目录资产编码（用户流程为空）
+	AssetVer   string   `json:"asset_version"`
 }
 
 // BuildInstallableAssets 把用户 published 流程转成可安装清单（纯函数，便于测试）。
@@ -71,16 +78,68 @@ func BuildInstallableAssets(flows []*model.EgoliteFlow) ([]InstallableAsset, err
 		if len(domains) == 0 {
 			continue // 无域名的资产不可执行（market 通道要求白名单），静默跳过
 		}
+		var writes []string
+		if len(f.WritesJSON) > 0 {
+			_ = json.Unmarshal(f.WritesJSON, &writes)
+		}
 		sum := sha256.Sum256([]byte(f.Script))
 		out = append(out, InstallableAsset{
 			ID:         id,
 			Name:       f.Name,
 			Version:    f.Version,
 			Domains:    domains,
+			Writes:     writes,
 			Entry:      path.Join("tools", entry),
 			Script:     f.Script,
 			ScriptHash: hex.EncodeToString(sum[:]),
+			Source:     model.EgoAssetSourceFlow,
 			FlowID:     f.ID,
+		})
+	}
+	return out, nil
+}
+
+// BuildInstallableFromCatalog 把资产目录条目转成可安装清单（纯函数）。
+//
+// 与 flow 侧同一套过滤纪律（published + scan_passed + 有域名 + 有脚本），
+// 唯独入口路径直接取资产自身 Entry（发布时已 slug 化到 tools/ 下），
+// 且带上 asset_id/asset_version——执行侧 market origin 的入参就是这两个值。
+func BuildInstallableFromCatalog(assets []*model.EgoliteAsset) ([]InstallableAsset, error) {
+	out := make([]InstallableAsset, 0, len(assets))
+	for _, a := range assets {
+		if a == nil || a.Status != model.EgoAssetPublished || !a.ScanPassed || a.Script == "" {
+			continue
+		}
+		id := slugify(a.AssetCode)
+		if id == "" {
+			continue
+		}
+		var domains []string
+		if len(a.DomainsJSON) > 0 {
+			if err := json.Unmarshal(a.DomainsJSON, &domains); err != nil {
+				return nil, fmt.Errorf("资产 %s domains 解析失败: %w", a.AssetCode, err)
+			}
+		}
+		if len(domains) == 0 {
+			continue
+		}
+		var writes []string
+		if len(a.WritesJSON) > 0 {
+			_ = json.Unmarshal(a.WritesJSON, &writes)
+		}
+		sum := sha256.Sum256([]byte(a.Script))
+		out = append(out, InstallableAsset{
+			ID:         id,
+			Name:       a.Name,
+			Version:    a.Version,
+			Domains:    domains,
+			Writes:     writes,
+			Entry:      a.Entry,
+			Script:     a.Script,
+			ScriptHash: hex.EncodeToString(sum[:]),
+			Source:     a.Source,
+			AssetID:    slugify(a.AssetCode),
+			AssetVer:   fmt.Sprintf("%d", a.Version),
 		})
 	}
 	return out, nil
@@ -103,8 +162,32 @@ func slugify(s string) string {
 	return strings.Trim(b.String(), "-_")
 }
 
-// ListPublishedForUser 服务端打包入口（routes 层调用）
-func ListPublishedForUser(ctx context.Context, flowRepo EgoFlowRepository, userID uint) ([]InstallableAsset, error) {
+// ListInstallableForUser 服务端打包入口（routes 层调用）。
+//
+// 清单 = 目录资产（全租户已发布） + 该用户自己 published 的流程；
+// 同 slug 时目录资产胜出（见文件头冲突纪律）。
+func ListInstallableForUser(ctx context.Context, flowRepo EgoFlowRepository, assetRepo EgoAssetRepository, userID uint) ([]InstallableAsset, error) {
+	out := make([]InstallableAsset, 0, 32)
+	taken := make(map[string]bool, 32)
+
+	if assetRepo != nil {
+		assets, err := assetRepo.ListPublished(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cat, err := BuildInstallableFromCatalog(assets)
+		if err != nil {
+			return nil, err
+		}
+		for _, a := range cat {
+			if taken[a.ID] {
+				continue
+			}
+			taken[a.ID] = true
+			out = append(out, a)
+		}
+	}
+
 	// published 的全量（单用户流程数十位级，一页 100 足够；超出时按页循环）
 	all := make([]*model.EgoliteFlow, 0, 100)
 	for page := 1; page <= 10; page++ {
@@ -117,5 +200,16 @@ func ListPublishedForUser(ctx context.Context, flowRepo EgoFlowRepository, userI
 			break
 		}
 	}
-	return BuildInstallableAssets(all)
+	flows, err := BuildInstallableAssets(all)
+	if err != nil {
+		return nil, err
+	}
+	for _, a := range flows {
+		if taken[a.ID] {
+			continue // 目录资产优先
+		}
+		taken[a.ID] = true
+		out = append(out, a)
+	}
+	return out, nil
 }

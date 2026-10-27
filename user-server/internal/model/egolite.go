@@ -133,3 +133,58 @@ const (
 )
 
 func (EgoliteWriteClaim) TableName() string { return "egolite_write_claims" }
+
+// EgoliteAsset 资产目录（平台端发布 → 用户端浏览/使用 → 下发执行 的中间事实源）。
+//
+// 定位：user-server 自包含的「资产目录」，**不依赖 platform-server / PLATFORM_ENABLED /
+// binary_asset 通道**——平台端=本实例的管理端（role=admin），发布动作就是往本表写一行。
+// 与 egolite_flows 的分工：
+//   - egolite_flows 是「某个用户自己的草稿/流程」（user_id 维度，可继续演化）；
+//   - egolite_assets 是「已审核、可被全租户使用的目录条目」（tenant 维度，脚本快照不可变）。
+// 快照纪律：Script 在发布时刻复制一份，不引用 flow（flow 后续改动不影响已发布资产；
+// 要改就发新版本，version 自增——与 flow 的不可变版本语义同构）。
+//
+// 幂等键 uniqueIndex(tenant_id, asset_code)：同一租户内资产编码唯一（ON CONFLICT 依据）。
+type EgoliteAsset struct {
+	TenantID uint `gorm:"not null;default:1;uniqueIndex:uq_ego_asset_code,priority:1" json:"tenant_id"`
+
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	AssetCode string `gorm:"size:128;not null;uniqueIndex:uq_ego_asset_code,priority:2" json:"asset_code"` // 执行侧 asset_id（slug 化，兼作 learnings 目录名）
+	Name      string `gorm:"size:160;not null" json:"name"`
+	Version   int    `gorm:"not null;default:1" json:"version"`
+
+	DomainsJSON  datatypes.JSON `gorm:"column:domains;type:jsonb" json:"domains"`
+	WritesJSON   datatypes.JSON `gorm:"column:writes;type:jsonb" json:"writes"`
+	ParamsSchema datatypes.JSON `gorm:"column:params_schema;type:jsonb" json:"params_schema"`
+	Entry        string         `gorm:"size:256;not null" json:"entry"` // 资产内入口（tools/xxx.js，相对 learnings/{code} 根）
+	Script       string         `gorm:"type:text" json:"script"`        // 发布时刻的脚本快照
+	ScriptHash   string         `gorm:"size:64;not null" json:"script_hash"`
+
+	Status     string `gorm:"size:16;not null;default:published;index" json:"status"` // published / offline
+	ScanPassed bool   `gorm:"not null;default:false" json:"scan_passed"`
+	ScanReport datatypes.JSON `gorm:"column:scan_report;type:jsonb" json:"scan_report"`
+
+	Source          string     `gorm:"size:16;not null;default:flow" json:"source"` // flow（审核用户流程）/ pack（直接发脚本包）
+	SourceFlowID    uint       `gorm:"index" json:"source_flow_id"`
+	PublisherUserID uint       `gorm:"index;not null" json:"publisher_user_id"` // 发布人（管理端操作者）
+	PublishedAt     *time.Time `json:"published_at"`
+	InstallCount    int        `gorm:"not null;default:0" json:"install_count"` // 被市场执行引用的次数（弱计数，仅运营参考）
+
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdatedAt" json:"updated_at"`
+}
+
+// 资产状态常量（only published 可被用户端看见与执行；offline 是软下线，不删行——
+// 已装过该资产的 runner 本地副本仍在，删行会让「为什么它还能跑」变成谜）
+const (
+	EgoAssetPublished = "published"
+	EgoAssetOffline   = "offline"
+)
+
+// 资产来源常量
+const (
+	EgoAssetSourceFlow = "flow" // 由用户提交审核的流程审核通过后发布
+	EgoAssetSourcePack = "pack" // 管理端直接发布脚本包（自包含，不经任何外部平台通道）
+)
+
+func (EgoliteAsset) TableName() string { return "egolite_assets" }

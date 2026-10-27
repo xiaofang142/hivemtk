@@ -23,14 +23,15 @@ import (
 
 // EgoExecutionService 执行域
 type EgoExecutionService struct {
-	execRepo EgoExecutionRepository
-	evRepo   EgoEventRepository
-	flowRepo EgoFlowRepository
-	registry *EgoRunnerRegistry
+	execRepo  EgoExecutionRepository
+	evRepo    EgoEventRepository
+	flowRepo  EgoFlowRepository
+	assetRepo EgoAssetRepository // market 通道的资产校验源（nil ⇒ market 全拒，fail-closed）
+	registry  *EgoRunnerRegistry
 }
 
-func NewEgoExecutionService(execRepo EgoExecutionRepository, evRepo EgoEventRepository, flowRepo EgoFlowRepository, registry *EgoRunnerRegistry) *EgoExecutionService {
-	return &EgoExecutionService{execRepo: execRepo, evRepo: evRepo, flowRepo: flowRepo, registry: registry}
+func NewEgoExecutionService(execRepo EgoExecutionRepository, evRepo EgoEventRepository, flowRepo EgoFlowRepository, assetRepo EgoAssetRepository, registry *EgoRunnerRegistry) *EgoExecutionService {
+	return &EgoExecutionService{execRepo: execRepo, evRepo: evRepo, flowRepo: flowRepo, assetRepo: assetRepo, registry: registry}
 }
 
 // RunnerEvent runner 上行事件帧（A3 协议服务端侧形状；cmd/ego-runner 以别名共用，
@@ -83,8 +84,39 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 	if req.Origin == "draft" && req.FlowID == 0 {
 		return nil, fmt.Errorf("draft 执行必须提供 flow_id")
 	}
-	if req.Origin == "market" && (req.AssetID == "" || req.Entry == "") {
-		return nil, fmt.Errorf("market 执行必须提供 asset_id 与 entry")
+
+	// market 通道：资产必须来自本实例已上架的目录（published + scan_passed）。
+	// 这是「平台端发布 → 用户端使用 → 下发执行」闭环的唯一入口，也是防越权的唯一判定点：
+	// asset_id 由客户端给，但**能不能跑由服务端说了算**。
+	var asset *model.EgoliteAsset
+	if req.Origin == "market" {
+		if req.AssetID == "" {
+			return nil, fmt.Errorf("market 执行必须提供 asset_id")
+		}
+		if s.assetRepo == nil {
+			return nil, ErrAssetUnavailable
+		}
+		a, err := s.assetRepo.GetByCode(ctx, req.AssetID)
+		if err != nil {
+			return nil, ErrAssetNotFound
+		}
+		if a.Status != model.EgoAssetPublished || !a.ScanPassed || a.Script == "" {
+			return nil, ErrAssetNotFound
+		}
+		asset = a
+		if req.Entry == "" {
+			req.Entry = a.Entry // 缺省用资产自身入口（客户端不必知道路径）
+		}
+		if req.AssetVersion == "" {
+			req.AssetVersion = fmt.Sprintf("%d", a.Version)
+		}
+		// 资产声明了写动作 ⇒ 强制步级确认（客户端不可自行关闭，决策 4）
+		if len(assetWriteNames(a)) > 0 {
+			req.ConfirmPolicy = "require"
+		}
+	}
+	if req.Origin == "market" && req.Entry == "" {
+		return nil, fmt.Errorf("market 执行必须提供 entry（资产未声明入口）")
 	}
 	if req.TimeoutSec <= 0 {
 		req.TimeoutSec = egoExecDefTimeoutSec
@@ -128,6 +160,10 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 	}
 	if err := s.execRepo.Create(ctx, e); err != nil {
 		return nil, err
+	}
+	if asset != nil {
+		// 引用计数（弱计数：失败不影响执行主流程——统计口径不该成为执行前置）
+		_ = s.assetRepo.IncInstall(ctx, asset.AssetCode)
 	}
 
 	dispatched := s.dispatch(ctx, e)

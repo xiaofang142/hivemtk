@@ -36,10 +36,14 @@ type installableAsset struct {
 	Name       string   `json:"name"`
 	Version    int      `json:"version"`
 	Domains    []string `json:"domains"`
+	Writes     []string `json:"writes"`
 	Entry      string   `json:"entry"`
 	Script     string   `json:"script"`
 	ScriptHash string   `json:"script_hash"`
+	Source     string   `json:"source"`
 	FlowID     uint     `json:"flow_id"`
+	AssetID    string   `json:"asset_id"`
+	AssetVer   string   `json:"asset_version"`
 }
 
 // learningsDir 物理 learnings 根（ego lite 实际读取的目录，T2 实测可读）
@@ -139,6 +143,10 @@ func (r *runner) installAsset(a installableAsset) (bool, error) {
 		return false, err
 	}
 
+	source := a.Source
+	if source == "" {
+		source = "flow-publish" // 兼容旧服务端（未带 source 字段）
+	}
 	manifest := map[string]any{
 		"id":      a.ID,
 		"name":    a.Name,
@@ -147,9 +155,11 @@ func (r *runner) installAsset(a installableAsset) (bool, error) {
 		"hivemtk": map[string]any{
 			"entry":       a.Entry,
 			"compat_min":  "0.6.0",
-			"writes":      []string{},
-			"source":      "flow-publish",
+			"writes":      a.Writes,
+			"source":      source,
 			"flow_id":     a.FlowID,
+			"asset_id":    a.AssetID,
+			"asset_ver":   a.AssetVer,
 			"synced_at":   time.Now().UTC().Format(time.RFC3339),
 			"script_hash": a.ScriptHash,
 		},
