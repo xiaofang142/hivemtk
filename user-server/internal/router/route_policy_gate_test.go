@@ -88,6 +88,7 @@ func chainHasAny(chain []string, guards []string) bool {
 var anonymousAllowedRoutes = map[string]string{
 	"GET /":                                                      "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /api/browser/host-ws":                                   "NM Host 通道：只认回环对端 IP + 主机令牌握手（两道门都在 handler 内，见 HostWSHandler.Handle）",
+	"GET /api/egolite/assets/pull":                               "ego-lite 资产分发：eg_ 前缀令牌校验（ValidateEgoToken，token 内嵌 userID 决定只发该用户自己 published 的流程）+ 只读清单，handler 内鉴权",
 	"GET /api/egolite/runner-ws":                                 "ego-runner 通道：eg_ 前缀令牌（KV 双候选轮换+常量时间比较）+ 形态开关回环门 + register 握手，全部在 handler 内（EgoRunnerWSHandler.Handle）；token 即身份，与 host-ws 同形状",
 	"GET /api/chat/public/agents/available":                      "官网访客对话组件：AppKeyResolve + visitor_token（HMAC 绑定 channel/visitor/session）+ 访客限流",
 	"GET /api/chat/public/channel/:app_key/info":                 "官网访客对话组件：AppKeyResolve + visitor_token（HMAC 绑定 channel/visitor/session）+ 访客限流",

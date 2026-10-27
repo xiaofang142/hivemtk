@@ -324,6 +324,10 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "baCreate", Title: "新建任务", Icon: "Plus", Path: "/browser-automation/tasks/create"},
 					{Key: "baCron", Title: "定时触发器", Icon: "Timer", Path: "/browser-automation/cron"},
 					{Key: "baStatus", Title: "Host 状态", Icon: "CircleCheck", Path: "/browser-automation/status"},
+					// ego-lite 腿（调研决策 2：双腿并存；同一付费能力下的第二种执行腿）
+					{Key: "egoFlows", Title: "我的流程", Icon: "Document", Path: "/browser-automation/ego/flows"},
+					{Key: "egoExecutions", Title: "执行监控", Icon: "DataLine", Path: "/browser-automation/ego/executions"},
+					{Key: "egoRunner", Title: "Runner 状态", Icon: "Cpu", Path: "/browser-automation/ego/runner"},
 				},
 			},
 			{

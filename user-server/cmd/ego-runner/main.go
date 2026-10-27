@@ -487,6 +487,21 @@ func main() {
 	defer stop()
 
 	r := &runner{conf: c}
+	// 资产同步（T3）：启动即拉一次，之后每 10 分钟一轮（幂等，只写变化项）。
+	// 独立于 WS 生命周期——WS 断了资产目录仍应是最新的。
+	r.pullAssets()
+	go func() {
+		ticker := time.NewTicker(assetPullInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				r.pullAssets()
+			}
+		}
+	}()
 	backoff := reconnectBase
 	for {
 		if ctx.Err() != nil {

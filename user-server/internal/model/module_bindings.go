@@ -357,6 +357,7 @@ var ModuleMenuBindings = map[string][]string{
 	// ========== browser-automation：浏览器自动化（5 节点）==========
 	ModuleBrowserAutomation: {
 		"browserAutomation", "baTasks", "baCreate", "baCron", "baStatus",
+		"egoFlows", "egoExecutions", "egoRunner",
 	},
 
 	// ========== geo：GEO 智能优化（30 节点）==========

@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +52,26 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 
 	// 启动兜底：KV 无 eg_ token 则自动生成（fail-closed 不卡死首次部署，host-ws 先例）
 	egolite.EnsureEgoTokenExists(context.Background(), kvRepo)
+
+	// 资产清单拉取（T3：runner 侧 SyncPull 等价）。鉴权同 runner-ws：eg_ token 即身份——
+	// 拉的是「该 token 归属用户自己发布的流程」，token 内嵌 userID 由 ValidateEgoToken 解析。
+	engine.GET("/api/egolite/assets/pull", func(c *gin.Context) {
+		tok := c.Query("token")
+		if tok == "" {
+			tok = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		}
+		userID, ok := egolite.ValidateEgoToken(c.Request.Context(), kvRepo, tok)
+		if !ok {
+			c.JSON(401, gin.H{"code": 1, "msg": "runner token 无效"})
+			return
+		}
+		assets, err := egolite.ListPublishedForUser(c.Request.Context(), flowRepo, userID)
+		if err != nil {
+			c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": 0, "data": gin.H{"assets": assets}})
+	})
 
 	// runner WS（不过 JWT——token 即身份，host-ws 同形状）
 	wsHandler := egolite.NewEgoRunnerWSHandler(registry, kvRepo)
