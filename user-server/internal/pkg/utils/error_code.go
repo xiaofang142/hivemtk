@@ -66,6 +66,30 @@ const (
 	ErrorCodeLTCConfigDegraded ErrorCode = "LTC_CONFIG_DEGRADED_8102"
 	ErrorCodeLTCStageUnknown   ErrorCode = "LTC_STAGE_UNKNOWN_8103"
 
+	// 消息撤回域。撤回失败落 409 的三条原因彼此修法不同，此前一律走
+	// response.Error(c, 409, …) 被折成 DUPLICATE_ENTRY_3003（「重复的记录」）——
+	// 可撤回一条消息既没写重复键，也和"重复"无关，前端按码分流时会被带偏：
+	//   - 渠道没有撤回通道：去平台后台手工删（≠ 再点一次）
+	//   - 已过平台窗口：只能人工处理，重试无用
+	//   - 端口未装配：运维/装配问题（这一条走 503，不在此列）
+	ErrorCodeMessageRecallUnsupported   ErrorCode = "MESSAGE_RECALL_UNSUPPORTED_8201"
+	ErrorCodeMessageRecallWindowExpired ErrorCode = "MESSAGE_RECALL_WINDOW_EXPIRED_8202"
+
+	// 状态机冲突域。409 此前一律折成 DUPLICATE_ENTRY_3003（「重复的记录」），
+	// 但"这条已经在跑/已经被确认/已经归档"既不是重复键也不是重复提交：
+	//   - WORKFLOW：执行已结束，再 stop 一次没有意义（刷新即可）
+	//   - ORDER_DRAFT：草稿已被别人确认/取消/过期（刷新列表即可）
+	ErrorCodeWorkflowStateConflict   ErrorCode = "WORKFLOW_STATE_CONFLICT_8301"
+	ErrorCodeOrderDraftStateConflict ErrorCode = "ORDER_DRAFT_STATE_CONFLICT_8302"
+
+	// WhatsApp 个人版扫码登录已随 gowa 下线（W-3）。410 而不是 500：
+	// "曾经有、永久移走"要让老前端去换 Cloud API，而不是以为服务挂了在重试。
+	ErrorCodeWhatsappLoginRetired ErrorCode = "WHATSAPP_LOGIN_RETIRED_8401"
+
+	// 上游/渠道失败（502）。此前 502 没有专属码，按 HTTP 反查落到 UNKNOWN_1000，
+	// 前端无法把"渠道挂了/凭据错"与"未知错误"分开。
+	ErrorCodeUpstreamFailure ErrorCode = "UPSTREAM_FAILURE_5005"
+
 	// 终态下线域（N-5）：已下线端点的 410 墓碑响应。此前 response.Error(c, 410, …)
 	// 走 int 反向映射落 UNKNOWN_1000（"未知错误"）——老客户端拿到的码在说一件
 	// 没发生过的事，监控/按码分流都无法把"地址该换了"从"服务器坏了"里分出来。
@@ -127,6 +151,14 @@ var errorCodeRegistry = map[ErrorCode]ErrorCodeConfig{
 	ErrorCodeLTCStageDisabled:  {Code: ErrorCodeLTCStageDisabled, HTTPCode: 409, Message: "LTC 阶段未启用"},
 	ErrorCodeLTCConfigDegraded: {Code: ErrorCodeLTCConfigDegraded, HTTPCode: 409, Message: "LTC 运营配置读不动，已按关闭处理"},
 	ErrorCodeLTCStageUnknown:   {Code: ErrorCodeLTCStageUnknown, HTTPCode: 409, Message: "LTC 阶段名未注册"},
+
+	ErrorCodeMessageRecallUnsupported:   {Code: ErrorCodeMessageRecallUnsupported, HTTPCode: 409, Message: "该渠道不支持主动撤回"},
+	ErrorCodeMessageRecallWindowExpired: {Code: ErrorCodeMessageRecallWindowExpired, HTTPCode: 409, Message: "已超过平台撤回窗口"},
+
+	ErrorCodeWorkflowStateConflict:   {Code: ErrorCodeWorkflowStateConflict, HTTPCode: 409, Message: "工作流状态不满足该操作"},
+	ErrorCodeOrderDraftStateConflict: {Code: ErrorCodeOrderDraftStateConflict, HTTPCode: 409, Message: "订单草稿状态不满足该操作"},
+	ErrorCodeWhatsappLoginRetired:    {Code: ErrorCodeWhatsappLoginRetired, HTTPCode: 410, Message: "WhatsApp 个人版扫码登录已下线"},
+	ErrorCodeUpstreamFailure:         {Code: ErrorCodeUpstreamFailure, HTTPCode: 502, Message: "上游渠道调用失败"},
 
 	ErrorCodeLegacyGone: {Code: ErrorCodeLegacyGone, HTTPCode: 410, Message: "该接口已废弃"},
 }

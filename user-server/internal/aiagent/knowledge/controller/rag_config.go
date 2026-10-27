@@ -147,6 +147,12 @@ func (ctrl *RagConfigController) DeleteRagProduct(c *gin.Context) {
 
 	err := ctrl.service.DeleteRagProduct(c.Request.Context(), id)
 	if err != nil {
+		// 0 行不等于服务故障：删一条已经没了的记录要回 404（与 A2/A6 同口径），
+		// 修前这里一律 500，且把 "record not found" 原文漏给前端。
+		if isNotFoundError(err) {
+			response.Error(c, http.StatusNotFound, "RAG 产品不存在")
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

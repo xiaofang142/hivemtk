@@ -13,6 +13,7 @@ import (
 
 	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/qq"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/httpclient"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -253,7 +254,10 @@ func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, 
 	}
 	if _, err := cli.SendMessage(ctx, target, content); err != nil {
 		_ = s.qqSvc.UpdateErrorOnly(ctx, accountID, time.Now(), err.Error())
-		return fmt.Errorf("send qq msg: %w", err)
+		// 渠道原文常带 "not found"（app_id/密钥无效时 QQ 就回这类话），裸 fmt 包上去
+		// 会被 response.ErrorFromDB 按文本翻成 404「记录不存在」——现场实测把"凭据错了"
+		// 说成"账号没了"。这里显式声明上游失败（5xxx ⇒ 502），保留渠道真因。
+		return bizerr.Wrap(bizerr.CodePlatformUnavail, "发送 QQ 消息失败（渠道不可达或凭据无效）", err)
 	}
 	// 成功后记录出站消息到 message_hub + inbox（与 TG 出站落库一致）
 	outMsgID := "qq_out_" + fmt.Sprintf("%d_%d", accountID, time.Now().UnixNano())

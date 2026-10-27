@@ -13,6 +13,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// 活码写口的业务错误哨兵。
+//
+// 修前这些分支一律 errors.New，controller 走 HandleDBError ⇒ 非"不存在"类错误
+// 统统折成 500「创建活码失败」，调用方拿不到"短链重了"还是"域名停了"。
+// 现在按原因分码：短链冲突 409、域名不可用 400（与 A15/A16 同一口径）。
+var (
+	ErrLiveCodeShortLinkExists   = errors.New("短链已存在")
+	ErrLiveCodeDomainUnavailable = errors.New("活码域名不可用")
+)
+
 // LiveCodeService 活码服务接口
 type LiveCodeService interface {
 	Create(ctx context.Context, req *dto.CreateLiveCodeRequest) (*dto.LiveCodeResponse, error)
@@ -55,31 +65,31 @@ func NewLiveCodeService() LiveCodeService {
 func (s *liveCodeService) Create(ctx context.Context, req *dto.CreateLiveCodeRequest) (*dto.LiveCodeResponse, error) {
 	existingCode, _ := s.liveCodeRepo.GetByShortLink(ctx, req.ShortLink)
 	if existingCode != nil {
-		return nil, errors.New("短链已存在")
+		return nil, fmt.Errorf("%w: %s", ErrLiveCodeShortLinkExists, req.ShortLink)
 	}
 
 	shortDomain, err := s.domainRepo.GetByID(ctx, int(req.ShortDomainID))
 	if err != nil {
-		return nil, errors.New("短链域名不存在")
+		return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 	}
 	if shortDomain.Status != 1 {
-		return nil, errors.New("短链域名不可用")
+		return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 	}
 
 	entryDomain, err := s.domainRepo.GetByID(ctx, int(req.EntryDomainID))
 	if err != nil {
-		return nil, errors.New("入口域名不存在")
+		return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 	}
 	if entryDomain.Status != 1 {
-		return nil, errors.New("入口域名不可用")
+		return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 	}
 
 	landingDomain, err := s.domainRepo.GetByID(ctx, int(req.LandingDomainID))
 	if err != nil {
-		return nil, errors.New("落地域名不存在")
+		return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 	}
 	if landingDomain.Status != 1 {
-		return nil, errors.New("落地域名不可用")
+		return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 	}
 
 	liveCode := &model.LiveCode{
@@ -102,7 +112,14 @@ func (s *liveCodeService) Create(ctx context.Context, req *dto.CreateLiveCodeReq
 		return nil, err
 	}
 
-	return s.modelToResponse(ctx, liveCode), nil
+	// 回读一次再回显：Create 时模型上没有 domain 关联，直接 modelToResponse
+	// 会让创建响应里的 short_domain/entry_domain/landing_domain 全是 null，
+	// 而紧接着的 GET 又是有值的——同一份数据两个形状（现场实测）。
+	created, err := s.liveCodeRepo.GetByID(ctx, liveCode.ID)
+	if err != nil {
+		return s.modelToResponse(ctx, liveCode), nil
+	}
+	return s.modelToResponse(ctx, created), nil
 }
 
 func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.UpdateLiveCodeRequest) (*dto.LiveCodeResponse, error) {
@@ -114,7 +131,7 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.ShortLink != "" && req.ShortLink != liveCode.ShortLink {
 		existingCode, _ := s.liveCodeRepo.GetByShortLink(ctx, req.ShortLink)
 		if existingCode != nil && existingCode.ID != id {
-			return nil, errors.New("短链已存在")
+			return nil, fmt.Errorf("%w: %s", ErrLiveCodeShortLinkExists, req.ShortLink)
 		}
 		liveCode.ShortLink = req.ShortLink
 	}
@@ -122,10 +139,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.ShortDomainID > 0 && req.ShortDomainID != liveCode.ShortDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.ShortDomainID))
 		if err != nil {
-			return nil, errors.New("短链域名不存在")
+			return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, errors.New("短链域名不可用")
+			return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 		}
 		liveCode.ShortDomainID = req.ShortDomainID
 	}
@@ -133,10 +150,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.EntryDomainID > 0 && req.EntryDomainID != liveCode.EntryDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.EntryDomainID))
 		if err != nil {
-			return nil, errors.New("入口域名不存在")
+			return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, errors.New("入口域名不可用")
+			return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 		}
 		liveCode.EntryDomainID = req.EntryDomainID
 	}
@@ -144,10 +161,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.LandingDomainID > 0 && req.LandingDomainID != liveCode.LandingDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.LandingDomainID))
 		if err != nil {
-			return nil, errors.New("落地域名不存在")
+			return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, errors.New("落地域名不可用")
+			return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 		}
 		liveCode.LandingDomainID = req.LandingDomainID
 	}

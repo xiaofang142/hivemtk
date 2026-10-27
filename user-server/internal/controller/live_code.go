@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reach/card/template"
@@ -24,6 +25,25 @@ func NewLiveCodeController(liveCodeService service.LiveCodeService) *LiveCodeCon
 	}
 }
 
+// handleLiveCodeWriteError 分流活码写口的业务错误：
+//   - 短链重了 → 409（不是服务故障，换一个短链即可）
+//   - 域名停用/不存在 → 400（先修域名池）
+//   - 其余仍走 HandleDBError（真 DB 故障保持 500、记录不存在 404）
+func handleLiveCodeWriteError(ctx *gin.Context, err error, operation string) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, service.ErrLiveCodeShortLinkExists):
+		response.Error(ctx, http.StatusConflict, err.Error())
+		return true
+	case errors.Is(err, service.ErrLiveCodeDomainUnavailable):
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return true
+	}
+	return HandleDBError(ctx, err, operation)
+}
+
 // @Summary      创建活码
 // @Tags      live-code
 // @Router    /api/live-codes/create [post]
@@ -36,7 +56,7 @@ func (c *LiveCodeController) Create(ctx *gin.Context) {
 	}
 
 	liveCode, err := c.liveCodeService.Create(ctx.Request.Context(), &req)
-	if HandleDBError(ctx, err, "创建活码") {
+	if handleLiveCodeWriteError(ctx, err, "创建活码") {
 		return
 	}
 
@@ -57,7 +77,7 @@ func (c *LiveCodeController) Update(ctx *gin.Context) {
 	}
 
 	liveCode, err := c.liveCodeService.Update(ctx.Request.Context(), idStr, &req)
-	if HandleDBError(ctx, err, "更新活码") {
+	if handleLiveCodeWriteError(ctx, err, "更新活码") {
 		return
 	}
 
@@ -182,7 +202,7 @@ func (c *LiveCodeController) GetQRCodes(ctx *gin.Context) {
 // @Router    /api/live-codes/qrcodes/{qr_id}/stats [get]
 // GetQRStats 获取活码二维码统计
 func (c *LiveCodeController) GetQRStats(ctx *gin.Context) {
-	qrIDStr := ctx.Param("qrId")
+	qrIDStr := ctx.Param("qr_id")
 
 	stats, err := c.liveCodeService.GetQRStats(ctx.Request.Context(), qrIDStr)
 	if HandleDBError(ctx, err, "获取活码二维码统计") {
@@ -341,7 +361,7 @@ func (c *LiveCodeController) RecordClick(ctx *gin.Context) {
 // @Router    /api/live-codes/qrcodes/{qr_id}/delete [delete]
 // DeleteLiveCodeQR 删除活码二维码
 func (c *LiveCodeController) DeleteLiveCodeQR(ctx *gin.Context) {
-	idStr := ctx.Param("id")
+	idStr := ctx.Param("qr_id")
 	if idStr == "" {
 		response.Error(ctx, 400, "二维码ID不能为空")
 		return
@@ -365,7 +385,7 @@ func (c *LiveCodeController) DeleteLiveCodeQR(ctx *gin.Context) {
 // @Router    /api/live-codes/qrcodes/{qr_id}/update [put]
 // UpdateLiveCodeQR 更新活码二维码
 func (c *LiveCodeController) UpdateLiveCodeQR(ctx *gin.Context) {
-	idStr := ctx.Param("id")
+	idStr := ctx.Param("qr_id")
 	if idStr == "" {
 		response.Error(ctx, 400, "二维码ID不能为空")
 		return

@@ -23,6 +23,8 @@ package controller
 
 import (
 	"errors"
+
+	"hivemtk-user/internal/pkg/utils"
 	"net/http"
 	"strconv"
 	"strings"
@@ -436,11 +438,11 @@ func (c *OrderDraftController) replyError(ctx *gin.Context, err error) {
 	case errors.Is(err, service.ErrOrderDraftNotFound):
 		response.Error(ctx, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrOrderDraftNotPending), errors.Is(err, service.ErrOrderDraftExpired):
-		response.Error(ctx, http.StatusConflict, err.Error())
+		response.ErrorWithCode(ctx, utils.ErrorCodeOrderDraftStateConflict, http.StatusConflict, err.Error())
 	case isOrderDraftPendingConflict(err):
 		// 部分唯一索引（同一客户 + 同一产品只能有一条 pending）撞车：
 		// 这是"那个产品已经有一张待确认草稿了"的业务结论，不是服务器故障。
-		response.Error(ctx, http.StatusConflict,
+		response.ErrorWithCode(ctx, utils.ErrorCodeOrderDraftStateConflict, http.StatusConflict,
 			"该客户名下同一产品已有一张待确认草稿，改成这个名字会与之冲突："+err.Error())
 	default:
 		logger.Warnf("[OrderDraft] 未预期错误: %v", err)

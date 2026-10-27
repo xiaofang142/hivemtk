@@ -144,7 +144,9 @@ func (c *SOPController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		// 删一条已经没了的 SOP 是 404，不是 400（A2/A6 同口径）：400 会让前端
+		// 以为是"ID 写错了"，而真实情况是"别人先删了/重复点"。
+		response.ErrorFromDB(ctx, err, "SOP 不存在")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "删除成功")

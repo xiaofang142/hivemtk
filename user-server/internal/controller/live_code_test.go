@@ -125,7 +125,9 @@ func TestLiveCodeController_Create_Success(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK && w.Code != http.StatusNotFound {
+	// 测试库没有 domain_pool 行 ⇒ 服务层现在按"域名不可用"回 400（带原因），
+	// 不再是 500/静默；200 仍是合法分支（注入域名后）。
+	if w.Code != http.StatusOK && w.Code != http.StatusNotFound && w.Code != http.StatusBadRequest {
 		t.Errorf("Expected 200 or 404, got %d. Body: %s", w.Code, w.Body.String())
 	}
 }

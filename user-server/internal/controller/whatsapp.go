@@ -1,9 +1,13 @@
 package controller
 
 import (
+	"errors"
+
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
+	"net/http"
 	"strings"
 	"time"
 
@@ -104,6 +108,11 @@ func (c *WhatsappController) StartLogin(ctx *gin.Context) {
 	}
 	qr, err := c.svc.StartLogin(ctx.Request.Context(), accID, 20*time.Second)
 	if err != nil {
+		// 个人版扫码登录已下线（W-3）：410 让老前端拿到"搬家了"，而不是 500 服务故障。
+		if errors.Is(err, service.ErrWhatsAppProviderUnsupported) {
+			response.ErrorWithCode(ctx, utils.ErrorCodeWhatsappLoginRetired, http.StatusGone, err.Error())
+			return
+		}
 
 		if strings.Contains(err.Error(), "dial") || strings.Contains(err.Error(), "websocket") || strings.Contains(err.Error(), "handshake") {
 			response.Error(ctx, 503, "无法连接 WhatsApp 服务器（检查网络/代理后重试）", err.Error())

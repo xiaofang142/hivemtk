@@ -53,7 +53,16 @@ func (r *whatsappRepo) UpdateAccount(ctx context.Context, acc *model.WhatsappAcc
 }
 
 func (r *whatsappRepo) DeleteAccount(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappAccount{}).Error
+	// 0 行必须报 not found：controller 据此回 404。修前直接返回 Delete 的 nil 错误，
+	// 「删一个不存在的账号」也回 200「删除成功」（A2 同族，现场实测）。
+	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappAccount{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *whatsappRepo) ListAccounts(ctx context.Context) ([]*model.WhatsappAccount, error) {
@@ -106,7 +115,14 @@ func (r *whatsappRepo) UpdateDraft(ctx context.Context, d *model.WhatsappDraft) 
 	return r.db.WithContext(ctx).Model(&model.WhatsappDraft{}).Where("id = ?", d.ID).Updates(d).Error
 }
 func (r *whatsappRepo) DeleteDraft(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappDraft{}).Error
+	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappDraft{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 func (r *whatsappRepo) ListDrafts(ctx context.Context) ([]*model.WhatsappDraft, error) {
 	var list []*model.WhatsappDraft
@@ -129,7 +145,14 @@ func (r *whatsappRepo) UpdateJob(ctx context.Context, j *model.WhatsappJob) erro
 	return r.db.WithContext(ctx).Model(&model.WhatsappJob{}).Where("id = ?", j.ID).Updates(j).Error
 }
 func (r *whatsappRepo) DeleteJob(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappJob{}).Error
+	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WhatsappJob{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 func (r *whatsappRepo) ListJobs(ctx context.Context) ([]*model.WhatsappJob, error) {
 	var list []*model.WhatsappJob

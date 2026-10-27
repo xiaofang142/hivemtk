@@ -70,6 +70,10 @@ func writeServiceError(c *gin.Context, err error) {
 	if err == nil {
 		return
 	}
+	if errors.Is(err, service.ErrUserNotFound) {
+		response.NotFound(c, "用户不存在")
+		return
+	}
 	if errors.Is(err, service.ErrInvalidInput) {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -127,6 +128,10 @@ func (ctrl *TelegramGateController) Create(c *gin.Context) {
 		gate.VerifyTTLMin = *req.VerifyTTLMin
 	}
 	if err := ctrl.svc.CreateGate(c.Request.Context(), gate); err != nil {
+		if errors.Is(err, service.ErrTelegramGateExists) {
+			response.Error(c, 409, err.Error())
+			return
+		}
 		response.ErrorFromDB(c, err, "创建失败（群组可能已配置）")
 		return
 	}

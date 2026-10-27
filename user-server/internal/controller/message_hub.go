@@ -11,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -201,12 +202,13 @@ func (c *MessageHubController) Recall(ctx *gin.Context) {
 			response.NotFound(ctx, "消息不存在")
 		case errors.Is(err, service.ErrMessageHubRecallInbound):
 			response.Error(ctx, http.StatusBadRequest, err.Error())
-		case errors.Is(err, service.ErrMessageHubRecallNotSupported),
-			errors.Is(err, service.ErrMessageHubRecallWindowExpired):
-			// 409 而不是 400：请求本身没写错，是"这个对象/这个时点做不到"。
-			// 前端据此显示可解释文案（换人工去平台里删 / 窗口已过），
-			// 而不是笼统的"参数错误"。
-			response.Error(ctx, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrMessageHubRecallNotSupported):
+			// 409 而不是 400：请求本身没写错，是"这个对象做不到"。
+			// 码按原因分（8201 渠道无撤回通道 / 8202 窗口已过），不折进
+			// DUPLICATE_ENTRY_3003 —— 撤回既没写重复键也和"重复"无关。
+			response.ErrorWithCode(ctx, utils.ErrorCodeMessageRecallUnsupported, http.StatusConflict, err.Error())
+		case errors.Is(err, service.ErrMessageHubRecallWindowExpired):
+			response.ErrorWithCode(ctx, utils.ErrorCodeMessageRecallWindowExpired, http.StatusConflict, err.Error())
 		case errors.Is(err, service.ErrMessageHubRecallUnavailable):
 			response.Error(ctx, http.StatusServiceUnavailable, err.Error())
 		default:

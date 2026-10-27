@@ -2,9 +2,17 @@ package service
 
 import (
 	"context"
+	"errors"
+
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
 )
+
+// ErrSessionTagCodeExists 标签编码重复（唯一索引 idx_session_tags_code）。
+//
+// 在 service 层归一：controller 不允许 import repository（depguard），
+// 而 PG 的 duplicate key 原文（索引名 + SQL 片段）也不该直接回给前端。
+var ErrSessionTagCodeExists = errors.New("标签编码已存在")
 
 // SessionTagService 会话标签服务
 type SessionTagService struct {
@@ -43,6 +51,9 @@ func (s *SessionTagService) CreateTag(ctx context.Context, req *CreateTagRequest
 	}
 
 	if err := s.tagRepo.Create(ctx, tag); err != nil {
+		if repository.IsDuplicateKeyErr(err) {
+			return nil, ErrSessionTagCodeExists
+		}
 		return nil, err
 	}
 

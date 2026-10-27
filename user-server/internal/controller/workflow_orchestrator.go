@@ -355,7 +355,8 @@ func (c *WorkflowOrchestratorController) StopExecution(ctx *gin.Context) {
 		}
 
 		if errors.Is(err, service.ErrExecutionNotRunning) {
-			response.Error(ctx, http.StatusConflict, err.Error())
+			// 409 的专属码：再 stop 一次不是"重复提交"，是"这条已经结束了"。
+			response.ErrorWithCode(ctx, utils.ErrorCodeWorkflowStateConflict, http.StatusConflict, err.Error())
 			return
 		}
 		response.Error(ctx, http.StatusInternalServerError, err.Error())

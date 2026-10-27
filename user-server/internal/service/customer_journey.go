@@ -25,6 +25,11 @@ const (
 
 	journeyL1TTL = 60 * time.Second
 
+	// journeyOverviewScanCap 总览/漏斗一次最多回读多少个权威态。
+	// 每个成员一次 GetJSON：索引没有上限（追加写、按 TTL 过期），
+	// 不设上限时客户量大的一次总览会把请求拖成秒级；截断会 Warn 留痕。
+	journeyOverviewScanCap = 20000
+
 	journeyTTLAcquisition   = 30 * 24 * time.Hour
 	journeyTTLTransactional = 90 * 24 * time.Hour
 	journeyTTLSleeping      = 180 * 24 * time.Hour
@@ -685,30 +690,90 @@ type JourneyOverview struct {
 	GeneratedAt    time.Time              `json:"generated_at"`
 }
 
+// forEachLiveState 遍历「当前还活着」的旅程状态，同一客户只回调一次。
+//
+// 有缓存时以 Redis 阶段索引为入口，而不是扫本实例的 L1（s.states）。
+// L1 只是本实例 60s 的读缓存：重启、换实例、或者这份实例只是没被写过的读侧，
+// 它都是空的 —— 旧实现直接扫 L1，于是「库里有 169 个客户」在总览/漏斗上读成 0
+// （UI 验证 F14：`/customerJourney/dashboard` 客户总数 0）。
+//
+// 索引只是提示：成员逐个回读权威态并按**权威态的阶段**计数（不是索引所在的阶段），
+// 所以成员换了阶段、旧阶段索引条目还在时也不会重复计数、不会算错格子。
+// 索引读不动时与其他读路径同口径：Warn 后退回本实例视图，而不是回一张空表。
+func (s *CustomerJourneyService) forEachLiveState(ctx context.Context, fn func(state *JourneyState)) {
+	if fn == nil {
+		return
+	}
+	if s.cache == nil {
+		// 无缓存后端（单机降级）：只能看本实例 L1，过期条目按 TTL 丢掉。
+		s.mu.RLock()
+		now := time.Now()
+		snapshot := make([]*JourneyState, 0, len(s.states))
+		for cid, state := range s.states {
+			if exp, ok := s.l1ExpiresAt[cid]; ok && now.After(exp) {
+				continue
+			}
+			cloned := cloneJourneyState(state)
+			snapshot = append(snapshot, &cloned)
+		}
+		s.mu.RUnlock()
+		for _, state := range snapshot {
+			fn(state)
+		}
+		return
+	}
+
+	seen := make(map[string]bool)
+	scanned := 0
+	for _, stage := range AllStages {
+		members, err := s.cache.LRange(ctx, journeyStageIndexKey(stage), 0, -1)
+		if err != nil {
+			logger.Warnf("journey.forEachLiveState(%s) 阶段索引读失败，跳过该阶段: %v", stage, err)
+			continue
+		}
+		for _, customerID := range members {
+			if customerID == "" || seen[customerID] {
+				continue
+			}
+			seen[customerID] = true
+			if scanned >= journeyOverviewScanCap {
+				// 兜底：每个成员一次 GetJSON，索引无上限时这份扫描会把总览拖成秒级。
+				// 截断要留痕——"读数偏小"和"没有客户"在页面上长得一样。
+				logger.Warnf("journey.forEachLiveState 扫描超过 %d 人，本次总览读数被截断", journeyOverviewScanCap)
+				return
+			}
+			scanned++
+			var loaded JourneyState
+			if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil ||
+				loaded.CustomerID == "" {
+				// 索引是追加写的：状态过期被 TTL 清掉后索引条目还在，
+				// 这种成员已不是"活着的客户"，跳过（回读权威态就是这层过滤）。
+				continue
+			}
+			fn(&loaded)
+		}
+	}
+}
+
 // GetOverview 获取全旅程总览（各阶段客户数 + 转化率）
 func (s *CustomerJourneyService) GetOverview(ctx context.Context) *JourneyOverview {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	overview := &JourneyOverview{
 		Stages:      make([]JourneyStageOverview, 0, len(AllStages)),
 		GeneratedAt: time.Now(),
 	}
-	overview.TotalCustomers = 0
 
 	stageCounts := make(map[JourneyStage]int, len(AllStages))
 	stageStaySum := make(map[JourneyStage]float64, len(AllStages))
 	now := time.Now()
-	for cid, state := range s.states {
-		if exp, ok := s.l1ExpiresAt[cid]; ok && now.After(exp) {
-			continue
-		}
+	s.forEachLiveState(ctx, func(state *JourneyState) {
 		overview.TotalCustomers++
 		stageCounts[state.CurrentStage]++
-		stay := now.Sub(state.StageSince).Hours()
-		stageStaySum[state.CurrentStage] += stay
+		// 零值 StageSince 不是"从公元元年开始停留"：算进去会把平均停留拉到 1.7e7 小时。
+		if !state.StageSince.IsZero() {
+			stageStaySum[state.CurrentStage] += now.Sub(state.StageSince).Hours()
+		}
 		overview.TotalEvents += len(state.StageHistory)
-	}
+	})
 
 	for _, st := range AllStages {
 		count := stageCounts[st]
@@ -748,10 +813,13 @@ func (s *CustomerJourneyService) Funnel(ctx context.Context) *JourneyFunnel {
 	stageDwell := make(map[JourneyStage][]float64)
 	ownerLoad := make(map[JourneyStage]map[string]int)
 
-	s.mu.RLock()
-	for _, state := range s.states {
+	dwellNow := time.Now()
+	s.forEachLiveState(ctx, func(state *JourneyState) {
 		stageCounts[state.CurrentStage]++
-		dwell := time.Since(state.StageSince).Hours() / 24
+		dwell := 0.0
+		if !state.StageSince.IsZero() {
+			dwell = dwellNow.Sub(state.StageSince).Hours() / 24
+		}
 		stageDwell[state.CurrentStage] = append(stageDwell[state.CurrentStage], dwell)
 		if ownerLoad[state.CurrentStage] == nil {
 			ownerLoad[state.CurrentStage] = make(map[string]int)
@@ -761,8 +829,7 @@ func (s *CustomerJourneyService) Funnel(ctx context.Context) *JourneyFunnel {
 			owner = "unassigned"
 		}
 		ownerLoad[state.CurrentStage][owner]++
-	}
-	s.mu.RUnlock()
+	})
 
 	funnel.TotalEntered = stageCounts[StageStranger] + stageCounts[StageLead] + stageCounts[StageContact]
 	funnel.TotalWon = stageCounts[StageWon]

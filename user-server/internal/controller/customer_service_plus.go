@@ -46,12 +46,19 @@ func (c *CustomerServicePlusController) AcquireEditLock(ctx *gin.Context) {
 // @Tags      customer-service-plus
 // @Router    /api/customer-sessions/{id}/edit-lock [delete]
 // ReleaseEditLock DELETE /api/customer-sessions/:id/edit-lock {holder}
+//
+// holder 缺省按「当前登录人」补：不补就会走到 service 的 `holder != ""` 分支，
+// 于是任何人 DELETE 一个不带 body 的请求都能把别人的锁解掉（A7）。
+// 补成 user:<id> 后与 AcquireEditLock 同口径——只能解自己的锁，别人的锁等 TTL 过期。
 func (c *CustomerServicePlusController) ReleaseEditLock(ctx *gin.Context) {
 	sessionID := ctx.Param("id")
 	var req struct {
 		Holder string `json:"holder"`
 	}
 	_ = ctx.ShouldBindJSON(&req)
+	if req.Holder == "" {
+		req.Holder = "user:" + anyToString(ctx.Value("user_id"))
+	}
 	if !c.svc.ReleaseEditLock(ctx.Request.Context(), sessionID, req.Holder) {
 		response.Error(ctx, http.StatusNotFound, "无有效编辑锁或非持有人")
 		return

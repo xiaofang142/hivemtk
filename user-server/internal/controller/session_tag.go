@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
@@ -48,6 +50,12 @@ func (c *SessionTagController) CreateTag(ctx *gin.Context) {
 
 	tag, err := c.tagService.CreateTag(ctx.Request.Context(), &req)
 	if err != nil {
+		// 编码重复是 409 而不是 400：请求本身没错，是"这个编码已经有人用了"。
+		// 修前这里把 PG 的 duplicate key 原文（含索引名与 SQL 片段）直接回给前端。
+		if errors.Is(err, service.ErrSessionTagCodeExists) {
+			response.Error(ctx, http.StatusConflict, "标签编码已存在: "+req.Code)
+			return
+		}
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}

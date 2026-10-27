@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"strconv"
@@ -650,6 +651,12 @@ func (s *TelegramGateService) GetGate(ctx context.Context, id uint) (*model.Tele
 }
 
 // CreateGate 创建网关配置
+// ErrTelegramGateExists 同一 (账号, 群) 已有管控配置。
+//
+// 供 HTTP 层映射 409：修前它是裸 fmt 错误，controller 走 ErrorFromDB 落 500
+// 「创建失败（群组可能已配置）」——把"重复配置"说成服务故障（现场实测）。
+var ErrTelegramGateExists = errors.New("该群组已存在管控配置")
+
 func (s *TelegramGateService) CreateGate(ctx context.Context, gate *model.TelegramGroupGate) error {
 	if s.gateRepo == nil {
 		return fmt.Errorf("db nil")
@@ -659,7 +666,7 @@ func (s *TelegramGateService) CreateGate(ctx context.Context, gate *model.Telegr
 		return fmt.Errorf("chat_id 不能为空")
 	}
 	if _, err := s.gateRepo.GetByChatID(ctx, gate.AccountID, gate.ChatID); err == nil {
-		return fmt.Errorf("该群组已存在管控配置")
+		return ErrTelegramGateExists
 	}
 	return s.gateRepo.Create(ctx, gate)
 }

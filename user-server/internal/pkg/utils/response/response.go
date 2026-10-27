@@ -268,6 +268,10 @@ func errorCodeFromHTTPCode(code int) utils.ErrorCode {
 		return utils.ErrorCodeInternalError
 	case http.StatusServiceUnavailable:
 		return utils.ErrorCodeServiceUnavailable
+	case http.StatusBadGateway:
+		// 502 是"上游/渠道失败"（bizerr 5xxx 平台类），不是未知错误：
+		// 前端要能把它与 UNKNOWN_1000 分开（重试/换凭据 vs 报障）。
+		return utils.ErrorCodeUpstreamFailure
 	default:
 		return utils.ErrorCodeUnknown
 	}

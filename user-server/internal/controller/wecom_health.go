@@ -35,6 +35,17 @@ func (c *WeComHealthController) ReportHealth(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
+	// 路由是 /accounts/:id，前端也按 path 传 id、body 只带健康字段；
+	// 修前 service 只读 body 的 account_id ⇒ 拼出来的请求恒报 invalid account_id（实测）。
+	if req.AccountID == 0 {
+		if id, err := strconv.ParseUint(ctx.Param("id"), 10, 32); err == nil {
+			req.AccountID = uint(id)
+		}
+	}
+	if req.AccountID == 0 {
+		response.Error(ctx, http.StatusBadRequest, "无效的账号ID")
+		return
+	}
 
 	rec, err := c.svc.ReportHealth(ctx.Request.Context(), &req)
 	if err != nil {

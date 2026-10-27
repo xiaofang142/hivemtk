@@ -19,6 +19,13 @@ import (
 // controller 层根据错误内容返回 4xx。
 var ErrInvalidInput = errors.New("service: invalid input")
 
+// ErrUserNotFound 目标账号不存在。
+//
+// 与 ErrInvalidInput 必须分开：对象没了是 404，请求不合法才是 400。此前三处
+// 「用户不存在」被裹进 ErrInvalidInput，于是删一个已删的账号回 400，还把
+// "service: invalid input" 这段内部包装文案漏进 message（现场实测）。
+var ErrUserNotFound = errors.New("用户不存在")
+
 // ErrLastAdmin 系统至少需要保留一个 admin 账号（由 repository.DeleteSafe 透传）
 var ErrLastAdmin = repository.ErrLastAdmin
 
@@ -427,7 +434,7 @@ func (s *SystemUserService) GetByIDAdmin(ctx context.Context, id uint) (*model.S
 	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("用户不存在: %w", ErrInvalidInput)
+			return nil, ErrUserNotFound
 		}
 		logger.Error(err, "GetByIDAdmin 查询失败")
 		return nil, err
@@ -521,7 +528,7 @@ func (s *SystemUserService) UpdateByAdmin(ctx context.Context, actorID, targetID
 	target, err := s.repo.GetByID(ctx, targetID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("用户不存在: %w", ErrInvalidInput)
+			return nil, ErrUserNotFound
 		}
 		logger.Error(err, "UpdateByAdmin 查询 target 失败")
 		return nil, err
@@ -597,7 +604,7 @@ func (s *SystemUserService) DeleteByAdmin(ctx context.Context, actorID, targetID
 			return fmt.Errorf("系统至少需要保留一个超管账号: %w", ErrInvalidInput)
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("用户不存在: %w", ErrInvalidInput)
+			return ErrUserNotFound
 		}
 		logger.Error(err, "DeleteByAdmin 删除失败")
 		return err

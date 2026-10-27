@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
@@ -122,8 +123,8 @@ func TestLiveCodeService_Create_DuplicateShortLink(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for duplicate short link")
 	}
-	if err.Error() != "短链已存在" {
-		t.Errorf("Expected '短链已存在', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeShortLinkExists) {
+		t.Errorf("Expected ErrLiveCodeShortLinkExists, got %v", err)
 	}
 }
 
@@ -146,8 +147,8 @@ func TestLiveCodeService_Create_InvalidShortDomain(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent short domain")
 	}
-	if err.Error() != "短链域名不存在" {
-		t.Errorf("Expected '短链域名不存在', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeDomainUnavailable) {
+		t.Errorf("Expected ErrLiveCodeDomainUnavailable（短链域名）, got %v", err)
 	}
 }
 
@@ -170,8 +171,8 @@ func TestLiveCodeService_Create_InvalidEntryDomain(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent entry domain")
 	}
-	if err.Error() != "入口域名不存在" {
-		t.Errorf("Expected '入口域名不存在', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeDomainUnavailable) {
+		t.Errorf("Expected ErrLiveCodeDomainUnavailable（入口域名）, got %v", err)
 	}
 }
 
@@ -194,8 +195,8 @@ func TestLiveCodeService_Create_InvalidLandingDomain(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent landing domain")
 	}
-	if err.Error() != "落地域名不存在" {
-		t.Errorf("Expected '落地域名不存在', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeDomainUnavailable) {
+		t.Errorf("Expected ErrLiveCodeDomainUnavailable（落地域名）, got %v", err)
 	}
 }
 
@@ -222,8 +223,8 @@ func TestLiveCodeService_Create_DisabledDomain(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for disabled domain")
 	}
-	if err.Error() != "短链域名不可用" {
-		t.Errorf("Expected '短链域名不可用', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeDomainUnavailable) {
+		t.Errorf("Expected ErrLiveCodeDomainUnavailable（短链域名）, got %v", err)
 	}
 }
 
@@ -314,8 +315,8 @@ func TestLiveCodeService_Update_DuplicateShortLink(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for duplicate short link")
 	}
-	if err.Error() != "短链已存在" {
-		t.Errorf("Expected '短链已存在', got %s", err.Error())
+	if !errors.Is(err, ErrLiveCodeShortLinkExists) {
+		t.Errorf("Expected ErrLiveCodeShortLinkExists, got %v", err)
 	}
 }
 

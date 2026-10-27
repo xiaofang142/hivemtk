@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -220,9 +222,17 @@ func (c *LLMRoutingController) UpdateStrategies(ctx *gin.Context) {
 //
 // Body 兼容：{ routes: [...] } 或 { scenario: "...", provider: "...", fallbacks: [...] }
 func (c *LLMRoutingController) UpdateSceneRouting(ctx *gin.Context) {
+	// 请求体只能读一次：先按批量形状解析，不匹配再按单条解析。
+	// 修前这里连着调了两次 ShouldBindJSON —— 第一次已把 body 读空，第二次必然
+	// `invalid body: EOF`，于是"单条场景路由"这条兼容入口从来就没成功过（实测）。
+	raw, readErr := io.ReadAll(io.LimitReader(ctx.Request.Body, 1<<20))
+	if readErr != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "read body: " + readErr.Error()})
+		return
+	}
 
 	var req service.UpdateStrategiesRequest
-	if err := ctx.ShouldBindJSON(&req); err == nil && len(req.Routes) > 0 {
+	if err := json.Unmarshal(raw, &req); err == nil && len(req.Routes) > 0 {
 		if err := c.routingService.UpdateStrategies(ctx.Request.Context(), req); err != nil {
 			ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 			return
@@ -232,7 +242,7 @@ func (c *LLMRoutingController) UpdateSceneRouting(ctx *gin.Context) {
 	}
 
 	var single service.LLMScenarioRoute
-	if err := ctx.ShouldBindJSON(&single); err != nil {
+	if err := json.Unmarshal(raw, &single); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "invalid body: " + err.Error()})
 		return
 	}

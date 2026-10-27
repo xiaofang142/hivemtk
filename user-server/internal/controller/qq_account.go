@@ -36,6 +36,20 @@ func NewQQAccountController(svc *service.QQService) *QQAccountController {
 	return &QQAccountController{svc: svc}
 }
 
+// abortQQAccountLookup 把「按 id 查这条 QQ 账号」的失败按语义分流。
+//
+// 修前所有失败都写 404「账号不存在」：库连接断了、租户上下文缺失（SaaS 下 fail-closed）
+// 也一律说成"这条账号没了"，运维照着去查数据，而真因在别处。与 A2/A5/A6 同一条口径：
+//   - 真没这条（gorm 记录不存在）→ 404「账号不存在」
+//   - 其余内部/上游故障 → 交给 ErrorFromDB（500/502，带原始消息）
+func abortQQAccountLookup(c *gin.Context, err error) {
+	if isNotFoundError(err) {
+		response.NotFound(c, "账号不存在")
+		return
+	}
+	response.ErrorFromDB(c, err, "账号查询失败", err.Error())
+}
+
 // RegisterRoutes 注册路由
 func (ctrl *QQAccountController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/qq/accounts")
@@ -115,7 +129,7 @@ func (ctrl *QQAccountController) Get(c *gin.Context) {
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		abortQQAccountLookup(c, err)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -195,7 +209,7 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		abortQQAccountLookup(c, err)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -253,7 +267,7 @@ func (ctrl *QQAccountController) Delete(c *gin.Context) {
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		abortQQAccountLookup(c, err)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -280,7 +294,7 @@ func (ctrl *QQAccountController) TestSend(c *gin.Context) {
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		abortQQAccountLookup(c, err)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -297,7 +311,9 @@ func (ctrl *QQAccountController) TestSend(c *gin.Context) {
 	}
 	integration := service.NewQQIntegrationService()
 	if err := integration.SendMessage(c.Request.Context(), acc.ID, req.TargetOpenID, "", req.Text); err != nil {
-		response.ErrorFromDB(c, err, "发送失败（注意：QQ 主动消息需用户允许且受频控，建议在群里 @机器人 后用被动回复）", err.Error())
+		// 不要再把 err.Error() 塞进 data：上游失败分支会用 BizError 的完整串
+		// （Message + cause）当 message，第二遍追加同一段就成了复读。
+		response.ErrorFromDB(c, err, "发送失败（注意：QQ 主动消息需用户允许且受频控，建议在群里 @机器人 后用被动回复）")
 		return
 	}
 	response.Success(c, gin.H{"ok": true}, "发送成功")
@@ -319,7 +335,7 @@ func (ctrl *QQAccountController) VerifyCallback(c *gin.Context) {
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		abortQQAccountLookup(c, err)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {

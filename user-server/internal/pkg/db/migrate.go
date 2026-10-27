@@ -721,8 +721,47 @@ func AutoMigrate() *gorm.DB {
 	// 排在终校验之后：它动的是**存量形状**（AutoMigrate 只加不删的那一半），
 	// 表都没建出来时这一句只会得到一句被吞掉的告警，而那句话会被读成"旧索引删掉了"。
 	postMigrateDropLegacyExternalOrderKey(DB)
+	// customer_tags.id 历史上是 serial integer，模型自多租户改造起是 varchar(36)+UUID。
+	// 形状不收敛时**任何**建标签/自动打标签都会在 INSERT 报
+	// `invalid input syntax for type integer: "<uuid>"`（2026-10-27 逐路由实测）。
+	postMigrateCustomerTagIDType(DB)
 
 	return DB
+}
+
+// postMigrateCustomerTagIDType 把 customer_tags.id 收敛到模型声明的 varchar(36)。
+//
+// 为什么必须显式改：GORM AutoMigrate 不会把已有 integer 列自动改成 varchar
+// （类型不同且列上有默认序列时它选择跳过），于是模型侧 BeforeCreate 生成的 UUID
+// 写进 integer 列必然报错——「标签规则」与「自动打标签」两条链路在旧库上 100% 失败，
+// 而错误原文是 PG 的类型转换错误，读起来像参数问题。
+//
+// 幂等：只在该列仍是整数族时动；已有数据用 `id::varchar` 无损转换（数字文本），
+// 新数据走 UUID。序列默认值先摘掉，否则后续 INSERT 仍尝试 nextval 塞进 varchar。
+func postMigrateCustomerTagIDType(db *gorm.DB) {
+	if db == nil || !db.Migrator().HasTable("customer_tags") {
+		return
+	}
+	var dataType string
+	if err := db.Raw(`SELECT data_type FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'customer_tags' AND column_name = 'id'`).
+		Scan(&dataType).Error; err != nil || dataType == "" {
+		return
+	}
+	if dataType != "integer" && dataType != "bigint" && dataType != "smallint" {
+		return
+	}
+	// 走平台级豁免通道（与 password_reset_tokens 的 DDL 同类）：租户 SQL 守卫会把
+	// 裸 Exec 当成"业务查询绕开 GORM"直接拒绝，迁移期 DDL 必须显式声明系统作用域。
+	sysDB := db.WithContext(tenant.WithSystemScope(context.Background()))
+	if err := sysDB.Exec(`ALTER TABLE customer_tags ALTER COLUMN id DROP DEFAULT`).Error; err != nil {
+		logger.Warn("customer_tags.id 摘除序列默认值失败（继续尝试改类型）: " + err.Error())
+	}
+	if err := sysDB.Exec(`ALTER TABLE customer_tags ALTER COLUMN id TYPE varchar(36) USING id::varchar`).Error; err != nil {
+		panic("customer_tags.id 类型迁移失败（integer → varchar(36)）: " + err.Error())
+	}
+	_ = sysDB.Exec(`DROP SEQUENCE IF EXISTS customer_tags_id_seq`).Error
+	logger.Info("customer_tags.id 已从整数序列收敛为 varchar(36)（模型侧 UUID 主键）")
 }
 
 // verifyUniqueIndex 在报"已就绪"之前读一次库里的**形状**：返回空串表示那枚索引确实唯一，

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -32,6 +33,23 @@ func NewWeComController(wecomService *service.WeComService) *WeComController {
 // @Summary      创建企业微信账号（出参脱敏）
 // @Tags      we-com
 // @Router    /api/wecom/accounts [post]
+
+// respondWeComError 把企微渠道错误与本地错误分开。
+//
+// 企微 API 的 errcode/errmsg 是**上游**失败（凭据错/频率限制/接口下线），
+// 修前一律走 ErrorFromDB 落 500「内部错误」，运维看不出该改凭据还是查本机；
+// 统一 502 + 渠道原文，与 QQ/TG 的 502 口径一致。
+func respondWeComError(ctx *gin.Context, err error, fallback string) {
+	if err == nil {
+		return
+	}
+	if service.AsChannelError(err) != nil {
+		response.ErrorWithCode(ctx, utils.ErrorCodeUpstreamFailure, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.ErrorFromDB(ctx, err, fallback, err.Error())
+}
+
 // CreateAccount 创建企业微信账号
 func (c *WeComController) CreateAccount(ctx *gin.Context) {
 
@@ -167,7 +185,7 @@ func (c *WeComController) SyncCustomers(ctx *gin.Context) {
 
 	count, err := c.wecomService.SyncCustomers(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		respondWeComError(ctx, err, "同步客户失败")
 		return
 	}
 
@@ -221,7 +239,7 @@ func (c *WeComController) SyncGroups(ctx *gin.Context) {
 
 	count, err := c.wecomService.SyncGroups(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		respondWeComError(ctx, err, "同步群失败")
 		return
 	}
 
@@ -281,7 +299,7 @@ func (c *WeComController) SendMessage(ctx *gin.Context) {
 
 	msgID, err := c.wecomService.SendMessage(ctx.Request.Context(), account, &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		respondWeComError(ctx, err, "发送失败")
 		return
 	}
 
@@ -310,7 +328,7 @@ func (c *WeComController) RefreshAccount(ctx *gin.Context) {
 	account.AccessToken = ""
 	account.TokenExpires = time.Time{}
 	if _, err := c.wecomService.GetAccessToken(ctx.Request.Context(), account); err != nil {
-		response.ErrorFromDB(ctx, err, "刷新失败："+err.Error())
+		respondWeComError(ctx, err, "刷新失败")
 		return
 	}
 
@@ -385,7 +403,7 @@ func (c *WeComController) SyncTags(ctx *gin.Context) {
 
 	count, err := c.wecomService.SyncTags(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		respondWeComError(ctx, err, "同步标签失败")
 		return
 	}
 
