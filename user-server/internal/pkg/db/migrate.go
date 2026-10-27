@@ -609,6 +609,14 @@ func allModels() []any {
 		&model.UnknownQuestion{},
 		&model.UnknownQuestionCluster{},
 		&model.UnknownQuestionReviewLog{},
+
+		// ego-lite 腿四表（设计文档 §一）：物理新表由标签直建（本泳道口径：新表
+		// allModels、存量表加列走版本化迁移）。漏登记的后果与 BrowserWriteClaim 同族——
+		// 执行/事件/流程/写台账的 INSERT 全部报错（fail-visible，不是静默失效）。
+		&model.EgoliteExecution{},
+		&model.EgoEventLog{},
+		&model.EgoliteFlow{},
+		&model.EgoliteWriteClaim{},
 	}
 }
 

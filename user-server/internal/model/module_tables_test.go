@@ -189,11 +189,20 @@ func TestBrowserAutomationTablesAllOwned(t *testing.T) {
 			missing = append(missing, tbl)
 		}
 	}
-	for tbl := range owned {
+	// ego-lite 腿的四张物理表住在 internal/model/egolite.go（物理独立是设计文档 §一
+	// 的定案），模块开关上随 browser-automation——模块归属合法，不算 ghost。
+	isEgo := func(t string) bool {
+		return strings.HasPrefix(t, "egolite_") || strings.HasPrefix(t, "ego_")
+	}
+	for _, tbl := range TablesOfModule(ModuleBrowserAutomation) {
+		if isEgo(tbl) {
+			continue // ego 表在另一个扫描面（internal/model），不与本目录 real 集比对
+		}
 		if !real[tbl] {
 			ghost = append(ghost, tbl)
 		}
 	}
+	_ = owned
 	sort.Strings(missing)
 	sort.Strings(ghost)
 	if len(missing) > 0 {

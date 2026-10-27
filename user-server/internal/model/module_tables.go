@@ -268,6 +268,13 @@ var browserAutomationOwnedTables = []string{
 	"browser_outreach_receipts", "browser_profile_health",
 }
 
+// egoLiteOwnedTables ego-lite 腿独占（设计文档 §一：四张物理新表，物理独立于
+// browser_automation；模块开关上随 browser-automation 一起——双腿属同一收费模块，
+// 表归属独立登记只是为了让「这四张表是谁的」这件事说清）
+var egoLiteOwnedTables = []string{
+	"egolite_executions", "ego_event_log", "egolite_flows", "egolite_write_claims",
+}
+
 // moduleTableRegistry 模块 → 独占表
 var moduleTableRegistry = map[string][]string{
 	ModuleCore:              coreOwnedTables,
@@ -291,7 +298,7 @@ var moduleTableRegistry = map[string][]string{
 	ModuleApproval:          approvalOwnedTables,
 	ModuleI18N:              i18nOwnedTables,
 	ModuleLLMCloud:          llmCloudOwnedTables,
-	ModuleBrowserAutomation: browserAutomationOwnedTables,
+	ModuleBrowserAutomation: append(browserAutomationOwnedTables, egoLiteOwnedTables...),
 }
 
 // TableOwners 表 → 模块 反查表（启动时构建）

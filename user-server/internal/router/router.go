@@ -505,6 +505,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupClueRoutes(auth, gormDB)
 		SetupGeoRoutes(auth, gormDB)
 		SetupBrowserAutomationRoutes(auth, r, gormDB)
+		SetupEgoLiteRoutes(auth, r, gormDB) // ego-lite 腿（M1 骨架：runner-ws + 状态 + token 轮换）
 		setupLeadMiningRoutes(auth)
 
 		setupCustomerRFMRoutes(auth)
