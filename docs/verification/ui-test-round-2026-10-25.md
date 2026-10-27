@@ -61,17 +61,17 @@
 | F4 | `profile`（私域） | 角色显示「商户管理员」 | `Profile.vue` 硬编码；私域无商户概念 | 已修（按 tenantMode 分流） |
 | F6 | `/aiAgent/tools` | 页头写死「管理 40 个」，实际 1 条 | 文案常量与数据源脱节 | 已修（动态 stats.total） |
 | F7 | `/aiProductivity/list`（SaaS） | 同库同租户 off 95 会话/240 AI 回复，on 全 0 | `BuildReport` 用 `context.Background()`，SaaS 租户插件无 ctx 注入 | 已修（透传 request ctx），待重建复测 |
-| F8 | `/asset-market/detail/:id` | 不存在的资产返回 200+空对象，页面渲染「?」+免费试用按钮 | 详情页无空/不存在态 | 待修 |
+| F8 | `/asset-market/detail/:id` | 不存在的资产返回 200+空对象，页面渲染「?」+免费试用按钮 | 详情页无空/不存在态 | 已修（复核 `Detail.vue:11` 空态 + `fetchDetail` 无资产即置 null） |
 | F9 | `/backup/enhanced` | 122 条已完成备份，统计卡「最近成功 -」「总大小 0 B」 | `LastSuccess` 只查 `success`（库里是 `completed`）；总大小取单条而非合计 | 已修（含 SumCompletedSize），待复测 |
 | F10 | `/batchOperation/list` | 页面只有操作历史，4 个工具卡全不渲染 | `/api/batch/tools` 返回 `{list,total}`，前端按数组处理；空数组兜底失效 | 已修（映射 list + label），已复测 |
-| F11 | `/browser-automation/tasks/create` | 空提交弹原始后端报错「参数不合法：name 为必填项；url 为必填项」，且重复两条 | 前端未做必填校验，直接打后端 | 待修（前端 rules） |
+| F11 | `/browser-automation/tasks/create` | 空提交弹原始后端报错「参数不合法：name 为必填项；url 为必填项」，且重复两条 | 前端未做必填校验，直接打后端 | 已修（复核 `Editor.vue:663-667` 前置校验名称/URL，不打后端） |
 | F12 | `/conversionFunnel/list`（SaaS） | 五阶段全 0，横幅「部分阶段取数失败: visit/clue/intent/session/opportunity」 | 同 F7 家族（ctx）；并行泳道已加 `BuildFunnelCtx/GetStageDetailsCtx` 并切 controller | 已修（他泳道，待重建复测） |
-| F13 | `/conversionFunnel/list`（私域） | 线索 61→意向 1→会话 95，阶段转化率 9500%，总进入量 0 | 五阶段取数口径不单调（访问/会话来自不同表/窗口） | 待评估（数据口径） |
-| F14 | `/customerJourney/dashboard` | 客户总数 0（库内 169 customers） | `GetOverview` 只读进程内存 `states`，重启后为空 | 待评估（需设计：落库或回填） |
-| F15 | `/email/smtp` | 27 条 SMTP 账号全为空字段 | 创建接口无必填校验，历史测试留下空记录 | 待修（后端校验） |
-| F16 | `/geo-tools/keyword-mining` | 私域种子/关联/下拉/长尾全 0，SaaS 有 7530/420/1170/26198 | 私域形态下 GEO 取数上下文/模块装配不明确 | 待查 |
-| F17 | `/knowledge/crawler-sources` | 「知识库」列显示数字 ID（12、3） | 列表未回填知识库名称 | 待修 |
-| F18 | `/knowledge/qa-candidates` | 创建时间显示 `1/1/1 08:05:43` | 零值时间未判空 | 待修 |
+| F13 | `/conversionFunnel/list`（私域） | 线索 61→意向 1→会话 95，阶段转化率 9500%，总进入量 0 | 五阶段取数口径不单调（访问/会话来自不同表/窗口） | 2026-10-27 复现：off/on 同为 visit 6→clue 61→intent 1→session 107，conversion 1783%。服务层已把 rate>100 的 drop_rate 置 0 并在测试里钉住「口径无单调约定」，**是否改指标属产品口径**（建议页面把列名改成「相邻阶段比值」并加口径说明） |
+| F14 | `/customerJourney/dashboard` | 客户总数 0（库内 169 customers） | `GetOverview` / `Funnel` 只读进程内存 `states`（每实例 60s 读缓存），Redis 里明明有权威态 | **已修**：新增 `forEachLiveState`（Redis 阶段索引入口 + 逐成员权威态回读，同一客户只算一次；无缓存时退回 L1 快照），总览与漏斗同口径；顺带修零值 `StageSince` 把平均停留算成天文数字。单测 `TestCustomerJourney_GetOverviewSeesWritesFromAnotherInstance` / `...CountsCustomerOnceAfterStageMove` / `...IgnoresZeroStageSince` / `...FunnelSeesWritesFromAnotherInstance` |
+| F15 | `/email/smtp` | 27 条 SMTP 账号全为空字段 | `CreateEmailSmtpRequest` 六个字段带 `binding:"required"`，新建不会再有空记录；历史 27 行是校验上线前的测试数据 | 代码已闭环（复核 dto）；历史空行属数据清理，未动库 |
+| F16 | `/geo-tools/keyword-mining` | 私域种子/关联/下拉/长尾全 0，SaaS 有 7530/420/1170/26198 | 私域形态下 GEO 取数上下文/模块装配不明确 | 2026-10-27 复核：同一接口两形态均有数据（off 29113/620/21912/522607，on 7531/620/1208/26221）。off 数值更大属单机形态不做租户过滤（预期），原「私域全 0」读数不可复现 |
+| F17 | `/knowledge/crawler-sources` | 「知识库」列显示数字 ID（12、3） | 列表未回填知识库名称 | 已修（复核 `CrawlerSources.vue:71` 走 `kbName(row.kb_id)`） |
+| F18 | `/knowledge/qa-candidates` | 创建时间显示 `1/1/1 08:05:43` | 零值时间未判空 | 已修（复核 `QACandidates.vue:200-206` 零值/非法时间回 `-`） |
 | F20 | `/reports/llm` | `GET /api/reports/llm/timeseries` 500：`avg_latency_ms "0.5333..." → int64` | SQL 除法 numeric 直接 Scan 到 int64 | 已修（ROUND::bigint），待重建复测 |
 | D1 | `/asset-bundle/merchant/:aid` | 危机感阈值显示 0、语气词显示 friendly，选项无此项 | 旧版资产包枚举与前端选项集不一致 | 已修（补 0/friendly 选项+字符串归一），已复测 |
 | D2 | `/asset-bundle/playground/:aid` | 不存在的 aid 静默 404，页面降级为空白新建模板可保存 | 加载失败只 toast，不阻断保存 | 已修（加载失败横幅 + 保存/发布禁用），已复测 |

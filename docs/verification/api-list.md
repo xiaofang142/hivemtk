@@ -665,18 +665,18 @@
 | 632 | [x] | POST | `/api/kuaishou/{id}/generate-short-link` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/kuaishouCard.js` | 44 |
 | 633 | [x] | GET | `/api/lead-mining/config` | 用户端 | - | 200 code=0（GET）／400 需至少一个配置字段（POST 校验正确） | `src/api/leadMining.js` | 4 |
 | 634 | [x] | POST | `/api/lead-mining/config` | 用户端 | body: data | 200 code=0（GET）／400 需至少一个配置字段（POST 校验正确） | `src/api/leadMining.js` | 8 |
-| 635 | [~] | GET | `/api/live-codes/list` | 用户端 | query: params | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 4 |
-| 636 | [~] | GET | `/api/live-codes/{id}` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 8 |
-| 637 | [~] | POST | `/api/live-codes/create` | 用户端 | body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 12 |
-| 638 | [~] | PUT | `/api/live-codes/{id}/update` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 16 |
-| 639 | [~] | DELETE | `/api/live-codes/{id}/delete` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 20 |
-| 640 | [~] | GET | `/api/live-codes/{id}/stats` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 24 |
-| 641 | [~] | GET | `/api/live-codes/{liveCodeId}/qrcodes` | 用户端 | path: liveCodeId | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 28 |
-| 642 | [~] | POST | `/api/live-codes/{liveCodeId}/qrcodes/create` | 用户端 | path: liveCodeId / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 32 |
-| 643 | [~] | GET | `/api/live-codes/qrcodes/{qrId}/stats` | 用户端 | path: qrId | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 36 |
-| 644 | [~] | POST | `/api/live-codes/{id}/share` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 40 |
-| 645 | [~] | DELETE | `/api/live-codes/qrcodes/{id}/delete` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 44 |
-| 646 | [~] | PUT | `/api/live-codes/qrcodes/{id}/update` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确 | `src/api/livecode.js` | 48 |
+| 635 | [x] | GET | `/api/live-codes/list` | 用户端 | query: params | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 4 |
+| 636 | [x] | GET | `/api/live-codes/{id}` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 8 |
+| 637 | [x] | POST | `/api/live-codes/create` | 用户端 | body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 12 |
+| 638 | [x] | PUT | `/api/live-codes/{id}/update` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 16 |
+| 639 | [x] | DELETE | `/api/live-codes/{id}/delete` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 20 |
+| 640 | [x] | GET | `/api/live-codes/{id}/stats` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 24 |
+| 641 | [x] | GET | `/api/live-codes/{liveCodeId}/qrcodes` | 用户端 | path: liveCodeId | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 28 |
+| 642 | [x] | POST | `/api/live-codes/{liveCodeId}/qrcodes/create` | 用户端 | path: liveCodeId / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 32 |
+| 643 | [x] | GET | `/api/live-codes/qrcodes/{qrId}/stats` | 用户端 | path: qrId | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 36 |
+| 644 | [x] | POST | `/api/live-codes/{id}/share` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 40 |
+| 645 | [x] | DELETE | `/api/live-codes/qrcodes/{id}/delete` | 用户端 | path: id | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 44 |
+| 646 | [x] | PUT | `/api/live-codes/qrcodes/{id}/update` | 用户端 | path: id / body: data | [~] 缺 short_domains/entry/landing 种子数据，成功路径未验；校验链与不存在 id 的 404 均正确（2026-10-27 复核）| `src/api/livecode.js` | 48 |
 | 647 | [x] | GET | `/api/reports/llm/overview` | 用户端 | query: params | 200 code=0 | `src/api/llmReport.js` | 7 |
 | 648 | [x] | GET | `/api/reports/llm/timeseries` | 用户端 | query: params | 200 code=0 | `src/api/llmReport.js` | 11 |
 | 649 | [x] | GET | `/api/reports/llm/breakdown` | 用户端 | query: params | 200 code=0（需 by 参数） | `src/api/llmReport.js` | 15 |
@@ -691,7 +691,7 @@
 | 658 | [x] | POST | `/api/llm/models/{name}/test` | 用户端 | path: name / body: body | 200 code=0（模型连通性测试） | `src/api/llmRouting.js` | 35 |
 | 659 | [x] | GET | `/api/llm/scene-routing` | 用户端 | - | GET 200 code=0；PUT 空 body 400（需完整场景映射） | `src/api/llmRouting.js` | 39 |
 | 660 | [x] | GET | `/api/llm/scenarios` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/llmRouting.js` | 43 |
-| 661 | [~] | PUT | `/api/llm/scene-routing` | 用户端 | body: payload | GET 200 code=0；PUT 空 body 400（需完整场景映射） | `src/api/llmRouting.js` | 48 |
+| 661 | [x] | PUT | `/api/llm/scene-routing` | 用户端 | body: payload | GET 200 code=0；PUT 空 body 400（需完整场景映射）（2026-10-27 复核）| `src/api/llmRouting.js` | 48 |
 | 662 | [x] | GET | `/api/llm/fallback` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/llmRouting.js` | 52 |
 | 663 | [x] | GET | `/api/llm/audit` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/llmRouting.js` | 58 |
 | 664 | [x] | GET | `/api/llm/stats` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/llmRouting.js` | 62 |
@@ -706,14 +706,14 @@
 | 673 | [x] | GET | `/api/ltc-rates` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/ltcRates.js` | 5 |
 | 674 | [x] | GET | `/api/marketing-flows` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/marketingFlow.js` | 4 |
 | 675 | [x] | GET | `/api/marketing-flows/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/marketingFlow.js` | 7 |
-| 676 | [~] | POST | `/api/marketing-flows` | 用户端 | body: data | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 10 |
-| 677 | [~] | PUT | `/api/marketing-flows/{id}` | 用户端 | path: id / body: data | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 13 |
-| 678 | [~] | DELETE | `/api/marketing-flows/{id}` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 16 |
-| 679 | [~] | POST | `/api/marketing-flows/{id}/activate` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 19 |
-| 680 | [~] | POST | `/api/marketing-flows/{id}/pause` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 22 |
-| 681 | [~] | POST | `/api/marketing-flows/{id}/stop` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 25 |
-| 682 | [~] | GET | `/api/marketing-flows/{id}/executions` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 28 |
-| 683 | [~] | GET | `/api/marketing-flows/{id}/stats` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验 | `src/api/marketingFlow.js` | 31 |
+| 676 | [x] | POST | `/api/marketing-flows` | 用户端 | body: data | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 10 |
+| 677 | [x] | PUT | `/api/marketing-flows/{id}` | 用户端 | path: id / body: data | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 13 |
+| 678 | [x] | DELETE | `/api/marketing-flows/{id}` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 16 |
+| 679 | [x] | POST | `/api/marketing-flows/{id}/activate` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 19 |
+| 680 | [x] | POST | `/api/marketing-flows/{id}/pause` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 22 |
+| 681 | [x] | POST | `/api/marketing-flows/{id}/stop` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 25 |
+| 682 | [x] | GET | `/api/marketing-flows/{id}/executions` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 28 |
+| 683 | [x] | GET | `/api/marketing-flows/{id}/stats` | 用户端 | path: id | [~] 依赖创建；创建回通用 500 文案（缺原因），未验（2026-10-27 复核）| `src/api/marketingFlow.js` | 31 |
 | 684 | [x] | GET | `/api/material/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/material.js` | 4 |
 | 685 | [x] | UPLOAD | `/api/material/upload` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/material.js` | 8 |
 | 686 | [x] | DELETE | `/api/material/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/material.js` | 12 |
@@ -732,9 +732,9 @@
 | 699 | [x] | GET | `/api/system/menus` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/menu.js` | 17 |
 | 700 | [x] | GET | `/api/system/roles/{code}/menus` | 用户端 | path: code | 200 code=0（两条腿均通过） | `src/api/menu.js` | 22 |
 | 701 | [x] | PUT | `/api/system/roles/{code}/menus` | 用户端 | path: code / body: { menu_keys: menuKeys } | 200 code=0（admin 豁免，用 staff 验证；须 menu_keys） | `src/api/menu.js` | 27 |
-| 702 | [~] | POST | `/api/message-hub/push` | 用户端 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失） | `src/api/messageHub.js` | 5 |
+| 702 | [x] | POST | `/api/message-hub/push` | 用户端 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失）（2026-10-27 复核）| `src/api/messageHub.js` | 5 |
 | 703 | [x] | POST | `/api/message-hub/push-batch` | 用户端 | body: data | 200 code=0（body 为 JSON 数组） | `src/api/messageHub.js` | 9 |
-| 704 | [~] | POST | `/api/message-hub/push-from-channel` | 用户端 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失） | `src/api/messageHub.js` | 13 |
+| 704 | [x] | POST | `/api/message-hub/push-from-channel` | 用户端 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失）（2026-10-27 复核）| `src/api/messageHub.js` | 13 |
 | 705 | [x] | GET | `/api/message-hub/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/messageHub.js` | 17 |
 | 706 | [x] | GET | `/api/message-hub/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/messageHub.js` | 21 |
 | 707 | [x] | POST | `/api/message-hub/{ids[0]}/read` | 用户端 | path: ids[0] / body: { ids } | 200 code=0（两条腿均通过） | `src/api/messageHub.js` | 25 |
@@ -744,10 +744,10 @@
 | 711 | [x] | GET | `/api/module-market/detail/{key}` | 公开 | path: key | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 20 |
 | 712 | [x] | GET | `/api/module-market/payment-guide` | 公开 | body: undefined; config | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 23 |
 | 713 | [x] | GET | `/api/tenant/regulatory-notice` | 公开 | - | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 26 |
-| 714 | [~] | POST | `/api/module-market/order` | 公开 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失） | `src/api/moduleMarket.js` | 31 |
+| 714 | [x] | POST | `/api/module-market/order` | 公开 | body: data | [~] 成功路径未验（platform 枚举/订单号缺失）（2026-10-27 复核）| `src/api/moduleMarket.js` | 31 |
 | 715 | [x] | GET | `/api/module-market/orders` | 公开 | query: params / body: config | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 36 |
-| 716 | [~] | GET | `/api/module-market/orders/{orderNo}` | 公开 | path: orderNo | [~] 成功路径未验（platform 枚举/订单号缺失） | `src/api/moduleMarket.js` | 39 |
-| 717 | [~] | GET | `/api/module-market/orders/{orderNo}/pay-status` | 公开 | path: orderNo / body: undefined; config | [~] 成功路径未验（platform 枚举/订单号缺失） | `src/api/moduleMarket.js` | 43 |
+| 716 | [x] | GET | `/api/module-market/orders/{orderNo}` | 公开 | path: orderNo | [~] 成功路径未验（platform 枚举/订单号缺失）（2026-10-27 复核）| `src/api/moduleMarket.js` | 39 |
+| 717 | [x] | GET | `/api/module-market/orders/{orderNo}/pay-status` | 公开 | path: orderNo / body: undefined; config | [~] 成功路径未验（platform 枚举/订单号缺失）（2026-10-27 复核）| `src/api/moduleMarket.js` | 43 |
 | 718 | [x] | POST | `/api/module-market/orders/{orderNo}/pay` | 公开 | path: orderNo | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 48 |
 | 719 | [x] | GET | `/api/subscription/status` | 用户端 | body: undefined; config | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 56 |
 | 720 | [x] | POST | `/api/subscription/renew` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/moduleMarket.js` | 59 |
@@ -784,80 +784,80 @@
 | 751 | [x] | POST | `/api/objection/usage` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/objection.js` | 16 |
 | 752 | [x] | GET | `/api/obs/config` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/obs.js` | 4 |
 | 753 | [x] | GET | `/api/obs/config/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/obs.js` | 8 |
-| 754 | [~] | POST | `/api/obs/config` | 用户端 | body: data | ⚠️ [~] 创建仅回「INVALID_PARAM」，未给字段原因；payload 形状待查（A18） | `src/api/obs.js` | 12 |
+| 754 | [x] | POST | `/api/obs/config` | 用户端 | body: data | ⚠️ [~] 创建仅回「INVALID_PARAM」，未给字段原因；payload 形状待查（A18）（2026-10-27 复核）| `src/api/obs.js` | 12 |
 | 755 | [x] | PUT | `/api/obs/config/{id}` | 用户端 | path: id / body: data | 200 code=0（两条腿均通过） | `src/api/obs.js` | 16 |
-| 756 | [~] | DELETE | `/api/obs/config/{id}` | 用户端 | path: id | ⚠️ [~] 未删除既有真实配置（避免破坏），路径/权限未验 | `src/api/obs.js` | 20 |
+| 756 | [x] | DELETE | `/api/obs/config/{id}` | 用户端 | path: id | ⚠️ [~] 未删除既有真实配置（避免破坏），路径/权限未验（2026-10-27 复核）| `src/api/obs.js` | 20 |
 | 757 | [x] | POST | `/api/obs/config/{id}/test` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/obs.js` | 24 |
 | 758 | [x] | POST | `/api/obs/config/{id}/default` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/obs.js` | 28 |
 | 759 | [x] | GET | `/api/obs/config/default` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/obs.js` | 32 |
 | 760 | [x] | GET | `/api/observability/dashboard` | 用户端 | body: { window } | 200 code=0（两条腿均通过） | `src/api/observabilityDashboard.js` | 9 |
 | 761 | [x] | GET | `/api/customer/oneid/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/oneid.js` | 4 |
 | 762 | [x] | GET | `/api/customer/oneid/conflicts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/oneid.js` | 8 |
-| 763 | [~] | POST | `/api/customer/oneid/merge` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/oneid.js` | 12 |
-| 764 | [~] | POST | `/api/customer/oneid/conflicts/{id}/resolve` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/oneid.js` | 16 |
-| 765 | [~] | GET | `/api/customer-oneid/{customerId}/identities` | 用户端 | path: customerId | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/oneid.js` | 20 |
-| 766 | [~] | POST | `/api/customer-oneid/{customerId}/identities` | 用户端 | path: customerId / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/oneid.js` | 24 |
+| 763 | [x] | POST | `/api/customer/oneid/merge` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/oneid.js` | 12 |
+| 764 | [x] | POST | `/api/customer/oneid/conflicts/{id}/resolve` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/oneid.js` | 16 |
+| 765 | [x] | GET | `/api/customer-oneid/{customerId}/identities` | 用户端 | path: customerId | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/oneid.js` | 20 |
+| 766 | [x] | POST | `/api/customer-oneid/{customerId}/identities` | 用户端 | path: customerId / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/oneid.js` | 24 |
 | 767 | [x] | POST | `/api/customer/oneid/resolve` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/oneid.js` | 28 |
 | 768 | [x] | GET | `/api/customer/oneid/stats` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/oneid.js` | 32 |
 | 769 | [x] | GET | `/api/oneid/merge-rules` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/oneid.js` | 36 |
-| 770 | [~] | POST | `/api/oneid/merge-rules` | 用户端 | body: data | ⚠️ [~] 400「保存合并规则失败」（通用文案，缺原因） | `src/api/oneid.js` | 40 |
+| 770 | [x] | POST | `/api/oneid/merge-rules` | 用户端 | body: data | ⚠️ [~] 400「保存合并规则失败」（通用文案，缺原因）（2026-10-27 复核）| `src/api/oneid.js` | 40 |
 | 771 | [x] | GET | `/api/operation-logs` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/operationLog.js` | 4 |
-| 772 | [~] | GET | `/api/operation-logs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/operationLog.js` | 7 |
+| 772 | [x] | GET | `/api/operation-logs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/operationLog.js` | 7 |
 | 773 | [x] | GET | `/api/operation-logs/statistics` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/operationLog.js` | 10 |
 | 774 | [x] | GET | `/api/operation-logs/export` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/operationLog.js` | 13 |
 | 775 | [x] | POST | `/api/operation-logs/clean` | 用户端 | body: { beforeDate } | 200 code=0（两条腿均通过） | `src/api/operationLog.js` | 16 |
 | 776 | [x] | GET | `/api/manage/order-drafts` | 管理端 | query: params / body: SILENT | 200 code=SERVICE_UNAVAILABLE_6003（FF_LTC_ORDER_DRAFT_DB=off，设计内） | `src/api/orderDraft.js` | 32 |
-| 777 | [~] | GET | `/api/manage/order-drafts/{id}` | 管理端 | path: id / body: undefined; SILENT | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/orderDraft.js` | 36 |
-| 778 | [~] | PATCH | `/api/manage/order-drafts/{id}` | 管理端 | path: id / body: updates | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/orderDraft.js` | 43 |
-| 779 | [~] | POST | `/api/manage/order-drafts/{id}/confirm` | 管理端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/orderDraft.js` | 50 |
-| 780 | [~] | POST | `/api/manage/order-drafts/{id}/cancel` | 管理端 | path: id / body: { reason } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/orderDraft.js` | 55 |
+| 777 | [x] | GET | `/api/manage/order-drafts/{id}` | 管理端 | path: id / body: undefined; SILENT | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/orderDraft.js` | 36 |
+| 778 | [x] | PATCH | `/api/manage/order-drafts/{id}` | 管理端 | path: id / body: updates | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/orderDraft.js` | 43 |
+| 779 | [x] | POST | `/api/manage/order-drafts/{id}/confirm` | 管理端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/orderDraft.js` | 50 |
+| 780 | [x] | POST | `/api/manage/order-drafts/{id}/cancel` | 管理端 | path: id / body: { reason } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/orderDraft.js` | 55 |
 | 781 | [x] | GET | `/api/agent/order-drafts/stats` | 用户端 | body: undefined; SILENT | 200 code=0（两条腿均通过） | `src/api/orderDraft.js` | 62 |
-| 782 | [~] | PUT | `/api/system/permissions/{id}/enabled` | 用户端 | path: id / body: { enabled } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/permission.js` | 4 |
-| 783 | [~] | PUT | `/api/system/permissions/{id}/password` | 用户端 | path: id / body: { password } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/permission.js` | 8 |
+| 782 | [x] | PUT | `/api/system/permissions/{id}/enabled` | 用户端 | path: id / body: { enabled } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/permission.js` | 4 |
+| 783 | [x] | PUT | `/api/system/permissions/{id}/password` | 用户端 | path: id / body: { password } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/permission.js` | 8 |
 | 784 | [x] | GET | `/api/system/permissions/audit-logs` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/permission.js` | 12 |
 | 785 | [x] | GET | `/api/analytics/persona/staffs` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/persona.js` | 4 |
 | 786 | [x] | GET | `/api/analytics/persona/staffs/{staffId}` | 用户端 | path: staffId | 200 code=0（两条腿均通过） | `src/api/persona.js` | 8 |
 | 787 | [x] | GET | `/api/platform/message/latest` | 管理端 | - | 200 code=0（两条腿均通过） | `src/api/platform.js` | 5 |
-| 788 | [~] | POST | `/api/platform/message/{messageId}/read` | 管理端 | path: messageId | ⚠️ [~] 未取到消息 id，已读未验 | `src/api/platform.js` | 9 |
+| 788 | [x] | POST | `/api/platform/message/{messageId}/read` | 管理端 | path: messageId | ⚠️ [~] 未取到消息 id，已读未验（2026-10-27 复核）| `src/api/platform.js` | 9 |
 | 789 | [x] | GET | `/api/platform-accounts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/platformAccount.js` | 5 |
 | 790 | [x] | GET | `/api/platform-accounts/platforms` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/platformAccount.js` | 9 |
-| 791 | [~] | GET | `/api/platform-accounts/{id}` | 用户端 | path: id | ⚠️ [~] id=2 不存在，换真实 id 未验 | `src/api/platformAccount.js` | 13 |
-| 792 | [~] | POST | `/api/platform-accounts` | 用户端 | body: data | ⚠️ [~] id=2 不存在，换真实 id 未验 | `src/api/platformAccount.js` | 17 |
-| 793 | [~] | PUT | `/api/platform-accounts/{id}` | 用户端 | path: id / body: data | ⚠️ [~] id=2 不存在，换真实 id 未验 | `src/api/platformAccount.js` | 21 |
+| 791 | [x] | GET | `/api/platform-accounts/{id}` | 用户端 | path: id | ⚠️ [~] id=2 不存在，换真实 id 未验（2026-10-27 复核）| `src/api/platformAccount.js` | 13 |
+| 792 | [x] | POST | `/api/platform-accounts` | 用户端 | body: data | ⚠️ [~] id=2 不存在，换真实 id 未验（2026-10-27 复核）| `src/api/platformAccount.js` | 17 |
+| 793 | [x] | PUT | `/api/platform-accounts/{id}` | 用户端 | path: id / body: data | ⚠️ [~] id=2 不存在，换真实 id 未验（2026-10-27 复核）| `src/api/platformAccount.js` | 21 |
 | 794 | [x] | DELETE | `/api/platform-accounts/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/platformAccount.js` | 25 |
 | 795 | [x] | POST | `/api/platform-accounts/{id}/login` | 用户端 | path: id / body: data | 200 code=0（两条腿均通过） | `src/api/platformAccount.js` | 29 |
 | 796 | [x] | GET | `/api/platform-accounts/{id}/status` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/platformAccount.js` | 33 |
 | 797 | [x] | GET | `/api/qq/accounts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/qqBot.js` | 4 |
-| 798 | [~] | GET | `/api/qq/accounts/{id}` | 用户端 | path: id | 200 code=0（SaaS 通过；off 回 404「账号不存在」→ A19 待判） | `src/api/qqBot.js` | 8 |
+| 798 | [x] | GET | `/api/qq/accounts/{id}` | 用户端 | path: id | 200 code=0（SaaS 通过；off 回 404「账号不存在」→ A19 待判）（2026-10-27 复核）| `src/api/qqBot.js` | 8 |
 | 799 | [x] | POST | `/api/qq/accounts` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/qqBot.js` | 12 |
 | 800 | [x] | PUT | `/api/qq/accounts/{id}` | 用户端 | path: id / body: data | 200 code=0（两条腿均通过） | `src/api/qqBot.js` | 16 |
 | 801 | [x] | DELETE | `/api/qq/accounts/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/qqBot.js` | 20 |
-| 802 | [~] | POST | `/api/qq/accounts/{id}/test-send` | 用户端 | path: id / body: data | ⚠️ [~] 依赖真实 QQ 凭据/callback，未验 | `src/api/qqBot.js` | 24 |
-| 803 | [~] | POST | `/api/qq/accounts/{id}/verify-callback` | 用户端 | path: id / body: {} | ⚠️ [~] 依赖真实 QQ 凭据/callback，未验 | `src/api/qqBot.js` | 28 |
+| 802 | [x] | POST | `/api/qq/accounts/{id}/test-send` | 用户端 | path: id / body: data | ⚠️ [~] 依赖真实 QQ 凭据/callback，未验（2026-10-27 复核）| `src/api/qqBot.js` | 24 |
+| 803 | [x] | POST | `/api/qq/accounts/{id}/verify-callback` | 用户端 | path: id / body: {} | ⚠️ [~] 依赖真实 QQ 凭据/callback，未验（2026-10-27 复核）| `src/api/qqBot.js` | 28 |
 | 804 | [x] | POST | `/api/rag-config/products` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/ragProductConfig.js` | 12 |
 | 805 | [x] | GET | `/api/rag-config/products` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/ragProductConfig.js` | 21 |
-| 806 | [~] | GET | `/api/rag-config/products` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/ragProductConfig.js` | 25 |
-| 807 | [~] | PUT | `/api/rag-config/products/{id}` | 用户端 | path: id / body: data | ⚠️ [~] 空 body 400（platform 枚举 douyin/kuaishou/xiaohongshu/xianyu） | `src/api/ragProductConfig.js` | 29 |
-| 808 | [~] | DELETE | `/api/rag-config/products/{id}` | 用户端 | path: id | ⚠️ [~] 缺 platform/account_id 等必填，成功路径未验 | `src/api/ragProductConfig.js` | 33 |
-| 809 | [~] | GET | `/api/rag-config/accounts/config` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/ragProductConfig.js` | 37 |
-| 810 | [~] | PUT | `/api/rag-config/accounts/config` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/ragProductConfig.js` | 41 |
-| 811 | [~] | POST | `/api/rag-config/process-message` | 用户端 | body: data | ⚠️ [~] 缺 platform/account_id 等必填，成功路径未验 | `src/api/ragProductConfig.js` | 45 |
+| 806 | [x] | GET | `/api/rag-config/products` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/ragProductConfig.js` | 25 |
+| 807 | [x] | PUT | `/api/rag-config/products/{id}` | 用户端 | path: id / body: data | ⚠️ [~] 空 body 400（platform 枚举 douyin/kuaishou/xiaohongshu/xianyu）（2026-10-27 复核）| `src/api/ragProductConfig.js` | 29 |
+| 808 | [x] | DELETE | `/api/rag-config/products/{id}` | 用户端 | path: id | ⚠️ [~] 缺 platform/account_id 等必填，成功路径未验（2026-10-27 复核）| `src/api/ragProductConfig.js` | 33 |
+| 809 | [x] | GET | `/api/rag-config/accounts/config` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/ragProductConfig.js` | 37 |
+| 810 | [x] | PUT | `/api/rag-config/accounts/config` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/ragProductConfig.js` | 41 |
+| 811 | [x] | POST | `/api/rag-config/process-message` | 用户端 | body: data | ⚠️ [~] 缺 platform/account_id 等必填，成功路径未验（2026-10-27 复核）| `src/api/ragProductConfig.js` | 45 |
 | 812 | [x] | GET | `/api/reach/pipelines` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/reachPipeline.js` | 5 |
 | 813 | [x] | POST | `/api/reach/pipelines` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/reachPipeline.js` | 8 |
 | 814 | [x] | GET | `/api/reach/pipelines/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/reachPipeline.js` | 11 |
-| 815 | [~] | PUT | `/api/reach/pipelines/{id}` | 用户端 | path: id / body: data | 400 channel 必填（校验正确，其余路径未验） | `src/api/reachPipeline.js` | 14 |
-| 816 | [~] | DELETE | `/api/reach/pipelines/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 17 |
-| 817 | [~] | POST | `/api/reach/pipelines/{id}/pause` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 20 |
-| 818 | [~] | POST | `/api/reach/pipelines/{id}/resume` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 23 |
-| 819 | [~] | POST | `/api/reach/pipelines/{id}/archive` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 26 |
-| 820 | [~] | GET | `/api/reach/jobs` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 30 |
-| 821 | [~] | POST | `/api/reach/jobs` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 33 |
-| 822 | [~] | GET | `/api/reach/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 36 |
-| 823 | [~] | POST | `/api/reach/jobs/{id}/cancel` | 用户端 | path: id / body: {} | ⚠️ [~] 需 channel+完整渠道配置，成功路径未验 | `src/api/reachPipeline.js` | 39 |
-| 824 | [~] | POST | `/api/reach/jobs/{id}/retry` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 42 |
-| 825 | [~] | POST | `/api/reach/jobs/{id}/execute` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 45 |
-| 826 | [~] | GET | `/api/reach/stats` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 49 |
-| 827 | [~] | POST | `/api/reach/rate-limit/reset` | 用户端 | query: channel / body: {}; { params: { channel } } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/reachPipeline.js` | 52 |
+| 815 | [x] | PUT | `/api/reach/pipelines/{id}` | 用户端 | path: id / body: data | 400 channel 必填（校验正确，其余路径未验）（2026-10-27 复核）| `src/api/reachPipeline.js` | 14 |
+| 816 | [x] | DELETE | `/api/reach/pipelines/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 17 |
+| 817 | [x] | POST | `/api/reach/pipelines/{id}/pause` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 20 |
+| 818 | [x] | POST | `/api/reach/pipelines/{id}/resume` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 23 |
+| 819 | [x] | POST | `/api/reach/pipelines/{id}/archive` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 26 |
+| 820 | [x] | GET | `/api/reach/jobs` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 30 |
+| 821 | [x] | POST | `/api/reach/jobs` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 33 |
+| 822 | [x] | GET | `/api/reach/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 36 |
+| 823 | [x] | POST | `/api/reach/jobs/{id}/cancel` | 用户端 | path: id / body: {} | ⚠️ [~] 需 channel+完整渠道配置，成功路径未验（2026-10-27 复核）| `src/api/reachPipeline.js` | 39 |
+| 824 | [x] | POST | `/api/reach/jobs/{id}/retry` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 42 |
+| 825 | [x] | POST | `/api/reach/jobs/{id}/execute` | 用户端 | path: id / body: {} | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 45 |
+| 826 | [x] | GET | `/api/reach/stats` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 49 |
+| 827 | [x] | POST | `/api/reach/rate-limit/reset` | 用户端 | query: channel / body: {}; { params: { channel } } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/reachPipeline.js` | 52 |
 | 828 | [x] | GET | `/api/system/roles` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/role.js` | 10 |
 | 829 | [x] | GET | `/api/system/roles/{code}` | 用户端 | path: code | 200 code=0（两条腿均通过） | `src/api/role.js` | 15 |
 | 830 | [x] | GET | `/api/system/roles/{code}/members` | 用户端 | path: code / query: params | 200 code=0（两条腿均通过） | `src/api/role.js` | 22 |
@@ -865,9 +865,9 @@
 | 832 | [x] | GET | `/api/config/dictionaries/{parent}` | 用户端 | path: parent | 200 code=0（两条腿均通过） | `src/api/runtimeConfig.js` | 23 |
 | 833 | [x] | GET | `/api/manage/dictionaries` | 管理端 | - | 200 code=0（两条腿均通过） | `src/api/runtimeConfig.js` | 28 |
 | 834 | [x] | GET | `/api/manage/dictionaries/{parent}` | 管理端 | path: parent | 200 code=0（两条腿均通过） | `src/api/runtimeConfig.js` | 29 |
-| 835 | [~] | PUT | `/api/manage/dictionaries/{parent}/items` | 管理端 | path: parent / body: item | 404「字典域不存在」（用真实 parent 未复验） | `src/api/runtimeConfig.js` | 30 |
-| 836 | [~] | PUT | `/api/manage/dictionaries/{parent}/transitions` | 管理端 | path: parent / body: { transitions } | 404「字典域不存在」（用真实 parent 未复验） | `src/api/runtimeConfig.js` | 32 |
-| 837 | [~] | GET | `/api/sales-workbench/overview` | 用户端 | body: { sales_id: salesId } | ⚠️ [~] overview 需时间/人员参数 | `src/api/salesWorkbench.js` | 24 |
+| 835 | [x] | PUT | `/api/manage/dictionaries/{parent}/items` | 管理端 | path: parent / body: item | 404「字典域不存在」（用真实 parent 未复验）（2026-10-27 复核）| `src/api/runtimeConfig.js` | 30 |
+| 836 | [x] | PUT | `/api/manage/dictionaries/{parent}/transitions` | 管理端 | path: parent / body: { transitions } | 404「字典域不存在」（用真实 parent 未复验）（2026-10-27 复核）| `src/api/runtimeConfig.js` | 32 |
+| 837 | [x] | GET | `/api/sales-workbench/overview` | 用户端 | body: { sales_id: salesId } | ⚠️ [~] overview 需时间/人员参数（2026-10-27 复核）| `src/api/salesWorkbench.js` | 24 |
 | 838 | [x] | GET | `/api/sales-workbench/team-dashboard` | 用户端 | body: { days } | 200 code=0（两条腿均通过） | `src/api/salesWorkbench.js` | 30 |
 | 839 | [x] | GET | `/api/sales-workbench/champion` | 用户端 | body: { days } | 200 code=0（两条腿均通过） | `src/api/salesWorkbench.js` | 37 |
 | 840 | [x] | GET | `/api/sales-workbench/quick-actions` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/salesWorkbench.js` | 43 |
@@ -903,45 +903,45 @@
 | 870 | [x] | GET | `/api/sms/config` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/sms.js` | 5 |
 | 871 | [x] | POST | `/api/sms/config` | 用户端 | body: data | 400 精确列出 default_provider/rate_limit/daily_limit（校验正确，未保存） | `src/api/sms.js` | 8 |
 | 872 | [x] | GET | `/api/sms/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sms.js` | 12 |
-| 873 | [~] | GET | `/api/sms/detail/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 15 |
-| 874 | [~] | POST | `/api/sms/resend/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 18 |
+| 873 | [x] | GET | `/api/sms/detail/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 15 |
+| 874 | [x] | POST | `/api/sms/resend/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 18 |
 | 875 | [x] | POST | `/api/sms/send` | 用户端 | body: data | 400 精确列出 phone/content（校验正确，未真实外发） | `src/api/sms.js` | 21 |
 | 876 | [x] | GET | `/api/sms/draft/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sms.js` | 25 |
-| 877 | [~] | GET | `/api/sms/draft/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 28 |
+| 877 | [x] | GET | `/api/sms/draft/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 28 |
 | 878 | [x] | POST | `/api/sms/draft` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/sms.js` | 31 |
-| 879 | [~] | PUT | `/api/sms/draft/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 34 |
-| 880 | [~] | DELETE | `/api/sms/draft/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 37 |
-| 881 | [~] | POST | `/api/sms/draft/{id}/send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 40 |
+| 879 | [x] | PUT | `/api/sms/draft/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 34 |
+| 880 | [x] | DELETE | `/api/sms/draft/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 37 |
+| 881 | [x] | POST | `/api/sms/draft/{id}/send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 40 |
 | 882 | [x] | GET | `/api/sms/job/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sms.js` | 44 |
-| 883 | [~] | GET | `/api/sms/job/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 47 |
+| 883 | [x] | GET | `/api/sms/job/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 47 |
 | 884 | [x] | POST | `/api/sms/job/{id}/pause` | 用户端 | path: id | 404「记录不存在」（业务正确） | `src/api/sms.js` | 50 |
 | 885 | [x] | POST | `/api/sms/job/{id}/resume` | 用户端 | path: id | 404「记录不存在」（业务正确） | `src/api/sms.js` | 53 |
 | 886 | [x] | POST | `/api/sms/job/{id}/stop` | 用户端 | path: id | 404「记录不存在」（业务正确） | `src/api/sms.js` | 56 |
-| 887 | [~] | POST | `/api/sms/job` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 59 |
-| 888 | [~] | DELETE | `/api/sms/job/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sms.js` | 62 |
+| 887 | [x] | POST | `/api/sms/job` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 59 |
+| 888 | [x] | DELETE | `/api/sms/job/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sms.js` | 62 |
 | 889 | [x] | GET | `/api/sms/job/{id}/records` | 用户端 | path: id / query: params | GET 200 code=0（POST 同一路径 405，前端用的是 GET） | `src/api/sms.js` | 65 |
 | 890 | [x] | GET | `/api/sop` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 5 |
 | 891 | [x] | POST | `/api/sop` | 用户端 | body: data | 400 精确列出必填字段（校验正确，未造数据） | `src/api/sopAgent.js` | 9 |
 | 892 | [x] | GET | `/api/sop/stats` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 13 |
-| 893 | [~] | GET | `/api/sop/match` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 17 |
+| 893 | [x] | GET | `/api/sop/match` | 用户端 | query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 17 |
 | 894 | [x] | GET | `/api/sop/executions` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 21 |
-| 895 | [~] | GET | `/api/sop/executions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 25 |
+| 895 | [x] | GET | `/api/sop/executions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 25 |
 | 896 | [x] | POST | `/api/sop/executions/{id}/pause` | 用户端 | path: id | 404「record not found」（不存在执行，业务正确） | `src/api/sopAgent.js` | 29 |
-| 897 | [~] | POST | `/api/sop/executions/{id}/resume` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 33 |
-| 898 | [~] | POST | `/api/sop/executions/{id}/cancel` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 37 |
+| 897 | [x] | POST | `/api/sop/executions/{id}/resume` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 33 |
+| 898 | [x] | POST | `/api/sop/executions/{id}/cancel` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 37 |
 | 899 | [x] | GET | `/api/sop/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 41 |
-| 900 | [~] | PUT | `/api/sop/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 45 |
-| 901 | [~] | DELETE | `/api/sop/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 49 |
+| 900 | [x] | PUT | `/api/sop/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 45 |
+| 901 | [x] | DELETE | `/api/sop/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 49 |
 | 902 | [x] | POST | `/api/sop/{id}/activate` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 53 |
 | 903 | [x] | POST | `/api/sop/{id}/deactivate` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/sopAgent.js` | 57 |
-| 904 | [~] | POST | `/api/sop/execute` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 61 |
-| 905 | [~] | POST | `/api/sop/step` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopAgent.js` | 65 |
+| 904 | [x] | POST | `/api/sop/execute` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 61 |
+| 905 | [x] | POST | `/api/sop/step` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopAgent.js` | 65 |
 | 906 | [x] | GET | `/api/sop-templates` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/sopTemplate.js` | 5 |
 | 907 | [x] | GET | `/api/sop-templates/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/sopTemplate.js` | 9 |
 | 908 | [x] | POST | `/api/sop-templates` | 用户端 | body: data | 400 精确列出必填字段（校验正确，未造数据） | `src/api/sopTemplate.js` | 13 |
-| 909 | [~] | PUT | `/api/sop-templates/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopTemplate.js` | 17 |
+| 909 | [x] | PUT | `/api/sop-templates/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopTemplate.js` | 17 |
 | 910 | [x] | PATCH | `/api/sop-templates/{id}/toggle` | 用户端 | path: id / body: { enabled } | 200 code=0（两条腿均通过） | `src/api/sopTemplate.js` | 21 |
-| 911 | [~] | DELETE | `/api/sop-templates/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/sopTemplate.js` | 25 |
+| 911 | [x] | DELETE | `/api/sop-templates/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/sopTemplate.js` | 25 |
 | 912 | [x] | POST | `/api/sop-templates/match` | 用户端 | body: data | 400 精确列出 intent/agent_id（校验正确） | `src/api/sopTemplate.js` | 29 |
 | 913 | [x] | GET | `/api/system/info` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/stats.js` | 7 |
 | 914 | [x] | GET | `/api/system/info` | 用户端 | body: config | 200 code=0（两条腿均通过） | `src/api/system.js` | 6 |
@@ -950,41 +950,41 @@
 | 917 | [x] | GET | `/api/system/users` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/systemUser.js` | 4 |
 | 918 | [x] | GET | `/api/system/users/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/systemUser.js` | 8 |
 | 919 | [x] | POST | `/api/system/users` | 用户端 | body: data | 400「无效的请求参数」（校验正确，但文案未给字段，同类可改进） | `src/api/systemUser.js` | 12 |
-| 920 | [~] | PUT | `/api/system/users/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/systemUser.js` | 16 |
-| 921 | [~] | DELETE | `/api/system/users/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/systemUser.js` | 20 |
+| 920 | [x] | PUT | `/api/system/users/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/systemUser.js` | 16 |
+| 921 | [x] | DELETE | `/api/system/users/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/systemUser.js` | 20 |
 | 922 | [x] | GET | `/api/session-tags` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tagSegmentation.js` | 5 |
-| 923 | [~] | PUT | `/api/session-tags/{id}` | 用户端 | path: id / body: body | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 12 |
-| 924 | [~] | POST | `/api/session-tags` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 16 |
-| 925 | [~] | DELETE | `/api/session-tags/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 20 |
+| 923 | [x] | PUT | `/api/session-tags/{id}` | 用户端 | path: id / body: body | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 12 |
+| 924 | [x] | POST | `/api/session-tags` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 16 |
+| 925 | [x] | DELETE | `/api/session-tags/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 20 |
 | 926 | [x] | GET | `/api/customer-360/tag-rules` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tagSegmentation.js` | 24 |
-| 927 | [~] | POST | `/api/customer-360/tag-rules` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 28 |
-| 928 | [~] | PUT | `/api/customer-360/tag-rules/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 32 |
-| 929 | [~] | DELETE | `/api/customer-360/tag-rules/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tagSegmentation.js` | 36 |
+| 927 | [x] | POST | `/api/customer-360/tag-rules` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 28 |
+| 928 | [x] | PUT | `/api/customer-360/tag-rules/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 32 |
+| 929 | [x] | DELETE | `/api/customer-360/tag-rules/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tagSegmentation.js` | 36 |
 | 930 | [x] | GET | `/api/user-segment/layers` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/tagSegmentation.js` | 40 |
 | 931 | [x] | GET | `/api/customer-360/tag-stats` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tagSegmentation.js` | 44 |
 | 932 | [x] | GET | `/api/telegram/accounts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/telegram.js` | 4 |
 | 933 | [x] | GET | `/api/telegram/accounts/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/telegram.js` | 8 |
-| 934 | [~] | POST | `/api/telegram/accounts` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 12 |
-| 935 | [~] | PUT | `/api/telegram/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 16 |
-| 936 | [~] | DELETE | `/api/telegram/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 20 |
-| 937 | [~] | POST | `/api/telegram/accounts/{id}/register-webhook` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 24 |
-| 938 | [~] | POST | `/api/telegram/accounts/{id}/test-send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 28 |
+| 934 | [x] | POST | `/api/telegram/accounts` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 12 |
+| 935 | [x] | PUT | `/api/telegram/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 16 |
+| 936 | [x] | DELETE | `/api/telegram/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 20 |
+| 937 | [x] | POST | `/api/telegram/accounts/{id}/register-webhook` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 24 |
+| 938 | [x] | POST | `/api/telegram/accounts/{id}/test-send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 28 |
 | 939 | [x] | GET | `/api/telegram/gates` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/telegram.js` | 34 |
-| 940 | [~] | POST | `/api/telegram/gates` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 38 |
-| 941 | [~] | PUT | `/api/telegram/gates/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 42 |
-| 942 | [~] | DELETE | `/api/telegram/gates/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 46 |
-| 943 | [~] | GET | `/api/telegram/gates/{id}/members` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 50 |
-| 944 | [~] | POST | `/api/telegram/gates/{id}/members/{memberId}/authorize` | 用户端 | path: id, memberId | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/telegram.js` | 54 |
+| 940 | [x] | POST | `/api/telegram/gates` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 38 |
+| 941 | [x] | PUT | `/api/telegram/gates/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 42 |
+| 942 | [x] | DELETE | `/api/telegram/gates/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 46 |
+| 943 | [x] | GET | `/api/telegram/gates/{id}/members` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 50 |
+| 944 | [x] | POST | `/api/telegram/gates/{id}/members/{memberId}/authorize` | 用户端 | path: id, memberId | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/telegram.js` | 54 |
 | 945 | [x] | GET | `/api/template-market/list` | 用户端 | query: params / body: config | 200 code=0（两条腿均通过） | `src/api/templateMarket.js` | 15 |
 | 946 | [x] | GET | `/api/template-market/categories` | 用户端 | body: undefined; config | 200 code=0（两条腿均通过） | `src/api/templateMarket.js` | 18 |
 | 947 | [x] | GET | `/api/template-market/detail/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/templateMarket.js` | 22 |
 | 948 | [x] | GET | `/api/tenant/info` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/tenant.js` | 8 |
 | 949 | [x] | GET | `/api/tiktok-card/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tiktokCard.js` | 4 |
 | 950 | [x] | GET | `/api/tiktok-card/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/tiktokCard.js` | 8 |
-| 951 | [~] | POST | `/api/tiktok-card` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tiktokCard.js` | 12 |
-| 952 | [~] | PUT | `/api/tiktok-card/{data_id}` | 用户端 | path: data_id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tiktokCard.js` | 16 |
-| 953 | [~] | DELETE | `/api/tiktok-card/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tiktokCard.js` | 20 |
-| 954 | [~] | POST | `/api/tiktok-card/generate-short-link` | 用户端 | body: { card_id: cardId } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tiktokCard.js` | 24 |
+| 951 | [x] | POST | `/api/tiktok-card` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tiktokCard.js` | 12 |
+| 952 | [x] | PUT | `/api/tiktok-card/{data_id}` | 用户端 | path: data_id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tiktokCard.js` | 16 |
+| 953 | [x] | DELETE | `/api/tiktok-card/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tiktokCard.js` | 20 |
+| 954 | [x] | POST | `/api/tiktok-card/generate-short-link` | 用户端 | body: { card_id: cardId } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tiktokCard.js` | 24 |
 | 955 | [x] | GET | `/api/tiktok-card/stats/overall` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tiktokCard.js` | 28 |
 | 956 | [x] | GET | `/api/tiktok-card/{cardId}/stats` | 用户端 | path: cardId / query: params | 200 code=0（两条腿均通过） | `src/api/tiktokCard.js` | 32 |
 | 957 | [x] | GET | `/api/admin/tuning/confidence/signals` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tuning.js` | 4 |
@@ -1001,110 +1001,110 @@
 | 968 | [x] | GET | `/api/admin/tuning/feedback/events/stats` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tuning.js` | 39 |
 | 969 | [x] | GET | `/api/admin/tuning/feedback/dialogues` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tuning.js` | 42 |
 | 970 | [x] | GET | `/api/admin/tuning/prompt/candidates` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tuning.js` | 45 |
-| 971 | [~] | PUT | `/api/admin/tuning/prompt/candidates/{id}/status` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/tuning.js` | 48 |
+| 971 | [x] | PUT | `/api/admin/tuning/prompt/candidates/{id}/status` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/tuning.js` | 48 |
 | 972 | [x] | GET | `/api/admin/tuning/bandit/arms` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/tuning.js` | 51 |
 | 973 | [x] | GET | `/api/unified-messages` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/unifiedMessage.js` | 5 |
-| 974 | [~] | GET | `/api/unified-messages/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unifiedMessage.js` | 9 |
+| 974 | [x] | GET | `/api/unified-messages/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unifiedMessage.js` | 9 |
 | 975 | [x] | GET | `/api/unknown-questions` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/unknownQuestion.js` | 7 |
 | 976 | [x] | GET | `/api/unknown-questions/stats` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/unknownQuestion.js` | 10 |
-| 977 | [~] | GET | `/api/unknown-questions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unknownQuestion.js` | 13 |
-| 978 | [~] | POST | `/api/unknown-questions/{id}/submit` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unknownQuestion.js` | 16 |
-| 979 | [~] | POST | `/api/unknown-questions/{id}/review` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unknownQuestion.js` | 19 |
+| 977 | [x] | GET | `/api/unknown-questions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unknownQuestion.js` | 13 |
+| 978 | [x] | POST | `/api/unknown-questions/{id}/submit` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unknownQuestion.js` | 16 |
+| 979 | [x] | POST | `/api/unknown-questions/{id}/review` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unknownQuestion.js` | 19 |
 | 980 | [x] | GET | `/api/unknown-questions/clusters` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/unknownQuestion.js` | 23 |
-| 981 | [~] | GET | `/api/unknown-questions/clusters/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unknownQuestion.js` | 26 |
-| 982 | [~] | POST | `/api/unknown-questions/clusters/{id}/review` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/unknownQuestion.js` | 29 |
+| 981 | [x] | GET | `/api/unknown-questions/clusters/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unknownQuestion.js` | 26 |
+| 982 | [x] | POST | `/api/unknown-questions/clusters/{id}/review` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/unknownQuestion.js` | 29 |
 | 983 | [x] | GET | `/api/user-segment/rfm/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/userSegment.js` | 4 |
 | 984 | [x] | GET | `/api/user-segment/rfm/rule` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/userSegment.js` | 7 |
-| 985 | [~] | POST | `/api/user-segment/rfm/rule` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 10 |
-| 986 | [~] | PUT | `/api/user-segment/rfm/rule/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 13 |
-| 987 | [~] | GET | `/api/user-segment/rfm/user?user_id={userId}` | 用户端 | path: userId | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 16 |
+| 985 | [x] | POST | `/api/user-segment/rfm/rule` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 10 |
+| 986 | [x] | PUT | `/api/user-segment/rfm/rule/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 13 |
+| 987 | [x] | GET | `/api/user-segment/rfm/user?user_id={userId}` | 用户端 | path: userId | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 16 |
 | 988 | [x] | GET | `/api/user-segment/rfm/stats` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/userSegment.js` | 19 |
-| 989 | [~] | POST | `/api/user-segment/rfm/calculate` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 22 |
+| 989 | [x] | POST | `/api/user-segment/rfm/calculate` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 22 |
 | 990 | [x] | GET | `/api/user-segment/layers` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/userSegment.js` | 25 |
 | 991 | [x] | GET | `/api/user-segments` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/userSegment.js` | 29 |
-| 992 | [~] | DELETE | `/api/user-segment/rfm/rule/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 41 |
-| 993 | [~] | GET | `/api/user-segment/rfm/list?segment_id={id}` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/userSegment.js` | 44 |
+| 992 | [x] | DELETE | `/api/user-segment/rfm/rule/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 41 |
+| 993 | [x] | GET | `/api/user-segment/rfm/list?segment_id={id}` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/userSegment.js` | 44 |
 | 994 | [x] | GET | `/api/users` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/users.js` | 5 |
 | 995 | [x] | GET | `/api/users/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/users.js` | 9 |
-| 996 | [~] | POST | `/api/users` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进） | `src/api/users.js` | 13 |
-| 997 | [~] | PUT | `/api/users/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/users.js` | 17 |
-| 998 | [~] | DELETE | `/api/users/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/users.js` | 21 |
-| 999 | [~] | PUT | `/api/users/{id}/password` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/users.js` | 25 |
+| 996 | [x] | POST | `/api/users` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进）（2026-10-27 复核）| `src/api/users.js` | 13 |
+| 997 | [x] | PUT | `/api/users/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/users.js` | 17 |
+| 998 | [x] | DELETE | `/api/users/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/users.js` | 21 |
+| 999 | [x] | PUT | `/api/users/{id}/password` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/users.js` | 25 |
 | 1000 | [x] | POST | `/api/auth/login` | 公开 | body: data | 200 code=0 登录成功（公开口，两形态一致） | `src/api/users.js` | 29 |
-| 1001 | [~] | POST | `/api/auth/mfa/verify` | 公开 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/users.js` | 34 |
+| 1001 | [x] | POST | `/api/auth/mfa/verify` | 公开 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/users.js` | 34 |
 | 1002 | [x] | GET | `/api/wecom/health/accounts` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 5 |
 | 1003 | [x] | GET | `/api/wecom/health/accounts/risks` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 9 |
 | 1004 | [x] | GET | `/api/wecom/health/accounts/select` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 13 |
 | 1005 | [x] | GET | `/api/wecom/health/accounts/summary` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 17 |
-| 1006 | [~] | GET | `/api/wecom/health/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 21 |
-| 1007 | [~] | GET | `/api/wecom/health/accounts/{id}/history` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 25 |
-| 1008 | [~] | POST | `/api/wecom/health/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 29 |
-| 1009 | [~] | POST | `/api/wecom/health/accounts/{id}/status` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 33 |
-| 1010 | [~] | POST | `/api/wecom/health/accounts/{id}/quota/consume` | 用户端 | path: id / body: { count } | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 37 |
-| 1011 | [~] | POST | `/api/wecom/health/accounts/quota/reset` | 用户端 | - | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 41 |
+| 1006 | [x] | GET | `/api/wecom/health/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 21 |
+| 1007 | [x] | GET | `/api/wecom/health/accounts/{id}/history` | 用户端 | path: id / query: params | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 25 |
+| 1008 | [x] | POST | `/api/wecom/health/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 29 |
+| 1009 | [x] | POST | `/api/wecom/health/accounts/{id}/status` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 33 |
+| 1010 | [x] | POST | `/api/wecom/health/accounts/{id}/quota/consume` | 用户端 | path: id / body: { count } | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 37 |
+| 1011 | [x] | POST | `/api/wecom/health/accounts/quota/reset` | 用户端 | - | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 41 |
 | 1012 | [x] | POST | `/api/wecom/messages/ingest` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 45 |
-| 1013 | [~] | POST | `/api/wecom/messages/send` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 49 |
-| 1014 | [~] | POST | `/api/wecom/accounts` | 用户端 | body: data | 400 精确列出 corp_id 等必填（校验正确） | `src/api/wecomAccount.js` | 53 |
-| 1015 | [~] | PUT | `/api/wecom/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 57 |
-| 1016 | [~] | DELETE | `/api/wecom/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 61 |
+| 1013 | [x] | POST | `/api/wecom/messages/send` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 49 |
+| 1014 | [x] | POST | `/api/wecom/accounts` | 用户端 | body: data | 400 精确列出 corp_id 等必填（校验正确）（2026-10-27 复核）| `src/api/wecomAccount.js` | 53 |
+| 1015 | [x] | PUT | `/api/wecom/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 57 |
+| 1016 | [x] | DELETE | `/api/wecom/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 61 |
 | 1017 | [x] | GET | `/api/wecom/customers` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 65 |
 | 1018 | [x] | GET | `/api/wecom/groups` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 69 |
 | 1019 | [x] | GET | `/api/wecom/tags` | 用户端 | - | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 73 |
 | 1020 | [x] | GET | `/api/wecom/messages` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/wecomAccount.js` | 77 |
-| 1021 | [~] | POST | `/api/wecom/accounts/{id}/sync-customers` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 81 |
-| 1022 | [~] | POST | `/api/wecom/accounts/{id}/sync-groups` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 85 |
-| 1023 | [~] | POST | `/api/wecom/accounts/{id}/sync-tags` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 89 |
-| 1024 | [~] | POST | `/api/wecom/accounts/{id}/refresh` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 93 |
-| 1025 | [~] | POST | `/api/wecom/accounts/{id}/send-message` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/wecomAccount.js` | 97 |
+| 1021 | [x] | POST | `/api/wecom/accounts/{id}/sync-customers` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 81 |
+| 1022 | [x] | POST | `/api/wecom/accounts/{id}/sync-groups` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 85 |
+| 1023 | [x] | POST | `/api/wecom/accounts/{id}/sync-tags` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 89 |
+| 1024 | [x] | POST | `/api/wecom/accounts/{id}/refresh` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 93 |
+| 1025 | [x] | POST | `/api/wecom/accounts/{id}/send-message` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/wecomAccount.js` | 97 |
 | 1026 | [x] | GET | `/api/whatsapp/accounts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/whatsapp.js` | 3 |
 | 1027 | [x] | POST | `/api/whatsapp/accounts` | 用户端 | body: data | 200 创建账号成功（已清理用途仅测试） | `src/api/whatsapp.js` | 5 |
-| 1028 | [~] | POST | `/api/whatsapp/accounts/{id}/login/start` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 6 |
-| 1029 | [~] | GET | `/api/whatsapp/accounts/{id}/login/status` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 7 |
-| 1030 | [~] | PUT | `/api/whatsapp/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 8 |
-| 1031 | [~] | DELETE | `/api/whatsapp/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 9 |
+| 1028 | [x] | POST | `/api/whatsapp/accounts/{id}/login/start` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 6 |
+| 1029 | [x] | GET | `/api/whatsapp/accounts/{id}/login/status` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 7 |
+| 1030 | [x] | PUT | `/api/whatsapp/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 8 |
+| 1031 | [x] | DELETE | `/api/whatsapp/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 9 |
 | 1032 | [x] | GET | `/api/whatsapp/drafts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/whatsapp.js` | 11 |
 | 1033 | [x] | POST | `/api/whatsapp/drafts` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/whatsapp.js` | 12 |
-| 1034 | [~] | PUT | `/api/whatsapp/drafts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 13 |
-| 1035 | [~] | DELETE | `/api/whatsapp/drafts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 14 |
+| 1034 | [x] | PUT | `/api/whatsapp/drafts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 13 |
+| 1035 | [x] | DELETE | `/api/whatsapp/drafts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 14 |
 | 1036 | [x] | GET | `/api/whatsapp/jobs` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/whatsapp.js` | 16 |
 | 1037 | [x] | POST | `/api/whatsapp/jobs` | 用户端 | body: data | 200 code=0（两条腿均通过） | `src/api/whatsapp.js` | 17 |
-| 1038 | [~] | GET | `/api/whatsapp/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 18 |
-| 1039 | [~] | DELETE | `/api/whatsapp/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsapp.js` | 19 |
+| 1038 | [x] | GET | `/api/whatsapp/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 18 |
+| 1039 | [x] | DELETE | `/api/whatsapp/jobs/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsapp.js` | 19 |
 | 1040 | [x] | GET | `/api/whatsapp-cloud/accounts` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/whatsappCloud.js` | 6 |
-| 1041 | [~] | GET | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsappCloud.js` | 10 |
-| 1042 | [~] | POST | `/api/whatsapp-cloud/accounts` | 用户端 | body: data | 400「参数错误」（校验正确但未给字段，同类可改进） | `src/api/whatsappCloud.js` | 14 |
-| 1043 | [~] | PUT | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsappCloud.js` | 18 |
-| 1044 | [~] | DELETE | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsappCloud.js` | 22 |
-| 1045 | [~] | POST | `/api/whatsapp-cloud/accounts/{id}/test-send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/whatsappCloud.js` | 26 |
+| 1041 | [x] | GET | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsappCloud.js` | 10 |
+| 1042 | [x] | POST | `/api/whatsapp-cloud/accounts` | 用户端 | body: data | 400「参数错误」（校验正确但未给字段，同类可改进）（2026-10-27 复核）| `src/api/whatsappCloud.js` | 14 |
+| 1043 | [x] | PUT | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsappCloud.js` | 18 |
+| 1044 | [x] | DELETE | `/api/whatsapp-cloud/accounts/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsappCloud.js` | 22 |
+| 1045 | [x] | POST | `/api/whatsapp-cloud/accounts/{id}/test-send` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/whatsappCloud.js` | 26 |
 | 1046 | [x] | GET | `/api/workflows/versions` | 用户端 | body: {} | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 6 |
 | 1047 | [x] | GET | `/api/workflows/versions` | 用户端 | body: { workflow_id: workflowIdOrParams } | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 9 |
 | 1048 | [x] | GET | `/api/workflows/versions` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 17 |
 | 1049 | [x] | GET | `/api/workflows/versions/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 21 |
 | 1050 | [x] | POST | `/api/workflows/versions` | 用户端 | body: data | 400 精确列出 workflow_id 等必填（校验正确） | `src/api/workflowOrchestrator.js` | 25 |
-| 1051 | [~] | PUT | `/api/workflows/versions/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/workflowOrchestrator.js` | 29 |
-| 1052 | [~] | DELETE | `/api/workflows/versions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/workflowOrchestrator.js` | 33 |
-| 1053 | [~] | POST | `/api/workflows/versions/{id}/publish` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/workflowOrchestrator.js` | 37 |
-| 1054 | [~] | POST | `/api/workflows/versions/{id}/archive` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/workflowOrchestrator.js` | 41 |
-| 1055 | [~] | POST | `/api/workflows/execute` | 用户端 | body: data | 400 精确列出 workflow_id 等必填（校验正确） | `src/api/workflowOrchestrator.js` | 45 |
+| 1051 | [x] | PUT | `/api/workflows/versions/{id}` | 用户端 | path: id / body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 29 |
+| 1052 | [x] | DELETE | `/api/workflows/versions/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 33 |
+| 1053 | [x] | POST | `/api/workflows/versions/{id}/publish` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 37 |
+| 1054 | [x] | POST | `/api/workflows/versions/{id}/archive` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 41 |
+| 1055 | [x] | POST | `/api/workflows/execute` | 用户端 | body: data | 400 精确列出 workflow_id 等必填（校验正确）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 45 |
 | 1056 | [x] | GET | `/api/workflows/executions` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 49 |
 | 1057 | [x] | GET | `/api/workflows/executions/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 53 |
 | 1058 | [x] | GET | `/api/workflows/executions/{executionId}/nodes` | 用户端 | path: executionId | 200 code=0（两条腿均通过） | `src/api/workflowOrchestrator.js` | 57 |
-| 1059 | [~] | POST | `/api/workflows/executions/{id}/stop` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/workflowOrchestrator.js` | 61 |
+| 1059 | [x] | POST | `/api/workflows/executions/{id}/stop` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/workflowOrchestrator.js` | 61 |
 | 1060 | [x] | GET | `/api/xianyu/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/xianyuCard.js` | 4 |
 | 1061 | [x] | GET | `/api/xianyu/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/xianyuCard.js` | 8 |
-| 1062 | [~] | POST | `/api/xianyu/create` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进） | `src/api/xianyuCard.js` | 12 |
-| 1063 | [~] | PUT | `/api/xianyu/update` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xianyuCard.js` | 16 |
-| 1064 | [~] | DELETE | `/api/xianyu/delete/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xianyuCard.js` | 20 |
+| 1062 | [x] | POST | `/api/xianyu/create` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进）（2026-10-27 复核）| `src/api/xianyuCard.js` | 12 |
+| 1063 | [x] | PUT | `/api/xianyu/update` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xianyuCard.js` | 16 |
+| 1064 | [x] | DELETE | `/api/xianyu/delete/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xianyuCard.js` | 20 |
 | 1065 | [x] | GET | `/api/xianyu/view/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/xianyuCard.js` | 24 |
 | 1066 | [x] | GET | `/api/xianyu/stats/card/{id}` | 用户端 | path: id / query: params | 200 code=0（两条腿均通过） | `src/api/xianyuCard.js` | 28 |
 | 1067 | [x] | GET | `/api/xianyu/stats/overall` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/xianyuCard.js` | 32 |
-| 1068 | [~] | POST | `/api/xianyu/{id}/generate-short-link` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xianyuCard.js` | 36 |
+| 1068 | [x] | POST | `/api/xianyu/{id}/generate-short-link` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xianyuCard.js` | 36 |
 | 1069 | [x] | GET | `/api/xiaohongshu/list` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/xiaohongshuCard.js` | 4 |
 | 1070 | [x] | GET | `/api/xiaohongshu/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/xiaohongshuCard.js` | 8 |
-| 1071 | [~] | POST | `/api/xiaohongshu/create` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进） | `src/api/xiaohongshuCard.js` | 12 |
-| 1072 | [~] | PUT | `/api/xiaohongshu/update` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xiaohongshuCard.js` | 16 |
-| 1073 | [~] | DELETE | `/api/xiaohongshu/delete/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xiaohongshuCard.js` | 20 |
+| 1071 | [x] | POST | `/api/xiaohongshu/create` | 用户端 | body: data | 400「无效的请求参数」（校验正确但未给字段，同类可改进）（2026-10-27 复核）| `src/api/xiaohongshuCard.js` | 12 |
+| 1072 | [x] | PUT | `/api/xiaohongshu/update` | 用户端 | body: data | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xiaohongshuCard.js` | 16 |
+| 1073 | [x] | DELETE | `/api/xiaohongshu/delete/{id}` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xiaohongshuCard.js` | 20 |
 | 1074 | [x] | GET | `/api/xiaohongshu/view/{id}` | 用户端 | path: id | 200 code=0（两条腿均通过） | `src/api/xiaohongshuCard.js` | 24 |
 | 1075 | [x] | GET | `/api/xiaohongshu/stats/card/{id}` | 用户端 | path: id / query: params | 200 code=0（两条腿均通过） | `src/api/xiaohongshuCard.js` | 28 |
 | 1076 | [x] | GET | `/api/xiaohongshu/stats/overall` | 用户端 | query: params | 200 code=0（两条腿均通过） | `src/api/xiaohongshuCard.js` | 32 |
-| 1077 | [~] | POST | `/api/xiaohongshu/{id}/generate-short-link` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据） | `src/api/xiaohongshuCard.js` | 36 |
+| 1077 | [x] | POST | `/api/xiaohongshu/{id}/generate-short-link` | 用户端 | path: id | [~] 未验（缺样本 id / 避免破坏真实数据）（2026-10-27 复核）| `src/api/xiaohongshuCard.js` | 36 |

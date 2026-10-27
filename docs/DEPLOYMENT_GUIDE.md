@@ -243,6 +243,8 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `ALLOW_SELF_RESTART` | 关 | `true` 才允许「系统运维」接口让本进程退出重启 |
 | `WS_AGENT_ALLOW_ALL_USERS` | 关 | `true` 放开坐席通知订阅的角色限制（默认仅 admin/manager/staff/customer_service，见 R14-3 的 403 重连循环） |
 | `TOOL_PERMISSION_DEFAULT_DENY` | 关 | 工具权限白名单的缺省姿态：**不设＝白名单外放行**，设 `true` 才拒绝。生产建议设 |
+| `TOOL_PERMISSION_WHITELIST_SEED_FILE` | 空 | 工具权限白名单的种子文件路径（JSON：工具名 → 允许/拒绝）。**文件不存在或格式坏时按空种子处理并告警**，不会放宽到全放行——缺省姿态仍由 `TOOL_PERMISSION_DEFAULT_DENY` 决定。与 `TOOL_PERMISSION_DEFAULT_DENY` 配套：先从 `would_deny` 统计导出实际在用工具名落种子，再考虑收紧默认 |
+| `TOOL_RISK_STATS_FLUSH_INTERVAL` | `30s` | 工具风险判定 `would_deny` 统计的刷盘间隔（`internal/app/permission_wiring.go`）。统计落 `platform_config_kv`（键 `agent_tool_risk_stats_v1`），无新表；间隔越短重启丢的计数越少，代价是更频繁的 KV 写。只在风险判定层挂载后生效 |
 | `ORDER_WEBHOOK_NONCE_STRICT` | 关 | 设 `on` 开启商机回调 nonce 严格重放校验 |
 | `SMS_ALLOW_NIGHT_SEND` | 关 | `true` 绕开 22:00–08:00（CST）夜间不发短信的限制 |
 | `APP_ENV` / `MODE` / `GIN_MODE` | 无 | **开发环境判定**（`config.IsDevelopmentEnv`）：按 `APP_ENV` → `MODE` 取第一个非空值，`dev|development|debug|test|testing|local` 算开发；三者都空时再看 `GIN_MODE=debug`。都不设 ⇒ 按**生产**姿态走，这决定了多把安全闸的强度：`MASTER_KEY` 缺失时生产拒绝启动、`ALLOW_INSECURE_WEBHOOK=true` 或 `ALLOW_INSECURE_TELEGRAM_WEBHOOK=true` 时生产拒绝启动、`MARKETING_WEBHOOK_ALLOW_INSECURE` 与 Telegram 旁路只在开发姿态下才放行。**别指望"没设就是开发"**——没设恰恰是最严的那一侧 |

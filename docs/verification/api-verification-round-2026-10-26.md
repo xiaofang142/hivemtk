@@ -35,16 +35,16 @@
 | A2 | `PUT /api/v1/local-assets/{id}/toggle-active`、`DELETE /api/v1/local-assets/{id}` | 两形态 | 不存在的 id 回 `code=0`「ok」（0 行更新仍当成功） | 业务逻辑错误：前端拿不到「这条早没了」 | 已修：service 先 `FindByID`，不存在回 `6001 资产不存在`（`internal/service/local_asset.go`） |
 | A3 | `GET /api/ab-experiments/{id}/stats`（前端 `abExperimentPlus.js`） | 两形态 | `getExperimentWithStats(id,'bayesian')` 的 `method` 永远丢失，后端只拿到默认 frequentist | 前端把查询参数放进 axios 配置顶层（`{method}`），被 `axios.get` 的 mergeConfig 覆盖回 `get` | 已修：改 `{ params: { method } }`（`user-web/src/api/abExperimentPlus.js`） |
 | A4 | `POST /api/ai-productivity/overview`（`GET`） | 仅 SaaS | 修复前 SaaS 恒 0/0，独立部署有数 | `BuildReport` 用 `context.Background()`，租户插件按 ctx 注入 ⇒ 查不到行 | 已修（工作区既有改动）：控制器传 `ctx.Request.Context()`，回归两形态 tc=198/ai=528 一致 |
-| A6 | `DELETE /api/clues/delete/{id}` | 两形态 | 不存在的线索 id 仍回「删除线索成功」（0 行当成功） | 与 A2 同类 | 观察项，未改 |
-| A7 | `DELETE /api/customer-sessions/{id}/edit-lock` | 两形态 | body 无 holder 时可释放他人的编辑锁 | 设计取舍（`holder != "" && ...`），但协作场景下等于任何人都能抢解锁 | 观察项，未改 |
+| A6 | `DELETE /api/clues/delete/{id}` | 两形态 | 不存在的线索 id 仍回「删除线索成功」（0 行当成功） | 与 A2 同类 | 已修（2026-10-26 晚，见 §6）：clue 删除不存在 id → 404 |
+| A7 | `DELETE /api/customer-sessions/{id}/edit-lock` | 两形态 | body 无 holder 时可释放他人的编辑锁 | 设计取舍（`holder != "" && ...`），但协作场景下等于任何人都能抢解锁 | **已修**：控制器在 holder 缺省时按登录人补 `user:<id>`（与 Acquire 同口径），只能解自己的锁；前端 `acquireEditLock` 同步去掉写死的 `holder:'me'`（所有人共用一个持有人=锁形同虚设） |
 | A8 | `GET /api/conversion-funnels`、`/stage` | 仅 SaaS | 五段全 0 且 `degraded=true`，`stage_errors` 逐段报「表需要租户上下文但 ctx 未绑定」 | service 用 `context.Background()` 取数，SaaS 隔离 callback fail-closed；HTTP 200 掩盖了"全空" | 已修：新增 `BuildFunnelCtx` / `GetStageDetailsCtx`，控制器传 `ctx.Request.Context()`；回归两形态 126/221/133/311/0 一致 |
 | A9 | `PUT /api/manage/config-params/{group}/{key}` | 仅 SaaS | 改平台级参数（`misc.batch_import_max_file_mb`）回 400「不接受租户覆盖」 | 后端按参数归属拒绝，文案明确；但租户控制台仍展示该参数，保存必失败 | 观察项（产品口径）；建议租户页按归属置灰并给跳转 |
 | A10 | `GET /api/custom-reports/{id}/data` | 仅 SaaS | 500 `[tenant] 表 customer_sessions 需要租户上下文但 ctx 未绑定` | 控制器把 `*gin.Context` 当 `context.Context` 传给 service（gin 未开 ContextWithFallback），与 A1 同根 | 已修：传 `ctx.Request.Context()`；回归两形态 3 行 |
 | A11 | `PUT /api/custom-reports/{id}` | 两形态 | 非法图表类型被报成 500「更新报表失败」 | 控制器用 `HandleDBError` 映射入参错误，真实原因被吞 | 已修：改 `HandleServiceError` → 400「不支持的图表类型」 |
 | A12 | `POST /api/customer-service-agents` | 两形态 | 删除挂载后再建同一（座席,智能体）必然失败：`duplicate key ... idx_cs_agent_unique`，并把 SQLSTATE 原话漏给前端 | 软删行仍占唯一索引（索引不含 `deleted_at IS NULL`），Create 走 INSERT | 已修：Create 先查软删行并复活（repo `FindSoftDeletedByPair`/`Restore`）；回归删除→重建拿回同一 id |
-| A15 | `POST /api/marketing-flows` | 两形态 | 创建营销流程只回「创建营销流程失败」，不带任何原因（校验错/内部错混在一起）；后续 get/update/activate/pause/stop/executions/stats 无对象可验 | 错误被 controller 统一成一句通用文案，丢失 service 的具体原因 | 待查（下轮定位：先看 service.CreateFlow 的错误来源与 controller 的错误映射） |
+| A15 | `POST /api/marketing-flows` | 两形态 | 创建营销流程只回「创建营销流程失败」，不带任何原因（校验错/内部错混在一起）；后续 get/update/activate/pause/stop/executions/stats 无对象可验 | 错误被 controller 统一成一句通用文案，丢失 service 的具体原因 | ✅ 已修（§6）：写口按错误类别分流，非法入参回 400 + 原因原文 |
 | A13 | `PUT /api/faqs/{id}` | 两形态 | off：`null value in column "enabled"`；SaaS：`[tenant] 更新不可改写 tenant_id（上下文 1，SET 值 0）` | repo 用 `Select("*").Updates(entry)`：零值 tenant_id 被写回、未传的 enabled 写成 NULL | 已修：只更新表单拥有的列，enabled/agent_id 未传则保留原值；回归两形态更新成功且 enabled 保持 true |
-| A5 | `POST /api/batch/delete`、`/api/batch/update` | 两形态 | 对不存在的 id 仍回 `code=0 批量删除成功/批量更新成功`，无 affected 计数 | 观察项（与 A2 同类，但批量语义下 0 行可能是期望） | 本轮只记录；建议后续返回 `affected` 供前端区分 |
+| A5 | `POST /api/batch/delete`、`/api/batch/update` | 两形态 | 对不存在的 id 仍回 `code=0 批量删除成功/批量更新成功`，无 affected 计数 | 观察项（与 A2 同类，但批量语义下 0 行可能是期望） | 已具备计数（响应含 `requested` + `deleted_count`/`updated_count`）；0 行是否算错仍待产品口径 |
 
 ## 3.1 环境限制（不计缺陷）
 
@@ -119,7 +119,7 @@
 | `securityAudit.js` / `shortLink.js` | 13 | ✅ 通过（审计写入与短链增改/访问/分享/统计） |
 | `moduleMarket.js` | 17 | ✅ 14 / ⚠️ 下单/订单详情/取消无订单号未验；`/modules/*` 在 off 回 4301（A17 待判） |
 
-**进度：840 / 1077 条（78.0%）**（766 [x] + 74 [~]），剩余 237 条待验。
+**进度：1077 / 1077 条（100%）**（2026-10-27 余量清零轮补完最后 170 条，全部 [x]；细节见 §8）。
 
 ## 5. 下轮继续（环境重启命令）
 
@@ -147,8 +147,8 @@ cd user-server && CGO_ENABLED=0 go build -o /private/var/folders/xw/pd_rr_z54w38
 | A17 off 模式 `/modules/*` 4301 | ✅ 已修：`GuardModulePath` 在 `TENANT_MODE=off` 直接放行（私域无订阅关系） | 两形态 `GET /api/modules/my` → `code=0` |
 | A18 obs 创建只回 INVALID_PARAM | ✅ 已修：校验错误原文进 message；服务错误走 `HandleServiceError` | 两形态 → `请求参数错误: Key: 'CreateObsConfigRequest.Name' ...` |
 | A5/A6 0 行当成功（部分） | ✅ clue 删除、integration 账号删除已改为 404（含单测契约更新） | 两形态 DELETE 不存在 id → **404** |
-| A5 剩余（batch delete/update、email jobs/list、domain-pool 等） | ⏳ 未改：批量语义下 0 行是否算错需要产品口径；建议返回 `affected` 计数 | — |
-| A19 qqBot 同一 id off/on 不一致 | ⏳ 未修：需核对该行 `owner_user_id` 与 `guardChannelAccountOwnership` 在 off 模式的分支（疑似历史数据归属 + off 绕过归属判定） | 现象已记录：`GET /api/qq/accounts/1` off=404 / on=200 |
+| A5 剩余（batch delete/update、email jobs/list、domain-pool 等） | ✅ 计数已具备（响应含 `requested` + `deleted_count`/`updated_count`）；0 行是否算错仍待产品口径 | — |
+| A19 qqBot 同一 id off/on 不一致 | ✅ **已判 + 已修**：①实测两形态对同一 id 完全一致——先在 off 建号（id=3）后 off/on 均 `200`，不存在 id 两形态均 `404 NOT_FOUND_1002` 同文案，**原读数属探针顺序 artifact**（on 探针时行在、off 探针时行已被删），不是两形态取数差异；②顺带修掉真缺陷：五个入口（Get/Update/Delete/TestSend/VerifyCallback）原来把所有查账号失败一律写 404「账号不存在」，库故障/租户 fail-closed 会被说成"数据没了"——改为 `ErrRecordNotFound`→404、其余走 `ErrorFromDB`（500/502 带原文） | 单测 `TestAbortQQAccountLookup_*`（404/500 两条）；实探 off=8454 / on=8455 同 id 同码 |
 
 - 单测：`go test ./internal/content/controller ./internal/controller ./internal/repository ./internal/middleware -run 'Marketing|MCP|Obs|Clue|Integration|Module'` 全绿。
 
@@ -187,5 +187,53 @@ cd user-server && CGO_ENABLED=0 go build -o /private/var/folders/xw/pd_rr_z54w38
 | `POST /api/message-hub/99999999/recall` | 404 | `NOT_FOUND_1002` | `消息不存在` |
 | `POST /api/message-hub/1383/recall`（douyin 桥接） | 409 | `DUPLICATE_ENTRY_3003` | `recall not supported for channel（桥接渠道 msgID 是合成键，不是平台消息标识）` |
 
-观察项（未改）：409 在通用响应层一律映射成 `DUPLICATE_ENTRY_3003`，语义上「窗口过期/渠道不支持」与「重复条目」不对应；前端目前只用 message 文案，不影响展示，登记待通用错误码表扩容时一并处理。
+观察项（已修，2026-10-27）：409 在通用响应层一律映射成 `DUPLICATE_ENTRY_3003`，语义上「窗口过期/渠道不支持」与「重复条目」不对应。已新增两个消息撤回域错误码并按原因分流：`MESSAGE_RECALL_UNSUPPORTED_8201`（渠道没有主动撤回通道）与 `MESSAGE_RECALL_WINDOW_EXPIRED_8202`（已过平台窗口），HTTP 仍为 409；`response.ErrorWithCode` 直出码，不再经 `errorCodeFromHTTPCode` 折算。回归 `TestMessageRecallCodes_AreDistinct409`（utils）+ `go test ./internal/router` 全包绿。
 
+
+## 8. 2026-10-27 余量清零轮（170 条 [~] → 全部置 [x]）
+
+> 环境：`/tmp/hv-verify` 两实例（off 8424 / on 8425）共用隔离库 `user_db_api`；`FF_LTC_ORDER_DRAFT_DB=on`；
+> 账号 `uit_admin`（tenant 1，admin）；本机 LLM 未起（AI 回复腿仍属环境前提）。
+> 清单侧：`api-list.md` 状态 **1077/1077 = [x]**，本轮 170 条逐条双形态 curl，写操作只落隔离库。
+
+### 8.1 本轮修复的缺陷（每条都有改前/改后实测）
+
+| # | 路由/位置 | 缺陷（改前实测） | 修复 | 改后读数 |
+|---|---|---|---|---|
+| B1 | `GET/PUT/DELETE /api/live-codes/qrcodes/{qr_id}/*` | 控制器读 `ctx.Param("qrId")`，路由参数名是 `qr_id` ⇒ 二维码统计恒 404、更新/删除恒 400「二维码ID不能为空」 | `internal/controller/live_code.go` 三处改 `ctx.Param("qr_id")` | 统计 200、更新 200、删除 200；重复删除 404 |
+| B2 | `POST /api/live-codes/create` | ①短链重复回 500「创建活码失败」；②域名停用/不存在同样 500；③创建响应 `short_domain/entry_domain/landing_domain` 恒 null（紧接着 GET 又有值） | 新增 `ErrLiveCodeShortLinkExists`/`ErrLiveCodeDomainUnavailable` 哨兵，控制器 409/400 分流；创建后回读再回显 | 重复短链 **409**「短链已存在: xxx」；域名不合法 400 带原因；创建响应三域已带对象 |
+| B3 | `DELETE /api/users/{id}` | 删已删账号回 **400**「用户不存在: service: invalid input」（内部包装文案泄漏） | 新增 `service.ErrUserNotFound`，`writeServiceError` 映射 404 | 两形态 **404**「用户不存在」 |
+| B4 | `DELETE /api/rag-config/products/{id}` | 删不存在产品回 **500**「record not found」 | 控制器 `isNotFoundError` → 404「RAG 产品不存在」 | 两形态 404 |
+| B5 | `DELETE /api/sop/{id}` | 删不存在 SOP 回 400「sop not found」 | 改 `ErrorFromDB`（not found → 404） | 两形态 404「SOP 不存在」 |
+| B6 | `POST /api/session-tags` | 编码重复回 400 且把 PG `duplicate key ... idx_session_tags_code` 原文漏给前端 | `repository.IsDuplicateKeyErr` → 409「标签编码已存在: xxx」 | 两形态 409，无 SQL 原文 |
+| B7 | `POST /api/customer-360/tag-rules`（自动标签规则） | 恒 400 `invalid input syntax for type integer: "<uuid>"`：**库列 `customer_tags.id` 是 serial integer，模型是 varchar(36)+UUID**，建标签与自动打标签全链路不可用 | `internal/pkg/db/migrate.go` 新增 `postMigrateCustomerTagIDType`（幂等：仅整数族时 `DROP DEFAULT` + `TYPE varchar(36) USING id::varchar`，系统作用域执行） | 规则创建 200（id 为 UUID）；重复规则/标签均正常 |
+| B8 | `POST /api/telegram/gates` | 同群重复配置回 **500**「创建失败（群组可能已配置）」 | 新增 `ErrTelegramGateExists` → 409 | 两形态 409 |
+| B9 | `POST /api/wecom/health/accounts/{id}` | 只读 body 的 `account_id`，前端按 path 传 id ⇒ 恒 400 `invalid account_id` | body 缺省时回填 path id | 两形态 200「上报成功」 |
+| B10 | `DELETE /api/whatsapp/{accounts,drafts,jobs}/{id}` | 0 行删除回 200「删除成功」 | 仓储三个 Delete 检查 `RowsAffected==0` → `gorm.ErrRecordNotFound` | 两形态 404 |
+| B11 | `PUT /api/llm/scene-routing`（单条形状） | 同一请求体连续 `ShouldBindJSON` 两次 ⇒ 第二次必然 `invalid body: EOF`，单条路由从未成功过 | 改为 `io.ReadAll` + 两次 `json.Unmarshal` | 单条 200 `data=route`；批量形状仍 200 |
+| B12 | `POST /api/qq/accounts/{id}/test-send` | 渠道 401 原文带 "not found" ⇒ 落 **404**「发送失败」（把"凭据错"说成"账号没了"） | `SendMessage` 用 `bizerr.Wrap(CodePlatformUnavail, …)` 声明上游失败 | 两形态 **502** + 渠道真因 |
+
+> 关联：消息撤回 409 的码域语义（8201/8202）已在 §7.2 收口；`TestMessageRecallCodes_AreDistinct409` 在案。
+
+### 8.2 已验但属环境前提/设计内（判 [x]，不计缺陷）
+
+- **moduleMarket 下单/订单详情/pay-status**：`PLATFORM_ENABLED=false` ⇒ 4303「平台未连接」；不存在订单 4004；双栈成功路径见台账 §10 N-3（隔离双栈 49/49）。
+- **Telegram/WeCom/WhatsApp Cloud 外发**：本机无真实凭据，`test-send`/`sync-*`/`refresh` 均回明确上游错误（Telegram 400 文案、WeCom 500 带 errcode）。
+- **WhatsApp 个人版扫码登录**：W-3 已下线该能力，`login/start` 回 500 + 明确文案「个人版扫码登录已下线」。
+- **SMS**：当前 07:5x 处于夜间禁发窗口（22:00–8:00），发送/重发/草稿发送按设计拦截。
+- **订单草稿**：`FF_LTC_ORDER_DRAFT_DB=on` 后 list/get/patch/confirm/cancel 全通；状态机对二次确认/取消回 409 并点名当前状态。
+
+### 8.3 观察项收口（2026-10-27 续二，四项全部修复）
+
+1. ✅ 409 专属码：`WORKFLOW_STATE_CONFLICT_8301` / `ORDER_DRAFT_STATE_CONFLICT_8302`。workflow stop 二次调用、草稿重复确认/取消实测回 409 + 专属码（改前 `DUPLICATE_ENTRY_3003`）。
+2. ✅ 上游失败专属码 `UPSTREAM_FAILURE_5005`（502），`errorCodeFromHTTPCode(502)` 归位；企微控制器新增 `respondWeComError`（`service.AsChannelError` 判定），`sync-customers/groups/tags`、`send-message`、`refresh` 与 QQ `test-send` 实测 502 + 渠道原文。
+3. ✅ WhatsApp 个人版扫码下线改 **410 `WHATSAPP_LOGIN_RETIRED_8401`**（`errors.Is(err, service.ErrWhatsAppProviderUnsupported)`）。
+4. ✅ QQ 502 响应不再复读错误原文（`ErrorFromDB` 已用 BizError 完整串，第二遍 `data` 追加删除）。
+- 回归用例：`TestDomainConflictAndUpstreamCodes`（pkg/utils）；两形态实探 502/410/409 新码。
+
+### 8.4 回归
+
+- `go build ./...` / `go vet ./...` / `golangci-lint run ./internal/...`（0 issues）
+- **全包**：`go test -p 1 -timeout 1800s ./internal/service` → **ok 833.9s**；`go test -p 1 -timeout 1200s ./internal/controller` → **ok 157.6s**（须先 `unset PLATFORM_ENABLED`，见下）；`./internal/repository` 目标域子集全绿
+- **环境坑（新增）**：跑 `internal/controller` 全包前必须 `unset PLATFORM_ENABLED`（根 `.env` 里是 `false`，而 `withPlatformCfg` 只在变量未设置时才置 `true`，否则两条平台可达性用例假红：`TestAppConfigController_LivenessOnlyPlatformReportsConnected`、`TestPlatformController_RegisterMerchant_RefusalCarriesPlatformReason`）。已在 HEAD worktree 复现同红，属运行环境而非代码。
+- 隔离库新增验证种子：`domain_pool` 135–137、`order_drafts draft_verify_*`、未知问题聚类 #1、各域 `verify-*` 资源（仅 `user_db_api`）

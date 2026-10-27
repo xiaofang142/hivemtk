@@ -37,8 +37,24 @@
   所以裸敲 `go test ./internal/service` 会 `panic: test timed out`，与代码无关。CI 侧
   早在用 `-timeout 2400s`（`user-server-ci.yml:738/820`），`make test-go` 用 900s，
   本轮补了 `make test-service`（`-timeout 30m`）供单包复跑。三处入口现在都不再被默认值掐。
-- **仍需要动作的**：按子域拆包，把这一包的墙钟降回分钟级。属架构动作，拆之前要先把
-  `internal/pkg/testutil/testdb.go` 的槽位认领改成按子域隔离，否则拆了还是串行。
+- **仍需要动作的**：按子域拆包，把这一包的墙钟降回分钟级。属架构动作。
+- **2026-10-27 实测订正（拆包前置已经摸清）**：
+  1. `testutil` 槽位是**进程级**的（`procTestDBSlots=32` + 会话咨询锁），每个 Go 包是独立测试进程 ⇒
+     拆出的包天然各占一个槽位，**不需要再改 testutil**；仍串行的是单包内部（同包用例共享进程库，且逐用例 Drop+AutoMigrate）。
+  2. 已把跨域哨兵 `ErrDoNotContact` 下沉到 `internal/pkg/reach`（根 service 保留别名，零行为变化），
+     `service/sms/*` 也可以直接引用它。
+  3. 拿 `sms` 做试点时实测到的剩余耦合（这一刀必须先处理）：
+     `DoNotContactService`（`service/do_not_contact.go`，219 行，被 app/controller/aiagent 共用）、
+     `NormalizePhone`（已只是 `pkg/identity` 的转发）、`round2`（在 `email_tracking.go` 里）。
+     直接 `git mv sms*.go` 后编译报这三处；故本轮只完成哨兵下沉，未强推。
+  4. **2026-10-27 已按该顺序完成首刀**：
+     `NormalizePhone` 直接用 `internal/identity`；`round2` 下沉 `pkg/utils.Round2`；
+     `DoNotContactService` 抽到 `internal/service/dnc`（根包保留类型/构造别名，`dnc_compat.go`）；
+     `sms` 域 16 文件/5552 行整体迁入 `internal/service/sms`（控制器/app/router/root service 改引子包）。
+     读效：SMS 用例独立成包 **32s**（原在 833s 单包内）；`go build`/`vet`/lint/audit/router 全绿。
+  5. 下一域按同配方：`email`（8 文件/2608 行，依赖 `round2`→已共享）
+     → `cards`（douyin/xianyu/xiaohongshu/kuaishou 卡片族）→ `sop`。每刀验收：
+     `go build ./...` + 该域测试 + 根包测试子集 + `make audit`。
 - **已撤销的一条**：旧记录说 `check-battery-identity.py` 的豁免依赖被 gitignore 的轮次目录、
   干净克隆会红。2026-10-26 在干净 worktree（`git worktree add --detach /tmp/hm-clean-1026 11185fa4`）
   复算，`--selftest` 与 `--quiet-ok` 都是 **rc=0**（`失败 0 格` / `0 项不合格`），
