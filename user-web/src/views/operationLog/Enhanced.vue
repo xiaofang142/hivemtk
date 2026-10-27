@@ -194,6 +194,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { http } from '@/utils/request'
+import { exportOperationLogs } from '@/api/operationLog'
 
 const filters = reactive({ user: '', action: '', dateRange: [] })
 const logs = ref([])
@@ -253,8 +254,28 @@ function viewDetail(row) {
   ElMessageBox.alert(JSON.stringify(row, null, 2), '详情')
 }
 
-function exportLogs() {
-  window.open(`/api/operation-logs/export?${new URLSearchParams(filters)}`, '_blank')
+async function exportLogs() {
+  // 不能 window.open 直链：新标签页不会带 Authorization 头，实测恒 401。
+  // 走 axios 拿 blob（带令牌），再用一次性 object URL 触发下载。
+  try {
+    const blob = await exportOperationLogs({
+      user: filters.user,
+      action: filters.action,
+      start: filters.dateRange?.[0],
+      end: filters.dateRange?.[1]
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `operation-logs-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出已开始')
+  } catch (e) {
+    // 失败提示由 request 拦截器统一弹出（401 跳登录 / 403 无权限 / 502 上游原因）
+  }
 }
 
 onMounted(() => {

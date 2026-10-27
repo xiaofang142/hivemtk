@@ -54,10 +54,23 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
     } finally { summaryLoading.value = false }
   };
 
-  const exportTranscriptCurrent = () => {
+  const exportTranscriptCurrent = async () => {
     if (!currentSession.value) return ElMessage.warning('请先选择会话')
     const sid = currentSession.value.sessionId || currentSession.value.session_id
-    window.open(`/api/customer-sessions/${sid}/transcript?format=csv`, '_blank')
+    // 直链 window.open 不带 Authorization，实测恒 401；改走带令牌的 blob 下载。
+    try {
+      const blob = await http.get(`/api/customer-sessions/${sid}/transcript`, { format: 'csv' }, { responseType: 'blob' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `session-${sid}-transcript.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      ElMessage.error(e?.message || '导出失败')
+    }
   }
 
   const snoozeCurrent = async () => {

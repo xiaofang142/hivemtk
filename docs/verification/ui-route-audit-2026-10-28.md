@@ -80,6 +80,13 @@
 - `user-web/tests/unit/conversionFunnel_summary.test.js`：组件使用 `$t` 但测试未安装 i18n 插件导致 `$t is not a function`；已安装 i18n，并把「端到端转化率」旧标题断言改为按值断言（标题已诚实化为「端到端比值（会话/访问…）」）。
 - `user-server/internal/app/tool_alert_wiring_test.go`：告警 handler 是 goroutine 异步派发，测试立即读计数在机器繁忙时假红；改为轮询等待（2s 上限）+ shadow 后留 150ms 观察窗。
 
+### 4.5 导出类按钮用 window.open 直链导致 401（对抗性复查发现）
+
+- `/operationLog/enhanced` 点「导出」：`window.open('/api/operation-logs/export?...')` 新标签页不带 `Authorization`，后端恒回 401；原探测脚本把新标签页当 popup 关闭，因此第一轮未把它计为页面错误。
+- `/customerSession/list` 的「导出会话记录」同一写法（`/api/customer-sessions/:id/transcript`）。
+- 修复：两处改为 axios 带令牌请求 `responseType: 'blob'`，用一次性 object URL 下载；失败由请求拦截器统一提示。
+- 回归：真浏览器点「导出」返回 200 且提示「导出已开始」；后端日志不再出现该端点 401。
+
 ## 5. 证据
 
 - 逐路由结果：`evidence-20261028/*.json`（每个路由一份，含 clicks、API、console、alerts）
