@@ -165,6 +165,12 @@
             placeholder="例如：comment, submit（留空=纯读流程；非空则执行时强制逐步确认）"
           />
         </el-form-item>
+        <el-form-item label="定时触发">
+          <el-input
+            v-model="form.cronText"
+            placeholder="可选；5 段 cron（如 0 9 * * * 每日 9 点）；仅纯读流程可挂（writes 非空会被拒绝）"
+          />
+        </el-form-item>
         <el-form-item label="参数 Schema">
           <el-input
             v-model="form.paramsSchemaText"
@@ -296,6 +302,9 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteEgoFlow,
+  getEgoFlowCron,
+  upsertEgoFlowCron,
+  deleteEgoFlowCron,
   dryRunEgoFlow,
   listEgoFlows,
   publishEgoFlow,
@@ -318,6 +327,7 @@ const emptyForm = () => ({
   domainsText: '',
   writesText: '',
   paramsSchemaText: '',
+  cronText: '',
   script: ''
 })
 const form = ref(emptyForm())
@@ -379,8 +389,13 @@ const openEditor = (row) => {
       domainsText: joinList(row.domains),
       writesText: joinList(row.writes),
       paramsSchemaText: row.params_schema ? JSON.stringify(row.params_schema, null, 2) : '',
+      cronText: '',
       script: row.script || ''
     }
+    // 已挂载的定时触发器回填（specs/016：404=未挂载，静默留空）
+    getEgoFlowCron(row.id)
+      .then((tr) => { form.value.cronText = tr?.cron_expr || '' })
+      .catch(() => {})
   }
   editorVisible.value = true
 }
@@ -408,6 +423,17 @@ const onSave = async () => {
     const data = await saveEgoFlow(form.value.id, payload)
     scanReport.value = data?.scan_report || null
     form.value.id = data?.flow?.id || form.value.id
+    // 定时触发器随保存同步（specs/016 S10）：填了表达式挂载/更新，清空则摘除
+    const cronExpr = String(form.value.cronText || '').trim()
+    try {
+      if (cronExpr) {
+        await upsertEgoFlowCron(form.value.id, { cron_expr: cronExpr })
+      } else {
+        await deleteEgoFlowCron(form.value.id).catch(() => {})
+      }
+    } catch (e) {
+      ElMessage.warning(e?.message || '定时触发器保存失败（流程本体已保存）')
+    }
     ElMessage.success(data?.scan_report?.passed ? '已保存，扫描通过' : '已保存，但扫描有 block 命中')
     await load()
   } catch (e) {

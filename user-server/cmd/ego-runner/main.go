@@ -54,6 +54,7 @@ type runnerConf struct {
 	DeviceID      string // 首次安装生成，持久化
 	EgoBin        string // ego-browser 可执行文件路径
 	EgoServerName string // 可选：--ego-server-name（E3：官方唯一跨实例选择手段，多实例并存时防连错）
+	RepoDir       string // 可选：user-server 源码目录（repo_dir=...）——配置后 upgrade 帧追加 runner 自更新
 	LoopbackOnly  bool   // 形态甲标记（调研 §6.5；runner 侧仅记录与自检提示）
 }
 
@@ -107,6 +108,8 @@ func loadConf() (*runnerConf, error) {
 			c.EgoBin = v
 		case "ego_server_name":
 			c.EgoServerName = v
+		case "repo_dir":
+			c.RepoDir = v
 		case "loopback_only":
 			c.LoopbackOnly = v == "true"
 		}
@@ -636,6 +639,9 @@ func main() {
 		if c.EgoServerName != "" {
 			fmt.Printf("ego_server_name=%s（多实例并存时按名连接）\n", c.EgoServerName)
 		}
+		if c.RepoDir != "" {
+			fmt.Printf("repo_dir=%s（升级时追加 runner 自更新）\n", c.RepoDir)
+		}
 		fmt.Printf("ego-browser: %s (%s)\n", c.EgoBin, probeEgoVersion(c.EgoBin))
 		if _, err := os.Stat(c.WorkspaceDir); err != nil {
 			fmt.Printf("⚠️ workspace 不存在（安装资产后自动创建）: %s\n", c.WorkspaceDir)
@@ -1004,7 +1010,43 @@ func (r *runner) runUpgrade() {
 		payload["error"] = err.Error()
 	}
 	payload["output"] = truncate(string(out), 1500)
+	// runner 自更新（specs/016 C10 余量）：仅在显式配置 repo_dir 时启用——
+	// 官方 ego-browser 升级之后重建 runner 二进制（重启生效，运行中进程不被替换）
+	if r.conf.RepoDir != "" {
+		so, se := selfUpdate(r.conf.RepoDir)
+		payload["self_update"] = map[string]any{
+			"ok": se == nil, "output": truncate(so, 800), "note": "重启 ego-runner 后生效",
+		}
+		if se != nil {
+			payload["self_update"].(map[string]any)["error"] = se.Error()
+		}
+	}
 	r.send(eventLine{Type: "runner", Payload: mustJSON(payload)})
+}
+
+// selfUpdate 拉源码 + 重建当前二进制（前提：repo_dir 指向 user-server 源码目录，
+// 当前进程由 go build/install.sh 产物运行）。任一步失败都如实回传，不做半更新回滚——
+// 旧二进制仍在磁盘上跑着，下次升级重试即可。
+func selfUpdate(repoDir string) (string, error) {
+	var buf strings.Builder
+	pull := exec.Command("git", "-C", repoDir, "pull", "--ff-only")
+	pullOut, err := pull.CombinedOutput()
+	buf.Write(pullOut)
+	if err != nil {
+		return buf.String(), fmt.Errorf("git pull 失败（--ff-only 防止覆盖本机改动）: %w", err)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return buf.String(), fmt.Errorf("定位当前二进制失败: %w", err)
+	}
+	build := exec.Command("go", "build", "-o", exe, "./cmd/ego-runner")
+	build.Dir = repoDir
+	buildOut, err := build.CombinedOutput()
+	buf.Write(buildOut)
+	if err != nil {
+		return buf.String(), fmt.Errorf("go build 失败: %w", err)
+	}
+	return buf.String(), nil
 }
 
 // egoUpgradeArgs upgrade 子命令的 argv（--ego-server-name 同样前置）

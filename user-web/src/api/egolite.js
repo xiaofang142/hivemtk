@@ -27,6 +27,11 @@ export const dryRunEgoFlow = (id, data) =>
 
 export const deleteEgoFlow = (id) => http.delete(`/api/egolite/flows/${id}`)
 
+// 流程定时触发器（specs/016 S10；只挂纯读流程）
+export const getEgoFlowCron = (id) => http.get(`/api/egolite/flows/${id}/cron`)
+export const upsertEgoFlowCron = (id, data) => http.post(`/api/egolite/flows/${id}/cron`, data)
+export const deleteEgoFlowCron = (id) => http.delete(`/api/egolite/flows/${id}/cron`)
+
 // ========== 执行 ==========
 
 export const listEgoExecutions = (params) => http.get('/api/egolite/executions', params)

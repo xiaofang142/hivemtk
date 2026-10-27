@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/middleware"
 	hrepo "hivemtk-user/internal/repository"
@@ -32,6 +34,7 @@ import (
 //   - POST /api/egolite/flows/:id/submit   提交平台审核
 //   - POST /api/egolite/flows/:id/dry-run  试跑（draft 通道，过扫描门）
 //   - DELETE /api/egolite/flows/:id        删除流程
+//   - GET/POST/DELETE /api/egolite/flows/:id/cron  流程定时触发器（specs/016 S10，只挂纯读流程）
 //   - POST /api/egolite/executions         下发执行（draft=flow 试跑 / market=资产执行）
 //   - GET  /api/egolite/executions         执行列表
 //   - GET  /api/egolite/executions/:id     执行详情
@@ -64,6 +67,56 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
 	assetSvc := egolite.NewEgoAssetCatalog(assetRepo, flowRepo)
+
+	// 流程定时触发器（specs/016 S10，browser_cron_triggers 模式）：fire 闭包做
+	// 触发前置（runner 在线 + 流程复查 + 写动作复查），再走与手跑同一 Start 入口
+	// ——调度只是触发方式的差异，裁决链完全一致（服务端唯一事实源）。
+	cronRepo := egolite.NewEgoFlowCronRepositoryWithDB(gormDB)
+	cronSvc := egolite.NewEgoFlowCronService(cronRepo, flowRepo, func(ctx context.Context, userID, flowID uint) error {
+		if err := registry.EnsureOnline(userID); err != nil {
+			return err
+		}
+		f, err := flowRepo.GetForUser(ctx, flowID, userID)
+		if err != nil {
+			return err
+		}
+		if !f.ScanPassed {
+			return fmt.Errorf("扫描门未通过（流程在挂载后被改红）")
+		}
+		var writes []string
+		if json.Unmarshal(f.WritesJSON, &writes) == nil && len(writes) > 0 {
+			return fmt.Errorf("流程已声明写动作，定时触发摘除（决策点 6）")
+		}
+		_, err = execSvc.Start(ctx, userID, egolite.StartRequest{
+			Origin:    "draft",
+			FlowID:    flowID,
+			SpaceName: fmt.Sprintf("cron-flow-%d", flowID),
+		})
+		return err
+	})
+	go cronSvc.RestoreAll(context.Background())
+
+	// AI 工具执行器注入（specs/016 S11）：tooluse.SetEgoLiteRunner → EnsureOnline + Start，
+	// 与 browser_automation_routes.go 的 SetBrowserTaskRunner 同型
+	tooluse.SetEgoLiteRunner(func(ctx context.Context, userID uint, req tooluse.EgoLiteRunRequest) (map[string]any, error) {
+		if err := registry.EnsureOnline(userID); err != nil {
+			return nil, err
+		}
+		e, err := execSvc.Start(ctx, userID, egolite.StartRequest{
+			Origin:        map[bool]string{true: "draft", false: "market"}[req.FlowID > 0],
+			FlowID:        req.FlowID,
+			AssetID:       req.AssetID,
+			Entry:         "",
+			Params:        req.Params,
+			SpaceName:     req.SpaceName,
+			ConfirmPolicy: req.ConfirmPolicy,
+			TimeoutSec:    req.TimeoutSec,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"execution_id": e.ID, "state": e.State, "origin": e.Origin}, nil
+	})
 
 	// 断连钩子：该用户全部非终态执行判 failed（FailActiveByUser）。
 	// 独立实现实例——绝不复用 host-ws 的 FailRunningByUser（那是 browser_sessions 语义）。
@@ -259,6 +312,45 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": f})
+		})
+
+		// ---- 流程定时触发器（specs/016 S10；只挂纯读流程，service 闸 fail-close）----
+		eg.GET("/flows/:id/cron", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			tr, err := cronSvc.Get(c.Request.Context(), currentUID(c), uint(id))
+			if err != nil {
+				c.JSON(404, gin.H{"code": 1, "msg": "流程未挂载定时触发器"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": tr})
+		})
+		eg.POST("/flows/:id/cron", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				CronExpr string `json:"cron_expr"`
+				TimeZone string `json:"time_zone"`
+				Enabled  *bool  `json:"enabled"` // nil ⇒ 默认 true；显式 false 原样落库
+			}
+			if err := c.ShouldBindJSON(&body); err != nil || body.CronExpr == "" {
+				c.JSON(400, gin.H{"code": 1, "msg": "cron_expr 必填（5 段「分 时 日 月 周」）"})
+				return
+			}
+			tr, err := cronSvc.Upsert(c.Request.Context(), currentUID(c), uint(id), egolite.UpsertCronRequest{
+				CronExpr: body.CronExpr, TimeZone: body.TimeZone, Enabled: body.Enabled,
+			})
+			if err != nil {
+				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": tr, "msg": "已挂载；纯读流程按表达式定时发起执行"})
+		})
+		eg.DELETE("/flows/:id/cron", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			if err := cronSvc.Delete(c.Request.Context(), currentUID(c), uint(id)); err != nil {
+				c.JSON(404, gin.H{"code": 1, "msg": "流程未挂载定时触发器"})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "msg": "已摘除定时触发器"})
 		})
 
 		// ---- 执行域 ----

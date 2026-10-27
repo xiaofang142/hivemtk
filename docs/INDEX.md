@@ -105,13 +105,14 @@
 
 | 文档 | 说明 |
 |------|------|
-| [../specs/README.md](../specs/README.md) | spec 施工源索引（001/002/005/006/009/014/015） |
+| [../specs/README.md](../specs/README.md) | spec 施工源索引（001/002/005/006/009/014/015/016） |
 | [../specs/001-saas-multi-tenant/](../specs/001-saas-multi-tenant/) | 001 多租户底座（TENANT_MODE 双形态、tenancy、契约） |
 | [../specs/005-reach-compliance-policy/](../specs/005-reach-compliance-policy/) | 005 主动触达合规策略（E1，已交付） |
 | [../specs/006-wave2-gates-and-selector-health/](../specs/006-wave2-gates-and-selector-health/) | 006 Wave2 门禁与选择器健康（lane 在途） |
 | [../specs/009-docs-and-i18n-closeout/](../specs/009-docs-and-i18n-closeout/) | 009 F1 文档分层 + F3 国际化收口 + C4 多租户口径（本 lane） |
 | [../specs/014-egolite-blocking-confirm-gate/](../specs/014-egolite-blocking-confirm-gate/) | 014 ego-lite 腿收口：事前阻塞写确认闸（decision 文件握手）+ runner 接线杂项（已交付，2026-10-27） |
 | [../specs/015-egolite-runtime-supervision/](../specs/015-egolite-runtime-supervision/) | 015 ego-lite 运行时监督：域白名单三层（静扫/守卫/事件审计）+ 官方升级指令 + macOS 安装器（已交付，2026-10-28） |
+| [../specs/016-egolite-scheduling-and-selfupdate/](../specs/016-egolite-scheduling-and-selfupdate/) | 016 ego-lite 调度闭环：流程 cron 触发 + egolite_run AI 工具 + runner 自更新（已交付，2026-10-28） |
 | [../.specify/002-modular-subscription/](../.specify/002-modular-subscription/) | 002 模块订阅一期（模块闸、订单状态机、MarkPaid 唯一入账口、LLM 双轨计费） |
 | [../.specify/003-saas-billing-v2/](../.specify/003-saas-billing-v2/) | 003 SaaS 计费二期：订阅 + 易支付 + 初始化赠送 + 官网云端入口（`plan.md` 含 ADR-M8/M9 与「审查修订」） |
 

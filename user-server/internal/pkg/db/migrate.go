@@ -623,6 +623,8 @@ func allModels() []any {
 		// runner 令牌表（每用户多条，只存 sha256）：漏登记 ⇒ 签发/校验全挂，
 		// 表现是"所有 runner 都连不上"，fail-visible。
 		&model.EgoliteRunnerToken{},
+		// 流程定时触发器（specs/016 S10）：漏登记 ⇒ cron 挂载/触发记账全挂，fail-visible。
+		&model.EgoliteFlowCron{},
 	}
 }
 

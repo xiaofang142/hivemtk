@@ -175,3 +175,22 @@ func TestLoadConfEgoServerName(t *testing.T) {
 		t.Errorf("ego_server_name 未解析: %q", c.EgoServerName)
 	}
 }
+
+// specs/016：repo_dir 配置解析（runner 自更新的开关面）
+func TestLoadConfRepoDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	confFile := filepath.Join(t.TempDir(), "ego_runner.conf")
+	content := "server_url=ws://127.0.0.1:8204\ntoken=eg_1_abc\ndevice_id=11111111-1111-1111-1111-111111111111\nrepo_dir=/Users/me/hivemtk/user-server\n"
+	if err := os.WriteFile(confFile, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EGO_RUNNER_CONF", confFile)
+	c, err := loadConf()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.RepoDir != "/Users/me/hivemtk/user-server" {
+		t.Errorf("repo_dir 未解析: %q", c.RepoDir)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 // ego-lite 腿四张表（设计文档 §一 表模型定案：物理新表 + 列形状对齐 + 语义复用）。
@@ -211,3 +212,29 @@ type EgoliteRunnerToken struct {
 }
 
 func (EgoliteRunnerToken) TableName() string { return "egolite_runner_tokens" }
+
+// EgoliteFlowCron 流程定时触发器（specs/016 S10；调度模式照抄 BrowserCronTrigger，
+// 独占表登记在 egoLiteOwnedTables——物理独立纪律不变）。
+// 纪律：**只允许挂纯读流程（writes 为空）**——决策点 6：ego 腿全自动写长期受限；
+// 无人值守的写流程会在 waiting_confirm 卡到 confirm TTL 判停，没有业务价值。
+type EgoliteFlowCron struct {
+	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
+
+	ID     uint `gorm:"primaryKey" json:"id"`
+	FlowID uint `gorm:"column:flow_id;uniqueIndex;not null" json:"flow_id"`
+	UserID uint `gorm:"index;not null" json:"user_id"` // 触发时以归属用户身份下发
+
+	CronExpr string `gorm:"column:cron_expr;size:128;not null" json:"cron_expr"`           // 5 段表达式（注册前补秒段）
+	TimeZone string `gorm:"column:time_zone;size:64;not null;default:''" json:"time_zone"` // IANA 名，空=服务器本地（G20）
+	// Enabled 刻意**不声明** gorm `default:true`——GORM 零值陷阱（显式建停用触发器会被
+	// 列默认值翻成 true，见 BrowserCronTrigger.Enabled 的完整论证）。缺省语义在 service 层。
+	Enabled   bool       `gorm:"column:enabled;index" json:"enabled"`
+	NextRunAt *time.Time `gorm:"column:next_run_at" json:"next_run_at,omitempty"`
+	LastRunAt *time.Time `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
+
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+func (EgoliteFlowCron) TableName() string { return "egolite_flow_crons" }

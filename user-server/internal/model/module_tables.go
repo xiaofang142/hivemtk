@@ -273,7 +273,7 @@ var browserAutomationOwnedTables = []string{
 // 表归属独立登记只是为了让「这四张表是谁的」这件事说清）
 var egoLiteOwnedTables = []string{
 	"egolite_executions", "ego_event_log", "egolite_flows", "egolite_write_claims",
-	"egolite_assets", "egolite_runner_tokens",
+	"egolite_assets", "egolite_runner_tokens", "egolite_flow_crons",
 }
 
 // moduleTableRegistry 模块 → 独占表

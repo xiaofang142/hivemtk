@@ -239,6 +239,14 @@ func registerAllAgentToolsViaProviders(gormDB *gorm.DB) {
 		logger.Info("[agent] ✅ browser 自动化工具（browser_open_task/browser_task_status/browser_task_list）已接入全局注册中心")
 	}
 
+	// ego-lite 腿工具（egolite_run，specs/016 S11）：执行器经 SetEgoLiteRunner 注入
+	// （egolite_routes.go 装配），这里只登记工具面
+	if err := tooluse.RegisterEgoLiteTools(tooluse.GetGlobalRegistry(), tooluse.NewBrowserToolDeps(gormDB)); err != nil {
+		logger.Errorf("[agent] ⚠️ ego-lite 工具注册失败: %v", err)
+	} else {
+		logger.Info("[agent] ✅ ego-lite 工具（egolite_run）已接入全局注册中心")
+	}
+
 	rewirePermissionDecorators(tooluse.GetGlobalRegistry())
 
 	applyTenantDisabledTools(tooluse.GetGlobalRegistry())

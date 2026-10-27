@@ -16,6 +16,7 @@
 | 009 | [009-docs-and-i18n-closeout/](009-docs-and-i18n-closeout/) | F1 文档分层 + F3 国际化收口 + C4 多租户文档口径 | 本 lane |
 | 014 | [014-egolite-blocking-confirm-gate/](014-egolite-blocking-confirm-gate/) | ego-lite 腿收口：事前阻塞写确认闸（decision 文件握手）+ runner 接线杂项（server-name 透传/键匹配/分型解帧） | 已交付 |
 | 015 | [015-egolite-runtime-supervision/](015-egolite-runtime-supervision/) | ego-lite 运行时监督：域白名单三层（静扫/守卫/事件审计）+ 官方升级指令 + macOS 安装器 + 前端契约提示 | 已交付 |
+| 016 | [016-egolite-scheduling-and-selfupdate/](016-egolite-scheduling-and-selfupdate/) | ego-lite 调度闭环：流程 cron 触发（纯读特权）+ egolite_run AI 工具 + runner 自更新（handoff 真机销账） | 已交付 |
 
 > 注：目录下另有 `007-observability-and-channel-health/`、`012-module-contract-registry/` 为并发 lane
 > 在途（未提交），不在本索引登记范围，待其 delivery 收口后自行补录。
