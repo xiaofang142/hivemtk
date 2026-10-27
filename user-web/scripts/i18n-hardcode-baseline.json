@@ -1,6 +1,6 @@
 {
-  "total": 10422,
+  "total": 10419,
   "files": 224,
-  "generated": "2026-10-25",
-  "note": "OPT-FE-06 起点基线（user-web src/views 硬编码中文行数）。只许降：每替换一批视图就跑 check-i18n-hardcode.cjs 并按提示下调。platform-web 建同形基线。2026-10-24 下调 10497→10460：geo/Verification.vue 分批替换为 $t()（geoVerificationPage 词条，zh/en 源语言，其余语言暂随 en，待翻译批次）。2026-10-25 下调 10460→10422（W-1，2026-10-24 任务总表 W-1 执行）：src/views/reachPipeline/List.vue 210→0 行，其中用户可见文案迁移 209 行（reachPipeline.* 词条，9 语言各 149 条，全语言真翻译），行尾中文块注释移入独立 // 行 1 行（非 i18n 收益，单独计入）。"
+  "generated": "2026-10-27",
+  "note": "OPT-FE-06 起点基线（user-web src/views 硬编码中文行数）。只许降：每替换一批视图就跑 check-i18n-hardcode.cjs 并按提示下调。platform-web 建同形基线。2026-10-24 下调 10497→10460：geo/Verification.vue 分批替换为 $t()（geoVerificationPage 词条，zh/en 源语言，其余语言暂随 en，待翻译批次）。2026-10-25 下调 10460→10422（W-1，2026-10-24 任务总表 W-1 执行）：src/views/reachPipeline/List.vue 210→0 行，其中用户可见文案迁移 209 行（reachPipeline.* 词条，9 语言各 149 条，全语言真翻译），行尾中文块注释移入独立 // 行 1 行（非 i18n 收益，单独计入）。 2026-10-27 下调 10422→10419：会话漏斗页把「阶段转化率/端到端转化率」改为诚实的「相邻阶段比值/端到端比值」并迁到 conversionFunnelPage.*（9 语言），同时清掉 3 行硬编码。"
 }

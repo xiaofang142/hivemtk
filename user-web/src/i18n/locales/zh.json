@@ -943,30 +943,13 @@
   "平台": "平台",
   "请输入账号": "请输入账号",
   "未登录": "未登录",
-  "Pipeline 管理": "Pipeline 管理",
   "运行中": "运行中",
   "已归档": "已归档",
-  "总数减活跃与暂停": "总数减活跃与暂停",
-  "成功数": "成功数",
   "失败数": "失败数",
   "搜索名称": "搜索名称",
   "活跃": "活跃",
   "暂停": "暂停",
   "归档": "归档",
-  "重置限流": "重置限流",
-  "请选择渠道": "请选择渠道",
-  "至少选择一个步骤": "至少选择一个步骤",
-  "步骤必须包含 send (发送执行)": "步骤必须包含 send (发送执行)",
-  "已恢复": "已恢复",
-  "请先在渠道筛选中选择一个渠道": "请先在渠道筛选中选择一个渠道",
-  "限流已重置": "限流已重置",
-  "执行完成": "执行完成",
-  "已重新入队": "已重新入队",
-  "请选择 Pipeline": "请选择 Pipeline",
-  "请输入目标客户ID": "请输入目标客户ID",
-  "请输入 Payload": "请输入 Payload",
-  "Payload 不是有效的 JSON": "Payload 不是有效的 JSON",
-  "任务已入队": "任务已入队",
   "话术模板": "话术模板",
   "管理营销话术、销售话术模板": "管理营销话术、销售话术模板",
   "新增话术": "新增话术",
@@ -1175,7 +1158,6 @@
   "基础信息": "基础信息",
   "域名": "域名",
   "代理名称": "代理名称",
-  "任务总数": "任务总数",
   "坐席总数": "坐席总数",
   "事件类型": "事件类型",
   "总事件数": "总事件数",
@@ -2646,6 +2628,48 @@
     "enqueueFailed": "入队失败"
   },
   "browserAutomationPage": {
-    "postCommentUnsupportedSave": "暂不支持发评论（接口未公开/待 M3），请移除 post_comment 步骤或换平台后再保存"
+    "postCommentUnsupportedSave": "暂不支持发评论（接口未公开/待 M3），请移除 post_comment 步骤或换平台后再保存",
+    "nameRequired": "请填写任务名称",
+    "urlRequired": "请填写起始 URL"
+  },
+  "messageHubPage": {
+    "recall": {
+      "confirmed": "平台已确认撤回",
+      "recalled": "已撤回",
+      "action": "撤回",
+      "statusLabel": "撤回状态",
+      "recalledAt": "已撤回（{time}）",
+      "lastFailed": "上次撤回失败",
+      "notRecalled": "未撤回",
+      "confirm": "确定撤回消息 #{id}（{platform}）？撤回后平台侧那条消息会被删除，此操作不可撤销。",
+      "confirmTitle": "撤回消息",
+      "already": "这条消息之前已经撤回过（幂等：本次没有再次调用平台）",
+      "success": "撤回成功",
+      "unsupported": "该渠道不支持撤回，或已超过平台撤回窗口",
+      "inbound": "入站消息不能撤回",
+      "failed": "撤回失败：{reason}",
+      "unknown": "未知错误"
+    }
+  },
+  "customerJourneyPage": {
+    "localEmptyTitle": "本进程尚未捕获客户旅程状态",
+    "localEmptyDesc": "旅程阶段来自进程内的实时状态表：服务重启后为空，客户产生新事件/阶段流转后会自动恢复。这里的 0 不是「没有客户」，客户总量请看客户中心。"
+  },
+  "assetBundlePage": {
+    "notFoundTitle": "资产包不存在或加载失败",
+    "notFoundDesc": "aid={aid}：请返回资产包列表重新选择。本页已禁用保存/发布，避免把空白模板写回并覆盖线上资产。",
+    "merchantEditorCloseNoGate": "关闭（不触发危机感门禁）",
+    "merchantEditorFriendlyLegacy": "友好亲切（兼容旧版配置）"
+  },
+  "dashboardScreenPage": {
+    "componentAdded": "已添加组件"
+  },
+  "assetMarketPage": {
+    "notFound": "资产不存在，或当前部署未接入资产市场"
+  },
+  "conversionFunnelPage": {
+    "overallRatio": "端到端比值（会话/访问，口径不同可能 >100%）",
+    "stageRatio": "相邻阶段比值",
+    "tip": "相邻阶段来自不同数据源与时间窗（访问/线索/意向/会话/商机各自取数），比值可能超过 100%，不是坏数；是否改成严格转化口径属产品决策"
   }
 }

@@ -11,7 +11,7 @@
       v-if="!detail && !loading"
       class="mt-16"
     >
-      <el-empty description="资产不存在，或当前部署未接入资产市场" />
+      <el-empty :description="$t('assetMarketPage.notFound')" />
     </el-card>
     <el-card
       v-if="detail"

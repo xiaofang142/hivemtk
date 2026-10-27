@@ -160,6 +160,7 @@
 </template>
 
 <script setup>
+import i18n from '@/i18n'
 import { ref, reactive, markRaw } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -200,7 +201,7 @@ function onDrop(e) {
     height: 240,
     data: { value: Math.floor(Math.random() * 1000) }
   })
-  ElMessage.success('已添加组件')
+  ElMessage.success(i18n.global.t('dashboardScreenPage.componentAdded'))
 }
 
 function resolveChart(type) {
@@ -250,7 +251,7 @@ function addBlock(type) {
     height: 240,
     data: { value: Math.floor(Math.random() * 1000) }
   })
-  ElMessage.success('已添加组件')
+  ElMessage.success(i18n.global.t('dashboardScreenPage.componentAdded'))
 }
 function resize(i) {
   blocks.value[i].width = blocks.value[i].width === 6 ? 12 : 6

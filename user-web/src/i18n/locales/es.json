@@ -939,30 +939,13 @@
   "平台": "Plataforma",
   "请输入账号": "Please input your account",
   "未登录": "not_logged_in",
-  "Pipeline 管理": "PipelineManagement",
   "运行中": "In operation",
   "已归档": "Archived",
-  "总数减活跃与暂停": "Total Deactivation & Suspension",
-  "成功数": "Successes",
   "失败数": "Number of failures",
   "搜索名称": "Search Name",
   "活跃": "active",
   "暂停": "&Pause\\tF5",
   "归档": "%s Archives Text",
-  "重置限流": "Reset throttling",
-  "请选择渠道": "please_chose_channel",
-  "至少选择一个步骤": "Select at least one step",
-  "步骤必须包含 send (发送执行)": "Step must contain send (send execute)",
-  "已恢复": "Item restored",
-  "请先在渠道筛选中选择一个渠道": "Please select a channel in the channel filter first",
-  "限流已重置": "Current limiting has been reset",
-  "执行完成": "Withdrawn by UNBOA Implementation Status Implemented",
-  "已重新入队": "Re-enlisted",
-  "请选择 Pipeline": "Please select Pipeline",
-  "请输入目标客户ID": "Please enter the target customer ID",
-  "请输入 Payload": "Please enter Payload",
-  "Payload 不是有效的 JSON": "Payload is not a valid JSON",
-  "任务已入队": "Task Enlisted",
   "话术模板": "Speech art template",
   "管理营销话术、销售话术模板": "Manage marketing calls, sales calls templates",
   "新增话术": "New Calling Technique",
@@ -1171,7 +1154,6 @@
   "基础信息": "Basic Information",
   "域名": "Domain",
   "代理名称": "Agent Name",
-  "任务总数": "Total Tasks",
   "坐席总数": "Total Seats",
   "事件类型": "Event Type",
   "事件列表": "Event List",
@@ -2646,6 +2628,48 @@
     "enqueueFailed": "Error al encolar"
   },
   "browserAutomationPage": {
-    "postCommentUnsupportedSave": "Aún no se admite publicar comentarios (API no pública / M3 pendiente). Elimina el paso post_comment o cambia de plataforma antes de guardar."
+    "postCommentUnsupportedSave": "Aún no se admite publicar comentarios (API no pública / M3 pendiente). Elimina el paso post_comment o cambia de plataforma antes de guardar.",
+    "nameRequired": "Introduce un nombre de tarea",
+    "urlRequired": "Introduce la URL de inicio"
+  },
+  "messageHubPage": {
+    "recall": {
+      "confirmed": "Retirado en la plataforma",
+      "recalled": "Retirado",
+      "action": "Retirar",
+      "statusLabel": "Estado de retirada",
+      "recalledAt": "Retirado ({time})",
+      "lastFailed": "La última retirada falló",
+      "notRecalled": "No retirado",
+      "confirm": "¿Retirar el mensaje #{id} ({platform})? El mensaje se eliminará en la plataforma; esta acción no se puede deshacer.",
+      "confirmTitle": "Retirar mensaje",
+      "already": "Este mensaje ya se había retirado (idempotente: esta vez no se llamó a la plataforma)",
+      "success": "Retirado correctamente",
+      "unsupported": "Este canal no admite retirada o la ventana de la plataforma ha expirado",
+      "inbound": "Los mensajes entrantes no se pueden retirar",
+      "failed": "Error al retirar: {reason}",
+      "unknown": "Error desconocido"
+    }
+  },
+  "customerJourneyPage": {
+    "localEmptyTitle": "Este proceso aún no ha capturado estados del recorrido del cliente",
+    "localEmptyDesc": "Las etapas del recorrido provienen de la tabla de estado en vivo del proceso: queda vacía tras reiniciar y se repuebla cuando los clientes generan nuevos eventos o transiciones. Un 0 aquí no significa \"sin clientes\"; el total está en el Centro de clientes."
+  },
+  "assetBundlePage": {
+    "notFoundTitle": "El paquete de activos no existe o no se pudo cargar",
+    "notFoundDesc": "aid={aid}: vuelve a la lista de paquetes de activos y elige de nuevo. Guardar/publicar está deshabilitado en esta página para no sobrescribir el activo en vivo con una plantilla vacía.",
+    "merchantEditorCloseNoGate": "Desactivado (sin puerta de urgencia)",
+    "merchantEditorFriendlyLegacy": "Cercano (compatible con la configuración anterior)"
+  },
+  "dashboardScreenPage": {
+    "componentAdded": "Componente añadido"
+  },
+  "assetMarketPage": {
+    "notFound": "Activo no encontrado, o esta implementación no está conectada al mercado de activos"
+  },
+  "conversionFunnelPage": {
+    "overallRatio": "Ratio de extremo a extremo (sesiones/visitas; puede superar 100% por distinto alcance)",
+    "stageRatio": "Ratio entre etapas adyacentes",
+    "tip": "Las etapas adyacentes provienen de fuentes y ventanas distintas (visitas/leads/intención/sesiones/oportunidades se cuentan por separado), por lo que el ratio puede superar el 100%; no es un dato erróneo. Cambiar a una definición estricta de conversión es una decisión de producto."
   }
 }

@@ -385,16 +385,15 @@
         width="110"
       >
         <template #default="{ row }">
-          <!-- 撤回是**另一个维度**：recalled_at 非空与已读/未读互不影响
-               （后端也没把撤回写进 status，理由见 model.MessageHub 注释）。 -->
+          <!-- 撤回是**另一个维度**：recalled_at 非空与已读/未读互不影响（后端也没把撤回写进 status，理由见 model.MessageHub 注释）。 -->
           <el-tag
             v-if="row.recalled_at"
             type="info"
             size="small"
             effect="plain"
-            title="平台已确认撤回"
+            :title="$t('messageHubPage.recall.confirmed')"
           >
-            已撤回
+            {{ $t('messageHubPage.recall.recalled') }}
           </el-tag>
           <el-tag
             :type="row.is_read ? 'info' : 'danger'"
@@ -436,8 +435,7 @@
           >
             标记已读
           </el-button>
-          <!-- 撤回只对出站行出现：入站行是客户发来的，我们没有平台凭据删它
-               （后端同样判，这里只是不让运营点出一个必然 400 的按钮）。 -->
+          <!-- 撤回只对出站行出现：入站行是客户发来的，我们没有平台凭据删它（后端同样判，这里只是不让运营点出一个必然 400 的按钮）。 -->
           <el-button
             v-if="row.direction === 'outbound' && !row.recalled_at"
             type="danger"
@@ -446,7 +444,7 @@
             :loading="recallingId === row.id"
             @click="handleRecall(row)"
           >
-            撤回
+            {{ $t('messageHubPage.recall.action') }}
           </el-button>
         </template>
       </el-table-column>
@@ -708,14 +706,14 @@
           <el-descriptions-item label="发送时间">
             {{ formatTime(currentMessage.sent_at) }}
           </el-descriptions-item>
-          <el-descriptions-item label="撤回状态">
+          <el-descriptions-item :label="$t('messageHubPage.recall.statusLabel')">
             <el-tag
               v-if="currentMessage.recalled_at"
               type="info"
               size="small"
               effect="plain"
             >
-              已撤回（{{ formatTime(currentMessage.recalled_at) }}）
+              {{ $t('messageHubPage.recall.recalledAt', { time: formatTime(currentMessage.recalled_at) }) }}
             </el-tag>
             <el-tag
               v-else-if="currentMessage.recall_error"
@@ -723,9 +721,9 @@
               size="small"
               :title="currentMessage.recall_error"
             >
-              上次撤回失败
+              {{ $t('messageHubPage.recall.lastFailed') }}
             </el-tag>
-            <span v-else>未撤回</span>
+            <span v-else>{{ $t('messageHubPage.recall.notRecalled') }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="读取时间">
             {{ formatTime(currentMessage.read_at) }}
@@ -1045,9 +1043,9 @@ const recallingId = ref(null)
 const handleRecall = async (row) => {
   try {
     await ElMessageBox.confirm(
-      `确定撤回消息 #${row.id}（${platformLabel(row.platform)}）？撤回后平台侧那条消息会被删除，此操作不可撤销。`,
-      '撤回消息',
-      { type: 'warning', confirmButtonText: '撤回', cancelButtonText: '取消' }
+      i18n.global.t('messageHubPage.recall.confirm', { id: row.id, platform: platformLabel(row.platform) }),
+      i18n.global.t('messageHubPage.recall.confirmTitle'),
+      { type: 'warning', confirmButtonText: i18n.global.t('messageHubPage.recall.action'), cancelButtonText: '取消' }
     )
   } catch (e) {
     return
@@ -1057,20 +1055,20 @@ const handleRecall = async (row) => {
     // _silent：错误提示由下面按 status 分支自己给，避免拦截器再弹一条一样的
     const res = await messageHubApi.recallMessage(row.id, { _silent: true })
     if (res?.already_recalled) {
-      ElMessage.info('这条消息之前已经撤回过（幂等：本次没有再次调用平台）')
+      ElMessage.info(i18n.global.t('messageHubPage.recall.already'))
     } else {
-      ElMessage.success('撤回成功')
+      ElMessage.success(i18n.global.t('messageHubPage.recall.success'))
     }
     row.recalled_at = res?.recalled_at || new Date().toISOString()
     row.recall_error = ''
     await Promise.all([fetchMessageList(), loadStats()])
   } catch (e) {
     if (e?.status === 409) {
-      ElMessage.warning(e?.message || '该渠道不支持撤回，或已超过平台撤回窗口')
+      ElMessage.warning(e?.message || i18n.global.t('messageHubPage.recall.unsupported'))
     } else if (e?.status === 400) {
-      ElMessage.warning(e?.message || '入站消息不能撤回')
+      ElMessage.warning(e?.message || i18n.global.t('messageHubPage.recall.inbound'))
     } else {
-      ElMessage.error('撤回失败：' + (e?.message || '未知错误'))
+      ElMessage.error(i18n.global.t('messageHubPage.recall.failed', { reason: e?.message || i18n.global.t('messageHubPage.recall.unknown') }))
     }
     // 失败原因已经落到行上的 recall_error：重拉一次让"上次撤回失败"可见
     await fetchMessageList()

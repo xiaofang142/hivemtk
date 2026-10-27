@@ -78,8 +78,8 @@
       :closable="false"
       show-icon
       class="mb-3"
-      title="资产包不存在或加载失败"
-      :description="`aid=${aid}：请返回资产包列表重新选择。本页已禁用保存/发布，避免把空白模板写回并覆盖线上资产。`"
+      :title="$t('assetBundlePage.notFoundTitle')"
+      :description="$t('assetBundlePage.notFoundDesc', { aid })"
     />
 
     <el-row

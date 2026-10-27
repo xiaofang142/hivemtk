@@ -939,30 +939,13 @@
   "平台": "Plattform",
   "请输入账号": "Please input your account",
   "未登录": "not_logged_in",
-  "Pipeline 管理": "PipelineManagement",
   "运行中": "In operation",
   "已归档": "Archived",
-  "总数减活跃与暂停": "Total Deactivation & Suspension",
-  "成功数": "Successes",
   "失败数": "Number of failures",
   "搜索名称": "Search Name",
   "活跃": "active",
   "暂停": "&Pause\\tF5",
   "归档": "%s Archives Text",
-  "重置限流": "Reset throttling",
-  "请选择渠道": "please_chose_channel",
-  "至少选择一个步骤": "Select at least one step",
-  "步骤必须包含 send (发送执行)": "Step must contain send (send execute)",
-  "已恢复": "Item restored",
-  "请先在渠道筛选中选择一个渠道": "Please select a channel in the channel filter first",
-  "限流已重置": "Current limiting has been reset",
-  "执行完成": "Withdrawn by UNBOA Implementation Status Implemented",
-  "已重新入队": "Re-enlisted",
-  "请选择 Pipeline": "Please select Pipeline",
-  "请输入目标客户ID": "Please enter the target customer ID",
-  "请输入 Payload": "Please enter Payload",
-  "Payload 不是有效的 JSON": "Payload is not a valid JSON",
-  "任务已入队": "Task Enlisted",
   "话术模板": "Speech art template",
   "管理营销话术、销售话术模板": "Manage marketing calls, sales calls templates",
   "新增话术": "New Calling Technique",
@@ -1171,7 +1154,6 @@
   "基础信息": "Basic Information",
   "域名": "Domain",
   "代理名称": "Agent Name",
-  "任务总数": "Total Tasks",
   "坐席总数": "Total Seats",
   "事件类型": "Event Type",
   "事件列表": "Event List",
@@ -2646,6 +2628,48 @@
     "enqueueFailed": "Einreihen fehlgeschlagen"
   },
   "browserAutomationPage": {
-    "postCommentUnsupportedSave": "Kommentare zu posten werden noch nicht unterstützt (API nicht öffentlich / M3 ausstehend). Entfernen Sie den post_comment-Schritt oder wechseln Sie die Plattform, bevor Sie speichern."
+    "postCommentUnsupportedSave": "Kommentare zu posten werden noch nicht unterstützt (API nicht öffentlich / M3 ausstehend). Entfernen Sie den post_comment-Schritt oder wechseln Sie die Plattform, bevor Sie speichern.",
+    "nameRequired": "Bitte einen Aufgabennamen eingeben",
+    "urlRequired": "Bitte die Start-URL eingeben"
+  },
+  "messageHubPage": {
+    "recall": {
+      "confirmed": "Auf der Plattform zurückgezogen",
+      "recalled": "Zurückgezogen",
+      "action": "Zurückziehen",
+      "statusLabel": "Rückziehstatus",
+      "recalledAt": "Zurückgezogen ({time})",
+      "lastFailed": "Letztes Zurückziehen fehlgeschlagen",
+      "notRecalled": "Nicht zurückgezogen",
+      "confirm": "Nachricht #{id} ({platform}) zurückziehen? Die Nachricht wird auf der Plattform gelöscht; dies kann nicht rückgängig gemacht werden.",
+      "confirmTitle": "Nachricht zurückziehen",
+      "already": "Diese Nachricht wurde bereits zurückgezogen (idempotent: diesmal kein Plattformaufruf)",
+      "success": "Erfolgreich zurückgezogen",
+      "unsupported": "Dieser Kanal unterstützt kein Zurückziehen oder das Plattformfenster ist abgelaufen",
+      "inbound": "Eingehende Nachrichten können nicht zurückgezogen werden",
+      "failed": "Zurückziehen fehlgeschlagen: {reason}",
+      "unknown": "Unbekannter Fehler"
+    }
+  },
+  "customerJourneyPage": {
+    "localEmptyTitle": "Dieser Prozess hat noch keine Kunden-Journey-Zustände erfasst",
+    "localEmptyDesc": "Journey-Phasen stammen aus der prozessinternen Live-Zustandstabelle: Nach einem Neustart ist sie leer und füllt sich, sobald Kunden neue Ereignisse oder Phasenwechsel erzeugen. Eine 0 hier bedeutet nicht \"keine Kunden\" — die Gesamtzahl steht im Kundencenter."
+  },
+  "assetBundlePage": {
+    "notFoundTitle": "Asset-Paket existiert nicht oder konnte nicht geladen werden",
+    "notFoundDesc": "aid={aid}: Zurück zur Asset-Paket-Liste und erneut auswählen. Speichern/Veröffentlichen ist auf dieser Seite deaktiviert, damit keine leere Vorlage das Live-Asset überschreibt.",
+    "merchantEditorCloseNoGate": "Aus (kein Dringlichkeits-Gate)",
+    "merchantEditorFriendlyLegacy": "Freundlich (kompatibel zur Altkonfiguration)"
+  },
+  "dashboardScreenPage": {
+    "componentAdded": "Komponente hinzugefügt"
+  },
+  "assetMarketPage": {
+    "notFound": "Asset nicht gefunden oder diese Bereitstellung ist nicht mit dem Asset-Markt verbunden"
+  },
+  "conversionFunnelPage": {
+    "overallRatio": "End-to-End-Verhältnis (Sitzungen/Besuche; kann wegen unterschiedlicher Bezugsgrößen >100% sein)",
+    "stageRatio": "Verhältnis benachbarter Phasen",
+    "tip": "Benachbarte Phasen stammen aus unterschiedlichen Datenquellen und Zeitfenstern (Besuche/Leads/Intent/Sitzungen/Chancen werden getrennt gezählt), daher kann das Verhältnis 100% überschreiten — das ist kein Fehler. Ob auf eine strikte Konversionsdefinition umgestellt wird, ist eine Produktentscheidung."
   }
 }

@@ -660,11 +660,11 @@ async function save() {
   // 必填项在前端先拦：旧实现直接打后端，用户看到的是一句英文键名的
   // 「参数不合法：name 为必填项；url 为必填项」，且一次保存弹两条。
   if (!String(form.value.name || '').trim()) {
-    ElMessage.warning('请填写任务名称')
+    ElMessage.warning(i18n.global.t('browserAutomationPage.nameRequired'))
     return
   }
   if (!String(form.value.url || '').trim()) {
-    ElMessage.warning('请填写起始 URL')
+    ElMessage.warning(i18n.global.t('browserAutomationPage.urlRequired'))
     return
   }
   // F-1 收口：提示不拦保存 = 允许配出必失败的任务。M3 之前，不支持的平台

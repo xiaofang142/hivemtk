@@ -38,8 +38,8 @@
       :closable="false"
       show-icon
       class="mb-4"
-      title="本进程尚未捕获客户旅程状态"
-      description="旅程阶段来自进程内的实时状态表：服务重启后为空，客户产生新事件/阶段流转后会自动恢复。这里的 0 不是「没有客户」，客户总量请看客户中心。"
+      :title="$t('customerJourneyPage.localEmptyTitle')"
+      :description="$t('customerJourneyPage.localEmptyDesc')"
     />
 
     <el-row

@@ -939,30 +939,13 @@
   "平台": "Platform",
   "请输入账号": "Please input your account",
   "未登录": "not_logged_in",
-  "Pipeline 管理": "PipelineManagement",
   "运行中": "In operation",
   "已归档": "Archived",
-  "总数减活跃与暂停": "Total Deactivation & Suspension",
-  "成功数": "Successes",
   "失败数": "Number of failures",
   "搜索名称": "Search Name",
   "活跃": "active",
   "暂停": "&Pause\\tF5",
   "归档": "%s Archives Text",
-  "重置限流": "Reset throttling",
-  "请选择渠道": "please_chose_channel",
-  "至少选择一个步骤": "Select at least one step",
-  "步骤必须包含 send (发送执行)": "Step must contain send (send execute)",
-  "已恢复": "Item restored",
-  "请先在渠道筛选中选择一个渠道": "Please select a channel in the channel filter first",
-  "限流已重置": "Current limiting has been reset",
-  "执行完成": "Withdrawn by UNBOA Implementation Status Implemented",
-  "已重新入队": "Re-enlisted",
-  "请选择 Pipeline": "Please select Pipeline",
-  "请输入目标客户ID": "Please enter the target customer ID",
-  "请输入 Payload": "Please enter Payload",
-  "Payload 不是有效的 JSON": "Payload is not a valid JSON",
-  "任务已入队": "Task Enlisted",
   "话术模板": "Speech art template",
   "管理营销话术、销售话术模板": "Manage marketing calls, sales calls templates",
   "新增话术": "New Calling Technique",
@@ -1171,7 +1154,6 @@
   "基础信息": "Basic Information",
   "域名": "Domain",
   "代理名称": "Agent Name",
-  "任务总数": "Total Tasks",
   "坐席总数": "Total Seats",
   "事件类型": "Event Type",
   "事件列表": "Event List",
@@ -2646,6 +2628,48 @@
     "enqueueFailed": "Failed to enqueue"
   },
   "browserAutomationPage": {
-    "postCommentUnsupportedSave": "Posting comments is not supported yet (API not public / pending M3). Remove the post_comment step or switch platforms before saving."
+    "postCommentUnsupportedSave": "Posting comments is not supported yet (API not public / pending M3). Remove the post_comment step or switch platforms before saving.",
+    "nameRequired": "Please enter a task name",
+    "urlRequired": "Please enter the start URL"
+  },
+  "messageHubPage": {
+    "recall": {
+      "confirmed": "Recalled on platform",
+      "recalled": "Recalled",
+      "action": "Recall",
+      "statusLabel": "Recall status",
+      "recalledAt": "Recalled ({time})",
+      "lastFailed": "Last recall failed",
+      "notRecalled": "Not recalled",
+      "confirm": "Recall message #{id} ({platform})? The message will be deleted on the platform; this cannot be undone.",
+      "confirmTitle": "Recall message",
+      "already": "This message was already recalled (idempotent: no platform call this time)",
+      "success": "Recalled successfully",
+      "unsupported": "This channel does not support recall, or the platform window has expired",
+      "inbound": "Inbound messages cannot be recalled",
+      "failed": "Recall failed: {reason}",
+      "unknown": "Unknown error"
+    }
+  },
+  "customerJourneyPage": {
+    "localEmptyTitle": "This process has not captured customer journey states yet",
+    "localEmptyDesc": "Journey stages come from the in-process live state table: it is empty after a restart and repopulates as customers generate new events or stage transitions. A 0 here does not mean \"no customers\" — see Customer Center for the total."
+  },
+  "assetBundlePage": {
+    "notFoundTitle": "Asset bundle does not exist or failed to load",
+    "notFoundDesc": "aid={aid}: go back to the asset bundle list and choose again. Saving/publishing is disabled on this page to avoid writing a blank template over the live asset.",
+    "merchantEditorCloseNoGate": "Off (no urgency gate)",
+    "merchantEditorFriendlyLegacy": "Friendly (legacy config compatible)"
+  },
+  "dashboardScreenPage": {
+    "componentAdded": "Component added"
+  },
+  "assetMarketPage": {
+    "notFound": "Asset not found, or this deployment is not connected to the asset market"
+  },
+  "conversionFunnelPage": {
+    "overallRatio": "End-to-end ratio (sessions/visits; may exceed 100% due to differing scopes)",
+    "stageRatio": "Adjacent-stage ratio",
+    "tip": "Adjacent stages come from different data sources and time windows (visits/leads/intent/sessions/opportunities are counted separately), so the ratio may exceed 100% — this is not bad data. Whether to switch to a strict conversion definition is a product decision."
   }
 }

@@ -188,7 +188,7 @@
                 placeholder="选择阈值"
               >
                 <el-option
-                  label="关闭（不触发危机感门禁）"
+                  :label="$t('assetBundlePage.merchantEditorCloseNoGate')"
                   value="0"
                 />
                 <el-option
@@ -229,7 +229,7 @@
                   value="high"
                 />
                 <el-option
-                  label="友好亲切（兼容旧版配置）"
+                  :label="$t('assetBundlePage.merchantEditorFriendlyLegacy')"
                   value="friendly"
                 />
               </el-select>

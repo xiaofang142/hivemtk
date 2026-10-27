@@ -46,7 +46,7 @@
         </el-col>
         <el-col :span="6">
           <el-statistic
-            title="端到端转化率"
+            :title="$t('conversionFunnelPage.overallRatio')"
             :value="summary.overallRate"
             suffix="%"
           />
@@ -92,7 +92,12 @@
                 prop="count"
                 label="数量"
               />
-              <el-table-column label="阶段转化率">
+              <el-table-column>
+                <template #header>
+                  <el-tooltip :content="$t('conversionFunnelPage.tip')" placement="top">
+                    <span>{{ $t('conversionFunnelPage.stageRatio') }}</span>
+                  </el-tooltip>
+                </template>
                 <template #default="{ row }">
                   {{ (row.rate || 0).toFixed(1) }}%
                 </template>
@@ -145,7 +150,7 @@
           <el-descriptions-item label="数量">
             {{ loss.count }}
           </el-descriptions-item>
-          <el-descriptions-item label="阶段转化率">
+          <el-descriptions-item :label="$t('conversionFunnelPage.stageRatio')">
             {{ (loss.rate || 0).toFixed(1) }}%
           </el-descriptions-item>
           <el-descriptions-item label="平均停留(秒)">
