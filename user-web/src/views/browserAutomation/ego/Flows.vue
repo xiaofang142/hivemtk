@@ -175,6 +175,21 @@
             placeholder="ego-browser ES module 脚本（taskSpace/page 原语；发布时快照并复扫）"
           />
         </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="脚本契约（runner 组装时注入；ego-browser 不继承 env，只能内联）"
+        >
+          <div class="contract">
+            <code>__PARAMS__</code> 参数对象 · <code>__SPACE_NAME__</code> space 名（同名续跑）·
+            <code>__EXEC__</code> 执行键
+          </div>
+          <div class="contract">
+            写操作打印 <code>{"type":"confirm","action":"..."}</code> 请求裁决；其余输出按
+            <code>type</code>（action/snapshot/artifact/handoff/extract）归事件
+          </div>
+        </el-alert>
       </el-form>
 
       <el-alert
@@ -455,4 +470,5 @@ onMounted(load)
 .mono :deep(textarea) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .verdict { font-size: 12px; line-height: 1.7; }
 .verdict.warn { color: #b88230; }
+.contract { font-size: 12px; line-height: 1.8; }
 </style>

@@ -142,6 +142,25 @@
               发布（含扫描门）
             </el-button>
           </el-form-item>
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="脚本契约（runner 组装 round 脚本时注入，因为 ego-browser 不继承 env）"
+          >
+            <div class="contract">
+              <code>__PARAMS__</code> 调用方参数对象 · <code>__SPACE_NAME__</code> space 名（同名即续跑）·
+              <code>__EXEC__</code> 执行键
+            </div>
+            <div class="contract">
+              写操作必须请求裁决：打印 <code>{"type":"confirm","action":"comment"}</code> → 服务端进
+              <code>waiting_confirm</code> 等用户允许/拒绝（拒绝或 TTL 到期即终止本轮）
+            </div>
+            <div class="contract">
+              输出即协议：每行 JSON 的 <code>type</code>（action/snapshot/artifact/handoff/extract/confirm）
+              决定服务端状态迁移；非 JSON 行只进错误日志
+            </div>
+          </el-alert>
         </el-form>
       </el-tab-pane>
 
@@ -386,6 +405,7 @@ onMounted(() => {
 .page { padding: 12px; }
 .toolbar { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
 .hint { color: #909399; font-size: 12px; }
+.contract { font-size: 12px; line-height: 1.8; }
 .mono :deep(textarea) { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 .script {
   margin: 0;

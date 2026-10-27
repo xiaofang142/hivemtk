@@ -76,7 +76,7 @@ func loadConf() (*runnerConf, error) {
 	}
 	defer f.Close()
 	c := &runnerConf{
-		ServerURL:    "ws://127.0.0.1:8204",
+		ServerURL: "ws://127.0.0.1:8204",
 		// T2 勘误后定案：workspace=ego skill 物理目录（learnings 解包点），不再走 env 重定向
 		WorkspaceDir: filepath.Join(mustHome(), ".local", "share", "ego", "ego-skills"),
 		EgoBin:       "ego-browser",
@@ -155,13 +155,13 @@ type taskSpec struct {
 // ---------- 事件行（A3 协议；runner 只透传+补 seq，不自产结论） ----------
 
 type eventLine struct {
-	Seq      int             `json:"seq"`
-	Type     string          `json:"type"` // action/snapshot/artifact/handoff/extract/confirm/done/error/runner
-	Asset    string          `json:"asset,omitempty"`
-	Execution string         `json:"execution_id,omitempty"`
-	Payload  json.RawMessage `json:"payload,omitempty"`
-	Stderr   string          `json:"stderr,omitempty"` // runner 级错误（非资产自述）
-	ExitCode int             `json:"exit_code,omitempty"`
+	Seq       int             `json:"seq"`
+	Type      string          `json:"type"` // action/snapshot/artifact/handoff/extract/confirm/done/error/runner
+	Asset     string          `json:"asset,omitempty"`
+	Execution string          `json:"execution_id,omitempty"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	Stderr    string          `json:"stderr,omitempty"` // runner 级错误（非资产自述）
+	ExitCode  int             `json:"exit_code,omitempty"`
 }
 
 // ---------- WS 客户端（照抄 host_registry client 侧纪律：outbound、退避、心跳） ----------
@@ -247,6 +247,7 @@ func (r *runner) runTask(spec taskSpec) {
 //   - origin=draft：写 conf 的 DraftScript 到临时文件（正式扫描门/模板包装在 T13 落地；
 //     本骨架先按调研 §6.1④ 限制：仅本 user 的 draft 会到达这里——服务端职责）
 //   - origin=market：从 workspace 读资产 entry 文件
+//
 // 脚本模板（R4 全量）M2 落地；骨架版透传 entry 内容并以最小模板包装。
 func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err error) {
 	dir, err := os.MkdirTemp("", "ego-exec-*")
@@ -262,21 +263,26 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 	case "market":
 		assetDir := filepath.Join(r.conf.WorkspaceDir, "learnings", spec.AssetID)
 		entryPath := filepath.Join(assetDir, spec.Entry)
-		// 决策 8：market 资产执行前验签（fail-close）。公钥集合由安装器落盘
-		//（trust.pem，每行一个 base64 公钥——SyncPull 安装时写入；本文件只验）。
 		manifestRaw, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
 		if err != nil {
 			cleanup()
 			return "", nil, fmt.Errorf("读 manifest 失败（资产未安装？workspace=%s）: %w", assetDir, err)
 		}
-		if err := verifyAssetManifestAt(assetDir, manifestRaw); err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("资产验签失败，拒绝执行: %w", err)
-		}
 		b, err := os.ReadFile(entryPath)
 		if err != nil {
 			cleanup()
 			return "", nil, fmt.Errorf("读资产 entry 失败（workspace=%s）: %w", assetDir, err)
+		}
+		// 两级校验，顺序即语义：
+		//   ① 完整性（永远查）：entry 的 sha256 必须等于 manifest 里的 script_hash——
+		//      拦"装完之后本机被改"；
+		//   ② 来源认证（manifest 带签名才查）：ed25519 验签只服务将来跨实例官方包通道。
+		// 为什么不是无条件验签：本轮定案把签名链移出主链路（资产由本实例管理端发布，
+		// 信任源就是本实例），无条件验签会让"资产中心点运行"在正常部署下必然失败
+		// ——那不是安全，是把一条腿做成死的。
+		if err := verifyAssetAt(assetDir, manifestRaw, b); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("资产校验失败，拒绝执行: %w", err)
 		}
 		entrySrc = string(b)
 	default:
@@ -284,11 +290,32 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 		return "", nil, fmt.Errorf("未知 origin=%q", spec.Origin)
 	}
 
-	// 最小包装：注入 execution_id，供脚本内 E() 打点关联（R4 全量在 M2/T13）
-	script := fmt.Sprintf(`// ego-runner assembled @%s execution=%s origin=%s
-const __EXEC__ = %q;
-%s
-`, time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.ExecutionID, entrySrc)
+	// round 脚本前导：把执行上下文写成**脚本常量**。
+	//
+	// 唯一可行的注入方式就是"写进文本"——F13 实测：ego-browser 内嵌 Node 不继承
+	// shell env、cwd 恒为 /、argv 是 Helper 可执行文件本身。此前 params / space_name
+	// 只到 spec 就丢了，表现为"UI 填的参数脚本收不到"，静默降级成默认值。
+	//
+	// 契约（资产脚本可用）：
+	//   __EXEC__        本次执行键（ego-<row>-<ms>，脚本打点可回填）
+	//   __PARAMS__      调用方参数（JSON 对象；未传为 {}）
+	//   __SPACE_NAME__  space 名（空串=不指定，脚本自行起名）；同名的 space 会续跑，
+	//                   这是多轮任务的唯一衔接点（每轮新进程，变量不持久）
+	paramsJSON := "{}"
+	if len(spec.Params) > 0 {
+		var probe any
+		if json.Unmarshal(spec.Params, &probe) == nil && probe != nil {
+			paramsJSON = string(spec.Params)
+		}
+	}
+	preamble := fmt.Sprintf(
+		"// ego-runner assembled @%s execution=%s origin=%s round=%d\n"+
+			"const __EXEC__ = %q;\n"+
+			"const __PARAMS__ = %s;\n"+
+			"const __SPACE_NAME__ = %q;\n",
+		time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.Round,
+		spec.ExecutionID, paramsJSON, spec.SpaceName)
+	script := preamble + entrySrc
 
 	p := filepath.Join(dir, "flow-round01.mjs")
 	if err := os.WriteFile(p, []byte(script), 0o600); err != nil {
@@ -296,6 +323,30 @@ const __EXEC__ = %q;
 		return "", nil, err
 	}
 	return p, cleanup, nil
+}
+
+// eventTypeFromPayload 从脚本打印的 JSON 行里取事件类型。
+//
+// 为什么必须透传而不是一律 "action"：服务端的写操作闸靠事件类型推进状态机——
+// 只有 type=confirm 才会进 waiting_confirm（再由 /confirm 裁决、TTL 到期按拒绝收口）。
+// 此前所有行都被标成 action，等于把"写动作逐步确认"做成了装饰：状态永远到不了
+// waiting_confirm，deny 也永远不会下发。
+//
+// 白名单以外的类型一律归 action：脚本作者可能顺手写 {"type":"log"}，
+// 不能让它凭空造出服务端不认识的状态迁移。
+func eventTypeFromPayload(raw json.RawMessage) string {
+	var probe struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return "action"
+	}
+	switch probe.Type {
+	case "action", "snapshot", "artifact", "handoff", "extract", "confirm":
+		return probe.Type
+	default:
+		return "action"
+	}
 }
 
 // execEgo 执行 ego-browser nodejs（stdin 喂脚本——T2 实测：CLI 不接受文件参数，只认
@@ -340,7 +391,7 @@ func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) 
 			seq++
 			n := seq
 			seqMu.Unlock()
-			r.send(eventLine{Seq: n, Type: "action", Execution: spec.ExecutionID, Payload: raw})
+			r.send(eventLine{Seq: n, Type: eventTypeFromPayload(raw), Execution: spec.ExecutionID, Payload: raw})
 		}
 	}
 	errBuf := &strings.Builder{}
@@ -360,7 +411,7 @@ func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) 
 					seq++
 					n := seq
 					seqMu.Unlock()
-					r.send(eventLine{Seq: n, Type: "action", Execution: spec.ExecutionID, Payload: raw})
+					r.send(eventLine{Seq: n, Type: eventTypeFromPayload(raw), Execution: spec.ExecutionID, Payload: raw})
 					continue
 				}
 			}
@@ -418,12 +469,12 @@ func (r *runner) connect(ctx context.Context) error {
 	// register 帧（调研 §6.5：device_id + hostname + 版本）
 	egoVer := probeEgoVersion(r.conf.EgoBin)
 	_ = conn.WriteJSON(map[string]any{
-		"type":       "register",
-		"version":    "0.1.0",
-		"device_id":  r.conf.DeviceID,
-		"hostname":   mustHostname(),
+		"type":        "register",
+		"version":     "0.1.0",
+		"device_id":   r.conf.DeviceID,
+		"hostname":    mustHostname(),
 		"ego_version": egoVer,
-		"workspace":  r.conf.WorkspaceDir,
+		"workspace":   r.conf.WorkspaceDir,
 	})
 	return nil
 }
@@ -545,8 +596,8 @@ func readLoop(r *runner, ctx context.Context, once bool) {
 		}
 		_ = r.conn.SetReadDeadline(time.Now().Add(pongWait))
 		var frame struct {
-			Type string    `json:"type"`
-			Spec taskSpec  `json:"spec"`
+			Type string   `json:"type"`
+			Spec taskSpec `json:"spec"`
 		}
 		if err := r.conn.ReadJSON(&frame); err != nil {
 			return
@@ -585,9 +636,46 @@ func readLoop(r *runner, ctx context.Context, once bool) {
 	}
 }
 
-// verifyAssetManifestAt runner 侧 manifest 验签（决策 8：与 server 端同一验签算法——
-// 算法双端同源靠同一份规范（SHA-256 over raw-bytes-with-blank-signature）+ 本地重复实现
-// 最小化（runner 不 import server internal 包，规范漂移由 asset_sign_test 的向量测试钉死）。
+// verifyAssetAt 资产执行前的两级校验（顺序即语义）：
+//
+//	① 完整性（永远查）：entry 文件字节的 sha256 必须等于 manifest 里安装时记下的
+//	  script_hash —— 拦"装完之后本机被改"；
+//	② 来源认证（manifest 带 signature 才查）：ed25519 验签，只服务跨实例官方包通道。
+//
+// 为什么不再无条件验签：本实例发布的资产全程没有第三方签名环节（发布即信任 +
+// 静态扫描门 + 下发时服务端再过一次裁决），无条件验签会让"资产中心点运行"在正常
+// 部署下必然失败——把一条腿做成死的并不是安全。
+func verifyAssetAt(assetDir string, raw []byte, script []byte) error {
+	var m struct {
+		Hivemtk struct {
+			ScriptHash string `json:"script_hash"`
+			SigAlg     string `json:"sig_alg"`
+			Signature  string `json:"signature"`
+		} `json:"hivemtk"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return fmt.Errorf("manifest 解析失败: %w", err)
+	}
+	if m.Hivemtk.ScriptHash == "" {
+		return errors.New("manifest 缺 script_hash——无法做完整性校验（fail-close）")
+	}
+	sum := sha256.Sum256(script)
+	if got := hex.EncodeToString(sum[:]); got != m.Hivemtk.ScriptHash {
+		return fmt.Errorf("脚本 hash 与 manifest 不一致（本机文件可能被改动）：manifest=%s 实得=%s",
+			m.Hivemtk.ScriptHash, got)
+	}
+	if m.Hivemtk.Signature == "" {
+		// 未签名（本实例发布的用户流程/脚本包）：完整性已过，来源信任由服务端裁决
+		return nil
+	}
+	return verifyAssetManifestAt(assetDir, raw)
+}
+
+// verifyAssetManifestAt runner 侧 manifest 验签（只在上面的 ② 分支被调用：
+// manifest 明确带签名时才要求信任公钥，此时缺公钥即 fail-close）。
+// 与 server 端同一验签算法——算法双端同源靠同一份规范
+// （SHA-256 over raw-bytes-with-blank-signature）+ 本地重复实现最小化
+// （runner 不 import server internal 包，规范漂移由 asset_sign_test 的向量测试钉死）。
 func verifyAssetManifestAt(assetDir string, raw []byte) error {
 	trustPaths := []string{
 		filepath.Join(assetDir, "trust.pem"),
@@ -628,7 +716,7 @@ func verifyAssetManifestAt(assetDir string, raw []byte) error {
 }
 
 // verifyAssetSignatureLocal 与 internal/egolite.VerifyAssetSignature 同规范的最小实现
-//（SHA-256 over raw bytes with signature field blanked → ed25519.Verify）
+// （SHA-256 over raw bytes with signature field blanked → ed25519.Verify）
 func verifyAssetSignatureLocal(raw []byte, pub ed25519.PublicKey) error {
 	var m struct {
 		Hivemtk struct {
