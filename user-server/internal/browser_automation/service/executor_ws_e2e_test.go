@@ -38,6 +38,11 @@ type fakeExtension struct {
 
 	mu   sync.Mutex
 	seen []string
+	// lastPrepText 最近一次 comment_prep 下发的正文（=编辑器里当下有字）。
+	// published 已成功提交（回包 sent=true）的正文——只为模拟真实页面：
+	// 提交前数条目是空的，提交后页面上**确实**多了这一条，回查才能做新旧比对。
+	lastPrepText string
+	published    []string
 
 	// reply 由用例给出：返回 (data, errMsg)，errMsg 非空即回 ok=false
 	reply func(action string, frame map[string]any) (map[string]any, string)
@@ -47,6 +52,17 @@ func (f *fakeExtension) record(action string) {
 	f.mu.Lock()
 	f.seen = append(f.seen, action)
 	f.mu.Unlock()
+}
+
+// publishedComments 评论区里此刻的条目文本（测试专用，副本）
+func (f *fakeExtension) publishedComments() []any {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]any, 0, len(f.published))
+	for _, t := range f.published {
+		out = append(out, t)
+	}
+	return out
 }
 
 func (f *fakeExtension) actions() string {
@@ -81,10 +97,30 @@ func (f *fakeExtension) pump(t *testing.T) {
 		action, _ := frame["action"].(string)
 		reqID, _ := frame["req_id"].(string)
 		f.record(action)
+		if action == "comment_prep" {
+			if v, ok := frame["value"].(string); ok {
+				f.mu.Lock()
+				f.lastPrepText = v
+				f.mu.Unlock()
+			}
+		}
+		// 测试专用注入（不改动任何被测路径）：让 reply 能像真实页面那样回答
+		// 「评论区里现在有哪些条目」——post_comment 的基线与回查都读它。
+		// 判据是「有没有真的提交成功」（sent=true），不是调用次数：
+		// 按次数会让重跑轮（同一条腿第二次跑）把上一轮已渲染的评论算成基线，per-rund 假红。
+		frame["_published_comments"] = f.publishedComments()
 
 		data, errMsg := map[string]any{}, ""
 		if f.reply != nil {
 			data, errMsg = f.reply(action, frame)
+		}
+		// 一次「sent=true」= 页面上多了这条评论（后续 extract / comment_verify 都能看见）。
+		if action == "comment_send" && errMsg == "" {
+			if sent, _ := data["sent"].(bool); sent {
+				f.mu.Lock()
+				f.published = append(f.published, f.lastPrepText)
+				f.mu.Unlock()
+			}
 		}
 		if errMsg == hangFrame {
 			continue // 该命令故意不回包：模拟扩展侧假死
@@ -245,6 +281,18 @@ func happyReply(action string, frame map[string]any) (map[string]any, string) {
 		return map[string]any{"sent": true}, ""
 	case "comment_verify":
 		return map[string]any{"verified": true, "matched": 1, "text": "测试评论正文"}, ""
+	// E1/E21：post_comment 提交前会数一次「评论区现有几条同文本条目」（基线），
+	// 提交后 finalize 再数一次做新旧比对。首次调用=基线（页面还没这条），之后=含目标文本。
+	// 基线若恒为空，所有 happy 路径都会变成「提交后不多于基线」→ 全红。
+	case "extract":
+		items, _ := frame["_published_comments"].([]any)
+		if items == nil {
+			// 契约是「空数组字面量」而不是 null（0 条时扩展回 []，见 countCommentMatches
+			// 里那段「走到这里说明契约变了」）——夹具不许喂一个契约外的形状。
+			// 另：本函数有的调用点传 nil frame，这里必须能扛住。
+			items = []any{}
+		}
+		return map[string]any{"data": map[string]any{"comment_items": items}}, ""
 	case "query":
 		return map[string]any{"exists": false}, ""
 	default:
@@ -286,13 +334,17 @@ func TestWSE2E_ReadThenCommentThreeStage(t *testing.T) {
 
 	// 帧序列（去掉 detectBlockedIfFatal 的额外 snapshot 探针与 F3 注册探针后应恰为编排语义序列；
 	// 两类帧各自有专测正向断言其存在，这里只是不把它们算进编排序）
+	// 两帧 extract 是 E1/E21 的新旧判据：
+	//   · comment_prep **之前**那次=提交前基线（必须在任何写动作之前，prep 只是往输入框填字，
+	//     但它之后就开始有副作用了；拿不到基线直接拒提交，不再降级成「有没有」判据）；
+	//   · comment_verify 之后那次=回数，必须严格多于基线才算本次提交（session644 真机假绿）。
 	var wire []string
 	for _, a := range strings.Split(ext.actions(), ",") {
 		if a != "snapshot" && a != "tab_exists" {
 			wire = append(wire, a)
 		}
 	}
-	want := "open_tab,markdown,comment_prep,comment_send,comment_verify,close_tab"
+	want := "open_tab,markdown,extract,comment_prep,comment_send,comment_verify,extract,close_tab"
 	if strings.Join(wire, ",") != want {
 		t.Errorf("帧序列=%s want %s", strings.Join(wire, ","), want)
 	}
@@ -759,4 +811,97 @@ func waitFor(timeout time.Duration, cond func() bool) bool {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return cond()
+}
+
+// 3) E1 假绿回归（session644 真机形态的最小复现）：提交前页面上就已经有一条**同文本**
+// 评论（同账号对同一条笔记重复发同一句话），而本次提交恰好没有发出去
+// （点后落点位移 element_moved / 平台静默吞）。旧判据只问「页面上有没有这句话」，
+// 于是「一条根本没发出去的提交」拿到了 verified=true 的回执，并且被双发闸锁死
+// （verified 在拦阻集合内，任务重跑也发不出去）。
+// 新判据：回查命中后必须再数一次同文本条目，严格多于提交前基线才算本次提交的证据。
+func TestWSE2E_StaleCommentMatchIsNotVerified(t *testing.T) {
+	reply := func(action string, frame map[string]any) (map[string]any, string) {
+		if action == "extract" {
+			// 提交前 1 条、提交后还是 1 条：那条是历史评论，不是本次提交
+			return map[string]any{"data": map[string]any{"comment_items": []any{"测试评论正文"}}}, ""
+		}
+		return happyReply(action, frame)
+	}
+	exec, ext, bundle := newWSE2E(t, reply)
+	task, session := bundle.seedTask(t, threeStageSteps, false)
+	steps, err := ParseSteps([]byte(threeStageSteps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
+	defer cancel()
+	exec.ExecuteSession(ctx, task, session, steps)
+
+	got := bundle.reloadSession(t, session.ID)
+	if got.Status != "failed" {
+		t.Fatalf("终态=%s want failed（回查命中的是提交前那条评论，不能判已发布）", got.Status)
+	}
+	if !strings.Contains(got.ErrorMsg, "提交前就已存在的同文本评论") {
+		t.Errorf("失败归因未说明「命中的是旧评论」: %s", got.ErrorMsg)
+	}
+	// 判红不等于重发：提交点整场仍然只发生一次
+	if n := ext.countOf("comment_send"); n != 1 {
+		t.Errorf("comment_send 发生 %d 次，红线=1", n)
+	}
+	// 台账落 unattributed（不是 verified，也不是空）：人知道「试过了、归因不到」
+	row := readStepState(t, bundle, session.ID, 3)
+	if row.SubmitState != model.StepSubmitUnattributed {
+		t.Errorf("submit_state=%s want %s", row.SubmitState, model.StepSubmitUnattributed)
+	}
+}
+
+// 4) E1 正向：提交前 1 条同文本、提交后 2 条 → 多出来的那条就是本次提交的证据，判绿，
+// 且证据里带提交前/后计数（审计要能复算这条结论，而不是只看到一句 verified）。
+func TestWSE2E_NewCommentMatchIsVerified(t *testing.T) {
+	var extractCalls int
+	reply := func(action string, frame map[string]any) (map[string]any, string) {
+		if action == "extract" {
+			extractCalls++
+			items := []any{"测试评论正文"}
+			if extractCalls > 1 {
+				items = append(items, "测试评论正文")
+			}
+			return map[string]any{"data": map[string]any{"comment_items": items}}, ""
+		}
+		return happyReply(action, frame)
+	}
+	exec, _, bundle := newWSE2E(t, reply)
+	task, session := bundle.seedTask(t, threeStageSteps, false)
+	steps, err := ParseSteps([]byte(threeStageSteps))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), e2eExecBudget)
+	defer cancel()
+	exec.ExecuteSession(ctx, task, session, steps)
+
+	got := bundle.reloadSession(t, session.ID)
+	if got.Status != "completed" {
+		t.Fatalf("终态=%s（%s），want completed", got.Status, got.ErrorMsg)
+	}
+	row := readStepState(t, bundle, session.ID, 3)
+	if row.SubmitState != model.StepSubmitVerified {
+		t.Errorf("submit_state=%s want %s", row.SubmitState, model.StepSubmitVerified)
+	}
+	var evidence map[string]any
+	if err := json.Unmarshal(got.ExtractedData, &evidence); err != nil {
+		t.Fatalf("extracted_data 解析失败: %v", err)
+	}
+	list, _ := evidence["post_comment"].([]any)
+	if len(list) != 1 {
+		t.Fatalf("post_comment 证据条数=%d want 1", len(list))
+	}
+	entry, _ := list[0].(map[string]any)
+	if entry["pre_matched"] != float64(1) {
+		t.Errorf("证据缺提交前基线: pre_matched=%v", entry["pre_matched"])
+	}
+	ev, _ := entry["evidence"].(map[string]any)
+	if ev["post_matched"] != float64(2) {
+		t.Errorf("证据缺回查计数: post_matched=%v", ev["post_matched"])
+	}
 }

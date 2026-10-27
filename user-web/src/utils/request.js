@@ -378,10 +378,15 @@ const addInterceptors = () => {
             if (!silent) showToast(msg || t('http.tooManyRequests'))
             break
           case 500:
+            if (!silent) showToast(t('http.serverError'))
+            break
+          // 502/503/504 是「上游/依赖不可用」而不是本服务内部炸了：
+          // 后端通常已给出可照做的原因（如渠道返回的 code/msg），
+          // 一律盖成「服务器内部错误」会让用户错判并盲目重试。
           case 502:
           case 503:
           case 504:
-            if (!silent) showToast(t('http.serverError'))
+            if (!silent) showToast(msg || t('http.serverError'))
             break
           default:
             if (!silent) showToast(msg)

@@ -46,7 +46,8 @@ func assertNoInternalLeak(t *testing.T, msg string) {
 }
 
 func taskBodyJSON(name, steps string) string {
-	return fmt.Sprintf(`{"name":%q,"task_type":"one_shot","url":"https://example.com","steps":%s}`, name, steps)
+	// platform 必填（B21）：不再靠服务端缺省 xiaohongshu，请求体须自带
+	return fmt.Sprintf(`{"name":%q,"task_type":"one_shot","url":"https://example.com","platform":"xiaohongshu","steps":%s}`, name, steps)
 }
 
 // ---- B1：步内规则真的在入口生效 ----
@@ -144,7 +145,7 @@ func TestBindingErrorsUseAPIFieldNames(t *testing.T) {
 		want string
 	}{
 		{"缺 name", `{"task_type":"one_shot","url":"https://example.com"}`, "name 为必填项"},
-		{"task_type 不在枚举", `{"name":"契约-t","task_type":"every_day","url":"https://example.com"}`, "task_type 取值需为"},
+		{"task_type 不在枚举", `{"name":"契约-t","task_type":"every_day","url":"https://example.com","platform":"xiaohongshu"}`, "task_type 取值需为"},
 		{"url 超长", fmt.Sprintf(`{"name":"契约-u","task_type":"one_shot","url":"https://e.com/%s"}`, strings.Repeat("a", 2100)), "url 上限 2048 个字符"},
 		// 数值型的界得单独立腿：同一个 max 在 slice/string/number 上读法不同，
 		// 实测第一版把它缝成了「retry_count 上限 取值 10」——两种读法缝在一起没人看得懂。

@@ -100,6 +100,32 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if err != nil {
 			return nil, err
 		}
+		// 提交前基线（E1：零提交假绿修复 / E21：拿不到基线不再降级）。判据必须是**新旧**，
+		// 不是「有没有」。实测 session644：comment_send 回 element_moved（点已派发、落点位移）
+		// → 平台侧没有新评论，而 finalize 的 comment_verify 命中了**提交前就存在的**那条同文本
+		// 评论（同账号对同一条笔记重复发同一句话），回查判 verified=true、回执落 verified=true
+		// ——一条根本没发出去的提交拿到了「已发布」的结论，并且再被双发闸锁死
+		// （verified 在拦阻集合内），任务重跑也发不出去。
+		//
+		// 位置：任何写动作之前（prep 只是往输入框填字，不改评论条数），所以基线与提交点之间
+		// 唯一的差异就是「这次提交有没有发生」。取不到基线 = 新旧判据无从建立 = **拒绝提交**：
+		// 旧实现在这里降级成「有没有」判据 + recency_unproven 留痕，等于把假绿换成了
+		// 「有标签的假绿」——留痕不改变结论，回执照样 verified=true。所以那条岔路整条删了。
+		// 读两遍（只读、可安全重复）：extract 偶发失败不该把一个健康任务判死。
+		var baseMatched int
+		var baseErr error
+		for attempt := 0; attempt < 2; attempt++ {
+			baseMatched, baseErr = e.countCommentMatches(ctx, userID, tabID, locs, step.Value)
+			if baseErr == nil {
+				break
+			}
+		}
+		if baseErr != nil {
+			return nil, fmt.Errorf("post_comment 未提交（提交前基线不可用：%v）——新旧判据无从建立，本次点击从未发生", baseErr)
+		}
+		*seq++
+		e.appendCommandLog(ctx, session.ID, task.ID, stepRow.ID, *seq, "event", "comment_baseline",
+			map[string]any{"pre_matched": baseMatched, "item_selector": locs.CommentItemText}, 0, verdict(true))
 		// 双发闸在 executeStepWithRetry 下发任何帧之前已过（起对全部写步统一生效）。
 		textHash := writeStepKey(step)
 		prepReq := map[string]any{
@@ -190,7 +216,7 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		if sendErr != nil && e.healCommentSendButton(ctx, task, session, tabID, prepReq, sendErr) {
 			sendErr = sendOnce()
 		}
-		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, e.stopChFor(session.ID))
+		verified, evidence := e.finalizeComment(ctx, userID, tabID, step.Value, locs, baseMatched, e.stopChFor(session.ID))
 		// 回查结论落台账：verified 是唯一可对外宣称「已发布」的态；未见即 unattributed
 		// （已尝试、归因不到）——unattributed 仍在双发闸的拦截集合内，交人来判。
 		finalState := model.StepSubmitUnattributed
@@ -209,11 +235,12 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}, 0, verdict(verified))
 		// finalize 证据落 extracted_data（追溯面板 + I4 续跑位点：重放可见「哪条评论已提交已验证」）
 		e.mergeExtract(ctx, session, "post_comment", map[string]any{
-			"text":       step.Value,
-			"send_error": sendErrText(sendErr),
-			"verified":   verified,
-			"evidence":   evidence,
-			"posted_at":  time.Now().Format(time.RFC3339),
+			"text":        step.Value,
+			"send_error":  sendErrText(sendErr),
+			"verified":    verified,
+			"evidence":    evidence,
+			"pre_matched": baseMatched,
+			"posted_at":   time.Now().Format(time.RFC3339),
 		})
 		// Chunk5 回执挂起（不落库，收口时一起落，见 captureSessionReceipts）：
 		// 放在 mergeExtract 之后、两条结论分支之前——verified 与 unattributed 都是
@@ -243,10 +270,19 @@ func (e *Executor) dispatchStep(ctx context.Context, task *model.BrowserTask, se
 		}
 		// fails-loudly：提交结局未知或验证未见——归因「平台静默吞/审核中/渲染超时」，
 		// 步判失败但不重试（重试=双发）。
-		if sendErr != nil {
-			return nil, fmt.Errorf("post_comment 提交命令异常（%v）且回查未见评论——结果未知，不重试防双发", sendErr)
+		// 归因文案要能自己说明「为什么这次不算发布」：stale_match=回查命中的是提交前
+		// 就存在的那条同文本评论（本次提交没有任何正面证据），别让人去翻 evidence 才知道。
+		why := ""
+		if evidence != nil {
+			if stale, _ := evidence["stale_match"].(bool); stale {
+				why = fmt.Sprintf("（回查命中的是提交前就已存在的同文本评论：提交前 %v 条 → 提交后 %v 条，本次提交无正面证据）",
+					evidence["pre_matched"], evidence["post_matched"])
+			}
 		}
-		return nil, fmt.Errorf("post_comment 已提交但验证未通过（可能被平台拦截/审核中），不重试防双发")
+		if sendErr != nil {
+			return nil, fmt.Errorf("post_comment 提交命令异常（%v）且回查未见新评论%s——结果未知，不重试防双发", sendErr, why)
+		}
+		return nil, fmt.Errorf("post_comment 已提交但回查未见新评论%s（可能被平台拦截/审核中），不重试防双发", why)
 	case "assert":
 		// 断言类原语（洞察层）：contains_text / selector_exists，失败即抛错（Playwright expect 语义）
 		timeout := p.TimeoutMs
@@ -383,9 +419,20 @@ func (e *Executor) mergeExtract(ctx context.Context, session *model.BrowserSessi
 
 // finalizeComment F2② finalize：提交后的只读验证轮询（Postiz pending→checkPostStatus→finalize 语义）。
 // 短超时多次 comment_verify——每次都是只读命令，可安全重试/可中断；绝不重新提交。
-// 轮询窗口 = 首验 6s + 复核 2×5s（覆盖小红书评论异步审核回显的实测节奏），stopCh 关闭即放弃。
+// 轮询窗口 = 首验 6s + 复核 2×5s（覆盖评论区异步审核后回显的实测节奏），stopCh 关闭即放弃。
 // 返回 (verified, evidence)：evidence=最后一次验证回包（含命中容器数/条目文本节选）。
-func (e *Executor) finalizeComment(ctx context.Context, userID uint, tabID int, text string, locs platform.CommentLocators, stopCh chan struct{}) (bool, map[string]any) {
+//
+// 新旧判据（E1）：comment_verify 只回答「评论区页面上有没有这句话」，它回答不了
+// 「这句话是不是我这次发上去的」。同账号对同一条笔记重复发同一句话时，提交前这一问
+// 就已经是 true —— 于是任何一次「点没点中都不知道」的提交都能拿到 verified=true
+// （session644 实测：comment_send 回 element_moved、平台上没有新评论，回查命中 27 分钟前
+// 那条同文本评论，回执落 verified=true，再被双发闸锁死）。因此：
+//   - baseMatched（提交前同文本条目数）在这里一定是**已知**的：调用方在任何写动作之前
+//     就把它读到了，读不到直接拒提交（E21）。因此回查命中后必须**再数一次**，严格多于
+//     基线才算本次提交的证据；不多就记 stale_match 继续轮询（不放弃、不判绿）。
+//   - 不存在「退化判据」这条岔路：一条连新旧都分不清的 verified 不是结论，删掉比留痕强
+//     （留痕不改变结论，回执照样 verified=true —— 那就是带标签的假绿）。
+func (e *Executor) finalizeComment(ctx context.Context, userID uint, tabID int, text string, locs platform.CommentLocators, baseMatched int, stopCh chan struct{}) (bool, map[string]any) {
 	rounds := []int{6000, 5000, 5000}
 	var last map[string]any
 	for i, timeoutMs := range rounds {
@@ -398,9 +445,83 @@ func (e *Executor) finalizeComment(ctx context.Context, userID uint, tabID int, 
 			continue
 		}
 		last = res
-		if verified, _ := res["verified"].(bool); verified {
-			return true, res
+		verified, _ := res["verified"].(bool)
+		if !verified {
+			continue
 		}
+		// 「见了」≠「新见的」。数一次，必须严格多于提交前的同文本条目数。
+		now, cErr := e.countCommentMatches(ctx, userID, tabID, locs, text)
+		if cErr != nil {
+			// 数不出来就不判绿：基线已知却没拿到回数，证据链缺一格，继续轮询等它可读。
+			logger.Warnf("[BrowserExec] comment_verify 命中后回数失败（第%d轮，继续轮询）user=%d tab=%d: %v", i+1, userID, tabID, cErr)
+			res["count_error"] = cErr.Error()
+			last = res
+			continue
+		}
+		res["pre_matched"] = baseMatched
+		res["post_matched"] = now
+		if now <= baseMatched {
+			// 命中的是提交前就存在的那条：这不是本次提交的证据（漏判=不可逆动作的假绿）。
+			res["stale_match"] = true
+			logger.Warnf("[BrowserExec] comment_verify 命中的是旧评论（提交前 %d 条 → 提交后 %d 条），不判 verified user=%d tab=%d", baseMatched, now, userID, tabID)
+			last = res
+			continue
+		}
+		return true, res
 	}
 	return false, last
+}
+
+// countCommentMatches 数「评论区里文本与目标相同的条目」有几条。
+// 用 extract 而不是 query count：query 只能数 CSS 命中数，分不清「这条是我刚发的」
+// 还是「同一句话的历史评论」——那正是假绿的形状。extract 回的是逐条文本，
+// 在 Go 侧按归一化后精确相等计数（与扩展 comment_verify 的 own 判据同口径），
+// 无精确命中时退化为包含匹配（与 verified 的 contains 语义同口径）。
+// 只用于**前后对比**：两次测量同口径即可，绝对值本身不进结论。
+func (e *Executor) countCommentMatches(ctx context.Context, userID uint, tabID int, locs platform.CommentLocators, text string) (int, error) {
+	sel := strings.TrimSpace(locs.CommentItemText)
+	if sel == "" {
+		return 0, errors.New("平台适配器未声明 comment_item_text（无条目选择器可用）")
+	}
+	want := normalizeCommentText(text)
+	if want == "" {
+		return 0, errors.New("目标文本为空，无法建立计数基线")
+	}
+	res, err := e.hand.extract(ctx, userID, tabID, map[string]string{"comment_items": sel})
+	if err != nil {
+		return 0, err
+	}
+	raw, ok := res["data"].(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("extract 回包缺少 data（%T）", res["data"])
+	}
+	items, ok := raw["comment_items"].([]any)
+	if !ok {
+		// 0 条时扩展回的是空数组字面量，类型仍是 []any；走到这里说明契约变了，如实报错。
+		return 0, fmt.Errorf("extract 回包 comment_items 不是数组（%T）", raw["comment_items"])
+	}
+	exact, contains := 0, 0
+	for _, it := range items {
+		s, _ := it.(string)
+		s = normalizeCommentText(s)
+		if s == "" {
+			continue
+		}
+		if s == want {
+			exact++
+		} else if strings.Contains(s, want) {
+			contains++
+		}
+	}
+	// 精确相等优先：它才是「一句话一模一样的另一条评论」这个判据。
+	if exact > 0 {
+		return exact, nil
+	}
+	return contains, nil
+}
+
+// normalizeCommentText 去掉所有空白后再比：评论正文里的换行/缩进/全角空格
+// 在 innerText 与 textContent 两条取文路径上并不一致（扩展侧 norm 同口径）。
+func normalizeCommentText(s string) string {
+	return strings.Join(strings.Fields(s), "")
 }

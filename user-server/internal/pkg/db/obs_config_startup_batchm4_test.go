@@ -438,7 +438,9 @@ func TestBatchM_MigrateIsWiredIntoAPILifecycle(t *testing.T) {
 	const (
 		initStmt    = "db.InitDB()"
 		migrateStmt = "db.AutoMigrate()"
-		seedStmt    = "service.InitDefaultStorageIfEmpty(db.GetDB())"
+		// seed 口径随装配方式更新：ObsConfig 仓储改为显式注入 DB 句柄后，
+		// 这一行不再是 db.GetDB() 的旧写法；锁的仍是「顶层独占一行、位于 AutoMigrate 之后」。
+		seedStmt = "service.InitDefaultStorageIfEmpty(repository.NewObsConfigRepositoryWithDB(db.GetDB()))"
 	)
 	iInit, iMigrate, iSeed := stmtLines(initStmt), stmtLines(migrateStmt), stmtLines(seedStmt)
 	if n := len(iMigrate); n != 1 {

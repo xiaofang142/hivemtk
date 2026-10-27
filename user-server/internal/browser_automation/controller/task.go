@@ -106,7 +106,7 @@ func (c *TaskController) Create(ctx *gin.Context) {
 	t.Description = req.Description
 	t.TaskType = req.TaskType
 	t.Url = req.Url
-	t.Platform = strings.TrimSpace(req.Platform) // 空值由 Service.Create 缺省 xiaohongshu
+	t.Platform = strings.TrimSpace(req.Platform) // 必填（B21：不再缺省 xiaohongshu），空值由 Service.Create/Update 拒绝
 	t.BrainMode = req.BrainMode
 	t.BrainGoal = req.BrainGoal
 	t.CopyText = req.CopyText

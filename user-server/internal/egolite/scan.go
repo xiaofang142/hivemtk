@@ -102,8 +102,21 @@ func ScanScript(src string) ScanReport {
 			}
 		}
 	}
+	// EGO-R032（specs/015 C16，事件协议软契约的最低 lint）：全文无结构化事件输出
+	// → warn。事件行是监督链（Monitor/事件日志/域审计）的唯一数据源——一行都不打的
+	// 资产/流程，审计只剩退出码。warn 不拦发布，进人工审核清单。
+	if !eventPrintPattern.MatchString(src) {
+		report.Warnings = append(report.Warnings, ScanVerdict{
+			RuleID:   "EGO-R032",
+			Desc:     "全文未发现结构化事件输出（console.log(JSON.stringify(...))）——事件流将为空，审计只剩退出码",
+			Severity: "warn",
+			Line:     1,
+		})
+	}
 	return report
 }
+
+var eventPrintPattern = regexp.MustCompile(`console\.log\s*\(\s*JSON\.stringify`)
 
 // ScanManifest 校验 manifest 必备字段（A2：hivemtk 扩展 + domains 强制）。
 // 传入解析后的 manifest JSON 形状（由调用方 unmarshal），这里做规则判定。

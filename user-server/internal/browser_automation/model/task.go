@@ -64,7 +64,7 @@ type BrowserTask struct {
 	// 归属
 	UserID    uint   `gorm:"column:user_id;index;not null" json:"user_id"`
 	AccountID uint   `gorm:"column:account_id;index" json:"account_id"`
-	Platform  string `gorm:"column:platform;size:32;not null;default:xiaohongshu;index" json:"platform"` // 平台标识：xiaohongshu / douyin / xianyu（L3 适配器 identifier）
+	Platform  string `gorm:"column:platform;size:32;not null;default:'';index" json:"platform"` // 平台标识（必填）：xiaohongshu / douyin / xianyu（L3 适配器 identifier）；空值由 service 层拒绝，不再缺省为 xiaohongshu
 	// 执行状态快照
 	LastRunAt  *time.Time `gorm:"column:last_run_at" json:"last_run_at,omitempty"`
 	LastResult string     `gorm:"column:last_result;type:text" json:"last_result,omitempty"`

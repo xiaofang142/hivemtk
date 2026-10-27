@@ -204,6 +204,14 @@ func (s *EgoExecutionService) dispatch(ctx context.Context, e *model.EgoliteExec
 			return false
 		}
 		spec["draft_script"] = flow.Script
+		spec["domains"] = parseDomains(flow.DomainsJSON)
+	}
+	if e.Origin == "market" && s.assetRepo != nil {
+		// 域名白名单随 spec 下发（specs/015：runner 运行时域审计的数据源；
+		// 下发时刻快照，执行期目录变更不影响在途执行——版本钉扎同语义）
+		if a, err := s.assetRepo.GetByCode(ctx, e.AssetID); err == nil {
+			spec["domains"] = parseDomains(a.DomainsJSON)
+		}
 	}
 	if err := conn.SendSpec(map[string]any{"type": "task_spec", "spec": spec}); err != nil {
 		// 下发失败回退 created（用户可重发）；fail_reason 记录
@@ -398,6 +406,16 @@ func (s *EgoExecutionService) findByExecKey(ctx context.Context, userID uint, ex
 		return nil, ErrExecutionNotFound
 	}
 	return s.execRepo.GetForUser(ctx, rowID, userID)
+}
+
+// parseDomains domains JSON 列 → 字符串数组（解析失败/空视为零域：runner 侧零域
+// = 全拒，fail-close 与服务端「保存时 domains 必填」口径互为纵深）
+func parseDomains(raw []byte) []string {
+	var domains []string
+	if json.Unmarshal(raw, &domains) != nil {
+		return nil
+	}
+	return domains
 }
 
 func parseEventOk(payload json.RawMessage) *bool {

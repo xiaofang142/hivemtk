@@ -23,7 +23,7 @@ func (imaProvider) List(ctx context.Context, cfg map[string]any) ([]ExternalDoc,
 	clientID := cfgString(cfg, "client_id")
 	apiKey := cfgString(cfg, "api_key", "client_secret")
 	if clientID == "" || apiKey == "" {
-		return nil, fmt.Errorf("IMA 配置缺少 client_id/api_key")
+		return nil, invalidInput("IMA 配置缺少 client_id/api_key")
 	}
 	kbID := cfgString(cfg, "knowledge_base_id")
 	client := &http.Client{Timeout: 30 * time.Second}

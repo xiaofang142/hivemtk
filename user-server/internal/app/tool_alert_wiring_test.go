@@ -3,6 +3,7 @@ package app
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 )
@@ -30,10 +31,12 @@ func TestObserveToolCircuitDecision_AlertsOnBlockNotShadow(t *testing.T) {
 	observeToolCircuitDecision(t.Context(), tooluse.CircuitDecision{
 		ToolName: "search_kb", State: tooluse.CircuitOpen, WouldBlock: true, Shadow: false,
 	})
-	mu.Lock()
-	if len(alerts) != 1 {
-		t.Fatalf("enforce would_block 应恰好 1 条告警，实际 %d", len(alerts))
+	// emitAlert 的 handler 是 go 协程派发（生产语义：告警通道不能拖慢主链），
+	// 所以这里必须等它落地，不能 observe 返回后立刻读计数——全量跑时机器一忙就假红。
+	if n := waitAlertCount(&mu, &alerts, 1); n != 1 {
+		t.Fatalf("enforce would_block 应恰好 1 条告警，实际 %d", n)
 	}
+	mu.Lock()
 	if alerts[0].ToolName != "search_kb" {
 		t.Fatalf("告警应点名工具名，实际 %q", alerts[0].ToolName)
 	}
@@ -43,10 +46,26 @@ func TestObserveToolCircuitDecision_AlertsOnBlockNotShadow(t *testing.T) {
 	observeToolCircuitDecision(t.Context(), tooluse.CircuitDecision{
 		ToolName: "search_kb", State: tooluse.CircuitOpen, WouldBlock: true, Shadow: true,
 	})
+	// 给异步派发留出足够时间：若 shadow 也告警，这段时间内必然能看到 >1。
+	time.Sleep(150 * time.Millisecond)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(alerts) != 1 {
 		t.Fatalf("shadow 态不得触发告警（只记录），实际告警数 %d", len(alerts))
+	}
+}
+
+// waitAlertCount 轮询等待异步 handler 落地，避免把调度延迟当成功能缺失。
+func waitAlertCount(mu *sync.Mutex, alerts *[]tooluse.AlertEvent, want int) int {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(*alerts)
+		mu.Unlock()
+		if n >= want || time.Now().After(deadline) {
+			return n
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

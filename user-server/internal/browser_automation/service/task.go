@@ -119,16 +119,89 @@ func ValidateURL(raw string) error {
 	return nil
 }
 
+// requireTaskPlatform 平台必填（B21）：空值一律拒绝，不再缺省任何平台。
+// 只查非空、不查注册——执行前的数据面（Publish/RunTask）拿到的可能是历史行或工具
+// 造的行，注册校验留给执行面自己的 platform.Get（那里本来就 fails-loudly），
+// 这一层只堵「空值静默兜底成小红书」这一个洞。
+func requireTaskPlatform(t *model.BrowserTask) error {
+	p := strings.TrimSpace(t.Platform)
+	if p == "" {
+		ids := make([]string, 0, 4)
+		for _, pl := range platform.List() {
+			ids = append(ids, pl.Identifier())
+		}
+		return invalidInput("platform 必填（已注册：%s）——不再缺省为 xiaohongshu：静默兜底会让其它平台的任务按小红书定位表执行", strings.Join(ids, "/"))
+	}
+	t.Platform = p
+	return nil
+}
+
+// validateTaskPlatform 用户输入面的门：必填 + 必须已注册（P4/P5）。
+// B21 收口：早期把空值缺省成 xiaohongshu，看着是「存量兼容」，实际是 fail-open——
+// 一个忘了填 platform 的抖音任务会静默按小红书定位表执行（点错按钮/写错页面），
+// 出错后归因还会落在「定位失效」上，把平台选错这件事彻底藏起来。
+// 兼容成本也站不住：库里 582 条任务全部显式带平台（504 xiaohongshu / 54 douyin / 24 xianyu），空值 0 条。
+func validateTaskPlatform(t *model.BrowserTask) error {
+	if err := requireTaskPlatform(t); err != nil {
+		return err
+	}
+	if _, err := platform.Get(t.Platform); err != nil {
+		// 归成 400 而不是 500：这是**用户输入错**（填了个没接入的平台），
+		// 500 会把它伪装成服务端故障，前端只能捞一句「内部错误」。
+		return invalidInput("%v", err)
+	}
+	return nil
+}
+
+// validateStepsCapabilities 编排里出现的每个原语都必须能被该平台兑现（C21）。
+//
+// 背景：Capabilities() 此前只被 /platforms 接口和 Brain prompt 读，执行面一处都不看。
+// 于是「平台声明了 read_comment 却没声明 post_comment」这件事，要到**执行期**才以
+// comment_verify 报错的形式暴露——那时人已经在等结果，而真相（这个平台不支持发评论）
+// 在创建期就已知。这里把它提前到编排校验：需要能力却没声明 → 直接拒绝发布，
+// 文案点名「哪一步、要什么能力、平台声明了什么」。
+//
+// 只拦 RequiredCapability 命中表里的原语；通用原语（open_tab/click/query/…）不涉及平台能力。
+func validateStepsCapabilities(t *model.BrowserTask) error {
+	if t.BrainMode || len(t.Steps) == 0 {
+		return nil // Brain 的编排在运行期生成，靠执行面同一张表 + CommentLocatorsFor 拦
+	}
+	steps, err := ParseSteps(t.Steps)
+	if err != nil {
+		return err
+	}
+	p, err := platform.Get(strings.TrimSpace(t.Platform))
+	if err != nil {
+		// 注册校验属 Create/Update；这里若拿不到适配器（历史行/工具造行），
+		// 执行面自己的 platform.Get 会 fails-loudly，不在此重复报同一件事。
+		return nil
+	}
+	for i, s := range steps {
+		cap, need := platform.RequiredCapability(s.Action)
+		if !need || platform.HasCapability(p, cap) {
+			continue
+		}
+		declared := make([]string, 0, 4)
+		for _, c := range p.Capabilities() {
+			declared = append(declared, string(c))
+		}
+		// 序号用 1 起：编排面板与执行日志都按「第几步」读，0 起会让人对不上号。
+		return invalidInput("编排第 %d 步（%s）需要平台能力 %q，而 %s 未声明该能力（已声明：%s）",
+			i+1, s.Action, string(cap), p.Identifier(), strings.Join(declared, "/"))
+	}
+	return nil
+}
+
 func (s *TaskService) Create(ctx context.Context, userID uint, t *model.BrowserTask) error {
 	if err := ValidateURL(t.Url); err != nil {
 		return err
 	}
-	// 平台校验：必须是已注册适配器（P5 注册表唯一入口）；空值走缺省小红书
-	t.Platform = strings.TrimSpace(t.Platform)
-	if t.Platform == "" {
-		t.Platform = "xiaohongshu"
+	// 平台必填且必须是已注册适配器（P5 注册表唯一入口 + P4 fails-loudly）
+	if err := validateTaskPlatform(t); err != nil {
+		return err
 	}
-	if _, err := platform.Get(t.Platform); err != nil {
+	// 编排必须能被该平台兑现（C21：能力声明的执行面）
+	if err := validateStepsCapabilities(t); err != nil {
 		return err
 	}
 	t.UserID = userID
@@ -178,6 +251,14 @@ func (s *TaskService) Update(ctx context.Context, id, userID uint, mutator func(
 		return nil, err
 	}
 	if err := ValidateURL(t.Url); err != nil {
+		return nil, err
+	}
+	// 编辑也是平台的门：把 platform 清空等于让执行面按「无平台」跑（B21 fail-open 回归位）
+	if err := validateTaskPlatform(t); err != nil {
+		return nil, err
+	}
+	// 改 steps 同样要过能力校验：建的时候拦、改的时候放，等于白拦（同 cron 触发器的教训）
+	if err := validateStepsCapabilities(t); err != nil {
 		return nil, err
 	}
 	if err := s.taskRepo.Update(ctx, t); err != nil {
@@ -264,6 +345,15 @@ func (s *TaskService) Publish(ctx context.Context, id, userID uint) error {
 	}
 	if !t.BrainMode && len(t.Steps) == 0 {
 		return invalidInput("显式模式至少编排一个步骤")
+	}
+	// Publish 是进入可执行态的唯一门：平台在这里再校验一次（历史行/直改库都可能带空值）
+	if err := requireTaskPlatform(t); err != nil {
+		return err
+	}
+	// 能力校验也在这里再走一遍：Create 之后平台适配器可能已经变了（能力删了/加了），
+	// 而 draft 到 ready 之间还有 cron/重试/直接落库三条来路。
+	if err := validateStepsCapabilities(t); err != nil {
+		return err
 	}
 	// 确认等待预算夹紧 1..900s。dto binding 只管 HTTP 入口，这一列还有 cron/重试/
 	// 直接落库三条来路；Publish 是进入可执行态的唯一门，值在这里失守就等于把
@@ -442,6 +532,11 @@ func (s *TaskService) RunTask(ctx context.Context, taskID, userID uint, retryCou
 	}
 	if t.Status != "ready" && t.Status != "paused" && t.Status != "done" && t.Status != "failed" {
 		return nil, stateConflict("任务状态 %s 不可执行（需先 publish）", t.Status)
+	}
+	// 执行前最后一道平台门：库里若有一行 platform 为空（历史数据/直改库），
+	// 在这里就红，而不是带着 "" 进执行面去 platform.Get("") 拿一个「未注册」的错误。
+	if err := requireTaskPlatform(t); err != nil {
+		return nil, err
 	}
 	// 幂等：同任务已有运行中 session 则拒绝（并发触发防重，靠 DB 唯一性兜底竞态）
 	runningByTask, err := s.sessionRepo.CountRunningByTask(ctx, userID, taskID)

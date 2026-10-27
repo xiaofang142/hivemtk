@@ -63,7 +63,8 @@ func b19eBody(n int) string {
 	if err != nil {
 		panic(err)
 	}
-	return fmt.Sprintf(`{"name":"b19e-%d","task_type":"one_shot","url":"https://example.com","steps":%s}`, n, steps)
+	// platform 必填（B21）：这条腿测的是步数上限，平台显式给全
+	return fmt.Sprintf(`{"name":"b19e-%d","task_type":"one_shot","url":"https://example.com","platform":"xiaohongshu","steps":%s}`, n, steps)
 }
 
 func b19eCreate(t *testing.T, c *TaskController, n int) (int, errBody) {

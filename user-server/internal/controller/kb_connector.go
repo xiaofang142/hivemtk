@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -213,9 +214,14 @@ func SyncKBConnector(ctx *gin.Context) {
 	res, err := kbconnector.Sync(ctx.Request.Context(), id)
 	if err != nil {
 		// 连接器不存在是 404（资源没找到），不是 500（服务端炸了）。
-		// 同步本身失败（上游连不上、配置不合法）才是 500。
+		// 配置/上游清单不合法（URL 指向网页、清单不是 JSON 等）是 400：
+		// 这是调用方配置问题，回 500 只会让运维误判为服务故障。
 		if isNotFoundError(err) {
 			response.NotFoundError(ctx, "连接器")
+			return
+		}
+		if errors.Is(err, kbconnector.ErrInvalidInput) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
 		response.Error(ctx, http.StatusInternalServerError, err.Error())

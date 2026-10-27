@@ -1,6 +1,7 @@
 package kbconnector
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,12 +28,12 @@ type webhttpDoc struct {
 func (webhttpProvider) List(ctx context.Context, cfg map[string]any) ([]ExternalDoc, error) {
 	manifestURL := cfgString(cfg, "manifest_url", "url")
 	if manifestURL == "" {
-		return nil, fmt.Errorf("webhttp 配置缺少 manifest_url")
+		return nil, invalidInput("webhttp 配置缺少 manifest_url")
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, invalidInput("manifest_url 不是合法 URL: %v", err)
 	}
 	if headers, ok := cfg["headers"].(map[string]any); ok {
 		for k, v := range headers {
@@ -46,9 +47,23 @@ func (webhttpProvider) List(ctx context.Context, cfg map[string]any) ([]External
 		return nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	raw, readErr := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	if readErr != nil {
+		return nil, fmt.Errorf("读取清单响应失败: %w", readErr)
+	}
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("清单 HTTP %d: %s", res.StatusCode, truncate(string(raw), 120))
+		return nil, invalidInput("清单 HTTP %d（请确认 URL 指向可访问的 JSON 清单）: %s", res.StatusCode, truncate(string(raw), 120))
+	}
+	// 有些静态站会给 UTF-8 文件加 BOM；json.Unmarshal 不认 BOM，会报
+	// "invalid character 'ï'"，同样属于可修复的配置问题，这里先剥掉。
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	// 很多「清单 URL」实际指向普通网页/登录页：HTTP 200 但返回 HTML。
+	// 直接 JSON 解析会得到 "invalid character '<'"，对用户毫无指向性；
+	// 这里先按 Content-Type/首个非空白字节识别，给出可操作的提示。
+	ct := strings.ToLower(res.Header.Get("Content-Type"))
+	trimmed := strings.TrimLeft(string(raw), " \r\n\t")
+	if strings.Contains(ct, "text/html") || strings.HasPrefix(trimmed, "<") {
+		return nil, invalidInput("清单 URL 返回的是 HTML 网页而不是 JSON 清单（请填写 .json 清单地址，或检查是否需要登录 Cookie）")
 	}
 
 	var docs []webhttpDoc
@@ -56,7 +71,7 @@ func (webhttpProvider) List(ctx context.Context, cfg map[string]any) ([]External
 		Docs *[]webhttpDoc `json:"docs"`
 	}{Docs: &docs}); err != nil {
 		if err2 := json.Unmarshal(raw, &docs); err2 != nil {
-			return nil, fmt.Errorf("清单不是 {docs:[...]} 或 [...] 格式: %v", err)
+			return nil, invalidInput("清单不是 {docs:[...]} 或 [...] 格式: %v", err)
 		}
 	}
 

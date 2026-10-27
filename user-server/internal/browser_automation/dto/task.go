@@ -34,7 +34,7 @@ type CreateBrowserTaskReq struct {
 	Description string `json:"description"`
 	TaskType    string `json:"task_type" binding:"required,oneof=one_shot loop cron workflow"`
 	Url         string `json:"url" binding:"required,max=2048"`
-	Platform    string `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），空=xiaohongshu 兼容存量
+	Platform    string `json:"platform" binding:"omitempty,max=32"` // 平台标识（xiaohongshu/douyin/xianyu），必填；空值在 service 层 fails-loudly（B21 起不再缺省 xiaohongshu）
 	BrainMode   bool   `json:"brain_mode"`
 	BrainGoal   string `json:"brain_goal"`
 	CopyText    string `json:"copy_text"`

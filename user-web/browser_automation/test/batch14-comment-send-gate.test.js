@@ -71,7 +71,7 @@ beforeEach(() => {
 describe('comment_send 发送按钮闸门', () => {
   it('正向对照：可点按钮仍恰好一次坐标点击（闸门不得过修正成永不提交）', async () => {
     document.body.innerHTML = PAGE;
-    const r = await dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps());
+    const r = await dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps());
     expect(r).toEqual({ ok: true, sent: true });
     expect(cdp.clickAt).toHaveBeenCalledTimes(1);
   });
@@ -79,7 +79,7 @@ describe('comment_send 发送按钮闸门', () => {
   it('disabled 发送按钮：判「点击从未发生」，零坐标下发', async () => {
     document.body.innerHTML = PAGE;
     document.querySelector('#send').disabled = true;
-    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps()))
+    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps()))
       .rejects.toThrow(/send_button_not_interactable: disabled/);
     expect(cdp.clickAt).toHaveBeenCalledTimes(0);
   });
@@ -87,7 +87,7 @@ describe('comment_send 发送按钮闸门', () => {
   it('aria-disabled 同 disabled（组件库常用 aria 而非原生 disabled）', async () => {
     document.body.innerHTML = PAGE;
     document.querySelector('#send').setAttribute('aria-disabled', 'true');
-    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps()))
+    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps()))
       .rejects.toThrow(/send_button_not_interactable: disabled/);
     expect(cdp.clickAt).toHaveBeenCalledTimes(0);
   });
@@ -95,7 +95,7 @@ describe('comment_send 发送按钮闸门', () => {
   it('被浮层遮挡：上抛 covered，不得把这一次提交落在浮层上', async () => {
     document.body.innerHTML = PAGE + '<div id="mask"></div>';
     document.elementFromPoint = () => document.querySelector('#mask');
-    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps()))
+    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps()))
       .rejects.toThrow(/send_button_not_interactable: covered/);
     expect(cdp.clickAt).toHaveBeenCalledTimes(0);
   });
@@ -107,7 +107,7 @@ describe('comment_send 发送按钮闸门', () => {
         ? { x: 0, y: 0, left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, toJSON() {} }
         : BOX;
     };
-    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps()))
+    await expect(dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps()))
       .rejects.toThrow(/send_button_not_interactable: zero_box/);
     expect(cdp.clickAt).toHaveBeenCalledTimes(0);
   });
@@ -119,7 +119,7 @@ describe('comment_send 发送按钮闸门', () => {
     let scrolled = false;
     btn.scrollIntoView = () => { scrolled = true; };
     document.elementFromPoint = () => (scrolled ? btn : mask);
-    const r = await dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci' }, makeDeps());
+    const r = await dispatch({ action: 'comment_send', tab_id: 42, input_selector: '#ci', send_button_text: '发送' }, makeDeps());
     expect(r.sent).toBe(true);
     expect(scrolled).toBe(true);
     expect(cdp.clickAt).toHaveBeenCalledTimes(1);

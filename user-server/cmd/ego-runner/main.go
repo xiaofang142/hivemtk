@@ -356,7 +356,9 @@ func confirmDecisionPath(scriptPath string) string {
 // 只认 decision==="allow" 为放行（fail-close）：文件损坏/半写/未知值一律不放行；
 // TTL 到期返回 false，由脚本自行收口（进程被 runner kill 是兜底，不是依赖）。
 const confirmHelperJS = `// —— 事前阻塞写确认闸（HiveMTK runner 注入；契约见 specs/014-egolite-blocking-confirm-gate）——
-// 写提交点前调用：if (!(await __awaitConfirm__("动作名"))) { ...收口，不得继续写... }
+// 写提交点前调用：if (!(await __awaitConfirm__("动作名"))) { 跳过写动作，打印 ok:false 审计行 }
+// 注意：false 时**不要 process.exit**（扫描门 EGO-R013 禁止，且会伪造 done 终态）——
+// 跳过写、正常结束即可；终态由服务端裁决（deny/TTL 已判 stopped）。
 // 未调用本函数的脚本保持既有行为（乐观执行 + 服务端可杀死）。
 async function __awaitConfirm__(label) {
   console.log(JSON.stringify({ type: "confirm", action: String(label ?? ""), execution: __EXEC__, ts: Date.now() }));

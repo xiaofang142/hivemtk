@@ -75,13 +75,14 @@ func buildStepParams(step parsedStep) StepParams {
 	return p
 }
 
-// taskPlatformID 任务归属平台：task.platform 列是权威（R20 起为显式字段）；
-// 空值走缺省 xiaohongshu 保证存量任务兼容（AccountID 序号映射已废弃）
+// taskPlatformID 任务归属平台：task.platform 列是权威（R20 起为显式字段）。
+// B21：**不兜底**。早先空值回落 xiaohongshu 是 fail-open——漏填平台的抖音任务会
+// 静默拿小红书的定位表去点抖音页面，与 P4「未声明能力即报错」方向相反。
+// 现在空值原样返回 ""，交由下游 platform.Get("") 报错（执行面 fails-loudly）；
+// 入口侧另有门把它拦住：Create/Update 走 validateTaskPlatform（必填+已注册），
+// Publish/RunTask 走 requireTaskPlatform（必填）。
 func taskPlatformID(task *model.BrowserTask) string {
-	if p := strings.TrimSpace(task.Platform); p != "" {
-		return p
-	}
-	return "xiaohongshu"
+	return strings.TrimSpace(task.Platform)
 }
 
 // ParseSteps 编排 JSON → parsedStep 数组（task.steps 为空返回空切片）

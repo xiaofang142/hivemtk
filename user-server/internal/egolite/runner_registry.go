@@ -136,6 +136,24 @@ func (r *EgoRunnerRegistry) GetConn(userID uint) (*EgoRunnerConn, bool) {
 	return c, ok
 }
 
+// BroadcastUpgrade 向全部在线 runner 下发 ego-browser 升级指令（specs/015 C10；
+// runner 侧执行 `ego-browser upgrade` 并回传结果事件）。返回成功送达的连接数。
+func (r *EgoRunnerRegistry) BroadcastUpgrade() int {
+	r.mu.RLock()
+	conns := make([]*EgoRunnerConn, 0, len(r.conns))
+	for _, c := range r.conns {
+		conns = append(conns, c)
+	}
+	r.mu.RUnlock()
+	n := 0
+	for _, c := range conns {
+		if err := c.SendSpec(map[string]any{"type": "upgrade"}); err == nil {
+			n++
+		}
+	}
+	return n
+}
+
 // EnsureOnline 下发前判在线（ErrEgoRunnerOffline → controller 409）
 func (r *EgoRunnerRegistry) EnsureOnline(userID uint) error {
 	if _, ok := r.GetConn(userID); !ok {

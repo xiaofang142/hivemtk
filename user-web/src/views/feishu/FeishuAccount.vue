@@ -564,7 +564,8 @@ const handleRefreshToken = async (row) => {
     ElMessage.success(i18n.global.t('Token 刷新成功'))
     await fetchAccounts()
   } catch (e) {
-    ElMessage.error('网络错误：' + e.message)
+    // 失败提示由 request 拦截器统一弹出（502/400 展示服务端原因，网络错误展示超时）。
+    // 这里再弹一条「网络错误：…」只会和拦截器那条叠成两条同义报错。
   }
 }
 

@@ -14,10 +14,15 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 )
 
-func TestTaskPlatformIDFallback(t *testing.T) {
-	// task.platform 是权威；空值/空白回落 xiaohongshu（存量任务兼容）
-	if got := taskPlatformID(&model.BrowserTask{}); got != "xiaohongshu" {
-		t.Errorf("空平台应回落 xiaohongshu，got %q", got)
+func TestTaskPlatformIDNoFallback(t *testing.T) {
+	// B21：task.platform 是权威，**空值不再回落 xiaohongshu**。
+	// 旧实现返回 "xiaohongshu" 是 fail-open：漏填平台的抖音任务会静默拿小红书的
+	// 定位表去点抖音页面。现在空值原样返回 ""，下游 platform.Get("") 报错（fails-loudly）。
+	if got := taskPlatformID(&model.BrowserTask{}); got != "" {
+		t.Errorf("空平台不得兜底，want \"\"，got %q", got)
+	}
+	if got := taskPlatformID(&model.BrowserTask{Platform: "  "}); got != "" {
+		t.Errorf("纯空白平台不得兜底，want \"\"，got %q", got)
 	}
 	if got := taskPlatformID(&model.BrowserTask{Platform: "  douyin "}); got != "douyin" {
 		t.Errorf("平台名应去空白，got %q", got)

@@ -37,12 +37,12 @@ describe('AB 高级分析 API', () => {
 
   it('统计检验走 GET stats，method 缺省 frequentist', async () => {
     await api.getExperimentWithStats(7)
-    expect(http.get).toHaveBeenCalledWith('/api/ab-experiments/7/stats', { method: 'frequentist' })
+    expect(http.get).toHaveBeenCalledWith('/api/ab-experiments/7/stats', { params: { method: 'frequentist' } })
   })
 
   it('统计检验可切 bayesian 方法', async () => {
     await api.getExperimentWithStats(7, 'bayesian')
-    expect(http.get).toHaveBeenCalledWith('/api/ab-experiments/7/stats', { method: 'bayesian' })
+    expect(http.get).toHaveBeenCalledWith('/api/ab-experiments/7/stats', { params: { method: 'bayesian' } })
   })
 
   it('诊断与 CUPED 走 GET 各自段', async () => {

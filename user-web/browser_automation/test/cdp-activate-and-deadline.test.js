@@ -144,7 +144,7 @@ describe('dispatch：CDP 写之前必须激活 tab', () => {
     deps.tabManager.ensureActiveForInput.mockImplementation(async () => { order.push('activate'); });
     cdp.typeText.mockImplementation(async () => { order.push('type'); return { ok: true, chars: 1, typed: 1 }; });
 
-    await dispatch({ action: 'comment_prep', tab_id: 42, value: '真好吃' }, deps);
+    await dispatch({ action: 'comment_prep', tab_id: 42, value: '真好吃', input_selector: '#editor' }, deps);
 
     expect(order).toEqual(['activate', 'type']);
   });
@@ -156,7 +156,7 @@ describe('dispatch：CDP 写之前必须激活 tab', () => {
     deps.tabManager.ensureActiveForInput.mockImplementation(async () => { order.push('activate'); });
     cdp.clickAt.mockImplementation(async () => { order.push('click'); return { ok: true }; });
 
-    await dispatch({ action: 'comment_send', tab_id: 42, value: '真好吃' }, deps);
+    await dispatch({ action: 'comment_send', tab_id: 42, value: '真好吃', input_selector: 'textarea', send_button_text: '发送' }, deps);
 
     expect(order).toEqual(['activate', 'click']);
   });
@@ -237,7 +237,7 @@ describe('comment_prep 总闸：各层 deadline 相加仍会越服务端 30s 闸
     });
     cdp.typeText.mockImplementation(() => new Promise(() => {}));
 
-    const p = dispatch({ action: 'comment_prep', tab_id: 42, value: '真好吃' }, deps);
+    const p = dispatch({ action: 'comment_prep', tab_id: 42, value: '真好吃', input_selector: '#ci' }, deps);
     const settled = p.then(() => 'resolved', (e) => e.message);
 
     await vi.advanceTimersByTimeAsync(25001);
@@ -254,7 +254,7 @@ describe('comment_prep 总闸：各层 deadline 相加仍会越服务端 30s 闸
         vi.useFakeTimers();
         const deps = makeDeps();
         fakeChrome.scripting.executeScript.mockImplementation(() => new Promise(() => {}));
-        const p = dispatch({ action: 'comment_prep', tab_id: 42, value: 'x' }, deps);
+        const p = dispatch({ action: 'comment_prep', tab_id: 42, value: 'x', input_selector: '#ci' }, deps);
         p.catch(() => {});
         await vi.advanceTimersByTimeAsync(25001);
         return await p.then(() => 'resolved', (e) => e.message);

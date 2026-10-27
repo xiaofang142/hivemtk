@@ -22,6 +22,7 @@ import (
 	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelbot/whatsapp"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/httpclient"
 	"hivemtk-user/internal/pkg/tenant"
@@ -367,7 +368,7 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	resp, err := httpclient.Client.Do(req)
 	if err != nil {
-		return "", err
+		return "", bizerr.Wrap(bizerr.CodePlatformUnavail, "刷新飞书 Token 失败（飞书不可达）", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var out struct {
@@ -377,20 +378,20 @@ func (s *FeishuIntegrationService) getAccessToken(ctx context.Context, acc *mode
 		Expire            int    `json:"expire"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+		return "", bizerr.Wrap(bizerr.CodePlatformUnavail, "刷新飞书 Token 失败（返回内容无法解析）", err)
 	}
 	if out.Code != 0 {
 
 		acc.AccessToken = ""
 		acc.TokenExpires = nil
 		logger.Errorf("[feishu] 拉 token 失败 code=%d msg=%s（已清空旧 token）", out.Code, out.Msg)
-		return "", fmt.Errorf("feishu token code=%d: %s", out.Code, out.Msg)
+		return "", bizerr.New(bizerr.CodePlatformUnavail, fmt.Sprintf("刷新飞书 Token 失败：code=%d msg=%s", out.Code, out.Msg))
 	}
 	// 仓内五处同类腿（TG/企微/公众号/WhatsApp/钉钉）都是「err != nil 或 token 为空」双保险，飞书是漏判的第六处：
 	// 少了这一句会把 ""连同未来过期时间写回账号行，调用方再拿空 token 真发一次请求，
 	// 现场只剩平台侧的鉴权错误码，根因（上一跳就没给凭证）丢掉。守卫必须在写缓存之前。
 	if out.TenantAccessToken == "" {
-		return "", fmt.Errorf("feishu token empty code=%d msg=%s expire=%d", out.Code, out.Msg, out.Expire)
+		return "", bizerr.New(bizerr.CodePlatformUnavail, fmt.Sprintf("刷新飞书 Token 失败：飞书未返回 token（code=%d msg=%s）", out.Code, out.Msg))
 	}
 	expires := time.Now().Add(time.Duration(out.Expire-300) * time.Second)
 	acc.AccessToken = out.TenantAccessToken

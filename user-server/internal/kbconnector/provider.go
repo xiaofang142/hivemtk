@@ -4,10 +4,22 @@ package kbconnector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 )
+
+// ErrInvalidInput 连接器配置或上游清单本身不合法（缺字段、URL 指向网页、
+// 清单不是 JSON 等）。这类错误是**调用方/配置问题**，控制器应回 4xx，
+// 而不是 500「服务器内部错误」——否则运维只会看到「服务炸了」，不知道
+// 是连接器 URL 配错。
+var ErrInvalidInput = errors.New("连接器配置或上游清单不合法")
+
+// invalidInput 包一层哨兵错误，保留可读原因供前端直接展示。
+func invalidInput(format string, a ...any) error {
+	return fmt.Errorf("%w: %s", ErrInvalidInput, fmt.Sprintf(format, a...))
+}
 
 // ExternalDoc 连接器产出的一个可导入文档。
 type ExternalDoc struct {

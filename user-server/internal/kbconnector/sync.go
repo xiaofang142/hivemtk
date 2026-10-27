@@ -40,13 +40,13 @@ func Sync(ctx context.Context, connectorID uint) (*SyncResult, error) {
 	provider, err := LookupProvider(conn.Type)
 	if err != nil {
 		markFailed(g, conn.ID, err.Error())
-		return nil, err
+		return nil, invalidInput("%v", err)
 	}
 	cfg := map[string]any{}
 	if strings.TrimSpace(conn.Config) != "" {
 		if err := json.Unmarshal([]byte(conn.Config), &cfg); err != nil {
 			markFailed(g, conn.ID, "config 不是合法 JSON: "+err.Error())
-			return nil, err
+			return nil, invalidInput("config 不是合法 JSON: %v", err)
 		}
 	}
 

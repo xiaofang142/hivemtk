@@ -95,10 +95,12 @@ allow 放行 / deny 停止 / TTL 到期自停——验证注入的 JS 在 ego �
 ## 五、脚本契约（写进发布台/流程编辑器的作者须知，随本轮入库于 preamble 自述）
 
 ```js
-// 写提交点前调用；false = 用户拒绝或确认超时，必须立即收口不得继续写：
+// 写提交点前调用；false = 用户拒绝或确认超时，必须跳过写动作并打印审计行（**不要 process.exit**——
+// 扫描门 EGO-R013 禁止，且会伪造 done 终态；终态由服务端裁决，deny/TTL 已判 stopped）：
 if (!(await __awaitConfirm__("提交订单"))) {
   console.log(JSON.stringify({ type: "action", ok: false, note: "confirm_denied_or_timeout" }));
-  process.exit(2);
+} else {
+  // ...执行写动作...
 }
 // 声明了 writes 的资产/流程未走 __awaitConfirm__ 时，行为退回「乐观执行 + 可杀死」
 // （服务端 deny/TTL 仍会杀进程）——但不建议：审计只有事后行，没有事前闸。

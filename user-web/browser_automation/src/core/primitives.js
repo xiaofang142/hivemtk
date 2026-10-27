@@ -421,12 +421,16 @@ function injMarkdown() {
 
 /**
  * injPostCommentPrep 阶段一：定位评论输入框 + 聚焦 + 合成注入文字。
- * 选择器由平台适配器（服务端 L3）下发，缺省小红书（R17 真机实测）。
+ * 选择器**必须**由平台适配器（服务端 L3）下发（A21：删掉「缺省小红书选择器」）。
+ * 缺省那一版是 fail-open：没下发时扩展自己猜一组小红书式选择器，猜中了看起来很灵，
+ * 猜不中则报 comment_input_not_found —— 同一份「适配器没声明」在两种平台上给出两种结论，
+ * 且错误名指向「页面改版」而不是「配置缺失」，归因被带偏。
  * 返回 { ok, input_found, needs_trusted, input_text }。
  * needs_trusted=true 表示目标是 contenteditable（React 受控），合成注入后需 trusted 键入兜底。
  */
 function injPostCommentPrep(text, inputSelector) {
-  const CANDIDATE_INPUT = inputSelector || '.content-textarea, p.content-input, [contenteditable="true"], div[contenteditable], .comments-container textarea, textarea[placeholder]';
+  if (!inputSelector) return { ok: false, input_found: false, error: 'comment_input_selector_not_found' };
+  const CANDIDATE_INPUT = inputSelector;
   const el = (() => {
     const nodes = document.querySelectorAll(CANDIDATE_INPUT);
     for (const n of nodes) {
@@ -459,7 +463,13 @@ function injPostCommentPrep(text, inputSelector) {
  * 并返回输入框引用供后续验证。按钮文本由平台适配器下发。
  */
 async function injPostCommentSend(inputSelector, sendButtonText) {
-  const CANDIDATE_INPUT = inputSelector || '.content-textarea, p.content-input, [contenteditable="true"], div[contenteditable], .comments-container textarea, textarea[placeholder]';
+  // A21：输入框选择器与发送按钮文本都必须由适配器下发。按钮文案的旧缺省是
+  // ['发送','发布','评论']——那是把「小红书/微博式提交按钮」写成基座缺省：
+  // 换成英文站或多语言站，回包是 send_button_not_found（归因成「改版」），
+  // 真实原因是「适配器没声明」。两个字面量在这里都删掉，缺了就报自己的名字。
+  if (!inputSelector) return { ok: false, error: 'comment_input_selector_not_found' };
+  if (!sendButtonText) return { ok: false, error: 'send_button_text_not_found' };
+  const CANDIDATE_INPUT = inputSelector;
   const el = (() => {
     const nodes = document.querySelectorAll(CANDIDATE_INPUT);
     for (const n of nodes) {
@@ -470,7 +480,7 @@ async function injPostCommentSend(inputSelector, sendButtonText) {
   })();
   if (!el) return { ok: false, error: 'comment_input_not_found' };
 
-  const WANT = sendButtonText ? [sendButtonText] : ['发送', '发布', '评论'];
+  const WANT = [sendButtonText];
   let btn = null;
   let root = el.parentElement;
   for (let depth = 0; depth < 4 && root && !btn; depth++) {
@@ -565,12 +575,15 @@ async function injPostCommentSend(inputSelector, sendButtonText) {
 
 /**
  * injPostCommentVerify 阶段三：验证评论已渲染进评论区（xiaohongshu-mcp waitCommentRendered 模式）。
- * MutationObserver 等「评论区出现目标文本」或超时；配平台选择器参数（来自适配器，缺省用小红书）。
+ * MutationObserver 等「评论区出现目标文本」或超时；容器选择器**必须**由适配器下发（A21：
+ * 删掉 `.comments-container, .comments-el, [class*=comments]` 那组小红书式缺省——
+ * 缺省兜底会让「验证范围」在无声中扩大到整页，而整页里出现这句话的原因可以有很多）。
  * F2②：回包带 evidence（命中容器数 + 首个评论条目文本节选）——finalize 落库审计用。
  */
 function injPostCommentVerify(targetText, opts) {
   const o = opts || {};
-  const containerSel = o.containerSelector || '.comments-container, .comments-el, [class*=comment-list], [class*=comments]';
+  if (!o.containerSelector) return { ok: false, verified: false, error: 'comment_container_not_found' };
+  const containerSel = o.containerSelector;
   const deadline = Date.now() + (o.timeoutMs || 5000);
   const norm = (s) => (s || '').replace(/\s+/g, '');
   const want = norm(targetText);
@@ -1052,7 +1065,7 @@ export async function dispatch(cmd, deps) {
           // F2②（G11 正确版）：三段式编排收口 Go——扩展只暴露无状态子命令，
           // 提交（comment_send）与验证（comment_verify 轮询）分离，可中断可归因。
           // 旧一站式 post_comment 兼容路径已删（服务端 v3.41.0 起只发子命令，单一路径防分叉）。
-          // 平台选择器由服务端 L3 适配器下发（无则缺省小红书——R17 真机实测）。
+          // 平台选择器由服务端 L3 适配器下发；**未下发即报错**（A21：不再缺省小红书）。
           // A1 自愈回路：input_selector 允许是 @eN 引用（LLM 重定位产物），此处同 click/type 走 ref 解析。
           // ref 失效必须报 comment_input_not_found（Go 侧 healCommentInput 只认这个名字，
           // 报错名不对=自愈不触发=一次改版把整条写链路打死），故显式给 missToken。

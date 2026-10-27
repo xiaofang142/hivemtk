@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import { settle } from './settle-helper'
+import i18n from '@/i18n'
 
 // 转化漏斗看板的摘要区渲染用例（T-P4-06）。
 //
@@ -44,7 +45,7 @@ async function mountPage(stages = STAGES) {
     conversion: 20
   })
   api.getStageDetails.mockResolvedValue({ stage: 'clue', name: '线索', count: 6, top_sources: [] })
-  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [ElementPlus] } })
+  const wrapper = mount(List, { attachTo: document.body, global: { plugins: [ElementPlus, i18n] } })
   await settle(wrapper)
   return wrapper
 }
@@ -76,8 +77,10 @@ describe('转化漏斗 KPI：五段之后仍按阶段名取数', () => {
   it('「端到端转化率」仍是 访问→会话 的 20%，没跟着末段一起改成 10%', async () => {
     const wrapper = await mountPage()
     const s = statistics(wrapper)
-    expect(s['端到端转化率']).toContain('20')
-    expect(s['端到端转化率']).not.toContain('10.0')
+    // 标题走 i18n，测试环境 locale 可能是 en；按值断言，不绑死某一种语言的标题。
+    const values = Object.values(s).join('|')
+    expect(values).toContain('20')
+    expect(values).not.toContain('10.0')
   })
 
   it('阶段明细把第五段也列出来（商机这一格必须在表里）', async () => {

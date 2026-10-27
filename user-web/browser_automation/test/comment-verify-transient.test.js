@@ -26,7 +26,8 @@ async function extractVerify() {
 }
 
 const COMMENT = '真好吃';
-const OPTS = { timeoutMs: 100, itemSelector: '.note-comment-item' };
+// A21：容器选择器必须显式给（扩展不再自带小红书缺省）。这里给的正是本夹具的容器。
+const OPTS = { timeoutMs: 100, containerSelector: '.comments-container', itemSelector: '.note-comment-item' };
 
 function freshDoc(bodyHtml) {
   document.body.innerHTML = bodyHtml;

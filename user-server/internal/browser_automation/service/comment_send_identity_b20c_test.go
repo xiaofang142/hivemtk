@@ -99,12 +99,26 @@ func TestCommentSendResultRecordsIdentityChecked(t *testing.T) {
 
 // ③ element_moved 从 comment_send 回来时是「点了，但点到的可能不是发送按钮」：
 // 动作已经发生，台账必须留下这次尝试，且绝不重发（重发=双发，公开内容不可撤回）。
-// 这里让 comment_verify 仍然回 verified=true（评论确实上去了），判据取的是
-// 「台账记的是已跨越的态」而不是「步判绿不绿」——绿与不绿由回查裁决，跨没跨由台账裁决，两件事各留痕。
+// 这里让**页面**真的多出一条（element_moved 的语义正是「点已派发、只是复核没拿到落点身份」，
+// 评论完全可能已经上去了），所以回查应当判绿；判据取的是「台账记的是已跨越的态」而不是
+// 「步判绿不绿」——绿与不绿由回查裁决，跨没跨由台账裁决，两件事各留痕。
+//
+// E1/E21 追加：光让 comment_verify 回 verified=true 已经不够了。回查要和提交前基线比新旧，
+// 「页面上有这句话」本身不是证据（同账号重复文本评论提交前就已经是 true）。
+// 因此这条夹具必须让 extract 在**提交后**才数出这一条。
 func TestCommentSendElementMovedRecordsCrossedAttempt(t *testing.T) {
+	var extractCalls int
 	frames, row, got := runCommentSend(t, func(action string, frame map[string]any) (map[string]any, string) {
-		if action == "comment_send" {
+		switch action {
+		case "comment_send":
 			return nil, "element_moved: 落点已被 overlay 接管"
+		case "extract":
+			extractCalls++
+			items := []any{}
+			if extractCalls > 1 { // 第 1 次=提交前基线（还没发），之后=回数
+				items = append(items, "测试评论正文")
+			}
+			return map[string]any{"data": map[string]any{"comment_items": items}}, ""
 		}
 		return happyReply(action, frame)
 	})
