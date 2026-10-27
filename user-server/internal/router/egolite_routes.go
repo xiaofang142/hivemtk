@@ -361,6 +361,13 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		// runner 下次拉清单即可见；用户点它就跑，闭环在 user-server 内。
 		egAdmin := eg.Group("/admin", middleware.RequireAdminMiddleware())
 		{
+			// ego-browser 升级指令（specs/015 C10）：向全部在线 runner 广播 upgrade 帧；
+			// runner 执行官方 `ego-browser upgrade` 并回传结果事件（能力升级归 ego 官方，
+			// 本平台只做触发与结果监督）。
+			egAdmin.POST("/runner/upgrade", func(c *gin.Context) {
+				n := registry.BroadcastUpgrade()
+				response2(c, map[string]any{"notified": n}, "已向在线 runner 下发升级指令")
+			})
 			// 审核发布（用户流程 submitted → 复扫 → 目录条目）
 			egAdmin.POST("/assets/publish", func(c *gin.Context) {
 				var body struct {

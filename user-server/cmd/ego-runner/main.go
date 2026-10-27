@@ -34,6 +34,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -153,6 +154,7 @@ type taskSpec struct {
 	ResumeSpaceID string          `json:"resume_space_id,omitempty"`
 	Origin        string          `json:"origin"` // market / draft
 	DraftScript   string          `json:"draft_script,omitempty"`
+	Domains       []string        `json:"domains"` // 域名白名单（specs/015：运行时域审计数据源；下发时刻快照）
 }
 
 // ---------- 事件行（A3 协议；runner 只透传+补 seq，不自产结论） ----------
@@ -246,7 +248,7 @@ func (r *runner) runTask(spec taskSpec) {
 	// 不改 assembleScript 签名——目录每执行独立创建，天然无跨执行残留/伪造面。
 	ec.decisionPath = confirmDecisionPath(script)
 
-	code, errOut := r.execEgo(ctx, spec, script)
+	code, errOut := r.execEgo(ctx, cancel, spec, script)
 	r.send(eventLine{Type: "done", Execution: spec.ExecutionID, ExitCode: code, Stderr: truncate(errOut, 2000)})
 }
 
@@ -296,6 +298,14 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 		cleanup()
 		return "", nil, fmt.Errorf("未知 origin=%q", spec.Origin)
 	}
+	// 运行时收敛预检（specs/015 C2 第一层；扫描门 EGO-R001..R014 的 runner 侧镜像）：
+	// 服务端扫描门管"发布前"，这里管"执行前"——拦截工作区被篡改/历史脏数据漏网的
+	// 已知恶意模式。与服务端同一份规则语义，runner 不 import server internal 包
+	// （纪律），漂移由 scan_test 样例集钉死。
+	if violated := firstEntryBlocker(entrySrc); violated != "" {
+		cleanup()
+		return "", nil, fmt.Errorf("运行时收敛预检拒绝执行：命中 %s", violated)
+	}
 
 	// round 脚本前导：把执行上下文写成**脚本常量**。
 	//
@@ -324,6 +334,14 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 	}
 	p := filepath.Join(dir, "flow-round01.mjs")
 	decisionPath := confirmDecisionPath(p)
+	// __DOMAINS__ 空数组 = 零域（fail-close：守卫 helper 全拒；绕过 helper 的裸
+	// goto/fetch 由事件域审计兜底拦截）
+	domainsJSON := "[]"
+	if len(spec.Domains) > 0 {
+		if b, err := json.Marshal(spec.Domains); err == nil {
+			domainsJSON = string(b)
+		}
+	}
 	preamble := fmt.Sprintf(
 		"// ego-runner assembled @%s execution=%s origin=%s round=%d\n"+
 			"const __EXEC__ = %q;\n"+
@@ -331,9 +349,10 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 			"const __SPACE_NAME__ = %q;\n"+
 			"const __CONFIRM_FILE__ = %q;\n"+
 			"const __CONFIRM_TTL_SEC__ = %d;\n"+
-			confirmHelperJS,
+			"const __DOMAINS__ = %s;\n"+
+			confirmHelperJS+domainHelperJS,
 		time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.Round,
-		spec.ExecutionID, paramsJSON, spec.SpaceName, decisionPath, ttlSec)
+		spec.ExecutionID, paramsJSON, spec.SpaceName, decisionPath, ttlSec, domainsJSON)
 	script := preamble + entrySrc
 
 	if err := os.WriteFile(p, []byte(script), 0o600); err != nil {
@@ -376,6 +395,31 @@ async function __awaitConfirm__(label) {
 }
 `
 
+// domainHelperJS 注入 round 脚本的域名守卫（specs/015 C2 协作层）：
+// 裸 page.goto/page.fetch 无法从 runner 侧拦截（ego 注入的原语），但守卫 helper
+// 给脚本一条"被审计的通路"；绕过 helper 的导航由 runner 事件域审计兜底（auditEventURL）。
+// 语义与 Go 侧 domainAllowed 同源：整站 * 放行；精确域或子域命中；www. 归一。
+const domainHelperJS = `// —— 域名守卫（HiveMTK runner 注入；specs/015）——
+function __domainAllowed__(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (__DOMAINS__.includes("*")) return true;
+    return __DOMAINS__.some((d) => {
+      const dom = String(d).toLowerCase().trim().replace(/^www\./, "");
+      return dom !== "" && (host === dom || host.endsWith("." + dom));
+    });
+  } catch { return false; }
+}
+async function __gotoChecked__(page, url) {
+  if (!__domainAllowed__(url)) throw new Error("domain_violation: " + url + " 不在声明 domains 内（用 __gotoChecked__ 或扩 domains）");
+  return page.goto(url);
+}
+async function __fetchChecked__(page, url, opts) {
+  if (!__domainAllowed__(url)) throw new Error("domain_violation: " + url + " 不在声明 domains 内（用 __fetchChecked__ 或扩 domains）");
+  return page.fetch(url, opts);
+}
+`
+
 // eventTypeFromPayload 从脚本打印的 JSON 行里取事件类型。
 //
 // 为什么必须透传而不是一律 "action"：服务端的写操作闸靠事件类型推进状态机——
@@ -405,7 +449,7 @@ func eventTypeFromPayload(raw json.RawMessage) string {
 // T2 实测勘误（F6 降级）：EGO_BROWSER_AGENT_WORKSPACE 环境变量**不穿透**到内嵌 Node
 // （探针 pid 稳定复现 unset）——资产分发改为 SyncPull 直接解包到物理目录
 // ~/.local/share/ego/ego-skills/learnings/{site}/，脚本内以物理路径访问（实测可读）。
-func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) (int, string) {
+func (r *runner) execEgo(ctx context.Context, cancel context.CancelFunc, spec taskSpec, scriptPath string) (int, string) {
 	cmd := exec.CommandContext(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
 	script, err := os.Open(scriptPath)
 	if err != nil {
@@ -428,24 +472,22 @@ func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) 
 	var wg sync.WaitGroup
 	seq := 0
 	var seqMu sync.Mutex
-	scanEvents := func(sc *bufio.Scanner) {
-		for sc.Scan() {
-			line := strings.TrimSpace(sc.Text())
-			if line == "" || !strings.HasPrefix(line, "{") {
-				continue
-			}
-			var raw json.RawMessage
-			if json.Unmarshal([]byte(line), &raw) != nil {
-				continue
-			}
-			seqMu.Lock()
-			seq++
-			n := seq
-			seqMu.Unlock()
-			r.send(eventLine{Seq: n, Type: eventTypeFromPayload(raw), Execution: spec.ExecutionID, Payload: raw})
+	errBuf := &strings.Builder{}
+	// 统一事件出口：补 seq → 透传 → 运行时域审计（specs/015 C2）。
+	// 事件 payload 带 url 且越域 ⇒ fail-close：error 事件 + cancel 终止执行
+	// （脚本侧守卫 helper 是协作层，这里是强制层）。
+	handleEvent := func(raw json.RawMessage) {
+		seqMu.Lock()
+		seq++
+		n := seq
+		seqMu.Unlock()
+		r.send(eventLine{Seq: n, Type: eventTypeFromPayload(raw), Execution: spec.ExecutionID, Payload: raw})
+		if badURL, ok := auditEventURL(spec.Domains, raw); !ok {
+			r.send(eventLine{Type: "error", Execution: spec.ExecutionID,
+				Stderr: "domain_violation: 事件 URL 越域（" + badURL + "），按 fail-close 终止执行"})
+			cancel()
 		}
 	}
-	errBuf := &strings.Builder{}
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -458,11 +500,7 @@ func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) 
 			if line != "" && strings.HasPrefix(line, "{") {
 				var raw json.RawMessage
 				if json.Unmarshal([]byte(line), &raw) == nil {
-					seqMu.Lock()
-					seq++
-					n := seq
-					seqMu.Unlock()
-					r.send(eventLine{Seq: n, Type: eventTypeFromPayload(raw), Execution: spec.ExecutionID, Payload: raw})
+					handleEvent(raw)
 					continue
 				}
 			}
@@ -475,7 +513,17 @@ func (r *runner) execEgo(ctx context.Context, spec taskSpec, scriptPath string) 
 		defer wg.Done()
 		sc := bufio.NewScanner(stdout)
 		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		scanEvents(sc)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" || !strings.HasPrefix(line, "{") {
+				continue
+			}
+			var raw json.RawMessage
+			if json.Unmarshal([]byte(line), &raw) != nil {
+				continue
+			}
+			handleEvent(raw)
+		}
 	}()
 
 	done := make(chan error, 1)
@@ -693,6 +741,10 @@ func readLoop(r *runner, ctx context.Context, once bool) {
 			}
 			_ = json.Unmarshal(frame.Spec, &cf)
 			r.handleConfirmFrame(cf.ExecutionID, cf.Decision)
+		case "upgrade":
+			// ego-browser 升级指令（specs/015 C10）：能力升级归 ego 官方，runner 只执行
+			// 官方 upgrade 子命令并回传结果事件。异步执行不阻塞读循环。
+			go r.runUpgrade()
 		}
 		if once && frame.Type == "task_spec" {
 			// PoC 模式：跑完一个任务即退出（便于脚本化验收）
@@ -869,4 +921,97 @@ var _ = func() error {
 	_ = hex.EncodeToString(b)
 	_ = runtime.GOOS
 	return err
+}
+
+// ---------- 运行时收敛（specs/015 C2）与升级指令（C10） ----------
+
+// runnerEntryBlockers 执行前二次静扫（服务端扫描门 EGO-R001..R014 的 runner 侧镜像）。
+// 扫描门管"发布前"，这里管"执行前"——拦工作区被篡改/历史脏数据漏网的已知恶意模式。
+// 与服务端同一份语义；runner 不 import server internal 包（纪律），样例集由测试钉死。
+var runnerEntryBlockers = []struct {
+	name string
+	rx   *regexp.Regexp
+}{
+	{"EGO-R001 require(", regexp.MustCompile(`(?m)\brequire\s*\(`)},
+	{"EGO-R002 node: 模块", regexp.MustCompile(`(?m)(?:import\s+[^;]*from\s*|import\s*\(?|require\s*\(\s*)["']node:`)},
+	{"EGO-R003 child_process", regexp.MustCompile(`(?i)child[_\s]*process|spawnSync|execSync|fork\s*\(`)},
+	{"EGO-R004 import() 动态导入", regexp.MustCompile(`(?m)\bimport\s*\(\s*[^)]`)},
+	{"EGO-R010 eval(", regexp.MustCompile(`(?:^|[^$\w])eval\s*\(`)},
+	{"EGO-R011 Function 构造器", regexp.MustCompile(`(?m)new\s+Function\s*\(|Function\s*\(\s*["']`)},
+	{"EGO-R013 process 进程面", regexp.MustCompile(`(?m)\bprocess\s*\.\s*(?:binding|dlopen|exit|kill|env\s*\[)`)},
+}
+
+// firstEntryBlocker 返回首个命中的规则名（无命中返回空串）。
+// 注意：只扫 entry 原文——preamble 是 runner 自产的受信代码（confirm 契约用
+// import("node:fs/promises")，不适用本门）。
+func firstEntryBlocker(entrySrc string) string {
+	for _, b := range runnerEntryBlockers {
+		if b.rx.MatchString(entrySrc) {
+			return b.name
+		}
+	}
+	return ""
+}
+
+// domainAllowed 域名白名单判定（Go 侧；与注入 JS 的 __domainAllowed__ 同语义）：
+// 整站 * 放行；精确域或子域命中；www. 前缀归一；空域单 = 全拒（fail-close）。
+func domainAllowed(rawURL string, domains []string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, d := range domains {
+		dom := strings.ToLower(strings.TrimSpace(d))
+		dom = strings.TrimPrefix(dom, "www.")
+		if dom == "" {
+			continue
+		}
+		if dom == "*" || host == dom || strings.HasSuffix(host, "."+dom) {
+			return true
+		}
+	}
+	return false
+}
+
+// auditEventURL 运行时域审计：事件 payload 带 url 字段时校验白名单。
+// 零域单不审计（draft/market 的 domains 服务端必填，缺省视为未启用该层，避免误杀
+// 老资产——口径与「保存时 domains 必填」互补而非重复）。
+func auditEventURL(domains []string, raw json.RawMessage) (string, bool) {
+	if len(domains) == 0 {
+		return "", true
+	}
+	var probe struct {
+		URL string `json:"url"`
+	}
+	if json.Unmarshal(raw, &probe) != nil || probe.URL == "" {
+		return "", true
+	}
+	if domainAllowed(probe.URL, domains) {
+		return "", true
+	}
+	return probe.URL, false
+}
+
+// runUpgrade 执行官方 `ego-browser upgrade`（specs/015 C10）。ego lite 的升级策略
+// 归官方（不 fork、不代管版本），runner 只做"服务端触发 → 官方命令 → 结果回传"。
+func (r *runner) runUpgrade() {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, r.conf.EgoBin, egoUpgradeArgs(r.conf)...).CombinedOutput()
+	payload := map[string]any{"action": "ego-browser upgrade", "ok": err == nil}
+	if err != nil {
+		payload["error"] = err.Error()
+	}
+	payload["output"] = truncate(string(out), 1500)
+	r.send(eventLine{Type: "runner", Payload: mustJSON(payload)})
+}
+
+// egoUpgradeArgs upgrade 子命令的 argv（--ego-server-name 同样前置）
+func egoUpgradeArgs(c *runnerConf) []string {
+	args := make([]string, 0, 2)
+	if c.EgoServerName != "" {
+		args = append(args, "--ego-server-name="+c.EgoServerName)
+	}
+	return append(args, "upgrade")
 }

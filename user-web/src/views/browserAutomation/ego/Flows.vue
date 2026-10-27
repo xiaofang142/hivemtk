@@ -131,6 +131,16 @@
         :model="form"
         label-width="110px"
       >
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="脚本契约（runner 注入，直接可用）"
+        >
+          <div>常量：<code>__PARAMS__</code>（调用方参数对象）、<code>__SPACE_NAME__</code>（同名 space 续跑）、<code>__EXEC__</code>、<code>__DOMAINS__</code></div>
+          <div>写提交点前调用：<code>if (!(await __awaitConfirm__("动作名")))&#123; /* 跳过写，打印 ok:false 审计行 */ &#125;</code>——false=用户拒绝或确认超时（<b>不要 process.exit</b>，扫描门禁止）；域内导航建议 <code>__gotoChecked__(page, url)</code> / <code>__fetchChecked__(page, url, opts)</code>（越域即抛错）</div>
+          <div>脚本应至少打印一行 <code>console.log(JSON.stringify({...}))</code> 事件，否则事件流为空、审计只剩退出码（扫描门 warn）</div>
+        </el-alert>
         <el-form-item
           label="名称"
           required

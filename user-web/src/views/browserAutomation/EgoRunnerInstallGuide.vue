@@ -18,13 +18,17 @@
         编译 runner：<code>cd user-server &amp;&amp; go build -o ~/.hivemtk/ego-runner ./cmd/ego-runner</code>
       </li>
       <li>
-        写配置 <code>~/.hivemtk/ego_runner.conf</code>（key=value，同 nm_host.conf 形状）：
+        写配置 <code>~/.hivemtk/ego_runner.conf</code>（key=value，同 nm_host.conf 形状；也可用
+        <code>user-server/scripts/ego-runner/install.sh</code> 一键安装）：
         <pre class="conf">server_url=ws://127.0.0.1:8204
 token=eg_&lt;你的用户ID&gt;_&lt;随机串&gt;
 workspace_dir=~/.local/share/ego/ego-skills
-ego_bin=ego-browser</pre>
+ego_bin=ego-browser
+# 可选：本机有多个 ego lite 实例时按名连接（官方 --ego-server-name）
+# ego_server_name=work-a</pre>
         <div class="note">
-          token 在本页「我的 runner 令牌」里签发（明文只显示一次）；撤销即立刻失效
+          token 在本页「我的 runner 令牌」里签发（明文只显示一次）；撤销即立刻失效。
+          ego lite 升级由官方负责：管理端可向在线 runner 下发 <code>ego-browser upgrade</code> 指令
         </div>
       </li>
       <li>

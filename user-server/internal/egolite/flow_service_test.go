@@ -223,3 +223,41 @@ func TestDryRunConfirmPolicyDerivedFromWrites(t *testing.T) {
 		t.Errorf("声明 writes 的试跑必须强制 require（客户端不可关闭），got %s", eWrite.ConfirmPolicy)
 	}
 }
+
+// specs/015：domains JSON 列解析——失败/空视为零域（runner 侧零域全拒，fail-close 纵深）。
+func TestParseDomains(t *testing.T) {
+	if got := parseDomains([]byte(`["github.com","example.org"]`)); len(got) != 2 || got[0] != "github.com" {
+		t.Errorf("合法数组应解析: %v", got)
+	}
+	if got := parseDomains([]byte(`not-json`)); got != nil {
+		t.Errorf("坏 JSON 应返回 nil（零域）: %v", got)
+	}
+	if got := parseDomains(nil); got != nil {
+		t.Errorf("空应返回 nil: %v", got)
+	}
+}
+
+// specs/015 C16：无结构化事件输出 → EGO-R032 warn（不拦发布，进人工审核清单）。
+func TestScanWarnsOnNoEventOutput(t *testing.T) {
+	report := ScanScript(`const task = await taskSpace("静默脚本");
+await task.page("p1").goto("https://github.com");`)
+	if !report.Passed {
+		t.Fatal("无事件输出只是 warn，不应拦发布")
+	}
+	found := false
+	for _, w := range report.Warnings {
+		if w.RuleID == "EGO-R032" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("无事件输出脚本应产生 EGO-R032 warn: %+v", report.Warnings)
+	}
+	// 有事件输出的良性脚本不应误报
+	ok := ScanScript(benignScript)
+	for _, w := range ok.Warnings {
+		if w.RuleID == "EGO-R032" {
+			t.Errorf("良性事件脚本被 EGO-R032 误报: %+v", ok.Warnings)
+		}
+	}
+}

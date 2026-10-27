@@ -86,6 +86,15 @@
       width="560px"
     >
       <el-form label-width="110px">
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="运行契约"
+        >
+          <div>声明了写动作（{{ (writesOf(current) || []).join('、') }}）的资产服务端强制逐步确认：脚本在写提交点弹确认，你在「执行监控」页允许/拒绝。</div>
+          <div>导航/外联仅限资产声明的域名白名单内，越域会被 runner 强制终止。</div>
+        </el-alert>
         <el-form-item label="参数 JSON">
           <el-input
             v-model="runForm.paramsText"
