@@ -130,7 +130,7 @@
 
 | 文档 | 用途 |
 |---|---|
-| [OPEN_ITEMS.md](OPEN_ITEMS.md) | **唯一未完成清单**（完成即删行，不写流水账） |
+| docs/OPEN_ITEMS.md | **已删**（2026-10-29）：未执行任务收敛至工作区根 `docs/完成清单.md`（工作区聚合仓），本仓不再单设台账 |
 | [verification/api-verification-round-2026-10-26.md](verification/api-verification-round-2026-10-26.md) | 1077 条前端 API 双形态逐路由实测记录与缺陷台账 |
 | [verification/task3-api-verification.md](verification/task3-api-verification.md) | 任务三（首轮）API 验证与验收账号口径 |
 | [verification/ui-test-progress.md](verification/ui-test-progress.md) | 页面路由拟人点击测试进度与结论 |
