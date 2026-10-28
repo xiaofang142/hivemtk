@@ -404,3 +404,6 @@ yarn-error.log*
 
 # 发布脚本本地交叉编译产物（deploy-user.sh 的 API 路径）
 /deploy/out/
+
+# ego-runner 本机构建产物（scripts/ego-runner/install.sh 编译输出；B8/017 清理批次）
+/user-server/ego-runner

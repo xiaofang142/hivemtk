@@ -54,4 +54,3 @@ func TestWebhttpProviderValidManifest(t *testing.T) {
 		t.Fatalf("unexpected docs: %+v", docs)
 	}
 }
-
