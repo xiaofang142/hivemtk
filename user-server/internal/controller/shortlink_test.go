@@ -1560,3 +1560,35 @@ func TestShortLinkController_GenerateShortCode_MultipleGenerations(t *testing.T)
 		}
 	}
 }
+
+// 生产路由 PUT /shortlink/update 的 id 在 JSON body 里，不在 path。
+// 历史用例只覆盖 /shortlinks/:id，导致线上更新恒 400「无效的ID格式」而测试全绿。
+func TestShortLinkController_Update_ProductionRouteUsesBodyID(t *testing.T) {
+	database := setupShortLinkControllerTestDB(t)
+	database.Create(&model.DomainPool{Domain: "example.com", Port: 80, Purpose: "test", Status: 1})
+	svc := service.NewShortLinkService(repository.NewShortLinkRepository(database), repository.NewDomainPoolRepository(database), repository.NewShortLinkAccessRepository(database))
+	ctrl := NewShortLinkController(svc)
+	router := setupGinEngineForShortLink()
+	router.PUT("/shortlink/update", ctrl.Update)
+
+	link, err := svc.Create(context.Background(), &dto.CreateShortLinkRequest{
+		ShortCode: "prod01", OriginalURL: "https://www.example.com/original", Title: "Original", DomainID: 1,
+	})
+	if err != nil || link == nil {
+		t.Fatalf("前置创建失败: %v", err)
+	}
+	body, _ := json.Marshal(dto.UpdateShortLinkRequest{
+		ID: link.ID, ShortCode: "prod01", OriginalURL: "https://www.example.com/updated", Title: "Updated", Status: 1,
+	})
+	req, _ := http.NewRequest("PUT", "/shortlink/update", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("生产路由应 200，实际 %d body=%s", w.Code, w.Body.String())
+	}
+	got, _ := svc.GetByID(context.Background(), link.ID)
+	if got == nil || got.Title != "Updated" || got.OriginalURL != "https://www.example.com/updated" {
+		t.Fatalf("更新未落库: %+v", got)
+	}
+}

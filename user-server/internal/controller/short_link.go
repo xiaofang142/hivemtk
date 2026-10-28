@@ -66,16 +66,18 @@ func (c *ShortLinkController) Update(ctx *gin.Context) {
 		return
 	}
 
-	idStr := ctx.Param("id")
-	idFromURI, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "无效的ID格式")
-		return
-	}
-
-	if req.ID != uint(idFromURI) {
-		response.Error(ctx, http.StatusBadRequest, "ID不一致: JSON中的ID与URI参数中的ID不匹配")
-		return
+	// 生产路由是 PUT /shortlink/update（id 在 JSON body，不在 path）；历史测试用
+	// /shortlinks/:id。两种都要能用：path 有 id 时校验与 body 一致，没有就用 body.id。
+	if idStr := ctx.Param("id"); idStr != "" {
+		idFromURI, err := strconv.ParseUint(idStr, 10, 32)
+		if err != nil {
+			response.Error(ctx, http.StatusBadRequest, "无效的ID格式")
+			return
+		}
+		if req.ID != uint(idFromURI) {
+			response.Error(ctx, http.StatusBadRequest, "ID不一致: JSON中的ID与URI参数中的ID不匹配")
+			return
+		}
 	}
 
 	resp, err := c.shortLinkService.Update(ctx.Request.Context(), &req)
