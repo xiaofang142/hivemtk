@@ -130,11 +130,7 @@
 
 | 文档 | 用途 |
 |---|---|
-| docs/OPEN_ITEMS.md | **已删**（2026-10-29）：未执行任务收敛至工作区根 `docs/完成清单.md`（工作区聚合仓），本仓不再单设台账 |
-| [verification/api-verification-round-2026-10-26.md](verification/api-verification-round-2026-10-26.md) | 1077 条前端 API 双形态逐路由实测记录与缺陷台账 |
-| [verification/task3-api-verification.md](verification/task3-api-verification.md) | 任务三（首轮）API 验证与验收账号口径 |
-| [verification/ui-test-progress.md](verification/ui-test-progress.md) | 页面路由拟人点击测试进度与结论 |
-| [verification/ui-test-round-2026-10-25.md](verification/ui-test-round-2026-10-25.md) | UI 二次审核回合的缺陷与判定 |
+| docs/OPEN_ITEMS.md、docs/G0-*.md、docs/verification/ 轮报 ×7、operations/WhatsApp-库替换方案 | **已删**（2026-10-29 历史清扫，CLAUDE.md 规则 0c）：任务只跟踪工作区根 `docs/未完成清单.md`，交付记录只进 commit message；原文查 git 历史 |
 
 ### 竞品与调研
 
@@ -156,5 +152,4 @@
 | [contribute/CODE_COLLABORATION.md](contribute/CODE_COLLABORATION.md) | 协作与改动边界 |
 | [marketing-features/GEO_MODULE_DESIGN.md](marketing-features/GEO_MODULE_DESIGN.md) | GEO 模块设计说明 |
 | `bridge/BRIDGE-ARCHITECTURE-REVIEW.md` | 浏览器桥接架构复核结论（**本地文档**：`docs/bridge/` 已被 `.gitignore` 排除、不入库，故此处不给链接，避免 CI 断链门红） |
-| [operations/WhatsApp-库替换方案-2026-10-24.md](operations/WhatsApp-库替换方案-2026-10-24.md) | WhatsApp 弃维护库替换方案（**未完成**：文内声明未替换前不得宣称已换库） |
 | [architecture/adr/ADR-016-telegram-group-gate-policy.md](architecture/adr/ADR-016-telegram-group-gate-policy.md) | ADR-016 Telegram 社群门控三项口径 |

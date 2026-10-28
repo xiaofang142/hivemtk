@@ -315,7 +315,6 @@ KEY_FILES=(
   # ---- 工作区治理文档 ----
   "GOVERNANCE.md:docs/governance/"
   "MAINTAINERS.md:docs/governance/"
-  "78-OPTIMIZATION-TASKS.md:docs/governance/"
   # ---- 工作区架构文档 ----
   "ARCHITECTURE_OVERVIEW.md:docs/architecture/"
   "USER_SERVER_DEEP_ARCHITECTURE.md:docs/architecture/"
