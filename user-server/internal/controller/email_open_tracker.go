@@ -7,18 +7,18 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	emailsvc "hivemtk-user/internal/service/email"
 
 	"github.com/gin-gonic/gin"
 )
 
 // EmailOpenTrackerController 邮件打开率追踪控制器
 type EmailOpenTrackerController struct {
-	svc *service.EmailOpenTrackerService
+	svc *emailsvc.EmailOpenTrackerService
 }
 
 // NewEmailOpenTrackerController 创建控制器
-func NewEmailOpenTrackerController(svc *service.EmailOpenTrackerService) *EmailOpenTrackerController {
+func NewEmailOpenTrackerController(svc *emailsvc.EmailOpenTrackerService) *EmailOpenTrackerController {
 	return &EmailOpenTrackerController{svc: svc}
 }
 
@@ -43,7 +43,7 @@ func (c *EmailOpenTrackerController) PostmarkWebhook(ctx *gin.Context) {
 		response.Error(ctx, http.StatusServiceUnavailable, "邮件打开追踪服务未初始化")
 		return
 	}
-	var evt service.PostmarkOpenEvent
+	var evt emailsvc.PostmarkOpenEvent
 	if err := ctx.ShouldBindJSON(&evt); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
 		return
@@ -73,7 +73,7 @@ func (c *EmailOpenTrackerController) SendCloudWebhook(ctx *gin.Context) {
 		response.Error(ctx, http.StatusServiceUnavailable, "邮件打开追踪服务未初始化")
 		return
 	}
-	var evt service.SendCloudOpenEvent
+	var evt emailsvc.SendCloudOpenEvent
 	if err := ctx.ShouldBindJSON(&evt); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
 		return

@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	emailsvc "hivemtk-user/internal/service/email"
 	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
@@ -178,12 +179,12 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 	emailUnsubscribeRepo := repository.NewEmailUnsubscribeRepository(gormDB)
 	emailUnsubscribeCtrl := controller.NewEmailUnsubscribeController(
-		service.NewEmailUnsubscribeService(emailUnsubscribeRepo),
+		emailsvc.NewEmailUnsubscribeService(emailUnsubscribeRepo),
 	)
 	emailUnsubscribeCtrl.RegisterRoutes(nil, auth)
 
 	emailOpenTrackerCtrl := controller.NewEmailOpenTrackerController(
-		service.NewEmailOpenTrackerService(nil, nil),
+		emailsvc.NewEmailOpenTrackerService(nil, nil),
 	)
 	emailOpenTrackerCtrl.RegisterRoutes(nil, auth)
 
@@ -192,7 +193,7 @@ func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	// 从未注册（运行时 404）；公开侧像素/点击由 setupPublicRoutes 挂在 public 组。
 	emailTrackingRepo := repository.NewEmailTrackingRepository(gormDB)
 	emailTrackingCtrl := controller.NewEmailTrackingController(
-		service.NewEmailTrackingService(emailTrackingRepo),
+		emailsvc.NewEmailTrackingService(emailTrackingRepo),
 	)
 	emailTrackingCtrl.RegisterRoutes(nil, auth)
 }

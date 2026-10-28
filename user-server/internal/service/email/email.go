@@ -1,4 +1,4 @@
-package service
+package email
 
 import (
 	"context"
@@ -18,25 +18,44 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
+// OutboundHubPusher 消息中枢出站台账的最小接缝（接口注入）：
+// Send 成功发信后把台账推给根包的 MessageHubService。MessageHubService 属于
+// bridge/channel 域（feishu/telegram/qq/wecom 共用），不能跟着 email 走；本子包
+// 只认这个接口，由装配侧（根包 email_compat.go 给 *MessageHubService 挂
+// PushEmailOutbound 方法）注入，保证拆包依赖单向：root → email，子包不反向依赖根包。
+type OutboundHubPusher interface {
+	PushEmailOutbound(ctx context.Context, rec EmailOutboundRecord)
+}
+
+// EmailOutboundRecord 一次成功出站的台账字段（MessageHubService.Push 入参里
+// email 这条腿实际用到的字段子集）。Content 口径与既有 message_hub 台账一致：
+// subject + "\n" + body。
+type EmailOutboundRecord struct {
+	MsgID      string
+	AccountID  string
+	ReceiverID string
+	Content    string
+}
+
 // EmailService 邮件发送服务（基于 SMTP，纯协议层，不依赖第三方 SaaS）
 type EmailService struct {
 	accRepo *repository.EmailAccountRepository
-	hub     *MessageHubService
+	hub     OutboundHubPusher
 }
 
-// NewEmailService 创建邮件服务
-func NewEmailService() *EmailService {
+// NewEmailService 创建邮件服务。hub 为出站台账注入位（nil 则只发不记账）。
+func NewEmailService(hub OutboundHubPusher) *EmailService {
 	return &EmailService{
 		accRepo: repository.NewEmailAccountRepository(),
-		hub:     NewMessageHubService(),
+		hub:     hub,
 	}
 }
 
 // NewEmailServiceAuto 创建邮件服务（无参仓储工厂，对齐 message_hub 先例）
-func NewEmailServiceAuto() *EmailService {
+func NewEmailServiceAuto(hub OutboundHubPusher) *EmailService {
 	return &EmailService{
 		accRepo: repository.NewEmailAccountRepository(),
-		hub:     NewMessageHubService(),
+		hub:     hub,
 	}
 }
 
@@ -90,17 +109,11 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 	}
 
 	if s.hub != nil {
-		_, _ = s.hub.Push(ctx, &PushMessageRequest{
-			Platform:       model.ChannelEmail,
-			AccountID:      strconv.FormatUint(uint64(acc.ID), 10),
-			MsgID:          msgID,
-			Direction:      "outbound",
-			Status:         model.BridgeAckStatusDelivered,
-			MsgType:        "text",
-			ReceiverID:     to,
-			Content:        subject + "\n" + content,
-			ConversationID: "email-" + to,
-			IsAIReply:      true,
+		s.hub.PushEmailOutbound(ctx, EmailOutboundRecord{
+			MsgID:      msgID,
+			AccountID:  strconv.FormatUint(uint64(acc.ID), 10),
+			ReceiverID: to,
+			Content:    subject + "\n" + content,
 		})
 	}
 

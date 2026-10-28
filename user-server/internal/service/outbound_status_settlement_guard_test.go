@@ -34,7 +34,10 @@ var settledSites = []pushSite{
 
 	{"feishu.go", "WhatsAppCloudIntegrationService", "sendMessageWithTemplate"},
 	{"qq_account.go", "QQIntegrationService", "SendMessage"},
-	{"email.go", "EmailService", "Send"},
+	// email 域已拆入 internal/service/email（按域拆包第二刀）：EmailService.Send 经
+	// email.OutboundHubPusher 接缝回调本包适配器（email_compat.go 的 PushEmailOutbound），
+	// PushMessageRequest 字面量随之挪到适配器，站点身份同步改挂这里。
+	{"email_compat.go", "MessageHubService", "PushEmailOutbound"},
 }
 
 // pendingSites 先落库后发送（且可能被整段跳过）的出站站点，必须不声明状态。

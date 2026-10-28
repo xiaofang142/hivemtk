@@ -1,4 +1,4 @@
-package service
+package email
 
 import (
 	"context"
@@ -15,6 +15,7 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+	dncsvc "hivemtk-user/internal/service/dnc"
 )
 
 var EmailOpenPixel = []byte{
@@ -356,6 +357,7 @@ func (s *EmailOpenTrackerService) autoBlockOnBounce(ctx context.Context, email s
 		return
 	}
 	phone := strings.Split(email, "@")[0]
-	dnc := NewDoNotContactService(nil)
-	_ = dnc.BlockFromPhone(ctx, phone, "email_hard_bounce")
+	// 退订判定已下沉 internal/service/dnc（按域拆包），这里直引子包，不再绕根包别名。
+	dnCSVc := dncsvc.NewDoNotContactService(nil)
+	_ = dnCSVc.BlockFromPhone(ctx, phone, "email_hard_bounce")
 }

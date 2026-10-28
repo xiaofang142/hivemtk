@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	emailsvc "hivemtk-user/internal/service/email"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,11 +22,11 @@ import (
 //   - GET  /api/email/unsubscribe/export   导出退订名单（CSV）
 //   - POST /api/email/unsubscribe/resubscribe 重新订阅
 type EmailUnsubscribeController struct {
-	svc *service.EmailUnsubscribeService
+	svc *emailsvc.EmailUnsubscribeService
 }
 
 // NewEmailUnsubscribeController 创建邮件退订控制器
-func NewEmailUnsubscribeController(svc *service.EmailUnsubscribeService) *EmailUnsubscribeController {
+func NewEmailUnsubscribeController(svc *emailsvc.EmailUnsubscribeService) *EmailUnsubscribeController {
 	return &EmailUnsubscribeController{svc: svc}
 }
 

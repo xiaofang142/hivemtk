@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 	"hivemtk-user/internal/service"
+	emailsvc "hivemtk-user/internal/service/email"
 
 	"github.com/gin-gonic/gin"
 )
@@ -318,7 +319,7 @@ func (c *EmailGapController) TestSend(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
 		return
 	}
-	svc := service.NewEmailServiceAuto()
+	svc := emailsvc.NewEmailServiceAuto(service.NewMessageHubService())
 	sent, failed := 0, 0
 	var lastErr error
 	for _, to := range req.To {

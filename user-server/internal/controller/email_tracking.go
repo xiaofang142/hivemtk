@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	emailsvc "hivemtk-user/internal/service/email"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,11 +25,11 @@ import (
 //   - GET /api/email/track/jobs/:id/events       任务事件列表
 //   - GET /api/email/track/metrics               区间聚合指标
 type EmailTrackingController struct {
-	svc *service.EmailTrackingService
+	svc *emailsvc.EmailTrackingService
 }
 
 // NewEmailTrackingController 创建邮件追踪控制器
-func NewEmailTrackingController(svc *service.EmailTrackingService) *EmailTrackingController {
+func NewEmailTrackingController(svc *emailsvc.EmailTrackingService) *EmailTrackingController {
 	return &EmailTrackingController{svc: svc}
 }
 
