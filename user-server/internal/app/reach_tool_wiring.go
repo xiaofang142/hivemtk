@@ -27,11 +27,17 @@ func NewReachToolDepsWithAdapter(db *gorm.DB, adapter tooluse.ReachAdapter) tool
 		Adapter:      adapter,
 		Pipeline:     &reachBatchPipelineAdapter{svc: service.NewReachPipelineService(repository.NewReachPipelineRepository(db))},
 		DB:           db,
-		SendPipeline: newReachSendPipeline(adapter),
+		SendPipeline: newReachSendPipelineWithDB(adapter, db),
 	}
 }
 
 func newReachSendPipeline(adapter tooluse.ReachAdapter) tooluse.ReachSendPipelinePort {
+	return newReachSendPipelineWithDB(adapter, nil)
+}
+
+// newReachSendPipelineWithDB 组装触达发送管线；db 非 nil 时接持久 quiet 延迟队列（D02），
+// nil 时（旧调用方/测试）退回进程内队列——入队语义一致，仅重启丢队。
+func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) tooluse.ReachSendPipelinePort {
 
 	cfg := service.NewDefaultRateLimitedPipelineConfigWithCache(&reachChannelAdapterBridge{adapter: adapter})
 	// E1：挂上地区×行业合规策略判定器。
@@ -40,11 +46,48 @@ func newReachSendPipeline(adapter tooluse.ReachAdapter) tooluse.ReachSendPipelin
 	// 出口 enforceOutboundGates）**共用同一份计数**，否则同一客户在两条路径上各有一份额度，
 	// 日上限直接翻倍。策略本身仍来自参数中心，本行只是把「谁来做判定」接上。
 	cfg.CompliancePolicy = service.GlobalCompliancePolicy()
+	if db != nil {
+		// D04：可信同意闸（撤回即生效；存量无凭据按 legacy_assertion 留痕，不批量伪造）
+		// 与故障拒发的退订检查（DNC 状态查不清 ⇒ fail-closed）。
+		cfg.ConsentChecker = service.NewContactConsentService(repository.NewContactConsentRepository(db))
+		cfg.ConsentMode = service.ConsentModeRevocationOnly
+		cfg.DoNotContactStrict = service.NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db))
+		// D05：意图级硬配额（PG 预占真源）。维度=每客户每日；上限走参数中心
+		// reach/global_per_user_daily_limit，0=不设额（默认，零行为变更）。
+		// 仅当调用方带 action_intent_id 幂等键时才实际预占。
+		cfg.QuotaReserver = service.NewReachQuotaManager(repository.NewReachQuotaRepository(db))
+		cfg.QuotaScopesFn = func(ctx context.Context, req *service.ReachSendRequest) []service.QuotaScopeDef {
+			limit := service.GlobalConfigParam().GetInt(ctx, "reach", "global_per_user_daily_limit", 0)
+			if limit <= 0 {
+				return nil
+			}
+			who := req.CustomerID
+			if v, ok := req.Metadata["one_id"]; ok && v != "" {
+				who = v
+			}
+			if who == "" {
+				who = req.RecipientID
+			}
+			if who == "" {
+				return nil
+			}
+			return []service.QuotaScopeDef{{Key: "customer:" + who, Limit: limit}}
+		}
+	}
 	if os.Getenv("REACH_DISABLE_QUIET_HOURS") != "true" {
-		q := service.GetGlobalQuietHoursQueue()
 		cfg.QuietHoursEnabled = true
+		var sp service.SendPipeline
+		if db != nil {
+			// D02：生产路径用持久延迟队列，重启不丢队
+			q := service.NewPersistentQuietHoursQueue(repository.NewReachDeferredOutboundRepository(db))
+			cfg.QuietHoursDeferrer = q
+			sp = service.NewSendPipeline(cfg)
+			q.Start(context.Background(), sp)
+			return &reachSendPipelineAdapter{sp: sp}
+		}
+		q := service.GetGlobalQuietHoursQueue()
 		cfg.QuietHoursDeferrer = q
-		sp := service.NewSendPipeline(cfg)
+		sp = service.NewSendPipeline(cfg)
 		q.Start(context.Background(), sp)
 		return &reachSendPipelineAdapter{sp: sp}
 	}

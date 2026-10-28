@@ -29,6 +29,13 @@ type DelayedOutboundReply struct {
 	// LastError 最近一次投递失败的原因，供排障与"为什么客户没收到"复盘。
 	LastError string `gorm:"type:text" json:"last_error"`
 
+	// 租约三件套（D03）：行被 worker 抢占为 sending 时签发。
+	// ClaimToken 用于回写栅栏——旧 worker 拿过期 token 不得改写已被重认领的行；
+	// LeaseUntil 过期后行可被回收进程判定（重认领或转 unknown），不再永久悬挂。
+	ClaimToken string     `gorm:"type:varchar(64);index" json:"claim_token"`
+	ClaimedAt  *time.Time `json:"claimed_at"`
+	LeaseUntil *time.Time `gorm:"index" json:"lease_until"`
+
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
@@ -47,4 +54,8 @@ const (
 	DelayedStatusSuperseded = "superseded"
 	// DelayedStatusFailed 重投次数用尽仍失败，保留行与 last_error 作为终态证据
 	DelayedStatusFailed = "failed"
+	// DelayedStatusUnknown 发送结果未知待人工核对（D03）：worker 在投递中途崩溃、
+	// 租约过期时无法区分"没发出去"与"发了没回写"，禁止自动重发（可能双发），
+	// 由人工/查询核对后经 ResolveUnknown 收敛到 pending/sent/superseded。
+	DelayedStatusUnknown = "unknown"
 )

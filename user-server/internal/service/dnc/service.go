@@ -119,7 +119,7 @@ func (s *DoNotContactService) BlockFromPhone(ctx context.Context, phone, source 
 //
 // 查询顺序：channel 精确行优先，再查全局行(channel="")，任一命中即 blocked。
 // DB 异常时返回 false 并记录错误日志（与项目现有 IsUnsubscribed 容错习惯对齐，
-// 由调用方的其他合规检查兜底）。
+// 由调用方的其他合规检查兜底）。主动营销路径应改用 IsBlockedStrict 做故障拒发。
 func (s *DoNotContactService) IsBlocked(ctx context.Context, oneID, channel string) bool {
 	if strings.TrimSpace(oneID) == "" {
 		return false
@@ -134,6 +134,25 @@ func (s *DoNotContactService) IsBlocked(ctx context.Context, oneID, channel stri
 		return false
 	}
 	return exists
+}
+
+// IsBlockedStrict 故障显式版（D04）：DB 查询失败原样上抛错误，
+// 由调用方决定 fail-closed（主动营销拒发）还是 fail-open（被动客服继续）。
+// 查询语义与 IsBlocked 完全一致：channel 精确行优先，再查全局行。
+func (s *DoNotContactService) IsBlockedStrict(ctx context.Context, oneID, channel string) (bool, error) {
+	if strings.TrimSpace(oneID) == "" {
+		return false, nil
+	}
+	channels := []string{model.DoNotContactChannelAll}
+	if channel != "" {
+		channels = append([]string{channel}, channels...)
+	}
+	exists, err := s.repo.ExistsByOneIDAndChannels(ctx, oneID, channels)
+	if err != nil {
+		logger.Errorf("[DNC] 严格查询全局退订状态失败 one_id=%s channel=%s: %v", oneID, channel, err)
+		return false, err
+	}
+	return exists, nil
 }
 
 // Unblock 移除全局退订标志位（重新订阅），并写审计日志

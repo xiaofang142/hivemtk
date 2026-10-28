@@ -46,7 +46,7 @@ func TestDelayedOutboundRetryLane(t *testing.T) {
 		t.Fatalf("未到期不得被抢占，实得 %d 条", len(picked))
 	}
 
-	if err := repo.ScheduleRetry(ctx, rec.ID, time.Now().Add(60*time.Second), "tg send exhausted 3 retries"); err != nil {
+	if err := repo.ScheduleRetry(ctx, rec.ID, "", time.Now().Add(60*time.Second), "tg send exhausted 3 retries"); err != nil {
 		t.Fatalf("schedule retry: %v", err)
 	}
 	var after model.DelayedOutboundReply
@@ -64,7 +64,7 @@ func TestDelayedOutboundRetryLane(t *testing.T) {
 	}
 
 	// 收口：终态写 superseded 且不再被 HasPendingByConversation 视为待发。
-	if err := repo.FinishReplay(ctx, rec.ID, model.DelayedStatusSuperseded, time.Now(), "会话已被回复"); err != nil {
+	if err := repo.FinishReplay(ctx, rec.ID, "", model.DelayedStatusSuperseded, time.Now(), "会话已被回复"); err != nil {
 		t.Fatalf("finish: %v", err)
 	}
 	pending, err = repo.HasPendingByConversation(ctx, "conv-retry-1")

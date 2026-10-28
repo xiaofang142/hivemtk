@@ -58,6 +58,20 @@ var (
 	// ErrSendDoNotContact R-3a：收件人命中全局跨渠道退订标志位，必须跳过发送
 	ErrSendDoNotContact = errors.New("do not contact: recipient opted out globally")
 
+	// ErrSendDoNotContactUnavailable D04：退订状态查询失败，主动外发按拒发处理
+	//（fail-closed）。宁可迟发人工核实，不可在状态未知时对客户群发。
+	ErrSendDoNotContactUnavailable = errors.New("do not contact: state query unavailable (fail-closed)")
+
+	// ErrSendConsentRevoked D04：客户已撤回该目的的同意，撤回即生效（含队列重发前）
+	ErrSendConsentRevoked = errors.New("consent: recipient revoked consent for this purpose")
+
+	// ErrSendConsentRequired D04：enforce 模式下无可信同意凭据，拒发
+	//（metadata 自述的 opt_in 只是 legacy_assertion，不能替代凭据）
+	ErrSendConsentRequired = errors.New("consent: no trusted consent record for this purpose")
+
+	// ErrSendQuotaDenied D05：配额预占失败（超限/意图冲突），本次外发拒发
+	ErrSendQuotaDenied = errors.New("send quota: denied by reservation")
+
 	// ErrSendQuietHoursDeferred R-4：命中全渠道 quiet hours，消息已入延迟队列（非失败）
 	ErrSendQuietHoursDeferred = errors.New("send deferred to quiet hours release time")
 
@@ -136,6 +150,12 @@ type DoNotContactChecker interface {
 	IsBlocked(ctx context.Context, oneID, channel string) bool
 }
 
+// DoNotContactStrictChecker D04：故障显式的退订检查（DB 失败上抛错误）。
+// 主动营销外发在查询失败时必须拒发（fail-closed），不沿用 IsBlocked 的 fail-open。
+type DoNotContactStrictChecker interface {
+	IsBlockedStrict(ctx context.Context, oneID, channel string) (bool, error)
+}
+
 type SendRateLimiter interface {
 	Allow(ctx context.Context, key string, limit RateLimitSpec) bool
 }
@@ -209,6 +229,20 @@ type SendPipelineConfig struct {
 	QuietHoursDeferrer SendQuietHoursDeferrer
 	// QuietHoursClock 可替换时钟（测试注入），生产为 nil 即 time.Now
 	QuietHoursClock func() time.Time
+
+	// ConsentChecker D04：可信同意判定（nil = 跳过该闸，零行为变更）。
+	ConsentChecker ConsentChecker
+	// ConsentMode D04：revocation_only（默认，仅显式撤回拒发）/
+	// enforce（无可信凭据一律拒发，存量盘点完成后收紧用）。
+	ConsentMode string
+	// DoNotContactStrict D04：故障显式退订检查（nil 时退回 DoNotContact 的 fail-open）。
+	DoNotContactStrict DoNotContactStrictChecker
+
+	// QuotaReserver D05：意图级硬配额预占（nil = 不设额）。
+	QuotaReserver QuotaReserver
+	// QuotaScopesFn D05：本次请求的预占维度（nil 或返回空 = 不设额）。
+	// 仅当请求带 action_intent_id 时才会被调用——无幂等键不做预占。
+	QuotaScopesFn func(ctx context.Context, req *ReachSendRequest) []QuotaScopeDef
 }
 
 func DefaultSendPipelineConfig(adapter ChannelAdapter) SendPipelineConfig {

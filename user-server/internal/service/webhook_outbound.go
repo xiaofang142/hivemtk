@@ -307,13 +307,70 @@ func (s *WebhookService) dispatchDueDelayedOutbound(ctx context.Context) {
 		if err2 != nil || !ok {
 			return
 		}
-		picked, err2 = s.delayedRepo.ListSendingByID(ctx, ids, delayedOutboundBatchSize)
+		picked, err2 = s.delayedRepo.ClaimSendingRows(ctx, ids, now)
 		if err2 != nil || len(picked) == 0 {
 			return
 		}
 	}
 	for i := range picked {
 		s.replayDelayedOutbound(ctx, &picked[i])
+	}
+	// 租约/悬挂回收（D03）：sending 不再是"只观测不处理"的永久悬挂态。
+	// 历史无租约行与租约过期行在此判定：会话已被回复 → superseded；
+	// 无法确认外部结果 → unknown 待人工核对。绝不自动重发（可能双发）。
+	s.recoverStuckDelayedOutbound(ctx, now)
+}
+
+// recoverStuckDelayedOutbound 回收两类 sending 悬挂行（D03）：
+//   - legacy：无租约字段的历史行（send_at 超阈值）——无法判断是否已投出，直接 unknown；
+//   - 租约过期行：先查会话是否已被回复（superseded 可安全判定"不需要再投"），
+//     否则 unknown。所有转移都带原因入 last_error，人工可经 ResolveUnknown 收敛。
+func (s *WebhookService) recoverStuckDelayedOutbound(ctx context.Context, now time.Time) {
+	legacy, err := s.delayedRepo.ListLegacyStuckSending(ctx, now.Add(-delayedSendingStuckThreshold), delayedOutboundBatchSize)
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Msg("[H-3] legacy sending 悬挂行查询失败，忽略本轮回收")
+		legacy = nil
+	}
+	for i := range legacy {
+		if err := s.delayedRepo.MarkSendingUnknown(ctx, legacy[i].ID, "", "历史 sending 悬挂（无租约字段），核对前不重发"); err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Uint("id", legacy[i].ID).Msg("[H-3] legacy 悬挂行转 unknown 失败")
+			continue
+		}
+		logger.Ctx(ctx).Warn().Uint("id", legacy[i].ID).Str("conv_id", legacy[i].ConversationID).
+			Msg("[H-3] 历史 sending 悬挂行已转 unknown 待人工核对（legacy_unknown，不自动重发）")
+	}
+
+	expired, err := s.delayedRepo.ListExpiredLeaseSending(ctx, now, delayedOutboundBatchSize)
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Msg("[H-3] 租约过期 sending 行查询失败，忽略本轮回收")
+		return
+	}
+	for i := range expired {
+		rec := &expired[i]
+		if s.messageHubRepo != nil && rec.ConversationID != "" {
+			unreplied, _, err := s.messageHubRepo.HasUnrepliedCustomerMessage(ctx, rec.ConversationID, InboxReplyWindow)
+			if err == nil && !unreplied {
+				// 会话已被回复：这条内容无论如何都不该再投（superseded 是安全终态，
+				// 即便外部其实发成功过，也只是"已收到且已被回复"，无双发风险）。
+				if err := s.delayedRepo.MarkSendingUnknown(ctx, rec.ID, rec.ClaimToken, "租约过期且会话已被回复"); err != nil {
+					logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 过期租约行转 unknown 失败")
+					continue
+				}
+				if err := s.delayedRepo.ResolveUnknown(ctx, rec.ID, model.DelayedStatusSuperseded, now, "租约过期且会话已被回复，自动判定不再补投"); err != nil {
+					logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 过期租约行自动改判 superseded 失败")
+					continue
+				}
+				logger.Ctx(ctx).Info().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
+					Msg("[H-3] 租约过期的延迟出站因会话已被回复改判 superseded")
+				continue
+			}
+		}
+		if err := s.delayedRepo.MarkSendingUnknown(ctx, rec.ID, rec.ClaimToken, "投递租约过期，外部发送结果未知"); err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 租约过期行转 unknown 失败")
+			continue
+		}
+		logger.Ctx(ctx).Warn().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
+			Msg("[H-3] 投递租约过期的延迟出站已转 unknown 待人工核对（不自动重发，防双发）")
 	}
 }
 
@@ -330,7 +387,7 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 		// 旧内容不补投：等待期间坐席或新一轮 AI 回复已经出手，再投这条过期回复等于双份答案。
 		unreplied, _, err := s.messageHubRepo.HasUnrepliedCustomerMessage(ctx, rec.ConversationID, InboxReplyWindow)
 		if err == nil && !unreplied {
-			if ferr := s.delayedRepo.FinishReplay(ctx, rec.ID, model.DelayedStatusSuperseded, time.Now(), ""); ferr != nil {
+			if ferr := s.delayedRepo.FinishReplay(ctx, rec.ID, rec.ClaimToken, model.DelayedStatusSuperseded, time.Now(), ""); ferr != nil {
 				logger.Ctx(ctx).Warn().Err(ferr).Uint("id", rec.ID).Msg("[H-3] 重放改判 superseded 回写失败")
 			}
 			logger.Ctx(ctx).Info().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
@@ -361,14 +418,15 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 	case sent, !isRetry:
 		// 投递成功按 sent 收口；quiet hours 首发维持一次性语义（这条回复是按
 		// "次日首发"设计的，失败已由 sendOutbound 落失败轨迹，再叠重试等于改掉窗口定义）。
-		if err := s.delayedRepo.MarkSent(ctx, rec.ID, time.Now()); err != nil {
+		// 回写带 claim_token 栅栏：租约过期被重认领后，旧 worker 的回写 0 行拒绝。
+		if err := s.delayedRepo.MarkSent(ctx, rec.ID, rec.ClaimToken, time.Now()); err != nil {
 			logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 延迟回复状态回写失败")
 		}
 	default:
 		ce := AsChannelError(sendErr)
 		if ce != nil && ce.Retryable {
 			attempts := rec.Attempts + 1
-			if err := s.delayedRepo.ScheduleRetry(ctx, rec.ID, nextSendRetryAt(now, attempts, ce), ce.Raw); err != nil {
+			if err := s.delayedRepo.ScheduleRetry(ctx, rec.ID, rec.ClaimToken, nextSendRetryAt(now, attempts, ce), ce.Raw); err != nil {
 				logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 重投失败改排下一次异常")
 			}
 			logger.Ctx(ctx).Warn().Uint("id", rec.ID).Int("attempts", attempts).
@@ -386,7 +444,7 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 // abandonReplay 把重放行收口为终态 failed，并给这条客户消息留最后一次补触发机会：
 // 重试通道放弃后，会话里仍是未回复的入站行，不能就此没人应答。
 func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutboundReply, reason string) {
-	if err := s.delayedRepo.FinishReplay(ctx, rec.ID, model.DelayedStatusFailed, time.Now(), reason); err != nil {
+	if err := s.delayedRepo.FinishReplay(ctx, rec.ID, rec.ClaimToken, model.DelayedStatusFailed, time.Now(), reason); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 重放终态回写失败")
 	}
 	logger.Ctx(ctx).Error().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).

@@ -800,6 +800,12 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupChannelOverviewRoutes(auth, gormDB)
 
+		setupReachDeferredRoutes(auth, gormDB)
+
+		setupCapabilityRuntimeRoutes(auth, gormDB)
+
+		setupContactConsentRoutes(auth, gormDB)
+
 		wechatWebhookGroup := r.Group("/api")
 		setupWechatWebhookRoutes(wechatWebhookGroup, gormDB, bridgeIngressSvc)
 

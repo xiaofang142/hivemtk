@@ -6,6 +6,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,31 @@ func (p *defaultSendPipeline) Send(ctx context.Context, req *ReachSendRequest) *
 		Channel:        req.Channel,
 		AccountID:      req.AccountID,
 		StepResults:    []SendStepLog{},
+	}
+
+	// D05：意图级配额预占。只有调用方显式给了 action_intent_id 才参与——
+	// 没有幂等键就无法区分重试与新动作，预占账会失真。预占失败（超限/冲突）
+	// 一律拒发并留原因；成功后按结局结算：成功 commit、确定失败 release、
+	// 可重试/延后保持 reserved（重试复用同一预占）。
+	intentID := ""
+	quotaToken := ""
+	if p.config.QuotaReserver != nil && p.config.QuotaScopesFn != nil && req != nil {
+		if v, ok := req.Metadata["action_intent_id"]; ok && v != "" {
+			intentID = v
+			token, _, err := p.config.QuotaReserver.ReserveIntent(ctx, intentID, ReachPayloadHash(req), p.config.QuotaScopesFn(ctx, req))
+			if err != nil {
+				resp.Success = false
+				resp.Error = fmt.Sprintf("%s: %v", ErrSendQuotaDenied.Error(), err)
+				resp.DurationMs = time.Since(start).Milliseconds()
+				resp.SentAt = time.Now()
+				if p.config.AuditLogger != nil {
+					p.config.AuditLogger.LogSend(ctx, req, resp)
+				}
+				return resp
+			}
+			quotaToken = token
+			defer p.settleQuota(ctx, req, resp, intentID, quotaToken)
+		}
 	}
 
 	stepFuncs := map[string]func(ctx context.Context, req *ReachSendRequest, resp *SendResponse) SendStepLog{
@@ -78,6 +104,36 @@ func (p *defaultSendPipeline) Send(ctx context.Context, req *ReachSendRequest) *
 	return resp
 }
 
+// settleQuota D05 结算：按发送结局处置预占额。
+//   - Deferred（进延迟队列）：保持 reserved——队列重发带同一 intent，复用同一预占；
+//   - Success：commit（幂等，重复回执不重复计数）；
+//   - 失败：按渠道错误分类——可重试（network/429/5xx）保持 reserved 等重试复用；
+//     不可重试（授权失效/参数错）= 确定未发送，release 返还额度。
+//   - 分类不出来（unknown 类）→ MarkUnknown：额度保留待人工核对，不自动返还。
+func (p *defaultSendPipeline) settleQuota(ctx context.Context, req *ReachSendRequest, resp *SendResponse, intentID, token string) {
+	if intentID == "" || p.config.QuotaReserver == nil {
+		return
+	}
+	var err error
+	switch {
+	case resp.Deferred || resp.Success:
+		err = p.config.QuotaReserver.CommitIntent(ctx, intentID, token)
+	default:
+		ce := AsChannelError(errors.New(resp.Error))
+		if ce != nil && ce.Retryable {
+			return // 保持 reserved：重试复用同一预占
+		}
+		if ce == nil {
+			err = p.config.QuotaReserver.MarkUnknownIntent(ctx, intentID, token)
+		} else {
+			err = p.config.QuotaReserver.ReleaseIntent(ctx, intentID, token)
+		}
+	}
+	if err != nil {
+		logger.Warnf("[QUOTA] 预占结算失败 intent=%s err=%v", intentID, err)
+	}
+}
+
 func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendRequest, resp *SendResponse) SendStepLog {
 	start := time.Now()
 	log := SendStepLog{Step: SendStepPermission, StartedAt: start}
@@ -91,28 +147,51 @@ func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendR
 	if err := p.config.PermissionChecker.CheckSendPermission(ctx, req); err != nil {
 		log.Success = false
 		log.Error = err.Error()
-	} else if p.config.DoNotContact != nil {
+		log.EndedAt = time.Now()
+		log.DurationMs = time.Since(start).Milliseconds()
+		return log
+	}
 
-		oneID := req.CustomerID
-		if v, ok := req.Metadata["one_id"]; ok && v != "" {
-			oneID = v
+	// D04：主动外发的退订检查优先走故障显式通道——状态查不清就拒发
+	//（fail-closed），留原因码；未配 strict 时退回旧 fail-open。
+	if oneID := permissionOneID(req); oneID != "" && p.config.DoNotContact != nil {
+		blocked := false
+		if p.config.DoNotContactStrict != nil {
+			b, err := p.config.DoNotContactStrict.IsBlockedStrict(ctx, oneID, req.Channel)
+			if err != nil {
+				log.Success = false
+				log.Error = ErrSendDoNotContactUnavailable.Error()
+				log.Output = []any{map[string]any{"reason": "dnc_unavailable_fail_closed"}}
+				logger.Warnf("[DNC] pipeline 拒发 customer=%s channel=%s（退订状态查询失败，fail-closed）: %v", oneID, req.Channel, err)
+				log.EndedAt = time.Now()
+				log.DurationMs = time.Since(start).Milliseconds()
+				return log
+			}
+			blocked = b
+		} else {
+			blocked = p.config.DoNotContact.IsBlocked(ctx, oneID, req.Channel)
 		}
-		if oneID != "" && p.config.DoNotContact.IsBlocked(ctx, oneID, req.Channel) {
+		if blocked {
 			log.Success = false
 			log.Error = ErrSendDoNotContact.Error()
 			logger.Warnf("[DNC] pipeline 跳过发送 customer=%s channel=%s（命中全局退订标志位）", oneID, req.Channel)
-		} else if p.checkQuietHours(ctx, req, resp) {
-			log.Success = true
-			log.Skipped = true
-			log.Output = []any{map[string]any{
-				"deferred": true,
-				"send_at":  resp.DeferredAt.Format(time.RFC3339),
-				"reason":   ErrSendQuietHoursDeferred.Error(),
-			}}
-		} else {
-			log.Success = true
+			log.EndedAt = time.Now()
+			log.DurationMs = time.Since(start).Milliseconds()
+			return log
 		}
-	} else if p.checkQuietHours(ctx, req, resp) {
+	}
+
+	// D04：同意闸（独立于 DNC 配置）。撤回即生效（含延迟队列重发前）；
+	// paused 按延后处理；missing 按模式放行留痕或拒发。
+	if oneID := permissionOneID(req); oneID != "" {
+		if terminated := p.checkSendConsent(ctx, req, resp, &log, oneID); terminated {
+			log.EndedAt = time.Now()
+			log.DurationMs = time.Since(start).Milliseconds()
+			return log
+		}
+	}
+
+	if p.checkQuietHours(ctx, req, resp) {
 		log.Success = true
 		log.Skipped = true
 		log.Output = []any{map[string]any{
@@ -128,8 +207,84 @@ func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendR
 	return log
 }
 
+// permissionOneID 发送前置检查用的客户归一键：metadata.one_id 优先，退回 CustomerID。
+func permissionOneID(req *ReachSendRequest) string {
+	if req == nil {
+		return ""
+	}
+	if v, ok := req.Metadata["one_id"]; ok && v != "" {
+		return v
+	}
+	return req.CustomerID
+}
+
+// checkSendConsent D04 同意闸。
+// 返回 true 表示本次请求已被 consent 闸终结（拒绝/延后），调用方应立即返回该 step log。
+func (p *defaultSendPipeline) checkSendConsent(ctx context.Context, req *ReachSendRequest, resp *SendResponse, log *SendStepLog, oneID string) bool {
+	checker := p.config.ConsentChecker
+	if checker == nil {
+		return false
+	}
+	purpose := ReachSendPurpose(req)
+	dec := checker.CheckSendConsent(ctx, oneID, purpose, req.Channel)
+	switch dec.Status {
+	case ConsentStatusRevoked:
+		// 撤回即生效：metadata 自述 consent=true 也压不过真实撤回事实。
+		log.Success = false
+		log.Error = ErrSendConsentRevoked.Error()
+		log.Output = []any{map[string]any{"reason": ConsentReasonRevoked, "purpose": purpose}}
+		logger.Warnf("[CONSENT] pipeline 拒发 customer=%s channel=%s purpose=%s（已撤回同意，metadata 自述不构成授权）", oneID, req.Channel, purpose)
+		return true
+	case ConsentStatusPaused:
+		// 暂停 = 持久延后：恢复时刻明确则延到该点，否则顺延到静默窗口放开。
+		sendAt := time.Now().Add(time.Minute)
+		if dec.PausedUntil != nil {
+			sendAt = *dec.PausedUntil
+		}
+		if deferrer := p.config.QuietHoursDeferrer; deferrer != nil {
+			if err := deferrer.Defer(ctx, req, sendAt); err == nil {
+				resp.Deferred = true
+				resp.DeferredAt = sendAt
+				log.Success = true
+				log.Skipped = true
+				log.Output = []any{map[string]any{"deferred": true, "send_at": sendAt.Format(time.RFC3339), "reason": ConsentReasonPaused}}
+				return true
+			}
+		}
+		// 延迟队列不可用：按拒绝处理（与 deferSend 的入队失败口径一致）
+		log.Success = false
+		log.Error = "consent: preference paused and defer unavailable"
+		log.Output = []any{map[string]any{"reason": ConsentReasonPaused}}
+		return true
+	case ConsentStatusMissing:
+		if p.config.ConsentMode == ConsentModeEnforce {
+			log.Success = false
+			log.Error = ErrSendConsentRequired.Error()
+			log.Output = []any{map[string]any{"reason": ConsentReasonMissing, "purpose": purpose}}
+			logger.Warnf("[CONSENT] pipeline 拒发 customer=%s channel=%s purpose=%s（enforce 模式无可信同意凭据）", oneID, req.Channel, purpose)
+			return true
+		}
+		// revocation_only：无凭据放行，但 metadata 自述只能标 legacy_assertion 留痕。
+		log.Success = true
+		note := map[string]any{"reason": ConsentReasonMissing, "purpose": purpose}
+		if metadataOptIn(req.Metadata) {
+			note["metadata_opt_in"] = ConsentReasonLegacyAssertion
+		}
+		log.Output = []any{note}
+		return false
+	default: // granted
+		log.Success = true
+		return false
+	}
+}
+
 func (p *defaultSendPipeline) checkQuietHours(ctx context.Context, req *ReachSendRequest, resp *SendResponse) bool {
 	if !p.config.QuietHoursEnabled || req.Channel == "sms" {
+		return false
+	}
+	// D02：延迟队列 worker 的重发带豁免标记——这条消息已经等到窗口放开才重发，
+	// 再判延会让它永远在队列里自旋。
+	if quietHoursBypassed(ctx) {
 		return false
 	}
 	now := time.Now()
@@ -188,6 +343,13 @@ func (p *defaultSendPipeline) runCompliancePolicy(ctx context.Context, req *Reac
 	}()
 
 	if p.config.CompliancePolicy == nil {
+		log.Skipped = true
+		log.Success = true
+		return log
+	}
+
+	// D02：延迟队列 worker 的重发带豁免标记，合规静默窗口同样不再判延（防自旋）。
+	if quietHoursBypassed(ctx) {
 		log.Skipped = true
 		log.Success = true
 		return log

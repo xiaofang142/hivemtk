@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
+	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -88,10 +89,26 @@ func (s *ChurnPredictionService) CalculateChurnPrediction(ctx context.Context, u
 	orderValueScore := s.calculateOrderValueScore(userData)
 	engagementScore := s.calculateEngagementScore(userData)
 
-	churnScore := inactiveScore*config.InactiveDaysWeight +
-		purchaseFreqScore*config.PurchaseFreqWeight +
-		orderValueScore*config.OrderValueWeight +
-		engagementScore*config.EngagementWeight
+	// 客单价数据不可信（缺金额/多币种）时按 unknown 处理：不补 0 元真值，
+	// 也不把缺数据冒充低风险，而是排除该分量、其余权重按比例归一后加权。
+	// 泛化 map 入参未带 known 标志时保持旧行为（历史调用方语义不变）。
+	aovKnown := true
+	if known, ok := userData["average_order_value_known"].(bool); ok {
+		aovKnown = known
+	}
+	inactiveW := config.InactiveDaysWeight
+	purchaseFreqW := config.PurchaseFreqWeight
+	orderValueW := config.OrderValueWeight
+	engagementW := config.EngagementWeight
+	if !aovKnown {
+		orderValueW = 0
+	}
+	weightSum := inactiveW + purchaseFreqW + orderValueW + engagementW
+
+	churnScore := (inactiveScore*inactiveW +
+		purchaseFreqScore*purchaseFreqW +
+		orderValueScore*orderValueW +
+		engagementScore*engagementW) / weightSum
 
 	var churnRisk string
 	if churnScore >= config.CriticalRiskScore {
@@ -105,16 +122,27 @@ func (s *ChurnPredictionService) CalculateChurnPrediction(ctx context.Context, u
 	}
 
 	riskFactors := s.identifyRiskFactors(inactiveScore, purchaseFreqScore, orderValueScore, engagementScore)
+	if !aovKnown {
+		// 金额未知时“订单金额偏低”不是证据，仅是缺数据——不得进入风险因子。
+		for i, f := range riskFactors {
+			if f == "订单金额偏低" {
+				riskFactors = append(riskFactors[:i], riskFactors[i+1:]...)
+				break
+			}
+		}
+	}
 	riskFactorsJSON, _ := json.Marshal(riskFactors)
 
 	prediction := &model.ChurnPrediction{
-		UserID:            userID,
-		ChurnScore:        churnScore,
-		ChurnRisk:         churnRisk,
-		RiskFactors:       string(riskFactorsJSON),
-		DaysSinceActive:   int(inactiveScore),
-		PurchaseFreq:      purchaseFreqScore,
-		AverageOrderValue: orderValueScore,
+		UserID:          userID,
+		ChurnScore:      churnScore,
+		ChurnRisk:       churnRisk,
+		RiskFactors:     string(riskFactorsJSON),
+		DaysSinceActive: int(inactiveScore),
+		PurchaseFreq:    purchaseFreqScore,
+		// 金额未知存 0 表示“无数据”（可信 AOV 恒为正数，不会与 0 元真值混淆）；
+		// 已知时仍存该分量得分，与既有行语义一致。
+		AverageOrderValue: orderValueScore * boolToFloat(aovKnown),
 	}
 
 	if lastActivity, ok := userData["last_activity_at"].(time.Time); ok {
@@ -412,6 +440,11 @@ type UserBehaviorSnapshot struct {
 	LastPurchaseAt    time.Time
 	PurchaseFreq      int
 	AverageOrderValue float64
+	// AOVKnown 表示客单价是否由可信金额算出。事件缺金额、金额非法或
+	// 多币种混加时为 false——调用方必须按 unknown 处理（排除该分量重归一），
+	// 不得当作 0 元真值，也不得从购买次数反推金额。
+	AOVKnown    bool
+	AOVCurrency string
 }
 
 // DebugAggregate 暴露聚合结果用于调试/测试断言
@@ -434,27 +467,92 @@ func (s *ChurnPredictionService) aggregateCustomerBehavior(ctx context.Context) 
 	}
 
 	var rows []row
+	// 别名必须与 GORM 对字段名的 snake_case 映射一致：PurchaseCount90d→
+	// purchase_count90d（数字前不加下划线）。旧别名 purchase_count_90d 与
+	// interactions_30d 映射失配，频次/互动数在生产聚合里一直静默扫成 0。
 	if err := s.db.WithContext(ctx).Table("customer_events").
 		Select("customer_id, " +
 			"MAX(occurred_at) AS last_activity_at, " +
-			"COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') AS interactions_30d, " +
+			"COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') AS interactions30d, " +
 			"MAX(occurred_at) FILTER (WHERE event_type = 'purchase') AS last_purchase_at, " +
 			"COUNT(*) FILTER (WHERE event_type = 'purchase' " +
-			"AND occurred_at >= NOW() - INTERVAL '90 days') AS purchase_count_90d").
+			"AND occurred_at >= NOW() - INTERVAL '90 days') AS purchase_count90d").
 		Group("customer_id").
 		Scan(&rows).Error; err != nil {
 		return nil, err
+	}
+
+	// 金额必须取自事件 payload 的真实 amount 字段。只拉 90 天窗口内的购买事件，
+	// 在 Go 侧解析 EventData JSON：缺金额/非法金额不计入，多币种混加判 unknown，
+	// 同一 order_id 的重复事件只记一次业务金额。
+	type purchaseRow struct {
+		CustomerID string
+		EventData  string
+	}
+	var purchaseRows []purchaseRow
+	if err := s.db.WithContext(ctx).Table("customer_events").
+		Select("customer_id, event_data").
+		Where("event_type = ? AND occurred_at >= NOW() - INTERVAL '90 days'", "purchase").
+		Scan(&purchaseRows).Error; err != nil {
+		return nil, err
+	}
+
+	type aovAcc struct {
+		sum        float64
+		validCount int
+		orders     int
+		currency   string
+		mixed      bool
+		seen       map[string]struct{}
+	}
+	aovByCustomer := make(map[string]*aovAcc)
+	for _, pr := range purchaseRows {
+		data := parsePurchaseEventData(pr.EventData)
+		acc := aovByCustomer[pr.CustomerID]
+		if acc == nil {
+			acc = &aovAcc{seen: make(map[string]struct{})}
+			aovByCustomer[pr.CustomerID] = acc
+		}
+		if orderID, ok := data["order_id"].(string); ok && orderID != "" {
+			if _, dup := acc.seen[orderID]; dup {
+				continue
+			}
+			acc.seen[orderID] = struct{}{}
+		}
+		acc.orders++
+		amount, ok := purchaseAmount(data)
+		if !ok || amount <= 0 || math.IsInf(amount, 0) || math.IsNaN(amount) {
+			continue
+		}
+		currency, _ := data["currency"].(string)
+		if acc.validCount == 0 {
+			acc.currency = currency
+		} else if acc.currency != currency {
+			acc.mixed = true
+		}
+		acc.sum += amount
+		acc.validCount++
 	}
 
 	now := time.Now()
 	snaps := make([]UserBehaviorSnapshot, 0, len(rows))
 	for _, r := range rows {
 		snap := UserBehaviorSnapshot{
-			CustomerID:        r.CustomerID,
-			LastActivityAt:    r.LastActivityAt,
-			Interactions30d:   int(r.Interactions30d),
-			PurchaseFreq:      int(r.PurchaseCount90d),
-			AverageOrderValue: float64(r.PurchaseCount90d),
+			CustomerID:      r.CustomerID,
+			LastActivityAt:  r.LastActivityAt,
+			Interactions30d: int(r.Interactions30d),
+		}
+		if acc := aovByCustomer[r.CustomerID]; acc != nil {
+			// 频次与金额同源：按 order_id 去重后的订单数（无 order_id 的事件各记一次）。
+			snap.PurchaseFreq = acc.orders
+			if acc.validCount > 0 && !acc.mixed {
+				snap.AverageOrderValue = acc.sum / float64(acc.validCount)
+				snap.AOVKnown = true
+				snap.AOVCurrency = acc.currency
+			}
+		} else {
+			// 90 天窗口外/无 payload 行，退回 SQL 计数。
+			snap.PurchaseFreq = int(r.PurchaseCount90d)
 		}
 		if !r.LastActivityAt.IsZero() {
 			snap.DaysSinceActive = int(now.Sub(r.LastActivityAt).Hours() / 24)
@@ -470,6 +568,34 @@ func (s *ChurnPredictionService) aggregateCustomerBehavior(ctx context.Context) 
 	return snaps, nil
 }
 
+// parsePurchaseEventData 解析购买事件 payload，坏 JSON 返回空 map（金额记 unknown，不猜值）。
+func parsePurchaseEventData(raw string) map[string]any {
+	if raw == "" {
+		return map[string]any{}
+	}
+	var data map[string]any
+	if err := json.Unmarshal([]byte(raw), &data); err != nil || data == nil {
+		return map[string]any{}
+	}
+	return data
+}
+
+// purchaseAmount 从事件 payload 提取金额；兼容 float64 与 json.Number 之外的字符串数字。
+func purchaseAmount(data map[string]any) (float64, bool) {
+	switch v := data["amount"].(type) {
+	case float64:
+		return v, true
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			return 0, false
+		}
+		return f, true
+	default:
+		return 0, false
+	}
+}
+
 // RunChurnCalculationForAllCustomers 基于真实 customer_events 数据对全部客户执行流失计算。
 // 解决此前 churn_predictions 表永远为空（RunChurnCalculation 无生产调用方）的断头功能问题。
 func (s *ChurnPredictionService) RunChurnCalculationForAllCustomers(ctx context.Context) (int, error) {
@@ -481,14 +607,16 @@ func (s *ChurnPredictionService) RunChurnCalculationForAllCustomers(ctx context.
 	users := make([]map[string]any, 0, len(snaps))
 	for _, snap := range snaps {
 		u := map[string]any{
-			"user_id":             snap.CustomerID,
-			"days_since_active":   snap.DaysSinceActive,
-			"last_activity_at":    snap.LastActivityAt,
-			"interactions_30d":    snap.Interactions30d,
-			"days_since_purchase": snap.DaysSincePurchase,
-			"last_purchase_at":    snap.LastPurchaseAt,
-			"purchase_freq":       snap.PurchaseFreq,
-			"average_order_value": snap.AverageOrderValue,
+			"user_id":                      snap.CustomerID,
+			"days_since_active":            snap.DaysSinceActive,
+			"last_activity_at":             snap.LastActivityAt,
+			"interactions_30d":             snap.Interactions30d,
+			"days_since_purchase":          snap.DaysSincePurchase,
+			"last_purchase_at":             snap.LastPurchaseAt,
+			"purchase_freq":                snap.PurchaseFreq,
+			"average_order_value":          snap.AverageOrderValue,
+			"average_order_value_known":    snap.AOVKnown,
+			"average_order_value_currency": snap.AOVCurrency,
 		}
 		users = append(users, u)
 	}
@@ -558,6 +686,13 @@ func joinStrings(strs []string, sep string) string {
 		result += s
 	}
 	return result
+}
+
+func boolToFloat(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // CalculateConfidence 计算置信度（使用正态分布）

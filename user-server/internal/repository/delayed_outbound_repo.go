@@ -4,6 +4,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -11,6 +12,8 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+
+	"github.com/google/uuid"
 )
 
 // errDelayedOutboundUnavailable 仓储句柄缺失。
@@ -33,6 +36,10 @@ func clampBatchLimit(limit int) int {
 	}
 	return limit
 }
+
+// DelayedOutboundLease 单次投递租约时长（D03）。正常投递秒级收敛，5 分钟足够
+// 覆盖外部渠道超时；租约过期即视为持有者已失联，回收进程可以接管该行。
+const DelayedOutboundLease = 5 * time.Minute
 
 // DelayedOutboundRepository reach_delayed_outbound 队列收口
 type DelayedOutboundRepository struct {
@@ -59,7 +66,9 @@ func (r *DelayedOutboundRepository) CreatePending(ctx context.Context, rec *mode
 	return r.db.WithContext(ctx).Create(rec).Error
 }
 
-// PickDueForUpdate 事务：FOR UPDATE SKIP LOCKED 抢占到期的 pending 记录并置 sending
+// PickDueForUpdate 事务：FOR UPDATE SKIP LOCKED 抢占到期的 pending 记录并置 sending，
+// 逐行签发 claim_token + lease_until（D03）。token 是后续回写的栅栏：
+// 租约过期行被回收/重认领后，旧持有者带旧 token 的回写必须 0 行拒绝。
 func (r *DelayedOutboundRepository) PickDueForUpdate(ctx context.Context, now time.Time, limit int) ([]model.DelayedOutboundReply, error) {
 	if r.db == nil {
 		return nil, nil
@@ -77,12 +86,25 @@ func (r *DelayedOutboundRepository) PickDueForUpdate(ctx context.Context, now ti
 		if len(picked) == 0 {
 			return nil
 		}
-		ids := make([]uint, 0, len(picked))
-		for _, rec := range picked {
-			ids = append(ids, rec.ID)
+		for i := range picked {
+			token := uuid.NewString()
+			leaseUntil := now.Add(DelayedOutboundLease)
+			if err := tx.Model(&model.DelayedOutboundReply{}).Where("id = ?", picked[i].ID).
+				Updates(map[string]any{
+					"status":      "sending",
+					"claim_token": token,
+					"claimed_at":  now,
+					"lease_until": leaseUntil,
+				}).Error; err != nil {
+				return err
+			}
+			picked[i].Status = "sending"
+			picked[i].ClaimToken = token
+			claimedAt := now
+			picked[i].ClaimedAt = &claimedAt
+			picked[i].LeaseUntil = &leaseUntil
 		}
-		return tx.Model(&model.DelayedOutboundReply{}).Where("id IN ?", ids).
-			Update("status", "sending").Error
+		return nil
 	})
 	return picked, err
 }
@@ -127,7 +149,9 @@ func (r *DelayedOutboundRepository) PluckDueIDs(ctx context.Context, now time.Ti
 	return ids, err
 }
 
-// MarkSendingIfPending CAS：pending → sending，返回是否抢占成功
+// MarkSendingIfPending CAS：pending → sending，返回是否抢占成功。
+// 仅无事务 fallback 路径使用；成功后必须接着调 ClaimSendingRows 签发租约，
+// 否则回写没有栅栏 token 可验证。
 func (r *DelayedOutboundRepository) MarkSendingIfPending(ctx context.Context, ids []uint) (bool, error) {
 	if r.db == nil {
 		return false, nil
@@ -137,29 +161,53 @@ func (r *DelayedOutboundRepository) MarkSendingIfPending(ctx context.Context, id
 	return res.RowsAffected > 0, res.Error
 }
 
-// ListSendingByID 取 sending 状态记录（fallback 抢占后回读）
-func (r *DelayedOutboundRepository) ListSendingByID(ctx context.Context, ids []uint, limit int) ([]model.DelayedOutboundReply, error) {
+// ClaimSendingRows 给 fallback 路径的 sending 行逐行签发租约（D03）。
+// 只认领「尚无有效 token」的行（claim_token 为空），返回带 token 的行供栅栏回写。
+func (r *DelayedOutboundRepository) ClaimSendingRows(ctx context.Context, ids []uint, now time.Time) ([]model.DelayedOutboundReply, error) {
 	if r.db == nil {
 		return nil, nil
 	}
-	var picked []model.DelayedOutboundReply
-	err := r.db.WithContext(ctx).Where("id IN ? AND status = ?", ids, "sending").
-		Order("send_at ASC").Limit(clampBatchLimit(limit)).
-		Find(&picked).Error
-	return picked, err
+	var claimed []model.DelayedOutboundReply
+	for _, id := range ids {
+		token := uuid.NewString()
+		leaseUntil := now.Add(DelayedOutboundLease)
+		res := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+			Where("id = ? AND status = ? AND (claim_token = '' OR claim_token IS NULL)", id, "sending").
+			Updates(map[string]any{
+				"claim_token": token,
+				"claimed_at":  now,
+				"lease_until": leaseUntil,
+			})
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			continue
+		}
+		var rec model.DelayedOutboundReply
+		if err := r.db.WithContext(ctx).First(&rec, id).Error; err != nil {
+			return nil, err
+		}
+		claimed = append(claimed, rec)
+	}
+	return claimed, nil
 }
 
 // MarkSent 重放成功：status → sent。
 //
-// 0 行 ⇒ ErrRecordNotFound：这一行是本轮刚从库里抢出来的（PickDueForUpdate），
-// 命中 0 行只可能是它在投递途中被人删了。吞掉这个错就等于把「状态没回写」
-// 记成「已送达」，下一轮还会把它当 pending 重投一次。
-func (r *DelayedOutboundRepository) MarkSent(ctx context.Context, id uint, sentAt time.Time) error {
+// 0 行 ⇒ ErrRecordNotFound：可能是这行在投递途中被删，也可能（D03）是本 worker
+// 租约已过期、行已被重认领给新 token —— 两种情况都不得把「状态没回写」记成
+// 「已送达」。
+func (r *DelayedOutboundRepository) MarkSent(ctx context.Context, id uint, token string, sentAt time.Time) error {
 	if r == nil || r.db == nil {
 		return errDelayedOutboundUnavailable
 	}
-	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
-		Updates(map[string]any{"status": "sent", "sent_at": &sentAt}))
+	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
+	if token != "" {
+		// 栅栏：旧 worker 的回写在行被重认领后必须 0 行拒绝。
+		q = q.Where("claim_token = ?", token)
+	}
+	return _db.EnsureAffected(q.Updates(map[string]any{"status": "sent", "sent_at": &sentAt}))
 }
 
 // HasPendingByConversation 该会话是否还有「尚未投递且仍会被投递」的延迟出站。
@@ -177,38 +225,127 @@ func (r *DelayedOutboundRepository) HasPendingByConversation(ctx context.Context
 	return n > 0, err
 }
 
-// ScheduleRetry 重投失败后原地改排：回到 pending、send_at 推到 nextAt、attempts+1、记 last_error。
-// 不新建行：一条待投回复在队列里始终只有一行，避免同一份内容因多次失败被重放多次。
-func (r *DelayedOutboundRepository) ScheduleRetry(ctx context.Context, id uint, nextAt time.Time, lastError string) error {
+// ScheduleRetry 重投失败后原地改排：回到 pending、send_at 推到 nextAt、attempts+1、记 last_error、
+// 清租约。不新建行：一条待投回复在队列里始终只有一行，避免同一份内容因多次失败被重放多次。
+// 带 token 时为栅栏写（行被重认领后旧 worker 改排 0 行拒绝）。
+func (r *DelayedOutboundRepository) ScheduleRetry(ctx context.Context, id uint, token string, nextAt time.Time, lastError string) error {
 	if r == nil || r.db == nil {
 		return errDelayedOutboundUnavailable
 	}
 	if id == 0 {
 		return errors.New("delayed outbound: 空 ID 不是改排对象")
 	}
-	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":     model.DelayedStatusPending,
-			"send_at":    nextAt,
-			"attempts":   gorm.Expr("attempts + 1"),
-			"last_error": truncateForColumn(lastError, 1024),
-		}))
+	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
+	if token != "" {
+		q = q.Where("claim_token = ?", token)
+	}
+	return _db.EnsureAffected(q.Updates(map[string]any{
+		"status":      model.DelayedStatusPending,
+		"send_at":     nextAt,
+		"attempts":    gorm.Expr("attempts + 1"),
+		"last_error":  truncateForColumn(lastError, 1024),
+		"claim_token": "",
+		"claimed_at":  nil,
+		"lease_until": nil,
+	}))
 }
 
-// FinishReplay 重放收口到终态（sent / superseded / failed），失败原因留在 last_error。
-func (r *DelayedOutboundRepository) FinishReplay(ctx context.Context, id uint, status string, at time.Time, lastError string) error {
+// FinishReplay 重放收口到终态（sent / superseded / failed / unknown），失败原因留在 last_error。
+// 带 token 时为栅栏写（行被重认领后旧 worker 收口 0 行拒绝）。
+func (r *DelayedOutboundRepository) FinishReplay(ctx context.Context, id uint, token, status string, at time.Time, lastError string) error {
 	if r == nil || r.db == nil {
 		return errDelayedOutboundUnavailable
 	}
 	if id == 0 {
 		return errors.New("delayed outbound: 空 ID 不是收口对象")
 	}
-	updates := map[string]any{"status": status, "sent_at": &at}
+	updates := map[string]any{"status": status, "sent_at": &at, "lease_until": nil}
 	if lastError != "" {
 		updates["last_error"] = truncateForColumn(lastError, 1024)
 	}
+	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
+	if token != "" {
+		q = q.Where("claim_token = ?", token)
+	}
+	return _db.EnsureAffected(q.Updates(updates))
+}
+
+// ListExpiredLeaseSending 列出租约已过期的 sending 行（D03 回收对象）。
+func (r *DelayedOutboundRepository) ListExpiredLeaseSending(ctx context.Context, now time.Time, limit int) ([]model.DelayedOutboundReply, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	var rows []model.DelayedOutboundReply
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND lease_until IS NOT NULL AND lease_until < ?", "sending", now).
+		Order("send_at ASC").Limit(clampBatchLimit(limit)).
+		Find(&rows).Error
+	return rows, err
+}
+
+// ListLegacyStuckSending 列出无租约字段的历史 sending 悬挂行（D03 之前的旧数据：
+// 没有 claim_token/lease_until，只能按 send_at 年龄判定）。
+func (r *DelayedOutboundRepository) ListLegacyStuckSending(ctx context.Context, sendAtBefore time.Time, limit int) ([]model.DelayedOutboundReply, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	var rows []model.DelayedOutboundReply
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND (lease_until IS NULL) AND send_at < ?", "sending", sendAtBefore).
+		Order("send_at ASC").Limit(clampBatchLimit(limit)).
+		Find(&rows).Error
+	return rows, err
+}
+
+// MarkSendingUnknown 把 sending 行（带或不带 token）判为 unknown 待人工核对。
+// 外部渠道不提供可靠的按条查询时，「可能已发」的行禁止自动重发，只能转 unknown。
+func (r *DelayedOutboundRepository) MarkSendingUnknown(ctx context.Context, id uint, token, reason string) error {
+	if r == nil || r.db == nil {
+		return errDelayedOutboundUnavailable
+	}
+	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+		Where("id = ? AND status = ?", id, "sending")
+	if token != "" {
+		q = q.Where("claim_token = ?", token)
+	}
+	updates := map[string]any{
+		"status":      model.DelayedStatusUnknown,
+		"lease_until": nil,
+		"last_error":  truncateForColumn("发送结果未知待核对: "+reason, 1024),
+	}
+	return _db.EnsureAffected(q.Updates(updates))
+}
+
+// ResolveUnknown 人工核对 unknown 行后的收敛出口（D03：不永久无主悬挂）。
+//   - target=pending：核对确认没发出去，重新入队（sendAt=now 立即投）；
+//   - target=sent：核对确认已送达（补记 sentAt）；
+//   - target=superseded：核对确认不需要再发（如人工已另行回复）。
+func (r *DelayedOutboundRepository) ResolveUnknown(ctx context.Context, id uint, target string, sendAt time.Time, note string) error {
+	if r == nil || r.db == nil {
+		return errDelayedOutboundUnavailable
+	}
+	if id == 0 {
+		return errors.New("delayed outbound: 空 ID 不是核对对象")
+	}
+	updates := map[string]any{"lease_until": nil}
+	switch target {
+	case model.DelayedStatusPending:
+		updates["status"] = model.DelayedStatusPending
+		updates["send_at"] = sendAt
+	case model.DelayedStatusSent:
+		updates["status"] = model.DelayedStatusSent
+		updates["sent_at"] = &sendAt
+	case model.DelayedStatusSuperseded:
+		updates["status"] = model.DelayedStatusSuperseded
+		updates["sent_at"] = &sendAt
+	default:
+		return fmt.Errorf("delayed outbound: 不支持的 unknown 核对出口 %q（允许 pending/sent/superseded）", target)
+	}
+	if note != "" {
+		updates["last_error"] = truncateForColumn("人工核对: "+note, 1024)
+	}
 	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
-		Where("id = ?", id).Updates(updates))
+		Where("id = ? AND status = ?", id, model.DelayedStatusUnknown).Updates(updates))
 }
 
 // truncateForColumn 按 rune 上限截断入库文本（varchar 超长会整条 UPDATE 失败，

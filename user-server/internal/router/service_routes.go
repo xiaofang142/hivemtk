@@ -283,7 +283,8 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 		authPlainAdmin.PUT("/mcp/credentials/:id", controller.UpdateMCPCredential)
 		authPlainAdmin.DELETE("/mcp/credentials/:id", controller.DeleteMCPCredential)
 	}
-	auth.GET("/capabilities", controller.CapabilityMatrix)
+	// /api/capabilities 由 setupCapabilityRuntimeRoutes 统一注册（D01 能力运行视图）：
+	// 旧 CapabilityMatrix 同路径注册会在 Setup 时 panic（handlers already registered）。
 	auth.GET("/llm/providers/health/:provider", llmProvCtrl.GetProviderHealth)
 	auth.GET("/llm/providers/policy", llmProvCtrl.GetPolicy)
 	auth.GET("/llm-routings/providers/health", llmProvCtrl.GetHealth)
