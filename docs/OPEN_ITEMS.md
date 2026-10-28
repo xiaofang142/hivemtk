@@ -52,9 +52,13 @@
      `DoNotContactService` 抽到 `internal/service/dnc`（根包保留类型/构造别名，`dnc_compat.go`）；
      `sms` 域 16 文件/5552 行整体迁入 `internal/service/sms`（控制器/app/router/root service 改引子包）。
      读效：SMS 用例独立成包 **32s**（原在 833s 单包内）；`go build`/`vet`/lint/audit/router 全绿。
-  5. 下一域按同配方：`email`（8 文件/2608 行，依赖 `round2`→已共享）
-     → `cards`（douyin/xianyu/xiaohongshu/kuaishou 卡片族）→ `sop`。每刀验收：
-     `go build ./...` + 该域测试 + 根包测试子集 + `make audit`。
+  5. 下一域按同配方：`cards`（douyin/xianyu/xiaohongshu/kuaishou 卡片族）→ `sop`。
+     每刀验收：`go build ./...` + 该域测试 + 根包测试子集 + `make audit`。
+  6. **email 刀已完成**（2026-10-29，提交 09e2f5c2）：8 文件/2607 行迁入
+     `internal/service/email`；循环依赖用 `OutboundHubPusher` 接口注入解（根包
+     `email_compat.go` 给 MessageHubService 挂 `PushEmailOutbound`，未动
+     message_hub.go）；根包保留四类型五构造别名，controller 4 文件/router 2 文件
+     改引子包；email 包 28.9s 全绿、根包 Email 用例全绿。
 - **已撤销的一条**：旧记录说 `check-battery-identity.py` 的豁免依赖被 gitignore 的轮次目录、
   干净克隆会红。2026-10-26 在干净 worktree（`git worktree add --detach /tmp/hm-clean-1026 11185fa4`）
   复算，`--selftest` 与 `--quiet-ok` 都是 **rc=0**（`失败 0 格` / `0 项不合格`），
