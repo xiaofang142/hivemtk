@@ -226,7 +226,7 @@ function parseList(text) {
 async function loadConfig() {
   try {
     const res = await getLeadMiningConfig()
-    const data = res?.data?.data || res?.data || {}
+    const data = res?.data?.data || res?.data || res || {}
     form.enabled = !!data.enabled
     form.channels = data.channels || []
     form.requirement = data.requirement || ''

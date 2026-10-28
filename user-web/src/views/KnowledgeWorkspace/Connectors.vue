@@ -246,7 +246,7 @@ const saveCred = async (source) => {
 const testConn = async (source) => {
   try {
     const res = await http.post(`/api/knowledge/connectors/${source}/test`)
-    const d = res?.data || {}
+    const d = res?.data || res || {}
     d.ok ? ElMessage.success(d.message || '连接成功') : ElMessage.warning(d.message || '连接失败')
     await loadConnectors()
   } catch (e) {
@@ -260,8 +260,9 @@ const pull = async (source) => {
   pulling.value = source
   try {
     const res = await http.post(`/api/knowledge/connectors/${source}/pull`, { product_id: kbId })
-    lastResult.value = res?.data
-    ElMessage.success(`拉取完成: 成功 ${res?.data?.imported || 0} / 失败 ${res?.data?.failed || 0}`)
+    const d = res?.data || res || {}
+    lastResult.value = d
+    ElMessage.success(`拉取完成: 成功 ${d.imported || 0} / 失败 ${d.failed || 0}`)
   } catch (e) {
     ElMessage.error(e?.response?.data?.message || '拉取失败')
   } finally {

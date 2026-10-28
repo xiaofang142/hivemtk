@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -42,6 +43,10 @@ func (c *SiteController) ExportToHugo(ctx *gin.Context) {
 func (c *SiteController) TriggerDeploy(ctx *gin.Context) {
 	url, err := c.deploySvc.TriggerDeploy(ctx.Request.Context())
 	if err != nil {
+		if errors.Is(err, service.ErrSiteConfigInvalid) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -61,6 +66,10 @@ func (c *SiteController) FullPipeline(ctx *gin.Context) {
 	}
 	url, err := c.deploySvc.TriggerDeploy(ctx.Request.Context())
 	if err != nil {
+		if errors.Is(err, service.ErrSiteConfigInvalid) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusInternalServerError, "deploy: "+err.Error())
 		return
 	}

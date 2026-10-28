@@ -435,6 +435,11 @@ const loadList = async () => {
     list.value = res?.list || []
     total.value = res?.total || list.value.length
     computeStats();
+    // 未读数是全局口径，不能只数当前页（第 2 页可能 0 条未读，但全站还有）。
+    try {
+      const uc = await notificationApi.unreadCount()
+      stats.value.unread = uc?.count ?? stats.value.unread
+    } catch { /* 角标失败不阻断列表 */ }
   } catch (err) {
     ElMessage.error('加载通知失败：' + (err?.message || err))
   } finally {
@@ -443,7 +448,8 @@ const loadList = async () => {
 }
 
 const computeStats = () => {
-  stats.value.total = list.value.length
+  // 总数用接口 total（服务端分页），不是当前页数组长度——否则 1163 条只显示 20。
+  stats.value.total = total.value
   stats.value.unread = list.value.filter(m => !m.is_read).length
   const byType = { info: 0, warning: 0, error: 0, success: 0, announcement: 0, platform_notice: 0 }
   list.value.forEach(m => {
@@ -458,9 +464,11 @@ const onView = async (row) => {
   viewVisible.value = true
   if (!row.is_read) {
     try {
+      const wasUnread = !row.is_read
       await notificationApi.markRead(row.id)
       row.is_read = true
       computeStats()
+      if (wasUnread) stats.value.unread = Math.max(0, (stats.value.unread || 0) - 1)
     } catch { /* 忽略：标记已读失败不该挡住用户看详情 */ }
   }
 }
@@ -471,6 +479,7 @@ const onMarkAllRead = async () => {
     await notificationApi.markAllRead()
     list.value.forEach(m => { m.is_read = true })
     computeStats()
+    stats.value.unread = 0
     ElMessage.success(i18n.global.t('已全部标记为已读'))
   } catch (err) {
     ElMessage.error('操作失败：' + (err?.message || err))

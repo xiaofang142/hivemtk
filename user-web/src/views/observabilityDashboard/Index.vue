@@ -288,7 +288,7 @@ async function load() {
   loading.value = true
   try {
     const res = await getObservabilityDashboard('7d')
-    snapshot.value = res?.data || {}
+    snapshot.value = res?.data || res || {}
   } finally {
     loading.value = false
   }

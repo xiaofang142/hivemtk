@@ -64,7 +64,9 @@ async function deployOnly() {
     step.value = 2
     lastResult.value = `部署地址：${res?.site_url || '—'}`
     ElMessage.success('部署成功')
-  } catch (e) { ElMessage.error('部署失败') }
+  } catch (e) {
+    // 失败原因由 request 拦截器统一提示（配置问题 400 / 上游 502），不再叠一条「部署失败」
+  }
 }
 async function fullPipeline() {
   step.value = 1

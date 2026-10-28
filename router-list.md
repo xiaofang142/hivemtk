@@ -938,3 +938,11 @@
 - [x] `/xiaohongshuCard` ✅ 通过
 - [x] `/xiaohongshu/stats` ✅ 通过
 - [ ] `/xiaohongshu-card-stats/:id` — 未验证（需动态参数/数据）
+
+## 数据正确性复测（2026-10-28 第二轮）
+
+> 不只点交互，还抓 `/api/*` 响应体核对页面数字/列表/表单值；证据在 `evidence-data-20261028/`（240 条路由）。
+
+- 已修复：`/notifications` 总数 20→1163、`/system/automation-hub` Webhook 5 条不显示、`/observability-dashboard` 全部显示“-”、`/geo-tools/workflow` 请求 undefined + 不自动选流程、`/kuaishou/stats` 统计跳 404、`/aiProductivity/list` 平均响应 3220s、`/geo-tools/site-publish` 500/重复提示、`/scriptTemplate/ab-stats` 话术下拉空、`/lead-mining/index` 配置不显示、`/oneid/conflicts` 列表恒空、知识连接器测试/拉取结果错、会话 AI 摘要恒为空。
+- 仍缺业务数据无法核对：`/chat/embed/:channel_ref`、`/asset-market/detail/:id`、`/module-market/detail/:key`、`/followups/:id`、`/dashboard/drafts/:id`、会话监控 `sessions/:id`、404 参数路由。
+- 其余路由的统计卡/表格/总数与接口响应一致，未发现新的数据错位。

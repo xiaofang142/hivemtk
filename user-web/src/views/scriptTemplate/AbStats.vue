@@ -183,7 +183,7 @@ const statsVersions = computed(() => stats.value.versions || []);
 const loadScripts = async () => {
   try {
     const res = await getScriptTemplateList({ page: 1, pageSize: 100 });
-    const list = res?.data?.list || res?.data || [];
+    const list = res?.list || res?.data?.list || res || [];
     scripts.value = list.map((s) => ({ id: s.id, name: s.name || s.title }));
   } catch (e) {
     scripts.value = [];
@@ -194,7 +194,7 @@ const loadVersions = async () => {
   loadingVersions.value = true;
   try {
     const res = await scriptAbApi.listVersions(scriptId.value);
-    versions.value = res?.data?.list || [];
+    versions.value = res?.list || res?.data?.list || [];
   } catch (e) {
     versions.value = [];
   } finally {
@@ -206,7 +206,7 @@ const loadStats = async () => {
   loadingStats.value = true;
   try {
     const res = await scriptAbApi.getAbStats(scriptId.value);
-    stats.value = res?.data || {};
+    stats.value = res || {};
     if (stats.value.config) {
       abForm.value = {
         enabled: !!stats.value.config.enabled,

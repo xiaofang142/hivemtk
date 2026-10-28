@@ -209,7 +209,7 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await listConflicts({ status: 'pending' })
-    const data = res?.data?.data || res?.data || []
+    const data = res?.data?.data || res?.data || res || []
     conflicts.value = Array.isArray(data) ? data.map(c => ({ ...c, customer_ids: c.customer_ids || [] })) : []
   } catch (e) {
     ElMessage.error('加载冲突列表失败：' + (e?.message || e))

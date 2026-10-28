@@ -417,16 +417,18 @@ const loadAll = async () => {
     http.get('/api/webhook-subscriptions').catch(() => null),
     http.get('/api/report-subscriptions').catch(() => null)
   ])
-  if (ohRes?.data) oh.value = { ...oh.value, ...ohRes.data }
-  macros.value = macroRes?.data?.list || []
-  hooks.value = hookRes?.data?.list || []
-  subs.value = subRes?.data?.list || []
+  // request 拦截器已经把 {code,message,data} 拆成 data 返回，这里再取 .data 会永远为空：
+  // 实测 Webhook 有 5 条订阅、页面却显示「暂无数据」。
+  if (ohRes) oh.value = { ...oh.value, ...ohRes }
+  macros.value = macroRes?.list || macroRes?.data?.list || []
+  hooks.value = hookRes?.list || hookRes?.data?.list || []
+  subs.value = subRes?.list || subRes?.data?.list || []
   loadPerf()
 }
 
 const loadPerf = async () => {
   const res = await http.get(`/api/analytics/ai-performance?days=${perfDays.value}`).catch(() => null)
-  perf.value = res?.data || null
+  perf.value = res || null
 }
 
 const saveOH = async () => {

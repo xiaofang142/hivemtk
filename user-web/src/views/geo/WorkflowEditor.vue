@@ -497,6 +497,7 @@ const selectWorkflow = (w) => {
   currentWorkflow.value = w
   wfName.value = w.name || ''
   steps.value = Array.isArray(w.steps) ? JSON.parse(JSON.stringify(w.steps)) : []
+  loadExecutions()
 }
 
 const onNewWorkflow = () => {
@@ -572,18 +573,22 @@ const loadWorkflows = async () => {
   try {
     const data = await listWorkflows()
     workflows.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
+    // 首次进入默认选中第一条：否则右侧永远「未选择」，执行记录还拿 undefined 去查。
+    if (!currentWorkflow.value && workflows.value.length) selectWorkflow(workflows.value[0])
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 const loadExecutions = async () => {
+  const id = currentWorkflow.value?.id
+  if (!id) { executions.value = []; execLoading.value = false; return }
   execLoading.value = true
   try {
-    const data = await listWorkflowExecutions(currentWorkflow.value?.id)
+    const data = await listWorkflowExecutions(id)
     executions.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   execLoading.value = false
 }
 
-onMounted(() => { loadWorkflows(); loadExecutions() })
+onMounted(() => { loadWorkflows() })
 </script>
 
 <style lang="scss" scoped>

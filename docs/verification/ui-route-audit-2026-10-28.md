@@ -100,8 +100,44 @@
 | Go 全量 | `POSTGRES_TEST_PORT=8202 POSTGRES_TEST_PASSWORD=<local> go test -timeout 30m ./...` | ✅ exit=0（148 个包 ok，0 FAIL） |
 | 前端单测 | `npx vitest run` | ✅ 71 files / 705 tests 全通过 |
 | 前端构建 | `npm run dev`（Vite 8211）+ ego-browser 真浏览器 | ✅ 页面正常、无 console error |
+| 第二轮后端 | `go test ./internal/ops/repository ./internal/geo/... ./internal/kbconnector` | ✅ 全通过（service/controller 全量在上轮已通过；本轮 service 包因并行会话改动超默认 10m 超时，未计入结论） |
+| 第二轮前端 | `npx vitest run` / `npm run build` | ✅ 705/705；构建通过 |
 
-## 7. 未覆盖与限制
+> 说明：本轮执行期间工作区有另一个并行会话在提交 egolite 015/016 功能（HEAD 已前进到 `7403fee2`，存在未提交改动）。本报告的验证使用 `aacd3594` 工作树 + 本轮后端修复编译的独立二进制（`/tmp/user-server-audit`），未修改、未覆盖并行会话的文件；全量 `go test ./...` 以本轮开始前的 `5d6e60c2` 为基线已通过。
+
+## 7. 第二轮：页面数据正确性复测（2026-10-28）
+
+第一轮只证明「不报错」，本轮重新逐路由打开页面，并用 CDP 抓取接口响应体，核对
+页面统计卡 / 表格行数 / 总数 / 表单值是否来自接口真实数据。新增证据目录
+`evidence-data-20261028/`（240 条路由，含接口 URL、列表长度、total、统计卡、表单值、页面文本）。
+
+### 7.1 本轮发现并修复的数据错误
+
+| 页面 | 现象（数据错误） | 根因与修复 |
+|---|---|---|
+| `/notifications` | 「总消息」显示 20（当前页条数），接口 total=1163；未读数只数当前页 | `stats.total=list.length`；改用 `total` 与 `/notifications/unread-count`，标记已读后同步递减 |
+| `/system/automation-hub` | 出站 Webhook 接口有 5 条，页面「暂无数据」 | `request` 拦截器已解包 `data`，页面又取 `res.data.list`；改为 `res.list`（宏/报表订阅/办公时间同样修正） |
+| `/observability-dashboard` | 窗口/生成时间显示「-」，成本 0、漏斗 0、渠道空 | `snapshot = res?.data || {}` 把已解包数据丢掉；改为 `res?.data || res` |
+| `/geo-tools/workflow` | 挂载即请求 `/workflows/undefined/executions`，且不自动选工作流 | `onMounted` 同时调 loadWorkflows/loadExecutions；改为加载后默认选第一条，无 id 不发请求 |
+| `/kuaishou/stats` | 点「统计」跳到 `/kuaishou-card/stats/:id` → 404 | 路由应为 `/kuaishou-card-stats/:id`（其余四平台正确） |
+| `/aiProductivity/list` | 平均响应时长 3220 秒（53 分钟） | 旧 SQL 取任意相邻消息差（AI 连发/跨天回流都算）；改为仅「用户 → 紧邻首条 ai/agent/staff」并补 2 条仓储测试 |
+| `/geo-tools/site-publish` | 点「仅部署」500「服务器内部错误」，且再叠一条「部署失败」 | 站点目录非 git 仓库/未启用均映射 400 并给可操作提示；无变更时 git commit 非 0 不再视为失败；前端去掉重复提示 |
+| `/scriptTemplate/ab-stats` | 话术下拉为空 | `res?.data?.list` 取已解包数据；改为 `res.list` |
+| `/lead-mining/index` | 配置（渠道/关键词/阈值）不回落显示 | `res?.data` 未回落 `res`；补 fallback |
+| `/oneid/conflicts` | 冲突列表恒空（接口直接返回数组） | 同上补 `|| res` |
+| `/KnowledgeWorkspace/Connectors` | 「测试连接」「拉取」结果恒为失败/0 | `res?.data` 取已解包结果；改为 `res?.data || res` |
+| `/customerSession/list` | AI 摘要弹窗恒显示「摘要生成完成 / neutral」 | 同上 |
+
+### 7.2 数据核对方式
+
+- 每个路由用 CDP `Network.getResponseBody` 抓取 `/api/*` JSON，统计列表长度、`total/count`、关键字段。
+- 页面侧抓取 `.el-statistic`、表格前 5 行/行数、分页文本、输入框/下拉/开关的值。
+- 对「接口有列表但页面空」「接口 total 与页面数字不符」「页面出现 undefined/NaN」进行人工复核（已排除 FAQ 正文合法出现 undefined 等误报）。
+- 动态路由用真实业务 ID 复测：FAQ 2、渠道 3、知识库 2、智能体 30、资产包 `ast-general-ecs`、浏览器任务 554、SOP 模板 2（1 已软删）、工作流 `wf-e2e-test`、快手卡 12 等。
+
+本轮 240 条路由取得数据证据；仍无法验证的 7 条均为缺业务数据的动态页（`/chat/embed/:channel_ref`、`/asset-market/detail/:id`、`/module-market/detail/:key`、`/followups/:id`、`/dashboard/drafts/:id`、会话监控 `sessions/:id`、404 参数路由）。
+
+## 8. 未覆盖与限制
 
 - 10 条动态参数路由缺少可用业务数据（如订单草稿表为空、部分卡片详情/embed 渠道无记录、模块 key 无目录数据），未做真实点击；其余 15 条用真实 ID 抽样验证通过。
 - 语音/视频、真实第三方外发（短信/邮件/WhatsApp 发送）、支付与退款等破坏性链路未触发，避免产生真实外发或资金副作用；相关页面只做只读加载与安全按钮点击。

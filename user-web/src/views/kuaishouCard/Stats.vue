@@ -352,7 +352,7 @@ const refreshData = () => {
 };
 
 const goToCardStats = (cardId) => {
-  router.push(`/kuaishou-card/stats/${cardId}`)
+  router.push(`/kuaishou-card-stats/${cardId}`)
 };
 
 const formatNumber = (num) => {

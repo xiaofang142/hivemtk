@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,11 +10,18 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
+
+// ErrSiteConfigInvalid 站点配置不完整（未启用站点 / 目录不存在）。
+// 这类错误是用户在「静态站部署」页可以自行修正的配置问题，控制器应回 400，
+// 而不是 500「服务器内部错误」。
+var ErrSiteConfigInvalid = errors.New("站点配置不完整")
 
 // SiteDeployService 静态站部署服务
 //
@@ -268,7 +276,22 @@ func (s *SiteDeployService) buildSitemapXML(domain string, articles []model.GeoA
 func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 	siteCfg, err := s.sites.GetActive(ctx)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", fmt.Errorf("%w: 尚未启用静态站，请先在「静态站部署」保存并启用一个站点", ErrSiteConfigInvalid)
+		}
 		return "", err
+	}
+	if strings.TrimSpace(siteCfg.HugoPath) == "" {
+		return "", fmt.Errorf("%w: 站点目录未配置（hugo_path 为空）", ErrSiteConfigInvalid)
+	}
+	if st, statErr := os.Stat(siteCfg.HugoPath); statErr != nil || !st.IsDir() {
+		return "", fmt.Errorf("%w: 站点目录不存在或不可访问：%s", ErrSiteConfigInvalid, siteCfg.HugoPath)
+	}
+	// 目录存在但不是 git 仓库时，git add 会以 128 退出；这是「静态站部署」配置问题，
+	// 不是服务端内部错误，提前判掉并给出可照做的提示。
+	if out, gitErr := exec.CommandContext(ctx, "git", "-C", siteCfg.HugoPath, "rev-parse", "--is-inside-work-tree").CombinedOutput(); gitErr != nil {
+		_ = out
+		return "", fmt.Errorf("%w: 站点目录不是 git 仓库：%s（请先 git init 或填写正确的 Hugo 目录）", ErrSiteConfigInvalid, siteCfg.HugoPath)
 	}
 
 	cmds := [][]string{
@@ -278,9 +301,24 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 	}
 	for _, args := range cmds {
 		c := exec.CommandContext(ctx, args[0], args[1:]...)
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		if err := c.Run(); err != nil {
+		out, err := c.CombinedOutput()
+		if len(out) > 0 {
+			_, _ = os.Stdout.Write(out)
+		}
+		if err != nil {
+			// 没有任何内容可提交时 git commit 会以非 0 退出；这不是部署失败，
+			// 后续 push 仍应执行（否则「只改配置不动文章」的部署永远红）。
+			joined := string(out)
+			isCommit := false
+			for _, a := range args {
+				if a == "commit" {
+					isCommit = true
+					break
+				}
+			}
+			if isCommit && (strings.Contains(joined, "nothing to commit") || strings.Contains(joined, "no changes added to commit")) {
+				continue
+			}
 			logger.Warnf("TriggerDeploy 失败: %v", err)
 			return "", fmt.Errorf("%v: %w", strings.Join(args, " "), err)
 		}

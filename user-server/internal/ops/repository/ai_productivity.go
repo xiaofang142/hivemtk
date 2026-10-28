@@ -70,18 +70,25 @@ func (r *AIProductivityRepository) CountSessionMessagesBySenderTypeAndDayRange(c
 
 // GetAvgResponseTime 平均响应时长（秒）
 //
+// 口径：只统计「用户问 → 紧接着的首条回复（ai/agent/staff）」的间隔。
+// 旧实现取的是**任意相邻两条消息**的差（AI 连发两条、用户连发两条、跨天再回来都算），
+// 实测把间隔均值抬到 3220 秒（53 分钟），页面「平均响应时长」因此失真。
+// 多轮里只有首条回复计入，避免 AI 连发被重复计为多次响应。
+//
 // PostgreSQL 不允许在聚合函数(AVG)中直接嵌套窗口函数(LAG)，
-// 必须用子查询先算出相邻消息时间差，再在外层聚合。
+// 必须用子查询先算出相邻消息与相邻发送者，再在外层聚合。
 func (r *AIProductivityRepository) GetAvgResponseTime(ctx context.Context, startTime, endTime time.Time) (float64, error) {
 	type rtRow struct {
 		Avg float64
 	}
 	var rt rtRow
 	err := r.db.WithContext(ctx).
-		Table("(SELECT created_at - LAG(created_at) OVER (PARTITION BY session_id ORDER BY created_at) AS diff "+
+		Table("(SELECT created_at, sender_type, "+
+			"LAG(created_at) OVER (PARTITION BY session_id ORDER BY created_at) AS prev_at, "+
+			"LAG(sender_type) OVER (PARTITION BY session_id ORDER BY created_at) AS prev_sender "+
 			"FROM session_messages WHERE created_at BETWEEN ? AND ?) t", startTime, endTime).
-		Select("AVG(EXTRACT(EPOCH FROM diff)) AS avg").
-		Where("diff IS NOT NULL").
+		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (created_at - prev_at))), 0) AS avg").
+		Where("prev_sender = ? AND sender_type IN ?", "user", []string{"ai", "agent", "staff"}).
 		Scan(&rt).Error
 	return rt.Avg, err
 }

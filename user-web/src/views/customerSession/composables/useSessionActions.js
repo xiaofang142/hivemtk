@@ -47,7 +47,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
     try {
       summaryLoading.value = true
       const res = await http.post(`/api/customer-sessions/${sid}/ai-summary`)
-      const d = res?.data || {}
+      const d = res?.data || res || {}
       ElMessageBox.alert(d.summary || '摘要生成完成', 'AI 会话摘要（' + (d.sentiment || 'neutral') + '）', { confirmButtonText: '知道了' })
     } catch (e) {
       ElMessage.error(e?.message || '摘要生成失败')
