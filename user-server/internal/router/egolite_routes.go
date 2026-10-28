@@ -1,10 +1,13 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +21,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	hrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	"hivemtk-user/internal/storage"
 )
 
 // SetupEgoLiteRoutes ego-lite 腿路由（设计文档 S3/S6/S7/S9；调研 §6.5 鉴权定案）。
@@ -76,6 +80,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	sessionSvc := egolite.NewEgoSessionService(sessionRepo, roundRepo, execRepo, evRepo, registry, execSvc)
 	tooluse.SetBrowserSessionPort(sessionSvc)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
+	sessionSvc.AttachFlowService(flowSvc)
 	assetSvc := egolite.NewEgoAssetCatalog(assetRepo, flowRepo)
 
 	// 流程定时触发器（specs/016 S10，browser_cron_triggers 模式）：fire 闭包做
@@ -177,6 +182,61 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"assets": assets}})
+	})
+
+	// runner 产物上传（截图）：eg_ token 即身份；只收图片（PNG/JPEG），
+	// 8MB 上限；落 storage 本地驱动（与既有附件同一套目录/URL/租户前缀规则）。
+	engine.POST("/api/egolite/runner/artifacts", func(c *gin.Context) {
+		tok := c.Query("token")
+		if tok == "" {
+			tok = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		}
+		userID, ok := runnerAuth.Authenticate(c.Request.Context(), tok)
+		if !ok {
+			c.JSON(401, gin.H{"code": 1, "message": "runner token 无效"})
+			return
+		}
+		const maxArtifact = 8 << 20
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxArtifact+1024)
+		file, header, err := c.Request.FormFile("file")
+		if err != nil {
+			c.JSON(400, gin.H{"code": 1, "message": "缺少 file 字段或超出大小上限"})
+			return
+		}
+		defer func() { _ = file.Close() }()
+		if header.Size > maxArtifact {
+			c.JSON(413, gin.H{"code": 1, "message": "产物超过 8MB 上限"})
+			return
+		}
+		buf := &bytes.Buffer{}
+		if _, err := io.Copy(buf, io.LimitReader(file, maxArtifact+1)); err != nil {
+			c.JSON(500, gin.H{"code": 1, "message": "读取产物失败"})
+			return
+		}
+		b := buf.Bytes()
+		if len(b) > maxArtifact {
+			c.JSON(413, gin.H{"code": 1, "message": "产物超过 8MB 上限"})
+			return
+		}
+		ext := ""
+		switch {
+		case len(b) >= 8 && bytes.Equal(b[:8], []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}):
+			ext = ".png"
+		case len(b) >= 3 && b[0] == 0xff && b[1] == 0xd8 && b[2] == 0xff:
+			ext = ".jpg"
+		default:
+			c.JSON(400, gin.H{"code": 1, "message": "只接受 PNG/JPEG 产物"})
+			return
+		}
+		baseDir, publicPrefix, folder := storage.LocalSource()
+		driver := storage.NewLocalDriver(baseDir, publicPrefix)
+		name := fmt.Sprintf("ego-%d-%d%s", userID, time.Now().UnixNano(), ext)
+		url, _, err := driver.UploadReader(c.Request.Context(), bytes.NewReader(b), int64(len(b)), folder+"/egolite", name)
+		if err != nil {
+			c.JSON(500, gin.H{"code": 1, "message": "产物落盘失败: " + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": 0, "data": gin.H{"url": url, "bytes": len(b)}})
 	})
 
 	// runner WS（不过 JWT——token 即身份，host-ws 同形状）
@@ -396,8 +456,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			e, err := execSvc.Start(c.Request.Context(), currentUID(c), req)
 			if err != nil {
 				status := 400
-				if err == egolite.ErrConcurrencyGate {
+				switch err {
+				case egolite.ErrConcurrencyGate:
 					status = 429
+				case egolite.ErrAssetVersionConflict, egolite.ErrFlowScanGate:
+					// 409：资源当前状态冲突（版本已更新/扫描门未过），非入参格式错
+					status = 409
 				}
 				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
 				return
@@ -617,6 +681,19 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": sess})
+		})
+		eg.POST("/sessions/:id/save-as-flow", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Name string `json:"name"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			f, report, err := sessionSvc.SaveAsFlow(c.Request.Context(), currentUID(c), uint(id), body.Name)
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error(), "data": gin.H{"flow": f, "scan_report": report}})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"flow": f, "scan_report": report}})
 		})
 		eg.POST("/sessions/:id/finish", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)

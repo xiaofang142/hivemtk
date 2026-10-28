@@ -157,6 +157,10 @@ type taskSpec struct {
 	Origin        string          `json:"origin"` // market / draft / session
 	DraftScript   string          `json:"draft_script,omitempty"`
 	Domains       []string        `json:"domains"` // 域名白名单（specs/015：运行时域审计数据源；下发时刻快照）
+	// ScriptHash 服务端批准 hash 快照（specs/017①：market 下发时刻快照）。非空时与本地
+	// manifest 的 hivemtk.script_hash 交叉核对，拦"本地工作区滞留旧版本资产照旧组装"
+	// （完整性校验管"装完被改"，这里管"装的就是旧版"）。旧服务端不下发该字段，空值跳过。
+	ScriptHash string `json:"script_hash,omitempty"`
 	// 通用执行能力（2026-10-28）：ops 轮次协议
 	SessionID string          `json:"session_id,omitempty"`
 	Mode      string          `json:"mode,omitempty"` // ops（默认空=script）
@@ -351,6 +355,12 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 		if err := verifyAssetAt(assetDir, manifestRaw, b); err != nil {
 			cleanup()
 			return "", nil, fmt.Errorf("资产校验失败，拒绝执行: %w", err)
+		}
+		// 服务端批准快照交叉核对（specs/017①）：spec 带批准 hash 时，本地 manifest
+		// 必须同源——完整性校验管"装完之后本机被改"，这里管"装进来的就是旧版本"。
+		if err := verifySpecConsistency(manifestRaw, spec); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("资产与服务端批准版本不一致，拒绝执行: %w", err)
 		}
 		entrySrc = string(b)
 	default:
@@ -896,6 +906,38 @@ func (r *runner) handleConfirmFrame(execID, decision string) {
 		}
 		r.current.cancel()
 	}
+}
+
+// verifySpecConsistency 服务端批准快照 ↔ 本地 manifest 交叉核对（specs/017①）。
+// spec.script_hash / asset_version / entry 任一非空即比对本轮下发值与安装时记录值；
+// 不一致 ⇒ 本地工作区滞留的不是服务端当前批准的版本，拒绝组装（fail-close）。
+// 三项都为空（旧服务端/重放旧 spec）时跳过——不因缺字段把在途旧执行整体打死。
+func verifySpecConsistency(manifestRaw []byte, spec taskSpec) error {
+	if spec.ScriptHash == "" && spec.AssetVersion == "" && spec.Entry == "" {
+		return nil
+	}
+	var m struct {
+		Hivemtk struct {
+			Entry      string `json:"entry"`
+			AssetVer   string `json:"asset_ver"`
+			ScriptHash string `json:"script_hash"`
+		} `json:"hivemtk"`
+	}
+	if err := json.Unmarshal(manifestRaw, &m); err != nil {
+		return fmt.Errorf("manifest 解析失败: %w", err)
+	}
+	if spec.ScriptHash != "" && m.Hivemtk.ScriptHash != spec.ScriptHash {
+		return fmt.Errorf("批准 hash 不一致：服务端=%s 本地 manifest=%s（工作区资产已过期，请重新拉取资产）",
+			spec.ScriptHash, m.Hivemtk.ScriptHash)
+	}
+	if spec.AssetVersion != "" && m.Hivemtk.AssetVer != spec.AssetVersion {
+		return fmt.Errorf("资产版本不一致：服务端=v%s 本地 manifest=v%s（工作区资产已过期，请重新拉取资产）",
+			spec.AssetVersion, m.Hivemtk.AssetVer)
+	}
+	if spec.Entry != "" && m.Hivemtk.Entry != spec.Entry {
+		return fmt.Errorf("入口不一致：服务端=%s 本地 manifest=%s", spec.Entry, m.Hivemtk.Entry)
+	}
+	return nil
 }
 
 // verifyAssetAt 资产执行前的两级校验（顺序即语义）：

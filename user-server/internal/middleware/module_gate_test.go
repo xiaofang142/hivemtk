@@ -273,3 +273,25 @@ func TestGateIgnoresUnannotatedModule(t *testing.T) {
 
 var _ = context.Background
 var _ = gorm.ErrRecordNotFound
+
+// TestMatchModuleSegsTailWildcard specs/017 兜底轮：尾部 `**` 吃掉剩余全部段。
+// 单 `*` 语义不变（TestMatchModuleSegsSemantics 钉死），生成件不用 `**`。
+func TestMatchModuleSegsTailWildcard(t *testing.T) {
+	cases := []struct {
+		pattern, path string
+		want          bool
+	}{
+		{"/api/egolite/**", "/api/egolite/runner/status", true},
+		{"/api/egolite/**", "/api/egolite/runner/tokens/123/revoke", true}, // 任意深度
+		{"/api/egolite/**", "/api/egolite", true},                          // ** 可吃 0 段
+		{"/api/egolite/**", "/api/egolite2/x", false},                      // 前缀必须段级一致
+		{"/api/egolite/**", "/api/other/x", false},
+		{"/api/browser-automation/**", "/api/browser-automation/platforms/123/locators", true},
+		{"/api/customer/*", "/api/customer/oneid/list", false}, // 单 * 行为不受影响
+	}
+	for _, c := range cases {
+		if m := matchModuleSegs(c.pattern, splitModulePath(c.path)); m != c.want {
+			t.Errorf("matchModuleSegs(%q, %q) = %v，期望 %v", c.pattern, c.path, m, c.want)
+		}
+	}
+}

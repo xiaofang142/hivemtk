@@ -80,16 +80,19 @@ func (h *EgoRunnerWSHandler) SetTokenRepository(repo EgoRunnerTokenRepository) {
 // loopbackIfConfigured 形态开关读 KV（egolite_runner_loopback_only）。
 // fail-closed 方向：键不存在=形态乙（不启用回环门）——因为线上部署是这个默认形态，
 // 键语义是"显式声明同机部署"，不声明就不享受回环门这层防护。
+// 返回值=门是否启用（只看配置，不看 IP）：启用时 Handle 统一按
+// `!isLoopbackIP(RemoteIP)` 拒绝——合法非回环 IP 与畸形 RemoteAddr 都拦，
+// 判定不能反过来依赖 IP（否则"配置了仅回环 + 非回环来源"会因返回 false 短路放行）。
 func (h *EgoRunnerWSHandler) loopbackIfConfigured(ctx *gin.Context) bool {
 	v, err := h.kvRepo.Get(ctx.Request.Context(), "egolite_runner_loopback_only")
-	if err != nil || v != "true" {
-		return false
-	}
-	ip := ctx.RemoteIP()
-	if ip == "" || ip == "|" {
-		return true // RemoteAddr 畸形 → fail-closed 由下方统一拒绝
-	}
-	return isLoopbackIP(ip)
+	return err == nil && v == "true"
+}
+
+// loopbackRejected 回环门统一判定点（specs/017⑥）：门启用且来源非回环（含畸形
+// RemoteAddr 的 fail-closed 路径）⇒ 拒。判定只依赖「门是否启用」，不依赖 IP——
+// 否则"配置了仅回环 + 合法非回环来源"会因配置查询短路而放行。
+func (h *EgoRunnerWSHandler) loopbackRejected(ctx *gin.Context) bool {
+	return h.loopback(ctx) && !isLoopbackIP(ctx.RemoteIP())
 }
 
 // Handle GET /api/egolite/runner-ws?token=xxx
@@ -105,8 +108,8 @@ func (h *EgoRunnerWSHandler) Handle(ctx *gin.Context) {
 		return
 	}
 
-	// ② 回环门（形态甲 only）
-	if h.loopback(ctx) && !isLoopbackIP(ctx.RemoteIP()) {
+	// ② 回环门（形态甲 only）：门启用 ⇒ 非回环来源（含畸形 RemoteAddr）一律拒
+	if h.loopbackRejected(ctx) {
 		ctx.String(http.StatusForbidden, "runner 通道已配置仅限本机连接（loopback_only=true）")
 		return
 	}

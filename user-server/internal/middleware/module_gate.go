@@ -187,9 +187,29 @@ func splitModulePath(p string) []string {
 	return strings.Split(trimmed, "/")
 }
 
-// matchModuleSegs 模式段与真实段逐段比对；段数必须相等。
+// matchModuleSegs 模式段与真实段逐段比对。
+// 语义：`*` 吃掉恰好一段（段数必须相等，与能力面守卫同口径，既有测试钉死）；
+// 尾部 `**` 吃掉「剩余全部段」（≥0 段）——补充件的多层路由腿（如 /api/egolite/**）
+// 靠它一次盖住任意深度，否则深层路径（/api/egolite/runner/tokens/:id/revoke）漏出
+// 模块闸。生成件不使用 `**`，既有单 `*` 行为不受影响。
 func matchModuleSegs(pattern string, segs []string) bool {
 	ps := splitModulePath(pattern)
+	if len(ps) == 0 {
+		return false
+	}
+	if ps[len(ps)-1] == "**" {
+		// 尾部 **：前缀逐段比对 + 路径段数 ≥ 前缀段数（** 自身可吃 0 段）
+		prefix := ps[:len(ps)-1]
+		if len(segs) < len(prefix) {
+			return false
+		}
+		for i, p := range prefix {
+			if p != segs[i] {
+				return false
+			}
+		}
+		return true
+	}
 	if len(ps) != len(segs) {
 		return false
 	}

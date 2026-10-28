@@ -41,10 +41,14 @@ var ModuleRouteSupplement = []ModuleRouteRule{
 	// 免 JWT 的通道不在本闸射程（GuardModulePath 只挂 auth 组）：
 	//   /api/browser/host-ws、/api/egolite/runner-ws、/api/egolite/assets/pull
 	//   —— 准入由各自的 bh_/eg_ token 门负责，与模块闸互补。
+	// 尾部 ** 的必要性（specs/017 兜底轮）：单 `*` 只吃一段且段数必须相等，
+	// 深层路径（/api/egolite/runner/tokens/:id/revoke、/api/browser-automation/
+	// platforms/:id/locators）单 `*` 盖不住 —— 曾实际漏出模块闸，由
+	// router/module_gate_cover_test.go 的兜底测试钉住。
 	{Pattern: "/api/browser-automation", ModuleKey: "browser-automation"},
-	{Pattern: "/api/browser-automation/*", ModuleKey: "browser-automation"},
+	{Pattern: "/api/browser-automation/**", ModuleKey: "browser-automation"},
 	{Pattern: "/api/egolite", ModuleKey: "browser-automation"},
-	{Pattern: "/api/egolite/*", ModuleKey: "browser-automation"},
+	{Pattern: "/api/egolite/**", ModuleKey: "browser-automation"},
 }
 
 // ModuleRouteAll 生成件 + 补充件（匹配时按此顺序，补充件在前）

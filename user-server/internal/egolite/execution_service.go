@@ -112,6 +112,12 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 		if req.AssetVersion == "" {
 			req.AssetVersion = fmt.Sprintf("%d", a.Version)
 		}
+		// 版本钉扎（specs/017①）：客户端报的版本必须等于服务端当前批准版本。
+		// 橱窗快照/拉取滞后带来的旧版本号不能换来"按旧脚本组装"的执行——
+		// 批准 hash 快照只在当前版本上成立。
+		if req.AssetVersion != fmt.Sprintf("%d", a.Version) {
+			return nil, ErrAssetVersionConflict
+		}
 		// 资产声明了写动作 ⇒ 强制步级确认（客户端不可自行关闭，决策 4）
 		if len(assetWriteNames(a)) > 0 {
 			req.ConfirmPolicy = "require"
@@ -143,6 +149,22 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 	}
 	if active >= egoExecMaxActive {
 		return nil, ErrConcurrencyGate
+	}
+
+	// draft 通道与 DryRun 同门（specs/017④）：直接 POST executions 不允许绕过扫描门。
+	// 扫描门只在 DryRun/Publish/cron 挂过的日子已经结束——Start 是第四个入口，同规则。
+	//（校验顺序放在并发闸之后：闸满先报闸，属验证排序而非豁免。）
+	if req.Origin == "draft" {
+		flow, err := s.flowRepo.GetForUser(ctx, req.FlowID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("flow 不存在")
+		}
+		if !flow.ScanPassed {
+			return nil, ErrFlowScanGate
+		}
+		if flow.Script == "" {
+			return nil, fmt.Errorf("flow 脚本为空")
+		}
 	}
 
 	e := &model.EgoliteExecution{
@@ -205,6 +227,13 @@ func (s *EgoExecutionService) dispatch(ctx context.Context, e *model.EgoliteExec
 				map[string]any{"fail_reason": "flow 不存在或脚本为空", "ended_at": time.Now()})
 			return false
 		}
+		// 防御性扫描门（specs/017④）：Redispatch 不再过 Start 入口，扫描结论在这里
+		// 兜底——保存后扫描翻红的流程不能经重发通道漏出去。
+		if !flow.ScanPassed {
+			_ = s.execRepo.TransitionState(ctx, e.ID, []string{model.EgoExecDispatching}, model.EgoExecFailed,
+				map[string]any{"fail_reason": "扫描门未通过（重发通道兜底拦截）", "ended_at": time.Now()})
+			return false
+		}
 		spec["draft_script"] = flow.Script
 		spec["domains"] = parseDomains(flow.DomainsJSON)
 		s.claimWrites(ctx, e, writeNames(flow.WritesJSON))
@@ -213,6 +242,16 @@ func (s *EgoExecutionService) dispatch(ctx context.Context, e *model.EgoliteExec
 		// 域名白名单随 spec 下发（specs/015：runner 运行时域审计的数据源；
 		// 下发时刻快照，执行期目录变更不影响在途执行——版本钉扎同语义）
 		if a, err := s.assetRepo.GetByCode(ctx, e.AssetID); err == nil {
+			// 批准快照一致性（specs/017①）：Start 与 dispatch 之间资产更新 ⇒
+			// 本执行行的版本号已不对应任何现行批准状态，判 failed 而非照跑。
+			if fmt.Sprintf("%d", a.Version) != e.AssetVer {
+				_ = s.execRepo.TransitionState(ctx, e.ID, []string{model.EgoExecDispatching}, model.EgoExecFailed,
+					map[string]any{"fail_reason": fmt.Sprintf("资产版本已更新（当前 v%d，执行创建于 v%s），批准快照失效", a.Version, e.AssetVer), "ended_at": time.Now()})
+				return false
+			}
+			// 服务端批准 hash 快照随 spec 下发：runner 侧与本地 manifest 交叉核对，
+			// 拦"本地工作区滞留旧版本资产照旧组装"（拉取滞后/同步失败的窗口）。
+			spec["script_hash"] = a.ScriptHash
 			spec["domains"] = parseDomains(a.DomainsJSON)
 			s.claimWrites(ctx, e, assetWriteNames(a))
 		}
@@ -288,7 +327,11 @@ func (s *EgoExecutionService) IngestEvent(ctx context.Context, userID uint, ev R
 	return nil
 }
 
-// finishFromDone done 帧终态判定：exit_code==0 且未超时 → completed，否则 failed
+// finishFromDone done 帧终态判定：exit_code==0 且未超时 → completed，否则 failed。
+// completed 的证据口径（specs/017⑤）：退出码是 runner 进程级信号，不是业务完成证明；
+// 事件流里没有任何结构化行（动作/提取/产物/确认）时，完成判定事实上仅凭退出码，
+// 此时补一条 EGO-R033 审计告警行——终态不变（exit 0 仍是唯一可用信号），但监控面
+// 能看到这次"完成"是自述级弱证据，与 G-E5「不虚记 verified」同一诚实口径。
 func (s *EgoExecutionService) finishFromDone(ctx context.Context, e *model.EgoliteExecution, ev RunnerEvent) {
 	// done 帧需要拿到 exit_code；eventLine.ExitCode 由 runner 侧填。
 	// WithoutCancel：终态写必须活过请求/WS 生命周期（bridge 先例）。
@@ -305,6 +348,36 @@ func (s *EgoExecutionService) finishFromDone(ctx context.Context, e *model.Egoli
 	_ = s.execRepo.TransitionState(dbCtx, e.ID, []string{
 		model.EgoExecCreated, model.EgoExecDispatching, model.EgoExecRunning, model.EgoExecWaitingConfirm,
 	}, state, sets)
+	if state == model.EgoExecCompleted && !s.hasStructuredEvidence(dbCtx, e.ID) {
+		warnPayload, _ := json.Marshal(map[string]any{
+			"event": "completion_evidence_warning",
+			"code":  "EGO-R033",
+			"note":  "exit 0 但事件流无结构化行（动作/提取/产物/确认），完成判定仅凭 runner 退出码（自述级弱证据）",
+		})
+		_ = s.evRepo.Append(dbCtx, &model.EgoEventLog{
+			ExecutionID: e.ID,
+			Seq:         ev.Seq + 1,
+			Type:        "runner",
+			Payload:     datatypes.JSON(warnPayload),
+		})
+	}
+}
+
+// hasStructuredEvidence 事件流里是否存在结构化证据行（done/runner/error 之外的
+// 业务侧事件）。200 条窗口：结构化行只会出现在前 200 条里（每轮动作至少一条），
+// 超过 200 条必然已经有过结构化行。
+func (s *EgoExecutionService) hasStructuredEvidence(ctx context.Context, execID uint) bool {
+	events, err := s.evRepo.ListByExecution(ctx, execID, 200)
+	if err != nil {
+		return true // 查询失败不误报：宁可少一条告警，不给执行扣上无证据帽子
+	}
+	for _, ev := range events {
+		switch ev.Type {
+		case "action", "extract", "snapshot", "artifact", "confirm", "handoff", "round_result":
+			return true
+		}
+	}
+	return false
 }
 
 // Abort 用户停止（created/dispatching/running 可停；waiting_confirm 必须先 confirm/deny——

@@ -25,7 +25,8 @@ type EgoSessionService struct {
 	execRepo EgoExecutionRepository
 	evRepo   EgoEventRepository
 	registry *EgoRunnerRegistry
-	base     EventSink // 既有执行域（非 round 事件原样委托，保证 execution 状态机不断链）
+	base     EventSink       // 既有执行域（非 round 事件原样委托，保证 execution 状态机不断链）
+	flowSvc  *EgoFlowService // 可选：会话沉淀为 flow（T23）
 }
 
 // NewEgoSessionService 装配
@@ -42,6 +43,9 @@ func NewEgoSessionService(
 		evRepo: evRepo, registry: registry, base: base,
 	}
 }
+
+// AttachFlowService 注入流程域（会话沉淀为 flow；nil=不提供该能力）
+func (s *EgoSessionService) AttachFlowService(fs *EgoFlowService) { s.flowSvc = fs }
 
 // Engine 实现 browsercore.Executor
 func (s *EgoSessionService) Engine() string { return browsercore.EngineEgo }
@@ -450,6 +454,82 @@ func (s *EgoSessionService) applyRoundResult(ctx context.Context, sess *model.Eg
 	_ = s.sessions.TransitionState(ctx, sess.ID,
 		[]string{browsercore.SessionCreated, browsercore.SessionActive, browsercore.SessionWaitingConfirm, browsercore.SessionHandedOff},
 		next, sets2)
+}
+
+// SaveAsFlow 把会话已执行的轮次沉淀成一条普通 flow（"跑通一次 → 变成可复用资产"）。
+//
+// 设计取舍：
+//   - 只合并**已成功**的轮次（ok=true），失败轮次不写进确定性脚本；
+//   - 全部动作仍走同一编译器（browsercore.CompileOpsScript），保证沉淀结果与执行语义同源；
+//   - flow 域自己的"保存即扫描"照常执行——沉淀不是绕过审核的通道。
+func (s *EgoSessionService) SaveAsFlow(ctx context.Context, userID, sessionID uint, name string) (*model.EgoliteFlow, *ScanReport, error) {
+	if s.flowSvc == nil {
+		return nil, nil, fmt.Errorf("流程域未装配")
+	}
+	sess, err := s.sessions.GetForUser(ctx, sessionID, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	list, err := s.rounds.ListBySession(ctx, sessionID, 200)
+	if err != nil {
+		return nil, nil, err
+	}
+	var ops []browsercore.Op
+	writeSet := map[string]bool{}
+	var writes []string
+	used := 0
+	for _, rec := range list {
+		if rec.Ok == nil || !*rec.Ok {
+			continue
+		}
+		var req struct {
+			Ops []browsercore.Op `json:"ops"`
+		}
+		if json.Unmarshal(rec.RequestJSON, &req) != nil {
+			continue
+		}
+		for _, op := range req.Ops {
+			ops = append(ops, op)
+			if browsercore.IsWriteOp(op.Op) {
+				label := op.Label
+				if label == "" {
+					label = op.Op
+				}
+				if !writeSet[label] {
+					writeSet[label] = true
+					writes = append(writes, label)
+				}
+			}
+		}
+		used++
+	}
+	if len(ops) == 0 {
+		return nil, nil, fmt.Errorf("没有可沉淀的成功轮次（ok=true 且含动作）")
+	}
+	pol := policyFromJSON(sess.PolicyJSON)
+	if len(pol.Domains) == 0 {
+		return nil, nil, fmt.Errorf("会话没有域名白名单，无法沉淀为 flow")
+	}
+	for _, d := range pol.Domains {
+		if d == "*" {
+			return nil, nil, fmt.Errorf("会话声明了整站通配 *，用户 flow 不允许通配；请缩小 domains 后重试")
+		}
+	}
+	if name == "" {
+		name = fmt.Sprintf("session-%d-%s", sess.ID, time.Now().Format("0102-1504"))
+	}
+	script := browsercore.CompileOpsScript(ops, browsercore.DefaultObserveSpec(), 1)
+	f, report, err := s.flowSvc.Save(ctx, userID, 0, SaveRequest{
+		Name: name, Domains: pol.Domains, Writes: writes, Script: script,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if report != nil && !report.Passed {
+		return f, report, fmt.Errorf("沉淀脚本未通过扫描门（已保存为草稿，请查看 scan_report）")
+	}
+	_ = used
+	return f, report, nil
 }
 
 // WatchdogSweep 会话侧收口：execution 已终态但 session 还挂着 → 同步状态。

@@ -29,6 +29,11 @@ var (
 	ErrAssetNotFound = errors.New("资产不存在或已下线")
 	// ErrAssetUnavailable 装配缺陷：market 通道没有资产目录可校验（fail-closed）
 	ErrAssetUnavailable = errors.New("资产目录不可用（服务装配异常）")
+	// ErrAssetVersionConflict 客户端报的资产版本 ≠ 服务端当前批准版本（版本钉扎，
+	// specs/017①：旧橱窗快照/拉取滞后不能换来按旧脚本组装的执行）
+	ErrAssetVersionConflict = errors.New("资产版本已更新，请刷新橱窗后重试")
+	// ErrFlowScanGate draft 直发通道的扫描门（specs/017④：Start 与 DryRun/Publish/cron 同门）
+	ErrFlowScanGate = errors.New("扫描门未通过（存在 block 级命中），先修正脚本再执行")
 )
 
 // ---------- 执行 ----------
