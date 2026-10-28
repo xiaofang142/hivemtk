@@ -551,7 +551,7 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 				}
 				resp.Steps = append(resp.Steps, dto.SalesStepLog{
 					Step: "7.5_humanize_eval", Status: "fail_soft", LatencyMs: ms(stepStart),
-					Detail: fmt.Sprintf("拟人度未达标（%.2f < 0.85），保留 AI 回复下发（不转人工）", evalResult.TotalScore),
+					Detail: fmt.Sprintf("拟人度未达标（%.2f < %.2f），保留 AI 回复下发（不转人工）", evalResult.TotalScore, humanizesvc.EffectiveThreshold()),
 				})
 
 			}

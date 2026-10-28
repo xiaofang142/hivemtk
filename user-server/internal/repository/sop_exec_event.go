@@ -23,10 +23,13 @@ func NewSOPExecEventRepository(db *gorm.DB) *SOPExecEventRepository {
 	return &SOPExecEventRepository{db: db}
 }
 
-// Create 创建 SOP 执行事件
+// Create 创建 SOP 执行事件（append-only：事件流不做表级幂等）
 //
-// 幂等性由唯一约束 (execution_id, node_id, attempt) 保证，
-// 调用方应对重复写入错误降级处理（仅记录日志，不影响主流程）。
+// 历史：v2.7.1 曾建 UNIQUE (execution_id, node_id, attempt)，但节点执行器对同一
+// (node, attempt) 依次写 started/executed/completed 多条，第二条起必撞约束、被降级
+// 日志吞掉——事件流实际只剩每 (node, attempt) 第一条（审计回放与卡死计数双双失真，
+// 内容审计 2026-10-28 §5-①）。v3.86.1 已 DROP 该约束改普通索引；幂等性由调用方
+// （outbox/状态机）负责，本表不背。
 func (r *SOPExecEventRepository) Create(ctx context.Context, event *model.SOPExecEvent) error {
 	if r == nil || r.db == nil {
 		return errors.New("sop exec event repository not initialized")

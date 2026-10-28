@@ -87,6 +87,11 @@ func (m *ReachTablesMigration) Up(ctx context.Context) error {
 			kind VARCHAR(20) NOT NULL DEFAULT 'quiet_hours',
 			attempts INTEGER NOT NULL DEFAULT 0,
 			last_error TEXT NOT NULL DEFAULT '',
+			-- D03 租约三列（eea1f2e2）：与模型列同步是本迁移的硬约定
+			--（见文件头注释——漏列=纯迁移链库第一次读写即报错，v3_26_0 测试当场红）
+			claim_token VARCHAR(64) DEFAULT '',
+			claimed_at TIMESTAMPTZ,
+			lease_until TIMESTAMPTZ,
 			created_at TIMESTAMPTZ
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_reach_delayed_outbound_platform ON reach_delayed_outbound(platform)`,

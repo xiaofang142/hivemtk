@@ -903,10 +903,10 @@ func (d *SOPExecutionDispatcher) writeExecEvent(ctx context.Context, exec *model
 		TraceID:      tracing.TraceIDFromContext(ctx),
 	}
 	if err := d.eventRepo.Create(ctx, event); err != nil {
-		logger.Ctx(ctx).Debug().Err(err).
+		logger.Ctx(ctx).Warn().Err(err).
 			Str("node_id", node.ID).
 			Str("event_type", eventType).
-			Msg("[worker] write exec event failed (may be duplicate)")
+			Msg("[worker] write exec event failed（事件流 append-only，v3.86.1 后失败=真实写异常，不再是约束去重）")
 	}
 }
 

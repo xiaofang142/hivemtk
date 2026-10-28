@@ -490,3 +490,37 @@ func TestHumanize_TestCaseCount(t *testing.T) {
 	t.Log("  - 内部 helper: 5+6+3 = 14")
 	t.Log("  合计: ≥109")
 }
+
+// TestInjectTypoDefaultOff 内容审计 2026-10-28 §5-③：错别字注入默认关闭——
+// 默认构造下，即使随机数必然命中（randFn=0，10% 概率窗口内）且文本以 typoPool
+// 结尾，Polish 产出也不得被替换。显式 EnableTypoInjection 后行为恢复。
+func TestInjectTypoDefaultOff(t *testing.T) {
+	newHitCtx := func() *PolishContext {
+		return &PolishContext{Persona: "朋友", Intent: IntentGreeting}
+	}
+
+	// 默认关：randFn=0 必然命中 10% 概率窗口，文本以"好的"结尾
+	p := NewHumanizePolisher()
+	p.randFn = func() float64 { return 0 }
+	got := p.injectTypo("好的", newHitCtx())
+	if got != "好的" {
+		t.Fatalf("默认构造下错别字注入必须关闭，实得 %q（期望原样 %q）", got, "好的")
+	}
+	gotPolish, err := p.Polish(context.Background(), "好的", newHitCtx())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasSuffix(gotPolish, "好哒") || strings.HasSuffix(gotPolish, "ok") ||
+		gotPolish == "好滴" || gotPolish == "好的呀" {
+		t.Fatalf("Polish 全链默认下也不应注入错别字，实得 %q", gotPolish)
+	}
+
+	// 显式开启：同随机数下替换发生（开关本身有效，不是把注入逻辑删了）
+	p2 := NewHumanizePolisher()
+	p2.randFn = func() float64 { return 0 }
+	p2.EnableTypoInjection()
+	got2 := p2.injectTypo("好的", newHitCtx())
+	if got2 == "好的" {
+		t.Fatal("显式开启后 randFn=0 应命中替换，实得仍为原文")
+	}
+}

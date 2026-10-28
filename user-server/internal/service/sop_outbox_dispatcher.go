@@ -433,6 +433,12 @@ type SOPStuckDetector struct {
 	recentlyRecovered map[uint]time.Time
 	recoveredMu       sync.RWMutex
 	recoveredCooldown time.Duration
+
+	// recoveryAttempts 每执行累计恢复次数（内容审计 2026-10-28 §5-②：原实现
+	// 只有重投无上限，同卡死点理论可无限 5min 一轮）。达 maxRecoverAttempts
+	// 后不再重投，判 failed 收口（注释与代码自此一致）。
+	recoveryAttempts   map[uint]int
+	maxRecoverAttempts int
 }
 
 // NewSOPStuckDetector 创建卡死检测器
@@ -440,16 +446,18 @@ type SOPStuckDetector struct {
 // 句柄由 repository 自取全局库。
 func NewSOPStuckDetector(execDispatcher SOPDispatchSender) *SOPStuckDetector {
 	return &SOPStuckDetector{
-		execRepo:          repository.NewSopExecutionRepositoryDefault(),
-		timerRepo:         repository.NewSOPTimerRepositoryDefault(),
-		eventRepo:         repository.NewSOPExecEventRepositoryDefault(),
-		execDispatcher:    execDispatcher,
-		maxIdleTime:       30 * time.Minute,
-		maxExecTime:       24 * time.Hour,
-		tickInterval:      60 * time.Second,
-		recentlyRecovered: make(map[uint]time.Time),
-		recoveredCooldown: 5 * time.Minute,
-		stopCh:            make(chan struct{}),
+		execRepo:           repository.NewSopExecutionRepositoryDefault(),
+		timerRepo:          repository.NewSOPTimerRepositoryDefault(),
+		eventRepo:          repository.NewSOPExecEventRepositoryDefault(),
+		execDispatcher:     execDispatcher,
+		maxIdleTime:        30 * time.Minute,
+		maxExecTime:        24 * time.Hour,
+		tickInterval:       60 * time.Second,
+		recentlyRecovered:  make(map[uint]time.Time),
+		recoveryAttempts:   make(map[uint]int),
+		maxRecoverAttempts: 3,
+		recoveredCooldown:  5 * time.Minute,
+		stopCh:             make(chan struct{}),
 	}
 }
 
@@ -518,6 +526,7 @@ func (d *SOPStuckDetector) cleanupRecovered() {
 	for id, recoveredAt := range d.recentlyRecovered {
 		if recoveredAt.Before(threshold) {
 			delete(d.recentlyRecovered, id)
+			delete(d.recoveryAttempts, id) // 计数随冷却一起失效（执行恢复推进后重新起算）
 		}
 	}
 }
@@ -617,6 +626,30 @@ func (d *SOPStuckDetector) scanStuckExecutionsForTenant(ctx context.Context) {
 			Str("current_node", exec.CurrentNode).
 			Time("started_at", exec.StartedAt).
 			Msg("[stuck] detected stuck execution, attempting recovery")
+
+		// 恢复上限（内容审计 2026-10-28 §5-②）：同一执行累计恢复达上限后不再重投，
+		// 判 failed 收口——无限 5min 一轮的重投既不解决问题也会一直占用扫描窗口。
+		// 计数随冷却清理失效（执行真正推进 >5min 后再卡死 ⇒ 新一轮恢复预算）。
+		d.recoveredMu.Lock()
+		d.recoveryAttempts[exec.ID]++
+		attempts := d.recoveryAttempts[exec.ID]
+		d.recoveredMu.Unlock()
+		if attempts > d.maxRecoverAttempts {
+			logger.Ctx(execCtx).Error().
+				Uint("execution_id", exec.ID).
+				Int("recovery_attempts", attempts).
+				Str("current_node", exec.CurrentNode).
+				Msg("[stuck] recovery attempts exhausted, marking execution failed")
+			if err := d.execRepo.UpdateFields(execCtx, exec.ID, map[string]any{
+				"status":        SOPStatusFailed,
+				"error_message": fmt.Sprintf("卡死恢复重投 %d 次仍未推进（当前节点 %s），按失败收口", d.maxRecoverAttempts, exec.CurrentNode),
+			}); err != nil {
+				logger.Ctx(execCtx).Warn().Err(err).
+					Uint("execution_id", exec.ID).
+					Msg("[stuck] mark failed after exhausted recoveries failed")
+			}
+			continue
+		}
 
 		if d.execDispatcher != nil && exec.CurrentNode != "" {
 			traceID := fmt.Sprintf("stuck-recovery-%d-%d", exec.ID, now.Unix())

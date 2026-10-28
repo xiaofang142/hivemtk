@@ -11,11 +11,15 @@ import (
 type HumanizePolisher struct {
 	enableParticles  bool
 	enableTruncation bool
-	maxLength        int
-	platformStyle    PlatformStyle
-	particlePool     []string
-	emojiPool        map[string][]string
-	randFn           func() float64
+	// enableTypo 错别字注入开关（内容审计 2026-10-28 §5-③）：与"错别字默认关闭"
+	// 的产品口径对齐，默认 false——原实现默认生效（10% 概率替换"好的/是的"类结尾），
+	// 属实现与口径打架。显式开启走 EnableTypoInjection。
+	enableTypo    bool
+	maxLength     int
+	platformStyle PlatformStyle
+	particlePool  []string
+	emojiPool     map[string][]string
+	randFn        func() float64
 }
 
 // PlatformStyle 平台风格
@@ -331,8 +335,15 @@ func (p *HumanizePolisher) randIntn(n int) int {
 	return int(p.randFloat() * float64(n))
 }
 
+// EnableTypoInjection 显式开启错别字注入（默认关闭，见 enableTypo 字段注释）。
+// 仅供明确要求"拟人化拉满"的 persona 场景调用；测试用 SetRandFn 控制命中。
+func (p *HumanizePolisher) EnableTypoInjection() {
+	p.enableTypo = true
+}
+
 func (p *HumanizePolisher) injectTypo(text string, pctx *PolishContext) string {
-	if pctx == nil {
+	// 默认关闭（enableTypo 注释）：口径与实现自洽的唯一闸口，调用点不再重复判
+	if !p.enableTypo || pctx == nil {
 		return text
 	}
 	persona := strings.ToLower(pctx.Persona)

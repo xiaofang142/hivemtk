@@ -291,4 +291,12 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 平台撤回通道早已接通，缺的是本地回执，导致重复撤回会重复出网。
 	// 无回填：历史行的撤回状态保持"未知"，不猜成"没撤过"。
 	register(NewMessageHubRecallMigration(db))
+	// v3.86.1（内容审计 2026-10-28 §5-①）：sop_exec_events 去掉 uk_sop_exec_events
+	// 唯一约束——与同 attempt 写 started/executed/completed 的路径结构性冲突，
+	// 事件流被吞成每 (node,attempt) 一条；改 append-only + 普通复合索引。
+	register(NewSOPExecEventConstraintFixMigration(db))
+	// v3.86.2（G0 施工卡 schema 补齐）：D02-D05 五新表 + reach_delayed_outbound
+	// 租约三列收进正式迁移链——原依赖启动期 AutoMigrate，纯迁移链恢复库缺表缺列
+	//（TestReachTablesMigration_UpBuildsModelReadableTables 抓到）。
+	register(NewG0SchemaMigration(db))
 }
