@@ -160,6 +160,68 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 			SideEffects: []string{sideEffectKey},
 		}, nil
 
+	case "browser_session":
+		// 通用浏览器会话节点（2026-10-28）：一轮 ops 提交；异步派发后由
+		// browser_observe / 会话轮次账本取观测。执行器经 SetWorkflowBrowserSessionRunner 注入。
+		if workflowBrowserSessionRunner == nil {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: "browser session runner not configured",
+				Retryable:    false,
+			}, nil
+		}
+		sessionID, userID := "", 0
+		var ops []map[string]any
+		if wctx.NodeConfig != nil {
+			switch v := wctx.NodeConfig["session_id"].(type) {
+			case string:
+				sessionID = v
+			case float64:
+				sessionID = fmt.Sprintf("%d", int64(v))
+			case int:
+				sessionID = fmt.Sprintf("%d", v)
+			}
+			switch v := wctx.NodeConfig["user_id"].(type) {
+			case float64:
+				userID = int(v)
+			case int:
+				userID = v
+			case string:
+				_, _ = fmt.Sscanf(v, "%d", &userID)
+			}
+			if raw, ok := wctx.NodeConfig["ops"].([]any); ok {
+				for _, it := range raw {
+					if m, ok := it.(map[string]any); ok {
+						ops = append(ops, m)
+					}
+				}
+			}
+		}
+		if sessionID == "" || sessionID == "0" {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: "browser_session action requires session_id in node config",
+				Retryable:    false,
+			}, nil
+		}
+		runCtx, runCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Minute)
+		defer runCancel()
+		out, err := workflowBrowserSessionRunner(runCtx, uint(userID), sessionID, ops)
+		if err != nil {
+			return &WorkflowNodeExecResult{
+				Status:       NodeStatusFailed,
+				ErrorMessage: fmt.Sprintf("browser session %s failed: %v", sessionID, err),
+				Retryable:    true,
+			}, nil
+		}
+		AppendWorkflowSideEffect(wctx, sideEffectKey)
+		return &WorkflowNodeExecResult{
+			Status:      NodeStatusCompleted,
+			Output:      model.JSONMap{"session_id": sessionID, "result": out, "_action_type": "browser_session"},
+			NextNodeID:  "",
+			SideEffects: []string{sideEffectKey},
+		}, nil
+
 	case "browser_task":
 		taskID, userID := 0, 0
 		if wctx.NodeConfig != nil {
@@ -227,6 +289,14 @@ var workflowBrowserTaskRunner func(ctx context.Context, taskID, userID uint, ret
 // SetWorkflowBrowserTaskRunner 注入 browser_task 动作执行函数
 func SetWorkflowBrowserTaskRunner(fn func(ctx context.Context, taskID, userID uint, retryCount int) error) {
 	workflowBrowserTaskRunner = fn
+}
+
+// workflowBrowserSessionRunner browser_session 动作执行注入点
+var workflowBrowserSessionRunner func(ctx context.Context, userID uint, sessionID string, ops []map[string]any) (map[string]any, error)
+
+// SetWorkflowBrowserSessionRunner 注入通用浏览器会话执行函数（一轮 ops）
+func SetWorkflowBrowserSessionRunner(fn func(ctx context.Context, userID uint, sessionID string, ops []map[string]any) (map[string]any, error)) {
+	workflowBrowserSessionRunner = fn
 }
 
 // ConditionNodeExecutor 条件节点执行器

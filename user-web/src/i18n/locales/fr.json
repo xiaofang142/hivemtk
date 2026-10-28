@@ -314,6 +314,7 @@
     "baCron": "Déclencheurs planifiés",
     "baStatus": "État de l’hôte",
     "egoFlows": "Mes flux",
+    "egoSessions": "Sessions",
     "egoExecutions": "Exécutions",
     "egoRunner": "État du runner",
     "egoAssets": "Centre d’actifs",

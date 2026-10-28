@@ -15,13 +15,13 @@ import (
 type EgoliteExecution struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID         uint   `gorm:"primaryKey" json:"id"`
-	UserID     uint   `gorm:"index;not null" json:"user_id"`
-	FlowID     uint   `gorm:"index" json:"flow_id"`               // 用户流程（私享草稿执行时指向 egolite_flows）
-	AssetID    string `gorm:"size:128;index" json:"asset_id"`     // 市场资产（正式执行时）
-	AssetVer   string `gorm:"size:32" json:"asset_version"`
-	Origin     string `gorm:"size:16;not null;default:draft" json:"origin"` // draft / market
-	Entry      string `gorm:"size:256" json:"entry"`
+	ID         uint           `gorm:"primaryKey" json:"id"`
+	UserID     uint           `gorm:"index;not null" json:"user_id"`
+	FlowID     uint           `gorm:"index" json:"flow_id"`           // 用户流程（私享草稿执行时指向 egolite_flows）
+	AssetID    string         `gorm:"size:128;index" json:"asset_id"` // 市场资产（正式执行时）
+	AssetVer   string         `gorm:"size:32" json:"asset_version"`
+	Origin     string         `gorm:"size:16;not null;default:draft" json:"origin"` // draft / market
+	Entry      string         `gorm:"size:256" json:"entry"`
 	ParamsJSON datatypes.JSON `gorm:"column:params;type:jsonb" json:"params"`
 
 	SpaceName     string `gorm:"size:128" json:"space_name"`
@@ -31,12 +31,12 @@ type EgoliteExecution struct {
 	ConfirmTTLSec int    `gorm:"not null;default:300" json:"confirm_ttl_sec"`
 	TimeoutSec    int    `gorm:"not null;default:1800" json:"timeout_sec"`
 
-	State        string     `gorm:"size:16;not null;default:created;index" json:"state"`
-	DeviceID     string     `gorm:"size:64" json:"device_id"` // dispatch 时 runner 指纹
-	DispatchedAt *time.Time `json:"dispatched_at"`
-	StartedAt    *time.Time `json:"started_at"`
-	EndedAt      *time.Time `json:"ended_at"`
-	FailReason   string     `gorm:"size:512" json:"fail_reason,omitempty"`
+	State         string         `gorm:"size:16;not null;default:created;index" json:"state"`
+	DeviceID      string         `gorm:"size:64" json:"device_id"` // dispatch 时 runner 指纹
+	DispatchedAt  *time.Time     `json:"dispatched_at"`
+	StartedAt     *time.Time     `json:"started_at"`
+	EndedAt       *time.Time     `json:"ended_at"`
+	FailReason    string         `gorm:"size:512" json:"fail_reason,omitempty"`
 	ArtifactsJSON datatypes.JSON `gorm:"column:artifacts;type:jsonb" json:"artifacts"` // 产物账（截图URL/extract 概要）
 
 	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
@@ -69,7 +69,7 @@ type EgoEventLog struct {
 
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	ExecutionID uint           `gorm:"index;not null" json:"execution_id"`
-	Seq         int            `gorm:"not null" json:"seq"` // execution 内单调（runner 透传）
+	Seq         int            `gorm:"not null" json:"seq"`          // execution 内单调（runner 透传）
 	Type        string         `gorm:"size:24;not null" json:"type"` // action/snapshot/artifact/handoff/extract/confirm/done/error/runner
 	Action      string         `gorm:"size:64" json:"action"`
 	Ok          *bool          `gorm:"column:ok" json:"ok"` // 三态：nil=事件行未携带结论
@@ -84,19 +84,21 @@ func (EgoEventLog) TableName() string { return "ego_event_log" }
 type EgoliteFlow struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID         uint   `gorm:"primaryKey" json:"id"`
-	UserID     uint   `gorm:"index;not null" json:"user_id"`
-	Name       string `gorm:"size:128;not null" json:"name"`
-	DomainsJSON datatypes.JSON `gorm:"column:domains;type:jsonb" json:"domains"`
-	WritesJSON  datatypes.JSON `gorm:"column:writes;type:jsonb" json:"writes"`
+	ID           uint           `gorm:"primaryKey" json:"id"`
+	UserID       uint           `gorm:"index;not null" json:"user_id"`
+	Name         string         `gorm:"size:128;not null" json:"name"`
+	DomainsJSON  datatypes.JSON `gorm:"column:domains;type:jsonb" json:"domains"`
+	WritesJSON   datatypes.JSON `gorm:"column:writes;type:jsonb" json:"writes"`
 	ParamsSchema datatypes.JSON `gorm:"column:params_schema;type:jsonb" json:"params_schema"`
-	Script     string `gorm:"type:text" json:"script"` // flow JS 全文（draft 唯一真相源）
-	Status     string `gorm:"size:16;not null;default:draft;index" json:"status"` // draft / published / submitted
-	Version    int    `gorm:"not null;default:1" json:"version"`
-	ScanPassed bool   `gorm:"not null;default:false" json:"scan_passed"` // 最近一次扫描门结论
-	ScanReport datatypes.JSON `gorm:"column:scan_report;type:jsonb" json:"scan_report"`
-	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time `gorm:"autoUpdatedAt" json:"updated_at"`
+	Script       string         `gorm:"type:text" json:"script"`                            // flow JS 全文（draft 唯一真相源）
+	Status       string         `gorm:"size:16;not null;default:draft;index" json:"status"` // draft / published / submitted
+	Version      int            `gorm:"not null;default:1" json:"version"`
+	ScanPassed   bool           `gorm:"not null;default:false" json:"scan_passed"` // 最近一次扫描门结论
+	ScanReport   datatypes.JSON `gorm:"column:scan_report;type:jsonb" json:"scan_report"`
+	// RejectReason 审核驳回理由（submitted → draft 由管理端写入；作者在流程页可见）
+	RejectReason string    `gorm:"size:512" json:"reject_reason,omitempty"`
+	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdatedAt" json:"updated_at"`
 }
 
 // 流程状态常量
@@ -115,22 +117,22 @@ func (EgoliteFlow) TableName() string { return "egolite_flows" }
 type EgoliteWriteClaim struct {
 	TenantID uint `gorm:"not null;default:1;uniqueIndex:uq_ego_wclaim,priority:1" json:"tenant_id"`
 
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	ExecutionID uint      `gorm:"not null;uniqueIndex:uq_ego_wclaim,priority:2" json:"execution_id"`
-	Action      string    `gorm:"size:64;not null;uniqueIndex:uq_ego_wclaim,priority:3" json:"action"` // writes[] 声明的动作名
-	UserID      uint      `gorm:"index;not null" json:"user_id"`
-	AssetID     string    `gorm:"size:128" json:"asset_id"`
-	ClaimState  string    `gorm:"size:16;not null" json:"claim_state"` //见下方常量
-	ClaimedAt   time.Time `gorm:"autoCreateTime" json:"claimed_at"`
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	ExecutionID uint       `gorm:"not null;uniqueIndex:uq_ego_wclaim,priority:2" json:"execution_id"`
+	Action      string     `gorm:"size:64;not null;uniqueIndex:uq_ego_wclaim,priority:3" json:"action"` // writes[] 声明的动作名
+	UserID      uint       `gorm:"index;not null" json:"user_id"`
+	AssetID     string     `gorm:"size:128" json:"asset_id"`
+	ClaimState  string     `gorm:"size:16;not null" json:"claim_state"` //见下方常量
+	ClaimedAt   time.Time  `gorm:"autoCreateTime" json:"claimed_at"`
 	VerifiedAt  *time.Time `json:"verified_at"`
 }
 
 // 台账状态（step.go:49-52 语义原样：防止双发的最小事实集）
 const (
-	EgoWriteClaimed      = "claimed"       // 已声明要写（占位，唯一索引粒度：execution+action 首次）
-	EgoWriteSent         = "sent"          // 写已发出但未验证
-	EgoWriteVerified     = "verified"      // 写后验证通过
-	EgoWriteUnattributed = "unattributed"  // 尝试过但归因不到——拦重发
+	EgoWriteClaimed      = "claimed"      // 已声明要写（占位，唯一索引粒度：execution+action 首次）
+	EgoWriteSent         = "sent"         // 写已发出但未验证
+	EgoWriteVerified     = "verified"     // 写后验证通过
+	EgoWriteUnattributed = "unattributed" // 尝试过但归因不到——拦重发
 )
 
 func (EgoliteWriteClaim) TableName() string { return "egolite_write_claims" }
@@ -142,6 +144,7 @@ func (EgoliteWriteClaim) TableName() string { return "egolite_write_claims" }
 // 与 egolite_flows 的分工：
 //   - egolite_flows 是「某个用户自己的草稿/流程」（user_id 维度，可继续演化）；
 //   - egolite_assets 是「已审核、可被全租户使用的目录条目」（tenant 维度，脚本快照不可变）。
+//
 // 快照纪律：Script 在发布时刻复制一份，不引用 flow（flow 后续改动不影响已发布资产；
 // 要改就发新版本，version 自增——与 flow 的不可变版本语义同构）。
 //
@@ -161,8 +164,8 @@ type EgoliteAsset struct {
 	Script       string         `gorm:"type:text" json:"script"`        // 发布时刻的脚本快照
 	ScriptHash   string         `gorm:"size:64;not null" json:"script_hash"`
 
-	Status     string `gorm:"size:16;not null;default:published;index" json:"status"` // published / offline
-	ScanPassed bool   `gorm:"not null;default:false" json:"scan_passed"`
+	Status     string         `gorm:"size:16;not null;default:published;index" json:"status"` // published / offline
+	ScanPassed bool           `gorm:"not null;default:false" json:"scan_passed"`
 	ScanReport datatypes.JSON `gorm:"column:scan_report;type:jsonb" json:"scan_report"`
 
 	Source          string     `gorm:"size:16;not null;default:flow" json:"source"` // flow（审核用户流程）/ pack（直接发脚本包）
@@ -204,8 +207,8 @@ type EgoliteRunnerToken struct {
 	ID         uint       `gorm:"primaryKey" json:"id"`
 	UserID     uint       `gorm:"index;not null" json:"user_id"`
 	TokenHash  string     `gorm:"size:64;not null;uniqueIndex:uq_ego_rtoken_hash,priority:2" json:"-"` // sha256(明文)，永不返回
-	TokenHint  string     `gorm:"size:24;not null" json:"token_hint"`                                 // 展示用前缀（eg_12_ab…），不足以复原
-	Label      string     `gorm:"size:64" json:"label"`                                               // 设备备注（"办公室 Mac"）
+	TokenHint  string     `gorm:"size:24;not null" json:"token_hint"`                                  // 展示用前缀（eg_12_ab…），不足以复原
+	Label      string     `gorm:"size:64" json:"label"`                                                // 设备备注（"办公室 Mac"）
 	LastSeenAt *time.Time `json:"last_seen_at"`
 	RevokedAt  *time.Time `json:"revoked_at"`
 	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
@@ -238,3 +241,69 @@ type EgoliteFlowCron struct {
 }
 
 func (EgoliteFlowCron) TableName() string { return "egolite_flow_crons" }
+
+// EgoliteSession 通用浏览器任务会话（通用执行能力 M1）。
+//
+// 与 egolite_executions 的分工：
+//   - session = "多轮目标"的业务单元（goal / policy / space / round / state）；
+//   - execution = "一轮下发"的审计单元（每轮一行，复用既有状态机/看门狗/确认闸）。
+//
+// 纪律：session 不另造终态事实源——execution 终态由执行域负责，session 只做聚合视图；
+// space_name 是幂等键（同名 = 续跑，ego TaskSpace 语义）。
+type EgoliteSession struct {
+	TenantID uint `gorm:"not null;default:1;uniqueIndex:uq_ego_session_space,priority:1" json:"tenant_id"`
+
+	ID     uint   `gorm:"primaryKey" json:"id"`
+	UserID uint   `gorm:"index;not null;uniqueIndex:uq_ego_session_space,priority:2" json:"user_id"`
+	Goal   string `gorm:"size:512" json:"goal"`
+	Engine string `gorm:"size:16;not null;default:ego" json:"engine"` // ego / nm
+	Mode   string `gorm:"size:16;not null;default:ops" json:"mode"`   // ops / script
+
+	SpaceName string `gorm:"size:128;not null;uniqueIndex:uq_ego_session_space,priority:3" json:"space_name"`
+	SpaceID   string `gorm:"size:128" json:"space_id"`
+
+	// ExecutionID 最近一轮的 execution 行（每轮一行；confirm/abort 用它做状态机入口）
+	ExecutionID uint `gorm:"index" json:"execution_id"`
+
+	PolicyJSON datatypes.JSON `gorm:"column:policy;type:jsonb" json:"policy"`
+
+	Round          int        `gorm:"not null;default:0" json:"round"`
+	State          string     `gorm:"size:16;not null;default:created;index" json:"state"`
+	CreatedFrom    string     `gorm:"size:16;not null;default:api" json:"created_from"`
+	LastObservedAt *time.Time `json:"last_observed_at,omitempty"`
+	FailReason     string     `gorm:"size:512" json:"fail_reason,omitempty"`
+	EndedAt        *time.Time `json:"ended_at,omitempty"`
+
+	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (EgoliteSession) TableName() string { return "egolite_sessions" }
+
+// EgoliteRound 轮次账本（append-only 语义：结果只由终帧写一次）。
+//
+// uniqueIndex(tenant_id, session_id, round_no)：重复终帧（断线补传/重放）ON CONFLICT
+// DO NOTHING，不会把已落库的观测覆盖成后到的空帧。
+type EgoliteRound struct {
+	TenantID uint `gorm:"not null;default:1;uniqueIndex:uq_ego_round,priority:1" json:"tenant_id"`
+
+	ID          uint `gorm:"primaryKey" json:"id"`
+	SessionID   uint `gorm:"index;not null;uniqueIndex:uq_ego_round,priority:2" json:"session_id"`
+	ExecutionID uint `gorm:"index" json:"execution_id"`
+	UserID      uint `gorm:"index;not null" json:"user_id"`
+	RoundNo     int  `gorm:"not null;uniqueIndex:uq_ego_round,priority:3" json:"round_no"`
+
+	RequestJSON     datatypes.JSON `gorm:"column:request;type:jsonb" json:"request"`
+	ResultJSON      datatypes.JSON `gorm:"column:result;type:jsonb" json:"result"`
+	ObservationJSON datatypes.JSON `gorm:"column:observation;type:jsonb" json:"observation"`
+
+	Ok         *bool  `gorm:"column:ok" json:"ok"` // 三态：nil=未收到终帧
+	ErrorCode  string `gorm:"size:64" json:"error_code,omitempty"`
+	ErrorMsg   string `gorm:"size:512" json:"error_msg,omitempty"`
+	DurationMs int64  `json:"duration_ms"`
+	Actions    int    `json:"actions"`
+
+	CreatedAt time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+}
+
+func (EgoliteRound) TableName() string { return "egolite_rounds" }

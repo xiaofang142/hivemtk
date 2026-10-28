@@ -625,6 +625,10 @@ func allModels() []any {
 		&model.EgoliteRunnerToken{},
 		// 流程定时触发器（specs/016 S10）：漏登记 ⇒ cron 挂载/触发记账全挂，fail-visible。
 		&model.EgoliteFlowCron{},
+		// 通用执行能力（2026-10-28）：会话 + 轮次账本。漏登记 ⇒ 通用任务
+		// Open/Act 全挂，fail-visible。
+		&model.EgoliteSession{},
+		&model.EgoliteRound{},
 	}
 }
 

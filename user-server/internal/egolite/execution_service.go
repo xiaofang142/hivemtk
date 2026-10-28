@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -26,12 +27,13 @@ type EgoExecutionService struct {
 	execRepo  EgoExecutionRepository
 	evRepo    EgoEventRepository
 	flowRepo  EgoFlowRepository
-	assetRepo EgoAssetRepository // market 通道的资产校验源（nil ⇒ market 全拒，fail-closed）
+	assetRepo EgoAssetRepository      // market 通道的资产校验源（nil ⇒ market 全拒，fail-closed）
+	wcRepo    EgoWriteClaimRepository // 写台账（红线 2：声明写的执行必须留台账）
 	registry  *EgoRunnerRegistry
 }
 
-func NewEgoExecutionService(execRepo EgoExecutionRepository, evRepo EgoEventRepository, flowRepo EgoFlowRepository, assetRepo EgoAssetRepository, registry *EgoRunnerRegistry) *EgoExecutionService {
-	return &EgoExecutionService{execRepo: execRepo, evRepo: evRepo, flowRepo: flowRepo, assetRepo: assetRepo, registry: registry}
+func NewEgoExecutionService(execRepo EgoExecutionRepository, evRepo EgoEventRepository, flowRepo EgoFlowRepository, assetRepo EgoAssetRepository, wcRepo EgoWriteClaimRepository, registry *EgoRunnerRegistry) *EgoExecutionService {
+	return &EgoExecutionService{execRepo: execRepo, evRepo: evRepo, flowRepo: flowRepo, assetRepo: assetRepo, wcRepo: wcRepo, registry: registry}
 }
 
 // RunnerEvent runner 上行事件帧（A3 协议服务端侧形状；cmd/ego-runner 以别名共用，
@@ -51,9 +53,9 @@ func EgoExecKey(rowID uint) string { return fmt.Sprintf("ego-%d", rowID) }
 
 // StartRequest 下发请求体（routes 层 JSON 绑定）
 type StartRequest struct {
-	Origin        string          `json:"origin"`          // draft / market
-	FlowID        uint            `json:"flow_id"`         // draft 时必填
-	AssetID       string          `json:"asset_id"`        // market 时必填
+	Origin        string          `json:"origin"`   // draft / market
+	FlowID        uint            `json:"flow_id"`  // draft 时必填
+	AssetID       string          `json:"asset_id"` // market 时必填
 	AssetVersion  string          `json:"asset_version"`
 	Entry         string          `json:"entry"` // market 时必填（资产内入口）
 	Params        json.RawMessage `json:"params"`
@@ -205,12 +207,14 @@ func (s *EgoExecutionService) dispatch(ctx context.Context, e *model.EgoliteExec
 		}
 		spec["draft_script"] = flow.Script
 		spec["domains"] = parseDomains(flow.DomainsJSON)
+		s.claimWrites(ctx, e, writeNames(flow.WritesJSON))
 	}
 	if e.Origin == "market" && s.assetRepo != nil {
 		// 域名白名单随 spec 下发（specs/015：runner 运行时域审计的数据源；
 		// 下发时刻快照，执行期目录变更不影响在途执行——版本钉扎同语义）
 		if a, err := s.assetRepo.GetByCode(ctx, e.AssetID); err == nil {
 			spec["domains"] = parseDomains(a.DomainsJSON)
+			s.claimWrites(ctx, e, assetWriteNames(a))
 		}
 	}
 	if err := conn.SendSpec(map[string]any{"type": "task_spec", "spec": spec}); err != nil {
@@ -348,6 +352,7 @@ func (s *EgoExecutionService) Confirm(ctx context.Context, userID, execID uint, 
 			_ = conn.SendSpec(map[string]any{"type": "confirm", "spec": map[string]any{
 				"execution_id": EgoExecKey(e.ID), "decision": "allow"}})
 		}
+		s.markSentOnAllow(ctx, e)
 		if err := s.execRepo.TransitionState(ctx, e.ID, []string{model.EgoExecWaitingConfirm},
 			model.EgoExecRunning, nil); err != nil {
 			return nil, ErrExecStateConflict
@@ -418,6 +423,77 @@ func parseDomains(raw []byte) []string {
 	return domains
 }
 
+// writeNames 流程 writes JSON 列 → 动作名数组（解析失败视为未声明）
+func writeNames(raw []byte) []string {
+	var writes []string
+	if json.Unmarshal(raw, &writes) != nil {
+		return nil
+	}
+	return writes
+}
+
+// claimWrites 写台账占坑（落地指南红线 2：声明写的执行必须留台账）。
+// ON CONFLICT 幂等——redispatch 重复 dispatch 不重复占坑；占坑时机在真下发
+// （dispatch）而非 Start：没下发的执行没有授权任何写。
+func (s *EgoExecutionService) claimWrites(ctx context.Context, e *model.EgoliteExecution, writes []string) {
+	if s.wcRepo == nil {
+		return
+	}
+	for _, w := range writes {
+		w = strings.TrimSpace(w)
+		if w == "" {
+			continue
+		}
+		_, _ = s.wcRepo.Claim(ctx, &model.EgoliteWriteClaim{
+			TenantID:    e.TenantID,
+			ExecutionID: e.ID,
+			Action:      w,
+			UserID:      e.UserID,
+			AssetID:     e.AssetID,
+			ClaimState:  model.EgoWriteClaimed,
+		})
+	}
+}
+
+// markSentOnAllow 台账推进：放行 = 这次写已授权执行 → claimed → sent。
+// 动作名取自最近一条 confirm 事件（脚本 __awaitConfirm__(label) 的 label）；
+// 对不上声明清单就如实不动——不认识的写不标 sent（与 confirm 闸 fail-close 同向）。
+// 刻意不标 verified：ego 腿审计是自述级（G-E5），服务端没有独立验证证据，虚记
+// verified 就是腿 1 假绿事故的同款形状。
+func (s *EgoExecutionService) markSentOnAllow(ctx context.Context, e *model.EgoliteExecution) {
+	if s.wcRepo == nil {
+		return
+	}
+	events, err := s.evRepo.ListByExecution(ctx, e.ID, 200)
+	if err != nil || len(events) == 0 {
+		return
+	}
+	action := ""
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == "confirm" {
+			var p struct {
+				Action string `json:"action"`
+			}
+			if json.Unmarshal(events[i].Payload, &p) == nil {
+				action = strings.TrimSpace(p.Action)
+			}
+			break
+		}
+	}
+	if action == "" {
+		return
+	}
+	claims, err := s.wcRepo.ListByExecution(ctx, e.ID)
+	if err != nil {
+		return
+	}
+	for _, c := range claims {
+		if c.Action == action && c.ClaimState == model.EgoWriteClaimed {
+			_ = s.wcRepo.MarkSent(ctx, c.ID)
+		}
+	}
+}
+
 func parseEventOk(payload json.RawMessage) *bool {
 	if len(payload) == 0 {
 		return nil
@@ -436,7 +512,7 @@ func parseEventOk(payload json.RawMessage) *bool {
 
 func normalizeEventType(t string) string {
 	switch t {
-	case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "done", "error", "runner":
+	case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "round_result", "done", "error", "runner":
 		return t
 	default:
 		return "runner" // 未知类型归 runner（自述级审计不丢信息）

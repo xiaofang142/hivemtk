@@ -314,6 +314,7 @@
     "baCron": "定期トリガー",
     "baStatus": "ホスト状態",
     "egoFlows": "マイフロー",
+    "egoSessions": "セッション",
     "egoExecutions": "実行モニター",
     "egoRunner": "Runner 状態",
     "egoAssets": "アセットセンター",

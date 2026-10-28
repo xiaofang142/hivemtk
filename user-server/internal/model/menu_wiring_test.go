@@ -165,6 +165,7 @@ func TestMenuWiring_RegistryKeysAndPathsUnique(t *testing.T) {
 func TestMenuWiring_EgoLiteLegRows(t *testing.T) {
 	want := map[string]string{
 		"egoFlows":      "/browser-automation/ego/flows",
+		"egoSessions":   "/browser-automation/ego/sessions",
 		"egoExecutions": "/browser-automation/ego/executions",
 		"egoRunner":     "/browser-automation/ego/runner",
 		"egoAssets":     "/browser-automation/ego/assets",

@@ -314,6 +314,7 @@
     "baCron": "Gatilhos agendados",
     "baStatus": "Status do host",
     "egoFlows": "Meus fluxos",
+    "egoSessions": "Sessões",
     "egoExecutions": "Execuções",
     "egoRunner": "Status do runner",
     "egoAssets": "Central de ativos",

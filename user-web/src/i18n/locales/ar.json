@@ -272,6 +272,7 @@
     "baCron": "مؤقتات مجدولة",
     "baStatus": "حالة المضيف",
     "egoFlows": "مساراتي",
+    "egoSessions": "الجلسات",
     "egoExecutions": "مراقبة التنفيذ",
     "egoRunner": "حالة Runner",
     "egoAssets": "مركز الأصول",

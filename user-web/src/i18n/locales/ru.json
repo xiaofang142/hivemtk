@@ -314,6 +314,7 @@
     "baCron": "Плановые триггеры",
     "baStatus": "Статус хоста",
     "egoFlows": "Мои сценарии",
+    "egoSessions": "Сессии",
     "egoExecutions": "Мониторинг запусков",
     "egoRunner": "Статус runner",
     "egoAssets": "Центр ресурсов",

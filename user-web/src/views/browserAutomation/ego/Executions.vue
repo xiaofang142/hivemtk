@@ -96,6 +96,14 @@
             详情
           </el-button>
           <el-button
+            v-if="row.state === 'created'"
+            size="small"
+            type="warning"
+            @click.stop="onRedispatch(row)"
+          >
+            重发
+          </el-button>
+          <el-button
             size="small"
             type="danger"
             :disabled="isTerminal(row.state)"
@@ -229,7 +237,8 @@ import {
   abortEgoExecution,
   confirmEgoExecution,
   listEgoEvents,
-  listEgoExecutions
+  listEgoExecutions,
+  redispatchEgoExecution
 } from '@/api/egolite'
 
 const loading = ref(false)
@@ -296,13 +305,37 @@ const load = async () => {
 const openDetail = async (row) => {
   current.value = row
   drawerVisible.value = true
-  const data = await listEgoEvents(row.id, { limit: 200 })
-  events.value = data?.list || []
+  lastEventId.value = 0
+  await loadEvents(true)
+}
+
+// 事件流增量轮询（after_id 游标）：抽屉开着时随 3s 自动刷新只拉新增帧，
+// 执行中的时间线才跟得上脚本；全量重拉在长执行下既慢又会截断到前 200 条。
+const lastEventId = ref(0)
+const loadEvents = async (reset) => {
+  if (!current.value) return
+  const params = reset
+    ? { limit: 200 }
+    : { after_id: lastEventId.value, limit: 200 }
+  const data = await listEgoEvents(current.value.id, params)
+  const fresh = data?.list || []
+  if (reset) {
+    events.value = fresh
+  } else if (fresh.length) {
+    events.value = events.value.concat(fresh).slice(-1000)
+  }
+  if (fresh.length) lastEventId.value = fresh[fresh.length - 1].id
 }
 
 const onAbort = async (row) => {
   await abortEgoExecution(row.id)
   ElMessage.success('已停止')
+  await load()
+}
+
+const onRedispatch = async (row) => {
+  await redispatchEgoExecution(row.id)
+  ElMessage.success('已重发；runner 在线即可执行')
   await load()
 }
 
@@ -316,7 +349,9 @@ const onConfirm = async (allow) => {
 onMounted(() => {
   load()
   timer = setInterval(() => {
-    if (autoRefresh.value) load()
+    if (!autoRefresh.value) return
+    load()
+    if (drawerVisible.value) loadEvents(false)
   }, 3000)
 })
 onBeforeUnmount(() => timer && clearInterval(timer))

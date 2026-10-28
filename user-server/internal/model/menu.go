@@ -326,6 +326,7 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "baStatus", Title: "Host 状态", Icon: "CircleCheck", Path: "/browser-automation/status"},
 					// ego-lite 腿（调研决策 2：双腿并存；同一付费能力下的第二种执行腿）
 					{Key: "egoFlows", Title: "我的流程", Icon: "Document", Path: "/browser-automation/ego/flows"},
+					{Key: "egoSessions", Title: "通用会话", Icon: "Connection", Path: "/browser-automation/ego/sessions"},
 					{Key: "egoExecutions", Title: "执行监控", Icon: "DataLine", Path: "/browser-automation/ego/executions"},
 					{Key: "egoRunner", Title: "Runner 状态", Icon: "Cpu", Path: "/browser-automation/ego/runner"},
 					// 资产目录（自包含：发布 = 往本实例 egolite_assets 写一行，不经任何外部平台）

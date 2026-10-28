@@ -488,7 +488,7 @@ const doDryRun = async () => {
     if (params !== undefined) payload.params = params
     const exec = await dryRunEgoFlow(dryRunForm.value.flowId, payload)
     dryRunVisible.value = false
-    ElMessage.success(`已下发：执行 #${exec?.id}（状态 ${exec?.state}）`)
+    ElMessage.success(`已下发：执行 #${exec?.id}（状态 ${exec?.state}）→ 去「执行监控」看事件时间线${exec?.state === 'created' ? '（runner 未在线，上线后在监控页点「重发」）' : ''}`)
   } catch (e) {
     ElMessage.error(e?.message || '试跑失败（runner 可能不在线）')
   } finally {

@@ -25,7 +25,7 @@ func newExecTestEnv(t *testing.T) (EgoExecutionRepository, EgoEventRepository, E
 	flowRepo := NewEgoFlowRepositoryWithDB(db)
 	assetRepo := NewEgoAssetRepositoryWithDB(db)
 	registry := NewEgoRunnerRegistry()
-	svc := NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
+	svc := NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, NewEgoWriteClaimRepositoryWithDB(db), registry)
 	return execRepo, evRepo, flowRepo, assetRepo, registry, svc
 }
 

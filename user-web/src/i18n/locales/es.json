@@ -314,6 +314,7 @@
     "baCron": "Disparadores programados",
     "baStatus": "Estado del host",
     "egoFlows": "Mis flujos",
+    "egoSessions": "Sesiones",
     "egoExecutions": "Ejecuciones",
     "egoRunner": "Estado del runner",
     "egoAssets": "Centro de activos",

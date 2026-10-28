@@ -32,7 +32,7 @@ import (
 
 // InstallableAsset 可安装资产（runner 侧落盘输入；形状即 runner 的安装契约）
 type InstallableAsset struct {
-	ID         string   `json:"id"`     // 目录名（learnings/{id}）
+	ID         string   `json:"id"` // 目录名（learnings/{id}）
 	Name       string   `json:"name"`
 	Version    int      `json:"version"`
 	Domains    []string `json:"domains"`

@@ -33,6 +33,18 @@ var ModuleRouteSupplement = []ModuleRouteRule{
 	{Pattern: "/api/modules/sync", ModuleKey: "platform-link"},
 	{Pattern: "/api/modules/sync-logs", ModuleKey: "platform-link"},
 	{Pattern: "/api/manage/modules/*", ModuleKey: "platform-link"},
+
+	// ---- browser-automation：浏览器自动化双腿（¥99 买断）----
+	// 为什么不生成：能力面表未收录 /api/browser-automation 与 /api/egolite 的形状
+	// （生成口径的历史缺口），但模块归属早已登记（module_bindings browser-automation
+	// 10 节点，含 ego 五页）。不补路径闸 = 多租户模式下双腿免费——买断模块必须拦。
+	// 免 JWT 的通道不在本闸射程（GuardModulePath 只挂 auth 组）：
+	//   /api/browser/host-ws、/api/egolite/runner-ws、/api/egolite/assets/pull
+	//   —— 准入由各自的 bh_/eg_ token 门负责，与模块闸互补。
+	{Pattern: "/api/browser-automation", ModuleKey: "browser-automation"},
+	{Pattern: "/api/browser-automation/*", ModuleKey: "browser-automation"},
+	{Pattern: "/api/egolite", ModuleKey: "browser-automation"},
+	{Pattern: "/api/egolite/*", ModuleKey: "browser-automation"},
 }
 
 // ModuleRouteAll 生成件 + 补充件（匹配时按此顺序，补充件在前）

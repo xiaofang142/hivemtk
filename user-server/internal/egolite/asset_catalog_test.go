@@ -226,7 +226,7 @@ func TestMarketStartValidatesCatalog(t *testing.T) {
 func TestMarketStartFailsClosedWithoutCatalog(t *testing.T) {
 	ctx := context.Background()
 	execRepo, evRepo, flowRepo, _, registry, _ := newExecTestEnv(t)
-	svcNoCatalog := NewEgoExecutionService(execRepo, evRepo, flowRepo, nil, registry)
+	svcNoCatalog := NewEgoExecutionService(execRepo, evRepo, flowRepo, nil, nil, registry)
 	if _, err := svcNoCatalog.Start(ctx, 5, StartRequest{Origin: "market", AssetID: "x"}); err != ErrAssetUnavailable {
 		t.Fatalf("装配缺资产目录时 market 必须 fail-closed，got %v", err)
 	}

@@ -314,6 +314,7 @@
     "baCron": "Cron Triggers",
     "baStatus": "Host Status",
     "egoFlows": "My Flows",
+    "egoSessions": "Sessions",
     "egoExecutions": "Executions",
     "egoRunner": "Runner Status",
     "egoAssets": "Asset Hub",

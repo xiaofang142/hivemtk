@@ -314,6 +314,7 @@
     "baCron": "Zeitpläne",
     "baStatus": "Host-Status",
     "egoFlows": "Meine Abläufe",
+    "egoSessions": "Sitzungen",
     "egoExecutions": "Ausführungen",
     "egoRunner": "Runner-Status",
     "egoAssets": "Asset-Center",

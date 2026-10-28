@@ -247,6 +247,14 @@ func registerAllAgentToolsViaProviders(gormDB *gorm.DB) {
 		logger.Info("[agent] ✅ ego-lite 工具（egolite_run）已接入全局注册中心")
 	}
 
+	// 通用浏览器执行能力（browser_session_open/act/observe/finish）：端口由
+	// egolite_routes.go 装配（SetBrowserSessionPort）注入，这里只登记工具面。
+	if err := tooluse.RegisterBrowserSessionTools(tooluse.GetGlobalRegistry(), tooluse.NewBrowserToolDeps(gormDB)); err != nil {
+		logger.Errorf("[agent] ⚠️ 通用浏览器会话工具注册失败: %v", err)
+	} else {
+		logger.Info("[agent] ✅ 通用浏览器会话工具（open/act/observe/finish）已接入全局注册中心")
+	}
+
 	rewirePermissionDecorators(tooluse.GetGlobalRegistry())
 
 	applyTenantDisabledTools(tooluse.GetGlobalRegistry())

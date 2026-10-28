@@ -19,7 +19,7 @@ func newFlowEnv(t *testing.T) (*EgoFlowService, EgoFlowRepository) {
 	execRepo := NewEgoExecutionRepositoryWithDB(db)
 	evRepo := NewEgoEventRepositoryWithDB(db)
 	registry := NewEgoRunnerRegistry()
-	execSvc := NewEgoExecutionService(execRepo, evRepo, flowRepo, nil, registry)
+	execSvc := NewEgoExecutionService(execRepo, evRepo, flowRepo, nil, nil, registry)
 	return NewEgoFlowService(flowRepo, execSvc), flowRepo
 }
 

@@ -21,7 +21,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -35,7 +34,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -150,14 +148,20 @@ type taskSpec struct {
 	Entry         string          `json:"entry"` // 资产内 entry 工具名或文件相对路径
 	Params        json.RawMessage `json:"params"`
 	SpaceName     string          `json:"space_name"`
+	SpaceID       string          `json:"space_id,omitempty"`
 	ConfirmPolicy string          `json:"confirm_policy"` // none / require（M2 全量实现，本骨架透传）
 	ConfirmTTL    int             `json:"confirm_ttl_sec"`
 	TimeoutSec    int             `json:"timeout_sec"`
 	Round         int             `json:"round"` // resume 时 >1
 	ResumeSpaceID string          `json:"resume_space_id,omitempty"`
-	Origin        string          `json:"origin"` // market / draft
+	Origin        string          `json:"origin"` // market / draft / session
 	DraftScript   string          `json:"draft_script,omitempty"`
 	Domains       []string        `json:"domains"` // 域名白名单（specs/015：运行时域审计数据源；下发时刻快照）
+	// 通用执行能力（2026-10-28）：ops 轮次协议
+	SessionID string          `json:"session_id,omitempty"`
+	Mode      string          `json:"mode,omitempty"` // ops（默认空=script）
+	Ops       json.RawMessage `json:"ops,omitempty"`
+	Observe   json.RawMessage `json:"observe,omitempty"`
 }
 
 // ---------- 事件行（A3 协议；runner 只透传+补 seq，不自产结论） ----------
@@ -175,8 +179,7 @@ type eventLine struct {
 // ---------- WS 客户端（照抄 host_registry client 侧纪律：outbound、退避、心跳） ----------
 
 const (
-	pingInterval    = 30 * time.Second
-	pongWait        = 90 * time.Second // 服务端读超时参数沿用（调研 §6.5）
+	pongWait        = 90 * time.Second // 服务端读超时参数沿用（调研 §6.5）；保活靠服务端 30s ping（runner_ws.go pingLoop）
 	dialTimeout     = 10 * time.Second
 	reconnectBase   = 2 * time.Second
 	reconnectCap    = 60 * time.Second
@@ -186,9 +189,11 @@ const (
 type runner struct {
 	conf      *runnerConf
 	conn      *websocket.Conn
-	writeMu   sync.Mutex
+	writeMu   sync.Mutex   // 同时守 conn 与断线缓冲（同一把锁保证补传与实时帧不交错）
 	current   *execContext // 同一时刻至多一个执行（服务端并发闸是真正限制，这里防本地踩踏）
 	currentMu sync.Mutex
+	pending   []eventLine // 断线缓冲：conn 为空期间的事件行（DF-4⑤），重连后补传
+	dropped   int         // 缓冲溢出丢弃计数（补传时先补一条 runner 说明帧）
 }
 
 type execContext struct {
@@ -202,9 +207,58 @@ func (r *runner) send(ev eventLine) {
 	r.writeMu.Lock()
 	defer r.writeMu.Unlock()
 	if r.conn == nil {
+		// 断线缓冲（DF-4⑤）：脚本在 ego lite 内继续跑，事件行不能因为连接断开就
+		// 从审计里消失——本地暂存，重连后按原 seq 补传（服务端 append-only 只增不覆盖）。
+		r.enqueuePendingLocked(ev)
 		return
 	}
 	_ = r.conn.WriteJSON(ev)
+}
+
+// egoPendingCap 缓冲上限（条）。超限丢最老——长时间断线不该拖垮 runner 内存；
+// 丢过的条数在补传时以 runner 说明帧如实上报（审计诚实：不能装作没丢过）。
+const egoPendingCap = 5000
+
+func (r *runner) enqueuePendingLocked(ev eventLine) {
+	if len(r.pending) >= egoPendingCap {
+		r.pending = r.pending[1:]
+		r.dropped++
+	}
+	r.pending = append(r.pending, ev)
+}
+
+// drainPending 取走全部待补传帧与溢出计数（调用方须持 writeMu 或专用于测试）。
+func (r *runner) drainPending() ([]eventLine, int) {
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+	evs, dropped := r.pending, r.dropped
+	r.pending, r.dropped = nil, 0
+	return evs, dropped
+}
+
+// flushPending 重连后补传（连接建立后、进入读循环前调用一次）。
+func (r *runner) flushPending() {
+	events, dropped := r.drainPending()
+	if len(events) == 0 && dropped == 0 {
+		return
+	}
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+	if r.conn == nil {
+		// 取帧与写帧之间连接又断了：放回缓冲等下一次重连，不能让这批帧凭空消失
+		for _, ev := range events {
+			r.enqueuePendingLocked(ev)
+		}
+		r.dropped += dropped
+		return
+	}
+	if dropped > 0 {
+		_ = r.conn.WriteJSON(eventLine{Type: "runner", Payload: mustJSON(map[string]any{
+			"note": "断线期间缓冲溢出，丢弃最老事件", "dropped": dropped})})
+	}
+	for _, ev := range events {
+		_ = r.conn.WriteJSON(ev)
+	}
 }
 
 // ---------- 执行（校验 → 组装 → exec → 透传） ----------
@@ -269,10 +323,12 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 	cleanup = func() { _ = os.RemoveAll(dir) }
 
 	var entrySrc string
-	switch spec.Origin {
-	case "draft":
+	switch {
+	case spec.Mode == "ops":
+		entrySrc = buildOpsScript(spec, dir)
+	case spec.Origin == "draft":
 		entrySrc = spec.DraftScript
-	case "market":
+	case spec.Origin == "market":
 		assetDir := filepath.Join(r.conf.WorkspaceDir, "learnings", spec.AssetID)
 		entryPath := filepath.Join(assetDir, spec.Entry)
 		manifestRaw, err := os.ReadFile(filepath.Join(assetDir, "manifest.json"))
@@ -350,12 +406,16 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 			"const __EXEC__ = %q;\n"+
 			"const __PARAMS__ = %s;\n"+
 			"const __SPACE_NAME__ = %q;\n"+
+			"const __SPACE_ID__ = %q;\n"+
 			"const __CONFIRM_FILE__ = %q;\n"+
 			"const __CONFIRM_TTL_SEC__ = %d;\n"+
+			"const __CONFIRM_POLICY__ = %q;\n"+
+			"const __ARTIFACT_DIR__ = %q;\n"+
 			"const __DOMAINS__ = %s;\n"+
 			confirmHelperJS+domainHelperJS,
 		time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.Round,
-		spec.ExecutionID, paramsJSON, spec.SpaceName, decisionPath, ttlSec, domainsJSON)
+		spec.ExecutionID, paramsJSON, spec.SpaceName, spec.SpaceID, decisionPath, ttlSec,
+		spec.ConfirmPolicy, dir, domainsJSON)
 	script := preamble + entrySrc
 
 	if err := os.WriteFile(p, []byte(script), 0o600); err != nil {
@@ -366,6 +426,9 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 }
 
 const egoConfirmDefTTLSec = 300
+
+// egoColdStartHintAfter 冷启动静默哨阈值（见 execEgo 内注释）
+const egoColdStartHintAfter = 60 * time.Second
 
 const confirmDecisionFile = "confirm-decision.json"
 
@@ -440,7 +503,7 @@ func eventTypeFromPayload(raw json.RawMessage) string {
 		return "action"
 	}
 	switch probe.Type {
-	case "action", "snapshot", "artifact", "handoff", "extract", "confirm":
+	case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "round_result":
 		return probe.Type
 	default:
 		return "action"
@@ -476,10 +539,30 @@ func (r *runner) execEgo(ctx context.Context, cancel context.CancelFunc, spec ta
 	seq := 0
 	var seqMu sync.Mutex
 	errBuf := &strings.Builder{}
+	// 冷启动静默哨（任务一 e2e 实测发现形态）：CLI 子进程可能停在 ego lite 的
+	// 客户端授权门/未响应上——进程活着但**零输出**直到超时，用户侧只看到"一直下发中"。
+	// 60s 无任何脚本输出即上报一次 runner 提示事件（只提示一次，不干预执行）。
+	firstEvent := make(chan struct{})
+	closeOnce := sync.Once{}
+	go func() {
+		t := time.NewTimer(egoColdStartHintAfter)
+		defer t.Stop()
+		select {
+		case <-firstEvent:
+			return
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			r.send(eventLine{Type: "runner", Execution: spec.ExecutionID, Payload: mustJSON(map[string]string{
+				"note": "ego-browser 已启动但 60s 无脚本输出：请检查 ego lite 是否弹出授权确认（需在 GUI 点一次允许）、是否未登录或未响应",
+			})})
+		}
+	}()
 	// 统一事件出口：补 seq → 透传 → 运行时域审计（specs/015 C2）。
 	// 事件 payload 带 url 且越域 ⇒ fail-close：error 事件 + cancel 终止执行
 	// （脚本侧守卫 helper 是协作层，这里是强制层）。
 	handleEvent := func(raw json.RawMessage) {
+		closeOnce.Do(func() { close(firstEvent) })
 		seqMu.Lock()
 		seq++
 		n := seq
@@ -591,12 +674,17 @@ func egoNodeArgs(c *runnerConf) []string {
 	return append(args, "nodejs")
 }
 
+// probeEgoVersion 版本探测。F11 实测：ego-browser --version 把版本打到 **stderr**
+// （stdout 为空）——Output() 只收 stdout 会恒得空串，register 帧的 ego_version 就
+// 恒为 unknown，A5 版本协商随之失真。改用 CombinedOutput 取首行，剥掉 "ego-browser"
+// 前缀只留版本号；探不到如实报 unknown。
 func probeEgoVersion(egoBin string) string {
-	out, err := exec.Command(egoBin, "--version").Output()
+	out, err := exec.Command(egoBin, "--version").CombinedOutput()
 	if err != nil {
 		return "unknown"
 	}
-	return strings.TrimSpace(string(out))
+	line := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+	return strings.TrimSpace(strings.TrimPrefix(line, "ego-browser"))
 }
 
 func mustHostname() string {
@@ -680,6 +768,7 @@ func main() {
 		if err == nil {
 			fmt.Println("✅ 已连接，等待 task spec…")
 			backoff = reconnectBase
+			r.flushPending() // 断线期间缓冲的事件行先补传（DF-4⑤），再进读循环
 			readLoop(r, ctx, *once)
 		}
 		if ctx.Err() != nil {
@@ -727,6 +816,20 @@ func readLoop(r *runner, ctx context.Context, once bool) {
 			var spec taskSpec
 			if err := json.Unmarshal(frame.Spec, &spec); err == nil {
 				go r.runTask(spec)
+			}
+		case "round_spec":
+			// 通用执行能力：一轮 ops（服务端每次只下发一轮，脚本固定模板）
+			var spec taskSpec
+			if err := json.Unmarshal(frame.Spec, &spec); err == nil {
+				if spec.Mode == "" {
+					spec.Mode = "ops"
+				}
+				go r.runTask(spec)
+			}
+		case "finish_spec":
+			var fs finishSpec
+			if err := json.Unmarshal(frame.Spec, &fs); err == nil {
+				go r.runFinish(fs)
 			}
 		case "ping":
 			r.send(eventLine{Type: "pong"})
@@ -918,15 +1021,6 @@ func blankSignatureLocal(raw []byte, sigValue string) ([]byte, error) {
 		i++
 	}
 	return out, nil
-}
-
-// 编译期引用检查（rand/hex 在 token 自检时用；避免未使用报错的正式位置在 M2 轮换逻辑）
-var _ = func() error {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	_ = hex.EncodeToString(b)
-	_ = runtime.GOOS
-	return err
 }
 
 // ---------- 运行时收敛（specs/015 C2）与升级指令（C10） ----------

@@ -59,6 +59,12 @@ export default [
         meta: { title: '我的流程', requiresAuth: true }
       },
       {
+        path: 'ego/sessions',
+        name: 'EgoSessions',
+        component: () => import('@/views/browserAutomation/ego/Sessions.vue'),
+        meta: { title: '通用会话', requiresAuth: true }
+      },
+      {
         path: 'ego/executions',
         name: 'EgoExecutions',
         component: () => import('@/views/browserAutomation/ego/Executions.vue'),

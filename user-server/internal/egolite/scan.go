@@ -19,10 +19,10 @@ import (
 
 // ScanRule 单条扫描规则
 type ScanRule struct {
-	ID          string         // 规则标识（审核报告引用）
-	Desc        string         // 人工可读说明
-	Pattern     *regexp.Regexp // 匹配模式
-	Severity    string         // block（命中即拒）/ warn（进人工审核清单）
+	ID       string         // 规则标识（审核报告引用）
+	Desc     string         // 人工可读说明
+	Pattern  *regexp.Regexp // 匹配模式
+	Severity string         // block（命中即拒）/ warn（进人工审核清单）
 }
 
 var scanRules = buildScanRules()
@@ -70,7 +70,7 @@ type ScanVerdict struct {
 
 // ScanReport 扫描报告（审核工作台展示形状）
 type ScanReport struct {
-	Passed   bool          `json:"passed"`   // 无 block 即通过（warn 进人工审核清单）
+	Passed   bool          `json:"passed"` // 无 block 即通过（warn 进人工审核清单）
 	Blocked  []ScanVerdict `json:"blocked,omitempty"`
 	Warnings []ScanVerdict `json:"warnings,omitempty"`
 }

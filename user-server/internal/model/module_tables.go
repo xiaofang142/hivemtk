@@ -159,6 +159,10 @@ var aiSalesOwnedTables = []string{
 // reach-auto 模块独占
 var reachAutoOwnedTables = []string{
 	"reach_pipelines", "reach_jobs", "reach_delayed_outbound", "reach_compliance_log",
+	// D02/D04/D05（2026-10-28）：延迟出站持久队列、同意事实账与偏好、配额预占账——
+	// 均属主动触达域，随 reach-auto 开关。
+	"reach_deferred_outbound", "contact_consent_events", "contact_preferences",
+	"reach_quota_counters", "reach_quota_reservations",
 	"automation_rules", "rule_pending_executions", "optimization_suggestions",
 	// 工作流编排器（workflowOrchestrator 菜单节点同属本模块）
 	"workflow_versions", "workflow_executions", "workflow_node_executions",
@@ -274,6 +278,7 @@ var browserAutomationOwnedTables = []string{
 var egoLiteOwnedTables = []string{
 	"egolite_executions", "ego_event_log", "egolite_flows", "egolite_write_claims",
 	"egolite_assets", "egolite_runner_tokens", "egolite_flow_crons",
+	"egolite_sessions", "egolite_rounds",
 }
 
 // moduleTableRegistry 模块 → 独占表

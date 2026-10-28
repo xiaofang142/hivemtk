@@ -19,16 +19,16 @@ import (
 
 // SignedManifest 带 hivemtk 扩展面的 manifest（解析后）
 type SignedManifest struct {
-	ID       string   `json:"id"`
-	Version  string   `json:"version"`
-	Domains  []string `json:"domains"`
-	Hivemtk  struct {
-		Entry       string `json:"entry"`
-		CompatMin   string `json:"compat_min"`
-		Writes      []string `json:"writes"`
-		SigAlg      string `json:"sig_alg"`   // 固定 ed25519
-		Signature   string `json:"signature"` // base64(std) of SHA-256(canonical manifest body)
-		PubKeyFpr   string `json:"pubkey_fingerprint"` // sha256(pubkey) 前 16 hex（平台登记核对）
+	ID      string   `json:"id"`
+	Version string   `json:"version"`
+	Domains []string `json:"domains"`
+	Hivemtk struct {
+		Entry     string   `json:"entry"`
+		CompatMin string   `json:"compat_min"`
+		Writes    []string `json:"writes"`
+		SigAlg    string   `json:"sig_alg"`            // 固定 ed25519
+		Signature string   `json:"signature"`          // base64(std) of SHA-256(canonical manifest body)
+		PubKeyFpr string   `json:"pubkey_fingerprint"` // sha256(pubkey) 前 16 hex（平台登记核对）
 	} `json:"hivemtk"`
 }
 

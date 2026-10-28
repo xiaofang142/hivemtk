@@ -38,6 +38,16 @@ func extractRunnerToken(ctx *gin.Context) string {
 
 const runnerHandshakeReadDeadline = 10 * time.Second
 
+// 心跳参数镜像 browser_automation/service/timeouts.go（A6 收口单表：30s ping / 90s 读超时）。
+// 没有应用层探测时，确认等待（confirm TTL 默认 300s）、长页面等待这类静默期会被
+// 90s 读超时误判成断连——断连钩子会把还在跑的执行整体判 failed，用户点「允许」时
+// 放行帧发进的是一条已死的连接。ping/pong 帧两端 readLoop 均已实现（runner 回 pong、
+// 服务端 case "pong" 刷新读超时），这里补的只是发送方。
+const (
+	egoPingInterval      = 30 * time.Second
+	egoPingWriteDeadline = 10 * time.Second // 单帧写时限（ping/JSON 同值，timeouts.go 同参）
+)
+
 var runnerUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
@@ -49,7 +59,7 @@ var runnerUpgrader = websocket.Upgrader{
 type EgoRunnerWSHandler struct {
 	registry *EgoRunnerRegistry
 	kvRepo   hrepo.PlatformConfigKVRepository
-	auth     *egoTokenAuthenticator // 统一鉴权（令牌行优先，KV 兜底）
+	auth     *egoTokenAuthenticator  // 统一鉴权（令牌行优先，KV 兜底）
 	loopback func(*gin.Context) bool // 可注入便于测试；生产用形态开关
 	sink     EventSink               // 事件接收器（执行域服务；AttachEventSink 注入）
 }
@@ -136,6 +146,27 @@ func (h *EgoRunnerWSHandler) Handle(ctx *gin.Context) {
 		return
 	}
 	_ = conn.WriteJSON(map[string]any{"type": "welcome", "reason": reason})
+
+	// 服务端心跳（pingLoop，host_registry D4a 同型）：30s 一发，runner 自动回 pong，
+	// 服务端读循环收到 pong 即刷新 90s 读超时。写失败（半开连对端已死）即关连接，
+	// 让读循环走既有断连收尾（Unregister + 钩子）。
+	pingStop := make(chan struct{})
+	defer close(pingStop)
+	go func() {
+		t := time.NewTicker(egoPingInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-pingStop:
+				return
+			case <-t.C:
+				if err := registered.SendSpec(map[string]any{"type": "ping"}); err != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+	}()
 
 	// 业务读循环（事件 ingest / 心跳，runner_events.go）
 	h.readEvents(conn, userID)

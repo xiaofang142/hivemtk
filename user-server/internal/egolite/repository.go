@@ -199,6 +199,9 @@ func terminalStatesSlice() []string {
 type EgoEventRepository interface {
 	Append(ctx context.Context, ev *model.EgoEventLog) error
 	ListByExecution(ctx context.Context, executionID uint, limit int) ([]*model.EgoEventLog, error)
+	// ListByExecutionAfter Monitor 增量游标（after_id 之后的新增帧）。游标用 id 不用
+	// seq：seq 只在轮内单调（重发/续轮会把低 seq 再写进同一 execution），id 才全表单调。
+	ListByExecutionAfter(ctx context.Context, executionID uint, afterID uint, limit int) ([]*model.EgoEventLog, error)
 }
 
 type egoEventRepo struct{ db *gorm.DB }
@@ -221,6 +224,17 @@ func (r *egoEventRepo) ListByExecution(ctx context.Context, executionID uint, li
 	return list, err
 }
 
+func (r *egoEventRepo) ListByExecutionAfter(ctx context.Context, executionID uint, afterID uint, limit int) ([]*model.EgoEventLog, error) {
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	var list []*model.EgoEventLog
+	err := r.db.WithContext(ctx).
+		Where("execution_id = ? AND id > ?", executionID, afterID).
+		Order("id ASC").Limit(limit).Find(&list).Error
+	return list, err
+}
+
 // ---------- 流程 ----------
 
 // EgoFlowRepository egolite_flows 读写
@@ -230,6 +244,8 @@ type EgoFlowRepository interface {
 	// GetByID 管理端审核读（跨用户；审核工作台按流程号取，不看归属）
 	GetByID(ctx context.Context, id uint) (*model.EgoliteFlow, error)
 	Update(ctx context.Context, id, userID uint, sets map[string]any) error
+	// UpdateAdmin 管理端跨用户更新（审核工作台驳回；与 Update 的 user_id 闸互补）
+	UpdateAdmin(ctx context.Context, id uint, sets map[string]any) error
 	ListByUser(ctx context.Context, userID uint, page, pageSize int) ([]*model.EgoliteFlow, int64, error)
 	// ListByStatus 管理端按状态读（审核工作台：submitted 清单；空状态 = 全量）
 	ListByStatus(ctx context.Context, status string, page, pageSize int) ([]*model.EgoliteFlow, int64, error)
@@ -273,6 +289,18 @@ func (r *egoFlowRepo) GetByID(ctx context.Context, id uint) (*model.EgoliteFlow,
 func (r *egoFlowRepo) Update(ctx context.Context, id, userID uint, sets map[string]any) error {
 	res := r.db.WithContext(ctx).Model(&model.EgoliteFlow{}).
 		Where("id = ? AND user_id = ?", id, userID).Updates(sets)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrExecutionNotFound
+	}
+	return nil
+}
+
+func (r *egoFlowRepo) UpdateAdmin(ctx context.Context, id uint, sets map[string]any) error {
+	res := r.db.WithContext(ctx).Model(&model.EgoliteFlow{}).
+		Where("id = ?", id).Updates(sets)
 	if res.Error != nil {
 		return res.Error
 	}

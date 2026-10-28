@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,9 +13,11 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/browsercore"
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/middleware"
 	hrepo "hivemtk-user/internal/repository"
+	"hivemtk-user/internal/service"
 )
 
 // SetupEgoLiteRoutes ego-lite 腿路由（设计文档 S3/S6/S7/S9；调研 §6.5 鉴权定案）。
@@ -41,6 +44,7 @@ import (
 //   - GET  /api/egolite/executions/:id/events 事件日志（Monitor 页面数据源，T4）
 //   - POST /api/egolite/executions/:id/abort   停止
 //   - POST /api/egolite/executions/:id/confirm 用户确认/拒绝（写操作闸）
+//   - POST /api/egolite/executions/:id/redispatch 待下发执行重发（runner 上线后）
 //   - GET  /api/egolite/assets             资产目录橱窗（用户端，只有 published 可见）
 //   - POST /api/egolite/admin/assets/publish    平台端发布：审核用户流程 → 目录条目（admin）
 //   - POST /api/egolite/admin/assets/pack       平台端发布：直接发脚本包（admin）
@@ -61,10 +65,16 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	flowRepo := egolite.NewEgoFlowRepositoryWithDB(gormDB)
 	assetRepo := egolite.NewEgoAssetRepositoryWithDB(gormDB)
 	tokenRepo := egolite.NewEgoRunnerTokenRepositoryWithDB(gormDB)
+	claimRepo := egolite.NewEgoWriteClaimRepositoryWithDB(gormDB)
 	// 统一鉴权单点：令牌行（每用户多条）优先，KV 双候选兜底（老部署兼容）
 	runnerAuth := egolite.NewEgoTokenAuthenticator(tokenRepo, kvRepo)
 
-	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, registry)
+	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, claimRepo, registry)
+	// 通用执行能力（会话 + 轮次）：session 只做多轮聚合，事件先委托执行域再聚合。
+	sessionRepo := egolite.NewEgoSessionRepositoryWithDB(gormDB)
+	roundRepo := egolite.NewEgoRoundRepositoryWithDB(gormDB)
+	sessionSvc := egolite.NewEgoSessionService(sessionRepo, roundRepo, execRepo, evRepo, registry, execSvc)
+	tooluse.SetBrowserSessionPort(sessionSvc)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
 	assetSvc := egolite.NewEgoAssetCatalog(assetRepo, flowRepo)
 
@@ -118,10 +128,32 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		return map[string]any{"execution_id": e.ID, "state": e.State, "origin": e.Origin}, nil
 	})
 
+	// workflow browser_session 节点注入：与 browser_task 同型（一轮 ops，异步派发）
+	service.SetWorkflowBrowserSessionRunner(func(ctx context.Context, userID uint, sessionID string, ops []map[string]any) (map[string]any, error) {
+		sid, err := strconv.ParseUint(sessionID, 10, 32)
+		if err != nil || sid == 0 {
+			return nil, fmt.Errorf("session_id 非法: %q", sessionID)
+		}
+		if userID == 0 {
+			return nil, fmt.Errorf("browser_session 节点必须提供 user_id")
+		}
+		raw, _ := json.Marshal(ops)
+		var typed []browsercore.Op
+		if err := json.Unmarshal(raw, &typed); err != nil {
+			return nil, fmt.Errorf("ops 形状非法: %w", err)
+		}
+		res, err := sessionSvc.Act(ctx, browsercore.RoundRequest{UserID: userID, SessionID: uint(sid), Ops: typed})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"session_id": res.Session.ID, "round": res.Round.Round, "state": res.Session.State}, nil
+	})
+
 	// 断连钩子：该用户全部非终态执行判 failed（FailActiveByUser）。
 	// 独立实现实例——绝不复用 host-ws 的 FailRunningByUser（那是 browser_sessions 语义）。
 	registry.SetDisconnectHook(func(ctx context.Context, userID uint) {
 		execSvc.OnRunnerDisconnect(ctx, userID)
+		sessionSvc.OnRunnerDisconnect(ctx, userID)
 	})
 
 	// 启动兜底：KV 无 eg_ token 则自动生成（fail-closed 不卡死首次部署，host-ws 先例）
@@ -136,12 +168,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		}
 		userID, ok := runnerAuth.Authenticate(c.Request.Context(), tok)
 		if !ok {
-			c.JSON(401, gin.H{"code": 1, "msg": "runner token 无效"})
+			c.JSON(401, gin.H{"code": 1, "message": "runner token 无效"})
 			return
 		}
 		assets, err := egolite.ListInstallableForUser(c.Request.Context(), flowRepo, assetRepo, userID)
 		if err != nil {
-			c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+			c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"assets": assets}})
@@ -150,7 +182,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	// runner WS（不过 JWT——token 即身份，host-ws 同形状）
 	wsHandler := egolite.NewEgoRunnerWSHandler(registry, kvRepo)
 	wsHandler.SetTokenRepository(tokenRepo)
-	wsHandler.AttachEventSink(execSvc)
+	wsHandler.AttachEventSink(sessionSvc)
 	engine.GET("/api/egolite/runner-ws", wsHandler.Handle)
 
 	// 看门狗（60s 扫描：confirm TTL + 硬超时；WatchdogSweep 幂等，扫不到就空转）
@@ -160,6 +192,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		for range ticker.C {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_, _ = execSvc.WatchdogSweep(ctx)
+			_, _ = sessionSvc.WatchdogSweep(ctx)
 			cancel()
 		}
 	}()
@@ -178,7 +211,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		eg.GET("/runner/tokens", func(c *gin.Context) {
 			list, err := tokenRepo.ListByUser(c.Request.Context(), currentUID(c))
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
@@ -190,40 +223,40 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			_ = c.ShouldBindJSON(&body)
 			plain, rec, err := tokenRepo.Issue(c.Request.Context(), currentUID(c), body.Label)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": "签发失败: " + err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": "签发失败: " + err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": plain, "token_hint": rec.TokenHint, "id": rec.ID},
-				"msg": "令牌只显示这一次，请立即复制到 runner 配置"})
+				"message": "令牌只显示这一次，请立即复制到 runner 配置"})
 		})
 		eg.POST("/runner/tokens/:id/revoke", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			if err := tokenRepo.Revoke(c.Request.Context(), uint(id), currentUID(c)); err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": "令牌不存在或已撤销"})
+				c.JSON(400, gin.H{"code": 1, "message": "令牌不存在或已撤销"})
 				return
 			}
-			c.JSON(200, gin.H{"code": 0, "msg": "已撤销；该令牌立即失效"})
+			c.JSON(200, gin.H{"code": 0, "message": "已撤销；该令牌立即失效"})
 		})
 		// 兼容口径：轮换 KV 兜底 token（老部署/单机自用；admin 限定）
 		eg.POST("/runner/token/reset", func(c *gin.Context) {
 			if c.GetString("role") != "admin" {
-				c.JSON(403, gin.H{"code": 1, "msg": "仅管理员可轮换兜底 runner token"})
+				c.JSON(403, gin.H{"code": 1, "message": "仅管理员可轮换兜底 runner token"})
 				return
 			}
 			tok, err := egolite.RotateEgoToken(c.Request.Context(), kvRepo, 0)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": "轮换失败: " + err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": "轮换失败: " + err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": tok},
-				"msg": "已重置兜底 token；旧值仍可用，直到下一次重置"})
+				"message": "已重置兜底 token；旧值仍可用，直到下一次重置"})
 		})
 
 		// ---- 流程域 ----
 		eg.POST("/flows", func(c *gin.Context) {
 			var req egolite.SaveRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			flowID := uint(0)
@@ -234,7 +267,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			}
 			f, report, err := flowSvc.Save(c.Request.Context(), currentUID(c), flowID, req)
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"flow": f, "scan_report": report}})
@@ -244,7 +277,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 			list, total, err := flowRepo.ListByUser(c.Request.Context(), currentUID(c), page, size)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -253,7 +286,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			f, err := flowRepo.GetForUser(c.Request.Context(), uint(id), currentUID(c))
 			if err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "流程不存在"})
+				c.JSON(404, gin.H{"code": 1, "message": "流程不存在"})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": f})
@@ -262,7 +295,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			report, err := flowSvc.Rescan(c.Request.Context(), currentUID(c), uint(id))
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": report})
@@ -271,7 +304,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			f, err := flowSvc.Publish(c.Request.Context(), currentUID(c), uint(id))
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": f})
@@ -291,7 +324,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				if err == egolite.ErrConcurrencyGate {
 					status = 429
 				}
-				c.JSON(status, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
@@ -299,16 +332,16 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		eg.DELETE("/flows/:id", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			if err := flowRepo.Delete(c.Request.Context(), uint(id), currentUID(c)); err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "流程不存在"})
+				c.JSON(404, gin.H{"code": 1, "message": "流程不存在"})
 				return
 			}
-			c.JSON(200, gin.H{"code": 0, "msg": "已删除"})
+			c.JSON(200, gin.H{"code": 0, "message": "已删除"})
 		})
 		eg.POST("/flows/:id/submit", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			f, err := flowSvc.Submit(c.Request.Context(), currentUID(c), uint(id))
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": f})
@@ -319,7 +352,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			tr, err := cronSvc.Get(c.Request.Context(), currentUID(c), uint(id))
 			if err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "流程未挂载定时触发器"})
+				c.JSON(404, gin.H{"code": 1, "message": "流程未挂载定时触发器"})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": tr})
@@ -332,32 +365,32 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				Enabled  *bool  `json:"enabled"` // nil ⇒ 默认 true；显式 false 原样落库
 			}
 			if err := c.ShouldBindJSON(&body); err != nil || body.CronExpr == "" {
-				c.JSON(400, gin.H{"code": 1, "msg": "cron_expr 必填（5 段「分 时 日 月 周」）"})
+				c.JSON(400, gin.H{"code": 1, "message": "cron_expr 必填（5 段「分 时 日 月 周」）"})
 				return
 			}
 			tr, err := cronSvc.Upsert(c.Request.Context(), currentUID(c), uint(id), egolite.UpsertCronRequest{
 				CronExpr: body.CronExpr, TimeZone: body.TimeZone, Enabled: body.Enabled,
 			})
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
-			c.JSON(200, gin.H{"code": 0, "data": tr, "msg": "已挂载；纯读流程按表达式定时发起执行"})
+			c.JSON(200, gin.H{"code": 0, "data": tr, "message": "已挂载；纯读流程按表达式定时发起执行"})
 		})
 		eg.DELETE("/flows/:id/cron", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			if err := cronSvc.Delete(c.Request.Context(), currentUID(c), uint(id)); err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "流程未挂载定时触发器"})
+				c.JSON(404, gin.H{"code": 1, "message": "流程未挂载定时触发器"})
 				return
 			}
-			c.JSON(200, gin.H{"code": 0, "msg": "已摘除定时触发器"})
+			c.JSON(200, gin.H{"code": 0, "message": "已摘除定时触发器"})
 		})
 
 		// ---- 执行域 ----
 		eg.POST("/executions", func(c *gin.Context) {
 			var req egolite.StartRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			e, err := execSvc.Start(c.Request.Context(), currentUID(c), req)
@@ -366,7 +399,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				if err == egolite.ErrConcurrencyGate {
 					status = 429
 				}
-				c.JSON(status, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
@@ -376,7 +409,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 			list, total, err := execRepo.ListByUser(c.Request.Context(), currentUID(c), page, size)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -385,7 +418,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			e, err := execRepo.GetForUser(c.Request.Context(), uint(id), currentUID(c))
 			if err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "执行不存在"})
+				c.JSON(404, gin.H{"code": 1, "message": "执行不存在"})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
@@ -394,16 +427,32 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			// 归属校验先于读事件（越权与不存在同响应）
 			if _, err := execRepo.GetForUser(c.Request.Context(), uint(id), currentUID(c)); err != nil {
-				c.JSON(404, gin.H{"code": 1, "msg": "执行不存在"})
+				c.JSON(404, gin.H{"code": 1, "message": "执行不存在"})
 				return
 			}
 			limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
-			events, err := evRepo.ListByExecution(c.Request.Context(), uint(id), limit)
+			// 增量游标：after_id 传上次收到的最大事件 id，只回新增（Monitor 3s 轮询不重拉全量）
+			afterID, _ := strconv.ParseUint(c.DefaultQuery("after_id", "0"), 10, 64)
+			events, err := evRepo.ListByExecutionAfter(c.Request.Context(), uint(id), uint(afterID), limit)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": events}})
+		})
+		eg.POST("/executions/:id/redispatch", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			// runner 不在线时 Start 会把执行留在 created（待下发）；这是用户上线后的唯一重发口
+			e, err := execSvc.Redispatch(c.Request.Context(), currentUID(c), uint(id))
+			if err != nil {
+				status := 400
+				if err == egolite.ErrExecStateConflict {
+					status = 409
+				}
+				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": e, "message": "已重发（runner 不在线时保留在待下发态）"})
 		})
 		eg.POST("/executions/:id/abort", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -413,7 +462,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				if err == egolite.ErrExecStateConflict {
 					status = 409
 				}
-				c.JSON(status, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
@@ -430,10 +479,157 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				if err == egolite.ErrExecStateConflict {
 					status = 409
 				}
-				c.JSON(status, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(status, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": e})
+		})
+
+		// ---- 通用浏览器会话（M1/M2：ops 轮次协议）----
+		eg.POST("/sessions", func(c *gin.Context) {
+			var body struct {
+				Goal          string   `json:"goal"`
+				Engine        string   `json:"engine"`
+				SpaceName     string   `json:"space_name"`
+				Domains       []string `json:"domains"`
+				WriteConfirm  string   `json:"write_confirm"`
+				TimeoutSec    int      `json:"timeout_sec"`
+				MaxRounds     int      `json:"max_rounds"`
+				MaxActions    int      `json:"max_actions"`
+				ConfirmTTLSec int      `json:"confirm_ttl_sec"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			pol := browsercore.DefaultPolicy()
+			pol.Domains = body.Domains
+			if body.WriteConfirm != "" {
+				pol.WriteConfirm = body.WriteConfirm
+			}
+			if body.TimeoutSec > 0 {
+				pol.TimeoutSec = body.TimeoutSec
+			}
+			if body.MaxRounds > 0 {
+				pol.MaxRounds = body.MaxRounds
+			}
+			if body.MaxActions > 0 {
+				pol.MaxActions = body.MaxActions
+			}
+			if body.ConfirmTTLSec > 0 {
+				pol.ConfirmTTLSec = body.ConfirmTTLSec
+			}
+			sess, err := sessionSvc.Open(c.Request.Context(), browsercore.OpenRequest{
+				UserID: currentUID(c), Engine: body.Engine, Mode: browsercore.ModeOps,
+				Goal: body.Goal, SpaceName: body.SpaceName, CreatedFrom: "ui", Policy: pol,
+			})
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": sess})
+		})
+		eg.GET("/sessions", func(c *gin.Context) {
+			page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+			list, total, err := sessionSvc.List(c.Request.Context(), currentUID(c), page, size)
+			if err != nil {
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
+		})
+		eg.GET("/sessions/:id", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			sess, err := sessionSvc.Get(c.Request.Context(), currentUID(c), uint(id))
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": sess})
+		})
+		eg.POST("/sessions/:id/round", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Ops     []browsercore.Op        `json:"ops"`
+				Observe browsercore.ObserveSpec `json:"observe"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			res, err := sessionSvc.Act(c.Request.Context(), browsercore.RoundRequest{
+				UserID: currentUID(c), SessionID: uint(id), Ops: body.Ops, Observe: body.Observe,
+			})
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": res, "message": "已派发本轮；用 GET /sessions/:id/rounds 或 /observe 取结果"})
+		})
+		eg.POST("/sessions/:id/observe", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Round int `json:"round"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			info, err := sessionSvc.Observe(c.Request.Context(), browsercore.ObserveRequest{
+				UserID: currentUID(c), SessionID: uint(id), Round: body.Round,
+			})
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": info})
+		})
+		eg.GET("/sessions/:id/rounds", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+			list, err := sessionSvc.Rounds(c.Request.Context(), currentUID(c), uint(id), limit)
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
+		})
+		eg.POST("/sessions/:id/confirm", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Allow bool `json:"allow"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			sess, err := sessionSvc.Confirm(c.Request.Context(), currentUID(c), uint(id), body.Allow)
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": sess})
+		})
+		eg.POST("/sessions/:id/abort", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Reason string `json:"reason"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			sess, err := sessionSvc.Abort(c.Request.Context(), currentUID(c), uint(id), body.Reason)
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": sess})
+		})
+		eg.POST("/sessions/:id/finish", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			var body struct {
+				Keep []string `json:"keep"`
+			}
+			_ = c.ShouldBindJSON(&body)
+			sess, err := sessionSvc.Finish(c.Request.Context(), currentUID(c), uint(id), body.Keep)
+			if err != nil {
+				c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+				return
+			}
+			c.JSON(200, gin.H{"code": 0, "data": sess})
 		})
 
 		// ---- 资产目录：用户端橱窗 ----
@@ -442,7 +638,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		eg.GET("/assets", func(c *gin.Context) {
 			list, err := assetSvc.PublicList(c.Request.Context())
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
@@ -466,12 +662,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 					FlowID uint `json:"flow_id"`
 				}
 				if err := c.ShouldBindJSON(&body); err != nil || body.FlowID == 0 {
-					c.JSON(400, gin.H{"code": 1, "msg": "flow_id 必填"})
+					c.JSON(400, gin.H{"code": 1, "message": "flow_id 必填"})
 					return
 				}
 				a, err := assetSvc.PublishFromFlow(c.Request.Context(), currentUID(c), body.FlowID)
 				if err != nil {
-					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": a})
@@ -480,12 +676,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			egAdmin.POST("/assets/pack", func(c *gin.Context) {
 				var req egolite.PackPublishRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
-					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				a, err := assetSvc.PublishFromPack(c.Request.Context(), currentUID(c), req)
 				if err != nil {
-					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": a})
@@ -496,7 +692,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 				list, total, err := flowRepo.ListByStatus(c.Request.Context(), c.Query("status"), page, size)
 				if err != nil {
-					c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -506,7 +702,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 				list, total, err := assetSvc.AdminList(c.Request.Context(), page, size)
 				if err != nil {
-					c.JSON(500, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -515,7 +711,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 				a, err := assetSvc.Offline(c.Request.Context(), uint(id))
 				if err != nil {
-					c.JSON(400, gin.H{"code": 1, "msg": err.Error()})
+					c.JSON(400, gin.H{"code": 1, "message": err.Error()})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": a})
@@ -534,3 +730,18 @@ func response2(c *gin.Context, data any, msg string) {
 	c.JSON(200, gin.H{"code": 0, "message": msg, "data": data})
 }
 
+// egoSessionStatus 通用会话错误 → HTTP 状态（与既有执行域口径一致）
+func egoSessionStatus(err error) int {
+	switch {
+	case errors.Is(err, browsercore.ErrNotFound), errors.Is(err, egolite.ErrSessionNotFound):
+		return 404
+	case errors.Is(err, browsercore.ErrGate):
+		return 429
+	case errors.Is(err, browsercore.ErrStateConflict), errors.Is(err, egolite.ErrEgoRunnerOffline):
+		return 409
+	case errors.Is(err, browsercore.ErrPolicyViolation), errors.Is(err, browsercore.ErrEngineUnavailable):
+		return 400
+	default:
+		return 400
+	}
+}

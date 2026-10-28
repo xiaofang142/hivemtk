@@ -47,6 +47,10 @@ export const startEgoExecution = (data) =>
 
 export const abortEgoExecution = (id) => http.post(`/api/egolite/executions/${id}/abort`)
 
+// 待下发执行重发（runner 上线后；服务端 409=状态已推进）
+export const redispatchEgoExecution = (id) =>
+  http.post(`/api/egolite/executions/${id}/redispatch`, {}, { _silent: true })
+
 export const confirmEgoExecution = (id, allow) =>
   http.post(`/api/egolite/executions/${id}/confirm`, { allow })
 
@@ -79,3 +83,29 @@ export const publishEgoAssetFromFlow = (flowId) =>
 export const publishEgoAssetPack = (data) => http.post('/api/egolite/admin/assets/pack', data)
 
 export const offlineEgoAsset = (id) => http.post(`/api/egolite/admin/assets/${id}/offline`)
+
+// ========== 通用浏览器会话（ops 轮次协议） ==========
+
+export const listEgoSessions = (params) => http.get('/api/egolite/sessions', params)
+
+export const getEgoSession = (id) => http.get(`/api/egolite/sessions/${id}`)
+
+export const createEgoSession = (data) => http.post('/api/egolite/sessions', data, { _silent: true })
+
+export const runEgoSessionRound = (id, data) =>
+  http.post(`/api/egolite/sessions/${id}/round`, data, { _silent: true })
+
+export const observeEgoSession = (id, round = 0) =>
+  http.post(`/api/egolite/sessions/${id}/observe`, { round })
+
+export const listEgoSessionRounds = (id, params) =>
+  http.get(`/api/egolite/sessions/${id}/rounds`, params)
+
+export const confirmEgoSession = (id, allow) =>
+  http.post(`/api/egolite/sessions/${id}/confirm`, { allow })
+
+export const abortEgoSession = (id, reason = '用户停止') =>
+  http.post(`/api/egolite/sessions/${id}/abort`, { reason })
+
+export const finishEgoSession = (id, keep = []) =>
+  http.post(`/api/egolite/sessions/${id}/finish`, { keep })

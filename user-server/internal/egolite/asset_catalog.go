@@ -52,6 +52,30 @@ type PackPublishRequest struct {
 	Script       string          `json:"script"`
 }
 
+// RejectSubmitted 审核驳回：submitted → draft，理由回传作者。
+// 此前审核台只能「发布」或无视——提交方石沉大海（多角色审查任务二补的闭环）。
+func (c *EgoAssetCatalog) RejectSubmitted(ctx context.Context, flowID uint, reason string) (*model.EgoliteFlow, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil, fmt.Errorf("驳回理由必填（作者要能看到为什么）")
+	}
+	flow, err := c.flowRepo.GetByID(ctx, flowID)
+	if err != nil {
+		return nil, fmt.Errorf("流程不存在")
+	}
+	if flow.Status != model.EgoFlowSubmitted {
+		return nil, fmt.Errorf("只有已提交审核（submitted）的流程可驳回，当前状态 %s", flow.Status)
+	}
+	if err := c.flowRepo.UpdateAdmin(ctx, flow.ID, map[string]any{
+		"status":        model.EgoFlowDraft,
+		"reject_reason": truncateStr(reason, 512),
+		"updated_at":    time.Now(),
+	}); err != nil {
+		return nil, err
+	}
+	return c.flowRepo.GetByID(ctx, flowID)
+}
+
 // PublishFromFlow 审核通过并发布为目录资产。
 func (c *EgoAssetCatalog) PublishFromFlow(ctx context.Context, publisherUserID, flowID uint) (*model.EgoliteAsset, error) {
 	// 管理端按流程号读（跨用户）；用户侧"提交审核"已保证归属校验

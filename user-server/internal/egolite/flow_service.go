@@ -72,15 +72,15 @@ func (s *EgoFlowService) Save(ctx context.Context, userID, flowID uint, req Save
 	var f *model.EgoliteFlow
 	if flowID == 0 {
 		f = &model.EgoliteFlow{
-			UserID:     userID,
-			Name:       req.Name,
+			UserID:      userID,
+			Name:        req.Name,
 			DomainsJSON: domainsJSON,
 			WritesJSON:  writesJSON,
-			Script:     req.Script,
-			Status:     model.EgoFlowDraft,
-			Version:    1,
-			ScanPassed: report.Passed,
-			ScanReport: datatypes.JSON(mustJSON(report)),
+			Script:      req.Script,
+			Status:      model.EgoFlowDraft,
+			Version:     1,
+			ScanPassed:  report.Passed,
+			ScanReport:  datatypes.JSON(mustJSON(report)),
 		}
 		if err := s.flowRepo.Create(ctx, f); err != nil {
 			return nil, nil, err

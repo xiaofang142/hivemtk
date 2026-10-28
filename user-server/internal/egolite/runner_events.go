@@ -32,7 +32,7 @@ func (h *EgoRunnerWSHandler) readEvents(conn *websocket.Conn, userID uint) {
 		switch ev.Type {
 		case "pong":
 			// 心跳；deadline 已刷新
-		case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "done", "error", "runner":
+		case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "round_result", "done", "error", "runner":
 			if h.sink != nil {
 				// 独立 ctx：不绑 WS 请求生命周期——读循环退出（连接断）不能半路
 				// 杀掉最后一帧（done/error）的落库；终态写内部另有 WithoutCancel 双保险。

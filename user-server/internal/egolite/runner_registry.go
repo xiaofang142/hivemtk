@@ -41,10 +41,12 @@ type EgoRunnerConn struct {
 
 func newEgoRunnerConn() time.Time { return time.Now() }
 
-// SendSpec 下发 task spec（写帧经 writeMu 串行，HostConn 同纪律）
+// SendSpec 下发帧（写经 writeMu 串行 + 单帧写时限，HostConn 同纪律——
+// 半开 TCP 上无时限的 WriteJSON 会把 ping/下发协程一起挂死）
 func (c *EgoRunnerConn) SendSpec(frame any) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	_ = c.conn.SetWriteDeadline(time.Now().Add(egoPingWriteDeadline))
 	return c.conn.WriteJSON(frame)
 }
 
