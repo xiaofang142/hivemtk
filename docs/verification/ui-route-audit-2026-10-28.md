@@ -137,7 +137,23 @@
 
 本轮 240 条路由取得数据证据；仍无法验证的 7 条均为缺业务数据的动态页（`/chat/embed/:channel_ref`、`/asset-market/detail/:id`、`/module-market/detail/:key`、`/followups/:id`、`/dashboard/drafts/:id`、会话监控 `sessions/:id`、404 参数路由）。
 
-## 8. 未覆盖与限制
+## 8. 动态路由页面补全（2026-10-28 第三轮）
+
+上一轮列为「无数据未验证」的 7 条动态路由，本轮逐条落到真实数据/可用路径：
+
+| 路由 | 处理与证据 |
+|---|---|
+| `/chat/embed/:channel_ref` | 用真实 `chat_channels.app_key`（`ak_5exa...`）打开，客服窗、历史会话、发送框正常；未登录访客路径可用 |
+| `/asset-market/detail/:id` | 平台未接入时后端回落 `local_assets`：按 asset_id 返回本地资产详情（`data_preview`），页面正常渲染名称/版本/数据预览；仅 `is_active=false` 的资产按不存在处理 |
+| `/module-market/detail/:key` | 用真实模块 key `ai-agent` 打开，标题、价格、计费周期、包含页面数（6）与授权状态均显示 |
+| `/browser-automation/sessions/:id` | 用真实 session `647` 打开，耗时/成功率/提取数据/步骤时间线均显示 |
+| `/:pathMatch(.*)*` | 不存在路径进入 404 页，返回首页可用 |
+| `/followups/:id` | 页面组件存在；当前实例 `FF_LTC_ORDER_DRAFT_DB=off`，跟进服务未装配，页面显示「跟进服务未装配（非没有跟进）」而非空白/报错。属于产品特性开关，非缺页 |
+| `/dashboard/drafts/:id` | 同上，草稿运行时未装配时页面明确说明「订单草稿底座不可用」，不伪造列表 |
+
+> 说明：`/followups/:id` 与 `/dashboard/drafts/:id` 的数据由 AI 草稿/旅程运行时生成，打开 `FF_LTC_ORDER_DRAFT_DB=on` 才会产生；本轮未为了造数据而改写业务表。其降级态已验证为可读、可解释。
+
+## 9. 未覆盖与限制
 
 - 10 条动态参数路由缺少可用业务数据（如订单草稿表为空、部分卡片详情/embed 渠道无记录、模块 key 无目录数据），未做真实点击；其余 15 条用真实 ID 抽样验证通过。
 - 语音/视频、真实第三方外发（短信/邮件/WhatsApp 发送）、支付与退款等破坏性链路未触发，避免产生真实外发或资金副作用；相关页面只做只读加载与安全按钮点击。

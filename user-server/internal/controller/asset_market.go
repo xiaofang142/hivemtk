@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -78,9 +79,31 @@ func (h *AssetMarketController) ListMarket(c *gin.Context) {
 // @Router    /api/v1/asset-market/detail/{asset_id} [get]
 // MarketDetail GET /api/v1/asset-market/detail/:asset_id
 func (h *AssetMarketController) MarketDetail(c *gin.Context) {
-	detail, err := h.marketSvc.GetMarketAssetDetail(c.Request.Context(), c.Param("asset_id"))
-	if err != nil {
-		assetFail(c, err)
+	assetID := c.Param("asset_id")
+	detail, err := h.marketSvc.GetMarketAssetDetail(c.Request.Context(), assetID)
+	// 平台未接入时 service 可能返回 (空 map, nil)：空壳同样回落本地，否则页面只能报不存在。
+	if err != nil || len(detail) == 0 {
+		// 私域独立部署（未接平台）时市场接口不可用，但本机「我的资产」里可能已有
+		// 同 asset_id 的资产。此时直接报平台不可用会让 /asset-market/detail/:id
+		// 永远打不开；回落本地资产既保持页面可用，也不虚构平台数据。
+		if h.localSvc != nil {
+			if la, data, lerr := h.localSvc.LoadOne(c.Request.Context(), assetID); lerr == nil && la != nil {
+				assetOK(c, gin.H{
+					"asset_id":       la.AssetID,
+					"name":           la.Name,
+					"asset_type":     la.AssetType,
+					"industry":       la.Industry,
+					"latest_version": la.Version,
+					"description":    "本地已同步资产（当前部署未接入资产市场）",
+					"use_count":      la.UseCount,
+					"source":         "local",
+					"data_preview":   json.RawMessage(data),
+				})
+				return
+			}
+		}
+		// err 可能为 nil（平台未接入返回空壳 + nil），不能用 err.Error()。
+		assetFail(c, fmt.Errorf("资产不存在或不可用"))
 		return
 	}
 	assetOK(c, detail)

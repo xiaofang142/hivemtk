@@ -946,3 +946,8 @@
 - 已修复：`/notifications` 总数 20→1163、`/system/automation-hub` Webhook 5 条不显示、`/observability-dashboard` 全部显示“-”、`/geo-tools/workflow` 请求 undefined + 不自动选流程、`/kuaishou/stats` 统计跳 404、`/aiProductivity/list` 平均响应 3220s、`/geo-tools/site-publish` 500/重复提示、`/scriptTemplate/ab-stats` 话术下拉空、`/lead-mining/index` 配置不显示、`/oneid/conflicts` 列表恒空、知识连接器测试/拉取结果错、会话 AI 摘要恒为空。
 - 仍缺业务数据无法核对：`/chat/embed/:channel_ref`、`/asset-market/detail/:id`、`/module-market/detail/:key`、`/followups/:id`、`/dashboard/drafts/:id`、会话监控 `sessions/:id`、404 参数路由。
 - 其余路由的统计卡/表格/总数与接口响应一致，未发现新的数据错位。
+
+## 动态路由补全（第三轮 2026-10-28）
+
+- 已用真实数据验证：`/chat/embed/:channel_ref`（真实 app_key）、`/asset-market/detail/:id`（本地资产回落）、`/module-market/detail/:key`（ai-agent）、`/browser-automation/sessions/:id`（session 647）、404 参数路由。
+- `/followups/:id`、`/dashboard/drafts/:id`：组件已实现，数据依赖 `FF_LTC_ORDER_DRAFT_DB` 草稿/旅程运行时；当前 off 档页面给出明确降级说明，不是缺页。
