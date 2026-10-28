@@ -1,4 +1,4 @@
-// reach_quota_service.go 触达硬配额管理（D05/F03）——服务层编排。
+// reach_quota.go 触达硬配额管理（D05/F03）——服务层编排。
 //
 // 真源在 PG（计数行锁），Redis 只管 QPS；Redis 不可用不退化成无限放行。
 // 多 scope 预占按 key 排序后逐个 Reserve（锁顺序确定，避免死锁）；
