@@ -23,6 +23,7 @@ import (
 	hrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/storage"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // SetupEgoLiteRoutes ego-lite 腿路由（设计文档 S3/S6/S7/S9；调研 §6.5 鉴权定案）。
@@ -342,10 +343,21 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
+		// 观测留存清理（T19/J-6 D6 收口）：挂进同一循环、日级节流——每个 UTC 日
+		// 首次 tick 跑一次 RetentionSweep（幂等 UPDATE，重复执行 no-op）；
+		// keepDays 从 config_params 读（≤0 = 永不清理档）。失败只告警，不拦看门狗主职责。
+		lastRetentionDay := -1
 		for range ticker.C {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_, _ = execSvc.WatchdogSweep(ctx)
 			_, _ = sessionSvc.WatchdogSweep(ctx)
+			if day := time.Now().UTC().YearDay(); day != lastRetentionDay {
+				lastRetentionDay = day
+				n, err := egolite.RetentionSweep(ctx, gormDB, egolite.ObserveRetentionDays(ctx, gormDB))
+				if err != nil {
+					logger.Warnf("[egolite] 观测留存清理失败（窗口内 %d 行未动）: %v", n, err)
+				}
+			}
 			cancel()
 		}
 	}()
