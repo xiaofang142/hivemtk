@@ -59,8 +59,10 @@ func learningsDir(workspaceDir string) string {
 
 // pullAssets 拉取并安装（启动时 + 周期性）
 func (r *runner) pullAssets() {
+	t0 := time.Now()
 	u, err := url.Parse(r.conf.ServerURL)
 	if err != nil {
+		recordTelemetry("sync", time.Since(t0), false, "", "network")
 		return
 	}
 	scheme := "http"
@@ -78,12 +80,14 @@ func (r *runner) pullAssets() {
 	resp, err := client.Get(u.String())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产拉取失败: %v\n", err)
+		recordTelemetry("sync", time.Since(t0), false, "", "network")
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产拉取 HTTP %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
+		recordTelemetry("sync", time.Since(t0), false, "", "network")
 		return
 	}
 	// 包通道（S-7）：Content-Type 是 zip 就走整包安装，否则回落 JSON 清单（兼容旧服务端）。
@@ -91,11 +95,13 @@ func (r *runner) pullAssets() {
 		installed, skipped, ierr := r.installFromZip(resp.Body)
 		if ierr != nil {
 			fmt.Fprintf(os.Stderr, "[ego-runner] 资产包安装失败: %v\n", ierr)
+			recordTelemetry("sync", time.Since(t0), false, "", "hash")
 			return
 		}
 		if installed > 0 || skipped > 0 {
 			fmt.Fprintf(os.Stderr, "[ego-runner] 资产包同步：新装 %d / 未变 %d\n", installed, skipped)
 		}
+		recordTelemetry("sync", time.Since(t0), true, "", "")
 		return
 	}
 	var payload struct {
@@ -106,6 +112,7 @@ func (r *runner) pullAssets() {
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产清单解析失败: %v\n", err)
+		recordTelemetry("sync", time.Since(t0), false, "", "hash")
 		return
 	}
 	installed, skipped := 0, 0
@@ -113,10 +120,17 @@ func (r *runner) pullAssets() {
 		changed, err := r.installAsset(a)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[ego-runner] 安装 %s 失败: %v\n", a.ID, err)
+			// S-9 遥测 install：按资产记失败样本（错误码分类，不收原文）
+			errClass := "io"
+			if strings.Contains(err.Error(), "hash") {
+				errClass = "hash"
+			}
+			recordTelemetry("install", 0, false, a.ID, errClass)
 			continue
 		}
 		if changed {
 			installed++
+			recordTelemetry("install", 0, true, a.ID, "")
 		} else {
 			skipped++
 		}
@@ -124,6 +138,7 @@ func (r *runner) pullAssets() {
 	if installed > 0 || skipped > 0 {
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产同步：新装 %d / 未变 %d\n", installed, skipped)
 	}
+	recordTelemetry("sync", time.Since(t0), true, "", "")
 }
 
 // installAsset 单个资产落盘；返回是否实际写入（hash 未变则跳过）

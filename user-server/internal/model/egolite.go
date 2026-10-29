@@ -216,6 +216,30 @@ type EgoliteRunnerToken struct {
 
 func (EgoliteRunnerToken) TableName() string { return "egolite_runner_tokens" }
 
+// EgoliteTelemetry runner 遥测样本（S-9；口径见 egolite/telemetry.go——**永不收页面内容**）。
+//
+// 只存低基数枚举与数值：kind / 分类错误码 / 耗时 / ok / slug 形状的 skill_id /
+// device_id 形状的 runner_id。看板只吃聚合层（AggregateTelemetry），单条明细不对外。
+// 写入口唯一：/api/egolite/runner/telemetry（eg_ token），入口处过 SanitizeTelemetry
+// 默认拒绝白名单——白名单外的键（页面内容类）在入库前就被丢弃并计数。
+type EgoliteTelemetry struct {
+	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
+
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	UserID     uint      `gorm:"index;not null" json:"user_id"`                                     // 上报令牌归属人（不进看板聚合展示）
+	Kind       string    `gorm:"size:24;not null;index:idx_ego_tel_kind_at,priority:1" json:"kind"` // run/install/upgrade/sync
+	At         time.Time `gorm:"not null;index:idx_ego_tel_kind_at,priority:2" json:"at"`           // 采样时刻（UTC）
+	DurationMS int64     `json:"duration_ms"`
+	OK         bool      `json:"ok"`
+	SkillID    string    `gorm:"size:64" json:"skill_id"`
+	ErrorClass string    `gorm:"size:32" json:"error_class"` // 分类码（timeout/network/auth/io/hash/scan/unknown）
+	RunnerID   string    `gorm:"size:64" json:"runner_id"`   // device_id（安装时生成，非客户标识）
+
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (EgoliteTelemetry) TableName() string { return "egolite_telemetry" }
+
 // EgoliteFlowCron 流程定时触发器（specs/016 S10；调度模式照抄 BrowserCronTrigger，
 // 独占表登记在 egoLiteOwnedTables——物理独立纪律不变）。
 // 纪律：**只允许挂纯读流程（writes 为空）**——决策点 6：ego 腿全自动写长期受限；

@@ -306,8 +306,19 @@ func (r *runner) runTask(spec taskSpec) {
 	// 不改 assembleScript 签名——目录每执行独立创建，天然无跨执行残留/伪造面。
 	ec.decisionPath = confirmDecisionPath(script)
 
+	t0 := time.Now()
 	code, errOut := r.execEgo(ctx, cancel, spec, script)
 	r.send(eventLine{Type: "done", Execution: spec.ExecutionID, ExitCode: code, Stderr: truncate(errOut, 2000)})
+	// S-9 遥测 run：一次执行一条样本（退出码 0=ok；错误码按 assemble 阶段细分，
+	// 运行期失败无更细口径，归 unknown——遥测只收分类码不收 stderr 原文）。
+	errClass := ""
+	if code != 0 {
+		errClass = "unknown"
+		if strings.Contains(errOut, "组装失败") {
+			errClass = "scan"
+		}
+	}
+	recordTelemetry("run", time.Since(t0), code == 0, spec.AssetID, errClass)
 }
 
 // assembleScript 组装 round 脚本。骨架版规则：
@@ -423,7 +434,8 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 		time.Now().UTC().Format(time.RFC3339), spec.ExecutionID, spec.Origin, spec.Round,
 		spec.ExecutionID, paramsJSON, spec.SpaceName, spec.SpaceID, decisionPath, ttlSec,
 		spec.ConfirmPolicy, dir, domainsJSON)
-	script := preamble + entrySrc
+	preamble += "\n" + assetStartFrameJS(spec.Round, spec.Origin) + "\n"
+	script := preamble + wrapEntryEndFrame(entrySrc, spec.Round)
 
 	if err := os.WriteFile(p, []byte(script), 0o600); err != nil {
 		cleanup()
@@ -433,6 +445,45 @@ func (r *runner) assembleScript(spec taskSpec) (path string, cleanup func(), err
 }
 
 const egoConfirmDefTTLSec = 300
+
+// ---------- C16 开始/结束行强约束（调研 §六「输出协议软契约」收口） ----------
+//
+// 契约：每个 assembled round 脚本的 stdout 必须恰好一行 {"type":"asset","event":"start"}
+// 先于作者任何代码，且终止时（成功或抛错）至少一行 {"type":"asset","event":"end"}。
+// 组装器是唯一注入源——不靠作者自觉，历史资产零迁移（注入发生在执行时刻）。
+// 作者手打同型帧在发布门被 EGO-R034 拦（重复帧=契约破坏面）。
+//
+// 契约破坏面与各自处置：
+//   顶层 import/export → 块级包裹会语法错 → 退化为尾部追加（弱保证，退出码兜底）；
+//   脚本覆写 console / 吞 stdout → 注入面失效 → runner 终态帧+退出码兜底（诚实残余）；
+//   多轮 resume → 每轮独立进程各自打一对帧，round 字段对齐；
+//   旧消费方 → 未知 type 的 JSON 行，透传无害（前向兼容）。
+
+// assetStartFrameJS 开始行：随 preamble 注入，先于 entry 执行。
+func assetStartFrameJS(round int, origin string) string {
+	return fmt.Sprintf(
+		`;console.log(JSON.stringify({ type: "asset", event: "start", execution_id: __EXEC__, round: %d, origin: %q, ts: Date.now() }));`,
+		round, origin)
+}
+
+// topLevelDeclPattern 顶层 import/export（只能出现在模块顶层，块级包裹会 SyntaxError）。
+// 缩进的也算：宁可退化到弱保证，不赌作者书写风格。
+var topLevelDeclPattern = regexp.MustCompile(`(?m)^\s*(?:import|export)\s`)
+
+// wrapEntryEndFrame 给 entry 包上 end 帧：try/catch 包裹（抛错路径打 ok:false 后原样
+// rethrow，退出码语义不变）；有顶层 import/export 的脚本退化为尾部追加成功行。
+func wrapEntryEndFrame(entrySrc string, round int) string {
+	okLine := fmt.Sprintf(
+		`;console.log(JSON.stringify({ type: "asset", event: "end", ok: true, execution_id: __EXEC__, round: %d, error: null, ts: Date.now() }));`,
+		round)
+	errLine := fmt.Sprintf(
+		`;console.log(JSON.stringify({ type: "asset", event: "end", ok: false, execution_id: __EXEC__, round: %d, error: String(__egoEndErr && __egoEndErr.message ? __egoEndErr.message : __egoEndErr), ts: Date.now() }));`,
+		round)
+	if topLevelDeclPattern.MatchString(entrySrc) {
+		return entrySrc + "\n" + okLine + "\n"
+	}
+	return "try {\n" + entrySrc + "\n} catch (__egoEndErr) {\n" + errLine + "\n  throw __egoEndErr;\n}\n" + okLine + "\n"
+}
 
 // egoColdStartHintAfter 冷启动静默哨阈值（见 execEgo 内注释）
 const egoColdStartHintAfter = 60 * time.Second
@@ -510,7 +561,10 @@ func eventTypeFromPayload(raw json.RawMessage) string {
 		return "action"
 	}
 	switch probe.Type {
-	case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "round_result":
+	case "action", "snapshot", "artifact", "handoff", "extract", "confirm", "round_result",
+		// "asset"：C16 开始/结束帧，runner 组装器自产（受信——作者手打在发布门
+		// 被 EGO-R034 拦），服务端据此对齐脚本侧起止与执行记录。
+		"asset":
 		return probe.Type
 	default:
 		return "action"
@@ -751,6 +805,10 @@ func main() {
 	defer stop()
 
 	r := &runner{conf: c}
+	// S-9 遥测：环形缓冲 + 周期批量上报（30s 周期 / 64 条阈值，见 telemetry.go）。
+	// 先装 confSnapshot（采集点读 device_id），上报循环随后起——采集点在 pullAssets
+	// 里就有，不能等 flusher 起来才可记。
+	startTelemetryFlusher(*c, ctx.Done())
 	// 资产同步（T3）：启动即拉一次，之后每 10 分钟一轮（幂等，只写变化项）。
 	// 独立于 WS 生命周期——WS 断了资产目录仍应是最新的。
 	r.pullAssets()
@@ -1135,6 +1193,7 @@ func auditEventURL(domains []string, raw json.RawMessage) (string, bool) {
 // runUpgrade 执行官方 `ego-browser upgrade`（specs/015 C10）。ego lite 的升级策略
 // 归官方（不 fork、不代管版本），runner 只做"服务端触发 → 官方命令 → 结果回传"。
 func (r *runner) runUpgrade() {
+	t0 := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, r.conf.EgoBin, egoUpgradeArgs(r.conf)...).CombinedOutput()
@@ -1143,6 +1202,15 @@ func (r *runner) runUpgrade() {
 		payload["error"] = err.Error()
 	}
 	payload["output"] = truncate(string(out), 1500)
+	// S-9 遥测 upgrade：结果回传之外记一条分类样本（超时=ctx 到期）。
+	errClass := ""
+	if err != nil {
+		errClass = "unknown"
+		if ctx.Err() != nil {
+			errClass = "timeout"
+		}
+	}
+	recordTelemetry("upgrade", time.Since(t0), err == nil, "", errClass)
 	// runner 自更新（specs/016 C10 余量）：仅在显式配置 repo_dir 时启用——
 	// 官方 ego-browser 升级之后重建 runner 二进制（重启生效，运行中进程不被替换）
 	if r.conf.RepoDir != "" {

@@ -629,6 +629,9 @@ func allModels() []any {
 		// Open/Act 全挂，fail-visible。
 		&model.EgoliteSession{},
 		&model.EgoliteRound{},
+		// runner 遥测（S-9）：口径白名单在 egolite/telemetry.go，漏登记 ⇒
+		// 上报端点批量 INSERT 全挂，fail-visible（看板读空是症状不是静默）。
+		&model.EgoliteTelemetry{},
 	}
 }
 

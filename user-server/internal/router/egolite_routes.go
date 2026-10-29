@@ -56,6 +56,8 @@ import (
 //   - GET  /api/egolite/admin/assets            平台端资产全量列表（admin，含 offline）
 //   - POST /api/egolite/admin/assets/:id/offline 平台端资产下线（admin）
 //   - GET  /api/egolite/admin/flows        审核工作台：跨用户按状态列流程（admin）
+//   - POST /api/egolite/runner/telemetry   runner 遥测上报（S-9；eg_ token，默认拒绝白名单）
+//   - GET  /api/egolite/admin/telemetry/summary 遥测看板（admin；只回聚合桶，无明细面）
 //
 // 「平台端」= 本实例管理端（role=admin），**不经 platform-server / PLATFORM_ENABLED /
 // binary_asset 通道**：发布 = 往 egolite_assets 写一行，用户端立即可见可执行。
@@ -78,6 +80,8 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	// S-13：执行事件广播（SSE 数据源）。IngestEvent 是唯一写入口，广播跟着它走。
 	eventHub := egolite.NewEgoEventHub()
 	execSvc.AttachEventHub(eventHub)
+	// S-9 遥测：上报入口（eg_ token）+ 管理端聚合查询的取数仓库。
+	telRepo := egolite.NewEgoTelemetryRepositoryWithDB(gormDB)
 	// 通用执行能力（会话 + 轮次）：session 只做多轮聚合，事件先委托执行域再聚合。
 	sessionRepo := egolite.NewEgoSessionRepositoryWithDB(gormDB)
 	roundRepo := egolite.NewEgoRoundRepositoryWithDB(gormDB)
@@ -266,6 +270,36 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"url": url, "bytes": len(b)}})
+	})
+
+	// runner 遥测上报（S-9）：eg_ token 即身份；body {"events":[...]}，每条样本在
+	// IngestTelemetry 过默认拒绝白名单——页面内容类键在入库前丢弃并计数，这里不做
+	// 第二次口径裁决。批次上限 500，超出截断并在响应里如实回 dropped/truncated。
+	engine.POST("/api/egolite/runner/telemetry", func(c *gin.Context) {
+		tok := c.Query("token")
+		if tok == "" {
+			tok = strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+		}
+		userID, ok := runnerAuth.Authenticate(c.Request.Context(), tok)
+		if !ok {
+			c.JSON(401, gin.H{"code": 1, "message": "runner token 无效"})
+			return
+		}
+		var body struct {
+			Events []map[string]any `json:"events"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil || len(body.Events) == 0 {
+			c.JSON(400, gin.H{"code": 1, "message": "events 必填（非空数组）"})
+			return
+		}
+		accepted, droppedKeys, truncated, err := egolite.IngestTelemetry(c.Request.Context(), userID, telRepo, body.Events)
+		if err != nil {
+			c.JSON(500, gin.H{"code": 1, "message": "遥测入库失败: " + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": 0, "data": gin.H{
+			"accepted": accepted, "dropped_keys": droppedKeys, "truncated": truncated,
+		}})
 	})
 
 	// runner WS（不过 JWT——token 即身份，host-ws 同形状）
@@ -826,6 +860,20 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": a})
+			})
+			// 遥测看板（S-9）：**只回聚合层**——按 kind 的 count/成功率/p95 桶，
+			// 单条明细不出服务端（口径见 egolite/telemetry.go）。hours 上限 720。
+			egAdmin.GET("/telemetry/summary", func(c *gin.Context) {
+				hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
+				buckets, total, truncated, err := egolite.TelemetrySummary(c.Request.Context(), telRepo, hours)
+				if err != nil {
+					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": gin.H{
+					"window_hours": hours, "total": total, "truncated": truncated,
+					"buckets": buckets,
+				}})
 			})
 		}
 	}

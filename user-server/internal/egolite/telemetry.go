@@ -14,10 +14,13 @@ package egolite
 // 而遥测是**可观测性**需求，不是业务数据需求——少一个字段只影响看板，多一个字段是事故。
 
 import (
+	"context"
 	"math"
 	"sort"
 	"strings"
 	"time"
+
+	"hivemtk-user/internal/model"
 )
 
 // TelemetryEvent 一条遥测样本（最终落库/上报的形状，全部是低基数枚举或数值）。
@@ -202,4 +205,80 @@ func IsForbiddenTelemetryKey(k string) bool {
 		}
 	}
 	return false
+}
+
+// ---------- S-9 余量：上报端点 + 管理端聚合查询 ----------
+
+const (
+	// telemetryMaxBatch 单次上报上限：环形缓冲满刷也就几百条，超出即疑似失控采集，
+	// 收下前 500 条 + 明确告知 dropped，不做无限吞吐口。
+	telemetryMaxBatch = 500
+	// telemetryWindowMaxSamples 聚合窗口内最大样本数：遥测是低频运营数据（每 runner
+	// 每分钟个位数），千级窗口足够；超限截断由仓库层 +1 探测后如实标注。
+	telemetryWindowMaxSamples = 5000
+	// telemetryMaxWindowHours 聚合窗口上限（30 天）：更长的"趋势"是数仓的事。
+	telemetryMaxWindowHours = 720
+)
+
+// IngestTelemetry 上报入口的唯一口径裁决点：每条样本过 SanitizeTelemetry
+// （默认拒绝白名单，页面内容类键在此丢弃并计数），批次超限截断。
+// 返回 (入库数, 丢弃键总数, 截断数, error)。
+func IngestTelemetry(ctx context.Context, userID uint, repo EgoTelemetryRepository, rawEvents []map[string]any) (accepted, droppedKeys, truncated int, err error) {
+	if len(rawEvents) > telemetryMaxBatch {
+		truncated = len(rawEvents) - telemetryMaxBatch
+		rawEvents = rawEvents[:telemetryMaxBatch]
+	}
+	rows := make([]*model.EgoliteTelemetry, 0, len(rawEvents))
+	for _, raw := range rawEvents {
+		ev, dropped, derr := SanitizeTelemetry(raw)
+		droppedKeys += dropped
+		if derr != nil {
+			continue // 缺 kind 等不可救样本：不入库（口径：宁缺毋脏）
+		}
+		rows = append(rows, &model.EgoliteTelemetry{
+			TenantID:   1,
+			UserID:     userID,
+			Kind:       ev.Kind,
+			At:         ev.At,
+			DurationMS: ev.DurationMS,
+			OK:         ev.OK,
+			SkillID:    ev.SkillID,
+			ErrorClass: ev.ErrorClass,
+			RunnerID:   ev.RunnerID,
+		})
+	}
+	if len(rows) == 0 {
+		return 0, droppedKeys, truncated, nil
+	}
+	if err = repo.CreateBatch(ctx, rows); err != nil {
+		return 0, droppedKeys, truncated, err
+	}
+	return len(rows), droppedKeys, truncated, nil
+}
+
+// TelemetrySummary 管理端聚合查询：窗口内样本 → AggregateTelemetry 的 kind 桶。
+// **只回聚合层**，单条明细不出服务端（隐私口径：看板无明细面）。
+func TelemetrySummary(ctx context.Context, repo EgoTelemetryRepository, hours int) (buckets []TelemetryBucket, total int, truncated bool, err error) {
+	if hours <= 0 {
+		hours = 24
+	}
+	if hours > telemetryMaxWindowHours {
+		hours = telemetryMaxWindowHours
+	}
+	rows, err := repo.ListSince(ctx, time.Now().UTC().Add(-time.Duration(hours)*time.Hour))
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if len(rows) > telemetryWindowMaxSamples {
+		rows = rows[:telemetryWindowMaxSamples]
+		truncated = true
+	}
+	events := make([]TelemetryEvent, 0, len(rows))
+	for _, r := range rows {
+		events = append(events, TelemetryEvent{
+			Kind: r.Kind, At: r.At, DurationMS: r.DurationMS, OK: r.OK,
+			SkillID: r.SkillID, ErrorClass: r.ErrorClass, RunnerID: r.RunnerID,
+		})
+	}
+	return AggregateTelemetry(events), len(events), truncated, nil
 }

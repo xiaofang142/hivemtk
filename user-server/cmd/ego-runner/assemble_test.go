@@ -175,3 +175,106 @@ func TestAssembleScriptDraftSkipsAssetVerification(t *testing.T) {
 		t.Errorf("draft 脚本应原样内联并带 params:\n%s", string(b))
 	}
 }
+
+// ---------- C16 开始/结束行强约束（调研 §六「输出协议软契约」收口） ----------
+//
+// 契约：start 恰好一行且先于任何作者代码；end 在终止时必有（抛错路径 ok:false 后
+// 原样 rethrow，退出码语义不变）；顶层 import/export 的脚本退化为尾部追加。
+// 手打同型帧由发布门 EGO-R034 拦（重复帧=契约破坏面）——本组用例钉注入器的形状。
+
+func TestAssembleInjectsAssetStartEndFrames(t *testing.T) {
+	const entry = "tools/framed.js"
+	const src = "console.log(JSON.stringify({ type: 'action', hello: 1 }));\n"
+	r, _ := newTestRunner(t, "framed-tool", entry, src)
+	path, cleanup, err := r.assembleScript(taskSpec{
+		ExecutionID: "ego-7-1", AssetID: "framed-tool", Entry: entry,
+		Origin: "market", Round: 2,
+	})
+	if err != nil {
+		t.Fatalf("组装失败: %v", err)
+	}
+	defer cleanup()
+	b, _ := os.ReadFile(path)
+	got := string(b)
+
+	// start 恰好一次，且先于 entry（先于作者代码是契约的一半）
+	if n := strings.Count(got, `event: "start"`); n != 1 {
+		t.Fatalf("start 帧应恰好注入一次，实得 %d:\n%s", n, got)
+	}
+	if strings.Index(got, `event: "start"`) > strings.Index(got, strings.TrimSpace(src)) {
+		t.Fatalf("start 帧必须先于 entry 代码:\n%s", got)
+	}
+	// start 帧带执行键与轮次（服务端对齐脚本侧日志用）
+	if !strings.Contains(got, `execution_id: __EXEC__`) || !strings.Contains(got, `round: 2`) {
+		t.Fatalf("start 帧必须带 execution_id/round:\n%s", got)
+	}
+	// end 两个分支（成功/抛错）都在注入模板里：抛错路径也要有 end 行（ok:false + rethrow）
+	if !strings.Contains(got, `event: "end", ok: true`) {
+		t.Fatalf("成功路径 end 帧缺失:\n%s", got)
+	}
+	if !strings.Contains(got, `event: "end", ok: false`) || !strings.Contains(got, "throw __egoEndErr;") {
+		t.Fatalf("抛错路径 end 帧（ok:false + 原样 rethrow）缺失:\n%s", got)
+	}
+}
+
+func TestAssembleTopLevelImportFallsBackToAppend(t *testing.T) {
+	// 顶层 import 只能出现在模块顶层，块级包裹会 SyntaxError——必须退化为尾部追加
+	// （弱保证：抛错路径没有 end 行，runner 终态帧/退出码兜底）。
+	const entry = "tools/imp.js"
+	const src = "import x from \"https://cdn.example.com/x.js\";\nconsole.log(x);\n"
+	r, _ := newTestRunner(t, "imp-tool", entry, src)
+	path, cleanup, err := r.assembleScript(taskSpec{
+		ExecutionID: "ego-8-1", AssetID: "imp-tool", Entry: entry, Origin: "market", Round: 1,
+	})
+	if err != nil {
+		t.Fatalf("含顶层 import 的脚本应能组装（退化模式）: %v", err)
+	}
+	defer cleanup()
+	b, _ := os.ReadFile(path)
+	got := string(b)
+	if strings.Contains(got, "catch (__egoEndErr)") {
+		t.Fatalf("含顶层 import 的脚本不许块级包裹（会语法错）:\n%s", got)
+	}
+	if !strings.Contains(got, `event: "end", ok: true`) {
+		t.Fatalf("退化模式仍要有尾部 end 行:\n%s", got)
+	}
+	if !strings.Contains(got, `event: "start"`) {
+		t.Fatalf("退化模式 start 帧照常注入:\n%s", got)
+	}
+}
+
+func TestAssembleTopLevelExportFallsBackToAppend(t *testing.T) {
+	const entry = "tools/exp.js"
+	const src = "export const marker = 1;\nconsole.log(marker);\n"
+	r, _ := newTestRunner(t, "exp-tool", entry, src)
+	path, cleanup, err := r.assembleScript(taskSpec{
+		ExecutionID: "ego-9-1", AssetID: "exp-tool", Entry: entry, Origin: "market", Round: 1,
+	})
+	if err != nil {
+		t.Fatalf("含顶层 export 的脚本应能组装: %v", err)
+	}
+	defer cleanup()
+	b, _ := os.ReadFile(path)
+	if strings.Contains(string(b), "catch (__egoEndErr)") {
+		t.Fatalf("含顶层 export 的脚本不许块级包裹:\n%s", string(b))
+	}
+}
+
+func TestAssembleOpsModeGetsAssetFrames(t *testing.T) {
+	// ops 轮次（Mode=ops）同走 assembleScript，start/end 帧契约一致——
+	// round_result 是轮结果，asset start/end 是执行起止，两层各司其职。
+	r, _ := newTestRunner(t, "ops-tool", "tools/o.js", "console.log('unused');\n")
+	path, cleanup, err := r.assembleScript(taskSpec{
+		ExecutionID: "ego-10-1", Origin: "market", Mode: "ops",
+		Ops: json.RawMessage(`[{"op":"goto","url":"https://example.com"}]`),
+	})
+	if err != nil {
+		t.Fatalf("ops 组装失败: %v", err)
+	}
+	defer cleanup()
+	b, _ := os.ReadFile(path)
+	got := string(b)
+	if !strings.Contains(got, `event: "start"`) || !strings.Contains(got, `event: "end", ok: true`) {
+		t.Fatalf("ops 模式也必须注入 start/end 帧:\n%s", got)
+	}
+}

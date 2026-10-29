@@ -89,6 +89,13 @@ export default [
         name: 'EgoAssetAdmin',
         component: () => import('@/views/browserAutomation/ego/AssetAdmin.vue'),
         meta: { title: '资产发布台', requiresAuth: true, roles: ['admin'] }
+      },
+      {
+        // 遥测看板（S-9）：只回聚合桶（count/成功率/p95），无单条明细面
+        path: 'ego/telemetry',
+        name: 'EgoTelemetry',
+        component: () => import('@/views/browserAutomation/ego/Telemetry.vue'),
+        meta: { title: '遥测看板', requiresAuth: true, roles: ['admin'] }
       }
     ]
   }

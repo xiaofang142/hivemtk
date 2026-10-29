@@ -56,6 +56,13 @@ func buildScanRules() []ScanRule {
 		// —— 外联白名单外的 fetch 由运行时域检兜底（模板层），此处只 warn 提示审核 ——
 		{"EGO-R030", "显式 fetch 外联（运行时域检兜底，审核需核对 domains 声明）", rx(`(?m)\bfetch\s*\(`), "warn"},
 		{"EGO-R031", "XMLHttpRequest 外联", rx(`(?m)XMLHttpRequest|new\s+WebSocket\s*\(`), "warn"},
+
+		// —— C16 开始/结束行强约束（调研 §六「软契约」收口）的发布门 ——
+		// start/end 帧由 runner 组装器在执行时刻注入（唯一来源，先于业务代码 / 兜住抛错
+		// 路径）；作者手写同型帧 = 重复帧，破坏"start 恰好一行且先于业务代码"的契约。
+		// 发布与 draft 同门（ScanScript 唯一实现双端共用），命中即拒。
+		{"EGO-R034", "手写 asset 事件帧（start/end 行由组装器注入，手写即重复帧）",
+			rx(`(?i)["']?type["']?\s*:\s*["']asset["']`), "block"},
 	}
 }
 
@@ -103,8 +110,10 @@ func ScanScript(src string) ScanReport {
 		}
 	}
 	// EGO-R032（specs/015 C16，事件协议软契约的最低 lint）：全文无结构化事件输出
-	// → warn。事件行是监督链（Monitor/事件日志/域审计）的唯一数据源——一行都不打的
-	// 资产/流程，审计只剩退出码。warn 不拦发布，进人工审核清单。
+	// → warn。事件行是监督链（Monitor/事件日志/域审计）的唯一数据源——warn 不拦
+	// 发布，进人工审核清单。
+	// C16 强约束收口后的口径：start/end 帧已由 runner 组装器保证（EGO-R034 拦手写），
+	// 本规则盯的是**业务**事件面——一行业务事件都不打的资产，过程审计只剩起止两帧。
 	if !eventPrintPattern.MatchString(src) {
 		report.Warnings = append(report.Warnings, ScanVerdict{
 			RuleID:   "EGO-R032",

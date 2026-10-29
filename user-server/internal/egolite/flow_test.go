@@ -261,3 +261,37 @@ await task.page("p1").goto("https://github.com");`)
 		}
 	}
 }
+
+// C16 开始/结束行强约束（调研 §六「软契约」收口）：手打 asset 事件帧 → EGO-R034
+// block。start/end 帧的唯一来源是 runner 组装器（执行时刻注入），作者手写 = 重复帧，
+// 破坏「start 恰好一行且先于业务代码」的契约面。发布与 draft 同门，命中即拒。
+func TestScanBlocksHandwrittenAssetFrames(t *testing.T) {
+	// 手打 start 帧：无论单引号/双引号、键带不带引号，都算
+	for _, src := range []string{
+		`console.log(JSON.stringify({ type: "asset", event: "start" }));`,
+		`console.log(JSON.stringify({ 'type': 'asset', event: "end", ok: true }));`,
+		`const frame = {"type":"asset","event":"start"}; console.log(JSON.stringify(frame));`,
+	} {
+		report := ScanScript(src)
+		if report.Passed {
+			t.Errorf("手打 asset 帧必须被 EGO-R034 拦截，实际放行: %s", src)
+			continue
+		}
+		found := false
+		for _, b := range report.Blocked {
+			if b.RuleID == "EGO-R034" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("命中理由应为 EGO-R034，实得 %+v", report.Blocked)
+		}
+	}
+	// 良性脚本（type 是别的值）不得误报
+	ok := ScanScript(benignScript)
+	for _, b := range ok.Blocked {
+		if b.RuleID == "EGO-R034" {
+			t.Errorf("良性脚本被 EGO-R034 误报: %+v", ok.Blocked)
+		}
+	}
+}

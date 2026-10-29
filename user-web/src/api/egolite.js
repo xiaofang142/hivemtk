@@ -173,3 +173,9 @@ export const abortEgoSession = (id, reason = '用户停止') =>
 
 export const finishEgoSession = (id, keep = []) =>
   http.post(`/api/egolite/sessions/${id}/finish`, { keep })
+
+// ── 遥测看板（S-9）────────────────────────────────────────────
+// 只回聚合桶（按 kind 的 count/成功率/p95），没有单条明细——口径见
+// user-server internal/egolite/telemetry.go（永不收页面内容）。
+export const getEgoTelemetrySummary = (hours = 24) =>
+  http.get('/api/egolite/admin/telemetry/summary', { hours })

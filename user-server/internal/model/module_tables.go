@@ -279,6 +279,8 @@ var egoLiteOwnedTables = []string{
 	"egolite_executions", "ego_event_log", "egolite_flows", "egolite_write_claims",
 	"egolite_assets", "egolite_runner_tokens", "egolite_flow_crons",
 	"egolite_sessions", "egolite_rounds",
+	// runner 遥测（S-9）：口径白名单在 egolite/telemetry.go，随 ego 腿一起开关。
+	"egolite_telemetry",
 }
 
 // moduleTableRegistry 模块 → 独占表
