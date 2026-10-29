@@ -26,7 +26,9 @@ vi.mock('@/utils/bootstrapState', () => ({
   getBootstrap: () => ({ initialized: true, tenantMode: false })
 }))
 vi.mock('@/stores/user', () => ({
-  useUserStore: () => ({ isLoggedIn: true, role: 'admin', userInfo: { id: 1, username: 'probe' } })
+  // setToken：守卫的 localStorage→Pinia 同步闸（401 僵尸登录态修复）会调用它，
+  // mock 必须与真 store 形状一致，否则守卫在空 localStorage 下直接抛错。
+  useUserStore: () => ({ isLoggedIn: true, role: 'admin', userInfo: { id: 1, username: 'probe' }, setToken: () => {} })
 }))
 // Layout.vue 在 setup 顶层就调 usePermissionStore()，而它是 pinia setup store，
 // 内部 useUserStore() 要求有 active Pinia —— 本用例只装真路由（router.push），

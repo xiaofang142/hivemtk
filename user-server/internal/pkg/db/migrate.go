@@ -393,6 +393,7 @@ func allModels() []any {
 		&geomodel.GeoEntityRelation{},
 		&geomodel.GeoAlert{},
 		&geomodel.GeoJobRun{},
+		&geomodel.GeoAutopilotRun{}, // 006 一键自动驾驶运行记录
 		&geomodel.GeoCompetitor{},
 		&geomodel.GeoPushRecord{},
 		&geomodel.GeoSite{},

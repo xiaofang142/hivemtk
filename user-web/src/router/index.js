@@ -252,6 +252,18 @@ async function ensureRouteLoaded(path) {
 }
 
 router.beforeEach(async (to, from, next) => {
+  // guard 开始时的登录态快照：await 期间 401 处理可能清掉 token，
+  // 两道 401 竞态闸靠「曾有 token 而现在没了」识别这种会话失效（见下）。
+  const hadTokenAtGuardStart = !!localStorage.getItem('token')
+  // 登录态单一真相是 localStorage（bug: web-token-expired-no-redirect）：
+  // request.js 的 401 处理只清 localStorage，而 Pinia 的 token ref 只在
+  // initAuth 读过一次 —— 同文档内的 401 之后 store 里是僵尸 isLoggedIn，
+  // 会把已失效会话放进受保护页面（表现为"提示过期但停在原页"）。
+  // 守卫每次先对齐两者：localStorage 为空时把残留 ref 一并清掉。
+  const userStoreEarly = useUserStore()
+  if (!hadTokenAtGuardStart && userStoreEarly.isLoggedIn) {
+    userStoreEarly.setToken('')
+  }
   const routeLoaded = await ensureRouteLoaded(to.path);
 
   if (to.path.startsWith('/system/')) {
@@ -296,6 +308,16 @@ router.beforeEach(async (to, from, next) => {
       next('/setup')
       return
     }    const userStore = useUserStore()
+    // 401 竞态闸（bug: web-token-expired-no-redirect）：guard 开始时持有 token、
+    // 走到这里已被清掉的，说明 request.js 已在 await 期间 push('/login')；
+    // 此时必须由本 guard 亲自去 /login 并返回，否则下方任何一个 next() 决策都会
+    // 把被中断的原导航收尾回原页面，覆盖 /login（表现为"提示过期但不跳登录"）。
+    // 判据直读 localStorage（401 清空的正是它），不用 Pinia —— store 的 token ref
+    // 只在 initAuth 时读一次 localStorage，401 后是僵尸值，靠不住。
+    if (hadTokenAtGuardStart && !localStorage.getItem('token')) {
+      next('/login')
+      return
+    }
     // 系统已初始化：直接去登录页，绝不把“已初始化实例”的干净浏览器访客单机
     // 送进 /setup 安装向导。SaaS(tenant_mode=on) 多租户实例尤其如此——那里没有
     // “单机首次安装”场景，注册入口在登录页（Login.vue 的 enable_register 开关）。
@@ -311,6 +333,12 @@ router.beforeEach(async (to, from, next) => {
     // RBAC 菜单权限：登录后拉取后端菜单树（缓存），非超管校验路径授权
     const permissionStore = usePermissionStore()
     await permissionStore.ensureMenus()
+    // 第二道 401 竞态闸：ensureMenus 的请求正是不带 _silent 的业务请求，
+    // 过期 token 的 401 清会话就发生在上面的 await 期间——必须复查后再做决策。
+    if (hadTokenAtGuardStart && !localStorage.getItem('token')) {
+      next('/login')
+      return
+    }
     if (userStore.role !== 'admin') {
       const personalPaths = ['/profile', '/notifications']
       const isPersonal = personalPaths.some(p => to.path === p || to.path.startsWith(p + '/'))

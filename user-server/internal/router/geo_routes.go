@@ -102,6 +102,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	wfCtrl := geoctrl.NewWorkflowController(wfSvc)
 	tmCtrl := geoctrl.NewTechMetricsController(kbSvc)
 	keCtrl := geoctrl.NewKeywordEnhanceController(keSvc)
+	autopilotCtrl := geoctrl.NewAutopilotController(
+		geoservice.NewAutopilotService(georepo.NewGeoAutopilotRunRepositoryWithDB(gormDB)))
 
 	// ⬇️ GEO v2 新增 Service + Controller
 	// 探针装配是平台级全局动作（llm_providers/geo_config 装配期读取，进程内共享）：
@@ -246,6 +248,12 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/techconfig/sitemap", tmCtrl.GenerateSitemap)
 	geo.POST("/techconfig/llms-txt", tmCtrl.GenerateLLMsTxt)
 	geo.POST("/techconfig/audit", tmCtrl.AuditContent)
+	geo.POST("/techconfig/site-audit", tmCtrl.SiteAudit)
+
+	// 一键自动驾驶（单关键词全链路，傻瓜式入口）
+	geo.POST("/autopilot/runs", autopilotCtrl.Create)
+	geo.GET("/autopilot/runs", autopilotCtrl.List)
+	geo.GET("/autopilot/runs/:id", autopilotCtrl.Get)
 
 	geo.POST("/metrics/analyze", tmCtrl.AnalyzeMetrics)
 

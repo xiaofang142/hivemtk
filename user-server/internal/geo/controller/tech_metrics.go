@@ -87,6 +87,28 @@ func (c *TechMetricsController) AuditContent(ctx *gin.Context) {
 	response.Success(ctx, c.techconfigSvc.RunGEOAudit(req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD), "审计完成")
 }
 
+// @Summary      站点审计完成（rubric v2 九类百分制）
+// @Tags      tech-metrics
+// @Router    /api/geo/techconfig/site-audit [post]
+// SiteAudit 站点审计 v2：活体抓取目标 URL，按九类 rubric v2 打分并给修复清单。
+// 仅显式触发；出站请求只访问目标域公开资源，不带任何品牌配置数据。
+// POST /geo/techconfig/site-audit
+func (c *TechMetricsController) SiteAudit(ctx *gin.Context) {
+	var req struct {
+		URL   string `json:"url" binding:"required"`
+		Brand string `json:"brand"`
+	}
+	if !response.BindJSON(ctx, &req) {
+		return
+	}
+	rep, err := c.techconfigSvc.RunSiteAudit(ctx.Request.Context(), req.URL, req.Brand)
+	if err != nil {
+		response.ValidationError(ctx, err.Error())
+		return
+	}
+	response.Success(ctx, rep, "站点审计完成")
+}
+
 // @Summary      分析完成
 // @Tags      tech-metrics
 // @Router    /api/geo/metrics/analyze [post]

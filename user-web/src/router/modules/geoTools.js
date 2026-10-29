@@ -54,6 +54,12 @@ export default [
   // Layer 2: 执行 (group: 'execute')
   // ────────────────────────────────────────────────────
   {
+    path: '/geo-tools/autopilot',
+    name: 'GeoAutopilot',
+    component: () => import('@/views/geo/Autopilot.vue'),
+    meta: { title: '自动驾驶（一键）', group: 'execute', icon: 'MagicStick', order: 0, requiresAuth: true }
+  },
+  {
     path: '/geo-tools/keyword-mining',
     name: 'GeoKeywordMining',
     component: () => import('@/views/geo/KeywordMining.vue'),
