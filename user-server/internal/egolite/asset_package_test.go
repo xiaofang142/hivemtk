@@ -3,7 +3,9 @@ package egolite
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"io"
@@ -107,5 +109,70 @@ func TestSafeAssetPath(t *testing.T) {
 		if safeAssetPath(p) {
 			t.Errorf("%q 应判非法", p)
 		}
+	}
+}
+
+// ---------- S-6：签名 ----------
+
+func signAsset(t *testing.T, a InstallableAsset, priv ed25519.PrivateKey) InstallableAsset {
+	t.Helper()
+	a.SigAlg = "ed25519"
+	a.PubKeyFpr = PubKeyFingerprint(priv.Public().(ed25519.PublicKey))
+	canonical, err := assetManifestCanonical(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(canonical)
+	a.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))
+	return a
+}
+
+// TestVerifyPackageSignatures 正确签名通过；篡改脚本/换密钥/缺公钥一律拒。
+func TestVerifyPackageSignatures(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := sampleAsset("alpha", "tools/a.js", "console.log(1)")
+	signed := signAsset(t, base, priv)
+
+	if err := VerifyPackageSignatures([]InstallableAsset{signed}, pub); err != nil {
+		t.Fatalf("正确签名被拒: %v", err)
+	}
+	// 未签名资产在配置了公钥时放行（旧数据兼容）
+	if err := VerifyPackageSignatures([]InstallableAsset{base}, pub); err != nil {
+		t.Fatalf("未签名资产被拒: %v", err)
+	}
+	// 篡改脚本
+	tampered := signed
+	tampered.Script = "console.log('evil')"
+	if err := VerifyPackageSignatures([]InstallableAsset{tampered}, pub); err == nil {
+		t.Fatal("篡改后仍验过")
+	}
+	// 换公钥
+	otherPub, _, _ := ed25519.GenerateKey(nil)
+	if err := VerifyPackageSignatures([]InstallableAsset{signed}, otherPub); err == nil {
+		t.Fatal("换公钥后仍验过")
+	}
+	// 已签名但未配置公钥 ⇒ 拒（fail-close）
+	if err := VerifyPackageSignatures([]InstallableAsset{signed}, nil); err == nil {
+		t.Fatal("缺信任公钥时已签名资产应被拒")
+	}
+}
+
+// TestLoadAssetTrustPubKeyFromEnv 环境变量解析：空 ⇒ nil；非法 ⇒ 错；合法 ⇒ 32 字节。
+func TestLoadAssetTrustPubKeyFromEnv(t *testing.T) {
+	t.Setenv(AssetTrustPubKeyEnv, "")
+	if k, err := LoadAssetTrustPubKeyFromEnv(); err != nil || k != nil {
+		t.Fatalf("空配置 = (%v,%v)，期望 (nil,nil)", k, err)
+	}
+	t.Setenv(AssetTrustPubKeyEnv, "not-base64")
+	if _, err := LoadAssetTrustPubKeyFromEnv(); err == nil {
+		t.Fatal("非法公钥未报错")
+	}
+	pub, _, _ := ed25519.GenerateKey(nil)
+	t.Setenv(AssetTrustPubKeyEnv, base64.StdEncoding.EncodeToString(pub))
+	if k, err := LoadAssetTrustPubKeyFromEnv(); err != nil || !bytes.Equal(k, pub) {
+		t.Fatalf("合法公钥解析 = (%v,%v)", k, err)
 	}
 }

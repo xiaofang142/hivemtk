@@ -183,6 +183,16 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		}
 		// format=zip（S-7 包通道）：同一份清单打成包下发，runner 原子解包后换入。
 		// 默认仍是 JSON 清单——旧 runner 不认 zip，改了默认等于断兼容。
+		// S-6：带签名的资产先验签（fail-close）；未配置信任公钥时，已签名资产一律拒。
+		pub, kerr := egolite.LoadAssetTrustPubKeyFromEnv()
+		if kerr != nil {
+			c.JSON(400, gin.H{"code": 1, "message": kerr.Error()})
+			return
+		}
+		if verr := egolite.VerifyPackageSignatures(assets, pub); verr != nil {
+			c.JSON(400, gin.H{"code": 1, "message": verr.Error()})
+			return
+		}
 		if c.Query("format") == "zip" {
 			pkg, perr := egolite.BuildAssetPackage(assets)
 			if perr != nil {

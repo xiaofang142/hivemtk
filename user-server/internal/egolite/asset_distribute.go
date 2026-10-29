@@ -44,6 +44,12 @@ type InstallableAsset struct {
 	FlowID     uint     `json:"flow_id"`     // 用户流程来源时的 flow 号（目录资产为 0）
 	AssetID    string   `json:"asset_id"`    // 目录资产编码（用户流程为空）
 	AssetVer   string   `json:"asset_version"`
+
+	// 签名面（S-6 / 决策 8：ed25519）。Sig 为空 = 未签名（旧数据，兼容）；
+	// 有 Sig 时服务端与 runner 两端都验，验不过一律 fail-close。
+	SigAlg    string `json:"sig_alg,omitempty"`   // 固定 ed25519
+	Signature string `json:"signature,omitempty"` // base64(std)，对 manifest 规范化字节（signature 置空）的签名
+	PubKeyFpr string `json:"pubkey_fingerprint,omitempty"`
 }
 
 // BuildInstallableAssets 把用户 published 流程转成可安装清单（纯函数，便于测试）。

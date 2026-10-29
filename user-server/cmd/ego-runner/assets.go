@@ -280,12 +280,30 @@ func (r *runner) installFromZip(body io.Reader) (int, int, error) {
 		var m struct {
 			Hivemtk struct {
 				ScriptHash string `json:"script_hash"`
+				Entry      string `json:"entry"`
 			} `json:"hivemtk"`
 		}
 		if err := json.Unmarshal(mb, &m); err != nil {
 			return installed, skipped, fmt.Errorf("资产 %s manifest 解析失败: %w", id, err)
 		}
+		// 内容完整性：入口脚本的 hash 必须与 manifest 一致（签名只覆盖 manifest）。
+		if m.Hivemtk.ScriptHash != "" && m.Hivemtk.Entry != "" {
+			entryBody, ok := p.files[m.Hivemtk.Entry]
+			if !ok {
+				return installed, skipped, fmt.Errorf("资产 %s 缺入口 %s", id, m.Hivemtk.Entry)
+			}
+			sum := sha256.Sum256(entryBody)
+			if hex.EncodeToString(sum[:]) != m.Hivemtk.ScriptHash {
+				return installed, skipped, fmt.Errorf("资产 %s 入口 hash 与 manifest 不符", id)
+			}
+		}
 		dir := filepath.Join(learningsDir(r.conf.WorkspaceDir), id)
+		// S-6：带签名的 manifest 必须有可验的信任公钥，验不过即拒（fail-close）。
+		if sig := manifestSignature(mb); sig != "" {
+			if verr := verifyAssetManifestAt(dir, mb); verr != nil {
+				return installed, skipped, fmt.Errorf("资产 %s 签名验证失败: %w", id, verr)
+			}
+		}
 		if b, err := os.ReadFile(filepath.Join(dir, ".installed_hash")); err == nil &&
 			m.Hivemtk.ScriptHash != "" && strings.TrimSpace(string(b)) == m.Hivemtk.ScriptHash {
 			skipped++
@@ -318,4 +336,17 @@ func (r *runner) installFromZip(body io.Reader) (int, int, error) {
 		installed++
 	}
 	return installed, skipped, nil
+}
+
+// manifestSignature 读 manifest.hivemtk.signature（空串 = 未签名）。
+func manifestSignature(mb []byte) string {
+	var m struct {
+		Hivemtk struct {
+			Signature string `json:"signature"`
+		} `json:"hivemtk"`
+	}
+	if err := json.Unmarshal(mb, &m); err != nil {
+		return ""
+	}
+	return m.Hivemtk.Signature
 }

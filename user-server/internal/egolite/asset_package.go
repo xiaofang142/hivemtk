@@ -19,8 +19,13 @@ package egolite
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 )
@@ -117,14 +122,17 @@ func assetManifest(a InstallableAsset) map[string]any {
 		"version": version,
 		"domains": a.Domains,
 		"hivemtk": map[string]any{
-			"entry":       a.Entry,
-			"compat_min":  "0.6.0",
-			"writes":      a.Writes,
-			"source":      source,
-			"flow_id":     a.FlowID,
-			"asset_id":    a.AssetID,
-			"asset_ver":   a.AssetVer,
-			"script_hash": a.ScriptHash,
+			"entry":              a.Entry,
+			"compat_min":         "0.6.0",
+			"writes":             a.Writes,
+			"source":             source,
+			"flow_id":            a.FlowID,
+			"asset_id":           a.AssetID,
+			"asset_ver":          a.AssetVer,
+			"script_hash":        a.ScriptHash,
+			"sig_alg":            a.SigAlg,
+			"signature":          a.Signature,
+			"pubkey_fingerprint": a.PubKeyFpr,
 		},
 	}
 }
@@ -138,4 +146,70 @@ func safeAssetPath(p string) bool {
 		return false
 	}
 	return path.Clean(p) == p
+}
+
+// ---------- S-6：包通道上的签名验证 ----------
+
+// AssetTrustPubKeyEnv 平台/发布者公钥（base64 std，32 字节 raw ed25519）。
+// 配置后：带签名的资产必须验过；未签名的旧资产仍放行（兼容），但会在返回码里体现。
+const AssetTrustPubKeyEnv = "EGOLITE_ASSET_TRUST_PUBKEY"
+
+// VerifyPackageSignatures 校验清单里的签名（缺省公钥 ⇒ 未签名资产放行、已签名资产拒）。
+//
+// 判据：
+//   - Sig 为空：未签名，放行（旧数据兼容；是否要求签名由调用方决定）；
+//   - Sig 非空：必须有公钥，且指纹一致，且 ed25519 验过 —— 任一不满足即错。
+func VerifyPackageSignatures(assets []InstallableAsset, pub ed25519.PublicKey) error {
+	for _, a := range assets {
+		if a.Signature == "" {
+			continue
+		}
+		if len(pub) != ed25519.PublicKeySize {
+			return fmt.Errorf("资产 %s 带签名但未配置信任公钥（%s）", a.ID, AssetTrustPubKeyEnv)
+		}
+		if a.SigAlg != "" && a.SigAlg != "ed25519" {
+			return fmt.Errorf("资产 %s 签名算法不支持: %q", a.ID, a.SigAlg)
+		}
+		if a.PubKeyFpr != "" && a.PubKeyFpr != PubKeyFingerprint(pub) {
+			return fmt.Errorf("资产 %s 公钥指纹不匹配（清单 %s ≠ 本地 %s）", a.ID, a.PubKeyFpr, PubKeyFingerprint(pub))
+		}
+		sig, err := base64.StdEncoding.DecodeString(a.Signature)
+		if err != nil || len(sig) != ed25519.SignatureSize {
+			return fmt.Errorf("资产 %s 签名格式非法", a.ID)
+		}
+		// 签名只覆盖 manifest，脚本内容由 script_hash 绑定：先核对 hash，再验签。
+		sumLocal := sha256.Sum256([]byte(a.Script))
+		if a.ScriptHash != "" && hex.EncodeToString(sumLocal[:]) != a.ScriptHash {
+			return fmt.Errorf("资产 %s 脚本 hash 与清单不符", a.ID)
+		}
+		canonical, err := assetManifestCanonical(a)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(canonical)
+		if !ed25519.Verify(pub, sum[:], sig) {
+			return fmt.Errorf("资产 %s 签名验证失败", a.ID)
+		}
+	}
+	return nil
+}
+
+// assetManifestCanonical 生成"signature 置空"的规范化字节（发布侧签名与验证侧同一规则）。
+func assetManifestCanonical(a InstallableAsset) ([]byte, error) {
+	cp := a
+	cp.Signature = ""
+	return json.Marshal(assetManifest(cp))
+}
+
+// LoadAssetTrustPubKeyFromEnv 读环境变量里的信任公钥；未配置返回 nil。
+func LoadAssetTrustPubKeyFromEnv() (ed25519.PublicKey, error) {
+	raw := strings.TrimSpace(os.Getenv(AssetTrustPubKeyEnv))
+	if raw == "" {
+		return nil, nil
+	}
+	b, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil || len(b) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("%s 不是合法的 base64 ed25519 公钥（需 32 字节）", AssetTrustPubKeyEnv)
+	}
+	return ed25519.PublicKey(b), nil
 }
