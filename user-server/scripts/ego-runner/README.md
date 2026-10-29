@@ -34,6 +34,22 @@
 3. LaunchAgent `cn.hivemtk.ego-runner`（RunAtLoad + KeepAlive，崩溃自动拉起）；
 4. 日志：`~/.hivemtk/ego-runner.log`。
 
+## Windows（install.ps1）
+
+与 macOS 安装器同一份 conf 形状、同一组参数、同一种"已存在 conf 不覆盖"：
+
+```powershell
+.\install.ps1 -ServerUrl ws://127.0.0.1:8204 -Token eg_...   # 安装
+.\install.ps1 -Check                                          # 只核对
+.\uninstall.ps1                                               # 卸载（保留 conf）
+```
+
+- 二进制：`%USERPROFILE%\.hivemtk\bin\ego-runner.exe`（`-Bin` 可复制现成 exe）
+- conf：`%USERPROFILE%\.hivemtk\ego_runner.conf`（ACL 收紧为当前用户读写）
+- 自启：计划任务 `cn.hivemtk.ego-runner`（AtLogOn + 崩溃重启）；无 ScheduledTasks 模块时回落 `HKCU\...\Run`
+- 日志：`%USERPROFILE%\.hivemtk\ego-runner.log`
+- 两端契约由 `cmd/ego-runner/installer_consistency_test.go` 文本判据钉住（conf 键集合/核对模式/标签/卸载保留 conf）
+
 ## 升级 ego lite
 
 能力升级归 ego 官方：管理端 `POST /api/egolite/admin/runner/upgrade` 向在线 runner 广播
