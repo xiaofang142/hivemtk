@@ -1,4 +1,4 @@
-# ego-runner 安装器（specs/015 C7，Windows；设计文档 R2）
+﻿# ego-runner 安装器（specs/015 C7，Windows；设计文档 R2）
 #
 # 用法（PowerShell）：
 #   .\install.ps1 [-ServerUrl ws://127.0.0.1:8204] [-Token eg_...] [-EgoServerName <name>]

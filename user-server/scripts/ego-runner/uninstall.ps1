@@ -1,4 +1,4 @@
-# ego-runner 卸载器（Windows；与 uninstall.sh 同语义：只摘安装物，保留 conf）
+﻿# ego-runner 卸载器（Windows；与 uninstall.sh 同语义：只摘安装物，保留 conf）
 $ErrorActionPreference = "Stop"
 $Prefix   = Join-Path $env:USERPROFILE ".hivemtk"
 $BinDir   = Join-Path $Prefix "bin"
