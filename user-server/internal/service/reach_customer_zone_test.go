@@ -39,7 +39,7 @@ func TestCustomerZoneFromAttributes(t *testing.T) {
 
 func TestResolveCustomerZonePrecedence(t *testing.T) {
 	profile := NewTestZoneResolver(map[string]string{
-		"cust-ny": "America/New_York",
+		"cust-ny":  "America/New_York",
 		"cust-bad": "Mars/Olympus", // 坏值 → 跳过档案，回退
 	})
 	cfg := &SendPipelineConfig{CustomerTimeZoneLookup: profile}
