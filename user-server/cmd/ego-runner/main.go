@@ -28,6 +28,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -38,6 +39,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"hivemtk-user/internal/hostagent"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -82,17 +85,11 @@ func loadConf() (*runnerConf, error) {
 		WorkspaceDir: filepath.Join(mustHome(), ".local", "share", "ego", "ego-skills"),
 		EgoBin:       "ego-browser",
 	}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("读配置 %s 失败: %w", p, err)
+	}
+	for k, v := range hostagent.ParseConf(data) {
 		switch k {
 		case "server_url":
 			c.ServerURL = v

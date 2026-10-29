@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"hivemtk-user/internal/hostagent"
 )
 
 // 帧尺寸上限。三个量级各司其职，别混用一个数：
@@ -74,38 +74,16 @@ func envOr(key, def string) string {
 // loadConf 读 ~/.hivemtk/nm_host.conf。文件不存在返回空表——首次安装本来就没有它，
 // 把「没配置」当成错误会让 Host 在最有用的那一刻（还没配好）拒绝启动。
 func loadConf() map[string]string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	p := hostagent.DefaultConfPath("nm_host.conf")
+	if p == "" {
 		return map[string]string{}
 	}
-	conf, _ := readConfFile(filepath.Join(home, ".hivemtk", "nm_host.conf"))
+	conf, _ := hostagent.ReadConfFile(p)
 	return conf
 }
 
-// readConfFile 解析 key=value 行：跳过空行与 # 注释，键值各去一次首尾空白。
-// 不校验取值——缺哪一项由调用方决定退回到环境变量还是默认值。
-func readConfFile(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]string{}, nil
-		}
-		return nil, err
-	}
-	conf := map[string]string{}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		conf[strings.TrimSpace(k)] = strings.TrimSpace(v)
-	}
-	return conf, nil
-}
+// readConfFile 兼容入口：实现已收口到 internal/hostagent（与 ego-runner 同源）。
+func readConfFile(path string) (map[string]string, error) { return hostagent.ReadConfFile(path) }
 
 // resolveServerURL 优先级：环境变量 > 配置文件的 server_url= > 编译期默认值。
 // 只认环境变量是不够的：Chrome 通过 connectNative 起 Host 时不继承终端环境，
