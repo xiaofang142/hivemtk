@@ -89,6 +89,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	tooluse.SetBrowserSessionPort(sessionSvc)
 	flowSvc := egolite.NewEgoFlowService(flowRepo, execSvc)
 	sessionSvc.AttachFlowService(flowSvc)
+	// T21 日配额：会话/轮次/产物三维（quota.go）。注入 service（tooluse/workflow
+	// 入口同享），产物闸直接挂在 runner 产物上传口。
+	sessionSvc.AttachQuota(
+		func(ctx context.Context, userID uint) error { return egolite.CheckSessionQuota(ctx, gormDB, userID) },
+		func(ctx context.Context, userID uint) error { return egolite.CheckRoundQuota(ctx, gormDB, userID) },
+	)
 	assetSvc := egolite.NewEgoAssetCatalog(assetRepo, flowRepo)
 
 	// 流程定时触发器（specs/016 S10，browser_cron_triggers 模式）：fire 闭包做
@@ -239,6 +245,11 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		defer func() { _ = file.Close() }()
 		if header.Size > maxArtifact {
 			c.JSON(413, gin.H{"code": 1, "message": "产物超过 8MB 上限"})
+			return
+		}
+		// T21 产物日配额：截图是最容易失控的采集面（脚本循环截图），总量闸在此。
+		if qerr := egolite.CheckArtifactQuota(c.Request.Context(), gormDB, userID); qerr != nil {
+			c.JSON(429, gin.H{"code": 1, "message": qerr.Error()})
 			return
 		}
 		buf := &bytes.Buffer{}
@@ -724,6 +735,29 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
 		})
+		// 审计导出（T22）：会话→轮次→事件→产物 一条链；owner 直开，admin 全量。
+		// format=json（默认，完整嵌套）| csv（轮次扁平表）。内容与库直读一致。
+		eg.GET("/sessions/:id/export", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			isAdmin := c.GetString("role") == "admin"
+			switch c.DefaultQuery("format", "json") {
+			case "csv":
+				b, err := egolite.ExportSessionCSV(c.Request.Context(), gormDB, currentUID(c), uint(id), isAdmin)
+				if err != nil {
+					c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+					return
+				}
+				c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=ego-session-%d.csv", id))
+				c.Data(200, "text/csv; charset=utf-8", b)
+			default:
+				exp, err := egolite.ExportSession(c.Request.Context(), gormDB, currentUID(c), uint(id), isAdmin)
+				if err != nil {
+					c.JSON(egoSessionStatus(err), gin.H{"code": 1, "message": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"code": 0, "data": exp})
+			}
+		})
 		eg.POST("/sessions/:id/confirm", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 			var body struct {
@@ -900,6 +934,8 @@ func egoSessionStatus(err error) int {
 		return 409
 	case errors.Is(err, browsercore.ErrPolicyViolation), errors.Is(err, browsercore.ErrEngineUnavailable):
 		return 400
+	case errors.Is(err, egolite.ErrQuotaExceeded):
+		return 429
 	default:
 		return 400
 	}

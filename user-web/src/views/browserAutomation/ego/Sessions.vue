@@ -71,7 +71,7 @@
       />
       <el-table-column
         label="操作"
-        width="200"
+        width="280"
         fixed="right"
       >
         <template #default="{ row }">
@@ -88,6 +88,18 @@
             @click="stop(row)"
           >
             停止
+          </el-button>
+          <el-button
+            link
+            @click="exportAudit(row, 'json')"
+          >
+            导出JSON
+          </el-button>
+          <el-button
+            link
+            @click="exportAudit(row, 'csv')"
+          >
+            CSV
           </el-button>
         </template>
       </el-table-column>
@@ -261,6 +273,12 @@
             >
               提交本轮
             </el-button>
+            <el-button
+              size="small"
+              @click="saveAsFlow"
+            >
+              沉淀为流程
+            </el-button>
             <span class="hint">跨轮请用观测返回的 loc= 定位，不要使用快照 ref</span>
           </div>
         </el-card>
@@ -363,7 +381,8 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listEgoSessions, createEgoSession, listEgoSessionRounds,
-  runEgoSessionRound, confirmEgoSession, abortEgoSession, finishEgoSession, getEgoSession
+  runEgoSessionRound, confirmEgoSession, abortEgoSession, finishEgoSession, getEgoSession,
+  exportEgoSessionAudit, saveEgoSessionAsFlow
 } from '@/api/egolite'
 
 const loading = ref(false)
@@ -421,6 +440,45 @@ async function openDetail(row) {
   current.value = row
   detailVisible.value = true
   await reloadDetail()
+}
+
+// 会话沉淀为流程（T23）：把已成功轮次编译成一条 flow（后端走「保存即扫描」同一道门）。
+async function saveAsFlow() {
+  if (!current.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('流程名称（沉淀只合并已成功的轮次）', '沉淀为流程', {
+      inputValue: current.value.goal ? String(current.value.goal).slice(0, 40) : '',
+      inputPattern: /\S+/,
+      inputErrorMessage: '名称必填'
+    })
+    const res = await saveEgoSessionAsFlow(current.value.id, value)
+    ElMessage.success(`已沉淀为流程 #${res?.id ?? res?.data?.id ?? ''}，可在「我的流程」中查看/发布`)
+  } catch (e) {
+    if (e !== 'cancel' && e?.message) ElMessage.error(e.message)
+  }
+}
+
+// 审计导出（T22）：会话→轮次→事件→产物 一条链。JSON 直接下载；CSV 后端给 blob。
+async function exportAudit(row, format) {
+  try {
+    const res = await exportEgoSessionAudit(row.id, format)
+    let blob
+    let filename = `ego-session-${row.id}.${format}`
+    if (format === 'csv') {
+      blob = res instanceof Blob ? res : new Blob([res], { type: 'text/csv' })
+    } else {
+      const payload = res?.data ?? res
+      blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    ElMessage.error(e?.message || '导出失败')
+  }
 }
 
 async function reloadDetail() {

@@ -179,3 +179,11 @@ export const finishEgoSession = (id, keep = []) =>
 // user-server internal/egolite/telemetry.go（永不收页面内容）。
 export const getEgoTelemetrySummary = (hours = 24) =>
   http.get('/api/egolite/admin/telemetry/summary', { hours })
+
+// 审计导出（T22）：会话→轮次→事件→产物 一条链。JSON 返回数据，CSV 返回 blob。
+export const exportEgoSessionAudit = (id, format = 'json') =>
+  http.get(`/api/egolite/sessions/${id}/export`, { format }, { responseType: format === 'csv' ? 'blob' : undefined })
+
+// 会话沉淀为流程（T23）：把已成功轮次编译成一条 flow，一键发布通道的入口。
+export const saveEgoSessionAsFlow = (id, name) =>
+  http.post(`/api/egolite/sessions/${id}/save-as-flow`, { name })

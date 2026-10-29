@@ -27,6 +27,17 @@ type EgoSessionService struct {
 	registry *EgoRunnerRegistry
 	base     EventSink       // 既有执行域（非 round 事件原样委托，保证 execution 状态机不断链）
 	flowSvc  *EgoFlowService // 可选：会话沉淀为 flow（T23）
+	// quotaChecker 可选：会话/轮次日配额裁决（T21）。nil = 不启用（单机自用）。
+	// 独立成函数注入而不是传 *gorm.DB——配额实现（quota.go）管自己的表，
+	// 会话域不该知道统计细节；路由装配处绑定真库。
+	sessionQuota func(ctx context.Context, userID uint) error
+	roundQuota   func(ctx context.Context, userID uint) error
+}
+
+// AttachQuota 注入配额裁决（T21；session=开会话前，round=派发轮次前）。
+func (s *EgoSessionService) AttachQuota(sessionFn, roundFn func(ctx context.Context, userID uint) error) {
+	s.sessionQuota = sessionFn
+	s.roundQuota = roundFn
 }
 
 // NewEgoSessionService 装配
@@ -83,6 +94,13 @@ func (s *EgoSessionService) Open(ctx context.Context, req browsercore.OpenReques
 	if active >= 2 {
 		return nil, browsercore.ErrGate
 	}
+	// 日配额（T21）：并发限"同时"，这里限"总量"——超限 ErrQuotaExceeded（429），
+	// 文案带维度，用户知道是今天别开新会话了。
+	if s.sessionQuota != nil {
+		if err := s.sessionQuota(ctx, req.UserID); err != nil {
+			return nil, err
+		}
+	}
 
 	polJSON, _ := json.Marshal(req.Policy)
 	sess := &model.EgoliteSession{
@@ -117,6 +135,13 @@ func (s *EgoSessionService) Act(ctx context.Context, req browsercore.RoundReques
 	pol := policyFromJSON(sess.PolicyJSON)
 	if sess.Round >= pol.MaxRounds {
 		return nil, fmt.Errorf("%w: 已达轮次上限 %d", browsercore.ErrPolicyViolation, pol.MaxRounds)
+	}
+	// 日配额（T21）：会话内轮次也有 max_rounds 预算，这里按**用户**限日总量，
+	// 防"每天开很多个会话"的放大面。
+	if s.roundQuota != nil {
+		if err := s.roundQuota(ctx, req.UserID); err != nil {
+			return nil, err
+		}
 	}
 	if err := browsercore.ValidateOps(req.Ops, pol.MaxActions); err != nil {
 		return nil, err
@@ -389,6 +414,24 @@ func (s *EgoSessionService) IngestEvent(ctx context.Context, userID uint, ev Run
 			_ = s.sessions.TransitionState(context.WithoutCancel(ctx), sess.ID,
 				[]string{browsercore.SessionCreated, browsercore.SessionActive, browsercore.SessionWaitingConfirm, browsercore.SessionHandedOff},
 				browsercore.SessionFailed, map[string]any{"ended_at": time.Now(), "fail_reason": truncateStr(reason, 500)})
+		}
+		// T20 lint v2（事件协议终帧强约束）：进程正常退出（exit 0）但当前轮**没有**
+		// round_result 终帧 → 轮次判失败（MISSING_ROUND_RESULT）+ 会话判失败。
+		// 缺帧的典型来源：残缺/恶意脚本只打印业务事件就退出——按协议这是残缺执行，
+		// 不许停留在 pending 让账本看起来"还在跑"。
+		if ev.ExitCode == 0 && sess.Round > 0 {
+			if r, gerr := s.rounds.GetByRound(ctx, sess.ID, sess.Round); gerr == nil && r.Ok == nil {
+				_ = s.rounds.UpdateResult(ctx, sess.ID, sess.Round, map[string]any{
+					"ok":         false,
+					"error_code": "MISSING_ROUND_RESULT",
+					"error_msg":  "进程正常退出但未收到 round_result 终帧（事件协议 lint v2 判失败）",
+				})
+				_ = s.sessions.TransitionState(context.WithoutCancel(ctx), sess.ID,
+					[]string{browsercore.SessionCreated, browsercore.SessionActive, browsercore.SessionWaitingConfirm, browsercore.SessionHandedOff},
+					browsercore.SessionFailed, map[string]any{
+						"ended_at": time.Now(), "fail_reason": "当前轮缺 round_result 终帧",
+					})
+			}
 		}
 	}
 	return nil
