@@ -436,6 +436,11 @@ const onSend = async (payload) => {
       content: text,
       content_type: attachment ? attachment.mediaType : 'text'
     }
+    // J-12：访客浏览器自报时区（一次/会话，后端只增不覆盖进客户档案，
+    // 供触达静默窗口按访客当地时区判定）；取不到不传，零行为变更。
+    try {
+      body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
+    } catch (e) { /* 老浏览器无 Intl 时区面，静默跳过 */ }
     if (attachment) {
       body.media_url = attachment.url
       body.media_type = attachment.mediaType

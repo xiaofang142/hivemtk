@@ -83,7 +83,9 @@ func isAIReplyQuietHours(t time.Time) bool {
 	}
 	// 判定在异步排水/重投链上被调用，无请求 ctx 可用，走 context.Background()。
 	// 参数中心 60s TTL 缓存，故不会每条消息打库。
-	return inQuietHoursWindow(t, aiReplyQuietHoursStart(context.Background()), aiReplyQuietHoursEnd(context.Background()))
+	// AI 回复免打扰维持 cstZone（J-12 分层：客户时区只进触达管线静默窗口；
+	// 本函数无客户档案上下文，属会话域节奏控制）。
+	return inQuietHoursWindow(t, aiReplyQuietHoursStart(context.Background()), aiReplyQuietHoursEnd(context.Background()), cstZone)
 }
 
 // aiReplyQuietHoursFn 免打扰判定的可换点（测试装替身，生产走 isAIReplyQuietHours）。
@@ -133,7 +135,7 @@ func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel Web
 		Content:        content,
 		Cards:          delayedCardsPayload(cards),
 		ConversationID: convIDOrEmpty(hubMsg),
-		SendAt:         nextQuietHoursRelease(time.Now(), aiReplyQuietHoursEnd(ctx)),
+		SendAt:         nextQuietHoursRelease(time.Now(), aiReplyQuietHoursEnd(ctx), cstZone),
 		Status:         model.DelayedStatusPending,
 		Kind:           model.DelayedKindQuietHours,
 	}
@@ -197,7 +199,7 @@ func nextSendRetryAt(now time.Time, attempts int, ce *ChannelError) time.Time {
 	// 免打扰时段内重投等于在深夜打扰客户，和首发同规则顺延到窗口开放。
 	// 取一次再调用：不在持锁期间跑可换出去的策略（见 loadAIReplyQuietHoursFn）。
 	if loadAIReplyQuietHoursFn()(at) {
-		at = nextQuietHoursRelease(at, aiReplyQuietHoursEnd(context.Background()))
+		at = nextQuietHoursRelease(at, aiReplyQuietHoursEnd(context.Background()), cstZone)
 	}
 	return at
 }

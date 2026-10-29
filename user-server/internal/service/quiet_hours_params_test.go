@@ -133,17 +133,17 @@ func TestInQuietHoursWindow(t *testing.T) {
 	}
 	mk := func(h int) time.Time { return time.Date(2026, 1, 1, h, 0, 0, 0, cst) }
 	// 22-8 跨午夜：23 点在窗内，10 点不在。
-	if !inQuietHoursWindow(mk(23), 22, 8) {
+	if !inQuietHoursWindow(mk(23), 22, 8, cst) {
 		t.Error("23 点应落在 22-8 窗口内")
 	}
-	if inQuietHoursWindow(mk(10), 22, 8) {
+	if inQuietHoursWindow(mk(10), 22, 8, cst) {
 		t.Error("10 点不应落在 22-8 窗口内")
 	}
 	// 9-18 当日窗口。
-	if !inQuietHoursWindow(mk(12), 9, 18) {
+	if !inQuietHoursWindow(mk(12), 9, 18, cst) {
 		t.Error("12 点应落在 9-18 窗口内")
 	}
-	if inQuietHoursWindow(mk(20), 9, 18) {
+	if inQuietHoursWindow(mk(20), 9, 18, cst) {
 		t.Error("20 点不应落在 9-18 窗口内")
 	}
 }

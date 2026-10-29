@@ -72,16 +72,57 @@ func (s *VisitorChatService) ensureVisitorCustomer(ctx context.Context, req *Vis
 	}
 	unifiedID := "visitor:" + req.ChannelID + ":" + req.VisitorID
 	if existing, _ := s.customerRepo.GetByUnifiedID(ctx, unifiedID); existing != nil {
+		// J-12：老访客缺时区而本次请求带了 → 补写（只增不覆盖既有值）。
+		s.fillVisitorTimezone(ctx, existing, req.Timezone)
 		return nil
 	}
 	cust := &model.Customer{
 		UnifiedID: unifiedID,
 		Tags:      "[\"web_visitor\"]",
+		// J-12：访客浏览器自报时区进档案（触达静默窗口按客户时区判定的数据源）
+		CustomAttributes: visitorTimezoneAttrs("", req.Timezone),
 	}
 	if err := s.customerRepo.Create(ctx, cust); err != nil {
 		return fmt.Errorf("建档失败: %w", err)
 	}
 	return nil
+}
+
+// visitorTimezoneAttrs 把 IANA 时区名并入 custom_attributes jsonb（已有属性保留）。
+// tz 为空：existing 为空则给 "{}"（保持列默认语义），否则原样返回。
+func visitorTimezoneAttrs(existing, tz string) string {
+	if strings.TrimSpace(tz) == "" {
+		if strings.TrimSpace(existing) == "" {
+			return "{}"
+		}
+		return existing
+	}
+	attrs := map[string]any{}
+	if strings.TrimSpace(existing) != "" {
+		_ = json.Unmarshal([]byte(existing), &attrs)
+	}
+	if _, dup := attrs["timezone"]; dup {
+		return existing // 只增不覆盖：以客户首次自报为准，避免会话抖动改写档案
+	}
+	attrs["timezone"] = strings.TrimSpace(tz)
+	out, err := json.Marshal(attrs)
+	if err != nil {
+		return existing
+	}
+	return string(out)
+}
+
+// fillVisitorTimezone 老访客补时区（缺才写；写失败静默——时区是增益数据不是业务数据）。
+func (s *VisitorChatService) fillVisitorTimezone(ctx context.Context, cust *model.Customer, tz string) {
+	if strings.TrimSpace(tz) == "" || cust == nil {
+		return
+	}
+	merged := visitorTimezoneAttrs(cust.CustomAttributes, tz)
+	if merged == cust.CustomAttributes {
+		return
+	}
+	cust.CustomAttributes = merged
+	_ = s.customerRepo.Update(ctx, cust)
 }
 
 // SetOrchestrator 注入编排器（用于循环依赖解耦）
@@ -343,6 +384,11 @@ type VisitorSendMessageRequest struct {
 	MediaType   string `json:"media_type"`
 	MediaName   string `json:"media_name"`
 	MediaSize   int64  `json:"media_size"`
+	// Timezone J-12（选项③）：访客浏览器 IANA 时区名（前端
+	// Intl.DateTimeFormat().resolvedOptions().timeZone 自报）。可选——缺省零行为
+	// 变更；有值时写入客户档案 custom_attributes.timezone，供触达静默窗口按
+	// 访客当地时区判定（写入点见 ensureVisitorCustomer）。
+	Timezone string `json:"timezone,omitempty"`
 }
 
 // VisitorSendMessageResult 访客发送消息结果

@@ -51,17 +51,27 @@ func reachQuietHoursEnd(ctx context.Context) int {
 	return v
 }
 
-func inQuietHoursWindow(t time.Time, startHour, endHour int) bool {
-	h := t.In(cstZone).Hour()
+// inQuietHoursWindow 判定 t 是否落在静默窗口。zone = 判定所用时区：
+// 静默窗口按**收件客户当地**时区算（J-12 裁决），配额/合规域调用方传 cstZone。
+func inQuietHoursWindow(t time.Time, startHour, endHour int, zone *time.Location) bool {
+	if zone == nil {
+		zone = cstZone
+	}
+	h := t.In(zone).Hour()
 	if startHour > endHour {
 		return h >= startHour || h < endHour
 	}
 	return h >= startHour && h < endHour
 }
 
-func nextQuietHoursRelease(t time.Time, endHour int) time.Time {
-	local := t.In(cstZone)
-	release := time.Date(local.Year(), local.Month(), local.Day(), endHour, 0, 0, 0, cstZone)
+// nextQuietHoursRelease 下一次窗口放开的绝对时刻（按 zone 当地日历算，
+// 跨日按 zone 当地的零点边界 +AddDate——两时区日期可能差一天，不能混算）。
+func nextQuietHoursRelease(t time.Time, endHour int, zone *time.Location) time.Time {
+	if zone == nil {
+		zone = cstZone
+	}
+	local := t.In(zone)
+	release := time.Date(local.Year(), local.Month(), local.Day(), endHour, 0, 0, 0, zone)
 	if !local.Before(release) {
 		release = release.AddDate(0, 0, 1)
 	}

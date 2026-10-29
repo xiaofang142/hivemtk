@@ -52,6 +52,16 @@ func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) toolu
 		cfg.ConsentChecker = service.NewContactConsentService(repository.NewContactConsentRepository(db))
 		cfg.ConsentMode = service.ConsentModeRevocationOnly
 		cfg.DoNotContactStrict = service.NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db))
+		// J-12（选项③）：客户档案时区（custom_attributes.timezone）查档器——
+		// 只服务静默窗口/次日释放；查不到/坏值由 service 层回退 cstZone，零行为变更。
+		reachCustomerRepo := repository.NewProactiveReachRepository(db)
+		cfg.CustomerTimeZoneLookup = func(ctx context.Context, customerID string) (string, bool) {
+			c, err := reachCustomerRepo.GetCustomerByID(ctx, customerID)
+			if err != nil || c == nil {
+				return "", false
+			}
+			return c.CustomAttributes, true // 原始 jsonb 串，service 层统一解析
+		}
 		// D05：意图级硬配额（PG 预占真源）。维度=每客户每日；上限走参数中心
 		// reach/global_per_user_daily_limit，0=不设额，兜底 3（与种子 DefaultValue 及
 		// reach_pipeline 的读点一致——此前这里写 0，参数行缺失时会静默变成"不设额"，

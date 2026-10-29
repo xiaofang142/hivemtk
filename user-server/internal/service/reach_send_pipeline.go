@@ -229,6 +229,11 @@ type SendPipelineConfig struct {
 	QuietHoursDeferrer SendQuietHoursDeferrer
 	// QuietHoursClock 可替换时钟（测试注入），生产为 nil 即 time.Now
 	QuietHoursClock func() time.Time
+	// CustomerTimeZoneLookup J-12（选项③）：按 customerID 取客户档案时区
+	// （custom_attributes.timezone，IANA 名）。nil = 不查档案（此时静默窗口
+	// 只认 metadata 覆盖与 cstZone 回退）。分层口径：配额/合规域维持 cstZone，
+	// 本 lookup 只服务静默窗口与次日释放（见 reach_customer_zone.go）。
+	CustomerTimeZoneLookup CustomerTimeZoneLookup
 
 	// ConsentChecker D04：可信同意判定（nil = 跳过该闸，零行为变更）。
 	ConsentChecker ConsentChecker

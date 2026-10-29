@@ -591,8 +591,10 @@ func (p *ConfigCompliancePolicy) judgeRule(ctx context.Context, rule ComplianceR
 	if rule.RequireOptIn && !in.OptIn {
 		return ruleJudgement{kind: ComplianceDecisionDeny, reason: ComplianceReasonOptInRequired}
 	}
-	if start, end, ok := complianceQuietWindow(rule); ok && inQuietHoursWindow(now, start, end) {
-		return ruleJudgement{kind: ComplianceDecisionDefer, reason: ComplianceReasonQuietHours, sendAt: nextQuietHoursRelease(now, end)}
+	// 合规静默窗口维持 cstZone（J-12 分层：这是监管口径，不随客户时区漂移；
+	// 客户当地时区只作用于 R-4 静默窗口，见 reach_customer_zone.go）。
+	if start, end, ok := complianceQuietWindow(rule); ok && inQuietHoursWindow(now, start, end, cstZone) {
+		return ruleJudgement{kind: ComplianceDecisionDefer, reason: ComplianceReasonQuietHours, sendAt: nextQuietHoursRelease(now, end, cstZone)}
 	}
 	if rule.DailyLimit > 0 {
 		if usage := p.counter(); usage != nil {

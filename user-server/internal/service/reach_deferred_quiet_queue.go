@@ -195,10 +195,12 @@ func (q *PersistentQuietHoursQueue) recoverExpiredLeases(ctx context.Context, no
 
 // nextDeferredRetryAt 重发退避：1 分钟起步（管道内重试已由管线自己的 retry 步骤处理，
 // 这里只管 worker 级的下一轮）。落在静默窗口内则顺延到窗口放开。
+// 时区用 cstZone：这是 worker 节奏不是客户语义——真实放行判定在管线
+// checkQuietHours 里按客户时区（J-12）再算一次，双闸不冲突。
 func nextDeferredRetryAt(now time.Time) time.Time {
 	next := now.Add(time.Minute)
-	if inQuietHoursWindow(next, quietHoursStartHour, quietHoursEndHour) {
-		return nextQuietHoursRelease(next, quietHoursEndHour)
+	if inQuietHoursWindow(next, quietHoursStartHour, quietHoursEndHour, cstZone) {
+		return nextQuietHoursRelease(next, quietHoursEndHour, cstZone)
 	}
 	return next
 }

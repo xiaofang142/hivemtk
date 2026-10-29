@@ -291,14 +291,16 @@ func (p *defaultSendPipeline) checkQuietHours(ctx context.Context, req *ReachSen
 	if p.config.QuietHoursClock != nil {
 		now = p.config.QuietHoursClock()
 	}
-	if !inQuietHoursWindow(now, reachQuietHoursStart(ctx), reachQuietHoursEnd(ctx)) {
+	// J-12（选项③）：静默窗口按收件客户时区判定（metadata > 档案 > cstZone 回退）。
+	zone := resolveCustomerZone(ctx, &p.config, req)
+	if !inQuietHoursWindow(now, reachQuietHoursStart(ctx), reachQuietHoursEnd(ctx), zone) {
 		return false
 	}
 	deferrer := p.config.QuietHoursDeferrer
 	if deferrer == nil {
 		deferrer = GetGlobalQuietHoursQueue()
 	}
-	sendAt := nextQuietHoursRelease(now, reachQuietHoursEnd(ctx))
+	sendAt := nextQuietHoursRelease(now, reachQuietHoursEnd(ctx), zone)
 	return p.deferSend(ctx, req, resp, deferrer, sendAt, "[R-4] quiet hours")
 }
 
