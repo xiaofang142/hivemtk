@@ -181,6 +181,17 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			c.JSON(500, gin.H{"code": 1, "message": err.Error()})
 			return
 		}
+		// format=zip（S-7 包通道）：同一份清单打成包下发，runner 原子解包后换入。
+		// 默认仍是 JSON 清单——旧 runner 不认 zip，改了默认等于断兼容。
+		if c.Query("format") == "zip" {
+			pkg, perr := egolite.BuildAssetPackage(assets)
+			if perr != nil {
+				c.JSON(400, gin.H{"code": 1, "message": perr.Error()})
+				return
+			}
+			c.Data(200, "application/zip", pkg)
+			return
+		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"assets": assets}})
 	})
 

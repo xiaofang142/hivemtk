@@ -1,6 +1,8 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -68,6 +71,7 @@ func (r *runner) pullAssets() {
 	u.Path = "/api/egolite/assets/pull"
 	q := u.Query()
 	q.Set("token", r.conf.Token)
+	q.Set("format", "zip")
 	u.RawQuery = q.Encode()
 
 	client := &http.Client{Timeout: assetPullTimeout}
@@ -80,6 +84,18 @@ func (r *runner) pullAssets() {
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产拉取 HTTP %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
+		return
+	}
+	// 包通道（S-7）：Content-Type 是 zip 就走整包安装，否则回落 JSON 清单（兼容旧服务端）。
+	if ct := resp.Header.Get("Content-Type"); strings.Contains(ct, "zip") {
+		installed, skipped, ierr := r.installFromZip(resp.Body)
+		if ierr != nil {
+			fmt.Fprintf(os.Stderr, "[ego-runner] 资产包安装失败: %v\n", ierr)
+			return
+		}
+		if installed > 0 || skipped > 0 {
+			fmt.Fprintf(os.Stderr, "[ego-runner] 资产包同步：新装 %d / 未变 %d\n", installed, skipped)
+		}
 		return
 	}
 	var payload struct {
@@ -172,4 +188,134 @@ func (r *runner) installAsset(a installableAsset) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// ---------- S-7 包通道：zip 原子解包 ----------
+
+const (
+	assetZipMaxEntries    = 512
+	assetZipMaxEntryBytes = 4 << 20
+	assetZipMaxTotalBytes = 32 << 20
+)
+
+// safeZipEntry 校验包内路径（两端互不信任：服务端已判一次，这里再判）。
+func safeZipEntry(name string) bool {
+	if name == "" || strings.Contains(name, "..") || strings.Contains(name, "\\") {
+		return false
+	}
+	if strings.HasPrefix(name, "/") || path.IsAbs(name) {
+		return false
+	}
+	return path.Clean(name) == name
+}
+
+// installFromZip 把整包解到临时目录、逐资产原子换入；返回 (新装, 未变, error)。
+//
+// 原子性来自"先写 .tmp-<id> 再 rename"：中途失败时旧目录仍然完整，
+// 不会出现"entry 已换、manifest 还是旧版"的半装状态。
+func (r *runner) installFromZip(body io.Reader) (int, int, error) {
+	data, err := io.ReadAll(io.LimitReader(body, assetZipMaxTotalBytes+1))
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(data) > assetZipMaxTotalBytes {
+		return 0, 0, fmt.Errorf("包体积超过上限 %d", assetZipMaxTotalBytes)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return 0, 0, fmt.Errorf("读包失败: %w", err)
+	}
+	if len(zr.File) > assetZipMaxEntries {
+		return 0, 0, fmt.Errorf("条目数 %d 超过上限 %d", len(zr.File), assetZipMaxEntries)
+	}
+
+	type pkgAsset struct {
+		files map[string][]byte
+		hash  string
+	}
+	pkgs := map[string]*pkgAsset{}
+	total := 0
+	for _, f := range zr.File {
+		if !safeZipEntry(f.Name) {
+			return 0, 0, fmt.Errorf("非法条目路径: %q", f.Name)
+		}
+		parts := strings.SplitN(f.Name, "/", 2)
+		if len(parts) != 2 {
+			return 0, 0, fmt.Errorf("条目 %q 不在资产目录下", f.Name)
+		}
+		id, rel := parts[0], parts[1]
+		if f.UncompressedSize64 > assetZipMaxEntryBytes {
+			return 0, 0, fmt.Errorf("条目 %s 超过单条上限", f.Name)
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return 0, 0, err
+		}
+		content, err := io.ReadAll(io.LimitReader(rc, assetZipMaxEntryBytes+1))
+		rc.Close()
+		if err != nil {
+			return 0, 0, err
+		}
+		if len(content) > assetZipMaxEntryBytes {
+			return 0, 0, fmt.Errorf("条目 %s 超过单条上限", f.Name)
+		}
+		total += len(content)
+		if total > assetZipMaxTotalBytes {
+			return 0, 0, fmt.Errorf("解压体积超过上限 %d", assetZipMaxTotalBytes)
+		}
+		p := pkgs[id]
+		if p == nil {
+			p = &pkgAsset{files: map[string][]byte{}}
+			pkgs[id] = p
+		}
+		p.files[rel] = content
+	}
+
+	installed, skipped := 0, 0
+	for id, p := range pkgs {
+		mb, ok := p.files["manifest.json"]
+		if !ok {
+			return installed, skipped, fmt.Errorf("资产 %s 缺 manifest.json", id)
+		}
+		var m struct {
+			Hivemtk struct {
+				ScriptHash string `json:"script_hash"`
+			} `json:"hivemtk"`
+		}
+		if err := json.Unmarshal(mb, &m); err != nil {
+			return installed, skipped, fmt.Errorf("资产 %s manifest 解析失败: %w", id, err)
+		}
+		dir := filepath.Join(learningsDir(r.conf.WorkspaceDir), id)
+		if b, err := os.ReadFile(filepath.Join(dir, ".installed_hash")); err == nil &&
+			m.Hivemtk.ScriptHash != "" && strings.TrimSpace(string(b)) == m.Hivemtk.ScriptHash {
+			skipped++
+			continue
+		}
+		tmp := dir + ".tmp"
+		if err := os.RemoveAll(tmp); err != nil {
+			return installed, skipped, err
+		}
+		for rel, content := range p.files {
+			full := filepath.Join(tmp, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+				return installed, skipped, err
+			}
+			if err := os.WriteFile(full, content, 0o600); err != nil {
+				return installed, skipped, err
+			}
+		}
+		if m.Hivemtk.ScriptHash != "" {
+			if err := os.WriteFile(filepath.Join(tmp, ".installed_hash"), []byte(m.Hivemtk.ScriptHash), 0o600); err != nil {
+				return installed, skipped, err
+			}
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return installed, skipped, err
+		}
+		if err := os.Rename(tmp, dir); err != nil {
+			return installed, skipped, err
+		}
+		installed++
+	}
+	return installed, skipped, nil
 }
