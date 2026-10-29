@@ -20,8 +20,22 @@ import (
 // ErrDashboardRepoNotReady 仓储未注入（装配缺失）。
 var ErrDashboardRepoNotReady = errors.New("observability dashboard repository not initialized")
 
+// DashboardDefaultWindowHours 看板默认窗口的小时数**代码兜底**（7 天）。
+// 生效值由参数中心 `telemetry.dashboard_default_window_hours` 决定（改完即时生效）；
+// 这个常量只在库/参数服务不可用时生效，且必须与种子 DefaultValue 一致
+// （判据见 scripts/check-config-param-defaults.py）。
+const DashboardDefaultWindowHours = 168
+
 // DashboardDefaultWindow 看板默认窗口（7 天）。window 参数非法时回落这里。
-const DashboardDefaultWindow = 7 * 24 * time.Hour
+const DashboardDefaultWindow = time.Duration(DashboardDefaultWindowHours) * time.Hour
+
+// ChannelOnlineDegradedBelow 渠道在线率低于该百分比即判 degraded 的**代码兜底**。
+// 生效值由参数中心 `telemetry.channel_online_degraded_below` 决定。
+//
+// 90 的理由：在线率不是「有没有」的二元量——3 个账号掉 1 个就是 66.7%，
+// 但对这个租户来说「有一条消息发不出去」已经是真问题；而 100% 又不该是门槛
+// （偶发重连会天天飘红）。90 允许 10 个账号掉 1 个不响，掉 2 个才响。
+const ChannelOnlineDegradedBelow = 90
 
 // ── 状态取值 ────────────────────────────────────────────────────────────────
 
@@ -137,7 +151,8 @@ func (s *ObservabilityDashboardService) Snapshot(ctx context.Context, window str
 	if s.repo == nil {
 		return nil, ErrDashboardRepoNotReady
 	}
-	since := s.now().Add(-windowDuration(window))
+	defaultWindow := s.defaultWindow(ctx)
+	since := s.now().Add(-windowDuration(window, defaultWindow))
 
 	costRows, err := s.repo.LLMCost(ctx, since)
 	if err != nil {
@@ -167,18 +182,38 @@ func (s *ObservabilityDashboardService) Snapshot(ctx context.Context, window str
 
 	return &ObsDashSnapshot{
 		GeneratedAt:   s.now(),
-		Window:        normalizeWindow(window),
+		Window:        normalizeWindow(window, defaultWindow),
 		AICost:        buildAICostSection(costRows),
 		Delivery:      buildDeliverySection(deliveryRows),
 		Funnel:        buildFunnelSection(funnelRows),
-		ChannelHealth: buildChannelHealthSection(accountRows, selectorRows, domainBan),
+		ChannelHealth: buildChannelHealthSection(accountRows, selectorRows, domainBan, s.onlineDegradedBelow(ctx)),
 	}, nil
 }
 
 // ── 口径纯函数（可单测） ────────────────────────────────────────────────────
 
-// windowDuration 把 "24h"/"7d"/"30d" 换成时长。非法值回落 DashboardDefaultWindow。
-func windowDuration(window string) time.Duration {
+// defaultWindow 生效的默认窗口（参数中心 telemetry.dashboard_default_window_hours，兜底 7 天）。
+//
+// 越界一律回落兜底而不是夹：填 0 会被理解成「看板只看此刻」，那种读数还会显示成绿。
+func (s *ObservabilityDashboardService) defaultWindow(ctx context.Context) time.Duration {
+	hours := GlobalConfigParam().GetInt(ctx, "telemetry", "dashboard_default_window_hours", DashboardDefaultWindowHours)
+	if hours <= 0 || hours > 8760 {
+		return DashboardDefaultWindow
+	}
+	return time.Duration(hours) * time.Hour
+}
+
+// onlineDegradedBelow 生效的渠道在线率降级阈值（参数中心 telemetry.channel_online_degraded_below）。
+func (s *ObservabilityDashboardService) onlineDegradedBelow(ctx context.Context) int {
+	v := GlobalConfigParam().GetInt(ctx, "telemetry", "channel_online_degraded_below", ChannelOnlineDegradedBelow)
+	if v <= 0 || v > 100 {
+		return ChannelOnlineDegradedBelow
+	}
+	return v
+}
+
+// windowDuration 把 "24h"/"7d"/"30d" 换成时长。非法值回落 fallback（默认窗口）。
+func windowDuration(window string, fallback time.Duration) time.Duration {
 	switch window {
 	case "24h":
 		return 24 * time.Hour
@@ -187,18 +222,20 @@ func windowDuration(window string) time.Duration {
 	case "30d":
 		return 30 * 24 * time.Hour
 	default:
-		return DashboardDefaultWindow
+		return fallback
 	}
 }
 
-// normalizeWindow 返回对外展示用的窗口串（非法输入归一为 "7d"，与回落时长一致）。
-func normalizeWindow(window string) string {
+// normalizeWindow 返回对外展示用的窗口串（非法输入归一为 fallback 的可读形态）。
+func normalizeWindow(window string, fallback time.Duration) string {
 	switch window {
 	case "24h", "7d", "30d":
 		return window
-	default:
-		return "7d"
 	}
+	if h := int(fallback.Hours()); h > 0 && h%24 == 0 {
+		return fmt.Sprintf("%dd", h/24)
+	}
+	return fmt.Sprintf("%dh", int(fallback.Hours()))
 }
 
 // percent 算百分比（0–100，一位小数）。分母 0 返回 0 而不是 NaN——
@@ -235,6 +272,14 @@ func FunnelConversion(prev, curr int64) float64 {
 //	  否则会与「部分失效」混成一档黄；
 //	· 全离线独立一档：一台在线的都没有与「个别选择器坏了」是两种处置动作。
 func ClassifyChannelHealth(accounts, online int64, worstSelector string, brokenFields int) string {
+	return ClassifyChannelHealthWithThreshold(accounts, online, worstSelector, brokenFields, ChannelOnlineDegradedBelow)
+}
+
+// ClassifyChannelHealthWithThreshold 带在线率阈值的判定（阈值来自参数中心）。
+//
+// 在线率这一档是 007 §3.6 登记过、当时没接的那个：只有「全离线」一档时，
+// 5 个账号掉 4 个会显示成 healthy——运营面上那和「一切正常」长得一模一样。
+func ClassifyChannelHealthWithThreshold(accounts, online int64, worstSelector string, brokenFields, onlineDegradedBelow int) string {
 	if accounts == 0 {
 		return ChannelHealthStatusEmpty
 	}
@@ -245,6 +290,9 @@ func ClassifyChannelHealth(accounts, online int64, worstSelector string, brokenF
 		return ChannelHealthStatusOffline
 	}
 	if worstSelector == SelectorHealthStatusDegraded || brokenFields > 0 {
+		return ChannelHealthStatusDegraded
+	}
+	if onlineDegradedBelow > 0 && onlineDegradedBelow <= 100 && OnlineRate(online, accounts) < float64(onlineDegradedBelow) {
 		return ChannelHealthStatusDegraded
 	}
 	return ChannelHealthStatusHealthy
@@ -339,7 +387,8 @@ func dashboardNodeLabel(node string) string {
 }
 
 func buildChannelHealthSection(accountRows []repository.ObsDashChannelAccountRow,
-	selectorRows []model.BridgeSelectorHealth, domainBan repository.ObsDashDomainBanSummaryRow) ChannelHealthSection {
+	selectorRows []model.BridgeSelectorHealth, domainBan repository.ObsDashDomainBanSummaryRow,
+	onlineDegradedBelow int) ChannelHealthSection {
 	sec := ChannelHealthSection{
 		Channels:     make([]ChannelHealthView, 0, len(accountRows)),
 		DomainBanned: domainBan.Blacklisted,
@@ -369,7 +418,7 @@ func buildChannelHealthSection(accountRows []repository.ObsDashChannelAccountRow
 			OnlineRate:    OnlineRate(a.Online, a.Accounts),
 			SelectorWorst: w,
 			BrokenFields:  broken[a.Channel],
-			Status:        ClassifyChannelHealth(a.Accounts, a.Online, w, broken[a.Channel]),
+			Status:        ClassifyChannelHealthWithThreshold(a.Accounts, a.Online, w, broken[a.Channel], onlineDegradedBelow),
 		})
 	}
 	return sec

@@ -292,7 +292,9 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-10-23 content_guard 组新增 max_scan_runes 种子 ⇒ 238 → 239。
 // 2026-10-23 reach 组新增 compliance_policy_json 种子 ⇒ 239 → 240。
 // 2026-10-24 并行任务新增 bridge.selector_health_degraded_below ⇒ 240 → 241。
-const defaultParamDefsWant = 241
+// 2026-10-29 S-20（007 §3.6 余量）新增 telemetry.dashboard_default_window_hours +
+// telemetry.channel_online_degraded_below ⇒ 241 → 243。
+const defaultParamDefsWant = 243
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

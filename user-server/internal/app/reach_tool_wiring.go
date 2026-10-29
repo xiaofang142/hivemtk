@@ -53,11 +53,13 @@ func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) toolu
 		cfg.ConsentMode = service.ConsentModeRevocationOnly
 		cfg.DoNotContactStrict = service.NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db))
 		// D05：意图级硬配额（PG 预占真源）。维度=每客户每日；上限走参数中心
-		// reach/global_per_user_daily_limit，0=不设额（默认，零行为变更）。
+		// reach/global_per_user_daily_limit，0=不设额，兜底 3（与种子 DefaultValue 及
+		// reach_pipeline 的读点一致——此前这里写 0，参数行缺失时会静默变成"不设额"，
+		// 与种子描述的行为相反，被 check-config-param-defaults 判 MISMATCH 抓出）。
 		// 仅当调用方带 action_intent_id 幂等键时才实际预占。
 		cfg.QuotaReserver = service.NewReachQuotaManager(repository.NewReachQuotaRepository(db))
 		cfg.QuotaScopesFn = func(ctx context.Context, req *service.ReachSendRequest) []service.QuotaScopeDef {
-			limit := service.GlobalConfigParam().GetInt(ctx, "reach", "global_per_user_daily_limit", 0)
+			limit := service.GlobalConfigParam().GetInt(ctx, "reach", "global_per_user_daily_limit", 3)
 			if limit <= 0 {
 				return nil
 			}

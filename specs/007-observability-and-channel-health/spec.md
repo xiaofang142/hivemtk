@@ -199,7 +199,9 @@ ClassifyChannelHealth(accounts, online, worstSelector, brokenFields):
 - **D1 不在本泳道**：转化漏斗只做到「AI 全链路（trace 生命周期节点）」，不延伸到
   opportunity→quote→bill（那是 D1 的 Lead-to-Cash，数据源不同、且正被另一 lane 改动）。
 - **新表 = 0**：所有口径都有既有数据源，不需要新表 → 不需要动 `module_tables.go`。
-- **阈值不接参数中心**：`ChannelOnlineDegradedBelow`（本轮未使用，见 §3.6）与窗口默认值用包级常量；
-  接参数中心留作后续增量（需改 `config_param_seeds.go`，本泳道不碰）。
+- **阈值不接参数中心**（~~本轮~~ **2026-10-29 已按后续增量接上**，见 delivery D6）：
+  `ChannelOnlineDegradedBelow`（本轮未使用，见 §3.6）与窗口默认值当初用包级常量；
+  现为 `telemetry.dashboard_default_window_hours` 与 `telemetry.channel_online_degraded_below`
+  两条种子，代码常量只做兜底（与种子 DefaultValue 一致，gate `check-config-param-defaults` 已验）。
 - **domain_pool 封禁是全局计数**：域名到渠道的映射不在现有数据里，本轮不做「域名→渠道」归属推断，
   只在看板域名区展示全局封禁数；渠道级封禁信号用 selector broken（§3.5 口径 1）。

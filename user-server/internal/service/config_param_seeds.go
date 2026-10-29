@@ -240,6 +240,17 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "telemetry", Key: "trace_sink_buffer", Name: "Trace Sink 缓冲",
 			Description: "追踪采集缓冲队列容量（超过丢弃低优先级事件）",
 			ValueType:   "int", Unit: "条", DefaultValue: "2048", Min: strPtr("256"), Max: strPtr("524288"), Step: strPtr("256")},
+		// D6（specs/007 §3.6）：看板窗口默认值与渠道在线率降级阈值接参数中心。
+		// 读点：internal/service/observability_dashboard.go 的 defaultWindow / onlineDegradedBelow
+		// （每次快照热读；兜底常量 DashboardDefaultWindowHours / ChannelOnlineDegradedBelow 与 DefaultValue 一致）。
+		{Group: "telemetry", Key: "dashboard_default_window_hours",
+			Name:        "看板默认统计窗口（小时）",
+			Description: "运营看板在调用方没给 window（或给了非法值）时用的统计窗口，单位小时。写大＝样本更多、曲线更平滑，但「刚出问题」会被历史稀释；写小＝灵敏，代价是样本少时读数抖动。必须能被 24 整除才显示成「N 天」形态，否则显示成「N 小时」；0 或 >8760 一律回落兜底 168（7 天）——填 0 的直觉是「只看此刻」，而那样的看板会把空读数显示成绿色",
+			ValueType:   "int", Unit: "小时", DefaultValue: "168", Min: strPtr("1"), Max: strPtr("8760"), Step: strPtr("1"), Restart: false},
+		{Group: "telemetry", Key: "channel_online_degraded_below",
+			Name:        "渠道在线率降级阈值",
+			Description: "渠道在线账号占比低于该百分比即判 degraded（0–100）。在线率不是二元量：3 个账号掉 1 个就是 66.7%，对这个租户来说已经「有一条消息发不出去」。写 100＝偶发重连就飘红；写低＝只有大面积掉线才看得见，中间那一段会与「一切正常」同色。全离线另有 offline 档，不受此阈值影响。非正数或 >100 一律回落兜底 90",
+			ValueType:   "int", Unit: "%", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("100"), Step: strPtr("1"), Restart: false},
 		{Group: "telemetry", Key: "geo_position_window", Name: "品牌词命中去重窗口",
 			Description: "Geo 品牌词提及量统计时，相邻两处命中的字符间隔小于该值即算同一处提及（如「Apple 发布会」只计一次）。单位是字符偏移，不是条数。",
 			ValueType:   "int", Unit: "字符", DefaultValue: "20", Min: strPtr("5"), Max: strPtr("100"), Step: strPtr("1")},

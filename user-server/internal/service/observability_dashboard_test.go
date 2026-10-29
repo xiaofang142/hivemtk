@@ -137,7 +137,9 @@ func TestClassifyChannelHealth_OrderMatters(t *testing.T) {
 		{"存在 broken 字段 ⇒ degraded", 3, 3, SelectorHealthStatusOK, 1, ChannelHealthStatusDegraded},
 		{"在线 + 选择器健康 ⇒ healthy", 3, 3, SelectorHealthStatusOK, 0, ChannelHealthStatusHealthy},
 		{"在线 + 样本不足 ⇒ healthy（warming 不是问题）", 3, 3, SelectorHealthStatusWarming, 0, ChannelHealthStatusHealthy},
-		{"无选择器读数 + 在线 ⇒ healthy（missing 不构成信号）", 3, 2, "none", 0, ChannelHealthStatusHealthy},
+		{"无选择器读数 + 全在线 ⇒ healthy（missing 不构成信号）", 3, 3, "none", 0, ChannelHealthStatusHealthy},
+		{"在线率低于阈值 ⇒ degraded（007 §3.6 补上的那一档：3 掉 1 就是 66.7%）", 3, 2, "none", 0, ChannelHealthStatusDegraded},
+		{"在线率刚好等于阈值 ⇒ healthy（判据是「低于」不是「不高于」）", 10, 9, "none", 0, ChannelHealthStatusHealthy},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -146,6 +148,48 @@ func TestClassifyChannelHealth_OrderMatters(t *testing.T) {
 					tt.accounts, tt.online, tt.worstSelector, tt.brokenFields, got, tt.want)
 			}
 		})
+	}
+}
+
+// 阈值来自参数中心，所以要能按任意阈值判（并要求非法阈值不改变判定）
+func TestClassifyChannelHealthWithThreshold(t *testing.T) {
+	cases := []struct {
+		name      string
+		accounts  int64
+		online    int64
+		threshold int
+		want      string
+	}{
+		{"75% 在线 + 阈值 70 ⇒ healthy", 4, 3, 70, ChannelHealthStatusHealthy},
+		{"75% 在线 + 阈值 80 ⇒ degraded", 4, 3, 80, ChannelHealthStatusDegraded},
+		{"阈值 0（非法）⇒ 不看在线率档", 4, 3, 0, ChannelHealthStatusHealthy},
+		{"阈值 101（非法）⇒ 不看在线率档", 4, 3, 101, ChannelHealthStatusHealthy},
+		{"全离线优先于阈值（offline 而非 degraded）", 4, 0, 90, ChannelHealthStatusOffline},
+		{"选择器 broken 优先于阈值（banned 而非 degraded）", 4, 3, 100, ChannelHealthStatusBanned},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := ClassifyChannelHealthWithThreshold(c.accounts, c.online, "none", 0, c.threshold)
+			if c.name == "选择器 broken 优先于阈值（banned 而非 degraded）" {
+				got = ClassifyChannelHealthWithThreshold(c.accounts, c.online, SelectorHealthStatusBroken, 0, c.threshold)
+			}
+			if got != c.want {
+				t.Fatalf("got=%s want=%s", got, c.want)
+			}
+		})
+	}
+}
+
+// 默认窗口来自参数中心：展示串要跟着兜底值走（配 48h 就显示 2d，而不是永远 7d）
+func TestNormalizeWindow_FollowsConfiguredDefault(t *testing.T) {
+	if got := normalizeWindow("", 48*time.Hour); got != "2d" {
+		t.Fatalf("48h 兜底应显示 2d，got %q", got)
+	}
+	if got := normalizeWindow("bogus", 36*time.Hour); got != "36h" {
+		t.Fatalf("不能被 24 整除时应显示小时，got %q", got)
+	}
+	if got := normalizeWindow("24h", 168*time.Hour); got != "24h" {
+		t.Fatalf("合法入参应原样展示，got %q", got)
 	}
 }
 
@@ -163,7 +207,7 @@ func TestWindowDuration_FallsBackTo7d(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {
-			if got := windowDuration(tt.in); got != tt.want {
+			if got := windowDuration(tt.in, DashboardDefaultWindow); got != tt.want {
 				t.Fatalf("windowDuration(%q) = %v, want %v", tt.in, got, tt.want)
 			}
 		})

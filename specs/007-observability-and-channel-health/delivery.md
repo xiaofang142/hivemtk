@@ -81,8 +81,8 @@ $ cd user-web && npx eslint --fix src/views/observabilityDashboard/Index.vue src
 | D2 | 渠道在线率**不能**按 `status='online'` 数 | 复用 `bridgeOnlineSQLPredicate` + `service.BridgeOnlineGraceWindow`（默认 30s），与渠道总览/主动触达/离线回扫三个读侧同一条谓词。证据：`repository/bridge_online_predicate.go` |
 | D3 | 转化漏斗范围只做到「AI 全链路」 | 用 `message_trace` 六节点（ingest→delivered_ack）。**不延伸到** opportunity→quote→bill（D1 Lead-to-Cash，数据源不同且正被另一 lane 改动）。注意：`dashboard_sse_stats.go` 已有**销售漏斗**（customer_journey 陌生人→成单），与本漏斗口径不同、不冲突 |
 | D4 | 封禁信号两级 | 渠道级 = selector broken（B1-a 判定，平台改版/封禁强信号）；域名级 = `domain_pool.on_blacklist`。域名→渠道映射在现有数据里不存在，本轮**不做归属推断** |
-| D5 | 在线率不进状态判定 | `ClassifyChannelHealth` 只用「选择器最差态 + broken 字段数 + 是否全离线」，在线率只做展示——避免「在线率低」与「选择器坏」两套判据打架（在线率低的原因可能正是选择器坏了） |
-| D6 | 阈值不接参数中心 | `window` 默认 7d、`SelectorHealthDegradedBelow` 复用 B1-a 参数；本轮不新增 config_param 种子（避免动 `config_param_seeds.go` 被主智能体占用的文件）。接参数中心留作后续增量 |
+| D5 | 在线率不进状态判定 | `ClassifyChannelHealth` 只用「选择器最差态 + broken 字段数 + 是否全离线」，在线率只做展示——避免「在线率低」与「选择器坏」两套判据打架（在线率低的原因可能正是选择器坏了）。**2026-10-29 补充**：新增在线率降级档时按同一顾虑排序——选择器面有任何信号（broken/banned、degraded、broken 字段 >0）时先返回那一档，**只有选择器面无信号才看在线率**，两套判据永远不同时发话 |
+| D6 | 阈值不接参数中心 | ~~留作后续增量~~ **2026-10-29 已接上（S-20）**：`telemetry.dashboard_default_window_hours`（兜底 168h，窗串按配置显示 N d/N h）与 `telemetry.channel_online_degraded_below`（兜底 90，`OnlineRate < 阈值` 判 degraded，全离线仍走 offline 档，非法值回落兜底）；`SelectorHealthDegradedBelow` 本来就复用 B1-a 参数。兜底常量与种子 DefaultValue 由 `check-config-param-defaults` + 读取点门/键规范门三道 gate 校验 |
 | D7 | 送达率分母 | = delivered + failed（已了结）；pending/acked 单列为「在途」。把在途塞进分母会让送达率在消息发出瞬间被人为压低 |
 | D8 | 成本 0 是合法读数 | 本地模型 / 未接计费口径时 cost 列为 0，看板显式渲染「暂无数据」而非异常（前端空态 + 注释已写） |
 | D9 | 未跑真库测试 | 测试库被并发 lane 占用（铁律 4）。仓储 SQL 落地无真库用例，已在 delivery 声明；SQL 全部遵循 `dashboard_stats.go`/`ai_performance_repo.go` 的既有写法 |
