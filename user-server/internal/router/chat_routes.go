@@ -8,6 +8,7 @@ import (
 	dbutil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"hivemtk-user/internal/service/translation"
 	"hivemtk-user/internal/websocket"
 
@@ -117,15 +118,15 @@ func setupWeComRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 }
 
 func setupCardShareRoutes(r *gin.Engine, gormDB *gorm.DB) {
-	douyinCardCtrl := controller.NewDouyinCardController(service.NewDouyinCardService(gormDB))
+	douyinCardCtrl := controller.NewDouyinCardController(cardsvc.NewDouyinCardService(gormDB))
 	r.GET("/share/douyin/:id", middleware.PublicIDTenant(gormDB, "douyin_cards"), douyinCardCtrl.SharePage)
 
-	kuaishouCardCtrl := controller.NewKuaishouCardController(service.NewKuaishouCardService(gormDB))
+	kuaishouCardCtrl := controller.NewKuaishouCardController(cardsvc.NewKuaishouCardService(gormDB))
 	r.GET("/share/kuaishou/:id", middleware.PublicIDTenant(gormDB, "kuaishou_cards"), kuaishouCardCtrl.SharePage)
 
-	xiaohongshuCardCtrl := controller.NewXiaohongshuCardController(service.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
+	xiaohongshuCardCtrl := controller.NewXiaohongshuCardController(cardsvc.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
 	r.GET("/share/xiaohongshu/:id", middleware.PublicIDTenant(gormDB, "xiaohongshu_cards"), xiaohongshuCardCtrl.SharePage)
 
-	xianyuCardCtrl := controller.NewXianyuCardController(service.NewXianyuCardService(gormDB), service.NewXianyuCardStatsService(gormDB))
+	xianyuCardCtrl := controller.NewXianyuCardController(cardsvc.NewXianyuCardService(gormDB), cardsvc.NewXianyuCardStatsService(gormDB))
 	r.GET("/share/xianyu/:id", middleware.PublicIDTenant(gormDB, "xianyu_cards"), xianyuCardCtrl.SharePage)
 }

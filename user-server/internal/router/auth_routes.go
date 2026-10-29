@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	emailsvc "hivemtk-user/internal/service/email"
 	smssvc "hivemtk-user/internal/service/sms"
 
@@ -97,8 +98,8 @@ func setupAccountRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 }
 
 func setupShortLinkRoutes(auth *gin.RouterGroup, public *gin.RouterGroup, gormDB *gorm.DB) {
-	shortLinkCtrl := controller.NewShortLinkController(service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
-	shortLinkStatsCtrl := controller.NewShortLinkStatsController(service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
+	shortLinkCtrl := controller.NewShortLinkController(cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
+	shortLinkStatsCtrl := controller.NewShortLinkStatsController(cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
 
 	auth.GET("/short-link/list", shortLinkCtrl.GetList)
 	auth.GET("/short-link/:id", shortLinkCtrl.GetByID)

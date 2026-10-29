@@ -4,6 +4,7 @@ import (
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -13,7 +14,7 @@ import (
 
 func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
-	douyinCardCtrl := controller.NewDouyinCardController(service.NewDouyinCardService(gormDB))
+	douyinCardCtrl := controller.NewDouyinCardController(cardsvc.NewDouyinCardService(gormDB))
 	auth.GET("/douyin-card/list", douyinCardCtrl.GetList)
 	auth.POST("/douyin-card", middleware.RequirePermission("cards.write"), douyinCardCtrl.Create)
 	auth.PUT("/douyin-card/:id", middleware.RequirePermission("cards.write"), douyinCardCtrl.Update)
@@ -27,7 +28,7 @@ func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.GET("/douyin/view/:id", douyinCardCtrl.GetByID)
 	auth.POST("/douyin/:id/generate-short-link", middleware.RequirePermission("cards.write"), douyinCardCtrl.GenerateShortLink)
 
-	kuaishouCardCtrl := controller.NewKuaishouCardController(service.NewKuaishouCardService(gormDB))
+	kuaishouCardCtrl := controller.NewKuaishouCardController(cardsvc.NewKuaishouCardService(gormDB))
 	auth.GET("/kuaishou-card/list", kuaishouCardCtrl.GetList)
 	auth.POST("/kuaishou-card", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Create)
 	auth.PUT("/kuaishou-card/:id", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.Update)
@@ -43,7 +44,7 @@ func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.POST("/kuaishou/share/:id", kuaishouCardCtrl.ShareCard)
 	auth.POST("/kuaishou/:id/generate-short-link", middleware.RequirePermission("cards.write"), kuaishouCardCtrl.GenerateShortLink)
 
-	xiaohongshuCardCtrl := controller.NewXiaohongshuCardController(service.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
+	xiaohongshuCardCtrl := controller.NewXiaohongshuCardController(cardsvc.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
 	auth.GET("/xiaohongshu-card/list", xiaohongshuCardCtrl.GetList)
 	auth.POST("/xiaohongshu-card", xiaohongshuCardCtrl.Create)
 	auth.PUT("/xiaohongshu-card/:id", xiaohongshuCardCtrl.Update)
@@ -57,7 +58,7 @@ func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.GET("/xiaohongshu/view/:id", xiaohongshuCardCtrl.GetByID)
 	auth.POST("/xiaohongshu/:id/generate-short-link", xiaohongshuCardCtrl.GenerateShortLink)
 
-	xianyuCardCtrl := controller.NewXianyuCardController(service.NewXianyuCardService(gormDB), service.NewXianyuCardStatsService(gormDB))
+	xianyuCardCtrl := controller.NewXianyuCardController(cardsvc.NewXianyuCardService(gormDB), cardsvc.NewXianyuCardStatsService(gormDB))
 	auth.GET("/xianyu-card/list", xianyuCardCtrl.GetList)
 	auth.POST("/xianyu-card", xianyuCardCtrl.Create)
 	auth.PUT("/xianyu-card/:id", xianyuCardCtrl.Update)
@@ -80,7 +81,7 @@ func setupCardRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 // 必须与 :id 绑定。未带/伪造凭证分别为 401/403，任何匿名请求都写不进库。
 // 租户归属仍由 PublicIDTenant 按卡片 id 反查后绑定，统计写入落在卡片所属租户。
 func setupXianyuCardTrackRoutes(public *gin.RouterGroup, gormDB *gorm.DB) {
-	xianyuCardCtrl := controller.NewXianyuCardController(service.NewXianyuCardService(gormDB), service.NewXianyuCardStatsService(gormDB))
+	xianyuCardCtrl := controller.NewXianyuCardController(cardsvc.NewXianyuCardService(gormDB), cardsvc.NewXianyuCardStatsService(gormDB))
 	track := public.Group("/xianyu/:id", middleware.PublicIDTenant(gormDB, "xianyu_cards"))
 	track.POST("/click", xianyuCardCtrl.RecordClick)
 	track.POST("/share", xianyuCardCtrl.RecordShare)
@@ -88,36 +89,36 @@ func setupXianyuCardTrackRoutes(public *gin.RouterGroup, gormDB *gorm.DB) {
 }
 
 func setupCardStatsRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
-	douyinStatsCtrl := controller.NewDouyinCardStatsController(service.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(gormDB)))
+	douyinStatsCtrl := controller.NewDouyinCardStatsController(cardsvc.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(gormDB)))
 	auth.GET("/douyin-card/stats/:id", douyinStatsCtrl.GetCardStats)
 	auth.GET("/douyin-card/overall-stats", douyinStatsCtrl.GetOverallStats)
 	auth.GET("/douyin/stats/card/:id", douyinStatsCtrl.GetCardStats)
 	auth.GET("/douyin/stats/overall", douyinStatsCtrl.GetOverallStats)
 
-	kuaishouStatsCtrl := controller.NewKuaishouCardStatsController(service.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(gormDB)))
+	kuaishouStatsCtrl := controller.NewKuaishouCardStatsController(cardsvc.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(gormDB)))
 	auth.GET("/kuaishou-card/stats/:id", kuaishouStatsCtrl.GetCardStats)
 	auth.GET("/kuaishou-card/overall-stats", kuaishouStatsCtrl.GetOverallStats)
 	auth.GET("/kuaishou/stats/card/:id", kuaishouStatsCtrl.GetCardStats)
 	auth.GET("/kuaishou/stats/overall", kuaishouStatsCtrl.GetOverallStats)
 
-	xiaohongshuStatsCtrl := controller.NewXiaohongshuCardStatsController(service.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(gormDB)))
+	xiaohongshuStatsCtrl := controller.NewXiaohongshuCardStatsController(cardsvc.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(gormDB)))
 	auth.GET("/xiaohongshu-card/stats/:id", xiaohongshuStatsCtrl.GetCardStats)
 	auth.GET("/xiaohongshu-card/overall-stats", xiaohongshuStatsCtrl.GetOverallStats)
 	auth.GET("/xiaohongshu/stats/card/:id", xiaohongshuStatsCtrl.GetCardStats)
 	auth.GET("/xiaohongshu/stats/overall", xiaohongshuStatsCtrl.GetOverallStats)
 
-	xianyuStatsCtrl := controller.NewXianyuCardStatsController(service.NewXianyuCardStatsService(gormDB))
+	xianyuStatsCtrl := controller.NewXianyuCardStatsController(cardsvc.NewXianyuCardStatsService(gormDB))
 	auth.GET("/xianyu-card/stats/:id", xianyuStatsCtrl.GetCardStats)
 	auth.GET("/xianyu-card/overall-stats", xianyuStatsCtrl.GetOverallStats)
 	auth.GET("/xianyu/stats/card/:id", xianyuStatsCtrl.GetCardStats)
 	auth.GET("/xianyu/stats/overall", xianyuStatsCtrl.GetOverallStats)
 
 	factory := controller.NewCardStatsFactoryController(
-		service.NewPlatformDouyinCardStatsAdapter(service.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(gormDB))),
-		service.NewPlatformKuaishouCardStatsAdapter(service.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(gormDB))),
-		service.NewPlatformXiaohongshuCardStatsAdapter(service.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(gormDB))),
-		service.NewPlatformXianyuCardStatsAdapter(service.NewXianyuCardStatsService(gormDB)),
-		service.NewPlatformTiktokCardStatsAdapter(service.NewTikTokCardService()),
+		service.NewPlatformDouyinCardStatsAdapter(cardsvc.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(gormDB))),
+		service.NewPlatformKuaishouCardStatsAdapter(cardsvc.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(gormDB))),
+		service.NewPlatformXiaohongshuCardStatsAdapter(cardsvc.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(gormDB))),
+		service.NewPlatformXianyuCardStatsAdapter(cardsvc.NewXianyuCardStatsService(gormDB)),
+		service.NewPlatformTiktokCardStatsAdapter(cardsvc.NewTikTokCardService()),
 	)
 	auth.GET("/card-stats/:platform/stats/:id", factory.GetCardStats)
 	auth.GET("/card-stats/:platform/overall", factory.GetOverallStats)

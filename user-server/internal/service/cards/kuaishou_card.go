@@ -1,4 +1,4 @@
-package service
+package cards
 
 import (
 	"context"
@@ -31,7 +31,7 @@ type KuaishouCardService interface {
 type kuaishouCardService struct {
 	repo              repository.KuaishouCardRepository
 	shortLinkService  ShortLinkService
-	domainPoolService DomainPoolService
+	domainPoolService DomainPoolResolver
 	templateService   *template.TemplateService
 }
 
@@ -41,7 +41,7 @@ func NewKuaishouCardService(db any) KuaishouCardService {
 	return &kuaishouCardService{
 		repo:              repository.NewKuaishouCardRepository(gormDB),
 		shortLinkService:  NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)),
-		domainPoolService: NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB)),
+		domainPoolService: newRepoDomainPoolResolver(repository.NewDomainPoolRepository(gormDB)),
 		templateService:   template.NewTemplateService("internal/template"),
 	}
 }

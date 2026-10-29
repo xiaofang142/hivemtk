@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,30 +23,30 @@ import (
 //
 // 五层架构修复：所有 service 由 router 注入，controller 不再直接访问数据库
 type RedirectController struct {
-	shortLinkService            service.ShortLinkService
-	douyinCardService           service.DouyinCardService
-	kuaishouCardService         service.KuaishouCardService
-	xiaohongshuCardService      service.XiaohongshuCardService
-	xianyuCardService           service.XianyuCardService
-	douyinCardStatsService      service.DouyinCardStatsService
-	kuaishouCardStatsService    *service.KuaishouCardStatsService
-	xiaohongshuCardStatsService service.XiaohongshuCardStatsService
-	xianyuCardStatsService      service.XianyuCardStatsService
-	tiktokCardService           service.TikTokCardService
+	shortLinkService            cardsvc.ShortLinkService
+	douyinCardService           cardsvc.DouyinCardService
+	kuaishouCardService         cardsvc.KuaishouCardService
+	xiaohongshuCardService      cardsvc.XiaohongshuCardService
+	xianyuCardService           cardsvc.XianyuCardService
+	douyinCardStatsService      cardsvc.DouyinCardStatsService
+	kuaishouCardStatsService    *cardsvc.KuaishouCardStatsService
+	xiaohongshuCardStatsService cardsvc.XiaohongshuCardStatsService
+	xianyuCardStatsService      cardsvc.XianyuCardStatsService
+	tiktokCardService           cardsvc.TikTokCardService
 }
 
 // NewRedirectController 创建短链重定向控制器（service 由 router 注入）
 func NewRedirectController(
-	shortLinkService service.ShortLinkService,
-	douyinCardService service.DouyinCardService,
-	kuaishouCardService service.KuaishouCardService,
-	xiaohongshuCardService service.XiaohongshuCardService,
-	xianyuCardService service.XianyuCardService,
-	douyinCardStatsService service.DouyinCardStatsService,
-	kuaishouCardStatsService *service.KuaishouCardStatsService,
-	xiaohongshuCardStatsService service.XiaohongshuCardStatsService,
-	xianyuCardStatsService service.XianyuCardStatsService,
-	tiktokCardService service.TikTokCardService,
+	shortLinkService cardsvc.ShortLinkService,
+	douyinCardService cardsvc.DouyinCardService,
+	kuaishouCardService cardsvc.KuaishouCardService,
+	xiaohongshuCardService cardsvc.XiaohongshuCardService,
+	xianyuCardService cardsvc.XianyuCardService,
+	douyinCardStatsService cardsvc.DouyinCardStatsService,
+	kuaishouCardStatsService *cardsvc.KuaishouCardStatsService,
+	xiaohongshuCardStatsService cardsvc.XiaohongshuCardStatsService,
+	xianyuCardStatsService cardsvc.XianyuCardStatsService,
+	tiktokCardService cardsvc.TikTokCardService,
 ) *RedirectController {
 	return &RedirectController{
 		shortLinkService:            shortLinkService,

@@ -6,18 +6,18 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 )
 
 // DouyinCardController 抖音卡片控制器
 type DouyinCardController struct {
-	service service.DouyinCardService
+	service cardsvc.DouyinCardService
 }
 
 // NewDouyinCardController 创建抖音卡片控制器实例
-func NewDouyinCardController(service service.DouyinCardService) *DouyinCardController {
+func NewDouyinCardController(service cardsvc.DouyinCardService) *DouyinCardController {
 	return &DouyinCardController{
 		service: service,
 	}

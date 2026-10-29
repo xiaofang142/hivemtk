@@ -1,4 +1,4 @@
-package service
+package cards
 
 import (
 	"context"
@@ -30,7 +30,7 @@ type douyinCardService struct {
 	repo              repository.DouyinCardRepository
 	statsService      DouyinCardStatsService
 	shortLinkService  ShortLinkService
-	domainPoolService DomainPoolService
+	domainPoolService DomainPoolResolver
 	templateService   *template.TemplateService
 }
 
@@ -41,7 +41,7 @@ func NewDouyinCardService(db any) DouyinCardService {
 		repo:              repository.NewDouyinCardRepository(gormDB),
 		statsService:      NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(gormDB)),
 		shortLinkService:  NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)),
-		domainPoolService: NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB)),
+		domainPoolService: newRepoDomainPoolResolver(repository.NewDomainPoolRepository(gormDB)),
 		templateService:   template.NewTemplateService("internal/template"),
 	}
 }

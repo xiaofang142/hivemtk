@@ -4,6 +4,7 @@ import (
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -112,7 +113,7 @@ func setupWechatWebhookRoutes(r *gin.RouterGroup, gormDB *gorm.DB, ingressSvc *s
 
 func setupTiktokRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	tiktokCardCtrl := controller.NewTikTokCardController(
-		service.NewTikTokCardService(),
+		cardsvc.NewTikTokCardService(),
 	)
 	tiktokCardCtrl.RegisterRoutes(auth)
 }

@@ -10,20 +10,20 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	cardpkg "hivemtk-user/internal/reach/card"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 )
 
 // XianyuCardController 闲鱼卡片控制器
 type XianyuCardController struct {
-	service  service.XianyuCardService
-	statsSvc service.XianyuCardStatsService
+	service  cardsvc.XianyuCardService
+	statsSvc cardsvc.XianyuCardStatsService
 }
 
 // NewXianyuCardController 创建闲鱼卡片控制器实例
 // statsSvc 在构造时注入，避免 Controller 方法内直接访问数据库（架构违规）
-func NewXianyuCardController(service service.XianyuCardService, statsSvc service.XianyuCardStatsService) *XianyuCardController {
+func NewXianyuCardController(service cardsvc.XianyuCardService, statsSvc cardsvc.XianyuCardStatsService) *XianyuCardController {
 	return &XianyuCardController{
 		service:  service,
 		statsSvc: statsSvc,

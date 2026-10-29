@@ -1,4 +1,4 @@
-package service
+package cards
 
 import (
 	"context"
@@ -26,7 +26,7 @@ type xianyuCardService struct {
 	repo              repository.XianyuCardRepository
 	statsService      XianyuCardStatsService
 	shortLinkService  ShortLinkService
-	domainPoolService DomainPoolService
+	domainPoolService DomainPoolResolver
 	templateService   *template.TemplateService
 }
 
@@ -37,7 +37,7 @@ func NewXianyuCardService(db any) XianyuCardService {
 		repo:              repository.NewXianyuCardRepository(gormDB),
 		statsService:      NewXianyuCardStatsService(gormDB),
 		shortLinkService:  NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)),
-		domainPoolService: NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB)),
+		domainPoolService: newRepoDomainPoolResolver(repository.NewDomainPoolRepository(gormDB)),
 		templateService:   template.NewTemplateService("internal/template"),
 	}
 }

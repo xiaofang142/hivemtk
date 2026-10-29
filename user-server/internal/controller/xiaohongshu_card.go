@@ -7,18 +7,18 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 )
 
 // XiaohongshuCardController 小红书卡片控制器
 type XiaohongshuCardController struct {
-	service service.XiaohongshuCardService
+	service cardsvc.XiaohongshuCardService
 }
 
 // NewXiaohongshuCardController 创建小红书卡片控制器实例
-func NewXiaohongshuCardController(service service.XiaohongshuCardService) *XiaohongshuCardController {
+func NewXiaohongshuCardController(service cardsvc.XiaohongshuCardService) *XiaohongshuCardController {
 	return &XiaohongshuCardController{
 		service: service,
 	}

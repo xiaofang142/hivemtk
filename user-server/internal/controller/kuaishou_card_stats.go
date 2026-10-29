@@ -3,7 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -11,11 +11,11 @@ import (
 
 // KuaishouCardStatsController 快手卡片统计控制器
 type KuaishouCardStatsController struct {
-	statsService *service.KuaishouCardStatsService
+	statsService *cardsvc.KuaishouCardStatsService
 }
 
 // NewKuaishouCardStatsController 创建快手卡片统计控制器实例
-func NewKuaishouCardStatsController(statsService *service.KuaishouCardStatsService) *KuaishouCardStatsController {
+func NewKuaishouCardStatsController(statsService *cardsvc.KuaishouCardStatsService) *KuaishouCardStatsController {
 	return &KuaishouCardStatsController{
 		statsService: statsService,
 	}

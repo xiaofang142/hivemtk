@@ -13,6 +13,7 @@ import (
 	opsctrl "hivemtk-user/internal/ops/controller"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	smssvc "hivemtk-user/internal/service/sms"
 
 	"github.com/gin-gonic/gin"
@@ -266,32 +267,32 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/sms/configs/list", smsCtrl.GetConfig)
 
 	{
-		douyinCtrl := controller.NewDouyinCardController(service.NewDouyinCardService(gormDB))
+		douyinCtrl := controller.NewDouyinCardController(cardsvc.NewDouyinCardService(gormDB))
 		doReg("GET", "/douyin-cards", douyinCtrl.GetList)
 		doReg("GET", "/douyin-cards/list", douyinCtrl.GetList)
 		doReg("GET", "/douyin-cards/:id", douyinCtrl.GetByID)
 	}
 	{
-		kuaishouCtrl := controller.NewKuaishouCardController(service.NewKuaishouCardService(gormDB))
+		kuaishouCtrl := controller.NewKuaishouCardController(cardsvc.NewKuaishouCardService(gormDB))
 		doReg("GET", "/kuaishou-cards", kuaishouCtrl.GetList)
 		doReg("GET", "/kuaishou-cards/list", kuaishouCtrl.GetList)
 		doReg("GET", "/kuaishou-cards/:id", kuaishouCtrl.GetByID)
 	}
 	{
-		xhsCtrl := controller.NewXiaohongshuCardController(service.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
+		xhsCtrl := controller.NewXiaohongshuCardController(cardsvc.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(gormDB), cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)), service.NewDomainPoolService(repository.NewDomainPoolRepository(gormDB), repository.NewDomainBlacklistRepository(gormDB))))
 		doReg("GET", "/xiaohongshu-cards", xhsCtrl.GetList)
 		doReg("GET", "/xiaohongshu-cards/list", xhsCtrl.GetList)
 		doReg("GET", "/xiaohongshu-cards/:id", xhsCtrl.GetByID)
 	}
 	{
-		xianyuCtrl := controller.NewXianyuCardController(service.NewXianyuCardService(gormDB), service.NewXianyuCardStatsService(gormDB))
+		xianyuCtrl := controller.NewXianyuCardController(cardsvc.NewXianyuCardService(gormDB), cardsvc.NewXianyuCardStatsService(gormDB))
 		doReg("GET", "/xianyu-cards", xianyuCtrl.GetList)
 		doReg("GET", "/xianyu-cards/list", xianyuCtrl.GetList)
 		doReg("GET", "/xianyu-cards/:id", xianyuCtrl.GetByID)
 	}
 
 	tiktokCtrl := controller.NewTikTokCardController(
-		service.NewTikTokCardService(),
+		cardsvc.NewTikTokCardService(),
 	)
 	doReg("GET", "/tiktok-cards", tiktokCtrl.List)
 	doReg("GET", "/tiktok-cards/list", tiktokCtrl.List)
@@ -315,7 +316,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	)
 	doRegAdmin("GET", "/telegram/accounts/list", tgCtrl.List)
 
-	shortLinkCtrl := controller.NewShortLinkController(service.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
+	shortLinkCtrl := controller.NewShortLinkController(cardsvc.NewShortLinkService(repository.NewShortLinkRepository(gormDB), repository.NewDomainPoolRepository(gormDB), repository.NewShortLinkAccessRepository(gormDB)))
 	doReg("GET", "/short-links", shortLinkCtrl.GetList)
 	doReg("GET", "/short-links/list", shortLinkCtrl.GetList)
 	doReg("GET", "/short-links/:id", shortLinkCtrl.GetByID)

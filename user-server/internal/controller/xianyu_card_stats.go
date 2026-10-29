@@ -3,7 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"strconv"
 	"time"
 
@@ -14,14 +14,14 @@ import (
 //
 // 修复：严格遵循五层架构 Controller → Service → Repository → Model，
 // 移除原先方法内 new repository.XianyuCardStatsRepository 的越层调用，
-// 通过 service.XianyuCardStatsService 的 GetCardStatsRaw /
+// 通过 cardsvc.XianyuCardStatsService 的 GetCardStatsRaw /
 // GetOverallStatsRaw 方法访问原始统计数据（保留 views/clicks/shares 完整字段）。
 type XianyuCardStatsController struct {
-	service service.XianyuCardStatsService
+	service cardsvc.XianyuCardStatsService
 }
 
 // NewXianyuCardStatsController 创建闲鱼卡片统计控制器实例
-func NewXianyuCardStatsController(service service.XianyuCardStatsService) *XianyuCardStatsController {
+func NewXianyuCardStatsController(service cardsvc.XianyuCardStatsService) *XianyuCardStatsController {
 	return &XianyuCardStatsController{
 		service: service,
 	}

@@ -6,20 +6,20 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 )
 
 type TikTokCardController struct {
-	svc service.TikTokCardService
+	svc cardsvc.TikTokCardService
 }
 
 // NewTikTokCardController 创建 TikTok 卡片控制器
 //
 // 五层架构合规：service 由 router 层注入（service.NewTikTokCardServiceWithDB），
 // controller 不直接 import repository / db 包。
-func NewTikTokCardController(svc service.TikTokCardService) *TikTokCardController {
+func NewTikTokCardController(svc cardsvc.TikTokCardService) *TikTokCardController {
 	return &TikTokCardController{svc: svc}
 }
 

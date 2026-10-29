@@ -5,7 +5,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,18 +14,18 @@ import (
 //
 // LM-：以前每平台各自维护一套 controller（douyin/kuaishou/xiaohongshu/xianyu）
 // + stats 接口，参数命名、返回结构不一致。本 controller 通过
-// :platform 路径参数动态选择对应的 service.PlatformCardStatsService，
+// :platform 路径参数动态选择对应的 cardsvc.PlatformCardStatsService，
 // 对外暴露统一的 /api/card-stats/:platform/stats/:id 与
 // /api/card-stats/:platform/overall 接口。
 //
 // 支持的平台：douyin / kuaishou / xiaohongshu / xianyu / tiktok
 type CardStatsFactoryController struct {
-	registry map[string]service.PlatformCardStatsService
+	registry map[string]cardsvc.PlatformCardStatsService
 }
 
 // NewCardStatsFactoryController 创建平台路由器
-func NewCardStatsFactoryController(services ...service.PlatformCardStatsService) *CardStatsFactoryController {
-	reg := make(map[string]service.PlatformCardStatsService, len(services))
+func NewCardStatsFactoryController(services ...cardsvc.PlatformCardStatsService) *CardStatsFactoryController {
+	reg := make(map[string]cardsvc.PlatformCardStatsService, len(services))
 	for _, s := range services {
 		if s == nil {
 			continue
@@ -35,7 +35,7 @@ func NewCardStatsFactoryController(services ...service.PlatformCardStatsService)
 	return &CardStatsFactoryController{registry: reg}
 }
 
-func (c *CardStatsFactoryController) resolve(ctx *gin.Context) (service.PlatformCardStatsService, bool) {
+func (c *CardStatsFactoryController) resolve(ctx *gin.Context) (cardsvc.PlatformCardStatsService, bool) {
 	platform := ctx.Param("platform")
 	if platform == "" {
 		platform = ctx.Query("platform")

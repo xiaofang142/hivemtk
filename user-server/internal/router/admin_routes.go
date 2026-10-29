@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	emailsvc "hivemtk-user/internal/service/email"
 	smssvc "hivemtk-user/internal/service/sms"
 
@@ -68,16 +69,16 @@ func setupPublicRoutes(public *gin.RouterGroup, liveCodeController *controller.L
 	public.POST("/system/create-default-admin", setupOnly, authCtrl.CreateDefaultAdmin)
 
 	redirectCtrl := controller.NewRedirectController(
-		service.NewShortLinkService(repository.NewShortLinkRepository(db), repository.NewDomainPoolRepository(db), repository.NewShortLinkAccessRepository(db)),
-		service.NewDouyinCardService(db),
-		service.NewKuaishouCardService(db),
-		service.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(db), service.NewShortLinkService(repository.NewShortLinkRepository(db), repository.NewDomainPoolRepository(db), repository.NewShortLinkAccessRepository(db)), service.NewDomainPoolService(repository.NewDomainPoolRepository(db), repository.NewDomainBlacklistRepository(db))),
-		service.NewXianyuCardService(db),
-		service.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(db)),
-		service.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(db)),
-		service.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(db)),
-		service.NewXianyuCardStatsService(db),
-		service.NewTikTokCardService(),
+		cardsvc.NewShortLinkService(repository.NewShortLinkRepository(db), repository.NewDomainPoolRepository(db), repository.NewShortLinkAccessRepository(db)),
+		cardsvc.NewDouyinCardService(db),
+		cardsvc.NewKuaishouCardService(db),
+		cardsvc.NewXiaohongshuCardService(repository.NewXiaohongshuCardRepository(db), cardsvc.NewShortLinkService(repository.NewShortLinkRepository(db), repository.NewDomainPoolRepository(db), repository.NewShortLinkAccessRepository(db)), service.NewDomainPoolService(repository.NewDomainPoolRepository(db), repository.NewDomainBlacklistRepository(db))),
+		cardsvc.NewXianyuCardService(db),
+		cardsvc.NewDouyinCardStatsService(repository.NewDouyinCardStatsRepository(db)),
+		cardsvc.NewKuaishouCardStatsService(repository.NewKuaishouCardStatsRepository(db)),
+		cardsvc.NewXiaohongshuCardStatsService(repository.NewXiaohongshuCardStatsRepository(db)),
+		cardsvc.NewXianyuCardStatsService(db),
+		cardsvc.NewTikTokCardService(),
 	)
 	public.GET("/s/:code", middleware.PublicCodeTenant(db, "short_links", "short_code"), redirectCtrl.RedirectShortLink)
 	public.GET("/l/:code", middleware.PublicCodeTenant(db, "live_codes", "short_link"), liveCodeController.RedirectLiveCode)

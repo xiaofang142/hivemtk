@@ -3,7 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,11 +13,11 @@ import (
 
 // ShortLinkController 短链控制器
 type ShortLinkController struct {
-	shortLinkService service.ShortLinkService
+	shortLinkService cardsvc.ShortLinkService
 }
 
 // NewShortLinkController 创建短链控制器实例
-func NewShortLinkController(shortLinkService service.ShortLinkService) *ShortLinkController {
+func NewShortLinkController(shortLinkService cardsvc.ShortLinkService) *ShortLinkController {
 	return &ShortLinkController{
 		shortLinkService: shortLinkService,
 	}

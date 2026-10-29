@@ -4,7 +4,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 	"strconv"
 	"time"
 
@@ -12,10 +12,10 @@ import (
 )
 
 type XiaohongshuCardStatsController struct {
-	statsService service.XiaohongshuCardStatsService
+	statsService cardsvc.XiaohongshuCardStatsService
 }
 
-func NewXiaohongshuCardStatsController(statsService service.XiaohongshuCardStatsService) *XiaohongshuCardStatsController {
+func NewXiaohongshuCardStatsController(statsService cardsvc.XiaohongshuCardStatsService) *XiaohongshuCardStatsController {
 	return &XiaohongshuCardStatsController{
 		statsService: statsService,
 	}

@@ -1,4 +1,4 @@
-package service
+package cards
 
 import (
 	"context"
@@ -23,11 +23,11 @@ type xiaohongshuCardService struct {
 	repo              repository.XiaohongshuCardRepository
 	templateService   *template.TemplateService
 	shortLinkService  ShortLinkService
-	domainPoolService DomainPoolService
+	domainPoolService DomainPoolResolver
 }
 
 // NewXiaohongshuCardService 创建小红书卡片服务实例
-func NewXiaohongshuCardService(repo repository.XiaohongshuCardRepository, shortLinkService ShortLinkService, domainPoolService DomainPoolService) XiaohongshuCardService {
+func NewXiaohongshuCardService(repo repository.XiaohongshuCardRepository, shortLinkService ShortLinkService, domainPoolService DomainPoolResolver) XiaohongshuCardService {
 	return &xiaohongshuCardService{
 		repo:              repo,
 		templateService:   template.NewTemplateService("internal/template"),

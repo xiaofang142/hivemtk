@@ -1,4 +1,4 @@
-package service
+package cards
 
 // 契约：卡片「是否激活」的三态必须分得清 —— 缺省 / 显式 true / 显式 false。
 //
@@ -25,6 +25,9 @@ import (
 
 	"gorm.io/gorm"
 )
+
+// boolPtr 随卡片域拆包迁入本包（原在根包 service 的测试 helper，未跟迁）。
+func boolPtr(v bool) *bool { return &v }
 
 // readDouyinCardIsActive 用独立零值 struct 读回（复用已填充 struct 会把旧字段并进 WHERE）。
 func readDouyinCardIsActive(t *testing.T, db *gorm.DB, id uint) bool {
