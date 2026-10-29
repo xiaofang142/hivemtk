@@ -5,7 +5,7 @@
 //     才成立的路径；
 //   - 假仓储跑真库里**制造不出来**的分支：Insert 撞 23505 之后重查落空、读故障、
 //     凭证生成失败。这些分支规定的是"闸门在最坏时刻做什么"，不能只靠读代码确认。
-package service
+package approval
 
 import (
 	"context"
@@ -1143,3 +1143,9 @@ func TestApprovalService_AllowedTransitionsView(t *testing.T) {
 		t.Error("AllowedTransitions 返回了共享切片")
 	}
 }
+
+// storeApprovalNowFn 测试侧写侧 accessor（随审批域迁入本包；生产文件只留读侧接缝）。
+func storeApprovalNowFn(fn func() time.Time) { StoreNowFnForTest(fn) }
+
+// storeApprovalResumeTokFn 测试侧写侧 accessor（同 storeApprovalNowFn）。
+func storeApprovalResumeTokFn(fn func() (string, error)) { StoreResumeTokFnForTest(fn) }

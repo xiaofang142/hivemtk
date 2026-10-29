@@ -14,7 +14,7 @@
 // 从 (subject_type, subject_id) 映射到 (tool_name, account_id) 是调用方的知识
 // （报价的 subject 是 quote_id、外发的 subject 是 reach_plan_id，账号从哪来各不相同），
 // 现在接等于替三个还没写的调用方各自代设计一次。接线的卡是 T-P3-07 / T-P5-03。
-package service
+package approval
 
 import (
 	"context"

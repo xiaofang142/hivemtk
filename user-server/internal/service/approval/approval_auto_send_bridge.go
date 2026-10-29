@@ -14,7 +14,7 @@
 // 口径：只认 subject_type=quote、结论=approved 的裁决。rejected/expired/
 // reach_plan/order_command 等一律不动——它们要么没有"发"这个动作，要么
 // 外发口径未定义（等产品复议后扩展）。
-package service
+package approval
 
 import (
 	"context"
@@ -29,12 +29,34 @@ import (
 // 不装作真人：审计读这一列时必须能分辨"机器替人发的"与"人自己点的"。
 const approvalAutoSendOperator = "approval-auto-send"
 
+// QuoteApprovalSubjectType 报价审批的 subject_type（与根包 quote_send.go 同一词表）。
+const QuoteApprovalSubjectType = "quote"
+
+// QuoteSendRequest 自动外发所需的最小入参（与根包 QuoteSendInput 同形，根包适配器转换）。
+type QuoteSendRequest struct {
+	QuoteRowID string
+	ApprovalID string
+	Operator   string
+}
+
+// QuoteSendOutcome 自动外发结果的两列（日志用）。
+type QuoteSendOutcome struct {
+	Disposition string
+	Status      string
+}
+
+// QuoteSendService 报价发送腿对审批桥暴露的窄接口（根包 *QuoteSendService 适配后满足）。
+type QuoteSendService interface {
+	Available() bool
+	Send(ctx context.Context, in QuoteSendRequest) (*QuoteSendOutcome, error)
+}
+
 // ApprovalAutoSendBridge 审批通过 → 报价自动外发（E-10，产品可复议）。
 //
 // quoteSend 用全局实例（装配在 InitQuoteRuntime）：审批运行时与报价运行时的
 // 装配顺序不固定，持全局句柄可以让"谁先装配都能接上"（nil 时本桥静默 = 手动档）。
 type ApprovalAutoSendBridge struct {
-	quoteSend func() *QuoteSendService
+	quoteSend func() QuoteSendService
 	enabled   bool
 }
 
@@ -75,7 +97,7 @@ func parseApprovalAutoSendFlag(raw string) bool {
 // 开关读环境变量（见 approvalAutoSendFlagEnv）：off 时桥仍构造、仍订阅，
 // 但 NotifyDecided 第一行就静默返回——不摘订阅者的原因是装配面的订阅清单
 // 是 fan-out（AddWaitNotifier），摘装要过两把锁，静默判据一行就够。
-func NewApprovalAutoSendBridge(quoteSend func() *QuoteSendService) *ApprovalAutoSendBridge {
+func NewApprovalAutoSendBridge(quoteSend func() QuoteSendService) *ApprovalAutoSendBridge {
 	return &ApprovalAutoSendBridge{quoteSend: quoteSend, enabled: parseApprovalAutoSendFlag(os.Getenv(approvalAutoSendFlagEnv))}
 }
 
@@ -107,7 +129,7 @@ func (b *ApprovalAutoSendBridge) NotifyDecided(ctx context.Context, req *model.A
 			Msg("[approval-auto-send] 报价发送腿未装配 ⇒ 审批已通过但未自动外发，需人工发送（手动档行为）")
 		return
 	}
-	res, err := svc.Send(ctx, QuoteSendInput{
+	res, err := svc.Send(ctx, QuoteSendRequest{
 		QuoteRowID: req.SubjectID,
 		ApprovalID: req.ID,
 		Operator:   approvalAutoSendOperator,

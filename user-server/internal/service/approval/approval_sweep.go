@@ -10,7 +10,7 @@
 // "仍 pending 且已过 expires_at" 推导出 expired（见 sop_approval_resume.go）。
 // 本 worker 管的是另一件事：**库里那一行**。少了它，待办中心会一直显示一条
 // 早就该作废的待办，而审批人点开会发现"这条还能批吗"——状态不一致的表比没有表更难查。
-package service
+package approval
 
 import (
 	"context"

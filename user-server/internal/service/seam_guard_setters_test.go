@@ -21,17 +21,9 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
-func storeApprovalNowFn(fn func() time.Time) {
-	approvalSeamMu.Lock()
-	defer approvalSeamMu.Unlock()
-	approvalNowFn = fn
-}
-
-func storeApprovalResumeTokFn(fn func() (string, error)) {
-	approvalSeamMu.Lock()
-	defer approvalSeamMu.Unlock()
-	approvalResumeTokFn = fn
-}
+// 审批时钟/凭证接缝随审批域拆包（第五刀）迁入 internal/service/approval，
+// 本包的写侧 accessor 一并移除；用例改用 approval.StoreNowFnForTest /
+// approval.StoreResumeTokFnForTest（见 approval/testsupport.go）。
 
 func storeDingtalkOpenAPIBase(base string) {
 	dingtalkSeamMu.Lock()

@@ -4,7 +4,7 @@
 //	② 非 approved（rejected/expired）或非 quote subject ⇒ 不调 Send；
 //	③ 发送腿未装配（quoteSend 回 nil）⇒ 静默不 panic（手动档）；
 //	以及 fan-out：AddWaitNotifier 的订阅者收到通知，主槽（SetWaitNotifier）不受影响。
-package service
+package approval
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func TestApprovalAutoSendBridgeSkipsNonApprovedAndNonQuote(t *testing.T) {
 	// 判据②③：send 腿为 nil（未装配）时，非 approved / 非 quote 直接 return——
 	// 不走到取 quoteSend 那一步，自然也不出声。若分流写反，这里会因 nil svc
 	// 的日志路径在无 logger 环境下暴露为 panic 或无声通过——所以再用 rec 断言。
-	bridge := NewApprovalAutoSendBridge(func() *QuoteSendService { return nil })
+	bridge := NewApprovalAutoSendBridge(func() QuoteSendService { return nil })
 	cases := []struct {
 		name string
 		req  *model.ApprovalRequest
@@ -64,7 +64,7 @@ func TestApprovalAutoSendBridgeSkipsNonApprovedAndNonQuote(t *testing.T) {
 // ——t.Setenv 自动防并行测试的env 竞态。
 func TestApprovalAutoSendBridgeSwitchOffDisablesSend(t *testing.T) {
 	t.Setenv("FF_LTC_APPROVAL_AUTO_SEND", "off")
-	bridge := NewApprovalAutoSendBridge(func() *QuoteSendService { return nil })
+	bridge := NewApprovalAutoSendBridge(func() QuoteSendService { return nil })
 	// approved + quote：开关 on 时会走到取 quoteSend 那一步（nil ⇒ WARN 日志）
 	// off 时必须第一行就静默返回——这里用"不 panic 且正常返回"钉住形状，
 	// 更强的断言（不调 Send）由 parseApprovalAutoSendFlag 单测钉住。

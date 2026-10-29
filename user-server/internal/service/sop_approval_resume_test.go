@@ -590,7 +590,7 @@ func (e *approvalE2E) currentExecution(id uint) *model.SOPExecution {
 
 func (e *approvalE2E) pendingApprovalFor(execID uint, nodeID string) *model.ApprovalRequest {
 	e.t.Helper()
-	row, err := e.svc.repo.GetPendingBySubject(context.Background(),
+	row, err := e.svc.RepoForTest().GetPendingBySubject(context.Background(),
 		ApprovalSubjectTypeSOPNode, EncodeApprovalSubject(execID, nodeID), "quote.send")
 	if err != nil || row == nil {
 		e.t.Fatalf("查 pending 审批失败: (%v,%v)", row, err)

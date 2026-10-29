@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/service/approval"
 
 	"gorm.io/gorm"
 )
@@ -238,12 +239,12 @@ func TestSeamGuard_BridgeOnlineProbeIsLocked(t *testing.T) {
 func TestSeamGuard_ApprovalNowFnIsLocked(t *testing.T) {
 	probe := time.Unix(1_700_000_000, 0)
 	fn := func() time.Time { return probe }
-	prev := loadApprovalNowFn()
-	t.Cleanup(func() { storeApprovalNowFn(prev) })
+	prev := approval.LoadNowFnForTest()
+	t.Cleanup(func() { approval.StoreNowFnForTest(prev) })
 	hammerSeam(t, "approvalNowFn",
-		func() { storeApprovalNowFn(fn) },
+		func() { approval.StoreNowFnForTest(fn) },
 		func() {
-			if got := loadApprovalNowFn()(); !got.Equal(probe) {
+			if got := approval.LoadNowFnForTest()(); !got.Equal(probe) {
 				t.Errorf("时钟 = %v, want %v", got, probe)
 			}
 		})
@@ -252,12 +253,12 @@ func TestSeamGuard_ApprovalNowFnIsLocked(t *testing.T) {
 func TestSeamGuard_ApprovalResumeTokFnIsLocked(t *testing.T) {
 	want := errors.New("probe rand")
 	fn := func() (string, error) { return "", want }
-	prev := loadApprovalResumeTokFn()
-	t.Cleanup(func() { storeApprovalResumeTokFn(prev) })
+	prev := approval.LoadResumeTokFnForTest()
+	t.Cleanup(func() { approval.StoreResumeTokFnForTest(prev) })
 	hammerSeam(t, "approvalResumeTokFn",
-		func() { storeApprovalResumeTokFn(fn) },
+		func() { approval.StoreResumeTokFnForTest(fn) },
 		func() {
-			if _, err := loadApprovalResumeTokFn()(); !errors.Is(err, want) {
+			if _, err := approval.LoadResumeTokFnForTest()(); !errors.Is(err, want) {
 				t.Errorf("随机源 = %v, want 探针错误", err)
 			}
 		})
