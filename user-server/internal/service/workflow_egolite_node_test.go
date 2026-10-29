@@ -147,8 +147,8 @@ func TestEgoLiteRunNode_UserIDResolution(t *testing.T) {
 		want   uint
 	}{
 		{
-			name: "节点配置优先",
-			cfg:  model.JSONMap{"origin": "draft", "flow_id": float64(3), "user_id": float64(11)},
+			name:  "节点配置优先",
+			cfg:   model.JSONMap{"origin": "draft", "flow_id": float64(3), "user_id": float64(11)},
 			input: model.JSONMap{"user_id": float64(22)}, want: 11,
 		},
 		{
@@ -157,8 +157,8 @@ func TestEgoLiteRunNode_UserIDResolution(t *testing.T) {
 			input: model.JSONMap{"user_id": float64(22)}, want: 22,
 		},
 		{
-			name: "载荷里的字符串 user_id 也能认（JSON 反序列化常见形态）",
-			cfg:  model.JSONMap{"origin": "draft", "flow_id": float64(3)},
+			name:  "载荷里的字符串 user_id 也能认（JSON 反序列化常见形态）",
+			cfg:   model.JSONMap{"origin": "draft", "flow_id": float64(3)},
 			input: model.JSONMap{"user_id": "33"}, want: 33,
 		},
 		{

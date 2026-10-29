@@ -252,7 +252,10 @@
       width="560px"
     >
       <el-form label-width="100px">
-        <el-form-item label="参数 JSON">
+        <el-form-item
+          v-if="!dryRunHasSchema"
+          label="参数 JSON"
+        >
           <el-input
             v-model="dryRunForm.paramsText"
             type="textarea"
@@ -260,6 +263,12 @@
             placeholder="可选；将作为 params 透传给脚本"
           />
         </el-form-item>
+        <ParamsForm
+          v-else
+          v-model="dryRunForm.params"
+          :schema="dryRunForm.paramsSchema"
+          is-flow
+        />
         <el-form-item label="space 名">
           <el-input
             v-model="dryRunForm.spaceName"
@@ -298,7 +307,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteEgoFlow,
@@ -312,6 +321,7 @@ import {
   saveEgoFlow,
   submitEgoFlow
 } from '@/api/egolite'
+import ParamsForm from './ParamsForm.vue'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -331,7 +341,19 @@ const emptyForm = () => ({
   script: ''
 })
 const form = ref(emptyForm())
-const dryRunForm = ref({ flowId: 0, paramsText: '', spaceName: '', timeoutSec: 600 })
+const dryRunForm = ref({ flowId: 0, paramsText: '', params: {}, paramsSchema: null, spaceName: '', timeoutSec: 600 })
+
+// 流程登记了 params_schema ⇒ 表单模式（与资产运行同口径）；否则保持 JSON 文本域
+const dryRunHasSchema = computed(() => {
+  const s = dryRunForm.value.paramsSchema
+  if (!s) return false
+  try {
+    const obj = typeof s === 'string' ? JSON.parse(s) : s
+    return !!(obj && obj.properties && Object.keys(obj.properties).length)
+  } catch {
+    return false
+  }
+})
 
 const statusText = (s) =>
   ({ draft: '草稿', published: '已发布', submitted: '审核中' }[s] || s || '-')
@@ -473,7 +495,14 @@ const onDelete = async (row) => {
 }
 
 const onDryRun = (row) => {
-  dryRunForm.value = { flowId: row.id, paramsText: '', spaceName: '', timeoutSec: 600 }
+  dryRunForm.value = {
+    flowId: row.id,
+    paramsText: '',
+    params: {},
+    paramsSchema: row.params_schema || null,
+    spaceName: '',
+    timeoutSec: 600
+  }
   dryRunVisible.value = true
 }
 
@@ -484,8 +513,12 @@ const doDryRun = async () => {
       space_name: dryRunForm.value.spaceName || undefined,
       timeout_sec: dryRunForm.value.timeoutSec
     }
-    const params = parseJsonOrUndefined(dryRunForm.value.paramsText)
-    if (params !== undefined) payload.params = params
+    if (dryRunHasSchema.value) {
+      payload.params = { ...dryRunForm.value.params }
+    } else {
+      const params = parseJsonOrUndefined(dryRunForm.value.paramsText)
+      if (params !== undefined) payload.params = params
+    }
     const exec = await dryRunEgoFlow(dryRunForm.value.flowId, payload)
     dryRunVisible.value = false
     ElMessage.success(`已下发：执行 #${exec?.id}（状态 ${exec?.state}）→ 去「执行监控」看事件时间线${exec?.state === 'created' ? '（runner 未在线，上线后在监控页点「重发」）' : ''}`)

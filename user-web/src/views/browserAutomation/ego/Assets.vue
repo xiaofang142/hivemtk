@@ -95,7 +95,10 @@
           <div>声明了写动作（{{ (writesOf(current) || []).join('、') }}）的资产服务端强制逐步确认：脚本在写提交点弹确认，你在「执行监控」页允许/拒绝。</div>
           <div>导航/外联仅限资产声明的域名白名单内，越域会被 runner 强制终止。</div>
         </el-alert>
-        <el-form-item label="参数 JSON">
+        <el-form-item
+          v-if="!hasSchema"
+          label="参数 JSON"
+        >
           <el-input
             v-model="runForm.paramsText"
             type="textarea"
@@ -103,6 +106,11 @@
             placeholder="可选；将作为 params 透传给脚本"
           />
         </el-form-item>
+        <ParamsForm
+          v-else
+          v-model="runForm.params"
+          :schema="current?.params_schema"
+        />
         <el-form-item label="space 名">
           <el-input
             v-model="runForm.spaceName"
@@ -142,16 +150,29 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listEgoAssets, startEgoExecution } from '@/api/egolite'
+import ParamsForm from './ParamsForm.vue'
 
 const loading = ref(false)
 const list = ref([])
 const runVisible = ref(false)
 const running = ref(false)
 const current = ref(null)
-const runForm = ref({ paramsText: '', spaceName: '', timeoutSec: 900 })
+const runForm = ref({ paramsText: '', params: {}, spaceName: '', timeoutSec: 900 })
+
+// 有参数契约就走表单（ParamsForm），没契约保持原来的 JSON 文本域
+const hasSchema = computed(() => {
+  const s = current.value?.params_schema
+  if (!s) return false
+  try {
+    const obj = typeof s === 'string' ? JSON.parse(s) : s
+    return !!(obj && obj.properties && Object.keys(obj.properties).length)
+  } catch {
+    return false
+  }
+})
 
 const domainsText = (domains) => {
   if (!domains) return '-'
@@ -186,7 +207,7 @@ const load = async () => {
 
 const openRun = (asset) => {
   current.value = asset
-  runForm.value = { paramsText: '', spaceName: '', timeoutSec: 900 }
+  runForm.value = { paramsText: '', params: {}, spaceName: '', timeoutSec: 900 }
   runVisible.value = true
 }
 
@@ -200,7 +221,10 @@ const doRun = async () => {
       space_name: runForm.value.spaceName || undefined,
       timeout_sec: runForm.value.timeoutSec
     }
-    if (String(runForm.value.paramsText || '').trim()) {
+    if (hasSchema.value) {
+      // 表单模式：空对象也照发——空参数与"没参数"对 required 判定是两件事，交给服务端判
+      payload.params = { ...runForm.value.params }
+    } else if (String(runForm.value.paramsText || '').trim()) {
       payload.params = JSON.parse(runForm.value.paramsText)
     }
     if (writesOf(current.value).length) payload.confirm_policy = 'require'

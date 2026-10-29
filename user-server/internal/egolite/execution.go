@@ -122,6 +122,11 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 		if len(assetWriteNames(a)) > 0 {
 			req.ConfirmPolicy = "require"
 		}
+		// 参数契约（S-11）：market 通道以资产上架时登记的 params_schema 为准。
+		// 放在 Start 而不是前端表单里——表单可绕，执行域不可绕。
+		if err := ValidateEgoParams(a.ParamsSchema, req.Params); err != nil {
+			return nil, fmt.Errorf("资产 %s 参数校验失败: %w", a.AssetCode, err)
+		}
 	}
 	if req.Origin == "market" && req.Entry == "" {
 		return nil, fmt.Errorf("market 执行必须提供 entry（资产未声明入口）")
@@ -164,6 +169,10 @@ func (s *EgoExecutionService) Start(ctx context.Context, userID uint, req StartR
 		}
 		if flow.Script == "" {
 			return nil, fmt.Errorf("flow 脚本为空")
+		}
+		// 参数契约（S-11）：draft 通道（含 DryRun）以流程自身登记的 params_schema 为准。
+		if err := ValidateEgoParams(flow.ParamsSchema, req.Params); err != nil {
+			return nil, fmt.Errorf("流程参数校验失败: %w", err)
 		}
 	}
 
