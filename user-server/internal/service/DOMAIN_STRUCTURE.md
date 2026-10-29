@@ -12,7 +12,7 @@
 > | 一 | `internal/service/sms` | 已落地（历史） |
 > | 二 | `internal/service/email` | 已落地（09e2f5c2） |
 > | 三 | `internal/service/cards` | 已落地（f225f0a4，含卡片族 + 卡片统计适配器 + short_link） |
-> | 四 | `internal/service/sop` | 进行中（依赖摸底完成，见 `docs/未完成清单.md` S-2） |
+> | 四 | `internal/service/sop` + `internal/service/audience` | 已落地（cd80963f；圈选层独立成包，sop 直接引用） |
 > | 五 | `internal/service/approval` | 已落地（caf7785c） |
 >
 > 下文各节的文件表仍是**迁移蓝本**：已迁走的文件以子包为准，未迁的仍在根包。
