@@ -30,3 +30,18 @@ description: "GEO 一键 autopilot 实施任务清单"
 - [x] T011 `autopilot_test.go`：repo CRUD + steps JSON 往返；品牌缺失硬失败；步骤状态机
   （无 LLM 降级不 panic、终态一致性、进度单调）；HasRunning 并发闸
 - [x] T012 `go build ./...` + `go test ./internal/geo/...` 全绿；前端 vitest 不回归
+
+## 审计轮（2026-10-30）
+
+- [x] T013 **TOCTOU 修复**：HasRunning 与 INSERT 之间的并发窗口由 v3.87.0 部分唯一索引
+  `(tenant_id) WHERE status='running'` 兜底，Create 把 23505 唯一冲突映射为
+  ErrAutopilotRunning（409 语义）；回归 TestAutopilotUniqueIndexBackstop
+- [x] T014 **Create 数据竞争修复**：goroutine 独占 run 指针后，响应返回浅拷贝，
+  消除「goroutine 边写 HTTP 序列化边读」的竞争（-race 全绿）
+- [x] T015 **评分提取修复**：ScoreContent 的 scores 字段启发式路径是 map[string]float64、
+  LLM 路径是匿名 struct，修前类型断言两条全打不中 → 均分恒 0；改 JSON 往返
+  （autopilotScoreTotal）对两种载体同构；回归 TestAutopilotScoreTotal
+- [x] T016 **扩展词口径对齐**：Layer=related / Source=semantic_expand（与
+  SemanticExpand 产出一致），修前留空落 GORM default 'seed' 灌水漏斗种子层
+- [x] T017 **push_urls Domain 语义防御**：cfg.Domain 约定为裸主机名（site.go 同口径），
+  配置误存完整 URL 时剥 scheme 后再拼，不再产出 https://https:// 坏链

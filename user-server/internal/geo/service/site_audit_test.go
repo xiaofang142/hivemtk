@@ -27,10 +27,14 @@ const fullScoreHTML = `<!DOCTYPE html>
 <body>
 <h1>HiveMTK：开源私域营销操作系统</h1>
 <h2>核心能力</h2>
-<p>HiveMTK 覆盖 41 个工具，2026 年实测转化率提升 35%，客户说"再考虑一下"时 AI 能分辨真忙还是婉拒。</p>
+<p>HiveMTK 覆盖 41 个工具，2026 年实测转化率提升 35%，客户说"再考虑一下"时 AI 能分辨真忙还是婉拒。七个渠道的消息统一进入收件箱，智能体按置信度自动回复，低置信度场景转人工，全程数据不出域。</p>
 <h2>部署方式</h2>
-<p>支持本地部署与云端版，参见 <a href="https://github.com/xiaofang142/hivemtk">开源仓库</a> 与 <a href="/docs">使用文档</a>。</p>
+<p>支持本地部署与云端版，参见 <a href="https://github.com/xiaofang142/hivemtk">开源仓库</a> 与 <a href="/docs">使用文档</a>。私有化部署五分钟起服务：一条 docker compose 命令拉起 PostgreSQL、Redis 与 user-server，无需外部 SaaS 依赖，升级只需更换镜像并保留数据卷，配置与数据全部留在用户自己的数据库里。</p>
 <p>了解更多请访问 <a href="/about">关于我们</a> 或 <a href="/contact">联系方式</a>。</p>
+<h2>为什么开源</h2>
+<p>私域营销系统握着客户资产，闭源 SaaS 意味着数据出域。HiveMTK 以 AGPL-3.0 开源，2026 年已交付 62 个业务模块，企业可以在自己的服务器上审计每一行代码。实测某装修建材团队接入后，40 分钟内的重复报价事故归零，跟进响应时长从小时级降到秒级，这是流程引擎带来的确定性收益，而不是话术技巧。</p>
+<h2>适用场景</h2>
+<p>客户数上百、跟进节奏因人而异、出过消息重发或漏跟事故的团队，最适合用这套结构替代手工表格。常见问题见页内锚点 <a href="#faq">FAQ</a> 与 <a href="#pricing">价格说明</a>。</p>
 <img src="/a.png" alt="架构图">
 </body>
 </html>`
@@ -258,5 +262,90 @@ func TestFetchSiteResources(t *testing.T) {
 	// 不可达 URL → 返回错误（400 语义由 controller 层转换）
 	if _, err := fetchSiteResources(context.Background(), "http://127.0.0.1:1/"); err == nil {
 		t.Fatal("expected error for unreachable URL")
+	}
+}
+
+// 审计回归 1：标签堆出来的页面不得白过 CONTENT-LENGTH——可见文本必须取 DOM 文本节点
+// （修前 p.text 含全部标签与属性值，textLen 虚高，500 个 <p>字</p> 就能满分过字数）。
+func TestSiteAuditTagInflation(t *testing.T) {
+	body := "<html><head><title>厚标签页</title></head><body>" +
+		strings.Repeat("<div class=\"x\"><span>字</span></div>", 300) + // 可见文本 300 字
+		"</body></html>"
+	res := fullScoreResources(body)
+	rep := RunSiteAuditFromResources(res, "")
+	c := catByLabel(rep, "content")
+	got := checkByName(c, "CONTENT-LENGTH")
+	if got == nil || got.Pass {
+		t.Fatalf("tag-inflated page must fail CONTENT-LENGTH, got %+v", got)
+	}
+}
+
+// 审计回归 2：markdown 协商判定——HTML（含注释挡在 doctype 前的变形）不得误判成 markdown
+func TestSiteAuditMarkdownNegotiation(t *testing.T) {
+	cases := []struct {
+		name   string
+		mdBody string
+		wantMD bool
+	}{
+		{"真 markdown", "# 站点标题\n\n一段描述。\n", true},
+		{"注释挡在 doctype 前的 HTML", "<!-- server-side banner -->\n<!DOCTYPE html><html><body>hi</body></html>", false},
+		{"裸 <html 开头", "<html lang=\"zh\"><body>hi</body></html>", false},
+	}
+	for _, tc := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Accept") == "text/markdown" {
+				_, _ = w.Write([]byte(tc.mdBody))
+				return
+			}
+			_, _ = w.Write([]byte(fullScoreHTML))
+		}))
+		res, err := fetchSiteResources(context.Background(), srv.URL)
+		srv.Close()
+		if err != nil {
+			t.Fatalf("%s: fetch failed: %v", tc.name, err)
+		}
+		if res.MarkdownOK != tc.wantMD {
+			t.Fatalf("%s: MarkdownOK=%v want %v", tc.name, res.MarkdownOK, tc.wantMD)
+		}
+	}
+}
+
+// 审计回归 3：页内锚点不触发 G-LINKS，SPA hash 路由触发
+func TestSiteAuditHashLinks(t *testing.T) {
+	// 满分夹具含 #faq/#pricing 页内锚 → G-LINKS 必须通过
+	rep := RunSiteAuditFromResources(fullScoreResources(fullScoreHTML), "HiveMTK")
+	if got := checkByName(catByLabel(rep, "google_ai"), "G-LINKS"); got == nil || !got.Pass {
+		t.Fatalf("in-page anchors must not fail G-LINKS, got %+v", got)
+	}
+	// 换成 #/ 路由 → G-LINKS 必须失败
+	routeHTML := strings.Replace(fullScoreHTML, `<a href="#faq">FAQ</a> 与 <a href="#pricing">价格说明</a>`,
+		`<a href="#/docs">指南</a>`, 1)
+	rep2 := RunSiteAuditFromResources(fullScoreResources(routeHTML), "HiveMTK")
+	if got := checkByName(catByLabel(rep2, "google_ai"), "G-LINKS"); got == nil || got.Pass {
+		t.Fatalf("SPA #/ route must fail G-LINKS, got %+v", got)
+	}
+}
+
+// 审计回归 4：页面非 200（WAF 挑战页/登录墙）时，body 依赖类短路为 PAGE-STATUS
+// 一项——不得把错误页当正文审计（真站实测 xapptool.cn 对审计 UA 回 403 即此形态）
+func TestSiteAuditBodyBlockedShortCircuit(t *testing.T) {
+	res := fullScoreResources(fullScoreHTML)
+	res.StatusCode = 403
+	rep := RunSiteAuditFromResources(res, "HiveMTK")
+	for _, category := range []string{"schema", "content", "brand_entity", "meta", "signals"} {
+		c := catByLabel(rep, category)
+		if c == nil || len(c.Checks) != 1 || c.Checks[0].Check != "PAGE-STATUS" {
+			t.Fatalf("%s should short-circuit to PAGE-STATUS, got %+v", category, c)
+		}
+		if c.Score != 0 {
+			t.Fatalf("%s should score 0 when body blocked, got %d", category, c.Score)
+		}
+	}
+	// robots/llms/ai_discovery 走独立资源，不受 body 短路影响（仍按各自资源判定）
+	if got := checkByName(catByLabel(rep, "llms"), "LLMS-EXISTS"); got == nil || !got.Pass {
+		t.Fatalf("llms checks must still run on their own resource, got %+v", got)
+	}
+	if got := checkByName(catByLabel(rep, "robots"), "ROBOTS-ALLOW-OAI-SearchBot"); got == nil || !got.Pass {
+		t.Fatalf("robots checks must still run, got %+v", got)
 	}
 }

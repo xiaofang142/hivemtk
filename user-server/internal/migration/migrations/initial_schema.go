@@ -299,4 +299,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 租约三列收进正式迁移链——原依赖启动期 AutoMigrate，纯迁移链恢复库缺表缺列
 	//（TestReachTablesMigration_UpBuildsModelReadableTables 抓到）。
 	register(NewG0SchemaMigration(db))
+	// v3.87.0（006-geo-autopilot 审计轮）：geo_autopilot_runs 每租户至多一条
+	// running 的部分唯一索引——服务层「先查后插」存在 TOCTOU 窗口，DB 兜底。
+	register(NewGeoAutopilotSingleRunMigration(db))
 }

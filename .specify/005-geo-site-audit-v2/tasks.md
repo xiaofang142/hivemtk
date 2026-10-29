@@ -26,3 +26,19 @@ description: "GEO 站点审计 v2 实施任务清单"
 - [x] T009 `site_audit_test.go`：满分配置夹具全绿；逐类缺陷夹具断言扣分与 fixes 排序；
   robots 三层分级语义；llms.txt 结构校验；恶意输入（超长 body、坏 JSON-LD）不 panic
 - [x] T010 `go build ./...` + `go test ./internal/geo/...` 全绿
+
+## 审计轮（2026-10-30，真站烟雾驱动）
+
+- [x] T011 **textLen 灌水修复**：可见文本改从 DOM 文本节点收集（跳过 script/style/noscript/
+  template 子树），字数按非空白 rune 计——修前整页 HTML 当文本，标签堆出来的页面白过
+  CONTENT-LENGTH、品牌/G-SD-VISIBLE 匹配打到属性值上（回归：TestSiteAuditTagInflation）
+- [x] T012 **markdown 协商误判修复**：判定改为前 4KB 无 HTML 骨架标记（<!doctype html/
+  <html/<body）——修前只看前缀，`<!-- 注释 --><!DOCTYPE html>` 形态漏判（回归：
+  TestSiteAuditMarkdownNegotiation 三形态）
+- [x] T013 **G-LINKS 页内锚误伤修复**：仅 `#/`、`/#` SPA 路由计数违规，`#section`
+  合法页内锚放行（回归：TestSiteAuditHashLinks）
+- [x] T014 **非 200 正文短路**：WAF 挑战页/登录墙时 schema/content/brand/meta/signals
+  短路为 PAGE-STATUS 一项，不再把错误页当正文审计出"title 不含品牌名"类误导结论；
+  robots/llms/ai_discovery 走独立资源不受影响（回归：TestSiteAuditBodyBlockedShortCircuit；
+  真站烟雾 https://xapptool.cn 实证：审计 UA 被 WAF 拦 403，报告如实指出）
+- [x] T015 真站端到端烟雾（xapptool.cn）：抓取→解析→九类评分→修复清单全链路实证通过

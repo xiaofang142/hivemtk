@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"golang.org/x/net/html"
 )
@@ -136,12 +137,17 @@ func fetchSiteResources(ctx context.Context, rawURL string) (*SiteResources, err
 	}
 	root := u.Scheme + "://" + u.Host
 
-	// markdown 协商：同 URL 带 Accept: text/markdown 重取，返回非 HTML 即视为支持
+	// markdown 协商：同 URL 带 Accept: text/markdown 重取。判定口径：非空且
+	// 前 4KB 无任何 HTML 骨架标记（<!doctype html / <html / <body）——只看前缀
+	// 会把 "<!-- 注释 --><!DOCTYPE html>" 或空白开头再 doctype 的页面误判成 markdown。
 	_, _, _, mdBody, mdErr := siteFetch(ctx, final, "text/markdown")
-	if mdErr == nil {
-		lower := strings.ToLower(strings.TrimSpace(mdBody))
-		res.MarkdownOK = strings.TrimSpace(mdBody) != "" &&
-			!strings.HasPrefix(lower, "<!doctype html") && !strings.HasPrefix(lower, "<html")
+	if mdErr == nil && strings.TrimSpace(mdBody) != "" {
+		head := strings.ToLower(mdBody)
+		if len(head) > 4096 {
+			head = head[:4096]
+		}
+		res.MarkdownOK = !strings.Contains(head, "<!doctype html") &&
+			!strings.Contains(head, "<html") && !strings.Contains(head, "<body")
 	}
 
 	get := func(path string) (int, string) {
@@ -183,16 +189,20 @@ func siteFetch(ctx context.Context, target, accept string) (status int, finalURL
 // RunSiteAuditFromResources 对已抓取资源执行 rubric v2 评分。brand 仅用于页内匹配，不出站。
 func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditReport {
 	page := parseSitePage(res.Body)
+	// 正文可达性：非 200（WAF 挑战页/登录墙/硬 404）时 body 依赖类检查审计的是
+	// 错误页本身——报"title 不含品牌名"这类结论会误导站长。统一短路为 PAGE-STATUS
+	// 一项，指明真实原因与去处（真站实测 xapptool.cn 即此形态：审计 UA 被 WAF 拦 403）。
+	bodyOK := res.StatusCode == 200 && strings.TrimSpace(res.Body) != ""
 	cats := make([]SiteAuditCategory, 0, 9)
 	cats = append(cats,
 		auditGoogleAI(res, page),
 		auditRobots(res),
-		auditSchema(res, page),
-		auditSiteContent(page),
-		auditBrandEntity(res, page, brand),
-		auditSiteMeta(page),
+		auditSchemaShortCircuit(res, page, bodyOK),
+		auditSiteContentShortCircuit(res, page, bodyOK),
+		auditBrandEntityShortCircuit(res, page, brand, bodyOK),
+		auditSiteMetaShortCircuit(res, page, bodyOK),
 		auditLLMs(res),
-		auditSiteSignals(res, page),
+		auditSiteSignalsShortCircuit(res, page, bodyOK),
 		auditAIDiscovery(res),
 	)
 
@@ -336,7 +346,10 @@ func parseSitePage(body string) *sitePage {
 						if h == "" || h == "#" || strings.HasPrefix(h, "javascript:") {
 							break
 						}
-						if strings.HasPrefix(h, "#") || strings.HasPrefix(h, "/#") {
+						// 只把 SPA 前端路由（#/xxx、/#xxx）算作 G-LINKS 违规；
+						// "#section" 是合法页内锚点，不能误伤（上游检查的也是
+						// "no #/ routes"，即 hash 路由，不是页内锚）。
+						if strings.HasPrefix(h, "#/") || strings.HasPrefix(h, "/#") {
 							p.samePageHashLinks++
 						}
 						p.linkHrefs = append(p.linkHrefs, h)
@@ -360,10 +373,51 @@ func parseSitePage(body string) *sitePage {
 		}
 	}
 	walk(doc)
-	cleaned := siteAuditScriptRe.ReplaceAllString(body, " ")
-	p.text = html.UnescapeString(cleaned)
-	p.textLen = len([]rune(p.text))
+	// 可见文本必须从 DOM 文本节点取（跳过 script/style/noscript 子树）：
+	// 旧实现"正则剥 script/style 后整页当文本"会把标签与属性值一并计入，
+	// textLen 虚高（标签堆出来的页面白过 CONTENT-LENGTH）、品牌/G-SD-VISIBLE
+	// 匹配打到属性值上。解析失败（doc 为 nil）时退回正则路径兜底。
+	if doc != nil {
+		p.text = html.UnescapeString(collapseSpaces(collectVisibleText(doc)))
+	} else {
+		cleaned := siteAuditScriptRe.ReplaceAllString(body, " ")
+		p.text = html.UnescapeString(cleaned)
+	}
+	// 字数按非空白 rune 计：分隔符空格与缩进不是可见字符，计入会把
+	// "字 字 字"式的碎片文本灌水成两倍长度（跨标签碎片在 CJK 页面很常见）。
+	for _, r := range p.text {
+		if !unicode.IsSpace(r) {
+			p.textLen++
+		}
+	}
 	return p
+}
+
+// collectVisibleText 深度优先收集文本节点，script/style/noscript 子树整段跳过；
+// 相邻文本节点间补一个空格，防止跨标签拼词（如 <b>账</b><b>号</b> 拼成"账号"是
+// 渲染语义，但 <span>AI</span><span>客服</span> 不该被拼成一个词组导致误配）。
+func collectVisibleText(n *html.Node) string {
+	var b strings.Builder
+	var rec func(*html.Node)
+	rec = func(x *html.Node) {
+		if x.Type == html.ElementNode && (x.Data == "script" || x.Data == "style" || x.Data == "noscript" || x.Data == "template") {
+			return
+		}
+		if x.Type == html.TextNode {
+			b.WriteString(x.Data)
+			b.WriteByte(' ')
+		}
+		for c := x.FirstChild; c != nil; c = c.NextSibling {
+			rec(c)
+		}
+	}
+	rec(n)
+	return b.String()
+}
+
+// collapseSpaces 把连续空白压成单空格，避免 textLen 被缩进/换行灌水
+func collapseSpaces(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 func textContentOf(n *html.Node) string {
@@ -668,7 +722,7 @@ func auditSiteContent(p *sitePage) SiteAuditCategory {
 	add("CONTENT-HEADINGS", boolScore(hOK, 2), 2, hOK,
 		fmt.Sprintf("h1=%d h2=%d", p.h1, p.h2), "一个 h1 概括主题，正文用 h2 分节")
 	wOK := p.textLen >= 500
-	add("CONTENT-LENGTH", boolScore(wOK, 3), 3, wOK, fmt.Sprintf("正文约 %d 字符", p.textLen), "扩写至 500 字符以上")
+	add("CONTENT-LENGTH", boolScore(wOK, 3), 3, wOK, fmt.Sprintf("正文约 %d 字符（不含空白）", p.textLen), "扩写至 500 字符以上")
 	hasStats := siteHasStats(p.text)
 	add("CONTENT-EVIDENCE", boolScore(hasStats, 3), 3, hasStats,
 		map[bool]string{true: "含量化数据", false: "无百分比/数值等量化证据"}[hasStats],
@@ -845,6 +899,60 @@ func auditAIDiscovery(res *SiteResources) SiteAuditCategory {
 		"对 Accept: text/markdown 返回 Markdown 版本（可选进阶）")
 	cat.Score = sumChecks(cat.Checks)
 	return cat
+}
+
+// siteAuditBodyBlocked 非 200 时 body 依赖类统一的短路检查项
+func siteAuditBodyBlocked(res *SiteResources) SiteAuditCheck {
+	return SiteAuditCheck{Check: "PAGE-STATUS", Score: 0, Pass: false,
+		Detail: fmt.Sprintf("页面返回非 200（%d），无法审计正文内容", res.StatusCode),
+		Fix:    "让审计 UA（" + siteAuditUserAgent + "）能拿到 200：在 WAF/反爬规则中放行，或在发布设置里改为允许无 UA 差异的访问"}
+}
+
+// ── body 依赖类的非 200 短路包装（schema/content/brand/meta/signals） ─────────
+
+func auditSchemaShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "schema", Label: "结构化数据", Max: siteAuditMaxSchema}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditSchema(res, p)
+}
+
+func auditSiteContentShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "content", Label: "内容质量", Max: siteAuditMaxContent}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditSiteContent(p)
+}
+
+func auditBrandEntityShortCircuit(res *SiteResources, p *sitePage, brand string, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "brand_entity", Label: "品牌实体", Max: siteAuditMaxBrand}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditBrandEntity(res, p, brand)
+}
+
+func auditSiteMetaShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "meta", Label: "元信息", Max: siteAuditMaxMeta}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditSiteMeta(p)
+}
+
+func auditSiteSignalsShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "signals", Label: "时效与信号", Max: siteAuditMaxSignals}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditSiteSignals(res, p)
 }
 
 // ── 小工具 ───────────────────────────────────────────────────────────────────

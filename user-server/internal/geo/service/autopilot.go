@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
@@ -86,10 +89,18 @@ func (s *AutopilotService) Create(ctx context.Context, req *dto.AutopilotCreateR
 	}
 	run.SetSteps(autopilotPlanSteps(siteURL))
 	if err := s.runRepo.Create(ctx, run); err != nil {
+		// HasRunning 与 INSERT 之间的 TOCTOU 窗口由 v3.87.0 部分唯一索引兜底：
+		// 并发双插的输家拿到唯一冲突，翻译成同一个 409 语义
+		if autopilotIsUniqueViolation(err) {
+			return nil, ErrAutopilotRunning
+		}
 		return nil, fmt.Errorf("运行记录创建失败: %w", err)
 	}
 
-	// 运行体脱离请求 ctx：前端断开/轮询超时不能杀死任务；DB 写仍带租户绑定
+	// 运行体脱离请求 ctx：前端断开/轮询超时不能杀死任务；DB 写仍带租户绑定。
+	// goroutine 从此独占 run 指针；响应返回浅拷贝（字段全为值类型 + 此刻为 nil 的
+	// FinishedAt），避免 goroutine 边写边被 HTTP 序列化读的数据竞争。
+	runCopy := *run
 	runCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), autopilotRunTimeout)
 	go func() {
 		defer cancel()
@@ -101,7 +112,7 @@ func (s *AutopilotService) Create(ctx context.Context, req *dto.AutopilotCreateR
 		}()
 		s.execute(runCtx, run)
 	}()
-	return run, nil
+	return &runCopy, nil
 }
 
 // autopilotPlanSteps 依据输入预生成步骤骨架（后续逐步回填状态）
@@ -226,7 +237,10 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), pkgdb.GetDB(), NewLLMAdapter())
 		all := make([]*model.GeoKeyword, 0, len(expanded)+len(suggests)+len(longtails))
 		for _, w := range expanded[1:] { // 原词由 SaveMiningResults 作种子站位
-			all = append(all, &model.GeoKeyword{Keyword: w, ParentKeyword: run.Keyword, Source: "ai"})
+			// 字段口径与 KeywordService.SemanticExpand 的产出对齐（Layer=related，
+			// Source=semantic_expand）——漏斗按 layer 分层统计，留空会落 default 'seed'
+			all = append(all, &model.GeoKeyword{Keyword: w, ParentKeyword: run.Keyword,
+				Category: "扩展", Intent: "语义扩展", Source: "semantic_expand", Layer: "related"})
 		}
 		all = append(all, suggests...)
 		all = append(all, longtails...)
@@ -260,11 +274,11 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 				continue
 			}
 			if sc, err := contentSvc.ScoreContent(ctx, art.ID, art.Content, brand, w); err == nil {
-				// ScoreContent 形态：{"scores":{"total":N,...}}（LLM 与启发式同构）
-				if scObj, ok := sc["scores"].(map[string]any); ok {
-					if v, ok := scObj["total"].(float64); ok && v > 0 {
-						scores = append(scores, v)
-					}
+				// ScoreContent 的 scores 字段两条路径形状不同：启发式是
+				// map[string]float64，LLM 是 parseScoreResult 里的匿名 struct——
+				// 类型断言两条都打不中（审计轮实测恒 0 分），统一走 JSON 往返。
+				if v := autopilotScoreTotal(sc); v > 0 {
+					scores = append(scores, v)
 				}
 			}
 			_, _ = contentSvc.GenerateSchema(ctx, art.ID, brand, firstRunes(art.Content, 120), cfg.Domain)
@@ -296,10 +310,12 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 			repository.NewGeoArticleRepository(),
 		)
 		urls := make([]string, 0, len(articles))
+		domainHost := strings.Trim(strings.TrimSpace(cfg.Domain), "/")
+		domainHost = strings.TrimPrefix(strings.TrimPrefix(domainHost, "https://"), "http://")
 		for _, a := range articles {
 			u := a.SiteURL
-			if u == "" && strings.TrimSpace(cfg.Domain) != "" {
-				u = fmt.Sprintf("https://%s%s", strings.Trim(strings.TrimSpace(cfg.Domain), "/"), a.SitePath)
+			if u == "" && domainHost != "" {
+				u = fmt.Sprintf("https://%s%s", domainHost, a.SitePath)
 			}
 			if u != "" {
 				urls = append(urls, u)
@@ -396,12 +412,34 @@ func (s *AutopilotService) finishRun(ctx context.Context, run *model.GeoAutopilo
 	}
 }
 
+// autopilotScoreTotal 从 ScoreContent 结果提取 total 分（JSON 往返，
+// 对 map 与 struct 两种 scores 载体同构）
+func autopilotScoreTotal(sc map[string]any) float64 {
+	raw, err := json.Marshal(sc["scores"])
+	if err != nil {
+		return 0
+	}
+	var s struct {
+		Total float64 `json:"total"`
+	}
+	if json.Unmarshal(raw, &s) != nil {
+		return 0
+	}
+	return s.Total
+}
+
 func firstRunes(s string, n int) string {
 	r := []rune(strings.TrimSpace(s))
 	if len(r) > n {
 		r = r[:n]
 	}
 	return string(r)
+}
+
+// autopilotIsUniqueViolation 判定是否 PG 唯一约束冲突（23505）
+func autopilotIsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
 // List 运行历史

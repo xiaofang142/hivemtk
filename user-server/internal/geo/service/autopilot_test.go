@@ -10,9 +10,11 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/testutil"
+
+	"gorm.io/gorm"
 )
 
-func setupAutopilotTestDB(t *testing.T) *repository.GeoAutopilotRunRepository {
+func setupAutopilotTestDB(t *testing.T) (repository.GeoAutopilotRunRepository, *gorm.DB) {
 	t.Helper()
 	db := testutil.NewTestDB(t,
 		&model.GeoAutopilotRun{},
@@ -24,14 +26,13 @@ func setupAutopilotTestDB(t *testing.T) *repository.GeoAutopilotRunRepository {
 		&model.GeoAPICall{},
 		&model.GeoKnowledgeDocument{},
 	)
-	repo := repository.NewGeoAutopilotRunRepositoryWithDB(db)
-	return &repo
+	return repository.NewGeoAutopilotRunRepositoryWithDB(db), db
 }
 
 // T011-1 仓储 CRUD + steps JSON 往返 + List
 func TestAutopilotRepoCRUD(t *testing.T) {
 	ctx := context.Background()
-	repo := *setupAutopilotTestDB(t)
+	repo, _ := setupAutopilotTestDB(t)
 
 	run := &model.GeoAutopilotRun{Keyword: "客服系统", Status: "running"}
 	run.SetSteps(autopilotPlanSteps("https://example.com"))
@@ -105,7 +106,7 @@ func TestAutopilotPlanSteps(t *testing.T) {
 // T011-3 参数校验（400 语义）
 func TestAutopilotCreateValidation(t *testing.T) {
 	ctx := context.Background()
-	repo := *setupAutopilotTestDB(t)
+	repo, _ := setupAutopilotTestDB(t)
 	svc := NewAutopilotService(repo)
 
 	if _, err := svc.Create(ctx, &dto.AutopilotCreateRequest{Keyword: "  "}); err == nil || !strings.Contains(err.Error(), "关键词") {
@@ -122,7 +123,7 @@ func TestAutopilotCreateValidation(t *testing.T) {
 // T011-4 并发闸：已有 running 行时 Create 拒绝（409 语义 sentinel）
 func TestAutopilotRunningGate(t *testing.T) {
 	ctx := context.Background()
-	repo := *setupAutopilotTestDB(t)
+	repo, _ := setupAutopilotTestDB(t)
 	svc := NewAutopilotService(repo)
 
 	if err := repo.Create(ctx, &model.GeoAutopilotRun{Keyword: "占位", Status: "running"}); err != nil {
@@ -137,7 +138,7 @@ func TestAutopilotRunningGate(t *testing.T) {
 // T011-5 品牌缺失硬失败：run 终态 failed 且 error 指引配置入口；零 LLM/出站调用
 func TestAutopilotBrandMissingHardFail(t *testing.T) {
 	ctx := context.Background()
-	repo := *setupAutopilotTestDB(t)
+	repo, _ := setupAutopilotTestDB(t)
 	svc := NewAutopilotService(repo)
 
 	run, err := svc.Create(ctx, &dto.AutopilotCreateRequest{Keyword: "客服系统"})
@@ -176,7 +177,7 @@ func TestAutopilotBrandMissingHardFail(t *testing.T) {
 // T011-6 markStep 进度单调与状态回填（不跑真实管线，直接驱动状态机）
 func TestAutopilotMarkStepProgress(t *testing.T) {
 	ctx := context.Background()
-	repo := *setupAutopilotTestDB(t)
+	repo, _ := setupAutopilotTestDB(t)
 	svc := NewAutopilotService(repo)
 
 	run := &model.GeoAutopilotRun{Keyword: "k", Status: "running"}
@@ -207,5 +208,55 @@ func TestAutopilotMarkStepProgress(t *testing.T) {
 	got, _ = repo.GetByID(ctx, run.ID)
 	if got.Status != "partial" || got.Progress != 100 || got.FinishedAt == nil {
 		t.Fatalf("finishRun not persisted: %+v", got)
+	}
+}
+
+// 审计回归：评分提取对两种 scores 载体同构（启发式 map[string]float64 /
+// LLM parseScoreResult 的匿名 struct——修前两条路径类型断言全打不中，均分恒 0）
+func TestAutopilotScoreTotal(t *testing.T) {
+	heuristic := map[string]any{
+		"scores": map[string]float64{"structure": 90, "total": 82.5},
+	}
+	if got := autopilotScoreTotal(heuristic); got != 82.5 {
+		t.Fatalf("heuristic path: got %v want 82.5", got)
+	}
+	llmShaped := map[string]any{
+		"scores": struct {
+			Structure    float64 `json:"structure"`
+			BrandMention float64 `json:"brand_mention"`
+			Authority    float64 `json:"authority"`
+			Citations    float64 `json:"citations"`
+			Total        float64 `json:"total"`
+		}{Structure: 80, Total: 77},
+	}
+	if got := autopilotScoreTotal(llmShaped); got != 77 {
+		t.Fatalf("llm path: got %v want 77", got)
+	}
+	if got := autopilotScoreTotal(map[string]any{}); got != 0 {
+		t.Fatalf("missing scores: got %v want 0", got)
+	}
+}
+
+// 审计回归：TOCTOU 兜底——部分唯一索引在位时，绕过 HasRunning 的第二次
+// running 插入必须撞 23505，且 Create 的错误映射把它翻译为 ErrAutopilotRunning
+func TestAutopilotUniqueIndexBackstop(t *testing.T) {
+	ctx := context.Background()
+	repo, db := setupAutopilotTestDB(t)
+
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_geo_autopilot_runs_running ON geo_autopilot_runs (tenant_id) WHERE status = 'running'`).Error; err != nil {
+		t.Fatalf("create index: %v", err)
+	}
+	defer db.Exec(`DROP INDEX IF EXISTS uq_geo_autopilot_runs_running`)
+
+	if err := repo.Create(ctx, &model.GeoAutopilotRun{Keyword: "占位", Status: "running"}); err != nil {
+		t.Fatalf("first insert: %v", err)
+	}
+	err := repo.Create(ctx, &model.GeoAutopilotRun{Keyword: "撞线", Status: "running"})
+	if !autopilotIsUniqueViolation(err) {
+		t.Fatalf("second running insert should violate unique index, got %v", err)
+	}
+	svc := NewAutopilotService(repo)
+	if _, err := svc.Create(ctx, &dto.AutopilotCreateRequest{Keyword: "客服系统"}); err != ErrAutopilotRunning {
+		t.Fatalf("Create should map to ErrAutopilotRunning, got %v", err)
 	}
 }
