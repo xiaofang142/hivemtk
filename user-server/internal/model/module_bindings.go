@@ -194,7 +194,7 @@ func ModuleDependsOn(key string) []string {
 //
 // 键的排序按 SystemMenuTree 的先序遍历顺序书写，方便人工比对；测试不依赖顺序。
 var ModuleMenuBindings = map[string][]string{
-	// ========== core：系统基座（28 节点）==========
+	// ========== core：系统基座（29 节点）==========
 	ModuleCore: {
 		// system 顶级目录及其下的站点配置
 		"system", "siteConfig",
@@ -212,16 +212,18 @@ var ModuleMenuBindings = map[string][]string{
 		"operationLog", "securityAudit",
 		// AI 观测与渠道健康：admin 只读看板，与 systemMonitor/systemTrace 同族，归 core
 		"observabilityDashboard",
+		// D01 能力运行诊断：读的是本二进制的执行路径与配置，属于部署级诊断能力。
+		"capabilityDiagnostics",
 		// 备份
 		"backupList", "backupEnhanced",
 		// 客服 Web Widget 渠道（embed-sdk 在客户网站上的凭据来源，见文件头原则 1）
 		"chatChannelList",
 	},
 
-	// ========== customer：客户中心（12 节点）==========
+	// ========== customer：客户中心（13 节点）==========
 	ModuleCustomer: {
 		"customer", "clueList", "clueStatistics", "leadMining",
-		"customer360", "customerEvent", "tagSegmentation", "userSegment", "unifiedMessage",
+		"customer360", "customerConsents", "customerEvent", "tagSegmentation", "userSegment", "unifiedMessage",
 		"customerIdentity", "oneidList", "oneidConflicts", "oneidMergeRules",
 	},
 
@@ -294,10 +296,10 @@ var ModuleMenuBindings = map[string][]string{
 		"confidencePanel", "humanizePanel", "feedbackLoopPanel",
 	},
 
-	// ========== reach-auto：营销自动化（5 节点）==========
+	// ========== reach-auto：营销自动化（7 节点）==========
 	ModuleReachAuto: {
 		"reach", // 顶级目录：由全部触达/IM 收费模块共同持有（目录节点允许多绑定）
-		"agentActive", "reachPipeline", "marketingFlow", "batchOperation",
+		"agentActive", "reachPipeline", "reachDeferredOutbound", "marketingFlow", "batchOperation",
 		"workflowOrchestrator",
 	},
 

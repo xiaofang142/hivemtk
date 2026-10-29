@@ -68,6 +68,9 @@ var SystemMenuTree = []SystemMenuNode{
 			{Key: "clueStatistics", Title: "线索统计", Icon: "DataAnalysis", Path: "/clue/statistics"},
 			{Key: "leadMining", Title: "线索挖掘", Icon: "Search", Path: "/lead-mining/index"},
 			{Key: "customer360", Title: "客户 360", Icon: "UserFilled", Path: "/customer360/list"},
+			// D04：同意事实账（grant/revoke 追加）与触达偏好（暂停/时区）的管理面。
+			// 与 customer360 同组：两者回答的是同一个问题——"这个客户现在能不能联系"。
+			{Key: "customerConsents", Title: "客户同意与偏好", Icon: "DocumentChecked", Path: "/customer360/consents"},
 			{Key: "customerEvent", Title: "客户事件", Icon: "Bell", Path: "/customerEvent/list"},
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "manager", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "manager", "viewer"}},
@@ -107,6 +110,8 @@ var SystemMenuTree = []SystemMenuNode{
 				Key: "agentActive", Title: "主动触达", Icon: "Promotion",
 				Children: []SystemMenuNode{
 					{Key: "reachPipeline", Title: "触达 Pipeline", Icon: "Promotion", Path: "/reachPipeline/list", Roles: []string{"admin", "manager"}},
+					// D02：静默时段/合规窗口内暂缓的主动触达，可查可取消（仅 pending 可取消）。
+					{Key: "reachDeferredOutbound", Title: "延迟出站管理", Icon: "Timer", Path: "/reachPipeline/deferred-outbound", Roles: []string{"admin", "manager"}},
 					{Key: "marketingFlow", Title: "营销流程", Icon: "SetUp", Path: "/marketingFlow/list", Roles: []string{"admin", "manager"}},
 					{Key: "batchOperation", Title: "批量运营", Icon: "Operation", Path: "/batchOperation/list", Roles: []string{"admin", "manager"}},
 				},
@@ -443,6 +448,10 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "securityAudit", Title: "安全审计", Icon: "Lock", Path: "/securityAudit/list"},
 				},
 			},
+			// D01：能力运行诊断（implemented/configured/ready 三层，注册表声明≠实现）。
+			// 与「功能模块/模板市场」同类：开店前先看"这台机器到底能干什么"，
+			// 所以放在 system 顶级下的直接子位，而不是藏进 siteConfig。
+			{Key: "capabilityDiagnostics", Title: "能力运行诊断", Icon: "DataAnalysis", Path: "/cap/diagnostics", Roles: []string{"admin", "manager"}},
 			// 功能模块市场：付费能力的**购买入口**。
 			//
 			// 放在 system 顶级下的直接子位（与团队/权限设置/资产包平级），而不是

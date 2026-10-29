@@ -10,5 +10,12 @@ export default [
     name: 'ReachPipelineEditor',
     component: () => import('@/views/reachPipeline/Editor.vue'),
     meta: { title: 'Pipeline 编辑', group: 'reach', icon: 'Edit', requiresAuth: true, hideInMenu: true }
+  },
+  {
+    // D02 延迟出站：静默时段 / 合规窗口内暂缓的主动触达
+    path: '/reachPipeline/deferred-outbound',
+    name: 'ReachDeferredOutbound',
+    component: () => import('@/views/reachPipeline/DeferredOutbound.vue'),
+    meta: { title: '延迟出站管理', group: 'reach', icon: 'Timer', requiresAuth: true }
   }
 ]

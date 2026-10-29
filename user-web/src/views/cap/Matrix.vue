@@ -4,19 +4,30 @@
       <template #header>
         <div class="card-header">
           <span>渠道能力矩阵</span>
-          <el-button
-            size="small"
-            @click="copyMd"
-          >
-            复制 Markdown
-          </el-button>
+          <div>
+            <el-button
+              v-if="markdown"
+              size="small"
+              @click="copyMd"
+            >
+              复制 Markdown
+            </el-button>
+            <el-button
+              size="small"
+              type="primary"
+              plain
+              @click="$router.push('/cap/diagnostics')"
+            >
+              运行诊断
+            </el-button>
+          </div>
         </div>
       </template>
       <el-alert
         type="info"
         :closable="false"
         show-icon
-        title="由 internal/capregistry 注册表自动生成（docs/capabilities.md 与注册表测试钉死一致）。新增渠道/能力在 channels.go 登记后自动出现在这里。"
+        title="由 internal/capregistry 注册表自动生成。这里展示的是「已登记」的渠道×能力；注册表声明不等于本二进制已实现，运行态 implemented / configured / ready 请看「能力运行诊断」。"
         style="margin-bottom: 12px"
       />
       <el-table
@@ -72,7 +83,9 @@ const load = async () => {
   try {
     const res = await capabilitiesApi.get()
     const data = res?.data ?? res ?? {}
-    entries.value = data.entries ?? []
+    // D01 起 GET /api/capabilities 返回运行视图（capabilities/total/ready_count），
+    // 旧字段 entries/markdown 仅作兼容兜底；两者字段重叠部分是 platform/capability/via/note。
+    entries.value = data.capabilities ?? data.entries ?? []
     markdown.value = data.markdown ?? ''
   } finally {
     loading.value = false
