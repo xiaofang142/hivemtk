@@ -89,6 +89,7 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /":                                                      "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /api/browser/host-ws":                                   "NM Host 通道：只认回环对端 IP + 主机令牌握手（两道门都在 handler 内，见 HostWSHandler.Handle）",
 	"GET /api/egolite/assets/pull":                               "ego-lite 资产分发：eg_ 前缀令牌校验（ValidateEgoToken，token 内嵌 userID 决定只发该用户自己 published 的流程）+ 只读清单，handler 内鉴权",
+	"GET /api/egolite/assets/trust.pem":                          "trust.pem 分发通道（S-6）：本实例信任公钥——公开物，免鉴权；未配置 EGO_ASSET_TRUST_PUBLIC_KEY 时 404，无个人与租户数据",
 	"GET /api/egolite/runner-ws":                                 "ego-runner 通道：eg_ 前缀令牌（KV 双候选轮换+常量时间比较）+ 形态开关回环门 + register 握手，全部在 handler 内（EgoRunnerWSHandler.Handle）；token 即身份，与 host-ws 同形状",
 	"POST /api/egolite/runner/artifacts":                         "ego-lite runner 产物上传（截图）：eg_ 前缀令牌校验（runnerAuth.Authenticate，token 即身份）+ 只收图片 + 8MB 上限 + 产物日配额，handler 内鉴权",
 	"POST /api/egolite/runner/telemetry":                         "ego-lite runner 遥测上报（S-9）：eg_ 前缀令牌校验（runnerAuth.Authenticate，token 即身份）+ IngestTelemetry 默认拒绝白名单（页面内容类键入库前丢弃）+ 批次 500 截断，handler 内鉴权",

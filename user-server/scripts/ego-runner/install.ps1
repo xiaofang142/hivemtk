@@ -2,6 +2,7 @@
 #
 # 用法（PowerShell）：
 #   .\install.ps1 [-ServerUrl ws://127.0.0.1:8204] [-Token eg_...] [-EgoServerName <name>]
+#              [-TrustUrl https://<实例>/api/egolite/assets/trust.pem]
 #   .\install.ps1 -Check          # 只核对环境与配置，不写不装
 #   .\uninstall.ps1               # 卸载（同目录）
 #
@@ -19,6 +20,7 @@ param(
     [string]$Token = "",
     [string]$EgoServerName = "",
     [string]$Bin = "",
+    [string]$TrustUrl = "",
     [switch]$Check
 )
 
@@ -103,6 +105,22 @@ if (Test-Path $Conf) {
     # Windows 无 POSIX 权限位：用 ACL 只保留当前用户读写
     icacls $Conf /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
     Say "已生成 conf：$Conf（loopback_only=$loop）"
+}
+
+# ---------- 2.5 trust.pem（可选；S-6 分发通道） ----------
+if ($TrustUrl -ne "") {
+    $TrustPath = Join-Path $Prefix "ego_trust.pem"
+    if (Test-Path $TrustPath) {
+        Say "trust.pem 已存在，保留：$TrustPath"
+    } else {
+        Say "拉取信任公钥：$TrustUrl"
+        try {
+            Invoke-WebRequest -Uri $TrustUrl -OutFile $TrustPath -UseBasicParsing
+            Say "已落盘：$TrustPath"
+        } catch {
+            Die "trust.pem 拉取失败（检查实例是否配置 EGO_ASSET_TRUST_PUBLIC_KEY）: $($_.Exception.Message)"
+        }
+    }
 }
 
 # ---------- 3. 登录自启 ----------

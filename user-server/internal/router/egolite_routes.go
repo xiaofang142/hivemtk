@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -281,6 +282,24 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"url": url, "bytes": len(b)}})
+	})
+
+	// trust.pem 分发通道（S-6 余量）：本实例信任公钥的获取口——安装器 --trust-url
+	// 拉取落到 ~/.hivemtk/ego_trust.pem，runner 验签 fail-close 的公钥来源。
+	// 公钥本来就是公开物，端点免鉴权；未配置信任公钥（全验签关闭的部署）回 404，
+	// 安装器据此跳过。形状与 runner 解析器一致：base64 行 + 指纹注释。
+	engine.GET("/api/egolite/assets/trust.pem", func(c *gin.Context) {
+		pub, err := egolite.LoadAssetTrustPubKeyFromEnv()
+		if err != nil {
+			c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+			return
+		}
+		if pub == nil {
+			c.JSON(404, gin.H{"code": 1, "message": "本实例未配置资产信任公钥（EGO_ASSET_TRUST_PUBLIC_KEY）"})
+			return
+		}
+		c.String(200, "# hivemtk ego asset trust store (ed25519)\n# fingerprint=%s\n%s\n",
+			egolite.PubKeyFingerprint(pub), base64.StdEncoding.EncodeToString(pub))
 	})
 
 	// runner 遥测上报（S-9）：eg_ token 即身份；body {"events":[...]}，每条样本在

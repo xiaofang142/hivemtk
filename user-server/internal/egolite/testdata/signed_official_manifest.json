@@ -1,0 +1,15 @@
+{
+  "id": "official-demo",
+  "version": "1.0.0",
+  "domains": [
+    "example.com"
+  ],
+  "hivemtk": {
+    "entry": "tools/demo.js",
+    "compat_min": "0.6.0",
+    "writes": [],
+    "sig_alg": "ed25519",
+    "signature": "AcshEWrbOk1LhW95dKqwg7aT5Ir07IHLb6pVq4ik58ZQbGn1mypjLMVji0HjLOxPFGYqTrWKKyoD27u9R/3RBw==",
+    "pubkey_fingerprint": "2d53f632f7621f60"
+  }
+}

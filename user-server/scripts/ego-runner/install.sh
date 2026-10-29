@@ -3,6 +3,7 @@
 #
 # 用法：
 #   ./install.sh [--server-url ws://127.0.0.1:8204] [--token eg_...] [--ego-server-name <name>]
+#              [--trust-url https://<实例>/api/egolite/assets/trust.pem]
 #   ./install.sh --check          # 只核对环境与配置，不写不装
 #   ./uninstall.sh                # 卸载（同目录）
 #
@@ -28,6 +29,7 @@ SERVER_URL="ws://127.0.0.1:8204"
 TOKEN=""
 EGO_SERVER_NAME=""
 BIN_OVERRIDE=""
+TRUST_URL=""
 DO_CHECK=0
 
 while [[ $# -gt 0 ]]; do
@@ -36,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --token) TOKEN="$2"; shift 2 ;;
     --ego-server-name) EGO_SERVER_NAME="$2"; shift 2 ;;
     --bin) BIN_OVERRIDE="$2"; shift 2 ;;
+    --trust-url) TRUST_URL="$2"; shift 2 ;;
     --check) DO_CHECK=1; shift ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "未知参数: $1" >&2; exit 1 ;;
@@ -98,6 +101,21 @@ else
   } > "$CONF"
   chmod 600 "$CONF"
   say "已生成 conf：${CONF}（loopback_only=${LOOPBACK}）"
+fi
+
+# ---------- 2.5 trust.pem（可选；S-6 分发通道）----------
+# 未提供 --trust-url 则跳过（已装过的 trust.pem 不覆盖）。失败即中止：
+# 带签名的资产在缺公钥的 runner 上是 fail-close，与其装完跑不了，不如装的时候说清。
+if [[ -n "$TRUST_URL" ]]; then
+  if [[ -f "$PREFIX/ego_trust.pem" ]]; then
+    say "trust.pem 已存在，保留：$PREFIX/ego_trust.pem"
+  else
+    say "拉取信任公钥：$TRUST_URL"
+    curl -fsS "$TRUST_URL" -o "$PREFIX/ego_trust.pem" \
+      || die "trust.pem 拉取失败（检查实例是否配置 EGO_ASSET_TRUST_PUBLIC_KEY）"
+    chmod 644 "$PREFIX/ego_trust.pem"
+    say "已落盘：$PREFIX/ego_trust.pem"
+  fi
 fi
 
 # ---------- 3. LaunchAgent ----------
