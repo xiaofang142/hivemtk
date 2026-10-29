@@ -110,7 +110,11 @@ func (r *HelpCenterRepository) ListPublicArticles(ctx context.Context, category,
 	}
 	if q != "" {
 		like := "%" + q + "%"
-		qry = qry.Where("title ILIKE ? OR id IN (SELECT document_id FROM knowledge_chunks WHERE content ILIKE ?)", like, like)
+		// 子查询引用租户表 knowledge_chunks，但写在 Where 字面量里，隔离 callback
+		// 注入不到（只管外层表）——显式相关到外层 knowledge_documents.tenant_id：
+		// on 模式下内容匹配只看本租户的切片，别租户切片内容左右不了本租户的命中集；
+		// off 模式两侧恒为 1，条件恒真，行为逐字不变。
+		qry = qry.Where("title ILIKE ? OR id IN (SELECT document_id FROM knowledge_chunks WHERE content ILIKE ? AND knowledge_chunks.tenant_id = knowledge_documents.tenant_id)", like, like)
 	}
 	rows := []HCArticleRowRepo{}
 	if err := qry.Order("updated_at DESC").Limit(limit).Scan(&rows).Error; err != nil {

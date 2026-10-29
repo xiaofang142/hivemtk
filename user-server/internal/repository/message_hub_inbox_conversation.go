@@ -28,8 +28,12 @@ func (r *InboxConversationRepository) DeleteOrphanConvInboxRows(ctx context.Cont
 	if r == nil || r.db == nil {
 		return 0, nil
 	}
+	// NOT EXISTS 的子查询引用租户表 message_hub，但子查询写在 Where 字面量里，
+	// 隔离 callback 注入不到（只管外层表）——必须显式带上租户相关条件，否则
+	// on 模式下别租户同 conversation_id（conv: 前缀形态可撞）的 hub 行会压住
+	// 本租户的孤儿清理。off 模式两侧恒为 1，相关条件恒真，行为逐字不变。
 	res := r.db.WithContext(ctx).Unscoped().
-		Where("conversation_id LIKE ? AND NOT EXISTS (SELECT 1 FROM message_hub m WHERE m.conversation_id = inbox_conversations.conversation_id)",
+		Where("conversation_id LIKE ? AND NOT EXISTS (SELECT 1 FROM message_hub m WHERE m.conversation_id = inbox_conversations.conversation_id AND m.tenant_id = inbox_conversations.tenant_id)",
 			"conv:%").
 		Delete(&model.InboxConversation{})
 	return res.RowsAffected, res.Error

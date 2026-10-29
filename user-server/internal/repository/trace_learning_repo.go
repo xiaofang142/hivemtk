@@ -46,6 +46,11 @@ func (r *TraceLearningRepository) UpsertAttemptedEvalLog(ctx context.Context, lo
 }
 
 // ListPendingTraceIDs 批次候选：窗口内 AI dispatch 节点带 reply 的未评估 trace（id 升序）
+//
+// trace_eval_log 的 NOT IN 必须走 GORM 子查询而不是字面量
+// `NOT IN (SELECT trace_id FROM trace_eval_log)`：字面量里的 FROM 在隔离 callback
+// 的扫描面之外，on 模式下别租户评过的 trace_id（碰撞时）会压住本租户的待评估批次。
+// GORM 子查询经 callbacks.Query().Execute(DryRun) 展开，租户注入照常生效。
 func (r *TraceLearningRepository) ListPendingTraceIDs(ctx context.Context, sinceHours, limit int) ([]string, error) {
 	sub := r.db.WithContext(ctx).Table("message_trace").
 		Select("trace_id").
@@ -54,12 +59,13 @@ func (r *TraceLearningRepository) ListPendingTraceIDs(ctx context.Context, since
 	if sinceHours > 0 {
 		sub = sub.Where("created_at >= now() - make_interval(hours => ?)", sinceHours)
 	}
+	evaluated := r.db.WithContext(ctx).Table("trace_eval_log").Select("trace_id")
 	var traceIDs []string
 	err := r.db.WithContext(ctx).
 		Table("message_trace").
 		Select("trace_id").
 		Where("trace_id IN (?)", sub).
-		Where("trace_id NOT IN (SELECT trace_id FROM trace_eval_log)").
+		Where("trace_id NOT IN (?)", evaluated).
 		Group("trace_id").
 		Order("MAX(id) ASC").
 		Limit(limit).

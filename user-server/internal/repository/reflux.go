@@ -267,14 +267,25 @@ func (r *RefluxRepository) JoinCluster(ctx context.Context, clusterID int64, has
 		return tx.Model(&model.UnknownQuestionCluster{}).
 			Where("id = ?", clusterID).
 			Updates(map[string]any{
+				// 三个子查询都按 unknown_questions 计数/取样。cluster_id 是全局主键、
+				// 正常情况下不跨租户，但子查询写在 SET 表达式里，隔离 callback 注入
+				// 不到（只管外层表）——与 RefreshClusterFrequency 同一防御：显式带上
+				// tenant_id 相关条件，把"成员行永远与簇同租户"钉死在 SQL 里。
+				// off 模式两侧恒为 1，相关条件恒真，行为逐字不变。
 				"question_count": gorm.Expr(
-					`(SELECT COUNT(*) FROM unknown_questions q WHERE q.cluster_id = ?)`, clusterID),
+					`(SELECT COUNT(*) FROM unknown_questions q
+						WHERE q.cluster_id = ?
+						  AND q.tenant_id = unknown_question_clusters.tenant_id)`, clusterID),
 				"total_frequency": gorm.Expr(
-					`(SELECT COALESCE(SUM(frequency), 0) FROM unknown_questions q WHERE q.cluster_id = ?)`, clusterID),
+					`(SELECT COALESCE(SUM(frequency), 0) FROM unknown_questions q
+						WHERE q.cluster_id = ?
+						  AND q.tenant_id = unknown_question_clusters.tenant_id)`, clusterID),
 				"sample_questions": gorm.Expr(
 					`(SELECT COALESCE(array_agg(q), unknown_question_clusters.sample_questions) FROM (
 						SELECT question AS q FROM unknown_questions
-						WHERE cluster_id = ? ORDER BY last_seen_at DESC LIMIT ?
+						WHERE cluster_id = ?
+						  AND tenant_id = unknown_question_clusters.tenant_id
+						ORDER BY last_seen_at DESC LIMIT ?
 					) s)`, clusterID, maxSamples),
 			}).Error
 	})

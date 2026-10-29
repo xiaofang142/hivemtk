@@ -77,16 +77,27 @@ func (r *AIProductivityRepository) CountSessionMessagesBySenderTypeAndDayRange(c
 //
 // PostgreSQL 不允许在聚合函数(AVG)中直接嵌套窗口函数(LAG)，
 // 必须用子查询先算出相邻消息与相邻发送者，再在外层聚合。
+//
+// 子查询必须用 GORM 子查询（Table("(?)", sub)）构造，禁止 `Table("(SELECT … FROM
+// session_messages …)")` 字面量派生表：派生表外层解析不出表名 ⇒ 隔离 callback
+// 不注入；字面量里的 FROM 同样在 callback 的 JOIN/预构建 SQL 扫描面之外 ⇒
+// on 模式下会把**全部租户**的 session_messages 聚进同一个平均响应时长
+// （/api/analytics/ai-productivity 是租户身份端点，实测命中，specs/001 S-18）。
+// *gorm.DB 子查询由 GORM 经 callbacks.Query().Execute(DryRun) 展开，
+// 租户隔离 callback 对子查询照常注入 WHERE tenant_id = ?。
 func (r *AIProductivityRepository) GetAvgResponseTime(ctx context.Context, startTime, endTime time.Time) (float64, error) {
 	type rtRow struct {
 		Avg float64
 	}
 	var rt rtRow
-	err := r.db.WithContext(ctx).
-		Table("(SELECT created_at, sender_type, "+
+	lagged := r.db.WithContext(ctx).
+		Table("session_messages").
+		Select("created_at, sender_type, "+
 			"LAG(created_at) OVER (PARTITION BY session_id ORDER BY created_at) AS prev_at, "+
-			"LAG(sender_type) OVER (PARTITION BY session_id ORDER BY created_at) AS prev_sender "+
-			"FROM session_messages WHERE created_at BETWEEN ? AND ?) t", startTime, endTime).
+			"LAG(sender_type) OVER (PARTITION BY session_id ORDER BY created_at) AS prev_sender").
+		Where("created_at BETWEEN ? AND ?", startTime, endTime)
+	err := r.db.WithContext(ctx).
+		Table("(?) t", lagged).
 		Select("COALESCE(AVG(EXTRACT(EPOCH FROM (created_at - prev_at))), 0) AS avg").
 		Where("prev_sender = ? AND sender_type IN ?", "user", []string{"ai", "agent", "staff"}).
 		Scan(&rt).Error
