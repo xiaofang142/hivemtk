@@ -45,7 +45,8 @@ import (
 //   - POST /api/egolite/executions         下发执行（draft=flow 试跑 / market=资产执行）
 //   - GET  /api/egolite/executions         执行列表
 //   - GET  /api/egolite/executions/:id     执行详情
-//   - GET  /api/egolite/executions/:id/events 事件日志（Monitor 页面数据源，T4）
+//   - GET  /api/egolite/executions/:id/events 事件日志（增量游标 after_id；轮询兜底）
+//   - GET  /api/egolite/executions/:id/stream 事件流 SSE（S-13；终态发 end 帧收流）
 //   - POST /api/egolite/executions/:id/abort   停止
 //   - POST /api/egolite/executions/:id/confirm 用户确认/拒绝（写操作闸）
 //   - POST /api/egolite/executions/:id/redispatch 待下发执行重发（runner 上线后）
@@ -74,6 +75,9 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	runnerAuth := egolite.NewEgoTokenAuthenticator(tokenRepo, kvRepo)
 
 	execSvc := egolite.NewEgoExecutionService(execRepo, evRepo, flowRepo, assetRepo, claimRepo, registry)
+	// S-13：执行事件广播（SSE 数据源）。IngestEvent 是唯一写入口，广播跟着它走。
+	eventHub := egolite.NewEgoEventHub()
+	execSvc.AttachEventHub(eventHub)
 	// 通用执行能力（会话 + 轮次）：session 只做多轮聚合，事件先委托执行域再聚合。
 	sessionRepo := egolite.NewEgoSessionRepositoryWithDB(gormDB)
 	roundRepo := egolite.NewEgoRoundRepositoryWithDB(gormDB)
@@ -528,6 +532,11 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": events}})
+		})
+		// 事件流 SSE（S-13）：先补游标之后的历史，再随广播增量推；终态发 end 帧收流。
+		eg.GET("/executions/:id/stream", func(c *gin.Context) {
+			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
+			streamEgoExecution(c, execRepo, evRepo, eventHub, currentUID(c), uint(id))
 		})
 		eg.POST("/executions/:id/redispatch", func(c *gin.Context) {
 			id, _ := strconv.ParseUint(c.Param("id"), 10, 32)

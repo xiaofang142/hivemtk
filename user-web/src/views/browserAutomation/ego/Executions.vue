@@ -183,7 +183,55 @@
           </el-space>
         </div>
 
-        <h4>事件流</h4>
+        <template v-if="artifacts.length">
+          <h4>产物</h4>
+          <div class="artifacts">
+            <div
+              v-for="(a, i) in artifacts"
+              :key="`${a.kind}-${i}`"
+              class="artifact"
+            >
+              <el-image
+                v-if="a.image"
+                :src="a.image"
+                :preview-src-list="imageList"
+                :initial-index="a.imageIndex"
+                fit="cover"
+                class="thumb"
+                preview-teleported
+              />
+              <div class="artifact-meta">
+                <el-tag
+                  size="small"
+                  :type="a.kind === 'artifact' ? 'success' : 'info'"
+                >
+                  {{ a.kind }}
+                </el-tag>
+                <a
+                  v-if="a.image"
+                  :href="a.image"
+                  target="_blank"
+                  rel="noopener"
+                  class="sub"
+                >打开原图</a>
+                <span
+                  v-if="a.summary"
+                  class="sub"
+                >{{ a.summary }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <h4>
+          事件流<span
+            v-if="streaming"
+            class="sub live"
+          > · 实时</span><span
+            v-else-if="streamFailed"
+            class="sub"
+          > · 轮询兜底</span>
+        </h4>
         <el-timeline v-if="events.length">
           <el-timeline-item
             v-for="ev in events"
@@ -231,14 +279,15 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   abortEgoExecution,
   confirmEgoExecution,
   listEgoEvents,
   listEgoExecutions,
-  redispatchEgoExecution
+  redispatchEgoExecution,
+  streamEgoEvents
 } from '@/api/egolite'
 
 const loading = ref(false)
@@ -248,7 +297,10 @@ const autoRefresh = ref(true)
 const drawerVisible = ref(false)
 const current = ref(null)
 const events = ref([])
+const streaming = ref(false)
+const streamFailed = ref(false)
 let timer = null
+let stream = null
 
 const stateOptions = [
   { value: 'created', label: '待下发' },
@@ -288,6 +340,69 @@ const pretty = (payload) => {
   }
 }
 
+// 产物预览（S-13）：产物本来就是事件（runner 上报 screenshot/extract），
+// 从事件流里就地取，不再让用户去翻 payload——图片直接看图，其余给一行摘要。
+const artifacts = computed(() =>
+  events.value
+    .filter((ev) => ev.type === 'artifact' || ev.type === 'snapshot')
+    .map((ev) => {
+      const p = ev.payload || {}
+      const image =
+        typeof p.url === 'string' && /^https?:|^\/(api|uploads|static)\//.test(p.url) ? p.url : ''
+      const summary = p.summary || p.note || p.key || p.title || ''
+      return { kind: ev.type, image, summary: String(summary || ''), imageIndex: 0 }
+    })
+)
+const imageList = computed(() => artifacts.value.filter((a) => a.image).map((a) => a.image))
+
+const stopStream = () => {
+  if (stream) {
+    try {
+      stream.abort()
+    } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    stream = null
+  }
+  streaming.value = false
+}
+
+// 事件流：先补历史（一次 HTTP），再从游标处接 SSE 增量。断流/不支持时退回 3s 轮询。
+const startStream = () => {
+  stopStream()
+  if (!current.value) return
+  streamFailed.value = false
+  streaming.value = true
+  const id = current.value.id
+  try {
+    stream = streamEgoEvents(id, {
+      afterId: lastEventId.value,
+      onEvent: (ev) => {
+        if (!ev || !ev.id) return
+        if (ev.id <= lastEventId.value) return
+        events.value = events.value.concat(ev).slice(-1000)
+        lastEventId.value = ev.id
+        // waiting_confirm 之类需要用户动作的状态要立刻反映到详情头
+        if (ev.type === 'confirm') load()
+      },
+      onEnd: (info) => {
+        if (info && current.value) {
+          current.value.state = info.state || current.value.state
+          current.value.fail_reason = info.fail_reason || current.value.fail_reason
+        }
+        stopStream()
+        load()
+      }
+    })
+    stream.done.catch(() => {
+      // 流不可用（反代关缓冲/网关超时/服务端重启）：静默退回轮询，不打扰用户
+      streaming.value = false
+      streamFailed.value = true
+    })
+  } catch (_) {
+    streaming.value = false
+    streamFailed.value = true
+  }
+}
+
 const load = async () => {
   loading.value = true
   try {
@@ -306,7 +421,9 @@ const openDetail = async (row) => {
   current.value = row
   drawerVisible.value = true
   lastEventId.value = 0
+  events.value = []
   await loadEvents(true)
+  startStream()
 }
 
 // 事件流增量轮询（after_id 游标）：抽屉开着时随 3s 自动刷新只拉新增帧，
@@ -351,10 +468,18 @@ onMounted(() => {
   timer = setInterval(() => {
     if (!autoRefresh.value) return
     load()
-    if (drawerVisible.value) loadEvents(false)
+    // 事件优先走 SSE；只有流不可用时才退回 3s 增量轮询
+    if (drawerVisible.value && !streaming.value) loadEvents(false)
   }, 3000)
 })
-onBeforeUnmount(() => timer && clearInterval(timer))
+onBeforeUnmount(() => {
+  timer && clearInterval(timer)
+  stopStream()
+})
+
+watch(drawerVisible, (v) => {
+  if (!v) stopStream()
+})
 </script>
 
 <style scoped>
@@ -363,6 +488,11 @@ onBeforeUnmount(() => timer && clearInterval(timer))
 .hint { color: #909399; font-size: 12px; }
 .sub { color: #909399; font-size: 12px; }
 .confirm-bar { margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.artifacts { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 4px; }
+.artifact { width: 180px; }
+.thumb { width: 180px; height: 110px; border: 1px solid #ebeef5; border-radius: 4px; background: #f5f7fa; }
+.artifact-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.live { color: #67c23a; }
 .payload {
   margin: 4px 0 0;
   padding: 6px 8px;

@@ -1,4 +1,5 @@
 import { http } from '@/utils/http'
+import { getRequestInstance } from '@/utils/request'
 
 // ego-lite 腿（浏览器自动化的第二种执行腿：用户自己的 ego-browser）
 //
@@ -40,6 +41,69 @@ export const getEgoExecution = (id) => http.get(`/api/egolite/executions/${id}`)
 
 export const listEgoEvents = (id, params) =>
   http.get(`/api/egolite/executions/${id}/events`, params)
+
+// 事件流 SSE（S-13）：用 fetch + ReadableStream 而不是 EventSource——EventSource 不能带
+// Authorization 头，只能把 JWT 塞进 URL（日志/代理都会留痕）。这里保持和普通请求同一把令牌。
+//
+// 返回 { done: Promise, abort }：done 在服务端发 end 帧或流结束/出错时 resolve，
+// abort 用于关闭抽屉时立刻断开（服务端 handler 看到 ctx.Done 就收流）。
+export const streamEgoEvents = (id, { afterId = 0, onEvent, onEnd } = {}) => {
+  const inst = getRequestInstance()
+  const base = inst?.defaults?.baseURL || ''
+  const token = localStorage.getItem('token') || ''
+  const controller = new AbortController()
+  const url = `${base}/api/egolite/executions/${id}/stream${afterId ? `?after_id=${afterId}` : ''}`
+
+  const done = (async () => {
+    const resp = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal
+    })
+    if (!resp.ok || !resp.body) throw new Error(`事件流不可用（HTTP ${resp.status}）`)
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    let ended = false
+    while (!ended) {
+      const { value, done: streamDone } = await reader.read()
+      if (streamDone) break
+      buf += decoder.decode(value, { stream: true })
+      let sep
+      while ((sep = buf.indexOf('\n\n')) >= 0) {
+        const raw = buf.slice(0, sep)
+        buf = buf.slice(sep + 2)
+        const frame = parseSseFrame(raw)
+        if (!frame) continue
+        // 心跳注释帧（: hb）没有 data，parseSseFrame 已过滤
+        if (frame.event === 'end') {
+          ended = true
+          onEnd?.(frame.data)
+          break
+        }
+        if (frame.data) onEvent?.(frame.data)
+      }
+    }
+  })()
+
+  return { done, abort: () => controller.abort() }
+}
+
+const parseSseFrame = (raw) => {
+  let event = ''
+  const dataLines = []
+  for (const line of raw.split('\n')) {
+    if (!line || line.startsWith(':')) continue
+    if (line.startsWith('event:')) event = line.slice(6).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+    // id: 由服务端逐帧写入，前端只用事件体里的 id 做游标（同一事实源）
+  }
+  if (!dataLines.length) return null
+  try {
+    return { event, data: JSON.parse(dataLines.join('\n')) }
+  } catch {
+    return null
+  }
+}
 
 // 下发执行：draft=试跑某流程；market=执行目录资产（asset_id 即资产编码）
 export const startEgoExecution = (data) =>

@@ -30,10 +30,27 @@ type EgoExecutionService struct {
 	assetRepo EgoAssetRepository      // market 通道的资产校验源（nil ⇒ market 全拒，fail-closed）
 	wcRepo    EgoWriteClaimRepository // 写台账（红线 2：声明写的执行必须留台账）
 	registry  *EgoRunnerRegistry
+	hub       *EgoEventHub // 可选：SSE 变更广播（nil ⇒ 只落库，前端走轮询兜底）
 }
 
 func NewEgoExecutionService(execRepo EgoExecutionRepository, evRepo EgoEventRepository, flowRepo EgoFlowRepository, assetRepo EgoAssetRepository, wcRepo EgoWriteClaimRepository, registry *EgoRunnerRegistry) *EgoExecutionService {
 	return &EgoExecutionService{execRepo: execRepo, evRepo: evRepo, flowRepo: flowRepo, assetRepo: assetRepo, wcRepo: wcRepo, registry: registry}
+}
+
+// AttachEventHub 装配 SSE 广播（router 装配期调用；nil 撤装 ⇒ 前端退回轮询）。
+//
+// 用装配方法而不是构造函数入参：现有调用点（router + 十余个用例）不需要为一个
+// 可选能力改签名，也不会因为漏传它而悄悄少一个推送源。
+func (s *EgoExecutionService) AttachEventHub(hub *EgoEventHub) {
+	s.hub = hub
+}
+
+// notify 推送一次「该执行有变化」的信号。广播失败/未装配都不影响主流程——
+// 事件已经落库，订阅方最坏晚一拍（心跳补拉兜底）。
+func (s *EgoExecutionService) notify(execID uint) {
+	if s.hub != nil {
+		s.hub.Publish(execID)
+	}
 }
 
 // RunnerEvent runner 上行事件帧（A3 协议服务端侧形状；cmd/ego-runner 以别名共用，
@@ -333,6 +350,8 @@ func (s *EgoExecutionService) IngestEvent(ctx context.Context, userID uint, ev R
 	case "runner":
 		// runner 级事件（busy/abort 确认等）只落库
 	}
+	// 事件行 + 状态机都落定之后再广播：订阅方回库读到的必然包含这一拍。
+	s.notify(e.ID)
 	return nil
 }
 
@@ -408,6 +427,7 @@ func (s *EgoExecutionService) Abort(ctx context.Context, userID, execID uint, re
 	if conn, online := s.registry.GetConn(userID); online {
 		_ = conn.SendSpec(map[string]any{"type": "abort", "spec": map[string]any{"execution_id": EgoExecKey(e.ID)}})
 	}
+	s.notify(e.ID)
 	return s.execRepo.GetByID(ctx, execID)
 }
 
@@ -441,6 +461,7 @@ func (s *EgoExecutionService) Confirm(ctx context.Context, userID, execID uint, 
 		}
 	}
 	_ = decision
+	s.notify(e.ID)
 	return s.execRepo.GetByID(ctx, execID)
 }
 
@@ -462,6 +483,7 @@ func (s *EgoExecutionService) WatchdogSweep(ctx context.Context) (int, error) {
 			if conn, online := s.registry.GetConn(e.UserID); online {
 				_ = conn.SendSpec(map[string]any{"type": "abort", "spec": map[string]any{"execution_id": EgoExecKey(e.ID)}})
 			}
+			s.notify(e.ID)
 		}
 	}
 	timeoutOverdue, err := s.execRepo.ListTimeoutOverdue(ctx, now)
@@ -472,6 +494,7 @@ func (s *EgoExecutionService) WatchdogSweep(ctx context.Context) (int, error) {
 		if err := s.execRepo.TransitionState(ctx, e.ID, []string{model.EgoExecRunning, model.EgoExecDispatching},
 			model.EgoExecTimeout, map[string]any{"ended_at": now, "fail_reason": "执行硬超时（wall-clock 看门狗）"}); err == nil {
 			swept++
+			s.notify(e.ID)
 		}
 	}
 	return swept, nil
