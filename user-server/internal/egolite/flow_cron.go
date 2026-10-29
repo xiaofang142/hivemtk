@@ -112,30 +112,41 @@ func (s *EgoFlowCronService) applySchedule(ctx context.Context, tr *model.Egolit
 	s.storeTimes(ctx, tr.ID, nextRunAt(tr.CronExpr, tr.TimeZone, time.Now()), nil)
 }
 
+// triggerOnce 一次触发（调度回调的全部副作用都收敛在这里）。
+//
+// 无请求 ctx ⇒ 先 system scope 复读触发器行（避开 enabled/Delete 的竞态窗口），
+// 再钉回归属租户做业务段。
+//
+// 「单次触发，不重投」是刻意的：失败（并发闸满 / runner 离线 / 流程被改红）只记日志、
+// 记账照常推进到下一次——补投属于另一套语义（错过的点是否该补、补几次、补到哪一刻），
+// 需要单独立 spec；本函数绝不在失败路径上再调一次 fire。
+func (s *EgoFlowCronService) triggerOnce(flowID uint) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cur, err := s.cronRepo.GetByFlow(tenant.WithSystemScope(ctx), flowID)
+	if err != nil || cur == nil || !cur.Enabled {
+		return
+	}
+	ctx = tenant.OnlyTenant(ctx, cur.TenantID)
+	now := time.Now()
+	// last=本次触发时刻，next=本次之后的下一次
+	_ = s.cronRepo.UpdateTimes(ctx, cur.ID, nextRunAt(cur.CronExpr, cur.TimeZone, now), &now)
+	if s.fire == nil {
+		logger.Warnf("[EgoFlowCron] flow=%d 触发跳过: 未注入执行出口（装配缺失）", cur.FlowID)
+		return
+	}
+	if err := s.fire(ctx, cur.UserID, cur.FlowID); err != nil {
+		// 单次触发跳过，调度器继续（不 panic 不重投）；下次触发按表达式照常到来
+		logger.Warnf("[EgoFlowCron] flow=%d 触发跳过: %v", cur.FlowID, err)
+	}
+}
+
 // register 注册到项目 TaskManager（秒级 spec），触发时以归属用户身份 fire。
-// 触发回调纪律（browser cron 同源）：无请求 ctx ⇒ 先 system scope 复读触发器行
-// （enabled 与 Disable 的竞态窗口），再钉回归属租户做业务段。
 func (s *EgoFlowCronService) register(tr *model.EgoliteFlowCron) {
 	flowID := tr.FlowID
 	mgr := pkgcron.GetTaskManager()
 	entry, err := mgr.AddTask(toSixField(tr.CronExpr, tr.TimeZone), func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		cur, err := s.cronRepo.GetByFlow(tenant.WithSystemScope(ctx), flowID)
-		if err != nil || cur == nil || !cur.Enabled {
-			return
-		}
-		ctx = tenant.OnlyTenant(ctx, cur.TenantID)
-		now := time.Now()
-		// last=本次触发时刻，next=本次之后的下一次
-		_ = s.cronRepo.UpdateTimes(ctx, cur.ID, nextRunAt(cur.CronExpr, cur.TimeZone, now), &now)
-		if s.fire == nil {
-			return
-		}
-		if err := s.fire(ctx, cur.UserID, cur.FlowID); err != nil {
-			// 并发闸满 / runner 离线 / 流程被改红：单次触发跳过，调度器继续（不 panic 不重投）
-			logger.Warnf("[EgoFlowCron] flow=%d 触发跳过: %v", cur.FlowID, err)
-		}
+		s.triggerOnce(flowID)
 	})
 	s.mu.Lock()
 	if err == nil {
