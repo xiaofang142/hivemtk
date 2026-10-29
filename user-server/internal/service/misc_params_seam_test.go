@@ -32,26 +32,20 @@ type intSeam struct {
 func TestMiscDurationSeams(t *testing.T) {
 	seams := []durationSeam{
 		{
-			name:  "misc.sop_scheduler_interval",
-			param: "sop_scheduler_interval",
-			def:   60 * time.Second,
-			restore: func() func() {
-				old := sopSchedulerScanIntervalProvider
-				return func() { sopSchedulerScanIntervalProvider = old }
-			}(),
-			read: soPSchedulerScanInterval,
-			set:  SetSOPSchedulerScanIntervalProvider,
+			name:    "misc.sop_scheduler_interval",
+			param:   "sop_scheduler_interval",
+			def:     60 * time.Second,
+			restore: func() func() { return SwapSchedulerScanIntervalProvider(nil) }(),
+			read:    ProbeSchedulerScanInterval,
+			set:     SetSOPSchedulerScanIntervalProvider,
 		},
 		{
-			name:  "misc.sop_max_wait",
-			param: "sop_max_wait",
-			def:   24 * time.Hour,
-			restore: func() func() {
-				old := sopTimerMaxWaitProvider
-				return func() { sopTimerMaxWaitProvider = old }
-			}(),
-			read: sopTimerMaxWait,
-			set:  SetSOPTimerMaxWaitProvider,
+			name:    "misc.sop_max_wait",
+			param:   "sop_max_wait",
+			def:     24 * time.Hour,
+			restore: func() func() { return SwapTimerMaxWaitProvider(nil) }(),
+			read:    ProbeTimerMaxWait,
+			set:     SetSOPTimerMaxWaitProvider,
 		},
 		{
 			name:  "misc.reply_sem_timeout",

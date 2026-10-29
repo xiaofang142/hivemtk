@@ -29,13 +29,13 @@ func TestTelemetryWorkflowIntSeams(t *testing.T) {
 			why: "0 会在第一步就判超限，所有工作流全部失败",
 		},
 		{
-			name: "maxRunningPerSOP", defaultV: DefaultMaxRunningPerSOP,
-			inject: SetMaxRunningPerSOPProvider, read: maxRunningPerSOP,
+			name: "ProbeMaxRunningPerSOP", defaultV: DefaultMaxRunningPerSOP,
+			inject: SetMaxRunningPerSOPProvider, read: ProbeMaxRunningPerSOP,
 			why: "0 会让 count<=0 恒成立，调度器对所有 SOP 永久停摆",
 		},
 		{
-			name: "maxExecutedNodeTrace", defaultV: DefaultMaxExecutedNodeTrace,
-			inject: SetMaxExecutedNodeTraceProvider, read: maxExecutedNodeTrace,
+			name: "ProbeMaxExecutedNodeTrace", defaultV: DefaultMaxExecutedNodeTrace,
+			inject: SetMaxExecutedNodeTraceProvider, read: ProbeMaxExecutedNodeTrace,
 			why: "0 会让第一条轨迹就被丢弃，整次执行在界面上看不到任何节点",
 		},
 	}

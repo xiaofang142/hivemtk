@@ -3,6 +3,8 @@ package service
 import (
 	"testing"
 	"time"
+
+	"hivemtk-user/internal/service/audience"
 )
 
 // resetP1Providers 复位本批四个 provider。
@@ -13,8 +15,8 @@ import (
 func resetP1Providers(t *testing.T) {
 	t.Helper()
 	t.Cleanup(func() {
-		audienceDefaultLimitProvider = func() int { return DefaultAudienceLimit }
-		audienceMaxLimitProvider = func() int { return MaxAudienceLimit }
+		audience.SetAudienceDefaultLimitProvider(func() int { return audience.DefaultAudienceLimit })
+		audience.SetAudienceMaxLimitProvider(func() int { return audience.MaxAudienceLimit })
 		editLockTTLProvider = func() time.Duration { return EditLockTTL }
 		l1TTLHoursProvider = func() time.Duration { return L1TTLHours }
 	})
@@ -60,15 +62,15 @@ func TestAudienceConfigLimitNormalization(t *testing.T) {
 	resetP1Providers(t)
 
 	// 没写 limit → 走默认
-	if got := (AudienceConfig{Tags: []string{"x"}}).limit(); got != DefaultAudienceLimit {
+	if got := audience.NormalizedLimit(AudienceConfig{Tags: []string{"x"}}); got != DefaultAudienceLimit {
 		t.Errorf("未写 limit 得到 %d, 期望 %d", got, DefaultAudienceLimit)
 	}
 	// 写小了 → 原样
-	if got := (AudienceConfig{Tags: []string{"x"}, Limit: 7}).limit(); got != 7 {
+	if got := audience.NormalizedLimit(AudienceConfig{Tags: []string{"x"}, Limit: 7}); got != 7 {
 		t.Errorf("limit=7 得到 %d", got)
 	}
 	// 写超了 → 夹到硬上限
-	if got := (AudienceConfig{Tags: []string{"x"}, Limit: 99999}).limit(); got != MaxAudienceLimit {
+	if got := audience.NormalizedLimit(AudienceConfig{Tags: []string{"x"}, Limit: 99999}); got != MaxAudienceLimit {
 		t.Errorf("limit=99999 得到 %d, 期望夹到 %d", got, MaxAudienceLimit)
 	}
 
@@ -76,11 +78,11 @@ func TestAudienceConfigLimitNormalization(t *testing.T) {
 	SetAudienceDefaultLimitProvider(func() int { return 3 })
 	SetAudienceMaxLimitProvider(func() int { return 5 })
 	c := AudienceConfig{Tags: []string{"x"}}
-	if got := c.limit(); got != 3 {
+	if got := audience.NormalizedLimit(c); got != 3 {
 		t.Errorf("默认改成 3 后未写 limit 得到 %d", got)
 	}
 	c.Limit = 100
-	if got := c.limit(); got != 5 {
+	if got := audience.NormalizedLimit(c); got != 5 {
 		t.Errorf("上限改成 5 后 limit=100 得到 %d", got)
 	}
 }

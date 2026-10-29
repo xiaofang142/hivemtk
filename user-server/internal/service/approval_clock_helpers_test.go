@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service/approval"
 )
 
@@ -23,6 +24,18 @@ func (p *recordingPolicy) AutoApproves(_ context.Context, in approval.ApprovalSu
 	p.calls++
 	p.seen = append(p.seen, in)
 	return p.allow, p.reason
+}
+
+// seedOnModeTenantEnv 设 on 模式 + 活跃租户枚举器，并保证用例间复位。
+func seedOnModeTenantEnv(t *testing.T, ids []uint) {
+	t.Helper()
+	tenant.SetMode(tenant.ModeOn)
+	tenant.SetActiveTenantLoader(func(ctx context.Context) ([]uint, error) { return ids, nil })
+	t.Cleanup(func() {
+		tenant.SetActiveTenantLoader(nil)
+		tenant.ResetRegistryForTest()
+		tenant.SetMode(tenant.ModeOff)
+	})
 }
 
 // freezeApprovalClock 把审批服务的时钟换成可控值，返回"往前推"的函数。
