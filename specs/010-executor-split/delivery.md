@@ -43,10 +43,13 @@
 | `gofmt -l internal/browser_automation/` | ✅ 空输出（干净） |
 | `go test ./internal/browser_automation/... -run '^$'` | ✅ 全部包测试文件编译通过 |
 | `go test ./internal/browser_automation/service/ -run '<纯函数+静态锁 regex>' -v` | ✅ 48+ 顶层用例全绿（含新增 6 用例），0 FAIL |
-| `go test ./internal/browser_automation/service/`（全量） | ⚠️ FAIL 名称集合与拆前基线 **完全一致**：135 个 DB 用例全部为 `testdb.go:359` SASL auth 失败（本机 PG 口令与测试库不匹配），其余用例全绿 |
+| `go test ./internal/browser_automation/... -count=1 -timeout 40m`（全量，**真 PG**） | ✅ **rc=0 全绿**：controller 8.0s / dto 0.5s / platform 0.5s / repository 29.5s / **service 241.9s**（135 个 DB 用例已实跑，0 FAIL）——2026-10-29 复跑，见下方测试库说明 |
 
-**测试库说明**（与 005 交付同口径）：本机 PG 端口可达但口令不匹配（SASL 28P01），属环境失败而非代码缺陷。
-纯单元/静态用例全部不依赖测试库，已完整实跑；DB 用例以「编译通过 + FAIL 集合与基线一致」兜底。
+**测试库说明**（2026-10-29 更新）：此前卡点是**测试进程连的库口令与容器实例不一致**（SASL 28P01），
+不是代码缺陷。取证方式：以容器实例自身的口令注入环境变量后复跑——
+`POSTGRES_TEST_PORT=8202 POSTGRES_TEST_PASSWORD=$(docker exec mtk-postgres printenv POSTGRES_PASSWORD) go test ./internal/browser_automation/...`
+⇒ 五个包全绿、rc=0（service 241.9s）。仓内 `.env` 的口令与运行中的容器实例不一致属环境漂移，
+不影响本结论；该做法只用于取证，不写入脚本、不落盘密钥。
 
 **隔离验证说明**：主工作树的 `go build ./...` 在交付时被**并发 lane 的未提交 WIP** 阻断——
 `internal/repository/observability_dashboard.go`（新增，非本泳道）与既有 `dashboard_stats.go` 重复声明
@@ -79,7 +82,9 @@
 1. **主树 `go build ./...` 当前红**：并发 lane 在 `internal/repository` 的 WIP（
    `observability_dashboard.go` 与 `dashboard_stats.go` 重复声明 `FunnelStageRow`）所致，
    **非本泳道改动**；本泳道已用隔离工作树证明自身改动全绿。等该 lane 收口后主树应自然转绿。
-2. **135 个 DB 用例未实跑**（需真库）：已用「测试文件编译通过 + FAIL 集合与基线逐名一致」兜底。
-3. **文档行号陈旧**：`user-server/docs/architecture/model-list.md`、`docs/architecture/DATABASE_SCHEMA_DEEP_DIVE.md`
-   及若干 specs 日志引用 `service/executor.go:行号` 的历史行号随拆分偏移，属文档性陈旧，
-   不在本泳道可改目录范围内，建议另开文档卡刷新。
+2. ~~135 个 DB 用例未实跑（需真库）~~ **已销账（2026-10-29）**：真 PG 下 `./internal/browser_automation/...` 全绿 rc=0，
+   service 包 241.9s 跑完 135 个 DB 用例、0 FAIL（命令与取证方式见上表）。
+3. ~~文档行号陈旧~~ **已销账（2026-10-29）**：处置方式是「标注历史锚点」而不是改数字——
+   历史日志/评估里的 `executor.go:<行号>` 是拆分前 revision 的注码，回改等于伪造当时证据。
+   `user-server/docs/architecture/model-list.md` 头部已加文件定位提示（`service/executor.go` 现指同包八文件那一组），
+   `docs/architecture/DATABASE_SCHEMA_DEEP_DIVE.md` 对应历史叙述处已补一句行号锚点说明。

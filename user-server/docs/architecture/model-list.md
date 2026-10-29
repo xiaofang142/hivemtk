@@ -10,6 +10,11 @@
 > （探针 `user-server/tmp/probe/fresh`，gitignore 覆盖，不随仓交付）；
 > 「dev 库」列取自开发库 `user_db`（366 张，含历史残留）。
 
+> **文件定位提示（specs/010 执行器拆分后）**：本表叙述里出现的 `internal/browser_automation/service/executor.go`
+> 现在指**同包八文件那一组**（`executor.go` + `executor_session.go` 等，逐字节搬移、签名零改动，
+> 见 `specs/010-executor-split/delivery.md`）。历史日志/评估文档里带 `executor.go:<行号>` 的注码
+> 是**拆分前**的行号锚点，按历史证据保留、不回改——查现行代码请按符号名而非行号定位。
+
 ---
 
 ## 一、判据速查（审计时逐条对）

@@ -1882,6 +1882,7 @@ varchar(64) 会写入溢出"—— 这条 100/128 的分裂不是抽象风险，
   ③ `go vet ./...` **rc=1** 报 `internal/browser_automation/service/executor.go:117`（`cannot slice make(map[string]*string)`），
   而同一分钟 `go build ./...` **rc=0** ⇒ 该文件是并行会话**正在编辑**的（状态 `M`，那一行现已是 `ledgerGaps: make(map[string]bool),`）。
   共享工作树的 vet 只能证"这一分钟没人改文件"，所以闭包判定留给 `--shared` 克隆。
+  （行号锚点为拆分前 revision：`executor.go` 已按 `specs/010-executor-split` 拆成同包八文件，签名零改动。）
 
 - 门（每条都取真实退出码，方法见上）：`check-date-bucket-tz` rc=**0**（命中 **21**，与基线 21 同）、
   `check-enum-consistency` rc=**0**（3 条 warn，均非本卡字面量 —— `_trigger` 那三个值本来就**不在**它的读集里，
