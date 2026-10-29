@@ -133,6 +133,10 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		return map[string]any{"execution_id": e.ID, "state": e.State, "origin": e.Origin}, nil
 	})
 
+	// workflow egolite_run 节点注入（S-10）：与上面的 AI 工具同一条 Start 入口，
+	// 差别只在触发面——workflow 的节点参数由编排配置给出，归属人由节点/触发载荷指定。
+	service.SetWorkflowEgoLiteRunner(workflowEgoLiteAdapter{execSvc: execSvc, registry: registry})
+
 	// workflow browser_session 节点注入：与 browser_task 同型（一轮 ops，异步派发）
 	service.SetWorkflowBrowserSessionRunner(func(ctx context.Context, userID uint, sessionID string, ops []map[string]any) (map[string]any, error) {
 		sid, err := strconv.ParseUint(sessionID, 10, 32)

@@ -49,9 +49,13 @@ func TestWorkflowExecutorRegistry_RegisterAndGet(t *testing.T) {
 		t.Errorf("NodeType=%s want=trigger", got.NodeType())
 	}
 
+	// 5 = trigger / action / condition / subflow + egolite_run（S-10 第四种触发面）
 	all := r.AllRegistered(context.Background())
-	if len(all) != 4 {
-		t.Errorf("registered count=%d want=4 (got=%v)", len(all), all)
+	if len(all) != 5 {
+		t.Errorf("registered count=%d want=5 (got=%v)", len(all), all)
+	}
+	if _, err := r.Get(context.Background(), "egolite_run"); err != nil {
+		t.Errorf("egolite_run 未注册：节点会被 MustGet 兜成 noop 静默跳过，err=%v", err)
 	}
 
 	// 装配点漏传编排器时，subflow 节点会把"什么都没跑"记成 completed（见上一条用例的兜底分支），

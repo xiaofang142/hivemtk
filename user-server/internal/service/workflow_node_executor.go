@@ -276,4 +276,5 @@ func RegisterWorkflowNodeExecutors(registry *WorkflowNodeExecutorRegistry, orch 
 	reg(&ActionNodeExecutor{})
 	reg(&ConditionNodeExecutor{})
 	reg(NewSubflowNodeExecutor(orch))
+	reg(&EgoLiteRunNodeExecutor{})
 }

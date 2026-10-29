@@ -264,7 +264,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Lightning, Operation, Share, ForkSpoon } from '@element-plus/icons-vue'
+import { Delete, Lightning, Operation, Share, ForkSpoon, VideoPlay } from '@element-plus/icons-vue'
 import { workflowOrchestratorApi } from '@/api/workflowOrchestrator.js'
 
 const route = useRoute()
@@ -274,7 +274,8 @@ const nodeTypes = [
   { value: 'trigger', label: '触发器', icon: Lightning },
   { value: 'action', label: '动作', icon: Operation },
   { value: 'condition', label: '条件', icon: ForkSpoon },
-  { value: 'subflow', label: '子流程', icon: Share }
+  { value: 'subflow', label: '子流程', icon: Share },
+  { value: 'egolite_run', label: 'EGO 执行', icon: VideoPlay }
 ]
 
 const nodeTypeLabel = (v) => nodeTypes.find(t => t.value === v)?.label || v
