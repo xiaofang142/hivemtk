@@ -34,3 +34,24 @@
 - [x] T017 前端：`npx vitest run tests/unit/templateMarket_render.test.js` 全绿、`npm run build` 通过
 - [x] T018 四件套：`specs/013-template-skill-market/{spec,plan,tasks,delivery}.md`
 - [x] T019 delivery.md 写清：改动文件、测试命令与结果、未实现/留待后续决策点、建议接线点（controller 代码 + router 登记 + menu 节点）
+
+## Phase 5 S-22 收口：发布-审核-支付闭环（2026-10-29）
+
+- [x] T020 model：`market_catalog_entries`（平台级、无 tenant_id）+ `market_entry_orders`
+  （带 tenant_id）两张表 + 双状态机（目录条目 pending/approved/rejected/disabled、
+  订单 pending_payment/paid/cancelled）+ allModels() 登记 + module_tables.go core 归属
+- [x] T021 repository：`MarketEntryRepository`（条目/订单存取 + 条件跃迁乐观并发）+ 真库用例 3 条
+  （平台级匿名读不受租户闸拦、条件跃迁 0 行语义、订单租户隔离）
+- [x] T022 service：`MarketEntryService`（提审/审核/下架复架/下单/撤单/收款确认/我的三表）
+  + `TemplateMarketService` 合并 DB approved 条目上橱窗（读失败降级纯种子）+ 真库用例 4 条
+  （主线闭环 / 免费直通 / fail-closed 面 / 租户 on 隔离）
+- [x] T023 controller/router：`controller/market_entry.go` 9 端点；module_routes.go
+  auth 档 6 条 + tenantAdmin(admin) 档 4 条；哨兵→业务码映射（查无/越态/重复/参数不落 500）
+- [x] T024 菜单：menu.go templateMarketMy/templateMarketReview 两节点 +
+  module_bindings.go platform-link 归属（menu_wiring/menuRegistry 双侧门通过）
+- [x] T025 前端：api/templateMarket.js 闭环 API 与展示常量；路由模块补 /template-market/my
+  与 /template-market/review；MyWorkspace.vue / ReviewConsole.vue / PublishForm.vue；
+  Market.vue 工作台入口（发布弹窗/我的/审核台跳转，v-if 门保证匿名与冻结单测安全）
+- [x] T026 i18n：9 语种追加 menu 两键 + templateMarketPage 段 52 键（键值 9 语种 parity）
+- [x] T027 验证：go build ./... 干净、gofmt/vet 干净、五个后端包全量真库测试绿、
+  router 面全套绿；npm run build 绿 + 四份冻结门用例绿；delivery.md 补 S-22 收口补记

@@ -271,7 +271,10 @@ var ModuleMenuBindings = map[string][]string{
 		// 归 platform-link（基础模块，恒开）与上面的市场入口同一条理由：
 		// 绑定到某个付费模块后，未开通的用户会连带看不到「有哪些现成能力可用」，
 		// 而这份目录恰恰是他们决定买什么的前置信息。
+		// S-22：发布/审核/订单工作台与橱窗同族（发布入口不能被审核结果关闭、
+		// 审核台是橱窗的运营面），随 platform-link 一起，不绑任何付费模块。
 		"templateMarketGroup", "templateMarket",
+		"templateMarketMy", "templateMarketReview",
 	},
 
 	// ========== llm-cloud：平台模型算力（0 菜单节点）==========

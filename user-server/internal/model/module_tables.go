@@ -61,6 +61,11 @@ var coreOwnedTables = []string{
 	// 租户与模块化本体
 	"tenants", "tenant_modules", "module_sync_logs", "module_orders",
 	"tenant_subscription_mirror",
+	// 模板/技能市场写侧闭环（specs/013 S-22）：目录条目是**平台级共享橱窗**
+	//（无 tenant_id，锚点见 router/cross_tenant_scan_test.go 对 detail/:id 的判词），
+	// 订单与 module_orders 同一条线下收款形态。市场是 platform-link 基础模块的
+	// 橱窗/购买入口——购买入口不能被购买条件关闭，两表随基座常在，归 core。
+	"market_catalog_entries", "market_entry_orders",
 	"llm_providers", "llm_routing_rules", "llm_routing_logs", "llm_usage_records",
 	"llm_usage_daily", "trace_events",
 	// 升级 / 迁移 / 运维

@@ -4,6 +4,43 @@
       shadow="never"
       class="mb-12"
     >
+      <div class="workbench">
+        <div class="workbench-title">
+          {{ tmT('templateMarketPage.subtitle') }}
+        </div>
+        <div class="workbench-actions">
+          <!-- S-22 闭环工作台入口：发布/我的/审核。匿名访客只看不发
+               （发布与订单都要登录；审核台仅 admin，后端 AdminAuthMiddleware 收口）。 -->
+          <el-button
+            v-if="userStore.isLoggedIn"
+            type="primary"
+            size="small"
+            @click="publishVisible = true"
+          >
+            {{ tmT('templateMarketPage.publishCta') }}
+          </el-button>
+          <el-button
+            v-if="userStore.isLoggedIn"
+            size="small"
+            @click="$router.push('/template-market/my')"
+          >
+            {{ tmT('templateMarketPage.myWorkspace') }}
+          </el-button>
+          <el-button
+            v-if="userStore.isAdmin"
+            size="small"
+            @click="$router.push('/template-market/review')"
+          >
+            {{ tmT('templateMarketPage.reviewConsole') }}
+          </el-button>
+        </div>
+      </div>
+    </el-card>
+
+    <el-card
+      shadow="never"
+      class="mb-12"
+    >
       <el-form inline>
         <el-form-item label="类型">
           <el-select
@@ -171,17 +208,75 @@
           <span class="k">来源</span>
           <span class="v mono">{{ detail.source }}</span>
         </div>
+        <div class="row">
+          <span class="k">价格</span>
+          <span class="v">{{ marketPriceText(detail.price_cents) }}</span>
+        </div>
       </div>
+      <template #footer>
+        <span
+          v-if="detail && detail.price_cents > 0"
+          class="pay-hint"
+        >{{ tmT('templateMarketPage.payGuide') }}</span>
+      </template>
+    </el-dialog>
+
+    <!-- 发布入口（S-22）：提审落审核台，审核通过自动上橱窗。
+         v-if 门保证匿名橱窗（含单测挂载）不会实例化表单组件。 -->
+    <el-dialog
+      v-model="publishVisible"
+      :title="tmT('templateMarketPage.publishTitle')"
+      width="560px"
+      destroy-on-close
+    >
+      <PublishForm
+        v-if="publishVisible"
+        ref="publishFormRef"
+        @submitted="onSubmitted"
+      />
+      <template #footer>
+        <el-button @click="publishVisible = false">
+          {{ tmT('templateMarketPage.cancelBtn') }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="publishing"
+          @click="doPublish"
+        >
+          {{ tmT('templateMarketPage.submitForReview') }}
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
+import i18n from '@/i18n'
 import {
   listMarketEntries, marketCategories,
+  marketPriceText,
   ENTRY_KIND_LABEL, AVAILABILITY_LABEL, AVAILABILITY_TAG_TYPE
 } from '@/api/templateMarket'
+import PublishForm from './PublishForm.vue'
+
+// S-22 闭环接线说明：本页是公开橱窗（种子 + DB 已上架合并，list 接口不变），
+// 新增的只有「工作台入口」——发布弹窗（登录后）、我的工作台/审核台跳转按钮。
+// i18n 口径：新增面走 templateMarketPage.*（9 语种键已追加）；既有橱窗文案保持
+// 中文硬编码（tests/unit/templateMarket_render.test.js 钉住了这些渲染文案）。
+// 刻意**不走 useI18n()/$t**：本页会被无 i18n 插件的渲染单测直接挂载，
+// $t 缺席会当场 TypeError；tmT 用 i18n 单例的 global composer（无需 app.use）。
+const userStore = useUserStore()
+
+function tmT (key) {
+  try {
+    return i18n.global.t(key)
+  } catch {
+    return key
+  }
+}
 
 // 分类展示文案：目录里是英文键（channel_card 等），前端给中文名。
 // 未知分类原样显示 —— 后端新增分类不该让页面变成空白。
@@ -202,6 +297,11 @@ const categories = ref([])
 const loading = ref(false)
 const detailVisible = ref(false)
 const detail = ref(null)
+
+// 发布入口（S-22）
+const publishVisible = ref(false)
+const publishing = ref(false)
+const publishFormRef = ref()
 
 const filter = reactive({ kind: '', category: '', keyword: '' })
 
@@ -238,6 +338,23 @@ async function fetch () {
   }
 }
 
+async function doPublish () {
+  publishing.value = true
+  try {
+    await publishFormRef.value.submit()
+    publishVisible.value = false
+  } catch (e) {
+    if (e?.message) ElMessage.error(e.message)
+  } finally {
+    publishing.value = false
+  }
+}
+
+function onSubmitted () {
+  // 提审条目未上架不会出现在橱窗，刷新只是让分类候选等保持同源。
+  fetch()
+}
+
 onMounted(async () => {
   // 分类与列表并行拉；分类拉不到不阻塞列表（筛选器空着也能逛）。
   try {
@@ -251,6 +368,10 @@ onMounted(async () => {
 
 <style scoped>
 .mb-12 { margin-bottom: 12px; }
+.workbench { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.workbench-title { color: var(--el-text-color-secondary); font-size: 13px; }
+.workbench-actions { display: flex; gap: 0; }
+.pay-hint { color: var(--el-text-color-secondary); font-size: 12px; }
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

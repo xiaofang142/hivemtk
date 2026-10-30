@@ -2,6 +2,61 @@
 
 **Feature**: `013-template-skill-market` ｜ **交付日期**: 2026-10-24 ｜ **Spec/Plan/Tasks**: 同目录
 
+> ## S-22 收口补记（2026-10-29：发布-审核-支付闭环 + 接线 + i18n）
+>
+> 本节是「未实现/留待后续的决策点」清单的销账记录。第一轮交付的只读橱窗与其
+> controller/router/menu 接线（delivery.md 下方「建议接线点」三处）在先前的接线轮已全部落地
+> （`controller/template_market.go`、`module_routes.go` public 三条 + route_policy_gate_test
+> 匿名白名单三条 + `menu.go` templateMarketGroup + 前端 router/index.js 两处登记 + menu 9 语种键）。
+> 本轮补齐的是写侧闭环三段：
+>
+> **1) 发布入口（登录档）**：`POST /api/template-market/entries` 提审（落 pending，进审核台）；
+> `market_catalog_entries` 表（平台级、**无 tenant_id**——锚点即
+> `router/cross_tenant_scan_test.go` 对 detail/:id 的判词「平台级目录，无 tenant_id」，
+> 若带 tenant_id 会被租户登记表判成租户表，on 模式下匿名橱窗读被 fail-closed 拦死）。
+> 状态机 pending→approved/rejected、approved↔disabled、rejected/disabled→pending（同 ID 复提），
+> 对齐 asset_store 的单点跃迁表写法；ID 与进程内种子共处一个命名空间（提审判重双源）。
+>
+> **2) 审核台（admin 档，AdminAuthMiddleware）**：`GET/POST /api/template-market/admin/entries*`
+> 队列 + approve/reject（驳回必带理由）/disable/enable；`GET/POST /api/template-market/admin/orders*`
+> 订单管理 + mark-paid（线下收款确认——本仓没有聚合支付通道，把「收款确认」做成显式管理动作
+> 而不是假装有支付回调；对齐 module_market 线下付款指引思路，确认动作落本地）。
+> 审核通过即上橱窗：`TemplateMarketService` 合并种子 + DB approved（读失败降级纯种子，
+> 公开匿名面不因目录表故障拖死内置目录）。
+>
+> **3) 支付订单接线（登录档）**：`POST /api/template-market/entries/:id/order`（免费条目
+> 0 元直通 paid，对齐模块市场 0 元单直通；付费条目落 pending_payment 且必留联系电话）→
+> 买家撤单 `POST .../orders/:order_no/cancel` → 审核台 mark-paid → 「我的已获得」。
+> `market_entry_orders` 表带 tenant_id（订单是租户生意数据，对齐 module_orders；租户隔离
+> callback 照常生效）。同买家同条目活跃单幂等回显，不重复建单。
+>
+> **建表登记**：`internal/pkg/db/migrate.go` allModels()（MarketCatalogEntry/MarketEntryOrder）
+> + `internal/model/module_tables.go` coreOwnedTables（市场是 platform-link 基础模块的
+> 橱窗/购买入口，购买入口不能被购买条件关闭，两表随基座常在——与 module_orders 同一条）。
+>
+> **菜单**：`menu.go` templateMarketGroup 下补 `templateMarketMy`（我的发布/订单，
+> /template-market/my）与 `templateMarketReview`（发布审核，admin-only，/template-market/review），
+> `module_bindings.go` 归 platform-link（与橱窗同条理由）；前端路由挂
+> `src/router/modules/templateMarket.js`（同模块扩展，首段 template-market 已在
+> router/index.js 懒装配白名单），页面 `MyWorkspace.vue` / `ReviewConsole.vue`；
+> 发布入口是橱窗页内的弹窗（`PublishForm.vue`，登录可见）。
+>
+> **i18n**：9 语种追加 `menu.templateMarketMy/Review` 两键 + 顶层 `templateMarketPage` 段
+> 52 键（新组件 PublishForm/MyWorkspace/ReviewConsole 全量走 t()）。**既有橱窗页
+> Market.vue 的老文案保持中文硬编码**——`tests/unit/templateMarket_render.test.js`
+> 钉住了这些渲染文案且测试目录本轮不可动；Market.vue 新增面经 i18n 单例 global composer
+> 消费同组新键（不走 $t：无 i18n 插件的渲染单测挂本页时 $t 缺席会 TypeError）。
+>
+> **验证读数（2026-10-29 本机实测）**：`go build ./...` 干净；`gofmt -l` 新增文件干净；
+> `go vet`（model/repository/service/controller/router）干净；
+> `go test ./internal/model/ ./internal/repository/ ./internal/service/ ./internal/router/ ./internal/controller/ -count=1`
+> 全绿（含新增真库用例：仓储 3 条 + 服务闭环 4 条，真库 POSTGRES_TEST_PORT=8202）；
+> 前端 `npm run build` 通过、`templateMarket_render/menuRegistry_routes/i18n_messages_compile/
+> subMenuItem_i18n_render` 四份冻结门用例全绿。
+>
+> **仍留待后续**：目录热更（参数中心 JSON / 平台下发）、橱窗页老文案的 i18n 化
+>（需先解冻渲染单测或改其断言口径）、在线支付通道（当前只有线下确认一条路）。
+
 ## 一句话
 
 F2 从零落地「最小可用市场」：后端新增**进程内注册的只读目录数据源**（repository 接口 +

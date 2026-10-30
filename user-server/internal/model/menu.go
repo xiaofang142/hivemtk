@@ -474,11 +474,20 @@ var SystemMenuTree = []SystemMenuNode{
 			// 与「功能模块」平级 —— 同属「去哪找现成能力」这一族入口，
 			// 而不是站点部署设置（故不塞进 siteConfig）。角色口径沿用
 			// specs/013/delivery.md §4 的建议（admin/manager）。
+			//
+			// S-22 收口：发布-审核-支付闭环接线后，同组补两个工作台节点——
+			//   - 我的发布/订单：提审记录、购买订单与「已获得」都在 /template-market/my；
+			//   - 发布审核台：审核队列/下架/复架/收款确认在 /template-market/review，
+			//     admin-only（审核是公开橱窗的唯一写通道，不能开放给坐席）。
+			// 两个 path 都是 src/router/modules/templateMarket.js 里的真实路由
+			//（menuRegistry_routes.test.js 逐条对账：菜单 path 不在前端路由表 = 点进 NotFound）。
 			{
 				Key: "templateMarketGroup", Title: "模板/技能", Icon: "Shop",
 				Roles: []string{"admin", "manager"},
 				Children: []SystemMenuNode{
 					{Key: "templateMarket", Title: "模板/技能市场", Icon: "Shop", Path: "/template-market"},
+					{Key: "templateMarketMy", Title: "我的发布/订单", Icon: "Tickets", Path: "/template-market/my"},
+					{Key: "templateMarketReview", Title: "发布审核", Icon: "Operation", Path: "/template-market/review", Roles: []string{"admin"}},
 				},
 			},
 			{

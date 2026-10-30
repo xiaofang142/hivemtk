@@ -267,6 +267,11 @@ func allModels() []any {
 		&model.TenantModule{},
 		&model.ModuleSyncLog{},
 		&model.ModuleOrder{},
+		// 模板/技能市场写侧闭环（specs/013 S-22）：目录条目（发布→审核→上架）
+		// + 购买订单（线下收款确认）。漏登记时全新部署建不出这两张表，
+		// 发布/审核/下单全数 500（relation does not exist），公开橱窗只剩进程内种子。
+		&model.MarketCatalogEntry{},
+		&model.MarketEntryOrder{},
 		// 订阅镜像（003 T022）：显式迁移 v3.64.0 是生产口径，
 		// 这里登记供 AutoMigrate 兜底（全新部署先于迁移跑时建表）。
 		&model.TenantSubscriptionMirror{},

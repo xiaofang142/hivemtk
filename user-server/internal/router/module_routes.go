@@ -64,6 +64,17 @@ func setupModuleRoutes(public, auth, tenantAdmin, systemAdmin *gin.RouterGroup) 
 	}
 
 	if auth != nil {
+		// 模板/技能市场写侧闭环（specs/013 S-22）：提审/我的/下单在登录档。
+		// 提审落审核台（下方 admin 档）走「发布→审核→上架」，公开橱窗自动合并；
+		// 购买是「免费直通 / 付费待支付 → 线下收款确认」，对齐 module-market 线下路径。
+		meCtrl := controller.NewMarketEntryController()
+		auth.POST("/template-market/entries", meCtrl.Submit)
+		auth.GET("/template-market/my/submissions", meCtrl.MySubmissions)
+		auth.GET("/template-market/my/orders", meCtrl.MyOrders)
+		auth.GET("/template-market/my/owned", meCtrl.MyOwned)
+		auth.POST("/template-market/entries/:id/order", meCtrl.CreateOrder)
+		auth.POST("/template-market/orders/:order_no/cancel", meCtrl.CancelOrder)
+
 		// plainAuth：下单、查单、支付状态直查、我的模块、手动同步
 		auth.GET("/module-market/detail/:key", ctrl.Detail)
 		auth.POST("/module-market/order", ctrl.CreateOrder)
@@ -91,6 +102,18 @@ func setupModuleRoutes(public, auth, tenantAdmin, systemAdmin *gin.RouterGroup) 
 	if tenantAdmin != nil {
 		// 同步日志：落租户表 module_sync_logs ⇒ 租户档
 		tenantAdmin.GET("/modules/sync-logs", ctrl.SyncLogs)
+
+		// 模板/技能市场审核台（specs/013 S-22，admin 档）：
+		//   - 审核队列与审核动作操作的是 market_catalog_entries（平台级目录、
+		//     无 tenant_id），审核是把提审条目推进公开橱窗的唯一通道；
+		//   - 订单管理与收款确认操作 market_entry_orders（租户表）——租户 admin
+		//     只见本租户买家的单（租户隔离 callback 兜底），收款确认是线下到账
+		//     的显式落账动作。
+		meCtrl := controller.NewMarketEntryController()
+		tenantAdmin.GET("/template-market/admin/entries", meCtrl.ReviewList)
+		tenantAdmin.POST("/template-market/admin/entries/:id/review", meCtrl.ReviewAction)
+		tenantAdmin.GET("/template-market/admin/orders", meCtrl.AdminOrders)
+		tenantAdmin.POST("/template-market/admin/orders/:order_no/mark-paid", meCtrl.MarkPaid)
 	}
 	if systemAdmin != nil {
 		// 未挂模块的采集面：进程内路由注册表（全局）⇒ 平台运营方档

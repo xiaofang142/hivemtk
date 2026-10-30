@@ -44,6 +44,9 @@ type TemplateMarketEntry struct {
 	Source       string   `json:"source"`
 	Availability string   `json:"availability"` // AvailabilityBuiltin | NeedsModule | ComingSoon
 	Tags         []string `json:"tags,omitempty"`
+	// PriceCents 售价（分）。内置种子恒 0（免费）；写侧条目（S-22 发布-审核闭环
+	// 落库的 market_catalog_entries）可定价，付费条目走订单链购买。
+	PriceCents int64 `json:"price_cents"`
 }
 
 // TemplateMarketRepository 市场目录仓储接口。

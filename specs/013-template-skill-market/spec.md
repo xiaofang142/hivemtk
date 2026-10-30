@@ -10,6 +10,12 @@
 本 spec 对应《开发计划-改进清单-2026-10-23.md》P2 项 **F2 模板/技能市场**
 （原评估：「无模板/技能市场；只有 `internal/template/`（内容模板）」，重定级 P2，季度级项）。
 
+> **S-22 范围补记（2026-10-29）**：第一轮按上方口径只交付只读橱窗；写侧
+> （发布-审核-支付闭环 + controller/router/menu 接线 + i18n 9 语种）由未完成清单 S-22
+> 立项收口——表 `market_catalog_entries`/`market_entry_orders`、双状态机、审核台与
+> 订单接线、菜单两节点、`templateMarketPage` 9 语种段。详见本目录 delivery.md 顶部
+> 「S-22 收口补记」与 tasks.md Phase 5。本节之前的正文保持第一轮口径不动（历史锚点）。
+
 ## 一、现状调研结论（Argumentation · 回仓取证 2026-10-24）
 
 ### 1.1 「内容模板」是什么（F2 唯一的相关现状）
