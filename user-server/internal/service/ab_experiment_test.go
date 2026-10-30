@@ -1,9 +1,14 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
+
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 )
 
 // TestAbExperiment_AssignStable 同输入恒同输出，且输出 ∈ {control, treatment}
@@ -98,4 +103,41 @@ func TestAbExperiment_StopIdempotent(t *testing.T) {
 	a.Stop()
 	a.Stop()
 	a.LogExposure("exp_z", AbVariantControl, "c2", "s1")
+}
+
+// TestAbExperimentOnModeTenantCtx on 模式回归：入队时抄租户 → 落库行带 tenant_id；
+// 无租户绑定时必须丢弃并计数，绝不回落默认租户。
+func TestAbExperimentOnModeTenantCtx(t *testing.T) {
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
+	db := testutil.NewTestDB(t, &AbExposure{})
+	repo := repository.NewABExposureRepositoryWithDB(db)
+	a := NewABExperiment(repo, 8)
+	t.Cleanup(a.Stop)
+
+	ctx := tenant.WithTenantID(context.Background(), 7)
+	a.LogExposureCtx(ctx, "exp_on", AbVariantControl, "cust_on", "s1")
+
+	var rows []AbExposure
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		rows, _ = repo.ListSince(ctx, "exp_on", time.Now().Add(-time.Hour))
+		if len(rows) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(rows) != 1 || rows[0].TenantID != 7 {
+		t.Fatalf("on 模式曝光落库应带 tenant_id=7, got %+v", rows)
+	}
+	if got := a.SummariesCtx(ctx, "exp_on", time.Hour); got[AbVariantControl].Exposed != 1 {
+		t.Fatalf("on 模式汇总应看到 1 条曝光, got %+v", got)
+	}
+	a.MarkConversionCtx(ctx, "exp_on", "cust_on")
+
+	before := a.DroppedCount.Load()
+	a.LogExposureCtx(context.Background(), "exp_on", AbVariantControl, "cust_no_tenant", "s1")
+	if got := a.DroppedCount.Load(); got != before+1 {
+		t.Fatalf("on 模式无租户绑定应丢弃并计数, dropped %d -> %d", before, got)
+	}
 }

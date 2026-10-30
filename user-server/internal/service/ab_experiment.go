@@ -7,6 +7,7 @@ import (
 	"time"
 
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -100,13 +101,29 @@ func (a *ABExperiment) insert(e AbExposure) {
 	}
 }
 
-// LogExposure 异步记录曝光（fire-and-forget：缓冲满丢弃并计数，绝不阻塞）
+// LogExposure 异步记录曝光（fire-and-forget：缓冲满丢弃并计数，绝不阻塞）。
+// 保留旧签名：无请求 ctx 时按单租户口径落默认租户；on 模式请改用 LogExposureCtx。
 func (a *ABExperiment) LogExposure(expID, variant, customerID, sessionID string) {
+	a.LogExposureCtx(context.Background(), expID, variant, customerID, sessionID)
+}
+
+// LogExposureCtx 带请求 ctx 的曝光记录：入队时把租户归属抄进行内。
+// 为什么必须在入队时抄：刷盘 worker 只有进程级后台 ctx，拿不到请求租户；
+// on 模式无绑定会被隔离 callback 整批拒写，表现为"实验数据从来不生效"。
+func (a *ABExperiment) LogExposureCtx(ctx context.Context, expID, variant, customerID, sessionID string) {
 	if a == nil {
+		return
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		// on 模式无租户绑定：丢弃并出声，绝不回落默认租户（防跨租户写）。
+		a.DroppedCount.Add(1)
+		logger.Errorf("[T-7] 曝光丢弃：on 模式 ctx 缺少租户绑定 exp=%s cust=%s", expID, customerID)
 		return
 	}
 	select {
 	case a.ch <- AbExposure{
+		TenantID:     tenantID,
 		ExperimentID: expID,
 		Variant:      variant,
 		CustomerID:   customerID,
@@ -118,18 +135,30 @@ func (a *ABExperiment) LogExposure(expID, variant, customerID, sessionID string)
 	}
 }
 
-// MarkConversion 回填转化时间（首次转化生效；nil db 安全跳过）
+// MarkConversion 回填转化时间（首次转化生效；nil db 安全跳过）。
+// 保留旧签名供单租户调用；on 模式调用方必须用 MarkConversionCtx 传租户 ctx。
 func (a *ABExperiment) MarkConversion(expID, customerID string) {
+	a.MarkConversionCtx(context.Background(), expID, customerID)
+}
+
+// MarkConversionCtx 带租户 ctx 的转化回填（on 模式隔离 callback 依赖该绑定）。
+func (a *ABExperiment) MarkConversionCtx(ctx context.Context, expID, customerID string) {
 	if a == nil || a.exposureRepo == nil {
 		return
 	}
-	if err := a.exposureRepo.MarkConversion(context.Background(), expID, customerID, time.Now()); err != nil {
+	if err := a.exposureRepo.MarkConversion(ctx, expID, customerID, time.Now()); err != nil {
 		logger.Errorf("[T-7] 转化回填失败 exp=%s cust=%s err=%v", expID, customerID, err)
 	}
 }
 
-// Summaries 汇总窗口内各变体曝光数/转化数/转化率
+// Summaries 汇总窗口内各变体曝光数/转化数/转化率。
+// 保留旧签名供单租户调用；on 模式调用方必须用 SummariesCtx 传租户 ctx。
 func (a *ABExperiment) Summaries(expID string, window time.Duration) map[string]AbVariantSummary {
+	return a.SummariesCtx(context.Background(), expID, window)
+}
+
+// SummariesCtx 带租户 ctx 的汇总查询（on 模式隔离 callback 依赖该绑定）。
+func (a *ABExperiment) SummariesCtx(ctx context.Context, expID string, window time.Duration) map[string]AbVariantSummary {
 	res := map[string]AbVariantSummary{
 		AbVariantControl:   {Variant: AbVariantControl},
 		AbVariantTreatment: {Variant: AbVariantTreatment},
@@ -138,7 +167,7 @@ func (a *ABExperiment) Summaries(expID string, window time.Duration) map[string]
 		return res
 	}
 	since := time.Now().Add(-window)
-	rows, err := a.exposureRepo.ListSince(context.Background(), expID, since)
+	rows, err := a.exposureRepo.ListSince(ctx, expID, since)
 	if err != nil {
 		logger.Errorf("[T-7] 汇总查询失败 exp=%s err=%v", expID, err)
 		return res

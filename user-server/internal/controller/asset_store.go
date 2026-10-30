@@ -102,7 +102,7 @@ func (ctrl *AssetStoreController) CreateListing(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
-	l, err := ctrl.svc.CreateListing(tenantIDOf(c), uint(userClaimID(c)), req.AssetCode, req.AssetType, req.Name, req.Industry, req.Summary, req.Policy, req.Permissions)
+	l, err := ctrl.svc.CreateListing(c.Request.Context(), tenantIDOf(c), uint(userClaimID(c)), req.AssetCode, req.AssetType, req.Name, req.Industry, req.Summary, req.Policy, req.Permissions)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -119,7 +119,7 @@ func (ctrl *AssetStoreController) Submit(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := ctrl.svc.SubmitListing(tenantIDOf(c), id); err != nil {
+	if err := ctrl.svc.SubmitListing(c.Request.Context(), tenantIDOf(c), id); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -142,7 +142,7 @@ func (ctrl *AssetStoreController) Transition(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
-	if err := ctrl.svc.TransitionListing(tenantIDOf(c), id, req.To, 0, ""); err != nil {
+	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, req.To, 0, ""); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -158,7 +158,7 @@ func (ctrl *AssetStoreController) Versions(c *gin.Context) {
 	if !ok {
 		return
 	}
-	out, err := ctrl.svc.Versions(tenantIDOf(c), id)
+	out, err := ctrl.svc.Versions(c.Request.Context(), tenantIDOf(c), id)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -175,7 +175,7 @@ func (ctrl *AssetStoreController) Status(c *gin.Context) {
 	if !ok {
 		return
 	}
-	versions, err := ctrl.svc.Versions(tenantIDOf(c), id)
+	versions, err := ctrl.svc.Versions(c.Request.Context(), tenantIDOf(c), id)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -198,7 +198,7 @@ func (ctrl *AssetStoreController) Rate(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
-	if err := ctrl.svc.Rate(tenantIDOf(c), req.ListingID, userClaimID(c), req.PurchaseID, req.Score, req.Comment); err != nil {
+	if err := ctrl.svc.Rate(c.Request.Context(), tenantIDOf(c), req.ListingID, userClaimID(c), req.PurchaseID, req.Score, req.Comment); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -219,7 +219,7 @@ func (ctrl *AssetStoreController) Report(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
-	rep, err := ctrl.svc.Report(tenantIDOf(c), req.ListingID, userClaimID(c), req.Category, req.Detail)
+	rep, err := ctrl.svc.Report(c.Request.Context(), tenantIDOf(c), req.ListingID, userClaimID(c), req.Category, req.Detail)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -234,7 +234,7 @@ func (ctrl *AssetStoreController) Report(c *gin.Context) {
 func (ctrl *AssetStoreController) ReviewQueue(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	out, total, err := ctrl.svc.ReviewQueue(c.Query("asset_type"), page, pageSize)
+	out, total, err := ctrl.svc.ReviewQueue(c.Request.Context(), c.Query("asset_type"), page, pageSize)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -251,7 +251,7 @@ func (ctrl *AssetStoreController) Approve(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := ctrl.svc.TransitionListing(tenantIDOf(c), id, model.AssetListingPublished, userClaimID(c), ""); err != nil {
+	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, model.AssetListingPublished, userClaimID(c), ""); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -274,7 +274,7 @@ func (ctrl *AssetStoreController) Reject(c *gin.Context) {
 		response.Error(c, 400, "驳回必须填写理由")
 		return
 	}
-	if err := ctrl.svc.TransitionListing(tenantIDOf(c), id, model.AssetListingRejected, userClaimID(c), req.Reason); err != nil {
+	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, model.AssetListingRejected, userClaimID(c), req.Reason); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -294,7 +294,7 @@ func (ctrl *AssetStoreController) Suspend(c *gin.Context) {
 		Reason string `json:"reason"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	if err := ctrl.svc.TransitionListing(tenantIDOf(c), id, model.AssetListingSuspended, userClaimID(c), req.Reason); err != nil {
+	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, model.AssetListingSuspended, userClaimID(c), req.Reason); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -308,7 +308,7 @@ func (ctrl *AssetStoreController) Suspend(c *gin.Context) {
 func (ctrl *AssetStoreController) Reports(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	items, total, err := ctrl.svc.ListReports(c.Query("status"), page, pageSize)
+	items, total, err := ctrl.svc.ListReports(c.Request.Context(), c.Query("status"), page, pageSize)
 	if err != nil {
 		storeFail(c, err)
 		return
@@ -331,7 +331,7 @@ func (ctrl *AssetStoreController) HandleReport(c *gin.Context) {
 		Reason  string `json:"reason"`
 	}
 	_ = c.ShouldBindJSON(&req)
-	if err := ctrl.svc.HandleReport(tenantIDOf(c), id, userClaimID(c), req.Confirm, req.Reason); err != nil {
+	if err := ctrl.svc.HandleReport(c.Request.Context(), tenantIDOf(c), id, userClaimID(c), req.Confirm, req.Reason); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -345,7 +345,7 @@ func (ctrl *AssetStoreController) HandleReport(c *gin.Context) {
 func (ctrl *AssetStoreController) Attribution(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
-	out, total, err := ctrl.svc.Attribution(c.Query("period"), page, pageSize)
+	out, total, err := ctrl.svc.Attribution(c.Request.Context(), c.Query("period"), page, pageSize)
 	if err != nil {
 		storeFail(c, err)
 		return

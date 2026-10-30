@@ -55,7 +55,7 @@ func (r *AssetStoreRepository) CountVersionsSince(ctx context.Context, tenantID 
 	var cnt int64
 	err := r.db.WithContext(ctx).Model(&model.AssetVersion{}).
 		Where("tenant_id = ? AND created_at >= ?", tenantID, since).
-		Where("listing_id IN (?)", r.db.Model(&model.AssetListing{}).Select("id").Where("contributor_id = ?", contributorID)).
+		Where("listing_id IN (?)", r.db.WithContext(ctx).Model(&model.AssetListing{}).Select("id").Where("contributor_id = ?", contributorID)).
 		Count(&cnt).Error
 	return cnt, err
 }
