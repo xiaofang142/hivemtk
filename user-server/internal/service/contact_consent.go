@@ -8,6 +8,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -92,9 +93,15 @@ func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInpu
 	if decision != model.ConsentDecisionGrant && decision != model.ConsentDecisionRevoke {
 		return errors.New("decision 只能是 grant/revoke")
 	}
-	purpose := normalizeConsentPurpose(in.Purpose)
-	if purpose == "" {
-		return errors.New("purpose 不能为空")
+	// 写入事实账不接受静默回落：purpose/source 拼错必须当场拒绝，
+	// 否则一条「bogus」会被记成 marketing，事后无法分辨真实授权目的。
+	purpose, err := ParseConsentPurpose(in.Purpose)
+	if err != nil {
+		return err
+	}
+	source, err := ParseConsentSource(in.Source)
+	if err != nil {
+		return err
 	}
 	occurredAt := in.OccurredAt
 	if occurredAt.IsZero() {
@@ -106,7 +113,7 @@ func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInpu
 		ChannelScope:     strings.ToLower(strings.TrimSpace(in.ChannelScope)),
 		Decision:         decision,
 		StatementVersion: in.StatementVersion,
-		Source:           in.Source,
+		Source:           source,
 		Actor:            in.Actor,
 		EvidenceRef:      in.EvidenceRef,
 		OccurredAt:       occurredAt,
@@ -136,9 +143,9 @@ func (s *ContactConsentService) SetPreference(ctx context.Context, oneID, purpos
 	if oneID == "" {
 		return errors.New("one_id 不能为空")
 	}
-	purpose = normalizeConsentPurpose(purpose)
-	if purpose == "" {
-		return errors.New("purpose 不能为空")
+	purpose, err := ParseConsentPurpose(purpose)
+	if err != nil {
+		return err
 	}
 	return s.repo.UpsertPreference(ctx, &model.ContactPreference{
 		OneID:       oneID,
@@ -199,6 +206,36 @@ func (s *ContactConsentService) Preferences(ctx context.Context, oneID string) (
 		return nil, errors.New("contact consent service not initialized")
 	}
 	return s.repo.ListPreferencesByOneID(ctx, strings.TrimSpace(oneID))
+}
+
+// ParseConsentPurpose 严格解析写入用的同意目的：空值/未知值一律报错。
+// （管线侧的 CheckSendConsent 仍用容错的 normalizeConsentPurpose，
+// 因为渠道传来的 purpose 不可控，容错默认 marketing 是既定清洗口径。）
+func ParseConsentPurpose(p string) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(p))
+	switch v {
+	case model.ConsentPurposeMarketing, model.ConsentPurposeSupport, model.ConsentPurposeTransactional:
+		return v, nil
+	default:
+		return "", fmt.Errorf("purpose 必须是 marketing / support / transactional 之一（当前: %q）", strings.TrimSpace(p))
+	}
+}
+
+// ParseConsentSource 严格解析事实来源。空值默认 api；
+// legacy_assertion（调用方自述的 metadata 布尔位）明确禁止写入事实账——
+// 它能被任意构造，写进来就等于凭空造出一条「可信授权」。
+func ParseConsentSource(src string) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(src))
+	switch v {
+	case "":
+		return model.ConsentSourceAPI, nil
+	case model.ConsentSourceAPI, model.ConsentSourceSelfService, model.ConsentSourceImport:
+		return v, nil
+	case model.ConsentSourceLegacyAssert:
+		return "", fmt.Errorf("source 不接受 %s：历史断言不是可信同意凭据，请改用 api / self_service / import", model.ConsentSourceLegacyAssert)
+	default:
+		return "", fmt.Errorf("source 必须是 api / self_service / import 之一（当前: %q）", strings.TrimSpace(src))
+	}
 }
 
 func normalizeConsentPurpose(p string) string {

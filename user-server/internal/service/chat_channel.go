@@ -21,6 +21,9 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
+// ErrChatChannelNotFound 渠道不存在（控制器据此回 404，而不是 400）
+var ErrChatChannelNotFound = errors.New("渠道不存在")
+
 // ChatChannelService 客服 Web Widget 渠道管理服务
 //
 // 职责：
@@ -262,6 +265,24 @@ func (s *ChatChannelService) Create(ctx context.Context, req *CreateChannelReque
 		return nil, fmt.Errorf("保存渠道失败: %w", err)
 	}
 
+	// GORM 的 `default:` 标签会在 INSERT 时把显式零值换成默认值：auto_assign=false 被写成
+	// true、confidence_threshold=0 被写成 0.70。这两个 0 值都是合法配置（关闭自动分配、
+	// 阈值 0 = 始终转人工），创建后必须显式回写，否则前端保存成功但配置静默回弹。
+	zeroFix := map[string]any{}
+	if req.AutoAssign != nil && !*req.AutoAssign {
+		zeroFix["auto_assign"] = false
+		channel.AutoAssign = false
+	}
+	if req.ConfidenceThreshold != nil && *req.ConfidenceThreshold == 0 {
+		zeroFix["confidence_threshold"] = 0.0
+		channel.ConfidenceThreshold = 0
+	}
+	if len(zeroFix) > 0 {
+		if err := s.repo.Updates(ctx, channel.ID, zeroFix); err != nil {
+			return nil, fmt.Errorf("保存渠道配置失败: %w", err)
+		}
+	}
+
 	return &ChannelCreateResult{
 		Channel:   channel,
 		AppKey:    appKey,
@@ -389,7 +410,7 @@ func (s *ChatChannelService) GetByChannelID(ctx context.Context, channelID strin
 	ch, err := s.repo.GetByChannelID(ctx, channelID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("渠道不存在: %s", channelID)
+			return nil, fmt.Errorf("%w: %s", ErrChatChannelNotFound, channelID)
 		}
 		return nil, err
 	}

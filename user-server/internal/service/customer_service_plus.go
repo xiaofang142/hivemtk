@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"runtime/debug"
@@ -17,6 +18,8 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 // EditLockTTL 会话编辑锁 TTL（协作碰撞检测）
@@ -91,11 +94,49 @@ func NewCustomerServicePlusService() *CustomerServicePlusService {
 	}
 }
 
+// ErrCollabSessionNotFound 会话不存在（编辑锁 / 内部备注的公共前置校验）。
+// 用哨兵而非裸字符串：控制器要按它翻 404 —— 否则编辑锁能锁住任意 ID、
+// 内部备注能写到不存在的会话上，留下永远读不到的孤儿数据。
+var ErrCollabSessionNotFound = errors.New("会话不存在")
+
+// ensureSessionExists 校验会话存在且对当前租户可见（GORM 多租户插件自动加 tenant_id）。
+func (s *CustomerServicePlusService) ensureSessionExists(ctx context.Context, sessionID string) error {
+	if strings.TrimSpace(sessionID) == "" {
+		return fmt.Errorf("%w: 缺少会话 ID", ErrCollabSessionNotFound)
+	}
+	if _, err := s.sessionRepo.GetBySessionID(ctx, sessionID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %s", ErrCollabSessionNotFound, sessionID)
+		}
+		return err
+	}
+	return nil
+}
+
+// EnsureSessionExists 供控制器在回 200/409 之前先把「会话不存在」翻成 404。
+func (s *CustomerServicePlusService) EnsureSessionExists(ctx context.Context, sessionID string) error {
+	return s.ensureSessionExists(ctx, sessionID)
+}
+
+// purgeExpiredLocks 清掉已过期的锁条目（调用方需已持有 s.mu）。
+// 锁表没有后台清理线程，不顺手清理就会随「打开过的会话数」无界增长。
+func (s *CustomerServicePlusService) purgeExpiredLocks(now time.Time) {
+	for k, v := range s.locks {
+		if !v.ExpiresAt.After(now) {
+			delete(s.locks, k)
+		}
+	}
+}
+
 // AcquireEditLock 抢占编辑锁（他人持锁未过期 → false）
+//
+// 会话存在性由控制器（EnsureSessionExists）先校验：锁本身是纯内存结构，
+// 服务层再查一次 DB 只会让单元测试被迫造会话数据，不产生额外保护。
 func (s *CustomerServicePlusService) AcquireEditLock(_ context.Context, sessionID, holder string) (EditLock, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
+	s.purgeExpiredLocks(now)
 	if cur, ok := s.locks[sessionID]; ok && cur.ExpiresAt.After(now) && cur.Holder != holder {
 		return cur, false
 	}
@@ -116,7 +157,7 @@ func (s *CustomerServicePlusService) ReleaseEditLock(_ context.Context, sessionI
 	return true
 }
 
-// GetEditLock 查询锁状态（过期视为无锁）
+// GetEditLock 查询锁状态（过期视为无锁；会话存在性同样由控制器先校验）
 func (s *CustomerServicePlusService) GetEditLock(_ context.Context, sessionID string) (EditLock, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,6 +172,9 @@ func (s *CustomerServicePlusService) GetEditLock(_ context.Context, sessionID st
 func (s *CustomerServicePlusService) AddInternalNote(ctx context.Context, sessionID, content, senderID, senderName string) (*model.SessionMessage, error) {
 	if strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("备注内容不能为空")
+	}
+	if err := s.ensureSessionExists(ctx, sessionID); err != nil {
+		return nil, err
 	}
 	msg := &model.SessionMessage{
 		SessionID:  sessionID,
@@ -150,6 +194,9 @@ func (s *CustomerServicePlusService) AddInternalNote(ctx context.Context, sessio
 func (s *CustomerServicePlusService) ListInternalNotes(ctx context.Context, sessionID string, limit int) ([]*model.SessionMessage, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
+	}
+	if err := s.ensureSessionExists(ctx, sessionID); err != nil {
+		return nil, err
 	}
 	return s.msgRepo.ListInternalBySession(ctx, sessionID, limit)
 }

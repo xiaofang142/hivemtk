@@ -421,7 +421,14 @@ const goEdit = () => {
 const goEditAgent = (row) => {
   const id = row.agent_id || row.id
   if (!id) return
-  router.push({ name: 'AIAgentEdit', params: { id } })
+  // 绑定关系可能指向已删除的智能体（库内无外键），此时接口不返回名称
+  if (!row.name && !row.agent_name) {
+    ElMessage.warning('该智能体已不存在，无法编辑')
+    return
+  }
+  // 跨模块跳转必须用 path：aiAgent 模块是懒注册的，若本会话还没进过 /aiAgent，
+  // 按 name 跳会抛 "No match for {name:'AIAgentEdit'}"（KnowledgeBase → aiAgent 是首例）
+  router.push(`/aiAgent/edit/${id}`)
 }
 
 watch(

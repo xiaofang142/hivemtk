@@ -3,7 +3,6 @@ package controller
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -103,7 +102,9 @@ func (h *AssetMarketController) MarketDetail(c *gin.Context) {
 			}
 		}
 		// err 可能为 nil（平台未接入返回空壳 + nil），不能用 err.Error()。
-		assetFail(c, fmt.Errorf("资产不存在或不可用"))
+		// 用资产域的错误码（6001）而不是裸 error（会被兜成 5000 内部错误）：
+		// 「这条资产没有」是业务事实，不是服务端故障。
+		assetFail(c, bizerr.New(bizerr.CodeAssetNotFound, "资产不存在或不可用"))
 		return
 	}
 	assetOK(c, detail)
@@ -151,6 +152,18 @@ func (h *AssetMarketController) Sync(c *gin.Context) {
 	assetOK(c, gin.H{"message": "同步成功"})
 }
 
+// parseLocalAssetID 解析路径里的本地资产主键。
+// 非数字/非正数直接回 4000：原先 ParseInt 的错误被忽略，id 变 0 后一路查库，
+// 最后报「资产不存在」——把「URL 写错了」说成「数据没了」。
+func parseLocalAssetID(c *gin.Context) (int64, bool) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		response.ErrorWithBusinessCode(c, bizerr.CodeParamInvalid, "无效的资产 ID", gin.H{})
+		return 0, false
+	}
+	return id, true
+}
+
 // @Summary      查询本地资产列表
 // @Tags      asset-market
 // @Router    /api/v1/local-assets [get]
@@ -178,7 +191,10 @@ func (h *AssetMarketController) ListLocal(c *gin.Context) {
 // @Router    /api/v1/local-assets/{id} [get]
 // GetLocal GET /api/v1/local-assets/:id
 func (h *AssetMarketController) GetLocal(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, ok := parseLocalAssetID(c)
+	if !ok {
+		return
+	}
 	la, data, err := h.localSvc.Get(c.Request.Context(), id)
 	if err != nil {
 		assetFail(c, err)
@@ -223,7 +239,10 @@ func (h *AssetMarketController) CreateLocal(c *gin.Context) {
 // @Router    /api/v1/local-assets/{id} [put]
 // UpdateLocal PUT /api/v1/local-assets/:id
 func (h *AssetMarketController) UpdateLocal(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, ok := parseLocalAssetID(c)
+	if !ok {
+		return
+	}
 	body, _ := io.ReadAll(c.Request.Body)
 	var in service.UpdateAssetInput
 	if err := json.Unmarshal(body, &in); err != nil {
@@ -250,7 +269,10 @@ func (h *AssetMarketController) UpdateLocal(c *gin.Context) {
 // @Router    /api/v1/local-assets/{id} [delete]
 // DeleteLocal DELETE /api/v1/local-assets/:id
 func (h *AssetMarketController) DeleteLocal(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, ok := parseLocalAssetID(c)
+	if !ok {
+		return
+	}
 	if err := h.localSvc.SoftDelete(c.Request.Context(), id); err != nil {
 		assetFail(c, err)
 		return
@@ -263,7 +285,10 @@ func (h *AssetMarketController) DeleteLocal(c *gin.Context) {
 // @Router    /api/v1/local-assets/{id}/toggle-active [put]
 // ToggleActive PUT /api/v1/local-assets/:id/toggle-active
 func (h *AssetMarketController) ToggleActive(c *gin.Context) {
-	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+	id, ok := parseLocalAssetID(c)
+	if !ok {
+		return
+	}
 	var body dto.ToggleActiveRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误")

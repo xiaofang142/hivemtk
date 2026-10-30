@@ -197,6 +197,7 @@ import i18n from '@/i18n'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import smsApi from '@/api/sms'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
 
 // 未发送/失败的短信 sendTime 是 Go 零值（0001-01-01T08:05:43+08:05），直接渲染
@@ -255,7 +256,7 @@ const getSmsList = async () => {
     smsList.value = response.list || [];
     total.value = response.total || 0
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取短信列表失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取短信列表失败'))
   } finally {
     loading.value = false
   }
@@ -280,7 +281,7 @@ const handleView = async (row) => {
     const response = await smsApi.getSmsDetail(row.id)
     ElMessageBox.alert(JSON.stringify(response, null, 2), '短信详情')
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取短信详情失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取短信详情失败'))
   }
 };
 
@@ -290,7 +291,7 @@ const handleResend = async (row) => {
     ElMessage.success(i18n.global.t('短信重发成功'))
     getSmsList()
   } catch (error) {
-    ElMessage.error(i18n.global.t('短信重发失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('短信重发失败'))
   }
 };
 
@@ -334,7 +335,7 @@ const submitSendSms = async () => {
     sendDialogVisible.value = false
     getSmsList()
   } catch (error) {
-    ElMessage.error('短信发送失败')
+    if (!isUserReportedError(error)) ElMessage.error('短信发送失败')
   } finally {
     sending.value = false
   }

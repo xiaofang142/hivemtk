@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -53,10 +54,51 @@ func (r *BatchOperationRepository) GetHistoryByID(ctx context.Context, id uint) 
 // ErrBatchOperationNotCancellable 操作记录不存在或状态不可取消
 var ErrBatchOperationNotCancellable = errors.New("操作记录不存在或状态不可取消")
 
+// NotCancellableError 记录存在但当前状态不允许取消。
+//
+// 与「记录不存在」分开表述：前端拿到 404 会以为记录被删了，实际只是已完成/已取消。
+// Unwrap 回 ErrBatchOperationNotCancellable 以保持既有调用方（含单测）的 errors.Is 判定。
+type NotCancellableError struct {
+	Status string
+}
+
+func (e *NotCancellableError) Error() string {
+	status := e.Status
+	if status == "" {
+		status = "未知"
+	}
+	return "当前状态为 " + status + "，仅待执行（pending）或执行中（running）的批量操作可取消"
+}
+
+func (e *NotCancellableError) Unwrap() error { return ErrBatchOperationNotCancellable }
+
+// CreateHistory 写入一条批量操作历史。
+//
+// 历史表此前从未被写入过（四个写端点都不落库），导致前端的「操作历史」页恒空、
+// 取消与详情只能返回 404。写入点放在操作完成后（旁路观测，失败只记日志）。
+func (r *BatchOperationRepository) CreateHistory(ctx context.Context, h *contentmodel.BatchOperationHistory) error {
+	if r == nil || r.db == nil {
+		return errors.New("batch operation repository not initialized")
+	}
+	return r.db.WithContext(ctx).Create(h).Error
+}
+
 // CancelHistory 取消批量操作（仅 pending / running 状态可取消）
 //
-// 返回 (nil) 表示成功；返回 ErrBatchOperationNotCancellable 表示记录不存在或状态不可取消。
+// 返回 nil 表示成功；记录不存在时返回同时匹配 ErrBatchOperationNotCancellable
+// 与 gorm.ErrRecordNotFound 的错误；状态不允许时返回 *NotCancellableError。
 func (r *BatchOperationRepository) CancelHistory(ctx context.Context, id uint) error {
+	var current contentmodel.BatchOperationHistory
+	if err := r.db.WithContext(ctx).Select("id", "status").First(&current, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %w", ErrBatchOperationNotCancellable, gorm.ErrRecordNotFound)
+		}
+		return err
+	}
+	if current.Status != "pending" && current.Status != "running" {
+		return &NotCancellableError{Status: current.Status}
+	}
+
 	now := time.Now()
 	result := r.db.WithContext(ctx).
 		Model(&contentmodel.BatchOperationHistory{}).
@@ -70,7 +112,8 @@ func (r *BatchOperationRepository) CancelHistory(ctx context.Context, id uint) e
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return ErrBatchOperationNotCancellable
+		// 读与写之间被别的请求改走了状态
+		return &NotCancellableError{Status: "changed"}
 	}
 	return nil
 }

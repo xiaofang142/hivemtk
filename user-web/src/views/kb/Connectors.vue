@@ -206,6 +206,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { kbConnectorApi } from '@/api/kbConnector'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const rows = ref([])
 const types = ref([])
@@ -279,7 +280,7 @@ const save = async () => {
     dialogVisible.value = false
     await load()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '保存失败')
   } finally {
     saving.value = false
   }
@@ -292,7 +293,7 @@ const sync = async (row) => {
     ElMessage.success(res?.message || '同步完成')
     await load()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '同步失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '同步失败')
   } finally {
     syncingId.value = null
   }

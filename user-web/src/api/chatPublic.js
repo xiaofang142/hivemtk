@@ -92,6 +92,20 @@ export const getAvailableAgents = (channelId) => {
   return publicGet('/api/chat/public/agents/available', {}, channelId, '')
 }
 
+// 附件上传凭证（七牛）。
+// 后端 GET /api/chat/public/upload-token 要求 session_id + visitor_id 两个 query，
+// 并用 X-Chat-Visitor-Token 验签（与其它公开 chat 口同一套访客凭证），所以必须走
+// publicGet，不能用后台 JWT 的 http 实例 —— 后者既没带 session/visitor，也没有签名头。
+export const getUploadToken = (params, channelId, visitorId, visitorToken, sessionId) => {
+  return publicGet(
+    '/api/chat/public/upload-token',
+    { ...(params || {}), session_id: sessionId, visitor_id: visitorId },
+    channelId,
+    visitorId,
+    visitorToken
+  ).then((res) => (res && res.data !== undefined ? res.data : res))
+}
+
 export default {
   openSession,
   getActiveSession,
@@ -103,5 +117,6 @@ export default {
   closeSession,
   rateSession,
   exchangeSessionToken,
-  getAvailableAgents
+  getAvailableAgents,
+  getUploadToken
 }

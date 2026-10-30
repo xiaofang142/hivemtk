@@ -108,7 +108,7 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
 
 	if err := asset.ValidateAssetData(asset.AssetType(payload.AssetType), payload.Data); err != nil {
-		return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败", err)
+		return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败："+err.Error(), err)
 	}
 
 	now := time.Now()
@@ -169,7 +169,9 @@ func (s *LocalAssetService) CreateManual(ctx context.Context, in *CreateAssetInp
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "industry 不在支持列表内")
 	}
 	if err := asset.ValidateAssetData(asset.AssetType(in.AssetType), in.Data); err != nil {
-		return nil, bizerr.Wrap(bizerr.CodeAssetInvalid, "资产 JSON 校验失败", err)
+		// 把具体缺哪个字段一起带出：只回「资产 JSON 校验失败」时，前端只能看到
+		// 一句无法自助修复的话（缺 system_prompt / scripts / variants… 都长一样）。
+		return nil, bizerr.Wrap(bizerr.CodeAssetInvalid, "资产 JSON 校验失败："+err.Error(), err)
 	}
 	if in.AssetID == "" {
 		in.AssetID = "manual-" + uuid.NewString()
@@ -207,8 +209,13 @@ func (s *LocalAssetService) Update(ctx context.Context, id int64, in *UpdateAsse
 	if !asset.AssetType(in.AssetType).Valid() {
 		return bizerr.New(bizerr.CodeParamInvalid, "asset_type 非法")
 	}
+	// 与 CreateManual 对齐：更新同样要校验 industry。原先只校验 asset_type，
+	// 于是 PUT 可以把 industry 写成任意字符串（列表按行业筛选就再也命中不到）。
+	if !asset.Industry(in.Industry).Valid() {
+		return bizerr.New(bizerr.CodeParamInvalid, "industry 不在支持列表内")
+	}
 	if err := asset.ValidateAssetData(asset.AssetType(in.AssetType), in.Data); err != nil {
-		return bizerr.Wrap(bizerr.CodeAssetInvalid, "资产 JSON 校验失败", err)
+		return bizerr.Wrap(bizerr.CodeAssetInvalid, "资产 JSON 校验失败："+err.Error(), err)
 	}
 	la.Name = in.Name
 	la.AssetType = in.AssetType

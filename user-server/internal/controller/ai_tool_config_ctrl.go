@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,7 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // AIToolConfigController AI工具配置控制器
@@ -186,6 +188,10 @@ func (c *AIToolConfigController) BindAccount(ctx *gin.Context) {
 	}
 
 	if err := c.service.BindAccount(ctx.Request.Context(), name, req.AccountType, req.AccountID, req.IsPrimary); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(ctx, "工具不存在")
+			return
+		}
 		response.Error(ctx, http.StatusInternalServerError, "绑定失败: "+err.Error())
 		return
 	}

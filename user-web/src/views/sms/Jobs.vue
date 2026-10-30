@@ -355,6 +355,7 @@ import i18n from '@/i18n'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import smsApi from '@/api/sms'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
 import DOMPurify from 'dompurify'
 import { toList } from '@/utils/list'
@@ -569,10 +570,12 @@ const handleDialogClose = () => {
 };
 
 const handleSubmit = async () => {
+  if (!formRef.value) return
+  // el-form validate() 校验失败时 reject 的是字段错误对象，不是 false，
+  // 原先直接进 catch 会弹「任务创建失败：未知错误」。
+  const valid = await formRef.value.validate().then(() => true).catch(() => false)
+  if (!valid) return
   try {
-    if (!formRef.value) return
-    await formRef.value.validate()
-    
     const jobData = {
       name: formData.name,
       phoneList: formData.phoneList,
@@ -589,7 +592,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     getJobList()
   } catch (error) {
-    if (error !== false) {
+    if (!isUserReportedError(error)) {
       ElMessage.error('任务创建失败：' + (error.message || '未知错误'))
     }
   }

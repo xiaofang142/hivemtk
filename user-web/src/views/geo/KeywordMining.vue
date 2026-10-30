@@ -446,6 +446,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Download, MagicStick } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const brandName = ref('')
 
@@ -557,7 +558,7 @@ const loadList = async () => {
     tableData.value = res?.list || res?.items || res || []
     total.value = res?.total || tableData.value.length
   } catch (e) {
-    ElMessage.error(e.message || '关键词列表加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '关键词列表加载失败')
     tableData.value = []
     total.value = 0
   } finally {
@@ -570,7 +571,7 @@ const loadFunnel = async () => {
   try {
     funnel.value = (await geoApi.getKeywordFunnel()) || {}
   } catch (e) {
-    ElMessage.error(e.message || '漏斗统计加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '漏斗统计加载失败')
   } finally {
     funnelLoading.value = false
   }
@@ -597,7 +598,7 @@ const handleMine = async () => {
     listQuery.page = 1
     await Promise.all([loadList(), loadFunnel()])
   } catch (e) {
-    ElMessage.error(e.message || '关键词挖掘失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '关键词挖掘失败')
   } finally {
     mining.value = false
   }
@@ -617,7 +618,7 @@ const handleCrawlSuggest = async () => {
     listQuery.page = 1
     await Promise.all([loadList(), loadFunnel()])
   } catch (e) {
-    ElMessage.error(e.message || '下拉词抓取失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '下拉词抓取失败')
   } finally {
     suggesting.value = false
   }
@@ -633,7 +634,7 @@ const handleLongtail = async () => {
     listQuery.page = 1
     await Promise.all([loadList(), loadFunnel()])
   } catch (e) {
-    ElMessage.error(e.message || '长尾词组合失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '长尾词组合失败')
   } finally {
     longtailing.value = false
   }
@@ -647,7 +648,7 @@ const handleExpand = async (row) => {
     ElMessage.success(`语义扩展完成，新增 ${expanded.length} 个近义 / 长尾词`)
     await Promise.all([loadList(), loadFunnel()])
   } catch (e) {
-    ElMessage.error(e.message || '语义扩展失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '语义扩展失败')
   } finally {
     row._expanding = false
   }
@@ -660,7 +661,7 @@ const handleCluster = async (row) => {
     ElMessage.success('话题聚类完成')
     await loadList()
   } catch (e) {
-    ElMessage.error(e.message || '话题聚类失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '话题聚类失败')
   } finally {
     row._clustering = false
   }
@@ -676,7 +677,7 @@ const handleDelete = (row) => {
         ElMessage.success('已删除')
         await Promise.all([loadList(), loadFunnel()])
       } catch (e) {
-        ElMessage.error(e.message || '删除失败')
+        if (!isUserReportedError(e)) ElMessage.error(e.message || '删除失败')
       }
     })
     .catch(() => {})

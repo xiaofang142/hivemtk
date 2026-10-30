@@ -2,11 +2,11 @@
   <div class="not-found-container">
     <div class="error-content">
       <div class="error-code">
-        404
+        {{ statusCode }}
       </div>
       <div class="error-message">
-        <h1>{{ $t('页面不存在') }}</h1>
-        <p>您访问的页面好像去了外太空...</p>
+        <h1>{{ statusCode === 403 ? $t('无权访问') : $t('页面不存在') }}</h1>
+        <p>{{ statusCode === 403 ? $t('您没有权限访问该页面') : '您访问的页面好像去了外太空...' }}</p>
         <el-button
           type="primary"
           @click="goBack"
@@ -34,10 +34,14 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { useRouter } from 'vue-router'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, House } from '@element-plus/icons-vue'
 
+const route = useRoute()
 const router = useRouter()
+
+const statusCode = computed(() => (String(route.query.status || '') === '403' ? 403 : 404))
 
 const goBack = () => {
   router.go(-1)

@@ -633,7 +633,10 @@ const submitImport = async () => {
   }
   try {
     const res = await clueApi.import(clues)
-    ElMessage.success(`成功导入 ${res.successCount} 条线索，跳过 ${res.skipCount} 条重复数据`)
+    // 后端返回 snake_case（success_count / skip_count），这里两种写法都兼容
+    const successCount = res?.success_count ?? res?.successCount ?? 0
+    const skipCount = res?.skip_count ?? res?.skipCount ?? 0
+    ElMessage.success(`成功导入 ${successCount} 条线索，跳过 ${skipCount} 条重复数据`)
     importDialogVisible.value = false
     importForm.value = { type: '', content: '' }
     fetchCluelist()

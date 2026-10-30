@@ -240,6 +240,17 @@ func ErrorFromDB(c *gin.Context, err error, fallbackMsg string, data ...any) {
 		Error(c, http.StatusBadRequest, fallbackMsg, data...)
 		return
 	}
+	// 唯一键冲突（PostgreSQL 23505）：回 409，且**不回传 SQL 原文**。
+	// 原文含表名/约束名（`duplicate key value violates unique constraint
+	// "idx_ai_agents_agent_code"`），既是内部实现细节，也让前端只能看到英文 SQL。
+	// 调用方给的中文 fallbackMsg（"创建失败"）已足够定位是哪个操作撞了唯一键。
+	if strings.Contains(msg, "SQLSTATE 23505") || strings.Contains(msg, "duplicate key value violates unique constraint") {
+		if fallbackMsg == "" {
+			fallbackMsg = "数据重复，已存在相同的记录"
+		}
+		Error(c, http.StatusConflict, fallbackMsg)
+		return
+	}
 	if fallbackMsg == "" {
 		fallbackMsg = msg
 	}

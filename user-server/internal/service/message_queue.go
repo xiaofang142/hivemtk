@@ -64,6 +64,7 @@ func (mq *MessageQueueService) AddBatch(ctx context.Context, messages []model.Qu
 
 	mq.queues[queueID] = messages
 	mq.status[queueID] = model.QueueStatus{
+		QueueID: queueID,
 		Total:   len(messages),
 		Sent:    0,
 		Failed:  0,
@@ -153,6 +154,8 @@ func (mq *MessageQueueService) GetStatus(ctx context.Context, queueID string) mo
 		Sent:    dbStatus.Sent,
 		Failed:  dbStatus.Failed,
 		Status:  dbStatus.Status,
+		Created: dbStatus.CreatedAt,
+		Updated: dbStatus.UpdatedAt,
 	}
 }
 
@@ -171,6 +174,10 @@ func (mq *MessageQueueService) ListAllStatuses(ctx context.Context) []model.Queu
 			Sent:    s.Sent,
 			Failed:  s.Failed,
 			Status:  s.Status,
+			// 时间戳必须透传：发送记录页直接渲染 createdAt/updatedAt，
+			// 丢掉会显示成 0001-01-01 00:00:00。
+			Created: s.CreatedAt,
+			Updated: s.UpdatedAt,
 		})
 	}
 	return result

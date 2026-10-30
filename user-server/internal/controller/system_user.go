@@ -75,7 +75,7 @@ func writeServiceError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, service.ErrInvalidInput) {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, http.StatusBadRequest, serviceErrorMessage(err))
 		return
 	}
 	response.ErrorFromDB(c, err, err.Error())

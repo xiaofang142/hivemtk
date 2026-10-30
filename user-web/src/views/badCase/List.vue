@@ -794,8 +794,19 @@ function openCreate() {
 }
 
 async function submitCreate() {
-  create.submitting = true
   create.error = ''
+  // 必填项先在本地拦一道：后端对空 session_id 直接 400，把一句业务校验变成红色接口报错，
+  // 控制台还会留一条 Failed to load resource。这里按后端同样的口径先判。
+  const missing = [
+    ['session_id', '会话 id'],
+    ['query_text', '现场提问'],
+    ['answer_text', '本轮回答']
+  ].filter(([key]) => !String(create.form[key] || '').trim())
+  if (missing.length) {
+    create.error = `请填写：${missing.map(([, label]) => label).join('、')}`
+    return
+  }
+  create.submitting = true
   try {
     await badCaseApi.create({ ...create.form })
     ElMessage.success('已记进队列')

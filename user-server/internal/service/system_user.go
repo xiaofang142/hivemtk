@@ -35,8 +35,17 @@ type CreateUserRequest struct {
 	Password string `json:"password" binding:"required"`
 	Email    string `json:"email"`
 	RealName string `json:"real_name"`
-	Role     string `json:"role" binding:"required,oneof=admin user"`
+	Role     string `json:"role" binding:"required,oneof=admin user staff customer_service"`
 	Status   int    `json:"status"`
+}
+
+// isValidCreateRole 角色白名单：与 model.SystemRoleCode* 保持一致（user 为历史值，保留兼容）
+func isValidCreateRole(role string) bool {
+	switch role {
+	case model.SystemRoleCodeAdmin, model.SystemRoleCodeStaff, model.SystemRoleCodeCustomerService, "user":
+		return true
+	}
+	return false
 }
 
 // UpdateUserRequest 更新用户请求
@@ -44,7 +53,7 @@ type UpdateUserRequest struct {
 	Email    string `json:"email"`
 	Phone    string `json:"phone"`
 	RealName string `json:"real_name"`
-	Role     string `json:"role" binding:"omitempty,oneof=admin user"`
+	Role     string `json:"role" binding:"omitempty,oneof=admin user staff customer_service"`
 	Status   int    `json:"status"`
 }
 
@@ -141,8 +150,10 @@ func (s *SystemUserService) CreateUser(ctx context.Context, req *CreateUserReque
 	if req.Role == "" {
 		req.Role = "user"
 	}
-	if req.Role != "admin" && req.Role != "user" {
-		return nil, errors.New("角色非法，仅支持 admin/user")
+	// 角色白名单必须与 model.SystemRoleCode* 对齐：只放 admin/user 会让「新建客服/staff」
+	// 这种后台基础操作直接 400（2026-10-31 API 回归实测，前端角色下拉本来就带这四个值）。
+	if !isValidCreateRole(req.Role) {
+		return nil, errors.New("角色非法，仅支持 admin/user/staff/customer_service")
 	}
 
 	exists, err := s.repo.UsernameExists(ctx, req.Username, 0)
@@ -447,8 +458,13 @@ type CreateUserByAdminRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
 	Password string `json:"password" binding:"required,min=8,max=64"`
 	Email    string `json:"email" binding:"required,email"`
+	// Name/RealName 是同一字段的两个入参名：前端 UserList.vue 提交的是 name，
+	// 模型与列表响应里叫 real_name（2026-10-31 API 回归：只认 name 导致 real_name 恒空）。
 	Name     string `json:"name"`
-	Role     string `json:"role" binding:"required,oneof=admin customer_service staff"`
+	RealName string `json:"real_name"`
+	Phone    string `json:"phone"`
+	Status   *int   `json:"status"`
+	Role     string `json:"role" binding:"required,oneof=admin user staff customer_service"`
 }
 
 // CreateByAdmin admin 创建账号
@@ -493,14 +509,23 @@ func (s *SystemUserService) CreateByAdmin(ctx context.Context, actorID uint, req
 		return nil, fmt.Errorf("邮箱已被使用: %w", ErrInvalidInput)
 	}
 
+	realName := req.Name
+	if realName == "" {
+		realName = req.RealName
+	}
+	status := 1
+	if req.Status != nil {
+		status = *req.Status
+	}
 	user := &model.SystemUser{
 		Username: req.Username,
 		Password: req.Password,
 		Email:    req.Email,
-		RealName: req.Name,
+		Phone:    req.Phone,
+		RealName: realName,
 		Role:     req.Role,
-		Status:   1,
-		Enabled:  true,
+		Status:   status,
+		Enabled:  status == 1,
 	}
 	if err := s.repo.Create(ctx, user); err != nil {
 		logger.Error(err, "CreateByAdmin 创建用户失败")
@@ -513,7 +538,11 @@ func (s *SystemUserService) CreateByAdmin(ctx context.Context, actorID uint, req
 type UpdateUserByAdminRequest struct {
 	Username *string `json:"username"`
 	Email    *string `json:"email"`
+	// Name/RealName 双名兼容，见 CreateUserByAdminRequest 注释
 	Name     *string `json:"name"`
+	RealName *string `json:"real_name"`
+	Phone    *string `json:"phone"`
+	Status   *int    `json:"status"`
 	Role     *string `json:"role"`
 }
 
@@ -580,6 +609,36 @@ func (s *SystemUserService) UpdateByAdmin(ctx context.Context, actorID, targetID
 
 	if req.Name != nil {
 		target.RealName = *req.Name
+	} else if req.RealName != nil {
+		target.RealName = *req.RealName
+	}
+
+	if req.Phone != nil {
+		target.Phone = *req.Phone
+	}
+
+	// status 与 enabled 必须同步：登录判定是 `Status != 1 || !Enabled`，
+	// 只改其一会出现"界面显示已禁用但仍能登录"（或反之）的假成功。
+	// 前端 UserList.vue 编辑弹窗里的启用/禁用单选就是走这个字段。
+	if req.Status != nil && *req.Status != target.Status {
+		next := *req.Status
+		if next == 0 {
+			if actorID == targetID {
+				return nil, fmt.Errorf("不能禁用自己的账号: %w", ErrInvalidInput)
+			}
+			if target.Role == model.SystemRoleCodeAdmin {
+				enabledAdmins, err := s.repo.CountEnabledAdmins(ctx)
+				if err != nil {
+					logger.Error(err, "UpdateByAdmin 统计启用超管失败")
+					return nil, err
+				}
+				if enabledAdmins <= 1 {
+					return nil, fmt.Errorf("系统至少需要保留一个启用状态的超管账号: %w", ErrInvalidInput)
+				}
+			}
+		}
+		target.Status = next
+		target.Enabled = next == 1
 	}
 
 	if err := s.repo.Update(ctx, target); err != nil {

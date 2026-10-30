@@ -47,9 +47,8 @@ func (s *AgentKBBindingService) Bind(ctx context.Context, agentID, kbID uint, pr
 		return errors.New("knowledge_base_id 不能为空")
 	}
 	if err := s.bindingRepo.BindOverwrite(ctx, agentID, kbID, priority); err != nil {
-		if errors.Is(err, repository.ErrKnowledgeBaseNotFound) {
-			return fmt.Errorf("知识库不存在: %w", err)
-		}
+		// 仓储已返回带 kb_id 的可读文案（"知识库 123 不存在"），再包一层只会变成
+		// "知识库不存在: 知识库 123 不存在"，故原样透出。
 		return err
 	}
 	return nil

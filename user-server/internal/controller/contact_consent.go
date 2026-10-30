@@ -47,7 +47,7 @@ func (ctrl *ContactConsentController) Timeline(ctx *gin.Context) {
 func (ctrl *ContactConsentController) Record(ctx *gin.Context) {
 	var req consentRecordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：decision 必填（grant / revoke），其余字段可选")
 		return
 	}
 	actor := ginContextUserID(ctx)
@@ -81,7 +81,7 @@ type preferenceRequest struct {
 func (ctrl *ContactConsentController) SetPreference(ctx *gin.Context) {
 	var req preferenceRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：purpose 必填（marketing / support / transactional），paused/paused_until/timezone 可选")
 		return
 	}
 	var pausedUntil *time.Time

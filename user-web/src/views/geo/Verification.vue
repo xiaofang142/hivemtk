@@ -261,6 +261,7 @@ import { ElMessage } from 'element-plus'
 import { CircleCheck, Warning } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 // 本视图分批替换为 $t()（词条 geoVerificationPage.*）。
 const { t } = useI18n()
@@ -329,7 +330,7 @@ const onArticleChange = async (id) => {
   try {
     await geoApi.getArticleByID(id)
   } catch (e) {
-    ElMessage.error(e.message || t('geoVerificationPage.loadArticlesFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(e.message || t('geoVerificationPage.loadArticlesFailed'))
   }
 }
 
@@ -357,7 +358,7 @@ const handleVerify = async () => {
     }
     ElMessage.success(t('geoVerificationPage.done'))
   } catch (e) {
-    ElMessage.error(e.message || t('geoVerificationPage.failed'))
+    if (!isUserReportedError(e)) ElMessage.error(e.message || t('geoVerificationPage.failed'))
   } finally {
     verifying.value = false
   }
@@ -376,7 +377,7 @@ const handleMonitorNegative = async () => {
     negativeResults.value = res?.queries || []
     ElMessage.success(t('geoVerificationPage.negativeDone'))
   } catch (e) {
-    ElMessage.error(e.message || t('geoVerificationPage.negativeFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(e.message || t('geoVerificationPage.negativeFailed'))
   } finally {
     monitoring.value = false
   }

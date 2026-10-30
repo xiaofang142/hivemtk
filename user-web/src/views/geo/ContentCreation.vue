@@ -314,6 +314,7 @@ import { EditPen, DocumentCopy, DataAnalysis } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
 import { http } from '@/utils/request'
 import { copyToClipboard } from '@/utils/clipboard'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const models = ref([])
 
@@ -396,7 +397,7 @@ const handleBatchGenerate = async () => {
       ElMessage.success(`批量生成完成：成功 ${batchSucceeded.value} 条`)
     }
   } catch (e) {
-    ElMessage.error(e.message || '批量生成失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '批量生成失败')
   } finally {
     batchGenerating.value = false
   }
@@ -422,7 +423,7 @@ const retryBatchItem = async (idx) => {
       ElMessage.error('重试返回为空')
     }
   } catch (e) {
-    ElMessage.error(e.message || '重试失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '重试失败')
   } finally {
     batchGenerating.value = false
   }
@@ -465,7 +466,7 @@ const handleGenerate = async () => {
     generatedContent.value = res?.content || res?.article || (typeof res === 'string' ? res : '')
     ElMessage.success('内容生成完成')
   } catch (e) {
-    ElMessage.error(e.message || '内容生成失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '内容生成失败')
   } finally {
     generating.value = false
   }
@@ -483,7 +484,7 @@ const handleScore = async () => {
     score.value = res || null
     ElMessage.success('评分完成')
   } catch (e) {
-    ElMessage.error(e.message || '内容评分失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '内容评分失败')
   } finally {
     scoring.value = false
   }

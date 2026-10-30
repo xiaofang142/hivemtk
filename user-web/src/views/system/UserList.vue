@@ -436,7 +436,9 @@ const editUser = (row) => {
   form.value = {
     id: row.id,
     username: row.username || '',
-    name: row.name || '',
+    // 列表接口返回的是 real_name（模型字段），这里以前读 row.name 恒为空，
+    // 编辑弹窗里的姓名框永远是空的，保存后会把已有的姓名覆盖成空串。
+    name: row.real_name || row.name || '',
     email: row.email || '',
     role: row.role || 'customer_service',
     phone: row.phone || '',

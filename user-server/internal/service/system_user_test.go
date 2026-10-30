@@ -652,7 +652,7 @@ func TestSystemUserService_CreateUser_InvalidRole(t *testing.T) {
 		t.Fatal("CreateUser should fail for invalid role")
 	}
 
-	if err.Error() != "角色非法，仅支持 admin/user" {
+	if err.Error() != "角色非法，仅支持 admin/user/staff/customer_service" {
 		t.Errorf("Expected '角色非法，仅支持 admin/user', got %s", err.Error())
 	}
 }

@@ -397,20 +397,20 @@
               v-model="inputMsg"
               type="textarea"
               :rows="3"
-              :disabled="currentHandler === 'ai'"
-              :placeholder="currentHandler === 'ai' ? 'AI 托管中（请先接管）' : '输入消息... (Ctrl+Enter 发送)'"
+              :disabled="currentHandler === 'ai' || isSessionClosed"
+              :placeholder="isSessionClosed ? '会话已结束，无法再发送消息' : (currentHandler === 'ai' ? 'AI 托管中（请先接管）' : '输入消息... (Ctrl+Enter 发送)')"
               @keydown.ctrl.enter="sendMessage"
             />
             <div class="input-actions">
               <el-button
-                :disabled="currentHandler === 'ai'"
+                :disabled="currentHandler === 'ai' || isSessionClosed"
                 @click="insertTemplate"
               >
                 话术模板
               </el-button>
               <el-button
                 type="primary"
-                :disabled="!inputMsg.trim() || currentHandler === 'ai'"
+                :disabled="!inputMsg.trim() || currentHandler === 'ai' || isSessionClosed"
                 @click="sendMessage"
               >
                 发送 (Ctrl+Enter)
@@ -460,7 +460,7 @@ import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
 // 客户会话列表 · 容器组件:负责组装 composables 与子组件、生命周期编排。
 // 数据流/操作逻辑拆分至 ./composables/{useSessionFilters,useSessionList,useSessionActions}.js
 // 右栏客户 360° 与黑名单弹窗拆分至 ./components/{CustomerProfilePanel,BlacklistDialog}.vue
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, User, ChatLineSquare, Warning } from '@element-plus/icons-vue'
@@ -479,6 +479,9 @@ import BlacklistDialog from './components/BlacklistDialog.vue'
 const route = useRoute()
 const sessions = ref([])
 const inputMsg = ref('')
+// 已结束的会话后端拒收新消息（400「会话状态 closed 不允许发送消息」），
+// 输入区必须同步禁用，否则用户以为能发、点出去才报错。
+const isSessionClosed = computed(() => currentSession.value?.status === 'closed')
 
 // —— 会话列表与筛选 ——
 const { filterStatus, filteredSessions, findSession, upsertSession } = useSessionFilters(sessions)

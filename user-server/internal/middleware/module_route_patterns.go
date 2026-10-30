@@ -240,7 +240,10 @@ var ModuleRouteRules = []ModuleRouteRule{
 	{Pattern: "/api/whatsapp/accounts", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/accounts/*/login/status", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/drafts", ModuleKey: "im-intl"},
+	{Pattern: "/api/whatsapp/bulk-send", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/group-messaging/records", ModuleKey: "im-intl"},
+	// 发送口必须与读口同档：漏掉 send 时未订阅 im-intl 的租户读不到记录却能真发消息。
+	{Pattern: "/api/whatsapp/group-messaging/send", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/group-messaging/status/*", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/jobs", ModuleKey: "im-intl"},
 	{Pattern: "/api/whatsapp/jobs/*", ModuleKey: "im-intl"},

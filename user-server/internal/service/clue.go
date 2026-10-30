@@ -80,6 +80,11 @@ func (s *ClueService) GetClueAllList(ctx context.Context, clueType int64) ([]*mo
 }
 
 // GetWhatsappClues 取全部 WhatsApp 线索（type IN (5,7)，兼容历史错误类型）
+// GetByIDs 按主键批量取线索（群发目标是用户选中的具体线索，与线索类型无关）。
+func (s *ClueService) GetByIDs(ctx context.Context, ids []string) ([]*model.Clue, error) {
+	return s.repo.GetByIDs(ctx, ids)
+}
+
 func (s *ClueService) GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, error) {
 	return s.repo.GetWhatsappClues(ctx)
 }
@@ -191,6 +196,20 @@ var defaultClueTypes = []ClueType{
 	// 显示成「抖音」、按类型筛选时也筛不出来。类型号由 v3.56.0 迁移从存量 9 里分出来。
 	{Value: "18", Label: "GEO 决策链捕获"},
 	{Value: "99", Label: "自定义"},
+}
+
+// IsValidClueType 判断线索类型是否为产品对外暴露的类型号（1-18 + 99 自定义）。
+// 导入时必须挡掉未知类型：否则一条 type=999 的线索会写进库，列表里显示成
+// 空类型、按类型筛选永远筛不出来，统计里还多出一档无名分类。
+func IsValidClueType(t int64) bool {
+	switch t {
+	case ClueTypeQQ, ClueTypeWeChat, ClueTypePhone, ClueTypeTelegram, ClueTypeWhatsapp,
+		ClueTypeTwitter, ClueTypeWeCom, ClueTypeLeadMining, ClueTypeDouyin, ClueTypeKuaishou,
+		ClueTypeXiaohongshu, ClueTypeXianyu, ClueTypeFeishu, ClueTypeTikTok, ClueTypeWebWidget,
+		ClueTypeEmail, ClueTypeSMS, ClueTypeGeoCapture, ClueTypeCustom:
+		return true
+	}
+	return false
 }
 
 // GetClueTypes 获取线索类型列表

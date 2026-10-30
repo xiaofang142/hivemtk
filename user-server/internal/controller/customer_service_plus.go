@@ -2,6 +2,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -21,6 +22,15 @@ func NewCustomerServicePlusController() *CustomerServicePlusController {
 	return &CustomerServicePlusController{svc: service.NewCustomerServicePlusServiceFromGlobal()}
 }
 
+// writeCollabSessionError 会话不存在 → 404（不再让编辑锁/内部备注在任意 ID 上成功）。
+func writeCollabSessionError(ctx *gin.Context, err error) {
+	if errors.Is(err, service.ErrCollabSessionNotFound) {
+		response.NotFound(ctx, err.Error())
+		return
+	}
+	HandleDBError(ctx, err, "校验会话")
+}
+
 // @Summary      编辑锁已获取
 // @Tags      customer-service-plus
 // @Router    /api/customer-sessions/{id}/edit-lock [post]
@@ -33,6 +43,10 @@ func (c *CustomerServicePlusController) AcquireEditLock(ctx *gin.Context) {
 	_ = ctx.ShouldBindJSON(&req)
 	if req.Holder == "" {
 		req.Holder = "user:" + anyToString(ctx.Value("user_id"))
+	}
+	if err := c.svc.EnsureSessionExists(ctx.Request.Context(), sessionID); err != nil {
+		writeCollabSessionError(ctx, err)
+		return
 	}
 	lock, ok := c.svc.AcquireEditLock(ctx.Request.Context(), sessionID, req.Holder)
 	if !ok {
@@ -71,7 +85,12 @@ func (c *CustomerServicePlusController) ReleaseEditLock(ctx *gin.Context) {
 // @Router    /api/customer-sessions/{id}/edit-lock [get]
 // GetEditLock GET /api/customer-sessions/:id/edit-lock
 func (c *CustomerServicePlusController) GetEditLock(ctx *gin.Context) {
-	lock, ok := c.svc.GetEditLock(ctx.Request.Context(), ctx.Param("id"))
+	sessionID := ctx.Param("id")
+	if err := c.svc.EnsureSessionExists(ctx.Request.Context(), sessionID); err != nil {
+		writeCollabSessionError(ctx, err)
+		return
+	}
+	lock, ok := c.svc.GetEditLock(ctx.Request.Context(), sessionID)
 	if !ok {
 		response.Success(ctx, gin.H{"locked": false}, "ok")
 		return
@@ -92,6 +111,10 @@ func (c *CustomerServicePlusController) AddInternalNote(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误：content 必填")
 		return
 	}
+	if err := c.svc.EnsureSessionExists(ctx.Request.Context(), sessionID); err != nil {
+		writeCollabSessionError(ctx, err)
+		return
+	}
 	senderID, senderName := currentStaffInfo(ctx)
 	msg, err := c.svc.AddInternalNote(ctx.Request.Context(), sessionID, req.Content, senderID, senderName)
 	if HandleServiceError(ctx, err) {
@@ -106,7 +129,12 @@ func (c *CustomerServicePlusController) AddInternalNote(ctx *gin.Context) {
 // ListInternalNotes GET /api/customer-sessions/:id/internal-notes
 func (c *CustomerServicePlusController) ListInternalNotes(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
-	list, err := c.svc.ListInternalNotes(ctx.Request.Context(), ctx.Param("id"), limit)
+	sessionID := ctx.Param("id")
+	if err := c.svc.EnsureSessionExists(ctx.Request.Context(), sessionID); err != nil {
+		writeCollabSessionError(ctx, err)
+		return
+	}
+	list, err := c.svc.ListInternalNotes(ctx.Request.Context(), sessionID, limit)
 	if HandleServiceError(ctx, err) {
 		return
 	}

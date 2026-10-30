@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -80,6 +81,10 @@ func (ctrl *NotificationController) MarkRead(c *gin.Context) {
 		}
 	}
 	if err := ctrl.svc.MarkRead(c.Request.Context(), uid, uint(id)); err != nil {
+		if errors.Is(err, service.ErrNotificationNotFound) {
+			response.NotFound(c, err.Error())
+			return
+		}
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}

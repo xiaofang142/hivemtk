@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -52,6 +53,69 @@ func NewGroupMessagingController(
 		messageQueue:    messageQueue,
 		templateService: templateService,
 	}
+}
+
+// whatsappCamelAliases 前端表单字段（camelCase）到接口契约（snake_case）的别名表。
+//
+// BulkMessaging.vue 直接提交 reactive 表单对象（sendForm/templateForm），字段名是
+// templateId/leadIds/scheduleAt/isActive。不做这层归一化会有两个功能性缺口：
+// 群发恒 400（缺 lead_ids/template_id）、模板开关 is_active 恒不生效。
+var whatsappCamelAliases = map[string]string{
+	"templateId": "template_id",
+	"accountId":  "account_id",
+	"leadIds":    "lead_ids",
+	"scheduleAt": "schedule_at",
+	"isActive":   "is_active",
+}
+
+// normalizeWhatsappCamelKeys 把请求体中的 camelCase 别名改写成 snake_case。
+//
+// 已显式提供 snake_case 键时以它为准（契约调用方不受影响）；非 JSON 体原样返回，
+// 交给后续绑定逻辑报错。
+func normalizeWhatsappCamelKeys(body []byte) []byte {
+	var raw map[string]json.RawMessage
+	if len(body) == 0 || json.Unmarshal(body, &raw) != nil {
+		return body
+	}
+	found := false
+	for camel, snake := range whatsappCamelAliases {
+		v, ok := raw[camel]
+		if !ok {
+			continue
+		}
+		found = true
+		if _, exists := raw[snake]; !exists {
+			raw[snake] = v
+		}
+		delete(raw, camel)
+	}
+	if !found {
+		return body
+	}
+	out, err := json.Marshal(raw)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// replyTemplateError 模板相关错误的统一出口：未找到时给具体文案，
+// 其余交给通用 DB 错误映射（否则只会回「记录不存在」）。
+func (gmc *GroupMessagingController) replyTemplateError(c *gin.Context, err error, operation string) bool {
+	if errhttp.IsNotFoundError(err) {
+		response.NotFound(c, "模板不存在")
+		return true
+	}
+	return HandleDBError(c, err, operation)
+}
+
+// readWhatsappJSON 读取请求体并做 camelCase 归一化。
+func readWhatsappJSON(c *gin.Context) ([]byte, error) {
+	body, err := c.GetRawData()
+	if err != nil {
+		return nil, err
+	}
+	return normalizeWhatsappCamelKeys(body), nil
 }
 
 // @Summary      获取线索成功
@@ -114,13 +178,22 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 		Variables  map[string]string `json:"variables"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+	body, err := readWhatsappJSON(c)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：无法读取请求体")
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请求体不是合法的 JSON 对象")
+		return
+	}
+	if len(req.LeadIDs) == 0 || req.TemplateID == "" {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：lead_ids（线索 ID 列表）与 template_id（模板 ID）均为必填")
 		return
 	}
 
 	template, err := gmc.templateService.GetTemplate(c.Request.Context(), req.TemplateID)
-	if HandleDBError(c, err, "获取消息模板") {
+	if gmc.replyTemplateError(c, err, "获取消息模板") {
 		return
 	}
 
@@ -129,38 +202,45 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 		return
 	}
 
-	leads := make([]map[string]any, 0)
-
-	allClues, _, err := gmc.clueSvc.GetClueAllList(c.Request.Context(), 7)
+	// 按选中 ID 精确取线索：前端选择器列的是全类型线索，
+	// 早先按单一线索类型（7=企业微信）过滤会把其它来源的选中项静默丢掉，
+	// 结果「发送成功、count=0」。
+	clues, err := gmc.clueSvc.GetByIDs(c.Request.Context(), req.LeadIDs)
 	if err != nil {
-		logger.Errorf("获取WhatsApp线索失败: %v", err)
-		for _, leadID := range req.LeadIDs {
-			leads = append(leads, map[string]any{
-				"id":      leadID,
-				"name":    "Unknown",
-				"phone":   leadID,
-				"email":   "unknown@example.com",
-				"company": "Unknown Company",
-				"source":  "whatsapp",
-			})
+		response.ErrorFromDB(c, err, "获取线索失败")
+		return
+	}
+	byID := make(map[string]*model.Clue, len(clues))
+	for _, clue := range clues {
+		byID[clue.ID] = clue
+	}
+
+	leads := make([]map[string]any, 0, len(req.LeadIDs))
+	skipped := make([]string, 0)
+	for _, leadID := range req.LeadIDs {
+		clue, ok := byID[leadID]
+		if !ok {
+			skipped = append(skipped, leadID)
+			continue
 		}
-	} else {
-		for _, clue := range allClues {
-			clueIDStr := clue.ID
-			for _, reqLeadID := range req.LeadIDs {
-				if clueIDStr == reqLeadID {
-					leads = append(leads, map[string]any{
-						"id":      clueIDStr,
-						"name":    clue.Name,
-						"phone":   clue.Account,
-						"email":   "",
-						"company": clue.Address,
-						"source":  "whatsapp",
-					})
-					break
-				}
-			}
+		phone := strings.TrimSpace(clue.Account)
+		if phone == "" {
+			// 没有手机号就无法投递，混进队列只会变成必然失败的记录。
+			skipped = append(skipped, leadID)
+			continue
 		}
+		leads = append(leads, map[string]any{
+			"id":      clue.ID,
+			"name":    clue.Name,
+			"phone":   phone,
+			"email":   "",
+			"company": clue.Address,
+			"source":  "whatsapp",
+		})
+	}
+	if len(leads) == 0 {
+		response.Error(c, http.StatusBadRequest, "没有可发送的线索：所选线索不存在或缺少手机号（account）")
+		return
 	}
 
 	var messages []model.QueuedMessage
@@ -209,6 +289,7 @@ func (gmc *GroupMessagingController) SelectGroupAndSendMessage(c *gin.Context) {
 	response.Success(c, gin.H{
 		"queue_id": queueID,
 		"count":    len(messages),
+		"skipped":  len(skipped),
 	}, "消息已添加到发送队列")
 }
 
@@ -378,7 +459,7 @@ func (gmc *GroupMessagingController) GetTemplateByID(c *gin.Context) {
 	}
 
 	template, err := gmc.templateService.GetTemplate(c.Request.Context(), templateID)
-	if HandleDBError(c, err, "获取消息模板") {
+	if gmc.replyTemplateError(c, err, "获取消息模板") {
 		return
 	}
 
@@ -390,13 +471,38 @@ func (gmc *GroupMessagingController) GetTemplateByID(c *gin.Context) {
 // @Router    /api/whatsapp/templates [post]
 // 创建消息模板
 func (gmc *GroupMessagingController) CreateTemplate(c *gin.Context) {
-	var req model.WhatsappMessageTemplate
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+	// IsActive 用指针承接：模板表的 is_active 是 bool，无法区分「未传」与「显式 false」，
+	// 而未传时应默认启用。内层嵌入的 model 字段同名会被外层遮蔽，正好各取所需。
+	var req struct {
+		model.WhatsappMessageTemplate
+		IsActive *bool `json:"is_active"`
+	}
+	body, err := readWhatsappJSON(c)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：无法读取请求体")
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请求体不是合法的 JSON 对象")
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：模板名称（name）不能为空")
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：模板内容（content）不能为空")
 		return
 	}
 
-	template, err := gmc.templateService.CreateTemplate(c.Request.Context(), &req)
+	newTemplate := req.WhatsappMessageTemplate
+	if req.IsActive != nil {
+		newTemplate.IsActive = *req.IsActive
+	} else {
+		newTemplate.IsActive = true
+	}
+
+	template, err := gmc.templateService.CreateTemplate(c.Request.Context(), &newTemplate)
 	if HandleDBError(c, err, "创建模板") {
 		return
 	}
@@ -410,19 +516,20 @@ func (gmc *GroupMessagingController) CreateTemplate(c *gin.Context) {
 // 更新消息模板
 func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 	id := c.Param("id")
-	body, err := c.GetRawData()
+	rawBody, err := c.GetRawData()
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：无法读取请求体")
 		return
 	}
+	body := normalizeWhatsappCamelKeys(rawBody)
 	var req model.WhatsappMessageTemplate
 	if err := json.Unmarshal(body, &req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请求体不是合法的 JSON 对象")
 		return
 	}
 
 	existingTemplate, err := gmc.templateService.GetTemplate(c.Request.Context(), id)
-	if HandleDBError(c, err, "获取模板") {
+	if gmc.replyTemplateError(c, err, "获取模板") {
 		return
 	}
 
@@ -454,7 +561,7 @@ func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 func (gmc *GroupMessagingController) DeleteTemplate(c *gin.Context) {
 	id := c.Param("id")
 
-	if HandleDBError(c, gmc.templateService.DeleteTemplate(c.Request.Context(), id), "删除模板") {
+	if gmc.replyTemplateError(c, gmc.templateService.DeleteTemplate(c.Request.Context(), id), "删除模板") {
 		return
 	}
 
@@ -533,7 +640,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 	}
 
 	template, err := gmc.templateService.GetTemplate(c.Request.Context(), req.TemplateID)
-	if HandleDBError(c, err, "获取消息模板") {
+	if gmc.replyTemplateError(c, err, "获取消息模板") {
 		return
 	}
 	if !template.IsActive {

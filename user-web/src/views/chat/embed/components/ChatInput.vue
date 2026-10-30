@@ -115,7 +115,13 @@ const props = defineProps({
   color: { type: String, default: '#1989fa' },
   sending: { type: Boolean, default: false },
   placeholder: { type: String, default: '请输入消息...' },
-  maxLength: { type: Number, default: 2000 }
+  maxLength: { type: Number, default: 2000 },
+  // 访客附件上传要用的会话凭证：后端 upload-token 需 session_id/visitor_id +
+  // X-Chat-Visitor-Token，缺一个就 400/403。
+  channelId: { type: String, default: 'default' },
+  visitorId: { type: String, default: '' },
+  visitorToken: { type: String, default: '' },
+  sessionId: { type: String, default: '' }
 })
 
 const emit = defineEmits(['send', 'upload', 'progress'])
@@ -212,7 +218,13 @@ const uploadAttachment = async () => {
   uploadProgress.value = 0
 
   try {
-    const tokenData = await getUploadToken({ file_type: att.mediaType, ext: att.ext, size: att.size });
+    const tokenData = await getUploadToken(
+      { file_type: att.mediaType, ext: att.ext, size: att.size },
+      props.channelId,
+      props.visitorId,
+      props.visitorToken,
+      props.sessionId
+    );
     const { upload_url, token, key, public_url } = tokenData
 
     const form = new FormData();

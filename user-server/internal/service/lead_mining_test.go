@@ -122,6 +122,20 @@ func (f *fakeClueRepo) Create(_ context.Context, c *model.Clue) error {
 	f.createCnt++
 	return nil
 }
+
+// GetByIDs 按 ID 批量取（群发按 ID 精确取人，见 bulkMessaging 修复）
+func (f *fakeClueRepo) GetByIDs(_ context.Context, ids []string) ([]*model.Clue, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]*model.Clue, 0, len(ids))
+	for _, id := range ids {
+		if c, ok := f.byID[id]; ok {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeClueRepo) GetByID(_ context.Context, id string) (*model.Clue, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -19,6 +19,8 @@ import (
 
 	"time"
 
+	bizerr "hivemtk-user/internal/domain/errors"
+
 	"hivemtk-user/internal/dto"
 
 	"hivemtk-user/internal/model"
@@ -297,14 +299,17 @@ func (s *AssetBundleService) CreateBundle(ctx context.Context, m *model.AssetBun
 	if m == nil {
 		return errors.New("bundle is nil")
 	}
+	// 校验失败属于「客户端参数/状态问题」，用 BizError(4xxx) 表达，
+	// 上层 response.ErrorFromDB 才会落 400 而不是 500：作者照着提示改参数即可，
+	// 报成服务端故障既误导又招重试。
 	if m.AssetID == "" {
-		return errors.New("asset_id required")
+		return bizerr.New(bizerr.CodeParamInvalid, "asset_id 不能为空")
 	}
 	if m.Title == "" {
-		return errors.New("title required")
+		return bizerr.New(bizerr.CodeParamInvalid, "资产包名称（title）不能为空")
 	}
 	if len(m.Messages) == 0 {
-		return errors.New("messages required (at least system prompt)")
+		return bizerr.New(bizerr.CodeParamInvalid, "messages 不能为空（至少需要一条 role=system 的提示词）")
 	}
 	hasSystem := false
 	for _, msg := range m.Messages {
@@ -314,7 +319,7 @@ func (s *AssetBundleService) CreateBundle(ctx context.Context, m *model.AssetBun
 		}
 	}
 	if !hasSystem {
-		return errors.New("messages must contain at least one role=system")
+		return bizerr.New(bizerr.CodeParamInvalid, "messages 中至少需要一条 role=system 的提示词")
 	}
 	if m.Status == "" {
 		m.Status = model.AssetBundleStatusDraft
@@ -333,14 +338,14 @@ func (s *AssetBundleService) CreateBundle(ctx context.Context, m *model.AssetBun
 		return err
 	}
 	if exists {
-		return fmt.Errorf("asset_id %s already exists", m.AssetID)
+		return bizerr.New(bizerr.CodeConflict, fmt.Sprintf("asset_id %s 已存在，请更换后重试", m.AssetID))
 	}
 	return s.repo.Create(ctx, m)
 }
 
 func (s *AssetBundleService) UpdateBundle(ctx context.Context, m *model.AssetBundle) error {
 	if m == nil || m.ID == 0 {
-		return errors.New("bundle id required")
+		return bizerr.New(bizerr.CodeParamInvalid, "资产包 ID 不能为空")
 	}
 	old, err := s.repo.FindByID(ctx, m.ID)
 	if err != nil {
@@ -351,7 +356,7 @@ func (s *AssetBundleService) UpdateBundle(ctx context.Context, m *model.AssetBun
 		m.AssetID = old.AssetID
 	}
 	if old.AssetID != m.AssetID {
-		return errors.New("asset_id cannot be changed")
+		return bizerr.New(bizerr.CodeParamInvalid, "asset_id 创建后不可修改")
 	}
 
 	if m.Title == "" {
@@ -424,7 +429,7 @@ func (s *AssetBundleService) ArchiveBundle(ctx context.Context, id int64) error 
 	return s.repo.Update(ctx, m)
 }
 
-var ErrBundleNotHotEnabled = errors.New("asset bundle is not hot-enabled (call enable API first)")
+var ErrBundleNotHotEnabled = bizerr.New(bizerr.CodeParamInvalid, "资产包未热启用，请先调用 enable 接口启用后再使用")
 
 func (s *AssetBundleService) EnableBundle(ctx context.Context, id int64) (*model.AssetBundle, error) {
 	m, err := s.repo.FindByID(ctx, id)
@@ -615,7 +620,7 @@ func splitTags(raw string) []string {
 
 func (s *AssetBundleService) WeaveForRequest(ctx context.Context, assetID, userQuery string, in *WeaveInput) ([]model.AssetBundleMessage, error) {
 	if assetID == "" {
-		return nil, errors.New("asset_id required")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_id 不能为空")
 	}
 	if !s.hotPlug.isEmpty(ctx) && !in.Sandbox && !s.hotPlug.has(ctx, assetID) {
 		return nil, ErrBundleNotHotEnabled
@@ -861,10 +866,10 @@ func (c *hotPlugCache) list(ctx context.Context) []string {
 
 func BuildBundleFromMerchantForm(req dto.MerchantFormSaveRequest) (*model.AssetBundle, error) {
 	if req.AssetID == "" {
-		return nil, errors.New("asset_id required")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_id 不能为空")
 	}
 	if req.Title == "" {
-		return nil, errors.New("title required")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "资产包名称（title）不能为空")
 	}
 
 	system := buildMerchantSystemPrompt(req)
@@ -876,6 +881,12 @@ func BuildBundleFromMerchantForm(req dto.MerchantFormSaveRequest) (*model.AssetB
 	cards := append([]dto.MerchantQACard(nil), req.QACards...)
 	sortQACardsByOrder(cards)
 	for _, card := range cards {
+		// 前端卡片只有「触发场景描述」是必填引导项，用户经常只填 trigger 不填
+		// user_example。原先直接 continue 会把整张卡片静默丢掉（保存成功但内容消失），
+		// 这里用 trigger 兜底成示例问句。
+		if card.UserExample == "" {
+			card.UserExample = card.Trigger
+		}
 		if card.UserExample == "" || card.Reply == "" {
 			continue
 		}
@@ -999,7 +1010,19 @@ func buildIntentJSON(card dto.MerchantQACard) string {
 		captured["whatsapp"] = strings.TrimSpace(m)
 	}
 	capturedJSON, _ := json.Marshal(captured)
-	return fmt.Sprintf(`{"intent":"%s","captured_data":%s}`, intent, string(capturedJSON))
+	// trigger 一并写入：parse 侧靠它把「触发场景描述」回显到商户表单，
+	// 否则商户重新打开编辑器时该字段恒为空（保存过的内容看起来像丢了）。
+	return fmt.Sprintf(`{"intent":"%s","captured_data":%s,"trigger":%s}`,
+		intent, string(capturedJSON), mustJSONString(card.Trigger))
+}
+
+// mustJSONString 把任意字符串编码成 JSON 字符串字面量（失败时退化为空串 ""）。
+func mustJSONString(v string) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
 }
 
 func sortQACardsByOrder(cards []dto.MerchantQACard) {
@@ -1051,14 +1074,26 @@ func ParseBundleToMerchantForm(bundle *model.AssetBundle) dto.MerchantFormParseR
 			resp.EnabledIntents = strings.Split(strings.TrimSpace(m[1]), ",")
 		}
 	}
+	jsonBlockRE := regexp.MustCompile(`\n*\x60{3}json[\s\S]*?\x60{3}\s*$`)
+	jsonBodyRE := regexp.MustCompile(`\x60{3}json\s*([\s\S]*?)\s*\x60{3}`)
 	for i := 0; i < len(bundle.Messages)-1; i++ {
 		if bundle.Messages[i].Role == "user" && bundle.Messages[i+1].Role == "assistant" {
 			reply := bundle.Messages[i+1].Content
-			if m := regexp.MustCompile(`\n*\x60{3}json[\s\S]*?\x60{3}\s*$`).FindStringIndex(reply); m != nil {
+			trigger := ""
+			if m := jsonBodyRE.FindStringSubmatch(reply); len(m) > 1 {
+				var meta struct {
+					Trigger string `json:"trigger"`
+				}
+				if err := json.Unmarshal([]byte(m[1]), &meta); err == nil {
+					trigger = meta.Trigger
+				}
+			}
+			if m := jsonBlockRE.FindStringIndex(reply); m != nil {
 				reply = reply[:m[0]]
 			}
 			card := dto.MerchantQACard{
 				ID:          fmt.Sprintf("card_%d", len(resp.QACards)+1),
+				Trigger:     trigger,
 				UserExample: bundle.Messages[i].Content,
 				Reply:       reply,
 				Order:       len(resp.QACards),

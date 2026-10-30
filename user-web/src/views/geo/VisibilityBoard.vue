@@ -370,6 +370,7 @@ import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getEngineCompare, listProbeRuns, probeAllEngines } from '@/api/geoProbe.js'
 import { toList } from '@/utils/list'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const days = ref(30)
 const loading = ref(false)
@@ -462,7 +463,7 @@ const loadAll = async () => {
     renderTrendChart()
     await loadRuns()
   } catch (e) {
-    ElMessage.error(e?.message || '观测数据加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '观测数据加载失败')
   } finally {
     loading.value = false
   }
@@ -487,7 +488,7 @@ const runProbe = async () => {
     ElMessage.success('探测已启动，云端引擎返回后数据自动落库，稍后刷新查看')
     setTimeout(loadAll, 8000)
   } catch (e) {
-    ElMessage.error(e?.message || '探测触发失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '探测触发失败')
   } finally {
     probing.value = false
   }

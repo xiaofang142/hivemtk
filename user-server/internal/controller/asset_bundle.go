@@ -21,6 +21,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -111,6 +112,21 @@ func (c *AssetBundleController) SubmitToPlatform(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"platform_asset_id": platformAssetID}, "已提交平台审核")
 }
 
+// assetBundleWriteError 统一资产包写操作的错误出口：
+// 记录不存在 → 404 + 具体对象文案（仓储只回 gorm.ErrRecordNotFound 的英文原文，
+// 直接透出会变成「record not found」）；其余交给 ErrorFromDB 按错误类型分派。
+func assetBundleWriteError(ctx *gin.Context, err error, notFoundMsg, op string) {
+	if errhttp.IsNotFoundError(err) {
+		response.NotFound(ctx, notFoundMsg)
+		return
+	}
+	response.ErrorFromDB(ctx, err, op)
+}
+
+func assetBundleNotFoundMsg(id int64) string {
+	return "资产包不存在（id=" + strconv.FormatInt(id, 10) + "）"
+}
+
 // resolveAssetID 把路由参数归一化成 asset_id：
 //   - 数字主键（前端 bundle.id）→ 查库取该资产包的 asset_id
 //   - 非数字（历史调用方直接传 asset_id slug）→ 原样返回
@@ -190,7 +206,7 @@ func (c *AssetBundleController) Update(ctx *gin.Context) {
 	}
 	if err := c.svc.UpdateBundle(ctx.Request.Context(), bundle); err != nil {
 		logger.Errorf("[asset-bundle] update failed: %v", err)
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "更新资产包失败")
 		return
 	}
 	// W-5：Update 只回写 DTO 携带的列（tenant_id 等身份列不在更新白名单内），
@@ -216,7 +232,11 @@ func (c *AssetBundleController) Get(ctx *gin.Context) {
 	}
 	bundle, err := c.svc.GetBundle(ctx.Request.Context(), id)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "资产包不存在（id="+strconv.FormatInt(id, 10)+"）")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "查询资产包失败")
 		return
 	}
 	response.Success(ctx, bundle, "ok")
@@ -230,7 +250,11 @@ func (c *AssetBundleController) GetByAssetID(ctx *gin.Context) {
 	aid := ctx.Param("aid")
 	bundle, err := c.svc.GetBundleByAssetID(ctx.Request.Context(), aid)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "资产包不存在（asset_id="+aid+"）")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "查询资产包失败")
 		return
 	}
 	response.Success(ctx, bundle, "ok")
@@ -248,14 +272,27 @@ func (c *AssetBundleController) List(ctx *gin.Context) {
 			return
 		}
 	}
+	// 仓储会静默归一化分页（page<=0→1、size<=0→20、size>200→200）。
+	// 原样回显请求值会出现「size:0 却返回 20 条」，前端分页器据此算错页数，
+	// 因此这里用同一规则归一化后再回显。
+	page, size := req.Page, req.Size
+	if page <= 0 {
+		page = 1
+	}
+	if size <= 0 {
+		size = 20
+	}
+	if size > 200 {
+		size = 200
+	}
 	list, total, err := c.svc.ListBundlesWithParams(ctx.Request.Context(),
-		req.Keyword, req.Author, req.Industry, req.Language, req.Scope, assetBundleStatusToInt(model.AssetBundleStatus(req.Status)), strings.Join(req.Tags, ","), req.Page, req.Size)
+		req.Keyword, req.Author, req.Industry, req.Language, req.Scope, assetBundleStatusToInt(model.AssetBundleStatus(req.Status)), strings.Join(req.Tags, ","), page, size)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
 	response.Success(ctx, dto.AssetBundleListResponse{
-		List: service.FromAssetBundleModelList(list), Total: total, Page: req.Page, Size: req.Size,
+		List: service.FromAssetBundleModelList(list), Total: total, Page: page, Size: size,
 	}, "ok")
 }
 
@@ -270,7 +307,7 @@ func (c *AssetBundleController) Publish(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.PublishBundle(ctx.Request.Context(), id); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "启用资产包失败")
 		return
 	}
 	response.Success(ctx, "ok", "ok")
@@ -287,7 +324,7 @@ func (c *AssetBundleController) Archive(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.ArchiveBundle(ctx.Request.Context(), id); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "归档资产包失败")
 		return
 	}
 	response.Success(ctx, "ok", "ok")
@@ -306,7 +343,7 @@ func (c *AssetBundleController) Enable(ctx *gin.Context) {
 	bundle, err := c.svc.EnableBundle(ctx.Request.Context(), id)
 	if err != nil {
 		logger.Errorf("[asset-bundle] enable failed: %v", err)
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "热启用资产包失败")
 		return
 	}
 	response.Success(ctx, bundle, "enabled")
@@ -325,7 +362,7 @@ func (c *AssetBundleController) Disable(ctx *gin.Context) {
 	bundle, err := c.svc.DisableBundle(ctx.Request.Context(), id)
 	if err != nil {
 		logger.Errorf("[asset-bundle] disable failed: %v", err)
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "热禁用资产包失败")
 		return
 	}
 	response.Success(ctx, bundle, "disabled")
@@ -355,7 +392,7 @@ func (c *AssetBundleController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteBundle(ctx.Request.Context(), id); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "删除资产包失败")
 		return
 	}
 	response.Success(ctx, "ok", "ok")
@@ -449,7 +486,11 @@ func (c *AssetBundleController) MerchantParse(ctx *gin.Context) {
 	aid := ctx.Param("aid")
 	bundle, err := c.svc.GetBundleByAssetID(ctx.Request.Context(), aid)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "资产包不存在（asset_id="+aid+"）")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "解析资产包失败")
 		return
 	}
 	resp := service.ParseBundleToMerchantForm(bundle)

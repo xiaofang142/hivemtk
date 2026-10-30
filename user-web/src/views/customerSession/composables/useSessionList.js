@@ -5,6 +5,7 @@
 import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import i18n from '@/i18n'
+import { isUserReportedError } from '@/utils/errorReporting'
 import {
   getSessionMessages,
   sendMessage as sendMsg,
@@ -177,7 +178,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       scrollToBottom()
     } catch (e) {
       inputMsg.value = content;
-      ElMessage.error('发送失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('发送失败：' + (e?.message || ''))
     }
   }
 
@@ -300,7 +301,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       suggestion.is_used = true
       ElMessage.success(i18n.global.t('已采纳，可直接发送'))
     } catch (e) {
-      ElMessage.error(i18n.global.t('采纳失败'))
+      if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('采纳失败'))
     }
   }
 

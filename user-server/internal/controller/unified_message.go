@@ -90,7 +90,17 @@ func NewPlatformAccountController() *PlatformAccountController {
 // GetAccounts 获取平台账号列表
 func (c *PlatformAccountController) GetAccounts(ctx *gin.Context) {
 
-	accounts, err := c.accountService.GetAccounts(ctx.Request.Context())
+	// platform/account/status 是前端列表页的筛选参数，此前被整体忽略（见 service 注释）
+	filter := service.PlatformAccountFilter{
+		Platform: ctx.Query("platform"),
+		Account:  ctx.Query("account"),
+	}
+	if st := ctx.Query("status"); st != "" {
+		if n, err := strconv.Atoi(st); err == nil {
+			filter.Status = &n
+		}
+	}
+	accounts, err := c.accountService.GetAccountsFiltered(ctx.Request.Context(), filter)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
@@ -208,7 +218,7 @@ func (c *PlatformAccountController) LoginAccount(ctx *gin.Context) {
 	}
 
 	account, err := c.accountService.Login(ctx.Request.Context(), uint(id), &req)
-	if HandleDBError(ctx, err, "登录平台账号") {
+	if HandleServiceError(ctx, err) {
 		return
 	}
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
 	_db "hivemtk-user/internal/pkg/db"
@@ -309,6 +311,22 @@ func (s *ChurnPredictionService) InterveneWarning(ctx context.Context, id, handl
 	return s.warningRepo.MarkHandled(ctx, id, handledBy, note)
 }
 
+// InterveneLatestByUser 按用户 ID 干预其最新一条未处理预警，返回实际处理的预警 ID。
+//
+// 为什么需要：前端「干预」按钮在**预测列表**行上，行里只有 user_id、没有预警 ID，
+// 原来把 user_id 当 warning_id 提交 —— 字符串 UUID 直接 400，纯数字则会误标记
+// 别人的预警。按用户取最新未处理预警才能对上按钮语义。
+func (s *ChurnPredictionService) InterveneLatestByUser(ctx context.Context, userID string, handledBy uint, interventionType string) (uint, error) {
+	warning, err := s.warningRepo.LatestUnhandledByUser(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if err := s.warningRepo.MarkHandled(ctx, warning.ID, handledBy, "干预类型: "+interventionType); err != nil {
+		return 0, err
+	}
+	return warning.ID, nil
+}
+
 // GetModelConfig 获取模型配置
 func (s *ChurnPredictionService) GetModelConfig(ctx context.Context) (*model.ChurnModelConfig, error) {
 	config, err := s.configRepo.GetCurrent(ctx)
@@ -319,7 +337,14 @@ func (s *ChurnPredictionService) GetModelConfig(ctx context.Context) (*model.Chu
 }
 
 // SaveModelConfig 保存模型配置
+//
+// 写库前必须校验：此前直接把请求体 Upsert 进库，`isValidChurnConfig` 只在打分
+// 路径做兜底 —— 于是「全 0 配置」能保存成功：页面显示 0 权重 / 0 阈值（用户以为
+// 已生效），打分实际回落到默认值，配置项彻底失真。库里就有一行全 0 的脏配置。
 func (s *ChurnPredictionService) SaveModelConfig(ctx context.Context, config *model.ChurnModelConfig) error {
+	if err := validateChurnConfig(config); err != nil {
+		return err
+	}
 	return s.configRepo.Upsert(ctx, config)
 }
 
@@ -337,20 +362,49 @@ func (s *ChurnPredictionService) getDefaultConfig() *model.ChurnModelConfig {
 }
 
 func isValidChurnConfig(c *model.ChurnModelConfig) bool {
+	return validateChurnConfig(c) == nil
+}
+
+// validateChurnConfig 校验流失模型配置是否可执行（打分路径与保存路径共用）。
+// 逐项给中文原因，避免前端只看到「保存失败」却不知道哪一项非法。
+func validateChurnConfig(c *model.ChurnModelConfig) error {
 	if c == nil {
-		return false
+		return bizerr.New(bizerr.CodeParamInvalid, "模型配置不能为空")
+	}
+	weights := []struct {
+		name string
+		val  float64
+	}{
+		{"inactive_days_weight", c.InactiveDaysWeight},
+		{"purchase_freq_weight", c.PurchaseFreqWeight},
+		{"order_value_weight", c.OrderValueWeight},
+		{"engagement_weight", c.EngagementWeight},
+	}
+	for _, w := range weights {
+		if w.val < 0 || w.val > 1 {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("%s 必须在 0~1 之间（当前 %g）", w.name, w.val))
+		}
 	}
 	weightSum := c.InactiveDaysWeight + c.PurchaseFreqWeight + c.OrderValueWeight + c.EngagementWeight
 	if weightSum <= 0 {
-		return false
+		return bizerr.New(bizerr.CodeParamInvalid, "四项权重之和必须大于 0")
 	}
-	if c.InactiveThreshold <= 0 || c.PurchaseThreshold <= 0 {
-		return false
+	if c.InactiveThreshold <= 0 {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("inactive_threshold 必须大于 0（当前 %d）", c.InactiveThreshold))
 	}
-	if c.HighRiskScore <= 0 || c.CriticalRiskScore <= 0 {
-		return false
+	if c.PurchaseThreshold <= 0 {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("purchase_threshold 必须大于 0（当前 %d）", c.PurchaseThreshold))
 	}
-	return true
+	if c.HighRiskScore <= 0 || c.HighRiskScore > 100 {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("high_risk_score 必须在 0~100 之间（当前 %g）", c.HighRiskScore))
+	}
+	if c.CriticalRiskScore <= 0 || c.CriticalRiskScore > 100 {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("critical_risk_score 必须在 0~100 之间（当前 %g）", c.CriticalRiskScore))
+	}
+	if c.CriticalRiskScore < c.HighRiskScore {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("critical_risk_score（%g）不能低于 high_risk_score（%g）", c.CriticalRiskScore, c.HighRiskScore))
+	}
+	return nil
 }
 
 // GetChurnStatistics 获取流失统计

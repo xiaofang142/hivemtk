@@ -216,10 +216,12 @@ func (e *SalesEngine) tryFAQFastPath(ctx context.Context, req *SalesRequest) (*S
 	}
 
 	resp := &SalesResponse{
-		Reply:  entry.Answer,
-		Intent: &dto.RecognizeResult{IntentType: entry.Intent, Confidence: top.Score},
+		Reply: entry.Answer,
+		// top.Score 是关键词/向量加权分，可能 > 1（多词叠加）；置信度对外契约是 0~1，
+		// 原样透出会让前端进度条/百分比出现 103% 这类非法值。
+		Intent: &dto.RecognizeResult{IntentType: entry.Intent, Confidence: clamp01(top.Score)},
 		Confidence: &dto.ConfidenceDecision{
-			AggregatedConf:   top.Score,
+			AggregatedConf:   clamp01(top.Score),
 			DynamicThreshold: faqHitThresh,
 			DecisionBand:     dto.BandAuto,
 		},
@@ -236,6 +238,17 @@ func (e *SalesEngine) tryFAQFastPath(ctx context.Context, req *SalesRequest) (*S
 }
 
 type SalesRequest = dto.SalesRequest
+
+// clamp01 把分值夹到 [0,1]，用于对外暴露置信度（契约要求 0~1）。
+func clamp01(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
 
 func agentIDFromCtx(req *SalesRequest) uint {
 	if req == nil || req.AgentContext == nil {

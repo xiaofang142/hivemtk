@@ -35,7 +35,13 @@ func (c *AIProductivityController) GetReport(ctx *gin.Context) {
 
 // GetDailyTrend 日趋势
 func (c *AIProductivityController) GetDailyTrend(ctx *gin.Context) {
-	days, _ := strconv.Atoi(ctx.DefaultQuery("days", strconv.Itoa(reporting.DefaultWindowDays(ctx.Request.Context()))))
+	// days 会被服务层归一化（<=0 或 >90 回落默认窗口），控制器回显的 days 必须
+	// 用同一个归一化值，否则 days=0 的响应里 "days":0 而 trend 实际是 30 天。
+	defaultDays := reporting.DefaultWindowDays(ctx.Request.Context())
+	days, _ := strconv.Atoi(ctx.DefaultQuery("days", strconv.Itoa(defaultDays)))
+	if days <= 0 || days > 90 {
+		days = defaultDays
+	}
 	trend, err := c.svc.DailyTrend(ctx.Request.Context(), days)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "趋势查询失败: "+err.Error())

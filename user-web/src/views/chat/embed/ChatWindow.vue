@@ -47,7 +47,7 @@
       v-if="initFailed"
       class="offline-banner error-banner"
     >
-      <span>{{ $t('会话连接失败，请检查网络') }}</span>
+      <span>{{ initError || $t('会话连接失败，请检查网络') }}</span>
       <button @click="openSession(true)">
         {{ $t('重试') }}
       </button>
@@ -64,6 +64,10 @@
       ref="inputRef"
       :color="widgetColor"
       :sending="sending"
+      :channel-id="effectiveChannelId"
+      :visitor-id="visitorId"
+      :visitor-token="visitorToken"
+      :session-id="sessionId"
       @send="onSend"
     />
 
@@ -218,6 +222,7 @@ const showOfflineList = ref(false)
 const offlineBannerCount = ref(0)
 
 const initFailed = ref(false);
+const initError = ref('');
 let transferTimer = null;
 const clearTransferTimer = () => {
   if (transferTimer) { clearTimeout(transferTimer); transferTimer = null }
@@ -293,6 +298,7 @@ const buildUiMessage = (m) => ({
 const openSession = async (resume = true) => {
   loading.value = true
   initFailed.value = false
+  initError.value = ''
   try {
     const agentRes = await chatApi.getAvailableAgents(effectiveChannelId.value);
     agentCount.value = agentRes?.data?.available || 0
@@ -318,11 +324,16 @@ const openSession = async (resume = true) => {
     }
     connectWebSocket();
   } catch (err) {
-    console.error('打开会话失败：', err)
+    // 渠道未配置 / 已停用等业务拒绝（HTTP 401/403）会带回可读原因，直接展示，
+    // 不要一律说"请检查网络"——那是误导，重试也不会成功。
+    const reason = err?.response?.data?.message || err?.response?.data?.error || ''
+    initError.value = reason
+    if (reason) console.warn('[chat] 打开会话被拒绝：', reason)
+    else console.error('打开会话失败：', err)
     initFailed.value = true
     messages.value.push({
       sender_type: 'system',
-      content: i18n.global.t('会话连接失败，请点击右上角重试'),
+      content: reason || i18n.global.t('会话连接失败，请点击右上角重试'),
       created_at: new Date().toISOString()
     })
   } finally {

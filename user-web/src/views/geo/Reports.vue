@@ -214,6 +214,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const loading = ref(false)
 const costLoading = ref(false)
@@ -262,7 +263,7 @@ const loadSummary = async () => {
     const res = await geoApi.getReport(dateParams())
     summary.value = res || {}
   } catch (e) {
-    ElMessage.error(e.message || '报表加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '报表加载失败')
     summary.value = {}
   } finally {
     loading.value = false
@@ -275,7 +276,7 @@ const loadCosts = async () => {
     const res = await geoApi.getAPICosts(dateParams())
     costRows.value = res?.list || res?.items || res || []
   } catch (e) {
-    ElMessage.error(e.message || '成本明细加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '成本明细加载失败')
     costRows.value = []
   } finally {
     costLoading.value = false
@@ -288,7 +289,7 @@ const loadROI = async () => {
     const res = await geoApi.getROI(dateParams())
     roi.value = res || {}
   } catch (e) {
-    ElMessage.error(e.message || 'ROI 分析加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || 'ROI 分析加载失败')
     roi.value = {}
   } finally {
     roiLoading.value = false

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -25,6 +26,16 @@ type ChatChannelController struct {
 // NewChatChannelController 构造控制器
 func NewChatChannelController(svc *service.ChatChannelService) *ChatChannelController {
 	return &ChatChannelController{svc: svc}
+}
+
+// replyChatChannelError 渠道类错误统一出口：不存在 → 404（带具体 ref），其余 → 400。
+// 之前所有写口都把「渠道不存在: xxx」当 400 回，前端只能当参数错误处理。
+func replyChatChannelError(c *gin.Context, err error) {
+	if errors.Is(err, service.ErrChatChannelNotFound) {
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.Error(c, http.StatusBadRequest, err.Error())
 }
 
 // @Summary      列出渠道
@@ -60,7 +71,7 @@ func (ctrl *ChatChannelController) Get(c *gin.Context) {
 	channelID := c.Param("channel_id")
 	channel, err := ctrl.svc.GetByChannelID(c.Request.Context(), channelID)
 	if err != nil {
-		response.NotFoundError(c, "渠道")
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, channel, "ok")
@@ -74,7 +85,7 @@ func (ctrl *ChatChannelController) Get(c *gin.Context) {
 func (ctrl *ChatChannelController) Create(c *gin.Context) {
 	var req service.CreateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：channel_name 不能为空，allowed_origins 至少配置一个（字符串用逗号分隔，也可传字符串数组）")
 		return
 	}
 
@@ -87,7 +98,7 @@ func (ctrl *ChatChannelController) Create(c *gin.Context) {
 
 	result, err := ctrl.svc.Create(c.Request.Context(), &req, createdBy)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, result, "渠道已创建")
@@ -102,12 +113,12 @@ func (ctrl *ChatChannelController) Update(c *gin.Context) {
 	channelID := c.Param("channel_id")
 	var req service.UpdateChannelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：字段类型不匹配（allowed_origins 支持逗号分隔字符串或字符串数组，status 仅接受 active/disabled）")
 		return
 	}
 	channel, err := ctrl.svc.Update(c.Request.Context(), channelID, &req)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, channel, "已更新")
@@ -121,7 +132,7 @@ func (ctrl *ChatChannelController) Update(c *gin.Context) {
 func (ctrl *ChatChannelController) Delete(c *gin.Context) {
 	channelID := c.Param("channel_id")
 	if err := ctrl.svc.Delete(c.Request.Context(), channelID); err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, nil, "已禁用")
@@ -136,7 +147,7 @@ func (ctrl *ChatChannelController) RotateAppKey(c *gin.Context) {
 	channelID := c.Param("channel_id")
 	newKey, err := ctrl.svc.RotateAppKey(c.Request.Context(), channelID)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"app_key": newKey}, "AppKey 已轮换")
@@ -151,7 +162,7 @@ func (ctrl *ChatChannelController) ResetAppSecret(c *gin.Context) {
 	channelID := c.Param("channel_id")
 	newSecret, err := ctrl.svc.ResetAppSecret(c.Request.Context(), channelID)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		replyChatChannelError(c, err)
 		return
 	}
 	response.Success(c, gin.H{"app_secret": newSecret}, "AppSecret 已重置（仅返回一次）")

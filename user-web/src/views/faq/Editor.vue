@@ -145,9 +145,30 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item
+          label="智能体"
+          prop="agent_id"
+        >
+          <el-select
+            v-model="form.agent_id"
+            filterable
+            clearable
+            placeholder="该 FAQ 归属的智能体（必选）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="a in agentOptions"
+              :key="a.id"
+              :label="a.name"
+              :value="a.id"
+            />
+          </el-select>
+          <div class="form-tip">
+            每条 FAQ 必须归属一个智能体（1 对 1 绑定）
+          </div>
+        </el-form-item>
       </el-card>
 
-      
       <el-card
         shadow="never"
         class="section-card"
@@ -212,6 +233,8 @@ import {
   QuestionFilled, CollectionTag, Setting, Check
 } from '@element-plus/icons-vue'
 import { faqApi } from '@/api/faq'
+import { listEnabledAgents } from '@/api/aiAgent'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const t = i18n.global.t
 const route = useRoute()
@@ -220,6 +243,7 @@ const router = useRouter()
 const formRef = ref();
 const pageLoading = ref(false)
 const saving = ref(false)
+const agentOptions = ref([])
 const faqId = computed(() => route.params.id)
 const isEdit = computed(() => !!faqId.value)
 
@@ -234,6 +258,7 @@ const presetCategories = [
 ];
 
 const getDefaultForm = () => ({
+  agent_id: null,
   question: '',
   answer: '',
   keywords: [],
@@ -247,6 +272,9 @@ const getDefaultForm = () => ({
 const form = reactive(getDefaultForm())
 
 const rules = {
+  agent_id: [
+    { required: true, message: '请选择智能体', trigger: 'change' }
+  ],
   question: [
     { required: true, message: t('请输入问题'), trigger: 'blur' }
   ],
@@ -267,6 +295,19 @@ const parseKeywords = (input) => {
     .filter(Boolean)
 }
 
+const loadAgentOptions = async () => {
+  try {
+    const res = await listEnabledAgents()
+    const list = Array.isArray(res) ? res : (res?.list || [])
+    agentOptions.value = list
+    if (!isEdit.value && !form.agent_id && list.length) {
+      form.agent_id = list[0].id
+    }
+  } catch (e) {
+    agentOptions.value = []
+  }
+}
+
 const loadDetail = async () => {
   if (!isEdit.value) return
   pageLoading.value = true
@@ -279,7 +320,9 @@ const loadDetail = async () => {
       form.enabled = res.enabled !== false
     }
   } catch (e) {
-    ElMessage.error('加载 FAQ 详情失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) {
+      ElMessage.error('加载 FAQ 详情失败：' + (e.message || '未知错误'))
+    }
     goBack()
   } finally {
     pageLoading.value = false
@@ -298,6 +341,7 @@ const onSave = async () => {
     saving.value = true
     try {
       const data = {
+        agent_id: form.agent_id,
         question: form.question,
         answer: form.answer,
         keywords: merged,
@@ -315,7 +359,9 @@ const onSave = async () => {
       }
       goBack()
     } catch (e) {
-      ElMessage.error('保存失败：' + (e.message || '未知错误'))
+      if (!isUserReportedError(e)) {
+        ElMessage.error('保存失败：' + (e.message || '未知错误'))
+      }
     } finally {
       saving.value = false
     }
@@ -327,6 +373,7 @@ const goBack = () => {
 }
 
 onMounted(() => {
+  loadAgentOptions()
   loadDetail()
 })
 </script>

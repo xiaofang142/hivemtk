@@ -298,6 +298,9 @@ func sopToDTO(t *model.SOPTemplate) *dto.SOPTemplate {
 		Confidence: t.Confidence,
 		HitCount:   t.HitCount,
 		Enabled:    &enabled,
+		AgentID:    t.AgentID,
+		CreatedAt:  t.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:  t.UpdatedAt.Format(time.RFC3339),
 	}
 }
 

@@ -3,14 +3,39 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
 
 	"github.com/google/uuid"
 )
+
+// 服务层哨兵：控制器据此回 404（带业务 ref），避免一律落成「记录不存在」。
+var (
+	// ErrCommunityGroupNotFound 社群不存在
+	ErrCommunityGroupNotFound = errors.New("社群不存在")
+	// ErrCommunityMemberNotFound 社群成员不存在
+	ErrCommunityMemberNotFound = errors.New("社群成员不存在")
+)
+
+// wrapCommunityNotFound 把仓储层哨兵翻成服务层哨兵并带上业务 ref（id）。
+func wrapCommunityNotFound(err error, ref string) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, repository.ErrCommunityGroupNotFound):
+		return fmt.Errorf("%w: %s", ErrCommunityGroupNotFound, ref)
+	case errors.Is(err, repository.ErrCommunityMemberNotFound):
+		return fmt.Errorf("%w: %s", ErrCommunityMemberNotFound, ref)
+	}
+	return err
+}
 
 type CommunityService struct {
 	repo repository.CommunityRepository
@@ -49,7 +74,7 @@ func (s *CommunityService) GetGroupByID(ctx context.Context, id string) (*dto.Co
 		return nil, err
 	}
 	if group == nil {
-		return nil, errors.New("社群不存在")
+		return nil, fmt.Errorf("%w: %s", ErrCommunityGroupNotFound, id)
 	}
 
 	resp := &dto.CommunityGroupResponse{
@@ -64,6 +89,17 @@ func (s *CommunityService) GetGroupByID(ctx context.Context, id string) (*dto.Co
 }
 
 func (s *CommunityService) CreateGroup(ctx context.Context, req *dto.CreateCommunityGroupRequest) (*dto.CommunityGroupResponse, error) {
+	// 名称是页面的必填项，但导入/接口直调绕过了前端校验：空名会落成一排无法辨认的群。
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "请求参数错误：name（分组名称）不能为空")
+	}
+	if n := utf8.RuneCountInString(name); n > 100 {
+		return nil, bizerr.New(bizerr.CodeParamInvalid,
+			fmt.Sprintf("请求参数错误：name（分组名称）不能超过 100 个字符（当前 %d）", n))
+	}
+	req.Name = name
+
 	id := uuid.New().String()
 
 	group := &model.CommunityGroup{
@@ -101,11 +137,11 @@ func (s *CommunityService) UpdateGroup(ctx context.Context, id string, req *dto.
 	}
 	updates["updated_at"] = time.Now()
 
-	return s.repo.UpdateGroup(ctx, id, updates)
+	return wrapCommunityNotFound(s.repo.UpdateGroup(ctx, id, updates), id)
 }
 
 func (s *CommunityService) DeleteGroup(ctx context.Context, id string) error {
-	return s.repo.DeleteGroup(ctx, id)
+	return wrapCommunityNotFound(s.repo.DeleteGroup(ctx, id), id)
 }
 
 func (s *CommunityService) GetMembers(ctx context.Context, groupID string, page, pageSize int, search string) ([]*dto.CommunityMemberResponse, int64, error) {
@@ -138,7 +174,7 @@ func (s *CommunityService) GetMemberByID(ctx context.Context, id string) (*dto.C
 		return nil, err
 	}
 	if member == nil {
-		return nil, errors.New("社群成员不存在")
+		return nil, fmt.Errorf("%w: %s", ErrCommunityMemberNotFound, id)
 	}
 
 	resp := &dto.CommunityMemberResponse{
@@ -160,7 +196,7 @@ func (s *CommunityService) AddMember(ctx context.Context, req *dto.AddCommunityM
 		return nil, err
 	}
 	if group == nil {
-		return nil, errors.New("社群不存在")
+		return nil, fmt.Errorf("%w: %s", ErrCommunityGroupNotFound, req.GroupID)
 	}
 	exists, err := s.repo.ExistsMemberByUsername(ctx, req.GroupID, req.Username)
 	if err != nil {
@@ -217,11 +253,11 @@ func (s *CommunityService) UpdateMember(ctx context.Context, id string, req *dto
 	}
 	updates["updated_at"] = time.Now()
 
-	return s.repo.UpdateMember(ctx, id, updates)
+	return wrapCommunityNotFound(s.repo.UpdateMember(ctx, id, updates), id)
 }
 
 func (s *CommunityService) RemoveMember(ctx context.Context, id string) error {
-	return s.repo.RemoveMember(ctx, id)
+	return wrapCommunityNotFound(s.repo.RemoveMember(ctx, id), id)
 }
 
 func (s *CommunityService) GetMessages(ctx context.Context, groupID string, page, pageSize int) ([]*dto.CommunityMessageResponse, int64, error) {
@@ -245,6 +281,22 @@ func (s *CommunityService) GetMessages(ctx context.Context, groupID string, page
 	}
 
 	return responses, total, nil
+}
+
+// GetGroupStatistics 单个社群的口径（社群页统计弹窗）。
+// 群不存在回 ErrCommunityGroupNotFound —— 空统计与「群删了」必须区分。
+func (s *CommunityService) GetGroupStatistics(ctx context.Context, groupID string) (*dto.CommunityGroupStatsResponse, error) {
+	members, messages, activeToday, name, err := s.repo.GetGroupStats(ctx, groupID)
+	if err != nil {
+		return nil, wrapCommunityNotFound(err, groupID)
+	}
+	return &dto.CommunityGroupStatsResponse{
+		GroupID:      groupID,
+		Name:         name,
+		MemberCount:  int(members),
+		MessageCount: int(messages),
+		ActiveCount:  int(activeToday),
+	}, nil
 }
 
 func (s *CommunityService) GetStatistics(ctx context.Context) (*dto.CommunityStatisticsResponse, error) {

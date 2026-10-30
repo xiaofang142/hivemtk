@@ -199,6 +199,7 @@ import { ElMessage } from 'element-plus'
 import { Check, MagicStick } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const modelOptions = ref([])
 
@@ -302,7 +303,7 @@ const loadConfig = async () => {
       ? verifyFromDB
       : (config.verify_models.length ? config.verify_models : (modelOptions.value?.[0] ? [modelOptions.value[0].value] : []))
   } catch (e) {
-    ElMessage.error(e.message || '配置加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '配置加载失败')
   } finally {
     loading.value = false
   }
@@ -325,7 +326,7 @@ const handleSave = async () => {
     })
     ElMessage.success('配置已保存')
   } catch (e) {
-    ElMessage.error(e.message || '配置保存失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '配置保存失败')
   } finally {
     saving.value = false
   }
@@ -342,7 +343,7 @@ const handleOptimize = async () => {
     suggestions.value = res?.suggestions || []
     ElMessage.success(res?.summary || '配置优化建议已生成')
   } catch (e) {
-    ElMessage.error(e.message || '配置优化失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '配置优化失败')
   } finally {
     optimizing.value = false
   }

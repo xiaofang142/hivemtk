@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -141,12 +142,22 @@ func (ctrl *PermissionController) ListAuditLogs(c *gin.Context) {
 // 之前只有 ErrInvalidInput 被显式判，其余一律落 ErrorFromDB ⇒ 500：
 // 「初始超管账号的密码不允许通过此入口修改」被报成 500，调用方会以为服务端炸了，
 // 而实际上这条 500 与数据库毫无关系（ErrorFromDB 对非 DB 错误也只是原样回 500）。
+// serviceErrorMessage 去掉包装哨兵错误的内部后缀，避免把 "service: invalid input"
+// 这种实现细节透给前端（2026-10-31 API 回归：前端提示出现了 "不能启停自己的账号: service: invalid input"）。
+func serviceErrorMessage(err error) string {
+	msg := err.Error()
+	for _, sentinel := range []error{service.ErrInvalidInput, service.ErrInitialAdminProtected} {
+		msg = strings.TrimSuffix(msg, ": "+sentinel.Error())
+	}
+	return msg
+}
+
 func writePermissionServiceError(c *gin.Context, err error) {
 	if err == nil {
 		return
 	}
 	if errors.Is(err, service.ErrInvalidInput) || errors.Is(err, service.ErrInitialAdminProtected) {
-		response.Error(c, http.StatusBadRequest, err.Error())
+		response.Error(c, http.StatusBadRequest, serviceErrorMessage(err))
 		return
 	}
 	response.ErrorFromDB(c, err, err.Error())

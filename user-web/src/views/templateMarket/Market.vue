@@ -252,6 +252,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import i18n from '@/i18n'
@@ -300,6 +301,7 @@ const detail = ref(null)
 
 // 发布入口（S-22）
 const publishVisible = ref(false)
+const route = useRoute()
 const publishing = ref(false)
 const publishFormRef = ref()
 
@@ -356,6 +358,9 @@ function onSubmitted () {
 }
 
 onMounted(async () => {
+  // 从「我的发布/订单」点「我要发布」会带 ?publish=1 直接打开发布表单，
+  // 省掉"先进市场页再点一次发布"的一跳。
+  if (route.query.publish === '1' && userStore.isLoggedIn) publishVisible.value = true
   // 分类与列表并行拉；分类拉不到不阻塞列表（筛选器空着也能逛）。
   try {
     categories.value = await marketCategories({ _silent: true })

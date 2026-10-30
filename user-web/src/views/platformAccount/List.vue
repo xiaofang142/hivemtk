@@ -373,6 +373,14 @@
       width="500px"
     >
       <div v-loading="statusLoading">
+        <el-alert
+          v-if="statusError"
+          :title="statusError"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="status-error"
+        />
         <el-descriptions
           :column="1"
           border
@@ -409,6 +417,7 @@ import {
   Plus, Search, RefreshRight, Edit, Delete, Platform, SwitchButton, Check
 } from '@element-plus/icons-vue'
 import { platformAccountApi } from '@/api/platformAccount'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { getAccountStatusLabel, getAccountStatusTagType } from '@/constants/accountType';
 
 const loading = ref(false);
@@ -427,6 +436,7 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const currentAccount = ref({})
 const statusResult = ref({})
+const statusError = ref('')
 
 const searchForm = reactive({
   platform: '',
@@ -576,7 +586,7 @@ const handleDelete = (row) => {
       ElMessage.success(i18n.global.t('删除成功'))
       fetchAccountList()
     } catch (error) {
-      ElMessage.error(i18n.global.t('删除失败'))
+      if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('删除失败'))
       console.error(error)
     }
   }).catch((e) => {
@@ -607,7 +617,7 @@ const handleSubmit = async () => {
         dialogVisible.value = false
         fetchAccountList()
       } catch (error) {
-        ElMessage.error(isEdit.value ? '更新失败' : '创建失败')
+        if (!isUserReportedError(error)) ElMessage.error(isEdit.value ? '更新失败' : '创建失败')
         console.error(error)
       } finally {
         submitting.value = false
@@ -668,7 +678,7 @@ const submitLogin = async () => {
     loginDialogVisible.value = false
     fetchAccountList()
   } catch (error) {
-    ElMessage.error(i18n.global.t('登录失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('登录失败'))
     console.error(error)
   } finally {
     loginLoading.value = false
@@ -679,11 +689,15 @@ const handleCheckStatus = async (row) => {
   currentAccount.value = row
   statusDialogVisible.value = true
   statusLoading.value = true
+  statusError.value = ''
+  statusResult.value = {}
   try {
     const res = await platformAccountApi.checkStatus(row.id)
     statusResult.value = res || {}
   } catch (error) {
-    console.error(error)
+    // 能力已下线（400）时不再弹全局 toast，直接在弹窗里说明原因。
+    statusError.value = error?.response?.data?.message || error?.message || '状态检查失败'
+    console.warn(error)
   } finally {
     statusLoading.value = false
   }
@@ -715,6 +729,10 @@ const formatDateTime = (value) => {
 <style lang="scss" scoped>
 .platform-account-container {
   padding: 20px;
+
+  .status-error {
+    margin-bottom: 12px;
+  }
 
   .page-header {
     display: flex;

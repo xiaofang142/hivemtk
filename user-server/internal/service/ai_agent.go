@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -75,9 +76,46 @@ func (s *AIAgentService) Create(ctx context.Context, a *model.AIAgent) error {
 	if existing, _ := s.repo.GetByCode(ctx, a.AgentCode); existing != nil {
 		return fmt.Errorf("agent_code %s 已存在", a.AgentCode)
 	}
+	// GORM 的 `default:` 标签会在 INSERT 时把显式零值替换成默认值并回填结构体
+	// （status=0 被写成 1、temperature=0 被写成 0.7、top_p=0 被写成 0.9 …）。
+	// 这些 0 都是合法业务值（停用智能体、确定性采样），因此先记录，创建后按需回写。
+	zeroStatus := a.Status == 0
+	zeroTemperature := a.Temperature == 0
+	zeroTopP := a.TopP == 0
+	zeroFrequencyPenalty := a.FrequencyPenalty == 0
+	zeroPresencePenalty := a.PresencePenalty == 0
+
 	if err := s.repo.Create(ctx, a); err != nil {
+		// agent_code 的唯一索引不含 deleted_at：软删除的智能体仍占着这个 code，
+		// 而上面的 GetByCode 是带 deleted_at IS NULL 的，查不到它 —— 于是落到 INSERT
+		// 撞唯一键，用户看到的是裸 SQL。这里翻成可照做的中文提示。
+		if e := err.Error(); strings.Contains(e, "SQLSTATE 23505") && strings.Contains(e, "agent_code") {
+			return fmt.Errorf("agent_code %s 已被占用（可能属于已删除的智能体），请更换 agent_code", a.AgentCode)
+		}
 		return err
 	}
+
+	if zeroStatus || zeroTemperature || zeroTopP || zeroFrequencyPenalty || zeroPresencePenalty {
+		if zeroStatus {
+			a.Status = 0
+		}
+		if zeroTemperature {
+			a.Temperature = 0
+		}
+		if zeroTopP {
+			a.TopP = 0
+		}
+		if zeroFrequencyPenalty {
+			a.FrequencyPenalty = 0
+		}
+		if zeroPresencePenalty {
+			a.PresencePenalty = 0
+		}
+		if err := s.repo.Update(ctx, a); err != nil {
+			return fmt.Errorf("回写零值配置失败: %w", err)
+		}
+	}
+
 	s.invalidateCache(a.ID)
 	return nil
 }
@@ -310,19 +348,43 @@ func (s *ChannelAgentBindingService) Create(ctx context.Context, b *model.Channe
 	if b.AgentID == 0 {
 		return errors.New("agent_id 不能为空")
 	}
-	agent, err := s.agentRepo.GetByID(ctx, b.AgentID)
-	if err != nil {
-		return fmt.Errorf("智能体不存在: %w", err)
-	}
-	if agent.Status != 1 {
-		return errors.New("智能体已禁用，无法绑定")
+	if err := s.validateBindableAgent(ctx, b.AgentID); err != nil {
+		return err
 	}
 	if boolOrDefaultTrue(b.IsPrimary) {
 		if err := s.repo.ClearPrimaryByChannelAccount(ctx, b.ChannelType, b.AccountID); err != nil {
 			return fmt.Errorf("清除旧主绑定失败: %w", err)
 		}
 	}
-	return s.repo.Create(ctx, b)
+	if err := s.repo.Create(ctx, b); err != nil {
+		// idx_channel_binding_unique(tenant_id, channel_type, account_id, COALESCE(chat_id,''))
+		// 撞键说明该账号（会话）已绑过智能体；把 PG 原文换成「去改已有绑定」的指引。
+		if repository.IsDuplicateKeyErr(err) {
+			return bizerr.New(bizerr.CodeConflict, fmt.Sprintf(
+				"渠道账号 %s/%s 已存在相同绑定，请改为更新现有绑定（或换用不同的 chat_id）",
+				b.ChannelType, b.AccountID))
+		}
+		return err
+	}
+	return nil
+}
+
+// validateBindableAgent 绑定目标必须是「存在且启用」的智能体。
+//
+// 绑定表只存 agent_id，没有外键；不校验就会落出指向不存在/停用智能体的绑定，
+// 到回消息时才在 LoadAgentForChannel 里炸，现场看不到原因。
+func (s *ChannelAgentBindingService) validateBindableAgent(ctx context.Context, agentID uint) error {
+	agent, err := s.agentRepo.GetByID(ctx, agentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("智能体 %d 不存在，无法绑定", agentID))
+		}
+		return err
+	}
+	if agent.Status != 1 {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("智能体 %d 已停用，无法绑定", agentID))
+	}
+	return nil
 }
 
 // ListByChannelAccount 按渠道账号查询所有绑定
@@ -342,6 +404,12 @@ func (s *ChannelAgentBindingService) GetByID(ctx context.Context, id uint) (*mod
 
 // Update 更新绑定
 func (s *ChannelAgentBindingService) Update(ctx context.Context, b *model.ChannelAgentBinding) error {
+	if existing, _ := s.repo.GetByID(ctx, b.ID); existing != nil && existing.AgentID != b.AgentID {
+		// 只在「换绑」时校验目标智能体：否则智能体被停用后，改优先级/开关也会被拦。
+		if err := s.validateBindableAgent(ctx, b.AgentID); err != nil {
+			return err
+		}
+	}
 	if boolOrDefaultTrue(b.IsPrimary) {
 		existing, _ := s.repo.GetByID(ctx, b.ID)
 		if existing != nil && (existing.ChannelType != b.ChannelType || existing.AccountID != b.AccountID) {
@@ -355,6 +423,10 @@ func (s *ChannelAgentBindingService) Update(ctx context.Context, b *model.Channe
 		}
 	}
 	if err := s.repo.Update(ctx, b); err != nil {
+		if repository.IsDuplicateKeyErr(err) {
+			return bizerr.New(bizerr.CodeConflict,
+				"同一渠道账号下已存在相同 chat_id 的绑定，请先解绑后再修改（或改用不同的 chat_id）")
+		}
 		return err
 	}
 	return nil

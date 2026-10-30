@@ -31,6 +31,12 @@ func (c *ABExperimentController) CreateExperiment(ctx *gin.Context) {
 		return
 	}
 
+	// 创建人取 JWT 上下文，不取请求体：前端不会传，传了也不该被信任
+	if uid, ok := ctx.Get("user_id"); ok {
+		if id, ok := uid.(uint); ok {
+			req.CreatedBy = id
+		}
+	}
 	experiment, err := c.abService.CreateExperiment(ctx.Request.Context(), &req)
 	if errhttp.HandleDBError(ctx, err, "创建实验") {
 		return
@@ -194,8 +200,7 @@ func (c *ABExperimentController) GetConversionEvents(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
 
 	events, total, err := c.abService.GetConversionEvents(ctx.Request.Context(), uint(id), page, pageSize)
-	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+	if errhttp.HandleDBError(ctx, err, "获取转化事件") {
 		return
 	}
 
@@ -215,6 +220,10 @@ func (c *ABExperimentController) GetAdvancedStats(ctx *gin.Context) {
 		return
 	}
 	method := ctx.DefaultQuery("method", "frequentist")
+	if method != "frequentist" && method != "bayesian" {
+		response.Error(ctx, http.StatusBadRequest, "不支持的统计方法，仅支持 frequentist/bayesian")
+		return
+	}
 	var out map[string]any
 	switch method {
 	case "bayesian":
@@ -267,6 +276,11 @@ func (c *ABExperimentController) PostSequentialTest(ctx *gin.Context) {
 		Alpha float64 `json:"alpha"`
 	}
 	_ = ctx.ShouldBindJSON(&req)
+	// alpha 是显著性水平，必须落在 (0,1)；缺省或越界时回落到 0.05，
+	// 否则下游对数计算会得到 NaN/Inf 并原样返回给前端。
+	if req.Alpha <= 0 || req.Alpha >= 1 {
+		req.Alpha = 0.05
+	}
 	out, err := c.abService.GetSequentialTest(ctx.Request.Context(), uint(id), req.Alpha)
 	if errhttp.HandleDBError(ctx, err, "序贯检验") {
 		return

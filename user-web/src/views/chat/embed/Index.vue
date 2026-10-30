@@ -11,6 +11,12 @@
       @close="onClose"
     />
     <div
+      v-else-if="closed"
+      class="closed-container"
+    >
+      <p>{{ $t('会话已结束') }}</p>
+    </div>
+    <div
       v-else
       class="loading-container"
     >
@@ -24,11 +30,10 @@
 import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import ChatWindow from './ChatWindow.vue'
 
 const route = useRoute()
-const router = useRouter()
 
 const channelId = ref('default');
 const channelTitle = ref('在线客服')
@@ -36,12 +41,15 @@ const widgetColor = ref('#1989fa')
 const source = ref('')
 const cardId = ref('')
 const loaded = ref(false)
+const closed = ref(false)
 
 const onClose = () => {
   try {
     window.parent.postMessage({ type: 'chat-widget-close' }, '*')
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
-  router.replace({ name: 'NotFound' });
+  // 嵌入场景由宿主页面收起 iframe；独立打开时展示已结束态，不再跳到 404 页
+  closed.value = true
+  loaded.value = false
 }
 
 onMounted(() => {
@@ -77,6 +85,14 @@ html, body, #app {
 .loading-container {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+  font-size: 14px;
+}
+.closed-container {
+  display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;

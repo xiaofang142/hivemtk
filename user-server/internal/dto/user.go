@@ -11,7 +11,7 @@ type CreateUserRequest struct {
 	RealName string `json:"real_name"`
 	Phone    string `json:"phone"`
 	Avatar   string `json:"avatar"`
-	Role     string `json:"role" binding:"required,oneof=admin user"`
+	Role     string `json:"role" binding:"required,oneof=admin user staff customer_service"`
 	Status   int    `json:"status"`
 }
 
@@ -22,7 +22,7 @@ type UpdateUserRequest struct {
 	RealName string `json:"real_name"`
 	Phone    string `json:"phone"`
 	Avatar   string `json:"avatar"`
-	Role     string `json:"role" binding:"omitempty,oneof=admin user"`
+	Role     string `json:"role" binding:"omitempty,oneof=admin user staff customer_service"`
 	Status   *int   `json:"status"`
 }
 

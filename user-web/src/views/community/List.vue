@@ -25,9 +25,15 @@
           {{ $t('新增分组') }}
         </el-button>
       </div>
+      <input
+        ref="importInputRef"
+        type="file"
+        accept="application/json,.json"
+        class="hidden-file-input"
+        @change="onImportFileChange"
+      >
     </div>
 
-    
     <div class="search-form">
       <el-form
         :inline="true"
@@ -433,6 +439,7 @@ const messagesDialogVisible = ref(false)
 const statsDialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const importInputRef = ref(null)
 const currentGroup = ref({})
 const memberList = ref([])
 const messageList = ref([])
@@ -675,10 +682,33 @@ const handleViewStats = async (row) => {
   }
 };
 
-const handleImport = async () => {
+const handleImport = () => {
+  if (importInputRef.value) {
+    importInputRef.value.value = ''
+    importInputRef.value.click()
+  }
+};
+
+const onImportFileChange = async (event) => {
+  const file = event?.target?.files?.[0]
+  if (!file) return
+  let payload = null
   try {
-    await communityApi.importData({})
-    ElMessage.success(i18n.global.t('导入成功'))
+    const parsed = JSON.parse(await file.text())
+    payload = Array.isArray(parsed) ? { groups: parsed } : parsed
+  } catch (error) {
+    ElMessage.error(i18n.global.t('导入文件不是合法的 JSON'))
+    return
+  }
+  const groups = Array.isArray(payload?.groups) ? payload.groups : []
+  if (groups.length === 0) {
+    ElMessage.warning(i18n.global.t('导入文件没有分组数据'))
+    return
+  }
+  try {
+    const res = await communityApi.importData({ groups })
+    const successCount = res?.success_count ?? groups.length
+    ElMessage.success(i18n.global.t('导入完成：成功 {n} / 共 {t}', { n: successCount, t: groups.length }))
     fetchGroupList()
   } catch (error) {
     ElMessage.error(i18n.global.t('导入失败'))
@@ -688,8 +718,23 @@ const handleImport = async () => {
 
 const handleExport = async () => {
   try {
-    await communityApi.exportData({})
-    ElMessage.success(i18n.global.t('导出成功'))
+    const res = await communityApi.exportData({})
+    const groups = Array.isArray(res?.groups) ? res.groups : []
+    if (groups.length === 0) {
+      ElMessage.warning(i18n.global.t('暂无可导出的分组数据'))
+      return
+    }
+    const blob = new Blob([JSON.stringify({ groups }, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const stamp = new Date().toISOString().slice(0, 10)
+    link.href = url
+    link.download = `community-groups-${stamp}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    ElMessage.success(i18n.global.t('已导出 {n} 个分组', { n: groups.length }))
   } catch (error) {
     ElMessage.error(i18n.global.t('导出失败'))
     console.error(error)
@@ -700,6 +745,10 @@ const handleExport = async () => {
 <style lang="scss" scoped>
 .community-container {
   padding: 20px;
+
+  .hidden-file-input {
+    display: none;
+  }
 
   .page-header {
     display: flex;

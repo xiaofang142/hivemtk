@@ -1,6 +1,6 @@
 <template>
   <VueFlowCanvas
-    :title="`Pipeline - ${pipelineId || '新建'}`"
+    :title="pipelineName ? `${pipelineName}（#${pipelineId}）` : `Pipeline - ${pipelineId || '新建'}`"
     :initial-nodes="initialNodes"
     :initial-edges="initialEdges"
     :node-templates="nodeTemplates"
@@ -15,12 +15,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import VueFlowCanvas from '@/components/VueFlowCanvas.vue'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const route = useRoute()
 const router = useRouter()
 const pipelineId = computed(() => route.params.id)
 const initialNodes = ref([])
 const initialEdges = ref([])
+const pipelineName = ref('')
 
 const saving = ref(false)
 
@@ -36,9 +38,16 @@ const nodeTemplates = [
 
 async function load() {
   if (!pipelineId.value) return
-  const p = await http.get(`/api/reach/pipelines/${pipelineId.value}`)
-  initialNodes.value = p.nodes || []
-  initialEdges.value = p.edges || []
+  try {
+    const p = await http.get(`/api/reach/pipelines/${pipelineId.value}`)
+    pipelineName.value = p?.name || ''
+    initialNodes.value = p?.nodes || []
+    initialEdges.value = p?.edges || []
+  } catch (e) {
+    // 不存在/无权限时不要停在空白画布上让人误以为可编辑。
+    if (!isUserReportedError(e)) ElMessage.error('加载 Pipeline 失败')
+    router.replace('/reachPipeline/list')
+  }
 }
 
 async function onSave({ nodes, edges }) {

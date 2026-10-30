@@ -17,7 +17,7 @@ func ValidateAssetData(t AssetType, data []byte) error {
 	}
 	if industry, ok := m["industry"].(string); ok && industry != "" {
 		if !Industry(industry).Valid() {
-			return errors.New("industry 必须是 5 个行业之一")
+			return errors.New("industry 不在支持列表内（美妆/教培/医美/汽车/金融/电子烟/成人用品/两性健康/租车/民宿/货代/移民）")
 		}
 	}
 	switch t {

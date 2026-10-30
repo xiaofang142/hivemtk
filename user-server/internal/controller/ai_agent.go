@@ -2,10 +2,12 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/config"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -112,12 +114,35 @@ func (ctrl *AIAgentController) Get(c *gin.Context) {
 	response.Success(c, agent, "获取成功")
 }
 
+// temperatureOrDefault 三态浮点落到「默认值」：nil（未传）= def；显式 0 原样保留。
+func temperatureOrDefault(v *float64, def float64) float64 {
+	if v == nil {
+		return def
+	}
+	return *v
+}
+
 // boolPtrOrDefaultTrue 三态布尔落到「默认开启」能力开关：nil（未传）= true。
 func boolPtrOrDefaultTrue(v *bool) *bool {
 	if v == nil {
 		return boolPtr(true)
 	}
 	return v
+}
+
+// strOrEmpty / intOrZero 把 PATCH 语义的可选字段落到 Create 的默认值。
+func strOrEmpty(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func intOrZero(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
 
 type aiAgentCreateReq struct {
@@ -138,11 +163,12 @@ type aiAgentCreateReq struct {
 	ScriptLibraryIDs  []string                `json:"script_library_ids"`
 	LLMModel          string                  `json:"llm_model"`
 	LLMProviderConfig model.LLMProviderConfig `json:"llm_provider_config"`
-	Temperature       float64                 `json:"temperature"`
-	MaxTokens         int                     `json:"max_tokens"`
-	TopP              float64                 `json:"top_p"`
-	FrequencyPenalty  float64                 `json:"frequency_penalty"`
-	PresencePenalty   float64                 `json:"presence_penalty"`
+	// 指针：未传 → 0.7 默认值；显式 0 → 确定性输出，必须保留。
+	Temperature      *float64 `json:"temperature"`
+	MaxTokens        int      `json:"max_tokens"`
+	TopP             float64  `json:"top_p"`
+	FrequencyPenalty float64  `json:"frequency_penalty"`
+	PresencePenalty  float64  `json:"presence_penalty"`
 	// 指针用于区分「未传」与「显式 false」：未传走能力默认值，显式 false 必须落库。
 	EnableRAG            *bool   `json:"enable_rag"`
 	EnableScriptMatch    *bool   `json:"enable_script_match"`
@@ -152,9 +178,11 @@ type aiAgentCreateReq struct {
 	RAGTopK              int     `json:"rag_top_k"`
 	ConfidenceThreshold  float64 `json:"confidence_threshold"`
 	MaxAIConsecutive     int     `json:"max_ai_consecutive"`
-	Status               int     `json:"status"`
-	InternalLanguage     string  `json:"internal_language"`
-	TargetLanguage       string  `json:"target_language"`
+	// 指针用于区分「未传」与「显式 0」：未传走默认值，显式 0 必须落库
+	// （温度 0 是有意义的确定性参数；status=0 表示创建即停用）。
+	Status           *int   `json:"status"`
+	InternalLanguage string `json:"internal_language"`
+	TargetLanguage   string `json:"target_language"`
 }
 
 // @Summary      创建 AI 智能体
@@ -184,7 +212,7 @@ func (ctrl *AIAgentController) Create(c *gin.Context) {
 		ScriptLibraryIDs:     req.ScriptLibraryIDs,
 		LLMModel:             req.LLMModel,
 		LLMProviderConfig:    req.LLMProviderConfig,
-		Temperature:          req.Temperature,
+		Temperature:          temperatureOrDefault(req.Temperature, 0.7),
 		MaxTokens:            req.MaxTokens,
 		TopP:                 req.TopP,
 		FrequencyPenalty:     req.FrequencyPenalty,
@@ -197,21 +225,19 @@ func (ctrl *AIAgentController) Create(c *gin.Context) {
 		RAGTopK:              req.RAGTopK,
 		ConfidenceThreshold:  req.ConfidenceThreshold,
 		MaxAIConsecutive:     req.MaxAIConsecutive,
-		Status:               req.Status,
 		InternalLanguage:     req.InternalLanguage,
 		TargetLanguage:       req.TargetLanguage,
 	}
 	if agent.AgentType == "" {
 		agent.AgentType = string(model.AgentTypeSales)
 	}
-	if agent.Status == 0 {
+	if req.Status != nil {
+		agent.Status = *req.Status
+	} else {
 		agent.Status = 1
 	}
 	if agent.LLMModel == "" {
 		agent.LLMModel = config.DefaultLLMModel()
-	}
-	if agent.Temperature == 0 {
-		agent.Temperature = 0.7
 	}
 	if agent.MaxTokens == 0 {
 		agent.MaxTokens = 800
@@ -304,8 +330,8 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("llm_provider_config") {
 		existing.LLMProviderConfig = req.LLMProviderConfig
 	}
-	if hasKey("temperature") {
-		existing.Temperature = req.Temperature
+	if hasKey("temperature") && req.Temperature != nil {
+		existing.Temperature = *req.Temperature
 	}
 	if hasKey("max_tokens") && req.MaxTokens != 0 {
 		existing.MaxTokens = req.MaxTokens
@@ -343,8 +369,8 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("max_ai_consecutive") && req.MaxAIConsecutive != 0 {
 		existing.MaxAIConsecutive = req.MaxAIConsecutive
 	}
-	if hasKey("status") && req.Status != 0 {
-		existing.Status = req.Status
+	if hasKey("status") && req.Status != nil {
+		existing.Status = *req.Status
 	}
 	if hasKey("internal_language") {
 		existing.InternalLanguage = req.InternalLanguage
@@ -354,7 +380,7 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	}
 
 	if err := ctrl.svc.Update(c.Request.Context(), existing); err != nil {
-		response.Error(c, http.StatusBadRequest, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新智能体失败")
 		return
 	}
 	response.Success(c, existing, "更新成功")
@@ -497,7 +523,7 @@ func (ctrl *ChannelAgentBindingController) List(c *gin.Context) {
 	channelType = service.NormalizeChannelType(channelType)
 	list, err := ctrl.svc.ListByChannelAccount(c.Request.Context(), channelType, accountID)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		replyChannelBindingError(c, err, "查询绑定失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -514,7 +540,7 @@ func (ctrl *ChannelAgentBindingController) ListByAgent(c *gin.Context) {
 	}
 	list, err := ctrl.svc.ListByAgentID(c.Request.Context(), uint(agentID))
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		replyChannelBindingError(c, err, "查询绑定失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -524,9 +550,12 @@ type channelBindingReq struct {
 	ChannelType string `json:"channel_type" binding:"required"`
 	AccountID   string `json:"account_id" binding:"required"`
 	AgentID     uint   `json:"agent_id" binding:"required"`
-	ChatID      string `json:"chat_id"`   // 群组/会话 ID（空=account 级默认绑定）
-	ChatType    string `json:"chat_type"` // group | dm | thread（可选）
-	Priority    int    `json:"priority"`  // 手动优先级，高优先匹配
+	// ChatID/ChatType/Priority 同样是 PATCH 语义（指针）：未传 = Update 保留原值。
+	// 否则前端只改主绑定（不传 chat_id）时会把群组级绑定的 chat_id 清空，
+	// 既把群路由悄悄降级成账号默认绑定，又会与同账号的默认绑定撞唯一键（409）。
+	ChatID   *string `json:"chat_id"`   // 群组/会话 ID（空=account 级默认绑定）
+	ChatType *string `json:"chat_type"` // group | dm | thread（可选）
+	Priority *int    `json:"priority"`  // 手动优先级，高优先匹配
 	// PATCH 语义：nil = 未传 = Update 保留原值 / Create 走默认
 	IsPrimary *bool `json:"is_primary"`
 	Enabled   *bool `json:"enabled"`
@@ -538,21 +567,21 @@ type channelBindingReq struct {
 func (ctrl *ChannelAgentBindingController) Create(c *gin.Context) {
 	var req channelBindingReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：channel_type、account_id、agent_id 均为必填")
 		return
 	}
 	b := &model.ChannelAgentBinding{
 		ChannelType: service.NormalizeChannelType(req.ChannelType),
 		AccountID:   req.AccountID,
 		AgentID:     req.AgentID,
-		ChatID:      req.ChatID,
-		ChatType:    req.ChatType,
-		Priority:    req.Priority,
+		ChatID:      strOrEmpty(req.ChatID),
+		ChatType:    strOrEmpty(req.ChatType),
+		Priority:    intOrZero(req.Priority),
 		IsPrimary:   boolPtrOrDefaultTrue(req.IsPrimary),
 		Enabled:     boolPtrOrDefaultTrue(req.Enabled),
 	}
 	if err := ctrl.svc.Create(c.Request.Context(), b); err != nil {
-		response.Error(c, http.StatusBadRequest, "创建失败", err.Error())
+		replyChannelBindingError(c, err, "创建绑定失败")
 		return
 	}
 	response.Success(c, b, "创建成功")
@@ -569,21 +598,27 @@ func (ctrl *ChannelAgentBindingController) Update(c *gin.Context) {
 	}
 	existing, err := ctrl.svc.GetByID(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "绑定不存在", err.Error())
+		response.NotFound(c, "绑定不存在")
 		return
 	}
 	var req channelBindingReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：channel_type、account_id、agent_id 均为必填")
 		return
 	}
 	existing.ChannelType = service.NormalizeChannelType(req.ChannelType)
 	existing.AccountID = req.AccountID
 	existing.AgentID = req.AgentID
-	// chat_id/chat_type/priority 允许修改（群组路由调整场景）
-	existing.ChatID = req.ChatID
-	existing.ChatType = req.ChatType
-	existing.Priority = req.Priority
+	// chat_id/chat_type/priority 允许修改（群组路由调整场景），未传保留原值
+	if req.ChatID != nil {
+		existing.ChatID = *req.ChatID
+	}
+	if req.ChatType != nil {
+		existing.ChatType = *req.ChatType
+	}
+	if req.Priority != nil {
+		existing.Priority = *req.Priority
+	}
 	// PATCH 语义：未传保留原值，防止漏字段把绑定意外停用
 	if req.IsPrimary != nil {
 		existing.IsPrimary = req.IsPrimary
@@ -592,7 +627,7 @@ func (ctrl *ChannelAgentBindingController) Update(c *gin.Context) {
 		existing.Enabled = req.Enabled
 	}
 	if err := ctrl.svc.Update(c.Request.Context(), existing); err != nil {
-		response.Error(c, http.StatusBadRequest, "更新失败", err.Error())
+		replyChannelBindingError(c, err, "更新绑定失败")
 		return
 	}
 	response.Success(c, existing, "更新成功")
@@ -608,10 +643,23 @@ func (ctrl *ChannelAgentBindingController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.Delete(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		replyChannelBindingError(c, err, "绑定不存在")
 		return
 	}
 	response.Success(c, nil, "删除成功")
+}
+
+// replyChannelBindingError 渠道绑定的统一错误出口。
+//
+// bizerr(CodeConflict) 走 409（撞唯一键 = 该账号已绑过），其余交给 ErrorFromDB
+// 按哨兵/文本分流；fallback 只写「操作名」，不再把 err.Error() 透给前端。
+func replyChannelBindingError(c *gin.Context, err error, fallback string) {
+	var be *bizerr.BizError
+	if errors.As(err, &be) && be.Code == bizerr.CodeConflict {
+		response.Error(c, http.StatusConflict, be.Message)
+		return
+	}
+	response.ErrorFromDB(c, err, fallback)
 }
 
 type CustomerServiceAgentController struct {

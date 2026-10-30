@@ -326,6 +326,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import i18n from '@/i18n'
 import { kbCrawlerApi } from '@/api/kbCrawler'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { listKBs } from '@/api/knowledgeBase'
 
 const loading = ref(false)
@@ -371,7 +372,7 @@ const loadSources = async () => {
     const res = await kbCrawlerApi.listSources(params)
     sources.value = res?.items || res || []
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.crawlerSource.loadFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.loadFailed') + ': ' + (e.message || ''))
   } finally {
     loading.value = false
   }
@@ -391,7 +392,7 @@ const handleCreate = async () => {
     showCreate.value = false
     await loadSources()
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.crawlerSource.createFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.createFailed') + ': ' + (e.message || ''))
   } finally {
     creating.value = false
   }
@@ -402,7 +403,7 @@ const handleVerify = async (row) => {
     await kbCrawlerApi.verifySite(row.id)
     ElMessage.success(i18n.global.t('knowledge.crawlerSource.verifyOk'))
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.crawlerSource.verifyFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.verifyFailed') + ': ' + (e.message || ''))
   }
   await loadSources()
 }
@@ -412,7 +413,7 @@ const handleSync = async (row) => {
     const res = await kbCrawlerApi.syncSource(row.id)
     ElMessage.success(i18n.global.t('knowledge.crawlerSource.syncCreated') + `: ${res?.batch_no || ''}`)
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.crawlerSource.syncFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.syncFailed') + ': ' + (e.message || ''))
   }
 }
 
@@ -453,7 +454,7 @@ const handleRetry = async (row) => {
     ElMessage.success(i18n.global.t('knowledge.crawlerSource.retryCreated'))
     if (currentSource.value) await openBatches(currentSource.value)
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.crawlerSource.retryFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.retryFailed') + ': ' + (e.message || ''))
   }
 }
 

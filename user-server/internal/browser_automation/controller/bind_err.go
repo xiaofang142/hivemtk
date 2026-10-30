@@ -113,8 +113,11 @@ func apiFieldPath(namespace string, names map[string]string) string {
 	toks := pathToken.FindAllString(namespace, -1)
 	var b strings.Builder
 	for i, tok := range toks {
-		if i == 0 && !strings.HasPrefix(tok, "[") {
-			continue // 结构体名
+		// 首 token 一般是结构体名，丢掉。但 handler 内联的匿名结构体传进来时 Namespace
+		// 只有字段名（实测 SetDependency 的 `DependsOnMode` / RecoverProfile 的 `Platform`），
+		// 单 token 时再丢就什么都不剩，最后把 Go 字段名原样回显给用户了。
+		if i == 0 && len(toks) > 1 && !strings.HasPrefix(tok, "[") {
+			continue
 		}
 		if strings.HasPrefix(tok, "[") {
 			b.WriteString(tok)

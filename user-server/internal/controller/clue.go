@@ -1,15 +1,23 @@
 package controller
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+// clueImportMaxBatch 单次导入上限：cts 一次提交几十万行会把请求体、去重查询
+// （按 500 条分块）和插入事务同时撑爆，分批导入更可控。
+const clueImportMaxBatch = 5000
 
 type ClueController struct {
 	svc *service.ClueService
@@ -38,7 +46,7 @@ func NewClueController(svc *service.ClueService) *ClueController {
 func (c *ClueController) GetClueList(ctx *gin.Context) {
 	var req dto.GetClueRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：page / limit / type / is_verify / start / end 必须是整数")
 		return
 	}
 	if req.Page <= 0 {
@@ -89,11 +97,15 @@ func (c *ClueController) GetClueList(ctx *gin.Context) {
 func (c *ClueController) DeleteClue(ctx *gin.Context) {
 	var req dto.DeleteClueRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：缺少线索 ID")
 		return
 	}
 	err := c.svc.DeleteClue(ctx.Request.Context(), req.ID)
 	if err != nil {
+		if errhttp.IsNotFoundError(err) || errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(ctx, fmt.Sprintf("线索不存在（id=%s）", req.ID))
+			return
+		}
 		response.ErrorFromDB(ctx, err, "删除线索失败")
 		return
 	}
@@ -115,6 +127,10 @@ func (c *ClueController) GetClueStatistics(ctx *gin.Context) {
 		response.ErrorFromDB(ctx, err, "获取线索统计失败")
 		return
 	}
+	// 无数据时 Scan 出来是 nil，JSON 会序列化成 null；前端按数组消费，统一回 []。
+	if statistics == nil {
+		statistics = []map[string]any{}
+	}
 	response.Success(ctx, statistics, "获取线索统计成功")
 }
 
@@ -124,13 +140,30 @@ func (c *ClueController) GetClueStatistics(ctx *gin.Context) {
 func (c *ClueController) ImportClues(ctx *gin.Context) {
 	var req []dto.ImportClueRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest,
+			`请求参数错误：请求体必须是线索数组，例如 [{"name":"张三","account":"13800000000","type":"3"}]`)
+		return
+	}
+	if len(req) == 0 {
+		response.Error(ctx, http.StatusBadRequest, "导入数据不能为空")
+		return
+	}
+	if len(req) > clueImportMaxBatch {
+		response.Error(ctx, http.StatusBadRequest,
+			fmt.Sprintf("单次导入不超过 %d 条，请分批导入（当前 %d 条）", clueImportMaxBatch, len(req)))
 		return
 	}
 
-	for _, item := range req {
-		if _, err := strconv.ParseInt(item.Type, 10, 64); err != nil {
-			response.Error(ctx, http.StatusBadRequest, "线索类型格式错误")
+	for i, item := range req {
+		clueType, err := strconv.ParseInt(item.Type, 10, 64)
+		if err != nil {
+			response.Error(ctx, http.StatusBadRequest,
+				fmt.Sprintf("第 %d 条线索的 type 格式错误：必须是数字字符串（如 \"3\"），当前为 %q", i+1, item.Type))
+			return
+		}
+		if !service.IsValidClueType(clueType) {
+			response.Error(ctx, http.StatusBadRequest,
+				fmt.Sprintf("第 %d 条线索的 type=%d 不是合法的线索类型（可用值见 GET /api/clues/type）", i+1, clueType))
 			return
 		}
 	}

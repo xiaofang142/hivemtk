@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -119,7 +120,9 @@ func (c *BackupController) CreateBackup(ctx *gin.Context) {
 
 	var req service.CreateBackupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		// 别把 gin 的校验原文（Key: 'CreateBackupRequest.BackupName' ...）丢给前端：
+		// 它泄漏 Go 结构体名，对用户也毫无指导意义。
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：backup_name 必填")
 		return
 	}
 
@@ -189,7 +192,11 @@ func (c *BackupController) GetBackupByID(ctx *gin.Context) {
 
 	backup, err := c.backupService.GetBackupByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		if utils.IsRecordNotFound(err) {
+			response.NotFound(ctx, "备份不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "获取备份失败")
 		return
 	}
 
@@ -255,11 +262,15 @@ func (c *RestoreController) RestoreBackup(ctx *gin.Context) {
 
 	var req service.RestoreBackupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：backup_id 必填")
 		return
 	}
 
 	record, err := c.restoreService.RestoreBackup(ctx.Request.Context(), uid, &req)
+	if err != nil && errhttp.IsNotFoundError(err) {
+		response.NotFound(ctx, "备份不存在，无法恢复")
+		return
+	}
 	if HandleDBError(ctx, err, "恢复备份") {
 		return
 	}

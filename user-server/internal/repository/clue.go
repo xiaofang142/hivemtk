@@ -15,6 +15,9 @@ type ClueRepository interface {
 	Create(ctx context.Context, user *model.Clue) error
 	BatchCreateWithDedup(ctx context.Context, clues []*model.Clue) (successCount, skipCount int64, err error)
 	GetByID(ctx context.Context, id string) (*model.Clue, error)
+	// GetByIDs 按主键批量取线索（群发按选中 ID 精确取人；不按线索类型过滤，
+	// 前端选择器列的是全类型线索，按类型过滤会把其它来源的选中项静默丢掉）。
+	GetByIDs(ctx context.Context, ids []string) ([]*model.Clue, error)
 	GetClueList(ctx context.Context, page int, limit int) ([]*model.Clue, int64, error)
 	Delete(ctx context.Context, id string) error
 	GetClueStatistics(ctx context.Context) ([]map[string]any, error)
@@ -149,6 +152,17 @@ func (r *clueRepo) GetByID(ctx context.Context, id string) (*model.Clue, error) 
 // GetClueList 兼容分页接口（新版页面走 ListWithQuery）。
 // page/limit 在这里归一：调用方传 page=0 会算出负 Offset，PG 直接报
 // "OFFSET must not be negative"；limit=0 在 PG 是「不限制」，等于全表。
+func (r *clueRepo) GetByIDs(ctx context.Context, ids []string) ([]*model.Clue, error) {
+	if len(ids) == 0 {
+		return []*model.Clue{}, nil
+	}
+	var clues []*model.Clue
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&clues).Error; err != nil {
+		return nil, err
+	}
+	return clues, nil
+}
+
 func (r *clueRepo) GetClueList(ctx context.Context, page int, limit int) ([]*model.Clue, int64, error) {
 	if page <= 0 {
 		page = 1

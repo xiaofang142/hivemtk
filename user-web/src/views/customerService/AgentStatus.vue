@@ -350,6 +350,7 @@ import {
   getAgentSessions
 } from '@/api/customerService.js'
 import { getChannelLabel } from '@/constants/channel';
+import { isUserReportedError } from '@/utils/errorReporting';
 import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled';
 import { AGENT_STATUS, SESSION_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
 
@@ -430,7 +431,7 @@ const submitCreate = async () => {
     createVisible.value = false
     await loadAgents()
   } catch (e) {
-    ElMessage.error(e?.message || '创建失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '创建失败')
   }
 }
 
@@ -440,7 +441,7 @@ const handleGoOnline = async (row) => {
     ElMessage.success(i18n.global.t('已上线'))
     await loadAgents()
   } catch (e) {
-    ElMessage.error(i18n.global.t('上线失败'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('上线失败'))
   }
 }
 
@@ -450,7 +451,7 @@ const handleGoOffline = async (row) => {
     ElMessage.success(i18n.global.t('已下线'))
     await loadAgents()
   } catch (e) {
-    ElMessage.error(i18n.global.t('下线失败'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('下线失败'))
   }
 }
 

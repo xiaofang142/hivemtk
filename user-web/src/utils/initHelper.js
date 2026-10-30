@@ -24,8 +24,12 @@ export const saveApiConfigToFile = async (config) => {
 // 只写 localStorage 的旧实现会让每个会话的 App.vue 启动都看到 initialized=false，
 // 把所有人反复推进 /setup 向导。403 = 已初始化（SetupOnlyGuard），视为成功；
 // 网络失败同样吞掉 —— 本地标记先行，不能因一次可失败的请求把调用方挡住。
-export const markInitializationComplete = async () => {
+export const markLocalInitialized = () => {
   localStorage.setItem(INIT_STATUS_KEY, 'true')
+}
+
+export const markInitializationComplete = async () => {
+  markLocalInitialized()
   try {
     const { http } = await import('@/utils/request');
     await http.post('/api/system/init-complete', {}, { _silent: true });

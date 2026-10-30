@@ -1,5 +1,8 @@
 <template>
-  <el-container class="app-shell">
+  <!-- meta.hideLayout：订阅续费墙 / 商户注册这类「独立页」不要侧边栏+顶栏。
+       此前该元信息全仓无消费方（写在路由里却没人读），页面照样带整套 chrome。 -->
+  <router-view v-if="hideChrome" />
+  <el-container v-else class="app-shell">
     <MessageNotification />
     <!-- 订阅横幅（003 T023）：trial 剩 N 天提醒 / expired 红条，仅 saas 版渲染 -->
     <SubscriptionBanner />
@@ -235,6 +238,9 @@ const iconComponents = routeIconMap
 
 const route = useRoute()
 const router = useRouter()
+// 独立页（hideLayout）只渲染路由内容本身，不带导航骨架；也不参与全局导览
+// （导览锚点都在 chrome 里，渲染裸页时 .app-shell 不存在，useOnboarding 会自行跳过）。
+const hideChrome = computed(() => route.meta?.hideLayout === true)
 const userStore = useUserStore()
 const permissionStore = usePermissionStore()
 const t = i18n.global.t

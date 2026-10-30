@@ -262,6 +262,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentBindingDialog from '@/components/AgentBindingDialog.vue'
 import { copyToClipboard } from '@/utils/clipboard.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 import {
   listDingtalkApp,
   getDingtalkApp,
@@ -308,7 +309,7 @@ async function loadData() {
     tableData.value = arr
     total.value = res && res.total != null ? res.total : arr.length
   } catch (e) {
-    ElMessage.error('加载失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('加载失败：' + (e.message || e))
   } finally {
     loading.value = false
   }
@@ -352,7 +353,7 @@ async function openEdit(row) {
     })
     dialogVisible.value = true
   } catch (e) {
-    ElMessage.error('获取详情失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('获取详情失败：' + (e.message || e))
   }
 }
 
@@ -378,7 +379,7 @@ async function submit() {
     dialogVisible.value = false
     loadData()
   } catch (e) {
-    ElMessage.error('保存失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || e))
   } finally {
     saving.value = false
   }
@@ -395,7 +396,7 @@ async function handleDelete(row) {
     ElMessage.success('已删除')
     loadData()
   } catch (e) {
-    ElMessage.error('删除失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('删除失败：' + (e.message || e))
   }
 }
 
@@ -404,7 +405,7 @@ async function openTest(row) {
     const res = await testDingtalkApp(row.id)
     ElMessage.success('配置校验通过：' + (res?.ok ? 'AppKey/AppSecret/Token 齐全' : 'OK'))
   } catch (e) {
-    ElMessage.error('测试失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('测试失败：' + (e.message || e))
   }
 }
 

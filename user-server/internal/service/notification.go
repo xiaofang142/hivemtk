@@ -123,6 +123,10 @@ func (s *NotificationService) applyReadState(ctx context.Context, userID uint, l
 // MarkRead 标记单条已读
 //
 // 平台消息写已读回执（按人独立）；本地业务通知沿用行上的 is_read。
+// ErrNotificationNotFound 通知不存在或不属于当前用户/租户。
+// 用哨兵而不是裸字符串：控制器要按它翻 404，而不是把「找不到」当参数错误回 400。
+var ErrNotificationNotFound = errors.New("通知不存在或无权限")
+
 func (s *NotificationService) MarkRead(ctx context.Context, userID uint, id uint) error {
 	if id == 0 {
 		return errors.New("id 不能为空")
@@ -137,7 +141,7 @@ func (s *NotificationService) MarkRead(ctx context.Context, userID uint, id uint
 		return err
 	}
 	if !belongs {
-		return errors.New("通知不存在或无权限")
+		return ErrNotificationNotFound
 	}
 
 	isPlatform, err := s.isPlatformNotice(ctx, id)
@@ -153,7 +157,7 @@ func (s *NotificationService) MarkRead(ctx context.Context, userID uint, id uint
 		return err
 	}
 	if affected == 0 {
-		return errors.New("通知不存在或无权限")
+		return ErrNotificationNotFound
 	}
 	return nil
 }

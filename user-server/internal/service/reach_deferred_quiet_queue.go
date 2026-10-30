@@ -14,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -108,7 +109,18 @@ func (q *PersistentQuietHoursQueue) Start(ctx context.Context, pipeline SendPipe
 				return
 			case <-ticker.C:
 			}
-			q.dispatchDue(ctx, pipeline)
+			// S-1（SaaS 走查）：本 worker 由装配层用 context.Background() 启动，
+			// 没有租户上下文；多租户模式下 reach_deferred_outbound 的任意查询都会被
+			// 租户回调拒绝（"需要租户上下文但 ctx 未绑定"），后果是到期延迟消息永远
+			// 认领不到——日志每轮刷两行错误，功能却是彻底不生效。
+			// 后台任务统一经 tenant.Fanout 进入：off 模式退化为默认租户单次执行，
+			// on 模式逐活跃租户执行，回调内的 GORM 访问自动获得租户隔离。
+			if _, err := tenant.Fanout(ctx, nil, func(tctx context.Context, _ uint) (int64, error) {
+				q.dispatchDue(tctx, pipeline)
+				return 0, nil
+			}); err != nil {
+				logger.Errorf("[R-4] 延迟出站派发失败: %v", err)
+			}
 		}
 	})
 }

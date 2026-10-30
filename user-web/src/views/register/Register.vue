@@ -13,6 +13,32 @@
         </div>
       </template>
 
+      <!-- 云端统一受理注册的部署（reg_mode=saas 且本机不开放自助注册）：
+           后端 /api/tenant/register 会直接拒（4104 注册未开放），本机表单填到
+           最后一步才失败等于把用户带进死路，所以进来就说明去哪办。 -->
+      <el-result
+        v-if="cloudRegistrationOnly"
+        icon="info"
+        title="本部署的商户注册由云端统一受理"
+        sub-title="请前往云端控制台注册/开户；注册完成后用邮件里的账号回到本页登录。"
+      >
+        <template #extra>
+          <el-button
+            type="primary"
+            tag="a"
+            :href="cloudUrl || 'https://work.xapptool.cn'"
+            target="_blank"
+            rel="noopener"
+          >
+            前往云端控制台
+          </el-button>
+          <el-button @click="$router.push('/login')">
+            已有账号，去登录
+          </el-button>
+        </template>
+      </el-result>
+
+      <template v-if="!cloudRegistrationOnly">
       <el-steps
         :active="step"
         align-center
@@ -199,6 +225,7 @@
           已有账号，去登录
         </el-button>
       </div>
+      </template>
     </el-card>
   </div>
 </template>
@@ -233,6 +260,9 @@ const form = reactive({
 // 都没有这个字段，注册时多一个框只会让人填一个不存在的值。
 // 与 Login.vue 同一口径：读公开配置 /api/public/config。
 const tenantMode = ref(false)
+// 云端统一受理注册：reg_mode=saas 且本机 enable_register=false 时，本机不提供表单
+const cloudRegistrationOnly = ref(false)
+const cloudUrl = ref('')
 
 const rules = {
   username: [
@@ -429,6 +459,16 @@ onMounted(async () => {
   // 租户代码输入框只在 SaaS 多租户(on)形态显示（与登录页同一口径）。
   // 读失败按 off 处理：宁可少给一个框，也不要在私域部署里让人填一个不存在的概念。
   tenantMode.value = await TenantApi.isMultiTenant()
+  // 与登录页同一口径读公开配置：SaaS 云端受理注册时，本机表单没有意义
+  try {
+    const cfgRes = await http.get('/api/public/config', undefined, { _silent: true })
+    const cfg = cfgRes?.data ?? cfgRes ?? {}
+    cloudUrl.value = cfg.cloud_url || ''
+    cloudRegistrationOnly.value = cfg.reg_mode === 'saas' && !cfg.enable_register
+  } catch {
+    // 读不到就按“本机可注册”处理：宁可多显示表单，也不要凭空隐藏入口
+    cloudRegistrationOnly.value = false
+  }
   try {
     const res = await regulatoryNotice()
     notice.value = res || notice.value

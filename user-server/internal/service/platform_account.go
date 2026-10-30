@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
+	"strings"
 )
 
 // PlatformAccountService 平台账号服务
@@ -42,6 +43,46 @@ type PlatformLoginRequest struct {
 // GetAccounts 获取所有账号列表
 func (s *PlatformAccountService) GetAccounts(ctx context.Context) ([]*model.PlatformAccount, error) {
 	return s.accountRepo.GetAll(ctx)
+}
+
+// PlatformAccountFilter 列表筛选条件（全部可选，零值即不过滤）
+type PlatformAccountFilter struct {
+	Platform string
+	Account  string // 模糊匹配 account_name / account_id
+	Status   *int
+}
+
+// GetAccountsFiltered 带筛选的账号列表。
+//
+// 前端 platformAccount/List.vue 一直在传 platform/account/status 三个 query，
+// 而后端此前只调 GetAll() 把它们全丢掉——页面靠本地 computed 过滤才看着正常，
+// 换个客户端（第三方/移动端）就会发现筛选参数完全无效（2026-10-31 API 回归发现）。
+// 账号表是配置级小表，直接在内存里过滤，不动仓储接口，避免影响既有 mock。
+func (s *PlatformAccountService) GetAccountsFiltered(ctx context.Context, f PlatformAccountFilter) ([]*model.PlatformAccount, error) {
+	accounts, err := s.accountRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if f.Platform == "" && f.Account == "" && f.Status == nil {
+		return accounts, nil
+	}
+	kw := strings.ToLower(strings.TrimSpace(f.Account))
+	out := make([]*model.PlatformAccount, 0, len(accounts))
+	for _, a := range accounts {
+		if f.Platform != "" && string(a.Platform) != f.Platform {
+			continue
+		}
+		if f.Status != nil && a.Status != *f.Status {
+			continue
+		}
+		if kw != "" &&
+			!strings.Contains(strings.ToLower(a.AccountName), kw) &&
+			!strings.Contains(strings.ToLower(a.AccountID), kw) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, nil
 }
 
 // GetAccountByID 获取账号详情
@@ -106,7 +147,10 @@ func (s *PlatformAccountService) Login(ctx context.Context, id uint, req *Platfo
 	if err != nil {
 		return nil, err
 	}
-	return nil, fmt.Errorf("平台 %s 不支持服务端无头登录（CDP 自动回复通道已移除，请通过桥接扩展登录）", account.Platform)
+	// 与 CheckLoginStatus 保持同一错误类型：能力已下线属 400 语义，
+	// 早前这里返回裸 error，被 HandleDBError 兜成 HTTP 500 INTERNAL_ERROR_6002
+	// 「登录平台账号失败」——前端只能显示一句无信息量的内部错误（2026-10-31 回归发现）。
+	return nil, &UnsupportedCapabilityError{Capability: "无头登录", Platform: string(account.Platform)}
 }
 
 // CheckLoginStatus 检查登录状态

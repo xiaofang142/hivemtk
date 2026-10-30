@@ -1,11 +1,15 @@
 package controller
 
 import (
+	"errors"
+	opssvc "hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
+	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -213,16 +217,40 @@ func (c *UserSegmentController) GetRFMStats(ctx *gin.Context) {
 // @Tags      user-segment
 // @Router    /api/user-segment/rfm/calculate [post]
 // CalculateRFM 手动触发 RFM 全量计算（CustomerRFMService.ComputeAll，含挽回队列联动）
+// CalculateRFM 重算分层；body 可选 {"type":"churn"} 时同时重算流失预测。
+//
+// 前端「运行流失预测」按钮（src/api/churnPrediction.js 的 runChurnPrediction）
+// 就是 POST 这里并带 {"type":"churn"}，但控制器原来完全忽略 body：按钮只重算
+// 了 RFM，churn_predictions 一条不动，用户点完看不到任何变化 —— 流失计算只剩
+// cron 一条触发路径。这里按 type 追加流失计算，空 body 保持原行为。
 func (c *UserSegmentController) CalculateRFM(ctx *gin.Context) {
+	var req struct {
+		Type string `json:"type"`
+	}
+	// 空 body 保留历史语义（只重算 RFM），不能因为「没 body」报参数错误。
+	if err := ctx.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：type 必须是字符串（如 churn）")
+		return
+	}
+
 	count, err := c.rfmService.ComputeAll(ctx.Request.Context(), 0)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return
 	}
 
-	response.Success(ctx, gin.H{
-		"updated_count": count,
-	}, "计算完成")
+	payload := gin.H{"updated_count": count}
+
+	if strings.EqualFold(strings.TrimSpace(req.Type), "churn") {
+		churnCount, cerr := opssvc.NewChurnPredictionService().RunChurnCalculationForAllCustomers(ctx.Request.Context())
+		if cerr != nil {
+			response.ErrorFromDB(ctx, cerr, "流失预测计算失败")
+			return
+		}
+		payload["churn_updated_count"] = churnCount
+	}
+
+	response.Success(ctx, payload, "计算完成")
 }
 
 // @Summary      获取单个客户的 RFM 分层

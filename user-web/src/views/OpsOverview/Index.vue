@@ -158,6 +158,13 @@ const recentOps = ref([])
 const alertsCount = ref(0)
 
 function formatUptime(sec) {
+  // 后端 /api/system/stats 返回形如「4h 17m 38s」的字符串，兼容纯秒数
+  if (typeof sec === 'string') {
+    const trimmed = sec.trim()
+    if (!trimmed) return '0h 0m'
+    if (!/^\d+(\.\d+)?$/.test(trimmed)) return trimmed
+    sec = Number(trimmed)
+  }
   if (!sec || sec < 0) return '0h 0m'
   const h = Math.floor(sec / 3600)
   const m = Math.floor((sec % 3600) / 60)
@@ -176,6 +183,14 @@ function mapModules(nodeHealth) {
   }))
 }
 
+function fmtAgeMin(ageMin) {
+  const n = Number(ageMin)
+  if (!Number.isFinite(n) || n < 0) return '-'
+  if (n < 60) return `${Math.round(n)} 分钟前`
+  if (n < 1440) return `${Math.round(n / 60)} 小时前`
+  return `${Math.round(n / 1440)} 天前`
+}
+
 function mapRecentOps(anomalies) {
   if (!anomalies) return []
   const rows = []
@@ -190,8 +205,11 @@ function mapRecentOps(anomalies) {
     const items = anomalies[g.key] || []
     for (const it of items.slice(0, 10)) {
       rows.push({
-        time: it.last_seen || it.detected_at || it.updated_at || '-',
-        user: it.account_id || it.customer_id || '-',
+        // 后端 /api/monitor/anomalies 的分组项只有 {conversation_id, channel, age_min}
+        // （sync_gap 另带 message_count），没有 last_seen/account_id；
+        // 这里用 age_min 反推「N 分钟前」，user 列回落会话 ID，避免两列恒为 '-'。
+        time: it.last_seen || it.detected_at || it.updated_at || fmtAgeMin(it.age_min),
+        user: it.account_id || it.customer_id || it.conversation_id || '-',
         action: g.label,
         result: 'fail'
       })
@@ -200,41 +218,64 @@ function mapRecentOps(anomalies) {
   return rows.slice(0, 20)
 }
 
-async function loadOverview() {
-  try {
-    const [statusRes, opsStatsRes, modulesRes, opsRes] = await Promise.all([
-      getSystemStatus(),
-      getOpsStats(),
-      getModuleStatus(),
-      getRecentOperations(20)
-    ])
+// /api/system/stats 是实例级指标（CPU/磁盘/总用户数），后端按平台运营方档
+// （systemAdmin = PlatformOperatorMiddleware）守卫；SaaS 租户管理员会拿到 403。
+// 这不是故障，页面需降级展示，且不能因为一条 403 把其余三份数据一起丢掉
+// （原实现用 Promise.all，任一失败即整页停在「加载中...」）。
+function isForbidden(err) {
+  const status = err?.response?.status ?? err?.status
+  if (status === 403) return true
+  const msg = String(err?.message || err || '')
+  return msg.includes('403') || msg.includes('权限不足')
+}
 
-    const s = statusRes.data || {}
+async function loadOverview() {
+  const [statusR, opsStatsR, modulesR, opsR] = await Promise.allSettled([
+    getSystemStatus(),
+    getOpsStats(),
+    getModuleStatus(),
+    getRecentOperations(20)
+  ])
+
+  const statusRes = statusR.status === 'fulfilled' ? statusR.value : null
+  const opsStatsRes = opsStatsR.status === 'fulfilled' ? opsStatsR.value : null
+  const modulesRes = modulesR.status === 'fulfilled' ? modulesR.value : null
+  const opsRes = opsR.status === 'fulfilled' ? opsR.value : null
+
+  // 响应拦截器已解包为 data 本体，这里不能再取 .data（否则全部回落成 0/空）
+  const s = statusRes || {}
+  if (statusR.status === 'rejected') {
+    systemStatus.value = isForbidden(statusR.reason)
+      ? { text: '仅平台运营可见', code: 'forbidden' }
+      : { text: '加载失败', code: 'error' }
+  } else {
     systemStatus.value = {
       text: s.status || (s.cpu_usage > 90 ? '告警' : '正常'),
       code: s.status || 'ok'
     }
-    uptime.value = formatUptime(s.system_uptime ?? s.uptime)
+  }
+  uptime.value = formatUptime(s.system_uptime ?? s.uptime)
 
-    const o = opsStatsRes.data || {}
-    stats.value = {
-      onlineUsers: s.online_users ?? s.active_users ?? 0,
-      totalUsers: s.total_users ?? 0,
-      todayMessages: (o.inbound_rate_per_min * 60 + o.outbound_rate_per_min * 60) || 0,
-      messagesDelta: '0%'
-    }
+  const o = opsStatsRes || {}
+  stats.value = {
+    onlineUsers: s.online_users ?? s.active_users ?? 0,
+    totalUsers: s.total_users ?? 0,
+    todayMessages: (o.inbound_rate_per_min * 60 + o.outbound_rate_per_min * 60) || 0,
+    messagesDelta: '0%'
+  }
 
-    moduleStatus.value = mapModules(modulesRes.data || modulesRes.data?.nodes || [])
-    recentOps.value = mapRecentOps(opsRes.data || {})
+  moduleStatus.value = mapModules(modulesRes?.nodes || [])
+  recentOps.value = mapRecentOps(opsRes || {})
 
-    try {
-      const alertsRes = await http.get('/api/monitor/alerts/unread')
-      alertsCount.value = alertsRes?.count || alertsRes?.unread_count || 0
-    } catch {
-      alertsCount.value = 0
-    }
-  } catch (err) {
-    console.error('load overview failed:', err)
+  for (const r of [opsStatsR, modulesR, opsR]) {
+    if (r.status === 'rejected') console.error('load overview partial failure:', r.reason)
+  }
+
+  try {
+    const alertsRes = await http.get('/api/monitor/alerts/unread')
+    alertsCount.value = alertsRes?.count || alertsRes?.unread_count || 0
+  } catch {
+    alertsCount.value = 0
   }
 }
 

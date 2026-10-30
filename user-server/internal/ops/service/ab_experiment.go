@@ -37,6 +37,8 @@ type CreateExperimentRequest struct {
 	StartDate    string          `json:"start_date"`
 	EndDate      string          `json:"end_date"`
 	Variants     []VariantConfig `json:"variants"`
+	// CreatedBy 由控制器从 JWT 上下文注入，不信任请求体（避免伪造创建人）
+	CreatedBy uint `json:"-"`
 }
 
 // VariantConfig 变体配置
@@ -56,6 +58,7 @@ func (s *ABExperimentService) CreateExperiment(ctx context.Context, req *CreateE
 		SourceID:     req.SourceID,
 		TrafficSplit: req.TrafficSplit,
 		Status:       "draft",
+		CreatedBy:    req.CreatedBy,
 	}
 
 	if err := s.experimentRepo.Create(ctx, experiment); err != nil {
@@ -251,11 +254,17 @@ func (s *ABExperimentService) calculateConfidence(result *model.ABExperimentResu
 
 // GetExperimentResults 获取实验结果
 func (s *ABExperimentService) GetExperimentResults(ctx context.Context, experimentID uint) ([]*model.ABExperimentResult, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	return s.resultRepo.GetByExperiment(ctx, experimentID)
 }
 
 // GetConversionEvents 获取转化事件列表
 func (s *ABExperimentService) GetConversionEvents(ctx context.Context, experimentID uint, page, pageSize int) ([]*model.ABConversionEvent, int64, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, 0, err
+	}
 	return s.conversionRepo.GetByExperiment(ctx, experimentID, page, pageSize)
 }
 
@@ -277,8 +286,20 @@ func (s *ABExperimentService) variantCountsFromRepo(ctx context.Context, experim
 	return out, nil
 }
 
+// ensureExperimentExists 校验实验存在。
+// 统计类接口（stats/diagnostics/cuped/sequential/bayesian）只读分桶与事件表，
+// 实验不存在时这些表查不出任何行，会静默返回"空统计"而不是 404，
+// 前端会把"实验已被删除"误显示成"样本量为 0"。故统一前置一次存在性校验。
+func (s *ABExperimentService) ensureExperimentExists(ctx context.Context, experimentID uint) error {
+	_, err := s.experimentRepo.GetByID(ctx, experimentID)
+	return err
+}
+
 // GetAdvancedStats 频率派 z 检验结果（method=frequentist）
 func (s *ABExperimentService) GetAdvancedStats(ctx context.Context, experimentID uint) (map[string]any, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	counts, err := s.variantCountsFromRepo(ctx, experimentID)
 	if err != nil {
 		return nil, err
@@ -291,6 +312,9 @@ func (s *ABExperimentService) GetAdvancedStats(ctx context.Context, experimentID
 
 // GetBayesianTest 贝叶斯胜率
 func (s *ABExperimentService) GetBayesianTest(ctx context.Context, experimentID uint) (map[string]any, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	counts, err := s.variantCountsFromRepo(ctx, experimentID)
 	if err != nil {
 		return nil, err
@@ -303,6 +327,9 @@ func (s *ABExperimentService) GetBayesianTest(ctx context.Context, experimentID 
 
 // GetSequentialTest SPRT 序贯检验
 func (s *ABExperimentService) GetSequentialTest(ctx context.Context, experimentID uint, alpha float64) (map[string]any, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	counts, err := s.variantCountsFromRepo(ctx, experimentID)
 	if err != nil {
 		return nil, err
@@ -313,6 +340,9 @@ func (s *ABExperimentService) GetSequentialTest(ctx context.Context, experimentI
 
 // GetDiagnostics SRM + 最小样本 + 多曝光诊断
 func (s *ABExperimentService) GetDiagnostics(ctx context.Context, experimentID uint) (map[string]any, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	counts, err := s.variantCountsFromRepo(ctx, experimentID)
 	if err != nil {
 		return nil, err
@@ -348,6 +378,9 @@ func (s *ABExperimentService) countMultiExposeUsers(ctx context.Context, experim
 
 // GetCUPED CUPED 方差缩减（协变量=实验前事件计数；无数据退化）
 func (s *ABExperimentService) GetCUPED(ctx context.Context, experimentID uint) (map[string]any, error) {
+	if err := s.ensureExperimentExists(ctx, experimentID); err != nil {
+		return nil, err
+	}
 	counts, err := s.variantCountsFromRepo(ctx, experimentID)
 	if err != nil {
 		return nil, err

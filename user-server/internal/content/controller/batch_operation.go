@@ -2,18 +2,57 @@ package controller
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
-	"hivemtk-user/internal/pkg/errhttp"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
+	"hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/errhttp"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
+
+// recordBatchHistory 写入一条批量操作历史。
+//
+// 历史表此前从未被任何端点写入，前端的「操作历史」页因此恒空、取消与详情只能
+// 返回 404。历史是旁路观测：写入失败只记日志，绝不回滚已经成功的批量操作。
+func recordBatchHistory(ctx *gin.Context, svc *service.BatchOperationService, op, dataType, status string, total, success, failed int, errMsg string, started time.Time) {
+	now := time.Now()
+	var uid uint
+	if v, ok := ctx.Get("user_id"); ok {
+		if id, ok := v.(uint); ok {
+			uid = id
+		}
+	}
+	// 错误信息只留摘要：CSV 逐行失败时 errMsg 可能很长，表上是 text 也不必塞满。
+	if len(errMsg) > 900 {
+		errMsg = errMsg[:900] + "…"
+	}
+	h := &model.BatchOperationHistory{
+		OperationType: op,
+		DataType:      dataType,
+		Status:        status,
+		TotalCount:    total,
+		SuccessCount:  success,
+		FailedCount:   failed,
+		OperatorID:    uid,
+		ErrorMessage:  errMsg,
+		StartedAt:     started,
+		FinishedAt:    &now,
+	}
+	if err := svc.RecordHistory(ctx.Request.Context(), h); err != nil {
+		logger.Error(err, "写入批量操作历史失败: "+op)
+	}
+}
 
 // DefaultBatchImportMaxSizeMB 是参数中心 misc.batch_import_max_file_mb 的兜底值。
 //
@@ -81,7 +120,8 @@ func (c *BatchImportController) ImportFile(ctx *gin.Context) {
 
 	fileHeader, err := ctx.FormFile("file")
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "上传文件失败："+err.Error())
+		// 原文是 http: no such file / request Content-Type isn't multipart —— 对用户没有信息量
+		response.Error(ctx, http.StatusBadRequest, "上传文件失败：请选择要导入的文件（multipart 字段名 file）")
 		return
 	}
 
@@ -98,8 +138,14 @@ func (c *BatchImportController) ImportFile(ctx *gin.Context) {
 	}
 	defer func() { _ = f.Close() }()
 
+	started := time.Now()
 	result, err := c.svc.ImportFromCSV(ctx.Request.Context(), service.ImportType(importType), f)
 	if err != nil {
+		if errors.Is(err, service.ErrUnsupportedImportType) {
+			response.Error(ctx, http.StatusBadRequest, "导入失败："+err.Error())
+			return
+		}
+		recordBatchHistory(ctx, c.svc, "import", importType, "failed", 0, 0, 0, err.Error(), started)
 		response.Error(ctx, http.StatusInternalServerError, "导入失败："+err.Error())
 		return
 	}
@@ -117,6 +163,16 @@ func (c *BatchImportController) ImportFile(ctx *gin.Context) {
 		resp.Errors = append(resp.Errors, fmt.Sprintf("第 %d 行: %s", e.Row, e.Reason))
 	}
 
+	status := "completed"
+	if result.Failed > 0 {
+		status = "partial"
+	}
+	errSummary := ""
+	if len(resp.Errors) > 0 {
+		errSummary = strings.Join(resp.Errors, "; ")
+	}
+	recordBatchHistory(ctx, c.svc, "import", importType, status, result.Total, result.Success, result.Failed, errSummary, started)
+
 	response.Success(ctx, resp, "导入完成")
 }
 
@@ -127,9 +183,15 @@ func (c *BatchImportController) DownloadTemplate(ctx *gin.Context) {
 		importType = string(service.ImportTypeClue)
 	}
 
+	// 模板只有 CSV 一种形态：以前把 format 直接拼进文件名（format=md 会得到
+	// 一个叫 .md 的 CSV 文件），扩展名与内容不符。
 	format := ctx.Query("format")
 	if format == "" {
 		format = "csv"
+	}
+	if format != "csv" {
+		response.Error(ctx, http.StatusBadRequest, "暂不支持的模板格式: "+format+"（仅支持 csv）")
+		return
 	}
 
 	tmpl, err := c.svc.GetTemplate(service.ImportType(importType))
@@ -208,10 +270,29 @@ func (c *BatchExportController) ExportData(ctx *gin.Context) {
 		return
 	}
 
+	// 类型失败是用户传参问题（400），不是服务端故障：先挡在流式写出之前，
+	// 否则 GenerateCSV 之类返回的哨兵会被兜成 500「导出失败」。
+	switch exportType {
+	case string(service.ExportTypeClue), string(service.ExportTypeUser):
+	default:
+		response.Error(ctx, http.StatusBadRequest, "暂不支持的导出类型: "+exportType+"（支持 clue / user）")
+		return
+	}
+
+	started := time.Now()
+	record := func(status, errMsg string) {
+		success, failed := len(ids), 0
+		if status == "failed" {
+			success, failed = 0, len(ids)
+		}
+		recordBatchHistory(ctx, c.svc, "export", exportType, status, len(ids), success, failed, errMsg, started)
+	}
+
 	switch format {
 	case "csv":
 		buf, err := c.svc.GenerateCSV(ctx.Request.Context(), service.ExportType(exportType), ids)
 		if err != nil {
+			record("failed", err.Error())
 			response.Error(ctx, http.StatusInternalServerError, "导出失败："+err.Error())
 			return
 		}
@@ -219,9 +300,11 @@ func (c *BatchExportController) ExportData(ctx *gin.Context) {
 		ctx.Header("Content-Type", "text/csv; charset=utf-8")
 		ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 		ctx.Data(http.StatusOK, "text/csv", buf.Bytes())
+		record("completed", "")
 	case "jsonl":
 		buf, err := c.svc.GenerateJSONL(ctx.Request.Context(), service.ExportType(exportType), ids)
 		if err != nil {
+			record("failed", err.Error())
 			response.Error(ctx, http.StatusInternalServerError, "导出失败："+err.Error())
 			return
 		}
@@ -229,9 +312,11 @@ func (c *BatchExportController) ExportData(ctx *gin.Context) {
 		ctx.Header("Content-Type", "application/jsonl; charset=utf-8")
 		ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 		ctx.Data(http.StatusOK, "application/jsonl", buf.Bytes())
+		record("completed", "")
 	case "markdown":
 		buf, err := c.svc.GenerateMarkdown(ctx.Request.Context(), service.ExportType(exportType), ids)
 		if err != nil {
+			record("failed", err.Error())
 			response.Error(ctx, http.StatusInternalServerError, "导出失败："+err.Error())
 			return
 		}
@@ -239,8 +324,9 @@ func (c *BatchExportController) ExportData(ctx *gin.Context) {
 		ctx.Header("Content-Type", "text/markdown; charset=utf-8")
 		ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 		ctx.Data(http.StatusOK, "text/markdown", buf.Bytes())
+		record("completed", "")
 	default:
-		response.Error(ctx, http.StatusBadRequest, "暂不支持的导出格式: "+format)
+		response.Error(ctx, http.StatusBadRequest, "暂不支持的导出格式: "+format+"（支持 csv / jsonl / markdown）")
 	}
 }
 
@@ -265,7 +351,7 @@ type BatchDeleteRequest struct {
 func (c *BatchOperationController) BatchDelete(ctx *gin.Context) {
 	var req BatchDeleteRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：ids 必须是非空字符串数组")
 		return
 	}
 
@@ -274,9 +360,18 @@ func (c *BatchOperationController) BatchDelete(ctx *gin.Context) {
 		return
 	}
 
+	started := time.Now()
 	count, err := c.svc.BatchDeleteClues(ctx.Request.Context(), req.IDs)
 	if err != nil {
+		recordBatchHistory(ctx, c.svc, "delete", "clue", "failed", len(req.IDs), 0, len(req.IDs), err.Error(), started)
 		response.Error(ctx, http.StatusInternalServerError, "删除失败："+err.Error())
+		return
+	}
+	recordBatchHistory(ctx, c.svc, "delete", "clue", "completed", len(req.IDs), count, len(req.IDs)-count, "", started)
+
+	if count == 0 {
+		// 一条都没删掉却回「批量删除成功」，前端只会给个绿 toast，用户无从发现
+		response.Error(ctx, http.StatusBadRequest, "没有匹配到可删除的线索：所选 ID 均不存在或已被删除")
 		return
 	}
 
@@ -296,7 +391,7 @@ type BatchUpdateRequest struct {
 func (c *BatchOperationController) BatchUpdate(ctx *gin.Context) {
 	var req BatchUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：ids 必须是非空字符串数组，fields 必须是对象")
 		return
 	}
 
@@ -309,6 +404,7 @@ func (c *BatchOperationController) BatchUpdate(ctx *gin.Context) {
 		return
 	}
 
+	started := time.Now()
 	count, err := c.svc.BatchUpdateClues(ctx.Request.Context(), &service.BatchUpdateRequest{
 		IDs:    req.IDs,
 		Fields: req.Fields,
@@ -319,7 +415,14 @@ func (c *BatchOperationController) BatchUpdate(ctx *gin.Context) {
 			response.Error(ctx, http.StatusBadRequest, errMsg)
 			return
 		}
+		recordBatchHistory(ctx, c.svc, "update", "clue", "failed", len(req.IDs), 0, len(req.IDs), errMsg, started)
 		response.Error(ctx, http.StatusInternalServerError, "更新失败："+errMsg)
+		return
+	}
+	recordBatchHistory(ctx, c.svc, "update", "clue", "completed", len(req.IDs), count, len(req.IDs)-count, "", started)
+
+	if count == 0 {
+		response.Error(ctx, http.StatusBadRequest, "没有匹配到可更新的线索：所选 ID 均不存在或已被删除")
 		return
 	}
 
@@ -374,7 +477,12 @@ func (c *BatchOperationController) GetHistoryByID(ctx *gin.Context) {
 	}
 
 	history, err := c.svc.GetHistoryByID(ctx.Request.Context(), uint(id))
-	if errhttp.HandleDBError(ctx, err, "获取批量操作历史") {
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "操作记录不存在")
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "获取批量操作历史")
 		return
 	}
 
@@ -390,7 +498,16 @@ func (c *BatchOperationController) CancelHistory(ctx *gin.Context) {
 		return
 	}
 
-	if errhttp.HandleDBError(ctx, c.svc.CancelHistory(ctx.Request.Context(), uint(id)), "取消批量操作") {
+	if err := c.svc.CancelHistory(ctx.Request.Context(), uint(id)); err != nil {
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			response.NotFound(ctx, "操作记录不存在")
+		case errors.Is(err, contentrepo.ErrBatchOperationNotCancellable):
+			// 记录在，只是状态不允许（已完成/已取消）：404 会让用户以为记录被删了
+			response.Error(ctx, http.StatusConflict, err.Error())
+		default:
+			errhttp.HandleDBError(ctx, err, "取消批量操作")
+		}
 		return
 	}
 
@@ -408,7 +525,7 @@ type PreviewRequest struct {
 func (c *BatchOperationController) Preview(ctx *gin.Context) {
 	var req PreviewRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：operation_type 与 data_type 必填")
 		return
 	}
 

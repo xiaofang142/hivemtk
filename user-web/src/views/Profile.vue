@@ -260,6 +260,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Check, Lock, CopyDocument } from '@element-plus/icons-vue'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { TenantApi } from '@/api/tenant'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
@@ -480,7 +481,8 @@ const onChangePassword = async () => {
       window.location.href = '/#/login'
     }, 1200)
   } catch (err) {
-    if (err?.message) {
+    // 拦截器已把后端文案弹给用户（isUserReportedError），这里不再补一条重复 toast
+    if (err?.message && !isUserReportedError(err)) {
       ElMessage.error('修改失败：' + err.message)
     }
   } finally {

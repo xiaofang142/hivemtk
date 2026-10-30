@@ -14,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/model"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -146,7 +147,10 @@ func (r *assetBundleRepo) List(ctx context.Context, f AssetBundleFilter) ([]*mod
 		q = q.Where("status = ?", f.Status)
 	}
 	if len(f.Tags) > 0 {
-		q = q.Where("tags && ?", f.Tags)
+		// 必须包成 pq.StringArray：直接传 []string 时 GORM 会把它展开成
+		// `tags && $1,$2` 这种非法数组字面量，PG 直接报 SQLSTATE 22P02，
+		// 而且原始 SQL 会被回传前端。&& 是数组重叠运算符，右侧必须是单个数组。
+		q = q.Where("tags && ?", pq.StringArray(f.Tags))
 	}
 	if f.Page <= 0 {
 		f.Page = 1

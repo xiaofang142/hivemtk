@@ -258,7 +258,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { http } from '@/utils/request'
-import { markInitializationComplete } from '@/utils/initHelper'
+import { markInitializationComplete, markLocalInitialized } from '@/utils/initHelper'
 import { regulatoryNotice } from '@/api/moduleMarket'
 
 const router = useRouter()
@@ -417,7 +417,9 @@ onMounted(async () => {
       switch (status.state) {
         case 'HAS_ADMIN':
         case 'INITIALIZED':
-          await markInitializationComplete()
+          // 已经初始化完成：无需再 POST init-complete（SetupOnlyGuard 必然 403，
+          // 会在控制台留一条 Failed to load resource 噪声），只补本地标记即可。
+          markLocalInitialized()
           ElMessage.info(t('setup.errAlreadyInit'))
           router.push('/login')
           break

@@ -810,6 +810,7 @@ import { listByType as listKBByType } from '@/api/knowledgeBase'
 import { listByAgent as listAgentKBs, replaceAgentKBs } from '@/api/agentKBBinding'
 import { listBundles } from '@/api/assetBundle'
 import { INTERNAL_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const internalLanguageOptions = INTERNAL_LANGUAGE_OPTIONS
 const targetLanguageOptions = TARGET_LANGUAGE_OPTIONS
@@ -929,7 +930,9 @@ const loadScriptOptions = async () => {
 
 const loadAssetBundles = async () => {
   try {
-    const res = await listBundles({ page: 1, page_size: 200, status: 'active' })
+    // 后端 AssetBundleListRequest 的分页参数是 page/size（不是 page_size），
+    // 传错时 size 恒为 0 被兜成 20，资产包下拉框只能看到前 20 条。
+    const res = await listBundles({ page: 1, size: 200, status: 'active' })
     assetBundleOptions.value = res?.list || res?.items || []
   } catch (e) {
     console.warn('加载资产包列表失败：', e?.message)
@@ -1035,7 +1038,10 @@ const loadAgentDetail = async () => {
       form.target_language = res.target_language || ''
     }
   } catch (e) {
-    ElMessage.error('加载智能体详情失败：' + (e.message || '未知错误'))
+    // 拦截器已弹过文案（404 为「智能体不存在」类服务端文案），本地不重复弹
+    if (e?.response?.status !== 404 && !isUserReportedError(e)) {
+      ElMessage.error('加载智能体详情失败：' + (e.message || '未知错误'))
+    }
     goBack()
   } finally {
     pageLoading.value = false
@@ -1106,7 +1112,7 @@ const onSave = async () => {
       }
       goBack()
     } catch (e) {
-      ElMessage.error('保存失败：' + (e.message || '未知错误'))
+      if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || '未知错误'))
     } finally {
       saving.value = false
     }
@@ -1147,7 +1153,7 @@ const runTest = async () => {
     testResult.value = res
     ElMessage.success(i18n.global.t('测试执行完成'))
   } catch (e) {
-    ElMessage.error('测试失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('测试失败：' + (e.message || '未知错误'))
   } finally {
     testing.value = false
   }

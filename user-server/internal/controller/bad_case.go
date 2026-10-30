@@ -315,16 +315,39 @@ func (c *BadCaseController) unavailable(ctx *gin.Context) {
 func (c *BadCaseController) replyError(ctx *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrBadCaseInputInvalid):
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, badCasePublicMessage(err, service.ErrBadCaseInputInvalid))
 	case errors.Is(err, service.ErrBadCaseNotFound):
 		response.Error(ctx, http.StatusNotFound, err.Error())
 	case errors.Is(err, service.ErrBadCaseTransition),
 		errors.Is(err, service.ErrBadCaseNothingToExport):
-		response.Error(ctx, http.StatusConflict, err.Error())
+		response.Error(ctx, http.StatusConflict, badCasePublicMessage(err, nil))
 	default:
 		logger.Warnf("[BadCase] 未预期错误: %v", err)
 		response.Error(ctx, http.StatusInternalServerError, "坏例操作失败")
 	}
+}
+
+// badCasePublicMessage 摘掉内部哨兵前缀后再回前端。
+//
+// 服务层用 fmt.Errorf("%w: 具体原因", sentinel) 拼错，err.Error() 直接透出会变成
+// 「bad_case: 查询条件非法: 打标必须写明判定依据」——前半截是仓储哨兵名，属于
+// 内部实现细节，坐席看到只会以为系统坏了。sentinel 非空时连带它和分隔冒号一起摘；
+// 传 nil 时只摘 "bad_case: " 这层命名空间（状态迁移类的错误就是这样）。
+func badCasePublicMessage(err error, sentinel error) string {
+	msg := strings.TrimSpace(err.Error())
+	prefix := "bad_case:"
+	if sentinel != nil {
+		prefix = sentinel.Error()
+	}
+	rest, ok := strings.CutPrefix(msg, prefix)
+	if !ok {
+		return msg
+	}
+	rest = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(rest), ":"))
+	if rest == "" {
+		return msg
+	}
+	return rest
 }
 
 // badCaseQueryFromRequest 解析列表查询参数。返回 ok=false 表示已经回过错误响应。

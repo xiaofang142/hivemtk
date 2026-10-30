@@ -140,7 +140,7 @@
           <el-button
             size="small"
             type="primary"
-            @click="$router.push('/template-market')"
+            @click="$router.push('/template-market?publish=1')"
           >
             {{ $t('templateMarketPage.publishCta') }}
           </el-button>

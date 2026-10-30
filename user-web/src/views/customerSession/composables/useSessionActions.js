@@ -14,6 +14,7 @@ import {
   listBlacklist
 } from '@/api/customerSession.js'
 import { goOnline, goOffline, updateAgentStatus } from '@/api/customerService.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 export function useSessionActions({ currentSession, currentHandler, inputMsg, myAgentId }) {
   // —— 坐席状态 ——
@@ -50,7 +51,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       const d = res?.data || res || {}
       ElMessageBox.alert(d.summary || '摘要生成完成', 'AI 会话摘要（' + (d.sentiment || 'neutral') + '）', { confirmButtonText: '知道了' })
     } catch (e) {
-      ElMessage.error(e?.message || '摘要生成失败')
+      if (!isUserReportedError(e)) ElMessage.error(e?.message || '摘要生成失败')
     } finally { summaryLoading.value = false }
   };
 
@@ -69,7 +70,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       a.remove()
       URL.revokeObjectURL(url)
     } catch (e) {
-      ElMessage.error(e?.message || '导出失败')
+      if (!isUserReportedError(e)) ElMessage.error(e?.message || '导出失败')
     }
   }
 
@@ -79,7 +80,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
     try {
       await http.post(`/api/customer-sessions/${sid}/snooze`, { hours: 2 })
       ElMessage.success('会话已暂缓 2 小时')
-    } catch (e) { ElMessage.error(e?.message || '暂缓失败') }
+    } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '暂缓失败') }
   }
 
   const setPriorityCurrent = async () => {
@@ -91,7 +92,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       currentSession.value.priority = Number(value)
       ElMessage.success('优先级已更新')
     } catch (e) {
-      if (e !== 'cancel' && e !== 'close') ElMessage.error(e?.message || '设置失败')
+      if (!isUserReportedError(e)) ElMessage.error(e?.message || '设置失败')
     }
   }
 
@@ -119,7 +120,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       currentSession.value = null
       reloadSessions()
     } catch (e) {
-      if (e !== 'cancel') ElMessage.error(i18n.global.t('操作失败'))
+      if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('操作失败'))
     }
   }
 
@@ -138,7 +139,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       }
       ElMessage.success('已接管会话，现在可以与客户对话')
     } catch (e) {
-      ElMessage.error('接管失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('接管失败：' + (e?.message || ''))
     } finally {
       handlerSwitching.value = false
     }
@@ -158,7 +159,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       currentSession.value.status = 'waiting'
       ElMessage.success('已释放回 AI 托管')
     } catch (e) {
-      if (e !== 'cancel') ElMessage.error('释放失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('释放失败：' + (e?.message || ''))
     } finally {
       handlerSwitching.value = false
     }
@@ -202,7 +203,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       ElMessage.success('已加入黑名单，该会话已关闭')
       reloadSessions()
     } catch (e) {
-      ElMessage.error('拉黑失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('拉黑失败：' + (e?.message || ''))
     }
   }
 
@@ -219,7 +220,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       blacklistItems.value = list
     } catch (e) {
       blacklistItems.value = []
-      ElMessage.error('加载黑名单失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('加载黑名单失败：' + (e?.message || ''))
     } finally {
       blacklistLoading.value = false
     }
@@ -238,7 +239,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
       ElMessage.success('已解除拉黑')
       await loadBlacklist()
     } catch (e) {
-      if (e !== 'cancel') ElMessage.error('解除失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('解除失败：' + (e?.message || ''))
     }
   };
 
@@ -257,7 +258,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
         ElMessage.info(i18n.global.t('未检测到坐席身份，状态仅本地保存'))
       }
     } catch (e) {
-      ElMessage.error('状态切换失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('状态切换失败：' + (e?.message || ''))
       myStatus.value = 'offline';
     }
   };

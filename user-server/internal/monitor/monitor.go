@@ -181,6 +181,32 @@ type AnomalyGroups struct {
 	NodeAbnormal     []NodeAbnormalRow `json:"node_abnormal"`
 }
 
+// Trim 把每个分组截断到 n 条，供 handler 兑现 `?limit=` 入参。
+//
+// 说明：原先 handler 完全忽略 limit，前端传 20 也照样收到全量（一个卡死会话
+// 群就能回几百条），列表页靠前端自行 slice 兜底 —— 契约与实现不一致。
+// n <= 0 时不做任何裁剪。
+func (g *AnomalyGroups) Trim(n int) {
+	if g == nil || n <= 0 {
+		return
+	}
+	if len(g.SyncGap) > n {
+		g.SyncGap = g.SyncGap[:n]
+	}
+	if len(g.StuckReachable) > n {
+		g.StuckReachable = g.StuckReachable[:n]
+	}
+	if len(g.StuckUnreachable) > n {
+		g.StuckUnreachable = g.StuckUnreachable[:n]
+	}
+	if len(g.Unreachable) > n {
+		g.Unreachable = g.Unreachable[:n]
+	}
+	if len(g.NodeAbnormal) > n {
+		g.NodeAbnormal = g.NodeAbnormal[:n]
+	}
+}
+
 // Anomalies 返回当前业务链路异常分组清单。
 //
 // ctx 进 GORM 的理由与 HealthOverview 同一条，且这里更糟：四类异常逐条 log 后继续，

@@ -358,6 +358,9 @@ const addInterceptors = () => {
 
         const msg = extractServerMessage(data, t('http.requestFailed'))
         const bizCode = data && data.code
+        // 服务端明确给出的 message 才有信息量；空则用本地兜底文案，
+        // 不能拿 extractServerMessage 的 fallback（「请求失败」）盖掉更具体的分类文案。
+        const serverMsg = data && typeof data.message === 'string' ? data.message.trim() : ''
 
         switch (status) {
           case 401: {
@@ -368,11 +371,14 @@ const addInterceptors = () => {
             }
             break
           }
+          // 403/404 的服务端文案往往带「怎么才能用」的可执行信息
+          // （如「平台集成未启用（设 PLATFORM_ENABLED=true …）」），
+          // 一律盖成「拒绝访问 / 资源不存在」会让用户无从下手。
           case 403:
-            if (!silent) showToast(t('http.accessDenied'))
+            if (!silent) showToast(serverMsg || t('http.accessDenied'))
             break
           case 404:
-            if (!silent) showToast(t('http.notFound'))
+            if (!silent) showToast(serverMsg || t('http.notFound'))
             break
           case 429:
             if (!silent) showToast(msg || t('http.tooManyRequests'))

@@ -400,6 +400,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { toList } from '@/utils/list'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { formatDate } from '@/utils/format'
 import {
   getIntegrations,
@@ -581,7 +582,7 @@ const submitForm = async () => {
       dialogVisible.value = false
       refreshData()
     } catch (error) {
-      ElMessage.error(error?.message || i18n.global.t('保存失败'))
+      if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('保存失败'))
     } finally {
       submitting.value = false
     }
@@ -595,7 +596,7 @@ const toggleIntegration = async (row, nextStatus) => {
     row.status = nextStatus
     ElMessage.success(i18n.global.t('状态已更新'))
   } catch (error) {
-    ElMessage.error(error?.message || i18n.global.t('状态更新失败'))
+    if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('状态更新失败'))
   } finally {
     togglingId.value = 0
   }
@@ -613,7 +614,7 @@ const testConnection = async (row) => {
     }
   } catch (error) {
     pending.close()
-    ElMessage.error(error?.message || i18n.global.t('测试失败'))
+    if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('测试失败'))
   }
 }
 
@@ -626,7 +627,7 @@ const viewLogs = async (row) => {
     const data = await getIntegrationLogs({ page: 1, page_size: LOG_PAGE_SIZE })
     logs.value = toList(data).filter(log => log.platform === row.platform)
   } catch (error) {
-    ElMessage.error(error?.message || i18n.global.t('获取日志失败'))
+    if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('获取日志失败'))
   } finally {
     logsLoading.value = false
   }
@@ -648,7 +649,7 @@ const deleteIntegration = async (row) => {
     ElMessage.success(i18n.global.t('删除成功'))
     refreshData()
   } catch (error) {
-    ElMessage.error(error?.message || i18n.global.t('删除失败'))
+    if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('删除失败'))
   }
 }
 

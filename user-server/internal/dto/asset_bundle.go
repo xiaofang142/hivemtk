@@ -30,7 +30,9 @@ type AssetBundleCreateRequest struct {
 
 // AssetBundleUpdateRequest 更新资产包请求
 type AssetBundleUpdateRequest struct {
-	ID          int64                `json:"id" binding:"required"`
+	// ID 由路由参数 :id 注入（见 controller.Update），因此 body 里不强制携带；
+	// 曾用 binding:"required" 强制 body 回传 id，违反 REST 语义，外部客户端必踩。
+	ID          int64                `json:"id"`
 	Title       string               `json:"title"`
 	Description string               `json:"description"`
 	Author      string               `json:"author"`

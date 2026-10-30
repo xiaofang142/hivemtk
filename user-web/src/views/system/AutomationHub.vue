@@ -397,6 +397,7 @@
 import { ref, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const oh = ref({ enabled: false, daily_ranges: [['09:00', '18:00']], away_message: '' })
 const macros = ref([])
@@ -435,16 +436,17 @@ const saveOH = async () => {
   try {
     await http.put('/api/office-hours', oh.value)
     ElMessage.success('办公时间策略已保存')
-  } catch (e) { ElMessage.error(e?.message || '保存失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '保存失败') }
 }
 
 const addMacro = async () => {
+  if (!newMacro.value.name.trim()) { ElMessage.warning('请输入宏名称'); return }
   try {
     await http.post('/api/macros', { name: newMacro.value.name, actions: [{ type: newMacro.value.type, value: newMacro.value.value }] })
     ElMessage.success('宏已创建')
     newMacro.value = { name: '', type: 'add_note', value: '' }
     loadAll()
-  } catch (e) { ElMessage.error(e?.message || '创建失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '创建失败') }
 }
 
 const delMacro = async (row) => {
@@ -452,15 +454,27 @@ const delMacro = async (row) => {
     await ElMessageBox.confirm(`删除宏「${row.name}」？`, '确认', { type: 'warning' })
     await http.delete(`/api/macros/${row.id}`)
     loadAll()
-  } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error('删除失败') }
+  } catch (e) { if (e !== 'cancel' && e !== 'close' && !isUserReportedError(e)) ElMessage.error('删除失败') }
 }
 
 const addHook = async () => {
+  // 后端 URL 是 binding:"required"，空值直接 400 并回显 Go validator 原文，
+  // 这里先本地校验，避免把 Key: 'URL' ... 这种内部报错甩给用户。
+  const url = (newHook.value.url || '').trim()
+  if (!url) { ElMessage.warning('请输入 Webhook URL'); return }
+  if (!/^https?:\/\//i.test(url)) { ElMessage.warning('URL 需以 http:// 或 https:// 开头'); return }
   try {
-    const res = await http.post('/api/webhook-subscriptions', newHook.value)
-    ElMessageBox.alert(`订阅创建成功。签名密钥（仅显示一次，用于校验推送）：\n${res?.data?.secret || ''}`, '请保存 Secret')
+    const res = await http.post('/api/webhook-subscriptions', { ...newHook.value, url })
+    // 拦截器已把 {code,message,data} 拆成 data：secret 在 res.secret，不在 res.data.secret。
+    const secret = res?.secret || ''
+    if (secret) {
+      ElMessageBox.alert(`订阅创建成功。签名密钥（仅显示一次，用于校验推送）：\n${secret}`, '请保存 Secret')
+    } else {
+      ElMessage.success('订阅已创建')
+    }
+    newHook.value = { url: '', events: 'all' }
     loadAll()
-  } catch (e) { ElMessage.error(e?.message || '创建失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '创建失败') }
 }
 
 const delHook = async (row) => {
@@ -468,30 +482,33 @@ const delHook = async (row) => {
     await ElMessageBox.confirm(`删除订阅 ${row.url}？`, '确认', { type: 'warning' })
     await http.delete(`/api/webhook-subscriptions/${row.id}`)
     loadAll()
-  } catch (e) { if (e !== 'cancel' && e !== 'close') ElMessage.error('删除失败') }
+  } catch (e) { if (e !== 'cancel' && e !== 'close' && !isUserReportedError(e)) ElMessage.error('删除失败') }
 }
 
 const addSub = async () => {
+  const email = (newSub.value.email || '').trim()
+  if (!email) { ElMessage.warning('请输入接收邮箱'); return }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { ElMessage.warning('邮箱格式不正确'); return }
   try {
-    await http.post('/api/report-subscriptions', newSub.value)
+    await http.post('/api/report-subscriptions', { ...newSub.value, email })
     ElMessage.success('订阅成功（每日 08:00 发送昨日汇总）')
     newSub.value = { email: '', schedule: 'daily' }
     loadAll()
-  } catch (e) { ElMessage.error(e?.message || '订阅失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '订阅失败') }
 }
 
 const delSub = async (row) => {
   try {
     await http.delete(`/api/report-subscriptions/${row.id}`)
     loadAll()
-  } catch (e) { ElMessage.error('退订失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error('退订失败') }
 }
 
 const sendNow = async () => {
   try {
     const res = await http.post('/api/report-subscriptions/send-now')
-    ElMessage.success(`已发送 ${res?.data?.sent ?? 0} 份（未配置 SMTP 时会失败并记录日志）`)
-  } catch (e) { ElMessage.error(e?.message || '发送失败') }
+    ElMessage.success(`已发送 ${res?.sent ?? 0} 份（未配置 SMTP 时会失败并记录日志）`)
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '发送失败') }
 }
 
 onMounted(loadAll)

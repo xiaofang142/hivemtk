@@ -176,6 +176,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { listBindings, createBinding, updateBinding, deleteBinding } from '@/api/channelAgentBinding.js'
 import { listEnabledAgents } from '@/api/aiAgent.js'
 import { getChannelLabel } from '@/constants/channel'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -212,7 +213,7 @@ const loadBindings = async () => {
     const res = await listBindings({ channel_type: props.channelType, account_id: String(props.accountId) })
     bindings.value = res?.list || []
   } catch (e) {
-    ElMessage.error('加载绑定失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('加载绑定失败：' + (e.message || '未知错误'))
     bindings.value = []
   } finally {
     loading.value = false
@@ -250,7 +251,7 @@ const addBinding = async () => {
     addForm.is_primary = true
     await loadBindings()
   } catch (e) {
-    ElMessage.error('绑定失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('绑定失败：' + (e.message || '未知错误'))
   } finally {
     adding.value = false
   }
@@ -268,7 +269,7 @@ const setPrimary = async (row) => {
     ElMessage.success(i18n.global.t('已设为主绑定'))
     await loadBindings()
   } catch (e) {
-    ElMessage.error('设置失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('设置失败：' + (e.message || '未知错误'))
   }
 }
 
@@ -280,7 +281,7 @@ const removeBinding = (row) => {
         ElMessage.success(i18n.global.t('解绑成功'))
         await loadBindings()
       } catch (e) {
-        ElMessage.error('解绑失败：' + (e.message || '未知错误'))
+        if (!isUserReportedError(e)) ElMessage.error('解绑失败：' + (e.message || '未知错误'))
       }
     })
     .catch(() => {})

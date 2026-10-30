@@ -209,6 +209,11 @@ func TestAPIFieldPathShapes(t *testing.T) {
 			t.Errorf("apiFieldPath(%q) = %q want %q", ns, got, want)
 		}
 	}
+	// 匿名结构体（handler 内联的 req）没有结构体名前缀：Namespace 就是字段名本身，
+	// 不能当结构体名丢掉——实测 PUT /tasks/:id/dependency 回显过「DependsOnMode」。
+	if got := apiFieldPath("DependsOnMode", map[string]string{"DependsOnMode": "depends_on_mode"}); got != "depends_on_mode" {
+		t.Errorf("匿名结构体字段的对外名 = %q want depends_on_mode", got)
+	}
 	// 表里没有的名字按原样带出：新增字段忘写 tag 时要点得出字段，而不是给一条空消息
 	if got := apiFieldPath("X.SomeNewField", names); got != "SomeNewField" {
 		t.Errorf("未知字段的兜底 = %q want SomeNewField", got)

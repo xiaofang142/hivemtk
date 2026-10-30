@@ -662,8 +662,10 @@ const intervene = (row) => {
 const confirmIntervene = async () => {
   submittingIntervene.value = true
   try {
+    // 干预按钮在预测列表行上，行里只有 user_id（没有预警 ID）；后端按 user_id
+    // 取该用户最新一条未处理预警。不要把 user_id 当 warning_id 传。
     await interveneUser({
-      warning_id: interveneForm.userId,
+      user_id: interveneForm.userId,
       intervention_type: interveneForm.method,
       note: interveneForm.content,
     })

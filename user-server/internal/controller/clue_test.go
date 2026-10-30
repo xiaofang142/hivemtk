@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/dto"
@@ -209,7 +210,10 @@ func TestClueController_ImportClues_Success(t *testing.T) {
 	}
 }
 
-// TestClueController_ImportClues_EmptyArray 测试导入空数组
+// TestClueController_ImportClues_EmptyArray 空数组导入按参数错误拒绝。
+//
+// 原实现回 200 {success_count:0,skip_count:0}：接口看起来成功、实际什么都没做，
+// 调用方无法分辨「文件解析出 0 行」与「导入成功」，故改为 400。
 func TestClueController_ImportClues_EmptyArray(t *testing.T) {
 	setupClueTestDB(t)
 	ctrl, router := setupClueController(t)
@@ -223,8 +227,11 @@ func TestClueController_ImportClues_EmptyArray(t *testing.T) {
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status OK, got %d, body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status BadRequest, got %d, body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "导入数据不能为空") {
+		t.Errorf("Expected 空数组原因，body: %s", w.Body.String())
 	}
 }
 

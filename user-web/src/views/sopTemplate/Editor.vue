@@ -99,6 +99,30 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item
+              label="智能体"
+              prop="agent_id"
+            >
+              <el-select
+                v-model="form.agent_id"
+                filterable
+                clearable
+                placeholder="选择模板归属的智能体"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="a in agentOptions"
+                  :key="a.id"
+                  :label="a.name"
+                  :value="a.id"
+                />
+              </el-select>
+              <div class="form-tip">
+                每条 SOP 模板必须归属一个智能体（1 对 1 绑定）
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="优先级">
               <el-input-number
                 v-model="form.priority"
@@ -240,6 +264,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Tickets, Document, Setting, Check } from '@element-plus/icons-vue'
 import { sopTemplateApi } from '@/api/sopTemplate'
+import { listEnabledAgents } from '@/api/aiAgent'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const t = i18n.global.t
 const route = useRoute()
@@ -265,6 +291,7 @@ const stageOptions = [
 
 const getDefaultForm = () => ({
   name: '',
+  agent_id: null,
   intent: '',
   stage: 'middle',
   template: '',
@@ -276,12 +303,30 @@ const getDefaultForm = () => ({
 
 const form = reactive(getDefaultForm())
 
+const agentOptions = ref([])
+
+const loadAgentOptions = async () => {
+  try {
+    const res = await listEnabledAgents()
+    const list = Array.isArray(res) ? res : (res?.list || [])
+    agentOptions.value = list
+    if (!form.agent_id && list.length) {
+      form.agent_id = list[0].id
+    }
+  } catch (e) {
+    console.warn('加载智能体列表失败', e)
+  }
+}
+
 const rules = {
   name: [
     { required: true, message: t('请输入模板名称'), trigger: 'blur' }
   ],
   intent: [
     { required: true, message: t('请输入关联意图'), trigger: 'change' }
+  ],
+  agent_id: [
+    { required: true, message: '请选择智能体', trigger: 'change' }
   ],
   stage: [
     { required: true, message: t('请选择 SOP 阶段'), trigger: 'change' }
@@ -315,7 +360,7 @@ const loadDetail = async () => {
       form.enabled = res.enabled !== false
     }
   } catch (e) {
-    ElMessage.error('加载 SOP 模板详情失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('加载 SOP 模板详情失败：' + (e.message || '未知错误'))
     goBack()
   } finally {
     pageLoading.value = false
@@ -333,6 +378,7 @@ const onSave = async () => {
     try {
       const data = {
         name: form.name,
+        agent_id: form.agent_id,
         intent: form.intent,
         stage: form.stage,
         template: form.template,
@@ -350,7 +396,7 @@ const onSave = async () => {
       }
       goBack()
     } catch (e) {
-      ElMessage.error('保存失败：' + (e.message || '未知错误'))
+      if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || '未知错误'))
     } finally {
       saving.value = false
     }
@@ -362,6 +408,7 @@ const goBack = () => {
 }
 
 onMounted(() => {
+  loadAgentOptions()
   loadDetail()
 })
 </script>

@@ -161,13 +161,13 @@
 
 <script setup>
 import i18n from '@/i18n'
-import { ref, reactive, markRaw } from 'vue';
+import { ref, reactive, markRaw, h, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   DataLine, PieChart, Document, Histogram, TrendCharts, LocationInformation
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import { safeInit } from '@/utils/echarts'
+import { safeInit, safeDispose } from '@/utils/echarts'
 import { http } from '@/utils/request'
 
 const blockTypes = [
@@ -204,30 +204,64 @@ function onDrop(e) {
   ElMessage.success(i18n.global.t('dashboardScreenPage.componentAdded'))
 }
 
+// 图表组件必须用渲染函数定义：本项目打包的是 vue 运行时版（不含模板编译器），
+// 且 defineAsyncComponent 的 loader 必须返回 Promise，原先返回普通对象会抛
+// "loader(...).catch is not a function" 导致整个看板白屏。
 function resolveChart(type) {
   return markRaw({
-    line: defineAsyncComponent(() => loadChart(type)),
-    bar: defineAsyncComponent(() => loadChart(type)),
-    pie: defineAsyncComponent(() => loadChart(type)),
-    kpi: markRaw({ template: '<div class="kpi">{{ data.value }}</div>' }),
-    funnel: defineAsyncComponent(() => loadChart(type)),
-    map: defineAsyncComponent(() => loadChart(type))
-  }[type] || markRaw({ template: '未知' }))
+    line: createChart('line'),
+    bar: createChart('bar'),
+    pie: createChart('pie'),
+    kpi: createKpi(),
+    funnel: createChart('funnel'),
+    map: createChart('map')
+  }[type] || markRaw({ render: () => h('div', { class: 'chart-area' }, '未知') }))
 }
 
-import { defineAsyncComponent } from 'vue'
-function loadChart(type) {
-  return {
-    template: `<div ref="chart" class="chart-area"></div>`,
-    mounted() {
-      const c = safeInit(this.$refs.chart)
-      c.setOption({
-        xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] },
-        yAxis: { type: 'value' },
-        series: [{ type: '${type}', data: [10, 20, 30, 40] }]
-      })
-    }
+function createChart(type) {
+  // echarts 5 不内置任何行政区划 GeoJSON，直接 series.type='map' 会抛
+  // "Map not exists / Cannot read properties of undefined (reading 'regions')"。
+  // 地图块先给出可读占位提示，待接入行政区划数据后再启用真实地图。
+  if (type === 'map') {
+    return markRaw({
+      props: { data: { type: Object, default: () => ({}) } },
+      setup() {
+        return () => h('div', { class: 'chart-area map-placeholder' }, '地图组件需接入行政区划数据后显示')
+      }
+    })
   }
+  return markRaw({
+    props: { data: { type: Object, default: () => ({}) } },
+    setup() {
+      const el = ref(null)
+      let chart = null
+      onMounted(() => {
+        if (!el.value) return
+        chart = safeInit(el.value)
+        if (!chart) return
+        chart.setOption({
+          xAxis: { type: 'category', data: ['A', 'B', 'C', 'D'] },
+          yAxis: { type: 'value' },
+          series: [{ type, data: [10, 20, 30, 40] }]
+        })
+      })
+      // 组件销毁时释放 echarts 实例，避免看板反复增删组件后内存与事件监听堆积
+      onBeforeUnmount(() => {
+        if (chart) safeDispose(chart)
+        chart = null
+      })
+      return () => h('div', { ref: el, class: 'chart-area' })
+    }
+  })
+}
+
+function createKpi() {
+  return markRaw({
+    props: { data: { type: Object, default: () => ({}) } },
+    setup(props) {
+      return () => h('div', { class: 'kpi' }, props.data?.value ?? 0)
+    }
+  })
 }
 
 function blockStyle(b) {
@@ -295,6 +329,15 @@ async function save() {
 .canvas-block { position: relative; display: inline-block; background: #F8FAFC; border-radius: 6px; padding: 12px; margin: 4px; vertical-align: top; }
 .block-toolbar { position: absolute; right: 4px; top: 4px; }
 .chart-area { width: 100%; height: 180px; }
+.map-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+}
 .block-title { text-align: center; font-size: 12px; color: #94A3B8; margin-top: 4px; }
 .kpi { font-size: 32px; font-weight: 700; text-align: center; color: #4F46E5; }
 </style>

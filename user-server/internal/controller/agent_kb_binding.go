@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -63,8 +64,7 @@ func (c *AgentKBBindingController) ListByAgent(ctx *gin.Context) {
 		return
 	}
 	list, err := c.svc.ListByAgent(ctx.Request.Context(), uint(aid))
-	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	if errhttp.HandleDBError(ctx, err, "查询智能体绑定") {
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -89,8 +89,7 @@ func (c *AgentKBBindingController) ListByKB(ctx *gin.Context) {
 		return
 	}
 	list, err := c.svc.ListByKB(ctx.Request.Context(), uint(kid))
-	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	if errhttp.HandleDBError(ctx, err, "查询知识库绑定") {
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -112,7 +111,7 @@ func (c *AgentKBBindingController) ReplaceByAgent(ctx *gin.Context) {
 	}
 	var req agentKBReplaceReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：kb_ids 必须是字符串数组")
 		return
 	}
 	kbIDs := make([]uint, 0, len(req.KbIDs))
@@ -125,7 +124,11 @@ func (c *AgentKBBindingController) ReplaceByAgent(ctx *gin.Context) {
 		kbIDs = append(kbIDs, uint(v))
 	}
 	if err := c.svc.ReplaceByAgent(ctx.Request.Context(), uint(aid), kbIDs); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, err.Error())
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "同步知识库绑定")
 		return
 	}
 	response.Success(ctx, gin.H{"agent_id": aid, "count": len(kbIDs)}, "同步成功")
@@ -142,8 +145,7 @@ func (c *AgentKBBindingController) UnbindByPath(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的 agent_id 或 kb_id")
 		return
 	}
-	if err := c.svc.Unbind(ctx.Request.Context(), uint(aid), uint(kbId)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	if err := c.svc.Unbind(ctx.Request.Context(), uint(aid), uint(kbId)); errhttp.HandleDBError(ctx, err, "解绑知识库") {
 		return
 	}
 	response.Success(ctx, gin.H{"agent_id": aid, "knowledge_base_id": kbId}, "解绑成功")
@@ -162,7 +164,7 @@ type agentKBBindReq struct {
 func (c *AgentKBBindingController) Bind(ctx *gin.Context) {
 	var req agentKBBindReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：agent_id 与 knowledge_base_id 均为必填")
 		return
 	}
 	if req.AgentID == 0 {
@@ -174,7 +176,13 @@ func (c *AgentKBBindingController) Bind(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Bind(ctx.Request.Context(), req.AgentID, req.KnowledgeBaseID, req.Priority); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		// 知识库不存在时保留带 id 的具体原因（"知识库 999999 不存在"），
+		// 通用 HandleDBError 会把它统一压成"记录不存在"，排查时看不出是哪个 kb。
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, err.Error())
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "绑定知识库")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -198,8 +206,7 @@ func (c *AgentKBBindingController) BatchBind(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-	if err := c.svc.BatchBind(ctx.Request.Context(), req.Items); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	if err := c.svc.BatchBind(ctx.Request.Context(), req.Items); errhttp.HandleDBError(ctx, err, "批量绑定知识库") {
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -230,8 +237,7 @@ func (c *AgentKBBindingController) Unbind(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "knowledge_base_id 必填且 > 0")
 		return
 	}
-	if err := c.svc.Unbind(ctx.Request.Context(), req.AgentID, req.KnowledgeBaseID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	if err := c.svc.Unbind(ctx.Request.Context(), req.AgentID, req.KnowledgeBaseID); errhttp.HandleDBError(ctx, err, "解绑知识库") {
 		return
 	}
 	response.Success(ctx, gin.H{

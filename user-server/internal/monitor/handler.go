@@ -40,12 +40,29 @@ func healthHandler(c *gin.Context) {
 	response.Success(c, h, "success")
 }
 
+// anomaliesLimitDefault / anomaliesLimitCap：`?limit=` 的缺省与上限。
+// 每类异常单独截断（前端按分组渲染折叠区块，全局截断会让后几组恒空）。
+const (
+	anomaliesLimitDefault = 50
+	anomaliesLimitCap     = 200
+)
+
 func anomaliesHandler(c *gin.Context) {
 	a, err := Anomalies(c.Request.Context())
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	limit := anomaliesLimitDefault
+	if v := c.Query("limit"); v != "" {
+		if n, convErr := strconv.Atoi(v); convErr == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > anomaliesLimitCap {
+		limit = anomaliesLimitCap
+	}
+	a.Trim(limit)
 	response.Success(c, a, "success")
 }
 

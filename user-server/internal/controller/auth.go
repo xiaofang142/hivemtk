@@ -675,7 +675,20 @@ func (c *SystemUserController) GetUsers(ctx *gin.Context) {
 		pageSize = 10
 	}
 
-	users, total, err := c.userService.GetUsers(ctx.Request.Context(), page, pageSize)
+	// keyword 不是可选装饰：前端 UserList.vue 的搜索框就是往本端点丢 keyword，
+	// 这里不认就等于搜索框点了没反应（2026-10-31 API 回归实测 total 恒为全量）。
+	// 复用 SearchUsers 的服务实现，保持分页形状一致，不再复制一份查询条件。
+	keyword := strings.TrimSpace(ctx.Query("keyword"))
+	var (
+		users []*service.SystemUserResponse
+		total int64
+		err   error
+	)
+	if keyword != "" {
+		users, total, err = c.userService.SearchUsers(ctx.Request.Context(), keyword, page, pageSize)
+	} else {
+		users, total, err = c.userService.GetUsers(ctx.Request.Context(), page, pageSize)
+	}
 	if err != nil {
 		response.ErrorFromDB(ctx, err, err.Error())
 		return

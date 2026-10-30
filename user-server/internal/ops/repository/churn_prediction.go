@@ -195,6 +195,21 @@ func (r *ChurnWarningRepository) GetUnhandled(ctx context.Context, page, pageSiz
 	return warnings, total, err
 }
 
+// LatestUnhandledByUser 取某用户最新一条未处理预警（0 行 ⇒ ErrRecordNotFound）。
+//
+// 供「按用户干预」使用：预测列表行只有 user_id，没有预警 ID。
+func (r *ChurnWarningRepository) LatestUnhandledByUser(ctx context.Context, userID string) (*model.ChurnWarning, error) {
+	var warning model.ChurnWarning
+	err := r.db.WithContext(ctx).
+		Where("user_id = ? AND is_handled = ?", userID, false).
+		Order("created_at DESC").
+		First(&warning).Error
+	if err != nil {
+		return nil, err
+	}
+	return &warning, nil
+}
+
 // Update 整行回写流失预警。走 db.SaveWholeRow：裸 Save 命中 0 行会回退成
 // INSERT 把已删预警按原 id 插回。
 func (r *ChurnWarningRepository) Update(ctx context.Context, warning *model.ChurnWarning) error {

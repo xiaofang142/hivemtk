@@ -395,6 +395,7 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { geoApi } from '@/api/geo.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 import {
   listPlatforms as fetchPlatforms,
   listPlatformAccounts,
@@ -520,7 +521,7 @@ const saveAccount = async () => {
     accountDialogVisible.value = false
     await loadAccounts()
   } catch (e) {
-    ElMessage.error(e?.message || '保存失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '保存失败')
   }
 }
 

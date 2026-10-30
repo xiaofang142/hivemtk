@@ -59,6 +59,22 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="导入到智能体">
+          <el-select
+            v-model="targetAgentId"
+            filterable
+            clearable
+            placeholder="选择接收导入的智能体"
+            style="width: 200px"
+          >
+            <el-option
+              v-for="a in agentOptions"
+              :key="a.id"
+              :label="a.name"
+              :value="a.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button
             type="primary"
@@ -280,6 +296,8 @@ import {
   ChatLineRound
 } from '@element-plus/icons-vue'
 import { sopTemplateApi } from '@/api/sopTemplate'
+import { listEnabledAgents } from '@/api/aiAgent'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const builtInTemplates = ref([
   {
@@ -468,6 +486,21 @@ const builtInTemplates = ref([
 
 const loading = ref(false);
 const filter = ref({ keyword: '', category: '' })
+const targetAgentId = ref(null)
+const agentOptions = ref([])
+
+const loadAgentOptions = async () => {
+  try {
+    const res = await listEnabledAgents()
+    const list = Array.isArray(res) ? res : (res?.list || [])
+    agentOptions.value = list
+    if (!targetAgentId.value && list.length) {
+      targetAgentId.value = list[0].id
+    }
+  } catch (e) {
+    console.warn('加载智能体列表失败', e)
+  }
+}
 const detailVisible = ref(false)
 const currentTpl = ref(null)
 
@@ -539,11 +572,16 @@ const showDetail = (tpl) => {
 }
 
 const onImport = async (tpl) => {
+  if (!targetAgentId.value) {
+    ElMessage.warning('请先在筛选栏选择「导入到智能体」')
+    return
+  }
   tpl._importing = true
   try {
     await sopTemplateApi.create({
       code: tpl.code,
       name: tpl.name,
+      agent_id: targetAgentId.value,
       intent: tpl.intent,
       stage: tpl.stage,
       template: tpl.template,
@@ -558,13 +596,14 @@ const onImport = async (tpl) => {
       detailVisible.value = false
     }
   } catch (e) {
-    ElMessage.error('导入失败：' + (e?.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('导入失败：' + (e?.message || '未知错误'))
   } finally {
     tpl._importing = false
   }
 }
 
 onMounted(() => {
+  loadAgentOptions()
   loadImportedState()
 })
 </script>

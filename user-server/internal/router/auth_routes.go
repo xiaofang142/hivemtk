@@ -115,7 +115,7 @@ func setupShortLinkRoutes(auth *gin.RouterGroup, public *gin.RouterGroup, gormDB
 		admin.POST("/shortlink/create", shortLinkCtrl.Create)
 		admin.PUT("/shortlink/update", shortLinkCtrl.Update)
 		admin.DELETE("/shortlink/delete/:id", shortLinkCtrl.Delete)
-		admin.POST("/shortlink/generate", shortLinkCtrl.Create)
+		admin.POST("/shortlink/generate", shortLinkCtrl.GenerateShortCode)
 		admin.POST("/shortlink/:id/share", shortLinkStatsCtrl.ShareShortLink)
 	}
 	public.POST("/short-link/access", shortLinkCtrl.AccessShortLink)

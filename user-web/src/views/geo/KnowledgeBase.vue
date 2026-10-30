@@ -206,6 +206,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listKBDocuments, saveKBDocument, deleteKBDocument, askKB, extractEntities } from '@/api/geoEntity.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const docs = ref([])
 const loading = ref(false)
@@ -254,7 +255,7 @@ const onUpload = async (file) => {
     ElMessage.success('文档上传成功')
     await loadDocs()
   } catch (e) {
-    ElMessage.error(e?.message || '上传失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '上传失败')
   }
   return false
 }
@@ -263,7 +264,7 @@ const onUpdateLevel = async (row) => {
   try {
     await saveKBDocument({ id: row.id || row.doc_id, source_level: row.source_level, title: row.title || row.filename, content: row.content || '' })
     ElMessage.success('已更新')
-  } catch (e) { ElMessage.error(e?.message || '更新失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '更新失败') }
 }
 
 const onDelete = async (row) => {
@@ -271,7 +272,7 @@ const onDelete = async (row) => {
     await deleteKBDocument(row.id || row.doc_id)
     ElMessage.success('已删除')
     loadDocs()
-  } catch (e) { ElMessage.error(e?.message || '删除失败') }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '删除失败') }
 }
 
 const onExtract = async (row) => {
@@ -280,7 +281,7 @@ const onExtract = async (row) => {
     await extractEntities(row.id || row.doc_id)
     ElMessage.success('实体抽取完成')
     loadDocs()
-  } catch (e) { ElMessage.error('抽取失败：' + (e?.message || e)) }
+  } catch (e) { if (!isUserReportedError(e)) ElMessage.error('抽取失败：' + (e?.message || e)) }
   extractLoading.value = null
 }
 

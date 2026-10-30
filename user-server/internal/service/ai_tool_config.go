@@ -87,7 +87,14 @@ func (s *AIToolConfigService) GetToolAccounts(ctx context.Context, toolName stri
 }
 
 // BindAccount 绑定账号到工具
+//
+// 先确认工具存在：绑定表只按 tool_name 存字符串，没有外键，不校验就会静默写出一条
+// 指向不存在工具的孤儿绑定（GET /:name 永远查不到它，DELETE 也删不掉）。
 func (s *AIToolConfigService) BindAccount(ctx context.Context, toolName, accountType, accountID string, isPrimary bool) error {
+	if _, err := s.toolRepo.GetByName(ctx, toolName); err != nil {
+		return err
+	}
+
 	binding := &model.AIToolAccountBinding{
 		ToolName:    toolName,
 		AccountType: accountType,

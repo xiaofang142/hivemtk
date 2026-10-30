@@ -389,6 +389,22 @@
         :model="testForm"
         label-width="80px"
       >
+        <el-form-item label="智能体">
+          <el-select
+            v-model="testForm.agent_id"
+            filterable
+            clearable
+            placeholder="请选择要匹配的智能体"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="a in agentOptions"
+              :key="a.id"
+              :label="a.name || a.agent_name || ('智能体 ' + a.id)"
+              :value="a.id"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="测试问题">
           <el-input
             v-model="testForm.msg"
@@ -479,6 +495,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, Aim } from '@element-plus/icons-vue'
 import { faqApi } from '@/api/faq'
 import { listKBs } from '@/api/knowledgeBase'
+import { listEnabledAgents } from '@/api/aiAgent'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const router = useRouter()
 
@@ -538,7 +556,9 @@ const categoryCount = computed(() => {
 const testDialogVisible = ref(false);
 const testLoading = ref(false)
 const testTouched = ref(false)
-const testForm = ref({ msg: '' })
+// 后端 /api/faqs/match 要求 agent_id（FAQ 与智能体 1 对 1），不传必然 400
+const testForm = ref({ msg: '', agent_id: null })
+const agentOptions = ref([])
 const testResult = ref([])
 
 const truncate = (text, len) => {
@@ -625,8 +645,21 @@ const goEdit = (row) => {
 const goTest = () => {
   testTouched.value = false
   testResult.value = []
-  testForm.value = { msg: '' }
+  testForm.value = { msg: '', agent_id: testForm.value.agent_id || null }
   testDialogVisible.value = true
+  loadAgentOptions()
+}
+
+const loadAgentOptions = async () => {
+  if (agentOptions.value.length) return
+  try {
+    const res = await listEnabledAgents()
+    const list = Array.isArray(res) ? res : (res?.list || [])
+    agentOptions.value = list
+    if (!testForm.value.agent_id && list.length) testForm.value.agent_id = list[0].id
+  } catch {
+    agentOptions.value = []
+  }
 }
 
 const onToggle = async (row, v) => {
@@ -674,6 +707,7 @@ const onTestOne = (row) => {
   testTouched.value = true
   testForm.value.msg = row.question
   testDialogVisible.value = true
+  loadAgentOptions()
   runTest()
 };
 
@@ -682,20 +716,25 @@ const runTest = async () => {
     ElMessage.warning('请输入测试问题')
     return
   }
+  if (!testForm.value.agent_id) {
+    ElMessage.warning('请选择智能体')
+    return
+  }
   testLoading.value = true
   testTouched.value = true
   try {
-    const res = await faqApi.match({ msg: testForm.value.msg, top_k: 5 })
+    const res = await faqApi.match({ msg: testForm.value.msg, top_k: 5, agent_id: testForm.value.agent_id })
     testResult.value = res || []
   } catch (e) {
     testResult.value = []
-    ElMessage.error('匹配失败：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('匹配失败：' + (e.message || '未知错误'))
   } finally {
     testLoading.value = false
   }
 };
 
 onMounted(() => {
+  loadAgentOptions()
   loadKBMap()
   loadList()
   loadStats()

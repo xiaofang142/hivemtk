@@ -67,6 +67,11 @@ export function resolveRoutePattern(matched: Array<{ path: string }> | undefined
  * 本仓的 hook 需要按「有没有外壳」来决定要不要开导览，所以先在开导览前自查。
  */
 function hasLayoutChrome(steps: OnboardingStep[]): boolean {
+  // 判定依据必须是 Layout 外壳本身，不能只看“某个步骤目标存在”：
+  // 登录页、帮助中心等公开页也有自己的 .brand-mark 等装饰元素，
+  // 只按目标元素判定会把 /login 误认为外壳已挂载，于是全局导览
+  // 在未登录的登录页上弹出，并把气泡锚到登录页的 logo 上。
+  if (!document.querySelector('.app-shell')) return false
   return steps.some(step => {
     try {
       return typeof step.element === 'string' && !!document.querySelector(step.element)

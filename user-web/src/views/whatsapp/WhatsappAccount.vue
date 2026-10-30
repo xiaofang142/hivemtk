@@ -6,6 +6,23 @@
           WhatsApp 账号管理
         </div>
       </template>
+      <el-alert
+        class="provider-alert"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="个人版扫码登录已下线（底层 gowa 已停止维护）"
+        description="新账号请使用 WhatsApp Cloud API（PhoneID + Token）接入；存量个人版会话仅保留只读记录。"
+      >
+        <el-button
+          size="small"
+          type="primary"
+          link
+          @click="$router.push('/whatsapp-cloud')"
+        >
+          前往 WhatsApp Cloud
+        </el-button>
+      </el-alert>
       <el-form
         :inline="true"
         @submit.prevent
@@ -54,12 +71,6 @@
           width="340"
         >
           <template #default="{ row }">
-            <el-button
-              size="small"
-              @click="startLogin(row)"
-            >
-              登录
-            </el-button>
             <el-button
               size="small"
               @click="refreshStatus(row)"
@@ -118,6 +129,7 @@ import api from '@/api/whatsapp'
 import { ElMessage } from 'element-plus'
 import { toList } from '@/utils/list'
 import { computed } from 'vue'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const accounts = ref([])
 const loading = ref(false)
@@ -144,15 +156,6 @@ function createAccount() {
   })
 }
 
-function startLogin(row) {
-  api.startLogin(row.id).then(res => {
-    qrCode.value = res.qr;
-    qrDialog.value = true
-  }).catch((e) => {
-    ElMessage.error(e?.message || '启动登录失败（检查网络后重试）');
-  })
-}
-
 function refreshStatus(row) {
   api.loginStatus(row.id).then(res => {
     if (res.logged_in) {
@@ -161,10 +164,10 @@ function refreshStatus(row) {
     } else {
       qrCode.value = res.qr || ''
       if (qrCode.value) qrDialog.value = true
-      else ElMessage.info(i18n.global.t('未登录，请点击登录生成二维码'))
+      else ElMessage.info('未登录：个人版扫码已下线，请到「WhatsApp Cloud」配置 PhoneID + Token')
     }
   }).catch((e) => {
-    ElMessage.error(e?.message || '获取登录状态失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '获取登录状态失败')
   })
 }
 
@@ -181,5 +184,6 @@ function openBindingDialog(row) {
 <style scoped>
 .page { padding: 20px; }
 .card-header { font-weight: 600; }
+.provider-alert { margin-bottom: 16px; }
 .qr-box { display:flex; justify-content:center; }
 </style>

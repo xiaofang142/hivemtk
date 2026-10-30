@@ -21,8 +21,10 @@ type CommunityGroupResponse struct {
 
 // GetCommunityGroupsResponse 获取社群列表响应
 type GetCommunityGroupsResponse struct {
-	Total int                       `json:"total"`
-	List  []*CommunityGroupResponse `json:"list"`
+	Total    int                       `json:"total"`
+	List     []*CommunityGroupResponse `json:"list"`
+	Page     int                       `json:"page"`
+	PageSize int                       `json:"page_size"`
 }
 
 // CreateCommunityGroupRequest 创建社群请求
@@ -59,8 +61,10 @@ type CommunityMemberResponse struct {
 
 // GetCommunityMembersResponse 获取社群成员响应
 type GetCommunityMembersResponse struct {
-	Total int                        `json:"total"`
-	List  []*CommunityMemberResponse `json:"list"`
+	Total    int                        `json:"total"`
+	List     []*CommunityMemberResponse `json:"list"`
+	Page     int                        `json:"page"`
+	PageSize int                        `json:"page_size"`
 }
 
 // AddCommunityMemberRequest 添加社群成员请求
@@ -98,8 +102,10 @@ type CommunityMessageResponse struct {
 
 // GetCommunityMessagesResponse 获取社群消息响应
 type GetCommunityMessagesResponse struct {
-	Total int                         `json:"total"`
-	List  []*CommunityMessageResponse `json:"list"`
+	Total    int                         `json:"total"`
+	List     []*CommunityMessageResponse `json:"list"`
+	Page     int                         `json:"page"`
+	PageSize int                         `json:"page_size"`
 }
 
 // CommunityStatisticsResponse 社群统计响应
@@ -109,4 +115,22 @@ type CommunityStatisticsResponse struct {
 	TotalMessages   int `json:"total_messages"`
 	ActiveGroups    int `json:"active_groups"`
 	NewMembersToday int `json:"new_members_today"`
+}
+
+// CommunityGroupStatsResponse 单个社群统计。
+// 前端社群页的「社群统计」弹窗按 member_count / message_count / active_count 三张卡渲染，
+// 字段名必须与页面一致（早前后端只回全站口径的 total_*，弹窗恒为 0）。
+type CommunityGroupStatsResponse struct {
+	GroupID      string `json:"group_id"`
+	Name         string `json:"name"`
+	MemberCount  int    `json:"member_count"`
+	MessageCount int    `json:"message_count"`
+	ActiveCount  int    `json:"active_count"`
+}
+
+// CommunityImportError 单条导入失败明细（第几条 + 原因），便于用户改文件后重传。
+type CommunityImportError struct {
+	Index   int    `json:"index"`
+	Name    string `json:"name"`
+	Message string `json:"message"`
 }

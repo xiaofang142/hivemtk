@@ -113,11 +113,18 @@ func (s *CronService) Update(ctx context.Context, id, userID uint, cronExpr, tim
 	// baErrToResponse 的 default → 500 INTERNAL_ERROR_6002：实测表达式写错的人收到
 	// 「服务器内部错误 + 回显 robfig 原文」，既告诉他该改什么又告诉他这是服务端的锅。
 	// 与 Create 同口径：同一条判据在两个入口上给出两种 HTTP 结论，等于没有判据。
-	if err := ValidateCronExpr(cronExpr, timeZone); err != nil {
+	// PUT 是局部更新：前端改表达式时只发 {"cron_expr":...}（UpdateCronReq 的 time_zone 是
+	// 普通 string，没传就是空串）。原实现无条件覆盖 → 改一次表达式就把已设的 Asia/Shanghai
+	// 抹成服务器本地时区，实测 cron 60 的 time_zone 被清空。空格语义统一为「不动」。
+	if v := strings.TrimSpace(cronExpr); v != "" {
+		tr.CronExpr = v
+	}
+	if v := strings.TrimSpace(timeZone); v != "" {
+		tr.TimeZone = v
+	}
+	if err := ValidateCronExpr(tr.CronExpr, tr.TimeZone); err != nil {
 		return nil, invalidInput("%s", err)
 	}
-	tr.CronExpr = strings.TrimSpace(cronExpr)
-	tr.TimeZone = strings.TrimSpace(timeZone)
 	if err := s.cronRepo.Update(ctx, tr); err != nil {
 		return nil, err
 	}

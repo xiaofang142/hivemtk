@@ -460,6 +460,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const STEP_TYPES = {
   trigger:  { label: '触发器',     kind: 'control', default: {} },
@@ -544,15 +545,21 @@ const onDeleteWorkflow = async () => {
     steps.value = []
     loadWorkflows()
   } catch (e) {
-    ElMessage.error(e?.message || '删除失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '删除失败')
   }
 }
 
 const onRunNow = async () => {
   if (!currentWorkflow.value) return
+  // 未保存的新工作流在后端还不存在：按名称调用只会得到 404「工作流不存在」。
+  // 先把话说在前面，别让用户把 404 当成执行失败。
+  if (!currentWorkflow.value.id) {
+    ElMessage.warning('请先保存工作流再执行')
+    return
+  }
   running.value = true
   try {
-    await runWorkflow(currentWorkflow.value.id || wfName.value, { steps: steps.value })
+    await runWorkflow(currentWorkflow.value.id, { steps: steps.value })
     ElMessage.success('工作流已启动')
     loadExecutions()
   } catch (e) {

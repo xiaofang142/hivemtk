@@ -17,7 +17,7 @@ from collections import OrderedDict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROUTER_DIR = os.path.join(ROOT, "user-web", "src", "router")
 MOD_DIR = os.path.join(ROUTER_DIR, "modules")
-OUT = os.path.join(ROOT, "docs", "verification", "router-list.md")
+OUT = os.path.join(ROOT, "router-list.md")
 
 # 路由对象字段之间常夹注释行（`// ...`），先剥掉再匹配，否则 path/name 之间的
 # 注释会把正则打断、整条路由静默漏掉。

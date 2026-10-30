@@ -195,6 +195,7 @@ import { ElMessage } from 'element-plus'
 import { MagicStick, Right } from '@element-plus/icons-vue'
 import { copyToClipboard } from '@/utils/clipboard'
 import { geoApi } from '@/api/geo'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const form = reactive({
   source: 'textarea',
@@ -232,7 +233,7 @@ const onArticleChange = async (id) => {
     const res = await geoApi.getArticleByID(id)
     form.content = res?.content || res?.article || ''
   } catch (e) {
-    ElMessage.error(e.message || '文章加载失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '文章加载失败')
   }
 }
 
@@ -255,7 +256,7 @@ const handleOptimize = async () => {
     suggestions.value = Array.isArray(raw) ? raw : String(raw).split('\n').map((s) => s.trim()).filter(Boolean)
     ElMessage.success('文章优化完成')
   } catch (e) {
-    ElMessage.error(e.message || '文章优化失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '文章优化失败')
   } finally {
     optimizing.value = false
   }
@@ -275,7 +276,7 @@ const handleScore = async (stage) => {
     else scoreAfter.value = res
     ElMessage.success('评分完成')
   } catch (e) {
-    ElMessage.error(e.message || '评分失败')
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '评分失败')
   } finally {
     loading.value = false
   }

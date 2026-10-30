@@ -69,6 +69,7 @@ type SOPTemplate struct {
 	Confidence float64 `json:"confidence"`
 	HitCount   int64   `json:"hit_count"`
 	Enabled    *bool   `json:"enabled,omitempty"`
+	AgentID    *uint   `json:"agent_id,omitempty"`
 	CreatedAt  string  `json:"created_at,omitempty"`
 	UpdatedAt  string  `json:"updated_at,omitempty"`
 }

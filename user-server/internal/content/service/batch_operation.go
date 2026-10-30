@@ -41,6 +41,15 @@ func NewBatchOperationService(db *gorm.DB) *BatchOperationService {
 	}
 }
 
+// ErrUnsupportedImportType / ErrUnsupportedExportType 入口类型不合法。
+//
+// 单独给哨兵：控制器要把它翻成 400「参数错误」，而不是 500「导入失败」——
+// 用户传了个不存在的 type 不是服务端故障。
+var (
+	ErrUnsupportedImportType = errors.New("不支持的导入类型")
+	ErrUnsupportedExportType = errors.New("不支持的导出类型")
+)
+
 // ImportType 导入类型
 type ImportType string
 
@@ -98,7 +107,7 @@ func (s *BatchOperationService) ImportFromCSV(ctx context.Context, importType Im
 	case ImportTypeUser:
 		s.importUsers(ctx, dataRows, header, result)
 	default:
-		return nil, fmt.Errorf("不支持的导入类型: %s", importType)
+		return nil, fmt.Errorf("%w: %s（支持 clue / user）", ErrUnsupportedImportType, importType)
 	}
 
 	return result, nil
@@ -298,7 +307,7 @@ func (s *BatchOperationService) GenerateCSV(ctx context.Context, exportType Expo
 	case ExportTypeUser:
 		return s.exportUsers(ctx, writer, &buf, ids)
 	default:
-		return nil, errors.New("不支持的导出类型")
+		return nil, fmt.Errorf("%w: %s（支持 clue / user）", ErrUnsupportedExportType, exportType)
 	}
 }
 
@@ -351,7 +360,7 @@ func (s *BatchOperationService) GenerateJSONL(ctx context.Context, exportType Ex
 			})
 		}
 	default:
-		return nil, errors.New("不支持的导出类型")
+		return nil, fmt.Errorf("%w: %s（支持 clue / user）", ErrUnsupportedExportType, exportType)
 	}
 	return &buf, nil
 }
@@ -401,7 +410,7 @@ func (s *BatchOperationService) GenerateMarkdown(ctx context.Context, exportType
 			rows = append(rows, []string{u.ID, u.Username, u.Email, u.Phone, u.RealName, strconv.FormatInt(int64(u.Status), 10), time.Unix(u.CreateTime, 0).Format("2006-01-02 15:04:05")})
 		}
 	default:
-		return nil, errors.New("不支持的导出类型")
+		return nil, fmt.Errorf("%w: %s（支持 clue / user）", ErrUnsupportedExportType, exportType)
 	}
 
 	fmt.Fprintf(&buf, "| %s |\n", strings.Join(headers, " | "))
@@ -530,7 +539,7 @@ func (s *BatchOperationService) GetTemplate(importType ImportType) (*TemplateDef
 			},
 		}, nil
 	default:
-		return nil, errors.New("不支持的导入类型")
+		return nil, fmt.Errorf("%w: %s（支持 clue / user）", ErrUnsupportedImportType, importType)
 	}
 }
 
@@ -646,6 +655,16 @@ func (s *BatchOperationService) GetHistories(ctx context.Context, page, pageSize
 // GetHistoryByID 根据 ID 获取批量操作历史
 func (s *BatchOperationService) GetHistoryByID(ctx context.Context, id uint) (*model.BatchOperationHistory, error) {
 	return s.batchOpRepo.GetHistoryByID(ctx, id)
+}
+
+// RecordHistory 落一条批量操作历史（旁路观测，失败不阻断主流程的判定交给调用方）。
+func (s *BatchOperationService) RecordHistory(ctx context.Context, h *model.BatchOperationHistory) error {
+	if h == nil || s.batchOpRepo == nil {
+		// 零值服务实例（控制器单测的接缝写法）没有仓储：历史是旁路观测，
+		// 这里直接跳过，不能因为补落库把既有调用路径打成 panic。
+		return nil
+	}
+	return s.batchOpRepo.CreateHistory(ctx, h)
 }
 
 // CancelHistory 取消批量操作（标记为已取消）

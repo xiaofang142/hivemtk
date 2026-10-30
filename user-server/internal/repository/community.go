@@ -12,6 +12,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// 仓储层哨兵：服务层据此翻成 404（带业务 ref），不再依赖错误文案比较。
+var (
+	// ErrCommunityGroupNotFound 社群不存在
+	ErrCommunityGroupNotFound = errors.New("社群不存在")
+	// ErrCommunityMemberNotFound 社群成员不存在
+	ErrCommunityMemberNotFound = errors.New("社群成员不存在")
+)
+
 type CommunityRepository interface {
 	GetGroups(ctx context.Context, page, pageSize int, search string) ([]*model.CommunityGroup, int64, error)
 	CreateGroup(ctx context.Context, group *model.CommunityGroup) (*model.CommunityGroup, error)
@@ -27,6 +35,8 @@ type CommunityRepository interface {
 	GetMemberByID(ctx context.Context, id string) (*model.CommunityMember, error)
 
 	GetMessages(ctx context.Context, groupID string, page, pageSize int) ([]*model.CommunityMessage, int64, error)
+	// GetGroupStats 单群统计：成员数 / 消息数 / 今日活跃成员数（last_seen 落在今日内）。
+	GetGroupStats(ctx context.Context, groupID string) (members, messages, activeToday int64, name string, err error)
 	GetStatistics(ctx context.Context) (*CommunityStatistics, error)
 }
 
@@ -97,7 +107,7 @@ func (r *communityRepository) UpdateGroup(ctx context.Context, id string, update
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("社群不存在")
+		return ErrCommunityGroupNotFound
 	}
 	return nil
 }
@@ -116,7 +126,7 @@ func (r *communityRepository) DeleteGroup(ctx context.Context, id string) error 
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return errors.New("社群不存在")
+			return ErrCommunityGroupNotFound
 		}
 		return nil
 	})
@@ -200,7 +210,7 @@ func (r *communityRepository) UpdateMember(ctx context.Context, id string, updat
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return errors.New("社群成员不存在")
+		return ErrCommunityMemberNotFound
 	}
 	return nil
 }
@@ -210,7 +220,7 @@ func (r *communityRepository) RemoveMember(ctx context.Context, id string) error
 		var member model.CommunityMember
 		if err := tx.Where("id = ?", id).First(&member).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return errors.New("社群成员不存在")
+				return ErrCommunityMemberNotFound
 			}
 			return err
 		}
@@ -220,7 +230,7 @@ func (r *communityRepository) RemoveMember(ctx context.Context, id string) error
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			return errors.New("社群成员不存在")
+			return ErrCommunityMemberNotFound
 		}
 
 		// 历史数据里 member_count 可能已是 0，减到负数会把统计带偏。
@@ -259,6 +269,34 @@ func (r *communityRepository) GetMessages(ctx context.Context, groupID string, p
 	}
 
 	return messages, total, nil
+}
+
+// GetGroupStats 单群统计。群不存在时回 ErrCommunityGroupNotFound，供控制器区分 404 与空统计。
+func (r *communityRepository) GetGroupStats(ctx context.Context, groupID string) (int64, int64, int64, string, error) {
+	var group model.CommunityGroup
+	if err := r.db.WithContext(ctx).Where("id = ?", groupID).First(&group).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, 0, 0, "", ErrCommunityGroupNotFound
+		}
+		return 0, 0, 0, "", err
+	}
+
+	var members, messages, activeToday int64
+	if err := r.db.WithContext(ctx).Model(&model.CommunityMember{}).
+		Where("group_id = ?", groupID).Count(&members).Error; err != nil {
+		return 0, 0, 0, "", err
+	}
+	if err := r.db.WithContext(ctx).Model(&model.CommunityMessage{}).
+		Where("group_id = ?", groupID).Count(&messages).Error; err != nil {
+		return 0, 0, 0, "", err
+	}
+	todayStart := timeutil.StartOfBusinessDay(time.Now())
+	if err := r.db.WithContext(ctx).Model(&model.CommunityMember{}).
+		Where("group_id = ? AND last_seen >= ?", groupID, todayStart).Count(&activeToday).Error; err != nil {
+		return 0, 0, 0, "", err
+	}
+
+	return members, messages, activeToday, group.Name, nil
 }
 
 func (r *communityRepository) GetStatistics(ctx context.Context) (*CommunityStatistics, error) {

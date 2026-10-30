@@ -30,6 +30,8 @@ export const platformAccountApi = {
   },
 
   checkStatus(id) {
-    return http.get(`/api/platform-accounts/${id}/status`)
+    // 该平台不支持服务端登录态检查时后端返回 400（能力已下线），
+    // 由弹窗内联提示承载，不再叠加全局 toast。
+    return http.get(`/api/platform-accounts/${id}/status`, undefined, { _silent: true })
   }
 };
