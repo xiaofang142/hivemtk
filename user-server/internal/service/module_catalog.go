@@ -438,14 +438,21 @@ func (s *ModuleCatalogService) Sync(ctx context.Context) (*ModuleSyncResult, err
 	// SystemScope 写（列默认值 1），租户 2 买的东西会激活到租户 1 —— 租户 2
 	// 永远打不开、租户 1 反而白得。对不上本地订单的行（平台种子、迁移前的
 	// 历史单）落默认租户；off 模式订单全部归默认租户。
+	existing, listErr := s.repo.ListAll(ctx)
+
 	targets := s.purchaseTenants(ctx)
-	groups := make(map[uint][]*model.TenantModule, 2)
+	groups := make(map[uint][]*model.TenantModule, 8)
 	for _, row := range rows {
 		tid := tenant.DefaultTenantID
-		// 基础模块行**永远**落默认租户：免费常开是全安装的底线，不随订单
-		// 归属漂移（若某张历史订单的 items 里混进了基础 key，默认租户也不
-		// 丢失它的 base 行；下单租户的基础包由下面的补齐分支负责）。
-		if !isBaseModuleKey(row.ModuleKey) {
+		// 基础模块行与 0 元模块行**永远**落默认租户：前者是免费常开的底线，
+		// 后者自 2026-10-30 起是「需开通但不收费」——平台对 0 元模块自动
+		// owned=true，所以它对每个租户都成立，不能再按下单租户分流。分流一旦
+		// 生效，默认租户会保留一条旧的 disabled 行（线上事故：reach-social
+		// 被分到别的下单租户，tenant 1 仍是 disabled，五个平台菜单全空）。
+		//
+		// 收费模块（PriceCents>0）仍按订单落点：有本轮租户绑定就落它自己，
+		// 商户级那轮才从订单反查（历史原因见下方注释）。
+		if !isBaseModuleKey(row.ModuleKey) && row.PriceCents > 0 {
 			switch {
 			case reqTenantBound:
 				// 本轮同步有租户绑定 ⇒ 落点就是**本轮这个租户**。
@@ -469,28 +476,34 @@ func (s *ModuleCatalogService) Sync(ctx context.Context) (*ModuleSyncResult, err
 		}
 		groups[tid] = append(groups[tid], row)
 	}
-	// 发起同步的租户即使一笔订单都没有，也必须是本轮落行的对象：新注册商户
-	// 正是这种形态（本地没有任何订单）。否则它拿到 0 行 —— 闸按空镜像只放行
-	// 基础包，平台已按 owned 下发的 0 元模块也被判关（线上表现：除基础外的
-	// 页面一律 4301、菜单只剩骨架）。
-	if reqTenantBound && reqTenantID != tenant.DefaultTenantID {
-		if _, ok := groups[reqTenantID]; !ok {
-			groups[reqTenantID] = nil
-		}
-	}
-	// 非默认租户拿到任何一行，就必须同时拿到基础模块行与 0 元赠送行：
-	// boot=true 之后判定按行走，缺 base 行会把 core/customer 等基础能力一并
-	// 判关（空镜像给基础包、有镜像却不给基础包是自相矛盾的）；0 元模块同理 ——
-	// 平台把它们算进 active_keys 并标 gift，本地却只落默认租户，等于对每个
-	// 非默认租户静默收回免费能力。
+	// 每个已存在的租户、本轮发起租户、默认租户，都必须拿到基础模块行与
+	// 全部 0 元模块行：boot=true 之后判定按行走，缺 base 行会把 core/customer
+	// 等基础能力一并判关；0 元模块缺行则会被 module gate 判成未开通，菜单
+	// 只剩骨架（新注册商户、存量商户都踩过）。
 	//
 	// 收费模块（PriceCents>0）不在此列：它们只对下单租户可见，落点由上面的
 	// 订单归并决定；对没下单的租户复制就是白送。
-	for tid, g := range groups {
-		if tid == tenant.DefaultTenantID {
-			continue
+	tenantIDs := map[uint]bool{tenant.DefaultTenantID: true}
+	for _, e := range existing {
+		if e != nil && e.TenantID != 0 {
+			tenantIDs[e.TenantID] = true
 		}
-		have := make(map[string]bool, len(g)+len(model.BaseModuleKeys()))
+	}
+	for tid := range groups {
+		tenantIDs[tid] = true
+	}
+	if reqTenantBound && reqTenantID != 0 {
+		tenantIDs[reqTenantID] = true
+	}
+	freeRows := make([]*model.TenantModule, 0, len(rows))
+	for _, r := range rows {
+		if r.PriceCents == 0 && !isBaseModuleKey(r.ModuleKey) {
+			freeRows = append(freeRows, r)
+		}
+	}
+	for tid := range tenantIDs {
+		g := groups[tid]
+		have := make(map[string]bool, len(g)+len(model.BaseModuleKeys())+len(freeRows))
 		for _, r := range g {
 			have[r.ModuleKey] = true
 		}
@@ -501,8 +514,8 @@ func (s *ModuleCatalogService) Sync(ctx context.Context) (*ModuleSyncResult, err
 			g = append(g, r)
 			have[r.ModuleKey] = true
 		}
-		for _, r := range rows {
-			if r.PriceCents != 0 || isBaseModuleKey(r.ModuleKey) || have[r.ModuleKey] {
+		for _, r := range freeRows {
+			if have[r.ModuleKey] {
 				continue
 			}
 			// 每个租户各拿一份独立行：隔离 callback 会把 TenantID 写在行上，
@@ -548,8 +561,7 @@ func (s *ModuleCatalogService) Sync(ctx context.Context) (*ModuleSyncResult, err
 	// 所以 stale 判定只在**本轮有该租户专属名单**时做，且只看该租户的行：
 	//   - 有租户绑定 ⇒ 判该租户的行（撤销语义正确）；
 	//   - 无租户绑定（商户级那轮）⇒ 不判任何租户行（无权判定别人存废）。
-	existing, err := s.repo.ListAll(ctx)
-	if err == nil && reqTenantBound {
+	if listErr == nil && reqTenantBound {
 		active := map[string]bool{}
 		for _, k := range snap.ActiveKeys {
 			active[k] = true
@@ -686,7 +698,7 @@ func baseTenantModuleRows(now time.Time) []*model.TenantModule {
 }
 
 // offlineGiftModuleRows 离线赠送行：基础模块 + 全部 0 元付费模块
-// （browser-automation 除外——¥99 买断，本地无支付通道 → 保持不可购不可用）。
+// （browser-automation 除外——¥1 买断，本地无支付通道 → 保持不可购不可用）。
 //
 // 与 baseTenantModuleRows 的分工见后者注释：本函数**只**服务 bootstrapOffline。
 // 0 元付费模块必须显式落行（source=gift），否则闸的空态/有行判定只认
@@ -823,7 +835,7 @@ type MyModuleView struct {
 	Category   string `json:"category"`
 	PriceCents int64  `json:"price_cents"`
 	// BillingCycle 计费周期（once=买断/monthly/yearly/metered）。
-	// 缺它时 priceLabel 走不到「买断」分支，¥99 买断的模块会被标成「¥99 / 年」。
+	// 缺它时 priceLabel 走不到「买断」分支，¥1 买断的浏览器自动化会被标成「¥1 / 年」。
 	BillingCycle string     `json:"billing_cycle"`
 	Icon         string     `json:"icon"`
 	Summary      string     `json:"summary"`

@@ -246,7 +246,7 @@ func giftPaidKeys() []string {
 }
 
 // TestOfflineBootstrapOpensGiftModules 离线首启：基础模块 + 0 元赠送模块全开，
-// 唯一锁定的是 browser-automation（¥99 买断，本地无支付通道，003 R3 用户裁决）。
+// 唯一锁定的是 browser-automation（¥1 买断，本地无支付通道）。
 // 验收口径：EnabledKeys = 23（24 - 浏览器自动化）。
 func TestOfflineBootstrapOpensGiftModules(t *testing.T) {
 	newModuleDB(t)
@@ -289,10 +289,9 @@ func TestOfflineBootstrapOpensGiftModules(t *testing.T) {
 	}
 	// EnabledKeys = 基础模块 + 0 元赠送付费模块。
 	//
-	// 2026-10-22：定价对齐 ¥1（commit 38f9fce2）之后，目录里**没有** 0 元的付费模块了
-	// （原来的 16 条 0 元赠送全部变成 ¥1），所以赠送集为空 ⇒ 离线只开 7 个基础模块。
-	// 这里不再写死「24 - 浏览器自动化」：那个数是旧口径（16 条 0 元赠送时代）留下的，
-	// 定价一改就与事实脱节 —— 判据应当跟着目录走（giftPaidKeys() 已经是这个形状）。
+	// 2026-10-30 用户裁决：只有 browser-automation 收费，其余 16 个付费模块
+	// PriceCents=0 ⇒ 全部进入赠送集，离线开满 24 - 1 = 23 个模块。
+	// 判据不写死数字，跟着目录走（giftPaidKeys() 已经是这个形状）。
 	keys := gate.EnabledKeys(ctx)
 	wantEnabled := len(model.BaseModuleKeys()) + len(giftPaidKeys())
 	if len(keys) != wantEnabled {
@@ -336,11 +335,11 @@ func TestOfflineBootstrapUpgradesExistingDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 行数 = 基础 + 赠送 + **存量已购行**（geo 那条 purchase 行是升级前就有的，
-	// 升级只做幂等补齐、不删它 ⇒ 计入总数）。
-	wantTotal := len(model.BaseModuleKeys()) + len(giftPaidKeys()) + 1 /* geo 已购 */
+	// 行数 = 基础 + 赠送集。geo 已经在赠送集里，且升级前就有一条 purchase 行；
+	// bootstrapOffline 只补缺失 key、不覆盖已有行 ⇒ geo 仍算一行，不能额外 +1。
+	wantTotal := len(model.BaseModuleKeys()) + len(giftPaidKeys())
 	if len(rows) != wantTotal {
-		t.Errorf("升级后应有 %d 行（基础 + 赠送 + 存量已购），实际 %d", wantTotal, len(rows))
+		t.Errorf("升级后应有 %d 行（基础 + 赠送），实际 %d", wantTotal, len(rows))
 	}
 	byKey := map[string]*model.TenantModule{}
 	for _, r := range rows {
@@ -367,12 +366,11 @@ func TestOfflineBootstrapUpgradesExistingDeployment(t *testing.T) {
 
 	// 菜单树对账：**赠送集**里的模块，其菜单节点必须出现在过滤结果里。
 	//
-	// 2026-10-22：定价对齐 ¥1 之后赠送集为空（没有 0 元付费模块了），所以菜单树
-	// 里只该出现基础模块的菜单；原来写死的那 13 个付费模块菜单（aiAgent/geoTools…）
-	// 属于旧口径。判据改成跟着赠送集走：0 元赠送模块的菜单必须在，
-	// 付费模块的菜单**必须不在**（没开通就不该出现）。
+	// 菜单树对账：2026-10-30 起 16 个付费模块 0 元赠送，所以除
+	// browser-automation 外，赠送集内模块的菜单都必须出现；browser-automation
+	// 未开通 ⇒ 它的菜单必须不在。
 	//
-	// 同时保留一条硬判据：基础模块的菜单必须都在（赠送集为空时它就是全部）。
+	// 同时保留一条硬判据：基础模块的菜单必须都在。
 	gate := NewModuleGateServiceWithRepo(repo)
 	gate.Invalidate()
 	gate.Refresh(ctx)
@@ -386,8 +384,12 @@ func TestOfflineBootstrapUpgradesExistingDeployment(t *testing.T) {
 		}
 	}
 	for _, k := range giftPaidKeys() {
-		if findMenuKey(tree, giftMenuKey(k)) < 0 {
-			t.Errorf("0 元赠送模块 %s 的菜单节点缺失（菜单快照未按赠送集刷新）", k)
+		menuKeys := model.ModuleMenuBindings[k]
+		if len(menuKeys) == 0 {
+			continue // 例如 llm-cloud：模块本身没有独占菜单节点
+		}
+		if findMenuKey(tree, menuKeys[0]) < 0 {
+			t.Errorf("0 元赠送模块 %s 的菜单节点 %s 缺失（菜单快照未按赠送集刷新）", k, menuKeys[0])
 		}
 	}
 	if findMenuKey(tree, "browserAutomation") >= 0 {
@@ -504,15 +506,13 @@ func TestMarketListMarksBaseAsFreeAndPaidAsPayable(t *testing.T) {
 	if !byKey[model.ModuleCore].Free {
 		t.Error("core 应标记为 free")
 	}
-	// 003 重定价（2026-10-22 对齐 ¥1，commit 38f9fce2）：
-	// 目录里 17 个付费模块**全部**是 ¥1（100 分），没有 0 元赠送项了。
-	// 所以 geo / llm-cloud 都是「需开通且收钱」，不再是 free_to_enable；
-	// browser-automation 也是 ¥1（不再是 ¥99 买断）。
-	if byKey[model.ModuleGEO].FreeToEnable {
-		t.Error("geo 是付费类目模块（¥1），不应标记 free_to_enable（0 元才赠送）")
+	// 2026-10-30 用户裁决：17 个付费模块里只有 browser-automation 收费，
+	// 其余 16 个 PriceCents=0 ⇒ 全部标记 free_to_enable（需开通但不收钱）。
+	if !byKey[model.ModuleGEO].FreeToEnable {
+		t.Error("geo 定价 0 元，应标记「需开通但不收钱」")
 	}
-	if byKey[model.ModuleLLMCloud].FreeToEnable {
-		t.Error("llm-cloud 定价 ¥1，不应标记「需开通但不收钱」")
+	if !byKey[model.ModuleLLMCloud].FreeToEnable {
+		t.Error("llm-cloud 模块本身 0 元，应标记「需开通但不收钱」（token 按量另计）")
 	}
 	// 定价与计费周期必须与目录一致（不写死数值：目录一改价这里就跟着走）
 	ba := byKey[model.ModuleBrowserAutomation]
@@ -763,8 +763,8 @@ func TestStartModuleSyncBootstrapsBaseModules(t *testing.T) {
 	}
 
 	// 闸此刻必须真的开始拦（这是本条用例真正的判据）。
-	// 判据模块换为 browser-automation：003 重定价后 geo 是 0 元赠送模块，
-	// 离线会随赠送集落地；唯一离线仍锁定的付费模块是 ¥99 买断的浏览器自动化。
+	// 判据模块换为 browser-automation：geo 等 16 个模块是 0 元赠送，
+	// 离线会随赠送集落地；唯一离线仍锁定的模块是 ¥1 买断的浏览器自动化。
 	gate := NewModuleGateServiceWithRepo(repository.NewTenantModuleRepositoryWithDB(rawDB(t)))
 	gate.Invalidate()
 	if err := gate.Refresh(context.Background()); err != nil {
@@ -856,8 +856,8 @@ func TestModuleGateOnModeSyncAndTenantScopedRead(t *testing.T) {
 	if !gate.IsEnabled(reqCtx, model.ModuleCore) {
 		t.Error("基础模块应放行")
 	}
-	// 判据模块为 browser-automation：003 重定价后 geo 是 0 元赠送模块，
-	// 离线随赠送集落地；唯一离线仍锁定的付费模块是 ¥99 买断的浏览器自动化。
+	// 判据模块为 browser-automation：geo 等 16 个模块是 0 元赠送，
+	// 离线随赠送集落地；唯一离线仍锁定的模块是 ¥1 买断的浏览器自动化。
 	if gate.IsEnabled(reqCtx, model.ModuleBrowserAutomation) {
 		t.Error("未开通的 browser-automation 被放行：on 模式闸静默全开（P1 回归）")
 	}

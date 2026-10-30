@@ -64,7 +64,7 @@ const routes = [
     component: () => import('../views/PricingPage.vue'),
     meta: {
       title: '按需订阅',
-      description: 'HiveMTK 按需订阅：AGPL-3.0 开源基座与 7 个基础模块免费常开，17 个收费模块统一 ¥1（浏览器自动化为买断）；云端版软件订阅 9 元、新商户 15 天体验期并赠 10M 模型 token，平台模型算力按输入 / 输出 token 预付费，支持 SaaS 多租户与离线单机双形态。',
+      description: 'HiveMTK 按需订阅：AGPL-3.0 开源基座与 7 个基础模块免费常开，17 个增值模块中 16 个 0 元、仅浏览器自动化 ¥1 买断；云端版软件订阅 9 元、新商户 15 天体验期并赠 10M 模型 token，平台模型算力按输入 / 输出 token 预付费，支持 SaaS 多租户与离线单机双形态。',
       keywords: 'HiveMTK订阅,功能模块免费,浏览器自动化买断,云端版订阅,LLM按量计费,平台模型算力,SaaS多租户,按需订阅',
     },
   },

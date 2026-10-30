@@ -131,19 +131,19 @@ func TestModuleCatalogMetaConsistent(t *testing.T) {
 }
 
 // TestModuleCatalogBillingCyclesValid 目录里的计费周期必须是已知枚举，且
-// 定价口径符合当前基线：7 个基础模块 0 元常开，17 个收费模块统一 ¥1（100 分）。
+// 定价口径符合当前基线（2026-10-30 用户裁决）：7 个基础模块 0 元常开，
+// 17 个收费模块里只有 browser-automation 收费 100 分（¥1 买断），其余 16 个 0 元。
 //
 // 口径沿革（别再照着旧口径改测试）：
-//   - 早期口径是「除浏览器自动化外全部 0 元，唯一有价模块 browser-automation
-//     9900/once」——本测试最初就是按它写的；
-//   - 38f9fce2「编译期模块定价对齐 ¥1」把 user-server 的 ModuleCatalogMeta
-//     与平台端目录对齐成「17 个收费模块统一 ¥1（100 分）」，并同步改了文件头
-//     的定价说明，**但没同步改这条断言** —— 于是它一直红着，是条过期断言。
+//   - 003 全免费时代：除浏览器自动化外全部 0 元；
+//   - 38f9fce2：17 个收费模块统一 ¥1（100 分）；
+//   - 2026-10-30 用户裁决又回到「只有浏览器自动化收费」：其余 16 个 0 元。
 //
-// 现在钉的是「与平台端一致」这条真正的业务口径：
+// 现在钉的是当前业务口径：
 //   - 基础模块：0 元、且不设计费周期之外的怪值；
-//   - 收费模块：统一 100 分；浏览器自动化是 once 买断，llm-cloud 是 metered
-//     按量，其余是 yearly —— 计费周期必须落在这四种已知枚举里。
+//   - 收费类目：只有浏览器自动化 100 分（once 买断）；llm-cloud 是 metered
+//     按量，其余 15 个虽然 PriceCents=0 仍保留 yearly —— 计费周期必须落在
+//     这四种已知枚举里。
 func TestModuleCatalogBillingCyclesValid(t *testing.T) {
 	valid := map[string]bool{
 		BillingCycleYearly: true, BillingCycleMetered: true,
@@ -159,17 +159,23 @@ func TestModuleCatalogBillingCyclesValid(t *testing.T) {
 	}
 	priced := 0
 	for _, m := range ModuleCatalogMeta {
-		if m.PriceCents <= 0 {
+		if m.Category == ModuleCategoryBase {
 			continue
 		}
-		priced++
-		// 收费模块统一 ¥1（100 分）：与平台端目录同价，不允许各模块各订各的。
-		if m.PriceCents != 100 {
-			t.Errorf("收费模块应统一 ¥1（100 分），实际 %s 定价 %d", m.Key, m.PriceCents)
+		switch m.Key {
+		case ModuleBrowserAutomation:
+			priced++
+			if m.PriceCents != 100 {
+				t.Errorf("浏览器自动化应保持收费 100 分（¥1 买断），实际 %d", m.PriceCents)
+			}
+		default:
+			if m.PriceCents != 0 {
+				t.Errorf("除浏览器自动化外，收费类目模块应免费（0 分），实际 %s 定价 %d", m.Key, m.PriceCents)
+			}
 		}
 	}
-	if priced == 0 {
-		t.Fatal("没有任何收费模块 —— 定价口径整段失效")
+	if priced != 1 {
+		t.Fatalf("应恰有 1 个有价模块（browser-automation），实际 %d", priced)
 	}
 	// 买断/按量这两种特殊周期必须落在预期的那个模块上（它们决定续费与到期语义）。
 	for _, m := range ModuleCatalogMeta {
@@ -324,6 +330,30 @@ func TestFilterMenuTreeByModule(t *testing.T) {
 	if !coreAlive {
 		t.Error("core 模块节点（systemUser）不应被过滤掉")
 	}
+
+	// 关闭 reach-social（抖音/小红书/快手/闲鱼/TikTok 的父模块）后，
+	// 这些分组目录必须整体消失，而不是留下「只有标题、没有子菜单」的空壳。
+	// 线上故障就是这样：admin 走模块树不做角色过滤，空目录被原样下发。
+	socialCut := FilterMenuTreeByModule(SystemMenuTree, func(mk string) bool {
+		return mk != ModuleReachSocial
+	})
+	socialGroups := map[string]bool{
+		"douyin": true, "kuaishou": true, "xiaohongshu": true,
+		"xianyu": true, "tiktok": true,
+	}
+	var check func([]SystemMenuNode)
+	check = func(ns []SystemMenuNode) {
+		for _, n := range ns {
+			if socialGroups[n.Key] {
+				t.Errorf("关闭 reach-social 后分组目录 %s 仍出现在菜单树中", n.Key)
+			}
+			if n.Path == "" && len(n.Children) == 0 {
+				t.Errorf("过滤后出现空目录节点 %s（只有标题、没有子菜单）", n.Key)
+			}
+			check(n.Children)
+		}
+	}
+	check(socialCut)
 }
 
 // TestFilterMenuTreeByModuleNilFilter 未注入判定函数时返回全树（离线首启不被卡死）。

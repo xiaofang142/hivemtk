@@ -412,10 +412,9 @@ func TestModuleSyncProvisionsFreeModulesForRequestingTenant(t *testing.T) {
 	}
 	// 0 元付费模块：平台视为赠送（owned=true，owned_source 显式给 gift）
 	//
-	// 2026-10-21 定价改版后线上已无 0 元付费模块（17 个 paid 模块统一 ¥1），
-	// 但「0 元 ⇒ gift」这条代码路径**仍必须被覆盖**：离线部署 / 存量商户升级前
-	// 落的 0 元 gift 行还在，且平台端改价是后台动作，随时可能把某个模块改回 0 元。
-	// 故桩里保留一个显式 0 元的模块（geo），专门压 gift 这条路径。
+	// 2026-10-30 起 16 个付费模块都是 0 元（只有浏览器自动化收费），
+	// 「0 元 ⇒ gift」是主路径；这里用 geo 显式压一遍，确保平台下发
+	// owned_source=gift 时用户端落 source=gift 而不是 purchase。
 	//
 	// owned_source 必须显式给 "gift"：平台端对「0 元且已授予」的模块就是
 	// 这么下发的（owned_flag=true 且 owned_source 空 ⇒ 平台补 "gift"，
@@ -434,7 +433,7 @@ func TestModuleSyncProvisionsFreeModulesForRequestingTenant(t *testing.T) {
 	// 桩若把它写成 owned=true+active_status=active，就会把它塞进 active_keys
 	// ⇒ 用户端按「本轮租户的名单」把它落给请求租户（a315e471 修的正是这条：
 	// 落点用本轮租户，不再用订单反查）⇒ 变成白送。
-	// 价取 2026-10-21 改版后的 ¥1（100 分）；测试只关心「收费」这个性质，不关心具体金额。
+	// 浏览器自动化保持 ¥1（100 分）买断；测试只关心「收费」这个性质，不关心具体金额。
 	catalog = append(catalog, map[string]any{
 		"module_key": model.ModuleBrowserAutomation, "name": "浏览器自动化", "category": "paid",
 		"price_cents": 100, "owned": false, "owned_status": "",
@@ -473,6 +472,24 @@ func TestModuleSyncProvisionsFreeModulesForRequestingTenant(t *testing.T) {
 	orderRepo := repository.NewModuleOrderRepositoryWithDB(database)
 
 	// 与「新商户登录后在页面里点同步」/ 开户后异步同步同形：ctx 绑请求租户，无本地订单
+	// 存量默认租户的 0 元模块可能停在 disabled（2026-10-30 线上事故：
+	// reach-social 被旧逻辑按下单租户分到别处，tenant 1 保留 disabled 行）。
+	// 另一个已存在租户（34）只有基础行，也必须被补上 0 元模块。
+	sysSeedCtx := tenant.WithSystemScope(context.Background())
+	if err := repo.UpsertMany(sysSeedCtx, []*model.TenantModule{{
+		ModuleKey: model.ModuleGEO, Status: model.TenantModuleDisabled,
+		Source: model.TenantModuleSourcePurchase, Category: model.ModuleCategoryPaid,
+		PriceCents: 100,
+	}}); err != nil {
+		t.Fatalf("写入默认租户 disabled 0 元模块: %v", err)
+	}
+	if err := repo.UpsertMany(tenant.OnlyTenant(sysSeedCtx, 34), []*model.TenantModule{{
+		ModuleKey: model.ModuleCore, Status: model.TenantModuleActive,
+		Source: model.TenantModuleSourceDefaultBase, Category: model.ModuleCategoryBase,
+	}}); err != nil {
+		t.Fatalf("写入租户 34 基础行: %v", err)
+	}
+
 	reqCtx := tenant.WithTenantID(context.Background(), reqTenantID)
 	svc := NewModuleCatalogServiceWithRepos(repo, orderRepo)
 	if _, err := svc.Sync(reqCtx); err != nil {
@@ -529,6 +546,18 @@ func TestModuleSyncProvisionsFreeModulesForRequestingTenant(t *testing.T) {
 	// owned 之前的旧口径，与生产实际不符。
 	if r := perTenant[tenant.DefaultTenantID][model.ModuleBrowserAutomation]; r != nil {
 		t.Errorf("默认租户不该有 browser-automation 行（该租户未购买，source=%s）", r.Source)
+	}
+
+	// 3.1 存量 disabled 的 0 元模块必须被本轮同步改回 active；其他已存在租户
+	// 也必须补到 0 元模块（而不是只有发起同步的租户拿到）。
+	if r := perTenant[tenant.DefaultTenantID][model.ModuleGEO]; r == nil || r.Status != model.TenantModuleActive {
+		t.Errorf("默认租户的存量 disabled 0 元模块应被激活，实际 %+v", r)
+	}
+	if r := perTenant[34][model.ModuleGEO]; r == nil || r.Status != model.TenantModuleActive {
+		t.Errorf("已存在租户 34 应补到 0 元模块 geo，实际 %+v", r)
+	}
+	if r := perTenant[34][model.ModuleBrowserAutomation]; r != nil {
+		t.Errorf("租户 34 未下单却拿到了收费模块 browser-automation（source=%s）", r.Source)
 	}
 
 	// 4. 闸：赠送模块对请求租户放行，收费模块仍拦

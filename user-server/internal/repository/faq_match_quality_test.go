@@ -37,7 +37,7 @@ func websiteFAQSet() []model.FAQEntry {
 			Keywords: kw("是什么", "介绍", "简介", "产品", "项目", "营销系统", "开源", "做什么", "平台", "HiveMTK"), Confidence: 0.95, Enabled: &enabled},
 		{ID: 2, Question: "HiveMTK 支持哪些渠道？", Answer: "支持 13 个渠道：Telegram、QQ、企业微信、飞书、WhatsApp、钉钉、抖音、小红书、快手、闲鱼、TikTok，以及网页客服。",
 			Keywords: kw("渠道", "接入", "Telegram", "QQ", "企业微信", "飞书", "WhatsApp", "钉钉", "抖音", "小红书", "快手", "闲鱼", "TikTok", "网页客服"), Confidence: 0.95, Enabled: &enabled},
-		{ID: 3, Question: "HiveMTK 怎么收费？", Answer: "基础模块免费，增值模块每个 ¥1，LLM 算力四档 ¥1/¥3/¥6/¥9，软件订阅 ¥9/月。",
+		{ID: 3, Question: "HiveMTK 怎么收费？", Answer: "基础模块免费常开，17 个增值模块中 16 个 0 元开通、仅浏览器自动化 ¥1 买断，LLM 算力四档 ¥1/¥3/¥6/¥9，软件订阅 ¥9/月。",
 			Keywords: kw("收费", "价格", "多少钱", "计费", "订阅", "套餐", "积分", "免费", "购买", "费用"), Confidence: 0.90, Enabled: &enabled},
 		{ID: 4, Question: "HiveMTK 支持私有化部署吗？", Answer: "支持私有化部署（Docker Compose），也提供 SaaS 云端版。",
 			Keywords: kw("私有化", "部署", "Docker", "安装", "本地", "服务器", "环境", "私有化部署"), Confidence: 0.90, Enabled: &enabled},
