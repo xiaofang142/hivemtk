@@ -157,6 +157,17 @@ func ltcStageGate(stage service.LTCStage, reader LTCConfigReader) gin.HandlerFun
 		if cfg.Degraded {
 			data["degrade_reason"] = cfg.DegradeReason
 		}
+		// D-1 7×24h 观察窗（P-1）：强制门此前只回响应、不留日志，
+		// 导致「按 stage+reason 计量」在生产上无从取数。这里补一条结构化 warn，
+		// 与 shadow 的 event 区分开（shadow 是"本应拒绝"，这里是"已拒绝"）。
+		logger.Ctx(c.Request.Context()).Warn().
+			Str("event", "ltc_gate_refused").
+			Str("stage", string(stage)).
+			Str("reason", reason).
+			Bool("master_enabled", cfg.Enabled).
+			Bool("degraded", cfg.Degraded).
+			Str("path", c.Request.URL.Path).
+			Msg("LTC 阶段门拒绝请求（已阻断，无外发/写库副作用）")
 		code := ltcRefusalCode(reason)
 		response.Error(c, code, ltcRefusalMessage(stage, reason), data)
 		c.Abort()
