@@ -1,6 +1,7 @@
 package errhttp
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // HandleDBError 处理服务层返回的错误。
@@ -54,6 +56,12 @@ func isNotFoundError(err error) bool {
 	// bizerr.Wrap(bizerr.CodePlatformUnavail, ...) 标记）。
 	if bizerr.IsUpstreamFailure(err) {
 		return false
+	}
+	// gorm.ErrRecordNotFound 是仓储层「查无此条」的权威信号，收编到这一处判定：
+	// controller 不必再为这一个哨兵直连 gorm（depguard 'controller-layer' 红线），
+	// 文本兜底（「不存在」/「not found」）继续覆盖 service 层的口语化错误。
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "不存在") || strings.Contains(msg, "not found")

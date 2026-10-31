@@ -16,12 +16,27 @@ vi.mock('@/api/templateMarket', () => ({
   listMarketEntries: api.list,
   marketCategories: api.categories,
   marketEntryDetail: vi.fn(),
+  // 页面卡片价格列消费这个助手（S-22 收费上架后新增）；mock 不补的话
+  // 渲染期 undefined 调用直接把整棵组件树炸空。
+  marketPriceText: (cents) => (cents > 0 ? `¥${(cents / 100).toFixed(2)}` : '免费'),
   ENTRY_KIND_LABEL: { template: '模板', skill: '技能' },
   AVAILABILITY_LABEL: { builtin: '内置可用', needs_module: '需开通模块', coming_soon: '即将上线' },
   AVAILABILITY_TAG_TYPE: { builtin: 'success', needs_module: 'warning', coming_soon: 'info' }
 }))
 
+// 页面 onMounted 读 route.query（?publish=1 直开发布表单），无 router 装配时
+// useRoute() 返回 undefined → TypeError 把 fetch 掐死 → 橱窗永远空。
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: {} }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() })
+}))
+
 import Market from '@/views/templateMarket/Market.vue'
+import i18n from '@/i18n'
+
+// jsdom 的 navigator.language 是 en-US，页面经全局 i18n 直译后断言里的中文
+// 文案全部落空——组件用例统一钉在 zh（与 chat_embed 系列同一做法）。
+i18n.global.locale.value = 'zh'
 
 const ENTRIES = [
   { id: 'card-douyin', kind: 'template', name: '抖音卡片页', category: 'channel_card', summary: '抖音渠道卡片', source: 'internal/reach/card/template/douyin_card.html', availability: 'builtin', tags: ['douyin', '卡片'] },

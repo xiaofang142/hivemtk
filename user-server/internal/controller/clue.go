@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,7 +11,6 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // clueImportMaxBatch 单次导入上限：cts 一次提交几十万行会把请求体、去重查询
@@ -102,7 +100,7 @@ func (c *ClueController) DeleteClue(ctx *gin.Context) {
 	}
 	err := c.svc.DeleteClue(ctx.Request.Context(), req.ID)
 	if err != nil {
-		if errhttp.IsNotFoundError(err) || errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, fmt.Sprintf("线索不存在（id=%s）", req.ID))
 			return
 		}

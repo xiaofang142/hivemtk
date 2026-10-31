@@ -135,9 +135,7 @@ func (s *EgoFlowService) Publish(ctx context.Context, userID, flowID uint) (*mod
 	if !f.ScanPassed {
 		return nil, fmt.Errorf("扫描门未通过，禁止发布")
 	}
-	if f.Status == model.EgoFlowPublished || f.Status == model.EgoFlowSubmitted {
-		// 重复发布 = 版本自增（不可变版本语义）
-	}
+	// 已发布/已提交的重复发布 = 版本自增（不可变版本语义）
 	return s.republish(ctx, f)
 }
 
@@ -193,8 +191,4 @@ func (s *EgoFlowService) Rescan(ctx context.Context, userID, flowID uint) (*Scan
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
-}
-
-func datatypesJSON(b []byte) json.RawMessage {
-	return json.RawMessage(b)
 }

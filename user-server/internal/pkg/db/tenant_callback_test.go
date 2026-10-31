@@ -298,6 +298,9 @@ func TestTenantRegistry_ModelDeclarations(t *testing.T) {
 		"platform_config_kv",
 		"cron_job_leases", "dictionaries", "dictionary_transitions",
 		"backups", "restore_records",
+		// 平台级公开目录：模板/技能市场目录条目全租户共享（行不归属租户，
+		// 提交人/审核人是运营侧归属，下单归属在 tenant_orders 一侧），故全局。
+		"market_catalog_entries",
 	}
 	global := make(map[string]bool, len(globalTables))
 	for _, table := range globalTables {

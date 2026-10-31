@@ -83,7 +83,7 @@ func (r *runner) pullAssets() {
 		recordTelemetry("sync", time.Since(t0), false, "", "network")
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // 读完即弃，关闭错误无从处置
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		fmt.Fprintf(os.Stderr, "[ego-runner] 资产拉取 HTTP %d: %s\n", resp.StatusCode, strings.TrimSpace(string(body)))
@@ -246,7 +246,6 @@ func (r *runner) installFromZip(body io.Reader) (int, int, error) {
 
 	type pkgAsset struct {
 		files map[string][]byte
-		hash  string
 	}
 	pkgs := map[string]*pkgAsset{}
 	total := 0
@@ -267,7 +266,7 @@ func (r *runner) installFromZip(body io.Reader) (int, int, error) {
 			return 0, 0, err
 		}
 		content, err := io.ReadAll(io.LimitReader(rc, assetZipMaxEntryBytes+1))
-		rc.Close()
+		_ = rc.Close() // 内容已读尽，关闭错误不影响本路径
 		if err != nil {
 			return 0, 0, err
 		}

@@ -31,10 +31,6 @@ func NewReachToolDepsWithAdapter(db *gorm.DB, adapter tooluse.ReachAdapter) tool
 	}
 }
 
-func newReachSendPipeline(adapter tooluse.ReachAdapter) tooluse.ReachSendPipelinePort {
-	return newReachSendPipelineWithDB(adapter, nil)
-}
-
 // newReachSendPipelineWithDB 组装触达发送管线；db 非 nil 时接持久 quiet 延迟队列（D02），
 // nil 时（旧调用方/测试）退回进程内队列——入队语义一致，仅重启丢队。
 func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) tooluse.ReachSendPipelinePort {

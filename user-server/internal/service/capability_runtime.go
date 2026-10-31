@@ -8,7 +8,6 @@ package service
 
 import (
 	"context"
-	"sync"
 
 	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/dto"
@@ -146,6 +145,3 @@ func (s *CapabilityRuntimeService) Describe(ctx context.Context) dto.CapabilityR
 	}
 	return out
 }
-
-// capabilityContractOnce 契约测试只跑一次探针（并发安全由测试串行保证，这里兜底）
-var capabilityContractOnce sync.Once

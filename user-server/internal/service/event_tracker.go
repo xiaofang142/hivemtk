@@ -9,6 +9,7 @@ import (
 
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -110,6 +111,13 @@ func (s *EventTracker) Track(ctx context.Context, dto *EventDTO) error {
 	}
 
 	if !s.disableAsync {
+		// 测试收尾/装配早期 dbstate 可能未就绪——无库窗口里的异步打标没有意义，
+		// 与其在协程里 recover 一条 nil-DB panic 栈，不如派发前显式跳过并留痕。
+		// （Record 本身已在上面同步路径上报错返回，这里只管异步面。）
+		if dbstate.Get() == nil {
+			logger.Warnf("event_tracker: DB 未就绪，跳过事件 %s 的异步打标", event.CustomerID)
+			return nil
+		}
 		// fire-and-forget 异步处理不能复用请求 ctx：HTTP handler 返回即取消，异步任务会被掐断半途
 		asyncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 60*time.Second)
 		go func() {

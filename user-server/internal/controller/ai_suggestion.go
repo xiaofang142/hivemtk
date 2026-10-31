@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 
 	"hivemtk-user/internal/pkg/errhttp"
@@ -11,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // AISuggestionController AI建议控制器
@@ -72,7 +70,7 @@ func (c *AISuggestionController) UseSuggestion(ctx *gin.Context) {
 	if err := c.suggestionService.UseSuggestion(ctx.Request.Context(), uint(id), agentID); err != nil {
 		// 0 行 = id 不存在（或不属于本租户）。仓储已把它归一成 ErrRecordNotFound，
 		// 这里只回「建议不存在（id=…）」，不要把 gorm 原文透给前端。
-		if errors.Is(err, gorm.ErrRecordNotFound) || errhttp.IsNotFoundError(err) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, fmt.Sprintf("AI 建议不存在（id=%d）", id))
 			return
 		}

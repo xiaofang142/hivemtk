@@ -2,17 +2,16 @@
 package controller
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // CSATController 满意度控制器
@@ -40,7 +39,7 @@ func (c *CSATController) Submit(ctx *gin.Context) {
 	}
 	sessionID := ctx.Param("id")
 	survey, err := c.svc.Submit(ctx.Request.Context(), sessionID, req.Score, req.Comment)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errhttp.IsNotFoundError(err) {
 		// 与 Trigger 配套：没有调查单就无从评分。原先落到通用 404「记录不存在」，
 		// 前端看不出是会话错了还是这张单不存在。
 		response.NotFound(ctx, fmt.Sprintf("该会话没有待评价的满意度调查单（session_id=%s）", sessionID))
@@ -59,7 +58,7 @@ func (c *CSATController) Submit(ctx *gin.Context) {
 func (c *CSATController) Trigger(ctx *gin.Context) {
 	sessionID := ctx.Param("id")
 	survey, err := c.svc.Trigger(ctx.Request.Context(), sessionID, "manual")
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errhttp.IsNotFoundError(err) {
 		response.NotFound(ctx, fmt.Sprintf("会话不存在（id=%s）", sessionID))
 		return
 	}

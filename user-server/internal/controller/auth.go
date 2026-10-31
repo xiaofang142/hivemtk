@@ -12,6 +12,7 @@ import (
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -93,6 +94,12 @@ func (c *AuthController) recordLoginRiskAsync(ctx *gin.Context, username string,
 	// 隔离闸按 tenant_id fail-closed 会拒绝全部读写（登录风控整链静默失效）。
 	// 必须在请求还活着时先把租户绑定摘出来，进协程再挂回去。
 	tid, hasTenant := tenant.FromContext(ctx.Request.Context())
+	// 测试收尾/装配早期 dbstate 可能未就绪——无库窗口里的风控记账没有意义，
+	// 与其在协程里 recover 一条 nil-DB panic 栈，不如派发前显式跳过并留痕。
+	if dbstate.Get() == nil {
+		logger.GetLogger().Warn().Str("username", username).Msg("[login-risk] DB 未就绪，跳过本次异步风控记账")
+		return
+	}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {

@@ -758,8 +758,11 @@ func TestBindingCRUD_BindNonExistentKB(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent KB")
 	}
-	if !strings.Contains(err.Error(), "知识库不存在") {
-		t.Errorf("expected '知识库不存在' error, got: %v", err)
+	// 现行契约（b4937754 起）：仓储回带 id 的可定位文案「知识库 99999 不存在」，
+	// service 原样透出（agent_kb_binding.go 注明不再包一层）。断言跟随契约，
+	// 同时锁「有 id」与「有不存在」两个要素。
+	if !strings.Contains(err.Error(), "99999") || !strings.Contains(err.Error(), "不存在") {
+		t.Errorf("expected '知识库 99999 不存在' error, got: %v", err)
 	}
 }
 

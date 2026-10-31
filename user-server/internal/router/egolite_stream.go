@@ -66,16 +66,16 @@ func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository,
 
 	writeFrame := func(event string, id uint, data any) {
 		if id > 0 {
-			fmt.Fprintf(c.Writer, "id: %d\n", id)
+			_, _ = fmt.Fprintf(c.Writer, "id: %d\n", id) // SSE：客户端断连是常态，由 ctx.Done 收流
 		}
 		if event != "" {
-			fmt.Fprintf(c.Writer, "event: %s\n", event)
+			_, _ = fmt.Fprintf(c.Writer, "event: %s\n", event) // 同上
 		}
 		b, err := json.Marshal(data)
 		if err != nil {
 			return
 		}
-		fmt.Fprintf(c.Writer, "data: %s\n\n", b)
+		_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", b) // 同上
 		c.Writer.Flush()
 	}
 
@@ -117,7 +117,7 @@ func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository,
 			}
 		case <-heartbeat.C:
 			// 注释帧：浏览器/netty 不会把它当事件，只用来保活 + 每 15s 复查终态
-			fmt.Fprint(c.Writer, ": hb\n\n")
+			_, _ = fmt.Fprint(c.Writer, ": hb\n\n") // 心跳帧同样容忍断连
 			c.Writer.Flush()
 		}
 	}

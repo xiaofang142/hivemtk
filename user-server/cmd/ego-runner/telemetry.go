@@ -173,7 +173,7 @@ var flushTelemetryPost = func(c runnerConf, body []byte) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // 上报后善后关闭，错误无从处置
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}

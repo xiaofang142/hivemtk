@@ -39,8 +39,6 @@ type EgoRunnerConn struct {
 	registeredAt time.Time
 }
 
-func newEgoRunnerConn() time.Time { return time.Now() }
-
 // SendSpec 下发帧（写经 writeMu 串行 + 单帧写时限，HostConn 同纪律——
 // 半开 TCP 上无时限的 WriteJSON 会把 ping/下发协程一起挂死）
 func (c *EgoRunnerConn) SendSpec(frame any) error {
@@ -52,10 +50,9 @@ func (c *EgoRunnerConn) SendSpec(frame any) error {
 
 // EgoRunnerRegistry per-user runner 连接表
 type EgoRunnerRegistry struct {
-	mu       sync.RWMutex
-	conns    map[uint]*EgoRunnerConn
-	hook     func(ctx context.Context, userID uint)
-	hookOnce sync.Once
+	mu    sync.RWMutex
+	conns map[uint]*EgoRunnerConn
+	hook  func(ctx context.Context, userID uint)
 }
 
 func NewEgoRunnerRegistry() *EgoRunnerRegistry {

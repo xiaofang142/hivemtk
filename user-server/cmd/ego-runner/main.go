@@ -78,7 +78,7 @@ func loadConf() (*runnerConf, error) {
 	if err != nil {
 		return nil, fmt.Errorf("打不开配置 %s（参考 nm_host.conf 的 key=value 格式）: %w", p, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // 只读句柄，关闭错误无从处置
 	c := &runnerConf{
 		ServerURL: "ws://127.0.0.1:8204",
 		// T2 勘误后定案：workspace=ego skill 物理目录（learnings 解包点），不再走 env 重定向
@@ -200,7 +200,6 @@ type runner struct {
 type execContext struct {
 	spec         taskSpec
 	cancel       context.CancelFunc
-	exitCode     int
 	decisionPath string // 事前阻塞确认闸的裁决文件（allow/deny 由 confirm 帧写入；每执行独立临时目录）
 }
 
@@ -583,7 +582,7 @@ func (r *runner) execEgo(ctx context.Context, cancel context.CancelFunc, spec ta
 		r.send(eventLine{Type: "error", Execution: spec.ExecutionID, Stderr: "打开脚本失败: " + err.Error()})
 		return -1, err.Error()
 	}
-	defer script.Close()
+	defer func() { _ = script.Close() }() // stdin 喂完即弃，关闭错误无从处置
 	cmd.Stdin = script
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
@@ -775,7 +774,7 @@ func main() {
 	flag.Parse()
 
 	if *confFile != "" {
-		os.Setenv("EGO_RUNNER_CONF", *confFile)
+		_ = os.Setenv("EGO_RUNNER_CONF", *confFile) // 键名合法，Setenv 实际不会失败
 	}
 	c, err := loadConf()
 	if err != nil {

@@ -15,7 +15,6 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type AIAgentController struct {
@@ -868,7 +867,7 @@ func replyCSMountError(c *gin.Context, err error, fallback string) {
 		errors.Is(err, service.ErrCSUserNotFound),
 		errors.Is(err, service.ErrCSAgentNotFound):
 		response.NotFound(c, err.Error())
-	case errors.Is(err, gorm.ErrRecordNotFound) || errhttp.IsNotFoundError(err):
+	case errhttp.IsNotFoundError(err):
 		response.NotFound(c, fallback)
 	default:
 		response.ErrorFromDB(c, err, fallback)

@@ -80,7 +80,7 @@ try {
 		r.send(eventLine{Type: "runner", Execution: spec.ExecutionID, Payload: mustJSON(map[string]any{"ok": false, "action": "finish", "error": err.Error()})})
 		return
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }() // 临时目录善后清理，错误无从处置
 	path := filepath.Join(dir, "finish.mjs")
 	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
 		r.send(eventLine{Type: "runner", Execution: spec.ExecutionID, Payload: mustJSON(map[string]any{"ok": false, "action": "finish", "error": err.Error()})})
@@ -91,7 +91,7 @@ try {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // stdin 喂完即弃，关闭错误无从处置
 	cmd.Stdin = f
 	out, _ := cmd.Output()
 	for _, line := range strings.Split(string(out), "\n") {
