@@ -1,5 +1,0 @@
-$ go build ./...
-(cwd=user-server)
-rc=0  13.9s
-
-
