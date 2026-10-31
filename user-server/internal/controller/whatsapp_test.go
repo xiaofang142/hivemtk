@@ -97,12 +97,27 @@ func TestWhatsappController_ListDrafts_Success(t *testing.T) {
 	ctrl := NewWhatsappController(service.NewWhatsappService(repository.NewClueRepositoryWithDB(db.GetDB())))
 	router := setupWhatsAppRouter(ctrl)
 
-	req, _ := http.NewRequest("GET", "/whatsapp/drafts", nil)
+	req, _ := http.NewRequest("GET", "/whatsapp/drafts?page=1&page_size=10", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected 200, got %d. Body: %s", w.Code, w.Body.String())
+	}
+
+	// S-31：响应必须是 {list,total} 形态（前端分页 UI 消费的契约）。
+	var body struct {
+		Data map[string]any `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &body)
+	if body.Data == nil {
+		t.Fatalf("响应缺 data: %s", w.Body.String())
+	}
+	if _, ok := body.Data["total"]; !ok {
+		t.Errorf("分页响应缺 total 字段: %s", w.Body.String())
+	}
+	if _, ok := body.Data["list"]; !ok {
+		t.Errorf("分页响应缺 list 字段: %s", w.Body.String())
 	}
 }
 

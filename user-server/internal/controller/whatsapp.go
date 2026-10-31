@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"strconv"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
@@ -151,13 +152,32 @@ type createDraftReq struct {
 // @Summary GET /api/whatsapp/drafts
 // @Tags      whatsapp
 // @Router    /api/whatsapp/drafts [get]
+// ListDrafts 分页口径与前端 page-sizes [10,20,50] 对齐：缺省 10、上限 50，
+// 返回 {list,total} 形态（前端 load() 双形态兼容已就位，S-31）。
 func (c *WhatsappController) ListDrafts(ctx *gin.Context) {
-	list, err := c.svc.ListDrafts(ctx.Request.Context())
+	page, pageSize := normalizeWhatsappPaging(ctx)
+	list, total, err := c.svc.ListDrafts(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取草稿失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取草稿失败")
 		return
 	}
-	response.Success(ctx, list, "获取草稿成功")
+	response.Success(ctx, gin.H{"list": list, "total": total}, "获取草稿成功")
+}
+
+// normalizeWhatsappPaging 归一化分页入参：page<1→1、page_size 缺省 10、封顶 50。
+func normalizeWhatsappPaging(ctx *gin.Context) (int, int) {
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 50 {
+		pageSize = 50
+	}
+	return page, pageSize
 }
 
 // @Summary POST /api/whatsapp/drafts
@@ -312,14 +332,15 @@ func (c *WhatsappController) DeleteDraft(ctx *gin.Context) {
 // @Summary 列出群发任务
 // @Tags      whatsapp
 // @Router    /api/whatsapp/jobs [get]
-// ListJobs 列出群发任务
+// ListJobs 列出群发任务（分页口径同 ListDrafts，S-31）
 func (c *WhatsappController) ListJobs(ctx *gin.Context) {
-	list, err := c.svc.ListJobs(ctx.Request.Context())
+	page, pageSize := normalizeWhatsappPaging(ctx)
+	list, total, err := c.svc.ListJobs(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取任务列表失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取任务列表失败")
 		return
 	}
-	response.Success(ctx, list, "获取任务列表成功")
+	response.Success(ctx, gin.H{"list": list, "total": total}, "获取任务列表成功")
 }
 
 // @Summary 获取群发任务详情

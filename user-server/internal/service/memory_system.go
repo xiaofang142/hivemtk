@@ -713,7 +713,16 @@ func (m *MemorySystem) recallPostgres(ctx context.Context, customerID string, qu
 }
 
 func (m *MemorySystem) recallFallback(ctx context.Context, customerID string, queryVec []float32, limit int) ([]LongTermMemoryRecallResult, error) {
-	items, err := m.memoryRepo.ListLongTermMemoriesForFallback(ctx, customerID, time.Now())
+	// 候选池硬上界（S-30）：池取 limit 的 4 倍留 rerank 余量，钳在 [200,500]。
+	// 无此上界时降级路径整表载入客户全部记忆（含 embedding 串），随条数线性退化。
+	pool := limit * 4
+	if pool < 200 {
+		pool = 200
+	}
+	if pool > 500 {
+		pool = 500
+	}
+	items, err := m.memoryRepo.ListLongTermMemoriesForFallback(ctx, customerID, time.Now(), pool)
 	if err != nil {
 		return nil, fmt.Errorf("fallback fetch: %w", err)
 	}

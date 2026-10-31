@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -420,7 +421,8 @@ func QueryScenarioStats(ctx context.Context, window string, limit int, enabledPr
 	case "week":
 		since = now.AddDate(0, 0, -7)
 	case "month":
-		since = now.AddDate(0, -1, 0)
+		// 上一个自然月 1 号零点起算（月末 AddDate 归一化会漂移，见 timeutil.TrailingMonthStart）。
+		since = timeutil.TrailingMonthStart(now)
 	default:
 		since = time.Time{}
 	}
@@ -581,7 +583,8 @@ func QueryDailyUsage(ctx context.Context, window, groupBy string, limit int) ([]
 	case "week":
 		since = now.AddDate(0, 0, -7)
 	case "month":
-		since = now.AddDate(0, -1, 0)
+		// 上一个自然月 1 号零点起算（月末 AddDate 归一化会漂移，见 timeutil.TrailingMonthStart）。
+		since = timeutil.TrailingMonthStart(now)
 	}
 
 	// 本地时区日：created_at::date（PG）。

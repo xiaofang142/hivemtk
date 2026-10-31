@@ -10,6 +10,7 @@ import (
 	"errors"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 
 	"hivemtk-user/internal/pkg/httpclient"
 	"hivemtk-user/internal/pkg/tenant"
@@ -599,7 +600,7 @@ func (s *IntegrationService) syncTaobaoOrders(ctx context.Context, account *mode
 		"method":        {"taobao.trades.sold.get"},
 		"format":        {"json"},
 		"v":             {"2.0"},
-		"start_created": {time.Now().AddDate(0, -1, 0).Format("2006-01-02 15:04:05")},
+		"start_created": {timeutil.TrailingMonthStart(time.Now()).Format("2006-01-02 15:04:05")},
 		"end_created":   {time.Now().Format("2006-01-02 15:04:05")},
 		"page":          {"1"},
 		"page_size":     {"100"},
@@ -765,7 +766,7 @@ func (s *IntegrationService) syncJDOrders(ctx context.Context, account *model.In
 		"method":     {"jingdong.pop.order.search"},
 		"format":     {"json"},
 		"v":          {"2.0"},
-		"start_date": {time.Now().AddDate(0, -1, 0).Format("2006-01-02 15:04:05")},
+		"start_date": {timeutil.TrailingMonthStart(time.Now()).Format("2006-01-02 15:04:05")},
 		"end_date":   {time.Now().Format("2006-01-02 15:04:05")},
 		"page":       {"1"},
 		"page_size":  {"100"},

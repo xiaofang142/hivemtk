@@ -54,7 +54,8 @@ type MemoryRepository interface {
 	CreateLongTermMemory(ctx context.Context, item *model.CustomerLongTermMemory) error
 	SaveLongTermMemory(ctx context.Context, item *model.CustomerLongTermMemory) error
 	SearchLongTermMemoriesByVector(ctx context.Context, queryVecStr, customerID string, fetchN int) ([]LongTermMemoryVectorRow, error)
-	ListLongTermMemoriesForFallback(ctx context.Context, customerID string, now time.Time) ([]model.CustomerLongTermMemory, error)
+	// limit 为硬上界（recallFallback 的候选池封顶），防随记忆增长的整表载入。
+	ListLongTermMemoriesForFallback(ctx context.Context, customerID string, now time.Time, limit int) ([]model.CustomerLongTermMemory, error)
 	ListLongTermMemories(ctx context.Context, customerID, memType string, limit int) ([]model.CustomerLongTermMemory, error)
 	DeleteLongTermMemoryByID(ctx context.Context, id uint64) error
 
@@ -271,11 +272,17 @@ func (r *memoryRepository) SearchLongTermMemoriesByVector(ctx context.Context, q
 	return rows, nil
 }
 
-func (r *memoryRepository) ListLongTermMemoriesForFallback(ctx context.Context, customerID string, now time.Time) ([]model.CustomerLongTermMemory, error) {
+// limit <= 0 视为不设上界（仅测试/显式全量场景使用；recallFallback 恒传正数）。
+func (r *memoryRepository) ListLongTermMemoriesForFallback(ctx context.Context, customerID string, now time.Time, limit int) ([]model.CustomerLongTermMemory, error) {
 	var items []model.CustomerLongTermMemory
-	if err := r.db.WithContext(ctx).
-		Where("customer_id = ? AND (expires_at IS NULL OR expires_at > ?)", customerID, now).
-		Find(&items).Error; err != nil {
+	q := r.db.WithContext(ctx).
+		Where("customer_id = ? AND (expires_at IS NULL OR expires_at > ?)", customerID, now)
+	if limit > 0 {
+		// 候选池按重要性+新鲜度排序后封顶：降级路径的内存占用与延迟不再随
+		// 记忆条数无界增长（2026-10-31 审计 S-30）。
+		q = q.Order("importance DESC, created_at DESC").Limit(limit)
+	}
+	if err := q.Find(&items).Error; err != nil {
 		return nil, err
 	}
 	return items, nil

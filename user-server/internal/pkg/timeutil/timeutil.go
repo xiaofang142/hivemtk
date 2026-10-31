@@ -86,3 +86,16 @@ func StartOfBusinessDay(t time.Time) time.Time {
 	y, m, d := t.In(businessTimeZone).Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, businessTimeZone)
 }
+
+// TrailingMonthStart 返回「上一个自然月 1 号 00:00:00（业务时区）」。
+//
+// 全仓凡是语义为「最近一个月 / 上个自然月」的统计窗口起点都必须用它，
+// 而不是 `time.Now().AddDate(0, -1, 0)`——后者在 31 号会把 9/31 归一化成
+// 10/1（落回当月，窗口虚长一倍）、3/31 会归成 3/3（窗口缩成几天）。
+// 2026-10-31 workbench 月末翻车（sales_workbench_test.go lastMonthStart
+// 即同款修复）后全仓复扫定为本仓唯一合法写法。
+func TrailingMonthStart(t time.Time) time.Time {
+	b := t.In(businessTimeZone)
+	firstOfCurrent := time.Date(b.Year(), b.Month(), 1, 0, 0, 0, 0, businessTimeZone)
+	return firstOfCurrent.AddDate(0, -1, 0)
+}

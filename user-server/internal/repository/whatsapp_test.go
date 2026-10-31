@@ -384,13 +384,22 @@ func TestWhatsappRepository_ListDrafts(t *testing.T) {
 		Title: "Other Draft",
 	})
 
-	drafts, err := repo.ListDrafts(context.Background())
+	drafts, total, err := repo.ListDrafts(context.Background(), 1, 50)
 	if err != nil {
 		t.Errorf("ListDrafts() error = %v", err)
 	}
 
-	if len(drafts) != 4 {
-		t.Errorf("Expected 4 drafts, got %d", len(drafts))
+	if len(drafts) != 4 || total != 4 {
+		t.Errorf("Expected 4 drafts/4 total, got %d/%d", len(drafts), total)
+	}
+
+	// S-31：分页语义钉住——第 2 页 pageSize=3 只剩 1 条，total 仍为全量。
+	page2, total2, err := repo.ListDrafts(context.Background(), 2, 3)
+	if err != nil {
+		t.Errorf("ListDrafts(page=2) error = %v", err)
+	}
+	if len(page2) != 1 || total2 != 4 {
+		t.Errorf("Expected 1 draft/4 total on page 2, got %d/%d", len(page2), total2)
 	}
 }
 
@@ -541,13 +550,13 @@ func TestWhatsappRepository_ListJobs(t *testing.T) {
 		DraftID: uuid.New(),
 	})
 
-	jobs, err := repo.ListJobs(context.Background())
+	jobs, total, err := repo.ListJobs(context.Background(), 1, 50)
 	if err != nil {
 		t.Errorf("ListJobs() error = %v", err)
 	}
 
-	if len(jobs) != 4 {
-		t.Errorf("Expected 4 jobs, got %d", len(jobs))
+	if len(jobs) != 4 || total != 4 {
+		t.Errorf("Expected 4 jobs/4 total, got %d/%d", len(jobs), total)
 	}
 }
 

@@ -23,13 +23,13 @@ type WhatsappRepository interface {
 	CreateDraft(ctx context.Context, d *model.WhatsappDraft) error
 	UpdateDraft(ctx context.Context, d *model.WhatsappDraft) error
 	DeleteDraft(ctx context.Context, id uuid.UUID) error
-	ListDrafts(ctx context.Context) ([]*model.WhatsappDraft, error)
+	ListDrafts(ctx context.Context, page, pageSize int) ([]*model.WhatsappDraft, int64, error)
 	GetDraft(ctx context.Context, id uuid.UUID) (*model.WhatsappDraft, error)
 
 	CreateJob(ctx context.Context, j *model.WhatsappJob) error
 	UpdateJob(ctx context.Context, j *model.WhatsappJob) error
 	DeleteJob(ctx context.Context, id uuid.UUID) error
-	ListJobs(ctx context.Context) ([]*model.WhatsappJob, error)
+	ListJobs(ctx context.Context, page, pageSize int) ([]*model.WhatsappJob, int64, error)
 	GetJob(ctx context.Context, id uuid.UUID) (*model.WhatsappJob, error)
 
 	CreateJobDetail(ctx context.Context, d *model.WhatsappJobDetail) error
@@ -124,10 +124,17 @@ func (r *whatsappRepo) DeleteDraft(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
-func (r *whatsappRepo) ListDrafts(ctx context.Context) ([]*model.WhatsappDraft, error) {
+
+// page/pageSize 由调用方归一化后传入（controller 层缺省 10、封顶 50）。
+func (r *whatsappRepo) ListDrafts(ctx context.Context, page, pageSize int) ([]*model.WhatsappDraft, int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&model.WhatsappDraft{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	var list []*model.WhatsappDraft
-	err := r.db.WithContext(ctx).Find(&list).Error
-	return list, err
+	err := r.db.WithContext(ctx).Order("created_at DESC").
+		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	return list, total, err
 }
 func (r *whatsappRepo) GetDraft(ctx context.Context, id uuid.UUID) (*model.WhatsappDraft, error) {
 	var d model.WhatsappDraft
@@ -154,10 +161,17 @@ func (r *whatsappRepo) DeleteJob(ctx context.Context, id uuid.UUID) error {
 	}
 	return nil
 }
-func (r *whatsappRepo) ListJobs(ctx context.Context) ([]*model.WhatsappJob, error) {
+
+// page/pageSize 由调用方归一化后传入（controller 层缺省 10、封顶 50）。
+func (r *whatsappRepo) ListJobs(ctx context.Context, page, pageSize int) ([]*model.WhatsappJob, int64, error) {
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&model.WhatsappJob{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
 	var list []*model.WhatsappJob
-	err := r.db.WithContext(ctx).Find(&list).Error
-	return list, err
+	err := r.db.WithContext(ctx).Order("created_at DESC").
+		Offset((page - 1) * pageSize).Limit(pageSize).Find(&list).Error
+	return list, total, err
 }
 func (r *whatsappRepo) GetJob(ctx context.Context, id uuid.UUID) (*model.WhatsappJob, error) {
 	var j model.WhatsappJob

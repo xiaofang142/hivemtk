@@ -207,7 +207,7 @@ func (s *EventTracker) GetEventHistory(ctx context.Context, customerID string, l
 func (s *EventTracker) GetStats(ctx context.Context, start, end string) (*repository.EventStats, error) {
 	startTime, err := timeutil.ParseBusinessDate(start)
 	if err != nil {
-		startTime = time.Now().AddDate(0, -1, 0)
+		startTime = timeutil.TrailingMonthStart(time.Now())
 	}
 
 	endTime, err := timeutil.ParseBusinessDate(end)

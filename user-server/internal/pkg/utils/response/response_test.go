@@ -2,8 +2,10 @@ package response
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/pkg/i18n"
@@ -408,4 +410,45 @@ func TestResponsePath_RequestlessContextDoesNotPanic(t *testing.T) {
 			t.Errorf("LocaleOf = %v, want 缺省中文", got)
 		}
 	})
+}
+
+// TestErrorFromDB_TerminalMasksRawError（S-29）：未知 500 类错误的三条泄漏面
+// （空 fallback 顶原文 / 调用方把 err.Error() 当 fallbackMsg / data 通道携带原文）
+// 在终态分支必须全部封死；400/409 分支的业务文案不受影响。
+func TestErrorFromDB_TerminalMasksRawError(t *testing.T) {
+	raw := `pq: syntax error at or near "SELEC" (SQLSTATE 42601), relation "bills_x"` // 表名+SQLSTATE，泄露即肉眼可见
+
+	cases := []struct {
+		name        string
+		fallback    string
+		data        []any
+		wantBlocked bool // true = 响应体不允许出现原文
+	}{
+		{"空 fallback", "", nil, true},
+		{"原文当 fallback", raw, nil, true},
+		{"原文塞 data", "导出失败", []any{raw}, true},
+		{"业务文案不受影响", "导出任务提交成功但状态刷新失败", nil, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest("POST", "/t", nil)
+
+			err := errors.New(raw)
+			ErrorFromDB(c, err, tc.fallback, tc.data...)
+
+			if w.Code != http.StatusInternalServerError {
+				t.Fatalf("未知错误应落 500，得到 %d", w.Code)
+			}
+			body := w.Body.String()
+			if tc.wantBlocked && strings.Contains(body, "SQLSTATE") {
+				t.Errorf("原文泄漏出境: %s", body)
+			}
+			if !tc.wantBlocked && !strings.Contains(body, tc.fallback) {
+				t.Errorf("业务文案被误掩: %s", body)
+			}
+		})
+	}
 }

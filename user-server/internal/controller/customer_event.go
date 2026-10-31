@@ -136,7 +136,7 @@ func (c *CustomerEventController) GetEventStats(ctx *gin.Context) {
 	// 缺省区间必须是**业务日**串：service.EventTracker.GetStats 用 ParseBusinessDate
 	// 解回来，两边口径要同源，否则默认窗口的首末日各差 8 小时。
 	if start == "" {
-		start = timeutil.BusinessDate(time.Now().AddDate(0, -1, 0))
+		start = timeutil.BusinessDate(timeutil.TrailingMonthStart(time.Now()))
 	}
 	if end == "" {
 		end = timeutil.BusinessToday()

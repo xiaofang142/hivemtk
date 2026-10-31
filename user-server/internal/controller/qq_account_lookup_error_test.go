@@ -38,7 +38,13 @@ func TestAbortQQAccountLookup_InternalErrorIs500(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("库故障应回 500 而不是 404，实际 %d body=%s", rec.Code, rec.Body.String())
 	}
-	if body := rec.Body.String(); !strings.Contains(body, "connection refused") {
-		t.Errorf("500 响应应带原始错误便于排查，实际 body=%s", body)
+	// S-29（2026-10-31）：500 的 message 掩码为操作名、data 通道不再携带原文——
+	// 原始错误（含 dial/驱动细节）只进服务端日志。「便于排查」由日志承接，
+	// 响应体不得出现连接串（多租户下面向商户/运营，内部拓扑是信息泄露面）。
+	if body := rec.Body.String(); strings.Contains(body, "connection refused") {
+		t.Errorf("500 响应体不得携带原始连接错误（原文已改走服务端日志），实际 body=%s", body)
+	}
+	if body := rec.Body.String(); !strings.Contains(body, "账号查询失败") {
+		t.Errorf("500 应保留操作名供定位，实际 body=%s", body)
 	}
 }

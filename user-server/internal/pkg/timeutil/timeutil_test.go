@@ -179,3 +179,31 @@ func TestStartOfBusinessDayIgnoresHostZone(t *testing.T) {
 		t.Errorf("日首两条算法不一致: %v vs %v", parsed, StartOfBusinessDay(instant))
 	}
 }
+
+// TestTrailingMonthStart 月末归一化防线：任何日子算「上月 1 号」都必须落在
+// 上一个自然月，且恒为该月 1 号零点（workbench 月末翻车后定的全仓口径）。
+func TestTrailingMonthStart(t *testing.T) {
+	cases := []struct {
+		day  string // 业务时区下的当日
+		want string // 期望的上月 1 号
+	}{
+		{"2026-10-31", "2026-09-01"}, // 31 号：AddDate(0,-1,0) 会归到 10-01，本函数必须不漂
+		{"2026-03-31", "2026-02-01"}, // 3 月末退一月撞 2 月短月
+		{"2026-12-31", "2026-11-01"},
+		{"2026-11-01", "2026-10-01"}, // 1 号：恰好等于调度日场景（feedback_loop cron）
+		{"2026-01-01", "2025-12-01"}, // 跨年
+	}
+	for _, c := range cases {
+		day, err := ParseBusinessDate(c.day)
+		if err != nil {
+			t.Fatalf("解析 %s: %v", c.day, err)
+		}
+		got := TrailingMonthStart(day)
+		if got.Format("2006-01-02") != c.want {
+			t.Errorf("TrailingMonthStart(%s) = %s, want %s", c.day, got.Format("2006-01-02"), c.want)
+		}
+		if got.Location().String() != businessTimeZone.String() {
+			t.Errorf("TrailingMonthStart 必须落在业务时区，得到 %s", got.Location())
+		}
+	}
+}

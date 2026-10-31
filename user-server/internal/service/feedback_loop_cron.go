@@ -88,6 +88,9 @@ func (c *FeedbackLoopCron) runChampionBaselineMonthlyTenant(ctx context.Context)
 	}
 
 	periodEnd := time.Now()
+	// 暗耦合警示：本处 AddDate(0,-1,0) 之所以恒正确，是因为 nextMonthlyRun(1,…)
+	// 把本 cron 钉死在每月 1 号执行（1 号做月减法无归一化漂移）——若改调度日，
+	// 这里必须同步换成 timeutil.TrailingMonthStart（月末语义）。
 	periodStart := periodEnd.AddDate(0, -1, 0)
 	rowsAffected := c.refreshChampionBaselineRows(ctx, "default", "default", "all", periodStart, periodEnd)
 	logger.Ctx(ctx).Info().Int64("rows_affected", rowsAffected).Msg("[cron] monthly champion baseline refresh done")

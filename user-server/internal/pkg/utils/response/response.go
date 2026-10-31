@@ -251,9 +251,19 @@ func ErrorFromDB(c *gin.Context, err error, fallbackMsg string, data ...any) {
 		Error(c, http.StatusConflict, fallbackMsg)
 		return
 	}
-	if fallbackMsg == "" {
-		fallbackMsg = msg
+	// 终态：未落入任何业务/上游/文本分派分支的错误 = 真正的未知 500。
+	// 原始错误（可含 SQLSTATE/表名/约束名/驱动消息）只进服务端日志，对外回操作名。
+	// 三个历史泄漏面在此一并封死（S-29，2026-10-31 审计）：
+	//   - fallbackMsg 为空时曾把 err.Error() 顶出去；
+	//   - 87 处调用点直接把 err.Error() 当 fallbackMsg 传入（== msg 判定一并拦住）；
+	//   - data 通道在终态丢弃（部分调用点把 err.Error() 塞在 data 里）。
+	// 400/404/409/502 分支的业务文案不受影响——那些分支的错误已有明确分类，
+	// 文本本就是写给用户照做的。
+	if fallbackMsg == "" || fallbackMsg == msg {
+		logger.Errorf("ErrorFromDB 未知 500 已掩码（原文仅入日志）: %s", msg)
+		fallbackMsg = "操作失败，请稍后重试"
 	}
+	data = nil // 终态一律不带 data：部分调用点把 err.Error() 塞在 data 里，无条件丢弃才封得死
 	Error(c, http.StatusInternalServerError, fallbackMsg, data...)
 }
 

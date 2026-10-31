@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 
 	"context"
@@ -29,7 +30,7 @@ func (s *KuaishouCardStatsService) GetCardStats(ctx context.Context, req *dto.Ku
 	}
 
 	if req.StartDate.IsZero() {
-		req.StartDate = time.Now().AddDate(0, -1, 0)
+		req.StartDate = timeutil.TrailingMonthStart(time.Now())
 	}
 	if req.EndDate.IsZero() {
 		req.EndDate = time.Now()
@@ -99,7 +100,7 @@ func (s *KuaishouCardStatsService) GetCardStats(ctx context.Context, req *dto.Ku
 // GetOverallStats 获取快手卡片总体统计数据
 func (s *KuaishouCardStatsService) GetOverallStats(ctx context.Context, req *dto.KuaishouCardOverallStatsRequest) (*dto.KuaishouCardOverallStatsResponse, error) {
 	if req.StartDate.IsZero() {
-		req.StartDate = time.Now().AddDate(0, -1, 0)
+		req.StartDate = timeutil.TrailingMonthStart(time.Now())
 	}
 	if req.EndDate.IsZero() {
 		req.EndDate = time.Now()
