@@ -101,7 +101,6 @@ ERNIE_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd
 GEO_BATCH	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
 GEO_DB_DSN	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
 GEO_SEED_DSN	待补文档（第36轮登记为债）；读取点 user-server/cmd/seedkw/main.go
-GOLDEN_DIR	待补文档（第36轮登记为债）；读取点 user-server/internal/pkg/goldentest/goldentest.go
 HIVE_MTK_HOST_TOKEN	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
 HIVE_MTK_HOST_VERSION	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
 HIVE_MTK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
@@ -113,4 +112,3 @@ MOCK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/bri
 PERF_PASSWORD	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 PERF_USERNAME	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 QWEN_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
-UPDATE_GOLDEN	黄金测试刷新开关（internal/pkg/goldentest，仅测试进程读取）

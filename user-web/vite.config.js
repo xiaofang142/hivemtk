@@ -311,12 +311,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // Vite 8 使用 Rolldown 打包，manualChunks 必须为函数形式（对象形式报 "Expected Function"）。
-        // 分桶语义与原对象式保持一致：vue / elementPlus / echarts / tinymce / utils。
+        // 分桶语义与原对象式保持一致：vue / elementPlus / echarts / utils。
         manualChunks(id) {
           if (!id.includes('node_modules')) return
           if (id.includes('element-plus') || id.includes('@element-plus')) return 'elementPlus'
           if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
-          if (id.includes('tinymce')) return 'tinymce'
           if (id.includes('axios') || id.includes('dompurify')) return 'utils'
           if (
             id.includes('vue-router') ||
@@ -355,11 +354,11 @@ export default defineConfig({
   },
   // 添加优化选项
   optimizeDeps: {
-    // dompurify / tinymce / echarts 等是被懒加载（动态 import）或较大体积的依赖，
+    // dompurify / echarts 等是被懒加载（动态 import）或较大体积的依赖，
     // 若不在启动期预打包，首次被页面请求时 Vite 会临时优化，期间对该依赖的请求返回
     // 504，导致 import 该依赖的页面（sms/Jobs、chatChannel/List、email/Drafts、
     // whatsappBot/BulkMessaging 等）白屏。显式 include 使其在 server 启动期完成预构建。
-    include: ['vue', 'vue-router', 'pinia', 'element-plus', 'axios', 'dompurify', 'echarts', 'tinymce', '@tinymce/tinymce-vue']
+    include: ['vue', 'vue-router', 'pinia', 'element-plus', 'axios', 'dompurify', 'echarts']
   },
   // 添加自定义配置以禁用警告
   define: {
