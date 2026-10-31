@@ -261,7 +261,7 @@ func (c *AuthController) GetCurrentUser(ctx *gin.Context) {
 		if HandleServiceError(ctx, err) {
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -334,7 +334,7 @@ func (c *AuthController) SetupMFA(ctx *gin.Context) {
 
 	resp, err := c.mfaService.SetupMFA(ctx.Request.Context(), uid, usernameStr)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -482,7 +482,7 @@ func (c *AuthController) GetMFAStatus(ctx *gin.Context) {
 
 	enabled, err := c.mfaService.IsMFAEnabled(ctx.Request.Context(), uid)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -542,7 +542,7 @@ func (c *AuthController) ListLoginEvents(ctx *gin.Context) {
 
 	events, total, err := c.riskService.ListLoginEvents(ctx.Request.Context(), uid, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -575,7 +575,7 @@ func (c *AuthController) ListSecurityAlerts(ctx *gin.Context) {
 
 	alerts, total, err := c.riskService.ListSecurityAlerts(ctx.Request.Context(), uid, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -697,7 +697,7 @@ func (c *SystemUserController) GetUsers(ctx *gin.Context) {
 		users, total, err = c.userService.GetUsers(ctx.Request.Context(), page, pageSize)
 	}
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -725,7 +725,7 @@ func (c *SystemUserController) SearchUsers(ctx *gin.Context) {
 	}
 	users, total, err := c.userService.SearchUsers(ctx.Request.Context(), keyword, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{

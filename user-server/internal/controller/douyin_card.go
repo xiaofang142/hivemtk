@@ -1,10 +1,12 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	cardsvc "hivemtk-user/internal/service/cards"
 
@@ -30,7 +32,8 @@ func NewDouyinCardController(service cardsvc.DouyinCardService) *DouyinCardContr
 func (c *DouyinCardController) Create(ctx *gin.Context) {
 	var req dto.DouyinCardCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, err.Error())
+		// 不再回显 gin/encoding-json 原文：里面带 Go 结构体字段名
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：字段类型或必填项不符合要求（见接口文档）")
 		return
 	}
 
@@ -49,7 +52,7 @@ func (c *DouyinCardController) Create(ctx *gin.Context) {
 func (c *DouyinCardController) Update(ctx *gin.Context) {
 	var req dto.DouyinCardUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：字段类型或必填项不符合要求（见接口文档）")
 		return
 	}
 
@@ -62,7 +65,7 @@ func (c *DouyinCardController) Update(ctx *gin.Context) {
 	if idStr := ctx.Param("id"); idStr != "" {
 		idFromURI, err := strconv.ParseUint(idStr, 10, 32)
 		if err != nil {
-			response.Error(ctx, http.StatusBadRequest, response.ErrInvalidIDFormat, err.Error())
+			response.Error(ctx, http.StatusBadRequest, "无效的 ID 格式：路径参数必须是数字")
 			return
 		}
 		if req.ID == 0 {
@@ -93,11 +96,16 @@ func (c *DouyinCardController) Delete(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidIDFormat, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的 ID 格式：路径参数必须是数字")
 		return
 	}
 
-	if HandleDBError(ctx, c.service.Delete(ctx.Request.Context(), uint(id)), "删除抖音卡片") {
+	if err := c.service.Delete(ctx.Request.Context(), uint(id)); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, fmt.Sprintf("抖音卡片不存在（id=%d）", id))
+			return
+		}
+		HandleDBError(ctx, err, "删除抖音卡片")
 		return
 	}
 
@@ -112,13 +120,17 @@ func (c *DouyinCardController) GetByID(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidIDFormat, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的 ID 格式：路径参数必须是数字")
 		return
 	}
 
 	card, err := c.service.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, response.ErrResourceNotFound, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, fmt.Sprintf("抖音卡片不存在（id=%d）", id))
+			return
+		}
+		response.Error(ctx, http.StatusInternalServerError, "获取抖音卡片失败")
 		return
 	}
 
@@ -132,7 +144,7 @@ func (c *DouyinCardController) GetByID(ctx *gin.Context) {
 func (c *DouyinCardController) GetList(ctx *gin.Context) {
 	var req dto.DouyinCardListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：page / page_size / status 等需为整数")
 		return
 	}
 
@@ -145,7 +157,7 @@ func (c *DouyinCardController) GetList(ctx *gin.Context) {
 
 	list, err := c.service.GetList(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, response.ErrGetListFailed, err.Error())
+		response.ErrorFromDB(ctx, err, "获取抖音卡片列表失败")
 		return
 	}
 
@@ -160,12 +172,17 @@ func (c *DouyinCardController) GenerateShortLink(ctx *gin.Context) {
 	idStr := ctx.Param("id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidIDFormat, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的 ID 格式：路径参数必须是数字")
 		return
 	}
 
 	card, err := c.service.GetCardModelByID(ctx.Request.Context(), uint(id))
-	if HandleDBError(ctx, err, "获取抖音卡片") {
+	if err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, fmt.Sprintf("抖音卡片不存在（id=%d）", id))
+			return
+		}
+		HandleDBError(ctx, err, "获取抖音卡片")
 		return
 	}
 

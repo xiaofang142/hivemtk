@@ -27,7 +27,7 @@ func NewProactiveReachController(svc *service.ProactiveReachService) *ProactiveR
 func (c *ProactiveReachController) ProactiveSend(ctx *gin.Context) {
 	var req service.ProactiveReachRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -56,7 +56,7 @@ func (c *ProactiveReachController) QuickSend(ctx *gin.Context) {
 		Subject   string `json:"subject,omitempty"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (c *ProactiveReachController) ProactiveSendFromCustomer(ctx *gin.Context) {
 		DryRun            bool     `json:"dry_run,omitempty"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -170,7 +170,7 @@ func (c *ProactiveReachController) ListChannels(ctx *gin.Context) {
 func (c *ProactiveReachController) ValidateReach(ctx *gin.Context) {
 	var req service.ProactiveReachRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	req.DryRun = true
@@ -193,7 +193,7 @@ func (c *ProactiveReachController) BatchProactiveSend(ctx *gin.Context) {
 		Template string                          `json:"template,omitempty"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

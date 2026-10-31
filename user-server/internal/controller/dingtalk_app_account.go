@@ -1,11 +1,14 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -96,7 +99,7 @@ func toDingTalkAppVO(a *model.DingTalkAppAccount) *dingTalkAppAccountVO {
 func (ctrl *DingTalkAppAccountController) List(c *gin.Context) {
 	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询钉钉应用账号列表失败")
 		return
 	}
 	out := make([]*dingTalkAppAccountVO, 0, len(accs))
@@ -113,12 +116,12 @@ func (ctrl *DingTalkAppAccountController) List(c *gin.Context) {
 func (ctrl *DingTalkAppAccountController) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		replyDingTalkAccountError(c, err, id)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.UserID) {
@@ -134,9 +137,15 @@ func (ctrl *DingTalkAppAccountController) Get(c *gin.Context) {
 func (ctrl *DingTalkAppAccountController) Create(c *gin.Context) {
 	var req dingTalkAppAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请求体需为 JSON 对象（字段见接口文档，密钥类字段可选）")
 		return
 	}
+	// #134 必填校验：缺账号名/AppKey/AppSecret 会写出无法回调、无法取 token 的孤儿账号
+	if strings.TrimSpace(req.AccountName) == "" || strings.TrimSpace(req.AppKey) == "" || strings.TrimSpace(req.AppSecret) == "" {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：account_name、app_key、app_secret 均为必填（token / aes_key / ai_agent_id 可选）")
+		return
+	}
+
 	acc := &model.DingTalkAppAccount{
 		AccountName:    req.AccountName,
 		AppKey:         req.AppKey,
@@ -153,7 +162,8 @@ func (ctrl *DingTalkAppAccountController) Create(c *gin.Context) {
 		acc.Status = 1
 	}
 	if err := ctrl.svc.CreateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "创建失败", err.Error())
+		// #135 不再把 err.Error() 塞进 data：会把 SQL/驱动原文回传前端
+		response.ErrorFromDB(c, err, "创建钉钉应用账号失败")
 		return
 	}
 	response.Success(c, toDingTalkAppVO(acc), "创建成功")
@@ -166,17 +176,17 @@ func (ctrl *DingTalkAppAccountController) Create(c *gin.Context) {
 func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	var req dingTalkAppAccountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请求体需为 JSON 对象（字段见接口文档，密钥类字段可选）")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		replyDingTalkAccountError(c, err, id)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.UserID) {
@@ -202,7 +212,7 @@ func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 		acc.Status = req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新钉钉应用账号失败")
 		return
 	}
 	response.Success(c, toDingTalkAppVO(acc), "更新成功")
@@ -215,19 +225,19 @@ func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 func (ctrl *DingTalkAppAccountController) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		replyDingTalkAccountError(c, err, id)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.UserID) {
 		return
 	}
 	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		response.ErrorFromDB(c, err, "删除钉钉应用账号失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -240,12 +250,12 @@ func (ctrl *DingTalkAppAccountController) Delete(c *gin.Context) {
 func (ctrl *DingTalkAppAccountController) Test(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		replyDingTalkAccountError(c, err, id)
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.UserID) {
@@ -256,4 +266,14 @@ func (ctrl *DingTalkAppAccountController) Test(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"ok": true, "inbound_enabled": acc.InboundEnabled}, "配置校验通过")
+}
+
+// replyDingTalkAccountError 账号读取失败：真·不存在回 404（带 id），其余回 500。
+// 原实现把任何错误都回 404 并把 err.Error() 放进 data，DB 故障会伪装成"账号不存在"。
+func replyDingTalkAccountError(c *gin.Context, err error, id uint64) {
+	if errhttp.IsNotFoundError(err) {
+		response.NotFound(c, fmt.Sprintf("钉钉应用账号不存在（id=%d）", id))
+		return
+	}
+	response.Error(c, http.StatusInternalServerError, "读取钉钉应用账号失败")
 }

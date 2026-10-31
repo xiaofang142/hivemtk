@@ -155,7 +155,7 @@ func (c *BackupController) GetBackupList(ctx *gin.Context) {
 
 	backups, total, err := c.backupService.GetBackupList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -299,7 +299,7 @@ func (c *RestoreController) GetRestoreList(ctx *gin.Context) {
 
 	records, total, err := c.restoreService.GetRestoreList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

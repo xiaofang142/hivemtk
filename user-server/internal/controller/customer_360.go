@@ -102,7 +102,7 @@ func (c *Customer360Controller) GetCustomerList(ctx *gin.Context) {
 
 	result, total, err := c.customer360Service.GetCustomerList(ctx.Request.Context(), page, pageSize, filters)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -577,7 +577,7 @@ type saveTagRuleRequest struct {
 func (c *Customer360Controller) SaveTagRule(ctx *gin.Context) {
 	var req saveTagRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	result, err := c.tagRuleSvc.SaveTagRule(ctx.Request.Context(), service.SaveTagRuleInput{
@@ -607,7 +607,7 @@ func (c *Customer360Controller) UpdateTagRule(ctx *gin.Context) {
 	}
 	var req saveTagRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	result, err := c.tagRuleSvc.UpdateTagRule(ctx.Request.Context(), id, service.SaveTagRuleInput{

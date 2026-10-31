@@ -50,7 +50,7 @@ func requireOwner(ctx *gin.Context) (string, bool) {
 	}
 	owner := ctx.Query("owner_id")
 	if owner == "" {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "owner_id 必填（管理员需显式指定跟进负责人）")
 		return "", false
 	}
 	return owner, true
@@ -78,7 +78,7 @@ func (c *FollowUpController) GetToday(ctx *gin.Context) {
 		// 与 CST 会话时区下的日期分桶差 8 小时（date-bucket-tz 守卫的立项原因）
 		parsed, err := timeutil.ParseBusinessDate(raw)
 		if err != nil {
-			response.Error(ctx, http.StatusBadRequest, "参数错误")
+			response.Error(ctx, http.StatusBadRequest, "date 格式非法：需为 YYYY-MM-DD")
 			return
 		}
 		date = parsed
@@ -110,7 +110,7 @@ func (c *FollowUpController) GetPending(ctx *gin.Context) {
 	if raw := ctx.Query("limit"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 || n > 500 {
-			response.Error(ctx, http.StatusBadRequest, "参数错误")
+			response.Error(ctx, http.StatusBadRequest, "limit 必须是 1-500 之间的整数")
 			return
 		}
 		limit = n
@@ -176,7 +176,7 @@ func (c *FollowUpController) Complete(ctx *gin.Context) {
 	}
 	id := ctx.Param("id")
 	if id == "" {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "id 必须是数字跟进 ID")
 		return
 	}
 	var body struct {
@@ -189,7 +189,7 @@ func (c *FollowUpController) Complete(ctx *gin.Context) {
 		result = string(service.FollowUpResultContacted)
 	}
 	if !followupResults[result] {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "result 只能是 contacted / interested / quoted / converted / rejected / lost / no_response")
 		return
 	}
 	err := c.svc.CompleteWithResult(ctx.Request.Context(), id, service.FollowUpResult(result), body.Note)
@@ -211,7 +211,7 @@ func (c *FollowUpController) Cancel(ctx *gin.Context) {
 	}
 	id := ctx.Param("id")
 	if id == "" {
-		response.Error(ctx, http.StatusBadRequest, "参数错误")
+		response.Error(ctx, http.StatusBadRequest, "id 必须是数字跟进 ID")
 		return
 	}
 	if err := c.svc.Cancel(ctx.Request.Context(), id); err != nil {

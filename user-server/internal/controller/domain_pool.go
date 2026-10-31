@@ -39,7 +39,7 @@ func NewDomainPoolController(domainPoolService service.DomainPoolService, health
 func (c *DomainPoolController) Create(ctx *gin.Context) {
 	var req dto.DomainPoolCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：domain 必填，port / purpose 可选")
 		return
 	}
 
@@ -62,7 +62,7 @@ func (c *DomainPoolController) Create(ctx *gin.Context) {
 func (c *DomainPoolController) Update(ctx *gin.Context) {
 	var req dto.DomainPoolUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：id 与 domain 必填，port / purpose / status / auto_switch_enabled 可选")
 		return
 	}
 
@@ -73,7 +73,7 @@ func (c *DomainPoolController) Update(ctx *gin.Context) {
 	// AutoSwitchEnabled 此前被 handler 忽略，经此接口永远无法更新；nil=不更新
 	if req.AutoSwitchEnabled != nil {
 		if _, err := c.domainPoolService.SetAutoSwitch(ctx.Request.Context(), req.ID, *req.AutoSwitchEnabled); err != nil {
-			response.Error(ctx, http.StatusInternalServerError, err.Error())
+			response.Error(ctx, http.StatusInternalServerError, "更新域名失败")
 			return
 		}
 	}
@@ -107,7 +107,7 @@ func (c *DomainPoolController) Delete(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "域名不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "删除域名失败")
 		return
 	}
 
@@ -149,13 +149,13 @@ func (c *DomainPoolController) GetByID(ctx *gin.Context) {
 func (c *DomainPoolController) List(ctx *gin.Context) {
 	var req dto.DomainPoolListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：page / page_size 必须是整数，domain / status 可选")
 		return
 	}
 
 	domainPools, total, err := c.domainPoolService.List(ctx.Request.Context(), req.Page, req.PageSize, req.Domain, req.Status)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取域名列表失败")
 		return
 	}
 
@@ -211,7 +211,7 @@ func (c *DomainPoolController) CheckDomain(ctx *gin.Context) {
 func (c *DomainPoolController) CheckAllDomains(ctx *gin.Context) {
 	results, err := c.domainPoolService.CheckAllDomains(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "批量检查域名失败")
 		return
 	}
 
@@ -234,7 +234,7 @@ func (c *DomainPoolController) HealthCheck(ctx *gin.Context) {
 	}
 	result, err := c.healthService.CheckOne(ctx.Request.Context(), id)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "检查域名健康状态失败")
 		return
 	}
 	response.Success(ctx, result, "探测完成")
@@ -248,7 +248,7 @@ func (c *DomainPoolController) HealthCheck(ctx *gin.Context) {
 func (c *DomainPoolController) HealthCheckAll(ctx *gin.Context) {
 	results, err := c.healthService.CheckAll(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "检查全部域名健康状态失败")
 		return
 	}
 	response.Success(ctx, results, "探测完成")
@@ -269,12 +269,12 @@ func (c *DomainPoolController) SwitchActive(ctx *gin.Context) {
 		return
 	}
 	if err := c.healthService.SwitchActive(ctx.Request.Context(), id, "手动切换"); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的域名 ID")
 		return
 	}
 	dp, err := c.domainPoolService.GetByID(ctx.Request.Context(), id)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "切换域名失败")
 		return
 	}
 	response.Success(ctx, toDomainResponse(dp), "切换成功")
@@ -289,10 +289,10 @@ func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 	best, err := c.healthService.SwitchToBest(ctx.Request.Context(), "API 触发自动切换")
 	if err != nil {
 		if errors.Is(err, errors.New("no available")) || (err != nil && err.Error() != "" && containsAny(err.Error(), "无可用", "no available")) {
-			response.Error(ctx, http.StatusNotFound, err.Error())
+			response.Error(ctx, http.StatusNotFound, "没有可用的备用域名")
 			return
 		}
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "自动切换域名失败")
 		return
 	}
 	response.Success(ctx, toDomainResponse(best), "切换成功")
@@ -306,7 +306,7 @@ func (c *DomainPoolController) AutoSwitchBest(ctx *gin.Context) {
 func (c *DomainPoolController) GetActiveDomain(ctx *gin.Context) {
 	active, err := c.healthService.GetActiveDomain(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取当前域名失败")
 		return
 	}
 	if active == nil {
@@ -326,7 +326,7 @@ func (c *DomainPoolController) ListAvailableDomains(ctx *gin.Context) {
 	minScore, _ := strconv.Atoi(ctx.DefaultQuery("min_score", "80"))
 	rows, err := c.healthService.ListAvailable(ctx.Request.Context(), minScore)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取可用域名失败")
 		return
 	}
 	out := make([]dto.DomainPoolResponse, 0, len(rows))
@@ -353,7 +353,7 @@ func (c *DomainPoolController) ListHealthLogs(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	logs, err := c.healthService.ListHealthLogs(ctx.Request.Context(), id, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取域名健康日志失败")
 		return
 	}
 	response.Success(ctx, gin.H{"list": logs, "total": len(logs)}, "")
@@ -377,11 +377,11 @@ type AddBlacklistRequest struct {
 func (c *DomainPoolController) AddBlacklist(ctx *gin.Context) {
 	var req AddBlacklistRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：domain 必填，reason 可选")
 		return
 	}
 	if err := c.domainPoolService.AddBlacklist(ctx.Request.Context(), req.Domain, req.Platform, req.Reason, req.Source, req.TTLHours); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "添加黑名单失败")
 		return
 	}
 	response.Success(ctx, nil, "已加入黑名单")
@@ -400,7 +400,7 @@ func (c *DomainPoolController) RemoveBlacklist(ctx *gin.Context) {
 		return
 	}
 	if err := c.domainPoolService.RemoveBlacklist(ctx.Request.Context(), domain); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "移除黑名单失败")
 		return
 	}
 	response.Success(ctx, nil, "已移出黑名单")
@@ -416,7 +416,7 @@ func (c *DomainPoolController) ListBlacklist(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	rows, total, err := c.domainPoolService.ListBlacklist(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取黑名单失败")
 		return
 	}
 	response.Success(ctx, gin.H{"list": rows, "total": total, "page": page, "page_size": pageSize}, "")
@@ -501,7 +501,7 @@ func (c *DomainPoolController) CheckBlacklist(ctx *gin.Context) {
 	}
 	blocked, err := c.domainPoolService.IsBlacklisted(ctx.Request.Context(), domain)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "查询黑名单失败")
 		return
 	}
 	response.Success(ctx, gin.H{"domain": domain, "blacklisted": blocked}, "ok")
@@ -556,7 +556,7 @@ func (c *DomainPoolController) RotateToBackup(ctx *gin.Context) {
 func (c *DomainPoolController) ListAlerts(ctx *gin.Context) {
 	alerts, err := c.domainPoolService.ListAlerts(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取域名告警失败")
 		return
 	}
 	out := make([]dto.DomainPoolResponse, 0, len(alerts))

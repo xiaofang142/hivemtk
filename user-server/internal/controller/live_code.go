@@ -136,7 +136,7 @@ func (c *LiveCodeController) GetList(ctx *gin.Context) {
 
 	liveCodes, total, err := c.liveCodeService.GetList(ctx.Request.Context(), page, pageSize, name, status)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

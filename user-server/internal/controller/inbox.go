@@ -41,7 +41,7 @@ func writeScopedError(ctx *gin.Context, err error) {
 	case errors.Is(err, service.ErrInboxConversationMissing):
 		response.NotFound(ctx, "会话不存在")
 	default:
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 	}
 }
 
@@ -254,7 +254,7 @@ func (c *InboxController) Assign(ctx *gin.Context) {
 		Remark         string `json:"remark"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	// 数据隔离：conversation_id 走 body 寻址，而 DataScopeGuard 的登记表只认路径参数
@@ -295,7 +295,7 @@ func (c *InboxController) AutoAssign(ctx *gin.Context) {
 		Mode           string   `json:"mode"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	// 数据隔离：同上，conversation_id 走 body 寻址，守卫登记表扫不到，
@@ -355,7 +355,7 @@ func (c *InboxController) Reconcile(ctx *gin.Context) {
 	}
 	res, err := c.svc.Reconcile(ctx.Request.Context(), mode)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, res, res.Message)
@@ -387,7 +387,7 @@ func (c *InboxController) ListAssignments(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	list, total, err := c.svc.ListAssignments(ctx.Request.Context(), convID, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -460,7 +460,7 @@ func (c *InboxController) StaffLoad(ctx *gin.Context) {
 	}
 	load, err := c.svc.StaffLoad(ctx.Request.Context(), staff)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"staff": staff, "load": load}, "查询成功")
@@ -476,7 +476,7 @@ func (c *InboxController) StaffLoad(ctx *gin.Context) {
 func (c *InboxController) Agents(ctx *gin.Context) {
 	agents, err := c.svc.ListAssignableAgents(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithList(ctx, agents, int64(len(agents)))
@@ -514,7 +514,7 @@ func (c *InboxIngressController) SetSessionService(svc *service.CustomerSessionS
 func (c *InboxIngressController) Ingress(ctx *gin.Context) {
 	var event model.MessageEvent
 	if err := ctx.ShouldBindJSON(&event); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	result, err := c.svc.HandleIngressMessage(ctx.Request.Context(), &event)
@@ -535,7 +535,7 @@ func (c *InboxIngressController) LockHuman(ctx *gin.Context) {
 		Reason    string `json:"reason"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	// 数据隔离：未装配会话服务时 fail-closed（与 DataScopeGuard"没装配查询源就 403"同一哲学），
@@ -550,7 +550,7 @@ func (c *InboxIngressController) LockHuman(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.LockSessionForHuman(ctx.Request.Context(), req.SessionID, req.Reason); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"session_id": req.SessionID, "locked": true}, "人工接管锁定成功")
@@ -567,7 +567,7 @@ func (c *InboxIngressController) UnlockHuman(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.UnlockSessionForHuman(ctx.Request.Context(), sessionID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"session_id": sessionID, "unlocked": true}, "解除人工接管成功")

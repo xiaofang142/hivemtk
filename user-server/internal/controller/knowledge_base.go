@@ -83,7 +83,7 @@ func (c *KnowledgeBaseController) List(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.ListKBs(ctx.Request.Context(), kbType, ownerType, agentID, keyword)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -159,7 +159,7 @@ func (c *KnowledgeBaseController) ListByAgent(ctx *gin.Context) {
 	}
 	list, err := c.svc.ListByAgent(ctx.Request.Context(), uint(aid))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -177,7 +177,7 @@ func (c *KnowledgeBaseController) ListByType(ctx *gin.Context) {
 	}
 	list, err := c.svc.ListByType(ctx.Request.Context(), kbType)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -200,7 +200,7 @@ type knowledgeBaseCreateReq struct {
 func (c *KnowledgeBaseController) Create(ctx *gin.Context) {
 	var req knowledgeBaseCreateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	kb := &model.KnowledgeBase{
@@ -213,7 +213,7 @@ func (c *KnowledgeBaseController) Create(ctx *gin.Context) {
 		Enabled:      req.Enabled,
 	}
 	if err := c.svc.CreateKB(ctx.Request.Context(), kb); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, kb, "创建成功")
@@ -240,7 +240,7 @@ func (c *KnowledgeBaseController) Update(ctx *gin.Context) {
 	}
 	var req knowledgeBaseUpdateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	kb := &model.KnowledgeBase{
@@ -252,7 +252,7 @@ func (c *KnowledgeBaseController) Update(ctx *gin.Context) {
 		Enabled:      req.Enabled,
 	}
 	if err := c.svc.UpdateKB(ctx.Request.Context(), uint(id), kb); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "更新成功")
@@ -269,7 +269,7 @@ func (c *KnowledgeBaseController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteKB(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "删除成功")
@@ -291,7 +291,7 @@ func (c *KnowledgeBaseController) BindToAgent(ctx *gin.Context) {
 	}
 	var req knowledgeBaseBindReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.AgentID == 0 {
@@ -299,7 +299,7 @@ func (c *KnowledgeBaseController) BindToAgent(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.BindToAgent(ctx.Request.Context(), uint(kbID), req.AgentID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"kb_id": kbID, "agent_id": req.AgentID}, "绑定成功")
@@ -317,7 +317,7 @@ func (c *KnowledgeBaseController) UnbindFromAgent(ctx *gin.Context) {
 	}
 	var req knowledgeBaseBindReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.AgentID == 0 {
@@ -325,7 +325,7 @@ func (c *KnowledgeBaseController) UnbindFromAgent(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.UnbindFromAgent(ctx.Request.Context(), uint(kbID), req.AgentID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"kb_id": kbID, "agent_id": req.AgentID}, "解绑成功")
@@ -354,7 +354,7 @@ func (c *KnowledgeBaseController) SwitchVersion(ctx *gin.Context) {
 	}
 	var req knowledgeBaseVersionSwitchReq
 	if err := ctx.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	target := 0
@@ -368,12 +368,12 @@ func (c *KnowledgeBaseController) SwitchVersion(ctx *gin.Context) {
 	}
 	kb, err := c.svc.PublishKBVersion(ctx.Request.Context(), uint(id), target)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), kb.ID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, info, "版本已切换")
@@ -400,7 +400,7 @@ func (c *KnowledgeBaseController) PutCanary(ctx *gin.Context) {
 	}
 	var req knowledgeBaseCanaryReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if *req.Percent < 0 || *req.Percent > 100 {
@@ -409,12 +409,12 @@ func (c *KnowledgeBaseController) PutCanary(ctx *gin.Context) {
 	}
 	kb, err := c.svc.SetKBCanary(ctx.Request.Context(), uint(id), *req.Enabled, *req.Percent)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), kb.ID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, info, "灰度配置已更新")
@@ -434,7 +434,7 @@ func (c *KnowledgeBaseController) VersionInfo(ctx *gin.Context) {
 	}
 	info, err := c.svc.KBVersionInfo(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if info == nil {

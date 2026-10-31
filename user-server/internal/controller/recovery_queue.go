@@ -51,7 +51,7 @@ func NewRecoveryQueueController() *RecoveryQueueController {
 func (c *RecoveryQueueController) Enqueue(ctx *gin.Context) {
 	var req dto.RecoveryEnqueueRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	item, err := c.svc.Enqueue(ctx.Request.Context(), &service.RecoveryEnqueueInput{
@@ -96,7 +96,7 @@ func (c *RecoveryQueueController) MarkAttempt(ctx *gin.Context) {
 	}
 	var req dto.RecoveryMarkAttemptRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	delay := time.Duration(req.NextDelay) * time.Second
@@ -130,7 +130,7 @@ func (c *RecoveryQueueController) MarkRecovered(ctx *gin.Context) {
 	// 空 body 合法（只标记成功、不记金额）；有 body 但 JSON 坏了要报 400，
 	// 不能静默当成 recovery_value=0 落库。
 	if err := ctx.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.MarkRecovered(ctx.Request.Context(), id, req.RecoveryValue); err != nil {

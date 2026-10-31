@@ -535,6 +535,19 @@ func (s *FAQService) Stats(ctx context.Context) (total, enabled int64, err error
 	if s.repo == nil {
 		return 0, 0, nil
 	}
+	// 有 COUNT 能力就用精确计数；否则退回按启用条目数（上限 10000）估算。
+	if c, ok := s.repo.(interface {
+		CountAll(ctx context.Context) (int64, error)
+		CountEnabled(ctx context.Context) (int64, error)
+	}); ok {
+		if total, err = c.CountAll(ctx); err != nil {
+			return 0, 0, err
+		}
+		if enabled, err = c.CountEnabled(ctx); err != nil {
+			return 0, 0, err
+		}
+		return total, enabled, nil
+	}
 	all, err := s.repo.ListEnabled(ctx, 10000)
 	if err != nil {
 		return 0, 0, err

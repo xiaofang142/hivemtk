@@ -38,7 +38,7 @@ func (c *UnifiedMessageController) GetMessages(ctx *gin.Context) {
 
 	messages, total, err := c.messageService.GetMessages(ctx.Request.Context(), platform, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -102,7 +102,7 @@ func (c *PlatformAccountController) GetAccounts(ctx *gin.Context) {
 	}
 	accounts, err := c.accountService.GetAccountsFiltered(ctx.Request.Context(), filter)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -138,7 +138,7 @@ func (c *PlatformAccountController) CreateAccount(ctx *gin.Context) {
 
 	var req service.CreatePlatformAccountRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -166,7 +166,7 @@ func (c *PlatformAccountController) UpdateAccount(ctx *gin.Context) {
 
 	var req service.UpdatePlatformAccountRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -213,7 +213,7 @@ func (c *PlatformAccountController) LoginAccount(ctx *gin.Context) {
 
 	var req service.PlatformLoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

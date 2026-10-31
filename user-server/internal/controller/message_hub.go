@@ -38,7 +38,7 @@ func NewMessageHubController(svc *service.MessageHubService) *MessageHubControll
 func (c *MessageHubController) Push(ctx *gin.Context) {
 	var req service.PushMessageRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -82,7 +82,7 @@ func (c *MessageHubController) Push(ctx *gin.Context) {
 func (c *MessageHubController) PushBatch(ctx *gin.Context) {
 	var reqs []service.PushMessageRequest
 	if err := ctx.ShouldBindJSON(&reqs); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	results, errs := c.svc.PushBatch(ctx.Request.Context(), reqs)
@@ -148,7 +148,7 @@ func (c *MessageHubController) List(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.List(ctx.Request.Context(), q)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(q.Page), int64(q.PageSize), total)
@@ -167,7 +167,7 @@ func (c *MessageHubController) GetByID(ctx *gin.Context) {
 	}
 	msg, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if msg == nil {
@@ -212,7 +212,7 @@ func (c *MessageHubController) Recall(ctx *gin.Context) {
 		case errors.Is(err, service.ErrMessageHubRecallUnavailable):
 			response.Error(ctx, http.StatusServiceUnavailable, err.Error())
 		default:
-			response.ErrorFromDB(ctx, err, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		}
 		return
 	}
@@ -228,11 +228,11 @@ func (c *MessageHubController) MarkRead(ctx *gin.Context) {
 		IDs []uint `json:"ids" binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.MarkRead(ctx.Request.Context(), req.IDs); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"updated": len(req.IDs)}, "标记已读成功")
@@ -256,7 +256,7 @@ func (c *MessageHubController) Stats(ctx *gin.Context) {
 	}
 	stats, err := c.svc.GetStats(ctx.Request.Context(), start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, stats, "统计成功")
@@ -280,7 +280,7 @@ func (c *MessageHubController) Platforms(ctx *gin.Context) {
 func (c *MessageHubController) PushFromChannel(ctx *gin.Context) {
 	var raw service.RawChannelMessage
 	if err := ctx.ShouldBindJSON(&raw); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	req := c.svc.ConvertFromChannel(ctx.Request.Context(), &raw)

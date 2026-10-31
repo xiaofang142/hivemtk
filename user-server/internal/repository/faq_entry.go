@@ -44,6 +44,21 @@ func (r *FAQRepository) GetByID(ctx context.Context, id uint) (*model.FAQEntry, 
 }
 
 // ListEnabled 查询所有启用的 FAQ
+// CountAll 统计 FAQ 总数（含停用）。统计口径不能用 ListEnabled：它把 limit 夹到
+// 10000，库里的条目超过上限时会把总数报成截断值。
+func (r *FAQRepository) CountAll(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.FAQEntry{}).Count(&n).Error
+	return n, err
+}
+
+// CountEnabled 统计启用中的 FAQ 数。
+func (r *FAQRepository) CountEnabled(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.FAQEntry{}).Where("enabled = ?", true).Count(&n).Error
+	return n, err
+}
+
 func (r *FAQRepository) ListEnabled(ctx context.Context, limit int) ([]model.FAQEntry, error) {
 	if limit <= 0 || limit > 10000 {
 		limit = 10000
@@ -337,7 +352,15 @@ func (r *FAQRepository) SetEnabled(ctx context.Context, id uint, enabled bool) e
 
 // Delete 删除 FAQ
 func (r *FAQRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.FAQEntry{}).Error
+	result := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.FAQEntry{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		// 0 行 = 目标不存在；回 not found 让上层回 404，避免「删除成功」掩盖误操作。
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 type FAQListParams struct {

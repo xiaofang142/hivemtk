@@ -65,7 +65,9 @@ func (r *egoFlowCronRepo) GetByFlow(ctx context.Context, flowID uint) (*model.Eg
 }
 
 func (r *egoFlowCronRepo) DeleteByFlow(ctx context.Context, flowID, userID uint) error {
-	res := r.db.WithContext(ctx).
+	// 定时触发器是配置行，摘除应物理删除：唯一索引 idx_egolite_flow_crons_flow_id 只认 flow_id
+	// 且不排除已软删行，留软删行会让「摘除后再挂载」永远撞 23505。
+	res := r.db.WithContext(ctx).Unscoped().
 		Where("flow_id = ? AND user_id = ?", flowID, userID).
 		Delete(&model.EgoliteFlowCron{})
 	if res.Error != nil {

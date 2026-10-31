@@ -120,7 +120,7 @@ func withBuyerIP(ctx *gin.Context) context.Context {
 func (c *ModuleMarketController) CreateOrder(ctx *gin.Context) {
 	var in service.MarketOrderInput
 	if err := ctx.ShouldBindJSON(&in); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	res, err := c.svc().CreateOrder(withBuyerIP(ctx), in)

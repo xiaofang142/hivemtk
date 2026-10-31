@@ -116,7 +116,7 @@ func (c *ModuleMarketController) LLMPlans(ctx *gin.Context) {
 func (c *ModuleMarketController) CreateLLMOrder(ctx *gin.Context) {
 	var in service.LLMOrderInput
 	if err := ctx.ShouldBindJSON(&in); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	res, err := service.NewLLMWalletService().CreateOrder(withBuyerIP(ctx), in)

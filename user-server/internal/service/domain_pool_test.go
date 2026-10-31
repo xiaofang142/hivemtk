@@ -132,19 +132,26 @@ func TestDomainPoolService_Update(t *testing.T) {
 	}
 }
 
-// TestDomainPoolService_Update_DefaultPort 测试更新时使用默认端口
+// TestDomainPoolService_Update_DefaultPort 端口零值不覆盖：PUT 未带端口时沿用原值，
+// 不能被默认值 80 悄悄改掉（原实现会把 8080 改成 80，属数据覆盖）。
 func TestDomainPoolService_Update_DefaultPort(t *testing.T) {
 	database := setupDomainPoolServiceTestDB(t)
 	service := NewDomainPoolService(repository.NewDomainPoolRepository(database), repository.NewDomainBlacklistRepository(database))
 
 	created, _ := service.Create(context.Background(), "example.com", 8080, "API 服务")
-	updated, err := service.Update(context.Background(), created.ID, "example.com", 0, "API 服务", 1)
+	updated, err := service.Update(context.Background(), created.ID, "example.com", 0, "API 服务", 0)
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
 
-	if updated.Port != 80 {
-		t.Errorf("Expected default port 80, got %d", updated.Port)
+	if updated.Port != 8080 {
+		t.Errorf("Expected port preserved 8080, got %d", updated.Port)
+	}
+	if updated.Purpose != "API 服务" {
+		t.Errorf("Expected purpose preserved, got %q", updated.Purpose)
+	}
+	if updated.Status != created.Status {
+		t.Errorf("Expected status preserved %d, got %d", created.Status, updated.Status)
 	}
 }
 

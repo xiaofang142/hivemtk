@@ -48,7 +48,7 @@ func (c *AnomalyLoginDetectorController) ListLoginEvents(ctx *gin.Context) {
 
 	events, total, err := c.detector.ListLoginEvents(ctx.Request.Context(), uid, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -88,7 +88,7 @@ func (c *AnomalyLoginDetectorController) ListAlerts(ctx *gin.Context) {
 
 	alerts, total, err := c.detector.ListAlerts(ctx.Request.Context(), uid, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

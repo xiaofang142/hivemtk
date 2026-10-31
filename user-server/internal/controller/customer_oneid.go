@@ -49,7 +49,7 @@ type mergeRequest struct {
 func (c *CustomerOneIDController) MergeIdentity(ctx *gin.Context) {
 	var req mergeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.PrimaryID == req.SecondaryID {
@@ -137,7 +137,7 @@ func (c *CustomerOneIDController) ResolveConflict(ctx *gin.Context) {
 	id := ctx.Param("id")
 	var req ResolveConflictRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.Action == "" {
@@ -213,7 +213,7 @@ func (c *CustomerOneIDController) LinkIdentity(ctx *gin.Context) {
 	}
 	var identifiers identity.Identifiers
 	if err := ctx.ShouldBindJSON(&identifiers); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.identitySvc.LinkIdentity(ctx.Request.Context(), customerID, identifiers.Phone, identifiers.Email, identifiers.WechatOpenID, identifiers.DouyinOpenID, identifiers.XiaohongshuID); err != nil {
@@ -231,12 +231,12 @@ func (c *CustomerOneIDController) LinkIdentity(ctx *gin.Context) {
 func (c *CustomerOneIDController) ResolveIdentity(ctx *gin.Context) {
 	var identifiers identity.Identifiers
 	if err := ctx.ShouldBindJSON(&identifiers); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	customers, err := c.identitySvc.ResolveIdentity(ctx.Request.Context(), identifiers)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	normalized := identity.Identifiers{
@@ -312,7 +312,7 @@ func (c *CustomerOneIDController) GetMergeRules(ctx *gin.Context) {
 func (c *CustomerOneIDController) SaveMergeRules(ctx *gin.Context) {
 	var set service.MergeRuleSet
 	if err := ctx.ShouldBindJSON(&set); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	mergeRuleSvc := service.NewOneIDMergeRuleService()
@@ -356,7 +356,7 @@ func (c *CustomerOneIDController) DeleteMergeRule(ctx *gin.Context) {
 func (c *CustomerOneIDController) PreviewMergeRules(ctx *gin.Context) {
 	var rules []service.MergePreviewRule
 	if err := ctx.ShouldBindJSON(&rules); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	mergeRuleSvc := service.NewOneIDMergeRuleService()

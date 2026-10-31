@@ -31,7 +31,7 @@ func NewClueScoreController(svc *service.ClueScoreService) *ClueScoreController 
 func (c *ClueScoreController) ScoreClue(ctx *gin.Context) {
 	var req dto.ClueScoreRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	clue, err := c.svc.LoadClueForScoring(ctx.Request.Context(), req.ClueID)
@@ -133,7 +133,7 @@ func (c *ClueScoreController) ListByGrade(ctx *gin.Context) {
 func (c *ClueScoreController) RecordEngagement(ctx *gin.Context) {
 	var req dto.ClueEngagementRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.RecordEngagement(ctx.Request.Context(), req.ClueID, req.EventType, req.Channel, req.Payload); err != nil {

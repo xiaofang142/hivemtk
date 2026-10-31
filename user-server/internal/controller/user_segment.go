@@ -44,7 +44,7 @@ func (c *UserSegmentController) GetRFMRule(ctx *gin.Context) {
 			response.Success(ctx, nil, "RFM 规则未配置，将使用系统默认")
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -69,7 +69,7 @@ func (c *UserSegmentController) ListRFMRules(ctx *gin.Context) {
 	}
 	rules, total, err := c.rfmService.ListRFMRules(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -93,7 +93,7 @@ func (c *UserSegmentController) SaveRFMRule(ctx *gin.Context) {
 
 	rule, err := c.rfmService.SaveRFMRule(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -177,7 +177,7 @@ func (c *UserSegmentController) GetRFMList(ctx *gin.Context) {
 
 	rfms, total, err := c.rfmService.ListBySegment(ctx.Request.Context(), segment, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -197,7 +197,7 @@ func (c *UserSegmentController) GetRFMList(ctx *gin.Context) {
 func (c *UserSegmentController) GetRFMStats(ctx *gin.Context) {
 	dist, err := c.rfmService.Distribution(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -235,7 +235,7 @@ func (c *UserSegmentController) CalculateRFM(ctx *gin.Context) {
 
 	count, err := c.rfmService.ComputeAll(ctx.Request.Context(), 0)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

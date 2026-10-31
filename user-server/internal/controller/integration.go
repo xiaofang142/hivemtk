@@ -65,7 +65,7 @@ func (c *IntegrationController) GetAccountList(ctx *gin.Context) {
 
 	accounts, err := c.integrationService.GetIntegrationAccountList(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	for _, acc := range accounts {
@@ -170,7 +170,7 @@ func (c *IntegrationController) SyncCustomers(ctx *gin.Context) {
 
 	count, err := c.integrationService.SyncCustomers(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -195,7 +195,7 @@ func (c *IntegrationController) SyncOrders(ctx *gin.Context) {
 
 	count, err := c.integrationService.SyncOrders(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -223,7 +223,7 @@ func (c *IntegrationController) SyncProducts(ctx *gin.Context) {
 
 	count, err := c.integrationService.SyncProducts(ctx.Request.Context(), account)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -275,7 +275,7 @@ func (c *IntegrationController) GetSyncLogs(ctx *gin.Context) {
 
 	logs, total, err := c.integrationService.GetSyncLogs(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -302,7 +302,7 @@ func (c *IntegrationController) GetExternalCustomers(ctx *gin.Context) {
 
 	customers, total, err := c.integrationService.GetExternalCustomers(ctx.Request.Context(), platform, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -329,7 +329,7 @@ func (c *IntegrationController) GetExternalOrders(ctx *gin.Context) {
 
 	orders, total, err := c.integrationService.GetExternalOrders(ctx.Request.Context(), platform, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -354,7 +354,7 @@ func (c *IntegrationController) GetExternalOrdersByCustomer(ctx *gin.Context) {
 	}
 	orders, err := c.integrationService.GetExternalOrdersByCustomer(ctx.Request.Context(), phone, name)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": orders, "count": len(orders)}, "获取成功")
@@ -457,7 +457,7 @@ func orderWebhookFailure(ctx *gin.Context, err error) {
 	case errors.Is(err, service.ErrPaymentServiceUnavailable):
 		response.Error(ctx, http.StatusServiceUnavailable, err.Error())
 	default:
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 	}
 }
 
@@ -561,7 +561,7 @@ func (c *IntegrationController) GetExternalProducts(ctx *gin.Context) {
 
 	products, total, err := c.integrationService.GetExternalProducts(ctx.Request.Context(), platform, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

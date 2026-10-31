@@ -63,7 +63,7 @@ func (c *FeatureFlagController) Get(ctx *gin.Context) {
 func (c *FeatureFlagController) Create(ctx *gin.Context) {
 	var req service.FlagCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：key 与 name 均为必填（description / enabled / rollout_percentage 可选）")
 		return
 	}
 	f, err := c.svc.Create(ctx.Request.Context(), &req, actorIDFrom(ctx))
@@ -84,7 +84,7 @@ func (c *FeatureFlagController) Update(ctx *gin.Context) {
 	}
 	var req service.FlagUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name / description / rollout_percentage / enabled 需与服务端定义一致")
 		return
 	}
 	f, err := c.svc.Update(ctx.Request.Context(), id, &req, actorIDFrom(ctx))
@@ -174,7 +174,7 @@ func (c *FeatureFlagController) Evaluate(ctx *gin.Context) {
 		Attributes map[string]any `json:"attributes"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：key 必填（attributes 可选）")
 		return
 	}
 	res := c.svc.Evaluate(ctx.Request.Context(), req.Key, req.Attributes)
@@ -191,7 +191,7 @@ func (c *FeatureFlagController) EvaluateBatch(ctx *gin.Context) {
 		Attributes map[string]any `json:"attributes"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：keys（开关 key 列表）必填")
 		return
 	}
 	response.Success(ctx, gin.H{"results": c.svc.EvaluateBatch(ctx.Request.Context(), req.Keys, req.Attributes)}, "ok")

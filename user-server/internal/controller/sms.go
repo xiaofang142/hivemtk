@@ -90,7 +90,7 @@ func (c *SmsController) GetConfig(ctx *gin.Context) {
 func (c *SmsController) SaveConfig(ctx *gin.Context) {
 	var req dto.SmsConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -229,7 +229,7 @@ func (c *SmsController) GetSmsDetail(ctx *gin.Context) {
 func (c *SmsController) SendSms(ctx *gin.Context) {
 	var req dto.SmsSendRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -330,7 +330,7 @@ func (c *SmsController) GetDraft(ctx *gin.Context) {
 func (c *SmsController) CreateDraft(ctx *gin.Context) {
 	var req dto.SmsDraftCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -357,7 +357,7 @@ func (c *SmsController) UpdateDraft(ctx *gin.Context) {
 
 	var req dto.SmsDraftUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -480,7 +480,7 @@ func (c *SmsController) GetJob(ctx *gin.Context) {
 func (c *SmsController) CreateJob(ctx *gin.Context) {
 	var req dto.SmsJobCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

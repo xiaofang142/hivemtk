@@ -27,7 +27,7 @@ func NewObjectionHandlerController(svc *service.ObjectionHandlerService) *Object
 func (c *ObjectionHandlerController) Handle(ctx *gin.Context) {
 	var req service.HandleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	resp, err := c.svc.Handle(ctx.Request.Context(), req)
@@ -47,7 +47,7 @@ func (c *ObjectionHandlerController) Classify(ctx *gin.Context) {
 		Text string `json:"text"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	cat, name := c.svc.Classify(ctx.Request.Context(), req.Text)
@@ -79,7 +79,7 @@ func (c *ObjectionHandlerController) RecordUsage(ctx *gin.Context) {
 		Success    bool `json:"success"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.RecordUsage(ctx.Request.Context(), req.TemplateID, req.Success); err != nil {

@@ -32,7 +32,7 @@ func NewWeComHealthController(svc *service.WeComAccountHealthService, integ *ser
 func (c *WeComHealthController) ReportHealth(ctx *gin.Context) {
 	var req service.ReportHealthRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	// 路由是 /accounts/:id，前端也按 path 传 id、body 只带健康字段；
@@ -90,7 +90,7 @@ func (c *WeComHealthController) ListHealthHistory(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.ListHealthHistory(ctx.Request.Context(), uint(accID), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -103,7 +103,7 @@ func (c *WeComHealthController) ListHealthHistory(ctx *gin.Context) {
 func (c *WeComHealthController) GetRiskAccounts(ctx *gin.Context) {
 	list, err := c.svc.GetRiskAccounts(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -134,7 +134,7 @@ func (c *WeComHealthController) SelectHealthyAccount(ctx *gin.Context) {
 func (c *WeComHealthController) GetHealthSummary(ctx *gin.Context) {
 	summary, err := c.svc.GetHealthSummary(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, summary, "查询成功")
@@ -171,7 +171,7 @@ func (c *WeComHealthController) ConsumeQuota(ctx *gin.Context) {
 func (c *WeComHealthController) ResetDailyQuota(ctx *gin.Context) {
 	n, err := c.svc.ResetDailyQuota(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"affected": n}, "重置成功")
@@ -184,7 +184,7 @@ func (c *WeComHealthController) ResetDailyQuota(ctx *gin.Context) {
 func (c *WeComHealthController) IngestMessage(ctx *gin.Context) {
 	var req service.IngestRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -203,7 +203,7 @@ func (c *WeComHealthController) IngestMessage(ctx *gin.Context) {
 func (c *WeComHealthController) SendMessage(ctx *gin.Context) {
 	var req service.WeComSendRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -222,7 +222,7 @@ func (c *WeComHealthController) SendMessage(ctx *gin.Context) {
 func (c *WeComHealthController) ListAccountsWithHealth(ctx *gin.Context) {
 	list, err := c.integ.ListAccountsWithHealth(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	// 出参脱敏：这条列表带着完整账号（含 corp_secret / access_token 等密钥）。
@@ -249,7 +249,7 @@ func (c *WeComHealthController) UpdateAccountStatus(ctx *gin.Context) {
 		return
 	}
 	if err := c.integ.UpdateAccountStatus(ctx.Request.Context(), uint(accID), req.LoginState, req.Risk); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": accID, "login_state": req.LoginState}, "更新成功")

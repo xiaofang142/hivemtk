@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"hivemtk-user/internal/pkg/errhttp"
 )
 
 // FAQController FAQ 知识库控制器
@@ -65,7 +66,7 @@ func (c *FAQController) List(ctx *gin.Context) {
 	}
 	page, pageSize, err := pagination.Parse(ctx)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：page / page_size 必须是整数")
 		return
 	}
 	filter := dto.FAQFilter{
@@ -82,7 +83,7 @@ func (c *FAQController) List(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.List(ctx.Request.Context(), filter)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取 FAQ 列表失败")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -106,7 +107,11 @@ func (c *FAQController) Get(ctx *gin.Context) {
 	}
 	entry, err := c.svc.GetByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.NotFound(ctx, "FAQ 不存在")
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "FAQ 不存在")
+			return
+		}
+		response.Error(ctx, http.StatusInternalServerError, "获取 FAQ 失败")
 		return
 	}
 	response.Success(ctx, entry, "查询成功")
@@ -136,7 +141,7 @@ type faqCreateReq struct {
 func (c *FAQController) Create(ctx *gin.Context) {
 	var req faqCreateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：question、answer、agent_id 均为必填（keywords / category / intent / confidence / enabled 可选）")
 		return
 	}
 	agentID := req.AgentID
@@ -151,7 +156,7 @@ func (c *FAQController) Create(ctx *gin.Context) {
 		AgentID:    &agentID,
 	}
 	if err := c.svc.Create(ctx.Request.Context(), entry); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "创建 FAQ 失败")
 		return
 	}
 	response.Success(ctx, entry, "创建成功")
@@ -176,7 +181,7 @@ func (c *FAQController) Update(ctx *gin.Context) {
 	}
 	var req faqCreateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：question / answer 需为字符串，keywords / category / intent 可选")
 		return
 	}
 	agentID := req.AgentID
@@ -191,7 +196,7 @@ func (c *FAQController) Update(ctx *gin.Context) {
 		AgentID:    &agentID,
 	}
 	if err := c.svc.Update(ctx.Request.Context(), uint(id), entry); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "更新 FAQ 失败")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "更新成功")
@@ -211,11 +216,11 @@ func (c *FAQController) Toggle(ctx *gin.Context) {
 		Enabled *bool `json:"enabled" binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：enabled 必填（true / false）")
 		return
 	}
 	if err := c.svc.SetEnabled(ctx.Request.Context(), uint(id), *req.Enabled); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "更新 FAQ 状态失败")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id, "enabled": *req.Enabled}, "状态已更新")
@@ -232,7 +237,11 @@ func (c *FAQController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "FAQ 不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "删除 FAQ 失败")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "删除成功")
@@ -251,7 +260,7 @@ type faqMatchReq struct {
 func (c *FAQController) Match(ctx *gin.Context) {
 	var req faqMatchReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：msg（用户问题）与 agent_id（正整数）均为必填，top_k 可选")
 		return
 	}
 	if req.AgentID == 0 {
@@ -260,7 +269,7 @@ func (c *FAQController) Match(ctx *gin.Context) {
 	}
 	matches, err := c.svc.MatchByAgent(ctx.Request.Context(), req.AgentID, req.Msg, req.TopK)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "FAQ 匹配失败")
 		return
 	}
 	response.Success(ctx, matches, "匹配成功")
@@ -273,7 +282,7 @@ func (c *FAQController) Match(ctx *gin.Context) {
 func (c *FAQController) Stats(ctx *gin.Context) {
 	total, enabled, err := c.svc.Stats(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取 FAQ 统计失败")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -293,7 +302,7 @@ func (c *FAQController) AnnotateFromSession(ctx *gin.Context) {
 		Category       string `json:"category"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id、question、answer 均为必填")
 		return
 	}
 
@@ -307,7 +316,7 @@ func (c *FAQController) AnnotateFromSession(ctx *gin.Context) {
 			Enabled:  boolPtr(true),
 		}
 		if err := c.svc.Update(ctx.Request.Context(), existing.ID, updated); err != nil {
-			response.Error(ctx, http.StatusInternalServerError, "标注更新失败: "+err.Error())
+			response.Error(ctx, http.StatusInternalServerError, "标注更新失败")
 			return
 		}
 		response.Success(ctx, updated, "已更新既有标注（下次 Layer1 命中将直接返回标准答案）")
@@ -320,7 +329,7 @@ func (c *FAQController) AnnotateFromSession(ctx *gin.Context) {
 		Enabled:  boolPtr(true),
 	}
 	if err := c.svc.Create(ctx.Request.Context(), entry); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "标注保存失败: "+err.Error())
+		response.Error(ctx, http.StatusInternalServerError, "标注保存失败")
 		return
 	}
 	response.Success(ctx, entry, "已保存为标注（下次 Layer1 命中将直接返回标准答案）")

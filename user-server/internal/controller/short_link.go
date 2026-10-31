@@ -36,7 +36,7 @@ func NewShortLinkController(shortLinkService cardsvc.ShortLinkService) *ShortLin
 func (c *ShortLinkController) Create(ctx *gin.Context) {
 	var req dto.CreateShortLinkRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -62,7 +62,7 @@ func (c *ShortLinkController) Create(ctx *gin.Context) {
 func (c *ShortLinkController) Update(ctx *gin.Context) {
 	var req dto.UpdateShortLinkRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -135,7 +135,7 @@ func (c *ShortLinkController) GetByID(ctx *gin.Context) {
 func (c *ShortLinkController) GetList(ctx *gin.Context) {
 	var req dto.ListShortLinkRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (c *ShortLinkController) GetList(ctx *gin.Context) {
 func (c *ShortLinkController) AccessShortLink(ctx *gin.Context) {
 	var req dto.AccessShortLinkRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -185,7 +185,7 @@ func accessErrorStatus(err error) int {
 func (c *ShortLinkController) GenerateShortCode(ctx *gin.Context) {
 	var req dto.GenerateShortCodeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

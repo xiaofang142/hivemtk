@@ -61,7 +61,7 @@ func (c *WeComController) CreateAccount(ctx *gin.Context) {
 
 	account, err := c.wecomService.CreateAccount(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -79,7 +79,7 @@ func (c *WeComController) GetAccountList(ctx *gin.Context) {
 
 	accounts, err := c.wecomService.GetAccountList(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -131,7 +131,7 @@ func (c *WeComController) UpdateAccount(ctx *gin.Context) {
 
 	account, err := c.wecomService.UpdateAccount(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -157,7 +157,7 @@ func (c *WeComController) DeleteAccount(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -206,7 +206,7 @@ func (c *WeComController) GetCustomerList(ctx *gin.Context) {
 
 	customers, total, err := c.wecomService.GetCustomerList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -260,7 +260,7 @@ func (c *WeComController) GetGroupList(ctx *gin.Context) {
 
 	groups, total, err := c.wecomService.GetGroupList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -355,7 +355,7 @@ func (c *WeComController) GetMessageList(ctx *gin.Context) {
 
 	messages, total, err := c.wecomService.GetMessageList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -375,7 +375,7 @@ func (c *WeComController) GetTagList(ctx *gin.Context) {
 
 	tags, err := c.wecomService.GetTagList(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

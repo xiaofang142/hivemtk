@@ -69,7 +69,7 @@ func (c *ShortLinkStatsController) GetAllStats(ctx *gin.Context) {
 
 	stats, err := c.shortLinkService.GetAllStats(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

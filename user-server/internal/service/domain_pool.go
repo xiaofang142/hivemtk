@@ -86,8 +86,19 @@ func (s *domainPoolService) Update(ctx context.Context, id int, domain string, p
 		}
 	}
 
+	// 零值不覆盖：PUT 是整表单提交，但前端可能不带 port / purpose / status。
+	// status 是健康状态（1 可用 / 2 不可访问 …），被零值覆盖会把域名直接打成「禁用」。
 	if port <= 0 {
-		port = 80
+		port = domainPool.Port
+		if port <= 0 {
+			port = 80
+		}
+	}
+	if purpose == "" {
+		purpose = domainPool.Purpose
+	}
+	if status == 0 {
+		status = domainPool.Status
 	}
 
 	domainPool.Domain = domain

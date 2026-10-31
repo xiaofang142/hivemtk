@@ -67,7 +67,7 @@ func (c *MigrationController) GetUpgradeHistory(ctx *gin.Context) {
 
 	tasks, total, err := c.migrationService.GetUpgradeHistory(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -86,7 +86,7 @@ func (c *MigrationController) GetUpgradeHistory(ctx *gin.Context) {
 func (c *MigrationController) GetMigrationRecords(ctx *gin.Context) {
 	records, err := c.migrationService.GetMigrationRecords(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -100,7 +100,7 @@ func (c *MigrationController) GetMigrationRecords(ctx *gin.Context) {
 func (c *MigrationController) GetCurrentVersion(ctx *gin.Context) {
 	version, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -122,13 +122,13 @@ func (c *MigrationController) CreateUpgradeTask(ctx *gin.Context) {
 
 	currentVersion, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
 	task, err := c.migrationService.ExecuteUpgrade(ctx.Request.Context(), currentVersion, req.ToVersion)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -149,7 +149,7 @@ func (c *MigrationController) Rollback(ctx *gin.Context) {
 	}
 
 	if err := c.migrationService.Rollback(ctx.Request.Context(), req.TargetVersion); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -163,13 +163,13 @@ func (c *MigrationController) Rollback(ctx *gin.Context) {
 func (c *MigrationController) GetAvailableUpgrades(ctx *gin.Context) {
 	currentVersion, err := c.migrationService.GetCurrentVersion(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
 	pendingMigrations, err := c.migrationService.GetPendingMigrations(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

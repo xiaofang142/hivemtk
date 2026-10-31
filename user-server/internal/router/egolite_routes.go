@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -198,7 +199,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		}
 		assets, err := egolite.ListInstallableForUser(c.Request.Context(), flowRepo, assetRepo, userID)
 		if err != nil {
-			c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+			c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 			return
 		}
 		// format=zip（S-7 包通道）：同一份清单打成包下发，runner 原子解包后换入。
@@ -279,7 +280,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		name := fmt.Sprintf("ego-%d-%d%s", userID, time.Now().UnixNano(), ext)
 		url, _, err := driver.UploadReader(c.Request.Context(), bytes.NewReader(b), int64(len(b)), folder+"/egolite", name)
 		if err != nil {
-			c.JSON(500, gin.H{"code": 1, "message": "产物落盘失败: " + err.Error()})
+			c.JSON(500, gin.H{"code": 1, "message": "产物落盘失败"})
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{"url": url, "bytes": len(b)}})
@@ -292,7 +293,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	engine.GET("/api/egolite/assets/trust.pem", func(c *gin.Context) {
 		pub, err := egolite.LoadAssetTrustPubKeyFromEnv()
 		if err != nil {
-			c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+			c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 			return
 		}
 		if pub == nil {
@@ -325,7 +326,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		}
 		accepted, droppedKeys, truncated, err := egolite.IngestTelemetry(c.Request.Context(), userID, telRepo, body.Events)
 		if err != nil {
-			c.JSON(500, gin.H{"code": 1, "message": "遥测入库失败: " + err.Error()})
+			c.JSON(500, gin.H{"code": 1, "message": "遥测入库失败"})
 			return
 		}
 		c.JSON(200, gin.H{"code": 0, "data": gin.H{
@@ -376,7 +377,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		eg.GET("/runner/tokens", func(c *gin.Context) {
 			list, err := tokenRepo.ListByUser(c.Request.Context(), currentUID(c))
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
@@ -388,7 +389,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			_ = c.ShouldBindJSON(&body)
 			plain, rec, err := tokenRepo.Issue(c.Request.Context(), currentUID(c), body.Label)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": "签发失败: " + err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": "令牌签发失败"})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": plain, "token_hint": rec.TokenHint, "id": rec.ID},
@@ -410,7 +411,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			}
 			tok, err := egolite.RotateEgoToken(c.Request.Context(), kvRepo, 0)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": "轮换失败: " + err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": "令牌轮换失败"})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"token": tok},
@@ -442,7 +443,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 			list, total, err := flowRepo.ListByUser(c.Request.Context(), currentUID(c), page, size)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -500,6 +501,12 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				c.JSON(404, gin.H{"code": 1, "message": "流程不存在"})
 				return
 			}
+			// 流程删掉后定时触发器必须一并摘除：残留行会继续被调度器扫到（fire 闭包虽会拒绝），
+			// 且 GET /flows/:id/cron 仍会返回「已挂载」，与「流程已删除」自相矛盾。
+			// 未挂载时 Delete 返回 ErrFlowCronNotFound，属正常分支，不算失败。
+			if err := cronSvc.Delete(c.Request.Context(), currentUID(c), uint(id)); err != nil && !errors.Is(err, egolite.ErrFlowCronNotFound) {
+				egoLogWarnf("egolite: 删除流程 %d 后摘除定时触发器失败: %v", id, err)
+			}
 			c.JSON(200, gin.H{"code": 0, "message": "已删除"})
 		})
 		eg.POST("/flows/:id/submit", func(c *gin.Context) {
@@ -537,7 +544,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				CronExpr: body.CronExpr, TimeZone: body.TimeZone, Enabled: body.Enabled,
 			})
 			if err != nil {
-				c.JSON(400, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(400, gin.H{"code": 1, "message": egoErrorMessage(err, "挂载定时触发器失败")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": tr, "message": "已挂载；纯读流程按表达式定时发起执行"})
@@ -578,7 +585,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 			list, total, err := execRepo.ListByUser(c.Request.Context(), currentUID(c), page, size)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -604,7 +611,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			afterID, _ := strconv.ParseUint(c.DefaultQuery("after_id", "0"), 10, 64)
 			events, err := evRepo.ListByExecutionAfter(c.Request.Context(), uint(id), uint(afterID), limit)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": events}})
@@ -708,7 +715,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 			list, total, err := sessionSvc.List(c.Request.Context(), currentUID(c), page, size)
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -848,7 +855,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 		eg.GET("/assets", func(c *gin.Context) {
 			list, err := assetSvc.PublicList(c.Request.Context())
 			if err != nil {
-				c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+				c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 				return
 			}
 			c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list}})
@@ -902,7 +909,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 				list, total, err := flowRepo.ListByStatus(c.Request.Context(), c.Query("status"), page, size)
 				if err != nil {
-					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+					c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -912,7 +919,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				size, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 				list, total, err := assetSvc.AdminList(c.Request.Context(), page, size)
 				if err != nil {
-					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+					c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": gin.H{"list": list, "total": total}})
@@ -932,7 +939,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 				hours, _ := strconv.Atoi(c.DefaultQuery("hours", "24"))
 				buckets, total, truncated, err := egolite.TelemetrySummary(c.Request.Context(), telRepo, hours)
 				if err != nil {
-					c.JSON(500, gin.H{"code": 1, "message": err.Error()})
+					c.JSON(500, gin.H{"code": 1, "message": egoErrorMessage(err, "服务暂时不可用，请稍后重试")})
 					return
 				}
 				c.JSON(200, gin.H{"code": 0, "data": gin.H{
@@ -970,4 +977,28 @@ func egoSessionStatus(err error) int {
 	default:
 		return 400
 	}
+}
+
+// egoErrorMessage 收敛对外错误文案：领域错误本身就是中文（如「流程不存在」），原样返回；
+// 驱动/数据库/运行时错误含内部细节（SQLSTATE、连接串等），一律用 fallback 兜住，避免泄漏。
+func egoErrorMessage(err error, fallback string) string {
+	if err == nil {
+		return fallback
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"sqlstate", "record not found", "duplicate key", "failed to",
+		"connection refused", "connection reset", "timeout", "panic",
+		"nil pointer", "invalid connection", "no such host",
+	} {
+		if strings.Contains(msg, marker) {
+			return fallback
+		}
+	}
+	return err.Error()
+}
+
+// egoLogWarnf egolite 路由层的轻量告警出口（路由包不依赖业务层 logger，避免额外耦合）。
+func egoLogWarnf(format string, args ...any) {
+	log.Printf("[WARN] "+format, args...)
 }

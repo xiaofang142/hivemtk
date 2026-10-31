@@ -31,13 +31,13 @@ func NewEmailSendController() *EmailSendController {
 func (c *EmailSendController) SendEmail(ctx *gin.Context) {
 	var req dto.SendEmailRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：to、subject、content、smtpId 均为必填（draftId / attachments / sendTime / immediateSend 可选）")
 		return
 	}
 
 	email, err := c.svc.SendEmail(ctx.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "发送失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "发送失败")
 		return
 	}
 

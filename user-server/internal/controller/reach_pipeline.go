@@ -44,7 +44,7 @@ func NewReachPipelineController(svc *service.ReachPipelineService) *ReachPipelin
 func (c *ReachPipelineController) CreatePipeline(ctx *gin.Context) {
 	var req service.CreatePipelineRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -74,7 +74,7 @@ func (c *ReachPipelineController) UpdatePipeline(ctx *gin.Context) {
 	}
 	var req service.CreatePipelineRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	pipe, err := c.svc.UpdatePipeline(ctx.Request.Context(), uint(id), &req)
@@ -114,7 +114,7 @@ func (c *ReachPipelineController) ListPipelines(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	list, total, err := c.svc.ListPipelines(ctx.Request.Context(), channel, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -148,7 +148,7 @@ func (c *ReachPipelineController) PausePipeline(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.PausePipeline(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "暂停成功")
@@ -165,7 +165,7 @@ func (c *ReachPipelineController) ResumePipeline(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.ResumePipeline(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "恢复成功")
@@ -182,7 +182,7 @@ func (c *ReachPipelineController) ArchivePipeline(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.ArchivePipeline(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "归档成功")
@@ -195,7 +195,7 @@ func (c *ReachPipelineController) ArchivePipeline(ctx *gin.Context) {
 func (c *ReachPipelineController) EnqueueJob(ctx *gin.Context) {
 	var req service.EnqueueJobRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -240,7 +240,7 @@ func (c *ReachPipelineController) ListJobs(ctx *gin.Context) {
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
 	list, total, err := c.svc.ListJobs(ctx.Request.Context(), channel, state, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -309,7 +309,7 @@ func (c *ReachPipelineController) ExecuteJob(ctx *gin.Context) {
 func (c *ReachPipelineController) Stats(ctx *gin.Context) {
 	stats, err := c.svc.Stats(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, stats, "查询成功")

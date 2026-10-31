@@ -60,7 +60,7 @@ func (r *RecognizeRequest) resolveText() string {
 func (c *IntentController) Recognize(ctx *gin.Context) {
 	var req RecognizeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	text := req.resolveText()
@@ -70,7 +70,7 @@ func (c *IntentController) Recognize(ctx *gin.Context) {
 	}
 	result, err := c.rec.Recognize(ctx.Request.Context(), req.SessionID, req.CustomerID, text)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, result, "识别成功")
@@ -99,7 +99,7 @@ type BatchRecognizeRequest struct {
 func (c *IntentController) BatchRecognize(ctx *gin.Context) {
 	var req BatchRecognizeRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (c *IntentController) Stats(ctx *gin.Context) {
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
 	stats, err := c.rec.GetIntentStats(ctx.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	byIntent := map[string]int{}
@@ -197,7 +197,7 @@ func (c *IntentController) RecentIntents(ctx *gin.Context) {
 	}
 	list, total, err := c.rec.GetRecentIntentsPaged(ctx.Request.Context(), customerID, intentType, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if list == nil {
@@ -235,12 +235,12 @@ type RecognizeFineRequest struct {
 func (c *IntentController) RecognizeFine(ctx *gin.Context) {
 	var req RecognizeFineRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	result, err := c.rec.RecognizeIntent(ctx.Request.Context(), req.Message, req.CustomerID, req.SessionID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, result, "识别成功")
@@ -257,7 +257,7 @@ func (c *IntentController) IntentLogs(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
 	logs, err := c.rec.GetIntentLogs(ctx.Request.Context(), customerID, major, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, logs, "查询成功")
@@ -272,7 +272,7 @@ func (c *IntentController) IntentStatsFine(ctx *gin.Context) {
 	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
 	stats, err := c.rec.GetIntentLogStats(ctx.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, stats, "查询成功")
@@ -291,7 +291,7 @@ func (c *IntentController) IntentStatsFine(ctx *gin.Context) {
 func (c *IntentController) GetConfig(ctx *gin.Context) {
 	cfg, err := service.LoadIntentConfig(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "查询成功")
@@ -316,7 +316,7 @@ type UpdateConfigRequest struct {
 func (c *IntentController) UpdateConfig(ctx *gin.Context) {
 	var req UpdateConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.Enabled == nil {
@@ -337,7 +337,7 @@ func (c *IntentController) UpdateConfig(ctx *gin.Context) {
 		UpdatedBy: updatedBy,
 	}
 	if err := service.UpdateIntentConfig(ctx.Request.Context(), cfg); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "更新成功")
@@ -365,7 +365,7 @@ type UpdateKeywordOverrideRequest struct {
 func (c *IntentController) UpdateKeywordOverride(ctx *gin.Context) {
 	var req UpdateKeywordOverrideRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.Override == nil {
@@ -390,7 +390,7 @@ func (c *IntentController) UpdateKeywordOverride(ctx *gin.Context) {
 		cleaned[k] = kept
 	}
 	if err := service.SaveIntentKeywordOverride(ctx.Request.Context(), cleaned); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"types": len(cleaned)}, "词表已更新并热生效")

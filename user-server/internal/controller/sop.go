@@ -38,7 +38,7 @@ func NewSOPController(svc *service.SOPService) *SOPController {
 func (c *SOPController) Create(ctx *gin.Context) {
 	var req service.CreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -69,7 +69,7 @@ func (c *SOPController) Update(ctx *gin.Context) {
 	}
 	var req service.CreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	agent, err := c.svc.Update(ctx.Request.Context(), uint(id), &req)
@@ -127,7 +127,7 @@ func (c *SOPController) List(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.List(ctx.Request.Context(), scenario, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -163,7 +163,7 @@ func (c *SOPController) Activate(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Activate(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "启用成功")
@@ -180,7 +180,7 @@ func (c *SOPController) Deactivate(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Deactivate(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "停用成功")
@@ -193,7 +193,7 @@ func (c *SOPController) Deactivate(ctx *gin.Context) {
 func (c *SOPController) Execute(ctx *gin.Context) {
 	var req dto.ExecuteRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -212,7 +212,7 @@ func (c *SOPController) Execute(ctx *gin.Context) {
 func (c *SOPController) Step(ctx *gin.Context) {
 	var req dto.StepRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	exec, err := c.svc.Step(ctx.Request.Context(), &req)
@@ -234,7 +234,7 @@ func (c *SOPController) Pause(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Pause(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "暂停成功")
@@ -251,7 +251,7 @@ func (c *SOPController) Resume(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Resume(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "恢复成功")
@@ -268,7 +268,7 @@ func (c *SOPController) Cancel(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Cancel(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "取消成功")
@@ -293,7 +293,7 @@ func (c *SOPController) GetExecution(ctx *gin.Context) {
 			response.NotFound(ctx, "执行不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, redactExecution(exec), "查询成功")
@@ -313,7 +313,7 @@ func (c *SOPController) ListExecutions(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.ListExecutions(ctx.Request.Context(), customerID, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	// 这里就地换 map 而不复制切片：这一份 list 是本次请求刚从仓储扫出来的私有数据，
@@ -372,7 +372,7 @@ func (c *SOPController) MatchByIntent(ctx *gin.Context) {
 	intent := ctx.Query("intent")
 	list, err := c.svc.MatchByIntent(ctx.Request.Context(), intent)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, list, "查询成功")
@@ -385,7 +385,7 @@ func (c *SOPController) MatchByIntent(ctx *gin.Context) {
 func (c *SOPController) Stats(ctx *gin.Context) {
 	stats, err := c.svc.Stats(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, stats, "查询成功")
@@ -421,7 +421,7 @@ func (c *SOPController) UpdateABTestConfig(ctx *gin.Context) {
 	}
 	var cfg service.SOPABTestConfig
 	if err := ctx.ShouldBindJSON(&cfg); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	agent, err := c.svc.UpdateABTestConfig(ctx.Request.Context(), uint(id), cfg)

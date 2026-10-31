@@ -3,6 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
 
@@ -24,13 +25,13 @@ func NewEmailJobsController() *EmailJobsController {
 func (c *EmailJobsController) CreateEmailJobs(ctx *gin.Context) {
 	var req dto.CreateEmailJobsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	resp, err := c.svc.CreateEmailJobsDTO(ctx.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "创建邮件任务失败")
 		return
 	}
 	response.Success(ctx, resp, "创建成功")
@@ -43,7 +44,7 @@ func (c *EmailJobsController) CreateEmailJobs(ctx *gin.Context) {
 func (c *EmailJobsController) GetEmailJobsList(ctx *gin.Context) {
 	var req dto.GetEmailJobsListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 	if req.Page <= 0 {
@@ -54,7 +55,7 @@ func (c *EmailJobsController) GetEmailJobsList(ctx *gin.Context) {
 	}
 	resp, err := c.svc.GetEmailJobsListDTO(ctx.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.ErrorFromDB(ctx, err, "获取邮件任务列表失败")
 		return
 	}
 	response.Success(ctx, resp, "获取成功")
@@ -69,13 +70,13 @@ func (c *EmailJobsController) GetEmailJobsDetail(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	jobsID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
@@ -85,7 +86,7 @@ func (c *EmailJobsController) GetEmailJobsDetail(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "任务不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "邮件任务不存在")
 		return
 	}
 	response.Success(ctx, resp, "获取成功")
@@ -95,24 +96,24 @@ func (c *EmailJobsController) GetEmailJobsDetail(ctx *gin.Context) {
 func (c *EmailJobsController) UpdateEmailJobs(ctx *gin.Context) {
 	var req dto.UpdateEmailJobsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	jobsID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	if err := c.svc.UpdateEmailJobsDTO(ctx.Request.Context(), req); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "更新邮件任务失败")
 		return
 	}
 
 	resp, err := c.svc.GetEmailJobsByIDDTO(ctx.Request.Context(), jobsID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, resp, "获取成功")
@@ -122,17 +123,17 @@ func (c *EmailJobsController) UpdateEmailJobs(ctx *gin.Context) {
 func (c *EmailJobsController) UpdateSendTotal(ctx *gin.Context) {
 	var req dto.UpdateEmailJobsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	if _, err := uuid.Parse(req.ID); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	if err := c.svc.UpdateEmailJobsDTO(ctx.Request.Context(), req); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "更新发送计数失败")
 		return
 	}
 	response.Success(ctx, nil, "更新成功")
@@ -147,18 +148,22 @@ func (c *EmailJobsController) DeleteEmailJobs(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	jobsID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的任务 ID（需 UUID）")
 		return
 	}
 
 	if err = c.svc.DeleteEmailJobs(ctx.Request.Context(), jobsID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "邮件任务不存在")
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "删除邮件任务失败")
 		return
 	}
 	response.Success(ctx, nil, "删除成功")

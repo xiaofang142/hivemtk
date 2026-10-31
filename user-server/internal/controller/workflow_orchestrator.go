@@ -36,7 +36,7 @@ func NewWorkflowOrchestratorController(svc *service.WorkflowOrchestratorService)
 func (c *WorkflowOrchestratorController) CreateVersion(ctx *gin.Context) {
 	var req dto.WorkflowVersionCreateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -134,7 +134,7 @@ func (c *WorkflowOrchestratorController) UpdateVersion(ctx *gin.Context) {
 
 	var req dto.WorkflowVersionUpdateRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -235,7 +235,7 @@ func (c *WorkflowOrchestratorController) DeleteVersion(ctx *gin.Context) {
 func (c *WorkflowOrchestratorController) Execute(ctx *gin.Context) {
 	var req dto.WorkflowExecuteRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

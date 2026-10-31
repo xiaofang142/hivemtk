@@ -65,7 +65,7 @@ func (c *AccountController) GetAccount(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "账户不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

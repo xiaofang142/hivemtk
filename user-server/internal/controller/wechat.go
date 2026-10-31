@@ -80,7 +80,7 @@ type createWechatAccountReq struct {
 func (c *WechatController) CreateAccount(ctx *gin.Context) {
 	var req createWechatAccountReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -113,7 +113,7 @@ func (c *WechatController) UpdateAccount(ctx *gin.Context) {
 
 	var req createWechatAccountReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 
@@ -164,7 +164,7 @@ type sendWechatMsgReq struct {
 func (c *WechatController) SendMessage(ctx *gin.Context) {
 	var req sendWechatMsgReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

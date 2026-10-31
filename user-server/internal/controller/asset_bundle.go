@@ -169,7 +169,7 @@ func (c *AssetBundleController) Create(ctx *gin.Context) {
 	}
 	if err := c.svc.CreateBundle(ctx.Request.Context(), bundle); err != nil {
 		logger.Errorf("[asset-bundle] create failed: %v", err)
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, bundle, "ok")
@@ -288,7 +288,7 @@ func (c *AssetBundleController) List(ctx *gin.Context) {
 	list, total, err := c.svc.ListBundlesWithParams(ctx.Request.Context(),
 		req.Keyword, req.Author, req.Industry, req.Language, req.Scope, assetBundleStatusToInt(model.AssetBundleStatus(req.Status)), strings.Join(req.Tags, ","), page, size)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, dto.AssetBundleListResponse{
@@ -375,7 +375,7 @@ func (c *AssetBundleController) Disable(ctx *gin.Context) {
 func (c *AssetBundleController) GetEnabled(ctx *gin.Context) {
 	list, err := c.svc.GetEnabledBundles(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": list, "total": len(list)}, "ok")
@@ -428,7 +428,7 @@ func (c *AssetBundleController) Weave(ctx *gin.Context) {
 	}
 	msgs, err := c.svc.WeaveForRequest(ctx.Request.Context(), req.AssetID, req.UserQuery, &in)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	stats := dto.WeaveStats{
@@ -459,19 +459,19 @@ func (c *AssetBundleController) MerchantSave(ctx *gin.Context) {
 	}
 	bundle, err := service.BuildBundleFromMerchantForm(req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	existing, _ := c.svc.GetBundleByAssetID(ctx.Request.Context(), req.AssetID)
 	if existing != nil {
 		bundle.ID = existing.ID
 		if err := c.svc.UpdateBundle(ctx.Request.Context(), bundle); err != nil {
-			response.ErrorFromDB(ctx, err, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
 		}
 	} else {
 		if err := c.svc.CreateBundle(ctx.Request.Context(), bundle); err != nil {
-			response.ErrorFromDB(ctx, err, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
 		}
 	}

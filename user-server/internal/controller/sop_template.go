@@ -75,7 +75,7 @@ func (c *SOPTemplateController) List(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.List(ctx.Request.Context(), filter)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -118,7 +118,7 @@ type sopTemplateCreateReq struct {
 func (c *SOPTemplateController) Create(ctx *gin.Context) {
 	var req sopTemplateCreateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	agentID := req.AgentID
@@ -134,7 +134,7 @@ func (c *SOPTemplateController) Create(ctx *gin.Context) {
 		AgentID:    &agentID,
 	}
 	if err := c.svc.Create(ctx.Request.Context(), tpl); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, tpl, "创建成功")
@@ -152,7 +152,7 @@ func (c *SOPTemplateController) Update(ctx *gin.Context) {
 	}
 	var req sopTemplateCreateReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	agentID := req.AgentID
@@ -168,7 +168,7 @@ func (c *SOPTemplateController) Update(ctx *gin.Context) {
 		AgentID:    &agentID,
 	}
 	if err := c.svc.Update(ctx.Request.Context(), uint(id), tpl); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "更新成功")
@@ -188,11 +188,11 @@ func (c *SOPTemplateController) Toggle(ctx *gin.Context) {
 		Enabled *bool `json:"enabled" binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.SetEnabled(ctx.Request.Context(), uint(id), *req.Enabled); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id, "enabled": *req.Enabled}, "状态已更新")
@@ -209,7 +209,7 @@ func (c *SOPTemplateController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id}, "删除成功")
@@ -229,7 +229,7 @@ type sopTemplateMatchReq struct {
 func (c *SOPTemplateController) Match(ctx *gin.Context) {
 	var req sopTemplateMatchReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.AgentID == 0 {
@@ -238,7 +238,7 @@ func (c *SOPTemplateController) Match(ctx *gin.Context) {
 	}
 	matches, err := c.svc.MatchByAgent(ctx.Request.Context(), req.AgentID, req.Intent, req.Stage, req.TopK)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, matches, "匹配成功")

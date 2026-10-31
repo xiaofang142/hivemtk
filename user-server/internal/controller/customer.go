@@ -37,7 +37,7 @@ func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {
 		customers, total, nextCursor, err := c.customerService.ListKeyset(ctx.Request.Context(), cursor, limit)
 		if err != nil {
-			response.ErrorFromDB(ctx, err, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
 		}
 		response.Success(ctx, gin.H{
@@ -57,7 +57,7 @@ func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 
 	customers, total, err := c.customerService.List(ctx.Request.Context(), page, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (c *CustomerController) GetCustomer(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (c *CustomerController) CreateCustomer(ctx *gin.Context) {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (c *CustomerController) AddTags(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -194,7 +194,7 @@ func (c *CustomerController) RemoveTags(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -230,7 +230,7 @@ func (c *CustomerController) MergeCustomers(ctx *gin.Context) {
 	svcCtx := service.WithOperator(ctx.Request.Context(), op)
 
 	if err := c.customerService.MergeCustomers(svcCtx, req.PrimaryID, req.SecondaryID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

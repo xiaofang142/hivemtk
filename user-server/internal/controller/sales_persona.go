@@ -57,7 +57,7 @@ func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 func (c *SalesPersonaController) ListStaffs(ctx *gin.Context) {
 	staffs, err := c.svc.ListStaffs(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithList(ctx, staffs, int64(len(staffs)))

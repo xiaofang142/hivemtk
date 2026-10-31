@@ -2,10 +2,12 @@ package controller
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/dto"
-	"hivemtk-user/internal/pkg/utils/pagination"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -37,7 +39,7 @@ type AppendMessageRequest struct {
 func (c *DialogueMemoryController) AppendMessage(ctx *gin.Context) {
 	var req AppendMessageRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id、role、content 均为必填，customer_id 可选")
 		return
 	}
 	err := c.svc.AppendMessage(ctx.Request.Context(), req.SessionID, req.CustomerID, dto.Message{
@@ -46,7 +48,7 @@ func (c *DialogueMemoryController) AppendMessage(ctx *gin.Context) {
 		Timestamp: time.Now(),
 	})
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "追加消息失败")
 		return
 	}
 	response.Success(ctx, nil, "追加成功")
@@ -57,14 +59,14 @@ func (c *DialogueMemoryController) AppendMessage(ctx *gin.Context) {
 // @Router    /api/memory/short [get]
 // ShortTerm 短期记忆
 func (c *DialogueMemoryController) ShortTerm(ctx *gin.Context) {
-	sessionID := ctx.Query("session_id")
+	sessionID := strings.TrimSpace(ctx.Query("session_id"))
 	if sessionID == "" {
 		response.Error(ctx, http.StatusBadRequest, "session_id 必填")
 		return
 	}
 	msgs, err := c.svc.GetShortTermMemory(ctx.Request.Context(), sessionID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "查询短期记忆失败")
 		return
 	}
 	response.Success(ctx, msgs, "查询成功")
@@ -75,10 +77,14 @@ func (c *DialogueMemoryController) ShortTerm(ctx *gin.Context) {
 // @Router    /api/memory/long [get]
 // LongTerm 长期记忆
 func (c *DialogueMemoryController) LongTerm(ctx *gin.Context) {
-	sessionID := ctx.Query("session_id")
+	sessionID := strings.TrimSpace(ctx.Query("session_id"))
+	if sessionID == "" {
+		response.Error(ctx, http.StatusBadRequest, "session_id 必填")
+		return
+	}
 	mem, err := c.svc.GetLongTermMemory(ctx.Request.Context(), sessionID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "查询长期记忆失败")
 		return
 	}
 	response.Success(ctx, mem, "查询成功")
@@ -97,12 +103,12 @@ type UpdateKeyFactsRequest struct {
 func (c *DialogueMemoryController) UpdateKeyFacts(ctx *gin.Context) {
 	var req UpdateKeyFactsRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id 与 facts（字符串字典）均为必填")
 		return
 	}
 	err := c.svc.UpdateKeyFacts(ctx.Request.Context(), req.SessionID, req.Facts)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "更新关键事实失败")
 		return
 	}
 	response.Success(ctx, nil, "更新成功")
@@ -122,12 +128,12 @@ type RecordObjectionRequest struct {
 func (c *DialogueMemoryController) RecordObjection(ctx *gin.Context) {
 	var req RecordObjectionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id、objection_type、content 均为必填")
 		return
 	}
 	err := c.svc.RecordObjection(ctx.Request.Context(), req.SessionID, req.ObjectionType, req.Content)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "记录异议失败")
 		return
 	}
 	response.Success(ctx, nil, "记录成功")
@@ -146,12 +152,12 @@ type UpdatePurchaseIntentRequest struct {
 func (c *DialogueMemoryController) UpdatePurchaseIntent(ctx *gin.Context) {
 	var req UpdatePurchaseIntentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id 与 level 均为必填")
 		return
 	}
 	err := c.svc.UpdatePurchaseIntent(ctx.Request.Context(), req.SessionID, req.Level)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "更新购买意向失败")
 		return
 	}
 	response.Success(ctx, nil, "更新成功")
@@ -170,12 +176,12 @@ type RecordIntentRequest struct {
 func (c *DialogueMemoryController) RecordIntent(ctx *gin.Context) {
 	var req RecordIntentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id 与 intent_type 均为必填")
 		return
 	}
 	err := c.svc.RecordIntent(ctx.Request.Context(), req.SessionID, req.IntentType)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "记录意图失败")
 		return
 	}
 	response.Success(ctx, nil, "记录成功")
@@ -194,12 +200,12 @@ type RecordSOPRequest struct {
 func (c *DialogueMemoryController) RecordSOP(ctx *gin.Context) {
 	var req RecordSOPRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：session_id 与 sop_name 均为必填")
 		return
 	}
 	err := c.svc.RecordSOP(ctx.Request.Context(), req.SessionID, req.SOPName)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "记录 SOP 失败")
 		return
 	}
 	response.Success(ctx, nil, "记录成功")
@@ -214,7 +220,7 @@ func (c *DialogueMemoryController) BuildContext(ctx *gin.Context) {
 	customerID := ctx.Query("customer_id")
 	s, err := c.svc.BuildContext(ctx.Request.Context(), sessionID, customerID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		replyMemoryError(ctx, err, "构建记忆上下文失败")
 		return
 	}
 	response.Success(ctx, gin.H{"context": s}, "查询成功")
@@ -225,16 +231,42 @@ func (c *DialogueMemoryController) BuildContext(ctx *gin.Context) {
 // @Router    /api/memory/list [get]
 // Stats 客户会话列表
 func (c *DialogueMemoryController) Stats(ctx *gin.Context) {
-	customerID := ctx.Query("customer_id")
-	_, limit, err := pagination.Parse(ctx)
+	customerID := strings.TrimSpace(ctx.Query("customer_id"))
+	pageSize := memoryPageSize(ctx)
+	mems, total, err := c.svc.ListByCustomerID(ctx.Request.Context(), customerID, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyMemoryError(ctx, err, "获取记忆列表失败")
 		return
 	}
-	mems, total, err := c.svc.ListByCustomerID(ctx.Request.Context(), customerID, limit)
-	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+	// ListByCustomerID 只有 limit（无 offset），因此 page 恒为 1，不按请求的 page 回显。
+	response.SuccessWithPage(ctx, mems, 1, int64(pageSize), total)
+}
+
+// replyMemoryError 对话记忆统一错误出口：not found → 404，其余交 HandleDBError。
+// 原先 10 个 handler 都把 err.Error() 当 fallback 直出，会把仓储/驱动原文暴露给前端。
+func replyMemoryError(ctx *gin.Context, err error, fallback string) {
+	if err == nil {
 		return
 	}
-	response.SuccessWithPage(ctx, mems, 1, int64(limit), total)
+	if errhttp.IsNotFoundError(err) {
+		response.NotFound(ctx, fallback)
+		return
+	}
+	errhttp.HandleDBError(ctx, err, fallback)
+}
+
+// memoryPageSize 归一化分页条数：缺省 20，上限 100。
+func memoryPageSize(ctx *gin.Context) int {
+	raw := strings.TrimSpace(ctx.Query("page_size"))
+	if raw == "" {
+		raw = strings.TrimSpace(ctx.Query("limit"))
+	}
+	size, _ := strconv.Atoi(raw)
+	if size < 1 {
+		size = 20
+	}
+	if size > 100 {
+		size = 100
+	}
+	return size
 }

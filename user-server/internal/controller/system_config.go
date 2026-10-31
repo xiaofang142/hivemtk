@@ -26,7 +26,7 @@ func NewSystemConfigController() *SystemConfigController {
 func (c *SystemConfigController) GetConfig(ctx *gin.Context) {
 	config, err := c.svc.GetConfig(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, config, "success")
@@ -48,7 +48,7 @@ func (c *SystemConfigController) SaveConfig(ctx *gin.Context) {
 	}
 	config, err := c.svc.SaveConfig(ctx.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, config, "success")

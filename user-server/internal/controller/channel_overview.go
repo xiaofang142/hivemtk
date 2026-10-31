@@ -34,7 +34,7 @@ func (ctrl *ChannelOverviewController) Overview(ctx *gin.Context) {
 func (ctrl *ChannelOverviewController) BindChannel(ctx *gin.Context) {
 	var req dto.CustomerChannelBinding
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"hivemtk-user/internal/dto"
 	email "hivemtk-user/internal/email/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"image"
 	"image/png"
@@ -28,13 +29,13 @@ func NewEmailListController(svc *email.EmailListService) *EmailListController {
 func (c *EmailListController) CreateEmailList(ctx *gin.Context) {
 	var req dto.CreateEmailListRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	total, err := c.svc.CreateEmailList(ctx.Request.Context(), req.Subject, req.Content, strings.Join(req.Attachments, ","))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "创建邮件列表失败")
 		return
 	}
 	response.Success(ctx, map[string]int64{
@@ -49,7 +50,7 @@ func (c *EmailListController) CreateEmailList(ctx *gin.Context) {
 func (c *EmailListController) GetEmailListList(ctx *gin.Context) {
 	var req dto.GetEmailListRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 	if req.Page <= 0 {
@@ -60,7 +61,7 @@ func (c *EmailListController) GetEmailListList(ctx *gin.Context) {
 	}
 	resp, err := c.svc.GetEmailListListDTO(ctx.Request.Context(), req.Page, req.PageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取邮件列表失败")
 		return
 	}
 	response.Success(ctx, resp, "success")
@@ -75,18 +76,18 @@ func (c *EmailListController) GetEmailListDetail(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 	listID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	resp, err := c.svc.GetEmailListByIDDTO(ctx.Request.Context(), listID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "邮件列表不存在")
 		return
 	}
 	response.Success(ctx, resp, "success")
@@ -96,17 +97,17 @@ func (c *EmailListController) GetEmailListDetail(ctx *gin.Context) {
 func (c *EmailListController) UpdateEmailList(ctx *gin.Context) {
 	var req dto.UpdateEmailListRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	if _, err := uuid.Parse(req.ID); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	if err := c.svc.UpdateEmailListDTO(ctx.Request.Context(), req); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "更新邮件列表失败")
 		return
 	}
 	response.Success(ctx, nil, "success")
@@ -121,18 +122,22 @@ func (c *EmailListController) DeleteEmailList(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	listID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 
 	if err = c.svc.DeleteEmailList(ctx.Request.Context(), listID); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "邮件列表不存在")
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "删除邮件列表失败")
 		return
 	}
 	response.Success(ctx, nil, "success")
@@ -181,7 +186,7 @@ func (c *EmailListController) GetTracking(ctx *gin.Context) {
 		Size int    `form:"page_size"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 	if req.Page <= 0 {
@@ -192,12 +197,12 @@ func (c *EmailListController) GetTracking(ctx *gin.Context) {
 	}
 	listID, err := uuid.Parse(req.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, "无效的列表 ID（需 UUID）")
 		return
 	}
 	events, total, err := c.svc.GetTrackingEvents(ctx.Request.Context(), listID, req.Page, req.Size)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "邮件列表不存在")
 		return
 	}
 	response.Success(ctx, map[string]interface{}{

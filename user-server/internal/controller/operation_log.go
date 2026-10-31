@@ -70,7 +70,7 @@ func (c *OperationLogController) GetList(ctx *gin.Context) {
 	if useCursor {
 		logs, total, nextCursor, err := c.logSvc.GetAllKeyset(ctx.Request.Context(), cursor, pageSize, filters)
 		if err != nil {
-			response.ErrorFromDB(ctx, err, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
 		}
 		response.Success(ctx, gin.H{
@@ -84,7 +84,7 @@ func (c *OperationLogController) GetList(ctx *gin.Context) {
 
 	logs, total, err := c.logSvc.GetAll(ctx.Request.Context(), page, pageSize, filters)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -148,7 +148,7 @@ func (c *OperationLogController) GetMyLogs(ctx *gin.Context) {
 
 	logs, total, err := c.logSvc.GetByUserID(ctx.Request.Context(), uid, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -167,7 +167,7 @@ func (c *OperationLogController) GetMyLogs(ctx *gin.Context) {
 func (c *OperationLogController) GetStatistics(ctx *gin.Context) {
 	stats, err := c.logSvc.GetStatistics(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -230,7 +230,7 @@ func (c *OperationLogController) CleanLogs(ctx *gin.Context) {
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
-		response.Error(ctx, http.StatusBadRequest, "参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	var cutoff time.Time

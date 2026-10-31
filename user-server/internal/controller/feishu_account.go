@@ -62,12 +62,12 @@ func (ctrl *FeishuAccountController) RegisterRoutes(router *gin.RouterGroup) {
 func (ctrl *FeishuAccountController) TestSendQuery(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	openID := c.Query("open_id")
@@ -85,7 +85,7 @@ func (ctrl *FeishuAccountController) TestSendQuery(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.SendMessage(ctx, uint(id), openID, content, "open_id", ""); err != nil {
-		response.ErrorFromDB(c, err, "发送失败", err.Error())
+		response.ErrorFromDB(c, err, "发送测试消息失败")
 		return
 	}
 	response.Success(c, nil, "发送成功")
@@ -134,7 +134,7 @@ func toFeishuVO(a *model.FeishuAccount) *feishuAccountVO {
 func (ctrl *FeishuAccountController) List(c *gin.Context) {
 	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询飞书账号失败")
 		return
 	}
 	out := make([]*feishuAccountVO, 0, len(accs))
@@ -151,12 +151,12 @@ func (ctrl *FeishuAccountController) List(c *gin.Context) {
 func (ctrl *FeishuAccountController) Get(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -182,7 +182,7 @@ type feishuCreateReq struct {
 func (ctrl *FeishuAccountController) Create(c *gin.Context) {
 	var req feishuCreateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	acc := &model.FeishuAccount{
@@ -198,7 +198,7 @@ func (ctrl *FeishuAccountController) Create(c *gin.Context) {
 	}
 	out, err := ctrl.svc.CreateAccount(c.Request.Context(), acc)
 	if err != nil {
-		response.ErrorFromDB(c, err, "创建失败", err.Error())
+		response.ErrorFromDB(c, err, "创建飞书账号失败")
 		return
 	}
 	response.Success(c, toFeishuVO(out), "创建成功")
@@ -221,17 +221,17 @@ type feishuUpdateReq struct {
 func (ctrl *FeishuAccountController) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	var req feishuUpdateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -261,7 +261,7 @@ func (ctrl *FeishuAccountController) Update(c *gin.Context) {
 		acc.Status = *req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新飞书账号失败")
 		return
 	}
 	response.Success(c, toFeishuVO(acc), "更新成功")
@@ -274,19 +274,19 @@ func (ctrl *FeishuAccountController) Update(c *gin.Context) {
 func (ctrl *FeishuAccountController) Delete(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
 		return
 	}
 	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		response.ErrorFromDB(c, err, "删除飞书账号失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -304,12 +304,12 @@ type feishuTestSendReq struct {
 func (ctrl *FeishuAccountController) TestSend(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -317,14 +317,14 @@ func (ctrl *FeishuAccountController) TestSend(c *gin.Context) {
 	}
 	var req feishuTestSendReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	integration := ctrl.integrationSvc
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.SendMessage(ctx, acc.ID, req.OpenID, req.Content, "open_id", ""); err != nil {
-		response.ErrorFromDB(c, err, "发送失败", err.Error())
+		response.ErrorFromDB(c, err, "发送测试消息失败")
 		return
 	}
 	response.Success(c, nil, "发送成功")
@@ -337,12 +337,12 @@ func (ctrl *FeishuAccountController) TestSend(c *gin.Context) {
 func (ctrl *FeishuAccountController) RefreshToken(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "ID 错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "无效的账号 ID")
 		return
 	}
 	acc, err := ctrl.svc.GetAccount(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "账号不存在", err.Error())
+		response.NotFound(c, "飞书账号不存在")
 		return
 	}
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
@@ -352,7 +352,7 @@ func (ctrl *FeishuAccountController) RefreshToken(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.RefreshAccessToken(ctx, acc); err != nil {
-		response.ErrorFromDB(c, err, "刷新失败", err.Error())
+		response.ErrorFromDB(c, err, "刷新飞书令牌失败")
 		return
 	}
 	response.Success(c, toFeishuVO(acc), "刷新成功")

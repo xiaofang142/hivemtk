@@ -90,7 +90,7 @@ func (c *EmailTrackingController) ClickRedirect(ctx *gin.Context) {
 	ua := ctx.Request.UserAgent()
 	target, err := c.svc.RecordClickEvent(ctx.Request.Context(), token, ip, ua)
 	if err != nil {
-		ctx.String(http.StatusBadRequest, "追踪链接无效或已过期：%s", err.Error())
+		ctx.String(http.StatusBadRequest, "追踪链接无效或已过期")
 		return
 	}
 
@@ -119,7 +119,7 @@ func (c *EmailTrackingController) GetJobMetrics(ctx *gin.Context) {
 
 	metric, err := c.svc.GetJobMetrics(ctx.Request.Context(), jobID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取指标失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "获取指标失败")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (c *EmailTrackingController) ListJobEvents(ctx *gin.Context) {
 
 	events, total, err := c.svc.ListJobEvents(ctx.Request.Context(), jobID, page, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询事件失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询事件失败")
 		return
 	}
 
@@ -164,7 +164,7 @@ type GetRangeMetricsRequest struct {
 func (c *EmailTrackingController) GetRangeMetrics(ctx *gin.Context) {
 	var req GetRangeMetricsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "参数错误：请检查 start / end 时间格式（RFC3339）")
 		return
 	}
 
@@ -181,7 +181,7 @@ func (c *EmailTrackingController) GetRangeMetrics(ctx *gin.Context) {
 
 	metric, err := c.svc.GetEmailMetrics(ctx.Request.Context(), start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "聚合指标失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "聚合指标失败")
 		return
 	}
 

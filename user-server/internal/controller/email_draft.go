@@ -27,13 +27,13 @@ func NewEmailDraftController() *EmailDraftController {
 func (c *EmailDraftController) CreateEmailDraft(ctx *gin.Context) {
 	var req dto.CreateEmailDraftRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	resp, err := c.svc.CreateEmailDraftDTO(ctx.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "创建失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "创建邮件草稿失败")
 		return
 	}
 	response.Success(ctx, resp, "创建成功")
@@ -46,7 +46,7 @@ func (c *EmailDraftController) CreateEmailDraft(ctx *gin.Context) {
 func (c *EmailDraftController) GetEmailDraftList(ctx *gin.Context) {
 	resp, err := c.svc.GetEmailDraftListDTO(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取列表失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "获取邮件草稿列表失败")
 		return
 	}
 	response.Success(ctx, resp, "获取成功")
@@ -61,7 +61,7 @@ func (c *EmailDraftController) GetEmailDraftDetail(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "参数错误")
 		return
 	}
 
@@ -77,7 +77,7 @@ func (c *EmailDraftController) GetEmailDraftDetail(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "草稿不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, "获取详情失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "邮件草稿不存在")
 		return
 	}
 	response.Success(ctx, resp, "获取成功")
@@ -98,7 +98,7 @@ func (c *EmailDraftController) GetEmailDraftDetail(ctx *gin.Context) {
 func (c *EmailDraftController) UpdateEmailDraft(ctx *gin.Context) {
 	var req dto.UpdateEmailDraftRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "参数错误")
 		return
 	}
 
@@ -116,7 +116,7 @@ func (c *EmailDraftController) UpdateEmailDraft(ctx *gin.Context) {
 	}
 
 	if err := c.svc.UpdateEmailDraftDTO(ctx.Request.Context(), req); err != nil {
-		response.ErrorFromDB(ctx, err, "更新失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "更新邮件草稿失败")
 		return
 	}
 	response.Success(ctx, nil, "更新成功")
@@ -131,7 +131,7 @@ func (c *EmailDraftController) DeleteEmailDraft(ctx *gin.Context) {
 		ID string `uri:"id" binding:"required"`
 	}
 	if err := ctx.ShouldBindUri(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "参数错误")
 		return
 	}
 
@@ -142,7 +142,7 @@ func (c *EmailDraftController) DeleteEmailDraft(ctx *gin.Context) {
 	}
 
 	if err = c.svc.DeleteEmailDraft(ctx.Request.Context(), draftID); err != nil {
-		response.ErrorFromDB(ctx, err, "删除失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "删除邮件草稿失败")
 		return
 	}
 	response.Success(ctx, nil, "删除成功")

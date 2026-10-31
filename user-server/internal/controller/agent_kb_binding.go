@@ -203,7 +203,7 @@ type agentKBBatchBindReq struct {
 func (c *AgentKBBindingController) BatchBind(ctx *gin.Context) {
 	var req agentKBBatchBindReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if err := c.svc.BatchBind(ctx.Request.Context(), req.Items); errhttp.HandleDBError(ctx, err, "批量绑定知识库") {
@@ -226,7 +226,7 @@ type agentKBUnbindReq struct {
 func (c *AgentKBBindingController) Unbind(ctx *gin.Context) {
 	var req agentKBUnbindReq
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
 	if req.AgentID == 0 {

@@ -79,7 +79,15 @@ func (r *douyinCardRepository) Update(ctx context.Context, card *model.DouyinCar
 }
 
 func (r *douyinCardRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&model.DouyinCard{}, id).Error
+	result := r.db.WithContext(ctx).Delete(&model.DouyinCard{}, id)
+	if result.Error != nil {
+		return result.Error
+	}
+	// 0 行=不存在：DELETE 幂等成功会让前端把「已删过的卡片」当成功，与其它模块 404 语义不一致
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *douyinCardRepository) GetByID(ctx context.Context, id uint) (*model.DouyinCard, error) {
