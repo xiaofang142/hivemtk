@@ -164,7 +164,7 @@ func (c *GrowthController) DeleteSavedView(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"deleted": true}, "视图已删除")
 }
 
-// @Summary      订阅成功
+// @Summary POST /api/report-subscriptions {email, schedule}
 // @Tags      growth
 // @Router    /api/report-subscriptions [post]
 // CreateReportSub POST /api/report-subscriptions {email, schedule}

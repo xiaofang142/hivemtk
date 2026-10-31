@@ -155,7 +155,7 @@ type GetRangeMetricsRequest struct {
 	End   string `form:"end" binding:"required"`
 }
 
-// @Summary      参数错误
+// @Summary GET /api/email/track/metrics?start=...&end=...
 // @Tags      email-tracking
 // @Router    /api/email/track/metrics [get]
 // GetRangeMetrics GET /api/email/track/metrics?start=...&end=...

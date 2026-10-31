@@ -63,6 +63,10 @@ type ProviderConfig struct {
 	Vendor        string   `json:"vendor,omitempty"`
 	Tags          []string `json:"tags,omitempty"`
 	ContextWindow int      `json:"context_window,omitempty"`
+	// KeyInvalid 表示库里存的 API Key 用当前主密钥解不开（主密钥轮换 / 多实例
+	// 配置不一致）。此时 APIKey 已被置空——不置空的话上游只会回一个 401，
+	// 运维看到的信息量等于零。置位后调用前显式回报可执行文案，前端也会打标。
+	KeyInvalid bool `json:"key_invalid,omitempty"`
 }
 
 type ScenarioRoute struct {

@@ -20,12 +20,13 @@ func NewToolExecutorAdapter(executor *tooluse.ToolExecutor) *ToolExecutorAdapter
 }
 
 // ListTools 实现 service.AgentToolExecutor.ListTools
-// 将 tooluse.LLMFunction 转为 service.AgentToolDef
-func (a *ToolExecutorAdapter) ListTools() []service.AgentToolDef {
+// 将 tooluse.LLMFunction 转为 service.AgentToolDef；并入当前请求租户自己的
+// custom_tools / mcp_servers 工具（多租户隔离，见 tooluse/tenant_registry.go）。
+func (a *ToolExecutorAdapter) ListTools(ctx context.Context) []service.AgentToolDef {
 	if a.executor == nil {
 		return nil
 	}
-	fns := a.executor.ListAvailableLLMFunctions()
+	fns := a.executor.ListAvailableLLMFunctionsForTenant(ctx)
 	out := make([]service.AgentToolDef, 0, len(fns))
 	for _, fn := range fns {
 		paramsMap, err := structToMap(fn.Parameters)

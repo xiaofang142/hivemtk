@@ -53,7 +53,7 @@ func (c *SubscriptionController) Status(ctx *gin.Context) {
 	response.Success(ctx, snap, "ok")
 }
 
-// @Summary      参数错误
+// @Summary POST /api/subscription/renew
 // @Tags      subscription
 // @Router    /api/subscription/renew [post]
 // Renew POST /api/subscription/renew

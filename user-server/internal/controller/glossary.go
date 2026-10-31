@@ -174,7 +174,7 @@ func (ctrl *GlossaryController) Delete(c *gin.Context) {
 	response.Success(c, nil, "删除成功")
 }
 
-// @Summary      校验完成
+// @Summary 预览某段文本的术语校验结果
 // @Tags      glossary
 // @Router    /api/glossaries/validate [post]
 // Validate 预览某段文本的术语校验结果

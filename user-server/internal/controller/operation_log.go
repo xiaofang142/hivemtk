@@ -30,7 +30,7 @@ func NewOperationLogController() *OperationLogController {
 	}
 }
 
-// @Summary      获取操作日志成功
+// @Summary 获取操作日志列表
 // @Tags      operation-log
 // @Router    /api/operation-logs [get]
 // GetList 获取操作日志列表
@@ -96,7 +96,7 @@ func (c *OperationLogController) GetList(ctx *gin.Context) {
 	}, "获取操作日志成功")
 }
 
-// @Summary      获取日志详情成功
+// @Summary 获取操作日志详情
 // @Tags      operation-log
 // @Router    /api/operation-logs/{id} [get]
 // GetByID 获取操作日志详情
@@ -160,7 +160,7 @@ func (c *OperationLogController) GetMyLogs(ctx *gin.Context) {
 	}, "获取操作日志成功")
 }
 
-// @Summary      获取统计信息成功
+// @Summary 获取操作日志统计
 // @Tags      operation-log
 // @Router    /api/operation-logs/statistics [get]
 // GetStatistics 获取操作日志统计
@@ -218,7 +218,7 @@ func (c *OperationLogController) ExportLogs(ctx *gin.Context) {
 	ctx.Data(http.StatusOK, "text/csv; charset=utf-8", buf.Bytes())
 }
 
-// @Summary      清理完成
+// @Summary 清理指定日期之前的操作日志
 // @Tags      operation-log
 // @Router    /api/operation-logs/clean [post]
 // CleanLogs 清理指定日期之前的操作日志

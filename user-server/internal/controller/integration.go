@@ -230,7 +230,7 @@ func (c *IntegrationController) SyncProducts(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"count": count}, "同步成功")
 }
 
-// @Summary      连接测试成功
+// @Summary 测试对接账号连接
 // @Tags      integration
 // @Router    /api/integrations/{id}/test [post]
 // TestIntegration 测试对接账号连接

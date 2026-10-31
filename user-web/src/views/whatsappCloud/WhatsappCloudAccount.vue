@@ -25,15 +25,9 @@
           width="70"
         />
         <el-table-column
-          prop="name"
+          prop="account_name"
           label="名称"
           min-width="120"
-        />
-        <el-table-column
-          prop="remark"
-          label="备注"
-          min-width="120"
-          show-overflow-tooltip
         />
         <el-table-column
           prop="phone_number_id"
@@ -313,6 +307,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import AgentBindingDialog from '@/components/AgentBindingDialog.vue'
 import { copyToClipboard } from '@/utils/clipboard.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 import {
   listWhatsappCloud,
   getWhatsappCloud,
@@ -398,8 +393,8 @@ async function openEdit(row) {
     const detail = await getWhatsappCloud(row.id)
     Object.assign(form, {
       id: detail.id,
-      name: detail.name || '',
-      remark: detail.remark || '',
+      name: detail.account_name || detail.name || '',
+      remark: '',
       phone_number_id: detail.phone_number_id || '',
       whatsapp_business_id: detail.whatsapp_business_id || '',
       access_token: '',
@@ -415,9 +410,14 @@ async function openEdit(row) {
 }
 
 async function submit() {
+  // 后端 whatsAppCloudCreateReq 的必填字段是 account_name / phone_number_id /
+  // whatsapp_business_id / access_token（json tag 就是这几个名字）。原来发的是 `name`
+  // 且空值用 `undefined`（JSON 序列化直接丢字段），于是每次保存都拿到 Go validator 原文。
   const payload = {
-    name: form.name,
-    remark: form.remark || undefined,
+    account_name: String(form.name || '').trim(),
+    phone_number_id: String(form.phone_number_id || '').trim(),
+    whatsapp_business_id: String(form.whatsapp_business_id || '').trim(),
+    access_token: String(form.access_token || '').trim(),
     phone_number_id: form.phone_number_id || undefined,
     whatsapp_business_id: form.whatsapp_business_id || undefined,
     access_token: form.access_token || undefined,
@@ -426,6 +426,10 @@ async function submit() {
     webhook_enabled: form.webhook_enabled,
     ai_agent_enabled: form.ai_agent_enabled
   }
+  if (!payload.account_name) { ElMessage.warning('请输入账号名称'); return }
+  if (!payload.phone_number_id) { ElMessage.warning('请输入 Phone Number ID'); return }
+  if (!payload.whatsapp_business_id) { ElMessage.warning('请输入 WhatsApp Business ID'); return }
+  if (!payload.access_token) { ElMessage.warning('请输入 Access Token'); return }
   saving.value = true
   try {
     if (dialogMode.value === 'edit') {
@@ -437,7 +441,7 @@ async function submit() {
     dialogVisible.value = false
     loadData()
   } catch (e) {
-    ElMessage.error('保存失败：' + (e.message || e))
+    if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || e))
   } finally {
     saving.value = false
   }
@@ -445,7 +449,7 @@ async function submit() {
 
 async function handleDelete(row) {
   try {
-    await ElMessageBox.confirm(`确认删除账号「${row.name}」？`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认删除账号「${row.account_name || row.name || row.id}」？`, '提示', { type: 'warning' })
   } catch {
     return
   }

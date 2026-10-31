@@ -305,7 +305,7 @@ func (c *EmailGapController) SuspendDomain(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"domain": req.Domain, "suspended": true}, "已暂停")
 }
 
-// @Summary      测试发送完成
+// @Summary POST /api/email/test-send {subject, html, to[]}
 // @Tags      email-gap
 // @Router    /api/email/test-send [post]
 // TestSend POST /api/email/test-send {subject, html, to[]}
@@ -385,7 +385,7 @@ func (c *EmailGapController) PlaygroundPresets(ctx *gin.Context) {
 	}, "total": 5}, "ok")
 }
 
-// @Summary      处理完成
+// @Summary POST /api/clues/import/apply-suggestions
 // @Tags      email-gap
 // @Router    /api/clues/import/apply-suggestions [post]
 func (c *EmailGapController) ClueApplySuggestions(ctx *gin.Context) {

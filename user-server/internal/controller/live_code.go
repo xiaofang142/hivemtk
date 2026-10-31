@@ -161,7 +161,7 @@ func (c *LiveCodeController) GetStats(ctx *gin.Context) {
 	response.Success(ctx, stats, "获取成功")
 }
 
-// @Summary      生成成功
+// @Summary 生成活码二维码
 // @Tags      live-code
 // @Router    /api/live-codes/{id}/qrcodes/create [post]
 // GenerateQRCode 生成活码二维码
@@ -212,7 +212,7 @@ func (c *LiveCodeController) GetQRStats(ctx *gin.Context) {
 	response.Success(ctx, stats, "获取成功")
 }
 
-// @Summary      分享成功
+// @Summary 分享活码
 // @Tags      live-code
 // @Router    /api/live-codes/{id}/share [post]
 // Share 分享活码
@@ -330,7 +330,7 @@ func (c *LiveCodeController) RenderLiveCodePage(ctx *gin.Context) {
 	ctx.String(http.StatusOK, html)
 }
 
-// @Summary      记录成功
+// @Summary 记录点击统计
 // @Tags      live-code
 // @Router    /api/livecode/{id}/click [post]
 // RecordClick 记录点击统计

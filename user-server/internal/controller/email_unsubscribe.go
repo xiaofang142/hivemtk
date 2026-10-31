@@ -67,7 +67,7 @@ type UnsubscribeConfirmRequest struct {
 	Reason string `json:"reason"`
 }
 
-// @Summary      退订成功
+// @Summary POST /api/email/unsubscribe/confirm
 // @Tags      email-unsubscribe
 // @Router    /api/email/unsubscribe/confirm [post]
 // UnsubscribeConfirm POST /api/email/unsubscribe/confirm
@@ -99,7 +99,7 @@ func (c *EmailUnsubscribeController) UnsubscribeConfirm(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"email": claim.Email, "status": "unsubscribed"}, "退订成功")
 }
 
-// @Summary      查询退订名单失败
+// @Summary GET /api/email/unsubscribe/list
 // @Tags      email-unsubscribe
 // @Router    /api/email/unsubscribe/list [get]
 // ListUnsubscribes GET /api/email/unsubscribe/list
@@ -117,7 +117,7 @@ func (c *EmailUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, records, int64(page), int64(limit), total)
 }
 
-// @Summary      导出退订名单失败
+// @Summary GET /api/email/unsubscribe/export
 // @Tags      email-unsubscribe
 // @Router    /api/email/unsubscribe/export [get]
 // ExportUnsubscribes GET /api/email/unsubscribe/export
@@ -147,7 +147,7 @@ type ResubscribeRequest struct {
 	Email string `json:"email" binding:"required,email"`
 }
 
-// @Summary      重新订阅成功
+// @Summary POST /api/email/unsubscribe/resubscribe
 // @Tags      email-unsubscribe
 // @Router    /api/email/unsubscribe/resubscribe [post]
 // Resubscribe POST /api/email/unsubscribe/resubscribe

@@ -21,7 +21,7 @@ func NewSupportMetricsController(svc service.SupportMetricsService) *SupportMetr
 	return &SupportMetricsController{svc: svc}
 }
 
-// @Summary      指标看板数据层不可用
+// @Summary GET /api/metrics/support?days=30
 // @Tags      support-metrics
 // @Router    /api/metrics/support [get]
 // GetSupportMetrics GET /api/metrics/support?days=30

@@ -227,7 +227,7 @@ type RecognizeFineRequest struct {
 	SessionID  string `json:"session_id"`
 }
 
-// @Summary      识别成功
+// @Summary 精细意图识别
 // @Tags      intent
 // @Router    /api/intent/recognize/fine [post]
 // RecognizeFine 精细意图识别

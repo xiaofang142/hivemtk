@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	ksvc "hivemtk-user/internal/aiagent/knowledge/service"
@@ -76,7 +77,58 @@ func (s *HelpCenterService) Articles(ctx context.Context, category, q string, li
 
 // ArticleDetail 文章详情（正文=chunks 拼接）
 func (s *HelpCenterService) ArticleDetail(ctx context.Context, id uint64) (map[string]any, error) {
-	return s.repo.GetPublicArticle(ctx, id)
+	detail, err := s.repo.GetPublicArticle(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	// 正文来自知识库 chunk 原文。行业演示种子（scripts/seed/bulk_seed_industries.py）
+	// 里的话术是模板，含 {hours}/{puffs} 这类占位符，直接输出会把模板语法露给终端用户。
+	// 这里做一次展示层兜底：已知占位符填演示值，未知占位符去掉花括号只留词干。
+	if body, ok := detail["content"].(string); ok {
+		detail["content"] = sanitizeDemoPlaceholders(body)
+	}
+	return detail, nil
+}
+
+// demoPlaceholderValues 是行业演示内容的占位符取值表（与种子脚本的话术口径一致）。
+// 新增占位符时两边一起加：这里负责存量数据，种子脚本负责新写入的数据。
+var demoPlaceholderValues = map[string]string{
+	"hours":          "2",
+	"seconds":        "3",
+	"days":           "3",
+	"puffs":          "500",
+	"temp_range":     "10–25℃",
+	"hundreds":       "数百",
+	"tens":           "数十",
+	"capacity":       "650",
+	"power":          "8",
+	"ohm":            "1.2",
+	"ml":             "2",
+	"mg":             "20",
+	"mg2":            "5",
+	"months":         "24",
+	"interval":       "30",
+	"fee":            "10",
+	"fee2":           "15",
+	"type":           "5",
+	"hypoallergenic": "低敏",
+}
+
+var demoPlaceholderRe = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]{0,31})\}`)
+
+// sanitizeDemoPlaceholders 把 {token} 形式的模板占位符变成可读文本。
+func sanitizeDemoPlaceholders(text string) string {
+	if !strings.Contains(text, "{") {
+		return text
+	}
+	return demoPlaceholderRe.ReplaceAllStringFunc(text, func(m string) string {
+		key := m[1 : len(m)-1]
+		if v, ok := demoPlaceholderValues[key]; ok {
+			return v
+		}
+		// 未知占位符：去掉花括号，保留词干，避免露出模板语法
+		return key
+	})
 }
 
 // SetArticleVisibility 管理端切换发布状态

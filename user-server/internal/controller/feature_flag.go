@@ -164,7 +164,7 @@ func (c *FeatureFlagController) Rollout(ctx *gin.Context) {
 	response.Success(ctx, f, "灰度已更新")
 }
 
-// @Summary      请求参数错误
+// @Summary POST /api/feature-flags/evaluate {key, attributes}
 // @Tags      feature-flag
 // @Router    /api/feature-flags/evaluate [post]
 // Evaluate POST /api/feature-flags/evaluate {key, attributes}
@@ -181,7 +181,7 @@ func (c *FeatureFlagController) Evaluate(ctx *gin.Context) {
 	response.Success(ctx, res, "ok")
 }
 
-// @Summary      请求参数错误
+// @Summary POST /api/feature-flags/evaluate-batch {keys[], attributes}
 // @Tags      feature-flag
 // @Router    /api/feature-flags/evaluate-batch [post]
 // EvaluateBatch POST /api/feature-flags/evaluate-batch {keys[], attributes}

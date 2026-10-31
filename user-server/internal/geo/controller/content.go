@@ -21,7 +21,7 @@ func NewContentController(svc *service.ContentService) *ContentController {
 	return &ContentController{svc: svc}
 }
 
-// @Summary      内容生成成功
+// @Summary 生成 GEO 内容
 // @Tags      content
 // @Router    /api/geo/content/generate [post]
 // GenerateContent 生成 GEO 内容
@@ -39,7 +39,7 @@ func (c *ContentController) GenerateContent(ctx *gin.Context) {
 	response.Success(ctx, result, "内容生成成功")
 }
 
-// @Summary      批量生成完成
+// @Summary 批量生成
 // @Tags      content
 // @Router    /api/geo/content/batch-generate [post]
 // GenerateContentBatch 批量生成
@@ -55,7 +55,7 @@ func (c *ContentController) GenerateContentBatch(ctx *gin.Context) {
 	response.Success(ctx, result, "批量生成完成")
 }
 
-// @Summary      内容优化成功
+// @Summary 优化内容
 // @Tags      content
 // @Router    /api/geo/content/optimize [post]
 // OptimizeContent 优化内容
@@ -73,7 +73,7 @@ func (c *ContentController) OptimizeContent(ctx *gin.Context) {
 	response.Success(ctx, result, "内容优化成功")
 }
 
-// @Summary      内容评分成功
+// @Summary 内容评分
 // @Tags      content
 // @Router    /api/geo/content/score [post]
 // ScoreContent 内容评分
@@ -91,7 +91,7 @@ func (c *ContentController) ScoreContent(ctx *gin.Context) {
 	response.Success(ctx, result, "内容评分成功")
 }
 
-// @Summary      E-E-A-T 增强成功
+// @Summary 增强 E-E-A-T
 // @Tags      content
 // @Router    /api/geo/content/eeat [post]
 // EnhanceEEAT 增强 E-E-A-T
@@ -114,7 +114,7 @@ func (c *ContentController) EnhanceEEAT(ctx *gin.Context) {
 	response.Success(ctx, result, "E-E-A-T 增强成功")
 }
 
-// @Summary      Schema 生成成功
+// @Summary 生成结构化数据 Schema
 // @Tags      content
 // @Router    /api/geo/content/schema [post]
 // GenerateSchema 生成结构化数据 Schema
@@ -137,7 +137,7 @@ func (c *ContentController) GenerateSchema(ctx *gin.Context) {
 	response.Success(ctx, result, "Schema 生成成功")
 }
 
-// @Summary      内容查重成功
+// @Summary 内容查重
 // @Tags      content
 // @Router    /api/geo/content/uniqueness [post]
 // CheckUniqueness 内容查重
@@ -180,7 +180,7 @@ func (c *ContentController) GetArticleList(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, list, int64(page), int64(limit), total)
 }
 
-// @Summary      获取文章详情成功
+// @Summary 获取文章详情
 // @Tags      content
 // @Router    /api/geo/content/{id} [get]
 // GetArticleByID 获取文章详情

@@ -145,7 +145,7 @@ func (c *SSOController) Login(ctx *gin.Context) {
 	ctx.Redirect(http.StatusFound, authURL)
 }
 
-// @Summary      登录成功
+// @Summary 处理 IdP 回调
 // @Tags      s-s-o
 // @Router    /api/sso/callback/{provider} [get]
 // Callback 处理 IdP 回调

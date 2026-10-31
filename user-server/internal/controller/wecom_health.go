@@ -25,7 +25,7 @@ func NewWeComHealthController(svc *service.WeComAccountHealthService, integ *ser
 	}
 }
 
-// @Summary      上报成功
+// @Summary 上报健康度
 // @Tags      we-com-health
 // @Router    /api/wecom/health/accounts/{id} [post]
 // ReportHealth 上报健康度
@@ -140,7 +140,7 @@ func (c *WeComHealthController) GetHealthSummary(ctx *gin.Context) {
 	response.Success(ctx, summary, "查询成功")
 }
 
-// @Summary      消耗成功
+// @Summary 消耗配额
 // @Tags      we-com-health
 // @Router    /api/wecom/health/accounts/{id}/quota/consume [post]
 // ConsumeQuota 消耗配额
@@ -164,7 +164,7 @@ func (c *WeComHealthController) ConsumeQuota(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"count": req.Count}, "消耗成功")
 }
 
-// @Summary      重置成功
+// @Summary 重置日配额
 // @Tags      we-com-health
 // @Router    /api/wecom/health/accounts/quota/reset [post]
 // ResetDailyQuota 重置日配额
@@ -177,7 +177,7 @@ func (c *WeComHealthController) ResetDailyQuota(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"affected": n}, "重置成功")
 }
 
-// @Summary      接入成功
+// @Summary 接入企微消息
 // @Tags      we-com-health
 // @Router    /api/wecom/messages/ingest [post]
 // IngestMessage 接入企微消息

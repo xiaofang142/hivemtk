@@ -114,6 +114,9 @@ DOTTED_KEY = re.compile(r"^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$")
 PREFIX_KEY = re.compile(r"^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\.$")
 #: 引号字面量（单引号或双引号），用于抓「不是 t() 实参、但确实是 i18n 键」的写法
 QUOTED = re.compile(r"'([^'\n]*)'|\"([^\"\n]*)\"")
+# Vue/HTML 属性值（双引号包裹）捕获组是属性值本身；只匹配绑定/静态属性，
+# 不跨行。例：:title="tmT('a.b')" / title="字面量"
+ATTR_VALUE = re.compile(r'(?::[A-Za-z_][\w.-]*|[A-Za-z_][\w.-]*)="([^"\n]*)"')
 
 SKIP_DIRS = {"node_modules", "dist", "coverage", ".git", ".nuxt"}
 #: 参与「字面量键」扫描的文件后缀——覆盖前端全部源码与用例。
@@ -248,6 +251,14 @@ def collect_literal_key_refs() -> tuple[set[str], set[str], set[str]]:
             continue
         for m in QUOTED.finditer(t):
             literals.add(m.group(1) if m.group(1) is not None else m.group(2))
+        # HTML/Vue 属性绑定里的单引号键（:title="tmT('xxx.yyy')" 这类）：
+        # QUOTED 从外层双引号起配，内层单引号键整个被吞，键就"消失"了——
+        # 而它运行时确实被 t 系消费。先把属性值整段抠出来，再在内段里跑
+        # 一遍 QUOTED，让内层单引号字面量重新可见。只放行 :x="..." 形态，
+        # 不放开全文子串，避免把注释里的键也捞成在用。
+        for attr in ATTR_VALUE.finditer(t):
+            for m in QUOTED.finditer(attr.group(1)):
+                literals.add(m.group(1) if m.group(1) is not None else m.group(2))
     exact = {lit for lit in literals if DOTTED_KEY.match(lit)}
     prefixes = {lit for lit in literals if PREFIX_KEY.match(lit)}
     return exact, prefixes, literals

@@ -105,7 +105,7 @@ func (c *InboxController) GetByID(ctx *gin.Context) {
 	response.Success(ctx, conv, "获取成功")
 }
 
-// @Summary      标记已读成功
+// @Summary 标记已读
 // @Tags      inbox
 // @Router    /api/inbox/conversations/{id}/read [post]
 // MarkRead 标记已读
@@ -194,7 +194,7 @@ func (c *InboxController) Mute(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"muted": req.Muted}, "操作成功")
 }
 
-// @Summary      添加成功
+// @Summary 添加标签
 // @Tags      inbox
 // @Router    /api/inbox/conversations/{id}/tags [post]
 // AddTag 添加标签
@@ -218,7 +218,7 @@ func (c *InboxController) AddTag(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"tag": req.Tag}, "添加成功")
 }
 
-// @Summary      移除成功
+// @Summary 移除标签
 // @Tags      inbox
 // @Router    /api/inbox/conversations/{id}/tags/{tag} [delete]
 // RemoveTag 移除标签
@@ -284,7 +284,7 @@ func (c *InboxController) Assign(ctx *gin.Context) {
 	response.Success(ctx, h, "操作成功")
 }
 
-// @Summary      分配成功
+// @Summary 自动分配
 // @Tags      inbox
 // @Router    /api/inbox/assign/auto [post]
 // AutoAssign 自动分配
@@ -327,7 +327,7 @@ func (c *InboxController) AutoAssign(ctx *gin.Context) {
 	response.Success(ctx, h, "分配成功")
 }
 
-// @Summary      统计成功
+// @Summary 统计
 // @Tags      inbox
 // @Router    /api/inbox/stats [get]
 // Stats 统计
@@ -507,7 +507,7 @@ func (c *InboxIngressController) SetSessionService(svc *service.CustomerSessionS
 	c.sessionSvc = svc
 }
 
-// @Summary      消息入站成功
+// @Summary 渠道消息统一入口
 // @Tags      inbox-ingress
 // @Router    /api/chat/ingress [post]
 // Ingress 渠道消息统一入口
@@ -525,7 +525,7 @@ func (c *InboxIngressController) Ingress(ctx *gin.Context) {
 	response.Success(ctx, result, "消息入站成功")
 }
 
-// @Summary      人工接管锁定成功
+// @Summary 锁定会话为人工接管（内部 API，由转人工硬闸调用）
 // @Tags      inbox-ingress
 // @Router    /api/inbox/lock-human [post]
 // LockHuman 锁定会话为人工接管（内部 API，由转人工硬闸调用）
@@ -556,7 +556,7 @@ func (c *InboxIngressController) LockHuman(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"session_id": req.SessionID, "locked": true}, "人工接管锁定成功")
 }
 
-// @Summary      解除人工接管成功
+// @Summary 解除人工接管
 // @Tags      inbox-ingress
 // @Router    /api/inbox/unlock-human/{session_id} [post]
 // UnlockHuman 解除人工接管

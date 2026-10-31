@@ -115,7 +115,7 @@ func (c *SystemUserAdminController) GetUsers(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, resp.List, int64(p), int64(s), resp.Total)
 }
 
-// @Summary      获取账号详情成功
+// @Summary GET /api/system/users/:id
 // @Tags      system-user-admin
 // @Router    /api/system/users/{id} [get]
 // GetByID GET /api/system/users/:id
@@ -132,7 +132,7 @@ func (c *SystemUserAdminController) GetByID(ctx *gin.Context) {
 	response.Success(ctx, user, "获取账号详情成功")
 }
 
-// @Summary      账号创建成功
+// @Summary POST /api/system/users
 // @Tags      system-user-admin
 // @Router    /api/system/users [post]
 // Create POST /api/system/users
@@ -153,7 +153,7 @@ func (c *SystemUserAdminController) Create(ctx *gin.Context) {
 	response.Success(ctx, user, "账号创建成功")
 }
 
-// @Summary      账号更新成功
+// @Summary PUT /api/system/users/:id
 // @Tags      system-user-admin
 // @Router    /api/system/users/{id} [put]
 // Update PUT /api/system/users/:id
@@ -178,7 +178,7 @@ func (c *SystemUserAdminController) Update(ctx *gin.Context) {
 	response.Success(ctx, user, "账号更新成功")
 }
 
-// @Summary      账号删除成功
+// @Summary DELETE /api/system/users/:id
 // @Tags      system-user-admin
 // @Router    /api/system/users/{id} [delete]
 // Delete DELETE /api/system/users/:id

@@ -78,7 +78,7 @@ func (c *ConfigParamController) ListGroups(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": groups, "message": "ok"})
 }
 
-// @Summary      参数错误
+// @Summary PUT /api/manage/config-params/:group/:key
 // @Tags      config-param
 // @Router    /api/manage/config-params/{group}/{key} [put]
 // Update PUT /api/manage/config-params/:group/:key

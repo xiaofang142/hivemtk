@@ -134,7 +134,7 @@ func (c *AgentKBBindingController) ReplaceByAgent(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"agent_id": aid, "count": len(kbIDs)}, "同步成功")
 }
 
-// @Summary      解绑成功
+// @Summary 按路径参数解绑（兼容前端 DELETE /:agentId/:kbId）
 // @Tags      agent-k-b-binding
 // @Router    /api/agent-kb-bindings/{agentId}/{kbId} [delete]
 // UnbindByPath 按路径参数解绑（兼容前端 DELETE /:agentId/:kbId）
@@ -157,7 +157,7 @@ type agentKBBindReq struct {
 	Priority        int  `json:"priority"`
 }
 
-// @Summary      绑定成功
+// @Summary 单个绑定 (重复自动覆盖)
 // @Tags      agent-k-b-binding
 // @Router    /api/agent-kb-bindings [post]
 // Bind 单个绑定 (重复自动覆盖)
@@ -196,7 +196,7 @@ type agentKBBatchBindReq struct {
 	Items []service.BatchBindItem `json:"items" binding:"required"`
 }
 
-// @Summary      批量绑定成功
+// @Summary 批量绑定 (事务, 任一失败整体回滚)
 // @Tags      agent-k-b-binding
 // @Router    /api/agent-kb-bindings/batch [post]
 // BatchBind 批量绑定 (事务, 任一失败整体回滚)
@@ -219,7 +219,7 @@ type agentKBUnbindReq struct {
 	KnowledgeBaseID uint `json:"knowledge_base_id" binding:"required"`
 }
 
-// @Summary      解绑成功
+// @Summary 单个解绑
 // @Tags      agent-k-b-binding
 // @Router    /api/agent-kb-bindings [delete]
 // Unbind 单个解绑

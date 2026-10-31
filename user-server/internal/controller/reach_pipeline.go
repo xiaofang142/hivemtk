@@ -137,7 +137,7 @@ func (c *ReachPipelineController) DeletePipeline(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "删除成功")
 }
 
-// @Summary      暂停成功
+// @Summary 暂停
 // @Tags      reach-pipeline
 // @Router    /api/reach/pipelines/{id}/pause [post]
 // PausePipeline 暂停
@@ -154,7 +154,7 @@ func (c *ReachPipelineController) PausePipeline(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "暂停成功")
 }
 
-// @Summary      恢复成功
+// @Summary 恢复
 // @Tags      reach-pipeline
 // @Router    /api/reach/pipelines/{id}/resume [post]
 // ResumePipeline 恢复
@@ -171,7 +171,7 @@ func (c *ReachPipelineController) ResumePipeline(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "恢复成功")
 }
 
-// @Summary      归档成功
+// @Summary 归档
 // @Tags      reach-pipeline
 // @Router    /api/reach/pipelines/{id}/archive [post]
 // ArchivePipeline 归档
@@ -188,7 +188,7 @@ func (c *ReachPipelineController) ArchivePipeline(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "归档成功")
 }
 
-// @Summary      入队成功
+// @Summary 入队任务
 // @Tags      reach-pipeline
 // @Router    /api/reach/jobs [post]
 // EnqueueJob 入队任务
@@ -246,7 +246,7 @@ func (c *ReachPipelineController) ListJobs(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
 }
 
-// @Summary      取消成功
+// @Summary 取消任务
 // @Tags      reach-pipeline
 // @Router    /api/reach/jobs/{id}/cancel [post]
 // CancelJob 取消任务
@@ -263,7 +263,7 @@ func (c *ReachPipelineController) CancelJob(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "取消成功")
 }
 
-// @Summary      重试成功
+// @Summary 重试任务
 // @Tags      reach-pipeline
 // @Router    /api/reach/jobs/{id}/retry [post]
 // RetryJob 重试任务
@@ -315,7 +315,7 @@ func (c *ReachPipelineController) Stats(ctx *gin.Context) {
 	response.Success(ctx, stats, "查询成功")
 }
 
-// @Summary      重置成功
+// @Summary 重置限流
 // @Tags      reach-pipeline
 // @Router    /api/reach/rate-limit/reset [post]
 // ResetRateLimit 重置限流
@@ -329,7 +329,7 @@ func (c *ReachPipelineController) ResetRateLimit(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"channel": channel}, "重置成功")
 }
 
-// @Summary      查询失败
+// @Summary GET /api/reach/jobs/with-experiment?experiment_id=xxx
 // @Tags      reach-pipeline
 // @Router    /api/reach/jobs/with-experiment [get]
 // ListJobsWithExperiment GET /api/reach/jobs/with-experiment?experiment_id=xxx

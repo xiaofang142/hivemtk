@@ -137,7 +137,7 @@ func (c *SystemOpsController) GetBackupList(ctx *gin.Context) {
 	}, "获取成功")
 }
 
-// @Summary      创建备份任务成功
+// @Summary 创建备份
 // @Tags      system-ops
 // @Router    /api/system/backup [post]
 // CreateBackup 创建备份
@@ -159,7 +159,7 @@ func (c *SystemOpsController) CreateBackup(ctx *gin.Context) {
 	response.Success(ctx, backup, "创建备份任务成功")
 }
 
-// @Summary      创建恢复任务成功
+// @Summary 恢复备份
 // @Tags      system-ops
 // @Router    /api/system/restore [post]
 // RestoreBackup 恢复备份

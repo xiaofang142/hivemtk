@@ -129,6 +129,11 @@ func degradedReply(req DispatchRequest) *DispatchResult {
 
 func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig, req DispatchRequest, route *ScenarioRoute) (*DispatchResult, error) {
 
+	if provider.KeyInvalid {
+		// 密文解不开：直接给可执行文案，别让上游的 401 顶到用户脸上
+		return nil, fmt.Errorf("提供商 %s 的 API Key 无法解密（主密钥可能已轮换），请在「系统设置 → 模型提供商」重新保存密钥", provider.Name)
+	}
+
 	if provider.APIKey == "" {
 		logger.Warnf("[LLM] WARN: provider %s APIKey empty (local model is fine; cloud will 401)", provider.Name)
 	}

@@ -30,20 +30,24 @@ type LLMModelStat struct {
 
 // LLMProviderInfo 暴露给前端的 provider 信息
 type LLMProviderInfo struct {
-	Name         string   `json:"name"`
-	DisplayName  string   `json:"display_name,omitempty"`
-	BaseURL      string   `json:"base_url"`
-	Model        string   `json:"model"`
-	APIKey       string   `json:"api_key,omitempty"`
-	APIKeySet    bool     `json:"api_key_set"`
-	Enabled      bool     `json:"enabled"`
-	QualityScore float64  `json:"quality_score"`
-	MaxRPM       int      `json:"max_rpm"`
-	CostPer1k    float64  `json:"cost_per_1k"`
-	AvgLatencyMs int      `json:"avg_latency_ms"`
-	NoFC         bool     `json:"no_fc"`
-	Vendor       string   `json:"vendor"`
-	Tags         []string `json:"tags,omitempty"`
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	BaseURL     string `json:"base_url"`
+	Model       string `json:"model"`
+	APIKey      string `json:"api_key,omitempty"`
+	APIKeySet   bool   `json:"api_key_set"`
+	Enabled     bool   `json:"enabled"`
+	// KeyInvalid 库里存的 API Key 用当前主密钥解不开（轮换/多实例不一致），
+	// 需要用户重新保存密钥；前端据此打「密钥失效」标记，而不是显示成"未设置"。
+	KeyInvalid       bool     `json:"key_invalid"`
+	KeyInvalidReason string   `json:"key_invalid_reason,omitempty"`
+	QualityScore     float64  `json:"quality_score"`
+	MaxRPM           int      `json:"max_rpm"`
+	CostPer1k        float64  `json:"cost_per_1k"`
+	AvgLatencyMs     int      `json:"avg_latency_ms"`
+	NoFC             bool     `json:"no_fc"`
+	Vendor           string   `json:"vendor"`
+	Tags             []string `json:"tags,omitempty"`
 
 	// Source provider 来源：self=自带 Key（不计费）/ platform=平台垫资（按量计费）
 	//
@@ -153,20 +157,23 @@ func (s *LLMRoutingService) ListModels(ctx context.Context) []LLMProviderInfo {
 	providers := s.dispatcher.GetAllProviders()
 	out := make([]LLMProviderInfo, 0, len(providers))
 	for _, p := range providers {
+		keyInvalidReason, keyInvalid := llm.KeyInvalidReason(p.Name)
 		out = append(out, LLMProviderInfo{
-			Name:         p.Name,
-			DisplayName:  p.DisplayName,
-			BaseURL:      p.BaseURL,
-			Model:        p.Model,
-			APIKeySet:    p.APIKey != "",
-			Enabled:      p.Enabled,
-			QualityScore: p.QualityScore,
-			MaxRPM:       p.MaxRPM,
-			CostPer1k:    p.CostPer1k,
-			AvgLatencyMs: p.AvgLatencyMs,
-			NoFC:         p.NoFC,
-			Vendor:       vendorOf(p),
-			Tags:         p.Tags,
+			Name:             p.Name,
+			DisplayName:      p.DisplayName,
+			BaseURL:          p.BaseURL,
+			Model:            p.Model,
+			APIKeySet:        p.APIKey != "",
+			Enabled:          p.Enabled,
+			KeyInvalid:       keyInvalid,
+			KeyInvalidReason: keyInvalidReason,
+			QualityScore:     p.QualityScore,
+			MaxRPM:           p.MaxRPM,
+			CostPer1k:        p.CostPer1k,
+			AvgLatencyMs:     p.AvgLatencyMs,
+			NoFC:             p.NoFC,
+			Vendor:           vendorOf(p),
+			Tags:             p.Tags,
 
 			Source:          p.ProviderSource(),
 			SourceAvailable: !p.IsPlatformProvider() || llm.IsPlatformProxyConfigured(),

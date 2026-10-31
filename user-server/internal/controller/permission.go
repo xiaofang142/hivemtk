@@ -57,7 +57,7 @@ func (ctrl *PermissionController) SetEnabled(c *gin.Context) {
 	response.Success(c, nil, "账号"+action+"成功")
 }
 
-// @Summary      密码重置成功
+// @Summary PUT /api/system/permissions/:id/password
 // @Tags      permission
 // @Router    /api/system/permissions/{id}/password [put]
 // ResetPassword PUT /api/system/permissions/:id/password

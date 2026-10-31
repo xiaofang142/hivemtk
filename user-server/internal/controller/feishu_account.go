@@ -330,7 +330,7 @@ func (ctrl *FeishuAccountController) TestSend(c *gin.Context) {
 	response.Success(c, nil, "发送成功")
 }
 
-// @Summary      刷新成功
+// @Summary 刷新 access_token
 // @Tags      feishu-account
 // @Router    /api/feishu/accounts/{id}/refresh-token [get]
 // RefreshToken 刷新 access_token

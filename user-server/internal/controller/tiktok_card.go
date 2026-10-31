@@ -142,7 +142,7 @@ func (ctrl *TikTokCardController) Delete(c *gin.Context) {
 	response.Success(c, nil, "删除成功")
 }
 
-// @Summary      生成成功
+// @Summary POST /api/tiktok-card/generate-short-link
 // @Tags      tik-tok-card
 // @Router    /api/tiktok-card/generate-short-link [post]
 func (ctrl *TikTokCardController) GenerateShortLink(c *gin.Context) {

@@ -38,7 +38,7 @@ func (c *ObjectionHandlerController) Handle(ctx *gin.Context) {
 	response.Success(ctx, resp, "处理成功")
 }
 
-// @Summary      分类成功
+// @Summary 分类
 // @Tags      objection-handler
 // @Router    /api/objection/classify [post]
 // Classify 分类
@@ -66,7 +66,7 @@ func (c *ObjectionHandlerController) ListCategories(ctx *gin.Context) {
 	response.SuccessWithList(ctx, cats, int64(len(cats)))
 }
 
-// @Summary      记录成功
+// @Summary 记录使用（需登录，与同目录其他 controller 鉴权惯例对齐）
 // @Tags      objection-handler
 // @Router    /api/objection/usage [post]
 // RecordUsage 记录使用（需登录，与同目录其他 controller 鉴权惯例对齐）

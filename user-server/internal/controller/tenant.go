@@ -40,7 +40,7 @@ func tenantFail(c *gin.Context, err error) {
 	response.ErrorWithBusinessCode(c, bizerr.CodeInternal, err.Error(), gin.H{})
 }
 
-// @Summary      注册成功
+// @Summary 自助开户
 // @Tags      tenant
 // @Router    /api/tenant/register [post]
 // Register 自助开户

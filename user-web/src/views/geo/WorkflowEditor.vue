@@ -563,7 +563,16 @@ const onRunNow = async () => {
     ElMessage.success('工作流已启动')
     loadExecutions()
   } catch (e) {
-    ElMessage.error('执行失败：' + (e?.message || e))
+    // 404 = 这条工作流在服务端已经不存在（别的会话删了 / 本地缓存了旧列表）。
+    // 只弹「执行失败」会让人以为是执行报错，这里顺手刷新列表并清空选中。
+    const status = e?.response?.status
+    if (status === 404) {
+      ElMessage.warning('工作流不存在或已被删除，已刷新列表')
+      currentWorkflow.value = null
+      loadWorkflows()
+    } else if (!isUserReportedError(e)) {
+      ElMessage.error('执行失败：' + (e?.message || e))
+    }
   } finally {
     running.value = false
   }

@@ -101,7 +101,7 @@ type SmsManualAddRequest struct {
 	Reason string `json:"reason"`
 }
 
-// @Summary      添加成功
+// @Summary POST /api/sms/unsubscribe/manual-add
 // @Tags      sms-unsubscribe
 // @Router    /api/sms/unsubscribe/manual-add [post]
 // ManualAdd POST /api/sms/unsubscribe/manual-add
@@ -143,7 +143,7 @@ func (c *SmsUnsubscribeController) DeleteByPhone(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"phone": phone, "status": "resubscribed"}, "删除成功")
 }
 
-// @Summary      查询退订名单失败
+// @Summary GET /api/sms/unsubscribe/list
 // @Tags      sms-unsubscribe
 // @Router    /api/sms/unsubscribe/list [get]
 // ListUnsubscribes GET /api/sms/unsubscribe/list
@@ -161,7 +161,7 @@ func (c *SmsUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, records, int64(page), int64(limit), total)
 }
 
-// @Summary      导出退订名单失败
+// @Summary GET /api/sms/unsubscribe/export
 // @Tags      sms-unsubscribe
 // @Router    /api/sms/unsubscribe/export [get]
 // ExportUnsubscribes GET /api/sms/unsubscribe/export

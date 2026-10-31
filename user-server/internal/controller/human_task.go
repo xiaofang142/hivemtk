@@ -158,7 +158,7 @@ func (c *HumanTaskController) Release(ctx *gin.Context) {
 	c.doAction(ctx, "释放", c.svc.Release)
 }
 
-// @Summary      完成
+// @Summary POST /api/human-tasks/{id}/complete
 // @Tags      human-task
 // @Router    /api/human-tasks/{id}/complete [post]
 // Complete POST /api/human-tasks/:id/complete（三类通用：坐席处理完 / 审批裁决 / 催收升级处理完）。

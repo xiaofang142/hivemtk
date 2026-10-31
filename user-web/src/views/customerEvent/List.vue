@@ -420,7 +420,7 @@ const loadStats = async () => {
 const customerOptions = ref([])
 const loadCustomerOptions = async () => {
   try {
-    const res = await getCustomerList({ pageSize: 200 })
+    const res = await getCustomerList({ page_size: 200 })
     customerOptions.value = res?.list || []
   } catch (e) {
     console.error('加载客户选项失败', e)

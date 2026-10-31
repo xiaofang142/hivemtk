@@ -29,7 +29,7 @@ type PredictRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// @Summary      预测成功
+// @Summary 同步预测接口（最简化）
 // @Tags      typing-predict
 // @Router    /api/chat/typing-predict/predict [post]
 // Predict 同步预测接口（最简化）
@@ -122,7 +122,7 @@ func NewManageTypingPredictController() *ManageTypingPredictController {
 	return &ManageTypingPredictController{svc: service.GetTypingPredictService()}
 }
 
-// @Summary      text 不能为空
+// @Summary GET /api/manage/typing-predict?text=&session_id=
 // @Tags      manage-typing-predict
 // @Router    /api/manage/typing-predict [get]
 // Predict GET /api/manage/typing-predict?text=&session_id=

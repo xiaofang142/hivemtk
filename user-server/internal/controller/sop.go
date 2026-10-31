@@ -152,7 +152,7 @@ func (c *SOPController) Delete(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "删除成功")
 }
 
-// @Summary      启用成功
+// @Summary 启用
 // @Tags      s-o-p
 // @Router    /api/sop/{id}/activate [post]
 // Activate 启用
@@ -169,7 +169,7 @@ func (c *SOPController) Activate(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "启用成功")
 }
 
-// @Summary      停用成功
+// @Summary 停用
 // @Tags      s-o-p
 // @Router    /api/sop/{id}/deactivate [post]
 // Deactivate 停用
@@ -205,7 +205,7 @@ func (c *SOPController) Execute(ctx *gin.Context) {
 	response.Success(ctx, redactExecution(exec), "执行成功")
 }
 
-// @Summary      推进成功
+// @Summary 单步推进
 // @Tags      s-o-p
 // @Router    /api/sop/step [post]
 // Step 单步推进
@@ -223,7 +223,7 @@ func (c *SOPController) Step(ctx *gin.Context) {
 	response.Success(ctx, redactExecution(exec), "推进成功")
 }
 
-// @Summary      暂停成功
+// @Summary 暂停
 // @Tags      s-o-p
 // @Router    /api/sop/executions/{id}/pause [post]
 // Pause 暂停
@@ -240,7 +240,7 @@ func (c *SOPController) Pause(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "暂停成功")
 }
 
-// @Summary      恢复成功
+// @Summary 恢复
 // @Tags      s-o-p
 // @Router    /api/sop/executions/{id}/resume [post]
 // Resume 恢复
@@ -257,7 +257,7 @@ func (c *SOPController) Resume(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"id": id}, "恢复成功")
 }
 
-// @Summary      取消成功
+// @Summary 取消
 // @Tags      s-o-p
 // @Router    /api/sop/executions/{id}/cancel [post]
 // Cancel 取消

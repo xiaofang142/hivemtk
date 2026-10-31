@@ -435,6 +435,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, User, ChatLineRound, Promotion, Money, Document, Bell, ShoppingCart } from '@element-plus/icons-vue'
 import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, getBatchDetail, batchImportFile } from '@/api/batchOperation.js'
 import { toList } from '@/utils/list.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { PASS_FAIL_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
 
 const getPreviewStatusLabel = (s) => getStatusLabel(s, PASS_FAIL_STATUS) === '成功' ? '可通过' : (getStatusLabel(s, PASS_FAIL_STATUS) || s || '-');
@@ -541,19 +542,38 @@ const preview = async () => {
       errors: data.errors || []
     }
   } catch (error) {
-    ElMessage.error('预览失败：' + (error?.message || error))
+    if (!isUserReportedError(error)) ElMessage.error('预览失败：' + (error?.message || error))
     previewVisible.value = false
   } finally {
     previewLoading.value = false
   }
 }
 
+// 导出走文件流：把 Blob 落成一次浏览器下载，而不是把 CSV 文本当 JSON 解析
+const saveBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // 立刻 revoke 会让部分浏览器取消下载，延后一拍释放
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 const execute = async () => {
   const loading = ElMessage({ message: i18n.global.t('batchOperation.running'), type: 'info', duration: 0 })
   try {
-    await runBatch({ tool: currentTool.value.name, ...form.value })
+    const result = await runBatch({ tool: currentTool.value.name, ...form.value })
     loading.close()
-    ElMessage.success(i18n.global.t('batchOperation.taskSubmitted'))
+    if (currentTool.value.name === 'export' && result instanceof Blob) {
+      const stamp = new Date().toISOString().slice(0, 10)
+      saveBlob(result, `batch-export-${stamp}.csv`)
+      ElMessage.success('导出文件已开始下载')
+    } else {
+      ElMessage.success(i18n.global.t('batchOperation.taskSubmitted'))
+    }
     dialogVisible.value = false
     previewVisible.value = false
     loadHistories()
@@ -563,7 +583,7 @@ const execute = async () => {
     // 筛选条件不是合法 JSON、没选文件……）全在 message 里，换成一句
     // 「执行失败」等于把唯一有用的信息吃掉。
     // 前缀仍走 i18n（词条「执行失败」在 9 个语言包里都有），别又写死中文。
-    ElMessage.error(i18n.global.t('batchOperation.executeFailed') + '：' + (error?.message || error))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('batchOperation.executeFailed') + '：' + (error?.message || error))
   }
 }
 
@@ -587,7 +607,7 @@ const cancelTask = async (row) => {
     ElMessage.success(i18n.global.t('已取消'))
     loadHistories()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error(i18n.global.t('batchOperation.cancelFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('batchOperation.cancelFailed'))
   }
 }
 

@@ -135,7 +135,7 @@ func (c *MigrationController) CreateUpgradeTask(ctx *gin.Context) {
 	response.Success(ctx, task, "迁移任务已创建")
 }
 
-// @Summary      回滚成功
+// @Summary 回滚到指定版本
 // @Tags      migration
 // @Router    /api/migration/rollback [post]
 // Rollback 回滚到指定版本

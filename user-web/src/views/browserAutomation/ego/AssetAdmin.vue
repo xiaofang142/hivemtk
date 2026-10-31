@@ -273,6 +273,7 @@
 
 <script setup>
 import { onMounted, ref, watch } from 'vue'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listEgoAdminAssets,
@@ -358,6 +359,15 @@ const onPublishFlow = async (row) => {
 }
 
 const onPublishPack = async () => {
+  // 名称/脚本是后端 ScanReport 的前置条件，空值提交只会换来一次 400「资产名称必填」
+  if (!String(packForm.value.name || '').trim()) {
+    ElMessage.warning('请输入资产名称')
+    return
+  }
+  if (!String(packForm.value.script || '').trim()) {
+    ElMessage.warning('请输入资产脚本')
+    return
+  }
   publishing.value = true
   try {
     const payload = {
@@ -373,7 +383,7 @@ const onPublishPack = async () => {
     packForm.value = { asset_code: '', name: '', domainsText: '', writesText: '', entry: '', script: '' }
     await loadAssets()
   } catch (e) {
-    ElMessage.error(e?.message || '发布失败（扫描门未通过？）')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '发布失败（扫描门未通过？）')
   } finally {
     publishing.value = false
   }

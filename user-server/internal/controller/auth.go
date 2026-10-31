@@ -401,7 +401,7 @@ func (c *AuthController) DisableMFA(ctx *gin.Context) {
 	}, "MFA 已禁用")
 }
 
-// @Summary      MFA 验证成功，登录完成
+// @Summary MFA 登录验证（登录第二步）
 // @Tags      auth
 // @Router    /api/auth/mfa/verify [post]
 // VerifyMFALogin MFA 登录验证（登录第二步）
@@ -660,7 +660,7 @@ func NewSystemUserController() *SystemUserController {
 	}
 }
 
-// @Summary      获取用户列表成功
+// @Summary 获取用户列表
 // @Tags      system-user
 // @Router    /api/users [get]
 // GetUsers 获取用户列表
@@ -702,7 +702,7 @@ func (c *SystemUserController) GetUsers(ctx *gin.Context) {
 	}, "获取用户列表成功")
 }
 
-// @Summary      搜索成功
+// @Summary GET /api/users/search?keyword=xxx
 // @Tags      system-user
 // @Router    /api/users/search [get]
 // SearchUsers GET /api/users/search?keyword=xxx
@@ -729,7 +729,7 @@ func (c *SystemUserController) SearchUsers(ctx *gin.Context) {
 	}, "搜索成功")
 }
 
-// @Summary      获取用户信息成功
+// @Summary 获取用户详情
 // @Tags      system-user
 // @Router    /api/users/{id} [get]
 // GetUser 获取用户详情
@@ -750,7 +750,7 @@ func (c *SystemUserController) GetUser(ctx *gin.Context) {
 	response.Success(ctx, user, "获取用户信息成功")
 }
 
-// @Summary      创建用户成功
+// @Summary 创建用户
 // @Tags      system-user
 // @Router    /api/users [post]
 // CreateUser 创建用户
@@ -770,7 +770,7 @@ func (c *SystemUserController) CreateUser(ctx *gin.Context) {
 	response.Success(ctx, user, "创建用户成功")
 }
 
-// @Summary      更新用户成功
+// @Summary 更新用户
 // @Tags      system-user
 // @Router    /api/users/{id} [put]
 // UpdateUser 更新用户
@@ -797,7 +797,7 @@ func (c *SystemUserController) UpdateUser(ctx *gin.Context) {
 	response.Success(ctx, user, "更新用户成功")
 }
 
-// @Summary      删除用户成功
+// @Summary 删除用户
 // @Tags      system-user
 // @Router    /api/users/{id} [delete]
 // DeleteUser 删除用户
@@ -827,7 +827,7 @@ func (c *SystemUserController) DeleteUser(ctx *gin.Context) {
 	response.Success(ctx, nil, "删除用户成功")
 }
 
-// @Summary      重置密码成功
+// @Summary 重置用户密码
 // @Tags      system-user
 // @Router    /api/users/{id}/password [put]
 // ResetPassword 重置用户密码

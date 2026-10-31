@@ -293,7 +293,7 @@ func TestT8_AgentLoop_MultiIteration(t *testing.T) {
 	executor := setupAgentLoopExecutor(t, db)
 	adapter := NewToolExecutorAdapter(executor)
 
-	tools := adapter.ListTools()
+	tools := adapter.ListTools(context.Background())
 	if len(tools) < 32 {
 		t.Fatalf("ListTools 应返回 >= 38 个工具，实际 %d", len(tools))
 	}
@@ -427,7 +427,7 @@ func TestT10_GlobalRegistry_Completeness(t *testing.T) {
 	executor := setupAgentLoopExecutor(t, db)
 	adapter := NewToolExecutorAdapter(executor)
 
-	tools := adapter.ListTools()
+	tools := adapter.ListTools(context.Background())
 	if len(tools) < 32 {
 		t.Fatalf("ListTools 应返回 >= 36 个工具，实际 %d", len(tools))
 	}
@@ -508,7 +508,7 @@ func TestAgentLoop_SalesEngineHandle_RealToolExecutor(t *testing.T) {
 	}
 
 	adapter := NewToolExecutorAdapter(executor)
-	tools := adapter.ListTools()
+	tools := adapter.ListTools(context.Background())
 	if len(tools) < 32 {
 		t.Errorf("ListTools 应返回 >= 38 个工具，实际 %d", len(tools))
 	}

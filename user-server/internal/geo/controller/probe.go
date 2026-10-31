@@ -240,7 +240,7 @@ func (c *EntityController) GetGraph(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"entity_id": id, "depth": depth, "entities": entities, "relations": rels}, "ok")
 }
 
-// @Summary      实体抽取完成
+// @Summary 从指定文档抽取实体
 // @Tags      entity
 // @Router    /api/geo/entities/extract [post]
 // Extract 从指定文档抽取实体

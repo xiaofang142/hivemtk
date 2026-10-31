@@ -198,7 +198,12 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 			Err:        fmt.Errorf("tool_name 不能为空"),
 		}
 	}
+	// 内置工具优先；未命中时回落到「当前请求租户」的叠加层（多租户下
+	// custom_tools / mcp_servers 的工具不放进全局注册表，见 tenant_registry.go）。
 	tool, err := e.registry.Get(req.ToolName)
+	if err != nil {
+		tool, err = GetToolForTenant(ctx, req.ToolName)
+	}
 	if err != nil {
 		return ExecuteResult{
 			ToolResult: ErrorResult(req.ToolName, err),
@@ -634,9 +639,45 @@ func (e *ToolExecutor) ListAvailableTools() []Tool {
 	return out
 }
 
+// ListAvailableToolsForTenant 在本执行器注册表的基础上并入当前请求租户的
+// 叠加层工具（custom_tools / mcp_servers），多租户下每个租户只看到自己的。
+// 与 Execute 的取用顺序一致：注册表内优先（生产里即全局内置），租户工具只补缺。
+func (e *ToolExecutor) ListAvailableToolsForTenant(ctx context.Context) []Tool {
+	all := e.registry.List()
+	if tid := ScopeFor(ctx); tid > 0 {
+		seen := make(map[string]struct{}, len(all))
+		for _, t := range all {
+			seen[t.Name()] = struct{}{}
+		}
+		for _, t := range ListTenantTools(tid) {
+			if _, dup := seen[t.Name()]; !dup {
+				all = append(all, t)
+			}
+		}
+	}
+	out := make([]Tool, 0, len(all))
+	for _, t := range all {
+		if o, ok := e.GetOverride(t.Name()); ok && o.Disabled {
+			continue
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
 // ListAvailableLLMFunctions 列出所有可用工具的 LLM Function Calling 格式
 func (e *ToolExecutor) ListAvailableLLMFunctions() []LLMFunction {
 	tools := e.ListAvailableTools()
+	out := make([]LLMFunction, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, ToLLMFunction(t))
+	}
+	return out
+}
+
+// ListAvailableLLMFunctionsForTenant 同 ListAvailableLLMFunctions，但按请求租户合并叠加层工具。
+func (e *ToolExecutor) ListAvailableLLMFunctionsForTenant(ctx context.Context) []LLMFunction {
+	tools := e.ListAvailableToolsForTenant(ctx)
 	out := make([]LLMFunction, 0, len(tools))
 	for _, t := range tools {
 		out = append(out, ToLLMFunction(t))

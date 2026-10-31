@@ -108,7 +108,7 @@ func (c *RecoveryQueueController) MarkAttempt(ctx *gin.Context) {
 }
 
 // MarkRecovered 标记挽回成功
-// @Summary 标记挽回成功
+// @Summary POST /api/recovery-queue/{id}/recovered
 // @Tags 挽回队列
 // @Accept json
 // @Produce json

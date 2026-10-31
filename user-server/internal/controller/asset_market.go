@@ -110,7 +110,7 @@ func (h *AssetMarketController) MarketDetail(c *gin.Context) {
 	assetOK(c, detail)
 }
 
-// @Summary      参数错误
+// @Summary POST /api/v1/asset-market/purchase
 // @Tags      asset-market
 // @Router    /api/v1/asset-market/purchase [post]
 // Purchase POST /api/v1/asset-market/purchase
@@ -131,7 +131,7 @@ func (h *AssetMarketController) Purchase(c *gin.Context) {
 	assetOK(c, gin.H{"message": "购买并同步成功"})
 }
 
-// @Summary      参数错误
+// @Summary POST /api/v1/asset-market/sync
 // @Tags      asset-market
 // @Router    /api/v1/asset-market/sync [post]
 // Sync POST /api/v1/asset-market/sync
@@ -207,7 +207,7 @@ func (h *AssetMarketController) GetLocal(c *gin.Context) {
 	assetOK(c, gin.H{"asset": la, "data": parsed})
 }
 
-// @Summary      JSON 解析失败
+// @Summary POST /api/v1/local-assets
 // @Tags      asset-market
 // @Router    /api/v1/local-assets [post]
 // CreateLocal POST /api/v1/local-assets
@@ -234,7 +234,7 @@ func (h *AssetMarketController) CreateLocal(c *gin.Context) {
 	assetOK(c, la)
 }
 
-// @Summary      JSON 解析失败
+// @Summary PUT /api/v1/local-assets/:id
 // @Tags      asset-market
 // @Router    /api/v1/local-assets/{id} [put]
 // UpdateLocal PUT /api/v1/local-assets/:id
@@ -280,7 +280,7 @@ func (h *AssetMarketController) DeleteLocal(c *gin.Context) {
 	assetOK(c, gin.H{"message": "删除成功"})
 }
 
-// @Summary      参数错误
+// @Summary PUT /api/v1/local-assets/:id/toggle-active
 // @Tags      asset-market
 // @Router    /api/v1/local-assets/{id}/toggle-active [put]
 // ToggleActive PUT /api/v1/local-assets/:id/toggle-active
@@ -315,7 +315,7 @@ func (h *AssetMarketController) SyncLog(c *gin.Context) {
 	assetOK(c, list)
 }
 
-// @Summary      参数错误
+// @Summary POST /api/asset-market/report-usage
 // @Tags      asset-market
 // @Router    /api/v1/asset-market/report-usage [post]
 // ReportUsage POST /api/asset-market/report-usage
@@ -350,7 +350,7 @@ func (h *AssetMarketController) MyPurchases(c *gin.Context) {
 	assetOK(c, list)
 }
 
-// @Summary      参数错误
+// @Summary POST /api/v1/asset-market/bind
 // @Tags      asset-market
 // @Router    /api/v1/asset-market/bind [post]
 // BindToAgent POST /api/v1/asset-market/bind

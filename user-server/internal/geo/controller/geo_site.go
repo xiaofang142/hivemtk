@@ -56,7 +56,7 @@ func (c *GeoSiteController) List(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"list": list, "total": total}, "ok")
 }
 
-// @Summary      站点配置不存在
+// @Summary GET /api/geo/sites/{id}
 // @Tags      geo-site
 // @Router    /api/geo/sites/{id} [get]
 func (c *GeoSiteController) Get(ctx *gin.Context) {
@@ -88,7 +88,7 @@ func (c *GeoSiteController) Create(ctx *gin.Context) {
 	response.Success(ctx, item, "created")
 }
 
-// @Summary      站点配置不存在
+// @Summary PUT /api/geo/sites/{id}
 // @Tags      geo-site
 // @Router    /api/geo/sites/{id} [put]
 func (c *GeoSiteController) Update(ctx *gin.Context) {
@@ -108,7 +108,7 @@ func (c *GeoSiteController) Update(ctx *gin.Context) {
 	response.Success(ctx, item, "updated")
 }
 
-// @Summary      站点配置不存在
+// @Summary DELETE /api/geo/sites/{id}
 // @Tags      geo-site
 // @Router    /api/geo/sites/{id} [delete]
 func (c *GeoSiteController) Delete(ctx *gin.Context) {

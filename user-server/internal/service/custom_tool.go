@@ -5,12 +5,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+
+	"gorm.io/gorm"
+
+	bizerr "hivemtk-user/internal/domain/errors"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbencrypt"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -40,7 +46,7 @@ type ImportInput struct {
 // Import 解析 schema、SSRF 校验、落库并注册 Provider。返回导入的工具数。
 func (s *CustomToolService) Import(ctx context.Context, in ImportInput) (int, *model.CustomTool, error) {
 	if strings.TrimSpace(in.Name) == "" {
-		return 0, nil, fmt.Errorf("name 不能为空")
+		return 0, nil, bizerr.New(bizerr.CodeParamInvalid, "name 不能为空")
 	}
 	provider, err := tooluse.NewOpenAPIToolProvider(tooluse.OpenAPIImportSpec{
 		Name: in.Name, Description: in.Description, BaseURL: in.BaseURL,
@@ -48,16 +54,17 @@ func (s *CustomToolService) Import(ctx context.Context, in ImportInput) (int, *m
 		TimeoutMS: in.TimeoutMS,
 	})
 	if err != nil {
-		return 0, nil, err
+		// schema/必填项问题 ⇒ 400（原文已是中文可读原因）
+		return 0, nil, bizerr.New(bizerr.CodeParamInvalid, err.Error())
 	}
 	// SSRF：导入时校验一次（运行时转发由 client 直连该基址，导入即锁定）
 	if err := tooluse.ValidateOpenAPIBaseURL(in.BaseURL); err != nil {
-		return 0, nil, err
+		return 0, nil, bizerr.New(bizerr.CodeParamInvalid, err.Error())
 	}
 
 	// 去重
 	if _, err := s.repo.FindByName(ctx, in.Name); err == nil {
-		return 0, nil, fmt.Errorf("工具集 %q 已存在，请先删除再导入", in.Name)
+		return 0, nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("工具集 %q 已存在，请先删除再导入", in.Name))
 	}
 
 	rec := &model.CustomTool{
@@ -69,18 +76,24 @@ func (s *CustomToolService) Import(ctx context.Context, in ImportInput) (int, *m
 		rec.AuthValueEnc = dbencrypt.Encrypt(in.AuthValue)
 	}
 	if err := s.repo.Create(ctx, rec); err != nil {
-		return 0, nil, fmt.Errorf("落库失败: %w", err)
+		// 并发同名时 FindByName 拦不住，唯一索引兜底；不要把 PG 原文回给前端。
+		if repository.IsDuplicateKeyErr(err) {
+			return 0, nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("工具集 %q 已存在，请先删除再导入", in.Name))
+		}
+		return 0, nil, errors.New("保存工具集失败")
 	}
 
 	// 即时注册：导入成功后本进程立刻可调。**重启后的恢复不靠这里**——
 	// 自注册切片是进程内的，重启即空；启动期由 tooluse.LoadCustomToolProviders
 	// 从 custom_tools 表重建（装配点见 app/tool_provider_wiring.go）。
 	tooluse.RegisterToolProvider(provider)
-	if tr := tooluse.GetGlobalRegistry(); tr != nil {
-		tools, perr := provider.Provide(tooluse.ProviderContext{})
-		if perr == nil {
-			for _, t := range tools {
-				_ = tr.Register(t)
+	// 登记到**当前租户的叠加层**（不是全局注册表）：多租户下工具是租户级资源，
+	// 进全局会让其他租户的 Agent 也能调到它（见 tooluse/tenant_registry.go）。
+	ownerTenant := tenant.WriteTenantID(ctx)
+	if tools, perr := provider.Provide(tooluse.ProviderContext{}); perr == nil {
+		for _, t := range tools {
+			if err := tooluse.RegisterTenantTool(ownerTenant, t); err != nil {
+				logger.Ctx(ctx).Warn().Err(err).Str("tool", t.Name()).Msg("[custom-tool] 工具登记失败")
 			}
 		}
 	}
@@ -101,7 +114,13 @@ func (s *CustomToolService) List(ctx context.Context) ([]*model.CustomTool, erro
 // 注释口径：注销 Provider 不删除已注册工具，同步清理由调用方处理；重启后
 // auto_register 列表已无此项，自然收敛）。
 func (s *CustomToolService) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return bizerr.New(bizerr.CodeNotFound, fmt.Sprintf("工具集不存在（id=%d）", id))
+		}
+		return errors.New("删除工具集失败")
+	}
+	return nil
 }
 
 // countOps 统计 schema 中的操作数（ToolCount 展示用）。

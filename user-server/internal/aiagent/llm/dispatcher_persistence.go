@@ -67,12 +67,21 @@ func (d *Dispatcher) LoadProvidersFromDB() error {
 			logger.Infof("[LLM] api key 存量迁移：%d 个 provider 的明文密钥已加密", migrated)
 		}
 	}
+	invalidKeys := 0
 	for i := range rows {
 		cfg := rowToProviderConfig(&rows[i])
-		cfg.APIKey = decryptAPIKeyForUse(cfg.APIKey)
+		plain, invalid := decryptAPIKeyForUseNamed(cfg.Name, cfg.APIKey)
+		cfg.APIKey = plain
+		cfg.KeyInvalid = invalid
+		if invalid {
+			invalidKeys++
+		}
 		d.AddProvider(cfg)
 	}
 	logger.Infof("[LLM] LoadProvidersFromDB: 从 llm_providers 加载 %d 个 provider", len(rows))
+	if invalidKeys > 0 {
+		logger.Errorf("[LLM] 有 %d 个 provider 的 API Key 无法解密（MASTER_KEY 轮换或实例间不一致），需在「系统设置 → 模型提供商」重新保存密钥后恢复", invalidKeys)
+	}
 	return nil
 }
 
@@ -115,6 +124,9 @@ func (d *Dispatcher) UpsertProviderToDB(pc ProviderConfig) error {
 		logger.Errorf("[LLM] UpsertProviderToDB 更新 %s 失败: %v", pc.Name, err)
 		return err
 	}
+	// 重新保存即视为密钥已修复：清掉启动期打的「解不开」标记，
+	// 否则页面会一直挂着"密钥失效"，直到下次重启才消失。
+	clearKeyInvalid(pc.Name)
 	return nil
 }
 

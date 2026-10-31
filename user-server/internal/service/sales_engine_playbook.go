@@ -110,7 +110,7 @@ func (e *SalesEngine) generateCandidate(
 	}
 
 	if e.toolExecutor != nil {
-		availableTools := e.toolExecutor.ListTools()
+		availableTools := e.toolExecutor.ListTools(ctx)
 		if len(availableTools) > 0 {
 			return e.runAgentLoop(ctx, scenario, agentPrompt, req, intent, mem, customer, availableTools, ragChunks)
 		}

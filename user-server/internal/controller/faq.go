@@ -244,7 +244,7 @@ type faqMatchReq struct {
 	AgentID uint   `json:"agent_id" binding:"required"`
 }
 
-// @Summary      匹配成功
+// @Summary 关键词匹配 (调试接口 + 未来 RAG 引擎调用)
 // @Tags      f-a-q
 // @Router    /api/faqs/match [post]
 // Match 关键词匹配 (调试接口 + 未来 RAG 引擎调用)

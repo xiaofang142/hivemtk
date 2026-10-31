@@ -222,7 +222,7 @@ type sopTemplateMatchReq struct {
 	AgentID uint   `json:"agent_id" binding:"required"`
 }
 
-// @Summary      匹配成功
+// @Summary 按 (agent_id, intent, stage) 匹配 (Task 16 强 1对1 改造后)
 // @Tags      s-o-p-template
 // @Router    /api/sop-templates/match [post]
 // Match 按 (agent_id, intent, stage) 匹配 (Task 16 强 1对1 改造后)

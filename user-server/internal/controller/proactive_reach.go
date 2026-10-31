@@ -19,7 +19,7 @@ func NewProactiveReachController(svc *service.ProactiveReachService) *ProactiveR
 	return &ProactiveReachController{svc: svc}
 }
 
-// @Summary      触达成功
+// @Summary 主动发送消息
 // @Tags      proactive-reach
 // @Router    /api/reach/proactive/send [post]
 // ProactiveSend 主动发送消息
@@ -81,7 +81,7 @@ func (c *ProactiveReachController) QuickSend(ctx *gin.Context) {
 	response.Success(ctx, resp, "发送成功")
 }
 
-// @Summary      触达成功
+// @Summary 从客户 ID 发起触达（v2 智能选渠道）
 // @Tags      proactive-reach
 // @Router    /api/reach/proactive/customer/{customer_id} [post]
 // ProactiveSendFromCustomer 从客户 ID 发起触达（v2 智能选渠道）
@@ -162,7 +162,7 @@ func (c *ProactiveReachController) ListChannels(ctx *gin.Context) {
 	}, "查询成功")
 }
 
-// @Summary      验证完成
+// @Summary 验证触达条件（兼容性保留）
 // @Tags      proactive-reach
 // @Router    /api/reach/proactive/validate [post]
 // ValidateReach 验证触达条件（兼容性保留）
@@ -182,7 +182,7 @@ func (c *ProactiveReachController) ValidateReach(ctx *gin.Context) {
 	response.Success(ctx, resp, "验证完成")
 }
 
-// @Summary      批量触达完成
+// @Summary 批量触达（兼容性保留）
 // @Tags      proactive-reach
 // @Router    /api/reach/proactive/batch [post]
 // BatchProactiveSend 批量触达（兼容性保留）

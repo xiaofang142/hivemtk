@@ -21,7 +21,7 @@ func NewVisibilityController(visibilitySvc *service.VisibilityService, fanoutSvc
 	return &VisibilityController{visibilitySvc: visibilitySvc, fanoutSvc: fanoutSvc}
 }
 
-// @Summary      获取可见性趋势失败
+// @Summary GET /geo/visibility/trend?engine=&intent=&days=
 // @Tags      visibility
 // @Router    /api/geo/visibility/trend [get]
 // Trend GET /geo/visibility/trend?engine=&intent=&days=
@@ -39,7 +39,7 @@ func (c *VisibilityController) Trend(ctx *gin.Context) {
 	response.Success(ctx, result, "ok")
 }
 
-// @Summary      获取引擎对比失败
+// @Summary GET /geo/visibility/engine-compare?intent=&days=
 // @Tags      visibility
 // @Router    /api/geo/visibility/engine-compare [get]
 // EngineCompare GET /geo/visibility/engine-compare?intent=&days=
@@ -58,7 +58,7 @@ func (c *VisibilityController) EngineCompare(ctx *gin.Context) {
 	response.Success(ctx, result, "ok")
 }
 
-// @Summary      扇出研究完成
+// @Summary POST /geo/prompt/fanout
 // @Tags      visibility
 // @Router    /api/geo/prompt/fanout [post]
 // Fanout POST /geo/prompt/fanout

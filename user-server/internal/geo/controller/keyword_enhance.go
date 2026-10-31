@@ -17,7 +17,7 @@ func NewKeywordEnhanceController(svc *service.KeywordEnhanceService) *KeywordEnh
 	return &KeywordEnhanceController{svc: svc}
 }
 
-// @Summary      分析完成
+// @Summary 分析历史关键词表现
 // @Tags      keyword-enhance
 // @Router    /api/geo/keyword-enhance/analyze [get]
 // Analyze 分析历史关键词表现
@@ -31,7 +31,7 @@ func (c *KeywordEnhanceController) Analyze(ctx *gin.Context) {
 	response.Success(ctx, result, "分析完成")
 }
 
-// @Summary      增强完成
+// @Summary 用历史数据增强现有关键词
 // @Tags      keyword-enhance
 // @Router    /api/geo/keyword-enhance/enhance [post]
 // Enhance 用历史数据增强现有关键词

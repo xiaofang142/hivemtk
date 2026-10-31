@@ -21,6 +21,9 @@ const route = useRoute()
 const router = useRouter()
 const pipelineId = computed(() => route.params.id)
 const initialNodes = ref([])
+// 保存时按后端合约（CreatePipelineRequest: name/channel 必填 + steps/retry_policy/rate_limit）
+// 回填原值：PUT 只发 {nodes, edges} 会被 ShouldBindJSON 拒成 400。
+const original = ref(null)
 const initialEdges = ref([])
 const pipelineName = ref('')
 
@@ -40,6 +43,7 @@ async function load() {
   if (!pipelineId.value) return
   try {
     const p = await http.get(`/api/reach/pipelines/${pipelineId.value}`)
+    original.value = p || null
     pipelineName.value = p?.name || ''
     initialNodes.value = p?.nodes || []
     initialEdges.value = p?.edges || []
@@ -59,8 +63,24 @@ async function onSave({ nodes, edges }) {
   if (saving.value) return
   saving.value = true
   try {
-    await http.put(`/api/reach/pipelines/${pipelineId.value}`, { nodes, edges })
+    const base = original.value || {}
+    // 画布节点 → 流水线步骤序列（结束节点不落库）；画布为空时保留原步骤
+    const steps = (nodes || [])
+      .filter((n) => n && n.type !== 'end')
+      .map((n) => n?.data?.channel || n?.type)
+      .filter(Boolean)
+    await http.put(`/api/reach/pipelines/${pipelineId.value}`, {
+      name: base.name || pipelineName.value,
+      description: base.description || '',
+      channel: base.channel || 'email',
+      steps: steps.length ? steps : (base.steps || []),
+      retry_policy: base.retry_policy || {},
+      rate_limit: base.rate_limit || {}
+    })
     ElMessage.success('已保存')
+    await load()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e?.message || e))
   } finally {
     saving.value = false
   }

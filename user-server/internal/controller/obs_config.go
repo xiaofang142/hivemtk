@@ -137,7 +137,7 @@ func (c *ObsConfigController) DeleteConfig(ctx *gin.Context) {
 	response.Success(ctx, nil, "删除成功")
 }
 
-// @Summary      连接测试成功
+// @Summary 测试连接
 // @Tags      obs-config
 // @Router    /api/obs/config/{id}/test [post]
 // TestConnection 测试连接
@@ -166,7 +166,7 @@ func (c *ObsConfigController) TestConnection(ctx *gin.Context) {
 	response.Success(ctx, nil, "连接测试成功")
 }
 
-// @Summary      设为默认配置成功
+// @Summary 设为默认配置（开源版：全局唯一默认）
 // @Tags      obs-config
 // @Router    /api/obs/config/{id}/default [post]
 // SetDefault 设为默认配置（开源版：全局唯一默认）

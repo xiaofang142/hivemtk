@@ -35,7 +35,7 @@ func (c *GeoDecisionController) GetTasks(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"list": tasks, "total": len(tasks)}, "ok")
 }
 
-// @Summary      已完成
+// @Summary POST /api/geo/decision/tasks/{id}/done
 // @Tags      geo-decision
 // @Router    /api/geo/decision/tasks/{id}/done [post]
 // MarkTaskDone 标记任务完成

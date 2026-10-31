@@ -291,7 +291,7 @@ func (ctrl *TelegramAccountController) Delete(c *gin.Context) {
 	response.Success(c, nil, "删除成功")
 }
 
-// @Summary      Webhook 注册成功
+// @Summary 调用 Telegram setWebhook 接口注册 webhook
 // @Tags      telegram-account
 // @Router    /api/telegram/accounts/{id}/register-webhook [post]
 // RegisterWebhook 调用 Telegram setWebhook 接口注册 webhook
@@ -395,7 +395,7 @@ func deriveTelegramWebhookURLWithBase(c *gin.Context, accountID uint, publicBase
 	return fmt.Sprintf("%s://%s/api/webhook/telegram/%d", scheme, host, accountID)
 }
 
-// @Summary      获取状态成功
+// @Summary 校验 Bot Token 与 webhook 注册状态（无需改动账号）
 // @Tags      telegram-account
 // @Router    /api/telegram/accounts/{id}/status [get]
 // Status 校验 Bot Token 与 webhook 注册状态（无需改动账号）

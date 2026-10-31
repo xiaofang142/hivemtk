@@ -42,7 +42,8 @@ func ServerConfigFromRow(row *model.MCPServer) ClientConfig {
 // tooluse（会与 business_tools 的 portcontract→repository 成环），而「发现并落库」
 // 本来就住在本包——所以默认句柄的解析也留在这里，调用方只传行。
 func DiscoverAndRegisterRowDefaultDB(ctx context.Context, row *model.MCPServer) (int, error) {
-	return DiscoverAndRegisterRow(ctx, dbpkg.GetDB(), row, tooluse.GetGlobalRegistry())
+	// 登记到该 server 所属租户的叠加层（多租户隔离），而不是全局注册表。
+	return DiscoverAndRegisterRow(ctx, dbpkg.GetDB(), row, tooluse.EnsureTenantRegistry(row.TenantID))
 }
 
 // DiscoverAndRegisterRow 发现一个已配置 server 并登记结果（tool_count/last_status）。

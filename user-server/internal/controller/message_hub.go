@@ -75,7 +75,7 @@ func (c *MessageHubController) Push(ctx *gin.Context) {
 	response.Success(ctx, msg, "推送成功")
 }
 
-// @Summary      批量推送完成
+// @Summary 批量推送
 // @Tags      message-hub
 // @Router    /api/message-hub/push-batch [post]
 // PushBatch 批量推送
@@ -219,7 +219,7 @@ func (c *MessageHubController) Recall(ctx *gin.Context) {
 	response.Success(ctx, res, "撤回成功")
 }
 
-// @Summary      标记已读成功
+// @Summary 标记已读
 // @Tags      message-hub
 // @Router    /api/message-hub/{id}/read [post]
 // MarkRead 标记已读
@@ -238,7 +238,7 @@ func (c *MessageHubController) MarkRead(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"updated": len(req.IDs)}, "标记已读成功")
 }
 
-// @Summary      统计成功
+// @Summary 统计
 // @Tags      message-hub
 // @Router    /api/message-hub/stats [get]
 // Stats 统计

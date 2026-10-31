@@ -20,7 +20,7 @@ func NewIndexTrackerController(svc *service.IndexTrackerService) *IndexTrackerCo
 	return &IndexTrackerController{svc: svc}
 }
 
-// @Summary      文章不存在
+// @Summary POST /geo/index-tracking/verify/:article_id
 // @Tags      index-tracker
 // @Router    /api/geo/index-tracking/verify/{article_id} [post]
 // VerifyFull POST /geo/index-tracking/verify/:article_id

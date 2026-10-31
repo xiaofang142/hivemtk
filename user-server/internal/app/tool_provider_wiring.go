@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	mcpclient "hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/bridge"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -197,19 +198,11 @@ func registerAllAgentToolsViaProviders(gormDB *gorm.DB) {
 
 	initBuiltinToolProviders(providerRegistry)
 
-	// P1-2：OpenAPI 导入的工具体现在 custom_tools 表里，进程内注册表重启即空——
-	// 必须每次启动从表里重建，否则「前端显示已导入、Agent 调不到」。
-	for _, p := range tooluse.LoadCustomToolProviders(gormDB) {
-		if err := providerRegistry.RegisterProvider(p); err != nil {
-			logger.Errorf("[agent] 注册 OpenAPI 工具集 %s 失败: %v", p.Name(), err)
-		}
-	}
-
-	// P1-3：外部 MCP server 同理——配置在 mcp_servers 表里，工具要靠启动发现补回。
-	// 单个 server 不可达只跳过它自己（LoadConfiguredServers 内部隔离）。
-	if nSrv, nTool := mcpclient.LoadConfiguredServers(context.Background(), gormDB, tooluse.GetGlobalRegistry()); nSrv > 0 || nTool > 0 {
-		logger.Infof("[agent] ✅ 外部 MCP server 接入 %d 个 / 工具 %d 个", nSrv, nTool)
-	}
+	// P1-2 / P1-3：custom_tools（OpenAPI 导入）与 mcp_servers（外部 MCP）都是**租户表**，
+	// 进程内注册表重启即空，必须每次启动从表里重建；但重建的目标不是全局注册表，
+	// 而是按租户隔离的叠加层（tooluse.EnsureTenantRegistry）——否则多租户下
+	// A 租户的 Agent 能调到 B 租户的工具（工具背后带 B 的凭据）。
+	loadTenantScopedToolProviders(context.Background(), gormDB)
 
 	autoProviders := tooluse.GetAutoRegisteredProviders()
 	for _, p := range autoProviders {
@@ -313,4 +306,81 @@ func applyDisabledTools(registry *tooluse.ToolRegistry, disabled []string) int {
 		logger.Infof("[agent] 🚫 工具 %s 已按 agent_settings.disabled_tools 停用", name)
 	}
 	return removed
+}
+
+// loadTenantScopedToolProviders 按租户重建 custom_tools / mcp_servers 的工具。
+//
+// 枚举行用 SystemScope（跨租户读），工具只登记到各自租户的叠加层；
+// 单行/单 server 失败只跳过自己。单租户（off）模式全部行属于默认租户，
+// ScopeFor 会把默认租户的工具合并给所有请求，行为与改造前一致。
+func loadTenantScopedToolProviders(ctx context.Context, gormDB *gorm.DB) {
+	if gormDB == nil {
+		return
+	}
+	sysCtx := tenant.WithSystemScope(ctx)
+
+	// 1) OpenAPI 导入工具集
+	var rows []model.CustomTool
+	if err := gormDB.WithContext(sysCtx).Where("is_active = ?", true).Order("id ASC").Find(&rows).Error; err != nil {
+		logger.Warnf("[custom-tool] 启动加载失败（租户自定义工具将不可用，其余工具不受影响）: %v", err)
+	} else {
+		byTenant := map[uint][]model.CustomTool{}
+		for _, r := range rows {
+			byTenant[r.TenantID] = append(byTenant[r.TenantID], r)
+		}
+		for tid, list := range byTenant {
+			n := 0
+			for i := range list {
+				rec := list[i]
+				p, err := tooluse.CustomToolRowToProvider(&rec)
+				if err != nil {
+					logger.Warnf("[custom-tool] 跳过工具集 %q(id=%d,tenant=%d): %v", rec.Name, rec.ID, tid, err)
+					continue
+				}
+				tools, perr := p.Provide(tooluse.ProviderContext{})
+				if perr != nil {
+					logger.Warnf("[custom-tool] 工具集 %q(id=%d,tenant=%d) 装配失败: %v", rec.Name, rec.ID, tid, perr)
+					continue
+				}
+				for _, t := range tools {
+					if err := tooluse.RegisterTenantTool(tid, t); err != nil {
+						logger.Warnf("[custom-tool] 工具 %q(tenant=%d) 登记失败: %v", t.Name(), tid, err)
+						continue
+					}
+					n++
+				}
+			}
+			if n > 0 {
+				logger.Infof("[custom-tool] 租户 %d 重建 %d 个 OpenAPI 工具", tid, n)
+			}
+		}
+	}
+
+	// 2) 外部 MCP server
+	var servers []model.MCPServer
+	if err := gormDB.WithContext(sysCtx).Where("enabled = ?", true).Order("id ASC").Find(&servers).Error; err != nil {
+		logger.Warnf("[mcp-client] 读取 mcp_servers 失败（外部 MCP 工具不可用，其余工具不受影响）: %v", err)
+		return
+	}
+	byTenant := map[uint][]model.MCPServer{}
+	for _, r := range servers {
+		byTenant[r.TenantID] = append(byTenant[r.TenantID], r)
+	}
+	for tid, list := range byTenant {
+		tctx := tenant.WithTenantID(ctx, tid)
+		reg := tooluse.EnsureTenantRegistry(tid)
+		nSrv, nTool := 0, 0
+		for i := range list {
+			n, err := mcpclient.DiscoverAndRegisterRow(tctx, gormDB, &list[i], reg)
+			if err != nil {
+				logger.Warnf("[mcp-client] server %q(tenant=%d) 发现失败（跳过该 server）: %v", list[i].Name, tid, err)
+				continue
+			}
+			nSrv++
+			nTool += n
+		}
+		if nSrv > 0 {
+			logger.Infof("[mcp-client] 租户 %d 接入 %d 个 server / %d 个工具", tid, nSrv, nTool)
+		}
+	}
 }

@@ -25,7 +25,7 @@ func NewReportController(svc *service.ReportService, analyticsSvc *service.GeoDe
 	return &ReportController{svc: svc, analyticsSvc: analyticsSvc}
 }
 
-// @Summary      获取汇总报表成功
+// @Summary 获取 GEO 汇总报表
 // @Tags      report
 // @Router    /api/geo/reports/summary [get]
 // GetReport 获取 GEO 汇总报表
@@ -42,7 +42,7 @@ func (c *ReportController) GetReport(ctx *gin.Context) {
 	response.Success(ctx, result, "获取汇总报表成功")
 }
 
-// @Summary      获取 ROI 分析成功
+// @Summary 获取 ROI 分析
 // @Tags      report
 // @Router    /api/geo/reports/roi [get]
 // GetROI 获取 ROI 分析
@@ -61,7 +61,7 @@ func (c *ReportController) GetROI(ctx *gin.Context) {
 	response.Success(ctx, result, "获取 ROI 分析成功")
 }
 
-// @Summary      获取 API 成本成功
+// @Summary 获取 API 调用成本
 // @Tags      report
 // @Router    /api/geo/reports/api-costs [get]
 // GetAPICosts 获取 API 调用成本

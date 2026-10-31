@@ -395,3 +395,30 @@ WindowSeconds
 WindowSize
 WorkerCount
 XianyuReportTokenTTL
+
+# ── B1-b（2026-10-31）：坐席接待上限两个常量，刻意**不入库** ────────────
+# 判据：参数中心的语义是「运维改了就应改变系统行为」，而这两个是**两端协议形状**：
+#   AgentMaxSessionsLimit —— 校验上界，与前端坐席表单 input-number 的 max 必须
+#                            同值；单边调高服务端虽收、前端却拦不住同理反推，
+#                            契约改值要连前端一起发。
+#   AgentMaxSessionsDefault —— 新建坐席未指定接待上限的 API 缺省档，文档口径，
+#                            不是缺配置时的运行时兜底。
+AgentMaxSessionsDefault
+AgentMaxSessionsLimit
+
+# ── B1-c（2026-10-31）：资产包解压防爆闸三个常量，刻意**不入库** ────────────
+# 判据：同 B1-a 的「防撑爆的闸，不是运维旋钮」——AssetPackageMaxEntryBytes /
+# AssetPackageMaxTotalBytes 是 zip 解压炸弹防线（单条目 4MB / 整包 32MB），
+# AssetPackageMaxEntries 是包形状上限。放进参数中心等于给运维一个
+# 「调大就能灌爆内存」的合法入口，与这组常量的存在目的（防线）相反。
+AssetPackageMaxEntries
+AssetPackageMaxEntryBytes
+AssetPackageMaxTotalBytes
+
+# ── B1-d（2026-10-31）：用户标签 API 校验边界两个常量，刻意**不入库** ───────
+# 判据：MaxUserTagRunes / MaxUserTags 是用户标签接口的**入参契约边界**
+# （单标签 50 字符 / 一组 100 个），错误文案直接引用（「超过 50 个字符」
+# 「一次最多设置 100 个标签」）。前端表单 maxLength 与文档口径同源；
+# 运维单边调大只会让 API 文档、前端校验、服务端判定三者互相打架。
+MaxUserTagRunes
+MaxUserTags

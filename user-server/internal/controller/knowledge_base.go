@@ -279,7 +279,7 @@ type knowledgeBaseBindReq struct {
 	AgentID uint `json:"agent_id" binding:"required"`
 }
 
-// @Summary      绑定成功
+// @Summary 绑定到智能体
 // @Tags      knowledge-base
 // @Router    /api/knowledge-bases/{id}/bind [post]
 // BindToAgent 绑定到智能体
@@ -305,7 +305,7 @@ func (c *KnowledgeBaseController) BindToAgent(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"kb_id": kbID, "agent_id": req.AgentID}, "绑定成功")
 }
 
-// @Summary      解绑成功
+// @Summary 从智能体解绑
 // @Tags      knowledge-base
 // @Router    /api/knowledge-bases/{id}/unbind [post]
 // UnbindFromAgent 从智能体解绑

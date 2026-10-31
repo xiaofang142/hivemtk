@@ -16,7 +16,7 @@ import (
 )
 
 type AgentToolExecutor interface {
-	ListTools() []AgentToolDef
+	ListTools(ctx context.Context) []AgentToolDef
 	DispatchToolCalls(ctx context.Context, calls []AgentToolCall, toolCtx AgentToolContext) []AgentToolResult
 }
 

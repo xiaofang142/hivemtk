@@ -21,7 +21,7 @@ func NewSecurityRulesController(svc service.SecurityRulesService) *SecurityRules
 	return &SecurityRulesController{svc: svc}
 }
 
-// @Summary      安全规则存储不可用
+// @Summary GET /api/security/rules
 // @Tags      security-rules
 // @Router    /api/security/rules [get]
 // GetRules GET /api/security/rules

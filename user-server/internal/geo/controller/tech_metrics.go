@@ -24,7 +24,7 @@ func NewTechMetricsController(kbSvc *service.KBService) *TechMetricsController {
 	}
 }
 
-// @Summary      生成成功
+// @Summary 生成 robots.txt
 // @Tags      tech-metrics
 // @Router    /api/geo/techconfig/robots [post]
 // GenerateRobots 生成 robots.txt
@@ -37,7 +37,7 @@ func (c *TechMetricsController) GenerateRobots(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"content": c.techconfigSvc.GenerateRobots(&cfg)}, "生成成功")
 }
 
-// @Summary      生成成功
+// @Summary 生成 llms.txt（AI 引擎知识索引）
 // @Tags      tech-metrics
 // @Router    /api/geo/techconfig/llms-txt [post]
 // GenerateLLMsTxt 生成 llms.txt（AI 引擎知识索引）
@@ -50,7 +50,7 @@ func (c *TechMetricsController) GenerateLLMsTxt(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"content": c.techconfigSvc.GenerateLLMsTxt(&cfg)}, "生成成功")
 }
 
-// @Summary      生成成功
+// @Summary 生成 sitemap.xml
 // @Tags      tech-metrics
 // @Router    /api/geo/techconfig/sitemap [post]
 // GenerateSitemap 生成 sitemap.xml
@@ -109,7 +109,7 @@ func (c *TechMetricsController) SiteAudit(ctx *gin.Context) {
 	response.Success(ctx, rep, "站点审计完成")
 }
 
-// @Summary      分析完成
+// @Summary 分析内容质量指标
 // @Tags      tech-metrics
 // @Router    /api/geo/metrics/analyze [post]
 // AnalyzeMetrics 分析内容质量指标

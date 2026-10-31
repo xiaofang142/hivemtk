@@ -201,7 +201,7 @@ func (c *CustomerOneIDController) GetIdentityMappings(ctx *gin.Context) {
 	}, "获取成功")
 }
 
-// @Summary      链接成功
+// @Summary 链接新身份到指定客户
 // @Tags      customer-one-i-d
 // @Router    /api/customer-oneid/{customer_id}/identities [post]
 // LinkIdentity 链接新身份到指定客户

@@ -23,7 +23,7 @@ func NewRagEvalController() *RagEvalController {
 	}
 }
 
-// @Summary      评测完成
+// @Summary POST /api/rag-eval/run
 // @Tags      rag-eval
 // @Router    /api/rag-eval/run [post]
 // Run POST /api/rag-eval/run

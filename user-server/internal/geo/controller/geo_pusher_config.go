@@ -53,7 +53,7 @@ func (c *GeoPusherConfigController) List(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"list": list, "total": total}, "ok")
 }
 
-// @Summary      推送平台配置不存在
+// @Summary GET /api/geo/pushers/{id}
 // @Tags      geo-pusher-config
 // @Router    /api/geo/pushers/{id} [get]
 func (c *GeoPusherConfigController) Get(ctx *gin.Context) {
@@ -85,7 +85,7 @@ func (c *GeoPusherConfigController) Create(ctx *gin.Context) {
 	response.Success(ctx, item, "created")
 }
 
-// @Summary      推送平台配置不存在
+// @Summary PUT /api/geo/pushers/{id}
 // @Tags      geo-pusher-config
 // @Router    /api/geo/pushers/{id} [put]
 func (c *GeoPusherConfigController) Update(ctx *gin.Context) {
@@ -105,7 +105,7 @@ func (c *GeoPusherConfigController) Update(ctx *gin.Context) {
 	response.Success(ctx, item, "updated")
 }
 
-// @Summary      推送平台配置不存在
+// @Summary DELETE /api/geo/pushers/{id}
 // @Tags      geo-pusher-config
 // @Router    /api/geo/pushers/{id} [delete]
 func (c *GeoPusherConfigController) Delete(ctx *gin.Context) {

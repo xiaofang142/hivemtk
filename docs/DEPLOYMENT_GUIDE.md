@@ -259,6 +259,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 | `FF_LTC_COLLECTION_JOB` | `off` | 催收任务（逾期应收自动提醒 + 越过升级线转人工待办）的三态开关 `off\|shadow\|enforce`（`internal/service/collection_job.go`，解析复用挽回 worker 的 `parseRecoveryWorkerMode`，别名口径与它同一份）。`off` 连轮询协程都不起、一轮都不扫；`shadow` 只选路不发不写；`enforce` 才真给真人发提醒。**env 这一档在装配期读一次 ⇒ 改档要重启**；每轮现读的是第二把锁 `ltc.config` 的 `collection` 阶段档（它关着的每一轮一次查询都不发，一键回滚要下一轮就咬得住，指的是这一把）。写布尔真值（`true`/`1`/`on`）一律按 `shadow` 处理并告警——短信不可撤回，要真发必须显式写 `enforce` |
 | `LTC_COLLECTION_JOB_BATCH` | `20` | 催收单轮扫描封顶（对应 `ScanOverdue` 的 limit），可用区间 `[1,200]`；非整数或超界 ⇒ 告警并沿用默认。上限比挽回队列的 `[1,500]` 窄是代价决定的：单轮内每行一次商机读（应收表上没有客户列，身份按 `bills.opportunity_id` 现推），批越大跨表读越多 |
 | `BROWSER_JEV_ENABLED` | 关 | JEV 外部决策服务总开关（`internal/browser_automation/service/jev.go`）。**铁律：默认关闭**——未置位时每轮 plan 原样走内置 Brain 路径，一个字节都不发往外部。取值 `1/true/on` 才开启 |
+| `EGOLITE_ASSET_TRUST_PUBKEY` | 空 | egolite 资产包通道的 ed25519 信任公钥（**base64 std 编码的 32 字节 raw key**，`internal/egolite/asset_package.go`）。未配置 ⇒ 带签名的资产直接报错（不是放行），未签名旧资产正常装；配置后 ⇒ 带签名资产强制三重校验（ed25519 验签、签名算法白名单、清单公钥指纹与本机一致），未签名仍放行（兼容存量）。**缺失不放宽姿态，配置才收紧**——发布签名资产的部署必须配它 |
 | `BROWSER_JEV_ENDPOINT` | 空 | JEV `DispatchStructured` 的端点地址（无 scheme 时按 http 补齐）。为空 ⇒ JEV 侧不可用，退回内置 Brain 路径并打 warn。它同时是 `BROWSER_JEV_MODEL` 的生效前提：只设 MODEL 不设 ENDPOINT 时覆盖被忽略并显式告警——模型名长在 provider 上，没有 provider 就无处可挂 |
 | `BROWSER_JEV_API_KEY` | 空 | JEV 端点的鉴权密钥，作为 `Authorization` 头发出。空 ⇒ 不带该头（端点自身若要求鉴权会 401，届时回退内置 Brain） |
 | `BROWSER_JEV_MODEL` | 空 | 覆盖 JEV 路由里 provider 声明的模型名。**仅在 `BROWSER_JEV_ENDPOINT` 已设时生效**；单独设置会被忽略并告警（见上一行） |

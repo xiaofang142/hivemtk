@@ -213,7 +213,7 @@ func (c *UserSegmentController) GetRFMStats(ctx *gin.Context) {
 	}, "获取成功")
 }
 
-// @Summary      计算完成
+// @Summary 手动触发 RFM 全量计算（CustomerRFMService.ComputeAll，含挽回队列联动）
 // @Tags      user-segment
 // @Router    /api/user-segment/rfm/calculate [post]
 // CalculateRFM 手动触发 RFM 全量计算（CustomerRFMService.ComputeAll，含挽回队列联动）

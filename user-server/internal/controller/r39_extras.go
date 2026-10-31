@@ -136,7 +136,7 @@ func NewWebVitalsController() *WebVitalsController {
 	return &WebVitalsController{svc: opssvc.NewWebVitalService()}
 }
 
-// @Summary      请求参数错误
+// @Summary POST /api/monitor/web-vitals
 // @Tags      web-vitals
 // @Router    /api/monitor/web-vitals [post]
 // Report POST /api/monitor/web-vitals

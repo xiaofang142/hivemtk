@@ -30,7 +30,7 @@ type AppendMessageRequest struct {
 	Content    string `json:"content" binding:"required"`
 }
 
-// @Summary      追加成功
+// @Summary 追加消息
 // @Tags      dialogue-memory
 // @Router    /api/memory/messages [post]
 // AppendMessage 追加消息
@@ -115,7 +115,7 @@ type RecordObjectionRequest struct {
 	Content       string `json:"content" binding:"required"`
 }
 
-// @Summary      记录成功
+// @Summary 记录异议
 // @Tags      dialogue-memory
 // @Router    /api/memory/objections [post]
 // RecordObjection 记录异议
@@ -163,7 +163,7 @@ type RecordIntentRequest struct {
 	IntentType string `json:"intent_type" binding:"required"`
 }
 
-// @Summary      记录成功
+// @Summary 记录意图
 // @Tags      dialogue-memory
 // @Router    /api/memory/intent-trail [post]
 // RecordIntent 记录意图
@@ -187,7 +187,7 @@ type RecordSOPRequest struct {
 	SOPName   string `json:"sop_name" binding:"required"`
 }
 
-// @Summary      记录成功
+// @Summary 记录 SOP
 // @Tags      dialogue-memory
 // @Router    /api/memory/sop-history [post]
 // RecordSOP 记录 SOP

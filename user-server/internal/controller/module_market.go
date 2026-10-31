@@ -89,7 +89,7 @@ func (c *ModuleMarketController) List(ctx *gin.Context) {
 	}, "ok")
 }
 
-// @Summary      模块不存在
+// @Summary GET /api/module-market/detail/:key
 // @Tags      module-market
 // @Router    /api/module-market/detail/{key} [get]
 // Detail GET /api/module-market/detail/:key

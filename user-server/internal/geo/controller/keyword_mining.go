@@ -18,7 +18,7 @@ func NewKeywordMiningController(svc *service.KeywordMiningService) *KeywordMinin
 	return &KeywordMiningController{svc: svc}
 }
 
-// @Summary      下拉词落库失败
+// @Summary POST /geo/keyword-mining/crawl-suggest
 // @Tags      keyword-mining
 // @Router    /api/geo/keyword-mining/crawl-suggest [post]
 // CrawlSuggest POST /geo/keyword-mining/crawl-suggest
@@ -48,7 +48,7 @@ func (c *KeywordMiningController) CrawlSuggest(ctx *gin.Context) {
 	}, "ok")
 }
 
-// @Summary      长尾词落库失败
+// @Summary POST /geo/keyword-mining/longtail
 // @Tags      keyword-mining
 // @Router    /api/geo/keyword-mining/longtail [post]
 // CombineLongtail POST /geo/keyword-mining/longtail

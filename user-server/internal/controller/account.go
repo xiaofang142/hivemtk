@@ -49,7 +49,7 @@ func (c *AccountController) GetAccounts(ctx *gin.Context) {
 	response.Success(ctx, resp, "success")
 }
 
-// @Summary      账户ID不能为空
+// @Summary GET /api/account/{id}
 // @Tags      account
 // @Router    /api/account/{id} [get]
 func (c *AccountController) GetAccount(ctx *gin.Context) {

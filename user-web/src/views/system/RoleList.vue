@@ -205,6 +205,7 @@ import { Lock, User } from '@element-plus/icons-vue'
 import { listRoles, listRoleMembers } from '@/api/role'
 import { getAllMenus, getRoleMenuKeys, updateRoleMenuKeys } from '@/api/menu'
 import PageState from '@/components/PageState.vue'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const { t } = useI18n()
 
@@ -283,7 +284,7 @@ async function loadMembers() {
       total: data?.total || 0
     }
   } catch (e) {
-    ElMessage.error(e?.message || t('common.operationFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || t('common.operationFailed'))
   } finally {
     membersLoading.value = false
   }
@@ -318,7 +319,7 @@ async function openMenuDialog(role) {
       menuTreeRef.value?.setCheckedKeys(checked)
     }, 0)
   } catch (e) {
-    ElMessage.error(e?.message || t('common.operationFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || t('common.operationFailed'))
     menuDialogVisible.value = false
   }
 }
@@ -337,7 +338,7 @@ async function saveRoleMenus() {
     ElMessage.success(t('common.operationSuccess', '保存成功'))
     menuDialogVisible.value = false
   } catch (e) {
-    ElMessage.error(e?.message || t('common.operationFailed'))
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || t('common.operationFailed'))
   } finally {
     menuSaving.value = false
   }

@@ -198,7 +198,7 @@ func (c *PlatformAccountController) DeleteAccount(ctx *gin.Context) {
 	response.Success(ctx, nil, "删除成功")
 }
 
-// @Summary      登录成功
+// @Summary 登录平台账号
 // @Tags      platform-account
 // @Router    /api/platform-accounts/{id}/login [post]
 // LoginAccount 登录平台账号
@@ -225,7 +225,7 @@ func (c *PlatformAccountController) LoginAccount(ctx *gin.Context) {
 	response.Success(ctx, account, "登录成功")
 }
 
-// @Summary      检查成功
+// @Summary 检查登录状态
 // @Tags      platform-account
 // @Router    /api/platform-accounts/{id}/status [get]
 // CheckLoginStatus 检查登录状态

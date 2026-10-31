@@ -119,12 +119,24 @@ export function downloadBatchTemplate(type = 'clue') {
 }
 
 export function batchExport(data) {
-  // 后端读 ctx.PostForm 的 type / format / ids（ids 是逗号分隔串）
-  return postForm('/api/batch/export', {
-    type: data?.type || 'clue',
-    format: data?.format || 'csv',
-    ids: toIdList(data?.ids).join(',')
-  })
+  // 后端读 ctx.PostForm 的 type / format / ids（ids 是逗号分隔串）。
+  //
+  // 响应体是**文件流**（csv/xlsx），不是 JSON：走默认 JSON 解析会让 request.js
+  // 打出「收到非 JSON 响应，疑似网关兜底到前端页面」的伪错误（实测 CSV 前几行
+  // 被当成异常响应体打印到控制台）。所以这里显式要 blob，由调用方触发下载。
+  return http.post(
+    '/api/batch/export',
+    new URLSearchParams({
+      type: data?.type || 'clue',
+      format: data?.format || 'csv',
+      ids: toIdList(data?.ids).join(',')
+    }).toString(),
+    {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      responseType: 'blob',
+      _silent: true
+    }
+  )
 }
 
 export function batchDelete(data) {

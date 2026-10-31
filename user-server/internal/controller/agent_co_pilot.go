@@ -51,7 +51,7 @@ func (c *AgentCoPilotController) SaveConfig(ctx *gin.Context) {
 	response.Success(ctx, req, "保存成功")
 }
 
-// @Summary      评估完成
+// @Summary POST /api/agent/co-pilot/evaluate
 // @Tags      agent-co-pilot
 // @Router    /api/agent/co-pilot/evaluate [post]
 // Evaluate POST /api/agent/co-pilot/evaluate

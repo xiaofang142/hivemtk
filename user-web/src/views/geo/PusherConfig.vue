@@ -188,6 +188,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { geoApi } from '@/api/geo'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
@@ -232,6 +233,9 @@ function openDialog(row) {
 }
 
 async function save() {
+  // platform 是后端 required 校验项，本地先拦一次：空表单直发只会拿到
+  // 「platform 必填」的报错并弹两次（拦截器 + 这里）
+  if (!String(form.value.platform || '').trim()) { ElMessage.warning('请选择平台'); return }
   try {
     // 把 config_json_text 解析成对象再序列化
     let cfgJson = form.value.config_json_text
@@ -251,7 +255,7 @@ async function save() {
     dialogVisible.value = false
     load()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '保存失败')
   }
 }
 

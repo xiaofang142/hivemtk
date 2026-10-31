@@ -102,7 +102,7 @@ func (c *DictionaryController) PublicDictionary(ctx *gin.Context) {
 	}, "message": "ok"})
 }
 
-// @Summary      参数错误
+// @Summary PUT /api/manage/dictionaries/:parent/items
 // @Tags      dictionary
 // @Router    /api/manage/dictionaries/{parent}/items [put]
 // UpsertItem PUT /api/manage/dictionaries/:parent/items
@@ -148,7 +148,7 @@ func (c *DictionaryController) UpsertItem(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
-// @Summary      参数错误
+// @Summary PUT /api/manage/dictionaries/:parent/transitions
 // @Tags      dictionary
 // @Router    /api/manage/dictionaries/{parent}/transitions [put]
 // ReplaceTransitions PUT /api/manage/dictionaries/:parent/transitions

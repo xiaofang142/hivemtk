@@ -21,7 +21,7 @@ func NewCompetitorController(svc *service.GeoCompetitorService) *CompetitorContr
 	return &CompetitorController{svc: svc}
 }
 
-// @Summary      查询竞品失败
+// @Summary GET /geo/competitors?status=active
 // @Tags      competitor
 // @Router    /api/geo/competitors [get]
 // List GET /geo/competitors?status=active
@@ -35,7 +35,7 @@ func (c *CompetitorController) List(ctx *gin.Context) {
 	response.Success(ctx, list, "ok")
 }
 
-// @Summary      竞品不存在
+// @Summary GET /geo/competitors/:id
 // @Tags      competitor
 // @Router    /api/geo/competitors/{id} [get]
 // Get GET /geo/competitors/:id

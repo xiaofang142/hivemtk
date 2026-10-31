@@ -22,7 +22,7 @@ func NewAlertController(svc *service.AlertService) *AlertController {
 	return &AlertController{svc: svc}
 }
 
-// @Summary      查询告警失败
+// @Summary GET /geo/alerts?type=&level=&page=&limit=
 // @Tags      alert
 // @Router    /api/geo/alerts [get]
 // List GET /geo/alerts?type=&level=&page=&limit=
@@ -42,7 +42,7 @@ func (c *AlertController) List(ctx *gin.Context) {
 	response.Success(ctx, result, "ok")
 }
 
-// @Summary      查询未读告警数失败
+// @Summary GET /geo/alerts/unread-count
 // @Tags      alert
 // @Router    /api/geo/alerts/unread-count [get]
 // UnreadCount GET /geo/alerts/unread-count

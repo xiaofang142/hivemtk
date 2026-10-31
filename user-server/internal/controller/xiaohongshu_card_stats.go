@@ -21,7 +21,7 @@ func NewXiaohongshuCardStatsController(statsService cardsvc.XiaohongshuCardStats
 	}
 }
 
-// @Summary      获取统计数据成功
+// @Summary 获取单个小红书卡片的统计数据
 // @Tags      xiaohongshu-card-stats
 // @Router    /api/xiaohongshu-card/stats/{id} [get]
 // GetCardStats 获取单个小红书卡片的统计数据
@@ -60,7 +60,7 @@ func (c *XiaohongshuCardStatsController) GetCardStats(ctx *gin.Context) {
 	response.Success(ctx, stats, "获取统计数据成功")
 }
 
-// @Summary      获取统计数据成功
+// @Summary 获取小红书卡片的总体统计数据
 // @Tags      xiaohongshu-card-stats
 // @Router    /api/xiaohongshu-card/overall-stats [get]
 // GetOverallStats 获取小红书卡片的总体统计数据

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -256,11 +257,11 @@ func (s *Server) handleInitialize(_ context.Context, req JSONRPCRequest) ([]byte
 	return s.successResponse(req.ID, result), nil
 }
 
-func (s *Server) handleToolsList(_ context.Context, req JSONRPCRequest) ([]byte, error) {
+func (s *Server) handleToolsList(ctx context.Context, req JSONRPCRequest) ([]byte, error) {
 	if errResp, ok := s.checkInitialized(req); !ok {
 		return errResp, nil
 	}
-	tools := s.listTools()
+	tools := s.listToolsForTenant(ctx)
 	return s.successResponse(req.ID, ListToolsResult{Tools: tools}), nil
 }
 
@@ -289,11 +290,26 @@ func (s *Server) handleToolsCall(ctx context.Context, req JSONRPCRequest) ([]byt
 	return s.successResponse(req.ID, result), nil
 }
 
-func (s *Server) listTools() []MCPTool {
+// listToolsForTenant 服务器注册表 + 当前租户叠加层的工具（多租户隔离）。
+// 生产里 registry 就是全局注册表（controller/mcp.go 传 GetGlobalRegistry()），
+// 与 callTool 的取用顺序一致：注册表内优先，租户工具只补缺不遮蔽。
+func (s *Server) listToolsForTenant(ctx context.Context) []MCPTool {
 	if s.registry == nil {
 		return []MCPTool{}
 	}
 	tools := s.registry.List()
+	seen := make(map[string]struct{}, len(tools))
+	for _, t := range tools {
+		seen[t.Name()] = struct{}{}
+	}
+	if tid := tooluse.ScopeFor(ctx); tid > 0 {
+		for _, t := range tooluse.ListTenantTools(tid) {
+			if _, dup := seen[t.Name()]; !dup {
+				tools = append(tools, t)
+			}
+		}
+	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name() < tools[j].Name() })
 	out := make([]MCPTool, 0, len(tools))
 	for _, t := range tools {
 		params := t.Parameters()
@@ -311,6 +327,10 @@ func (s *Server) callTool(ctx context.Context, params CallToolParams) (*CallTool
 		return nil, fmt.Errorf("tool registry not configured")
 	}
 	tool, err := s.registry.Get(params.Name)
+	if err != nil {
+		// 内置未命中时回落到当前请求租户的叠加层（custom_tools / mcp_servers）。
+		tool, err = tooluse.GetToolForTenant(ctx, params.Name)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("tool not found: %s", params.Name)
 	}

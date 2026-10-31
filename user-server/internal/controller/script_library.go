@@ -140,7 +140,7 @@ func (c *ScriptLibraryController) UpdateABConfig(ctx *gin.Context) {
 	response.Success(ctx, req, "AB 配置已保存")
 }
 
-// @Summary      请求参数错误
+// @Summary POST /api/script-ab/conversion
 // @Tags      script-library
 // @Router    /api/script-ab/conversion [post]
 // RecordConversion POST /api/script-ab/conversion（转化回写：one_id/conversation_id/outcome）

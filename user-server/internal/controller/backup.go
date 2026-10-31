@@ -108,7 +108,7 @@ func requireAdminAuth(ctx *gin.Context) (uint, bool) {
 	return uid, true
 }
 
-// @Summary      创建备份任务成功
+// @Summary 创建备份
 // @Tags      backup
 // @Router    /api/backups [post]
 // CreateBackup 创建备份
@@ -243,7 +243,7 @@ func NewRestoreController(svc *service.RestoreService) *RestoreController {
 	return &RestoreController{restoreService: svc}
 }
 
-// @Summary      创建恢复任务成功
+// @Summary 恢复备份
 // @Tags      restore
 // @Router    /api/restore [post]
 // RestoreBackup 恢复备份

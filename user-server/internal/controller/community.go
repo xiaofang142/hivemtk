@@ -65,7 +65,7 @@ func NewCommunityController(svc *service.CommunityService) *CommunityController 
 	return &CommunityController{svc: svc}
 }
 
-// @Summary      获取社群列表成功
+// @Summary 获取社群列表
 // @Tags      community
 // @Router    /api/community/groups [get]
 // GetGroups 获取社群列表
@@ -93,7 +93,7 @@ func (c *CommunityController) GetGroups(ctx *gin.Context) {
 	response.Success(ctx, resp, "获取社群列表成功")
 }
 
-// @Summary      获取社群详情成功
+// @Summary 获取社群详情
 // @Tags      community
 // @Router    /api/community/groups/{id} [get]
 // GetGroupByID 获取社群详情
@@ -112,7 +112,7 @@ func (c *CommunityController) GetGroupByID(ctx *gin.Context) {
 	response.Success(ctx, group, "获取社群详情成功")
 }
 
-// @Summary      创建社群成功
+// @Summary 创建社群
 // @Tags      community
 // @Router    /api/community/groups [post]
 // CreateGroup 创建社群
@@ -131,7 +131,7 @@ func (c *CommunityController) CreateGroup(ctx *gin.Context) {
 	response.Success(ctx, group, "创建社群成功")
 }
 
-// @Summary      更新社群成功
+// @Summary 更新社群
 // @Tags      community
 // @Router    /api/community/groups/{id} [put]
 // UpdateGroup 更新社群
@@ -151,7 +151,7 @@ func (c *CommunityController) UpdateGroup(ctx *gin.Context) {
 	response.Success(ctx, nil, "更新社群成功")
 }
 
-// @Summary      删除社群成功
+// @Summary 删除社群
 // @Tags      community
 // @Router    /api/community/groups/{id} [delete]
 // DeleteGroup 删除社群
@@ -165,7 +165,7 @@ func (c *CommunityController) DeleteGroup(ctx *gin.Context) {
 	response.Success(ctx, nil, "删除社群成功")
 }
 
-// @Summary      获取成员列表成功
+// @Summary 获取社群成员列表
 // @Tags      community
 // @Router    /api/community/members [get]
 // GetMembers 获取社群成员列表
@@ -193,7 +193,7 @@ func (c *CommunityController) GetMembers(ctx *gin.Context) {
 	response.Success(ctx, resp, "获取成员列表成功")
 }
 
-// @Summary      获取成员详情成功
+// @Summary 获取社群成员详情
 // @Tags      community
 // @Router    /api/community/members/{id} [get]
 // GetMemberByID 获取社群成员详情
@@ -212,7 +212,7 @@ func (c *CommunityController) GetMemberByID(ctx *gin.Context) {
 	response.Success(ctx, member, "获取成员详情成功")
 }
 
-// @Summary      添加成员成功
+// @Summary 添加社群成员
 // @Tags      community
 // @Router    /api/community/members [post]
 // AddMember 添加社群成员
@@ -231,7 +231,7 @@ func (c *CommunityController) AddMember(ctx *gin.Context) {
 	response.Success(ctx, member, "添加成员成功")
 }
 
-// @Summary      更新成员成功
+// @Summary 更新社群成员
 // @Tags      community
 // @Router    /api/community/members/{id} [put]
 // UpdateMember 更新社群成员
@@ -251,7 +251,7 @@ func (c *CommunityController) UpdateMember(ctx *gin.Context) {
 	response.Success(ctx, nil, "更新成员成功")
 }
 
-// @Summary      移除成员成功
+// @Summary 移除社群成员
 // @Tags      community
 // @Router    /api/community/members/{id} [delete]
 // RemoveMember 移除社群成员
@@ -265,7 +265,7 @@ func (c *CommunityController) RemoveMember(ctx *gin.Context) {
 	response.Success(ctx, nil, "移除成员成功")
 }
 
-// @Summary      获取消息列表成功
+// @Summary 获取社群消息
 // @Tags      community
 // @Router    /api/community/messages [get]
 // GetMessages 获取社群消息
@@ -293,7 +293,7 @@ func (c *CommunityController) GetMessages(ctx *gin.Context) {
 	response.Success(ctx, resp, "获取消息列表成功")
 }
 
-// @Summary      获取统计信息成功
+// @Summary 获取社群统计
 // @Tags      community
 // @Router    /api/community/stats [get]
 // GetStatistics 获取社群统计
@@ -316,7 +316,7 @@ func (c *CommunityController) GetStatistics(ctx *gin.Context) {
 	response.Success(ctx, stats, "获取统计信息成功")
 }
 
-// @Summary      导入完成
+// @Summary 导入社群数据
 // @Tags      community
 // @Router    /api/community/import [post]
 // ImportData 导入社群数据
@@ -358,7 +358,7 @@ func (c *CommunityController) ImportData(ctx *gin.Context) {
 	}, "导入完成")
 }
 
-// @Summary      导出成功
+// @Summary 导出社群数据
 // @Tags      community
 // @Router    /api/community/export [post]
 // ExportData 导出社群数据

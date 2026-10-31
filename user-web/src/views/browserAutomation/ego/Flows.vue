@@ -308,6 +308,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteEgoFlow,
@@ -432,6 +433,11 @@ const parseJsonOrUndefined = (text) => {
 }
 
 const onSave = async () => {
+  // 后端 SaveRequest 只有服务层校验（返回「flow 名称必填」），空名提交会白打一次 400
+  if (!String(form.value.name || '').trim()) {
+    ElMessage.warning('请输入流程名称')
+    return
+  }
   saving.value = true
   try {
     const payload = {
@@ -459,7 +465,8 @@ const onSave = async () => {
     ElMessage.success(data?.scan_report?.passed ? '已保存，扫描通过' : '已保存，但扫描有 block 命中')
     await load()
   } catch (e) {
-    ElMessage.error(e?.message || '保存失败')
+    // 拦截器已经弹过后端文案，这里再补一条就是同一个失败的第二次记账
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '保存失败')
   } finally {
     saving.value = false
   }

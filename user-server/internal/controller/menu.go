@@ -20,7 +20,7 @@ func NewMenuController() *MenuController {
 	return &MenuController{svc: service.NewMenuService()}
 }
 
-// @Summary      获取菜单成功
+// @Summary GET /api/menus
 // @Tags      menu
 // @Router    /api/menus [get]
 // GetMyMenus GET /api/menus
@@ -40,7 +40,7 @@ func (ctrl *MenuController) GetMyMenus(c *gin.Context) {
 	response.Success(c, gin.H{"tree": tree, "all": role == "admin"}, "获取菜单成功")
 }
 
-// @Summary      获取菜单注册表成功
+// @Summary GET /api/system/menus
 // @Tags      menu
 // @Router    /api/system/menus [get]
 // AdminGetAllMenus GET /api/system/menus
@@ -50,7 +50,7 @@ func (ctrl *MenuController) AdminGetAllMenus(c *gin.Context) {
 	response.Success(c, gin.H{"tree": ctrl.svc.GetAllMenuTree()}, "获取菜单注册表成功")
 }
 
-// @Summary      获取角色菜单权限成功
+// @Summary GET /api/system/roles/:code/menus
 // @Tags      menu
 // @Router    /api/system/roles/{code}/menus [get]
 // AdminGetRoleMenus GET /api/system/roles/:code/menus
@@ -70,7 +70,7 @@ func (ctrl *MenuController) AdminGetRoleMenus(c *gin.Context) {
 	response.Success(c, gin.H{"menu_keys": keys}, "获取角色菜单权限成功")
 }
 
-// @Summary      保存角色菜单权限成功
+// @Summary PUT /api/system/roles/:code/menus
 // @Tags      menu
 // @Router    /api/system/roles/{code}/menus [put]
 // AdminUpdateRoleMenus PUT /api/system/roles/:code/menus

@@ -221,7 +221,7 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 	response.Success(ctx, resp, syncMsg)
 }
 
-// @Summary      健康检查成功
+// @Summary 健康检查
 // @Tags      app-config
 // @Router    /api/app-config/health [get]
 // HealthCheck 健康检查

@@ -234,6 +234,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { geoApi } from '@/api/geo'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const list = ref([])
@@ -288,6 +289,10 @@ function openDialog(row) {
 
 async function save() {
   try {
+    // page_type / schema_type 是后端必填项，本地先拦一次：空表单直发只会拿到
+    // 「page_type required」这种英文校验原文，用户还得自己翻译
+    if (!String(form.value.page_type || '').trim()) { ElMessage.warning('请填写页面类型'); return }
+    if (!String(form.value.schema_type || '').trim()) { ElMessage.warning('请填写 Schema 类型'); return }
     let tpl = form.value.template_json_text
     try { tpl = JSON.parse(form.value.template_json_text) } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const payload = {
@@ -305,7 +310,7 @@ async function save() {
     dialogVisible.value = false
     load()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '保存失败')
   }
 }
 

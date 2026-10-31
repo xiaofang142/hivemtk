@@ -241,6 +241,7 @@
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const FIELD_LABELS = {
   phone: '手机号',
@@ -258,11 +259,16 @@ const rules = ref([])
 const dialogVisible = ref(false)
 const editing = reactive({ id: null, name: '', type: 'deterministic', fields: [], threshold: 95, priority: 50, action: 'review', enabled: true })
 const preview = ref(null)
+// 后端 POST /api/oneid/merge-rules 接受的是**完整规则集**（built_in/custom/strategy），
+// 不是单条规则：只把当前编辑对象发过去会被 validateRuleSet 拒掉（400）。
+// 这里把 GET 拿到的原始集合留在手上，保存时合并后再全量提交。
+const serverSet = ref(null)
 
 async function load() {
   loading.value = true
   try {
     const res = await http.get('/api/oneid/merge-rules')
+    serverSet.value = Array.isArray(res) ? null : res
     const list = Array.isArray(res)
       ? res
       : [...(res?.built_in || []), ...(res?.custom || [])];
@@ -286,11 +292,45 @@ async function saveRule() {
     ElMessage.warning('请选择至少一个匹配字段')
     return
   }
-  await http.post('/api/oneid/merge-rules', editing)
-  ElMessage.success('已保存')
-  dialogVisible.value = false
-  await load()
-  await runPreview()
+  const toMergeRule = (r) => ({
+    id: Number(r.id) || 0,
+    name: r.name || '',
+    field: (Array.isArray(r.fields) && r.fields[0]) || r.field || '',
+    op: r.op || 'eq',
+    value: r.value || '',
+    priority: Number(r.priority) || 0,
+    enabled: r.enabled !== false,
+    built_in: !!r.built_in,
+    description: r.description || '',
+    example: r.example || ''
+  })
+  // 先把当前编辑内容合并回本地列表（同 id 覆盖，否则追加），再全量提交
+  const merged = rules.value.map((r) => ({ ...r }))
+  const idx = merged.findIndex((r) => editing.id && r.id === editing.id)
+  const nextRule = { ...editing }
+  if (idx >= 0) merged[idx] = nextRule
+  else merged.push(nextRule)
+  const all = merged.map(toMergeRule)
+  const payload = {
+    built_in: all.filter((r) => r.built_in),
+    custom: all.filter((r) => !r.built_in),
+    strategy: serverSet.value?.strategy || {
+      primary_rule: 'latest_active',
+      conflict_behavior: 'queue_review',
+      window_start: '02:00',
+      window_end: '04:00',
+      post_merge_actions: []
+    }
+  }
+  try {
+    await http.post('/api/oneid/merge-rules', payload)
+    ElMessage.success('已保存')
+    dialogVisible.value = false
+    await load()
+    await runPreview()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e?.message || e))
+  }
 }
 
 function addRule() {

@@ -46,7 +46,7 @@ type platformConnectivityResp struct {
 	LatencyMs int64 `json:"latency_ms"`
 }
 
-// @Summary      平台集成未启用（PLATFORM_ENABLED 未开启）：平台侧功能全部不可用
+// @Summary POST /api/manage/platform-host/connectivity
 // @Tags      platform-connectivity
 // @Router    /api/manage/platform-host/connectivity [post]
 // TestConnectivity POST /api/manage/platform-host/connectivity
@@ -121,7 +121,7 @@ func (c *PlatformConnectivityController) TestConnectivity(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 }
 
-// @Summary      参数错误
+// @Summary PUT /api/manage/platform-host
 // @Tags      platform-connectivity
 // @Router    /api/manage/platform-host [put]
 // SetPlatformHost PUT /api/manage/platform-host

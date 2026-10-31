@@ -369,7 +369,7 @@ func (c *CustomerServicePlusController) DLQDrop(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"dropped": true}, "已丢弃")
 }
 
-// @Summary      批量重试完成
+// @Summary POST /api/message-hub/dlq/batch-retry（真实数量返回）
 // @Tags      customer-service-plus
 // @Router    /api/message-hub/dlq/batch-retry [post]
 // DLQBatchRetry POST /api/message-hub/dlq/batch-retry（真实数量返回）

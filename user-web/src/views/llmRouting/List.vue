@@ -144,8 +144,20 @@
             width="90"
           >
             <template #default="{ row }">
+              <el-tooltip
+                v-if="row.key_invalid"
+                :content="row.key_invalid_reason || 'API Key 无法解密，请重新保存'"
+                placement="top"
+              >
+                <el-tag
+                  type="danger"
+                  size="small"
+                >
+                  密钥失效
+                </el-tag>
+              </el-tooltip>
               <el-tag
-                v-if="row.api_key_set"
+                v-else-if="row.api_key_set"
                 type="success"
                 size="small"
               >

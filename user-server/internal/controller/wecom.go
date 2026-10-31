@@ -306,7 +306,7 @@ func (c *WeComController) SendMessage(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"msg_id": msgID}, "发送成功")
 }
 
-// @Summary      刷新成功
+// @Summary 刷新 access_token（清空本地缓存，强制向企业微信重新换取）
 // @Tags      we-com
 // @Router    /api/wecom/accounts/{id}/refresh [post]
 // RefreshAccount 刷新 access_token（清空本地缓存，强制向企业微信重新换取）

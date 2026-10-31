@@ -47,9 +47,28 @@ def batch_no_conflict(table, cols, rows):
     cur.executemany(f"INSERT INTO {table} ({col_str}) VALUES ({placeholders})", rows)
     return cur.rowcount
 
-def fill(tmpl, fillers):
-    return re.sub(r'\{(\w+)\}', lambda m: fillers.get(m.group(1), m.group(0)), tmpl)
+# 演示话术里的占位符取值表。
+# 这些模板原本是给商户自己改的（{hours}→自家续航），但演示数据直接灌进知识库后
+# 会在帮助中心与 RAG 回答里露出 "{hours}小时" 这种模板语法。所以兜底给一套演示值，
+# 未登记的占位符去掉花括号只留词干——宁可读起来朴素，也不能把模板语法给终端用户看。
+DEMO_VALUES = {
+    'hours': '2', 'seconds': '3', 'days': '3', 'puffs': '500',
+    'temp_range': '10–25℃', 'hundreds': '数百', 'tens': '数十',
+    'capacity': '650', 'power': '8', 'ohm': '1.2', 'ml': '2',
+    'mg': '20', 'mg2': '5', 'months': '24', 'interval': '30',
+    'fee': '10', 'fee2': '15', 'type': '5', 'hypoallergenic': '低敏',
+}
 
+
+def fill(tmpl, fillers):
+    def repl(m):
+        key = m.group(1)
+        if key in fillers:
+            return str(fillers[key])
+        if key in DEMO_VALUES:
+            return DEMO_VALUES[key]
+        return key
+    return re.sub(r'\{(\w+)\}', repl, tmpl)
 # agent IDs
 AG = {
     'product': get_agent_id('seed-hivemtk-product-service'),

@@ -597,6 +597,7 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -728,7 +729,7 @@ const loadList = async () => {
       total.value = res?.total ?? list.value.length
     }
   } catch (e) {
-    ElMessage.error(i18n.global.t('加载术语列表失败') + '：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('加载术语列表失败') + '：' + (e.message || '未知错误'))
   } finally {
     loading.value = false
   }
@@ -793,7 +794,7 @@ const openEditDialog = async (row) => {
     const obj = normalizeTranslations(detail.translations)
     translationList.value = Object.keys(obj).map((lang) => ({ lang, text: obj[lang] || '' }))
   } catch (e) {
-    ElMessage.error(i18n.global.t('加载术语详情失败') + '：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('加载术语详情失败') + '：' + (e.message || '未知错误'))
   } finally {
     formLoading.value = false
   }
@@ -837,6 +838,13 @@ const submitForm = async () => {
     translations
   }
 
+  // 更新必须有 term_id：拼不出 id 时 URL 会变成 /api/glossaries/，后端 404，
+  // 用户看到的是「请求地址不存在」，与“保存失败”对不上。
+  if (isEdit.value && !editingTermId.value) {
+    ElMessage.warning('缺少术语 ID，无法更新')
+    return
+  }
+
   submitting.value = true
   try {
     if (isEdit.value) {
@@ -849,7 +857,7 @@ const submitForm = async () => {
     formDialogVisible.value = false
     loadList()
   } catch (e) {
-    ElMessage.error((isEdit.value ? i18n.global.t('更新失败') : i18n.global.t('创建失败')) + '：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error((isEdit.value ? i18n.global.t('更新失败') : i18n.global.t('创建失败')) + '：' + (e.message || '未知错误'))
   } finally {
     submitting.value = false
   }
@@ -868,7 +876,7 @@ const onToggleStatus = (row) => {
       ElMessage.success(`${action}成功`)
       loadList()
     } catch (e) {
-      ElMessage.error(`${action}失败：` + (e.message || '未知错误'))
+      if (!isUserReportedError(e)) ElMessage.error(`${action}失败：` + (e.message || '未知错误'))
     }
   }).catch(() => {})
 };
@@ -884,7 +892,7 @@ const onDelete = (row) => {
       ElMessage.success(i18n.global.t('删除成功'))
       loadList()
     } catch (e) {
-      ElMessage.error(i18n.global.t('删除失败') + '：' + (e.message || '未知错误'))
+      if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('删除失败') + '：' + (e.message || '未知错误'))
     }
   }).catch(() => {})
 };
@@ -914,7 +922,7 @@ const runValidate = async () => {
     validateResult.value = res || { hits: [], violations: [] }
     ElMessage.success(i18n.global.t('校验完成'))
   } catch (e) {
-    ElMessage.error(i18n.global.t('校验失败') + '：' + (e.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('校验失败') + '：' + (e.message || '未知错误'))
   } finally {
     validating.value = false
   }

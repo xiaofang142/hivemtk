@@ -147,7 +147,7 @@ func (c *ShortLinkController) GetList(ctx *gin.Context) {
 	response.Success(ctx, resp, "获取成功")
 }
 
-// @Summary      访问成功
+// @Summary 访问短链
 // @Tags      short-link
 // @Router    /api/shortlink/access [post]
 // AccessShortLink 访问短链

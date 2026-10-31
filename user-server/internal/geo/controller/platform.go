@@ -20,7 +20,7 @@ func NewPlatformController(svc *service.PlatformService) *PlatformController {
 	return &PlatformController{svc: svc}
 }
 
-// @Summary      获取平台列表成功
+// @Summary 获取支持的平台列表
 // @Tags      platform
 // @Router    /api/geo/platform/platforms [get]
 // ListPlatforms 获取支持的平台列表
@@ -45,7 +45,7 @@ func (c *PlatformController) ListAccounts(ctx *gin.Context) {
 	response.SuccessWithPage(ctx, list, int64(page), int64(limit), total)
 }
 
-// @Summary      保存账号成功
+// @Summary 新增平台账号
 // @Tags      platform
 // @Router    /api/geo/platform/accounts [post]
 // SaveAccount 新增平台账号
@@ -63,7 +63,7 @@ func (c *PlatformController) SaveAccount(ctx *gin.Context) {
 	response.Success(ctx, account, "保存账号成功")
 }
 
-// @Summary      删除账号成功
+// @Summary 删除平台账号
 // @Tags      platform
 // @Router    /api/geo/platform/accounts/{id} [delete]
 // DeleteAccount 删除平台账号

@@ -306,3 +306,19 @@
 - 待点验 `[ ]`：**0** 条
 - 已点出缺陷 `[!]`：**0** 条（逐页点出的缺陷已当轮修复并回归，详见 commit message）
 - 任务六已写页面导览 `G`：**0** 条
+
+### 第二轮：全元素点验（2026-10-31）
+
+第一轮是「按页抽样点击」，第二轮改为**逐页穷举交互元素**：button / a / tab / menu / radio /
+checkbox / switch / select / cascader / input-number / 分页 / 表头排序 / 展开行 / 行内按钮 /
+dropdown / link / date-picker / color-picker / tag 关闭 / tree / transfer / slider / carousel /
+image / 卡片，按控件类型分别交互（下拉选项、开关点开后复原、日期弹层后关闭），弹窗内按钮
+逐个点并根据 `confirmDestructive` 决定「确定」还是「取消」，跳转后 `history.back()` 回原页继续。
+
+- 独立部署（8320 → 8314）：257 页全部重跑，每页结果落在 `results2/`，错误按**具体点击元素**归属。
+- SaaS（8321 → 8315）核心与公开页抽样 14 页：`/setup` `/login` `/help-center` `/register`
+  `/subscription-wall` `/messageHub/list` `/aiAgent/list` `/knowledgeBase/list`
+  `/customerSession/list` `/module-market` `/llmRouting/list` `/system/users`
+  `/whatsapp-cloud` `/asset-market`，行为与独立部署一致。
+- 第二轮新发现并修复 5 处（批量导出文件流、egolite 两处、geo 两处、术语表、OneID 合并规则、
+  渠道流水线保存合约、WhatsApp Cloud 字段名、角色页重复提示），详见 commit message。
