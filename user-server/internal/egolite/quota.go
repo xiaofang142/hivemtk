@@ -28,8 +28,8 @@ var ErrQuotaExceeded = errors.New("egolite: 当日配额已用尽")
 // 配额缺省（保守起步：单用户单日）。硬编码而非 config_params——
 // 首版口径要可被测试钉死；放开到参数中心是后续轮的事（届时测试改读参数）。
 const (
-	SessionQuotaPerDay = 20
-	RoundQuotaPerDay   = 200
+	SessionQuotaPerDay  = 20
+	RoundQuotaPerDay    = 200
 	ArtifactQuotaPerDay = 100
 )
 

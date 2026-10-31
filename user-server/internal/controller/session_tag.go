@@ -23,6 +23,18 @@ func NewSessionTagController() *SessionTagController {
 	}
 }
 
+// replySessionTagError 会话标签域统一错误出口：不存在 → 404，编码重复 → 409。
+func replySessionTagError(ctx *gin.Context, err error, code string, op string) {
+	switch {
+	case errors.Is(err, service.ErrSessionTagNotFound):
+		response.NotFound(ctx, err.Error())
+	case errors.Is(err, service.ErrSessionTagCodeExists):
+		response.Error(ctx, http.StatusConflict, "标签编码已存在: "+code)
+	default:
+		response.ErrorFromDB(ctx, err, op)
+	}
+}
+
 // @Summary      查询会话标签列表
 // @Tags      session-tag
 // @Router    /api/session-tags [get]
@@ -30,7 +42,7 @@ func NewSessionTagController() *SessionTagController {
 func (c *SessionTagController) GetTags(ctx *gin.Context) {
 	tags, err := c.tagService.GetTags(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取会话标签失败")
 		return
 	}
 
@@ -44,7 +56,7 @@ func (c *SessionTagController) GetTags(ctx *gin.Context) {
 func (c *SessionTagController) CreateTag(ctx *gin.Context) {
 	var req service.CreateTagRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name 与 code 均为必填，group / color / description / sort_order 可选")
 		return
 	}
 
@@ -52,11 +64,7 @@ func (c *SessionTagController) CreateTag(ctx *gin.Context) {
 	if err != nil {
 		// 编码重复是 409 而不是 400：请求本身没错，是"这个编码已经有人用了"。
 		// 修前这里把 PG 的 duplicate key 原文（含索引名与 SQL 片段）直接回给前端。
-		if errors.Is(err, service.ErrSessionTagCodeExists) {
-			response.Error(ctx, http.StatusConflict, "标签编码已存在: "+req.Code)
-			return
-		}
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replySessionTagError(ctx, err, req.Code, "创建会话标签失败")
 		return
 	}
 
@@ -77,13 +85,13 @@ func (c *SessionTagController) UpdateTag(ctx *gin.Context) {
 
 	var req service.CreateTagRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name 与 code 均为必填，group / color / description / sort_order 可选")
 		return
 	}
 
 	tag, err := c.tagService.UpdateTag(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replySessionTagError(ctx, err, req.Code, "更新会话标签失败")
 		return
 	}
 
@@ -103,7 +111,7 @@ func (c *SessionTagController) DeleteTag(ctx *gin.Context) {
 	}
 
 	if err := c.tagService.DeleteTag(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replySessionTagError(ctx, err, "", "删除会话标签失败")
 		return
 	}
 

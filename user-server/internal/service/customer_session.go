@@ -18,6 +18,7 @@ import (
 	"hivemtk-user/internal/websocket"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // CustomerSessionService 客服会话服务
@@ -71,6 +72,24 @@ func NewCustomerSessionService() *CustomerSessionService {
 		blacklistRepo: repository.NewUserBlacklistRepository(),
 	}
 }
+
+// ErrCustomerSessionNotFound 会话不存在（对外 404）。
+// 文案沿用历史「会话不存在」，避免破坏依赖错误字符串的旧调用方。
+var ErrCustomerSessionNotFound = errors.New("会话不存在")
+
+// ErrSessionMessageRejected 会话当前状态不接受新消息（对外 400）。
+// 用类型包一层是为了保留历史文案「会话状态 X 不允许发送消息」，同时让调用方能用 errors.Is 判定。
+var ErrSessionMessageRejected = errors.New("会话不允许发送消息")
+
+// SessionNotSendableError 会话状态不允许发送消息。Error() 与历史文案一致。
+type SessionNotSendableError struct{ Status string }
+
+func (e *SessionNotSendableError) Error() string {
+	return fmt.Sprintf("会话状态 %s 不允许发送消息", e.Status)
+}
+
+// Unwrap 支持 errors.Is(err, ErrSessionMessageRejected)。
+func (e *SessionNotSendableError) Unwrap() error { return ErrSessionMessageRejected }
 
 // CreateSessionRequest 创建会话请求
 type CreateSessionRequest struct {
@@ -219,10 +238,13 @@ func (r *SendMessageRequest) UnmarshalJSON(data []byte) error {
 func (s *CustomerSessionService) SendMessage(ctx context.Context, req *SendMessageRequest) (*model.SessionMessage, error) {
 	session, err := s.sessionRepo.GetBySessionID(ctx, req.SessionID)
 	if err != nil {
-		return nil, errors.New("会话不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrCustomerSessionNotFound
+		}
+		return nil, err
 	}
 	if !CustomerSessionCanSendMessage(session) {
-		return nil, fmt.Errorf("会话状态 %s 不允许发送消息", session.Status)
+		return nil, &SessionNotSendableError{Status: string(session.Status)}
 	}
 
 	message := &model.SessionMessage{
@@ -316,7 +338,10 @@ func (s *CustomerSessionService) pushToVisitor(ctx context.Context, sessionID st
 func (s *CustomerSessionService) GetMessages(ctx context.Context, sessionID string, page, pageSize int) ([]*model.SessionMessage, int64, error) {
 	session, err := s.sessionRepo.GetBySessionID(ctx, sessionID)
 	if err != nil {
-		return nil, 0, errors.New("会话不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, 0, ErrCustomerSessionNotFound
+		}
+		return nil, 0, err
 	}
 	_ = session
 

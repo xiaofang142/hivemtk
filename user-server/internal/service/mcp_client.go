@@ -8,9 +8,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
+
+	bizerr "hivemtk-user/internal/domain/errors"
 
 	"hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/model"
@@ -43,13 +48,13 @@ type MCPImportInput struct {
 // Create 落库并立即发现注册。
 func (s *MCPClientService) Create(ctx context.Context, in MCPImportInput) (*model.MCPServer, int, error) {
 	if strings.TrimSpace(in.Name) == "" {
-		return nil, 0, fmt.Errorf("name 不能为空")
+		return nil, 0, bizerr.New(bizerr.CodeParamInvalid, "name 不能为空")
 	}
 	if strings.TrimSpace(in.Endpoint) == "" {
-		return nil, 0, fmt.Errorf("endpoint 不能为空")
+		return nil, 0, bizerr.New(bizerr.CodeParamInvalid, "endpoint 不能为空")
 	}
 	if _, err := s.repo.FindByName(ctx, in.Name); err == nil {
-		return nil, 0, fmt.Errorf("MCP server %q 已存在，请先删除", in.Name)
+		return nil, 0, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("MCP server %q 已存在，请先删除", in.Name))
 	}
 	row := &model.MCPServer{
 		Name: in.Name, Endpoint: in.Endpoint,
@@ -58,7 +63,19 @@ func (s *MCPClientService) Create(ctx context.Context, in MCPImportInput) (*mode
 	}
 	row.Enabled = in.Enabled == nil || *in.Enabled
 	if err := s.repo.Create(ctx, row); err != nil {
-		return nil, 0, fmt.Errorf("落库失败: %w", err)
+		// 唯一索引兜底：并发同名时上面的 FindByName 拦不住，不能把 PG 原文回给前端。
+		if repository.IsDuplicateKeyErr(err) {
+			return nil, 0, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("MCP server %q 已存在，请先删除", in.Name))
+		}
+		return nil, 0, errors.New("保存 MCP 配置失败")
+	}
+	// model.MCPServer.Enabled 带 `gorm:"default:true"`，GORM 会把显式 false 当零值换成默认值
+	// 并回填结构体 —— 创建时「先不启用」会静默变成启用。这里显式回写。
+	if in.Enabled != nil && !*in.Enabled {
+		if err := s.repo.SetEnabled(ctx, row.ID, false); err != nil {
+			return nil, 0, errors.New("保存 MCP 配置失败")
+		}
+		row.Enabled = false
 	}
 	if row.Enabled {
 		n, err := mcp.DiscoverAndRegisterRowDefaultDB(ctx, row)
@@ -93,7 +110,10 @@ func (s *MCPClientService) Delete(ctx context.Context, id uint) error {
 func (s *MCPClientService) SetEnabled(ctx context.Context, id uint, enabled bool) (*model.MCPServer, int, error) {
 	row, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, 0, fmt.Errorf("配置不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, 0, bizerr.New(bizerr.CodeNotFound, fmt.Sprintf("MCP 配置不存在（id=%d）", id))
+		}
+		return nil, 0, errors.New("读取 MCP 配置失败")
 	}
 	if err := s.repo.SetEnabled(ctx, id, enabled); err != nil {
 		return nil, 0, err
@@ -114,12 +134,16 @@ func (s *MCPClientService) SetEnabled(ctx context.Context, id uint, enabled bool
 func (s *MCPClientService) Test(ctx context.Context, id uint) ([]string, error) {
 	row, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("配置不存在")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, bizerr.New(bizerr.CodeNotFound, fmt.Sprintf("MCP 配置不存在（id=%d）", id))
+		}
+		return nil, errors.New("读取 MCP 配置失败")
 	}
 	client := mcp.NewClient(mcp.ServerConfigFromRow(row))
 	tools, err := client.ListTools(ctx)
 	if err != nil {
-		return nil, err
+		// 上游不可达 ⇒ 5xxx ⇒ 502：与"配置不存在"的 404 分开，运维才知道该改地址还是改记录。
+		return nil, bizerr.Wrap(bizerr.CodePlatformUnavail, "连通性测试失败", err)
 	}
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {

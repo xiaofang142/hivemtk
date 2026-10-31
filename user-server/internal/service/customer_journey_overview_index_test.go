@@ -29,7 +29,7 @@ func TestCustomerJourney_GetOverviewSeesWritesFromAnotherInstance(t *testing.T) 
 	}
 
 	// 前置：读侧 L1 必须是空的，否则测不到跨实例这条腿。
-	if _, ok := reader.getLiveL1("cust_overview"); ok {
+	if _, ok := reader.getLiveL1("", "cust_overview"); ok {
 		t.Fatal("前置不成立：读侧 L1 里已经有这条状态")
 	}
 

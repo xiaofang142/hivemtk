@@ -169,12 +169,18 @@ func (s *ConversionFunnelService) BuildFunnelCtx(ctx context.Context, startTime,
 
 // StageConversion 单阶段转化详情
 type StageConversion struct {
-	Stage       string       `json:"stage"`
-	Name        string       `json:"name"`
-	Count       int64        `json:"count"`
-	Rate        float64      `json:"rate"`
-	AvgDuration float64      `json:"avg_duration_seconds"`
-	TopSources  []SourceStat `json:"top_sources"`
+	Stage       string  `json:"stage"`
+	Name        string  `json:"name"`
+	Count       int64   `json:"count"`
+	Rate        float64 `json:"rate"`
+	AvgDuration float64 `json:"avg_duration_seconds"`
+	// Degraded 本段取数失败（失败按 0 上报，与汇总腿的显式降级同口径）；
+	// 调用方可据此分辨"真的是 0"与"没查到"。
+	Degraded bool `json:"degraded"`
+	// AvgDurationAvailable 平均停留时长是否真实可得。当前没有「阶段停留时长」的取数源
+	// （事件表只有发生时刻，没有进入/离开配对），一律 false —— 别让调用方把 0 当实测值。
+	AvgDurationAvailable bool         `json:"avg_duration_available"`
+	TopSources           []SourceStat `json:"top_sources"`
 }
 
 // SourceStat 来源统计
@@ -188,7 +194,29 @@ func (s *ConversionFunnelService) GetStageDetails(stage string, startTime, endTi
 	return s.GetStageDetailsCtx(context.Background(), stage, startTime, endTime)
 }
 
+// countStage 按阶段键取计数（与 BuildFunnelCtx 的五个计数分支同源，新增阶段请同步改两处）。
+func (s *ConversionFunnelService) countStage(ctx context.Context, stage opsrepo.FunnelStageKey, startTime, endTime time.Time) (int64, error) {
+	switch stage {
+	case opsrepo.StageVisit:
+		return s.repo.CountCustomerEventsByTimeRange(ctx, startTime, endTime)
+	case opsrepo.StageClue:
+		return s.repo.CountCluesByUnixTimeRange(ctx, startTime, endTime)
+	case opsrepo.StageIntent:
+		return s.repo.CountIntentRecords(ctx, startTime, endTime, nil)
+	case opsrepo.StageSession:
+		return s.repo.CountCustomerSessionsByTimeRange(ctx, startTime, endTime)
+	case opsrepo.StageOpportunity:
+		return s.repo.CountOpportunitiesByTimeRange(ctx, startTime, endTime)
+	}
+	return 0, nil
+}
+
 // GetStageDetailsCtx 与 GetStageDetails 同口径，用调用方 ctx 取数（SaaS 租户隔离）。
+//
+// 两处行为收紧（此前都是「静默给 0/0.0」）：
+//   - 取数失败不再完全无声：保留「按 0 上报」与既有 warn 告警（见
+//     conversion_funnel_opportunity_log_test.go 的口径锁），并新增 degraded=true 让调用方分辨；
+//   - rate 不再是永不上报的零值，按漏斗同口径算出（首段 100，其余 = 本段/上段 *100）。
 func (s *ConversionFunnelService) GetStageDetailsCtx(ctx context.Context, stage string, startTime, endTime time.Time) (*StageConversion, error) {
 	if startTime.IsZero() {
 		startTime = time.Now().AddDate(0, 0, -30)
@@ -197,38 +225,53 @@ func (s *ConversionFunnelService) GetStageDetailsCtx(ctx context.Context, stage 
 		endTime = time.Now()
 	}
 
-	det := &StageConversion{Stage: stage}
+	det := &StageConversion{Stage: stage, TopSources: []SourceStat{}}
+	key := opsrepo.FunnelStageKey(stage)
 	// 未登记的阶段名（演示表那套 exposure/click/…、以及拼错的键）一律保持现状：
 	// 返回 200 + 空名字 + 0 计数，不判 404 —— 那是改变现网行为，
 	// 且调用方（前端别名 `/conversion-funnel/stage`）当前就在按这个形状渲染。
-	switch opsrepo.FunnelStageKey(stage) {
-	case opsrepo.StageVisit:
-		det.Name = opsrepo.StageVisit.Label()
-		count, _ := s.repo.CountCustomerEventsByTimeRange(ctx, startTime, endTime)
-		det.Count = count
-	case opsrepo.StageClue:
-		det.Name = opsrepo.StageClue.Label()
-		count, _ := s.repo.CountCluesByUnixTimeRange(ctx, startTime, endTime)
-		det.Count = count
-		rows, _ := s.repo.GetClueSourceStats(ctx, startTime, endTime)
+	stages := opsrepo.LiveFunnelStages()
+	idx := -1
+	for i, k := range stages {
+		if k == key {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return det, nil
+	}
+
+	det.Name = key.Label()
+	// 取数失败按 0 上报（口径同汇总腿：0 ≠ 没有数据），但不再静默 ——
+	// 一条 warn 日志 + degraded=true，让调用方和运维都能分辨。
+	count, err := s.countStage(ctx, key, startTime, endTime)
+	if err != nil {
+		logger.Warnf("[Funnel] %s详情取数失败，按 0 返回（0 ≠ 没有数据）: %v", key.Label(), err)
+		det.Degraded = true
+		count = 0
+	}
+	det.Count = count
+
+	if idx == 0 {
+		det.Rate = 100
+	} else if prev, prevErr := s.countStage(ctx, stages[idx-1], startTime, endTime); prevErr != nil {
+		logger.Warnf("[Funnel] %s 取数失败，%s 段转化率按 0 上报（0 ≠ 没有数据）: %v", stages[idx-1].Label(), key.Label(), prevErr)
+		det.Degraded = true
+	} else if prev > 0 {
+		det.Rate = float64(count) / float64(prev) * 100
+	}
+
+	if key == opsrepo.StageClue {
+		rows, err := s.repo.GetClueSourceStats(ctx, startTime, endTime)
+		if err != nil {
+			logger.Warnf("[Funnel] 线索来源统计失败，按空列表返回（0 ≠ 没有数据）: %v", err)
+			det.Degraded = true
+			rows = nil
+		}
 		for _, r := range rows {
 			det.TopSources = append(det.TopSources, SourceStat{Source: r.Source, Count: r.Count})
 		}
-	case opsrepo.StageIntent:
-		det.Name = opsrepo.StageIntent.Label()
-		count, _ := s.repo.CountIntentRecords(ctx, startTime, endTime, nil)
-		det.Count = count
-	case opsrepo.StageSession:
-		det.Name = opsrepo.StageSession.Label()
-		count, _ := s.repo.CountCustomerSessionsByTimeRange(ctx, startTime, endTime)
-		det.Count = count
-	case opsrepo.StageOpportunity:
-		det.Name = opsrepo.StageOpportunity.Label()
-		count, err := s.repo.CountOpportunitiesByTimeRange(ctx, startTime, endTime)
-		if err != nil {
-			logger.Warnf("[Funnel] 商机详情取数失败，按 0 返回（0 ≠ 没有商机）: %v", err)
-		}
-		det.Count = count
 	}
 
 	return det, nil

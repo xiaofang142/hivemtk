@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"fmt"
+	"strings"
+
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -42,7 +45,7 @@ func (c *CustomerEventController) TrackEvent(ctx *gin.Context) {
 		EventData   map[string]any `json:"event_data"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 与 event_type 均为必填，event_source / event_data 可选")
 		return
 	}
 
@@ -58,7 +61,7 @@ func (c *CustomerEventController) TrackEvent(ctx *gin.Context) {
 	}
 
 	if err := c.tracker.Track(ctx.Request.Context(), dto); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -91,7 +94,7 @@ func (c *CustomerEventController) GetEventHistory(ctx *gin.Context) {
 
 	events, err := c.tracker.GetEventHistory(ctx.Request.Context(), customerID, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -116,7 +119,7 @@ func (c *CustomerEventController) DeleteEvent(ctx *gin.Context) {
 
 	count, err := c.tracker.DeleteByCustomerID(ctx.Request.Context(), customerID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -127,8 +130,8 @@ func (c *CustomerEventController) DeleteEvent(ctx *gin.Context) {
 // @Tags      customer-event
 // @Router    /api/customer-events [get]
 func (c *CustomerEventController) GetEventStats(ctx *gin.Context) {
-	start := ctx.Query("start")
-	end := ctx.Query("end")
+	start := strings.TrimSpace(ctx.Query("start"))
+	end := strings.TrimSpace(ctx.Query("end"))
 
 	// 缺省区间必须是**业务日**串：service.EventTracker.GetStats 用 ParseBusinessDate
 	// 解回来，两边口径要同源，否则默认窗口的首末日各差 8 小时。
@@ -139,9 +142,27 @@ func (c *CustomerEventController) GetEventStats(ctx *gin.Context) {
 		end = timeutil.BusinessToday()
 	}
 
+	// 显式传入的区间非法时不能静默回落到默认窗口：调用方会以为看到的是自己要求的区间。
+	startTime, err := timeutil.ParseBusinessDate(start)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest,
+			fmt.Sprintf("start 必须是业务日（YYYY-MM-DD），当前为 %q", start))
+		return
+	}
+	endTime, err := timeutil.ParseBusinessDate(end)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest,
+			fmt.Sprintf("end 必须是业务日（YYYY-MM-DD），当前为 %q", end))
+		return
+	}
+	if startTime.After(endTime) {
+		response.Error(ctx, http.StatusBadRequest, "start 不能晚于 end")
+		return
+	}
+
 	stats, err := c.tracker.GetStats(ctx.Request.Context(), start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -164,12 +185,12 @@ func (c *CustomerEventController) TrackPageView(ctx *gin.Context) {
 		Title      string `json:"title"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 与 url 均为必填，title 可选")
 		return
 	}
 
 	if err := c.tracker.TrackPageView(ctx.Request.Context(), req.CustomerID, req.URL, req.Title); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -192,12 +213,12 @@ func (c *CustomerEventController) TrackClick(ctx *gin.Context) {
 		Target     string `json:"target"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 与 element 均为必填，target 可选")
 		return
 	}
 
 	if err := c.tracker.TrackClick(ctx.Request.Context(), req.CustomerID, req.Element, req.Target); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -220,12 +241,12 @@ func (c *CustomerEventController) TrackPurchase(ctx *gin.Context) {
 		Items      []string `json:"items"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 必填，amount 必须是非零数字，items 为字符串数组")
 		return
 	}
 
 	if err := c.tracker.TrackPurchase(ctx.Request.Context(), req.CustomerID, req.Amount, req.Items); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -247,12 +268,12 @@ func (c *CustomerEventController) TrackSignup(ctx *gin.Context) {
 		SignupMethod string `json:"signup_method"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 必填，signup_method 可选")
 		return
 	}
 
 	if err := c.tracker.TrackSignup(ctx.Request.Context(), req.CustomerID, req.SignupMethod); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -274,12 +295,12 @@ func (c *CustomerEventController) TrackLogin(ctx *gin.Context) {
 		LoginMethod string `json:"login_method"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 必填，login_method 可选")
 		return
 	}
 
 	if err := c.tracker.TrackLogin(ctx.Request.Context(), req.CustomerID, req.LoginMethod); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -304,12 +325,12 @@ func (c *CustomerEventController) TrackAddToCart(ctx *gin.Context) {
 		Quantity    int     `json:"quantity"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：customer_id 与 product_id 必填，price 必须是非零数字，quantity 可选")
 		return
 	}
 
 	if err := c.tracker.TrackAddToCart(ctx.Request.Context(), req.CustomerID, req.ProductID, req.ProductName, req.Price, req.Quantity); err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 
@@ -325,9 +346,13 @@ func (c *CustomerEventController) ListGlobal(ctx *gin.Context) {
 	if page <= 0 {
 		page = 1
 	}
+	// 与仓储 ListGlobal 的夹取规则保持一致，回显的分页参数必须是真正生效的那组。
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
 	list, total, err := c.tracker.ListGlobalEvents(ctx.Request.Context(), ctx.Query("event_type"), limit, (page-1)*limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "事件追踪失败")
 		return
 	}
 	response.Success(ctx, gin.H{"list": list, "total": total, "page": page, "page_size": limit}, "ok")

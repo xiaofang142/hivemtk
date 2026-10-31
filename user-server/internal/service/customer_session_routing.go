@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -20,7 +21,7 @@ type AssignSessionRequest struct {
 func (s *CustomerSessionService) AssignSession(ctx context.Context, req *AssignSessionRequest) error {
 	agent, err := s.agentRepo.GetByAgentID(ctx, req.AgentID)
 	if err != nil {
-		return errors.New("客服不存在")
+		return fmt.Errorf("客服不存在（agent_id=%d，请先在坐席管理中登记该账号）", req.AgentID)
 	}
 
 	if agent.Status == "offline" {
@@ -86,7 +87,7 @@ func (s *CustomerSessionService) TransferSession(ctx context.Context, sessionID 
 
 	newAgent, err := s.agentRepo.GetByAgentID(ctx, newAgentID)
 	if err != nil {
-		return errors.New("客服不存在")
+		return fmt.Errorf("客服不存在（agent_id=%d，请先在坐席管理中登记该账号）", newAgentID)
 	}
 
 	if newAgent.Status != "online" {

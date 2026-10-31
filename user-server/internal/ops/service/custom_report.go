@@ -11,6 +11,8 @@ import (
 	_db "hivemtk-user/internal/pkg/db"
 	sysrepo "hivemtk-user/internal/repository"
 
+	bizerr "hivemtk-user/internal/domain/errors"
+
 	"gorm.io/gorm"
 )
 
@@ -46,6 +48,13 @@ func NewCustomReportServiceWithDB(db *gorm.DB) *CustomReportService {
 	}
 }
 
+// 报表读写口的领域错误。控制器据 errors.Is 映射状态码：
+// 不存在→404、无权限→403，避免把 DB 故障也压成「报表不存在」。
+var (
+	ErrReportNotFound  = errors.New("报表不存在")
+	ErrReportForbidden = errors.New("无权操作该报表")
+)
+
 // CreateReportRequest 创建报表请求
 type CreateReportRequest struct {
 	Name        string                  `json:"name"`
@@ -75,11 +84,11 @@ type UpdateReportRequest struct {
 // CreateReport 创建报表
 func (s *CustomReportService) CreateReport(ctx context.Context, createdBy uint, req *CreateReportRequest) (*model.CustomReport, error) {
 	if !isValidDataSource(req.DataSource) {
-		return nil, errors.New("不支持的数据源类型")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的数据源类型")
 	}
 
 	if !isValidChartType(req.ChartType) {
-		return nil, errors.New("不支持的图表类型")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的图表类型")
 	}
 
 	dimensionsJSON, _ := json.Marshal(req.Dimensions)
@@ -112,11 +121,11 @@ func (s *CustomReportService) CreateReport(ctx context.Context, createdBy uint, 
 func (s *CustomReportService) GetReport(ctx context.Context, id uint, userID uint, isAdmin bool) (*model.CustomReport, error) {
 	report, err := s.reportRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, errors.New("报表不存在")
+		return nil, fmt.Errorf("%w（id=%d）", ErrReportNotFound, id)
 	}
 
 	if !report.IsPublic && !isAdmin && report.CreatedBy != userID {
-		return nil, errors.New("无权限查看")
+		return nil, fmt.Errorf("%w：该报表属于他人（id=%d）", ErrReportForbidden, id)
 	}
 
 	return report, nil
@@ -134,19 +143,19 @@ func (s *CustomReportService) GetReportList(ctx context.Context, page, pageSize 
 func (s *CustomReportService) UpdateReport(ctx context.Context, id uint, userID uint, isAdmin bool, req *UpdateReportRequest) (*model.CustomReport, error) {
 	report, err := s.reportRepo.GetByID(ctx, id)
 	if err != nil {
-		return nil, errors.New("报表不存在")
+		return nil, fmt.Errorf("%w（id=%d）", ErrReportNotFound, id)
 	}
 
 	if !isAdmin && report.CreatedBy != userID {
-		return nil, errors.New("无权限修改此报表")
+		return nil, fmt.Errorf("%w：该报表属于他人（id=%d）", ErrReportForbidden, id)
 	}
 
 	if !isValidDataSource(req.DataSource) {
-		return nil, errors.New("不支持的数据源类型")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的数据源类型")
 	}
 
 	if !isValidChartType(req.ChartType) {
-		return nil, errors.New("不支持的图表类型")
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的图表类型")
 	}
 
 	dimensionsJSON, _ := json.Marshal(req.Dimensions)
@@ -176,11 +185,11 @@ func (s *CustomReportService) UpdateReport(ctx context.Context, id uint, userID 
 func (s *CustomReportService) DeleteReport(ctx context.Context, id uint, userID uint, isAdmin bool) error {
 	report, err := s.reportRepo.GetByID(ctx, id)
 	if err != nil {
-		return errors.New("报表不存在")
+		return fmt.Errorf("%w（id=%d）", ErrReportNotFound, id)
 	}
 
 	if !isAdmin && report.CreatedBy != userID {
-		return errors.New("无权限删除此报表")
+		return fmt.Errorf("%w：该报表属于他人（id=%d）", ErrReportForbidden, id)
 	}
 
 	return s.reportRepo.Delete(ctx, id)
@@ -193,7 +202,14 @@ func (s *CustomReportService) GetPublicTemplates(ctx context.Context) ([]*model.
 
 // UseTemplate 使用模板
 func (s *CustomReportService) UseTemplate(ctx context.Context, templateID uint, createdBy uint) (*model.CustomReport, error) {
-	return s.reportRepo.UseTemplate(ctx, templateID, createdBy)
+	report, err := s.reportRepo.UseTemplate(ctx, templateID, createdBy)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w（模板 id=%d）", ErrReportNotFound, templateID)
+		}
+		return nil, err
+	}
+	return report, nil
 }
 
 // QueryReportData 查询报表数据

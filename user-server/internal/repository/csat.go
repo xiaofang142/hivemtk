@@ -141,9 +141,11 @@ func (r *CSATSurveyRepository) Trend(ctx context.Context, days int) ([]map[strin
 	// since 下推给 `responded_at >= ?`，而 PG 会话时区钉在 CST ⇒ 边界按业务日算
 	since := timeutil.BusinessDate(time.Now().AddDate(0, 0, -days))
 	err := r.db.WithContext(ctx).Model(&model.CSATSurvey{}).
-		Select("DATE(responded_at) AS date, AVG(score) AS avg, COUNT(*) AS cnt").
+		// date 只回业务日（YYYY-MM-DD）：直接 DATE(...) 到 Go 的 string 会变成
+		// "2026-10-31T00:00:00Z"，前端把它当 x 轴标签直接渲染，图表上就是一串时间戳。
+		Select("to_char(DATE(responded_at), 'YYYY-MM-DD') AS date, AVG(score) AS avg, COUNT(*) AS cnt").
 		Where("status = ? AND responded_at >= ?", model.CSATStatusResponded, since).
-		Group("DATE(responded_at)").Order("date ASC").
+		Group("DATE(responded_at)").Order("DATE(responded_at) ASC").
 		Scan(&rows).Error
 	out := make([]map[string]any, 0, len(rows))
 	for _, r := range rows {

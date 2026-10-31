@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,6 +32,32 @@ func NewAgentStatusController(
 	}
 }
 
+// agentPublicMessage 去掉哨兵前缀，避免前端看到「坐席已存在: 坐席 62 已存在」这类重复。
+func agentPublicMessage(err error, sentinel error) string {
+	msg := err.Error()
+	prefix := sentinel.Error() + ": "
+	if strings.HasPrefix(msg, prefix) {
+		return strings.TrimSpace(strings.TrimPrefix(msg, prefix))
+	}
+	return msg
+}
+
+// replyAgentError 坐席域统一错误出口：哨兵 → 400/404/409，其余走通用 DB 映射。
+//
+// 不直接把 err.Error() 塞进 404/500：仓储层错误可能带 SQLSTATE 与表名。
+func replyAgentError(ctx *gin.Context, err error, op string) {
+	switch {
+	case errors.Is(err, service.ErrAgentNotFound):
+		response.NotFound(ctx, agentPublicMessage(err, service.ErrAgentNotFound))
+	case errors.Is(err, service.ErrAgentDuplicated):
+		response.Error(ctx, http.StatusConflict, agentPublicMessage(err, service.ErrAgentDuplicated))
+	case errors.Is(err, service.ErrAgentInvalidInput):
+		response.Error(ctx, http.StatusBadRequest, agentPublicMessage(err, service.ErrAgentInvalidInput))
+	default:
+		response.ErrorFromDB(ctx, err, op)
+	}
+}
+
 // @Summary      创建客服
 // @Tags      agent-status
 // @Router    /api/agents [post]
@@ -37,13 +65,13 @@ func NewAgentStatusController(
 func (c *AgentStatusController) CreateAgent(ctx *gin.Context) {
 	var req service.CreateAgentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：agent_id（坐席号，正整数）与 agent_name（坐席姓名）均为必填，max_sessions 可选（1~50）")
 		return
 	}
 
 	agent, err := c.agentService.CreateAgent(ctx.Request.Context(), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyAgentError(ctx, err, "创建坐席失败")
 		return
 	}
 
@@ -64,7 +92,7 @@ func (c *AgentStatusController) GetAgentStatus(ctx *gin.Context) {
 
 	agent, err := c.agentService.GetAgentStatus(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyAgentError(ctx, err, "获取坐席失败")
 		return
 	}
 
@@ -78,7 +106,7 @@ func (c *AgentStatusController) GetAgentStatus(ctx *gin.Context) {
 func (c *AgentStatusController) GetOnlineAgents(ctx *gin.Context) {
 	agents, err := c.agentService.GetOnlineAgents(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取在线坐席失败")
 		return
 	}
 
@@ -131,7 +159,7 @@ func (c *AgentStatusController) GetMyAgent(ctx *gin.Context) {
 func (c *AgentStatusController) ListAllAgents(ctx *gin.Context) {
 	agents, err := c.agentService.ListAllAgents(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取坐席列表失败")
 		return
 	}
 
@@ -161,23 +189,26 @@ func (c *AgentStatusController) UpdateAgentStatus(ctx *gin.Context) {
 		return
 	}
 
+	// 前端监管台的"编辑坐席"弹窗把状态与接待上限放在同一个表单里提交，
+	// 原先只解 status、max_sessions 被静默丢弃（保存成功但上限没变）。
 	var req struct {
-		Status string `json:"status" binding:"required"`
+		Status      string `json:"status" binding:"required"`
+		MaxSessions *int   `json:"max_sessions"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：status 必填（online / busy / offline），max_sessions 可选（1~50）")
 		return
 	}
 
-	if err := c.agentService.UpdateAgentStatus(ctx.Request.Context(), uint(id), req.Status); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+	if err := c.agentService.UpdateAgentStatus(ctx.Request.Context(), uint(id), req.Status, req.MaxSessions); err != nil {
+		replyAgentError(ctx, err, "更新坐席状态失败")
 		return
 	}
 
 	response.Success(ctx, nil, "更新成功")
 }
 
-// @Summary      上线成功
+// @Summary 客服上线
 // @Tags      agent-status
 // @Router    /api/agent-statuses/{id}/online [post]
 // GoOnline 客服上线
@@ -190,14 +221,14 @@ func (c *AgentStatusController) GoOnline(ctx *gin.Context) {
 	}
 
 	if err := c.agentService.GoOnline(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyAgentError(ctx, err, "坐席上线失败")
 		return
 	}
 
 	response.Success(ctx, nil, "上线成功")
 }
 
-// @Summary      下线成功
+// @Summary 客服下线
 // @Tags      agent-status
 // @Router    /api/agent-statuses/{id}/offline [post]
 // GoOffline 客服下线
@@ -210,7 +241,7 @@ func (c *AgentStatusController) GoOffline(ctx *gin.Context) {
 	}
 
 	if err := c.agentService.GoOffline(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyAgentError(ctx, err, "坐席下线失败")
 		return
 	}
 

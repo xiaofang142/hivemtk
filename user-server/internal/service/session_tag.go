@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 // ErrSessionTagCodeExists 标签编码重复（唯一索引 idx_session_tags_code）。
@@ -13,6 +16,9 @@ import (
 // 在 service 层归一：controller 不允许 import repository（depguard），
 // 而 PG 的 duplicate key 原文（索引名 + SQL 片段）也不该直接回给前端。
 var ErrSessionTagCodeExists = errors.New("标签编码已存在")
+
+// ErrSessionTagNotFound 会话标签不存在（update/delete 的目标 id 查无此条）
+var ErrSessionTagNotFound = errors.New("会话标签不存在")
 
 // SessionTagService 会话标签服务
 type SessionTagService struct {
@@ -64,6 +70,9 @@ func (s *SessionTagService) CreateTag(ctx context.Context, req *CreateTagRequest
 func (s *SessionTagService) UpdateTag(ctx context.Context, id uint, req *CreateTagRequest) (*model.SessionTag, error) {
 	tag, err := s.tagRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %d", ErrSessionTagNotFound, id)
+		}
 		return nil, err
 	}
 
@@ -75,6 +84,10 @@ func (s *SessionTagService) UpdateTag(ctx context.Context, id uint, req *CreateT
 	tag.SortOrder = req.SortOrder
 
 	if err := s.tagRepo.Update(ctx, tag); err != nil {
+		// 改编码撞唯一索引同样是「这个编码已经有人用了」，不是 500。
+		if repository.IsDuplicateKeyErr(err) {
+			return nil, ErrSessionTagCodeExists
+		}
 		return nil, err
 	}
 
@@ -85,6 +98,9 @@ func (s *SessionTagService) UpdateTag(ctx context.Context, id uint, req *CreateT
 func (s *SessionTagService) DeleteTag(ctx context.Context, id uint) error {
 	tag, err := s.tagRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrSessionTagNotFound, id)
+		}
 		return err
 	}
 	_ = tag

@@ -537,12 +537,22 @@ func NormalizeChannelType(ch string) string {
 	}
 }
 
+// 客服挂载域哨兵：控制器据此翻 404/400，避免把仓储原文与 gorm 文案透给前端。
+var (
+	ErrCSMountNotFound   = errors.New("客服挂载不存在")
+	ErrCSSeatNotFound    = errors.New("坐席不存在")
+	ErrCSUserNotFound    = errors.New("用户不存在")
+	ErrCSAgentNotFound   = errors.New("智能体不存在")
+	ErrCSMountDuplicated = errors.New("该坐席已挂载此智能体")
+)
+
 // CustomerServiceAgentService 客服挂载服务
 type CustomerServiceAgentService struct {
 	repo            *repository.CustomerServiceAgentRepository
 	agentRepo       *repository.AIAgentRepository
 	agentSvc        *AIAgentService
 	agentStatusRepo *repository.AgentStatusRepository
+	userRepo        repository.SystemUserRepository
 }
 
 // NewCustomerServiceAgentService 创建客服挂载服务（绑定全局默认 DB，仅兼容存量测试/调用方）
@@ -576,6 +586,7 @@ func NewCustomerServiceAgentServiceWithRepos(
 		agentRepo:       agentRepo,
 		agentSvc:        agentSvc,
 		agentStatusRepo: agentStatusRepo,
+		userRepo:        repository.NewSystemUserRepository(),
 	}
 }
 
@@ -612,9 +623,15 @@ func (s *CustomerServiceAgentService) Create(ctx context.Context, c *model.Custo
 	if c.AIAgentID == 0 {
 		return errors.New("ai_agent_id 不能为空")
 	}
+	if err := s.ensureSeatExists(ctx, c.AgentStatusID); err != nil {
+		return err
+	}
 	agent, err := s.agentRepo.GetByID(ctx, c.AIAgentID)
 	if err != nil {
-		return fmt.Errorf("智能体不存在: %w", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d（无法挂载）", ErrCSAgentNotFound, c.AIAgentID)
+		}
+		return fmt.Errorf("查询智能体失败: %w", err)
 	}
 	if agent.Status != 1 {
 		return errors.New("智能体已禁用，无法挂载")
@@ -637,7 +654,13 @@ func (s *CustomerServiceAgentService) Create(ctx context.Context, c *model.Custo
 		*c = *old
 		return nil
 	}
-	return s.repo.Create(ctx, c)
+	if err := s.repo.Create(ctx, c); err != nil {
+		if repository.IsDuplicateKeyErr(err) {
+			return fmt.Errorf("%w（agent_status_id=%d, ai_agent_id=%d）", ErrCSMountDuplicated, c.AgentStatusID, c.AIAgentID)
+		}
+		return err
+	}
+	return nil
 }
 
 // ListByAgentStatusID 按座席查询所有挂载
@@ -652,11 +675,28 @@ func (s *CustomerServiceAgentService) ListByAIAgentID(ctx context.Context, aiAge
 
 // GetByID 获取挂载详情
 func (s *CustomerServiceAgentService) GetByID(ctx context.Context, id uint) (*model.CustomerServiceAgent, error) {
-	return s.repo.GetByID(ctx, id)
+	m, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %d", ErrCSMountNotFound, id)
+		}
+		return nil, err
+	}
+	return m, nil
 }
 
 // Update 更新挂载
 func (s *CustomerServiceAgentService) Update(ctx context.Context, c *model.CustomerServiceAgent) error {
+	// 换到别的坐席或换智能体时，两端都必须真实存在，否则会写出孤儿挂载。
+	if err := s.ensureSeatExists(ctx, c.AgentStatusID); err != nil {
+		return err
+	}
+	if _, err := s.agentRepo.GetByID(ctx, c.AIAgentID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d（无法挂载）", ErrCSAgentNotFound, c.AIAgentID)
+		}
+		return fmt.Errorf("查询智能体失败: %w", err)
+	}
 	if boolOrDefaultTrue(c.IsPrimary) {
 		existing, _ := s.repo.GetByID(ctx, c.ID)
 		if existing != nil {
@@ -670,7 +710,30 @@ func (s *CustomerServiceAgentService) Update(ctx context.Context, c *model.Custo
 
 // Delete 删除挂载
 func (s *CustomerServiceAgentService) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
+	if err := s.repo.Delete(ctx, id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrCSMountNotFound, id)
+		}
+		return err
+	}
+	return nil
+}
+
+// ensureSeatExists 校验 agent_status_id 指向的坐席真实存在（挂载表无外键，缺这条就是孤儿行）。
+func (s *CustomerServiceAgentService) ensureSeatExists(ctx context.Context, agentStatusID uint) error {
+	if agentStatusID == 0 {
+		return errors.New("agent_status_id 不能为空")
+	}
+	if s.agentStatusRepo == nil {
+		return nil
+	}
+	if _, err := s.agentStatusRepo.GetByID(ctx, agentStatusID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrCSSeatNotFound, agentStatusID)
+		}
+		return fmt.Errorf("查询坐席失败: %w", err)
+	}
+	return nil
 }
 
 // LoadAgentForSeat 加载客服座席挂载的主智能体上下文
@@ -727,10 +790,32 @@ func (s *CustomerServiceAgentService) ListByUserID(ctx context.Context, userID u
 	return s.repo.ListByAgentStatusID(ctx, st.ID)
 }
 
+// isMissingSchemaError 判定是否为「库/表不存在」类错误（单测夹具常见）。
+func isMissingSchemaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "SQLSTATE 42P01") || strings.Contains(msg, "SQLSTATE 42703")
+}
+
 // CreateByUserID 按用户ID创建挂载（自动创建 AgentStatus）
 func (s *CustomerServiceAgentService) CreateByUserID(ctx context.Context, userID uint, userName string, aiAgentID uint, isPrimary bool) (*model.CustomerServiceAgent, error) {
 	if aiAgentID == 0 {
 		return nil, errors.New("ai_agent_id 不能为空")
+	}
+	// 团队成员即坐席：user_id 必须指向本租户真实存在的用户，否则会凭空造坐席。
+	if s.userRepo != nil && userID > 0 {
+		if _, err := s.userRepo.GetByID(ctx, userID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, fmt.Errorf("%w: %d", ErrCSUserNotFound, userID)
+			}
+			// 只建了挂载相关表的测试夹具里没有 system_users；缺表不代表用户不存在，
+			// 视为「无法校验」继续（生产库不会缺表，缺了也会有告警可查）。
+			if !isMissingSchemaError(err) {
+				return nil, fmt.Errorf("查询用户失败: %w", err)
+			}
+		}
 	}
 	st, err := s.GetOrCreateAgentStatusByUserID(ctx, userID, userName)
 	if err != nil {

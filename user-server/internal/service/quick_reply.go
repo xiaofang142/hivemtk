@@ -2,9 +2,17 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
+
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
+
+	"gorm.io/gorm"
 )
+
+// ErrQuickReplyNotFound 快捷回复不存在（update/delete 的目标 id 查无此条）
+var ErrQuickReplyNotFound = errors.New("快捷回复不存在")
 
 // QuickReplyService 快捷回复服务
 type QuickReplyService struct {
@@ -56,6 +64,9 @@ func (s *QuickReplyService) CreateReply(ctx context.Context, createdBy uint, req
 func (s *QuickReplyService) UpdateReply(ctx context.Context, id uint, req *CreateReplyRequest) (*model.QuickReply, error) {
 	reply, err := s.replyRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %d", ErrQuickReplyNotFound, id)
+		}
 		return nil, err
 	}
 
@@ -80,6 +91,9 @@ func (s *QuickReplyService) UpdateReply(ctx context.Context, id uint, req *Creat
 func (s *QuickReplyService) DeleteReply(ctx context.Context, id uint) error {
 	reply, err := s.replyRepo.GetByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrQuickReplyNotFound, id)
+		}
 		return err
 	}
 	_ = reply

@@ -383,6 +383,14 @@ func TestCustomer360Controller_UpdateCustomerTags(t *testing.T) {
 			expectSuccess:  false,
 		},
 		{
+			// "tags": [] 是合法请求：表示清空全部标签（区别于缺 tags 字段的 400）。
+			name:           "empty_tags_clears",
+			url:            "/api/customer/tags?user_id=user-test",
+			requestBody:    map[string]any{"tags": []string{}},
+			expectedStatus: 200,
+			expectSuccess:  true,
+		},
+		{
 			name:           "invalid_json",
 			url:            "/api/customer/tags?user_id=user-test",
 			requestBody:    "invalid",

@@ -9,14 +9,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary      分配成功
+// @Summary 分配会话
 // @Tags      customer-session
 // @Router    /api/customer-sessions/assign [post]
 // AssignSession 分配会话
 func (c *CustomerSessionController) AssignSession(ctx *gin.Context) {
 	var req service.AssignSessionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest,
+			"请求参数错误：session_id（会话主键，数字）与 agent_id（坐席用户主键）均为必填")
 		return
 	}
 
@@ -34,7 +35,7 @@ func (c *CustomerSessionController) AssignSession(ctx *gin.Context) {
 	response.Success(ctx, nil, "分配成功")
 }
 
-// @Summary      分配成功
+// @Summary 自动分配会话
 // @Tags      customer-session
 // @Router    /api/customer-sessions/{id}/auto-assign [post]
 // AutoAssignSession 自动分配会话
@@ -60,7 +61,7 @@ func (c *CustomerSessionController) AutoAssignSession(ctx *gin.Context) {
 	response.Success(ctx, nil, "分配成功")
 }
 
-// @Summary      转接成功
+// @Summary 转接会话
 // @Tags      customer-session
 // @Router    /api/customer-sessions/{id}/transfer [post]
 // TransferSession 转接会话
@@ -76,7 +77,8 @@ func (c *CustomerSessionController) TransferSession(ctx *gin.Context) {
 		NewAgentID uint `json:"new_agent_id" binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest,
+			"请求参数错误：new_agent_id 必填（目标坐席的用户主键，正整数）")
 		return
 	}
 

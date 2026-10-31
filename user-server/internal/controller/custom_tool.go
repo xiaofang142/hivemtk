@@ -2,9 +2,12 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -28,12 +31,12 @@ func NewCustomToolController() *CustomToolController {
 func (c *CustomToolController) Import(ctx *gin.Context) {
 	var in service.ImportInput
 	if err := ctx.ShouldBindJSON(&in); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求体非法: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name、base_url、schema_json 均为必填（description / auth_header / auth_value / timeout_ms 可选）")
 		return
 	}
 	n, rec, err := c.svc.Import(ctx.Request.Context(), in)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyCustomIntegrationError(ctx, err, "导入工具集失败")
 		return
 	}
 	response.Success(ctx, gin.H{"tool_count": n, "record": rec}, "导入成功")
@@ -46,7 +49,7 @@ func (c *CustomToolController) Import(ctx *gin.Context) {
 func (c *CustomToolController) List(ctx *gin.Context) {
 	out, err := c.svc.List(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyCustomIntegrationError(ctx, err, "获取工具集列表失败")
 		return
 	}
 	response.Success(ctx, out, "获取成功")
@@ -63,8 +66,29 @@ func (c *CustomToolController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyCustomIntegrationError(ctx, err, "删除工具集失败")
 		return
 	}
 	response.Success(ctx, gin.H{"deleted": id}, "删除成功")
+}
+
+// replyCustomIntegrationError 统一工具集/MCP 配置的错误出口：
+// 业务码 4004→404、4009→409、其余 4xxx→400（由 ErrorFromDB 转），未知错误泛化为 fallbackMsg。
+func replyCustomIntegrationError(ctx *gin.Context, err error, fallbackMsg string) {
+	var be *bizerr.BizError
+	if errors.As(err, &be) {
+		switch be.Code {
+		case bizerr.CodeNotFound:
+			response.NotFound(ctx, be.Error())
+			return
+		case bizerr.CodeConflict:
+			response.Error(ctx, http.StatusConflict, be.Error())
+			return
+		}
+	}
+	if errhttp.IsNotFoundError(err) {
+		response.NotFound(ctx, fallbackMsg)
+		return
+	}
+	errhttp.HandleDBError(ctx, err, fallbackMsg)
 }

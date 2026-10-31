@@ -3,6 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -48,10 +53,43 @@ type EventDTO struct {
 	EventData   map[string]any    `json:"event_data"`
 }
 
+// 事件表的三列长度上限（customer_events.customer_id varchar(64) /
+// event_type varchar(32) / event_source varchar(32)）。超长时 PG 会回 22001，
+// 旧实现把整段 SQL 原文透给前端，这里提前拦成参数错误。
+const (
+	maxEventCustomerIDLen = 64
+	maxEventTypeLen       = 32
+	maxEventSourceLen     = 32
+)
+
+// validateEventFields 校验事件标识字段的取值与长度。
+func validateEventFields(dto *EventDTO) error {
+	if n := utf8.RuneCountInString(dto.CustomerID); n > maxEventCustomerIDLen {
+		return bizerr.New(bizerr.CodeParamInvalid,
+			fmt.Sprintf("请求参数错误：customer_id 不能超过 %d 个字符（当前 %d）", maxEventCustomerIDLen, n))
+	}
+	if dto.EventType == "" {
+		return bizerr.New(bizerr.CodeParamInvalid, "请求参数错误：event_type 不能为空")
+	}
+	if n := utf8.RuneCountInString(string(dto.EventType)); n > maxEventTypeLen {
+		return bizerr.New(bizerr.CodeParamInvalid,
+			fmt.Sprintf("请求参数错误：event_type 不能超过 %d 个字符（当前 %d）", maxEventTypeLen, n))
+	}
+	if n := utf8.RuneCountInString(string(dto.EventSource)); n > maxEventSourceLen {
+		return bizerr.New(bizerr.CodeParamInvalid,
+			fmt.Sprintf("请求参数错误：event_source 不能超过 %d 个字符（当前 %d）", maxEventSourceLen, n))
+	}
+	return nil
+}
+
 // Track 追踪通用事件
 func (s *EventTracker) Track(ctx context.Context, dto *EventDTO) error {
-	if dto == nil || dto.CustomerID == "" {
+	if dto == nil || strings.TrimSpace(dto.CustomerID) == "" {
 		return ErrInvalidDTO
+	}
+	dto.CustomerID = strings.TrimSpace(dto.CustomerID)
+	if err := validateEventFields(dto); err != nil {
+		return err
 	}
 
 	event := &model.CustomerEvent{

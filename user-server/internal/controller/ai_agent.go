@@ -10,10 +10,12 @@ import (
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type AIAgentController struct {
@@ -402,7 +404,7 @@ func (ctrl *AIAgentController) Delete(c *gin.Context) {
 	response.Success(c, nil, "删除成功")
 }
 
-// @Summary      状态更新成功
+// @Summary POST /api/ai-agents/{id}/toggle
 // @Tags      a-i-agent
 // @Router    /api/ai-agents/{id}/toggle [post]
 func (ctrl *AIAgentController) Toggle(c *gin.Context) {
@@ -440,7 +442,7 @@ func (ctrl *AIAgentController) Toggle(c *gin.Context) {
 	response.Success(c, gin.H{"id": id, "status": newStatus}, "状态更新成功")
 }
 
-// @Summary      测试成功
+// @Summary POST /api/ai-agents/{id}/test
 // @Tags      a-i-agent
 // @Router    /api/ai-agents/{id}/test [post]
 func (ctrl *AIAgentController) Test(c *gin.Context) {
@@ -689,17 +691,17 @@ func (ctrl *CustomerServiceAgentController) RegisterRoutes(router *gin.RouterGro
 func (ctrl *CustomerServiceAgentController) List(c *gin.Context) {
 	agentStatusIDStr := c.Query("agent_status_id")
 	if agentStatusIDStr == "" {
-		response.Error(c, http.StatusBadRequest, "参数缺失", "agent_status_id 必填")
+		response.Error(c, http.StatusBadRequest, "请求参数错误：agent_status_id（坐席主键）必填")
 		return
 	}
 	agentStatusID, err := strconv.ParseUint(agentStatusIDStr, 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "无效的座席ID", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：agent_status_id 必须是数字主键")
 		return
 	}
 	list, err := ctrl.svc.ListByAgentStatusID(c.Request.Context(), uint(agentStatusID))
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询客服挂载失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -711,12 +713,12 @@ func (ctrl *CustomerServiceAgentController) List(c *gin.Context) {
 func (ctrl *CustomerServiceAgentController) ListByAIAgent(c *gin.Context) {
 	aiAgentID, err := strconv.ParseUint(c.Param("ai_agent_id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "无效的智能体ID", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：ai_agent_id 必须是数字主键")
 		return
 	}
 	list, err := ctrl.svc.ListByAIAgentID(c.Request.Context(), uint(aiAgentID))
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询客服挂载失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -736,7 +738,7 @@ type csAgentMountReq struct {
 func (ctrl *CustomerServiceAgentController) Create(c *gin.Context) {
 	var req csAgentMountReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：agent_status_id（坐席主键）与 ai_agent_id（智能体主键）均为必填，is_primary / enabled 可选")
 		return
 	}
 	m := &model.CustomerServiceAgent{
@@ -746,7 +748,7 @@ func (ctrl *CustomerServiceAgentController) Create(c *gin.Context) {
 		Enabled:       boolPtrOrDefaultTrue(req.Enabled),
 	}
 	if err := ctrl.svc.Create(c.Request.Context(), m); err != nil {
-		response.Error(c, http.StatusBadRequest, "创建失败", err.Error())
+		replyCSMountError(c, err, "创建客服挂载失败")
 		return
 	}
 	response.Success(c, m, "创建成功")
@@ -760,17 +762,17 @@ func (ctrl *CustomerServiceAgentController) Create(c *gin.Context) {
 func (ctrl *CustomerServiceAgentController) Update(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "无效的ID", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：挂载 ID 必须是数字主键")
 		return
 	}
 	existing, err := ctrl.svc.GetByID(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, "挂载不存在", err.Error())
+		replyCSMountError(c, err, "查询客服挂载失败")
 		return
 	}
 	var req csAgentMountReq
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：agent_status_id（坐席主键）与 ai_agent_id（智能体主键）均为必填，is_primary / enabled 可选")
 		return
 	}
 	existing.AgentStatusID = req.AgentStatusID
@@ -783,7 +785,7 @@ func (ctrl *CustomerServiceAgentController) Update(c *gin.Context) {
 		existing.Enabled = req.Enabled
 	}
 	if err := ctrl.svc.Update(c.Request.Context(), existing); err != nil {
-		response.Error(c, http.StatusBadRequest, "更新失败", err.Error())
+		replyCSMountError(c, err, "更新客服挂载失败")
 		return
 	}
 	response.Success(c, existing, "更新成功")
@@ -801,7 +803,7 @@ func (ctrl *CustomerServiceAgentController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.Delete(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		replyCSMountError(c, err, "删除客服挂载失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -814,13 +816,13 @@ func (ctrl *CustomerServiceAgentController) Delete(c *gin.Context) {
 // GET /api/customer-service-agents/by-user/:user_id
 func (ctrl *CustomerServiceAgentController) ListByUser(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 64)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "无效的用户ID", err.Error())
+	if err != nil || userID == 0 {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：user_id 必须是正整数（团队成员的用户主键）")
 		return
 	}
 	list, err := ctrl.svc.ListByUserID(c.Request.Context(), uint(userID))
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		replyCSMountError(c, err, "查询客服挂载失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -834,8 +836,8 @@ func (ctrl *CustomerServiceAgentController) ListByUser(c *gin.Context) {
 // body: {"ai_agent_id": 1, "is_primary": true, "user_name": "张三"}
 func (ctrl *CustomerServiceAgentController) CreateByUser(c *gin.Context) {
 	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 64)
-	if err != nil {
-		response.Error(c, http.StatusBadRequest, "无效的用户ID", err.Error())
+	if err != nil || userID == 0 {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：user_id 必须是正整数（团队成员的用户主键）")
 		return
 	}
 	var req struct {
@@ -844,13 +846,31 @@ func (ctrl *CustomerServiceAgentController) CreateByUser(c *gin.Context) {
 		UserName  string `json:"user_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：ai_agent_id（智能体主键）必填，is_primary / user_name 可选")
 		return
 	}
 	m, err := ctrl.svc.CreateByUserID(c.Request.Context(), uint(userID), req.UserName, req.AIAgentID, req.IsPrimary)
 	if err != nil {
-		response.Error(c, http.StatusBadRequest, "创建失败", err.Error())
+		replyCSMountError(c, err, "创建客服挂载失败")
 		return
 	}
 	response.Success(c, m, "创建成功")
+}
+
+// replyCSMountError 客服挂载的统一错误出口：坐席/用户不存在回 404，
+// 其余参数类错误回 400，彻底不再把 gorm 原文（"record not found"）透给前端。
+func replyCSMountError(c *gin.Context, err error, fallback string) {
+	switch {
+	case errors.Is(err, service.ErrCSMountDuplicated):
+		response.Error(c, http.StatusConflict, err.Error())
+	case errors.Is(err, service.ErrCSMountNotFound),
+		errors.Is(err, service.ErrCSSeatNotFound),
+		errors.Is(err, service.ErrCSUserNotFound),
+		errors.Is(err, service.ErrCSAgentNotFound):
+		response.NotFound(c, err.Error())
+	case errors.Is(err, gorm.ErrRecordNotFound) || errhttp.IsNotFoundError(err):
+		response.NotFound(c, fallback)
+	default:
+		response.ErrorFromDB(c, err, fallback)
+	}
 }

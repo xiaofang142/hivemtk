@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -46,7 +47,9 @@ func (c *CustomReportController) CreateReport(ctx *gin.Context) {
 
 	var req service.CreateReportRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		// 不拼 err.Error()：encoding/json 的原文会带出 Go 结构体字段名
+		// （如 "cannot unmarshal string into Go struct field CreateReportRequest.dimensions"）。
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name / data_source / chart_type 必填；dimensions、metrics 必须是数组，元素形如 {\"field\":\"platform\",\"label\":\"平台\"}")
 		return
 	}
 
@@ -71,7 +74,7 @@ func (c *CustomReportController) GetReport(ctx *gin.Context) {
 	userID, isAdmin := extractUserContext(ctx)
 	report, err := c.reportService.GetReport(ctx.Request.Context(), uint(id), userID, isAdmin)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyReportError(ctx, err, "获取报表")
 		return
 	}
 
@@ -89,9 +92,17 @@ func (c *CustomReportController) GetReportList(ctx *gin.Context) {
 	}
 	if ps := ctx.Query("page_size"); ps != "" {
 		pageSize, _ = strconv.Atoi(ps)
-		if pageSize > 100 {
-			pageSize = 100
-		}
+	}
+	// 回显必须与实际查询用的分页一致：仓储会对越界值纠偏，控制器若不纠，
+	// 前端拿到的 page/page_size 就与实际数据页不符（page=0 会显示成第 0 页）。
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
 	}
 
 	userID, isAdmin := extractUserContext(ctx)
@@ -121,7 +132,7 @@ func (c *CustomReportController) UpdateReport(ctx *gin.Context) {
 
 	var req service.UpdateReportRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name / data_source / chart_type 必须是字符串；dimensions、metrics 必须是数组")
 		return
 	}
 
@@ -130,7 +141,8 @@ func (c *CustomReportController) UpdateReport(ctx *gin.Context) {
 	// 与 CreateReport 同一条映射：不支持的图表类型/数据源是**入参错误**（400），
 	// 不是数据库错误。用 HandleDBError 会把它压成 500「更新报表失败」，把可行动的
 	// 原因（哪一项不支持）换成一句无从下手的话。
-	if errhttp.HandleServiceError(ctx, err) {
+	if err != nil {
+		replyReportError(ctx, err, "更新报表")
 		return
 	}
 
@@ -149,7 +161,8 @@ func (c *CustomReportController) DeleteReport(ctx *gin.Context) {
 
 	userID, isAdmin := extractUserContext(ctx)
 	err = c.reportService.DeleteReport(ctx.Request.Context(), uint(id), userID, isAdmin)
-	if errhttp.HandleDBError(ctx, err, "删除报表") {
+	if err != nil {
+		replyReportError(ctx, err, "删除报表")
 		return
 	}
 
@@ -160,7 +173,7 @@ func (c *CustomReportController) DeleteReport(ctx *gin.Context) {
 func (c *CustomReportController) GetPublicTemplates(ctx *gin.Context) {
 	templates, err := c.reportService.GetPublicTemplates(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyReportError(ctx, err, "获取报表模板")
 		return
 	}
 
@@ -184,7 +197,8 @@ func (c *CustomReportController) UseTemplate(ctx *gin.Context) {
 	}
 
 	report, err := c.reportService.UseTemplate(ctx.Request.Context(), uint(id), userID.(uint))
-	if errhttp.HandleDBError(ctx, err, "使用报表模板") {
+	if err != nil {
+		replyReportError(ctx, err, "使用报表模板")
 		return
 	}
 
@@ -201,31 +215,22 @@ func (c *CustomReportController) QueryReportData(ctx *gin.Context) {
 		return
 	}
 
-	params := make(map[string]any)
-	if startTime := ctx.Query("start_time"); startTime != "" {
-		if t, err := time.Parse("2006-01-02", startTime); err == nil {
-			params["start_time"] = t
-		}
-	}
-	if endTime := ctx.Query("end_time"); endTime != "" {
-		if t, err := time.Parse("2006-01-02", endTime); err == nil {
-			params["end_time"] = t
-		}
-	}
-	if layer := ctx.Query("layer"); layer != "" {
-		params["layer"] = layer
+	params, err := reportQueryParams(ctx)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	userID, isAdmin := extractUserContext(ctx)
 	report, err := c.reportService.GetReport(ctx.Request.Context(), uint(id), userID, isAdmin)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyReportError(ctx, err, "获取报表")
 		return
 	}
 
 	data, err := c.reportService.QueryReportData(ctx.Request.Context(), report, params)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyReportError(ctx, err, "查询报表数据")
 		return
 	}
 
@@ -241,37 +246,81 @@ func (c *CustomReportController) ExportCSV(ginCtx *gin.Context) {
 		return
 	}
 
-	params := make(map[string]any)
-	if startTime := ginCtx.Query("start_time"); startTime != "" {
-		if t, err := time.Parse("2006-01-02", startTime); err == nil {
-			params["start_time"] = t
-		}
-	}
-	if endTime := ginCtx.Query("end_time"); endTime != "" {
-		if t, err := time.Parse("2006-01-02", endTime); err == nil {
-			params["end_time"] = t
-		}
-	}
-	if layer := ginCtx.Query("layer"); layer != "" {
-		params["layer"] = layer
+	params, err := reportQueryParams(ginCtx)
+	if err != nil {
+		response.Error(ginCtx, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	userID, isAdmin := extractUserContext(ginCtx)
 	report, err := c.reportService.GetReport(ginCtx.Request.Context(), uint(id), userID, isAdmin)
 	if err != nil {
-		response.Error(ginCtx, http.StatusNotFound, err.Error())
+		replyReportError(ginCtx, err, "获取报表")
+		return
+	}
+
+	// 先把数据算出来再写响应头：CSV 头一旦写出，后续 response.Error 会把 JSON
+	// 错误体塞进 CSV 流里，前端只会得到一个既不是 CSV 也不是 JSON 的坏文件。
+	data, err := c.reportService.QueryReportData(ginCtx.Request.Context(), report, params)
+	if err != nil {
+		replyReportError(ginCtx, err, "导出报表")
 		return
 	}
 
 	ginCtx.Header("Content-Type", "text/csv; charset=utf-8")
 	ginCtx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="report_%d.csv"`, id))
-	if err := c.reportService.ExportReportCSV(ginCtx.Request.Context(), ginCtx.Writer, report, params); err != nil {
-		if errors.Is(err, service.ErrReportTooManyRows) {
-
-			response.Error(ginCtx, http.StatusBadRequest, err.Error())
-			return
-		}
-		response.Error(ginCtx, http.StatusInternalServerError, err.Error())
+	if err := service.ExportReportDataCSV(ginCtx.Writer, data); err != nil {
+		response.Error(ginCtx, http.StatusInternalServerError, "写 CSV 失败")
 		return
+	}
+}
+
+// reportQueryParams 解析报表查询区间。日期非法必须报错——静默忽略会让用户
+// 以为在查 3 天数据，实际拿到的是全量。
+func reportQueryParams(ctx *gin.Context) (map[string]any, error) {
+	params := make(map[string]any)
+	if raw := ctx.Query("start_time"); raw != "" {
+		t, err := time.Parse("2006-01-02", raw)
+		if err != nil {
+			return nil, fmt.Errorf("start_time 必须是 YYYY-MM-DD（当前为 %q）", raw)
+		}
+		params["start_time"] = t
+	}
+	if raw := ctx.Query("end_time"); raw != "" {
+		t, err := time.Parse("2006-01-02", raw)
+		if err != nil {
+			return nil, fmt.Errorf("end_time 必须是 YYYY-MM-DD（当前为 %q）", raw)
+		}
+		params["end_time"] = t
+	}
+	if layer := ctx.Query("layer"); layer != "" {
+		params["layer"] = layer
+	}
+	return params, nil
+}
+
+// replyReportError 统一报表错误出口：不存在→404、无权限→403、超行→400，
+// 其余交给数据库错误映射。原先把所有错误都打成 404 + err.Error()，
+// 既把 DB 故障说成「报表不存在」，又把内部错误原文透给前端。
+// isReportParamInvalid 报表校验错误（数据源/图表类型等）应回 400，而不是被 HandleDBError 压成 500。
+func isReportParamInvalid(err error) bool {
+	var be *bizerr.BizError
+	return errors.As(err, &be) && be.Code == bizerr.CodeParamInvalid
+}
+
+func replyReportError(ctx *gin.Context, err error, fallback string) {
+	switch {
+	case err == nil:
+		return
+	case errors.Is(err, service.ErrReportNotFound):
+		response.NotFound(ctx, err.Error())
+	case errors.Is(err, service.ErrReportForbidden):
+		response.Error(ctx, http.StatusForbidden, err.Error())
+	case errors.Is(err, service.ErrReportTooManyRows):
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+	case isReportParamInvalid(err):
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+	default:
+		errhttp.HandleDBError(ctx, err, fallback)
 	}
 }

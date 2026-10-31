@@ -46,6 +46,15 @@ func (r *AgentStatusRepository) GetByAgentID(ctx context.Context, agentID uint) 
 	return &status, nil
 }
 
+// GetByID 按主键取坐席状态（创建客服挂载时校验 agent_status_id 是否真实存在）。
+func (r *AgentStatusRepository) GetByID(ctx context.Context, id uint) (*model.AgentStatus, error) {
+	var status model.AgentStatus
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&status).Error; err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
 func (r *AgentStatusRepository) GetOnlineAgents(ctx context.Context) ([]*model.AgentStatus, error) {
 	var agents []*model.AgentStatus
 	cutoff := time.Now().Add(-5 * time.Minute)
@@ -77,6 +86,21 @@ func (r *AgentStatusRepository) UpdateStatus(ctx context.Context, agentID uint, 
 	// 计数/状态更新保持"0 行即 no-op"：心跳与计数是 best-effort，
 	// 坐席行缺失时按幂等成功处理（既有契约，由仓储用例锁死）。
 	return r.db.WithContext(ctx).Model(&model.AgentStatus{}).Where("agent_id = ?", agentID).Updates(updates).Error
+}
+
+// UpdateStatusAndLimit 更新状态并可选更新接待上限。
+//
+// 为什么单独一个方法：UpdateStatus 是心跳/上线/下线的热路径，签名里塞
+// 一个 *int 会让所有调用点都要考虑"上限要不要动"；而监管台的"编辑坐席"
+// 弹窗同时提交 status 与 max_sessions（前端把两者放在同一个表单里）。
+func (r *AgentStatusRepository) UpdateStatusAndLimit(ctx context.Context, agentID uint, status string, maxSessions *int) error {
+	if maxSessions != nil {
+		if err := r.db.WithContext(ctx).Model(&model.AgentStatus{}).
+			Where("agent_id = ?", agentID).Update("max_sessions", *maxSessions).Error; err != nil {
+			return err
+		}
+	}
+	return r.UpdateStatus(ctx, agentID, status)
 }
 
 // IncrementActiveSessions 增加活跃会话数

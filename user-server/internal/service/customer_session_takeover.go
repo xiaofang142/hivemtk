@@ -39,7 +39,7 @@ func (s *CustomerSessionService) TakeoverByAgent(ctx context.Context, req *Takeo
 
 	agent, err := s.agentRepo.GetByAgentID(ctx, req.AgentID)
 	if err != nil || agent == nil {
-		return errors.New("坐席不存在")
+		return fmt.Errorf("坐席不存在（agent_id=%d，请先在坐席管理中登记该账号）", req.AgentID)
 	}
 	if agent.Status == "offline" {
 		return errors.New("坐席已离线，无法接管")
@@ -123,8 +123,12 @@ func (s *CustomerSessionService) ReleaseToAI(ctx context.Context, req *ReleaseTo
 	if err != nil {
 		return errors.New("会话不存在")
 	}
+	if session.AgentID == 0 {
+		// AI 托管中的会话没有持有坐席，释放无意义：给出可读原因，而不是笼统的「无权操作」。
+		return fmt.Errorf("当前会话未由坐席持有（session_id=%d，可能已切回 AI 托管），无需释放", req.SessionID)
+	}
 	if session.AgentID != req.AgentID {
-		return errors.New("无权操作：会话不属于该坐席")
+		return fmt.Errorf("无权操作：会话不属于该坐席（agent_id=%d，session_id=%d）", req.AgentID, req.SessionID)
 	}
 
 	session.HandlerType = model.HandlerTypeAI

@@ -6,6 +6,7 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 	"runtime/debug"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,6 +38,41 @@ const (
 	journeyTTLDefault       = 30 * 24 * time.Hour
 )
 
+// journeyScope 返回当前请求的租户作用域前缀，**只用于进程内 L1 视图**。
+//
+// 为什么 Redis 键不拼它：cache.RedisCache 的每个读写都会先过 scopeKey →
+// tenant.RedisKey(ctx, key)，SaaS 下自动写成 "t<id>:<key>"。旅程键若再拼一次
+// 租户前缀，实际落库键就是 t16:t16:journey:state:<cid>（重复前缀，实测确认），
+// 于是"写入成功但按正常键读不到"。租户隔离由缓存层负责；这里的作用域只解决
+// 另一件事——L1 是跨租户共享的进程内 map，客户号只在租户内唯一。
+func journeyScope(ctx context.Context) string {
+	// 私域独立部署是单租户：保持历史键（无作用域），不做任何迁移。
+	if !tenant.IsMultiTenant() {
+		return ""
+	}
+	if id, ok := tenant.FromContext(ctx); ok && id > 0 {
+		return fmt.Sprintf("t%d:", id)
+	}
+	return ""
+}
+
+// journeyLoadState 读取旅程状态（权威层）。
+//
+// 键不带租户前缀：租户隔离由 cache.RedisCache 的 scopeKey 统一负责（见 journeyScope 注释），
+// 因此在 SaaS 与私域两种形态下这里读的都是同一个逻辑键，不需要回退读"另一份键"。
+func (s *CustomerJourneyService) journeyLoadState(ctx context.Context, _ string, customerID string) (JourneyState, bool) {
+	var loaded JourneyState
+	if s.cache == nil {
+		return loaded, false
+	}
+	if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil || loaded.CustomerID == "" {
+		return JourneyState{}, false
+	}
+	return loaded, true
+}
+
+// journeyStateKey 等三个键构造器**不含租户前缀**：Redis 后端的 scopeKey 会统一加
+// "t<id>:"（参见 journeyScope 注释），重复拼接会得到 t16:t16:journey:state:<cid>。
 func journeyStateKey(customerID string) string {
 	return journeyStateKeyPrefix + customerID
 }
@@ -47,6 +83,20 @@ func journeyStageIndexKey(stage JourneyStage) string {
 
 func journeyStageSeenKey(stage JourneyStage, customerID string) string {
 	return journeyStageSeenPrefix + string(stage) + ":" + customerID
+}
+
+// journeyL1Key L1 内存缓存的键：作用域 + 客户号（L1 同样是跨租户共享的进程内 map）。
+func journeyL1Key(scope, customerID string) string {
+	return scope + customerID
+}
+
+// trimJourneyScope 从 L1 键里剥出客户号；前缀不匹配说明是别的租户的条目。
+func trimJourneyScope(scope, key string) (string, bool) {
+	if !strings.HasPrefix(key, scope) {
+		return "", false
+	}
+	cid := strings.TrimPrefix(key, scope)
+	return cid, cid != ""
 }
 
 func journeyStateTTL(stage JourneyStage) time.Duration {
@@ -298,46 +348,48 @@ func (s *CustomerJourneyService) authoritativeStage(ctx context.Context, custome
 	if s.cache == nil || customerID == "" {
 		return ""
 	}
-	var loaded JourneyState
-	if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil {
+	loaded, ok := s.journeyLoadState(ctx, journeyScope(ctx), customerID)
+	if !ok {
 		return ""
 	}
 	return loaded.CurrentStage
 }
 
-func (s *CustomerJourneyService) getLiveL1(customerID string) (*JourneyState, bool) {
+func (s *CustomerJourneyService) getLiveL1(scope, customerID string) (*JourneyState, bool) {
+	key := journeyL1Key(scope, customerID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	state, ok := s.states[customerID]
+	state, ok := s.states[key]
 	if !ok {
 		return nil, false
 	}
-	if exp, ok := s.l1ExpiresAt[customerID]; ok && time.Now().After(exp) {
-		delete(s.states, customerID)
-		delete(s.l1ExpiresAt, customerID)
+	if exp, ok := s.l1ExpiresAt[key]; ok && time.Now().After(exp) {
+		delete(s.states, key)
+		delete(s.l1ExpiresAt, key)
 		return nil, false
 	}
 	c := cloneJourneyState(state)
 	return &c, true
 }
 
-func (s *CustomerJourneyService) putL1(customerID string, state *JourneyState) {
+func (s *CustomerJourneyService) putL1(scope, customerID string, state *JourneyState) {
+	key := journeyL1Key(scope, customerID)
 	s.mu.Lock()
 	stored := cloneJourneyState(state)
-	s.states[customerID] = &stored
-	s.l1ExpiresAt[customerID] = time.Now().Add(journeyL1TTL)
+	s.states[key] = &stored
+	s.l1ExpiresAt[key] = time.Now().Add(journeyL1TTL)
 	s.mu.Unlock()
 }
 
 func (s *CustomerJourneyService) loadAuthoritative(ctx context.Context, customerID string) (*JourneyState, bool) {
-	if st, ok := s.getLiveL1(customerID); ok {
+	scope := journeyScope(ctx)
+	if st, ok := s.getLiveL1(scope, customerID); ok {
 		return st, true
 	}
 	if s.cache != nil {
-		var loaded JourneyState
-		if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err == nil && loaded.CustomerID != "" {
+		if loaded, ok := s.journeyLoadState(ctx, scope, customerID); ok {
 			stored := loaded
-			s.putL1(customerID, &stored)
+			s.putL1(scope, customerID, &stored)
 			out := loaded
 			return &out, true
 		}
@@ -381,7 +433,7 @@ func (s *CustomerJourneyService) Touch(ctx context.Context, customerID, source s
 	state.CustomerID = customerID
 	state.LastTouchAt = time.Now()
 	state.TotalTouches++
-	s.putL1(customerID, &state)
+	s.putL1(journeyScope(ctx), customerID, &state)
 	s.persistState(ctx, &state)
 }
 
@@ -407,7 +459,7 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 	state.CustomerID = customerID
 	fromStage := state.CurrentStage
 	if fromStage == toStage {
-		s.putL1(customerID, &state)
+		s.putL1(journeyScope(ctx), customerID, &state)
 		return nil, nil
 	}
 	event := &JourneyEvent{
@@ -424,7 +476,7 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 	state.StageSince = time.Now()
 	state.StageHistory = append(state.StageHistory, *event)
 	s.applyStageSideEffects(ctx, &state, toStage)
-	s.putL1(customerID, &state)
+	s.putL1(journeyScope(ctx), customerID, &state)
 	s.persistState(ctx, &state)
 	for _, sub := range s.subscribers {
 		go sub.OnJourneyEvent(ctx, customerID, event)
@@ -478,14 +530,14 @@ func (s *CustomerJourneyService) AddSubscriber(ctx context.Context, sub JourneyS
 // 不排序的话同一份状态两次请求能给出两份顺序不同的名单。
 func (s *CustomerJourneyService) ListByStage(ctx context.Context, stage JourneyStage) []string {
 	if s.cache == nil {
-		return s.listByStageLocal(stage)
+		return s.listByStageLocal(ctx, stage)
 	}
 	members, err := s.cache.LRange(ctx, journeyStageIndexKey(stage), 0, -1)
 	if err != nil {
 		// 索引读不动时退回本实例视图，而不是回一张空表：空表与"这个阶段没有客户"
 		// 在调用方看来一模一样，而前者是故障、后者是事实。
 		logger.Warnf("journey.ListByStage(%s) 阶段索引读失败，退回本实例视图: %v", stage, err)
-		return s.listByStageLocal(stage)
+		return s.listByStageLocal(ctx, stage)
 	}
 	ids := []string{}
 	checked := make(map[string]bool, len(members))
@@ -503,13 +555,18 @@ func (s *CustomerJourneyService) ListByStage(ctx context.Context, stage JourneyS
 }
 
 // listByStageLocal 本实例 L1 视图：缓存缺席或故障时的退路，覆盖面只有这一份实例写过的客户。
-func (s *CustomerJourneyService) listByStageLocal(stage JourneyStage) []string {
+func (s *CustomerJourneyService) listByStageLocal(ctx context.Context, stage JourneyStage) []string {
+	scope := journeyScope(ctx)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	customerIDs := []string{}
 	now := time.Now()
-	for cid, state := range s.states {
-		if exp, ok := s.l1ExpiresAt[cid]; ok && now.After(exp) {
+	for key, state := range s.states {
+		cid, ok := trimJourneyScope(scope, key)
+		if !ok {
+			continue
+		}
+		if exp, ok := s.l1ExpiresAt[key]; ok && now.After(exp) {
 			continue
 		}
 		if state.CurrentStage == stage {
@@ -529,10 +586,15 @@ func (s *CustomerJourneyService) AutoDetectSleeping(ctx context.Context) []strin
 	wokeUp := []string{}
 	now := time.Now()
 	snapshots := make([]JourneyState, 0)
-	for cid, state := range s.states {
-		if exp, ok := s.l1ExpiresAt[cid]; ok && now.After(exp) {
-			delete(s.states, cid)
-			delete(s.l1ExpiresAt, cid)
+	scope := journeyScope(ctx)
+	for key, state := range s.states {
+		cid, inScope := trimJourneyScope(scope, key)
+		if !inScope {
+			continue
+		}
+		if exp, ok := s.l1ExpiresAt[key]; ok && now.After(exp) {
+			delete(s.states, key)
+			delete(s.l1ExpiresAt, key)
 			continue
 		}
 		meta := StageMetas[state.CurrentStage]
@@ -568,7 +630,7 @@ func (s *CustomerJourneyService) AutoDetectSleeping(ctx context.Context) []strin
 			state.StageHistory = append(state.StageHistory, *event)
 			s.applyStageSideEffects(ctx, state, StageSleeping)
 			wokeUp = append(wokeUp, cid)
-			s.l1ExpiresAt[cid] = now.Add(journeyL1TTL)
+			s.l1ExpiresAt[key] = now.Add(journeyL1TTL)
 			snapshots = append(snapshots, cloneJourneyState(state))
 		}
 	}
@@ -708,9 +770,13 @@ func (s *CustomerJourneyService) forEachLiveState(ctx context.Context, fn func(s
 		// 无缓存后端（单机降级）：只能看本实例 L1，过期条目按 TTL 丢掉。
 		s.mu.RLock()
 		now := time.Now()
+		scope := journeyScope(ctx)
 		snapshot := make([]*JourneyState, 0, len(s.states))
-		for cid, state := range s.states {
-			if exp, ok := s.l1ExpiresAt[cid]; ok && now.After(exp) {
+		for key, state := range s.states {
+			if _, ok := trimJourneyScope(scope, key); !ok {
+				continue
+			}
+			if exp, ok := s.l1ExpiresAt[key]; ok && now.After(exp) {
 				continue
 			}
 			cloned := cloneJourneyState(state)
@@ -725,6 +791,7 @@ func (s *CustomerJourneyService) forEachLiveState(ctx context.Context, fn func(s
 
 	seen := make(map[string]bool)
 	scanned := 0
+	scope := journeyScope(ctx)
 	for _, stage := range AllStages {
 		members, err := s.cache.LRange(ctx, journeyStageIndexKey(stage), 0, -1)
 		if err != nil {
@@ -743,9 +810,8 @@ func (s *CustomerJourneyService) forEachLiveState(ctx context.Context, fn func(s
 				return
 			}
 			scanned++
-			var loaded JourneyState
-			if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil ||
-				loaded.CustomerID == "" {
+			loaded, ok := s.journeyLoadState(ctx, scope, customerID)
+			if !ok {
 				// 索引是追加写的：状态过期被 TTL 清掉后索引条目还在，
 				// 这种成员已不是"活着的客户"，跳过（回读权威态就是这层过滤）。
 				continue

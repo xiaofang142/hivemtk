@@ -816,25 +816,46 @@ func (s *Customer360Service) GetCustomerEvents(ctx context.Context, customerID s
 	if err != nil {
 		return nil, err
 	}
+	if len(events) > 0 {
+		return events, nil
+	}
+	// 没有行为事件时无法仅凭事件表判定客户是否存在；这里回查会话，让
+	// 「未知客户」与 /basic、/sessions 保持一致的 404 语义（原来恒回 200 空数组，
+	// 前端无法区分「没埋点」和「用户不存在」）。
+	sessions, err := s.sessionRepo.GetByUserID(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	if len(sessions) == 0 {
+		return nil, ErrCustomerNotFound
+	}
 	return events, nil
 }
 
 // GetCustomerOrders 按客户档案查询订单（前端 GET /api/customer-360/orders）。
 // 订单以会话 account_id 关联：解析出该客户全部会话账户后批量拉取。
 func (s *Customer360Service) GetCustomerOrders(ctx context.Context, customerID string, limit int) ([]*OrderItem, error) {
+	// 前端 /customer-360/orders 传的 user_id 来自 basic_info.user_id，即
+	// customer_sessions.user_id；而 /customer/360/:id 传的是 customers 表主键。
+	// 两套 ID 空间此前只支持后者，导致列表页进来恒 404「客户不存在」。
+	var sessions []*model.CustomerSession
 	cust, err := s.customerRepo.GetByID(ctx, customerID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+	switch {
+	case err == nil && cust != nil:
+		sessions, err = s.sessionRepo.GetByOneID(ctx, cust.UnifiedID)
+		if err != nil {
+			return nil, err
+		}
+	case err != nil && !errors.Is(err, gorm.ErrRecordNotFound):
+		return nil, err
+	default:
+		sessions, err = s.sessionRepo.GetByUserID(ctx, customerID)
+		if err != nil {
+			return nil, err
+		}
+		if len(sessions) == 0 {
 			return nil, ErrCustomerNotFound
 		}
-		return nil, err
-	}
-	if cust == nil {
-		return nil, ErrCustomerNotFound
-	}
-	sessions, err := s.sessionRepo.GetByOneID(ctx, cust.UnifiedID)
-	if err != nil {
-		return nil, err
 	}
 	accountIDs := make([]string, 0, len(sessions))
 	for _, sess := range sessions {
@@ -911,10 +932,56 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 		if dto == nil {
 			continue
 		}
+		if !matchesCustomerFilters(dto, filters) {
+			continue
+		}
 		result[userID] = dto
 	}
 
+	// 带筛选时 total 只能是「本页命中数」：platform / activity_level /
+	// purchase_power 三个维度都是 assemble 之后才算出来的画像字段，SQL 层
+	// 无法分页，硬报会话总数会让前端分页算出永远点不完的页码。
+	if len(filters) > 0 {
+		total = int64(len(result))
+	}
+
 	return result, total, nil
+}
+
+// matchesCustomerFilters 在 DTO 层做 platform / activity_level / purchase_power 过滤。
+// 三个参数此前被控制器收集却从未使用（筛选框点了等于没点）。
+func matchesCustomerFilters(dto *Customer360DTO, filters map[string]string) bool {
+	if len(filters) == 0 {
+		return true
+	}
+	if want, ok := filters["platform"]; ok && want != "" {
+		got := ""
+		if dto.BasicInfo != nil {
+			got = dto.BasicInfo.SourcePlatform
+		}
+		if !strings.EqualFold(got, want) {
+			return false
+		}
+	}
+	if want, ok := filters["activity_level"]; ok && want != "" {
+		got := ""
+		if dto.UserProfile != nil {
+			got = dto.UserProfile.ActivityLevel
+		}
+		if !strings.EqualFold(got, want) {
+			return false
+		}
+	}
+	if want, ok := filters["purchase_power"]; ok && want != "" {
+		got := ""
+		if dto.UserProfile != nil {
+			got = dto.UserProfile.PurchasePower
+		}
+		if !strings.EqualFold(got, want) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Customer360Service) indexCluesByAccount(ctx context.Context, accounts []string) map[string][]*model.Clue {

@@ -34,7 +34,7 @@ func (c *MCPClientController) Create(ctx *gin.Context) {
 	}
 	row, tools, err := c.svc.Create(ctx.Request.Context(), req)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyCustomIntegrationError(ctx, err, "创建 MCP 配置失败")
 		return
 	}
 	response.Success(ctx, gin.H{"server": row, "tool_count": tools}, "已保存")
@@ -47,7 +47,7 @@ func (c *MCPClientController) Create(ctx *gin.Context) {
 func (c *MCPClientController) List(ctx *gin.Context) {
 	rows, err := c.svc.List(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyCustomIntegrationError(ctx, err, "获取 MCP 配置列表失败")
 		return
 	}
 	response.Success(ctx, rows, "获取成功")
@@ -92,7 +92,7 @@ func (c *MCPClientController) SetEnabled(ctx *gin.Context) {
 	}
 	row, tools, err := c.svc.SetEnabled(ctx.Request.Context(), uint(id), req.Enabled)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyCustomIntegrationError(ctx, err, "启停 MCP 配置失败")
 		return
 	}
 	response.Success(ctx, gin.H{"server": row, "tool_count": tools}, "已更新")
@@ -110,7 +110,7 @@ func (c *MCPClientController) Test(ctx *gin.Context) {
 	}
 	names, err := c.svc.Test(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusBadGateway, err.Error())
+		replyCustomIntegrationError(ctx, err, "连通性测试失败")
 		return
 	}
 	response.Success(ctx, gin.H{"tools": names, "tool_count": len(names)}, "连通成功")

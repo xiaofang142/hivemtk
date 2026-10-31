@@ -59,7 +59,9 @@ func TestCustomerSessionController_GetSessions_Success(t *testing.T) {
 	ctrl, _, router := setupCustomerSessionController(t)
 	router.GET("/customer-sessions", ctrl.GetSessions)
 
-	req, _ := http.NewRequest("GET", "/customer-sessions?status=active&page=1&page_size=20", nil)
+	// status 用模型真实枚举（pending）：老测试写的 active 从来不是合法会话状态，
+	// 状态白名单（isKnownSessionStatus）上线后该值正确地回 400。
+	req, _ := http.NewRequest("GET", "/customer-sessions?status=pending&page=1&page_size=20", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 

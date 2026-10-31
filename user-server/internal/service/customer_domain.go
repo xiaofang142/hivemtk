@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
 	_type "hivemtk-user/internal/pkg/utils/type"
@@ -43,12 +46,61 @@ func NewUserTagService() *UserTagService {
 	return &UserTagService{tagRepo: repository.NewUserTagRepository()}
 }
 
-// ReplaceUserTags 覆盖式更新用户标签，返回最终标签列表
+// ErrUserTagInvalid 标签入参非法（空标签 / 超长 / 数量超限）。
+var ErrUserTagInvalid = errors.New("标签非法")
+
+// 标签约束与 user_tags.tag_name（varchar(50)）保持一致，避免把 DB 层的
+// 「value too long for type character varying(50)」当成 500 抛给前端。
+const (
+	MaxUserTagRunes = 50
+	MaxUserTags     = 100
+)
+
+// NormalizeUserTags 去空白、去空串、去重并校验长度与数量。
+func NormalizeUserTags(tags []string) ([]string, error) {
+	out := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, raw := range tags {
+		t := strings.TrimSpace(raw)
+		if t == "" {
+			continue
+		}
+		if utf8.RuneCountInString(t) > MaxUserTagRunes {
+			return nil, fmt.Errorf("%w：标签「%s…」超过 %d 个字符（当前 %d）", ErrUserTagInvalid, truncateRunes(t, 12), MaxUserTagRunes, utf8.RuneCountInString(t))
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	if len(out) > MaxUserTags {
+		return nil, fmt.Errorf("%w：一次最多设置 %d 个标签（当前 %d）", ErrUserTagInvalid, MaxUserTags, len(out))
+	}
+	return out, nil
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+// ReplaceUserTags 覆盖式更新用户标签，返回最终标签列表。
+//
+// 先校验再删旧数据：原实现「先全删再插入」，插入失败（例如标签超长触发
+// varchar(50) 约束）时用户的标签已被清空，等于把一次参数错误放大成数据丢失。
 func (s *UserTagService) ReplaceUserTags(ctx context.Context, userID string, tags []string) ([]string, error) {
+	normalized, err := NormalizeUserTags(tags)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.tagRepo.DeleteTagsByUser(ctx, userID); err != nil {
 		return nil, err
 	}
-	if err := s.tagRepo.AddTags(ctx, userID, tags); err != nil {
+	if err := s.tagRepo.AddTags(ctx, userID, normalized); err != nil {
 		return nil, err
 	}
 	return s.tagRepo.GetTagsByUser(ctx, userID)

@@ -3,14 +3,19 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -21,6 +26,40 @@ const (
 	// HeartbeatMonitorInterval 后台心跳检查默认间隔
 	HeartbeatMonitorInterval = time.Minute
 )
+
+// 坐席状态取值域：前端工作台只有在线/忙碌/离线三档。
+//
+// 不设白名单时任意串都能落库（例如 status="bogus"），后果是该坐席既不在
+// 在线列表（status IN online,busy）也不被判离线，监管台仍显示一条"幽灵"行。
+const (
+	AgentStatusOnline  = "online"
+	AgentStatusBusy    = "busy"
+	AgentStatusOffline = "offline"
+
+	// AgentMaxSessionsDefault 新建坐席未指定接待上限时的默认值
+	AgentMaxSessionsDefault = 5
+	// AgentMaxSessionsLimit 接待上限的上界（与前端 input-number 的 max 对齐）
+	AgentMaxSessionsLimit = 50
+)
+
+// 坐席域错误哨兵：控制器据此映射 400/404/409。
+var (
+	// ErrAgentInvalidInput 入参不合法（状态取值、接待上限、坐席号/名称）
+	ErrAgentInvalidInput = errors.New("坐席参数非法")
+	// ErrAgentNotFound 坐席不存在
+	ErrAgentNotFound = errors.New("坐席不存在")
+	// ErrAgentDuplicated 同一坐席号已有状态记录
+	ErrAgentDuplicated = errors.New("坐席已存在")
+)
+
+// isValidAgentStatus 状态取值是否在域内
+func isValidAgentStatus(status string) bool {
+	switch status {
+	case AgentStatusOnline, AgentStatusBusy, AgentStatusOffline:
+		return true
+	}
+	return false
+}
 
 // AgentStatusService 客服状态服务
 type AgentStatusService struct {
@@ -49,17 +88,35 @@ type CreateAgentRequest struct {
 
 // CreateAgent 创建客服状态记录
 func (s *AgentStatusService) CreateAgent(ctx context.Context, req *CreateAgentRequest) (*model.AgentStatus, error) {
+	name := strings.TrimSpace(req.AgentName)
+	if req.AgentID == 0 {
+		return nil, fmt.Errorf("%w: 坐席 ID 必须是正整数", ErrAgentInvalidInput)
+	}
+	if name == "" {
+		return nil, fmt.Errorf("%w: 坐席姓名不能为空", ErrAgentInvalidInput)
+	}
+	if utf8.RuneCountInString(name) > 100 {
+		return nil, fmt.Errorf("%w: 坐席姓名不能超过 100 个字符", ErrAgentInvalidInput)
+	}
+	maxSessions := req.MaxSessions
+	if maxSessions == 0 {
+		maxSessions = AgentMaxSessionsDefault
+	}
+	if maxSessions < 1 || maxSessions > AgentMaxSessionsLimit {
+		return nil, fmt.Errorf("%w: 接待上限必须在 1~%d 之间（当前 %d）", ErrAgentInvalidInput, AgentMaxSessionsLimit, maxSessions)
+	}
+
 	agent := &model.AgentStatus{
 		AgentID:     req.AgentID,
-		AgentName:   req.AgentName,
-		Status:      "offline",
-		MaxSessions: req.MaxSessions,
-	}
-	if agent.MaxSessions == 0 {
-		agent.MaxSessions = 5
+		AgentName:   name,
+		Status:      AgentStatusOffline,
+		MaxSessions: maxSessions,
 	}
 
 	if err := s.agentRepo.Create(ctx, agent); err != nil {
+		if repository.IsDuplicateKeyErr(err) {
+			return nil, fmt.Errorf("%w: 坐席 %d 已存在，请直接编辑现有坐席", ErrAgentDuplicated, req.AgentID)
+		}
 		return nil, err
 	}
 
@@ -70,6 +127,9 @@ func (s *AgentStatusService) CreateAgent(ctx context.Context, req *CreateAgentRe
 func (s *AgentStatusService) GetAgentStatus(ctx context.Context, agentID uint) (*model.AgentStatus, error) {
 	agent, err := s.agentRepo.GetByAgentID(ctx, agentID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("%w: %d", ErrAgentNotFound, agentID)
+		}
 		return nil, err
 	}
 	return agent, nil
@@ -86,36 +146,50 @@ func (s *AgentStatusService) ListAllAgents(ctx context.Context) ([]*model.AgentS
 }
 
 // UpdateAgentStatus 更新客服状态
-func (s *AgentStatusService) UpdateAgentStatus(ctx context.Context, agentID uint, status string) error {
+func (s *AgentStatusService) UpdateAgentStatus(ctx context.Context, agentID uint, status string, maxSessions *int) error {
+	status = strings.TrimSpace(status)
+	if !isValidAgentStatus(status) {
+		return fmt.Errorf("%w: 坐席状态只能是 online / busy / offline（当前 %q）", ErrAgentInvalidInput, status)
+	}
+	if maxSessions != nil && (*maxSessions < 1 || *maxSessions > AgentMaxSessionsLimit) {
+		return fmt.Errorf("%w: 接待上限必须在 1~%d 之间（当前 %d）", ErrAgentInvalidInput, AgentMaxSessionsLimit, *maxSessions)
+	}
+
 	agent, err := s.agentRepo.GetByAgentID(ctx, agentID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrAgentNotFound, agentID)
+		}
 		return err
 	}
 
-	if agent.Status == "offline" && status != "online" {
-		return errors.New("客服离线时只能切换到在线状态")
+	if agent.Status == AgentStatusOffline && status != AgentStatusOnline {
+		return fmt.Errorf("%w: 客服离线时只能切换到在线状态", ErrAgentInvalidInput)
 	}
 
-	return s.agentRepo.UpdateStatus(ctx, agentID, status)
+	return s.agentRepo.UpdateStatusAndLimit(ctx, agentID, status, maxSessions)
 }
 
 // GoOnline 客服上线
 func (s *AgentStatusService) GoOnline(ctx context.Context, agentID uint) error {
-	return s.UpdateAgentStatus(ctx, agentID, "online")
+	return s.UpdateAgentStatus(ctx, agentID, AgentStatusOnline, nil)
 }
 
 // GoOffline 客服下线
 func (s *AgentStatusService) GoOffline(ctx context.Context, agentID uint) error {
 	agent, err := s.agentRepo.GetByAgentID(ctx, agentID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("%w: %d", ErrAgentNotFound, agentID)
+		}
 		return err
 	}
 
 	if agent.ActiveSessions > 0 {
-		return errors.New("还有未完成的会话，请先处理或转接")
+		return fmt.Errorf("%w: 还有 %d 个未完成的会话，请先处理或转接", ErrAgentInvalidInput, agent.ActiveSessions)
 	}
 
-	return s.agentRepo.UpdateStatus(ctx, agentID, "offline")
+	return s.agentRepo.UpdateStatus(ctx, agentID, AgentStatusOffline)
 }
 
 // GetAgentSessions 获取客服的活跃会话

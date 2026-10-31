@@ -202,9 +202,13 @@ func TestWorkbench_Month(t *testing.T) {
 			Amount: 1000, ProductName: "P", OrderedAt: time.Now(),
 		})
 	}
+	// 「上月」取当月 1 号再退一个月：AddDate(0,-1,0) 在 31 号会把 9/31 归一化成
+	// 10/1——落回本月，本月口径就把这笔 9999 算进来（2026-10-31 实测翻车）。
+	now := time.Now()
+	lastMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).AddDate(0, -1, 0)
 	stats.RecordOrder(context.Background(), OrderEvent{
 		OrderID: "o_last", CustomerID: "c_last", OwnerID: salesID,
-		Amount: 9999, ProductName: "P", OrderedAt: time.Now().AddDate(0, -1, 0),
+		Amount: 9999, ProductName: "P", OrderedAt: lastMonthStart,
 	})
 	overview := workbench.GetOverview(context.Background(), salesID)
 	if overview.Month.TotalOrders != 5 {

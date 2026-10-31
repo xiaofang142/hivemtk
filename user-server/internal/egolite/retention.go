@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"hivemtk-user/internal/model"
+
 	"gorm.io/gorm"
 )
 
@@ -27,12 +29,11 @@ func RetentionSweep(ctx context.Context, db *gorm.DB, keepDays int) (int64, erro
 		return 0, nil // 永不清理档
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(keepDays) * 24 * time.Hour)
-	res := db.WithContext(ctx).Exec(`
-		UPDATE egolite_rounds
-		SET observation = NULL
-		WHERE observation IS NOT NULL
-		  AND created_at < ?
-	`, cutoff)
+	// UpdateColumn：与原 UPDATE 语义一致——只置 observation 为 NULL，不触碰
+	// updated_at，也不走 hooks（幂等重跑对已清理行是 no-op）。
+	res := db.WithContext(ctx).Model(&model.EgoliteRound{}).
+		Where("observation IS NOT NULL AND created_at < ?", cutoff).
+		UpdateColumn("observation", gorm.Expr("NULL"))
 	if res.Error != nil {
 		return 0, res.Error
 	}
@@ -43,9 +44,11 @@ func RetentionSweep(ctx context.Context, db *gorm.DB, keepDays int) (int64, erro
 // 治理参数进参数中心（007 同口径），不散落 env。
 func ObserveRetentionDays(ctx context.Context, db *gorm.DB) int {
 	var v string
-	err := db.WithContext(ctx).Raw(
-		`SELECT param_value FROM config_params WHERE param_group='egolite' AND key='observation_retention_days' LIMIT 1`,
-	).Scan(&v).Error
+	err := db.WithContext(ctx).Model(&model.ConfigParam{}).
+		Select("param_value").
+		Where("param_group = ? AND key = ?", "egolite", "observation_retention_days").
+		Limit(1).
+		Scan(&v).Error
 	if err != nil || v == "" {
 		return 30
 	}

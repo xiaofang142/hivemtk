@@ -2,10 +2,12 @@ package controller
 
 import (
 	"errors"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +35,17 @@ func NewCustomer360Controller(customer360Service *service.Customer360Service) *C
 	}
 }
 
+// replyCustomer360Error 统一客户 360 的错误出口。
+// 原来多数 handler 对任何错误都回 404 + err.Error()，DB 抖动会被伪装成
+// 「客户不存在」，同时把英文/驱动错误原文透给前端。
+func replyCustomer360Error(ctx *gin.Context, err error, fallback string) {
+	if errors.Is(err, service.ErrCustomerNotFound) || errhttp.IsNotFoundError(err) {
+		response.NotFound(ctx, "客户不存在")
+		return
+	}
+	errhttp.HandleDBError(ctx, err, fallback)
+}
+
 // @Summary      获取客户 360° 视图
 // @Tags      customer360
 // @Router    /api/customer-360 [get]
@@ -46,7 +59,7 @@ func (c *Customer360Controller) GetCustomer360(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -114,7 +127,7 @@ func (c *Customer360Controller) GetCustomerBasicInfo(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -137,7 +150,7 @@ func (c *Customer360Controller) GetCustomerStats(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -160,7 +173,7 @@ func (c *Customer360Controller) GetCustomerSessions(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -187,7 +200,7 @@ func (c *Customer360Controller) GetCustomerEvents(ctx *gin.Context) {
 
 	events, err := c.customer360Service.GetCustomerEvents(ctx.Request.Context(), customerID, limit)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, "客户不存在")
+		replyCustomer360Error(ctx, err, "获取客户行为事件失败")
 		return
 	}
 
@@ -214,11 +227,7 @@ func (c *Customer360Controller) GetCustomerOrders(ctx *gin.Context) {
 
 	items, err := c.customer360Service.GetCustomerOrders(ctx.Request.Context(), customerID, limit)
 	if err != nil {
-		if errors.Is(err, service.ErrCustomerNotFound) {
-			response.Error(ctx, http.StatusNotFound, "客户不存在")
-			return
-		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户订单失败")
 		return
 	}
 
@@ -241,7 +250,7 @@ func (c *Customer360Controller) GetCustomerMessages(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 
@@ -262,18 +271,23 @@ func (c *Customer360Controller) UpdateCustomerTags(ctx *gin.Context) {
 		return
 	}
 
+	// Tags 用指针接：缺字段（请求体残缺）→ 400；"tags": [] → 合法，表示清空全部标签。
 	var req struct {
-		Tags []string `json:"tags" binding:"required"`
+		Tags *[]string `json:"tags"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
+	if err := ctx.ShouldBindJSON(&req); err != nil || req.Tags == nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请求体必须是 {\"tags\": [\"标签1\", \"标签2\"]}，tags 为字符串数组（传空数组表示清空标签）")
 		return
 	}
 
-	finalTags, err := c.userTagSvc.ReplaceUserTags(ctx.Request.Context(), userID, req.Tags)
+	finalTags, err := c.userTagSvc.ReplaceUserTags(ctx.Request.Context(), userID, *req.Tags)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "保存标签失败："+err.Error())
+		if errors.Is(err, service.ErrUserTagInvalid) {
+			response.Error(ctx, http.StatusBadRequest, strings.TrimPrefix(err.Error(), service.ErrUserTagInvalid.Error()+"："))
+			return
+		}
+		response.ErrorFromDB(ctx, err, "保存标签失败")
 		return
 	}
 
@@ -296,7 +310,7 @@ func (c *Customer360Controller) GetCustomerTags(ctx *gin.Context) {
 
 	tags, err := c.userTagSvc.GetUserTags(ctx.Request.Context(), userID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取标签失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "获取标签失败")
 		return
 	}
 
@@ -363,7 +377,7 @@ func (c *Customer360Controller) AddCustomerTag(ctx *gin.Context) {
 	}, "添加成功")
 }
 
-// @Summary      移除成功
+// @Summary 移除客户标签（兼容前端 DELETE /api/customer/:id/tags/:tag）
 // @Tags      customer360
 // @Router    /api/customer/{id}/tags/{tag} [delete]
 // RemoveCustomerTag 移除客户标签（兼容前端 DELETE /api/customer/:id/tags/:tag）
@@ -492,7 +506,7 @@ func (c *Customer360Controller) GetCustomerBehaviors(ctx *gin.Context) {
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
 	}
 

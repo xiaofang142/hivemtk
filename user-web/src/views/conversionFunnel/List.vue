@@ -154,7 +154,7 @@
             {{ (loss.rate || 0).toFixed(1) }}%
           </el-descriptions-item>
           <el-descriptions-item label="平均停留(秒)">
-            {{ loss.avgDuration.toFixed(1) }}
+            {{ loss.avgDurationAvailable ? loss.avgDuration.toFixed(1) : '暂无数据' }}
           </el-descriptions-item>
         </el-descriptions>
         <el-table
@@ -223,7 +223,7 @@ export default {
   computed: {
     // D-3：降级态的逐段点名文案（stage_errors 来自后端显式降级契约）。
     degradedDetail() {
-      const errs = Array.isArray(this.report.stage_errors) ? this.report.stage_errors : []
+      const errs = Array.isArray(this.report?.stage_errors) ? this.report.stage_errors : []
       if (!errs.length) return '具体失败阶段未点名（旧版响应）。'
       return '失败阶段：' + errs.map((e) => e.name || e.stage).join('、')
     }
@@ -263,6 +263,9 @@ export default {
         count: d.count || 0,
         rate: d.rate || 0,
         avgDuration: d.avg_duration_seconds || 0,
+        // 后端暂无「阶段停留时长」取数源，会显式回 avg_duration_available=false；
+        // 别把 0.0 秒当成实测值展示给用户。
+        avgDurationAvailable: d.avg_duration_available === true,
         topSources: Array.isArray(d.top_sources) ? d.top_sources : []
       }
     },

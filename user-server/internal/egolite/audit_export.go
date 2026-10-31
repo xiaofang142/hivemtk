@@ -26,11 +26,11 @@ import (
 
 // SessionExport 会话审计链（JSON 形状）。
 type SessionExport struct {
-	ExportedAt string                 `json:"exported_at"`
-	Session    *model.EgoliteSession  `json:"session"`
-	Rounds     []*model.EgoliteRound  `json:"rounds"`
+	ExportedAt string                    `json:"exported_at"`
+	Session    *model.EgoliteSession     `json:"session"`
+	Rounds     []*model.EgoliteRound     `json:"rounds"`
 	Executions []*model.EgoliteExecution `json:"executions"`
-	Events     []*model.EgoEventLog   `json:"events"`
+	Events     []*model.EgoEventLog      `json:"events"`
 	// ArtifactCount 产物事件数（产物本体在用户本机/storage，这里给的是账本面）
 	ArtifactCount int64 `json:"artifact_count"`
 }

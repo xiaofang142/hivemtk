@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"net/http"
@@ -21,6 +23,15 @@ func NewQuickReplyController() *QuickReplyController {
 	}
 }
 
+// replyQuickReplyError 快捷回复域统一错误出口：不存在 → 404，其余走通用 DB 映射。
+func replyQuickReplyError(ctx *gin.Context, err error, op string) {
+	if errors.Is(err, service.ErrQuickReplyNotFound) {
+		response.NotFound(ctx, err.Error())
+		return
+	}
+	response.ErrorFromDB(ctx, err, op)
+}
+
 // @Summary      查询快捷回复列表
 // @Tags      quick-reply
 // @Router    /api/quick-replies [get]
@@ -29,7 +40,7 @@ func (c *QuickReplyController) GetReplies(ctx *gin.Context) {
 	category := ctx.Query("category")
 	replies, err := c.replyService.GetReplies(ctx.Request.Context(), category)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取快捷回复失败")
 		return
 	}
 
@@ -45,13 +56,13 @@ func (c *QuickReplyController) CreateReply(ctx *gin.Context) {
 
 	var req service.CreateReplyRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：category、title、content 均为必填，channel / sort_order / is_public 可选")
 		return
 	}
 
 	reply, err := c.replyService.CreateReply(ctx.Request.Context(), createdBy, &req)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyQuickReplyError(ctx, err, "创建快捷回复失败")
 		return
 	}
 
@@ -72,13 +83,13 @@ func (c *QuickReplyController) UpdateReply(ctx *gin.Context) {
 
 	var req service.CreateReplyRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：category、title、content 均为必填，channel / sort_order / is_public 可选")
 		return
 	}
 
 	reply, err := c.replyService.UpdateReply(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyQuickReplyError(ctx, err, "更新快捷回复失败")
 		return
 	}
 
@@ -98,7 +109,7 @@ func (c *QuickReplyController) DeleteReply(ctx *gin.Context) {
 	}
 
 	if err := c.replyService.DeleteReply(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		replyQuickReplyError(ctx, err, "删除快捷回复失败")
 		return
 	}
 
@@ -112,7 +123,7 @@ func (c *QuickReplyController) DeleteReply(ctx *gin.Context) {
 func (c *QuickReplyController) GetReplyCategories(ctx *gin.Context) {
 	categories, err := c.replyService.GetCategories(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "获取快捷回复分类失败")
 		return
 	}
 

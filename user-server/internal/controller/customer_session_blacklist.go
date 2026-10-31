@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// @Summary      拉黑成功
+// @Summary 拉黑当前会话对应的访客
 // @Tags      customer-session
 // @Router    /api/customer-sessions/{id}/blacklist [post]
 // Blacklist 拉黑当前会话对应的访客
@@ -54,7 +54,7 @@ func (c *CustomerSessionController) Blacklist(ctx *gin.Context) {
 	}, "拉黑成功")
 }
 
-// @Summary      解除拉黑成功
+// @Summary 解除拉黑
 // @Tags      customer-session
 // @Router    /api/customer-sessions/blacklist/remove [post]
 // Unblacklist 解除拉黑
@@ -70,7 +70,8 @@ func (c *CustomerSessionController) Unblacklist(ctx *gin.Context) {
 		Platform model.Platform `json:"platform"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		response.Error(ctx, http.StatusBadRequest,
+			"请求参数错误：user_id 必填，platform 可选（默认 web）")
 		return
 	}
 	if getUserIDFromContext(ctx) == 0 {
@@ -99,7 +100,7 @@ func (c *CustomerSessionController) IsUserBlacklisted(ctx *gin.Context) {
 	platform := model.Platform(ctx.DefaultQuery("platform", "web"))
 	ok, err := c.sessionService.IsUserBlacklisted(ctx.Request.Context(), userID, platform)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "查询黑名单失败")
 		return
 	}
 	response.Success(ctx, gin.H{"blacklisted": ok}, "查询成功")
@@ -112,11 +113,10 @@ func (c *CustomerSessionController) IsUserBlacklisted(ctx *gin.Context) {
 //
 //	GET /api/customer-sessions/blacklist?page=1&page_size=20
 func (c *CustomerSessionController) ListActiveBlacklist(ctx *gin.Context) {
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	page, pageSize := sessionPaging(ctx, 20, 100)
 	rows, total, err := c.sessionService.ListActiveBlacklist(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, err.Error())
+		response.ErrorFromDB(ctx, err, "查询黑名单失败")
 		return
 	}
 	response.Success(ctx, gin.H{

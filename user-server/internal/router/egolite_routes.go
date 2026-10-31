@@ -20,10 +20,10 @@ import (
 	"hivemtk-user/internal/browsercore"
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/pkg/utils/logger"
 	hrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/storage"
-	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // SetupEgoLiteRoutes ego-lite 腿路由（设计文档 S3/S6/S7/S9；调研 §6.5 鉴权定案）。
