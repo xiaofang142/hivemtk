@@ -1,6 +1,7 @@
 package cards
 
 import (
+	"errors"
 	"context"
 	"testing"
 
@@ -220,9 +221,13 @@ func TestDouyinCardService_Delete_NotFound(t *testing.T) {
 	database := setupDouyinCardServiceTestDB(t)
 	service := NewDouyinCardService(database)
 
+	// 与另外三端（快手/闲鱼/小红书）一致：删不存在的卡片必须报错。
+	// 仓储层 douyin_card.go 已明确「0 行=不存在 ⇒ ErrRecordNotFound，
+	// DELETE 幂等成功会让前端把『已删过的卡片』当成功，与其它模块 404 语义不一致」，
+	// 本测试原先断言相反（幂等成功），HEAD 上即红。
 	err := service.Delete(context.Background(), 999)
-	if err != nil {
-		t.Errorf("Delete should not return error for non-existent card: %v", err)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("删不存在的卡片应返回 ErrRecordNotFound，实际 %v", err)
 	}
 }
 

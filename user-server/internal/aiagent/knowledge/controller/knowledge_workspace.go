@@ -648,6 +648,11 @@ func (ctrl *KnowledgeWorkspaceController) SyncOpenAPISource(c *gin.Context) {
 			response.Error(c, http.StatusNotFound, err.Error())
 			return
 		}
+		if isUpstreamSyncError(err) {
+			// 外部端点不可达 / 上游返回错误 → 502 并给出可执行原因（不再笼统报「服务器内部错误」）
+			response.Error(c, http.StatusBadGateway, "同步数据源失败："+err.Error()+"。请检查端点 URL 是否可达、认证方式与网络连通性。")
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -655,6 +660,8 @@ func (ctrl *KnowledgeWorkspaceController) SyncOpenAPISource(c *gin.Context) {
 }
 
 // TestOpenAPISource 测试连接
+// 契约：body 携带待测 spec（前端「保存前先测」场景传全量字段）；
+// body 未携带 endpoint 时回落到库中该 id 的已存配置（API 直连场景只传 id）。
 func (ctrl *KnowledgeWorkspaceController) TestOpenAPISource(c *gin.Context) {
 	if !ctrl.requireOpenAPIPort(c) {
 		return
@@ -663,6 +670,45 @@ func (ctrl *KnowledgeWorkspaceController) TestOpenAPISource(c *gin.Context) {
 	if err := c.ShouldBindJSON(&src); err != nil {
 		response.Error(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
+	}
+	if src.Endpoint == "" {
+		id, idErr := strconv.ParseUint(c.Param("id"), 10, 64)
+		if idErr != nil || id == 0 {
+			response.Error(c, http.StatusBadRequest, "endpoint 不能为空（或携带已存数据源 id 以回落到库中配置）")
+			return
+		}
+		stored, getErr := ctrl.openapiService.GetSource(c.Request.Context(), c.Query("product_id"), int64(id))
+		if getErr != nil {
+			if isNotFoundError(getErr) {
+				response.Error(c, http.StatusNotFound, getErr.Error())
+				return
+			}
+			response.Error(c, http.StatusInternalServerError, getErr.Error())
+			return
+		}
+		// body 里显式给的字段（如临时换 auth_config 试连）优先于库中值
+		if src.Name == "" {
+			src.Name = stored.Name
+		}
+		if src.Method == "" {
+			src.Method = stored.Method
+		}
+		if src.AuthType == "" {
+			src.AuthType = stored.AuthType
+		}
+		if src.AuthConfig == "" {
+			src.AuthConfig = stored.AuthConfig
+		}
+		if src.RequestTemplate == "" {
+			src.RequestTemplate = stored.RequestTemplate
+		}
+		if src.ResponsePath == "" {
+			src.ResponsePath = stored.ResponsePath
+		}
+		src.Endpoint = stored.Endpoint
+	}
+	if src.Method == "" {
+		src.Method = "GET"
 	}
 	result, _ := ctrl.openapiService.TestConnection(c.Request.Context(), &src)
 	response.Success(c, result, "测试完成")

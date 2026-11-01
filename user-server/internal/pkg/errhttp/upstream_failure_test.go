@@ -106,3 +106,25 @@ func TestIsNotFoundError_WrappedUpstreamStillNotMatched(t *testing.T) {
 		t.Errorf("包过一层的上游失败仍不得判成 not-found，实际判成了")
 	}
 }
+
+// TestHandleServiceError_UpstreamFailureMaps502 渠道故障必须回 502，不能压成 400。
+// 2026-11-01 API 全量回归实测：POST /api/sms/resend/{id} 在阿里云密钥失效时回
+// 400「重发短信失败（渠道不可达或凭证无效）」，而同族 POST /api/sms/send 走
+// ErrorFromDB 回 502 —— 同一故障两种状态码，且 400 的语义把运维引向"请求写错了"。
+func TestHandleServiceError_UpstreamFailureMaps502(t *testing.T) {
+	ctx, rec := newTestCtx(t)
+
+	upstream := bizerr.Wrap(bizerr.CodePlatformUnavail,
+		"重发短信失败（渠道不可达或凭证无效）",
+		errors.New("aliyun sms error: Specified access key is not found."))
+
+	if !HandleServiceError(ctx, upstream) {
+		t.Fatal("error should be handled")
+	}
+	if rec.Code == http.StatusNotFound {
+		t.Fatalf("上游失败不得映射成 404，实际 %d", rec.Code)
+	}
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("上游/渠道失败应映射 502，实际 %d，body=%s", rec.Code, rec.Body.String())
+	}
+}

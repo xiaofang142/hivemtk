@@ -168,27 +168,48 @@ func TestGetModuleFromPath_Team(t *testing.T) {
 		t.Errorf("Expected module 'users' for /api/team/users, got %s", result)
 	}
 
+	// 只有域名的路径回落域名本身（此前落 "unknown"，日志里看不出是哪个模块）
 	result = getModuleFromPath("/api/team")
-	if result != "unknown" {
-		t.Errorf("Expected module 'unknown' for /api/team, got %s", result)
+	if result != "team" {
+		t.Errorf("Expected module 'team' for /api/team, got %s", result)
 	}
 
 	result = getModuleFromPath("/api/users")
-	if result != "unknown" {
-		t.Errorf("Expected module 'unknown' for /api/users, got %s", result)
+	if result != "users" {
+		t.Errorf("Expected module 'users' for /api/users, got %s", result)
+	}
+}
+
+// TestGetModuleFromPath_ResourceID 资源 ID 不得被当成模块名。
+// 2026-11-01 API 全量回归实测：module_stats 里长出一堆 "1413"/"5"/UUID 键，
+// 按模块筛日志失效。
+func TestGetModuleFromPath_ResourceID(t *testing.T) {
+	cases := map[string]string{
+		"/api/users/123":                             "users",
+		"/api/marketing-flows/5/activate":            "marketing-flows",
+		"/api/message-hub/1413/read":                 "message-hub",
+		"/api/material/8cb2b6f3-ae17-4be5-9a86-d7acb7e3eaa0": "material",
+		"/api/manage/order-drafts":                   "order-drafts",
+		"/api/manage/order-drafts/draft_1_2/confirm": "order-drafts",
+	}
+	for path, want := range cases {
+		if got := getModuleFromPath(path); got != want {
+			t.Errorf("getModuleFromPath(%q) = %q, want %q", path, got, want)
+		}
 	}
 }
 
 // TestGetResourceFromPath 测试资源类型解析
 func TestGetResourceFromPath(t *testing.T) {
+	// 第 4 段是 ID 时，资源名回落到域名（此前返回 "123"）
 	result := getResourceFromPath("/api/users/123")
-	if result != "123" {
-		t.Errorf("Expected resource '123', got %s", result)
+	if result != "users" {
+		t.Errorf("Expected resource 'users', got %s", result)
 	}
 
 	result = getResourceFromPath("/api/users")
-	if result != "unknown" {
-		t.Errorf("Expected resource 'unknown', got %s", result)
+	if result != "users" {
+		t.Errorf("Expected resource 'users', got %s", result)
 	}
 }
 
@@ -202,14 +223,25 @@ func TestGetResourceFromPath_Unknown(t *testing.T) {
 
 // TestGetResourceIDFromPath_Numeric 测试数字 ID 解析
 func TestGetResourceIDFromPath_Numeric(t *testing.T) {
+	// /api/users/123 的 ID 就在第 4 段，此前判据只看第 5 段起 ⇒ 丢 ID
 	result := getResourceIDFromPath("/api/users/123")
-	if result != "" {
-		t.Errorf("Expected empty resource ID for /api/users/123, got %s", result)
+	if result != "123" {
+		t.Errorf("Expected resource ID '123' for /api/users/123, got %s", result)
 	}
 
 	result = getResourceIDFromPath("/api/users/1/123")
-	if result != "123" {
-		t.Errorf("Expected resource ID '123', got %s", result)
+	if result != "1" {
+		t.Errorf("Expected first resource ID '1', got %s", result)
+	}
+}
+
+// TestGetResourceIDFromPath_NonNumeric 非数字业务 ID（UUID/前缀 ID）也要识别
+func TestGetResourceIDFromPath_NonNumeric(t *testing.T) {
+	if got := getResourceIDFromPath("/api/material/8cb2b6f3-ae17-4be5-9a86-d7acb7e3eaa0"); got != "8cb2b6f3-ae17-4be5-9a86-d7acb7e3eaa0" {
+		t.Errorf("UUID resource id not detected, got %q", got)
+	}
+	if got := getResourceIDFromPath("/api/message-hub/1413/read"); got != "1413" {
+		t.Errorf("Expected '1413', got %q", got)
 	}
 }
 

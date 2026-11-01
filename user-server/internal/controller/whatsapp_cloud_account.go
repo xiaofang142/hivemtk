@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -285,7 +286,12 @@ func (ctrl *WhatsAppCloudAccountController) TestSend(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.SendMessage(ctx, uint(id), req.ToPhone, req.Content); err != nil {
-		response.ErrorFromDB(c, err, "发送失败", err.Error())
+		// 渠道失败必须**声明**自己是上游失败（bizerr 5xxx），否则 ErrorFromDB 的
+		// 文本分派认不出来，会落到终态被掩码成 500「发送失败」——2026-11-01 API
+		// 全量回归实测：网络/凭据故障时状态码 500、文案无任何可操作信息，
+		// 而 /api/sms/send 同族场景回的是 502 + 渠道真因。
+		response.ErrorFromDB(c, bizerr.Wrap(bizerr.CodePlatformUnavail,
+			"发送失败（渠道不可达或凭据无效）", err), "发送失败")
 		return
 	}
 	response.Success(c, nil, "发送成功")

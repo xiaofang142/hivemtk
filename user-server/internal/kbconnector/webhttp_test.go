@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,56 @@ func TestWebhttpProviderMissingManifestURLIsInvalidInput(t *testing.T) {
 	p, _ := LookupProvider("webhttp")
 	if _, err := p.List(context.Background(), map[string]any{}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("期望 ErrInvalidInput，实际 %v", err)
+	}
+}
+
+// 非 200 的清单响应：错误文案只许带状态码与操作提示，禁止把上游响应体
+// （登录页/CDN 拦截页等远端内容）回显给 API 调用方（2026-10-31 api 全量回归）。
+func TestWebhttpProviderNon200DoesNotEchoUpstreamBody(t *testing.T) {
+	mark := "SECRET-UPSTREAM-PAGE-MARKER-1031"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"` + mark + `"}`))
+	}))
+	defer srv.Close()
+
+	p, _ := LookupProvider("webhttp")
+	_, err := p.List(context.Background(), map[string]any{"manifest_url": srv.URL})
+	if err == nil {
+		t.Fatal("期望返回错误，实际成功")
+	}
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("期望 ErrInvalidInput，实际 %v", err)
+	}
+	if strings.Contains(err.Error(), mark) {
+		t.Fatalf("错误文案回显了上游响应体: %v", err)
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Fatalf("错误文案应包含状态码 404: %v", err)
+	}
+}
+
+// 非 200 且上游回 HTML 页：提示里要给出「HTML 页面」的可操作方向，但同样不回显 body。
+func TestWebhttpProviderNon200HTMLPageHintsHTML(t *testing.T) {
+	mark := "SECRET-LOGIN-PAGE-MARKER-1031"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusFound)
+		_, _ = w.Write([]byte("<!doctype html><html><body>" + mark + "</body></html>"))
+	}))
+	defer srv.Close()
+
+	p, _ := LookupProvider("webhttp")
+	_, err := p.List(context.Background(), map[string]any{"manifest_url": srv.URL})
+	if err == nil {
+		t.Fatal("期望返回错误，实际成功")
+	}
+	if strings.Contains(err.Error(), mark) {
+		t.Fatalf("错误文案回显了上游响应体: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTML") {
+		t.Fatalf("错误文案应提示 HTML 页面: %v", err)
 	}
 }
 

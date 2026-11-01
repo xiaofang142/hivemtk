@@ -1616,3 +1616,39 @@ func TestValidateTargetURL(t *testing.T) {
 		}
 	}
 }
+
+// TestShortLinkService_Delete_WithAccessLogs 有访问流水的短链也必须能删。
+//
+// 坑（2026-11-01 API 全量回归实测）：Delete 先删主表再删访问流水，
+// 而 short_link_accesses.short_link_id 有外键约束 ⇒ 被访问过的短链删不掉，
+// 接口回 500「删除短链失败」；没访问过的反而能删——越有用的越删不掉。
+// 修法：先删子表流水，再删主表。本测试钉住顺序。
+func TestShortLinkService_Delete_WithAccessLogs(t *testing.T) {
+	database := setupShortLinkServiceTestDB(t)
+	service := newTestShortLinkService(database)
+
+	createResp, err := service.Create(context.Background(), &dto.CreateShortLinkRequest{
+		ShortCode:   "withaccess1031",
+		OriginalURL: "https://example.com/with-access",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	// 造一条访问流水（等价真实点击）
+	if _, err := service.AccessShortLink(context.Background(), &dto.AccessShortLinkRequest{
+		ShortCode: "withaccess1031",
+		IP:        "127.0.0.1",
+		UserAgent: "go-test",
+	}); err != nil {
+		t.Fatalf("AccessShortLink failed: %v", err)
+	}
+
+	if err := service.Delete(context.Background(), createResp.ID); err != nil {
+		t.Fatalf("有访问流水的短链必须能删除（先删子表再删主表）：%v", err)
+	}
+
+	if _, err := service.GetByID(context.Background(), createResp.ID); err == nil {
+		t.Fatal("删除后不应再查到该短链")
+	}
+}

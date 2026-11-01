@@ -44,7 +44,9 @@ func (imaProvider) List(ctx context.Context, cfg map[string]any) ([]ExternalDoc,
 		defer func() { _ = res.Body.Close() }()
 		raw, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 		if res.StatusCode != http.StatusOK {
-			return fmt.Errorf("IMA %s HTTP %d: %s", apiPath, res.StatusCode, truncate(string(raw), 120))
+			// 不回显上游响应体：那是 ima.qq.com 的内容（登录页/风控页/HTML），
+			// 原样拼进错误文案会外泄给 API 调用方；状态码已足够定位问题层级。
+			return fmt.Errorf("IMA %s HTTP %d（请检查 client_id/api_key 与知识库可见性）", apiPath, res.StatusCode)
 		}
 		if out == nil {
 			return nil

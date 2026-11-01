@@ -15,6 +15,7 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // AuditManager 审计管理器（封装全局状态）
@@ -360,29 +361,102 @@ func getActionFromMethod(method string) string {
 	}
 }
 
-func getModuleFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	if len(parts) >= 4 && parts[3] != "" {
-		return parts[3]
+// 操作日志的 module / resource / resource_id 都从请求路径推导，三条函数共用
+// 同一份「路径段里哪一段是资源 ID」的判定，避免各自猜错。
+//
+// 历史缺陷（2026-11-01 API 全量回归实测）：三个函数都默认 path 形如
+// /api/{module}/{resource}，直接取第 4 段当 module/resource。但仓里大量写口是
+// /api/{domain}/{id}[/{action}]——POST /api/marketing-flows/5/activate、
+// POST /api/message-hub/1413/read、DELETE /api/material/8cb2b6f3-… 都是这个形状。
+// 于是第 4 段（数字/UUID）被当成模块名记进 operation_logs.module，
+// /api/operation-logs/statistics 的 module_stats 里长出一堆 ID 键
+// （实测出现 "1413"、"5"、"8cb2b6f3-ae17-…"），按模块筛日志彻底失效。
+//
+// 判据：第 4 段是 ID（数字/UUID/带前缀的业务 ID）⇒ module 与 resource 都回落
+// 到第 3 段的域名词；否则维持「第 4 段是资源名」的既有语义。
+const auditPathRootPrefix = "api"
+
+// isAuditID 判定一个路径段是否更像「某个资源的 ID」而不是「资源名」。
+func isAuditID(seg string) bool {
+	if seg == "" {
+		return false
 	}
-	return "unknown"
+	if _, err := strconv.Atoi(seg); err == nil {
+		return true
+	}
+	// UUID：8-4-4-4-12（大小写不敏感、允许无连字符 32 位纯十六进制）
+	if len(seg) == 36 && strings.Count(seg, "-") == 4 {
+		if _, err := uuid.Parse(seg); err == nil {
+			return true
+		}
+	}
+	if len(seg) == 32 && isHexString(seg) {
+		return true
+	}
+	// 带前缀的业务 ID：msg_id / sess_xxx / bc_xxx / crawl_xxx 等
+	for _, prefix := range []string{"msg_", "sess_", "bc_", "crawl_", "tr-", "conv-", "BATCH-", "EXT-", "mcp-", "ak_", "draft_"} {
+		if strings.HasPrefix(seg, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHexString(s string) bool {
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// auditPathSegments 去掉前导 "api"（以及可选 "manage" 前缀）后的路径段。
+func auditPathSegments(path string) []string {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) > 0 && parts[0] == auditPathRootPrefix {
+		parts = parts[1:]
+	}
+	return parts
+}
+
+// auditDomainAndResource 返回 (module, resource)：
+//   - /api/team/users            → ("users", "users")
+//   - /api/users/123            → ("users", "users")   ← 修复点：不再返回 "123"
+//   - /api/marketing-flows/5/x  → ("marketing-flows", "marketing-flows")
+//   - /api/manage/order-drafts  → ("order-drafts", "order-drafts")
+func auditDomainAndResource(path string) (string, string) {
+	parts := auditPathSegments(path)
+	// 跳过 manage 段：/api/manage/xxx 的模块是 xxx
+	if len(parts) > 0 && parts[0] == "manage" {
+		parts = parts[1:]
+	}
+	if len(parts) == 0 {
+		return "unknown", "unknown"
+	}
+	domain := parts[0]
+	if len(parts) >= 2 && !isAuditID(parts[1]) {
+		return parts[1], parts[1]
+	}
+	return domain, domain
+}
+
+func getModuleFromPath(path string) string {
+	module, _ := auditDomainAndResource(path)
+	return module
 }
 
 func getResourceFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	if len(parts) >= 4 && parts[3] != "" {
-		return parts[3]
-	}
-	return "unknown"
+	_, resource := auditDomainAndResource(path)
+	return resource
 }
 
+// getResourceIDFromPath 取路径里第一个 ID 段（第 4 段起，或紧跟域名的 ID 段）。
 func getResourceIDFromPath(path string) string {
-	parts := strings.Split(path, "/")
-	if len(parts) >= 5 {
-		for _, part := range parts[4:] {
-			if _, err := strconv.Atoi(part); err == nil {
-				return part
-			}
+	parts := auditPathSegments(path)
+	for _, part := range parts {
+		if isAuditID(part) {
+			return part
 		}
 	}
 	return ""

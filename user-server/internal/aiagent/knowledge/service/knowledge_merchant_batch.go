@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -72,7 +73,7 @@ func MerchantBatchMaxFileSize() int64 {
 // BatchImport 批量导入（统一入口，items 或 file 二选一）
 func (s *KnowledgeMerchantService) BatchImport(ctx context.Context, req *BatchImportRequest) (*BatchImportResult, error) {
 	if req.ProductID == "" {
-		return nil, errors.New("product_id 不能为空")
+		return nil, errors.New("请选择目标知识库（产品）后再导入")
 	}
 	batchNo := "BATCH-" + time.Now().Format("20060102150405") + "-" + uuid.New().String()[:8]
 
@@ -157,11 +158,27 @@ func (s *KnowledgeMerchantService) parseBatchFile(ctx context.Context, file mult
 			format = "json"
 		case strings.HasSuffix(name, ".csv"):
 			format = "csv"
+		case strings.HasSuffix(name, ".txt"):
+			// BatchImport.vue 的文件选择器明确 accept .txt（.csv,.json,.txt），
+			// 但此前 auto 分派把 .txt 落进 default→json，上传必报
+			// 「JSON 解析失败: invalid character …」——前端允许、后端必炸。
+			// .txt 按整文件单文档处理：标题取文件名（去扩展名），正文即全文。
+			format = "text"
 		default:
 			format = "json"
 		}
 	}
 	switch format {
+	case "text":
+		text := strings.TrimSpace(string(raw))
+		if text == "" {
+			return nil, errors.New("TXT 文件内容为空")
+		}
+		title := "未命名文档"
+		if header != nil && header.Filename != "" {
+			title = strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+		}
+		return []BatchImportItem{{Title: title, Content: text}}, nil
 	case "csv":
 		return parseCSV(raw)
 	case "json":

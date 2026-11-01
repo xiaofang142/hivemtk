@@ -170,13 +170,16 @@ func (s *shortLinkService) Delete(ctx context.Context, id uint) error {
 		return errors.New("短链不存在")
 	}
 
-	if err := s.shortLinkRepo.Delete(ctx, id); err != nil {
-		return fmt.Errorf("删除短链失败: %v", err)
+	// 先删子表（访问流水）再删主表：short_link_accesses.short_link_id 有外键约束，
+	// 反过来先删主表会直接撞 23503，接口回 500「删除短链失败」——而这条短链偏偏
+	// 是**被访问过**的那类（没访问过的能删掉，越有用的越删不掉）。
+	// 2026-11-01 API 全量回归实测复现：访问一次后 DELETE 即失败。
+	if err := s.accessRepo.DeleteByShortLinkID(ctx, id); err != nil {
+		return fmt.Errorf("删除短链访问记录失败: %v", err)
 	}
 
-	if err := s.accessRepo.DeleteByShortLinkID(ctx, id); err != nil {
-
-		return fmt.Errorf("删除短链访问记录失败(主表已删): %v", err)
+	if err := s.shortLinkRepo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("删除短链失败: %v", err)
 	}
 
 	return nil

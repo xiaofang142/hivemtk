@@ -52,7 +52,14 @@ func (webhttpProvider) List(ctx context.Context, cfg map[string]any) ([]External
 		return nil, fmt.Errorf("读取清单响应失败: %w", readErr)
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, invalidInput("清单 HTTP %d（请确认 URL 指向可访问的 JSON 清单）: %s", res.StatusCode, truncate(string(raw), 120))
+		// 非 200 只报状态码，不回显上游响应体：body 是远端内容（可能是登录页/
+		// CDN 拦截页/任意 HTML），原样拼进错误文案会把它泄漏给 API 调用方；
+		// HTML 页的可操作提示由下方 200 分支的同款识别兜底。
+		trimmedStatus := strings.TrimLeft(string(raw), " \r\n\t")
+		if strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "text/html") || strings.HasPrefix(trimmedStatus, "<") {
+			return nil, invalidInput("清单 HTTP %d（请确认 URL 指向可访问的 JSON 清单，当前返回的是 HTML 页面，检查是否需要登录 Cookie）", res.StatusCode)
+		}
+		return nil, invalidInput("清单 HTTP %d（请确认 URL 指向可访问的 JSON 清单）", res.StatusCode)
 	}
 	// 有些静态站会给 UTF-8 文件加 BOM；json.Unmarshal 不认 BOM，会报
 	// "invalid character 'ï'"，同样属于可修复的配置问题，这里先剥掉。

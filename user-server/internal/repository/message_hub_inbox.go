@@ -199,8 +199,13 @@ func (r *MessageHubRepository) Delete(ctx context.Context, id uint) error {
 		return nil
 	}
 	// message_hub 是消息流/出站队列表，claim SQL 按 status 取行不感知软删，
-	// 软删行可能被重新领取发送，故保持物理删除
-	return r.db.WithContext(ctx).Unscoped().Where("id = ?", id).Delete(&model.MessageHub{}).Error
+	// 软删行可能被重新领取发送，故保持物理删除。
+	//
+	// 命中 0 行必须报 ErrRecordNotFound（与 _db.EnsureAffected 同口径）：
+	// 此前直接返回 res.Error，删一个不存在的消息也回 200「删除成功」并把该 id
+	// 原样回显（2026-11-02 API 全量回归实测），调用方无法区分「删掉了」与
+	// 「这个 id 根本不存在」，前端/脚本里的错 id 永远不会暴露。
+	return _db.EnsureAffected(r.db.WithContext(ctx).Unscoped().Where("id = ?", id).Delete(&model.MessageHub{}))
 }
 
 func (r *MessageHubRepository) GetByPlatformAccountMsgID(ctx context.Context, platform, accountID, msgID string) (*model.MessageHub, error) {

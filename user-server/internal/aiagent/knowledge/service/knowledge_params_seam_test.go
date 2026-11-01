@@ -158,3 +158,40 @@ func TestParseBatchFileEnforcesMaxFileSize(t *testing.T) {
 		require.ErrorContains(t, err, "上限 20 MB")
 	})
 }
+
+// TestParseBatchFileTxtAutoDetect BatchImport.vue 的文件选择器 accept 为 .csv,.json,.txt，
+// 但此前 auto 分派把 .txt 落进 default→json，上传 .txt 必报「JSON 解析失败」
+// （2026-10-31 API 全量回归实测）。锁定：.txt 按「整文件单文档」解析，
+// 标题取文件名去扩展名，正文即全文；空文件报可操作错误。
+func TestParseBatchFileTxtAutoDetect(t *testing.T) {
+	s := &KnowledgeMerchantService{}
+
+	t.Run("auto + .txt 解析为单文档", func(t *testing.T) {
+		body := "这是纯文本知识内容，第一段。\n\n这是第二段。"
+		items, err := s.parseBatchFile(context.Background(),
+			fakeBatchFile{bytes.NewReader([]byte(body))},
+			&multipart.FileHeader{Filename: "产品说明.txt", Size: int64(len(body))}, "")
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		require.Equal(t, "产品说明", items[0].Title)
+		require.Equal(t, body, items[0].Content)
+	})
+
+	t.Run("显式 format=text 同样生效", func(t *testing.T) {
+		body := "显式指定 text 格式的内容。"
+		items, err := s.parseBatchFile(context.Background(),
+			fakeBatchFile{bytes.NewReader([]byte(body))},
+			&multipart.FileHeader{Filename: "any.bin", Size: int64(len(body))}, "text")
+		require.NoError(t, err)
+		require.Len(t, items, 1)
+		require.Equal(t, "any", items[0].Title, "标题取文件名去扩展名（与 .txt 同一规则）")
+	})
+
+	t.Run("空 .txt 报可操作错误且不回显内容", func(t *testing.T) {
+		items, err := s.parseBatchFile(context.Background(),
+			fakeBatchFile{bytes.NewReader([]byte("   \n  "))},
+			&multipart.FileHeader{Filename: "empty.txt", Size: 5}, "")
+		require.ErrorContains(t, err, "TXT 文件内容为空")
+		require.Nil(t, items)
+	})
+}

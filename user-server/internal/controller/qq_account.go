@@ -197,6 +197,25 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 	response.Success(c, toQQAccountVO(c.Request.Context(), acc), "创建成功")
 }
 
+// qqAccountUpdateReq 更新请求：与创建同形，但密钥与 app_id 均非必填。
+//
+// 为什么必须另立一个结构（2026-11-01 API 全量回归实测）：Update 的既有语义是
+// 「AppSecret / WebhookSecret 为空时保留原值」——因为 VO 从不回显明文，前端编辑
+// 表单回填的 secret 恒为空串。可上一版直接复用 qqAccountCreateReq，其 binding
+// 标了 required ⇒ 空 secret 在绑定层就被 400 拦下，"保留原值"那条分支永远走不到，
+// 结果就是「编辑 QQ 账号只要不重新输入全部密钥就存不了」。
+// 这里去掉 required，字段类型与非空更新逻辑保持不变。
+type qqAccountUpdateReq struct {
+	AccountName    string `json:"account_name"`
+	AppID          string `json:"app_id"`
+	AppSecret      string `json:"app_secret"`
+	WebhookSecret  string `json:"webhook_secret"`
+	WebhookURL     string `json:"webhook_url"`
+	WebhookEnabled bool   `json:"webhook_enabled"`
+	AIAgentEnabled bool   `json:"ai_agent_enabled"`
+	Status         int    `json:"status"`
+}
+
 // @Summary      更新 QQ 账号
 // @Tags      q-q-account
 // @Router    /api/qq/accounts/{id} [put]
@@ -215,12 +234,15 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 	if !guardChannelAccountOwnership(c, acc.OwnerUserID) {
 		return
 	}
-	var req qqAccountCreateReq
+	var req qqAccountUpdateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
 		return
 	}
-	acc.AccountName = req.AccountName
+	// 与密钥同一「空=不改」口径：部分更新不该把名字抹成空串
+	if strings.TrimSpace(req.AccountName) != "" {
+		acc.AccountName = strings.TrimSpace(req.AccountName)
+	}
 	if req.AppID != "" {
 		acc.AppID = req.AppID
 	}

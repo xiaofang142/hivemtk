@@ -1,6 +1,7 @@
 package service
 
 import (
+	bizerr "hivemtk-user/internal/domain/errors"
 	"bytes"
 
 	"context"
@@ -256,7 +257,13 @@ func (s *IntegrationService) SyncCustomers(ctx context.Context, account *model.I
 	case string(PlatformFenxiangxiao):
 		return s.syncFenxiangxiaoCustomers(ctx, account)
 	default:
-		return 0, errors.New("不支持的平台")
+		// 明确声明为客户端可纠正的参数问题（400 + 指名可用平台），
+		// 不能再用裸 errors.New("不支持的平台")：那会被上层压成 500
+		// 「操作失败，请稍后重试」，调用方既不知道是自己选错平台，也不知道能选什么
+		// （2026-11-02 API 全量回归实测：custom 平台同步稳定 500）。
+		return 0, bizerr.Wrap(bizerr.CodeParamInvalid,
+			"该平台不支持客户同步（仅支持 销售易 / 纷享销客）",
+			fmt.Errorf("platform=%s", account.Platform))
 	}
 }
 
@@ -577,7 +584,9 @@ func (s *IntegrationService) SyncOrders(ctx context.Context, account *model.Inte
 	case string(PlatformJD):
 		return s.syncJDOrders(ctx, account)
 	default:
-		return 0, errors.New("不支持的平台")
+		return 0, bizerr.Wrap(bizerr.CodeParamInvalid,
+			"该平台不支持订单同步（仅支持 淘宝 / 京东）",
+			fmt.Errorf("platform=%s", account.Platform))
 	}
 }
 
@@ -898,7 +907,9 @@ func (s *IntegrationService) SyncProducts(ctx context.Context, account *model.In
 	case string(PlatformJD):
 		return s.syncJDProducts(ctx, account)
 	default:
-		return 0, errors.New("不支持的平台")
+		return 0, bizerr.Wrap(bizerr.CodeParamInvalid,
+			"该平台不支持商品同步（仅支持 淘宝 / 京东）",
+			fmt.Errorf("platform=%s", account.Platform))
 	}
 }
 

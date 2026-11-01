@@ -633,6 +633,11 @@ func draftFromModel(m *model.OrderDraft) *OrderDraft {
 		meta[k] = v
 	}
 	return &OrderDraft{
+		// TenantID 必须带回来：service.OrderDraft 把它序列化成响应体 tenant_id，
+		// 漏映射时读口恒回 0，而库里行属于租户 1（2026-11-01 API 全量回归实测：
+		// GET 单条返回 tenant_id:0，库里是 1）——on 模式下前端拿到的归属是假的。
+		// 写方向不动：tenant_id 由 GORM 回调按请求上下文写入，显式回填 0 会撞 fail-closed。
+		TenantID:     m.TenantID,
 		ID:           m.ID,
 		CustomerID:   m.CustomerID,
 		OneID:        m.OneID,

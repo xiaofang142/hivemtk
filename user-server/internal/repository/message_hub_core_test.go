@@ -12,14 +12,15 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
-
-	"gorm.io/gorm"
 )
 
 func setupMessageHubTestDB(t *testing.T) *gorm.DB {
@@ -952,5 +953,20 @@ func TestMessageHubRepository_GetByDedupHash(t *testing.T) {
 	_, err = nilRepo.GetByDedupHash(ctx, "wechat", "x")
 	if err != gorm.ErrRecordNotFound {
 		t.Errorf("nil repo 应返回 ErrRecordNotFound, 实际 %v", err)
+	}
+}
+
+// TestMessageHubRepository_Delete_MissingReportsNotFound 删不存在的消息必须报
+// ErrRecordNotFound，不能静默成功。
+// 坑（2026-11-02 API 全量回归实测）：DELETE /api/inbox/conversations/143/messages/99999999
+// 回 200「删除成功」并回显 deleted:99999999 —— 调用方无法区分「删掉了」和「id 打错了」。
+// 与同仓 FAQ #152 的「重复删必须 404」同一口径。
+func TestMessageHubRepository_Delete_MissingReportsNotFound(t *testing.T) {
+	db := setupMessageHubTestDB(t)
+	repo := &MessageHubRepository{db: db}
+
+	err := repo.Delete(context.Background(), 99999999)
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("删不存在的消息应返回 ErrRecordNotFound，实际 %v", err)
 	}
 }

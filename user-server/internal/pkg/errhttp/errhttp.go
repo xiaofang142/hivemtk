@@ -33,12 +33,22 @@ func HandleDBError(ctx *gin.Context, err error, operation string) bool {
 // 与 HandleDBError 不同，非"记录不存在"的错误响应 400（业务校验错误），
 // 适用于服务层会返回业务校验错误（如"系统模板不能修改"、"无权限修改"）的场景。
 // 返回 true 表示已处理错误并写入响应，调用方应立即 return。
+//
+// 上游/渠道失败例外（2026-11-01 API 全量回归实测）：service 层用
+// bizerr.Wrap(CodePlatformUnavail, …) 声明的渠道故障必须回 502，
+// 不能压成 400 —— 400 的语义是「你的请求写错了」，会把运维引向错误的排查方向，
+// 而 /api/sms/send 走 ErrorFromDB 时已经是 502，同一族接口两种状态码。
+// 与 response.ErrorFromDB 的分档保持一致（IsUpstreamFailure ⇒ 502）。
 func HandleServiceError(ctx *gin.Context, err error) bool {
 	if err == nil {
 		return false
 	}
 	if IsNotFoundError(err) {
 		response.NotFound(ctx, "记录不存在")
+		return true
+	}
+	if bizerr.IsUpstreamFailure(err) {
+		response.Error(ctx, http.StatusBadGateway, err.Error())
 		return true
 	}
 	response.Error(ctx, http.StatusBadRequest, err.Error())

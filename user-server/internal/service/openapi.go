@@ -84,19 +84,46 @@ func (s *OpenAPIService) UpdateSource(ctx context.Context, src *model.KnowledgeO
 		}
 		return err
 	}
-	// 把库里的 tenant_id 带回来。
-	//
-	// 为什么必须：调用方传进来的是**新建的零值 model**（tenant_id=0），
-	// 而 repo.Update 走 GORM 的 Save —— Save 写**全部字段含零值**，
-	// 于是这一行的租户被改写成 0。多租户模式下 tenant 回调 fail-closed 当场拒掉：
-	// "[tenant] 更新不可改写 tenant_id（上下文租户 1，SET 值 0）" ⇒ 接口 500；
-	// 独立部署模式没有这层校验 ⇒ 同一个接口 SaaS 下 500、私域下 200。
-	// 这就是本仓这一族缺陷的通用形状（见 service/sms.go 的 SaveConfig 同型）。
+	// 部分更新语义：调用方传进来的是**新建的零值 model**，只应覆盖请求里真正
+	// 携带的字段；repo.Update 走 GORM 的 Save 写**全部字段含零值**，未传字段会被
+	// 清零——2026-10-31 API 全量回归实测：只传 name/description 的 PUT 把
+	// product_id/type/endpoint/method/auth_type 全部抹掉（数据丢失）。
+	// 因此这里把库中行作为底版，仅用请求里的非零值字段覆盖；运行时字段
+	// （last_sync_at/last_status/last_error/total_synced）永远以库中值为准，
+	// enabled=0 视为未携带（禁用走 /toggle 专用口），与 orderDraft.edit 的
+	// 「没给=不改」同一口径。tenant_id 恢复逻辑是本函数的既有修复（SaaS 下
+	// fail-closed 拒改租户），合并在同一步里完成。
 	src.TenantID = existing.TenantID
+	src.ProductID = pickNonEmpty(src.ProductID, existing.ProductID)
+	src.Name = pickNonEmpty(src.Name, existing.Name)
+	src.Type = pickNonEmpty(src.Type, existing.Type)
+	src.Endpoint = pickNonEmpty(src.Endpoint, existing.Endpoint)
+	src.Method = pickNonEmpty(src.Method, existing.Method)
+	src.AuthType = pickNonEmpty(src.AuthType, existing.AuthType)
+	src.AuthConfig = pickNonEmpty(src.AuthConfig, existing.AuthConfig)
+	src.RequestTemplate = pickNonEmpty(src.RequestTemplate, existing.RequestTemplate)
+	src.ResponsePath = pickNonEmpty(src.ResponsePath, existing.ResponsePath)
+	src.FieldMapping = pickNonEmpty(src.FieldMapping, existing.FieldMapping)
+	src.Schedule = pickNonEmpty(src.Schedule, existing.Schedule)
+	if src.Enabled == 0 {
+		src.Enabled = existing.Enabled
+	}
+	src.LastSyncAt = existing.LastSyncAt
+	src.LastStatus = existing.LastStatus
+	src.LastError = existing.LastError
+	src.TotalSynced = existing.TotalSynced
 	if err := s.encryptAuthConfig(ctx, src); err != nil {
 		return fmt.Errorf("加密认证配置失败: %w", err)
 	}
 	return s.srcRepo.Update(ctx, src)
+}
+
+// pickNonEmpty 部分更新合并原语：请求值非空用请求值，否则保留库中值。
+func pickNonEmpty(in, fallback string) string {
+	if in != "" {
+		return in
+	}
+	return fallback
 }
 
 // DeleteSource 删除数据源

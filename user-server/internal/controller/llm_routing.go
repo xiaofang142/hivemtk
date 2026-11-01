@@ -89,7 +89,10 @@ func (c *LLMRoutingController) GetModel(ctx *gin.Context) {
 			return
 		}
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": nil, "message": "model not found"})
+	// 与本文件 UpdateModel/DeleteModel 的 not-found 同口径：404，而不是
+	// 200 + code:0 + data:null（后者违反 /api 响应契约——「成功」语义下
+	// 调用方无法区分「查到了空模型」与「不存在」）。
+	ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "model not found"})
 }
 
 // @Summary      更新 provider

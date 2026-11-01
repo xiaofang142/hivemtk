@@ -315,8 +315,17 @@ func (c *TuningController) UpdatePromptCandidateStatus(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "status required")
 		return
 	}
+	// id 必须是数字主键：此前直接把字符串塞进 bigint 查询，PG 回
+	// `invalid input syntax for type bigint: "x" (SQLSTATE 22P02)`，而下面那句
+	// fallbackMsg 又把 err.Error() 拼进对外文案 → SQL 原文泄漏给调用方
+	// （2026-11-02 API 全量回归实测）。非法 id 属于入参错误，在入口就拦。
+	if _, err := strconv.ParseUint(id, 10, 64); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的候选ID")
+		return
+	}
 	if err := c.svc.UpdatePromptCandidateStatus(ctx.Request.Context(), id, status); err != nil {
-		response.ErrorFromDB(ctx, err, "update failed: "+err.Error())
+		// 不再把 err.Error() 拼进 fallbackMsg：那是 SQL 原文通道。
+		response.ErrorFromDB(ctx, err, "更新候选状态失败")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id, "status": status}, "")

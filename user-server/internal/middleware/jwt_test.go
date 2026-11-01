@@ -592,7 +592,7 @@ func TestGetModuleFromPath(t *testing.T) {
 		expected string
 	}{
 		{"/api/team/users", "users"},
-		{"/api/products/123", "123"},
+		{"/api/products/123", "products"}, // 资源 ID 不是模块名（2026-11-01 修复）
 		{"/api", "unknown"},
 	}
 
@@ -611,7 +611,7 @@ func TestGetResourceIDFromPath(t *testing.T) {
 		path     string
 		expected string
 	}{
-		{"/api/users/123", ""},
+		{"/api/users/123", "123"}, // 第 4 段的数字 ID 就是资源 ID（2026-11-01 修复）
 		{"/api/users", ""},
 	}
 
