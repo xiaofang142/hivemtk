@@ -912,10 +912,26 @@ func (s *InboxService) DeleteMessage(ctx context.Context, conversationID, messag
 	if _, err := s.GetByID(ctx, conversationID); err != nil {
 		return err
 	}
+	// 会话级归属校验（2026-11-02 对抗性复核实测）：
+	// DELETE /api/inbox/conversations/{A}/messages/{B的消息} 原先只要 A 可见就成功，
+	// 同租户内可以借一个可见会话删掉另一个会话的消息。消息 id 是全局自增，
+	// 前端把 conversation 与 message 一起传正是为了限定范围，服务端不能只看前半段。
+	conv, err := s.GetByID(ctx, conversationID)
+	if err != nil {
+		return err
+	}
 	switch source {
 	case "hub":
 		if s.hubRepo == nil {
 			return ErrInboxRepoNotReady
+		}
+		msg, err := s.hubRepo.GetByID(ctx, messageID)
+		if err != nil {
+			return err
+		}
+		if !hubBelongsToConversation(msg, conv) {
+			// 归属不符按「查无」口径回，不泄露别的会话是否存在该消息
+			return gorm.ErrRecordNotFound
 		}
 		if err := s.hubRepo.Delete(ctx, messageID); err != nil {
 			return err
@@ -924,7 +940,13 @@ func (s *InboxService) DeleteMessage(ctx context.Context, conversationID, messag
 		if s.sessionMsgRepo == nil || !s.sessionMsgRepo.HasTable(ctx) {
 			return ErrInboxRepoNotReady
 		}
-		if err := s.sessionMsgRepo.Delete(ctx, messageID); err != nil {
+		// session_messages 按 session_id 归属：会话有会话键时双键删除，
+		// 消息不属于该会话即 0 行 ⇒ 404；无会话键时退化为原行为（仅可见性约束）。
+		if conv.ConversationID != "" {
+			if err := s.sessionMsgRepo.DeleteInSession(ctx, conv.ConversationID, messageID); err != nil {
+				return err
+			}
+		} else if err := s.sessionMsgRepo.Delete(ctx, messageID); err != nil {
 			return err
 		}
 	default:
@@ -1024,4 +1046,24 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// hubBelongsToConversation 判定推送消息是否属于该收件箱会话。
+//
+// 判据优先级：平台+账号必须一致；会话有 conversation_id 时以它为界
+// （群聊/多轮会话的权威键）；缺失时回落到"客户在收发双方之一"。
+func hubBelongsToConversation(msg *model.MessageHub, conv *model.InboxConversation) bool {
+	if msg == nil || conv == nil {
+		return false
+	}
+	if msg.Platform != conv.Platform || msg.AccountID != conv.AccountID {
+		return false
+	}
+	if conv.ConversationID != "" {
+		return msg.ConversationID == conv.ConversationID
+	}
+	if conv.CustomerID == "" {
+		return true
+	}
+	return msg.SenderID == conv.CustomerID || msg.ReceiverID == conv.CustomerID
 }

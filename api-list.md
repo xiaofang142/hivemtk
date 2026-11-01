@@ -1126,7 +1126,7 @@
 | 7 | - | - | POST | `/api/inbox/conversations/{id}/mute` | `id` | {muted} | - | JWT | ✅ 通过 | 静音生效 |
 | 8 | - | - | POST | `/api/inbox/conversations/{id}/tags` | `id` | {tag} | - | JWT | ✅ 通过 | 添加成功 |
 | 9 | - | - | DELETE | `/api/inbox/conversations/{id}/tags/{tag}` | `id, tag` | - | - | JWT | ✅ 通过 | 移除成功 |
-| 10 | - | - | DELETE | `/api/inbox/conversations/{id}/messages/{mid}` | `id, mid, source` | - | source=hub|session | JWT | 🔧 已修复 | 删不存在的消息曾回 200「删除成功」并回显该 id（假成功）→ 仓储命中 0 行改报 ErrRecordNotFound，控制器明确 404「消息不存在」；回归 TestMessageHubRepository_Delete_MissingReportsNotFound |
+| 10 | - | - | DELETE | `/api/inbox/conversations/{id}/messages/{mid}` | `id, mid, source` | - | source=hub/session | JWT | 🔧 已修复 | 两处缺陷：①删不存在的消息曾回 200「删除成功」并回显 id（假成功）→ 0 行改报 ErrRecordNotFound，控制器 404「消息不存在」；②同租户可借可见会话 A 删掉会话 B 的消息（消息 id 全局自增，服务端只看会话可见性）→ 增归属校验（hub 按 platform+account+conversation_id 判定、session 走双键 DeleteInSession），跨会话 404、同会话 200；回归 TestMessageHubRepository_Delete_MissingReportsNotFound + TestHubBelongsToConversation |
 | 11 | - | - | POST | `/api/inbox/assign` | `data` | data | - | JWT | ✅ 通过 | 必填 conversation_id/action/to_type(human|sop|ai)；非法 to_type → 400「invalid assign_to」 |
 | 12 | - | - | POST | `/api/inbox/assign/auto` | `data` | {conversation_id,candidates} | - | JWT | ✅ 通过 | 分配成功 |
 | 13 | - | - | GET | `/api/inbox/assignments` | `params` | - | params | JWT | ✅ 通过 | {list} |

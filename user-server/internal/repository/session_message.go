@@ -272,6 +272,18 @@ func (r *SessionMessageRepository) Delete(ctx context.Context, id uint) error {
 	return _db.EnsureAffected(r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.SessionMessage{}))
 }
 
+// DeleteInSession 带会话归属的删除：消息不属于该会话时命中 0 行 ⇒ ErrRecordNotFound。
+// 供收件箱按「会话 + 消息」双键删除使用（消息 id 全局自增，只按 id 删等于允许
+// 借一个可见会话删掉另一个会话的消息，2026-11-02 对抗性复核实测）。
+func (r *SessionMessageRepository) DeleteInSession(ctx context.Context, sessionID string, id uint) error {
+	if r == nil || r.db == nil {
+		return errSessionMessageUnavailable
+	}
+	return _db.EnsureAffected(r.db.WithContext(ctx).
+		Where("id = ? AND session_id = ?", id, sessionID).
+		Delete(&model.SessionMessage{}))
+}
+
 // ListInternalBySession 会话内部备注列表（仅 is_internal=true）
 func (r *SessionMessageRepository) ListInternalBySession(ctx context.Context, sessionID string, limit int) ([]*model.SessionMessage, error) {
 	if r == nil || r.db == nil {
