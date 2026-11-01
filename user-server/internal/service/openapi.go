@@ -71,59 +71,73 @@ func (s *OpenAPIService) GetSource(ctx context.Context, productID string, id int
 	return s.srcRepo.GetByProductAndID(ctx, productID, id)
 }
 
-// UpdateSource 更新数据源
-func (s *OpenAPIService) UpdateSource(ctx context.Context, src *model.KnowledgeOpenAPISource) error {
-	if src.ID == 0 {
-		return errors.New("数据源 ID 不能为空")
+// OpenAPISourcePatch 数据源部分更新补丁。
+//
+// 指针字段的三态语义：nil=请求未携带（保留库中值）；非 nil（含空串）=显式赋值
+// （空串即清空）。这是从「非零值合并」升级来的——上一版用 non-empty 判定，
+// 虽然治好了「未携带字段被清零」的数据丢失，却让"把 schedule/request_template
+// 清空"变成静默无效（用户点保存、界面回显还是旧值）。2026-11-02 二次审核实测。
+
+
+// UpdateSource 更新数据源（部分更新：只有补丁里出现的字段才会被写）。
+func (s *OpenAPIService) UpdateSource(ctx context.Context, id uint64, patch model.OpenAPISourcePatch) (*model.KnowledgeOpenAPISource, error) {
+	if id == 0 {
+		return nil, errors.New("数据源 ID 不能为空")
 	}
 	// 先确认存在，避免 repo.Save 对不存在的 id 变成 INSERT（upsert 语义错误）
-	existing, err := s.srcRepo.GetByID(ctx, src.ID)
+	existing, err := s.srcRepo.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("数据源不存在: id=%d", src.ID)
+			return nil, fmt.Errorf("数据源不存在: id=%d", id)
 		}
-		return err
+		return nil, err
 	}
-	// 部分更新语义：调用方传进来的是**新建的零值 model**，只应覆盖请求里真正
-	// 携带的字段；repo.Update 走 GORM 的 Save 写**全部字段含零值**，未传字段会被
-	// 清零——2026-10-31 API 全量回归实测：只传 name/description 的 PUT 把
-	// product_id/type/endpoint/method/auth_type 全部抹掉（数据丢失）。
-	// 因此这里把库中行作为底版，仅用请求里的非零值字段覆盖；运行时字段
-	// （last_sync_at/last_status/last_error/total_synced）永远以库中值为准，
-	// enabled=0 视为未携带（禁用走 /toggle 专用口），与 orderDraft.edit 的
-	// 「没给=不改」同一口径。tenant_id 恢复逻辑是本函数的既有修复（SaaS 下
-	// fail-closed 拒改租户），合并在同一步里完成。
-	src.TenantID = existing.TenantID
-	src.ProductID = pickNonEmpty(src.ProductID, existing.ProductID)
-	src.Name = pickNonEmpty(src.Name, existing.Name)
-	src.Type = pickNonEmpty(src.Type, existing.Type)
-	src.Endpoint = pickNonEmpty(src.Endpoint, existing.Endpoint)
-	src.Method = pickNonEmpty(src.Method, existing.Method)
-	src.AuthType = pickNonEmpty(src.AuthType, existing.AuthType)
-	src.AuthConfig = pickNonEmpty(src.AuthConfig, existing.AuthConfig)
-	src.RequestTemplate = pickNonEmpty(src.RequestTemplate, existing.RequestTemplate)
-	src.ResponsePath = pickNonEmpty(src.ResponsePath, existing.ResponsePath)
-	src.FieldMapping = pickNonEmpty(src.FieldMapping, existing.FieldMapping)
-	src.Schedule = pickNonEmpty(src.Schedule, existing.Schedule)
-	if src.Enabled == 0 {
-		src.Enabled = existing.Enabled
+	// 以库中行为底版，只覆盖补丁里出现的字段（patch 见 model.OpenAPISourcePatch）。
+	// 为什么必须：repo.Update 走 GORM 的 Save —— Save 写**全部字段含零值**，
+	// 而 controller 拿到的是请求体绑定的零值 model；直接 Save 会把未传字段清零
+	// （2026-10-31 实测：只传 name 的 PUT 把 product_id/type/endpoint/method/
+	// auth_type 全抹掉，enabled 被禁）。tenant_id 同样必须保留：SaaS 下
+	// fail-closed 拒改租户，独立部署则被静默改写（本仓这一族缺陷的通用形状）。
+	src := *existing
+	if patch.Name != nil {
+		src.Name = *patch.Name
 	}
-	src.LastSyncAt = existing.LastSyncAt
-	src.LastStatus = existing.LastStatus
-	src.LastError = existing.LastError
-	src.TotalSynced = existing.TotalSynced
-	if err := s.encryptAuthConfig(ctx, src); err != nil {
-		return fmt.Errorf("加密认证配置失败: %w", err)
+	if patch.Endpoint != nil {
+		src.Endpoint = *patch.Endpoint
 	}
-	return s.srcRepo.Update(ctx, src)
-}
-
-// pickNonEmpty 部分更新合并原语：请求值非空用请求值，否则保留库中值。
-func pickNonEmpty(in, fallback string) string {
-	if in != "" {
-		return in
+	if patch.Method != nil {
+		src.Method = *patch.Method
 	}
-	return fallback
+	if patch.AuthType != nil {
+		src.AuthType = *patch.AuthType
+	}
+	if patch.AuthConfig != nil {
+		src.AuthConfig = *patch.AuthConfig
+	}
+	if patch.RequestTemplate != nil {
+		src.RequestTemplate = *patch.RequestTemplate
+	}
+	if patch.ResponsePath != nil {
+		src.ResponsePath = *patch.ResponsePath
+	}
+	if patch.FieldMapping != nil {
+		src.FieldMapping = *patch.FieldMapping
+	}
+	if patch.Schedule != nil {
+		src.Schedule = *patch.Schedule
+	}
+	if patch.Enabled != nil {
+		src.Enabled = *patch.Enabled
+	}
+	// 运行时字段恒以库中值为准（补丁不提供，也不许被客户端改写）：
+	// last_sync_at / last_status / last_error / total_synced 已随 existing 带入。
+	if err := s.encryptAuthConfig(ctx, &src); err != nil {
+		return nil, fmt.Errorf("加密认证配置失败: %w", err)
+	}
+	if err := s.srcRepo.Update(ctx, &src); err != nil {
+		return nil, err
+	}
+	return &src, nil
 }
 
 // DeleteSource 删除数据源

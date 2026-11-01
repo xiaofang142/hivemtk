@@ -23,6 +23,11 @@ const (
 	SourceTypeURL     SourceType = "url"
 	SourceTypeBatch   SourceType = "batch"
 	SourceTypeOpenAPI SourceType = "openapi"
+	// 系统预置：演示/种子数据（scripts/seed 写入），统计与筛选必须能识别，
+	// 否则知识库统计的「来源类型分布」会漏掉这部分文档（此前 36 篇里只统计到 11 篇）。
+	SourceTypeSystemSeed SourceType = "system_seed"
+	// 手动录入：后台手工创建的文档
+	SourceTypeManual SourceType = "manual"
 )
 
 // KnowledgeDocument 知识库文档(产品维度)
@@ -211,3 +216,21 @@ type HelpCenterTestRecord struct {
 }
 
 func (HelpCenterTestRecord) TableName() string { return "help_center_test_records" }
+
+// OpenAPISourcePatch 知识 OpenAPI 数据源的部分更新补丁。
+//
+// 指针三态：nil=请求未携带（保留库中值）；非 nil（含空串）=显式赋值（空串即清空）。
+// 放在 model 层是为了让 controller 的 port 与 service 共用同一份结构，
+// 不必让 controller 反向依赖 service。
+type OpenAPISourcePatch struct {
+	Name            *string
+	Endpoint        *string
+	Method          *string
+	AuthType        *string
+	AuthConfig      *string
+	RequestTemplate *string
+	ResponsePath    *string
+	FieldMapping    *string
+	Schedule        *string
+	Enabled         *int
+}

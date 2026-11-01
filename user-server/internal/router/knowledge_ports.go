@@ -5,6 +5,7 @@ import (
 
 	knowledgectrl "hivemtk-user/internal/aiagent/knowledge/controller"
 	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/service"
 )
 
@@ -24,8 +25,8 @@ func (a *openAPISourceAdapter) GetSource(ctx context.Context, productID string, 
 	return a.svc.GetSource(ctx, productID, id)
 }
 
-func (a *openAPISourceAdapter) UpdateSource(ctx context.Context, src *knowledgemodel.KnowledgeOpenAPISource) error {
-	return a.svc.UpdateSource(ctx, src)
+func (a *openAPISourceAdapter) UpdateSource(ctx context.Context, id uint64, patch model.OpenAPISourcePatch) (*knowledgemodel.KnowledgeOpenAPISource, error) {
+	return a.svc.UpdateSource(ctx, id, patch)
 }
 
 func (a *openAPISourceAdapter) DeleteSource(ctx context.Context, productID string, id int64) error {

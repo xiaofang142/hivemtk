@@ -1220,7 +1220,7 @@
 | 15 | knowledgeAPI | listOpenAPISources | GET | `/api/knowledge/openapi/sources` | `params` | - | params | JWT | ✅ 通过 | {items} 含 auth_config 脱敏 |
 | 16 | knowledgeAPI | createOpenAPISource | POST | `/api/knowledge/openapi/sources` | `data` | data | - | JWT | ✅ 通过 | 必填 endpoint（缺 → 400「数据源端点不能为空」） |
 | 17 | knowledgeAPI | getOpenAPISource | GET | `/api/knowledge/openapi/sources/{id}` | `id, params` | - | params | JWT | ✅ 通过 | 全量行 |
-| 18 | knowledgeAPI | updateOpenAPISource | PUT | `/api/knowledge/openapi/sources/{id}` | `id, data` | data | - | JWT | 🔧 已修复 | 部分更新曾把未携带字段全部清零（product_id/type/endpoint/method/auth_type 被抹、enabled 被禁）——零值 model + Save 全字段写；service 层改非零值合并（「没给=不改」），回归测试 TestOpenAPISourcePartialUpdateKeepsUnsentFields |
+| 18 | knowledgeAPI | updateOpenAPISource | PUT | `/api/knowledge/openapi/sources/{id}` | `id, data` | data | - | JWT | 🔧 已修复 | 部分更新曾把未携带字段全部清零（数据丢失）；先改「非零值合并」治了丢失但让显式清空静默失效 → 最终改指针补丁三态（nil=不改 / 非 nil 含空串=赋值）；回归 TestOpenAPISourcePartialUpdateKeepsUnsentFields + TestOpenAPISourcePatch_ExplicitEmptyClears；线上复验：只传 name+schedule 保留其它字段、传 schedule: 可清空 |
 | 19 | knowledgeAPI | deleteOpenAPISource | DELETE | `/api/knowledge/openapi/sources/{id}` | `id, params` | - | params | JWT | ✅ 通过 | 删除成功且库中 0 行 |
 | 20 | knowledgeAPI | syncOpenAPISource | POST | `/api/knowledge/openapi/sources/{id}/sync` | `id, params` | Literal | params | JWT | ✅ 通过 | {total_items,imported,skipped,failed,status:success} |
 | 21 | knowledgeAPI | testOpenAPISource | POST | `/api/knowledge/openapi/sources/{id}/test` | `id, data` | data | - | JWT | 🔧 已修复 | 空 body 曾测空 URL（`unsupported protocol scheme ""`）——控制器只绑 body 不读库；改为 body 无 endpoint 时回落库中该 id 配置（body 显式字段优先，兼容前端保存前试连），仍无 → 400；不存在 id 404 |

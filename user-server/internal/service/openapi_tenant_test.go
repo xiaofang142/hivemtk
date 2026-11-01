@@ -22,7 +22,6 @@ import (
 	"context"
 	"testing"
 
-	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
 	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
@@ -52,16 +51,14 @@ func TestOpenAPISourceUpdateKeepsTenant(t *testing.T) {
 		t.Fatalf("种子数据源落库失败：%v", err)
 	}
 
-	// 模拟 controller 的真实入参：**新建的零值 model**（tenant_id=0）。
-	err := svc.UpdateSource(context.Background(), &model.KnowledgeOpenAPISource{
-		ID:        seed.ID,
-		ProductID: "p1",
-		Name:      "new-name",
-		Type:      "rest",
-		Endpoint:  "https://api.example.com/v2",
-		Method:    "GET",
-		AuthType:  "none",
-		Enabled:   1,
+	// 模拟 controller 的真实入参：只有补丁里出现的字段会被写。
+	name := "new-name"
+	endpoint := "https://api.example.com/v2"
+	method := "GET"
+	authType := "none"
+	enabled := 1
+	_, err := svc.UpdateSource(context.Background(), seed.ID, model.OpenAPISourcePatch{
+		Name: &name, Endpoint: &endpoint, Method: &method, AuthType: &authType, Enabled: &enabled,
 	})
 	if err != nil {
 		t.Fatalf("多租户模式下 UpdateSource 失败：%v", err)
@@ -89,9 +86,8 @@ func TestOpenAPISourceUpdateNotFound(t *testing.T) {
 	repo := knowledgerepo.NewKnowledgeOpenAPIRepository(db)
 	svc := &OpenAPIService{srcRepo: repo, docRepo: knowledgerepo.NewKnowledgeDocumentRepository(db)}
 
-	err := svc.UpdateSource(context.Background(), &knowledgemodel.KnowledgeOpenAPISource{
-		ID: 999999, Name: "x",
-	})
+	name := "x"
+	_, err := svc.UpdateSource(context.Background(), 999999, model.OpenAPISourcePatch{Name: &name})
 	if err == nil {
 		t.Fatal("不存在的 id 必须报错")
 	}
@@ -130,11 +126,9 @@ func TestOpenAPISourcePartialUpdateKeepsUnsentFields(t *testing.T) {
 		t.Fatalf("种子数据源落库失败：%v", err)
 	}
 
-	// 模拟 controller 的真实入参：只改名字，其余字段零值（未携带）。
-	err := svc.UpdateSource(context.Background(), &model.KnowledgeOpenAPISource{
-		ID:   seed.ID,
-		Name: "new-name",
-	})
+	// 模拟 controller 的真实入参：只改名字，其余字段未携带（nil）。
+	name := "new-name"
+	_, err := svc.UpdateSource(context.Background(), seed.ID, model.OpenAPISourcePatch{Name: &name})
 	if err != nil {
 		t.Fatalf("部分更新失败：%v", err)
 	}
@@ -166,5 +160,51 @@ func TestOpenAPISourcePartialUpdateKeepsUnsentFields(t *testing.T) {
 	}
 	if got.Enabled != 1 {
 		t.Errorf("未携带 enabled 不得禁用行（禁用走 /toggle）：实际 %d", got.Enabled)
+	}
+}
+
+// TestOpenAPISourcePatch_ExplicitEmptyClears 显式传空串必须清空字段。
+//
+// 对抗性复核（2026-11-02）：上一版用「非空值才覆盖」做部分更新，治好了
+// 未携带字段被清零，却让"把 schedule / request_template 清空"变成静默无效
+// ——用户点保存、回显还是旧值。指针补丁的三态（nil=不改，非 nil 含空=赋值）
+// 才是正确语义，本测试钉住"显式空串能清空"这一半。
+func TestOpenAPISourcePatch_ExplicitEmptyClears(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.KnowledgeOpenAPISource{})
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	repo := knowledgerepo.NewKnowledgeOpenAPIRepository(db)
+	svc := &OpenAPIService{srcRepo: repo, docRepo: knowledgerepo.NewKnowledgeDocumentRepository(db)}
+
+	seed := &model.KnowledgeOpenAPISource{
+		TenantID: 1, ProductID: "p-clear", Name: "n", Type: "rest",
+		Endpoint: "https://api.example.com/v1", Method: "GET", AuthType: "none",
+		Schedule: "@hourly", RequestTemplate: `{"q":"{{query}}"}`, Enabled: 1,
+	}
+	if err := repo.Create(context.Background(), seed); err != nil {
+		t.Fatalf("种子失败：%v", err)
+	}
+
+	empty := ""
+	if _, err := svc.UpdateSource(context.Background(), seed.ID, model.OpenAPISourcePatch{
+		Schedule: &empty, RequestTemplate: &empty,
+	}); err != nil {
+		t.Fatalf("显式清空失败：%v", err)
+	}
+
+	var got model.KnowledgeOpenAPISource
+	if err := db.Where("id = ?", seed.ID).First(&got).Error; err != nil {
+		t.Fatalf("读回失败：%v", err)
+	}
+	if got.Schedule != "" {
+		t.Errorf("显式空串必须清空 schedule，实际 %q", got.Schedule)
+	}
+	if got.RequestTemplate != "" {
+		t.Errorf("显式空串必须清空 request_template，实际 %q", got.RequestTemplate)
+	}
+	// 未携带的字段仍然保留
+	if got.Endpoint != "https://api.example.com/v1" {
+		t.Errorf("未携带字段不得被清空：endpoint=%q", got.Endpoint)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/model"
 	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -595,14 +596,34 @@ func (ctrl *KnowledgeWorkspaceController) UpdateOpenAPISource(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的数据源ID")
 		return
 	}
-	var src knowledgemodel.KnowledgeOpenAPISource
-	if err := c.ShouldBindJSON(&src); err != nil {
+	// 指针字段绑定：nil=未携带（保留库中值）、非 nil=显式赋值（空串即清空）。
+	// 不能直接绑 model：零值 model + repo.Save 全字段写会把未传字段清零，
+	// 而「用非空值判断」又会让显式清空静默失效（两次都是实测踩出来的）。
+	var body struct {
+		Name            *string `json:"name"`
+		Endpoint        *string `json:"endpoint"`
+		Method          *string `json:"method"`
+		AuthType        *string `json:"auth_type"`
+		AuthConfig      *string `json:"auth_config"`
+		RequestTemplate *string `json:"request_template"`
+		ResponsePath    *string `json:"response_path"`
+		FieldMapping    *string `json:"field_mapping"`
+		Schedule        *string `json:"schedule"`
+		Enabled         *int    `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-	src.ID = id
+	patch := model.OpenAPISourcePatch{
+		Name: body.Name, Endpoint: body.Endpoint, Method: body.Method,
+		AuthType: body.AuthType, AuthConfig: body.AuthConfig,
+		RequestTemplate: body.RequestTemplate, ResponsePath: body.ResponsePath,
+		FieldMapping: body.FieldMapping, Schedule: body.Schedule, Enabled: body.Enabled,
+	}
 
-	if err := ctrl.openapiService.UpdateSource(c.Request.Context(), &src); err != nil {
+	updated, err := ctrl.openapiService.UpdateSource(c.Request.Context(), id, patch)
+	if err != nil {
 		if isNotFoundError(err) {
 			response.Error(c, http.StatusNotFound, err.Error())
 			return
@@ -610,7 +631,7 @@ func (ctrl *KnowledgeWorkspaceController) UpdateOpenAPISource(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(c, src, "更新成功")
+	response.Success(c, updated, "更新成功")
 }
 
 // DeleteOpenAPISource 删除数据源
