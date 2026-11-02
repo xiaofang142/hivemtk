@@ -123,7 +123,7 @@ func (r *LLMUsageReportRepository) AggregateWindow(ctx context.Context, from, to
 			scenario,
 			COALESCE(channel, '') AS channel,
 			COALESCE(source, '') AS source,
-			CASE WHEN success THEN '' ELSE COALESCE(NULLIF(error_class, ''), 'unknown') END AS error_class,
+			`+errorClassExpr+` AS error_class,
 			COUNT(*) AS call_count,
 			SUM(CASE WHEN success THEN 0 ELSE 1 END) AS error_count,
 			SUM(CASE WHEN from_cache THEN 1 ELSE 0 END) AS cache_hit_count,
@@ -133,8 +133,7 @@ func (r *LLMUsageReportRepository) AggregateWindow(ctx context.Context, from, to
 			SUM(latency_ms) AS latency_sum_ms,
 			SUM(latency_ms * latency_ms) AS sum_squares_latency_ms`).
 		Where("created_at >= ? AND created_at < ?", from, to).
-		Group(`tenant_id, stat_date, provider, model, scenario, channel, source,
-			CASE WHEN success THEN '' ELSE COALESCE(NULLIF(error_class, ''), 'unknown') END`).
+		Group(`tenant_id, stat_date, provider, model, scenario, channel, source, ` + errorClassExpr).
 		Scan(&rows).Error
 	if err != nil {
 		return 0, fmt.Errorf("aggregate routing_logs: %w", err)
@@ -238,6 +237,19 @@ func (r *LLMUsageReportRepository) Totals(ctx context.Context, from, to time.Tim
 	return row, nil
 }
 
+// errorClassExpr 把失败调用归一成可读的错误分类。
+// 背景：llm_routing_logs.error_class 历史上没有写入方，失败行清一色落 unknown，
+// 报表「错误类型分布」只有 unknown 一片、明细「错误类型」列对排障没信息量；
+// 而 error_msg 里带着 status=401 / invalid_api_key / Invalid Authentication 等可分类特征，
+// 因此在读取侧用文本回推分类。success 行恒为空串，与 llm_usage_daily 存量口径一致。
+const errorClassExpr = "CASE WHEN success THEN '' " +
+	"WHEN NULLIF(error_class, '') IS NOT NULL THEN error_class " +
+	"WHEN COALESCE(error_msg, '') ~* '(invalid_api_key|invalid authentication|unauthorized|status=401|incorrect api key)' THEN 'auth' " +
+	"WHEN COALESCE(error_msg, '') ~* '(status=429|rate limit|quota|insufficient_quota)' THEN 'rate_limit' " +
+	"WHEN COALESCE(error_msg, '') ~* '(timeout|timed out|deadline exceeded)' THEN 'timeout' " +
+	"WHEN COALESCE(error_msg, '') ~* '(status=5[0-9][0-9]|connection refused|no such host|bad gateway|service unavailable)' THEN 'upstream' " +
+	"ELSE 'unknown' END"
+
 // LatencyPercentiles 明细侧实时分位（聚合表存的是 AVG，P95 精确值只在明细侧）
 func (r *LLMUsageReportRepository) LatencyPercentiles(ctx context.Context, from, to time.Time) (p50, p95 int64, err error) {
 	if r.db == nil {
@@ -316,10 +328,13 @@ func (r *LLMUsageReportRepository) ErrorClassAgg(ctx context.Context, from, to t
 		return nil, fmt.Errorf("llm usage report repository: db handle is nil")
 	}
 	rows := []LLMUsageReportBreakdownRow{}
-	if err := r.db.WithContext(ctx).Table("llm_usage_daily").
-		Select(`error_class AS dim, SUM(error_count) AS call_count`).
-		Where("stat_date >= ? AND stat_date < ? AND error_count > 0", from.Format("2006-01-02"), to.Format("2006-01-02")).
-		Group("error_class").
+	// 直接按明细表实时归类：llm_usage_daily 里历史行的 error_class 全是 unknown
+	//（写入侧从未标注），只有明细表带 error_msg 能回推分类，聚合口径必须与「错误明细」一致。
+	if err := r.db.WithContext(ctx).Table("llm_routing_logs").
+		Select(errorClassExpr+" AS dim, COUNT(*) AS call_count").
+		Where("success = false AND created_at >= ? AND created_at < ?", from, to).
+		Group(errorClassExpr).
+		Order("call_count DESC").
 		Scan(&rows).Error; err != nil {
 		return nil, err
 	}
@@ -333,12 +348,13 @@ func (r *LLMUsageReportRepository) FailedCalls(ctx context.Context, from, to tim
 	}
 	dq := r.db.WithContext(ctx).Table("llm_routing_logs").
 		Select(`trace_id, scenario, provider, model,
-			COALESCE(NULLIF(error_class,''),'unknown') AS error_class,
+			`+errorClassExpr+` AS error_class,
 			LEFT(COALESCE(error_msg,''),500) AS error_msg,
 			latency_ms, created_at`).
 		Where("success = false AND created_at >= ? AND created_at < ?", from, to)
 	if errorClass != "" {
-		dq = dq.Where("COALESCE(NULLIF(error_class,''),'unknown') = ?", errorClass)
+		// 过滤走同一表达式，否则「按分类筛选」与展示的分类对不上
+		dq = dq.Where(errorClassExpr+" = ?", errorClass)
 	}
 	var total int64
 	if err := dq.Count(&total).Error; err != nil {
