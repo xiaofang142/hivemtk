@@ -179,13 +179,15 @@ func (s *KnowledgeBaseService) GetKBStats(ctx context.Context, id uint) (map[str
 }
 
 // ListKBs 列表查询
-func (s *KnowledgeBaseService) ListKBs(ctx context.Context, kbType, ownerType string, agentID uint, keyword string) ([]*model.KnowledgeBase, int64, error) {
+func (s *KnowledgeBaseService) ListKBs(ctx context.Context, kbType, ownerType string, agentID uint, keyword string, enabled *bool) ([]*model.KnowledgeBase, int64, error) {
 	if s.repo == nil {
 		return nil, 0, nil
 	}
 	filter := repository.KBListFilter{
 		Type:      kbType,
 		OwnerType: ownerType,
+		// 启用状态过滤（模型字段 enabled，无 status 列）
+		Enabled: enabled,
 	}
 	if agentID > 0 {
 		aid := agentID

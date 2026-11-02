@@ -70,7 +70,9 @@ func TestGetKB_NilRepo(t *testing.T) {
 // TestListKBs_NilRepo 测试 nil repo
 func TestListKBs_NilRepo(t *testing.T) {
 	svc := &KnowledgeBaseService{}
-	got, total, err := svc.ListKBs(context.Background(), "faq", "", 0, "")
+	// 第六参 enabled 是 2026-11 新增的启用状态过滤（nil=不过滤）；
+	// 本用例只测 nil repo 的短路行为，传 nil 即可。
+	got, total, err := svc.ListKBs(context.Background(), "faq", "", 0, "", nil)
 	if err != nil {
 		t.Errorf("expected nil error, got %v", err)
 	}

@@ -81,7 +81,19 @@ func (c *KnowledgeBaseController) List(ctx *gin.Context) {
 		}
 		agentID = uint(n)
 	}
-	list, total, err := c.svc.ListKBs(ctx.Request.Context(), kbType, ownerType, agentID, keyword)
+	// 启用状态过滤：模型里开关字段是 `enabled`（bool），没有 status 列。
+	// 前端「状态」下拉此前传的是 status=1/0，后端不读 ⇒ 筛选从未生效，
+	// 且行内状态标签读 row.status 恒 undefined ⇒ 全部显示「禁用」。
+	var enabled *bool
+	if v := ctx.Query("enabled"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			response.Error(ctx, http.StatusBadRequest, "无效的 enabled 参数（true/false）")
+			return
+		}
+		enabled = &b
+	}
+	list, total, err := c.svc.ListKBs(ctx.Request.Context(), kbType, ownerType, agentID, keyword, enabled)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return

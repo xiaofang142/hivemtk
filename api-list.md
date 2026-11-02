@@ -814,17 +814,24 @@
 | 12 | domainPoolApi | checkAllDomains | POST | `/api/domain-pool/check-all` | - | {} | - | JWT | 🔧 | #137 批量检查失败 → 500「批量检查域名失败」（原直出 err.Error()） |
 
 ### douyinCard.js
+
+> 台账溯源（2026-11-02 补）：本节此前的 9 条备注在工作区合并时被覆盖，且那份记录从未提交过。
+> 现按两条独立证据重建：① 旧台账 `docs/verification/api-list.md` 第 338–346 行（2026-10-27，
+> 逐条 200 code=0）；② 2026-11-02 全链路复测（创建→读→改→统计→短链→删除）。
+> 前端侧另有并行 lane 的在途改动（`views/douyinCard/{List,CardStats}.vue` 时间列改用 `fmtTime`
+> 统一格式化，避免渲染原始 ISO 串）——那属于前端显示层，不在本表 API 行内计为「已修复」。
+
 | # | 导出 | 函数 | 方法 | 路径 | 入参 | Body | Query | 鉴权 | 状态 | 备注 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | - | - | GET | `/api/douyin/list` | - | - | - | JWT | ✅ 通过 | {list} |
-| 2 | - | - | GET | `/api/douyin/{id}` | - | - | - | JWT | ✅ 通过 | 单条 |
-| 3 | - | - | POST | `/api/douyin/create` | - | - | - | JWT | ✅ 通过 | 创建成功（自动生成 /s/xxx 短码） |
-| 4 | - | - | PUT | `/api/douyin/update` | - | - | - | JWT | ✅ 通过 | 全量语义（未传字段被清空，前端整表单提交） |
-| 5 | - | - | DELETE | `/api/douyin/delete/{id}` | - | - | - | JWT | ✅ 通过 | 删除成功 |
-| 6 | - | - | GET | `/api/douyin/view/{id}` | - | - | - | JWT | ✅ 通过 | 落地页视图数据 |
-| 7 | - | - | GET | `/api/douyin/stats/card/{id}` | - | - | - | JWT | ✅ 通过 | cardId/viewCount/dailyStats |
-| 8 | - | - | GET | `/api/douyin/stats/overall` | - | - | - | JWT | ✅ 通过 | totalCards/activeCards/totalViews |
-| 9 | - | - | POST | `/api/douyin/{id}/generate-short-link` | - | - | - | JWT | ✅ 通过 | 短链生成/复用成功 |
+| 1 | - | - | GET | `/api/douyin/list` | - | - | params | JWT | ✅ 通过 | 旧台账 #338（total=26）；11-02 复测 {list} 正常 |
+| 2 | - | - | GET | `/api/douyin/{id}` | - | - | - | JWT | ✅ 通过 | 旧台账 #339；复测单条全量行 |
+| 3 | - | - | POST | `/api/douyin/create` | - | data | - | JWT | ✅ 通过 | 旧台账 #340（id=63/64）；复测创建即生成 `/s/xxx` 短码 |
+| 4 | - | - | PUT | `/api/douyin/update` | - | data | - | JWT | ✅ 通过 | 旧台账 #341；复测确认**全量语义**：未传字段（description/image_url）会被清空，前端为整表单提交 |
+| 5 | - | - | DELETE | `/api/douyin/delete/{id}` | - | - | - | JWT | ✅ 通过 | 旧台账 #342；复测删除成功；不存在 id → 404（仓储 ErrRecordNotFound，测试 TestDouyinCardService_Delete_NotFound 已对齐该语义） |
+| 6 | - | - | GET | `/api/douyin/view/{id}` | - | - | - | JWT | ✅ 通过 | 旧台账 #343；复测与 #2 同源数据 |
+| 7 | - | - | GET | `/api/douyin/stats/card/{id}` | - | - | params | JWT | ✅ 通过 | 旧台账 #344；复测 cardId/viewCount/dailyStats 完整 |
+| 8 | - | - | GET | `/api/douyin/stats/overall` | - | - | params | JWT | ✅ 通过 | 旧台账 #345；复测 totalCards/activeCards/totalViews/popularCards |
+| 9 | - | - | POST | `/api/douyin/{id}/generate-short-link` | - | - | - | JWT | ✅ 通过 | 旧台账 #346；复测短链生成/复用成功 |
 
 ### egolite.js
 
@@ -1235,7 +1242,7 @@
 
 | # | 导出 | 函数 | 方法 | 路径 | 入参 | Body | Query | 鉴权 | 状态 | 备注 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | - | - | GET | `/api/knowledge-bases` | - | - | params | JWT | ✅ 通过 | type/kb_type 双参数过滤、keyword、分页 {list,total} |
+| 1 | - | - | GET | `/api/knowledge-bases` | - | - | params | JWT | ✅ 通过 | type/kb_type 双参数过滤、keyword、enabled（新增，非法值 400）、分页 {list,total} |
 | 2 | - | - | GET | `/api/knowledge-bases/by-type/{kbType}` | - | - | params | JWT | ✅ 通过 | 数组返回 |
 | 3 | - | - | GET | `/api/knowledge-bases/{id}` | - | - | - | JWT | ✅ 通过 | 全量行 |
 | 4 | - | - | POST | `/api/knowledge-bases` | - | data | - | JWT | ✅ 通过 | 缺必填 400；owner_type 缺省 private ⇒ 必须带 owner_agent_id（service 层有精确中文提示，但被 ErrorFromDB fallback 掩码成「操作失败」——文案策略记二次审核）；shared 直建成功 |
