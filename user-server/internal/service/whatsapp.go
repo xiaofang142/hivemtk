@@ -133,8 +133,8 @@ func (s *WhatsappService) CreateDraft(ctx context.Context, title, content string
 	d := &model.WhatsappDraft{Title: title, Content: content}
 	return d, s.repo.CreateDraft(ctx, d)
 }
-func (s *WhatsappService) ListDrafts(ctx context.Context) ([]*model.WhatsappDraft, error) {
-	return s.repo.ListDrafts(ctx)
+func (s *WhatsappService) ListDrafts(ctx context.Context, page, pageSize int) ([]*model.WhatsappDraft, int64, error) {
+	return s.repo.ListDrafts(ctx, page, pageSize)
 }
 func (s *WhatsappService) UpdateDraft(ctx context.Context, d *model.WhatsappDraft) error {
 	return s.repo.UpdateDraft(ctx, d)
@@ -208,8 +208,8 @@ func (s *WhatsappService) CreateBulkJob(ctx context.Context, draftID uuid.UUID) 
 }
 
 // ListJobs lists all bulk send jobs
-func (s *WhatsappService) ListJobs(ctx context.Context) ([]*model.WhatsappJob, error) {
-	return s.repo.ListJobs(ctx)
+func (s *WhatsappService) ListJobs(ctx context.Context, page, pageSize int) ([]*model.WhatsappJob, int64, error) {
+	return s.repo.ListJobs(ctx, page, pageSize)
 }
 
 // GetJob returns a single bulk send job by ID
