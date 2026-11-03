@@ -16,6 +16,10 @@ type PlatformAssetPayload struct {
 	SHA256      string          `json:"sha256"`
 	Data        json.RawMessage `json:"data"`
 	PurchasedAt time.Time       `json:"purchased_at"`
+	// 文件型资产（browser_extension）的 sync 响应没有 data，只有安装包元信息。
+	FileURL   string `json:"file_url"`
+	Filename  string `json:"filename"`
+	SizeBytes int64  `json:"size_bytes"`
 }
 
 // PlatformAPIClient 平台资产市场客户端接口（实现放在 platform 包适配层）

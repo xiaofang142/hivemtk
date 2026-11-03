@@ -48,6 +48,9 @@ func (a *AssetMarketClientAdapter) PullData(ctx context.Context, assetID string)
 		SHA256:      p.SHA256,
 		Data:        p.Data,
 		PurchasedAt: p.PurchasedAt,
+		FileURL:     p.FileURL,
+		Filename:    p.Filename,
+		SizeBytes:   p.SizeBytes,
 	}, nil
 }
 

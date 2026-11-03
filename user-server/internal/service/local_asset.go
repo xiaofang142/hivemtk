@@ -115,6 +115,22 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 		if err := asset.ValidateAssetData(asset.AssetType(payload.AssetType), payload.Data); err != nil {
 			return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败："+err.Error(), err)
 		}
+	} else if len(payload.Data) == 0 {
+		// local_asset_data.data 是 NOT NULL（二次回归 5000 实锤）：扩展把安装包
+		// 元信息序列化成 data 落库，my-assets 渲染与后续下载入口都有据可依。
+		meta, merr := json.Marshal(map[string]any{
+			"name":       payload.Name,
+			"asset_type": "browser_extension",
+			"version":    payload.Version,
+			"file_url":   payload.FileURL,
+			"filename":   payload.Filename,
+			"size_bytes": payload.SizeBytes,
+			"sha256":     payload.SHA256,
+		})
+		if merr != nil {
+			return bizerr.Wrap(bizerr.CodeInternal, "扩展元数据序列化失败", merr)
+		}
+		payload.Data = meta
 	}
 
 	now := time.Now()

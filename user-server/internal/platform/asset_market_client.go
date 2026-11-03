@@ -20,6 +20,11 @@ type AssetPayload struct {
 	SHA256      string          `json:"sha256"`
 	Data        json.RawMessage `json:"data"`
 	PurchasedAt time.Time       `json:"purchased_at"`
+	// 文件型资产（browser_extension）的 sync 响应没有 data，只有安装包元信息；
+	// 之前没接这三个字段，扩展落库只能拿到 nil data 撞 NOT NULL（二次回归 5000）。
+	FileURL   string `json:"file_url"`
+	Filename  string `json:"filename"`
+	SizeBytes int64  `json:"size_bytes"`
 }
 
 // AssetMarketClient 资产市场商户端客户端
