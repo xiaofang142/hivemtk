@@ -62,6 +62,11 @@ var messageHubPlatforms = map[string]bool{
 	"dingtalk": true,
 	"wechat":   true,
 	"custom":   true,
+	// web_embed（2026-11-04 BUG-3）：本系统内部网页客服渠道，有真实入站
+	// （chat_public visitor 链路走 customer_sessions 而非 hub，但出站中转与
+	// 平台枚举都该认识它）——缺词等于 /api/message-hub/platforms 枚举看不到
+	// 网页客服、push 落库被拒或枚举失真。
+	"web_embed": true,
 }
 
 var messageHubMsgTypes = map[string]bool{
@@ -385,6 +390,9 @@ func (s *MessageHubService) Push(ctx context.Context, req *PushMessageRequest) (
 		return msg, err
 	}
 	s.notify(ctx, msg)
+	// web_embed 出站直投（BUG-3，2026-11-04）：内部网页客服渠道没有认领方，
+	// pending 行只会永远挂起；Push 落库后立刻投到访客会话并置 delivered。
+	s.deliverWebEmbedOutboundLogged(ctx, msg)
 	return msg, nil
 }
 

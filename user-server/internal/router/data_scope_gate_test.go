@@ -330,6 +330,7 @@ var dataScopeScopedElsewhere = map[string]string{
 	"POST /api/customer-sessions/:id/messages":       "service.CustomerSessionService.GetSessionByIDStringScoped（controller/customer_session.go）",
 	"POST /api/customer-sessions/:id/rate":           "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session.go）",
 	"POST /api/customer-sessions/:id/release":        "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session_takeover.go）",
+	"POST /api/customer-sessions/:id/reply":          "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session_takeover.go，回复前自动接管）",
 	"PUT /api/customer-sessions/:id/status":          "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session.go）",
 	"POST /api/customer-sessions/:id/switch-handler": "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session_takeover.go）",
 	"POST /api/customer-sessions/:id/tags":           "service.CustomerSessionService.GetSessionByIDScoped（controller/customer_session.go）",
@@ -339,6 +340,7 @@ var dataScopeScopedElsewhere = map[string]string{
 	"GET /api/inbox/conversations/:id":                  "service.InboxService.GetByIDScoped",
 	"GET /api/inbox/conversations/:id/messages":         "service.InboxService.GetMessagesByConversationScoped",
 	"DELETE /api/inbox/conversations/:id/messages/:mid": "service.InboxService.DeleteMessageScoped",
+	"POST /api/inbox/conversations/:id/reply":           "service.InboxService.GetByIDScoped + CustomerSessionService.GetSessionByIDStringScoped（controller/inbox_reply.go）",
 	"POST /api/inbox/conversations/:id/mute":            "service.InboxService.MuteScoped",
 	"POST /api/inbox/conversations/:id/pin":             "service.InboxService.PinScoped",
 	"POST /api/inbox/conversations/:id/read":            "service.InboxService.MarkReadScoped",
@@ -352,7 +354,7 @@ var dataScopeScopedElsewhere = map[string]string{
 
 // dataScopeElsewhereCap 名册的上界（只减不增的棘轮）：
 // 覆盖率涨了就把对应条目删掉并把这里改小；把它调大等于承认新泄露，需要单独评审。
-const dataScopeElsewhereCap = 22
+const dataScopeElsewhereCap = 24 // 2026-11-04 22→24：新增 reply 两口：新增 POST /customer-sessions/:id/reply（BUG-1 人工回复口，已带 GetSessionByIDScoped 执行点），客服域总口 38→39 且全数覆盖
 
 // TestDataSetGate_CustomerDomainIsAllAccountedFor 客服域按行寻址的口，逐条要么登记进守卫、
 // 要么在名册里有明确执行点，二者必居其一。

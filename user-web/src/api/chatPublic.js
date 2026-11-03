@@ -12,6 +12,9 @@ import axios from 'axios'
 const publicPost = async (url, data, channelId, visitorId, visitorToken) => {
   return axios.post(url, data, {
     baseURL: window.location.origin,
+    // 60s 上限（BUG-9，2026-11-04）：axios 默认无超时，AI 同步生成慢时
+    // 访客端「发送中」会无限期挂住；到点放开按钮并走 catch 的失败提示。
+    timeout: 60000,
     headers: {
       'Content-Type': 'application/json',
       'X-Chat-Channel-Id': channelId,

@@ -135,10 +135,10 @@
                 <el-option
                   v-for="b in assetBundleOptions"
                   :key="b.asset_id"
-                  :label="b.title || b.asset_id"
+                  :label="b.title || b.name || b.asset_id"
                   :value="b.asset_id"
                 >
-                  <span>{{ b.title || b.asset_id }}</span>
+                  <span>{{ b.title || b.name || b.asset_id }}</span>
                   <span style="float: right; color: #8492a6; font-size: 12px">{{ b.industry || '' }}</span>
                 </el-option>
               </el-select>
@@ -809,6 +809,7 @@ import { sopTemplateApi } from '@/api/sopTemplate'
 import { listByType as listKBByType } from '@/api/knowledgeBase'
 import { listByAgent as listAgentKBs, replaceAgentKBs } from '@/api/agentKBBinding'
 import { listBundles } from '@/api/assetBundle'
+import { listLocalAssets } from '@/api/assetMarket'
 import { INTERNAL_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 import { isUserReportedError } from '@/utils/errorReporting'
 
@@ -932,8 +933,27 @@ const loadAssetBundles = async () => {
   try {
     // 后端 AssetBundleListRequest 的分页参数是 page/size（不是 page_size），
     // 传错时 size 恒为 0 被兜成 20，资产包下拉框只能看到前 20 条。
-    const res = await listBundles({ page: 1, size: 200, status: 'active' })
-    assetBundleOptions.value = res?.list || res?.items || []
+    // 2026-11-04（BUG-5）：并入 /api/v1/local-assets——资产市场购买同步的
+    // 资产只落在 local_assets，原下拉只读内置 asset-bundle 等于买来的包
+    // 永远选不到。两源合并，按 asset_id 去重；运行时 AgentLoader 按
+    // asset_id 加载，两条来源都能被智能体消费。
+    const [bundleRes, localRes] = await Promise.allSettled([
+      listBundles({ page: 1, size: 200, status: 'active' }),
+      listLocalAssets({ page: 1, size: 200, asset_type: 'agent_persona' })
+    ])
+    const bundles = bundleRes.status === 'fulfilled'
+      ? (bundleRes.value?.list || bundleRes.value?.items || [])
+      : []
+    const localAssets = localRes.status === 'fulfilled'
+      ? (localRes.value?.list || localRes.value?.items || [])
+      : []
+    const seen = new Set()
+    assetBundleOptions.value = [...bundles, ...localAssets].filter((b) => {
+      const key = b.asset_id || b.id
+      if (!key || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   } catch (e) {
     console.warn('加载资产包列表失败：', e?.message)
   }

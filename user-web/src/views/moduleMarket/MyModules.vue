@@ -340,9 +340,11 @@
             <el-button
               link
               type="primary"
+              :loading="ordering"
+              :disabled="ordering"
               @click="buy(row)"
             >
-              购买
+              {{ ordering ? '下单中' : '购买' }}
             </el-button>
           </template>
         </el-table-column>
@@ -543,6 +545,9 @@ function genClientOrderNo () {
 // 购买套餐：不再要求先填联系方式/加微信，直接下单并进入在线收银台。
 // 账号邮箱顺带上行，仅用于线下通道异常时的兜底联系（不作为付款前置条件）。
 async function buy (plan) {
+  // 防重复下单（BUG-7，2026-11-04）：epay 建单有秒级耗时，按钮 loading 之外
+  // 再挡一道——client_order_no 每次点击都重新生成，连点会静默多建订单。
+  if (ordering.value) return
   ordering.value = true
   try {
     const res = await createLLMOrder({
@@ -586,7 +591,9 @@ async function onSync () {
     if (res?.degraded) {
       ElMessage.warning(res.message || '平台不可达，已沿用上次同步结果')
     } else {
-      ElMessage.success(res.message || `已同步，当前开通 ${res?.active_count ?? 0} 个模块`)
+      // active_count 是「模块目录里可用条目数」，与上方「已开通」卡片（我的模块数）不是同一口径，
+      // 直接写「当前开通 N 个模块」会和卡片数字对不上，这里改成目录口径的措辞。
+      ElMessage.success(res.message || `已同步模块目录，可用 ${res?.active_count ?? 0} 个条目`)
     }
     fetch()
   } catch (e) {

@@ -35,7 +35,8 @@ func TestInboxAgentsRosterReadableAndDesensitized(t *testing.T) {
 		// 写进去仍是 true（生产侧 SetEnabled 也是走 Update 的）。
 		{Username: "agent-off", Password: "x", RealName: "已停用", Role: "customer_service",
 			Status: 1, Enabled: true},
-		// 超管与经理不是坐席候选（名单是"谁能接手会话"，不是"系统里有谁"）。
+		// 无坐席档案的账号域角色不是坐席候选（名单是"谁能接手会话"=有档案的在职账号，
+		// 不是"系统里有谁"；admin 老板有档案时同样会出现在名单里——SaaS 新租户常态）。
 		{Username: "gate-boss", Password: "x", RealName: "超管", Role: "admin",
 			Status: 1, Enabled: true},
 		{Username: "gate-manager", Password: "x", RealName: "经理", Role: "manager",
@@ -44,6 +45,20 @@ func TestInboxAgentsRosterReadableAndDesensitized(t *testing.T) {
 	for _, r := range rows {
 		if err := database.Create(r).Error; err != nil {
 			t.Fatalf("写入坐席夹具 %s 失败: %v", r.Username, err)
+		}
+	}
+	// 坐席档案（2026-11-04 BUG-2 口径修正后名单的判定源）：名单= 有坐席档案的
+	// 在职账号。三个在职账号都建档；gate-boss / gate-manager 刻意不建档——
+	// 它们代表"账号域里存在但不是坐席"的行，正是不该混进脱敏投影的形状。
+	if err := database.AutoMigrate(&model.AgentStatus{}); err != nil {
+		t.Fatalf("迁移 agent_statuses 失败: %v", err)
+	}
+	for _, idx := range []int{0, 1, 2} {
+		r := rows[idx]
+		if err := database.Create(&model.AgentStatus{
+			AgentID: r.ID, AgentName: r.Username, Status: "offline", MaxSessions: 5,
+		}).Error; err != nil {
+			t.Fatalf("写入坐席档案 %s 失败: %v", r.Username, err)
 		}
 	}
 	off := rows[2]

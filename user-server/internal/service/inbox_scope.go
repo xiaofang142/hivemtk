@@ -175,12 +175,17 @@ func (s *InboxService) ListAssignableAgents(ctx context.Context) ([]InboxAgent, 
 		// 与其余读路径同一套"无库回空"语义（全局句柄未注入时不报错、不查库）。
 		return nil, nil
 	}
+	// 口径修正（2026-11-04 T1 线上验收 BUG-2）：名单从「角色白名单」改为
+	// 「有坐席档案的在职账号」。原白名单（customer_service/staff 两档）在 SaaS
+	// 新租户上永远为空——租户唯一账号是 admin 角色，而坐席档案（agent_statuses）
+	// 在注册/首次上线时就已建好。按档案 join 后：admin 老板兼客服出现在名单里；
+	// 反过来，仅账号域的 admin（无坐席档案）依旧不会混进脱敏投影。
 	var agents []InboxAgent
-	err := dbUtil.GetDB().WithContext(ctx).Table("system_users").
-		Select("id", "username", "real_name", "role").
-		Where("role IN ? AND enabled = ? AND status = ?",
-			[]string{model.SystemRoleCodeCustomerService, model.SystemRoleCodeStaff}, true, 1).
-		Order("username").
+	err := dbUtil.GetDB().WithContext(ctx).Table("agent_statuses AS a").
+		Select("u.id", "u.username", "u.real_name", "u.role").
+		Joins("JOIN system_users AS u ON u.id = a.agent_id AND u.enabled = ? AND u.status = ?", true, 1).
+		Where("a.deleted_at IS NULL").
+		Order("u.username").
 		Scan(&agents).Error
 	return agents, err
 }

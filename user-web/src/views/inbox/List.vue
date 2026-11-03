@@ -496,6 +496,40 @@
           :description="$t('选择左侧会话查看对话')"
         />
 
+        <!-- 人工回复（BUG-1，2026-11-04）：坐席在收件箱直接回复访客，
+             走 POST /api/inbox/conversations/:id/reply（AI 会话自动接管为人工）。 -->
+        <div
+          v-if="currentConv"
+          class="thread-reply"
+        >
+          <el-input
+            v-model="replyDraft"
+            type="textarea"
+            :rows="2"
+            maxlength="5000"
+            show-word-limit
+            :placeholder="$t('输入人工回复内容，Ctrl+Enter 发送')"
+            @keydown.ctrl.enter.prevent="sendAgentReply"
+            @keydown.meta.enter.prevent="sendAgentReply"
+          />
+          <div class="thread-reply-actions">
+            <el-button
+              size="small"
+              @click="replyDraft = ''"
+            >
+              {{ $t('清空') }}
+            </el-button>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="replySending"
+              :disabled="!replyDraft.trim()"
+              @click="sendAgentReply"
+            >
+              {{ $t('回复访客') }}
+            </el-button>
+          </div>
+        </div>
         <div
           v-if="currentConv"
           class="thread-pagination"
@@ -677,6 +711,7 @@ import {
   Delete, ArrowDown, Document
 } from '@element-plus/icons-vue'
 import { inboxApi } from '@/api/inbox'
+import { http } from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { CHANNEL_OPTIONS, getChannelLabel, getChannelTagType } from '@/constants/channel'
 import i18n from '@/i18n'
@@ -705,6 +740,34 @@ const assignDialogVisible = ref(false)
 const assignSubmitting = ref(false)
 const assignForm = reactive({ to_user_id: '', remark: '' })
 const staffOptions = ref([])
+
+// 人工回复（BUG-1，2026-11-04）：落 POST /api/inbox/conversations/:id/reply。
+// 成功后把返回的 message 追加进当前线程底部，不等下一次轮询。
+const replyDraft = ref('')
+const replySending = ref(false)
+const sendAgentReply = async () => {
+  if (!currentConv.value || replySending.value) return
+  const content = (replyDraft.value || '').trim()
+  if (!content) return
+  replySending.value = true
+  try {
+    const res = await http.post(
+      `/api/inbox/conversations/${currentConv.value.id}/reply`,
+      { content }
+    )
+    const msg = res?.data?.message || res?.message
+    if (msg && msg.id) {
+      threadMessages.value = [...threadMessages.value, msg]
+      threadPagination.total += 1
+    }
+    replyDraft.value = ''
+    ElMessage.success(t('回复已发送'))
+  } catch (e) {
+    // request.js 已统一弹错，这里不再重复提示
+  } finally {
+    replySending.value = false
+  }
+}
 
 const tagDialogVisible = ref(false)
 const newTag = ref('')
@@ -1296,6 +1359,17 @@ onUnmounted(stopPolling)
 }
 .msg-file-icon {
   margin-right: 2px;
+}
+.thread-reply {
+  padding-top: 10px;
+  border-top: 1px solid #ebeef5;
+  margin-top: 8px;
+}
+.thread-reply-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .thread-pagination {
   padding-top: 10px;
