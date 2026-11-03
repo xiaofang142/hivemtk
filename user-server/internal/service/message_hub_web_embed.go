@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"time"
 
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/model"
+	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
 
 	"gorm.io/gorm"
@@ -56,42 +57,25 @@ func (s *MessageHubService) DeliverWebEmbedOutbound(ctx context.Context, msg *mo
 		return fmt.Errorf("未找到可投递的网页客服会话 (account=%s conv=%s): %w", msg.AccountID, msg.ConversationID, err)
 	}
 
-	message := &model.SessionMessage{
-		SessionID:   session.SessionID,
-		Content:     msg.Content,
-		ContentType: model.MessageType(msg.MsgType),
-		MediaURL:    msg.MediaURL,
-		SenderType:  "agent",
-		SenderID:    msg.SenderID,
-		SenderName:  msg.SenderName,
-	}
-	if message.ContentType == "" {
-		message.ContentType = model.MessageTypeText
+	contentType := model.MessageType(msg.MsgType)
+	if contentType == "" {
+		contentType = model.MessageTypeText
 	}
 
-	txErr := db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(message).Error; err != nil {
-			return err
-		}
-		now := time.Now()
-		if err := tx.Model(&model.CustomerSession{}).Where("id = ?", session.ID).Updates(map[string]any{
-			"last_message":      msg.Content,
-			"last_message_by":   "agent",
-			"last_message_at":   now,
-			"human_reply_count": gorm.Expr("human_reply_count + 1"),
-		}).Error; err != nil {
-			return err
-		}
-		extra := msg.Extra
-		if extra == nil {
-			extra = model.JSONMap{}
-		}
-		extra["web_embed_delivered_at"] = now.Format(time.RFC3339)
-		extra["web_embed_session_id"] = session.SessionID
-		return tx.Model(&model.MessageHub{}).Where("id = ?", msg.ID).Updates(map[string]any{
-			"status": "delivered",
-			"extra":  extra,
-		}).Error
+	// 事务写侧在 Repository（arch 守卫要求：service 不直接开 gorm 事务）。
+	if s.repo == nil {
+		return errors.New("message hub repo not ready")
+	}
+	message, txErr := s.repo.DeliverWebEmbedOutboundTx(ctx, repository.WebEmbedDeliveryInput{
+		MsgID:       msg.ID,
+		Extra:       msg.Extra,
+		SessionID:   session.ID,
+		ChatSession: session.SessionID,
+		Content:     msg.Content,
+		ContentType: contentType,
+		MediaURL:    msg.MediaURL,
+		SenderID:    msg.SenderID,
+		SenderName:  msg.SenderName,
 	})
 	if txErr != nil {
 		return txErr
@@ -109,8 +93,7 @@ func (s *MessageHubService) DeliverWebEmbedOutbound(ctx context.Context, msg *mo
 			"sender_id":    message.SenderID,
 		}
 		if err := websocket.SendToVisitor("message", payload, session.SessionID); err == nil {
-			now := time.Now()
-			_ = db.Model(&model.SessionMessage{}).Where("id = ?", message.ID).Update("delivered_at", &now).Error
+			_ = repository.NewSessionMessageRepository().MarkDeliveredAt(ctx, message.ID, time.Now())
 		}
 	}
 	return nil

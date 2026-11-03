@@ -36,7 +36,7 @@ const API_FILES = [
   'abExperiment', 'aiAgent', 'aiProductivity', 'approval', 'backup', 'batchOperation',
   'bulkMessaging', 'channelAgentBinding', 'chat', 'chatChannel', 'chatPublic', 'churnPrediction',
   'clue', 'community', 'conversionFunnel', 'customReport', 'customer360', 'customerEvent',
-  'customerJourney', 'customerService', 'customerServiceAgent', 'customerSession', 'dashboardScreen',
+  'customerJourney', 'customerService', 'customerSession', 'dashboardScreen',
   'dialogueMemory', 'domainPool', 'douyinCard', 'email', 'feishu', 'humanTask', 'integration', 'intentRecognition',
   'knowledge', 'knowledgeBase', 'knowledgeMerchant', 'kuaishouCard', 'livecode', 'llmRouting',
   'marketingFlow', 'material', 'messageHub', 'objection', 'obs', 'oneid', 'operationLog',
