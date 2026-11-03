@@ -319,7 +319,9 @@ const openSession = async (resume = true) => {
         created_at: new Date().toISOString()
       })
     }
-    if (data.session?.is_new_session === false) {
+    // is_new_session 在响应顶层（VisitorOpenSessionResult），不在 session 对象里
+    // ——此前读错层级导致刷新后聊天历史永不回放（回归实测）。
+    if (data.is_new_session === false || data.session?.is_new_session === false) {
       await loadHistory()
     }
     connectWebSocket();
