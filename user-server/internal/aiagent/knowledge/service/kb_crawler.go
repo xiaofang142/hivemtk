@@ -228,12 +228,18 @@ func (s *CrawlerService) DeleteSource(ctx context.Context, id uint) error {
 	return s.db.WithContext(ctx).Delete(&model.KBCrawlerSource{}, id).Error
 }
 
-// ListSources 列出源
-func (s *CrawlerService) ListSources(ctx context.Context, kbID uint) ([]model.KBCrawlerSource, error) {
+// ListSources 列出源。kbID=0 不限知识库；status 为空不限状态（active/paused/error）。
+//
+// 状态筛选必须落在 SQL 上：前端“状态”下拉此前只是把 status 发上来，
+// 服务层忽略后即使筛“已暂停”也照旧返回全部行，看起来像筛选坏了。
+func (s *CrawlerService) ListSources(ctx context.Context, kbID uint, status string) ([]model.KBCrawlerSource, error) {
 	var out []model.KBCrawlerSource
 	q := s.db.WithContext(ctx).Order("id DESC")
 	if kbID > 0 {
 		q = q.Where("kb_id = ?", kbID)
+	}
+	if status = strings.TrimSpace(status); status != "" {
+		q = q.Where("status = ?", status)
 	}
 	err := q.Find(&out).Error
 	return out, err

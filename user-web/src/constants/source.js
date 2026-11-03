@@ -22,6 +22,9 @@ export const SOURCE_OPTIONS = Object.freeze([
   { value: 'url',       label: 'URL 抓取',   tagType: 'warning', group: 'knowledge', description: 'URL 网页抓取' },
   { value: 'openapi',   label: 'OpenAPI',    tagType: 'info',    group: 'knowledge', description: '外部 OpenAPI 同步' },
   { value: 'batch',     label: '批量导入',   tagType: 'info',        group: 'knowledge', description: '批量任务导入' },
+  // 系统预置：内置演示/种子数据（scripts/seed 与 AutoMigrate 写入），
+  // 之前没有这个映射，文档管理的「来源」列会直接显示原始值 system_seed
+  { value: 'system_seed', label: '系统预置', tagType: 'info',    group: 'knowledge', description: '系统内置演示/种子数据' },
   { value: 'api',       label: 'API',        tagType: 'info',    group: 'knowledge', description: '外部 API 推送' },
   { value: 'crawler',   label: '爬虫',       tagType: 'warning', group: 'knowledge', description: '爬虫采集' },
 

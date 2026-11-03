@@ -208,7 +208,9 @@ func (s *RagEvalGapService) RunAsync(parent context.Context, productID string) (
 	if s == nil || s.gapRepo == nil {
 		return nil, fmt.Errorf("service or repository is nil")
 	}
-	run := &model.RagEvalRun{Total: -1}
+	// 先落一行 running 占位（total=-1 表示「还没算出结果」），跑完原地回填，
+	// 这样一次评测只产生一条记录，用户点一次不会看到两行（历史实现会再插一行 completed）。
+	run := &model.RagEvalRun{Total: -1, Status: "running"}
 	if err := s.gapRepo.CreateRun(parent, run); err != nil {
 		return nil, err
 	}
@@ -221,16 +223,28 @@ func (s *RagEvalGapService) RunAsync(parent context.Context, productID string) (
 		ctx, cancel := context.WithTimeout(tenant.BackgroundWithTenant(parent), utils.CronMediumTimeout)
 		defer cancel()
 		res, err := s.computeRun(ctx, pid)
+		// 结果回写要独立的短超时 ctx：计算用尽配额时 ctx 已取消，直接用它会写失败。
+		wctx, wcancel := context.WithTimeout(tenant.BackgroundWithTenant(parent), 10*time.Second)
+		defer wcancel()
 		if err != nil {
-			_ = s.gapRepo.MarkRunFailed(ctx, runID)
+			_ = s.gapRepo.MarkRunFailed(wctx, runID, "评测失败："+err.Error())
 			return
 		}
-		_ = s.gapRepo.UpdateRunResult(ctx, runID, map[string]any{
+		_ = s.gapRepo.UpdateRunResult(wctx, runID, map[string]any{
 			"total": res.Total, "hit": res.Hit, "recall5": res.Recall5,
 			"mrr": res.MRR, "ndcg5": res.NDCG5, "eval_set_size": res.EvalSetSize,
+			"status": "completed",
 		})
 	}(run.ID, productID)
 	return run, nil
+}
+
+// ReconcileInterrupted 清理上个进程遗留的 running 行（进程重启会打断后台评测）。
+func (s *RagEvalGapService) ReconcileInterrupted(ctx context.Context) (int64, error) {
+	if s == nil || s.gapRepo == nil {
+		return 0, fmt.Errorf("service or repository is nil")
+	}
+	return s.gapRepo.MarkInterruptedRuns(ctx)
 }
 
 func (s *RagEvalGapService) computeRun(ctx context.Context, productID string) (*model.RagEvalRun, error) {
@@ -256,9 +270,7 @@ func (s *RagEvalGapService) computeRun(ctx context.Context, productID string) (*
 		run.MRR = run.MRR / float64(run.Total)
 		run.NDCG5 = run.NDCG5 / float64(run.Total)
 	}
-	if err := s.gapRepo.CreateRunCompleted(ctx, run); err != nil {
-		return nil, err
-	}
+	// 结果由 RunAsync 原地回写占位行，这里不再插入新行（否则一次评测会多出一条重复记录）。
 	return run, nil
 }
 

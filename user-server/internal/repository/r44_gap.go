@@ -130,10 +130,31 @@ func (r *RagEvalGapRepo) CreateRun(ctx context.Context, run *model.RagEvalRun) e
 	return r.db.WithContext(ctx).Create(run).Error
 }
 
-func (r *RagEvalGapRepo) MarkRunFailed(ctx context.Context, runID uint) error {
+// MarkRunFailed 把评测标记为失败：total=-2 是「无有效结果」的哨兵值（前端显示 '-'），
+// 同时落 status/error_msg，避免列表里只剩一行 0 指标让人误以为跑成功。
+func (r *RagEvalGapRepo) MarkRunFailed(ctx context.Context, runID uint, msg string) error {
 	return r.db.WithContext(ctx).Model(&model.RagEvalRun{}).
 		Where("id = ?", runID).
-		Updates(map[string]any{"total": -2, "eval_set_size": 0}).Error
+		Updates(map[string]any{
+			"total":         -2,
+			"eval_set_size": 0,
+			"status":        "failed",
+			"error_msg":     msg,
+		}).Error
+}
+
+// MarkInterruptedRuns 把上个进程残留的 running 行标记为失败。
+// 评测在后台 goroutine 里跑，进程重启后这些行不会再有结果，不清理会永远显示「进行中」。
+func (r *RagEvalGapRepo) MarkInterruptedRuns(ctx context.Context) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&model.RagEvalRun{}).
+		// running：上次进程的 goroutine 已死；total=-1 且 completed：历史占位行从未回填结果，同样属中断
+		Where("status = ? OR (status = ? AND total = ?)", "running", "completed", -1).
+		Updates(map[string]any{
+			"status":    "failed",
+			"total":     -2,
+			"error_msg": "评测被中断（服务重启），请重新运行",
+		})
+	return res.RowsAffected, res.Error
 }
 
 func (r *RagEvalGapRepo) UpdateRunResult(ctx context.Context, runID uint, updates map[string]any) error {

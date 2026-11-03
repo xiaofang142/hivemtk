@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -75,6 +76,24 @@ func (r *KnowledgeDocumentRepository) GetByProductAndID(ctx context.Context, pro
 		return nil, err
 	}
 	return &doc, nil
+}
+
+// GetByIDs 批量按 ID 取文档（返回 id -> 文档 映射）。
+// 用于检索结果按文档维度后置过滤（分类/标签）：命中分段只带 document_id，
+// 而 category/tags 在文档表上，逐条 GetByID 会产生 N 次查询。
+func (r *KnowledgeDocumentRepository) GetByIDs(ctx context.Context, ids []uint64) (map[uint64]*model.KnowledgeDocument, error) {
+	out := make(map[uint64]*model.KnowledgeDocument, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var docs []*model.KnowledgeDocument
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&docs).Error; err != nil {
+		return nil, err
+	}
+	for _, d := range docs {
+		out[d.ID] = d
+	}
+	return out, nil
 }
 
 // ListFilter 文档列表筛选
@@ -225,9 +244,13 @@ func (r *KnowledgeDocumentRepository) CountByProduct(ctx context.Context, produc
 	return count, nil
 }
 
-func (r *KnowledgeDocumentRepository) CountByMerchant(ctx context.Context) (int64, error) {
+func (r *KnowledgeDocumentRepository) CountByMerchant(ctx context.Context, productID string) (int64, error) {
 	var count int64
-	if err := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).Count(&count).Error; err != nil {
+	q := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{})
+	if strings.TrimSpace(productID) != "" {
+		q = q.Where("product_id = ?", productID)
+	}
+	if err := q.Count(&count).Error; err != nil {
 		return 0, err
 	}
 	return count, nil

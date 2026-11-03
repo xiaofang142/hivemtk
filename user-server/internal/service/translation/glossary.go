@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	i18npkg "hivemtk-user/internal/pkg/i18n"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -233,6 +234,10 @@ func (s *GlossaryService) Create(ctx context.Context, g *model.Glossary) error {
 		g.Status = "active"
 	}
 	if err := s.repo.Create(ctx, g); err != nil {
+		// term_id 全局唯一：重复时给出可执行文案，而不是把 SQL 唯一键冲突抛成「创建术语失败」
+		if repository.IsDuplicateKeyErr(err) {
+			return &GlossaryDuplicateError{TermID: g.TermID}
+		}
 		return fmt.Errorf("glossary: create failed: %w", err)
 	}
 	s.InvalidateAll(ctx)
@@ -404,4 +409,14 @@ func pickTextByLang(translations []glossaryTranslation, lang string) string {
 		}
 	}
 	return ""
+}
+
+// GlossaryDuplicateError 术语 term_id 唯一冲突。
+//
+// 单独成型而不是用 fmt.Errorf：控制器需要 errors.As 判定后回 409 + 可执行文案，
+// 否则会落到 ErrorFromDB 的兜底 500「创建术语失败」。
+type GlossaryDuplicateError struct{ TermID string }
+
+func (e *GlossaryDuplicateError) Error() string {
+	return fmt.Sprintf("术语 %s 已存在（term_id 需唯一），请修改 term_id 或直接编辑已有术语", e.TermID)
 }

@@ -9,7 +9,13 @@ export const RATING_OPTIONS = Object.freeze([
     description: '相关'
   },
   { value: 'neutral',  label: '一般',   tagType: 'info',    description: '一般' },
-  { value: 'bad',      label: '不相关', tagType: 'danger',  description: '不相关' }
+  { value: 'bad',      label: '不相关', tagType: 'danger',  description: '不相关' },
+  // 历史 e2e 数据用的是 2~5 星评分（Playground 三态之外的旧口径），
+  // 这里补上映射，避免反馈列表把 5 直接渲染成数字「5」。
+  { value: 5, label: '5 星', tagType: 'success', description: '历史星级评价' },
+  { value: 4, label: '4 星', tagType: 'success', description: '历史星级评价' },
+  { value: 3, label: '3 星', tagType: 'info',    description: '历史星级评价' },
+  { value: 2, label: '2 星', tagType: 'danger',  description: '历史星级评价' }
 ]);
 
 export const RATING_LABEL_MAP = Object.freeze(

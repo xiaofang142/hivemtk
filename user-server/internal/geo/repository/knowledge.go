@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/geo/model"
@@ -16,6 +17,8 @@ type GeoKnowledgeDocumentRepository interface {
 	Update(ctx context.Context, doc *model.GeoKnowledgeDocument) error
 	GetByID(ctx context.Context, id string) (*model.GeoKnowledgeDocument, error)
 	GetList(ctx context.Context) ([]*model.GeoKnowledgeDocument, error)
+	// ListFiltered 按标题/正文关键词与来源等级过滤（keyword、sourceLevel 为空表示不过滤）
+	ListFiltered(ctx context.Context, keyword, sourceLevel string) ([]*model.GeoKnowledgeDocument, error)
 	Delete(ctx context.Context, id string) error
 }
 
@@ -66,6 +69,21 @@ func (r *geoKnowledgeDocRepo) GetByID(ctx context.Context, id string) (*model.Ge
 func (r *geoKnowledgeDocRepo) GetList(ctx context.Context) ([]*model.GeoKnowledgeDocument, error) {
 	var docs []*model.GeoKnowledgeDocument
 	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(1000).Find(&docs).Error
+	return docs, err
+}
+
+// ListFiltered 按关键词（标题/正文模糊）与来源等级过滤，避免把 400+ 全量文档原样吐给前端后由浏览器过滤
+func (r *geoKnowledgeDocRepo) ListFiltered(ctx context.Context, keyword, sourceLevel string) ([]*model.GeoKnowledgeDocument, error) {
+	var docs []*model.GeoKnowledgeDocument
+	q := r.db.WithContext(ctx).Model(&model.GeoKnowledgeDocument{})
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("title ILIKE ? OR content ILIKE ?", like, like)
+	}
+	if lv := strings.TrimSpace(sourceLevel); lv != "" {
+		q = q.Where("source_level = ?", lv)
+	}
+	err := q.Order("created_at DESC").Limit(1000).Find(&docs).Error
 	return docs, err
 }
 

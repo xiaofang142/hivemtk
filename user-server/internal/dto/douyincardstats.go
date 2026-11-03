@@ -52,6 +52,8 @@ type PopularCard struct {
 type Activity struct {
 	ID        uint   `json:"id"`
 	CardID    uint   `json:"cardId"`
+	// CardTitle 来自卡片表 JOIN，前端「最近活动」直接展示
+	CardTitle string `json:"cardTitle"`
 	Action    string `json:"action"`
 	Username  string `json:"username"`
 	IPAddress string `json:"ipAddress"`

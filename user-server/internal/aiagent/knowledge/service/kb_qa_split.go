@@ -144,6 +144,9 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 	}
 
 	rows := make([]*internalmodel.QACandidate, 0, len(items))
+	// 显式写时间：审核队列按 created_at 展示"候选产生时间"，历史上存在绕过 GORM 时序钩子
+	// 写入的行（created_at 为 NULL）导致前端整列显示 "-"，这里不再依赖 autoCreateTime。
+	now := time.Now()
 	for _, it := range items {
 		if strings.TrimSpace(it.Question) == "" || strings.TrimSpace(it.Answer) == "" {
 			continue
@@ -158,6 +161,8 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 			AnswerAnchor: it.AnswerAnchor,
 			Status:       internalmodel.QACandidateStatusPendingReview,
 			TaskID:       taskID,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		})
 	}
 	if len(rows) == 0 {

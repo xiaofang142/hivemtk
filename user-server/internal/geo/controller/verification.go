@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strings"
 
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/service"
@@ -30,9 +31,19 @@ func (c *VerificationController) VerifyArticle(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
+	// 未选模型时后端无法验证：给出可执行 400（原来是 500「AI 搜索验证失败」，用户不知道下一步做什么）
+	if len(req.Models) == 0 {
+		response.Error(ctx, http.StatusBadRequest, "请选择至少一个验证模型后再验证（当前部署没有可用的云端模型时，请先在「模型提供商」启用一个可访问的模型）")
+		return
+	}
 	result, err := c.svc.VerifyArticle(ctx.Request.Context(), req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "AI 搜索验证失败")
+		// 服务层错误带具体原因（如 provider 连接失败），直接透出比「服务器内部错误」可执行
+		msg := err.Error()
+		if !strings.Contains(msg, "AI 搜索验证失败") {
+			msg = "AI 搜索验证失败: " + msg
+		}
+		response.Error(ctx, http.StatusInternalServerError, msg)
 		return
 	}
 	response.Success(ctx, result, "AI 搜索验证成功")

@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -232,6 +233,16 @@ func (c *CustomerOneIDController) ResolveIdentity(ctx *gin.Context) {
 	var identifiers identity.Identifiers
 	if err := ctx.ShouldBindJSON(&identifiers); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
+		return
+	}
+	// 一个标识都没填时 ResolveIdentity 会「解析成功」并落一条空身份客户，
+	// 属于脏数据入口，必须在入口拦下并给出可执行提示。
+	if strings.TrimSpace(identifiers.Phone) == "" &&
+		strings.TrimSpace(identifiers.Email) == "" &&
+		strings.TrimSpace(identifiers.WechatOpenID) == "" &&
+		strings.TrimSpace(identifiers.DouyinOpenID) == "" &&
+		strings.TrimSpace(identifiers.XiaohongshuID) == "" {
+		response.Error(ctx, http.StatusBadRequest, "请至少填写一个身份标识（手机号 / 邮箱 / 微信 OpenID / 抖音 OpenID / 小红书 ID）")
 		return
 	}
 	customers, err := c.identitySvc.ResolveIdentity(ctx.Request.Context(), identifiers)

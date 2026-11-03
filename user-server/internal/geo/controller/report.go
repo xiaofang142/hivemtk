@@ -67,7 +67,8 @@ func (c *ReportController) GetROI(ctx *gin.Context) {
 // GetAPICosts 获取 API 调用成本
 // GET /geo/reports/api-costs
 func (c *ReportController) GetAPICosts(ctx *gin.Context) {
-	result, err := c.svc.GetAPICosts(ctx.Request.Context())
+	// 与 summary/roi 一致支持日期范围过滤（原来忽略 start_date/end_date，页面上换日期结果不变）
+	result, err := c.svc.GetAPICosts(ctx.Request.Context(), ctx.Query("start_date"), ctx.Query("end_date"))
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "获取 API 成本失败")
 		return

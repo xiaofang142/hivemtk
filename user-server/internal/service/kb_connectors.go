@@ -51,7 +51,13 @@ type ConnectorStatus struct {
 	LastTestAt  *string        `json:"last_test_at,omitempty"`
 	LastTestOK  *bool          `json:"last_test_ok,omitempty"`
 	LastTestMsg string         `json:"last_test_msg,omitempty"`
+	// PullSupported 是否已实现「一键拉取导入」；未实现时前端应禁用按钮而不是让用户点了才报错
+	PullSupported bool `json:"pull_supported"`
 }
+
+// kbConnectorOrder 固定列出顺序：List 之前直接遍历 map，Server 每次返回顺序随机，
+// 前端四张卡片会来回跳位（用户以为选错了卡片），这里显式定序。
+var kbConnectorOrder = []string{"notion", "feishu", "dingtalk", "crm"}
 
 var kbConnectorNames = map[string]string{
 	"notion": "Notion", "feishu": "飞书", "dingtalk": "钉钉", "crm": "自定义 CRM Webhook",
@@ -59,8 +65,8 @@ var kbConnectorNames = map[string]string{
 
 // List 列出全部连接器状态
 func (s *KBConnectorService) List(ctx context.Context) []ConnectorStatus {
-	out := make([]ConnectorStatus, 0, len(kbConnectorSources))
-	for source := range kbConnectorSources {
+	out := make([]ConnectorStatus, 0, len(kbConnectorOrder))
+	for _, source := range kbConnectorOrder {
 		out = append(out, s.Get(ctx, source))
 	}
 	return out
@@ -68,7 +74,7 @@ func (s *KBConnectorService) List(ctx context.Context) []ConnectorStatus {
 
 // Get 单个连接器状态（凭据脱敏）
 func (s *KBConnectorService) Get(ctx context.Context, source string) ConnectorStatus {
-	st := ConnectorStatus{Source: source, Name: kbConnectorNames[source]}
+	st := ConnectorStatus{Source: source, Name: kbConnectorNames[source], PullSupported: kbPullers[source] != nil}
 	raw, err := s.kv.Get(ctx, connectorKVKey(source))
 	if err != nil || raw == "" {
 		return st
@@ -81,15 +87,26 @@ func (s *KBConnectorService) Get(ctx context.Context, source string) ConnectorSt
 	st.Configured = len(saved.Config) > 0
 	st.Config = maskConnectorConfig(saved.Config)
 
+	// Test() 写回的是 test_at / test_ok / test_msg，这里曾按 at/ok/msg 读取，
+	// 导致「最近测试」永远不显示；保留旧键兜底以兼容历史数据。
 	var testRes struct {
-		At  string `json:"at"`
-		OK  bool   `json:"ok"`
-		Msg string `json:"msg"`
+		At    string `json:"test_at"`
+		OK    bool   `json:"test_ok"`
+		Msg   string `json:"test_msg"`
+		AtOld string `json:"at"`
+		OKOld bool   `json:"ok"`
+		MsgOld string `json:"msg"`
 	}
-	if err := json.Unmarshal([]byte(raw), &testRes); err == nil && testRes.At != "" {
-		st.LastTestAt = &testRes.At
-		st.LastTestOK = &testRes.OK
-		st.LastTestMsg = testRes.Msg
+	if err := json.Unmarshal([]byte(raw), &testRes); err == nil {
+		at, ok, msg := testRes.At, testRes.OK, testRes.Msg
+		if at == "" {
+			at, ok, msg = testRes.AtOld, testRes.OKOld, testRes.MsgOld
+		}
+		if at != "" {
+			st.LastTestAt = &at
+			st.LastTestOK = &ok
+			st.LastTestMsg = msg
+		}
 	}
 	return st
 }

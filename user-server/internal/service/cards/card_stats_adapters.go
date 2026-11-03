@@ -161,11 +161,11 @@ func (a *kuaishouCardStatsAdapter) GetCardStats(ctx context.Context, req *dto.Pl
 	if req == nil {
 		return nil, fmt.Errorf("请求不能为空")
 	}
-	startDate, endDate := parseDateRange(req.StartDate, req.EndDate)
+	// 内部服务自己解析 YYYY-MM-DD，这里直接透传字符串（避免二次解析/类型不匹配）
 	inner := &dto.KuaishouCardStatsRequest{
 		CardID:    req.CardID,
-		StartDate: startDate,
-		EndDate:   endDate,
+		StartDate: req.StartDate,
+		EndDate:   req.EndDate,
 		GroupBy:   req.GroupBy,
 	}
 	resp, err := a.inner.GetCardStats(ctx, inner)
@@ -185,10 +185,10 @@ func (a *kuaishouCardStatsAdapter) GetOverallStats(ctx context.Context, req *dto
 	if req == nil {
 		return nil, fmt.Errorf("请求不能为空")
 	}
-	startDate, endDate := parseDateRange(req.StartDate, req.EndDate)
+	// 同上：日期字符串由内部服务解析
 	inner := &dto.KuaishouCardOverallStatsRequest{
-		StartDate: startDate,
-		EndDate:   endDate,
+		StartDate: req.StartDate,
+		EndDate:   req.EndDate,
 		GroupBy:   req.GroupBy,
 		Limit:     req.Limit,
 	}

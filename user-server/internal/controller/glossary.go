@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/errhttp"
 	i18npkg "hivemtk-user/internal/pkg/i18n"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service/translation"
@@ -47,12 +48,17 @@ func (ctrl *GlossaryController) RegisterRoutes(router *gin.RouterGroup) {
 func (ctrl *GlossaryController) Create(c *gin.Context) {
 	var req dto.GlossaryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：term_id、category、translations（多语言译法）均为必填；preserve / pattern / status 可选")
 		return
 	}
 	g := translation.ToGlossaryModel(&req)
 	if err := ctrl.svc.Create(c.Request.Context(), g); err != nil {
-		response.Error(c, http.StatusBadRequest, "创建失败", err.Error())
+		var dup *translation.GlossaryDuplicateError
+		if errors.As(err, &dup) {
+			response.Error(c, http.StatusConflict, dup.Error())
+			return
+		}
+		response.ErrorFromDB(c, err, "创建术语失败")
 		return
 	}
 	response.Success(c, translation.FromGlossaryModel(g), "创建成功")
@@ -66,7 +72,7 @@ func (ctrl *GlossaryController) Create(c *gin.Context) {
 func (ctrl *GlossaryController) List(c *gin.Context) {
 	var req dto.GlossaryListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：查询条件不合法（page / page_size 需为数字）")
 		return
 	}
 	if req.Page < 1 {
@@ -79,7 +85,7 @@ func (ctrl *GlossaryController) List(c *gin.Context) {
 	if req.Category != "" && req.Status == "" && req.Keyword == "" {
 		list, err := ctrl.svc.ListByCategory(c.Request.Context(), req.Category)
 		if err != nil {
-			response.ErrorFromDB(c, err, "查询失败", err.Error())
+			response.ErrorFromDB(c, err, "获取术语列表失败")
 			return
 		}
 		response.SuccessWithList(c, translation.FromGlossaryModelList(list), int64(len(list)))
@@ -88,7 +94,7 @@ func (ctrl *GlossaryController) List(c *gin.Context) {
 
 	list, total, err := ctrl.svc.List(c.Request.Context(), req.Status, req.Keyword, req.Page, req.PageSize)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "获取术语失败")
 		return
 	}
 	response.SuccessWithPage(c, translation.FromGlossaryModelList(list), int64(req.Page), int64(req.PageSize), total)
@@ -111,7 +117,7 @@ func (ctrl *GlossaryController) Get(c *gin.Context) {
 			response.NotFoundError(c, "术语")
 			return
 		}
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "获取术语失败")
 		return
 	}
 	response.Success(c, translation.FromGlossaryModel(g), "获取成功")
@@ -134,13 +140,13 @@ func (ctrl *GlossaryController) Update(c *gin.Context) {
 			response.NotFoundError(c, "术语")
 			return
 		}
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "获取术语失败")
 		return
 	}
 
 	var req dto.GlossaryUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：term_id、category、translations（多语言译法）均为必填；preserve / pattern / status 可选")
 		return
 	}
 	updated := translation.ToGlossaryModelUpdate(&req)
@@ -150,7 +156,12 @@ func (ctrl *GlossaryController) Update(c *gin.Context) {
 		updated.Status = existing.Status
 	}
 	if err := ctrl.svc.Update(c.Request.Context(), updated); err != nil {
-		response.Error(c, http.StatusBadRequest, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新术语失败")
+		return
+	}
+	// 请求体里只有可编辑字段，直接回 updated 会丢掉 created_at 等未在请求里的列 → 回读落库结果。
+	if fresh, ferr := ctrl.svc.GetByTermID(c.Request.Context(), termID); ferr == nil && fresh != nil {
+		response.Success(c, translation.FromGlossaryModel(fresh), "更新成功")
 		return
 	}
 	response.Success(c, translation.FromGlossaryModel(updated), "更新成功")
@@ -168,7 +179,11 @@ func (ctrl *GlossaryController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.Delete(c.Request.Context(), termID); err != nil {
-		response.Error(c, http.StatusBadRequest, "删除失败", err.Error())
+		if errors.Is(err, translation.ErrGlossaryNotFound) || errhttp.IsNotFoundError(err) {
+			response.NotFound(c, "术语不存在")
+			return
+		}
+		response.ErrorFromDB(c, err, "删除术语失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -182,13 +197,13 @@ func (ctrl *GlossaryController) Delete(c *gin.Context) {
 func (ctrl *GlossaryController) Validate(c *gin.Context) {
 	var req dto.GlossaryValidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.Error(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		response.Error(c, http.StatusBadRequest, "请求参数错误：term_id、category、translations（多语言译法）均为必填；preserve / pattern / status 可选")
 		return
 	}
 	lang := i18npkg.NormalizeLang(req.Lang)
 	view, err := ctrl.svc.LoadByLang(c.Request.Context(), lang)
 	if err != nil {
-		response.ErrorFromDB(c, err, "加载术语表失败", err.Error())
+		response.ErrorFromDB(c, err, "加载术语表失败")
 		return
 	}
 	corrected, issues := ctrl.validator.Validate(req.Text, lang, view)

@@ -76,17 +76,20 @@ type LiveCodeStatsResponse struct {
 
 // GenerateQRCodeRequest 生成二维码请求
 type GenerateQRCodeRequest struct {
-	ExpireDays int `json:"expire_days" binding:"required"`
+	// ExpireDays 允许前端不传：服务层会补默认 30 天，避免必填校验原文直接暴露给用户。
+	ExpireDays int `json:"expire_days" binding:"omitempty,min=1,max=3650"`
 	Status     int `json:"status"`
 }
 
 // LiveCodeQRResponse 活码二维码响应
 type LiveCodeQRResponse struct {
-	ID                  string    `json:"id"`
-	LiveCodeID          string    `json:"live_code_id"`
-	ImageURL            string    `json:"image_url"`
-	QRImageURL          string    `json:"qr_image_url"`
-	ExpireDays          int       `json:"expire_days"`
+	ID         string `json:"id"`
+	LiveCodeID string `json:"live_code_id"`
+	ImageURL   string `json:"image_url"`
+	QRImageURL string `json:"qr_image_url"`
+	ExpireDays int    `json:"expire_days"`
+	// DailyLimit 每日限制次数：前端「二维码管理」列直接展示，缺字段会渲染成空的「次」
+	DailyLimit          int       `json:"daily_limit"`
 	ViewCount           int       `json:"view_count"`
 	ClickCount          int       `json:"click_count"`
 	Status              int       `json:"status"`

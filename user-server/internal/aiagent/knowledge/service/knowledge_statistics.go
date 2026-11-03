@@ -76,13 +76,15 @@ func (s *KnowledgeStatisticsService) GetOverview(ctx context.Context, productID 
 		SourceTypeBreakdown:  make(map[string]int64),
 	}
 
-	totalDocs, err := s.docRepo.CountByMerchant(ctx)
+	// 产品筛选必须同时作用于文档数/分段数：否则按产品筛选后「来源分布/索引健康度」
+	// 只统计该产品文档，而总量与就绪率分母仍是全库（曾出现 5 篇文档却算 5/36 就绪率）
+	totalDocs, err := s.docRepo.CountByMerchant(ctx, productID)
 	if err != nil {
 		return nil, errors.New("统计文档数失败: " + err.Error())
 	}
 	overview.TotalDocuments = totalDocs
 
-	totalChunks, err := s.chunkRepo.CountByMerchant(ctx)
+	totalChunks, err := s.chunkRepo.CountByMerchant(ctx, productID)
 	if err != nil {
 		return nil, errors.New("统计分段数失败: " + err.Error())
 	}
@@ -94,7 +96,9 @@ func (s *KnowledgeStatisticsService) GetOverview(ctx context.Context, productID 
 	}
 	overview.TotalTokens = totalTokens
 
-	overview.TotalSearches, _ = s.searchLogRepo.TodayCount(ctx)
+	// 累计检索次数用 TotalCount（原先用 TodayCount，导致 KPI 当天为 0 时
+	// 与下方「检索质量」的窗口总数矛盾）
+	overview.TotalSearches, _ = s.searchLogRepo.TotalCount(ctx, productID)
 
 	overview.TodayImports, _ = s.docRepo.CountTodayImports(ctx)
 	overview.TodaySearches, _ = s.searchLogRepo.TodayCount(ctx)
@@ -120,9 +124,12 @@ func (s *KnowledgeStatisticsService) GetOverview(ctx context.Context, productID 
 		overview.EmbedStatusBreakdown[string(status)] = total
 	}
 
+	// 必须覆盖库里真实存在的全部来源类型：漏掉 batch / system_seed / manual 会让
+	// 「来源类型分布」加起来小于文档总数（曾出现 36 篇只统计到 11 篇）
 	for _, st := range []model.SourceType{
 		model.SourceTypeUpload, model.SourceTypeText,
 		model.SourceTypeURL, model.SourceTypeOpenAPI,
+		model.SourceTypeBatch, model.SourceTypeSystemSeed, model.SourceTypeManual,
 	} {
 		filter := repository.ListFilter{
 

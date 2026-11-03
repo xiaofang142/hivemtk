@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -183,6 +184,9 @@ func (s *LLMRoutingService) ListModels(ctx context.Context) []LLMProviderInfo {
 			SeparatePricing: p.HasSeparatePricing(),
 		})
 	}
+	// 按名称稳定排序：模型来自 map，不排序时每次刷新行序随机，
+	// 用户勾选/比对同名行时会点错（审计实测同一页面三次首行都不同）。
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 

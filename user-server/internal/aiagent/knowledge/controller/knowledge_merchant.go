@@ -2,8 +2,10 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -11,6 +13,22 @@ import (
 	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/response"
 )
+
+// operatorName 取当前操作者名称，用于 created_by / operator 审计字段。
+// JWT 中间件写入的 key 是 username / user_id，而历史代码读的是 "operator"（全仓无人 Set 过），
+// 导致 Token 的「创建人」列与反馈的「操作员」列恒为空。这里按 username → operator → user#id 兜底。
+func operatorName(c *gin.Context) string {
+	if v := strings.TrimSpace(c.GetString("username")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(c.GetString("operator")); v != "" {
+		return v
+	}
+	if uid := c.GetUint("user_id"); uid > 0 {
+		return fmt.Sprintf("user#%d", uid)
+	}
+	return ""
+}
 
 // KnowledgeMerchantController 商户视角 RAG 增强控制器
 // 对应审计：商户自部署场景的可视化管理 + 外部系统接入 + 检索调试
@@ -66,7 +84,7 @@ func (ctrl *KnowledgeMerchantController) BatchImport(c *gin.Context) {
 		return
 	}
 	if req.Operator == "" {
-		req.Operator = c.GetString("operator")
+		req.Operator = operatorName(c)
 	}
 	result, err := ctrl.svc.BatchImport(c.Request.Context(), &req)
 	if err != nil {
@@ -80,7 +98,8 @@ func (ctrl *KnowledgeMerchantController) BatchImport(c *gin.Context) {
 func (ctrl *KnowledgeMerchantController) BatchUpload(c *gin.Context) {
 	productID := c.PostForm("product_id")
 	if productID == "" {
-		response.Error(c, http.StatusBadRequest, "product_id 不能为空")
+		// 面向界面文案：直接说该做什么，而不是回字段名（2026-10-31 逐页点验）
+		response.Error(c, http.StatusBadRequest, "请选择目标知识库（产品）后再上传导入")
 		return
 	}
 	file, header, err := c.Request.FormFile("file")
@@ -211,7 +230,7 @@ func (ctrl *KnowledgeMerchantController) SubmitFeedback(c *gin.Context) {
 		return
 	}
 	if req.Operator == "" {
-		req.Operator = c.GetString("operator")
+		req.Operator = operatorName(c)
 	}
 	if err := ctrl.svc.SubmitFeedback(c.Request.Context(), &req); err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
@@ -224,7 +243,9 @@ func (ctrl *KnowledgeMerchantController) ListFeedbacks(c *gin.Context) {
 	productID := c.Query("product_id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	rating, _ := strconv.Atoi(c.DefaultQuery("rating", "0"))
+	// 默认 999 表示「不按评价过滤」；此前默认 "0" 会把不带 rating 的请求当成“只查一般”。
+	rating, _ := strconv.Atoi(c.DefaultQuery("rating", "999"))
+	keyword := c.Query("keyword")
 	filter := 999
 	if rating >= -1 && rating <= 1 {
 		filter = rating
@@ -234,12 +255,21 @@ func (ctrl *KnowledgeMerchantController) ListFeedbacks(c *gin.Context) {
 		Page:      page,
 		PageSize:  pageSize,
 		Rating:    filter,
+		Keyword:   keyword,
 	})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(c, gin.H{"items": list, "total": total, "page": page, "page_size": pageSize}, "")
+	stats, err := ctrl.svc.FeedbackStats(c.Request.Context(), productID)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.Success(c, gin.H{
+		"items": list, "total": total, "page": page, "page_size": pageSize,
+		"stats": gin.H{"total": stats.Total, "good": stats.Good, "neutral": stats.Neutral, "bad": stats.Bad},
+	}, "")
 }
 
 func (ctrl *KnowledgeMerchantController) CreateToken(c *gin.Context) {
@@ -249,7 +279,7 @@ func (ctrl *KnowledgeMerchantController) CreateToken(c *gin.Context) {
 		return
 	}
 	if req.CreatedBy == "" {
-		req.CreatedBy = c.GetString("operator")
+		req.CreatedBy = operatorName(c)
 	}
 	tok, err := ctrl.svc.CreateToken(c.Request.Context(), &req)
 	if err != nil {
@@ -294,7 +324,7 @@ func (ctrl *KnowledgeMerchantController) ExternalImport(c *gin.Context) {
 		req.Token = c.Query("token")
 	}
 	if req.Operator == "" {
-		req.Operator = c.GetString("operator")
+		req.Operator = operatorName(c)
 	}
 	if req.Source == "" {
 		response.Error(c, http.StatusBadRequest, "source 不能为空")

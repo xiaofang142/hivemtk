@@ -32,7 +32,7 @@
                   <el-option
                     v-for="p in productList"
                     :key="p.id"
-                    :label="p.name"
+                    :label="productOptionLabel(p)"
                     :value="p.id"
                   />
                 </el-select>
@@ -198,7 +198,7 @@
                 <el-option
                   v-for="p in productList"
                   :key="p.id"
-                  :label="p.name"
+                  :label="productOptionLabel(p)"
                   :value="p.id"
                 />
               </el-select>
@@ -213,7 +213,7 @@
                 </el-checkbox>
               </el-checkbox-group>
               <div class="form-hint">
-                不勾选则默认 read + write
+                不勾选则默认只读；需要写入请勾选「可写」
               </div>
             </el-form-item>
             <el-form-item label="过期时间">
@@ -325,12 +325,14 @@ curl -X POST \
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, CopyDocument } from '@element-plus/icons-vue'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
 import { copyToClipboard } from '@/utils/clipboard'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
+import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const creating = ref(false)
@@ -372,11 +374,19 @@ const loadTokens = async () => {
     })
     tokens.value = res?.items || res || []
   } catch (e) {
-    ElMessage.error('加载 Token 失败: ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error('加载 Token 失败: ' + (e.message || ''))
   } finally {
     loading.value = false
   }
 }
+
+// 产品下拉里存在重名（如两条「通用电商客服知识库」），重名时补 ID 以便区分
+const duplicatedProductNames = computed(() => {
+  const names = productList.value.map((p) => p.name)
+  return new Set(names.filter((n, i) => names.indexOf(n) !== i))
+})
+const productOptionLabel = (p) =>
+  duplicatedProductNames.value.has(p.name) ? `${p.name}（${p.id}）` : p.name
 
 const getProductName = (id) => {
   const p = productList.value.find(p => p.id === id)
@@ -417,7 +427,7 @@ const handleCreate = async () => {
       loadTokens()
     }
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error('创建失败: ' + (e.message || ''))
   } finally {
     creating.value = false
   }
@@ -434,7 +444,8 @@ const handleRevoke = async (row) => {
     ElMessage.success(i18n.global.t('已吊销'))
     loadTokens()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('吊销失败: ' + (e.message || ''))
+    // 拦截器已弹过后端文案，取消/关闭确认框按已报处理
+    if (!isUserReportedError(e)) ElMessage.error('吊销失败: ' + (e.message || ''))
   }
 }
 
@@ -446,7 +457,8 @@ const copyToken = async () => {
   }
 }
 
-const formatDate = (d) => d ? new Date(d).toLocaleString('zh-CN') : '-'
+// 统一时间口径：零值/非法时间显示 '-'，其余按当前语言格式化
+const formatDate = (d) => fmtTime(d, undefined, '-')
 
 onMounted(async () => {
   await loadProducts()

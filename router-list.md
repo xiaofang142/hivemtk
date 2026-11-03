@@ -78,7 +78,7 @@
 | 35 | [x] | `/badCase/list` | BadCaseList | Bad Case 队列 | - | `views/badCase/List.vue` | `src/router/modules/badCase.js` | - |
 | 36 | [x] | `/batchOperation/list` | BatchOperationList | 批量操作 | 是 | `views/batchOperation/List.vue` | `src/router/modules/batchOperation.js` | - |
 | 37 | [x] | `/bridge/token` | BridgeTokenManagement | 桥接凭证 | - | `views/bridge/TokenManagement.vue` | `src/router/modules/bridgeToken.js` | - |
-| 38 | [~] | `/bridge/extension` | BridgeExtensionPackage | 扩展安装包 | 是 | `views/bridge/ExtensionPackage.vue` | `src/router/modules/bridgeToken.js` | - |
+| 38 | [x] | `/bridge/extension` | BridgeExtensionPackage | 扩展安装包 | 是 | `views/bridge/ExtensionPackage.vue` | `src/router/modules/bridgeToken.js` | - |
 | 39 | [x] | `/bridge` | BridgeRoot | 渠道接入 | - | `-` | `src/router/modules/bridgeToken.js` | - |
 | 40 | [x] | `/token` | - |  | - | `-` | `src/router/modules/bridgeToken.js` | - |
 | 41 | [x] | `/browser-automation` | BrowserAutomation | 浏览器自动化 | 是 | `-` | `src/router/modules/browserAutomation.js` | - |
@@ -322,3 +322,30 @@ image / 卡片，按控件类型分别交互（下拉选项、开关点开后复
   `/whatsapp-cloud` `/asset-market`，行为与独立部署一致。
 - 第二轮新发现并修复 5 处（批量导出文件流、egolite 两处、geo 两处、术语表、OneID 合并规则、
   渠道流水线保存合约、WhatsApp Cloud 字段名、角色页重复提示），详见 commit message。
+
+### 第三轮：页面数据与交互结果点验（2026-10-31）
+
+前两轮回答的是「页面有没有报错、控件点得动」；这一轮回答「**页面上的数据对不对、交互有没有真的生效**」。
+
+每页固定两套判定，缺一即记为问题：
+
+**数据面**
+1. 列表接口 `total` 与渲染行数/空态是否自洽（`total>0` 但 0 行、`total=0` 但有行、`total>0` 但既无行也无空态）
+2. 渲染文本里不得出现 `undefined` / `null` / `NaN` / `Infinity` / `[object Object]` / `Invalid Date` /
+   `0001-01-01` / Go 格式化残留 `%!s(` `<nil>` / 单花括号占位符 `{token}` / 未替换 `${var}`
+3. 接口 `code != 0` 一律记录；分页 total 文案与接口 total 一致
+4. 卡片/统计数值与接口字段一致，不得恒为 0 或空图表
+5. 首行关键字段（名称、编号、时间）非空且非占位值
+6. 筛选/搜索条件变化后，接口入参与返回结果确实随之变化
+
+**交互面**
+1. 每个可点元素点击后必须产生可观察效果：`navigate` / `modal` / `dom` / `request`
+2. 无任何效果且非「已选中项」的点击记为 `noop`，逐条人工判定是否死按钮
+3. 弹窗必须带内容（标题/表单/按钮），不得是空白弹窗
+4. 保存/删除/状态切换后回读接口确认已落库（GET 复核）
+5. 分页、排序、tab 切换后内容确实变化
+6. 每次点击引发的 console / pageerror / 非 2xx 归属到该元素
+
+工具：`/tmp/ui-audit/run3.mjs` + `runall3.py`，输出 `results3/<nnn>-<mode>-<slug>.json`
+（`initial` 指纹、`dataFindings[]`、`clicks[{effect,reqs,modal,errors,anomalies}]`、`noopCount`）。
+

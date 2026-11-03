@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
@@ -84,7 +85,7 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 			}
 			fetched, ferr := s.fetchFeishu(ctx, req.FeishuDocID)
 			if ferr != nil {
-				return nil, ferr
+				return nil, externalImportCause(ferr)
 			}
 			items = fetched
 		case "notion":
@@ -93,9 +94,15 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 			}
 			fetched, ferr := s.fetchNotion(ctx, req.NotionPageID, tok)
 			if ferr != nil {
-				return nil, ferr
+				return nil, externalImportCause(ferr)
 			}
 			items = fetched
+		case "dingtalk":
+			// 钉钉侧没有与飞书/Notion 对等的「按 docID 拉正文」公开接口（需应用凭证 +
+			// 文档权限审批），本服务未接入。以前它会掉进下面的 default，回一句
+			// 「source 不支持自动抓取」—— 页面明明有「钉钉 DocID」输入框，用户会以为
+			// 是自己 ID 填错了。
+			return nil, errors.New("钉钉文档自动抓取尚未接入，请在「通用 JSON」里粘贴内容，或由钉钉机器人调用 OpenAPI 推送 items")
 		default:
 			return nil, errors.New("未提供 items，且 source 不支持自动抓取")
 		}
@@ -228,6 +235,28 @@ func (s *KnowledgeMerchantService) ListExternalJobs(ctx context.Context, product
 		Page:      page,
 		PageSize:  pageSize,
 	})
+}
+
+// externalImportCause 把「抓取上游文档」的失败翻译成业务错误，让 controller 的
+// response.ErrorFromDB 返回 400/502 + 可读原因。
+//
+// 为什么必须翻译：未配置凭证（FEISHU_APP_ID / NOTION_API_KEY 缺失）、上游 401、
+// 文档 ID 打错都属于「用户自己能改」的问题，直接 return 原始 error 会落到
+// ErrorFromDB 最后的兜底分支 —— 500「外部系统导入失败」，提示既没原因也没方向，
+// 用户只能反复重试。配置类问题用 4xxx（400），上游可达但回错用 5001（502）。
+func externalImportCause(err error) error {
+	if err == nil {
+		return nil
+	}
+	var be *bizerr.BizError
+	if errors.As(err, &be) {
+		return err
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "未配置凭证") || strings.Contains(msg, "不能为空") {
+		return bizerr.New(bizerr.CodeParamInvalid, msg)
+	}
+	return bizerr.Wrap(bizerr.CodePlatformUnavail, msg, nil)
 }
 
 func (s *KnowledgeMerchantService) fetchFeishu(ctx context.Context, docID string) ([]BatchImportItem, error) {

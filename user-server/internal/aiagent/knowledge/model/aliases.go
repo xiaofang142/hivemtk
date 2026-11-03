@@ -40,6 +40,9 @@ const (
 	SourceTypeURL     = model.SourceTypeURL
 	SourceTypeBatch   = model.SourceTypeBatch
 	SourceTypeOpenAPI = model.SourceTypeOpenAPI
+	// 以下两类历史数据里存在（seed 脚本 / 手工录入），统计枚举必须包含
+	SourceTypeSystemSeed = model.SourceTypeSystemSeed
+	SourceTypeManual     = model.SourceTypeManual
 )
 
 type (

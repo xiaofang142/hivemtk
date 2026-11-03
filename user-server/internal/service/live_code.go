@@ -70,26 +70,26 @@ func (s *liveCodeService) Create(ctx context.Context, req *dto.CreateLiveCodeReq
 
 	shortDomain, err := s.domainRepo.GetByID(ctx, int(req.ShortDomainID))
 	if err != nil {
-		return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
+		return nil, fmt.Errorf("%w：短链域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 	}
 	if shortDomain.Status != 1 {
-		return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
+		return nil, fmt.Errorf("%w：短链域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 	}
 
 	entryDomain, err := s.domainRepo.GetByID(ctx, int(req.EntryDomainID))
 	if err != nil {
-		return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
+		return nil, fmt.Errorf("%w：入口域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 	}
 	if entryDomain.Status != 1 {
-		return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
+		return nil, fmt.Errorf("%w：入口域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 	}
 
 	landingDomain, err := s.domainRepo.GetByID(ctx, int(req.LandingDomainID))
 	if err != nil {
-		return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
+		return nil, fmt.Errorf("%w：落地域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 	}
 	if landingDomain.Status != 1 {
-		return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
+		return nil, fmt.Errorf("%w：落地域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 	}
 
 	liveCode := &model.LiveCode{
@@ -139,10 +139,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.ShortDomainID > 0 && req.ShortDomainID != liveCode.ShortDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.ShortDomainID))
 		if err != nil {
-			return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
+			return nil, fmt.Errorf("%w：短链域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, fmt.Errorf("%w: 短链域名 %d", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
+			return nil, fmt.Errorf("%w：短链域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.ShortDomainID)
 		}
 		liveCode.ShortDomainID = req.ShortDomainID
 	}
@@ -150,10 +150,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.EntryDomainID > 0 && req.EntryDomainID != liveCode.EntryDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.EntryDomainID))
 		if err != nil {
-			return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
+			return nil, fmt.Errorf("%w：入口域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, fmt.Errorf("%w: 入口域名 %d", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
+			return nil, fmt.Errorf("%w：入口域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.EntryDomainID)
 		}
 		liveCode.EntryDomainID = req.EntryDomainID
 	}
@@ -161,10 +161,10 @@ func (s *liveCodeService) Update(ctx context.Context, id string, req *dto.Update
 	if req.LandingDomainID > 0 && req.LandingDomainID != liveCode.LandingDomainID {
 		domain, err := s.domainRepo.GetByID(ctx, int(req.LandingDomainID))
 		if err != nil {
-			return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
+			return nil, fmt.Errorf("%w：落地域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 		}
 		if domain.Status != 1 {
-			return nil, fmt.Errorf("%w: 落地域名 %d", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
+			return nil, fmt.Errorf("%w：落地域名 %d 不存在或已停用，请到「域名池」选择可用域名", ErrLiveCodeDomainUnavailable, req.LandingDomainID)
 		}
 		liveCode.LandingDomainID = req.LandingDomainID
 	}
@@ -343,6 +343,11 @@ func (s *liveCodeService) GenerateQRCode(ctx context.Context, id string, req *dt
 	_, err := s.liveCodeRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("活码不存在")
+	}
+
+	// 过期天数默认 30 天：DTO 已放宽为可选，这里兜底，保证入库值合法。
+	if req.ExpireDays <= 0 {
+		req.ExpireDays = 30
 	}
 
 	imagePath := fmt.Sprintf("/uploads/qrcodes/%s.png", uuid.New().String())
@@ -558,6 +563,7 @@ func (s *liveCodeService) qrModelToResponse(ctx context.Context, qrCode *model.L
 		ImageURL:            qrCode.ImageURL,
 		QRImageURL:          qrCode.ImageURL,
 		ExpireDays:          qrCode.ExpireDays,
+		DailyLimit:          qrCode.DailyLimit,
 		ViewCount:           viewCount,
 		ClickCount:          clickCount,
 		Status:              qrCode.Status,

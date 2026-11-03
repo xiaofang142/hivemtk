@@ -99,32 +99,16 @@ QUANTIFY = ("overlay=", "已在 HEAD", "覆盖 {")
 # 没有一枚驱动可以挂身份行。A5（族归属对账）靠这份名单放行它们，理由必须写实——
 # 空字符串等于"用一行代码关掉一格判据"。
 NOT_A_BATTERY = {
-    "CIwiring": "某几轮 `make audit`／逐门复跑的手工重定向读数，身份在正文的 SHA 叙述里，无驱动可挂",
-    "Transcript": "check-secret-containment.py `--transcripts` 那一面的一次性普查读数（键名与次数），"
-                  "产物由人工命令行重定向落盘，不是电池格子",
     "b-phase": "R22 复审泳道 b 阶段的**分车道 findings**（`lane-2-d7-gate-findings.md` 等），"
                "手写结论文件、由人工执行重定向落盘；提到它的三枚刀具（`mut_d7gate_r22lane.py`／"
                "`mut_outbound_claim_r22lane.py`／`mut_sentcache_r22lane.py`）都只在散文里引用它，"
                "前两者代码内没有仓库落点、第三枚的落点是 `R22-lanes`",
-    "c-phase": "同泳道 c 阶段 findings，同上",
-    "R22-closefinal": "R22 复审收口轮的逐门复跑输出与账本读数（人工命令行重定向），无电池驱动",
-    "R22-phaseE": "R22 复审 E 阶段一次性读数（人工重定向），无电池驱动",
-    "R22-protocol": "二次检查协议（second-review-protocol）自身的校准／演练读数，人工执行落盘",
-    "R22closeout": "R22 收口轮的一次性补测读数，人工重定向，无驱动可挂",
     "R23retention": "R23 保留策略一次性核查读数，人工重定向，无驱动可挂",
     "R23dedup": "R23 入站去重首轮九格的逐格日志（`CONTROL.log`／`K1…K9-*.log`），由人工命令行"
                 "重定向落盘；`mut_ingest_dedup_r23.py` 的代码里没有仓库内落点（只在 docstring 里"
                 "引用这一族），故它不进成员名单——这条登记同时是本门的一处口径盲区：argv 指进树内"
                 "的一次性读数不会有驱动归属",
 
-    "R25full": "R25 全量复跑的一次性读数（不带格名），人工重定向，无驱动可挂",
-    "R25full2": "R25 全量复跑第二趟的一次性读数，人工重定向，无驱动可挂",
-    "R26media": "R26 媒体批次的一次性锚点／核查读数，人工重定向，无驱动可挂",
-    "R27media": "R27 媒体批次（协程快照站点普查）的一次性读数，人工重定向，无驱动可挂",
-    "calib": "53300 连接容量标定趟（`cap-ab-53300-probe.py` 之前的手工容器标定），人工重定向",
-    "calib2": "同上的第二趟标定，人工重定向",
-    "dentproof-anchor": "锚点预检的一次性\"凹痕证明\"读数（证明参数真进了装架），人工重定向",
-    "wiring-anchor": "门禁注册接线核查的一次性锚点读数，人工重定向",
     "P903": "常驻变异电池 `mut_journey_stage_index_p903.sh`（.sh 驱动）；本门驱动轴只覆盖 `mut_*.py`"
             "（ast/tokenize 解析），.sh 候选不进 drivers() ⇒ 无身份发射点可挂；"
             "产物为 `go test -overlay` customer_journey 阶段索引变异读数，非人工重定向",

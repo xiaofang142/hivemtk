@@ -268,7 +268,19 @@ func (c *MarketingFlowController) Trigger(ctx *gin.Context) {
 	}
 
 	execution, err := c.flowService.TriggerFlowByID(ctx.Request.Context(), id, triggerID, uidStr, req.Data)
-	if errhttp.HandleDBError(ctx, err, "触发营销流程") {
+	// 业务校验失败（如「流程未激活」）必须把原因透出给用户，
+	// 否则前端只能看到笼统的「触发营销流程失败」，不知道要先去启用流程。
+	if errors.Is(err, utils.ErrInvalidInput) {
+		// 去掉 sentinel 包装前缀，前端直接展示「流程未激活」这类可执行文案
+		msg := strings.TrimPrefix(err.Error(), "invalid input: ")
+		response.Error(ctx, http.StatusBadRequest, msg)
+		return
+	}
+	if errors.Is(err, utils.ErrForbidden) {
+		response.Error(ctx, http.StatusForbidden, err.Error())
+		return
+	}
+	if errhttp.HandleDBError(ctx, err, "触发营销流程失败") {
 		return
 	}
 

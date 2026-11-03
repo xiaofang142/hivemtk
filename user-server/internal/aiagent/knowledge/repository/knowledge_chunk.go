@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"errors"
 	"fmt"
 	"strconv"
@@ -217,9 +218,12 @@ func (r *KnowledgeChunkRepository) CountByProductID(ctx context.Context, product
 	return count, nil
 }
 
-func (r *KnowledgeChunkRepository) CountByMerchant(ctx context.Context) (int64, error) {
+func (r *KnowledgeChunkRepository) CountByMerchant(ctx context.Context, productID string) (int64, error) {
 	var count int64
 	q := r.db.WithContext(ctx).Model(&model.KnowledgeChunk{})
+	if strings.TrimSpace(productID) != "" {
+		q = q.Where("product_id = ?", productID)
+	}
 	if err := q.Count(&count).Error; err != nil {
 		return 0, err
 	}

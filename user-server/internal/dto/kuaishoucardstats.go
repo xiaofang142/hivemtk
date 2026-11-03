@@ -4,10 +4,12 @@ import "time"
 
 // KuaishouCardStatsRequest 快手卡片统计数据请求
 type KuaishouCardStatsRequest struct {
-	CardID    uint      `form:"cardId" json:"cardId" binding:"required"`
-	StartDate time.Time `form:"startDate" json:"startDate"`
-	EndDate   time.Time `form:"endDate" json:"endDate"`
-	GroupBy   string    `form:"groupBy" json:"groupBy"`
+	CardID uint `form:"card_id" json:"cardId" binding:"required"`
+	// 日期用字符串承接（前端 el-date-picker 传的是 YYYY-MM-DD）：
+	// 用 time.Time 直接绑定会在参数带日期时 400「参数错误」。
+	StartDate string `form:"start_date" json:"startDate"`
+	EndDate   string `form:"end_date" json:"endDate"`
+	GroupBy   string `form:"group_by" json:"groupBy"`
 }
 
 // KuaishouCardStatsResponse 快手卡片统计数据响应
@@ -23,11 +25,16 @@ type KuaishouCardStatsResponse struct {
 }
 
 // KuaishouCardOverallStatsRequest 快手卡片总体统计数据请求
+// 查询参数统一用 snake_case（start_date/end_date/group_by）：
+// 前端一直按 snake_case 传，之前这里写 camelCase，gin 绑定不到 ⇒
+// 日期范围与分组方式被静默丢弃，页面看到的永远是「近一个月 + 按天」。
 type KuaishouCardOverallStatsRequest struct {
-	StartDate time.Time `form:"startDate" json:"startDate"`
-	EndDate   time.Time `form:"endDate" json:"endDate"`
-	GroupBy   string    `form:"groupBy" json:"groupBy"`
-	Limit     int       `form:"limit" json:"limit"`
+	// 日期用字符串承接理由同上：YYYY-MM-DD 无法绑进 time.Time，
+	// 之前改成 snake_case 后只要前端带日期就 400，比“参数被忽略”更难排查。
+	StartDate string `form:"start_date" json:"startDate"`
+	EndDate   string `form:"end_date" json:"endDate"`
+	GroupBy   string `form:"group_by" json:"groupBy"`
+	Limit     int    `form:"limit" json:"limit"`
 }
 
 // KuaishouCardOverallStatsResponse 快手卡片总体统计数据响应

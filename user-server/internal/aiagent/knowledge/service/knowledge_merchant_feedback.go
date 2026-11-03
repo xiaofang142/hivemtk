@@ -61,6 +61,8 @@ type ListFeedbacksRequest struct {
 	Page      int    `json:"page"`
 	PageSize  int    `json:"page_size"`
 	Rating    int    `json:"rating"`
+	// Keyword 按查询文本模糊搜索（前端「搜索」输入框）
+	Keyword string `json:"keyword"`
 }
 
 // ListFeedbacks 反馈列表
@@ -73,10 +75,20 @@ func (s *KnowledgeMerchantService) ListFeedbacks(ctx context.Context, req *ListF
 		ProductID: req.ProductID,
 		Page:      req.Page,
 		PageSize:  req.PageSize,
+		Keyword:   req.Keyword,
 	}
 	if req.Rating >= -1 && req.Rating <= 1 {
 		filter.Rating = req.Rating
 		filter.HasRating = true
 	}
 	return s.feedbackRepo.List(ctx, filter)
+}
+
+// FeedbackStats 评价分布（全量，不随分页变化）
+func (s *KnowledgeMerchantService) FeedbackStats(ctx context.Context, productID string) (repository.FeedbackStats, error) {
+	if s.db == nil {
+		return repository.FeedbackStats{}, nil
+	}
+	s.ensureReposFromDB()
+	return s.feedbackRepo.Stats(ctx, productID)
 }

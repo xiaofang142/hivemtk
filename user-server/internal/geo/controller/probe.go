@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/geo/service"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -254,7 +255,12 @@ func (c *EntityController) Extract(ctx *gin.Context) {
 	}
 	err := c.extractor.ExtractFromDocument(ctx.Request.Context(), body.DocID)
 	if err != nil {
-		response.BusinessError(ctx, fmt.Sprintf("实体抽取失败: %v", err))
+		// 服务层文案已自带「实体抽取失败：」前缀时不重复拼接
+		msg := err.Error()
+		if !strings.Contains(msg, "实体抽取失败") {
+			msg = fmt.Sprintf("实体抽取失败: %v", err)
+		}
+		response.BusinessError(ctx, msg)
 		return
 	}
 	response.Success(ctx, gin.H{"doc_id": body.DocID, "status": "completed"}, "实体抽取完成")

@@ -27,7 +27,8 @@ func NewKBController(svc *service.KBService) *KBController {
 // List 文档列表
 // GET /geo/kb/documents
 func (c *KBController) List(ctx *gin.Context) {
-	docs, err := c.svc.List(ctx.Request.Context())
+	// keyword / source_level 为可选过滤条件（前端搜索框与等级筛选直接下发，避免全量 400+ 文档回传）
+	docs, err := c.svc.ListFiltered(ctx.Request.Context(), ctx.Query("keyword"), ctx.Query("source_level"))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取文档列表失败")
 		return

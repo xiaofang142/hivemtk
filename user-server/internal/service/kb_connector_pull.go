@@ -21,18 +21,19 @@ const (
 	notionAPIRateGap             = 350 * time.Millisecond
 )
 
-// ConnectorPuller 连接器拉取函数签名（闭包形式，s 由调用方注入）
-type ConnectorPuller func(ctx context.Context, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error)
+// ConnectorPuller 连接器拉取函数签名。
+// svc 由调用方（Pull）注入真实实例：曾经这里用包级 globalKBPullService（零值，
+// kv/httpCli 均为 nil）直接调用，导致 notch/... 拉取必然 panic → 500 空响应，
+// 前端只能提示「服务返回了非预期的响应」。
+type ConnectorPuller func(ctx context.Context, svc *KBConnectorService, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error)
 
 var kbPullers = map[string]ConnectorPuller{}
 
 func init() {
-	RegisterKBPuller("notion", func(ctx context.Context, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error) {
-		return globalKBPullService.pullNotion(ctx, productID, saved, req)
+	RegisterKBPuller("notion", func(ctx context.Context, svc *KBConnectorService, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error) {
+		return svc.pullNotion(ctx, productID, saved, req)
 	})
 }
-
-var globalKBPullService = &KBConnectorService{}
 
 // RegisterKBPuller 注册一个新的连接器拉取实现（供外部扩展）
 func RegisterKBPuller(source string, p ConnectorPuller) { kbPullers[source] = p }
@@ -79,7 +80,7 @@ func (s *KBConnectorService) Pull(ctx context.Context, source, productID string,
 	if !ok {
 		return nil, fmt.Errorf("连接器 %s 的自动拉取尚未实现（已支持的 source: notion；其他可用外部导入推送或 OpenAPI）", source)
 	}
-	return puller(ctx, productID, &saved, req)
+	return puller(ctx, s, productID, &saved, req)
 }
 
 func (s *KBConnectorService) pullNotion(ctx context.Context, productID string, saved *SaveConnectorRequest, req *ConnectorPullRequest) (*ConnectorPullResult, error) {

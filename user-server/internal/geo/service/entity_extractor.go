@@ -95,7 +95,10 @@ func (s *EntityExtractorService) ExtractFromDocument(ctx context.Context, docID 
 		preview = preview[:500]
 	}
 	if err := json.Unmarshal([]byte(resp.Content), &parsed); err != nil {
-		return fmt.Errorf("解析 LLM 返回 JSON 失败: %w, raw=%s", err, preview)
+		// 原始返回只落服务端日志：模型供应商的兜底话术（如「当前客服系统繁忙」）直接弹给用户
+		// 既看不懂也误导（曾出现 invalid character 'æ' 这类乱码片段），前端只给可执行提示。
+		logger.Warnf("[GEO] 实体抽取失败：LLM 返回非 JSON（doc=%s, err=%v, raw=%s）", docID, err, preview)
+		return fmt.Errorf("实体抽取失败：模型返回内容不是合法 JSON，请稍后重试；若持续失败请检查「模型提供商」配置")
 	}
 
 	entities := make([]*model.GeoEntity, 0, len(parsed.Entities))

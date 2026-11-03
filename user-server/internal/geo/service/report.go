@@ -146,9 +146,9 @@ func (s *ReportService) GetROI(ctx context.Context, provider, modelName, startDa
 	}, nil
 }
 
-// GetAPICosts 获取 API 调用成本明细
-func (s *ReportService) GetAPICosts(ctx context.Context) ([]dto.APICostItem, error) {
-	stats, err := s.apiCallRepo.GetCostStatistics(ctx, "", "")
+// GetAPICosts 获取 API 调用成本明细（startDate/endDate 为空表示不限日期）
+func (s *ReportService) GetAPICosts(ctx context.Context, startDate, endDate string) ([]dto.APICostItem, error) {
+	stats, err := s.apiCallRepo.GetCostStatistics(ctx, startDate, endDate)
 	if err != nil {
 		return nil, fmt.Errorf("获取 API 成本失败: %w", err)
 	}

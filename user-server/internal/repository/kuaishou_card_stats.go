@@ -32,12 +32,15 @@ type KuaishouRecentActivity struct {
 type KuaishouCardStatsRepository interface {
 	GetCardByID(ctx context.Context, cardID uint) (*model.KuaishouCard, error)
 	CountCardViews(ctx context.Context, cardID uint) (int64, error)
-	GetCardDailyStats(ctx context.Context, cardID uint, startDate, endDate time.Time) ([]KuaishouCardStatsDailyResult, error)
+	// CountCardViewsInRange 区间内的浏览数：单卡统计页的「总浏览量」旁边的日期范围
+	// 也控制着「访问趋势」，两块口径必须一致，否则窄区间下 KPI 有值而趋势为空。
+	CountCardViewsInRange(ctx context.Context, cardID uint, startDate, endDate time.Time) (int64, error)
+	GetCardDailyStats(ctx context.Context, cardID uint, startDate, endDate time.Time, groupBy string) ([]KuaishouCardStatsDailyResult, error)
 	CountTotalCards(ctx context.Context) (int64, error)
 	CountActiveCards(ctx context.Context) (int64, error)
 	CountTotalViews(ctx context.Context, startDate, endDate time.Time) (int64, error)
 	GetPopularCards(ctx context.Context, limit int) ([]model.KuaishouCard, error)
-	GetOverallDailyStats(ctx context.Context, startDate, endDate time.Time) ([]KuaishouCardStatsDailyResult, error)
+	GetOverallDailyStats(ctx context.Context, startDate, endDate time.Time, groupBy string) ([]KuaishouCardStatsDailyResult, error)
 	GetRecentActivitiesWithJoin(ctx context.Context, limit int) ([]KuaishouRecentActivity, error)
 	// GetRecentActivitiesByCard 单卡维度的最近浏览记录（抖音/小红书两仓都有
 	// 同名方法，快手此前漏实现导致单卡统计页「最近活动」恒空）。
@@ -70,12 +73,35 @@ func (r *kuaishouCardStatsRepository) CountCardViews(ctx context.Context, cardID
 	return n, err
 }
 
-func (r *kuaishouCardStatsRepository) GetCardDailyStats(ctx context.Context, cardID uint, startDate, endDate time.Time) ([]KuaishouCardStatsDailyResult, error) {
+// dateGroupExpr 把分组粒度翻译成 SQL 日期表达式。
+// 之前单卡统计直接 DATE(created_at)，页面上的「按周/按月」等于没选。
+func dateGroupExpr(groupBy string) string {
+	switch groupBy {
+	case "week":
+		return "TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD')"
+	case "month":
+		return "TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM-DD')"
+	default:
+		return "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
+	}
+}
+
+func (r *kuaishouCardStatsRepository) CountCardViewsInRange(ctx context.Context, cardID uint, startDate, endDate time.Time) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.KuaishouCardActivity{}).
+		Where("card_id = ? AND activity_type = ? AND created_at >= ? AND created_at <= ?", cardID, "view", startDate, endDate).
+		Count(&n).Error
+	return n, err
+}
+
+func (r *kuaishouCardStatsRepository) GetCardDailyStats(ctx context.Context, cardID uint, startDate, endDate time.Time, groupBy string) ([]KuaishouCardStatsDailyResult, error) {
 	var results []KuaishouCardStatsDailyResult
+	expr := dateGroupExpr(groupBy)
 	err := r.db.WithContext(ctx).Table("kuaishou_card_activities").
-		Select("DATE(created_at) as date, activity_type, COUNT(*) as count").
+		Select(expr+" as date, activity_type, COUNT(*) as count").
 		Where("card_id = ? AND created_at BETWEEN ? AND ?", cardID, startDate, endDate).
-		Group("DATE(created_at), activity_type").
+		Group(expr + ", activity_type").
+		Order("date ASC").
 		Scan(&results).Error
 	return results, err
 }
@@ -107,12 +133,24 @@ func (r *kuaishouCardStatsRepository) GetPopularCards(ctx context.Context, limit
 	return cards, err
 }
 
-func (r *kuaishouCardStatsRepository) GetOverallDailyStats(ctx context.Context, startDate, endDate time.Time) ([]KuaishouCardStatsDailyResult, error) {
+// GetOverallDailyStats 按时间粒度聚合全部卡片的浏览事件。
+// groupBy 之前被服务层丢掉，导致前端「按天/按周/按月」切换毫无效果；
+// 这里按 day/week/month 选不同的日期表达式，与抖音/小红书同口径。
+func (r *kuaishouCardStatsRepository) GetOverallDailyStats(ctx context.Context, startDate, endDate time.Time, groupBy string) ([]KuaishouCardStatsDailyResult, error) {
+	dateExpr := "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
+	switch groupBy {
+	case "week":
+		dateExpr = "TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD')"
+	case "month":
+		dateExpr = "TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM-DD')"
+	}
+
 	var results []KuaishouCardStatsDailyResult
 	err := r.db.WithContext(ctx).Table("kuaishou_card_activities").
-		Select("DATE(created_at) as date, activity_type, COUNT(*) as count").
+		Select(dateExpr+" as date, activity_type, COUNT(*) as count").
 		Where("created_at BETWEEN ? AND ?", startDate, endDate).
-		Group("DATE(created_at), activity_type").
+		Group(dateExpr + ", activity_type").
+		Order("date ASC").
 		Scan(&results).Error
 	return results, err
 }

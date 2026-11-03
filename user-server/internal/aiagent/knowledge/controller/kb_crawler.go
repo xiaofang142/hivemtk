@@ -59,10 +59,10 @@ func pathUint64(c *gin.Context, name string) (uint64, error) {
 	return strconv.ParseUint(c.Param(name), 10, 64)
 }
 
-// ListSources GET /sources?kb_id=
+// ListSources GET /sources?kb_id=&status=
 func (ctrl *KBCrawlerController) ListSources(c *gin.Context) {
 	kbID, _ := strconv.ParseUint(c.Query("kb_id"), 10, 64)
-	out, err := ctrl.svc.ListSources(c.Request.Context(), uint(kbID))
+	out, err := ctrl.svc.ListSources(c.Request.Context(), uint(kbID), c.Query("status"))
 	if err != nil {
 		response.Error(c, 500, err.Error())
 		return

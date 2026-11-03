@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -33,8 +34,19 @@ type FeedbackListFilter struct {
 	ProductID string
 	Rating    int
 	HasRating bool
-	Page      int
-	PageSize  int
+	// Keyword 按查询文本模糊匹配；此前前端有搜索框但请求里没带该参数，导致「搜索」按钮点了没有效果。
+	Keyword  string
+	Page     int
+	PageSize int
+}
+
+// FeedbackStats 反馈评价分布（按 product_id 全量聚合，不是当前页）
+// 兼容两套评分：Playground 的三态 1/0/-1，以及早期 e2e 数据的 2~5 星。
+type FeedbackStats struct {
+	Total   int64
+	Good    int64
+	Neutral int64
+	Bad     int64
 }
 
 // List 列出反馈
@@ -59,6 +71,9 @@ func (r *KnowledgeFeedbackRepository) List(ctx context.Context, filter FeedbackL
 	if filter.HasRating {
 		q = q.Where("rating = ?", filter.Rating)
 	}
+	if kw := strings.TrimSpace(filter.Keyword); kw != "" {
+		q = q.Where("query ILIKE ?", "%"+kw+"%")
+	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -69,6 +84,25 @@ func (r *KnowledgeFeedbackRepository) List(ctx context.Context, filter FeedbackL
 		return nil, 0, err
 	}
 	return list, total, nil
+}
+
+// Stats 统计评价分布。
+// 前端原先按「当前页」自己数，翻到第 2 页总数就变小；且 2~5 星的老数据既不算相关也不算不相关，
+// 于是「总反馈数 7 / 相关 3 / 一般 1 / 不相关 0」对不上。这里按 product_id 全量聚合一次给前端。
+func (r *KnowledgeFeedbackRepository) Stats(ctx context.Context, productID string) (FeedbackStats, error) {
+	var s FeedbackStats
+	if r == nil || r.db == nil {
+		return s, nil
+	}
+	q := r.db.WithContext(ctx).Model(&model.KnowledgeFeedback{})
+	if productID != "" {
+		q = q.Where("product_id = ?", productID)
+	}
+	err := q.Select(`COUNT(*) AS total,
+		COALESCE(SUM(CASE WHEN rating IN (1,4,5) THEN 1 ELSE 0 END),0) AS good,
+		COALESCE(SUM(CASE WHEN rating IN (0,3) THEN 1 ELSE 0 END),0) AS neutral,
+		COALESCE(SUM(CASE WHEN rating IN (-1,2) THEN 1 ELSE 0 END),0) AS bad`).Scan(&s).Error
+	return s, err
 }
 
 // KnowledgeAPITokenRepository 知识库 API Token 仓储

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -114,6 +115,12 @@ func NewRagEvalGapController() *RagEvalGapController {
 		}
 		return out, nil
 	})
+	// 上次进程的评测 goroutine 已随进程结束，残留的 running 行原地标失败，避免列表永远显示「进行中」。
+	if n, err := svc.ReconcileInterrupted(context.Background()); err != nil {
+		log.Printf("[rag-eval] 清理中断评测失败: %v", err)
+	} else if n > 0 {
+		log.Printf("[rag-eval] 已把 %d 条中断的评测标记为失败", n)
+	}
 	return &RagEvalGapController{svc: svc}
 }
 

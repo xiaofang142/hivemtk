@@ -5,6 +5,7 @@ import (
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/reporting"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -211,6 +212,22 @@ func (r *KnowledgeSearchLogRepository) TodayCount(ctx context.Context) (int64, e
 	var count int64
 	today := timeutil.BusinessToday()
 	q := r.db.WithContext(ctx).Model(&model.KnowledgeSearchLog{}).Where("created_at >= ?", today)
+	if err := q.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// TotalCount 累计检索次数（可按产品过滤）
+//
+// 总览卡片的「总检索次数」必须用累计口径：此前误用 TodayCount，
+// 当天没有检索时 KPI 显示 0，而下方「检索质量」的 30 天总数却是 42，自相矛盾。
+func (r *KnowledgeSearchLogRepository) TotalCount(ctx context.Context, productID string) (int64, error) {
+	var count int64
+	q := r.db.WithContext(ctx).Model(&model.KnowledgeSearchLog{})
+	if strings.TrimSpace(productID) != "" {
+		q = q.Where("product_id = ?", productID)
+	}
 	if err := q.Count(&count).Error; err != nil {
 		return 0, err
 	}

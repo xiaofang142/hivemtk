@@ -190,7 +190,7 @@ func (c *HumanTaskController) Cancel(ctx *gin.Context) {
 		Reason *string `json:"reason"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求体不是合法 JSON："+err.Error())
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请求体不是合法 JSON 对象")
 		return
 	}
 	reason := ""
@@ -247,15 +247,15 @@ func (c *HumanTaskController) unavailable(ctx *gin.Context) {
 func (c *HumanTaskController) replyError(ctx *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrHumanTaskInputInvalid): // 与 repository 同一 sentinel（别名）
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		response.Error(ctx, http.StatusBadRequest, humanTaskPublicMessage(err))
 	case errors.Is(err, service.ErrHumanTaskNotFound):
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		response.Error(ctx, http.StatusNotFound, humanTaskPublicMessage(err))
 	case errors.Is(err, service.ErrHumanTaskNotHolder):
-		response.Error(ctx, http.StatusForbidden, err.Error())
+		response.Error(ctx, http.StatusForbidden, humanTaskPublicMessage(err))
 	case errors.Is(err, service.ErrHumanTaskTransition),
 		errors.Is(err, service.ErrHumanTaskLost),
 		errors.Is(err, service.ErrHumanTaskOpenConflict):
-		response.Error(ctx, http.StatusConflict, err.Error())
+		response.Error(ctx, http.StatusConflict, humanTaskPublicMessage(err))
 	default:
 		logger.Warnf("[HumanTask] 未预期错误: %v", err)
 		response.Error(ctx, http.StatusInternalServerError, "待办操作失败")
@@ -363,4 +363,19 @@ func humanTaskIDParam(ctx *gin.Context) (string, bool) {
 		return "", false
 	}
 	return id, true
+}
+
+// humanTaskPublicMessage 去掉内部哨兵前缀（如 "human_task: 查询条件非法: "），
+// 只把可读原因回给前端，避免把内部错误分类名暴露成用户文案。
+func humanTaskPublicMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	for _, prefix := range []string{"human_task: 查询条件非法: ", "human_task: 查询条件非法", "human_task: "} {
+		if strings.HasPrefix(msg, prefix) {
+			return strings.TrimPrefix(msg, prefix)
+		}
+	}
+	return msg
 }

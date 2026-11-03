@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
@@ -26,6 +27,30 @@ type CreateTokenRequest struct {
 	CreatedBy string     `json:"created_by"`
 }
 
+// normalizeScopes 归一 Token 权限。
+// 最小权限原则：不显式声明权限时只给 read（历史行为是默认 read+write，
+// 等于"什么都不选就拿到写权限"，对推送文档这种高权限接口风险过大）；
+// 未识别的取值直接丢弃，避免拼错字符串反而保留在库里。
+func normalizeScopes(in []string) []string {
+	out := make([]string, 0, 2)
+	seen := map[string]bool{}
+	for _, s := range in {
+		v := strings.ToLower(strings.TrimSpace(s))
+		if v != "read" && v != "write" {
+			continue
+		}
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	if len(out) == 0 {
+		return []string{"read"}
+	}
+	return out
+}
+
 // CreateToken 创建 Token（返回明文 token 仅此一次）
 func (s *KnowledgeMerchantService) CreateToken(ctx context.Context, req *CreateTokenRequest) (*model.KnowledgeAPIToken, error) {
 	if req.Name == "" {
@@ -40,10 +65,7 @@ func (s *KnowledgeMerchantService) CreateToken(ctx context.Context, req *CreateT
 		return nil, err
 	}
 	hashed := hashToken(plain)
-	scopes := req.Scopes
-	if len(scopes) == 0 {
-		scopes = []string{"read", "write"}
-	}
+	scopes := normalizeScopes(req.Scopes)
 	scopesJSON, _ := json.Marshal(scopes)
 	tok := &model.KnowledgeAPIToken{
 		Name:       req.Name,

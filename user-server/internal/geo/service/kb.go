@@ -78,6 +78,11 @@ func (s *KBService) List(ctx context.Context) ([]*model.GeoKnowledgeDocument, er
 	return s.docRepo.GetList(ctx)
 }
 
+// ListFiltered 文档列表（支持标题/正文关键词与来源等级过滤）
+func (s *KBService) ListFiltered(ctx context.Context, keyword, sourceLevel string) ([]*model.GeoKnowledgeDocument, error) {
+	return s.docRepo.ListFiltered(ctx, keyword, sourceLevel)
+}
+
 // Delete 删除文档
 // ListDocuments 返回 KB 文档原行（llms.txt 自动装配需要）：
 // 供 TechConfigService 拼装 llms.txt 的 Docs 段（与 List 的 dto 化不同——这里要 SourceURL/Content 原字段）。

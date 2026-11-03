@@ -322,8 +322,6 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 			"name":        brandName,
 			"description": description,
 			"url":         domain,
-			"provider":    "heuristic_fallback",
-			"model":       "template_v1",
 		}
 		if articleID != "" && s.articleRepo != nil {
 			if article, gErr := s.articleRepo.GetByID(ctx, articleID); gErr == nil && article != nil {
@@ -351,8 +349,8 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 			"url":         domain,
 		}
 	}
-	schema["provider"] = resp.Provider
-	schema["model"] = resp.Model
+	// 注意：JSON-LD 会被直接发布到站点（geo_articles.json_ld / 站点标记），
+	// 只能包含 schema.org 词汇；provider/model 这类内部溯源信息不能写进去（非标准字段且泄露实现细节）。
 
 	if articleID != "" && s.articleRepo != nil {
 		article, gErr := s.articleRepo.GetByID(ctx, articleID)

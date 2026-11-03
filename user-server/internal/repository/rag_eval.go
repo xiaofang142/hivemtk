@@ -137,17 +137,29 @@ func (r *RagEvalRepository) ListIndexedDocuments(ctx context.Context, limit int)
 	return docs, err
 }
 
-// LatestRun 取最新一次评测 run；无记录返回空对象（与 gap 契约一致）。
+// LatestRun 取最新一次「有结果」的评测 run：优先 status=completed 且 total>0，
+// 否则退回最新一条记录（首次运行中/全部失败时仍能拿到最近状态）。
+// 原来直接取 id DESC 第一条，评测进行期间 KPI（Recall/MRR/评估集）会被那条
+// total=-1、eval_set_size=0 的占位行覆盖，页面还会误判「未上传评估集」。
 func (r *RagEvalRepository) LatestRun(ctx context.Context) (*model.RagEvalRun, error) {
 	var run model.RagEvalRun
-	err := r.db.WithContext(ctx).Order("id DESC").First(&run).Error
-	if err != nil {
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND total > 0", "completed").
+		Order("id DESC").First(&run).Error
+	if err == nil {
+		return &run, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	var latest model.RagEvalRun
+	if err := r.db.WithContext(ctx).Order("id DESC").First(&latest).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return &model.RagEvalRun{}, nil
 		}
 		return nil, err
 	}
-	return &run, nil
+	return &latest, nil
 }
 
 // ListRunsDesc 按 id 降序列出 run（limit<=0 或 >100 归一为 20）。

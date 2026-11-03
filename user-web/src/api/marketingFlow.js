@@ -43,8 +43,12 @@ export function updateFlow(id, data) {
 export function deleteFlow(id) {
   return deleteMarketingFlow(id)
 }
+// 执行 = 真正跑一次流程（POST /:id/trigger），而不是把状态改成 activate
+export function triggerFlow(id) {
+  return http.post(`/api/marketing-flows/${id}/trigger`, {})
+}
 export function runFlow(id) {
-  return activateFlow(id)
+  return triggerFlow(id)
 }
 export function toggleFlow(id, enabled) {
   return enabled ? activateFlow(id) : pauseMarketingFlow(id)

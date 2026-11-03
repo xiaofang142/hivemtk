@@ -1,7 +1,13 @@
 import { http } from '@/utils/http'
 
-export const listEntities = (type, keyword) =>
-  http.get('/api/geo/entity/list', { type: type || '', keyword: keyword || '' });
+// 后端参数名是 search（不是 keyword），并且支持 page/limit 分页与 total 返回
+export const listEntities = (type, keyword, page = 1, limit = 20) =>
+  http.get('/api/geo/entity/list', {
+    type: type || '',
+    search: keyword || '',
+    page: page || 1,
+    limit: limit || 20
+  });
 
 export const getEntityRelations = (entityId) =>
   http.get(`/api/geo/entity/${entityId}/graph`)
