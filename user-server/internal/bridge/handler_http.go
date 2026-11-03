@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"encoding/json"
 	"bytes"
 	"context"
 	"errors"
@@ -350,7 +351,12 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	bm := metrics.GetBridge()
 
 	var req HTTPIngestRequest
-	bodyBindErr := c.ShouldBindJSON(&req)
+	rawBody, _ := io.ReadAll(c.Request.Body)
+	if len(rawBody) > 0 {
+		// 回填 body：后续 collectHTTPRequestInfo 之外的日志/预览与 ShouldBindJSON 都要用
+		c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
+	}
+	bodyBindErr := json.Unmarshal(rawBody, &req)
 	if bodyBindErr == nil {
 		if channel == "" {
 			channel = req.Channel
@@ -360,6 +366,25 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		}
 		if conversationID == "" {
 			conversationID = req.ConversationID
+		}
+		// 平铺字段守卫（T2 验收缺陷，2026-11-04）：顶层没有 "messages" 键、
+		// 且带了 content/sender_type/events 等平铺字段 = 调用方协议用错。
+		// 旧代码 Bind 成功但 Messages 为空后一路 OK:true，调用方以为上报成功
+		// 实际一条没进库。显式 "messages":[]（扩展空批次心跳）保持既有契约：
+		// ok=true + ingested=[]。
+		if !bytes.Contains(rawBody, []byte(`"messages"`)) && len(rawBody) > 2 {
+			logger.Ctx(ctx0).Warn().
+				Str("module", "bridge").
+				Str("event", "http_ingest_flat_payload").
+				Str("full_url", info.FullURL).
+				Str("body_preview", info.BodyPreview).
+				Msg("[Bridge HTTP] body 缺 messages 键：请按 {channel,account_id,conversation_id,messages:[{...}]} 上报")
+			bm.IngestErrors.WithLabel(NormalizeBridgeChannel(channel), "messages_required").Inc()
+			c.JSON(http.StatusBadRequest, HTTPIngestResponse{
+				OK:     false,
+				Reason: `messages required: body must be {"messages":[{...}]}; flat top-level content/sender_type fields are not accepted`,
+			})
+			return
 		}
 	}
 

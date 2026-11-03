@@ -74,7 +74,9 @@ func (c *InboxController) Reply(ctx *gin.Context) {
 		return
 	}
 	// 仍在 AI/待处理态时先接管为人工，避免「人已经回了、会话还标 AI 处理中」的漂移。
-	if session.HandlerType != model.HandlerTypeHuman {
+	// 连 AgentID 一起判：关键词转人工只写 handler_type 不挂坐席（agent_id=0、
+	// status 仍 ai_handling），AI 会继续抢答——坐席没真正挂上就补接管。
+	if session.HandlerType != model.HandlerTypeHuman || session.AgentID == 0 {
 		if err := sessionSvc.TakeoverByAgent(ctx.Request.Context(), &service.TakeoverRequest{
 			SessionID: session.ID,
 			AgentID:   agentID,

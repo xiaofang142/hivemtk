@@ -27,6 +27,9 @@ type CustomerSessionService struct {
 	messageRepo   *repository.SessionMessageRepository
 	agentRepo     *repository.AgentStatusRepository
 	blacklistRepo *repository.UserBlacklistRepository
+	// inboxConvRepo 收件箱会话镜像（BUG-11，2026-11-04）：agent 回复必须同步
+	// 到 inbox 的 last_message_preview，否则会话列表永远停在最新入站消息。
+	inboxConvRepo *repository.InboxConversationRepository
 }
 
 // CustomerSessionActiveTTL 客服会话活跃 TTL 的兜底值声明。
@@ -70,6 +73,7 @@ func NewCustomerSessionService() *CustomerSessionService {
 		messageRepo:   repository.NewSessionMessageRepository(),
 		agentRepo:     repository.NewAgentStatusRepository(),
 		blacklistRepo: repository.NewUserBlacklistRepository(),
+		inboxConvRepo: repository.NewInboxConversationRepository(),
 	}
 }
 
@@ -304,9 +308,29 @@ func (s *CustomerSessionService) SendMessage(ctx context.Context, req *SendMessa
 
 	if req.SenderType == "agent" || req.SenderType == "ai" {
 		s.pushToVisitor(ctx, session.SessionID, message)
+		// 收件箱镜像同步（BUG-11）：出站消息同样要刷新会话列表预览，
+		// 否则坐席回复后列表仍显示客户上一条。unreadInc=0——这条是
+		// 己方发出，不该给客户侧未读加数。
+		s.syncInboxPreview(ctx, session, message.Content)
 	}
 
 	return message, nil
+}
+
+// syncInboxPreview 把出站内容写回收件箱会话的 last_message_preview。
+//
+// 只做 best-effort：收件箱是工作台视图，镜像失败不该让发送失败（与
+// chat_visitor.syncToInbox 的定位一致）。
+func (s *CustomerSessionService) syncInboxPreview(ctx context.Context, session *model.CustomerSession, content string) {
+	if s.inboxConvRepo == nil || session == nil || content == "" {
+		return
+	}
+	conv, err := s.inboxConvRepo.FindByPlatformAccountCustomer(
+		ctx, string(session.Platform), session.AccountID, session.UserID)
+	if err != nil || conv == nil {
+		return
+	}
+	_ = s.inboxConvRepo.UpdateLastMessage(ctx, conv.ID, content, time.Now(), 0)
 }
 
 func (s *CustomerSessionService) pushToVisitor(ctx context.Context, sessionID string, message *model.SessionMessage) {

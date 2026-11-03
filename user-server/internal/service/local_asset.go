@@ -106,9 +106,15 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 		return bizerr.Wrap(bizerr.CodeSyncFailed, "拉取平台数据失败", err)
 	}
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
+	normalizeBundleType(&payload.AssetType)
 
-	if err := asset.ValidateAssetData(asset.AssetType(payload.AssetType), payload.Data); err != nil {
-		return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败："+err.Error(), err)
+	// browser_extension（T2 验收缺陷）：扩展资产的内容是 file_url 指向的安装包，
+	// 平台没有 asset_data JSON——原样走 ValidateAssetData 必报「未知资产类型/
+	// 资产 JSON 格式错误」，扩展永远买不下来。跳过内容校验，元数据照常落库。
+	if payload.AssetType != "browser_extension" {
+		if err := asset.ValidateAssetData(asset.AssetType(payload.AssetType), payload.Data); err != nil {
+			return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败："+err.Error(), err)
+		}
 	}
 
 	now := time.Now()
@@ -148,6 +154,7 @@ func (s *LocalAssetService) SyncFromPlatform(ctx context.Context, assetID string
 		return bizerr.Wrap(bizerr.CodeSyncFailed, "拉取失败", err)
 	}
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
+	normalizeBundleType(&payload.AssetType)
 
 	la.Version = payload.Version
 	la.SyncedAt = time.Now()
@@ -336,4 +343,16 @@ func (s *LocalAssetService) reportUsageAsync(parent context.Context, assetID str
 	ctx, cancel := context.WithTimeout(tenant.BackgroundWithTenant(parent), utils.ShortTimeout)
 	defer cancel()
 	_ = s.ReportUsage(ctx, assetID)
+}
+
+// normalizeBundleType 平台「bundle」类型归一化为 agent_persona（T1 验收 BUG-4 根治）。
+//
+// 平台市场允许 bundle（打包人设）类资产，用户端五类资产契约里没有这个词——
+// 原样落库会连环失败：校验器报「未知资产类型」、AgentLoader 按 asset_type=
+// 'agent_persona' 查询永远漏掉 bundle 行。bundle 的数据对象与 agent_persona
+// 同构（name+system_prompt+messages），入库前直接归一化，全链路无感消费。
+func normalizeBundleType(t *string) {
+	if t != nil && *t == "bundle" {
+		*t = string(asset.AssetTypeAgentPersona)
+	}
 }

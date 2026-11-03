@@ -857,7 +857,8 @@ const getDefaultForm = () => ({
   script_library_ids: [],
   llm_model: 'gpt-4o-mini',
   temperature: 0.7,
-  max_tokens: 800,
+  // 2048（迁移 059）：800 token≈200 汉字，长回答必被生成端掐断（BUG-10）
+  max_tokens: 2048,
   top_p: 0.9,
   frequency_penalty: 0.5,
   presence_penalty: 0.5,

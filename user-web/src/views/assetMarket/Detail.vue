@@ -81,7 +81,7 @@ const loading = ref(false)
 const detail = ref(null)
 
 const asset = computed(() => detail.value?.asset || detail.value || {})
-const version = computed(() => detail.value?.latest_version || {})
+const version = computed(() => detail.value?.version_info || {})
 const previewText = computed(() => {
   const p = detail.value?.data_preview || detail.value?.data
   try {

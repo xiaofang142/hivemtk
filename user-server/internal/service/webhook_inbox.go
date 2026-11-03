@@ -16,10 +16,23 @@ func (s *WebhookService) upsertInboxFromHub(ctx context.Context, hub *model.Mess
 	if s.inboxConvRepo == nil || hub == nil {
 		return
 	}
+	// BUG-11（2026-11-04）：出站 hub 行只有真正投递成功才该占预览位。桥接/custom
+	// 渠道的 pending 行可能永远没人认领（T1 实测 id=866 就是这么挂住的），把
+	// 它写成"最后一条消息"会让坐席看到一条客户根本没收到的话。入站照旧，
+	// 出站只在 delivered/sent 时刷新，且不增加客户侧未读数。
+	outboundPending := hub.Direction == "outbound" &&
+		hub.Status != "delivered" && hub.Status != "sent"
+	if outboundPending {
+		return
+	}
+	unreadInc := 1
+	if hub.Direction == "outbound" {
+		unreadInc = 0
+	}
 	conv, err := s.inboxConvRepo.FindByPlatformAccountCustomer(ctx, hub.Platform, hub.AccountID, hub.SenderID)
 	if err == nil && conv != nil {
 
-		_ = s.inboxConvRepo.UpdateLastMessage(ctx, conv.ID, hub.Content, hub.SentAt, 1)
+		_ = s.inboxConvRepo.UpdateLastMessage(ctx, conv.ID, hub.Content, hub.SentAt, unreadInc)
 		return
 	}
 	newConv := &model.InboxConversation{
@@ -29,7 +42,7 @@ func (s *WebhookService) upsertInboxFromHub(ctx context.Context, hub *model.Mess
 		CustomerName:       customerName,
 		LastMessagePreview: hub.Content,
 		LastMessageAt:      &hub.SentAt,
-		UnreadCount:        1,
+		UnreadCount:        unreadInc,
 		Status:             InboxStatusUnread,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
