@@ -81,8 +81,11 @@
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180"
-      />
+        width="180">
+        <template #default="{ row }">
+          {{ fmtTime(row.created_at) }}
+        </template>
+      </el-table-column>
       <el-table-column
         label="操作"
         width="150"
@@ -289,6 +292,7 @@ import {
   redispatchEgoExecution,
   streamEgoEvents
 } from '@/api/egolite'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const list = ref([])

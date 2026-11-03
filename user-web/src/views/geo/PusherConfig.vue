@@ -71,8 +71,11 @@
         <el-table-column
           prop="updated_at"
           label="更新时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.updated_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="180"
@@ -190,6 +193,7 @@ import { ref, onMounted } from 'vue'
 import { geoApi } from '@/api/geo'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { fmtTime } from '@/utils/time'
 
 const list = ref([])
 const page = ref(1)

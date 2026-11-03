@@ -142,13 +142,19 @@
             <el-table-column
               prop="last_activity_at"
               label="最后活跃"
-              min-width="180"
-            />
+              min-width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.last_activity_at) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="predicted_at"
               label="预测时间"
-              min-width="180"
-            />
+              min-width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.predicted_at) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="risk_factors"
               label="流失原因"
@@ -439,10 +445,10 @@
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="最后活跃">
-              {{ currentUser.last_activity_at }}
+              {{ fmtTime(currentUser.last_activity_at) }}
             </el-descriptions-item>
             <el-descriptions-item label="预测时间">
-              {{ currentUser.predicted_at }}
+              {{ fmtTime(currentUser.predicted_at) }}
             </el-descriptions-item>
           </el-descriptions>
 
@@ -525,6 +531,7 @@ import {
   markWarningHandled,
 } from '@/api/churnPrediction.js'
 import { toList } from '@/utils/list.js'
+import { fmtTime } from '@/utils/time'
 
 const activeTab = ref('predictions')
 const loadingPred = ref(false)

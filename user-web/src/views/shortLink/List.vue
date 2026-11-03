@@ -136,8 +136,11 @@
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180"
-      />
+        width="180">
+        <template #default="{ row }">
+          {{ fmtTime(row.created_at) }}
+        </template>
+      </el-table-column>
       <el-table-column
         label="操作"
         width="300"
@@ -458,6 +461,7 @@ import PageState from '@/components/PageState.vue'
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { copyToClipboard as writeClipboard } from '@/utils/clipboard.js'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const error = ref('')

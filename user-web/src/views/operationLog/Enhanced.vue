@@ -81,8 +81,11 @@
         <el-table-column
           prop="createdAt"
           label="时间"
-          width="170"
-        />
+          width="170">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="user"
           label="操作人"
@@ -195,6 +198,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { http } from '@/utils/request'
 import { exportOperationLogs } from '@/api/operationLog'
+import { fmtTime } from '@/utils/time'
 
 const filters = reactive({ user: '', action: '', dateRange: [] })
 const logs = ref([])

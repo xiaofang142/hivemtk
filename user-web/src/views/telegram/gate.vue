@@ -311,8 +311,11 @@
         <el-table-column
           prop="created_at"
           label="加入时间"
-          min-width="160"
-        />
+          min-width="160">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="120"
@@ -338,6 +341,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listAccounts, listGates, createGate, updateGate, deleteGate, listGateMembers, authorizeGateMember } from '@/api/telegram'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const saving = ref(false)

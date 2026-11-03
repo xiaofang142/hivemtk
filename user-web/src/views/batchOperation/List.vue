@@ -85,8 +85,11 @@
         <el-table-column
           prop="createdAt"
           label="执行时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="150"
@@ -347,10 +350,10 @@
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="执行时间">
-              {{ taskDetail.createdAt }}
+              {{ fmtTime(taskDetail.createdAt) }}
             </el-descriptions-item>
             <el-descriptions-item label="完成时间">
-              {{ taskDetail.finishedAt }}
+              {{ fmtTime(taskDetail.finishedAt) }}
             </el-descriptions-item>
             <el-descriptions-item label="总数量">
               {{ taskDetail.totalCount }}
@@ -437,6 +440,7 @@ import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, 
 import { toList } from '@/utils/list.js'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { PASS_FAIL_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
+import { fmtTime } from '@/utils/time'
 
 const getPreviewStatusLabel = (s) => getStatusLabel(s, PASS_FAIL_STATUS) === '成功' ? '可通过' : (getStatusLabel(s, PASS_FAIL_STATUS) || s || '-');
 const getPreviewStatusTagType = (s) => getStatusTagType(s, PASS_FAIL_STATUS)

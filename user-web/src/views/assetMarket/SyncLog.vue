@@ -34,8 +34,11 @@
         <el-table-column
           prop="created_at"
           label="时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="asset_id"
           label="资产"
@@ -74,6 +77,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { syncLog } from '@/api/assetMarket'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const list = ref([])

@@ -42,6 +42,11 @@
       </template>
 
       
+      <!-- 口径说明：总浏览量为所选时间范围内的浏览事件数，热门卡片按卡片累计浏览量排序，
+           两者不必相等，避免读者误以为统计坏了 -->
+      <div class="stats-note">
+        口径：总浏览量与访问趋势为所选时间范围内的浏览事件；热门卡片按卡片累计浏览量排序（不受时间范围限制）。
+      </div>
       <div class="stats-overview">
         <el-row :gutter="20">
           <el-col :span="6">
@@ -185,7 +190,11 @@
                 <el-table-column
                   prop="username"
                   label="用户"
-                />
+                >
+                  <template #default="scope">
+                    {{ scope.row.username || scope.row.ipAddress || '匿名访客' }}
+                  </template>
+                </el-table-column>
                 <el-table-column
                   prop="createdAt"
                   label="时间"
@@ -254,9 +263,10 @@ const fetchOverallStats = async () => {
       activationRate: response.totalCards > 0 ? (response.activeCards / response.totalCards) * 100 : 0,
       popularCards: response.popularCards || [],
       recentActivities: response.recentActivities || [],
+      // 后端 DailyStat 的字段是 view（单数），前端一直读 item.views ⇒ 趋势图恒为空走零值兜底
       trend_data: {
-        dates: (response.dailyStats && Array.isArray(response.dailyStats)) ? response.dailyStats.map(item => item.date) : [],
-        views: (response.dailyStats && Array.isArray(response.dailyStats)) ? response.dailyStats.map(item => item.views) : []
+        dates: (response.dailyStats && Array.isArray(response.dailyStats)) ? response.dailyStats.map(item => formatDate(item.date)) : [],
+        views: (response.dailyStats && Array.isArray(response.dailyStats)) ? response.dailyStats.map(item => Number(item.view ?? item.views ?? 0)) : []
       }
     };
 
@@ -437,6 +447,13 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.stats-note {
+  margin: 4px 0 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
 .kuaishou-card-stats-container {
   padding: 20px;
 }

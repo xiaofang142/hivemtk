@@ -270,8 +270,11 @@
         <el-table-column
           prop="createdAt"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="status"
           label="状态"
@@ -484,8 +487,11 @@
         <el-table-column
           prop="lastOrderTime"
           label="最近消费时间"
-          width="170"
-        />
+          width="170">
+          <template #default="{ row }">
+            {{ fmtTime(row.lastOrderTime) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="100"
@@ -534,6 +540,7 @@ import {
   getStatusTagType as getStatusTagTypeFromArr,
 } from '@/constants/status';
 import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled'
+import { fmtTime } from '@/utils/time'
 
 const router = useRouter()
 

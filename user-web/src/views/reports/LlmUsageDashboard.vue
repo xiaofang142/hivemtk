@@ -80,7 +80,13 @@
         </el-table-column>
         <el-table-column prop="trace_id" label="TraceID" width="180" show-overflow-tooltip />
         <el-table-column prop="model" label="模型" width="160" show-overflow-tooltip />
-        <el-table-column prop="error_class" label="错误类型" width="140" />
+        <el-table-column label="错误类型" width="140">
+          <template #default="{ row }">
+            <el-tag :type="errorClassTagType(row.error_class)" size="small">
+              {{ errorClassLabel(row.error_class) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="error_msg" label="错误消息" show-overflow-tooltip />
       </el-table>
       <el-pagination
@@ -118,12 +124,25 @@ const errorRows = ref([])
 const errorPage = ref(1)
 const errorPageSize = 20
 const errorTotal = ref(0)
+// 错误类聚合（/errors 返回的 by_class），饼图只认这份数据
+const errorAgg = ref([])
 const breakdownBy = ref('model')
 
 const fmtCents = (c) => (c / 100).toFixed(2)
 const fmtRate = (r) => `${(r * 100).toFixed(2)}%`
 const fmtNum = (n) => Number(n || 0).toLocaleString()
 const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '')
+// 错误分类标签：后端按 error_msg 文本回推成 auth/rate_limit/timeout/upstream/unknown
+const ERROR_CLASS_LABEL = {
+  auth: '鉴权失败',
+  rate_limit: '限流/额度',
+  timeout: '超时',
+  upstream: '上游异常',
+  unknown: '未分类'
+}
+const errorClassLabel = (c) => ERROR_CLASS_LABEL[c] || (c ? String(c) : '未分类')
+const errorClassTagType = (c) =>
+  ({ auth: 'danger', rate_limit: 'warning', timeout: 'info', upstream: 'danger' }[c] || 'info')
 
 const kpiCards = computed(() => {
   const o = overview.value || {}
@@ -198,9 +217,11 @@ function renderBreakdown() {
 
 function renderErrorPie() {
   if (!errorPieChart) return
-  const data = (breakdownRows.value || [])
-    .filter((r) => r.dim && r.dim !== '(未知)' && r.error_count > 0)
-    .map((r) => ({ name: r.dim, value: r.error_count }))
+  // 之前读的是「维度 breakdown」的 error_count（模型维度），饼图要么空要么与错误无关；
+  // 这里改用 /errors 的 by_class 聚合，name 走中文标签。
+  const data = (errorAgg.value || [])
+    .filter((r) => r.dim && Number(r.call_count || r.error_count || 0) > 0)
+    .map((r) => ({ name: errorClassLabel(r.dim), value: Number(r.call_count || r.error_count || 0) }))
   errorPieChart.setOption({
     tooltip: { trigger: 'item' },
     series: [{ type: 'pie', radius: ['40%', '70%'], data, label: { formatter: '{b}: {c}' } }]
@@ -223,8 +244,12 @@ async function loadTrend() {
 async function loadBreakdown() {
   const data = await LlmReportApi.getBreakdown({ ...rangeParams(), by: breakdownBy.value })
   breakdownRows.value = data || []
+  // 模型筛选的可选项来自「按模型」维度的实际数据：
+  // 之前 modelOptions 声明了却没人填，下拉永远是空的（选了也没用）。
+  if (breakdownBy.value === 'model') {
+    modelOptions.value = (breakdownRows.value || []).map((r) => r.dim).filter(Boolean)
+  }
   renderBreakdown()
-  if (breakdownBy.value === 'error_class') renderErrorPie()
 }
 
 async function loadErrors() {
@@ -235,6 +260,8 @@ async function loadErrors() {
   }) || {}
   errorRows.value = d.rows || []
   errorTotal.value = d.total || 0
+  errorAgg.value = d.by_class || []
+  renderErrorPie()
 }
 
 async function refresh() {

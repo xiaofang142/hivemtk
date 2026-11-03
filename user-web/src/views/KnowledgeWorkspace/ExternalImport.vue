@@ -47,10 +47,18 @@
                 <el-radio-button label="notion">
                   Notion
                 </el-radio-button>
-                <el-radio-button label="dingtalk">
-                  钉钉
+                <el-radio-button
+                  label="dingtalk"
+                  disabled
+                >
+                  钉钉（未接入）
                 </el-radio-button>
               </el-radio-group>
+              <!-- 钉钉没有与飞书/Notion 对等的「按 docID 拉正文」接口（需应用凭证 + 文档权限审批），
+                   后端未接入；保留入口但禁用，避免用户填完 DocID 才收到失败。 -->
+              <div class="source-hint">
+                钉钉文档自动抓取尚未接入：请改用「通用 JSON」粘贴内容，或由钉钉侧调用 OpenAPI 推送 items。
+              </div>
             </el-form-item>
             <el-form-item
               label="产品"
@@ -64,7 +72,7 @@
                 <el-option
                   v-for="p in productList"
                   :key="p.id"
-                  :label="p.name"
+                  :label="productOptionLabel(p)"
                   :value="p.id"
                 />
               </el-select>
@@ -268,7 +276,7 @@
             <el-option
               v-for="p in productList"
               :key="p.id"
-              :label="p.name"
+              :label="productOptionLabel(p)"
               :value="p.id"
             />
           </el-select>
@@ -345,6 +353,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Document, Promotion } from '@element-plus/icons-vue'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 
 const importing = ref(false)
@@ -364,6 +373,15 @@ const form = reactive({
 })
 
 const testMode = ref(false)
+
+// 产品列表里存在同名产品（如「通用电商客服知识库」有 seed 与正式两条），
+// 下拉只显示名字时无法区分，重名时补上产品 ID。
+const duplicatedProductNames = computed(() => {
+  const seen = new Map()
+  productList.value.forEach((p) => seen.set(p.name, (seen.get(p.name) || 0) + 1))
+  return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([name]) => name))
+})
+const productOptionLabel = (p) => (duplicatedProductNames.value.has(p.name) ? `${p.name}（${p.id}）` : p.name)
 
 const canSubmit = computed(() => {
   if (!form.product_id) return false
@@ -440,7 +458,8 @@ const handleImport = async () => {
       loadJobs()
     }
   } catch (e) {
-    ElMessage.error('提交失败: ' + (e.message || ''))
+    // 拦截器已经弹过后端可读文案（如「飞书抓取未配置凭证 …」），这里再弹一次会重复
+    if (!isUserReportedError(e)) ElMessage.error('提交失败: ' + (e.message || ''))
   } finally {
     importing.value = false
   }
@@ -479,6 +498,13 @@ watch(apiToken, (val) => {
 </script>
 
 <style scoped lang="scss">
+.source-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
 .external-import-page {
   padding: 0;
 }

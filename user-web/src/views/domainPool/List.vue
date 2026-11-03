@@ -113,8 +113,11 @@
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180"
-      />
+        width="180">
+        <template #default="{ row }">
+          {{ fmtTime(row.created_at) }}
+        </template>
+      </el-table-column>
       <el-table-column
         label="操作"
         width="200"
@@ -246,6 +249,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, RefreshRight } from '@element-plus/icons-vue'
 import { domainPoolApi } from '@/api/domainPool'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const checkingAll = ref(false)

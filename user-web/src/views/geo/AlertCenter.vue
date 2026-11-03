@@ -226,6 +226,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listGeoAlerts, getGeoAlertsUnreadCount, ackGeoAlert, deleteGeoAlert } from '@/api/geoAlert'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const alerts = ref([])
 const total = ref(0)
@@ -270,7 +271,12 @@ const load = async () => {
 }
 
 const ack = async (row) => {
-  await ackGeoAlert(row.id)
+  try {
+    await ackGeoAlert(row.id)
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '确认告警失败')
+    return
+  }
   ElMessage.success('已确认')
   await load()
 }
@@ -278,15 +284,35 @@ const ack = async (row) => {
 const ackAllVisible = async () => {
   const targets = alerts.value.filter((a) => !a.notified)
   if (!targets.length) return
-  await ElMessageBox.confirm(`确认本页 ${targets.length} 条告警？`, '批量确认')
-  await Promise.all(targets.map((a) => ackGeoAlert(a.id)))
+  // 取消/关闭确认框时 ElMessageBox 会 reject，必须吞掉，否则控制台留 unhandled rejection
+  try {
+    await ElMessageBox.confirm(`确认本页 ${targets.length} 条告警？`, '批量确认')
+  } catch {
+    return
+  }
+  try {
+    await Promise.all(targets.map((a) => ackGeoAlert(a.id)))
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '批量确认失败')
+    return
+  }
   ElMessage.success(`已确认 ${targets.length} 条`)
   await load()
 }
 
 const remove = async (row) => {
-  await ElMessageBox.confirm('确定删除该告警？', '删除')
-  await deleteGeoAlert(row.id)
+  // 同上：取消确认框不是错误，直接返回
+  try {
+    await ElMessageBox.confirm('确定删除该告警？', '删除')
+  } catch {
+    return
+  }
+  try {
+    await deleteGeoAlert(row.id)
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '删除告警失败')
+    return
+  }
   ElMessage.success('已删除')
   await load()
 }

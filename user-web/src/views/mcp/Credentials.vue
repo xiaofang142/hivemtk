@@ -164,6 +164,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { mcpCredentialApi } from '@/api/mcpCredential'
 import { copyToClipboard } from '@/utils/clipboard'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const rows = ref([])
 const loading = ref(false)
@@ -179,7 +180,10 @@ const load = async () => {
   loading.value = true
   try {
     const res = await mcpCredentialApi.list()
-    rows.value = res?.data ?? res ?? []
+    rows.value = Array.isArray(res) ? res : (res?.list ?? [])
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('获取凭证列表失败')
+    rows.value = []
   } finally {
     loading.value = false
   }
@@ -194,12 +198,14 @@ const doCreate = async () => {
   creating.value = true
   try {
     const res = await mcpCredentialApi.create({ name: createName.value })
-    issued.value = res?.data ?? {}
+    // 响应拦截器已经把信封拆成 data，这里再取 res.data 会拿到 undefined，
+    // 结果「只显示一次」的 API Key 变成空白 —— 必须直接用 res。
+    issued.value = res && typeof res === 'object' ? res : {}
     createVisible.value = false
     issuedVisible.value = true
     await load()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '签发失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '签发失败')
   } finally {
     creating.value = false
   }
@@ -216,16 +222,31 @@ const copyAll = async () => {
 }
 
 const toggle = async (row) => {
-  await mcpCredentialApi.update(row.id, { enabled: !row.enabled })
-  ElMessage.success(row.enabled ? '已停用' : '已启用')
-  await load()
+  try {
+    await mcpCredentialApi.update(row.id, { enabled: !row.enabled })
+    ElMessage.success(row.enabled ? '已停用' : '已启用')
+    await load()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('状态更新失败')
+  }
 }
 
 const remove = async (row) => {
-  await ElMessageBox.confirm(`确认删除凭证 ${row.client_id}？使用它的 Skill/Agent 将立即失效。`, '删除确认', { type: 'warning' })
-  await mcpCredentialApi.remove(row.id)
-  ElMessage.success('已删除')
-  await load()
+  // 用户点取消时 confirm 会 reject('cancel')，不接住就是一条 unhandled rejection
+  try {
+    await ElMessageBox.confirm(`确认删除凭证 ${row.client_id}？使用它的 Skill/Agent 将立即失效。`, '删除确认', { type: 'warning' })
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return
+    if (!isUserReportedError(e)) ElMessage.error('删除失败')
+    return
+  }
+  try {
+    await mcpCredentialApi.remove(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('删除失败')
+  }
 }
 
 onMounted(load)

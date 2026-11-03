@@ -174,8 +174,11 @@
         <el-table-column
           prop="failedAt"
           label="失败时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.failedAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="120"
@@ -209,6 +212,7 @@ import { ElMessage } from 'element-plus'
 import { safeInit, safeDispose } from '@/utils/echarts'
 import { http } from '@/utils/request'
 import { getChannelLabel } from '@/constants/channel'
+import { fmtTime } from '@/utils/time'
 
 // 窗口与刷新都只有一处事实源：卡片副标题、图表标题、请求参数三处都从这里长出来，
 // 免得"最近 1 小时"这句文案和实际发出去的时间界各说各话。

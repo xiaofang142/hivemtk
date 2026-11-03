@@ -24,7 +24,7 @@
           <el-option
             v-for="p in productList"
             :key="p.id"
-            :label="p.name"
+            :label="productOptionLabel(p)"
             :value="p.id"
           />
         </el-select>
@@ -219,7 +219,7 @@
             <el-option
               v-for="p in productList"
               :key="p.id"
-              :label="p.name"
+              :label="productOptionLabel(p)"
               :value="p.id"
             />
           </el-select>
@@ -327,7 +327,7 @@
             v-model="form.request_template"
             type="textarea"
             :rows="4"
-            placeholder="支持模板变量: {{ now }}, {{ timestamp }}, {{ date }}, {{ last_sync_at }}"
+            placeholder="支持模板变量: {{ now }}, {{ timestamp }}, {{ date }}, {{ fmtTime(last_sync_at) }}"
           />
           <div class="form-tip">
             JSON 格式,可使用 Go template 语法,<code v-pre>{{.last_sync_at}}</code> 用于增量同步
@@ -484,13 +484,15 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { knowledgeAPI } from '@/api/knowledge'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { getAuthTypeLabel } from '@/constants/authType';
 import { PASS_FAIL_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status'
+import { fmtTime } from '@/utils/time'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const HTTP_METHOD_TAG = { GET: '', POST: 'success', PUT: 'warning', DELETE: 'danger', PATCH: 'warning' };
 const getMethodLabel = (m) => (m || '').toUpperCase()
@@ -507,6 +509,14 @@ const editingId = ref(null)
 const formRef = ref(null)
 
 const productList = ref([])
+// 种子数据里存在同名产品（通用电商客服知识库 seed-035-ecom / ecommerce-general-cs），
+// 下拉只用名字时无法区分，重名时在标签里补上产品 ID。
+const duplicatedProductNames = computed(() => {
+  const counter = {}
+  productList.value.forEach(p => { counter[p.name] = (counter[p.name] || 0) + 1 })
+  return new Set(Object.keys(counter).filter(n => counter[n] > 1))
+})
+const productOptionLabel = (p) => duplicatedProductNames.value.has(p.name) ? `${p.name}（${p.id}）` : p.name
 const sources = ref([])
 const testResult = ref(null)
 const syncResult = ref(null)
@@ -673,7 +683,8 @@ const handleTest = async (row) => {
     testResult.value = res
     showTestResultDialog.value = true
   } catch (e) {
-    ElMessage.error('测试失败: ' + (e.message || ''))
+    // 拦截器已按后端文案提示过（400/502 直接透出可执行原因），这里不再重复弹
+    if (!isUserReportedError(e)) ElMessage.error('测试失败: ' + (e.message || ''))
   }
 }
 
@@ -685,7 +696,8 @@ const handleSync = async (row) => {
     showSyncResultDialog.value = true
     loadSources()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('同步失败: ' + (e.message || ''))
+    if (isUserReportedError(e)) return
+    ElMessage.error('同步失败: ' + (e.message || ''))
   }
 }
 

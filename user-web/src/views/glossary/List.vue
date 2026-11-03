@@ -188,10 +188,10 @@
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.status === 1 ? 'success' : 'info'"
+              :type="row.status === 'active' || row.status === 1 ? 'success' : 'info'"
               size="small"
             >
-              {{ row.status === 1 ? '启用' : '禁用' }}
+              {{ row.status === 'active' || row.status === 1 ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -220,11 +220,11 @@
             </el-button>
             <el-button
               link
-              :type="row.status === 1 ? 'warning' : 'success'"
+              :type="row.status === 'active' || row.status === 1 ? 'warning' : 'success'"
               size="small"
               @click="onToggleStatus(row)"
             >
-              {{ row.status === 1 ? '禁用' : '启用' }}
+              {{ row.status === 'active' || row.status === 1 ? '禁用' : '启用' }}
             </el-button>
             <el-button
               link
@@ -717,7 +717,8 @@ const loadList = async () => {
     }
     if (filter.value.category) params.category = filter.value.category
     if (filter.value.status !== '' && filter.value.status !== null && filter.value.status !== undefined) {
-      params.status = filter.value.status
+      // 后端 status 是字符串（active / disabled），前端下拉用 1/0，这里做映射
+      params.status = filter.value.status === 1 ? 'active' : (filter.value.status === 0 ? 'disabled' : '')
     }
     if (filter.value.keyword) params.keyword = filter.value.keyword
     const res = await listGlossaries(params)
@@ -760,7 +761,13 @@ const resetForm = () => {
 };
 
 const addTranslation = () => {
-  translationList.value.push({ lang: '', text: '' })
+  // 默认预选一个未被占用的语言（优先简体中文）：原来新增行语言为空，
+  // 用户只填译法点时会在「存在未填写完整的多语言译法，已自动忽略」和
+  // 「请至少填写一条多语言译法」之间来回，体验等同于保存失败。
+  const used = new Set(translationList.value.map((t) => t.lang).filter(Boolean))
+  const preferred = languageOptions.find((l) => l.value === 'zh' && !used.has('zh'))
+  const fallback = languageOptions.find((l) => !used.has(l.value))
+  translationList.value.push({ lang: (preferred || fallback)?.value || '', text: '' })
 }
 
 const removeTranslation = (idx) => {
@@ -788,7 +795,8 @@ const openEditDialog = async (row) => {
       category: detail.category || 'brand',
       preserve: !!detail.preserve,
       pattern: detail.pattern || '',
-      status: detail.status === 0 ? 0 : 1,
+      // 后端 status 为字符串（active / disabled），弹窗内仍用 1/0
+      status: detail.status === 'active' || detail.status === 1 ? 1 : 0,
       translations: {}
     }
     const obj = normalizeTranslations(detail.translations)
@@ -825,8 +833,15 @@ const submitForm = async () => {
       hasInvalid = true
     }
   })
-  if (hasInvalid) {
+  if (hasInvalid && Object.keys(translations).length) {
+    // 只有“部分完整”时才提示忽略，全部为空时下面会只弹一条更明确的提示
     ElMessage.warning(i18n.global.t('存在未填写完整的多语言译法，已自动忽略'))
+  }
+  // 后端要求 translations 至少一条：空译法直发只会拿到「term_id、category、translations 均为必填」
+  // 这条看不出到底缺哪项的通用文案，因此在这里先拦下
+  if (!Object.keys(translations).length) {
+    ElMessage.warning('请至少填写一条多语言译法（语言 + 译法）')
+    return
   }
 
   const payload = {
@@ -834,7 +849,8 @@ const submitForm = async () => {
     category: form.value.category,
     preserve: form.value.preserve,
     pattern: form.value.pattern || '',
-    status: form.value.status,
+    // 后端 Status 是 string（曾因传数字导致 ShouldBindJSON 报 cannot unmarshal number，并回 400 通用文案）
+    status: form.value.status === 1 || form.value.status === 'active' ? 'active' : 'disabled',
     translations
   }
 
@@ -864,15 +880,25 @@ const submitForm = async () => {
 }
 
 const onToggleStatus = (row) => {
-  const next = row.status === 1 ? 0 : 1
-  const action = next === 1 ? '启用' : '禁用'
+  // 后端 status 为字符串：active / disabled；兼容旧数字行数据
+  const isActive = row.status === 'active' || row.status === 1
+  const next = isActive ? 'disabled' : 'active'
+  const action = next === 'active' ? '启用' : '禁用'
   ElMessageBox.confirm(
     `确认${action}术语「${row.term_id}」吗？`,
     i18n.global.t('操作确认'),
     { type: 'warning', confirmButtonText: i18n.global.t('确认') + action, cancelButtonText: i18n.global.t('取消') }
   ).then(async () => {
     try {
-      await updateGlossary(row.term_id, { status: next })
+      // 后端 Update 的必填项是 term_id / category / translations：只传 status 会被 binding 拒绝，
+      // 因此这里把该行已有的分类与译法一起回填（纯状态切换，内容不变）
+      await updateGlossary(row.term_id, {
+        category: row.category,
+        translations: row.translations || {},
+        preserve: !!row.preserve,
+        pattern: row.pattern || '',
+        status: next,
+      })
       ElMessage.success(`${action}成功`)
       loadList()
     } catch (e) {

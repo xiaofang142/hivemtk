@@ -343,6 +343,12 @@ const handleVerify = async () => {
     ElMessage.warning(t('geoVerificationPage.inputBrand'))
     return
   }
+  // 没有可选模型时后端无法验证（会 500），这里提前拦住并说明原因，
+  // 模型下拉为空通常是本部署没有可访问的云端模型（本地/未启用 provider 已被过滤）。
+  if (!form.models || !form.models.length) {
+    ElMessage.warning('当前没有可用的云端验证模型，请先在「模型提供商」启用一个可访问的模型后再验证')
+    return
+  }
   verifying.value = true
   results.value = []
   try {

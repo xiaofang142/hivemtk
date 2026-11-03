@@ -26,7 +26,7 @@
             <el-card>
               <el-statistic
                 title="总实体数"
-                :value="totalEntities"
+                :value="entityTotal"
               />
             </el-card>
           </el-col>
@@ -111,15 +111,12 @@
               </template>
             </el-table-column>
             <el-table-column
-              prop="entity_count"
-              label="实体数"
-              width="90"
-            />
-            <el-table-column
-              prop="uploaded_at"
               label="上传时间"
-              width="170"
-            />
+              width="170">
+              <template #default="{ row }">
+                {{ fmtTime(row.created_at || row.uploaded_at) }}
+              </template>
+            </el-table-column>
             <el-table-column
               label="操作"
               width="200"
@@ -204,9 +201,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { listKBDocuments, saveKBDocument, deleteKBDocument, askKB, extractEntities } from '@/api/geoEntity.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { listKBDocuments, saveKBDocument, deleteKBDocument, askKB, extractEntities, listEntities } from '@/api/geoEntity.js'
 import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
 
 const docs = ref([])
 const loading = ref(false)
@@ -214,7 +212,9 @@ const keyword = ref('')
 const extractLoading = ref(null)
 
 const aLevelCount = computed(() => docs.value.filter(d => d.source_level === 'A').length)
-const totalEntities = computed(() => docs.value.reduce((s, d) => s + (d.entity_count || 0), 0))
+// 后端 KB 文档行没有 entity_count 字段，实体数与文档无外键关联，
+// 因此「总实体数」改用实体库真实总数（/api/geo/entity/list 的 total），原来按行求和永远是 0。
+const entityTotal = ref(0)
 
 const messages = ref([])
 const askInput = ref('')
@@ -227,6 +227,15 @@ const loadDocs = async () => {
     docs.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
   } catch { docs.value = [] }
   loading.value = false
+}
+
+// 拉取实体库总数（只取 1 条用于拿 total，避免整表传输）
+const loadEntityTotal = async () => {
+  try {
+    const res = await listEntities('', '')
+    const total = Array.isArray(res) ? res.length : Number(res?.total || 0)
+    entityTotal.value = total || 0
+  } catch { entityTotal.value = 0 }
 }
 
 const onUpload = async (file) => {
@@ -268,6 +277,16 @@ const onUpdateLevel = async (row) => {
 }
 
 const onDelete = async (row) => {
+  // 知识库文档删除是不可撤销操作，先二次确认（与其余页面一致），取消时静默返回
+  try {
+    await ElMessageBox.confirm(`确认删除文档「${row.title || row.filename || row.id || row.doc_id}」？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
   try {
     await deleteKBDocument(row.id || row.doc_id)
     ElMessage.success('已删除')
@@ -301,7 +320,10 @@ const onAsk = async () => {
   asking.value = false
 }
 
-onMounted(loadDocs)
+onMounted(() => {
+  loadDocs()
+  loadEntityTotal()
+})
 </script>
 
 <style lang="scss" scoped>

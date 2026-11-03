@@ -103,7 +103,7 @@
             {{ getChannelLabel(current.source) }}
           </el-descriptions-item>
           <el-descriptions-item label="注册时间">
-            {{ current.createdAt }}
+            {{ fmtTime(current.createdAt) }}
           </el-descriptions-item>
           <el-descriptions-item label="最后活跃">
             {{ current.lastActive }}
@@ -259,8 +259,11 @@
               <el-table-column
                 prop="pay_time"
                 label="支付时间"
-                width="160"
-              />
+                width="160">
+                <template #default="{ row }">
+                  {{ fmtTime(row.pay_time) }}
+                </template>
+              </el-table-column>
               <el-table-column
                 prop="items"
                 label="商品"
@@ -332,6 +335,7 @@ import {
   getCustomerStatusTagType as getCustomerStatusTagTypeFromConst,
 } from '@/constants/customerTag';
 import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled';
+import { fmtTime } from '@/utils/time'
 
 const getCustomerStatusLabel = (s) => getCustomerStatusLabelFromConst(s) || getEnabledLabel(s);
 const getCustomerStatusTagType = (s) => getCustomerStatusTagTypeFromConst(s) || getEnabledTagType(s)

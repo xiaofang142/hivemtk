@@ -161,6 +161,15 @@
         <el-divider content-position="left">
           识别结果
         </el-divider>
+        <el-alert
+          v-if="intentDisabled"
+          class="intent-disabled-tip"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="意图识别功能未启用"
+          description="当前结果为规则兜底（置信度偏低）。请到「系统设置 → 功能开关 → 意图识别」开启后重试。"
+        />
         <el-descriptions
           :column="2"
           border
@@ -232,6 +241,15 @@
         <el-divider content-position="left">
           批量识别结果（{{ batchResults.length }} 条）
         </el-divider>
+        <el-alert
+          v-if="intentDisabled"
+          class="intent-disabled-tip"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="意图识别功能未启用"
+          description="当前结果为规则兜底（置信度偏低）。请到「系统设置 → 功能开关 → 意图识别」开启后重试。"
+        />
         <el-table
           :data="batchResults"
           stripe
@@ -345,6 +363,12 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <!-- 口径说明：KPI 来自 /api/intent/stats（默认近 7 天），下方记录表是全量历史，
+         两者不一致时用户容易误以为统计坏了 -->
+    <div class="stat-note">
+      统计口径：上方 KPI 为近 7 天数据（各卡片独立统计）；下方「最近识别记录」为全量历史。
+    </div>
 
     <el-row :gutter="16">
       <el-col :span="10">
@@ -935,9 +959,14 @@ import { ElMessage } from 'element-plus'
 import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
 import { intentApi } from '@/api/intentRecognition.js'
 import { getChannelLabel } from '@/constants/channel'
-const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合' };
-const RECOGNIZE_METHOD_TAG = { llm: 'danger', rule: 'info', keyword: 'success', bert: 'warning', hybrid: 'primary' }
+// disabled = 意图识别功能开关关闭时后端返回的 method（原样展示会变成「方法: disabled」）
+const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合', disabled: '未启用' };
+const RECOGNIZE_METHOD_TAG = { llm: 'danger', rule: 'info', keyword: 'success', bert: 'warning', hybrid: 'primary', disabled: 'warning' }
 const getMethodLabel = (m) => RECOGNIZE_METHOD[m] || m || '-'
+// 后端在功能开关关闭时返回 method=disabled；个别历史记录 method 为空，同样按未启用处理
+const isMethodDisabled = (m) => !m || m === 'disabled'
+// 结果区常驻提示开关：识别返回 disabled（功能开关关闭）时置 true，下一次识别开始时复位
+const intentDisabled = ref(false)
 // 兜底必须是 el-tag 的合法 type：空串会触发
 // "Invalid prop: validation failed for prop type" 告警并回落到 default(primary) 显示成蓝色。
 // 与本文件 getIntentTagType(:666) / getFineMethodType(:517) 的 'info' 兜底一致。
@@ -1249,6 +1278,14 @@ const fillExample = () => {
   testForm.value.message = examples[Math.floor(Math.random() * examples.length)]
 }
 
+// 意图识别功能开关关闭时后端返回 method=disabled（仅规则兜底、置信度 30%），
+// 不明确告知的话用户会以为识别能力有缺陷，因此统一在识别后补一条可执行提示。
+const warnIfIntentDisabled = (methods) => {
+  const list = (Array.isArray(methods) ? methods : [methods])
+  // 只在结果区展示常驻提示（el-alert），不再额外弹 toast，避免同一条信息出现两次
+  intentDisabled.value = list.length > 0 && list.every(m => isMethodDisabled(m))
+}
+
 const runRecognize = async () => {
   if (!testForm.value.message || !testForm.value.message.trim()) {
     ElMessage.warning(i18n.global.t('请输入客户消息'))
@@ -1266,6 +1303,7 @@ const runRecognize = async () => {
     const res = await intentApi.recognize(data)
     recognizeResult.value = res
     ElMessage.success(i18n.global.t('识别完成'))
+    warnIfIntentDisabled(res && res.method)
     loadRecent()
   } catch (e) {
     ElMessage.error('识别失败：' + (e.message || '未知错误'))
@@ -1288,6 +1326,7 @@ const runBatchRecognize = async () => {
     const list = Array.isArray(res) ? res : (res?.list || [])
     batchResults.value = list.map((r, i) => ({ ...r, message: r.message || lines[i] }))
     ElMessage.success(`批量识别完成，共 ${batchResults.value.length} 条`)
+    warnIfIntentDisabled(batchResults.value.map(r => r.method))
     loadRecent()
   } catch (e) {
     ElMessage.error('批量识别失败：' + (e.message || '未知错误'))
@@ -1351,6 +1390,12 @@ onMounted(() => {
 })
 </script>
 
+
+.stat-note {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
 <style scoped lang="scss">
 .intent-recognition-page { padding: 20px; }
 
@@ -1423,5 +1468,8 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.intent-disabled-tip {
+  margin: 8px 0 12px;
 }
 </style>

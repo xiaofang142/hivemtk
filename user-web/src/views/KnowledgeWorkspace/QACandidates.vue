@@ -105,7 +105,7 @@
           width="160"
         >
           <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
+            {{ formatDate(row.created_at || row.updated_at) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -159,6 +159,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import i18n from '@/i18n'
 import { kbQaCandidateApi } from '@/api/kbCrawler'
+import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const items = ref([])
@@ -177,7 +179,7 @@ const loadList = async () => {
     items.value = res?.items || res || []
     total.value = res?.total || 0
   } catch (e) {
-    ElMessage.error(i18n.global.t('knowledge.qaCandidate.loadFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.qaCandidate.loadFailed') + ': ' + (e.message || ''))
   } finally {
     loading.value = false
   }
@@ -189,7 +191,7 @@ const act = async (fn, row) => {
     ElMessage.success(i18n.global.t('common.operationSuccess'))
     await loadList()
   } catch (e) {
-    ElMessage.error(i18n.global.t('common.operationFailed') + ': ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('common.operationFailed') + ': ' + (e.message || ''))
   }
 }
 
@@ -197,13 +199,7 @@ const sourceTag = (s) => ({ crawl: 'warning', feedback: 'primary', manual: 'info
 const sourceLabel = (s) => ({ crawl: 'knowledge.qaCandidate.sourceCrawl', feedback: 'knowledge.qaCandidate.sourceFeedback', manual: 'knowledge.qaCandidate.sourceManual' }[s] || s)
 const statusTag = (s) => ({ pending_review: 'warning', approved: 'success', rejected: 'danger', indexed: 'success' }[s] || 'info')
 const statusLabel = (s) => ({ pending_review: 'knowledge.qaCandidate.pending', approved: 'knowledge.qaCandidate.approved', rejected: 'knowledge.qaCandidate.rejected', indexed: 'knowledge.qaCandidate.indexed' }[s] || s)
-const formatDate = (d) => {
-  if (!d) return '-'
-  const t = new Date(d)
-  // 零值时间（0001-01-01…）不能显示成 1/1/1
-  if (Number.isNaN(t.getTime()) || t.getUTCFullYear() <= 1) return '-'
-  return t.toLocaleString('zh-CN')
-}
+const formatDate = (d) => fmtTime(d, undefined, '-')
 
 onMounted(loadList)
 </script>

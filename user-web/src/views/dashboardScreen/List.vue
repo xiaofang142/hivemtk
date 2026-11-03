@@ -3,7 +3,7 @@
     <div class="dashboard-header">
       <h1>{{ $t('营销数据大屏') }}</h1>
       <div class="header-info">
-        <span class="time">{{ currentTime }}</span>
+        <span class="time">{{ fmtTime(currentTime) }}</span>
         <el-button
           type="primary"
           @click="$router.push('/dashboardScreen/builder')"
@@ -166,6 +166,7 @@ import { FullScreen, User, ShoppingCart, ChatLineRound, Document, Promotion, Bel
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getDashboardData, getRealtimeActivities } from '@/api/dashboardScreen.js'
+import { fmtTime } from '@/utils/time'
 
 const currentTime = ref('')
 const isFullscreen = ref(false)

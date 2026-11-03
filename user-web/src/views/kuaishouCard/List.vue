@@ -377,6 +377,7 @@ import KuaishouCardPreview from '@/components/KuaishouCardPreview.vue'
 import { domainPoolApi } from '@/api/domainPool'
 import * as kuaishouCardApi from '@/api/kuaishouCard'
 import { copyToClipboard } from '@/utils/clipboard.js'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const formatDate = (date, format) => {
   if (!date) return ''
@@ -461,8 +462,9 @@ const loadData = async () => {
     tableData.value = res.list || [];
     pagination.total = res.total || 0
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取数据失败'))
-    console.error('获取快手卡片列表失败:', error)
+    // 拦截器已弹过后端文案，这里只在没弹过时兜底
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取数据失败'))
+    console.warn('获取快手卡片列表失败:', error)
   } finally {
     loading.value = false
   }
@@ -538,9 +540,8 @@ const handleDelete = async (row) => {
     ElMessage.success(i18n.global.t('删除成功'));
     loadData()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(i18n.global.t('删除失败'))
-    }
+    if (error === 'cancel' || error === 'close') return
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('删除失败'))
   }
 }
 
@@ -562,14 +563,17 @@ const handleStatusChange = async (row) => {
     });
   } catch (error) {
     row.is_active = !row.is_active
-    ElMessage.error(i18n.global.t('更新失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('更新失败'))
   }
 }
 
 const handleSubmit = async () => {
   if (!formRef.value) return
+  // 表单校验失败时 validate() reject 的是字段对象（不是 false），
+  // 之前直接落进 catch 会误弹「操作失败」——校验不通过不应报错，只显示行内提示。
+  const valid = await formRef.value.validate().then(() => true).catch(() => false)
+  if (!valid) return
   try {
-    await formRef.value.validate()
     let res
     if (currentCardId.value) {
       res = await kuaishouCardApi.updateKuaishouCard({
@@ -583,8 +587,7 @@ const handleSubmit = async () => {
     dialogVisible.value = false
     loadData()
   } catch (error) {
-    if (error === false) return
-    ElMessage.error(i18n.global.t('操作失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('操作失败'))
   }
 }
 

@@ -94,8 +94,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          min-width="170"
-        />
+          min-width="170">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="300"
@@ -385,6 +388,7 @@ import {
   exportCustomReport,
   queryReportData,
 } from '@/api/customReport.js'
+import { fmtTime } from '@/utils/time'
 
 // 维度/指标的显示名。标签是直接渲染给用户看的界面文案，所以走 i18n。
 // 用点分键（customReport.dimension.*）而不是中文字面量：中文字面量键在

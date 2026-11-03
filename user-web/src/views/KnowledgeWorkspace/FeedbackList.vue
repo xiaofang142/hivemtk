@@ -25,7 +25,7 @@
           <el-option
             v-for="p in productList"
             :key="p.id"
-            :label="p.name"
+            :label="productOptionLabel(p)"
             :value="p.id"
           />
         </el-select>
@@ -218,6 +218,8 @@ import { Refresh } from '@element-plus/icons-vue'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { getRatingLabel, getRatingTagType } from '@/constants/rating';
+import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
 
 const getRatingClass = (r) => `rating-${r}`;
 
@@ -244,6 +246,21 @@ const loadProducts = async () => {
   }
 }
 
+// 种子数据里存在同名产品（如两条「通用电商客服知识库」），下拉只显示名字无法区分，
+// 重名时补上 ID；与检索 Playground 的展示口径一致。
+const duplicatedProductNames = computed(() => {
+  const seen = new Map()
+  productList.value.forEach(p => {
+    const n = p.name || ''
+    seen.set(n, (seen.get(n) || 0) + 1)
+  })
+  return new Set([...seen.entries()].filter(([, n]) => n > 1).map(([n]) => n))
+})
+
+const productOptionLabel = (p) => duplicatedProductNames.value.has(p.name || '')
+  ? `${p.name}（${p.id}）`
+  : (p.name || '')
+
 const loadFeedbacks = async () => {
   loading.value = true
   try {
@@ -251,14 +268,21 @@ const loadFeedbacks = async () => {
     const res = await knowledgeMerchantAPI.listFeedbacks({
       product_id: filter.product_id,
       rating: rating,
+      keyword: filter.keyword,
       page: pagination.page,
       page_size: pagination.pageSize
     })
     feedbacks.value = res?.items || []
     pagination.total = res?.total || 0
-    computeStats();
+    // KPI 用后端按 product_id 全量聚合的结果（之前用当前页自己数：翻页会变小、2~5 星旧数据不计入导致对不上）
+    if (res?.stats) {
+      const s = res.stats
+      stats.value = { total: s.total || 0, good: s.good || 0, neutral: s.neutral || 0, bad: s.bad || 0 }
+    } else {
+      computeStats()
+    }
   } catch (e) {
-    ElMessage.error('加载反馈失败: ' + (e.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error('加载反馈失败: ' + (e.message || ''))
   } finally {
     loading.value = false
   }
@@ -268,14 +292,15 @@ const computeStats = () => {
   const s = { total: 0, good: 0, neutral: 0, bad: 0 }
   feedbacks.value.forEach(f => {
     s.total++
-    if (f.rating === 1) s.good++
-    else if (f.rating === 0) s.neutral++
-    else if (f.rating === -1) s.bad++
+    // 兼容 Playground 三态（1/0/-1）与历史星级（2~5）
+    if (f.rating === 1 || f.rating === 4 || f.rating === 5) s.good++
+    else if (f.rating === 0 || f.rating === 3) s.neutral++
+    else if (f.rating === -1 || f.rating === 2) s.bad++
   })
   stats.value = s
 }
 
-const formatDate = (d) => d ? new Date(d).toLocaleString('zh-CN') : '-'
+const formatDate = (d) => fmtTime(d, undefined, '-')
 
 onMounted(async () => {
   await loadProducts()

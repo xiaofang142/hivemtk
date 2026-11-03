@@ -92,7 +92,7 @@
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="创建时间">
-                {{ cardInfo.created_at }}
+                {{ fmtTime(cardInfo.created_at) }}
               </el-descriptions-item>
               <el-descriptions-item
                 label="描述"
@@ -150,6 +150,7 @@
               <template #header>
                 <div class="card-header">
                   <span>最近活动</span>
+                  <span class="card-hint">（卡片最近 10 条浏览记录，不受日期范围限制）</span>
                 </div>
               </template>
               <el-table
@@ -157,9 +158,12 @@
                 style="width: 100%"
               >
                 <el-table-column
-                  prop="username"
                   label="用户"
-                />
+                >
+                  <template #default="scope">
+                    {{ scope.row.username || scope.row.ipAddress || '匿名访客' }}
+                  </template>
+                </el-table-column>
                 <el-table-column
                   prop="action"
                   label="操作"
@@ -197,11 +201,21 @@ import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getKuaishouCard, getKuaishouCardStats } from '@/api/kuaishouCard'
+import { fmtTime } from '@/utils/time'
 
 const route = useRoute();
 const router = useRouter()
 
 const loading = ref(false);
+// formatYmd 把日期控件给的 Date 转成接口约定的 YYYY-MM-DD（本地时区，避免 toISOString 偏移到前一天）。
+const formatYmd = (d) => {
+  if (!d) return ''
+  const dt = new Date(d)
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${dt.getFullYear()}-${mm}-${dd}`
+}
+
 const cardId = ref(route.params.id)
 const cardInfo = ref({})
 // 模板头部的「加载失败」与告警条都要有真值可依：这两个 ref 先前只在模板里出现、
@@ -240,21 +254,16 @@ const fetchCardInfo = async () => {
 
 const fetchCardStats = async () => {
   try {
+    // 参数名统一 snake_case（后端 DTO 的 form tag 就是 snake_case），日期只传 YYYY-MM-DD：
+    // 服务端用 time.Parse("2006-01-02") 解析、并把结束日抬到当天末尾。
+    // 之前这里发 camelCase 的 startDate/endDate，键名绑不上，日期区间与「按周/按月」都是哑控件。
     const params = {
-      groupBy: groupBy.value
+      group_by: groupBy.value
     }
-    
+
     if (dateRange.value && dateRange.value.length === 2) {
-      // 快手这条接口和抖音/小红书不一样：dto.KuaishouCardStatsRequest 的 StartDate/EndDate 是
-      // time.Time 且没挂 time_format，gin 只按 RFC3339 解析。原来这里发的是 start_date=2026-09-11
-      // 这种 snake + 纯日期：键名不绑定（日期区间控件是个哑控件），改成 camel 的纯日期又会 400。
-      // 带毫秒的 Z 形 ISO 串两端都成立，实测 http=200 且区间真生效。
-      params.startDate = new Date(dateRange.value[0]).toISOString()
-      // 选择器回的是当天 00:00 的 Date：直接发出去会把结束日那天的浏览全 cut 掉，
-      // 所以右端要抬到当天末尾，让区间是闭区间。
-      const rangeEnd = new Date(dateRange.value[1])
-      rangeEnd.setHours(23, 59, 59, 999)
-      params.endDate = rangeEnd.toISOString()
+      params.start_date = formatYmd(dateRange.value[0])
+      params.end_date = formatYmd(dateRange.value[1])
     }
     
     const res = await getKuaishouCardStats(cardId.value, params)
@@ -484,5 +493,10 @@ onBeforeUnmount(() => {
     width: 100%;
     flex-wrap: wrap;
   }
+}
+.card-hint {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--el-text-color-secondary);
 }
 </style>

@@ -73,10 +73,24 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="last_status"
           label="最近同步"
-          width="100"
-        />
+          width="180"
+        >
+          <template #default="{ row }">
+            <div v-if="row.last_sync_at">
+              <el-tag
+                size="small"
+                :type="row.last_status === 'success' ? 'success' : (row.last_status === 'failed' ? 'danger' : 'info')"
+              >
+                {{ SYNC_STATUS[row.last_status] || row.last_status }}
+              </el-tag>
+              <div class="text-xs text-gray-500">
+                {{ fmtTime(row.last_sync_at) }}
+              </div>
+            </div>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="last_summary"
           label="摘要"
@@ -207,6 +221,10 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { kbConnectorApi } from '@/api/kbConnector'
 import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
+
+// 后端 last_status 是英文状态码，直接绑 prop 会在表格里显示 failed/success
+const SYNC_STATUS = { success: '成功', failed: '失败', running: '进行中', pending: '等待中' }
 
 const rows = ref([])
 const types = ref([])
@@ -300,10 +318,19 @@ const sync = async (row) => {
 }
 
 const remove = async (row) => {
-  await ElMessageBox.confirm(`删除连接器「${row.name}」？已导入的文档会保留在知识库。`, '删除确认', { type: 'warning' })
-  await kbConnectorApi.remove(row.id)
-  ElMessage.success('已删除')
-  await load()
+  try {
+    await ElMessageBox.confirm(`删除连接器「${row.name}」？已导入的文档会保留在知识库。`, '删除确认', { type: 'warning' })
+  } catch {
+    // 用户取消/关闭确认框：直接返回，避免 unhandled promise rejection
+    return
+  }
+  try {
+    await kbConnectorApi.remove(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '删除失败')
+  }
 }
 
 onMounted(load)

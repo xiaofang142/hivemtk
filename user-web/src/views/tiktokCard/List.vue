@@ -125,8 +125,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="280"
@@ -328,7 +331,7 @@
           label="创建时间"
           :span="2"
         >
-          {{ currentCard.created_at }}
+          {{ fmtTime(currentCard.created_at) }}
         </el-descriptions-item>
         <el-descriptions-item
           label="跳转链接"
@@ -408,6 +411,7 @@ import {
   deleteTikTokCard,
   generateShortLink
 } from '@/api/tiktokCard'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const tableData = ref([])

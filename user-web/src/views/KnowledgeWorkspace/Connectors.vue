@@ -107,11 +107,17 @@
               size="small"
               type="success"
               :loading="pulling === c.source"
-              :disabled="!c.enabled"
+              :disabled="!c.enabled || !c.pull_supported"
               @click="pull(c.source)"
             >
               一键拉取导入
             </el-button>
+          </div>
+          <div
+            v-if="!c.pull_supported"
+            class="pull-hint"
+          >
+            自动拉取目前仅支持 Notion；飞书 / 钉钉 / CRM 请用「外部导入」推送或 OpenAPI 写入。
           </div>
         </el-card>
       </el-col>
@@ -165,6 +171,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import PageHeader from '@/components/PageHeader.vue'
 import { http } from '@/utils/request'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const connectors = ref([])
 const kbList = ref([])
@@ -239,7 +246,8 @@ const saveCred = async (source) => {
     ElMessage.success('凭据已保存（读取侧自动脱敏）')
     await loadConnectors()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '保存失败')
+    // 拦截器已弹过服务端文案，这里只在未报错时补充，避免同一条错误弹两次
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '保存失败')
   }
 }
 
@@ -250,7 +258,7 @@ const testConn = async (source) => {
     d.ok ? ElMessage.success(d.message || '连接成功') : ElMessage.warning(d.message || '连接失败')
     await loadConnectors()
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '测试失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '测试失败')
   }
 }
 
@@ -264,7 +272,7 @@ const pull = async (source) => {
     lastResult.value = d
     ElMessage.success(`拉取完成: 成功 ${d.imported || 0} / 失败 ${d.failed || 0}`)
   } catch (e) {
-    ElMessage.error(e?.response?.data?.message || '拉取失败')
+    if (!isUserReportedError(e)) ElMessage.error(e?.response?.data?.message || '拉取失败')
   } finally {
     pulling.value = ''
   }
@@ -283,5 +291,6 @@ onMounted(() => { loadConnectors(); loadKBs() })
 .form-actions { margin-top: 8px; display: flex; gap: 8px; }
 .pull-box { display: flex; gap: 8px; margin-top: 8px; }
 .kb-select { flex: 1; }
+.pull-hint { margin-top: 6px; font-size: 12px; color: #909399; line-height: 1.5; }
 .result-card { margin-top: 8px; }
 </style>

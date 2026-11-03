@@ -49,8 +49,11 @@
             prop="created_at"
             label="创建时间"
             width="300"
-            flex="1"
-          />
+            flex="1">
+            <template #default="{ row }">
+              {{ fmtTime(row.created_at) }}
+            </template>
+          </el-table-column>
         </el-table>
         <div style="width: 100%;text-align: center; display: flex;">
           <el-pagination
@@ -72,6 +75,7 @@ import i18n from '@/i18n'
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { emailApi } from '@/api/email'
+import { fmtTime } from '@/utils/time'
 
 const jobsList = ref([])
 const jobsTotal = ref(0)

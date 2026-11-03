@@ -88,7 +88,7 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
-            {{ cardInfo.created_at }}
+            {{ fmtTime(cardInfo.created_at) }}
           </el-descriptions-item>
           <el-descriptions-item label="总浏览量">
             {{ cardInfo.view_count || 0 }}
@@ -255,6 +255,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { safeInit } from '@/utils/echarts'
 import { getXianyuCard, getXianyuCardStats } from '@/api/xianyuCard'
+import { fmtTime } from '@/utils/time'
 
 const router = useRouter()
 const route = useRoute()

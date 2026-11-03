@@ -397,7 +397,7 @@
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="检测时间">
-            {{ statusResult.checked_at }}
+            {{ fmtTime(statusResult.checked_at) }}
           </el-descriptions-item>
           <el-descriptions-item label="说明">
             {{ statusResult.message || '-' }}
@@ -419,6 +419,7 @@ import {
 import { platformAccountApi } from '@/api/platformAccount'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { getAccountStatusLabel, getAccountStatusTagType } from '@/constants/accountType';
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const submitting = ref(false)

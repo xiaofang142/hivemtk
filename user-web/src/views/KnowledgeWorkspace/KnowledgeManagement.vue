@@ -166,21 +166,13 @@
             style="width: 130px"
             @change="handleSearch"
           >
+            <!-- 选项来自统一来源字典：之前这里写死 upload/text/url/openapi，
+                 而库里实际还有 system_seed/manual/batch，导致这几类文档筛不出来 -->
             <el-option
-              :label="$t('文件上传')"
-              value="upload"
-            />
-            <el-option
-              :label="$t('文本')"
-              value="text"
-            />
-            <el-option
-              label="URL"
-              value="url"
-            />
-            <el-option
-              label="OpenAPI"
-              value="openapi"
+              v-for="opt in sourceFilterOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
             />
           </el-select>
           <el-input
@@ -653,7 +645,55 @@
           label="字符数"
           width="100"
         />
+        <el-table-column
+          label="操作"
+          width="80"
+        >
+          <template #default="{ row }">
+            <el-button
+              size="small"
+              link
+              type="primary"
+              @click="openChunkEditor(currentDoc.id, row.id)"
+            >
+              编辑
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
+    </el-dialog>
+
+    <el-dialog
+      v-model="showChunkDialog"
+      title="编辑分段"
+      width="640px"
+      :close-on-click-modal="false"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="分段正文是 RAG 直接检索的语料，改完立即生效；已进入发布制的知识库会拒绝直改（需走变更审批）。"
+        style="margin-bottom: 12px"
+      />
+      <el-input
+        v-model="chunkForm.content"
+        type="textarea"
+        :rows="10"
+        placeholder="分段正文"
+      />
+      <template #footer>
+        <el-button @click="showChunkDialog = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="chunkSaving"
+          @click="saveChunk"
+        >
+          保存
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -662,18 +702,21 @@
 import i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { isUserReportedError } from '@/utils/errorReporting'
+import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
 import { Upload, Refresh, UploadFilled, Search, Document, ChatDotRound, Plus, List } from '@element-plus/icons-vue'
 import { knowledgeAPI } from '@/api/knowledge'
 import { http } from '@/utils/request'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { listTools } from '@/api/aiTool'
 import { EMBED_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
-import { getSourceLabel, getSourceTagType } from '@/constants/source'
+import { getSourceLabel, getSourceTagType, filterSourcesByGroup } from '@/constants/source'
 import { rtNum } from '@/utils/runtimeConfig'
 
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(false)
 const importing = ref(false)
@@ -684,6 +727,9 @@ const showImportDialog = ref(false)
 // 用户再点「开始导入」只会得到「请选择文件」。
 const uploadRef = ref(null)
 const showDetailDialog = ref(false)
+const showChunkDialog = ref(false)
+const chunkSaving = ref(false)
+const chunkForm = reactive({ chunk_id: null, document_id: null, content: '' })
 const importTab = ref('upload')
 
 const overview = ref({})
@@ -899,8 +945,62 @@ const showDocumentDetail = async (row) => {
   }
 }
 
-const handleReindex = async (row) => {
+// 打开分段编辑器：分段正文是 RAG 直接检索的语料，Playground 的「编辑分段」也走这里。
+// 之前 Playground 会带 document_id/chunk_id 跳到本页，但本页从不读这些 query，
+// 用户点完只看到一个普通列表页 —— 属于「点了没反应」的死链。
+const openChunkEditor = async (documentId, chunkId) => {
   try {
+    const res = await knowledgeMerchantAPI.listDocumentChunks(documentId, { page: 1, page_size: 200 })
+    const list = res?.items || []
+    const hit = list.find((c) => Number(c.id) === Number(chunkId))
+    if (!hit) {
+      ElMessage.warning('该分段已不存在，可能已被重建索引替换，请重新检索')
+      return
+    }
+    chunkForm.document_id = documentId
+    chunkForm.chunk_id = hit.id
+    chunkForm.content = hit.content || ''
+    showChunkDialog.value = true
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('加载分段失败: ' + (e.message || ''))
+  }
+}
+
+const saveChunk = async () => {
+  if (!String(chunkForm.content || '').trim()) {
+    ElMessage.warning('分段正文不能为空')
+    return
+  }
+  chunkSaving.value = true
+  try {
+    await knowledgeMerchantAPI.updateChunk(chunkForm.chunk_id, { content: chunkForm.content })
+    ElMessage.success('分段已更新')
+    showChunkDialog.value = false
+    if (showDetailDialog.value && currentDoc.value) {
+      const r = await knowledgeAPI.getDocumentChunks(currentDoc.value.id)
+      chunks.value = (r?.items || []).slice(0, 20)
+    }
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('更新分段失败: ' + (e.message || ''))
+  } finally {
+    chunkSaving.value = false
+  }
+}
+
+// 处理 Playground「编辑分段」深链：?document_id=&chunk_id=&tab=chunks
+const openFromQuery = async () => {
+  const docId = Number(route.query.document_id)
+  const chunkId = Number(route.query.chunk_id)
+  if (!docId) return
+  if (chunkId) {
+    await openChunkEditor(docId, chunkId)
+    return
+  }
+  const row = documents.value.find((d) => Number(d.id) === docId)
+  if (row) await showDocumentDetail(row)
+}
+
+const handleReindex = async (row) => {  try {
     await ElMessageBox.confirm(`确认重建文档「${row.title}」的索引吗?`, '重建索引', { type: 'warning' })
     await knowledgeAPI.reindexDocument(row.id, { product_id: filter.product_id })
     ElMessage.success(i18n.global.t('重建任务已启动'))
@@ -936,8 +1036,9 @@ const startPolling = () => {
   }, 3000)
 };
 
-onMounted(() => {
-  loadAll()
+onMounted(async () => {
+  await loadAll()
+  await openFromQuery()
 })
 
 onUnmounted(() => {
@@ -953,6 +1054,9 @@ const embedStatusLabel = getEmbedStatusLabel;
 const embedStatusTag = getEmbedStatusTagType
 const sourceTypeLabel = (t) => getSourceLabel(t);
 const sourceTypeTag = (t) => getSourceTagType(t)
+// 来源类型筛选：知识库常见来源 + 通用来源（手动/系统自动等），
+// 保证库里存在的每一类 source_type 都能被筛到（后端 ListFilter.SourceType 直接透传）
+const sourceFilterOptions = filterSourcesByGroup(['knowledge', 'common'])
 const formatNumber = (n) => n == null ? '-' : Number(n).toLocaleString()
 const formatPercent = (n) => n == null ? '-' : (n * 100).toFixed(1) + '%'
 const togglePublic = async (row, visible) => {

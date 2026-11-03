@@ -127,8 +127,11 @@
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180"
-      />
+        width="180">
+        <template #default="{ row }">
+          {{ fmtTime(row.created_at) }}
+        </template>
+      </el-table-column>
       <el-table-column
         label="操作"
         width="340"
@@ -284,8 +287,11 @@
         <el-table-column
           prop="join_time"
           label="加入时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.join_time) }}
+          </template>
+        </el-table-column>
       </el-table>
       <div class="pagination-container">
         <el-pagination
@@ -336,8 +342,11 @@
         <el-table-column
           prop="created_at"
           label="时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
       </el-table>
       <div class="pagination-container">
         <el-pagination
@@ -405,7 +414,7 @@
             {{ currentGroup.id }}
           </el-descriptions-item>
           <el-descriptions-item label="创建时间">
-            {{ currentGroup.created_at }}
+            {{ fmtTime(currentGroup.created_at) }}
           </el-descriptions-item>
           <el-descriptions-item label="状态">
             {{ currentGroup.status === 1 ? '正常' : '禁用' }}
@@ -426,6 +435,7 @@ import {
   DataAnalysis, Download, Upload
 } from '@element-plus/icons-vue'
 import { communityApi } from '@/api/community'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const submitting = ref(false)

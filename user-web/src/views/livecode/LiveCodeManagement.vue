@@ -115,8 +115,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="300"
@@ -202,31 +205,67 @@
           <el-input v-model="liveCodeForm.short_link" />
         </el-form-item>
         <el-form-item
-          label="短链域名ID"
+          label="短链域名"
           prop="short_domain_id"
         >
-          <el-input-number
+          <!-- 原来这里是裸的 el-input-number（默认 1），用户既不知道 1 是谁、也不知道该填什么，
+               提交后只会拿到「活码域名不可用: 短链域名 1」。改成从域名池选可用域名。 -->
+          <el-select
             v-model="liveCodeForm.short_domain_id"
-            :min="1"
-          />
+            filterable
+            placeholder="选择短链域名"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in domainOptions"
+              :key="d.id"
+              :label="domainLabel(d)"
+              :value="d.id"
+              :disabled="d.status !== 1"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item
-          label="入口域名ID"
+          label="入口域名"
           prop="entry_domain_id"
         >
-          <el-input-number
+          <!-- 原来这里是裸的 el-input-number（默认 1），用户既不知道 1 是谁、也不知道该填什么，
+               提交后只会拿到「活码域名不可用: 短链域名 1」。改成从域名池选可用域名。 -->
+          <el-select
             v-model="liveCodeForm.entry_domain_id"
-            :min="1"
-          />
+            filterable
+            placeholder="选择入口域名"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in domainOptions"
+              :key="d.id"
+              :label="domainLabel(d)"
+              :value="d.id"
+              :disabled="d.status !== 1"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item
-          label="落地域名ID"
+          label="落地域名"
           prop="landing_domain_id"
         >
-          <el-input-number
+          <!-- 原来这里是裸的 el-input-number（默认 1），用户既不知道 1 是谁、也不知道该填什么，
+               提交后只会拿到「活码域名不可用: 短链域名 1」。改成从域名池选可用域名。 -->
+          <el-select
             v-model="liveCodeForm.landing_domain_id"
-            :min="1"
-          />
+            filterable
+            placeholder="选择落地域名"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="d in domainOptions"
+              :key="d.id"
+              :label="domainLabel(d)"
+              :value="d.id"
+              :disabled="d.status !== 1"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item
           label="图片URL"
@@ -323,8 +362,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="200"
@@ -369,6 +411,20 @@
         :rules="qrRules"
         label-width="120px"
       >
+        <el-form-item
+          label="过期天数"
+          prop="expire_days"
+        >
+          <!-- 后端 GenerateQRCodeRequest.ExpireDays 是 required；
+               之前表单没有这个字段 ⇒ 每次生成二维码都弹 Go validator 原文。 -->
+          <el-input-number
+            v-model="qrForm.expire_days"
+            :min="1"
+            :max="3650"
+            controls-position="right"
+          />
+          <span style="margin-left: 10px;">天</span>
+        </el-form-item>
         <el-form-item
           label="每日限制"
           prop="daily_limit"
@@ -469,14 +525,31 @@
           </el-col>
         </el-row>
         
-        <div
-          class="chart-container"
-          style="margin-top: 20px;"
+        <!-- 接口 LiveCodeStatsResponse 不含日趋势字段，原来这里放了个永远空白的
+             #statsChart（从未 init echarts）。改为展示点击/二维码相关计数 + 转化率说明。 -->
+        <el-row
+          :gutter="16"
+          style="margin-top: 16px;"
         >
-          <div
-            id="statsChart"
-            style="width: 100%; height: 300px;"
-          />
+          <el-col
+            v-for="item in statsSecondary"
+            :key="item.label"
+            :span="6"
+          >
+            <el-card class="stats-card">
+              <div class="stats-item">
+                <div class="stats-value">
+                  {{ item.value }}
+                </div>
+                <div class="stats-label">
+                  {{ item.label }}
+                </div>
+              </div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <div class="stats-note">
+          转化率 {{ Number(statsData.conversion_rate || 0).toFixed(1) }}%（二维码点击 / 二维码展示）；接口暂不提供日趋势，趋势图暂未接入。
         </div>
       </div>
       
@@ -491,8 +564,9 @@
 
 <script setup>
 import i18n from '@/i18n'
+import { isUserReportedError } from '@/utils/errorReporting'
 
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   getLiveCodes, 
@@ -507,6 +581,8 @@ import {
   shareLiveCode
 } from '@/api/livecode'
 import { copyToClipboard } from '@/utils/clipboard'
+import { fmtTime } from '@/utils/time'
+import { domainPoolApi } from '@/api/domainPool'
 
 const loading = ref(false);
 const submitLoading = ref(false)
@@ -523,7 +599,32 @@ const qrFormTitle = ref('')
 const liveCodeFormRef = ref()
 const qrFormRef = ref()
 const currentLiveCodeId = ref(null)
+// 域名池候选：活码写入时要的是 domain_pool.id，之前让人手填数字 ⇒ 必然踩「域名不可用」。
+const domainOptions = ref([])
+const domainLabel = (d) => `${d.domain}（#${d.id}）${d.status === 1 ? '' : ' · 已停用'}`
+const defaultDomainId = () => {
+  const first = domainOptions.value.find((d) => d.status === 1)
+  return first ? first.id : null
+}
+const loadDomainOptions = async () => {
+  try {
+    const res = await domainPoolApi.getList({ page: 1, page_size: 200 })
+    domainOptions.value = (res?.list || []).map((d) => ({ id: d.id, domain: d.domain, status: d.status }))
+  } catch (error) {
+    domainOptions.value = []
+    if (!isUserReportedError(error)) ElMessage.error('获取可用域名失败')
+  }
+}
+
 const statsData = ref({})
+
+// 弹窗下半部分的次级指标（总点击 / 今日点击 / 二维码展示 / 二维码点击）
+const statsSecondary = computed(() => [
+  { label: '总点击', value: statsData.value.total_clicks || 0 },
+  { label: '今日点击', value: statsData.value.today_clicks || 0 },
+  { label: '二维码展示', value: statsData.value.total_qr_shown || 0 },
+  { label: '二维码点击', value: statsData.value.total_qr_clicks || 0 },
+])
 
 const searchForm = reactive({
   name: '',
@@ -540,9 +641,9 @@ const liveCodeForm = reactive({
   id: null,
   name: '',
   short_link: '',
-  short_domain_id: 1,
-  entry_domain_id: 1,
-  landing_domain_id: 1,
+  short_domain_id: null,
+  entry_domain_id: null,
+  landing_domain_id: null,
   status: 1,
   image_url: '',
   entry_url: '',
@@ -551,6 +652,7 @@ const liveCodeForm = reactive({
 
 const qrForm = reactive({
   id: null,
+  expire_days: 30,
   daily_limit: 200,
   status: 1
 });
@@ -575,6 +677,9 @@ const liveCodeRules = {
 };
 
 const qrRules = {
+  expire_days: [
+    { required: true, message: '请输入过期天数', trigger: 'blur', type: 'number' }
+  ],
   daily_limit: [
     { required: true, message: i18n.global.t('请输入每日限制'), trigger: 'blur', type: 'number' }
   ]
@@ -601,7 +706,7 @@ const fetchLiveCodeList = async () => {
     liveCodeList.value = response.list
     pagination.total = response.total
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取活码列表失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取活码列表失败'))
   } finally {
     loading.value = false
   }
@@ -613,7 +718,7 @@ const fetchQRList = async (liveCodeId) => {
     const response = await getLiveCodeQRs(liveCodeId)
     qrList.value = response
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取二维码列表失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取二维码列表失败'))
   } finally {
     qrLoading.value = false
   }
@@ -649,9 +754,9 @@ const handleAdd = () => {
     id: null,
     name: '',
     short_link: '',
-    short_domain_id: 1,
-    entry_domain_id: 1,
-    landing_domain_id: 1,
+    short_domain_id: defaultDomainId(),
+    entry_domain_id: defaultDomainId(),
+    landing_domain_id: defaultDomainId(),
     status: 1,
     image_url: '',
     entry_url: '',
@@ -693,7 +798,7 @@ const handleDelete = (row) => {
         ElMessage.success(i18n.global.t('删除成功'))
         fetchLiveCodeList()
       } catch (error) {
-        ElMessage.error(i18n.global.t('删除失败'))
+        if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('删除失败'))
       }
     })
     .catch(() => {})
@@ -729,7 +834,7 @@ const handleEditQR = (row) => {
 
 const handleDeleteQR = (row) => {
   ElMessageBox.confirm(
-    `确定要删除二维码 "${row.name}" 吗？`,
+    `确定要删除二维码 #${row.id} 吗？`,
     '提示',
     {
       confirmButtonText: '确定',
@@ -743,7 +848,7 @@ const handleDeleteQR = (row) => {
         ElMessage.success(i18n.global.t('删除成功'))
         fetchQRList(currentLiveCodeId.value)
       } catch (error) {
-        ElMessage.error(i18n.global.t('删除失败'))
+        if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('删除失败'))
       }
     })
     .catch(() => {})
@@ -755,7 +860,7 @@ const handleStats = async (row) => {
     statsData.value = response
     statsDialogVisible.value = true;
   } catch (error) {
-    ElMessage.error(i18n.global.t('获取统计数据失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('获取统计数据失败'))
   }
 };
 
@@ -770,7 +875,7 @@ const handleShare = async (row) => {
       ElMessage.warning(i18n.global.t('复制失败，请手动复制'))
     }
   } catch (error) {
-    ElMessage.error(i18n.global.t('分享失败'))
+    if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('分享失败'))
   }
 };
 
@@ -793,7 +898,7 @@ const handleSubmit = async () => {
     fetchLiveCodeList()
   } catch (error) {
     if (error.message) {
-      ElMessage.error(error.message)
+      if (!isUserReportedError(error)) ElMessage.error(error.message)
     }
   } finally {
     submitLoading.value = false
@@ -819,7 +924,7 @@ const handleQRSubmit = async () => {
     fetchQRList(currentLiveCodeId.value)
   } catch (error) {
     if (error.message) {
-      ElMessage.error(error.message)
+      if (!isUserReportedError(error)) ElMessage.error(error.message)
     }
   } finally {
     qrSubmitLoading.value = false
@@ -839,6 +944,7 @@ const handleQRFormClose = () => {
 };
 
 onMounted(() => {
+  loadDomainOptions()
   fetchLiveCodeList()
 });
 </script>
@@ -896,5 +1002,11 @@ onMounted(() => {
 .stats-label {
   font-size: 14px;
   color: #909399;
+}
+.stats-note {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 </style>

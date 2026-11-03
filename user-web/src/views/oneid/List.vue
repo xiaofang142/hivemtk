@@ -209,8 +209,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          min-width="180"
-        />
+          min-width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="200"
@@ -376,8 +379,10 @@ import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { Plus, UserFilled, Cellphone, Message, Connection } from '@element-plus/icons-vue'
 import { listOneID, resolveIdentity, getIdentityMappings, linkIdentity, getOneIDStats } from '@/api/oneid'
+import { fmtTime } from '@/utils/time'
 
 const list = ref([])
 const total = ref(0)
@@ -465,13 +470,21 @@ const showLink = (row) => {
 }
 
 const handleResolve = async () => {
+  // 空表单直发后端会「解析成功」并落一条空身份客户，本地先拦（后端也已加同样的校验）
+  const f = resolveForm.value || {}
+  if (!String(f.phone || '').trim() && !String(f.email || '').trim() &&
+      !String(f.wechat_open_id || '').trim() && !String(f.douyin_open_id || '').trim()) {
+    ElMessage.warning('请至少填写一个身份标识（手机号/邮箱/微信/抖音）')
+    return
+  }
   try {
     await resolveIdentity(resolveForm.value)
     ElMessage.success(i18n.global.t('解析成功'))
     resolveDialogVisible.value = false
     loadList()
   } catch (e) {
-    ElMessage.error('解析失败：' + e.message)
+    if (isUserReportedError(e)) return
+    ElMessage.error('解析失败：' + (e?.message || '未知错误'))
   }
 }
 

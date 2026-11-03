@@ -54,10 +54,10 @@
               :span="1"
             >
               <el-tag
-                :type="kbData.status === 1 ? 'success' : 'info'"
+                :type="kbData.enabled ? 'success' : 'info'"
                 size="small"
               >
-                {{ kbData.status === 1 ? '启用' : '禁用' }}
+                {{ kbData.enabled ? '启用' : '禁用' }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item

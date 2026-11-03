@@ -442,13 +442,19 @@
             <el-table-column
               prop="started_at"
               label="开始时间"
-              width="180"
-            />
+              width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.started_at) }}
+              </template>
+            </el-table-column>
             <el-table-column
               prop="finished_at"
               label="结束时间"
-              width="180"
-            />
+              width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.finished_at) }}
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </div>
@@ -461,6 +467,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
 import { isUserReportedError } from '@/utils/errorReporting'
+import { fmtTime } from '@/utils/time'
 
 const STEP_TYPES = {
   trigger:  { label: '触发器',     kind: 'control', default: {} },

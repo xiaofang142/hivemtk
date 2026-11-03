@@ -325,7 +325,7 @@
                   {{ msg.content }}
                 </div>
                 <div class="time">
-                  {{ msg.createdAt }}
+                  {{ fmtTime(msg.createdAt) }}
                 </div>
               </div>
             </div>
@@ -473,6 +473,7 @@ import { useSessionList } from './composables/useSessionList'
 import { useSessionActions } from './composables/useSessionActions'
 import CustomerProfilePanel from './components/CustomerProfilePanel.vue'
 import BlacklistDialog from './components/BlacklistDialog.vue'
+import { fmtTime } from '@/utils/time'
 
 // —— 共享状态:会话数据源 + 输入框内容(列表/操作/聊天多个职责共同读写) ——
 // 深链入口：CSAT 看板的「查看会话」等按钮以 ?session_id= 打开本页，需在列表就位后选中它

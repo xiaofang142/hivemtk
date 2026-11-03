@@ -100,7 +100,7 @@
               服务器时间
             </div>
             <div class="metric-value">
-              {{ metrics.server_time }}
+              {{ fmtTime(metrics.server_time) }}
             </div>
           </el-card>
         </el-col>
@@ -143,6 +143,7 @@ import i18n from '@/i18n'
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { StatsApi } from '@/api/stats'
+import { fmtTime } from '@/utils/time'
 
 const metrics = ref({
   cpu_usage: 0,

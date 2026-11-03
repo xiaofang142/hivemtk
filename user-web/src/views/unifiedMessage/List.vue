@@ -327,10 +327,10 @@
               {{ currentMessage.chat_id }}
             </el-descriptions-item>
             <el-descriptions-item label="发送时间">
-              {{ currentMessage.created_at }}
+              {{ fmtTime(currentMessage.created_at) }}
             </el-descriptions-item>
             <el-descriptions-item label="更新时间">
-              {{ currentMessage.updated_at }}
+              {{ fmtTime(currentMessage.updated_at) }}
             </el-descriptions-item>
           </el-descriptions>
           <div class="message-content">
@@ -358,6 +358,7 @@ import { copyToClipboard } from '@/utils/clipboard.js'
 import { getMyAgent } from '@/api/customerService'
 import AgentSocket from '@/utils/agentSocket'
 import { CHANNEL_OPTIONS, getChannelLabel, getChannelTagType } from '@/constants/channel'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false);
 const detailLoading = ref(false)

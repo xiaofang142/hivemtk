@@ -97,8 +97,11 @@
         <el-table-column
           prop="created_at"
           label="签发时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="last_seen_at"
           label="最近使用"
@@ -192,6 +195,7 @@ import {
   listEgoRunnerTokens,
   revokeEgoRunnerToken
 } from '@/api/egolite'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const runners = ref([])

@@ -163,8 +163,11 @@
         <el-table-column
           prop="createdAt"
           label="时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="120"
@@ -297,7 +300,7 @@
             {{ currentEvent.ip }}
           </el-descriptions-item>
           <el-descriptions-item label="时间">
-            {{ currentEvent.createdAt }}
+            {{ fmtTime(currentEvent.createdAt) }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -346,6 +349,7 @@ import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getCustomerEventHistory, getEventStats, trackEvent, getGlobalEvents } from '@/api/customerEvent.js'
 import { getCustomerList } from '@/api/customer360.js'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const events = ref([])

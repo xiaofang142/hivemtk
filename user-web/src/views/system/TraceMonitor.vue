@@ -144,7 +144,7 @@
                   {{ statusText(item) }}
                 </el-tag>
                 <span class="span-dur">{{ item.duration_ms }} ms</span>
-                <span class="span-time">{{ item.created_at }}</span>
+                <span class="span-time">{{ fmtTime(item.created_at) }}</span>
               </div>
               <div
                 v-show="expanded[item.id]"
@@ -203,7 +203,7 @@
                   {{ statusText(item.turn) }}
                 </el-tag>
                 <span class="span-dur">{{ item.turn.duration_ms }} ms</span>
-                <span class="span-time">{{ item.turn.created_at }}</span>
+                <span class="span-time">{{ fmtTime(item.turn.created_at) }}</span>
               </div>
               <div
                 v-show="expanded[item.turn.id]"
@@ -246,7 +246,7 @@
                   {{ statusText(item.tool) }}
                 </el-tag>
                 <span class="span-dur">{{ item.tool.duration_ms }} ms</span>
-                <span class="span-time">{{ item.tool.created_at }}</span>
+                <span class="span-time">{{ fmtTime(item.tool.created_at) }}</span>
               </div>
               <div class="span-body">
                 <el-descriptions
@@ -554,13 +554,19 @@
           <el-table-column
             prop="first_at"
             label="首节点"
-            width="180"
-          />
+            width="180">
+            <template #default="{ row }">
+              {{ fmtTime(row.first_at) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="last_at"
             label="末节点"
-            width="180"
-          />
+            width="180">
+            <template #default="{ row }">
+              {{ fmtTime(row.last_at) }}
+            </template>
+          </el-table-column>
           <el-table-column
             label="操作"
             width="100"
@@ -797,8 +803,11 @@
           <el-table-column
             prop="created_at"
             label="评估时间"
-            width="180"
-          />
+            width="180">
+            <template #default="{ row }">
+              {{ fmtTime(row.created_at) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="channel"
             label="渠道"
@@ -915,6 +924,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { MonitorApi as monitorApi } from '@/api/monitor'
+import { fmtTime } from '@/utils/time'
 
 const channels = ['douyin', 'xiaohongshu', 'wechat', 'telegram', 'whatsapp', 'instagram', 'facebook', 'line', 'kuaishou', 'weibo']
 

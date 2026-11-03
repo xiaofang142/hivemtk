@@ -15,7 +15,7 @@
             {{ snapshot.window || '-' }}
           </div>
           <div class="stat-meta">
-            生成于 {{ formattedAt }}
+            生成于 {{ fmtTime(formattedAt) }}
           </div>
         </el-card>
       </el-col>
@@ -247,6 +247,7 @@
 import { ref, computed, onMounted } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { getObservabilityDashboard } from '@/api/observabilityDashboard'
+import { fmtTime } from '@/utils/time'
 
 const snapshot = ref({})
 const loading = ref(false)

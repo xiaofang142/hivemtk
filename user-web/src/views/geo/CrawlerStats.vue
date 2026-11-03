@@ -227,7 +227,7 @@
       </template>
       <el-table
         v-loading="loading"
-        :data="filteredKeywordStats"
+        :data="pagedKeywordStats"
         size="small"
         :default-sort="{prop:'visit_count', order:'descending'}"
       >
@@ -276,6 +276,14 @@
           </template>
         </el-table-column>
       </el-table>
+      <!-- 关键词行数可达数千（现网 7001 行），必须分页渲染，否则整表单次挂载会把页面卡住 -->
+      <el-pagination
+        v-model:current-page="kwPage"
+        :page-size="kwPageSize"
+        :total="filteredKeywordStats.length"
+        layout="prev, pager, next, total"
+        small
+      />
     </el-card>
 
     
@@ -337,7 +345,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getCrawlerStats, runCrawler as runCrawlerApi } from '@/api/geoProbe.js'
 
@@ -354,6 +362,16 @@ const filteredKeywordStats = computed(() => {
   if (!kwFilter.value) return keywordStats.value
   return keywordStats.value.filter(k => k.keyword.includes(kwFilter.value))
 })
+
+// 关键词热力表分页：后端一次返回上千行（现网 7001 行），直接整表渲染会明显卡顿
+const kwPage = ref(1)
+const kwPageSize = 50
+const pagedKeywordStats = computed(() => {
+  const start = (kwPage.value - 1) * kwPageSize
+  return filteredKeywordStats.value.slice(start, start + kwPageSize)
+})
+// 过滤条件变化后回到第 1 页，避免停留在超出结果的页码上看到空表
+watch(kwFilter, () => { kwPage.value = 1 })
 
 const coverageColor = computed(() => {
   const v = coverageScore.value

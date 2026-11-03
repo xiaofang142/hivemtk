@@ -36,7 +36,7 @@
                 <el-option
                   v-for="p in productList"
                   :key="p.id"
-                  :label="p.name"
+                  :label="productOptionLabel(p)"
                   :value="p.id"
                 />
               </el-select>
@@ -116,6 +116,10 @@
               <el-checkbox v-model="form.use_rerank">
                 启用重排序
               </el-checkbox>
+              <!-- 这两个开关当前只写进调试信息：商户检索链路没有接入三级缓存与 rerank，勾选不改变结果，必须说明清楚 -->
+              <div class="param-hint">
+                当前检索链路未接入三级缓存与重排序，勾选仅记录参数，不影响检索结果。
+              </div>
             </el-form-item>
           </el-form>
         </el-card>
@@ -336,10 +340,19 @@
               {{ result.debug_info.threshold }}
             </el-descriptions-item>
             <el-descriptions-item label="三级缓存">
-              {{ result.debug_info.use_three_tier ? '开启' : '关闭' }}
+              {{ result.debug_info.use_three_tier ? '已勾选（未接入，仅记录）' : '关闭' }}
             </el-descriptions-item>
             <el-descriptions-item label="重排序">
-              {{ result.debug_info.use_rerank ? '开启' : '关闭' }}
+              {{ result.debug_info.use_rerank ? '已勾选（未接入，仅记录）' : '关闭' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="分类过滤">
+              {{ result.debug_info.filter_category || '未设置' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="标签过滤">
+              {{ (result.debug_info.tags && result.debug_info.tags.length) ? result.debug_info.tags.join('、') : '未设置' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="被过滤分段">
+              {{ result.debug_info.doc_filtered || 0 }}
             </el-descriptions-item>
             <el-descriptions-item label="查询">
               {{ result.query }}
@@ -389,6 +402,20 @@ const form = reactive({
 })
 
 const canSearch = computed(() => form.product_id && form.query.trim())
+
+// 种子数据里存在同名产品（如「通用电商客服知识库」有 seed-035-ecom 与 ecommerce-general-cs 两条），
+// 下拉里两条同名项无法区分，选错就把检索打到另一个产品上。仅对重名的项追加产品 ID。
+const duplicatedProductNames = computed(() => {
+  const counts = {}
+  productList.value.forEach(p => {
+    counts[p.name] = (counts[p.name] || 0) + 1
+  })
+  return new Set(Object.keys(counts).filter(n => counts[n] > 1))
+})
+
+function productOptionLabel(p) {
+  return duplicatedProductNames.value.has(p.name) ? `${p.name}（${p.id}）` : p.name
+}
 
 const loadProducts = async () => {
   try {
@@ -490,6 +517,13 @@ onMounted(() => {
   font-size: 12px;
   color: #909399;
   margin-top: -10px;
+}
+
+.param-hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
+  margin-top: 4px;
 }
 
 .metric-row {

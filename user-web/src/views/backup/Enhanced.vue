@@ -132,8 +132,11 @@
         <el-table-column
           prop="createdAt"
           label="备份时间"
-          width="170"
-        />
+          width="170">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           prop="size"
           label="大小"
@@ -233,6 +236,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatFileSize } from '@/utils/format'
 import { http } from '@/utils/request'
+import { fmtTime } from '@/utils/time'
 
 const stats = ref({ total: 0, lastSuccess: '-', totalSize: 0, nextRun: '-' })
 const strategy = reactive({

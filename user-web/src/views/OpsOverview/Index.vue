@@ -173,14 +173,25 @@ function formatUptime(sec) {
 
 function mapModules(nodeHealth) {
   if (!Array.isArray(nodeHealth)) return []
-  return nodeHealth.map(n => ({
-    name: n.channel || n.node_id || n.platform || '-',
-    status: n.status === 'healthy' || n.status === 'ok' ? 'ok'
-      : n.status === 'degraded' || n.status === 'warn' ? 'warn' : 'error',
-    latency: n.latency_ms ?? n.avg_latency_ms ?? '-',
-    qps: n.qps ?? n.rate_per_min ?? '-',
-    errorRate: n.error_rate ?? n.failure_rate ?? '-'
-  }))
+  // /api/monitor/node-health 的节点字段是 node / node_label / abnormal / abnormal_rate，
+  // 之前按 channel / node_id / status 取值，结果整张表只有一行「- / 异常」，看不出是哪个模块。
+  return nodeHealth.map(n => {
+    const rate = Number(n.abnormal_rate ?? 0)
+    let status = 'ok'
+    if (n.status) {
+      status = n.status === 'healthy' || n.status === 'ok' ? 'ok'
+        : n.status === 'degraded' || n.status === 'warn' ? 'warn' : 'error'
+    } else if (Number(n.abnormal ?? 0) > 0 || rate > 0) {
+      status = rate >= 0.2 ? 'error' : 'warn'
+    }
+    return {
+      name: n.node_label || n.node || n.channel || n.node_id || n.platform || '-',
+      status,
+      latency: n.avg_duration_ms ?? n.latency_ms ?? n.avg_latency_ms ?? '-',
+      qps: n.total ?? n.qps ?? n.rate_per_min ?? '-',
+      errorRate: n.abnormal_rate != null ? `${(Number(n.abnormal_rate) * 100).toFixed(1)}%` : (n.error_rate ?? n.failure_rate ?? '-')
+    }
+  })
 }
 
 function fmtAgeMin(ageMin) {

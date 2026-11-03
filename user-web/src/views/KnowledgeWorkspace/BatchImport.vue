@@ -326,6 +326,7 @@ import { Upload, View, CircleCheck, UploadFilled } from '@element-plus/icons-vue
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { rtNum } from '@/utils/runtimeConfig'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const activeTab = ref('upload')
 const uploading = ref(false)
@@ -500,6 +501,12 @@ const loadPasteTemplate = () => {
 
 const handleBatchImport = async () => {
   if (!preview.value.length) return
+  // 后端要求 product_id 必填：在这里先拦，别让用户看完确认框才吃到「product_id 不能为空」
+  const targetProduct = activeTab.value === 'upload' ? uploadForm.product_id : pasteForm.product_id
+  if (!targetProduct) {
+    ElMessage.warning('请选择目标知识库（产品）后再导入')
+    return
+  }
   try {
     await ElMessageBox.confirm(
       `确认导入 ${preview.value.length} 条记录吗?`,
@@ -531,7 +538,8 @@ const handleBatchImport = async () => {
       else pasteForm.jsonText = ''
     }
   } catch (e) {
-    ElMessage.error('导入失败: ' + (e.message || ''))
+    // 拦截器已经弹过服务端文案，这里不再重复（同一条错误弹两次）
+    if (!isUserReportedError(e)) ElMessage.error('导入失败: ' + (e.message || ''))
   } finally {
     importing.value = false
   }

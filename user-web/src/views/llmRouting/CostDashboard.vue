@@ -50,7 +50,7 @@
       <el-col :span="16">
         <el-card>
           <template #header>
-            <span>成本趋势（30 天）</span>
+            <span>{{ chartTitle }}</span>
           </template>
           <div
             ref="trendRef"
@@ -61,7 +61,7 @@
       <el-col :span="8">
         <el-card>
           <template #header>
-            <span>模型分布</span>
+            <span>{{ distTitle }}</span>
           </template>
           <div
             ref="distRef"
@@ -95,6 +95,9 @@
         v-loading="loading"
         :data="breakdownData"
       >
+        <template #empty>
+          <el-empty :description="emptyHint" />
+        </template>
         <el-table-column
           prop="name"
           :label="breakdownName"
@@ -129,10 +132,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
-import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
 import { safeInit } from '@/utils/echarts'
 import { http } from '@/utils/request'
 import { formatCompactNumber } from '@/utils/format'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const stats = ref({})
 const breakdown = ref('scenario')
@@ -141,6 +145,11 @@ const loading = ref(false)
 const trendRef = ref()
 const distRef = ref()
 
+// 空态文案随维度变化：智能体维度在 LLM 调用日志里没有对应字段，不能只显示「暂无数据」
+const emptyHint = computed(() => (breakdown.value === 'agent'
+  ? 'LLM 调用日志暂未记录智能体维度，按智能体统计不可用'
+  : '当前时间窗口内没有调用记录'))
+
 const breakdownName = computed(() => ({
   scenario: '场景',
   model: '模型',
@@ -148,6 +157,12 @@ const breakdownName = computed(() => ({
 }[breakdown.value]))
 
 const formatNumber = formatCompactNumber
+
+// 图表标题跟随当前维度：这张图是按维度聚合的成本/调用量对比，不是时间趋势
+const chartTitle = computed(() => `按${breakdownName.value}的成本与调用次数（30 天）`)
+// 全部模型成本为 0 时（免费/本地模型），饼图改用调用次数占比，否则饼图会整块空白
+const distUsesCalls = ref(false)
+const distTitle = computed(() => `按${breakdownName.value}的调用占比${distUsesCalls.value ? '（成本均为 0，按调用次数）' : ''}`)
 
 async function load() {
   loading.value = true
@@ -159,9 +174,15 @@ async function load() {
     // 后端 cost-stats 返回 by_model/by_provider 分组、usage 返回汇总+by_* —— 前端做映射
     stats.value = u || {}
     const rows = (breakdown.value === 'model' ? (cs?.by_model || (u.by_provider || [])) : (u['by_' + breakdown.value] || []))
-    breakdownData.value = rows.map((r) => ({ ...r, name: r.provider || r.scenario || r.agent || '-' }))
+    // 后端按 map 遍历返回，顺序不稳定；按调用次数降序，方便看头部消耗方
+    breakdownData.value = rows
+      .map((r) => ({ ...r, name: r.provider || r.scenario || r.agent || '-' }))
+      .sort((a, b) => Number(b.call_count || 0) - Number(a.call_count || 0))
     renderTrend(breakdownData.value)
     renderDist(breakdownData.value)
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('加载成本数据失败')
+    breakdownData.value = []
   } finally {
     loading.value = false
   }
@@ -170,8 +191,13 @@ async function load() {
 function renderTrend(rows) {
   if (!trendRef.value) return
   const top = (rows || []).slice(0, 8)
-  if (!top.length) return
-  const chart = safeInit(trendRef.value)
+  const chart0 = safeInit(trendRef.value)
+  if (!top.length) {
+    // 切到无数据维度时清空上一维度的图形，避免留下旧图误导
+    chart0.clear()
+    return
+  }
+  const chart = chart0
   chart.setOption({
     tooltip: { trigger: 'axis' },
     xAxis: { type: 'category', data: top.map((d) => d.name) },
@@ -183,20 +209,31 @@ function renderTrend(rows) {
       { name: '成本', type: 'bar', data: top.map((d) => Number(d.total_cost || 0)) },
       { name: '调用次数', type: 'bar', yAxisIndex: 1, data: top.map((d) => Number(d.call_count || 0)) }
     ]
-  })
+  }, true)
 }
 
 function renderDist(data) {
   if (!distRef.value) return
+  const rows = (data || []).slice(0, 8)
+  const costTotal = rows.reduce((sum, d) => sum + Number(d.total_cost || 0), 0)
+  distUsesCalls.value = costTotal <= 0
   const chart = safeInit(distRef.value)
+  if (!rows.length) {
+    chart.clear()
+    return
+  }
   chart.setOption({
     tooltip: { trigger: 'item' },
     series: [{
       type: 'pie',
       radius: '70%',
-      data: (data || []).slice(0, 8).map((d) => ({ name: d.name || '-', value: Number(d.total_cost || 0) }))
+      data: rows.map((d) => ({
+        name: d.name || '-',
+        // 成本全为 0 时用调用次数，保证饼图能反映请求分布而不是一片空白
+        value: distUsesCalls.value ? Number(d.call_count || 0) : Number(d.total_cost || 0)
+      }))
     }]
-  })
+  }, true)
 }
 
 watch(breakdown, load)

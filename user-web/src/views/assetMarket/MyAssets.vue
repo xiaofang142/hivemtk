@@ -149,8 +149,11 @@
         <el-table-column
           prop="synced_at"
           label="同步时间"
-          width="170"
-        />
+          width="170">
+          <template #default="{ row }">
+            {{ fmtTime(row.synced_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="280"
@@ -314,6 +317,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSourceLabel, getSourceTagType } from '@/constants/source';
 import { getEnabledTagType } from '@/constants/enabled'
 import { INDUSTRY_VALUES } from '@/constants/industry'
+import { fmtTime } from '@/utils/time'
 
 const industries = INDUSTRY_VALUES
 const loading = ref(false)

@@ -149,8 +149,11 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="280"
@@ -352,7 +355,7 @@
           label="创建时间"
           :span="2"
         >
-          {{ currentCard.created_at }}
+          {{ fmtTime(currentCard.created_at) }}
         </el-descriptions-item>
         <el-descriptions-item
           label="跳转链接"
@@ -425,6 +428,7 @@ import XiaohongshuCardPreview from '@/components/XiaohongshuCardPreview.vue'
 import { domainPoolApi } from '@/api/domainPool'
 import { getXiaohongshuCardList, createXiaohongshuCard, updateXiaohongshuCard, deleteXiaohongshuCard, generateShortLink } from '@/api/xiaohongshuCard'
 import { copyToClipboard } from '@/utils/clipboard.js'
+import { fmtTime } from '@/utils/time'
 
 const router = useRouter();
 

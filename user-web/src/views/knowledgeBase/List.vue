@@ -235,10 +235,10 @@
         >
           <template #default="{ row }">
             <el-tag
-              :type="row.status === 1 ? 'success' : 'info'"
+              :type="row.enabled ? 'success' : 'info'"
               size="small"
             >
-              {{ row.status === 1 ? '启用' : '禁用' }}
+              {{ row.enabled ? '启用' : '禁用' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -283,11 +283,11 @@
             </el-button>
             <el-button
               link
-              :type="row.status === 1 ? 'warning' : 'success'"
+              :type="row.enabled ? 'warning' : 'success'"
               size="small"
               @click="onToggle(row)"
             >
-              {{ row.status === 1 ? '禁用' : '启用' }}
+              {{ row.enabled ? '禁用' : '启用' }}
             </el-button>
             <el-button
               link
@@ -431,6 +431,7 @@ import {
 } from '@element-plus/icons-vue'
 import { listKBs, listByType, deleteKB, getKB, createKB, updateKB } from '@/api/knowledgeBase'
 import { listByKB } from '@/api/agentKBBinding'
+import { isUserReportedError } from '@/utils/errorReporting'
 import KBDrawer from './KBDrawer.vue'
 
 const router = useRouter()
@@ -612,13 +613,19 @@ const loadList = async (type) => {
       // 后端现已同时接受 kb_type（兼容旧前端），前端这边改回文档口径。
       type: t,
       keyword: filter.value.keyword || undefined,
-      status: filter.value.status ?? undefined
+      // 后端模型只有 enabled（boolean），没有 status 列。
+      // 之前这里发 status=1/0 被后端静默丢弃 ⇒「状态」筛选从未生效。
+      enabled: filter.value.status === 1 ? true : (filter.value.status === 0 ? false : undefined)
     }
     const res = await listKBs(params).catch(() => null)
     if (isStale()) return
     let items = extractList(res)
     total.value = extractTotal(res)
-    if (items.length === 0) {
+    // 回退接口 /by-type 只按类型过滤，不认 keyword / enabled：
+    // 带着筛选条件打过去会把「本来正确的 0 条」换成不匹配筛选的行
+    // （例如筛「禁用」时列表又冒出启用中的库）。所以只在无筛选条件时回退。
+    const hasFilter = !!(params.keyword || params.enabled !== undefined)
+    if (items.length === 0 && !hasFilter) {
       const fb = await listByType(t, params).catch(() => null);
       if (isStale()) return
       items = extractList(fb)
@@ -635,14 +642,16 @@ const loadList = async (type) => {
             agent_count = 0
           }
         }
-        return { ...it, agent_count }
+        // 后端返回的类型字段是 `type`，表格模板读的是 `kb_type`（历史命名），
+        // 这里统一归一，否则「类型」列永远显示 "-"。
+        return { ...it, kb_type: it.kb_type || it.type, agent_count }
       })
     );
     if (isStale()) return
     list.value = enriched
     stats.value = {
       total: total.value || enriched.length,
-      enabled: enriched.filter((x) => x.status === 1).length
+      enabled: enriched.filter((x) => x.enabled === true).length
     };
     totalAgentBindings.value = enriched.reduce((s, x) => s + (x.agent_count || 0), 0)
   } catch (e) {
@@ -697,7 +706,9 @@ const goEdit = (row) => {
 const openDetail = async (row) => {
   try {
     const fresh = await getKB(row.id).catch(() => null)
-    currentKB.value = fresh || row
+    const src = fresh || row
+    // 详情模板读的是 kb_type（历史命名），接口返回的是 type，不归一详情里「类型」是 "-"
+    currentKB.value = { ...src, kb_type: src.kb_type || src.type }
   } catch {
     currentKB.value = row
   }
@@ -709,8 +720,9 @@ const openAgentBindings = (row) => {
 }
 
 const onToggle = async (row) => {
-  const next = row.status === 1 ? 0 : 1
-  const action = next === 1 ? '启用' : '禁用'
+  // 开关字段是 enabled（*bool）；以前按 status=1/0 提交，后端不认 ⇒ 点了只弹成功其实没改。
+  const next = !row.enabled
+  const action = next ? '启用' : '禁用'
   try {
     await ElMessageBox.confirm(
       `确认要${action}知识库「${row.name}」吗？`,
@@ -722,11 +734,11 @@ const onToggle = async (row) => {
   }
   try {
     const { updateKB } = await import('@/api/knowledgeBase')
-    await updateKB(row.id, { status: next })
+    await updateKB(row.id, { enabled: next })
     ElMessage.success(`${action}成功`)
     loadList()
   } catch (e) {
-    ElMessage.error(`${action}失败：` + (e?.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error(`${action}失败：` + (e?.message || '未知错误'))
   }
 }
 
@@ -745,7 +757,7 @@ const onDelete = async (row) => {
     ElMessage.success('删除成功')
     loadList()
   } catch (e) {
-    ElMessage.error('删除失败：' + (e?.message || '未知错误'))
+    if (!isUserReportedError(e)) ElMessage.error('删除失败：' + (e?.message || '未知错误'))
   }
 }
 

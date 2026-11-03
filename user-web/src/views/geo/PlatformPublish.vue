@@ -331,8 +331,11 @@
           <el-table-column
             prop="created_at"
             label="时间"
-            width="180"
-          />
+            width="180">
+            <template #default="{ row }">
+              {{ fmtTime(row.created_at) }}
+            </template>
+          </el-table-column>
         </el-table>
         <div
           v-if="records.length === 0"
@@ -403,6 +406,7 @@ import {
   publishToPlatform,
   listPlatformPublishRecords
 } from '@/api/geoPlatform.js'
+import { fmtTime } from '@/utils/time'
 
 const allPlatforms = ref([]);
 const platformsLoading = ref(false)

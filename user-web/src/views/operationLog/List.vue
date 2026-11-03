@@ -175,8 +175,11 @@
         <el-table-column
           prop="created_at"
           label="时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="100"
@@ -221,7 +224,7 @@
           {{ currentLog.module }}
         </el-descriptions-item>
         <el-descriptions-item label="操作类型">
-          {{ currentLog.action }}
+          {{ getActionText(currentLog.action) }}
         </el-descriptions-item>
         <el-descriptions-item label="目标对象">
           <span v-if="currentLog.resource_id">{{ currentLog.resource }} #{{ currentLog.resource_id }}</span>
@@ -243,7 +246,7 @@
           {{ currentLog.user_agent }}
         </el-descriptions-item>
         <el-descriptions-item label="时间">
-          {{ currentLog.created_at }}
+          {{ fmtTime(currentLog.created_at) }}
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -257,6 +260,8 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { getOperationLogs, exportOperationLogs, getOperationLogDetail } from '@/api/operationLog.js'
+import { fmtTime } from '@/utils/time'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const loading = ref(false)
 const searchKeyword = ref('')
@@ -292,6 +297,9 @@ const loadLogs = async () => {
     const res = await getOperationLogs({ page: pagination.value.page, size: pagination.value.size })
     logs.value = res?.list || [];
     pagination.value.total = res?.total || 0
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error('加载操作日志失败')
+    logs.value = []
   } finally {
     loading.value = false
   }

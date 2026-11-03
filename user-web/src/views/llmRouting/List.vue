@@ -624,7 +624,11 @@
             <template #empty>
               <el-empty description="暂无按日数据（当日未聚合时由日志兜底，需有真实调用）" />
             </template>
-            <el-table-column prop="stat_date" label="日期" width="130" />
+            <el-table-column prop="stat_date" label="日期" width="130">
+              <template #default="{ row }">
+                {{ fmtTime(row.stat_date) }}
+              </template>
+            </el-table-column>
             <el-table-column prop="scenario" label="场景" min-width="140">
               <template #default="{ row }">
                 {{ row.scenario || '—' }}
@@ -1218,6 +1222,8 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { LlmRoutingApi } from '@/api/llmRouting.js'
+import { fmtTime } from '@/utils/time'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 const activeTab = ref('models')
 const loading = reactive({ models: false, routing: false, fallback: false, cost: false, audit: false, modelType: false, health: false, egress: false, daily: false })
@@ -1477,7 +1483,7 @@ const submitModel = async () => {
       modelDialogVisible.value = false
       loadModels()
     } catch (e) {
-      ElMessage.error(e?.message || '保存失败')
+      if (!isUserReportedError(e)) ElMessage.error(e?.message || '保存失败')
     }
   })
 }
@@ -1489,7 +1495,9 @@ const deleteModel = async (row) => {
     ElMessage.success('删除成功')
     loadModels()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    // 取消/关闭 + 拦截器已弹过服务端文案时都不再重复提示
+    if (e === 'cancel' || e === 'close' || isUserReportedError(e)) return
+    ElMessage.error('删除失败')
   }
 }
 
@@ -1500,7 +1508,7 @@ const toggleStatus = async (row) => {
     ElMessage.success('状态已更新')
     loadModels()
   } catch (e) {
-    ElMessage.error('状态更新失败：' + (e?.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error('状态更新失败：' + (e?.message || ''))
   }
 }
 
@@ -1513,7 +1521,7 @@ const testModel = async (row) => {
       ElMessage.warning(`模型 "${row.name}" 调用失败：${result?.error || '未知错误'}`)
     }
   } catch (e) {
-    ElMessage.error('测试失败：' + (e?.message || ''))
+    if (!isUserReportedError(e)) ElMessage.error('测试失败：' + (e?.message || ''))
   }
 }
 
@@ -1547,7 +1555,8 @@ const removeRoutingRow = async (index) => {
     await LlmRoutingApi.saveSceneRouting(next);
     ElMessage.success(`已删除 ${removed?.scenario || ''}`)
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    if (e === 'cancel' || e === 'close' || isUserReportedError(e)) return
+    ElMessage.error('删除失败')
   }
 }
 
@@ -1567,7 +1576,7 @@ const submitRouting = async () => {
       routingDialogVisible.value = false
       loadRouting()
     } catch (e) {
-      ElMessage.error('保存失败：' + (e?.message || ''))
+      if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e?.message || ''))
     }
   })
 }

@@ -99,8 +99,11 @@
         <el-table-column
           prop="updatedAt"
           label="更新时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.updatedAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="250"
@@ -257,6 +260,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getScriptCategories, getScripts, createScript, updateScript, deleteScript as deleteScriptApi, useScript as useScriptApi } from '@/api/scriptTemplate.js'
 import { toList } from '@/utils/list.js'
 import { copyToClipboard } from '@/utils/clipboard.js'
+import { fmtTime } from '@/utils/time'
 
 const loading = ref(false)
 const searchKeyword = ref('')

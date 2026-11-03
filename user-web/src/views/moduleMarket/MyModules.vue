@@ -430,7 +430,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   myModules, syncModules, moduleSyncLogs, listMarketModules,
@@ -604,6 +604,16 @@ async function onSync () {
 }
 
 onMounted(fetch)
+
+// 钱包是页面快照：访客对话在别的窗口消耗 token 后回到本页，累计消耗永远停在
+// 打开那一刻（T1 验收 BUG-8 的真实体感）。页面重新可见时静默重拉一次。
+function handleVisibility () {
+  if (document.visibilityState === 'visible' && userStore.isLoggedIn) {
+    loadLLM()
+  }
+}
+onMounted(() => document.addEventListener('visibilitychange', handleVisibility))
+onUnmounted(() => document.removeEventListener('visibilitychange', handleVisibility))
 </script>
 
 <style scoped>

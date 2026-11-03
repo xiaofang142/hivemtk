@@ -92,7 +92,7 @@
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="创建时间">
-                {{ cardInfo.created_at }}
+                {{ fmtTime(cardInfo.created_at) }}
               </el-descriptions-item>
               <el-descriptions-item
                 label="描述"
@@ -196,6 +196,7 @@ import { ref, reactive, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { safeInit } from '@/utils/echarts'
 import { getTikTokCard, getTikTokCardStats } from '@/api/tiktokCard'
+import { fmtTime } from '@/utils/time'
 
 const route = useRoute();
 const router = useRouter()

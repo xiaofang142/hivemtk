@@ -157,8 +157,11 @@
             <el-table-column
               prop="updatedAt"
               label="更新时间"
-              width="180"
-            />
+              width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.updatedAt) }}
+              </template>
+            </el-table-column>
             <el-table-column
               label="操作"
               width="200"
@@ -243,8 +246,11 @@
             <el-table-column
               prop="createdAt"
               label="创建时间"
-              width="180"
-            />
+              width="180">
+              <template #default="{ row }">
+                {{ fmtTime(row.createdAt) }}
+              </template>
+            </el-table-column>
             <el-table-column
               label="操作"
               width="150"
@@ -387,6 +393,7 @@ import * as bulkMessagingApi from '@/api/bulkMessaging'
 import * as clueApi from '@/api/clue'
 import * as whatsappApi from '@/api/whatsapp'
 import { toList } from '@/utils/list'
+import { fmtTime } from '@/utils/time'
 
 const activeTab = ref('send')
 const sending = ref(false)

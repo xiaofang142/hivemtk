@@ -358,9 +358,15 @@ const batches = ref([])
 const currentSource = ref(null)
 
 const loadKBs = async () => {
-  const res = await listKBs({ page: 1, page_size: 100 })
-  // request.js 拦截器已解包为 data.data，分页键是 list（对齐 Connectors.vue）
-  kbList.value = res?.list || res?.items || res?.data?.list || []
+  try {
+    const res = await listKBs({ page: 1, page_size: 100 })
+    // request.js 拦截器已解包为 data.data，分页键是 list（对齐 Connectors.vue）
+    kbList.value = res?.list || res?.items || res?.data?.list || []
+  } catch (e) {
+    // 知识库下拉为空时页面仍可用（列表里的 kb_id 会退化成裸 ID），但不该静默失败
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.loadFailed') + ': ' + (e.message || ''))
+    kbList.value = []
+  }
 }
 
 const loadSources = async () => {
@@ -418,12 +424,23 @@ const handleSync = async (row) => {
 }
 
 const handlePause = async (row) => {
-  await kbCrawlerApi.pauseSource(row.id)
+  try {
+    await kbCrawlerApi.pauseSource(row.id)
+  } catch (e) {
+    // 拦截器已弹过服务端文案，这里只兜住未处理的 rejection，避免控制台报错
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.pause') + ': ' + (e.message || ''))
+    return
+  }
   await loadSources()
 }
 
 const handleResume = async (row) => {
-  await kbCrawlerApi.resumeSource(row.id)
+  try {
+    await kbCrawlerApi.resumeSource(row.id)
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.resume') + ': ' + (e.message || ''))
+    return
+  }
   await loadSources()
 }
 
@@ -443,6 +460,10 @@ const openBatches = async (row) => {
   try {
     const res = await kbCrawlerApi.listBatches({ source_id: row.id, page: 1, page_size: 50 })
     batches.value = res?.items || res || []
+  } catch (e) {
+    // 抽屉已经打开，失败时给一条明确提示，别留一张永远加载中的空表
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('knowledge.crawlerSource.loadFailed') + ': ' + (e.message || ''))
+    batches.value = []
   } finally {
     batchLoading.value = false
   }

@@ -9,10 +9,12 @@
           style="width: 220px"
           @change="loadAll"
         >
+          <!-- 产品数据里存在同名不同 id 的重复项（如「通用电商客服知识库」），
+               重名时补上 id 以便区分，与 Playground / 反馈 / Token 页保持一致 -->
           <el-option
             v-for="p in productList"
             :key="p.id"
-            :label="p.name"
+            :label="productOptionLabel(p)"
             :value="p.id"
           />
         </el-select>
@@ -21,11 +23,13 @@
           style="width: 120px"
           @change="loadAll"
         >
+          <!-- 选项必须绑定循环变量 d：此前 label/value 都写了 filter.days，
+               三个选项全部显示「近 30 天」且选中后不改变区间 -->
           <el-option
             v-for="d in [7, 30, 90]"
             :key="d"
-            :label="`近 ${filter.days} 天`"
-            :value="filter.days"
+            :label="`近 ${d} 天`"
+            :value="d"
           />
         </el-select>
         <el-button
@@ -37,7 +41,12 @@
       </div>
     </el-card>
 
-    
+    <!-- 口径说明：KPI 是累计值，下方趋势/热点/质量按所选时间范围统计，
+         两者同页容易被读成矛盾（曾出现 2697 与 42 并存） -->
+    <div class="stat-note">
+      口径：上方 KPI（文档 / 分段 / Token / 检索次数）为累计统计；下方「检索趋势」「分数分布」「热点查询 TOP20」「检索质量」按所选时间范围统计。
+    </div>
+
     <el-row
       :gutter="16"
       class="overview-row"
@@ -392,6 +401,13 @@
         <el-card>
           <template #header>
             <span>检索质量</span>
+            <el-tag
+              size="small"
+              type="info"
+              style="margin-left: 8px"
+            >
+              近 {{ filter.days }} 天
+            </el-tag>
           </template>
           <el-descriptions
             :column="2"
@@ -432,8 +448,9 @@
         <div class="card-header">
           <span>导入审计日志</span>
           <div>
-            <span class="header-stat">成功率: <el-tag :type="importStats.success_rate >= 0.9 ? 'success' : 'warning'">{{ formatPercent(importStats.success_rate) }}</el-tag></span>
-            <span class="header-stat">平均耗时: <el-tag>{{ (importStats.avg_duration_ms || 0).toFixed(0) }} ms</el-tag></span>
+            <!-- 无导入记录时不能显示 0.0% / 0 ms：下方表格是「暂无数据」，指标却说成功率 0%，会被读成「全部失败」 -->
+            <span class="header-stat">成功率: <el-tag :type="hasImportData ? (importStats.success_rate >= 0.9 ? 'success' : 'warning') : 'info'">{{ hasImportData ? formatPercent(importStats.success_rate) : '-' }}</el-tag></span>
+            <span class="header-stat">平均耗时: <el-tag>{{ hasImportData ? (importStats.avg_duration_ms || 0).toFixed(0) + ' ms' : '-' }}</el-tag></span>
           </div>
         </div>
       </template>
@@ -584,6 +601,14 @@ const getPassFailStatusLabel = (s) => getStatusLabel(s, PASS_FAIL_STATUS);
 const getPassFailStatusTagType = (s) => getStatusTagType(s, PASS_FAIL_STATUS)
 
 const productList = ref([])
+// 产品数据里存在同名不同 id 的重复项，重名时补 id 便于用户区分
+const duplicatedProductNames = computed(() => {
+  const counter = {}
+  for (const p of productList.value) counter[p.name] = (counter[p.name] || 0) + 1
+  return Object.keys(counter).filter((name) => counter[name] > 1)
+})
+const productOptionLabel = (p) =>
+  duplicatedProductNames.value.includes(p.name) ? `${p.name}（${p.id}）` : p.name
 const overview = ref({})
 const documentStats = ref({})
 const searchStats = ref({})
@@ -674,8 +699,10 @@ const maxScore = computed(() => {
   return Math.max(1, ...list.map(i => i.count || 0))
 })
 
+// 颜色需覆盖库里全部来源类型（batch/system_seed/manual 之前缺失，统一落到默认色导致多类同色）
 const SOURCE_COLOR_MAP = {
-  upload: '#4F46E5', text: '#10B981', url: '#F59E0B', openapi: '#EF4444', batch: '#909399'
+  upload: '#4F46E5', text: '#10B981', url: '#F59E0B', openapi: '#EF4444',
+  batch: '#909399', system_seed: '#6366F1', manual: '#14B8A6'
 };
 const sourceTypeLabel = (t) => getSourceLabel(t)
 const sourceTypeColor = (t) => SOURCE_COLOR_MAP[t] || '#4F46E5'
@@ -689,6 +716,9 @@ const calcHeight = (val, max) => {
   if (!max || max <= 0) return 0
   return Math.max(2, Math.round((val / max) * 100))
 }
+
+// 导入审计是否有数据：决定「成功率 / 平均耗时」显示数值还是 '-'
+const hasImportData = computed(() => Number(importStats.value.total_imports || 0) > 0)
 
 const formatNumber = (n) => n == null ? '-' : Number(n).toLocaleString()
 const formatPercent = (n) => n == null ? '-' : (n * 100).toFixed(1) + '%'
@@ -708,6 +738,12 @@ onMounted(() => {
     display: flex;
     gap: 12px;
     align-items: center;
+  }
+  .stat-note {
+    margin: -6px 0 14px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--el-text-color-secondary);
   }
   .overview-row, .chart-row {
     margin-bottom: 16px;

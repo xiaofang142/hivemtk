@@ -66,8 +66,11 @@
         <el-table-column
           prop="createdAt"
           label="创建时间"
-          width="180"
-        />
+          width="180">
+          <template #default="{ row }">
+            {{ fmtTime(row.createdAt) }}
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="250"
@@ -336,8 +339,11 @@
           <el-table-column
             prop="sendTime"
             label="发送时间"
-            width="180"
-          />
+            width="180">
+            <template #default="{ row }">
+              {{ fmtTime(row.sendTime) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="errorMsg"
             label="错误信息"
@@ -359,6 +365,7 @@ import { isUserReportedError } from '@/utils/errorReporting'
 import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
 import DOMPurify from 'dompurify'
 import { toList } from '@/utils/list'
+import { fmtTime } from '@/utils/time'
 
 const jobList = ref([]);
 const currentPage = ref(1)

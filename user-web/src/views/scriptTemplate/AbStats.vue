@@ -73,8 +73,11 @@
               <el-table-column
                 prop="created_at"
                 label="创建时间"
-                width="160"
-              />
+                width="160">
+                <template #default="{ row }">
+                  {{ fmtTime(row.created_at) }}
+                </template>
+              </el-table-column>
             </el-table>
           </el-card>
         </el-col>
@@ -169,6 +172,7 @@ import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { getScriptTemplateList } from '@/api/scriptTemplate';
 import { scriptAbApi } from '@/api/scriptAb';
+import { fmtTime } from '@/utils/time'
 
 const scripts = ref([]);
 const scriptId = ref(null);

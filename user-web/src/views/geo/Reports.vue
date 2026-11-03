@@ -61,6 +61,11 @@
       </el-col>
     </el-row>
 
+    <!-- 口径说明：只有 API 调用/成本随日期范围变化，其余为全量统计，避免用户以为筛选无效 -->
+    <div class="kpi-note">
+      口径：文章总数 / 关键词数 / 优化次数 / 验证次数为全量统计；API 调用与成本按所选日期范围统计。
+    </div>
+
     
     <el-card
       shadow="never"
@@ -308,6 +313,11 @@ onMounted(loadAll)
 <style lang="scss" scoped>
 .geo-page {
   padding: $spacing-lg 24px;
+}
+.kpi-note {
+  margin: -4px 0 12px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 .page-header h2 {
   margin: 0 0 6px;

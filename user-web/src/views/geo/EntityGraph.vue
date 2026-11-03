@@ -9,7 +9,7 @@
           <el-card>
             <el-statistic
               title="实体总数"
-              :value="entities.length"
+              :value="entityTotal"
             />
           </el-card>
         </el-col>
@@ -54,6 +54,8 @@
                   size="small"
                   style="width:120px"
                   clearable
+                  @change="reloadFromFirstPage"
+                  @clear="reloadFromFirstPage"
                 >
                   <el-option
                     v-for="t in entityTypes"
@@ -68,8 +70,8 @@
                   size="small"
                   style="width:140px"
                   clearable
-                  @clear="loadEntities"
-                  @keyup.enter="loadEntities"
+                  @clear="reloadFromFirstPage"
+                  @keyup.enter="reloadFromFirstPage"
                 />
               </div>
             </template>
@@ -99,6 +101,17 @@
                 </template>
               </el-table-column>
             </el-table>
+            <!-- 原来只展示接口默认的 20 行、没有分页，其余 300+ 实体无法浏览 -->
+            <el-pagination
+              v-model:current-page="page"
+              v-model:page-size="pageSize"
+              class="mt-2"
+              small
+              layout="prev, pager, next, total"
+              :total="entityTotal"
+              :page-size="pageSize"
+              @current-change="loadEntities"
+            />
           </el-card>
         </el-col>
 
@@ -242,6 +255,11 @@ import { listEntities, getEntityRelations, extractEntities } from '@/api/geoEnti
 import { geoApi } from '@/api/geo.js'
 
 const entities = ref([])
+// 接口返回 total（全库 358），列表本身只有一页 20 行，
+// KPI 以前用 entities.length 统计，等于把「实体总数」显示成分页大小。
+const entityTotal = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const typeFilter = ref('')
 const keyword = ref('')
@@ -251,8 +269,10 @@ const schema = ref('')
 const schemaLoading = ref(false)
 const entityTable = ref(null)
 
+// 类型下拉：既有类型枚举 + 已加载行的类型（后端数据存在大小写变体，如 Concept/concept）
+const ENTITY_TYPES = ['Concept', 'Product', 'Person', 'Organization', 'Location']
 const entityTypes = computed(() => {
-  const set = new Set(entities.value.map(e => e.type).filter(Boolean))
+  const set = new Set([...ENTITY_TYPES, ...entities.value.map(e => e.type).filter(Boolean)])
   return [...set]
 })
 const totalRelations = computed(() => relations.value.length)
@@ -275,10 +295,17 @@ const layoutRelations = (rels) => {
 const loadEntities = async () => {
   loading.value = true
   try {
-    const data = await listEntities(typeFilter.value, keyword.value)
+    const data = await listEntities(typeFilter.value, keyword.value, page.value, pageSize.value)
     entities.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
-  } catch { entities.value = [] }
+    entityTotal.value = Array.isArray(data) ? entities.value.length : Number(data?.total || entities.value.length)
+  } catch { entities.value = []; entityTotal.value = 0 }
   loading.value = false
+}
+
+// 改筛选/搜索条件时回到第 1 页，否则会停在越界页显示空列表
+const reloadFromFirstPage = () => {
+  page.value = 1
+  loadEntities()
 }
 
 const onSelectEntity = async (row) => {
