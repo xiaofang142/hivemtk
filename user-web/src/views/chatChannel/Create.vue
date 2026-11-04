@@ -189,24 +189,25 @@
 
       <el-form label-width="120px">
         <el-form-item :label="$t('渠道 ID')">
-          <code class="cred">{{ createdData?.Channel?.channel_id }}</code>
+          <!-- 后端 ChannelCreateResult JSON tag 是小写 channel/app_key/app_secret（曾误读 Go 字段名渲染成空白，旅程验收断点） -->
+          <code class="cred">{{ createdData?.channel?.channel_id }}</code>
         </el-form-item>
         <el-form-item label="AppKey">
-          <code class="cred">{{ createdData?.AppKey }}</code>
+          <code class="cred">{{ createdData?.app_key }}</code>
           <el-button
             link
             type="primary"
-            @click="copy(createdData?.AppKey)"
+            @click="copy(createdData?.app_key)"
           >
             <el-icon><CopyDocument /></el-icon>{{ $t('复制') }}
           </el-button>
         </el-form-item>
         <el-form-item label="AppSecret">
-          <code class="cred secret">{{ createdData?.AppSecret }}</code>
+          <code class="cred secret">{{ createdData?.app_secret }}</code>
           <el-button
             link
             type="primary"
-            @click="copy(createdData?.AppSecret)"
+            @click="copy(createdData?.app_secret)"
           >
             <el-icon><CopyDocument /></el-icon>{{ $t('复制') }}
           </el-button>
