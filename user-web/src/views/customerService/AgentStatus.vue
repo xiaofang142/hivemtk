@@ -115,6 +115,17 @@
             >
               {{ getAgentStatusLabel(row.status) }}
             </el-tag>
+            <!-- J-13 选项 A：回复时自动上线只作提示，presence 仍是「离线」 -->
+            <el-tag
+              v-if="row.status !== 'online' && row.auto_online_at"
+              type="info"
+              size="small"
+              effect="plain"
+              class="ml-1"
+              :title="$t('该坐席在回复客户时自动接通，但未主动上线；在线率与派单仍按真实状态统计')"
+            >
+              {{ $t('回复时自动上线') }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column

@@ -2746,5 +2746,7 @@
   "您没有权限访问该页面": "Keine Berechtigung für diese Seite",
   "执行失败": "Ausführung fehlgeschlagen",
   "无权访问": "Zugriff verweigert",
-  "获取流程列表失败": "Workflows konnten nicht geladen werden"
+  "获取流程列表失败": "Workflows konnten nicht geladen werden",
+  "Auto-Online bei Antwort": "Auto-Online bei Antwort",
+  "Dieser Agent wurde beim Antworten automatisch verbunden, ist aber nicht online gegangen; Präsenz und Zuweisung nutzen den echten Status": "Dieser Agent wurde beim Antworten automatisch verbunden, ist aber nicht online gegangen; Präsenz und Zuweisung nutzen den echten Status"
 }

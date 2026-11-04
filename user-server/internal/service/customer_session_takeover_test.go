@@ -265,13 +265,15 @@ func TestSwitchHandler_InvalidType(t *testing.T) {
 	}
 }
 
-// TestTakeoverByAgent_SelfServiceAutoOnline 坐席自己回复触发的接管：离线也放行并自动上线
+// TestTakeoverByAgent_SelfServiceMarkAutoOnline 坐席自己回复触发的接管：
+// 离线也放行，但**只记 auto_online 证据、不改 status**（J-13 选项 A）。
 //
 // 全旅程验收实测（2026-11-04）：新租户管理员首次点「回复访客」被
-// 「坐席已离线，无法接管」挡死——单老板租户没有「先点上线再回复」的心智。
-// 口径：只有在 Reply 双口显式置 SelfService=true 的接管才自动上线；
-// 其它入口（抢会话等）仍按离线拒绝（见 TestTakeoverByAgent_OfflineAgent）。
-func TestTakeoverByAgent_SelfServiceAutoOnline(t *testing.T) {
+// 「坐席已离线，无法接管」挡死。口径：Reply 双口显式置 SelfService=true
+// 的接管放行离线坐席；presence（status）与「回复时自动上线」分离——
+// 多坐席团队在线率/派单不被一次回复污染。其它入口仍按离线拒绝
+// （见 TestTakeoverByAgent_OfflineAgent）。
+func TestTakeoverByAgent_SelfServiceMarkAutoOnline(t *testing.T) {
 	svc := setupCustomerSessionService(t)
 
 	sess, err := svc.CreateSession(context.Background(), &CreateSessionRequest{
@@ -303,7 +305,10 @@ func TestTakeoverByAgent_SelfServiceAutoOnline(t *testing.T) {
 		t.Fatalf("接管后 handler=%s agent=%d, want human/202", got.HandlerType, got.AgentID)
 	}
 	a, _ := svc.agentRepo.GetByAgentID(context.Background(), 202)
-	if a.Status != "online" {
-		t.Fatalf("SelfService 接管后坐席状态 = %s, want online", a.Status)
+	if a.Status != "offline" {
+		t.Fatalf("SelfService 接管不应改 presence：status = %s, want offline（J-13 选项 A）", a.Status)
+	}
+	if a.AutoOnlineAt == nil || a.AutoOnlineSource != "reply" {
+		t.Fatalf("应记录 auto_online 证据：at=%v source=%q", a.AutoOnlineAt, a.AutoOnlineSource)
 	}
 }

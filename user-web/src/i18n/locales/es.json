@@ -2746,5 +2746,7 @@
   "您没有权限访问该页面": "No tienes permiso para acceder a esta página",
   "执行失败": "Error al ejecutar",
   "无权访问": "Acceso denegado",
-  "获取流程列表失败": "Error al cargar los flujos"
+  "获取流程列表失败": "Error al cargar los flujos",
+  "Conexión automática al responder": "Conexión automática al responder",
+  "Este agente se conectó automáticamente al responder pero no se puso en línea; la presencia y la asignación usan el estado real": "Este agente se conectó automáticamente al responder pero no se puso en línea; la presencia y la asignación usan el estado real"
 }

@@ -2746,5 +2746,7 @@
   "您没有权限访问该页面": "You don't have permission to access this page",
   "执行失败": "Execution failed",
   "无权访问": "Access denied",
-  "获取流程列表失败": "Failed to load workflows"
+  "获取流程列表失败": "Failed to load workflows",
+  "Auto-online on reply": "Auto-online on reply",
+  "This agent auto-connected while replying but did not go online; presence and assignment still use the real status": "This agent auto-connected while replying but did not go online; presence and assignment still use the real status"
 }

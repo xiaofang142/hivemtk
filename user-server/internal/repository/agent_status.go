@@ -74,6 +74,18 @@ func (r *AgentStatusRepository) ListAllAgents(ctx context.Context) ([]*model.Age
 }
 
 // UpdateStatus 更新客服状态
+// MarkAutoOnline 记录「回复时自动上线」证据（不改 status，J-13 选项 A）。
+func (r *AgentStatusRepository) MarkAutoOnline(ctx context.Context, agentID uint, source string) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&model.AgentStatus{}).
+		Where("agent_id = ?", agentID).
+		Updates(map[string]any{
+			"auto_online_at":     &now,
+			"auto_online_source": source,
+			"last_active_at":     &now,
+		}).Error
+}
+
 func (r *AgentStatusRepository) UpdateStatus(ctx context.Context, agentID uint, status string) error {
 	updates := map[string]any{"status": status}
 	now := time.Now()

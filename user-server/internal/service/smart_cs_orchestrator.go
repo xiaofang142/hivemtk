@@ -311,10 +311,18 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	}
 
 	if session.HandlerType == model.HandlerTypeHuman && session.AgentID > 0 {
-		if o.isAgentOnline(ctx, session.AgentID) {
+		// J-13：坐席在线 → 正常人工路由；坐席离线但**已经有人工回复** → 仍然
+		// 保持人工（AI 不抢已经被人接手的会话）。presence 与「是否已接管」是
+		// 两件事：auto-online 只记证据不改 status，所以这里用 human_reply_count
+		// 兜住「离线坐席回复完就走」的场景，避免 AI 把会话抢回去。
+		if o.isAgentOnline(ctx, session.AgentID) || session.HumanReplyCount > 0 {
 			result.HandlerType = model.HandlerTypeHuman
 			result.Transferred = true
-			result.TransferReason = "会话已分配给在线座席"
+			if session.HumanReplyCount > 0 {
+				result.TransferReason = "会话已由人工接管（坐席离线，保持人工）"
+			} else {
+				result.TransferReason = "会话已分配给在线座席"
+			}
 			return result, nil
 		}
 	}

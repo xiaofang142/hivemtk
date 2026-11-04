@@ -2746,5 +2746,7 @@
   "您没有权限访问该页面": "Você não tem permissão para acessar esta página",
   "执行失败": "Falha na execução",
   "无权访问": "Acesso negado",
-  "获取流程列表失败": "Falha ao carregar fluxos"
+  "获取流程列表失败": "Falha ao carregar fluxos",
+  "Online automático ao responder": "Online automático ao responder",
+  "Este agente conectou automaticamente ao responder, mas não ficou online; presença e atribuição usam o status real": "Este agente conectou automaticamente ao responder, mas não ficou online; presença e atribuição usam o status real"
 }

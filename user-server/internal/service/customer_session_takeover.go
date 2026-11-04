@@ -53,10 +53,13 @@ func (s *CustomerSessionService) TakeoverByAgent(ctx context.Context, req *Takeo
 		// 触发的接管（reason=inbox_reply/agent_reply）自动置 online；其它
 		// 入口（抢别人会话等）保持原拦截语义不动。
 		if req.SelfService {
-			if err := s.agentRepo.UpdateStatus(ctx, req.AgentID, "online"); err != nil {
-				return fmt.Errorf("坐席离线且自动上线失败: %w", err)
+			// J-13 选项 A：只记「回复时自动上线」证据，不改 status——
+			// 多坐席团队的在线率/派单按真 status 统计，不被一次回复污染；
+			// 单老板租户照常回复（本分支已放行离线坐席）。
+			if err := s.agentRepo.MarkAutoOnline(ctx, req.AgentID, "reply"); err != nil {
+				return fmt.Errorf("坐席离线且记录自动上线失败: %w", err)
 			}
-			agent.Status = "online"
+			agent.AutoOnlineSource = "reply"
 		} else {
 			return errors.New("坐席已离线，无法接管")
 		}

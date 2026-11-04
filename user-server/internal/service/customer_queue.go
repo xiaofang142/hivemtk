@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"hivemtk-user/internal/repository"
 )
@@ -113,6 +114,10 @@ type AgentStatusItem struct {
 	MaxSessions    int     `json:"max_sessions"`
 	ActiveSessions int     `json:"active_sessions"`
 	LoadRatio      float64 `json:"load_ratio"`
+	// AutoOnlineAt/Source：J-13 选项 A——「回复时自动上线」只作提示，不改
+	// status。管理端据此显示「回复时自动上线」，在线率/派单仍按 status 计。
+	AutoOnlineAt     *time.Time `json:"auto_online_at,omitempty"`
+	AutoOnlineSource string     `json:"auto_online_source,omitempty"`
 }
 
 // GetAgents 获取所有坐席的实时状态列表
@@ -128,12 +133,14 @@ func (s *CustomerQueueService) GetAgents(ctx context.Context) ([]AgentStatusItem
 			ratio = float64(a.ActiveSessions) / float64(a.MaxSessions)
 		}
 		items = append(items, AgentStatusItem{
-			AgentID:        a.AgentID,
-			AgentName:      a.AgentName,
-			Status:         a.Status,
-			MaxSessions:    a.MaxSessions,
-			ActiveSessions: a.ActiveSessions,
-			LoadRatio:      ratio,
+			AgentID:          a.AgentID,
+			AgentName:        a.AgentName,
+			Status:           a.Status,
+			MaxSessions:      a.MaxSessions,
+			ActiveSessions:   a.ActiveSessions,
+			LoadRatio:        ratio,
+			AutoOnlineAt:     a.AutoOnlineAt,
+			AutoOnlineSource: a.AutoOnlineSource,
 		})
 	}
 	return items, nil

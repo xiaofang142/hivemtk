@@ -2746,5 +2746,7 @@
   "您没有权限访问该页面": "Vous n'avez pas l'autorisation d'accéder à cette page",
   "执行失败": "Échec de l'exécution",
   "无权访问": "Accès refusé",
-  "获取流程列表失败": "Échec du chargement des flux"
+  "获取流程列表失败": "Échec du chargement des flux",
+  "Connexion auto à la réponse": "Connexion auto à la réponse",
+  "Cet agent s'est connecté automatiquement en répondant mais n'est pas passé en ligne ; la présence et l'affectation utilisent l'état réel": "Cet agent s'est connecté automatiquement en répondant mais n'est pas passé en ligne ; la présence et l'affectation utilisent l'état réel"
 }
