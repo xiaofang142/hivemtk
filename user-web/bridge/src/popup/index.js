@@ -1,5 +1,6 @@
 import {
   DEFAULT_USER_SERVER,
+  ONLINE_USER_SERVER,
   PLATFORM_ENTRY_URLS,
   UI_DEFAULTS,
   PATROL_DEFAULTS,
@@ -37,6 +38,10 @@ const $ = (id) => document.getElementById(id);
 // 调整流程：见 docs/bridge/DEFAULTS.md §3
 const DEFAULT_PORT_HINT = DEFAULT_USER_SERVER.port;
 const DEFAULT_PLACEHOLDER = DEFAULT_USER_SERVER.baseUrl;
+// 线上（SaaS 云端）地址：扩展默认用它 —— 安装包从平台下载的租户开箱即连云端。
+// 本地地址仍是自部署场景的兜底提示（DEFAULT_USER_SERVER 不动，运行期回退语义不变）。
+const ONLINE_PLACEHOLDER = ONLINE_USER_SERVER.baseUrl;
+const SERVER_URL_HINT = '例如 ' + ONLINE_PLACEHOLDER + '（线上）或 ' + DEFAULT_PLACEHOLDER + '（本地）';
 const HEALTH_PATHS = DEFAULT_USER_SERVER.healthPaths;
 // popup「测试连接」单次 fetch 超时（与 constants.UI_DEFAULTS.healthCheckTimeoutMs 同源）
 const POPUP_HEALTH_CHECK_TIMEOUT_MS = UI_DEFAULTS.healthCheckTimeoutMs;
@@ -356,7 +361,7 @@ function buildConnectionVerdict(reach, cred) {
   const r = reach || {};
   if (!r.ok) {
     if (r.reason === 'empty') {
-      return { kind: 'error', title: '请输入服务端地址', body: '例如 ' + DEFAULT_PLACEHOLDER };
+      return { kind: 'error', title: '请输入服务端地址', body: SERVER_URL_HINT };
     }
     if (r.reason && /^http_/.test(r.reason)) {
       return {
@@ -1064,11 +1069,21 @@ function wirePatrol() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  $('serverUrl').placeholder = DEFAULT_PLACEHOLDER;
+  // 服务端地址：placeholder 与「未配置时的预填值」都是线上地址（默认线上），
+  // 本地地址走下方两个快捷按钮（useOnline/useLocal），一键切换不手敲。
+  $('serverUrl').placeholder = ONLINE_PLACEHOLDER;
   $('token').placeholder = '服务端配置了桥接凭证时必填，留空会被全部拒绝（401）';
   $('tenantCode').placeholder = 'SaaS 多租户模式必填，如 t42xk（离线单机留空）';
+  $('useOnline').addEventListener('click', () => {
+    $('serverUrl').value = ONLINE_PLACEHOLDER;
+    $('serverUrl').focus();
+  });
+  $('useLocal').addEventListener('click', () => {
+    $('serverUrl').value = DEFAULT_PLACEHOLDER;
+    $('serverUrl').focus();
+  });
   loadConfig((cfg) => {
-    $('serverUrl').value = cfg.serverUrl || '';
+    $('serverUrl').value = cfg.serverUrl || ONLINE_PLACEHOLDER;
     $('token').value = cfg.token || '';
     $('tenantCode').value = cfg.tenantCode || '';
   });
@@ -1077,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = $('save');
     const serverUrl = normalizeServerUrl($('serverUrl').value);
     if (!serverUrl) {
-      showBanner('error', '请输入服务端地址', '例如 ' + DEFAULT_PLACEHOLDER);
+      showBanner('error', '请输入服务端地址', SERVER_URL_HINT);
       $('serverUrl').focus();
       return;
     }
@@ -1102,7 +1117,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const serverUrl = normalizeServerUrl($('serverUrl').value);
     const token = String($('token').value || '').trim();
     if (!serverUrl) {
-      showBanner('error', '请输入服务端地址', '例如 ' + DEFAULT_PLACEHOLDER);
+      showBanner('error', '请输入服务端地址', SERVER_URL_HINT);
       return;
     }
     btn.disabled = true;

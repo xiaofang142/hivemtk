@@ -89,10 +89,24 @@ func (s *BridgeExtensionService) Latest(ctx context.Context) (*BridgeExtensionPa
 		Name:    stringField(detail, "name"),
 		Version: stringField(detail, "latest_version"),
 	}
-	// latest_version 在详情里可能是"版本号字符串"，也可能是"版本行对象"
-	// （平台 GetMarketAssetDetail 用 result["latest_version"] = v 覆盖了字符串）。
-	// 两种形态都要认，否则取不到版本号。
-	if v, ok := detail["latest_version"].(map[string]any); ok {
+	// 版本行对象在详情里的键经历过一次跨仓漂移（T1 修复，platform 仓
+	// asset_market_service.go GetMarketAssetDetail）：
+	//   - 旧：result["latest_version"] = v —— 版本对象直接盖掉字符串；
+	//   - 新：latest_version 保持 assets 表的字符串语义（"1.0.3"），
+	//         版本行对象改放 result["version_info"]（前端徽章曾把 JSON
+	//         原文渲染成 v{...}，故拆键）。
+	// 本服务两端都要认：version_info 优先（新平台），latest_version 仍为
+	// map 时回退（旧平台）。只认旧键的后果是 file_url 恒空 ⇒ 线上一律
+	// 报"未上架"（2026-11-04 线上回归实测，v1.0.2 时代即已断）。
+	if v, ok := detail["version_info"].(map[string]any); ok {
+		pkg.Version = stringField(v, "version")
+		pkg.FileURL = stringField(v, "file_url")
+		pkg.Filename = stringField(v, "filename")
+		pkg.FileSHA256 = stringField(v, "file_sha256")
+		if sb, ok := v["size_bytes"].(float64); ok {
+			pkg.SizeBytes = int64(sb)
+		}
+	} else if v, ok := detail["latest_version"].(map[string]any); ok {
 		pkg.Version = stringField(v, "version")
 		pkg.FileURL = stringField(v, "file_url")
 		pkg.Filename = stringField(v, "filename")

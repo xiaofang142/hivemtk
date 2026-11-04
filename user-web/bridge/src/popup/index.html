@@ -30,6 +30,7 @@
       input { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; }
       input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79, 140, 255, 0.15); }
       .hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+      .addr-inline { font-family: ui-monospace, monospace; font-size: 11px; color: var(--primary); }
 
       .row { display: flex; gap: 6px; margin-top: 10px; }
       .row > button { flex: 1; }
@@ -118,7 +119,11 @@
 
     <label for="serverUrl">服务端地址 (http/https)</label>
     <input id="serverUrl" placeholder="" autocomplete="off" />
-    <div class="hint">user-server 默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / user-server 运行期环境变量 <code>PORT</code>）；自定义请用 PORT 环境变量覆盖</div>
+    <div class="row" style="margin-top: 4px;">
+      <button type="button" id="useOnline" class="secondary" title="SaaS 云端 user-server（默认推荐）">线上 <span class="addr-inline">workapi.xapptool.cn</span></button>
+      <button type="button" id="useLocal" class="secondary" title="本机自部署 user-server（开发端口见 DEVELOPMENT.md 端口对照表）">本地 <span class="addr-inline">localhost:8204</span></button>
+    </div>
+    <div class="hint">点一下即可填入。线上是云端 SaaS 的 user-server（默认推荐，租户从平台下载安装包后直接用）；本地用于本机自部署。默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / user-server 运行期环境变量 <code>PORT</code>）。</div>
 
     <label for="token">通道凭证 Token</label>
     <input id="token" placeholder="服务端配置了桥接凭证时必填，留空会被全部拒绝（401）" autocomplete="off" />

@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_USER_SERVER,
+  ONLINE_USER_SERVER,
   PLATFORM_ENTRY_URLS,
   RATE_LIMIT_DEFAULTS,
   UI_DEFAULTS,
@@ -30,6 +31,26 @@ describe('DEFAULT_USER_SERVER', () => {
 
   it('profile 必须为 dev', () => {
     expect(DEFAULT_USER_SERVER.profile).toBe('dev');
+  });
+});
+
+describe('ONLINE_USER_SERVER', () => {
+  it('必须是 https（云端 API 口不允许明文）', () => {
+    expect(ONLINE_USER_SERVER.baseUrl.startsWith('https://')).toBe(true);
+  });
+
+  it('必须指向云端 API 域名（deploy/deploy.conf USER_API_URL 派生域），不得误用网页域名', () => {
+    // work.xapptool.cn 是网页口（/health 落 SPA 兜底回 HTML 假 200）；
+    // 扩展默认连的必须是 API 正域名 workapi（PUBLIC_BASE_URL，deploy/README.md §8.7）。
+    expect(ONLINE_USER_SERVER.baseUrl).toBe('https://workapi.xapptool.cn');
+  });
+
+  it('profile 必须为 saas-cloud（与本地 dev profile 区分）', () => {
+    expect(ONLINE_USER_SERVER.profile).toBe('saas-cloud');
+  });
+
+  it('线上与本地默认地址不得相同（popup 两个快捷按钮才有区分意义）', () => {
+    expect(ONLINE_USER_SERVER.baseUrl).not.toBe(DEFAULT_USER_SERVER.baseUrl);
   });
 });
 

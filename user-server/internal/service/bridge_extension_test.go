@@ -83,7 +83,78 @@ func TestBridgeExtensionService_NilClientIsOffline(t *testing.T) {
 	}
 }
 
-// TestBridgeExtensionService_LatestVersionObjectForm 平台详情里 latest_version 是版本行对象
+// TestBridgeExtensionService_VersionInfoForm 平台 T1 修复后的详情形状：
+// latest_version 保持字符串语义，版本行对象改放 version_info（跨仓契约，
+// platform 仓 asset_market_service.go GetMarketAssetDetail）。
+// 回归背景：2026-11-04 线上实测——本服务只认旧的 latest_version=对象形状，
+// file_url 恒空 ⇒ 线上一律报「未上架」，v1.0.2 时代下载口即已断。
+func TestBridgeExtensionService_VersionInfoForm(t *testing.T) {
+	enablePlatformForTest(t)
+	client := &stubPlatformClient{
+		list: []map[string]any{{"asset_id": "ast-general-abc"}},
+		detail: map[string]any{
+			"name":           "HiveBridge 蜂桥",
+			"latest_version": "1.0.3",
+			"version_info": map[string]any{
+				"version":     "1.0.3",
+				"file_url":    "/files/extensions/2026/11/pkg.zip",
+				"filename":    "hivebridge-1.0.3.zip",
+				"size_bytes":  float64(227721),
+				"file_sha256": "0c74dc8d",
+			},
+		},
+	}
+	svc := NewBridgeExtensionService(client)
+	pkg, err := svc.Latest(context.Background())
+	if err != nil {
+		t.Fatalf("Latest 失败: %v", err)
+	}
+	if pkg.Version != "1.0.3" {
+		t.Errorf("版本号应为 1.0.3，实际 %s", pkg.Version)
+	}
+	if pkg.FileURL != "/files/extensions/2026/11/pkg.zip" {
+		t.Errorf("file_url 应从 version_info 取到，实际 %s", pkg.FileURL)
+	}
+	if pkg.Filename != "hivebridge-1.0.3.zip" {
+		t.Errorf("文件名应取到，实际 %s", pkg.Filename)
+	}
+	if pkg.SizeBytes != 227721 {
+		t.Errorf("字节数应为 227721，实际 %d", pkg.SizeBytes)
+	}
+	if pkg.FileSHA256 != "0c74dc8d" {
+		t.Errorf("sha256 应取到，实际 %s", pkg.FileSHA256)
+	}
+}
+
+// TestBridgeExtensionService_VersionInfoWinsWhenBothPresent 两键并存（未来
+// 平台若把两处都塞对象）时 version_info 优先，不允许读到旧键的陈旧值
+func TestBridgeExtensionService_VersionInfoWinsWhenBothPresent(t *testing.T) {
+	enablePlatformForTest(t)
+	client := &stubPlatformClient{
+		list: []map[string]any{{"asset_id": "ast-general-abc"}},
+		detail: map[string]any{
+			"name": "HiveBridge 蜂桥",
+			"latest_version": map[string]any{
+				"version":  "0.9.0-old",
+				"file_url": "/files/extensions/old.zip",
+			},
+			"version_info": map[string]any{
+				"version":  "1.0.3",
+				"file_url": "/files/extensions/2026/11/pkg.zip",
+			},
+		},
+	}
+	svc := NewBridgeExtensionService(client)
+	pkg, err := svc.Latest(context.Background())
+	if err != nil {
+		t.Fatalf("Latest 失败: %v", err)
+	}
+	if pkg.Version != "1.0.3" || pkg.FileURL != "/files/extensions/2026/11/pkg.zip" {
+		t.Errorf("version_info 应优先于 latest_version，实际 version=%s file_url=%s", pkg.Version, pkg.FileURL)
+	}
+}
+
+// TestBridgeExtensionService_LatestVersionObjectForm 平台详情里 latest_version 是版本行对象（旧平台形状，回退兼容）
 func TestBridgeExtensionService_LatestVersionObjectForm(t *testing.T) {
 	enablePlatformForTest(t)
 	client := &stubPlatformClient{

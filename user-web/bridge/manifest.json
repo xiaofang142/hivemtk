@@ -7,7 +7,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "将抖音/小红书/TikTok/闲鱼/快手 网页私信实时桥接到 HiveMTK AI 智能体（user-server），支持多账号、消息历史回填与拟人限速风控。",
   "permissions": [
     "alarms",

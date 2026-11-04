@@ -76,12 +76,42 @@
         <li>右上角开启「开发者模式」。</li>
         <li>点「加载已解压的扩展程序」，选择刚才解压出来的目录。</li>
         <li v-if="tenantMode === true">
-          点扩展图标，填写本系统的服务端地址与「桥接凭证」，并填入租户短码后保存。
+          点扩展图标，在「服务端地址」填下方任一地址（默认已预填线上，点「线上/本地」可切换），填入「桥接凭证」与租户短码后保存。
         </li>
         <li v-else>
-          点扩展图标，填写本系统的服务端地址与「桥接凭证」后保存。
+          点扩展图标，在「服务端地址」填下方任一地址（默认已预填线上，点「线上/本地」可切换），填入「桥接凭证」后保存。
         </li>
       </ol>
+      <div class="mt-2 text-sm text-gray-600">
+        <div class="mb-1 font-medium">服务端地址（点「复制」后粘贴进扩展）：</div>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>
+            线上（默认）：<code class="font-mono text-xs">{{ ONLINE_SERVER_URL }}</code>
+            <el-button
+              size="small"
+              link
+              type="primary"
+              @click="copyServerUrl(ONLINE_SERVER_URL)"
+            >
+              复制
+            </el-button>
+          </span>
+          <span>
+            本地：<code class="font-mono text-xs">{{ LOCAL_SERVER_URL }}</code>
+            <el-button
+              size="small"
+              link
+              type="primary"
+              @click="copyServerUrl(LOCAL_SERVER_URL)"
+            >
+              复制
+            </el-button>
+          </span>
+        </div>
+        <div class="mt-1 text-xs text-gray-400">
+          线上是云端 SaaS 的 user-server（从本页下载安装包的租户直接用它）；本地是本机自部署 user-server（默认端口 8204）。扩展弹窗里「线上 / 本地」两个按钮可一键填入。
+        </div>
+      </div>
       <!-- 租户短码只存在于 SaaS 多租户形态：私域独立部署（TENANT_MODE=off）下
            后端 resolveBridgeTenant 直接放行（不绑租户），扩展里没有「租户短码」
            这个字段。此处无条件展示等于让私域用户去填一个不存在的概念。 -->
@@ -103,6 +133,28 @@ import { ElMessage } from 'element-plus'
 import { getBridgeExtensionPackage } from '@/api/bridgeExtension.js'
 import { getBootstrap } from '@/utils/bootstrapState.js'
 import { http } from '@/utils/request'
+// 地址单源：直接引扩展源码的 constants，网页端展示的与扩展弹窗里预填的永远一致，
+// 不在本页再抄一份硬编码（两处漂移 = 用户照网页填的地址连不上扩展默认连的）。
+import { DEFAULT_USER_SERVER, ONLINE_USER_SERVER } from '../../../bridge/src/core/constants.js'
+
+const ONLINE_SERVER_URL = ONLINE_USER_SERVER.baseUrl
+const LOCAL_SERVER_URL = DEFAULT_USER_SERVER.baseUrl
+
+const copyServerUrl = async (url) => {
+  try {
+    await navigator.clipboard.writeText(url)
+    ElMessage.success('已复制：' + url)
+  } catch {
+    // clipboard API 在非 https / 老浏览器可能不可用，退回 execCommand 兜底
+    const ta = document.createElement('textarea')
+    ta.value = url
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    ElMessage.success('已复制：' + url)
+  }
+}
 
 const pkg = ref(null)
 const loading = ref(false)

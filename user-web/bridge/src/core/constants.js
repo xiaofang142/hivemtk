@@ -26,6 +26,19 @@ export const DEFAULT_USER_SERVER = {
   profile: 'dev',
 };
 
+// 线上（SaaS 云端）user-server 地址 —— 扩展分发渠道是平台（平台运营上传安装包、
+// 租户从用户端网页下载），对这份渠道装出来的扩展，「默认能连上」的地址是云端 API 口。
+//
+// 文档源：deploy/deploy.conf USER_API_URL（唯一配置源，随 DOMAIN 派生）；
+// 交叉验证：deploy/README.md §5 端口与域名对照 —— workapi.xapptool.cn → 宝塔反代 127.0.0.1:8204，
+// 且 README §8.7 PUBLIC_BASE_URL=https://workapi.xapptool.cn 是服务端自认的 API 正域名。
+// 注意别用 work.xapptool.cn 当扩展默认：它虽也反代 /api/*（2026-11-04 实测），
+// 但 /health 落 SPA 兜底回 HTML（假 200），扩展「测试连接」的健康口在 API 域名上才是真的。
+export const ONLINE_USER_SERVER = {
+  baseUrl: 'https://workapi.xapptool.cn',
+  profile: 'saas-cloud',
+};
+
 // 租户短码（tenant_code）——SaaS 多租户模式下桥接入口的归属自证凭据。
 //
 // 服务端判据（user-server/internal/bridge/tenant_binding.go:63-92）：
