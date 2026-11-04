@@ -130,9 +130,15 @@ import { http } from '@/utils/request'
 // 取当前站 origin（SaaS 实例的对外地址），私域部署整块不展示。
 import { DEFAULT_USER_SERVER } from '../../../bridge/src/core/constants.js'
 
-// 线上地址取当前站点 origin（SaaS 实例的对外地址），不写死域名；私域部署
-// 不展示这一项（tenantMode=false 时整块 v-if 不渲染，见模板）。
-const ONLINE_SERVER_URL = typeof window !== 'undefined' ? window.location.origin : ''
+// 线上地址：优先构建期注入的 VITE_BRIDGE_ONLINE_SERVER（deploy.sh 传
+// $USER_API_URL=workapi.<域名>），没有就退回当前站点 origin。
+// 为什么优先注入而不是直接 origin：扩展官方发行包预填的是 API 正域名
+// （workapi），而 origin（work）的 /health 会落 SPA 兜底回 HTML —— 页面与弹窗
+// 若显示两个不同地址，用户照着页面填会得到「可达但健康口是假 200」的结果。
+// 单一源 = 同一个值喂两处；开源/自部署构建不注入，显示自己的 origin，零厂商域名。
+const INJECTED_ONLINE_URL = (import.meta.env && import.meta.env.VITE_BRIDGE_ONLINE_SERVER) || ''
+const ONLINE_SERVER_URL =
+  INJECTED_ONLINE_URL || (typeof window !== 'undefined' ? window.location.origin : '')
 const LOCAL_SERVER_URL = DEFAULT_USER_SERVER.baseUrl
 // 本部署地址：私域独立部署下，扩展该连的正是「用户此刻访问的这个服务器」。
 // 取 origin 而不是再问后端要一个 base_url —— 用户能打开本页，说明这个 origin

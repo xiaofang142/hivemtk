@@ -41,7 +41,10 @@ for (const [name, entry] of Object.entries(entries)) {
     // 线上（SaaS）地址只在发行构建时注入；未设时源码常量得到空串，
     // 自部署用户的弹窗默认仍指向本机（见 src/core/constants.js 隐私说明）。
     define: {
-      'process.env.BRIDGE_ONLINE_SERVER': JSON.stringify(process.env.BRIDGE_ONLINE_SERVER || ''),
+      // key 用专用标识符而非 process.env.*：MV3 没有 process 全局，替换
+      // process.env.X 只会留下 `typeof process<"u" && …` 的运行时短路，
+      // 注入被静默丢弃（2026-11-04 二次审核实测：带 env 构建出的包仍不预填）。
+      __BRIDGE_ONLINE_SERVER__: JSON.stringify(process.env.BRIDGE_ONLINE_SERVER || ''),
     },
   };
   if (watch) {

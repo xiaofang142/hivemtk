@@ -43,8 +43,20 @@ export const DEFAULT_USER_SERVER = {
 //     弹窗默认仍是 localhost:8204（DEFAULT_USER_SERVER），零行为变化；
 //   · 官方 SaaS 发行包构建时设 BRIDGE_ONLINE_SERVER=https://<我方 API>，
 //     由 scripts/build.mjs 的 esbuild define 注入，源码里不出现域名。
+//
+// 注入必须走「专用标识符」，不能走 process.env（2026-11-04 二次审核实测）：
+//   MV3 扩展里没有 process 全局。原先写成
+//     (typeof process !== 'undefined' && process.env && process.env.BRIDGE_ONLINE_SERVER)
+//   时，esbuild 只能替换掉 `process.env.BRIDGE_ONLINE_SERVER` 这一小段，产物是
+//     typeof process<"u" && process.env && "https://<我方 API>" || ""
+//   在扩展运行时 `typeof process` 恒为 "undefined" 而短路 ⇒ 注入被静默丢弃，
+//   带 BRIDGE_ONLINE_SERVER 构建出来的包依然不预填云端地址（线上按钮直接隐藏）。
+//   改成让构建工具替换整个标识符：注入时表达式折成 `typeof "https://…"`（string），
+//   未注入（测试 / 开源构建）该标识符不存在，typeof 得 "undefined" ⇒ 空串。
+//   回归用例：test/popup-online-injection.test.js（带 define 打包，断言预填值）。
+/* global __BRIDGE_ONLINE_SERVER__ */
 const INJECTED_ONLINE_SERVER =
-  (typeof process !== 'undefined' && process.env && process.env.BRIDGE_ONLINE_SERVER) || ''
+  typeof __BRIDGE_ONLINE_SERVER__ !== 'undefined' ? __BRIDGE_ONLINE_SERVER__ : ''
 
 export const ONLINE_USER_SERVER = {
   baseUrl: INJECTED_ONLINE_SERVER,

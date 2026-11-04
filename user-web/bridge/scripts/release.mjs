@@ -34,12 +34,23 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.0.5': `- 修复 1.0.4 的注入失效（严重）：官方发行包即使带 BRIDGE_ONLINE_SERVER 构建，
+  弹窗仍预填 localhost、线上按钮被隐藏 —— 产物里是
+  \`typeof process<"u" && process.env && "https://…" || ""\`，而 MV3 扩展没有 process
+  全局，该短路在运行时恒假，注入被静默丢弃（真机复现：1.0.4 安装后默认=localhost）。
+  改为 esbuild define 直接替换专用标识符 __BRIDGE_ONLINE_SERVER__，注入真正生效。
+- 补回归用例 test/popup-online-injection.test.js：带 define 打包 → 断言预填云端、
+  按钮可见、地址文案正确；不带 define → 断言预填本地、按钮隐藏。旧实现下前三条必红
+  （变异验证：还原旧写法 3 红 3 绿）。
+- 发行构建口径（务必照此打包，否则等于自部署版）：
+  BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run release`,
   '1.0.4': `- 隐私红线修正：线上地址改为**构建期注入**（BRIDGE_ONLINE_SERVER），源码与开源构建里
   不再出现任何厂商域名。默认构建（自部署）弹窗预填本地 localhost:8204，绝不把客户私信
   指向厂商云端；只有官方 SaaS 发行包在构建时注入云端地址，弹窗才默认线上。
 - 弹窗「线上」按钮在未注入时隐藏，DOM 里也不渲染厂商域名；「线上/本地」标签域名字样
   改为运行时填充，开源用户看到的是一份干净的私有化产物。
-- 单测补隐私腿：未注入 ⇒ constants.online 为空串、popup 默认=本地、线上按钮隐藏。`,
+- 单测补隐私腿：未注入 ⇒ constants.online 为空串、popup 默认=本地、线上按钮隐藏。
+  注：注入实现（process.env.X）在扩展运行时失效，已在 1.0.5 修复。`,
   '1.0.3': `- 服务端地址默认线上：弹窗「服务端地址」未配置时预填云端地址 https://workapi.xapptool.cn
   （placeholder 同步），从平台下载安装包的租户开箱即连云端，不再需要手敲地址
 - 地址两个快捷提示：弹窗新增「线上 / 本地」两个一键填入按钮（线上=workapi.xapptool.cn，
