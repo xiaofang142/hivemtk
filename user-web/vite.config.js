@@ -364,6 +364,12 @@ export default defineConfig({
   define: {
     __VUE_OPTIONS_API__: true,
     __VUE_PROD_DEVTOOLS__: false,
+    // 桥接扩展的「线上」地址：构建期注入，源码不落厂商域名。
+    // 与 user-web/bridge/scripts/build.mjs 用同一个环境变量名，
+    // 部署脚本一次注入两处（deploy.sh 传 BRIDGE_ONLINE_SERVER=$USER_API_URL）。
+    // 未注入（开源/自部署构建）⇒ 空串 ⇒ 安装页只展示「本部署地址 / 本地」，
+    // 绝不渲染空地址，也不回落到任何厂商域名（见 bridge/src/core/constants.js 隐私说明）。
+    'process.env.BRIDGE_ONLINE_SERVER': JSON.stringify(process.env.BRIDGE_ONLINE_SERVER || ''),
     'process.env': {}
   }
 })
