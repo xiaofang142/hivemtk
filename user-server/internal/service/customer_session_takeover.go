@@ -1,7 +1,6 @@
 package service
 
 import (
-	"strings"
 	"context"
 	"errors"
 	"fmt"
@@ -15,9 +14,14 @@ import (
 
 // TakeoverRequest 坐席接管请求
 type TakeoverRequest struct {
-	SessionID uint   `json:"session_id" binding:"required"`
-	AgentID   uint   `json:"agent_id" binding:"required"`
-	Reason    string `json:"reason"`
+	// SelfService 表示这次接管由「坐席自己回复客户」触发（Reply 双口置 true）。
+	// 只有这种接管允许把离线坐席自动置 online —— 用 reason 字符串前缀判定
+	// 会被外部调用方伪造（/takeover body 的 reason 是自由文本），等于开了
+	// 一个绕过「坐席离线不可接管」的口子。
+	SelfService bool
+	SessionID   uint   `json:"session_id" binding:"required"`
+	AgentID     uint   `json:"agent_id" binding:"required"`
+	Reason      string `json:"reason"`
 }
 
 // TakeoverByAgent 坐席接管 AI 会话
@@ -48,7 +52,7 @@ func (s *CustomerSessionService) TakeoverByAgent(ctx context.Context, req *Takeo
 		// 接管」挡死——单老板租户根本没有「先点上线再回复」的心智。Reply
 		// 触发的接管（reason=inbox_reply/agent_reply）自动置 online；其它
 		// 入口（抢别人会话等）保持原拦截语义不动。
-		if strings.HasPrefix(req.Reason, "inbox_reply") || strings.HasPrefix(req.Reason, "agent_reply") {
+		if req.SelfService {
 			if err := s.agentRepo.UpdateStatus(ctx, req.AgentID, "online"); err != nil {
 				return fmt.Errorf("坐席离线且自动上线失败: %w", err)
 			}

@@ -79,37 +79,29 @@
           点扩展图标，在「服务端地址」填下方任一地址（默认已预填线上，点「线上/本地」可切换），填入「桥接凭证」与租户短码后保存。
         </li>
         <li v-else>
-          点扩展图标，在「服务端地址」填下方任一地址（默认已预填线上，点「线上/本地」可切换），填入「桥接凭证」后保存。
+          点扩展图标，把「服务端地址」改成下方「本部署地址」（安装包默认预填的是云端地址，私域部署必须覆盖成这一个），再填入「桥接凭证」后保存。
         </li>
       </ol>
       <div class="mt-2 text-sm text-gray-600">
         <div class="mb-1 font-medium">服务端地址（点「复制」后粘贴进扩展）：</div>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span>
-            线上（默认）：<code class="font-mono text-xs">{{ ONLINE_SERVER_URL }}</code>
+          <span
+            v-for="item in serverUrls"
+            :key="item.url"
+          >
+            {{ item.label }}：<code class="font-mono text-xs">{{ item.url }}</code>
             <el-button
               size="small"
               link
               type="primary"
-              @click="copyServerUrl(ONLINE_SERVER_URL)"
-            >
-              复制
-            </el-button>
-          </span>
-          <span>
-            本地：<code class="font-mono text-xs">{{ LOCAL_SERVER_URL }}</code>
-            <el-button
-              size="small"
-              link
-              type="primary"
-              @click="copyServerUrl(LOCAL_SERVER_URL)"
+              @click="copyServerUrl(item.url)"
             >
               复制
             </el-button>
           </span>
         </div>
         <div class="mt-1 text-xs text-gray-400">
-          线上是云端 SaaS 的 user-server（从本页下载安装包的租户直接用它）；本地是本机自部署 user-server（默认端口 8204）。扩展弹窗里「线上 / 本地」两个按钮可一键填入。
+          {{ addressFootnote }}
         </div>
       </div>
       <!-- 租户短码只存在于 SaaS 多租户形态：私域独立部署（TENANT_MODE=off）下
@@ -128,17 +120,24 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBridgeExtensionPackage } from '@/api/bridgeExtension.js'
 import { getBootstrap } from '@/utils/bootstrapState.js'
 import { http } from '@/utils/request'
-// 地址单源：直接引扩展源码的 constants，网页端展示的与扩展弹窗里预填的永远一致，
-// 不在本页再抄一份硬编码（两处漂移 = 用户照网页填的地址连不上扩展默认连的）。
-import { DEFAULT_USER_SERVER, ONLINE_USER_SERVER } from '../../../bridge/src/core/constants.js'
+// 本地地址单源：直接引扩展源码的 constants（避免网页与弹窗各抄一份漂移）。
+// 线上地址**不再从 constants 取**——那是构建期注入、开源构建为空；网页端改为
+// 取当前站 origin（SaaS 实例的对外地址），私域部署整块不展示。
+import { DEFAULT_USER_SERVER } from '../../../bridge/src/core/constants.js'
 
-const ONLINE_SERVER_URL = ONLINE_USER_SERVER.baseUrl
+// 线上地址取当前站点 origin（SaaS 实例的对外地址），不写死域名；私域部署
+// 不展示这一项（tenantMode=false 时整块 v-if 不渲染，见模板）。
+const ONLINE_SERVER_URL = typeof window !== 'undefined' ? window.location.origin : ''
 const LOCAL_SERVER_URL = DEFAULT_USER_SERVER.baseUrl
+// 本部署地址：私域独立部署下，扩展该连的正是「用户此刻访问的这个服务器」。
+// 取 origin 而不是再问后端要一个 base_url —— 用户能打开本页，说明这个 origin
+// 对他可达，且它就是该租户的 user-server 入口。
+const DEPLOY_ORIGIN = (typeof window !== 'undefined' && window.location?.origin) || ''
 
 const copyServerUrl = async (url) => {
   try {
@@ -182,6 +181,33 @@ if (tenantMode.value === null) {
     })
     .catch(() => { tenantMode.value = false })
 }
+
+// 地址清单按部署形态收敛（二次审核修正）：
+//   - SaaS（tenantMode=true）且构建注入了云端地址：「线上」优先并标默认；
+//   - 云端地址为空（开源 / 自部署构建，ONLINE_USER_SERVER.baseUrl === ''）：
+//     绝不渲染一条空地址，也不回落到任何厂商域名 —— 直接给「本部署地址」；
+//   - 私域（false）/ 未知（null）：**不出现线上云端**。私域租户照着云端地址填，
+//     等于把自家私信往厂商服务器送（必被 401 拒掉），是纯误导。
+const serverUrls = computed(() => {
+  const local = { label: '本地', url: LOCAL_SERVER_URL }
+  if (tenantMode.value === true && ONLINE_SERVER_URL) {
+    return [{ label: '线上（默认）', url: ONLINE_SERVER_URL }, local]
+  }
+  const items = []
+  if (DEPLOY_ORIGIN) items.push({ label: '本部署地址（默认）', url: DEPLOY_ORIGIN })
+  items.push(local)
+  return items
+})
+
+const addressFootnote = computed(() => {
+  if (tenantMode.value === true && ONLINE_SERVER_URL) {
+    return '线上是云端 SaaS 的 user-server（从本页下载安装包的租户直接用它）；本地是本机自部署 user-server（默认端口 8204）。扩展弹窗里「线上 / 本地」两个按钮可一键填入。'
+  }
+  if (tenantMode.value === true) {
+    return '本部署地址就是当前访问的这个服务器；本地是本机自部署 user-server（默认端口 8204）。本次构建未注入云端地址，故不展示线上入口。'
+  }
+  return '本部署地址就是当前访问的这个服务器（私域独立部署请用它，不要填云端地址）；本地是本机同机自部署 user-server（默认端口 8204）。'
+})
 
 const load = async () => {
   loading.value = true

@@ -120,7 +120,7 @@
     <label for="serverUrl">服务端地址 (http/https)</label>
     <input id="serverUrl" placeholder="" autocomplete="off" />
     <div class="row" style="margin-top: 4px;">
-      <button type="button" id="useOnline" class="secondary" title="SaaS 云端 user-server（默认推荐）">线上 <span class="addr-inline">workapi.xapptool.cn</span></button>
+      <button type="button" id="useOnline" class="secondary" title="SaaS 云端 user-server">线上 <span class="addr-inline" id="useOnlineAddr"></span></button>
       <button type="button" id="useLocal" class="secondary" title="本机自部署 user-server（开发端口见 DEVELOPMENT.md 端口对照表）">本地 <span class="addr-inline">localhost:8204</span></button>
     </div>
     <div class="hint">点一下即可填入。线上是云端 SaaS 的 user-server（默认推荐，租户从平台下载安装包后直接用）；本地用于本机自部署。默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / user-server 运行期环境变量 <code>PORT</code>）。</div>

@@ -193,9 +193,10 @@ func (c *CustomerSessionController) Reply(ctx *gin.Context) {
 	// ai_handling，AI 路由对这种会话会继续抢答。坐席没真正挂上就补接管。
 	if session.HandlerType != model.HandlerTypeHuman || session.AgentID == 0 {
 		if err := c.sessionService.TakeoverByAgent(ctx.Request.Context(), &service.TakeoverRequest{
-			SessionID: session.ID,
-			AgentID:   agentID,
-			Reason:    "agent_reply",
+			SessionID:   session.ID,
+			AgentID:     agentID,
+			Reason:      "agent_reply",
+			SelfService: true,
 		}); err != nil {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return

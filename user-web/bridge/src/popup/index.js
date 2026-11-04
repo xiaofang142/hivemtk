@@ -1071,9 +1071,17 @@ function wirePatrol() {
 document.addEventListener('DOMContentLoaded', () => {
   // 服务端地址：placeholder 与「未配置时的预填值」都是线上地址（默认线上），
   // 本地地址走下方两个快捷按钮（useOnline/useLocal），一键切换不手敲。
-  $('serverUrl').placeholder = ONLINE_PLACEHOLDER;
+  $('serverUrl').placeholder = ONLINE_PLACEHOLDER || DEFAULT_PLACEHOLDER;
   $('token').placeholder = '服务端配置了桥接凭证时必填，留空会被全部拒绝（401）';
   $('tenantCode').placeholder = 'SaaS 多租户模式必填，如 t42xk（离线单机留空）';
+  const onlineBtn = $('useOnline');
+  if (!ONLINE_PLACEHOLDER) {
+    // 未注入线上地址（开源/自部署构建）：隐藏按钮，且 DOM 里不出现任何厂商域名
+    if (onlineBtn) onlineBtn.style.display = 'none';
+  } else {
+    const addr = $('useOnlineAddr');
+    if (addr) addr.textContent = ONLINE_PLACEHOLDER.replace(/^https?:\/\//, '');
+  }
   $('useOnline').addEventListener('click', () => {
     $('serverUrl').value = ONLINE_PLACEHOLDER;
     $('serverUrl').focus();
@@ -1083,7 +1091,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('serverUrl').focus();
   });
   loadConfig((cfg) => {
-    $('serverUrl').value = cfg.serverUrl || ONLINE_PLACEHOLDER;
+    // 默认值口径（隐私红线）：已配置 → 用户值；未配置 → 有注入的线上地址才用
+  // 线上，否则回本地。开源构建注入为空，绝不把私域用户的私信指向厂商域。
+  $('serverUrl').value = cfg.serverUrl || ONLINE_PLACEHOLDER || DEFAULT_PLACEHOLDER;
     $('token').value = cfg.token || '';
     $('tenantCode').value = cfg.tenantCode || '';
   });

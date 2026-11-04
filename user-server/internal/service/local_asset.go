@@ -106,7 +106,9 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 		return bizerr.Wrap(bizerr.CodeSyncFailed, "拉取平台数据失败", err)
 	}
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
+	originalType := payload.AssetType
 	normalizeBundleType(&payload.AssetType)
+	payload.Data = normalizeBundleData(payload.Data, payload.Name, originalType)
 
 	// browser_extension（T2 验收缺陷）：扩展资产的内容是 file_url 指向的安装包，
 	// 平台没有 asset_data JSON——原样走 ValidateAssetData 必报「未知资产类型/
@@ -170,7 +172,9 @@ func (s *LocalAssetService) SyncFromPlatform(ctx context.Context, assetID string
 		return bizerr.Wrap(bizerr.CodeSyncFailed, "拉取失败", err)
 	}
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
+	originalType := payload.AssetType
 	normalizeBundleType(&payload.AssetType)
+	payload.Data = normalizeBundleData(payload.Data, payload.Name, originalType)
 
 	la.Version = payload.Version
 	la.SyncedAt = time.Now()
@@ -371,4 +375,32 @@ func normalizeBundleType(t *string) {
 	if t != nil && *t == "bundle" {
 		*t = string(asset.AssetTypeAgentPersona)
 	}
+}
+
+// normalizeBundleData 兜底：平台/管理端建的 bundle 若把剧本存成裸数组，
+// 归一化成 agent_persona 后会卡在「缺少必填字段: name / system_prompt」。
+// 这里把数组包成 {name, system_prompt, messages}，system_prompt 用一句
+// 中性的通用人设（真正内容仍在 messages 里，运行时照常注入）。
+// 已经是对象的数据原样返回（我们的 27 个包都走这条）。
+func normalizeBundleData(raw json.RawMessage, name string, originalType string) json.RawMessage {
+	if originalType != "bundle" || len(raw) == 0 {
+		return raw
+	}
+	var probe any
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		return raw
+	}
+	arr, ok := probe.([]any)
+	if !ok {
+		return raw
+	}
+	wrapped, err := json.Marshal(map[string]any{
+		"name":          name,
+		"system_prompt": "你是本行业的专业智能客服助手，按下方示例对话的话术风格与业务口径回复客户；不确定的信息如实告知并转人工。",
+		"messages":      arr,
+	})
+	if err != nil {
+		return raw
+	}
+	return wrapped
 }

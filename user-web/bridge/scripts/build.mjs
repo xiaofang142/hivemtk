@@ -38,6 +38,11 @@ for (const [name, entry] of Object.entries(entries)) {
     minify: !watch,
     sourcemap: watch,
     logLevel: 'info',
+    // 线上（SaaS）地址只在发行构建时注入；未设时源码常量得到空串，
+    // 自部署用户的弹窗默认仍指向本机（见 src/core/constants.js 隐私说明）。
+    define: {
+      'process.env.BRIDGE_ONLINE_SERVER': JSON.stringify(process.env.BRIDGE_ONLINE_SERVER || ''),
+    },
   };
   if (watch) {
     const ctx = await build.context(opts);

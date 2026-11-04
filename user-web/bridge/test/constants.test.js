@@ -34,23 +34,26 @@ describe('DEFAULT_USER_SERVER', () => {
   });
 });
 
-describe('ONLINE_USER_SERVER', () => {
-  it('必须是 https（云端 API 口不允许明文）', () => {
-    expect(ONLINE_USER_SERVER.baseUrl.startsWith('https://')).toBe(true);
+describe('ONLINE_USER_SERVER（构建期注入，隐私红线）', () => {
+  it('未注入时必须为空串——开源/自部署构建绝不预填厂商云端地址', () => {
+    // 源码里写死云端域名的后果：自部署用户首次打开弹窗即被预填我方域名，
+    // 点保存就把客户私信传到厂商域（违反「100% 私域零出域」）。
+    if (!process.env.BRIDGE_ONLINE_SERVER) {
+      expect(ONLINE_USER_SERVER.baseUrl).toBe('');
+    }
   });
 
-  it('必须指向云端 API 域名（deploy/deploy.conf USER_API_URL 派生域），不得误用网页域名', () => {
-    // work.xapptool.cn 是网页口（/health 落 SPA 兜底回 HTML 假 200）；
-    // 扩展默认连的必须是 API 正域名 workapi（PUBLIC_BASE_URL，deploy/README.md §8.7）。
-    expect(ONLINE_USER_SERVER.baseUrl).toBe('https://workapi.xapptool.cn');
+  it('注入值（若存在）必须是 https 且不是本地地址', () => {
+    const v = process.env.BRIDGE_ONLINE_SERVER;
+    if (v) {
+      expect(ONLINE_USER_SERVER.baseUrl).toBe(v);
+      expect(ONLINE_USER_SERVER.baseUrl.startsWith('https://')).toBe(true);
+      expect(ONLINE_USER_SERVER.baseUrl).not.toBe(DEFAULT_USER_SERVER.baseUrl);
+    }
   });
 
   it('profile 必须为 saas-cloud（与本地 dev profile 区分）', () => {
     expect(ONLINE_USER_SERVER.profile).toBe('saas-cloud');
-  });
-
-  it('线上与本地默认地址不得相同（popup 两个快捷按钮才有区分意义）', () => {
-    expect(ONLINE_USER_SERVER.baseUrl).not.toBe(DEFAULT_USER_SERVER.baseUrl);
   });
 });
 

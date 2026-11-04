@@ -264,3 +264,46 @@ func TestSwitchHandler_InvalidType(t *testing.T) {
 		t.Error("expected error for invalid handler type")
 	}
 }
+
+// TestTakeoverByAgent_SelfServiceAutoOnline 坐席自己回复触发的接管：离线也放行并自动上线
+//
+// 全旅程验收实测（2026-11-04）：新租户管理员首次点「回复访客」被
+// 「坐席已离线，无法接管」挡死——单老板租户没有「先点上线再回复」的心智。
+// 口径：只有在 Reply 双口显式置 SelfService=true 的接管才自动上线；
+// 其它入口（抢会话等）仍按离线拒绝（见 TestTakeoverByAgent_OfflineAgent）。
+func TestTakeoverByAgent_SelfServiceAutoOnline(t *testing.T) {
+	svc := setupCustomerSessionService(t)
+
+	sess, err := svc.CreateSession(context.Background(), &CreateSessionRequest{
+		Platform:  model.PlatformWeb,
+		AccountID: "acc_1",
+		UserID:    "u_self",
+		UserName:  "访客B",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := &model.AgentStatus{AgentID: 202, AgentName: "老板兼客服", Status: "offline", MaxSessions: 5}
+	if err := svc.agentRepo.Create(context.Background(), agent); err != nil {
+		t.Fatal(err)
+	}
+
+	err = svc.TakeoverByAgent(context.Background(), &TakeoverRequest{
+		SessionID:   sess.ID,
+		AgentID:     202,
+		Reason:      "inbox_reply",
+		SelfService: true,
+	})
+	if err != nil {
+		t.Fatalf("SelfService 接管应放行离线坐席: %v", err)
+	}
+
+	got, _ := svc.GetSessionByID(context.Background(), sess.ID)
+	if got.HandlerType != model.HandlerTypeHuman || got.AgentID != 202 {
+		t.Fatalf("接管后 handler=%s agent=%d, want human/202", got.HandlerType, got.AgentID)
+	}
+	a, _ := svc.agentRepo.GetByAgentID(context.Background(), 202)
+	if a.Status != "online" {
+		t.Fatalf("SelfService 接管后坐席状态 = %s, want online", a.Status)
+	}
+}

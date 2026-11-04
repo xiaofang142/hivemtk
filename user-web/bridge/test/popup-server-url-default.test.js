@@ -16,7 +16,11 @@ const popupEntry = resolve(__dirname, '../src/popup/index.js');
 
 // 线上/本地地址预期值 —— 与 src/core/constants.js 单源对齐（常量本身已有 constants.test.js 守门），
 // 这里只断言 popup 的接线行为是否把两个地址用对了位置。
-const ONLINE_URL = 'https://workapi.xapptool.cn';
+// 线上地址是**构建期注入**（BRIDGE_ONLINE_SERVER），源码不写死域名。测试进程
+// 未注入 ⇒ 线上地址为空串，popup 必须回退本地（隐私红线：开源/自部署构建
+// 绝不预填厂商云端地址）。注入路径由 constants.test.js 的另一条腿覆盖。
+const INJECTED_ONLINE = process.env.BRIDGE_ONLINE_SERVER || '';
+const ONLINE_URL = INJECTED_ONLINE;
 const LOCAL_URL = 'http://localhost:8204';
 
 let _bundledPromise = null;
@@ -133,15 +137,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('popup 服务端地址默认值（两个提示：本地/线上，默认线上）', () => {
-  it('placeholder 是线上地址（默认推荐）', async () => {
+describe('popup 服务端地址默认值（未注入线上地址时默认本地）', () => {
+  it('placeholder 未注入时是本地地址', async () => {
     const { elements } = await loadPopupInteractive(undefined);
-    expect(elements['serverUrl'].placeholder).toBe(ONLINE_URL);
+    expect(elements['serverUrl'].placeholder).toBe(ONLINE_URL || LOCAL_URL);
   });
 
-  it('无已存配置时，输入框预填线上地址（开箱即连云端）', async () => {
+  it('无已存配置时，输入框预填注入值（无注入则本地）——绝不默认厂商云端', async () => {
     const { elements } = await loadPopupInteractive(undefined);
-    expect(elements['serverUrl'].value).toBe(ONLINE_URL);
+    expect(elements['serverUrl'].value).toBe(ONLINE_URL || LOCAL_URL);
+    expect(elements['serverUrl'].value).not.toBe('');
   });
 
   it('已有已存配置时，显示已存值，不被线上地址覆盖', async () => {
@@ -149,11 +154,20 @@ describe('popup 服务端地址默认值（两个提示：本地/线上，默认
     expect(elements['serverUrl'].value).toBe('http://192.168.1.10:8204');
   });
 
-  it('「线上」快捷按钮一键填入线上地址', async () => {
+  it('未注入线上地址时，「线上」按钮被隐藏（点了会指向不存在的域）', async () => {
     const { elements } = await loadPopupInteractive(undefined);
-    elements['serverUrl'].value = 'something-else';
-    elements['useOnline'].click();
-    expect(elements['serverUrl'].value).toBe(ONLINE_URL);
+    if (!INJECTED_ONLINE) {
+      expect(elements['useOnline'].style.display).toBe('none');
+    }
+  });
+
+  it('注入了线上地址时，「线上」按钮一键填入', async () => {
+    const { elements } = await loadPopupInteractive(undefined);
+    if (INJECTED_ONLINE) {
+      elements['serverUrl'].value = 'something-else';
+      elements['useOnline'].click();
+      expect(elements['serverUrl'].value).toBe(ONLINE_URL);
+    }
   });
 
   it('「本地」快捷按钮一键填入本地地址（自部署场景）', async () => {
@@ -162,13 +176,11 @@ describe('popup 服务端地址默认值（两个提示：本地/线上，默认
     expect(elements['serverUrl'].value).toBe(LOCAL_URL);
   });
 
-  it('两个快捷按钮填的地址互不相同，且与输入框初始默认（线上）一致', async () => {
+  it('「本地」按钮始终可得，且与初始默认一致（未注入场景）', async () => {
     const { elements } = await loadPopupInteractive(undefined);
     const initial = elements['serverUrl'].value;
-    elements['useOnline'].click();
-    expect(elements['serverUrl'].value).toBe(initial);
     elements['useLocal'].click();
-    expect(elements['serverUrl'].value).not.toBe(initial);
     expect(elements['serverUrl'].value).toBe(LOCAL_URL);
+    if (!INJECTED_ONLINE) expect(initial).toBe(LOCAL_URL);
   });
 });

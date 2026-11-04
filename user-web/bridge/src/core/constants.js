@@ -34,8 +34,20 @@ export const DEFAULT_USER_SERVER = {
 // 且 README §8.7 PUBLIC_BASE_URL=https://workapi.xapptool.cn 是服务端自认的 API 正域名。
 // 注意别用 work.xapptool.cn 当扩展默认：它虽也反代 /api/*（2026-11-04 实测），
 // 但 /health 落 SPA 兜底回 HTML（假 200），扩展「测试连接」的健康口在 API 域名上才是真的。
+// SaaS 云端 user-server 地址：**构建期注入**，不是源码常量。
+//
+// 隐私红线（2026-11-04 二次审核）：本项目卖点是「100% 私域零出域」，把
+// workapi.xapptool.cn 写死成源码默认值，等于让任何自部署用户第一次打开
+// 弹窗就预填厂商云端地址——点保存就把客户私信传到厂商域。故：
+//   · 开源 / 自部署构建（不设 BRIDGE_ONLINE_SERVER）→ baseUrl 为空串，
+//     弹窗默认仍是 localhost:8204（DEFAULT_USER_SERVER），零行为变化；
+//   · 官方 SaaS 发行包构建时设 BRIDGE_ONLINE_SERVER=https://<我方 API>，
+//     由 scripts/build.mjs 的 esbuild define 注入，源码里不出现域名。
+const INJECTED_ONLINE_SERVER =
+  (typeof process !== 'undefined' && process.env && process.env.BRIDGE_ONLINE_SERVER) || ''
+
 export const ONLINE_USER_SERVER = {
-  baseUrl: 'https://workapi.xapptool.cn',
+  baseUrl: INJECTED_ONLINE_SERVER,
   profile: 'saas-cloud',
 };
 
