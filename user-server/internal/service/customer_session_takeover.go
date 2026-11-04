@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"fmt"
@@ -42,7 +43,19 @@ func (s *CustomerSessionService) TakeoverByAgent(ctx context.Context, req *Takeo
 		return fmt.Errorf("坐席不存在（agent_id=%d，请先在坐席管理中登记该账号）", req.AgentID)
 	}
 	if agent.Status == "offline" {
-		return errors.New("坐席已离线，无法接管")
+		// 回复动作本身就是在线证明（全旅程验收 2026-11-04）：新租户管理员
+		// 首次人工回复时坐席档案还是默认 offline，被这句「坐席已离线，无法
+		// 接管」挡死——单老板租户根本没有「先点上线再回复」的心智。Reply
+		// 触发的接管（reason=inbox_reply/agent_reply）自动置 online；其它
+		// 入口（抢别人会话等）保持原拦截语义不动。
+		if strings.HasPrefix(req.Reason, "inbox_reply") || strings.HasPrefix(req.Reason, "agent_reply") {
+			if err := s.agentRepo.UpdateStatus(ctx, req.AgentID, "online"); err != nil {
+				return fmt.Errorf("坐席离线且自动上线失败: %w", err)
+			}
+			agent.Status = "online"
+		} else {
+			return errors.New("坐席已离线，无法接管")
+		}
 	}
 	if agent.ActiveSessions >= agent.MaxSessions {
 		return errors.New("坐席会话已满")
