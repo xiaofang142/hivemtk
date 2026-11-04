@@ -405,9 +405,18 @@ func (s *ModuleCatalogService) Sync(ctx context.Context) (*ModuleSyncResult, err
 	}
 
 	// ---- 订阅镜像 ----
-	// 部署级单行，sync 在 SystemScope 写（镜像表无 tenant_id，不受租户串写影响）。
-	// 平台段缺失（老平台/读失败）不写：保留最后已知态（fail-open 的数据来源）。
-	if snap.Subscription != nil {
+	// 只写**带租户绑定**的那一轮：请求来自哪个租户，平台就下发哪个租户的订阅段
+	// （tenant_code 参数），镜像落点也是该租户的行。
+	//
+	// 商户级轮次（后台 10 分钟 runner 无绑定 → tenant_code 为空）拿到的是
+	// tenant_code='' 的旧行；写进 SystemScope 的默认租户行会把 tenant 1 的真实
+	// 付费状态覆盖成商户级体验期（2026-11-04 生产库实测：tenant 1 实际 active
+	// 至 2027-01-17，镜像却是 trial 至当天 15:00）。非默认租户的行更不该由
+	// 别的租户的轮次代写 —— 每个租户的状态由自己的请求触发刷新
+	// （见 SubscriptionMirrorService.Refresh）。
+	//
+	// 平台段缺失（老平台/读失败）同样不写：保留最后已知态（fail-open 的数据来源）。
+	if snap.Subscription != nil && reqTenantBound {
 		if err := NewSubscriptionMirrorService().SaveFromSnapshot(ctx, snap.Subscription); err != nil {
 			logger.Warnf("[module-sync] 订阅镜像写入失败（不影响模块下发）: %v", err)
 		}

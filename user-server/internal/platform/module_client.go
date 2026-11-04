@@ -188,12 +188,17 @@ func ClientIPFromContext(ctx context.Context) string {
 
 // do 执行一次平台请求并解出 data
 func (c *ModuleClient) do(method, path string, req any, out any) error {
+	return c.doWithContext(context.Background(), method, path, req, out)
+}
+
+// doWithContext 同 do，但把调用方 ctx 传播到 HTTP 请求（取消/超时生效）。
+func (c *ModuleClient) doWithContext(ctx context.Context, method, path string, req any, out any) error {
 	var env struct {
 		Code int             `json:"code"`
 		Msg  string          `json:"msg"`
 		Data json.RawMessage `json:"data"`
 	}
-	if err := c.client.Do(method, path, req, &env); err != nil {
+	if err := c.client.DoContext(ctx, method, path, req, &env); err != nil {
 		return err
 	}
 	if out == nil || len(env.Data) == 0 {
@@ -211,7 +216,7 @@ func (c *ModuleClient) do(method, path string, req any, out any) error {
 func (c *ModuleClient) SyncModules(ctx context.Context, tenantCode string) (*ModuleSnapshot, error) {
 	var snap ModuleSnapshot
 	path := "/merchant-api/modules/sync?tenant_code=" + url.QueryEscape(tenantCode)
-	if err := c.do("GET", path, nil, &snap); err != nil {
+	if err := c.doWithContext(ctx, "GET", path, nil, &snap); err != nil {
 		return nil, err
 	}
 	return &snap, nil

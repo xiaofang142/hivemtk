@@ -52,11 +52,12 @@ func setupStaleScopeStub(t *testing.T) {
 func setupStaleScopeDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	database := testutil.NewTestDB(t,
-		&model.Tenant{}, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{})
+		&model.Tenant{}, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{},
+		&model.TenantSubscriptionMirror{})
 	db.SetTestDB(database)
 	t.Cleanup(func() {
 		sysCtx := tenant.WithSystemScope(context.Background())
-		for _, m := range []any{&model.Tenant{}, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{}} {
+		for _, m := range []any{&model.Tenant{}, &model.TenantModule{}, &model.ModuleSyncLog{}, &model.ModuleOrder{}, &model.TenantSubscriptionMirror{}} {
 			if err := database.Session(&gorm.Session{AllowGlobalUpdate: true}).WithContext(sysCtx).Delete(m).Error; err != nil {
 				t.Logf("清理 %T 失败: %v", m, err)
 			}
@@ -270,5 +271,99 @@ func TestSync_TenantRound_LandsPaidModuleOnRequestingTenant(t *testing.T) {
 	if nB > 0 {
 		t.Errorf("租户甲这轮 sync 不该往租户乙名下写 reach-auto（实写 %d 行）："+
 			"落点必须是本轮同步的租户，不是订单里最新那一笔的租户", nB)
+	}
+}
+
+// setupSubscriptionMirrorStub 平台桩：模块目录为空，订阅段固定顺延到 30 天后。
+// 用于钉住「哪一轮 sync 有权写订阅镜像」。
+func setupSubscriptionMirrorStub(t *testing.T, periodEnd time.Time) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/merchant-api/modules/sync":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 200, "msg": "", "data": map[string]any{
+				"merchant_key": "MKE2E",
+				"active_keys":  []string{},
+				"menu_keys":    []string{},
+				"catalog":      []any{},
+				"subscription": map[string]any{
+					"status":             "active",
+					"current_period_end": periodEnd.UTC().Format(time.RFC3339),
+					"price_cents":        900,
+				},
+			}})
+		case "/merchant-api/orders":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 200, "msg": "", "data": map[string]any{
+				"total": 0, "list": []map[string]any{},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SECRET_m1rr0r}}"})
+}
+
+// TestSync_MerchantLevelRound_MustNotWriteSubscriptionMirror 钉住：无租户绑定的
+// 商户级同步（后台 10 分钟 runner）**不得**写订阅镜像。
+//
+// 线上症状（2026-11-04）：商户级那轮拿到的是 tenant_code=” 的旧订阅行，却被
+// 写进 SystemScope 的默认租户镜像 —— tenant 1 真实 active 至 2027-01-17，镜像
+// 却显示 trial 至当天 15:00。订阅镜像按租户一行，只有该租户自己的请求有权写。
+func TestSync_MerchantLevelRound_MustNotWriteSubscriptionMirror(t *testing.T) {
+	withTenantMode(t, tenant.ModeOn)
+	t.Setenv("PLATFORM_ENABLED", "true")
+	t.Setenv("PLATFORM_MERCHANT_KEY", "MKE2E")
+
+	database := setupStaleScopeDB(t)
+	setupSubscriptionMirrorStub(t, time.Now().Add(30*24*time.Hour))
+
+	// 后台 runner 的上下文：SystemScope、无租户绑定。
+	sysCtx := tenant.WithSystemScope(context.Background())
+	if _, err := NewModuleCatalogService().Sync(sysCtx); err != nil {
+		t.Fatalf("商户级 Sync 失败: %v", err)
+	}
+
+	var n int64
+	if err := database.WithContext(sysCtx).Model(&model.TenantSubscriptionMirror{}).Count(&n).Error; err != nil {
+		t.Fatalf("回查订阅镜像失败: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("商户级同步不得写订阅镜像（写入了 %d 行）：tenant_code='' 的订阅段属于"+
+			"商户级旧行，写进默认租户镜像会覆盖该租户真实付费状态", n)
+	}
+}
+
+// TestSync_TenantRound_WritesOwnSubscriptionMirror 正向用例：带着租户绑定的
+// 同步必须把平台下发的该租户订阅段写进**这一租户**的镜像行。
+func TestSync_TenantRound_WritesOwnSubscriptionMirror(t *testing.T) {
+	withTenantMode(t, tenant.ModeOn)
+	t.Setenv("PLATFORM_ENABLED", "true")
+	t.Setenv("PLATFORM_MERCHANT_KEY", "MKE2E")
+
+	database := setupStaleScopeDB(t)
+	periodEnd := time.Now().Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
+	setupSubscriptionMirrorStub(t, periodEnd)
+
+	tn := &model.Tenant{Code: "tMIRROR1", Name: "镜像租户"}
+	if err := database.Create(tn).Error; err != nil {
+		t.Fatalf("写入租户行: %v", err)
+	}
+	tenantCtx := tenant.OnlyTenant(context.Background(), tn.ID)
+	if _, err := NewModuleCatalogService().Sync(tenantCtx); err != nil {
+		t.Fatalf("租户级 Sync 失败: %v", err)
+	}
+
+	var row model.TenantSubscriptionMirror
+	if err := database.WithContext(tenant.WithSystemScope(context.Background())).
+		Where("id = ?", tn.ID).First(&row).Error; err != nil {
+		t.Fatalf("该租户的订阅镜像未落库: %v", err)
+	}
+	if row.CurrentPeriodEnd == nil || !row.CurrentPeriodEnd.Equal(periodEnd) {
+		t.Fatalf("到期时间未按平台段写回，got %v want %v", row.CurrentPeriodEnd, periodEnd)
+	}
+	if row.Status != model.SubscriptionStatusActive {
+		t.Fatalf("status 应按本地惰性判定为 active，got %s", row.Status)
 	}
 }

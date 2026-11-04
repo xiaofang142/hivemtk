@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/config"
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
@@ -126,6 +127,55 @@ type SubscriptionSnapshot struct {
 
 // staleWarnAfter 镜像陈旧告警阈值（只 Warn，不升级为锁，修订 #2）
 const staleWarnAfter = time.Hour
+
+// statusRefreshTTL 状态接口回源平台的最小间隔。
+//
+// 状态接口被墙页、顶部订阅横幅和恢复轮询调用，不能每次都打平台；60s 足够让
+// 「平台确认收款」在一分钟内反映到用户眼前，同时把出站请求压到 ≤1 次/分钟/租户。
+const statusRefreshTTL = time.Minute
+
+// statusRefreshTimeout 回源超时上限。
+//
+// 平台客户端整体超时是 5s，对页面加载太长：回源只是「尽力刷新」，2s 拿不到就
+// 按镜像最后已知态返回（锁判定本地化，不依赖这次回源）。
+const statusRefreshTimeout = 2 * time.Second
+
+// Refresh 回源平台刷新**当前租户**的订阅镜像（状态接口用，尽力而为）。
+//
+// 为什么需要它：镜像按租户一行（id=tenant_id），而后台 10 分钟周期同步没有
+// 租户绑定（只服务默认租户），其他租户的镜像只在它自己调 POST /api/modules/sync
+// 时才刷新。于是平台确认收款后，用户刷新订阅页看到的仍是续费前的到期时间
+// —— 2026-11-04 生产事故 ORD179377249492384KKX0 的根因。
+// 这里让「看状态」这个用户动作本身触发一次回源，TTL 内不重复打平台。
+//
+// 失败语义：返回错误由调用方记日志，**不得**让状态接口失败 —— 平台不可达时
+// 继续用镜像最后已知态（与 IsLocked 的 fail-open 同一取舍方向）。
+func (s *SubscriptionMirrorService) Refresh(ctx context.Context) error {
+	if !config.PlatformEnabled() {
+		return nil
+	}
+	if row, err := s.repo.Get(ctx); err == nil && row != nil && time.Since(row.FetchedAt) < statusRefreshTTL {
+		return nil
+	}
+	code := currentTenantCode(ctx)
+	if tenant.IsMultiTenant() && code == "" {
+		// 多租户下解析不出本租户短码：平台会按 tenant_code='' 返回**商户级**订阅段，
+		// 写进当前租户的镜像就是串数据（与 Sync 的商户级写入口同一条红线）。
+		// 宁可不刷新，等下一次带得上租户的请求。
+		return fmt.Errorf("订阅镜像回源跳过：多租户下未解析出 tenant_code")
+	}
+	rc, cancel := context.WithTimeout(ctx, statusRefreshTimeout)
+	defer cancel()
+	snap, err := platform.NewModuleClient().SyncModules(rc, code)
+	if err != nil {
+		return err
+	}
+	if snap == nil || snap.Subscription == nil {
+		// 平台未下发订阅段（老平台/读失败）：保留最后已知态，不清空。
+		return nil
+	}
+	return s.SaveFromSnapshot(ctx, snap.Subscription)
+}
 
 // Snapshot 读镜像 + 本地惰性判定（状态 API 与闸共用同一口径）。
 func (s *SubscriptionMirrorService) Snapshot(ctx context.Context) (*SubscriptionSnapshot, error) {

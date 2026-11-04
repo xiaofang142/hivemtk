@@ -123,7 +123,15 @@ func (c *Client) sign(method, path string, body []byte) (string, string, error) 
 // Do 公开的 HTTP 请求方法，供 controller 层代理调用平台 API 使用。
 // 失败时返回 *PlatformError，调用方可按状态码/业务 code 结构化分支处理。
 func (c *Client) Do(method, path string, reqData, respData any) error {
-	return c.doRetry(method, path, reqData, respData, false)
+	return c.doRetry(context.Background(), method, path, reqData, respData, false)
+}
+
+// DoContext 与 Do 相同，但尊重调用方 ctx（取消/超时传播到 HTTP 请求）。
+//
+// 给「用户请求路径上的尽力回源」用：平台挂掉时页面加载最多等调用方给的时限，
+// 而不是被客户端固定超时拖住。
+func (c *Client) DoContext(ctx context.Context, method, path string, reqData, respData any) error {
+	return c.doRetry(ctx, method, path, reqData, respData, false)
 }
 
 func (c *Client) ensureJWTToken() error {
@@ -203,10 +211,13 @@ func (c *Client) ensureJWTToken() error {
 }
 
 func (c *Client) do(method, path string, reqData, respData any) error {
-	return c.doRetry(method, path, reqData, respData, false)
+	return c.doRetry(context.Background(), method, path, reqData, respData, false)
 }
 
-func (c *Client) doRetry(method, path string, reqData, respData any, retried bool) error {
+func (c *Client) doRetry(ctx context.Context, method, path string, reqData, respData any, retried bool) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if config.PlatformCfg == nil {
 		err := fmt.Errorf("%w: 商户上报请求未发出", ErrPlatformNotConfigured)
 		logger.Error(err, "商户上报请求失败")
@@ -228,7 +239,7 @@ func (c *Client) doRetry(method, path string, reqData, respData any, retried boo
 	}
 	logger.Info(reqLog)
 
-	req, err := newPlatformRequest(context.Background(), method, url, body)
+	req, err := newPlatformRequest(ctx, method, url, body)
 	if err != nil {
 		return fmt.Errorf("构造平台请求失败: %w", err)
 	}
@@ -268,7 +279,7 @@ func (c *Client) doRetry(method, path string, reqData, respData any, retried boo
 		c.jwtMu.Unlock()
 		logger.Debugf("[platform-client] JWT refreshed path=%s", path)
 		logger.Warn(fmt.Sprintf("平台 JWT 失效(401)，清空缓存并重试一次: %s %s", method, url))
-		return c.doRetry(method, path, reqData, respData, true)
+		return c.doRetry(ctx, method, path, reqData, respData, true)
 	}
 
 	if resp.StatusCode != http.StatusOK {

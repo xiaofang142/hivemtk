@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 )
@@ -37,14 +38,21 @@ func subscriptionFail(ctx *gin.Context, err error) {
 	}
 }
 
-// @Summary      查询订阅状态（本地镜像，不回源平台）
+// @Summary      查询订阅状态（先回源刷新镜像，失败回落本地镜像）
 // @Tags      subscription
 // @Router    /api/subscription/status [get]
 // Status GET /api/subscription/status
 //
-// 读镜像 + 本地惰性判定（与平台 CurrentStatus 同款），不回源平台 ——
-// 平台不可达时镜像最后已知态照常可读，续费墙不会因为断网打不开。
+// 先按 TTL 回源平台刷新**本租户**镜像，再读镜像 + 本地惰性判定（与平台
+// CurrentStatus 同款）。回源失败只 Warn、照常返回镜像最后已知态 ——
+// 平台不可达时续费墙不会因为断网打不开。
+//
+// 回源是必需的：后台周期同步只覆盖默认租户，其他租户的镜像只在它自己触发
+// 同步时才更新；平台确认收款后没有别的通道会通知本租户（见 Refresh 注释）。
 func (c *SubscriptionController) Status(ctx *gin.Context) {
+	if err := c.svc.Refresh(ctx.Request.Context()); err != nil {
+		logger.Warnf("[subscription] 状态回源刷新失败（沿用镜像最后已知态）: %v", err)
+	}
 	snap, err := c.svc.Snapshot(ctx.Request.Context())
 	if err != nil {
 		subscriptionFail(ctx, err)
