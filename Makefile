@@ -467,28 +467,28 @@ fmt-check:
 
 # 本地全量 Go 测试。
 #
-# -p 1 是硬要求，与 .github/workflows/user-server-ci.yml:562-566 保持一致：
-# 用例共享同一批测试库槽位（见 internal/pkg/testutil/testdb.go），并发跑会互相认领
-# 对方的行（reply_guard 认领表 / delayed-<id> 撞自增主键），表现为多个重度依赖测试库的
-# 包（internal/{controller,repository,service,pkg/db}）同时挂起、10 分钟集体超时。
-# 实测 2026-10-13：去掉 -p 1 后这 4 个包 FAIL，单独串行跑任一包均可通过。
-# -timeout 900s 配套放宽单包预算（Go 默认 10m0s；CI 实测最慢包 98s，900s ≈ 9 倍余量）。
+# -p 1 保留为保守默认，与 .github/workflows/user-server-ci.yml:562-566 保持一致。
+# 2026-11-05 修复了 testutil 槽位咨询锁的生命周期 bug：维护连接曾是局部变量，
+# GC 后连接关闭、会话级锁提前释放，另一个测试进程会抢到同一槽位并 DROP 正在
+# 使用的库（旧注释把它误记成 reply_guard/delayed-<id> 的跨包串味）。
+# 同树实测：service+repository+pkg/db 三包 `-p 3` 并发全绿（service 490.8s /
+# repository 124.9s / pkg/db 207.6s）。controller 当时被另一分支在途 import cycle
+# 阻塞未参与，故本轮不改 CI/默认值；本地需要提速可显式 -p 3（前提是 controller 可编译）。
+# -timeout 1800s：全量跑时 service 在累积 I/O 负载下实测 727s（2026-11-05 同树
+# 全量门禁，149 包全绿），900s 只剩 173s 余量；CI 的 service 分片用 2400s，本地取 1800s。
 #
 # 与 CI 的有意差异：本地不加 -short（跳过 Short() 门控用例会漏问题）、不加 -race
 # （全量耗时数倍拉长，本地不适用）。
 test-go:
-	cd user-server && go test ./... -count=1 -p 1 -timeout 900s
+	cd user-server && go test ./... -count=1 -p 1 -timeout 1800s
 
 # 单跑 `internal/service` 一包。
 #
-# 存在的理由是一条**实测**：这一包全量单独跑要 648.6s（2026-10-26 本机 `-p 1`），
-# 而 `go test ./internal/service` 不带 -timeout 时用的是 Go 默认的 10m0s，差 48 秒
-# 就 `panic: test timed out`。也就是说"直接敲 go test 看这一包"这个动作本身是红的，
-# 与代码好不好无关 —— CI 侧早就在用 -timeout 2400s（user-server-ci.yml），只有
-# 手工跑没跟上的那一条会误报。
-#
-# 30m 是宽余量（648.6s ≈ 11m；3 倍），不是"跑得慢就多给点"：
-# 这一包的用例多数要真连测试库并串行认领槽位，机器负载波动会成倍放大。
+# 2026-11-05 本机 `-p 1` 实测 390.3s（同一工作树优化前 729.0s，-46.5%）；
+# 默认 10m0s 现在通常够用，但历史负载波动可到 700-880s，30m 宽余量保留。
+# 慢因已从每用例 DropTable+AutoMigrate（旧：AutoMigrate 311s + Normalize 115.6s /
+# 2375 次建库）降为 TRUNCATE 的 PG 文件 fsync（新：168.6s / 2375 次）；
+# 彻底消除需要测试库服务端 fsync=off（当前 mtk-postgres 与业务库同容器，未改）。
 test-service:
 	cd user-server && go test ./internal/service -count=1 -p 1 -timeout 30m
 

@@ -273,6 +273,13 @@ func TestApprovalRequestRepo_ConflictSenseIsConstraintSpecific(t *testing.T) {
 	if err := database.Exec("CREATE UNIQUE INDEX uq_approval_test_note ON approval_requests (decision_note)").Error; err != nil {
 		t.Fatalf("临时唯一索引创建失败：%v", err)
 	}
+	// testutil 现在按进程复用 schema（只 TRUNCATE，不再每例 DROP 表），
+	// 临时索引必须在用例结束显式删除，否则后续用例会撞上这条与审批无关的唯一约束。
+	t.Cleanup(func() {
+		if err := database.Exec("DROP INDEX IF EXISTS uq_approval_test_note").Error; err != nil {
+			t.Logf("清理临时唯一索引失败: %v", err)
+		}
+	})
 
 	a := newApprovalRow("apr_cs_1", "quote", "q-cs-1", "p1", model.ApprovalStatusApproved)
 	a.DecisionNote = "note-first"

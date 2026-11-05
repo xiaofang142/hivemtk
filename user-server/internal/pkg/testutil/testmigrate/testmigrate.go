@@ -14,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/migration"
 	"hivemtk-user/internal/migration/migrations"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 // RunTestMigrations 运行所有注册的 registry 迁移的 Up()，使测试库具备与生产一致的完整 schema。
@@ -32,6 +33,9 @@ func RunTestMigrations(t *testing.T, database *gorm.DB) {
 			t.Logf("测试迁移告警(未致命): %s: %v", m.Name(), err)
 		}
 	}
+	// 迁移可能新增带 tenant_id 的表/唯一索引；共享 schema 缓存不会自动
+	// 感知绕过 NewTestDB 的 DDL，这里显式重跑一次租户装配。
+	testutil.RefreshTenancy(t, database)
 }
 
 func isMissingRelationErr(err error) bool {

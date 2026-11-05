@@ -46,6 +46,11 @@ func newModuleDB(t *testing.T) {
 			t.Fatalf("migrate %T: %v", m, err)
 		}
 	}
+	// 这批表是测试内显式 Drop+AutoMigrate 的，不在 testutil 的进程级
+	// “已迁移”快照里，且 AutoMigrate 只产生模型标签形状；后续用例依赖
+	// Normalize 后的复合唯一索引做 ON CONFLICT。这里显式重跑一次租户装配，
+	// 否则会看到 42P10 / 23505（idx_local_tenant_module 形状不符）。
+	testutil.RefreshTenancy(t, database)
 
 	// **必须**在用例结束时清空，不能只在开头清。
 	//

@@ -93,6 +93,9 @@ func TestLoadLatestCheckpoint_CursorNeverGoesBackwards(t *testing.T) {
 	if err := db.Exec(checkpointTableDDL).Error; err != nil {
 		t.Skipf("建表失败（环境限制）: %v", err)
 	}
+	// 裸 CREATE TABLE 不经过 testutil 的 schema 登记；租户登记表/唯一索引
+	// 需要重新内省一次（共享 schema 缓存不会自动感知这条 DDL）。
+	testutil.RefreshTenancy(t, db)
 	repo := repository.NewAgentCheckpointRepository(db)
 	ctx := context.Background()
 

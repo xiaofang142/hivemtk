@@ -29,6 +29,19 @@ func batchMNewRepo(t *testing.T) (ObsConfigRepository, *gorm.DB) {
 	return NewObsConfigRepository(), gdb
 }
 
+// dropObsConfigSingleDefaultIndex 清掉 R4/R6b 现场铺的库级守卫。
+// testutil 现在按进程复用 schema（只 TRUNCATE，不再每例 DROP 表），
+// 这条索引不会随下一个用例的表重建消失；不清理会让 R5 的“双默认存量”
+// 夹具直接撞 23505。
+func dropObsConfigSingleDefaultIndex(t *testing.T, gdb *gorm.DB) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := gdb.Exec("DROP INDEX IF EXISTS idx_obs_config_single_default").Error; err != nil {
+			t.Logf("清理 idx_obs_config_single_default 失败: %v", err)
+		}
+	})
+}
+
 // batchMCountDefault 直接按列统计，不走 GetDefault —— 否则"两条默认"会被
 // GetDefault 的 First 语义藏成一条，用例就成了自证。
 func batchMCountDefault(t *testing.T, gdb *gorm.DB) (int64, []string) {
@@ -324,6 +337,7 @@ func TestBatchM_SetDefaultSucceedsWithSingleDefaultGuard(t *testing.T) {
 		ON obs_config (is_default) WHERE is_default`).Error; err != nil {
 		t.Fatalf("铺库级守卫失败: %v", err)
 	}
+	dropObsConfigSingleDefaultIndex(t, gdb)
 
 	batchMCreate(t, repo, "batchm-r4-old", model.ObsProviderLocal, model.ObsStatusActive, true)
 	target := batchMCreate(t, repo, "batchm-r4-new", model.ObsProviderQiniu, model.ObsStatusActive, false)
@@ -491,6 +505,7 @@ func TestBatchM_UpdateSucceedsWithSingleDefaultGuard(t *testing.T) {
 		ON obs_config (is_default) WHERE is_default`).Error; err != nil {
 		t.Fatalf("铺库级守卫失败: %v", err)
 	}
+	dropObsConfigSingleDefaultIndex(t, gdb)
 
 	old := batchMCreate(t, repo, "batchm-r6b-old", model.ObsProviderLocal, model.ObsStatusActive, true)
 	other := batchMCreate(t, repo, "batchm-r6b-other", model.ObsProviderQiniu, model.ObsStatusActive, false)

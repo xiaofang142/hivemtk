@@ -8,15 +8,24 @@
 //     config.DefaultDBPortDev(8232) / config.DefaultDBPortDocker(8202) 的实际探测
 //
 // 端口探测存在的理由见 testDBPortCandidates 注释（避免硬编码 8202 导致本地假绿）。
+//
+// 性能口径（2026-11-05）：
+//   - 进程级只建一个库；
+//   - 每个用例开一个连接池，cleanup Close（隔离跨用例异步写）；
+//   - 每个模型在进程内只 AutoMigrate 一次，后续用例用 TRUNCATE 清空；
+//   - 租户索引规范化/登记表只在新模型加入时重跑；
+//   - TESTDB_LEGACY=1 可切回旧的「每用例 DropTable+AutoMigrate」路径。
 package testutil
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -24,6 +33,7 @@ import (
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenancyidx"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -41,6 +51,37 @@ var (
 	procDBName    string
 	procDBInit    sync.Once
 	procDBInitErr error
+
+	// procDBMaintConn 是持有槽位咨询锁的会话。必须包级持有：
+	// ensureProcTestDB 返回后局部变量即不可达，GC 一旦回收连接，
+	// 会话级咨询锁就随之释放，另一个测试进程会抢到同一槽位并
+	// DROP DATABASE 正在使用的库（Makefile 里“去掉 -p 1 后 4 个包同时挂起”
+	// 的历史形态与此一致）。连接活到进程退出，由 OS 关闭。
+	// 只写不读是刻意的：SlotLockHeld 提供只读诊断，供测试断言它没被回收。
+	procDBMaintConn *sql.Conn
+)
+
+// SlotLockHeld 报告本进程是否仍持有槽位咨询锁的维护连接。
+// 仅供测试/诊断：连接一旦被 GC 回收，会话级咨询锁会提前释放，
+// 并发测试进程可能撞到同一槽位库。
+func SlotLockHeld() bool {
+	return procDBMaintConn != nil
+}
+
+// endpoint 解析结果进程级缓存：同一进程里数百次 NewTestDB 不需要反复
+// 做 2s 超时的 TCP 探测。失败不缓存，允许 PG 中途启动后重试。
+var (
+	endpointMu     sync.Mutex
+	endpointHost   string
+	endpointPort   string
+	endpointCached bool
+)
+
+// schema 登记表：key 为实际表名（GORM 的 TableName() 结果）。
+// 首次见到的表才 AutoMigrate；后续用例只 TRUNCATE。
+var (
+	schemaMu       sync.Mutex
+	migratedTables = map[string]bool{}
 )
 
 // testDBPortCandidates 返回宿主机测试库端口候选（按优先级去重）。
@@ -88,6 +129,19 @@ func dialTestDB(host, port string) error {
 // 返回 (host, port, err)。err 非 nil 表示所有候选都不可达，此时 port 为首个候选，
 // 便于错误信息指向最可能的配置项。
 func resolveTestDBEndpoint() (string, string, error) {
+	endpointMu.Lock()
+	defer endpointMu.Unlock()
+	if endpointCached {
+		return endpointHost, endpointPort, nil
+	}
+	host, port, err := resolveTestDBEndpointUncached()
+	if err == nil {
+		endpointHost, endpointPort, endpointCached = host, port, true
+	}
+	return host, port, err
+}
+
+func resolveTestDBEndpointUncached() (string, string, error) {
 	// POSTGRES_TEST_DSN 显式给出完整连接串时以它为准，不再猜端口。
 	if dsn := os.Getenv("POSTGRES_TEST_DSN"); dsn != "" {
 		host := getEnvOr("POSTGRES_TEST_HOST", "127.0.0.1")
@@ -146,23 +200,27 @@ const (
 	testDBMaxIdleConns = 8
 )
 
-// NewTestDB 创建并初始化（或复用）当前进程的独立 PostgreSQL 测试数据库。
+// NewTestDB 返回当前进程共享的测试库句柄，并保证本次 models 对应的表可见且为空。
 //
 // 行为：
 //  1. 首次调用时在维护库（postgres）创建独立库（先清理同名残留）。
 //     库名取自一组固定槽位（user_db_test_slot<N>），由会话级咨询锁分配，
 //     因此库总数有界；详见 procTestDBSlots 注释（RISK-07）。
-//  2. 连接该库，启用 pgvector 扩展（向量字段必需）。
-//  3. 在测试 session 内禁用外键约束（避免跨域共享模型引用时缺失依赖记录）。
-//  4. 对传入的 models 执行 AutoMigrate（先 DROP 目标表再重建，幂等）。
-//  5. 通过 t.Cleanup 注册清理：断开本测试连接（不 DROP 整个进程库，供同进程后续测试复用）。
+//  2. 每个用例开一个连接池（池上界 32/8），cleanup 时 Close；
+//     不跨用例共享池——上一用例的异步 goroutine 不能写进下一用例的表。
+//  3. 每个模型在进程内只 AutoMigrate 一次；之后每次调用对本次 models
+//     执行 `TRUNCATE ... RESTART IDENTITY CASCADE`，语义等价旧实现的
+//     “DROP 后重建空表”（含序列重置）。
+//  4. 租户索引规范化/租户登记表只在新模型加入时重跑；用例自己 DROP/RENAME
+//     过表时 TRUNCATE 会失败，此时回退 DROP+AutoMigrate 并重试。
+//  5. 通过 t.Cleanup 还原 dbstate 并关闭本用例连接池。
 //
 // 优雅降级：当 PostgreSQL 测试库不可达时（如本地开发无 PG），
 // 自动调用 t.Skipf 跳过本测试，保证 go test 不会因环境差异大面积失败。
 // 强依赖真实 DB 的集成/E2E 测试在此场景下整体跳过，不影响纯单元测试。
 // 注意：CI 环境（CI 环境变量非空）下改为 t.Fatalf —— 见函数体内注释。
 //
-// 注意：本辅助在创建成功后会自动 db.SetTestDB(database) 并在 t.Cleanup 里还原为 nil。
+// 注意：本辅助在创建成功后会自动 dbstate.Set(database) 并在 t.Cleanup 里还原为 nil。
 //
 // Service 层构造器已统一改为无参 + 全局
 // dbUtil.GetDB()/repository.GetDB() 注入，不再有 WithDB 变体。若本辅助不注入全局，
@@ -178,6 +236,13 @@ const (
 // 既有调用方无需改动。
 func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	t.Helper()
+
+	// TESTDB_TIMING=1 时输出分阶段耗时，用于定位整套用例的建库成本。
+	// 默认关闭，不改变任何行为。
+	started := time.Now()
+	last := started
+	var tEndpoint, tEnsure, tOpen, tSettings, tDrop, tMigrate, tNormalize, tRegistry, tTruncate time.Duration
+	newCount := 0
 
 	host, port, dialErr := resolveTestDBEndpoint()
 	if dialErr != nil {
@@ -202,77 +267,277 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 		return nil
 	}
 
-	ensureProcTestDB(t)
-	testDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname="+procDBName)
-	database, err := gorm.Open(postgres.Open(testDSN), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), err)
-	}
+	tEndpoint = time.Since(last)
+	last = time.Now()
 
-	if sqlDB, dbErr := database.DB(); dbErr == nil {
-		sqlDB.SetMaxOpenConns(testDBMaxOpenConns)
-		sqlDB.SetMaxIdleConns(testDBMaxIdleConns)
-		// 整包跑时每用例都 DropTable+AutoMigrate，磁盘/fsync 压力下
-		// CREATE EXTENSION / SET session_replication_role / DDL 可能在 PG 后端卡住数分钟
-		// （实测 TestKuaishouCardService_ShareCard_NotFound 卡在 testdb.go:219 的
-		// SET session_replication_role 上直到 go test 超时）。给 setup 会话设上限，
-		// 让失败以错误形式暴露而不是挂死整包。
-		// 多参数 SET(...)=... 在部分驱动/协议下语法报错；拆两条。
-		// 全量套件数百次 DropTable+AutoMigrate 在 fsync 压力下会卡在
-		// SET session_replication_role 等后台语句上数分钟，语句/锁超时兜底。
-		if _, execErr := sqlDB.Exec("SET statement_timeout = '60s'"); execErr != nil {
-			t.Logf("设置测试 statement_timeout 提示: %v", execErr)
-		}
-		if _, execErr := sqlDB.Exec("SET lock_timeout = '15s'"); execErr != nil {
-			t.Logf("设置测试 lock_timeout 提示: %v", execErr)
-		}
-		if _, execErr := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS vector"); execErr != nil {
-			t.Logf("启用 pgvector 扩展提示（需 postgres 镜像含 vector 包）: %v", execErr)
-		}
-		if _, execErr := sqlDB.Exec("SET session_replication_role = 'replica'"); execErr != nil {
-			t.Logf("禁用外键约束提示: %v", execErr)
-		}
-	}
+	ensureProcTestDB(t)
+	tEnsure = time.Since(last)
+	testDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname="+procDBName)
+
+	legacy := os.Getenv("TESTDB_LEGACY") == "1"
+	var database *gorm.DB
+	database, tOpen, tSettings = openTestDB(t, testDSN)
+	last = time.Now()
 
 	if len(models) > 0 {
-		for _, m := range models {
-			if dropErr := database.Migrator().DropTable(m); dropErr != nil {
-				t.Logf("DropTable 提示 %T: %v", m, dropErr)
+		if legacy {
+			sysDB := systemScopeDB(database)
+			for _, m := range models {
+				if dropErr := sysDB.Migrator().DropTable(m); dropErr != nil {
+					t.Logf("DropTable 提示 %T: %v", m, dropErr)
+				}
 			}
+			tDrop = time.Since(last)
+			last = time.Now()
+			if migrateErr := sysDB.AutoMigrate(models...); migrateErr != nil {
+				t.Fatalf("AutoMigrate 失败: %v", migrateErr)
+			}
+			tMigrate = time.Since(last)
+			last = time.Now()
+			// 租户唯一索引规范化（与 db.AutoMigrate 同一实现）：模型标签建的是单列
+			// 唯一索引，隔离要求 (tenant_id, 原列)——不规范化则复合 ON CONFLICT 失配。
+			if _, normErr := tenancyidx.Normalize(database); normErr != nil {
+				t.Fatalf("租户唯一索引规范化失败: %v", normErr)
+			}
+			tNormalize = time.Since(last)
+			last = time.Now()
+			// 租户登记表（数据库内省：有 tenant_id 列的表），供隔离 callback 判定
+			if regErr := tenancyidx.InitTenantRegistry(database); regErr != nil {
+				t.Fatalf("租户登记表装配失败: %v", regErr)
+			}
+			tRegistry = time.Since(last)
+			// 租户隔离 callback（与 db.AutoMigrate 同一实现）：off 模式直通，
+			// 测试内 SetMode(on) 即获得注入语义（T028 越权套件依赖此通路）
+			tenancyidx.RegisterTenantCallbacks(database)
+		} else {
+			st := ensureSchema(t, database, models)
+			newCount = st.newCount
+			tMigrate = st.migrate
+			tNormalize = st.normalize
+			tRegistry = st.registry
+			tTruncate = st.truncate
 		}
-		if migrateErr := database.AutoMigrate(models...); migrateErr != nil {
-			t.Fatalf("AutoMigrate 失败: %v", migrateErr)
-		}
-		// 租户唯一索引规范化（与 db.AutoMigrate 同一实现）：模型标签建的是单列
-		// 唯一索引，隔离要求 (tenant_id, 原列)——不规范化则复合 ON CONFLICT 失配。
-		if _, normErr := tenancyidx.Normalize(database); normErr != nil {
-			t.Fatalf("租户唯一索引规范化失败: %v", normErr)
-		}
-		// 租户登记表（数据库内省：有 tenant_id 列的表），供隔离 callback 判定
-		if regErr := tenancyidx.InitTenantRegistry(database); regErr != nil {
-			t.Fatalf("租户登记表装配失败: %v", regErr)
-		}
-		// 租户隔离 callback（与 db.AutoMigrate 同一实现）：off 模式直通，
-		// 测试内 SetMode(on) 即获得注入语义（T028 越权套件依赖此通路）
-		tenancyidx.RegisterTenantCallbacks(database)
 	}
-
-	sqlDB, err := database.DB()
-	if err != nil {
-		t.Fatalf("获取 sql.DB 失败: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = sqlDB.Close()
-	})
 
 	// 注入全局，供无参 Service 构造器（dbUtil.GetDB() / repository.GetDB()）取用。
 	// 写 dbstate 而不是直接 db.SetTestDB：见 dbstate 包注释（import cycle）。
 	dbstate.Set(database)
 	t.Cleanup(func() { dbstate.Set(nil) })
 
+	if os.Getenv("TESTDB_TIMING") != "" {
+		fmt.Fprintf(os.Stderr,
+			"[testdb-timing] models=%d new=%d endpoint=%s ensure=%s open=%s settings=%s drop=%s migrate=%s normalize=%s registry=%s truncate=%s total=%s\n",
+			len(models), newCount, tEndpoint, tEnsure, tOpen, tSettings, tDrop, tMigrate, tNormalize, tRegistry, tTruncate, time.Since(started))
+	}
+
 	return database
+}
+
+// openTestDB 每个用例开一个独立连接池。
+//
+// 为什么不能共享一个进程级池：上一用例的异步 goroutine（如
+// IntentRecognizer.saveRecord 的 fire-and-forget 写）会继续持有句柄，
+// 把行写进下一用例已经 TRUNCATE 过的表，表现为“多一条记录”。
+// 旧实现靠每个用例 cleanup Close 天然隔离；这里保留该语义，只把
+// 真正贵的 AutoMigrate/Normalize 变成进程内一次。
+func openTestDB(t testing.TB, testDSN string) (database *gorm.DB, open, settings time.Duration) {
+	begin := time.Now()
+	var err error
+	database, err = gorm.Open(postgres.Open(testDSN), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), err)
+	}
+	open = time.Since(begin)
+
+	begin = time.Now()
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("获取 sql.DB 失败: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(testDBMaxOpenConns)
+	sqlDB.SetMaxIdleConns(testDBMaxIdleConns)
+	// statement_timeout/lock_timeout/synchronous_commit 已由 ensureProcTestDB
+	// 在库级设置，所有新会话自动继承；这里只处理不能库级设置的
+	// session_replication_role（与旧实现同一次尝试）。
+	if _, execErr := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS vector"); execErr != nil {
+		t.Logf("启用 pgvector 扩展提示（需 postgres 镜像含 vector 包）: %v", execErr)
+	}
+	if _, execErr := sqlDB.Exec("SET session_replication_role = 'replica'"); execErr != nil {
+		t.Logf("禁用外键约束提示: %v", execErr)
+	}
+	settings = time.Since(begin)
+
+	// cleanup Close 会等待在途查询结束/失败，挡住跨用例异步写。
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	// 每个新句柄都要注册 callback（同一 Config 上幂等替换）。
+	tenancyidx.RegisterTenantCallbacks(database)
+	// 租户登记表是进程级全局状态；用例可能 ResetRegistryForTest 后
+	// 再调 NewTestDB（db 包的 tenant_callback 套件就是这样）。登记表
+	// 未装配时 on 模式会 fail-closed 拒绝一切操作，因此每次打开句柄都
+	// 检查一次；已就绪时只是一次读锁，成本可忽略。
+	if !tenancyidx.RegistryReady() {
+		if regErr := tenancyidx.InitTenantRegistry(database); regErr != nil {
+			t.Fatalf("租户登记表装配失败: %v", regErr)
+		}
+	}
+	return database, open, settings
+}
+
+// schemaTiming 是 ensureSchema 的分阶段读数（TESTDB_TIMING 用）。
+type schemaTiming struct {
+	newCount  int
+	migrate   time.Duration
+	normalize time.Duration
+	registry  time.Duration
+	truncate  time.Duration
+}
+
+// ensureSchema 保证本次 models 的表存在且为空。
+//
+// 快路径：模型已在进程内登记过 → 只 TRUNCATE（一次多表语句，含序列重置）。
+// 慢路径：出现新模型 → AutoMigrate 新模型，再重跑一次租户索引/登记表。
+// 回退：TRUNCATE 失败（用例自己 DROP/RENAME 过表）→ DROP+AutoMigrate 本次
+// models、重跑租户装配、再 TRUNCATE 一次。
+func ensureSchema(t testing.TB, database *gorm.DB, models []any) schemaTiming {
+	schemaMu.Lock()
+	defer schemaMu.Unlock()
+
+	sysDB := systemScopeDB(database)
+	var st schemaTiming
+	tables := make([]string, 0, len(models))
+	seenTables := make(map[string]bool, len(models))
+	newModels := make([]any, 0, len(models))
+	newTables := make([]string, 0, len(models))
+
+	for _, m := range models {
+		table, err := tableNameFor(database, m)
+		if err != nil {
+			t.Fatalf("解析模型表名失败 %T: %v", m, err)
+		}
+		if seenTables[table] {
+			continue
+		}
+		seenTables[table] = true
+		tables = append(tables, table)
+		if !migratedTables[table] {
+			newModels = append(newModels, m)
+			newTables = append(newTables, table)
+		}
+	}
+	st.newCount = len(newModels)
+
+	if len(newModels) > 0 {
+		begin := time.Now()
+		if err := sysDB.AutoMigrate(newModels...); err != nil {
+			t.Fatalf("AutoMigrate 失败: %v", err)
+		}
+		st.migrate = time.Since(begin)
+
+		st.normalize, st.registry = refreshTenancyLocked(t, database)
+		for _, table := range newTables {
+			migratedTables[table] = true
+		}
+	}
+
+	begin := time.Now()
+	if err := truncateTables(sysDB, tables); err != nil {
+		t.Logf("TRUNCATE 本次模型失败，回退 DROP+AutoMigrate: %v", err)
+		for _, m := range models {
+			if dropErr := sysDB.Migrator().DropTable(m); dropErr != nil {
+				t.Logf("回退 DropTable 提示 %T: %v", m, dropErr)
+			}
+		}
+		if migrateErr := sysDB.AutoMigrate(models...); migrateErr != nil {
+			t.Fatalf("回退 AutoMigrate 失败: %v", migrateErr)
+		}
+		for _, table := range tables {
+			migratedTables[table] = true
+		}
+		norm, reg := refreshTenancyLocked(t, database)
+		st.normalize += norm
+		st.registry += reg
+		if truncateErr := truncateTables(sysDB, tables); truncateErr != nil {
+			t.Fatalf("回退后 TRUNCATE 仍失败: %v", truncateErr)
+		}
+	}
+	st.truncate = time.Since(begin)
+	return st
+}
+
+// systemScopeDB 让 schema 维护（AutoMigrate/DropTable/TRUNCATE）走系统作用域。
+// 用例可能在 NewTestDB 之前就把租户模式切成 on（如 TestAbExperimentOnModeTenantCtx），
+// 此时 on 模式的 raw SQL 守卫会拒绝引用租户表的 DDL；schema 维护是装配操作，
+// 必须显式声明系统作用域（与 tenancyidx.Normalize 的处理一致）。
+func systemScopeDB(database *gorm.DB) *gorm.DB {
+	ctx := context.Background()
+	if database != nil && database.Statement != nil && database.Statement.Context != nil {
+		ctx = database.Statement.Context
+	}
+	return database.WithContext(tenant.WithSystemScope(ctx))
+}
+
+// refreshTenancyLocked 重跑租户唯一索引规范化/登记表装配；调用方需持有 schemaMu。
+func refreshTenancyLocked(t testing.TB, database *gorm.DB) (normalize, registry time.Duration) {
+	begin := time.Now()
+	// 租户唯一索引规范化（与 db.AutoMigrate 同一实现）：模型标签建的是单列
+	// 唯一索引，隔离要求 (tenant_id, 原列)——不规范化则复合 ON CONFLICT 失配。
+	if _, err := tenancyidx.Normalize(database); err != nil {
+		t.Fatalf("租户唯一索引规范化失败: %v", err)
+	}
+	normalize = time.Since(begin)
+
+	begin = time.Now()
+	// 租户登记表（数据库内省：有 tenant_id 列的表），供隔离 callback 判定。
+	if err := tenancyidx.InitTenantRegistry(database); err != nil {
+		t.Fatalf("租户登记表装配失败: %v", err)
+	}
+	registry = time.Since(begin)
+
+	// 租户隔离 callback（与 db.AutoMigrate 同一实现）：off 模式直通，
+	// 测试内 SetMode(on) 即获得注入语义（T028 越权套件依赖此通路）。
+	tenancyidx.RegisterTenantCallbacks(database)
+	return normalize, registry
+}
+
+// RefreshTenancy 供测试内绕过 NewTestDB 直接改 schema 后调用：
+// 裸 CREATE TABLE / 生产 registry 迁移之后，重新内省租户表并规范化唯一索引。
+func RefreshTenancy(t testing.TB, database *gorm.DB) {
+	t.Helper()
+	if database == nil {
+		t.Fatalf("RefreshTenancy: database is nil")
+	}
+	schemaMu.Lock()
+	defer schemaMu.Unlock()
+	refreshTenancyLocked(t, database)
+}
+
+// tableNameFor 用 GORM 自己的命名策略解析模型对应的实际表名，
+// 与 AutoMigrate/DropTable 使用同一套 TableName() 规则。
+func tableNameFor(database *gorm.DB, model any) (string, error) {
+	stmt := &gorm.Statement{DB: database}
+	if err := stmt.Parse(model); err != nil {
+		return "", err
+	}
+	if stmt.Schema == nil || stmt.Schema.Table == "" {
+		return "", fmt.Errorf("模型没有可解析的表名")
+	}
+	return stmt.Schema.Table, nil
+}
+
+// truncateTables 清空本次 models 的表并重置自增序列。
+// RESTART IDENTITY 与旧实现 DROP+CREATE 的序列重置语义一致；
+// CASCADE 处理用例之间遗留的外键依赖。
+func truncateTables(database *gorm.DB, tables []string) error {
+	if len(tables) == 0 {
+		return nil
+	}
+	quoted := make([]string, len(tables))
+	for i, table := range tables {
+		quoted[i] = `"` + strings.ReplaceAll(table, `"`, `""`) + `"`
+	}
+	return database.Exec("TRUNCATE TABLE " + strings.Join(quoted, ", ") + " RESTART IDENTITY CASCADE").Error
 }
 
 // procTestDBSlots 进程级测试库的槽位数。
@@ -281,8 +546,8 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 // 且从不 DROP** —— 实测累积 1505 个 / 19 GB。
 //
 // 为什么不能在进程退出时删：Go **没有**通用的"测试进程退出"回调。只有显式写了 TestMain
-// 的包才有挂钩子的地方，而全仓 293 个使用 NewTestDB 的测试文件分布在 35 个包目录里，
-// 其中**只有 5 个包有 TestMain** —— 靠 TestMain 兜不住。
+// 的包才有挂钩子的地方，而全仓 786 个使用 NewTestDB 的测试文件分布在 61 个包目录里，
+// 其中**只有 8 个包有 TestMain** —— 靠 TestMain 兜不住。
 //
 // 因此改为「固定槽位 + PostgreSQL 会话级咨询锁」：库总数由**历史运行次数**降为
 // **槽位数**（有界）。会话级咨询锁在连接断开时由 PG 自动释放，
@@ -295,10 +560,11 @@ const procTestDBLockBase = 0x6d746b00
 
 // acquireTestDBSlot 在维护库连接上依次尝试获取槽位咨询锁，返回首个拿到的槽位。
 // 全部被占用时返回 ok=false（同一台机器上并发跑了多套 go test）。
-func acquireTestDBSlot(conn *sql.DB, t testing.TB) (slot int, ok bool) {
+func acquireTestDBSlot(conn *sql.Conn, t testing.TB) (slot int, ok bool) {
 	for i := 0; i < procTestDBSlots; i++ {
 		var got bool
-		if err := conn.QueryRow("SELECT pg_try_advisory_lock($1)", procTestDBLockBase+int64(i)).Scan(&got); err != nil {
+		if err := conn.QueryRowContext(context.Background(),
+			"SELECT pg_try_advisory_lock($1)", procTestDBLockBase+int64(i)).Scan(&got); err != nil {
 			t.Logf("获取测试库槽位 %d 的咨询锁失败: %v", i, err)
 			continue
 		}
@@ -333,10 +599,15 @@ func ensureProcTestDB(t testing.TB) {
 			procDBInitErr = err
 			return
 		}
-		// s 刻意不 Close：会话级咨询锁随连接释放，连接必须活到进程结束，
-		// 否则槽位会在测试跑到一半时被回收。进程退出时 OS 关 socket，PG 随即释放锁。
+		conn, err := s.Conn(context.Background())
+		if err != nil {
+			procDBInitErr = err
+			return
+		}
+		// 包级持有：局部变量 GC 后连接关闭，会话级咨询锁会提前释放（见变量注释）。
+		procDBMaintConn = conn
 
-		slot, locked := acquireTestDBSlot(s, t)
+		slot, locked := acquireTestDBSlot(conn, t)
 		if locked {
 			procDBName = fmt.Sprintf("%s_slot%d", base, slot)
 		} else {
@@ -347,12 +618,29 @@ func ensureProcTestDB(t testing.TB) {
 			procDBName = fmt.Sprintf("%s_%d", base, os.Getpid())
 		}
 
-		if _, e := s.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, procDBName)); e != nil {
+		ctx := context.Background()
+		if _, e := conn.ExecContext(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, procDBName)); e != nil {
 			t.Logf("清理残留测试库提示 %s: %v", procDBName, e)
 		}
-		if _, e := s.Exec(fmt.Sprintf(`CREATE DATABASE "%s"`, procDBName)); e != nil {
+		if _, e := conn.ExecContext(ctx, fmt.Sprintf(`CREATE DATABASE "%s"`, procDBName)); e != nil {
 			procDBInitErr = e
 			return
+		}
+
+		// 测试库级设置：
+		//   - synchronous_commit=off：DDL/DML 提交不再等 WAL fsync，直接消掉
+		//     整套用例在 macOS 磁盘上的主要尾延迟；
+		//   - statement_timeout/lock_timeout：旧的逐连接 SET 不保证命中
+		//     DDL 所在连接，库级设置覆盖所有新会话，失败快于挂死。
+		// 仅作用于本进程租用的测试库，失败只记日志（普通用户可能无权限）。
+		for _, stmt := range []string{
+			fmt.Sprintf(`ALTER DATABASE "%s" SET synchronous_commit = off`, procDBName),
+			fmt.Sprintf(`ALTER DATABASE "%s" SET lock_timeout = '15s'`, procDBName),
+			fmt.Sprintf(`ALTER DATABASE "%s" SET statement_timeout = '60s'`, procDBName),
+		} {
+			if _, e := conn.ExecContext(ctx, stmt); e != nil {
+				t.Logf("设置测试库参数提示（%s）: %v", stmt, e)
+			}
 		}
 	})
 	if procDBInitErr != nil {
