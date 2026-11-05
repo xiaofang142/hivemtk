@@ -88,7 +88,7 @@ func (c *BridgeSelectorHealthController) List(ctx *gin.Context) {
 	}
 	views, err := c.svc.List(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{

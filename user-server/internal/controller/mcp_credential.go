@@ -39,7 +39,7 @@ func ListMCPCredentials(ctx *gin.Context) {
 	}
 	rows, err := mcpAdminSvc().List(ctx.Request.Context(), 200)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	out := make([]mcpCredentialRow, 0, len(rows))
@@ -110,7 +110,7 @@ func UpdateMCPCredential(ctx *gin.Context) {
 		return
 	}
 	if err := mcpAdminSvc().Update(ctx.Request.Context(), id, updates); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	middleware.InvalidateMCPCredentialCache()

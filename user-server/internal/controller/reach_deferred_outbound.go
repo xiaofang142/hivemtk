@@ -32,7 +32,7 @@ func (ctrl *ReachDeferredOutboundController) List(ctx *gin.Context) {
 		page, pageSize,
 	)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": rows, "total": total}, "查询成功")
@@ -51,7 +51,7 @@ func (ctrl *ReachDeferredOutboundController) Cancel(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "记录不存在或不可取消（仅 pending 可取消）")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id64}, "已取消")

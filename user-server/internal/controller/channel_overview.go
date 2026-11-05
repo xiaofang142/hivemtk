@@ -44,7 +44,7 @@ func (ctrl *ChannelOverviewController) BindChannel(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "customer not found")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "绑定成功")
@@ -68,7 +68,7 @@ func (ctrl *ChannelOverviewController) ListCustomerChannels(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "customer not found")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "查询成功")

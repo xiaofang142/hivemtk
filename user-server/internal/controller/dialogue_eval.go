@@ -43,7 +43,7 @@ func (c *DialogueEvalController) Run(ctx *gin.Context) {
 	}
 	runs, err := c.svc.RunGoldEvaluationWithSet(ctx.Request.Context(), req.Name, req.BadCaseLimit, req.EvalSetID)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, runs, "评测完成")
@@ -62,7 +62,7 @@ func (c *DialogueEvalController) List(ctx *gin.Context) {
 	}
 	runs, err := c.svc.ListDialogueEvalRuns(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, runs, "获取成功")
@@ -125,7 +125,7 @@ func (c *DialogueEvalController) ListSets(ctx *gin.Context) {
 	}
 	sets, err := c.svc.ListEvalSets(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, sets, "获取成功")

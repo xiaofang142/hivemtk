@@ -36,7 +36,7 @@ func (c *RagEvalController) Run(ctx *gin.Context) {
 	}
 	run, err := c.svc.RunAutoEvaluation(ctx.Request.Context(), &cfg)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, run, "评测完成")
@@ -55,7 +55,7 @@ func (c *RagEvalController) List(ctx *gin.Context) {
 	}
 	runs, err := c.svc.ListRuns(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, runs, "获取成功")

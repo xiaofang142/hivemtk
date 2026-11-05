@@ -2,8 +2,6 @@
 package controller
 
 import (
-	"net/http"
-
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -32,7 +30,7 @@ func (c *SmartRouterController) SelectAgent(ctx *gin.Context) {
 	}
 	result, err := c.svc.SelectAgent(ctx.Request.Context(), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if result == nil {

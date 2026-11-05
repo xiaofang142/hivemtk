@@ -22,7 +22,7 @@ func NewToolIntegrationConfigController() *ToolIntegrationConfigController {
 func (c *ToolIntegrationConfigController) GetConfig(ctx *gin.Context) {
 	cfg, err := service.LoadToolIntegrationConfig(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "ok")
@@ -39,7 +39,7 @@ func (c *ToolIntegrationConfigController) SaveConfig(ctx *gin.Context) {
 		return
 	}
 	if err := service.SaveToolIntegrationConfig(ctx.Request.Context(), &cfg); err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "ok")

@@ -35,6 +35,8 @@ var (
 
 	ErrInboxConversationMissing = errors.New("conversation not found")
 
+	ErrInboxMessageMissing = errors.New("message not found")
+
 	ErrInboxRepoNotReady = errors.New("inbox repository not ready")
 )
 
@@ -909,15 +911,15 @@ func (s *InboxService) DeleteMessage(ctx context.Context, conversationID, messag
 	if s.inboxRepo == nil {
 		return ErrInboxRepoNotReady
 	}
-	if _, err := s.GetByID(ctx, conversationID); err != nil {
-		return err
-	}
 	// 会话级归属校验（2026-11-02 对抗性复核实测）：
 	// DELETE /api/inbox/conversations/{A}/messages/{B的消息} 原先只要 A 可见就成功，
 	// 同租户内可以借一个可见会话删掉另一个会话的消息。消息 id 是全局自增，
 	// 前端把 conversation 与 message 一起传正是为了限定范围，服务端不能只看前半段。
 	conv, err := s.GetByID(ctx, conversationID)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrInboxConversationMissing
+		}
 		return err
 	}
 	switch source {
@@ -927,13 +929,19 @@ func (s *InboxService) DeleteMessage(ctx context.Context, conversationID, messag
 		}
 		msg, err := s.hubRepo.GetByID(ctx, messageID)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInboxMessageMissing
+			}
 			return err
 		}
 		if !hubBelongsToConversation(msg, conv) {
 			// 归属不符按「查无」口径回，不泄露别的会话是否存在该消息
-			return gorm.ErrRecordNotFound
+			return ErrInboxMessageMissing
 		}
 		if err := s.hubRepo.Delete(ctx, messageID); err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrInboxMessageMissing
+			}
 			return err
 		}
 	case "session":
@@ -942,12 +950,17 @@ func (s *InboxService) DeleteMessage(ctx context.Context, conversationID, messag
 		}
 		// session_messages 按 session_id 归属：会话有会话键时双键删除，
 		// 消息不属于该会话即 0 行 ⇒ 404；无会话键时退化为原行为（仅可见性约束）。
+		var delErr error
 		if conv.ConversationID != "" {
-			if err := s.sessionMsgRepo.DeleteInSession(ctx, conv.ConversationID, messageID); err != nil {
-				return err
+			delErr = s.sessionMsgRepo.DeleteInSession(ctx, conv.ConversationID, messageID)
+		} else {
+			delErr = s.sessionMsgRepo.Delete(ctx, messageID)
+		}
+		if delErr != nil {
+			if errors.Is(delErr, gorm.ErrRecordNotFound) {
+				return ErrInboxMessageMissing
 			}
-		} else if err := s.sessionMsgRepo.Delete(ctx, messageID); err != nil {
-			return err
+			return delErr
 		}
 	default:
 		return fmt.Errorf("无效消息来源: %s", source)

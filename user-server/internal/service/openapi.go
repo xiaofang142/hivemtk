@@ -78,7 +78,6 @@ func (s *OpenAPIService) GetSource(ctx context.Context, productID string, id int
 // 虽然治好了「未携带字段被清零」的数据丢失，却让"把 schedule/request_template
 // 清空"变成静默无效（用户点保存、界面回显还是旧值）。2026-11-02 二次审核实测。
 
-
 // UpdateSource 更新数据源（部分更新：只有补丁里出现的字段才会被写）。
 func (s *OpenAPIService) UpdateSource(ctx context.Context, id uint64, patch model.OpenAPISourcePatch) (*model.KnowledgeOpenAPISource, error) {
 	if id == 0 {

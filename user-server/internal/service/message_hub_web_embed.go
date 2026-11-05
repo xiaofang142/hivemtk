@@ -17,18 +17,14 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"hivemtk-user/internal/model"
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/websocket"
-
-	"gorm.io/gorm"
 )
 
 // DeliverWebEmbedOutbound 把一条 web_embed 出站 hub 行投递到访客会话。
@@ -39,20 +35,11 @@ func (s *MessageHubService) DeliverWebEmbedOutbound(ctx context.Context, msg *mo
 	if msg == nil {
 		return errors.New("nil hub message")
 	}
-	db := dbUtil.GetDB().WithContext(ctx)
-	if db == nil {
-		return errors.New("db not ready")
+	// 读侧与事务写侧都在 Repository（arch 守卫：service 不直接持 DB 句柄）。
+	if s.repo == nil {
+		return errors.New("message hub repo not ready")
 	}
-
-	var session model.CustomerSession
-	err := db.Where("platform = ? AND session_id = ?", model.PlatformWebEmbed, msg.ConversationID).
-		First(&session).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		err = db.Where("platform = ? AND account_id = ?", model.PlatformWebEmbed, msg.AccountID).
-			Where("status NOT IN ?", []model.SessionStatus{model.SessionStatusResolved, model.SessionStatusClosed}).
-			Order("last_message_at DESC NULLS LAST, created_at DESC").
-			First(&session).Error
-	}
+	session, err := s.repo.FindDeliverableWebEmbedSession(ctx, msg.ConversationID, msg.AccountID)
 	if err != nil {
 		return fmt.Errorf("未找到可投递的网页客服会话 (account=%s conv=%s): %w", msg.AccountID, msg.ConversationID, err)
 	}
@@ -62,10 +49,6 @@ func (s *MessageHubService) DeliverWebEmbedOutbound(ctx context.Context, msg *mo
 		contentType = model.MessageTypeText
 	}
 
-	// 事务写侧在 Repository（arch 守卫要求：service 不直接开 gorm 事务）。
-	if s.repo == nil {
-		return errors.New("message hub repo not ready")
-	}
 	message, txErr := s.repo.DeliverWebEmbedOutboundTx(ctx, repository.WebEmbedDeliveryInput{
 		MsgID:       msg.ID,
 		Extra:       msg.Extra,
@@ -93,7 +76,7 @@ func (s *MessageHubService) DeliverWebEmbedOutbound(ctx context.Context, msg *mo
 			"sender_id":    message.SenderID,
 		}
 		if err := websocket.SendToVisitor("message", payload, session.SessionID); err == nil {
-			_ = repository.NewSessionMessageRepository().MarkDeliveredAt(ctx, message.ID, time.Now())
+			_ = s.repo.MarkSessionMessageDeliveredAt(ctx, message.ID, time.Now())
 		}
 	}
 	return nil
@@ -108,14 +91,15 @@ func (s *MessageHubService) deliverWebEmbedOutboundLogged(ctx context.Context, m
 	if err := s.DeliverWebEmbedOutbound(ctx, msg); err != nil {
 		logger.Warnf("[MessageHub] web_embed 直投失败 msg_id=%s: %v", msg.MsgID, err)
 		// 失败轨迹写回 hub 行，管理端可见（不覆盖 pending 状态，待办集合仍能捞起）。
-		if db := dbUtil.GetDB().WithContext(ctx); db != nil {
+		if s.repo != nil {
 			extra := msg.Extra
 			if extra == nil {
 				extra = model.JSONMap{}
 			}
 			extra["web_embed_error"] = err.Error()
-			extraJSON, _ := json.Marshal(extra)
-			_ = db.Model(&model.MessageHub{}).Where("id = ?", msg.ID).Update("extra", string(extraJSON)).Error
+			if uerr := s.repo.UpdateHubExtra(ctx, msg.ID, extra); uerr != nil {
+				logger.Warnf("[MessageHub] web_embed 失败轨迹写回失败 msg_id=%s: %v", msg.MsgID, uerr)
+			}
 		}
 	}
 }

@@ -90,11 +90,11 @@ func (s *KBConnectorService) Get(ctx context.Context, source string) ConnectorSt
 	// Test() 写回的是 test_at / test_ok / test_msg，这里曾按 at/ok/msg 读取，
 	// 导致「最近测试」永远不显示；保留旧键兜底以兼容历史数据。
 	var testRes struct {
-		At    string `json:"test_at"`
-		OK    bool   `json:"test_ok"`
-		Msg   string `json:"test_msg"`
-		AtOld string `json:"at"`
-		OKOld bool   `json:"ok"`
+		At     string `json:"test_at"`
+		OK     bool   `json:"test_ok"`
+		Msg    string `json:"test_msg"`
+		AtOld  string `json:"at"`
+		OKOld  bool   `json:"ok"`
 		MsgOld string `json:"msg"`
 	}
 	if err := json.Unmarshal([]byte(raw), &testRes); err == nil {

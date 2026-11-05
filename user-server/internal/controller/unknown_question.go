@@ -83,7 +83,7 @@ func (c *UnknownQuestionController) List(ctx *gin.Context) {
 	}
 	rows, total, err := c.svc.ListQuestions(ctx.Request.Context(), q, page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, rows, int64(page), int64(pageSize), total)
@@ -98,7 +98,7 @@ func (c *UnknownQuestionController) Stats(ctx *gin.Context) {
 	}
 	data, err := c.svc.Stats(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "ok")
@@ -146,7 +146,7 @@ func (c *UnknownQuestionController) Submit(ctx *gin.Context) {
 			response.NotFound(ctx, "未知问题不存在或状态已变更")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": id, "status": model.UQStatusPendingReview}, "ok")
@@ -199,7 +199,7 @@ func (c *UnknownQuestionController) ClusterList(ctx *gin.Context) {
 	}
 	rows, total, err := c.svc.ListClusters(ctx.Request.Context(), q, page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, rows, int64(page), int64(pageSize), total)

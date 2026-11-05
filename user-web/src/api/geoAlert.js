@@ -1,4 +1,4 @@
-import { http } from '@/utils/http'
+import { http } from '@/utils/request'
 
 export const listGeoAlerts = (params) =>
   http.get('/api/geo/alerts', params);

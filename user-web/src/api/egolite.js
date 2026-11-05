@@ -1,5 +1,4 @@
-import { http } from '@/utils/http'
-import { getRequestInstance } from '@/utils/request'
+import { http, getRequestInstance } from '@/utils/request'
 
 // ego-lite 腿（浏览器自动化的第二种执行腿：用户自己的 ego-browser）
 //

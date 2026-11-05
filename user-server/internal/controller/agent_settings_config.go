@@ -22,7 +22,7 @@ func NewAgentSettingsController() *AgentSettingsController {
 func (c *AgentSettingsController) GetConfig(ctx *gin.Context) {
 	cfg, err := service.LoadAgentSettingsConfig(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "ok")
@@ -43,7 +43,7 @@ func (c *AgentSettingsController) SaveConfig(ctx *gin.Context) {
 		return
 	}
 	if err := service.SaveAgentSettingsConfig(ctx.Request.Context(), &cfg); err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "ok")

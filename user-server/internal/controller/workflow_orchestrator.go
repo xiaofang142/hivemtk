@@ -98,7 +98,7 @@ func (c *WorkflowOrchestratorController) ListVersions(ctx *gin.Context) {
 		}
 		list, total, err := c.svc.ListAll(ctx.Request.Context(), workflowID, status, page, pageSize)
 		if err != nil {
-			response.Error(ctx, http.StatusInternalServerError, err.Error())
+			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
 		}
 		response.SuccessWithPage(ctx, list, int64(page), int64(pageSize), total)
@@ -107,7 +107,7 @@ func (c *WorkflowOrchestratorController) ListVersions(ctx *gin.Context) {
 
 	versions, err := c.svc.ListVersions(ctx.Request.Context(), workflowID)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -139,7 +139,7 @@ func (c *WorkflowOrchestratorController) UpdateVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.UpdateVersion(ctx.Request.Context(), uint(id), &req); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -164,7 +164,7 @@ func (c *WorkflowOrchestratorController) PublishVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.PublishVersion(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -189,7 +189,7 @@ func (c *WorkflowOrchestratorController) ArchiveVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.ArchiveVersion(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -214,7 +214,7 @@ func (c *WorkflowOrchestratorController) DeleteVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.DeleteVersion(ctx.Request.Context(), uint(id)); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -298,7 +298,7 @@ func (c *WorkflowOrchestratorController) ListExecutions(ctx *gin.Context) {
 
 	list, total, err := c.svc.ListExecutions(ctx.Request.Context(), workflowID, status, page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -324,7 +324,7 @@ func (c *WorkflowOrchestratorController) GetNodeExecutions(ctx *gin.Context) {
 
 	nodes, err := c.svc.GetNodeExecutions(ctx.Request.Context(), uint(execID))
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 
@@ -359,7 +359,7 @@ func (c *WorkflowOrchestratorController) StopExecution(ctx *gin.Context) {
 			response.ErrorWithCode(ctx, utils.ErrorCodeWorkflowStateConflict, http.StatusConflict, err.Error())
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
@@ -33,7 +32,7 @@ func (c *TraceLearningController) TriggerEval(ctx *gin.Context) {
 	dry, _ := strconv.ParseBool(ctx.DefaultQuery("dry", "false"))
 	res, err := c.svc.RunBatch(ctx.Request.Context(), hours, limit, dry)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	resp := gin.H{"processed": res.Processed}
@@ -52,7 +51,7 @@ func (c *TraceLearningController) EvalLogs(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	logs, err := c.svc.Logs(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, logs, "ok")
@@ -67,7 +66,7 @@ func (c *TraceLearningController) KnowledgeWeights(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	rows, err := c.svc.TopWeights(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, rows, "ok")

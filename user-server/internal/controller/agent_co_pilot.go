@@ -29,7 +29,7 @@ func NewAgentCoPilotController() *AgentCoPilotController {
 func (c *AgentCoPilotController) GetConfig(ctx *gin.Context) {
 	cfg, err := c.svc.GetConfig(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "获取成功")
@@ -67,7 +67,7 @@ func (c *AgentCoPilotController) Evaluate(ctx *gin.Context) {
 	}
 	decision, err := c.svc.Evaluate(ctx.Request.Context(), req.Confidence, req.EstimatedCost)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, decision, "评估完成")

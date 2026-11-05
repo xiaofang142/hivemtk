@@ -1,4 +1,4 @@
-import { http } from '@/utils/http'
+import { http } from '@/utils/request'
 
 export const listPlatforms = () =>
   http.get('/api/geo/platform/platforms');

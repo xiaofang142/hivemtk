@@ -10,7 +10,6 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // InboxController 统一收件箱控制器
@@ -438,7 +437,7 @@ func (c *InboxController) DeleteMessage(ctx *gin.Context) {
 	if err := c.svc.DeleteMessageScoped(ctx.Request.Context(), uint(conversationID), uint(mid), source, inboxScopeFromCtx(ctx)); err != nil {
 		// 消息不存在要给得出「消息不存在」，而不是走到通用分支的
 		// 「操作失败，请稍后重试」——后者会让调用方以为可以重试。
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, service.ErrInboxMessageMissing) {
 			response.NotFound(ctx, "消息不存在")
 			return
 		}

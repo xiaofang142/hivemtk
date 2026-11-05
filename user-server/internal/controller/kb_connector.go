@@ -55,7 +55,7 @@ func ListKBConnectors(ctx *gin.Context) {
 	}
 	rows, err := kbAdminSvc().List(ctx.Request.Context(), 100)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	out := make([]gin.H, 0, len(rows))
@@ -119,7 +119,7 @@ func CreateKBConnector(ctx *gin.Context) {
 		Enabled: enabled, LastStatus: "idle",
 	}
 	if err := kbAdminSvc().Create(ctx.Request.Context(), &conn); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"id": conn.ID}, "创建成功")
@@ -181,7 +181,7 @@ func UpdateKBConnector(ctx *gin.Context) {
 			response.NotFoundError(ctx, "连接器")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"ok": true}, "已更新")
@@ -198,7 +198,7 @@ func DeleteKBConnector(ctx *gin.Context) {
 			response.NotFoundError(ctx, "连接器")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"ok": true, "note": "已导入文档保留在知识库"}, "已删除")
@@ -224,7 +224,7 @@ func SyncKBConnector(ctx *gin.Context) {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, res, res.Summary)

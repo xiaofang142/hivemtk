@@ -185,12 +185,12 @@ func TestGetModuleFromPath_Team(t *testing.T) {
 // 按模块筛日志失效。
 func TestGetModuleFromPath_ResourceID(t *testing.T) {
 	cases := map[string]string{
-		"/api/users/123":                             "users",
-		"/api/marketing-flows/5/activate":            "marketing-flows",
-		"/api/message-hub/1413/read":                 "message-hub",
+		"/api/users/123":                                     "users",
+		"/api/marketing-flows/5/activate":                    "marketing-flows",
+		"/api/message-hub/1413/read":                         "message-hub",
 		"/api/material/8cb2b6f3-ae17-4be5-9a86-d7acb7e3eaa0": "material",
-		"/api/manage/order-drafts":                   "order-drafts",
-		"/api/manage/order-drafts/draft_1_2/confirm": "order-drafts",
+		"/api/manage/order-drafts":                           "order-drafts",
+		"/api/manage/order-drafts/draft_1_2/confirm":         "order-drafts",
 	}
 	for path, want := range cases {
 		if got := getModuleFromPath(path); got != want {

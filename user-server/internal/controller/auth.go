@@ -512,7 +512,7 @@ func (c *AuthController) GenerateBackupCodes(ctx *gin.Context) {
 
 	codes, err := c.mfaService.GenerateBackupCodes(ctx.Request.Context(), uid)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

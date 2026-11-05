@@ -78,13 +78,13 @@ func loadConf() map[string]string {
 	if p == "" {
 		return map[string]string{}
 	}
-	conf, _ := hostagent.ReadConfFile(p)
+	conf, _ := readConfFile(p)
 	return conf
 }
 
 // readConfFile 兼容入口：实现已收口到 internal/hostagent（与 ego-runner 同源）。
-// host_config_test.go 经此入口断言配置解析行为，不是死代码——golangci unused
-// 只扫非测试代码才误报过它（2026-10-31 删错一次，测试编译炸了才抓回来）。
+// host_config_test.go 经此入口断言配置解析行为；loadConf 也走这里，避免
+// golangci unused 把「仅测试引用的兼容入口」误判为死代码（2026-10-31 删错一次）。
 func readConfFile(path string) (map[string]string, error) { return hostagent.ReadConfFile(path) }
 
 // resolveServerURL 优先级：环境变量 > 配置文件的 server_url= > 编译期默认值。

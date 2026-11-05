@@ -24,14 +24,14 @@ func TestQQAccountUpdateReqAllowsEmptySecrets(t *testing.T) {
 
 	// 前端真实载荷：account_name/app_id 回填，两个 secret 为空串
 	body := map[string]any{
-		"account_name":    "APITestQQ-改",
-		"app_id":          "apitest-qq-1031",
-		"app_secret":      "",
-		"webhook_secret":  "",
-		"webhook_url":     "",
-		"webhook_enabled": false,
+		"account_name":     "APITestQQ-改",
+		"app_id":           "apitest-qq-1031",
+		"app_secret":       "",
+		"webhook_secret":   "",
+		"webhook_url":      "",
+		"webhook_enabled":  false,
 		"ai_agent_enabled": true,
-		"status":          1,
+		"status":           1,
 	}
 	raw, _ := json.Marshal(body)
 

@@ -2,7 +2,6 @@
 package controller
 
 import (
-	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
@@ -43,7 +42,7 @@ func (c *AgentAttributionController) GetPerformance(ctx *gin.Context) {
 
 	perfs, err := c.svc.GetPerformance(ctx.Request.Context(), &q)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, perfs, "获取成功")

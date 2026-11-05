@@ -1,4 +1,4 @@
-import { http } from '@/utils/http'
+import { http } from '@/utils/request'
 
 export const listProbeEngines = () =>
   http.get('/api/geo/probe/engines');

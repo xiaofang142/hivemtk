@@ -1,8 +1,8 @@
 package service
 
 import (
-	bizerr "hivemtk-user/internal/domain/errors"
 	"bytes"
+	bizerr "hivemtk-user/internal/domain/errors"
 
 	"context"
 

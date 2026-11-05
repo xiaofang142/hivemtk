@@ -20,7 +20,7 @@ func NewLeadMiningController() *LeadMiningController {
 func (c *LeadMiningController) GetConfig(ctx *gin.Context) {
 	cfg, err := service.GetLeadMiningConfig(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "success")
@@ -49,7 +49,7 @@ func (c *LeadMiningController) SaveConfig(ctx *gin.Context) {
 		return
 	}
 	if err := service.SaveLeadMiningConfig(ctx.Request.Context(), &cfg); err != nil {
-		response.Error(ctx, 500, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, cfg, "success")

@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
-	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/aiagent/knowledge/repository"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"

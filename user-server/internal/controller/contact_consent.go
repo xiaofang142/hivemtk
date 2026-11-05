@@ -37,7 +37,7 @@ func (ctrl *ContactConsentController) Timeline(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "100"))
 	events, err := ctrl.svc.Timeline(ctx.Request.Context(), ctx.Param("customer_id"), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": events, "total": len(events)}, "查询成功")
@@ -104,7 +104,7 @@ func (ctrl *ContactConsentController) SetPreference(ctx *gin.Context) {
 func (ctrl *ContactConsentController) ListPreferences(ctx *gin.Context) {
 	prefs, err := ctrl.svc.Preferences(ctx.Request.Context(), ctx.Param("customer_id"))
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": prefs, "total": len(prefs)}, "查询成功")

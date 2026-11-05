@@ -145,7 +145,7 @@ func (c *KnowledgeBaseController) Stats(ctx *gin.Context) {
 	}
 	stats, err := c.svc.GetKBStats(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if stats == nil {

@@ -1,4 +1,4 @@
-import { http } from '@/utils/http'
+import { http } from '@/utils/request'
 
 // 后端参数名是 search（不是 keyword），并且支持 page/limit 分页与 total 返回
 export const listEntities = (type, keyword, page = 1, limit = 20) =>

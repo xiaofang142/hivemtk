@@ -55,7 +55,7 @@ func (c *AlertRuleController) Create(ctx *gin.Context) {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, rule, "创建成功")
@@ -91,7 +91,7 @@ func (c *AlertRuleController) Update(ctx *gin.Context) {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, rule, "更新成功")
@@ -117,7 +117,7 @@ func (c *AlertRuleController) Delete(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "删除成功")
@@ -159,7 +159,7 @@ func (c *AlertRuleController) List(ctx *gin.Context) {
 	enabledOnly := ctx.Query("enabled_only") == "true"
 	list, total, err := c.svc.List(ctx.Request.Context(), page, size, enabledOnly)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": list, "total": total}, "")
@@ -212,7 +212,7 @@ func (c *AlertRuleController) ListHistory(ctx *gin.Context) {
 	source := ctx.Query("source")
 	list, total, err := c.svc.ListHistory(ctx.Request.Context(), page, size, uint(ruleID), source)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"list": list, "total": total}, "")
@@ -235,7 +235,7 @@ func (c *AlertRuleController) ResolveHistory(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.ResolveHistory(ctx.Request.Context(), uint(ruleID)); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "已标记为恢复")
@@ -253,7 +253,7 @@ func (c *AlertRuleController) Unread(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
 	out, err := c.svc.GetUnread(ctx.Request.Context(), limit)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

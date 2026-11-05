@@ -29,9 +29,9 @@ user-server/internal/service/objection_handler.go	1	存量：service 直接取 D
 user-server/internal/service/openapi.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/rag_product.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/sales_persona.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/sop_template.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
+user-server/internal/service/sop/sop_template.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增；2026-11-05 拆包迁入 sop/ 子包，处数不变）
 user-server/internal/service/tenant.go	1	存量：起步赠送经 tenantRepo.GetDB 取句柄（RBAC/sessionRepo 同款口径，2026-10-20 登记；全局 _db.GetDB 已改写清零）
-user-server/internal/service/tiktok_card.go	1	存量：卡片服务构造时取全局库句柄，收口需改构造注入
+user-server/internal/service/cards/tiktok_card.go	1	存量：卡片服务构造时取全局库句柄，收口需改构造注入（2026-11-05 拆包迁入 cards/ 子包，处数不变）
 user-server/internal/service/trace_learning/service.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/webhook.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/wecom.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）

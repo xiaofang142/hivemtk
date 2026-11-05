@@ -63,7 +63,7 @@ func TestKBCRUD_FullLifecycle(t *testing.T) {
 		t.Errorf("update description failed: %q", got2.Description)
 	}
 
-	listed, total, err := kbSvc.ListKBs(ctx, model.KnowledgeBaseTypeFAQ, "", agent1, "")
+	listed, total, err := kbSvc.ListKBs(ctx, model.KnowledgeBaseTypeFAQ, "", agent1, "", nil)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

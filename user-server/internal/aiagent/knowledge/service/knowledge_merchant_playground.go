@@ -160,6 +160,7 @@ func (s *KnowledgeMerchantService) Playground(ctx context.Context, req *Playgrou
 //   - category 非空：仅保留文档 category 与之相等（忽略大小写）的分段；
 //   - tags 非空：仅保留文档 tags 中命中任一标签（忽略大小写）的分段；
 //   - 文档已被删除或批量查询失败时保留该分段（检索结果不能因过滤元数据缺失而静默丢光）。
+//
 // 返回过滤后的分段与被过滤掉的条数（写进 DebugInfo，便于排查"结果为什么变少"）。
 func (s *KnowledgeMerchantService) applyDocLevelFilters(ctx context.Context, chunks []MerchantRAGChunk, category string, tags []string) ([]MerchantRAGChunk, int) {
 	category = strings.TrimSpace(category)

@@ -372,7 +372,7 @@ func (c *EmailGapController) RFMMatrixStats(ctx *gin.Context) {
 func (c *EmailGapController) DLQBatchRetry(ctx *gin.Context) {
 	n, err := c.svc.RetryDeadLetters(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"requeued": n}, "批量重试已入队")
@@ -409,7 +409,7 @@ func (c *EmailGapController) ClueApplySuggestions(ctx *gin.Context) {
 	}
 	res, err := c.svc.ClueApplySuggestions(ctx.Request.Context(), req.Action, req.Duplicates)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"merged": res.Merged, "skipped": res.Skipped, "failed": res.Failed}, "处理完成")
@@ -434,7 +434,7 @@ func (c *EmailGapController) ClueMerge(ctx *gin.Context) {
 	}
 	ok, err := c.svc.ClueMerge(ctx.Request.Context(), id, req.From)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"merged": ok}, "已合并")
@@ -452,7 +452,7 @@ func (c *EmailGapController) ClueForceCreate(ctx *gin.Context) {
 	}
 	ok, err := c.svc.ClueForceCreate(ctx.Request.Context(), row)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"created": ok}, "已强制创建")
@@ -474,7 +474,7 @@ func (c *BackupGapController) Preview(ctx *gin.Context) {
 
 	out, err := c.svc.PreviewTableStats(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	_ = b

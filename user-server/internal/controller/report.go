@@ -73,7 +73,7 @@ func (c *ReportController) GetOverview(ctx *gin.Context) {
 	}
 	data, err := c.svc.Overview(ctx.Request.Context(), from, to, ctx.Query("channel"), ctx.Query("source"))
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "ok")
@@ -96,7 +96,7 @@ func (c *ReportController) GetTimeseries(ctx *gin.Context) {
 	data, err := c.svc.Timeseries(ctx.Request.Context(), from, to,
 		ctx.Query("model"), ctx.Query("scenario"), ctx.Query("channel"), ctx.Query("source"))
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "ok")
@@ -152,7 +152,7 @@ func (c *ReportController) GetErrors(ctx *gin.Context) {
 	}
 	data, err := c.svc.ErrorReport(ctx.Request.Context(), from, to, ctx.Query("error_class"), page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, data, "ok")

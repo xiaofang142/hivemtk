@@ -24,7 +24,7 @@ func NewRagProductController() *RagProductController {
 func (c *RagProductController) List(ctx *gin.Context) {
 	products, err := c.svc.List(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, products, "ok")
@@ -36,7 +36,7 @@ func (c *RagProductController) List(ctx *gin.Context) {
 func (c *RagProductController) Stats(ctx *gin.Context) {
 	stats, err := c.svc.Stats(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, stats, "ok")
@@ -70,7 +70,7 @@ func (c *RagProductController) Create(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Create(ctx.Request.Context(), &p); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, p, "ok")
@@ -85,7 +85,7 @@ func (c *RagProductController) Update(ctx *gin.Context) {
 	}
 	p.ID = id
 	if err := c.svc.Update(ctx.Request.Context(), &p); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, p, "ok")
@@ -94,7 +94,7 @@ func (c *RagProductController) Update(ctx *gin.Context) {
 func (c *RagProductController) Delete(ctx *gin.Context) {
 	id := ctx.Param("id")
 	if err := c.svc.Delete(ctx.Request.Context(), id); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"deleted": id}, "ok")

@@ -80,7 +80,7 @@ func (ctrl *BridgeAccountController) SendManual(c *gin.Context) {
 		case errors.Is(err, bridge.ErrBridgeAccountRepoNotReady):
 			response.Error(c, http.StatusServiceUnavailable, err.Error())
 		default:
-			response.Error(c, http.StatusInternalServerError, err.Error())
+			response.ErrorFromDB(c, err, "操作失败，请稍后重试")
 		}
 		return
 	}

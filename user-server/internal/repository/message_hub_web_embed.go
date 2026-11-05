@@ -7,12 +7,17 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"hivemtk-user/internal/model"
 
 	"gorm.io/gorm"
 )
+
+// errWebEmbedRepoUnavailable 句柄缺失＝装配漏线，不是「没有这条会话」。
+var errWebEmbedRepoUnavailable = errors.New("message hub repository not ready")
 
 // WebEmbedDeliveryInput 直投事务的全部写参。
 type WebEmbedDeliveryInput struct {
@@ -71,6 +76,53 @@ func (r *MessageHubRepository) DeliverWebEmbedOutboundTx(ctx context.Context, in
 
 // MarkDeliveredAt 幂等补写访客侧消息的 delivered_at（WS 推送成功后调用）。
 func (r *SessionMessageRepository) MarkDeliveredAt(ctx context.Context, messageID uint, at time.Time) error {
+	return r.db.WithContext(ctx).Model(&model.SessionMessage{}).
+		Where("id = ?", messageID).Update("delivered_at", &at).Error
+}
+
+// FindDeliverableWebEmbedSession 定位可直投的网页客服会话：
+// ConversationID 非空先按 chat session_id 精确找；未命中（或为空）回退到该渠道
+// 最近一条未结束会话（与访客离线续接同一套排序口径）。
+func (r *MessageHubRepository) FindDeliverableWebEmbedSession(ctx context.Context, conversationID, accountID string) (*model.CustomerSession, error) {
+	if r == nil || r.db == nil {
+		return nil, errWebEmbedRepoUnavailable
+	}
+	var session model.CustomerSession
+	db := r.db.WithContext(ctx)
+	err := db.Where("platform = ? AND session_id = ?", model.PlatformWebEmbed, conversationID).
+		First(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = db.Where("platform = ? AND account_id = ?", model.PlatformWebEmbed, accountID).
+			Where("status NOT IN ?", []model.SessionStatus{model.SessionStatusResolved, model.SessionStatusClosed}).
+			Order("last_message_at DESC NULLS LAST, created_at DESC").
+			First(&session).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+// UpdateHubExtra 只写回 hub 行的 extra（web_embed 直投失败轨迹；不动 status，
+// 待办集合仍能把 pending 行捞起）。
+func (r *MessageHubRepository) UpdateHubExtra(ctx context.Context, msgID uint, extra model.JSONMap) error {
+	if r == nil || r.db == nil {
+		return errWebEmbedRepoUnavailable
+	}
+	extraJSON, err := json.Marshal(extra)
+	if err != nil {
+		return err
+	}
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("id = ?", msgID).Update("extra", string(extraJSON)).Error
+}
+
+// MarkSessionMessageDeliveredAt 幂等补写访客侧消息的 delivered_at（WS 推送成功后调用）。
+// 收在 hub 仓储上供直投链路复用，service 无需自行构造 SessionMessageRepository。
+func (r *MessageHubRepository) MarkSessionMessageDeliveredAt(ctx context.Context, messageID uint, at time.Time) error {
+	if r == nil || r.db == nil {
+		return errWebEmbedRepoUnavailable
+	}
 	return r.db.WithContext(ctx).Model(&model.SessionMessage{}).
 		Where("id = ?", messageID).Update("delivered_at", &at).Error
 }

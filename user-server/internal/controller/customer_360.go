@@ -534,7 +534,7 @@ func (c *Customer360Controller) GetCustomerCommunications(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "客户不存在")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 

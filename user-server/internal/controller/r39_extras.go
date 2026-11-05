@@ -45,7 +45,7 @@ func (c *MarketingFlowSyncController) SyncABResults(ctx *gin.Context) {
 			response.Success(ctx, gin.H{"synced": false, "results": []any{}}, "流程未绑定实验")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	if err := c.abService.CalculateResults(ctx.Request.Context(), experiment.ID); err != nil {
@@ -54,7 +54,7 @@ func (c *MarketingFlowSyncController) SyncABResults(ctx *gin.Context) {
 	}
 	results, err := c.abService.GetExperimentResults(ctx.Request.Context(), experiment.ID)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"synced": true, "experiment_id": experiment.ID, "results": results}, "实验结果已回流")
@@ -167,7 +167,7 @@ func (c *WebVitalsController) Report(ctx *gin.Context) {
 		rec.UserAgent = ctx.Request.UserAgent()
 	}
 	if err := c.svc.Report(ctx.Request.Context(), rec); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"recorded": true}, "ok")
