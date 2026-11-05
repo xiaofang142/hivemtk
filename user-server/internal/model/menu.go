@@ -392,6 +392,7 @@ var SystemMenuTree = []SystemMenuNode{
 							{Key: "geoVerification", Title: "多模型验证", Icon: "CircleCheck", Path: "/geo-tools/verification"},
 							{Key: "geoAlerts", Title: "预警中心", Icon: "Bell", Path: "/geo-tools/alerts"},
 							{Key: "geoReports", Title: "数据报表", Icon: "DataAnalysis", Path: "/geo-tools/reports"},
+							{Key: "geoDualEngine", Title: "双端监测", Icon: "DataBoard", Path: "/geo-tools/dual-engine"},
 							{Key: "geoDecisionReport", Title: "决策报告", Icon: "Document", Path: "/geo/decision-report"},
 						},
 					},

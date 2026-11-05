@@ -177,6 +177,12 @@ export default [
     meta: { title: '成本报表', group: 'observe', icon: 'Money', order: 8, requiresAuth: true }
   },
   {
+    path: '/geo-tools/dual-engine',
+    name: 'GeoDualEngine',
+    component: () => import('@/views/geo/DualEngineBoard.vue'),
+    meta: { title: '双端监测', group: 'observe', icon: 'DataBoard', order: 9, requiresAuth: true }
+  },
+  {
     path: '/geo-tools/alerts',
     name: 'GeoAlertCenter',
     component: () => import('@/views/geo/AlertCenter.vue'),

@@ -410,6 +410,8 @@ func allModels() []any {
 		// 审计中心：一次体检一条 run，逐检查项一条 item。报告与 compare 都读这两张表。
 		&geomodel.GeoAuditRun{},
 		&geomodel.GeoAuditItem{},
+		// GSC 性能数据（query/page/clicks/impressions/ctr/position）。
+		&geomodel.GeoSearchQuery{},
 
 		// GeoCrawlerVisit 此前是 29 个 geo 模型里**唯一没登记**的：
 		// internal/router/router.go 的 AICrawlerMonitor 回调会 fire-and-forget 地写入它，

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
@@ -44,6 +45,10 @@ type failingRecordRepo struct{ err error }
 
 func (r *failingRecordRepo) BatchCreate(_ context.Context, _ []*model.GeoPushRecord) error {
 	return r.err
+}
+
+func (r *failingRecordRepo) GoogleStats(_ context.Context, _ time.Time) (int64, int64, error) {
+	return 0, 0, r.err
 }
 
 func newPushSvcForTest(t *testing.T, records repository.GeoPushRecordRepository, pushers map[string]Pusher) *PushService {

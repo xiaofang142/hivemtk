@@ -183,6 +183,13 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auditSvc := geoservice.NewAuditService(georepo.NewGeoAuditRepositoryWithDB(gormDB), alertSvc)
 	auditCtrl := geoctrl.NewAuditController(auditSvc)
 
+	searchConsoleSvc := geoservice.NewSearchConsoleService(
+		georepo.NewGeoSearchQueryRepositoryWithDB(gormDB),
+		georepo.NewGeoProbeRunRepositoryWithDB(gormDB),
+		georepo.NewGeoPushRecordRepositoryWithDB(gormDB),
+	)
+	searchConsoleCtrl := geoctrl.NewSearchConsoleController(searchConsoleSvc)
+
 	geo := auth.Group("/geo")
 
 	geo.POST("/audit/site", auditCtrl.RunSite)
@@ -191,6 +198,9 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.GET("/audit/runs/:id", auditCtrl.Get)
 	geo.GET("/audit/runs/:id/report", auditCtrl.Report)
 	geo.GET("/audit/compare", auditCtrl.Compare)
+
+	geo.POST("/search-console/import", searchConsoleCtrl.Import)
+	geo.GET("/reports/dual-engine", searchConsoleCtrl.DualEngine)
 
 	geo.POST("/keywords/mine", keywordCtrl.MineKeywords)
 	geo.POST("/keywords/expand", keywordCtrl.SemanticExpand)
