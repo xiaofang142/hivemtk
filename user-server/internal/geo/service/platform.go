@@ -144,7 +144,7 @@ func (s *PlatformService) validateAccount(req *dto.SavePlatformAccountRequest) e
 		}
 	case "webhook":
 		if req.Credentials == nil || (req.Credentials["url"] == "" && req.Credentials["endpoint"] == "") {
-			return fmt.Errorf("Webhook 需要 url（额外配置填 {\"url\":\"https://...\"}）")
+			return fmt.Errorf("webhook 需要 url（额外配置填 {\"url\":\"https://...\"}）")
 		}
 	}
 	return nil

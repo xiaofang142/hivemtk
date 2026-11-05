@@ -7,9 +7,9 @@
 ## 核心工作流
 
 ```
-品牌配置 → 关键词蒸馏 → 内容创作 → 多模型验证 → 平台同步发布
-                ↑                             ↓
-           数据增强 ← 历史验证数据 ←──────────┘
+审计体检 → 品牌/产品六问 → 关键词蒸馏 → 内容创作 → 多模型验证 / 双端监测
+   ↑                                                        ↓
+   └──────── 月度复查对比 ←── 承接页（FAQ/留资/首响）←── 平台发布
 ```
 
 ---
@@ -73,8 +73,41 @@
 
 | 功能 | 说明 |
 |------|------|
-| **平台管理** | GitHub/掘金/知乎/CSDN/微博 等 12 平台账号管理 |
-| **一键发布** | GitHub API 直接写入 README / 其他平台记录待手动发布 |
+| **平台管理** | 当前 5 个平台定义：GitHub README / GitHub Blog / WordPress / 通用 Webhook / Medium（手动） |
+| **真实发布** | GitHub（Contents API）、WordPress（XML-RPC `wp.newPost`）、通用 Webhook（JSON + 可选 HMAC）为 `real_api` |
+| **手动发布** | Medium 无开放写接口，只提供手动复制；知乎/掘金/CSDN 等未内置，不做“假装已发布”的记录 |
+
+账号配置：
+
+- GitHub：AppKey = owner，Secret = Personal Access Token（repo 权限）
+- WordPress：AppKey = 用户名，Secret = 应用密码，额外配置 `{"endpoint":"https://站点/xmlrpc.php"}`
+- Webhook：Secret = 可选 HMAC 密钥，额外配置 `{"url":"https://接收端"}`
+
+### 7. 审计中心 (`/geo-tools/audit-center`)
+
+| 功能 | 说明 |
+|------|------|
+| **站点体检** | rubric v3（112 分，含产品定位/人群/代际差异/版本时效），支持单页或 sitemap 全站（默认 10 页、上限 20） |
+| **内容体检** | 抓 URL 正文/meta/JSON-LD，跑 content-v2 因子并落库 |
+| **复查对比** | 同 rubric 版本才可比；输出新增/修复/回退；报告可下载 HTML/CSV |
+| **月度任务** | `site_audit` 每月 1 日跑启用站点，分数下降 > 8 写告警 |
+
+### 8. 双端监测 (`/geo-tools/dual-engine`)
+
+| 功能 | 说明 |
+|------|------|
+| **AI 端** | 探针次数/品牌提及/引用数，按引擎与 `mode`（simulated/real/manual）分列 |
+| **Google 端** | 导入 GSC 性能 CSV（Top queries / Top pages），展示点击/展现/CTR/平均排名 |
+| **口径** | AI 提及与 Google 点击不混算；无日期列标 `gsc_csv_undated`，不冒充精确日粒度 |
+
+### 9. 承接链接 (`/geo-tools/capture-links`)
+
+| 功能 | 说明 |
+|------|------|
+| **公开落地页** | `GET /api/public/geo/l/:code`，访客可看标题/关键词、去目标链接 |
+| **FAQ** | `POST .../ask` 复用知识库 RAG；单链接每日 200 次上限 |
+| **留资** | `POST .../lead` 写统一线索池（类型 18），单链接每日 100 条上限；有 OneID 时回填归因链 |
+| **首响** | 按 `clues.one_id → customer_sessions` 统计；没有会话显示“未接入”，不展示零延迟 |
 
 ---
 
@@ -182,6 +215,29 @@ POST   /api/geo/platform/publish      发布到平台
 GET    /api/geo/platform/records      发布记录
 ```
 
+### 审计 / 双端 / 承接
+
+```
+POST   /api/geo/audit/site                   站点体检（scope=page|site）
+POST   /api/geo/audit/content                内容体检（给 URL 自动抓正文）
+GET    /api/geo/audit/runs                   体检历史
+GET    /api/geo/audit/runs/:id               详情
+GET    /api/geo/audit/runs/:id/report        报告（format=html|csv）
+GET    /api/geo/audit/compare                同 rubric 两次对比
+
+POST   /api/geo/search-console/import        导入 GSC CSV/JSON
+GET    /api/geo/reports/dual-engine          AI/Google 双端报表
+
+POST   /api/geo/capture/links                创建承接链接
+GET    /api/geo/capture/links                列表
+GET    /api/geo/capture/links/:id            详情 + 首响
+DELETE /api/geo/capture/links/:id            删除
+
+GET    /api/public/geo/l/:code               公开落地页（HTML；?format=json）
+POST   /api/public/geo/l/:code/ask           公开 FAQ（每日配额）
+POST   /api/public/geo/l/:code/lead          公开留资（每日配额）
+```
+
 ### 资源 / 配置 / 指标
 
 ```
@@ -222,7 +278,7 @@ A: 是的。工作流中的 `content_generate`、`content_score`、`eeat_enhance
 A: 当前实现使用 PostgreSQL 内存检索（关键词匹配），适合几百篇以内的品牌知识库。如需更大规模，建议后续接入 pgvector 向量检索。
 
 **Q: 平台同步支持哪些平台？**
-A: GitHub（API 直连写入 README），掘金/知乎/CSDN/微博/小红书/抖音/今日头条/Medium/WordPress 等通过复制模式（手动粘贴）。
+A: 真正走 API 的只有 GitHub（Contents API）、WordPress（XML-RPC）和通用 Webhook；Medium 只支持手动复制。知乎/掘金/CSDN 等未内置，页面不会伪造发布记录。
 
 **Q: 关键词数据增强怎么工作的？**
 A: 它分析历史验证结果中的查询，统计每个关键词的提及率，提取高价值关键词，然后用 LLM 生成增强建议。需要先运行过 AI 搜索验证功能积累数据。

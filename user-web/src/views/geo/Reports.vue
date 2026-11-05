@@ -146,6 +146,86 @@
     
     <el-card
       shadow="never"
+      class="format-card"
+    >
+      <template #header>
+        <span class="card-title">内容格式归因（按意图）</span>
+      </template>
+      <el-table
+        v-loading="formatLoading"
+        :data="formatRows"
+        stripe
+        style="width: 100%"
+      >
+        <el-table-column
+          prop="intent"
+          label="意图"
+          width="120"
+        />
+        <el-table-column
+          prop="content_format"
+          label="内容格式"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="queries"
+          label="样本量"
+          width="90"
+          align="right"
+        />
+        <el-table-column
+          prop="mentions"
+          label="品牌提及"
+          width="100"
+          align="right"
+        />
+        <el-table-column
+          label="提及率"
+          width="100"
+          align="right"
+        >
+          <template #default="{ row }">
+            {{ ((row.mention_rate || 0) * 100).toFixed(1) }}%
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="引用率"
+          width="100"
+          align="right"
+        >
+          <template #default="{ row }">
+            {{ ((row.citation_rate || 0) * 100).toFixed(1) }}%
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="结论"
+          width="110"
+        >
+          <template #default="{ row }">
+            <el-tag
+              v-if="row.queries < 10"
+              size="small"
+              type="info"
+            >
+              样本不足
+            </el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-if="!formatRows.length && !formatLoading"
+        description="暂无意图归因数据（先跑决策链探针）"
+        :image-size="60"
+      />
+      <div class="kpi-note">
+        口径：按 geo_query_chains 的意图分组；样本量 &lt; 10 的分组不下结论。
+      </div>
+    </el-card>
+
+    <el-card
+      shadow="never"
       class="roi-card"
     >
       <template #header>
@@ -228,6 +308,8 @@ const dateRange = ref([])
 const summary = ref({})
 const costRows = ref([])
 const roi = ref({})
+const formatRows = ref([])
+const formatLoading = ref(false)
 
 const filter = reactive({})
 
@@ -288,6 +370,26 @@ const loadCosts = async () => {
   }
 }
 
+const daysParam = () => {
+  const [start, end] = dateRange.value || []
+  if (!start || !end) return 30
+  const days = Math.ceil((new Date(end) - new Date(start)) / 86400000) + 1
+  return Math.min(90, Math.max(1, days))
+}
+
+const loadFormat = async () => {
+  formatLoading.value = true
+  try {
+    const res = await geoApi.getContentFormatAttribution(daysParam())
+    formatRows.value = res?.rows || []
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '内容格式归因加载失败')
+    formatRows.value = []
+  } finally {
+    formatLoading.value = false
+  }
+}
+
 const loadROI = async () => {
   roiLoading.value = true
   try {
@@ -304,6 +406,7 @@ const loadROI = async () => {
 const loadAll = () => {
   loadSummary()
   loadCosts()
+  loadFormat()
   loadROI()
 }
 

@@ -327,7 +327,7 @@
               size="small"
               :type="sourceTagType(row.source)"
             >
-              {{ row.source || '—' }}
+              {{ sourceLabel(row.source) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -536,8 +536,45 @@ const layerTagType = (layer) => {
 }
 
 const sourceTagType = (source) => {
-  const map = { AI: 'primary', 词库: 'warning', 混合: 'success', suggest: 'warning', longtail: 'danger', 下拉词: 'warning', 长尾: 'danger' }
+  if (!source) return 'info'
+  if (source.startsWith('suggest_')) return 'success'
+  const map = {
+    AI: 'primary',
+    llm: 'primary',
+    词库: 'warning',
+    混合: 'success',
+    mixed: 'success',
+    combination: 'warning',
+    template_combined: 'warning',
+    manual_seed: 'info',
+    data_enhanced: 'danger',
+    semantic_expand: 'danger',
+    suggest: 'success',
+    longtail: 'danger',
+    下拉词: 'success',
+    长尾: 'danger'
+  }
   return map[source] || 'info'
+}
+
+// 数据来源必须一眼可辨：真实下拉接口抓到的 ≠ LLM 估算的。
+const sourceLabel = (source) => {
+  if (!source) return '未知'
+  if (source.startsWith('suggest_')) return '真实下拉·' + source.slice('suggest_'.length)
+  const map = {
+    llm: 'LLM 估算',
+    mixed: '混合',
+    combination: '词库组合',
+    template_combined: '模板组合',
+    manual_seed: '人工种子',
+    data_enhanced: '历史数据回流',
+    semantic_expand: '语义扩展',
+    AI: 'LLM 估算',
+    词库: '词库',
+    混合: '混合',
+    下拉词: '真实下拉'
+  }
+  return map[source] || source
 }
 
 const parseSeeds = () => {

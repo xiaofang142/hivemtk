@@ -56,6 +56,24 @@ export const geoApi = {
     return http.post('/api/geo/index-tracking/verify-all')
   },
 
+  // ⬇️ GEO v2：引用漂移 / 域名 / 矩阵
+  getCitationDrift(params = {}) {
+    return http.get('/api/geo/citations/drift', params)
+  },
+
+  getCitationDomains(days = 30) {
+    return http.get('/api/geo/citations/domains', { days })
+  },
+
+  getCitationMatrix(days = 30, topQueries = 20, topDomains = 10) {
+    return http.get('/api/geo/citations/matrix', { days, top_queries: topQueries, top_domains: topDomains })
+  },
+
+  downloadCitationCSV(kind, params = {}) {
+    const path = kind === 'matrix' ? '/api/geo/citations/matrix' : '/api/geo/citations/domains'
+    return http.get(path, { ...params, format: 'csv' }, { responseType: 'blob' })
+  },
+
   // ⬇️ GEO v2：静态站部署
   exportSite() {
     return http.post('/api/geo/site/export')
@@ -191,6 +209,10 @@ export const geoApi = {
 
   getAPICosts(params) {
     return http.get('/api/geo/reports/api-costs', params)
+  },
+
+  getContentFormatAttribution(days = 30) {
+    return http.get('/api/geo/reports/content-format', { days })
   },
 
   getConfig() {

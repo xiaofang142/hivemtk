@@ -26,7 +26,7 @@ func (s *PlatformService) publishWebhook(ctx context.Context, article *model.Geo
 	}
 	endpoint := firstNonEmpty(creds["url"], creds["endpoint"])
 	if endpoint == "" {
-		return nil, fmt.Errorf("Webhook 缺少 url")
+		return nil, fmt.Errorf("webhook 缺少 url")
 	}
 	if err := validateOutboundURL(endpoint, true); err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (s *PlatformService) publishWebhook(ctx context.Context, article *model.Geo
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
 		s.saveFailedRecord(ctx, article.ID, req.Platform, err.Error())
-		return nil, fmt.Errorf("Webhook 请求失败: %w", err)
+		return nil, fmt.Errorf("webhook 请求失败: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -74,7 +74,7 @@ func (s *PlatformService) publishWebhook(ctx context.Context, article *model.Geo
 			msg = msg[:500]
 		}
 		s.saveFailedRecord(ctx, article.ID, req.Platform, msg)
-		return nil, fmt.Errorf("Webhook %d: %s", resp.StatusCode, msg)
+		return nil, fmt.Errorf("webhook %d: %s", resp.StatusCode, msg)
 	}
 
 	publishedURL := endpoint

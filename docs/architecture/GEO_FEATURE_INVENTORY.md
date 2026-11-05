@@ -3,7 +3,7 @@
 > 业务域：GEO（Generative Engine Optimization，生成式引擎优化）
 > 代码位置：`user-server/internal/geo/`
 > 路由挂载：`user-server/internal/router/geo_routes.go` → `SetupGeoRoutes(auth, gormDB)`
-> 架构约束：单租户共享工作区（无 user_id / tenant_id 归属字段），仅 config 写入/优化设 AdminAuth
+> 架构约束：多租户（所有 GEO 表带 `tenant_id`，由 GORM 隔离 callback 自动填充/过滤；公开落地页按 code 自证租户），config 写入/优化与 job/字典写入设 AdminAuth
 
 ---
 
@@ -12,18 +12,18 @@
 ```
 internal/geo/
 ├── doc.go                          模块设计声明 + 全局设计决策锚点
-├── controller/                     9 个 Handler（+ 1 个决策链 Controller）
-├── service/                        18 个 Service（含 v3 决策链化新增）
-├── repository/                     9 个 Repository 接口
-├── model/                          7 个 GORM Model
-└── dto/                            9 个 DTO 子包（请求/响应契约）
+├── controller/                     35 个 Controller 构造器
+├── service/                        39 个 Service（含探针/审计/承接/发布适配器）
+├── repository/                     35 个 Repository 接口
+├── model/                          37 个 GORM Model
+└── dto/                            11 个 DTO 文件（请求/响应契约）
 ```
 
 ---
 
 ## 2. 五层架构清单
 
-### 2.1 Model 层（7 张主表 + 7 张附属表）
+### 2.1 Model 层（37 个模型）
 
 | 文件 | 模型 | 核心字段 | 备注 |
 |------|------|---------|------|
@@ -36,9 +36,9 @@ internal/geo/
 | `model/crawler_visit.go` | `GeoCrawlerVisit` | user_agent, path, engine(GPTBot/PerplexityBot), ip | v3 A6 爬虫访问记录 |
 | `model/workflow.go` | `GeoWorkflow` + `GeoWorkflowExecution` | steps(JSON), conditions(JSON), schedule | 工作流定义 + 执行记录 |
 
-> 额外模型（repository 依赖但 service 未单列文件）：`GeoOptimization`、`GeoAPICall`、`GeoPlatformAccount`、`GeoPublishRecord`、`GeoContentTask`、`GeoWorkflowTemplate`、`GeoKeywordGroup`。
+> 2026-11 新增：`GeoAuditRun` / `GeoAuditItem`（体检历史与逐项问题）、`GeoSearchQuery`（GSC 性能数据，`(tenant_id,row_key)` 唯一）、`GeoCaptureLink`（公开承接码/点击/线索/每日配额）。完整 37 个模型见 `internal/geo/model/`。
 
-### 2.2 Repository 层（9 个接口）
+### 2.2 Repository 层（35 个接口）
 
 | 文件 | 接口 | 核心方法 |
 |------|------|---------|
@@ -52,7 +52,7 @@ internal/geo/
 | `repository/workflow.go` | `GeoWorkflowRepository` + `GeoWorkflowExecutionRepository` + `GeoWorkflowTemplateRepository` | CRUD + Run + ListExecutions |
 | `repository/geo_test.go` | — | test helper `setupGeoTestDB` |
 
-### 2.3 Service 层（18 个服务文件）
+### 2.3 Service 层（39 个 Service 类型）
 
 | 文件 | Service | 核心功能 | 依赖 |
 |------|---------|---------|------|
@@ -75,7 +75,7 @@ internal/geo/
 | `service/decision_executors.go` | 决策链执行器 | query_probe / source_attribution / content_gap_fill / capture_lead 四类步骤 | SearchProbe + ChainRepo + TaskRepo + LeadCapturePort（portcontract） |
 | `service/decision_analytics.go` | `GeoDecisionAnalyticsService` | v3 竞品对齐：A1 SOV 品牌声量 / A6 爬虫统计 / A7 不准确声明检测 | VerifyRepo + TaskRepo + ChainRepo + CrawlerRepo + LLMAdapter |
 
-### 2.4 Controller 层（10 个 Handler）
+### 2.4 Controller 层（35 个构造器）
 
 | 文件 | Controller | 路由前缀 | 核心端点 |
 |------|-----------|---------|---------|
@@ -91,7 +91,7 @@ internal/geo/
 | `controller/keyword_enhance.go` | `KeywordEnhanceController` | `/geo/keyword-enhance` | analyze / enhance |
 | `controller/decision_controller.go` | `GeoDecisionController` | `/geo/decision`(直接挂 auth) | report / tasks GET / tasks/:id/done POST |
 
-### 2.5 DTO 层
+### 2.5 DTO 层（11 个文件）
 
 | 文件 | 用途 |
 |------|------|
@@ -123,7 +123,10 @@ internal/geo/
 
 ## 4. 路由总览
 
-全部挂在 `auth.Group("/geo")` 下（`/api` 前缀由外层 router 提供）：
+共 **147 条**注册（`geo_routes.go` 内联统计）：144 条鉴权路由（含 3 条直接挂 `auth` 的决策端点）+ 3 条公开承接路由。
+鉴权路由挂在 `auth.Group("/geo")` 下（`/api` 前缀由外层 router 提供）；公开路由为
+`GET /api/public/geo/l/:code`、`POST .../ask`、`POST .../lead`，由 `PublicCodeTenant` 按 code 绑定租户。
+下面保留核心路由示例，完整清单以 `geo_routes.go` 为准：
 
 ```
 GET    /api/geo/config                               ConfigController.GetConfig
@@ -215,10 +218,12 @@ POST   /api/geo/inaccurate-claims                    -> GeoDecisionAnalyticsServ
 
 ## 6. 设计约束（doc.go 声明）
 
-1. **单租户**：无 user_id / tenant_id 字段，不做归属过滤
+1. **多租户**：所有 GEO 表带 `tenant_id`；写入由隔离 callback 填充，读取自动过滤；公开入口（短链/落地页/活码）按业务码反查唯一租户，反查失败 fail-closed
 2. **凭据安全**：`internal/pkg/crypto` AES-256-GCM 加密；`FIELD_ENCRYPTION_KEY >= 32 字节`；接口层一律脱敏
 3. **LLM 成本**：`EstimateCostUSD` 返回 USD/CNY 双值，**估算而非账单**
-4. **已知演进方向**：pgvector 语义检索（知识库）、workflow JSONB 化、geo_api_calls 时间索引
+4. **数据来源诚实**：探针 `mode=simulated/real/manual` 全链路透传；GSC 数据标 `gsc_csv`/`gsc_csv_undated`；平台能力只有 GitHub/WordPress/Webhook 标 `real_api`，Medium 标 `manual`；首响无会话时显示“未接入”
+5. **审计口径版本化**：站点 rubric v2/v3、内容 rubric content-v1/v2 落库；跨版本 compare 明确“不可比”
+6. **已知演进方向**：pgvector 语义检索（知识库）、workflow JSONB 化、geo_api_calls 时间索引
 
 ---
 
@@ -226,9 +231,10 @@ POST   /api/geo/inaccurate-claims                    -> GeoDecisionAnalyticsServ
 
 | 维度 | 数量 |
 |------|------|
-| Model | 7 主模型 + 7 附属模型 |
-| Repository 接口 | 9（含附属 4 个） |
-| Service 文件 | 18（含 prompts / intent_matrix 工具类） |
-| Controller | 10 |
-| DTO 文件 | 9 |
-| 路由端点 | 52（含 Admin 2 个 + 内联 handler 3 个） |
+| Model | 37 |
+| Repository 接口 | 35 |
+| Service 类型 | 39 |
+| Controller 构造器 | 35 |
+| DTO 文件 | 11 |
+| 路由注册 | 147（鉴权 144 + 公开 3） |
+| 前端页面 | 30（`user-web/src/views/geo/`） |
