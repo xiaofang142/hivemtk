@@ -382,6 +382,12 @@ var SystemMenuTree = []SystemMenuNode{
 						},
 					},
 					{
+						Key: "geoCapture", Title: "承接", Icon: "ChatDotRound",
+						Children: []SystemMenuNode{
+							{Key: "geoCaptureLinks", Title: "承接链接", Icon: "Link", Path: "/geo-tools/capture-links"},
+						},
+					},
+					{
 						Key: "geoMonitor", Title: "监控", Icon: "Monitor",
 						Children: []SystemMenuNode{
 							{Key: "geoFunnelDashboard", Title: "漏斗总览", Icon: "DataAnalysis", Path: "/geo-tools/funnel-dashboard"},

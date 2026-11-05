@@ -183,6 +183,12 @@ export default [
     meta: { title: '双端监测', group: 'observe', icon: 'DataBoard', order: 9, requiresAuth: true }
   },
   {
+    path: '/geo-tools/capture-links',
+    name: 'GeoCaptureLinks',
+    component: () => import('@/views/geo/CaptureLinks.vue'),
+    meta: { title: '承接链接', group: 'observe', icon: 'Link', order: 10, requiresAuth: true }
+  },
+  {
     path: '/geo-tools/alerts',
     name: 'GeoAlertCenter',
     component: () => import('@/views/geo/AlertCenter.vue'),

@@ -2,16 +2,21 @@ package router
 
 import (
 	"context"
+	"strings"
 
+	"hivemtk-user/internal/config"
+	maindto "hivemtk-user/internal/dto"
 	geoctrl "hivemtk-user/internal/geo/controller"
 	georepo "hivemtk-user/internal/geo/repository"
 	geoservice "hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/identity"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	mainrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	cardsvc "hivemtk-user/internal/service/cards"
 
 	"hivemtk-user/internal/aiagent/llm"
 
@@ -53,6 +58,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	wfSvc := geoservice.NewWorkflowService(wfRepo, execRepo, tplRepo, chainRepo, taskRepo, llmAdapter)
 
 	mainClueRepo := mainrepo.NewClueRepositoryWithDB(gormDB)
+	identitySvc := service.NewCustomerIdentityService()
 
 	decisionCtrl := geoctrl.NewGeoDecisionController(
 		geoservice.NewDecisionService(taskRepo, newGeoLeadReporter(mainClueRepo)),
@@ -71,25 +77,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		llmAdapter,
 		georepo.NewGeoAPICallRepositoryWithDB(gormDB))
 
-	wfSvc.RegisterCaptureLeadExecutor(geoservice.CaptureLeadFunc(func(ctx context.Context, contact, contactType, chainID, intent string) (string, error) {
-		clue := &model.Clue{
-			Account:  contact,
-			Name:     contact,
-			SourceID: chainID,
-			// GEO 捕获有自己的类型号（旧版本借用抖音的 9，列表页因此把它叫成抖音、
-			// 还与抖音线索共用 (type, account) 判重键）。存量 9 的改判见 v3.56.0。
-			Type: service.ClueTypeGeoCapture,
-		}
-		if err := mainClueRepo.Create(ctx, clue); err != nil {
-			return "", err
-		}
-
-		if clue.OneID != "" {
-			_, err := chainRepo.BindOneIDToChain(ctx, chainID, clue.OneID)
-			utils.WarnErrKV("router.geo.bindOneIDToChain", err, "chain_id", chainID, "one_id", clue.OneID, "clue_id", clue.ID)
-		}
-		return clue.ID, nil
-	}))
+	wfSvc.RegisterCaptureLeadExecutor(geoCaptureLeadPort(mainClueRepo, chainRepo, identitySvc))
 	keSvc := geoservice.NewKeywordEnhanceService(keywordRepo, verifyRepo, llmAdapter)
 
 	keywordCtrl := geoctrl.NewKeywordController(keywordSvc)
@@ -190,7 +178,25 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	)
 	searchConsoleCtrl := geoctrl.NewSearchConsoleController(searchConsoleSvc)
 
+	captureSvc := geoservice.NewCaptureService(
+		georepo.NewGeoCaptureLinkRepositoryWithDB(gormDB),
+		kbSvc,
+		geoCaptureLeadPort(mainClueRepo, chainRepo, identitySvc),
+		geoCaptureShortLinkAdapter{svc: cardsvc.NewShortLinkService(
+			mainrepo.NewShortLinkRepository(gormDB),
+			mainrepo.NewDomainPoolRepository(gormDB),
+			mainrepo.NewShortLinkAccessRepository(gormDB),
+		)},
+		config.GetPublicBaseURL(),
+	)
+	captureCtrl := geoctrl.NewCaptureController(captureSvc)
+
 	geo := auth.Group("/geo")
+
+	geo.POST("/capture/links", captureCtrl.Create)
+	geo.GET("/capture/links", captureCtrl.List)
+	geo.GET("/capture/links/:id", captureCtrl.Get)
+	geo.DELETE("/capture/links/:id", captureCtrl.Delete)
 
 	geo.POST("/audit/site", auditCtrl.RunSite)
 	geo.POST("/audit/content", auditCtrl.RunContent)
@@ -387,4 +393,87 @@ func newGeoLeadReporter(clues mainrepo.ClueRepository) *geoLeadReporter {
 func (r *geoLeadReporter) CountCapturedLeads(ctx context.Context) (int64, error) {
 	clueType := service.ClueTypeGeoCapture
 	return r.clues.CountWithQuery(ctx, mainrepo.ClueQuery{Type: &clueType})
+}
+
+// geoCaptureLeadPort 把 GEO 承接线索写进主域 clues（类型 18），并在有 OneID 时
+// 回填归因链。装配层共用这一份实现，避免工作流与公开落地页两套口径。
+func geoCaptureLeadPort(clues mainrepo.ClueRepository, chains georepo.GeoQueryChainRepository, identitySvc *service.CustomerIdentityService) geoservice.LeadCapturePort {
+	return geoservice.CaptureLeadFunc(func(ctx context.Context, contact, contactType, sourceID, intent string) (string, error) {
+		oneID := ""
+		if identitySvc != nil {
+			ids := identity.Identifiers{}
+			switch contactType {
+			case "phone":
+				ids.Phone = contact
+			case "email":
+				ids.Email = contact
+			}
+			if ids.Phone != "" || ids.Email != "" {
+				if customer, err := identitySvc.IdentifyOrCreate(ctx, ids); err != nil {
+					utils.WarnErrKV("router.geo.identifyLead", err, "contact_type", contactType)
+				} else if customer != nil {
+					oneID = customer.UnifiedID
+				}
+			}
+		}
+		clue := &model.Clue{
+			Account:  contact,
+			Name:     contact,
+			SourceID: sourceID,
+			Desc:     intent,
+			OneID:    oneID,
+			Type:     service.ClueTypeGeoCapture,
+		}
+		if err := clues.Create(ctx, clue); err != nil {
+			return "", err
+		}
+		if clue.OneID != "" && sourceID != "" {
+			_, err := chains.BindOneIDToChain(ctx, sourceID, clue.OneID)
+			utils.WarnErrKV("router.geo.bindOneIDToChain", err, "source_id", sourceID, "one_id", clue.OneID, "clue_id", clue.ID)
+		}
+		return clue.ID, nil
+	})
+}
+
+// geoCaptureShortLinkAdapter 把 cards.ShortLinkService 适配成 geo 的端口，
+// 防止 geo service 反向依赖业务域。
+type geoCaptureShortLinkAdapter struct{ svc cardsvc.ShortLinkService }
+
+func (a geoCaptureShortLinkAdapter) CreateCaptureShortLink(ctx context.Context, code, targetURL, title string) (*geoservice.ShortLinkRef, error) {
+	resp, err := a.svc.Create(ctx, &maindto.CreateShortLinkRequest{
+		ShortCode:   code,
+		OriginalURL: targetURL,
+		Title:       title,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ref := &geoservice.ShortLinkRef{ID: resp.ID, Code: resp.ShortCode}
+	if base := strings.TrimRight(config.GetPublicBaseURLFor(ctx), "/"); base != "" {
+		ref.URL = base + "/s/" + resp.ShortCode
+	}
+	return ref, nil
+}
+
+func (a geoCaptureShortLinkAdapter) DeleteShortLink(ctx context.Context, id uint) error {
+	return a.svc.Delete(ctx, id)
+}
+
+// SetupGeoCapturePublicRoutes 公开落地页三端点。
+//
+// 租户由 code 自证（PublicCodeTenant 先按 code 反查唯一 tenant_id，再绑定 ctx）。
+// 全局限流在 router 装配期已挂；FAQ/留资另按链接做每日配额，防单页把 LLM 成本打穿。
+func SetupGeoCapturePublicRoutes(public *gin.RouterGroup, gormDB *gorm.DB) {
+	captureSvc := geoservice.NewCaptureService(
+		georepo.NewGeoCaptureLinkRepositoryWithDB(gormDB),
+		geoservice.NewKBService(georepo.NewGeoKnowledgeDocumentRepositoryWithDB(gormDB), geoservice.NewLLMAdapter()),
+		geoCaptureLeadPort(mainrepo.NewClueRepositoryWithDB(gormDB), georepo.NewGeoQueryChainRepository(gormDB), service.NewCustomerIdentityService()),
+		nil,
+		"",
+	)
+	ctrl := geoctrl.NewPublicController(captureSvc)
+	tenantGuard := middleware.PublicCodeTenant(gormDB, "geo_capture_links", "code")
+	public.GET("/public/geo/l/:code", tenantGuard, ctrl.Landing)
+	public.POST("/public/geo/l/:code/ask", tenantGuard, ctrl.Ask)
+	public.POST("/public/geo/l/:code/lead", tenantGuard, ctrl.Lead)
 }

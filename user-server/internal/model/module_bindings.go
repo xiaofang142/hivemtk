@@ -376,7 +376,7 @@ var ModuleMenuBindings = map[string][]string{
 		"geoPublish", "geoSitePublish", "geoPushCenter", "geoPlatformPublish", "geoWorkflow",
 		"geoMonitor", "geoFunnelDashboard", "geoIndexTracking", "geoVisibilityBoard",
 		"geoSovBoard", "geoCrawlerStats", "geoVerification", "geoAlerts", "geoReports",
-		"geoDualEngine", "geoDecisionReport",
+		"geoDualEngine", "geoDecisionReport", "geoCapture", "geoCaptureLinks",
 	},
 
 	// ========== sales-crm：销售工作台（4 节点）==========

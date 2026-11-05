@@ -498,6 +498,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupShortLinkRoutes(auth, public, gormDB)
 
+		SetupGeoCapturePublicRoutes(public, gormDB)
+
 		setupLiveCodeRoutes(auth, liveCodeController)
 
 		setupEmailRoutes(auth, gormDB)

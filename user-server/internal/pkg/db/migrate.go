@@ -412,6 +412,8 @@ func allModels() []any {
 		&geomodel.GeoAuditItem{},
 		// GSC 性能数据（query/page/clicks/impressions/ctr/position）。
 		&geomodel.GeoSearchQuery{},
+		// 承接闭环：公开落地页 / FAQ / 留资 / 首响归因。
+		&geomodel.GeoCaptureLink{},
 
 		// GeoCrawlerVisit 此前是 29 个 geo 模型里**唯一没登记**的：
 		// internal/router/router.go 的 AICrawlerMonitor 回调会 fire-and-forget 地写入它，
