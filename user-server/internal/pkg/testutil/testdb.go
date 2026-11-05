@@ -15,6 +15,17 @@
 //   - 每个模型在进程内只 AutoMigrate 一次，后续用例用 TRUNCATE 清空；
 //   - 租户索引规范化/登记表只在新模型加入时重跑；
 //   - TESTDB_LEGACY=1 可切回旧的「每用例 DropTable+AutoMigrate」路径。
+//
+// 可调环境变量：
+//
+//	TESTDB_TIMING=1              输出 NewTestDB 分阶段耗时到 stderr
+//	TESTDB_LEGACY=1              回旧路径（每用例 Drop+AutoMigrate）
+//	TESTDB_STATEMENT_TIMEOUT=60s 测试库级 statement_timeout（0 关闭）
+//	TESTDB_LOCK_TIMEOUT=15s      测试库级 lock_timeout（0 关闭）
+//	TESTDB_CLOSE_TIMEOUT=30s     连接池 Close 上限（Go duration，防泄漏事务挂死）
+//
+// 本地快速测试库：make test-db-fast-up（docker-compose.test.yml，fsync=off），
+// 然后 make test-service-fast / make test-go-fast（默认端口 8217）。
 package testutil
 
 import (
@@ -83,6 +94,45 @@ var (
 	schemaMu       sync.Mutex
 	migratedTables = map[string]bool{}
 )
+
+// 测试库级超时。ALTER DATABASE 失败时（极少数非 owner 场景）openTestDB
+// 会退回逐连接 SET；同时允许用环境变量覆盖，避免长语句被 60s 误杀。
+var (
+	procDBSettingsOK       bool
+	procDBStatementTimeout = "60s"
+	procDBLockTimeout      = "15s"
+)
+
+var timeoutRe = regexp.MustCompile(`^[0-9]+(ms|s|min|h)?$`)
+
+// timeoutSetting 读取 SQL 时长型环境变量（如 60s/5min/0），非法值回退默认。
+// 值会拼进 ALTER DATABASE ... SET，必须挡掉引号/分号等注入字符。
+func timeoutSetting(t testing.TB, key, fallback string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	if !timeoutRe.MatchString(v) {
+		t.Logf("%s=%q 不是合法时长（示例 60s/5min/0），回退 %s", key, v, fallback)
+		return fallback
+	}
+	return v
+}
+
+// closeTimeout 读取连接池关闭上限（Go duration，如 30s/1m）。
+// 关闭超时通常意味着用例泄漏了事务/连接；默认 30s，避免旧实现那种无限挂起。
+func closeTimeout() time.Duration {
+	const fallback = 30 * time.Second
+	v := os.Getenv("TESTDB_CLOSE_TIMEOUT")
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return fallback
+	}
+	return d
+}
 
 // testDBPortCandidates 返回宿主机测试库端口候选（按优先级去重）。
 //
@@ -367,10 +417,39 @@ func openTestDB(t testing.TB, testDSN string) (database *gorm.DB, open, settings
 	if _, execErr := sqlDB.Exec("SET session_replication_role = 'replica'"); execErr != nil {
 		t.Logf("禁用外键约束提示: %v", execErr)
 	}
+	// 库级 ALTER 失败时的兜底：退回逐连接 SET（与旧实现同形态）。
+	// 正常路径（测试库由本进程 CREATE、当前用户即 owner）不会走到这里。
+	if !procDBSettingsOK {
+		for _, stmt := range []string{
+			"SET statement_timeout = '" + procDBStatementTimeout + "'",
+			"SET lock_timeout = '" + procDBLockTimeout + "'",
+		} {
+			if _, execErr := sqlDB.Exec(stmt); execErr != nil {
+				t.Logf("回退设置 %s 提示: %v", stmt, execErr)
+			}
+		}
+	}
 	settings = time.Since(begin)
 
 	// cleanup Close 会等待在途查询结束/失败，挡住跨用例异步写。
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	// 但若用例泄漏了事务/连接，Close 会无限等待（历史上有 40 分钟不退出）；
+	// 这里加有界等待：超时即判失败，让下一个用例去撞 lock_timeout，
+	// 而不是把整套 go test 挂死。
+	t.Cleanup(func() {
+		timeout := closeTimeout()
+		closed := make(chan struct{})
+		go func() {
+			_ = sqlDB.Close()
+			close(closed)
+		}()
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-closed:
+		case <-timer.C:
+			t.Errorf("关闭测试连接池超时（%s）：可能存在泄漏事务/未归还连接；后续用例可能被锁阻塞", timeout)
+		}
+	})
 	// 每个新句柄都要注册 callback（同一 Config 上幂等替换）。
 	tenancyidx.RegisterTenantCallbacks(database)
 	// 租户登记表是进程级全局状态；用例可能 ResetRegistryForTest 后
@@ -400,6 +479,10 @@ type schemaTiming struct {
 // 慢路径：出现新模型 → AutoMigrate 新模型，再重跑一次租户索引/登记表。
 // 回退：TRUNCATE 失败（用例自己 DROP/RENAME 过表）→ DROP+AutoMigrate 本次
 // models、重跑租户装配、再 TRUNCATE 一次。
+//
+// 复用契约：TRUNCATE 只清数据，不移除用例自建的列/索引/约束。测试若改
+// schema，必须在 cleanup 里还原，或调用 ResetSchema；旧实现每例 DROP 会把
+// 这类泄漏掩盖掉（approval/obs_config/module_gate 三处回归的根因）。
 func ensureSchema(t testing.TB, database *gorm.DB, models []any) schemaTiming {
 	schemaMu.Lock()
 	defer schemaMu.Unlock()
@@ -510,6 +593,43 @@ func RefreshTenancy(t testing.TB, database *gorm.DB) {
 	}
 	schemaMu.Lock()
 	defer schemaMu.Unlock()
+	refreshTenancyLocked(t, database)
+}
+
+// ResetSchema 丢弃并重建给定 models 的表，然后重跑租户装配。
+//
+// 与 RefreshTenancy 的分工：
+//   - RefreshTenancy：只重跑 Normalize/登记表，不动表结构；适合迁移后补登记。
+//   - ResetSchema：DROP+AutoMigrate，移除测试自建的列/索引/约束；适合测试
+//     故意改过 schema 后的 cleanup。
+//
+// 注意：GORM DropTable 遇到外键引用时可能只记录提示；需要彻底重建有引用
+// 关系的表时，测试应优先使用未引用的表，或显式处理依赖。
+func ResetSchema(t testing.TB, database *gorm.DB, models ...any) {
+	t.Helper()
+	if database == nil {
+		t.Fatalf("ResetSchema: database is nil")
+	}
+	if len(models) == 0 {
+		return
+	}
+	schemaMu.Lock()
+	defer schemaMu.Unlock()
+
+	sysDB := systemScopeDB(database)
+	for _, m := range models {
+		if err := sysDB.Migrator().DropTable(m); err != nil {
+			t.Logf("ResetSchema DropTable 提示 %T: %v", m, err)
+		}
+	}
+	if err := sysDB.AutoMigrate(models...); err != nil {
+		t.Fatalf("ResetSchema AutoMigrate 失败: %v", err)
+	}
+	for _, m := range models {
+		if table, err := tableNameFor(database, m); err == nil {
+			migratedTables[table] = true
+		}
+	}
 	refreshTenancyLocked(t, database)
 }
 
@@ -627,18 +747,23 @@ func ensureProcTestDB(t testing.TB) {
 			return
 		}
 
-		// 测试库级设置：
+		// 测试库级设置（可用 TESTDB_STATEMENT_TIMEOUT / TESTDB_LOCK_TIMEOUT 覆盖）：
 		//   - synchronous_commit=off：DDL/DML 提交不再等 WAL fsync，直接消掉
 		//     整套用例在 macOS 磁盘上的主要尾延迟；
 		//   - statement_timeout/lock_timeout：旧的逐连接 SET 不保证命中
 		//     DDL 所在连接，库级设置覆盖所有新会话，失败快于挂死。
-		// 仅作用于本进程租用的测试库，失败只记日志（普通用户可能无权限）。
+		// 仅作用于本进程租用的测试库，失败只记日志（普通用户可能无权限），
+		// 并由 openTestDB 退回逐连接 SET 兜底。
+		procDBStatementTimeout = timeoutSetting(t, "TESTDB_STATEMENT_TIMEOUT", "60s")
+		procDBLockTimeout = timeoutSetting(t, "TESTDB_LOCK_TIMEOUT", "15s")
+		procDBSettingsOK = true
 		for _, stmt := range []string{
 			fmt.Sprintf(`ALTER DATABASE "%s" SET synchronous_commit = off`, procDBName),
-			fmt.Sprintf(`ALTER DATABASE "%s" SET lock_timeout = '15s'`, procDBName),
-			fmt.Sprintf(`ALTER DATABASE "%s" SET statement_timeout = '60s'`, procDBName),
+			fmt.Sprintf(`ALTER DATABASE "%s" SET lock_timeout = '%s'`, procDBName, procDBLockTimeout),
+			fmt.Sprintf(`ALTER DATABASE "%s" SET statement_timeout = '%s'`, procDBName, procDBStatementTimeout),
 		} {
 			if _, e := conn.ExecContext(ctx, stmt); e != nil {
+				procDBSettingsOK = false
 				t.Logf("设置测试库参数提示（%s）: %v", stmt, e)
 			}
 		}

@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"testing"
+	"time"
 )
 
 // 这两个模型只在本文件使用：验证进程级 schema 复用/按需迁移/掉表回退。
@@ -18,6 +19,22 @@ type testdbProbeB struct {
 }
 
 func (testdbProbeB) TableName() string { return "testdb_schema_probe_b" }
+
+// 父子探针：验证 TRUNCATE ... CASCADE 会清空引用父表的子表。
+type testdbProbeParent struct {
+	ID   uint   `gorm:"primaryKey"`
+	Name string `gorm:"size:64"`
+}
+
+func (testdbProbeParent) TableName() string { return "testdb_schema_probe_parent" }
+
+type testdbProbeChild struct {
+	ID       uint              `gorm:"primaryKey"`
+	ParentID uint              `gorm:"index"`
+	Parent   testdbProbeParent `gorm:"foreignKey:ParentID"`
+}
+
+func (testdbProbeChild) TableName() string { return "testdb_schema_probe_child" }
 
 // 槽位咨询锁必须由包级连接持有：局部变量被 GC 后连接关闭、锁提前释放，
 // 另一个测试进程会抢到同一槽位并 DROP 正在使用的库。
@@ -85,5 +102,85 @@ func TestNewTestDBRecoversDroppedTable(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("重建后的表不是空表：count=%d", n)
+	}
+}
+
+// ResetSchema 必须把测试自建的列/索引一并移除，恢复模型定义的形状。
+func TestResetSchemaRemovesExtraColumn(t *testing.T) {
+	db := NewTestDB(t, &testdbProbeA{})
+	if err := db.Exec(`ALTER TABLE testdb_schema_probe_a ADD COLUMN extra text`).Error; err != nil {
+		t.Fatalf("加列: %v", err)
+	}
+	if !db.Migrator().HasColumn(&testdbProbeA{}, "extra") {
+		t.Fatalf("前置不成立：extra 列未建出")
+	}
+
+	ResetSchema(t, db, &testdbProbeA{})
+	if db.Migrator().HasColumn(&testdbProbeA{}, "extra") {
+		t.Fatalf("ResetSchema 后 extra 列仍存在")
+	}
+}
+
+// 显式钉住 TRUNCATE ... CASCADE 的语义：只请求父表时，引用它的子表也会被清空。
+// 这比旧实现 DropTable（遇外键常失败）隔离更强，是本轮有意的行为变化。
+func TestTruncateCascadeClearsDependentTable(t *testing.T) {
+	db := NewTestDB(t, &testdbProbeParent{}, &testdbProbeChild{})
+	if err := db.Create(&testdbProbeParent{ID: 1, Name: "p"}).Error; err != nil {
+		t.Fatalf("seed parent: %v", err)
+	}
+	if err := db.Create(&testdbProbeChild{ID: 1, ParentID: 1}).Error; err != nil {
+		t.Fatalf("seed child: %v", err)
+	}
+
+	// 第二次只请求父表；TRUNCATE 父表带 CASCADE，子表应同步清空。
+	db = NewTestDB(t, &testdbProbeParent{})
+	var parents, children int64
+	if err := db.Model(&testdbProbeParent{}).Count(&parents).Error; err != nil {
+		t.Fatalf("count parent: %v", err)
+	}
+	if err := db.Model(&testdbProbeChild{}).Count(&children).Error; err != nil {
+		t.Fatalf("count child: %v", err)
+	}
+	if parents != 0 || children != 0 {
+		t.Fatalf("TRUNCATE CASCADE 后应为空，got parent=%d child=%d", parents, children)
+	}
+}
+
+func TestTimeoutSettingValidation(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", "60s"},
+		{"30s", "30s"},
+		{"5min", "5min"},
+		{"500ms", "500ms"},
+		{"1h", "1h"},
+		{"0", "0"},
+		{"1.5s", "60s"},
+		{"-1s", "60s"},
+		{"x'; DROP TABLE users;--", "60s"},
+	}
+	for _, tc := range cases {
+		t.Setenv("TESTDB_STATEMENT_TIMEOUT", tc.in)
+		if got := timeoutSetting(t, "TESTDB_STATEMENT_TIMEOUT", "60s"); got != tc.want {
+			t.Errorf("timeoutSetting(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestCloseTimeoutParsing(t *testing.T) {
+	cases := []struct {
+		in   string
+		want time.Duration
+	}{
+		{"", 30 * time.Second},
+		{"5s", 5 * time.Second},
+		{"1m", time.Minute},
+		{"bad", 30 * time.Second},
+		{"0s", 30 * time.Second},
+	}
+	for _, tc := range cases {
+		t.Setenv("TESTDB_CLOSE_TIMEOUT", tc.in)
+		if got := closeTimeout(); got != tc.want {
+			t.Errorf("closeTimeout(%q) = %v, want %v", tc.in, got, tc.want)
+		}
 	}
 }

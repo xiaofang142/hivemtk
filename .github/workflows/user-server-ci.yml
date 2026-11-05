@@ -577,6 +577,9 @@ jobs:
     name: Unit tests -race (user-server core)
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # 测试 PG 用 fsync=off：CI 的 postgres 是临时容器，数据不需要持久化；
+    # 直接消掉 TRUNCATE 的 DataFileImmediateSync 等待。本地等价物见
+    # docker-compose.test.yml（mtk-postgres-test，端口 8217）。
     services:
       postgres:
         image: pgvector/pgvector:pg15
@@ -585,7 +588,7 @@ jobs:
         # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
         # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
         # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
-        command: '-c max_connections=400'
+        command: '-c max_connections=400 -c fsync=off -c synchronous_commit=off -c full_page_writes=off'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -684,7 +687,7 @@ jobs:
         # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
         # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
         # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
-        command: '-c max_connections=400'
+        command: '-c max_connections=400 -c fsync=off -c synchronous_commit=off -c full_page_writes=off'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -761,7 +764,7 @@ jobs:
         # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
         # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
         # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
-        command: '-c max_connections=400'
+        command: '-c max_connections=400 -c fsync=off -c synchronous_commit=off -c full_page_writes=off'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123
@@ -907,7 +910,7 @@ jobs:
         # 「最后一个开连接的用例随机红」的形态撞上 too many clients / SQLSTATE 53300。
         # 数字不许只改这一处：本作业末尾那步「现测 PG 名额」从本文件派生 want，
         # 常驻门 scripts/check-ci-pg-capacity.py 核对声明值 ≥ 代码侧池上界之和。
-        command: '-c max_connections=400'
+        command: '-c max_connections=400 -c fsync=off -c synchronous_commit=off -c full_page_writes=off'
         env:
           POSTGRES_USER: admin
           POSTGRES_PASSWORD: password123

@@ -22,6 +22,7 @@
 | **8208** | Embedding 推理     | 宿主机 llama     | —         | 8208                            | `EMBEDDING_BASE_URL`           | `inference.embedding.base_url` | **私域部署强制本地**（数据不出域）                   |
 | **8209** | Rerank 推理        | 宿主机 llama     | —         | 8209                            | `RERANK_BASE_URL`              | `inference.rerank.base_url`    | 与 Embedding 同属 RAG 链路                 |
 | **8210** | Laya 决策服务      | 宿主机 torch（FastAPI） | —      | 8210                            | `LAYA_PORT`（`LAYA_BASE_URL` 暂无） | —                        | ModernBERT-large 421M，非自回归 choice/score/noul；端点 `POST /v1/decide`（非 OpenAI chat 形态，不走 llama.cpp） |
+| **8217** | PostgreSQL 专用测试库 | Docker 测试（fsync=off） | ✅ 8202 | 8217（docker-compose.test.yml） | `USER_POSTGRES_TEST_HOST_PORT` | `POSTGRES_TEST_PORT` | 仅 `go test` 用，数据可丢；与业务库 `mtk-postgres` 独立容器/卷；`make test-db-fast-up` 启动，`make test-service-fast` / `make test-go-fast` 使用 |
 
 ### 前端开发端口（外部依赖，不在 ports.go）
 

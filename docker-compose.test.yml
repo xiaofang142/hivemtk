@@ -1,0 +1,52 @@
+# 专用测试库：fsync=off / synchronous_commit=off / full_page_writes=off。
+#
+# 只给 `go test` 用，数据随时可丢，不要放业务数据；与主 compose 的
+# mtk-postgres（业务库，fsync=on）完全隔离，独立容器、独立卷、独立端口。
+#
+# 启动：make test-db-fast-up
+# 使用：make test-service-fast / make test-go-fast（默认 127.0.0.1:8217）
+# 停止：make test-db-fast-down
+services:
+  mtk-postgres-test:
+    image: pgvector/pgvector:pg15
+    container_name: mtk-postgres-test
+    environment:
+      TZ: Asia/Shanghai
+      LANG: C.UTF-8
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}"
+      POSTGRES_DB: ${USER_DB_NAME:-user_db}
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off
+      - -c
+      - max_connections=500
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - port=8202
+    ports:
+      - "127.0.0.1:${USER_POSTGRES_TEST_HOST_PORT:-8217}:8202"
+    volumes:
+      - mtk_user_pg_test_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-admin} -d ${USER_DB_NAME:-user_db} -p 8202
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  mtk_user_pg_test_data:

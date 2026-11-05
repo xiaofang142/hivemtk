@@ -364,7 +364,7 @@ dev-down:
 # =============================================================================
 # 代码质量护栏（P0-1：架构依赖规则见 user-server/.golangci.yml depguard）
 # =============================================================================
-.PHONY: lint lint-config-verify lint-install lint-install-force lint-version-check vet test-go test-service fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets wire-contract
+.PHONY: lint lint-config-verify lint-install lint-install-force lint-version-check vet test-go test-service test-go-fast test-service-fast test-db-fast-up test-db-fast-down fmt fmt-check test-db-prune go-cache-trim audit audit-artifacts audit-secrets wire-contract
 
 # 必须与 .github/workflows/user-server-ci.yml 里 golangci-lint-action 的 version 同步。
 # 上一版是死 pin v2.1.6：它由 go1.24 构建，跑本仓声明的 go1.25 直接
@@ -479,18 +479,53 @@ fmt-check:
 #
 # 与 CI 的有意差异：本地不加 -short（跳过 Short() 门控用例会漏问题）、不加 -race
 # （全量耗时数倍拉长，本地不适用）。
+# 需要更快时用 make test-go-fast（连 fsync=off 专用测试库，见 docker-compose.test.yml）。
 test-go:
 	cd user-server && go test ./... -count=1 -p 1 -timeout 1800s
 
 # 单跑 `internal/service` 一包。
 #
-# 2026-11-05 本机 `-p 1` 实测 390.3s（同一工作树优化前 729.0s，-46.5%）；
+# 2026-11-05 本机 `-p 1` 实测 372.3s（同一工作树优化前 729.0s，-48.9%）；
 # 默认 10m0s 现在通常够用，但历史负载波动可到 700-880s，30m 宽余量保留。
 # 慢因已从每用例 DropTable+AutoMigrate（旧：AutoMigrate 311s + Normalize 115.6s /
-# 2375 次建库）降为 TRUNCATE 的 PG 文件 fsync（新：168.6s / 2375 次）；
-# 彻底消除需要测试库服务端 fsync=off（当前 mtk-postgres 与业务库同容器，未改）。
+# 2375 次建库）降为 TRUNCATE 的 PG 文件 fsync（新：151.9s / 2375 次）；
+# 用 fsync=off 专用库再降到 245.0s（setup 仅 39.7s = 16.1%，truncate 18.4s）：
+# make test-db-fast-up + make test-service-fast（docker-compose.test.yml，端口 8217；
+# 业务库 mtk-postgres 不动）。
 test-service:
 	cd user-server && go test ./internal/service -count=1 -p 1 -timeout 30m
+
+# 专用 fsync=off 测试库（见 docker-compose.test.yml）。
+# 只给 go test 用，数据可丢；与业务库 mtk-postgres 完全隔离。
+test-db-fast-up:
+	docker compose -f docker-compose.test.yml up -d mtk-postgres-test
+	@for i in $$(seq 1 30); do \
+	  s=$$(docker inspect -f '{{.State.Health.Status}}' mtk-postgres-test 2>/dev/null || true); \
+	  if [ "$$s" = "healthy" ]; then \
+	    echo "mtk-postgres-test 就绪（127.0.0.1:$${USER_POSTGRES_TEST_HOST_PORT:-8217}）"; exit 0; \
+	  fi; \
+	  sleep 1; \
+	done; \
+	echo "mtk-postgres-test 未就绪：docker logs mtk-postgres-test" >&2; exit 1
+
+test-db-fast-down:
+	docker compose -f docker-compose.test.yml down
+
+# 快速测试目标：连 fsync=off 专用库（默认 127.0.0.1:8217），
+# 密码从容器读，不落盘。与 test-go/test-service 的代码/参数/超时完全一致，
+# 唯一区别是测试库的持久化设置。使用前先 make test-db-fast-up。
+# 2026-11-05 实测：service 245.0s（4097 PASS / 0 FAIL，setup 39.7s / 2375 次调用）。
+test-go-fast:
+	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
+	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
+	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
+	  go test ./... -count=1 -p 1 -timeout 1800s
+
+test-service-fast:
+	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
+	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
+	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
+	  go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 跨端线上契约清单（SaaS 审计 A10）
 #
