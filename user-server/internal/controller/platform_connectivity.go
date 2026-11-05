@@ -12,6 +12,8 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -86,7 +88,7 @@ func (c *PlatformConnectivityController) TestConnectivity(ctx *gin.Context) {
 		resp.Status = "not_configured"
 		resp.Message = "平台集成未启用（PLATFORM_ENABLED 未开启）：平台侧功能全部不可用，" +
 			"此时探测地址没有意义。请先开启平台集成并配置平台地址。"
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 		return
 	}
 
@@ -94,14 +96,14 @@ func (c *PlatformConnectivityController) TestConnectivity(ctx *gin.Context) {
 		resp.Status = "not_configured"
 		resp.Message = "平台地址未配置：请在参数中心设置 platform.api_host，" +
 			"或通过环境变量 PLATFORM_API_HOST/PLATFORM_API_URL 或 config/platform.yaml 的 api_url 指定。"
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 		return
 	}
 
 	if err := validatePlatformHost(target); err != nil {
 		resp.Status = "not_configured"
 		resp.Message = "平台地址格式非法：" + err.Error()
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 		return
 	}
 
@@ -111,14 +113,14 @@ func (c *PlatformConnectivityController) TestConnectivity(ctx *gin.Context) {
 		resp.Status = "unreachable"
 		resp.Message = "平台不可达：" + err.Error()
 		logger.Warnf("[platform-connectivity] 探测失败 address=%s err=%v", target, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 		return
 	}
 
 	resp.Reachable = true
 	resp.Status = "ok"
 	resp.Message = fmt.Sprintf("平台可达（%d ms）", latency)
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp, "message": resp.Message})
 }
 
 // @Summary PUT /api/manage/platform-host
@@ -146,32 +148,32 @@ func (c *PlatformConnectivityController) SetPlatformHost(ctx *gin.Context) {
 		Address string `json:"address"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
 		return
 	}
 	address := strings.TrimRight(strings.TrimSpace(req.Address), "/")
 	if address == "" {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "平台地址不能为空（要清空请用参数中心的「重置为默认值」）"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "平台地址不能为空（要清空请用参数中心的「重置为默认值」）"})
 		return
 	}
 	if err := validatePlatformHost(address); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "平台地址格式非法: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "平台地址格式非法: " + err.Error()})
 		return
 	}
 
 	cpSvc := service.GlobalConfigParam()
 	if cpSvc == nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "参数中心未初始化"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "参数中心未初始化"})
 		return
 	}
 	actorID := c.currentUserID(ctx)
 	if err := cpSvc.UpdatePlatformDefault(ctx.Request.Context(), "platform", "api_host", address, actorID); err != nil {
 		logger.Warnf("[platform-host] UpdatePlatformDefault err=%v", err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
 	logger.Infof("[platform-host] 平台地址已更新为 %s（改完约 60 秒内生效，无需重启）", address)
-	ctx.JSON(http.StatusOK, gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{
 		"code":    0,
 		"message": "平台地址已更新，约 60 秒内生效（无需重启）",
 		"data":    platformConnectivityResp{Address: address, Source: "config_param", PlatformEnabled: config.PlatformEnabled()},

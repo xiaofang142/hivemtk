@@ -38,12 +38,12 @@ func NewBridgeSelectorHealthController(svc *service.SelectorHealthService) *Brid
 //	{ "ok": true, "threshold": 60, "degraded": ["messageItem"], "items": [...] }
 func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 	if c.svc == nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": "selector health service not initialized"})
+		response.Envelope(ctx, http.StatusServiceUnavailable, gin.H{"ok": false, "error": "selector health service not initialized"})
 		return
 	}
 	var rep service.SelectorHealthReport
 	if err := ctx.ShouldBindJSON(&rep); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
 	views, err := c.svc.Ingest(ctx.Request.Context(), rep)
@@ -55,7 +55,7 @@ func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 		case errors.Is(err, service.ErrSelectorHealthRepoNotReady):
 			status = http.StatusServiceUnavailable
 		}
-		ctx.JSON(status, gin.H{"ok": false, "error": err.Error()})
+		response.Envelope(ctx, status, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
 	// degraded 只列 broken/degraded 的字段名：扩展侧在自检页上直接展示这句，
@@ -66,7 +66,7 @@ func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 			degraded = append(degraded, v.Field)
 		}
 	}
-	ctx.JSON(http.StatusOK, gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{
 		"ok":        true,
 		"threshold": c.svc.Threshold(ctx.Request.Context()),
 		"degraded":  degraded,

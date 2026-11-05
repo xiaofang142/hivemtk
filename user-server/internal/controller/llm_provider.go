@@ -4,6 +4,8 @@ import (
 	"errors"
 	"net/http"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -24,7 +26,7 @@ func NewLLMProviderController(failoverSvc *service.LLMFailoverService) *LLMProvi
 
 func (c *LLMProviderController) guardFailover(ctx *gin.Context) bool {
 	if !c.failoverSvc.Ready() {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{
+		response.Envelope(ctx, http.StatusServiceUnavailable, gin.H{
 			"code":    503,
 			"message": "ProviderFailover not initialized",
 		})
@@ -44,7 +46,7 @@ func (c *LLMProviderController) GetHealth(ctx *gin.Context) {
 		return
 	}
 	healths := c.failoverSvc.GetAllHealth()
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": healths})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": healths})
 }
 
 // @Summary      查询单个 provider 健康度
@@ -59,15 +61,15 @@ func (c *LLMProviderController) GetProviderHealth(ctx *gin.Context) {
 	}
 	name := ctx.Param("name")
 	if name == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "name is required"})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": "name is required"})
 		return
 	}
 	h := c.failoverSvc.GetHealth(name)
 	if h == nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "provider not found", "data": gin.H{"name": name}})
+		response.Envelope(ctx, http.StatusNotFound, gin.H{"code": 404, "message": "provider not found", "data": gin.H{"name": name}})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": h})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": h})
 }
 
 // ResetCircuit 重置 provider 熔断器（支持单个或全部）
@@ -90,11 +92,11 @@ func (c *LLMProviderController) ResetCircuit(ctx *gin.Context) {
 				reset++
 			}
 		}
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"reset": reset, "total": len(all)}})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{"reset": reset, "total": len(all)}})
 		return
 	}
 	ok := c.failoverSvc.ResetCircuit(body.Name)
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"name": body.Name, "reset": ok}})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{"name": body.Name, "reset": ok}})
 }
 
 // @Summary      查询降级策略
@@ -108,7 +110,7 @@ func (c *LLMProviderController) GetPolicy(ctx *gin.Context) {
 		return
 	}
 	policy := c.failoverSvc.LoadPolicy(ctx.Request.Context())
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": policy})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": policy})
 }
 
 // UpdatePolicy 更新降级策略
@@ -121,12 +123,12 @@ func (c *LLMProviderController) UpdatePolicy(ctx *gin.Context) {
 	}
 	var policy service.LLMFailoverPolicy
 	if err := ctx.ShouldBindJSON(&policy); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "invalid body: " + err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": "invalid body: " + err.Error()})
 		return
 	}
 	c.failoverSvc.ApplyPolicy(policy)
 	logger.Infof("[LLMProviderController] UpdatePolicy applied: scenarios=%d", len(policy.Scenarios))
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": policy})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": policy})
 }
 
 // @Summary      根据 scenario + canary key 决定走哪个 provider（决策可观测）
@@ -146,20 +148,20 @@ func (c *LLMProviderController) ResolveRoute(ctx *gin.Context) {
 		CanaryKey string `json:"canary_key"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "invalid body: " + err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": "invalid body: " + err.Error()})
 		return
 	}
 	if body.Scenario == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "scenario is required"})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": "scenario is required"})
 		return
 	}
 	res, err := c.failoverSvc.ResolveRoute(body.Scenario, body.CanaryKey)
 	if errors.Is(err, service.ErrLLMDispatcherNotReady) {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "message": "dispatcher not initialized"})
+		response.Envelope(ctx, http.StatusServiceUnavailable, gin.H{"code": 503, "message": "dispatcher not initialized"})
 		return
 	}
 	if errors.Is(err, service.ErrLLMScenarioRouteNotFound) {
-		ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": "scenario route not found"})
+		response.Envelope(ctx, http.StatusNotFound, gin.H{"code": 404, "message": "scenario route not found"})
 		return
 	}
 	resp := gin.H{
@@ -170,5 +172,5 @@ func (c *LLMProviderController) ResolveRoute(ctx *gin.Context) {
 		"weight":    res.Weight,
 		"is_canary": res.IsCanary,
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": resp})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": resp})
 }

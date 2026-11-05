@@ -107,7 +107,7 @@ func (c *WebhookController) bindCallbackTenant(ctx *gin.Context, reqCtx context.
 	if terr != nil {
 		log.Printf("[SECURITY] webhook 租户解析失败 channel=%s account=%s ip=%s: %v",
 			channel, accountID, ctx.ClientIP(), terr)
-		ctx.JSON(http.StatusNotFound, gin.H{"accepted": false, "reason": "unknown account"})
+		response.Envelope(ctx, http.StatusNotFound, gin.H{"accepted": false, "reason": "unknown account"})
 		return reqCtx, false
 	}
 	return tenant.WithTenantID(reqCtx, tid), true
@@ -131,7 +131,7 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 
 	body, err := service.ReadAll(ctx.Request.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{
 			"accepted": false,
 			"reason":   "read body: " + err.Error(),
 		})
@@ -151,7 +151,7 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 	// QQ 开放平台 Op13 回调地址验证：需同步返回 Ed25519 签名，不走入队流程
 	if channel == service.ChannelQQ {
 		if handled, payload := c.svc.HandleQQCallbackChallenge(reqCtx, accountID, body); handled {
-			ctx.JSON(http.StatusOK, payload)
+			response.Envelope(ctx, http.StatusOK, payload)
 			return
 		}
 	}
@@ -163,7 +163,7 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 				ctx.String(http.StatusUnauthorized, "feishu url_verification failed: "+verr.Error())
 				return
 			}
-			ctx.JSON(http.StatusOK, gin.H{"challenge": challenge})
+			response.Envelope(ctx, http.StatusOK, gin.H{"challenge": challenge})
 			return
 		}
 	}
@@ -197,7 +197,7 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 	status := http.StatusOK
 	if result.QueueFull {
 		ctx.Header("Retry-After", "30")
-		ctx.JSON(http.StatusServiceUnavailable, result)
+		response.Envelope(ctx, http.StatusServiceUnavailable, result)
 		return
 	}
 	if !result.Accepted {
@@ -209,7 +209,7 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 			status = http.StatusTooManyRequests
 		}
 	}
-	ctx.JSON(status, result)
+	response.Envelope(ctx, status, result)
 }
 
 // ReceiveWithoutAccount godoc
@@ -227,7 +227,7 @@ func (c *WebhookController) ReceiveWithoutAccount(ctx *gin.Context) {
 
 	body, err := service.ReadAll(ctx.Request.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{
 			"accepted": false,
 			"reason":   "read body: " + err.Error(),
 		})
@@ -259,7 +259,7 @@ func (c *WebhookController) ReceiveWithoutAccount(ctx *gin.Context) {
 	if !result.Accepted {
 		status = http.StatusBadRequest
 	}
-	ctx.JSON(status, result)
+	response.Envelope(ctx, status, result)
 }
 
 // @Summary      企微 URL 验证（GET 挑战）
@@ -343,7 +343,7 @@ func (c *WebhookController) FeishuVerify(ctx *gin.Context) {
 		ctx.String(http.StatusForbidden, "verification failed")
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"challenge": challenge})
+	response.Envelope(ctx, http.StatusOK, gin.H{"challenge": challenge})
 }
 
 // WhatsAppVerify 处理 Meta 回调 URL 验证挑战（GET）
@@ -435,24 +435,24 @@ func (c *WebhookController) DingTalkReceive(ctx *gin.Context) {
 	accountIDStr := ctx.Param("account_id")
 	accountID, err := strconv.ParseUint(accountIDStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"accepted": false, "reason": "invalid account_id"})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"accepted": false, "reason": "invalid account_id"})
 		return
 	}
 	if c.dtAppSvc == nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{"accepted": false, "reason": "dingtalk app service not configured"})
+		response.Envelope(ctx, http.StatusServiceUnavailable, gin.H{"accepted": false, "reason": "dingtalk app service not configured"})
 		return
 	}
 	body, err := service.ReadAll(ctx.Request.Body)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"accepted": false, "reason": "read body: " + err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"accepted": false, "reason": "read body: " + err.Error()})
 		return
 	}
 	reqCtx := middleware.InjectLangToCtx(ctx.Request.Context(), c.langResolver, "", 0)
 	if err := c.dtAppSvc.ReceiveMessage(reqCtx, uint(accountID), body, extractQuery(ctx), extractHeaders(ctx)); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"accepted": false, "reason": err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"accepted": false, "reason": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"accepted": true})
+	response.Envelope(ctx, http.StatusOK, gin.H{"accepted": true})
 }
 
 // @Summary      Webhook 队列统计（待处理/队列长度）

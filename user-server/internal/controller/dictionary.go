@@ -8,6 +8,8 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,16 +32,16 @@ func NewDictionaryController(svc *service.DictionaryService) *DictionaryControll
 // 目录：全部字典域。
 func (c *DictionaryController) ListParents(ctx *gin.Context) {
 	if !c.ready() {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
 		return
 	}
 	parents, err := c.svc.ListParents(ctx.Request.Context())
 	if err != nil {
 		logger.Warnf("[Dictionary] ListParents err=%v", err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": parents, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": parents, "message": "ok"})
 }
 
 // @Summary      字典服务未装配
@@ -49,21 +51,21 @@ func (c *DictionaryController) ListParents(ctx *gin.Context) {
 // 一个域的完整定义（项 + 跃迁）。
 func (c *DictionaryController) GetDictionary(ctx *gin.Context) {
 	if !c.ready() {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
 		return
 	}
 	parent := ctx.Param("parent")
 	items, trans, err := c.svc.GetDictionary(ctx.Request.Context(), parent)
 	if err == service.ErrDictionaryParentUnknown {
-		ctx.JSON(http.StatusOK, gin.H{"code": 404, "message": "字典域不存在: " + parent})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 404, "message": "字典域不存在: " + parent})
 		return
 	}
 	if err != nil {
 		logger.Warnf("[Dictionary] GetDictionary %s err=%v", parent, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{
 		"parent":      parent,
 		"items":       items,
 		"transitions": trans,
@@ -81,21 +83,21 @@ func (c *DictionaryController) GetDictionary(ctx *gin.Context) {
 // 两条返回体完全一致，差别只在鉴权与路径。
 func (c *DictionaryController) PublicDictionary(ctx *gin.Context) {
 	if !c.ready() {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
 		return
 	}
 	parent := ctx.Param("parent")
 	items, trans, err := c.svc.GetDictionary(ctx.Request.Context(), parent)
 	if err == service.ErrDictionaryParentUnknown {
-		ctx.JSON(http.StatusOK, gin.H{"code": 404, "message": "字典域不存在: " + parent})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 404, "message": "字典域不存在: " + parent})
 		return
 	}
 	if err != nil {
 		logger.Warnf("[Dictionary] PublicDictionary %s err=%v", parent, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{
 		"parent":      parent,
 		"items":       items,
 		"transitions": trans,
@@ -117,11 +119,11 @@ func (c *DictionaryController) UpsertItem(ctx *gin.Context) {
 		Enabled     *bool  `json:"enabled"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
 		return
 	}
 	if !c.ready() {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
 		return
 	}
 	enabled := true
@@ -137,15 +139,15 @@ func (c *DictionaryController) UpsertItem(ctx *gin.Context) {
 		Enabled:     enabled,
 	}
 	if err := c.svc.UpsertItem(ctx.Request.Context(), d, c.currentUserID(ctx)); err == service.ErrDictionarySystemLocked {
-		ctx.JSON(http.StatusOK, gin.H{"code": 403,
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 403,
 			"message": "该项由代码种子锁定，不能改名或停用（代码是权威的那一侧）"})
 		return
 	} else if err != nil {
 		logger.Warnf("[Dictionary] UpsertItem %s.%s err=%v", parent, body.Code, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
 // @Summary PUT /api/manage/dictionaries/:parent/transitions
@@ -159,19 +161,19 @@ func (c *DictionaryController) ReplaceTransitions(ctx *gin.Context) {
 		Transitions []model.DictionaryTransition `json:"transitions"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
 		return
 	}
 	if !c.ready() {
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "字典服务未装配"})
 		return
 	}
 	if err := c.svc.ReplaceTransitions(ctx.Request.Context(), parent, body.Transitions, c.currentUserID(ctx)); err != nil {
 		logger.Warnf("[Dictionary] ReplaceTransitions %s err=%v", parent, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
 // currentUserID 与 config_param 控制器同一口径：从 ctx 取 user_id，取不到返回 0

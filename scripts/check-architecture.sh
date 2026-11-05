@@ -97,12 +97,28 @@ if [ -n "$CONTROLLER_NON_TEST" ]; then
 fi
 
 # 1.4 controller 不应写 c.JSON
+# 2026-11-05 二次审计：原正则只认接收者 `c.`，controller 里把 gin.Context 命名成
+# `ctx` 的 14 处 ctx.JSON 长期漏检（webhook.go）。改为任意接收者后统一收口到
+# response.Success/Error/ErrorFromDB（历史特殊契约走 response.Envelope）。
 CONTROLLER_NON_TEST=$(find "$TARGET/internal/controller" -name "*.go" ! -name "*_test.go" 2>/dev/null)
 if [ -n "$CONTROLLER_NON_TEST" ]; then
-  if grep -rn "c\.JSON(\|c\.AbortWithStatusJSON(" $CONTROLLER_NON_TEST 2>/dev/null; then
+  if grep -rnE "[A-Za-z_][A-Za-z0-9_]*\.(JSON|AbortWithStatusJSON)\(" $CONTROLLER_NON_TEST 2>/dev/null; then
     log_fail "[L3] controller 使用 c.JSON 直接写响应,应使用 response.Success/Error"
   else
     log_pass "[L3] controller 使用 response.Success/Error 统一响应"
+  fi
+fi
+
+# 1.5 router 不应写内联处理器
+# 2026-11-05 二次审计：路由表只做 URL → 处理器的映射；处理器（含中间件闭包）
+# 一律落在 controller/middleware/独立基础设施包，否则权限、校验、响应信封
+# 全在装配处发散，审计时无法按层收敛。
+ROUTER_NON_TEST=$(find "$TARGET/internal/router" -name "*.go" ! -name "*_test.go" 2>/dev/null)
+if [ -n "$ROUTER_NON_TEST" ]; then
+  if grep -rn "func(c \*gin.Context)\|func(ctx \*gin.Context)" $ROUTER_NON_TEST 2>/dev/null; then
+    log_fail "[L2] router 含内联处理器,路由表应只做映射"
+  else
+    log_pass "[L2] router 无内联处理器"
   fi
 fi
 

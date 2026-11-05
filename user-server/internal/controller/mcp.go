@@ -8,6 +8,8 @@ import (
 	"hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/pkg/utils/logger"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,11 +39,11 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 	const maxBody = 1 << 20
 	body, err := io.ReadAll(io.LimitReader(ctx.Request.Body, maxBody+1))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "read body: " + err.Error()})
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"error": "read body: " + err.Error()})
 		return
 	}
 	if int64(len(body)) > maxBody {
-		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
+		response.Envelope(ctx, http.StatusRequestEntityTooLarge, gin.H{"error": "request body too large"})
 		return
 	}
 
@@ -50,7 +52,7 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 	if err != nil {
 
 		logger.Ctx(ctx.Request.Context()).Warn().Err(err).Msg("[MCP] handle request failed")
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 

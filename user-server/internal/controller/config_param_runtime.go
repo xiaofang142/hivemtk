@@ -7,6 +7,8 @@ import (
 
 	"hivemtk-user/internal/pkg/utils/logger"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -104,7 +106,7 @@ func (c *ConfigParamController) Runtime(ctx *gin.Context) {
 	// 返回空配置：Runtime 是前端启动链上的一环，它 panic 会让整个 SPA 打不开。
 	out := make(map[string]string, 32)
 	if c.svc == nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": out, "message": "ok"})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": out, "message": "ok"})
 		return
 	}
 	if len(allowed) > 0 {
@@ -128,7 +130,7 @@ func (c *ConfigParamController) Runtime(ctx *gin.Context) {
 	for coord, value := range c.crossGroupValues(ctx) {
 		out[coord] = value
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": out, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": out, "message": "ok"})
 }
 
 // crossGroupValues 取 runtimeCrossGroupKeys 里那些「组不在白名单、但键单独放行」的值。

@@ -12,6 +12,8 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -49,10 +51,10 @@ func (c *ConfigParamController) List(ctx *gin.Context) {
 	}
 	if err != nil {
 		logger.Warnf("[ConfigParam] List group=%s err=%v", group, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": list, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": list, "message": "ok"})
 }
 
 // @Summary      查询配置分组元数据（唯一事实源）
@@ -68,14 +70,14 @@ func (c *ConfigParamController) ListGroups(ctx *gin.Context) {
 	groups, err := c.svc.Groups(ctx.Request.Context())
 	if err != nil {
 		logger.Warnf("[ConfigParam] ListGroups err=%v", err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
 	// nil slice 序列化成 null，前端 map/Object.entries 会炸；空集合必须是 []。
 	if groups == nil {
 		groups = []model.ConfigParamGroup{}
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": groups, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": groups, "message": "ok"})
 }
 
 // @Summary PUT /api/manage/config-params/:group/:key
@@ -91,21 +93,21 @@ func (c *ConfigParamController) Update(ctx *gin.Context) {
 		Value json.RawMessage `json:"value" binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
 		return
 	}
 	value, err := decodeScalarValue(body.Value)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "参数错误: " + err.Error()})
 		return
 	}
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.UpdateValue(ctx.Request.Context(), group, key, value, actorID); err != nil {
 		logger.Warnf("[ConfigParam] Update %s.%s err=%v", group, key, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
 // decodeScalarValue 把请求体里的 JSON 标量折成参数表要存的那个字符串。
@@ -172,10 +174,10 @@ func (c *ConfigParamController) ResetToDefault(ctx *gin.Context) {
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.ResetToDefault(ctx.Request.Context(), group, key, actorID); err != nil {
 		logger.Warnf("[ConfigParam] ResetToDefault %s.%s err=%v", group, key, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
 // @Summary      整组重置配置参数为默认值
@@ -188,10 +190,10 @@ func (c *ConfigParamController) BulkResetGroup(ctx *gin.Context) {
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.BulkResetGroup(ctx.Request.Context(), group, actorID); err != nil {
 		logger.Warnf("[ConfigParam] BulkResetGroup %s err=%v", group, err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 400, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "message": "ok"})
 }
 
 // @Summary      查询配置参数变更日志（审计回溯）
@@ -204,10 +206,10 @@ func (c *ConfigParamController) AuditLogs(ctx *gin.Context) {
 	logs, err := c.svc.AuditLogs(ctx.Request.Context(), limit)
 	if err != nil {
 		logger.Warnf("[ConfigParam] AuditLogs err=%v", err)
-		ctx.JSON(http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"code": 0, "data": logs, "message": "ok"})
+	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": logs, "message": "ok"})
 }
 
 func (c *ConfigParamController) currentUserID(ctx *gin.Context) uint {

@@ -5,6 +5,8 @@ import (
 
 	"hivemtk-user/internal/pkg/featureflag"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -40,11 +42,11 @@ func NewBridgeCapabilitiesController() *BridgeCapabilitiesController {
 //	  "sse_heartbeat_ms": 15000
 //	}
 //
-// 直接 c.JSON 而非 response.Success：此端点被前端桥接模块调用，
+// 用 response.Envelope 直写裸 schema 而非 response.Success：此端点被前端桥接模块调用，
 // 期望稳定的 schema（key 名 + 类型不变），不应受 response 包装层
 // locale/i18n 影响（与平台约定一致）。
 func (c *BridgeCapabilitiesController) GetCapabilities(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{
 		"sse_enabled":      featureflag.Get(featureflag.FF_ENABLE_SSE_BRIDGE).Bool(),
 		"poll_interval_ms": 1500,
 		"sse_heartbeat_ms": 15000,

@@ -35,7 +35,7 @@ func NewDataExportController() *DataExportController {
 func (c *DataExportController) Export(ctx *gin.Context) {
 	customerID := ctx.Param("customer_id")
 	if customerID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{
 			"code":    400,
 			"message": "customer_id 不能为空",
 		})
@@ -48,11 +48,11 @@ func (c *DataExportController) Export(ctx *gin.Context) {
 
 		switch {
 		case strings.Contains(msg, "DSAR_001"):
-			ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": msg})
+			response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": msg})
 		case strings.Contains(msg, "DSAR_002") || utils.IsRecordNotFound(err) || strings.Contains(msg, "不存在"):
-			ctx.JSON(http.StatusNotFound, gin.H{"code": 404, "message": msg})
+			response.Envelope(ctx, http.StatusNotFound, gin.H{"code": 404, "message": msg})
 		default:
-			ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": fmt.Sprintf("导出失败: %v", err)})
+			response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": fmt.Sprintf("导出失败: %v", err)})
 		}
 		return
 	}
@@ -90,7 +90,7 @@ func (c *ManageDataExportController) Export(ctx *gin.Context) {
 	if HandleServiceError(ctx, err) {
 		return
 	}
-	ctx.JSON(200, gin.H{
+	response.Envelope(ctx, 200, gin.H{
 		"code":    0,
 		"message": "ok",
 		"data":    json.RawMessage(data),

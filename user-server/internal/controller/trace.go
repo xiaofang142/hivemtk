@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/pkg/utils/response"
+
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/aiagent/llm"
@@ -30,7 +32,7 @@ func NewTraceController() *TraceController {
 func (c *TraceController) GetTrace(ctx *gin.Context) {
 	traceID := ctx.Param("traceId")
 	if traceID == "" {
-		ctx.JSON(http.StatusBadRequest, gin.H{
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{
 			"error": "trace_id is required",
 			"code":  "INVALID_PARAM",
 		})
@@ -39,20 +41,20 @@ func (c *TraceController) GetTrace(ctx *gin.Context) {
 	detail, err := llm.QueryTrace(ctx.Request.Context(), traceID)
 	if err != nil {
 		if errors.Is(err, llm.ErrTraceNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{
+			response.Envelope(ctx, http.StatusNotFound, gin.H{
 				"error":    "trace not found",
 				"code":     "NOT_FOUND",
 				"trace_id": traceID,
 			})
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 			"code":  "INTERNAL_ERROR",
 		})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{
 		"code": 0,
 		"msg":  "ok",
 		"data": detail,
@@ -72,13 +74,13 @@ func (c *TraceController) ListRecent(ctx *gin.Context) {
 	}
 	items, err := llm.ListRecentTraces(ctx.Request.Context(), limit)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{
 			"error": err.Error(),
 			"code":  "INTERNAL_ERROR",
 		})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{
+	response.Envelope(ctx, http.StatusOK, gin.H{
 		"code":  0,
 		"msg":   "ok",
 		"data":  items,
