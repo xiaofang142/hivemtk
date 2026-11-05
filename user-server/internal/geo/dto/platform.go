@@ -34,6 +34,13 @@ type SavePlatformAccountRequest struct {
 	AccountName string            `json:"account_name" binding:"required"`
 	Status      string            `json:"status"`
 	Credentials map[string]string `json:"credentials"`
+	// 兼容前端现有的三段式表单：按平台映射到 Credentials。
+	// github: user=app_key, access_token=secret；wordpress: username/password；
+	// webhook: secret；其它平台 api_key/access_token。
+	AppKey string `json:"app_key"`
+	Secret string `json:"secret"`
+	// Extra 是 JSON 对象字符串，用于 endpoint/url 等平台专属配置。
+	Extra string `json:"extra"`
 }
 
 // PublishRequest 平台发布请求

@@ -90,6 +90,13 @@
                 Cookie
               </el-tag>
               <el-tag
+                v-else-if="row.capability === 'manual'"
+                type="info"
+                size="small"
+              >
+                手动复制
+              </el-tag>
+              <el-tag
                 v-else
                 type="info"
                 size="small"
@@ -145,21 +152,30 @@
                 v-else-if="row.name === 'medium'"
                 class="hint"
               >
-                访问 <a
-                  href="https://medium.com/me/settings/security"
-                  target="_blank"
-                >https://medium.com/me/settings/security</a> 手动配置 IntegrationToken（或通过 OAuth 应用授权），填入环境变量 <code>MEDIUM_TOKEN</code>
+                Medium 没有开放写接口，仅支持“发布后复制正文到编辑器”的手动流程；不要把它当成可自动发布的平台。
               </span>
               <span
                 v-else-if="row.name === 'wordpress'"
                 class="hint"
               >
-                WordPress 后台 → 用户 → 应用密码 → 生成专用密码，填入环境变量 <code>WORDPRESS_APPPASS</code>（用户名+密码）
+                配置账号：AppKey 填 WordPress 用户名，Secret 填“用户 → 应用密码”生成的专用密码，额外配置填
+                <code>{"endpoint":"https://你的站点/xmlrpc.php"}</code>。
               </span>
+              <span
+                v-else-if="row.name === 'webhook'"
+                class="hint"
+              >
+                配置账号：AppKey 留空，Secret 填可选 HMAC 密钥，额外配置填
+                <code>{"url":"https://你的接收端"}</code>；发布会 POST 文章 JSON（带 X-GEO-Signature）。
+              </span>
+              <span
+                v-else-if="row.capability === 'manual'"
+                class="hint"
+              >该平台仅支持手动复制发布。</span>
               <span
                 v-else-if="row.capability === 'real_api'"
                 class="hint"
-              >需配置 API Token 环境变量后可发布</span>
+              >需配置账号凭据后可发布</span>
               <span
                 v-else
                 class="hint"
@@ -446,13 +462,13 @@ const recordsToday = computed(() => {
 })
 
 const configuredPlatformNames = computed(() =>
-  Object.keys(accounts.value).filter(k => accounts.value[k] && (accounts.value[k].app_key || accounts.value[k].configured))
+  Object.keys(accounts.value).filter(k => accounts.value[k]?.has_credentials)
 )
 
 const isConfigured = (name) => configuredPlatformNames.value.includes(name)
 
 const authLabel = (t) => {
-  const map = { token: 'API Token', oauth: 'OAuth', cookie: 'Cookie', xmlrpc: 'XML-RPC', custom: '自定义' }
+  const map = { token: 'API Token', oauth: 'OAuth', cookie: 'Cookie', xmlrpc: 'XML-RPC', webhook: 'Webhook', manual: '手动', custom: '自定义' }
   return map[t] || t || '-'
 }
 
@@ -482,9 +498,11 @@ const loadPlatforms = async () => {
 const loadAccounts = async () => {
   try {
     const data = await listPlatformAccounts()
-    accounts.value = Array.isArray(data)
-      ? data.reduce((acc, a) => { acc[a.platform || a.name || a.key] = a; return acc }, {})
-      : (data || {})
+    const items = Array.isArray(data) ? data : (data?.list || data?.items || [])
+    accounts.value = items.reduce((acc, a) => {
+      acc[a.platform || a.name || a.key] = a
+      return acc
+    }, {})
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 

@@ -47,9 +47,12 @@ func defaultPlatforms() []platformDef {
 	return []platformDef{
 		{Name: "github_readme", DisplayName: "GitHub README", URL: "https://github.com", Path: "README.md", Branch: "master", AuthType: "token", Enabled: true, Capability: "real_api"},
 		{Name: "github_blog", DisplayName: "GitHub Blog", URL: "https://github.com", Path: "blog/", Branch: "master", AuthType: "token", Enabled: true, Capability: "real_api"},
-		{Name: "medium", DisplayName: "Medium", URL: "https://medium.com", AuthType: "oauth", Enabled: true, Capability: "real_api"},
-		{Name: "wordpress", DisplayName: "WordPress", AuthType: "xmlrpc", Enabled: true, Capability: "real_api"},
-		{Name: "custom", DisplayName: "自定义平台", AuthType: "custom", Enabled: false, Capability: "stub"},
+		{Name: "wordpress", DisplayName: "WordPress", URL: "https://wordpress.org", AuthType: "xmlrpc", Enabled: true, Capability: "real_api"},
+		{Name: "webhook", DisplayName: "通用 Webhook", AuthType: "webhook", Enabled: true, Capability: "real_api"},
+		// Medium 没有开放写接口（Integration Token 只能读），只能人工复制发布：
+		// 之前标 real_api 是口径造假，这里如实改为 manual。
+		{Name: "medium", DisplayName: "Medium（手动）", URL: "https://medium.com", AuthType: "manual", Enabled: true, Capability: "manual"},
+		{Name: "custom", DisplayName: "自定义平台（手动）", AuthType: "custom", Enabled: false, Capability: "manual"},
 	}
 }
 
@@ -124,20 +127,81 @@ func (s *PlatformService) ListPlatforms(ctx context.Context) []dto.PlatformInfo 
 func (s *PlatformService) validateAccount(req *dto.SavePlatformAccountRequest) error {
 	switch req.Platform {
 	case "github_readme", "github_blog":
-		if (req.Credentials == nil || (req.Credentials["api_key"] == "" && req.Credentials["access_token"] == "")) &&
+		if (req.Credentials == nil || (req.Credentials["token"] == "" && req.Credentials["access_token"] == "")) &&
 			os.Getenv("GEO_GITHUB_TOKEN") == "" {
 			return fmt.Errorf("GitHub 平台需要提供 access_token 或配置 GEO_GITHUB_TOKEN")
 		}
 	case "wordpress":
-		if req.Credentials == nil || req.Credentials["api_key"] == "" {
-			return fmt.Errorf("WordPress 需要提供 api_key")
+		creds := req.Credentials
+		if creds == nil || (creds["endpoint"] == "" && creds["url"] == "") {
+			return fmt.Errorf("WordPress 需要 endpoint（额外配置填 {\"endpoint\":\"https://站点/xmlrpc.php\"}）")
+		}
+		if creds["username"] == "" && creds["user"] == "" {
+			return fmt.Errorf("WordPress 需要用户名")
+		}
+		if creds["password"] == "" && creds["api_key"] == "" {
+			return fmt.Errorf("WordPress 需要应用密码")
+		}
+	case "webhook":
+		if req.Credentials == nil || (req.Credentials["url"] == "" && req.Credentials["endpoint"] == "") {
+			return fmt.Errorf("Webhook 需要 url（额外配置填 {\"url\":\"https://...\"}）")
 		}
 	}
 	return nil
 }
 
+// normalizePlatformCredentials 把前端三段式表单（app_key/secret/extra）
+// 归一成平台语义的 Credentials；显式 credentials 优先，不被兼容字段覆盖。
+func normalizePlatformCredentials(req *dto.SavePlatformAccountRequest) error {
+	creds := map[string]string{}
+	for k, v := range req.Credentials {
+		if strings.TrimSpace(v) != "" {
+			creds[k] = strings.TrimSpace(v)
+		}
+	}
+	if extra := strings.TrimSpace(req.Extra); extra != "" && extra != "{}" {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(extra), &obj); err != nil {
+			return fmt.Errorf("额外配置必须是 JSON 对象")
+		}
+		for k, v := range obj {
+			s, ok := v.(string)
+			if !ok {
+				continue
+			}
+			if _, exists := creds[k]; !exists && strings.TrimSpace(s) != "" {
+				creds[k] = strings.TrimSpace(s)
+			}
+		}
+	}
+	setIfEmpty := func(key, value string) {
+		if value != "" && creds[key] == "" {
+			creds[key] = value
+		}
+	}
+	appKey, secret := strings.TrimSpace(req.AppKey), strings.TrimSpace(req.Secret)
+	switch {
+	case strings.HasPrefix(req.Platform, "github"):
+		setIfEmpty("user", appKey)
+		setIfEmpty("access_token", secret)
+	case req.Platform == "wordpress":
+		setIfEmpty("username", appKey)
+		setIfEmpty("password", secret)
+	case req.Platform == "webhook":
+		setIfEmpty("secret", secret)
+	default:
+		setIfEmpty("api_key", appKey)
+		setIfEmpty("access_token", secret)
+	}
+	req.Credentials = creds
+	return nil
+}
+
 // SaveAccount 新增/更新平台账号（同平台同名账号覆盖更新）
 func (s *PlatformService) SaveAccount(ctx context.Context, req *dto.SavePlatformAccountRequest) (*dto.PlatformAccountResponse, error) {
+	if err := normalizePlatformCredentials(req); err != nil {
+		return nil, err
+	}
 	if err := s.validateAccount(req); err != nil {
 		return nil, err
 	}
@@ -304,6 +368,10 @@ func (s *PlatformService) Publish(ctx context.Context, req *dto.PublishRequest) 
 	switch req.Platform {
 	case "github_readme", "github_blog", "github":
 		return s.publishGitHub(ctx, article, req, path, branch, commitMsg)
+	case "wordpress":
+		return s.publishWordPress(ctx, article, req)
+	case "webhook":
+		return s.publishWebhook(ctx, article, req)
 	}
 
 	publishID := fmt.Sprintf("%s_%d", req.Platform, time.Now().UnixMilli())
