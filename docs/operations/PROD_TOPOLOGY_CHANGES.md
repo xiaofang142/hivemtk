@@ -4,6 +4,39 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-05 · 租户 1 平台 LLM 钱包与高优路由兜底
+
+**问题**：线上租户 1（`tenant_code=local-xw0hgtdo`）能查到平台下发的
+`platform-*` provider，但 `platform_db.llm_wallets` 没有该租户行 ⇒ 代理侧余额
+不足，内容生成静默回落 `heuristic_fallback`，GEO FAQ 也降级成检索摘要。
+
+**线上数据改动**（`mtk-platform-postgres/platform_db`）：
+
+```sql
+-- 按新开户赠送口径给租户 1 发放 2000 万输入 / 400 万输出 token
+INSERT INTO llm_wallets (merchant_key, tenant_code, input_tokens_remaining, output_tokens_remaining,
+                         total_recharged_input, total_recharged_output, ...)
+VALUES (:merchant_key, 'local-xw0hgtdo', 20000000, 4000000, 20000000, 4000000, ...);
+INSERT INTO llm_wallet_txns (..., reason, ref_type, note)
+VALUES (..., 'gift', 'signup', '线上租户1平台LLM开户赠送 ...');
+```
+
+**线上配置改动**（`user_db.llm_routing_rules`，`high_quality` 场景）：
+
+```sql
+UPDATE llm_routing_rules
+SET route_json = jsonb_set(route_json::jsonb, '{min_quality}', '0.94')::text
+WHERE tenant_id = 1 AND scenario = 'high_quality';
+```
+
+原因：`platform-sensenova` 偶发上游 429（`inference exceeds tpm/rpm limit`），
+而备选 `platform-dashscope` 质量分 0.94 被原阈值 0.95 挡掉，导致 high_quality
+场景无可用 provider。阈值降到 0.94 后 dashscope 可作为真实兜底。
+
+**校验**：GEO `content/generate` 返回 `model=deepseek-v4-flash` 且平台钱包有
+`consume` 流水；`geo/kb/ask` 在知识库有匹配文档时返回
+`provider=platform-sensenova`，不再走 `heuristic_fallback`。
+
 ## 2026-11-05 · 通用短链 `/s/` 反代
 
 **问题**：卡片/分享短链生成的是同源相对路径 `/s/<code>`，后端实际路由是
