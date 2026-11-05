@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
@@ -227,6 +228,11 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 				if seen[row.Name] {
 					continue
 				}
+				apiKey, invalid := llm.DecryptProviderAPIKeyForUse(row.Name, row.APIKey)
+				if invalid {
+					// 密文解不开时跳过，避免把 enc:v1:... 当 Bearer 发出去再收一个 401。
+					continue
+				}
 				seen[row.Name] = true
 				lowerName := strings.ToLower(row.Name)
 				lowerURL := strings.ToLower(row.BaseURL)
@@ -235,7 +241,7 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 						name:      row.Name,
 						endpoint:  row.BaseURL,
 						model:     row.Model,
-						apiKey:    row.APIKey,
+						apiKey:    apiKey,
 						brandHint: brandHint,
 					})
 					continue
@@ -244,7 +250,7 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 					name:      row.Name,
 					endpoint:  row.BaseURL,
 					model:     row.Model,
-					apiKey:    row.APIKey,
+					apiKey:    apiKey,
 					brandHint: brandHint,
 				})
 			}

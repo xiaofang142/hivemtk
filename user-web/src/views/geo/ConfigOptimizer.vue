@@ -263,7 +263,14 @@ const loadModelOptions = async () => {
         label: `${m.display_name || m.name} (${m.model || m.name})`,
         value: m.name
       }))
-    modelOptions.value = options
+    // /api/llm/models 会把同名的 self/platform provider 同时返回；
+    // 下拉框按 value 去重，避免同一个模型出现两次、选中项看起来跳动。
+    const seen = new Set()
+    modelOptions.value = options.filter((o) => {
+      if (seen.has(o.value)) return false
+      seen.add(o.value)
+      return true
+    })
     if (options.length) {
       if (!config.default_model || !options.some((o) => o.value === config.default_model)) {
         config.default_model = options[0].value
@@ -398,8 +405,20 @@ const handleOptimize = async () => {
       advantages: config.advantages.join('、'),
       competitors: config.competitors
     })
-    suggestions.value = res?.suggestions || []
-    ElMessage.success(res?.summary || '配置优化建议已生成')
+    const raw = res?.suggestions
+    if (Array.isArray(raw) && raw.length) {
+      suggestions.value = raw
+    } else {
+      // 后端实际返回 recommended_versions（版本方案），不是 suggestions。
+      // 之前直接取 suggestions 会渲染出 3 张只有「中」标签的空卡片。
+      suggestions.value = (res?.recommended_versions || []).map((v) => ({
+        priority: '方案',
+        title: v.version_name || v.brand || '优化方案',
+        description: [v.brand, v.advantages, v.reason].filter(Boolean).join('｜')
+      }))
+    }
+    const effects = res?.expected_effects || {}
+    ElMessage.success(effects.geo_friendliness || res?.summary || '配置优化建议已生成')
   } catch (e) {
     if (!isUserReportedError(e)) ElMessage.error(e.message || '配置优化失败')
   } finally {

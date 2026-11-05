@@ -140,6 +140,22 @@ func TestPlatformService_SaveAccount(t *testing.T) {
 	}
 }
 
+func TestPlatformService_SaveAccount_DefaultsAccountName(t *testing.T) {
+	db := geoTestDB(t)
+	svc := NewPlatformService(newGeoAccountRepo(db), newGeoRecordRepo(db), newGeoArticleRepo(db))
+
+	account, err := svc.SaveAccount(context.Background(), &dto.SavePlatformAccountRequest{
+		Platform:    "webhook",
+		Credentials: map[string]string{"url": "https://example.com/hook"},
+	})
+	if err != nil {
+		t.Fatalf("SaveAccount without account_name should succeed: %v", err)
+	}
+	if account.AccountName != "webhook" {
+		t.Fatalf("AccountName = %q, want platform fallback", account.AccountName)
+	}
+}
+
 func TestEstimateCostUSD(t *testing.T) {
 
 	usd, cny := EstimateCostUSD(context.Background(), "gpt-4o", 1_000_000, 500_000)

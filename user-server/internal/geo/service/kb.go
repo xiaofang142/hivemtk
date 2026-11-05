@@ -46,6 +46,12 @@ func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequ
 			existing.Content = req.Content
 			existing.DocType = req.DocType
 			existing.Metadata = metadataJSON
+			if req.SourceLevel != "" {
+				existing.SourceLevel = req.SourceLevel
+			}
+			if req.SourceURL != "" {
+				existing.SourceURL = req.SourceURL
+			}
 			if err := s.docRepo.Update(ctx, existing); err != nil {
 				return nil, err
 			}
@@ -56,11 +62,13 @@ func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequ
 	}
 
 	doc := &model.GeoKnowledgeDocument{
-		ID:       req.ID,
-		Title:    req.Title,
-		Content:  req.Content,
-		DocType:  req.DocType,
-		Metadata: metadataJSON,
+		ID:          req.ID,
+		Title:       req.Title,
+		Content:     req.Content,
+		DocType:     req.DocType,
+		SourceLevel: req.SourceLevel,
+		SourceURL:   req.SourceURL,
+		Metadata:    metadataJSON,
 	}
 	if err := s.docRepo.Create(ctx, doc); err != nil {
 		return nil, err

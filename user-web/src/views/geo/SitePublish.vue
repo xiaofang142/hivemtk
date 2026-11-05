@@ -54,8 +54,15 @@ async function exportOnly() {
   try {
     const res = await geoApi.exportSite()
     step.value = 1
-    lastResult.value = `导出 ${res?.exported ?? 0} 篇`
-    ElMessage.success('导出成功')
+    const exported = Number(res?.exported ?? 0)
+    lastResult.value = `导出 ${exported} 篇`
+    // 0 篇时后端确实完成了“无事可做”，但提示“导出成功”会让用户以为文章
+    // 已经铺到官网。明确告诉他需要先把文章状态改成已发布。
+    if (exported === 0) {
+      ElMessage.warning('没有已发布文章可导出：请先在内容创作页把文章状态改为已发布')
+    } else {
+      ElMessage.success(`已导出 ${exported} 篇`)
+    }
   } catch (e) { ElMessage.error('导出失败') }
 }
 async function deployOnly() {

@@ -32,6 +32,11 @@ type GeoCaptureLinkRepository interface {
 	Create(ctx context.Context, link *model.GeoCaptureLink) error
 	GetByID(ctx context.Context, id uint) (*model.GeoCaptureLink, error)
 	GetByCode(ctx context.Context, code string) (*model.GeoCaptureLink, error)
+	// GetByCodeUnscoped 连同软删除行一起查：删除后重建同一承接码时，唯一索引
+	// 仍被旧行占着，必须先找出旧行做原地复活，不能再 INSERT。
+	GetByCodeUnscoped(ctx context.Context, code string) (*model.GeoCaptureLink, error)
+	// Restore 复活软删除行并覆盖业务字段，同时清空旧的点击/线索/配额计数。
+	Restore(ctx context.Context, link *model.GeoCaptureLink) error
 	List(ctx context.Context, q CaptureLinkQuery) ([]*model.GeoCaptureLink, int64, error)
 	Delete(ctx context.Context, id uint) error
 	UpdateShortLinkID(ctx context.Context, id, shortLinkID uint) error
@@ -73,6 +78,52 @@ func (r *geoCaptureLinkRepo) GetByCode(ctx context.Context, code string) (*model
 		return nil, err
 	}
 	return &link, nil
+}
+
+func (r *geoCaptureLinkRepo) GetByCodeUnscoped(ctx context.Context, code string) (*model.GeoCaptureLink, error) {
+	var link model.GeoCaptureLink
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("code = ?", strings.TrimSpace(code)).First(&link).Error; err != nil {
+		return nil, err
+	}
+	return &link, nil
+}
+
+func (r *geoCaptureLinkRepo) Restore(ctx context.Context, link *model.GeoCaptureLink) error {
+	now := time.Now()
+	res := r.db.WithContext(ctx).Unscoped().Model(&model.GeoCaptureLink{}).
+		Where("id = ?", link.ID).
+		Updates(map[string]any{
+			"article_id":    link.ArticleID,
+			"chain_id":      link.ChainID,
+			"source_id":     link.SourceID,
+			"keyword":       link.Keyword,
+			"title":         link.Title,
+			"target_url":    link.TargetURL,
+			"created_by":    link.CreatedBy,
+			"short_link_id": link.ShortLinkID,
+			"clicks":        0,
+			"leads":         0,
+			"ask_date":      nil,
+			"ask_count":     0,
+			"lead_date":     nil,
+			"lead_count":    0,
+			"deleted_at":    nil,
+			"created_at":    now,
+			"updated_at":    now,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	link.DeletedAt = gorm.DeletedAt{}
+	link.UpdatedAt = now
+	link.Clicks, link.Leads = 0, 0
+	link.AskDate, link.LeadDate = nil, nil
+	link.AskCount, link.LeadCount = 0, 0
+	return nil
 }
 
 func (r *geoCaptureLinkRepo) List(ctx context.Context, q CaptureLinkQuery) ([]*model.GeoCaptureLink, int64, error) {

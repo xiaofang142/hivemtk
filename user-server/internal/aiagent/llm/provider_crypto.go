@@ -93,3 +93,11 @@ func decryptAPIKeyForUseNamed(name, stored string) (string, bool) {
 	}
 	return plain, false
 }
+
+// DecryptProviderAPIKeyForUse 给 GEO 探针等非 Dispatcher 调用方使用：
+// llm_providers.api_key 在库里是 enc:v1 密文，直接当 Bearer 发出去必然 401。
+// 返回的 invalid=true 表示密文无法用当前 MASTER_KEY 解开，调用方应显式跳过
+// 该 provider，而不是拿空 key 再试一次。
+func DecryptProviderAPIKeyForUse(name, stored string) (string, bool) {
+	return decryptAPIKeyForUseNamed(name, stored)
+}

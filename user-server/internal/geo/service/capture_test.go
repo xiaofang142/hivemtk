@@ -105,6 +105,35 @@ func TestCaptureService_Create(t *testing.T) {
 	}
 }
 
+func TestCaptureService_Create_RevivesDeletedCode(t *testing.T) {
+	db := captureSetupDB(t)
+	ctx := tenant.WithTenantID(context.Background(), captureTenant)
+	repo := repository.NewGeoCaptureLinkRepositoryWithDB(db)
+	shorts := &fakeShortLinks{}
+	svc := newCaptureSvc(t, repo, &fakeKB{}, nil, shorts)
+
+	first, err := svc.Create(ctx, CaptureLinkInput{TargetURL: "https://example.com/one", Code: "reusecode"}, "tester")
+	if err != nil {
+		t.Fatalf("首次创建失败: %v", err)
+	}
+	if err := repo.Delete(ctx, first.ID); err != nil {
+		t.Fatalf("删除失败: %v", err)
+	}
+	second, err := svc.Create(ctx, CaptureLinkInput{TargetURL: "https://example.com/two", Code: "reusecode"}, "tester2")
+	if err != nil {
+		t.Fatalf("删除后同码重建失败: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Fatalf("应复活原行，id %d → %d", first.ID, second.ID)
+	}
+	if second.TargetURL != "https://example.com/two" || second.CreatedBy != "tester2" {
+		t.Fatalf("复活后字段未覆盖: %+v", second)
+	}
+	if second.Clicks != 0 || second.Leads != 0 {
+		t.Fatalf("复活后计数未清零: %+v", second)
+	}
+}
+
 func TestCaptureService_AskQuotaAndLeadRollback(t *testing.T) {
 	db := captureSetupDB(t)
 	ctx := tenant.WithTenantID(context.Background(), captureTenant)

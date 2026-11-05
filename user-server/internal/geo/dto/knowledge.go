@@ -4,11 +4,13 @@ import "time"
 
 // SaveKnowledgeDocumentRequest 保存知识库文档请求
 type SaveKnowledgeDocumentRequest struct {
-	ID       string            `json:"id"`
-	Title    string            `json:"title" binding:"required"`
-	Content  string            `json:"content" binding:"required"`
-	DocType  string            `json:"doc_type"`
-	Metadata map[string]string `json:"metadata"`
+	ID          string            `json:"id"`
+	Title       string            `json:"title" binding:"required"`
+	Content     string            `json:"content" binding:"required"`
+	DocType     string            `json:"doc_type"`
+	SourceLevel string            `json:"source_level"`
+	SourceURL   string            `json:"source_url"`
+	Metadata    map[string]string `json:"metadata"`
 }
 
 // KnowledgeDocumentResponse 知识库文档响应

@@ -198,6 +198,11 @@ func normalizePlatformCredentials(req *dto.SavePlatformAccountRequest) error {
 
 // SaveAccount 新增/更新平台账号（同平台同名账号覆盖更新）
 func (s *PlatformService) SaveAccount(ctx context.Context, req *dto.SavePlatformAccountRequest) (*dto.PlatformAccountResponse, error) {
+	// 前端配置弹窗只采平台 + AppKey/Secret/额外配置，没有账号展示名。
+	// 同平台只保留一个默认账号，留空用平台标识即可，避免 400 把配置入口堵死。
+	if strings.TrimSpace(req.AccountName) == "" {
+		req.AccountName = req.Platform
+	}
 	if err := normalizePlatformCredentials(req); err != nil {
 		return nil, err
 	}
@@ -523,6 +528,7 @@ func (s *PlatformService) saveFailedRecord(ctx context.Context, articleID, platf
 		ArticleID: articleID,
 		Platform:  platform,
 		Status:    PublishStatusFailed,
+		Error:     errMsg,
 	})
 }
 

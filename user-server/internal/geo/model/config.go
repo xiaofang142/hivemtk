@@ -80,13 +80,15 @@ func (m *GeoPlatformAccount) BeforeCreate(tx *gorm.DB) error {
 type GeoPublishRecord struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID           string    `gorm:"type:varchar(36);primaryKey" json:"id"`
-	ArticleID    string    `gorm:"type:varchar(36);index" json:"article_id"`
-	Platform     string    `gorm:"type:varchar(50)" json:"platform"`
-	AccountID    string    `gorm:"type:varchar(200)" json:"account_id"`
-	Status       string    `gorm:"type:varchar(20);default:'pending'" json:"status"`
-	PublishedURL string    `gorm:"type:varchar(500)" json:"published_url"`
-	PublishedAt  time.Time `json:"published_at"`
+	ID           string `gorm:"type:varchar(36);primaryKey" json:"id"`
+	ArticleID    string `gorm:"type:varchar(36);index" json:"article_id"`
+	Platform     string `gorm:"type:varchar(50)" json:"platform"`
+	AccountID    string `gorm:"type:varchar(200)" json:"account_id"`
+	Status       string `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	PublishedURL string `gorm:"type:varchar(500)" json:"published_url"`
+	// Error 失败原因（发布记录页要能看到，不再只有一行 failed）。
+	Error       string    `gorm:"type:text" json:"error"`
+	PublishedAt time.Time `json:"published_at"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`

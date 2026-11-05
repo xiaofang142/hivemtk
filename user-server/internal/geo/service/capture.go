@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/url"
@@ -15,6 +16,8 @@ import (
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
 	baseservice "hivemtk-user/internal/service"
+
+	"gorm.io/gorm"
 )
 
 // captureLeadLimit 单条承接链接的每日留资上限，数据源是参数中心
@@ -240,6 +243,20 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 		CreatedBy: createdBy,
 	}
 
+	// code 是全局唯一索引，Delete 又是软删除：同码重建时旧行仍占着索引，
+	// 直接 INSERT 会抛 23505。删过就原地复活，并把旧计数清空。
+	revived := false
+	existing, err := s.links.GetByCodeUnscoped(ctx, code)
+	if err == nil {
+		if !existing.DeletedAt.Valid {
+			return nil, fmt.Errorf("承接码 %s 已被使用，请换一个", code)
+		}
+		link.ID = existing.ID
+		revived = true
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+
 	var shortRef *ShortLinkRef
 	if s.shorts != nil && strings.HasPrefix(s.publicBase, "https://") && len("g"+code) <= 20 {
 		shortCode := "g" + code
@@ -250,6 +267,16 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 		} else if shortRef != nil {
 			link.ShortLinkID = shortRef.ID
 		}
+	}
+
+	if revived {
+		if err := s.links.Restore(ctx, link); err != nil {
+			if shortRef != nil {
+				_ = s.shorts.DeleteShortLink(ctx, shortRef.ID)
+			}
+			return nil, err
+		}
+		return s.baseView(link), nil
 	}
 
 	if err := s.links.Create(ctx, link); err != nil {

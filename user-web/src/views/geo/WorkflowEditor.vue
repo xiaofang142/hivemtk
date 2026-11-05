@@ -465,7 +465,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
+import { listWorkflows, saveWorkflow, updateWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { fmtTime } from '@/utils/time'
 
@@ -529,15 +529,23 @@ const moveStep = (idx, dir) => {
 const onSaveWorkflow = async () => {
   try {
     const payload = {
-      id: currentWorkflow.value?.id,
       name: wfName.value,
       description: currentWorkflow.value?.description,
       steps: steps.value
     }
-    const result = await saveWorkflow(payload)
+    const id = currentWorkflow.value?.id
+    // 有 id 走 PUT，否则每次「保存」都 POST 一条新工作流，编辑两次列表里
+    // 就出现两条同名记录，Run Now 也不知道该跑哪一条。
+    const result = id
+      ? await updateWorkflow(id, payload)
+      : await saveWorkflow(payload)
     ElMessage.success('保存成功')
-    loadWorkflows()
-    if (result?.id) currentWorkflow.value.id = result.id
+    if (result?.id) {
+      currentWorkflow.value = { ...(currentWorkflow.value || {}), ...result }
+      wfName.value = result.name || wfName.value
+    }
+    await loadWorkflows()
+    await loadExecutions()
   } catch (e) {
     ElMessage.error('保存失败：' + (e?.message || e))
   }
@@ -558,10 +566,11 @@ const onDeleteWorkflow = async () => {
 
 const onRunNow = async () => {
   if (!currentWorkflow.value) return
-  // 未保存的新工作流在后端还不存在：按名称调用只会得到 404「工作流不存在」。
-  // 先把话说在前面，别让用户把 404 当成执行失败。
-  if (!currentWorkflow.value.id) {
-    ElMessage.warning('请先保存工作流再执行')
+  // 先把编辑中的步骤落盘再执行：否则改了步骤直接 Run Now 跑的还是旧定义，
+  // 用户看到的结果与编辑器不一致。新工作流也会在这一步拿到 id。
+  await onSaveWorkflow()
+  if (!currentWorkflow.value?.id) {
+    ElMessage.warning('工作流保存失败，无法执行')
     return
   }
   running.value = true

@@ -322,18 +322,17 @@ const onGenerateSchema = async () => {
   if (!currentEntity.value) return
   schemaLoading.value = true
   try {
-    let brandName = 'HiveMTK', advantages = '', domain = '';
+    let brandName = 'HiveMTK', domain = '';
     try {
       const cfg = await geoApi.getConfig()
       brandName = cfg?.brand_name || brandName
-      advantages = cfg?.advantages || ''
       domain = cfg?.domain || ''
     } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     const data = await geoApi.generateSchema({
-      content: currentEntity.value.description || currentEntity.value.name,
+      // 后端 /api/geo/content/schema 只读 description；此前发 content/keyword
+      // 会被忽略，生成器拿到空描述，Schema 结果为空。
+      description: currentEntity.value.description || currentEntity.value.name,
       brand_name: brandName,
-      advantages,
-      keyword: currentEntity.value.name,
       domain
     })
     const result = typeof data === 'string' ? data : (data?.schema_json || data?.schema || JSON.stringify(data, null, 2))

@@ -486,9 +486,18 @@ const loadRuns = async () => {
 const runProbe = async () => {
   probing.value = true
   try {
-    await probeAllEngines([], '这款产品的主要优势和适用场景是什么？')
-    ElMessage.success('探测已启动，云端引擎返回后数据自动落库，稍后刷新查看')
-    setTimeout(loadAll, 8000)
+    const res = await probeAllEngines([], '这款产品的主要优势和适用场景是什么？')
+    const failed = Number(res?.failed || 0)
+    const total = Number(res?.total || 0)
+    const firstError = Array.isArray(res?.errors) ? res.errors[0] : ''
+    if (total === 0 && failed > 0) {
+      ElMessage.error(`探测失败：${firstError || '所有引擎均不可用，请检查 llm_providers 的 Key / 地址'}`)
+    } else if (failed > 0) {
+      ElMessage.warning(`部分引擎失败（${failed} 个）：${firstError || '可稍后重试'}`)
+    } else {
+      ElMessage.success('探测完成，数据已落库')
+    }
+    await loadAll()
   } catch (e) {
     if (!isUserReportedError(e)) ElMessage.error(e?.message || '探测触发失败')
   } finally {

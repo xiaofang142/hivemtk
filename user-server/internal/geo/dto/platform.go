@@ -29,9 +29,11 @@ type PlatformAccountResponse struct {
 
 // SavePlatformAccountRequest 保存平台账号请求
 type SavePlatformAccountRequest struct {
-	Platform    string            `json:"platform" binding:"required"`
-	AccountID   string            `json:"account_id"`
-	AccountName string            `json:"account_name" binding:"required"`
+	Platform  string `json:"platform" binding:"required"`
+	AccountID string `json:"account_id"`
+	// AccountName 是展示名；前端三段式表单没有该字段。留空时服务端回落到
+	// Platform（同平台默认账号），不能把「没填展示名」判成非法请求。
+	AccountName string            `json:"account_name"`
 	Status      string            `json:"status"`
 	Credentials map[string]string `json:"credentials"`
 	// 兼容前端现有的三段式表单：按平台映射到 Credentials。

@@ -299,7 +299,8 @@ const onExtract = async (row) => {
   try {
     await extractEntities(row.id || row.doc_id)
     ElMessage.success('实体抽取完成')
-    loadDocs()
+    // 实体数统计来自实体库总数，不是文档列表；只刷 loadDocs 会一直显示 0。
+    await Promise.all([loadDocs(), loadEntityTotal()])
   } catch (e) { if (!isUserReportedError(e)) ElMessage.error('抽取失败：' + (e?.message || e)) }
   extractLoading.value = null
 }

@@ -322,11 +322,14 @@
           size="small"
         >
           <el-table-column
-            prop="article_title"
             label="文章"
             min-width="160"
             show-overflow-tooltip
-          />
+          >
+            <template #default="{ row }">
+              {{ articleTitle(row.article_id) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="platform"
             label="平台"
@@ -351,7 +354,26 @@
             label="错误信息"
             min-width="200"
             show-overflow-tooltip
-          />
+          >
+            <template #default="{ row }">
+              {{ row.error || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="published_url"
+            label="发布链接"
+            min-width="220"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }">
+              <a
+                v-if="row.published_url"
+                :href="row.published_url"
+                target="_blank"
+              >{{ row.published_url }}</a>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
           <el-table-column
             prop="created_at"
             label="时间"
@@ -480,8 +502,14 @@ const authLabel = (t) => {
   return map[t] || t || '-'
 }
 
+const articleTitle = (id) => {
+  if (!id) return '-'
+  const found = articles.value.find(a => a.id === id)
+  return found?.title || id
+}
+
 const statusType = (s) => {
-  if (s === 'success' || s === 'done') return 'success'
+  if (s === 'success' || s === 'done' || s === 'copied') return 'success'
   if (s === 'failed' || s === 'error') return 'danger'
   if (s === 'running' || s === 'pending') return 'warning'
   return 'info'
@@ -567,6 +595,9 @@ const onTestPublish = async (p) => {
     ElMessage.success(`${p.display_name} 测试发布成功`)
   } catch (e) {
     ElMessage.error(`${p.display_name} 测试失败：${e?.message || e}`)
+  } finally {
+    // 失败也会写 publish record；不刷新的话记录页永远看不到这次失败。
+    await loadRecords()
   }
 }
 
