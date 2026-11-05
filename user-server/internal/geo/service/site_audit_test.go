@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+// 本包测试全部打 httptest（127.0.0.1）；生产默认仍由 safeAuditBaseURL 拒绝私网。
+// 只放行测试二进制的出站校验，不放宽 safeAuditBaseURL 本身的断言。
+func init() {
+	siteAuditHostValidator = func(string) error { return nil }
+}
+
 // fullScoreHTML 满分页夹具：覆盖全部可页内判定的检查项
 const fullScoreHTML = `<!DOCTYPE html>
 <html lang="zh-CN">

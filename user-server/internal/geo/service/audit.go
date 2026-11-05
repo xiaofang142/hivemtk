@@ -39,17 +39,29 @@ type AuditFixView struct {
 
 // AuditReportView 一次体检的归一报告（落库快照与 API 响应共用）。
 type AuditReportView struct {
-	Kind          string              `json:"kind"`
-	Scope         string              `json:"scope"`
-	URL           string              `json:"url"`
-	Brand         string              `json:"brand"`
-	RubricVersion string              `json:"rubric_version"`
-	Score         int                 `json:"score"`
-	MaxScore      int                 `json:"max_score"`
-	Grade         string              `json:"grade"`
-	Summary       string              `json:"summary"`
-	Categories    []SiteAuditCategory `json:"categories"`
-	Fixes         []AuditFixView      `json:"fixes"`
+	Kind          string                `json:"kind"`
+	Scope         string                `json:"scope"`
+	URL           string                `json:"url"`
+	Brand         string                `json:"brand"`
+	RubricVersion string                `json:"rubric_version"`
+	Score         int                   `json:"score"`
+	MaxScore      int                   `json:"max_score"`
+	Grade         string                `json:"grade"`
+	Summary       string                `json:"summary"`
+	Categories    []SiteAuditCategory   `json:"categories"`
+	Fixes         []AuditFixView        `json:"fixes"`
+	Pages         []SiteAuditPageResult `json:"pages,omitempty"`
+}
+
+// SiteAuditPageResult 全站审计的逐页结果。
+type SiteAuditPageResult struct {
+	URL        string              `json:"url"`
+	Score      int                 `json:"score"`
+	MaxScore   int                 `json:"max_score"`
+	Grade      string              `json:"grade"`
+	Categories []SiteAuditCategory `json:"categories,omitempty"`
+	Fixes      []AuditFixView      `json:"fixes,omitempty"`
+	Error      string              `json:"error,omitempty"`
 }
 
 // ContentAuditInput 内容体检入参。Content 为空且 URL 非空时自动抓取正文。
@@ -115,8 +127,11 @@ func NewAuditService(repo repository.GeoAuditRepository, alerts *AlertService) *
 	return &AuditService{repo: repo, tech: NewTechConfigService(), alerts: alerts}
 }
 
-// RunSiteAudit 对单页站点跑 rubric v3 并落库。
-func (s *AuditService) RunSiteAudit(ctx context.Context, rawURL, brand, source, createdBy string) (*model.GeoAuditRun, *AuditReportView, error) {
+// RunSiteAudit 站点体检：scope=page 单页；scope=site 按 sitemap 逐页审计后聚合。
+func (s *AuditService) RunSiteAudit(ctx context.Context, rawURL, brand, scope string, maxPages int, source, createdBy string) (*model.GeoAuditRun, *AuditReportView, error) {
+	if normalizeAuditScope(scope) == model.GeoAuditScopeSite {
+		return s.runFullSiteAudit(ctx, rawURL, brand, maxPages, source, createdBy)
+	}
 	report, err := s.tech.RunSiteAudit(ctx, rawURL, brand)
 	if err != nil {
 		return nil, nil, err
@@ -158,6 +173,9 @@ func (s *AuditService) RunContentAudit(ctx context.Context, in ContentAuditInput
 // 可引用性审计需要的 Markdown 形状，并用真实 robots/llms 结果覆盖
 // RunGEOAudit 里两个“默认放行”的因子。
 func (s *AuditService) auditFromURL(ctx context.Context, rawURL, brand string) (*GeoAuditReport, error) {
+	if err := siteAuditHostValidator(rawURL); err != nil {
+		return nil, err
+	}
 	res, err := fetchSiteResources(ctx, rawURL)
 	if err != nil {
 		return nil, err
@@ -273,13 +291,23 @@ func (s *AuditService) persist(ctx context.Context, view *AuditReportView, pageC
 	if err != nil {
 		return nil, fmt.Errorf("序列化修复清单失败: %w", err)
 	}
+	var pages []byte
+	if len(view.Pages) > 0 {
+		pages, err = json.Marshal(view.Pages)
+		if err != nil {
+			return nil, fmt.Errorf("序列化逐页结果失败: %w", err)
+		}
+		if pageCount < len(view.Pages) {
+			pageCount = len(view.Pages)
+		}
+	}
 	if pageCount <= 0 {
 		pageCount = 1
 	}
 	run := &model.GeoAuditRun{
 		Kind: view.Kind, Scope: view.Scope, URL: view.URL, Brand: view.Brand,
 		RubricVersion: view.RubricVersion, Score: view.Score, MaxScore: view.MaxScore,
-		Grade: view.Grade, Categories: cats, Fixes: fixes, Summary: view.Summary,
+		Grade: view.Grade, Categories: cats, Fixes: fixes, PageResults: pages, Summary: view.Summary,
 		Source: source, PageCount: pageCount, CreatedBy: createdBy,
 	}
 	items := make([]*model.GeoAuditItem, 0)
@@ -307,6 +335,13 @@ func normalizeAuditSource(source string) string {
 	default:
 		return model.GeoAuditSourceManual
 	}
+}
+
+func normalizeAuditScope(scope string) string {
+	if scope == model.GeoAuditScopeSite {
+		return model.GeoAuditScopeSite
+	}
+	return model.GeoAuditScopePage
 }
 
 // Get 取一次体检及逐项结果。
@@ -510,6 +545,8 @@ func (s *AuditService) BuildReportHTML(ctx context.Context, id string) (string, 
 	_ = json.Unmarshal(run.Categories, &cats)
 	var fixes []AuditFixView
 	_ = json.Unmarshal(run.Fixes, &fixes)
+	var pages []SiteAuditPageResult
+	_ = json.Unmarshal(run.PageResults, &pages)
 	// 兼容两类历史/种子行：快照 JSON 为空时从 item 行重建，
 	// 否则报告会出现“有失败项但没有修复清单”的裂缝。
 	if len(cats) == 0 {
@@ -523,7 +560,7 @@ func (s *AuditService) BuildReportHTML(ctx context.Context, id string) (string, 
 		pct = run.Score * 100 / run.MaxScore
 	}
 	data := auditReportTemplateData{
-		Run: run, Categories: cats, Fixes: fixes, Items: items,
+		Run: run, Categories: cats, Fixes: fixes, Items: items, Pages: pages,
 		ScorePct: pct, GeneratedAt: time.Now().Format("2006-01-02 15:04"),
 	}
 	var buf bytes.Buffer
@@ -559,6 +596,7 @@ type auditReportTemplateData struct {
 	Items       []*model.GeoAuditItem
 	Categories  []SiteAuditCategory
 	Fixes       []AuditFixView
+	Pages       []SiteAuditPageResult
 	ScorePct    int
 	GeneratedAt string
 }
@@ -595,6 +633,10 @@ th{background:#f3f4f6}.pass{color:#059669;font-weight:600}.fail{color:#dc2626;fo
 </tbody></table>
 <h2>修复清单（按分值降序）</h2>
 {{if .Fixes}}{{range .Fixes}}<div class="fix"><strong>[{{.Category}}] {{.Check}}</strong>（{{.Weight}} 分）<div>{{.Detail}}</div><div class="muted">建议：{{.Suggestion}}</div></div>{{end}}{{else}}<p class="muted">没有未通过项。</p>{{end}}
+{{if .Pages}}<h2>页面明细</h2>
+<table><thead><tr><th>页面</th><th>得分</th><th>等级</th><th>结果</th></tr></thead><tbody>
+{{range .Pages}}<tr><td>{{.URL}}</td><td>{{.Score}} / {{.MaxScore}}</td><td>{{.Grade}}</td><td>{{if .Error}}<span class="fail">{{.Error}}</span>{{else}}<span class="pass">已完成</span>{{end}}</td></tr>{{end}}
+</tbody></table>{{end}}
 <h2>逐项明细</h2>
 <table><thead><tr><th>分类</th><th>检查项</th><th>得分</th><th>结果</th><th>说明</th></tr></thead><tbody>
 {{range .Items}}<tr><td>{{.CategoryLabel}}</td><td>{{.Check}}</td><td>{{.Score}} / {{.Max}}</td><td class="{{if .Pass}}pass{{else}}fail{{end}}">{{passText .Pass}}</td><td>{{.Detail}}</td></tr>{{end}}

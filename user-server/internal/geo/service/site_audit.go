@@ -118,6 +118,13 @@ type SiteAuditFix struct {
 
 var siteAuditClient = &http.Client{Timeout: siteFetchTimeout}
 
+// siteAuditHostValidator 出站前的主机校验（SSRF 防护）。
+// 默认拒绝私网/回环/元数据地址；测试用 httptest 时在 site_audit_test.go 的 init 里放行。
+var siteAuditHostValidator = func(rawURL string) error {
+	_, err := safeAuditBaseURL(rawURL)
+	return err
+}
+
 // fetchSiteResources 抓取目标页与其同域 AI 可达性资源。任何单项失败只降级该项，不中断整体。
 func fetchSiteResources(ctx context.Context, rawURL string) (*SiteResources, error) {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
@@ -1108,6 +1115,9 @@ func siteJSONLDHasKey(jsonLDs []string, key string) bool {
 
 // RunSiteAudit 活体审计入口：抓取 + 评分
 func (s *TechConfigService) RunSiteAudit(ctx context.Context, rawURL, brand string) (*GeoSiteAuditReport, error) {
+	if err := siteAuditHostValidator(rawURL); err != nil {
+		return nil, err
+	}
 	res, err := fetchSiteResources(ctx, rawURL)
 	if err != nil {
 		return nil, err

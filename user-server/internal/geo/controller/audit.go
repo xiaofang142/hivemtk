@@ -26,7 +26,7 @@ func NewAuditController(svc *service.AuditService) *AuditController {
 	return &AuditController{svc: svc}
 }
 
-// @Summary 站点体检（rubric v2）
+// @Summary 站点体检（rubric v3；scope=site 时按 sitemap 逐页审计）
 // @Tags    geo-audit
 // @Router  /api/geo/audit/site [post]
 // RunSite POST /geo/audit/site
@@ -39,13 +39,12 @@ func (c *AuditController) RunSite(ctx *gin.Context) {
 	if scope == "" {
 		scope = model.GeoAuditScopePage
 	}
-	if scope != model.GeoAuditScopePage {
-		// 全站审计（P2）尚未实现：明确拒绝，不能让前端以为已经扫了整站。
-		response.Error(ctx, http.StatusBadRequest, "当前仅支持单页审计（scope=page），全站审计将在后续版本开放")
+	if scope != model.GeoAuditScopePage && scope != model.GeoAuditScopeSite {
+		response.Error(ctx, http.StatusBadRequest, "scope 仅支持 page 或 site")
 		return
 	}
 	run, view, err := c.svc.RunSiteAudit(ctx.Request.Context(), req.URL, req.Brand,
-		model.GeoAuditSourceManual, ctx.GetString("username"))
+		scope, req.MaxPages, model.GeoAuditSourceManual, ctx.GetString("username"))
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return

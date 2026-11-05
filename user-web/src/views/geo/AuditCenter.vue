@@ -23,12 +23,35 @@
         <el-form-item label="体检类型">
           <el-radio-group v-model="form.kind">
             <el-radio-button value="site">
-              站点（rubric v2）
+              站点（rubric v3）
             </el-radio-button>
             <el-radio-button value="content">
-              内容（25 因子）
+              内容（29 因子）
             </el-radio-button>
           </el-radio-group>
+        </el-form-item>
+        <el-form-item
+          v-if="form.kind === 'site'"
+          label="范围"
+        >
+          <el-radio-group v-model="form.scope">
+            <el-radio-button value="page">
+              单页
+            </el-radio-button>
+            <el-radio-button value="site">
+              全站（sitemap）
+            </el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item
+          v-if="form.kind === 'site' && form.scope === 'site'"
+          label="最多页数"
+        >
+          <el-input-number
+            v-model="form.max_pages"
+            :min="1"
+            :max="20"
+          />
         </el-form-item>
         <el-form-item label="URL">
           <el-input
@@ -222,6 +245,59 @@
             v-if="!current.fixes.length"
             description="没有未通过项"
           />
+        </el-tab-pane>
+
+        <el-tab-pane
+          v-if="current.pages && current.pages.length"
+          label="页面明细"
+          name="pages"
+        >
+          <el-table
+            :data="current.pages"
+            size="small"
+            border
+          >
+            <el-table-column
+              prop="url"
+              label="页面"
+              min-width="320"
+              show-overflow-tooltip
+            />
+            <el-table-column
+              label="得分"
+              width="110"
+            >
+              <template #default="{ row }">
+                {{ row.score }} / {{ row.max_score }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="grade"
+              label="等级"
+              width="90"
+            />
+            <el-table-column
+              label="结果"
+              width="120"
+            >
+              <template #default="{ row }">
+                <el-tag
+                  v-if="row.error"
+                  type="danger"
+                  size="small"
+                >
+                  抓取失败
+                </el-tag>
+                <el-tag
+                  v-else
+                  type="success"
+                  size="small"
+                >
+                  已完成
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
         </el-tab-pane>
       </el-tabs>
     </el-card>
@@ -546,6 +622,8 @@ import {
 
 const form = reactive({
   kind: 'site',
+  scope: 'page',
+  max_pages: 10,
   url: '',
   brand: '',
   content: '',
@@ -603,7 +681,12 @@ async function runAudit () {
   try {
     let data
     if (form.kind === 'site') {
-      data = await runSiteAudit({ url: form.url, brand: form.brand, scope: 'page' })
+      data = await runSiteAudit({
+        url: form.url,
+        brand: form.brand,
+        scope: form.scope,
+        max_pages: form.max_pages
+      })
     } else {
       data = await runContentAudit({
         url: form.url,
@@ -626,7 +709,8 @@ function applyReport (payload) {
   current.value = {
     run: payload.run,
     categories: report.categories || payload.run.categories || [],
-    fixes: report.fixes || payload.run.fixes || []
+    fixes: report.fixes || payload.run.fixes || [],
+    pages: report.pages || payload.run.page_results || []
   }
   openCategories.value = current.value.categories.map((c) => c.category)
   resultTab.value = 'categories'

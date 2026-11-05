@@ -29,6 +29,7 @@ func auditServiceTestDB(t *testing.T) *gorm.DB {
 // auditFixtureSite 一个最小的可审计站点：robots 放行 AI 爬虫、llms.txt 合规、
 // 文章含 H1/H2/列表/表格/FAQ/量化数据/外链/JSON-LD。
 func auditFixtureSite() *httptest.Server {
+	var baseURL string
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -66,7 +67,21 @@ func auditFixtureSite() *httptest.Server {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprint(w, "# HiveMtk\n\n> AI 销售与智能客服平台\n\n## 产品\n- [GEO](https://example.com/geo)\n- [定价](https://example.com/pricing)\n\n## 文档\n- [指南](https://example.com/docs)\n\n更多内容见站点地图。")
 	})
-	return httptest.NewServer(mux)
+	mux.HandleFunc("/sitemap.xml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><urlset><url><loc>%s/</loc></url><url><loc>%s/pricing</loc></url><url><loc>%s/docs</loc></url></urlset>`, baseURL, baseURL, baseURL)
+	})
+	page := func(title string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprintf(w, `<html lang="zh-CN"><head><title>%s - HiveMtk</title><meta name="description" content="HiveMtk 是面向企业的 AI 销售与智能客服平台，适合需要私域增长的中小团队，这是最新版本的产品说明。"></head><body><h1>%s</h1><ul><li>AI 销售</li><li>RAG</li><li>SOP</li></ul><p>相比上一代，v2 增加了多模型验证。</p><p><a href="/docs">文档</a> <a href="/pricing">价格</a></p></body></html>`, title, title)
+		}
+	}
+	mux.HandleFunc("/pricing", page("价格"))
+	mux.HandleFunc("/docs", page("文档"))
+	srv := httptest.NewServer(mux)
+	baseURL = srv.URL
+	return srv
 }
 
 func TestHtmlToAuditMarkdown_KeepsStructureDropsChrome(t *testing.T) {
@@ -92,7 +107,7 @@ func TestAuditService_RunSiteAuditPersists(t *testing.T) {
 	defer site.Close()
 
 	svc := NewAuditService(repository.NewGeoAuditRepositoryWithDB(db), nil)
-	run, view, err := svc.RunSiteAudit(context.Background(), site.URL, "HiveMtk", model.GeoAuditSourceManual, "tester")
+	run, view, err := svc.RunSiteAudit(context.Background(), site.URL, "HiveMtk", model.GeoAuditScopePage, 1, model.GeoAuditSourceManual, "tester")
 	if err != nil {
 		t.Fatalf("站点审计失败: %v", err)
 	}
@@ -114,6 +129,42 @@ func TestAuditService_RunSiteAuditPersists(t *testing.T) {
 	}
 	if items[0].RunID != run.ID || items[0].TenantID == 0 {
 		t.Fatalf("item 归属字段未填: %+v", items[0])
+	}
+}
+
+func TestAuditService_RunFullSiteAudit(t *testing.T) {
+	db := auditServiceTestDB(t)
+	site := auditFixtureSite()
+	defer site.Close()
+
+	svc := NewAuditService(repository.NewGeoAuditRepositoryWithDB(db), nil)
+	run, view, err := svc.RunSiteAudit(context.Background(), site.URL, "HiveMtk",
+		model.GeoAuditScopeSite, 5, model.GeoAuditSourceManual, "tester")
+	if err != nil {
+		t.Fatalf("全站审计失败: %v", err)
+	}
+	if run.Scope != model.GeoAuditScopeSite {
+		t.Fatalf("scope 应为 site，实际 %s", run.Scope)
+	}
+	if run.PageCount != 3 || len(view.Pages) != 3 {
+		t.Fatalf("sitemap 应发现 3 页，实际 page_count=%d pages=%d", run.PageCount, len(view.Pages))
+	}
+	if run.MaxScore != 3*112 {
+		t.Fatalf("全站分母应为 3×112，实际 %d", run.MaxScore)
+	}
+	if run.Score <= 0 || len(view.Categories) != 10 {
+		t.Fatalf("聚合报告异常: score=%d cats=%d", run.Score, len(view.Categories))
+	}
+	if !strings.Contains(run.Summary, "全站 3 页") {
+		t.Fatalf("summary 未说明全站页数: %s", run.Summary)
+	}
+	// 逐页结果落库后，报告页应能读出来。
+	gotRun, _, err := svc.Get(context.Background(), run.ID)
+	if err != nil {
+		t.Fatalf("回查失败: %v", err)
+	}
+	if len(gotRun.PageResults) == 0 {
+		t.Fatal("page_results 未落库")
 	}
 }
 

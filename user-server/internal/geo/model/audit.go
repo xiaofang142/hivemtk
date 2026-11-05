@@ -55,7 +55,10 @@ type GeoAuditRun struct {
 
 	Categories datatypes.JSON `gorm:"type:jsonb" json:"categories"`
 	Fixes      datatypes.JSON `gorm:"type:jsonb" json:"fixes"`
-	Summary    string         `gorm:"type:text" json:"summary"`
+	// PageResults 全站审计的逐页结果；单页审计为 null。
+	// 聚合分落在 Score/Categories/Items，逐页明细只用于报告与定位问题。
+	PageResults datatypes.JSON `gorm:"type:jsonb" json:"page_results,omitempty"`
+	Summary     string         `gorm:"type:text" json:"summary"`
 
 	Source    string `gorm:"type:varchar(20);index" json:"source"`
 	PageCount int    `gorm:"default:1" json:"page_count"`

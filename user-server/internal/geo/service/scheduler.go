@@ -359,7 +359,7 @@ func siteAuditJob(ctx context.Context) (string, error) {
 				fmt.Errorf("执行超时中止")
 		}
 		rawURL := normalizeSiteAuditURL(site.Domain)
-		run, _, runErr := auditSvc.RunSiteAudit(ctx, rawURL, brand, model.GeoAuditSourceSchedule, "job")
+		run, _, runErr := auditSvc.RunSiteAudit(ctx, rawURL, brand, model.GeoAuditScopeSite, defaultSiteAuditPages, model.GeoAuditSourceSchedule, "job")
 		if runErr != nil {
 			failed++
 			logger.Warn(fmt.Sprintf("[GEO Job site_audit] 站点 %s 审计失败: %v", rawURL, runErr))
