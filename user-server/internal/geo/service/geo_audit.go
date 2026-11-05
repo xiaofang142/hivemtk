@@ -61,6 +61,10 @@ func fixSuggestion(factor, detail string) string {
 		{"时效性声明", "标注内容适用版本与更新年份（如 2026），过期数据及时刷新"},
 		{"品牌自然融入", "品牌出现 2-6 次，自然分布于首段、正文与结尾"},
 		{"差异化定位", "点名核心卖点（开源/本地部署/不出域等），勿与竞品同质化"},
+		{"产品定位清晰", "首段用一句话定义“是什么产品/属于什么类别”，再展开功能"},
+		{"目标人群明确", "写明适合谁（团队/企业/开发者/行业），不要只写“高效、专业”"},
+		{"代际差异", "补一句和上一代/旧方案的区别（升级点、能力边界）"},
+		{"版本时效", "标注当前版本号或更新年份，过期数据及时刷新"},
 		{"CTA行动号召", "结尾加明确 CTA（了解更多/联系我们/开始使用）"},
 		{"多语言友好", "清除 TODO 等占位符残留"},
 		{"Meta描述长度", "meta description 控制在 80-300 字符，含关键词与卖点"},
@@ -128,6 +132,12 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 
 	add("品牌自然融入", 5, strings.Count(content, "HiveMtk") >= 2 && strings.Count(content, "HiveMtk") <= 6, fmt.Sprintf("提及 %d 次(建议2-6次)", strings.Count(content, "HiveMtk")))
 	add("差异化定位", 4, strings.Contains(lc, "开源") || strings.Contains(lc, "本地部署") || strings.Contains(lc, "不出域"), "核心卖点出现")
+	// 产品叙事四问（rubric content-v2）：回答“是什么/适合谁/和上一代差在哪/最新版本”。
+	add("产品定位清晰", 4, siteHasAny(content, "是", "为") &&
+		siteHasAny(content, "平台", "系统", "软件", "工具", "产品", "服务", "解决方案"), "首段有产品类别定义")
+	add("目标人群明确", 3, siteHasAny(content, "适合", "面向", "专为", "团队", "企业", "个人", "开发者", "中小企业"), "写出适合谁")
+	add("代际差异", 3, siteHasAny(content, "相比", "上一代", "新一代", "升级", "区别于", "不同于", "替代"), "与上一代/旧方案的差异")
+	add("版本时效", 2, siteVersionTokenRe.MatchString(content) || siteHasRecentYear(content), "版本号或近期年份")
 	add("CTA行动号召", 3, strings.Contains(lc, "了解更多") || strings.Contains(lc, "联系我们") || strings.Contains(lc, "开始使用") || strings.Contains(lc, "部署"), "引导下一步动作")
 	add("多语言友好", 1, !strings.Contains(content, "TODO"), "无占位符残留")
 
@@ -166,7 +176,7 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 		summary += " 优秀，达到行业领先水平。"
 	}
 
-	return &GeoAuditReport{URL: url, RubricVersion: GeoAuditRubricContentV1, Score: score, Grade: AuditGrade(score), Factors: factors, Fixes: buildFixes(factors), Summary: summary}
+	return &GeoAuditReport{URL: url, RubricVersion: GeoAuditRubricContentV2, Score: score, Grade: AuditGrade(score), Factors: factors, Fixes: buildFixes(factors), Summary: summary}
 }
 
 func countPass(fs []GeoAuditFactor) int {

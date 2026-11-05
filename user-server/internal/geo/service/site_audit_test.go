@@ -27,9 +27,10 @@ const fullScoreHTML = `<!DOCTYPE html>
 <body>
 <h1>HiveMTK：开源私域营销操作系统</h1>
 <h2>核心能力</h2>
+<ul><li>41 个工具</li><li>七端打通</li><li>数据不出域</li></ul>
 <p>HiveMTK 覆盖 41 个工具，2026 年实测转化率提升 35%，客户说"再考虑一下"时 AI 能分辨真忙还是婉拒。七个渠道的消息统一进入收件箱，智能体按置信度自动回复，低置信度场景转人工，全程数据不出域。</p>
 <h2>部署方式</h2>
-<p>支持本地部署与云端版，参见 <a href="https://github.com/xiaofang142/hivemtk">开源仓库</a> 与 <a href="/docs">使用文档</a>。私有化部署五分钟起服务：一条 docker compose 命令拉起 PostgreSQL、Redis 与 user-server，无需外部 SaaS 依赖，升级只需更换镜像并保留数据卷，配置与数据全部留在用户自己的数据库里。</p>
+<p>相比上一代，v2 增加了多模型验证与本地知识库检索。支持本地部署与云端版，参见 <a href="https://github.com/xiaofang142/hivemtk">开源仓库</a> 与 <a href="/docs">使用文档</a>。私有化部署五分钟起服务：一条 docker compose 命令拉起 PostgreSQL、Redis 与 user-server，无需外部 SaaS 依赖，升级只需更换镜像并保留数据卷，配置与数据全部留在用户自己的数据库里。</p>
 <p>了解更多请访问 <a href="/about">关于我们</a> 或 <a href="/contact">联系方式</a>。</p>
 <h2>为什么开源</h2>
 <p>私域营销系统握着客户资产，闭源 SaaS 意味着数据出域。HiveMTK 以 AGPL-3.0 开源，2026 年已交付 62 个业务模块，企业可以在自己的服务器上审计每一行代码。实测某装修建材团队接入后，40 分钟内的重复报价事故归零，跟进响应时长从小时级降到秒级，这是流程引擎带来的确定性收益，而不是话术技巧。</p>
@@ -91,7 +92,7 @@ func checkByName(c *SiteAuditCategory, check string) *SiteAuditCheck {
 func TestSiteAuditFullScore(t *testing.T) {
 	rep := RunSiteAuditFromResources(fullScoreResources(fullScoreHTML), "HiveMTK")
 	if rep.Score != rep.MaxScore {
-		t.Fatalf("expected full score %d, got %d\nsummary=%s", rep.MaxScore, rep.Score, rep.Summary)
+		t.Errorf("expected full score %d, got %d\nsummary=%s", rep.MaxScore, rep.Score, rep.Summary)
 		for _, c := range rep.Categories {
 			for _, ck := range c.Checks {
 				if !ck.Pass {

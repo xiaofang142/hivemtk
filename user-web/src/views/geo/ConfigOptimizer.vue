@@ -103,6 +103,49 @@
                 </el-button>
               </div>
             </el-form-item>
+            <el-divider content-position="left">
+              产品叙事（官网六问）
+            </el-divider>
+            <div class="brief-hint">
+              这里填的是“AI 能不能直接回答”的事实：是什么产品、核心功能、适合谁、和上一代/竞品差在哪、最新版本。内容生成、改写与 Schema 都会引用这些字段。
+            </div>
+            <el-form-item label="产品类别">
+              <el-input
+                v-model="config.product_category"
+                placeholder="如：AI 销售与智能客服平台 / SCRM 系统"
+                clearable
+              />
+            </el-form-item>
+            <el-form-item label="目标人群">
+              <el-input
+                v-model="config.target_audience"
+                placeholder="如：需要私域增长的中小企业、销售团队、运营负责人"
+                clearable
+              />
+            </el-form-item>
+            <el-form-item label="核心功能">
+              <el-input
+                v-model="config.key_features"
+                type="textarea"
+                :rows="2"
+                placeholder="如：AI 销售引擎、RAG 知识库、SOP 流程、13 渠道接入（用顿号或换行分隔）"
+              />
+            </el-form-item>
+            <el-form-item label="代际/竞品差异">
+              <el-input
+                v-model="config.generation_note"
+                type="textarea"
+                :rows="2"
+                placeholder="如：相比上一代增加了多模型验证；相比竞品强调本地部署、数据不出域"
+              />
+            </el-form-item>
+            <el-form-item label="当前版本">
+              <el-input
+                v-model="config.version_label"
+                placeholder="如：v2.5（2026-11 更新）"
+                clearable
+              />
+            </el-form-item>
             <el-form-item label="默认生成模型">
               <el-select
                 v-model="config.default_model"
@@ -245,7 +288,12 @@ const config = reactive({
   advantages: [],
   competitors: [],
   default_model: '',
-  verify_models: []
+  verify_models: [],
+  product_category: '',
+  target_audience: '',
+  key_features: '',
+  generation_note: '',
+  version_label: ''
 })
 
 const loading = ref(false)
@@ -302,6 +350,11 @@ const loadConfig = async () => {
     config.verify_models = verifyFromDB.length
       ? verifyFromDB
       : (config.verify_models.length ? config.verify_models : (modelOptions.value?.[0] ? [modelOptions.value[0].value] : []))
+    config.product_category = res?.product_category || ''
+    config.target_audience = res?.target_audience || ''
+    config.key_features = res?.key_features || ''
+    config.generation_note = res?.generation_note || ''
+    config.version_label = res?.version_label || ''
   } catch (e) {
     if (!isUserReportedError(e)) ElMessage.error(e.message || '配置加载失败')
   } finally {
@@ -322,7 +375,12 @@ const handleSave = async () => {
       advantages: config.advantages.join('、'),
       competitors: config.competitors,
       default_model: config.default_model,
-      verify_models: config.verify_models
+      verify_models: config.verify_models,
+      product_category: config.product_category,
+      target_audience: config.target_audience,
+      key_features: config.key_features,
+      generation_note: config.generation_note,
+      version_label: config.version_label
     })
     ElMessage.success('配置已保存')
   } catch (e) {
@@ -369,6 +427,15 @@ onMounted(async () => {
   margin: 0 0 16px;
   color: $info-color;
   font-size: $font-size-small;
+}
+.brief-hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  color: $info-color;
+  font-size: $font-size-small;
+  line-height: 1.6;
+  background: rgba(64, 158, 255, 0.06);
+  border-radius: 6px;
 }
 .form-card,
 .suggest-card {

@@ -17,7 +17,7 @@ import (
 )
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GEO 站点审计 v2（rubric v2 九类百分制）
+// GEO 站点审计 v3（rubric v3 十类：v2 九类 + 产品叙事）
 //
 // 吸纳自开源项目 geo-optimizer-skill v4.19.8（MIT，Auriti Labs）的审计语义与分值表，
 // 以 Go 原生移植（无 Python 运行时依赖）。与既有 RunGEOAudit（25 因子内容审计）互补：
@@ -29,20 +29,21 @@ import (
 // 请求不携带任何品牌配置数据；无用户触发时零出站请求。
 // ─────────────────────────────────────────────────────────────────────────────
 
-// rubric v2 各类满分（与 geo-optimizer-skill SKILL.md 评分表逐项一致）
+// rubric v3 各类满分：v2 的九类 + product_clarity（官网六问）12 分。
 const (
-	siteAuditMaxGoogleAI   = 20
-	siteAuditMaxRobots     = 14
-	siteAuditMaxSchema     = 14
-	siteAuditMaxContent    = 14
-	siteAuditMaxBrand      = 12
-	siteAuditMaxMeta       = 11
-	siteAuditMaxLLMs       = 6
-	siteAuditMaxSignals    = 6
-	siteAuditMaxAIDisc     = 3
-	siteAuditTotalMaxScore = siteAuditMaxGoogleAI + siteAuditMaxRobots + siteAuditMaxSchema +
+	siteAuditMaxGoogleAI       = 20
+	siteAuditMaxRobots         = 14
+	siteAuditMaxSchema         = 14
+	siteAuditMaxContent        = 14
+	siteAuditMaxBrand          = 12
+	siteAuditMaxMeta           = 11
+	siteAuditMaxLLMs           = 6
+	siteAuditMaxSignals        = 6
+	siteAuditMaxAIDisc         = 3
+	siteAuditMaxProductClarity = 12
+	siteAuditTotalMaxScore     = siteAuditMaxGoogleAI + siteAuditMaxRobots + siteAuditMaxSchema +
 		siteAuditMaxContent + siteAuditMaxBrand + siteAuditMaxMeta + siteAuditMaxLLMs +
-		siteAuditMaxSignals + siteAuditMaxAIDisc
+		siteAuditMaxSignals + siteAuditMaxAIDisc + siteAuditMaxProductClarity
 )
 
 // siteFetch 抓取边界
@@ -92,7 +93,7 @@ type SiteAuditCategory struct {
 	Checks   []SiteAuditCheck `json:"checks"`
 }
 
-// GeoSiteAuditReport 站点审计报告（rubric v2）
+// GeoSiteAuditReport 站点审计报告（rubric v3）
 type GeoSiteAuditReport struct {
 	URL           string              `json:"url"`
 	RubricVersion string              `json:"rubric_version"`
@@ -187,7 +188,7 @@ func siteFetch(ctx context.Context, target, accept string) (status int, finalURL
 
 // ── 评分（纯函数，可离线复用） ───────────────────────────────────────────────
 
-// RunSiteAuditFromResources 对已抓取资源执行 rubric v2 评分。brand 仅用于页内匹配，不出站。
+// RunSiteAuditFromResources 对已抓取资源执行 rubric v3 评分。brand 仅用于页内匹配，不出站。
 func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditReport {
 	page := parseSitePage(res.Body)
 	// 正文可达性：非 200（WAF 挑战页/登录墙/硬 404）时 body 依赖类检查审计的是
@@ -201,6 +202,7 @@ func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditRe
 		auditSchemaShortCircuit(res, page, bodyOK),
 		auditSiteContentShortCircuit(res, page, bodyOK),
 		auditBrandEntityShortCircuit(res, page, brand, bodyOK),
+		auditProductClarityShortCircuit(res, page, bodyOK),
 		auditSiteMetaShortCircuit(res, page, bodyOK),
 		auditLLMs(res),
 		auditSiteSignalsShortCircuit(res, page, bodyOK),
@@ -228,7 +230,7 @@ func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditRe
 	}
 
 	rep := &GeoSiteAuditReport{
-		URL: res.FinalURL, RubricVersion: GeoSiteAuditRubricV2, Score: score, MaxScore: siteAuditTotalMaxScore,
+		URL: res.FinalURL, RubricVersion: GeoSiteAuditRubricV3, Score: score, MaxScore: siteAuditTotalMaxScore,
 		Grade: AuditGrade(score * 100 / siteAuditTotalMaxScore), Categories: cats, Fixes: fixes,
 	}
 	passed, total := 0, 0
@@ -240,7 +242,7 @@ func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditRe
 			}
 		}
 	}
-	rep.Summary = fmt.Sprintf("通过 %d/%d 项，rubric v2 得分 %d/%d（%s）。", passed, total, rep.Score, rep.MaxScore, rep.Grade)
+	rep.Summary = fmt.Sprintf("通过 %d/%d 项，rubric v3 得分 %d/%d（%s）。", passed, total, rep.Score, rep.MaxScore, rep.Grade)
 	if rep.Score*100/siteAuditTotalMaxScore < 60 {
 		rep.Summary += " 建议优先修复分值最高的未通过项。"
 	}
@@ -258,6 +260,8 @@ type sitePage struct {
 	lang              string
 	h1                int
 	h2                int
+	listItems         int
+	hasTable          bool
 	text              string
 	textLen           int
 	jsonLDs           []string
@@ -332,6 +336,10 @@ func parseSitePage(body string) *sitePage {
 				p.h1++
 			case "h2":
 				p.h2++
+			case "li":
+				p.listItems++
+			case "table":
+				p.hasTable = true
 			case "img":
 				p.imgs++
 				for _, a := range n.Attr {
@@ -918,6 +926,101 @@ func auditSchemaShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteA
 		return cat
 	}
 	return auditSchema(res, p)
+}
+
+// ── product_clarity（12 分，rubric v3 新增） ────────────────────────────────
+//
+// 图 2 的“官网六问”：AI 需要能直接回答这是什么产品/核心功能/适合谁/
+// 代际差异/竞品差异/最新版本，而不是从漂亮页面里猜。全部为页内确定性检查，
+// 不调用 LLM，也不把品牌配置带出站。
+
+var siteVersionTokenRe = regexp.MustCompile(`(?i)\bv\d+(?:\.\d+)*\b`)
+
+func auditProductClarity(p *sitePage) SiteAuditCategory {
+	cat := SiteAuditCategory{Category: "product_clarity", Label: "产品叙事（官网六问）", Max: siteAuditMaxProductClarity}
+	add := func(check string, max int, pass bool, detail, fix string) {
+		score := 0
+		if pass {
+			score = max
+		}
+		cat.Checks = append(cat.Checks, SiteAuditCheck{Check: check, Score: score, Max: max, Pass: pass, Detail: detail, Fix: fix})
+	}
+
+	headRunes := []rune(p.text)
+	head := p.text
+	if len(headRunes) > 300 {
+		head = string(headRunes[:300])
+	}
+	defineOK := (siteHasAny(head, "是", "为", "属于") ||
+		siteHasAny(p.title, "平台", "系统", "软件", "工具", "产品", "服务", "解决方案")) &&
+		siteHasAny(p.text, "平台", "系统", "软件", "工具", "产品", "服务", "解决方案")
+	defineDetail := "首段缺少定义句"
+	if defineOK {
+		defineDetail = "首段含定义性表述"
+	}
+	add("PRODUCT-DEFINE", 2, defineOK, defineDetail,
+		"首屏用一句话定义“是什么产品/属于什么类别”，例：HiveMtk 是面向企业的 AI 销售与智能客服平台")
+
+	featureOK := siteHasAny(p.text, "功能", "能力", "特性", "优势") && (p.listItems >= 3 || p.hasTable)
+	add("PRODUCT-FEATURES", 2, featureOK, fmt.Sprintf("列表项 %d / 表格 %v", p.listItems, p.hasTable),
+		"用列表或表格列出 3 条以上核心功能，AI 才能稳定抽取")
+
+	audienceOK := siteHasAny(p.text, "适合", "面向", "专为", "团队", "企业", "个人", "开发者", "中小企业")
+	add("PRODUCT-AUDIENCE", 2, audienceOK, "检查适合人群表述",
+		"明确写出适合谁（团队/企业/开发者/行业），避免只有“高效、专业”这类空话")
+
+	diffOK := siteHasAny(p.text, "相比", "上一代", "新一代", "升级", "区别于", "不同于", "替代")
+	add("PRODUCT-DIFF", 2, diffOK, "检查代际差异表述",
+		"补一句和上一代/旧方案的区别（升级点、能力边界），让 AI 能回答“有什么不同”")
+
+	compOK := siteHasAny(p.text, "竞品", "替代方案", "对比", "相比", " vs ", "VS ")
+	add("PRODUCT-COMPETITOR", 1, compOK, "检查竞品差异表述",
+		"补对比维度或对比页入口（vs/相比/替代），不要只列自家卖点")
+
+	versionOK := siteJSONLDHasKey(p.jsonLDs, "softwareVersion") ||
+		siteJSONLDHasKey(p.jsonLDs, "version") ||
+		siteJSONLDHasKey(p.jsonLDs, "dateModified") ||
+		siteVersionTokenRe.MatchString(p.text) || siteHasRecentYear(p.text)
+	add("PRODUCT-VERSION", 2, versionOK, "检查版本/更新时间信号",
+		"标注当前版本号或更新年份，并在 JSON-LD 补 softwareVersion/dateModified")
+
+	relCount := 0
+	for _, href := range p.linkHrefs {
+		lc := strings.ToLower(href)
+		if strings.Contains(lc, "/product") || strings.Contains(lc, "/pricing") ||
+			strings.Contains(lc, "/price") || strings.Contains(lc, "/docs") ||
+			strings.Contains(lc, "/doc") || strings.Contains(lc, "/solution") ||
+			strings.Contains(lc, "/feature") || strings.Contains(lc, "/use-case") ||
+			strings.Contains(lc, "#pricing") {
+			relCount++
+		}
+	}
+	jsonLDStr := strings.Join(p.jsonLDs, " ")
+	relOK := relCount >= 2 || strings.Contains(jsonLDStr, `"Product"`) || strings.Contains(jsonLDStr, `"SoftwareApplication"`)
+	add("PRODUCT-RELATIONS", 1, relOK, fmt.Sprintf("产品/价格/文档类内链 %d 个", relCount),
+		"补产品/方案/价格/文档页内链，帮助 AI 建立产品关系而不是只读单页")
+
+	cat.Score = sumChecks(cat.Checks)
+	return cat
+}
+
+func auditProductClarityShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {
+	if !bodyOK {
+		cat := SiteAuditCategory{Category: "product_clarity", Label: "产品叙事（官网六问）", Max: siteAuditMaxProductClarity}
+		cat.Checks = append(cat.Checks, siteAuditBodyBlocked(res))
+		return cat
+	}
+	return auditProductClarity(p)
+}
+
+func siteHasAny(text string, words ...string) bool {
+	lc := strings.ToLower(text)
+	for _, w := range words {
+		if strings.Contains(lc, strings.ToLower(w)) {
+			return true
+		}
+	}
+	return false
 }
 
 func auditSiteContentShortCircuit(res *SiteResources, p *sitePage, bodyOK bool) SiteAuditCategory {

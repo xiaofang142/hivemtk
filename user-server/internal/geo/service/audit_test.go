@@ -96,14 +96,14 @@ func TestAuditService_RunSiteAuditPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("站点审计失败: %v", err)
 	}
-	if run.ID == "" || run.RubricVersion != GeoSiteAuditRubricV2 {
+	if run.ID == "" || run.RubricVersion != GeoSiteAuditRubricV3 {
 		t.Fatalf("run 字段不完整: %+v", run)
 	}
-	if run.MaxScore != 100 || run.Score <= 0 {
+	if run.MaxScore != 112 || run.Score <= 0 {
 		t.Fatalf("站点审计分数异常: %d/%d", run.Score, run.MaxScore)
 	}
-	if len(view.Categories) != 9 {
-		t.Fatalf("rubric v2 应有 9 类，实际 %d", len(view.Categories))
+	if len(view.Categories) != 10 {
+		t.Fatalf("rubric v3 应有 10 类，实际 %d", len(view.Categories))
 	}
 	gotRun, items, err := svc.Get(context.Background(), run.ID)
 	if err != nil {
@@ -127,11 +127,11 @@ func TestAuditService_RunContentAuditFromURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("URL 内容体检失败: %v", err)
 	}
-	if run.Kind != model.GeoAuditKindContent || run.RubricVersion != GeoAuditRubricContentV1 {
+	if run.Kind != model.GeoAuditKindContent || run.RubricVersion != GeoAuditRubricContentV2 {
 		t.Fatalf("内容体检 rubric 错误: %+v", run)
 	}
-	if len(view.Categories) != 1 || len(view.Categories[0].Checks) != 25 {
-		t.Fatalf("25 因子应落 25 项，实际 %d 类 / %d 项", len(view.Categories), len(view.Categories[0].Checks))
+	if len(view.Categories) != 1 || len(view.Categories[0].Checks) != 29 {
+		t.Fatalf("29 因子应落 29 项，实际 %d 类 / %d 项", len(view.Categories), len(view.Categories[0].Checks))
 	}
 	if run.MaxScore <= 0 || run.Score <= 0 {
 		t.Fatalf("内容体检分数异常: %d/%d", run.Score, run.MaxScore)

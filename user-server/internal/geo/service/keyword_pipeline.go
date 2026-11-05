@@ -184,6 +184,7 @@ func runPipelineSEOBatch(ctx context.Context, gormDB *gorm.DB, llmAdapter *LLMAd
 		repository.NewGeoOptimizationRepository(),
 		repository.NewGeoAPICallRepository(),
 		repository.NewGeoKnowledgeDocumentRepository(),
+		repository.NewGeoConfigRepository(),
 		llmAdapter,
 	)
 	verifySvc := NewVerificationService(

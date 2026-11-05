@@ -48,12 +48,31 @@ func (c *ConfigController) UpdateConfig(ctx *gin.Context) {
 		DefaultModel     string   `json:"default_model"`
 		VerifyModels     []string `json:"verify_models"`
 		NegativeKeywords []string `json:"negative_keywords"`
+
+		ProductCategory string `json:"product_category"`
+		TargetAudience  string `json:"target_audience"`
+		KeyFeatures     string `json:"key_features"`
+		GenerationNote  string `json:"generation_note"`
+		VersionLabel    string `json:"version_label"`
 	}
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
-	err := c.svc.UpdateConfig(ctx.Request.Context(), req.Brand, req.BrandDescription,
-		req.Advantages, req.Competitors, req.Domain, req.DefaultModel, req.VerifyModels, req.NegativeKeywords)
+	err := c.svc.UpdateConfig(ctx.Request.Context(), service.ConfigUpdateInput{
+		Brand:            req.Brand,
+		BrandDescription: req.BrandDescription,
+		Advantages:       req.Advantages,
+		Competitors:      req.Competitors,
+		Domain:           req.Domain,
+		DefaultModel:     req.DefaultModel,
+		VerifyModels:     req.VerifyModels,
+		NegativeKeywords: req.NegativeKeywords,
+		ProductCategory:  req.ProductCategory,
+		TargetAudience:   req.TargetAudience,
+		KeyFeatures:      req.KeyFeatures,
+		GenerationNote:   req.GenerationNote,
+		VersionLabel:     req.VersionLabel,
+	})
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "更新配置失败")
 		return

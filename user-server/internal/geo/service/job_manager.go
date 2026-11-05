@@ -121,10 +121,10 @@ var geoJobDefs = []geoJobDef{
 		Fn:          citationDriftJob,
 	},
 	{
-		// 月度复查：每月 1 日 06:00 给启用中的 geo_sites 各跑一次 rubric v2。
+		// 月度复查：每月 1 日 06:00 给启用中的 geo_sites 各跑一次 rubric v3。
 		// 结果落审计历史，分数较上次下降 >8 分写 geo_alerts（图3 的 geo-compare 闭环）。
 		Name:        JobSiteAudit,
-		Description: "站点月度体检：对启用站点跑 rubric v2 并落审计历史；分数下降 >8 分写告警",
+		Description: "站点月度体检：对启用站点跑 rubric v3 并落审计历史；分数下降 >8 分写告警",
 		DefaultSpec: "0 0 6 1 * *",
 		Timeout:     40 * time.Minute,
 		Fn:          siteAuditJob,

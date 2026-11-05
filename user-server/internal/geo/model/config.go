@@ -25,6 +25,14 @@ type GeoConfig struct {
 	// CronSpecs 定时任务调度配置 JSON map：{"sov_refresh":"0 0 2 * * *",...}
 	CronSpecs string `gorm:"type:text" json:"cron_specs"`
 
+	// 产品叙事（官网六问）：AI 需要的不是“漂亮页面”，而是能直接回答
+	// 这是什么产品/核心功能/适合谁/代际差异/竞品差异/最新版本。
+	ProductCategory string `gorm:"type:varchar(200)" json:"product_category"`
+	TargetAudience  string `gorm:"type:varchar(500)" json:"target_audience"`
+	KeyFeatures     string `gorm:"type:text" json:"key_features"`
+	GenerationNote  string `gorm:"type:text" json:"generation_note"`
+	VersionLabel    string `gorm:"type:varchar(100)" json:"version_label"`
+
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`

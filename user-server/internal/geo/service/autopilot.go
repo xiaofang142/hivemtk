@@ -128,7 +128,7 @@ func autopilotPlanSteps(siteURL string) []model.AutopilotStep {
 	if siteURL != "" {
 		steps = append(steps,
 			model.AutopilotStep{Name: "push_urls", Label: "蜘蛛推送", Status: "running"},
-			model.AutopilotStep{Name: "site_audit", Label: "站点审计（rubric v2）", Status: "running"},
+			model.AutopilotStep{Name: "site_audit", Label: "站点审计（rubric v3）", Status: "running"},
 		)
 	}
 	steps = append(steps, model.AutopilotStep{Name: "summary", Label: "汇总报告", Status: "running"})
@@ -261,6 +261,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 			repository.NewGeoOptimizationRepository(),
 			repository.NewGeoAPICallRepository(),
 			repository.NewGeoKnowledgeDocumentRepository(),
+			repository.NewGeoConfigRepository(),
 			NewLLMAdapter(),
 		)
 		okN, failN := 0, 0
@@ -332,7 +333,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 		}
 	}
 
-	// 8. site_audit（可选：rubric v2 站点审计，见 005-geo-site-audit-v2）
+	// 8. site_audit（可选：rubric v3 站点审计，见 005-geo-site-audit-v2）
 	if run.SiteURL != "" {
 		rep, err := NewTechConfigService().RunSiteAudit(ctx, run.SiteURL, brand)
 		if err != nil {

@@ -22,8 +22,10 @@ import (
 
 // 审计 rubric 版本。总分分母随版本变化，compare 只在同版本内成立。
 const (
-	GeoSiteAuditRubricV2    = "v2"
-	GeoAuditRubricContentV1 = "content-v1"
+	GeoSiteAuditRubricV2    = "v2"         // 历史报告（9 类 / 100 分），保留用于对比
+	GeoSiteAuditRubricV3    = "v3"         // 新增 product_clarity（10 类 / 112 分）
+	GeoAuditRubricContentV1 = "content-v1" // 历史内容报告（25 因子 / 88 分权重）
+	GeoAuditRubricContentV2 = "content-v2" // 新增产品叙事四问（29 因子 / 100 分权重）
 )
 
 // AuditFixView 审计修复项的归一形状（站点 rubric 与 25 因子共用）。
@@ -113,7 +115,7 @@ func NewAuditService(repo repository.GeoAuditRepository, alerts *AlertService) *
 	return &AuditService{repo: repo, tech: NewTechConfigService(), alerts: alerts}
 }
 
-// RunSiteAudit 对单页站点跑 rubric v2 并落库。
+// RunSiteAudit 对单页站点跑 rubric v3 并落库。
 func (s *AuditService) RunSiteAudit(ctx context.Context, rawURL, brand, source, createdBy string) (*model.GeoAuditRun, *AuditReportView, error) {
 	report, err := s.tech.RunSiteAudit(ctx, rawURL, brand)
 	if err != nil {

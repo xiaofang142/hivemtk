@@ -24,6 +24,7 @@ func newBatchContentSvc(t *testing.T) *ContentService {
 		repository.NewGeoOptimizationRepositoryWithDB(db),
 		repository.NewGeoAPICallRepositoryWithDB(db),
 		newGeoKBRepo(db),
+		repository.NewGeoConfigRepositoryWithDB(db),
 		NewLLMAdapter(),
 	)
 }

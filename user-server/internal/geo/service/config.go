@@ -37,9 +37,30 @@ func (s *ConfigService) GetConfig(ctx context.Context) (*model.GeoConfig, error)
 	return config, nil
 }
 
+// ConfigUpdateInput GEO 配置的合并更新入参。
+//
+// 用结构体而不是长参数列表：产品叙事的 5 个字段加进来后，位置参数已经 13 个，
+// 调用点错位不会编译报错（同型 string 太多），排查成本高。
+type ConfigUpdateInput struct {
+	Brand            string
+	BrandDescription string
+	Advantages       string
+	Competitors      []string
+	Domain           string
+	DefaultModel     string
+	VerifyModels     []string
+	NegativeKeywords []string
+
+	ProductCategory string
+	TargetAudience  string
+	KeyFeatures     string
+	GenerationNote  string
+	VersionLabel    string
+}
+
 // UpdateConfig 更新 GEO 配置（合并更新，保留未提供的字段）
 // negativeKeywords 为 nil 时保留现有负面监控种子词配置
-func (s *ConfigService) UpdateConfig(ctx context.Context, brand, brandDescription, advantages string, competitors []string, domain, defaultModel string, verifyModels []string, negativeKeywords []string) error {
+func (s *ConfigService) UpdateConfig(ctx context.Context, in ConfigUpdateInput) error {
 	existing, err := s.configRepo.Get(ctx)
 	if err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -47,29 +68,44 @@ func (s *ConfigService) UpdateConfig(ctx context.Context, brand, brandDescriptio
 		}
 		existing = &model.GeoConfig{Language: "zh"}
 	}
-	if brand != "" {
-		existing.BrandName = brand
+	if in.Brand != "" {
+		existing.BrandName = in.Brand
 	}
-	if brandDescription != "" {
-		existing.BrandDescription = brandDescription
+	if in.BrandDescription != "" {
+		existing.BrandDescription = in.BrandDescription
 	}
-	if advantages != "" {
-		existing.Advantages = advantages
+	if in.Advantages != "" {
+		existing.Advantages = in.Advantages
 	}
-	if len(competitors) > 0 {
-		existing.Competitors = strings.Join(competitors, "、")
+	if len(in.Competitors) > 0 {
+		existing.Competitors = strings.Join(in.Competitors, "、")
 	}
-	if domain != "" {
-		existing.Domain = domain
+	if in.Domain != "" {
+		existing.Domain = in.Domain
 	}
-	if defaultModel != "" {
-		existing.DefaultModel = defaultModel
+	if in.DefaultModel != "" {
+		existing.DefaultModel = in.DefaultModel
 	}
-	if len(verifyModels) > 0 {
-		existing.VerifyModels = strings.Join(verifyModels, "、")
+	if len(in.VerifyModels) > 0 {
+		existing.VerifyModels = strings.Join(in.VerifyModels, "、")
 	}
-	if negativeKeywords != nil {
-		existing.NegativeKeywords = strings.Join(negativeKeywords, ",")
+	if in.NegativeKeywords != nil {
+		existing.NegativeKeywords = strings.Join(in.NegativeKeywords, ",")
+	}
+	if in.ProductCategory != "" {
+		existing.ProductCategory = in.ProductCategory
+	}
+	if in.TargetAudience != "" {
+		existing.TargetAudience = in.TargetAudience
+	}
+	if in.KeyFeatures != "" {
+		existing.KeyFeatures = in.KeyFeatures
+	}
+	if in.GenerationNote != "" {
+		existing.GenerationNote = in.GenerationNote
+	}
+	if in.VersionLabel != "" {
+		existing.VersionLabel = in.VersionLabel
 	}
 	if existing.Language == "" {
 		existing.Language = "zh"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
@@ -17,17 +18,135 @@ type ContentService struct {
 	optimizationRepo repository.GeoOptimizationRepository
 	apiCallRepo      repository.GeoAPICallRepository
 	kbRepo           repository.GeoKnowledgeDocumentRepository
+	configRepo       repository.GeoConfigRepository
 	llm              *LLMAdapter
 }
 
 // NewContentService 创建内容服务
-func NewContentService(ar repository.GeoArticleRepository, or repository.GeoOptimizationRepository, acr repository.GeoAPICallRepository, kr repository.GeoKnowledgeDocumentRepository, adapter *LLMAdapter) *ContentService {
+func NewContentService(ar repository.GeoArticleRepository, or repository.GeoOptimizationRepository, acr repository.GeoAPICallRepository, kr repository.GeoKnowledgeDocumentRepository, cr repository.GeoConfigRepository, adapter *LLMAdapter) *ContentService {
 	return &ContentService{
 		articleRepo:      ar,
 		optimizationRepo: or,
 		apiCallRepo:      acr,
 		kbRepo:           kr,
+		configRepo:       cr,
 		llm:              adapter,
+	}
+}
+
+// ProductBrief 官网六问的答案，作为内容生成/优化的约束注入。
+// 全部为空时不追加任何内容，保持旧 prompt 行为不变。
+type ProductBrief struct {
+	ProductCategory string
+	TargetAudience  string
+	KeyFeatures     string
+	GenerationNote  string
+	VersionLabel    string
+}
+
+func (b ProductBrief) empty() bool {
+	return b.ProductCategory == "" && b.TargetAudience == "" && b.KeyFeatures == "" &&
+		b.GenerationNote == "" && b.VersionLabel == ""
+}
+
+// promptBlock 把六问拼成 prompt 片段。只写用户配置的事实，不替用户编造。
+func (b ProductBrief) promptBlock() string {
+	if b.empty() {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n【产品叙事约束（必须覆盖，依据用户配置，不得编造）】")
+	if b.ProductCategory != "" {
+		sb.WriteString("\n- 产品类别：" + b.ProductCategory)
+	}
+	if b.KeyFeatures != "" {
+		sb.WriteString("\n- 核心功能：" + b.KeyFeatures)
+	}
+	if b.TargetAudience != "" {
+		sb.WriteString("\n- 适合人群：" + b.TargetAudience)
+	}
+	if b.GenerationNote != "" {
+		sb.WriteString("\n- 代际/竞品差异：" + b.GenerationNote)
+	}
+	if b.VersionLabel != "" {
+		sb.WriteString("\n- 当前版本/时效：" + b.VersionLabel)
+	}
+	sb.WriteString("\n写作与改写时，必须让读者能直接回答：这是什么产品、核心功能是什么、适合谁、和上一代/竞品差在哪、哪些信息是最新版本。")
+	return sb.String()
+}
+
+// loadProductBrief 读本租户 GEO 配置。读失败（无配置/无 DB）时返回空 brief，
+// 保证内容生成不因配置缺失而中断。
+func (s *ContentService) loadProductBrief(ctx context.Context) ProductBrief {
+	if s.configRepo == nil {
+		return ProductBrief{}
+	}
+	cfg, err := s.configRepo.Get(ctx)
+	if err != nil || cfg == nil {
+		return ProductBrief{}
+	}
+	return ProductBrief{
+		ProductCategory: cfg.ProductCategory,
+		TargetAudience:  cfg.TargetAudience,
+		KeyFeatures:     cfg.KeyFeatures,
+		GenerationNote:  cfg.GenerationNote,
+		VersionLabel:    cfg.VersionLabel,
+	}
+}
+
+func (b ProductBrief) schemaPromptBlock() string {
+	if b.empty() {
+		return ""
+	}
+	parts := make([]string, 0, 5)
+	if b.ProductCategory != "" {
+		parts = append(parts, "applicationCategory="+b.ProductCategory)
+	}
+	if b.TargetAudience != "" {
+		parts = append(parts, "audience.audienceType="+b.TargetAudience)
+	}
+	if b.VersionLabel != "" {
+		parts = append(parts, "softwareVersion="+b.VersionLabel)
+	}
+	return "\n\n【产品叙事字段】JSON-LD 在类型适用时补充 softwareVersion / audience / dateModified / applicationCategory。" +
+		"已知：" + strings.Join(parts, "；") + "。只使用 schema.org 标准词汇，不要编造字段。"
+}
+
+// applyProductBriefToSchema 只补标准字段，不覆盖 LLM 已生成的同名字段。
+func applyProductBriefToSchema(schema map[string]any, b ProductBrief) {
+	if schema == nil || b.empty() {
+		return
+	}
+	t, _ := schema["@type"].(string)
+	switch t {
+	case "Product", "SoftwareApplication", "Article", "WebPage", "BlogPosting":
+		if b.TargetAudience != "" {
+			if _, exists := schema["audience"]; !exists {
+				schema["audience"] = map[string]any{
+					"@type":        "Audience",
+					"audienceType": b.TargetAudience,
+				}
+			}
+		}
+	}
+	switch t {
+	case "SoftwareApplication":
+		if b.VersionLabel != "" {
+			if _, exists := schema["softwareVersion"]; !exists {
+				schema["softwareVersion"] = b.VersionLabel
+			}
+		}
+		if b.ProductCategory != "" {
+			if _, exists := schema["applicationCategory"]; !exists {
+				schema["applicationCategory"] = b.ProductCategory
+			}
+		}
+	}
+	switch t {
+	case "Article", "WebPage", "BlogPosting", "SoftwareApplication":
+		if _, exists := schema["dateModified"]; !exists {
+			schema["dateModified"] = time.Now().Format("2006-01-02")
+		}
 	}
 }
 
@@ -77,7 +196,7 @@ func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, bra
 	if style == "" {
 		style = "专业"
 	}
-	prompt := ContentGenerationPrompt(ctx, brandName, advantagesStr, keyword, wordCountStr, style, lang)
+	prompt := ContentGenerationPrompt(ctx, brandName, advantagesStr, keyword, wordCountStr, style, lang) + s.loadProductBrief(ctx).promptBlock()
 
 	resp, err := s.llm.Generate(ctx, "", prompt, 0.7, 4000)
 	if err != nil {
@@ -140,7 +259,7 @@ func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, bra
 // OptimizeContent 优化内容
 func (s *ContentService) OptimizeContent(ctx context.Context, articleID, content, brandName string, advantages []string) (*model.GeoOptimization, error) {
 	advantagesStr := AdvantagesToString(advantages)
-	prompt := ContentOptimizePrompt(ctx, brandName, advantagesStr, content)
+	prompt := ContentOptimizePrompt(ctx, brandName, advantagesStr, content) + s.loadProductBrief(ctx).promptBlock()
 
 	resp, err := s.llm.Generate(ctx, "", prompt, 0.6, 4000)
 	if err != nil {
@@ -311,7 +430,8 @@ func (s *ContentService) EnhanceEEAT(ctx context.Context, articleID, content, br
 // GenerateSchema 生成 JSON-LD Schema（第三参为站点域名）
 // articleID 可选：非空时将 Schema 持久化到 geo_articles.json_ld
 func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandName, description, domain string) (map[string]any, error) {
-	prompt := SchemaGeneratePrompt(ctx, brandName, description, domain)
+	brief := s.loadProductBrief(ctx)
+	prompt := SchemaGeneratePrompt(ctx, brandName, description, domain) + brief.schemaPromptBlock()
 
 	resp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
 	if err != nil {
@@ -323,6 +443,7 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 			"description": description,
 			"url":         domain,
 		}
+		applyProductBriefToSchema(schema, brief)
 		if articleID != "" && s.articleRepo != nil {
 			if article, gErr := s.articleRepo.GetByID(ctx, articleID); gErr == nil && article != nil {
 				if ld, jErr := json.Marshal(schema); jErr == nil {
@@ -349,6 +470,7 @@ func (s *ContentService) GenerateSchema(ctx context.Context, articleID, brandNam
 			"url":         domain,
 		}
 	}
+	applyProductBriefToSchema(schema, brief)
 	// 注意：JSON-LD 会被直接发布到站点（geo_articles.json_ld / 站点标记），
 	// 只能包含 schema.org 词汇；provider/model 这类内部溯源信息不能写进去（非标准字段且泄露实现细节）。
 
