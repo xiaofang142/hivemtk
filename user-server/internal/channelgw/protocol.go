@@ -93,6 +93,27 @@ type IngestMessage struct {
 	ContentHash    string         `json:"content_hash,omitempty"`
 }
 
+// IngestCtxKeys 电商上下文键约定（借鉴 ChatGPT-On-CS CTX_* 模型，2026-11 穷尽调研）。
+//
+// 驱动/扩展在能拿到平台上下文（商品卡、订单面板、会员标签）时，把这些键放进
+// IngestMessage.Extra（前缀 `ctx.`），服务端随 message_hub.extra 落库、AI 侧按需读取；
+// 拿不到不编造——缺键就是缺上下文，不得用占位值污染。
+// 参考源：docs/research/CHATGPT-ON-CS-IMPLEMENTATION-DETAILS-2026-11.md §4.1/§7
+// （对方经 CTX_* Map 注入 LLM variables 与 goods_append system 消息）。
+const (
+	IngestCtxGoods          = "ctx.goods"            // 当前咨询商品名
+	IngestCtxGoodsID        = "ctx.goods_id"         // 商品 ID
+	IngestCtxGoodsSpec      = "ctx.goods_spec"       // 商品规格
+	IngestCtxOrderID        = "ctx.order_id"         // 订单号
+	IngestCtxOrderStatus    = "ctx.order_status"     // 订单状态（待支付/备货中/已发货/售后中/已完成/已关闭…）
+	IngestCtxOrderAmount    = "ctx.order_amount"     // 订单金额
+	IngestCtxLogistics      = "ctx.logistics_status" // 物流状态
+	IngestCtxMemberTag      = "ctx.member_tag"       // 会员标签
+	IngestCtxFanTag         = "ctx.fan_tag"          // 粉丝标签
+	IngestCtxNewCustomerTag = "ctx.new_customer_tag" // 新客标签
+	IngestCtxSenderName     = "ctx.sender_name"      // 发送者昵称（与顶层 sender_name 同源冗余）
+)
+
 // IngestRequest HTTP 上报请求体（与扩展端 http-ingest.js 严格对齐）。
 //
 // ExpectReply / TimeoutMs 目前**服务端不消费**：ingest 恒立即返回，回复由扩展经

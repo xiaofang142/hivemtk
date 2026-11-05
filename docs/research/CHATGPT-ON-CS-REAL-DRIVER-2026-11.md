@@ -4,6 +4,9 @@
 > 本轮按要求从官方渠道取得**真实安装包**并解包还原，把上一轮所有标 `推断` 的结论升级为 `实证`。
 > **合规**：仅借鉴架构与协议思想；源码全文不复制进 hivemtk（AGPL-3.0 + 闭源部分版权归原作），
 > 本报告只引用必要的选择器/常量作为互操作证据。
+> **穷尽精读**：109 文件逐模块细节（REST 全集/数据模型全字段/回复链 5 AI 通道/humancursor
+> 曲线算法/CDP DOMUtils/卡片抽取/转接链/风控细节全集/14 平台选择器与方向判定）见
+> [CHATGPT-ON-CS-IMPLEMENTATION-DETAILS-2026-11.md](./CHATGPT-ON-CS-IMPLEMENTATION-DETAILS-2026-11.md)。
 
 ---
 

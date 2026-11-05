@@ -1,5 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { escapeHTML, sanitizeForDisplay, safeSetValue, safeSetContent } from '../src/core/sanitize.js';
+import { escapeHTML, sanitizeForDisplay, safeSetValue, safeSetContent, stripNonBmpChars } from '../src/core/sanitize.js';
+
+describe('sanitize / stripNonBmpChars（借鉴 ChatGPT-On-CS pinduoduo 实证）', () => {
+  it('剥星形面字符（emoji 补对面/生僻扩展区），BMP 内内容与中文保留', () => {
+    const s = '你好😀世界𠀀AB';
+    expect(stripNonBmpChars(s)).toBe('你好世界AB');
+  });
+
+  it('null/undefined 归空串；纯 BMP 串原样返回', () => {
+    expect(stripNonBmpChars(null)).toBe('');
+    expect(stripNonBmpChars(undefined)).toBe('');
+    expect(stripNonBmpChars('普通文本 ~!@#')).toBe('普通文本 ~!@#');
+  });
+});
 
 describe('sanitize / escapeHTML', () => {
   it('转义所有 HTML 危险字符', () => {

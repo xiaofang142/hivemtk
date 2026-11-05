@@ -34,6 +34,24 @@ export function sanitizeForDisplay(text, maxBytes = MAX_BODY_BYTES) {
 }
 
 // ---------------------------------------------------------------------------
+// 非 BMP 字符剥离（借鉴 ChatGPT-On-CS v1.4.5 pinduoduo 驱动 sendReply，2026-11 穷尽调研）：
+//   原作写法 content.replace(/[^\u0000-\uFFFF]/g, '') —— 但 JS 正则**无 u 标志时按
+//   UTF-16 码元工作**，代理对（emoji 等）的每个码元都落在 \u0000-\uFFFF 内，这条
+//   剥离在原作里实际失效（复刻校正：必须加 u 标志按码点匹配才生效）。
+//   目的：剥 >U+FFFF 的星形面字符（部分 emoji、生僻 CJK 扩展区），它们在某些平台
+//   网页输入框会触发渲染异常或静默丢弃。
+//   对方仅在拼多多驱动启用；hivemtk 现有桥接渠道暂无该实证需求，故只导出备用
+//   （渠道面板可按需启用），不默认挂入出站链——剥 emoji 是内容损失，须有渠道证据。
+// ---------------------------------------------------------------------------
+export function stripNonBmpChars(text) {
+  if (text == null) return '';
+  // u 标志=按码点匹配（原作缺此标志导致失效，此处校正）；\u0000 是范围端点写法，
+  // 有意剥星形面字符属平台兼容净化目标而非误伤
+  // eslint-disable-next-line no-control-regex
+  return String(text).replace(/[^\u0000-\uFFFF]/gu, '');
+}
+
+// ---------------------------------------------------------------------------
 // 私聊 DM 出站的 Markdown 剥除（与服务端 bridge_outbound_markdown.go 同口径，
 // 双保险：服务端入队前剥一次，扩展发送前再剥一次——服务端漏改版本/离线重放
 // 旧信封时仍有兜底）。
