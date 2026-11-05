@@ -29,9 +29,17 @@ type Citation struct {
 	Title string `json:"title,omitempty"`
 }
 
+// 探针数据来源。UI 与报告必须按此标注，禁止把 simulated 写成 real。
+const (
+	ProbeModeSimulated = "simulated"
+	ProbeModeReal      = "real"
+	ProbeModeManual    = "manual"
+)
+
 // ProbeResult 单次探针结果
 type ProbeResult struct {
 	Engine    string     `json:"engine"`
+	Mode      string     `json:"mode"`
 	Query     string     `json:"query"`
 	Response  string     `json:"response"`
 	Citations []Citation `json:"citations"`
@@ -150,8 +158,8 @@ func (p *llmEndpointProbe) Probe(ctx context.Context, query string) (*ProbeResul
 	}
 	cites := extractCitationsFromText(content)
 	return &ProbeResult{
-		Engine: p.Name(), Query: query, Response: content,
-		Citations: cites, LatencyMs: latency, Sentiment: sentiment,
+		Engine: p.Name(), Mode: ProbeModeSimulated, Query: query, Response: content,
+		Citations: cites, LatencyMs: latency, Simulated: true, Sentiment: sentiment,
 	}, nil
 }
 
@@ -220,6 +228,18 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 					continue
 				}
 				seen[row.Name] = true
+				lowerName := strings.ToLower(row.Name)
+				lowerURL := strings.ToLower(row.BaseURL)
+				if strings.Contains(lowerName, "perplexity") || strings.Contains(lowerURL, "perplexity") {
+					probes = append(probes, &perplexityProbe{
+						name:      row.Name,
+						endpoint:  row.BaseURL,
+						model:     row.Model,
+						apiKey:    row.APIKey,
+						brandHint: brandHint,
+					})
+					continue
+				}
 				probes = append(probes, &llmEndpointProbe{
 					name:      row.Name,
 					endpoint:  row.BaseURL,
@@ -442,6 +462,7 @@ func (s *ProbeService) buildProbeRun(ctx context.Context, p SearchProbe, pr *Pro
 	brandHit := matchBrandNames(pr.Response, s.getBrandNames(ctx))
 	run := &model.GeoProbeRun{
 		Engine:         pr.Engine,
+		Mode:           probeModeOrDefault(pr.Mode),
 		Query:          pr.Query,
 		Response:       pr.Response,
 		LatencyMs:      pr.LatencyMs,
@@ -453,6 +474,15 @@ func (s *ProbeService) buildProbeRun(ctx context.Context, p SearchProbe, pr *Pro
 		run.Citations = b
 	}
 	return run
+}
+
+func probeModeOrDefault(mode string) string {
+	switch mode {
+	case ProbeModeReal, ProbeModeManual:
+		return mode
+	default:
+		return ProbeModeSimulated
+	}
 }
 
 // TestSingle 测试单个引擎

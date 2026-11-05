@@ -135,6 +135,42 @@ func (c *ProbeController) ListAvailableEngines(ctx *gin.Context) {
 	response.Success(ctx, names, "ok")
 }
 
+// @Summary      引擎数据来源（simulated/real/manual）
+// @Tags      probe
+// @Router    /api/geo/probe/engines/meta [get]
+// ListEngineMeta 返回引擎名与数据来源，供前端标注“模拟/真实”。
+func (c *ProbeController) ListEngineMeta(ctx *gin.Context) {
+	engines := service.NewEngineProbes()
+	out := make([]gin.H, 0, len(engines))
+	for _, e := range engines {
+		out = append(out, gin.H{"name": e.Name(), "mode": service.ProbeModeOf(e)})
+	}
+	response.Success(ctx, out, "ok")
+}
+
+// @Summary      导入真实探针结果
+// @Tags      probe
+// @Router    /api/geo/probe/import [post]
+// Import 人工导入第三方工具/人工复核得到的真实结果，mode 固定为 manual。
+func (c *ProbeController) Import(ctx *gin.Context) {
+	var body struct {
+		Rows []service.ProbeImportRow `json:"rows"`
+	}
+	if !response.BindJSON(ctx, &body) {
+		return
+	}
+	if len(body.Rows) == 0 {
+		response.Error(ctx, http.StatusBadRequest, "rows 不能为空")
+		return
+	}
+	if len(body.Rows) > 500 {
+		response.Error(ctx, http.StatusBadRequest, "单次最多导入 500 行")
+		return
+	}
+	created, skipped, errs := c.probeSvc.ImportRuns(ctx.Request.Context(), body.Rows)
+	response.Success(ctx, gin.H{"created": created, "skipped": skipped, "errors": errs}, "导入完成")
+}
+
 // @Summary      最近探针运行记录（支持引擎过滤）
 // @Tags      probe
 // @Router    /api/geo/probe/runs [get]

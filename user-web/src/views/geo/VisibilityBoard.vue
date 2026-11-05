@@ -1,5 +1,6 @@
 <template>
   <div class="geo-page p-4">
+    <ProbeModeBanner />
     <!-- 概览卡片区 -->
     <el-row
       :gutter="12"
@@ -371,6 +372,7 @@ import { safeInit } from '@/utils/echarts'
 import { getEngineCompare, listProbeRuns, probeAllEngines } from '@/api/geoProbe.js'
 import { toList } from '@/utils/list'
 import { isUserReportedError } from '@/utils/errorReporting'
+import ProbeModeBanner from './ProbeModeBanner.vue'
 
 const days = ref(30)
 const loading = ref(false)

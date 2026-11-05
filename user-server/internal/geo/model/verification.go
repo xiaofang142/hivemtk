@@ -11,11 +11,13 @@ import (
 type GeoVerifyResult struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID             string `gorm:"type:varchar(36);primaryKey" json:"id"`
-	ArticleID      string `gorm:"type:varchar(36);index" json:"article_id"`
-	BrandName      string `gorm:"type:varchar(200);index" json:"brand_name"`
-	Model          string `gorm:"type:varchar(100)" json:"model"`
-	Engine         string `gorm:"type:varchar(50)" json:"engine,omitempty"`
+	ID        string `gorm:"type:varchar(36);primaryKey" json:"id"`
+	ArticleID string `gorm:"type:varchar(36);index" json:"article_id"`
+	BrandName string `gorm:"type:varchar(200);index" json:"brand_name"`
+	Model     string `gorm:"type:varchar(100)" json:"model"`
+	Engine    string `gorm:"type:varchar(50)" json:"engine,omitempty"`
+	// ProbeMode 该条验证所用探针的数据来源（simulated/real/manual）。
+	ProbeMode      string `gorm:"type:varchar(16);default:'simulated'" json:"probe_mode"`
 	Query          string `gorm:"type:text" json:"query"`
 	Response       string `gorm:"type:text" json:"response"`
 	BrandMentioned bool   `gorm:"default:false" json:"brand_mentioned"`

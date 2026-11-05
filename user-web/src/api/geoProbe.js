@@ -3,6 +3,13 @@ import { http } from '@/utils/request'
 export const listProbeEngines = () =>
   http.get('/api/geo/probe/engines');
 
+// 引擎名 + 数据来源（simulated / real）。UI 必须按此标注，不能把模拟写成真实。
+export const listProbeEngineMeta = () =>
+  http.get('/api/geo/probe/engines/meta');
+
+export const importProbeRuns = (rows) =>
+  http.post('/api/geo/probe/import', { rows })
+
 export const testEngineProbe = (engine, query) =>
   http.post('/api/geo/probe/test', { engine, query })
 

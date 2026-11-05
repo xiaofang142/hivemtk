@@ -316,6 +316,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.POST("/keyword-enhance/enhance", keCtrl.Enhance)
 
 	geo.GET("/probe/engines", probeCtrl.ListAvailableEngines)
+	geo.GET("/probe/engines/meta", probeCtrl.ListEngineMeta)
+	geo.POST("/probe/import", probeCtrl.Import)
 	geo.POST("/probe/test", probeCtrl.TestSingle)
 	geo.POST("/probe/all", probeCtrl.ProbeAll)
 	geo.POST("/probe/run-negative", probeCtrl.RunNegativeMonitor)

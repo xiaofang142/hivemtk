@@ -139,6 +139,8 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/geo/platform/records", MenuKeys: []string{"geoPlatformPublish"}},
 	{Pattern: "/api/geo/probe/all", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVisibilityBoard"}},
 	{Pattern: "/api/geo/probe/engines", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVisibilityBoard"}},
+	{Pattern: "/api/geo/probe/engines/meta", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVerification", "geoVisibilityBoard"}},
+	{Pattern: "/api/geo/probe/import", MenuKeys: []string{"geoVerification"}},
 	{Pattern: "/api/geo/probe/run-negative", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVisibilityBoard"}},
 	{Pattern: "/api/geo/probe/run-source-sync", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVisibilityBoard"}},
 	{Pattern: "/api/geo/probe/runs", MenuKeys: []string{"geoCompetitors", "geoCrawlerStats", "geoSovBoard", "geoVisibilityBoard"}},

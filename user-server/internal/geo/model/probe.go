@@ -15,8 +15,11 @@ import (
 type GeoProbeRun struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID                  uint           `gorm:"primaryKey;column:id" json:"id"`
-	Engine              string         `gorm:"column:engine;size:32;index" json:"engine"`
+	ID     uint   `gorm:"primaryKey;column:id" json:"id"`
+	Engine string `gorm:"column:engine;size:32;index" json:"engine"`
+	// Mode 数据来源：simulated（LLM 模拟）/ real（真实搜索 API）/ manual（人工导入）。
+	// 旧行没有该列时由列默认值兜底为 simulated——与历史事实一致。
+	Mode                string         `gorm:"column:mode;size:16;index;default:'simulated'" json:"mode"`
 	Query               string         `gorm:"column:query;size:1024;index" json:"query"`
 	Response            string         `gorm:"column:response;type:text" json:"response"`
 	Citations           datatypes.JSON `gorm:"column:citations;type:jsonb" json:"citations"`

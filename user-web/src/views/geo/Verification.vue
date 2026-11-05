@@ -1,5 +1,6 @@
 <template>
   <div class="geo-page">
+    <ProbeModeBanner />
     <el-card
       shadow="never"
       class="form-card"
@@ -85,6 +86,12 @@
           >
             <el-icon><CircleCheck /></el-icon><span>{{ t('geoVerificationPage.run') }}</span>
           </el-button>
+          <el-button
+            :loading="importing"
+            @click="importVisible = true"
+          >
+            导入真实结果
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -109,6 +116,19 @@
           :label="t('geoVerificationPage.models')"
           width="140"
         />
+        <el-table-column
+          label="数据来源"
+          width="100"
+        >
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              :type="row.probe_mode === 'real' ? 'success' : row.probe_mode === 'manual' ? 'info' : 'warning'"
+            >
+              {{ modeText(row.probe_mode) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column
           prop="query"
           :label="t('geoVerificationPage.colQuery')"
@@ -251,6 +271,38 @@
         />
       </el-table>
     </el-card>
+
+    <el-dialog
+      v-model="importVisible"
+      title="导入真实探针结果"
+      width="720px"
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="用于导入第三方 AI 可见度工具或人工复核得到的真实结果；导入行会标记为“人工导入”，不会冒充平台实时探针。"
+        style="margin-bottom: 10px"
+      />
+      <el-input
+        v-model="importText"
+        type="textarea"
+        :rows="12"
+        placeholder='JSON 数组：[{"engine":"perplexity","query":"...","response":"...","citations":["https://..."],"sentiment":"neutral"}]'
+      />
+      <template #footer>
+        <el-button @click="importVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="importing"
+          @click="submitImport"
+        >
+          导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -260,8 +312,10 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { CircleCheck, Warning } from '@element-plus/icons-vue'
 import { geoApi } from '@/api/geo'
+import { importProbeRuns } from '@/api/geoProbe'
 import { http } from '@/utils/request'
 import { isUserReportedError } from '@/utils/errorReporting'
+import ProbeModeBanner from './ProbeModeBanner.vue'
 
 // 本视图分批替换为 $t()（词条 geoVerificationPage.*）。
 const { t } = useI18n()
@@ -306,10 +360,18 @@ const verifying = ref(false)
 const monitoring = ref(false)
 const results = ref([])
 const negativeResults = ref([])
+const importVisible = ref(false)
+const importText = ref('')
+const importing = ref(false)
 
 const sentimentType = (s) => {
   const map = { 正面: 'success', positive: 'success', 中性: 'info', neutral: 'info', 负面: 'danger', negative: 'danger' }
   return map[s] || 'info'
+}
+const modeText = (mode) => {
+  if (mode === 'real') return '真实'
+  if (mode === 'manual') return '人工导入'
+  return '模拟'
 }
 const riskType = (r) => {
   const map = { 高: 'danger', 中: 'warning', 低: 'success' }
@@ -367,6 +429,31 @@ const handleVerify = async () => {
     if (!isUserReportedError(e)) ElMessage.error(e.message || t('geoVerificationPage.failed'))
   } finally {
     verifying.value = false
+  }
+}
+
+const submitImport = async () => {
+  let rows
+  try {
+    rows = JSON.parse(importText.value)
+  } catch {
+    ElMessage.error('JSON 格式不正确')
+    return
+  }
+  if (!Array.isArray(rows) || !rows.length) {
+    ElMessage.warning('请提供非空 JSON 数组')
+    return
+  }
+  importing.value = true
+  try {
+    const res = await importProbeRuns(rows)
+    ElMessage.success(`导入完成：成功 ${res?.created || 0}，跳过 ${res?.skipped || 0}`)
+    importVisible.value = false
+    importText.value = ''
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(e.message || '导入失败')
+  } finally {
+    importing.value = false
   }
 }
 

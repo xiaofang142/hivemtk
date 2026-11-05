@@ -1,6 +1,7 @@
 <template>
   <div class="geo-page">
     <div class="p-4">
+      <ProbeModeBanner />
       <el-row
         :gutter="16"
         class="mb-4"
@@ -210,6 +211,7 @@ import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getSOV, getSOVTrend, listCompetitors } from '@/api/geoProbe.js'
+import ProbeModeBanner from './ProbeModeBanner.vue'
 
 const BRAND_HINTS = ['hivemtk', 'hivemtk']
 const trendDays = 30

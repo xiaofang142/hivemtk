@@ -95,12 +95,14 @@ func (s *VerificationService) VerifyArticle(ctx context.Context, req dto.VerifyR
 	probeResult, probeErr := s.probe.Probe(ctx, req.Query)
 	probeResponse := ""
 	probeEngine := ""
+	probeMode := ProbeModeSimulated
 	if probeErr != nil {
 
 		probeResponse = fmt.Sprintf("[探针错误：%v]", probeErr)
 	} else {
 		probeResponse = probeResult.Response
 		probeEngine = probeResult.Engine
+		probeMode = probeModeOrDefault(probeResult.Mode)
 	}
 
 	prompt := VerifySearchPrompt(ctx, req.BrandName, req.Query, probeResponse)
@@ -133,6 +135,7 @@ func (s *VerificationService) VerifyArticle(ctx context.Context, req dto.VerifyR
 			BrandName:      req.BrandName,
 			Model:          extraModel,
 			Engine:         engineTag,
+			ProbeMode:      probeMode,
 			Query:          req.Query,
 			Response:       extraParsed.Response,
 			BrandMentioned: extraParsed.BrandMentioned,
@@ -151,6 +154,7 @@ func (s *VerificationService) VerifyArticle(ctx context.Context, req dto.VerifyR
 		BrandName:      req.BrandName,
 		Model:          resp.Model,
 		Engine:         engineTag,
+		ProbeMode:      probeMode,
 		Query:          req.Query,
 		Response:       parsed.Response,
 		BrandMentioned: parsed.BrandMentioned,
