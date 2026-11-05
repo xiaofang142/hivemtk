@@ -49,7 +49,7 @@ func (c *AIToolConfigController) ListTools(ctx *gin.Context) {
 
 	result, err := c.service.ListTools(ctx.Request.Context(), category, enabled, page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "获取工具列表失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取工具列表失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, result, "ok")
@@ -153,7 +153,7 @@ func (c *AIToolConfigController) GetToolAccounts(ctx *gin.Context) {
 
 	result, err := c.service.GetToolAccounts(ctx.Request.Context(), name)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "获取绑定账号失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取绑定账号失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, result, "ok")
@@ -191,7 +191,7 @@ func (c *AIToolConfigController) BindAccount(ctx *gin.Context) {
 			response.NotFound(ctx, "工具不存在")
 			return
 		}
-		response.Error(ctx, http.StatusInternalServerError, "绑定失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "绑定失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "success")

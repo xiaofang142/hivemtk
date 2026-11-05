@@ -27,7 +27,7 @@ type QueueSnapshot = service.QueueSnapshot
 func (c *CustomerServiceController) GetQueue(ctx *gin.Context) {
 	snapshot, err := c.svc.GetQueue(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, "获取队列失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取队列失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, snapshot, "获取成功")
@@ -44,7 +44,7 @@ type CapacitySnapshot = service.CapacitySnapshot
 func (c *CustomerServiceController) GetCapacity(ctx *gin.Context) {
 	result, err := c.svc.GetCapacity(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, "获取容量失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取容量失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, result, "获取成功")
@@ -61,7 +61,7 @@ type AgentStatusItem = service.AgentStatusItem
 func (c *CustomerServiceController) GetAgents(ctx *gin.Context) {
 	items, err := c.svc.GetAgents(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, 500, "查询坐席列表失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询坐席列表失败，请稍后重试")
 		return
 	}
 	response.SuccessWithList(ctx, items, int64(len(items)))

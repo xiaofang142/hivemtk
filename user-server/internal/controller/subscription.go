@@ -34,7 +34,8 @@ func subscriptionFail(ctx *gin.Context, err error) {
 		response.ErrorWithBusinessCode(ctx, bizerr.CodeModulePlatformUnavail,
 			"平台未连接，无法办理续费。请在系统设置中配置平台地址后重试。", gin.H{})
 	default:
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("subscription service error: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 	}
 }
 

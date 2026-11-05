@@ -59,7 +59,7 @@ func (c *KBItemBindingController) fail(ctx *gin.Context, err error, action strin
 	case errors.Is(err, service.ErrItemNotFound):
 		response.Error(ctx, http.StatusNotFound, "内容不存在或不属于当前租户")
 	default:
-		response.Error(ctx, http.StatusInternalServerError, action+"失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, action+"失败，请稍后重试")
 	}
 }
 

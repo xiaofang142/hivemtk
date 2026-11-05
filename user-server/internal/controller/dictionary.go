@@ -38,7 +38,7 @@ func (c *DictionaryController) ListParents(ctx *gin.Context) {
 	parents, err := c.svc.ListParents(ctx.Request.Context())
 	if err != nil {
 		logger.Warnf("[Dictionary] ListParents err=%v", err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取字典失败，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": parents, "message": "ok"})
@@ -62,7 +62,7 @@ func (c *DictionaryController) GetDictionary(ctx *gin.Context) {
 	}
 	if err != nil {
 		logger.Warnf("[Dictionary] GetDictionary %s err=%v", parent, err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取字典失败，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{
@@ -94,7 +94,7 @@ func (c *DictionaryController) PublicDictionary(ctx *gin.Context) {
 	}
 	if err != nil {
 		logger.Warnf("[Dictionary] PublicDictionary %s err=%v", parent, err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取字典失败，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": gin.H{

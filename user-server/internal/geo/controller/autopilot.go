@@ -34,7 +34,7 @@ func (c *AutopilotController) Create(ctx *gin.Context) {
 	run, err := c.svc.Create(ctx.Request.Context(), &req)
 	if err != nil {
 		if errors.Is(err, service.ErrAutopilotRunning) {
-			ctx.JSON(409, gin.H{"code": 409, "message": err.Error()})
+			response.Envelope(ctx, 409, gin.H{"code": 409, "message": err.Error()})
 			return
 		}
 		response.ValidationError(ctx, err.Error())

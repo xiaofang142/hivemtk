@@ -133,13 +133,13 @@ func (c *SSOController) Login(ctx *gin.Context) {
 	oidc := adapter.OIDC()
 	if err := oidc.EnsureFresh(requestCtx); err != nil {
 		clearSSOCookies(ctx)
-		response.Error(ctx, http.StatusInternalServerError, "获取授权配置失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取授权配置失败，请稍后重试")
 		return
 	}
 	authURL, err := oidc.BuildAuthURL(state, nonce, verifier)
 	if err != nil {
 		clearSSOCookies(ctx)
-		response.Error(ctx, http.StatusInternalServerError, "构建授权地址失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "构建授权地址失败，请稍后重试")
 		return
 	}
 	ctx.Redirect(http.StatusFound, authURL)

@@ -51,7 +51,7 @@ func (c *ConfigParamController) List(ctx *gin.Context) {
 	}
 	if err != nil {
 		logger.Warnf("[ConfigParam] List group=%s err=%v", group, err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取配置参数失败，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": list, "message": "ok"})
@@ -70,7 +70,7 @@ func (c *ConfigParamController) ListGroups(ctx *gin.Context) {
 	groups, err := c.svc.Groups(ctx.Request.Context())
 	if err != nil {
 		logger.Warnf("[ConfigParam] ListGroups err=%v", err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取配置分组失败，请稍后重试"})
 		return
 	}
 	// nil slice 序列化成 null，前端 map/Object.entries 会炸；空集合必须是 []。
@@ -206,7 +206,7 @@ func (c *ConfigParamController) AuditLogs(ctx *gin.Context) {
 	logs, err := c.svc.AuditLogs(ctx.Request.Context(), limit)
 	if err != nil {
 		logger.Warnf("[ConfigParam] AuditLogs err=%v", err)
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": err.Error()})
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": 500, "message": "获取变更日志失败，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": logs, "message": "ok"})

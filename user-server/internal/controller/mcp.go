@@ -52,7 +52,7 @@ func (c *MCPController) Handle(ctx *gin.Context) {
 	if err != nil {
 
 		logger.Ctx(ctx.Request.Context()).Warn().Err(err).Msg("[MCP] handle request failed")
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"error": err.Error()})
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 

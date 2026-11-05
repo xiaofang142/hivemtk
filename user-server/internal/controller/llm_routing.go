@@ -178,7 +178,8 @@ func (c *LLMRoutingController) TestModel(ctx *gin.Context) {
 				"平台模型余额不足，请购买 LLM 套餐后重试", gin.H{})
 			return
 		}
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": result})
@@ -267,7 +268,8 @@ func (c *LLMRoutingController) ListAuditHistory(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	rows, err := c.routingService.ListAuditHistory(ctx.Request.Context(), scenario, limit)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": rows})
@@ -294,7 +296,8 @@ func (c *LLMRoutingController) Usage(ctx *gin.Context) {
 	window := ctx.DefaultQuery("window", "all")
 	summary, err := c.routingService.Usage(ctx.Request.Context(), window)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error(), "trace_id": logger.TraceIDFromContext(ctx.Request.Context())})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing usage failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试", "trace_id": logger.TraceIDFromContext(ctx.Request.Context())})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": summary})
@@ -311,7 +314,8 @@ func (c *LLMRoutingController) CostStats(ctx *gin.Context) {
 	window := ctx.DefaultQuery("window", "month")
 	summary, err := c.routingService.Usage(ctx.Request.Context(), window)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	out := gin.H{
@@ -451,7 +455,8 @@ func (c *LLMRoutingController) ScenarioStats(ctx *gin.Context) {
 	window := ctx.DefaultQuery("window", "month")
 	summary, err := c.routingService.Usage(ctx.Request.Context(), window)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{
@@ -478,7 +483,8 @@ func (c *LLMRoutingController) ModelTypeStats(ctx *gin.Context) {
 	window := ctx.DefaultQuery("window", "month")
 	summary, err := c.routingService.Usage(ctx.Request.Context(), window)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	models := c.routingService.ListModels(ctx.Request.Context())
@@ -592,7 +598,8 @@ func (c *LLMRoutingController) DailyUsage(ctx *gin.Context) {
 	groupBy := ctx.DefaultQuery("group_by", "day_scenario")
 	points, err := c.routingService.DailyUsage(ctx.Request.Context(), window, groupBy)
 	if err != nil {
-		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": err.Error()})
+		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")
+		response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "服务暂时不可用，请稍后重试"})
 		return
 	}
 	response.Envelope(ctx, http.StatusOK, gin.H{"code": 0, "data": points})

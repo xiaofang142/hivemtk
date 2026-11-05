@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 )
@@ -39,7 +40,8 @@ func (c *TemplateMarketController) List(ctx *gin.Context) {
 		Keyword:  ctx.Query("keyword"),
 	})
 	if err != nil {
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("template market service error: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 		return
 	}
 	start := (page - 1) * pageSize
@@ -62,7 +64,8 @@ func (c *TemplateMarketController) List(ctx *gin.Context) {
 func (c *TemplateMarketController) Categories(ctx *gin.Context) {
 	cats, err := c.svc.Categories(ctx.Request.Context())
 	if err != nil {
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("template market service error: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 		return
 	}
 	response.Success(ctx, cats, "ok")
@@ -78,7 +81,8 @@ func (c *TemplateMarketController) Detail(ctx *gin.Context) {
 		return
 	}
 	if err != nil {
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("template market service error: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 		return
 	}
 	response.Success(ctx, item, "ok")

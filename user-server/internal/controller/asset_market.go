@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/config"
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -38,7 +39,8 @@ func assetFail(c *gin.Context, err error) {
 		response.ErrorWithBusinessCode(c, be.Code, be.Message, gin.H{})
 		return
 	}
-	response.ErrorWithBusinessCode(c, bizerr.CodeInternal, err.Error(), gin.H{})
+	logger.Errorf("asset market service error: %v", err)
+	response.ErrorWithBusinessCode(c, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 }
 
 func assetOK(c *gin.Context, data interface{}) {

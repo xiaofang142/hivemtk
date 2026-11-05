@@ -59,7 +59,7 @@ func (c *WechatController) RegisterWebhookRoutes(r *gin.RouterGroup) {
 func (c *WechatController) ListAccounts(ctx *gin.Context) {
 	accounts, err := c.svc.ListAccounts(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "查询失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, accounts, "查询成功")
@@ -94,7 +94,7 @@ func (c *WechatController) CreateAccount(ctx *gin.Context) {
 		Status:         "active",
 	}
 	if err := c.svc.CreateAccount(ctx.Request.Context(), acc); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "创建失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "创建失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "创建成功")
@@ -170,7 +170,7 @@ func (c *WechatController) SendMessage(ctx *gin.Context) {
 
 	msgID, err := c.svc.SendCustomMessage(ctx.Request.Context(), req.AccountID, req.OpenID, req.MsgType, req.Content)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "发送失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "发送失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{

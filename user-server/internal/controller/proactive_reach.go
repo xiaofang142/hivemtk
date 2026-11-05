@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"hivemtk-user/internal/pkg/utils/response"
@@ -8,6 +9,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// reachFail 区分「外发门/冷却/配额/合规拒绝」与未知故障：
+// 前者是调用方需要读到原因的业务拒绝（保留原 error 文本，沿用既有 500 契约），
+// 后者按 ErrorFromDB 统一掩码并落服务端日志。
+func reachFail(ctx *gin.Context, err error, fallbackMsg string) {
+	switch {
+	case errors.Is(err, service.ErrReachApprovalDenied),
+		errors.Is(err, service.ErrReachCooldown),
+		errors.Is(err, service.ErrReachRateLimited),
+		errors.Is(err, service.ErrSendPermissionDenied),
+		errors.Is(err, service.ErrSendQuotaDenied),
+		errors.Is(err, service.ErrSendComplianceDenied):
+		response.Error(ctx, http.StatusInternalServerError, err.Error())
+	default:
+		response.ErrorFromDB(ctx, err, fallbackMsg)
+	}
+}
 
 // ProactiveReachController 主动触达控制器（按 OneID 智能选渠道）
 type ProactiveReachController struct {
@@ -33,7 +51,7 @@ func (c *ProactiveReachController) ProactiveSend(ctx *gin.Context) {
 
 	resp, err := c.svc.ReachByCustomer(ctx.Request.Context(), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "发送失败: "+err.Error())
+		reachFail(ctx, err, "发送失败，请稍后重试")
 		return
 	}
 
@@ -74,7 +92,7 @@ func (c *ProactiveReachController) QuickSend(ctx *gin.Context) {
 
 	resp, err := c.svc.ReachByCustomer(ctx.Request.Context(), v2req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "发送失败: "+err.Error())
+		reachFail(ctx, err, "发送失败，请稍后重试")
 		return
 	}
 
@@ -113,7 +131,7 @@ func (c *ProactiveReachController) ProactiveSendFromCustomer(ctx *gin.Context) {
 	}
 	resp, err := c.svc.ReachByCustomer(ctx.Request.Context(), req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "触达失败: "+err.Error())
+		reachFail(ctx, err, "触达失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, resp, "触达成功")
@@ -176,7 +194,7 @@ func (c *ProactiveReachController) ValidateReach(ctx *gin.Context) {
 	req.DryRun = true
 	resp, err := c.svc.ReachByCustomer(ctx.Request.Context(), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "验证失败: "+err.Error())
+		reachFail(ctx, err, "验证失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, resp, "验证完成")

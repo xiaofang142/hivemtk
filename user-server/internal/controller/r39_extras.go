@@ -49,7 +49,7 @@ func (c *MarketingFlowSyncController) SyncABResults(ctx *gin.Context) {
 		return
 	}
 	if err := c.abService.CalculateResults(ctx.Request.Context(), experiment.ID); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "实验结果计算失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "实验结果计算失败，请稍后重试")
 		return
 	}
 	results, err := c.abService.GetExperimentResults(ctx.Request.Context(), experiment.ID)

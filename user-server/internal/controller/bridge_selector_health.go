@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -49,13 +50,18 @@ func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 	views, err := c.svc.Ingest(ctx.Request.Context(), rep)
 	if err != nil {
 		status := http.StatusInternalServerError
+		msg := err.Error()
 		switch {
 		case errors.Is(err, service.ErrSelectorHealthInvalidReport):
 			status = http.StatusBadRequest
 		case errors.Is(err, service.ErrSelectorHealthRepoNotReady):
 			status = http.StatusServiceUnavailable
+		default:
+			// 未知故障：原文只落日志，对外回通用文案（与 500 掩码口径一致）。
+			logger.Errorf("[BridgeSelectorHealth] report failed: %v", err)
+			msg = "服务暂时不可用，请稍后重试"
 		}
-		response.Envelope(ctx, status, gin.H{"ok": false, "error": err.Error()})
+		response.Envelope(ctx, status, gin.H{"ok": false, "error": msg})
 		return
 	}
 	// degraded 只列 broken/degraded 的字段名：扩展侧在自检页上直接展示这句，

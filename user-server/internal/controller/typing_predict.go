@@ -48,7 +48,7 @@ func (c *TypingPredictController) Predict(ctx *gin.Context) {
 	}
 	pred, err := c.svc.Predict(ctx.Request.Context(), req.Text, req.SessionID)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "预测失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "预测失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, pred, "预测成功")

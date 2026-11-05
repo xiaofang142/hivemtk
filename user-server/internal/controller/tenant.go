@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -37,7 +38,8 @@ func tenantFail(c *gin.Context, err error) {
 		response.ErrorWithBusinessCode(c, be.Code, be.Message, gin.H{})
 		return
 	}
-	response.ErrorWithBusinessCode(c, bizerr.CodeInternal, err.Error(), gin.H{})
+	logger.Errorf("tenant service error: %v", err)
+	response.ErrorWithBusinessCode(c, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 }
 
 // @Summary 自助开户

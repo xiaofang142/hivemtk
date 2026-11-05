@@ -345,7 +345,7 @@ func (c *ReachPipelineController) ListJobsWithExperiment(ctx *gin.Context) {
 	}
 	list, total, err := c.svc.ListJobsByExperiment(ctx.Request.Context(), experimentID, page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "查询失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{

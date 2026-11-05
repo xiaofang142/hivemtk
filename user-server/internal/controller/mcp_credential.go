@@ -70,7 +70,7 @@ func CreateMCPCredential(ctx *gin.Context) {
 		Enabled:    true,
 	}
 	if err := mcpAdminSvc().Create(ctx.Request.Context(), &cred); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "创建失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "创建失败，请稍后重试")
 		return
 	}
 	// 新建也要清缓存：门那侧的缓存按 client_id 单键存"当时全库唯一归属"，

@@ -78,7 +78,7 @@ func UpdateEmbeddingConfig(ctx *gin.Context) {
 		APIKey:  req.APIKey,
 		Model:   req.Model,
 	}, actorID); err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "保存失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "保存失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"ok": true}, "已保存（本进程立即生效，其余实例最多等一个缓存周期）")

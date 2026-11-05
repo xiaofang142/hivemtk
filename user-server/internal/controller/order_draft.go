@@ -333,7 +333,7 @@ func (c *OrderDraftController) replyDraftAfterWrite(ctx *gin.Context, id string)
 	fresh, err := c.svc.GetByID(ctx.Request.Context(), id)
 	if err != nil {
 		logger.Warnf("[OrderDraft] 写成功但回读失败（草稿 %s）：%v", id, err)
-		response.Error(ctx, http.StatusInternalServerError, "改动已生效，但回读草稿失败："+err.Error())
+		response.Error(ctx, http.StatusInternalServerError, "改动已生效，但回读草稿失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, fresh, "ok")

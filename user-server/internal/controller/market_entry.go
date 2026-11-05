@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 )
@@ -36,7 +37,8 @@ func marketEntryFail(ctx *gin.Context, err error) {
 		errors.Is(err, service.ErrMarketEntryInvalidParam):
 		response.ErrorWithBusinessCode(ctx, bizerr.CodeParamInvalid, err.Error(), gin.H{})
 	default:
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("market entry service error: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "操作失败，请稍后重试", gin.H{})
 	}
 }
 

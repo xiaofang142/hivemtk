@@ -42,7 +42,7 @@ func (c *WorkflowOrchestratorController) CreateVersion(ctx *gin.Context) {
 
 	version, err := c.svc.CreateVersion(ctx.Request.Context(), &req)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "创建工作流版本失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "创建工作流版本失败，请稍后重试")
 		return
 	}
 
