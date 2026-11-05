@@ -97,6 +97,9 @@ export const PLATFORM_ENTRY_URLS = {
   tiktok: 'https://www.tiktok.com/messages',
   xianyu: 'https://www.goofish.com/im',
   kuaishou: 'https://www.kuaishou.com/new-reco',
+  jd: 'https://jdm.jd.com/',
+  bilibili: 'https://message.bilibili.com/',
+  weibo: 'https://weibo.com/chat',
 };
 
 // =============================================================
@@ -205,13 +208,17 @@ export const CHANNEL_DISPLAY = Object.freeze({
   tiktok: 'TikTok',
   xianyu: '闲鱼',
   kuaishou: '快手',
+  jd: '京东',
+  bilibili: 'B站',
+  weibo: '微博',
 });
 
 // B8（2026-09-19）实验渠道清单——与 user-server internal/channelgw/registry.go 的
 // ChannelSpec.Experimental 同步维护。快手网页 IM 选择器是模式猜测、零真机校准：
 // 链路可跑但不保证生产级正确率。语义是「如实降级声明」：只影响日志/诊断展示，
 // 不拦截任何功能（未证伪不删除）。
-export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true });
+// 2026-11 新增 jd/bilibili/weibo：选择器有公开页面结构证据但未真机校准，同样标实验。
+export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true, jd: true, bilibili: true, weibo: true });
 
 export function isExperimentalChannel(channel) {
   return !!EXPERIMENTAL_CHANNELS[channel];
@@ -226,7 +233,7 @@ export function isExperimentalChannel(channel) {
 // 2026-08-05 渠道编码统一：CHANNELS 值改为平台全名（去掉 _web 后缀），与后端
 // model.ChannelXHS/Douyin/Kuaishou/Xianyu/TikTok 一一对应。
 export const PROTOCOL = Object.freeze({
-  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou' },
+  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou', JD: 'jd', BILIBILI: 'bilibili', WEIBO: 'weibo' },
   FRAME: {
     REGISTER: 'register',
     INBOUND: 'inbound_message',

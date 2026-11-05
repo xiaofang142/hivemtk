@@ -9,8 +9,8 @@ export const CHANNEL_GROUP = Object.freeze({
 
 export const CHANNEL_OPTIONS = Object.freeze([
   { value: 'wecom',         label: '企业微信', tagType: 'success', group: CHANNEL_GROUP.IM,     icon: 'OfficeBuilding', description: '企业微信（外部联系人）', alias: ['企微'] },
-  { value: 'weixin',        label: '微信公众号', tagType: 'success', group: CHANNEL_GROUP.IM,   icon: 'ChatDotRound',    description: '微信公众号（客服消息）', alias: ['微信'] },
-  { value: 'personal_wx',   label: '个人微信',   tagType: 'success', group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',  description: '个人微信（聚合）' },
+  { value: 'weixin',        label: '微信公众号', tagType: 'success', group: CHANNEL_GROUP.IM,   icon: 'ChatDotRound',    description: '微信公众号（客服消息）', alias: ['微信', 'wechat'] },
+  { value: 'personal_wx',   label: '个人微信',   tagType: 'success', group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',  description: '个人微信（桌面伴生；服务端协议就绪，伴生未交付）' },
   { value: 'whatsapp',      label: 'WhatsApp',  tagType: 'success', group: CHANNEL_GROUP.IM,     icon: 'ChatLineRound',   description: 'WhatsApp Cloud API（Meta 商业）', newBadge: true },
   { value: 'telegram',      label: 'Telegram',  tagType: 'primary', group: CHANNEL_GROUP.IM,     icon: 'Promotion',       description: 'Telegram Bot API（境外 IM）', newBadge: true },
   { value: 'feishu',        label: '飞书',      tagType: 'primary', group: CHANNEL_GROUP.COLLAB, icon: 'ChatLineSquare',  description: '飞书 Open API（协作）', newBadge: true },
@@ -27,6 +27,9 @@ export const CHANNEL_OPTIONS = Object.freeze([
   { value: 'xiaohongshu',   label: '小红书',    tagType: 'danger',  group: CHANNEL_GROUP.SOCIAL, icon: 'Postcard',        description: '小红书私信' },
   { value: 'xianyu',        label: '闲鱼',      tagType: 'warning', group: CHANNEL_GROUP.SOCIAL, icon: 'Goods',           description: '闲鱼私信' },
   { value: 'tiktok',        label: 'TikTok',    tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'TikTok 私信' },
+  { value: 'jd',            label: '京东',      tagType: 'danger',      group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: '京东（京麦/咚咚私信，实验）' },
+  { value: 'bilibili',      label: 'B站',       tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'B站私信（实验）' },
+  { value: 'weibo',         label: '微博',      tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',    description: '微博聊天（实验）' },
   { value: 'sms',           label: '短信',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Cellphone',       description: '短信触达（模板/直发）' },
   { value: 'email',         label: '邮件',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Message',         description: '邮件触达（支持附件）' },
   { value: 'card',          label: '卡片',      tagType: 'info',    group: CHANNEL_GROUP.CARD,   icon: 'Postcard',        description: '卡片消息（子渠道）' },
@@ -39,7 +42,11 @@ export const PLATFORM_GROUP_MEMBERS = Object.freeze({
   xiaohongshu: ['xiaohongshu', 'xhs_web'],
   tiktok: ['tiktok', 'tiktok_web'],
   kuaishou: ['kuaishou', 'kuaishou_web'],
-  xianyu: ['xianyu', 'xianyu_web']
+  xianyu: ['xianyu', 'xianyu_web'],
+  jd: ['jd', 'jd_web'],
+  bilibili: ['bilibili', 'bilibili_web', 'bili'],
+  weibo: ['weibo', 'weibo_web', 'wb'],
+  personal_wx: ['personal_wx', 'wx_personal', 'wechat_personal']
 });
 
 export const PLATFORM_GROUP_MEMBERS_REVERSE = Object.freeze(
@@ -67,7 +74,15 @@ export const CHANNEL_LEGACY_WEB_TO_CANONICAL = Object.freeze({
   'kuaishou_web': 'kuaishou',
   'xianyu_web': 'xianyu',
   'tiktok_web': 'tiktok',
-  'xhs': 'xiaohongshu'
+  'xhs': 'xiaohongshu',
+  'jd_web': 'jd',
+  'jingdong': 'jd',
+  'bili': 'bilibili',
+  'bilibili_web': 'bilibili',
+  'wb': 'weibo',
+  'weibo_web': 'weibo',
+  'wx_personal': 'personal_wx',
+  'wechat_personal': 'personal_wx'
 });
 
 export const CHANNEL_TAG_TYPE_MAP = Object.freeze(

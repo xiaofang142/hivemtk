@@ -44,12 +44,18 @@ var messageHubPlatforms = map[string]bool{
 	"xiaohongshu": true,
 	"xianyu":      true,
 	"tiktok":      true,
-	"whatsapp":    true,
-	"sms":         true,
-	"email":       true,
-	"telegram":    true,
-	"feishu":      true,
-	"qq":          true,
+	// 2026-11 六渠道统一接待：jd/bilibili/weibo 走蜂桥；weixin 与 wechat 并存
+	// （入站控制器写 wechat，触达链路用 weixin，两条都真实存在）。
+	"jd":       true,
+	"bilibili": true,
+	"weibo":    true,
+	"weixin":   true,
+	"whatsapp": true,
+	"sms":      true,
+	"email":    true,
+	"telegram": true,
+	"feishu":   true,
+	"qq":       true,
 	// 缺这三词是本表与真实数据面脱节留下的两处不同的坑，一并补：
 	//   - dingtalk / wechat 有**真实入站路径**直接写 event.Channel
 	//     （controller/wechat.go:292、service/dingtalk_app.go:214 → inbox_ingress_persist.go:53

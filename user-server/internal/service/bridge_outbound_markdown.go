@@ -44,6 +44,11 @@ var markdownDMChannels = map[string]bool{
 	"kuaishou":    true,
 	"tiktok":      true,
 	"xianyu":      true,
+	// 2026-11 新增桥接渠道：同样是纯文本输入框，Markdown 会原样暴露。
+	"jd":          true,
+	"bilibili":    true,
+	"weibo":       true,
+	"personal_wx": true,
 }
 
 // StripMarkdownForDM 把 Markdown 语法标记剥成纯文本，供网页私信输入框直发。

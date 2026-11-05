@@ -68,6 +68,18 @@ func (m *mockReachAdapter) SendTikTok(ctx context.Context, accountID, openID, ms
 func (m *mockReachAdapter) SendXianyu(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
 	return "", nil
 }
+func (m *mockReachAdapter) SendJD(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", nil
+}
+func (m *mockReachAdapter) SendBilibili(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", nil
+}
+func (m *mockReachAdapter) SendWeibo(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", nil
+}
+func (m *mockReachAdapter) SendPersonalWX(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", nil
+}
 func (m *mockReachAdapter) SendDingTalk(ctx context.Context, chatID, msgType, content string) (string, error) {
 	m.gotDingChat = chatID
 	return m.msgID, m.err

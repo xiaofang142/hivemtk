@@ -58,6 +58,15 @@ const (
 
 	ChannelTiktok WebhookChannel = "tiktok"
 
+	// 2026-11 六渠道统一接待：桥接类（入站走 /api/bridge/ingest）+ 个人微信伴生。
+	ChannelJD WebhookChannel = "jd"
+
+	ChannelBilibili WebhookChannel = "bilibili"
+
+	ChannelWeibo WebhookChannel = "weibo"
+
+	ChannelPersonalWX WebhookChannel = "personal_wx"
+
 	ChannelWechat WebhookChannel = "wechat"
 
 	ChannelWeCom WebhookChannel = "wecom"

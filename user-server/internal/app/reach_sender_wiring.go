@@ -60,7 +60,8 @@ func (p *pipelineReachSender) SendReach(ctx context.Context, channel, accountID,
 		// 工具那条（它有 card_id 的来源）。管道要支持卡片，得先定"card_id 从 job 的哪格来"，
 		// 在那之前这里必须报错：调度器不能把没出网的作业记成已投递。
 		return "", errors.New("card: 批量管道没有 card_id 的来源，卡片外发请走 reach.card.send 工具")
-	case "douyin", "kuaishou", "xiaohongshu", "tiktok", "xianyu":
+	case "douyin", "kuaishou", "xiaohongshu", "tiktok", "xianyu",
+		"jd", "bilibili", "weibo", "personal_wx":
 		if p.bridge == nil {
 			return "", fmt.Errorf("bridge 适配器未接线，无法触达渠道 %s", channel)
 		}
@@ -75,6 +76,14 @@ func (p *pipelineReachSender) SendReach(ctx context.Context, channel, accountID,
 			return p.bridge.SendTikTok(ctx, accountID, to, "text", content)
 		case "xianyu":
 			return p.bridge.SendXianyu(ctx, accountID, to, "text", content)
+		case "jd":
+			return p.bridge.SendJD(ctx, accountID, to, "text", content)
+		case "bilibili":
+			return p.bridge.SendBilibili(ctx, accountID, to, "text", content)
+		case "weibo":
+			return p.bridge.SendWeibo(ctx, accountID, to, "text", content)
+		case "personal_wx":
+			return p.bridge.SendPersonalWX(ctx, accountID, to, "text", content)
 		}
 	}
 	return "", fmt.Errorf("unsupported channel: %s", channel)

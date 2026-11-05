@@ -249,7 +249,7 @@ func (p *HumanizePolisher) applyPlatformStyle(ctx context.Context, text string, 
 
 func (p *HumanizePolisher) getStyleForPlatform(ctx context.Context, platform string) PlatformStyle {
 	switch strings.ToLower(platform) {
-	case "wechat", "weixin":
+	case "wechat", "weixin", "personal_wx":
 		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "wechat"}
 	case "douyin":
 		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "douyin"}
@@ -259,6 +259,11 @@ func (p *HumanizePolisher) getStyleForPlatform(ctx context.Context, platform str
 		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "xianyu"}
 	case "tiktok":
 		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "tiktok"}
+	case "jd":
+		// 京东是电商场景，语气与抖音/拼多多同档：可emoji、不要公文化。
+		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "jd"}
+	case "bilibili", "bili", "weibo", "wb":
+		return PlatformStyle{AllowEmoji: true, AllowFormality: false, StyleName: "social"}
 	case "whatsapp", "telegram":
 		return PlatformStyle{AllowEmoji: true, AllowFormality: true, StyleName: "im"}
 	case "email", "mail":

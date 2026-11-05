@@ -1,7 +1,7 @@
 {
   "name": "hivemtk-bridge",
-  "version": "1.0.5",
-  "description": "HiveBridge 蜂桥：抖音/小红书/TikTok 网页私信 <-> user-server AI 智能体 桥接 Chrome 扩展（纯 JavaScript / Manifest V3）",
+  "version": "1.1.0",
+  "description": "HiveBridge 蜂桥：抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博 网页私信 <-> user-server AI 智能体 桥接 Chrome 扩展（纯 JavaScript / Manifest V3）",
   "private": true,
   "type": "module",
   "scripts": {

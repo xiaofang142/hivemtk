@@ -46,19 +46,21 @@ func TestRegistry_RegisterAndQuery(t *testing.T) {
 	}
 }
 
-// TestKuaishouExperimentalDeclared B8（2026-09-19）：快手是唯一实验渠道——选择器
-// 纯模式猜测、零真机校准，注册处如实降级；其余四渠道保持生产声明。
-// 若快手完成真机校准，翻转 spec 的 Experimental 并同步 bridge constants.js。
+// TestKuaishouExperimentalDeclared B8（2026-09-19）：快手选择器纯模式猜测、零真机校准，
+// 注册处如实降级。2026-11 新增 jd/bilibili/weibo/personal_wx 同样未真机校准，
+// 一并登记为 experimental；已有四渠道保持生产声明。
 func TestKuaishouExperimentalDeclared(t *testing.T) {
-	if !Default.IsExperimental(model.ChannelKuaishou) {
-		t.Error("kuaishou 应登记为 experimental")
+	for _, name := range []string{model.ChannelKuaishou, model.ChannelJD, model.ChannelBilibili, model.ChannelWeibo, model.ChannelPersonalWX} {
+		if !Default.IsExperimental(name) {
+			t.Errorf("%s 应登记为 experimental", name)
+		}
 	}
 	for _, name := range []string{model.ChannelDouyin, model.ChannelXHS, model.ChannelXianyu, model.ChannelTikTok} {
 		if Default.IsExperimental(name) {
 			t.Errorf("%s 不应标 experimental", name)
 		}
 	}
-	// 降级不删链路：五渠道仍全量可查
+	// 降级不删链路：全部注册渠道仍可查
 	for _, name := range Default.Names() {
 		if !Default.IsChannel(name) {
 			t.Errorf("Names/IsChannel 不一致: %s", name)
@@ -69,7 +71,7 @@ func TestKuaishouExperimentalDeclared(t *testing.T) {
 	}
 }
 
-// TestDefaultRegistry 默认注册表覆盖 5 大社交渠道，且均支持 HTTP + WebSocket 双传输。
+// TestDefaultRegistry 默认注册表覆盖九大渠道，且均支持 HTTP + WebSocket 双传输。
 func TestDefaultRegistry(t *testing.T) {
 	want := []string{
 		model.ChannelDouyin,
@@ -77,6 +79,10 @@ func TestDefaultRegistry(t *testing.T) {
 		model.ChannelKuaishou,
 		model.ChannelXianyu,
 		model.ChannelTikTok,
+		model.ChannelJD,
+		model.ChannelBilibili,
+		model.ChannelWeibo,
+		model.ChannelPersonalWX,
 	}
 	for _, ch := range want {
 		if !Default.IsChannel(ch) {

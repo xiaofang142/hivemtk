@@ -61,6 +61,22 @@ func (a *BridgeReachAdapter) SendXianyu(ctx context.Context, accountID, openID, 
 	return a.deliverToOutbox(ctx, "xianyu", accountID, openID, msgType, content)
 }
 
+func (a *BridgeReachAdapter) SendJD(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return a.deliverToOutbox(ctx, "jd", accountID, openID, msgType, content)
+}
+
+func (a *BridgeReachAdapter) SendBilibili(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return a.deliverToOutbox(ctx, "bilibili", accountID, openID, msgType, content)
+}
+
+func (a *BridgeReachAdapter) SendWeibo(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return a.deliverToOutbox(ctx, "weibo", accountID, openID, msgType, content)
+}
+
+func (a *BridgeReachAdapter) SendPersonalWX(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return a.deliverToOutbox(ctx, "personal_wx", accountID, openID, msgType, content)
+}
+
 func (a *BridgeReachAdapter) deliverToOutbox(ctx context.Context, channel, accountID, openID, msgType, content string) (string, error) {
 	if err := service.DeliverBridgeOutbound(ctx, channel, accountID, openID, msgType, content, ""); err != nil {
 		return "", err

@@ -12,10 +12,16 @@ const (
 	ChannelDouyin   = "douyin"
 	ChannelKuaishou = "kuaishou"
 	ChannelTikTok   = "tiktok"
-	ChannelEmail    = "email"
-	ChannelFeishu   = "feishu"
-	ChannelDingTalk = "dingtalk"
-	ChannelQQ       = "qq"
+	// 2026-11 六渠道统一接待：京东/B站/微博走蜂桥网页私信；个人微信走桌面伴生
+	// （服务端协议同蜂桥，伴生为外部工程）。
+	ChannelJD         = "jd"
+	ChannelBilibili   = "bilibili"
+	ChannelWeibo      = "weibo"
+	ChannelPersonalWX = "personal_wx"
+	ChannelEmail      = "email"
+	ChannelFeishu     = "feishu"
+	ChannelDingTalk   = "dingtalk"
+	ChannelQQ         = "qq"
 )
 
 // 消息类型

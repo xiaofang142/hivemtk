@@ -21,6 +21,10 @@ type ReachAdapter interface {
 	SendXHS(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
 	SendTikTok(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
 	SendXianyu(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
+	SendJD(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
+	SendBilibili(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
+	SendWeibo(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
+	SendPersonalWX(ctx context.Context, accountID, openID, msgType, content string) (msgID string, err error)
 	SendDingTalk(ctx context.Context, chatID, msgType, content string) (msgID string, err error)
 	SendTelegram(ctx context.Context, accountID, chatID, content string) (msgID string, err error)
 	SendWhatsApp(ctx context.Context, accountID, toPhone, content string) (msgID string, err error)
@@ -99,6 +103,14 @@ func dispatchToAdapter(ctx context.Context, adapter ReachAdapter, req *ReachSend
 		return adapter.SendTikTok(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
 	case "xianyu", "xianyu_web":
 		return adapter.SendXianyu(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
+	case "jd", "jd_web", "jingdong":
+		return adapter.SendJD(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
+	case "bilibili", "bili", "bilibili_web":
+		return adapter.SendBilibili(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
+	case "weibo", "wb", "weibo_web":
+		return adapter.SendWeibo(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
+	case "personal_wx", "wx_personal", "wechat_personal":
+		return adapter.SendPersonalWX(ctx, req.AccountID, req.RecipientID, req.MsgType, req.Content)
 	case "dingtalk":
 		return adapter.SendDingTalk(ctx, req.RecipientID, req.MsgType, req.Content)
 	case "telegram":
@@ -565,7 +577,7 @@ func NewReachBatchTool(deps ReachToolDeps) *ReachBatchTool {
 					"channel": {
 						Type:        "string",
 						Description: "渠道（不填则用 pipeline 配置）",
-						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
+						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "jd", "bilibili", "weibo", "personal_wx", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
 					},
 					"items": {
 						Type:        "array",
@@ -753,7 +765,7 @@ func NewReachRecallTool(deps ReachToolDeps) *ReachRecallTool {
 					"channel": {
 						Type:        "string",
 						Description: "渠道",
-						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
+						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "jd", "bilibili", "weibo", "personal_wx", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
 					},
 					"message_id": {Type: "string", Description: "消息 ID"},
 				},
@@ -801,7 +813,7 @@ func NewReachHealthTool(deps ReachToolDeps) *ReachHealthTool {
 					"channel": {
 						Type:        "string",
 						Description: "渠道",
-						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
+						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "jd", "bilibili", "weibo", "personal_wx", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
 					},
 					"account_id": {Type: "string", Description: "账号 ID（不填则查询渠道下所有账号摘要）"},
 				},
@@ -987,7 +999,7 @@ func NewReachAccountListTool(deps ReachToolDeps) *ReachAccountListTool {
 					"channel": {
 						Type:        "string",
 						Description: "渠道（不填则返回所有渠道）",
-						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
+						Enum:        []string{"sms", "email", "wecom", "weixin", "douyin", "kuaishou", "xiaohongshu", "jd", "bilibili", "weibo", "personal_wx", "dingtalk", "telegram", "whatsapp", "feishu", "card"},
 					},
 				},
 			},

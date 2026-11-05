@@ -38,16 +38,17 @@ func runtimeImplemented(e capregistry.Entry) bool {
 	switch e.Cap {
 	case capregistry.CapDMReceive, capregistry.CapDMSend:
 		switch e.Platform {
-		case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu":
+		case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu",
+			"jd", "bilibili", "weibo", "personal_wx":
 			return e.Via == "bridge" // bridge 收发链路（inbox_ingress / outbox）
-		case "wecom", "telegram":
+		case "wecom", "telegram", "wechat":
 			return e.Via == "api" || e.Via == "webhook"
 		default:
 			return false
 		}
 	case capregistry.CapWebhook:
 		switch e.Platform {
-		case "wecom", "telegram", "feishu", "whatsapp":
+		case "wecom", "telegram", "feishu", "whatsapp", "wechat":
 			return e.Via == "webhook"
 		default:
 			return false
@@ -79,6 +80,8 @@ func (s *CapabilityRuntimeService) platformConfigured(ctx context.Context, platf
 		n, err = s.repo.CountTelegram(ctx)
 	case "wecom":
 		n, err = s.repo.CountWeCom(ctx)
+	case "wechat", "weixin":
+		n, err = s.repo.CountWechat(ctx)
 	case "feishu":
 		n, err = s.repo.CountFeishu(ctx)
 	case "whatsapp":
@@ -87,7 +90,8 @@ func (s *CapabilityRuntimeService) platformConfigured(ctx context.Context, platf
 		n, err = s.repo.CountSMS(ctx)
 	case "email":
 		n, err = s.repo.CountEmail(ctx)
-	case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu":
+	case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu",
+		"jd", "bilibili", "weibo", "personal_wx":
 		n, err = s.repo.CountBridge(ctx, platform)
 	case "ima", "webhttp":
 		// kb.sync：对应类型的启用连接器存在即视为已配置

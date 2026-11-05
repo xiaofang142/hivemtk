@@ -16,6 +16,20 @@ func init() {
 	Register(Entry{Platform: "tiktok", Cap: CapDMSend, Via: "bridge", Note: "海外链路"})
 	Register(Entry{Platform: "xianyu", Cap: CapDMReceive, Via: "bridge", Note: ""})
 	Register(Entry{Platform: "xianyu", Cap: CapDMSend, Via: "bridge", Note: ""})
+	// 2026-11 六渠道统一接待：京东/B站/微博为网页私信桥（选择器待真机校准）；
+	// personal_wx 为桌面伴生协议（服务端已就绪，伴生为外部工程）。
+	Register(Entry{Platform: "jd", Cap: CapDMReceive, Via: "bridge", Note: "京麦/咚咚网页私信；Experimental，选择器待真机"})
+	Register(Entry{Platform: "jd", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "bilibili", Cap: CapDMReceive, Via: "bridge", Note: "message.bilibili.com；Experimental"})
+	Register(Entry{Platform: "bilibili", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "weibo", Cap: CapDMReceive, Via: "bridge", Note: "weibo.com/chat；Experimental"})
+	Register(Entry{Platform: "weibo", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "personal_wx", Cap: CapDMReceive, Via: "bridge", Note: "桌面伴生上报；伴生未交付（外部工程）"})
+	Register(Entry{Platform: "personal_wx", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；伴生未交付（外部工程）"})
+
+	// 官方 API/webhook 渠道
+	Register(Entry{Platform: "wechat", Cap: CapWebhook, Via: "webhook", Note: "公众号回调验签（/api/webhook/wechat/:account_id）"})
+	Register(Entry{Platform: "wechat", Cap: CapDMSend, Via: "api", Note: "客服消息；触达侧渠道码 weixin 同源"})
 
 	// 官方 API/webhook 渠道
 	Register(Entry{Platform: "wecom", Cap: CapWebhook, Via: "webhook", Note: "XML 信封验签（msg_signature 恒时比较 + 时间窗）"})

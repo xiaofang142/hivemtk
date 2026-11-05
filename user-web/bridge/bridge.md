@@ -1,8 +1,9 @@
 # Bridge · HiveBridge 蜂桥
 
 > 通过部署在用户浏览器里的 Chrome 扩展（`user-web/bridge`），
-> 把抖音 / 小红书 / TikTok / 闲鱼 / 快手 网页私信实时桥接到 `user-server` 的 AI 智能体，
+> 把抖音 / 小红书 / TikTok / 闲鱼 / 快手 / 京东 / B站 / 微博 网页私信实时桥接到 `user-server` 的 AI 智能体，
 > 实现"客户发私信 → 智能体自动回复 → 回复回写网页发送"的闭环。
+> 其中京东 / B站 / 微博为 2026-11 新增，选择器未真机校准，注册表与 UI 均标 Experimental。
 
 **核心特性：**
 
@@ -47,7 +48,7 @@
 
 因此需要 Chrome 扩展充当浏览器侧代理：
 
-1. 在抖音 / 小红书 / TikTok / 闲鱼 / 快手 网页注入 content script，监听并解析私信；
+1. 在抖音 / 小红书 / TikTok / 闲鱼 / 快手 / 京东 / B站 / 微博 网页注入 content script，监听并解析私信；
 2. 上报新私信到 `user-server`；
 3. 接收 `user-server` 下发的 AI 回复，回写到网页发送框并点击发送。
 

@@ -537,7 +537,8 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		return s.sendWeChat(ctx, req, recipient)
 	case "feishu":
 		return s.sendFeishu(ctx, req, recipient, accountID)
-	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu":
+	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu",
+		"jd", "bilibili", "weibo", "personal_wx":
 		return s.sendBridge(ctx, channel, req, recipient, accountID)
 	case "dingtalk":
 		return s.sendDingTalk(ctx, req, recipient)

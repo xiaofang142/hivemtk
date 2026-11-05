@@ -122,10 +122,10 @@ describe('UI_DEFAULTS', () => {
 });
 
 describe('PROTOCOL', () => {
-  it('CHANNELS 值：2026-08-05 渠道编码统一后全部为全名（无 _web 后缀）', () => {
-    // 2026-08-05 渠道编码统一：bridge 渠道名 = 平台全名（xiaohongshu/douyin/kuaishou/xianyu/tiktok），
+  it('CHANNELS 值：渠道编码统一后全部为平台全名（无 _web 后缀）', () => {
+    // 渠道名 = 平台全名（xiaohongshu/douyin/kuaishou/xianyu/tiktok/jd/bilibili/weibo），
     // 与后端 model.Channel*、SQL 数据、channel_agent_bindings 完全一致。
-    const expected = new Set(['xiaohongshu', 'douyin', 'kuaishou', 'xianyu', 'tiktok']);
+    const expected = new Set(['xiaohongshu', 'douyin', 'kuaishou', 'xianyu', 'tiktok', 'jd', 'bilibili', 'weibo']);
     for (const v of Object.values(PROTOCOL.CHANNELS)) {
       expect(expected.has(v)).toBe(true);
     }

@@ -817,7 +817,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		} else {
 			sent = true
 		}
-	case ChannelDouyin, ChannelXiaohongshu, ChannelTiktok, ChannelXianyu, ChannelKuaishou:
+	case ChannelDouyin, ChannelXiaohongshu, ChannelTiktok, ChannelXianyu, ChannelKuaishou,
+		ChannelJD, ChannelBilibili, ChannelWeibo, ChannelPersonalWX:
 
 		if hubMsg != nil {
 			outMsg := &model.MessageHub{

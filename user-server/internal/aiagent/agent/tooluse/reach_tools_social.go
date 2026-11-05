@@ -24,6 +24,22 @@ func (NoOpReachAdapter) SendXianyu(ctx context.Context, accountID, openID, msgTy
 	return "", ErrAdapterNotConfigured
 }
 
+func (NoOpReachAdapter) SendJD(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", ErrAdapterNotConfigured
+}
+
+func (NoOpReachAdapter) SendBilibili(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", ErrAdapterNotConfigured
+}
+
+func (NoOpReachAdapter) SendWeibo(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", ErrAdapterNotConfigured
+}
+
+func (NoOpReachAdapter) SendPersonalWX(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", ErrAdapterNotConfigured
+}
+
 func (NoOpReachAdapter) SendDingTalk(ctx context.Context, chatID, msgType, content string) (string, error) {
 	return "", ErrAdapterNotConfigured
 }

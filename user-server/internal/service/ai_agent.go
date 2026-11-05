@@ -530,6 +530,14 @@ func NormalizeChannelType(ch string) string {
 		return string(model.ChannelTypeXianyu)
 	case "tiktok", "tiktok_web":
 		return string(model.ChannelTypeTikTok)
+	case "jd", "jd_web", "jingdong":
+		return string(model.ChannelTypeJD)
+	case "bilibili", "bili", "bilibili_web":
+		return string(model.ChannelTypeBilibili)
+	case "weibo", "wb", "weibo_web":
+		return string(model.ChannelTypeWeibo)
+	case "personal_wx", "wx_personal", "wechat_personal":
+		return string(model.ChannelTypePersonalWX)
 	case "web_embed", "webembed":
 		return string(model.ChannelTypeWebEmbed)
 	default:

@@ -16,6 +16,10 @@ const (
 	ChannelTikTok      = "tiktok"
 	ChannelKuaishouWeb = "kuaishou"
 	ChannelXianyuWeb   = "xianyu"
+	ChannelJDWeb       = "jd"
+	ChannelBilibiliWeb = "bilibili"
+	ChannelWeiboWeb    = "weibo"
+	ChannelPersonalWX  = "personal_wx"
 )
 
 func NormalizeBridgeChannel(ch string) string {
@@ -24,12 +28,20 @@ func NormalizeBridgeChannel(ch string) string {
 		return model.ChannelXHS
 	case "douyin_web":
 		return model.ChannelDouyin
-	case "kuaishou_web":
+	case "kuaishou_web", "ks":
 		return model.ChannelKuaishou
 	case "xianyu_web":
 		return model.ChannelXianyu
 	case "tiktok_web":
 		return model.ChannelTikTok
+	case "jd_web", "jingdong", "jd_chat":
+		return model.ChannelJD
+	case "bili", "bilibili_web", "b站":
+		return model.ChannelBilibili
+	case "wb", "weibo_web":
+		return model.ChannelWeibo
+	case "wx_personal", "wechat_personal", "personal_wechat":
+		return model.ChannelPersonalWX
 	default:
 		return ch
 	}

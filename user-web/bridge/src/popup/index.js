@@ -16,6 +16,10 @@ import { SEL as DOUYIN_SEL } from '../channels/douyin.js';
 import { SEL as XHS_SEL } from '../channels/xhs.js';
 import { SEL as XIANYU_SEL } from '../channels/xianyu.js';
 import { SEL as TIKTOK_SEL } from '../channels/tiktok.js';
+import { SEL as KUAISHOU_SEL } from '../channels/kuaishou.js';
+import { SEL as JD_SEL } from '../channels/jd.js';
+import { SEL as BILIBILI_SEL } from '../channels/bilibili.js';
+import { SEL as WEIBO_SEL } from '../channels/weibo.js';
 import {
   renderHealthPanel,
   startHealthPanelPolling,
@@ -62,7 +66,7 @@ function lastError() {
 //   - "The message port closed before a response was received."        → receiver 异步丢失
 //   - "Message manager disconnected"                                   → MV3 通道关闭
 function diagnoseUninjected(errMsg, tabUrl) {
-  const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(tabUrl || '');
+  const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(tabUrl || '');
   const lines = [];
   if (errMsg && /Could not establish connection|Receiving end does not exist|port closed|disconnected/i.test(errMsg)) {
     if (!onSupportedHost) {
@@ -505,7 +509,7 @@ function selfCheck() {
         return;
       }
       // 第一道闸：域名白名单
-      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(tab.url);
+      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(tab.url);
       if (!onSupportedHost) {
         $('selfOut').textContent = `当前标签页不是抖音/小红书/TikTok/闲鱼：\n${tab.url}\n\n请在对应平台网页（已登录）上点击。`;
         return;
@@ -776,7 +780,7 @@ function syncAllConversations() {
         $('selfOut').textContent = '无活动标签页';
         return;
       }
-      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(tab.url || '');
+      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(tab.url || '');
       if (!onSupportedHost) {
         $('selfOut').textContent = '当前标签页不是抖音/小红书/TikTok/闲鱼：\n' + (tab.url || '');
         return;
@@ -836,6 +840,10 @@ const CHANNEL_SEL_MAP = {
   xiaohongshu: XHS_SEL,
   xianyu: XIANYU_SEL,
   tiktok: TIKTOK_SEL,
+  kuaishou: KUAISHOU_SEL,
+  jd: JD_SEL,
+  bilibili: BILIBILI_SEL,
+  weibo: WEIBO_SEL,
 };
 
 // 取某渠道某字段的当前生效默认选择器（来自 SEL；抖音 input 字段兼容 EDITOR/INPUT 双命名）
@@ -893,7 +901,7 @@ function broadcastSelectorsUpdated() {
       const list = Array.isArray(tabs) ? tabs : [];
       for (const t of list) {
         if (!t || !t.id || !t.url) continue;
-        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(t.url)) continue;
+        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(t.url)) continue;
         try {
           chrome.tabs.sendMessage(t.id, { type: 'selectorsUpdated' }, () => {  try { void chrome.runtime.lastError; } catch (_) {} });
         } catch (_) {  }
@@ -966,7 +974,7 @@ function sendToActiveTab(msg, cb) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs && tabs[0];
       if (!tab || !tab.id) { cb && cb({ ok: false, reason: 'no-active-tab' }); return; }
-      if (!tab.url || !/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(tab.url)) {
+      if (!tab.url || !/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(tab.url)) {
         cb && cb({ ok: false, reason: 'not-supported-host', url: tab.url });
         return;
       }
@@ -1163,6 +1171,12 @@ document.addEventListener('DOMContentLoaded', () => {
   $('openXhs').addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.xiaohongshu));
   $('openTiktok').addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.tiktok));
   $('openXianyu').addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.xianyu));
+  const openJd = $('openJd');
+  if (openJd) openJd.addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.jd));
+  const openBili = $('openBilibili');
+  if (openBili) openBili.addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.bilibili));
+  const openWeibo = $('openWeibo');
+  if (openWeibo) openWeibo.addEventListener('click', () => openUrl(PLATFORM_ENTRY_URLS.weibo));
 
   refreshStatus();
 
@@ -1248,7 +1262,7 @@ document.addEventListener('DOMContentLoaded', () => {
           accountsList.innerHTML = '<div class="hint" style="padding:8px;">当前无活跃账号（content script 未启动）</div>';
           return;
         }
-        const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou'];
+        const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou', 'jd', 'bilibili', 'weibo'];
         const sorted = channels.sort((a, b) => {
           const ai = order.indexOf(a); const bi = order.indexOf(b);
           if (ai === -1 && bi === -1) return a.localeCompare(b);

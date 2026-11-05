@@ -111,6 +111,10 @@ const (
 	ChannelTypeKuaishou    ChannelType = "kuaishou"
 	ChannelTypeXianyu      ChannelType = "xianyu"
 	ChannelTypeTikTok      ChannelType = "tiktok"
+	ChannelTypeJD          ChannelType = "jd"
+	ChannelTypeBilibili    ChannelType = "bilibili"
+	ChannelTypeWeibo       ChannelType = "weibo"
+	ChannelTypePersonalWX  ChannelType = "personal_wx"
 	ChannelTypeWeb         ChannelType = "web"
 	ChannelTypeWebEmbed    ChannelType = "web_embed"
 )

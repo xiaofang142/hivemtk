@@ -34,6 +34,14 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.1.0': `- 新增三个网页私信渠道：京东（jdm.jd.com / dongdong.jd.com，all_frames）、
+  B站（message.bilibili.com）、微博（weibo.com/chat）。三条均为实验渠道：
+  选择器来自公开页面结构，未真机校准，popup 与后端均标 Experimental。
+- 微博以 Enter 发送（页面原生语义），B站/京东优先点发送按钮、回车兜底。
+- 扩展渠道表/展示名/入口 URL/账号启停顺序/选择器面板同步登记；构建产物新增
+  content-jd.js / content-bilibili.js / content-weibo.js。
+- 渠道差异仍收敛在 BaseAdapter 契约内：会话锚点、串台守卫、拟人键入、
+  outbox/ack、限速全部复用，没有为单渠道另造投递链路。`,
   '1.0.5': `- 修复 1.0.4 的注入失效（严重）：官方发行包即使带 BRIDGE_ONLINE_SERVER 构建，
   弹窗仍预填 localhost、线上按钮被隐藏 —— 产物里是
   \`typeof process<"u" && process.env && "https://…" || ""\`，而 MV3 扩展没有 process

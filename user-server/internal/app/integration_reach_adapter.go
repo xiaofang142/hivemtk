@@ -370,6 +370,24 @@ func (a *IntegrationReachAdapter) SendXianyu(ctx context.Context, accountID, ope
 	return "", fmt.Errorf("xianyu: %w", ErrChannelNotImplemented)
 }
 
+// SendJD / SendBilibili / SendWeibo / SendPersonalWX 同属桥接渠道：
+// 生产装配由 BridgeReachAdapter 覆盖，本包只保留 fail-closed 兜底。
+func (a *IntegrationReachAdapter) SendJD(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", fmt.Errorf("jd: %w", ErrChannelNotImplemented)
+}
+
+func (a *IntegrationReachAdapter) SendBilibili(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", fmt.Errorf("bilibili: %w", ErrChannelNotImplemented)
+}
+
+func (a *IntegrationReachAdapter) SendWeibo(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", fmt.Errorf("weibo: %w", ErrChannelNotImplemented)
+}
+
+func (a *IntegrationReachAdapter) SendPersonalWX(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	return "", fmt.Errorf("personal_wx: %w", ErrChannelNotImplemented)
+}
+
 func (a *IntegrationReachAdapter) SendDingTalk(ctx context.Context, chatID, msgType, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
 	logger.Ctx(ctx).Debug().Str("channel", "dingtalk").Str("chat_id", chatID).Int("content_len", len(content)).Msg("reach send start")
@@ -1020,7 +1038,8 @@ func reachAccountChannels(channel string) ([]string, error) {
 	case "":
 		return []string{"telegram", "whatsapp", "feishu", "wecom", "weixin", "dingtalk",
 			bridge.ChannelDouyinWeb, bridge.ChannelKuaishouWeb, bridge.ChannelXHSWeb,
-			bridge.ChannelTikTok, bridge.ChannelXianyuWeb}, nil
+			bridge.ChannelTikTok, bridge.ChannelXianyuWeb, bridge.ChannelJDWeb,
+			bridge.ChannelBilibiliWeb, bridge.ChannelWeiboWeb, bridge.ChannelPersonalWX}, nil
 	case "sms", "email", "card", "web":
 		return nil, ErrChannelNoAccountDimension
 	}

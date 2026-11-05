@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "HiveBridge 蜂桥 — 抖音/小红书/TikTok/闲鱼/快手 私信桥接",
+  "name": "HiveBridge 蜂桥 — 抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博 私信桥接",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "version": "1.0.5",
-  "description": "将抖音/小红书/TikTok/闲鱼/快手 网页私信实时桥接到 HiveMTK AI 智能体（user-server），支持多账号、消息历史回填与拟人限速风控。",
+  "version": "1.1.0",
+  "description": "将抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博 网页私信实时桥接到 HiveMTK AI 智能体（user-server），支持多账号、消息历史回填与拟人限速风控。京东/B站/微博为实验渠道。",
   "permissions": [
     "alarms",
     "storage",
@@ -79,6 +79,34 @@
         "https://*.kuaishou.com/*"
       ],
       "js": ["content-kuaishou.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://jdm.jd.com/*",
+        "https://dongdong.jd.com/*",
+        "https://chat.jd.com/*",
+        "https://im.jd.com/*"
+      ],
+      "js": ["content-jd.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://message.bilibili.com/*"
+      ],
+      "js": ["content-bilibili.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://weibo.com/*",
+        "https://*.weibo.com/*"
+      ],
+      "js": ["content-weibo.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

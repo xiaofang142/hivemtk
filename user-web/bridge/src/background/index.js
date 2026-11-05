@@ -215,7 +215,7 @@ function broadcastToAllTabs(payload) {
       const list = Array.isArray(tabs) ? tabs : [];
       for (const t of list) {
         if (!t || !t.id || !t.url) continue;
-        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com/i.test(t.url)) continue;
+        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(t.url)) continue;
         try {
           chrome.tabs.sendMessage(t.id, payload, () => { try { void chrome.runtime.lastError; } catch (_) {} });
         } catch (_) {  }

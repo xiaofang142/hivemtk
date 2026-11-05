@@ -22,6 +22,9 @@ const entries = {
   'content-tiktok': 'src/content/tiktok.js',
   'content-xianyu': 'src/content/xianyu.js',
   'content-kuaishou': 'src/content/kuaishou.js',
+  'content-jd': 'src/content/jd.js',
+  'content-bilibili': 'src/content/bilibili.js',
+  'content-weibo': 'src/content/weibo.js',
   popup: 'src/popup/index.js',
 };
 

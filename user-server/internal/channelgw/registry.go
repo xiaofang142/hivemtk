@@ -110,6 +110,14 @@ func init() {
 		{Name: model.ChannelKuaishou, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "快手", Experimental: true},
 		{Name: model.ChannelXianyu, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "闲鱼"},
 		{Name: model.ChannelTikTok, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "TikTok"},
+		// 2026-11 六渠道统一接待新增：
+		//   - jd/bilibili/weibo：网页私信选择器已有公开页面结构证据，但未真机校准；
+		//   - personal_wx：服务端协议就绪，桌面伴生尚未交付（外部工程）。
+		// 四者一律 Experimental，链路可跑但不宣称生产可用。
+		{Name: model.ChannelJD, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "京东", Experimental: true},
+		{Name: model.ChannelBilibili, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "B站", Experimental: true},
+		{Name: model.ChannelWeibo, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "微博", Experimental: true},
+		{Name: model.ChannelPersonalWX, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "个人微信", Experimental: true},
 	} {
 		Default.Register(spec)
 	}

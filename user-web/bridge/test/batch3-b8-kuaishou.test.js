@@ -36,11 +36,14 @@ describe('B8 getAccountId 只信 /profile/<id> 形态', () => {
 });
 
 describe('B8 实验渠道声明', () => {
-  it('kuaishou 是唯一实验渠道；行为面不拦截其余', () => {
+  it('kuaishou 与 2026-11 新增三渠道是实验渠道；其余不拦截', () => {
     expect(isExperimentalChannel('kuaishou')).toBe(true);
+    expect(isExperimentalChannel('jd')).toBe(true);
+    expect(isExperimentalChannel('bilibili')).toBe(true);
+    expect(isExperimentalChannel('weibo')).toBe(true);
     expect(isExperimentalChannel('douyin')).toBe(false);
     expect(isExperimentalChannel(undefined)).toBe(false);
-    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou']);
+    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou', 'jd', 'bilibili', 'weibo']);
   });
 
   it('content 启动路径引用实验告警（源码契约）', () => {

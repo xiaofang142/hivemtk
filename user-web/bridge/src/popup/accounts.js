@@ -72,7 +72,7 @@ export function setAccountEnabledViaBackground(channel, accountId, enabled) {
 // 渲染账号启停列表 HTML（纯函数，便于测试）
 // states: { channel: { accountId: { enabled, pausedAt } } }
 export function renderAccountRows(states) {
-  const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou'];
+  const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou', 'jd', 'bilibili', 'weibo'];
   const channels = Object.keys(states || {}).sort((a, b) => {
     const ai = order.indexOf(a); const bi = order.indexOf(b);
     if (ai === -1 && bi === -1) return a.localeCompare(b);

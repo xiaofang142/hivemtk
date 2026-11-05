@@ -280,10 +280,15 @@ var defaultThirdPartyRateLimitByChannel = map[string]RateLimitSpec{
 	"tiktok_web":   {QPS: 30, Burst: 60},
 	"xianyu":       {QPS: 30, Burst: 60},
 	"xianyu_web":   {QPS: 30, Burst: 60},
-	"dingtalk":     {QPS: 30, Burst: 60},
-	"telegram":     {QPS: 30, Burst: 60},
-	"whatsapp":     {QPS: 30, Burst: 60},
-	"feishu":       {QPS: 30, Burst: 60},
+	// 2026-11 新增桥接渠道：非电商/新链路先保守一档（风控未知）。
+	"jd":          {QPS: 20, Burst: 40},
+	"bilibili":    {QPS: 20, Burst: 40},
+	"weibo":       {QPS: 20, Burst: 40},
+	"personal_wx": {QPS: 10, Burst: 20},
+	"dingtalk":    {QPS: 30, Burst: 60},
+	"telegram":    {QPS: 30, Burst: 60},
+	"whatsapp":    {QPS: 30, Burst: 60},
+	"feishu":      {QPS: 30, Burst: 60},
 }
 
 func DefaultThirdPartyRateLimitSpec(channel string) RateLimitSpec {

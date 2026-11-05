@@ -211,9 +211,10 @@ func extractSessionSkills(sess *model.CustomerSession) []string {
 
 	var skills []string
 	switch sess.Platform {
-	case "wechat", "wecom":
+	case "wechat", "weixin", "personal_wx", "wecom":
 		skills = append(skills, "wechat")
-	case "douyin", "kuaishou", "tiktok", "xiaohongshu", "xianyu":
+	case "douyin", "kuaishou", "tiktok", "xiaohongshu", "xianyu",
+		"jd", "bilibili", "weibo":
 		skills = append(skills, "social_media")
 	}
 	if sess.Priority >= 3 {
