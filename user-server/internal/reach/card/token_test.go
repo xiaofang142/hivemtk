@@ -46,7 +46,11 @@ func TestXianyuReportToken_RejectsTampered(t *testing.T) {
 	if err := VerifyXianyuReportToken(42, tampered); !errors.Is(err, ErrXianyuReportTokenInvalid) {
 		t.Fatalf("调换段落的凭证应被拒绝，实际 %v", err)
 	}
-	flipped := "0" + parts[0][1:] + "." + parts[1]
+	flippedFirst := byte('0')
+	if parts[0][0] == '0' {
+		flippedFirst = '1'
+	}
+	flipped := string(flippedFirst) + parts[0][1:] + "." + parts[1]
 	if err := VerifyXianyuReportToken(42, flipped); !errors.Is(err, ErrXianyuReportTokenInvalid) {
 		t.Fatalf("篡改签名的凭证应被拒绝，实际 %v", err)
 	}
