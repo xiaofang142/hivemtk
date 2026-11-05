@@ -2,6 +2,7 @@ package controller
 
 import (
 	"hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
 	"strconv"
@@ -88,7 +89,12 @@ func (ctrl *KnowledgeBaseController) GetDocument(c *gin.Context) {
 
 	doc, err := ctrl.kbService.GetDocument(c.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(c, http.StatusNotFound, err.Error())
+		if isNotFoundError(err) {
+			response.Error(c, http.StatusNotFound, "文档不存在")
+			return
+		}
+		logger.Errorf("[knowledge] 获取文档失败 id=%d: %v", id, err)
+		response.Error(c, http.StatusInternalServerError, "获取文档失败，请稍后重试")
 		return
 	}
 
@@ -106,10 +112,11 @@ func (ctrl *KnowledgeBaseController) DeleteDocument(c *gin.Context) {
 
 	if err := ctrl.kbService.DeleteDocument(c.Request.Context(), uint(id)); err != nil {
 		if isNotFoundError(err) {
-			response.Error(c, http.StatusNotFound, err.Error())
+			response.Error(c, http.StatusNotFound, "文档不存在")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		logger.Errorf("[knowledge] 删除文档失败 id=%d: %v", id, err)
+		response.Error(c, http.StatusInternalServerError, "删除文档失败，请稍后重试")
 		return
 	}
 

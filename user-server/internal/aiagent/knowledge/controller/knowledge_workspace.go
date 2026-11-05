@@ -6,6 +6,7 @@ import (
 	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 	"net/http"
@@ -665,15 +666,17 @@ func (ctrl *KnowledgeWorkspaceController) SyncOpenAPISource(c *gin.Context) {
 	result, err := ctrl.openapiService.SyncSource(c.Request.Context(), productID, int64(id))
 	if err != nil {
 		if isNotFoundError(err) {
-			response.Error(c, http.StatusNotFound, err.Error())
+			response.Error(c, http.StatusNotFound, "数据源不存在")
 			return
 		}
 		if isUpstreamSyncError(err) {
-			// 外部端点不可达 / 上游返回错误 → 502 并给出可执行原因（不再笼统报「服务器内部错误」）
-			response.Error(c, http.StatusBadGateway, "同步数据源失败："+err.Error()+"。请检查端点 URL 是否可达、认证方式与网络连通性。")
+			// 上游原文（端点/连接细节）只进日志；对外仍给可执行的排查方向。
+			logger.Errorf("[knowledge] 同步数据源失败 source=%d: %v", id, err)
+			response.Error(c, http.StatusBadGateway, "同步数据源失败；请检查端点 URL 是否可达、认证方式与网络连通性")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		logger.Errorf("[knowledge] 同步数据源失败 source=%d: %v", id, err)
+		response.Error(c, http.StatusInternalServerError, "同步数据源失败，请稍后重试")
 		return
 	}
 	response.Success(c, result, "同步完成")

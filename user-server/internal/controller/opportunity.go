@@ -583,7 +583,9 @@ func (c *OpportunityController) replyError(ctx *gin.Context, err error) {
 
 func (c *OpportunityController) writeConflict(ctx *gin.Context, status int, reason string, err error) {
 	if reason == opportunityReasonStaleVersion {
-		response.Error(ctx, status, err.Error()+"（重取这一行后再改，不要直接重发同一份请求）",
+		// 可执行指引放前面：若 err 夹带上游/驱动原文，统一出口会在原文处截断，
+		// 后面的 reason 会丢；前置后至少保住「先重取再改」这句。
+		response.Error(ctx, status, "请重取这一行后再改，不要直接重发同一份请求："+err.Error(),
 			gin.H{"reason": reason})
 		return
 	}

@@ -3,6 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/errhttp"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
 	"strconv"
@@ -56,7 +57,12 @@ func (c *ABExperimentController) GetExperiment(ctx *gin.Context) {
 
 	experiment, err := c.abService.GetExperiment(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "实验不存在")
+			return
+		}
+		logger.Errorf("[ops] 获取实验失败 id=%d: %v", id, err)
+		response.Error(ctx, http.StatusInternalServerError, "获取实验失败，请稍后重试")
 		return
 	}
 
@@ -71,7 +77,8 @@ func (c *ABExperimentController) GetExperimentList(ctx *gin.Context) {
 
 	experiments, total, err := c.abService.GetExperimentList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		logger.Errorf("[ops] 获取实验列表失败: %v", err)
+		response.Error(ctx, http.StatusInternalServerError, "获取实验列表失败，请稍后重试")
 		return
 	}
 

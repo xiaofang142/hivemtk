@@ -18,6 +18,7 @@ import (
 
 	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -119,9 +120,11 @@ func handleLTCConfigPut(c *gin.Context) {
 	res, serr := svc.Save(c.Request.Context(), cfg, c.GetUint("user_id"))
 	if serr != nil {
 		if errors.Is(serr, service.ErrLTCStoreUnavailable) {
+			// 存储原文（dial tcp/SQLSTATE）只进日志：这条 503 要让运营看懂
+			// 「没写进去、现网仍是旧配置」，不需要把底层地址带出去。
+			logger.Errorf("ltc.config 存储不可用: %v", serr)
 			response.Error(c, http.StatusServiceUnavailable,
-				"ltc.config 未写入（存储不可用）："+serr.Error()+
-					"；当前生效的仍是改动前那一份，闸门不会因此放行任何路由")
+				"ltc.config 未写入（存储不可用）；当前生效的仍是改动前那一份，闸门不会因此放行任何路由")
 			return
 		}
 		response.Error(c, http.StatusBadRequest, "ltc.config 未保存："+serr.Error())

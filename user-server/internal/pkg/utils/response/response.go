@@ -103,6 +103,75 @@ func SuccessWithPage(c *gin.Context, data any, page, pageSize int64, total int64
 	})
 }
 
+const (
+	// leakWindowRunes 原文片段判定的滑窗宽度（按 rune，避免中文被字节切断后漏判）。
+	leakWindowRunes = 16
+	// maskedInternalMessage 无法从原文中剥离出业务前缀时的统一兜底。
+	maskedInternalMessage = "操作失败，请稍后重试"
+)
+
+// internalDetailMarkers 高置信度内部错误标记。
+//
+// 历史 controller 仍有 `response.Error(c, 500, err.Error())` 这类直接出口
+// （S-36 只清了 ErrorFromDB）。这里在统一出口做最后一道兜底：命中任一标记
+// 就把标记之后的驱动/SQL/网络原文全部截掉，只保留调用方写的前缀；
+// 绑定错误（Key: 'X' Error:Field validation...）不含这些标记，不受影响。
+var internalDetailMarkers = []string{
+	"sqlstate ",
+	"pq: ",
+	"sql: ",
+	"gorm: ",
+	"database/sql",
+	"record not found",
+	"duplicate key value violates",
+	"duplicate entry",
+	"violates foreign key constraint",
+	"relation \"",
+	"column \"",
+	"no such table",
+	"no such column",
+	"unknown column",
+	"syntax error at or near",
+	"dial tcp ",
+	"connection refused",
+	"context deadline exceeded",
+	"access denied for user",
+	"unknown database",
+	"panic: ",
+	"runtime error",
+	"goroutine ",
+	"error 1045",
+	"error 1062",
+	"error 1146",
+	"mysql:",
+	"ora-",
+}
+
+// sanitizeInternalDetail 截断写给用户的文案里夹带的内部错误原文。
+//
+// 例："查询失败: pq: relation \"secret_table\" does not exist (SQLSTATE 42P01)"
+// ⇒ "查询失败"。前缀为空时回统一兜底；没有命中标记的普通业务文案原样返回。
+func sanitizeInternalDetail(msg string) string {
+	if msg == "" {
+		return msg
+	}
+	lower := strings.ToLower(msg)
+	idx := -1
+	for _, marker := range internalDetailMarkers {
+		if i := strings.Index(lower, marker); i >= 0 && (idx < 0 || i < idx) {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return msg
+	}
+	prefix := strings.TrimRight(msg[:idx], " \t:：-—,，;；")
+	if prefix == "" {
+		return maskedInternalMessage
+	}
+	return prefix
+}
+
 // Error 错误响应 - 支持 ErrorCode 和 int 两种类型
 func Error(c *gin.Context, code any, message string, data ...any) {
 	var httpCode int
@@ -143,6 +212,9 @@ func Error(c *gin.Context, code any, message string, data ...any) {
 			message = message + ": " + detail
 		}
 	}
+
+	// 统一出口兜底：direct response.Error 里的驱动/SQL/网络原文不得出境。
+	message = sanitizeInternalDetail(message)
 
 	resp := Response{
 		Code:    errorCode,
@@ -274,17 +346,17 @@ func ErrorFromDB(c *gin.Context, err error, fallbackMsg string, data ...any) {
 // 命中任一即掩码；正常业务文案（"导出任务已提交"）不受影响。
 func safeFallback(fallbackMsg, raw string) string {
 	if fallbackMsg == "" || leaksRaw(fallbackMsg, raw) {
-		return "操作失败，请稍后重试"
+		return maskedInternalMessage
 	}
 	return fallbackMsg
 }
 
 // leaksRaw 判断 fallback 是否夹带了原始错误。
 //
-// 完全相等/包含整串直接命中；另外按 16 字符滑窗比对——调用方常只拼错误尾部
+// 完全相等/包含整串直接命中；另外按 16 个 rune 的滑窗比对——调用方常只拼错误尾部
 // （`"查询失败: "+strings.TrimPrefix(err.Error(), "record not found: ")`），
-// 整串包含判不出来，但长片段仍能命中。16 字符以下的公共片段不判，避免误伤
-// “查询失败”这类正常文案。
+// 整串包含判不出来，但长片段仍能命中。按 rune 而非字节切窗：中文原文被字节
+// 切断后 Contains 会漏判。16 rune 以下的公共片段不判，避免误伤“查询失败”这类正常文案。
 func leaksRaw(fallbackMsg, raw string) bool {
 	if raw == "" {
 		return false
@@ -292,12 +364,12 @@ func leaksRaw(fallbackMsg, raw string) bool {
 	if fallbackMsg == raw || strings.Contains(fallbackMsg, raw) {
 		return true
 	}
-	const window = 16
-	if len(raw) < window {
+	runes := []rune(raw)
+	if len(runes) < leakWindowRunes {
 		return false
 	}
-	for i := 0; i+window <= len(raw); i++ {
-		if strings.Contains(fallbackMsg, raw[i:i+window]) {
+	for i := 0; i+leakWindowRunes <= len(runes); i++ {
+		if strings.Contains(fallbackMsg, string(runes[i:i+leakWindowRunes])) {
 			return true
 		}
 	}
@@ -360,7 +432,22 @@ func rawInValue(v any, raw string) bool {
 		if err != nil {
 			return true
 		}
-		return strings.Contains(string(b), raw)
+		encoded := string(b)
+		if strings.Contains(encoded, raw) {
+			return true
+		}
+		// 结构体/映射走 JSON 时，原文里的引号、换行会被转义，直接 Contains 会漏。
+		// 把 raw 也按同一规则编码后比对（去掉两端 JSON 引号）。
+		if q, err := json.Marshal(raw); err == nil {
+			escaped := string(q)
+			if len(escaped) >= 2 {
+				escaped = escaped[1 : len(escaped)-1]
+			}
+			if escaped != "" && strings.Contains(encoded, escaped) {
+				return true
+			}
+		}
+		return false
 	}
 }
 
@@ -457,6 +544,7 @@ func ErrorWithBusinessCode(c *gin.Context, code int, message string, data ...any
 	if len(data) > 0 {
 		d = data[0]
 	}
+	message = sanitizeInternalDetail(message)
 	c.JSON(http.StatusOK, Response{
 		Code:    code,
 		Message: i18n.Localize(localeOf(c), message),

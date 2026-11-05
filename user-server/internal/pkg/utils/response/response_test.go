@@ -528,3 +528,96 @@ func TestErrorFromDB_UpstreamKeepsControlledReasonDropsRawData(t *testing.T) {
 		t.Errorf("上游分支应保留受控原因，body=%s", body)
 	}
 }
+
+// TestError_MasksDirectInternalDetail（S-36 二次审核）：
+// 历史 controller 仍有直接 response.Error(500, err.Error())；统一出口必须截断原文。
+func TestError_MasksDirectInternalDetail(t *testing.T) {
+	const raw = `pq: relation "secret_table" does not exist (SQLSTATE 42P01)`
+	c, w := setupTestContext()
+
+	Error(c, http.StatusInternalServerError, "查询失败: "+raw)
+
+	body := w.Body.String()
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("状态码 = %d，期望 500，body=%s", w.Code, body)
+	}
+	for _, leak := range []string{"secret_table", "SQLSTATE", "42P01", "pq:"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("direct Error 泄漏内部原文 %q: %s", leak, body)
+		}
+	}
+	if !strings.Contains(body, "查询失败") {
+		t.Errorf("应保留业务前缀，body=%s", body)
+	}
+}
+
+// TestErrorWithBusinessCode_MasksDirectInternalDetail：200+业务码出口同样掩码。
+func TestErrorWithBusinessCode_MasksDirectInternalDetail(t *testing.T) {
+	const raw = `dial tcp 10.0.0.9:443: connection refused`
+	c, w := setupTestContext()
+
+	ErrorWithBusinessCode(c, bizerr.CodeInternal, "同步失败: "+raw)
+
+	body := w.Body.String()
+	for _, leak := range []string{"10.0.0.9", "connection refused", "dial tcp"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("business-code 出口泄漏内部原文 %q: %s", leak, body)
+		}
+	}
+	if !strings.Contains(body, "同步失败") {
+		t.Errorf("应保留业务前缀，body=%s", body)
+	}
+}
+
+// TestError_KeepsBusinessAndBindingDetail：不含内部标记的业务/绑定文案不得误伤。
+func TestError_KeepsBusinessAndBindingDetail(t *testing.T) {
+	c, w := setupTestContext()
+	Error(c, http.StatusBadRequest, "手机号格式不正确，请重新填写")
+	if !strings.Contains(w.Body.String(), "手机号格式不正确") {
+		t.Errorf("业务文案被误杀: %s", w.Body.String())
+	}
+
+	c, w = setupTestContext()
+	Error(c, http.StatusBadRequest, ErrInvalidParams,
+		"Key: 'Phone' Error:Field validation for 'Phone' failed on the 'required' tag")
+	body := w.Body.String()
+	if !strings.Contains(body, "Phone") || !strings.Contains(body, "required") {
+		t.Errorf("绑定错误详情被误杀: %s", body)
+	}
+}
+
+// TestErrorFromDB_StructDataEscapedRaw：结构体 data 经 JSON 编码后引号被转义，
+// 直接字符串比对会漏；safeData 必须按同规则编码后再比。
+func TestErrorFromDB_StructDataEscapedRaw(t *testing.T) {
+	type payload struct {
+		Detail string `json:"detail"`
+	}
+	const raw = `duplicate key value violates unique constraint "idx_secret"`
+	c, w := setupTestContext()
+
+	ErrorFromDB(c, errors.New(raw), "创建失败", payload{Detail: raw})
+
+	body := w.Body.String()
+	if strings.Contains(body, "idx_secret") || strings.Contains(body, "secret") {
+		t.Errorf("结构体 data 的转义原文泄漏: %s", body)
+	}
+	if !strings.Contains(body, "创建失败") {
+		t.Errorf("应保留业务文案，body=%s", body)
+	}
+}
+
+// TestErrorFromDB_RuneWindowMasksChineseSuffix：中文原文被截成后缀时按 rune 滑窗命中。
+func TestErrorFromDB_RuneWindowMasksChineseSuffix(t *testing.T) {
+	const raw = "查询用户订单失败：数据库连接超时，请检查网络配置后重试"
+	c, w := setupTestContext()
+
+	ErrorFromDB(c, errors.New(raw), "数据库连接超时，请检查网络配置后重试")
+
+	body := w.Body.String()
+	if strings.Contains(body, "数据库连接超时") {
+		t.Errorf("中文后缀未被识别为原文泄漏: %s", body)
+	}
+	if !strings.Contains(body, "操作失败") {
+		t.Errorf("应回退统一安全文案，body=%s", body)
+	}
+}
