@@ -55,7 +55,7 @@ func (c *SmsDeliveryTrackerController) GetMetrics(ctx *gin.Context) {
 	}
 	m, err := c.svc.GetDeliveryRateMetrics(ctx.Request.Context(), start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询到达率失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询到达率失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, m, "ok")
@@ -89,7 +89,7 @@ func (c *SmsDeliveryTrackerController) ListPortability(ctx *gin.Context) {
 
 	records, total, err := c.svc.ListPortabilityRecords(ctx.Request.Context(), phone, page, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询携号转网记录失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询携号转网记录失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, records, int64(page), int64(limit), total)
@@ -191,7 +191,7 @@ func (c *SmsDeliveryTrackerController) Webhook(ctx *gin.Context) {
 		RawPayload:  smssvc.MarshalReport(req),
 	}
 	if err := c.svc.RecordFromProvider(requestCtx, report); err != nil {
-		response.ErrorFromDB(ctx, err, "记录回执失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "记录回执失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{

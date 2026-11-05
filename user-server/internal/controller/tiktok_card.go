@@ -60,7 +60,7 @@ func (ctrl *TikTokCardController) List(c *gin.Context) {
 
 	list, err := ctrl.svc.GetList(c.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取列表失败: "+err.Error())
+		response.ErrorFromDB(c, err, "获取列表失败，请稍后重试")
 		return
 	}
 	response.Success(c, list, "获取成功")
@@ -96,7 +96,7 @@ func (ctrl *TikTokCardController) Create(c *gin.Context) {
 
 	card, err := ctrl.svc.Create(c.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(c, err, "创建失败: "+err.Error())
+		response.ErrorFromDB(c, err, "创建失败，请稍后重试")
 		return
 	}
 	response.Success(c, card, "创建成功")
@@ -190,7 +190,7 @@ func (ctrl *TikTokCardController) GenerateShortLink(c *gin.Context) {
 func (ctrl *TikTokCardController) StatsOverall(c *gin.Context) {
 	data, err := ctrl.svc.StatsOverall(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取统计失败: "+err.Error())
+		response.ErrorFromDB(c, err, "获取统计失败，请稍后重试")
 		return
 	}
 	response.Success(c, data, "获取成功")

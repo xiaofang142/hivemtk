@@ -70,7 +70,7 @@ func (c *SmsController) GetConfig(ctx *gin.Context) {
 		maskSMSConfig(config)
 	}
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取配置失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取配置失败，请稍后重试")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (c *SmsController) SaveConfig(ctx *gin.Context) {
 	}
 
 	if err := c.service.SaveConfig(ctx.Request.Context(), &req); err != nil {
-		response.ErrorFromDB(ctx, err, "保存配置失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "保存配置失败，请稍后重试")
 		return
 	}
 
@@ -192,7 +192,7 @@ func (c *SmsController) GetSmsList(ctx *gin.Context) {
 
 	list, total, err := c.service.GetSmsList(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取短信列表失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取短信列表失败，请稍后重试")
 		return
 	}
 
@@ -245,7 +245,7 @@ func (c *SmsController) SendSms(ctx *gin.Context) {
 	}
 
 	if err := c.service.SendSms(ctx.Request.Context(), &req); err != nil {
-		response.ErrorFromDB(ctx, err, "发送短信失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "发送短信失败，请稍后重试")
 		return
 	}
 
@@ -293,7 +293,7 @@ func (c *SmsController) GetDraftList(ctx *gin.Context) {
 
 	list, total, err := c.service.GetDraftList(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取草稿列表失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取草稿列表失败，请稍后重试")
 		return
 	}
 
@@ -336,7 +336,7 @@ func (c *SmsController) CreateDraft(ctx *gin.Context) {
 
 	draft, err := c.service.CreateDraft(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "创建草稿失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "创建草稿失败，请稍后重试")
 		return
 	}
 
@@ -443,7 +443,7 @@ func (c *SmsController) GetJobList(ctx *gin.Context) {
 
 	list, total, err := c.service.GetJobList(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取任务列表失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "获取任务列表失败，请稍后重试")
 		return
 	}
 
@@ -485,7 +485,7 @@ func (c *SmsController) CreateJob(ctx *gin.Context) {
 	}
 
 	if err := c.service.CreateJob(ctx.Request.Context(), &req); err != nil {
-		response.ErrorFromDB(ctx, err, "创建任务失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "创建任务失败，请稍后重试")
 		return
 	}
 

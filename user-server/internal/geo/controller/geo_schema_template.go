@@ -1,16 +1,15 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 )
 
 // GeoSchemaTemplateController Schema 模板库 CRUD
@@ -59,7 +58,7 @@ func (c *GeoSchemaTemplateController) List(ctx *gin.Context) {
 func (c *GeoSchemaTemplateController) Get(ctx *gin.Context) {
 	item, err := c.svc.Get(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "Schema 模板不存在")
 			return
 		}
@@ -95,7 +94,7 @@ func (c *GeoSchemaTemplateController) Update(ctx *gin.Context) {
 	}
 	item, err := c.svc.Update(ctx.Request.Context(), ctx.Param("id"), req.toInput())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "Schema 模板不存在")
 			return
 		}
@@ -110,7 +109,7 @@ func (c *GeoSchemaTemplateController) Update(ctx *gin.Context) {
 // @Router    /api/geo/schema-templates/{id} [delete]
 func (c *GeoSchemaTemplateController) Delete(ctx *gin.Context) {
 	if err := c.svc.Delete(ctx.Request.Context(), ctx.Param("id")); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "Schema 模板不存在")
 			return
 		}

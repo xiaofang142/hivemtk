@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	knowledgemodel "hivemtk-user/internal/aiagent/knowledge/model"
-	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -259,7 +258,7 @@ func (ctrl *KnowledgeWorkspaceController) ListDocuments(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	productID := ctrl.resolveProductID(c.Query("product_id"))
 
-	filter := knowledgerepo.ListFilter{
+	filter := knowledgesvc.ListFilter{
 		ProductID:   productID,
 		EmbedStatus: c.Query("embed_status"),
 		SourceType:  c.Query("source_type"),
@@ -504,7 +503,7 @@ func (ctrl *KnowledgeWorkspaceController) ListImportLogs(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	productID := ctrl.resolveProductID(c.Query("product_id"))
 
-	docs, total, err := ctrl.kbService.ListImportLogs(c.Request.Context(), knowledgerepo.ImportLogListFilter{
+	docs, total, err := ctrl.kbService.ListImportLogs(c.Request.Context(), knowledgesvc.ImportLogListFilter{
 		ProductID: productID,
 		BatchNo:   c.Query("batch_no"),
 		Page:      page,

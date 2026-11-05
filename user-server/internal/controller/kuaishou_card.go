@@ -141,7 +141,7 @@ func (c *KuaishouCardController) GetList(ctx *gin.Context) {
 
 	list, err := c.service.GetList(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, response.ErrGetListFailed, err.Error())
+		response.ErrorFromDB(ctx, err, response.ErrGetListFailed)
 		return
 	}
 
@@ -230,7 +230,7 @@ func (c *KuaishouCardController) GenerateShortLink(ctx *gin.Context) {
 
 	err = c.service.GenerateShortLink(ctx.Request.Context(), card)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, response.ErrBusinessError, err.Error())
+		response.ErrorFromDB(ctx, err, response.ErrBusinessError)
 		return
 	}
 

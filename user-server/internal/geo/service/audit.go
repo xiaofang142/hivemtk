@@ -117,6 +117,10 @@ type AuditCompareResult struct {
 //  1. 调既有 rubric（站点 v2 / 内容 25 因子）；
 //  2. 归一化后落 run+item；
 //  3. 提供历史、对比与可打印报告。
+//
+// AuditRunQuery 仓储查询 DTO 的对外别名：controller 只依赖 service 层。
+type AuditRunQuery = repository.AuditRunQuery
+
 type AuditService struct {
 	repo   repository.GeoAuditRepository
 	tech   *TechConfigService

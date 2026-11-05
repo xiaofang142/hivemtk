@@ -19,6 +19,7 @@ import (
 	"hivemtk-user/internal/contentguard/model"
 	"hivemtk-user/internal/contentguard/service"
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 )
 
@@ -147,7 +148,8 @@ func (c *GuardController) ImportWords(ctx *gin.Context) {
 	}
 	n, err := c.svc.ImportWords(ctx.Request.Context(), inputs)
 	if err != nil {
-		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, err.Error(), gin.H{})
+		logger.Errorf("contentguard import words failed: %v", err)
+		response.ErrorWithBusinessCode(ctx, bizerr.CodeInternal, "导入词库失败，请稍后重试", gin.H{})
 		return
 	}
 	response.Success(ctx, gin.H{"imported": n}, "ok")

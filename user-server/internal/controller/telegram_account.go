@@ -107,7 +107,7 @@ func maskBotToken(token string) string {
 func (ctrl *TelegramAccountController) List(c *gin.Context) {
 	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取列表失败", err.Error())
+		response.ErrorFromDB(c, err, "获取列表失败")
 		return
 	}
 	list := make([]telegramAccountVO, 0, len(accs))
@@ -200,7 +200,7 @@ func (ctrl *TelegramAccountController) Create(c *gin.Context) {
 
 	created, err := ctrl.svc.CreateAccount(c.Request.Context(), acc)
 	if err != nil {
-		response.ErrorFromDB(c, err, "创建失败", err.Error())
+		response.ErrorFromDB(c, err, "创建失败")
 		return
 	}
 	response.Success(c, toTelegramAccountVO(created), "创建成功（Bot Token 验证 + Webhook/Polling 配置正在后台自动处理中）")
@@ -260,7 +260,7 @@ func (ctrl *TelegramAccountController) Update(c *gin.Context) {
 		acc.Status = *req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新失败")
 		return
 	}
 	response.Success(c, toTelegramAccountVO(acc), "更新成功")
@@ -285,7 +285,7 @@ func (ctrl *TelegramAccountController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		response.ErrorFromDB(c, err, "删除失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")
@@ -364,7 +364,7 @@ func (ctrl *TelegramAccountController) RegisterWebhook(c *gin.Context) {
 		}
 	}
 	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "保存状态失败", err.Error())
+		response.ErrorFromDB(c, err, "保存状态失败")
 		return
 	}
 	service.StopTelegramPolling(acc.ID)

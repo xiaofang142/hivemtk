@@ -40,7 +40,7 @@ func (c *SalesPersonaController) GetReport(ctx *gin.Context) {
 	}
 	rep, err := c.svc.BuildReport(ctx.Request.Context(), uint(staffID))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "报告生成失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "报告生成失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, rep, "报告生成成功")

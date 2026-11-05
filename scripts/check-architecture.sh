@@ -64,9 +64,9 @@ echo "[1/10] Controller 反向依赖检查..."
 # 允许例外: *_test.go 文件可以 import repository 用于测试构造(Go 标准模式)
 # repo 分支必须带右边界:"internal/repo" 是 "internal/reporting" 的前缀，
 # 不锚定会把 reporting 组（controller 合法依赖）整批判成分层违规。
-CONTROLLER_NON_TEST_FILES=$(find "$TARGET/internal/controller" -name "*.go" ! -name "*_test.go" 2>/dev/null)
+CONTROLLER_NON_TEST_FILES=$(find "$TARGET/internal" -path "*/controller/*.go" ! -name "*_test.go" 2>/dev/null)
 if [ -n "$CONTROLLER_NON_TEST_FILES" ]; then
-  if grep -rnE 'hivemtk-user/internal/repository|hivemtk-user/internal/repo([^A-Za-z0-9_]|$)' $CONTROLLER_NON_TEST_FILES 2>/dev/null; then
+  if grep -rnE 'hivemtk-user/internal/([A-Za-z0-9_]+/)*repository([^A-Za-z0-9_]|$)' $CONTROLLER_NON_TEST_FILES 2>/dev/null; then
     log_fail "[L3] controller 直接引用 repository,违反分层(_test.go 文件例外)"
   else
     log_pass "[L3] controller 未直接引用 repository"
@@ -77,7 +77,7 @@ fi
 
 # 1.2 controller 不应直接调 db
 # 允许例外: *_test.go 文件可调 db.GetDB() 用于测试 setup
-CONTROLLER_NON_TEST=$(find "$TARGET/internal/controller" -name "*.go" ! -name "*_test.go" 2>/dev/null)
+CONTROLLER_NON_TEST=$(find "$TARGET/internal" -path "*/controller/*.go" ! -name "*_test.go" 2>/dev/null)
 if [ -n "$CONTROLLER_NON_TEST" ]; then
   if grep -rn "db\.GetDB()\|_db\.GetDB()" $CONTROLLER_NON_TEST 2>/dev/null; then
     log_fail "[L3] controller 直接调 db.GetDB(),违反分层(_test.go 文件例外)"
@@ -87,7 +87,7 @@ if [ -n "$CONTROLLER_NON_TEST" ]; then
 fi
 
 # 1.3 controller 不应直接调 gorm
-CONTROLLER_NON_TEST=$(find "$TARGET/internal/controller" -name "*.go" ! -name "*_test.go" 2>/dev/null)
+CONTROLLER_NON_TEST=$(find "$TARGET/internal" -path "*/controller/*.go" ! -name "*_test.go" 2>/dev/null)
 if [ -n "$CONTROLLER_NON_TEST" ]; then
   if grep -rn "\"gorm.io/gorm\"" $CONTROLLER_NON_TEST 2>/dev/null; then
     log_fail "[L3] controller 直接引用 gorm,违反分层(应只通过 service)"
@@ -101,7 +101,7 @@ fi
 # `ctx` 的 14 处 ctx.JSON 长期漏检（webhook.go）。改为任意接收者后统一收口到
 # response.Success/Error/ErrorFromDB（历史特殊契约走 response.Envelope）。
 # 同时覆盖 gin 的其它 JSON 写出变体，避免用 PureJSON/IndentedJSON 绕过门禁。
-CONTROLLER_NON_TEST=$(find "$TARGET/internal/controller" -name "*.go" ! -name "*_test.go" 2>/dev/null)
+CONTROLLER_NON_TEST=$(find "$TARGET/internal" -path "*/controller/*.go" ! -name "*_test.go" 2>/dev/null)
 if [ -n "$CONTROLLER_NON_TEST" ]; then
   if grep -rnE "[A-Za-z_][A-Za-z0-9_]*\.(JSON|AbortWithStatusJSON|PureJSON|IndentedJSON|SecureJSON|JSONP|AsciiJSON)\(" $CONTROLLER_NON_TEST 2>/dev/null; then
     log_fail "[L3] controller 使用 c.JSON 直接写响应,应使用 response.Success/Error"
@@ -122,6 +122,18 @@ if [ -n "$ROUTER_NON_TEST" ]; then
   else
     log_pass "[L2] router 无内联处理器"
   fi
+fi
+
+# 1.6 controller 错误文案/data 不得夹带 err.Error()（S-36）
+# 调用可能跨行，交 scripts/check-error-leak.py 做词法扫描；命中即红。
+if [ -f "$SCRIPT_DIR/check-error-leak.py" ]; then
+  if python3 "$SCRIPT_DIR/check-error-leak.py" "$TARGET" >/tmp/check-error-leak.$$ 2>&1; then
+    log_pass "[L3] controller 错误文案未夹带 err.Error()"
+  else
+    log_fail "[L3] controller 把 err.Error() 放进 fallback/data，泄露内部错误"
+    sed 's/^/    /' /tmp/check-error-leak.$$ | head -20
+  fi
+  rm -f /tmp/check-error-leak.$$
 fi
 
 # -----------------------------------------------------------------------------

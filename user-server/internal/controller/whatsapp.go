@@ -37,7 +37,7 @@ func NewWhatsappController(svc *service.WhatsappService) *WhatsappController {
 func (c *WhatsappController) ListAccounts(ctx *gin.Context) {
 	list, err := c.svc.ListAccounts(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取账号列表失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取账号列表失败")
 		return
 	}
 	// 出参脱敏：token / app_secret 是企业微信侧的接入**密钥**，
@@ -88,7 +88,7 @@ func (c *WhatsappController) CreateAccount(ctx *gin.Context) {
 	}
 	acc, err := c.svc.CreateAccount(ctx.Request.Context(), req.Name, req.Remark)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "创建账号失败", err.Error())
+		response.ErrorFromDB(ctx, err, "创建账号失败")
 		return
 	}
 	// 回显同样脱敏（账号模型带着 token / app_secret 字段）。
@@ -119,7 +119,7 @@ func (c *WhatsappController) StartLogin(ctx *gin.Context) {
 			response.Error(ctx, 503, "无法连接 WhatsApp 服务器（检查网络/代理后重试）", err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, "启动登录失败", err.Error())
+		response.ErrorFromDB(ctx, err, "启动登录失败")
 		return
 	}
 	response.Success(ctx, gin.H{"qr": qr}, "登录二维码生成成功")
@@ -137,7 +137,7 @@ func (c *WhatsappController) LoginStatus(ctx *gin.Context) {
 	}
 	loggedIn, err := c.svc.LoginStatus(ctx.Request.Context(), accID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取登录状态失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取登录状态失败")
 		return
 	}
 	qr, _ := c.svc.GetLoginQR(ctx.Request.Context(), accID)
@@ -191,7 +191,7 @@ func (c *WhatsappController) CreateDraft(ctx *gin.Context) {
 	}
 	d, err := c.svc.CreateDraft(ctx.Request.Context(), req.Title, req.Content)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "创建草稿失败", err.Error())
+		response.ErrorFromDB(ctx, err, "创建草稿失败")
 		return
 	}
 	response.Success(ctx, d, "创建草稿成功")
@@ -217,7 +217,7 @@ func (c *WhatsappController) CreateJob(ctx *gin.Context) {
 	}
 	job, err := c.svc.CreateBulkJob(ctx.Request.Context(), dID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "创建任务失败", err.Error())
+		response.ErrorFromDB(ctx, err, "创建任务失败")
 		return
 	}
 	response.Success(ctx, job, "群发任务已创建")
@@ -241,7 +241,7 @@ func (c *WhatsappController) UpdateAccount(ctx *gin.Context) {
 	}
 	acc, err := c.svc.GetAccount(ctx.Request.Context(), accID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取账号失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取账号失败")
 		return
 	}
 	if acc == nil {
@@ -251,7 +251,7 @@ func (c *WhatsappController) UpdateAccount(ctx *gin.Context) {
 	acc.Name = req.Name
 	acc.Remark = req.Remark
 	if err := c.svc.UpdateAccount(ctx.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(ctx, err, "更新账号失败", err.Error())
+		response.ErrorFromDB(ctx, err, "更新账号失败")
 		return
 	}
 	// 回显同样脱敏（下面这条 account 带着 token / app_secret）。
@@ -271,7 +271,7 @@ func (c *WhatsappController) DeleteAccount(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteAccount(ctx.Request.Context(), accID); err != nil {
-		response.ErrorFromDB(ctx, err, "删除账号失败", err.Error())
+		response.ErrorFromDB(ctx, err, "删除账号失败")
 		return
 	}
 	response.Success(ctx, nil, "删除账号成功")
@@ -295,7 +295,7 @@ func (c *WhatsappController) UpdateDraft(ctx *gin.Context) {
 	}
 	draft, err := c.svc.GetDraft(ctx.Request.Context(), draftID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取草稿失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取草稿失败")
 		return
 	}
 	if draft == nil {
@@ -305,7 +305,7 @@ func (c *WhatsappController) UpdateDraft(ctx *gin.Context) {
 	draft.Title = req.Title
 	draft.Content = req.Content
 	if err := c.svc.UpdateDraft(ctx.Request.Context(), draft); err != nil {
-		response.ErrorFromDB(ctx, err, "更新草稿失败", err.Error())
+		response.ErrorFromDB(ctx, err, "更新草稿失败")
 		return
 	}
 	response.Success(ctx, draft, "更新草稿成功")
@@ -323,7 +323,7 @@ func (c *WhatsappController) DeleteDraft(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteDraft(ctx.Request.Context(), draftID); err != nil {
-		response.ErrorFromDB(ctx, err, "删除草稿失败", err.Error())
+		response.ErrorFromDB(ctx, err, "删除草稿失败")
 		return
 	}
 	response.Success(ctx, nil, "删除草稿成功")
@@ -356,7 +356,7 @@ func (c *WhatsappController) GetJob(ctx *gin.Context) {
 	}
 	job, err := c.svc.GetJob(ctx.Request.Context(), jobID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取任务失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取任务失败")
 		return
 	}
 	if job == nil {
@@ -378,7 +378,7 @@ func (c *WhatsappController) DeleteJob(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteJob(ctx.Request.Context(), jobID); err != nil {
-		response.ErrorFromDB(ctx, err, "删除任务失败", err.Error())
+		response.ErrorFromDB(ctx, err, "删除任务失败")
 		return
 	}
 	response.Success(ctx, nil, "删除任务成功")

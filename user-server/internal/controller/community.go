@@ -365,7 +365,7 @@ func (c *CommunityController) ImportData(ctx *gin.Context) {
 func (c *CommunityController) ExportData(ctx *gin.Context) {
 	groups, _, err := c.svc.GetGroups(ctx.Request.Context(), 1, 10000, "")
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "导出数据失败", err.Error())
+		response.ErrorFromDB(ctx, err, "导出数据失败")
 		return
 	}
 

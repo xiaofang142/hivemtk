@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // ScriptTemplateController 话术模板控制器
@@ -20,14 +19,11 @@ type ScriptTemplateController struct {
 // NewScriptTemplateController 创建话术模板控制器实例。
 //
 // 句柄由装配点注入（与 #16/#17/#18 同口径）：改前无参构造口一路 new 到仓储，
-// 仓储自己摸全局 db.GetDB()，于是 handler 手上的 ctx 在这条链上没有任何一格被用上。
-// 同步服务也在这里建好：改前 SyncToLibrary handler 每个请求 new 一个，
+// 仓储自己摸全局数据库句柄，于是 handler 手上的 ctx 在这条链上没有任何一格被用上。
+// 同步服务也由装配点建好：改前 SyncToLibrary handler 每个请求 new 一个，
 // 把「装配」下沉到了请求路径上。
-func NewScriptTemplateController(db *gorm.DB) *ScriptTemplateController {
-	return &ScriptTemplateController{
-		templateService: service.NewScriptTemplateService(db),
-		syncService:     service.NewScriptTemplateSyncService(db),
-	}
+func NewScriptTemplateController(templateService *service.ScriptTemplateService, syncService *service.ScriptTemplateSyncService) *ScriptTemplateController {
+	return &ScriptTemplateController{templateService: templateService, syncService: syncService}
 }
 
 // CreateTemplate 创建话术模板

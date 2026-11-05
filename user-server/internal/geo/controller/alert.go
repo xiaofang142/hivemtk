@@ -1,15 +1,14 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // AlertController GEO 告警中心控制器
@@ -66,7 +65,7 @@ func (c *AlertController) MarkNotified(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.MarkNotified(ctx.Request.Context(), uint(id)); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "告警不存在")
 			return
 		}
@@ -93,7 +92,7 @@ func (c *AlertController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteAlert(ctx.Request.Context(), uint(id)); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "告警不存在")
 			return
 		}

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/geo/dto"
-	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/geo/service"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -41,7 +40,7 @@ func (c *CaptureController) Create(ctx *gin.Context) {
 func (c *CaptureController) List(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
-	list, total, err := c.svc.List(ctx.Request.Context(), repository.CaptureLinkQuery{
+	list, total, err := c.svc.List(ctx.Request.Context(), service.CaptureLinkQuery{
 		Keyword: ctx.Query("keyword"), Page: page, Limit: limit,
 	})
 	if err != nil {

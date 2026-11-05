@@ -1,14 +1,13 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // DictController GEO 通用配置字典（数据库驱动的硬编码替代，独立部署可维护）
@@ -80,7 +79,7 @@ func (c *DictController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Delete(ctx.Request.Context(), category, key); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "字典条目不存在")
 			return
 		}

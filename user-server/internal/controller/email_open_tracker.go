@@ -54,7 +54,7 @@ func (c *EmailOpenTrackerController) PostmarkWebhook(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.RecordPostmarkEvent(requestCtx, &evt); err != nil {
-		response.ErrorFromDB(ctx, err, "记录事件失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "记录事件失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"recorded": true, "type": evt.RecordType}, "ok")
@@ -84,7 +84,7 @@ func (c *EmailOpenTrackerController) SendCloudWebhook(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.RecordSendCloudEvent(requestCtx, &evt); err != nil {
-		response.ErrorFromDB(ctx, err, "记录事件失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "记录事件失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"recorded": true, "event": evt.Event}, "ok")
@@ -107,7 +107,7 @@ func (c *EmailOpenTrackerController) GetOpenMetrics(ctx *gin.Context) {
 	totalSent, _ := strconv.ParseInt(ctx.DefaultQuery("total_sent", "0"), 10, 64)
 	m, err := c.svc.GetOpenRateMetrics(ctx.Request.Context(), jobID, totalSent)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询打开率失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询打开率失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, m, "ok")

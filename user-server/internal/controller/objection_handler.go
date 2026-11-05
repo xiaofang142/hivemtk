@@ -32,7 +32,7 @@ func (c *ObjectionHandlerController) Handle(ctx *gin.Context) {
 	}
 	resp, err := c.svc.Handle(ctx.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "处理失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "处理失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, resp, "处理成功")
@@ -83,7 +83,7 @@ func (c *ObjectionHandlerController) RecordUsage(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.RecordUsage(ctx.Request.Context(), req.TemplateID, req.Success); err != nil {
-		response.ErrorFromDB(ctx, err, "记录失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "记录失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "记录成功")

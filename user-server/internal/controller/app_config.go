@@ -91,7 +91,7 @@ type AppConfigResp struct {
 func (c *AppConfigController) GetAppConfig(ctx *gin.Context) {
 	sysConfig, err := c.sysConfigSvc.GetConfig(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取系统配置失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取系统配置失败")
 		return
 	}
 
@@ -137,7 +137,7 @@ func (c *AppConfigController) UpdateAppConfig(ctx *gin.Context) {
 
 	_, err := c.sysConfigSvc.SaveBasicConfig(ctx.Request.Context(), req.BasicConfig.AppName, req.PlatformSync.PlatformURL)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "保存配置失败", err.Error())
+		response.ErrorFromDB(ctx, err, "保存配置失败")
 		return
 	}
 
@@ -159,7 +159,7 @@ func (c *AppConfigController) SyncWithPlatform(ctx *gin.Context) {
 
 	sysConfig, err := c.sysConfigSvc.GetConfig(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取系统配置失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取系统配置失败")
 		return
 	}
 

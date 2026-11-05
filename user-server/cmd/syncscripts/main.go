@@ -35,7 +35,7 @@ func main() {
 	db.InitDB()
 	gormDB := db.GetDB()
 
-	svc := service.NewScriptTemplateSyncService(gormDB)
+	svc := service.NewScriptTemplateSyncService(service.NewScriptTemplateSyncDeps(gormDB))
 	ctxs, err := syncContexts(gormDB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] 读取话术归属租户失败: %v\n", err)

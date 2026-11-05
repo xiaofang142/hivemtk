@@ -10,15 +10,12 @@ import (
 	"time"
 
 	"hivemtk-user/internal/content/model"
-	contentrepo "hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/content/service"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // recordBatchHistory 写入一条批量操作历史。
@@ -93,10 +90,8 @@ type BatchImportController struct {
 }
 
 // NewBatchImportController 创建批量导入控制器
-func NewBatchImportController() *BatchImportController {
-	return &BatchImportController{
-		svc: service.NewBatchOperationService(db.GetDB()),
-	}
+func NewBatchImportController(svc *service.BatchOperationService) *BatchImportController {
+	return &BatchImportController{svc: svc}
 }
 
 // ImportResult 导入结果（对外暴露）
@@ -235,10 +230,8 @@ type BatchExportController struct {
 }
 
 // NewBatchExportController 创建批量导出控制器
-func NewBatchExportController() *BatchExportController {
-	return &BatchExportController{
-		svc: service.NewBatchOperationService(db.GetDB()),
-	}
+func NewBatchExportController(svc *service.BatchOperationService) *BatchExportController {
+	return &BatchExportController{svc: svc}
 }
 
 // ExportData 导出数据
@@ -336,10 +329,8 @@ type BatchOperationController struct {
 }
 
 // NewBatchOperationController 创建批量操作控制器
-func NewBatchOperationController() *BatchOperationController {
-	return &BatchOperationController{
-		svc: service.NewBatchOperationService(db.GetDB()),
-	}
+func NewBatchOperationController(svc *service.BatchOperationService) *BatchOperationController {
+	return &BatchOperationController{svc: svc}
 }
 
 // BatchDeleteRequest 批量删除请求
@@ -478,7 +469,7 @@ func (c *BatchOperationController) GetHistoryByID(ctx *gin.Context) {
 
 	history, err := c.svc.GetHistoryByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) || errhttp.IsNotFoundError(err) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "操作记录不存在")
 			return
 		}
@@ -500,9 +491,9 @@ func (c *BatchOperationController) CancelHistory(ctx *gin.Context) {
 
 	if err := c.svc.CancelHistory(ctx.Request.Context(), uint(id)); err != nil {
 		switch {
-		case errors.Is(err, gorm.ErrRecordNotFound):
+		case errhttp.IsNotFoundError(err):
 			response.NotFound(ctx, "操作记录不存在")
-		case errors.Is(err, contentrepo.ErrBatchOperationNotCancellable):
+		case errors.Is(err, service.ErrBatchOperationNotCancellable):
 			// 记录在，只是状态不允许（已完成/已取消）：404 会让用户以为记录被删了
 			response.Error(ctx, http.StatusConflict, err.Error())
 		default:

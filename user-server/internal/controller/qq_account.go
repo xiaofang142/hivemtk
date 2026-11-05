@@ -47,7 +47,7 @@ func abortQQAccountLookup(c *gin.Context, err error) {
 		response.NotFound(c, "账号不存在")
 		return
 	}
-	response.ErrorFromDB(c, err, "账号查询失败", err.Error())
+	response.ErrorFromDB(c, err, "账号查询失败")
 }
 
 // RegisterRoutes 注册路由
@@ -107,7 +107,7 @@ func toQQAccountVO(ctx context.Context, acc *model.QQAccount) qqAccountVO {
 func (ctrl *QQAccountController) List(c *gin.Context) {
 	accs, err := ctrl.svc.ListAccounts(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取列表失败", err.Error())
+		response.ErrorFromDB(c, err, "获取列表失败")
 		return
 	}
 	list := make([]qqAccountVO, 0, len(accs))
@@ -182,7 +182,7 @@ func (ctrl *QQAccountController) Create(c *gin.Context) {
 		OwnerUserID:    currentStaffUserID(c),
 	}
 	if _, err := ctrl.svc.CreateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "创建失败", err.Error())
+		response.ErrorFromDB(c, err, "创建失败")
 		return
 	}
 	// 拿到 ID 后补推导 URL（仅当用户未显式传入且推导值合法）
@@ -271,7 +271,7 @@ func (ctrl *QQAccountController) Update(c *gin.Context) {
 		acc.Status = req.Status
 	}
 	if err := ctrl.svc.UpdateAccount(c.Request.Context(), acc); err != nil {
-		response.ErrorFromDB(c, err, "更新失败", err.Error())
+		response.ErrorFromDB(c, err, "更新失败")
 		return
 	}
 	response.Success(c, toQQAccountVO(c.Request.Context(), acc), "更新成功")
@@ -296,7 +296,7 @@ func (ctrl *QQAccountController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.DeleteAccount(c.Request.Context(), uint(id)); err != nil {
-		response.ErrorFromDB(c, err, "删除失败", err.Error())
+		response.ErrorFromDB(c, err, "删除失败")
 		return
 	}
 	response.Success(c, nil, "删除成功")

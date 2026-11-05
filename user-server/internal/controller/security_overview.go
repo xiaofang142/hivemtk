@@ -34,7 +34,7 @@ func (c *SecurityOverviewController) Overview(ctx *gin.Context) {
 	}
 	out, err := c.svc.Overview(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "聚合安全总览失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "聚合安全总览失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, out, "ok")

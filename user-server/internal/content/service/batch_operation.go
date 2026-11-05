@@ -29,17 +29,34 @@ type BatchOperationService struct {
 	userRepo    cdprepo.UserRepository
 }
 
-// NewBatchOperationService 创建批量操作服务
-//
-// 收 db 而不是内部去摸全局句柄：这一层的缺陷正是「把 handler 传下来的 ctx 丢掉、
-// 自己造 context.Background()」，构造口能注入才能在 on 模式下把 ctx 是否贯通钉成用例。
-func NewBatchOperationService(db *gorm.DB) *BatchOperationService {
-	return &BatchOperationService{
-		batchOpRepo: contentrepo.NewBatchOperationRepository(db),
-		clueRepo:    cdprepo.NewClueRepositoryWithDB(db),
-		userRepo:    cdprepo.NewUserRepositoryWithDB(db),
+// BatchOperationDeps 批量操作服务的仓储依赖。
+type BatchOperationDeps struct {
+	BatchOpRepo *contentrepo.BatchOperationRepository
+	ClueRepo    cdprepo.ClueRepository
+	UserRepo    cdprepo.UserRepository
+}
+
+// NewBatchOperationDeps 由装配处用数据库句柄构造依赖包。
+func NewBatchOperationDeps(db *gorm.DB) BatchOperationDeps {
+	return BatchOperationDeps{
+		BatchOpRepo: contentrepo.NewBatchOperationRepository(db),
+		ClueRepo:    cdprepo.NewClueRepositoryWithDB(db),
+		UserRepo:    cdprepo.NewUserRepositoryWithDB(db),
 	}
 }
+
+// NewBatchOperationService 创建批量操作服务（依赖由装配处注入）。
+func NewBatchOperationService(deps BatchOperationDeps) *BatchOperationService {
+	return &BatchOperationService{
+		batchOpRepo: deps.BatchOpRepo,
+		clueRepo:    deps.ClueRepo,
+		userRepo:    deps.UserRepo,
+	}
+}
+
+// ErrBatchOperationNotCancellable 历史任务已进入终态，不能再取消。
+// 对外暴露 service 别名，controller 不直接 import repository。
+var ErrBatchOperationNotCancellable = contentrepo.ErrBatchOperationNotCancellable
 
 // ErrUnsupportedImportType / ErrUnsupportedExportType 入口类型不合法。
 //

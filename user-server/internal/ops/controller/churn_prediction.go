@@ -11,7 +11,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // ChurnPredictionController 流失预警控制器
@@ -157,7 +156,7 @@ func (c *ChurnPredictionController) MarkWarningHandled(ctx *gin.Context) {
 	handledBy, _ := userID.(uint)
 
 	err = c.churnService.MarkWarningHandled(ctx.Request.Context(), uint(id), handledBy, req.Note)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errhttp.IsNotFoundError(err) {
 		response.NotFound(ctx, "预警不存在（id="+idStr+"）")
 		return
 	}
@@ -202,7 +201,7 @@ func (c *ChurnPredictionController) InterveneUser(ctx *gin.Context) {
 	warningID := req.WarningID
 	if warningID == 0 {
 		id, err := c.churnService.InterveneLatestByUser(ctx.Request.Context(), req.UserID, handledBy, req.InterventionType)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "该用户没有待处理的流失预警（user_id="+req.UserID+"）")
 			return
 		}
@@ -212,7 +211,7 @@ func (c *ChurnPredictionController) InterveneUser(ctx *gin.Context) {
 		warningID = id
 	} else {
 		err := c.churnService.InterveneWarning(ctx.Request.Context(), warningID, handledBy, req.InterventionType)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "预警不存在（id="+strconv.FormatUint(uint64(warningID), 10)+"）")
 			return
 		}

@@ -177,13 +177,13 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/reach-pipelines/list", reachCtrl.ListPipelines)
 	doReg("GET", "/reach-pipelines/:id", reachCtrl.GetPipeline)
 
-	marketingFlowCtrl := contentctrl.NewMarketingFlowController()
+	marketingFlowCtrl := contentctrl.NewMarketingFlowController(contentService.NewMarketingFlowService(contentService.NewMarketingFlowDeps(gormDB)))
 	doReg("GET", "/marketing-flows/list", marketingFlowCtrl.GetFlowList)
 
 	doReg("GET", "/marketing-flows/executions", marketingFlowCtrl.GetExecutionList)
 	doReg("GET", "/marketing-flows/executions/stats", marketingFlowCtrl.GetExecutionStats)
 
-	batchOpCtrl := contentctrl.NewBatchOperationController()
+	batchOpCtrl := contentctrl.NewBatchOperationController(contentService.NewBatchOperationService(contentService.NewBatchOperationDeps(gormDB)))
 	doReg("GET", "/batch-operations", batchOpCtrl.GetTools)
 	doReg("GET", "/batch-operations/list", batchOpCtrl.GetHistories)
 
@@ -193,7 +193,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/sop-agents/stats", sopCtrl.Stats)
 	doReg("GET", "/sop-agents/:id", sopCtrl.Get)
 
-	scriptCtrl := contentctrl.NewScriptTemplateController(gormDB)
+	scriptCtrl := contentctrl.NewScriptTemplateController(contentService.NewScriptTemplateService(contentService.NewScriptTemplateDeps(gormDB)), contentService.NewScriptTemplateSyncService(contentService.NewScriptTemplateSyncDeps(gormDB)))
 	doReg("GET", "/script-templates", scriptCtrl.GetTemplateList)
 	doReg("GET", "/script-templates/list", scriptCtrl.GetTemplateList)
 	doReg("GET", "/script-templates/categories", scriptCtrl.GetCategories)
@@ -330,7 +330,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/rag-product-configs/stats", ragProductCtrl.Stats)
 	doReg("GET", "/rag-product-configs/:id", ragProductCtrl.Get)
 
-	aiContentCtrl := contentctrl.NewAIContentController()
+	aiContentCtrl := contentctrl.NewAIContentController(contentService.NewAIContentService(contentService.NewAIContentDeps(gormDB)), contentService.NewPromptTemplateService(contentService.NewPromptTemplateDeps(gormDB)))
 	doReg("GET", "/ai-content/list", aiContentCtrl.GetGenerationHistory)
 	doReg("GET", "/ai-content/history", aiContentCtrl.GetGenerationHistory)
 	doReg("GET", "/ai-content/templates", aiContentCtrl.GetTemplates)
@@ -339,7 +339,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("POST", "/ai-content/:id/favorite", aiContentCtrl.FavoriteRecord)
 	doReg("POST", "/ai-content/:id/rate", aiContentCtrl.RateRecord)
 
-	templateCtrl := contentctrl.NewTemplateMarketController()
+	templateCtrl := contentctrl.NewTemplateMarketController(contentService.NewTemplateMarketService(contentService.NewTemplateMarketDeps(gormDB)))
 	doReg("GET", "/market-templates", templateCtrl.GetTemplateList)
 	doReg("GET", "/market-templates/list", templateCtrl.GetTemplateList)
 	doReg("GET", "/market-templates/official", templateCtrl.GetOfficialTemplates)
@@ -392,7 +392,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/obs-configs/default", obsCtrl.GetDefaultConfig)
 	doReg("GET", "/obs-configs/:id", obsCtrl.GetConfig)
 
-	materialCtrl := contentctrl.NewMaterialController(contentService.NewMaterialService(gormDB))
+	materialCtrl := contentctrl.NewMaterialController(contentService.NewMaterialService(contentService.NewMaterialDeps(gormDB)))
 	doReg("GET", "/material-library/list", materialCtrl.GetMaterialList)
 	doReg("GET", "/material-library", materialCtrl.GetMaterialList)
 	doReg("GET", "/material-library/categories", materialCtrl.GetMaterialCategories)

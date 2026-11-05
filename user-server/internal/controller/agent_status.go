@@ -143,7 +143,7 @@ func (c *AgentStatusController) GetMyAgent(ctx *gin.Context) {
 	}
 	st, err := c.customerService.GetOrCreateAgentStatusByUserID(ctx.Request.Context(), userID, name)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取坐席身份失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取坐席身份失败")
 		return
 	}
 	response.Success(ctx, st, "获取成功")

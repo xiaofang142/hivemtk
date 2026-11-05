@@ -40,12 +40,12 @@ func (c *ClueScoreController) ScoreClue(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "线索不存在")
 			return
 		}
-		response.ErrorFromDB(ctx, err, "加载线索失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "加载线索失败，请稍后重试")
 		return
 	}
 	score, err := c.svc.ScoreClue(ctx.Request.Context(), clue)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "评分失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "评分失败，请稍后重试")
 		return
 	}
 	resp := service.FromClueScoreModel(score)
@@ -67,7 +67,7 @@ func (c *ClueScoreController) ScoreAll(ctx *gin.Context) {
 	}
 	count, err := c.svc.ScoreAll(ctx.Request.Context(), limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "批量评分失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "批量评分失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, dto.ScoreAllResponse{Scored: count, Limit: limit}, "批量评分完成")
@@ -87,7 +87,7 @@ func (c *ClueScoreController) GetByClueID(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, "未找到评分")
 			return
 		}
-		response.ErrorFromDB(ctx, err, "查询评分失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询评分失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, service.FromClueScoreModel(score), "ok")
@@ -107,7 +107,7 @@ func (c *ClueScoreController) ListByGrade(ctx *gin.Context) {
 	pageSize := parsePositiveInt(ctx.Query("page_size"), 20, 200)
 	list, total, err := c.svc.ListByGrade(ctx.Request.Context(), grade, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询失败，请稍后重试")
 		return
 	}
 	resp := &dto.ClueScoreListResponse{
@@ -137,7 +137,7 @@ func (c *ClueScoreController) RecordEngagement(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.RecordEngagement(ctx.Request.Context(), req.ClueID, req.EventType, req.Channel, req.Payload); err != nil {
-		response.ErrorFromDB(ctx, err, "记录失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "记录失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, nil, "ok")

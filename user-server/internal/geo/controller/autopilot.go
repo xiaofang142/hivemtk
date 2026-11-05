@@ -8,10 +8,10 @@ import (
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // AutopilotController GEO 一键自动驾驶控制器
@@ -48,7 +48,7 @@ func (c *AutopilotController) Create(ctx *gin.Context) {
 func (c *AutopilotController) Get(ctx *gin.Context) {
 	run, err := c.svc.Get(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, 404, "运行记录不存在")
 			return
 		}

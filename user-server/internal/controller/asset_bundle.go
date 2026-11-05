@@ -100,13 +100,13 @@ func (c *AssetBundleController) SubmitToPlatform(ctx *gin.Context) {
 	}
 	assetID, err := c.resolveAssetID(ctx, rawID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "提交平台失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "提交平台失败，请稍后重试")
 		return
 	}
 	platformAssetID, err := c.svc.SubmitToPlatform(ctx.Request.Context(), assetID)
 	if err != nil {
 		logger.Errorf("[asset-bundle] submit to platform failed: %v", err)
-		response.ErrorFromDB(ctx, err, "提交平台失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "提交平台失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{"platform_asset_id": platformAssetID}, "已提交平台审核")

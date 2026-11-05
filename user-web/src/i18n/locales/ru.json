@@ -345,7 +345,12 @@
     "moduleCenter": "Магазин модулей",
     "myModules": "Мои модули",
     "moduleOrders": "Заказы модулей",
-    "aiCustomIntegration": "Tool Integrations"
+    "aiCustomIntegration": "Tool Integrations",
+    "geoDiagnose": "Диагностика",
+    "geoAuditCenter": "Центр аудита",
+    "geoDualEngine": "Мониторинг двух движков",
+    "geoCapture": "Захват",
+    "geoCaptureLinks": "Ссылки захвата"
   },
   "保存": "Save",
   "提交": "Submit",

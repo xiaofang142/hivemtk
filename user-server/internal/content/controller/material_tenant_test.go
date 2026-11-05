@@ -145,7 +145,7 @@ func matPhysicalCategoryCount(t *testing.T, database *gorm.DB, id string) int64 
 // 所以夹具必须能把「有 license」和「有租户」两种口径分开测。
 func matRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	t.Helper()
-	ctrl := NewMaterialController(contentservice.NewMaterialService(db.GetDB()))
+	ctrl := NewMaterialController(contentservice.NewMaterialService(contentservice.NewMaterialDeps(db.GetDB())))
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(func(ctx *gin.Context) {

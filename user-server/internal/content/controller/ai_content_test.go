@@ -27,7 +27,7 @@ func setupAIContentTestDB(t *testing.T) *gorm.DB {
 
 func setupAIContentController(t *testing.T) (*AIContentController, *gin.Engine) {
 	setupAIContentTestDB(t)
-	ctrl := NewAIContentController()
+	ctrl := newTestAIContentController()
 	router := gin.New()
 
 	router.Use(func(ctx *gin.Context) {
@@ -113,7 +113,7 @@ func TestAIContentController_GenerateContent_MissingInput(t *testing.T) {
 
 func TestAIContentController_GenerateContent_NoMerchant(t *testing.T) {
 	setupAIContentTestDB(t)
-	ctrl := NewAIContentController()
+	ctrl := newTestAIContentController()
 	router := gin.New()
 	router.POST("/ai/generate", ctrl.GenerateContent)
 
@@ -178,7 +178,7 @@ func TestAIContentController_GetGenerationHistory_WithFilters(t *testing.T) {
 // TestAIContentController_GetGenerationHistory_NoUser 测试缺少用户信息
 func TestAIContentController_GetGenerationHistory_NoUser(t *testing.T) {
 	setupAIContentTestDB(t)
-	ctrl := NewAIContentController()
+	ctrl := newTestAIContentController()
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
 		ctx.Next()
@@ -230,7 +230,7 @@ func TestAIContentController_GetRecordByID_InvalidID(t *testing.T) {
 
 func TestAIContentController_GetRecordByID_NoMerchant(t *testing.T) {
 	setupAIContentTestDB(t)
-	ctrl := NewAIContentController()
+	ctrl := newTestAIContentController()
 	router := gin.New()
 	router.GET("/ai/records/:id", ctrl.GetRecordByID)
 
@@ -671,7 +671,7 @@ func TestAIContentController_GetTemplateTypes_Success(t *testing.T) {
 
 // TestAIContentController_NewAIContentController 测试构造函数
 func TestAIContentController_NewAIContentController(t *testing.T) {
-	ctrl := NewAIContentController()
+	ctrl := newTestAIContentController()
 	if ctrl == nil {
 		t.Error("Expected controller instance, got nil")
 	}

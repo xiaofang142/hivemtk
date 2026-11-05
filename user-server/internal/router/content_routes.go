@@ -14,7 +14,7 @@ import (
 )
 
 func setupMaterialRoutes(auth *gin.RouterGroup) {
-	materialCtrl := contentctrl.NewMaterialController(contentservice.NewMaterialService(dbutil.GetDB()))
+	materialCtrl := contentctrl.NewMaterialController(contentservice.NewMaterialService(contentservice.NewMaterialDeps(dbutil.GetDB())))
 
 	auth.GET("/material/list", materialCtrl.GetMaterialList)
 	auth.POST("/material", materialCtrl.UploadMaterial)

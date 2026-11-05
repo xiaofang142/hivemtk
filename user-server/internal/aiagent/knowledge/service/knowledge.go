@@ -59,6 +59,12 @@ func anchorOrDefault() kbAnchor {
 	return nil
 }
 
+// 查询 DTO 的对外别名：controller 只依赖 service 层，不 import repository。
+type (
+	ListFilter          = repository.ListFilter
+	ImportLogListFilter = repository.ImportLogListFilter
+)
+
 // KnowledgeService 知识库服务(统一入口)
 type KnowledgeService struct {
 	db            *gorm.DB

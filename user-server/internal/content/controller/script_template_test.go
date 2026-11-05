@@ -49,7 +49,7 @@ func setupScriptRouter(ctrl *ScriptTemplateController) *gin.Engine {
 
 func TestScriptTemplateController_GetTemplateList_NoAuth(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/scripts", ctrl.GetTemplateList)
@@ -65,7 +65,7 @@ func TestScriptTemplateController_GetTemplateList_NoAuth(t *testing.T) {
 
 func TestScriptTemplateController_GetTemplateList_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("GET", "/scripts?page=1&page_size=10", nil)
@@ -84,7 +84,7 @@ func TestScriptTemplateController_GetTemplateList_Success(t *testing.T) {
 
 func TestScriptTemplateController_CreateTemplate_NoAuth(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -109,7 +109,7 @@ func TestScriptTemplateController_CreateTemplate_NoAuth(t *testing.T) {
 
 func TestScriptTemplateController_CreateTemplate_InvalidJSON(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("POST", "/scripts", bytes.NewReader([]byte("invalid")))
@@ -124,7 +124,7 @@ func TestScriptTemplateController_CreateTemplate_InvalidJSON(t *testing.T) {
 
 func TestScriptTemplateController_CreateTemplate_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	body, _ := json.Marshal(service.CreateScriptTemplateRequest{
@@ -144,7 +144,7 @@ func TestScriptTemplateController_CreateTemplate_Success(t *testing.T) {
 
 func TestScriptTemplateController_GetTemplateByID_InvalidID(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("GET", "/scripts/abc", nil)
@@ -158,7 +158,7 @@ func TestScriptTemplateController_GetTemplateByID_InvalidID(t *testing.T) {
 
 func TestScriptTemplateController_UpdateTemplate_InvalidID(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	body, _ := json.Marshal(service.UpdateTemplateRequest{Title: "Updated"})
@@ -174,7 +174,7 @@ func TestScriptTemplateController_UpdateTemplate_InvalidID(t *testing.T) {
 
 func TestScriptTemplateController_DeleteTemplate_InvalidID(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("DELETE", "/scripts/abc", nil)
@@ -188,7 +188,7 @@ func TestScriptTemplateController_DeleteTemplate_InvalidID(t *testing.T) {
 
 func TestScriptTemplateController_GetCategories_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("GET", "/scripts/categories", nil)
@@ -202,7 +202,7 @@ func TestScriptTemplateController_GetCategories_Success(t *testing.T) {
 
 func TestScriptTemplateController_SearchTemplates_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("GET", "/scripts/search?keyword=test", nil)
@@ -216,7 +216,7 @@ func TestScriptTemplateController_SearchTemplates_Success(t *testing.T) {
 
 func TestScriptTemplateController_GetPublicTemplates_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("GET", "/scripts/public?page=1&page_size=5", nil)
@@ -230,7 +230,7 @@ func TestScriptTemplateController_GetPublicTemplates_Success(t *testing.T) {
 
 func TestScriptTemplateController_RecommendScript_NoAuth(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/scripts/recommend", ctrl.RecommendScript)
@@ -248,7 +248,7 @@ func TestScriptTemplateController_RecommendScript_NoAuth(t *testing.T) {
 
 func TestScriptTemplateController_RecommendScript_InvalidJSON(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	req, _ := http.NewRequest("POST", "/scripts/recommend", bytes.NewReader([]byte("bad")))
@@ -263,7 +263,7 @@ func TestScriptTemplateController_RecommendScript_InvalidJSON(t *testing.T) {
 
 func TestScriptTemplateController_RecommendScript_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	body, _ := json.Marshal(map[string]string{
@@ -282,7 +282,7 @@ func TestScriptTemplateController_RecommendScript_Success(t *testing.T) {
 
 func TestScriptTemplateController_DeleteTemplate_Success(t *testing.T) {
 	setupScriptTestDB(t)
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := setupScriptRouter(ctrl)
 
 	body, _ := json.Marshal(service.CreateScriptTemplateRequest{

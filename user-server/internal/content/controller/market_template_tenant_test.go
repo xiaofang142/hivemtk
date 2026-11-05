@@ -79,7 +79,7 @@ func mtcPhysicalDownloads(t *testing.T, database *gorm.DB, templateID uint) []*m
 // "uint"（用户侧 JWT）与 "float64"（团队侧 JWT）；none 表示压根没有身份。
 func mtcRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	t.Helper()
-	ctrl := NewTemplateMarketController()
+	ctrl := newTestTemplateMarketController()
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(func(ctx *gin.Context) {

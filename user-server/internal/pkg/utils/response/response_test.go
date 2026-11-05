@@ -11,6 +11,8 @@ import (
 	"hivemtk-user/internal/pkg/i18n"
 	"hivemtk-user/internal/pkg/utils"
 
+	bizerr "hivemtk-user/internal/domain/errors"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -412,9 +414,62 @@ func TestResponsePath_RequestlessContextDoesNotPanic(t *testing.T) {
 	})
 }
 
-// TestErrorFromDB_TerminalMasksRawError（S-29）：未知 500 类错误的三条泄漏面
-// （空 fallback 顶原文 / 调用方把 err.Error() 当 fallbackMsg / data 通道携带原文）
-// 在终态分支必须全部封死；400/409 分支的业务文案不受影响。
+// TestErrorFromDB_ClassifiedBranchesMaskRawError（S-36）：4xx/502 分类分支
+// 同样不能把 err.Error() 带出——无论它藏在 fallback 还是 data 里。
+func TestErrorFromDB_ClassifiedBranchesMaskRawError(t *testing.T) {
+	const raw = `relation "secret_table" does not exist (SQLSTATE 42P01)`
+
+	cases := []struct {
+		name       string
+		err        error
+		fallback   string
+		data       []any
+		wantStatus int
+	}{
+		{
+			name:       "not found：原文拼进 fallback",
+			err:        errors.New("record not found: " + raw),
+			fallback:   "查询失败: " + raw,
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "invalid input：原文塞进 data",
+			err:        errors.New("invalid input: " + raw),
+			fallback:   "参数错误",
+			data:       []any{raw},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "conflict：原文既进 fallback 又进 data",
+			err:        errors.New("duplicate key value violates unique constraint " + raw),
+			fallback:   "创建失败: " + raw,
+			data:       []any{gin.H{"detail": raw}},
+			wantStatus: http.StatusConflict,
+		},
+		{
+			name:       "forbidden：data 夹带原文",
+			err:        errors.New("forbidden: " + raw),
+			fallback:   "无权限",
+			data:       []any{raw},
+			wantStatus: http.StatusForbidden,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, w := setupTestContext()
+			ErrorFromDB(c, tc.err, tc.fallback, tc.data...)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("状态码 = %d，期望 %d，body=%s", w.Code, tc.wantStatus, w.Body.String())
+			}
+			body := w.Body.String()
+			if strings.Contains(body, "secret_table") || strings.Contains(body, "SQLSTATE") {
+				t.Errorf("分类分支泄漏原始错误: %s", body)
+			}
+		})
+	}
+}
 func TestErrorFromDB_TerminalMasksRawError(t *testing.T) {
 	raw := `pq: syntax error at or near "SELEC" (SQLSTATE 42601), relation "bills_x"` // 表名+SQLSTATE，泄露即肉眼可见
 
@@ -450,5 +505,26 @@ func TestErrorFromDB_TerminalMasksRawError(t *testing.T) {
 				t.Errorf("业务文案被误掩: %s", body)
 			}
 		})
+	}
+}
+
+// TestErrorFromDB_UpstreamKeepsControlledReasonDropsRawData（S-36）：
+// 502 分支保留 BizError 里写给用户的原因，但 data 中的原始错误仍要丢弃。
+func TestErrorFromDB_UpstreamKeepsControlledReasonDropsRawData(t *testing.T) {
+	const raw = `dial tcp 10.0.0.9:443: connection refused`
+	c, w := setupTestContext()
+
+	err := bizerr.Wrap(bizerr.CodePlatformUnavail, "渠道不可达或凭据无效", errors.New(raw))
+	ErrorFromDB(c, err, "发送失败: "+raw, raw)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("上游失败应 502，实际 %d，body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, raw) || strings.Contains(body, "10.0.0.9") {
+		t.Errorf("上游分支泄漏原始连接错误: %s", body)
+	}
+	if !strings.Contains(body, "渠道不可达") {
+		t.Errorf("上游分支应保留受控原因，body=%s", body)
 	}
 }

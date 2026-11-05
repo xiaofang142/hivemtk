@@ -3,7 +3,6 @@ package controller
 import (
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/service"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
@@ -18,10 +17,8 @@ type TemplateMarketController struct {
 }
 
 // NewTemplateMarketController 创建模板市场控制器实例
-func NewTemplateMarketController() *TemplateMarketController {
-	return &TemplateMarketController{
-		marketService: service.NewTemplateMarketService(db.GetDB()),
-	}
+func NewTemplateMarketController(marketService *service.TemplateMarketService) *TemplateMarketController {
+	return &TemplateMarketController{marketService: marketService}
 }
 
 // callerUserID 取当前登录用户。

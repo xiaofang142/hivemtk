@@ -229,7 +229,7 @@ func (c *SSOController) resolveRedirectTarget(ctx *gin.Context, requestCtx conte
 func (c *SSOController) GetTenantProviders(ctx *gin.Context) {
 	providers, err := c.ssoService.TenantProviders(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "读取租户企业登录配置失败", err.Error())
+		response.ErrorFromDB(ctx, err, "读取租户企业登录配置失败")
 		return
 	}
 	response.Success(ctx, gin.H{"providers": service.MaskTenantSSOClientSecrets(providers)}, "获取成功")
@@ -253,7 +253,7 @@ func (c *SSOController) SaveTenantProviders(ctx *gin.Context) {
 	requestCtx := ctx.Request.Context()
 	existing, err := c.ssoService.TenantProviders(requestCtx)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "读取租户企业登录配置失败", err.Error())
+		response.ErrorFromDB(ctx, err, "读取租户企业登录配置失败")
 		return
 	}
 	merged, err := service.PreserveMaskedClientSecrets(body.Providers, existing)

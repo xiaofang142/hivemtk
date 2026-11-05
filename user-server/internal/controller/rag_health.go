@@ -38,7 +38,7 @@ func (c *RagHealthController) GetHealth(ctx *gin.Context) {
 	window := time.Duration(windowSec) * time.Second
 	report, err := c.svc.GetHealthCached(ctx.Request.Context(), window)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "健康度评估失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "健康度评估失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, report, "ok")
@@ -61,7 +61,7 @@ func (c *RagHealthController) RefreshHealth(ctx *gin.Context) {
 	window := time.Duration(windowSec) * time.Second
 	report, err := c.svc.GetHealth(ctx.Request.Context(), window)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "健康度评估失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "健康度评估失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, report, "ok")

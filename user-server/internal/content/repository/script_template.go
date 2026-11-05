@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/content/model"
+	mainmodel "hivemtk-user/internal/model"
 
 	"gorm.io/gorm"
 )
@@ -233,4 +234,36 @@ func normalizeScriptPaging(page, pageSize int) (int, int) {
 // PG 与 MySQL 的 LIKE 默认转义符都是反斜杠，无需显式 ESCAPE 子句。
 func escapeScriptLike(s string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
+}
+
+// ErrScriptLibraryMissing 读前置与写口之间那一行没了（含「不存在」⇒ 出口 404）。
+var ErrScriptLibraryMissing = errors.New("运行时话术不存在")
+
+// UpsertLibrary 按 (category, title) 幂等写运行时话术库。
+// 只更新正文/场景/标签三列；usage_count 等运行时统计与归属列不动。
+func (r *ScriptTemplateRepository) UpsertLibrary(ctx context.Context, lib *mainmodel.ScriptLibrary) (bool, error) {
+	var existing mainmodel.ScriptLibrary
+	err := r.db.WithContext(ctx).Where("category = ? AND title = ?", lib.Category, lib.Title).First(&existing).Error
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		if err := r.db.WithContext(ctx).Create(lib).Error; err != nil {
+			return false, err
+		}
+		return true, nil
+	case err != nil:
+		return false, err
+	default:
+		res := r.db.WithContext(ctx).Model(&existing).Updates(map[string]any{
+			"content":  lib.Content,
+			"scenario": lib.Scenario,
+			"tags":     lib.Tags,
+		})
+		if res.Error != nil {
+			return false, res.Error
+		}
+		if res.RowsAffected == 0 {
+			return false, ErrScriptLibraryMissing
+		}
+		return false, nil
+	}
 }

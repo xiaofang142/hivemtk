@@ -56,7 +56,7 @@ func (ctrl *NotificationController) List(c *gin.Context) {
 
 	resp, err := ctrl.svc.List(c.Request.Context(), req)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.Success(c, resp, "ok")
@@ -105,7 +105,7 @@ func (ctrl *NotificationController) MarkAllRead(c *gin.Context) {
 	}
 	n, err := ctrl.svc.MarkAllRead(c.Request.Context(), uid)
 	if err != nil {
-		response.ErrorFromDB(c, err, "操作失败", err.Error())
+		response.ErrorFromDB(c, err, "操作失败")
 		return
 	}
 	response.Success(c, gin.H{"marked": n}, "已全部标记为已读")
@@ -125,7 +125,7 @@ func (ctrl *NotificationController) UnreadCount(c *gin.Context) {
 	}
 	count, err := ctrl.svc.CountUnread(c.Request.Context(), uid)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.Success(c, gin.H{"count": count}, "ok")

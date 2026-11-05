@@ -345,7 +345,12 @@
     "moduleCenter": "モジュールマーケット",
     "myModules": "自分のモジュール",
     "moduleOrders": "モジュール注文",
-    "aiCustomIntegration": "ツール連携"
+    "aiCustomIntegration": "ツール連携",
+    "geoDiagnose": "診断",
+    "geoAuditCenter": "監査センター",
+    "geoDualEngine": "デュアルエンジン監視",
+    "geoCapture": "キャプチャ",
+    "geoCaptureLinks": "キャプチャリンク"
   },
   "保存": "保存",
   "提交": "送信",

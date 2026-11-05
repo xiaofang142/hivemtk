@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/content/service"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -57,10 +56,8 @@ type MarketingFlowController struct {
 }
 
 // NewMarketingFlowController 创建营销流程控制器实例
-func NewMarketingFlowController() *MarketingFlowController {
-	return &MarketingFlowController{
-		flowService: service.NewMarketingFlowService(db.GetDB()),
-	}
+func NewMarketingFlowController(flowService *service.MarketingFlowService) *MarketingFlowController {
+	return &MarketingFlowController{flowService: flowService}
 }
 
 // CreateFlow 创建流程

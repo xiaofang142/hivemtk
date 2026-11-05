@@ -67,7 +67,7 @@ func (c *RagRecallMonitorController) ListSnapshots(ctx *gin.Context) {
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "50"))
 	rows, err := c.svc.ListSnapshots(ctx.Request.Context(), limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询监控快照失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询监控快照失败，请稍后重试")
 		return
 	}
 	response.SuccessWithPage(ctx, rows, 1, int64(limit), int64(len(rows)))
@@ -107,7 +107,7 @@ func (c *RagRecallMonitorController) Collect(ctx *gin.Context) {
 
 	summary, err := c.svc.CollectAndStore(bgCtx, start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "采集失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "采集失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, summary, "ok")
@@ -171,7 +171,7 @@ func (c *RagRecallMonitorController) GetRecallMetrics(ctx *gin.Context) {
 	}
 	metrics, err := c.metricsSvc.GetRecallMetrics(ctx.Request.Context(), start, end)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询召回指标失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询召回指标失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, metrics, "ok")
@@ -198,7 +198,7 @@ func (c *RagRecallMonitorController) GetLowRecallQueries(ctx *gin.Context) {
 	}
 	rows, err := c.metricsSvc.GetLowRecallQueries(ctx.Request.Context(), threshold, limit)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询低召回样本失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询低召回样本失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, rows, "ok")

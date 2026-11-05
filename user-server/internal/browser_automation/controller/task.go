@@ -10,13 +10,13 @@ import (
 	bamodel "hivemtk-user/internal/browser_automation/model"
 	baplat "hivemtk-user/internal/browser_automation/platform"
 	basvc "hivemtk-user/internal/browser_automation/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // hostProber 交互式执行前的 Host 在线探针，生产实现是 *service.HostRegistry。
@@ -67,7 +67,14 @@ func baErrToResponse(ctx *gin.Context, err error, notFoundMsg string) {
 		response.Error(ctx, http.StatusConflict, err.Error())
 	case errors.Is(err, basvc.ErrInvalidURL):
 		response.Error(ctx, http.StatusBadRequest, err.Error())
-	case errors.Is(err, gorm.ErrRecordNotFound):
+	case errhttp.IsNotFoundError(err):
+		// 文本判定先于类型分支，但类型化 NotFoundError 自带更准确的主语
+		// （任务/触发器），不能被域级兜底文案盖掉。
+		var nf *basvc.NotFoundError
+		if errors.As(err, &nf) {
+			response.Error(ctx, http.StatusNotFound, nf.Error())
+			return
+		}
 		response.Error(ctx, http.StatusNotFound, notFoundMsg)
 	default:
 		// 类型分流放在 default 里：这三类是「带动态文案的前置条件/结论」，没有可比对的哨兵值，

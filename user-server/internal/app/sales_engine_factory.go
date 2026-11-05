@@ -43,7 +43,7 @@ func BuildSalesEngine(gormDB *gorm.DB) *service.SalesEngine {
 
 	ragSearcher := knowledgesvc.NewRagSearcher()
 
-	scriptLookup := service.NewScriptLookupAdapter(contentservice.NewScriptTemplateService(gormDB))
+	scriptLookup := service.NewScriptLookupAdapter(contentservice.NewScriptTemplateService(contentservice.NewScriptTemplateDeps(gormDB)))
 	customerLookup := service.NewCustomerLookupAdapter(repository.NewCustomerRepository())
 
 	engine := service.NewSalesEngine(

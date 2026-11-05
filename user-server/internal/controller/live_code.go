@@ -375,7 +375,7 @@ func (c *LiveCodeController) DeleteLiveCodeQR(ctx *gin.Context) {
 			response.Error(ctx, http.StatusNotFound, err.Error())
 			return
 		}
-		response.ErrorFromDB(ctx, err, "删除二维码失败", err.Error())
+		response.ErrorFromDB(ctx, err, "删除二维码失败")
 		return
 	}
 

@@ -96,7 +96,7 @@ func mflPhysicalExecutions(t *testing.T, database *gorm.DB, flowID uint) []*cont
 // X-Test-Role 头注入且默认**非** admin —— 只有非管理员身份才会走到 handler 内的归属判定。
 func mflRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	t.Helper()
-	ctrl := NewMarketingFlowController()
+	ctrl := newTestMarketingFlowController()
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(func(ctx *gin.Context) {

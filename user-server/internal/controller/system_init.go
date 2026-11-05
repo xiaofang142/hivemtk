@@ -148,7 +148,7 @@ func (c *SystemInitController) InitComplete(ctx *gin.Context) {
 
 	adminUsername := checker.GetAdminUsername()
 	if err := checker.SetAdminInit(adminUsername); err != nil {
-		response.ErrorFromDB(ctx, err, "标记初始化状态失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "标记初始化状态失败，请稍后重试")
 		return
 	}
 

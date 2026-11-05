@@ -3,6 +3,7 @@ package router
 import (
 	"hivemtk-user/internal/app"
 	contentctrl "hivemtk-user/internal/content/controller"
+	contentservice "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
 	opsctrl "hivemtk-user/internal/ops/controller"
@@ -16,9 +17,10 @@ import (
 )
 
 func setupBatchRoutes(auth *gin.RouterGroup) {
-	batchImportCtrl := contentctrl.NewBatchImportController()
-	batchExportCtrl := contentctrl.NewBatchExportController()
-	batchOpCtrl := contentctrl.NewBatchOperationController()
+	batchSvc := contentservice.NewBatchOperationService(contentservice.NewBatchOperationDeps(dbutil.GetDB()))
+	batchImportCtrl := contentctrl.NewBatchImportController(batchSvc)
+	batchExportCtrl := contentctrl.NewBatchExportController(batchSvc)
+	batchOpCtrl := contentctrl.NewBatchOperationController(batchSvc)
 
 	auth.GET("/batch/template", batchImportCtrl.DownloadTemplate)
 	auth.POST("/batch/export", batchExportCtrl.ExportData)
@@ -37,7 +39,7 @@ func setupBatchRoutes(auth *gin.RouterGroup) {
 }
 
 func setupAIContentRoutes(auth *gin.RouterGroup) {
-	aiContentCtrl := contentctrl.NewAIContentController()
+	aiContentCtrl := contentctrl.NewAIContentController(contentservice.NewAIContentService(contentservice.NewAIContentDeps(dbutil.GetDB())), contentservice.NewPromptTemplateService(contentservice.NewPromptTemplateDeps(dbutil.GetDB())))
 	auth.GET("/ai/history", aiContentCtrl.GetGenerationHistory)
 	auth.GET("/ai/history/:id", aiContentCtrl.GetRecordByID)
 	auth.POST("/ai/history", aiContentCtrl.CreateHistory)
@@ -75,7 +77,7 @@ func setupUserSegmentRoutes(auth *gin.RouterGroup) {
 }
 
 func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
-	marketingFlowCtrl := contentctrl.NewMarketingFlowController()
+	marketingFlowCtrl := contentctrl.NewMarketingFlowController(contentservice.NewMarketingFlowService(contentservice.NewMarketingFlowDeps(dbutil.GetDB())))
 
 	extrasCtrl := controller.NewCustomerEventBatchController()
 	auth.POST("/customer-events/batch", extrasCtrl.TrackBatch)
@@ -155,7 +157,7 @@ func setupDashboardRoutes(auth *gin.RouterGroup, public *gin.RouterGroup) {
 }
 
 func setupTemplateRoutes(auth *gin.RouterGroup) {
-	templateCtrl := contentctrl.NewTemplateMarketController()
+	templateCtrl := contentctrl.NewTemplateMarketController(contentservice.NewTemplateMarketService(contentservice.NewTemplateMarketDeps(dbutil.GetDB())))
 	auth.GET("/templates", templateCtrl.GetTemplateList)
 	auth.POST("/templates", templateCtrl.CreateTemplate)
 	auth.GET("/templates/:id", templateCtrl.GetTemplateByID)
@@ -167,7 +169,7 @@ func setupTemplateRoutes(auth *gin.RouterGroup) {
 }
 
 func setupScriptRoutes(auth *gin.RouterGroup) {
-	scriptCtrl := contentctrl.NewScriptTemplateController(dbutil.GetDB())
+	scriptCtrl := contentctrl.NewScriptTemplateController(contentservice.NewScriptTemplateService(contentservice.NewScriptTemplateDeps(dbutil.GetDB())), contentservice.NewScriptTemplateSyncService(contentservice.NewScriptTemplateSyncDeps(dbutil.GetDB())))
 	auth.GET("/scripts", scriptCtrl.GetTemplateList)
 	auth.GET("/scripts/:id", scriptCtrl.GetTemplateByID)
 	auth.POST("/scripts", scriptCtrl.CreateTemplate)

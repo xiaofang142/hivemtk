@@ -130,7 +130,7 @@ func (gmc *GroupMessagingController) GetLeadGroups(c *gin.Context) {
 	}
 	clues, total, err := gmc.clueSvc.GetClueAllList(c.Request.Context(), 7)
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取线索失败", err.Error())
+		response.ErrorFromDB(c, err, "获取线索失败")
 		return
 	}
 
@@ -440,7 +440,7 @@ func (gmc *GroupMessagingController) GetTemplates(c *gin.Context) {
 
 	templates, err := gmc.templateService.GetTemplates(c.Request.Context(), category, isActive)
 	if err != nil {
-		response.ErrorFromDB(c, err, "获取模板失败", err.Error())
+		response.ErrorFromDB(c, err, "获取模板失败")
 		return
 	}
 

@@ -33,7 +33,7 @@ func setupMarketingFlowServiceTestDBWithCDP(t *testing.T) *gorm.DB {
 // TestMarketingFlowService_sendActionRemoveTag 测试移除标签动作
 func TestMarketingFlowService_sendActionRemoveTag(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	if err := service.userTagRepo.AddTags(context.Background(), "user-remove-1", []string{"vip", "active", "trial"}); err != nil {
 		t.Fatalf("预设标签失败：%v", err)
@@ -147,7 +147,7 @@ func TestMarketingFlowService_sendActionRemoveTag(t *testing.T) {
 // TestMarketingFlowService_sendActionAssignAgent 测试分配客服动作
 func TestMarketingFlowService_sendActionAssignAgent(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	now := time.Now()
 	agent1 := &reachmodel.AgentStatus{
@@ -271,7 +271,7 @@ func TestMarketingFlowService_sendActionAssignAgent(t *testing.T) {
 // TestMarketingFlowService_sendActionAssignAgent_NoAgents 测试无可用客服场景
 func TestMarketingFlowService_sendActionAssignAgent_NoAgents(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	session := &reachmodel.CustomerSession{
 		SessionID: "sess-no-agent",
@@ -292,7 +292,7 @@ func TestMarketingFlowService_sendActionAssignAgent_NoAgents(t *testing.T) {
 // TestMarketingFlowService_sendActionCreateTask 测试创建任务动作
 func TestMarketingFlowService_sendActionCreateTask(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	tests := []struct {
 		name           string
@@ -420,7 +420,7 @@ func TestMarketingFlowService_sendActionCreateTask(t *testing.T) {
 // TestMarketingFlowService_sendActionSendSms 测试发送短信动作
 func TestMarketingFlowService_sendActionSendSms(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	t.Run("sms sender not registered", func(t *testing.T) {
 		origSender := smsSenderFunc
@@ -517,7 +517,7 @@ func TestMarketingFlowService_sendActionSendSms(t *testing.T) {
 // TestMarketingFlowService_sendActionUpdateLead 测试更新线索动作
 func TestMarketingFlowService_sendActionUpdateLead(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	clue := &reachmodel.Clue{
 		SourceID: "src-1",
@@ -707,7 +707,7 @@ func TestMarketingFlowService_sendActionUpdateLead(t *testing.T) {
 // TestMarketingFlowService_sendActionCreateOrder 测试创建订单动作
 func TestMarketingFlowService_sendActionCreateOrder(t *testing.T) {
 	database := setupMarketingFlowServiceTestDBWithCDP(t)
-	service := NewMarketingFlowService(database)
+	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
 
 	tests := []struct {
 		name        string

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,12 +8,11 @@ import (
 
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
-	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // AuditController GEO 审计中心：体检、历史、对比、报告。
@@ -80,7 +78,7 @@ func (c *AuditController) RunContent(ctx *gin.Context) {
 func (c *AuditController) List(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
-	runs, total, err := c.svc.List(ctx.Request.Context(), repository.AuditRunQuery{
+	runs, total, err := c.svc.List(ctx.Request.Context(), service.AuditRunQuery{
 		Kind:          ctx.Query("kind"),
 		URL:           ctx.Query("url"),
 		RubricVersion: ctx.Query("rubric_version"),
@@ -110,7 +108,7 @@ func (c *AuditController) List(ctx *gin.Context) {
 func (c *AuditController) Get(ctx *gin.Context) {
 	run, items, err := c.svc.Get(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "审计记录不存在")
 			return
 		}
@@ -148,7 +146,7 @@ func (c *AuditController) Report(ctx *gin.Context) {
 }
 
 func (c *AuditController) reportError(ctx *gin.Context, err error) {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	if errhttp.IsNotFoundError(err) {
 		response.Error(ctx, http.StatusNotFound, "审计记录不存在")
 		return
 	}
@@ -167,7 +165,7 @@ func (c *AuditController) Compare(ctx *gin.Context) {
 	}
 	res, err := c.svc.Compare(ctx.Request.Context(), from, to)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "审计记录不存在")
 			return
 		}

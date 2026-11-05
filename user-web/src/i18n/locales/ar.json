@@ -303,7 +303,12 @@
     "moduleCenter": "متجر الوحدات",
     "myModules": "وحداتي",
     "moduleOrders": "طلبات الوحدات",
-    "aiCustomIntegration": "Tool Integrations"
+    "aiCustomIntegration": "Tool Integrations",
+    "geoDiagnose": "تشخيص",
+    "geoAuditCenter": "مركز التدقيق",
+    "geoDualEngine": "مراقبة المحركين",
+    "geoCapture": "استقبال",
+    "geoCaptureLinks": "روابط الاستقبال"
   },
   "保存": "حفظ",
   "提交": "إرسال",

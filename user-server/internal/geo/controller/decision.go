@@ -1,15 +1,14 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type GeoDecisionController struct {
@@ -42,7 +41,7 @@ func (c *GeoDecisionController) GetTasks(ctx *gin.Context) {
 // POST /api/geo/decision/tasks/:id/done
 func (c *GeoDecisionController) MarkTaskDone(ctx *gin.Context) {
 	if err := c.svc.MarkDone(ctx.Request.Context(), ctx.Param("id")); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "补位任务不存在")
 			return
 		}

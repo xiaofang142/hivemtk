@@ -2,7 +2,6 @@ package controller
 
 import (
 	"hivemtk-user/internal/content/service"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
 	"strconv"
@@ -19,11 +18,8 @@ type AIContentController struct {
 }
 
 // NewAIContentController 创建AI内容控制器实例
-func NewAIContentController() *AIContentController {
-	return &AIContentController{
-		contentService:  service.NewAIContentService(db.GetDB()),
-		templateService: service.NewPromptTemplateService(db.GetDB()),
-	}
+func NewAIContentController(contentService *service.AIContentService, templateService *service.PromptTemplateService) *AIContentController {
+	return &AIContentController{contentService: contentService, templateService: templateService}
 }
 
 // aiUserID 取调用者身份（生成记录与模板的归属门都建在这个值上）。

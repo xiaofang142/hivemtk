@@ -66,12 +66,28 @@ type materialService struct {
 	obsService   ObsService
 }
 
-// NewMaterialService 创建素材服务。句柄由装配处交进来，服务层不再自己摸全局 db.GetDB()。
-func NewMaterialService(db *gorm.DB) MaterialService {
+// MaterialDeps 素材服务的仓储/OBS 依赖。
+type MaterialDeps struct {
+	CategoryRepo repository.MaterialCategoryRepository
+	MaterialRepo repository.MaterialRepository
+	ObsService   ObsService
+}
+
+// NewMaterialDeps 由装配处用数据库句柄构造依赖包。
+func NewMaterialDeps(db *gorm.DB) MaterialDeps {
+	return MaterialDeps{
+		CategoryRepo: repository.NewMaterialCategoryRepository(db),
+		MaterialRepo: repository.NewMaterialRepository(db),
+		ObsService:   NewObsConfigServiceAdapter(db),
+	}
+}
+
+// NewMaterialService 创建素材服务（依赖由装配处注入）。
+func NewMaterialService(deps MaterialDeps) MaterialService {
 	return &materialService{
-		categoryRepo: repository.NewMaterialCategoryRepository(db),
-		materialRepo: repository.NewMaterialRepository(db),
-		obsService:   NewObsConfigServiceAdapter(db),
+		categoryRepo: deps.CategoryRepo,
+		materialRepo: deps.MaterialRepo,
+		obsService:   deps.ObsService,
 	}
 }
 

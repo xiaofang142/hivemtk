@@ -56,7 +56,7 @@ func (ctrl *ChatChannelController) List(c *gin.Context) {
 	}
 	list, total, err := ctrl.svc.List(c.Request.Context(), keyword, status, page, pageSize)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithPage(c, list, int64(page), int64(pageSize), total)

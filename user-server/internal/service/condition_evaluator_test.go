@@ -19,7 +19,7 @@ func setupConditionEvaluatorService(t *testing.T) *contentsvc.MarketingFlowServi
 		&model.UserTag{},
 	)
 	db.SetTestDB(database)
-	return contentsvc.NewMarketingFlowService(database)
+	return contentsvc.NewMarketingFlowService(contentsvc.NewMarketingFlowDeps(database))
 }
 
 func TestEvaluateCondition_EqOperator(t *testing.T) {

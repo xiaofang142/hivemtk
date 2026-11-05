@@ -36,20 +36,44 @@ type MarketingFlowService struct {
 	operationLogRepo cdprepo.OperationLogRepository
 }
 
-// NewMarketingFlowService 创建营销流程服务。
-//
-// 句柄由装配处交进来，服务层不再自己摸全局 `db.GetDB()`（与 #16 同口径）：
-// 租户来自每次调用的 ctx，句柄只是连接池，把「摸全局」留在装配层才能一眼看出谁在构造它。
-func NewMarketingFlowService(db *gorm.DB) *MarketingFlowService {
+// MarketingFlowDeps 营销流程服务的仓储依赖。
+// 构造器不再收 *gorm.DB：句柄只在 NewMarketingFlowDeps（装配/测试工厂）里出现。
+type MarketingFlowDeps struct {
+	FlowRepo         *repository.MarketingFlowRepository
+	ExecutionRepo    *repository.FlowExecutionRepository
+	UserTagRepo      cdprepo.UserTagRepository
+	OrderRepo        cdprepo.OrderRepository
+	ClueRepo         cdprepo.ClueRepository
+	SessionRepo      *cdprepo.CustomerSessionRepository
+	AgentRepo        *cdprepo.AgentStatusRepository
+	OperationLogRepo cdprepo.OperationLogRepository
+}
+
+// NewMarketingFlowDeps 由装配处用数据库句柄构造依赖包。
+func NewMarketingFlowDeps(db *gorm.DB) MarketingFlowDeps {
+	return MarketingFlowDeps{
+		FlowRepo:         repository.NewMarketingFlowRepository(db),
+		ExecutionRepo:    repository.NewFlowExecutionRepository(db),
+		UserTagRepo:      cdprepo.NewUserTagRepositoryWithDB(db),
+		OrderRepo:        cdprepo.NewOrderRepositoryWithDB(db),
+		ClueRepo:         cdprepo.NewClueRepositoryWithDB(db),
+		SessionRepo:      cdprepo.NewCustomerSessionRepositoryWithDB(db),
+		AgentRepo:        cdprepo.NewAgentStatusRepositoryWithDB(db),
+		OperationLogRepo: cdprepo.NewOperationLogRepositoryWithDB(db),
+	}
+}
+
+// NewMarketingFlowService 创建营销流程服务（依赖由装配处注入）。
+func NewMarketingFlowService(deps MarketingFlowDeps) *MarketingFlowService {
 	return &MarketingFlowService{
-		flowRepo:         repository.NewMarketingFlowRepository(db),
-		executionRepo:    repository.NewFlowExecutionRepository(db),
-		userTagRepo:      cdprepo.NewUserTagRepositoryWithDB(db),
-		orderRepo:        cdprepo.NewOrderRepositoryWithDB(db),
-		clueRepo:         cdprepo.NewClueRepositoryWithDB(db),
-		sessionRepo:      cdprepo.NewCustomerSessionRepositoryWithDB(db),
-		agentRepo:        cdprepo.NewAgentStatusRepositoryWithDB(db),
-		operationLogRepo: cdprepo.NewOperationLogRepositoryWithDB(db),
+		flowRepo:         deps.FlowRepo,
+		executionRepo:    deps.ExecutionRepo,
+		userTagRepo:      deps.UserTagRepo,
+		orderRepo:        deps.OrderRepo,
+		clueRepo:         deps.ClueRepo,
+		sessionRepo:      deps.SessionRepo,
+		agentRepo:        deps.AgentRepo,
+		operationLogRepo: deps.OperationLogRepo,
 	}
 }
 

@@ -1,15 +1,14 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // GeoSiteController 站点部署配置 CRUD
@@ -62,7 +61,7 @@ func (c *GeoSiteController) List(ctx *gin.Context) {
 func (c *GeoSiteController) Get(ctx *gin.Context) {
 	item, err := c.svc.Get(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "站点配置不存在")
 			return
 		}
@@ -98,7 +97,7 @@ func (c *GeoSiteController) Update(ctx *gin.Context) {
 	}
 	item, err := c.svc.Update(ctx.Request.Context(), ctx.Param("id"), req.toInput())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "站点配置不存在")
 			return
 		}
@@ -113,7 +112,7 @@ func (c *GeoSiteController) Update(ctx *gin.Context) {
 // @Router    /api/geo/sites/{id} [delete]
 func (c *GeoSiteController) Delete(ctx *gin.Context) {
 	if err := c.svc.Delete(ctx.Request.Context(), ctx.Param("id")); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "站点配置不存在")
 			return
 		}

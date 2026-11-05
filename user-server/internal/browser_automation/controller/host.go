@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
@@ -9,19 +10,27 @@ import (
 	"hivemtk-user/internal/browser_automation/service"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
-	hrepo "hivemtk-user/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
+// platformConfigKV 只声明 Host token 需要的 KV 能力。
+// 装配点传 repository 实现；controller 不 import repository。
+type platformConfigKV interface {
+	Available() bool
+	Get(ctx context.Context, key string) (string, error)
+	Upsert(ctx context.Context, key, value string) (string, error)
+	EnsureTable(ctx context.Context) error
+}
+
 // HostController NM Host 状态（admin 全量 / 登录用户读自己）+ Host WS 入口
 type HostController struct {
 	registry *service.HostRegistry
-	kvRepo   hrepo.PlatformConfigKVRepository
+	kvRepo   platformConfigKV
 }
 
-func NewHostController(registry *service.HostRegistry, kvRepo hrepo.PlatformConfigKVRepository) *HostController {
+func NewHostController(registry *service.HostRegistry, kvRepo platformConfigKV) *HostController {
 	return &HostController{registry: registry, kvRepo: kvRepo}
 }
 
@@ -69,10 +78,10 @@ var hostUpgrader = websocket.Upgrader{
 // HostWSHandler Host WebSocket 入口（双层防护：token + 本地回环 IP）
 type HostWSHandler struct {
 	registry *service.HostRegistry
-	kvRepo   hrepo.PlatformConfigKVRepository
+	kvRepo   platformConfigKV
 }
 
-func NewHostWSHandler(registry *service.HostRegistry, kvRepo hrepo.PlatformConfigKVRepository) *HostWSHandler {
+func NewHostWSHandler(registry *service.HostRegistry, kvRepo platformConfigKV) *HostWSHandler {
 	return &HostWSHandler{registry: registry, kvRepo: kvRepo}
 }
 

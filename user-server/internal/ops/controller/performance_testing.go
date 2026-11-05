@@ -2,15 +2,14 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/ops/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // PerformanceTestController 性能压测控制器
@@ -47,7 +46,7 @@ func (c *PerformanceTestController) GetResult(ctx *gin.Context) {
 	}
 	r, err := c.svc.GetResult(uint(id))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "压测记录不存在")
 			return
 		}

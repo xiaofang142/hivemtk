@@ -1,25 +1,32 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 
-	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/service"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
 )
 
+// geoConfigReader 只声明本控制器读配置所需的能力。
+// 由装配点传入仓储实现；controller 不 import repository，分层不反向。
+type geoConfigReader interface {
+	Get(ctx context.Context) (*model.GeoConfig, error)
+}
+
 // SiteController 静态站部署 v2
 type SiteController struct {
 	deploySvc  *service.SiteDeployService
 	pushSvc    *service.PushService
-	configRepo repository.GeoConfigRepository
+	configRepo geoConfigReader
 }
 
-func NewSiteController(deploySvc *service.SiteDeployService, pushSvc *service.PushService, configRepo repository.GeoConfigRepository) *SiteController {
+func NewSiteController(deploySvc *service.SiteDeployService, pushSvc *service.PushService, configRepo geoConfigReader) *SiteController {
 	return &SiteController{deploySvc: deploySvc, pushSvc: pushSvc, configRepo: configRepo}
 }
 

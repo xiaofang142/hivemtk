@@ -73,7 +73,7 @@ func (c *SmsUnsubscribeController) InboundSmsWebhook(ctx *gin.Context) {
 
 	matched, err := c.svc.ProcessUnsubscribeReply(requestCtx, req.Phone, req.Content, req.MessageID)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "处理上行短信失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "处理上行短信失败，请稍后重试")
 		return
 	}
 
@@ -115,7 +115,7 @@ func (c *SmsUnsubscribeController) ManualAdd(ctx *gin.Context) {
 	}
 
 	if err := c.svc.UnsubscribePhone(ctx.Request.Context(), req.Phone, req.Reason, "", "manual"); err != nil {
-		response.ErrorFromDB(ctx, err, "添加退订号码失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "添加退订号码失败，请稍后重试")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (c *SmsUnsubscribeController) DeleteByPhone(ctx *gin.Context) {
 	}
 
 	if err := c.svc.ResubscribePhone(ctx.Request.Context(), phone); err != nil {
-		response.ErrorFromDB(ctx, err, "删除退订号码失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "删除退订号码失败，请稍后重试")
 		return
 	}
 
@@ -154,7 +154,7 @@ func (c *SmsUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 
 	records, total, err := c.svc.ListUnsubscribes(ctx.Request.Context(), page, limit, keyword)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询退订名单失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "查询退订名单失败，请稍后重试")
 		return
 	}
 
@@ -170,7 +170,7 @@ func (c *SmsUnsubscribeController) ListUnsubscribes(ctx *gin.Context) {
 func (c *SmsUnsubscribeController) ExportUnsubscribes(ctx *gin.Context) {
 	records, err := c.svc.ListAllUnsubscribes(ctx.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "导出退订名单失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "导出退订名单失败，请稍后重试")
 		return
 	}
 

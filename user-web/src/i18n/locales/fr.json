@@ -345,7 +345,12 @@
     "moduleCenter": "Marché des modules",
     "myModules": "Mes modules",
     "moduleOrders": "Commandes de modules",
-    "aiCustomIntegration": "Tool Integrations"
+    "aiCustomIntegration": "Tool Integrations",
+    "geoDiagnose": "Diagnostic",
+    "geoAuditCenter": "Centre d'audit",
+    "geoDualEngine": "Surveillance double moteur",
+    "geoCapture": "Capture",
+    "geoCaptureLinks": "Liens de capture"
   },
   "保存": "Save",
   "提交": "Submit",

@@ -101,6 +101,9 @@ type CaptureLandingView struct {
 }
 
 // CaptureService 承接闭环：链接 → 落地页 → FAQ/留资 → 线索 → 首响。
+// CaptureLinkQuery 仓储查询 DTO 的对外别名：controller 只依赖 service 层。
+type CaptureLinkQuery = repository.CaptureLinkQuery
+
 type CaptureService struct {
 	links      repository.GeoCaptureLinkRepository
 	kb         KnowledgeAskPort

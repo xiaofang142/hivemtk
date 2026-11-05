@@ -21,12 +21,26 @@ type AIContentService struct {
 	templateRepo repository.PromptTemplateRepository
 }
 
-// NewAIContentService 创建 AI 内容服务实例
-func NewAIContentService(db *gorm.DB) *AIContentService {
+// AIContentDeps AI 内容服务的仓储依赖。
+type AIContentDeps struct {
+	RecordRepo   repository.AIGenerationRecordRepository
+	TemplateRepo repository.PromptTemplateRepository
+}
+
+// NewAIContentDeps 由装配处用数据库句柄构造依赖包。
+func NewAIContentDeps(db *gorm.DB) AIContentDeps {
+	return AIContentDeps{
+		RecordRepo:   repository.NewAIGenerationRecordRepository(db),
+		TemplateRepo: repository.NewPromptTemplateRepository(db),
+	}
+}
+
+// NewAIContentService 创建 AI 内容服务实例（依赖由装配处注入）。
+func NewAIContentService(deps AIContentDeps) *AIContentService {
 	return &AIContentService{
 		llmService:   llm.NewLLMService(),
-		recordRepo:   repository.NewAIGenerationRecordRepository(db),
-		templateRepo: repository.NewPromptTemplateRepository(db),
+		recordRepo:   deps.RecordRepo,
+		templateRepo: deps.TemplateRepo,
 	}
 }
 
@@ -246,11 +260,19 @@ type PromptTemplateService struct {
 	templateRepo repository.PromptTemplateRepository
 }
 
-// NewPromptTemplateService 创建提示词模板服务实例
-func NewPromptTemplateService(db *gorm.DB) *PromptTemplateService {
-	return &PromptTemplateService{
-		templateRepo: repository.NewPromptTemplateRepository(db),
-	}
+// PromptTemplateDeps 提示词模板服务的仓储依赖。
+type PromptTemplateDeps struct {
+	TemplateRepo repository.PromptTemplateRepository
+}
+
+// NewPromptTemplateDeps 由装配处用数据库句柄构造依赖包。
+func NewPromptTemplateDeps(db *gorm.DB) PromptTemplateDeps {
+	return PromptTemplateDeps{TemplateRepo: repository.NewPromptTemplateRepository(db)}
+}
+
+// NewPromptTemplateService 创建提示词模板服务实例（依赖由装配处注入）。
+func NewPromptTemplateService(deps PromptTemplateDeps) *PromptTemplateService {
+	return &PromptTemplateService{templateRepo: deps.TemplateRepo}
 }
 
 // CreateTemplateRequest 创建模板请求

@@ -26,12 +26,25 @@ type ScriptTemplateService struct {
 	categoryRepo *repository.ScriptCategoryRepository
 }
 
-// NewScriptTemplateService 由装配点注入句柄：服务不自己 new 无参仓储
-// （改前仓储构造口自己摸全局 db.GetDB()，handler 的 ctx 从这一段开始断掉）。
-func NewScriptTemplateService(db *gorm.DB) *ScriptTemplateService {
+// ScriptTemplateDeps 话术模板服务的仓储依赖。
+type ScriptTemplateDeps struct {
+	TemplateRepo *repository.ScriptTemplateRepository
+	CategoryRepo *repository.ScriptCategoryRepository
+}
+
+// NewScriptTemplateDeps 由装配处用数据库句柄构造依赖包。
+func NewScriptTemplateDeps(db *gorm.DB) ScriptTemplateDeps {
+	return ScriptTemplateDeps{
+		TemplateRepo: repository.NewScriptTemplateRepository(db),
+		CategoryRepo: repository.NewScriptCategoryRepository(db),
+	}
+}
+
+// NewScriptTemplateService 创建话术模板服务（依赖由装配处注入）。
+func NewScriptTemplateService(deps ScriptTemplateDeps) *ScriptTemplateService {
 	return &ScriptTemplateService{
-		templateRepo: repository.NewScriptTemplateRepository(db),
-		categoryRepo: repository.NewScriptCategoryRepository(db),
+		templateRepo: deps.TemplateRepo,
+		categoryRepo: deps.CategoryRepo,
 	}
 }
 

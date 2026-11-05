@@ -69,7 +69,7 @@ func (ctrl *AIAgentController) List(c *gin.Context) {
 	}
 	list, err := ctrl.svc.List(c.Request.Context(), agentType, status, keyword)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -85,7 +85,7 @@ func (ctrl *AIAgentController) List(c *gin.Context) {
 func (ctrl *AIAgentController) ListEnabled(c *gin.Context) {
 	list, err := ctrl.svc.ListEnabled(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
@@ -435,7 +435,7 @@ func (ctrl *AIAgentController) Toggle(c *gin.Context) {
 		}
 	}
 	if err := ctrl.svc.UpdateStatus(c.Request.Context(), uint(id), newStatus); err != nil {
-		response.ErrorFromDB(c, err, "状态更新失败", err.Error())
+		response.ErrorFromDB(c, err, "状态更新失败")
 		return
 	}
 	response.Success(c, gin.H{"id": id, "status": newStatus}, "状态更新成功")
@@ -464,7 +464,7 @@ func (ctrl *AIAgentController) Test(c *gin.Context) {
 	}
 	resp, err := ctrl.svc.TestAgent(c.Request.Context(), uint(id), req.CustomerID, req.Message, ctrl.engine)
 	if err != nil {
-		response.ErrorFromDB(c, err, "测试失败", err.Error())
+		response.ErrorFromDB(c, err, "测试失败")
 		return
 	}
 	response.Success(c, resp, "测试成功")
@@ -481,7 +481,7 @@ func (ctrl *AIAgentController) GetContext(c *gin.Context) {
 	}
 	ctx, err := ctrl.svc.LoadContext(c.Request.Context(), uint(id))
 	if err != nil {
-		response.ErrorFromDB(c, err, "加载失败", err.Error())
+		response.ErrorFromDB(c, err, "加载失败")
 		return
 	}
 	if ctx == nil {

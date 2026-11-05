@@ -68,7 +68,7 @@ func bopCtrlRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	if middleware.IsTestMode {
 		t.Fatal("IsTestMode 为真时 AdminAuthMiddleware 会无条件放行 admin，本文件的 403 断言将失去意义")
 	}
-	ctrl := NewBatchOperationController()
+	ctrl := newTestBatchOperationController()
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
 		if uid, err := strconv.ParseUint(ctx.GetHeader("X-Test-Uid"), 10, 32); err == nil && uid != 0 {

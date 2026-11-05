@@ -78,7 +78,7 @@ func writeServiceError(c *gin.Context, err error) {
 		response.Error(c, http.StatusBadRequest, serviceErrorMessage(err))
 		return
 	}
-	response.ErrorFromDB(c, err, err.Error())
+	response.ErrorFromDB(c, err, "操作失败，请稍后重试")
 }
 
 // @Summary      分页查询系统用户（关键字/角色筛选）

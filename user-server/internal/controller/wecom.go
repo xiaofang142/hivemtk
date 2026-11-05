@@ -47,7 +47,7 @@ func respondWeComError(ctx *gin.Context, err error, fallback string) {
 		response.ErrorWithCode(ctx, utils.ErrorCodeUpstreamFailure, http.StatusBadGateway, err.Error())
 		return
 	}
-	response.ErrorFromDB(ctx, err, fallback, err.Error())
+	response.ErrorFromDB(ctx, err, fallback)
 }
 
 // CreateAccount 创建企业微信账号
@@ -334,7 +334,7 @@ func (c *WeComController) RefreshAccount(ctx *gin.Context) {
 
 	account, err = c.wecomService.GetAccountByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "刷新后回查账号失败："+err.Error())
+		response.ErrorFromDB(ctx, err, "刷新后回查账号失败，请稍后重试")
 		return
 	}
 	maskWeComAccount(account)

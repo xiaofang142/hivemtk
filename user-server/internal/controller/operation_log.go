@@ -193,7 +193,7 @@ func (c *OperationLogController) ExportLogs(ctx *gin.Context) {
 
 	logs, err := c.logSvc.ExportAll(ctx.Request.Context(), pageSize)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "查询日志失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "查询日志失败，请稍后重试")
 		return
 	}
 
@@ -249,7 +249,7 @@ func (c *OperationLogController) CleanLogs(ctx *gin.Context) {
 		cutoff = time.Now().AddDate(0, 0, -90)
 	}
 	if err := c.logSvc.DeleteOldLogs(ctx.Request.Context(), cutoff); err != nil {
-		response.ErrorFromDB(ctx, err, "清理失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "清理失败，请稍后重试")
 		return
 	}
 	response.Success(ctx, gin.H{
@@ -275,7 +275,7 @@ func (c *OperationLogController) DeleteLogs(ctx *gin.Context) {
 
 	count, err := c.logSvc.DeleteByIDs(ctx.Request.Context(), req.IDs)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "删除失败: "+err.Error())
+		response.ErrorFromDB(ctx, err, "删除失败，请稍后重试")
 		return
 	}
 

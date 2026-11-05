@@ -63,7 +63,7 @@ func (c *KuaishouCardStatsController) GetOverallStats(ctx *gin.Context) {
 
 	stats, err := c.statsService.GetOverallStats(ctx.Request.Context(), &req)
 	if err != nil {
-		response.ErrorFromDB(ctx, err, "获取总体统计数据失败", err.Error())
+		response.ErrorFromDB(ctx, err, "获取总体统计数据失败")
 		return
 	}
 

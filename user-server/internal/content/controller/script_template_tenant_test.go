@@ -111,7 +111,7 @@ func scrPhysicalLibrary(t *testing.T, database *gorm.DB, category, title string)
 // :id 在前、静态段在后，别名层同样按这个次序注册，锁就得按生产次序立。
 func scrRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	t.Helper()
-	ctrl := NewScriptTemplateController(db.GetDB())
+	ctrl := newTestScriptTemplateController()
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(func(ctx *gin.Context) {
@@ -350,7 +350,7 @@ func TestScriptCreateWithoutUserIDDoesNotPanic(t *testing.T) {
 		ctx.Request = ctx.Request.WithContext(tenant.WithTenantID(ctx.Request.Context(), scrTenantA))
 		ctx.Next()
 	})
-	noUID.POST("/scripts", NewScriptTemplateController(db.GetDB()).CreateTemplate)
+	noUID.POST("/scripts", newTestScriptTemplateController().CreateTemplate)
 
 	body, _ := json.Marshal(map[string]any{"name": "n", "category": "sales", "title": "t", "content": "c"})
 	w := scrCall(noUID, http.MethodPost, "/scripts", body)
@@ -401,7 +401,7 @@ func TestScriptSyncToLibraryIsTenantFactored(t *testing.T) {
 
 	// B 再同步：必须新长一行归 B 的，不许覆写 A 那行。
 	bCtx := tenant.WithTenantID(context.Background(), scrTenantB)
-	bSvc := contentservice.NewScriptTemplateSyncService(db.GetDB())
+	bSvc := contentservice.NewScriptTemplateSyncService(contentservice.NewScriptTemplateSyncDeps(db.GetDB()))
 	if _, err := bSvc.SyncToLibrary(bCtx); err != nil {
 		t.Fatalf("B 家同步失败: %v", err)
 	}

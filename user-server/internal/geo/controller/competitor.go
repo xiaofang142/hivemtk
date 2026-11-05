@@ -1,15 +1,14 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // CompetitorController 竞品管理控制器
@@ -47,7 +46,7 @@ func (c *CompetitorController) Get(ctx *gin.Context) {
 	}
 	dto, err := c.svc.GetCompetitor(ctx.Request.Context(), uint(id))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "竞品不存在")
 			return
 		}
@@ -90,7 +89,7 @@ func (c *CompetitorController) Update(ctx *gin.Context) {
 	}
 	result, err := c.svc.UpdateCompetitor(ctx.Request.Context(), uint(id), dto)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "竞品不存在")
 			return
 		}
@@ -111,7 +110,7 @@ func (c *CompetitorController) Delete(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeleteCompetitor(ctx.Request.Context(), uint(id)); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "竞品不存在")
 			return
 		}

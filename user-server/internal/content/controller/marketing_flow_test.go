@@ -28,7 +28,7 @@ func setupMarketingFlowTestDB(t *testing.T) *gorm.DB {
 func setupMarketingFlowRouter(t *testing.T, db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	flowService := service.NewMarketingFlowService(db)
+	flowService := service.NewMarketingFlowService(service.NewMarketingFlowDeps(db))
 
 	controller := &MarketingFlowController{
 		flowService: flowService,

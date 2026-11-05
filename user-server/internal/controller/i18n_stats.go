@@ -58,7 +58,7 @@ func (ctrl *I18nStatsController) GetStats(c *gin.Context) {
 	days := parseDays(c, 7)
 	overview, err := ctrl.svc.GetStatsWithDays(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.Success(c, overview, "获取成功")
@@ -73,7 +73,7 @@ func (ctrl *I18nStatsController) GetLangDistribution(c *gin.Context) {
 	days := parseDays(c, 7)
 	rows, err := ctrl.svc.GetLangDistribution(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, rows, int64(len(rows)))
@@ -88,7 +88,7 @@ func (ctrl *I18nStatsController) GetCacheHitRate(c *gin.Context) {
 	days := parseDays(c, 7)
 	hitRate, err := ctrl.svc.GetCacheHitRate(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.Success(c, gin.H{
@@ -105,7 +105,7 @@ func (ctrl *I18nStatsController) GetCacheHitRate(c *gin.Context) {
 func (ctrl *I18nStatsController) GetGlossaryCoverage(c *gin.Context) {
 	rows, err := ctrl.svc.GetGlossaryCoverage(c.Request.Context())
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, rows, int64(len(rows)))
@@ -120,7 +120,7 @@ func (ctrl *I18nStatsController) GetQualityTrend(c *gin.Context) {
 	days := parseDays(c, reporting.DefaultWindowDays(c.Request.Context()))
 	rows, err := ctrl.svc.GetQualityTrend(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, rows, int64(len(rows)))
@@ -135,7 +135,7 @@ func (ctrl *I18nStatsController) GetLatencyStats(c *gin.Context) {
 	days := parseDays(c, 7)
 	rows, err := ctrl.svc.GetLatencyStats(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.SuccessWithList(c, rows, int64(len(rows)))
@@ -150,7 +150,7 @@ func (ctrl *I18nStatsController) GetFallbackRate(c *gin.Context) {
 	days := parseDays(c, 7)
 	rate, err := ctrl.svc.GetFallbackRate(c.Request.Context(), days)
 	if err != nil {
-		response.ErrorFromDB(c, err, "查询失败", err.Error())
+		response.ErrorFromDB(c, err, "查询失败")
 		return
 	}
 	response.Success(c, gin.H{

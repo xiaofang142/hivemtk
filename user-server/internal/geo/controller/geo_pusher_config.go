@@ -1,16 +1,15 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 )
 
 // GeoPusherConfigController 蜘蛛平台配置 CRUD
@@ -59,7 +58,7 @@ func (c *GeoPusherConfigController) List(ctx *gin.Context) {
 func (c *GeoPusherConfigController) Get(ctx *gin.Context) {
 	item, err := c.svc.Get(ctx.Request.Context(), ctx.Param("id"))
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "推送平台配置不存在")
 			return
 		}
@@ -95,7 +94,7 @@ func (c *GeoPusherConfigController) Update(ctx *gin.Context) {
 	}
 	item, err := c.svc.Update(ctx.Request.Context(), ctx.Param("id"), req.toInput())
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "推送平台配置不存在")
 			return
 		}
@@ -110,7 +109,7 @@ func (c *GeoPusherConfigController) Update(ctx *gin.Context) {
 // @Router    /api/geo/pushers/{id} [delete]
 func (c *GeoPusherConfigController) Delete(ctx *gin.Context) {
 	if err := c.svc.Delete(ctx.Request.Context(), ctx.Param("id")); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "推送平台配置不存在")
 			return
 		}

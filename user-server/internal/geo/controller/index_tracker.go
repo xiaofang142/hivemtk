@@ -1,14 +1,13 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 // IndexTrackerController 收录追踪 + AI 引用 v2
@@ -28,7 +27,7 @@ func (c *IndexTrackerController) VerifyFull(ctx *gin.Context) {
 	articleID := ctx.Param("article_id")
 	standing, err := c.svc.VerifyArticleFull(ctx.Request.Context(), articleID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "文章不存在")
 			return
 		}

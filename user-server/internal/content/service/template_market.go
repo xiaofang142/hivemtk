@@ -17,11 +17,25 @@ type TemplateMarketService struct {
 	downloadRepo *contentrepo.MarketTemplateDownloadRepository
 }
 
-// NewTemplateMarketService 创建模板市场服务实例
-func NewTemplateMarketService(db *gorm.DB) *TemplateMarketService {
+// TemplateMarketDeps 模板市场服务的仓储依赖。
+type TemplateMarketDeps struct {
+	TemplateRepo *contentrepo.MarketTemplateRepository
+	DownloadRepo *contentrepo.MarketTemplateDownloadRepository
+}
+
+// NewTemplateMarketDeps 由装配处用数据库句柄构造依赖包。
+func NewTemplateMarketDeps(db *gorm.DB) TemplateMarketDeps {
+	return TemplateMarketDeps{
+		TemplateRepo: contentrepo.NewMarketTemplateRepository(db),
+		DownloadRepo: contentrepo.NewMarketTemplateDownloadRepository(db),
+	}
+}
+
+// NewTemplateMarketService 创建模板市场服务实例（依赖由装配处注入）。
+func NewTemplateMarketService(deps TemplateMarketDeps) *TemplateMarketService {
 	return &TemplateMarketService{
-		templateRepo: contentrepo.NewMarketTemplateRepository(db),
-		downloadRepo: contentrepo.NewMarketTemplateDownloadRepository(db),
+		templateRepo: deps.TemplateRepo,
+		downloadRepo: deps.DownloadRepo,
 	}
 }
 
