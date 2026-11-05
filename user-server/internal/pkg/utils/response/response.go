@@ -132,6 +132,11 @@ var internalDetailMarkers = []string{
 	"no such column",
 	"unknown column",
 	"syntax error at or near",
+	"value too long for type",
+	"invalid input syntax for type",
+	"null value in column",
+	"violates not-null constraint",
+	"division by zero",
 	"dial tcp ",
 	"connection refused",
 	"context deadline exceeded",
@@ -145,6 +150,7 @@ var internalDetailMarkers = []string{
 	"error 1146",
 	"mysql:",
 	"ora-",
+	"error: ",
 }
 
 // sanitizeInternalDetail 截断写给用户的文案里夹带的内部错误原文。

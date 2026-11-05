@@ -551,6 +551,25 @@ func TestError_MasksDirectInternalDetail(t *testing.T) {
 	}
 }
 
+// TestError_MasksRawAtStart：原文本身就是整句（没有业务前缀）时，不能因为
+// 只截断标记之后而把标记之前那半句 SQL 放出去（"ERROR: value too long..."）。
+func TestError_MasksRawAtStart(t *testing.T) {
+	const raw = `ERROR: value too long for type character varying(64) (SQLSTATE 22001)`
+	c, w := setupTestContext()
+
+	Error(c, http.StatusInternalServerError, raw)
+
+	body := w.Body.String()
+	for _, leak := range []string{"value too long", "character varying", "SQLSTATE", "22001"} {
+		if strings.Contains(body, leak) {
+			t.Errorf("整句原文泄漏 %q: %s", leak, body)
+		}
+	}
+	if !strings.Contains(body, "操作失败") {
+		t.Errorf("应回退统一安全文案，body=%s", body)
+	}
+}
+
 // TestErrorWithBusinessCode_MasksDirectInternalDetail：200+业务码出口同样掩码。
 func TestErrorWithBusinessCode_MasksDirectInternalDetail(t *testing.T) {
 	const raw = `dial tcp 10.0.0.9:443: connection refused`
