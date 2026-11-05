@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"hivemtk-user/internal/health"
 	"hivemtk-user/internal/pkg/db"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,10 @@ func (f *errorPinger) Ping(ctx context.Context) error {
 	return f.err
 }
 
+func noDBProbe() health.DBProbe {
+	return func(ctx context.Context) (bool, error) { return false, nil }
+}
+
 func TestHealthCheck_NoDependencies(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	prevDB := db.GetDB()
@@ -27,7 +32,7 @@ func TestHealthCheck_NoDependencies(t *testing.T) {
 	t.Cleanup(func() { db.SetTestDB(prevDB) })
 
 	r := gin.New()
-	r.GET("/health", HealthCheck(nil, nil))
+	r.GET("/health", health.New(nil, noDBProbe()).Check)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -41,7 +46,7 @@ func TestHealthCheck_NoDependencies(t *testing.T) {
 func TestHealthCheck_RedisDown(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/health", HealthCheck(&errorPinger{err: errors.New("connection refused")}, nil))
+	r.GET("/health", health.New(&errorPinger{err: errors.New("connection refused")}, noDBProbe()).Check)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -55,7 +60,7 @@ func TestHealthCheck_RedisDown(t *testing.T) {
 func TestLivenessCheck(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/healthz", LivenessCheck())
+	r.GET("/healthz", health.New(nil, noDBProbe()).Live)
 
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -69,7 +74,7 @@ func TestLivenessCheck(t *testing.T) {
 func TestReadinessCheck_NoDB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/readyz", ReadinessCheck(nil, nil))
+	r.GET("/readyz", health.New(nil, noDBProbe()).Ready)
 
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()

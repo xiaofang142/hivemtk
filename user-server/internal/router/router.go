@@ -14,6 +14,7 @@ import (
 	"hivemtk-user/internal/controller"
 	georepo "hivemtk-user/internal/geo/repository"
 	geoservice "hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/health"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/monitor"
 	"hivemtk-user/internal/pkg/tenant"
@@ -95,68 +96,69 @@ func parseCORSOrigins(s string) []string {
 	return out
 }
 
-func corsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
-		allow := false
-		if origin != "" {
-			switch {
-			case strings.HasPrefix(origin, "chrome-extension://"):
+func corsMiddleware(c *gin.Context) {
+	origin := c.GetHeader("Origin")
+	allow := false
+	if origin != "" {
+		switch {
+		case strings.HasPrefix(origin, "chrome-extension://"):
 
-				allowedExts := strings.Split(os.Getenv("CORS_ALLOWED_EXTENSIONS"), ",")
-				for _, ext := range allowedExts {
-					if strings.TrimSpace(ext) != "" && origin == strings.TrimSpace(ext) {
+			allowedExts := strings.Split(os.Getenv("CORS_ALLOWED_EXTENSIONS"), ",")
+			for _, ext := range allowedExts {
+				if strings.TrimSpace(ext) != "" && origin == strings.TrimSpace(ext) {
+					allow = true
+					break
+				}
+			}
+			// fail-closed：未配置白名单时不再放行任意扩展来源
+			if !allow {
+				logger.Infof("[CORS] 拒绝未列入 CORS_ALLOWED_EXTENSIONS 的扩展来源: %s", origin)
+			}
+		default:
+
+			fullPath := c.Request.URL.Path
+			if strings.HasSuffix(fullPath, "/outbox/sse") || strings.Contains(fullPath, "outbox/sse") {
+				allow = sseOriginAllowed(origin, c.Request)
+			} else {
+				for _, a := range allowedCORSOrigins {
+					if a == origin {
 						allow = true
 						break
 					}
 				}
-				// fail-closed：未配置白名单时不再放行任意扩展来源
-				if !allow {
-					logger.Infof("[CORS] 拒绝未列入 CORS_ALLOWED_EXTENSIONS 的扩展来源: %s", origin)
-				}
-			default:
-
-				fullPath := c.Request.URL.Path
-				if strings.HasSuffix(fullPath, "/outbox/sse") || strings.Contains(fullPath, "outbox/sse") {
-					allow = sseOriginAllowed(origin, c.Request)
-				} else {
-					for _, a := range allowedCORSOrigins {
-						if a == origin {
-							allow = true
-							break
-						}
-					}
-				}
 			}
 		}
-		if allow {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Vary", "Origin")
-		}
-		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），
-		// 而浏览器对自定义头要先过预检——这里没列出它，跨源网页调用方就会在预检阶段被拦，
-		// 拿到的报错与「凭证不对」长得完全不同，很容易被当成服务端故障。
-		//
-		// X-Chat-* 那四枚是前台聊天窗的调用面：/api/chat/public/* 用 X-Chat-Visitor-Id 做会话归属
-		// （controller/chat_public.go 里缺它直接回 400「X-Chat-Visitor-Id 必填」），用
-		// X-Chat-Channel-Id 选渠道。仓库自带的 iframe 窗与 API 同源、不会触发预检，所以现网没炸过；
-		// 但 ADR 的跨域/CDN 部署（docs/architecture/adr/ADR-011-chat-widget-embed.md §6.2）要求
-		// 接入方自建前端直连 /api/chat/public/*，那种页面一发预检就死在允许头上，报错读起来像
-		// 「服务端 403」而不是「头没登记」。
-		//
-		// 反过来，机器对机器的签名/凭证头（X-Ingress-Secret、X-Webhook-Secret、X-API-KEY、
-		// 各渠道签名头、X-Knowledge-Token）一律不加：那些没有浏览器调用方，加进允许头只是把
-		// 凭证的可达面平白摊给任意被放行的源。
-		c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token,X-Chat-App-Key,X-Chat-Channel-Id,X-Chat-Visitor-Id,X-Chat-Visitor-Token")
-		c.Header("Access-Control-Expose-Headers", "Last-Event-ID,X-Trace-Id")
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
 	}
+	if allow {
+		c.Header("Access-Control-Allow-Origin", origin)
+		c.Header("Vary", "Origin")
+	}
+	c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+	// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），
+	// 而浏览器对自定义头要先过预检——这里没列出它，跨源网页调用方就会在预检阶段被拦，
+	// 拿到的报错与「凭证不对」长得完全不同，很容易被当成服务端故障。
+	//
+	// X-Chat-* 那四枚是前台聊天窗的调用面：/api/chat/public/* 用 X-Chat-Visitor-Id 做会话归属
+	// （controller/chat_public.go 里缺它直接回 400「X-Chat-Visitor-Id 必填」），用
+	// X-Chat-Channel-Id 选渠道。仓库自带的 iframe 窗与 API 同源、不会触发预检，所以现网没炸过；
+	// 但 ADR 的跨域/CDN 部署（docs/architecture/adr/ADR-011-chat-widget-embed.md §6.2）要求
+	// 接入方自建前端直连 /api/chat/public/*，那种页面一发预检就死在允许头上，报错读起来像
+	// 「服务端 403」而不是「头没登记」。
+	//
+	// 反过来，机器对机器的签名/凭证头（X-Ingress-Secret、X-Webhook-Secret、X-API-KEY、
+	// 各渠道签名头、X-Knowledge-Token）一律不加：那些没有浏览器调用方，加进允许头只是把
+	// 凭证的可达面平白摊给任意被放行的源。
+	c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token,X-Chat-App-Key,X-Chat-Channel-Id,X-Chat-Visitor-Id,X-Chat-Visitor-Token")
+	c.Header("Access-Control-Expose-Headers", "Last-Event-ID,X-Trace-Id")
+	if c.Request.Method == http.MethodOptions {
+		c.AbortWithStatus(http.StatusNoContent)
+		return
+	}
+	c.Next()
 }
+
+// Pinger 兼容别名：健康检查实现已迁入 controller，main 仍按 router.Pinger 注入。
+type Pinger = health.Pinger
 
 var HealthRedis Pinger
 
@@ -173,17 +175,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	RegisterFilesRoute(r)
 
+	staticCtl := controller.NewStaticController("")
 	r.HandleMethodNotAllowed = true
-	r.NoMethod(func(c *gin.Context) {
-		c.JSON(http.StatusMethodNotAllowed, gin.H{
-			"code":    "METHOD_NOT_ALLOWED_405",
-			"message": "请求方法不被支持",
-			"method":  c.Request.Method,
-			"path":    c.Request.URL.Path,
-		})
-	})
+	r.NoMethod(staticCtl.MethodNotAllowed)
 
-	r.Use(corsMiddleware())
+	r.Use(corsMiddleware)
 	r.Use(gin.Recovery())
 
 	// 全局请求体封顶：注册位置必须在**任何会读 body 的中间件与鉴权之前** ——
@@ -200,9 +196,21 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	injectMiddlewarePorts(gormDB)
 
-	r.GET("/health", HealthCheck(HealthRedis, gormDB))
-	r.GET("/healthz", LivenessCheck())
-	r.GET("/readyz", ReadinessCheck(HealthRedis, gormDB))
+	// 健康检查的数据库探活在装配点注入，controller 不持有 *gorm.DB。
+	dbProbe := func(ctx context.Context) (bool, error) {
+		if gormDB == nil {
+			return false, nil
+		}
+		sqlDB, err := gormDB.DB()
+		if err != nil {
+			return true, err
+		}
+		return true, sqlDB.PingContext(ctx)
+	}
+	healthCtl := health.New(HealthRedis, dbProbe)
+	r.GET("/health", healthCtl.Check)
+	r.GET("/healthz", healthCtl.Live)
+	r.GET("/readyz", healthCtl.Ready)
 
 	// 路由表调试端点：默认仅本地/开发环境开放；生产需显式 ENABLE_DEBUG_ROUTES=true
 	//

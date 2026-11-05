@@ -141,7 +141,7 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /chat/embed":                                     "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /chat/embed/*path":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /favicon.ico":                                    "前端静态产物与分享页：只有模板与图片，无商户数据",
-	"GET /files/*filepath":                                "本地上传目录的公开外链：文件名是随机 uuid、目录不可列举，serveUploadsGuarded 另挡同源可执行扩展名并加 nosniff/sandbox",
+	"GET /files/*filepath":                                "本地上传目录的公开外链：文件名是随机 uuid、目录不可列举，middleware.FilesGuard 另挡同源可执行扩展名并加 nosniff/sandbox",
 	"GET /health":                                         "存活/就绪探针：只回进程状态",
 	"GET /healthz":                                        "存活/就绪探针：只回进程状态",
 	"GET /index.html":                                     "前端静态产物与分享页：只有模板与图片，无商户数据",

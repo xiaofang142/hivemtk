@@ -1,4 +1,7 @@
-package router
+package health
+
+// 健康检查控制器（基础设施路由；2026-11-05 二次审计：从 router 迁入）。
+// 不 import gorm：数据库探活由装配点注入 DBProbe，controller 不持有数据库句柄。
 
 import (
 	"context"
@@ -10,18 +13,30 @@ import (
 	"os"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
-
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-// Pinger Redis 健康检查接口（避免强制依赖 go-redis 模块）
+// Pinger Redis 健康检查接口（避免强制依赖 go-redis 模块）。
 type Pinger interface {
 	Ping(ctx context.Context) error
+}
+
+// DBProbe 数据库探活：configured=false 表示未装配；err 非空表示不可用。
+type DBProbe func(ctx context.Context) (configured bool, err error)
+
+// Handler 健康检查。
+type Handler struct {
+	redis Pinger
+	db    DBProbe
+}
+
+func New(redis Pinger, db DBProbe) *Handler {
+	return &Handler{redis: redis, db: db}
 }
 
 func inferenceStatus() string {
@@ -108,87 +123,110 @@ func probeEmbeddingHTTP(u *url.URL) (string, string) {
 	return "up", ""
 }
 
-// HealthCheck 全维度健康检查
-// 返回应用、数据库、Redis、推理栈 四层健康状态
-// 统一响应格式: {code:0, message:"ok", data:{status,checks,...}}
-func HealthCheck(redisClient Pinger, gormDB *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-		defer cancel()
+// Check 全维度健康检查：应用、数据库、Redis、推理栈 四层状态。
+func (h *Handler) Check(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
 
-		checks := gin.H{}
-		overallOK := true
+	checks := gin.H{}
+	overallOK := true
 
-		dbStatus := "ok"
-		dbErr := ""
-		if database := gormDB; database != nil {
-			if sqlDB, dbErr2 := database.DB(); dbErr2 != nil {
-				dbStatus = "down"
-				dbErr = dbErr2.Error()
-				overallOK = false
-			} else if err2 := sqlDB.PingContext(ctx); err2 != nil {
-				dbStatus = "down"
-				dbErr = err2.Error()
-				overallOK = false
-			}
-		} else {
-			dbStatus = "not_configured"
-		}
-		checks["database"] = gin.H{"status": dbStatus, "error": dbErr}
-
-		redisStatus := "not_configured"
-		redisErr := ""
-		if redisClient != nil {
-			redisStatus = "ok"
-			if err := redisClient.Ping(ctx); err != nil {
-				redisStatus = "down"
-				redisErr = err.Error()
-				overallOK = false
-			}
-		}
-		checks["redis"] = gin.H{"status": redisStatus, "error": redisErr}
-
-		infStatus := inferenceStatus()
-		infErr := ""
-		if infStatus == "down" {
-			overallOK = false
-			infErr = "no healthy LLM provider"
-		}
-		checks["inference"] = gin.H{"status": infStatus, "error": infErr}
-
-		embStatus, embErr := embeddingStatus()
-		checks["embedding"] = gin.H{"status": embStatus, "error": embErr}
-		if embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
-			overallOK = false
-		}
-
-		data := gin.H{
-			"status":    "ok",
-			"timestamp": time.Now().Unix(),
-			"service":   "user-server",
-			"checks":    checks,
-		}
-		if !overallOK {
-			data["status"] = "degraded"
-			response.ErrorWithBusinessCode(c, 50301, "service degraded", data)
-			return
-		}
-		response.Success(c, data, "ok")
+	dbStatus := "ok"
+	dbErr := ""
+	configured, probeErr := h.db(ctx)
+	if !configured {
+		dbStatus = "not_configured"
+	} else if probeErr != nil {
+		dbStatus = "down"
+		dbErr = probeErr.Error()
+		overallOK = false
 	}
+	checks["database"] = gin.H{"status": dbStatus, "error": dbErr}
+
+	redisStatus := "not_configured"
+	redisErr := ""
+	if h.redis != nil {
+		redisStatus = "ok"
+		if err := h.redis.Ping(ctx); err != nil {
+			redisStatus = "down"
+			redisErr = err.Error()
+			overallOK = false
+		}
+	}
+	checks["redis"] = gin.H{"status": redisStatus, "error": redisErr}
+
+	infStatus := inferenceStatus()
+	infErr := ""
+	if infStatus == "down" {
+		overallOK = false
+		infErr = "no healthy LLM provider"
+	}
+	checks["inference"] = gin.H{"status": infStatus, "error": infErr}
+
+	embStatus, embErr := embeddingStatus()
+	checks["embedding"] = gin.H{"status": embStatus, "error": embErr}
+	if embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
+		overallOK = false
+	}
+
+	data := gin.H{
+		"status":    "ok",
+		"timestamp": time.Now().Unix(),
+		"service":   "user-server",
+		"checks":    checks,
+	}
+	if !overallOK {
+		data["status"] = "degraded"
+		response.ErrorWithBusinessCode(c, 50301, "service degraded", data)
+		return
+	}
+	response.Success(c, data, "ok")
 }
 
-// LivenessCheck 存活性检查（轻量级，不检查依赖）
-func LivenessCheck() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		response.Success(c, gin.H{
-			"status":    "alive",
-			"timestamp": time.Now().Unix(),
-		}, "ok")
+// Live 存活性检查（轻量级，不检查依赖）。
+func (h *Handler) Live(c *gin.Context) {
+	response.Success(c, gin.H{
+		"status":    "alive",
+		"timestamp": time.Now().Unix(),
+	}, "ok")
+}
+
+// Ready 就绪性检查（检查依赖）。
+func (h *Handler) Ready(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 1*time.Second)
+	defer cancel()
+
+	configured, dbErr := h.db(ctx)
+	if !configured {
+		notReadyResponse(c, 50302, "database not initialized")
+		return
 	}
+	if dbErr != nil {
+		notReadyResponse(c, 50303, "database: "+dbErr.Error())
+		return
+	}
+	if h.redis != nil {
+		if err := h.redis.Ping(ctx); err != nil {
+			notReadyResponse(c, 50304, "redis: "+err.Error())
+			return
+		}
+	}
+	if infStatus := inferenceStatus(); infStatus == "down" {
+		notReadyResponse(c, 50305, "inference: no healthy LLM provider")
+		return
+	}
+	if embStatus, embErr := embeddingStatus(); embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
+		notReadyResponse(c, 50306, "embedding: "+embErr)
+		return
+	}
+	response.Success(c, gin.H{
+		"status":    "ready",
+		"timestamp": time.Now().Unix(),
+	}, "ok")
 }
 
 func notReadyResponse(c *gin.Context, code int, reason string) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
+	response.Envelope(c, http.StatusServiceUnavailable, gin.H{
 		"code":    code,
 		"message": reason,
 		"data": gin.H{
@@ -196,42 +234,4 @@ func notReadyResponse(c *gin.Context, code int, reason string) {
 			"reason": reason,
 		},
 	})
-}
-
-// ReadinessCheck 就绪性检查（检查依赖）
-func ReadinessCheck(redisClient Pinger, gormDB *gorm.DB) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 1*time.Second)
-		defer cancel()
-
-		if database := gormDB; database == nil {
-			notReadyResponse(c, 50302, "database not initialized")
-			return
-		}
-		if sqlDB, dbErr := gormDB.DB(); dbErr != nil {
-			notReadyResponse(c, 50303, "database: "+dbErr.Error())
-			return
-		} else if err := sqlDB.PingContext(ctx); err != nil {
-			notReadyResponse(c, 50303, "database: "+err.Error())
-			return
-		}
-		if redisClient != nil {
-			if err := redisClient.Ping(ctx); err != nil {
-				notReadyResponse(c, 50304, "redis: "+err.Error())
-				return
-			}
-		}
-		if infStatus := inferenceStatus(); infStatus == "down" {
-			notReadyResponse(c, 50305, "inference: no healthy LLM provider")
-			return
-		}
-		if embStatus, embErr := embeddingStatus(); embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
-			notReadyResponse(c, 50306, "embedding: "+embErr)
-			return
-		}
-		response.Success(c, gin.H{
-			"status":    "ready",
-			"timestamp": time.Now().Unix(),
-		}, "ok")
-	}
 }

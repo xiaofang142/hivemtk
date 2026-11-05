@@ -107,9 +107,8 @@
 import i18n from '@/i18n'
 
 import { ref, computed, nextTick } from 'vue'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { getUploadToken } from '@/api/chat'
+import { getUploadToken, uploadToStorage } from '@/api/chat'
 
 const props = defineProps({
   color: { type: String, default: '#1989fa' },
@@ -231,12 +230,9 @@ const uploadAttachment = async () => {
     form.append('file', att.file)
     form.append('token', token)
     form.append('key', key)
-    const r = await axios.post(upload_url, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (e) => {
-        if (e.total) {
-          uploadProgress.value = Math.round((e.loaded / e.total) * 100)
-        }
+    const r = await uploadToStorage(upload_url, form, (e) => {
+      if (e.total) {
+        uploadProgress.value = Math.round((e.loaded / e.total) * 100)
       }
     })
     if (r.status !== 200) {

@@ -1,29 +1,14 @@
 package router
 
+// Swagger 路由装配（2026-11-05 二次审计：处理器已迁入 controller.SwaggerController）。
+
 import (
-	"net"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 
-	// 触发生成包 docs 的 init()，将 swagger 规范注册到 swaggo 全局注册表，
-	// 供 ginSwagger.WrapHandler 读取。
-	_ "hivemtk-user/docs"
+	"hivemtk-user/internal/controller"
 )
-
-func isLocalRequest(ip string) bool {
-	if ip == "127.0.0.1" || ip == "::1" || ip == "localhost" {
-		return true
-	}
-	parsedIP := net.ParseIP(ip)
-	if parsedIP == nil {
-		return false
-	}
-	return parsedIP.IsLoopback()
-}
 
 // RegisterSwaggerRoutes 注册 Swagger 文档路由
 // 使用方法：在 Setup() 函数末尾调用 RegisterSwaggerRoutes(r)
@@ -37,20 +22,7 @@ func RegisterSwaggerRoutes(r *gin.Engine) {
 	if os.Getenv("ENABLE_SWAGGER") != "true" {
 		return
 	}
-
-	r.GET("/swagger/*any", func(c *gin.Context) {
-		if !isLocalRequest(c.ClientIP()) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "swagger is only accessible from localhost"})
-			return
-		}
-		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
-	})
-
-	r.GET("/api/swagger.json", func(c *gin.Context) {
-		if !isLocalRequest(c.ClientIP()) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "swagger is only accessible from localhost"})
-			return
-		}
-		c.File("./docs/swagger.json")
-	})
+	sc := controller.NewSwaggerController()
+	r.GET("/swagger/*any", sc.UI)
+	r.GET("/api/swagger.json", sc.Spec)
 }

@@ -16,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+
+	"hivemtk-user/internal/controller"
 )
 
 // newLegacyRoutesTestEngine 只挂墓碑路由：这一条腿不需要库，任何机器上都跑。
@@ -49,14 +51,14 @@ func TestKnowledgeLegacyTopLevelReturnsGone(t *testing.T) {
 			t.Fatalf("GET %s 的响应体不是 JSON：%v / %s", path, err, w.Body.String())
 		}
 		// 文案要能被人读到：老客户端至少能从 message 里看出"废弃"与迁移目标。
-		for _, needle := range []string{"已废弃", knowledgeMigrationTarget} {
+		for _, needle := range []string{"已废弃", controller.KnowledgeMigrationTarget} {
 			if !strings.Contains(body.Message, needle) {
 				t.Errorf("GET %s 的 message 缺 %q：%q", path, needle, body.Message)
 			}
 		}
 		// 结构化字段要能被告机器读到。
-		if body.Data.MigrateTo != knowledgeMigrationTarget {
-			t.Errorf("GET %s 的 data.migrate_to 应为 %q，实得 %q", path, knowledgeMigrationTarget, body.Data.MigrateTo)
+		if body.Data.MigrateTo != controller.KnowledgeMigrationTarget {
+			t.Errorf("GET %s 的 data.migrate_to 应为 %q，实得 %q", path, controller.KnowledgeMigrationTarget, body.Data.MigrateTo)
 		}
 		// N-5：正式错误码而非 UNKNOWN_1000——按码分流的客户端要能认出"该换地址了"。
 		if body.Code != "LEGACY_GONE_4100" {
@@ -102,7 +104,7 @@ func TestKnowledgeLegacyRoutesDoNotShadowLiveKBItems(t *testing.T) {
 	if code != http.StatusGone {
 		t.Fatalf("真实装配下匿名 GET /api/knowledge 应 410 Gone，实得 %d / %s", code, strings.TrimSpace(body))
 	}
-	if !strings.Contains(body, knowledgeMigrationTarget) {
-		t.Errorf("410 响应体缺迁移目标 %q：%s", knowledgeMigrationTarget, strings.TrimSpace(body))
+	if !strings.Contains(body, controller.KnowledgeMigrationTarget) {
+		t.Errorf("410 响应体缺迁移目标 %q：%s", controller.KnowledgeMigrationTarget, strings.TrimSpace(body))
 	}
 }

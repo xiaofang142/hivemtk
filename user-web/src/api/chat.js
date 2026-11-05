@@ -1,5 +1,8 @@
 import { getUploadToken as publicGetUploadToken } from './chatPublic'
 
+// 附件直传封装（七牛等对象存储）；视图层不再直接依赖 axios。
+export { uploadToStorage } from './chatPublic'
+
 // 访客端附件上传凭证。
 //
 // 契约见 chatPublic.getUploadToken：后端需要 session_id/visitor_id query 与

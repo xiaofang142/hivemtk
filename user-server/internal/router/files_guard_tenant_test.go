@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/storage"
 
@@ -52,7 +53,7 @@ func newTenantFilesGuardServer(t *testing.T) (*gin.Engine, string) {
 	mustWrite("tenant_6/materials/2026/10/b.pdf")
 	mustWrite("materials/legacy.pdf") // 存量根域文件（系统级上传）
 	r := gin.New()
-	r.GET("/files/*filepath", serveUploadsGuarded(dir))
+	r.GET("/files/*filepath", middleware.FilesGuard(dir))
 	return r, dir
 }
 

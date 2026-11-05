@@ -1,4 +1,4 @@
-package router
+package controller
 
 // egolite_stream_test.go —— S-13 SSE 行为（真 PG）。
 //
@@ -31,13 +31,15 @@ func newStreamTestServer(t *testing.T) (*httptest.Server, egolite.EgoExecutionRe
 	execRepo := egolite.NewEgoExecutionRepositoryWithDB(db)
 	evRepo := egolite.NewEgoEventRepositoryWithDB(db)
 	hub := egolite.NewEgoEventHub()
+	svc := egolite.NewEgoExecutionService(execRepo, evRepo, nil, nil, nil, egolite.NewEgoRunnerRegistry())
+	svc.AttachEventHub(hub)
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.GET("/s/:id", func(c *gin.Context) {
 		id, _ := strconv.ParseUint(c.Param("id"), 10, 32)
 		// 固定 uid=1：中间件在真实链路里给，用例只测 handler 本身
-		streamEgoExecution(c, execRepo, evRepo, hub, 1, uint(id))
+		streamEgoExecution(c, svc, 1, uint(id))
 	})
 	srv := httptest.NewServer(r)
 	return srv, execRepo, evRepo, hub

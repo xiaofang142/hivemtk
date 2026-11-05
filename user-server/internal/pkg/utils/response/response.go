@@ -444,3 +444,13 @@ func BindQuery(c *gin.Context, obj any) bool {
 	}
 	return true
 }
+
+// Envelope 写调用方给定的业务信封，保留真实 HTTP 状态码。
+//
+// 专用于既有契约不是标准 {code:0|ErrorCode} 形状的接口（egolite 腿、支付回调等）：
+// 它们按 `{code:1,message}` + 4xx/5xx 与网关/前端约定，改用 Success/Error 会改契约。
+// 新接口不得使用本函数——controller 层禁止直接 c.JSON（check-architecture.sh L3），
+// 本入口是那条例外的唯一收口点，便于审计。
+func Envelope(c *gin.Context, httpCode int, payload any) {
+	c.JSON(httpCode, payload)
+}

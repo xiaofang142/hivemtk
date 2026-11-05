@@ -1,4 +1,4 @@
-package router
+package controller
 
 // egolite_stream.go —— S-13：执行事件 SSE（替换 Monitor 抽屉的 3s 轮询）。
 //
@@ -9,6 +9,7 @@ package router
 //   - 执行进终态且没有待推事件 ⇒ 发 `event: end` 后关流，客户端不必自己判断何时停。
 //
 // 鉴权：走 eg 分组既有 JWT 中间件；归属校验在 GetForUser（越权与不存在同响应 404）。
+// 2026-11-05 二次审计：从 router 包迁入 controller，仓储依赖改为执行服务接缝。
 
 import (
 	"encoding/json"
@@ -20,6 +21,7 @@ import (
 
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/response"
 )
 
 const (
@@ -38,11 +40,11 @@ type egoStreamEventPayload struct {
 	CreatedAt  time.Time       `json:"created_at"`
 }
 
-func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository, evRepo egolite.EgoEventRepository, hub *egolite.EgoEventHub, userID, execID uint) {
+func streamEgoExecution(c *gin.Context, exec *egolite.EgoExecutionService, userID, execID uint) {
 	ctx := c.Request.Context()
-	e, err := execRepo.GetForUser(ctx, execID, userID)
+	e, err := exec.GetForUser(ctx, execID, userID)
 	if err != nil {
-		c.JSON(404, gin.H{"code": 1, "message": "执行不存在"})
+		response.Envelope(c, 404, gin.H{"code": 1, "message": "执行不存在"})
 		return
 	}
 
@@ -59,7 +61,7 @@ func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository,
 	c.Writer.WriteHeader(http.StatusOK)
 	c.Writer.Flush()
 
-	signal, cancel := hub.Subscribe(execID)
+	signal, cancel := exec.SubscribeEvents(execID)
 	defer cancel()
 	heartbeat := time.NewTicker(egoStreamHeartbeat)
 	defer heartbeat.Stop()
@@ -81,7 +83,7 @@ func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository,
 
 	// drain 把游标之后的增量推完，返回是否还有更多（满批 ⇒ 继续拉，不等信号）
 	drain := func() bool {
-		batch, err := evRepo.ListByExecutionAfter(ctx, execID, cursor, egoStreamBatch)
+		batch, err := exec.ListEventsAfter(ctx, execID, cursor, egoStreamBatch)
 		if err != nil {
 			return false
 		}
@@ -100,7 +102,7 @@ func streamEgoExecution(c *gin.Context, execRepo egolite.EgoExecutionRepository,
 			// 满批继续拉：历史积压要一次追平，不能一拍只走 200 条
 		}
 		// 每拍复查一次状态：终态 + 已推完 ⇒ 收流（客户端不必自己判何时停）
-		if cur, err := execRepo.GetForUser(ctx, execID, userID); err == nil {
+		if cur, err := exec.GetForUser(ctx, execID, userID); err == nil {
 			e = cur
 		}
 		if isEgoTerminal(e.State) {

@@ -419,6 +419,23 @@ export function getRequestInstance() {
   return request
 }
 
+// 公开请求实例（访客聊天 / 第三方存储上传等免 JWT 面）。
+//
+// 单独实例且不挂 JWT/刷新拦截器：访客页没有后台令牌，若走主实例会把
+// 管理端 token 带到公开接口上。baseURL 固定为当前站点（私域部署），
+// 绝对 URL（如七牛 upload_url）由 axios 自行覆盖。
+let publicRequest = null
+export function getPublicRequestInstance() {
+  if (!publicRequest) {
+    publicRequest = axios.create({
+      baseURL: window.location.origin,
+      // 60s 上限（BUG-9，2026-11-04）：AI 同步生成慢时「发送中」不能无限期挂住。
+      timeout: 60000
+    })
+  }
+  return publicRequest
+}
+
 export const updateRequestConfig = async () => {
   try {
   const apiConfig = getApiConfig()

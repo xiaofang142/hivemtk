@@ -1,4 +1,4 @@
-import axios from 'axios'
+import { getPublicRequestInstance } from '@/utils/request'
 
 // ============================================================================
 // 公开 chat API 封装（访客端，无 JWT）
@@ -10,7 +10,7 @@ import axios from 'axios'
 // ============================================================================
 
 const publicPost = async (url, data, channelId, visitorId, visitorToken) => {
-  return axios.post(url, data, {
+  return getPublicRequestInstance().post(url, data, {
     baseURL: window.location.origin,
     // 60s 上限（BUG-9，2026-11-04）：axios 默认无超时，AI 同步生成慢时
     // 访客端「发送中」会无限期挂住；到点放开按钮并走 catch 的失败提示。
@@ -26,7 +26,7 @@ const publicPost = async (url, data, channelId, visitorId, visitorToken) => {
 }
 
 const publicGet = async (url, params, channelId, visitorId, visitorToken) => {
-  return axios.get(url, {
+  return getPublicRequestInstance().get(url, {
     baseURL: window.location.origin,
     params,
     headers: {
@@ -122,4 +122,13 @@ export default {
   exchangeSessionToken,
   getAvailableAgents,
   getUploadToken
+}
+
+// 访客附件上传：目标 URL 由后端 upload-token 给出（七牛等对象存储直传）。
+// 走公开实例，避免把后台 JWT 带到第三方域名。
+export const uploadToStorage = (uploadUrl, form, onProgress) => {
+  return getPublicRequestInstance().post(uploadUrl, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    onUploadProgress: onProgress
+  })
 }

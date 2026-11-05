@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/storage"
 
 	dbutil "hivemtk-user/internal/pkg/db"
@@ -44,7 +45,7 @@ func newFilesGuardServer(t *testing.T) (*gin.Engine, string) {
 	})
 
 	r := gin.New()
-	r.GET("/files/*filepath", serveUploadsGuarded(dir))
+	r.GET("/files/*filepath", middleware.FilesGuard(dir))
 	return r, dir
 }
 

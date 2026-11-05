@@ -2,7 +2,7 @@ package router
 
 // /files 在**真装配**（Setup）下的凭证契约（SaaS 审计 A1 / A12，2026-10-23）。
 //
-// 为什么这组用例必须走 Setup 而不是直接调 serveUploadsGuarded：
+// 为什么这组用例必须走 Setup 而不是直接调 middleware.FilesGuard：
 // 上一轮 P0-2 的修法（首段 tenant_{id} 必须等于请求 ctx 里的租户）在**隔离环境里测得出绿、
 // 在生产路径上一步都走不到** —— /files 是 Setup 里最先注册的路由，而 gin 的 r.Use 只对之后
 // 登记的路由生效，所以它的 handler 链上没有 TenantMiddleware，请求 ctx 里永远没有租户绑定，

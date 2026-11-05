@@ -29,7 +29,12 @@ const mocks = vi.hoisted(() => {
   return { request, http, axios }
 })
 
-vi.mock('@/utils/request', () => ({ default: mocks.request, http: mocks.http }))
+vi.mock('@/utils/request', () => ({
+  default: mocks.request,
+  http: mocks.http,
+  getRequestInstance: () => mocks.request,
+  getPublicRequestInstance: () => mocks.axios
+}))
 vi.mock('axios', () => ({ default: mocks.axios, __esModule: true }))
 
 const API_FILES = [

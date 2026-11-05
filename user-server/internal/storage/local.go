@@ -70,7 +70,7 @@ func (d *LocalDriver) tenantPathPrefix(ctx context.Context) string {
 
 // dangerousWebExts "浏览器同源直接执行/渲染"的扩展名集合。
 //
-// 本地存储目录经 /files 以应用主站同源发布（router.serveUploadsGuarded），
+// 本地存储目录经 /files 以应用主站同源发布（middleware.FilesGuard），
 // 落盘 .html/.svg/.js 等即构成存储型 XSS。两类来源曾实测可达：
 //   - 素材库上传（content/service/material.go）不校验扩展名，文件名整体透传；
 //   - WhatsApp 入站媒体（service/channel_media.go）文件名 hint 来自远程消息、
