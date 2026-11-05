@@ -52,7 +52,6 @@ func defaultPlatforms() []platformDef {
 		// Medium 没有开放写接口（Integration Token 只能读），只能人工复制发布：
 		// 之前标 real_api 是口径造假，这里如实改为 manual。
 		{Name: "medium", DisplayName: "Medium（手动）", URL: "https://medium.com", AuthType: "manual", Enabled: true, Capability: "manual"},
-		{Name: "custom", DisplayName: "自定义平台（手动）", AuthType: "custom", Enabled: false, Capability: "manual"},
 	}
 }
 

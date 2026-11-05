@@ -25,6 +25,8 @@ internal/geo/
 
 ### 2.1 Model 层（37 个模型）
 
+> 下表只列核心模型；完整清单见 `internal/geo/model/*.go`。
+
 | 文件 | 模型 | 核心字段 | 备注 |
 |------|------|---------|------|
 | `model/config.go` | `GeoConfig` | brand_name, advantages, competitors, domain | 单例（固定 ID=1），全局品牌配置 |
@@ -40,6 +42,8 @@ internal/geo/
 
 ### 2.2 Repository 层（35 个接口）
 
+> 下表只列核心接口；审计/GSC/承接/平台推送等仓储见 `internal/geo/repository/`。
+
 | 文件 | 接口 | 核心方法 |
 |------|------|---------|
 | `repository/config.go` | `GeoConfigRepository` | Get() / Update() |
@@ -53,6 +57,8 @@ internal/geo/
 | `repository/geo_test.go` | — | test helper `setupGeoTestDB` |
 
 ### 2.3 Service 层（39 个 Service 类型）
+
+> 下表只列核心服务；探针适配（Perplexity）、审计 rubric、GSC 解析、承接、WordPress/Webhook 发布器等见 `internal/geo/service/`。
 
 | 文件 | Service | 核心功能 | 依赖 |
 |------|---------|---------|------|
@@ -76,6 +82,8 @@ internal/geo/
 | `service/decision_analytics.go` | `GeoDecisionAnalyticsService` | v3 竞品对齐：A1 SOV 品牌声量 / A6 爬虫统计 / A7 不准确声明检测 | VerifyRepo + TaskRepo + ChainRepo + CrawlerRepo + LLMAdapter |
 
 ### 2.4 Controller 层（35 个构造器）
+
+> 下表只列核心 Handler；审计中心、双端报表、承接链接等新增 Controller 见 `internal/geo/controller/`。
 
 | 文件 | Controller | 路由前缀 | 核心端点 |
 |------|-----------|---------|---------|

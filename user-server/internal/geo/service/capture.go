@@ -14,7 +14,34 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
+	baseservice "hivemtk-user/internal/service"
 )
+
+// captureLeadLimit 单条承接链接的每日留资上限，数据源是参数中心
+// geo.capture_lead_daily_limit；缺省/非法一律回落编译期 100。
+func captureLeadLimit(ctx context.Context) int {
+	if ctx == nil {
+		return CaptureLeadDailyLimit
+	}
+	n := baseservice.GlobalConfigParam().GetInt(ctx, "geo", "capture_lead_daily_limit", CaptureLeadDailyLimit)
+	if n <= 0 {
+		return CaptureLeadDailyLimit
+	}
+	return n
+}
+
+// captureAskLimit 单条承接链接的每日问答上限，数据源是参数中心
+// geo.capture_ask_daily_limit；缺省/非法一律回落编译期 200。
+func captureAskLimit(ctx context.Context) int {
+	if ctx == nil {
+		return CaptureAskDailyLimit
+	}
+	n := baseservice.GlobalConfigParam().GetInt(ctx, "geo", "capture_ask_daily_limit", CaptureAskDailyLimit)
+	if n <= 0 {
+		return CaptureAskDailyLimit
+	}
+	return n
+}
 
 const (
 	// CaptureAskDailyLimit 单条承接链接每天最多回答的问题数（防 LLM 成本被打穿）。
@@ -148,7 +175,7 @@ func (s *CaptureService) landingURL(code string) string {
 
 // shortURL 短码在装配层固定为 "g"+承接码，详情/列表据此还原，避免额外一次短链查询。
 func (s *CaptureService) shortURL(link *model.GeoCaptureLink) string {
-	if link.ShortLinkID == 0 || s.publicBase == "" {
+	if link.ShortLinkID == 0 || s.publicBase == "" || len("g"+link.Code) > 20 {
 		return ""
 	}
 	return s.publicBase + "/s/g" + link.Code
@@ -211,11 +238,8 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 	}
 
 	var shortRef *ShortLinkRef
-	if s.shorts != nil && strings.HasPrefix(s.publicBase, "https://") {
+	if s.shorts != nil && strings.HasPrefix(s.publicBase, "https://") && len("g"+code) <= 20 {
 		shortCode := "g" + code
-		if len(shortCode) > 20 {
-			shortCode = shortCode[:20]
-		}
 		shortRef, err = s.shorts.CreateCaptureShortLink(ctx, shortCode, s.landingURL(code), title)
 		if err != nil {
 			logger.Warnf("[GEO capture] 短链创建失败 code=%s: %v", code, err)
@@ -304,19 +328,19 @@ func (s *CaptureService) Ask(ctx context.Context, code, question string) (*dto.K
 	if utf8.RuneCountInString(question) > captureQuestionMaxRunes {
 		return nil, fmt.Errorf("问题最多 %d 字", captureQuestionMaxRunes)
 	}
+	if s.kb == nil {
+		return nil, fmt.Errorf("知识库问答未接入")
+	}
 	link, err := s.links.GetByCode(ctx, strings.TrimSpace(code))
 	if err != nil {
 		return nil, err
 	}
-	ok, err := s.links.ReserveAsk(ctx, link.ID, businessDay(s.now()), CaptureAskDailyLimit)
+	ok, err := s.links.ReserveAsk(ctx, link.ID, businessDay(s.now()), captureAskLimit(ctx))
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, fmt.Errorf("今日问答次数已用完，请明天再来或直接留言")
-	}
-	if s.kb == nil {
-		return nil, fmt.Errorf("知识库问答未接入")
 	}
 	return s.kb.Ask(ctx, question)
 }
@@ -351,7 +375,7 @@ func (s *CaptureService) SubmitLead(ctx context.Context, code, contact, contactT
 		return "", err
 	}
 	day := businessDay(s.now())
-	ok, err := s.links.ReserveLead(ctx, link.ID, day, CaptureLeadDailyLimit)
+	ok, err := s.links.ReserveLead(ctx, link.ID, day, captureLeadLimit(ctx))
 	if err != nil {
 		return "", err
 	}
