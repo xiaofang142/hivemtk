@@ -24,18 +24,26 @@ function mergedSelectors() {
 }
 
 // —— 选择器定义 ——
-// 来源：2026-11-05 公开 bundle（message-pc/static/js/index.*.js +
-// static/css/index.*.css）提取的类名，未在登录态真机校准；因此本渠道标
-// Experimental。改版后优先在 popup 选择器面板覆盖，不急着发版。
+// 2026-11-06 升级为「实证」：来源 ChatGPT-On-CS v1.4.5 官方安装包内嵌
+// sourcemap 还原的 src/main/platforms/bilibili/index.ts：
+//   会话 div.list-container > div.list-item（未读 .notify.notify-number）；
+//   未关注人消息 tab [title='未关注人消息']（回 [title='我的消息']）；
+//   会话面板 .dialog（用户名 .title > span），消息 .message-list > .msg-item，
+//   方向按 .msg-item class 含 not-me / .message-content class 含 is-me；
+//   输入 #editor，发送 [class*='btn-box send-btn']，图片 .image-upload-btn。
+// 旧 bundle 线索保留为兜底候选。改版后在 popup 选择器面板覆盖即可。
 export const SEL = {
-  CHAT_LIST: '.message-sidebar__item, [class*="session-item" i], [class*="conversation-item" i], [class*="chat-item" i]',
-  MSG_LIST: '.message-content__inner, .message-section__body, [class*="message-list" i]',
-  MSG_ITEM: '.interaction-item__content, [class*="message-item" i], [class*="msg-item" i]',
-  TEXT: '.message-text-nodes, [class*="message-text" i], [class*="msg-content" i]',
-  INPUT: '.message-reply-box__input, textarea[class*="reply" i], textarea[placeholder*="回复"]',
-  SEND: '.message-reply-box__pub, button[class*="send" i], [aria-label*="发送"]',
-  PEER_NAME: '.message-header__title, [class*="message-header" i] [class*="title" i]',
-  UNREAD: '.message-sidebar__item-dot, .message-sidebar__item-num, [class*="unread" i]',
+  CHAT_LIST: ".list-container div[class='list-item'], .message-sidebar__item, [class*=\"session-item\" i]",
+  MSG_LIST: ".message-list, .message-content__inner, [class*=\"message-list\" i]",
+  MSG_ITEM: '.msg-item, .interaction-item__content, [class*="message-item" i]',
+  TEXT: '.message-content, .message-text-nodes, [class*="msg-content" i]',
+  INPUT: '#editor, .message-reply-box__input, textarea[class*="reply" i]',
+  SEND: "[class*='btn-box send-btn'], .message-reply-box__pub, button[class*=\"send\" i]",
+  PEER_NAME: ".dialog div[class='title'] > span, .message-header__title, [class*=\"message-header\" i] [class*=\"title\" i]",
+  UNREAD: '.notify.notify-number, .message-sidebar__item-num, [class*="unread" i]',
+  UNFOLLOWED_TAB: "[title='未关注人消息']",
+  MY_MSG_TAB: "[title='我的消息']",
+  IMAGE_UPLOAD: '.image-upload-btn, input[type="file"]',
   SYSTEM: '.message-divider, [class*="system" i], [class*="notice" i]',
 };
 
@@ -120,7 +128,9 @@ function conversationItems() {
 }
 
 function itemName(el) {
-  const nameEl = el.querySelector('[class*="name" i], [class*="title" i], .message-sidebar__item-name');
+  // 优先精确 class="name"（实证 list-item 内 <span class="name">），
+  // 再放宽到 [class*="name"]，最后整项文本兜底。
+  const nameEl = el.querySelector('.name, [class*="name" i], [class*="title" i], .message-sidebar__item-name');
   return sanitizePeerName(nameEl ? cleanText(nameEl) : cleanText(el));
 }
 
@@ -154,6 +164,9 @@ function getConversationId() {
     const fromQuery = q.get('uid') || q.get('mid') || q.get('talker_id');
     if (fromQuery) return String(fromQuery);
   } catch (_) {  }
+  // 3.5) 会话面板（.dialog）标题昵称（实证：ChatGPT-On-CS 从 .title > span 取名）
+  const dialogName = getPeerName();
+  if (dialogName) return 'conv:' + dialogName.slice(0, 80);
   // 4) 昵称派生
   if (active) {
     const name = itemName(active);
@@ -189,6 +202,21 @@ function isSystemMessage(item) {
   }
 }
 
+// 方向判定（实证，ChatGPT-On-CS v1.4.5 platforms/bilibili）：
+//   .msg-item class 含 not-me → 对方；.message-content class 含 is-me → 自己。
+// 判不出时回落 customer（服务端入站回环判定兜底）。
+function directionOf(item) {
+  try {
+    const itemCls = String(item.className || '');
+    if (/not-me/i.test(itemCls)) return SENDER.CUSTOMER;
+    const content = item.querySelector('.message-content');
+    const contentCls = content ? String(content.className || '') : '';
+    if (/is-me/i.test(contentCls)) return SENDER.SELF;
+    if (/not-me/i.test(contentCls)) return SENDER.CUSTOMER;
+  } catch (_) {  }
+  return FRONTEND_DEFAULT_SENDER_TYPE;
+}
+
 function parseMessageItem(item) {
   if (!item) return null;
   if (isSystemMessage(item)) {
@@ -212,16 +240,17 @@ function parseMessageItem(item) {
   const mediaUrl = img ? (img.getAttribute('src') || '') : '';
   const msgType = !text && mediaUrl ? 'image' : 'text';
   if (!text && !mediaUrl) return null;
+  const senderType = directionOf(item);
   return {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,
-    sender_type: FRONTEND_DEFAULT_SENDER_TYPE,
+    sender_type: senderType,
     text: text || '[图片]',
     media_url: mediaUrl,
     msg_type: msgType,
     is_group: false,
     group_id: '',
     group_name: '',
-    sender_name: getPeerName(),
+    sender_name: senderType === SENDER.CUSTOMER ? getPeerName() : '',
     timestamp: Date.now(),
     raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
   };
@@ -305,6 +334,9 @@ const hooks = {
     try {
       if (isEditable) {
         while (input.firstChild) input.removeChild(input.firstChild);
+        // jsdom 的 innerText 是独立存储（不生成子节点），真浏览器 innerText=''
+        // 等价清空；两者都清保证测试与真实环境语义一致。
+        try { input.innerText = ''; } catch (_) {  }
         input.dispatchEvent(new InputEvent('input', { bubbles: true }));
       } else {
         setValue(input, '');

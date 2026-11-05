@@ -137,6 +137,20 @@ POST /api/bridge/ingest
 伴生只做四件事：**枚举会话、读当前会话消息、写输入框发送、上报登录态**。
 不在伴生里做 AI/关键词/转人工（全部交给服务端），避免第二套决策逻辑。
 
+### 3.2.2b 桌面驱动的实证技术栈（ChatGPT-On-CS v1.4.5，2026-11-06 还原）
+
+ChatGPT-On-CS 的个人微信驱动（`app.platforms.wechat.task`，Nuitka 编译不可反编译，但依赖/资源/函数名可证）：
+- **win32 句柄三步法**：`wechat_get_window_handle`（win32gui 找微信主窗）→
+  `wechat_get_editor_rect`（取输入框矩形）→ `wechat_send_to_editor`（剪贴板写入 + Enter 键击）；
+- **Airtest 图像模板**：`assets/airtest/wechat/{chat_message_input,chat_message_file_button}.png`
+  用于消息区/文件按钮的模板匹配（cv2 + PIL）；
+- **OCR 读屏**：`app.core.pyocr`（onnxruntime）把聊天区截图转文本，喂给 LLM 链路
+  （主进程经 socket.io `strategyService-ocr` 调用）；
+- **无 hook / 无协议库 / 无内存注入**——与我们"桌面伴生"选型一致；
+- 帮助文档实证两个坑：输入框区域被遮挡会发送失败；微信"发送快捷键"必须设为 Enter。
+
+我们伴生工程（Windows）可直接采用同一三步法 + 模板匹配 + OCR 组合。
+
 ### 3.2.3 桌面伴生的风险控制（设计约束）
 
 | 风险 | 约束 |

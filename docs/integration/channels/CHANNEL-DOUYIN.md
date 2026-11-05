@@ -47,13 +47,13 @@ sequenceDiagram
 
 ---
 
-## 3. 覆盖边界
+## 3. 覆盖边界（2026-11-06 实证修订）
 
-| 入口 | 是否覆盖 | 说明 |
+| 入口 | 是否覆盖 | ChatGPT-On-CS 实证 |
 |---|---|---|
-| `www.douyin.com/chat` 抖音私信 | ✅ | 现有适配器 |
-| 抖店飞鸽 `im.jinritemai.com` | ❌ | 商家客服工作台，独立页面；后续项 |
-| 抖音企业号后台 | ❌ | 与私信页不同；后续按需 |
+| `www.douyin.com/chat` 抖音私信 | ✅ | 其用 `creator.douyin.com/creator-micro/data/following/chat`（创作者中心），输入 `div[class*='chat-input']` 分段 fill+Enter |
+| 抖店飞鸽 `im.jinritemai.com` | ❌ | **有完整实证驱动**（jinritemai，696 行）：`.messageList`、图片 `span[data-qa-id='qa-send-img']`、转人工 `qa-transfer-customer`、商品卡上下文、断线自动跳 `fxg.jinritemai.com/login` |
+| 抖音企业号后台 | ❌ | 有 `douyin_mp`（252 行）驱动 |
 
 **为什么本轮不扩飞鸽**：需要商家账号真机校准；贸然加 host 会把"未验证"包装成"已支持"。
 先在文档与任务清单登记，拿到账号后按同一 BaseAdapter 模式新增 `channels/feige.js`。

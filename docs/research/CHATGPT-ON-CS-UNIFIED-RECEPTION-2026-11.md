@@ -1,6 +1,9 @@
 # ChatGPT-On-CS 多平台统一接待原理与六渠道架构（2026-11）
 
 > 配套：[CHATGPT-ON-CS-ARCHITECTURE-2026-11](./CHATGPT-ON-CS-ARCHITECTURE-2026-11.md)
+> **2026-11-06 实证修订**：本文六渠道"推断"部分已由真实安装包解包还原订正（微博方向=气泡
+> left/right、B站=`#editor`+`btn-box send-btn`、京东=京麦桌面客户端而非网页、个人微信=win32+Airtest+OCR），
+> 以 [CHATGPT-ON-CS-REAL-DRIVER-2026-11.md](./CHATGPT-ON-CS-REAL-DRIVER-2026-11.md) 为准。
 > **证据分级**：
 > - `实证`：公开仓代码或公开静态资源可直接验证；
 > - `推断`：公开仓未含驱动源码，按产品文档、统一协议、平台公开页面结构反推；

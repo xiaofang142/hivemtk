@@ -50,7 +50,12 @@ sequenceDiagram
 
 ---
 
-## 3. 与 ChatGPT-On-CS 的对照
+## 3. 与 ChatGPT-On-CS 的对照（2026-11-06 实证补注）
+
+实证：ChatGPT-On-CS 小红书有**两个驱动**——`xiaohongshu`（445 行，入口
+`www.xiaohongshu.com/notification`，做**评论/通知运营**：`.action-text` 打开回复框
+`.comment-input` → `button.submit` 提交，含关注列表回访）与 `xiaohongshu_pro`（414 行，
+专业号私信）。hivemtk 蜂桥覆盖的是 `/chat` 私信页，与 `_pro` 同位、与评论通道互补。
 
 | 维度 | ChatGPT-On-CS（推断） | hivemtk 现状 | 结论 |
 |---|---|---|---|

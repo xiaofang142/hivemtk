@@ -1,8 +1,14 @@
 # 京东渠道接入方案（2026-11，新增）
 
-> 目标：把**京东商家侧客服会话**（京麦工作台 / 咚咚）接入 hivemtk 统一接待。
-> 路线：蜂桥网页私信桥接（与小红书/抖音同构），不依赖京东开放平台资质。
-> 状态：**选择器未真机校准，标 Experimental**。总方案见 [六渠道缺口评估](../CHANNEL-GAP-ANALYSIS-2026-11.md)。
+> 目标：把**京东商家侧客服会话**接入 hivemtk 统一接待。
+> 路线修订（2026-11-06，依据真实驱动还原报告）：
+> - **ChatGPT-On-CS 的"京东"没有网页驱动**——其京东能力 = **京麦桌面客户端驱动**
+>   （`win_jinmai`，Python 侧车 Airtest 模板 `airtest/jinmai/chat_message_input.png` + win32）
+>   叠加抖店飞鸽网页驱动（`jinritemai`，抖音系电商）。
+> - hivemtk 的网页桥（jdm/dongdong）**无任何实证选择器**，降级为"待验证方案"；
+>   新增与 ChatGPT-On-CS 同构的**京麦桌面伴生**为实证路线 B。
+> 总方案见 [六渠道缺口评估](../CHANNEL-GAP-ANALYSIS-2026-11.md) 与
+> [真实驱动还原报告](../../research/CHATGPT-ON-CS-REAL-DRIVER-2026-11.md)。
 
 ---
 
@@ -15,6 +21,12 @@
 | 京东客服开放平台 | `https://dongdong.jd.com/open` | 官方 API（本轮不用） |
 
 **不做**：京东消费者端网页（买家侧）、京东联盟/广告、订单履约。
+
+**实证事实**：ChatGPT-On-CS v1.4.5 京东相关驱动只有两处——
+1. `app.asar` 内 `platforms/jinmai/index.ts`（125 行，仅转发 `strategyService-run` 给 Python 侧车，`id='win_jinmai'`）；
+2. Python 侧车 `app.platforms.jinmai.task`（Nuitka 编译，Airtest 模板 `chat_message_input.png` 输入框定位）。
+3. 抖店飞鸽网页驱动 `platforms/jinritemai/index.ts`（696 行，含转人工 `qa-transfer-customer`、
+   商品卡上下文抓取、登录态丢失自动跳 `fxg.jinritemai.com/login`）——属抖音电商域。
 
 ---
 
@@ -73,10 +85,10 @@ graph TB
 
 ---
 
-## 4. 选择器草案（待真机）
+## 4. 选择器现状（网页路线无实证，桌面路线不需要选择器）
 
-> 京东聊天页有登录墙，2026-11-05 未能取到真实 DOM。以下先给"多候选 + 通用兜底"，
-> 上线前必须真机校准；用户可在 popup 选择器面板覆盖。
+> 京东聊天页有登录墙，且 ChatGPT-On-CS 证明京东客服的可行载体是**桌面客户端**而非网页。
+> 网页桥保留"多候选 + 通用兜底"骨架，但明确标注**零实证**；用户可在 popup 覆盖。
 
 ```js
 export const SEL = {
@@ -177,15 +189,15 @@ export const SEL = {
 
 ---
 
-## 10. 风险与降级
+## 10. 风险与降级（修订）
 
 | 风险 | 降级 |
 |---|---|
-| 选择器不匹配 | `Experimental` + 用户覆盖 + 深度自检快照 |
+| 网页选择器零实证 | 文档/代码均标"待验证"；真机校准前不得宣称京东已支持 |
+| 京麦客户端路线（实证路线 B） | 需 Windows + 京麦客户端 + 桌面伴生（与个人微信伴生同一工程载体）；可复用 Airtest 模板法（ChatGPT-On-CS 用 1 张输入框模板 + win32 句柄） |
 | iframe 跨域 | `all_frames: true` + 账号缓存；仍失败则提示"请在咚咚独立窗口打开" |
-| 登录失效 | 自检失败告警，不自动重登 |
-| 平台改版 | 选择器多候选 + selector-health 遥测 |
-| 风控 | 沿用拟人限速/会话冷却；京东侧更保守（默认 30/min） |
+| 登录失效 | 自检失败告警，不自动重登（ChatGPT-On-CS 抖店驱动有自动跳登录页的对偶做法） |
+| 风控 | 沿用拟人限速/会话冷却；京东侧更保守（默认 20/min） |
 
 ---
 

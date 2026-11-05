@@ -23,20 +23,24 @@ function mergedSelectors() {
 }
 
 // —— 选择器定义 ——
-// 来源：2026-11-05 公开 bundle（h5.sinaimg.cn/m/pcweibochat/js/app.*.js +
-// css/app.*.css）。#webchat-textarea、ul.chat-content、.chatlist-box、
-// .sessionlist、.message-item 可直接验证；self/other 方向类与文本类名待真机。
+// 2026-11-06 升级为「实证」：来源 ChatGPT-On-CS v1.4.5 官方安装包
+// （GitHub Releases，SHA512 已验）内嵌 sourcemap 还原的
+// src/main/platforms/weibo/index.ts（文件尾注释原文即下列选择器）。
+// 方向判定：气泡 .bubble_cont.basi 的 left=客户 / right=自己；
+// 正文 p.puretext，图片/视频走 div.card。#webchat-textarea + Enter 发送
+// 与公开 bundle 证据互相印证。
 export const SEL = {
   CHAT_LIST: '.chatlist-box .sessionlist, [class*="sessionlist" i]',
   MSG_LIST: 'ul.chat-content, [class*="chat-content" i]',
   MSG_ITEM: '.message-item, [class*="message-item" i]',
-  TEXT: '.message-item .text, .bubble_cont .text, [class*="bubble_cont" i] .text',
+  TEXT: 'div>p[class*="puretext" i], .bubble_cont .text, .message-item .text',
   INPUT: '#webchat-textarea, textarea[class*="textarea" i]',
   SEND: '.sendbox_bar button, [class*="send-btn" i], [aria-label*="发送"]',
-  PEER_NAME: '.chat-header .name, [class*="chat"] [class*="name" i]',
-  UNREAD: '.chatlist-box [class*="unread" i], [class*="red-dot" i]',
-  SELF: '.message-item.self, [class*="message-item" i].self',
-  OTHER: '.message-item.other, [class*="message-item" i].other',
+  PEER_NAME: 'div[class*="friendname" i]>div>span, .chat-header .name, [class*="chat"] [class*="name" i]',
+  UNREAD: '[class*="num fff font" i], .chatlist-box [class*="unread" i], [class*="red-dot" i]',
+  BUBBLE: '[class*="bubble_cont" i]',
+  CARD_IMG: '[class*="card" i]>div>img',
+  CARD_VIDEO: '[class*="card" i]>div>video',
 };
 
 function isWeiboHost() {
@@ -160,10 +164,15 @@ function getPeerName() {
   return el ? sanitizePeerName(cleanText(el)) : '';
 }
 
+// 方向判定（实证）：消息项内气泡 .bubble_cont.basi 的 class 含
+// left=对方（客户）/ right=自己（ChatGPT-On-CS v1.4.5 platforms/weibo 实证）。
+// 判不出时回落 customer（服务端入站回环判定会兜底）。
 function directionOf(item) {
   try {
-    if (item.matches(SEL.SELF)) return SENDER.SELF;
-    if (item.matches(SEL.OTHER)) return SENDER.CUSTOMER;
+    const bubble = item.querySelector(SEL.BUBBLE);
+    const cls = bubble ? String(bubble.className || '') : '';
+    if (/\bleft\b/i.test(cls)) return SENDER.CUSTOMER;
+    if (/\bright\b/i.test(cls)) return SENDER.SELF;
   } catch (_) {  }
   return FRONTEND_DEFAULT_SENDER_TYPE;
 }
@@ -173,8 +182,10 @@ function parseMessageItem(item) {
   const textEl = item.querySelector(SEL.TEXT);
   let text = textEl ? cleanText(textEl) : '';
   if (!text) text = cleanText(item);
-  const img = item.querySelector('img[src]');
-  const mediaUrl = img ? (img.getAttribute('src') || '') : '';
+  // 图片/视频优先（实证：div.card > div > img|video），有媒体时文本只作占位
+  const img = item.querySelector(SEL.CARD_IMG) || item.querySelector('img[src]');
+  const video = item.querySelector(SEL.CARD_VIDEO) || item.querySelector('video[src]');
+  const mediaUrl = (img && img.getAttribute('src')) || (video && video.getAttribute('src')) || '';
   if (!text && !mediaUrl) return null;
   const senderType = directionOf(item);
   return {
@@ -182,7 +193,7 @@ function parseMessageItem(item) {
     sender_type: senderType,
     text: text || '[图片]',
     media_url: mediaUrl,
-    msg_type: !text && mediaUrl ? 'image' : 'text',
+    msg_type: mediaUrl && !text ? (video ? 'video' : 'image') : 'text',
     is_group: false,
     group_id: '',
     group_name: '',

@@ -27,10 +27,11 @@ function fixture() {
         <li class="sessionlist" data-uid="20002"><div class="name">另一个好友</div></li>
       </ul>
     </div>
-    <div class="chat-header"><span class="name">微博好友</span></div>
+    <div class="chat-header"><div class="friendname one-line hvhd"><div><span>微博好友</span></div></div></div>
     <ul class="chat-content">
-      <li class="message-item other"><div class="text">在吗</div></li>
-      <li class="message-item self"><div class="text">在的</div></li>
+      <li class="message-item"><div class="bubble_cont basi left"><p class="puretext">在吗</p></div></li>
+      <li class="message-item"><div class="bubble_cont basi right"><p class="puretext">在的</p></div></li>
+      <li class="message-item"><div class="bubble_cont basi left"><div class="card"><div><img src="https://wx1.sinaimg.cn/x.jpg"></div></div></div></li>
     </ul>
     <textarea id="webchat-textarea"></textarea>
   `;
@@ -57,13 +58,17 @@ describe('weibo adapter（实验渠道）', () => {
     expect(a.getConversationId()).toBe('20001');
   });
 
-  it('parseMessageItem 区分 self/other', () => {
+  it('parseMessageItem 按气泡 left/right 区分方向（ChatGPT-On-CS 实证）并识别图片', () => {
     const a = buildWeiboAdapter();
     const items = a.getMessageItems();
-    expect(items.length).toBe(2);
+    expect(items.length).toBe(3);
     expect(a.parseMessageItem(items[0]).sender_type).toBe(SENDER.CUSTOMER);
     expect(a.parseMessageItem(items[1]).sender_type).toBe(SENDER.SELF);
     expect(a.parseMessageItem(items[0]).text).toBe('在吗');
+    const imgMsg = a.parseMessageItem(items[2]);
+    expect(imgMsg.msg_type).toBe('image');
+    expect(imgMsg.media_url).toContain('sinaimg.cn');
+    expect(imgMsg.sender_type).toBe(SENDER.CUSTOMER);
   });
 
   it('sendText 用 Enter 发送并清空输入框', async () => {

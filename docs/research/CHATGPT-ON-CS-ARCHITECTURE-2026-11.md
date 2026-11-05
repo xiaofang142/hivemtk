@@ -1,5 +1,9 @@
 # ChatGPT-On-CS 架构、原理与数据流分析（2026-11）
 
+> **2026-11-06 实证修订**：本文 §2"仓库存量事实"中"平台驱动不在仓内"的结论仍然成立（指 git 源码），
+> 但官方 **GitHub Releases 安装包内含全部闭源驱动**，且 Electron 侧带 sourcemap 可完整还原——
+> 已还原 109 个主进程源文件（含 14 个平台驱动）+ Python 侧车模块结构。全部推断已升级为实证，
+> 以 [CHATGPT-ON-CS-REAL-DRIVER-2026-11.md](./CHATGPT-ON-CS-REAL-DRIVER-2026-11.md) 为准；本文保留作开源仓壳层分析。
 > **借鉴对象**：<https://github.com/cs-lazy-tools/ChatGPT-On-CS>
 > **分析基线**：`2af901b00f42ce871ea07b3ab1f9919c2b2f33a2`（2026-10-10，v1.4.5）
 > **许可**：AGPL-3.0（**只借鉴架构与协议思想，不复制源码**；复制即传染，法务边界见 §12）

@@ -1,8 +1,10 @@
 # B站（哔哩哔哩）渠道接入方案（2026-11，新增）
 
 > 目标：把 B站网页私信（`message.bilibili.com`）接入 hivemtk 统一接待。
-> 路线：蜂桥网页私信桥接。状态：**选择器部分实证、会话列表待真机，标 Experimental**。
-> 总方案见 [六渠道缺口评估](../CHANNEL-GAP-ANALYSIS-2026-11.md)。
+> 路线：蜂桥网页私信桥接。状态：**选择器已实证**（2026-11-06 从 ChatGPT-On-CS v1.4.5 官方安装包
+> 内嵌 sourcemap 还原的 `platforms/bilibili/index.ts` 取得全套选择器，实现已落地
+> `user-web/bridge/src/channels/bilibili.js`），仍标 Experimental（待真机登录回归）。
+> 证据链见 [真实驱动还原报告](../../research/CHATGPT-ON-CS-REAL-DRIVER-2026-11.md)。
 
 ---
 
@@ -20,25 +22,26 @@
 
 ---
 
-## 2. 页面结构证据（2026-11-05 公开 bundle）
+## 2. 页面结构证据（实证，来源：ChatGPT-On-CS v1.4.5 `platforms/bilibili/index.ts`）
 
-从 `s1.hdslb.com/bfs/static/2233-monorepo/message-pc/static/js/index.*.js` 与
-`.../css/index.*.css` 提取到（`实证`，但未在登录态确认可见性）：
-
-| 用途 | 候选选择器 |
+| 用途 | 实证选择器（已落地 `bilibili.js`） |
 |---|---|
-| 会话列表项 | `.message-sidebar__item`（注意：该 sidebar 同时含"回复我的/@我/收到的赞"导航，需按文本/私信 tab 过滤） |
-| 消息容器 | `.message-content__inner`、`.message-section__body` |
-| 消息文本 | `.message-text-nodes` |
-| 消息项 | `.interaction-item__content`、`.message-section__body > *`（待真机） |
-| 输入框 | `.message-reply-box__input`（textarea） |
-| 发送按钮 | `.message-reply-box__pub` |
-| 会话标题 | `.message-header__title` |
-| 未读 | `.message-sidebar__item-dot`、`.message-sidebar__item-num` |
+| 入口 URL | `https://message.bilibili.com/#/whisper` |
+| 会话列表 | `div[class*='list-container'] > div[class='list-item']` |
+| 未读徽标 | `.notify.notify-number`（点击即进会话） |
+| 未关注人消息 tab | `[title='未关注人消息']`，处理后回 `[title='我的消息']` |
+| 每轮会话数上限 | 5（`Math.min(count, 5)`） |
+| 会话面板 | `.dialog`；用户名 `div[class='title'] > span` |
+| 消息列表 | `.message-list` 下 `.msg-item` |
+| 方向 | `.msg-item` class 含 `not-me` = 对方；`.message-content` class 含 `is-me` = 自己 |
+| 图片 | `.message-content img` 的 `src` |
+| 输入框 | `#editor`（contenteditable） |
+| 发送按钮 | `[class*='btn-box send-btn']`（无则 Enter） |
+| 图片回复 | `.image-upload-btn` |
+| 发送策略 | 按 `truncateWordKey`/`truncateWordCount` 分段，逐段 fill + 点击 |
 
-> **重要**：B站消息中心是"多分区"页面，`.message-sidebar__item` 首先是左侧导航，不是会话列表。
-> 适配器必须先确认当前在"私信"分区，再定位会话列表；否则会把"回复我的"当成会话。
-> 该确认逻辑待真机，本轮用 URL/文本双重判定并允许用户覆盖。
+> ChatGPT-On-CS 用 JSDOM 解析 `.message-list` 的 innerHTML 快照再判定方向；
+> hivemtk 蜂桥用 MutationObserver 增量采集，选择器同源但采集方式不同（更实时）。
 
 ---
 
@@ -85,7 +88,7 @@ export const SEL = {
 **match()**
 
 1. host 是 `message.bilibili.com`；
-2. 页面上存在 `.message-reply-box__input` 或聊天线程容器；
+2. 页面上存在 `#editor`（实证输入框）或 `.message-list` 会话线程；
 3. 若只有侧边栏导航、没有输入框 → 返回 false（还没进私信会话）。
 
 **getAccountId()**
@@ -97,9 +100,9 @@ export const SEL = {
 
 **getConversationId()**
 
-1. 活动会话项 `data-uid`/`data-mid`/`data-id`；
-2. URL query `uid`/`mid`/`talker_id`；
-3. 会话标题链接 `/u/<id>`；
+1. 会话面板 `.dialog` 的用户名（实证路径：ChatGPT-On-CS 从 `.title > span` 取名）→ `conv:<name>` 派生；
+2. 活动会话项 `data-uid`/`data-mid`/`data-id`；
+3. URL query `uid`/`mid`/`talker_id`；
 4. 昵称派生 `conv:<name>`。
 
 **sendText()**
@@ -170,7 +173,7 @@ export const SEL = {
 
 | 风险 | 降级 |
 |---|---|
-| `.message-sidebar__item` 是导航不是会话 | match() 要求输入框存在；会话列表定位二次过滤 |
+| 导航项误判为会话 | `NAV_TEXT` 黑名单过滤（回复我的/@我/收到的赞）+ 实证 `.list-item` 优先 |
 | SPA 路由切换不重载 | MutationObserver + `pushState`/`hashchange` 监听（沿用 common.js） |
 | 登录态失效 | 自检失败告警，不自动重登 |
 | 风控 | 拟人限速；B站非电商，默认 20/min 更保守 |

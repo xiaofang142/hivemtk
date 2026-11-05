@@ -1,8 +1,10 @@
 # 微博渠道接入方案（2026-11，新增）
 
-> 目标：把微博网页聊天（`weibo.com/chat`）接入 hivemtk 统一接待。
-> 路线：蜂桥网页私信桥接。状态：**选择器部分实证、消息项类名待真机，标 Experimental**。
-> 总方案见 [六渠道缺口评估](../CHANNEL-GAP-ANALYSIS-2026-11.md)。
+> 目标：把微博网页聊天接入 hivemtk 统一接待。路线：蜂桥网页私信桥接。
+> 状态：**选择器已实证**（2026-11-06 从 ChatGPT-On-CS v1.4.5 官方安装包内嵌 sourcemap 还原的
+> `platforms/weibo/index.ts` 取得全套选择器，方向判定 left/right 系其文件尾注释原文），
+> 实现已落地（`user-web/bridge/src/channels/weibo.js`），仍标 Experimental（待真机登录回归）。
+> 证据链见 [真实驱动还原报告](../../research/CHATGPT-ON-CS-REAL-DRIVER-2026-11.md)。
 
 ---
 
@@ -10,31 +12,37 @@
 
 | 项 | 值 |
 |---|---|
-| 聊天入口 | `https://weibo.com/chat`（未登录 302 到 `passport.weibo.com`） |
+| 聊天入口 | `https://api.weibo.com/chat#/chat`（ChatGPT-On-CS 实证入口；`weibo.com/chat` 同 UI） |
 | 页面形态 | Vue 2 + 自研组件（`woo-*`），SPA |
 | 登录态 | 微博 Cookie（`SUB` 等） |
-| 账号 ID | 当前登录 UID；`$CONFIG.uid` / `window.$CONFIG` / 页面个人链接 |
-| 会话 ID | 对方 UID（`selectId`）；列表项 `data-*` 或昵称派生 |
-| 消息 | 文本/图片/表情/卡片/群消息；文本为主 |
+| 账号 ID | 当前登录 UID；`window.$CONFIG?.uid` |
+| 会话 ID | 对方 UID；列表项 `data-*` 或昵称派生 |
+| 消息 | 文本/图片/视频；文本为主 |
 | 发送 | `#webchat-textarea` 输入，**Enter 发送**（Ctrl+Enter 换行） |
 
 ---
 
-## 2. 页面结构证据（2026-11-05 公开 bundle）
+## 2. 页面结构证据（两级来源互相印证）
 
-从 `h5.sinaimg.cn/m/pcweibochat/js/app.*.js` 与 `css/app.*.css` 提取（`实证`）：
+**来源 A（公开 bundle，2026-11-05）**：`h5.sinaimg.cn/m/pcweibochat/js/app.*.js`、`css/app.*.css`。
+**来源 B（实证，2026-11-06）**：ChatGPT-On-CS v1.4.5 安装包 sourcemap 还原源码，文件尾注释原文：
 
-| 用途 | 选择器 |
+> 消息数 `[class*='num fff font']`；消息 `.message-item`；用户名 `div[class*='friendname one-line hvhd']>div>span`；
+> 气泡 `div[class*='bubble_cont basi']`，**用户的消息 = bubble_cont basi left，我的消息 = right**；
+> 正文 `div>p[class*='puretext']`；图片 `[class*='bubble_cont basi']>div[class*='card']>div>img`；
+> 视频 `…>video`；输入框 `[id='webchat-textarea']`。
+
+| 用途 | 选择器（已落地 `weibo.js`） |
 |---|---|
-| 会话列表容器 | `.chatlist-box` |
-| 会话项 | `.sessionlist`（`li.sessionlist`） |
-| 会话名 | `.list-right .name` |
+| 会话列表 | `.chatlist-box .sessionlist` |
+| 未读 | `[class*="num fff font" i]` |
 | 消息列表 | `ul.chat-content` |
-| 消息项 | `.message-item`（方向类：`.other` / `.self`，待真机确认） |
-| 消息文本 | `.message-item .text`、`.bubble_cont .text`（待真机） |
+| 消息项 | `.message-item` |
+| 方向 | 气泡 `.bubble_cont` class：`left`=客户 / `right`=自己 |
+| 正文 | `div>p[class*="puretext" i]` |
+| 图片/视频 | `[class*="card" i]>div>img` / `>video` |
 | 输入框 | `#webchat-textarea` |
-| 发送提示/按钮区 | `.sendbox_bar`、`.sendbox_prompt` |
-| 发送方式 | Enter（页面文案："按下Enter发送内容/ Command+Enter换行"） |
+| 发送 | Enter（按钮 `.sendbox_bar button` 为兜底） |
 
 ---
 
@@ -61,38 +69,38 @@ graph TB
 
 ---
 
-## 4. 适配器设计
+## 4. 适配器设计（已按实证落地，见 `user-web/bridge/src/channels/weibo.js`）
 
 ```js
 export const SEL = {
   CHAT_LIST: '.chatlist-box .sessionlist, [class*="sessionlist" i]',
   MSG_LIST: 'ul.chat-content, [class*="chat-content" i]',
   MSG_ITEM: '.message-item, [class*="message-item" i]',
-  TEXT: '.message-item .text, .bubble_cont .text, [class*="bubble_cont" i] .text',
+  TEXT: 'div>p[class*="puretext" i], .bubble_cont .text, .message-item .text',
   INPUT: '#webchat-textarea, textarea[class*="textarea" i]',
   SEND: '.sendbox_bar button, [class*="send-btn" i], [aria-label*="发送"]',
-  PEER_NAME: '.chat-header .name, [class*="chat"] [class*="name" i]',
-  UNREAD: '.chatlist-box [class*="unread" i], [class*="red-dot" i]',
-  SELF: '.message-item.self, [class*="message-item" i].self',
-  OTHER: '.message-item.other, [class*="message-item" i].other',
+  PEER_NAME: 'div[class*="friendname" i]>div>span, .chat-header .name, [class*="chat"] [class*="name" i]',
+  UNREAD: '[class*="num fff font" i], .chatlist-box [class*="unread" i], [class*="red-dot" i]',
+  BUBBLE: '[class*="bubble_cont" i]',
+  CARD_IMG: '[class*="card" i]>div>img',
+  CARD_VIDEO: '[class*="card" i]>div>video',
 };
 ```
 
-**match()**：host `weibo.com` 或 `api.weibo.com`，且存在 `#webchat-textarea` 或 `.chat-content`。
+**match()**：host `weibo.com`（含 `api.weibo.com`），且存在 `#webchat-textarea` 或 `.chat-content`。
 
 **getAccountId()**：`window.$CONFIG?.uid` → 页面 `/u/<uid>` 链接 → localStorage 缓存 → `weibo-unknown`。
 
 **getConversationId()**：会话项 `data-uid`/`data-id` → 当前会话 `data-*` → 昵称派生。
 微博的 `selectId` 是 Vue store 内部值，DOM 上不一定可见；不要依赖它，除非真机确认。
 
-**parseMessageItem()**
+**parseMessageItem()**（实证）
 
-- 方向：`.message-item.self` → 自己；`.other` → 对方；
-- 文本：`TEXT` 选择器；拿不到则用 `innerText` 去掉时间/状态噪声；
-- 时间：消息项内时间元素/`data-time`；拿不到用 `Date.now()`；
-- 卡片/图片：`msg_type` 置 `image/card`，`media_url` 尽力取 `<img src>`。
+- 方向：消息项内 `.bubble_cont` class 含 `left` → 客户；含 `right` → 自己；判不出回落 customer（服务端回环判定兜底）；
+- 正文：`div>p[class*="puretext"]`；拿不到再取整项文本去噪；
+- 媒体：`div[class*="card"]>div>img|video`，`msg_type` 置 `image/video`，`media_url` 取 `src`。
 
-**sendText()**
+**sendText()**（已落地）
 
 - `#webchat-textarea` 是 textarea → `setValue`（先清空）；
 - 微博无独立发送按钮（实测页面提示 Enter 发送），**优先派发 Enter keydown/keyup**；
@@ -162,7 +170,7 @@ export const SEL = {
 | 风险 | 降级 |
 |---|---|
 | 虚拟滚动只渲染可视区 | 以增量 MutationObserver 为主，回填只取当前可见 + 滚动触发 |
-| 消息项类名改版 | 多候选 + `innerText` 兜底 + popup 覆盖 |
+| 消息项类名改版 | 多候选 + 实证 selector + popup 覆盖 |
 | Enter 发送被页面拦截 | 用原生 `KeyboardEvent` + `isComposing=false`；失败再找按钮 |
 | 登录态失效 | 302 到 passport 时 match=false，不误报 |
 | 风控 | 拟人限速，默认 20/min |
