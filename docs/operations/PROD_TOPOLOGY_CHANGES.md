@@ -4,6 +4,37 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-05 · 通用短链 `/s/` 反代
+
+**问题**：卡片/分享短链生成的是同源相对路径 `/s/<code>`，后端实际路由是
+`/api/s/:code`；`work.xapptool.cn` 没有 `/s/` 反代，`workapi.xapptool.cn`
+的 `location /` 又会把未知路径回落成前端 SPA ⇒ 短链打开是登录页/首页，不是目标页。
+
+**线上改动**（`work.xapptool.cn.conf` 与 `workapi.xapptool.cn.conf` 各加一段）：
+
+```nginx
+# /s/<code> → 后端 /api/s/<code>
+location ^~ /s/ {
+    proxy_pass http://127.0.0.1:8204/api/s/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 120s;
+}
+```
+
+**校验**：
+```bash
+curl -sS -o /dev/null -D - https://work.xapptool.cn/s/eIZ5MV | head -1    # 302
+curl -sS -o /dev/null -D - https://workapi.xapptool.cn/s/eIZ5MV | head -1 # 302
+```
+
+**代码配套**：`ShareShortLink` 生成绝对短链时改用 `PUBLIC_BASE_URL`
+（`config.GetPublicBaseURL()`），未配置才回落 `localhost:8204`；卡片响应仍给
+相对 `/s/<code>`，由上述 nginx 统一承接。
+
 ## 2026-11-04 · 资产封面/扩展包静态文件分流
 
 **问题**：`assets.cover_url` 存的是相对路径 `/files/covers/...`，前端 `<img>`

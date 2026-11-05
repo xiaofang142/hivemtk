@@ -1267,6 +1267,7 @@ func TestShortLinkService_GetAllStats_EmptyStats(t *testing.T) {
 
 // TestShortLinkService_ShareShortLink 测试分享短链
 func TestShortLinkService_ShareShortLink(t *testing.T) {
+	t.Setenv("PUBLIC_BASE_URL", "")
 	database := setupShortLinkServiceTestDB(t)
 	service := newTestShortLinkService(database)
 
@@ -1299,6 +1300,29 @@ func TestShortLinkService_ShareShortLink(t *testing.T) {
 	}
 	if !strings.HasPrefix(resp.QRCode, "data:image/png;base64,") {
 		t.Errorf("Expected QRCode to be base64 encoded image, got %s", resp.QRCode)
+	}
+}
+
+func TestShortLinkService_ShareShortLink_UsesPublicBaseURL(t *testing.T) {
+	t.Setenv("PUBLIC_BASE_URL", "https://work.xapptool.cn/")
+	database := setupShortLinkServiceTestDB(t)
+	service := newTestShortLinkService(database)
+
+	createResp, err := service.Create(context.Background(), &dto.CreateShortLinkRequest{
+		ShortCode:   "sharepublic",
+		OriginalURL: "https://example.com/share",
+		Title:       "分享公网基址",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+
+	resp, err := service.ShareShortLink(context.Background(), &dto.ShareShortLinkRequest{ID: createResp.ID})
+	if err != nil {
+		t.Fatalf("ShareShortLink failed: %v", err)
+	}
+	if want := "https://work.xapptool.cn/s/sharepublic"; resp.ShortURL != want {
+		t.Fatalf("ShortURL = %q, want %q", resp.ShortURL, want)
 	}
 }
 

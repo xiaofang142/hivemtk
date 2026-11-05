@@ -544,7 +544,14 @@ func (s *shortLinkService) ShareShortLink(ctx context.Context, req *dto.ShareSho
 		return nil, errors.New("短链不存在")
 	}
 
-	shortURL := fmt.Sprintf("%s/s/%s", config.DefaultUserServerBaseURL, shortLink.ShortCode)
+	// 分享出去的短链必须是**公网可访问**的地址：默认常量是 localhost:8204，
+	// 线上直接拼出去等于把用户指回本机。部署期 PUBLIC_BASE_URL 优先，未配置才
+	// 回落默认值（本地开发/测试沿用原口径）。
+	base := strings.TrimRight(config.GetPublicBaseURL(), "/")
+	if base == "" {
+		base = strings.TrimRight(config.DefaultUserServerBaseURL, "/")
+	}
+	shortURL := fmt.Sprintf("%s/s/%s", base, shortLink.ShortCode)
 
 	qrCode := utils.GenerateQRCode(shortURL)
 
