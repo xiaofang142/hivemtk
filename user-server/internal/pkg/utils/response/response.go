@@ -214,7 +214,14 @@ func Error(c *gin.Context, code any, message string, data ...any) {
 	}
 
 	// 统一出口兜底：direct response.Error 里的驱动/SQL/网络原文不得出境。
+	// data 同通道也要查：调用方常把同一个 err.Error() 既拼进文案又塞进 data。
+	rawMessage := message
 	message = sanitizeInternalDetail(message)
+	// 只有 message 真含内部细节时才按原文丢弃 data。否则像 LTC 阶段门这种
+	// 把 reason 明写进公开文案的响应，reason 字段会被误判成泄漏而整块删掉。
+	if len(data) > 0 && message != rawMessage && safeData(data, rawMessage) == nil {
+		data = nil
+	}
 
 	resp := Response{
 		Code:    errorCode,
@@ -544,7 +551,11 @@ func ErrorWithBusinessCode(c *gin.Context, code int, message string, data ...any
 	if len(data) > 0 {
 		d = data[0]
 	}
+	rawMessage := message
 	message = sanitizeInternalDetail(message)
+	if len(data) > 0 && message != rawMessage && safeData([]any{d}, rawMessage) == nil {
+		d = nil
+	}
 	c.JSON(http.StatusOK, Response{
 		Code:    code,
 		Message: i18n.Localize(localeOf(c), message),

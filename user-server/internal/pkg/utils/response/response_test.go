@@ -621,3 +621,30 @@ func TestErrorFromDB_RuneWindowMasksChineseSuffix(t *testing.T) {
 		t.Errorf("应回退统一安全文案，body=%s", body)
 	}
 }
+
+// TestError_DropsDataWithInternalDetail：direct Error 的 data 与 message 同通道，
+// 同一个原文塞进 data 也必须丢弃。
+func TestError_DropsDataWithInternalDetail(t *testing.T) {
+	const raw = `pq: relation "secret_table" does not exist (SQLSTATE 42P01)`
+	c, w := setupTestContext()
+
+	Error(c, http.StatusInternalServerError, "查询失败: "+raw, gin.H{"detail": raw})
+
+	body := w.Body.String()
+	if strings.Contains(body, "secret_table") || strings.Contains(body, "SQLSTATE") {
+		t.Errorf("direct Error 的 data 泄漏原文: %s", body)
+	}
+}
+
+// TestErrorWithBusinessCode_DropsDataWithInternalDetail：业务码出口的 data 同样查原文。
+func TestErrorWithBusinessCode_DropsDataWithInternalDetail(t *testing.T) {
+	const raw = `dial tcp 10.0.0.9:443: connection refused`
+	c, w := setupTestContext()
+
+	ErrorWithBusinessCode(c, bizerr.CodeInternal, "同步失败: "+raw, gin.H{"detail": raw})
+
+	body := w.Body.String()
+	if strings.Contains(body, "10.0.0.9") || strings.Contains(body, "connection refused") {
+		t.Errorf("business-code 出口的 data 泄漏原文: %s", body)
+	}
+}
