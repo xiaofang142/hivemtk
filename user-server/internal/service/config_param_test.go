@@ -294,7 +294,9 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-10-24 并行任务新增 bridge.selector_health_degraded_below ⇒ 240 → 241。
 // 2026-10-29 S-20（007 §3.6 余量）新增 telemetry.dashboard_default_window_hours +
 // telemetry.channel_online_degraded_below ⇒ 241 → 243。
-const defaultParamDefsWant = 243
+// 2026-11-05 9d6477c9 geo 承接链接新增 geo.capture_ask_daily_limit +
+// geo.capture_lead_daily_limit ⇒ 243 → 245。
+const defaultParamDefsWant = 245
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

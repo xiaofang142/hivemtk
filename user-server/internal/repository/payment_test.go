@@ -339,6 +339,42 @@ func TestPaymentRepository_ListByBillIDIsScopedAndOrdered(t *testing.T) {
 	}
 }
 
+// paid_at 相同时按 id 兜底：newPaymentKey 的 seq 是定宽零填充，
+// 文本字典序必须等于生成顺序（"_10" 不能排到 "_09" 前）。
+func TestPaymentRepository_ListByBillIDTieBreaksSamePaidAtByPaddedID(t *testing.T) {
+	db := setupPaymentTestDB(t)
+	if db == nil {
+		t.Fatal("测试库不可达")
+	}
+	repo := NewPaymentRepositoryWithDB(db)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 5, 2, 0, 0, 0, time.UTC)
+
+	// 同 paid_at、同 created_at，只有 id 的 seq 不同；定宽后 _09 应排在 _10 前。
+	first := newPaymentRow("p_tie_0000000000009", "b_tie", "ref-tie-9", 10.00)
+	first.PaidAt = base
+	first.CreatedAt = base
+	second := newPaymentRow("p_tie_0000000000010", "b_tie", "ref-tie-10", 10.00)
+	second.PaidAt = base
+	second.CreatedAt = base
+	for _, row := range []*model.Payment{first, second} {
+		if err := repo.Create(ctx, row); err != nil {
+			t.Fatalf("种 %s 失败: %v", row.ID, err)
+		}
+	}
+
+	rows, err := repo.ListByBillID(ctx, "b_tie")
+	if err != nil {
+		t.Fatalf("列表失败: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("期望 2 行，实际 %d", len(rows))
+	}
+	if rows[0].ID != "p_tie_0000000000009" || rows[1].ID != "p_tie_0000000000010" {
+		t.Errorf("同 paid_at 未按定宽 id 保序：%s, %s", rows[0].ID, rows[1].ID)
+	}
+}
+
 // TestPaymentRepository_MethodSetIsExactlyTheDocumentedSix 接口形状即"回款行不可改写"。
 // CreateRefundGuarded 是 A11 TOCTOU 修复加的退款入账原子通路（名字不以 Update/Save/
 // Upsert 开头：它只追加新行，不碰既有行——守卫由 banned 前缀循环钉住）。

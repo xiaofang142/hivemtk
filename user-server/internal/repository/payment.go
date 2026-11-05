@@ -399,6 +399,8 @@ func (r *paymentRepo) ListByBillID(ctx context.Context, billID string) ([]*model
 	var rows []*model.Payment
 	if err := r.db.WithContext(ctx).
 		Where("bill_id = ?", strings.TrimSpace(billID)).
+		// paid_at 相同时按 id 兜底；newPaymentKey 把 seq 零填充到定宽，
+		// 因此文本字典序等于生成顺序（"_000...10" 不会排到 "_000...09" 前面）。
 		Order("paid_at ASC").Order("id ASC").
 		Find(&rows).Error; err != nil {
 		return nil, err

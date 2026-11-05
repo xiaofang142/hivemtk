@@ -479,9 +479,11 @@ fmt-check:
 #
 # 与 CI 的有意差异：本地不加 -short（跳过 Short() 门控用例会漏问题）、不加 -race
 # （全量耗时数倍拉长，本地不适用）。
+# EMBEDDING_ALLOW_FALLBACK=true 与 CI workflow 的全局 env 同名同值：不设时
+# knowledge 流水线会去连未启动的 8208，单包实测 199.3s→75.1s（全耗在 HTTP 超时）。
 # 需要更快时用 make test-go-fast（连 fsync=off 专用测试库，见 docker-compose.test.yml）。
 test-go:
-	cd user-server && go test ./... -count=1 -p 1 -timeout 1800s
+	cd user-server && EMBEDDING_ALLOW_FALLBACK=true go test ./... -count=1 -p 1 -timeout 1800s
 
 # 单跑 `internal/service` 一包。
 #
@@ -493,7 +495,7 @@ test-go:
 # make test-db-fast-up + make test-service-fast（docker-compose.test.yml，端口 8217；
 # 业务库 mtk-postgres 不动）。
 test-service:
-	cd user-server && go test ./internal/service -count=1 -p 1 -timeout 30m
+	cd user-server && EMBEDDING_ALLOW_FALLBACK=true go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 专用 fsync=off 测试库（见 docker-compose.test.yml）。
 # 只给 go test 用，数据可丢；与业务库 mtk-postgres 完全隔离。
@@ -512,19 +514,25 @@ test-db-fast-down:
 	docker compose -f docker-compose.test.yml down
 
 # 快速测试目标：连 fsync=off 专用库（默认 127.0.0.1:8217），
-# 密码从容器读，不落盘。与 test-go/test-service 的代码/参数/超时完全一致，
-# 唯一区别是测试库的持久化设置。使用前先 make test-db-fast-up。
+# 密码从容器读，不落盘。使用前先 make test-db-fast-up。
 # 2026-11-05 实测：service 245.0s（4097 PASS / 0 FAIL，setup 39.7s / 2375 次调用）。
+# -p 3：跨包并行，靠槽位咨询锁给每个包进程独立测试库（锁生命周期 bug 已修）。
+# 全量实测 12.9 分钟（149 包 0 失败；-p 1 各包合计 1804s，约 30 分钟；
+# 未开降级时 -p 3 也要 21.7 分钟）。service 是主长杆（-p 3 下约 312s）；
+# knowledge/service 未开降级时 471s，开 EMBEDDING_ALLOW_FALLBACK 后约 82s。
+# CI 仍用 -p 1 保持资源可预期。
 test-go-fast:
 	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
 	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
 	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
-	  go test ./... -count=1 -p 1 -timeout 1800s
+	  EMBEDDING_ALLOW_FALLBACK=true \
+	  go test ./... -count=1 -p 3 -timeout 1800s
 
 test-service-fast:
 	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
 	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
 	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
+	  EMBEDDING_ALLOW_FALLBACK=true \
 	  go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 跨端线上契约清单（SaaS 审计 A10）

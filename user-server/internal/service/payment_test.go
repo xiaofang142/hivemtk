@@ -545,6 +545,24 @@ func TestPaymentServiceAvailabilityAndFailures(t *testing.T) {
 
 // —— ⑥ 读侧视图 ——————————————————————————————————————————————
 
+// TestPaymentKeyLexicographicOrderMatchesSequence 对账单在 paid_at 相同时按 id 兜底排序，
+// 因此 id 的文本序必须等于 seq 的生成序；seq 跨数位（9→10、99→100）是回归点。
+func TestPaymentKeyLexicographicOrderMatchesSequence(t *testing.T) {
+	at := time.Date(2026, 11, 5, 9, 30, 0, 0, time.UTC)
+	for _, pair := range [][2]int64{{9, 10}, {99, 100}, {999, 1000}} {
+		lo, hi := newPaymentKey(at, pair[0]), newPaymentKey(at, pair[1])
+		if !(lo < hi) {
+			t.Errorf("seq %d→%d 的文本序颠倒：%q 不小于 %q", pair[0], pair[1], lo, hi)
+		}
+	}
+	if a, b := newPaymentKey(at, 7), newPaymentKey(at, 7); a != b {
+		t.Errorf("同一时刻同一 seq 生成不一致：%q / %q", a, b)
+	}
+	if worst := newPaymentKey(at, math.MaxInt64); len(worst) > 64 {
+		t.Errorf("最坏情况 id 长 %d，超过抄送列宽：%q", len(worst), worst)
+	}
+}
+
 // TestPaymentServiceStatementAnswersTheReconciliationPair 读侧答的就是结转遗留①那两问：
 // 一张账单收了多少、还欠多少，名下行按流水顺序列出来。
 func TestPaymentServiceStatement(t *testing.T) {

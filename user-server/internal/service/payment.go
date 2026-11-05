@@ -783,6 +783,9 @@ func nextPaymentSeq() int64 { return atomic.AddInt64(&paymentSeq, 1) }
 // newPaymentKey 纯函数版生成器（同一时刻 + 同一 seq ⇒ 同一个号），用例可直接复算。
 //
 // 与 newBillKey 同一条不含日期串的理由（时区裂脑），前缀 p_ 与 b_ / q_ 同族。
+// seq 定宽零填充：对账单在 paid_at 相同时按 id 兜底排序，"_10" < "_9" 的
+// 字典序会把第 10 笔排到第 9 笔前（2026-11-05 分片跑暴露：第三行错位）。
+// 定宽后文本序 == 生成序；正常 seq（≤13 位）长度仍为 35，int64 上限也在 64 以内。
 func newPaymentKey(now time.Time, seq int64) string {
-	return fmt.Sprintf("p_%d_%d", now.UnixNano(), seq)
+	return fmt.Sprintf("p_%d_%013d", now.UnixNano(), seq)
 }
