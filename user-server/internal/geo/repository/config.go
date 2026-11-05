@@ -54,7 +54,8 @@ func (r *geoConfigRepo) Update(ctx context.Context, config *model.GeoConfig) err
 	// 时无法与「不存在」区分。
 	res := db.Model(&model.GeoConfig{}).Where("id = ?", existing.ID).
 		Select("brand_name", "brand_description", "advantages", "competitors", "domain",
-			"language", "default_model", "verify_models", "negative_keywords", "cron_specs").
+			"language", "default_model", "verify_models", "negative_keywords", "cron_specs",
+			"product_category", "target_audience", "key_features", "generation_note", "version_label").
 		Updates(config)
 	if res.Error != nil {
 		return res.Error

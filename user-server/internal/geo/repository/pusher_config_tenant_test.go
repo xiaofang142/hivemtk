@@ -162,3 +162,40 @@ func TestGeoPusherConfigRepository_停用值不被列默认值覆盖(t *testing.
 		t.Fatal("显式 active=false 落库变成了 true")
 	}
 }
+
+// TestGeoPusherConfigRepository_删除后可重建同平台 软删除行仍占用唯一索引；
+// 删除百度配置后重新添加同平台必须成功（原位复活）。
+func TestGeoPusherConfigRepository_删除后可重建同平台(t *testing.T) {
+	db := gpcSetupDB(t)
+	repo := NewGeoPusherConfigRepositoryWithDB(db)
+	ctx := tenant.WithTenantID(context.Background(), gpcTenantA)
+
+	first := &model.GeoPusherConfig{
+		Platform:   "baidu",
+		ConfigJSON: datatypes.JSON(`{"token":"old"}`),
+		DailyLimit: 10,
+		Active:     true,
+	}
+	if err := repo.Create(ctx, first); err != nil {
+		t.Fatalf("首次创建失败: %v", err)
+	}
+	if err := repo.Delete(ctx, first.ID); err != nil {
+		t.Fatalf("删除失败: %v", err)
+	}
+	second := &model.GeoPusherConfig{
+		Platform:   "baidu",
+		ConfigJSON: datatypes.JSON(`{"token":"new"}`),
+		DailyLimit: 20,
+		Active:     true,
+	}
+	if err := repo.Create(ctx, second); err != nil {
+		t.Fatalf("删除后重建同平台失败: %v", err)
+	}
+	if second.ID != first.ID || second.TenantID != gpcTenantA || second.DailyLimit != 20 {
+		t.Fatalf("应原位复活并覆盖字段: id=%s limit=%d", second.ID, second.DailyLimit)
+	}
+	got, err := repo.GetByID(ctx, first.ID)
+	if err != nil || got.DailyLimit != 20 {
+		t.Fatalf("复活后读取不对: %+v err=%v", got, err)
+	}
+}

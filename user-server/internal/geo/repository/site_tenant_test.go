@@ -136,3 +136,30 @@ func TestGeoSiteRepository_停用值不被列默认值覆盖(t *testing.T) {
 		t.Fatal("显式 active=false 落库变成了 true")
 	}
 }
+
+// TestGeoSiteRepository_删除后可重建同域名 软删除行仍占用唯一索引；
+// 运营删站点后重新添加同域名必须成功（原位复活），而不是抛 23505。
+func TestGeoSiteRepository_删除后可重建同域名(t *testing.T) {
+	db := gsiteSetupDB(t)
+	repo := NewGeoSiteRepositoryWithDB(db)
+	ctx := tenant.WithTenantID(context.Background(), gsiteTenantA)
+
+	first := &model.GeoSite{Domain: "recreate.example", Provider: "cloudflare", HugoPath: "/old", Active: true}
+	if err := repo.Create(ctx, first); err != nil {
+		t.Fatalf("首次创建失败: %v", err)
+	}
+	if err := repo.Delete(ctx, first.ID); err != nil {
+		t.Fatalf("删除失败: %v", err)
+	}
+	second := &model.GeoSite{Domain: "recreate.example", Provider: "cloudflare", HugoPath: "/new", Active: true}
+	if err := repo.Create(ctx, second); err != nil {
+		t.Fatalf("删除后重建同域名失败: %v", err)
+	}
+	if second.ID != first.ID || second.TenantID != gsiteTenantA || second.HugoPath != "/new" {
+		t.Fatalf("应原位复活并覆盖字段: id=%s path=%s", second.ID, second.HugoPath)
+	}
+	got, err := repo.GetByID(ctx, first.ID)
+	if err != nil || got.HugoPath != "/new" {
+		t.Fatalf("复活后读取不对: %+v err=%v", got, err)
+	}
+}

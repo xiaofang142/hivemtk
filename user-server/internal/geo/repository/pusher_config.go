@@ -69,6 +69,31 @@ func (r *geoPusherConfigRepo) GetByID(ctx context.Context, id string) (*model.Ge
 func (r *geoPusherConfigRepo) Create(ctx context.Context, cfg *model.GeoPusherConfig) error {
 	plain := cfg.ConfigJSON
 	cfg.ConfigJSON = sealConfig(plain)
+	// 软删除行仍占着 (tenant_id, platform) 唯一索引：先找未删行会漏掉它，
+	// 直接 Create 会抛 23505。命中同平台的历史行时原位复活并覆盖配置。
+	var existing model.GeoPusherConfig
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("platform = ?", cfg.Platform).First(&existing).Error; err == nil && existing.DeletedAt.Valid {
+		now := time.Now()
+		if err := r.db.WithContext(ctx).Unscoped().Model(&model.GeoPusherConfig{}).
+			Where("id = ?", existing.ID).
+			Updates(map[string]any{
+				"config_json": cfg.ConfigJSON,
+				"daily_limit": cfg.DailyLimit,
+				"active":      cfg.Active,
+				"deleted_at":  nil,
+				"updated_at":  now,
+			}).Error; err != nil {
+			cfg.ConfigJSON = plain
+			return err
+		}
+		cfg.ID = existing.ID
+		cfg.TenantID = existing.TenantID
+		cfg.CreatedAt = existing.CreatedAt
+		cfg.UpdatedAt = now
+		cfg.ConfigJSON = plain
+		return nil
+	}
 	err := r.db.WithContext(ctx).Create(cfg).Error
 	cfg.ConfigJSON = plain // 响应回显明文，不把密文吐给调用方
 	return err

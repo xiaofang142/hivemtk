@@ -66,6 +66,31 @@ func (r *geoSiteRepo) GetActive(ctx context.Context) (*model.GeoSite, error) {
 }
 
 func (r *geoSiteRepo) Create(ctx context.Context, site *model.GeoSite) error {
+	// 软删除行仍占着 (tenant_id, domain) 唯一索引：删除站点后重新添加同域名，
+	// 直接 Create 会抛 23505。命中历史行时原位复活并覆盖可编辑字段。
+	var existing model.GeoSite
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("domain = ?", site.Domain).First(&existing).Error; err == nil && existing.DeletedAt.Valid {
+		now := time.Now()
+		if err := r.db.WithContext(ctx).Unscoped().Model(&model.GeoSite{}).
+			Where("id = ?", existing.ID).
+			Updates(map[string]any{
+				"provider":   site.Provider,
+				"hugo_path":  site.HugoPath,
+				"git_repo":   site.GitRepo,
+				"deploy_cmd": site.DeployCmd,
+				"active":     site.Active,
+				"deleted_at": nil,
+				"updated_at": now,
+			}).Error; err != nil {
+			return err
+		}
+		site.ID = existing.ID
+		site.TenantID = existing.TenantID
+		site.CreatedAt = existing.CreatedAt
+		site.UpdatedAt = now
+		return nil
+	}
 	return r.db.WithContext(ctx).Create(site).Error
 }
 
