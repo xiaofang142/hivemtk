@@ -160,10 +160,11 @@
             placeholder="git@github.com:xxx/xxx.git"
           />
         </el-form-item>
-        <el-form-item label="部署命令">
-          <el-input
-            v-model="form.deploy_cmd"
-            placeholder="hugo -e production"
+        <el-form-item label="构建说明">
+          <el-alert
+            type="info"
+            :closable="false"
+            title="部署命令已停用：服务器不再执行自定义命令（安全）。Git 推送后由托管平台（GitHub Actions / Cloudflare Pages）自动构建。"
           />
         </el-form-item>
         <el-form-item label="启用">

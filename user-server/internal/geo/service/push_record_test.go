@@ -128,18 +128,18 @@ func TestPushURLs_引擎整体失败不记账(t *testing.T) {
 	svc := newPushSvcForTest(t, &failingRecordRepo{err: errors.New("不应被调用")},
 		map[string]Pusher{"baidu": &stubPusher{name: "baidu", err: errors.New("网络不通")}})
 
-	if err := svc.PushURLs(context.Background(), []string{"https://a.example/1"}); err != nil {
-		t.Fatalf("引擎整体失败应跳过该平台，不报错: %v", err)
+	if err := svc.PushURLs(context.Background(), []string{"https://a.example/1"}); err == nil {
+		t.Fatal("所有引擎整体失败时不应返回成功")
 	}
 }
 
 func TestValidatePlatforms_未启用平台必须报错(t *testing.T) {
 	svc := &PushService{pushers: map[string]Pusher{"baidu": &stubPusher{name: "baidu"}}}
 
-	if err := svc.ValidatePlatforms([]string{"baidu"}); err != nil {
+	if err := svc.ValidatePlatforms(context.Background(), []string{"baidu"}); err != nil {
 		t.Fatalf("已启用平台不应报错: %v", err)
 	}
-	err := svc.ValidatePlatforms([]string{"baidu", "google"})
+	err := svc.ValidatePlatforms(context.Background(), []string{"baidu", "google"})
 	if err == nil || !strings.Contains(err.Error(), "google") {
 		t.Fatalf("未启用平台应报错并点名，实际: %v", err)
 	}

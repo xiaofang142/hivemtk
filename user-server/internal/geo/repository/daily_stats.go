@@ -22,6 +22,10 @@ type GeoDailyStatRepository interface {
 	BatchUpsert(ctx context.Context, stats []*model.GeoDailyStat) error
 	// IncrementByEngine 按 (stat_date, engine, "mixed", "mixed") 累加引用数
 	IncrementByEngine(ctx context.Context, statDate, engine string, citations, brandMentions int) error
+	// SetCitationByEngine 按 (stat_date, engine, "mixed", "mixed") 覆盖引用数为快照值。
+	// 重复触发 verify-all 时必须用覆盖，不能用累加——聚合源是「全量已引用行」，
+	// 累加会让同一天的引用数随刷新次数翻倍。
+	SetCitationByEngine(ctx context.Context, statDate, engine string, citations int) error
 	List(ctx context.Context, engine, funnelStage, startDate, endDate string, page, limit int) ([]*model.GeoDailyStat, int64, error)
 	GetTrend(ctx context.Context, engine, funnelStage, intent string, days int) ([]*model.GeoDailyStat, error)
 }
@@ -66,6 +70,24 @@ func (r *geoDailyStatRepo) IncrementByEngine(ctx context.Context, statDate, engi
 		DoUpdates: clause.Assignments(map[string]any{
 			"citation_count":        gorm.Expr("geo_daily_stats.citation_count + EXCLUDED.citation_count"),
 			"brand_mentioned_count": gorm.Expr("geo_daily_stats.brand_mentioned_count + EXCLUDED.brand_mentioned_count"),
+		}),
+	}).Create(stat).Error
+}
+
+func (r *geoDailyStatRepo) SetCitationByEngine(ctx context.Context, statDate, engine string, citations int) error {
+	stat := &model.GeoDailyStat{
+		Date:          statDate,
+		Engine:        engine,
+		Intent:        "mixed",
+		FunnelStage:   "mixed",
+		CitationCount: citations,
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "tenant_id"}, {Name: "stat_date"}, {Name: "engine"}, {Name: "intent"},
+		},
+		DoUpdates: clause.Assignments(map[string]any{
+			"citation_count": gorm.Expr("EXCLUDED.citation_count"),
 		}),
 	}).Create(stat).Error
 }

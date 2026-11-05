@@ -160,15 +160,9 @@ func NewMonitorCrawlerService(
 		crawlerRepo:    crawlerRepo,
 		keywordRepo:    keywordRepo,
 		competitorRepo: competitorRepo,
-		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				if len(via) >= 3 {
-					return fmt.Errorf("too many redirects")
-				}
-				return nil
-			},
-		},
+		// 竞品域名来自租户输入：必须用解析后 IP 校验的客户端，
+		// 否则域名指向 127.0.0.1 / 云元数据地址时会变成盲 SSRF。
+		httpClient: newSiteAuditHTTPClient(10 * time.Second),
 	}
 }
 

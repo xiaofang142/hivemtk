@@ -14,14 +14,14 @@ import (
 // RunGEOAuditLive 带真实技术检查的审计：先跑纯内容审计，再对站点
 // robots.txt / llms.txt 做真实 HTTP 检查并覆盖两个硬编码因子。
 // SSRF 防护：仅 http/https，拒绝私网/回环/link-local IP 字面量与云元数据地址。
-func (s *TechConfigService) RunGEOAuditLive(ctx context.Context, rawURL, title, content, metaDesc, schemaJSONLD string) *GeoAuditReport {
-	rep := s.RunGEOAudit(rawURL, title, content, metaDesc, schemaJSONLD)
+func (s *TechConfigService) RunGEOAuditLive(ctx context.Context, rawURL, title, content, metaDesc, schemaJSONLD, brand string) *GeoAuditReport {
+	rep := s.RunGEOAudit(rawURL, title, content, metaDesc, schemaJSONLD, brand)
 
 	base, err := safeAuditBaseURL(rawURL)
 	if err != nil {
 		return rep
 	}
-	httpClient := &http.Client{Timeout: 8 * time.Second}
+	httpClient := newSiteAuditHTTPClient(8 * time.Second)
 
 	robotsOK, robotsDetail := checkRobotsAllowsAIBots(ctx, httpClient, base)
 	llmsOK, llmsDetail := checkLLMsTxtPresent(ctx, httpClient, base)
@@ -30,7 +30,7 @@ func (s *TechConfigService) RunGEOAuditLive(ctx context.Context, rawURL, title, 
 	rep.Fixes = buildFixes(rep.Factors)
 	rep.Score = auditScore(rep.Factors)
 	rep.Grade = AuditGrade(rep.Score)
-	rep.Summary = fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100（含 robots.txt/llms.txt 真实检查）。", countPass(rep.Factors), len(rep.Factors), rep.Score)
+	rep.Summary = fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100（含 robots.txt/llms.txt 真实检查）。", countPass(rep.Factors), countChecked(rep.Factors), rep.Score)
 	return rep
 }
 
@@ -39,6 +39,7 @@ func overrideFactor(fs []GeoAuditFactor, name string, pass bool, detail string) 
 		if strings.Contains(fs[i].Factor, name) {
 			fs[i].Pass = pass
 			fs[i].Detail = detail
+			fs[i].Skipped = false
 		}
 	}
 	return fs
@@ -47,6 +48,9 @@ func overrideFactor(fs []GeoAuditFactor, name string, pass bool, detail string) 
 func auditScore(fs []GeoAuditFactor) int {
 	total, earned := 0, 0
 	for _, f := range fs {
+		if f.Skipped {
+			continue
+		}
 		total += f.Weight
 		if f.Pass {
 			earned += f.Weight

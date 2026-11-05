@@ -17,6 +17,7 @@ type GenerateContentRequest struct {
 type BatchGenerateRequest struct {
 	Keywords   []string `json:"keywords" binding:"required,min=1"`
 	BrandName  string   `json:"brand_name"`
+	Model      string   `json:"model"`
 	Advantages []string `json:"advantages"`
 	WordCount  int      `json:"word_count" binding:"omitempty,min=100,max=20000"`
 	Style      string   `json:"style"`

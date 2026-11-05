@@ -111,6 +111,18 @@
               </template>
             </el-table-column>
             <el-table-column
+              label="公开 FAQ"
+              width="100"
+            >
+              <template #default="{ row }">
+                <el-switch
+                  v-model="row.is_public"
+                  size="small"
+                  @change="onTogglePublic(row)"
+                />
+              </template>
+            </el-table-column>
+            <el-table-column
               label="上传时间"
               width="170">
               <template #default="{ row }">
@@ -260,7 +272,8 @@ const onUpload = async (file) => {
       return false
     }
     const title = rawFile.name.replace(/\.[^.]+$/, '') || '未命名文档'
-    await saveKBDocument({ title, content, source_level: 'C' })
+    // 上传的文档默认私有；需要出现在公开承接页 FAQ 时再手动打开。
+    await saveKBDocument({ title, content, source_level: 'C', is_public: false })
     ElMessage.success('文档上传成功')
     await loadDocs()
   } catch (e) {
@@ -269,9 +282,25 @@ const onUpload = async (file) => {
   return false
 }
 
+const onTogglePublic = async (row) => {
+  try {
+    await saveKBDocument({
+      id: row.id || row.doc_id,
+      title: row.title || row.filename,
+      content: row.content || '',
+      source_level: row.source_level,
+      is_public: !!row.is_public
+    })
+    ElMessage.success(row.is_public ? '已对公开 FAQ 开放' : '已设为私有')
+  } catch (e) {
+    row.is_public = !row.is_public
+    if (!isUserReportedError(e)) ElMessage.error(e?.message || '更新失败')
+  }
+}
+
 const onUpdateLevel = async (row) => {
   try {
-    await saveKBDocument({ id: row.id || row.doc_id, source_level: row.source_level, title: row.title || row.filename, content: row.content || '' })
+    await saveKBDocument({ id: row.id || row.doc_id, source_level: row.source_level, title: row.title || row.filename, content: row.content || '', is_public: !!row.is_public })
     ElMessage.success('已更新')
   } catch (e) { if (!isUserReportedError(e)) ElMessage.error(e?.message || '更新失败') }
 }

@@ -18,6 +18,7 @@ import (
 	hivemodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/platform"
 
 	"gorm.io/gorm"
 )
@@ -104,19 +105,23 @@ func (p *llmEndpointProbe) Name() string {
 
 var sentimentRegexp = regexp.MustCompile(`(?m)^\s*\[SENTIMENT:\s*(positive|neutral|negative)\]\s*$`)
 
-func (p *llmEndpointProbe) Probe(ctx context.Context, query string) (*ProbeResult, error) {
-	start := time.Now()
+func probeSystemPrompt(brandHint string) string {
 	brandCtx := ""
-	if p.brandHint != "" {
-		brandCtx = fmt.Sprintf("\n【品牌上下文】%s。回答中涉及此品牌时请以此描述为准，不要和同名的其他项目混淆。", p.brandHint)
+	if brandHint != "" {
+		brandCtx = fmt.Sprintf("\n【品牌上下文】%s。回答中涉及此品牌时请以此描述为准，不要和同名的其他项目混淆。", brandHint)
 	}
-	systemPrompt := `你是 AI 搜索答案专家。请以事实为依据回答用户的搜索查询。
+	return `你是 AI 搜索答案专家。请以事实为依据回答用户的搜索查询。
 要求：
 1. 直接给出有用的回答（200-400字），不要说"作为AI我无法"之类的套话
 2. 尽量引用具体信息源（网站、博客、文档链接等），如果不确定就说"据公开资料"
 3. 如果涉及具体产品/品牌，客观陈述其定位和特点
 4. 输出中自然出现"信息来源"或"参考链接"小节，列出 1-3 条你所知的可靠链接
 5. 回答最后单独输出一行情感标签，格式严格为 [SENTIMENT: positive] 或 [SENTIMENT: neutral] 或 [SENTIMENT: negative]，三选一。判断标准：你的回答整体态度——如果在为品牌辩护、说没负面、没证据=positive；只是客观陈述=neutral；确认有真实差评/投诉/负面新闻=negative` + brandCtx
+}
+
+func (p *llmEndpointProbe) Probe(ctx context.Context, query string) (*ProbeResult, error) {
+	start := time.Now()
+	systemPrompt := probeSystemPrompt(p.brandHint)
 	var out struct {
 		Choices []struct {
 			Message struct {
@@ -172,17 +177,107 @@ func extractCitationsFromText(text string) []Citation {
 	return cites
 }
 
+// platformProxyProbe 通过平台 LLM 代理调用平台垫资模型。
+//
+// 平台 provider 的 api_key 永不下发，BaseURL 也为空，不能走 llmEndpointProbe；
+// 这条路径让 GEO 探针在自有 Key 不可用时仍能使用平台余额，扣费记在当前租户。
+type platformProxyProbe struct {
+	name      string
+	model     string
+	brandHint string
+}
+
+func (p *platformProxyProbe) Name() string {
+	if p.name != "" {
+		return p.name
+	}
+	return "platform-llm"
+}
+
+func (p *platformProxyProbe) Probe(ctx context.Context, query string) (*ProbeResult, error) {
+	start := time.Now()
+	client := platform.NewLLMProxyClient()
+	if !client.Available() {
+		return nil, fmt.Errorf("%s: 平台代理未配置", p.Name())
+	}
+	body, err := json.Marshal(map[string]any{
+		"model": p.model,
+		"messages": []map[string]any{
+			{"role": "system", "content": probeSystemPrompt(p.brandHint)},
+			{"role": "user", "content": query},
+		},
+		"temperature": 0.3,
+		"max_tokens":  1024,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: marshal: %w", p.Name(), err)
+	}
+	resp, err := client.ChatCompletions(ctx, p.name, body, platform.LLMCallMeta{
+		Scenario:   "geo_probe",
+		TenantCode: platform.TenantCodeFromContext(ctx),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", p.Name(), err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s: 平台代理 status=%d: %s", p.Name(), resp.StatusCode, truncateForProbeError(resp.Body))
+	}
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return nil, fmt.Errorf("%s: parse: %w", p.Name(), err)
+	}
+	if len(out.Choices) == 0 {
+		return nil, fmt.Errorf("%s: empty response", p.Name())
+	}
+	content := out.Choices[0].Message.Content
+	sentiment := "neutral"
+	if m := sentimentRegexp.FindStringSubmatch(content); len(m) == 2 {
+		sentiment = m[1]
+		content = strings.TrimSpace(sentimentRegexp.ReplaceAllString(content, ""))
+	}
+	return &ProbeResult{
+		Engine: p.Name(), Mode: ProbeModeSimulated, Query: query, Response: content,
+		Citations: extractCitationsFromText(content), LatencyMs: time.Since(start).Milliseconds(),
+		Simulated: true, Sentiment: sentiment,
+	}, nil
+}
+
+func truncateForProbeError(body []byte) string {
+	const max = 300
+	s := string(body)
+	if len(s) > max {
+		return s[:max] + "…"
+	}
+	return s
+}
+
 // NewEngineProbes 装配所有可用真实引擎探针（统一从 DB 配置读取）。
 // 优先级：DB 中 enabled=true 的 provider 在前，本地 LLM 兜底在后。
 // 环境变量仅作为补充（兼容老部署），不再硬编码任何 endpoint/model。
 func NewEngineProbes() []SearchProbe {
-	// llm_providers（探针引擎配置）与 geo_config（品牌提示词）都在租户登记表内，
-	// 但探针装配是**平台级全局**动作（进程内共享一份引擎清单，与请求租户无关）：
-	// 传请求 ctx 会把装配结果按租户过滤成空清单，传裸 Background 又会被隔离
-	// callback fail-closed（search_probe.go:190 生产日志形态）。装配期统一走
-	// tenant.WithSystemScope 平台级豁免通道（与 geo_routes 装配、cron job 同口径）。
+	// 兼容旧调用：无租户上下文时按平台级读全量。新代码必须用
+	// NewEngineProbesForContext(ctx)（带请求/任务租户），否则会把 A 的
+	// provider 与品牌提示词用在 B 的探针上。
 	return NewEngineProbesFromDB(tenant.WithSystemScope(context.Background()), db.GetDB())
 }
+
+// NewEngineProbesForContext 按 ctx 绑定的租户装配探针引擎。
+// ctx 无租户（多租户模式）时返回空清单：宁可无探针，也不跨租户取凭据。
+func NewEngineProbesForContext(ctx context.Context) []SearchProbe {
+	if _, ok := tenant.FromContext(ctx); !ok && tenant.IsMultiTenant() {
+		return nil
+	}
+	return NewEngineProbesFromDB(ctx, db.GetDB())
+}
+
+// ProbeResolver 在调用时按租户解析探针清单。
+type ProbeResolver func(context.Context) []SearchProbe
 
 // NewEngineProbesFromDB 从 llm_providers 表装配探针引擎。
 //
@@ -215,7 +310,22 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 		var rows []hivemodel.LLMProvider
 		if err := g.WithContext(ctx).Where("enabled = ?", true).Order("sort_order ASC").Find(&rows).Error; err == nil {
 			for _, row := range rows {
-				if row.BaseURL == "" || row.Model == "" {
+				if row.Model == "" {
+					continue
+				}
+				if row.Source == hivemodel.LLMSourcePlatform {
+					if seen[row.Name] || !platform.NewLLMProxyClient().Available() {
+						continue
+					}
+					seen[row.Name] = true
+					probes = append(probes, &platformProxyProbe{
+						name:      row.Name,
+						model:     row.Model,
+						brandHint: brandHint,
+					})
+					continue
+				}
+				if row.BaseURL == "" {
 					continue
 				}
 
@@ -260,13 +370,18 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 }
 
 // MultiEngineProbe 将多个 SearchProbe 包装成一个 SearchProbe：顺序尝试，首个成功即返回
-type MultiEngineProbe struct{ probes []SearchProbe }
+type MultiEngineProbe struct {
+	probes   []SearchProbe
+	resolver ProbeResolver
+}
 
 func (m *MultiEngineProbe) Name() string { return "multi-engine" }
 
 func (m *MultiEngineProbe) Probe(ctx context.Context, query string) (*ProbeResult, error) {
 	probes := m.probes
-	if len(probes) == 0 {
+	if m.resolver != nil {
+		probes = m.resolver(ctx)
+	} else if len(probes) == 0 {
 		probes = NewEngineProbes()
 	}
 	if len(probes) == 0 {
@@ -285,13 +400,14 @@ func (m *MultiEngineProbe) Probe(ctx context.Context, query string) (*ProbeResul
 
 // NewDefaultSearchProbe 创建默认探针（全部从 DB 配置读取）
 func NewDefaultSearchProbe() SearchProbe {
-	return &MultiEngineProbe{probes: NewEngineProbes()}
+	return &MultiEngineProbe{resolver: NewEngineProbesForContext}
 }
 
 // ProbeService 持有 []SearchProbe + ProbeRepository 的聚合服务
 type ProbeService struct {
-	probes []SearchProbe
-	repo   repository.GeoProbeRunRepository
+	probes   []SearchProbe
+	resolver ProbeResolver
+	repo     repository.GeoProbeRunRepository
 }
 
 // probeAttemptBackoff 探针重试退避间隔（指数退避：2s、4s）
@@ -352,6 +468,25 @@ func NewProbeService(probes []SearchProbe, repo repository.GeoProbeRunRepository
 	return &ProbeService{probes: probes, repo: repo}
 }
 
+// SetProbeResolver 装配期注入按租户解析器（生产路径）。未注入时退回静态清单，
+// 保持测试与单租户离线模式的兼容。
+func (s *ProbeService) SetProbeResolver(r ProbeResolver) { s.resolver = r }
+
+func (s *ProbeService) probesFor(ctx context.Context) []SearchProbe {
+	if s.resolver != nil {
+		return s.resolver(ctx)
+	}
+	if len(s.probes) > 0 {
+		return s.probes
+	}
+	return NewEngineProbesForContext(ctx)
+}
+
+// AvailableEngines 当前租户可用的引擎清单（供 controller 展示）。
+func (s *ProbeService) AvailableEngines(ctx context.Context) []SearchProbe {
+	return s.probesFor(ctx)
+}
+
 // MaxProbeSampleRounds 单次探针最多采样轮数（对标 Auriti citations --runs 置信区间；
 // 上限 5 轮防止 LLM 成本爆炸，默认 1 轮保持现有行为）
 const MaxProbeSampleRounds = 5
@@ -399,10 +534,7 @@ func (s *ProbeService) ProbeAllEnginesSampled(ctx context.Context, query string,
 
 // ProbeAllEngines 遍历所有引擎，逐个调用，结果写入 geo_probe_runs
 func (s *ProbeService) ProbeAllEngines(ctx context.Context, query string) ([]*model.GeoProbeRun, []error) {
-	probes := s.probes
-	if len(probes) == 0 {
-		probes = NewEngineProbes()
-	}
+	probes := s.probesFor(ctx)
 	runs := make([]*model.GeoProbeRun, 0, len(probes))
 	errs := []error{}
 	for _, p := range probes {
@@ -424,10 +556,7 @@ func (s *ProbeService) ProbeAllEngines(ctx context.Context, query string) ([]*mo
 // ProbeAllEnginesConcurrent 并发调用所有引擎（慢引擎不再阻塞整轮），结果写入 geo_probe_runs。
 // 每个引擎独立失败互不影响；返回值语义与 ProbeAllEngines 一致。
 func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query string) ([]*model.GeoProbeRun, []error) {
-	probes := s.probes
-	if len(probes) == 0 {
-		probes = NewEngineProbes()
-	}
+	probes := s.probesFor(ctx)
 	type probeOutcome struct {
 		run *model.GeoProbeRun
 		err error
@@ -493,7 +622,8 @@ func probeModeOrDefault(mode string) string {
 
 // TestSingle 测试单个引擎
 func (s *ProbeService) TestSingle(ctx context.Context, engineName, query string) (*ProbeResult, error) {
-	for _, p := range s.probes {
+	probes := s.probesFor(ctx)
+	for _, p := range probes {
 		if engineName == "" || p.Name() == engineName {
 			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {
@@ -504,7 +634,7 @@ func (s *ProbeService) TestSingle(ctx context.Context, engineName, query string)
 			return pr, nil
 		}
 	}
-	return nil, fmt.Errorf("engine %s not found (available: %s)", engineName, availableEngineNames(s.probes))
+	return nil, fmt.Errorf("engine %s not found (available: %s)", engineName, availableEngineNames(probes))
 }
 
 // ListRuns 返回最近 N 条探针运行记录

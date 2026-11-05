@@ -27,6 +27,7 @@ type IndexTrackerService struct {
 	keywordRepo  repository.GeoKeywordRepository
 	dailyRepo    repository.GeoDailyStatRepository
 	probes       []SearchProbe
+	resolver     ProbeResolver
 }
 
 // NewIndexTrackerService 创建收录追踪服务（probes 为 AI 搜索探针，可为空）
@@ -45,6 +46,9 @@ func NewIndexTrackerService(
 		probes:       probes,
 	}
 }
+
+// SetProbeResolver 装配期注入按租户解析器；未注入时使用静态清单（测试/离线）。
+func (s *IndexTrackerService) SetProbeResolver(r ProbeResolver) { s.resolver = r }
 
 // ArticleStanding 单篇文章站位评分
 type ArticleStanding struct {
@@ -85,7 +89,7 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 		query = article.Title
 	}
 
-	probes := s.activeProbes()
+	probes := s.activeProbes(ctx)
 	if len(probes) == 0 {
 		logger.Warnf("VerifyArticleFull: 无可用 AI 探针，仅回读历史 tracking (article=%s)", article.ID)
 	} else {
@@ -152,9 +156,13 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 	return as, nil
 }
 
-// activeProbes 返回构造时注入的探针。
-// 装配（含 DB 读取）由 router 在启动期用 system scope 完成，服务层不再持有 DB。
-func (s *IndexTrackerService) activeProbes() []SearchProbe {
+// activeProbes 按调用租户解析探针。不能在装配期固化成进程级清单：
+// llm_providers 与 geo_config 都是租户表，固化后 A 的品牌提示词和
+// provider 凭据会被 B 的收录验证使用。
+func (s *IndexTrackerService) activeProbes(ctx context.Context) []SearchProbe {
+	if s.resolver != nil {
+		return s.resolver(ctx)
+	}
 	return s.probes
 }
 
@@ -294,7 +302,7 @@ func (s *IndexTrackerService) upsertDailyStats(ctx context.Context) {
 	// 这一轮会把业务当日的引用数累加到**前一天**的行上。
 	statDate := timeutil.BusinessToday()
 	for _, r := range rows {
-		if err := s.dailyRepo.IncrementByEngine(ctx, statDate, r.Engine, int(r.Count), 0); err != nil {
+		if err := s.dailyRepo.SetCitationByEngine(ctx, statDate, r.Engine, int(r.Count)); err != nil {
 			logger.Warnf("upsertDailyStats: 引擎 %s 聚合失败: %v", r.Engine, err)
 		}
 	}

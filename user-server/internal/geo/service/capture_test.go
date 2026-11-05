@@ -36,7 +36,7 @@ func captureSetupDB(t *testing.T) *gorm.DB {
 
 type fakeKB struct{ calls int }
 
-func (f *fakeKB) Ask(_ context.Context, q string) (*dto.KBAskResponse, error) {
+func (f *fakeKB) AskPublic(_ context.Context, q string) (*dto.KBAskResponse, error) {
 	f.calls++
 	return &dto.KBAskResponse{Answer: "答：" + q, Sources: []string{"知识库"}}, nil
 }
@@ -77,7 +77,7 @@ func TestCaptureService_Create(t *testing.T) {
 	view, err := svc.Create(ctx, CaptureLinkInput{
 		TargetURL: "https://example.com/geo",
 		Keyword:   "geo 优化",
-		ArticleID: 7,
+		ArticleID: "art-7",
 	}, "tester")
 	if err != nil {
 		t.Fatalf("创建失败: %v", err)
@@ -188,5 +188,16 @@ func TestCaptureService_AskQuotaAndLeadRollback(t *testing.T) {
 	}
 	if detail.Connected {
 		t.Fatal("没有会话时不应显示已接入")
+	}
+}
+
+func TestBusinessDayUsesChinaCalendar(t *testing.T) {
+	// UTC 11-04 17:30 = 北京 11-05 01:30，配额应算 11-05。
+	got := businessDay(time.Date(2026, 11, 4, 17, 30, 0, 0, time.UTC))
+	if got.Format("2006-01-02") != "2026-11-05" {
+		t.Fatalf("businessDay=%s，期望按中国日历算 2026-11-05", got.Format("2006-01-02"))
+	}
+	if got.Location() != time.UTC || got.Hour() != 0 {
+		t.Fatalf("date 值应以 UTC 零点承载，实际 %s", got)
 	}
 }

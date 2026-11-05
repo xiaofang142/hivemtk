@@ -69,13 +69,21 @@ func (m *GeoWorkflow) GetConditions() (map[string]string, error) {
 type GeoWorkflowExecution struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID          string     `gorm:"type:varchar(36);primaryKey" json:"id"`
-	WorkflowID  string     `gorm:"type:varchar(36);index" json:"workflow_id"`
-	Status      string     `gorm:"type:varchar(20)" json:"status"`
-	Result      string     `gorm:"type:text" json:"result"`
-	Error       string     `gorm:"type:text" json:"error"`
-	StartedAt   time.Time  `json:"started_at"`
-	CompletedAt *time.Time `json:"completed_at"`
+	// WorkflowName 冗余展示字段（不落库，列表装配时填充）。
+	WorkflowName string `gorm:"-" json:"workflow_name,omitempty"`
+
+	ID         string `gorm:"type:varchar(36);primaryKey" json:"id"`
+	WorkflowID string `gorm:"type:varchar(36);index" json:"workflow_id"`
+	Status     string `gorm:"type:varchar(20)" json:"status"`
+	// Progress/CurrentStep 供执行监控页实时展示；此前模型没有这两列，
+	// 前端永远读到 0/空，任务成功后仍显示 0%。
+	Progress    int       `gorm:"default:0" json:"progress"`
+	CurrentStep string    `gorm:"type:varchar(100)" json:"current_step"`
+	Result      string    `gorm:"type:text" json:"result"`
+	Error       string    `gorm:"type:text" json:"error"`
+	StartedAt   time.Time `json:"started_at"`
+	// FinishedAt 对外沿用 finished_at（前端表格列名），库里列名 completed_at 不变。
+	CompletedAt *time.Time `gorm:"column:completed_at" json:"finished_at"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`

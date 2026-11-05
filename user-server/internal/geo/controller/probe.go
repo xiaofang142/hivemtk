@@ -88,7 +88,7 @@ func errlistStrings(errs []error) []string {
 // RunNegativeMonitor 手动触发负面监控
 // POST /geo/probe/run-negative
 func (c *ProbeController) RunNegativeMonitor(ctx *gin.Context) {
-	if _, err := service.GetGeoJobManager().Trigger(service.JobNegativeMonitor); err != nil {
+	if _, err := service.GetGeoJobManager().TriggerForTenant(ctx.Request.Context(), service.JobNegativeMonitor); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -101,7 +101,7 @@ func (c *ProbeController) RunNegativeMonitor(ctx *gin.Context) {
 // RunSOVRefresh 手动触发 SOV 刷新（SovBoard.vue 刷新按钮依赖）
 // POST /geo/probe/run-sov
 func (c *ProbeController) RunSOVRefresh(ctx *gin.Context) {
-	if _, err := service.GetGeoJobManager().Trigger(service.JobSOVRefresh); err != nil {
+	if _, err := service.GetGeoJobManager().TriggerForTenant(ctx.Request.Context(), service.JobSOVRefresh); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -114,7 +114,7 @@ func (c *ProbeController) RunSOVRefresh(ctx *gin.Context) {
 // RunSourceSync 手动触发信源目录同步
 // POST /geo/probe/run-source-sync
 func (c *ProbeController) RunSourceSync(ctx *gin.Context) {
-	if _, err := service.GetGeoJobManager().Trigger(service.JobSourceSync); err != nil {
+	if _, err := service.GetGeoJobManager().TriggerForTenant(ctx.Request.Context(), service.JobSourceSync); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -127,7 +127,7 @@ func (c *ProbeController) RunSourceSync(ctx *gin.Context) {
 // ListAvailableEngines 返回当前装配的所有引擎名
 // GET /geo/probe/engines
 func (c *ProbeController) ListAvailableEngines(ctx *gin.Context) {
-	engines := service.NewEngineProbes()
+	engines := c.probeSvc.AvailableEngines(ctx.Request.Context())
 	names := make([]string, 0, len(engines))
 	for _, e := range engines {
 		names = append(names, e.Name())
@@ -140,7 +140,7 @@ func (c *ProbeController) ListAvailableEngines(ctx *gin.Context) {
 // @Router    /api/geo/probe/engines/meta [get]
 // ListEngineMeta 返回引擎名与数据来源，供前端标注“模拟/真实”。
 func (c *ProbeController) ListEngineMeta(ctx *gin.Context) {
-	engines := service.NewEngineProbes()
+	engines := c.probeSvc.AvailableEngines(ctx.Request.Context())
 	out := make([]gin.H, 0, len(engines))
 	for _, e := range engines {
 		out = append(out, gin.H{"name": e.Name(), "mode": service.ProbeModeOf(e)})

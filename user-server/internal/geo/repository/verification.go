@@ -4,6 +4,7 @@ import (
 	"context"
 	"hivemtk-user/internal/geo/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -94,7 +95,13 @@ func (r *geoAPICallRepo) GetCostStatistics(ctx context.Context, startDate, endDa
 		query = query.Where("created_at >= ?", startDate)
 	}
 	if endDate != "" {
-		query = query.Where("created_at <= ?", endDate)
+		// 前端传 YYYY-MM-DD：`<= '2026-11-06'` 会被 PG 折算成当天 00:00，
+		// 整个结束日的数据全丢。日期形态改成半开区间 [start, end+1d)。
+		if t, perr := time.Parse("2006-01-02", endDate); perr == nil {
+			query = query.Where("created_at < ?", t.AddDate(0, 0, 1))
+		} else {
+			query = query.Where("created_at <= ?", endDate)
+		}
 	}
 
 	err := query.Scan(&statistics).Error

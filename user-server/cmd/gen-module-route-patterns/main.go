@@ -34,7 +34,7 @@ func main() {
 	seen := map[string]bool{}
 	unbound := map[string]int{}
 
-	for _, c := range model.MenuCapabilities {
+	for _, c := range model.AllMenuCapabilities() {
 		// 关键判据：**只有一个**不同模块时才算归属明确。
 		//
 		// 一条能力面可以同时归多个菜单节点（menu_capability_routes.go 里

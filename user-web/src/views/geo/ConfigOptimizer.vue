@@ -34,6 +34,13 @@
                 clearable
               />
             </el-form-item>
+            <el-form-item label="官网域名">
+              <el-input
+                v-model="config.domain"
+                placeholder="如：xiaofang142.github.io（不要带 https://）"
+                clearable
+              />
+            </el-form-item>
             <el-form-item label="品牌描述">
               <el-input
                 v-model="config.description"
@@ -100,6 +107,38 @@
                   @click="showCompInput"
                 >
                   + 竞品
+                </el-button>
+              </div>
+            </el-form-item>
+            <el-form-item label="负面种子词">
+              <div class="tags-input">
+                <el-tag
+                  v-for="(tag, i) in config.negative_keywords"
+                  :key="i"
+                  closable
+                  type="danger"
+                  class="tag-item"
+                  @close="config.negative_keywords.splice(i, 1)"
+                >
+                  {{ tag }}
+                </el-tag>
+                <el-input
+                  v-if="negInputVisible"
+                  ref="negInputRef"
+                  v-model="negInputValue"
+                  size="small"
+                  class="tag-input"
+                  placeholder="回车添加"
+                  @keyup.enter="addTag(config.negative_keywords, 'neg')"
+                  @blur="onBlurAddTag('neg')"
+                />
+                <el-button
+                  v-else
+                  size="small"
+                  class="tag-add"
+                  @click="showNegInput"
+                >
+                  + 负面词
                 </el-button>
               </div>
             </el-form-item>
@@ -292,8 +331,10 @@ const loadModelOptions = async () => {
 const config = reactive({
   brand: '',
   description: '',
+  domain: '',
   advantages: [],
   competitors: [],
+  negative_keywords: [],
   default_model: '',
   verify_models: [],
   product_category: '',
@@ -314,6 +355,9 @@ const advInputRef = ref(null)
 const compInputVisible = ref(false)
 const compInputValue = ref('')
 const compInputRef = ref(null)
+const negInputVisible = ref(false)
+const negInputValue = ref('')
+const negInputRef = ref(null)
 
 const priorityType = (p) => {
   const map = { 高: 'danger', 中: 'warning', 低: 'success' }
@@ -329,16 +373,20 @@ const showCompInput = () => {
   nextTick(() => compInputRef.value?.focus?.())
 }
 const addTag = (arr, type = 'adv') => {
-  const visible = type === 'comp' ? compInputVisible : advInputVisible
-  const value = type === 'comp' ? compInputValue : advInputValue
+  const visible = type === 'comp' ? compInputVisible : (type === 'neg' ? negInputVisible : advInputVisible)
+  const value = type === 'comp' ? compInputValue : (type === 'neg' ? negInputValue : advInputValue)
   const v = value.value.trim()
   if (v && !arr.includes(v)) arr.push(v)
   value.value = ''
   visible.value = false
 }
 
+const showNegInput = () => {
+  negInputVisible.value = true
+  nextTick(() => negInputRef.value?.focus?.())
+}
 const onBlurAddTag = (type = 'adv') => {
-  const arr = type === 'comp' ? config.competitors : config.advantages
+  const arr = type === 'comp' ? config.competitors : (type === 'neg' ? config.negative_keywords : config.advantages)
   setTimeout(() => addTag(arr, type), 100)
 };
 
@@ -350,8 +398,10 @@ const loadConfig = async () => {
     const res = await geoApi.getConfig()
     config.brand = res?.brand_name || ''
     config.description = res?.brand_description || ''
+    config.domain = res?.domain || ''
     config.advantages = splitCN(res?.advantages);
     config.competitors = splitCN(res?.competitors)
+    config.negative_keywords = splitCN(res?.negative_keywords)
     config.default_model = res?.default_model || config.default_model || modelOptions.value?.[0]?.value || ''
     const verifyFromDB = splitCN(res?.verify_models)
     config.verify_models = verifyFromDB.length
@@ -379,8 +429,10 @@ const handleSave = async () => {
     await geoApi.updateConfig({
       brand: config.brand,
       brand_description: config.description,
+      domain: config.domain,
       advantages: config.advantages.join('、'),
       competitors: config.competitors,
+      negative_keywords: config.negative_keywords,
       default_model: config.default_model,
       verify_models: config.verify_models,
       product_category: config.product_category,

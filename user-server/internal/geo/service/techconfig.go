@@ -120,9 +120,15 @@ type LLMsDocEntry struct {
 // 自动装配——KB 文档就是品牌权威资料的第一现场，llms.txt 的受众（AI 引擎）恰恰
 // 需要它们。手工覆盖语义：请求体里显式传入的条目排前面且不重复追加。
 func (s *TechConfigService) GenerateLLMsTxt(cfg *LLMsTxtConfig) string {
+	return s.GenerateLLMsTxtCtx(context.Background(), cfg)
+}
+
+// GenerateLLMsTxtCtx 带请求/任务租户的版本：KB 文档表是租户表，
+// 内部必须用该 ctx 读取，否则多租户模式下自动装配恒为空。
+func (s *TechConfigService) GenerateLLMsTxtCtx(ctx context.Context, cfg *LLMsTxtConfig) string {
 	docs := cfg.Documents
 	if s.kbDocs != nil {
-		docs = mergeKBDocsInto(s, cfg, docs)
+		docs = mergeKBDocsInto(ctx, s, cfg, docs)
 	}
 	return renderLLMsTxt(cfg, docs)
 }
@@ -131,11 +137,10 @@ func (s *TechConfigService) GenerateLLMsTxt(cfg *LLMsTxtConfig) string {
 // 显式传了大量文档视为"完全手工接管"，不再混入 KB 条目（可预期性优先）。
 const llmsTxtAutoDocsThreshold = 1
 
-func mergeKBDocsInto(s *TechConfigService, cfg *LLMsTxtConfig, manual []LLMsDocEntry) []LLMsDocEntry {
+func mergeKBDocsInto(ctx context.Context, s *TechConfigService, cfg *LLMsTxtConfig, manual []LLMsDocEntry) []LLMsDocEntry {
 	if len(manual) >= llmsTxtAutoDocsThreshold {
 		return manual
 	}
-	ctx := context.Background()
 	kbList, err := s.kbDocs.ListDocuments(ctx)
 	if err != nil || len(kbList) == 0 {
 		return manual

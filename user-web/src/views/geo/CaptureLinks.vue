@@ -176,12 +176,21 @@
             placeholder="留空自动生成；4-32 位字母/数字/-/_"
           />
         </el-form-item>
-        <el-form-item label="文章 ID">
-          <el-input-number
+        <el-form-item label="关联文章">
+          <el-select
             v-model="form.article_id"
-            :min="0"
-            controls-position="right"
-          />
+            filterable
+            clearable
+            placeholder="可选：绑定一篇文章（UUID）"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="a in articles"
+              :key="a.id"
+              :label="a.title || a.keyword || a.id"
+              :value="a.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="归因链 ID">
           <el-input
@@ -291,6 +300,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { geoApi } from '@/api/geo'
 import {
   createCaptureLink,
   deleteCaptureLink,
@@ -308,12 +318,13 @@ const loading = ref(false)
 
 const createVisible = ref(false)
 const creating = ref(false)
+const articles = ref([])
 const form = reactive({
   target_url: '',
   title: '',
   keyword: '',
   code: '',
-  article_id: 0,
+  article_id: '',
   chain_id: ''
 })
 
@@ -345,8 +356,17 @@ function reload () {
 }
 
 function openCreate () {
-  Object.assign(form, { target_url: '', title: '', keyword: '', code: '', article_id: 0, chain_id: '' })
+  Object.assign(form, { target_url: '', title: '', keyword: '', code: '', article_id: '', chain_id: '' })
   createVisible.value = true
+}
+
+async function loadArticles () {
+  try {
+    const res = await geoApi.getArticleList({ page: 1, limit: 100 })
+    articles.value = res?.list || res?.items || (Array.isArray(res) ? res : [])
+  } catch {
+    articles.value = []
+  }
 }
 
 async function submitCreate () {
@@ -402,7 +422,10 @@ async function copy (text) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadArticles()
+})
 </script>
 
 <style scoped>

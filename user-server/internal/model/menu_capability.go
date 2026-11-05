@@ -31,7 +31,7 @@ var capabilityCompiled = buildCapabilityIndex()
 
 func buildCapabilityIndex() capabilityIndex {
 	idx := capabilityIndex{byFirstSegment: map[string][]CapabilityOwner{}}
-	for _, c := range MenuCapabilities {
+	for _, c := range AllMenuCapabilities() {
 		segs := splitPathSegments(c.Pattern)
 		if len(segs) == 0 {
 			continue
@@ -98,8 +98,9 @@ func CapabilityOwnersFor(path string) []CapabilityOwner {
 // CapabilityPatterns 返回生成件的 (pattern, menuKeys) 视图，供常驻门逐条核对
 // "这一行有没有命中真实路由"（写错路径的死行会静默不生效）。
 func CapabilityPatterns() [][2][]string {
-	out := make([][2][]string, 0, len(MenuCapabilities))
-	for _, c := range MenuCapabilities {
+	all := AllMenuCapabilities()
+	out := make([][2][]string, 0, len(all))
+	for _, c := range all {
 		out = append(out, [2][]string{{c.Pattern}, c.MenuKeys})
 	}
 	return out

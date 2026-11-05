@@ -16,7 +16,7 @@ func TestAuditGradeBands(t *testing.T) {
 
 func TestAuditReportHasGradeAndFixes(t *testing.T) {
 	svc := NewTechConfigService()
-	rep := svc.RunGEOAudit("https://example.com/a", "t", "短内容", "", "")
+	rep := svc.RunGEOAudit("https://example.com/a", "t", "短内容", "", "", "")
 	if rep.Grade == "" {
 		t.Fatal("Grade 为空")
 	}

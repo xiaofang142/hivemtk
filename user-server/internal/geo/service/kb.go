@@ -31,7 +31,7 @@ func NewKBService(dr repository.GeoKnowledgeDocumentRepository, adapter *LLMAdap
 // Save 新增/更新文档
 func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequest) (*model.GeoKnowledgeDocument, error) {
 	metadataJSON := ""
-	if len(req.Metadata) > 0 {
+	if req.Metadata != nil {
 		b, err := json.Marshal(req.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("序列化 metadata 失败: %w", err)
@@ -44,8 +44,16 @@ func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequ
 		if err == nil {
 			existing.Title = req.Title
 			existing.Content = req.Content
-			existing.DocType = req.DocType
-			existing.Metadata = metadataJSON
+			// 部分更新（等级/公开开关）不带 doc_type/metadata 时不能清空旧值。
+			if req.DocType != "" {
+				existing.DocType = req.DocType
+			}
+			if req.Metadata != nil {
+				existing.Metadata = metadataJSON
+			}
+			if req.IsPublic != nil {
+				existing.IsPublic = *req.IsPublic
+			}
 			if req.SourceLevel != "" {
 				existing.SourceLevel = req.SourceLevel
 			}
@@ -69,6 +77,9 @@ func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequ
 		SourceLevel: req.SourceLevel,
 		SourceURL:   req.SourceURL,
 		Metadata:    metadataJSON,
+	}
+	if req.IsPublic != nil {
+		doc.IsPublic = *req.IsPublic
 	}
 	if err := s.docRepo.Create(ctx, doc); err != nil {
 		return nil, err
@@ -104,10 +115,25 @@ func (s *KBService) Delete(ctx context.Context, id string) error {
 
 // Search 关键词检索（标题命中 0.6 + 内容命中 0.4）
 func (s *KBService) Search(ctx context.Context, q string, limit int) ([]*dto.KBSearchResult, error) {
+	return s.search(ctx, q, limit, false)
+}
+
+// SearchPublic 只检索公开文档（公开承接页 FAQ）。
+func (s *KBService) SearchPublic(ctx context.Context, q string, limit int) ([]*dto.KBSearchResult, error) {
+	return s.search(ctx, q, limit, true)
+}
+
+func (s *KBService) search(ctx context.Context, q string, limit int, publicOnly bool) ([]*dto.KBSearchResult, error) {
 	if limit <= 0 {
 		limit = 10
 	}
-	docs, err := s.docRepo.GetList(ctx)
+	var docs []*model.GeoKnowledgeDocument
+	var err error
+	if publicOnly {
+		docs, err = s.docRepo.GetPublicList(ctx)
+	} else {
+		docs, err = s.docRepo.GetList(ctx)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -144,11 +170,26 @@ func (s *KBService) Search(ctx context.Context, q string, limit int) ([]*dto.KBS
 
 // Ask RAG 问答：检索 Top5 片段作为上下文交给 LLM
 func (s *KBService) Ask(ctx context.Context, question string) (*dto.KBAskResponse, error) {
+	return s.ask(ctx, question, false)
+}
+
+// AskPublic 公开承接页问答：只允许公开文档进入上下文。
+func (s *KBService) AskPublic(ctx context.Context, question string) (*dto.KBAskResponse, error) {
+	return s.ask(ctx, question, true)
+}
+
+func (s *KBService) ask(ctx context.Context, question string, publicOnly bool) (*dto.KBAskResponse, error) {
 	if s.llm == nil {
 		return nil, fmt.Errorf("未配置 LLM 提供商")
 	}
 
-	docs, err := s.Search(ctx, question, 5)
+	var docs []*dto.KBSearchResult
+	var err error
+	if publicOnly {
+		docs, err = s.SearchPublic(ctx, question, 5)
+	} else {
+		docs, err = s.Search(ctx, question, 5)
+	}
 	if err != nil {
 		return nil, err
 	}

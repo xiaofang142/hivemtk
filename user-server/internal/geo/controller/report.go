@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 
@@ -198,13 +199,16 @@ func (c *ReportController) InaccurateClaims(ctx *gin.Context) {
 // RunCrawler 手动触发竞品监控爬虫
 // POST /geo/crawler/run
 func (c *ReportController) RunCrawler(ctx *gin.Context) {
+	// 只跑当前租户：普通用户点「立即执行」不能触发全租户扇出。
+	// 请求返回后 ctx 会被取消，执行体用 BackgroundWithTenant 脱离生命周期。
+	runCtx := tenant.BackgroundWithTenant(ctx.Request.Context())
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				fmt.Printf("[GEO Crawler] panic: %v\n%s", r, debug.Stack())
 			}
 		}()
-		if _, err := service.CrawlerMonitorCronSync(); err != nil {
+		if _, err := service.CrawlerMonitorCronWithContext(runCtx); err != nil {
 			fmt.Printf("[GEO Crawler] 竞品监控同步失败: %v\n", err)
 		}
 	}()

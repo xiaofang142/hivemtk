@@ -158,9 +158,9 @@ func (s *AuditService) RunContentAudit(ctx context.Context, in ContentAuditInput
 		}
 		report, err = s.auditFromURL(ctx, in.URL, in.Brand)
 	} else if in.Live && strings.TrimSpace(in.URL) != "" {
-		report = s.tech.RunGEOAuditLive(ctx, in.URL, in.Title, in.Content, in.MetaDesc, in.SchemaJSONLD)
+		report = s.tech.RunGEOAuditLive(ctx, in.URL, in.Title, in.Content, in.MetaDesc, in.SchemaJSONLD, in.Brand)
 	} else {
-		report = s.tech.RunGEOAudit(in.URL, in.Title, in.Content, in.MetaDesc, in.SchemaJSONLD)
+		report = s.tech.RunGEOAudit(in.URL, in.Title, in.Content, in.MetaDesc, in.SchemaJSONLD, in.Brand)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -191,7 +191,7 @@ func (s *AuditService) auditFromURL(ctx context.Context, rawURL, brand string) (
 		content = "# " + title + "\n\n" + content
 	}
 	schema := strings.Join(page.jsonLDs, "\n\n")
-	report := s.tech.RunGEOAudit(res.FinalURL, title, content, page.description, schema)
+	report := s.tech.RunGEOAudit(res.FinalURL, title, content, page.description, schema, brand)
 
 	robotsPass, robotsDetail := auditRobotsPass(res)
 	llmsPass, llmsDetail := auditLLMsPass(res)
@@ -200,7 +200,7 @@ func (s *AuditService) auditFromURL(ctx context.Context, rawURL, brand string) (
 	report.Fixes = buildFixes(report.Factors)
 	report.Score = auditScore(report.Factors)
 	report.Grade = AuditGrade(report.Score)
-	report.Summary = fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100（含 robots.txt/llms.txt 真实检查）。", countPass(report.Factors), len(report.Factors), report.Score)
+	report.Summary = fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100（含 robots.txt/llms.txt 真实检查）。", countPass(report.Factors), countChecked(report.Factors), report.Score)
 	report.URL = res.FinalURL
 	if brand != "" {
 		report.Summary += " 品牌：" + brand + "。"
@@ -380,6 +380,14 @@ func (s *AuditService) Compare(ctx context.Context, fromID, toID string) (*Audit
 	}
 	if from.RubricVersion != to.RubricVersion {
 		res.Reason = fmt.Sprintf("rubric 版本不同（%s vs %s），分母不同，不可直接比较", from.RubricVersion, to.RubricVersion)
+		return res, nil
+	}
+	if from.Scope != to.Scope {
+		res.Reason = fmt.Sprintf("审计范围不同（%s vs %s），不可比", from.Scope, to.Scope)
+		return res, nil
+	}
+	if from.PageCount != to.PageCount {
+		res.Reason = fmt.Sprintf("全站页面数不同（%d vs %d），总分分母不同，不可比", from.PageCount, to.PageCount)
 		return res, nil
 	}
 	res.Comparable = true
@@ -645,7 +653,7 @@ th{background:#f3f4f6}.pass{color:#059669;font-weight:600}.fail{color:#dc2626;fo
 <table><thead><tr><th>分类</th><th>检查项</th><th>得分</th><th>结果</th><th>说明</th></tr></thead><tbody>
 {{range .Items}}<tr><td>{{.CategoryLabel}}</td><td>{{.Check}}</td><td>{{.Score}} / {{.Max}}</td><td class="{{if .Pass}}pass{{else}}fail{{end}}">{{passText .Pass}}</td><td>{{.Detail}}</td></tr>{{end}}
 </tbody></table>
-<p class="meta">本报告由 HiveMtk GEO 审计中心生成。GEO 没有“保证被 AI 引用”的通行证；本报告只描述体检读数与可执行修复项。</p>
+<p class="meta">本报告由 GEO 审计中心生成。GEO 没有“保证被 AI 引用”的通行证；本报告只描述体检读数与可执行修复项。</p>
 </body></html>`))
 
 var auditInlineSpaceRe = regexp.MustCompile(`[ \t]+`)

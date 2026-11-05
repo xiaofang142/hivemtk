@@ -20,6 +20,10 @@ func (r *memDailyRepo) BatchUpsert(_ context.Context, ss []*model.GeoDailyStat) 
 	r.stats = append(r.stats, ss...)
 	return nil
 }
+func (r *memDailyRepo) SetCitationByEngine(ctx context.Context, statDate, engine string, citations int) error {
+	return r.IncrementByEngine(ctx, statDate, engine, citations, 0)
+}
+
 func (r *memDailyRepo) IncrementByEngine(_ context.Context, statDate, engine string, citations, brandMentions int) error {
 	r.stats = append(r.stats, &model.GeoDailyStat{
 		Date:                statDate,

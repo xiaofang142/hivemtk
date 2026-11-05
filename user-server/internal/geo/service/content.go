@@ -180,7 +180,22 @@ func truncateRunes(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
-func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, brandName string, advantages []string, wordCount int, style string) (*model.GeoArticle, error) {
+// resolveProvider 显式指定的 provider 优先；否则回落到本租户配置的
+// default_model（之前只存不用）。仍为空则走场景路由默认链路。
+func (s *ContentService) resolveProvider(ctx context.Context, explicit string) string {
+	explicit = strings.TrimSpace(explicit)
+	if explicit != "" {
+		return explicit
+	}
+	if s.configRepo != nil {
+		if cfg, err := s.configRepo.Get(ctx); err == nil && cfg != nil {
+			return strings.TrimSpace(cfg.DefaultModel)
+		}
+	}
+	return ""
+}
+
+func (s *ContentService) GenerateContent(ctx context.Context, provider, lang, keyword, brandName string, advantages []string, wordCount int, style string) (*model.GeoArticle, error) {
 	if lang == "" {
 		lang = "zh"
 	}
@@ -198,9 +213,9 @@ func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, bra
 	}
 	prompt := ContentGenerationPrompt(ctx, brandName, advantagesStr, keyword, wordCountStr, style, lang) + s.loadProductBrief(ctx).promptBlock()
 
-	resp, err := s.llm.Generate(ctx, "", prompt, 0.7, 4000)
+	resp, err := s.llm.GenerateWithProvider(ctx, s.resolveProvider(ctx, provider), "", prompt, 0.7, 4000)
 	if err != nil {
-		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式内容生成: keyword=%s, brand=%s", keyword, brandName))
+		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式内容生成: keyword=%s, brand=%s provider=%s", keyword, brandName, provider))
 		title, content := generateHeuristicContent(keyword, brandName, advantages, wordCount, style)
 		article := &model.GeoArticle{
 			Keyword:   keyword,
@@ -257,11 +272,11 @@ func (s *ContentService) GenerateContent(ctx context.Context, lang, keyword, bra
 }
 
 // OptimizeContent 优化内容
-func (s *ContentService) OptimizeContent(ctx context.Context, articleID, content, brandName string, advantages []string) (*model.GeoOptimization, error) {
+func (s *ContentService) OptimizeContent(ctx context.Context, provider, articleID, content, brandName string, advantages []string) (*model.GeoOptimization, error) {
 	advantagesStr := AdvantagesToString(advantages)
 	prompt := ContentOptimizePrompt(ctx, brandName, advantagesStr, content) + s.loadProductBrief(ctx).promptBlock()
 
-	resp, err := s.llm.Generate(ctx, "", prompt, 0.6, 4000)
+	resp, err := s.llm.GenerateWithProvider(ctx, s.resolveProvider(ctx, provider), "", prompt, 0.6, 4000)
 	if err != nil {
 		logger.Warn(fmt.Sprintf("[GEO Content] LLM 不可用，降级为启发式内容优化: articleID=%s", articleID))
 		optimization := &model.GeoOptimization{

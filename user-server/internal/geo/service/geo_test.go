@@ -310,3 +310,49 @@ func newGeoExecRepo(db *gorm.DB) repository.GeoWorkflowExecutionRepository {
 func newGeoTplRepo(db *gorm.DB) repository.GeoWorkflowTemplateRepository {
 	return repository.NewGeoWorkflowTemplateRepositoryWithDB(db)
 }
+
+// 公开 FAQ 只能检索 is_public 文档；内部文档默认不可见。
+func TestKBPublicBoundary(t *testing.T) {
+	db := geoTestDB(t)
+	repo := newGeoKBRepo(db)
+	svc := NewKBService(repo, nil)
+	ctx := context.Background()
+
+	privateDoc, err := svc.Save(ctx, &dto.SaveKnowledgeDocumentRequest{
+		Title: "内部报价", Content: "内部底价 8 折，禁止外传", DocType: "reference",
+	})
+	if err != nil {
+		t.Fatalf("Save private: %v", err)
+	}
+	publicDoc, err := svc.Save(ctx, &dto.SaveKnowledgeDocumentRequest{
+		Title: "产品介绍", Content: "HiveMtk 是开源私域营销系统", DocType: "reference",
+		IsPublic: boolPtr(true),
+	})
+	if err != nil {
+		t.Fatalf("Save public: %v", err)
+	}
+
+	if res, err := svc.SearchPublic(ctx, "内部", 10); err != nil || len(res) != 0 {
+		t.Fatalf("公开检索不应命中内部文档: n=%d err=%v", len(res), err)
+	}
+	if res, err := svc.SearchPublic(ctx, "HiveMtk", 10); err != nil || len(res) != 1 {
+		t.Fatalf("公开检索应命中公开文档: n=%d err=%v", len(res), err)
+	}
+	// 内部检索仍能看到全部
+	if res, err := svc.Search(ctx, "内部", 10); err != nil || len(res) != 1 {
+		t.Fatalf("内部检索应命中私有文档: n=%d err=%v", len(res), err)
+	}
+
+	// 关闭公开后立即从公开检索消失
+	if _, err := svc.Save(ctx, &dto.SaveKnowledgeDocumentRequest{
+		ID: publicDoc.ID, Title: publicDoc.Title, Content: publicDoc.Content, IsPublic: boolPtr(false),
+	}); err != nil {
+		t.Fatalf("关闭公开失败: %v", err)
+	}
+	if res, _ := svc.SearchPublic(ctx, "HiveMtk", 10); len(res) != 0 {
+		t.Fatalf("关闭公开后仍可检索到: n=%d", len(res))
+	}
+	_ = privateDoc
+}
+
+func boolPtr(v bool) *bool { return &v }

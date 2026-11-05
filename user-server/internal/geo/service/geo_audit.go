@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -12,6 +13,9 @@ type GeoAuditFactor struct {
 	Pass   bool   `json:"pass"`
 	Detail string `json:"detail,omitempty"`
 	Weight int    `json:"weight"`
+	// Skipped 表示本次审计无法检查该因子（例如没给品牌、没抓站点），
+	// 不计入加权分母，也不进修复清单，避免“默认放行”虚高分数。
+	Skipped bool `json:"skipped,omitempty"`
 }
 
 // GeoAuditReport 25 因子 GEO 审计报告（竞品对齐 Otterly 25因子 + Scrunch 技术可达性）
@@ -94,7 +98,7 @@ func fixSuggestion(factor, detail string) string {
 func buildFixes(fs []GeoAuditFactor) []GeoAuditFix {
 	out := make([]GeoAuditFix, 0)
 	for _, f := range fs {
-		if !f.Pass {
+		if !f.Pass && !f.Skipped {
 			out = append(out, GeoAuditFix{Factor: f.Factor, Weight: f.Weight, Detail: f.Detail, Suggestion: fixSuggestion(f.Factor, f.Detail)})
 		}
 	}
@@ -102,11 +106,16 @@ func buildFixes(fs []GeoAuditFactor) []GeoAuditFix {
 	return out
 }
 
-// RunGEOAudit 对指定内容执行 25 因子审计（Otterly 特色能力对齐）
-func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSONLD string) *GeoAuditReport {
+// RunGEOAudit 对指定内容执行 25 因子审计（Otterly 特色能力对齐）。
+// brand 为空时品牌提及因子按“跳过”处理；URL 不是绝对地址时，
+// 依赖站点的 HTTPS/URL 语义因子同样跳过，避免静态内容审计虚高。
+func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSONLD, brand string) *GeoAuditReport {
 	factors := make([]GeoAuditFactor, 0, 25)
 	add := func(name string, weight int, pass bool, detail string) {
 		factors = append(factors, GeoAuditFactor{Factor: name, Pass: pass, Detail: detail, Weight: weight})
+	}
+	skip := func(name string, weight int, detail string) {
+		factors = append(factors, GeoAuditFactor{Factor: name, Pass: true, Detail: detail, Weight: weight, Skipped: true})
 	}
 
 	lc := strings.ToLower(content)
@@ -130,7 +139,13 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 	add("作者/经验信号", 3, strings.Contains(lc, "我们的") || strings.Contains(lc, "实践") || strings.Contains(lc, "客户案例"), "第一手经验表述")
 	add("时效性声明", 2, strings.Contains(content, "2025") || strings.Contains(content, "2026"), "包含近期年份")
 
-	add("品牌自然融入", 5, strings.Count(content, "HiveMtk") >= 2 && strings.Count(content, "HiveMtk") <= 6, fmt.Sprintf("提及 %d 次(建议2-6次)", strings.Count(content, "HiveMtk")))
+	brand = strings.TrimSpace(brand)
+	if brand == "" {
+		skip("品牌自然融入", 5, "未指定品牌，本次跳过品牌提及检查")
+	} else {
+		mentions := strings.Count(strings.ToLower(content), strings.ToLower(brand))
+		add("品牌自然融入", 5, mentions >= 2 && mentions <= 6, fmt.Sprintf("提及 %d 次(建议2-6次)", mentions))
+	}
 	add("差异化定位", 4, strings.Contains(lc, "开源") || strings.Contains(lc, "本地部署") || strings.Contains(lc, "不出域"), "核心卖点出现")
 	// 产品叙事四问（rubric content-v2）：回答“是什么/适合谁/和上一代差在哪/最新版本”。
 	add("产品定位清晰", 4, siteHasAny(content, "是", "为") &&
@@ -143,10 +158,15 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 
 	add("Meta描述长度", 3, len(metaDesc) >= 80 && len(metaDesc) <= 300, fmt.Sprintf("%d 字符", len(metaDesc)))
 	add("Schema JSON-LD", 5, strings.Contains(schemaJSONLD, "application/ld+json") || strings.Contains(schemaJSONLD, "@context"), "结构化数据标记")
-	add("llms.txt 可用", 4, true, "已由 /api/geo/techconfig/llms-txt 提供")
-	add("robots.txt 允许 GPTBot", 4, true, "techconfig 默认允许 AI 爬虫")
-	add("HTTPS", 5, strings.HasPrefix(url, "https://"), "传输安全")
-	add("URL语义化", 3, !strings.Contains(url, "?id="), "URL 包含关键词而非查询参数")
+	skip("llms.txt 可用", 4, "静态内容审计未抓取站点；live/URL 审计会做真实检查")
+	skip("robots.txt 允许 GPTBot", 4, "静态内容审计未抓取站点；live/URL 审计会做真实检查")
+	if isAbsoluteHTTPURL(url) {
+		add("HTTPS", 5, strings.HasPrefix(strings.ToLower(url), "https://"), "传输安全")
+		add("URL语义化", 3, !strings.Contains(url, "?id="), "URL 包含关键词而非查询参数")
+	} else {
+		skip("HTTPS", 5, "未提供站点 URL，跳过传输安全检查")
+		skip("URL语义化", 3, "未提供站点 URL，跳过 URL 语义检查")
+	}
 	add("内部链接≥2", 2, strings.Count(content, "](/") >= 2, "站内链接数")
 
 	add("定义句开头", 4, strings.Contains(content[:auditMin(len(content), 200)], "是"), "首200字符含定义性表述")
@@ -157,6 +177,9 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 
 	totalWeight, earned := 0, 0
 	for _, f := range factors {
+		if f.Skipped {
+			continue
+		}
 		totalWeight += f.Weight
 		if f.Pass {
 			earned += f.Weight
@@ -167,7 +190,8 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 		score = earned * 100 / totalWeight
 	}
 
-	summary := fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100。", countPass(factors), len(factors), score)
+	checked := countChecked(factors)
+	summary := fmt.Sprintf("通过 %d/%d 项，加权得分 %d/100。", countPass(factors), checked, score)
 	if score < 60 {
 		summary += " 建议优先修复高权重未通过项。"
 	} else if score < 80 {
@@ -182,11 +206,28 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 func countPass(fs []GeoAuditFactor) int {
 	n := 0
 	for _, f := range fs {
-		if f.Pass {
+		if !f.Skipped && f.Pass {
 			n++
 		}
 	}
 	return n
+}
+
+// countChecked 返回实际参与评分的因子数（跳过项不计）。
+func countChecked(fs []GeoAuditFactor) int {
+	n := 0
+	for _, f := range fs {
+		if !f.Skipped {
+			n++
+		}
+	}
+	return n
+}
+
+// isAbsoluteHTTPURL 判断字符串是否为可解析的 http/https 绝对地址。
+func isAbsoluteHTTPURL(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 func containsAny(s string, subs []string) bool {

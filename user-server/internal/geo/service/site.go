@@ -87,9 +87,14 @@ func GenerateLLMsTxt(brand, domain string, articles []model.GeoArticle) string {
 	return sb.String()
 }
 
-// GenerateRobots 2026 AI 爬虫友好 robots.txt
-func GenerateRobots() string {
-	return `# HiveMtk GEO Site - 2026 AI Crawler Friendly
+// GenerateSiteRobots 2026 AI 爬虫友好 robots.txt。
+// name 用当前品牌/域名，不再把 HiveMtk 写死到每个租户的站点里。
+func GenerateSiteRobots(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "GEO Site"
+	}
+	return `# ` + name + ` - 2026 AI Crawler Friendly
 User-agent: *
 Allow: /
 Disallow: /admin/
@@ -155,13 +160,17 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("geo_site 未配置: %w", err)
 	}
-	if siteCfg.HugoPath == "" {
-		return 0, fmt.Errorf("hugo_path 未配置")
+	hugoPath, err := validateHugoPath(ctx, siteCfg.HugoPath)
+	if err != nil {
+		return 0, err
+	}
+	if hugoPath == "" {
+		return 0, fmt.Errorf("%w: hugo_path 未配置", ErrSiteConfigInvalid)
 	}
 
-	// 确保目录存在
-	contentDir := filepath.Join(siteCfg.HugoPath, "content", "posts")
-	staticDir := filepath.Join(siteCfg.HugoPath, "static")
+	// 确保目录存在（路径已限制在 GEO_SITE_ROOT/<tenant> 之下）
+	contentDir := filepath.Join(hugoPath, "content", "posts")
+	staticDir := filepath.Join(hugoPath, "static")
 	for _, d := range []string{contentDir, staticDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return 0, err
@@ -228,7 +237,7 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 	}
 
 	// 写 robots.txt
-	if err := os.WriteFile(filepath.Join(staticDir, "robots.txt"), []byte(GenerateRobots()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(staticDir, "robots.txt"), []byte(GenerateSiteRobots(siteCfg.Domain)), 0o644); err != nil {
 		logger.Warnf("写 robots.txt 失败: %v", err)
 	}
 
@@ -238,7 +247,7 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 		logger.Warnf("写 sitemap.xml 失败: %v", err)
 	}
 
-	logger.Warnf("ExportToHugo: %d 篇文章已导出到 %s", count, siteCfg.HugoPath)
+	logger.Warnf("ExportToHugo: %d 篇文章已导出到 %s", count, hugoPath)
 	return count, nil
 }
 
@@ -281,26 +290,38 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 		}
 		return "", err
 	}
-	if strings.TrimSpace(siteCfg.HugoPath) == "" {
+	hugoPath, err := validateHugoPath(ctx, siteCfg.HugoPath)
+	if err != nil {
+		return "", err
+	}
+	if hugoPath == "" {
 		return "", fmt.Errorf("%w: 站点目录未配置（hugo_path 为空）", ErrSiteConfigInvalid)
 	}
-	if st, statErr := os.Stat(siteCfg.HugoPath); statErr != nil || !st.IsDir() {
-		return "", fmt.Errorf("%w: 站点目录不存在或不可访问：%s", ErrSiteConfigInvalid, siteCfg.HugoPath)
+	if st, statErr := os.Stat(hugoPath); statErr != nil || !st.IsDir() {
+		return "", fmt.Errorf("%w: 站点目录不存在或不可访问：%s", ErrSiteConfigInvalid, hugoPath)
 	}
 	// 目录存在但不是 git 仓库时，git add 会以 128 退出；这是「静态站部署」配置问题，
 	// 不是服务端内部错误，提前判掉并给出可照做的提示。
-	if out, gitErr := exec.CommandContext(ctx, "git", "-C", siteCfg.HugoPath, "rev-parse", "--is-inside-work-tree").CombinedOutput(); gitErr != nil {
+	if out, gitErr := exec.CommandContext(ctx, "git", "-C", hugoPath, "rev-parse", "--is-inside-work-tree").CombinedOutput(); gitErr != nil {
 		_ = out
 		return "", fmt.Errorf("%w: 站点目录不是 git 仓库：%s（请先 git init 或填写正确的 Hugo 目录）", ErrSiteConfigInvalid, siteCfg.HugoPath)
 	}
 
+	// git_repo 配置了远端时以它为准（origin 指到该地址再推）；
+	// 没配置则沿用仓库里已有的 origin。GIT_TERMINAL_PROMPT=0 防止
+	// https 远端缺凭据时 git 卡在交互输入上把 goroutine 挂死。
+	deployEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	cmds := [][]string{
-		{"git", "-C", siteCfg.HugoPath, "add", "."},
-		{"git", "-C", siteCfg.HugoPath, "commit", "-m", fmt.Sprintf("GEO deploy: %s", time.Now().Format("2006-01-02 15:04"))},
-		{"git", "-C", siteCfg.HugoPath, "push", "origin", "main"},
+		{"git", "-C", hugoPath, "add", "."},
+		{"git", "-C", hugoPath, "commit", "-m", fmt.Sprintf("GEO deploy: %s", time.Now().Format("2006-01-02 15:04"))},
 	}
+	if repo := strings.TrimSpace(siteCfg.GitRepo); repo != "" {
+		cmds = append(cmds, []string{"git", "-C", hugoPath, "remote", "set-url", "origin", repo})
+	}
+	cmds = append(cmds, []string{"git", "-C", hugoPath, "push", "origin", "main"})
 	for _, args := range cmds {
 		c := exec.CommandContext(ctx, args[0], args[1:]...)
+		c.Env = deployEnv
 		out, err := c.CombinedOutput()
 		if len(out) > 0 {
 			_, _ = os.Stdout.Write(out)

@@ -17,6 +17,8 @@ type GeoKnowledgeDocumentRepository interface {
 	Update(ctx context.Context, doc *model.GeoKnowledgeDocument) error
 	GetByID(ctx context.Context, id string) (*model.GeoKnowledgeDocument, error)
 	GetList(ctx context.Context) ([]*model.GeoKnowledgeDocument, error)
+	// GetPublicList 只返回公开文档（公开承接页 FAQ 用）。
+	GetPublicList(ctx context.Context) ([]*model.GeoKnowledgeDocument, error)
 	// ListFiltered 按标题/正文关键词与来源等级过滤（keyword、sourceLevel 为空表示不过滤）
 	ListFiltered(ctx context.Context, keyword, sourceLevel string) ([]*model.GeoKnowledgeDocument, error)
 	Delete(ctx context.Context, id string) error
@@ -43,11 +45,14 @@ func (r *geoKnowledgeDocRepo) Update(ctx context.Context, doc *model.GeoKnowledg
 	res := r.db.WithContext(ctx).Model(&model.GeoKnowledgeDocument{}).
 		Where("id = ?", doc.ID).
 		Updates(map[string]any{
-			"title":      doc.Title,
-			"content":    doc.Content,
-			"doc_type":   doc.DocType,
-			"metadata":   doc.Metadata,
-			"updated_at": time.Now(),
+			"title":        doc.Title,
+			"content":      doc.Content,
+			"doc_type":     doc.DocType,
+			"metadata":     doc.Metadata,
+			"source_level": doc.SourceLevel,
+			"source_url":   doc.SourceURL,
+			"is_public":    doc.IsPublic,
+			"updated_at":   time.Now(),
 		})
 	if res.Error != nil {
 		return res.Error
@@ -73,6 +78,13 @@ func (r *geoKnowledgeDocRepo) GetList(ctx context.Context) ([]*model.GeoKnowledg
 }
 
 // ListFiltered 按关键词（标题/正文模糊）与来源等级过滤，避免把 400+ 全量文档原样吐给前端后由浏览器过滤
+func (r *geoKnowledgeDocRepo) GetPublicList(ctx context.Context) ([]*model.GeoKnowledgeDocument, error) {
+	var docs []*model.GeoKnowledgeDocument
+	err := r.db.WithContext(ctx).Where("is_public = ?", true).
+		Order("created_at DESC").Limit(1000).Find(&docs).Error
+	return docs, err
+}
+
 func (r *geoKnowledgeDocRepo) ListFiltered(ctx context.Context, keyword, sourceLevel string) ([]*model.GeoKnowledgeDocument, error) {
 	var docs []*model.GeoKnowledgeDocument
 	q := r.db.WithContext(ctx).Model(&model.GeoKnowledgeDocument{})

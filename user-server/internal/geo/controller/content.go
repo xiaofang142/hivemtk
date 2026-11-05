@@ -31,7 +31,7 @@ func (c *ContentController) GenerateContent(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
-	result, err := c.svc.GenerateContent(ctx.Request.Context(), req.Lang, req.Keyword, req.BrandName, req.Advantages, req.WordCount, req.Style)
+	result, err := c.svc.GenerateContent(ctx.Request.Context(), req.Model, req.Lang, req.Keyword, req.BrandName, req.Advantages, req.WordCount, req.Style)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "内容生成失败")
 		return
@@ -65,7 +65,7 @@ func (c *ContentController) OptimizeContent(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
-	result, err := c.svc.OptimizeContent(ctx.Request.Context(), req.ArticleID, req.Content, req.BrandName, req.Advantages)
+	result, err := c.svc.OptimizeContent(ctx.Request.Context(), req.Model, req.ArticleID, req.Content, req.BrandName, req.Advantages)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, "内容优化失败")
 		return

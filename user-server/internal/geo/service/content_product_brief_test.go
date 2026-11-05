@@ -78,9 +78,11 @@ func TestConfigServiceUpdateProductBrief(t *testing.T) {
 	svc := NewConfigService(repo, nil)
 	ctx := context.Background()
 
+	productCategory, targetAudience, keyFeatures := "AI 销售平台", "中小企业", "RAG、SOP"
+	generationNote, versionLabel := "相比上一代增加多模型验证", "v2.5"
 	if err := svc.UpdateConfig(ctx, ConfigUpdateInput{
-		Brand: "HiveMtk", ProductCategory: "AI 销售平台", TargetAudience: "中小企业",
-		KeyFeatures: "RAG、SOP", GenerationNote: "相比上一代增加多模型验证", VersionLabel: "v2.5",
+		Brand: "HiveMtk", ProductCategory: &productCategory, TargetAudience: &targetAudience,
+		KeyFeatures: &keyFeatures, GenerationNote: &generationNote, VersionLabel: &versionLabel,
 	}); err != nil {
 		t.Fatalf("更新配置失败: %v", err)
 	}
@@ -101,5 +103,69 @@ func TestConfigServiceUpdateProductBrief(t *testing.T) {
 	got, _ = repo.Get(ctx)
 	if got.BrandName != "HiveMtk 2" || got.VersionLabel != "v2.5" {
 		t.Fatalf("合并更新丢了字段: %+v", got)
+	}
+}
+
+// 清空语义：显式传空值必须覆盖旧值，未传字段保留。
+func TestConfigServiceUpdateClearsExplicitEmpty(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.GeoConfig{})
+	if db == nil {
+		t.Fatal("测试库不可达：配置清空语义判不了")
+	}
+	repo := repository.NewGeoConfigRepositoryWithDB(db)
+	svc := NewConfigService(repo, nil)
+	ctx := context.Background()
+
+	desc, adv, domain := "旧描述", "旧优势", "old.example.com"
+	comps := []string{"甲", "乙"}
+	negs := []string{"差评", "骗局"}
+	if err := svc.UpdateConfig(ctx, ConfigUpdateInput{
+		Brand: "HiveMtk", BrandDescription: &desc, Advantages: &adv,
+		Domain: &domain, Competitors: &comps, NegativeKeywords: &negs,
+	}); err != nil {
+		t.Fatalf("首次更新失败: %v", err)
+	}
+
+	empty, emptyList := "", []string{}
+	if err := svc.UpdateConfig(ctx, ConfigUpdateInput{
+		BrandDescription: &empty, Domain: &empty, Competitors: &emptyList, NegativeKeywords: &emptyList,
+	}); err != nil {
+		t.Fatalf("清空更新失败: %v", err)
+	}
+	got, err := repo.Get(ctx)
+	if err != nil {
+		t.Fatalf("回查失败: %v", err)
+	}
+	if got.BrandDescription != "" || got.Domain != "" || got.Competitors != "" || got.NegativeKeywords != "" {
+		t.Fatalf("显式空值未清空: %+v", got)
+	}
+	if got.BrandName != "HiveMtk" || got.Advantages != "旧优势" {
+		t.Fatalf("未传字段应保留: %+v", got)
+	}
+}
+
+// 默认生成模型必须真的被内容链路读取（此前只存不用）。
+func TestContentServiceResolveProvider(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.GeoConfig{})
+	if db == nil {
+		t.Fatal("测试库不可达：默认模型读取判不了")
+	}
+	repo := repository.NewGeoConfigRepositoryWithDB(db)
+	cfgSvc := NewConfigService(repo, nil)
+	contentSvc := NewContentService(nil, nil, nil, nil, repo, nil)
+	ctx := context.Background()
+
+	if got := contentSvc.resolveProvider(ctx, ""); got != "" {
+		t.Fatalf("未配置时应返回空 provider，得到 %q", got)
+	}
+	if got := contentSvc.resolveProvider(ctx, " explicit-model "); got != "explicit-model" {
+		t.Fatalf("显式指定应优先，得到 %q", got)
+	}
+	def := "deepseek"
+	if err := cfgSvc.UpdateConfig(ctx, ConfigUpdateInput{Brand: "B", DefaultModel: &def}); err != nil {
+		t.Fatalf("保存默认模型失败: %v", err)
+	}
+	if got := contentSvc.resolveProvider(ctx, ""); got != "deepseek" {
+		t.Fatalf("应回落到 default_model=deepseek，得到 %q", got)
 	}
 }

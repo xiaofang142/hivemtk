@@ -18,6 +18,10 @@ type GeoKnowledgeDocument struct {
 	SourceLevel string `gorm:"column:source_level;size:2;index" json:"source_level"`
 	SourceURL   string `gorm:"column:source_url;size:512" json:"source_url"`
 	Metadata    string `gorm:"type:text" json:"metadata"`
+	// IsPublic 控制该文档是否可被公开承接页的 FAQ 检索。
+	// 默认 false：内部资料（报价、SOP、客户名单）不能因为落在 GEO 知识库
+	// 就被公网访客问出来。
+	IsPublic bool `gorm:"column:is_public;default:false;index" json:"is_public"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`

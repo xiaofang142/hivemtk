@@ -40,20 +40,20 @@ func (c *ConfigController) GetConfig(ctx *gin.Context) {
 // PUT /geo/config
 func (c *ConfigController) UpdateConfig(ctx *gin.Context) {
 	var req struct {
-		Brand            string   `json:"brand"`
-		BrandDescription string   `json:"brand_description"`
-		Advantages       string   `json:"advantages"`
-		Competitors      []string `json:"competitors"`
-		Domain           string   `json:"domain"`
-		DefaultModel     string   `json:"default_model"`
-		VerifyModels     []string `json:"verify_models"`
-		NegativeKeywords []string `json:"negative_keywords"`
+		Brand            string    `json:"brand"`
+		BrandDescription *string   `json:"brand_description"`
+		Advantages       *string   `json:"advantages"`
+		Competitors      *[]string `json:"competitors"`
+		Domain           *string   `json:"domain"`
+		DefaultModel     *string   `json:"default_model"`
+		VerifyModels     *[]string `json:"verify_models"`
+		NegativeKeywords *[]string `json:"negative_keywords"`
 
-		ProductCategory string `json:"product_category"`
-		TargetAudience  string `json:"target_audience"`
-		KeyFeatures     string `json:"key_features"`
-		GenerationNote  string `json:"generation_note"`
-		VersionLabel    string `json:"version_label"`
+		ProductCategory *string `json:"product_category"`
+		TargetAudience  *string `json:"target_audience"`
+		KeyFeatures     *string `json:"key_features"`
+		GenerationNote  *string `json:"generation_note"`
+		VersionLabel    *string `json:"version_label"`
 	}
 	if !response.BindJSON(ctx, &req) {
 		return

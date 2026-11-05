@@ -103,7 +103,7 @@ func (c *KeywordMiningController) BuildFunnel(ctx *gin.Context) {
 // TriggerPipeline POST /geo/keyword-mining/pipeline
 // 异步触发关键词批量管线（4业务线×技术栈→展开→落库→有界SEO），执行历史查 /geo/jobs/runs
 func (c *KeywordMiningController) TriggerPipeline(ctx *gin.Context) {
-	started, err := service.GetGeoJobManager().Trigger(service.JobKeywordPipeline)
+	started, err := service.GetGeoJobManager().TriggerForTenant(ctx.Request.Context(), service.JobKeywordPipeline)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return

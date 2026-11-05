@@ -260,3 +260,33 @@ func TestAutopilotUniqueIndexBackstop(t *testing.T) {
 		t.Fatalf("Create should map to ErrAutopilotRunning, got %v", err)
 	}
 }
+
+// 进程重启后 running 行必须有收口路径，否则 HasRunning 永久 409。
+func TestAutopilotFailStaleRunning(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := setupAutopilotTestDB(t)
+
+	old := &model.GeoAutopilotRun{
+		Keyword: "陈旧任务", Status: "running",
+		StartedAt: time.Now().Add(-time.Hour),
+	}
+	if err := repo.Create(ctx, old); err != nil {
+		t.Fatalf("Create old: %v", err)
+	}
+	fresh := &model.GeoAutopilotRun{Keyword: "新任务", Status: "running"}
+	if err := repo.Create(ctx, fresh); err != nil {
+		t.Fatalf("Create fresh: %v", err)
+	}
+
+	n, err := repo.FailStaleRunning(ctx, time.Now().Add(-30*time.Minute))
+	if err != nil || n != 1 {
+		t.Fatalf("FailStaleRunning n=%d err=%v，期望只收口 1 条", n, err)
+	}
+	got, err := repo.GetByID(ctx, old.ID)
+	if err != nil || got.Status != "failed" || got.FinishedAt == nil || got.Error == "" {
+		t.Fatalf("陈旧记录未收口: %+v err=%v", got, err)
+	}
+	if ok, err := repo.HasRunning(ctx); err != nil || !ok {
+		t.Fatalf("新鲜 running 记录应保留，HasRunning=%v err=%v", ok, err)
+	}
+}

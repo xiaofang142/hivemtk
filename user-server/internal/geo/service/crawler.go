@@ -2,6 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,9 +36,31 @@ func NewCrawlerService(sourceCatalogRepo repository.GeoSourceCatalogRepository) 
 // 与非空字段，不会把已标注的等级清空。访问明细的落库在爬虫追踪链路
 // （geo_crawler_visits），不在本方法内。
 func (s *CrawlerService) RecordVisit(ctx context.Context, sourceURL string) error {
+	sourceURL = strings.TrimSpace(sourceURL)
+	u, err := url.Parse(sourceURL)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("信源 URL 必须是 http(s) 绝对地址: %s", sourceURL)
+	}
 	domain := ExtractDomain(sourceURL)
 	if domain == "" {
-		return nil
+		return fmt.Errorf("无法解析信源域名: %s", sourceURL)
+	}
+	// 真做一次有界 GET：信源同步的“可达”必须有请求支撑，不能只 upsert
+	// 一行 Verified=true。safe client 会解析 IP 并拒绝内网目标。
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", siteAuditUserAgent)
+	req.Header.Set("Range", "bytes=0-2047")
+	resp, err := newSiteAuditHTTPClient(10 * time.Second).Do(req)
+	if err != nil {
+		return fmt.Errorf("信源不可达: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 2048))
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("信源不可达: HTTP %d", resp.StatusCode)
 	}
 
 	catalog := &model.GeoSourceCatalog{

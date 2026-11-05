@@ -612,9 +612,27 @@ func (m *JobManager) ListRuns(ctx context.Context, jobName string, page, limit i
 	return m.runRepo.List(ctx, jobName, page, limit)
 }
 
-// Trigger 手动触发入口（controller 用）
+// Trigger 手动触发入口（仅管理端：对全部活跃租户各跑一次）。
 func (m *JobManager) Trigger(name string) (bool, error) {
 	return m.StartJob(name, "manual")
+}
+
+// TriggerForTenant 当前请求租户手动触发。普通用户页面上的「刷新/立即执行」
+// 必须走这里：调用 Trigger 会扇出到所有租户，等于用 A 的点击消耗 B 的额度
+// 并写 B 的数据。运行体脱离请求取消，但保留租户绑定。
+func (m *JobManager) TriggerForTenant(ctx context.Context, name string) (bool, error) {
+	def, ok := m.defByName(name)
+	if !ok {
+		return false, fmt.Errorf("未知任务: %s", name)
+	}
+	tid, ok := tenant.FromContext(ctx)
+	if !ok {
+		if tenant.IsMultiTenant() {
+			return false, errors.New("当前请求缺少租户上下文")
+		}
+		tid = tenant.DefaultTenantID
+	}
+	return m.startJobForTenant(def, tenant.WithTenantID(context.Background(), tid), "manual", tid), nil
 }
 
 func (m *JobManager) defByName(name string) (geoJobDef, bool) {

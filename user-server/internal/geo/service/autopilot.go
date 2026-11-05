@@ -73,6 +73,14 @@ func (s *AutopilotService) Create(ctx context.Context, req *dto.AutopilotCreateR
 		n = autopilotArticleMax
 	}
 
+	// 进程崩溃/重启后 running 行不会被原 goroutine 收口；先清掉超过
+	// 运行上限 + 2 分钟宽限的陈旧记录，否则 HasRunning 会永久拒绝新任务。
+	if n, staleErr := s.runRepo.FailStaleRunning(ctx, time.Now().Add(-(autopilotRunTimeout + 2*time.Minute))); staleErr != nil {
+		logger.Warnf("[GEO Autopilot] 清理陈旧 running 记录失败: %v", staleErr)
+	} else if n > 0 {
+		logger.Warnf("[GEO Autopilot] 已收口 %d 条陈旧 running 记录", n)
+	}
+
 	running, err := s.runRepo.HasRunning(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("并发检查失败: %w", err)
@@ -269,7 +277,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 			if i >= run.ArticleCount || ctx.Err() != nil {
 				break
 			}
-			art, err := contentSvc.GenerateContent(ctx, lang, w, brand, advs, 1200, "professional")
+			art, err := contentSvc.GenerateContent(ctx, "", lang, w, brand, advs, 1200, "professional")
 			if err != nil {
 				failN++
 				continue

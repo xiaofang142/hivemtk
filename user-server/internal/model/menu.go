@@ -365,6 +365,7 @@ var SystemMenuTree = []SystemMenuNode{
 					{
 						Key: "geoProd", Title: "生产", Icon: "EditPen",
 						Children: []SystemMenuNode{
+							{Key: "geoAutopilot", Title: "一键自动驾驶", Icon: "MagicStick", Path: "/geo-tools/autopilot"},
 							{Key: "geoKeywordMining", Title: "关键词蒸馏", Icon: "Search", Path: "/geo-tools/keyword-mining"},
 							{Key: "geoContentCreation", Title: "内容创作", Icon: "EditPen", Path: "/geo-tools/content-creation"},
 							{Key: "geoContentOptimize", Title: "文章优化", Icon: "Document", Path: "/geo-tools/content-optimize"},

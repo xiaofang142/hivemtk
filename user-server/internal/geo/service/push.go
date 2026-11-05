@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -519,14 +520,36 @@ func (p *SitemapPusher) Push(ctx context.Context, urls []string) ([]PushResult, 
 // PushService 编排器
 // ────────────────────────────────────────────
 
+func asString(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+type pushState struct {
+	pushers  map[string]Pusher
+	quota    *QuotaManager
+	quotaDay string
+	mu       sync.Mutex
+}
+
+// PushService 推送编排器。
+//
+// 注意：pushers 不能做成进程级单例。geo_pusher_configs 是按 tenant_id 隔离的，
+// 启动期把全部租户的凭据装进一个 map，会让 A 租户的百度 token 去推 B 租户的 URL，
+// 也会把 A 的 used_today 写进 B 的配额行。这里改为每次调用按请求 ctx 加载当前
+// 租户的配置；测试可注入 pushers/quota 覆盖 DB。
 type PushService struct {
 	configs  repository.GeoPusherConfigRepository
 	records  repository.GeoPushRecordRepository
 	articles repository.GeoArticleRepository
-	quota    *QuotaManager
+
+	// 测试注入；生产为 nil
 	pushers  map[string]Pusher
+	quota    *QuotaManager
+	quotaDay string
 	mu       sync.Mutex
-	quotaDay string // 内存配额所属日期，跨天自动 Reset
 }
 
 func NewPushService(
@@ -534,76 +557,56 @@ func NewPushService(
 	records repository.GeoPushRecordRepository,
 	articles repository.GeoArticleRepository,
 ) *PushService {
-	svc := &PushService{
-		configs:  configs,
-		records:  records,
-		articles: articles,
-		quota:    NewQuotaManager(),
+	return &PushService{configs: configs, records: records, articles: articles}
+}
+
+// ErrNoPushPlatforms 没有配置任何真实推送平台。调用方应显示配置引导，
+// 不能拿 sitemap 占位或空循环冒充“推送成功”。
+var ErrNoPushPlatforms = errors.New("没有启用的推送平台，请先在「蜘蛛推送配置」添加凭据")
+
+func (s *PushService) loadState(ctx context.Context) (*pushState, error) {
+	if s.pushers != nil {
+		q := s.quota
+		if q == nil {
+			q = NewQuotaManager()
+		}
+		day := s.quotaDay
+		if day == "" {
+			day = timeutil.BusinessToday()
+		}
+		return &pushState{pushers: s.pushers, quota: q, quotaDay: day}, nil
+	}
+	if s.configs == nil {
+		return nil, fmt.Errorf("推送配置仓储未初始化")
+	}
+	if tenant.IsMultiTenant() {
+		tid, ok := tenant.FromContext(ctx)
+		if !ok || tid == 0 {
+			return nil, fmt.Errorf("推送缺少租户上下文")
+		}
+	}
+	configs, _, err := s.configs.List(ctx, 1, 200)
+	if err != nil {
+		return nil, fmt.Errorf("读取推送配置失败: %w", err)
+	}
+	state := &pushState{
 		pushers:  map[string]Pusher{},
+		quota:    NewQuotaManager(),
 		quotaDay: timeutil.BusinessToday(),
 	}
-	// 自动从 DB 读配置注册
-	svc.registerFromDB()
-	return svc
-}
-
-// rollQuotaDay 长驻进程跨天时重置内存配额
-//
-// 日期键两侧都必须走 timeutil：`today` 是宿主时区口径、`last_reset_at` 是 DB 里
-// CST 会话时区写入的 timestamptz，混用 `Format` 会让同一天被判成跨天（配额莫名归零）
-// 或跨天被判成同天（当日额度提前打满）。
-func (s *PushService) rollQuotaDay() {
-	today := timeutil.BusinessToday()
-	s.mu.Lock()
-	if today != s.quotaDay {
-		s.quotaDay = today
-		s.quota.Reset()
-	}
-	s.mu.Unlock()
-}
-
-// persistQuota 将内存配额写回 geo_pusher_configs（UsedToday/LastResetAt）
-//
-// geo_pusher_configs 带 tenant_id、在租户登记表内：隔离 callback 只看 GORM
-// 语句的 ctx，调用方（PushURLs/PushManual）透传请求 ctx，否则 on 模式 fail-closed。
-func (s *PushService) persistQuota(ctx context.Context, platform string) {
-	used := s.quota.Used(platform)
-	err := s.configs.UpdateUsage(ctx, platform, used)
-	// 回写失败必须出声：静默丢会让 used_today 停在旧值 —— 跨天/重启
-	// 后按 DB 复原已用量时拿到脏值，当日配额被成倍超发或凭空归零。
-	if err != nil {
-		logger.Warnf("[push] 配额回写失败 platform=%s used_today=%d: %v", platform, used, err)
-	}
-}
-
-// registerFromDB 启动期从 DB 装配推送引擎（NewPushService 构造路径）。
-//
-// 构造期没有 HTTP 请求 ctx 可绑，而 geo_pusher_configs 是租户表：TENANT_MODE=on
-// 下裸 ctx 的 Find 会被隔离 callback fail-closed（装配结果为空 ⇒ 推送引擎全灭）。
-// 走 tenant.WithSystemScope 平台级豁免通道（与 migration/健康检查同口径）。
-func (s *PushService) registerFromDB() {
-	ctx := tenant.WithSystemScope(context.Background())
-	configs, err := s.configs.ListAll(ctx)
-	if err != nil {
-		// 装配失败必须出声：否则推送引擎全灭且无任何日志。
-		logger.Warnf("[push] 平台配置装配失败: %v", err)
-		return
-	}
-	today := timeutil.BusinessToday()
 	for _, cfg := range configs {
-		// 配额 DB 同步：跨天自动归零，同天恢复已用量
-		if cfg.DailyLimit > 0 {
-			used := cfg.UsedToday
-			lastDay := ""
-			if cfg.LastResetAt != nil {
-				lastDay = timeutil.BusinessDate(*cfg.LastResetAt)
-			}
-			if lastDay != today {
-				used = 0
-			}
-			s.quota.SetLimit(cfg.Platform, cfg.DailyLimit)
-			s.quota.SetUsed(cfg.Platform, used)
+		// <=0 视为不限额（UI 显示 ∞），必须无条件 SetLimit：否则配置里
+		// 存的 0 不生效，QuotaManager 仍按内置默认上限（百度 5000/Google 200）拦人。
+		used := cfg.UsedToday
+		lastDay := ""
+		if cfg.LastResetAt != nil {
+			lastDay = timeutil.BusinessDate(*cfg.LastResetAt)
 		}
+		if lastDay != state.quotaDay {
+			used = 0
+		}
+		state.quota.SetLimit(cfg.Platform, cfg.DailyLimit)
+		state.quota.SetUsed(cfg.Platform, used)
 		if !cfg.Active {
 			continue
 		}
@@ -614,7 +617,7 @@ func (s *PushService) registerFromDB() {
 			site, _ := m["site"].(string)
 			token, _ := m["token"].(string)
 			if site != "" && token != "" {
-				s.pushers["baidu"] = NewBaiduPusher(site, token)
+				state.pushers["baidu"] = NewBaiduPusher(site, token)
 			}
 		case "google":
 			if projs, ok := m["projects"].([]any); ok {
@@ -628,7 +631,7 @@ func (s *PushService) registerFromDB() {
 					}
 				}
 				if len(list) > 0 {
-					s.pushers["google"] = NewGooglePusher(list)
+					state.pushers["google"] = NewGooglePusher(list)
 				}
 			}
 		case "indexnow":
@@ -636,36 +639,61 @@ func (s *PushService) registerFromDB() {
 			key, _ := m["key"].(string)
 			keyLoc, _ := m["keyLocation"].(string)
 			if host != "" && key != "" {
-				s.pushers["indexnow"] = NewIndexNowPusher(host, key, keyLoc)
+				state.pushers["indexnow"] = NewIndexNowPusher(host, key, keyLoc)
 			}
 		}
 	}
-	// 兜底：总会注册 sitemap
-	s.pushers["sitemap"] = NewSitemapPusher()
+	return state, nil
 }
 
-func asString(v any) string {
-	if s, ok := v.(string); ok {
-		return s
+// rollQuotaDay 长驻进程跨天时重置该租户的内存配额
+func (s *PushService) rollQuotaDay(st *pushState) {
+	today := timeutil.BusinessToday()
+	st.mu.Lock()
+	if today != st.quotaDay {
+		st.quotaDay = today
+		st.quota.Reset()
 	}
-	return ""
+	st.mu.Unlock()
 }
 
-// PushURLs 推一组 URL（所有启用的引擎）
+// persistQuota 将当前租户的内存配额写回 geo_pusher_configs。
+// ctx 必须带租户，否则 on 模式下 UpdateUsage 会被隔离 callback 拒绝。
+func (s *PushService) persistQuota(ctx context.Context, st *pushState, platform string) {
+	used := st.quota.Used(platform)
+	if err := s.configs.UpdateUsage(ctx, platform, used); err != nil {
+		logger.Warnf("[push] 配额回写失败 platform=%s used_today=%d: %v", platform, used, err)
+	}
+}
+
+// PushURLs 推一组 URL（所有启用的引擎）。
+// 无真实平台或所有平台均失败时返回错误，不再静默 200。
 func (s *PushService) PushURLs(ctx context.Context, urls []string) error {
 	if len(urls) == 0 {
 		return nil
 	}
-
-	s.rollQuotaDay()
+	st, err := s.loadState(ctx)
+	if err != nil {
+		return err
+	}
+	if len(st.pushers) == 0 {
+		return ErrNoPushPlatforms
+	}
+	s.rollQuotaDay(st)
 	batchID := uuid.New().String()
-	for platform, pusher := range s.pushers {
-		if !s.quota.Allow(platform, len(urls)) {
-			logger.Warnf("[%s] 配额用尽，跳过 %d URL", platform, len(urls))
+	attempted, failed, written, successTotal := 0, 0, 0, 0
+	var errs []string
+	for platform, pusher := range st.pushers {
+		if !st.quota.Allow(platform, len(urls)) {
+			failed++
+			errs = append(errs, fmt.Sprintf("%s 配额不足", platform))
 			continue
 		}
+		attempted++
 		results, err := pusher.Push(ctx, urls)
 		if err != nil {
+			failed++
+			errs = append(errs, fmt.Sprintf("%s: %v", platform, err))
 			logger.Warnf("[%s] 推送失败: %v", platform, err)
 			continue
 		}
@@ -681,30 +709,48 @@ func (s *PushService) PushURLs(ctx context.Context, urls []string) error {
 				fail++
 				rec.FailCount = 1
 				rec.ErrorMsg = r.Error
+				errs = append(errs, fmt.Sprintf("%s: %s", platform, r.Error))
 			}
 			if r.RemainQuota > 0 {
 				rec.RemainQuota = r.RemainQuota
 			}
 			records = append(records, rec)
 		}
-		// 记账失败必须上抛：静默丢记录等于事后无账可查。
+		if len(records) == 0 {
+			failed++
+			errs = append(errs, fmt.Sprintf("%s: 没有返回推送结果", platform))
+			continue
+		}
 		if err := s.records.BatchCreate(ctx, records); err != nil {
 			return fmt.Errorf("[%s] 推送记录落库失败: %w", platform, err)
 		}
-
-		s.quota.Consume(platform, success)
-		s.persistQuota(ctx, platform)
+		written += len(records)
+		successTotal += success
+		st.quota.Consume(platform, success)
+		s.persistQuota(ctx, st, platform)
 		logger.Warnf("[%s] 推送 %d URL 成功=%d 失败=%d", platform, len(urls), success, fail)
+	}
+	if attempted == 0 || written == 0 || successTotal == 0 {
+		// 记录写进去了不等于推送成功：每个 URL 都被平台拒绝时 written>0，
+		// 但 success=0。这里必须报错，否则页面/自动驾驶会把全失败当成功。
+		return fmt.Errorf("推送失败：%s", strings.Join(errs, "；"))
+	}
+	if failed > 0 || successTotal < len(urls)*attempted {
+		logger.Warnf("[push] 部分平台失败: %s", strings.Join(errs, "；"))
 	}
 	return nil
 }
 
 // ValidatePlatforms 校验平台名是否已启用。未注册的平台必须报错，
 // 不能静默跳过——否则调用方拿到 code=0 却一条记录都没有。
-func (s *PushService) ValidatePlatforms(platforms []string) error {
+func (s *PushService) ValidatePlatforms(ctx context.Context, platforms []string) error {
+	st, err := s.loadState(ctx)
+	if err != nil {
+		return err
+	}
 	var unknown []string
 	for _, plat := range platforms {
-		if _, ok := s.pushers[plat]; !ok {
+		if _, ok := st.pushers[plat]; !ok {
 			unknown = append(unknown, plat)
 		}
 	}
@@ -716,23 +762,35 @@ func (s *PushService) ValidatePlatforms(platforms []string) error {
 
 // PushManual 手动推指定平台
 func (s *PushService) PushManual(ctx context.Context, urls []string, platforms []string) ([]*model.GeoPushRecord, error) {
-	if err := s.ValidatePlatforms(platforms); err != nil {
+	st, err := s.loadState(ctx)
+	if err != nil {
 		return nil, err
 	}
-	var records []*model.GeoPushRecord
-	s.rollQuotaDay()
-	batchID := uuid.New().String()
+	if len(st.pushers) == 0 {
+		return nil, ErrNoPushPlatforms
+	}
+	var unknown []string
 	for _, plat := range platforms {
-		p, ok := s.pushers[plat]
-		if !ok {
-			continue
+		if _, ok := st.pushers[plat]; !ok {
+			unknown = append(unknown, plat)
 		}
-		if !s.quota.Allow(plat, len(urls)) {
-			logger.Warnf("[%s] 手动推送：配额用尽，跳过", plat)
+	}
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("推送平台未启用: %s", strings.Join(unknown, "、"))
+	}
+	var records []*model.GeoPushRecord
+	s.rollQuotaDay(st)
+	batchID := uuid.New().String()
+	var errs []string
+	for _, plat := range platforms {
+		p := st.pushers[plat]
+		if !st.quota.Allow(plat, len(urls)) {
+			errs = append(errs, fmt.Sprintf("%s 配额不足", plat))
 			continue
 		}
 		results, err := p.Push(ctx, urls)
 		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", plat, err))
 			continue
 		}
 		success := 0
@@ -743,27 +801,38 @@ func (s *PushService) PushManual(ctx context.Context, urls []string, platforms [
 				success++
 			} else {
 				rec.FailCount = 1
+				errs = append(errs, fmt.Sprintf("%s: %s", plat, r.Error))
 			}
 			records = append(records, rec)
 		}
-		s.quota.Consume(plat, success)
-		s.persistQuota(ctx, plat)
+		st.quota.Consume(plat, success)
+		s.persistQuota(ctx, st, plat)
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("推送失败：%s", strings.Join(errs, "；"))
 	}
 	if err := s.records.BatchCreate(ctx, records); err != nil {
 		return records, fmt.Errorf("推送记录落库失败: %w", err)
 	}
+	if len(errs) > 0 {
+		return records, fmt.Errorf("部分推送失败：%s", strings.Join(errs, "；"))
+	}
 	return records, nil
 }
 
-// QuotaStatus 返回各引擎配额状态
-func (s *PushService) QuotaStatus() map[string]any {
-	s.rollQuotaDay()
+// QuotaStatus 返回当前租户各引擎配额状态
+func (s *PushService) QuotaStatus(ctx context.Context) map[string]any {
+	st, err := s.loadState(ctx)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	s.rollQuotaDay(st)
 	out := map[string]any{}
-	for name := range s.pushers {
+	for name := range st.pushers {
 		out[name] = map[string]any{
 			"registered": true,
-			"remain":     s.quota.Remain(name),
-			"used":       s.quota.Used(name),
+			"remain":     st.quota.Remain(name),
+			"used":       st.quota.Used(name),
 		}
 	}
 	return out

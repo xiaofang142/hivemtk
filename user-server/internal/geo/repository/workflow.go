@@ -106,6 +106,8 @@ func (r *geoWorkflowExecRepo) Update(ctx context.Context, exec *model.GeoWorkflo
 	res := r.db.WithContext(ctx).Model(&model.GeoWorkflowExecution{}).Where("id = ?", exec.ID).
 		Updates(map[string]any{
 			"status":       exec.Status,
+			"progress":     exec.Progress,
+			"current_step": exec.CurrentStep,
 			"completed_at": exec.CompletedAt,
 			"result":       exec.Result,
 			"error":        exec.Error,

@@ -443,7 +443,12 @@ func (d *Dispatcher) DispatchMultiModel(ctx context.Context, req DispatchRequest
 		d.mu.RLock()
 		provider, ok := d.providers[name]
 		d.mu.RUnlock()
-		if !ok || !provider.Enabled || provider.APIKey == "" {
+		if !ok || !provider.Enabled {
+			continue
+		}
+		// 平台垫资 provider 没有 APIKey（凭据只在平台侧），不能按空 Key 跳过；
+		// 只要求平台代理可用。自带 Key provider 仍然必须有 Key。
+		if provider.APIKey == "" && !(provider.IsPlatformProvider() && IsPlatformProxyConfigured()) {
 			continue
 		}
 
@@ -451,7 +456,7 @@ func (d *Dispatcher) DispatchMultiModel(ctx context.Context, req DispatchRequest
 			logger.Debugf("[LLM] DispatchMultiModel provider=%s 集群熔断中，跳过", name)
 			continue
 		}
-		result, err := d.callProvider(ctx, provider, req, &ScenarioRoute{MaxLatency: 10000})
+		result, err := d.callProvider(ctx, provider, req, &ScenarioRoute{MaxLatency: 120000})
 		if err != nil {
 
 			if fo := GetGlobalFailover(); fo != nil {

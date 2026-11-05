@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/model"
+	pkgdb "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
 )
 
@@ -151,11 +154,49 @@ func isLocalURL(url string) bool {
 }
 
 // ListModels 列出所有 provider（含本地）
+// tenantProviderNames 多租户下返回当前租户的 provider 名集合。
+// 进程内 dispatcher 是全平台共享的（含其他租户的自带 Key 行），列表接口
+// 不能把它们原样吐给当前租户；按 ctx 租户从库表反查归属后再过滤。
+// 返回 ok=false 表示不需要过滤（单租户离线模式）。
+func (s *LLMRoutingService) tenantProviderNames(ctx context.Context) (map[string]bool, bool) {
+	if !tenant.IsMultiTenant() {
+		return nil, false
+	}
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 {
+		return map[string]bool{}, true
+	}
+	var rows []model.LLMProvider
+	if err := pkgdb.GetDB().WithContext(ctx).
+		Select("name").
+		Where("tenant_id = ?", tid).
+		Find(&rows).Error; err != nil {
+		// 读库失败按 fail-closed 处理：宁可列表为空，也不把别的租户的
+		// provider 名单泄漏出去。
+		return map[string]bool{}, true
+	}
+	names := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		names[r.Name] = true
+	}
+	return names, true
+}
+
 func (s *LLMRoutingService) ListModels(ctx context.Context) []LLMProviderInfo {
 	if s.dispatcher == nil {
 		return nil
 	}
+	allowed, needFilter := s.tenantProviderNames(ctx)
 	providers := s.dispatcher.GetAllProviders()
+	if needFilter {
+		filtered := make([]llm.ProviderConfig, 0, len(providers))
+		for _, p := range providers {
+			if allowed[p.Name] {
+				filtered = append(filtered, p)
+			}
+		}
+		providers = filtered
+	}
 	out := make([]LLMProviderInfo, 0, len(providers))
 	for _, p := range providers {
 		keyInvalidReason, keyInvalid := llm.KeyInvalidReason(p.Name)

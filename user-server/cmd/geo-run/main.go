@@ -136,14 +136,20 @@ func main() {
 
 	configSvc := geoservice.NewConfigService(
 		georepo.NewGeoConfigRepositoryWithDB(db), geoservice.NewLLMAdapter())
+	brandDesc := "开源自私域营销 AI 操作系统：ReAct 销冠智能体(41工具)+13渠道触达(企微/WhatsApp/TG/抖音/小红书/TikTok等)+RAG三级检索+SOP自动化，数据100%本地部署不出域，AGPL-3.0 开源"
+	advantagesStr := "数据不出域;AI直接驱动成交而非仅客服应答;开源可自部署;多渠道统一收件箱;决策链GEO优化内置"
+	competitors := []string{"微伴助手", "探马SCRM", "尘锋SCRM"}
+	domain := config.WebsiteBaseURL()
+	defaultModel := "deepseek"
+	verifyModels := []string{"deepseek", "qwen"}
 	_ = configSvc.UpdateConfig(ctx, geoservice.ConfigUpdateInput{
 		Brand:            "HiveMtk",
-		BrandDescription: "开源自私域营销 AI 操作系统：ReAct 销冠智能体(41工具)+13渠道触达(企微/WhatsApp/TG/抖音/小红书/TikTok等)+RAG三级检索+SOP自动化，数据100%本地部署不出域，AGPL-3.0 开源",
-		Advantages:       "数据不出域;AI直接驱动成交而非仅客服应答;开源可自部署;多渠道统一收件箱;决策链GEO优化内置",
-		Competitors:      []string{"微伴助手", "探马SCRM", "尘锋SCRM"},
-		Domain:           config.WebsiteBaseURL(),
-		DefaultModel:     "deepseek",
-		VerifyModels:     []string{"deepseek", "qwen"},
+		BrandDescription: &brandDesc,
+		Advantages:       &advantagesStr,
+		Competitors:      &competitors,
+		Domain:           &domain,
+		DefaultModel:     &defaultModel,
+		VerifyModels:     &verifyModels,
 	})
 	cfgRow, _ := configSvc.GetConfig(ctx)
 	fmt.Printf("== [U1] 品牌配置已保存 == 品牌=%s 竞品=%s\n", cfgRow.BrandName, cfgRow.Competitors)
@@ -182,7 +188,7 @@ func main() {
 
 	fmt.Println("== [U3] 决策链三阶段内容+验证 ==")
 	for _, iq := range intentQueries {
-		art, gerr := contentSvc.GenerateContent(ctx, "", iq.kw, brand, advantages, 800, "professional")
+		art, gerr := contentSvc.GenerateContent(ctx, "", "", iq.kw, brand, advantages, 800, "professional")
 		if gerr != nil {
 			fmt.Printf("  [%s] 生成失败: %v\n", iq.intent, gerr)
 			continue
@@ -295,12 +301,12 @@ func main() {
 		if i >= batchN {
 			break
 		}
-		art, gerr := contentSvc.GenerateContent(ctx, "", iq.kw, brand, advantages, 800, "professional")
+		art, gerr := contentSvc.GenerateContent(ctx, "", "", iq.kw, brand, advantages, 800, "professional")
 		if gerr != nil {
 			continue
 		}
 		vr, verr := verifySvc.VerifyArticle(ctx, geodto.VerifyRequest{ArticleID: art.ID, Query: iq.query, BrandName: brand})
-		audit := auditSvc.RunGEOAudit(iq.kw, art.Title, art.Content, "", "")
+		audit := auditSvc.RunGEOAudit(iq.kw, art.Title, art.Content, "", "", brand)
 		auditTotal += audit.Score
 		st := "✗"
 		if verr == nil && vr != nil && vr.BrandMentioned {

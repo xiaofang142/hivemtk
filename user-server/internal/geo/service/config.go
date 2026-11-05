@@ -42,20 +42,26 @@ func (s *ConfigService) GetConfig(ctx context.Context) (*model.GeoConfig, error)
 // 用结构体而不是长参数列表：产品叙事的 5 个字段加进来后，位置参数已经 13 个，
 // 调用点错位不会编译报错（同型 string 太多），排查成本高。
 type ConfigUpdateInput struct {
-	Brand            string
-	BrandDescription string
-	Advantages       string
-	Competitors      []string
-	Domain           string
-	DefaultModel     string
-	VerifyModels     []string
-	NegativeKeywords []string
+	Brand string
+	// DefaultModel/VerifyModels 指针：nil=保留，非 nil（可空）=覆盖。
+	// 默认生成模型此前只存不用，现在由内容生成/优化读取（见 ContentService.resolveProvider）。
+	DefaultModel *string
+	VerifyModels *[]string
 
-	ProductCategory string
-	TargetAudience  string
-	KeyFeatures     string
-	GenerationNote  string
-	VersionLabel    string
+	// 以下字段用指针区分「没传」与「传了空值」：nil=保留，非 nil=覆盖
+	// （空串/空切片即清空）。此前一律 `!= ""` 才写，用户在页面上清空域名
+	// 或负面词后保存，旧值会静默回来。
+	BrandDescription *string
+	Advantages       *string
+	Competitors      *[]string
+	Domain           *string
+	NegativeKeywords *[]string
+
+	ProductCategory *string
+	TargetAudience  *string
+	KeyFeatures     *string
+	GenerationNote  *string
+	VersionLabel    *string
 }
 
 // UpdateConfig 更新 GEO 配置（合并更新，保留未提供的字段）
@@ -71,41 +77,41 @@ func (s *ConfigService) UpdateConfig(ctx context.Context, in ConfigUpdateInput) 
 	if in.Brand != "" {
 		existing.BrandName = in.Brand
 	}
-	if in.BrandDescription != "" {
-		existing.BrandDescription = in.BrandDescription
+	if in.BrandDescription != nil {
+		existing.BrandDescription = strings.TrimSpace(*in.BrandDescription)
 	}
-	if in.Advantages != "" {
-		existing.Advantages = in.Advantages
+	if in.Advantages != nil {
+		existing.Advantages = strings.TrimSpace(*in.Advantages)
 	}
-	if len(in.Competitors) > 0 {
-		existing.Competitors = strings.Join(in.Competitors, "、")
+	if in.Competitors != nil {
+		existing.Competitors = strings.Join(*in.Competitors, "、")
 	}
-	if in.Domain != "" {
-		existing.Domain = in.Domain
+	if in.Domain != nil {
+		existing.Domain = strings.TrimSpace(*in.Domain)
 	}
-	if in.DefaultModel != "" {
-		existing.DefaultModel = in.DefaultModel
+	if in.DefaultModel != nil {
+		existing.DefaultModel = strings.TrimSpace(*in.DefaultModel)
 	}
-	if len(in.VerifyModels) > 0 {
-		existing.VerifyModels = strings.Join(in.VerifyModels, "、")
+	if in.VerifyModels != nil {
+		existing.VerifyModels = strings.Join(*in.VerifyModels, "、")
 	}
 	if in.NegativeKeywords != nil {
-		existing.NegativeKeywords = strings.Join(in.NegativeKeywords, ",")
+		existing.NegativeKeywords = strings.Join(*in.NegativeKeywords, ",")
 	}
-	if in.ProductCategory != "" {
-		existing.ProductCategory = in.ProductCategory
+	if in.ProductCategory != nil {
+		existing.ProductCategory = strings.TrimSpace(*in.ProductCategory)
 	}
-	if in.TargetAudience != "" {
-		existing.TargetAudience = in.TargetAudience
+	if in.TargetAudience != nil {
+		existing.TargetAudience = strings.TrimSpace(*in.TargetAudience)
 	}
-	if in.KeyFeatures != "" {
-		existing.KeyFeatures = in.KeyFeatures
+	if in.KeyFeatures != nil {
+		existing.KeyFeatures = strings.TrimSpace(*in.KeyFeatures)
 	}
-	if in.GenerationNote != "" {
-		existing.GenerationNote = in.GenerationNote
+	if in.GenerationNote != nil {
+		existing.GenerationNote = strings.TrimSpace(*in.GenerationNote)
 	}
-	if in.VersionLabel != "" {
-		existing.VersionLabel = in.VersionLabel
+	if in.VersionLabel != nil {
+		existing.VersionLabel = strings.TrimSpace(*in.VersionLabel)
 	}
 	if existing.Language == "" {
 		existing.Language = "zh"

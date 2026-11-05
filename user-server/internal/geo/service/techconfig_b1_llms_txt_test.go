@@ -71,7 +71,7 @@ func TestGenerateLLMsTxt_DedupByURL(t *testing.T) {
 		},
 	}
 	// 直接测 merge 函数：manual 0 条 + KB 1 条，URL 唯一 ⇒ 1 条
-	merged := mergeKBDocsInto(svc, cfg, nil)
+	merged := mergeKBDocsInto(context.Background(), svc, cfg, nil)
 	require.Len(t, merged, 1)
 	assert.Equal(t, "https://example.com/wp", merged[0].URL)
 }

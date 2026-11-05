@@ -371,7 +371,7 @@ var ModuleMenuBindings = map[string][]string{
 		"geoTools", "geoDiagnose", "geoAuditCenter", "geoConfigGroup",
 		"geoBrandConfig", "geoSeoInfra", "geoPusherConfig", "geoSiteConfig",
 		"geoSchemaTemplates", "geoCompetitors", "geoConfig",
-		"geoProd", "geoKeywordMining", "geoContentCreation", "geoContentOptimize",
+		"geoProd", "geoAutopilot", "geoKeywordMining", "geoContentCreation", "geoContentOptimize",
 		"geoKnowledgeBase", "geoEntityGraph",
 		"geoPublish", "geoSitePublish", "geoPushCenter", "geoPlatformPublish", "geoWorkflow",
 		"geoMonitor", "geoFunnelDashboard", "geoIndexTracking", "geoVisibilityBoard",

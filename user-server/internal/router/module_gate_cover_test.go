@@ -13,6 +13,7 @@ package router
 // 不在本表（route_policy_gate_test.go 已另行钉住）。
 
 import (
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/middleware"
@@ -102,6 +103,26 @@ func TestModuleRoutePatternsCoverShippedRoutes_BrowserLegs(t *testing.T) {
 	for _, p := range []string{"/api/egolite2/x", "/api/browser-automationX", "/api/egolitefake/y"} {
 		if got := middleware.ModuleOwnerOf(p); got == "browser-automation" {
 			t.Errorf("负向路径 %q 不应命中 browser-automation（前缀误匹配）", p)
+		}
+	}
+}
+
+// TestGeoRoutesAllModuleGated 新增 /api/geo/* 路由必须同时进入能力面与模块归属表，
+// 否则多租户模式下未购买 GEO 模块的租户可以直接调用（模块闸对未覆盖路径放行）。
+// 事实源是 liveRoutes（生产装配入口 Setup 注册的真实路由），不是手抄清单。
+func TestGeoRoutesAllModuleGated(t *testing.T) {
+	exact, _ := liveRoutes(t)
+	for key := range exact {
+		parts := strings.SplitN(key, " ", 2)
+		if len(parts) != 2 || !strings.HasPrefix(parts[1], "/api/geo") {
+			continue
+		}
+		path := routeShape(parts[1])
+		if owner := middleware.ModuleOwnerOf(path); owner != "geo" {
+			t.Errorf("GEO 路由 %s 模块归属=%q，应为 geo（改了路由但没更新能力面/模块模式表？跑 go run ./cmd/gen-module-route-patterns）", key, owner)
+		}
+		if keys := middleware.CapabilityOwnerKeysFor(path); len(keys) == 0 {
+			t.Errorf("GEO 路由 %s 没有能力面归属（menu_capability_routes.go 缺条目）", key)
 		}
 	}
 }

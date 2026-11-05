@@ -33,7 +33,7 @@ func (c *PushController) PushURLs(ctx *gin.Context) {
 		return
 	}
 	if len(req.Platforms) > 0 {
-		if err := c.svc.ValidatePlatforms(req.Platforms); err != nil {
+		if err := c.svc.ValidatePlatforms(ctx.Request.Context(), req.Platforms); err != nil {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -57,7 +57,7 @@ func (c *PushController) PushURLs(ctx *gin.Context) {
 // @Router    /api/geo/push/quota [get]
 // QuotaStatus GET /geo/push/quota
 func (c *PushController) QuotaStatus(ctx *gin.Context) {
-	status := c.svc.QuotaStatus()
+	status := c.svc.QuotaStatus(ctx.Request.Context())
 	response.Success(ctx, status, "ok")
 }
 

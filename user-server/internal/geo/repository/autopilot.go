@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"hivemtk-user/internal/geo/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -17,6 +18,9 @@ type GeoAutopilotRunRepository interface {
 	List(ctx context.Context, page, limit int) ([]*model.GeoAutopilotRun, int64, error)
 	// HasRunning 同租户是否已有 running 记录（并发闸）
 	HasRunning(ctx context.Context) (bool, error)
+	// FailStaleRunning 把超过阈值仍为 running 的记录收口为 failed。
+	// 进程崩溃/重启后不会有 goroutine 回来写终态，不收口会让并发闸永久卡死。
+	FailStaleRunning(ctx context.Context, before time.Time) (int64, error)
 }
 
 type geoAutopilotRunRepo struct {
@@ -65,6 +69,18 @@ func (r *geoAutopilotRunRepo) List(ctx context.Context, page, limit int) ([]*mod
 		Offset((page - 1) * limit).Limit(limit).
 		Find(&rows).Error
 	return rows, total, err
+}
+
+func (r *geoAutopilotRunRepo) FailStaleRunning(ctx context.Context, before time.Time) (int64, error) {
+	now := time.Now()
+	res := r.db.WithContext(ctx).Model(&model.GeoAutopilotRun{}).
+		Where("status = ? AND started_at < ?", "running", before).
+		Updates(map[string]any{
+			"status":      "failed",
+			"error":       "任务超时或服务重启，已自动标记失败；可重新发起",
+			"finished_at": now,
+		})
+	return res.RowsAffected, res.Error
 }
 
 func (r *geoAutopilotRunRepo) HasRunning(ctx context.Context) (bool, error) {

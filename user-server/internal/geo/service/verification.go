@@ -120,32 +120,37 @@ func (s *VerificationService) VerifyArticle(ctx context.Context, req dto.VerifyR
 		engineTag = "probe-failed"
 	}
 
-	for _, extraModel := range req.Models {
-		if strings.TrimSpace(extraModel) == "" || extraModel == resp.Model {
-			continue
+	// 多模型验证：req.Models 是 provider 名（/api/llm/models 返回的 name）。
+	// 必须走真实的多 provider 调度，并按响应里的实际模型入库；此前用默认
+	// provider 重复调用再贴上所请求的模型名，等于伪造多模型对比。
+	extraProviders := make([]string, 0, len(req.Models))
+	for _, name := range req.Models {
+		name = strings.TrimSpace(name)
+		if name != "" && name != resp.Provider {
+			extraProviders = append(extraProviders, name)
 		}
-		extraResp, err := s.llm.GenerateJSON(ctx, "", prompt, 8000)
-		if err != nil {
-			continue
+	}
+	if len(extraProviders) > 0 {
+		extraResults, multiErr := s.llm.GenerateJSONMultiModel(ctx, "", prompt, 8000, extraProviders)
+		if multiErr != nil {
+			logger.Warnf("[GEO verify] 多模型验证失败（仅保留主模型结果）: %v", multiErr)
 		}
-		extraParsed := parseVerifyResponse(extraResp.Content)
-		s.recordAPICall(ctx, extraResp, "verify_search_multi")
-		_ = s.verifyRepo.Create(ctx, &model.GeoVerifyResult{
-			ArticleID:      req.ArticleID,
-			BrandName:      req.BrandName,
-			Model:          extraModel,
-			Engine:         engineTag,
-			ProbeMode:      probeMode,
-			Query:          req.Query,
-			Response:       extraParsed.Response,
-			BrandMentioned: extraParsed.BrandMentioned,
-			MentionCount:   extraParsed.MentionCount,
-			Sentiment:      extraParsed.Sentiment,
-			Position:       strings.Join(extraParsed.MentionPositions, "; "),
-		})
-		if extraParsed.BrandMentioned && !parsed.BrandMentioned {
-			parsed.BrandMentioned = true
-			parsed.MentionCount += extraParsed.MentionCount
+		for _, extraResp := range extraResults {
+			extraParsed := parseVerifyResponse(extraResp.Content)
+			s.recordAPICall(ctx, extraResp, "verify_search_multi")
+			_ = s.verifyRepo.Create(ctx, &model.GeoVerifyResult{
+				ArticleID:      req.ArticleID,
+				BrandName:      req.BrandName,
+				Model:          extraResp.Model,
+				Engine:         engineTag,
+				ProbeMode:      probeMode,
+				Query:          req.Query,
+				Response:       extraParsed.Response,
+				BrandMentioned: extraParsed.BrandMentioned,
+				MentionCount:   extraParsed.MentionCount,
+				Sentiment:      extraParsed.Sentiment,
+				Position:       strings.Join(extraParsed.MentionPositions, "; "),
+			})
 		}
 	}
 

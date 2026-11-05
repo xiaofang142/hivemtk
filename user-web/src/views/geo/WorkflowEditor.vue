@@ -434,7 +434,8 @@
             >
               <template #default="{ row }">
                 <el-progress
-                  :percentage="row.progress || 0"
+                  :percentage="row.progress || (row.status === 'success' ? 100 : 0)"
+                  :status="row.status === 'failed' ? 'exception' : undefined"
                   size="small"
                 />
               </template>
@@ -452,7 +453,7 @@
               label="结束时间"
               width="180">
               <template #default="{ row }">
-                {{ fmtTime(row.finished_at) }}
+                {{ fmtTime(row.finished_at || row.completed_at) }}
               </template>
             </el-table-column>
           </el-table>

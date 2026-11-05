@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/url"
+	"strings"
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
@@ -50,14 +53,64 @@ func (s *GeoCompetitorService) GetCompetitor(ctx context.Context, id uint) (*Com
 	return &dto, nil
 }
 
+// normalizeCompetitorDomain 只接受裸域名/主机名，拒绝 scheme、路径、用户信息
+// 与内网字面量。爬虫会把它拼成 https://<domain><path>，任何多余字符都可能
+// 改变目标主机（如 "example.com@127.0.0.1"）。
+func normalizeCompetitorDomain(raw string) (string, error) {
+	d := strings.TrimSpace(strings.ToLower(raw))
+	if d == "" {
+		return "", fmt.Errorf("竞品域名不能为空")
+	}
+	if strings.ContainsAny(d, "/\\?#@ \t\r\n") {
+		return "", fmt.Errorf("竞品域名只能是主机名（不要带协议、路径或参数）")
+	}
+	u, err := url.Parse("https://" + d)
+	if err != nil || u.Hostname() == "" || u.Host != d {
+		return "", fmt.Errorf("竞品域名格式非法: %s", raw)
+	}
+	host := u.Hostname()
+	if host == "localhost" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
+		return "", fmt.Errorf("竞品域名不能指向内网主机")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return "", fmt.Errorf("竞品域名不能指向内网地址")
+		}
+	}
+	return d, nil
+}
+
+func normalizeCompetitorPaths(paths []string) ([]string, error) {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if !strings.HasPrefix(p, "/") || strings.Contains(p, "..") || strings.ContainsAny(p, "\r\n") {
+			return nil, fmt.Errorf("竞品路径必须以 / 开头且不能包含 ..: %s", p)
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
 func (s *GeoCompetitorService) CreateCompetitor(ctx context.Context, dto CompetitorDTO) (*CompetitorDTO, error) {
 	if dto.Name == "" || dto.Domain == "" {
 		return nil, fmt.Errorf("name and domain are required")
 	}
+	domain, err := normalizeCompetitorDomain(dto.Domain)
+	if err != nil {
+		return nil, err
+	}
+	paths, err := normalizeCompetitorPaths(dto.Paths)
+	if err != nil {
+		return nil, err
+	}
 	c := &model.GeoCompetitor{
 		Name:     dto.Name,
-		Domain:   dto.Domain,
-		Paths:    strSliceToJSON(dto.Paths),
+		Domain:   domain,
+		Paths:    strSliceToJSON(paths),
 		Category: dto.Category,
 		Priority: dto.Priority,
 		Status:   dto.Status,
@@ -85,9 +138,17 @@ func (s *GeoCompetitorService) UpdateCompetitor(ctx context.Context, id uint, dt
 	if err != nil {
 		return nil, err
 	}
+	domain, err := normalizeCompetitorDomain(dto.Domain)
+	if err != nil {
+		return nil, err
+	}
+	paths, err := normalizeCompetitorPaths(dto.Paths)
+	if err != nil {
+		return nil, err
+	}
 	c.Name = dto.Name
-	c.Domain = dto.Domain
-	c.Paths = strSliceToJSON(dto.Paths)
+	c.Domain = domain
+	c.Paths = strSliceToJSON(paths)
 	c.Category = dto.Category
 	c.Priority = dto.Priority
 	c.Status = dto.Status

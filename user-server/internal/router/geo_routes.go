@@ -94,10 +94,14 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		geoservice.NewAutopilotService(georepo.NewGeoAutopilotRunRepositoryWithDB(gormDB)))
 
 	// ⬇️ GEO v2 新增 Service + Controller
-	// 探针装配是平台级全局动作（llm_providers/geo_config 装配期读取，进程内共享）：
-	// 构造期没有 HTTP 请求 ctx 可绑，TENANT_MODE=on 下裸 ctx 会被隔离 callback
-	// fail-closed ⇒ 探针清单恒空。走 tenant.WithSystemScope 平台级豁免通道。
-	probes := geoservice.NewEngineProbesFromDB(tenant.WithSystemScope(context.Background()), gormDB)
+	// 探针必须按请求租户解析：llm_providers/geo_config 都是租户表，装配期
+	// 固化一份清单会把 A 的品牌提示词与 provider 凭据用在 B 的探针上。
+	probeResolver := func(ctx context.Context) []geoservice.SearchProbe {
+		if _, ok := tenant.FromContext(ctx); !ok && tenant.IsMultiTenant() {
+			return nil
+		}
+		return geoservice.NewEngineProbesFromDB(ctx, gormDB)
+	}
 	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
 	pushSvc := geoservice.NewPushService(
 		georepo.NewGeoPusherConfigRepositoryWithDB(gormDB),
@@ -111,8 +115,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		articleRepo,
 		keywordRepo,
 		georepo.NewGeoDailyStatRepositoryWithDB(gormDB),
-		probes...,
 	)
+	indexTrackerSvc.SetProbeResolver(probeResolver)
 	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
 	seedTermSvc := geoservice.NewSeedTermService(georepo.NewGeoSeedTermRepositoryWithDB(gormDB))
 	seedTermCtrl := geoctrl.NewSeedTermController(seedTermSvc)
@@ -130,7 +134,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	schemaCRUDCtrl := geoctrl.NewGeoSchemaTemplateController(schemaTemplateSvc)
 
 	probeRepo := georepo.NewGeoProbeRunRepositoryWithDB(gormDB)
-	probeSvc := geoservice.NewProbeService(probes, probeRepo)
+	probeSvc := geoservice.NewProbeService(nil, probeRepo)
+	probeSvc.SetProbeResolver(probeResolver)
 	probeCtrl := geoctrl.NewProbeController(probeSvc)
 	citeSvc := geoservice.NewCitationService(probeRepo, configRepo, georepo.NewGeoCompetitorRepositoryWithDB(gormDB))
 	// A10（2026-10-24）：引用漂移读端注入（快照由 cron citation_drift 写）。
@@ -316,12 +321,6 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	geo.PUT("/sites/:id", siteCRUDCtrl.Update)
 	geo.DELETE("/sites/:id", siteCRUDCtrl.Delete)
 
-	geo.GET("/pushers", pusherCRUDCtrl.List)
-	geo.POST("/pushers", pusherCRUDCtrl.Create)
-	geo.GET("/pushers/:id", pusherCRUDCtrl.Get)
-	geo.PUT("/pushers/:id", pusherCRUDCtrl.Update)
-	geo.DELETE("/pushers/:id", pusherCRUDCtrl.Delete)
-
 	geo.GET("/schema-templates", schemaCRUDCtrl.List)
 	geo.POST("/schema-templates", schemaCRUDCtrl.Create)
 	geo.GET("/schema-templates/:id", schemaCRUDCtrl.Get)
@@ -353,6 +352,13 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 	geoAdmin := geo.Group("")
 	geoAdmin.Use(middleware.AdminAuthMiddleware())
+	// 推送凭据含百度 token / Google 私钥 / IndexNow key：列表回显明文，必须管理员专属
+	geo.GET("/pushers", pusherCRUDCtrl.List)
+	geo.POST("/pushers", pusherCRUDCtrl.Create)
+	geo.GET("/pushers/:id", pusherCRUDCtrl.Get)
+	geo.PUT("/pushers/:id", pusherCRUDCtrl.Update)
+	geo.DELETE("/pushers/:id", pusherCRUDCtrl.Delete)
+
 	geoAdmin.PUT("/config", configCtrl.UpdateConfig)
 	geoAdmin.POST("/config/optimize", configCtrl.OptimizeConfig)
 

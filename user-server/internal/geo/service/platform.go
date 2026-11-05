@@ -83,9 +83,7 @@ func NewPlatformService(
 		accountRepo: ar,
 		recordRepo:  rr,
 		articleRepo: gr,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		httpClient:  newSafePublishHTTPClient(30 * time.Second),
 	}
 }
 

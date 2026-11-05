@@ -88,8 +88,8 @@ func discoverSiteAuditURLs(ctx context.Context, rawURL string, maxPages int) ([]
 	root := base.Scheme + "://" + base.Host
 
 	urls := []string{rawURL}
-	for _, sm := range sitemapCandidates(ctx, root) {
-		locs, smErr := fetchSitemapLocs(ctx, sm, 0)
+	for _, sm := range sitemapCandidates(ctx, root, base.Host) {
+		locs, smErr := fetchSitemapLocs(ctx, sm, 0, base.Host)
 		if smErr != nil {
 			continue
 		}
@@ -107,7 +107,7 @@ func discoverSiteAuditURLs(ctx context.Context, rawURL string, maxPages int) ([]
 			continue
 		}
 		pu, pErr := url.Parse(u)
-		if pErr != nil || pu.Host != base.Host || (pu.Scheme != "http" && pu.Scheme != "https") {
+		if pErr != nil || !sameAuditHost(pu.Host, base.Host) || (pu.Scheme != "http" && pu.Scheme != "https") {
 			continue
 		}
 		if isAuditAssetURL(pu.Path) {
@@ -126,11 +126,16 @@ func discoverSiteAuditURLs(ctx context.Context, rawURL string, maxPages int) ([]
 	return out, note, nil
 }
 
-func sitemapCandidates(ctx context.Context, root string) []string {
+func sitemapCandidates(ctx context.Context, root, allowedHost string) []string {
 	out := make([]string, 0, 4)
 	add := func(u string) {
 		u = strings.TrimSpace(u)
 		if u == "" {
+			return
+		}
+		// robots.txt 里的 Sitemap 行可能指向任意域，只接受本站主机，
+		// 避免把审计抓取变成对第三方站点的探测。
+		if pu, err := url.Parse(u); err != nil || !sameAuditHost(pu.Host, allowedHost) {
 			return
 		}
 		for _, existing := range out {
@@ -164,7 +169,10 @@ type sitemapDoc struct {
 	} `xml:"sitemap"`
 }
 
-func fetchSitemapLocs(ctx context.Context, sitemapURL string, depth int) ([]string, error) {
+func fetchSitemapLocs(ctx context.Context, sitemapURL string, depth int, allowedHost string) ([]string, error) {
+	if pu, err := url.Parse(strings.TrimSpace(sitemapURL)); err != nil || !sameAuditHost(pu.Host, allowedHost) {
+		return nil, fmt.Errorf("sitemap 域名不属于本站: %s", sitemapURL)
+	}
 	body, code, err := fetchAuditFile(ctx, siteAuditClient, sitemapURL)
 	if err != nil {
 		return nil, err
@@ -187,13 +195,21 @@ func fetchSitemapLocs(ctx context.Context, sitemapURL string, depth int) ([]stri
 			if i >= 3 {
 				break
 			}
-			locs, childErr := fetchSitemapLocs(ctx, strings.TrimSpace(sm.Loc), depth+1)
+			locs, childErr := fetchSitemapLocs(ctx, strings.TrimSpace(sm.Loc), depth+1, allowedHost)
 			if childErr == nil {
 				out = append(out, locs...)
 			}
 		}
 	}
 	return out, nil
+}
+
+// sameAuditHost 判断两个主机是否属于同一站点（容忍 www 前缀差异）。
+func sameAuditHost(a, b string) bool {
+	normalize := func(h string) string {
+		return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h)), "www.")
+	}
+	return normalize(a) != "" && normalize(a) == normalize(b)
 }
 
 func isAuditAssetURL(path string) bool {

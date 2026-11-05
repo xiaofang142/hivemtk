@@ -50,7 +50,7 @@ func sovRefreshJob(ctx context.Context) (string, error) {
 
 	keywordRepo := repository.NewGeoKeywordRepository()
 	probeRepo := repository.NewGeoProbeRunRepository()
-	probes := NewEngineProbes()
+	probes := NewEngineProbesForContext(ctx)
 	probeSvc := NewProbeService(probes, probeRepo)
 
 	const sovKeywordSample = 60
@@ -217,7 +217,7 @@ func negativeMonitorJob(ctx context.Context) (string, error) {
 	}
 	negativeWords := loadNegativeKeywords(ctx, config)
 
-	probes := NewEngineProbes()
+	probes := NewEngineProbesForContext(ctx)
 	probeSvc := NewProbeService(probes, probeRepo)
 
 	queries := make([]string, 0, len(negativeWords))

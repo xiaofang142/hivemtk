@@ -103,5 +103,13 @@ func (c *SiteController) LlmsTxtPreview(ctx *gin.Context) {
 // @Router    /api/geo/site/robots-preview [get]
 // RobotsTxtPreview GET /geo/site/robots-preview
 func (c *SiteController) RobotsTxtPreview(ctx *gin.Context) {
-	response.Success(ctx, gin.H{"content": service.GenerateRobots()}, "ok")
+	name := "GEO Site"
+	if cfg, err := c.configRepo.Get(ctx.Request.Context()); err == nil && cfg != nil {
+		if b := strings.TrimSpace(cfg.BrandName); b != "" {
+			name = b
+		} else if d := strings.TrimSpace(cfg.Domain); d != "" {
+			name = d
+		}
+	}
+	response.Success(ctx, gin.H{"content": service.GenerateSiteRobots(name)}, "ok")
 }

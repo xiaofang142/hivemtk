@@ -11,16 +11,21 @@ type SaveKnowledgeDocumentRequest struct {
 	SourceLevel string            `json:"source_level"`
 	SourceURL   string            `json:"source_url"`
 	Metadata    map[string]string `json:"metadata"`
+	// IsPublic 指针：nil=不修改，true/false=显式设置（公开 FAQ 可见性）。
+	IsPublic *bool `json:"is_public"`
 }
 
 // KnowledgeDocumentResponse 知识库文档响应
 type KnowledgeDocumentResponse struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	DocType   string    `json:"doc_type"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Content     string    `json:"content"`
+	DocType     string    `json:"doc_type"`
+	SourceLevel string    `json:"source_level,omitempty"`
+	SourceURL   string    `json:"source_url,omitempty"`
+	IsPublic    bool      `json:"is_public"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // KBSearchResult 知识库检索结果（含相关性得分）

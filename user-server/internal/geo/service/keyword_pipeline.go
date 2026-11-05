@@ -223,7 +223,7 @@ func runPipelineSEOBatch(ctx context.Context, gormDB *gorm.DB, llmAdapter *LLMAd
 
 // seoOneWord 单词全链路：生成 → 评分 → 验证（含探针 + 多模型对比）
 func seoOneWord(ctx context.Context, contentSvc *ContentService, verifySvc *VerificationService, lang, keyword, brand string, advs, models []string) error {
-	art, err := contentSvc.GenerateContent(ctx, lang, keyword, brand, advs, geoPipelineSEOWordCount, "professional")
+	art, err := contentSvc.GenerateContent(ctx, "", lang, keyword, brand, advs, geoPipelineSEOWordCount, "professional")
 	if err != nil {
 		return fmt.Errorf("内容生成失败: %w", err)
 	}

@@ -53,7 +53,7 @@ func (s *ContentService) GenerateContentBatch(ctx context.Context, req dto.Batch
 	res.Items = make([]BatchGenerateItem, 0, len(req.Keywords))
 	for _, kw := range req.Keywords {
 		item := BatchGenerateItem{Keyword: kw}
-		article, err := s.GenerateContent(ctx, req.Lang, kw, req.BrandName, req.Advantages, req.WordCount, req.Style)
+		article, err := s.GenerateContent(ctx, req.Model, req.Lang, kw, req.BrandName, req.Advantages, req.WordCount, req.Style)
 		if err != nil {
 			item.Error = err.Error()
 		} else {

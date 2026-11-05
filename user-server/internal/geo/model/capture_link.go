@@ -21,7 +21,9 @@ type GeoCaptureLink struct {
 	// ShortLinkID 指向 short_links.id；未配置公网基座时为 0（只有站内落地页路径）。
 	ShortLinkID uint `gorm:"default:0;index" json:"short_link_id"`
 
-	ArticleID uint   `gorm:"default:0;index" json:"article_id"`
+	// ArticleID 对应 geo_articles.id（varchar(36) UUID）。此前是 uint，
+	// 前端填的数字永远对不上文章主键；这里按真实类型存字符串。
+	ArticleID string `gorm:"type:varchar(36);index" json:"article_id"`
 	ChainID   string `gorm:"size:255;index" json:"chain_id"`
 	// SourceID 写进 clues.source_id，用于把线索归因回本条承接链接。
 	SourceID  string `gorm:"size:255;index" json:"source_id"`

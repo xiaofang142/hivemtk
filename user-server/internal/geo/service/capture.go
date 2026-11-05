@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
@@ -72,7 +73,7 @@ type ShortLinkPort interface {
 
 // KnowledgeAskPort 公开 FAQ 问答端口，KBService 实现。
 type KnowledgeAskPort interface {
-	Ask(ctx context.Context, question string) (*dto.KBAskResponse, error)
+	AskPublic(ctx context.Context, question string) (*dto.KBAskResponse, error)
 }
 
 // CaptureLinkInput 创建承接链接的入参。
@@ -81,7 +82,7 @@ type CaptureLinkInput struct {
 	Title     string `json:"title"`
 	TargetURL string `json:"target_url"`
 	Keyword   string `json:"keyword"`
-	ArticleID uint   `json:"article_id"`
+	ArticleID string `json:"article_id"`
 	ChainID   string `json:"chain_id"`
 }
 
@@ -172,27 +173,38 @@ func (s *CaptureService) landingPath(code string) string {
 	return "/api/public/geo/l/" + code
 }
 
-func (s *CaptureService) landingURL(code string) string {
-	if s.publicBase == "" {
+// publicBaseFor 优先读当前租户在参数中心的公网基址，未配置时回落到
+// 装配期基址。捕获服务在装配期拿不到请求租户，不能把基址固化成进程级。
+func (s *CaptureService) publicBaseFor(ctx context.Context) string {
+	if base := strings.TrimRight(config.GetPublicBaseURLFor(ctx), "/"); base != "" {
+		return base
+	}
+	return s.publicBase
+}
+
+func (s *CaptureService) landingURL(ctx context.Context, code string) string {
+	base := s.publicBaseFor(ctx)
+	if base == "" {
 		return s.landingPath(code)
 	}
-	return s.publicBase + s.landingPath(code)
+	return base + s.landingPath(code)
 }
 
 // shortURL 短码在装配层固定为 "g"+承接码，详情/列表据此还原，避免额外一次短链查询。
-func (s *CaptureService) shortURL(link *model.GeoCaptureLink) string {
-	if link.ShortLinkID == 0 || s.publicBase == "" || len("g"+link.Code) > 20 {
+func (s *CaptureService) shortURL(ctx context.Context, link *model.GeoCaptureLink) string {
+	base := s.publicBaseFor(ctx)
+	if link.ShortLinkID == 0 || base == "" || len("g"+link.Code) > 20 {
 		return ""
 	}
-	return s.publicBase + "/api/s/g" + link.Code
+	return base + "/api/s/g" + link.Code
 }
 
-func (s *CaptureService) baseView(link *model.GeoCaptureLink) *CaptureLinkView {
+func (s *CaptureService) baseView(ctx context.Context, link *model.GeoCaptureLink) *CaptureLinkView {
 	return &CaptureLinkView{
 		GeoCaptureLink: *link,
 		LandingPath:    s.landingPath(link.Code),
-		LandingURL:     s.landingURL(link.Code),
-		ShortURL:       s.shortURL(link),
+		LandingURL:     s.landingURL(ctx, link.Code),
+		ShortURL:       s.shortURL(ctx, link),
 	}
 }
 
@@ -258,9 +270,9 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 	}
 
 	var shortRef *ShortLinkRef
-	if s.shorts != nil && strings.HasPrefix(s.publicBase, "https://") && len("g"+code) <= 20 {
+	if base := s.publicBaseFor(ctx); s.shorts != nil && strings.HasPrefix(base, "https://") && len("g"+code) <= 20 {
 		shortCode := "g" + code
-		shortRef, err = s.shorts.CreateCaptureShortLink(ctx, shortCode, s.landingURL(code), title)
+		shortRef, err = s.shorts.CreateCaptureShortLink(ctx, shortCode, s.landingURL(ctx, code), title)
 		if err != nil {
 			logger.Warnf("[GEO capture] 短链创建失败 code=%s: %v", code, err)
 			shortRef = nil
@@ -276,7 +288,7 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 			}
 			return nil, err
 		}
-		return s.baseView(link), nil
+		return s.baseView(ctx, link), nil
 	}
 
 	if err := s.links.Create(ctx, link); err != nil {
@@ -286,7 +298,7 @@ func (s *CaptureService) Create(ctx context.Context, in CaptureLinkInput, create
 		return nil, err
 	}
 
-	return s.baseView(link), nil
+	return s.baseView(ctx, link), nil
 }
 
 func (s *CaptureService) List(ctx context.Context, q repository.CaptureLinkQuery) ([]*CaptureLinkView, int64, error) {
@@ -296,7 +308,7 @@ func (s *CaptureService) List(ctx context.Context, q repository.CaptureLinkQuery
 	}
 	views := make([]*CaptureLinkView, 0, len(links))
 	for _, link := range links {
-		views = append(views, s.baseView(link))
+		views = append(views, s.baseView(ctx, link))
 	}
 	return views, total, nil
 }
@@ -311,7 +323,7 @@ func (s *CaptureService) Get(ctx context.Context, id uint) (*CaptureLinkView, er
 	if err != nil {
 		return nil, err
 	}
-	view := s.baseView(link)
+	view := s.baseView(ctx, link)
 	view.Responses = stats
 	view.Connected = stats.Matched > 0
 	return view, nil
@@ -372,7 +384,7 @@ func (s *CaptureService) Ask(ctx context.Context, code, question string) (*dto.K
 	if !ok {
 		return nil, fmt.Errorf("今日问答次数已用完，请明天再来或直接留言")
 	}
-	return s.kb.Ask(ctx, question)
+	return s.kb.AskPublic(ctx, question)
 }
 
 // SubmitLead 公开留资：先占配额，落线索失败则回滚计数。
@@ -433,7 +445,15 @@ func (s *CaptureService) SubmitLead(ctx context.Context, code, contact, contactT
 	return clueID, nil
 }
 
+// captureBusinessZone 业务日固定按中国标准时间（UTC+8）切日。
+// 此前用 UTC 切日，北京时间 0:00-8:00 仍算前一天，配额与用户认知错位。
+var captureBusinessZone = time.FixedZone("CST", 8*3600)
+
 func businessDay(t time.Time) time.Time {
+	// 取中国时区的日历日，但用 UTC 零点承载这个“日期值”：
+	// 列类型是 date，驱动若把 +08 零点的 timestamptz 交给 PG，会话时区
+	// （通常 UTC）会把它折回前一天，导致同一业务日反复重置配额。
+	t = t.In(captureBusinessZone)
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }

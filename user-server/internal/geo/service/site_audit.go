@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -116,7 +117,61 @@ type SiteAuditFix struct {
 
 // ── 活体抓取 ─────────────────────────────────────────────────────────────────
 
-var siteAuditClient = &http.Client{Timeout: siteFetchTimeout}
+var siteAuditClient = newSiteAuditHTTPClient(siteFetchTimeout)
+
+// newSiteAuditHTTPClient 构造带 SSRF 防护的抓取客户端：
+//   - 连接前解析域名，只拨号到通过 host 校验的 IP（防 DNS 指向内网/重绑定）；
+//   - 每次重定向重新校验，最多 5 跳；
+//   - 不走环境代理，避免代理地址绕过校验。
+func newSiteAuditHTTPClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("出站地址非法: %w", err)
+			}
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("域名解析失败: %w", err)
+			}
+			var lastErr error
+			for _, ipa := range ips {
+				ipAddr := net.JoinHostPort(ipa.IP.String(), port)
+				if err := siteAuditHostValidator("http://" + ipAddr); err != nil {
+					lastErr = err
+					continue
+				}
+				conn, dialErr := dialer.DialContext(ctx, network, ipAddr)
+				if dialErr == nil {
+					return conn, nil
+				}
+				lastErr = dialErr
+			}
+			if lastErr == nil {
+				lastErr = errors.New("域名没有可用地址")
+			}
+			return nil, lastErr
+		},
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		MaxIdleConns:          10,
+		IdleConnTimeout:       30 * time.Second,
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 {
+				return errors.New("重定向次数超过 5 次")
+			}
+			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+				return errors.New("重定向到非 http(s) 地址")
+			}
+			return siteAuditHostValidator(req.URL.String())
+		},
+	}
+}
 
 // siteAuditHostValidator 出站前的主机校验（SSRF 防护）。
 // 默认拒绝私网/回环/元数据地址；测试用 httptest 时在 site_audit_test.go 的 init 里放行。
@@ -966,7 +1021,7 @@ func auditProductClarity(p *sitePage) SiteAuditCategory {
 		defineDetail = "首段含定义性表述"
 	}
 	add("PRODUCT-DEFINE", 2, defineOK, defineDetail,
-		"首屏用一句话定义“是什么产品/属于什么类别”，例：HiveMtk 是面向企业的 AI 销售与智能客服平台")
+		"首屏用一句话定义“是什么产品/属于什么类别”，例：某品牌是面向企业的 AI 销售与智能客服平台")
 
 	featureOK := siteHasAny(p.text, "功能", "能力", "特性", "优势") && (p.listItems >= 3 || p.hasTable)
 	add("PRODUCT-FEATURES", 2, featureOK, fmt.Sprintf("列表项 %d / 表格 %v", p.listItems, p.hasTable),

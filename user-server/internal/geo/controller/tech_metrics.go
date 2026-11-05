@@ -47,7 +47,7 @@ func (c *TechMetricsController) GenerateLLMsTxt(ctx *gin.Context) {
 	if !response.BindJSON(ctx, &cfg) {
 		return
 	}
-	response.Success(ctx, gin.H{"content": c.techconfigSvc.GenerateLLMsTxt(&cfg)}, "生成成功")
+	response.Success(ctx, gin.H{"content": c.techconfigSvc.GenerateLLMsTxtCtx(ctx.Request.Context(), &cfg)}, "生成成功")
 }
 
 // @Summary 生成 sitemap.xml
@@ -75,16 +75,17 @@ func (c *TechMetricsController) AuditContent(ctx *gin.Context) {
 		Content      string `json:"content" binding:"required"`
 		MetaDesc     string `json:"meta_desc"`
 		SchemaJSONLD string `json:"schema_jsonld"`
+		Brand        string `json:"brand"`
 		Live         bool   `json:"live"`
 	}
 	if !response.BindJSON(ctx, &req) {
 		return
 	}
 	if req.Live && req.URL != "" {
-		response.Success(ctx, c.techconfigSvc.RunGEOAuditLive(ctx.Request.Context(), req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD), "审计完成（含真实技术检查）")
+		response.Success(ctx, c.techconfigSvc.RunGEOAuditLive(ctx.Request.Context(), req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD, req.Brand), "审计完成（含真实技术检查）")
 		return
 	}
-	response.Success(ctx, c.techconfigSvc.RunGEOAudit(req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD), "审计完成")
+	response.Success(ctx, c.techconfigSvc.RunGEOAudit(req.URL, req.Title, req.Content, req.MetaDesc, req.SchemaJSONLD, req.Brand), "审计完成")
 }
 
 // @Summary      站点审计完成（rubric v2 九类百分制）

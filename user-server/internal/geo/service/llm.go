@@ -214,6 +214,85 @@ func (a *LLMAdapter) Generate(ctx context.Context, systemPrompt, prompt string, 
 	}, nil
 }
 
+// GenerateWithProvider 用指定 provider（/api/llm/models 返回的 name）真实调用。
+// provider 为空时按场景路由走默认链路。Dispatcher 可能降级到同 provider 的
+// 其它模型，但 provider 本身是钉死的；结果里的 Model 是实际使用的模型。
+func (a *LLMAdapter) GenerateWithProvider(ctx context.Context, provider, systemPrompt, prompt string, temperature float64, maxTokens int) (*LLMResult, error) {
+	if provider == "" {
+		return a.Generate(ctx, systemPrompt, prompt, temperature, maxTokens)
+	}
+	if a.dispatcher == nil {
+		return nil, fmt.Errorf("LLM dispatcher 未初始化")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	if maxTokens <= 0 || maxTokens > geoMaxTokensPerCall() {
+		maxTokens = geoMaxTokensPerCall()
+	}
+	req := llm.DispatchRequest{
+		Scenario:     llm.ScenarioHighQuality,
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+		Temperature:  temperature,
+		MaxTokens:    maxTokens,
+	}
+	results, err := a.dispatcher.DispatchMultiModel(ctx, req, []string{provider})
+	if err != nil {
+		return nil, fmt.Errorf("模型 %s 不可用: %w", provider, err)
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("模型 %s 没有返回结果", provider)
+	}
+	resp := results[0]
+	return &LLMResult{
+		Content:      resp.Content,
+		Provider:     resp.Provider,
+		Model:        resp.Model,
+		InputTokens:  resp.Usage.PromptTokens,
+		OutputTokens: resp.Usage.CompletionTokens,
+	}, nil
+}
+
+// GenerateJSONMultiModel 用指定 provider 名列表真实并行/顺序调用，返回每个
+// provider 实际使用的模型。调用方必须按 result.Model 入库，不能拿请求里的
+// 模型名冒充——Dispatcher 可能选中同 provider 下的另一个模型或降级。
+func (a *LLMAdapter) GenerateJSONMultiModel(ctx context.Context, systemPrompt, prompt string, maxTokens int, providers []string) ([]*LLMResult, error) {
+	if a.dispatcher == nil {
+		return nil, fmt.Errorf("LLM dispatcher 未初始化")
+	}
+	if len(providers) == 0 {
+		return nil, errors.New("未指定模型")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	if maxTokens <= 0 || maxTokens > geoMaxTokensPerCall() {
+		maxTokens = geoMaxTokensPerCall()
+	}
+	req := llm.DispatchRequest{
+		Scenario:     llm.ScenarioHighQuality,
+		Prompt:       prompt,
+		SystemPrompt: systemPrompt,
+		Temperature:  0.3,
+		MaxTokens:    maxTokens,
+		JSONMode:     true,
+	}
+	results, err := a.dispatcher.DispatchMultiModel(ctx, req, providers)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*LLMResult, 0, len(results))
+	for _, resp := range results {
+		out = append(out, &LLMResult{
+			Content:      resp.Content,
+			Provider:     resp.Provider,
+			Model:        resp.Model,
+			InputTokens:  resp.Usage.PromptTokens,
+			OutputTokens: resp.Usage.CompletionTokens,
+		})
+	}
+	return out, nil
+}
+
 // GenerateJSON 生成 JSON 格式内容
 func (a *LLMAdapter) GenerateJSON(ctx context.Context, systemPrompt, prompt string, maxTokens int) (*LLMResult, error) {
 	if a.dispatcher == nil {
