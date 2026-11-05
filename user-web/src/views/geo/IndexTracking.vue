@@ -18,7 +18,10 @@
         </div>
       </template>
 
-      <el-tabs v-model="activeTab">
+      <el-tabs
+        v-model="activeTab"
+        @tab-change="onTabChange"
+      >
         <el-tab-pane
           label="收录列表"
           name="index"
@@ -494,6 +497,10 @@ async function verifyAll() {
     ElMessage.success('已触发全量验证')
     load()
   } catch (e) { ElMessage.error('失败') }
+}
+
+function onTabChange (name) {
+  if (name === 'domains' && !domains.value) loadDomains()
 }
 
 function refreshActive () {

@@ -178,7 +178,7 @@ func (s *CaptureService) shortURL(link *model.GeoCaptureLink) string {
 	if link.ShortLinkID == 0 || s.publicBase == "" || len("g"+link.Code) > 20 {
 		return ""
 	}
-	return s.publicBase + "/s/g" + link.Code
+	return s.publicBase + "/api/s/g" + link.Code
 }
 
 func (s *CaptureService) baseView(link *model.GeoCaptureLink) *CaptureLinkView {

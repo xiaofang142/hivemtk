@@ -119,7 +119,14 @@
           >
             <template #default="{ row }">
               <el-tag
-                v-if="isConfigured(row.name)"
+                v-if="row.capability === 'manual'"
+                type="info"
+                size="small"
+              >
+                无需配置
+              </el-tag>
+              <el-tag
+                v-else-if="isConfigured(row.name)"
                 type="success"
                 size="small"
               >
@@ -130,7 +137,7 @@
                 type="info"
                 size="small"
               >
-                未配置 Token
+                未配置账号
               </el-tag>
             </template>
           </el-table-column>
@@ -146,7 +153,7 @@
                 访问 <a
                   href="https://github.com/settings/tokens"
                   target="_blank"
-                >https://github.com/settings/tokens</a> 创建 Personal Access Token（classic，勾选 repo 权限），填入环境变量 <code>GITHUB_TOKEN</code>
+                >https://github.com/settings/tokens</a> 创建 Personal Access Token（classic，勾选 repo 权限）；账号里 AppKey 填 owner，Secret 填 Token（也兼容 <code>GITHUB_TOKEN</code> 环境变量）
               </span>
               <span
                 v-else-if="row.name === 'medium'"
@@ -189,9 +196,10 @@
             <template #default="{ row }">
               <el-button
                 size="small"
+                :disabled="row.capability === 'manual'"
                 @click="openAccountDialog(row)"
               >
-                配置 Token
+                {{ row.capability === 'manual' ? '无需配置' : '配置账号' }}
               </el-button>
               <el-button
                 size="small"

@@ -52,7 +52,7 @@ func (f *fakeShortLinks) CreateCaptureShortLink(_ context.Context, code, _, _ st
 		return nil, errors.New("短码冲突")
 	}
 	f.created++
-	return &ShortLinkRef{ID: uint(f.created), Code: code, URL: "https://go.example.test/s/" + code}, nil
+	return &ShortLinkRef{ID: uint(f.created), Code: code, URL: "https://go.example.test/api/s/" + code}, nil
 }
 
 func (f *fakeShortLinks) DeleteShortLink(_ context.Context, _ uint) error {
@@ -88,7 +88,7 @@ func TestCaptureService_Create(t *testing.T) {
 	if view.LandingURL != "https://go.example.test/api/public/geo/l/"+view.Code {
 		t.Fatalf("落地 URL 不对: %s", view.LandingURL)
 	}
-	if view.ShortLinkID == 0 || !strings.Contains(view.ShortURL, "/s/g") {
+	if view.ShortLinkID == 0 || !strings.Contains(view.ShortURL, "/api/s/g") {
 		t.Fatalf("短链未创建: %+v", view)
 	}
 	if view.Title != "geo 优化" || view.CreatedBy != "tester" {

@@ -345,7 +345,12 @@
     "moduleCenter": "功能模块市场",
     "myModules": "我的模块",
     "moduleOrders": "模块订单",
-    "aiCustomIntegration": "工具接入"
+    "aiCustomIntegration": "工具接入",
+    "geoDiagnose": "诊断",
+    "geoAuditCenter": "审计中心",
+    "geoDualEngine": "双端监测",
+    "geoCapture": "承接",
+    "geoCaptureLinks": "承接链接"
   },
   "保存": "保存",
   "提交": "提交",

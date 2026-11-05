@@ -11,7 +11,7 @@
             type="info"
             effect="plain"
           >
-            rubric v2 · 25 因子
+            站点 rubric v3 · 内容 29 因子
           </el-tag>
         </div>
       </template>

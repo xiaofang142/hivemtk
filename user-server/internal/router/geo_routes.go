@@ -450,7 +450,7 @@ func (a geoCaptureShortLinkAdapter) CreateCaptureShortLink(ctx context.Context, 
 	}
 	ref := &geoservice.ShortLinkRef{ID: resp.ID, Code: resp.ShortCode}
 	if base := strings.TrimRight(config.GetPublicBaseURLFor(ctx), "/"); base != "" {
-		ref.URL = base + "/s/" + resp.ShortCode
+		ref.URL = base + "/api/s/" + resp.ShortCode
 	}
 	return ref, nil
 }
