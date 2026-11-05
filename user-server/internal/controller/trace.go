@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -48,8 +49,9 @@ func (c *TraceController) GetTrace(ctx *gin.Context) {
 			})
 			return
 		}
+		logger.Errorf("trace query failed: %v", err)
 		response.Envelope(ctx, http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "服务暂时不可用，请稍后重试",
 			"code":  "INTERNAL_ERROR",
 		})
 		return
@@ -74,8 +76,9 @@ func (c *TraceController) ListRecent(ctx *gin.Context) {
 	}
 	items, err := llm.ListRecentTraces(ctx.Request.Context(), limit)
 	if err != nil {
+		logger.Errorf("trace query failed: %v", err)
 		response.Envelope(ctx, http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "服务暂时不可用，请稍后重试",
 			"code":  "INTERNAL_ERROR",
 		})
 		return

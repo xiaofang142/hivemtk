@@ -214,7 +214,7 @@ func (c *OrderDraftController) Confirm(ctx *gin.Context) {
 			// 只回"确认失败"会让人以为草稿还在待确认池里。
 			logger.Warnf("[OrderDraft] ❌ 草稿 %s 已置为 confirmed 但订单创建失败，需人工补建：%v", draft.ID, err)
 			response.Error(ctx, http.StatusInternalServerError,
-				"订单创建失败，但草稿已置为 confirmed（不会自动重试，需人工补建订单）: "+err.Error())
+				"订单创建失败，但草稿已置为 confirmed（不会自动重试，需人工补建订单）")
 			return
 		}
 		c.replyError(ctx, err)

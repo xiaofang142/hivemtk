@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/service"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -52,7 +53,8 @@ func (c *DataExportController) Export(ctx *gin.Context) {
 		case strings.Contains(msg, "DSAR_002") || utils.IsRecordNotFound(err) || strings.Contains(msg, "不存在"):
 			response.Envelope(ctx, http.StatusNotFound, gin.H{"code": 404, "message": msg})
 		default:
-			response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": fmt.Sprintf("导出失败: %v", err)})
+			logger.Errorf("data export failed: %v", err)
+			response.Envelope(ctx, http.StatusInternalServerError, gin.H{"code": 500, "message": "导出失败，请稍后重试"})
 		}
 		return
 	}

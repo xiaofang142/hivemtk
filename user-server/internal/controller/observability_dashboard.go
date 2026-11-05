@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -40,10 +41,14 @@ func (c *ObservabilityDashboardController) Snapshot(ctx *gin.Context) {
 	snap, err := c.svc.Snapshot(ctx.Request.Context(), ctx.Query("window"))
 	if err != nil {
 		status := http.StatusInternalServerError
+		msg := "看板数据加载失败，请稍后重试"
 		if errors.Is(err, service.ErrDashboardRepoNotReady) {
 			status = http.StatusServiceUnavailable
+			msg = err.Error()
+		} else {
+			logger.Errorf("observability dashboard snapshot failed: %v", err)
 		}
-		response.Error(ctx, status, err.Error())
+		response.Error(ctx, status, msg)
 		return
 	}
 	response.Success(ctx, snap, "ok")

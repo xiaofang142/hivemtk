@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reach/card/template"
 	"hivemtk-user/internal/service"
@@ -261,7 +262,8 @@ func (c *LiveCodeController) RedirectLiveCode(ctx *gin.Context) {
 
 	response, err := c.liveCodeService.Share(ctx.Request.Context(), liveCode.ID, req)
 	if err != nil {
-		ctx.String(http.StatusInternalServerError, "分享失败: %v", err)
+		logger.Errorf("live code share failed: %v", err)
+		ctx.String(http.StatusInternalServerError, "分享失败，请稍后重试")
 		return
 	}
 

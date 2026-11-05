@@ -136,13 +136,15 @@ func main() {
 
 	configSvc := geoservice.NewConfigService(
 		georepo.NewGeoConfigRepositoryWithDB(db), geoservice.NewLLMAdapter())
-	_ = configSvc.UpdateConfig(ctx,
-		"HiveMtk",
-		"开源自私域营销 AI 操作系统：ReAct 销冠智能体(41工具)+13渠道触达(企微/WhatsApp/TG/抖音/小红书/TikTok等)+RAG三级检索+SOP自动化，数据100%本地部署不出域，AGPL-3.0 开源",
-		"数据不出域;AI直接驱动成交而非仅客服应答;开源可自部署;多渠道统一收件箱;决策链GEO优化内置",
-		[]string{"微伴助手", "探马SCRM", "尘锋SCRM"},
-		config.WebsiteBaseURL(), "deepseek",
-		[]string{"deepseek", "qwen"}, nil)
+	_ = configSvc.UpdateConfig(ctx, geoservice.ConfigUpdateInput{
+		Brand:            "HiveMtk",
+		BrandDescription: "开源自私域营销 AI 操作系统：ReAct 销冠智能体(41工具)+13渠道触达(企微/WhatsApp/TG/抖音/小红书/TikTok等)+RAG三级检索+SOP自动化，数据100%本地部署不出域，AGPL-3.0 开源",
+		Advantages:       "数据不出域;AI直接驱动成交而非仅客服应答;开源可自部署;多渠道统一收件箱;决策链GEO优化内置",
+		Competitors:      []string{"微伴助手", "探马SCRM", "尘锋SCRM"},
+		Domain:           config.WebsiteBaseURL(),
+		DefaultModel:     "deepseek",
+		VerifyModels:     []string{"deepseek", "qwen"},
+	})
 	cfgRow, _ := configSvc.GetConfig(ctx)
 	fmt.Printf("== [U1] 品牌配置已保存 == 品牌=%s 竞品=%s\n", cfgRow.BrandName, cfgRow.Competitors)
 
@@ -174,6 +176,7 @@ func main() {
 		georepo.NewGeoOptimizationRepositoryWithDB(db),
 		georepo.NewGeoAPICallRepositoryWithDB(db),
 		georepo.NewGeoKnowledgeDocumentRepositoryWithDB(db),
+		georepo.NewGeoConfigRepositoryWithDB(db),
 		geoservice.NewLLMAdapter(),
 	)
 
