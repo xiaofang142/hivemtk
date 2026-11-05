@@ -94,13 +94,14 @@ type SiteAuditCategory struct {
 
 // GeoSiteAuditReport 站点审计报告（rubric v2）
 type GeoSiteAuditReport struct {
-	URL        string              `json:"url"`
-	Score      int                 `json:"score"`
-	Grade      string              `json:"grade"`
-	MaxScore   int                 `json:"max_score"`
-	Categories []SiteAuditCategory `json:"categories"`
-	Fixes      []SiteAuditFix      `json:"fixes"`
-	Summary    string              `json:"summary"`
+	URL           string              `json:"url"`
+	RubricVersion string              `json:"rubric_version"`
+	Score         int                 `json:"score"`
+	Grade         string              `json:"grade"`
+	MaxScore      int                 `json:"max_score"`
+	Categories    []SiteAuditCategory `json:"categories"`
+	Fixes         []SiteAuditFix      `json:"fixes"`
+	Summary       string              `json:"summary"`
 }
 
 // SiteAuditFix 修复建议（按分值降序，前端可直接渲染为任务清单）
@@ -227,7 +228,7 @@ func RunSiteAuditFromResources(res *SiteResources, brand string) *GeoSiteAuditRe
 	}
 
 	rep := &GeoSiteAuditReport{
-		URL: res.FinalURL, Score: score, MaxScore: siteAuditTotalMaxScore,
+		URL: res.FinalURL, RubricVersion: GeoSiteAuditRubricV2, Score: score, MaxScore: siteAuditTotalMaxScore,
 		Grade: AuditGrade(score * 100 / siteAuditTotalMaxScore), Categories: cats, Fixes: fixes,
 	}
 	passed, total := 0, 0

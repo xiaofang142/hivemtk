@@ -366,9 +366,9 @@ var ModuleMenuBindings = map[string][]string{
 		"egoFlows", "egoSessions", "egoExecutions", "egoRunner", "egoAssets", "egoAssetAdmin",
 	},
 
-	// ========== geo：GEO 智能优化（30 节点）==========
+	// ========== geo：GEO 智能优化（32 节点）==========
 	ModuleGEO: {
-		"geoTools", "geoConfigGroup",
+		"geoTools", "geoDiagnose", "geoAuditCenter", "geoConfigGroup",
 		"geoBrandConfig", "geoSeoInfra", "geoPusherConfig", "geoSiteConfig",
 		"geoSchemaTemplates", "geoCompetitors", "geoConfig",
 		"geoProd", "geoKeywordMining", "geoContentCreation", "geoContentOptimize",

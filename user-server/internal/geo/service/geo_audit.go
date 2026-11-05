@@ -16,12 +16,13 @@ type GeoAuditFactor struct {
 
 // GeoAuditReport 25 因子 GEO 审计报告（竞品对齐 Otterly 25因子 + Scrunch 技术可达性）
 type GeoAuditReport struct {
-	URL     string           `json:"url"`
-	Score   int              `json:"score"`
-	Grade   string           `json:"grade"`
-	Factors []GeoAuditFactor `json:"factors"`
-	Fixes   []GeoAuditFix    `json:"fixes"`
-	Summary string           `json:"summary"`
+	URL           string           `json:"url"`
+	RubricVersion string           `json:"rubric_version"`
+	Score         int              `json:"score"`
+	Grade         string           `json:"grade"`
+	Factors       []GeoAuditFactor `json:"factors"`
+	Fixes         []GeoAuditFix    `json:"fixes"`
+	Summary       string           `json:"summary"`
 }
 
 // GeoAuditFix 未通过项的修复建议（按权重降序，前端可直接渲染为任务清单）
@@ -165,7 +166,7 @@ func (s *TechConfigService) RunGEOAudit(url, title, content, metaDesc, schemaJSO
 		summary += " 优秀，达到行业领先水平。"
 	}
 
-	return &GeoAuditReport{URL: url, Score: score, Grade: AuditGrade(score), Factors: factors, Fixes: buildFixes(factors), Summary: summary}
+	return &GeoAuditReport{URL: url, RubricVersion: GeoAuditRubricContentV1, Score: score, Grade: AuditGrade(score), Factors: factors, Fixes: buildFixes(factors), Summary: summary}
 }
 
 func countPass(fs []GeoAuditFactor) int {

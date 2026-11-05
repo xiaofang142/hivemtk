@@ -34,6 +34,11 @@ type AlertListResult struct {
 	Total int64             `json:"total"`
 }
 
+// CreateAlert 写入一条告警（定时任务/审计复查共用）。
+func (s *AlertService) CreateAlert(ctx context.Context, alert *model.GeoAlert) error {
+	return s.repo.Create(ctx, alert)
+}
+
 // ListAlerts 分页查询告警列表
 func (s *AlertService) ListAlerts(ctx context.Context, q AlertQuery) (*AlertListResult, error) {
 	if q.Page <= 0 {

@@ -345,6 +345,12 @@ var SystemMenuTree = []SystemMenuNode{
 				Roles: []string{"admin", "manager"},
 				Children: []SystemMenuNode{
 					{
+						Key: "geoDiagnose", Title: "诊断", Icon: "Aim",
+						Children: []SystemMenuNode{
+							{Key: "geoAuditCenter", Title: "审计中心", Icon: "Aim", Path: "/geo-tools/audit-center"},
+						},
+					},
+					{
 						Key: "geoConfigGroup", Title: "配置", Icon: "Setting",
 						Children: []SystemMenuNode{
 							{Key: "geoBrandConfig", Title: "品牌与域名", Icon: "OfficeBuilding", Path: "/geo-tools/brand-config"},

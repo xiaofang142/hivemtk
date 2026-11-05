@@ -72,6 +72,8 @@ var workerModuleKey = map[string]string{
 	"source_sync":      model.ModuleGEO,
 	"crawler_monitor":  model.ModuleGEO,
 	"keyword_pipeline": model.ModuleGEO,
+	"citation_drift":   model.ModuleGEO,
+	"site_audit":       model.ModuleGEO,
 
 	// 客户中心 cron
 	"customer_rfm":     model.ModuleCustomer, // customer_rfm_cron.go 每日 RFM 全量重算

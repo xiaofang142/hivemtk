@@ -180,7 +180,17 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	alertSvc := geoservice.NewAlertService(georepo.NewGeoAlertRepositoryWithDB(gormDB))
 	alertCtrl := geoctrl.NewAlertController(alertSvc)
 
+	auditSvc := geoservice.NewAuditService(georepo.NewGeoAuditRepositoryWithDB(gormDB), alertSvc)
+	auditCtrl := geoctrl.NewAuditController(auditSvc)
+
 	geo := auth.Group("/geo")
+
+	geo.POST("/audit/site", auditCtrl.RunSite)
+	geo.POST("/audit/content", auditCtrl.RunContent)
+	geo.GET("/audit/runs", auditCtrl.List)
+	geo.GET("/audit/runs/:id", auditCtrl.Get)
+	geo.GET("/audit/runs/:id/report", auditCtrl.Report)
+	geo.GET("/audit/compare", auditCtrl.Compare)
 
 	geo.POST("/keywords/mine", keywordCtrl.MineKeywords)
 	geo.POST("/keywords/expand", keywordCtrl.SemanticExpand)

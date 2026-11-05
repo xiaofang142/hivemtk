@@ -322,3 +322,108 @@ func crawlerMonitorJob(ctx context.Context) (string, error) {
 	}
 	return fmt.Sprintf("写入爬虫访问记录=%d 条", n), nil
 }
+
+// siteAuditJob 月度站点体检：给启用中的 geo_sites 各跑一次 rubric v2，
+// 结果落审计历史；与上一次同 URL/同 rubric 的分数相比下降 >8 分时写告警。
+//
+// 执行形态与其它 GEO 任务一致：JobManager 按 (任务, 租户) 注册，进来时
+// ctx 已绑定本租户；geo_sites / geo_audit_runs 都是租户表，不能跨租户聚合。
+func siteAuditJob(ctx context.Context) (string, error) {
+	siteRepo := repository.NewGeoSiteRepository()
+	sites, err := listAllGeoSites(ctx, siteRepo)
+	if err != nil {
+		return "", fmt.Errorf("拉取站点失败: %w", err)
+	}
+	active := make([]*model.GeoSite, 0, len(sites))
+	for _, s := range sites {
+		if s != nil && s.Active && strings.TrimSpace(s.Domain) != "" {
+			active = append(active, s)
+		}
+	}
+	if len(active) == 0 {
+		return "无启用站点，跳过本轮", nil
+	}
+
+	brand := ""
+	if cfg, cfgErr := repository.NewGeoConfigRepository().Get(ctx); cfgErr == nil && cfg != nil {
+		brand = cfg.BrandName
+	}
+	alertSvc := NewAlertService(repository.NewGeoAlertRepository())
+	auditRepo := repository.NewGeoAuditRepository()
+	auditSvc := NewAuditService(auditRepo, alertSvc)
+
+	success, failed := 0, 0
+	for _, site := range active {
+		if ctx.Err() != nil {
+			return fmt.Sprintf("超时中止：已审计 %d 个站点（成功=%d 失败=%d）", success+failed, success, failed),
+				fmt.Errorf("执行超时中止")
+		}
+		rawURL := normalizeSiteAuditURL(site.Domain)
+		run, _, runErr := auditSvc.RunSiteAudit(ctx, rawURL, brand, model.GeoAuditSourceSchedule, "job")
+		if runErr != nil {
+			failed++
+			logger.Warn(fmt.Sprintf("[GEO Job site_audit] 站点 %s 审计失败: %v", rawURL, runErr))
+			continue
+		}
+		success++
+		prev, prevErr := auditRepo.Previous(ctx, run)
+		if prevErr != nil || prev == nil {
+			continue
+		}
+		delta := run.Score - prev.Score
+		if delta > -8 {
+			continue
+		}
+		details, _ := json.Marshal(map[string]any{
+			"url":            run.URL,
+			"rubric_version": run.RubricVersion,
+			"from_score":     prev.Score,
+			"to_score":       run.Score,
+			"from_run":       prev.ID,
+			"to_run":         run.ID,
+		})
+		alert := &model.GeoAlert{
+			Type:      "audit_score_drop",
+			Level:     "warning",
+			BrandName: brand,
+			Query:     run.URL,
+			Engine:    "geo-audit",
+			Snippet:   fmt.Sprintf("站点审计分数从 %d 降到 %d（%d 分）", prev.Score, run.Score, delta),
+			Details:   string(details),
+			Notified:  false,
+		}
+		if err := alertSvc.CreateAlert(ctx, alert); err != nil {
+			logger.Error(err, "[GEO Job site_audit] 写入分数下降告警失败")
+		}
+	}
+	summary := fmt.Sprintf("站点审计完成：成功=%d 失败=%d", success, failed)
+	if failed == len(active) {
+		return summary, fmt.Errorf("全部 %d 个站点审计失败，本轮无有效数据", len(active))
+	}
+	return summary, nil
+}
+
+func listAllGeoSites(ctx context.Context, repo repository.GeoSiteRepository) ([]*model.GeoSite, error) {
+	const limit = 200
+	page := 1
+	out := make([]*model.GeoSite, 0)
+	for {
+		list, total, err := repo.List(ctx, page, limit)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, list...)
+		if len(list) == 0 || int64(len(out)) >= total {
+			return out, nil
+		}
+		page++
+	}
+}
+
+func normalizeSiteAuditURL(domain string) string {
+	d := strings.TrimSpace(domain)
+	if strings.HasPrefix(d, "http://") || strings.HasPrefix(d, "https://") {
+		return d
+	}
+	return "https://" + strings.TrimPrefix(d, "//")
+}

@@ -36,6 +36,7 @@ const (
 	JobCrawlerMonitor  = "crawler_monitor"
 	JobKeywordPipeline = "keyword_pipeline"
 	JobCitationDrift   = "citation_drift" // A10：引用漂移每日快照
+	JobSiteAudit       = "site_audit"     // P0：启用站点月度体检 + 分数下降告警
 
 	geoJobRunRetention = 30 * 24 * time.Hour
 )
@@ -118,6 +119,15 @@ var geoJobDefs = []geoJobDef{
 		DefaultSpec: "0 0 5 * * *",
 		Timeout:     15 * time.Minute,
 		Fn:          citationDriftJob,
+	},
+	{
+		// 月度复查：每月 1 日 06:00 给启用中的 geo_sites 各跑一次 rubric v2。
+		// 结果落审计历史，分数较上次下降 >8 分写 geo_alerts（图3 的 geo-compare 闭环）。
+		Name:        JobSiteAudit,
+		Description: "站点月度体检：对启用站点跑 rubric v2 并落审计历史；分数下降 >8 分写告警",
+		DefaultSpec: "0 0 6 1 * *",
+		Timeout:     40 * time.Minute,
+		Fn:          siteAuditJob,
 	},
 }
 

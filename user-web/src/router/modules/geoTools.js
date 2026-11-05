@@ -5,6 +5,17 @@
 
 export default [
   // ────────────────────────────────────────────────────
+  // Layer 0: 诊断 (group: 'diagnose')
+  // 先体检，再按修复清单做专项；一个月后用同页的“复查对比”看变化。
+  // ────────────────────────────────────────────────────
+  {
+    path: '/geo-tools/audit-center',
+    name: 'GeoAuditCenter',
+    component: () => import('@/views/geo/AuditCenter.vue'),
+    meta: { title: '审计中心', group: 'diagnose', icon: 'Aim', order: 0, requiresAuth: true }
+  },
+
+  // ────────────────────────────────────────────────────
   // Layer 1: 配置 (group: 'config')
   // ────────────────────────────────────────────────────
   {
