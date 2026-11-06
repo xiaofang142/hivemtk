@@ -265,7 +265,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/sales-champions/list", personaCtrl.ListStaffs)
 	doReg("GET", "/sales-champions/:id", personaCtrl.GetReport)
 
-	emailListCtrl := controller.NewEmailListController(emailservice.NewEmailListService(gormDB))
+	emailListCtrl := controller.NewEmailListController(emailservice.NewEmailListService(repository.NewClueRepositoryWithDB(gormDB)))
 	doReg("GET", "/email/lists", emailListCtrl.GetEmailListList)
 	doReg("GET", "/email/lists/list", emailListCtrl.GetEmailListList)
 	doReg("GET", "/email/lists/:id", emailListCtrl.GetEmailListDetail)

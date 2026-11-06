@@ -526,9 +526,12 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// AV-04c 刀 3（2026-11-07）：script_template 清零除名。
 	// AV-04c 刀 4（2026-11-07）：script_template_sync 清零除名 —— content 域整域出快照，
 	// 守卫对该域回归为「新增即红」（无豁免行）。
-	// ---- email 域（1 句柄 / 1 GetDB）----
-	"user-server/internal/email/service/email_list.go": {handles: 1},
-	"user-server/internal/email/service/email_smtp.go": {getdb: 1},
+	// ---- email 域（曾登记 1 句柄 / 1 GetDB）----
+	// AV-04c 批次2（2026-11-07）：email_list.go 构造器 *gorm.DB 形参改 ClueRepository
+	// 注入（装配点传 NewClueRepositoryWithDB(原句柄)，连接不变）；email_smtp.go 的
+	// GetRandEmailSmtp 记账改直持 EmailListRepository（同仓储同查询，不再经
+	// NewEmailListService(dbpkg.GetDB()) 拼服务）。两文件清零除名 —— email 域整域出
+	// 快照，守卫对该域回归为「新增即红」（无豁免行）。
 	// ---- geo 域（4 句柄 / 5 GetDB）----
 	// AV-04b：autopilot getdb 5→2（3 处 KeywordMiningService 构造去 pkgdb.GetDB）；
 	// keyword_mining.go 句柄已清零（持久化下沉 GeoKeywordRepository），按

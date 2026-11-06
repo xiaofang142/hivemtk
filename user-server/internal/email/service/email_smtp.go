@@ -6,16 +6,23 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/crypto"
-	dbpkg "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/repository"
 )
 
 type EmailSmtpService struct {
 	repo repository.EmailSmtpRepository
+	// emailListRepo 日发送记账（email_list.from 计数）用的列表仓储。原实现经
+	// NewEmailListService(dbpkg.GetDB()) 借全局句柄拼一个完整列表服务只为调一个
+	// 计数方法（AV-04c 收口点）；现在与 repo 同口径在构造期取仓储（句柄解析留在
+	// 仓储层），查询契约不变。
+	emailListRepo repository.EmailListRepository
 }
 
 func NewEmailSmtpService() *EmailSmtpService {
-	return &EmailSmtpService{repo: repository.NewEmailSmtpRepository()}
+	return &EmailSmtpService{
+		repo:          repository.NewEmailSmtpRepository(),
+		emailListRepo: repository.NewEmailListRepository(),
+	}
 }
 
 func (s *EmailSmtpService) CreateEmailSmtp(ctx context.Context, emailSmtp model.EmailSmtp) (*model.EmailSmtp, error) {
@@ -66,11 +73,10 @@ func (s *EmailSmtpService) GetRandEmailSmtp(ctx context.Context) (*model.EmailSm
 			emailSmtpList[i].Password = dec
 		}
 	}
-	emailListService := NewEmailListService(dbpkg.GetDB())
 	for _, emailSmtp := range emailSmtpList {
 		// 记账键必须是 Username：email_list.from 落的是发信账号，读展示名等于永远数到 0，
 		// Limit 形同不存在（日上限是唯一挡着发信域被拉黑的闸门）。
-		todayCount, err := emailListService.GetTodayCountByFrom(ctx, emailSmtp.Username)
+		todayCount, err := s.emailListRepo.GetTodayCountByFrom(ctx, emailSmtp.Username)
 		if err != nil {
 			return nil, err
 		}

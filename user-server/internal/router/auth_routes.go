@@ -148,7 +148,7 @@ func setupLiveCodeRoutes(auth *gin.RouterGroup, liveCodeController *controller.L
 }
 
 func setupEmailRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
-	emailListCtrl := controller.NewEmailListController(emailservice.NewEmailListService(gormDB))
+	emailListCtrl := controller.NewEmailListController(emailservice.NewEmailListService(repository.NewClueRepositoryWithDB(gormDB)))
 	emailSmtpCtrl := controller.NewEmailSmtpController()
 	emailDraftCtrl := controller.NewEmailDraftController()
 	emailJobsCtrl := controller.NewEmailJobsController()

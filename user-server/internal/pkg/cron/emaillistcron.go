@@ -88,7 +88,7 @@ func EmailListCron() {
 			logger.Errorf("[email_list_cron] panic recovered: %v\n%s", r, debug.Stack())
 		}
 	}()
-	emailListService := email.NewEmailListService(dbpkg.GetDB())
+	emailListService := email.NewEmailListService(repository.NewClueRepositoryWithDB(dbpkg.GetDB()))
 
 	deps := emailRowDeps{
 		smtp:        email.NewEmailSmtpService(),

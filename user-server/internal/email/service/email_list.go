@@ -15,7 +15,6 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 // EmailListService 列表服务
@@ -25,11 +24,13 @@ type EmailListService struct {
 	systemConfigRepo repository.SystemConfigRepository
 }
 
-// NewEmailListService 创建列表服务实例。db 用于线索仓储的显式注入（不摸全局句柄）。
-func NewEmailListService(db *gorm.DB) *EmailListService {
+// NewEmailListService 创建列表服务实例。线索仓储显式注入（DI 装配点传
+// repository.NewClueRepositoryWithDB(<句柄>)，默认装配用 NewClueRepositoryDefault()），
+// service 层不接收 *gorm.DB 形参（arch_gorm_guard gorm_handle_param）。
+func NewEmailListService(clueRepo repository.ClueRepository) *EmailListService {
 	return &EmailListService{
 		repo:             repository.NewEmailListRepository(),
-		clueRepo:         repository.NewClueRepositoryWithDB(db),
+		clueRepo:         clueRepo,
 		systemConfigRepo: repository.NewSystemConfigRepository(),
 	}
 }
