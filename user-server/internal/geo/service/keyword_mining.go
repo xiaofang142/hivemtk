@@ -19,25 +19,24 @@ import (
 
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
-	"gorm.io/gorm"
 )
 
 // KeywordMiningService 关键词蒸馏服务（GEO v2 新增）
 //
 // 负责：下拉词 API 抓取、模板化长尾词组合、LLM 意图分类、4 层漏斗统计。
 // 是 KeywordService（LLM 造词）的补充——提供真实用户搜索数据。
+// 持久化全部走 GeoKeywordRepository（AV-04b 下沉）：本服务不持有/不获取
+// *gorm.DB，评分/去重/父子关联/意图补全等业务逻辑保留在这里。
 type KeywordMiningService struct {
 	kwRepo repository.GeoKeywordRepository
-	db     *gorm.DB
 	llm    *LLMAdapter
 }
 
 func NewKeywordMiningService(
 	kwRepo repository.GeoKeywordRepository,
-	db *gorm.DB,
 	llm *LLMAdapter,
 ) *KeywordMiningService {
-	return &KeywordMiningService{kwRepo: kwRepo, db: db, llm: llm}
+	return &KeywordMiningService{kwRepo: kwRepo, llm: llm}
 }
 
 // ────────────────────────────────────────────
@@ -846,10 +845,8 @@ func (s *KeywordMiningService) SaveMiningResults(ctx context.Context, seeds []st
 		}
 	}
 
-	var existing []model.GeoKeyword
-	if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).
-		Where("keyword IN ?", texts).
-		Find(&existing).Error; err != nil {
+	existing, err := s.kwRepo.FindExistingByKeywords(ctx, texts)
+	if err != nil {
 		return 0, err
 	}
 	byText := make(map[string]*model.GeoKeyword, len(existing))
@@ -891,8 +888,7 @@ func (s *KeywordMiningService) SaveMiningResults(ctx context.Context, seeds []st
 		}
 	}
 	if len(staleSeedIDs) > 0 {
-		if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).Where("id IN ?", staleSeedIDs).
-			Updates(map[string]any{"last_mined_at": now, "updated_at": now}).Error; err != nil {
+		if err := s.kwRepo.TouchMinedAtByIDs(ctx, staleSeedIDs, now); err != nil {
 			return 0, err
 		}
 	}
@@ -951,18 +947,21 @@ func (s *KeywordMiningService) SaveMiningResults(ctx context.Context, seeds []st
 		saved += len(toCreate)
 	}
 	for _, ex := range toSave {
-		if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).Where("id = ?", ex.ID).Updates(map[string]any{
-			"layer":           ex.Layer,
-			"parent_id":       ex.ParentID,
-			"parent_keyword":  ex.ParentKeyword,
-			"query_intent":    ex.QueryIntent,
-			"intent":          ex.Intent,
-			"funnel_stage":    ex.FunnelStage,
-			"suggest_engines": ex.SuggestEngines,
-			"suggest_count":   ex.SuggestCount,
-			"last_mined_at":   ex.LastMinedAt,
-			"updated_at":      now,
-		}).Error; err != nil {
+		// 白名单回写：可写字段集合锁在 repository.GeoKeywordMiningPatch 里，
+		// 与下沉前的 Updates map 逐键一致（含显式 updated_at=now）。
+		patch := repository.GeoKeywordMiningPatch{
+			Layer:          ex.Layer,
+			ParentID:       ex.ParentID,
+			ParentKeyword:  ex.ParentKeyword,
+			QueryIntent:    ex.QueryIntent,
+			Intent:         ex.Intent,
+			FunnelStage:    ex.FunnelStage,
+			SuggestEngines: ex.SuggestEngines,
+			SuggestCount:   ex.SuggestCount,
+			LastMinedAt:    ex.LastMinedAt,
+			UpdatedAt:      now,
+		}
+		if err := s.kwRepo.UpdateMiningFields(ctx, ex.ID, patch); err != nil {
 			return saved, err
 		}
 		saved++
@@ -1032,72 +1031,51 @@ func (s *KeywordMiningService) BuildFunnel(ctx context.Context) (*KeywordFunnel,
 		SuggestEngines: map[string]int{},
 	}
 
-	// 按 layer 分组
-	type row struct {
-		Layer string `gorm:"column:layer"`
-		Cnt   int64  `gorm:"column:cnt"`
-	}
-	var rows []row
-	if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).
-		Select("COALESCE(layer,'seed') as layer, COUNT(*) as cnt").
-		Where("status = ?", "active").
-		Group("COALESCE(layer,'seed')").
-		Scan(&rows).Error; err != nil {
+	// 按 layer 分组（聚合查询与 COALESCE 语义在仓储层，AV-04b 下沉）
+	rows, err := s.kwRepo.FunnelCounts(ctx, repository.GeoKeywordFunnelLayer)
+	if err != nil {
 		return nil, err
 	}
 	for _, r := range rows {
-		switch r.Layer {
+		switch r.Value {
 		case "seed":
-			f.SeedCount = int(r.Cnt)
+			f.SeedCount = int(r.Count)
 		case "related":
-			f.RelatedCount = int(r.Cnt)
+			f.RelatedCount = int(r.Count)
 		case "suggest":
-			f.SuggestCount = int(r.Cnt)
+			f.SuggestCount = int(r.Count)
 		case "longtail":
-			f.LongtailCount = int(r.Cnt)
+			f.LongtailCount = int(r.Count)
 		}
-		f.Total += int(r.Cnt)
+		f.Total += int(r.Count)
 	}
 
 	// 按 query_intent 分组
-	var irows []row
-	if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).
-		Select("COALESCE(query_intent,'unknown') as layer, COUNT(*) as cnt").
-		Where("status = ?", "active").
-		Group("COALESCE(query_intent,'unknown')").
-		Scan(&irows).Error; err != nil {
+	irows, err := s.kwRepo.FunnelCounts(ctx, repository.GeoKeywordFunnelQueryIntent)
+	if err != nil {
 		return nil, err
 	}
 	for _, r := range irows {
-		f.Intents[r.Layer] = int(r.Cnt)
+		f.Intents[r.Value] = int(r.Count)
 	}
 
 	// 按 funnel_stage 分组
-	var srows []row
-	if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).
-		Select("COALESCE(funnel_stage,'unknown') as layer, COUNT(*) as cnt").
-		Where("status = ?", "active").
-		Group("COALESCE(funnel_stage,'unknown')").
-		Scan(&srows).Error; err != nil {
+	srows, err := s.kwRepo.FunnelCounts(ctx, repository.GeoKeywordFunnelStage)
+	if err != nil {
 		return nil, err
 	}
 	for _, r := range srows {
-		f.FunnelStages[r.Layer] = int(r.Cnt)
+		f.FunnelStages[r.Value] = int(r.Count)
 	}
 
 	// 按引擎聚合 suggest 层覆盖（suggest_engines 为 JSON 数组字符串）
-	var engRows []struct {
-		Engines string `gorm:"column:engines"`
-	}
-	if err := s.db.WithContext(ctx).Model(&model.GeoKeyword{}).
-		Select("suggest_engines as engines").
-		Where("status = ? AND layer = ? AND suggest_engines <> ''", "active", "suggest").
-		Scan(&engRows).Error; err != nil {
+	payloads, err := s.kwRepo.ListSuggestEnginePayloads(ctx)
+	if err != nil {
 		return nil, err
 	}
-	for _, er := range engRows {
+	for _, raw := range payloads {
 		var engs []string
-		if err := json.Unmarshal([]byte(er.Engines), &engs); err != nil {
+		if err := json.Unmarshal([]byte(raw), &engs); err != nil {
 			continue
 		}
 		seen := map[string]bool{}

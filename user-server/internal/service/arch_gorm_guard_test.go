@@ -530,10 +530,12 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// ---- email 域（1 句柄 / 1 GetDB）----
 	"user-server/internal/email/service/email_list.go": {handles: 1},
 	"user-server/internal/email/service/email_smtp.go": {getdb: 1},
-	// ---- geo 域（6 句柄 / 8 GetDB）----
-	"user-server/internal/geo/service/autopilot.go":        {getdb: 5},
+	// ---- geo 域（4 句柄 / 5 GetDB）----
+	// AV-04b：autopilot getdb 5→2（3 处 KeywordMiningService 构造去 pkgdb.GetDB）；
+	// keyword_mining.go 句柄已清零（持久化下沉 GeoKeywordRepository），按
+	// 「清零即删行」纪律除名，守卫对该文件不再有豁免行。
+	"user-server/internal/geo/service/autopilot.go":        {getdb: 2},
 	"user-server/internal/geo/service/job_manager.go":      {handles: 2},
-	"user-server/internal/geo/service/keyword_mining.go":   {handles: 2},
 	"user-server/internal/geo/service/keyword_pipeline.go": {handles: 1, getdb: 1},
 	"user-server/internal/geo/service/search_probe.go":     {handles: 1, getdb: 2},
 	// ---- ops 域（9 句柄 / 5 GetDB）----

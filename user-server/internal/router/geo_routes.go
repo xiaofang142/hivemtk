@@ -102,7 +102,7 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		}
 		return geoservice.NewEngineProbesFromDB(ctx, gormDB)
 	}
-	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
+	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, llmAdapter)
 	pushSvc := geoservice.NewPushService(
 		georepo.NewGeoPusherConfigRepositoryWithDB(gormDB),
 		georepo.NewGeoPushRecordRepositoryWithDB(gormDB),

@@ -212,7 +212,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 
 	// 3. suggest_crawl（下拉词，best-effort）
 	{
-		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), pkgdb.GetDB(), NewLLMAdapter())
+		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), NewLLMAdapter())
 		outcome := miningSvc.CrawlSuggest(ctx, []string{run.Keyword}, nil)
 		suggests = outcome.Keywords
 		detail := fmt.Sprintf("下拉词 %d 个", len(suggests))
@@ -229,7 +229,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 
 	// 4. longtail_expand（离线模板，零成本）
 	{
-		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), pkgdb.GetDB(), NewLLMAdapter())
+		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), NewLLMAdapter())
 		lt, err := miningSvc.CombineLongtail(ctx, []string{run.Keyword}, nil)
 		if err != nil {
 			s.markStep(ctx, run, steps, "longtail_expand", "skipped", "长尾展开失败: "+err.Error(), nil)
@@ -242,7 +242,7 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 
 	// 5. save_keywords（落库 + 意图分类，硬依赖：不落库下游无从查询）
 	{
-		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), pkgdb.GetDB(), NewLLMAdapter())
+		miningSvc := NewKeywordMiningService(repository.NewGeoKeywordRepository(), NewLLMAdapter())
 		all := make([]*model.GeoKeyword, 0, len(expanded)+len(suggests)+len(longtails))
 		for _, w := range expanded[1:] { // 原词由 SaveMiningResults 作种子站位
 			// 字段口径与 KeywordService.SemanticExpand 的产出对齐（Layer=related，

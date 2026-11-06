@@ -55,7 +55,7 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 	keywordRepo := repository.NewGeoKeywordRepository()
 	gormDB := pkgdb.GetDB()
 	llmAdapter := NewLLMAdapter()
-	miningSvc := NewKeywordMiningService(keywordRepo, gormDB, llmAdapter)
+	miningSvc := NewKeywordMiningService(keywordRepo, llmAdapter)
 
 	// 1. 种子矩阵（DB 优先：geo_seed_terms 表；空表自动播种，DB 故障回硬编码）
 	seeds, seedLines := NewSeedTermService(repository.NewGeoSeedTermRepositoryWithDB(gormDB)).LoadSeedMatrix(ctx)
