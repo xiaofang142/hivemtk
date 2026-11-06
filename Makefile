@@ -482,8 +482,16 @@ fmt-check:
 # EMBEDDING_ALLOW_FALLBACK=true 与 CI workflow 的全局 env 同名同值：不设时
 # knowledge 流水线会去连未启动的 8208，单包实测 199.3s→75.1s（全耗在 HTTP 超时）。
 # 需要更快时用 make test-go-fast（连 fsync=off 专用测试库，见 docker-compose.test.yml）。
+#
+# [AV-02 接手] 认证预检门（加固⑤）：全量之前先只读验证测试实例可达且凭证有效
+# （TestTestDBAuthenticationPreflight：SELECT 1 + current_database，不建库不建表，
+# 配置缺失时是 Fatal 而不是 Skip）。预检失败（缺配置/坏口令/不可达）直接失败不进
+# 全量 —— 坏密码快速退出且不回退空口令/业务端口，由 testutil 配置门 + 本门共同保证。
+TESTDB_AUTH_GATE := go test ./internal/pkg/testutil -count=1 -run '^TestTestDBAuthenticationPreflight$$'
+
 test-go:
-	cd user-server && EMBEDDING_ALLOW_FALLBACK=true go test ./... -count=1 -p 1 -timeout 1800s
+	cd user-server && EMBEDDING_ALLOW_FALLBACK=true $(TESTDB_AUTH_GATE) && \
+	EMBEDDING_ALLOW_FALLBACK=true go test ./... -count=1 -p 1 -timeout 1800s
 
 # 单跑 `internal/service` 一包。
 #
@@ -495,7 +503,8 @@ test-go:
 # make test-db-fast-up + make test-service-fast（docker-compose.test.yml，端口 8217；
 # 业务库 mtk-postgres 不动）。
 test-service:
-	cd user-server && EMBEDDING_ALLOW_FALLBACK=true go test ./internal/service -count=1 -p 1 -timeout 30m
+	cd user-server && EMBEDDING_ALLOW_FALLBACK=true $(TESTDB_AUTH_GATE) && \
+	EMBEDDING_ALLOW_FALLBACK=true go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 专用 fsync=off 测试库（见 docker-compose.test.yml）。
 # 只给 go test 用，数据可丢；与业务库 mtk-postgres 完全隔离。
@@ -515,6 +524,9 @@ test-db-fast-down:
 
 # 快速测试目标：连 fsync=off 专用库（默认 127.0.0.1:8217），
 # 密码从容器读，不落盘。使用前先 make test-db-fast-up。
+# [AV-02 接手] 环境统一 export 后先跑 $(TESTDB_AUTH_GATE) 认证预检门再放行全量
+# （加固⑤：预检失败不进任何 DDL/全量套件；POSTGRES_TEST_DSN 显式置空，
+# 防继承的业务 DSN 把连接重定向到未预检实例）。
 # 2026-11-05 实测：service 245.0s（4097 PASS / 0 FAIL，setup 39.7s / 2375 次调用）。
 # -p 3：跨包并行，靠槽位咨询锁给每个包进程独立测试库（锁生命周期 bug 已修）。
 # 全量实测 12.9 分钟（149 包 0 失败；-p 1 各包合计 1804s，约 30 分钟；
@@ -522,17 +534,29 @@ test-db-fast-down:
 # knowledge/service 未开降级时 471s，开 EMBEDDING_ALLOW_FALLBACK 后约 82s。
 # CI 仍用 -p 1 保持资源可预期。
 test-go-fast:
-	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
-	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
-	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
-	  EMBEDDING_ALLOW_FALLBACK=true \
+	@set -eu; \
+	  password="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)"; \
+	  user="$$(docker exec mtk-postgres-test printenv POSTGRES_USER)"; \
+	  test -n "$$password" && test -n "$$user" || { echo '测试容器凭证缺失，拒绝运行测试' >&2; exit 1; }; \
+	  cd user-server; \
+	  export POSTGRES_TEST_DSN= POSTGRES_TEST_HOST=127.0.0.1 \
+	    POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
+	    POSTGRES_TEST_USER="$$user" POSTGRES_TEST_PASSWORD="$$password" \
+	    POSTGRES_TEST_DBNAME=user_db_test EMBEDDING_ALLOW_FALLBACK=true; \
+	  $(TESTDB_AUTH_GATE); \
 	  go test ./... -count=1 -p 3 -timeout 1800s
 
 test-service-fast:
-	cd user-server && POSTGRES_TEST_HOST=127.0.0.1 \
-	  POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
-	  POSTGRES_TEST_PASSWORD="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)" \
-	  EMBEDDING_ALLOW_FALLBACK=true \
+	@set -eu; \
+	  password="$$(docker exec mtk-postgres-test printenv POSTGRES_PASSWORD)"; \
+	  user="$$(docker exec mtk-postgres-test printenv POSTGRES_USER)"; \
+	  test -n "$$password" && test -n "$$user" || { echo '测试容器凭证缺失，拒绝运行测试' >&2; exit 1; }; \
+	  cd user-server; \
+	  export POSTGRES_TEST_DSN= POSTGRES_TEST_HOST=127.0.0.1 \
+	    POSTGRES_TEST_PORT=$${USER_POSTGRES_TEST_HOST_PORT:-8217} \
+	    POSTGRES_TEST_USER="$$user" POSTGRES_TEST_PASSWORD="$$password" \
+	    POSTGRES_TEST_DBNAME=user_db_test EMBEDDING_ALLOW_FALLBACK=true; \
+	  $(TESTDB_AUTH_GATE); \
 	  go test ./internal/service -count=1 -p 1 -timeout 30m
 
 # 跨端线上契约清单（SaaS 审计 A10）
@@ -752,4 +776,3 @@ audit-rbac-surface:
 	EMBEDDING_ALLOW_FALLBACK=true \
 		python3 scripts/menu-route-role-audit.py \
 		--check-go user-server/internal/model/menu_capability_routes.go
-
