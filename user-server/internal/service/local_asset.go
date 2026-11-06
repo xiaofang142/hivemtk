@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,6 +190,10 @@ func (s *LocalAssetService) SyncFromPlatform(ctx context.Context, assetID string
 
 // CreateManual 自建资产
 func (s *LocalAssetService) CreateManual(ctx context.Context, in *CreateAssetInput) (*model.LocalAsset, error) {
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "资产名称不能为空")
+	}
 	if !asset.AssetType(in.AssetType).Valid() {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_type 非法")
 	}
@@ -211,7 +216,7 @@ func (s *LocalAssetService) CreateManual(ctx context.Context, in *CreateAssetInp
 		AssetID:   in.AssetID,
 		AssetType: in.AssetType,
 		Industry:  in.Industry,
-		Name:      in.Name,
+		Name:      name,
 		Version:   "1.0.0",
 		Source:    model.AssetSourceManual,
 		IsActive:  true,
@@ -233,6 +238,10 @@ func (s *LocalAssetService) Update(ctx context.Context, id int64, in *UpdateAsse
 	if err != nil {
 		return bizerr.Wrap(bizerr.CodeAssetNotFound, "资产不存在", err)
 	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return bizerr.New(bizerr.CodeParamInvalid, "资产名称不能为空")
+	}
 	if !asset.AssetType(in.AssetType).Valid() {
 		return bizerr.New(bizerr.CodeParamInvalid, "asset_type 非法")
 	}
@@ -244,7 +253,7 @@ func (s *LocalAssetService) Update(ctx context.Context, id int64, in *UpdateAsse
 	if err := asset.ValidateAssetData(asset.AssetType(in.AssetType), in.Data); err != nil {
 		return bizerr.Wrap(bizerr.CodeAssetInvalid, "资产 JSON 校验失败："+err.Error(), err)
 	}
-	la.Name = in.Name
+	la.Name = name
 	la.AssetType = in.AssetType
 	la.Industry = in.Industry
 	la.UpdatedAt = time.Now()

@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/platform"
 )
 
@@ -37,5 +40,31 @@ func TestPurchaseFailMsg_KeepsTransportErrorReason(t *testing.T) {
 	got := purchaseFailMsg(fmt.Errorf("dial tcp 10.0.0.1:8080: connect: connection refused"))
 	if got != "平台购买失败: dial tcp 10.0.0.1:8080: connect: connection refused" {
 		t.Fatalf("非平台拒绝应原样带上原因，得到 %q", got)
+	}
+}
+
+// 自建资产的「名称」是列表里唯一的人类可读标识，空名称会建出一行空白记录：
+// 列表上只能看到空白单元格，删除确认框显示「确认删除「」？」。
+// 前端表单虽然标了 required，但没有 rules，曾经点「创建」直接提交空名称。
+//
+// 这里钉住 service 层：空白名称必须回客户端可纠正的 4000，不能落库。
+func TestLocalAssetCreateManual_RejectsBlankName(t *testing.T) {
+	svc := &LocalAssetService{}
+
+	for _, name := range []string{"", "   ", "\t\n"} {
+		_, err := svc.CreateManual(context.Background(), &CreateAssetInput{
+			Name:      name,
+			AssetType: "agent_persona",
+			Industry:  "美妆",
+		})
+		if err == nil {
+			t.Fatalf("名称 %q 应被拒绝，实际创建成功", name)
+		}
+		if !bizerr.IsClientError(err) {
+			t.Fatalf("名称 %q 应回客户端错误（400），实际：%v", name, err)
+		}
+		if !strings.Contains(err.Error(), "名称") {
+			t.Fatalf("错误文案应指明名称，实际：%v", err)
+		}
 	}
 }

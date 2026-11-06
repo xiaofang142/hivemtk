@@ -341,8 +341,8 @@
         >
           <el-link
             type="primary"
-            :href="current.link"
-            target="_blank"
+            :href="detailLinkHref"
+            :target="detailLinkTarget"
           >
             <el-icon><Link /></el-icon>
             查看详情
@@ -377,6 +377,19 @@ const filter = reactive({ type: '', level: '', is_read: '', keyword: '' })
 
 const viewVisible = ref(false)
 const current = ref(null)
+
+// 通知里的 link 是业务路由（如 /badCase/list），而本应用用 hash 路由。
+// 直接把它塞进 href 会变成 http://host/badCase/list#/messageHub/list 的整页跳转：
+// 服务端回 index.html 后 hash 为空，守卫把人送回工作台，目标页永远到不了。
+// 内部路径补上 '#'，外部 URL 原样保留（仍新开标签页）。
+const isExternalLink = (link) => /^(https?:)?\/\//i.test(String(link || ''))
+const detailLinkHref = computed(() => {
+  const link = String(current.value?.link || '')
+  if (!link) return ''
+  if (isExternalLink(link)) return link
+  return link.startsWith('#') ? link : `#${link}`
+})
+const detailLinkTarget = computed(() => (isExternalLink(current.value?.link) ? '_blank' : '_self'))
 
 const stats = ref({
   total: 0,

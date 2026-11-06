@@ -1,7 +1,7 @@
 # 前端页面路由清单（任务四逐页点验 + 任务六新手引导文案）
 
 - 来源：`user-web/src/router/index.js` + `src/router/modules/*.js`（86 个模块文件）
-- 规模：**257 条页面路由**
+- 规模：**260 条页面路由**
 - 生成方式：`scripts/gen_router_list.py`（只做索引，不开浏览器；重跑保留既有勾选状态）
 - 校验口径：本地起 user-server + user-web，逐条路由**拟人点击**页面所有元素/表单/交互，
   比对**浏览器控制台报错**与 **Network 里的非 2xx API 响应**；发现错误即修复
@@ -13,9 +13,11 @@
 | SaaS 多租户 | `127.0.0.1:8315`（`TENANT_MODE=on`） | `127.0.0.1:8321` | `tenant_mode=true` / `edition=saas` |
 | 私域独立部署 | `127.0.0.1:8314`（`TENANT_MODE=off`） | `127.0.0.1:8320` | `tenant_mode=false` / `edition=opensource` |
 
-- 浏览器：ego lite（`ego-browser`，复用登录态，脚本逐页拟人点击；控制台 + Network 全量采集）
+- 浏览器：ego lite（`ego-browser`，复用登录态，逐页拟人点击；控制台 + Network 全量采集）
 - 登录账号：`uit_admin` / `Hive@Test123`（id=26，tenant_id=1）
-- 两种形态**都要过**：SaaS 页出现的租户/商务属性，独立部署页必须不出现且不报错
+- 覆盖口径：独立部署 260 条逐页点验；SaaS 抽检租户代码登录/空租户代码回退、注册页、租户隔离、
+  订阅墙、公开客服挂件与新增 GEO 页等租户敏感/公开链路（未逐条重复 260 页）
+- 两种形态的差异点必须成立：SaaS 页出现的租户/商务属性，独立部署页必须不出现且不报错
 
 ## 状态图例
 
@@ -71,7 +73,7 @@
 | 28 | [x] | `/asset-bundle/merchant/:aid` | AssetBundleMerchantEdit | 商户配置话术包 | 是 | `views/assetBundle/MerchantEditor.vue` | `src/router/modules/assetBundle.js` | - |
 | 29 | [x] | `/asset-market` | AssetMarket | 资产市场 | 是 | `views/assetMarket/Market.vue` | `src/router/modules/assetMarket.js` | - |
 | 30 | [x] | `/asset-market/detail/:id` | AssetMarketDetail | 资产详情 | 是 | `views/assetMarket/Detail.vue` | `src/router/modules/assetMarket.js` | - |
-| 31 | [~] | `/asset-market/my-assets` | AssetMyAssets | 我的资产 | 是 | `views/assetMarket/MyAssets.vue` | `src/router/modules/assetMarket.js` | - |
+| 31 | [x] | `/asset-market/my-assets` | AssetMyAssets | 我的资产 | 是 | `views/assetMarket/MyAssets.vue` | `src/router/modules/assetMarket.js` | - |
 | 32 | [x] | `/asset-market/sync-log` | AssetSyncLog | 同步日志 | 是 | `views/assetMarket/SyncLog.vue` | `src/router/modules/assetMarket.js` | - |
 | 33 | [x] | `/backup/list` | BackupList | 备份恢复 | 是 | `views/backup/List.vue` | `src/router/modules/backup.js` | - |
 | 34 | [x] | `/backup/enhanced` | BackupEnhanced | 备份管理 | 是 | `views/backup/Enhanced.vue` | `src/router/modules/backup.js` | - |
@@ -140,212 +142,172 @@
 | 97 | [x] | `/feishu/account` | FeishuAccount | 飞书账号 | - | `views/feishu/FeishuAccount.vue` | `src/router/modules/feishu.js` | - |
 | 98 | [~] | `/followups/today` | FollowUpToday | 今日跟进 | 是 | `views/followups/Today.vue` | `src/router/modules/followups.js` | - |
 | 99 | [~] | `/followups/:id` | FollowUpDetail | 跟进详情 | 是 | `views/followups/Today.vue` | `src/router/modules/followups.js` | - |
-| 100 | [x] | `/geo-tools/brand-config` | GeoBrandConfig | 品牌与域名 | 是 | `views/geo/BrandConfig.vue` | `src/router/modules/geoTools.js` | - |
-| 101 | [x] | `/geo-tools/seo-infra` | GeoSeoInfra | SEO 基础设施 | 是 | `views/geo/SeoInfra.vue` | `src/router/modules/geoTools.js` | - |
-| 102 | [x] | `/geo-tools/pusher-config` | GeoPusherConfig | 蜘蛛推送配置 | 是 | `views/geo/PusherConfig.vue` | `src/router/modules/geoTools.js` | - |
-| 103 | [x] | `/geo-tools/site-config` | GeoSiteConfig | 静态站部署 | 是 | `views/geo/SiteConfig.vue` | `src/router/modules/geoTools.js` | - |
-| 104 | [x] | `/geo-tools/schema-templates` | GeoSchemaTemplates | Schema 模板 | 是 | `views/geo/SchemaTemplates.vue` | `src/router/modules/geoTools.js` | - |
-| 105 | [x] | `/geo-tools/competitors` | GeoCompetitors | 竞品管理 | 是 | `views/geo/CompetitorManage.vue` | `src/router/modules/geoTools.js` | - |
-| 106 | [x] | `/geo-tools/config` | GeoConfigOptimizer | 配置优化 | 是 | `views/geo/ConfigOptimizer.vue` | `src/router/modules/geoTools.js` | - |
-| 107 | [x] | `/geo-tools/autopilot` | GeoAutopilot | 自动驾驶（一键） | 是 | `views/geo/Autopilot.vue` | `src/router/modules/geoTools.js` | - |
-| 108 | [x] | `/geo-tools/keyword-mining` | GeoKeywordMining | 关键词蒸馏 | 是 | `views/geo/KeywordMining.vue` | `src/router/modules/geoTools.js` | - |
-| 109 | [x] | `/geo-tools/content-creation` | GeoContentCreation | 内容创作 | 是 | `views/geo/ContentCreation.vue` | `src/router/modules/geoTools.js` | - |
-| 110 | [x] | `/geo-tools/content-optimize` | GeoContentOptimize | 文章优化 | 是 | `views/geo/ContentOptimize.vue` | `src/router/modules/geoTools.js` | - |
-| 111 | [x] | `/geo-tools/site-publish` | GeoSitePublish | 发布到官网 | 是 | `views/geo/SitePublish.vue` | `src/router/modules/geoTools.js` | - |
-| 112 | [x] | `/geo-tools/push-center` | GeoPushCenter | 蜘蛛推送 | 是 | `views/geo/PushCenter.vue` | `src/router/modules/geoTools.js` | - |
-| 113 | [x] | `/geo-tools/platform-publish` | GeoPlatformPublish | 多平台发布 | 是 | `views/geo/PlatformPublish.vue` | `src/router/modules/geoTools.js` | - |
-| 114 | [x] | `/geo-tools/workflow` | GeoWorkflow | 工作流 | 是 | `views/geo/WorkflowEditor.vue` | `src/router/modules/geoTools.js` | - |
-| 115 | [x] | `/geo-tools/knowledge-base` | GeoKnowledgeBase | GEO 知识库 | 是 | `views/geo/KnowledgeBase.vue` | `src/router/modules/geoTools.js` | - |
-| 116 | [x] | `/geo-tools/entity-graph` | GeoEntityGraph | 实体图谱 | 是 | `views/geo/EntityGraph.vue` | `src/router/modules/geoTools.js` | - |
-| 117 | [x] | `/geo-tools/funnel-dashboard` | GeoFunnelDashboard | 漏斗总览 | 是 | `views/geo/FunnelDashboard.vue` | `src/router/modules/geoTools.js` | - |
-| 118 | [x] | `/geo-tools/index-tracking` | GeoIndexTracking | 收录与引用 | 是 | `views/geo/IndexTracking.vue` | `src/router/modules/geoTools.js` | - |
-| 119 | [x] | `/geo-tools/visibility` | GeoVisibilityBoard | 可见性趋势 | 是 | `views/geo/VisibilityBoard.vue` | `src/router/modules/geoTools.js` | - |
-| 120 | [x] | `/geo-tools/sov-board` | GeoSovBoard | 竞品 SOV | 是 | `views/geo/SovBoard.vue` | `src/router/modules/geoTools.js` | - |
-| 121 | [x] | `/geo-tools/crawler-stats` | GeoCrawlerStats | 爬虫统计 | 是 | `views/geo/CrawlerStats.vue` | `src/router/modules/geoTools.js` | - |
-| 122 | [x] | `/geo-tools/verification` | GeoVerification | 多模型验证 | 是 | `views/geo/Verification.vue` | `src/router/modules/geoTools.js` | - |
-| 123 | [x] | `/geo/decision-report` | GeoDecisionReport | 决策链报表 | 是 | `views/geo/DecisionReport.vue` | `src/router/modules/geoTools.js` | - |
-| 124 | [x] | `/geo-tools/reports` | GeoReports | 成本报表 | 是 | `views/geo/Reports.vue` | `src/router/modules/geoTools.js` | - |
-| 125 | [x] | `/geo-tools/alerts` | GeoAlertCenter | 告警中心 | 是 | `views/geo/AlertCenter.vue` | `src/router/modules/geoTools.js` | - |
-| 126 | [x] | `/glossary` | GlossaryList | 术语表管理 | 是 | `views/glossary/List.vue` | `src/router/modules/glossary.js` | - |
-| 127 | [x] | `/i18n/dashboard` | I18nDashboard | 多语言监控 | 是 | `views/i18n/Dashboard.vue` | `src/router/modules/i18nStats.js` | - |
-| 128 | [x] | `/inbox/list` | InboxList | 统一收件箱 | - | `views/inbox/List.vue` | `src/router/modules/inbox.js` | - |
-| 129 | [x] | `/integration/list` | IntegrationList | 第三方对接 | 是 | `views/integration/List.vue` | `src/router/modules/integration.js` | - |
-| 130 | [x] | `/intentRecognition/list` | IntentRecognitionList | 意图识别 | 是 | `views/intentRecognition/List.vue` | `src/router/modules/intentRecognition.js` | - |
-| 131 | [x] | `/kb/connectors` | KbConnectors | 知识库连接器 | 是 | `views/kb/Connectors.vue` | `src/router/modules/kbConnector.js` | - |
-| 132 | [x] | `/cap/matrix` | CapabilityMatrix | 能力矩阵 | 是 | `views/cap/Matrix.vue` | `src/router/modules/kbConnector.js` | - |
-| 133 | [x] | `/cap/diagnostics` | CapabilityDiagnostics | 能力运行诊断 | 是 | `views/cap/Diagnostics.vue` | `src/router/modules/kbConnector.js` | - |
-| 134 | [x] | `/knowledge/management` | KnowledgeManagement | 知识库管理 | 是 | `views/KnowledgeWorkspace/KnowledgeManagement.vue` | `src/router/modules/knowledge.js` | - |
-| 135 | [x] | `/knowledge/batch-import` | KnowledgeBatchImport | 批量导入 | 是 | `views/KnowledgeWorkspace/BatchImport.vue` | `src/router/modules/knowledge.js` | - |
-| 136 | [x] | `/knowledge/playground` | KnowledgePlayground | 检索 Playground | 是 | `views/KnowledgeWorkspace/Playground.vue` | `src/router/modules/knowledge.js` | - |
-| 137 | [x] | `/knowledge/connectors` | KnowledgeConnectors | 外部连接器 | 是 | `views/KnowledgeWorkspace/Connectors.vue` | `src/router/modules/knowledge.js` | - |
-| 138 | [x] | `/knowledge/crawler-sources` | KnowledgeCrawlerSources | 网站爬取 | 是 | `views/KnowledgeWorkspace/CrawlerSources.vue` | `src/router/modules/knowledge.js` | - |
-| 139 | [x] | `/knowledge/qa-candidates` | KnowledgeQACandidates | QA 审核队列 | 是 | `views/KnowledgeWorkspace/QACandidates.vue` | `src/router/modules/knowledge.js` | - |
-| 140 | [x] | `/knowledge/feedbacks` | KnowledgeFeedbacks | 反馈管理 | 是 | `views/KnowledgeWorkspace/FeedbackList.vue` | `src/router/modules/knowledge.js` | - |
-| 141 | [x] | `/knowledge/tokens` | KnowledgeTokens | API Token | 是 | `views/KnowledgeWorkspace/ApiToken.vue` | `src/router/modules/knowledge.js` | - |
-| 142 | [x] | `/knowledge/external` | KnowledgeExternal | 外部系统接入 | 是 | `views/KnowledgeWorkspace/ExternalImport.vue` | `src/router/modules/knowledge.js` | - |
-| 143 | [x] | `/knowledge/statistics` | KnowledgeStatistics | 知识库统计 | 是 | `views/KnowledgeWorkspace/KnowledgeStatistics.vue` | `src/router/modules/knowledge.js` | - |
-| 144 | [x] | `/knowledge/openapi` | KnowledgeOpenAPI | OpenAPI 集成 | 是 | `views/KnowledgeWorkspace/OpenAPIIntegration.vue` | `src/router/modules/knowledge.js` | - |
-| 145 | [x] | `/knowledge/rag-eval` | RagEvaluation | RAG 评测 | 是 | `views/knowledge/RagEvaluation.vue` | `src/router/modules/knowledge.js` | - |
-| 146 | [x] | `/knowledgeBase` | KnowledgeBase | 知识库管理 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
-| 147 | [x] | `/knowledgeBase/list` | KnowledgeBaseList | 知识库列表 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
-| 148 | [x] | `/knowledgeBase/create` | KnowledgeBaseCreate | 新建知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
-| 149 | [x] | `/knowledgeBase/edit/:id` | KnowledgeBaseEdit | 编辑知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
-| 150 | [x] | `/kuaishouCard` | KuaishouCard | 快手卡片 | - | `views/kuaishouCard/List.vue` | `src/router/modules/kuaishouCard.js` | - |
-| 151 | [x] | `/kuaishou/stats` | KuaishouStats | 快手卡片统计 | - | `views/kuaishouCard/Stats.vue` | `src/router/modules/kuaishouCard.js` | - |
-| 152 | [x] | `/kuaishou-card-stats/:id` | KuaishouCardStats | 快手卡片详情统计 | - | `views/kuaishouCard/CardStats.vue` | `src/router/modules/kuaishouCard.js` | - |
-| 153 | [x] | `/lead-mining/index` | LeadMining | 线索发掘 | - | `views/leadMining/Index.vue` | `src/router/modules/leadMining.js` | - |
-| 154 | [x] | `/livecode` | LiveCodeManagement | 活码管理 | - | `views/livecode/LiveCodeManagement.vue` | `src/router/modules/livecode.js` | - |
-| 155 | [x] | `/reports/llm` | LlmUsageDashboard | LLM用量报表 | 是 | `views/reports/LlmUsageDashboard.vue` | `src/router/modules/llmReport.js` | - |
-| 156 | [x] | `/llmRouting/list` | LlmRoutingList | LLM路由 | 是 | `views/llmRouting/List.vue` | `src/router/modules/llmRouting.js` | - |
-| 157 | [x] | `/llmRouting/cost` | LlmRoutingCostDashboard | 成本看板 | 是 | `views/llmRouting/CostDashboard.vue` | `src/router/modules/llmRouting.js` | - |
-| 158 | [x] | `/marketingFlow/list` | MarketingFlowList | 营销自动化 | 是 | `views/marketingFlow/List.vue` | `src/router/modules/marketingFlow.js` | - |
-| 159 | [x] | `/mcp/credentials` | McpCredentials | MCP凭证 | 是 | `views/mcp/Credentials.vue` | `src/router/modules/mcpCredential.js` | - |
-| 160 | [x] | `/messageHub/list` | MessageHubList | 消息中台 | - | `views/messageHub/List.vue` | `src/router/modules/messageHub.js` | - |
-| 161 | [x] | `/messageHub/dashboard` | MessageHubDashboard | 消息总览 | - | `views/messageHub/Dashboard.vue` | `src/router/modules/messageHub.js` | - |
-| 162 | [x] | `/module-market` | ModuleMarket | 功能模块市场 | 否 | `views/moduleMarket/Market.vue` | `src/router/modules/moduleMarket.js` | - |
-| 163 | [x] | `/module-market/detail/:key` | ModuleMarketDetail | 模块详情 | 否 | `views/moduleMarket/Detail.vue` | `src/router/modules/moduleMarket.js` | - |
-| 164 | [x] | `/module-market/my` | ModuleMy | 我的模块 | 是 | `views/moduleMarket/MyModules.vue` | `src/router/modules/moduleMarket.js` | - |
-| 165 | [x] | `/module-market/orders` | ModuleOrders | 我的订单 | 是 | `views/moduleMarket/Orders.vue` | `src/router/modules/moduleMarket.js` | - |
-| 166 | [x] | `/subscription-wall` | SubscriptionWall | 订阅续费 | 是 | `views/subscription/Wall.vue` | `src/router/modules/moduleMarket.js` | - |
-| 167 | [x] | `/register` | Register | 商户注册 | 否 | `views/register/Register.vue` | `src/router/modules/moduleMarket.js` | - |
-| 168 | [x] | `/objection/list` | ObjectionList | 异议处理 | 是 | `views/objection/List.vue` | `src/router/modules/objection.js` | - |
-| 169 | [x] | `/observability-dashboard` | ObservabilityDashboard | AI 观测与渠道健康 | - | `views/observabilityDashboard/Index.vue` | `src/router/modules/observabilityDashboard.js` | - |
-| 170 | [x] | `/oneid/list` | OneIDList | OneID 列表 | 是 | `views/oneid/List.vue` | `src/router/modules/oneid.js` | - |
-| 171 | [x] | `/oneid/conflicts` | OneIDConflicts | 身份冲突解决 | 是 | `views/oneid/Conflicts.vue` | `src/router/modules/oneid.js` | - |
-| 172 | [x] | `/oneid/merge-rules` | OneIDMergeRules | 合并规则配置 | 是 | `views/oneid/MergeRuleConfig.vue` | `src/router/modules/oneid.js` | - |
-| 173 | [x] | `/operationLog/list` | OperationLogList | 操作日志 | 是 | `views/operationLog/List.vue` | `src/router/modules/operationLog.js` | - |
-| 174 | [x] | `/operationLog/enhanced` | OperationLogEnhanced | 操作日志(增强) | 是 | `views/operationLog/Enhanced.vue` | `src/router/modules/operationLog.js` | - |
-| 175 | [x] | `/ops-overview` | OpsOverview | 运维总览 | - | `views/OpsOverview/Index.vue` | `src/router/modules/ops.js` | - |
-| 176 | [x] | `/sales-cockpit` | SalesCockpitIndex | AI 销冠驾驶舱 | - | `views/SalesCockpit/Index.vue` | `src/router/modules/ops.js` | - |
-| 177 | [x] | `/dashboard/drafts` | OrderDraftList | 订单草稿 | 是 | `views/orderDraft/List.vue` | `src/router/modules/orderDraft.js` | - |
-| 178 | [x] | `/dashboard/drafts/:id` | OrderDraftDetail | 草稿详情 | 是 | `views/orderDraft/Detail.vue` | `src/router/modules/orderDraft.js` | - |
-| 179 | [x] | `/system/permissions` | PermissionPanel | permission.title | 是 | `views/system/PermissionPanel.vue` | `src/router/modules/permission.js` | - |
-| 180 | [x] | `/persona/list` | PersonaList | 销冠画像 | 是 | `views/persona/List.vue` | `src/router/modules/persona.js` | - |
-| 181 | [x] | `/platformAccount/list` | PlatformAccountList | 平台账号 | 是 | `views/platformAccount/List.vue` | `src/router/modules/platformAccount.js` | - |
-| 182 | [x] | `/qq` | QQBot | QQ 机器人 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - |
-| 183 | [x] | `/qq/account` | QQAccount | 机器人账号 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - |
-| 184 | [x] | `/system/rag-product-config` | RagProductConfigIndex | RAG 主配置 | 是 | `views/RagProductConfig/index.vue` | `src/router/modules/ragProductConfig.js` | - |
-| 185 | [x] | `/system/rag-account` | RagProductAccountConfig | RAG 账号配置 | 是 | `views/RagProductConfig/AccountConfig.vue` | `src/router/modules/ragProductConfig.js` | - |
-| 186 | [x] | `/system/rag-product` | RagProductManagement | RAG 产品管理 | 是 | `views/RagProductConfig/RagProductManagement.vue` | `src/router/modules/ragProductConfig.js` | - |
-| 187 | [x] | `/reachPipeline/list` | ReachPipelineList | 触达Pipeline | - | `views/reachPipeline/List.vue` | `src/router/modules/reachPipeline.js` | - |
-| 188 | [x] | `/reachPipeline/editor/:id?` | ReachPipelineEditor | Pipeline 编辑 | 是 | `views/reachPipeline/Editor.vue` | `src/router/modules/reachPipeline.js` | - |
-| 189 | [x] | `/reachPipeline/deferred-outbound` | ReachDeferredOutbound | 延迟出站管理 | 是 | `views/reachPipeline/DeferredOutbound.vue` | `src/router/modules/reachPipeline.js` | - |
-| 190 | [x] | `/system/roles` | RoleList | role.title | 是 | `views/system/RoleList.vue` | `src/router/modules/role.js` | - |
-| 191 | [x] | `/sales-workbench` | SalesWorkbenchIndex | 销售工作台 | 是 | `views/salesWorkbench/Index.vue` | `src/router/modules/salesWorkbench.js` | - |
-| 192 | [x] | `/scriptTemplate/list` | ScriptTemplateList | 话术库 | 是 | `views/scriptTemplate/List.vue` | `src/router/modules/scriptTemplate.js` | - |
-| 193 | [x] | `/scriptTemplate/ab-stats` | ScriptTemplateAbStats | 话术AB测试 | 是 | `views/scriptTemplate/AbStats.vue` | `src/router/modules/scriptTemplate.js` | - |
-| 194 | [x] | `/securityAudit/list` | SecurityAuditList | 安全审计 | 是 | `views/securityAudit/List.vue` | `src/router/modules/securityAudit.js` | - |
-| 195 | [x] | `/shortLink` | ShortLink | 短链管理 | - | `views/shortLink/List.vue` | `src/router/modules/shortLink.js` | - |
-| 196 | [x] | `/shortLink/stats` | ShortLinkStats | 短链统计 | - | `views/shortLink/Stats.vue` | `src/router/modules/shortLink.js` | - |
-| 197 | [x] | `/sms/list` | SmsList | 短信列表 | - | `views/sms/List.vue` | `src/router/modules/sms.js` | - |
-| 198 | [x] | `/sms/drafts` | SmsDrafts | 短信草稿 | - | `views/sms/Drafts.vue` | `src/router/modules/sms.js` | - |
-| 199 | [x] | `/sms/jobs` | SmsJobs | 短信任务 | - | `views/sms/Jobs.vue` | `src/router/modules/sms.js` | - |
-| 200 | [x] | `/sms/config` | SmsConfig | 短信配置 | - | `views/sms/Config.vue` | `src/router/modules/sms.js` | - |
-| 201 | [x] | `/sopAgent/list` | SopAgentList | 销冠 SOP 智能体 | 是 | `views/sopAgent/List.vue` | `src/router/modules/sopAgent.js` | - |
-| 202 | [x] | `/sop-template` | SOPTemplate | SOP 模板库 | - | `views/sopTemplate/Index.vue` | `src/router/modules/sopTemplateKb.js` | - |
-| 203 | [x] | `/sop-template/list` | SOPTemplateList | SOP 模板列表 | - | `views/sopTemplate/List.vue` | `src/router/modules/sopTemplateKb.js` | - |
-| 204 | [x] | `/sop-template/market` | SOPTemplateMarket | SOP 模板市场 | - | `views/sopTemplate/Market.vue` | `src/router/modules/sopTemplateKb.js` | - |
-| 205 | [x] | `/sop-template/editor` | SOPTemplateEditor | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - |
-| 206 | [x] | `/sop-template/editor/:id` | SOPTemplateEditorEdit | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - |
-| 207 | [x] | `/system/config` | SystemConfig | 站点设置 | 是 | `views/system/Config.vue` | `src/router/modules/system.js` | - |
-| 208 | [x] | `/system/obs-config` | SystemObsConfig | 存储配置 | 是 | `views/system/ObsConfig.vue` | `src/router/modules/system.js` | - |
-| 209 | [x] | `/system/material-library` | SystemMaterialLibrary | 素材库 | 是 | `views/system/MaterialLibrary.vue` | `src/router/modules/system.js` | - |
-| 210 | [x] | `/system/monitor` | SystemMonitor | 监控 | 是 | `views/system/Monitor.vue` | `src/router/modules/system.js` | - |
-| 211 | [x] | `/system/trace` | TraceMonitor | 链路追踪 | 是 | `views/system/TraceMonitor.vue` | `src/router/modules/system.js` | - |
-| 212 | [x] | `/system/guide` | SystemGuide | 使用引导 | 是 | `views/system/Guide.vue` | `src/router/modules/system.js` | - |
-| 213 | [x] | `/system/rag-overview` | RagOverview | RAG概览 | 是 | `views/system/RagOverview.vue` | `src/router/modules/system.js` | - |
-| 214 | [x] | `/system/automation-hub` | AutomationHub | 自动化中心 | 是 | `views/system/AutomationHub.vue` | `src/router/modules/system.js` | - |
-| 215 | [x] | `/system/config-params` | ConfigParams | 动态阈值参数 | 是 | `views/system/ConfigParams.vue` | `src/router/modules/system.js` | - |
-| 216 | [x] | `/system/dictionaries` | SystemDictionaries | 业务字典 | 是 | `views/system/DictionaryManager.vue` | `src/router/modules/system.js` | - |
-| 217 | [x] | `/system/feature-flags` | SystemFeatureFlags | 功能开关 | 是 | `views/system/FeatureFlags.vue` | `src/router/modules/system.js` | - |
-| 218 | [x] | `/system/ltc-config` | LTCConfig | LTC 运营开关 | 是 | `views/system/LTCConfig.vue` | `src/router/modules/system.js` | - |
-| 219 | [x] | `/system/users` | SystemUserList | systemUser.title | 是 | `views/system/UserList.vue` | `src/router/modules/systemUser.js` | - |
-| 220 | [x] | `/tagSegmentation/list` | TagSegmentationList | 标签分层 | 是 | `views/tagSegmentation/List.vue` | `src/router/modules/tagSegmentation.js` | - |
-| 221 | [x] | `/telegram` | Telegram | TG 机器人 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - |
-| 222 | [x] | `/telegram/account` | TelegramAccount | 机器人账号 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - |
-| 223 | [x] | `/telegram/gate` | TelegramGate | 入群管控 | - | `views/telegram/gate.vue` | `src/router/modules/telegram.js` | - |
-| 224 | [x] | `/template-market` | TemplateMarket | 模板/技能市场 | 否 | `views/templateMarket/Market.vue` | `src/router/modules/templateMarket.js` | - |
-| 225 | [x] | `/template-market/my` | TemplateMarketMy | 我的发布/订单 | 是 | `views/templateMarket/MyWorkspace.vue` | `src/router/modules/templateMarket.js` | - |
-| 226 | [x] | `/template-market/review` | TemplateMarketReview | 发布审核 | 是 | `views/templateMarket/ReviewConsole.vue` | `src/router/modules/templateMarket.js` | - |
-| 227 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | - |
-| 228 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | - |
-| 229 | [x] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | - |
-| 230 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | - |
-| 231 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | - |
-| 232 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | - |
-| 233 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | - |
-| 234 | [x] | `/unifiedMessage/list` | UnifiedMessageList | 统一消息 | - | `views/unifiedMessage/List.vue` | `src/router/modules/unifiedMessage.js` | - |
-| 235 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | - |
-| 236 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | - |
-| 237 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | - |
-| 238 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | - |
-| 239 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | - |
-| 240 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | - |
-| 241 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - |
-| 242 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - |
-| 243 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | - |
-| 244 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | - |
-| 245 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | - |
-| 246 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | - |
-| 247 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | - |
-| 248 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | - |
-| 249 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | - |
-| 250 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | - |
-| 251 | [x] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | - |
-| 252 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | - |
-| 253 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | - |
-| 254 | [x] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | - |
-| 255 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | - |
-| 256 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | - |
-| 257 | [x] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | - |
+| 100 | [x] | `/geo-tools/audit-center` | GeoAuditCenter | 审计中心 | 是 | `views/geo/AuditCenter.vue` | `src/router/modules/geoTools.js` | - |
+| 101 | [x] | `/geo-tools/brand-config` | GeoBrandConfig | 品牌与域名 | 是 | `views/geo/BrandConfig.vue` | `src/router/modules/geoTools.js` | - |
+| 102 | [x] | `/geo-tools/seo-infra` | GeoSeoInfra | SEO 基础设施 | 是 | `views/geo/SeoInfra.vue` | `src/router/modules/geoTools.js` | - |
+| 103 | [x] | `/geo-tools/pusher-config` | GeoPusherConfig | 蜘蛛推送配置 | 是 | `views/geo/PusherConfig.vue` | `src/router/modules/geoTools.js` | - |
+| 104 | [x] | `/geo-tools/site-config` | GeoSiteConfig | 静态站部署 | 是 | `views/geo/SiteConfig.vue` | `src/router/modules/geoTools.js` | - |
+| 105 | [x] | `/geo-tools/schema-templates` | GeoSchemaTemplates | Schema 模板 | 是 | `views/geo/SchemaTemplates.vue` | `src/router/modules/geoTools.js` | - |
+| 106 | [x] | `/geo-tools/competitors` | GeoCompetitors | 竞品管理 | 是 | `views/geo/CompetitorManage.vue` | `src/router/modules/geoTools.js` | - |
+| 107 | [x] | `/geo-tools/config` | GeoConfigOptimizer | 配置优化 | 是 | `views/geo/ConfigOptimizer.vue` | `src/router/modules/geoTools.js` | - |
+| 108 | [x] | `/geo-tools/autopilot` | GeoAutopilot | 自动驾驶（一键） | 是 | `views/geo/Autopilot.vue` | `src/router/modules/geoTools.js` | - |
+| 109 | [x] | `/geo-tools/keyword-mining` | GeoKeywordMining | 关键词蒸馏 | 是 | `views/geo/KeywordMining.vue` | `src/router/modules/geoTools.js` | - |
+| 110 | [x] | `/geo-tools/content-creation` | GeoContentCreation | 内容创作 | 是 | `views/geo/ContentCreation.vue` | `src/router/modules/geoTools.js` | - |
+| 111 | [x] | `/geo-tools/content-optimize` | GeoContentOptimize | 文章优化 | 是 | `views/geo/ContentOptimize.vue` | `src/router/modules/geoTools.js` | - |
+| 112 | [x] | `/geo-tools/site-publish` | GeoSitePublish | 发布到官网 | 是 | `views/geo/SitePublish.vue` | `src/router/modules/geoTools.js` | - |
+| 113 | [x] | `/geo-tools/push-center` | GeoPushCenter | 蜘蛛推送 | 是 | `views/geo/PushCenter.vue` | `src/router/modules/geoTools.js` | - |
+| 114 | [x] | `/geo-tools/platform-publish` | GeoPlatformPublish | 多平台发布 | 是 | `views/geo/PlatformPublish.vue` | `src/router/modules/geoTools.js` | - |
+| 115 | [x] | `/geo-tools/workflow` | GeoWorkflow | 工作流 | 是 | `views/geo/WorkflowEditor.vue` | `src/router/modules/geoTools.js` | - |
+| 116 | [x] | `/geo-tools/knowledge-base` | GeoKnowledgeBase | GEO 知识库 | 是 | `views/geo/KnowledgeBase.vue` | `src/router/modules/geoTools.js` | - |
+| 117 | [x] | `/geo-tools/entity-graph` | GeoEntityGraph | 实体图谱 | 是 | `views/geo/EntityGraph.vue` | `src/router/modules/geoTools.js` | - |
+| 118 | [x] | `/geo-tools/funnel-dashboard` | GeoFunnelDashboard | 漏斗总览 | 是 | `views/geo/FunnelDashboard.vue` | `src/router/modules/geoTools.js` | - |
+| 119 | [x] | `/geo-tools/index-tracking` | GeoIndexTracking | 收录与引用 | 是 | `views/geo/IndexTracking.vue` | `src/router/modules/geoTools.js` | - |
+| 120 | [x] | `/geo-tools/visibility` | GeoVisibilityBoard | 可见性趋势 | 是 | `views/geo/VisibilityBoard.vue` | `src/router/modules/geoTools.js` | - |
+| 121 | [x] | `/geo-tools/sov-board` | GeoSovBoard | 竞品 SOV | 是 | `views/geo/SovBoard.vue` | `src/router/modules/geoTools.js` | - |
+| 122 | [x] | `/geo-tools/crawler-stats` | GeoCrawlerStats | 爬虫统计 | 是 | `views/geo/CrawlerStats.vue` | `src/router/modules/geoTools.js` | - |
+| 123 | [x] | `/geo-tools/verification` | GeoVerification | 多模型验证 | 是 | `views/geo/Verification.vue` | `src/router/modules/geoTools.js` | - |
+| 124 | [x] | `/geo/decision-report` | GeoDecisionReport | 决策链报表 | 是 | `views/geo/DecisionReport.vue` | `src/router/modules/geoTools.js` | - |
+| 125 | [x] | `/geo-tools/reports` | GeoReports | 成本报表 | 是 | `views/geo/Reports.vue` | `src/router/modules/geoTools.js` | - |
+| 126 | [x] | `/geo-tools/dual-engine` | GeoDualEngine | 双端监测 | 是 | `views/geo/DualEngineBoard.vue` | `src/router/modules/geoTools.js` | - |
+| 127 | [x] | `/geo-tools/capture-links` | GeoCaptureLinks | 承接链接 | 是 | `views/geo/CaptureLinks.vue` | `src/router/modules/geoTools.js` | - |
+| 128 | [x] | `/geo-tools/alerts` | GeoAlertCenter | 告警中心 | 是 | `views/geo/AlertCenter.vue` | `src/router/modules/geoTools.js` | - |
+| 129 | [x] | `/glossary` | GlossaryList | 术语表管理 | 是 | `views/glossary/List.vue` | `src/router/modules/glossary.js` | - |
+| 130 | [x] | `/i18n/dashboard` | I18nDashboard | 多语言监控 | 是 | `views/i18n/Dashboard.vue` | `src/router/modules/i18nStats.js` | - |
+| 131 | [x] | `/inbox/list` | InboxList | 统一收件箱 | - | `views/inbox/List.vue` | `src/router/modules/inbox.js` | - |
+| 132 | [x] | `/integration/list` | IntegrationList | 第三方对接 | 是 | `views/integration/List.vue` | `src/router/modules/integration.js` | - |
+| 133 | [x] | `/intentRecognition/list` | IntentRecognitionList | 意图识别 | 是 | `views/intentRecognition/List.vue` | `src/router/modules/intentRecognition.js` | - |
+| 134 | [x] | `/kb/connectors` | KbConnectors | 知识库连接器 | 是 | `views/kb/Connectors.vue` | `src/router/modules/kbConnector.js` | - |
+| 135 | [x] | `/cap/matrix` | CapabilityMatrix | 能力矩阵 | 是 | `views/cap/Matrix.vue` | `src/router/modules/kbConnector.js` | - |
+| 136 | [x] | `/cap/diagnostics` | CapabilityDiagnostics | 能力运行诊断 | 是 | `views/cap/Diagnostics.vue` | `src/router/modules/kbConnector.js` | - |
+| 137 | [x] | `/knowledge/management` | KnowledgeManagement | 知识库管理 | 是 | `views/KnowledgeWorkspace/KnowledgeManagement.vue` | `src/router/modules/knowledge.js` | - |
+| 138 | [x] | `/knowledge/batch-import` | KnowledgeBatchImport | 批量导入 | 是 | `views/KnowledgeWorkspace/BatchImport.vue` | `src/router/modules/knowledge.js` | - |
+| 139 | [x] | `/knowledge/playground` | KnowledgePlayground | 检索 Playground | 是 | `views/KnowledgeWorkspace/Playground.vue` | `src/router/modules/knowledge.js` | - |
+| 140 | [x] | `/knowledge/connectors` | KnowledgeConnectors | 外部连接器 | 是 | `views/KnowledgeWorkspace/Connectors.vue` | `src/router/modules/knowledge.js` | - |
+| 141 | [x] | `/knowledge/crawler-sources` | KnowledgeCrawlerSources | 网站爬取 | 是 | `views/KnowledgeWorkspace/CrawlerSources.vue` | `src/router/modules/knowledge.js` | - |
+| 142 | [x] | `/knowledge/qa-candidates` | KnowledgeQACandidates | QA 审核队列 | 是 | `views/KnowledgeWorkspace/QACandidates.vue` | `src/router/modules/knowledge.js` | - |
+| 143 | [x] | `/knowledge/feedbacks` | KnowledgeFeedbacks | 反馈管理 | 是 | `views/KnowledgeWorkspace/FeedbackList.vue` | `src/router/modules/knowledge.js` | - |
+| 144 | [x] | `/knowledge/tokens` | KnowledgeTokens | API Token | 是 | `views/KnowledgeWorkspace/ApiToken.vue` | `src/router/modules/knowledge.js` | - |
+| 145 | [x] | `/knowledge/external` | KnowledgeExternal | 外部系统接入 | 是 | `views/KnowledgeWorkspace/ExternalImport.vue` | `src/router/modules/knowledge.js` | - |
+| 146 | [x] | `/knowledge/statistics` | KnowledgeStatistics | 知识库统计 | 是 | `views/KnowledgeWorkspace/KnowledgeStatistics.vue` | `src/router/modules/knowledge.js` | - |
+| 147 | [x] | `/knowledge/openapi` | KnowledgeOpenAPI | OpenAPI 集成 | 是 | `views/KnowledgeWorkspace/OpenAPIIntegration.vue` | `src/router/modules/knowledge.js` | - |
+| 148 | [x] | `/knowledge/rag-eval` | RagEvaluation | RAG 评测 | 是 | `views/knowledge/RagEvaluation.vue` | `src/router/modules/knowledge.js` | - |
+| 149 | [x] | `/knowledgeBase` | KnowledgeBase | 知识库管理 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
+| 150 | [x] | `/knowledgeBase/list` | KnowledgeBaseList | 知识库列表 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
+| 151 | [x] | `/knowledgeBase/create` | KnowledgeBaseCreate | 新建知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
+| 152 | [x] | `/knowledgeBase/edit/:id` | KnowledgeBaseEdit | 编辑知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - |
+| 153 | [x] | `/kuaishouCard` | KuaishouCard | 快手卡片 | - | `views/kuaishouCard/List.vue` | `src/router/modules/kuaishouCard.js` | - |
+| 154 | [x] | `/kuaishou/stats` | KuaishouStats | 快手卡片统计 | - | `views/kuaishouCard/Stats.vue` | `src/router/modules/kuaishouCard.js` | - |
+| 155 | [x] | `/kuaishou-card-stats/:id` | KuaishouCardStats | 快手卡片详情统计 | - | `views/kuaishouCard/CardStats.vue` | `src/router/modules/kuaishouCard.js` | - |
+| 156 | [x] | `/lead-mining/index` | LeadMining | 线索发掘 | - | `views/leadMining/Index.vue` | `src/router/modules/leadMining.js` | - |
+| 157 | [x] | `/livecode` | LiveCodeManagement | 活码管理 | - | `views/livecode/LiveCodeManagement.vue` | `src/router/modules/livecode.js` | - |
+| 158 | [x] | `/reports/llm` | LlmUsageDashboard | LLM用量报表 | 是 | `views/reports/LlmUsageDashboard.vue` | `src/router/modules/llmReport.js` | - |
+| 159 | [x] | `/llmRouting/list` | LlmRoutingList | LLM路由 | 是 | `views/llmRouting/List.vue` | `src/router/modules/llmRouting.js` | - |
+| 160 | [x] | `/llmRouting/cost` | LlmRoutingCostDashboard | 成本看板 | 是 | `views/llmRouting/CostDashboard.vue` | `src/router/modules/llmRouting.js` | - |
+| 161 | [x] | `/marketingFlow/list` | MarketingFlowList | 营销自动化 | 是 | `views/marketingFlow/List.vue` | `src/router/modules/marketingFlow.js` | - |
+| 162 | [x] | `/mcp/credentials` | McpCredentials | MCP凭证 | 是 | `views/mcp/Credentials.vue` | `src/router/modules/mcpCredential.js` | - |
+| 163 | [x] | `/messageHub/list` | MessageHubList | 消息中台 | - | `views/messageHub/List.vue` | `src/router/modules/messageHub.js` | - |
+| 164 | [x] | `/messageHub/dashboard` | MessageHubDashboard | 消息总览 | - | `views/messageHub/Dashboard.vue` | `src/router/modules/messageHub.js` | - |
+| 165 | [x] | `/module-market` | ModuleMarket | 功能模块市场 | 否 | `views/moduleMarket/Market.vue` | `src/router/modules/moduleMarket.js` | - |
+| 166 | [x] | `/module-market/detail/:key` | ModuleMarketDetail | 模块详情 | 否 | `views/moduleMarket/Detail.vue` | `src/router/modules/moduleMarket.js` | - |
+| 167 | [x] | `/module-market/my` | ModuleMy | 我的模块 | 是 | `views/moduleMarket/MyModules.vue` | `src/router/modules/moduleMarket.js` | - |
+| 168 | [x] | `/module-market/orders` | ModuleOrders | 我的订单 | 是 | `views/moduleMarket/Orders.vue` | `src/router/modules/moduleMarket.js` | - |
+| 169 | [x] | `/subscription-wall` | SubscriptionWall | 订阅续费 | 是 | `views/subscription/Wall.vue` | `src/router/modules/moduleMarket.js` | - |
+| 170 | [x] | `/register` | Register | 商户注册 | 否 | `views/register/Register.vue` | `src/router/modules/moduleMarket.js` | - |
+| 171 | [x] | `/objection/list` | ObjectionList | 异议处理 | 是 | `views/objection/List.vue` | `src/router/modules/objection.js` | - |
+| 172 | [x] | `/observability-dashboard` | ObservabilityDashboard | AI 观测与渠道健康 | - | `views/observabilityDashboard/Index.vue` | `src/router/modules/observabilityDashboard.js` | - |
+| 173 | [x] | `/oneid/list` | OneIDList | OneID 列表 | 是 | `views/oneid/List.vue` | `src/router/modules/oneid.js` | - |
+| 174 | [x] | `/oneid/conflicts` | OneIDConflicts | 身份冲突解决 | 是 | `views/oneid/Conflicts.vue` | `src/router/modules/oneid.js` | - |
+| 175 | [x] | `/oneid/merge-rules` | OneIDMergeRules | 合并规则配置 | 是 | `views/oneid/MergeRuleConfig.vue` | `src/router/modules/oneid.js` | - |
+| 176 | [x] | `/operationLog/list` | OperationLogList | 操作日志 | 是 | `views/operationLog/List.vue` | `src/router/modules/operationLog.js` | - |
+| 177 | [x] | `/operationLog/enhanced` | OperationLogEnhanced | 操作日志(增强) | 是 | `views/operationLog/Enhanced.vue` | `src/router/modules/operationLog.js` | - |
+| 178 | [x] | `/ops-overview` | OpsOverview | 运维总览 | - | `views/OpsOverview/Index.vue` | `src/router/modules/ops.js` | - |
+| 179 | [x] | `/sales-cockpit` | SalesCockpitIndex | AI 销冠驾驶舱 | - | `views/SalesCockpit/Index.vue` | `src/router/modules/ops.js` | - |
+| 180 | [x] | `/dashboard/drafts` | OrderDraftList | 订单草稿 | 是 | `views/orderDraft/List.vue` | `src/router/modules/orderDraft.js` | - |
+| 181 | [x] | `/dashboard/drafts/:id` | OrderDraftDetail | 草稿详情 | 是 | `views/orderDraft/Detail.vue` | `src/router/modules/orderDraft.js` | - |
+| 182 | [x] | `/system/permissions` | PermissionPanel | permission.title | 是 | `views/system/PermissionPanel.vue` | `src/router/modules/permission.js` | - |
+| 183 | [x] | `/persona/list` | PersonaList | 销冠画像 | 是 | `views/persona/List.vue` | `src/router/modules/persona.js` | - |
+| 184 | [x] | `/platformAccount/list` | PlatformAccountList | 平台账号 | 是 | `views/platformAccount/List.vue` | `src/router/modules/platformAccount.js` | - |
+| 185 | [x] | `/qq` | QQBot | QQ 机器人 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - |
+| 186 | [x] | `/qq/account` | QQAccount | 机器人账号 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - |
+| 187 | [x] | `/system/rag-product-config` | RagProductConfigIndex | RAG 主配置 | 是 | `views/RagProductConfig/index.vue` | `src/router/modules/ragProductConfig.js` | - |
+| 188 | [x] | `/system/rag-account` | RagProductAccountConfig | RAG 账号配置 | 是 | `views/RagProductConfig/AccountConfig.vue` | `src/router/modules/ragProductConfig.js` | - |
+| 189 | [x] | `/system/rag-product` | RagProductManagement | RAG 产品管理 | 是 | `views/RagProductConfig/RagProductManagement.vue` | `src/router/modules/ragProductConfig.js` | - |
+| 190 | [x] | `/reachPipeline/list` | ReachPipelineList | 触达Pipeline | - | `views/reachPipeline/List.vue` | `src/router/modules/reachPipeline.js` | - |
+| 191 | [x] | `/reachPipeline/editor/:id?` | ReachPipelineEditor | Pipeline 编辑 | 是 | `views/reachPipeline/Editor.vue` | `src/router/modules/reachPipeline.js` | - |
+| 192 | [x] | `/reachPipeline/deferred-outbound` | ReachDeferredOutbound | 延迟出站管理 | 是 | `views/reachPipeline/DeferredOutbound.vue` | `src/router/modules/reachPipeline.js` | - |
+| 193 | [x] | `/system/roles` | RoleList | role.title | 是 | `views/system/RoleList.vue` | `src/router/modules/role.js` | - |
+| 194 | [x] | `/sales-workbench` | SalesWorkbenchIndex | 销售工作台 | 是 | `views/salesWorkbench/Index.vue` | `src/router/modules/salesWorkbench.js` | - |
+| 195 | [x] | `/scriptTemplate/list` | ScriptTemplateList | 话术库 | 是 | `views/scriptTemplate/List.vue` | `src/router/modules/scriptTemplate.js` | - |
+| 196 | [x] | `/scriptTemplate/ab-stats` | ScriptTemplateAbStats | 话术AB测试 | 是 | `views/scriptTemplate/AbStats.vue` | `src/router/modules/scriptTemplate.js` | - |
+| 197 | [x] | `/securityAudit/list` | SecurityAuditList | 安全审计 | 是 | `views/securityAudit/List.vue` | `src/router/modules/securityAudit.js` | - |
+| 198 | [x] | `/shortLink` | ShortLink | 短链管理 | - | `views/shortLink/List.vue` | `src/router/modules/shortLink.js` | - |
+| 199 | [x] | `/shortLink/stats` | ShortLinkStats | 短链统计 | - | `views/shortLink/Stats.vue` | `src/router/modules/shortLink.js` | - |
+| 200 | [x] | `/sms/list` | SmsList | 短信列表 | - | `views/sms/List.vue` | `src/router/modules/sms.js` | - |
+| 201 | [x] | `/sms/drafts` | SmsDrafts | 短信草稿 | - | `views/sms/Drafts.vue` | `src/router/modules/sms.js` | - |
+| 202 | [x] | `/sms/jobs` | SmsJobs | 短信任务 | - | `views/sms/Jobs.vue` | `src/router/modules/sms.js` | - |
+| 203 | [x] | `/sms/config` | SmsConfig | 短信配置 | - | `views/sms/Config.vue` | `src/router/modules/sms.js` | - |
+| 204 | [x] | `/sopAgent/list` | SopAgentList | 销冠 SOP 智能体 | 是 | `views/sopAgent/List.vue` | `src/router/modules/sopAgent.js` | - |
+| 205 | [x] | `/sop-template` | SOPTemplate | SOP 模板库 | - | `views/sopTemplate/Index.vue` | `src/router/modules/sopTemplateKb.js` | - |
+| 206 | [x] | `/sop-template/list` | SOPTemplateList | SOP 模板列表 | - | `views/sopTemplate/List.vue` | `src/router/modules/sopTemplateKb.js` | - |
+| 207 | [x] | `/sop-template/market` | SOPTemplateMarket | SOP 模板市场 | - | `views/sopTemplate/Market.vue` | `src/router/modules/sopTemplateKb.js` | - |
+| 208 | [x] | `/sop-template/editor` | SOPTemplateEditor | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - |
+| 209 | [x] | `/sop-template/editor/:id` | SOPTemplateEditorEdit | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - |
+| 210 | [x] | `/system/config` | SystemConfig | 站点设置 | 是 | `views/system/Config.vue` | `src/router/modules/system.js` | - |
+| 211 | [x] | `/system/obs-config` | SystemObsConfig | 存储配置 | 是 | `views/system/ObsConfig.vue` | `src/router/modules/system.js` | - |
+| 212 | [x] | `/system/material-library` | SystemMaterialLibrary | 素材库 | 是 | `views/system/MaterialLibrary.vue` | `src/router/modules/system.js` | - |
+| 213 | [x] | `/system/monitor` | SystemMonitor | 监控 | 是 | `views/system/Monitor.vue` | `src/router/modules/system.js` | - |
+| 214 | [x] | `/system/trace` | TraceMonitor | 链路追踪 | 是 | `views/system/TraceMonitor.vue` | `src/router/modules/system.js` | - |
+| 215 | [x] | `/system/guide` | SystemGuide | 使用引导 | 是 | `views/system/Guide.vue` | `src/router/modules/system.js` | - |
+| 216 | [x] | `/system/rag-overview` | RagOverview | RAG概览 | 是 | `views/system/RagOverview.vue` | `src/router/modules/system.js` | - |
+| 217 | [x] | `/system/automation-hub` | AutomationHub | 自动化中心 | 是 | `views/system/AutomationHub.vue` | `src/router/modules/system.js` | - |
+| 218 | [x] | `/system/config-params` | ConfigParams | 动态阈值参数 | 是 | `views/system/ConfigParams.vue` | `src/router/modules/system.js` | - |
+| 219 | [x] | `/system/dictionaries` | SystemDictionaries | 业务字典 | 是 | `views/system/DictionaryManager.vue` | `src/router/modules/system.js` | - |
+| 220 | [x] | `/system/feature-flags` | SystemFeatureFlags | 功能开关 | 是 | `views/system/FeatureFlags.vue` | `src/router/modules/system.js` | - |
+| 221 | [x] | `/system/ltc-config` | LTCConfig | LTC 运营开关 | 是 | `views/system/LTCConfig.vue` | `src/router/modules/system.js` | - |
+| 222 | [x] | `/system/users` | SystemUserList | systemUser.title | 是 | `views/system/UserList.vue` | `src/router/modules/systemUser.js` | - |
+| 223 | [x] | `/tagSegmentation/list` | TagSegmentationList | 标签分层 | 是 | `views/tagSegmentation/List.vue` | `src/router/modules/tagSegmentation.js` | - |
+| 224 | [x] | `/telegram` | Telegram | TG 机器人 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - |
+| 225 | [x] | `/telegram/account` | TelegramAccount | 机器人账号 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - |
+| 226 | [x] | `/telegram/gate` | TelegramGate | 入群管控 | - | `views/telegram/gate.vue` | `src/router/modules/telegram.js` | - |
+| 227 | [x] | `/template-market` | TemplateMarket | 模板/技能市场 | 否 | `views/templateMarket/Market.vue` | `src/router/modules/templateMarket.js` | - |
+| 228 | [x] | `/template-market/my` | TemplateMarketMy | 我的发布/订单 | 是 | `views/templateMarket/MyWorkspace.vue` | `src/router/modules/templateMarket.js` | - |
+| 229 | [x] | `/template-market/review` | TemplateMarketReview | 发布审核 | 是 | `views/templateMarket/ReviewConsole.vue` | `src/router/modules/templateMarket.js` | - |
+| 230 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | - |
+| 231 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | - |
+| 232 | [x] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | - |
+| 233 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | - |
+| 234 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | - |
+| 235 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | - |
+| 236 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | - |
+| 237 | [x] | `/unifiedMessage/list` | UnifiedMessageList | 统一消息 | - | `views/unifiedMessage/List.vue` | `src/router/modules/unifiedMessage.js` | - |
+| 238 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | - |
+| 239 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | - |
+| 240 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | - |
+| 241 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | - |
+| 242 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | - |
+| 243 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | - |
+| 244 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - |
+| 245 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - |
+| 246 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | - |
+| 247 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | - |
+| 248 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | - |
+| 249 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | - |
+| 250 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | - |
+| 251 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | - |
+| 252 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | - |
+| 253 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | - |
+| 254 | [x] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | - |
+| 255 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | - |
+| 256 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | - |
+| 257 | [x] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | - |
+| 258 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | - |
+| 259 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | - |
+| 260 | [x] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | - |
 
 ## 进度
 
-- 已验证无错误 `[x]`：**253** 条
-- 已验证·设计内拒绝 `[~]`：**4** 条（`/asset-market/my-assets`、`/bridge/extension`、`/followups/today`、`/followups/:id`）
+- 已验证无错误 `[x]`：**258** 条
+- 已验证·设计内拒绝 `[~]`：**2** 条（`/followups/today`、`/followups/:id`：跟进服务未装配，后端回 503 且页面明示原因）
 - 待点验 `[ ]`：**0** 条
-- 已点出缺陷 `[!]`：**0** 条（逐页点出的缺陷已当轮修复并回归，详见 commit message）
+- 已点出缺陷 `[!]`：**0** 条
 - 任务六已写页面导览 `G`：**0** 条
-
-### 第二轮：全元素点验（2026-10-31）
-
-第一轮是「按页抽样点击」，第二轮改为**逐页穷举交互元素**：button / a / tab / menu / radio /
-checkbox / switch / select / cascader / input-number / 分页 / 表头排序 / 展开行 / 行内按钮 /
-dropdown / link / date-picker / color-picker / tag 关闭 / tree / transfer / slider / carousel /
-image / 卡片，按控件类型分别交互（下拉选项、开关点开后复原、日期弹层后关闭），弹窗内按钮
-逐个点并根据 `confirmDestructive` 决定「确定」还是「取消」，跳转后 `history.back()` 回原页继续。
-
-- 独立部署（8320 → 8314）：257 页全部重跑，每页结果落在 `results2/`，错误按**具体点击元素**归属。
-- SaaS（8321 → 8315）核心与公开页抽样 14 页：`/setup` `/login` `/help-center` `/register`
-  `/subscription-wall` `/messageHub/list` `/aiAgent/list` `/knowledgeBase/list`
-  `/customerSession/list` `/module-market` `/llmRouting/list` `/system/users`
-  `/whatsapp-cloud` `/asset-market`，行为与独立部署一致。
-- 第二轮新发现并修复 5 处（批量导出文件流、egolite 两处、geo 两处、术语表、OneID 合并规则、
-  渠道流水线保存合约、WhatsApp Cloud 字段名、角色页重复提示），详见 commit message。
-
-### 第三轮：页面数据与交互结果点验（2026-10-31）
-
-前两轮回答的是「页面有没有报错、控件点得动」；这一轮回答「**页面上的数据对不对、交互有没有真的生效**」。
-
-每页固定两套判定，缺一即记为问题：
-
-**数据面**
-1. 列表接口 `total` 与渲染行数/空态是否自洽（`total>0` 但 0 行、`total=0` 但有行、`total>0` 但既无行也无空态）
-2. 渲染文本里不得出现 `undefined` / `null` / `NaN` / `Infinity` / `[object Object]` / `Invalid Date` /
-   `0001-01-01` / Go 格式化残留 `%!s(` `<nil>` / 单花括号占位符 `{token}` / 未替换 `${var}`
-3. 接口 `code != 0` 一律记录；分页 total 文案与接口 total 一致
-4. 卡片/统计数值与接口字段一致，不得恒为 0 或空图表
-5. 首行关键字段（名称、编号、时间）非空且非占位值
-6. 筛选/搜索条件变化后，接口入参与返回结果确实随之变化
-
-**交互面**
-1. 每个可点元素点击后必须产生可观察效果：`navigate` / `modal` / `dom` / `request`
-2. 无任何效果且非「已选中项」的点击记为 `noop`，逐条人工判定是否死按钮
-3. 弹窗必须带内容（标题/表单/按钮），不得是空白弹窗
-4. 保存/删除/状态切换后回读接口确认已落库（GET 复核）
-5. 分页、排序、tab 切换后内容确实变化
-6. 每次点击引发的 console / pageerror / 非 2xx 归属到该元素
-
-工具：`/tmp/ui-audit/run3.mjs` + `runall3.py`，输出 `results3/<nnn>-<mode>-<slug>.json`
-（`initial` 指纹、`dataFindings[]`、`clicks[{effect,reqs,modal,errors,anomalies}]`、`noopCount`）。
-

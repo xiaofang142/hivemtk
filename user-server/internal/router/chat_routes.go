@@ -45,7 +45,14 @@ func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *s
 		Enabled:          true,
 	}))
 
-	chatPublic.Use(middleware.SanitizeMiddleware())
+	// 这里**不能**挂 SanitizeMiddleware：它改写的是处理器实际读取的请求体，而不是日志副本。
+	// 实测（2026-11-06 真机）：公开会话的 channel_id 是 36 位 UUID，命中 tokenRe
+	// （\b[A-Za-z0-9_-]{30,}\b）后被替换成 `7d35...6225`，控制器拿脱敏值去查
+	// chat_channels ⇒ 合法渠道也回「渠道不存在」；访客消息正文里的长串（URL/单号/
+	// 英文长词）同样会在入库前被截断成 `Toke...6789`，业务数据被永久污染。
+	// 脱敏/掩码是**日志出口**的职责（凭据由 APIInteractionLogger 按字段名 redact，
+	// PII 如需掩码也应在日志侧另做），不能改写处理器读到的入参。
+	// 渠道/会话/访客标识与消息正文都是业务数据，必须原样进入处理器。
 
 	ctrl := controller.NewChatPublicController(visitorSvc, channelSvc)
 

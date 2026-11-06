@@ -402,6 +402,13 @@ const openCreate = () => {
 }
 
 const submitCreate = async () => {
+  const name = form.value.name.trim()
+  // 表单标了 required 但没有 rules，空名称会直接建出一条「名称」为空的资产；
+  // 列表里只能看到一行空白，连删除确认框都显示「确认删除「」？」。
+  if (!name) {
+    ElMessage.error('请输入资产名称')
+    return
+  }
   let data
   try {
     data = JSON.parse(form.value.dataText)
@@ -409,11 +416,15 @@ const submitCreate = async () => {
     ElMessage.error('JSON 格式错误')
     return
   }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    ElMessage.error('JSON 数据必须是对象')
+    return
+  }
   data.asset_type = form.value.asset_type
   data.industry = form.value.industry
-  data.name = form.value.name || data.name
+  data.name = name
   await createLocalAsset({
-    name: form.value.name,
+    name,
     asset_type: form.value.asset_type,
     industry: form.value.industry,
     data
