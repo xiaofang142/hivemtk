@@ -220,7 +220,11 @@
           label="名称"
           required
         >
-          <el-input v-model="form.name" />
+          <el-input
+            v-model="form.name"
+            maxlength="128"
+            show-word-limit
+          />
         </el-form-item>
         <el-form-item
           label="类型"

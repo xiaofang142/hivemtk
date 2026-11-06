@@ -68,3 +68,24 @@ func TestLocalAssetCreateManual_RejectsBlankName(t *testing.T) {
 		}
 	}
 }
+
+// 名称列是 varchar(128)。超长值不拦会在 INSERT 时被数据库拒绝，
+// 上层只看到「创建资产失败」5000，用户不知道是名字太长。
+func TestLocalAssetCreateManual_RejectsOverlongName(t *testing.T) {
+	svc := &LocalAssetService{}
+
+	_, err := svc.CreateManual(context.Background(), &CreateAssetInput{
+		Name:      strings.Repeat("长", 129),
+		AssetType: "agent_persona",
+		Industry:  "美妆",
+	})
+	if err == nil {
+		t.Fatal("129 个字符的名称应被拒绝")
+	}
+	if !bizerr.IsClientError(err) {
+		t.Fatalf("超长名称应回客户端错误（400），实际：%v", err)
+	}
+	if !strings.Contains(err.Error(), "128") {
+		t.Fatalf("错误文案应指明上限，实际：%v", err)
+	}
+}

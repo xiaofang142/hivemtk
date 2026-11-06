@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -194,6 +195,9 @@ func (s *LocalAssetService) CreateManual(ctx context.Context, in *CreateAssetInp
 	if name == "" {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "资产名称不能为空")
 	}
+	if utf8.RuneCountInString(name) > 128 {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "资产名称不能超过 128 个字符")
+	}
 	if !asset.AssetType(in.AssetType).Valid() {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_type 非法")
 	}
@@ -241,6 +245,9 @@ func (s *LocalAssetService) Update(ctx context.Context, id int64, in *UpdateAsse
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return bizerr.New(bizerr.CodeParamInvalid, "资产名称不能为空")
+	}
+	if utf8.RuneCountInString(name) > 128 {
+		return bizerr.New(bizerr.CodeParamInvalid, "资产名称不能超过 128 个字符")
 	}
 	if !asset.AssetType(in.AssetType).Valid() {
 		return bizerr.New(bizerr.CodeParamInvalid, "asset_type 非法")
