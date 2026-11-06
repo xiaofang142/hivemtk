@@ -1,5 +1,13 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CircuitBreaker, circuitBreaker } from '../src/core/circuit-breaker.js';
+
+// 固定非零基准 t0（AV-08 可控时钟）：TTL/窗口判定随显式推进走，不用真实 sleep。
+const T0 = 1_700_000_000_000;
+
+// 每个用例结束后恢复真实时钟（等价 finally，保证不泄漏到其他测试文件）
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('CircuitBreaker 幂等键（P3-A 2026-08-15）', () => {
   let cb;
@@ -24,16 +32,21 @@ describe('CircuitBreaker 幂等键（P3-A 2026-08-15）', () => {
     expect(cb._idempotencyDedupeHits).toBe(1);
   });
 
-  it('TTL 外同 key 视为新', async () => {
+  it('TTL 外同 key 视为新（受控时钟，无真实 sleep）', () => {
+    vi.useFakeTimers({ now: T0, toFake: ['Date'] });
     cb.registerIdempotency('key-1');
     cb.markIdempotencyOk('key-1');
-    await new Promise((r) => setTimeout(r, 50));
+    vi.advanceTimersByTime(50); // TTL(1000) 内：仍命中
+    expect(cb.registerIdempotency('key-1').deduped).toBe(true);
     const orig = cb._idempotencyTtlMs;
     cb._idempotencyTtlMs = 10;
-    await new Promise((r) => setTimeout(r, 30));
-    const r = cb.registerIdempotency('key-1');
-    expect(r.deduped).toBe(false);
-    cb._idempotencyTtlMs = orig;
+    try {
+      vi.advanceTimersByTime(30); // 距注册/ok 时刻累计 80ms > 10ms TTL
+      const r = cb.registerIdempotency('key-1');
+      expect(r.deduped).toBe(false);
+    } finally {
+      cb._idempotencyTtlMs = orig;
+    }
   });
 
   it('clearIdempotency 后可重发', () => {
@@ -122,8 +135,8 @@ describe('CircuitBreaker 结构化健康度（P3-C 2026-08-15）', () => {
     cb.registerIdempotency('k1');
     cb.registerIdempotency('k2');
     cb.markIdempotencyOk('k1');
-    cb.registerIdempotency('k1'); 
-    cb.registerIdempotency('k1'); 
+    cb.registerIdempotency('k1');
+    cb.registerIdempotency('k1');
     const s = cb.snapshot();
     expect(s.idempotency.keysTracked).toBe(2);
     expect(s.idempotency.dedupeHits).toBe(2);
@@ -141,23 +154,27 @@ describe('CircuitBreaker 结构化健康度（P3-C 2026-08-15）', () => {
   });
 });
 
-describe('CircuitBreaker 三态机（P3-C 回归）', () => {
+describe('CircuitBreaker 三态机（P3-C 回归，AV-08 可控时钟）', () => {
   let cb;
   beforeEach(() => {
+    vi.useFakeTimers({ now: T0, toFake: ['Date'] });
     cb = new CircuitBreaker({ failureThreshold: 3, openDurationMs: 100, deadManSeconds: 1 });
   });
-  it('CLOSED 3 次失败 → OPEN', () => {
+  it('CLOSED 3 次失败 → OPEN（t0 开启瞬间）', () => {
     cb.recordFailure(new Error('e1'));
     cb.recordFailure(new Error('e2'));
     cb.recordFailure(new Error('e3'));
     expect(cb.state).toBe('OPEN');
+    expect(cb.openedAt).toBe(T0);
     expect(cb.isOpen()).toBe(true);
   });
-  it('OPEN openDurationMs 后 → HALF_OPEN', async () => {
-    cb.failureCount = 3;
-    cb.state = 'OPEN';
-    cb.openedAt = Date.now() - 200;
-    expect(cb.isOpen()).toBe(false);
+  it('OPEN openDurationMs 后 → HALF_OPEN（t0+100 调 isOpen() 才转态，不自动转）', () => {
+    cb.recordFailure(new Error('e1'));
+    cb.recordFailure(new Error('e2'));
+    cb.recordFailure(new Error('e3'));
+    vi.setSystemTime(T0 + 100);
+    expect(cb.state).toBe('OPEN'); // 未调 isOpen() 前不自动转态
+    expect(cb.isOpen()).toBe(false); // 调用瞬间才判定并转换
     expect(cb.state).toBe('HALF_OPEN');
   });
   it('reset() 完整重置（含 idempotency + P3-C 字段）', () => {
@@ -173,5 +190,3 @@ describe('CircuitBreaker 三态机（P3-C 回归）', () => {
     expect(cb._totalCalls).toBe(0);
   });
 });
-
-

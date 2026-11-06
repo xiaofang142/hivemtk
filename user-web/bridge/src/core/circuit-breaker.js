@@ -8,6 +8,9 @@ class CircuitBreaker {
     this.failureThreshold = opts.failureThreshold || 5;
     this.openDurationMs = opts.openDurationMs || 30000;
     this.halfOpenSuccessThreshold = opts.halfOpenSuccessThreshold || 1;
+    // 时钟注入点（AV-08）：默认仍走全局 Date.now，生产行为不变；测试可注入受控时钟，
+    // 使 100ms 窗口边界（t0+99/t0+100、重开窗口 t1+99/t1+100）可精确断言，不依赖真实 CPU/日志耗时。
+    this._now = typeof opts.now === 'function' ? opts.now : () => Date.now();
     this.state = 'CLOSED';      
     this.failureCount = 0;
     this.halfOpenSuccessCount = 0;
@@ -36,7 +39,7 @@ class CircuitBreaker {
 
   isOpen() {
     if (this.state === 'OPEN') {
-      if (Date.now() - this.openedAt >= this.openDurationMs) {
+      if (this._now() - this.openedAt >= this.openDurationMs) {
         this._transitionTo('HALF_OPEN');
         return false;
       }
@@ -47,7 +50,7 @@ class CircuitBreaker {
 
   registerIdempotency(key) {
     if (!key) return { accepted: true, deduped: false };
-    const now = Date.now();
+    const now = this._now();
     const existed = this._idempotencyKeys.get(key);
     if (existed && now - existed.at < this._idempotencyTtlMs) {
       this._idempotencyDedupeHits++;
@@ -65,7 +68,7 @@ class CircuitBreaker {
   markIdempotencyOk(key) {
     if (!key) return;
     const existed = this._idempotencyKeys.get(key);
-    if (existed) this._idempotencyKeys.set(key, { ...existed, at: Date.now(), status: 'ok' });
+    if (existed) this._idempotencyKeys.set(key, { ...existed, at: this._now(), status: 'ok' });
   }
 
   clearIdempotency(key) {
@@ -92,7 +95,7 @@ class CircuitBreaker {
       this._errorCodeDistribution[code] = (this._errorCodeDistribution[code] || 0) + 1;
     }
     this._recentCalls.push({
-      at: Date.now(),
+      at: this._now(),
       latencyMs,
       ok,
       errCode: ok ? null : this._classifyError(err),
@@ -115,11 +118,11 @@ class CircuitBreaker {
   _transitionTo(next) {
     if (this.state === next) return;
     this.state = next;
-    this.lastTransitionAt = Date.now();
+    this.lastTransitionAt = this._now();
   }
 
   recordSuccess() {
-    this.lastSuccessAt = Date.now();
+    this.lastSuccessAt = this._now();
     if (this.state === 'HALF_OPEN') {
       this.halfOpenSuccessCount++;
       if (this.halfOpenSuccessCount >= this.halfOpenSuccessThreshold) {
@@ -135,7 +138,7 @@ class CircuitBreaker {
   }
 
   recordFailure(err) {
-    this.lastFailureAt = Date.now();
+    this.lastFailureAt = this._now();
     this.failureCount++;
     // 记录失败原因（去重后保留前 5）
     const reason = err && err.message ? String(err.message).slice(0, 200) : 'unknown';
@@ -147,11 +150,11 @@ class CircuitBreaker {
     }
     if (this.state === 'HALF_OPEN') {
       this._transitionTo('OPEN');
-      this.openedAt = Date.now();
+      this.openedAt = this._now();
       log.warn('熔断器探测失败，重新 OPEN', { reason });
     } else if (this.state === 'CLOSED' && this.failureCount >= this.failureThreshold) {
       this._transitionTo('OPEN');
-      this.openedAt = Date.now();
+      this.openedAt = this._now();
       log.warn(`熔断器开启：连续失败 ${this.failureCount} 次，${this.openDurationMs}ms 后探测`, {
         reasons: this._recentReasons,
       });
@@ -201,7 +204,7 @@ class CircuitBreaker {
       },
       healthy: this.lastSuccessAt === 0
         ? (this.failureCount === 0)
-        : (Date.now() - this.lastSuccessAt < this.deadManSeconds * 1000),
+        : (this._now() - this.lastSuccessAt < this.deadManSeconds * 1000),
       deadManSeconds: this.deadManSeconds,
     };
   }
