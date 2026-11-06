@@ -45,3 +45,33 @@ func TestMessageHubPlatformsCoverAllChannelConstants(t *testing.T) {
 		}
 	}
 }
+
+// TestMessageHubChannelVocabularyWechatWeixinPersonalWXSeparation 公众号双写法与个人微信的三词分离：
+// wechat（入站控制器写）与 weixin（触达链路写）是公众号的两个真实落库写法，personal_wx 是
+// 独立渠道「个人微信」。词表层只做"接受"，不做改写合并——统计按存储原值 GROUP BY platform，
+// 三个词必须同时被接受且是三个不同的词值；显示归一（都叫「微信公众号」/「个人微信」）
+// 是前端 src/constants/channel.js 的职责，不在这里替它收口。
+func TestMessageHubChannelVocabularyWechatWeixinPersonalWXSeparation(t *testing.T) {
+	// 企微/小红书的 canonical 常量同场核对，契约表每行都有落点。
+	for _, ch := range []string{
+		"wechat", "weixin",
+		model.ChannelPersonalWX, // personal_wx
+		model.ChannelWeCom,      // wecom（企微）
+		model.ChannelXHS,        // xiaohongshu（小红书；前端旧值 xhs 由前端别名表归一）
+	} {
+		if !messageHubPlatforms[ch] {
+			t.Errorf("message_hub 平台词表缺少渠道 %q", ch)
+		}
+	}
+
+	// 三词分离：公众号双写法与个人微信互为不同词值，谁也不许是谁的别名
+	// （别名归一是纯显示层概念；存储层一个词就是一行分桶）。
+	if "wechat" == "weixin" || "wechat" == string(model.ChannelPersonalWX) ||
+		"weixin" == string(model.ChannelPersonalWX) {
+		t.Fatal("公众号双写法与个人微信的词值必须互不相同")
+	}
+	if messageHubPlatforms["personal_wx"] != true || messageHubPlatforms["wechat"] != true ||
+		messageHubPlatforms["weixin"] != true {
+		t.Fatal("三词必须同时被词表接受")
+	}
+}

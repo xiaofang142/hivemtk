@@ -103,7 +103,16 @@ export const getChannelLabel = (value) => {
   return value
 };
 
-export const getChannelTagType = (value) => CHANNEL_TAG_TYPE_MAP[value] || 'info';
+// tag 颜色跟 canonical 渠道走，不跟落库写法走：公众号入站写 wechat、触达写 weixin，
+// 两批行显示同名「微信公众号」就该同色（都 success）；旧网页别名（wx_personal 等）
+// 同理归到所属渠道。认不出的值仍落 info 灰（未知兜底不变），空值也照旧 info。
+export const getChannelTagType = (value) => {
+  if (CHANNEL_LEGACY_WEB_TO_CANONICAL[value])
+    return getChannelTagType(CHANNEL_LEGACY_WEB_TO_CANONICAL[value]);
+  if (CHANNEL_TAG_TYPE_MAP[value]) return CHANNEL_TAG_TYPE_MAP[value]
+  const aliasOption = CHANNEL_OPTIONS.find((o) => o.alias && o.alias.includes(value))
+  return aliasOption ? aliasOption.tagType : 'info'
+};
 
 export const getChannelOption = (value) => CHANNEL_MAP[value] || null;
 

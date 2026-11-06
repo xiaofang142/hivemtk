@@ -33,6 +33,7 @@ vi.mock('@/utils/echarts', () => ({
 }))
 
 import Dashboard from '@/views/messageHub/Dashboard.vue'
+import { getChannelLabel, getChannelTagType } from '@/constants/channel'
 
 const STATS = {
   total: 6,
@@ -139,9 +140,13 @@ describe('图表：柱子高度是 stats 里的计数，不是随机数', () => 
     const wrapper = await mountPage()
     expect(chart.setOption).toHaveBeenCalledTimes(1)
     const option = chart.setOption.mock.calls[0][0]
-    // douyin 有中文词表、wechat 没有（hub 写 wechat，前端词表是 weixin）：
-    // 认不出的一律原样露出，不许替它编一个相近的渠道名。
-    expect(option.xAxis.data).toEqual(['抖音', 'wechat'])
+    // douyin 有中文词表；wechat 是 hub 落库的公众号写法之一，channel.js 里 weixin 的
+    // alias 表（['微信','wechat']）认得它 ⇒ 显示归一为「微信公众号」，与
+    // channel_options_new_channels.test.js 锁的词表一致。原注释「wechat 没有
+    // （前端词表是 weixin）」已过时：该 alias 是 2026-11 六渠道统一接待时补的。
+    // 显示归一不改存储分桶；认不出的渠道仍原样露出，守护用例在下方
+    // 「混合公众号写法」组里（pigeon_post 那条）。
+    expect(option.xAxis.data).toEqual(['抖音', '微信公众号'])
     expect(option.series[0].data).toEqual([4, 2])
     // notMerge=true：渠道少一档时上一轮的柱子必须跟着消失
     expect(chart.setOption.mock.calls[0][1]).toBe(true)
@@ -166,6 +171,130 @@ describe('图表：柱子高度是 stats 里的计数，不是随机数', () => 
     const wrapper = await mountPage()
     expect(chart.setOption).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('该窗口内没有消息')
+    wrapper.unmount()
+  })
+})
+
+describe('渠道词表：canonical / alias / 显示三层职责分离', () => {
+  // 词表唯一事实源是 src/constants/channel.js。三层职责各管各的：
+  //   canonical（落库 ID）→ 中文名；旧网页别名 → 归到 canonical（历史数据不迁移照常可读）；
+  //   显示别名（wechat/微信/企微）→ 所属渠道的中文名。个人微信是独立渠道，
+  //   任何一层都不许把 personal_wx 并进公众号；未知值原样露出、空值统一 '-'。
+  it('canonical 落库 ID 显示中文名；公众号两种写法同标签，个人微信独立不混标', () => {
+    expect(getChannelLabel('weixin')).toBe('微信公众号')
+    expect(getChannelLabel('wechat')).toBe('微信公众号')
+    expect(getChannelLabel('wecom')).toBe('企业微信')
+    expect(getChannelLabel('xiaohongshu')).toBe('小红书')
+    expect(getChannelLabel('douyin')).toBe('抖音')
+    expect(getChannelLabel('personal_wx')).toBe('个人微信')
+    expect(getChannelLabel('personal_wx')).not.toBe('微信公众号')
+  })
+
+  it('旧网页别名仍能读取（历史值不迁移），归一到所属渠道的标签', () => {
+    expect(getChannelLabel('xhs')).toBe('小红书')
+    expect(getChannelLabel('wx_personal')).toBe('个人微信')
+    expect(getChannelLabel('wechat_personal')).toBe('个人微信')
+    expect(getChannelLabel('bili')).toBe('B站')
+    expect(getChannelLabel('wb')).toBe('微博')
+    expect(getChannelLabel('douyin_web')).toBe('抖音')
+  })
+
+  it('显示别名映射到所属渠道标签，tag 颜色也跟随 canonical（同名同色）', () => {
+    expect(getChannelLabel('企微')).toBe('企业微信')
+    expect(getChannelLabel('微信')).toBe('微信公众号')
+    expect(getChannelTagType('wechat')).toBe(getChannelTagType('weixin'))
+    expect(getChannelTagType('wx_personal')).toBe(getChannelTagType('personal_wx'))
+    expect(getChannelTagType('企微')).toBe(getChannelTagType('wecom'))
+  })
+
+  it('未知字符串原样露出（可识别兜底），null/undefined/空串统一 "-"', () => {
+    expect(getChannelLabel('pigeon_post')).toBe('pigeon_post')
+    expect(getChannelLabel(null)).toBe('-')
+    expect(getChannelLabel(undefined)).toBe('-')
+    expect(getChannelLabel('')).toBe('-')
+    expect(getChannelTagType('pigeon_post')).toBe('info')
+  })
+})
+
+describe('混合公众号写法：仪表盘分组不丢行、不双计', () => {
+  // hub 落库同时存在 wechat（入站控制器写）与 weixin（触达链路写）两种公众号写法。
+  // 显示都归一为「微信公众号」，但统计按存储原值分桶——归一只发生在显示层，
+  // 不改写查询成员集合：两桶不合并、同一行不双计、任何一桶都不许丢。
+  const MIXED_STATS = {
+    total: 10,
+    inbound: 6,
+    outbound: 4,
+    unread: 3,
+    by_platform: { wecom: 4, wechat: 3, weixin: 2, personal_wx: 1 },
+    by_direction: { inbound: 6, outbound: 4 },
+    by_msg_type: { text: 10 },
+    recent_24h: 10
+  }
+  const MIXED_DLQ = {
+    list: [
+      {
+        id: 21,
+        platform: 'wechat',
+        msg_id: 'm_21',
+        direction: 'outbound',
+        content: 'ok',
+        error: '投递超时',
+        retries: 1,
+        failedAt: '2026-09-29 10:00:00'
+      }
+    ],
+    total: 1
+  }
+
+  const mountMixed = async () => {
+    http.get.mockImplementation((url) => {
+      if (url === '/api/message-hub/stats') return Promise.resolve(MIXED_STATS)
+      if (url === '/api/message-hub/dlq') return Promise.resolve(MIXED_DLQ)
+      return Promise.reject(new Error(`不该再请求 ${url}`))
+    })
+    return mountPage()
+  }
+
+  it('四桶四柱：公众号两种写法各自成柱但同显「微信公众号」，计数原样、行数守恒', async () => {
+    const wrapper = await mountMixed()
+    const option = chart.setOption.mock.calls[0][0]
+    // 按数量降序：wecom(4) > wechat(3) > weixin(2) > personal_wx(1)。
+    // 两个公众号桶没被合并成一条（两个独立柱），也没把同一行算两遍（计数 3+2 原样）。
+    expect(option.xAxis.data).toEqual(['企业微信', '微信公众号', '微信公众号', '个人微信'])
+    expect(option.series[0].data).toEqual([4, 3, 2, 1])
+    // 行数守恒：各桶计数之和 = total，没有一行在归一显示中蒸发或翻倍
+    expect(option.series[0].data.reduce((a, b) => a + b, 0)).toBe(MIXED_STATS.total)
+    // 个人微信在图上是独立一柱，不是公众号的别名桶
+    expect(option.xAxis.data).toContain('个人微信')
+    wrapper.unmount()
+  })
+
+  it('死信返回集合里的 wechat 行也显示「微信公众号」，不是裸码也不是个人微信', async () => {
+    const wrapper = await mountMixed()
+    const dlqRow = document.querySelectorAll('.dlq-card .el-table__row')[0]
+    expect(dlqRow.textContent).toContain('微信公众号')
+    expect(dlqRow.textContent).not.toContain('个人微信')
+    wrapper.unmount()
+  })
+
+  it('筛选请求参数只按时间窗拉全量分布，没有按别名拆分/改写的渠道键', async () => {
+    const wrapper = await mountMixed()
+    const params = getStatsParams()
+    expect(Object.keys(params).sort()).toEqual(['end_time', 'start_time'])
+    wrapper.unmount()
+  })
+
+  it('认不出的渠道在图表上原样露出，不许替它编一个相近的渠道名', async () => {
+    http.get.mockImplementation((url) => {
+      if (url === '/api/message-hub/stats') {
+        return Promise.resolve({ ...MIXED_STATS, by_platform: { pigeon_post: 2 } })
+      }
+      return Promise.resolve(MIXED_DLQ)
+    })
+    const wrapper = await mountPage()
+    const option = chart.setOption.mock.calls[0][0]
+    expect(option.xAxis.data).toEqual(['pigeon_post'])
+    expect(option.series[0].data).toEqual([2])
     wrapper.unmount()
   })
 })
