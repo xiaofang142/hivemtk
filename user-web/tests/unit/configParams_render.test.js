@@ -36,9 +36,36 @@ vi.mock('@/api/configParams', () => ({
 import ConfigParams from '@/views/system/ConfigParams.vue'
 import { settle } from './settle-helper'
 
+// 本文件原来没有 afterEach：每条用例 mount 出的组件连同它的 watcheffect 一直活到
+// 文件结束（不 attachTo body 看不见，但实例、watcher、teleport 归属都在）。
+// 登记到 mounted，统一在 afterEach 卸载——释放点唯一化，断言失败也不漏。
+const mounted = []
+
+function mountPage() {
+  const w = mount(ConfigParams, { global: { plugins: [ElementPlus] } })
+  mounted.push(w)
+  return w
+}
+
+afterEach(() => {
+  while (mounted.length) {
+    try {
+      mounted.pop().unmount()
+    } catch {
+      /* 重复卸载不抛即可，不掩盖用例本身的失败 */
+    }
+  }
+  document.body.innerHTML = ''
+})
+
 const GROUPS = [
   { group: 'lock', label: '分布式锁', description: '锁与幂等的存活时间', sort_order: 10 },
-  { group: 'agent_llm', label: 'AI 大模型', description: '模型调用与熔断', sort_order: 20 }
+  { group: 'agent_llm', label: 'AI 大模型', description: '模型调用与熔断', sort_order: 20 },
+  // 这一组是「标题真的来自后端」的活证：watchdog_probe 不在任何前端硬编码表里，
+  // 页面要是哪天改回本地 GROUP_LABELS 兜底，这里只能落回 key 本身或「-」，
+  // 断「分布式锁/AI 大模型」这种老组名永远抓不住那类回归——它们的硬编码文案与
+  // 后端 mock 恰好同文。后端新增组静默回落英文 key 正是这一卡修掉的 bug。
+  { group: 'watchdog_probe', label: '后端新增看门狗组', description: '探针与自愈参数', sort_order: 30 }
 ]
 
 function param(over) {
@@ -60,10 +87,6 @@ function param(over) {
     deprecated: false,
     ...over
   }
-}
-
-function mountPage() {
-  return mount(ConfigParams, { global: { plugins: [ElementPlus] } })
 }
 
 describe('ConfigParams.vue 渲染与友好性承诺', () => {
@@ -108,6 +131,10 @@ describe('ConfigParams.vue 渲染与友好性承诺', () => {
     const text = w.text()
     expect(text).toContain('分布式锁')
     expect(text).toContain('AI 大模型')
+    // watchdog_probe 是后端 mock 独有的组名：旧版断言只认「分布式锁/AI 大模型」，
+    // 可这两组的硬编码文案与后端 mock 恰好同文——就算整页改回写死的 GROUP_LABELS
+    // 这两条也照样绿。后端新增的组在硬编码表里查无此项，回落 key 即红，这才是真证。
+    expect(text).toContain('后端新增看门狗组')
   })
 
   it('默认不显示已下架项，打开开关后才列出', async () => {

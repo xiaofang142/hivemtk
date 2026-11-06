@@ -42,6 +42,13 @@ const serverRows = (n, type) => Array.from({ length: n }, (_, i) => ({
   updated_at: 1791600000 + i,
 }))
 
+// 本文件所有挂载登记到 current，afterEach 统一卸载：旧版每条用例结尾手动
+// wrapper.unmount()，断言一红就跳过，组件（及其 watcher）活到文件结束；
+// 下一条用例挂载时上一个还没卸，pickOption 里"展开的下拉面板应有 1 个"
+// 这类对 body 全量枚举的断言就会数到上一只的下拉（teleport 面板同样在 body 上）。
+// 释放点唯一化到 afterEach：绿路径同样执行，断言失败也不漏。
+let current = null
+
 async function mountList() {
   const host = document.createElement('div')
   document.body.appendChild(host)
@@ -49,6 +56,7 @@ async function mountList() {
     global: { plugins: [ElementPlus], mocks: { $t: (k) => k } },
     attachTo: host,
   })
+  current = wrapper
   await settle(wrapper)
   return wrapper
 }
@@ -92,6 +100,12 @@ describe('线索列表页把筛选下推到服务端', () => {
     api.statistics.mockResolvedValue([{ type: 4, total: 29, verify_total: 0 }])
   })
   afterEach(() => {
+    try {
+      current?.unmount()
+    } catch {
+      /* 重复卸载不抛即可，不掩盖用例本身的失败 */
+    }
+    current = null
     vi.restoreAllMocks()
     document.body.replaceChildren()
   })
@@ -100,7 +114,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     const wrapper = await mountList()
     expect(pageQueries()).toHaveLength(1)
     expect(pageQueries()[0]).toEqual([1, 10, {}])
-    wrapper.unmount()
   })
 
   it('选类型 + 搜索：type 进条件、页码回到第 1 页', async () => {
@@ -108,7 +121,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     await pickOption(wrapper, '线索类型', 'Telegram')
     await clickButton(wrapper, '搜索')
     expect(lastFilters()).toMatchObject({ type: '4' })
-    wrapper.unmount()
   })
 
   it('选「未验证」：0 是真条件，不能被当成没传', async () => {
@@ -117,7 +129,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     await pickOption(wrapper, '验证状态', '未验证')
     await clickButton(wrapper, '搜索')
     expect(lastFilters()).toMatchObject({ is_verify: 0 })
-    wrapper.unmount()
   })
 
   it('关键字原样进条件（不截断、不本地化）', async () => {
@@ -128,7 +139,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     await kwInput.setValue('a&b 测试')
     await clickButton(wrapper, '搜索')
     expect(lastFilters()).toMatchObject({ keyword: 'a&b 测试' })
-    wrapper.unmount()
   })
 
   it('表格就是服务端给的那批行：前端不再按类型二次过滤', async () => {
@@ -141,13 +151,11 @@ describe('线索列表页把筛选下推到服务端', () => {
     expect(wrapper.findAll('.el-table__body tr')).toHaveLength(10)
     expect(rowTypeCells(wrapper)[0]).toBe('抖音')
     expect(wrapper.find('.el-table__empty-text').exists()).toBe(false)
-    wrapper.unmount()
   })
 
   it('总数取自服务端，不是一页的行数', async () => {
     const wrapper = await mountList()
     expect(wrapper.find('.el-pagination__total').text()).toContain('29')
-    wrapper.unmount()
   })
 
   it('统计卡走全局口径：另发一次全量计数，不用当前页凑数', async () => {
@@ -164,7 +172,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     // 今日新增走 start 条件的计数请求：limit=1 只要总数
     const todayCall = api.list.mock.calls.find((c) => c[1] === 1 && c[2]?.start > 0)
     expect(todayCall, '今日新增没有发出带 start 的计数请求').toBeTruthy()
-    wrapper.unmount()
   })
 
   it('第 2 页上换筛选：回到第 1 页重查，不停在筛完的第 2 页空表', async () => {
@@ -178,7 +185,6 @@ describe('线索列表页把筛选下推到服务端', () => {
     const q = pageQueries().at(-1)
     expect(q[0], `换筛选后仍停在第 ${q[0]} 页（19 条命中全在第 1 页，读起来像筛出 0 条）`).toBe(1)
     expect(q[2]).toMatchObject({ type: '9' })
-    wrapper.unmount()
   })
 
   it('重置：条件清空后重新查询，而不是在旧的那一页上恢复', async () => {
@@ -189,6 +195,5 @@ describe('线索列表页把筛选下推到服务端', () => {
     await clickButton(wrapper, '重置')
     expect(api.list.mock.calls.length).toBeGreaterThan(before)
     expect(lastFilters()).toEqual({})
-    wrapper.unmount()
   })
 })

@@ -103,6 +103,12 @@ function stubEndpoints(wideRows) {
   })
 }
 
+// 本文件所有挂载登记到 mounted，afterEach 统一卸载：旧版靠每条用例结尾的
+// wrapper.unmount()，断言一红就跳过——组件（attachTo body 的整棵树）和它
+// watch(currentSession) 挂着的画像/AI 建议请求链都活到文件结束。释放点唯一化，
+// 断言失败也不漏卸；下一条腿挂载时场上保证没有上一条腿的残留实例。
+const mounted = []
+
 async function mountPage() {
   const wrapper = mount(List, {
     attachTo: document.body,
@@ -112,6 +118,7 @@ async function mountPage() {
       stubs: { CustomerProfilePanel: true, BlacklistDialog: true }
     }
   })
+  mounted.push(wrapper)
   // onMounted 里是 loadSessions → 深链再取宽列表 → selectSession → 标签/AI 建议/画像，
   // 一串真 promise 链。settle 排空微任务、让出宏任务，连续两轮渲染相同才停。
   await settle(wrapper)
@@ -124,6 +131,19 @@ const warningToasts = () =>
   Array.from(document.querySelectorAll('.el-message--warning')).map((n) => n.textContent.trim())
 const sessionRequests = () => http.get.mock.calls.filter(([url]) => url === '/api/customer-sessions')
 
+// 把 warning 提示条的自动关闭（ElMessage 默认 3 秒）钉住：深链未命中那条腿断言的
+// 正是这条 toast，而 settle 的"连续两轮相同"判据在极端负载下可能拖过 3 秒——
+// 等到的"稳定"是 toast 关掉之后的稳定，"看得见的提示"读空，红得像深链坏了。
+// 只钉这一只 timer（duration: 0 = 挂出后不自动关，真实实现照常挂载渲染），
+// 其余时钟全部真实；afterEach 的 closeAll 负责回收。
+const pinWarningToast = () => {
+  const real = ElMessage.warning
+  const spy = vi.spyOn(ElMessage, 'warning').mockImplementation((arg) =>
+    real(typeof arg === 'string' ? { message: arg, duration: 0 } : { ...arg, duration: 0 })
+  )
+  return () => spy.mockRestore()
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   ctx.query = {}
@@ -131,6 +151,13 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  while (mounted.length) {
+    try {
+      mounted.pop().unmount()
+    } catch {
+      /* 重复卸载不抛即可，不掩盖用例本身的失败 */
+    }
+  }
   ElMessage.closeAll()
   // 消息条在 body 上而不是 wrapper 上：不清的话下一条腿的"有没有提示"会读到上一条腿的。
   document.body.replaceChildren()
@@ -149,17 +176,15 @@ describe('深链命中日常那一页：直接选中，不额外捞宽列表', (
     expect(wrapper.find('.chat-header h3').text()).toBe('近期客户3')
     // 选中即按那条会话的数字主键拉消息（证明走的是 selectSession 而不是只高亮）
     expect(http.get).toHaveBeenCalledWith('/api/customer-sessions/43/messages', undefined)
-    wrapper.unmount()
   })
 
   it('命中首页时不该多发一次宽列表请求（日常路径不许被这个入口带跑）', async () => {
     ctx.query = { session_id: 'sess_recent_3' }
     stubEndpoints(WIDE_PAGE)
-    const wrapper = await mountPage()
+    await mountPage()
     expect(sessionRequests().length).toBe(1)
     expect(sessionRequests()[0][1]).toBeUndefined()
     expect(warningToasts()).toEqual([])
-    wrapper.unmount()
   })
 
   it('深链写成数字主键也要命中（两种口径同源）', async () => {
@@ -169,7 +194,6 @@ describe('深链命中日常那一页：直接选中，不额外捞宽列表', (
     const active = activeItems(wrapper)
     expect(active.length).toBe(1)
     expect(active[0].find('.name').text()).toBe('近期客户2')
-    wrapper.unmount()
   })
 })
 
@@ -191,29 +215,35 @@ describe('深链不在首页：按深链专用的一页宽列表再找一次', (
     // 选中的那条必须看得见：它进了左栏列表，而不是只活在 currentSession 里
     expect(sessionRows(wrapper).map((n) => n.find('.name').text())).toContain('差评客户癸')
     expect(warningToasts()).toEqual([])
-    wrapper.unmount()
   })
 
   it('宽列表里也没有时：不许假装选中，要给一条看得见的提示', async () => {
     ctx.query = { session_id: 'sess_nowhere' }
     stubEndpoints(WIDE_PAGE)
+    // toast 已钉成不自动关（见 pinWarningToast 注释）+ warn 的还原放进 finally：
+    // 断言一红就跳过尾部的 mockRestore() 是旧版的清理漏洞——console.warn 会被
+    // 一直哑到文件结束，后续用例的排障输出跟着一起失踪。
+    const unpinWarning = pinWarningToast()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const wrapper = await mountPage()
+    try {
+      const wrapper = await mountPage()
 
-    expect(sessionRequests().length).toBe(2)
-    expect(activeItems(wrapper).length).toBe(0)
-    // 没有 currentSession ⇒ 聊天栏是空的占位，而不是某条会话的壳子
-    expect(wrapper.find('.chat-header').exists()).toBe(false)
-    const toasts = warningToasts()
-    expect(toasts.length).toBe(1)
-    expect(toasts[0]).toContain('sess_nowhere')
-    // 开发态那行 warn 也要在（两个口径都得留：用户看提示，排查看控制台）。
-    // 按参数逐个匹配，不做 String(args)——数组转串会在参数间插逗号，'…: sess_x' 这种整句永远对不上。
-    const warnCalls = warn.mock.calls.filter((c) => String(c[0]).includes('深链指定的会话不在当前列表内'))
-    expect(warnCalls.length).toBe(1)
-    expect(warnCalls[0][1]).toBe('sess_nowhere')
-    warn.mockRestore()
-    wrapper.unmount()
+      expect(sessionRequests().length).toBe(2)
+      expect(activeItems(wrapper).length).toBe(0)
+      // 没有 currentSession ⇒ 聊天栏是空的占位，而不是某条会话的壳子
+      expect(wrapper.find('.chat-header').exists()).toBe(false)
+      const toasts = warningToasts()
+      expect(toasts.length).toBe(1)
+      expect(toasts[0]).toContain('sess_nowhere')
+      // 开发态那行 warn 也要在（两个口径都得留：用户看提示，排查看控制台）。
+      // 按参数逐个匹配，不做 String(args)——数组转串会在参数间插逗号，'…: sess_x' 这种整句永远对不上。
+      const warnCalls = warn.mock.calls.filter((c) => String(c[0]).includes('深链指定的会话不在当前列表内'))
+      expect(warnCalls.length).toBe(1)
+      expect(warnCalls[0][1]).toBe('sess_nowhere')
+    } finally {
+      unpinWarning()
+      warn.mockRestore()
+    }
   })
 })
 
@@ -226,7 +256,6 @@ describe('没有深链参数时保持原样', () => {
     expect(activeItems(wrapper).length).toBe(0)
     expect(warningToasts()).toEqual([])
     expect(wrapper.text()).toContain('请从左侧选择会话')
-    wrapper.unmount()
   })
 })
 
@@ -239,15 +268,13 @@ describe('夹具自证', () => {
     // 深链目标确实不在首页里，只在宽列表里
     expect(DAILY_PAGE.map((r) => r.session_id)).not.toContain('sess_old_9')
     expect(WIDE_PAGE.map((r) => r.session_id)).toContain('sess_old_9')
-    wrapper.unmount()
   })
 
   it('坐席身份到位后 socket 真的装上（深链那条腿不能顺手把 socket 腿证伪）', async () => {
     stubEndpoints(WIDE_PAGE)
-    const wrapper = await mountPage()
+    await mountPage()
     expect(sockets.length).toBe(1)
     expect(sockets[0].agentId).toBe('ag-1')
     expect(sockets[0].connected).toBe(true)
-    wrapper.unmount()
   })
 })

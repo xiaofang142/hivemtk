@@ -18,13 +18,18 @@ import axios from 'axios'
 
 import { markUserReported, isUserReportedError } from '@/utils/errorReporting'
 
-let request = null
-
-async function freshRequest() {
-  vi.resetModules()
-  const m = await import('@/utils/request')
-  request = m.default
-}
+// request 模块在文件加载期静态导入一次，不再每条用例 vi.resetModules() 后重新实例化。
+// 原因（AV-07 压力复现实录）：beforeEach 里的 `await import('@/utils/request')` 会把
+// element-plus + i18n + http-core 整张模块图重新求值一遍，CPU 被抢占时单次 import
+// 就能越过 vitest 默认的 hookTimeout 10000ms（12 个 CPU burner 下 3/5 轮翻车，
+// 翻的都是"Hook timed out in 10000ms"）；而且 hook 一挂 afterEach 里的
+// errSpy.mockRestore() 会因为 errSpy 还没赋值再补一刀 TypeError，把原失败盖掉。
+// 静态导入让 hook 全部变成同步代码：无 hookTimeout 暴露面，清理必然有 spy 可还原。
+// 每用例共用同一实例后要复核的共享状态只有两处，都成立：
+//   - showToast 的 2500ms 去重：四条腿的提示文案（服务器内部错误 / 无权访问 /
+//     网络超时 / _silent 不提示）互不相同，不会互相抑制；
+//   - defaults.adapter：每条用例 adapterReply 都先覆写再发请求，不依赖全新实例。
+import request from '@/utils/request'
 
 function adapterReply(status, body, extra = {}) {
   request.defaults.adapter = async (config) => {
@@ -107,14 +112,20 @@ describe('errorReporting：兜底只放过"已经对用户报过"的那两类', 
 describe('拦截器给每条"用户已经被告知"的拒绝盖凭据', () => {
   let errSpy
 
-  beforeEach(async () => {
+  // 顺序即安全：先装 spy、清 body，再做任何可能失败的事（这里已经没有 await，
+  // hook 不可能半途而废）。即便将来有人往前几行加回 await，spy 也已就位，
+  // afterEach 的还原不会因为"spy 还没装上"而抛 TypeError 掩盖原始失败。
+  beforeEach(() => {
     document.body.innerHTML = ''
-    await freshRequest()
     errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   })
 
   afterEach(() => {
-    errSpy.mockRestore()
+    // ?.：beforeEach 若在装 spy 之前失败，errSpy 仍是 undefined —— 清理跳过，
+    // 让用例停在它自己的原始错误上，而不是被清理代码的 TypeError 盖掉。
+    errSpy?.mockRestore()
+    errSpy = undefined
+    document.body.innerHTML = ''
   })
 
   // 分支自证：夹具掉进"网关非 JSON"分支时也会盖标记，那等于给一条它声称没测的路径盖章。

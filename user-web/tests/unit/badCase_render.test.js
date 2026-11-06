@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import ElementPlus from 'element-plus'
+import ElementPlus, { ElMessage } from 'element-plus'
 import { createPinia } from 'pinia'
 import { settle, settleBody } from './settle-helper'
 
@@ -102,16 +102,29 @@ const STATS = {
 const countButtons = (scope, text) =>
   Array.from(scope.querySelectorAll('button')).filter((b) => b.textContent.trim() === text).length
 
-async function mountPage(rows = ROWS, stats = STATS) {
-  api.list.mockResolvedValue({ list: rows, total: rows.length })
-  api.stats.mockResolvedValue(stats)
-  api.taxonomy.mockResolvedValue(TAXONOMY)
+// 本文件所有挂载都登记在这里，afterEach 统一卸载。组件可靠释放不是 stylistic：
+// List.vue 的 onMounted 挂了 30s 一次的 stats 轮询 setInterval（onBeforeUnmount 才清），
+// 旧版靠每条用例结尾"自觉"调 wrapper.unmount()——断言一红就跳过，组件连同轮询一起
+// 活到文件结束；负载下文件拖过 30s 时，僵尸轮询会拿**当前用例**的 api.stats mock
+// 继续打（它读的是共享的 vi.fn），把"某条用例的 mock 只被自己的挂载调用过"这个前提搅浑。
+// 唯一释放点放在 afterEach：绿路径同样执行，断言失败也不会漏。
+const mounted = []
+
+async function mountTracked() {
   const wrapper = mount(List, {
     attachTo: document.body,
     global: { plugins: [createPinia(), ElementPlus] }
   })
+  mounted.push(wrapper)
   await settle(wrapper)
   return wrapper
+}
+
+async function mountPage(rows = ROWS, stats = STATS) {
+  api.list.mockResolvedValue({ list: rows, total: rows.length })
+  api.stats.mockResolvedValue(stats)
+  api.taxonomy.mockResolvedValue(TAXONOMY)
+  return mountTracked()
 }
 
 beforeEach(() => {
@@ -120,6 +133,14 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  while (mounted.length) {
+    try {
+      mounted.pop().unmount()
+    } catch {
+      /* 已卸载/已断开的组件重复卸载不抛出即可，不掩盖用例本身的失败 */
+    }
+  }
+  ElMessage.closeAll()
   document.body.innerHTML = ''
 })
 
@@ -139,10 +160,9 @@ describe('队列渲染：三类状态一起列，按钮按状态分', () => {
   it('"打标"只给待判定的那一行；已判定的只剩"撤销"；已导出的一个都不给', async () => {
     // 已导出那一格是本卡最贵的红线：那行已经带着 eval_set_id 交出去了，
     // 队列里还能给它打标 = 事后偷换一份已经用于算分的样本。
-    const wrapper = await mountPage()
+    await mountPage()
     expect(countButtons(document.body, '打标')).toBe(1)
     expect(countButtons(document.body, '撤销')).toBe(2)
-    wrapper.unmount()
   })
 
   it('没有 user id 时整页只读，并挂着那句"只能看不能点"', async () => {
@@ -151,7 +171,6 @@ describe('队列渲染：三类状态一起列，按钮按状态分', () => {
     expect(countButtons(document.body, '打标')).toBe(0)
     expect(countButtons(document.body, '撤销')).toBe(0)
     expect(wrapper.text()).toContain('登录态里没有 user id')
-    wrapper.unmount()
   })
 
   it('值域外的状态自己站出来，不藏进任何一档读数', async () => {
@@ -163,21 +182,21 @@ describe('队列渲染：三类状态一起列，按钮按状态分', () => {
     const wrapper = await mountPage(ROWS, dirty)
     expect(wrapper.text()).toContain('值域外状态')
     expect(wrapper.text()).toContain('pending_ 3')
-    wrapper.unmount()
   })
 
   it('labeled=0 时导出按钮是禁用的，读数里有已判定样本才可点', async () => {
-    const findExport = () =>
-      Array.from(document.querySelectorAll('button')).find((b) =>
+    // 按各自实例的根元素找按钮，不在 document 全局找：本文件现在由 afterEach 统一卸载，
+    // 两条挂载在这一格的断言期间同时在场上，全局查询拿到的永远是 DOM 序在前的那只
+    // （旧版靠"第一只挂载手动 unmount 之后才挂第二只"这个时序巧合活着）。
+    const findExport = (scope) =>
+      Array.from(scope.querySelectorAll('button')).find((b) =>
         b.textContent.trim().includes('导出评测集')
       )
     const empty = await mountPage(ROWS, { ...STATS, by_status: { pending: 5, labeled: 0 } })
-    expect(findExport().disabled).toBe(true)
-    empty.unmount()
+    expect(findExport(empty.element).disabled).toBe(true)
 
     const filled = await mountPage()
-    expect(findExport().disabled).toBe(false)
-    filled.unmount()
+    expect(findExport(filled.element).disabled).toBe(false)
   })
 })
 
@@ -186,20 +205,14 @@ describe('503 与读数：底座不可用不等于队列清完了', () => {
     api.list.mockRejectedValue(Object.assign(new Error('unavailable'), { status: 503 }))
     api.stats.mockRejectedValue(Object.assign(new Error('unavailable'), { status: 503 }))
     api.taxonomy.mockResolvedValue(TAXONOMY)
-    const wrapper = mount(List, {
-      attachTo: document.body,
-      global: { plugins: [createPinia(), ElementPlus] }
-    })
-    await settle(wrapper)
+    const wrapper = await mountTracked()
     expect(wrapper.text()).toContain('Bad Case 底座不可用')
     expect(wrapper.text()).toContain('一次都没读到')
-    wrapper.unmount()
   })
 
   it('已判率读数印成百分数（它是本卡北极星，不该要人自己心算 0.6667）', async () => {
     const wrapper = await mountPage()
     expect(wrapper.text()).toContain('66.7%')
-    wrapper.unmount()
   })
 })
 
@@ -225,6 +238,19 @@ describe('打标抽屉：类目与依据两条腿都齐了才点得动', () => {
     // 抽屉 teleport 到 body，wrapper.html() 看不见它 —— 用整页 DOM 做稳定判据
     await settleBody()
     expect(markDrawer(), '点打标后抽屉必须打开').toBeTruthy()
+  }
+
+  // 把 warning 提示条（ElMessage.warning）的自动关闭钉住：ElMessage 默认挂出 3 秒
+  // 就自己关，而 settleBody 的"连续两轮相同"判据在极端负载下可能拖过 3 秒——
+  // 等到的"稳定"是 toast 关掉之后的稳定，断言读空，红得像代码坏了其实是等赢了。
+  // 只钉这一只 timer（duration: 0 = 不自动关，真实实现照常挂载渲染），
+  // 其余时钟全部保持真实；用例结束（或 afterEach 的 closeAll）即回收。
+  const pinWarningToast = () => {
+    const real = ElMessage.warning
+    const spy = vi.spyOn(ElMessage, 'warning').mockImplementation((arg) =>
+      real(typeof arg === 'string' ? { message: arg, duration: 0 } : { ...arg, duration: 0 })
+    )
+    return () => spy.mockRestore()
   }
 
   const typeNote = async (text) => {
@@ -285,26 +311,72 @@ describe('打标抽屉：类目与依据两条腿都齐了才点得动', () => {
   })
 
   it('后端回 409（这条已被别人判定）时那句结论读得到，不许静默', async () => {
-    api.label.mockRejectedValue(
-      Object.assign(new Error('bad_case: 当前状态不允许该操作'), { status: 409 })
+    // 用受控 deferred 替代"一挂就拒"的 mockRejectedValue：先把"提交进行中"这一段
+    // 摆在台面上（loading 抑制重复提交），再手动放行进 409 分支。一挂就拒的 mock
+    // 根本给不出"第二次点击落在 loading 上"的窗口，重复提交抑制就只能是口头承诺。
+    let failWith409
+    api.label.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failWith409 = () =>
+            reject(Object.assign(new Error('bad_case: 当前状态不允许该操作'), { status: 409 }))
+        })
+    )
+    const unpinWarning = pinWarningToast()
+    try {
+      await openMarkDrawer()
+      await pickCategory('知识库缺内容（知识库）')
+      await typeNote('两条腿都补齐了')
+
+      submitButton().click()
+      await settleBody()
+      expect(api.label).toHaveBeenCalledTimes(1)
+      // 提交进行中：mark.submitting ⇒ el-button loading ⇒ 原生 disabled。
+      // jsdom 对 disabled 按钮的 .click() 不派发事件（与真人点不动一致，已单独验证），
+      // 所以这里第二次点击必须是"发不出第二条请求"，而不是断言没用上的第三次调用。
+      expect(submitButton().classList.contains('is-loading')).toBe(true)
+      expect(submitButton().disabled).toBe(true)
+      submitButton().click()
+      expect(api.label).toHaveBeenCalledTimes(1)
+
+      failWith409()
+      // 409 走的是"关掉抽屉 + 刷队列 + 说一句话"这一路（别人的结论该出现在列表里），
+      // 所以断言打在 toast 上而不是抽屉里 —— 抽屉此刻本来就应该是关着的。
+      // toast 已被钉成不自动关：settleBody 结束时它必然还在场上，读空只剩一种解释。
+      await settleBody()
+      expect(document.body.textContent).toContain('当前状态不允许该操作')
+      // loading 复位：finally 把 mark.submitting 归零，场上不再有转圈的提交按钮
+      expect(document.body.querySelector('.el-button.is-loading')).toBe(null)
+    } finally {
+      unpinWarning()
+    }
+  })
+
+  it('底座 5xx 时抽屉不关、错留在原地：那不该表现成"没判上，刷新看看"', async () => {
+    let failWith500
+    api.label.mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          failWith500 = () => reject(Object.assign(new Error('坏例操作失败'), { status: 500 }))
+        })
     )
     await openMarkDrawer()
     await pickCategory('知识库缺内容（知识库）')
     await typeNote('两条腿都补齐了')
+
     submitButton().click()
     await settleBody()
-    // 409 走的是"关掉抽屉 + 刷队列 + 说一句话"这一路（别人的结论该出现在列表里），
-    // 所以断言打在 toast 上而不是抽屉里 —— 抽屉此刻本来就应该是关着的。
-    expect(document.body.textContent).toContain('当前状态不允许该操作')
-  })
-
-  it('底座 5xx 时抽屉不关、错留在原地：那不该表现成"没判上，刷新看看"', async () => {
-    api.label.mockRejectedValue(Object.assign(new Error('坏例操作失败'), { status: 500 }))
-    await openMarkDrawer()
-    await pickCategory('知识库缺内容（知识库）')
-    await typeNote('两条腿都补齐了')
+    expect(api.label).toHaveBeenCalledTimes(1)
+    expect(submitButton().classList.contains('is-loading')).toBe(true)
+    expect(submitButton().disabled).toBe(true)
     submitButton().click()
+    expect(api.label).toHaveBeenCalledTimes(1)
+
+    failWith500()
     await settleBody()
     expect(markDrawer().textContent).toContain('坏例操作失败')
+    // loading 复位：错误留在抽屉里的同时按钮回到可点状态，不是永远转圈卡死
+    expect(submitButton().classList.contains('is-loading')).toBe(false)
+    expect(submitButton().disabled).toBe(false)
   })
 })
