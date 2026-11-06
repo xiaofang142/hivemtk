@@ -113,6 +113,27 @@ linters:
             - pkg: "hivemtk-user/internal/controller"
               desc: "repository 不得依赖 controller"
 
+        # service 层（AV-03 2026-11-07 扩面）：files 覆盖全域 internal/**/service
+        #（含子目录、含未来新域），与 scripts/check-architecture.sh §2.0 和
+        # user-server/internal/service/arch_gorm_guard_test.go 同一目录集意图。
+        # depguard 只能做 **import 级**判定，与另外两把门的能力边界（不宣称三工具等价）：
+        #   - 看不见 *gorm.DB 类型字段/形参/返回值、事务回调位置 → arch_gorm_guard_test.go（AST）负责；
+        #   - 看不见 GetDB() 方法**调用**（repo.GetDB() 不需要 import 句柄包）→ check-architecture.sh §2.2/§2.2.2 负责；
+        #   - 以下两条同意图 deny 因存量非零暂不武装（「清零后再启用」方法论），AV-04c 清理后解开：
+        #       gorm.io/gorm —— 80 个 service 生产文件在 import（五层架构 §2 明文允许
+        #         Service「gorm（仅事务）」，import 级一刀切会误伤合规事务接缝）；
+        #       hivemtk-user/internal/pkg/db —— 29 个文件在 import，其中 9 个只用
+        #         RegisterExtraModels/TryAdvisoryLock（装配引导/锁助手，不取句柄），
+        #         depguard 无符号粒度，一刀切会对这 9 个合规文件误报。
+        service-layer:
+          files:
+            - "**/internal/**/service/**.go"
+          deny:
+            - pkg: "hivemtk-user/internal/controller"
+              desc: "service 不得反向依赖 controller（check-architecture.sh §2.1 同意图，import 级兜底）"
+            - pkg: "hivemtk-user/internal/router"
+              desc: "service 不得反向依赖 router（check-architecture.sh §2.1 同意图，import 级兜底）"
+
         # aiagent 不得反向依赖业务三层（P2-3 已清零，端口接口 + app 装配注入）
         aiagent-layer:
           files:

@@ -142,11 +142,65 @@ fi
 echo ""
 echo "[2/10] Service 反向依赖检查..."
 
+# -----------------------------------------------------------------------------
+# 2.0 全域 service 目录集与解析门（AV-03 2026-11-07 统一口径）
+# -----------------------------------------------------------------------------
+# 发现规则与 user-server/internal/service/arch_gorm_guard_test.go 共用同一意图：
+# internal 下「目录分量为 service」的目录树（含子目录），排 *_test.go 与
+# testdata/（测试夹具），不看 build tag。两侧各自实现、互为对照：本节输出
+# 域→文件数与扫描总量；守卫测试 -v 日志输出同一张表。
+# 旧版只扫 "$TARGET/internal/service/"——geo/content/ops/browser_automation/
+# aiagent-knowledge 等兄弟 service 域整域漏检（AV-03 扩面对象）。
+# 注意：扩面发现的兄弟域存量会以「新增」出现在 2.2.2 的基线比对里——那是
+# AV-04c 的存量清单，本脚本如实报红，不把它们登记进基线（基线文件不在本轮
+# 范围，且登记=扩大白名单，掩盖违规）。
+SERVICE_DOMAIN_DIRS=()
+while IFS= read -r d; do
+  SERVICE_DOMAIN_DIRS+=("$d")
+done < <(find "$TARGET/internal" -type d -name service 2>/dev/null | sort)
+
+SERVICE_FILES=()
+if [ "${#SERVICE_DOMAIN_DIRS[@]}" -gt 0 ]; then
+  while IFS= read -r f; do
+    SERVICE_FILES+=("$f")
+  done < <(find "${SERVICE_DOMAIN_DIRS[@]}" \
+    \( -type d -name testdata -prune \) -o \
+    \( -type f -name '*.go' ! -name '*_test.go' -print \) 2>/dev/null | sort -u)
+fi
+
+echo "  [AV-03] 全域 service 目录集（与 arch_gorm_guard_test.go 同一发现规则）："
+SERVICE_DOMAIN_TREE_TOTAL=0
+for d in "${SERVICE_DOMAIN_DIRS[@]}"; do
+  n=$(find "$d" \( -type d -name testdata -prune \) -o \( -type f -name '*.go' ! -name '*_test.go' -print \) 2>/dev/null | wc -l | tr -d ' ')
+  echo "    ${d#"$TARGET/"}: $n"
+  SERVICE_DOMAIN_TREE_TOTAL=$((SERVICE_DOMAIN_TREE_TOTAL + n))
+done
+echo "    合计 ${#SERVICE_DOMAIN_DIRS[@]} 域 / 目录树计 $SERVICE_DOMAIN_TREE_TOTAL 个，去重后实际扫描 ${#SERVICE_FILES[@]} 个生产文件"
+
+# 2.0b 解析失败即红：解析不动的文件对文本扫描是暗区（grep 读到的字节 ≠ AST 语义），
+# 对 AST 守卫是 Fatal。同一道门在 shell 侧用 gofmt -e 实现（解析失败退出码 2）。
+if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+  PARSE_ERR_LOG="$(mktemp "${TMPDIR:-/tmp}/arch-parse.XXXXXX")"
+  if gofmt -e "${SERVICE_FILES[@]}" >/dev/null 2>"$PARSE_ERR_LOG"; then
+    log_pass "[L4] ${#SERVICE_FILES[@]} 个 service 生产文件全部可解析（gofmt -e 门）"
+  else
+    log_fail "[L4] service 生产文件存在解析失败（文本/AST 扫描对该文件不可信，先修语法）:"
+    head -20 "$PARSE_ERR_LOG" | sed 's/^/    /'
+  fi
+  if [ -n "$PARSE_ERR_LOG" ]; then
+    rm -f "$PARSE_ERR_LOG"
+  fi
+fi
+
 # 2.1 service 不应调 controller / router
-if grep -rn "hivemtk-user/internal/controller\|hivemtk-user/internal/router" "$TARGET/internal/service/" 2>/dev/null; then
-  log_fail "[L4] service 引用 controller/router,违反分层"
+if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+  if grep -rn "hivemtk-user/internal/controller\|hivemtk-user/internal/router" "${SERVICE_FILES[@]}" 2>/dev/null; then
+    log_fail "[L4] service 引用 controller/router,违反分层"
+  else
+    log_pass "[L4] service 未引用 controller/router"
+  fi
 else
-  log_pass "[L4] service 未引用 controller/router"
+  log_pass "[L4] service 域为空,跳过"
 fi
 
 # 2.2 service 不应直接调 db
@@ -155,15 +209,18 @@ fi
 #   (a) db.GetDB() / _db.GetDB()：通过全局单例拿 DB 句柄
 #   (b) \w+\.db\.(WithContext|Raw|Exec|Create|Save|Update|Delete|Find|First|Where|Model|Transaction|Begin|Count|Clauses|Scan|Order|Dialector)：service struct 持有 *gorm.DB 字段并直接调用 GORM 方法
 #       注：允许在 struct 定义行（type xxx struct { db *gorm.DB }）和注释行出现 .db.，不视为违规
-SERVICE_DB_HITS=$(grep -rnE --include="*.go" --exclude="*_test.go" \
-  "db\.GetDB()|_db\.GetDB()|[a-zA-Z_]+\.db\.(WithContext|Raw|Exec|Create|Save|Update|Delete|Find|First|Where|Model|Transaction|Begin|Count|Clauses|Scan|Order|Dialector)" \
-  "$TARGET/internal/service/" 2>/dev/null \
-  | grep -vE ':[[:space:]]*//' \
-  | grep -vE ':[[:space:]]*\*' \
-  | grep -vE ':[[:space:]]*/\*' \
-  | grep -vE ':[[:space:]]*//[[:space:]]|:[[:space:]]*//[^ ]' \
-  | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
-  || true)
+SERVICE_DB_HITS=""
+if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+  SERVICE_DB_HITS=$(grep -rnE \
+    "db\.GetDB()|_db\.GetDB()|[a-zA-Z_]+\.db\.(WithContext|Raw|Exec|Create|Save|Update|Delete|Find|First|Where|Model|Transaction|Begin|Count|Clauses|Scan|Order|Dialector)" \
+    "${SERVICE_FILES[@]}" 2>/dev/null \
+    | grep -vE ':[[:space:]]*//' \
+    | grep -vE ':[[:space:]]*\*' \
+    | grep -vE ':[[:space:]]*/\*' \
+    | grep -vE ':[[:space:]]*//[[:space:]]|:[[:space:]]*//[^ ]' \
+    | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
+    || true)
+fi
 if [ -n "$SERVICE_DB_HITS" ]; then
   log_fail "[L4] service 直接调 db,违反分层(应通过 repository)"
   echo "$SERVICE_DB_HITS" | sed 's/^/    /'
@@ -188,11 +245,14 @@ fi
 #    修好检查，只是换了一种失真。现加行尾锚点 + 允许 struct tag，只匹配真字段：
 #      - 行尾必须是行尾或 struct tag（`json:"-"` 形式），因此带逗号的形参被排除；
 #      - 形参行 `db *gorm.DB,` 与 `db *gorm.DB)` 均不再命中。
-SERVICE_DB_FIELDS=$(grep -rnE --include="*.go" --exclude="*_test.go" \
-  '^[[:space:]]*db[[:space:]]+\*gorm\.DB([[:space:]]+`[^`]*`)?[[:space:]]*$' \
-  "$TARGET/internal/service/" 2>/dev/null \
-  | grep -vE '://' \
-  || true)
+SERVICE_DB_FIELDS=""
+if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+  SERVICE_DB_FIELDS=$(grep -rnE \
+    '^[[:space:]]*db[[:space:]]+\*gorm\.DB([[:space:]]+`[^`]*`)?[[:space:]]*$' \
+    "${SERVICE_FILES[@]}" 2>/dev/null \
+    | grep -vE '://' \
+    || true)
+fi
 if [ -n "$SERVICE_DB_FIELDS" ]; then
   log_warn "[L4] 以下 service struct 持有 *gorm.DB 字段(应重构为 Repository 注入):"
   echo "$SERVICE_DB_FIELDS" | sed 's/^/    /' | head -20
@@ -216,17 +276,26 @@ fi
 # 相等，多了判「超出」、少了判「收窄」（与 scripts/test-nil-deref.baseline 同一双向口径）。
 # 基线的键相对**仓库根**（`user-server/internal/service/x.go`），不是相对 service/ —— 跟同目录
 # 其它 .baseline 的约定保持一致，免得同一棵树里两套路径口径互相看不懂。
+# AV-03 2026-11-07：扫描集从 "$TARGET/internal/service/" 扩到全域 service 目录集
+#（§2.0 发现的 SERVICE_FILES，与 arch_gorm_guard_test.go 同一规则）；兄弟域的
+# 存量命中会以「新增」逐文件列出 —— 那是 AV-04c 的存量清单，本门不为此放宽基线。
+# 同批补第二形态：`)  .GetDB` —— 调用结果上直接取句柄的链式写法
+# （`repository.NewX().GetDB()` / `o.getRepo().GetDB()`），旧模式只认
+# 标识符接收者，实测漏过 auth.go:1020、feedback_loop/sop_optimization_gate.go:80。
 ARCH_L4_BASELINE="$SCRIPT_DIR/arch-l4-getdb.baseline"
 if [ -f "$ARCH_L4_BASELINE" ]; then
-  SERVICE_DB_WIDE=$(grep -rnE --include="*.go" --exclude="*_test.go" \
-    '[a-zA-Z0-9_]+\.GetDB\b' "$TARGET/internal/service/" 2>/dev/null \
-    | grep -vE ':[[:space:]]*//' \
-    | grep -vE ':[[:space:]]*\*' \
-    | grep -vE ':[[:space:]]*/\*' \
-    | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
-    | awk -F: -v pre="$TARGET/" -v rel="$TARGET_REL/" \
-        '{ p=$1; if (index(p, pre)==1) p=rel substr(p, length(pre)+1); print p }' \
-    || true)
+  SERVICE_DB_WIDE=""
+  if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+    SERVICE_DB_WIDE=$(grep -rnE \
+      '[a-zA-Z0-9_]+\.GetDB\b|[)]\.GetDB\b' "${SERVICE_FILES[@]}" 2>/dev/null \
+      | grep -vE ':[[:space:]]*//' \
+      | grep -vE ':[[:space:]]*\*' \
+      | grep -vE ':[[:space:]]*/\*' \
+      | grep -vE ':[[:space:]]*db[[:space:]]+\*gorm\.DB' \
+      | awk -F: -v pre="$TARGET/" -v rel="$TARGET_REL/" \
+          '{ p=$1; if (index(p, pre)==1) p=rel substr(p, length(pre)+1); print p }' \
+      || true)
+  fi
   L4_BASELINE_VERDICT=$(awk -F'\t' -v base="$ARCH_L4_BASELINE" '
     FNR==NR {
       if ($0 !~ /^#/ && NF>=3 && $3 != "") { bc[$1]=$2+0; bl[$1]=1 }
@@ -253,9 +322,14 @@ else
   log_fail "[L4] 宽口径基线文件缺失：${ARCH_L4_BASELINE}（缺基线不放行，避免门静默空转）"
 fi
 
-# 2.3 service 不应写 SQL 字符串拼接
-if grep -rn '\.Raw(.*+.*)' "$TARGET/internal/service/" 2>/dev/null; then
+# 2.3 service 不应写 SQL 字符串拼接（AV-03 起同一全域目录集）
+SERVICE_SQL_CONCAT=""
+if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
+  SERVICE_SQL_CONCAT=$(grep -rn '\.Raw(.*+.*)' "${SERVICE_FILES[@]}" 2>/dev/null || true)
+fi
+if [ -n "$SERVICE_SQL_CONCAT" ]; then
   log_fail "[L4] service 含 SQL 字符串拼接,应封装到 repository"
+  echo "$SERVICE_SQL_CONCAT" | sed 's/^/    /'
 else
   log_pass "[L4] service 未含 SQL 字符串拼接"
 fi
