@@ -482,7 +482,8 @@ func setupProactiveReachRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 
 func setupLLMRoutingRoutes(auth *gin.RouterGroup) {
 	dispatcher := app.GetGlobalDispatcher()
-	routingService := service.NewLLMRoutingService(dispatcher)
+	// AV-04a：租户 provider 名单查询经仓储注入（原 Service 内 pkgdb.GetDB() 直查已下沉）
+	routingService := service.NewLLMRoutingService(dispatcher, repository.NewLLMProviderRepository())
 	llmCtrl := controller.NewLLMRoutingController(routingService)
 	if f := app.GetGlobalProviderFailover(); f != nil {
 		llmCtrl.SetFailover(service.NewLLMFailoverService(f))

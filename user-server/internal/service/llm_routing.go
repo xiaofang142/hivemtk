@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
-	"hivemtk-user/internal/model"
-	pkgdb "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
 )
@@ -131,19 +129,35 @@ type TestModelResult struct {
 	Error       string  `json:"error,omitempty"`
 }
 
+// TenantProviderLookup 按租户反查 provider Name 集合的查询依赖（AV-04a）。
+//
+// 由 repository.LLMProviderRepository 实现并经装配注入（service_routes /
+// frontend_aliases 两处构造点，grep 全仓确认无其他 NewLLMRoutingService
+// 构造点）；Service 只认本接口，不再直访 pkgdb.GetDB()。
+type TenantProviderLookup interface {
+	ListProviderNamesByTenant(ctx context.Context, tenantID uint) ([]string, error)
+}
+
 // LLMRoutingService LLM 路由服务
 type LLMRoutingService struct {
 	dispatcher *llm.Dispatcher
+	// providerLookup 多租户下按租户反查 provider 名单的依赖（可 nil：
+	// 单租户模式永不调用；多租户下为 nil 按 fail-closed 空名单处理）。
+	providerLookup TenantProviderLookup
 
 	mu    sync.Mutex
 	stats map[string]*LLMModelStat
 }
 
 // NewLLMRoutingService 创建 LLM 路由服务
-func NewLLMRoutingService(d *llm.Dispatcher) *LLMRoutingService {
+//
+// providerLookup：llm_providers 按租户读取仓储（repository.LLMProviderRepository），
+// 多租户模式下列表过滤依赖它；传 nil 时多租户列表 fail-closed 为空。
+func NewLLMRoutingService(d *llm.Dispatcher, providerLookup TenantProviderLookup) *LLMRoutingService {
 	return &LLMRoutingService{
-		dispatcher: d,
-		stats:      make(map[string]*LLMModelStat),
+		dispatcher:     d,
+		providerLookup: providerLookup,
+		stats:          make(map[string]*LLMModelStat),
 	}
 }
 
@@ -156,7 +170,7 @@ func isLocalURL(url string) bool {
 // ListModels 列出所有 provider（含本地）
 // tenantProviderNames 多租户下返回当前租户的 provider 名集合。
 // 进程内 dispatcher 是全平台共享的（含其他租户的自带 Key 行），列表接口
-// 不能把它们原样吐给当前租户；按 ctx 租户从库表反查归属后再过滤。
+// 不能把它们原样吐给当前租户；按 ctx 租户经注入的仓储反查归属后再过滤。
 // 返回 ok=false 表示不需要过滤（单租户离线模式）。
 func (s *LLMRoutingService) tenantProviderNames(ctx context.Context) (map[string]bool, bool) {
 	if !tenant.IsMultiTenant() {
@@ -166,20 +180,22 @@ func (s *LLMRoutingService) tenantProviderNames(ctx context.Context) (map[string
 	if !ok || tid == 0 {
 		return map[string]bool{}, true
 	}
-	var rows []model.LLMProvider
-	if err := pkgdb.GetDB().WithContext(ctx).
-		Select("name").
-		Where("tenant_id = ?", tid).
-		Find(&rows).Error; err != nil {
+	if s.providerLookup == nil {
+		// 缺查询依赖与读库失败同口径 fail-closed：宁可列表为空，
+		// 也不退回全平台名单把别的租户的 provider 泄漏出去。
+		return map[string]bool{}, true
+	}
+	names, err := s.providerLookup.ListProviderNamesByTenant(ctx, tid)
+	if err != nil {
 		// 读库失败按 fail-closed 处理：宁可列表为空，也不把别的租户的
 		// provider 名单泄漏出去。
 		return map[string]bool{}, true
 	}
-	names := make(map[string]bool, len(rows))
-	for _, r := range rows {
-		names[r.Name] = true
+	allowed := make(map[string]bool, len(names))
+	for _, n := range names {
+		allowed[n] = true
 	}
-	return names, true
+	return allowed, true
 }
 
 func (s *LLMRoutingService) ListModels(ctx context.Context) []LLMProviderInfo {

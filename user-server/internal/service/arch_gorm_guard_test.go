@@ -559,7 +559,6 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	"user-server/internal/service/inbox_ingress.go":                       {getdb: 1},
 	"user-server/internal/service/inbox_scope.go":                         {getdb: 1},
 	"user-server/internal/service/knowledge_base.go":                      {getdb: 1},
-	"user-server/internal/service/llm_routing.go":                         {getdb: 1}, // AV-04a 修复对象；清零后删本行
 	"user-server/internal/service/objection_handler.go":                   {getdb: 1},
 	"user-server/internal/service/openapi.go":                             {getdb: 2},
 	"user-server/internal/service/rag_product.go":                         {getdb: 1},

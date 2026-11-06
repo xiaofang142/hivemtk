@@ -167,7 +167,8 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("POST", "/dialogue-memories/sop-history", memCtrl.RecordSOP)
 	doReg("GET", "/dialogue-memories/context", memCtrl.BuildContext)
 
-	routingSvc := service.NewLLMRoutingService(app.GetGlobalDispatcher())
+	// AV-04a：别名路由与主路由同口径——租户 provider 名单查询经仓储注入
+	routingSvc := service.NewLLMRoutingService(app.GetGlobalDispatcher(), repository.NewLLMProviderRepository())
 	llmCtrl := controller.NewLLMRoutingController(routingSvc)
 	doReg("GET", "/llm-routing/rules", llmCtrl.ListStrategies)
 	doReg("GET", "/llm-routing/models", llmCtrl.ListModels)
