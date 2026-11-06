@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
@@ -35,7 +36,11 @@ func main() {
 	db.InitDB()
 	gormDB := db.GetDB()
 
-	svc := service.NewScriptTemplateSyncService(service.NewScriptTemplateSyncDeps(gormDB))
+	// AV-04c：ScriptTemplateSyncDeps 直构（原 service.NewScriptTemplateSyncDeps
+	// 工厂已收口到装配处）。
+	svc := service.NewScriptTemplateSyncService(service.ScriptTemplateSyncDeps{
+		TemplateRepo: contentrepo.NewScriptTemplateRepository(gormDB),
+	})
 	ctxs, err := syncContexts(gormDB)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[ERROR] 读取话术归属租户失败: %v\n", err)

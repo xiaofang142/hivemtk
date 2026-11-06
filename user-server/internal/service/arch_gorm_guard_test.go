@@ -520,13 +520,12 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// ---- browser_automation 域（0 句柄 / 1 GetDB）----
 	"user-server/internal/browser_automation/service/feedback.go": {getdb: 1},
 	// ---- content 域（9 句柄）----
-	"user-server/internal/content/service/ai_content.go":           {handles: 2},
-	"user-server/internal/content/service/batch_operation.go":      {handles: 1},
-	"user-server/internal/content/service/marketing_flow.go":       {handles: 1},
-	"user-server/internal/content/service/material.go":             {handles: 2},
-	"user-server/internal/content/service/script_template.go":      {handles: 1},
-	"user-server/internal/content/service/script_template_sync.go": {handles: 1},
-	"user-server/internal/content/service/template_market.go":      {handles: 1},
+	// AV-04c 刀 1（2026-11-07）：ai_content/batch_operation/marketing_flow 清零除名
+	// （deps 工厂 NewXxxDeps(db) 收口到装配处直构，service 层不再持 *gorm.DB 形参）。
+	// AV-04c 刀 2（2026-11-07）：material/template_market 同法清零除名（OBS adapter 改收仓储）。
+	// AV-04c 刀 3（2026-11-07）：script_template 清零除名。
+	// AV-04c 刀 4（2026-11-07）：script_template_sync 清零除名 —— content 域整域出快照，
+	// 守卫对该域回归为「新增即红」（无豁免行）。
 	// ---- email 域（1 句柄 / 1 GetDB）----
 	"user-server/internal/email/service/email_list.go": {handles: 1},
 	"user-server/internal/email/service/email_smtp.go": {getdb: 1},

@@ -8,6 +8,7 @@ import (
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/bridge"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentservice "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -43,7 +44,11 @@ func BuildSalesEngine(gormDB *gorm.DB) *service.SalesEngine {
 
 	ragSearcher := knowledgesvc.NewRagSearcher()
 
-	scriptLookup := service.NewScriptLookupAdapter(contentservice.NewScriptTemplateService(contentservice.NewScriptTemplateDeps(gormDB)))
+	// AV-04c：ScriptTemplateDeps 直构（原 service.NewScriptTemplateDeps 工厂已收口到装配处）。
+	scriptLookup := service.NewScriptLookupAdapter(contentservice.NewScriptTemplateService(contentservice.ScriptTemplateDeps{
+		TemplateRepo: contentrepo.NewScriptTemplateRepository(gormDB),
+		CategoryRepo: contentrepo.NewScriptCategoryRepository(gormDB),
+	}))
 	customerLookup := service.NewCustomerLookupAdapter(repository.NewCustomerRepository())
 
 	engine := service.NewSalesEngine(

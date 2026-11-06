@@ -30,11 +30,13 @@ import (
 	"testing"
 
 	contentmodel "hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentservice "hivemtk-user/internal/content/service"
 	usermodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
+	cdprepo "hivemtk-user/internal/repository"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -145,7 +147,11 @@ func matPhysicalCategoryCount(t *testing.T, database *gorm.DB, id string) int64 
 // 所以夹具必须能把「有 license」和「有租户」两种口径分开测。
 func matRouter(t *testing.T, bindTenant bool) *gin.Engine {
 	t.Helper()
-	ctrl := NewMaterialController(contentservice.NewMaterialService(contentservice.NewMaterialDeps(db.GetDB())))
+	ctrl := NewMaterialController(contentservice.NewMaterialService(contentservice.MaterialDeps{
+		CategoryRepo: contentrepo.NewMaterialCategoryRepository(db.GetDB()),
+		MaterialRepo: contentrepo.NewMaterialRepository(db.GetDB()),
+		ObsService:   contentservice.NewObsConfigServiceAdapter(cdprepo.NewObsConfigRepositoryWithDB(db.GetDB())),
+	}))
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(func(ctx *gin.Context) {

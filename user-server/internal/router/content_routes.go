@@ -2,6 +2,7 @@ package router
 
 import (
 	contentctrl "hivemtk-user/internal/content/controller"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentservice "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/middleware"
@@ -14,7 +15,12 @@ import (
 )
 
 func setupMaterialRoutes(auth *gin.RouterGroup) {
-	materialCtrl := contentctrl.NewMaterialController(contentservice.NewMaterialService(contentservice.NewMaterialDeps(dbutil.GetDB())))
+	// AV-04c：MaterialDeps 直构（原 service.NewMaterialDeps 工厂已收口到装配处）。
+	materialCtrl := contentctrl.NewMaterialController(contentservice.NewMaterialService(contentservice.MaterialDeps{
+		CategoryRepo: contentrepo.NewMaterialCategoryRepository(dbutil.GetDB()),
+		MaterialRepo: contentrepo.NewMaterialRepository(dbutil.GetDB()),
+		ObsService:   contentservice.NewObsConfigServiceAdapter(repository.NewObsConfigRepositoryWithDB(dbutil.GetDB())),
+	}))
 
 	auth.GET("/material/list", materialCtrl.GetMaterialList)
 	auth.POST("/material", materialCtrl.UploadMaterial)

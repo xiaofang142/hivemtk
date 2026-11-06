@@ -19,8 +19,6 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	userrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/storage"
-
-	"gorm.io/gorm"
 )
 
 func strVal(p *string) string {
@@ -73,14 +71,8 @@ type MaterialDeps struct {
 	ObsService   ObsService
 }
 
-// NewMaterialDeps 由装配处用数据库句柄构造依赖包。
-func NewMaterialDeps(db *gorm.DB) MaterialDeps {
-	return MaterialDeps{
-		CategoryRepo: repository.NewMaterialCategoryRepository(db),
-		MaterialRepo: repository.NewMaterialRepository(db),
-		ObsService:   NewObsConfigServiceAdapter(db),
-	}
-}
+// MaterialDeps 的装配（仓储/OBS adapter 构造）由装配处完成：internal/router
+// 直接填本结构体，service 层不再持 *gorm.DB 形参（AV-04c）。
 
 // NewMaterialService 创建素材服务（依赖由装配处注入）。
 func NewMaterialService(deps MaterialDeps) MaterialService {
@@ -95,10 +87,11 @@ type obsConfigServiceAdapter struct {
 	cfgRepo userrepo.ObsConfigRepository
 }
 
-// NewObsConfigServiceAdapter 用装配点交来的句柄构造 adapter。
-func NewObsConfigServiceAdapter(db *gorm.DB) *obsConfigServiceAdapter {
+// NewObsConfigServiceAdapter 用装配点交来的 OBS 配置仓储构造 adapter
+// （句柄→仓储的转换在装配处完成，AV-04c）。
+func NewObsConfigServiceAdapter(cfgRepo userrepo.ObsConfigRepository) *obsConfigServiceAdapter {
 	return &obsConfigServiceAdapter{
-		cfgRepo: userrepo.NewObsConfigRepositoryWithDB(db),
+		cfgRepo: cfgRepo,
 	}
 }
 

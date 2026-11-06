@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	contentmodel "hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentservice "hivemtk-user/internal/content/service"
 	mainmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
@@ -401,7 +402,10 @@ func TestScriptSyncToLibraryIsTenantFactored(t *testing.T) {
 
 	// B 再同步：必须新长一行归 B 的，不许覆写 A 那行。
 	bCtx := tenant.WithTenantID(context.Background(), scrTenantB)
-	bSvc := contentservice.NewScriptTemplateSyncService(contentservice.NewScriptTemplateSyncDeps(db.GetDB()))
+	// AV-04c：service 生产层不再持 *gorm.DB 形参，测试侧直构 Deps。
+	bSvc := contentservice.NewScriptTemplateSyncService(contentservice.ScriptTemplateSyncDeps{
+		TemplateRepo: contentrepo.NewScriptTemplateRepository(db.GetDB()),
+	})
 	if _, err := bSvc.SyncToLibrary(bCtx); err != nil {
 		t.Fatalf("B 家同步失败: %v", err)
 	}

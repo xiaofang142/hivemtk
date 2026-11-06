@@ -27,13 +27,8 @@ type AIContentDeps struct {
 	TemplateRepo repository.PromptTemplateRepository
 }
 
-// NewAIContentDeps 由装配处用数据库句柄构造依赖包。
-func NewAIContentDeps(db *gorm.DB) AIContentDeps {
-	return AIContentDeps{
-		RecordRepo:   repository.NewAIGenerationRecordRepository(db),
-		TemplateRepo: repository.NewPromptTemplateRepository(db),
-	}
-}
+// AIContentDeps 的装配（仓储构造）由装配处完成：internal/router、internal/app
+// 直接填本结构体，service 层不再持 *gorm.DB 形参（AV-04c）。
 
 // NewAIContentService 创建 AI 内容服务实例（依赖由装配处注入）。
 func NewAIContentService(deps AIContentDeps) *AIContentService {
@@ -265,10 +260,7 @@ type PromptTemplateDeps struct {
 	TemplateRepo repository.PromptTemplateRepository
 }
 
-// NewPromptTemplateDeps 由装配处用数据库句柄构造依赖包。
-func NewPromptTemplateDeps(db *gorm.DB) PromptTemplateDeps {
-	return PromptTemplateDeps{TemplateRepo: repository.NewPromptTemplateRepository(db)}
-}
+// PromptTemplateDeps 的装配同 AIContentDeps：仓储构造收口在装配处（AV-04c）。
 
 // NewPromptTemplateService 创建提示词模板服务实例（依赖由装配处注入）。
 func NewPromptTemplateService(deps PromptTemplateDeps) *PromptTemplateService {

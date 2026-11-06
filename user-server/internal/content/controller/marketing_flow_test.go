@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	contentmodel "hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/content/service"
+	cdprepo "hivemtk-user/internal/repository"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,7 +30,16 @@ func setupMarketingFlowTestDB(t *testing.T) *gorm.DB {
 func setupMarketingFlowRouter(t *testing.T, db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	flowService := service.NewMarketingFlowService(service.NewMarketingFlowDeps(db))
+	flowService := service.NewMarketingFlowService(service.MarketingFlowDeps{
+		FlowRepo:         contentrepo.NewMarketingFlowRepository(db),
+		ExecutionRepo:    contentrepo.NewFlowExecutionRepository(db),
+		UserTagRepo:      cdprepo.NewUserTagRepositoryWithDB(db),
+		OrderRepo:        cdprepo.NewOrderRepositoryWithDB(db),
+		ClueRepo:         cdprepo.NewClueRepositoryWithDB(db),
+		SessionRepo:      cdprepo.NewCustomerSessionRepositoryWithDB(db),
+		AgentRepo:        cdprepo.NewAgentStatusRepositoryWithDB(db),
+		OperationLogRepo: cdprepo.NewOperationLogRepositoryWithDB(db),
+	})
 
 	controller := &MarketingFlowController{
 		flowService: flowService,

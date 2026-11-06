@@ -30,7 +30,7 @@ func setupMarketingFlowServiceTestDB(t *testing.T) *gorm.DB {
 }
 
 func setupMarketingFlowService(t *testing.T) *MarketingFlowService {
-	return NewMarketingFlowService(NewMarketingFlowDeps(setupMarketingFlowServiceTestDB(t)))
+	return NewMarketingFlowService(newMarketingFlowDeps(setupMarketingFlowServiceTestDB(t)))
 }
 
 // TestNewMarketingFlowService 测试创建服务实例
@@ -195,7 +195,7 @@ func TestMarketingFlowService_GetFlowByID_UnboundTenant(t *testing.T) {
 		t.Fatalf("预置流程失败: %v", err)
 	}
 
-	service := NewMarketingFlowService(NewMarketingFlowDeps(database))
+	service := NewMarketingFlowService(newMarketingFlowDeps(database))
 	got, err := service.GetFlowByID(context.Background(), row.ID)
 	if err == nil {
 		t.Fatalf("无租户上下文时不应查到流程，实得 %+v", got)

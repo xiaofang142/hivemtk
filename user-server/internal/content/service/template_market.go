@@ -7,8 +7,6 @@ import (
 	"hivemtk-user/internal/content/model"
 	contentrepo "hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
-
-	"gorm.io/gorm"
 )
 
 // TemplateMarketService 模板市场服务
@@ -18,17 +16,11 @@ type TemplateMarketService struct {
 }
 
 // TemplateMarketDeps 模板市场服务的仓储依赖。
+// 装配（仓储构造）由装配处完成：internal/router 直接填本结构体，service 层
+// 不再持 *gorm.DB 形参（AV-04c）。
 type TemplateMarketDeps struct {
 	TemplateRepo *contentrepo.MarketTemplateRepository
 	DownloadRepo *contentrepo.MarketTemplateDownloadRepository
-}
-
-// NewTemplateMarketDeps 由装配处用数据库句柄构造依赖包。
-func NewTemplateMarketDeps(db *gorm.DB) TemplateMarketDeps {
-	return TemplateMarketDeps{
-		TemplateRepo: contentrepo.NewMarketTemplateRepository(db),
-		DownloadRepo: contentrepo.NewMarketTemplateDownloadRepository(db),
-	}
 }
 
 // NewTemplateMarketService 创建模板市场服务实例（依赖由装配处注入）。

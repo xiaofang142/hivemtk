@@ -15,8 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 var smsSenderFunc func(ctx context.Context, phone, content string) error
@@ -37,7 +35,8 @@ type MarketingFlowService struct {
 }
 
 // MarketingFlowDeps 营销流程服务的仓储依赖。
-// 构造器不再收 *gorm.DB：句柄只在 NewMarketingFlowDeps（装配/测试工厂）里出现。
+// 装配（仓储构造）由装配处完成：internal/router 直接填本结构体，service 层
+// 不再持 *gorm.DB 形参（AV-04c）。
 type MarketingFlowDeps struct {
 	FlowRepo         *repository.MarketingFlowRepository
 	ExecutionRepo    *repository.FlowExecutionRepository
@@ -47,20 +46,6 @@ type MarketingFlowDeps struct {
 	SessionRepo      *cdprepo.CustomerSessionRepository
 	AgentRepo        *cdprepo.AgentStatusRepository
 	OperationLogRepo cdprepo.OperationLogRepository
-}
-
-// NewMarketingFlowDeps 由装配处用数据库句柄构造依赖包。
-func NewMarketingFlowDeps(db *gorm.DB) MarketingFlowDeps {
-	return MarketingFlowDeps{
-		FlowRepo:         repository.NewMarketingFlowRepository(db),
-		ExecutionRepo:    repository.NewFlowExecutionRepository(db),
-		UserTagRepo:      cdprepo.NewUserTagRepositoryWithDB(db),
-		OrderRepo:        cdprepo.NewOrderRepositoryWithDB(db),
-		ClueRepo:         cdprepo.NewClueRepositoryWithDB(db),
-		SessionRepo:      cdprepo.NewCustomerSessionRepositoryWithDB(db),
-		AgentRepo:        cdprepo.NewAgentStatusRepositoryWithDB(db),
-		OperationLogRepo: cdprepo.NewOperationLogRepositoryWithDB(db),
-	}
 }
 
 // NewMarketingFlowService 创建营销流程服务（依赖由装配处注入）。

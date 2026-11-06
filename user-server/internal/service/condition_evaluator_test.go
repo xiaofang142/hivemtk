@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	contentmodel "hivemtk-user/internal/content/model"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentsvc "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/pkg/testutil"
+	cdprepo "hivemtk-user/internal/repository"
 )
 
 func setupConditionEvaluatorService(t *testing.T) *contentsvc.MarketingFlowService {
@@ -19,7 +21,17 @@ func setupConditionEvaluatorService(t *testing.T) *contentsvc.MarketingFlowServi
 		&model.UserTag{},
 	)
 	db.SetTestDB(database)
-	return contentsvc.NewMarketingFlowService(contentsvc.NewMarketingFlowDeps(database))
+	// AV-04c：service 生产层不再持 *gorm.DB 形参，测试侧直构 Deps。
+	return contentsvc.NewMarketingFlowService(contentsvc.MarketingFlowDeps{
+		FlowRepo:         contentrepo.NewMarketingFlowRepository(database),
+		ExecutionRepo:    contentrepo.NewFlowExecutionRepository(database),
+		UserTagRepo:      cdprepo.NewUserTagRepositoryWithDB(database),
+		OrderRepo:        cdprepo.NewOrderRepositoryWithDB(database),
+		ClueRepo:         cdprepo.NewClueRepositoryWithDB(database),
+		SessionRepo:      cdprepo.NewCustomerSessionRepositoryWithDB(database),
+		AgentRepo:        cdprepo.NewAgentStatusRepositoryWithDB(database),
+		OperationLogRepo: cdprepo.NewOperationLogRepositoryWithDB(database),
+	})
 }
 
 func TestEvaluateCondition_EqOperator(t *testing.T) {

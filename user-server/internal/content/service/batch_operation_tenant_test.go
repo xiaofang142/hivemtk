@@ -41,7 +41,7 @@ func bopSvcDB(t *testing.T) (*gorm.DB, *BatchOperationService, context.Context, 
 	if db == nil {
 		t.Fatal("测试库不可达：ctx 是否贯通全都判不了（不 Skip，跳过等于没锁）")
 	}
-	return db, NewBatchOperationService(NewBatchOperationDeps(db)),
+	return db, NewBatchOperationService(newBatchOperationDeps(db)),
 		tenant.WithTenantID(context.Background(), bopSvcTenantA),
 		tenant.WithTenantID(context.Background(), bopSvcTenantB)
 }

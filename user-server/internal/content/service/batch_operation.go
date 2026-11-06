@@ -18,8 +18,6 @@ import (
 	cdpmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	cdprepo "hivemtk-user/internal/repository"
-
-	"gorm.io/gorm"
 )
 
 // BatchOperationService 批量操作服务
@@ -36,14 +34,8 @@ type BatchOperationDeps struct {
 	UserRepo    cdprepo.UserRepository
 }
 
-// NewBatchOperationDeps 由装配处用数据库句柄构造依赖包。
-func NewBatchOperationDeps(db *gorm.DB) BatchOperationDeps {
-	return BatchOperationDeps{
-		BatchOpRepo: contentrepo.NewBatchOperationRepository(db),
-		ClueRepo:    cdprepo.NewClueRepositoryWithDB(db),
-		UserRepo:    cdprepo.NewUserRepositoryWithDB(db),
-	}
-}
+// BatchOperationDeps 的装配（仓储构造）由装配处完成：internal/router 直接填本
+// 结构体，service 层不再持 *gorm.DB 形参（AV-04c）。
 
 // NewBatchOperationService 创建批量操作服务（依赖由装配处注入）。
 func NewBatchOperationService(deps BatchOperationDeps) *BatchOperationService {

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"gorm.io/gorm"
-
 	contentmodel "hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
 	mainmodel "hivemtk-user/internal/model"
@@ -17,13 +15,10 @@ import (
 var ErrScriptLibraryMissing = repository.ErrScriptLibraryMissing
 
 // ScriptTemplateSyncDeps 同步服务的仓储依赖。
+// 装配（仓储构造）由装配处完成：internal/router、cmd/syncscripts 直接填本结构体，
+// service 层不再持 *gorm.DB 形参（AV-04c）。
 type ScriptTemplateSyncDeps struct {
 	TemplateRepo *repository.ScriptTemplateRepository
-}
-
-// NewScriptTemplateSyncDeps 由装配处用数据库句柄构造依赖包。
-func NewScriptTemplateSyncDeps(db *gorm.DB) ScriptTemplateSyncDeps {
-	return ScriptTemplateSyncDeps{TemplateRepo: repository.NewScriptTemplateRepository(db)}
 }
 
 // ScriptTemplateSyncService 话术模板 → 运行时话术库 同步服务

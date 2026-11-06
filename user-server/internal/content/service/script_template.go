@@ -16,8 +16,6 @@ import (
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
 	"strings"
-
-	"gorm.io/gorm"
 )
 
 // ScriptTemplateService 话术模板服务
@@ -27,17 +25,11 @@ type ScriptTemplateService struct {
 }
 
 // ScriptTemplateDeps 话术模板服务的仓储依赖。
+// 装配（仓储构造）由装配处完成：internal/router、internal/app 直接填本结构体，
+// service 层不再持 *gorm.DB 形参（AV-04c）。
 type ScriptTemplateDeps struct {
 	TemplateRepo *repository.ScriptTemplateRepository
 	CategoryRepo *repository.ScriptCategoryRepository
-}
-
-// NewScriptTemplateDeps 由装配处用数据库句柄构造依赖包。
-func NewScriptTemplateDeps(db *gorm.DB) ScriptTemplateDeps {
-	return ScriptTemplateDeps{
-		TemplateRepo: repository.NewScriptTemplateRepository(db),
-		CategoryRepo: repository.NewScriptCategoryRepository(db),
-	}
 }
 
 // NewScriptTemplateService 创建话术模板服务（依赖由装配处注入）。

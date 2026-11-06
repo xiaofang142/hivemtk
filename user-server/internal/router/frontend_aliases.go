@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/app"
 	contentctrl "hivemtk-user/internal/content/controller"
+	contentrepo "hivemtk-user/internal/content/repository"
 	contentService "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/controller"
 	emailservice "hivemtk-user/internal/email/service"
@@ -178,13 +179,27 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/reach-pipelines/list", reachCtrl.ListPipelines)
 	doReg("GET", "/reach-pipelines/:id", reachCtrl.GetPipeline)
 
-	marketingFlowCtrl := contentctrl.NewMarketingFlowController(contentService.NewMarketingFlowService(contentService.NewMarketingFlowDeps(gormDB)))
+	// AV-04c：MarketingFlowDeps 直构（原 service.NewMarketingFlowDeps 工厂已收口到装配处）。
+	marketingFlowCtrl := contentctrl.NewMarketingFlowController(contentService.NewMarketingFlowService(contentService.MarketingFlowDeps{
+		FlowRepo:         contentrepo.NewMarketingFlowRepository(gormDB),
+		ExecutionRepo:    contentrepo.NewFlowExecutionRepository(gormDB),
+		UserTagRepo:      repository.NewUserTagRepositoryWithDB(gormDB),
+		OrderRepo:        repository.NewOrderRepositoryWithDB(gormDB),
+		ClueRepo:         repository.NewClueRepositoryWithDB(gormDB),
+		SessionRepo:      repository.NewCustomerSessionRepositoryWithDB(gormDB),
+		AgentRepo:        repository.NewAgentStatusRepositoryWithDB(gormDB),
+		OperationLogRepo: repository.NewOperationLogRepositoryWithDB(gormDB),
+	}))
 	doReg("GET", "/marketing-flows/list", marketingFlowCtrl.GetFlowList)
 
 	doReg("GET", "/marketing-flows/executions", marketingFlowCtrl.GetExecutionList)
 	doReg("GET", "/marketing-flows/executions/stats", marketingFlowCtrl.GetExecutionStats)
 
-	batchOpCtrl := contentctrl.NewBatchOperationController(contentService.NewBatchOperationService(contentService.NewBatchOperationDeps(gormDB)))
+	batchOpCtrl := contentctrl.NewBatchOperationController(contentService.NewBatchOperationService(contentService.BatchOperationDeps{
+		BatchOpRepo: contentrepo.NewBatchOperationRepository(gormDB),
+		ClueRepo:    repository.NewClueRepositoryWithDB(gormDB),
+		UserRepo:    repository.NewUserRepositoryWithDB(gormDB),
+	}))
 	doReg("GET", "/batch-operations", batchOpCtrl.GetTools)
 	doReg("GET", "/batch-operations/list", batchOpCtrl.GetHistories)
 
@@ -194,7 +209,14 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/sop-agents/stats", sopCtrl.Stats)
 	doReg("GET", "/sop-agents/:id", sopCtrl.Get)
 
-	scriptCtrl := contentctrl.NewScriptTemplateController(contentService.NewScriptTemplateService(contentService.NewScriptTemplateDeps(gormDB)), contentService.NewScriptTemplateSyncService(contentService.NewScriptTemplateSyncDeps(gormDB)))
+	scriptCtrl := contentctrl.NewScriptTemplateController(
+		contentService.NewScriptTemplateService(contentService.ScriptTemplateDeps{
+			TemplateRepo: contentrepo.NewScriptTemplateRepository(gormDB),
+			CategoryRepo: contentrepo.NewScriptCategoryRepository(gormDB),
+		}),
+		contentService.NewScriptTemplateSyncService(contentService.ScriptTemplateSyncDeps{
+			TemplateRepo: contentrepo.NewScriptTemplateRepository(gormDB),
+		}))
 	doReg("GET", "/script-templates", scriptCtrl.GetTemplateList)
 	doReg("GET", "/script-templates/list", scriptCtrl.GetTemplateList)
 	doReg("GET", "/script-templates/categories", scriptCtrl.GetCategories)
@@ -331,7 +353,15 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/rag-product-configs/stats", ragProductCtrl.Stats)
 	doReg("GET", "/rag-product-configs/:id", ragProductCtrl.Get)
 
-	aiContentCtrl := contentctrl.NewAIContentController(contentService.NewAIContentService(contentService.NewAIContentDeps(gormDB)), contentService.NewPromptTemplateService(contentService.NewPromptTemplateDeps(gormDB)))
+	aiContentCtrl := contentctrl.NewAIContentController(
+		contentService.NewAIContentService(contentService.AIContentDeps{
+			RecordRepo:   contentrepo.NewAIGenerationRecordRepository(gormDB),
+			TemplateRepo: contentrepo.NewPromptTemplateRepository(gormDB),
+		}),
+		contentService.NewPromptTemplateService(contentService.PromptTemplateDeps{
+			TemplateRepo: contentrepo.NewPromptTemplateRepository(gormDB),
+		}),
+	)
 	doReg("GET", "/ai-content/list", aiContentCtrl.GetGenerationHistory)
 	doReg("GET", "/ai-content/history", aiContentCtrl.GetGenerationHistory)
 	doReg("GET", "/ai-content/templates", aiContentCtrl.GetTemplates)
@@ -340,7 +370,10 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("POST", "/ai-content/:id/favorite", aiContentCtrl.FavoriteRecord)
 	doReg("POST", "/ai-content/:id/rate", aiContentCtrl.RateRecord)
 
-	templateCtrl := contentctrl.NewTemplateMarketController(contentService.NewTemplateMarketService(contentService.NewTemplateMarketDeps(gormDB)))
+	templateCtrl := contentctrl.NewTemplateMarketController(contentService.NewTemplateMarketService(contentService.TemplateMarketDeps{
+		TemplateRepo: contentrepo.NewMarketTemplateRepository(gormDB),
+		DownloadRepo: contentrepo.NewMarketTemplateDownloadRepository(gormDB),
+	}))
 	doReg("GET", "/market-templates", templateCtrl.GetTemplateList)
 	doReg("GET", "/market-templates/list", templateCtrl.GetTemplateList)
 	doReg("GET", "/market-templates/official", templateCtrl.GetOfficialTemplates)
@@ -393,7 +426,11 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/obs-configs/default", obsCtrl.GetDefaultConfig)
 	doReg("GET", "/obs-configs/:id", obsCtrl.GetConfig)
 
-	materialCtrl := contentctrl.NewMaterialController(contentService.NewMaterialService(contentService.NewMaterialDeps(gormDB)))
+	materialCtrl := contentctrl.NewMaterialController(contentService.NewMaterialService(contentService.MaterialDeps{
+		CategoryRepo: contentrepo.NewMaterialCategoryRepository(gormDB),
+		MaterialRepo: contentrepo.NewMaterialRepository(gormDB),
+		ObsService:   contentService.NewObsConfigServiceAdapter(repository.NewObsConfigRepositoryWithDB(gormDB)),
+	}))
 	doReg("GET", "/material-library/list", materialCtrl.GetMaterialList)
 	doReg("GET", "/material-library", materialCtrl.GetMaterialList)
 	doReg("GET", "/material-library/categories", materialCtrl.GetMaterialCategories)

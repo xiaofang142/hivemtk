@@ -33,7 +33,7 @@ var aiSvcCtx = context.Background()
 // TestNewAIContentService 测试创建 AI 内容服务
 func TestNewAIContentService(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 	if service == nil {
 		t.Error("Expected non-nil service")
 	}
@@ -43,7 +43,7 @@ func TestNewAIContentService(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_Copywriting(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -70,7 +70,7 @@ func TestAIContentService_GenerateContent_Copywriting(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_Title(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -100,7 +100,7 @@ func TestAIContentService_GenerateContent_Title(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_Reply(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -127,7 +127,7 @@ func TestAIContentService_GenerateContent_Reply(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_Rewrite(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -157,7 +157,7 @@ func TestAIContentService_GenerateContent_Rewrite(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_SocialPost(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -187,7 +187,7 @@ func TestAIContentService_GenerateContent_SocialPost(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_WithTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 
@@ -231,7 +231,7 @@ func TestAIContentService_GenerateContent_WithTemplate(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_WithCustomModel(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -259,7 +259,7 @@ func TestAIContentService_GenerateContent_WithCustomModel(t *testing.T) {
 // 未配置 LLM_API_KEY 时，应在调用外部 LLM API 前返回 "AI service not configured" 错误
 func TestAIContentService_GenerateContent_DefaultModel(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	ctx := context.Background()
 	req := &GenerateContentRequest{
@@ -285,7 +285,7 @@ func TestAIContentService_GenerateContent_DefaultModel(t *testing.T) {
 // TestAIContentService_GetGenerationHistory 测试获取生成历史
 func TestAIContentService_GetGenerationHistory(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	for i := 1; i <= 5; i++ {
 		record := &model.AIGenerationRecord{
@@ -317,7 +317,7 @@ func TestAIContentService_GetGenerationHistory(t *testing.T) {
 // TestAIContentService_GetGenerationHistory_WithFilters 测试带过滤条件的生成历史
 func TestAIContentService_GetGenerationHistory_WithFilters(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record1 := &model.AIGenerationRecord{
 		UserID:  1,
@@ -360,7 +360,7 @@ func TestAIContentService_GetGenerationHistory_WithFilters(t *testing.T) {
 // TestAIContentService_GetRecordByID_Success 测试获取记录成功
 func TestAIContentService_GetRecordByID_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID: 1,
@@ -384,7 +384,7 @@ func TestAIContentService_GetRecordByID_Success(t *testing.T) {
 // 改前这一口只看 id，同租户内任何登录用户换个 id 就能拿到别人的输入原文与生成结果。
 func TestAIContentService_GetRecordByID_WrongOwner(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID: 1,
@@ -403,7 +403,7 @@ func TestAIContentService_GetRecordByID_WrongOwner(t *testing.T) {
 // TestAIContentService_SaveRecord 测试保存记录
 func TestAIContentService_SaveRecord(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID:  1,
@@ -430,7 +430,7 @@ func TestAIContentService_SaveRecord(t *testing.T) {
 // TestAIContentService_FavoriteRecord 测试收藏记录
 func TestAIContentService_FavoriteRecord(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID:     1,
@@ -457,7 +457,7 @@ func TestAIContentService_FavoriteRecord(t *testing.T) {
 // TestAIContentService_RateRecord_Success 测试评分记录成功
 func TestAIContentService_RateRecord_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID: 1,
@@ -484,7 +484,7 @@ func TestAIContentService_RateRecord_Success(t *testing.T) {
 // TestAIContentService_RateRecord_InvalidRating 测试无效评分
 func TestAIContentService_RateRecord_InvalidRating(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID: 1,
@@ -503,7 +503,7 @@ func TestAIContentService_RateRecord_InvalidRating(t *testing.T) {
 // TestAIContentService_DeleteRecord_Success 测试删除记录成功
 func TestAIContentService_DeleteRecord_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	record := &model.AIGenerationRecord{
 		UserID: 1,
@@ -531,7 +531,7 @@ func TestAIContentService_DeleteRecord_Success(t *testing.T) {
 // 处理器随后对不存在的 id 回「删除成功」，界面显示已删、库里一行没动。
 func TestAIContentService_DeleteRecord_MissingRow(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	if err := service.DeleteRecord(aiSvcCtx, 999999); err == nil {
 		t.Error("删除不存在的 id 返回了 nil error")
@@ -541,7 +541,7 @@ func TestAIContentService_DeleteRecord_MissingRow(t *testing.T) {
 // TestPromptTemplateService_GetTemplates 测试获取模板列表
 func TestPromptTemplateService_GetTemplates(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template1 := &model.PromptTemplate{
 		Name:     "测试模板 1",
@@ -574,7 +574,7 @@ func TestPromptTemplateService_GetTemplates(t *testing.T) {
 // TestPromptTemplateService_GetTemplates_ByType 测试按类型获取模板
 func TestPromptTemplateService_GetTemplates_ByType(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template1 := &model.PromptTemplate{
 		Name:     "文案模板",
@@ -611,7 +611,7 @@ func TestPromptTemplateService_GetTemplates_ByType(t *testing.T) {
 // TestPromptTemplateService_GetTemplateByID_Success 测试获取模板成功
 func TestPromptTemplateService_GetTemplateByID_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "测试模板",
@@ -639,7 +639,7 @@ func TestPromptTemplateService_GetTemplateByID_Success(t *testing.T) {
 // TestPromptTemplateService_GetTemplateByID_SystemTemplate 测试获取系统模板
 func TestPromptTemplateService_GetTemplateByID_SystemTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "系统模板",
@@ -662,7 +662,7 @@ func TestPromptTemplateService_GetTemplateByID_SystemTemplate(t *testing.T) {
 
 func TestPromptTemplateService_GetTemplateByID_WrongMerchant(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "测试模板",
@@ -685,7 +685,7 @@ func TestPromptTemplateService_GetTemplateByID_WrongMerchant(t *testing.T) {
 // TestPromptTemplateService_CreateTemplate 测试创建模板
 func TestPromptTemplateService_CreateTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	req := &CreateTemplateRequest{
 		Name:        "新模板",
@@ -725,7 +725,7 @@ func TestPromptTemplateService_CreateTemplate(t *testing.T) {
 // TestPromptTemplateService_UpdateTemplate_Success 测试更新模板成功
 func TestPromptTemplateService_UpdateTemplate_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "原模板",
@@ -769,7 +769,7 @@ func TestPromptTemplateService_UpdateTemplate_Success(t *testing.T) {
 // TestPromptTemplateService_UpdateTemplate_SystemTemplate 测试不能更新系统模板
 func TestPromptTemplateService_UpdateTemplate_SystemTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "系统模板",
@@ -794,7 +794,7 @@ func TestPromptTemplateService_UpdateTemplate_SystemTemplate(t *testing.T) {
 
 func TestPromptTemplateService_UpdateTemplate_WrongMerchant(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "测试模板",
@@ -820,7 +820,7 @@ func TestPromptTemplateService_UpdateTemplate_WrongMerchant(t *testing.T) {
 // TestPromptTemplateService_DeleteTemplate_Success 测试删除模板成功
 func TestPromptTemplateService_DeleteTemplate_Success(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "测试模板",
@@ -847,7 +847,7 @@ func TestPromptTemplateService_DeleteTemplate_Success(t *testing.T) {
 // TestPromptTemplateService_DeleteTemplate_SystemTemplate 测试不能删除系统模板
 func TestPromptTemplateService_DeleteTemplate_SystemTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "系统模板",
@@ -866,7 +866,7 @@ func TestPromptTemplateService_DeleteTemplate_SystemTemplate(t *testing.T) {
 
 func TestPromptTemplateService_DeleteTemplate_WrongMerchant(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	template := &model.PromptTemplate{
 		Name:     "测试模板",
@@ -886,7 +886,7 @@ func TestPromptTemplateService_DeleteTemplate_WrongMerchant(t *testing.T) {
 // TestPromptTemplateService_InitSystemTemplates 测试初始化系统模板
 func TestPromptTemplateService_InitSystemTemplates(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	err := service.InitSystemTemplates(aiSvcCtx)
 
@@ -923,7 +923,7 @@ func TestPromptTemplateService_InitSystemTemplates(t *testing.T) {
 // TestPromptTemplateService_GetTemplateTypes 测试获取模板类型列表
 func TestPromptTemplateService_GetTemplateTypes(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	service := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	types := service.GetTemplateTypes()
 
@@ -955,7 +955,7 @@ func TestPromptTemplateService_GetTemplateTypes(t *testing.T) {
 // TestAIContentService_buildDefaultPrompt_Copywriting 测试构建默认提示词 - 文案
 func TestAIContentService_buildDefaultPrompt_Copywriting(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	req := &GenerateContentRequest{
 		Type:  model.AIGenerationTypeCopywriting,
@@ -976,7 +976,7 @@ func TestAIContentService_buildDefaultPrompt_Copywriting(t *testing.T) {
 // TestAIContentService_buildDefaultPrompt_Title 测试构建默认提示词 - 标题
 func TestAIContentService_buildDefaultPrompt_Title(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	req := &GenerateContentRequest{
 		Type:  model.AIGenerationTypeTitle,
@@ -997,7 +997,7 @@ func TestAIContentService_buildDefaultPrompt_Title(t *testing.T) {
 // TestAIContentService_fillTemplate 测试填充模板变量
 func TestAIContentService_fillTemplate(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	service := NewAIContentService(NewAIContentDeps(database))
+	service := NewAIContentService(newAIContentDeps(database))
 
 	template := "你好，{{name}}，欢迎来到{{place}}"
 	variables := map[string]any{
@@ -1026,8 +1026,8 @@ func TestAIContentService_fillTemplate(t *testing.T) {
 //	表里有 ⇒ 必须有专属分支（不能原样回显）；分支里有 ⇒ 必须出现在给前端的类型表里（否则选不到）。
 func TestAIContentService_TypeVocabularyMatchesPrompts(t *testing.T) {
 	database := setupAIContentServiceTestDB(t)
-	content := NewAIContentService(NewAIContentDeps(database))
-	template := NewPromptTemplateService(NewPromptTemplateDeps(database))
+	content := NewAIContentService(newAIContentDeps(database))
+	template := NewPromptTemplateService(newPromptTemplateDeps(database))
 
 	listed := map[string]bool{}
 	for _, item := range template.GetTemplateTypes() {

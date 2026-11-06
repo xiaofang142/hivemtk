@@ -40,7 +40,7 @@ func mtsDB(t *testing.T) (*gorm.DB, *TemplateMarketService, context.Context, con
 		t.Fatal("测试库不可达：租户遮挡与归属判定全都判不了（不 Skip，跳过等于没锁）")
 	}
 	return gdb,
-		NewTemplateMarketService(NewTemplateMarketDeps(gdb)),
+		NewTemplateMarketService(newTemplateMarketDeps(gdb)),
 		tenant.WithTenantID(context.Background(), mtsTenantA),
 		tenant.WithTenantID(context.Background(), mtsTenantB)
 }
