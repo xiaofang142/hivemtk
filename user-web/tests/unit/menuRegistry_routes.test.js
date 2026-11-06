@@ -125,28 +125,83 @@ describe('后端菜单注册表 ↔ 前端路由', () => {
 })
 
 describe('菜单标题 i18n 覆盖', () => {
-  it('注册表里每个菜单 key 在全部语言包都有标题（缺一个就渲染成裸 key）', () => {
-    // Layout.vue / SubMenuItem.vue 渲染标题走 t('menu.' + key)。vue-i18n 对缺失的
-    // key 不报错、不抛异常，直接把 key 原样当文案显示出来——2026-10-12 实测
-    // systemDictionaries、systemFeatureFlags 两条在侧边栏显示成
-    // 「menu.systemDictionaries」。上一份用例管住了 path 与图标，没有管标题，
-    // 所以这两条一路全绿进到了页面上。
-    const localesDir = resolve(process.cwd(), 'src/i18n/locales')
-    const localeFiles = readdirSync(localesDir).filter((f) => f.endsWith('.json'))
-    expect(localeFiles.length, '读不到语言包，后面的断言会真空通过').toBeGreaterThan(5)
+  // Layout.vue / SubMenuItem.vue 渲染标题走 t('menu.' + key)。vue-i18n 对缺失的
+  // key 不报错、不抛异常，直接把 key 原样当文案显示出来——2026-10-12 实测
+  // systemDictionaries、systemFeatureFlags 两条在侧边栏显示成
+  // 「menu.systemDictionaries」。上一份用例管住了 path 与图标，没有管标题，
+  // 所以这两条一路全绿进到了页面上。
+  //
+  // 九语种（zh/en/ja/de/ru/pt/fr/es/ar）是产品承诺的语言矩阵，不是「恰好有九个
+  // JSON 文件」：临时调试文件忘删、某语言包被误删、某语言缺新菜单的 key——
+  // 这些都不会让页面崩，只会让某语言用户看到裸 key 或英文兜底。所以这里
+  // 三道闸一起上：文件集合精确等于九个、每个后端菜单 key 都有非空标题、
+  // 标题不许是占位符（值等于裸 key 说明根本没翻译）。
+  const EXPECTED_LOCALES = ['ar', 'de', 'en', 'es', 'fr', 'ja', 'pt', 'ru', 'zh']
+  const localesDir = resolve(process.cwd(), 'src/i18n/locales')
 
+  // 为什么包一层而不是直接 JSON.parse：解析失败抛的是原生 SyntaxError，
+  // 报错里看不出是哪个语言包坏了；包一层把文件名带进错误信息，坏文件一眼定位。
+  // （JSON 坏了的文件在后面的用例里也会红——这里只是让红得可读。）
+  const loadLocaleJson = (locale) => {
+    const file = `${locale}.json`
+    try {
+      return JSON.parse(readFileSync(resolve(localesDir, file), 'utf8'))
+    } catch (err) {
+      throw new Error(`${file} 不是合法 JSON，语言包加载会失败：${err.message}`, { cause: err })
+    }
+  }
+
+  // 注意这里返回的是语言代码（去掉 .json 后缀），与 EXPECTED_LOCALES 直接可比。
+  const localeFiles = () =>
+    readdirSync(localesDir)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => f.replace(/\.json$/, ''))
+      .sort()
+
+  it('语言包文件集合精确等于九语种 zh/en/ja/de/ru/pt/fr/es/ar（多一个少一个都是矩阵破损）', () => {
+    const actual = localeFiles()
+    expect(
+      actual,
+      `语言包必须是精确的九个：${EXPECTED_LOCALES.join('、')}。\n` +
+        `多出来的通常是临时调试文件忘了删；少掉的那个语言会在页面上静默退回兜底文案。`
+    ).toEqual(EXPECTED_LOCALES)
+  })
+
+  it('注册表里每个菜单 key 在全部语言包都有非空标题（缺一个就渲染成裸 key）', () => {
     const keys = backendMenuItems().map((it) => it.key).filter(Boolean)
     expect(keys.length, '读不到后端菜单 key，后面的断言会真空通过').toBeGreaterThan(20)
 
-    for (const file of localeFiles) {
-      const menuLabels = JSON.parse(readFileSync(resolve(localesDir, file), 'utf8')).menu || {}
+    // 按「语言包 → 缺失 key 列表」汇总成一次断言：以前逐文件断言时，第一个
+    // 红的语言包会吞掉后面语言包的报错，一次只能看见一个文件的缺口。
+    const gaps = []
+    for (const file of localeFiles()) {
+      const menuLabels = loadLocaleJson(file).menu || {}
       const missing = keys.filter((k) => typeof menuLabels[k] !== 'string' || !menuLabels[k].trim()).sort()
-      expect(
-        missing,
-        `${file} 的 menu 段缺这些标题：${missing.join(', ')}\n` +
-          `缺 key 时页面不报错，直接把「menu.xxx」显示在菜单上。`
-      ).toEqual([])
+      if (missing.length) gaps.push(`${file}: ${missing.join(', ')}`)
     }
+    expect(
+      gaps,
+      `以下语言包的 menu 段缺这些标题：\n${gaps.join('\n')}\n` +
+        `缺 key 时页面不报错，直接把「menu.xxx」显示在菜单上。\n` +
+        `补文案时注意：值不许是裸 key 本身，也不许留空白字符串——那是占位符不是翻译。`
+    ).toEqual([])
+  })
+
+  it('标题值不许是裸 key（值等于 key 或 menu.key 说明是占位符，根本没翻译）', () => {
+    // 缺 key 会渲染成裸 key，上一条闸住了；但另一种偷懒是补上 key 却把值写成
+    // key 本身或「menu.xxx」——不缺 key 了，页面上显示的仍然是裸 key。
+    const keys = backendMenuItems().map((it) => it.key).filter(Boolean)
+    const placeholders = []
+    for (const file of localeFiles()) {
+      const menuLabels = loadLocaleJson(file).menu || {}
+      for (const k of keys) {
+        if (menuLabels[k] === k || menuLabels[k] === `menu.${k}`) placeholders.push(`${file}: ${k}`)
+      }
+    }
+    expect(
+      placeholders,
+      `以下语言包的这些标题值是占位符（值等于裸 key），不是真翻译：\n${placeholders.join('\n')}`
+    ).toEqual([])
   })
 })
 
