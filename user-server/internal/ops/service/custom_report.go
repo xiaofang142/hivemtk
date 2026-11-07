@@ -8,7 +8,6 @@ import (
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
-	_db "hivemtk-user/internal/pkg/db"
 	sysrepo "hivemtk-user/internal/repository"
 
 	bizerr "hivemtk-user/internal/domain/errors"
@@ -17,8 +16,11 @@ import (
 )
 
 // CustomReportService 自定义报表服务
+//
+// AV-04c 批次7 刀2：不再持有 *gorm.DB（五段数据源聚合 SQL 下沉
+// opsrepo.CustomReportRepository，谓词拼接下沉 opsrepo.ApplyConds），
+// 构造统一走仓储默认构造（各自解析同一全局句柄，与原同连接）。
 type CustomReportService struct {
-	db          *gorm.DB
 	reportRepo  *opsrepo.CustomReportRepository
 	sessionRepo *sysrepo.CustomerSessionRepository
 	clueRepo    sysrepo.ClueRepository
@@ -27,24 +29,24 @@ type CustomReportService struct {
 
 // NewCustomReportService 创建自定义报表服务
 func NewCustomReportService() *CustomReportService {
-	db := _db.GetDB()
 	return &CustomReportService{
-		db:          db,
-		reportRepo:  opsrepo.NewCustomReportRepositoryWithDB(db),
-		sessionRepo: sysrepo.NewCustomerSessionRepositoryWithDB(db),
-		clueRepo:    sysrepo.NewClueRepositoryWithDB(db),
-		userRfmRepo: sysrepo.NewUserRFMRepositoryWithDB(db),
+		reportRepo:  opsrepo.NewCustomReportRepository(),
+		sessionRepo: sysrepo.NewCustomerSessionRepository(),
+		clueRepo:    sysrepo.NewClueRepositoryDefault(),
+		userRfmRepo: sysrepo.NewUserRFMRepository(),
 	}
 }
 
-// NewCustomReportServiceWithDB 创建指定数据库连接的自定义报表服务实例（用于测试）
-func NewCustomReportServiceWithDB(db *gorm.DB) *CustomReportService {
+// NewCustomReportServiceWithRepos repo 注入构造（测试/装配方显式注入仓储；
+// 替代原 NewCustomReportServiceWithDB 的 *gorm.DB 形参，句柄不出仓储层）。
+func NewCustomReportServiceWithRepos(reportRepo *opsrepo.CustomReportRepository,
+	sessionRepo *sysrepo.CustomerSessionRepository, clueRepo sysrepo.ClueRepository,
+	userRfmRepo *sysrepo.UserRFMRepository) *CustomReportService {
 	return &CustomReportService{
-		db:          db,
-		reportRepo:  opsrepo.NewCustomReportRepositoryWithDB(db),
-		sessionRepo: sysrepo.NewCustomerSessionRepositoryWithDB(db),
-		clueRepo:    sysrepo.NewClueRepositoryWithDB(db),
-		userRfmRepo: sysrepo.NewUserRFMRepositoryWithDB(db),
+		reportRepo:  reportRepo,
+		sessionRepo: sessionRepo,
+		clueRepo:    clueRepo,
+		userRfmRepo: userRfmRepo,
 	}
 }
 
@@ -271,41 +273,12 @@ func (s *CustomReportService) querySessionData(ctx context.Context, report *mode
 
 	conds, args := BuildReportFilterSQL("sessions", report.Filters)
 
-	type sessionAgg struct {
-		DimValue     string
-		SessionCount int64
-		MessageSum   int64
-	}
-
 	dimField := "status"
 	if len(dimensions) > 0 {
 		dimField = dimensions[0].Field
 	}
-	var groupExpr, dimValueExpr string // 分支（含 default）各自赋值
-	switch dimField {
-	case "date", "created_at":
-		groupExpr = "DATE(created_at)"
-		dimValueExpr = "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
-	case "agent_name":
-		groupExpr = "COALESCE(NULLIF(agent_name, ''), '未分配')"
-		dimValueExpr = "COALESCE(NULLIF(agent_name, ''), '未分配')"
-	case "platform":
-		// 与 queryMessageData / report_filter.go 白名单对齐：platform 是合法维度，
-		// 不能静默落到 default 的 status 列（曾把平台分布画成会话状态分布）。
-		groupExpr = "COALESCE(NULLIF(platform, ''), 'unknown')"
-		dimValueExpr = "COALESCE(NULLIF(platform, ''), 'unknown')"
-	default:
-		groupExpr = "status"
-		dimValueExpr = "status::text"
-	}
-
-	q := s.db.WithContext(ctx).Table("customer_sessions").
-		Select(dimValueExpr + " AS dim_value, COUNT(*) AS session_count, COALESCE(SUM(message_count), 0) AS message_sum").
-		Group(groupExpr).
-		Order(groupExpr)
-	q = applyConds(q, conds, args)
-	var aggs []sessionAgg
-	if err := q.Scan(&aggs).Error; err != nil {
+	aggs, err := s.reportRepo.AggregateSessionsByDim(ctx, dimField, conds, args)
+	if err != nil {
 		return nil, err
 	}
 
@@ -362,34 +335,10 @@ func (s *CustomReportService) queryMessageData(ctx context.Context, report *mode
 		metricField = metrics[0].Field
 	}
 
-	type msgAgg struct {
-		DimValue string
-		Count    int64
-	}
-
 	conds, args := BuildReportFilterSQL("messages", report.Filters)
 
-	var dimValueExpr, groupExpr string // 三个分支（含 default）各自赋值
-	switch dimField {
-	case "date", "created_at":
-		groupExpr = "DATE(created_at)"
-		dimValueExpr = "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
-	case "platform":
-		groupExpr = "COALESCE(platform, 'unknown')"
-		dimValueExpr = "COALESCE(platform, 'unknown')"
-	default:
-		groupExpr = "COALESCE(content_type, 'unknown')"
-		dimValueExpr = "COALESCE(content_type, 'unknown')"
-	}
-
-	q := s.db.WithContext(ctx).
-		Table("unified_messages").
-		Select(dimValueExpr + " AS dim_value, COUNT(*) AS count").
-		Group(groupExpr).
-		Order(groupExpr)
-	q = applyConds(q, conds, args)
-	var aggs []msgAgg
-	if err := q.Scan(&aggs).Error; err != nil {
+	aggs, err := s.reportRepo.AggregateMessagesByDim(ctx, dimField, conds, args)
+	if err != nil {
 		return nil, err
 	}
 
@@ -436,33 +385,8 @@ func (s *CustomReportService) queryClueData(ctx context.Context, report *model.C
 	if len(dimensions) > 0 {
 		dimField = dimensions[0].Field
 	}
-	var dimValueExpr, groupExpr string // 各分支（含 default）各自赋值
-	switch dimField {
-	case "is_verify":
-		dimValueExpr = "is_verify::text"
-		groupExpr = "is_verify"
-	case "level":
-		dimValueExpr = "COALESCE(NULLIF(level, ''), 'warm')"
-		groupExpr = "COALESCE(NULLIF(level, ''), 'warm')"
-	case "is_group":
-		dimValueExpr = "is_group::text"
-		groupExpr = "is_group"
-	default:
-		dimValueExpr = "type::text"
-		groupExpr = "type"
-	}
-
-	type clueAgg struct {
-		DimValue string
-		Count    int64
-	}
-	q := s.db.WithContext(ctx).Table("clues").
-		Select(dimValueExpr + " AS dim_value, COUNT(*) AS count").
-		Group(groupExpr).
-		Order(groupExpr)
-	q = applyConds(q, conds, args)
-	var aggs []clueAgg
-	if err := q.Scan(&aggs).Error; err != nil {
+	aggs, err := s.reportRepo.AggregateCluesByDim(ctx, dimField, conds, args)
+	if err != nil {
 		return nil, err
 	}
 
@@ -587,33 +511,9 @@ func (s *CustomReportService) queryUserData(ctx context.Context, report *model.C
 		dimField = dimensions[0].Field
 	}
 
-	var groupExpr, dimValueExpr string // 三个分支（含 default）各自赋值
-	switch dimField {
-	case "user_type", "churn_risk":
-		groupExpr = "churn_risk"
-		dimValueExpr = "churn_risk::text"
-	case "date", "created_at":
-		groupExpr = "DATE(created_at)"
-		dimValueExpr = "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
-	default:
-		groupExpr = "DATE(created_at)"
-		dimValueExpr = "TO_CHAR(DATE(created_at), 'YYYY-MM-DD')"
-	}
-
-	type userAgg struct {
-		DimValue string
-		Count    int64
-	}
-
 	conds, args := BuildReportFilterSQL("users", report.Filters)
-	q := s.db.WithContext(ctx).
-		Table("customers").
-		Select(dimValueExpr + " AS dim_value, COUNT(*) AS count").
-		Group(groupExpr).
-		Order(groupExpr)
-	q = applyConds(q, conds, args)
-	var aggs []userAgg
-	if err := q.Scan(&aggs).Error; err != nil {
+	aggs, err := s.reportRepo.AggregateUsersByDim(ctx, dimField, conds, args)
+	if err != nil {
 		return nil, err
 	}
 
@@ -656,19 +556,8 @@ func (s *CustomReportService) queryAgentData(ctx context.Context, report *model.
 		return nil, fmt.Errorf("解析报表指标配置失败: %w", err)
 	}
 
-	type agentAgg struct {
-		AgentName       string
-		SessionCount    int64
-		AvgResponseTime float64
-	}
-	var aggs []agentAgg
-	if err := s.db.WithContext(ctx).
-		Table("customer_sessions").
-		Select("agent_name AS agent_name, COUNT(*) AS session_count, COALESCE(AVG(avg_response_time), 0) AS avg_response_time").
-		Where("agent_name IS NOT NULL AND agent_name <> ''").
-		Group("agent_name").
-		Order("session_count DESC").
-		Scan(&aggs).Error; err != nil {
+	aggs, err := s.reportRepo.AggregateAgentSessions(ctx)
+	if err != nil {
 		return nil, err
 	}
 

@@ -29,8 +29,7 @@ func setupCustomReportServiceTestDB(t *testing.T) *gorm.DB {
 func setupCustomReportService(t *testing.T, testDB *gorm.DB) *CustomReportService {
 	db.SetTestDB(testDB)
 	return &CustomReportService{
-		db:          testDB,
-		reportRepo:  opsrepo.NewCustomReportRepository(),
+		reportRepo:  opsrepo.NewCustomReportRepository(), // 自取全局句柄（上行为测试库）
 		sessionRepo: sysrepo.NewCustomerSessionRepository(),
 		clueRepo:    sysrepo.NewClueRepositoryWithDB(testDB),
 		userRfmRepo: sysrepo.NewUserRFMRepository(),

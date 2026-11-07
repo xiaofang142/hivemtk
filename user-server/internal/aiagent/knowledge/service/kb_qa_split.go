@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/kbcrawler"
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	internalmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/async"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -31,9 +32,13 @@ type LLMClient interface {
 }
 
 // QASplitService QA 拆分服务
+//
+// AV-04c 批次7 刀3：不再持有 *gorm.DB（kb_documents 读取与 qa_candidates 落库
+// 下沉 knowledgeRepo），构造收口为仓储注入/Default。
 type QASplitService struct {
-	db  *gorm.DB
-	llm LLMClient
+	docs   *knowledgeRepo.KBCrawlerRepository // kb_documents 读口（QA 拆分取正文）
+	qaRepo *knowledgeRepo.QACandidateRepository
+	llm    LLMClient
 
 	mu      sync.Mutex
 	pending []qaTask // 简单内存队列：一篇文档一个任务（§5.1，不建任务表）
@@ -44,9 +49,14 @@ type QASplitService struct {
 	MaxQAPerBatch int
 }
 
-// NewQASplitService 构造
-func NewQASplitService(db *gorm.DB, llm LLMClient) *QASplitService {
-	return &QASplitService{db: db, llm: llm, MaxDocTokens: 8000, MaxQAPerBatch: 5}
+// NewQASplitService 构造（仓储 Default 构造自取全局句柄；与传 GetDB() 同连接同时刻）。
+func NewQASplitService(llm LLMClient) *QASplitService {
+	return NewQASplitServiceWithRepos(knowledgeRepo.NewKBCrawlerRepositoryDefault(), knowledgeRepo.NewQACandidateRepositoryDefault(), llm)
+}
+
+// NewQASplitServiceWithRepos 仓储注入构造（装配方/测试显式注入）。
+func NewQASplitServiceWithRepos(docs *knowledgeRepo.KBCrawlerRepository, qaRepo *knowledgeRepo.QACandidateRepository, llm LLMClient) *QASplitService {
+	return &QASplitService{docs: docs, qaRepo: qaRepo, llm: llm, MaxDocTokens: 8000, MaxQAPerBatch: 5}
 }
 
 type qaTask struct {
@@ -103,8 +113,8 @@ type qaItem struct {
 // ProcessDocument 对一篇文档执行 QA 拆分：读 kb_documents.content → LLM → 落候选行。
 // taskID = qa_<docID>_<unixnano>（一篇文档一个任务，task_id 聚合判断完成度）。
 func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) error {
-	var doc internalmodel.KBDocument
-	if err := s.db.WithContext(ctx).First(&doc, docID).Error; err != nil {
+	doc, err := s.docs.GetDocumentByID(ctx, docID)
+	if err != nil {
 		return fmt.Errorf("读文档失败: %w", err)
 	}
 	if doc.Content == "" {
@@ -168,7 +178,7 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 	if len(rows) == 0 {
 		return nil
 	}
-	return s.db.WithContext(ctx).Create(&rows).Error
+	return s.qaRepo.CreateBatch(ctx, &rows)
 }
 
 // parseQAOutput 解析 LLM 输出 JSON 数组（容忍前后多余文字）
@@ -199,40 +209,27 @@ func estimateTokens(s string) int {
 
 // ListQACandidates 候选列表（source_type/status 过滤，T1 前端复用同一接口语义）
 func (s *QASplitService) ListQACandidates(ctx context.Context, sourceType, status string, page, pageSize int) ([]internalmodel.QACandidate, int64, error) {
-	q := s.db.WithContext(ctx).Model(&internalmodel.QACandidate{})
-	if sourceType != "" {
-		q = q.Where("source_type = ?", sourceType)
-	}
-	if status != "" {
-		q = q.Where("status = ?", status)
-	}
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	var out []internalmodel.QACandidate
-	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&out).Error
-	return out, total, err
+	return s.qaRepo.List(ctx, sourceType, status, page, pageSize)
 }
 
 // ReviewQACandidate 裁决候选（approve/reject；走 QACandidateTransitionAllowed）
 func (s *QASplitService) ReviewQACandidate(ctx context.Context, id uint64, to, reviewer string) error {
-	var c internalmodel.QACandidate
-	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
+	c, err := s.qaRepo.GetByID(ctx, id)
+	if err != nil {
 		// D-25：not-found 语义必须保留，controller 依赖 errhttp.IsNotFoundError 映射 404
 		return gorm.ErrRecordNotFound
 	}
 	if !internalmodel.QACandidateTransitionAllowed(c.Status, to) {
 		return fmt.Errorf("非法状态跃迁: %s → %s", c.Status, to)
 	}
-	return s.db.WithContext(ctx).Model(&c).Updates(map[string]any{"status": to, "reviewer": reviewer}).Error
+	return s.qaRepo.UpdateReview(ctx, id, map[string]any{"status": to, "reviewer": reviewer})
 }
 
 // PublishQACandidate approved → indexed：QA 对转成知识库文档（answer 为正文、
 // question 进 metadata 语义上由 title 承载），走 ProcessDocumentByID 同链路。
 func (s *QASplitService) PublishQACandidate(ctx context.Context, id uint64, kb *KnowledgeBaseService) error {
-	var c internalmodel.QACandidate
-	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
+	c, err := s.qaRepo.GetByID(ctx, id)
+	if err != nil {
 		// D-25：not-found 语义必须保留，controller 依赖 errhttp.IsNotFoundError 映射 404
 		return gorm.ErrRecordNotFound
 	}
@@ -247,10 +244,10 @@ func (s *QASplitService) PublishQACandidate(ctx context.Context, id uint64, kb *
 		FileSize: int64(len(c.Answer)),
 		Status:   internalmodel.KBDocumentStatusPending,
 	}
-	if err := s.db.WithContext(ctx).Create(doc).Error; err != nil {
+	if err := s.docs.CreateDocument(ctx, doc); err != nil {
 		return fmt.Errorf("落知识库文档失败: %w", err)
 	}
-	if err := s.db.WithContext(ctx).Model(&c).Update("status", internalmodel.QACandidateStatusIndexed).Error; err != nil {
+	if err := s.qaRepo.UpdateStatus(ctx, id, internalmodel.QACandidateStatusIndexed); err != nil {
 		return err
 	}
 	go kb.ProcessDocumentByID(context.Background(), doc.ID)

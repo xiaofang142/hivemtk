@@ -10,8 +10,10 @@ import (
 
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
+	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
+	sysrepo "hivemtk-user/internal/repository"
 )
 
 func TestExportReportDataCSV_HeaderAndRows(t *testing.T) {
@@ -90,7 +92,12 @@ func TestCustomReportService_ExportCSV_FullPath(t *testing.T) {
 	database := testutil.NewTestDB(t, &sysmodel.UnifiedMessage{})
 	db.SetTestDB(database)
 
-	svc := NewCustomReportServiceWithDB(database)
+	svc := NewCustomReportServiceWithRepos(
+		opsrepo.NewCustomReportRepositoryWithDB(database),
+		sysrepo.NewCustomerSessionRepositoryWithDB(database),
+		sysrepo.NewClueRepositoryWithDB(database),
+		sysrepo.NewUserRFMRepositoryWithDB(database),
+	)
 
 	report := &model.CustomReport{
 		Name:       "消息类型分布",

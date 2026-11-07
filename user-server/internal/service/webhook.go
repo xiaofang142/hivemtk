@@ -125,55 +125,31 @@ type WebhookChannel string
 //
 // 句柄由各 repository 自取全局库（测试用 db.SetTestDB／testutil 换库），
 // 构造器不经手 *gorm.DB；未装配库时仍可构造，是否连上由 connected() 判。
+// AV-04c 批次7：原先「构造器取 repository.GetDB() 再逐仓 SetDB」的装配删除——
+// 各仓无参构造已自取同一全局句柄（dbstate 单源），SetDB 重设是同值冗余；
+// 消息四仓改 DBReady() 探针保持「无库留 nil」语义，句柄不再在 service 过手。
 func NewWebhookService() *WebhookService {
-	db := repository.GetDB()
 	guardInsecureWebhookAtStartup()
 	wecomRepo := repository.NewWeComAccountRepository()
-	if db != nil {
-		wecomRepo.SetDB(context.Background(), db)
-	}
 	accountRepo := repository.NewIntegrationAccountRepository()
-	if db != nil {
-		accountRepo.SetDB(context.Background(), db)
-	}
 	eventRepo := repository.NewWebhookEventRepository()
-	if db != nil {
-		repository.SetWebhookEventRepoDB(eventRepo, db)
-	}
 	telegramRepo := repository.NewTelegramAccountRepository()
-	if db != nil {
-		telegramRepo.SetDB(context.Background(), db)
-	}
 	qqRepo := repository.NewQQAccountRepository()
-	if db != nil {
-		qqRepo.SetDB(context.Background(), db)
-	}
 	feishuRepo := repository.NewFeishuAccountRepository()
-	if db != nil {
-		feishuRepo.SetDB(context.Background(), db)
-	}
 	feishuMsgRepo := repository.NewFeishuMessageRepository()
-	if db != nil {
-		feishuMsgRepo.SetDB(context.Background(), db)
-	}
 	waRepo := repository.NewWhatsAppCloudAccountRepository()
-	if db != nil {
-		waRepo.SetDB(context.Background(), db)
-	}
 
 	var messageHubRepo *repository.MessageHubRepository
-	if db != nil {
+	if repository.DBReady() {
 		messageHubRepo = repository.NewMessageHubRepository()
-		repository.SetMessageHubRepoDB(messageHubRepo, db)
 	}
 	var inboxConvRepo *repository.InboxConversationRepository
-	if db != nil {
+	if repository.DBReady() {
 		inboxConvRepo = repository.NewInboxConversationRepository()
-		repository.SetInboxConversationRepoDB(inboxConvRepo, db)
 	}
 	var unifiedMsgRepo repository.UnifiedMessageRepository
-	if db != nil {
-		unifiedMsgRepo = repository.NewUnifiedMessageRepositoryWithDB(db)
+	if repository.DBReady() {
+		unifiedMsgRepo = repository.NewUnifiedMessageRepository()
 	}
 	s := &WebhookService{
 		eventRepo:         eventRepo,
@@ -193,7 +169,7 @@ func NewWebhookService() *WebhookService {
 		messageHubRepo:    messageHubRepo,
 		inboxConvRepo:     inboxConvRepo,
 		unifiedMsgRepo:    unifiedMsgRepo,
-		delayedRepo:       repository.NewDelayedOutboundRepository(db),
+		delayedRepo:       repository.NewDelayedOutboundRepositoryDefault(),
 		ingressSvc:        NewInboxIngressService(),
 		integrations: webhookIntegrations{
 			feishu: func() *FeishuIntegrationService { return NewFeishuIntegrationService(feishuRepo, feishuMsgRepo) },
@@ -239,30 +215,24 @@ func (s *WebhookService) connected() bool {
 	return s != nil && s.eventRepo != nil && s.eventRepo.Connected()
 }
 
-// ensureReposFromDB 懒建四件下游 repo：句柄只在装配瞬间从 eventRepo（构造器必设）
-// 取一次——持有者是 repo，service 不存字段。放到 dispatch 首用时建是既有行为，
-// 这里不提前到构造器。
+// ensureReposFromDB 懒建四件下游 repo：连接与 eventRepo 同源（仓储层 Shared
+// 构造内部对齐），service 不取句柄也不存字段。放到 dispatch 首用时建是既有
+// 行为，这里不提前到构造器；来源仓储缺句柄时 Shared 返回 nil，懒装配语义不变。
 func (s *WebhookService) ensureReposFromDB(ctx context.Context) {
 	if s == nil || s.eventRepo == nil {
 		return
 	}
-	db := s.eventRepo.GetDB()
-	if db == nil {
-		return
-	}
 	if s.messageHubRepo == nil {
-		s.messageHubRepo = repository.NewMessageHubRepository()
-		repository.SetMessageHubRepoDB(s.messageHubRepo, db)
+		s.messageHubRepo = repository.NewMessageHubRepositoryShared(s.eventRepo)
 	}
 	if s.inboxConvRepo == nil {
-		s.inboxConvRepo = repository.NewInboxConversationRepository()
-		repository.SetInboxConversationRepoDB(s.inboxConvRepo, db)
+		s.inboxConvRepo = repository.NewInboxConversationRepositoryShared(s.eventRepo)
 	}
 	if s.unifiedMsgRepo == nil {
-		s.unifiedMsgRepo = repository.NewUnifiedMessageRepositoryWithDB(db)
+		s.unifiedMsgRepo = repository.NewUnifiedMessageRepositoryShared(s.eventRepo)
 	}
 	if s.clueRepo == nil {
-		s.clueRepo = repository.NewClueRepositoryWithDB(db)
+		s.clueRepo = repository.NewClueRepositoryShared(s.eventRepo)
 	}
 }
 

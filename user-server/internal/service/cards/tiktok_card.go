@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/repository"
 	"time"
@@ -30,12 +29,11 @@ type tiktokCardService struct {
 	shortLinkRepo repository.ShortLinkRepository
 }
 
-// NewTikTokCardService 创建 TikTok 卡片服务
+// NewTikTokCardService 创建 TikTok 卡片服务（句柄由仓储 Default 构造自取全局库）
 func NewTikTokCardService() TikTokCardService {
-	db := dbUtil.GetDB()
 	return &tiktokCardService{
-		repo:          repository.NewTikTokCardRepository(db),
-		shortLinkRepo: repository.NewShortLinkRepository(db),
+		repo:          repository.NewTikTokCardRepositoryDefault(),
+		shortLinkRepo: repository.NewShortLinkRepositoryDefault(),
 	}
 }
 

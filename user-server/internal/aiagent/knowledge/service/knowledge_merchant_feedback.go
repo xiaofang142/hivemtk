@@ -30,7 +30,7 @@ func (s *KnowledgeMerchantService) SubmitFeedback(ctx context.Context, req *Subm
 	if req.Rating < -1 || req.Rating > 1 {
 		return errors.New("rating 必须在 [-1, 0, 1]")
 	}
-	if s.db == nil {
+	if !s.dbReady() {
 		return nil
 	}
 	s.ensureReposFromDB()
@@ -67,7 +67,7 @@ type ListFeedbacksRequest struct {
 
 // ListFeedbacks 反馈列表
 func (s *KnowledgeMerchantService) ListFeedbacks(ctx context.Context, req *ListFeedbacksRequest) ([]model.KnowledgeFeedback, int64, error) {
-	if s.db == nil {
+	if !s.dbReady() {
 		return nil, 0, nil
 	}
 	s.ensureReposFromDB()
@@ -86,7 +86,7 @@ func (s *KnowledgeMerchantService) ListFeedbacks(ctx context.Context, req *ListF
 
 // FeedbackStats 评价分布（全量，不随分页变化）
 func (s *KnowledgeMerchantService) FeedbackStats(ctx context.Context, productID string) (repository.FeedbackStats, error) {
-	if s.db == nil {
+	if !s.dbReady() {
 		return repository.FeedbackStats{}, nil
 	}
 	s.ensureReposFromDB()

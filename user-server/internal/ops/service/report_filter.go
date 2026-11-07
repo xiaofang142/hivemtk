@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/ops/model"
-
-	"gorm.io/gorm"
 )
 
 var filterFieldWhitelist = map[string]map[string]string{
@@ -98,9 +96,6 @@ func isAllDigits(s string) bool {
 	return len(s) > 0
 }
 
-func applyConds(base *gorm.DB, conds []string, args []any) *gorm.DB {
-	if len(conds) == 0 {
-		return base
-	}
-	return base.Where(strings.Join(conds, " AND "), args...)
-}
+// applyConds 已随 AV-04c 批次7 刀2 下沉 ops 仓储（opsrepo.ApplyConds，谓词组装
+// 逻辑逐字保留）；本文件自此只做过滤器 JSON→安全谓词片段的白名单解析，不再持有
+// *gorm.DB。唯一调用方 custom_report.go 已同步改为仓储聚合方法。

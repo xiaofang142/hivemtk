@@ -25,6 +25,12 @@ func NewKnowledgeChunkRepository(db *gorm.DB) *KnowledgeChunkRepository {
 	return &KnowledgeChunkRepository{db: db}
 }
 
+// NewKnowledgeChunkRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：创建知识库分段仓储装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeChunkRepositoryDefault() *KnowledgeChunkRepository {
+	return NewKnowledgeChunkRepository(_db.GetDB())
+}
+
 // Create 创建分段
 //
 // T-P9-02：写入前先过一次版本打戳（见 kbrelease.StampForWrite）。收在仓储这里而不是

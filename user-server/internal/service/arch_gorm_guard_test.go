@@ -509,14 +509,31 @@ func gormGuardScanFile(path string) (gormGuardStat, []gormGuardFinding, error) {
 // 失效（文件没了或已清零）一律红。逐条明细（规则/行号/原因）见 AV-04c 存量清单，
 // 与 check-architecture.sh 扩面后的全域读数同源。
 var gormGuardRatchet = map[string]gormGuardStat{
-	// ---- aiagent/knowledge 域（17 句柄 / 1 事务 / 6 GetDB）----
-	"user-server/internal/aiagent/knowledge/service/kb_crawler.go":           {handles: 2},
-	"user-server/internal/aiagent/knowledge/service/kb_qa_split.go":          {handles: 2},
-	"user-server/internal/aiagent/knowledge/service/knowledge.go":            {handles: 3, getdb: 1},
-	"user-server/internal/aiagent/knowledge/service/knowledge_base.go":       {handles: 2, tx: 1, getdb: 2}, // tx=1：全域唯一真 Transaction 回调（DeleteDocument）
-	"user-server/internal/aiagent/knowledge/service/knowledge_merchant.go":   {handles: 3, getdb: 1},        // 含 GetDB() *gorm.DB 方法声明（返回句柄）
-	"user-server/internal/aiagent/knowledge/service/knowledge_statistics.go": {handles: 2, getdb: 1},
-	"user-server/internal/aiagent/knowledge/service/rag_searcher.go":         {handles: 3, getdb: 1},
+	// ---- aiagent/knowledge 域（0 句柄 / 1 事务 / 0 GetDB）----
+	// AV-04c 批次7（2026-11-07）刀3：kb_crawler 句柄 2、kb_qa_split 句柄 2 清零除名
+	// —— 爬取源/批次/入库（kb_documents+kb_document_chunks）SQL 下沉
+	// knowledgeRepo.KBCrawlerRepository（含 Scan/Count 错误路径「错误按 0 计」语义
+	// 逐字保留，调用方显式忽略），qa_candidates 落库/列表/审核下沉
+	// knowledgeRepo.QACandidateRepository；两服务构造改仓储注入/Default
+	//（NewCrawlerService(kb)/NewQASplitService(llm)，装配点 router/service_routes.go
+	// 与 router/system_routes.go 同步）。回归见 service/kb_crawler_sink_test.go 与
+	// service/kb_qa_split_sink_test.go。
+	// AV-04c 批次7（2026-11-07）刀4：knowledge.go 3+1、knowledge_merchant.go 3+1
+	//（含 GetDB() *gorm.DB 方法声明，随字段一并删除）、knowledge_statistics.go 2+1、
+	// rag_searcher.go 3+1 清零除名 —— 六仓储九仓 Default/WithDeps 双构造收口
+	//（NewKnowledgeService/NewKnowledgeServiceWithDeps 等，WithDB 的 *gorm.DB 形参
+	// 全域清零，装配点 cmd/websitekb、app/kb_release_wiring、agent/tooluse、router
+	// 全部同步）；rag_searcher 三段直查（weights/bm25×2/vector）下沉
+	// knowledgeRepo（repository/rag_search.go，SQL/谓词/排序逐字保留），
+	// NewHybridSearcher/NewCachedEmbeddingClient/NewContextualRetrievalEnhancer
+	// 三接缝经 kbsearch（llm×ragretrieval×gorm 交汇点，llm→platform→repository→
+	// kbrepo 环使仓储无法直引 llm 类型），连接经仓储泛型 WithConn 递入；
+	// knowledge_base.go 句柄 2 + getdb 2 清零、tx=1 保留（AV-03 钉住的唯一合法
+	// Transaction 回调 DeleteDocument，回调体逐字未动，句柄解析改
+	// KBDocumentRepository.Transaction 仓储接缝）；连带文件 knowledge_base_import
+	// （docs.GetByID）、knowledge_merchant 五 nil-guard（s.db==nil→dbReady() 探针）。
+	// 回归见 service/knowledge_tx_seam_test.go 与 service/rag_search_sink_test.go。
+	"user-server/internal/aiagent/knowledge/service/knowledge_base.go": {tx: 1}, // tx=1：AV-03 钉住的唯一真 Transaction 回调（DeleteDocument，仓储接缝保形）
 	// ---- browser_automation 域（0 句柄 / 0 GetDB）----
 	// AV-04c 批次3（2026-11-07）：feedback.go getdb 1 清零除名 —— notifyFailure 的
 	// system_users Raw 邮箱查询下沉 SystemUserRepository.GetEmailByID（显式
@@ -561,14 +578,28 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// DashboardScreenRepository（ops/repository/dashboard_screen.go，谓词/投影/
 	// 排序/HasTable 守卫逐字保留）；report_filter.go 仍登记 {handles: 2}（applyConds
 	// 形参+返回值，唯一调用方 custom_report.go 在途未收口，随其批次一并清零）。
-	"user-server/internal/ops/service/custom_report.go": {handles: 2, getdb: 1},
-	"user-server/internal/ops/service/report_filter.go": {handles: 2},
-	// ---- 根域 internal/service（0 句柄 / 1 事务 / 34 GetDB）----
+	// AV-04c 批次7（2026-11-07）刀2：custom_report 句柄 2 + getdb 1、report_filter
+	// 句柄 2 清零除名，ops 域整域出快照 —— 五段数据源聚合 SQL（sessions/messages/
+	// clues/users/agents，dimField→表达式映射逐字保留）下沉 opsrepo.CustomReport-
+	// Repository.Aggregate*ByDim/AggregateAgentSessions；report_filter 的 applyConds
+	// 下沉 opsrepo.ApplyConds（谓词组装逐字保留），service 只留过滤器白名单解析；
+	// db 字段/构造器 getdb/NewCustomReportServiceWithDB 形参改仓储注入构造
+	// NewCustomReportServiceWithRepos（四处装配/测试点同步）。回归见
+	// ops/service/custom_report_sink_test.go 与 ops/repository/custom_report_agg_test.go。
+	// ---- 根域 internal/service（0 句柄 / 1 事务 / 0 GetDB）----
 	// AV-04c 批次4（2026-11-07）：auth.go getdb 1 清零除名（开户赠送改
 	// NewStarterKitRepositoryDefault，repository/starter_kit.go）；feedback_loop/
 	// sop_optimization_gate.go getdb 1 清零除名（改 FeedbackLoopRepository.
 	// TraceLearningRepo() 共享连接，FeedbackLoopRepository.GetDB 方法随之删除）。
-	"user-server/internal/service/cards/tiktok_card.go": {getdb: 1},
+	// AV-04c 批次7（2026-11-07）刀1：cards/tiktok_card getdb 1、根域
+	// knowledge_base/openapi/webhook/wecom getdb 1+2+2+1 清零除名 —— 五文件装配
+	// 收口为仓储 Default 构造（KnowledgeBase/KBItemBinding/WeComTag/ShortLink/
+	// KnowledgeOpenAPI/KnowledgeDocument 六仓新增 Default），webhook 构造器删
+	// GetDB+逐仓 SetDB 同值冗余（各仓无参构造已自取同一 dbstate 全局句柄）、
+	// 消息三仓改 DBReady() 探针保持「无库留 nil」；懒装配 ensureReposFromDB 改
+	// 仓储 Shared 构造（MessageHub/InboxConversation/UnifiedMessage/Clue 四仓
+	// 新增 Shared(evRepo)，与 eventRepo 同连接同源），句柄不再在 service 过手。
+	// 回归见 service/webhook_wiring_default_test.go。
 	// AV-04c 批次5（2026-11-07）：customer_session getdb 3、customer_session_scope
 	// getdb 2 清零除名 —— 待处理池列表/计数（管理员与坐席隔离两口径）下沉
 	// CustomerSessionRepository.ListPending* / CountByStatuses*，送达回写下沉
@@ -596,8 +627,6 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// InitFeedbackCollector / InitFeedbackLoopComponents 两个装配点改
 	// NewFeedbackLoopRepositoryDefault（句柄解析下沉仓储层，同连接同时刻；
 	// 回归见 service/feedback_loop_init_wiring_test.go）。
-	"user-server/internal/service/knowledge_base.go": {getdb: 1},
-	"user-server/internal/service/openapi.go":        {getdb: 2},
 	// AV-04c 批次6（2026-11-07）刀3+刀4：tenant/feedback_loop_init/trace_learning
 	// 四文件 getdb 全部清零 —— tenant 开户赠送改 NewStarterKitRepositoryDefault、
 	// feedback 两个装配点改 NewFeedbackLoopRepositoryDefault（句柄解析下沉仓储层）；
@@ -608,8 +637,6 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// 回归见 service/feedback_loop_init_wiring_test.go 与
 	// service/trace_learning/run_batch_conn_seam_test.go。
 	"user-server/internal/service/trace_learning/service.go": {tx: 1},
-	"user-server/internal/service/webhook.go":                {getdb: 2},
-	"user-server/internal/service/wecom.go":                  {getdb: 1},
 }
 
 // ----------------------------------------------------------------------------

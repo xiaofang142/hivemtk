@@ -21,6 +21,7 @@
 package app
 
 import (
+	kbrepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -52,9 +53,17 @@ func InitKBReleaseRuntime(db *gorm.DB) *service.KBReleaseService {
 		approvals,
 		// 向量补算走 aiagent 那一份 KnowledgeService：per-product 的 embedding 配置
 		// （provider_config_json）只有它读得到，另造一份就会把"这个库用的是哪个向量端点"
-		// 这件事在两层各记一遍。用 WithDB 形式而不是 NewKnowledgeService()：后者内部取
-		// 全局句柄，装配点就说不清"这条链用的是哪把句柄"。
-		knowledgesvc.NewKnowledgeServiceWithDB(db),
+		// 这件事在两层各记一遍。用 WithDeps 形式而不是 NewKnowledgeService()：后者内部取
+		// 全局句柄，装配点就说不清"这条链用的是哪把句柄"。（批次7 刀4：WithDB 的
+		// *gorm.DB 形参清零，改为仓储注入，句柄仍在本装配点显式给出。）
+		knowledgesvc.NewKnowledgeServiceWithDeps(knowledgesvc.KnowledgeServiceDeps{
+			RagRepo:       kbrepo.NewRagConfigRepository(db),
+			DocRepo:       kbrepo.NewKnowledgeDocumentRepository(db),
+			ChunkRepo:     kbrepo.NewKnowledgeChunkRepository(db),
+			ParentRepo:    kbrepo.NewKnowledgeChunkParentRepository(db),
+			ImportLogRepo: kbrepo.NewKnowledgeImportLogRepository(db),
+			SearchLogRepo: kbrepo.NewKnowledgeSearchLogRepository(db),
+		}),
 	)
 	service.SetGlobalKBReleaseService(svc)
 

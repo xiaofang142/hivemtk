@@ -8,6 +8,7 @@ import (
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/model"
+	db "hivemtk-user/internal/pkg/db"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -51,7 +52,8 @@ func setupKMRouter(t *testing.T, ctrl *KnowledgeMerchantController) *gin.Engine 
 	router := gin.New()
 	db := setupKMSvcTestDB(t)
 	seedRagProducts(db)
-	ctrl.svc = knowledgesvc.NewKnowledgeMerchantServiceWithDB(db)
+	// 批次7 刀4：WithDB 的 *gorm.DB 形参清零；NewTestDB 已装配全局句柄，Default 构造同连接。
+	ctrl.svc = knowledgesvc.NewKnowledgeMerchantService()
 	group := router.Group("/api")
 	group.Use(func(c *gin.Context) {
 		c.Set("operator", "tester")
@@ -449,7 +451,7 @@ func TestKM_EndToEnd_ExternalImport_WithToken(t *testing.T) {
 
 func TestKM_SubmitFeedback_NilDB_NoPanic(t *testing.T) {
 	ctrl := &KnowledgeMerchantController{
-		svc: knowledgesvc.NewKnowledgeMerchantServiceWithDB(nil),
+		svc: knowledgesvc.NewKnowledgeMerchantServiceWithDeps(knowledgesvc.KnowledgeMerchantDeps{}), // 零值 deps = 原 WithDB(nil) 无库语义
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -476,6 +478,7 @@ var _ = context.Background
 func TestKM_Playground_WithData(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{
 		ProductID:  pid,
@@ -483,21 +486,21 @@ func TestKM_Playground_WithData(t *testing.T) {
 		SourceType: model.SourceTypeBatch,
 		Status:     1,
 	}
-	ctrl.svc.GetDB().Create(doc)
+	db.Create(doc)
 	chunks := []model.KnowledgeChunk{
 		{DocumentID: doc.ID, ProductID: pid, ChunkIndex: 0, Content: "退货政策: 请在订单页面申请退货,7天内处理", ContentHash: "h1", CharCount: 30, TokenCount: 10},
 		{DocumentID: doc.ID, ProductID: pid, ChunkIndex: 1, Content: "运费说明: 满99包邮,否则10元运费", ContentHash: "h2", CharCount: 30, TokenCount: 10},
 	}
 	v := ragretrieval.NewVectorizer(0, nil)
 	for i := range chunks {
-		if err := ctrl.svc.GetDB().Create(&chunks[i]).Error; err != nil {
+		if err := db.Create(&chunks[i]).Error; err != nil {
 			t.Fatalf("create chunk: %v", err)
 		}
 		vec, err := v.EmbedText(chunks[i].Content)
 		if err != nil {
 			t.Fatalf("embed chunk %d: %v", i, err)
 		}
-		if err := ctrl.svc.GetDB().
+		if err := db.
 			Exec("UPDATE knowledge_chunks SET embedding = ?::vector WHERE id = ?", toPgVector(vec), chunks[i].ID).Error; err != nil {
 			t.Fatalf("update chunk embedding: %v", err)
 		}
@@ -538,10 +541,11 @@ func TestKM_Playground_WithData(t *testing.T) {
 func TestKM_Playground_ThresholdFilter(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Test Doc", SourceType: model.SourceTypeBatch, Status: 1}
-	ctrl.svc.GetDB().Create(doc)
-	ctrl.svc.GetDB().Create(&model.KnowledgeChunk{
+	db.Create(doc)
+	db.Create(&model.KnowledgeChunk{
 		DocumentID: doc.ID, ProductID: pid, ChunkIndex: 0,
 		Content: "hello world", ContentHash: "h1", CharCount: 11, TokenCount: 2,
 	})
@@ -575,9 +579,10 @@ func TestKM_Playground_ThresholdFilter(t *testing.T) {
 func TestKM_UpdateChunk_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
-	ctrl.svc.GetDB().Create(doc)
+	db.Create(doc)
 	chunk := &model.KnowledgeChunk{
 		DocumentID:  doc.ID,
 		ProductID:   pid,
@@ -588,7 +593,7 @@ func TestKM_UpdateChunk_OK(t *testing.T) {
 		TokenCount:  2,
 		EmbeddingID: "vec_123",
 	}
-	ctrl.svc.GetDB().Create(chunk)
+	db.Create(chunk)
 	body := mustJSON(t, map[string]any{"content": "更新后的新内容"})
 	req, _ := http.NewRequest("PUT", fmt.Sprintf("/api/knowledge-merchant/chunks/%d", chunk.ID), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -599,7 +604,7 @@ func TestKM_UpdateChunk_OK(t *testing.T) {
 	}
 
 	var updated model.KnowledgeChunk
-	ctrl.svc.GetDB().First(&updated, chunk.ID)
+	db.First(&updated, chunk.ID)
 	if updated.EmbeddingID != "" {
 		t.Errorf("expected EmbeddingID reset, got %s", updated.EmbeddingID)
 	}
@@ -612,11 +617,12 @@ func TestKM_UpdateChunk_OK(t *testing.T) {
 func TestKM_DeleteChunk_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
-	ctrl.svc.GetDB().Create(doc)
+	db.Create(doc)
 	chunk := &model.KnowledgeChunk{DocumentID: doc.ID, ProductID: pid, ChunkIndex: 0, Content: "x", ContentHash: "h1", CharCount: 1, TokenCount: 1}
-	ctrl.svc.GetDB().Create(chunk)
+	db.Create(chunk)
 	req, _ := http.NewRequest("DELETE", fmt.Sprintf("/api/knowledge-merchant/chunks/%d", chunk.ID), nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -624,7 +630,7 @@ func TestKM_DeleteChunk_OK(t *testing.T) {
 		t.Fatalf("want 200, got %d, body=%s", w.Code, w.Body.String())
 	}
 	var count int64
-	ctrl.svc.GetDB().Model(&model.KnowledgeChunk{}).Where("id = ?", chunk.ID).Count(&count)
+	db.Model(&model.KnowledgeChunk{}).Where("id = ?", chunk.ID).Count(&count)
 	if count != 0 {
 		t.Errorf("expected chunk deleted, but found %d", count)
 	}
@@ -634,11 +640,12 @@ func TestKM_DeleteChunk_OK(t *testing.T) {
 func TestKM_SplitChunk_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
-	ctrl.svc.GetDB().Create(doc)
+	db.Create(doc)
 	original := &model.KnowledgeChunk{DocumentID: doc.ID, ProductID: pid, ChunkIndex: 0, Content: "长内容A长内容B", ContentHash: "h1", CharCount: 10, TokenCount: 3}
-	ctrl.svc.GetDB().Create(original)
+	db.Create(original)
 	body := mustJSON(t, map[string]any{"parts": []string{"段A内容", "段B内容"}})
 	req, _ := http.NewRequest("POST", fmt.Sprintf("/api/knowledge-merchant/chunks/%d/split", original.ID), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -649,7 +656,7 @@ func TestKM_SplitChunk_OK(t *testing.T) {
 	}
 
 	var newCount int64
-	ctrl.svc.GetDB().Model(&model.KnowledgeChunk{}).Where("document_id = ?", doc.ID).Count(&newCount)
+	db.Model(&model.KnowledgeChunk{}).Where("document_id = ?", doc.ID).Count(&newCount)
 	if newCount != 2 {
 		t.Errorf("expected 2 chunks after split, got %d", newCount)
 	}
@@ -659,11 +666,12 @@ func TestKM_SplitChunk_OK(t *testing.T) {
 func TestKM_ListDocumentChunks_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
-	ctrl.svc.GetDB().Create(doc)
+	db.Create(doc)
 	for i := 0; i < 3; i++ {
-		ctrl.svc.GetDB().Create(&model.KnowledgeChunk{
+		db.Create(&model.KnowledgeChunk{
 			DocumentID: doc.ID, ProductID: pid, ChunkIndex: i,
 			Content: fmt.Sprintf("chunk %d", i), ContentHash: fmt.Sprintf("h%d", i), CharCount: 8, TokenCount: 2,
 		})
@@ -683,6 +691,7 @@ func TestKM_ListDocumentChunks_OK(t *testing.T) {
 func TestKM_RevokeToken_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	body := mustJSON(t, map[string]any{
 		"name":       "revoke-test",
 		"product_id": "kb-1",
@@ -711,7 +720,7 @@ func TestKM_RevokeToken_OK(t *testing.T) {
 	}
 
 	var tok model.KnowledgeAPIToken
-	ctrl.svc.GetDB().First(&tok, resp.Data.ID)
+	db.First(&tok, resp.Data.ID)
 	if tok.Enabled != 0 {
 		t.Errorf("expected enabled=0 after revoke, got %d", tok.Enabled)
 	}
@@ -721,6 +730,7 @@ func TestKM_RevokeToken_OK(t *testing.T) {
 func TestKM_FullFlow_TokenValidate_ExternalImport(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	body := mustJSON(t, map[string]any{
 		"name":       "full-flow",
 		"product_id": "kb-e2e",
@@ -778,7 +788,7 @@ func TestKM_FullFlow_TokenValidate_ExternalImport(t *testing.T) {
 
 	var docCount int64
 	pidNumeric := "kb-e2e"
-	ctrl.svc.GetDB().Model(&model.KnowledgeDocument{}).Where("product_id = ?", pidNumeric).Count(&docCount)
+	db.Model(&model.KnowledgeDocument{}).Where("product_id = ?", pidNumeric).Count(&docCount)
 	if docCount < 2 {
 		t.Errorf("expected at least 2 docs, got %d", docCount)
 	}
@@ -788,6 +798,7 @@ func TestKM_FullFlow_TokenValidate_ExternalImport(t *testing.T) {
 func TestKM_FullFlow_FeedbackStore(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
+	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
 	body := mustJSON(t, map[string]any{
 		"product_id": "kb-1",
 		"query":      "测试反馈",
@@ -804,12 +815,12 @@ func TestKM_FullFlow_FeedbackStore(t *testing.T) {
 	}
 
 	var count int64
-	ctrl.svc.GetDB().Model(&model.KnowledgeFeedback{}).Count(&count)
+	db.Model(&model.KnowledgeFeedback{}).Count(&count)
 	if count < 1 {
 		t.Errorf("expected feedback stored, count=%d", count)
 	}
 	var fb model.KnowledgeFeedback
-	ctrl.svc.GetDB().Where("query = ?", "测试反馈").First(&fb)
+	db.Where("query = ?", "测试反馈").First(&fb)
 	if fb.Rating != 1 {
 		t.Errorf("expected rating=1, got %d", fb.Rating)
 	}

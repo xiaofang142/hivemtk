@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
+	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/ops/service"
+	sysrepo "hivemtk-user/internal/repository"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,7 +31,12 @@ func setupCustomReportTestDB(t *testing.T) *gorm.DB {
 func setupCustomReportRouter(t *testing.T, db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	reportService := service.NewCustomReportServiceWithDB(db)
+	reportService := service.NewCustomReportServiceWithRepos(
+		opsrepo.NewCustomReportRepositoryWithDB(db),
+		sysrepo.NewCustomerSessionRepositoryWithDB(db),
+		sysrepo.NewClueRepositoryWithDB(db),
+		sysrepo.NewUserRFMRepositoryWithDB(db),
+	)
 
 	controller := &CustomReportController{
 		reportService: reportService,

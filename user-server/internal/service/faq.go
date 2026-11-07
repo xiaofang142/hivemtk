@@ -255,9 +255,19 @@ func (s *FAQService) MatchByAgentKB(ctx context.Context, agentID uint, kbIDs []u
 func (s *FAQService) toMatchResults(entries []model.FAQEntry, matchType string) []dto.FAQMatchResult {
 	out := make([]dto.FAQMatchResult, 0, len(entries))
 	for i, e := range entries {
+		// 排序分是「关键词强度 × 置信度」的乘积，关键词多/命中次数高的条目
+		// 会超过 1（实测 1.04、2.43）。DTO 的 score 在 UI 按置信度百分比展示、
+		// 上层也按 0~1 阈值比，这里夹到 [0,1]；排序用的是未夹的原分，
+		// 夹紧只影响展示，不改变命中顺序与门槛判定。
+		score := e.Confidence
+		if score > 1 {
+			score = 1
+		} else if score < 0 {
+			score = 0
+		}
 		out = append(out, dto.FAQMatchResult{
 			Entry:     entryToDTO(&e),
-			Score:     e.Confidence,
+			Score:     score,
 			Rank:      i,
 			HitCount:  e.HitCount,
 			MatchType: matchType,

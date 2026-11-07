@@ -14,6 +14,7 @@ package service
 
 import (
 	"context"
+	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"io"
 	"os"
 	"sort"
@@ -229,7 +230,8 @@ func TestKbGate_RagSearcherSitesHideUnpublished(t *testing.T) {
 					want = site.on
 				}
 				database := kbSvcSetup(t)
-				s := &RagSearcher{db: database, embeddingService: kbSvcFakeEmb{}}
+				s := NewRagSearcherWithRepo(knowledgerepo.NewKnowledgeChunkRepository(database))
+				s.embeddingService = kbSvcFakeEmb{}
 				got := site.call(t, s)
 				require.Equal(t, want, got, "%s 在 %s=%s 档的可见集合不对", site.name, kbrelease.FlagEnv, tc.mode)
 			})
@@ -275,7 +277,8 @@ func TestKbGate_ShadowLogsWouldHide(t *testing.T) {
 			t.Run(l.mode+"/"+site.label, func(t *testing.T) {
 				t.Setenv(kbrelease.FlagEnv, l.mode)
 				database := kbSvcSetup(t)
-				s := &RagSearcher{db: database, embeddingService: kbSvcFakeEmb{}}
+				s := NewRagSearcherWithRepo(knowledgerepo.NewKnowledgeChunkRepository(database))
+				s.embeddingService = kbSvcFakeEmb{}
 
 				// 取那条"已写入未发布"的 chunk id：闸门在 on 档该挡的就是它。
 				var pendingID uint64
@@ -328,7 +331,8 @@ func TestKbGate_ShadowLogsWouldHide(t *testing.T) {
 func TestKbGate_ShadowSilentWhenNothingWouldHide(t *testing.T) {
 	t.Setenv(kbrelease.FlagEnv, "shadow")
 	database := kbSvcSetup(t)
-	s := &RagSearcher{db: database, embeddingService: kbSvcFakeEmb{}}
+	s := NewRagSearcherWithRepo(knowledgerepo.NewKnowledgeChunkRepository(database))
+	s.embeddingService = kbSvcFakeEmb{}
 
 	// 取在服那两行的 id（doc 911 版本 0、doc 912 版本=effective，都不该被闸门挡）。
 	var ids []uint64

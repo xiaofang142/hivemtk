@@ -21,6 +21,13 @@ func NewKnowledgeOpenAPIRepository(db *gorm.DB) *KnowledgeOpenAPIRepository {
 	return &KnowledgeOpenAPIRepository{db: db}
 }
 
+// NewKnowledgeOpenAPIRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/openapi.go 装配收口——句柄解析收回仓储层，
+// service 不再经 dbUtil.GetDB() 伸手拿句柄。
+func NewKnowledgeOpenAPIRepositoryDefault() *KnowledgeOpenAPIRepository {
+	return NewKnowledgeOpenAPIRepository(_db.GetDB())
+}
+
 // Create 创建数据源
 func (r *KnowledgeOpenAPIRepository) Create(ctx context.Context, src *model.KnowledgeOpenAPISource) error {
 	if src.LastStatus == "" {

@@ -244,7 +244,7 @@ func docHasAnyTag(rawTags string, targets []string) bool {
 }
 
 func (s *KnowledgeMerchantService) recordSearchLog(ctx context.Context, productID string, query string, topK int, threshold float64, count int, max, min, avg float64, latencyMs int64) error {
-	if s.db == nil {
+	if !s.dbReady() {
 		return nil
 	}
 	s.ensureReposFromDB()

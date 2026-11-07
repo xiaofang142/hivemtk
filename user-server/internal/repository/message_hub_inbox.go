@@ -22,6 +22,18 @@ func NewMessageHubRepositoryWithDB(db *gorm.DB) *MessageHubRepository {
 	return &MessageHubRepository{db: db}
 }
 
+// NewMessageHubRepositoryShared 以 WebhookEventRepository 的连接构造（AV-04c 批次7）。
+//
+// webhook 懒装配接缝：原先 service 从 eventRepo.GetDB() 取句柄再手工
+// New+SetMessageHubRepoDB，句柄在 service 层过手。改为仓储层共享构造——
+// 来源仓储缺句柄时返回 nil，保持「无库不建仓」的懒装配语义（nil 由调用方照旧判空）。
+func NewMessageHubRepositoryShared(evRepo *WebhookEventRepository) *MessageHubRepository {
+	if evRepo == nil || evRepo.db == nil {
+		return nil
+	}
+	return NewMessageHubRepositoryWithDB(evRepo.db)
+}
+
 func (r *MessageHubRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	if db != nil {
 		r.db = db

@@ -31,8 +31,9 @@ func setupKBRouter(t *testing.T, ctrl *KnowledgeBaseController) *gin.Engine {
 		c.Set("user_id", "test_value")
 		c.Next()
 	})
-	db := setupKBTestDB(t)
-	ctrl.kbService = knowledgesvc.NewKnowledgeBaseServiceWithDB(db)
+	setupKBTestDB(t) // 装配全局测试句柄
+	// 批次7 刀4：WithDB 的 *gorm.DB 形参清零；NewTestDB 已装配全局句柄，Default 构造同连接。
+	ctrl.kbService = knowledgesvc.NewKnowledgeBaseService()
 	group := router.Group("/api")
 	ctrl.RegisterRoutes(group)
 	return router

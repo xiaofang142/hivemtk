@@ -34,6 +34,12 @@ func NewShortLinkRepository(db *gorm.DB) ShortLinkRepository {
 	return &shortLinkRepository{db: db}
 }
 
+// NewShortLinkRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/cards/tiktok_card.go 装配收口——句柄解析收回仓储层。
+func NewShortLinkRepositoryDefault() ShortLinkRepository {
+	return NewShortLinkRepository(GetDB())
+}
+
 func (r *shortLinkRepository) Create(ctx context.Context, shortLink *model.ShortLink) error {
 	logger.Infof("创建短链，ShortCode: %s, OriginalURL: %s", shortLink.ShortCode, shortLink.OriginalURL)
 	err := r.db.WithContext(ctx).Create(shortLink).Error

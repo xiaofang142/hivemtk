@@ -194,12 +194,12 @@ func (s *KnowledgeBaseService) ProcessDocumentByID(ctx context.Context, document
 			s.markDocumentFailed(ctx, documentID, fmt.Sprintf("处理异常: %v", r))
 		}
 	}()
-	var doc model.KBDocument
-	if err := s.db.WithContext(ctx).First(&doc, documentID).Error; err != nil {
+	doc, err := s.docs.GetByID(ctx, documentID)
+	if err != nil {
 		logger.Errorf("[KBImport] ProcessDocumentByID 读文档失败 doc=%d: %v", documentID, err)
 		return
 	}
-	s.processContent(ctx, &doc, doc.Content)
+	s.processContent(ctx, doc, doc.Content)
 }
 
 // processContent content → 分片 → 向量化 → 入索引 → 状态推进

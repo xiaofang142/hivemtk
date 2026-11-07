@@ -27,6 +27,15 @@ func NewKnowledgeDocumentRepository(db *gorm.DB) *KnowledgeDocumentRepository {
 	return &KnowledgeDocumentRepository{db: db}
 }
 
+// NewKnowledgeDocumentRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/openapi.go 装配收口——句柄解析收回仓储层。
+func NewKnowledgeDocumentRepositoryDefault() *KnowledgeDocumentRepository {
+	return NewKnowledgeDocumentRepository(_db.GetDB())
+}
+
+// Connected 句柄就绪探针（纯内存访问器，无 DB 操作；替代原 service 侧 s.db == nil 判断）。
+func (r *KnowledgeDocumentRepository) Connected() bool { return r != nil && r.db != nil }
+
 // Create 创建文档
 func (r *KnowledgeDocumentRepository) Create(ctx context.Context, doc *model.KnowledgeDocument) error {
 	if doc.SourceType == "" {

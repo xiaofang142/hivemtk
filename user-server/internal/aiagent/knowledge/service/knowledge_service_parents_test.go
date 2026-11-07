@@ -28,7 +28,7 @@ func runPipelineForParents(t *testing.T, docID uint64, content string) (*Knowled
 		ADD COLUMN IF NOT EXISTS embed_status varchar(16) NOT NULL DEFAULT 'pending'`).Error; err != nil {
 		t.Fatalf("补 chunk 向量列失败: %v", err)
 	}
-	svc := NewKnowledgeServiceWithDB(db)
+	svc := NewKnowledgeService()
 	if err := db.Create(&model.KnowledgeDocument{
 		ID: docID, ProductID: "p-parent", Title: "父子分段", EmbedStatus: model.EmbedStatusPending,
 	}).Error; err != nil {

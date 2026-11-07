@@ -311,7 +311,10 @@ if [ -f "$ARCH_L4_BASELINE" ]; then
       }
       for (p in bl) if (!(p in cur)) { print "失效条目（该文件已不再命中，请从基线里删除这一行）: " p; bad=1 }
       if (!bad) { t=0; n=0; for (p in cur) { t+=cur[p]; n++ }; printf "OK\t%d\t%d\n", t, n }
-    }' "$ARCH_L4_BASELINE" <(printf '%s\n' "$SERVICE_DB_WIDE" | sort | uniq -c | awk '{print $2"\t"$1}'))
+    }' "$ARCH_L4_BASELINE" <(printf '%s' "$SERVICE_DB_WIDE" | sort | uniq -c | awk '{print $2"\t"$1}'))
+    # 注：这里用 printf '%s'（不带换行）。'%s\n' 在扫描结果为空时会吐出一行空串，
+    # 经 uniq -c 后变成「1 个空路径命中」，被上面判成「新增: 有 1 处 .GetDB」——
+    # 2026-11-07 AV-04c 批次7 全域清零后首次触发（此前存量永不为空，bug 一直潜伏）。
   if [ "${L4_BASELINE_VERDICT%%$'\t'*}" = "OK" ]; then
     log_pass "[L4] service 取 DB 句柄宽口径与基线一致（存量 $(echo "$L4_BASELINE_VERDICT" | cut -f2) 处 / $(echo "$L4_BASELINE_VERDICT" | cut -f3) 个文件）"
   else

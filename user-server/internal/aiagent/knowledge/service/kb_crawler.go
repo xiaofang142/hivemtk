@@ -23,6 +23,7 @@ import (
 
 	kbcrawler "hivemtk-user/internal/aiagent/knowledge/kbcrawler"
 	knowledgeModel "hivemtk-user/internal/aiagent/knowledge/model"
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
 
 	"gorm.io/gorm"
@@ -40,8 +41,11 @@ const (
 )
 
 // CrawlerService 爬取服务（对齐 KnowledgeBaseService 风格）
+//
+// AV-04c 批次7 刀3：不再持有 *gorm.DB（爬取源/批次/入库文档 SQL 下沉
+// knowledgeRepo.KBCrawlerRepository），构造收口为仓储注入/Default。
 type CrawlerService struct {
-	db     *gorm.DB
+	repo   *knowledgeRepo.KBCrawlerRepository
 	kb     *KnowledgeBaseService
 	http   *http.Client
 	extr   kbcrawler.Extractor
@@ -50,8 +54,13 @@ type CrawlerService struct {
 	hashes map[string]map[string]string // source_id → url → contentHash
 }
 
-// NewCrawlerService 构造
-func NewCrawlerService(db *gorm.DB, kb *KnowledgeBaseService) *CrawlerService {
+// NewCrawlerService 构造（仓储 Default 构造自取全局句柄；与传 GetDB() 同连接同时刻）。
+func NewCrawlerService(kb *KnowledgeBaseService) *CrawlerService {
+	return NewCrawlerServiceWithRepos(knowledgeRepo.NewKBCrawlerRepositoryDefault(), kb)
+}
+
+// NewCrawlerServiceWithRepos 仓储注入构造（装配方/测试显式注入）。
+func NewCrawlerServiceWithRepos(repo *knowledgeRepo.KBCrawlerRepository, kb *KnowledgeBaseService) *CrawlerService {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout: 10 * time.Second,
@@ -77,7 +86,7 @@ func NewCrawlerService(db *gorm.DB, kb *KnowledgeBaseService) *CrawlerService {
 		},
 	}
 	return &CrawlerService{
-		db:     db,
+		repo:   repo,
 		kb:     kb,
 		http:   client,
 		extr:   kbcrawler.NewGoqueryExtractor(),
@@ -143,13 +152,12 @@ func (s *CrawlerService) CreateSource(ctx context.Context, in *CreateSourceInput
 		return nil, errors.New("start_url 仅支持 http/https")
 	}
 	// KB 归属租户校验（租户隔离 callback 在 on 模式下已注入 WHERE tenant_id）
-	var kbRow model.KnowledgeBase
-	if err := s.db.WithContext(ctx).First(&kbRow, in.KBID).Error; err != nil {
+	if ok, err := s.repo.KBExists(ctx, in.KBID); err != nil || !ok {
 		return nil, errors.New("目标知识库不存在")
 	}
 	// 配额：每租户源数
-	var cnt int64
-	if err := s.db.WithContext(ctx).Model(&model.KBCrawlerSource{}).Count(&cnt).Error; err != nil {
+	cnt, err := s.repo.CountSources(ctx)
+	if err != nil {
 		return nil, err
 	}
 	if cnt >= MaxSourcesPerTenant {
@@ -181,7 +189,7 @@ func (s *CrawlerService) CreateSource(ctx context.Context, in *CreateSourceInput
 		Status:          model.KBCrawlerSourceStatusActive,
 		SiteVerifyToken: verifyToken(),
 	}
-	if err := s.db.WithContext(ctx).Create(src).Error; err != nil {
+	if err := s.repo.CreateSource(ctx, src); err != nil {
 		return nil, fmt.Errorf("保存爬取源失败: %w", err)
 	}
 	return src, nil
@@ -195,10 +203,9 @@ func verifyToken() string {
 
 // UpdateSource 更新源（改 start_url 不支持——视为新建源重建）
 func (s *CrawlerService) UpdateSource(ctx context.Context, id uint, fields map[string]any) error {
-	var src model.KBCrawlerSource
 	// 返回 ErrRecordNotFound 而非裸 errors.New：controller 依赖 errhttp.IsNotFoundError
 	// 把「不存在」映射为 404，避免被 400/409 的兜底分类吞掉（D-24）。
-	if err := s.db.WithContext(ctx).First(&src, id).Error; err != nil {
+	if _, err := s.repo.GetSourceByID(ctx, id); err != nil {
 		return gorm.ErrRecordNotFound
 	}
 	allowed := map[string]bool{"include_patterns": true, "max_pages": true, "interval_hours": true, "auto_resync": true, "qa_split_enabled": true}
@@ -210,25 +217,25 @@ func (s *CrawlerService) UpdateSource(ctx context.Context, id uint, fields map[s
 	if len(fields) == 0 {
 		return errors.New("无可更新字段（start_url 不允许修改，请新建源）")
 	}
-	return s.db.WithContext(ctx).Model(&src).Updates(fields).Error
+	return s.repo.UpdateSourceFields(ctx, id, fields)
 }
 
 // TransitionSource 源状态跃迁（active⇄paused，error→active 人工恢复）
 func (s *CrawlerService) TransitionSource(ctx context.Context, id uint, to string) error {
-	var src model.KBCrawlerSource
+	src, err := s.repo.GetSourceByID(ctx, id)
 	// 同 UpdateSource：not-found 用 ErrRecordNotFound，由 controller 映射 404（D-24）。
-	if err := s.db.WithContext(ctx).First(&src, id).Error; err != nil {
+	if err != nil {
 		return gorm.ErrRecordNotFound
 	}
 	if !model.KBCrawlerSourceTransitionAllowed(src.Status, to) {
 		return fmt.Errorf("非法状态跃迁: %s → %s", src.Status, to)
 	}
-	return s.db.WithContext(ctx).Model(&src).Updates(map[string]any{"status": to, "error_msg": ""}).Error
+	return s.repo.UpdateSourceStatus(ctx, id, to)
 }
 
 // DeleteSource 软删源（不删已入库文档）
 func (s *CrawlerService) DeleteSource(ctx context.Context, id uint) error {
-	return s.db.WithContext(ctx).Delete(&model.KBCrawlerSource{}, id).Error
+	return s.repo.DeleteSource(ctx, id)
 }
 
 // ListSources 列出源。kbID=0 不限知识库；status 为空不限状态（active/paused/error）。
@@ -236,23 +243,14 @@ func (s *CrawlerService) DeleteSource(ctx context.Context, id uint) error {
 // 状态筛选必须落在 SQL 上：前端“状态”下拉此前只是把 status 发上来，
 // 服务层忽略后即使筛“已暂停”也照旧返回全部行，看起来像筛选坏了。
 func (s *CrawlerService) ListSources(ctx context.Context, kbID uint, status string) ([]model.KBCrawlerSource, error) {
-	var out []model.KBCrawlerSource
-	q := s.db.WithContext(ctx).Order("id DESC")
-	if kbID > 0 {
-		q = q.Where("kb_id = ?", kbID)
-	}
-	if status = strings.TrimSpace(status); status != "" {
-		q = q.Where("status = ?", status)
-	}
-	err := q.Find(&out).Error
-	return out, err
+	return s.repo.ListSources(ctx, kbID, status)
 }
 
 // VerifySite 域名验证（§8.1 硬门槛）：抓根路径 hivemtk-verify.txt 或首页，
 // 检查验证 token（<meta name="hivemtk-site-verify" content="token">）。
 func (s *CrawlerService) VerifySite(ctx context.Context, id uint) error {
-	var src model.KBCrawlerSource
-	if err := s.db.WithContext(ctx).First(&src, id).Error; err != nil {
+	src, err := s.repo.GetSourceByID(ctx, id)
+	if err != nil {
 		return errors.New("爬取源不存在")
 	}
 	if src.SiteVerified {
@@ -265,12 +263,12 @@ func (s *CrawlerService) VerifySite(ctx context.Context, id uint) error {
 	// 根路径校验文件优先
 	if body, status, err := s.fetch(ctx, u.Scheme+"://"+u.Host+"/hivemtk-verify.txt"); err == nil &&
 		status == http.StatusOK && strings.Contains(body, src.SiteVerifyToken) {
-		return s.db.WithContext(ctx).Model(&src).Updates(map[string]any{"site_verified": true}).Error
+		return s.repo.SetSourceVerified(ctx, id)
 	}
 	// 首页 meta 标签兜底
 	if body, status, err := s.fetch(ctx, src.StartURL); err == nil &&
 		status == http.StatusOK && strings.Contains(body, src.SiteVerifyToken) {
-		return s.db.WithContext(ctx).Model(&src).Updates(map[string]any{"site_verified": true}).Error
+		return s.repo.SetSourceVerified(ctx, id)
 	}
 	return errors.New("站点验证失败：请在目标站点根路径放置 hivemtk-verify.txt（内容为验证 token）或首页加 <meta name=\"hivemtk-site-verify\" content=\"...\"> 标签")
 }
@@ -306,8 +304,8 @@ func (s *CrawlerService) fetch(ctx context.Context, rawURL string) (string, int,
 // CreateBatch 手动/定时触发一次同步：建 pending 批次行。
 // 未通过站点验证的源不发起任何请求（硬门槛）——直接报错。
 func (s *CrawlerService) CreateBatch(ctx context.Context, sourceID uint, trigger string) (*model.KBCrawlBatch, error) {
-	var src model.KBCrawlerSource
-	if err := s.db.WithContext(ctx).First(&src, sourceID).Error; err != nil {
+	src, err := s.repo.GetSourceByID(ctx, sourceID)
+	if err != nil {
 		return nil, errors.New("爬取源不存在")
 	}
 	if src.Status != model.KBCrawlerSourceStatusActive {
@@ -316,11 +314,9 @@ func (s *CrawlerService) CreateBatch(ctx context.Context, sourceID uint, trigger
 	if !src.SiteVerified {
 		return nil, errors.New("源未通过站点验证，不能同步（先调用验证接口）")
 	}
-	// 每租户每日页面配额（§8.2）
-	var todayPages int64
-	s.db.WithContext(ctx).Model(&model.KBCrawlBatch{}).
-		Where("created_at >= ?", time.Now().Format("2006-01-02")).
-		Select("COALESCE(SUM(pages_found),0)").Scan(&todayPages)
+	// 每租户每日页面配额（§8.2）。原实现不检查 Scan 错误（错误 ⇒ 按 0 计、配额
+	// 放行）——错误路径逐字保留，这里显式忽略仓储返回的 error。
+	todayPages, _ := s.repo.SumPagesFoundSince(ctx, time.Now().Format("2006-01-02"))
 	if todayPages >= MaxDailyCrawlPages {
 		return nil, errors.New("今日爬取页面配额已用完，批次推迟到次日")
 	}
@@ -330,7 +326,7 @@ func (s *CrawlerService) CreateBatch(ctx context.Context, sourceID uint, trigger
 		Trigger:  trigger,
 		Status:   model.KBCrawlBatchStatusPending,
 	}
-	if err := s.db.WithContext(ctx).Create(batch).Error; err != nil {
+	if err := s.repo.CreateBatch(ctx, batch); err != nil {
 		return nil, err
 	}
 	return batch, nil
@@ -339,27 +335,27 @@ func (s *CrawlerService) CreateBatch(ctx context.Context, sourceID uint, trigger
 // RunBatch 同步执行一个 pending 批次（cron worker / 手动触发后异步执行）。
 // 单源串行限速（间隔 ≥ max(Crawl-delay, 1s)），单批次并发 1。
 func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
-	var batch model.KBCrawlBatch
-	if err := s.db.WithContext(ctx).First(&batch, batchID).Error; err != nil {
+	batch, err := s.repo.GetBatchByID(ctx, batchID)
+	if err != nil {
 		return errors.New("批次不存在")
 	}
 	if batch.Status != model.KBCrawlBatchStatusPending {
 		return fmt.Errorf("批次状态为 %s，不可执行", batch.Status)
 	}
-	var src model.KBCrawlerSource
-	if err := s.db.WithContext(ctx).First(&src, batch.SourceID).Error; err != nil {
+	src, err := s.repo.GetSourceByID(ctx, batch.SourceID)
+	if err != nil {
 		return errors.New("爬取源不存在")
 	}
 
 	now := time.Now()
-	s.db.WithContext(ctx).Model(&batch).Updates(map[string]any{
+	_ = s.repo.UpdateBatchFields(ctx, batch.ID, map[string]any{
 		"status": model.KBCrawlBatchStatusRunning, "started_at": now,
 	})
 
 	batchCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 
-	counters, runErr := s.crawl(batchCtx, &src, &batch)
+	counters, runErr := s.crawl(batchCtx, src, batch)
 
 	finished := time.Now()
 	updates := map[string]any{
@@ -379,30 +375,28 @@ func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
 		status = model.KBCrawlBatchStatusPartiallyFailed
 	}
 	updates["status"] = status
-	if err := s.db.WithContext(ctx).Model(&batch).Updates(updates).Error; err != nil {
+	if err := s.repo.UpdateBatchFields(ctx, batch.ID, updates); err != nil {
 		return err
 	}
 
-	// 更新源：last_crawl_at / last_batch_id；连续 3 批失败自动置 error
+	// 更新源：last_crawl_at / last_batch_id；连续 3 批失败自动置 error。
+	// 原实现不检查 Count 错误（错误 ⇒ 按 0 计、不触发自动暂停）——错误路径
+	// 逐字保留，这里显式忽略仓储返回的 error。
 	srcUpdates := map[string]any{"last_crawl_at": finished, "last_batch_id": batch.BatchNo}
 	if status == model.KBCrawlBatchStatusFailed {
-		var consecFail int64
-		s.db.WithContext(ctx).Model(&model.KBCrawlBatch{}).
-			Where("source_id = ? AND status = ? AND created_at >= ?",
-				src.ID, model.KBCrawlBatchStatusFailed, time.Now().AddDate(0, 0, -7)).
-			Count(&consecFail)
+		consecFail, _ := s.repo.CountFailedBatchesSince(ctx, src.ID, time.Now().AddDate(0, 0, -7))
 		if consecFail >= MaxConsecutiveFailBatch && src.Status == model.KBCrawlerSourceStatusActive {
 			srcUpdates["status"] = model.KBCrawlerSourceStatusError
 			srcUpdates["error_msg"] = fmt.Sprintf("连续 %d 批失败，已自动暂停；请排查后人工恢复", consecFail)
 		}
 	}
-	return s.db.WithContext(ctx).Model(&src).Updates(srcUpdates).Error
+	return s.repo.UpdateSourceFields(ctx, src.ID, srcUpdates)
 }
 
 // RetryBatch 重试 failed 批次：新建批次行（旧行保持 failed 不覆盖，只增事件流）。
 func (s *CrawlerService) RetryBatch(ctx context.Context, batchID uint64) (*model.KBCrawlBatch, error) {
-	var old model.KBCrawlBatch
-	if err := s.db.WithContext(ctx).First(&old, batchID).Error; err != nil {
+	old, err := s.repo.GetBatchByID(ctx, batchID)
+	if err != nil {
 		return nil, errors.New("批次不存在")
 	}
 	if old.Status != model.KBCrawlBatchStatusFailed {
@@ -418,7 +412,7 @@ func (s *CrawlerService) RetryBatch(ctx context.Context, batchID uint64) (*model
 		Status:     model.KBCrawlBatchStatusPending,
 		RetryCount: old.RetryCount + 1,
 	}
-	if err := s.db.WithContext(ctx).Create(batch).Error; err != nil {
+	if err := s.repo.CreateBatch(ctx, batch); err != nil {
 		return nil, err
 	}
 	return batch, nil
@@ -426,17 +420,7 @@ func (s *CrawlerService) RetryBatch(ctx context.Context, batchID uint64) (*model
 
 // ListBatches 批次列表
 func (s *CrawlerService) ListBatches(ctx context.Context, sourceID uint, page, pageSize int) ([]model.KBCrawlBatch, int64, error) {
-	var out []model.KBCrawlBatch
-	var total int64
-	q := s.db.WithContext(ctx).Model(&model.KBCrawlBatch{})
-	if sourceID > 0 {
-		q = q.Where("source_id = ?", sourceID)
-	}
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-	err := q.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&out).Error
-	return out, total, err
+	return s.repo.ListBatches(ctx, sourceID, page, pageSize)
 }
 
 // —— 爬取核心 ——
@@ -597,14 +581,12 @@ func (s *CrawlerService) setHash(sourceID uint, pageURL, hash string) {
 // title 存 URL 作变更检测约定键）→ ProcessDocumentByID 复用分段→向量化→索引全链路。
 // 变更页：旧 chunks 标 superseded 后重建。返回 (docID, isNew, err)。
 func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCrawlerSource, pageURL string, page *kbcrawler.Page) (uint, bool, error) {
-	var existing model.KBDocument
-	err := s.db.WithContext(ctx).Where("title = ? AND file_type = ?", pageURL, ".html").First(&existing).Error
+	existing, err := s.repo.FindHTMLDocByTitle(ctx, pageURL)
 	if err == nil {
-		// 变更重建：旧 chunks 标 superseded
-		s.db.WithContext(ctx).Table("kb_document_chunks").
-			Where("document_id = ? AND status = ?", existing.ID, "active").
-			Update("status", "superseded")
-		s.db.WithContext(ctx).Model(&existing).Updates(map[string]any{
+		// 变更重建：旧 chunks 标 superseded。原实现不检查这两步回写错误
+		// （best-effort）——错误路径逐字保留，显式忽略仓储返回的 error。
+		_ = s.repo.SupersedeActiveChunks(ctx, existing.ID)
+		_ = s.repo.UpdateDocumentFields(ctx, existing.ID, map[string]any{
 			"content": page.Content, "status": knowledgeModel.KBDocumentStatusPending, "error_msg": "",
 		})
 		go s.kb.ProcessDocumentByID(context.Background(), existing.ID)
@@ -619,7 +601,7 @@ func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCra
 		FileSize: int64(len(page.Content)),
 		Status:   knowledgeModel.KBDocumentStatusPending,
 	}
-	if err := s.db.WithContext(ctx).Create(doc).Error; err != nil {
+	if err := s.repo.CreateDocument(ctx, doc); err != nil {
 		return 0, true, fmt.Errorf("保存爬取文档失败: %w", err)
 	}
 	go s.kb.ProcessDocumentByID(context.Background(), doc.ID)

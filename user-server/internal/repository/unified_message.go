@@ -30,6 +30,18 @@ func NewUnifiedMessageRepositoryWithDB(db *gorm.DB) UnifiedMessageRepository {
 	return &unifiedMessageRepo{db: db}
 }
 
+// NewUnifiedMessageRepositoryShared 以 WebhookEventRepository 的连接构造（AV-04c 批次7）。
+//
+// webhook 懒装配接缝：原先 service 从 eventRepo.GetDB() 取句柄再传进来，句柄在
+// service 层过手。改为仓储层共享构造；来源仓储缺句柄时返回 nil 接口值，
+// 保持「无库不建仓」的懒装配语义（nil 由调用方照旧判空）。
+func NewUnifiedMessageRepositoryShared(evRepo *WebhookEventRepository) UnifiedMessageRepository {
+	if evRepo == nil || evRepo.db == nil {
+		return nil
+	}
+	return NewUnifiedMessageRepositoryWithDB(evRepo.db)
+}
+
 func (r *unifiedMessageRepo) Create(ctx context.Context, msg *model.UnifiedMessage) error {
 	return r.db.WithContext(ctx).Create(msg).Error
 }

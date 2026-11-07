@@ -104,7 +104,7 @@ func setupKnowledgeBaseRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	knowledgeBaseCtrl := knowledgectrl.NewKnowledgeBaseController()
 	// 上传口可选 QA 增强（P1 观察项②，对标 FastGPT）：与爬虫侧共用同一套拆分服务，
 	// 默认关——只有 /rag/import 显式带 qa_split=true 才在文档入库后投递拆分。
-	knowledgeBaseCtrl.SetQASplitService(knowledgesvc.NewQASplitService(gormDB, knowledgesvc.NewGatewayLLMClient()))
+	knowledgeBaseCtrl.SetQASplitService(knowledgesvc.NewQASplitService(knowledgesvc.NewGatewayLLMClient()))
 	knowledgeBaseCtrl.RegisterRoutes(auth)
 
 	// 知识库成员绑定（P0-2/P0-3/D-8 方案 A）：/knowledge-bases/:id/items 三端点。

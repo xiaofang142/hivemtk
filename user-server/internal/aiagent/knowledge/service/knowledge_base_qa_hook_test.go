@@ -17,14 +17,16 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
+	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
 // newKBImportTestService 建 KB 服务 + 文件夹具；返回已注入的投递替身。
 func newKBImportTestService(t *testing.T) (*KnowledgeBaseService, *recordingQA, string) {
 	t.Helper()
-	db := testutil.NewTestDB(t, &model.KBDocument{})
-	svc := NewKnowledgeBaseServiceWithDB(db)
+	_ = testutil.NewTestDB(t, &model.KBDocument{})
+	svc := NewKnowledgeBaseService()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "doc.txt")
@@ -97,8 +99,7 @@ func TestKBImport_QASplitOffKeepsLegacyBehavior(t *testing.T) {
 	// 等文档处理完成再断言（异步流水线；处理完仍不该有投递）
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		var doc model.KBDocument
-		if err := svc.db.First(&doc, 1).Error; err == nil && doc.Status == model.KBDocumentStatusIndexed {
+		if doc, err := knowledgerepo.NewKBDocumentRepository(db.GetDB()).GetByID(context.Background(), 1); err == nil && doc.Status == model.KBDocumentStatusIndexed {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -110,7 +111,7 @@ func TestKBImport_QASplitOffKeepsLegacyBehavior(t *testing.T) {
 
 func TestKBImport_QASplitRequestedButNotWired(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.KBDocument{})
-	svc := NewKnowledgeBaseServiceWithDB(db) // 不注入 qaEnqueue/qaSplit
+	svc := NewKnowledgeBaseService() // 不注入 qaEnqueue/qaSplit
 	dir := t.TempDir()
 	path := filepath.Join(dir, "doc.txt")
 	if err := os.WriteFile(path, []byte(strings.Repeat("未装配拆分服务时的正文。", 30)), 0o600); err != nil {

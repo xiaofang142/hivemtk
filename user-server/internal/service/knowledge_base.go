@@ -36,15 +36,14 @@ func NewKnowledgeBaseServiceDefault() *KnowledgeBaseService {
 	return NewKnowledgeBaseService()
 }
 
-// NewKnowledgeBaseService 创建知识库服务（句柄由 repository 自取全局库）。
+// NewKnowledgeBaseService 创建知识库服务（句柄由各仓储 Default 构造自取全局库）。
 //
 // 三个 repo 的显式注入构造见 NewKnowledgeBaseServiceWithRepos（装配方逐域迁移用）。
 func NewKnowledgeBaseService() *KnowledgeBaseService {
-	db := repository.GetDB()
 	return &KnowledgeBaseService{
-		repo:        repository.NewKnowledgeBaseRepository(db),
-		bindingRepo: repository.NewAgentKBBindingRepository(db),
-		itemRepo:    repository.NewKBItemBindingRepository(db),
+		repo:        repository.NewKnowledgeBaseRepositoryDefault(),
+		bindingRepo: repository.NewAgentKBBindingRepositoryDefault(),
+		itemRepo:    repository.NewKBItemBindingRepositoryDefault(),
 	}
 }
 

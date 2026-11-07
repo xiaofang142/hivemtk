@@ -19,28 +19,30 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
+	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
-func waitKBDocStatus(t *testing.T, svc *KnowledgeBaseService, id uint, want model.KBDocumentStatus) model.KBDocument {
+func waitKBDocStatus(t *testing.T, svc *KnowledgeBaseService, id uint, want model.KBDocumentStatus) *model.KBDocument {
 	t.Helper()
+	_ = svc // 轮询改走仓储（批次7 刀4：service 不再持 db 句柄），全局即测试库
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
-		var doc model.KBDocument
-		if err := svc.db.First(&doc, id).Error; err == nil && doc.Status == want {
+		doc, err := knowledgerepo.NewKBDocumentRepository(db.GetDB()).GetByID(context.Background(), id)
+		if err == nil && doc.Status == want {
 			return doc
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	var doc model.KBDocument
-	_ = svc.db.First(&doc, id)
+	doc, _ := knowledgerepo.NewKBDocumentRepository(db.GetDB()).GetByID(context.Background(), id)
 	t.Fatalf("文档 %d 未在 20s 内进入 %s（实际 %s / err=%s）", id, want, doc.Status, doc.ErrorMsg)
 	return doc
 }
 
 func TestKBImport_FakePDFMarksFailed(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.KBDocument{})
-	svc := NewKnowledgeBaseServiceWithDB(db)
+	_ = testutil.NewTestDB(t, &model.KBDocument{}) // 装配全局测试句柄（轮询改走仓储）
+	svc := NewKnowledgeBaseService()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fake.pdf")
@@ -64,8 +66,8 @@ func TestKBImport_FakePDFMarksFailed(t *testing.T) {
 }
 
 func TestKBImport_PlainTextStillIndexes(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.KBDocument{})
-	svc := NewKnowledgeBaseServiceWithDB(db)
+	_ = testutil.NewTestDB(t, &model.KBDocument{}) // 装配全局测试句柄（轮询改走仓储）
+	svc := NewKnowledgeBaseService()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "ok.txt")
 	if err := os.WriteFile(path, []byte(strings.Repeat("正常纯文本正文内容。", 40)), 0o600); err != nil {

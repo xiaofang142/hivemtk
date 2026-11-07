@@ -27,7 +27,7 @@ const scanPDF = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2
 
 func TestProcessDocumentAsync_FakePDFMarksFailedNoChunks(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.KnowledgeDocument{}, &model.KnowledgeChunk{})
-	svc := NewKnowledgeServiceWithDB(db)
+	svc := NewKnowledgeService()
 
 	dir := t.TempDir()
 	pdfPath := filepath.Join(dir, "fake_scan.pdf")
@@ -70,7 +70,7 @@ func TestProcessDocumentAsync_PlainTextFallbackPreserved(t *testing.T) {
 		ADD COLUMN IF NOT EXISTS embed_status varchar(16) NOT NULL DEFAULT 'pending'`).Error; err != nil {
 		t.Fatalf("补 chunk 向量列失败: %v", err)
 	}
-	svc := NewKnowledgeServiceWithDB(db)
+	svc := NewKnowledgeService()
 
 	dir := t.TempDir()
 	// 不存在的 .txt 文件路径 → os.ReadFile 失败走不到提取；为触发提取异常，

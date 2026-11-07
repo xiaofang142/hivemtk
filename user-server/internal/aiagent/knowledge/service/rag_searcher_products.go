@@ -12,7 +12,7 @@ import (
 // rag_product_ids 从未生效——任意接入的新知识都会被所有智能体全局召回（污染）。
 // 本方法让 rag_product_ids 真正生效：优先分产品召回，无命中时由调用方回退全局。
 func (s *RagSearcher) SearchProducts(ctx context.Context, productIDs []string, query string, topK int) ([]RAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, nil
 	}
 	if topK <= 0 {

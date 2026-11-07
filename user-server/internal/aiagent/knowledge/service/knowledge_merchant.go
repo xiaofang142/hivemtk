@@ -1,10 +1,6 @@
 package service
 
 import (
-	dbutil "hivemtk-user/internal/pkg/db"
-
-	"gorm.io/gorm"
-
 	"hivemtk-user/internal/aiagent/knowledge/repository"
 )
 
@@ -18,8 +14,10 @@ import (
 //  4. FeedbackService       反馈标注                         → knowledge_merchant_feedback.go
 //  5. TokenService          外部 API Token 管理              → knowledge_merchant_token.go
 //  6. ExternalImportService 外部系统接入（飞书/Notion/通用 JSON） → knowledge_merchant_external.go
+//
+// AV-04c 批次7 刀4：不再持有 *gorm.DB / GetDB 出口——九仓储构造收口
+// （Default 自取全局句柄 / WithDeps 显式注入），句柄不出仓储层。
 type KnowledgeMerchantService struct {
-	db            *gorm.DB
 	kbService     *KnowledgeService
 	ragSearch     *RagSearcher
 	docRepo       *repository.KnowledgeDocumentRepository
@@ -31,58 +29,73 @@ type KnowledgeMerchantService struct {
 	externalRepo  *repository.ExternalImportJobRepository
 }
 
-// GetDB 暴露内部 DB（仅用于测试和特殊场景，生产代码不应直接访问）
-func (s *KnowledgeMerchantService) GetDB() *gorm.DB {
-	return s.db
+// KnowledgeMerchantDeps 仓储依赖集合（装配点/测试显式注入；替代 *gorm.DB 形参）。
+type KnowledgeMerchantDeps struct {
+	KBService     *KnowledgeService
+	RagSearch     *RagSearcher
+	DocRepo       *repository.KnowledgeDocumentRepository
+	ChunkRepo     *repository.KnowledgeChunkRepository
+	ProdRepo      *repository.RagConfigRepository
+	SearchLogRepo *repository.KnowledgeSearchLogRepository
+	FeedbackRepo  *repository.KnowledgeFeedbackRepository
+	TokenRepo     *repository.KnowledgeAPITokenRepository
+	ExternalRepo  *repository.ExternalImportJobRepository
 }
 
-// NewKnowledgeMerchantService 创建商户视角 RAG 服务
+// dbReady 句柄就绪探针：与原 `s.db == nil` 同语义（docRepo 与原 db 字段同源同刻构造）。
+func (s *KnowledgeMerchantService) dbReady() bool {
+	return s.docRepo != nil && s.docRepo.Connected()
+}
+
+// NewKnowledgeMerchantService 创建商户视角 RAG 服务（各仓储 Default 构造自取全局句柄）。
 func NewKnowledgeMerchantService() *KnowledgeMerchantService {
-	db := dbutil.GetDB()
-	return &KnowledgeMerchantService{
-		db:            db,
-		kbService:     NewKnowledgeService(),
-		ragSearch:     NewRagSearcher(),
-		docRepo:       repository.NewKnowledgeDocumentRepository(db),
-		chunkRepo:     repository.NewKnowledgeChunkRepository(db),
-		prodRepo:      repository.NewRagConfigRepository(db),
-		searchLogRepo: repository.NewKnowledgeSearchLogRepository(db),
-		feedbackRepo:  repository.NewKnowledgeFeedbackRepository(db),
-		tokenRepo:     repository.NewKnowledgeAPITokenRepository(db),
-		externalRepo:  repository.NewExternalImportJobRepository(db),
-	}
+	return newKnowledgeMerchantService(KnowledgeMerchantDeps{
+		KBService:     NewKnowledgeService(),
+		RagSearch:     NewRagSearcher(),
+		DocRepo:       repository.NewKnowledgeDocumentRepositoryDefault(),
+		ChunkRepo:     repository.NewKnowledgeChunkRepositoryDefault(),
+		ProdRepo:      repository.NewRagConfigRepositoryDefault(),
+		SearchLogRepo: repository.NewKnowledgeSearchLogRepositoryDefault(),
+		FeedbackRepo:  repository.NewKnowledgeFeedbackRepositoryDefault(),
+		TokenRepo:     repository.NewKnowledgeAPITokenRepositoryDefault(),
+		ExternalRepo:  repository.NewExternalImportJobRepositoryDefault(),
+	})
 }
 
-// NewKnowledgeMerchantServiceWithDB 带 DB 的版本（用于测试）
-func NewKnowledgeMerchantServiceWithDB(gdb *gorm.DB) *KnowledgeMerchantService {
+// NewKnowledgeMerchantServiceWithDeps 仓储注入构造（装配方自有句柄/测试注入；
+// 零值 deps 等价原 WithDB(nil) 的无库语义）。
+func NewKnowledgeMerchantServiceWithDeps(deps KnowledgeMerchantDeps) *KnowledgeMerchantService {
+	return newKnowledgeMerchantService(deps)
+}
+
+func newKnowledgeMerchantService(deps KnowledgeMerchantDeps) *KnowledgeMerchantService {
 	return &KnowledgeMerchantService{
-		db:            gdb,
-		kbService:     NewKnowledgeServiceWithDB(gdb),
-		ragSearch:     NewRagSearcherWithDB(gdb),
-		docRepo:       repository.NewKnowledgeDocumentRepository(gdb),
-		chunkRepo:     repository.NewKnowledgeChunkRepository(gdb),
-		prodRepo:      repository.NewRagConfigRepository(gdb),
-		searchLogRepo: repository.NewKnowledgeSearchLogRepository(gdb),
-		feedbackRepo:  repository.NewKnowledgeFeedbackRepository(gdb),
-		tokenRepo:     repository.NewKnowledgeAPITokenRepository(gdb),
-		externalRepo:  repository.NewExternalImportJobRepository(gdb),
+		kbService:     deps.KBService,
+		ragSearch:     deps.RagSearch,
+		docRepo:       deps.DocRepo,
+		chunkRepo:     deps.ChunkRepo,
+		prodRepo:      deps.ProdRepo,
+		searchLogRepo: deps.SearchLogRepo,
+		feedbackRepo:  deps.FeedbackRepo,
+		tokenRepo:     deps.TokenRepo,
+		externalRepo:  deps.ExternalRepo,
 	}
 }
 
 func (s *KnowledgeMerchantService) ensureReposFromDB() {
-	if s.db == nil {
+	if !s.dbReady() {
 		return
 	}
 	if s.searchLogRepo == nil {
-		s.searchLogRepo = repository.NewKnowledgeSearchLogRepository(s.db)
+		s.searchLogRepo = repository.NewKnowledgeSearchLogRepositoryDefault()
 	}
 	if s.feedbackRepo == nil {
-		s.feedbackRepo = repository.NewKnowledgeFeedbackRepository(s.db)
+		s.feedbackRepo = repository.NewKnowledgeFeedbackRepositoryDefault()
 	}
 	if s.tokenRepo == nil {
-		s.tokenRepo = repository.NewKnowledgeAPITokenRepository(s.db)
+		s.tokenRepo = repository.NewKnowledgeAPITokenRepositoryDefault()
 	}
 	if s.externalRepo == nil {
-		s.externalRepo = repository.NewExternalImportJobRepository(s.db)
+		s.externalRepo = repository.NewExternalImportJobRepositoryDefault()
 	}
 }

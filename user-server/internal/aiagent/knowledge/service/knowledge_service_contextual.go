@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+
+	"hivemtk-user/internal/aiagent/knowledge/kbsearch"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -26,12 +28,12 @@ func (s *KnowledgeService) enhanceDocumentContextual(ctx context.Context, docume
 			logger.Errorf("[R-3] contextual enhance panic doc=%d: %v\n%s", documentID, r, debug.Stack())
 		}
 	}()
-	if s.db == nil || s.llmSvc == nil || s.embeddingSvc == nil {
+	if s.chunkRepo == nil || !s.chunkRepo.Connected() || s.llmSvc == nil || s.embeddingSvc == nil {
 		return
 	}
 	chatClient := ragretrieval.NewDispatcherChatAdapter(llm.NewDispatcher(s.llmSvc)).
 		WithScenario(llm.ScenarioLongSummary)
-	enhancer := ragretrieval.NewContextualRetrievalEnhancer(s.db, chatClient, s.embeddingSvc, nil)
+	enhancer := kbsearch.NewContextualEnhancerFromRepo(s.chunkRepo, chatClient, s.embeddingSvc, nil)
 	if err := enhancer.EnhanceDocument(ctx, documentID); err != nil {
 		logger.Warnf("[R-3] contextual enhance failed doc=%d (non-blocking): %v", documentID, err)
 		return

@@ -8,15 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/aiagent/knowledge/kbsearch"
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/aiagent/llm"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/cache"
-	"hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
-
-	"gorm.io/gorm"
 )
 
 type cacheRedisAdapter struct {
@@ -45,7 +43,7 @@ func getGlobalRedisClient() ragretrieval.RedisClient {
 }
 
 type RagSearcher struct {
-	db               *gorm.DB
+	chunkRepo        *knowledgeRepo.KnowledgeChunkRepository
 	embeddingService llm.EmbeddingServiceInterface
 	hybridSearcher   *ragretrieval.HybridSearcher
 }
@@ -59,26 +57,26 @@ type RagSearcher struct {
 //   - llmChatClient 为 nil：HyDE / Multi-Query 默认关闭；redisClient 仅用于查询改写 L1 缓存
 //
 // 需要完整能力（HyDE / Multi-Query / 显式覆盖）的生产环境可用 EnableHybridSearcher 注入。
+// AV-04c 批次7 刀4：连接经分段仓储（Default 构造自取全局句柄），句柄不在 service 过手；
+// ragretrieval 构造接缝经 kbsearch（llm×ragretrieval×gorm 交汇点）。
 func NewRagSearcher() *RagSearcher {
-	return newRagSearcherWithDB(db.GetDB())
+	return newRagSearcherWithRepo(knowledgeRepo.NewKnowledgeChunkRepositoryDefault())
 }
 
-// NewRagSearcherWithDB 创建带 DB 的 RAG 检索器（供测试注入 DB）
-//
-// 测试场景同样启用 HybridSearcher。
-func NewRagSearcherWithDB(gdb *gorm.DB) *RagSearcher {
-	return newRagSearcherWithDB(gdb)
+// NewRagSearcherWithRepo 仓储注入构造（装配方/测试显式注入分段仓储）。
+func NewRagSearcherWithRepo(chunkRepo *knowledgeRepo.KnowledgeChunkRepository) *RagSearcher {
+	return newRagSearcherWithRepo(chunkRepo)
 }
 
-func newRagSearcherWithDB(gdb *gorm.DB) *RagSearcher {
+func newRagSearcherWithRepo(chunkRepo *knowledgeRepo.KnowledgeChunkRepository) *RagSearcher {
 	s := &RagSearcher{
-		db:               gdb,
+		chunkRepo:        chunkRepo,
 		embeddingService: llm.NewEmbeddingService(),
 	}
 	dispatcher := llm.NewDispatcher(llm.NewLLMService())
 	_ = dispatcher
 
-	embClient := ragretrieval.NewCachedEmbeddingClient(s.embeddingService, getGlobalRedisClient(), gdb, nil)
+	embClient := kbsearch.NewCachedEmbeddingClientFromRepo(chunkRepo, s.embeddingService, getGlobalRedisClient())
 
 	var reranker ragretrieval.RerankerInterface
 	if rc := ragretrieval.DefaultRerankConfig(); rc != nil && rc.Enabled {
@@ -121,8 +119,8 @@ func (s *RagSearcher) EnableHybridSearcher(
 	if embeddingClient == nil {
 		embeddingClient = s.embeddingService
 	}
-	s.hybridSearcher = ragretrieval.NewHybridSearcher(
-		s.db, embeddingClient, reranker, llmChatClient, redisClient, cfg,
+	s.hybridSearcher = kbsearch.NewHybridSearcherFromRepo(
+		s.chunkRepo, embeddingClient, reranker, llmChatClient, redisClient, cfg,
 	)
 }
 
@@ -132,7 +130,7 @@ func (s *RagSearcher) EnableHybridSearcher(
 //  1. 若 hybridSearcher 已注入 → 委托给 HybridSearcher（混合检索 + RRF + 重排）
 //  2. 否则走 legacy：TEI 编码 query → 1024 维向量 → pgvector <=> HNSW → 失败回退 BM25-lite
 func (s *RagSearcher) Search(ctx context.Context, query string, topK int) ([]RAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, nil
 	}
 	if topK <= 0 {
@@ -173,7 +171,7 @@ func (s *RagSearcher) Search(ctx context.Context, query string, topK int) ([]RAG
 // metadata 为可选附加字段过滤条件（如 {"customer_id":"123","order_id":"A01"}），
 // 用于把检索范围收敛到特定业务上下文（如某客户的订单知识）。
 func (s *RagSearcher) SearchIndex(ctx context.Context, productID string, query string, topK int, metadata map[string]string) ([]MerchantRAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, nil
 	}
 	if topK <= 0 {
@@ -212,11 +210,11 @@ func (s *RagSearcher) SearchIndex(ctx context.Context, productID string, query s
 // 实现：每次请求用传入的 embedding client + reranker 构造临时 HybridSearcher，
 // 不修改共享的 s.hybridSearcher 单例（避免并发竞态）。结果经 chunksToMerchantChunks 转换。
 func (s *RagSearcher) SearchIndexWithConfig(ctx context.Context, productID string, query string, topK int, embClient llm.EmbeddingServiceInterface, reranker ragretrieval.RerankerInterface) ([]MerchantRAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, fmt.Errorf("db 未初始化")
 	}
 	cfg := ragretrieval.DefaultHybridSearcherConfig()
-	hs := ragretrieval.NewHybridSearcher(s.db, embClient, reranker, nil, nil, cfg)
+	hs := kbsearch.NewHybridSearcherFromRepo(s.chunkRepo, embClient, reranker, nil, nil, cfg)
 	chunks, err := hs.SearchIndex(ctx, productID, query, topK)
 	if err != nil {
 		return nil, err
@@ -239,15 +237,11 @@ func clampWeight(w float64) float64 {
 
 func (s *RagSearcher) loadChunkWeights(ctx context.Context, ids []uint64) map[uint64]float64 {
 	out := make(map[uint64]float64, len(ids))
-	if s.db == nil || len(ids) == 0 {
+	if !s.chunkRepo.Connected() || len(ids) == 0 {
 		return out
 	}
-	type wrow struct {
-		ID     uint64
-		Weight float64
-	}
-	var rows []wrow
-	if err := s.db.WithContext(ctx).Table("knowledge_chunks").Select("id, weight").Where("id IN ?", ids).Scan(&rows).Error; err != nil {
+	rows, err := s.chunkRepo.ChunkWeights(ctx, ids)
+	if err != nil {
 		logger.Warnf("[RagSearcher] loadChunkWeights failed: %v", err)
 		return out
 	}
@@ -274,7 +268,7 @@ func (s *RagSearcher) rankRAGChunks(ctx context.Context, chunks []RAGChunk) []RA
 	tracing.RecordRecalledChunks(ctx, chunkIDs)
 	// 记录这批召回里有多少条会被版本闸门挡掉，是"要不要开闸"这个决定的数据来源；
 	// off/on 档零开销（LogWouldHide 自己判档）。
-	kbrelease.LogWouldHide(ctx, s.db, ids, "", "rankRAGChunks")
+	s.chunkRepo.LogWouldHide(ctx, ids, "", "rankRAGChunks")
 	weights := s.loadChunkWeights(ctx, ids)
 	type ranked struct {
 		c   RAGChunk
@@ -313,7 +307,7 @@ func (s *RagSearcher) rankMerchantChunks(ctx context.Context, chunks []MerchantR
 		ids = append(ids, c.ID)
 	}
 	tracing.RecordRecalledChunks(ctx, chunkIDs)
-	kbrelease.LogWouldHide(ctx, s.db, ids, "", "rankMerchantChunks")
+	s.chunkRepo.LogWouldHide(ctx, ids, "", "rankMerchantChunks")
 	weights := s.loadChunkWeights(ctx, ids)
 	type ranked struct {
 		c   MerchantRAGChunk

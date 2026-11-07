@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
 
@@ -19,6 +20,12 @@ type KnowledgeChunkParentRepository struct {
 // NewKnowledgeChunkParentRepository 创建父块仓储
 func NewKnowledgeChunkParentRepository(db *gorm.DB) *KnowledgeChunkParentRepository {
 	return &KnowledgeChunkParentRepository{db: db}
+}
+
+// NewKnowledgeChunkParentRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：KnowledgeChunkParentRepository 装配收口装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeChunkParentRepositoryDefault() *KnowledgeChunkParentRepository {
+	return NewKnowledgeChunkParentRepository(_db.GetDB())
 }
 
 // BatchCreate 批量写入父块，回写各自的自增 ID（子块要引用）。

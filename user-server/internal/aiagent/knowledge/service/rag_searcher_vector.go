@@ -6,8 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"hivemtk-user/internal/pkg/kbrelease"
-	"hivemtk-user/internal/pkg/pgvector"
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 )
 
 func (s *RagSearcher) vectorSearch(ctx context.Context, productID string, query string, topK int) ([]scored, error) {
@@ -23,24 +22,24 @@ func (s *RagSearcher) vectorSearch(ctx context.Context, productID string, query 
 
 	vecLiteral := vecToPGString(queryVec)
 
-	var rows []chunkRow
-	q := s.db.WithContext(ctx).Table("knowledge_chunks").
-		Select("id, document_id, content, (1 - (embedding <=> ?::vector))::float8 AS score", vecLiteral).
-		Where("embedding IS NOT NULL AND embedding_source = 'tei'")
-	if productID != "" {
-		q = q.Where("product_id = ?"+kbrelease.AndVisible(), productID)
-	} else if vis := kbrelease.AndVisible(); vis != "" {
-		q = q.Where(strings.TrimPrefix(vis, " AND "))
-	}
-	q = q.Order(pgvector.OrderByEmbeddingDistance(vecLiteral)).Limit(topK)
-	if err := q.Scan(&rows).Error; err != nil {
+	rows, err := s.chunkRepo.VectorSearchRows(ctx, productID, vecLiteral, topK)
+	if err != nil {
 		return nil, err
 	}
 	pairs := make([]scored, 0, len(rows))
 	for _, r := range rows {
-		pairs = append(pairs, scored{row: r, score: r.Score})
+		pairs = append(pairs, scored{row: chunkRow(r), score: r.Score})
 	}
 	return pairs, nil
+}
+
+// toServiceChunkRows 仓储行 → service 行（同形字段直转换）。
+func toServiceChunkRows(rows []knowledgeRepo.RagSearchChunkRow) []chunkRow {
+	out := make([]chunkRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, chunkRow(r))
+	}
+	return out
 }
 
 func vecToPGString(v []float32) string {

@@ -21,6 +21,12 @@ func NewKnowledgeFeedbackRepository(db *gorm.DB) *KnowledgeFeedbackRepository {
 	return &KnowledgeFeedbackRepository{db: db}
 }
 
+// NewKnowledgeFeedbackRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：service 装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeFeedbackRepositoryDefault() *KnowledgeFeedbackRepository {
+	return NewKnowledgeFeedbackRepository(_db.GetDB())
+}
+
 // Create 创建反馈
 func (r *KnowledgeFeedbackRepository) Create(ctx context.Context, fb *model.KnowledgeFeedback) error {
 	if r == nil || r.db == nil {
@@ -115,6 +121,12 @@ func NewKnowledgeAPITokenRepository(db *gorm.DB) *KnowledgeAPITokenRepository {
 	return &KnowledgeAPITokenRepository{db: db}
 }
 
+// NewKnowledgeAPITokenRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：service 装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeAPITokenRepositoryDefault() *KnowledgeAPITokenRepository {
+	return NewKnowledgeAPITokenRepository(_db.GetDB())
+}
+
 // Create 创建 Token
 func (r *KnowledgeAPITokenRepository) Create(ctx context.Context, tok *model.KnowledgeAPIToken) error {
 	if r == nil || r.db == nil {
@@ -182,6 +194,12 @@ type ExternalImportJobRepository struct {
 // NewExternalImportJobRepository 创建外部导入任务仓储
 func NewExternalImportJobRepository(db *gorm.DB) *ExternalImportJobRepository {
 	return &ExternalImportJobRepository{db: db}
+}
+
+// NewExternalImportJobRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：service 装配收口——句柄解析收回仓储层，service 不再经手。
+func NewExternalImportJobRepositoryDefault() *ExternalImportJobRepository {
+	return NewExternalImportJobRepository(_db.GetDB())
 }
 
 // Create 创建任务

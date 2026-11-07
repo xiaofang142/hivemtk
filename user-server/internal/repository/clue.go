@@ -49,6 +49,18 @@ func NewClueRepositoryWithDB(db *gorm.DB) ClueRepository {
 	return &clueRepo{db: db}
 }
 
+// NewClueRepositoryShared 以 WebhookEventRepository 的连接构造（AV-04c 批次7）。
+//
+// webhook 懒装配接缝：原先 service 从 eventRepo.GetDB() 取句柄再传进来，句柄在
+// service 层过手。改为仓储层共享构造；来源仓储缺句柄时返回 nil 接口值，
+// 保持「无库不建仓」的懒装配语义（nil 由调用方照旧判空）。
+func NewClueRepositoryShared(evRepo *WebhookEventRepository) ClueRepository {
+	if evRepo == nil || evRepo.db == nil {
+		return nil
+	}
+	return NewClueRepositoryWithDB(evRepo.db)
+}
+
 // Create 纯写入。去重判据属业务规则，由 service 层先查 ExistsByTypeAndAccount 再决定。
 func (r *clueRepo) Create(ctx context.Context, clue *model.Clue) error {
 	return r.db.WithContext(ctx).Create(clue).Error

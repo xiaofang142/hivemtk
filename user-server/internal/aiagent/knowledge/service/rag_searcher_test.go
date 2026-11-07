@@ -32,8 +32,8 @@ func toPgVector(vec []float32) string {
 func TestRagSearcher_RealVectorSearch(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.KnowledgeChunk{}, &model.KnowledgeDocument{})
 	testmigrate.RunTestMigrations(t, database)
-	s := NewRagSearcherWithDB(database)
-	if s.db == nil {
+	s := NewRagSearcher()
+	if !s.chunkRepo.Connected() {
 		t.Fatalf("DB 未初始化")
 	}
 

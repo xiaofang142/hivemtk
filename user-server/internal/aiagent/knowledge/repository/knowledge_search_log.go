@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/reporting"
 	"strings"
@@ -19,6 +20,12 @@ type KnowledgeSearchLogRepository struct {
 // NewKnowledgeSearchLogRepository 创建检索日志仓储
 func NewKnowledgeSearchLogRepository(db *gorm.DB) *KnowledgeSearchLogRepository {
 	return &KnowledgeSearchLogRepository{db: db}
+}
+
+// NewKnowledgeSearchLogRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：KnowledgeSearchLogRepository 装配收口装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeSearchLogRepositoryDefault() *KnowledgeSearchLogRepository {
+	return NewKnowledgeSearchLogRepository(_db.GetDB())
 }
 
 // Create 创建日志

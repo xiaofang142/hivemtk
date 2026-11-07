@@ -19,6 +19,13 @@ func NewKnowledgeBaseRepository(db *gorm.DB) *KnowledgeBaseRepository {
 	return &KnowledgeBaseRepository{db: db}
 }
 
+// NewKnowledgeBaseRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/knowledge_base.go 装配收口——句柄解析收回仓储层，
+// service 不再经 repository.GetDB() 伸手拿句柄。
+func NewKnowledgeBaseRepositoryDefault() *KnowledgeBaseRepository {
+	return NewKnowledgeBaseRepository(GetDB())
+}
+
 // Create 新增知识库
 func (r *KnowledgeBaseRepository) Create(ctx context.Context, kb *model.KnowledgeBase) error {
 	return r.db.WithContext(ctx).Select("*").Create(kb).Error

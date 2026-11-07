@@ -23,6 +23,12 @@ func NewKBItemBindingRepository(db *gorm.DB) *KBItemBindingRepository {
 	return &KBItemBindingRepository{db: db}
 }
 
+// NewKBItemBindingRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/knowledge_base.go 装配收口——句柄解析收回仓储层。
+func NewKBItemBindingRepositoryDefault() *KBItemBindingRepository {
+	return NewKBItemBindingRepository(GetDB())
+}
+
 // itemModel 返回 item_type 对应的内容模型与标题列名。
 func itemModel(itemType string) (any, string, error) {
 	switch itemType {

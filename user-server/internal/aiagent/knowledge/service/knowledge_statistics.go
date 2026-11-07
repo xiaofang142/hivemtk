@@ -7,13 +7,13 @@ import (
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	"hivemtk-user/internal/aiagent/knowledge/repository"
-	"hivemtk-user/internal/pkg/db"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // KnowledgeStatisticsService 知识库统计服务
+//
+// AV-04c 批次7 刀4：不再持有 *gorm.DB，五仓储构造收口（Default 自取全局句柄 /
+// WithDeps 显式注入）。
 type KnowledgeStatisticsService struct {
 	docRepo       *repository.KnowledgeDocumentRepository
 	chunkRepo     *repository.KnowledgeChunkRepository
@@ -22,23 +22,39 @@ type KnowledgeStatisticsService struct {
 	openapiRepo   *repository.KnowledgeOpenAPIRepository
 }
 
-// NewKnowledgeStatisticsService 创建统计服务
+// KnowledgeStatisticsDeps 仓储依赖集合（装配点/测试显式注入；替代 *gorm.DB 形参）。
+type KnowledgeStatisticsDeps struct {
+	DocRepo       *repository.KnowledgeDocumentRepository
+	ChunkRepo     *repository.KnowledgeChunkRepository
+	ImportLogRepo *repository.KnowledgeImportLogRepository
+	SearchLogRepo *repository.KnowledgeSearchLogRepository
+	OpenAPIRepo   *repository.KnowledgeOpenAPIRepository
+}
+
+// NewKnowledgeStatisticsService 创建统计服务（各仓储 Default 构造自取全局句柄，
+// 与原 newKnowledgeStatisticsServiceWithDB(db.GetDB()) 同连接同时刻）。
 func NewKnowledgeStatisticsService() *KnowledgeStatisticsService {
-	return newKnowledgeStatisticsServiceWithDB(db.GetDB())
+	return newKnowledgeStatisticsService(KnowledgeStatisticsDeps{
+		DocRepo:       repository.NewKnowledgeDocumentRepositoryDefault(),
+		ChunkRepo:     repository.NewKnowledgeChunkRepositoryDefault(),
+		ImportLogRepo: repository.NewKnowledgeImportLogRepositoryDefault(),
+		SearchLogRepo: repository.NewKnowledgeSearchLogRepositoryDefault(),
+		OpenAPIRepo:   repository.NewKnowledgeOpenAPIRepositoryDefault(),
+	})
 }
 
-// NewKnowledgeStatisticsServiceWithDB 带 DB 的统计服务(用于测试)
-func NewKnowledgeStatisticsServiceWithDB(gdb *gorm.DB) *KnowledgeStatisticsService {
-	return newKnowledgeStatisticsServiceWithDB(gdb)
+// NewKnowledgeStatisticsServiceWithDeps 仓储注入构造（装配方自有句柄/测试注入）。
+func NewKnowledgeStatisticsServiceWithDeps(deps KnowledgeStatisticsDeps) *KnowledgeStatisticsService {
+	return newKnowledgeStatisticsService(deps)
 }
 
-func newKnowledgeStatisticsServiceWithDB(gdb *gorm.DB) *KnowledgeStatisticsService {
+func newKnowledgeStatisticsService(deps KnowledgeStatisticsDeps) *KnowledgeStatisticsService {
 	return &KnowledgeStatisticsService{
-		docRepo:       repository.NewKnowledgeDocumentRepository(gdb),
-		chunkRepo:     repository.NewKnowledgeChunkRepository(gdb),
-		importLogRepo: repository.NewKnowledgeImportLogRepository(gdb),
-		searchLogRepo: repository.NewKnowledgeSearchLogRepository(gdb),
-		openapiRepo:   repository.NewKnowledgeOpenAPIRepository(gdb),
+		docRepo:       deps.DocRepo,
+		chunkRepo:     deps.ChunkRepo,
+		importLogRepo: deps.ImportLogRepo,
+		searchLogRepo: deps.SearchLogRepo,
+		openapiRepo:   deps.OpenAPIRepo,
 	}
 }
 

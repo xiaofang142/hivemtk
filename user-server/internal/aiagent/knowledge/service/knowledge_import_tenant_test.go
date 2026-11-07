@@ -71,7 +71,7 @@ func TestImportDocument_TenantScopedPath(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("STORAGE_LOCAL_BASE_DIR", base)
 
-	svc := NewKnowledgeBaseServiceWithDB(db)
+	svc := NewKnowledgeBaseService()
 
 	cases := []struct {
 		name       string
@@ -127,7 +127,7 @@ func TestImportDocument_OnModeWithoutTenantFailsClosed(t *testing.T) {
 	t.Setenv("STORAGE_LOCAL_BASE_DIR", base)
 
 	withTenantModeKB(t, tenant.ModeOn)
-	svc := NewKnowledgeBaseServiceWithDB(db)
+	svc := NewKnowledgeBaseService()
 
 	file, header := importTempUpload(t, "hello")
 	if _, err := svc.ImportDocument(context.Background(), "t", file, header); err == nil {
@@ -160,7 +160,7 @@ func TestImportText_TenantScopedPath(t *testing.T) {
 	base := t.TempDir()
 	t.Setenv("STORAGE_LOCAL_BASE_DIR", base)
 
-	svc := NewKnowledgeServiceWithDB(db)
+	svc := NewKnowledgeService()
 	withTenantModeKB(t, tenant.ModeOn)
 	ctx := tenant.WithTenantID(context.Background(), 9)
 

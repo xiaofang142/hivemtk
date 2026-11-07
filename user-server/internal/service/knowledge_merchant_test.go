@@ -196,7 +196,7 @@ func TestSubmitFeedback_ValidatesRating(t *testing.T) {
 }
 
 func TestContextCheck(t *testing.T) {
-	svc := knowledgesvc.NewKnowledgeMerchantServiceWithDB(nil)
+	svc := knowledgesvc.NewKnowledgeMerchantServiceWithDeps(knowledgesvc.KnowledgeMerchantDeps{}) // 零值 deps = 原 WithDB(nil) 无库语义
 	err := svc.SubmitFeedback(context.Background(), &knowledgesvc.SubmitFeedbackRequest{Query: "q", Rating: 1})
 	if err != nil {
 		t.Errorf("nil db should not error on feedback: %v", err)

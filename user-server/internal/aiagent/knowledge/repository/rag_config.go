@@ -20,6 +20,12 @@ func NewRagConfigRepository(db *gorm.DB) *RagConfigRepository {
 	return &RagConfigRepository{db: db}
 }
 
+// NewRagConfigRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：service 装配收口——句柄解析收回仓储层，service 不再经手。
+func NewRagConfigRepositoryDefault() *RagConfigRepository {
+	return NewRagConfigRepository(_db.GetDB())
+}
+
 func (r *RagConfigRepository) CreateRagProduct(ctx context.Context, product *model.RagProduct) error {
 	product.ID = uuid.New().String()
 	return r.db.WithContext(ctx).Create(product).Error

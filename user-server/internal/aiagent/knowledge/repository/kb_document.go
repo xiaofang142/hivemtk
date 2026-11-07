@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
@@ -17,6 +18,19 @@ type KBDocumentRepository struct {
 // NewKBDocumentRepository 创建知识库文档仓储
 func NewKBDocumentRepository(db *gorm.DB) *KBDocumentRepository {
 	return &KBDocumentRepository{db: db}
+}
+
+// NewKBDocumentRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：创建知识库文档仓储装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKBDocumentRepositoryDefault() *KBDocumentRepository {
+	return NewKBDocumentRepository(_db.GetDB())
+}
+
+// Transaction 事务接缝（仓储同形接缝）：回调拿到事务句柄执行原子读写。
+// AV-03 钉住的 service 层唯一合法 Transaction 回调（DeleteDocument 级联删除）
+// 经此接缝保持原样——回调体仍在 service（业务原子性语义），句柄解析收回仓储。
+func (r *KBDocumentRepository) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return r.db.WithContext(ctx).Transaction(fn)
 }
 
 // Create 创建文档

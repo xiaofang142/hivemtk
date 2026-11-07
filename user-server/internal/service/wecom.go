@@ -34,14 +34,14 @@ type WeComService struct {
 	tagRepo      *repository.WeComTagRepository
 }
 
-// NewWeComService 创建企业微信服务实例(无参,内部用 dbUtil.GetDB()
+// NewWeComService 创建企业微信服务实例(无参,各仓储自取全局库)
 func NewWeComService() *WeComService {
 	return &WeComService{
 		accountRepo:  repository.NewWeComAccountRepository(),
 		customerRepo: repository.NewWeComCustomerRepository(),
 		groupRepo:    repository.NewWeComGroupRepository(),
 		messageRepo:  repository.NewWeComMessageRepository(),
-		tagRepo:      repository.NewWeComTagRepository(repository.GetDB()),
+		tagRepo:      repository.NewWeComTagRepositoryDefault(),
 	}
 }
 

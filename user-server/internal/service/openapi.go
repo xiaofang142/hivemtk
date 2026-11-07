@@ -14,7 +14,6 @@ import (
 	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/model"
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"io"
 	"net/http"
 	"strings"
@@ -35,8 +34,8 @@ type OpenAPIService struct {
 // NewOpenAPIService 创建 OpenAPI 服务
 func NewOpenAPIService() *OpenAPIService {
 	return &OpenAPIService{
-		srcRepo:   knowledgerepo.NewKnowledgeOpenAPIRepository(dbUtil.GetDB()),
-		docRepo:   knowledgerepo.NewKnowledgeDocumentRepository(dbUtil.GetDB()),
+		srcRepo:   knowledgerepo.NewKnowledgeOpenAPIRepositoryDefault(),
+		docRepo:   knowledgerepo.NewKnowledgeDocumentRepositoryDefault(),
 		kbService: knowledgesvc.NewKnowledgeService(),
 		client: &http.Client{
 			Timeout: 60 * time.Second,

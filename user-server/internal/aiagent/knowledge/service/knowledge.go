@@ -14,7 +14,6 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/etl"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/async"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"mime/multipart"
@@ -23,8 +22,6 @@ import (
 	"sync/atomic"
 
 	"time"
-
-	"gorm.io/gorm"
 )
 
 // kbAnchor 内容变更失效锚端口：抬 KB 行 updated_at 的能力。
@@ -65,8 +62,10 @@ type (
 )
 
 // KnowledgeService 知识库服务(统一入口)
+//
+// AV-04c 批次7 刀4：不再持有 *gorm.DB，六仓储构造收口（Default 自取全局句柄 /
+// WithDeps 显式注入），句柄不出仓储层。
 type KnowledgeService struct {
-	db            *gorm.DB
 	processor     *etl.DocumentProcessor
 	vectorizer    *ragretrieval.Vectorizer
 	indexer       ragretrieval.IndexManagerInterface
@@ -82,32 +81,51 @@ type KnowledgeService struct {
 	ragSearcher   *RagSearcher
 }
 
-// NewKnowledgeService 创建知识库服务
+// KnowledgeServiceDeps 仓储依赖集合（装配点/测试显式注入；替代 *gorm.DB 形参）。
+type KnowledgeServiceDeps struct {
+	RagRepo       *repository.RagConfigRepository
+	DocRepo       *repository.KnowledgeDocumentRepository
+	ChunkRepo     *repository.KnowledgeChunkRepository
+	ParentRepo    *repository.KnowledgeChunkParentRepository
+	ImportLogRepo *repository.KnowledgeImportLogRepository
+	SearchLogRepo *repository.KnowledgeSearchLogRepository
+	// RagSearcher 缺省时按 ChunkRepo 构造（同连接）；显式传 nil 表示刻意不装配。
+	RagSearcher *RagSearcher
+}
+
+// NewKnowledgeService 创建知识库服务（各仓储 Default 构造自取全局句柄，
+// 与原 newKnowledgeServiceWithDB(db.GetDB()) 同连接同时刻）。
 func NewKnowledgeService() *KnowledgeService {
-	return newKnowledgeServiceWithDB(db.GetDB())
+	return newKnowledgeService(KnowledgeServiceDeps{
+		RagRepo:       repository.NewRagConfigRepositoryDefault(),
+		DocRepo:       repository.NewKnowledgeDocumentRepositoryDefault(),
+		ChunkRepo:     repository.NewKnowledgeChunkRepositoryDefault(),
+		ParentRepo:    repository.NewKnowledgeChunkParentRepositoryDefault(),
+		ImportLogRepo: repository.NewKnowledgeImportLogRepositoryDefault(),
+		SearchLogRepo: repository.NewKnowledgeSearchLogRepositoryDefault(),
+	})
 }
 
-// NewKnowledgeServiceWithDB 创建带 DB 的知识库服务(用于测试)
-func NewKnowledgeServiceWithDB(gdb *gorm.DB) *KnowledgeService {
-	return newKnowledgeServiceWithDB(gdb)
+// NewKnowledgeServiceWithDeps 仓储注入构造（装配方自有句柄/测试注入）。
+func NewKnowledgeServiceWithDeps(deps KnowledgeServiceDeps) *KnowledgeService {
+	return newKnowledgeService(deps)
 }
 
-func newKnowledgeServiceWithDB(gdb *gorm.DB) *KnowledgeService {
+func newKnowledgeService(deps KnowledgeServiceDeps) *KnowledgeService {
 	return &KnowledgeService{
-		db:            gdb,
 		processor:     etl.NewDocumentProcessor(nil),
 		vectorizer:    ragretrieval.NewVectorizer(EmbeddingDim(), nil),
 		indexer:       nil,
-		ragRepo:       repository.NewRagConfigRepository(gdb),
-		docRepo:       repository.NewKnowledgeDocumentRepository(gdb),
-		chunkRepo:     repository.NewKnowledgeChunkRepository(gdb),
-		parentRepo:    repository.NewKnowledgeChunkParentRepository(gdb),
-		importLogRepo: repository.NewKnowledgeImportLogRepository(gdb),
-		searchLogRepo: repository.NewKnowledgeSearchLogRepository(gdb),
+		ragRepo:       deps.RagRepo,
+		docRepo:       deps.DocRepo,
+		chunkRepo:     deps.ChunkRepo,
+		parentRepo:    deps.ParentRepo,
+		importLogRepo: deps.ImportLogRepo,
+		searchLogRepo: deps.SearchLogRepo,
 		kbRepo:        anchorOrDefault(),
 		embeddingSvc:  llm.NewEmbeddingService(),
 		llmSvc:        llm.NewLLMService(),
-		ragSearcher:   NewRagSearcherWithDB(gdb),
+		ragSearcher:   NewRagSearcherWithRepo(deps.ChunkRepo),
 	}
 }
 

@@ -268,6 +268,12 @@ func NewWeComTagRepository(db *gorm.DB) *WeComTagRepository {
 	}
 }
 
+// NewWeComTagRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7：service/wecom.go 装配收口——句柄解析收回仓储层。
+func NewWeComTagRepositoryDefault() *WeComTagRepository {
+	return NewWeComTagRepository(GetDB())
+}
+
 // Create 创建标签
 func (r *WeComTagRepository) Create(ctx context.Context, tag *model.WeComTag) error {
 	return r.db.WithContext(ctx).Create(tag).Error

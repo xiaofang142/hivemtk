@@ -11,10 +11,8 @@
 # trace_learning/adjuster.go 的两处 `repo.GetDB() == nil` 已改为仓储 `DBReady()` 就绪探针（句柄判断
 # 收回仓储内部，不再经 service 取句柄）；feedback 系四文件（H4 域）按既有口径补登——它们用同一
 # 连接构造兄弟仓储/在启动期装配，收口需构造注入，登记同样只是承认存量。
+# 2026-11-07 AV-04c 批次7 刀1：knowledge_base/openapi/cards/tiktok_card/webhook/wecom 五文件
+# getdb 1+2+1+2+1 清零除名（装配收口为仓储 Default 构造；webhook 懒装配改仓储 Shared 构造，
+# 句柄不再在 service 过手）——全域宽口径存量清零，本表自此无条目行，守卫回归「新增即红」。
 存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 存量：service 直接取 DB 句柄，收口需改构造注入（三个构造器各取 1–2 处：NewAIAgentService/NewChannelAgentBindingService/NewCustomerServiceAgentService）
-user-server/internal/service/knowledge_base.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/openapi.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/cards/tiktok_card.go	1	存量：卡片服务构造时取全局库句柄，收口需改构造注入（2026-11-05 拆包迁入 cards/ 子包，处数不变）
-user-server/internal/service/webhook.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/wecom.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）

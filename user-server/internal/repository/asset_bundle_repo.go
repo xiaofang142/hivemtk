@@ -129,7 +129,10 @@ func (r *assetBundleRepo) List(ctx context.Context, f AssetBundleFilter) ([]*mod
 
 	if strings.TrimSpace(f.Keyword) != "" {
 		kw := "%" + f.Keyword + "%"
-		q = q.Where("title ILIKE ? OR description ILIKE ?", kw, kw)
+		// 前端 placeholder 承诺「搜索标题 / Asset ID」，所以 asset_id 也必须参与
+		// 关键词匹配；只搜 title/description 会让「按 Asset ID 找包」永远落空
+		// （asset_id 是用户在列表页最常用的精确定位键）。
+		q = q.Where("title ILIKE ? OR description ILIKE ? OR asset_id ILIKE ?", kw, kw, kw)
 	}
 	if f.Author != "" {
 		q = q.Where("author = ?", f.Author)

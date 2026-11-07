@@ -47,12 +47,21 @@ func NewKnowledgeToolDeps() KnowledgeToolDeps {
 	}
 }
 
-// NewKnowledgeToolDepsWithDB 创建知识工具依赖（带 DB，用于测试）
+// NewKnowledgeToolDepsWithDB 创建知识工具依赖（带 DB，用于测试）。
+// AV-04c 批次7 刀4：service 层 *gorm.DB 构造形参清零后，本装配点改以仓储注入
+// 拼装 KnowledgeService（同句柄同刻构造，连接不变）。
 func NewKnowledgeToolDepsWithDB(gdb *gorm.DB) KnowledgeToolDeps {
-	ks := knowledgesvc.NewKnowledgeServiceWithDB(gdb)
+	ks := knowledgesvc.NewKnowledgeServiceWithDeps(knowledgesvc.KnowledgeServiceDeps{
+		RagRepo:       knowledgerepo.NewRagConfigRepository(gdb),
+		DocRepo:       knowledgerepo.NewKnowledgeDocumentRepository(gdb),
+		ChunkRepo:     knowledgerepo.NewKnowledgeChunkRepository(gdb),
+		ParentRepo:    knowledgerepo.NewKnowledgeChunkParentRepository(gdb),
+		ImportLogRepo: knowledgerepo.NewKnowledgeImportLogRepository(gdb),
+		SearchLogRepo: knowledgerepo.NewKnowledgeSearchLogRepository(gdb),
+	})
 	return KnowledgeToolDeps{
 		KnowledgeService: ks,
-		RagSearcher:      knowledgesvc.NewRagSearcherWithDB(gdb),
+		RagSearcher:      knowledgesvc.NewRagSearcherWithRepo(knowledgerepo.NewKnowledgeChunkRepository(gdb)),
 		RagRepo:          knowledgerepo.NewRagConfigRepository(gdb),
 		DocRepo:          knowledgerepo.NewKnowledgeDocumentRepository(gdb),
 		SearchLogRepo:    knowledgerepo.NewKnowledgeSearchLogRepository(gdb),

@@ -51,6 +51,18 @@ func NewInboxConversationRepositoryWithDB(db *gorm.DB) *InboxConversationReposit
 	return &InboxConversationRepository{db: db}
 }
 
+// NewInboxConversationRepositoryShared 以 WebhookEventRepository 的连接构造（AV-04c 批次7）。
+//
+// webhook 懒装配接缝：原先 service 从 eventRepo.GetDB() 取句柄再手工
+// New+SetInboxConversationRepoDB，句柄在 service 层过手。改为仓储层共享构造——
+// 来源仓储缺句柄时返回 nil，保持「无库不建仓」的懒装配语义（nil 由调用方照旧判空）。
+func NewInboxConversationRepositoryShared(evRepo *WebhookEventRepository) *InboxConversationRepository {
+	if evRepo == nil || evRepo.db == nil {
+		return nil
+	}
+	return NewInboxConversationRepositoryWithDB(evRepo.db)
+}
+
 // SetInboxConversationRepoDB 工具函数（service 层使用）
 func SetInboxConversationRepoDB(r *InboxConversationRepository, db *gorm.DB) {
 	r.SetDB(context.Background(), db)

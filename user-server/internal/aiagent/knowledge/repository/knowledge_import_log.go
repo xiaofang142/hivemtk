@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/reporting"
 	"time"
@@ -18,6 +19,12 @@ type KnowledgeImportLogRepository struct {
 // NewKnowledgeImportLogRepository 创建导入日志仓储
 func NewKnowledgeImportLogRepository(db *gorm.DB) *KnowledgeImportLogRepository {
 	return &KnowledgeImportLogRepository{db: db}
+}
+
+// NewKnowledgeImportLogRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+// AV-04c 批次7 刀4：KnowledgeImportLogRepository 装配收口装配收口——句柄解析收回仓储层，service 不再经手。
+func NewKnowledgeImportLogRepositoryDefault() *KnowledgeImportLogRepository {
+	return NewKnowledgeImportLogRepository(_db.GetDB())
 }
 
 // Create 创建日志

@@ -108,7 +108,7 @@ func (s *KnowledgeMerchantService) ValidateToken(ctx context.Context, plain stri
 	if plain == "" {
 		return nil, fmt.Errorf("%w: token 不能为空", utils.ErrUnauthorized)
 	}
-	if s.db == nil {
+	if !s.dbReady() {
 		return nil, errors.New("数据库未初始化")
 	}
 	s.ensureReposFromDB()

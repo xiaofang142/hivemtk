@@ -9,15 +9,17 @@ import (
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/etl"
 	chunkModel "hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"os"
 
 	"gorm.io/gorm"
 )
 
 // KnowledgeBaseService 知识库服务
+//
+// AV-04c 批次7 刀4：不再持有 *gorm.DB——文档读写全部经 docs 仓储，
+// DeleteDocument 的事务接缝（AV-03 钉住的合法 Transaction 实参回调）经
+// KBDocumentRepository.Transaction 仓储接缝保持原样，句柄解析收回仓储层。
 type KnowledgeBaseService struct {
-	db        *gorm.DB
 	docs      *knowledgeRepo.KBDocumentRepository
 	processor *etl.DocumentProcessor
 	indexer   ragretrieval.IndexManagerInterface
@@ -32,20 +34,17 @@ type KnowledgeBaseService struct {
 // NewKnowledgeBaseService 创建知识库服务
 // 默认 EmbeddingDim 维(bge-m3,本地 TEI 真实 embedding)
 func NewKnowledgeBaseService() *KnowledgeBaseService {
-	return &KnowledgeBaseService{
-		db:        db.GetDB(),
-		docs:      knowledgeRepo.NewKBDocumentRepository(db.GetDB()),
-		processor: etl.NewDocumentProcessor(nil),
-		indexer:   ragretrieval.NewInMemoryIndexManager(EmbeddingDim()),
-		vector:    ragretrieval.NewVectorizer(EmbeddingDim(), nil),
-	}
+	return newKnowledgeBaseService(knowledgeRepo.NewKBDocumentRepositoryDefault())
 }
 
-// NewKnowledgeBaseServiceWithDB 创建带 DB 连接的知识库服务(用于测试)
-func NewKnowledgeBaseServiceWithDB(gdb *gorm.DB) *KnowledgeBaseService {
+// NewKnowledgeBaseServiceWithDocs 仓储注入构造（装配方自有句柄/测试注入）。
+func NewKnowledgeBaseServiceWithDocs(docs *knowledgeRepo.KBDocumentRepository) *KnowledgeBaseService {
+	return newKnowledgeBaseService(docs)
+}
+
+func newKnowledgeBaseService(docs *knowledgeRepo.KBDocumentRepository) *KnowledgeBaseService {
 	return &KnowledgeBaseService{
-		db:        gdb,
-		docs:      knowledgeRepo.NewKBDocumentRepository(gdb),
+		docs:      docs,
 		processor: etl.NewDocumentProcessor(nil),
 		indexer:   ragretrieval.NewInMemoryIndexManager(EmbeddingDim()),
 		vector:    ragretrieval.NewVectorizer(EmbeddingDim(), nil),
@@ -71,7 +70,9 @@ func (s *KnowledgeBaseService) GetDocument(ctx context.Context, id uint) (*model
 
 func (s *KnowledgeBaseService) DeleteDocument(ctx context.Context, id uint) error {
 	var doc model.KBDocument
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	// AV-03 钉住的合法事务接缝：Transaction 实参位置的回调原样保留（回调体逐字
+	// 未动），句柄解析经 KBDocumentRepository.Transaction 收回仓储层。
+	err := s.docs.Transaction(ctx, func(tx *gorm.DB) error {
 		if err := tx.WithContext(ctx).Where("id = ?", id).First(&doc).Error; err != nil {
 			return err
 		}

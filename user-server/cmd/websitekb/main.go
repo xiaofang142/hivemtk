@@ -27,6 +27,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
+	knowledgerepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
@@ -110,7 +111,14 @@ func main() {
 		// 向量化：Reindex 会读 chunk 内容 → 调 embedding 服务 → 回写 embedding
 		// 并把文档状态置为 indexed。不做这步，chunk 的 embedding 为空，
 		// 检索时 `WHERE embedding IS NOT NULL` 会把它们全过滤掉（等于白插）。
-		ks := knowledgesvc.NewKnowledgeServiceWithDB(db)
+		ks := knowledgesvc.NewKnowledgeServiceWithDeps(knowledgesvc.KnowledgeServiceDeps{
+			RagRepo:       knowledgerepo.NewRagConfigRepository(db),
+			DocRepo:       knowledgerepo.NewKnowledgeDocumentRepository(db),
+			ChunkRepo:     knowledgerepo.NewKnowledgeChunkRepository(db),
+			ParentRepo:    knowledgerepo.NewKnowledgeChunkParentRepository(db),
+			ImportLogRepo: knowledgerepo.NewKnowledgeImportLogRepository(db),
+			SearchLogRepo: knowledgerepo.NewKnowledgeSearchLogRepository(db),
+		})
 		if err := ks.Reindex(ctx, productID, doc.ID); err != nil {
 			fmt.Printf("[%s] 向量化失败: %v\n", d.Title, err)
 			os.Exit(1)
@@ -163,7 +171,14 @@ func fixPricingDoc(ctx context.Context, db *gorm.DB) error {
 	if err := db.WithContext(ctx).Save(&doc).Error; err != nil {
 		return err
 	}
-	ks := knowledgesvc.NewKnowledgeServiceWithDB(db)
+	ks := knowledgesvc.NewKnowledgeServiceWithDeps(knowledgesvc.KnowledgeServiceDeps{
+		RagRepo:       knowledgerepo.NewRagConfigRepository(db),
+		DocRepo:       knowledgerepo.NewKnowledgeDocumentRepository(db),
+		ChunkRepo:     knowledgerepo.NewKnowledgeChunkRepository(db),
+		ParentRepo:    knowledgerepo.NewKnowledgeChunkParentRepository(db),
+		ImportLogRepo: knowledgerepo.NewKnowledgeImportLogRepository(db),
+		SearchLogRepo: knowledgerepo.NewKnowledgeSearchLogRepository(db),
+	})
 	if err := ks.Reindex(ctx, productID, doc.ID); err != nil {
 		return fmt.Errorf("价格文档向量化失败: %w", err)
 	}

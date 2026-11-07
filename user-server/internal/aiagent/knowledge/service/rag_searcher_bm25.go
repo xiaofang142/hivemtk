@@ -4,45 +4,37 @@ import (
 	"context"
 	"sort"
 
-	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/utils/bm25"
 )
 
 func (s *RagSearcher) bm25SearchAll(ctx context.Context, query string, topK int) ([]RAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, nil
 	}
 	terms := bm25.Tokenize(query)
 	if len(terms) == 0 {
 		return nil, nil
 	}
-	var rows []chunkRow
-	q := kbrelease.WhereVisible(s.db.WithContext(ctx).
-		Table("knowledge_chunks").
-		Select("id, document_id, content").
-		Where("embedding IS NULL OR embedding IS NOT NULL"))
-	if err := q.Limit(BM25ScanLimit()).Scan(&rows).Error; err != nil {
+	rows, err := s.chunkRepo.BM25ScanRows(ctx, BM25ScanLimit())
+	if err != nil {
 		return nil, err
 	}
-	return s.bm25RankAndReturn(rows, terms, topK), nil
+	return s.bm25RankAndReturn(toServiceChunkRows(rows), terms, topK), nil
 }
 
 func (s *RagSearcher) bm25SearchIndex(ctx context.Context, productID string, query string, topK int) ([]MerchantRAGChunk, error) {
-	if s.db == nil {
+	if !s.chunkRepo.Connected() {
 		return nil, nil
 	}
 	terms := bm25.Tokenize(query)
 	if len(terms) == 0 {
 		return nil, nil
 	}
-	var rows []chunkRow
-	q := kbrelease.WhereVisible(s.db.WithContext(ctx).
-		Table("knowledge_chunks").
-		Select("id, document_id, content").
-		Where("product_id = ?", productID))
-	if err := q.Limit(BM25ScanLimit()).Scan(&rows).Error; err != nil {
+	repoRows, err := s.chunkRepo.BM25ScanRowsByProduct(ctx, productID, BM25ScanLimit())
+	if err != nil {
 		return nil, err
 	}
+	rows := toServiceChunkRows(repoRows)
 	pairs := s.bm25Rank(rows, terms)
 	if len(pairs) > topK {
 		pairs = pairs[:topK]
