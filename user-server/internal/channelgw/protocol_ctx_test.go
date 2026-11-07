@@ -23,6 +23,10 @@ func TestIngestCtxKeys(t *testing.T) {
 		IngestCtxFanTag,
 		IngestCtxNewCustomerTag,
 		IngestCtxSenderName,
+		// CH-37b 身份/会话扩展键
+		IngestCtxAssignedStatus,
+		IngestCtxShopID,
+		IngestCtxRegion,
 	}
 	seen := map[string]bool{}
 	for _, k := range keys {
@@ -43,6 +47,12 @@ func TestIngestCtxKeys(t *testing.T) {
 	for _, must := range []string{IngestCtxGoods, IngestCtxGoodsID, IngestCtxOrderID, IngestCtxOrderStatus} {
 		if !seen[must] {
 			t.Errorf("缺少电商核心上下文键 %q", must)
+		}
+	}
+	// CH-37b 身份/会话扩展键不得缺失（店铺归属/地域/接单状态）
+	for _, must := range []string{IngestCtxAssignedStatus, IngestCtxShopID, IngestCtxRegion} {
+		if !seen[must] {
+			t.Errorf("缺少身份/会话扩展上下文键 %q", must)
 		}
 	}
 }

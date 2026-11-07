@@ -2,6 +2,7 @@ package channelgw
 
 import (
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -112,7 +113,79 @@ const (
 	IngestCtxFanTag         = "ctx.fan_tag"          // 粉丝标签
 	IngestCtxNewCustomerTag = "ctx.new_customer_tag" // 新客标签
 	IngestCtxSenderName     = "ctx.sender_name"      // 发送者昵称（与顶层 sender_name 同源冗余）
+
+	// CH-37b 身份/会话扩展键：店铺归属、地域、接单/指派状态。
+	IngestCtxAssignedStatus = "ctx.assigned_status" // 接单/指派状态（会话被人工接手或分配跟进的状态标记）
+	IngestCtxShopID         = "ctx.shop_id"         // 店铺 ID（多店商家区分上下文归属）
+	IngestCtxRegion         = "ctx.region"          // 地域/区域（买家或门店所属区域）
 )
+
+// —— 线路侧 Extra 透传白名单（CH-37b：ctx.* 通路修复 + 身份扩展键）——
+//
+// 下游 inbox_ingress_persist 把 event.Extra 全量落 message_hub.extra，而 account_id
+// 等固定键被服务端用来判定账号归属；因此线路侧 IngestMessage.Extra 绝不能整包透传：
+//
+//   - 固定键（ingestExtraServerKeys）由转换层按消息字段权威写入，线路值一律丢弃；
+//   - 仅 `ctx.` 前缀键与显式白名单键（IngestExtraAllowKeys）放行透传；
+//   - 其余键丢弃并计数（IngestExtraDroppedKeys）——宁可缺键，不得污染固定键命名空间。
+//
+// 扩展端生产者（驱动/适配器负责写入这些键）属 CH-16 刀；本刀只修服务端通路与词表。
+const IngestExtraAllowPrefix = "ctx."
+
+// IngestExtraAllowKeys ctx. 前缀之外的显式透传白名单。当前为空：CH-16 扩展生产者落地前
+// 不保留任何非 ctx. 键位；后续如需放行新键，在此登记并同步补 protocol_extra_test.go 用例。
+var IngestExtraAllowKeys = map[string]struct{}{}
+
+// ingestExtraServerKeys 服务端固定键：转换层权威写入，线路侧 Extra 不得覆盖。
+// 与 ToEvent/HistoryToEvent 的写入键位逐一对应（account_id/bridge/sender_type/transport/
+// content_hash/is_group/group_id/group_name，另 ToEventFull 追加 history）。
+var ingestExtraServerKeys = map[string]struct{}{
+	"account_id":   {},
+	"bridge":       {},
+	"sender_type":  {},
+	"transport":    {},
+	"content_hash": {},
+	"is_group":     {},
+	"group_id":     {},
+	"group_name":   {},
+	"history":      {},
+}
+
+// IngestExtraDroppedKeys 因未通过白名单（或试图覆盖固定键）而被丢弃的线路侧 Extra 键
+// 累计计数。进程级原子计数，供后续 metrics 接线；protocol_extra_test.go 据此断言丢弃行为。
+var IngestExtraDroppedKeys atomic.Int64
+
+// allowIngestExtraKey 判断线路侧 Extra 键是否允许透传进 event.Extra。
+func allowIngestExtraKey(key string) bool {
+	if _, ok := ingestExtraServerKeys[key]; ok {
+		return false // 固定键：服务端权威写入，线路值不得覆盖
+	}
+	if strings.HasPrefix(key, IngestExtraAllowPrefix) {
+		return true
+	}
+	_, ok := IngestExtraAllowKeys[key]
+	return ok
+}
+
+// applyIngestExtra 把线路侧 IngestMessage.Extra 按白名单规则合并进 event.Extra。
+// ToEvent/ToEventFull（经 ToEvent）/HistoryToEvent 三处转换共用本 helper，不得复制逻辑；
+// extra 为空（含 nil）是无害 no-op。已存在的服务端值一律不被线路值覆盖（双保险）。
+func applyIngestExtra(ev *model.MessageEvent, extra map[string]any) {
+	if ev == nil || len(extra) == 0 {
+		return
+	}
+	for k, v := range extra {
+		if !allowIngestExtraKey(k) {
+			IngestExtraDroppedKeys.Add(1)
+			continue
+		}
+		if _, exists := ev.Extra[k]; exists {
+			IngestExtraDroppedKeys.Add(1)
+			continue
+		}
+		ev.Extra[k] = v
+	}
+}
 
 // IngestRequest HTTP 上报请求体（与扩展端 http-ingest.js 严格对齐）。
 //
@@ -243,6 +316,8 @@ func bridgeSessionKey(channel, accountID, conversationID, groupID, senderID, sen
 // ToEvent 将上行消息转换为消息中台的 model.MessageEvent（不含 History 拷贝）。
 //
 // transport 标记来源传输（"http" / "websocket"），写入 Extra["transport"] 供可观测。
+// 线路侧 Extra 仅按白名单透传（applyIngestExtra）：ctx.* 前缀键透传进 event.Extra，
+// 固定键不被线路值覆盖，非白名单键丢弃并计数。
 // History 字段不在此拷贝：HTTP/WS 传输均由传输层先逐条 PersistHistory 落库，
 // 实时消息事件再入批处理管道，避免双重落库（与历史 handler 行为严格一致）。
 func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
@@ -289,6 +364,7 @@ func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
 	if m.GroupName != "" {
 		ev.Extra["group_name"] = m.GroupName
 	}
+	applyIngestExtra(ev, m.Extra)
 	return ev
 }
 
@@ -367,6 +443,9 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 	if groupName := firstNonEmpty(it.GroupName, parent.GroupName); groupName != "" {
 		ev.Extra["group_name"] = groupName
 	}
+	// 会话级 history 帧的 Extra 取自帧顶层消息 parent（HistoryItem 无独立 Extra 字段），
+	// 透传规则与 ToEvent 完全一致（applyIngestExtra 统一处理）。
+	applyIngestExtra(ev, parent.Extra)
 	return ev
 }
 
