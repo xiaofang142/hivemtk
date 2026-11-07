@@ -268,6 +268,11 @@ func (c *SOPController) Cancel(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.Cancel(ctx.Request.Context(), uint(id)); err != nil {
+		// D-36：执行不存在回 404（与 GetExecution 同文案口径），不再落 ErrorFromDB 兑底
+		if errors.Is(err, service.ErrSOPExecNotFound) {
+			response.NotFound(ctx, "执行不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}

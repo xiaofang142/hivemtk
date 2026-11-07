@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -13,6 +14,14 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
+
+// ErrWeComUpstreamSend 企微**上游**投递失败（凭据错 40013、网络不可达、接口下线）。
+//
+// D-42（2026-11-07）：控制器原来把所有错误统一回 400「入参错误」，
+// 企微侧 errcode=40013 invalid corpid 被当成"客户端请求有问题"，
+// 客户端会原样重试、运维也看不出该改凭据。用哨兵把上游失败与
+// 入参/业务校验错误分开，controller 据此回 502 UPSTREAM_FAILURE_5005。
+var ErrWeComUpstreamSend = errors.New("wecom upstream send failed")
 
 // WeComIntegrationService 企微与消息中台/统一收件箱集成
 type WeComIntegrationService struct {
@@ -180,7 +189,9 @@ func (s *WeComIntegrationService) SendMessage(ctx context.Context, req *WeComSen
 				Content: req.Content,
 				MediaID: req.MediaID,
 			}); serr != nil {
-				return hubMsg, fmt.Errorf("wecom outbound api: %w", serr)
+				// 双 %w：既保留上游原始错误链（errcode 原文/网络错误），
+				// 又给控制器一个可判定的哨兵（D-42：上游失败回 502 而非 400）。
+				return hubMsg, fmt.Errorf("%w: wecom outbound api: %w", ErrWeComUpstreamSend, serr)
 			} else if msgID != "" {
 				// 把企微平台 msgid 写入 hub 行 Extra，供 recallWeCom 撤回时读取。
 				// 旧消息无此字段 → 撤回会返回 "wecom hub extra missing msgid"（预期行为）。

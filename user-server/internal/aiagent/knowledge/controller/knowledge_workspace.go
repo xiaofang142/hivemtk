@@ -418,6 +418,10 @@ func (ctrl *KnowledgeWorkspaceController) RebuildProductIndex(c *gin.Context) {
 	}
 	productID := productIDStr
 	if err := ctrl.kbService.RebuildIndex(c.Request.Context(), productID); err != nil {
+		if isNotFoundError(err) {
+			response.Error(c, http.StatusNotFound, err.Error())
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -646,6 +650,11 @@ func (ctrl *KnowledgeWorkspaceController) DeleteOpenAPISource(c *gin.Context) {
 	}
 	productID := ctrl.resolveProductID(c.Query("product_id"))
 	if err := ctrl.openapiService.DeleteSource(c.Request.Context(), productID, int64(id)); err != nil {
+		// D-28：不存在/已删/不属于该产品都是 not found，不能兜底成 500。
+		if isNotFoundError(err) {
+			response.Error(c, http.StatusNotFound, "数据源不存在")
+			return
+		}
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}

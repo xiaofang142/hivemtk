@@ -552,8 +552,12 @@ func (s *CustomerRFMService) ListRFMRules(ctx context.Context, page, pageSize in
 
 // SaveRFMRuleRequest 保存 RFM 规则请求
 // 金额字段单位：分（前端展示时 / 100 转元）
+//
+// Name 不再 required（D-40）：历史规则（如 id=2，2026-08-31 建）name 是空串，
+// 前端编辑弹窗按 GET 回填后原样提交，required 会把"改一个阈值"整单打回 400，
+// 逼运营先编一个名字。名字只是备注，不参与打分。
 type SaveRFMRuleRequest struct {
-	Name     string `json:"name" binding:"required"`
+	Name     string `json:"name"`
 	RDays1   int    `json:"r_days_1"`
 	RDays2   int    `json:"r_days_2"`
 	RDays3   int    `json:"r_days_3"`
@@ -617,7 +621,10 @@ func (s *CustomerRFMService) SaveRFMRule(ctx context.Context, req *SaveRFMRuleRe
 func (s *CustomerRFMService) UpdateRFMRule(ctx context.Context, id uint, req *SaveRFMRuleRequest) (*model.RFMRule, error) {
 	rule, err := s.ruleRepo().GetByID(ctx, id)
 	if err != nil {
-		return nil, errors.New("规则不存在")
+		// D-40：保留仓储的 not-found 语义（gorm.ErrRecordNotFound），
+		// controller 据 errhttp.IsNotFoundError 映射 404；原先包成
+		// errors.New("规则不存在") 后只能落到 400，客户端分不清"没这条"和"参数错"。
+		return nil, err
 	}
 
 	rule.Name = req.Name

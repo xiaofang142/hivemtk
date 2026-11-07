@@ -14,6 +14,9 @@ type XiaohongshuCardService interface {
 	Update(ctx context.Context, req *dto.XiaohongshuCardUpdateRequest) (*dto.XiaohongshuCardResponse, error)
 	Delete(ctx context.Context, id uint) error
 	GetByID(ctx context.Context, id uint) (*dto.XiaohongshuCardResponse, error)
+	// GetCardModelByID 取模型实体：生成短链需要 redirect_url/domain_pool_id/title 等字段，
+	// 只传一个带 ID 的空壳会让生成逻辑永远走 early-return（D-45）。
+	GetCardModelByID(ctx context.Context, id uint) (*model.XiaohongshuCard, error)
 	GetList(ctx context.Context, req *dto.XiaohongshuCardListRequest) (*dto.XiaohongshuCardListResponse, error)
 	GenerateCardChatPage(ctx context.Context, id uint, baseURL string) (string, error)
 	GenerateShortLink(ctx context.Context, card *model.XiaohongshuCard) error
@@ -206,9 +209,18 @@ func (s *xiaohongshuCardService) GenerateCardChatPage(ctx context.Context, id ui
 	return s.templateService.RenderCardChatPage("xiaohongshu", card.ID, card.Title, card.Description, card.ImageURL, card.Tags, baseURL)
 }
 
+func (s *xiaohongshuCardService) GetCardModelByID(ctx context.Context, id uint) (*model.XiaohongshuCard, error) {
+	return s.repo.GetByID(ctx, id)
+}
+
 func (s *xiaohongshuCardService) GenerateShortLink(ctx context.Context, card *model.XiaohongshuCard) error {
 	if card.ShortLinkID != nil {
 		return nil // 已绑定短链：幂等跳过，避免重复造短码留下孤儿
+	}
+
+	// 没有跳转地址就不该造短链：生成的短链是死链，且接口会 200 空 code（D-44）。
+	if card.RedirectURL == "" {
+		return ErrCardRedirectURLRequired
 	}
 
 	var domainID uint = 0
@@ -224,9 +236,6 @@ func (s *xiaohongshuCardService) GenerateShortLink(ctx context.Context, card *mo
 		return err
 	}
 
-	if card.RedirectURL == "" {
-		return nil
-	}
 	createReq := &dto.CreateShortLinkRequest{
 		ShortCode:   shortCodeResp.ShortCode,
 		OriginalURL: card.RedirectURL,

@@ -169,12 +169,16 @@ func (s *tiktokCardService) GenerateShortLink(ctx context.Context, cardID uint) 
 
 	shortCode := generateRandomCode(8)
 
-	if card.ShortLinkID != 0 {
-		_ = s.shortLinkRepo.Delete(ctx, card.ShortLinkID)
+	// 跳转地址校验必须在删除旧短链之前（D-44）。
+	if card.RedirectURL == "" {
+		return nil, ErrCardRedirectURLRequired
 	}
 
-	if card.RedirectURL == "" {
-		return nil, nil
+	if card.ShortLinkID != 0 {
+		// 悬空 ID（旧短链已被删）不该挡住重建，先确认存在再删。
+		if _, err := s.shortLinkRepo.GetByID(ctx, card.ShortLinkID); err == nil {
+			_ = s.shortLinkRepo.Delete(ctx, card.ShortLinkID)
+		}
 	}
 	sl := &model.ShortLink{
 		ShortCode:   shortCode,

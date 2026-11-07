@@ -147,6 +147,11 @@ func (c *XianyuCardController) GenerateShortLink(ctx *gin.Context) {
 	}
 
 	card, err := c.service.GetByIDWithRefresh(ctx.Request.Context(), uint(id))
+	if err != nil && errors.Is(err, cardsvc.ErrCardRedirectURLRequired) {
+		// 没填跳转地址是可引导的用户错误，回 400 而不是 500（D-44）。
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
 	if HandleDBError(ctx, err, "获取闲鱼卡片") {
 		return
 	}

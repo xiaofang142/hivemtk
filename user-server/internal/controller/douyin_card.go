@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -186,8 +187,15 @@ func (c *DouyinCardController) GenerateShortLink(ctx *gin.Context) {
 		return
 	}
 
-	if HandleDBError(ctx, c.service.GenerateShortLink(ctx.Request.Context(), card), "生成短链") {
-		return
+	if err := c.service.GenerateShortLink(ctx.Request.Context(), card); err != nil {
+		// 没填跳转地址是可引导的用户错误，不该落到 500「操作失败，请稍后重试」（D-44）。
+		if errors.Is(err, cardsvc.ErrCardRedirectURLRequired) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
+		if HandleDBError(ctx, err, "生成短链") {
+			return
+		}
 	}
 
 	cardResp, err := c.service.GetByIDWithRefresh(ctx.Request.Context(), uint(id))

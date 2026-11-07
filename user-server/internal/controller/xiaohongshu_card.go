@@ -1,11 +1,11 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"hivemtk-user/internal/dto"
-	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/response"
 	cardsvc "hivemtk-user/internal/service/cards"
 
@@ -140,9 +140,21 @@ func (c *XiaohongshuCardController) GenerateShortLink(ctx *gin.Context) {
 		return
 	}
 
-	card := &model.XiaohongshuCard{ID: uint(id)}
-	if HandleDBError(ctx, c.service.GenerateShortLink(ctx.Request.Context(), card), "生成短链") {
+	// 必须取真实实体：只传 `&model.XiaohongshuCard{ID: id}` 空壳时，
+	// redirect_url/title/domain_pool_id 全为零值，GenerateShortLink 永远提前返回，
+	// 接口 200 但既没建链也没报错（D-45）。
+	card, err := c.service.GetCardModelByID(ctx.Request.Context(), uint(id))
+	if HandleDBError(ctx, err, "获取小红书卡片") {
 		return
+	}
+	if err := c.service.GenerateShortLink(ctx.Request.Context(), card); err != nil {
+		if errors.Is(err, cardsvc.ErrCardRedirectURLRequired) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
+		if HandleDBError(ctx, err, "生成短链") {
+			return
+		}
 	}
 
 	cardResp, err := c.service.GetByID(ctx.Request.Context(), uint(id))

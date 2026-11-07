@@ -50,13 +50,9 @@ type ExternalImportResponse struct {
 
 // ExternalImport 外部系统导入（统一入口）
 func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *ExternalImportRequest) (*ExternalImportResponse, error) {
-	if req.Source == "" {
-		return nil, errors.New("source 不能为空")
-	}
-	if req.ProductID == "" {
-		return nil, errors.New("product_id 不能为空")
-	}
-
+	// 公开入口（仅凭 X-Knowledge-Token 认证），必须**先鉴权再校验业务字段**：
+	// 否则未携带/伪造 token 的调用方会先看到「source 不能为空」这类 400，
+	// 既误导客户端（以为是参数问题），也把字段规则暴露在认证之前。
 	tok, err := s.ValidateToken(ctx, req.Token)
 	if err != nil {
 		return nil, err
@@ -66,6 +62,13 @@ func (s *KnowledgeMerchantService) ExternalImport(ctx context.Context, req *Exte
 	ctx = tenant.OnlyTenant(ctx, tok.TenantID)
 	if !tokenHasScope(tok.Scopes, "write") {
 		return nil, fmt.Errorf("%w: token 缺少 write 权限", utils.ErrForbidden)
+	}
+
+	if req.Source == "" {
+		return nil, errors.New("source 不能为空")
+	}
+	if req.ProductID == "" {
+		return nil, errors.New("product_id 不能为空")
 	}
 
 	if tok.ProductID != "" && tok.ProductID != "*" && tok.ProductID != req.ProductID {

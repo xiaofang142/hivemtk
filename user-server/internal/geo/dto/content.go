@@ -4,7 +4,7 @@ import "time"
 
 // GenerateContentRequest 内容生成请求
 type GenerateContentRequest struct {
-	Keyword    string   `json:"keyword"`
+	Keyword    string   `json:"keyword" binding:"required"`
 	BrandName  string   `json:"brand_name"`
 	Advantages []string `json:"advantages"`
 	Model      string   `json:"model"`

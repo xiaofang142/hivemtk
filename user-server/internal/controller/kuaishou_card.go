@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -230,6 +231,11 @@ func (c *KuaishouCardController) GenerateShortLink(ctx *gin.Context) {
 
 	err = c.service.GenerateShortLink(ctx.Request.Context(), card)
 	if err != nil {
+		// 没填跳转地址是可引导的用户错误（D-44）。
+		if errors.Is(err, cardsvc.ErrCardRedirectURLRequired) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.ErrorFromDB(ctx, err, response.ErrBusinessError)
 		return
 	}

@@ -138,9 +138,14 @@ func (s *GeoCompetitorService) UpdateCompetitor(ctx context.Context, id uint, dt
 	if err != nil {
 		return nil, err
 	}
-	domain, err := normalizeCompetitorDomain(dto.Domain)
-	if err != nil {
-		return nil, err
+	// 域名为空表示保持原域名（部分更新语义）：前端编辑竞品时经常只改优先级/路径，
+	// 不重新输入域名；强制要求会逼调用方回填 domain，缺省即 400。
+	domain := c.Domain
+	if dto.Domain != "" {
+		domain, err = normalizeCompetitorDomain(dto.Domain)
+		if err != nil {
+			return nil, err
+		}
 	}
 	paths, err := normalizeCompetitorPaths(dto.Paths)
 	if err != nil {

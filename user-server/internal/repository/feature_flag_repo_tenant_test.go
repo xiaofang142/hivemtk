@@ -79,6 +79,26 @@ func TestFeatureFlag_CreateFillsTenantAndEnforcesCompositeUnique(t *testing.T) {
 	}
 }
 
+func TestFeatureFlag_CreatePersistsZeroRollout(t *testing.T) {
+	db := ffSetupDB(t, tenant.ModeOn)
+	repo := NewFeatureFlagRepository(db)
+	ctxA := tenant.WithTenantID(context.Background(), ffTenantA)
+
+	// rollout_percentage=0 是合法值（谁都不放量）。model 上的 `default:100` 只是
+	// 列默认值，不能让显式 0 在插入时被 GORM 当成"未设置"而改写成 100。
+	created := &model.FeatureFlag{Key: "ff_zero_rollout", Name: "zero", RolloutPercentage: 0}
+	if err := repo.Create(ctxA, created); err != nil {
+		t.Fatalf("创建 rollout=0 的开关失败: %v", err)
+	}
+	got, err := repo.GetByID(ctxA, created.ID)
+	if err != nil {
+		t.Fatalf("回读开关失败: %v", err)
+	}
+	if got.RolloutPercentage != 0 {
+		t.Fatalf("显式 rollout=0 落库变成 %d ⇒ 零值被列默认值覆盖", got.RolloutPercentage)
+	}
+}
+
 func TestFeatureFlag_CreateUnboundCtxIsRejected(t *testing.T) {
 	db := ffSetupDB(t, tenant.ModeOn)
 	repo := NewFeatureFlagRepository(db)

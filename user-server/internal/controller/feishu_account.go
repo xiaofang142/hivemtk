@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
@@ -35,6 +36,22 @@ func NewFeishuAccountController(svc *service.FeishuService, integrationSvc *serv
 		svc:            svc,
 		integrationSvc: integrationSvc,
 	}
+}
+
+// respondFeishuError 区分飞书**上游**失败与本地错误。
+//
+// 飞书返回的 code/msg（凭据错 10003、限流、接口下线）是上游失败，修前一律走
+// ErrorFromDB 落 500「内部错误」，运维既看不出该改凭据还是查本机，客户端还会重试。
+// 统一 502 + 渠道原文，与企微（respondWeComError）/QQ/TG 的口径一致。
+func respondFeishuError(c *gin.Context, err error, fallback string) {
+	if err == nil {
+		return
+	}
+	if service.AsChannelError(err) != nil {
+		response.ErrorWithCode(c, utils.ErrorCodeUpstreamFailure, http.StatusBadGateway, err.Error())
+		return
+	}
+	response.ErrorFromDB(c, err, fallback)
 }
 
 // RegisterRoutes 注册路由
@@ -85,7 +102,7 @@ func (ctrl *FeishuAccountController) TestSendQuery(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.SendMessage(ctx, uint(id), openID, content, "open_id", ""); err != nil {
-		response.ErrorFromDB(c, err, "发送测试消息失败")
+		respondFeishuError(c, err, "发送测试消息失败")
 		return
 	}
 	response.Success(c, nil, "发送成功")
@@ -324,7 +341,7 @@ func (ctrl *FeishuAccountController) TestSend(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
 	defer cancel()
 	if err := integration.SendMessage(ctx, acc.ID, req.OpenID, req.Content, "open_id", ""); err != nil {
-		response.ErrorFromDB(c, err, "发送测试消息失败")
+		respondFeishuError(c, err, "发送测试消息失败")
 		return
 	}
 	response.Success(c, nil, "发送成功")

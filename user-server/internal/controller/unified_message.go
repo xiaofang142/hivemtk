@@ -65,7 +65,10 @@ func (c *UnifiedMessageController) GetMessageByID(ctx *gin.Context) {
 
 	msg, err := c.messageService.GetMessageByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		response.Error(ctx, http.StatusNotFound, err.Error())
+		// D-41：此前直接把 err.Error()（gorm "record not found"）交给 response，
+		// 被 S-36 的原文掩码规则洗成「操作失败，请稍后重试」——404 却给运维一句
+		// 看不出是"消息不存在"的话。这里给中文固定文案。
+		response.Error(ctx, http.StatusNotFound, "消息不存在")
 		return
 	}
 

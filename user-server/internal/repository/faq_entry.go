@@ -338,16 +338,31 @@ func (r *FAQRepository) Update(ctx context.Context, id uint, entry *model.FAQEnt
 	if entry.Enabled != nil {
 		updates["enabled"] = *entry.Enabled
 	}
-	return r.db.WithContext(ctx).Model(&model.FAQEntry{}).
+	result := r.db.WithContext(ctx).Model(&model.FAQEntry{}).
 		Where("id = ?", id).
-		Updates(updates).Error
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		// 0 行 = 目标不存在；回 not found 让上层 404，避免「更新成功」掩盖误操作。
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // SetEnabled 仅切换启用状态（列表页开关专用，避免全量 Update 的 required 校验）
 func (r *FAQRepository) SetEnabled(ctx context.Context, id uint, enabled bool) error {
-	return r.db.WithContext(ctx).Model(&model.FAQEntry{}).
+	result := r.db.WithContext(ctx).Model(&model.FAQEntry{}).
 		Where("id = ?", id).
-		Update("enabled", enabled).Error
+		Update("enabled", enabled)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // Delete 删除 FAQ

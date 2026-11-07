@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	kbservice "hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -98,6 +99,10 @@ func (ctrl *KBCrawlerController) UpdateSource(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.UpdateSource(c.Request.Context(), id, fields); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.Error(c, 404, "爬取源不存在")
+			return
+		}
 		response.Error(c, 400, err.Error())
 		return
 	}
@@ -121,6 +126,10 @@ func (ctrl *KBCrawlerController) transition(c *gin.Context, to string) {
 		return
 	}
 	if err := ctrl.svc.TransitionSource(c.Request.Context(), id, to); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.Error(c, 404, "爬取源不存在")
+			return
+		}
 		response.Error(c, 409, err.Error())
 		return
 	}
@@ -231,6 +240,11 @@ func (ctrl *KBCrawlerController) review(c *gin.Context, to string) {
 		return
 	}
 	if err := ctrl.qa.ReviewQACandidate(c.Request.Context(), id, to, c.GetString("username")); err != nil {
+		// D-25：不存在 → 404，其余（非法跃迁等）维持 409
+		if errhttp.IsNotFoundError(err) {
+			response.Error(c, 404, "候选不存在")
+			return
+		}
 		response.Error(c, 409, err.Error())
 		return
 	}
@@ -245,6 +259,11 @@ func (ctrl *KBCrawlerController) PublishQACandidate(c *gin.Context) {
 		return
 	}
 	if err := ctrl.qa.PublishQACandidate(c.Request.Context(), id, ctrl.svc.KB()); err != nil {
+		// D-25：不存在 → 404，其余维持 409
+		if errhttp.IsNotFoundError(err) {
+			response.Error(c, 404, "候选不存在")
+			return
+		}
 		response.Error(c, 409, err.Error())
 		return
 	}

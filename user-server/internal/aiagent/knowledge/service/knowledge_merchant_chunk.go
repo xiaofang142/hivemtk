@@ -120,6 +120,14 @@ func (s *KnowledgeMerchantService) SplitChunk(ctx context.Context, req *SplitChu
 	if len(req.Parts) < 2 {
 		return errors.New("至少需要 2 段")
 	}
+	// D-31：必须先校验再删。原实现先删原分段、再在插入循环里 `continue` 跳过空白段——
+	// 传 ["  ", ""] 时原分段被删掉、新分段一个都不插，接口还回"拆分成功"，
+	// 文档就此静默丢失全部分段。空白段一律拒绝，而不是悄悄丢弃。
+	for _, part := range req.Parts {
+		if strings.TrimSpace(part) == "" {
+			return errors.New("拆分内容不能为空")
+		}
+	}
 	chunk, err := s.chunkRepo.GetByID(ctx, req.ChunkID)
 	if err != nil {
 		return err

@@ -73,8 +73,15 @@ func TestGeoPusherConfigCRUD(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &geomodel.GeoPusherConfig{})
 	r := newGeoCRUDRouter(db)
 
+	// D-22：平台必须是 loadState 实际装配的集合（baidu/google/indexnow），
+	// 未知平台会在装配期被静默跳过，因此接口层直接拒绝。
+	if status, env := do(t, r, "POST", "/pusher-configs",
+		`{"platform":"test_pf","config_json":{},"daily_limit":5}`); status != http.StatusBadRequest {
+		t.Fatalf("未知 platform 应 400，得 %d: %+v", status, env)
+	}
+
 	status, env := do(t, r, "POST", "/pusher-configs",
-		`{"platform":"test_pf","config_json":{"token":"x"},"daily_limit":5}`)
+		`{"platform":"indexnow","config_json":{"token":"x"},"daily_limit":5}`)
 	if status != http.StatusOK {
 		t.Fatalf("Create 应 200，得 %d: %+v", status, env)
 	}
@@ -85,7 +92,7 @@ func TestGeoPusherConfigCRUD(t *testing.T) {
 
 	// platform 唯一索引：重复创建应 400
 	if status, _ := do(t, r, "POST", "/pusher-configs",
-		`{"platform":"test_pf","config_json":{},"daily_limit":1}`); status != http.StatusBadRequest {
+		`{"platform":"indexnow","config_json":{},"daily_limit":1}`); status != http.StatusBadRequest {
 		t.Fatalf("重复 platform 应 400，得 %d", status)
 	}
 	// 非法 JSON → 400
@@ -98,7 +105,7 @@ func TestGeoPusherConfigCRUD(t *testing.T) {
 	}
 
 	status, env = do(t, r, "GET", "/pusher-configs/"+id, "")
-	if status != http.StatusOK || env.Data["platform"] != "test_pf" {
+	if status != http.StatusOK || env.Data["platform"] != "indexnow" {
 		t.Fatalf("Get 失败: %d %+v", status, env)
 	}
 
@@ -120,7 +127,7 @@ func TestGeoPusherConfigCRUD(t *testing.T) {
 		t.Fatalf("Update 应 200，得 %d", status)
 	}
 	_, env = do(t, r, "GET", "/pusher-configs/"+id, "")
-	if env.Data["daily_limit"] != float64(9) || env.Data["platform"] != "test_pf" {
+	if env.Data["daily_limit"] != float64(9) || env.Data["platform"] != "indexnow" {
 		t.Fatalf("Update 后字段不符: %v", env.Data)
 	}
 

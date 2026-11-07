@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -164,6 +165,11 @@ func (c *WorkflowOrchestratorController) PublishVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.PublishVersion(ctx.Request.Context(), uint(id)); err != nil {
+		// D-43：不存在的版本曾回 200「发布成功」（更新 0 行不报错）。
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "工作流版本不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
@@ -189,6 +195,11 @@ func (c *WorkflowOrchestratorController) ArchiveVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.ArchiveVersion(ctx.Request.Context(), uint(id)); err != nil {
+		// D-43：不存在的版本曾回 200「归档成功」（更新 0 行不报错）。
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "工作流版本不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
@@ -214,6 +225,11 @@ func (c *WorkflowOrchestratorController) DeleteVersion(ctx *gin.Context) {
 	}
 
 	if err := c.svc.DeleteVersion(ctx.Request.Context(), uint(id)); err != nil {
+		// D-43：不存在的版本曾回 200「删除成功」（更新 0 行不报错）。
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "工作流版本不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}

@@ -2,6 +2,7 @@ package cards
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
@@ -57,8 +58,12 @@ func (s *xianyuCardService) Create(ctx context.Context, req *dto.XianyuCardCreat
 		return nil, fmt.Errorf("创建闲鱼卡片失败: %w", err)
 	}
 
-	if err := s.GenerateShortLink(ctx, card); err != nil {
-		logger.Errorf("警告：生成短链失败：%v", err)
+	// 没有跳转地址就不生成短链：条目的展示依赖 redirect_url，硬生成只会留下死链，
+	// 且会让「无跳转地址」变成一条噪音告警。
+	if card.RedirectURL != "" {
+		if err := s.GenerateShortLink(ctx, card); err != nil {
+			logger.Errorf("警告：生成短链失败：%v", err)
+		}
 	}
 
 	return s.convertToResponse(ctx, card), nil
@@ -109,7 +114,14 @@ func (s *xianyuCardService) GetByIDWithRefresh(ctx context.Context, id uint) (*d
 	}
 
 	if err := s.GenerateShortLink(ctx, card); err != nil {
-		logger.Errorf("警告：刷新短链失败：%v", err)
+		// 没填跳转地址是可引导的用户错误：交回 controller 变 400，
+		// 不能像 D-44 之前那样「旧链删了、新链没建、还回 200」。
+		if errors.Is(err, ErrCardRedirectURLRequired) {
+			return nil, err
+		}
+		// 其它失败（域名池被停用等）不阻断读取，但必须留痕，
+		// 避免又回到「静默 200」的假成功。
+		logger.Warnf("[xianyu] 刷新短链失败（不影响卡片读取）: %v", err)
 	}
 
 	return s.convertToResponse(ctx, card), nil
@@ -150,9 +162,19 @@ func (s *xianyuCardService) GenerateCardChatPage(ctx context.Context, id uint, b
 }
 
 func (s *xianyuCardService) GenerateShortLink(ctx context.Context, card *model.XianyuCard) error {
+	// 跳转地址校验必须发生在删除旧短链之前：否则「重新生成短链」会把已经分发出去的
+	// /s/xxxxxx 删掉、然后因为没目标地址直接返回，旧链接 404 而接口仍报成功（D-44）。
+	if card.RedirectURL == "" {
+		return ErrCardRedirectURLRequired
+	}
+
 	if card.ShortLinkID > 0 {
-		if err := s.shortLinkService.Delete(ctx, card.ShortLinkID); err != nil {
-			return fmt.Errorf("删除旧短链失败: %w", err)
+		// 旧短链已经被删过（历史 D-44 就留下过这种悬空 ID）时不能让它挡住重建：
+		// 先确认存在再删，查不到就当作「已经删掉了」继续造新链。
+		if _, err := s.shortLinkService.GetByID(ctx, card.ShortLinkID); err == nil {
+			if err := s.shortLinkService.Delete(ctx, card.ShortLinkID); err != nil {
+				return fmt.Errorf("删除旧短链失败: %w", err)
+			}
 		}
 	}
 
@@ -167,10 +189,6 @@ func (s *xianyuCardService) GenerateShortLink(ctx context.Context, card *model.X
 	var domainID uint = 0
 	if card.DomainPoolID != 0 {
 		domainID = card.DomainPoolID
-	}
-
-	if card.RedirectURL == "" {
-		return nil
 	}
 	shortLink, err := s.shortLinkService.Create(ctx, &dto.CreateShortLinkRequest{
 		ShortCode:   generateResp.ShortCode,

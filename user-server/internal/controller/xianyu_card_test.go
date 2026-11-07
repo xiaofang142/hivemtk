@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/dto"
@@ -411,12 +412,14 @@ func TestXianyuCardController_GenerateShortLink_Success(t *testing.T) {
 	ctrl := NewXianyuCardController(svc, service.NewXianyuCardStatsService(database))
 	router := setupGinEngine()
 
+	// D-44：没有 redirect_url 时 GenerateShortLink 会拒绝生成（避免删旧链后建空链），
+	// 本用例验证「有跳转地址」的成功路径，因此显式给 redirect_url。
 	svc.Create(context.Background(), &dto.XianyuCardCreateRequest{
-		Title:        "Card with Short Link",
-		Description:  "This card will have a short link",
-		ImageURL:     "https://example.com/image.jpg",
-		DomainPoolID: 1,
-		IsActive:     boolPtr(true),
+		Title:       "Card with Short Link",
+		Description: "This card will have a short link",
+		ImageURL:    "https://example.com/image.jpg",
+		RedirectURL: "https://example.com/target",
+		IsActive:    boolPtr(true),
 	})
 
 	router.POST("/xianyu/cards/:id/shortlink", ctrl.GenerateShortLink)
@@ -427,6 +430,36 @@ func TestXianyuCardController_GenerateShortLink_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status OK, got %d, body: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestXianyuCardController_GenerateShortLink_RequiresRedirectURL 验证 D-44：
+// 卡片没配 redirect_url 时必须 400，而不是「删掉旧短链 + 200 空 code」。
+func TestXianyuCardController_GenerateShortLink_RequiresRedirectURL(t *testing.T) {
+	database := setupXianyuCardTestDB(t)
+	svc := service.NewXianyuCardService(database)
+	ctrl := NewXianyuCardController(svc, service.NewXianyuCardStatsService(database))
+	router := setupGinEngine()
+
+	if _, err := svc.Create(context.Background(), &dto.XianyuCardCreateRequest{
+		Title:    "Card without redirect",
+		ImageURL: "https://example.com/image.jpg",
+		IsActive: boolPtr(true),
+	}); err != nil {
+		t.Fatalf("准备数据失败: %v", err)
+	}
+
+	router.POST("/xianyu/cards/:id/shortlink", ctrl.GenerateShortLink)
+
+	req, _ := http.NewRequest("POST", "/xianyu/cards/1/shortlink", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("缺少 redirect_url 时应 400，实际 %d，body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "redirect_url") {
+		t.Errorf("错误文案应指出 redirect_url，实际: %s", w.Body.String())
 	}
 }
 

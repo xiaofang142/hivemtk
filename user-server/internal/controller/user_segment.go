@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	opssvc "hivemtk-user/internal/ops/service"
+	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -120,6 +121,11 @@ func (c *UserSegmentController) UpdateRFMRule(ctx *gin.Context) {
 
 	rule, err := c.rfmService.UpdateRFMRule(ctx.Request.Context(), uint(id), &req)
 	if err != nil {
+		// D-40：规则不存在 → 404（此前与参数错误一起回 400）。
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "规则不存在")
+			return
+		}
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}

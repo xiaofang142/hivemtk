@@ -169,12 +169,23 @@ func (r *FeedbackLoopRepository) ListPromptCandidates(ctx context.Context, statu
 }
 
 // UpdatePromptCandidateStatus 更新 Prompt 候选状态
+//
+// D-38：此前不校验 RowsAffected，对不存在的候选也返回成功，调用方（前端
+// 「批准/驳回」按钮）会以为已经落库。这里把 0 行受影响翻译成
+// gorm.ErrRecordNotFound，由 controller 映射 404。
 func (r *FeedbackLoopRepository) UpdatePromptCandidateStatus(ctx context.Context, id, status string) error {
 	now := time.Now()
-	return r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).
 		Model(&model.PromptCandidate{}).
 		Where("id = ?", id).
-		Updates(map[string]any{"status": status, "updated_at": now}).Error
+		Updates(map[string]any{"status": status, "updated_at": now})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // ListBanditArms Bandit 臂分页列表

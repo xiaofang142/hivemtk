@@ -51,7 +51,7 @@ func (c *KeywordController) SemanticExpand(ctx *gin.Context) {
 	}
 	result, err := c.svc.SemanticExpand(ctx.Request.Context(), req.Keywords, req.BrandName)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "语义扩展失败")
+		respondGeoLLMError(ctx, err, "语义扩展")
 		return
 	}
 	response.Success(ctx, result, "语义扩展成功")
@@ -69,7 +69,7 @@ func (c *KeywordController) TopicCluster(ctx *gin.Context) {
 	}
 	result, err := c.svc.TopicCluster(ctx.Request.Context(), req.Keywords, req.BrandName)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "话题集群失败")
+		respondGeoLLMError(ctx, err, "话题集群")
 		return
 	}
 	response.Success(ctx, result, "话题集群成功")

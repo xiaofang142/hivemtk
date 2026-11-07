@@ -16,6 +16,11 @@ import (
 // ErrConfidenceSignalNotFound 置信度信号不存在（供 controller 区分 404 与真实故障）。
 var ErrConfidenceSignalNotFound = errors.New("置信度信号不存在")
 
+// ErrInvalidCandidateStatus 候选状态不在白名单内（D-38 附带项）。
+// 此前任意字符串都能落库，一个拼写错误（"aproved"）就把候选置成
+// 没有任何分支认识的状态，之后既不会进入 A/B 也不会被淘汰。
+var ErrInvalidCandidateStatus = errors.New("无效的候选状态")
+
 // TuningService 统一管理服务接口
 //
 // 所有列表方法返回 **值切片**（[]T），与下层 Repository 保持一致；
@@ -190,6 +195,16 @@ func (s *tuningService) ListPromptCandidates(ctx context.Context, status string,
 }
 
 func (s *tuningService) UpdatePromptCandidateStatus(ctx context.Context, id, status string) error {
+	switch status {
+	case model.PromptCandidateStatusDraft,
+		model.PromptCandidateStatusPending,
+		model.PromptCandidateStatusApproved,
+		model.PromptCandidateStatusActive,
+		model.PromptCandidateStatusPromoted,
+		model.PromptCandidateStatusRetired:
+	default:
+		return ErrInvalidCandidateStatus
+	}
 	return s.feedbackRepo.UpdatePromptCandidateStatus(ctx, id, status)
 }
 

@@ -196,8 +196,10 @@ func verifyToken() string {
 // UpdateSource 更新源（改 start_url 不支持——视为新建源重建）
 func (s *CrawlerService) UpdateSource(ctx context.Context, id uint, fields map[string]any) error {
 	var src model.KBCrawlerSource
+	// 返回 ErrRecordNotFound 而非裸 errors.New：controller 依赖 errhttp.IsNotFoundError
+	// 把「不存在」映射为 404，避免被 400/409 的兜底分类吞掉（D-24）。
 	if err := s.db.WithContext(ctx).First(&src, id).Error; err != nil {
-		return errors.New("爬取源不存在")
+		return gorm.ErrRecordNotFound
 	}
 	allowed := map[string]bool{"include_patterns": true, "max_pages": true, "interval_hours": true, "auto_resync": true, "qa_split_enabled": true}
 	for k := range fields {
@@ -214,8 +216,9 @@ func (s *CrawlerService) UpdateSource(ctx context.Context, id uint, fields map[s
 // TransitionSource 源状态跃迁（active⇄paused，error→active 人工恢复）
 func (s *CrawlerService) TransitionSource(ctx context.Context, id uint, to string) error {
 	var src model.KBCrawlerSource
+	// 同 UpdateSource：not-found 用 ErrRecordNotFound，由 controller 映射 404（D-24）。
 	if err := s.db.WithContext(ctx).First(&src, id).Error; err != nil {
-		return errors.New("爬取源不存在")
+		return gorm.ErrRecordNotFound
 	}
 	if !model.KBCrawlerSourceTransitionAllowed(src.Status, to) {
 		return fmt.Errorf("非法状态跃迁: %s → %s", src.Status, to)

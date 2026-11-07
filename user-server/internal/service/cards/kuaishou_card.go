@@ -92,6 +92,9 @@ func (s *kuaishouCardService) Update(ctx context.Context, req *dto.KuaishouCardU
 	if err != nil {
 		return nil, err
 	}
+	// D-33：短链只在绑定的域名池变化时才需要重建。原实现每次更新都重建，
+	// 等于用户改个标题/描述就让已分发出去的 /s/xxxxxx 推广链接全部失效。
+	originalDomainPoolID := card.DomainPoolID
 
 	redirectURL := req.RedirectURL
 	if redirectURL == "" {
@@ -117,8 +120,10 @@ func (s *kuaishouCardService) Update(ctx context.Context, req *dto.KuaishouCardU
 		return nil, err
 	}
 
-	if err := s.GenerateShortLink(ctx, updatedCard); err != nil {
-		logger.Errorf("警告：生成短链失败：%v", err)
+	if originalDomainPoolID != req.DomainPoolID || card.ShortLinkID == nil || *card.ShortLinkID == 0 {
+		if err := s.GenerateShortLink(ctx, updatedCard); err != nil {
+			logger.Errorf("警告：生成短链失败：%v", err)
+		}
 	}
 
 	card, err = s.repo.GetByID(ctx, updatedCard.ID)
@@ -144,7 +149,10 @@ func (s *kuaishouCardService) Delete(ctx context.Context, id uint) error {
 	}
 
 	if card.ShortLinkID != nil && *card.ShortLinkID != 0 {
-		_ = s.shortLinkService.Delete(ctx, *card.ShortLinkID)
+		// 悬空 ID（旧短链已被删）不该挡住重建，先确认存在再删。
+		if _, err := s.shortLinkService.GetByID(ctx, *card.ShortLinkID); err == nil {
+			_ = s.shortLinkService.Delete(ctx, *card.ShortLinkID)
+		}
 	}
 
 	return s.repo.Delete(ctx, id)
@@ -301,6 +309,11 @@ func (s *kuaishouCardService) GenerateCardChatPage(ctx context.Context, id uint,
 }
 
 func (s *kuaishouCardService) GenerateShortLink(ctx context.Context, card *model.KuaishouCard) error {
+	// 跳转地址校验必须在删除旧短链之前（D-44）。
+	if card.RedirectURL == "" {
+		return ErrCardRedirectURLRequired
+	}
+
 	if card.ShortLinkID != nil && *card.ShortLinkID != 0 {
 		_ = s.shortLinkService.Delete(ctx, *card.ShortLinkID)
 	}
@@ -320,9 +333,6 @@ func (s *kuaishouCardService) GenerateShortLink(ctx context.Context, card *model
 		domainID = card.DomainPoolID
 	}
 
-	if card.RedirectURL == "" {
-		return nil
-	}
 	shortLinkReq := &dto.CreateShortLinkRequest{
 		ShortCode:   generateResp.ShortCode,
 		OriginalURL: card.RedirectURL,

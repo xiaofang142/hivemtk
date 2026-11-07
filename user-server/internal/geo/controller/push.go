@@ -46,7 +46,7 @@ func (c *PushController) PushURLs(ctx *gin.Context) {
 		err = c.svc.PushURLs(ctx.Request.Context(), req.URLs)
 	}
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, err.Error())
+		respondGeoConfigError(ctx, err, "URL 推送")
 		return
 	}
 	response.Success(ctx, gin.H{"count": len(req.URLs), "records": records}, "ok")

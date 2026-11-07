@@ -12,13 +12,17 @@ import "time"
 //  2. rollout 0-100       → FNV-1a(key:contextKey)%100 < RolloutPercentage 灰度放量（确定性粘性分桶）
 //  3. not found           → off, reason=not_found（前端降级默认值）
 type FeatureFlag struct {
-	ID                uint       `gorm:"primaryKey;autoIncrement" json:"id"`
-	TenantID          uint       `gorm:"not null;default:1;uniqueIndex:uni_feature_flags_tenant_key,priority:1" json:"tenant_id,omitempty"`
-	Key               string     `gorm:"type:varchar(100);not null;uniqueIndex:uni_feature_flags_tenant_key,priority:2" json:"key"`
-	Name              string     `gorm:"type:varchar(200)" json:"name"`
-	Description       string     `gorm:"type:varchar(500)" json:"description"`
-	Enabled           bool       `gorm:"default:false;index" json:"enabled"`
-	RolloutPercentage int        `gorm:"default:100" json:"rollout_percentage"`
+	ID          uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	TenantID    uint   `gorm:"not null;default:1;uniqueIndex:uni_feature_flags_tenant_key,priority:1" json:"tenant_id,omitempty"`
+	Key         string `gorm:"type:varchar(100);not null;uniqueIndex:uni_feature_flags_tenant_key,priority:2" json:"key"`
+	Name        string `gorm:"type:varchar(200)" json:"name"`
+	Description string `gorm:"type:varchar(500)" json:"description"`
+	Enabled     bool   `gorm:"default:false;index" json:"enabled"`
+	// RolloutPercentage 不再打 `default` 标签：GORM 在 Create 时会把带列默认值的
+	// 零值字段替换成默认值（Select("*") 也绕不过），导致显式 rollout_percentage=0
+	// （合法的"谁都不放量"）被静默改写成 100。默认 100 由 service.Create 负责；
+	// 仓储层必须原样写入调用方给的值。
+	RolloutPercentage int        `json:"rollout_percentage"`
 	Payload           string     `gorm:"type:text" json:"payload"`
 	Tags              string     `gorm:"type:varchar(200)" json:"tags"`
 	LastEvaluatedAt   *time.Time `json:"last_evaluated_at,omitempty"`

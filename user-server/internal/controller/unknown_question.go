@@ -6,6 +6,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -171,7 +172,13 @@ func (c *UnknownQuestionController) Review(ctx *gin.Context) {
 	}
 	data, err := c.svc.ReviewQuestion(ctx.Request.Context(), id, &req, operatorOf(ctx))
 	if err != nil {
-		if err == reflux.ErrIllegalTransition || err == reflux.ErrNotFound {
+		// D-39：目标不存在是 404，不是 400「入参错误」——此前两者都回 400，
+		// 客户端无法区分"这条未知问题已被删/换租户"与"body 写错了"。
+		if errors.Is(err, reflux.ErrNotFound) {
+			response.Error(ctx, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, reflux.ErrIllegalTransition) {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -244,6 +251,11 @@ func (c *UnknownQuestionController) ClusterReview(ctx *gin.Context) {
 	}
 	data, err := c.svc.ReviewCluster(ctx.Request.Context(), id, &req, operatorOf(ctx))
 	if err != nil {
+		// D-39：簇不存在 → 404（与单条审核同口径）。
+		if errors.Is(err, reflux.ErrNotFound) {
+			response.Error(ctx, http.StatusNotFound, err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}

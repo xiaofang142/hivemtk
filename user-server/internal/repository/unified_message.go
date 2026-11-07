@@ -121,7 +121,17 @@ func (r *platformAccountRepo) Update(ctx context.Context, account *model.Platfor
 }
 
 func (r *platformAccountRepo) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&model.PlatformAccount{}, id).Error
+	// D-35：必须校验 RowsAffected——删除 0 行说明账号不存在，
+	// 返回 gorm.ErrRecordNotFound 让 controller 的 HandleDBError 映射 404，
+	// 避免「删除成功」假成功误导前端。
+	res := r.db.WithContext(ctx).Delete(&model.PlatformAccount{}, id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (r *platformAccountRepo) UpdateStatus(ctx context.Context, id uint, status int) error {

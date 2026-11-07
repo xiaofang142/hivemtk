@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -112,11 +113,24 @@ func (s *PusherConfigService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
+// supportedPushPlatforms 是 loadState（push.go）真正会装配 Pusher 的平台全集。
+// 必须在配置入口就拒绝未知平台：装配期 switch 对未知平台静默跳过，
+// 调用方拿到 code=0 却永远不会被推送（与 ValidatePlatforms 的口径一致）。
+var supportedPushPlatforms = map[string]bool{
+	"baidu":    true,
+	"google":   true,
+	"indexnow": true,
+}
+
 func normalizePlatform(platform *string) (string, error) {
 	if platform == nil || strings.TrimSpace(*platform) == "" {
 		return "", errors.New("platform 必填")
 	}
-	return strings.TrimSpace(*platform), nil
+	p := strings.TrimSpace(*platform)
+	if !supportedPushPlatforms[p] {
+		return "", fmt.Errorf("不支持的平台: %s（可选 baidu / google / indexnow）", p)
+	}
+	return p, nil
 }
 
 // validatePusherConfigJSON 必须是 JSON 对象（各平台按 key 取值，数组/标量会让装配静默失效）

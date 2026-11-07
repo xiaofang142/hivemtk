@@ -528,6 +528,18 @@ func (s *SOPService) Resume(ctx context.Context, execID uint) error {
 }
 
 func (s *SOPService) Cancel(ctx context.Context, execID uint) error {
+	// D-36：与 Pause/Resume 同口径——先确认执行存在再取消，
+	// 否则不存在的 execID 也会「取消成功」（UpdateFields 影响 0 行不报错）。
+	exec, err := s.execRepo.GetByID(ctx, execID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrSOPExecNotFound
+		}
+		return err
+	}
+	if exec == nil {
+		return ErrSOPExecNotFound
+	}
 	now := time.Now()
 	return s.execRepo.UpdateFields(ctx, execID, map[string]any{
 		"status":       SOPStatusCanceled,

@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/errhttp"
 	cursorpkg "hivemtk-user/internal/pkg/pagination"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -324,6 +325,16 @@ func (c *TuningController) UpdatePromptCandidateStatus(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.UpdatePromptCandidateStatus(ctx.Request.Context(), id, status); err != nil {
+		// D-38：状态白名单外的值 → 400（列出可用值），不存在 → 404。
+		if errors.Is(err, service.ErrInvalidCandidateStatus) {
+			response.Error(ctx, http.StatusBadRequest,
+				"无效的候选状态：可选 draft/pending/approved/active/promoted/retired")
+			return
+		}
+		if errhttp.IsNotFoundError(err) {
+			response.Error(ctx, http.StatusNotFound, "候选不存在")
+			return
+		}
 		// 不再把 err.Error() 拼进 fallbackMsg：那是 SQL 原文通道。
 		response.ErrorFromDB(ctx, err, "更新候选状态失败")
 		return

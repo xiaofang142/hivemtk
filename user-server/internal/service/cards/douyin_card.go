@@ -270,8 +270,17 @@ func (s *douyinCardService) toResponseWithShortLink(ctx context.Context, card *m
 }
 
 func (s *douyinCardService) GenerateShortLink(ctx context.Context, card *model.DouyinCard) error {
+	// 跳转地址校验必须在删除旧短链之前（D-44）：否则刷新短链会先删掉已分发的链接，
+	// 再因为没目标地址提前返回，老链接直接 404。
+	if card.RedirectURL == "" {
+		return ErrCardRedirectURLRequired
+	}
+
 	if card.ShortLinkID != 0 {
-		_ = s.shortLinkService.Delete(ctx, card.ShortLinkID)
+		// 悬空 ID（旧短链已被删）不该挡住重建，先确认存在再删。
+		if _, err := s.shortLinkService.GetByID(ctx, card.ShortLinkID); err == nil {
+			_ = s.shortLinkService.Delete(ctx, card.ShortLinkID)
+		}
 	}
 
 	generateReq := &dto.GenerateShortCodeRequest{
@@ -291,9 +300,6 @@ func (s *douyinCardService) GenerateShortLink(ctx context.Context, card *model.D
 		}
 	}
 
-	if card.RedirectURL == "" {
-		return nil
-	}
 	shortLinkReq := &dto.CreateShortLinkRequest{
 		ShortCode:   generateResp.ShortCode,
 		OriginalURL: card.RedirectURL,

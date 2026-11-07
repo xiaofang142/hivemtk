@@ -196,6 +196,10 @@ func (c *FAQController) Update(ctx *gin.Context) {
 		AgentID:    &agentID,
 	}
 	if err := c.svc.Update(ctx.Request.Context(), uint(id), entry); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "FAQ 不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "更新 FAQ 失败")
 		return
 	}
@@ -220,6 +224,10 @@ func (c *FAQController) Toggle(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.SetEnabled(ctx.Request.Context(), uint(id), *req.Enabled); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "FAQ 不存在")
+			return
+		}
 		response.ErrorFromDB(ctx, err, "更新 FAQ 状态失败")
 		return
 	}

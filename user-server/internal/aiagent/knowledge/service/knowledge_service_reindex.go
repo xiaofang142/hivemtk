@@ -75,6 +75,11 @@ func (s *KnowledgeService) Reindex(ctx context.Context, productID string, docID 
 
 // RebuildIndex 重建某产品下全部文档的向量索引。
 func (s *KnowledgeService) RebuildIndex(ctx context.Context, productID string) error {
+	// D-26：产品不存在时必须显式报错，不能静默成功——否则前端会误以为索引已重建。
+	// GetRagProductByID 返回 "rag product not found"，controller 的 isNotFoundError 会映射为 404。
+	if _, err := s.ragRepo.GetRagProductByID(ctx, productID); err != nil {
+		return err
+	}
 	docs, _, err := s.docRepo.List(ctx, repository.ListFilter{ProductID: productID, PageSize: 1000})
 	if err != nil {
 		return err

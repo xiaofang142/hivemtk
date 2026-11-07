@@ -165,6 +165,13 @@ func replyChunkWriteError(c *gin.Context, err error) {
 		response.Error(c, http.StatusConflict, err.Error())
 		return
 	}
+	// D-30：分段不存在要回 404。原先一律 400 INVALID_PARAM_1001，DELETE 路径还会被
+	// 内部错误掩码成「操作失败，请稍后重试」（gorm 的 "record not found" 命中泄露标记），
+	// 调用方既分不清是参数错还是目标已经没了，也拿不到可行动的提示。
+	if isNotFoundError(err) {
+		response.Error(c, http.StatusNotFound, "分段不存在")
+		return
+	}
 	response.Error(c, http.StatusBadRequest, err.Error())
 }
 
@@ -326,14 +333,8 @@ func (ctrl *KnowledgeMerchantController) ExternalImport(c *gin.Context) {
 	if req.Operator == "" {
 		req.Operator = operatorName(c)
 	}
-	if req.Source == "" {
-		response.Error(c, http.StatusBadRequest, "source 不能为空")
-		return
-	}
-	if req.ProductID == "" {
-		response.Error(c, http.StatusBadRequest, "product_id 不能为空")
-		return
-	}
+	// source / product_id 的必填校验放在 service 里，且必须在 token 鉴权之后执行，
+	// 否则公开入口会在认证前先回 400（D-32）。
 	resp, err := ctrl.svc.ExternalImport(c.Request.Context(), &req)
 	if err != nil {
 		response.ErrorFromDB(c, err, "外部系统导入失败")

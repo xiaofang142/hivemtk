@@ -281,7 +281,7 @@ func (s *CustomReportService) querySessionData(ctx context.Context, report *mode
 	if len(dimensions) > 0 {
 		dimField = dimensions[0].Field
 	}
-	var groupExpr, dimValueExpr string // 三个分支（含 default）各自赋值
+	var groupExpr, dimValueExpr string // 分支（含 default）各自赋值
 	switch dimField {
 	case "date", "created_at":
 		groupExpr = "DATE(created_at)"
@@ -289,6 +289,11 @@ func (s *CustomReportService) querySessionData(ctx context.Context, report *mode
 	case "agent_name":
 		groupExpr = "COALESCE(NULLIF(agent_name, ''), '未分配')"
 		dimValueExpr = "COALESCE(NULLIF(agent_name, ''), '未分配')"
+	case "platform":
+		// 与 queryMessageData / report_filter.go 白名单对齐：platform 是合法维度，
+		// 不能静默落到 default 的 status 列（曾把平台分布画成会话状态分布）。
+		groupExpr = "COALESCE(NULLIF(platform, ''), 'unknown')"
+		dimValueExpr = "COALESCE(NULLIF(platform, ''), 'unknown')"
 	default:
 		groupExpr = "status"
 		dimValueExpr = "status::text"

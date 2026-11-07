@@ -140,7 +140,15 @@ func (s *OpenAPIService) UpdateSource(ctx context.Context, id uint64, patch mode
 }
 
 // DeleteSource 删除数据源
+//
+// D-28：先按 (productID, id) 确认归属再删——此前直接按 id 删除，
+// 既丢掉了产品隔离（能删掉同租户其它产品的数据源），
+// 又让「不存在/已删」落到 EnsureAffected 的 gorm.ErrRecordNotFound，
+// 被控制器统一兜底成 500「操作失败，请稍后重试」，调用方无法判断是删掉了还是本来就没有。
 func (s *OpenAPIService) DeleteSource(ctx context.Context, productID string, id int64) error {
+	if _, err := s.srcRepo.GetByProductAndID(ctx, productID, id); err != nil {
+		return err
+	}
 	return s.srcRepo.Delete(ctx, uint64(id))
 }
 

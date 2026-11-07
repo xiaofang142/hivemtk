@@ -128,17 +128,20 @@ func (KnowledgeChunk) TableName() string {
 type KnowledgeImportLog struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID          uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProductID   string    `gorm:"index;not null;default:''" json:"product_id"`
-	DocumentID  *uint64   `gorm:"index" json:"document_id"`
-	SourceType  string    `gorm:"size:16" json:"source_type"`
-	BatchNo     string    `gorm:"size:32;index" json:"batch_no"`
-	Status      string    `gorm:"size:16;default:'success'" json:"status"`
-	Operator    string    `gorm:"size:64" json:"operator"`
-	IP          string    `gorm:"size:64" json:"ip"`
-	UserAgent   string    `gorm:"size:256" json:"user_agent"`
-	DurationMs  int       `json:"duration_ms"`
-	ErrorDetail string    `gorm:"type:jsonb" json:"error_detail"`
+	ID         uint64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ProductID  string  `gorm:"index;not null;default:''" json:"product_id"`
+	DocumentID *uint64 `gorm:"index" json:"document_id"`
+	SourceType string  `gorm:"size:16" json:"source_type"`
+	BatchNo    string  `gorm:"size:32;index" json:"batch_no"`
+	Status     string  `gorm:"size:16;default:'success'" json:"status"`
+	Operator   string  `gorm:"size:64" json:"operator"`
+	IP         string  `gorm:"size:64" json:"ip"`
+	UserAgent  string  `gorm:"size:256" json:"user_agent"`
+	DurationMs int     `json:"duration_ms"`
+	// D-29：error_detail 存的是人读的错误文案（与 kb_merchant 批次表一致），必须用 text。
+	// 原为 jsonb，写入 "" 或 "dial tcp ..." 这类非 JSON 文本时 Postgres 直接报
+	// invalid input syntax for type json，导入日志一条都落不了库，导入统计恒为 0。
+	ErrorDetail string    `gorm:"type:text" json:"error_detail"`
 	CreatedAt   time.Time `gorm:"autoCreateTime;index" json:"created_at"`
 }
 

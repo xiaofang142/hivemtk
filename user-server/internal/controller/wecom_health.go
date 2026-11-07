@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -106,6 +108,10 @@ func (c *WeComHealthController) GetRiskAccounts(ctx *gin.Context) {
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
+	// 出参脱敏：风险账号同样带着完整密钥（与 ListAccountsWithHealth 同口径，D-37）。
+	for i := range list {
+		maskWeComAccount(&list[i])
+	}
 	response.Success(ctx, list, "查询成功")
 }
 
@@ -124,6 +130,8 @@ func (c *WeComHealthController) SelectHealthyAccount(ctx *gin.Context) {
 		response.Success(ctx, nil, "无可用账号，请先在系统中配置企业微信账号")
 		return
 	}
+	// 出参脱敏：最优账号同样带完整密钥（与 ListAccountsWithHealth 同口径，D-37）。
+	maskWeComAccount(acc)
 	response.Success(ctx, acc, "查询成功")
 }
 
@@ -209,6 +217,11 @@ func (c *WeComHealthController) SendMessage(ctx *gin.Context) {
 
 	hubMsg, err := c.integ.SendMessage(ctx.Request.Context(), &req)
 	if err != nil {
+		// D-42：企微上游失败（errcode/网络）是 502，入参与业务校验错误仍是 400。
+		if errors.Is(err, service.ErrWeComUpstreamSend) {
+			response.ErrorWithCode(ctx, utils.ErrorCodeUpstreamFailure, http.StatusBadGateway, err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return
 	}

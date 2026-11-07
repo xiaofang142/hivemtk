@@ -68,6 +68,15 @@ func TestPusherConfigService_Create校验(t *testing.T) {
 		t.Fatal("config_json 非对象应报错")
 	}
 
+	// 未知平台必须在入口拒绝：loadState 对未知平台静默跳过，
+	// 否则调用方拿到 code=0 却一条记录都不会推送（D-22）。
+	bogus := "bogus"
+	if _, err := svc.Create(ctx, PusherConfigInput{
+		Platform: &bogus, ConfigJSON: datatypes.JSON(`{"token":"x"}`),
+	}); err == nil {
+		t.Fatal("未知 platform 应报错")
+	}
+
 	repo := &stubPusherConfigRepo{}
 	svc = NewPusherConfigService(repo)
 	cfg, err := svc.Create(ctx, PusherConfigInput{

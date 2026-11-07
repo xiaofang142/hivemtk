@@ -20,7 +20,6 @@ import (
 	"mime/multipart"
 	"os"
 	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"time"
@@ -174,11 +173,17 @@ func (s *KnowledgeService) Import(ctx context.Context, req *ImportRequest) (*Kno
 	}
 
 	if err2 != nil {
-		_ = s.logImport(ctx, req, 0, "failed", int(time.Since(start).Milliseconds()), err2.Error())
+		if logErr := s.logImport(ctx, req, 0, "failed", int(time.Since(start).Milliseconds()), err2.Error()); logErr != nil {
+			logger.Warnf("[knowledge] 写导入日志失败（失败态）: %v", logErr)
+		}
 		return nil, err2
 	}
 
-	_ = s.logImport(ctx, req, doc.ID, "success", int(time.Since(start).Milliseconds()), "")
+	// 导入日志是审计与"导入统计"的唯一数据源，写失败必须留痕，
+	// 否则接口照常成功而页面上日志/统计永远为空（D-29）。
+	if logErr := s.logImport(ctx, req, doc.ID, "success", int(time.Since(start).Milliseconds()), ""); logErr != nil {
+		logger.Warnf("[knowledge] 写导入日志失败（成功态）: %v", logErr)
+	}
 
 	async.RunWithTimeout(ctx, AsyncProcessingTimeout(), func(procCtx context.Context) {
 		s.processDocumentAsync(procCtx, doc.ID, productNumericID, doc.FilePath, doc.FileName, req.Content, doc.MimeType, doc.Title, req.SourceType, req.Metadata)
@@ -361,19 +366,57 @@ func (s *KnowledgeService) Search(ctx context.Context, productID string, query s
 		return nil, errors.New("rag searcher 未初始化")
 	}
 
-	ragChunks, err := s.ragSearcher.Search(ctx, query, topK)
+	// D-27：必须走 SearchIndex 带上 product_id 过滤。此前调用的是全库检索 Search，
+	// 再把请求的 productID 回填到每条结果上——别的产品的文档会被贴上本产品标签返回，
+	// 前端"产品级检索"看到的其实是跨产品内容（串数据）。
+	ragChunks, err := s.ragSearcher.SearchIndex(ctx, productID, query, topK, nil)
 	if err != nil {
 		return nil, fmt.Errorf("混合检索失败: %w", err)
 	}
 	out := make([]model.KnowledgeChunk, 0, len(ragChunks))
-	for _, c := range ragChunks {
-
-		docID, _ := strconv.ParseUint(strings.TrimPrefix(c.DocID, "kb_doc_"), 10, 64)
-		out = append(out, model.KnowledgeChunk{
-			DocumentID: docID,
-			ProductID:  productID,
-			Content:    c.Content,
-		})
+	for _, c := range dedupeMerchantChunks(ragChunks) {
+		out = append(out, knowledgeChunkFromMerchant(productID, c))
 	}
 	return out, nil
+}
+
+// dedupeMerchantChunks 去掉混合检索里重复命中的同一分段。
+// 向量路与 BM25 路命中同一段时会产生两条一模一样的记录，前端会重复展示。
+func dedupeMerchantChunks(chunks []MerchantRAGChunk) []MerchantRAGChunk {
+	if len(chunks) < 2 {
+		return chunks
+	}
+	seen := make(map[string]struct{}, len(chunks))
+	out := make([]MerchantRAGChunk, 0, len(chunks))
+	for _, c := range chunks {
+		key := "doc:" + strconv.FormatUint(c.DocumentID, 10) + ":" + c.Content
+		if c.ID != 0 {
+			key = "id:" + strconv.FormatUint(c.ID, 10)
+		}
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, c)
+	}
+	return out
+}
+
+// knowledgeChunkFromMerchant 把检索层命中映射成接口返回的分段。
+//
+// D-27：ProductID 用调用方请求的产品，DocumentID/ID/SimilarityScore/Weight 必须取命中本身的字段——
+// 只回填 product_id 而丢掉命中元信息会让前端拿到「同一产品的两条一样的结果」和恒为 0 的相关度。
+func knowledgeChunkFromMerchant(productID string, c MerchantRAGChunk) model.KnowledgeChunk {
+	weight := c.Weight
+	if weight <= 0 {
+		weight = 1
+	}
+	return model.KnowledgeChunk{
+		ID:              c.ID,
+		DocumentID:      c.DocumentID,
+		ProductID:       productID,
+		Content:         c.Content,
+		SimilarityScore: c.Score,
+		Weight:          weight,
+	}
 }

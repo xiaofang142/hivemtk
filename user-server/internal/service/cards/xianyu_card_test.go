@@ -2,6 +2,7 @@ package cards
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"hivemtk-user/internal/dto"
@@ -264,11 +265,11 @@ func TestXianyuCardService_GetByIDWithRefresh_Success(t *testing.T) {
 	service := NewXianyuCardService(database)
 
 	createReq := &dto.XianyuCardCreateRequest{
-		Title:        "Test Card",
-		Description:  "Test description",
-		ImageURL:     "https://example.com/image.jpg",
-		DomainPoolID: 1,
-		IsActive:     boolPtr(true),
+		Title:       "Test Card",
+		Description: "Test description",
+		ImageURL:    "https://example.com/image.jpg",
+		RedirectURL: "https://example.com/target",
+		IsActive:    boolPtr(true),
 	}
 	createdCard, err := service.Create(context.Background(), createReq)
 	if err != nil {
@@ -282,6 +283,48 @@ func TestXianyuCardService_GetByIDWithRefresh_Success(t *testing.T) {
 
 	if fetchedCard.ID != createdCard.ID {
 		t.Errorf("Expected ID %d, got %d", createdCard.ID, fetchedCard.ID)
+	}
+}
+
+// TestXianyuCardService_GetByIDWithRefresh_RequiresRedirectURL 覆盖 D-44：
+// 卡片没有跳转地址时不许「刷新短链」——历史实现会先删掉已分发的短链再提前返回，
+// 用户看到 200，老链接直接 404。现在必须报错，且旧短链原样保留。
+func TestXianyuCardService_GetByIDWithRefresh_RequiresRedirectURL(t *testing.T) {
+	database := setupXianyuCardServiceTestDB(t)
+	service := NewXianyuCardService(database)
+
+	createdCard, err := service.Create(context.Background(), &dto.XianyuCardCreateRequest{
+		Title:       "Card With Link",
+		ImageURL:    "https://example.com/image.jpg",
+		RedirectURL: "https://example.com/target",
+	})
+	if err != nil {
+		t.Fatalf("Create failed: %v", err)
+	}
+	if createdCard.ShortCode == "" {
+		t.Fatal("预置条件失败：创建后应已有短链")
+	}
+
+	// 模拟「跳转地址被清空」的卡片（PUT 全量更新可以做到）。
+	if err := database.Model(&model.XianyuCard{}).
+		Where("id = ?", createdCard.ID).
+		Update("redirect_url", "").Error; err != nil {
+		t.Fatalf("清空 redirect_url 失败: %v", err)
+	}
+
+	if _, err := service.GetByIDWithRefresh(context.Background(), createdCard.ID); !errors.Is(err, ErrCardRedirectURLRequired) {
+		t.Fatalf("期望 ErrCardRedirectURLRequired，实际: %v", err)
+	}
+
+	// 旧短链必须还在：拒绝要发生在删除之前。
+	var linkCount int64
+	if err := database.Model(&model.ShortLink{}).
+		Where("short_code = ?", createdCard.ShortCode).
+		Count(&linkCount).Error; err != nil {
+		t.Fatalf("查询短链失败: %v", err)
+	}
+	if linkCount != 1 {
+		t.Fatalf("旧短链被删掉了（D-44 回归）: count=%d", linkCount)
 	}
 }
 

@@ -187,7 +187,7 @@ func (c *ReportController) InaccurateClaims(ctx *gin.Context) {
 	}
 	result, err := c.analyticsSvc.DetectInaccurateClaims(ctx.Request.Context(), body.BrandName)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "不准确声明检测失败: "+err.Error())
+		respondGeoLLMError(ctx, err, "不准确声明检测")
 		return
 	}
 	response.Success(ctx, result, "ok")

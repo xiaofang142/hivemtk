@@ -219,7 +219,8 @@ func (s *QASplitService) ListQACandidates(ctx context.Context, sourceType, statu
 func (s *QASplitService) ReviewQACandidate(ctx context.Context, id uint64, to, reviewer string) error {
 	var c internalmodel.QACandidate
 	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
-		return fmt.Errorf("候选不存在")
+		// D-25：not-found 语义必须保留，controller 依赖 errhttp.IsNotFoundError 映射 404
+		return gorm.ErrRecordNotFound
 	}
 	if !internalmodel.QACandidateTransitionAllowed(c.Status, to) {
 		return fmt.Errorf("非法状态跃迁: %s → %s", c.Status, to)
@@ -232,7 +233,8 @@ func (s *QASplitService) ReviewQACandidate(ctx context.Context, id uint64, to, r
 func (s *QASplitService) PublishQACandidate(ctx context.Context, id uint64, kb *KnowledgeBaseService) error {
 	var c internalmodel.QACandidate
 	if err := s.db.WithContext(ctx).First(&c, id).Error; err != nil {
-		return fmt.Errorf("候选不存在")
+		// D-25：not-found 语义必须保留，controller 依赖 errhttp.IsNotFoundError 映射 404
+		return gorm.ErrRecordNotFound
 	}
 	if !internalmodel.QACandidateTransitionAllowed(c.Status, internalmodel.QACandidateStatusIndexed) {
 		return fmt.Errorf("非法状态跃迁: %s → indexed（需先 approve）", c.Status)

@@ -112,7 +112,9 @@ func (s *RefluxService) ReviewQuestion(ctx context.Context, id int64, req *Adopt
 	case ActionAdopt:
 		return s.adoptSingle(ctx, uq, req, operatorID)
 	default:
-		return nil, ErrIllegalTransition
+		// 未知动作单独给文案：此前一律回「非法状态迁移」，运营照抄这句话排查
+		// 会往状态机上找，而实际是 body 里的 action 拼错/未注册（D-39 附带项）。
+		return nil, fmt.Errorf("action 必须是 adopt/ignore/merge（收到 %q）", req.Action)
 	}
 }
 

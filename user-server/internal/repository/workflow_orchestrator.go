@@ -129,7 +129,16 @@ func (r *WorkflowVersionRepository) DeleteByID(ctx context.Context, id uint) err
 	if r == nil || r.db == nil {
 		return errors.New("workflow version repository not initialized")
 	}
-	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WorkflowVersion{}).Error
+	// D-43：GORM 的 Delete 命中 0 行不报错，控制器就会回「删除成功」——
+	// 不存在的版本被当成已删除。按文档级/分段级删除的口径返 not found。
+	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&model.WorkflowVersion{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // UpdateStatus 更新版本状态
@@ -137,9 +146,18 @@ func (r *WorkflowVersionRepository) UpdateStatus(ctx context.Context, id uint, s
 	if r == nil || r.db == nil {
 		return errors.New("workflow version repository not initialized")
 	}
-	return r.db.WithContext(ctx).Model(&model.WorkflowVersion{}).
+	// D-43：同一形状——发布/归档不存在的版本原来静默成功（200「发布成功/归档成功」），
+	// 前端会以为状态已变，回读却仍是原记录。0 行受影响即视为不存在。
+	res := r.db.WithContext(ctx).Model(&model.WorkflowVersion{}).
 		Where("id = ?", id).
-		Update("status", status).Error
+		Update("status", status)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // CountByWorkflowID 统计指定 workflow_id 的版本数（用于自增 version）

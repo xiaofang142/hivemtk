@@ -42,7 +42,10 @@ func (r *featureFlagRepo) Create(ctx context.Context, f *model.FeatureFlag) erro
 	if f.TenantID == 0 {
 		f.TenantID = scopeTenantID(ctx)
 	}
-	return r.db.WithContext(ctx).Create(f).Error
+	// 显式 Select("*")：RolloutPercentage 带 `default:100` 标签，GORM 在 Create 时
+	// 会把零值字段从 INSERT 列里剔除、交给 DB 默认值——于是显式传 rollout_percentage=0
+	// （合法的"谁都不放量"）会被改写成 100，静默把开关全量打开。整列写入才与请求一致。
+	return r.db.WithContext(ctx).Select("*").Create(f).Error
 }
 
 // scopeTenantID 取本次写入的租户归属：有绑定用绑定；离线单机显式落默认租户

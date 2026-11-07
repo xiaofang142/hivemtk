@@ -96,7 +96,7 @@ func (c *ConfigController) OptimizeConfig(ctx *gin.Context) {
 	}
 	result, err := c.svc.OptimizeConfig(ctx.Request.Context(), req.BrandName, req.Advantages, req.Competitors)
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "配置优化失败")
+		respondGeoLLMError(ctx, err, "配置优化")
 		return
 	}
 	response.Success(ctx, result, "配置优化成功")
