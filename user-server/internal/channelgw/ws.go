@@ -283,16 +283,19 @@ func (c *wsConn) handleFrame(f *Frame) {
 	}
 }
 
-// wsAckFrameStatus 归一 ack 帧 Status 字段（CH-37b 刀2 起 WS 消费）。
+// wsAckFrameStatus 归一 ack 帧 Status 字段（CH-37b 刀2 起 WS 消费；刀4 R2/R6 三值）。
 // 返回 model.BridgeAckStatusDelivered（含空值：legacy 仅-delivered 帧不带 Status 或 Status 空
-// =delivered，行为不变）、model.BridgeAckStatusFailed；未知值返回空串——调用方按协议错误
-// 处理（本刀：拒翻转 + Warn + FrameAckUnknownStatusCount 打点；unknown 语义归刀4 R2/R6）。
+// =delivered，行为不变）、model.BridgeAckStatusFailed、model.BridgeAckStatusUnknown
+// （「已提交但结果不明」真终态：翻转入 unknown，永不自动重发，对账走显式迁移）；
+// 其余值返回空串——调用方按协议错误处理（拒翻转 + Warn + FrameAckUnknownStatusCount 打点）。
 func wsAckFrameStatus(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", model.BridgeAckStatusDelivered:
 		return model.BridgeAckStatusDelivered
 	case model.BridgeAckStatusFailed:
 		return model.BridgeAckStatusFailed
+	case model.BridgeAckStatusUnknown:
+		return model.BridgeAckStatusUnknown
 	default:
 		return ""
 	}
@@ -312,17 +315,20 @@ func (c *wsConn) handleAckFrame(f *Frame) {
 	}
 	ctx, cancel := context.WithTimeout(c.baseCtx(), runtimeWSPipelineTimeout(c.baseCtx()))
 	defer cancel()
-	if status == model.BridgeAckStatusFailed {
-		// failed 终态走 v2 详细 ack（CH-37b 刀2）：逐项分类落回执，行级翻转由 service 层保证。
-		// WS 帧不带 conversation/per-item error/claimed_at（栅栏随扩展侧 v2 items[] 另接），全 nil/空。
-		res, err := c.t.pipeline.AckOutboundDetailed(ctx, c.channel, c.accountID, f.MsgIDs, "", model.BridgeAckStatusFailed, nil, nil)
+	// CH-37b 刀4（R2/R6）：failed 与 unknown 共用详细 ack 路径，但语义分叉——
+	// failed=平台明确拒绝（可安全重试语义由既有 failed 链路处理）；unknown=「已提交但
+	// 结果不明」**真终态**（刀2 时是拒翻转+打点，本刀起真翻转入 unknown 态），
+	// 行级落 status='unknown'+push_error='ack_unknown'，此后不进任何认领/回收/重推路径，
+	// 出路只有显式对账（service.ReconcileUnknownOutbound）。
+	if status == model.BridgeAckStatusFailed || status == model.BridgeAckStatusUnknown {
+		res, err := c.t.pipeline.AckOutboundDetailed(ctx, c.channel, c.accountID, f.MsgIDs, "", status, nil, nil)
 		if err != nil {
-			logger.Warnf("[ChannelGW WS] ack failed 回写失败 channel=%s account=%s: %v", c.channel, c.accountID, err)
+			logger.Warnf("[ChannelGW WS] ack %s 回写失败 channel=%s account=%s: %v", status, c.channel, c.accountID, err)
 			return
 		}
 		if res != nil {
-			logger.Infof("[ChannelGW WS] 出站已确认 failed: channel=%s account=%s failed=%d duplicate=%d not_found=%d",
-				c.channel, c.accountID, res.FailedItemsCount, res.DuplicateCount, res.NotFoundCount)
+			logger.Infof("[ChannelGW WS] 出站已确认 %s: channel=%s account=%s failed=%d unknown=%d duplicate=%d not_found=%d",
+				status, c.channel, c.accountID, res.FailedItemsCount, res.UnknownItemsCount, res.DuplicateCount, res.NotFoundCount)
 		}
 		return
 	}

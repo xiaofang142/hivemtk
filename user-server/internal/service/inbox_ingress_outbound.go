@@ -207,13 +207,16 @@ type AckOutboundItem struct {
 }
 
 type AckOutboundResult struct {
-	AffectedCount    int               `json:"affected_count"`
-	AckedItemsCount  int               `json:"acked_items_count"`
-	FailedItemsCount int               `json:"failed_items_count"`
-	DuplicateCount   int               `json:"duplicate_count"`
-	NotFoundCount    int               `json:"not_found_count"`
-	NotInScopeCount  int               `json:"not_in_scope_count"`
-	Items            []AckOutboundItem `json:"items"`
+	AffectedCount    int `json:"affected_count"`
+	AckedItemsCount  int `json:"acked_items_count"`
+	FailedItemsCount int `json:"failed_items_count"`
+	// UnknownItemsCount CH-37b 刀4（R2/R6）：本次翻转为 unknown 终态的行数（结果不明，
+	// 永不自动重发、待人工/API 对账）。additive 字段：旧客户端忽略未知 JSON 键不受影响。
+	UnknownItemsCount int               `json:"unknown_items_count"`
+	DuplicateCount    int               `json:"duplicate_count"`
+	NotFoundCount     int               `json:"not_found_count"`
+	NotInScopeCount   int               `json:"not_in_scope_count"`
+	Items             []AckOutboundItem `json:"items"`
 }
 
 func (s *InboxIngressService) AckOutboundDeliveredDetailed(
@@ -275,8 +278,11 @@ func (s *InboxIngressService) ackOutboundDetailed(
 	if terminalStatus == "" {
 		terminalStatus = model.BridgeAckStatusDelivered
 	}
-	if terminalStatus != model.BridgeAckStatusDelivered && terminalStatus != model.BridgeAckStatusFailed {
-		return nil, fmt.Errorf("invalid terminal status: %q (must be delivered or failed)", terminalStatus)
+	// CH-37b 刀4（R2/R6）：terminalStatus 三值——delivered/failed 之外接受 unknown
+	// （「已提交但结果不明」，落库 status='unknown'+push_error='ack_unknown'，永不自动重发，
+	// 对账走 ReconcileUnknownOutbound）。词表收口 model.IsBridgeAckTerminalStatus。
+	if !model.IsBridgeAckTerminalStatus(terminalStatus) {
+		return nil, fmt.Errorf("invalid terminal status: %q (must be delivered, failed or unknown)", terminalStatus)
 	}
 
 	seen := make(map[string]struct{}, len(msgIDs))
@@ -344,9 +350,14 @@ func (s *InboxIngressService) ackOutboundDetailed(
 			if _, ok := updatedIDSet[id]; !ok {
 				continue
 			}
+			// 行级回执状态随终态走：delivered→acked、failed→failed、unknown→unknown
+			// （CH-37b 刀4：unknown 是独立终态，不冒充 acked/failed，独立计量见 UnknownItemsCount）。
 			st := model.BridgeAckStatusAcked
-			if terminalStatus == model.BridgeAckStatusFailed {
+			switch terminalStatus {
+			case model.BridgeAckStatusFailed:
 				st = model.BridgeAckStatusFailed
+			case model.BridgeAckStatusUnknown:
+				st = model.BridgeAckStatusUnknown
 			}
 			item := AckOutboundItem{MsgID: id, Status: st}
 			if perItem != nil {
@@ -369,13 +380,17 @@ func (s *InboxIngressService) ackOutboundDetailed(
 	finalItems := make([]AckOutboundItem, 0, len(result.Items))
 	ackedItemsCount := 0
 	failedItemsCount := 0
+	unknownItemsCount := 0
 	for _, item := range result.Items {
 		switch item.Status {
-		case model.BridgeAckStatusAcked, model.BridgeAckStatusFailed:
+		case model.BridgeAckStatusAcked, model.BridgeAckStatusFailed, model.BridgeAckStatusUnknown:
 			if _, ok := updatedIDSet[item.MsgID]; ok {
-				if item.Status == model.BridgeAckStatusFailed {
+				switch item.Status {
+				case model.BridgeAckStatusFailed:
 					failedItemsCount++
-				} else {
+				case model.BridgeAckStatusUnknown:
+					unknownItemsCount++
+				default:
 					ackedItemsCount++
 				}
 				if perItem != nil {
@@ -395,6 +410,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 	result.Items = finalItems
 	result.AckedItemsCount = ackedItemsCount
 	result.FailedItemsCount = failedItemsCount
+	result.UnknownItemsCount = unknownItemsCount
 
 	if conversationID == "" && len(deduped) > 0 {
 		var suspected []string
@@ -443,6 +459,12 @@ func (s *InboxIngressService) ackOutboundDetailed(
 		default:
 			traceStatus = tracing.StatusOk
 		}
+		// Expected 文案随终态分叉（CH-37b 刀4）：unknown 不是「已确认送达/失败」，
+		// 是「结果不明待对账」，文案不能冒充确定性结论。
+		expected := "pending → " + terminalStatus + "（桥接已确认送达/失败）"
+		if terminalStatus == model.BridgeAckStatusUnknown {
+			expected = "pending → unknown（桥端结果不明：永不自动重发，待人工/API 对账）"
+		}
 		tracing.RecordNode(ctx, tracing.NodeSpan{
 			TraceID:        traceID,
 			ConversationID: convID,
@@ -464,7 +486,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 				"status": terminalStatus,
 			},
 			DurationMs: ackTimer.ElapsedMs(),
-			Expected:   "pending → " + terminalStatus + "（桥接已确认送达/失败）",
+			Expected:   expected,
 			Status:     traceStatus,
 		})
 	}
@@ -478,4 +500,36 @@ type BridgeOutboundAckInput struct {
 	ConversationID string
 	Status         string
 	Error          string
+}
+
+// ReconcileUnknownOutbound CH-37b 刀4（R2/R6）对账出口（受控迁移，unknown 的唯一出路）：
+// 把 (channel, accountID) 下指定 id 的 unknown 行显式迁移到 delivered 或 failed，
+// push_error 留操作来源 'reconciled_unknown:<operator>'。
+//
+// 约束与语义：
+//   - 只接受 unknown 行：repo 谓词 status='unknown'，与其余任何取行/翻转路径零交集，
+//     迟到 ack / 回收 / exhaust 对 unknown 行的 0 触碰由此不受对账影响；
+//   - target 只许 delivered/failed（unknown→unknown 无意义，其余值报错）；
+//   - operator 必填（人工账号/API 身份）——对账是显式人工动作，不留来源的迁移拒绝执行；
+//   - 按**行 id** 定位而非 msg_id：msg_id 是内容哈希、可跨会话命中多行，受控迁移必须
+//     指到具体行；调用方（管理侧 API/运维）从 unknown 列表查询取得 id；
+//   - 租户作用域强制：ctx 须携带租户（on 模式下隔离 callback 对无租户 ctx fail-closed
+//     拒绝，行数 0 + error；off 模式单租户直通，与仓内 message_hub 写路径同口径）。
+//     跨租户行不在谓词命中集合，受影响行数 0。
+//
+// 返回实际迁移行数（幂等：非 unknown 行不计入，不报错——重复对账天然收敛）。
+// 管理侧 HTTP API 装配归后续刀（本刀交付 repo+service 两级能力与验收）。
+func (s *InboxIngressService) ReconcileUnknownOutbound(ctx context.Context, channel, accountID string, ids []uint, target, operator string) (int64, error) {
+	if s.hubRepo == nil {
+		return 0, errors.New("reconcile failed: hub repo not configured")
+	}
+	affected, err := s.hubRepo.ReconcileUnknownOutbound(ctx, channel, accountID, ids, target, operator)
+	if err != nil {
+		return 0, err
+	}
+	if affected > 0 {
+		logger.Infof("[Inbox] unknown 对账迁移: channel=%s account=%s ids=%v target=%s operator=%q affected=%d",
+			channel, accountID, ids, target, operator, affected)
+	}
+	return affected, nil
 }

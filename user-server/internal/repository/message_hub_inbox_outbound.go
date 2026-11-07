@@ -82,6 +82,28 @@ func (r *MessageHubRepository) exhaustOutbound(ctx context.Context, channel, acc
 // pushExhaustedError 写在行上的失败原因。刻意不带界数字：行上的 push_attempts 就是那个数。
 const pushExhaustedError = "outbound_push_exhausted"
 
+// pushAckUnknownError CH-37b 刀4（R2/R6）：详细 ack 落 unknown 终态时写在 push_error 上的
+// 原因标记。push_error 在这一格充当「操作来源」痕迹：status='unknown' + push_error=
+// 'ack_unknown' = 桥端 ack 报告结果不明（而非对账/回收写入）。
+const pushAckUnknownError = "ack_unknown"
+
+// pushReconciledUnknownPrefix CH-37b 刀4（R2/R6）：对账迁移在 push_error 上留的操作来源前缀，
+// 完整值为 <prefix><operator>（operator 由 service 层强制非空）。status 是 delivered/failed
+// 而 push_error 带本前缀 = 这行曾进 unknown、由人工/API 显式对账迁出。
+const pushReconciledUnknownPrefix = "reconciled_unknown:"
+
+// terminalAckUpdates 详细 ack 终态翻转的列值集：三态共用（delivered/failed/unknown）。
+// sent_at 与桥端主动 ack failed 路径同口径照写（提交动作确实发生过）；unknown 额外写
+// push_error=ack_unknown 记「结果不明」的来源（delivered/failed 不碰 push_error，
+// 与既有二值行为逐字节一致）。
+func terminalAckUpdates(terminalStatus string) map[string]any {
+	upd := map[string]any{"status": terminalStatus, "sent_at": time.Now()}
+	if terminalStatus == model.BridgeAckStatusUnknown {
+		upd["push_error"] = pushAckUnknownError
+	}
+	return upd
+}
+
 func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int, claimTimeout time.Duration) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || limit <= 0 {
 		return nil, nil
@@ -302,7 +324,10 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatus(
 	if r.db == nil || len(msgIDs) == 0 {
 		return nil, 0, nil
 	}
-	if terminalStatus != model.BridgeAckStatusDelivered && terminalStatus != model.BridgeAckStatusFailed {
+	// CH-37b 刀4：terminalStatus 扩为三值（delivered/failed/unknown），词表收口到
+	// model.IsBridgeAckTerminalStatus。unknown 走同一谓词（pending/inflight → 终态），
+	// 差别仅在列值集（terminalAckUpdates：unknown 额外写 push_error=ack_unknown）。
+	if !model.IsBridgeAckTerminalStatus(terminalStatus) {
 		return nil, 0, fmt.Errorf("invalid terminal status: %q", terminalStatus)
 	}
 	updatedIDs = make([]string, 0, len(msgIDs))
@@ -328,7 +353,7 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatus(
 		if conversationID != "" {
 			upd = upd.Where("conversation_id = ?", conversationID)
 		}
-		res := upd.Updates(map[string]any{"status": terminalStatus, "sent_at": time.Now()})
+		res := upd.Updates(terminalAckUpdates(terminalStatus))
 		if res.Error != nil {
 			return res.Error
 		}
@@ -361,7 +386,10 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatusFence
 	if r.db == nil || len(msgIDs) == 0 || len(claimedAtByMsgID) == 0 {
 		return nil, 0, nil
 	}
-	if terminalStatus != model.BridgeAckStatusDelivered && terminalStatus != model.BridgeAckStatusFailed {
+	// CH-37b 刀4：terminalStatus 扩为三值（delivered/failed/unknown），与无栅栏版同词表。
+	// 栅栏谓词（status='inflight' AND claimed_at IN ...）对 unknown 行天然不匹配——
+	// 行一旦落 unknown 就不再被任何 ack 翻转，对账只能走 ReconcileUnknownOutbound。
+	if !model.IsBridgeAckTerminalStatus(terminalStatus) {
 		return nil, 0, fmt.Errorf("invalid terminal status: %q", terminalStatus)
 	}
 	// 栅栏值域收紧到本批 msgIDs：键不在批内的条目绝不参与谓词。
@@ -406,7 +434,7 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatusFence
 		if conversationID != "" {
 			upd = upd.Where("conversation_id = ?", conversationID)
 		}
-		res := upd.Updates(map[string]any{"status": terminalStatus, "sent_at": time.Now()})
+		res := upd.Updates(terminalAckUpdates(terminalStatus))
 		if res.Error != nil {
 			return res.Error
 		}
@@ -417,6 +445,58 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatusFence
 		return nil, 0, err
 	}
 	return updatedIDs, affectedRows, nil
+}
+
+// ReconcileUnknownOutbound CH-37b 刀4（R2/R6）对账出口：把 unknown 行**显式**迁移到
+// delivered 或 failed（unknown 的唯一出路——永不自动重发，详见 model.BridgeAckStatusUnknown）。
+//
+// 谓词刻意收窄到 status='unknown'：与 ack/回收/exhaust 的取行集合零交集，因此
+//   - 对账与迟到 ack 并发时二者互斥（ack 谓词 pending/inflight 匹配不到 unknown 行）；
+//   - 两个对账并发时 PG 行锁 + WHERE status='unknown' 重评保证单胜者（败者 0 行）。
+//
+// 操作来源痕迹：push_error 写 'reconciled_unknown:<operator>'（operator 由 service 层强制
+// 非空；本层再兜一道）。sent_at/claimed_at 不动：unknown 翻入时已盖 sent_at，行已是终态，
+// 重盖只会抹掉「何时变成结果不明」的现场。租户作用域依赖隔离 callback（on 模式下 ctx
+// 未绑租户即 fail-closed 拒绝），与仓内其余 message_hub 写路径同口径。
+func (r *MessageHubRepository) ReconcileUnknownOutbound(ctx context.Context, channel, accountID string, ids []uint, target, operator string) (int64, error) {
+	if r == nil || r.db == nil || len(ids) == 0 {
+		return 0, nil
+	}
+	// 对账目标只许 delivered/failed：unknown→unknown 无意义，其余值一律拒绝。
+	if target != model.BridgeAckStatusDelivered && target != model.BridgeAckStatusFailed {
+		return 0, fmt.Errorf("invalid reconcile target: %q (must be delivered or failed)", target)
+	}
+	if strings.TrimSpace(operator) == "" {
+		return 0, errors.New("reconcile operator required: 对账必须留操作来源")
+	}
+	trace := pushReconciledUnknownPrefix + operator
+	if len(trace) > 200 { // push_error varchar(200)：截断 operator 保住前缀可辨识
+		trace = trace[:200]
+	}
+	res := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("platform = ? AND account_id = ? AND direction = 'outbound' AND id IN ? AND status = ?",
+			channel, accountID, ids, model.BridgeAckStatusUnknown).
+		Updates(map[string]any{"status": target, "push_error": trace})
+	return res.RowsAffected, res.Error
+}
+
+// CountOutboundUnknown CH-37b 刀4（R2/R6）：unknown 行数计量（对账入口的待办读数）。
+// channel/accountID 传空串 = 不按该维过滤（全局口径）；租户作用域同上依赖隔离 callback。
+func (r *MessageHubRepository) CountOutboundUnknown(ctx context.Context, channel, accountID string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	q := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = 'outbound' AND status = ?", model.BridgeAckStatusUnknown)
+	if channel != "" {
+		q = q.Where("platform = ?", channel)
+	}
+	if accountID != "" {
+		q = q.Where("account_id = ?", accountID)
+	}
+	var n int64
+	err := q.Count(&n).Error
+	return n, err
 }
 
 func (r *MessageHubRepository) AnyExistsByMsgIDs(ctx context.Context, channel string, msgIDs []string) (map[string]bool, error) {

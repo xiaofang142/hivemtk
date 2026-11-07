@@ -900,14 +900,17 @@ func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 }
 
 type BridgeOutboxAckResponse struct {
-	Status           string                    `json:"status"`
-	AffectedCount    int                       `json:"affected_count"`
-	AckedItemsCount  int                       `json:"acked_items_count"`
-	FailedItemsCount int                       `json:"failed_items_count"`
-	DuplicateCount   int                       `json:"duplicate_count"`
-	NotFoundCount    int                       `json:"not_found_count"`
-	NotInScopeCount  int                       `json:"not_in_scope_count"`
-	Items            []service.AckOutboundItem `json:"items"`
+	Status           string `json:"status"`
+	AffectedCount    int    `json:"affected_count"`
+	AckedItemsCount  int    `json:"acked_items_count"`
+	FailedItemsCount int    `json:"failed_items_count"`
+	// UnknownItemsCount CH-37b 刀4（R2/R6）：翻转为 unknown 终态（结果不明）的行数，
+	// additive 字段——旧客户端忽略未知 JSON 键不受影响。
+	UnknownItemsCount int                       `json:"unknown_items_count"`
+	DuplicateCount    int                       `json:"duplicate_count"`
+	NotFoundCount     int                       `json:"not_found_count"`
+	NotInScopeCount   int                       `json:"not_in_scope_count"`
+	Items             []service.AckOutboundItem `json:"items"`
 }
 
 // @Summary      欠交付
@@ -974,10 +977,13 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 			if st == "" {
 				st = model.BridgeAckStatusDelivered
 			}
-			if st != model.BridgeAckStatusDelivered && st != model.BridgeAckStatusFailed {
+			// CH-37b 刀4（R2/R6）：校验扩为三值（delivered/failed/unknown）。unknown=
+			// 「已提交但结果不明」真终态（永不自动重发，对账走显式迁移），与其余值同样
+			// 在任何写之前整批验完，维持「要么全收，要么一格不动」的批语义。
+			if !model.IsBridgeAckTerminalStatus(st) {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"status":  "error",
-					"message": fmt.Sprintf("invalid status: %q (must be delivered or failed)", it.Status),
+					"message": fmt.Sprintf("invalid status: %q (must be delivered, failed or unknown)", it.Status),
 				})
 				return
 			}
@@ -1014,10 +1020,12 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		terminalStatus = model.BridgeAckStatusDelivered
 	}
 
-	if terminalStatus != model.BridgeAckStatusDelivered && terminalStatus != model.BridgeAckStatusFailed {
+	// CH-37b 刀4（R2/R6）：v1 body status 同步扩为三值（delivered/failed/unknown）。
+	// unknown 走下方同一 AckOutboundDeliveredDetailed 路径，行级落 unknown 终态。
+	if !model.IsBridgeAckTerminalStatus(terminalStatus) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "error",
-			"message": fmt.Sprintf("invalid status: %q (must be delivered or failed)", terminalStatus),
+			"message": fmt.Sprintf("invalid status: %q (must be delivered, failed or unknown)", terminalStatus),
 		})
 		return
 	}
@@ -1056,6 +1064,7 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 			merged.AffectedCount += part.AffectedCount
 			merged.AckedItemsCount += part.AckedItemsCount
 			merged.FailedItemsCount += part.FailedItemsCount
+			merged.UnknownItemsCount += part.UnknownItemsCount
 			merged.DuplicateCount += part.DuplicateCount
 			merged.NotFoundCount += part.NotFoundCount
 			merged.NotInScopeCount += part.NotInScopeCount
@@ -1093,14 +1102,15 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 	}
 	bm.AckDuration.WithLabel(channel).Observe(float64(time.Since(start).Milliseconds()))
 	c.JSON(http.StatusOK, BridgeOutboxAckResponse{
-		Status:           "ok",
-		AffectedCount:    ackResult.AffectedCount,
-		AckedItemsCount:  ackResult.AckedItemsCount,
-		FailedItemsCount: ackResult.FailedItemsCount,
-		DuplicateCount:   ackResult.DuplicateCount,
-		NotFoundCount:    ackResult.NotFoundCount,
-		NotInScopeCount:  ackResult.NotInScopeCount,
-		Items:            ackResult.Items,
+		Status:            "ok",
+		AffectedCount:     ackResult.AffectedCount,
+		AckedItemsCount:   ackResult.AckedItemsCount,
+		FailedItemsCount:  ackResult.FailedItemsCount,
+		UnknownItemsCount: ackResult.UnknownItemsCount,
+		DuplicateCount:    ackResult.DuplicateCount,
+		NotFoundCount:     ackResult.NotFoundCount,
+		NotInScopeCount:   ackResult.NotInScopeCount,
+		Items:             ackResult.Items,
 	})
 }
 
