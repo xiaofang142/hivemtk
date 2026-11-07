@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"hivemtk-user/internal/service"
 )
 
 // CS-07 渠道支持等级公开收口（2026-11-07）：注册表事实与扩展侧/前端提示面逐项对照，
@@ -161,5 +163,109 @@ func TestSyntheticRegistrationDegradedNotPromoted(t *testing.T) {
 	r.Register(ChannelSpec{Name: "synthetic_prod", Transports: []Transport{TransportHTTP}, Label: "合成正式"})
 	if r.IsExperimental("synthetic_prod") {
 		t.Error("未标 Experimental 的注册项不应命中 IsExperimental")
+	}
+}
+
+// TestBridgeOutboxParityWithWebhookOutbound 闸 4（B5 单一 sender 能力位，CH-37b刀3）：
+// webhook_outbound AI 出站的可出站集合 ≡ registry 中 OutboundPath=bridge_outbox 的集合。
+//
+// 出站分支（service/webhook_outbound.go sendOutbound）已改为 registry 能力查询驱动
+// （channelgw init 经 service.SetBridgeOutboxChannels 装配，分支里不再枚举渠道常量），
+// 本闸双向钉住：
+//   - 方向 1：registry 有能力但出站不认 = 红（装配断链/注册缺 OutboundPath 时即红）；
+//   - 方向 2：出站认但 registry 无能力 = 红（注入被塞入 registry 之外的名字时即红）。
+//
+// 另附一道静态闸：sendOutbound 分支表不得再把桥接渠道常量写回 case 清单（防双清单回潮）。
+func TestBridgeOutboxParityWithWebhookOutbound(t *testing.T) {
+	// 批准决议口径：Default 九渠道全部登记 bridge_outbox。集合变化属于注册表事件，
+	// 必须显式改这里（与 TestExperimentalFlagsParityWithBridgeExtension 钉扩展集合同一方式）。
+	wantOutbox := map[string]bool{
+		"douyin":      true,
+		"xiaohongshu": true,
+		"kuaishou":    true,
+		"xianyu":      true,
+		"tiktok":      true,
+		"jd":          true,
+		"bilibili":    true,
+		"weibo":       true,
+		"personal_wx": true,
+	}
+
+	gotOutbox := Default.OutboundChannels(OutboundPathBridgeOutbox)
+	if len(gotOutbox) == 0 {
+		t.Fatal("registry Default 中没有任何渠道登记 OutboundPath=bridge_outbox（能力位被整体拆除）")
+	}
+	gotSet := map[string]bool{}
+	for _, n := range gotOutbox {
+		gotSet[n] = true
+		if !wantOutbox[n] {
+			t.Errorf("渠道 %q 登记 OutboundPath=bridge_outbox 但不在批准集合里（新增渠道请同步本闸与批准决议）", n)
+		}
+	}
+	for n := range wantOutbox {
+		if !gotSet[n] {
+			t.Errorf("渠道 %q 应登记 OutboundPath=bridge_outbox（九桥接渠道能力位缺失）", n)
+		}
+	}
+
+	// 装配事实：channelgw init 把能力集合注入 service（AI 出站桥接分支据此判定）。
+	recognized := service.BridgeOutboxChannels()
+	if len(recognized) == 0 {
+		t.Fatal("service.BridgeOutboxChannels 为空：registry init 的 SetBridgeOutboxChannels 装配断链，AI 桥接出站将全部被拒")
+	}
+
+	// 方向 1：registry 有能力但出站不认 = 红。
+	for _, n := range gotOutbox {
+		if !serviceCapableForParity(n) {
+			t.Errorf("方向1红：渠道 %q 在 registry 登记 bridge_outbox，但 webhook_outbound 出站不认（装配断链或判定集缺项）", n)
+		}
+	}
+	// 方向 2：出站认但 registry 无能力 = 红。
+	for _, n := range recognized {
+		if Default.OutboundPathOf(n) != OutboundPathBridgeOutbox {
+			t.Errorf("方向2红：webhook_outbound 认渠道 %q 可出站，但 registry 未登记 bridge_outbox（出站判定集混入了注册表之外的名字）", n)
+		}
+	}
+
+	// 静态闸：sendOutbound 分支表不得回退成硬编码桥接渠道清单（双清单回潮即红）。
+	assertNoBridgeChannelCaseList(t)
+}
+
+// serviceCapableForParity 方向断言的出站侧读数（经 service 导出能力查询）。
+func serviceCapableForParity(name string) bool {
+	for _, n := range service.BridgeOutboxChannels() {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+// assertNoBridgeChannelCaseList 扫描 sendOutbound 所在文件：任何 `case` 子句里
+// 不得出现桥接渠道常量——出站集合只能来自 registry 能力查询（bridgeOutboxCapable）。
+func assertNoBridgeChannelCaseList(t *testing.T) {
+	t.Helper()
+	root := repoRootFromCurrentFile(t)
+	raw, err := os.ReadFile(filepath.Join(root, "user-server", "internal", "service", "webhook_outbound.go"))
+	if err != nil {
+		t.Fatalf("读取 webhook_outbound.go 失败: %v", err)
+	}
+	bridgeConsts := []string{
+		"ChannelDouyin", "ChannelXiaohongshu", "ChannelTiktok", "ChannelXianyu", "ChannelKuaishou",
+		"ChannelJD", "ChannelBilibili", "ChannelWeibo", "ChannelPersonalWX",
+	}
+	for i, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "case ") {
+			continue
+		}
+		for _, c := range bridgeConsts {
+			if strings.Contains(trimmed, c) {
+				t.Errorf("webhook_outbound.go:%d 桥接渠道常量 %s 出现在 case 子句里（双清单回潮：出站集合必须由 registry 能力查询驱动）", i+1, c)
+			}
+		}
+	}
+	if !strings.Contains(string(raw), "bridgeOutboxCapable(channel)") {
+		t.Error("webhook_outbound.go 未发现桥接分支的 registry 能力查询（bridgeOutboxCapable(channel)），能力位驱动被拆除")
 	}
 }

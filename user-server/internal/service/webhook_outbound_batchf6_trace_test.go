@@ -572,7 +572,11 @@ func TestBF6_ChannelVocabularyCoversEveryOutboundChannel(t *testing.T) {
 	}
 
 	cases := bf6OutboundSwitchChannels(t)
-	if len(cases) < 8 {
+	// B5（CH-37b刀3）：桥接九族已从 case 清单改为 default 里的 registry 能力查询驱动
+	// （bridgeOutboxCapable），case 面收窄为 7 个 webhook 直发渠道（wecom/feishu/
+	// telegram/qq/whatsapp/dingtalk/wechat）。下限从 8 降到 7 与之同步；解析口径失效
+	// （tag 不是 channel / 代码结构重排）仍以 0 或骤减判红。
+	if len(cases) < 7 {
 		t.Fatalf("只取到 %d 个出站 case，switch 解析口径已失效", len(cases))
 	}
 	for name := range cases {

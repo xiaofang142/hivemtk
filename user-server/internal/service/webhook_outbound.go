@@ -17,6 +17,7 @@ import (
 
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 
 	"strings"
@@ -122,6 +123,73 @@ func isDelayedReplay(ctx context.Context) bool {
 }
 
 func init() { _db.RegisterExtraModels(&DelayedOutboundReply{}) }
+
+// =============================================================================
+// B5 单一 sender 能力位（CH-37b刀3 批准决议）：AI 出站桥接分支的渠道集合 =
+// channelgw registry OutboundPath=bridge_outbox 能力位的运行时投影。
+//
+// sendOutbound 的桥接分支此前在 case 里硬编码九个渠道常量，与 channelgw registry
+// 各维护一份清单，新增渠道要改两处。现在集合由注册表 init 装配
+// （channelgw/registry.go：service.SetBridgeOutboxChannels(Default.OutboundChannels(...))），
+// 分支只做能力查询（bridgeOutboxCapable）：新渠道只登记 registry 即自动获得出站路径。
+// 集合恒等（双向：registry 有能力但出站不认 = 红；出站认但 registry 无能力 = 红）
+// 由 channelgw/registry_parity_test.go TestBridgeOutboxParityWithWebhookOutbound 钉住。
+//
+// Sender 契约（B5）：桥接出站行 SenderID ≡ accountID——AI 路径（本文件桥接分支）
+// 与人工/触达路径（bridge_outbound.go DeliverBridgeOutbound）一致，重试/重放不换 sender，
+// 见 TestSendOutbound_Bridge_SenderIDEqualsAccountID / TestDeliverBridgeOutbound_SenderIDEqualsAccountID。
+// =============================================================================
+
+var (
+	bridgeOutboxMu       sync.RWMutex
+	bridgeOutboxChannels = map[string]struct{}{}
+)
+
+// SetBridgeOutboxChannels 用 registry OutboundPath=bridge_outbox 的渠道名集合重建
+// AI 出站桥接分支的判定集（由 channelgw/registry.go init 装配，运行时单一来源）。
+// 与 bridge/channel.go 对人工/触达白名单的 SetBridgeChannels 同一装配模式。
+// 空注入忽略（防误清空：装配时序异常时宁可维持上一份集合，也不悄悄断掉 AI 出站）。
+func SetBridgeOutboxChannels(names []string) {
+	if len(names) == 0 {
+		logger.Errorf("[B-5] SetBridgeOutboxChannels called with empty names; keep previous set")
+		return
+	}
+	m := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		m[n] = struct{}{}
+	}
+	if len(m) == 0 {
+		return
+	}
+	bridgeOutboxMu.Lock()
+	defer bridgeOutboxMu.Unlock()
+	bridgeOutboxChannels = m
+}
+
+// BridgeOutboxChannels 返回 AI 出站桥接分支当前认定的渠道集合（排序副本）。
+// parity 断言/诊断读取口；判定本体走 bridgeOutboxCapable。
+func BridgeOutboxChannels() []string {
+	bridgeOutboxMu.RLock()
+	defer bridgeOutboxMu.RUnlock()
+	names := make([]string, 0, len(bridgeOutboxChannels))
+	for n := range bridgeOutboxChannels {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// bridgeOutboxCapable 该渠道的 AI 出站是否走桥接出库队列（registry 能力查询）。
+// webhook 直发渠道与未注册渠道一律 false（走 default 的不支持分支，路径不变）。
+func bridgeOutboxCapable(channel WebhookChannel) bool {
+	bridgeOutboxMu.RLock()
+	defer bridgeOutboxMu.RUnlock()
+	_, ok := bridgeOutboxChannels[string(channel)]
+	return ok
+}
 
 func (s *WebhookService) enqueueDelayedOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) bool {
 	if s.delayedRepo == nil {
@@ -817,8 +885,29 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		} else {
 			sent = true
 		}
-	case ChannelDouyin, ChannelXiaohongshu, ChannelTiktok, ChannelXianyu, ChannelKuaishou,
-		ChannelJD, ChannelBilibili, ChannelWeibo, ChannelPersonalWX:
+	default:
+		// 桥接族（B5 单一 sender 能力位，CH-37b刀3 批准决议）：分支不再枚举渠道常量——
+		// 可出站判定查询 registry OutboundPath=bridge_outbox 能力投影（channelgw/registry.go
+		// init 经 SetBridgeOutboxChannels 装配）。新渠道只登记 registry 即自动获得本路径，
+		// 第二份渠道清单就此消灭；恒等由 TestBridgeOutboxParityWithWebhookOutbound 双向钉住
+		// （registry 有能力但出站不认 = 红；出站认但 registry 无能力 = 红）。
+		// 不在集合内的渠道（webhook 直发渠道各自有 case；未知渠道落这里）保持原
+		// 不支持分支不变：宁可明确拒绝，也不静默收下。
+		if !bridgeOutboxCapable(channel) {
+			logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
+			markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
+				fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
+			return
+		}
+		// R5（CH-37b刀3 批准的行为变更）：AI 桥接出站与人工/触达路径同一清洗口径——
+		// 网页私信输入框是纯文本，LLM 回复自带的 Markdown 语法符号会原样暴露给客户。
+		// 与 bridge_outbound.go DeliverBridgeOutbound 入队前完全同源（同一判定
+		// stripMarkdownForBridgeChannel + 同一函数 StripMarkdownForDM）。对纯文本幂等
+		// （九渠道既有行为零变化）；对含 Markdown 文本自此与人工路径一致——这是 R5
+		// 裁决批准的有意变化，前后对照见 TestSendOutbound_Bridge_MarkdownAlignedWithManualPath。
+		if stripMarkdownForBridgeChannel(string(channel), model.MsgTypeText) {
+			content = StripMarkdownForDM(content)
+		}
 
 		if hubMsg != nil {
 			outMsg := &model.MessageHub{
@@ -1023,11 +1112,6 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			markSendFailed(preSendFailure(channel, CategoryBadRequest,
 				fmt.Sprintf("%s 桥接出站缺少入站上下文，无 conversation 目标，未出库", channel)))
 		}
-	default:
-
-		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
-		markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
-			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
 	}
 	return
 }
