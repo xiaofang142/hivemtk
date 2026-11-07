@@ -8,12 +8,9 @@ import (
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
-	pkgdb "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	baseservice "hivemtk-user/internal/service"
-
-	"gorm.io/gorm"
 )
 
 const (
@@ -53,12 +50,11 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 	// 可能是历史空值/异常值，钉回行自己的租户是幂等保护，不是扇出。
 
 	keywordRepo := repository.NewGeoKeywordRepository()
-	gormDB := pkgdb.GetDB()
 	llmAdapter := NewLLMAdapter()
 	miningSvc := NewKeywordMiningService(keywordRepo, llmAdapter)
 
 	// 1. 种子矩阵（DB 优先：geo_seed_terms 表；空表自动播种，DB 故障回硬编码）
-	seeds, seedLines := NewSeedTermService(repository.NewGeoSeedTermRepositoryWithDB(gormDB)).LoadSeedMatrix(ctx)
+	seeds, seedLines := NewSeedTermService(repository.NewGeoSeedTermRepository()).LoadSeedMatrix(ctx)
 	if len(seeds) == 0 {
 		return "种子矩阵为空，跳过本轮", nil
 	}
@@ -99,7 +95,8 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("挖掘结果落库失败: %w", err)
 	}
 
-	// 6. 种子词 Cluster 回填（SaveMiningResults 建的 seed 行无 Cluster，按业务线分 4 批 UPDATE）
+	// 6. 种子词 Cluster 回填（SaveMiningResults 建的 seed 行无 Cluster，按业务线分 4 批 UPDATE；
+	// 查询经 GeoKeywordRepository.UpdateClusterByKeywords 下沉——AV-04c 批次3）
 	seedClustered := 0
 	byLine := map[string][]string{}
 	for _, s := range seeds {
@@ -107,19 +104,16 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 			byLine[line] = append(byLine[line], s)
 		}
 	}
-	kwTable := (&model.GeoKeyword{}).TableName()
 	for line, words := range byLine {
 		if ctx.Err() != nil {
 			break
 		}
-		res := gormDB.WithContext(ctx).Table(kwTable).
-			Where("keyword IN ? AND (cluster = '' OR cluster IS NULL)", words).
-			Update("cluster", line)
-		if res.Error != nil {
-			logger.Warnf("[GEO Job keyword_pipeline] 种子词业务线回填失败 line=%s: %v", line, res.Error)
+		affected, err := keywordRepo.UpdateClusterByKeywords(ctx, words, line)
+		if err != nil {
+			logger.Warnf("[GEO Job keyword_pipeline] 种子词业务线回填失败 line=%s: %v", line, err)
 			continue
 		}
-		seedClustered += int(res.RowsAffected)
+		seedClustered += int(affected)
 	}
 
 	// 7. 漏斗统计
@@ -129,7 +123,7 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 	}
 
 	// 8. 有界 LLM SEO 批次
-	seoOK, seoFail, seoNote := runPipelineSEOBatch(ctx, gormDB, llmAdapter)
+	seoOK, seoFail, seoNote := runPipelineSEOBatch(ctx, keywordRepo, llmAdapter)
 
 	summary := fmt.Sprintf(
 		"种子=%d 长尾=%d 下拉=%d 落库=%d 种子业务线回填=%d 漏斗总量=%d(suggest=%d/longtail=%d) SEO批次成功=%d失败=%d%s",
@@ -141,7 +135,9 @@ func keywordPipelineJob(ctx context.Context) (string, error) {
 
 // runPipelineSEOBatch 有界 LLM SEO：无文章的长尾/下拉词 → 生成 → 评分 → 验证（含探针）
 // 返回 (成功数, 失败数, 备注)
-func runPipelineSEOBatch(ctx context.Context, gormDB *gorm.DB, llmAdapter *LLMAdapter) (int, int, string) {
+// AV-04c 批次3：原 *gorm.DB 形参改 GeoKeywordRepository 注入（待 SEO 词拉取与
+// 思维链/补位任务仓储的构造随之下沉到仓储无参构造，句柄解析留在仓储层）。
+func runPipelineSEOBatch(ctx context.Context, keywordRepo repository.GeoKeywordRepository, llmAdapter *LLMAdapter) (int, int, string) {
 	batchN := geoPipelineBatchPerRun(ctx)
 	if batchN <= 0 {
 		return 0, 0, "（SEO批次已关闭 geo_pipeline_batch_per_run<=0）"
@@ -162,16 +158,8 @@ func runPipelineSEOBatch(ctx context.Context, gormDB *gorm.DB, llmAdapter *LLMAd
 	models := splitVerifyModels(cfg.VerifyModels)
 
 	// 取无文章的长尾/下拉词（ORDER BY last_mined_at 保证轮转推进）
-	kwTable := (&model.GeoKeyword{}).TableName()
-	artTable := (&model.GeoArticle{}).TableName()
-	var pending []model.GeoKeyword
-	if err := gormDB.WithContext(ctx).Table(kwTable+" k").
-		Select("k.*").
-		Joins(fmt.Sprintf("LEFT JOIN %s a ON a.keyword = k.keyword", artTable)).
-		Where("k.status = ? AND k.layer IN ? AND a.id IS NULL", "active", []string{"longtail", "suggest"}).
-		Order("k.last_mined_at ASC NULLS LAST, k.keyword ASC").
-		Limit(batchN).
-		Scan(&pending).Error; err != nil {
+	pending, err := keywordRepo.ListPendingSEOKeywords(ctx, batchN)
+	if err != nil {
 		logger.Warnf("[GEO Job keyword_pipeline] 拉取待SEO词失败: %v", err)
 		return 0, 0, fmt.Sprintf("（拉取待SEO词失败: %v）", err)
 	}
@@ -190,8 +178,8 @@ func runPipelineSEOBatch(ctx context.Context, gormDB *gorm.DB, llmAdapter *LLMAd
 	verifySvc := NewVerificationService(
 		repository.NewGeoVerifyResultRepository(),
 		repository.NewGeoAPICallRepository(),
-		repository.NewGeoQueryChainRepository(gormDB),
-		repository.NewGeoContentTaskRepository(gormDB),
+		repository.NewGeoQueryChainRepository(),
+		repository.NewGeoContentTaskRepository(),
 		llmAdapter,
 		nil,
 	)

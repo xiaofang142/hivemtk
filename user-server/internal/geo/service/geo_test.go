@@ -237,8 +237,8 @@ func TestWorkflowService(t *testing.T) {
 	llmFactory := NewLLMAdapter()
 	svc := NewWorkflowService(
 		newGeoWFRepo(db), newGeoExecRepo(db), newGeoTplRepo(db),
-		repository.NewGeoQueryChainRepository(db),
-		repository.NewGeoContentTaskRepository(db),
+		repository.NewGeoQueryChainRepositoryWithDB(db),
+		repository.NewGeoContentTaskRepositoryWithDB(db),
 		llmFactory,
 	)
 

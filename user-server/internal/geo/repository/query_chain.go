@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/geo/model"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
 
 	"gorm.io/gorm"
@@ -27,7 +28,14 @@ type GeoQueryChainRepository interface {
 
 type geoQueryChainRepository struct{ db *gorm.DB }
 
-func NewGeoQueryChainRepository(db *gorm.DB) GeoQueryChainRepository {
+// NewGeoQueryChainRepository 默认构造（全局句柄，仓库既有惯例；AV-04c 批次3 补齐，
+// 供不持 *gorm.DB 的 service 装配点使用，句柄解析留在仓储层）。
+func NewGeoQueryChainRepository() GeoQueryChainRepository {
+	return &geoQueryChainRepository{db: _db.GetDB()}
+}
+
+// NewGeoQueryChainRepositoryWithDB 创建指定数据库连接的实例（用于测试/装配注入）。
+func NewGeoQueryChainRepositoryWithDB(db *gorm.DB) GeoQueryChainRepository {
 	return &geoQueryChainRepository{db: db}
 }
 
@@ -104,7 +112,13 @@ type GeoContentTaskRepository interface {
 
 type geoContentTaskRepository struct{ db *gorm.DB }
 
-func NewGeoContentTaskRepository(db *gorm.DB) GeoContentTaskRepository {
+// NewGeoContentTaskRepository 默认构造（全局句柄，仓库既有惯例；AV-04c 批次3 补齐）。
+func NewGeoContentTaskRepository() GeoContentTaskRepository {
+	return &geoContentTaskRepository{db: _db.GetDB()}
+}
+
+// NewGeoContentTaskRepositoryWithDB 创建指定数据库连接的实例（用于测试/装配注入）。
+func NewGeoContentTaskRepositoryWithDB(db *gorm.DB) GeoContentTaskRepository {
 	return &geoContentTaskRepository{db: db}
 }
 

@@ -16,11 +16,9 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/platform"
-
-	"gorm.io/gorm"
+	mainrepo "hivemtk-user/internal/repository"
 )
 
 var urlRegexp = regexp.MustCompile(`https?://[^\s"'\)\]\}\>,;]+`)
@@ -261,10 +259,11 @@ func truncateForProbeError(body []byte) string {
 // 优先级：DB 中 enabled=true 的 provider 在前，本地 LLM 兜底在后。
 // 环境变量仅作为补充（兼容老部署），不再硬编码任何 endpoint/model。
 func NewEngineProbes() []SearchProbe {
-	// 兼容旧调用：无租户上下文时按平台级读全量。新代码必须用
+	// 兼容旧调用：无租户上下文时按平台级读全量（system scope）。新代码必须用
 	// NewEngineProbesForContext(ctx)（带请求/任务租户），否则会把 A 的
 	// provider 与品牌提示词用在 B 的探针上。
-	return NewEngineProbesFromDB(tenant.WithSystemScope(context.Background()), db.GetDB())
+	return NewEngineProbesFromDB(tenant.WithSystemScope(context.Background()),
+		mainrepo.NewLLMProviderRepository(), repository.NewGeoConfigRepository())
 }
 
 // NewEngineProbesForContext 按 ctx 绑定的租户装配探针引擎。
@@ -273,7 +272,7 @@ func NewEngineProbesForContext(ctx context.Context) []SearchProbe {
 	if _, ok := tenant.FromContext(ctx); !ok && tenant.IsMultiTenant() {
 		return nil
 	}
-	return NewEngineProbesFromDB(ctx, db.GetDB())
+	return NewEngineProbesFromDB(ctx, mainrepo.NewLLMProviderRepository(), repository.NewGeoConfigRepository())
 }
 
 // ProbeResolver 在调用时按租户解析探针清单。
@@ -284,20 +283,20 @@ type ProbeResolver func(context.Context) []SearchProbe
 // 这是唯一的探针装配入口。所有 provider 配置（endpoint/model/api_key）
 // 都从 DB 读取，不再硬编码。运维在后台改 llm_providers 表即可热切换探针引擎。
 //
+// AV-04c 批次3：原 *gorm.DB 形参改仓储注入——llm_providers 名单经
+// mainrepo.LLMProviderRepository.ListEnabled，品牌提示词两列投影经
+// GeoConfigRepository.GetBrandProfile（查询契约逐项保持，见两方法注释）。
+//
 // 注意：探针引擎只使用云端 provider（排除 localhost / 127.0.0.1 本地 LLM），
 // 避免本地 LLM 速度慢、质量低影响 GEO 验证准确性。本地 LLM 仅在 LLMAdapter
 // 的 fallback 链中作为兜底。
-func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
+func NewEngineProbesFromDB(ctx context.Context, providerRepo *mainrepo.LLMProviderRepository, cfgRepo repository.GeoConfigRepository) []SearchProbe {
 	probes := []SearchProbe{}
 	seen := make(map[string]bool)
 
 	brandHint := ""
-	if g != nil {
-		var cfg struct {
-			BrandName        string
-			BrandDescription string
-		}
-		if err := g.WithContext(ctx).Table("geo_config").Select("brand_name", "brand_description").First(&cfg).Error; err == nil {
+	if cfgRepo != nil {
+		if cfg, err := cfgRepo.GetBrandProfile(ctx); err == nil && cfg != nil {
 			if cfg.BrandName != "" && cfg.BrandDescription != "" {
 				brandHint = cfg.BrandName + "：" + cfg.BrandDescription
 			} else if cfg.BrandName != "" {
@@ -306,9 +305,9 @@ func NewEngineProbesFromDB(ctx context.Context, g *gorm.DB) []SearchProbe {
 		}
 	}
 
-	if g != nil {
-		var rows []hivemodel.LLMProvider
-		if err := g.WithContext(ctx).Where("enabled = ?", true).Order("sort_order ASC").Find(&rows).Error; err == nil {
+	if providerRepo != nil {
+		rows, err := providerRepo.ListEnabled(ctx)
+		if err == nil {
 			for _, row := range rows {
 				if row.Model == "" {
 					continue

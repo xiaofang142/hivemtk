@@ -98,6 +98,24 @@ type GeoKeywordRepository interface {
 	// 谓词 status='active' AND layer='suggest' AND suggest_engines <> ''（NULL 与 '' 一并排除，
 	// 与改前一致）；坏 JSON 原样交回，解析与跳过属业务层。
 	ListSuggestEnginePayloads(ctx context.Context) ([]string, error)
+
+	// ── 关键词管线持久化组（AV-04c 批次3 自 geo/service/keyword_pipeline.go 下沉）──
+	// 语义冻结基准：keyword_pipeline.go 改造前实现（2026-11-07 树）。
+
+	// UpdateClusterByKeywords 种子词业务线回填：把 cluster 为空（'' 或 NULL）的
+	// 指定关键词批量改写为业务线名，返回受影响行数（调用方记入运行摘要）。
+	// 谓词 keyword IN (?) AND (cluster = '' OR cluster IS NULL)；只写 cluster 一列
+	// （白名单），身份字段不在面内；Table 直查形态与改前一致（经 Model 会多挂
+	// 软删除过滤，geo_keywords 回填此前无此谓词）。租户过滤由连接级隔离
+	// callback 按 ctx 生效（与改前同）。err 与 RowsAffected 同源返回。
+	UpdateClusterByKeywords(ctx context.Context, words []string, cluster string) (int64, error)
+	// ListPendingSEOKeywords 取待 SEO 词（无文章的 active 长尾/下拉词）。
+	// geo_keywords k LEFT JOIN geo_articles a ON a.keyword = k.keyword，
+	// 谓词 k.status='active' AND k.layer IN ('longtail','suggest') AND a.id IS NULL；
+	// 排序 k.last_mined_at ASC NULLS LAST, k.keyword ASC（轮转推进语义）；
+	// limit 为批次上限（调用方保证 >0，与改前一致）。投影 k.*（整行）。
+	// 租户过滤由隔离 callback 按 ctx 注入主表与 JOIN（与改前同）。
+	ListPendingSEOKeywords(ctx context.Context, limit int) ([]model.GeoKeyword, error)
 }
 
 type geoKeywordRepo struct {
@@ -253,4 +271,30 @@ func (r *geoKeywordRepo) ListSuggestEnginePayloads(ctx context.Context) ([]strin
 		out = append(out, row.Engines)
 	}
 	return out, nil
+}
+
+// ────────────────────────────────────────────
+// 关键词管线持久化组（AV-04c 批次3 自 keyword_pipeline.go 下沉，语义逐项保持）
+// ────────────────────────────────────────────
+
+func (r *geoKeywordRepo) UpdateClusterByKeywords(ctx context.Context, words []string, cluster string) (int64, error) {
+	kwTable := (&model.GeoKeyword{}).TableName()
+	res := r.db.WithContext(ctx).Table(kwTable).
+		Where("keyword IN ? AND (cluster = '' OR cluster IS NULL)", words).
+		Update("cluster", cluster)
+	return res.RowsAffected, res.Error
+}
+
+func (r *geoKeywordRepo) ListPendingSEOKeywords(ctx context.Context, limit int) ([]model.GeoKeyword, error) {
+	kwTable := (&model.GeoKeyword{}).TableName()
+	artTable := (&model.GeoArticle{}).TableName()
+	var pending []model.GeoKeyword
+	err := r.db.WithContext(ctx).Table(kwTable+" k").
+		Select("k.*").
+		Joins(fmt.Sprintf("LEFT JOIN %s a ON a.keyword = k.keyword", artTable)).
+		Where("k.status = ? AND k.layer IN ? AND a.id IS NULL", "active", []string{"longtail", "suggest"}).
+		Order("k.last_mined_at ASC NULLS LAST, k.keyword ASC").
+		Limit(limit).
+		Scan(&pending).Error
+	return pending, err
 }

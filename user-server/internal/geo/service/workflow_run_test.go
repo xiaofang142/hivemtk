@@ -18,8 +18,8 @@ func TestWorkflowService_RunPersistsTerminalStatus(t *testing.T) {
 	db := geoTestDB(t)
 	svc := NewWorkflowService(
 		newGeoWFRepo(db), newGeoExecRepo(db), newGeoTplRepo(db),
-		repository.NewGeoQueryChainRepository(db),
-		repository.NewGeoContentTaskRepository(db),
+		repository.NewGeoQueryChainRepositoryWithDB(db),
+		repository.NewGeoContentTaskRepositoryWithDB(db),
 		nil,
 	)
 	ctx := context.Background()
@@ -90,8 +90,8 @@ func TestWorkflowService_Run_请求方断开仍落终态(t *testing.T) {
 	db := geoTestDB(t)
 	svc := NewWorkflowService(
 		newGeoWFRepo(db), newGeoExecRepo(db), newGeoTplRepo(db),
-		repository.NewGeoQueryChainRepository(db),
-		repository.NewGeoContentTaskRepository(db),
+		repository.NewGeoQueryChainRepositoryWithDB(db),
+		repository.NewGeoContentTaskRepositoryWithDB(db),
 		nil,
 	)
 

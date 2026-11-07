@@ -22,6 +22,11 @@ func (r *stubConfigRepo) Update(_ context.Context, _ *model.GeoConfig) error {
 	return nil
 }
 
+func (r *stubConfigRepo) GetBrandProfile(_ context.Context) (*repository.GeoBrandProfile, error) {
+	// 探针装配不入桩场景；零值即可（接口补齐，AV-04c 批次3）。
+	return &repository.GeoBrandProfile{}, nil
+}
+
 // stubProbeRepo 只喂 ListRecent（avg_sov 走零窗口 → ListRecent），
 // 其余方法返回零值，被调用即暴露"口径漂移"。
 type stubProbeRepo struct {

@@ -37,7 +37,7 @@ func gqcSetupDB(t *testing.T) *gorm.DB {
 
 func TestGeoQueryChainRepository_TenantScoped(t *testing.T) {
 	db := gqcSetupDB(t)
-	repo := NewGeoQueryChainRepository(db)
+	repo := NewGeoQueryChainRepositoryWithDB(db)
 	ctxA := tenant.WithTenantID(context.Background(), gqcTenantA)
 	ctxB := tenant.WithTenantID(context.Background(), gqcTenantB)
 	sysCtx := tenant.WithSystemScope(context.Background())
@@ -98,7 +98,7 @@ func TestGeoQueryChainRepository_TenantScoped(t *testing.T) {
 
 func TestGeoContentTaskRepository_TenantScoped(t *testing.T) {
 	db := gqcSetupDB(t)
-	repo := NewGeoContentTaskRepository(db)
+	repo := NewGeoContentTaskRepositoryWithDB(db)
 	ctxA := tenant.WithTenantID(context.Background(), gqcTenantA)
 	ctxB := tenant.WithTenantID(context.Background(), gqcTenantB)
 

@@ -53,6 +53,8 @@ type SystemUserRepository interface {
 	// FindByUsernameInTenant 按租户内用户名解析登录身份（tenant_code 定向登录通道）
 	FindByUsernameInTenant(ctx context.Context, tenantID uint, username string) (*model.SystemUser, error)
 	EmailExistsGlobal(ctx context.Context, email string) (bool, error)
+	// GetEmailByID 取用户通知邮箱（失败通知收件人解析，AV-04c 批次3），见实现处契约。
+	GetEmailByID(ctx context.Context, userID uint) (string, error)
 }
 
 type systemUserRepo struct {
@@ -224,6 +226,38 @@ func (r *systemUserRepo) GetFirstAdminUsername(ctx context.Context) (string, err
 		return "", err
 	}
 	return u.Username, nil
+}
+
+// GetEmailByID 取用户通知邮箱（AV-04c 批次3 自 browser_automation/service/feedback.go
+// notifyFailure 下沉——原实现 service 直持 pkgdb.GetDB() 发 Raw SQL）。
+//
+// 契约（与下沉前直查逐项一致）：
+//   - 谓词 id = ? AND email <> ”：空串视同未配置邮箱，返回 ("", nil)
+//     （原 len(emails)==0 分支同形）；多行在 id 主键约束下不可能出现，取首行同原 Scan。
+//   - 作用域：system_users 是租户表，原 Raw 绕过隔离 callback 做**跨租户全局解析**
+//     （browser_tasks.user_id 的归属用户不一定在发起 ctx 的租户里）。显式挂
+//     SystemScope 平台级豁免——与 GetFirstAdminUsername/ResolveByEmailGlobal 同口径：
+//     on 模式下隔离 callback 对 system scope 不注入条件，全局解析语义保持。
+//   - 形态：GORM API（Model+Where）而非保留 Raw——system_users 无软删除列，
+//     生成的 SQL 与原 Raw 逐词等价，且过 router 的 S-18 租户字面量盲区扫描
+//     （该扫描只对 repository 层生效，下沉后适用）。
+//   - 错误原样上抛；调用方（notifyFailure）静默跳过通知，与改前一致。
+func (r *systemUserRepo) GetEmailByID(ctx context.Context, userID uint) (string, error) {
+	if r == nil || r.db == nil {
+		return "", errors.New("system user repository not initialized")
+	}
+	var emails []string
+	if err := r.db.WithContext(tenant.WithSystemScope(ctx)).
+		Model(&model.SystemUser{}).
+		Select("email").
+		Where("id = ? AND email <> ''", userID).
+		Scan(&emails).Error; err != nil {
+		return "", err
+	}
+	if len(emails) == 0 {
+		return "", nil
+	}
+	return emails[0], nil
 }
 
 func (r *systemUserRepo) GetUpdatedAt(ctx context.Context, userID uint) (*time.Time, error) {

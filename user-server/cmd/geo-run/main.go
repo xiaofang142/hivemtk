@@ -172,8 +172,8 @@ func main() {
 	verifySvc := geoservice.NewVerificationService(
 		georepo.NewGeoVerifyResultRepositoryWithDB(db),
 		georepo.NewGeoAPICallRepositoryWithDB(db),
-		georepo.NewGeoQueryChainRepository(db),
-		georepo.NewGeoContentTaskRepository(db),
+		georepo.NewGeoQueryChainRepositoryWithDB(db),
+		georepo.NewGeoContentTaskRepositoryWithDB(db),
 		geoservice.NewLLMAdapter(),
 		geoservice.NewDefaultSearchProbe(),
 	)
@@ -220,8 +220,8 @@ func main() {
 		georepo.NewGeoWorkflowRepositoryWithDB(db),
 		georepo.NewGeoWorkflowExecutionRepositoryWithDB(db),
 		georepo.NewGeoWorkflowTemplateRepositoryWithDB(db),
-		georepo.NewGeoQueryChainRepository(db),
-		georepo.NewGeoContentTaskRepository(db),
+		georepo.NewGeoQueryChainRepositoryWithDB(db),
+		georepo.NewGeoContentTaskRepositoryWithDB(db),
 		geoservice.NewLLMAdapter(),
 	)
 	wf, err := wfSvc.Create(ctx, &geodto.SaveWorkflowRequest{
@@ -264,8 +264,8 @@ func main() {
 		verifySvc := geoservice.NewVerificationService(
 			georepo.NewGeoVerifyResultRepositoryWithDB(db),
 			georepo.NewGeoAPICallRepositoryWithDB(db),
-			georepo.NewGeoQueryChainRepository(db),
-			georepo.NewGeoContentTaskRepository(db),
+			georepo.NewGeoQueryChainRepositoryWithDB(db),
+			georepo.NewGeoContentTaskRepositoryWithDB(db),
 			geoservice.NewLLMAdapter(),
 			geoservice.NewDefaultSearchProbe(),
 		)

@@ -10,10 +10,10 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
 	emailsvc "hivemtk-user/internal/email/service"
-	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/mail"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
+	mainrepo "hivemtk-user/internal/repository"
 )
 
 // FeedbackService 反馈层：产物保存（LocalDriver）+ 通知（邮件）+ 失败重试调度。
@@ -21,6 +21,11 @@ import (
 type FeedbackService struct {
 	sessionRepo repository.BrowserSessionRepository
 	taskRepo    repository.BrowserTaskRepository
+	// systemUserRepo 失败通知收件人解析（system_users.email）。原实现 service 直持
+	// pkgdb.GetDB() 发 Raw SQL 查 system_users（AV-04c 批次3 收口点）；现在与 repo
+	// 同口径在构造期取仓储（句柄解析留在仓储层），查询契约不变（SystemScope 全局
+	// 解析，见 SystemUserRepository.GetEmailByID）。
+	systemUserRepo mainrepo.SystemUserRepository
 	// hostUsersFn 归属门：返回本进程当前持有 Host 连接的用户集（装配见 router 的
 	// SetHostUsersProvider）。nil = 不参与过滤。
 	hostUsersFn func() []uint
@@ -30,7 +35,11 @@ type FeedbackService struct {
 }
 
 func NewFeedbackService(sessionRepo repository.BrowserSessionRepository, taskRepo repository.BrowserTaskRepository) *FeedbackService {
-	return &FeedbackService{sessionRepo: sessionRepo, taskRepo: taskRepo}
+	return &FeedbackService{
+		sessionRepo:    sessionRepo,
+		taskRepo:       taskRepo,
+		systemUserRepo: mainrepo.NewSystemUserRepository(),
+	}
 }
 
 // SetHostUsersProvider 注入「本机 Host 连接归属」查询（HostRegistry.ConnectedUserIDs）。
@@ -118,10 +127,11 @@ func (f *FeedbackService) notifyFailure(ctx context.Context, task *model.Browser
 		return // 未配置 SMTP，静默跳过
 	}
 
-	var emails []string
-	if err := _db.GetDB().WithContext(ctx).
-		Raw(`SELECT email FROM system_users WHERE id = ? AND email <> ''`, fmt.Sprint(task.UserID)).
-		Scan(&emails).Error; err != nil || len(emails) == 0 {
+	// 收件人解析经 SystemUserRepository.GetEmailByID（AV-04c 批次3 下沉）：
+	// 原地 Raw 绕过租户隔离 callback 的语义由仓储内显式 SystemScope 保持；
+	// 无邮箱/读库失败静默跳过通知，与改前一致。
+	email, err := f.systemUserRepo.GetEmailByID(ctx, task.UserID)
+	if err != nil || email == "" {
 		return
 	}
 
@@ -131,10 +141,10 @@ func (f *FeedbackService) notifyFailure(ctx context.Context, task *model.Browser
 		task.Name, task.ID, session.ID, task.Url, errMsg,
 	)
 	cfg := mail.Config{From: smtp.Username, Password: smtp.Password}
-	if err := mail.SendMail(cfg, []string{emails[0]}, subject, body, false); err != nil {
-		logger.Warnf("[BrowserFeedback] 失败通知邮件发送失败 task=%d to=%s: %v", task.ID, emails[0], err)
+	if err := mail.SendMail(cfg, []string{email}, subject, body, false); err != nil {
+		logger.Warnf("[BrowserFeedback] 失败通知邮件发送失败 task=%d to=%s: %v", task.ID, email, err)
 	} else {
-		logger.Infof("[BrowserFeedback] 失败通知已发送 task=%d to=%s", task.ID, emails[0])
+		logger.Infof("[BrowserFeedback] 失败通知已发送 task=%d to=%s", task.ID, email)
 	}
 }
 

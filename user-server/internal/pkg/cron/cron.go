@@ -3,6 +3,7 @@ package cron
 import (
 	"context"
 	"fmt"
+	georepo "hivemtk-user/internal/geo/repository"
 	geoservice "hivemtk-user/internal/geo/service"
 	opsservice "hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/db"
@@ -141,7 +142,9 @@ func InitCron() {
 	// service.workerModuleKey；必须在 SetupGeoJobs 之前注入。
 	geoservice.SetGeoJobModuleGate(service.AllowWorker)
 	geoservice.SetupGeoJobs(mgr)
-	geoservice.GetGeoJobManager().SetJobManagerDB(db.GetDB())
+	// AV-04c 批次3：JobManager 不再持 *gorm.DB，分布式锁经 GeoJobLockRepository
+	// 注入（连接不变：仍是本装配点的 db.GetDB() 句柄）。
+	geoservice.GetGeoJobManager().SetJobManagerLockRepo(georepo.NewGeoJobLockRepositoryWithDB(db.GetDB()))
 
 	_, err = mgr.AddTask("0 5 3 * * *", mgr.goTask("daily_backup", func(ctx context.Context) {
 		service.RunDailyBackup()

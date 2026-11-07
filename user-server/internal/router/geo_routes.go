@@ -43,8 +43,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	wfRepo := georepo.NewGeoWorkflowRepositoryWithDB(gormDB)
 	execRepo := georepo.NewGeoWorkflowExecutionRepositoryWithDB(gormDB)
 	tplRepo := georepo.NewGeoWorkflowTemplateRepositoryWithDB(gormDB)
-	chainRepo := georepo.NewGeoQueryChainRepository(gormDB)
-	taskRepo := georepo.NewGeoContentTaskRepository(gormDB)
+	chainRepo := georepo.NewGeoQueryChainRepositoryWithDB(gormDB)
+	taskRepo := georepo.NewGeoContentTaskRepositoryWithDB(gormDB)
 
 	llmAdapter := geoservice.NewLLMAdapter()
 
@@ -71,8 +71,8 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		georepo.NewGeoVerifyResultRepositoryWithDB(gormDB),
 		georepo.NewGeoProbeRunRepositoryWithDB(gormDB),
 		georepo.NewGeoConfigRepositoryWithDB(gormDB),
-		georepo.NewGeoContentTaskRepository(gormDB),
-		georepo.NewGeoQueryChainRepository(gormDB),
+		georepo.NewGeoContentTaskRepositoryWithDB(gormDB),
+		georepo.NewGeoQueryChainRepositoryWithDB(gormDB),
 		georepo.NewGeoCrawlerVisitRepository(gormDB),
 		llmAdapter,
 		georepo.NewGeoAPICallRepositoryWithDB(gormDB))
@@ -96,11 +96,15 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	// ⬇️ GEO v2 新增 Service + Controller
 	// 探针必须按请求租户解析：llm_providers/geo_config 都是租户表，装配期
 	// 固化一份清单会把 A 的品牌提示词与 provider 凭据用在 B 的探针上。
+	// AV-04c 批次3：NewEngineProbesFromDB 改收仓储（llm_providers 名单/品牌投影），
+	// 装配点用本路由注入的 gormDB 构造，连接与测试注入路径不变。
 	probeResolver := func(ctx context.Context) []geoservice.SearchProbe {
 		if _, ok := tenant.FromContext(ctx); !ok && tenant.IsMultiTenant() {
 			return nil
 		}
-		return geoservice.NewEngineProbesFromDB(ctx, gormDB)
+		return geoservice.NewEngineProbesFromDB(ctx,
+			mainrepo.NewLLMProviderRepositoryWithDB(gormDB),
+			georepo.NewGeoConfigRepositoryWithDB(gormDB))
 	}
 	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, llmAdapter)
 	pushSvc := geoservice.NewPushService(
@@ -473,7 +477,7 @@ func SetupGeoCapturePublicRoutes(public *gin.RouterGroup, gormDB *gorm.DB) {
 	captureSvc := geoservice.NewCaptureService(
 		georepo.NewGeoCaptureLinkRepositoryWithDB(gormDB),
 		geoservice.NewKBService(georepo.NewGeoKnowledgeDocumentRepositoryWithDB(gormDB), geoservice.NewLLMAdapter()),
-		geoCaptureLeadPort(mainrepo.NewClueRepositoryWithDB(gormDB), georepo.NewGeoQueryChainRepository(gormDB), service.NewCustomerIdentityService()),
+		geoCaptureLeadPort(mainrepo.NewClueRepositoryWithDB(gormDB), georepo.NewGeoQueryChainRepositoryWithDB(gormDB), service.NewCustomerIdentityService()),
 		nil,
 		"",
 	)

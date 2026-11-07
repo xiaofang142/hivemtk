@@ -794,7 +794,7 @@ func registerEventSubscribers() {
 	bus.Subscribe(event.TopicKnowledgeDocumentChanged, indexer.Handle)
 	logger.Info("[event] subscribed: knowledge.document.changed -> rag.IncrementalIndexer")
 
-	chainSync := geoservice.NewInboxChainSync(georepo.NewGeoQueryChainRepository(db.GetDB()))
+	chainSync := geoservice.NewInboxChainSync(georepo.NewGeoQueryChainRepositoryWithDB(db.GetDB()))
 	bus.Subscribe(event.TopicCustomerMessageReceived, func(evt event.Event) error {
 		if p, ok := evt.Payload.(event.CustomerMessagePayload); ok {
 			go func() {

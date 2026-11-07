@@ -18,6 +18,16 @@ import (
 type GeoConfigRepository interface {
 	Get(ctx context.Context) (*model.GeoConfig, error)
 	Update(ctx context.Context, config *model.GeoConfig) error
+	// GetBrandProfile 探针品牌提示词两列投影（AV-04c 批次3 自
+	// geo/service/search_probe.go NewEngineProbesFromDB 下沉），见 GeoBrandProfile。
+	GetBrandProfile(ctx context.Context) (*GeoBrandProfile, error)
+}
+
+// GeoBrandProfile 探针装配读的 geo_config 两列投影（brand_name/brand_description）。
+// Value 的列名经 Select 显式映射（与下沉前匿名 struct 同形）。
+type GeoBrandProfile struct {
+	BrandName        string
+	BrandDescription string
 }
 
 type geoConfigRepo struct {
@@ -37,6 +47,24 @@ func (r *geoConfigRepo) Get(ctx context.Context) (*model.GeoConfig, error) {
 	var config model.GeoConfig
 	err := r.db.WithContext(ctx).First(&config).Error
 	return &config, err
+}
+
+// GetBrandProfile 探针品牌提示词投影读（AV-04c 批次3 下沉，语义逐项保持）：
+// Table 直查两列 + First。与 Get(ctx)（Model 形态）的差别在语义冻结说明里钉住：
+// Table 直查不挂软删除过滤（geo_config 无删除路径，行为差异实际不存在，但
+// 下沉纪律是谓词逐字保真）；错误（含 ErrRecordNotFound）原样上抛，调用方
+// fail-open（品牌提示词置空），与改前一致。租户过滤由隔离 callback 按 ctx 生效
+// （system scope = 平台级首行，请求 ctx = 本租户行，与改前同）。
+func (r *geoConfigRepo) GetBrandProfile(ctx context.Context) (*GeoBrandProfile, error) {
+	// nil 连接守卫：探针装配在未初始化全局 DB 的进程（部分单测路径）里会带着
+	// nil 句柄走到这里；报错交给调用方 fail-open（空提示词），与改前
+	// `g != nil` 短路的观察行为一致，不许 panic。
+	if r == nil || r.db == nil {
+		return nil, errors.New("geo config repository not initialized")
+	}
+	var cfg GeoBrandProfile
+	err := r.db.WithContext(ctx).Table("geo_config").Select("brand_name", "brand_description").First(&cfg).Error
+	return &cfg, err
 }
 
 func (r *geoConfigRepo) Update(ctx context.Context, config *model.GeoConfig) error {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -152,4 +153,120 @@ func containsStr(s, sub string) bool {
 		}
 		return false
 	})()
+}
+
+// fakeJobLockRepo 分布式锁接缝的行为桩（AV-04c 批次3：句柄字段改仓储注入后的
+// 接缝语义锁）。held 决定 TryLock 返回值；err 决定错误路径。
+type fakeJobLockRepo struct {
+	// acquired 是 TryLock 的返回值：true = 本次拿到锁；false = 锁在别人手里
+	//（调用方跳过本轮）。err 决定错误路径（锁状态未知 ⇒ 调用方放行）。
+	acquired bool
+	err      error
+
+	lockedCalls int
+	unlockCalls int
+}
+
+func (f *fakeJobLockRepo) TryLock(_ context.Context, key int64) (bool, error) {
+	f.lockedCalls++
+	return f.acquired, f.err
+}
+
+func (f *fakeJobLockRepo) Unlock(_ context.Context, key int64) {
+	f.unlockCalls++
+}
+
+// TestJobManager_LockSeam 锁接缝三态：被别人锁定 ⇒ 跳过本轮且不落运行记录；
+// 锁错误 ⇒ 放行本轮（宁多跑一轮，不可静默停摆，改前错误路径不变）；
+// 未装配（nil）⇒ 不参与锁，直接起跑。
+func TestJobManager_LockSeam(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.GeoJobRun{}, &model.GeoConfig{}, &model.GeoKeyword{})
+	db.SetTestDB(database)
+
+	mkManager := func() *JobManager {
+		return &JobManager{
+			runRepo: repository.NewGeoJobRunRepositoryWithDB(database),
+			cfgRepo: repository.NewGeoConfigRepositoryWithDB(database),
+			running: map[jobKey]*atomic.Bool{},
+			specs:   map[jobKey]string{},
+			entryID: map[jobKey]cron.EntryID{},
+		}
+	}
+	const tid = uint(42)
+	ctx := tenant.WithTenantID(context.Background(), tid)
+
+	// 每个子用例独立任务名：运行记录按任务名统计，不与共享测试库里其他子用例串数。
+	mkDef := func(name string) geoJobDef {
+		return geoJobDef{
+			Name:    name,
+			Timeout: 5 * time.Second,
+			Fn:      func(_ context.Context) (string, error) { return "ok", nil },
+		}
+	}
+	waitDone := func(t *testing.T, m *JobManager, k jobKey) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for m.runningState(k) && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if m.runningState(k) {
+			t.Fatal("任务应已执行完成")
+		}
+	}
+	countRuns := func(t *testing.T, m *JobManager, name string) int64 {
+		t.Helper()
+		_, total, err := m.runRepo.List(ctx, name, 1, 10)
+		if err != nil {
+			t.Fatalf("List runs 失败: %v", err)
+		}
+		return total
+	}
+
+	// 1. 锁被其他实例持有（TryLock=false）：跳过本轮，不落运行记录，不 unlock。
+	t.Run("held_by_other", func(t *testing.T) {
+		def := mkDef("lock_seam_job_held")
+		m := mkManager()
+		lock := &fakeJobLockRepo{acquired: false}
+		m.lockRepo = lock
+		if m.startJobForTenant(def, ctx, "manual", tid) {
+			t.Fatal("锁被他人持有时应跳过本次触发")
+		}
+		if lock.lockedCalls != 1 || lock.unlockCalls != 0 {
+			t.Fatalf("应恰好尝试一次加锁且不释放，实际 locked=%d unlock=%d", lock.lockedCalls, lock.unlockCalls)
+		}
+		if n := countRuns(t, m, def.Name); n != 0 {
+			t.Fatalf("跳过轮不该落运行记录，实际 %d 条", n)
+		}
+	})
+
+	// 2. 错误路径：锁状态未知 ⇒ 记日志后放行本轮（照常起跑并回写运行记录）。
+	t.Run("lock_error_proceeds", func(t *testing.T) {
+		def := mkDef("lock_seam_job_err")
+		m := mkManager()
+		lock := &fakeJobLockRepo{err: errors.New("db down")}
+		m.lockRepo = lock
+		if !m.startJobForTenant(def, ctx, "manual", tid) {
+			t.Fatal("锁错误应放行本轮（宁多跑一轮，不可静默停摆）")
+		}
+		waitDone(t, m, jobKey{name: def.Name, tenant: tid})
+		if n := countRuns(t, m, def.Name); n != 1 {
+			t.Fatalf("放行轮应落 1 条运行记录，实际 %d 条", n)
+		}
+		if lock.unlockCalls < 1 {
+			t.Fatalf("任务收口应释放锁，unlock=%d", lock.unlockCalls)
+		}
+	})
+
+	// 3. 未装配：不参与锁直接起跑（单实例语义，改前 m.db == nil 同形）。
+	t.Run("not_wired", func(t *testing.T) {
+		def := mkDef("lock_seam_job_nw")
+		m := mkManager()
+		if !m.startJobForTenant(def, ctx, "manual", tid) {
+			t.Fatal("未装配锁仓储应直接起跑")
+		}
+		waitDone(t, m, jobKey{name: def.Name, tenant: tid})
+		if n := countRuns(t, m, def.Name); n != 1 {
+			t.Fatalf("应落 1 条运行记录，实际 %d 条", n)
+		}
+	})
 }

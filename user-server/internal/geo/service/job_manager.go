@@ -14,7 +14,6 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
-	dbutil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -144,7 +143,10 @@ type JobManager struct {
 	sched   JobScheduler
 	runRepo repository.GeoJobRunRepository
 	cfgRepo repository.GeoConfigRepository
-	db      *gorm.DB
+	// lockRepo 分布式锁接缝（AV-04c 批次3：原 *gorm.DB 字段改仓储注入，
+	// 句柄解析留在 repository.GeoJobLockRepository；nil = 未装配 = 不参与锁，
+	// 与改前 m.db == nil 的短路语义一致）。
+	lockRepo repository.GeoJobLockRepository
 
 	// runMu 只护 running 这张**动态键表**（键含租户，运行期才会出现新键）。
 	// 与 m.mu 分开：ListJobs 读 running 时可能已持 m.mu.RLock，混用同一把锁
@@ -205,11 +207,13 @@ func (m *JobManager) runningState(k jobKey) bool {
 	return false
 }
 
-// SetJobManagerDB 设置数据库连接用于分布式锁
-func (m *JobManager) SetJobManagerDB(db *gorm.DB) {
+// SetJobManagerLockRepo 注入分布式锁仓储（装配点 internal/pkg/cron.InitCron）。
+// nil 视为不注入：不参与多实例互斥（单实例语义），与改前未 SetJobManagerDB 时
+// m.db == nil 的短路一致。
+func (m *JobManager) SetJobManagerLockRepo(repo repository.GeoJobLockRepository) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.db = db
+	m.lockRepo = repo
 }
 
 // jobModuleGate GEO 任务的模块闸：每次 tick 派发前判断「本实例上是否
@@ -384,7 +388,7 @@ func (m *JobManager) startJobForTenant(def geoJobDef, ctx context.Context, trigg
 	}
 
 	// 分布式锁：多实例部署时防止同一任务（同一租户）重复执行。
-	if m.db != nil {
+	if m.lockRepo != nil {
 		locked, err := m.acquireDistributedLock(def.Name, tid, def.Timeout)
 		if err != nil {
 			logger.Warn(fmt.Sprintf("[GEO Jobs] 任务 %s（租户 %d）获取分布式锁失败: %v", def.Name, tid, err))
@@ -421,26 +425,24 @@ func (m *JobManager) startJobForTenant(def geoJobDef, ctx context.Context, trigg
 // 不触达租户表 —— 裸 Background 不构成隔离 callback 触点，故保持不动。
 // 锁键含租户（lockKey）：调度是逐租户的，租户 A 的任务不该挡住租户 B。
 //
-// 为什么走 dbutil.TryAdvisoryLock 而不是就地 Select：GORM 的 Select 在没有
-// Model/Table 时拼出 `SELECT <expr> FROM `（FROM 后面是空的）⇒ 扫出多一列
-// 空值，Scan 进 bool 报 "unsupported data type: <nil>"，**锁根本没拿到**
-// 。共享实现见 internal/pkg/db/advisory_lock.go。
+// SQL 形态（恒一行派生表载体、GORM Select 陷阱）见 repository.GeoJobLockRepository
+// 与 internal/pkg/db/advisory_lock.go——AV-04c 批次3 起查询经锁仓储下沉，本层不再持句柄。
 func (m *JobManager) acquireDistributedLock(jobName string, tenantID uint, timeout time.Duration) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return dbutil.TryAdvisoryLock(ctx, m.db, advisoryLockKey(lockKey(jobName, tenantID)))
+	return m.lockRepo.TryLock(ctx, advisoryLockKey(lockKey(jobName, tenantID)))
 }
 
 // releaseDistributedLock 释放分布式锁
 // 判读同 acquireDistributedLock：pg_advisory_unlock 不触达租户表，裸 Background 保持不动。
 func (m *JobManager) releaseDistributedLock(jobName string, tenantID uint) {
-	if m.db == nil {
+	if m.lockRepo == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = dbutil.ReleaseAdvisoryLock(ctx, m.db, advisoryLockKey(lockKey(jobName, tenantID)))
+	m.lockRepo.Unlock(ctx, advisoryLockKey(lockKey(jobName, tenantID)))
 }
 
 // advisoryLockKey 把锁键字符串压成 int64（advisory lock 收 int64）。

@@ -54,3 +54,28 @@ func (r *LLMProviderRepository) ListProviderNamesByTenant(ctx context.Context, t
 	}
 	return names, nil
 }
+
+// ListEnabled 全部 enabled=true 的 provider 整行（GEO 探针引擎装配读）。
+//
+// 契约（AV-04c 批次3 冻结，与下沉前 geo/service/search_probe.go
+// NewEngineProbesFromDB 直查逐项一致）：
+//   - 谓词仅 enabled = true；排序 sort_order ASC（库内并列序由 PG 决定，与改前
+//     一致）；整行投影（api_key 密文/base_url/source 等全列——解密、本地端点过滤
+//     与去重属调用方业务，不进本方法）。
+//   - 租户过滤由连接级隔离 callback 按 ctx 生效：system scope = 平台级全量
+//     （旧调用兼容路径），请求/任务 ctx = 本租户 provider；本方法不隐式改作用域。
+//   - 错误原样上抛；调用方按 fail-open（空探针清单）处理，与改前一致。
+func (r *LLMProviderRepository) ListEnabled(ctx context.Context) ([]model.LLMProvider, error) {
+	if r.db == nil {
+		return nil, ErrDBNotReady
+	}
+	var rows []model.LLMProvider
+	if err := r.db.WithContext(ctx).
+		Model(&model.LLMProvider{}).
+		Where("enabled = ?", true).
+		Order("sort_order ASC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}

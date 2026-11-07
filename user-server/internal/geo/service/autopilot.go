@@ -14,7 +14,6 @@ import (
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
-	pkgdb "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -312,10 +311,11 @@ func (s *AutopilotService) execute(ctx context.Context, run *model.GeoAutopilotR
 	}
 
 	// 7. push_urls（可选：给了站点 URL；未配置推送器时 PushURLs 为 no-op，如实提示）
+	// AV-04c 批次3：两个仓储改无参构造（句柄解析留在仓储层，全局连接与改前一致）。
 	if run.SiteURL != "" {
 		pushSvc := NewPushService(
-			repository.NewGeoPusherConfigRepositoryWithDB(pkgdb.GetDB()),
-			repository.NewGeoPushRecordRepositoryWithDB(pkgdb.GetDB()),
+			repository.NewGeoPusherConfigRepository(),
+			repository.NewGeoPushRecordRepository(),
 			repository.NewGeoArticleRepository(),
 		)
 		urls := make([]string, 0, len(articles))

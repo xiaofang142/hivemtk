@@ -517,8 +517,11 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	"user-server/internal/aiagent/knowledge/service/knowledge_merchant.go":   {handles: 3, getdb: 1},        // 含 GetDB() *gorm.DB 方法声明（返回句柄）
 	"user-server/internal/aiagent/knowledge/service/knowledge_statistics.go": {handles: 2, getdb: 1},
 	"user-server/internal/aiagent/knowledge/service/rag_searcher.go":         {handles: 3, getdb: 1},
-	// ---- browser_automation 域（0 句柄 / 1 GetDB）----
-	"user-server/internal/browser_automation/service/feedback.go": {getdb: 1},
+	// ---- browser_automation 域（0 句柄 / 0 GetDB）----
+	// AV-04c 批次3（2026-11-07）：feedback.go getdb 1 清零除名 —— notifyFailure 的
+	// system_users Raw 邮箱查询下沉 SystemUserRepository.GetEmailByID（显式
+	// SystemScope 保全局解析语义），FeedbackService 构造期直持仓储（无装配点改动）。
+	// browser_automation 域整域出快照，守卫对该域回归为「新增即红」（无豁免行）。
 	// ---- content 域（9 句柄）----
 	// AV-04c 刀 1（2026-11-07）：ai_content/batch_operation/marketing_flow 清零除名
 	// （deps 工厂 NewXxxDeps(db) 收口到装配处直构，service 层不再持 *gorm.DB 形参）。
@@ -532,14 +535,19 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// GetRandEmailSmtp 记账改直持 EmailListRepository（同仓储同查询，不再经
 	// NewEmailListService(dbpkg.GetDB()) 拼服务）。两文件清零除名 —— email 域整域出
 	// 快照，守卫对该域回归为「新增即红」（无豁免行）。
-	// ---- geo 域（4 句柄 / 5 GetDB）----
+	// ---- geo 域（0 句柄 / 0 GetDB）----
 	// AV-04b：autopilot getdb 5→2（3 处 KeywordMiningService 构造去 pkgdb.GetDB）；
 	// keyword_mining.go 句柄已清零（持久化下沉 GeoKeywordRepository），按
 	// 「清零即删行」纪律除名，守卫对该文件不再有豁免行。
-	"user-server/internal/geo/service/autopilot.go":        {getdb: 2},
-	"user-server/internal/geo/service/job_manager.go":      {handles: 2},
-	"user-server/internal/geo/service/keyword_pipeline.go": {handles: 1, getdb: 1},
-	"user-server/internal/geo/service/search_probe.go":     {handles: 1, getdb: 2},
+	// AV-04c 批次3（2026-11-07）：geo 域整域出快照 —— job_manager.go 句柄 2 清零
+	// （db 字段+SetJobManagerDB 形参改 GeoJobLockRepository 注入，advisory lock 下沉
+	// repository/job_lock.go，装配点 internal/pkg/cron）；keyword_pipeline.go 句柄 1
+	// + getdb 1 清零（种子回填/待 SEO 词拉取下沉 GeoKeywordRepository，种子/思维链/
+	// 补位任务仓储改无参构造）；search_probe.go 句柄 1 + getdb 2 清零（llm_providers
+	// 名单下沉 mainrepo.LLMProviderRepository.ListEnabled、品牌投影下沉
+	// GeoConfigRepository.GetBrandProfile，NewEngineProbesFromDB 改收仓储，装配点
+	// router/geo_routes.go）；autopilot.go getdb 2 清零（pusher/push 仓储改无参构造）。
+	// 四文件清零除名，守卫对 geo 域回归为「新增即红」（无豁免行）。
 	// ---- ops 域（9 句柄 / 5 GetDB）----
 	"user-server/internal/ops/service/churn_prediction.go": {handles: 2, getdb: 1},
 	"user-server/internal/ops/service/custom_report.go":    {handles: 2, getdb: 1},
