@@ -9,6 +9,7 @@ import (
 
 	usermodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
+	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
 
@@ -32,6 +33,18 @@ func setupChurnAOVTestDB(t *testing.T) *gorm.DB {
 	return database
 }
 
+// newChurnServiceOnDB 指定库构造流失预警服务（原 NewChurnPredictionServiceWithDB
+// 的测试等价物：AV-04c 批次4 服务构造器改收仓储后，连接注入语义不变——同一
+// database 包进四个仓储）。
+func newChurnServiceOnDB(database *gorm.DB) *ChurnPredictionService {
+	return NewChurnPredictionServiceWithRepos(
+		opsrepo.NewChurnPredictionRepositoryWithDB(database),
+		opsrepo.NewChurnWarningRepositoryWithDB(database),
+		opsrepo.NewChurnModelConfigRepositoryWithDB(database),
+		opsrepo.NewChurnStatisticsRepositoryWithDB(database),
+	)
+}
+
 func seedPurchaseEvent(t *testing.T, database *gorm.DB, customerID string, occurredAt time.Time, eventData map[string]any) {
 	t.Helper()
 	raw, err := json.Marshal(eventData)
@@ -52,7 +65,7 @@ func seedPurchaseEvent(t *testing.T, database *gorm.DB, customerID string, occur
 // 验收主用例：100+900 两单 → 频次 2、AOV 500，而不是把次数 2 当金额。
 func TestChurnAggregate_AOVFromRealAmounts(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_aov", now.AddDate(0, 0, -1), map[string]any{"amount": 100.0})
@@ -82,7 +95,7 @@ func TestChurnAggregate_AOVFromRealAmounts(t *testing.T) {
 // 同一 order_id 的重复上报只记一次业务金额（频次也按去重后的订单数）。
 func TestChurnAggregate_DuplicateOrderCountedOnce(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_dup", now.AddDate(0, 0, -1), map[string]any{"amount": 300.0, "order_id": "ORD-1"})
@@ -108,7 +121,7 @@ func TestChurnAggregate_DuplicateOrderCountedOnce(t *testing.T) {
 // 缺金额事件不补 0 元真值：只有无金额事件 → AOV unknown。
 func TestChurnAggregate_MissingAmountIsUnknown(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_noamount", now.AddDate(0, 0, -1), map[string]any{"items": []string{"x"}})
@@ -148,7 +161,7 @@ func TestChurnAggregate_MissingAmountIsUnknown(t *testing.T) {
 // 不同币种不可直接加：混币种 → AOV unknown，且不丢币种信息。
 func TestChurnAggregate_MixedCurrencyIsUnknown(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_cny", now.AddDate(0, 0, -1), map[string]any{"amount": 100.0, "currency": "CNY"})
@@ -169,7 +182,7 @@ func TestChurnAggregate_MixedCurrencyIsUnknown(t *testing.T) {
 // 单币种时 AOV 已知且币种透出。
 func TestChurnAggregate_SingleCurrencyKnown(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_usd", now.AddDate(0, 0, -1), map[string]any{"amount": 60.0, "currency": "USD"})
@@ -193,7 +206,7 @@ func TestChurnAggregate_SingleCurrencyKnown(t *testing.T) {
 // 金额未知时：排除客单价分量并重归一权重，不冒充低风险也不冒充“订单金额偏低”因子。
 func TestChurnCalculate_AOVUnknownRenormalizesWeights(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 
 	userData := map[string]any{
 		"user_id":                   "user_unknown_aov",
@@ -231,7 +244,7 @@ func TestChurnCalculate_AOVUnknownRenormalizesWeights(t *testing.T) {
 // 金额未知时权重重归一的数值验证：只有互动分量为已知非满分。
 func TestChurnCalculate_AOVUnknownWeightRenormValue(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 
 	// inactive=0, freq=0, engagement=100，AOV unknown → score = 100 * 0.2/0.8 = 25
 	userData := map[string]any{
@@ -257,7 +270,7 @@ func TestChurnCalculate_AOVUnknownWeightRenormValue(t *testing.T) {
 // 未带 known 标志的旧调用方保持旧行为：aov=0 → 分量 100（不视为低风险）。
 func TestChurnCalculate_BackwardCompatibleWithoutKnownFlag(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 
 	userData := map[string]any{
 		"user_id":             "user_legacy",
@@ -283,7 +296,7 @@ func TestChurnCalculate_BackwardCompatibleWithoutKnownFlag(t *testing.T) {
 // 端到端：聚合 → 计算，已实付金额正确进入评分链路（不再把次数当金额）。
 func TestChurnRunForAllCustomers_RealAOVEndToEnd(t *testing.T) {
 	database := setupChurnAOVTestDB(t)
-	svc := NewChurnPredictionServiceWithDB(database)
+	svc := newChurnServiceOnDB(database)
 	now := time.Now()
 
 	seedPurchaseEvent(t, database, "cust_e2e", now.AddDate(0, 0, -1), map[string]any{"amount": 100.0})

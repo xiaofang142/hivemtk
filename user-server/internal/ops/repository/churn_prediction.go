@@ -323,3 +323,57 @@ func NewChurnModelConfigRepositoryWithDB(db *gorm.DB) *ChurnModelConfigRepositor
 func NewChurnStatisticsRepositoryWithDB(db *gorm.DB) *ChurnStatisticsRepository {
 	return &ChurnStatisticsRepository{db: db}
 }
+
+// CustomerBehaviorAggregateRow customer_events 按客户聚合的行为行（流失打分快照输入）。
+//
+// 列别名必须与 GORM 字段名的 snake_case 映射一致：Interactions30d→interactions30d、
+// PurchaseCount90d→purchase_count90d（数字前不加下划线）。旧别名 purchase_count_90d
+// 与 interactions_30d 映射失配，频次/互动数曾在生产聚合里静默扫成 0（见 service 层
+// aggregateCustomerBehavior 注释）。
+type CustomerBehaviorAggregateRow struct {
+	CustomerID       string
+	LastActivityAt   time.Time
+	Interactions30d  int64
+	LastPurchaseAt   *time.Time
+	PurchaseCount90d int64
+}
+
+// AggregateCustomerBehavior 全量客户行为聚合（AV-04c 批次4 自 service 层下沉）。
+//
+// SQL 与下沉前逐字一致：MAX 最近活跃、30 天互动计数、最近购买时间、90 天购买计数；
+// GROUP BY customer_id。只读聚合，无写入、无事务边界。
+func (r *ChurnPredictionRepository) AggregateCustomerBehavior(ctx context.Context) ([]CustomerBehaviorAggregateRow, error) {
+	var rows []CustomerBehaviorAggregateRow
+	if err := r.db.WithContext(ctx).Table("customer_events").
+		Select("customer_id, " +
+			"MAX(occurred_at) AS last_activity_at, " +
+			"COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') AS interactions30d, " +
+			"MAX(occurred_at) FILTER (WHERE event_type = 'purchase') AS last_purchase_at, " +
+			"COUNT(*) FILTER (WHERE event_type = 'purchase' " +
+			"AND occurred_at >= NOW() - INTERVAL '90 days') AS purchase_count90d").
+		Group("customer_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// PurchaseEventPayloadRow 90 天窗口内购买事件的 payload 行（金额在 service 侧解析）。
+type PurchaseEventPayloadRow struct {
+	CustomerID string
+	EventData  string
+}
+
+// ListRecentPurchaseEventPayloads 拉取 90 天窗口内全部购买事件的 payload
+// （AV-04c 批次4 自 service 层下沉）：金额必须取自事件 payload 的真实 amount 字段，
+// Go 侧解析（缺金额/非法金额不计入，多币种混加判 unknown，同 order_id 去重）。
+func (r *ChurnPredictionRepository) ListRecentPurchaseEventPayloads(ctx context.Context) ([]PurchaseEventPayloadRow, error) {
+	var rows []PurchaseEventPayloadRow
+	if err := r.db.WithContext(ctx).Table("customer_events").
+		Select("customer_id, event_data").
+		Where("event_type = ? AND occurred_at >= NOW() - INTERVAL '90 days'", "purchase").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}

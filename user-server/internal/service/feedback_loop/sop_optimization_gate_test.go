@@ -190,3 +190,30 @@ func TestGate_StructuralChecks(t *testing.T) {
 	assert.False(t, res.Passed)
 	assert.Contains(t, res.Reason, "合规门")
 }
+
+// TestGate_TraceLearningRepo_SharesInjectedDB AV-04c 批次4：gate 的 golden 聚合
+// 改走 repository.NewTraceLearningRepositoryShared(flRepo)（原 GetDB() 直拼
+// TraceLearning 仓储的写法已删，FeedbackLoopRepository.GetDB 方法一并移除）。
+//
+// 注入库构造的反馈闭环仓储，Shared 构造出的聚合仓储必须共享**同一条连接**：
+// MessageTrace 行只落在注入库上，聚合仓储能读到即证明连接同源（而不是全局句柄
+// ——SetTestDB 之前的库），单测注入语义与改前一致。
+func TestGate_TraceLearningRepo_SharesInjectedDB(t *testing.T) {
+	db := setupGateTestDB(t)
+	out, _ := json.Marshal(map[string]any{"reply": "您好，具体报价会按需定制"})
+	require.NoError(t, db.Create(&model.MessageTrace{
+		TraceID: "trace-shared", Node: "ai_dispatch", NodeOrder: 2, Output: string(out),
+	}).Error)
+
+	flRepo := repository.NewFeedbackLoopRepositoryWithDB(db)
+	tlRepo := repository.NewTraceLearningRepositoryShared(flRepo)
+	require.NotNil(t, tlRepo, "非 nil 反馈仓储必须给出聚合仓储")
+
+	spans, err := tlRepo.ListTraceSpans(context.Background(), "trace-shared")
+	require.NoError(t, err)
+	require.Len(t, spans, 1, "Shared 聚合仓储应读到注入库上的 message_trace 行")
+	assert.Equal(t, "ai_dispatch", spans[0].Node)
+
+	// nil 防御沿原 GetDB() 语义：nil 反馈仓储返回 nil，不 panic。
+	assert.Nil(t, repository.NewTraceLearningRepositoryShared(nil))
+}

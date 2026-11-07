@@ -6,6 +6,7 @@ import (
 	"time"
 
 	sysmodel "hivemtk-user/internal/model"
+	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
@@ -74,7 +75,7 @@ func TestLtcRatesService_GetLtcRates(t *testing.T) {
 	seedLtcPayment(t, db, "pay-1", "bill-1", 600, sysmodel.PaymentStatusConfirmed)
 	seedLtcPayment(t, db, "pay-rev", "bill-1", 200, sysmodel.PaymentStatusReversed)
 
-	svc := NewLtcRatesService().WithDB(db)
+	svc := NewLtcRatesService().WithRepo(opsrepo.NewLtcRatesRepository(db))
 	got, err := svc.GetLtcRates(context.Background())
 	if err != nil {
 		t.Fatalf("GetLtcRates: %v", err)
@@ -93,7 +94,7 @@ func TestLtcRatesService_GetLtcRates(t *testing.T) {
 // TestLtcRatesService_EmptyDB 空库三率全 0（分母为 0 不炸，分子分母照实返）。
 func TestLtcRatesService_EmptyDB(t *testing.T) {
 	db := setupLtcRatesDB(t)
-	got, err := NewLtcRatesService().WithDB(db).GetLtcRates(context.Background())
+	got, err := NewLtcRatesService().WithRepo(opsrepo.NewLtcRatesRepository(db)).GetLtcRates(context.Background())
 	if err != nil {
 		t.Fatalf("GetLtcRates: %v", err)
 	}
@@ -114,7 +115,7 @@ func TestLtcRatesService_EmptyDB(t *testing.T) {
 func TestLtcRatesService_NullExpectedCloseNotOverdue(t *testing.T) {
 	db := setupLtcRatesDB(t)
 	seedLtcOpp(t, db, "opp-open-nodate", sysmodel.OpportunityStatusOpen, nil)
-	got, err := NewLtcRatesService().WithDB(db).GetLtcRates(context.Background())
+	got, err := NewLtcRatesService().WithRepo(opsrepo.NewLtcRatesRepository(db)).GetLtcRates(context.Background())
 	if err != nil {
 		t.Fatalf("GetLtcRates: %v", err)
 	}

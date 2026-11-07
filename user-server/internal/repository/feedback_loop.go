@@ -24,12 +24,20 @@ type FeedbackLoopRepository struct {
 	db *gorm.DB
 }
 
-// GetDB 暴露底层连接（仅供 trace_learning 聚合等只读协作方使用，不用于 service 写路径）。
-func (r *FeedbackLoopRepository) GetDB() *gorm.DB {
-	if r == nil {
+// NewTraceLearningRepositoryShared 构造与反馈闭环仓储**共享同一条连接**的
+// trace_learning 协作仓储（只读聚合用）。
+//
+// 为什么收口成仓储层构造函数而不是暴露 GetDB()：service 侧唯一需求是"用同一条
+// 连接构造 TraceLearningRepository 去聚合 golden 案例"（原 FeedbackLoopRepository
+// .GetDB() 的唯一调用点，AV-04c 批次4 已随收口删除该方法）。构造函数形态与
+// NewTraceLearningRepository(db) 同族（包级构造不持 ctx，也不触库），service
+// 不再触碰 *gorm.DB 句柄，测试注入语义不变——NewFeedbackLoopRepositoryWithDB(db)
+// 构造的仓储，Shared 出来的聚合仓储仍绑定这条 db。
+func NewTraceLearningRepositoryShared(flRepo *FeedbackLoopRepository) *TraceLearningRepository {
+	if flRepo == nil {
 		return nil
 	}
-	return r.db
+	return NewTraceLearningRepository(flRepo.db)
 }
 
 // NewFeedbackLoopRepository 构造（无参，内部取库句柄，遵循本包其他仓储约定）

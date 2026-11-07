@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"hivemtk-user/internal/ops/model"
+	opsrepo "hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/ops/service"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,14 @@ func setupChurnPredictionTestDB(t *testing.T) *gorm.DB {
 func setupChurnPredictionRouter(t *testing.T, db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 
-	churnService := service.NewChurnPredictionServiceWithDB(db)
+	// 原 service.NewChurnPredictionServiceWithDB(db)：AV-04c 批次4 服务构造器
+	// 改收仓储后，同一 db 注入四个仓储，连接语义不变。
+	churnService := service.NewChurnPredictionServiceWithRepos(
+		opsrepo.NewChurnPredictionRepositoryWithDB(db),
+		opsrepo.NewChurnWarningRepositoryWithDB(db),
+		opsrepo.NewChurnModelConfigRepositoryWithDB(db),
+		opsrepo.NewChurnStatisticsRepositoryWithDB(db),
+	)
 
 	controller := &ChurnPredictionController{
 		churnService: churnService,

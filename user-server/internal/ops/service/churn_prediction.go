@@ -8,7 +8,6 @@ import (
 	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
-	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
@@ -20,7 +19,6 @@ import (
 
 // ChurnPredictionService 流失预警服务
 type ChurnPredictionService struct {
-	db             *gorm.DB
 	predictionRepo *repository.ChurnPredictionRepository
 	warningRepo    *repository.ChurnWarningRepository
 	configRepo     *repository.ChurnModelConfigRepository
@@ -30,7 +28,6 @@ type ChurnPredictionService struct {
 // NewChurnPredictionService 创建流失预警服务实例
 func NewChurnPredictionService() *ChurnPredictionService {
 	return &ChurnPredictionService{
-		db:             _db.GetDB(),
 		predictionRepo: repository.NewChurnPredictionRepository(),
 		warningRepo:    repository.NewChurnWarningRepository(),
 		configRepo:     repository.NewChurnModelConfigRepository(),
@@ -38,14 +35,22 @@ func NewChurnPredictionService() *ChurnPredictionService {
 	}
 }
 
-// NewChurnPredictionServiceWithDB 创建指定数据库连接的流失预警服务实例（用于测试）
-func NewChurnPredictionServiceWithDB(db *gorm.DB) *ChurnPredictionService {
+// NewChurnPredictionServiceWithRepos 按仓储注入创建流失预警服务实例（用于测试）。
+//
+// 历史签名是 WithDB(db *gorm.DB)（AV-04c 批次4 收口：service 不再持 *gorm.DB
+// 形参），改经仓储注入后连接语义不变——各仓储都有 WithDB 变体，同一连接注入
+// 四个仓储即等价于原来的整服务换库。
+func NewChurnPredictionServiceWithRepos(
+	predictionRepo *repository.ChurnPredictionRepository,
+	warningRepo *repository.ChurnWarningRepository,
+	configRepo *repository.ChurnModelConfigRepository,
+	statsRepo *repository.ChurnStatisticsRepository,
+) *ChurnPredictionService {
 	return &ChurnPredictionService{
-		db:             db,
-		predictionRepo: repository.NewChurnPredictionRepositoryWithDB(db),
-		warningRepo:    repository.NewChurnWarningRepositoryWithDB(db),
-		configRepo:     repository.NewChurnModelConfigRepositoryWithDB(db),
-		statsRepo:      repository.NewChurnStatisticsRepositoryWithDB(db),
+		predictionRepo: predictionRepo,
+		warningRepo:    warningRepo,
+		configRepo:     configRepo,
+		statsRepo:      statsRepo,
 	}
 }
 
@@ -512,42 +517,20 @@ func (s *ChurnPredictionService) GetPredictionByUserID(ctx context.Context, user
 }
 
 func (s *ChurnPredictionService) aggregateCustomerBehavior(ctx context.Context) ([]UserBehaviorSnapshot, error) {
-	type row struct {
-		CustomerID       string
-		LastActivityAt   time.Time
-		Interactions30d  int64
-		LastPurchaseAt   *time.Time
-		PurchaseCount90d int64
-	}
-
-	var rows []row
-	// 别名必须与 GORM 对字段名的 snake_case 映射一致：PurchaseCount90d→
-	// purchase_count90d（数字前不加下划线）。旧别名 purchase_count_90d 与
-	// interactions_30d 映射失配，频次/互动数在生产聚合里一直静默扫成 0。
-	if err := s.db.WithContext(ctx).Table("customer_events").
-		Select("customer_id, " +
-			"MAX(occurred_at) AS last_activity_at, " +
-			"COUNT(*) FILTER (WHERE occurred_at >= NOW() - INTERVAL '30 days') AS interactions30d, " +
-			"MAX(occurred_at) FILTER (WHERE event_type = 'purchase') AS last_purchase_at, " +
-			"COUNT(*) FILTER (WHERE event_type = 'purchase' " +
-			"AND occurred_at >= NOW() - INTERVAL '90 days') AS purchase_count90d").
-		Group("customer_id").
-		Scan(&rows).Error; err != nil {
+	// 聚合 SQL 已下沉 ChurnPredictionRepository（AV-04c 批次4）：列别名与 GORM
+	// 字段名 snake_case 映射一致（PurchaseCount90d→purchase_count90d，数字前不加
+	// 下划线）。旧别名 purchase_count_90d 与 interactions_30d 映射失配，频次/互动数
+	// 曾在生产聚合里静默扫成 0——改 SQL 时两侧必须同进退。
+	rows, err := s.predictionRepo.AggregateCustomerBehavior(ctx)
+	if err != nil {
 		return nil, err
 	}
 
-	// 金额必须取自事件 payload 的真实 amount 字段。只拉 90 天窗口内的购买事件，
+	// 金额必须取自事件 payload 的真实 amount 字段。仓储只拉 90 天窗口内的购买事件，
 	// 在 Go 侧解析 EventData JSON：缺金额/非法金额不计入，多币种混加判 unknown，
 	// 同一 order_id 的重复事件只记一次业务金额。
-	type purchaseRow struct {
-		CustomerID string
-		EventData  string
-	}
-	var purchaseRows []purchaseRow
-	if err := s.db.WithContext(ctx).Table("customer_events").
-		Select("customer_id, event_data").
-		Where("event_type = ? AND occurred_at >= NOW() - INTERVAL '90 days'", "purchase").
-		Scan(&purchaseRows).Error; err != nil {
+	purchaseRows, err := s.predictionRepo.ListRecentPurchaseEventPayloads(ctx)
+	if err != nil {
 		return nil, err
 	}
 

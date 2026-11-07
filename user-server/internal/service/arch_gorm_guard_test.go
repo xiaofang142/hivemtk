@@ -548,38 +548,43 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// GeoConfigRepository.GetBrandProfile，NewEngineProbesFromDB 改收仓储，装配点
 	// router/geo_routes.go）；autopilot.go getdb 2 清零（pusher/push 仓储改无参构造）。
 	// 四文件清零除名，守卫对 geo 域回归为「新增即红」（无豁免行）。
-	// ---- ops 域（9 句柄 / 5 GetDB）----
-	"user-server/internal/ops/service/churn_prediction.go": {handles: 2, getdb: 1},
+	// ---- ops 域（6 句柄 / 3 GetDB）----
+	// AV-04c 批次4（2026-11-07）：churn_prediction 句柄 2 + getdb 1 清零除名
+	// （db 字段与 WithDB 形参改四仓储注入 NewChurnPredictionServiceWithRepos，
+	// customer_events 两段聚合 SELECT 下沉 ChurnPredictionRepository.Aggregate-
+	// CustomerBehavior / ListRecentPurchaseEventPayloads，SQL 逐字保留）；ltc_rates
+	// 句柄 1 清零除名（WithDB 形参改 WithRepo 仓储注入）；web_vital getdb 1 清零
+	// 除名（直写下沉 WebVitalRepository.Create，repository/web_vital.go）。
 	"user-server/internal/ops/service/custom_report.go":    {handles: 2, getdb: 1},
 	"user-server/internal/ops/service/dashboard_screen.go": {handles: 2, getdb: 2}, // h=2：scope 闭包（回调外句柄，旧度量会冒充事务例外）
-	"user-server/internal/ops/service/ltc_rates.go":        {handles: 1},
 	"user-server/internal/ops/service/report_filter.go":    {handles: 2},
-	"user-server/internal/ops/service/web_vital.go":        {getdb: 1},
-	// ---- 根域 internal/service（0 句柄 / 1 事务 / 36 GetDB）----
-	"user-server/internal/service/auth.go":                                {getdb: 1}, // x().GetDB() 链式，shell 宽口径抓不到
-	"user-server/internal/service/cards/tiktok_card.go":                   {getdb: 1},
-	"user-server/internal/service/customer_session.go":                    {getdb: 3},
-	"user-server/internal/service/customer_session_scope.go":              {getdb: 2},
-	"user-server/internal/service/data_export.go":                         {getdb: 1},
-	"user-server/internal/service/faq.go":                                 {getdb: 1},
-	"user-server/internal/service/feedback_learning.go":                   {getdb: 2},
-	"user-server/internal/service/feedback_learning_cron.go":              {getdb: 2},
-	"user-server/internal/service/feedback_loop/sop_optimization_gate.go": {getdb: 1}, // x().GetDB() 链式，shell 宽口径抓不到
-	"user-server/internal/service/feedback_loop_cron.go":                  {getdb: 1},
-	"user-server/internal/service/feedback_loop_init.go":                  {getdb: 2},
-	"user-server/internal/service/inbox.go":                               {getdb: 1},
-	"user-server/internal/service/inbox_ingress.go":                       {getdb: 1},
-	"user-server/internal/service/inbox_scope.go":                         {getdb: 1},
-	"user-server/internal/service/knowledge_base.go":                      {getdb: 1},
-	"user-server/internal/service/objection_handler.go":                   {getdb: 1},
-	"user-server/internal/service/openapi.go":                             {getdb: 2},
-	"user-server/internal/service/rag_product.go":                         {getdb: 1},
-	"user-server/internal/service/sales_persona.go":                       {getdb: 2},
-	"user-server/internal/service/sop/sop_template.go":                    {getdb: 1},
-	"user-server/internal/service/tenant.go":                              {getdb: 1},
-	"user-server/internal/service/trace_learning/service.go":              {tx: 1, getdb: 3}, // tx=1：原基线的 Connection 接缝（advisory lock），沿原基线
-	"user-server/internal/service/webhook.go":                             {getdb: 2},
-	"user-server/internal/service/wecom.go":                               {getdb: 1},
+	// ---- 根域 internal/service（0 句柄 / 1 事务 / 34 GetDB）----
+	// AV-04c 批次4（2026-11-07）：auth.go getdb 1 清零除名（开户赠送改
+	// NewStarterKitRepositoryDefault，repository/starter_kit.go）；feedback_loop/
+	// sop_optimization_gate.go getdb 1 清零除名（改 FeedbackLoopRepository.
+	// TraceLearningRepo() 共享连接，FeedbackLoopRepository.GetDB 方法随之删除）。
+	"user-server/internal/service/cards/tiktok_card.go":      {getdb: 1},
+	"user-server/internal/service/customer_session.go":       {getdb: 3},
+	"user-server/internal/service/customer_session_scope.go": {getdb: 2},
+	"user-server/internal/service/data_export.go":            {getdb: 1},
+	"user-server/internal/service/faq.go":                    {getdb: 1},
+	"user-server/internal/service/feedback_learning.go":      {getdb: 2},
+	"user-server/internal/service/feedback_learning_cron.go": {getdb: 2},
+	"user-server/internal/service/feedback_loop_cron.go":     {getdb: 1},
+	"user-server/internal/service/feedback_loop_init.go":     {getdb: 2},
+	"user-server/internal/service/inbox.go":                  {getdb: 1},
+	"user-server/internal/service/inbox_ingress.go":          {getdb: 1},
+	"user-server/internal/service/inbox_scope.go":            {getdb: 1},
+	"user-server/internal/service/knowledge_base.go":         {getdb: 1},
+	"user-server/internal/service/objection_handler.go":      {getdb: 1},
+	"user-server/internal/service/openapi.go":                {getdb: 2},
+	"user-server/internal/service/rag_product.go":            {getdb: 1},
+	"user-server/internal/service/sales_persona.go":          {getdb: 2},
+	"user-server/internal/service/sop/sop_template.go":       {getdb: 1},
+	"user-server/internal/service/tenant.go":                 {getdb: 1},
+	"user-server/internal/service/trace_learning/service.go": {tx: 1, getdb: 3}, // tx=1：原基线的 Connection 接缝（advisory lock），沿原基线
+	"user-server/internal/service/webhook.go":                {getdb: 2},
+	"user-server/internal/service/wecom.go":                  {getdb: 1},
 }
 
 // ----------------------------------------------------------------------------

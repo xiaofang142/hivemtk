@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	opsrepo "hivemtk-user/internal/ops/repository"
 )
 
 // TestLtcRatesSLODocMatchesCode SLO 口径文档与代码一致性（T-P8-06，AC②）。
@@ -60,7 +62,7 @@ func TestLtcRatesSLODocMatchesCode(t *testing.T) {
 		t.Fatalf("文档 SQL(逾期分子): %v", err)
 	}
 
-	svc := NewLtcRatesService().WithDB(db)
+	svc := NewLtcRatesService().WithRepo(opsrepo.NewLtcRatesRepository(db))
 	svc.now = func() time.Time { return now }
 	got, err := svc.GetLtcRates(ctx)
 	if err != nil {

@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"gorm.io/gorm"
-
 	sysmodel "hivemtk-user/internal/model"
 	opsmodel "hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
@@ -25,12 +23,15 @@ func NewLtcRatesService() *LtcRatesService {
 	return &LtcRatesService{repo: opsrepo.NewLtcRatesRepository(nil), now: time.Now}
 }
 
-// WithDB 换库（单测注入 testutil 的库）。返回自身，链式。
-func (s *LtcRatesService) WithDB(db *gorm.DB) *LtcRatesService {
+// WithRepo 换取数仓储（单测注入 testutil 的库包出来的仓储）。返回自身，链式。
+//
+// 历史签名是 WithDB(db *gorm.DB)（AV-04c 批次4 收口：service 不再持 *gorm.DB
+// 形参），调用方改传 opsrepo.NewLtcRatesRepository(db)，连接语义不变。
+func (s *LtcRatesService) WithRepo(repo *opsrepo.LtcRatesRepository) *LtcRatesService {
 	if s == nil {
 		return nil
 	}
-	s.repo = opsrepo.NewLtcRatesRepository(db)
+	s.repo = repo
 	return s
 }
 

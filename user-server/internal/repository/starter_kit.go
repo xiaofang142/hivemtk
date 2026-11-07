@@ -29,6 +29,16 @@ func NewStarterKitRepository(db *gorm.DB) *StarterKitRepository {
 	return &StarterKitRepository{db: db}
 }
 
+// NewStarterKitRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+//
+// 供 service 层装配用：调用方不再自行取 `NewTenantRepository().GetDB()` 拼仓储
+// （那是 service 直取 DB 句柄的宽口径）。历史调用方 auth.go 开户赠送原先经
+// NewTenantRepository() 拿句柄——NewTenantRepository 构造即捕获全局连接、GetDB()
+// 原样返回该连接，因此本构造与其同连接、同解析时刻，行为不变。
+func NewStarterKitRepositoryDefault() *StarterKitRepository {
+	return NewStarterKitRepository(GetDB())
+}
+
 // CountSiteConfig 该租户是否已有站点配置（开户赠送的幂等检查）。
 func (r *StarterKitRepository) CountSiteConfig(ctx context.Context, tenantID uint) (int64, error) {
 	var n int64
