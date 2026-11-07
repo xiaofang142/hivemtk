@@ -22,6 +22,16 @@ type fakePipeline struct {
 	history  []*model.MessageEvent
 	claimQue []*model.MessageHub
 	acked    []string
+	detailed []detailedAckCall
+}
+
+// detailedAckCall 记录一次 AckOutboundDetailed 调用的关键入参（CH-37b 刀2 WS Frame.Status 消费用）。
+type detailedAckCall struct {
+	channel, accountID string
+	msgIDs             []string
+	conversationID     string
+	terminalStatus     string
+	fenceLen           int
 }
 
 func (f *fakePipeline) IngestBatch(_ context.Context, events []*model.MessageEvent) (*service.InboxIngressBatchResult, error) {
@@ -62,6 +72,29 @@ func (f *fakePipeline) AckOutbound(_ context.Context, _, _ string, msgIDs []stri
 	defer f.mu.Unlock()
 	f.acked = append(f.acked, msgIDs...)
 	return len(msgIDs), nil
+}
+
+func (f *fakePipeline) AckOutboundDetailed(_ context.Context, channel, accountID string, msgIDs []string, conversationID, terminalStatus string, _ map[string]service.BridgeOutboundAckInput, fence service.AckOutboundClaimFence) (*service.AckOutboundResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.detailed = append(f.detailed, detailedAckCall{
+		channel: channel, accountID: accountID,
+		msgIDs:         append([]string(nil), msgIDs...),
+		conversationID: conversationID, terminalStatus: terminalStatus,
+		fenceLen: len(fence),
+	})
+	items := make([]service.AckOutboundItem, 0, len(msgIDs))
+	res := &service.AckOutboundResult{Items: items}
+	for _, id := range msgIDs {
+		if terminalStatus == model.BridgeAckStatusFailed {
+			res.FailedItemsCount++
+			res.Items = append(res.Items, service.AckOutboundItem{MsgID: id, Status: model.BridgeAckStatusFailed})
+			continue
+		}
+		res.AckedItemsCount++
+		res.Items = append(res.Items, service.AckOutboundItem{MsgID: id, Status: model.BridgeAckStatusAcked})
+	}
+	return res, nil
 }
 
 func newTestServer(t *testing.T, fp IngressPipeline) *httptest.Server {

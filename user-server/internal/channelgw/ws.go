@@ -274,23 +274,65 @@ func (c *wsConn) handleFrame(f *Frame) {
 	case FramePing:
 		c.send(&Frame{V: CurrentProtocolVersion, Type: FramePong, Channel: c.channel, AccountID: c.accountID})
 	case FrameAck:
-		if len(f.MsgIDs) == 0 {
-			return
-		}
-		ctx, cancel := context.WithTimeout(c.baseCtx(), runtimeWSPipelineTimeout(c.baseCtx()))
-		defer cancel()
-		acked, err := c.t.pipeline.AckOutbound(ctx, c.channel, c.accountID, f.MsgIDs)
-		if err != nil {
-			logger.Warnf("[ChannelGW WS] ack 回写失败 channel=%s account=%s: %v", c.channel, c.accountID, err)
-			return
-		}
-		logger.Infof("[ChannelGW WS] 出站已确认 delivered: channel=%s account=%s acked=%d", c.channel, c.accountID, acked)
+		c.handleAckFrame(f)
 	case FrameInbound:
 		c.handleInbound(f)
 	case FrameHistory:
 		c.handleHistory(f)
 	default:
 	}
+}
+
+// wsAckFrameStatus 归一 ack 帧 Status 字段（CH-37b 刀2 起 WS 消费）。
+// 返回 model.BridgeAckStatusDelivered（含空值：legacy 仅-delivered 帧不带 Status 或 Status 空
+// =delivered，行为不变）、model.BridgeAckStatusFailed；未知值返回空串——调用方按协议错误
+// 处理（本刀：拒翻转 + Warn + FrameAckUnknownStatusCount 打点；unknown 语义归刀4 R2/R6）。
+func wsAckFrameStatus(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", model.BridgeAckStatusDelivered:
+		return model.BridgeAckStatusDelivered
+	case model.BridgeAckStatusFailed:
+		return model.BridgeAckStatusFailed
+	default:
+		return ""
+	}
+}
+
+func (c *wsConn) handleAckFrame(f *Frame) {
+	if len(f.MsgIDs) == 0 {
+		return
+	}
+	status := wsAckFrameStatus(f.Status)
+	if status == "" {
+		// 协议错误：未知 Status 一律不翻转任何行（宁可不 ack 重发，不可错标终态）。
+		FrameAckUnknownStatusCount.Add(1)
+		logger.Warnf("[ChannelGW WS] ack 帧 Status 非法（协议错误，已拒翻转）: channel=%s account=%s status=%q msg_ids=%d",
+			c.channel, c.accountID, f.Status, len(f.MsgIDs))
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.baseCtx(), runtimeWSPipelineTimeout(c.baseCtx()))
+	defer cancel()
+	if status == model.BridgeAckStatusFailed {
+		// failed 终态走 v2 详细 ack（CH-37b 刀2）：逐项分类落回执，行级翻转由 service 层保证。
+		// WS 帧不带 conversation/per-item error/claimed_at（栅栏随扩展侧 v2 items[] 另接），全 nil/空。
+		res, err := c.t.pipeline.AckOutboundDetailed(ctx, c.channel, c.accountID, f.MsgIDs, "", model.BridgeAckStatusFailed, nil, nil)
+		if err != nil {
+			logger.Warnf("[ChannelGW WS] ack failed 回写失败 channel=%s account=%s: %v", c.channel, c.accountID, err)
+			return
+		}
+		if res != nil {
+			logger.Infof("[ChannelGW WS] 出站已确认 failed: channel=%s account=%s failed=%d duplicate=%d not_found=%d",
+				c.channel, c.accountID, res.FailedItemsCount, res.DuplicateCount, res.NotFoundCount)
+		}
+		return
+	}
+	// legacy 仅-delivered 路径：原样保留（Status 空/显式 delivered 共用）。
+	acked, err := c.t.pipeline.AckOutbound(ctx, c.channel, c.accountID, f.MsgIDs)
+	if err != nil {
+		logger.Warnf("[ChannelGW WS] ack 回写失败 channel=%s account=%s: %v", c.channel, c.accountID, err)
+		return
+	}
+	logger.Infof("[ChannelGW WS] 出站已确认 delivered: channel=%s account=%s acked=%d", c.channel, c.accountID, acked)
 }
 
 func collectFrameMessages(f *Frame, channel, accountID string) []*IngestMessage {
@@ -437,6 +479,9 @@ func (c *wsConn) pushOnce() {
 				Content:        hub.Content,
 				MsgType:        hub.MsgType,
 				MediaURL:       hub.MediaURL,
+				// CH-37b 刀2：认领租约透出（既有列），供客户端回 ack 时原样带回做栅栏断言。
+				ClaimedAt:    hub.ClaimedAt,
+				PushAttempts: hub.PushAttempts,
 			},
 		}
 		if !c.send(f) {

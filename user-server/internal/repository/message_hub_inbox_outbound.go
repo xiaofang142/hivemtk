@@ -341,6 +341,84 @@ func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatus(
 	return updatedIDs, affectedRows, nil
 }
 
+// AckOutboundDeliveredBatchReturningWithStatusFenced CH-37b 刀2：claim 栅栏版详细 ack 条件更新。
+// 与 AckOutboundDeliveredBatchReturningWithStatus 同构（事务内 FOR UPDATE 取号 + 条件更新），
+// 差别仅在谓词：status 收紧为 'inflight' 且追加 claimed_at IN (调用方所见集合)——
+// 仅当行仍是「调用方认领的那一次」才翻转（乐观并发，防 30s 认领租约回收重领后旧 acker
+// 覆盖新一轮认领）。无 DDL：谓词完全落在既有 claimed_at 列上，不动索引不动 schema。
+//
+// 批量语义（一批多行各自 claimed_at）：谓词用本批 msgIDs 对应的 claimed_at 去重集合
+// 单条 UPDATE 放行，逐行结果经返回的 updatedIDs 区分——未翻转的行由 service 层按既有
+// 「toAck 但未更新」路径归 duplicate。claimedAtByMsgID 中键不属于本批 msgIDs 的条目
+// 不参与谓词；行无对应条目则不可能翻转（栅栏是白名单语义，不是黑名单）。
+// 集合内撞值（同批两行共用同一 claimed_at 瞬时值）是纳秒级时钟碰撞，忽略。
+func (r *MessageHubRepository) AckOutboundDeliveredBatchReturningWithStatusFenced(
+	ctx context.Context,
+	channel, accountID, conversationID, terminalStatus string,
+	msgIDs []string,
+	claimedAtByMsgID map[string]time.Time,
+) (updatedIDs []string, affectedRows int64, err error) {
+	if r.db == nil || len(msgIDs) == 0 || len(claimedAtByMsgID) == 0 {
+		return nil, 0, nil
+	}
+	if terminalStatus != model.BridgeAckStatusDelivered && terminalStatus != model.BridgeAckStatusFailed {
+		return nil, 0, fmt.Errorf("invalid terminal status: %q", terminalStatus)
+	}
+	// 栅栏值域收紧到本批 msgIDs：键不在批内的条目绝不参与谓词。
+	leaseValues := make([]time.Time, 0, len(msgIDs))
+	seenLease := make(map[time.Time]struct{}, len(msgIDs))
+	for _, id := range msgIDs {
+		t, ok := claimedAtByMsgID[id]
+		if !ok {
+			continue
+		}
+		if _, dup := seenLease[t]; dup {
+			continue
+		}
+		seenLease[t] = struct{}{}
+		leaseValues = append(leaseValues, t)
+	}
+	if len(leaseValues) == 0 {
+		return nil, 0, nil
+	}
+	updatedIDs = make([]string, 0, len(msgIDs))
+
+	// 事务内 FOR UPDATE 取号 + 条件更新（与无栅栏版同构，仅谓词收紧）
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		sel := tx.Model(&model.MessageHub{}).
+			Where("platform = ? AND account_id = ? AND direction = 'outbound' AND msg_id IN ? "+
+				"AND status = 'inflight' AND claimed_at IN ?",
+				channel, accountID, msgIDs, leaseValues)
+		if conversationID != "" {
+			sel = sel.Where("conversation_id = ?", conversationID)
+		}
+		if e := sel.Clauses(clause.Locking{Strength: "UPDATE"}).Pluck("msg_id", &updatedIDs).Error; e != nil {
+			return e
+		}
+		if len(updatedIDs) == 0 {
+			affectedRows = 0
+			return nil
+		}
+		upd := tx.Model(&model.MessageHub{}).
+			Where("platform = ? AND account_id = ? AND msg_id IN ? "+
+				"AND status = 'inflight' AND claimed_at IN ?",
+				channel, accountID, updatedIDs, leaseValues)
+		if conversationID != "" {
+			upd = upd.Where("conversation_id = ?", conversationID)
+		}
+		res := upd.Updates(map[string]any{"status": terminalStatus, "sent_at": time.Now()})
+		if res.Error != nil {
+			return res.Error
+		}
+		affectedRows = res.RowsAffected
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return updatedIDs, affectedRows, nil
+}
+
 func (r *MessageHubRepository) AnyExistsByMsgIDs(ctx context.Context, channel string, msgIDs []string) (map[string]bool, error) {
 	if r == nil || r.db == nil || len(msgIDs) == 0 || channel == "" {
 		return map[string]bool{}, nil

@@ -14,8 +14,12 @@ import (
 // 语义与 InboxIngressService 严格对齐：
 //   - IngestBatch：批量入站（按 conversation 分组 + msg_id 去重 + 时序锚点 + 合并 AI 触发）
 //   - PersistHistory：历史/回填消息仅落库（不触发 AI）
-//   - ClaimOutbound：下发队列权威认领（pending→inflight 原子翻转；超时惰性回收）
-//   - AckOutbound：下发确认（inflight/pending→delivered，幂等）
+//   - ClaimOutbound：下发队列权威认领（pending→inflight 原子翻转；超时惰性回收；
+//     返回行携带认领租约 claimed_at/push_attempts，供调用方回 ack 时做栅栏断言）
+//   - AckOutbound：下发确认（inflight/pending→delivered，幂等；legacy 语义不变）
+//   - AckOutboundDetailed：v2 详细 ack（CH-37b 刀2 经 pipeline 暴露，委托既有实现：
+//     items 逐项 delivered/failed + conversation scope + per-item error，返回
+//     acked/failed/duplicate/not_found/not_in_scope 逐项分类；fence 非 nil 时启用 claim 栅栏）
 //
 // 抽象为接口的目的：
 //  1. 传输层（ws.go / bridge HTTP handler）与 service 层解耦，便于单测注入 fake
@@ -25,6 +29,7 @@ type IngressPipeline interface {
 	PersistHistory(ctx context.Context, ev *model.MessageEvent, direction string) error
 	ClaimOutbound(ctx context.Context, channel, accountID string, limit int) ([]*model.MessageHub, error)
 	AckOutbound(ctx context.Context, channel, accountID string, msgIDs []string) (int, error)
+	AckOutboundDetailed(ctx context.Context, channel, accountID string, msgIDs []string, conversationID, terminalStatus string, perItem map[string]service.BridgeOutboundAckInput, fence service.AckOutboundClaimFence) (*service.AckOutboundResult, error)
 }
 
 type ingressPipeline struct {
@@ -64,4 +69,12 @@ func (p *ingressPipeline) AckOutbound(ctx context.Context, channel, accountID st
 		return 0, errPipelineNotConfigured
 	}
 	return p.ingress.AckOutboundDelivered(ctx, channel, accountID, msgIDs)
+}
+
+// AckOutboundDetailed v2 详细 ack 委托（CH-37b 刀2）：不改 service 层语义，只加 pipeline 暴露。
+func (p *ingressPipeline) AckOutboundDetailed(ctx context.Context, channel, accountID string, msgIDs []string, conversationID, terminalStatus string, perItem map[string]service.BridgeOutboundAckInput, fence service.AckOutboundClaimFence) (*service.AckOutboundResult, error) {
+	if p.ingress == nil {
+		return nil, errPipelineNotConfigured
+	}
+	return p.ingress.AckOutboundDeliveredDetailedFenced(ctx, channel, accountID, msgIDs, conversationID, terminalStatus, perItem, fence)
 }

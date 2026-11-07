@@ -224,6 +224,44 @@ func (s *InboxIngressService) AckOutboundDeliveredDetailed(
 	terminalStatus string,
 	perItem map[string]BridgeOutboundAckInput,
 ) (*AckOutboundResult, error) {
+	return s.ackOutboundDetailed(ctx, channel, accountID, msgIDs, conversationID, terminalStatus, perItem, nil)
+}
+
+// AckOutboundClaimFence CH-37b 刀2 claim 栅栏入参（乐观并发）：msg_id → 调用方认领时所见的
+// claimed_at。值必须取自认领返回行的 DB 读值（ClaimPendingOutbound 返回行的 ClaimedAt），
+// 不得用本地时钟拼造——PG timestamptz 是微秒精度，本地时钟值与库内存储值无法对上。
+//
+// 语义：仅当行当前 inflight 且 claimed_at 与所记一致才翻转；行已被回收/重领的迟到 ack
+// （防「30s 重领后旧 acker 覆盖」）或已回 pending 的行不翻转，按 duplicate 分类回执
+// （不翻转是硬保证，分类只影响回执读数）。键不在本批 msgIDs 内的条目不参与谓词。
+type AckOutboundClaimFence map[string]time.Time
+
+// AckOutboundDeliveredDetailedFenced CH-37b 刀2：带 claim 栅栏的详细 ack。
+// 与 AckOutboundDeliveredDetailed 同一实现体，仅条件更新谓词不同（见 repository.
+// AckOutboundDeliveredBatchReturningWithStatusFenced）；fence 为 nil/空等价 legacy 无栅栏。
+func (s *InboxIngressService) AckOutboundDeliveredDetailedFenced(
+	ctx context.Context,
+	channel, accountID string,
+	msgIDs []string,
+	conversationID string,
+	terminalStatus string,
+	perItem map[string]BridgeOutboundAckInput,
+	fence AckOutboundClaimFence,
+) (*AckOutboundResult, error) {
+	return s.ackOutboundDetailed(ctx, channel, accountID, msgIDs, conversationID, terminalStatus, perItem, fence)
+}
+
+// ackOutboundDetailed 详细 ack 共同实现体。fence 非 nil 且非空时走 repo 栅栏版条件更新，
+// 其余路径与 legacy 完全一致（fence=nil 即 AckOutboundDeliveredDetailed 原语义）。
+func (s *InboxIngressService) ackOutboundDetailed(
+	ctx context.Context,
+	channel, accountID string,
+	msgIDs []string,
+	conversationID string,
+	terminalStatus string,
+	perItem map[string]BridgeOutboundAckInput,
+	fence AckOutboundClaimFence,
+) (*AckOutboundResult, error) {
 	result := &AckOutboundResult{
 		Items: make([]AckOutboundItem, 0, len(msgIDs)),
 	}
@@ -285,7 +323,15 @@ func (s *InboxIngressService) AckOutboundDeliveredDetailed(
 
 	updatedIDSet := make(map[string]struct{}, len(toAck))
 	if len(toAck) > 0 {
-		updatedIDs, affected, err := s.hubRepo.AckOutboundDeliveredBatchReturningWithStatus(ctx, channel, accountID, conversationID, terminalStatus, toAck)
+		var updatedIDs []string
+		var affected int64
+		var err error
+		if len(fence) > 0 {
+			// CH-37b 刀2 claim 栅栏：仅当行当前 inflight 且 claimed_at 与调用方所见一致才翻转。
+			updatedIDs, affected, err = s.hubRepo.AckOutboundDeliveredBatchReturningWithStatusFenced(ctx, channel, accountID, conversationID, terminalStatus, toAck, fence)
+		} else {
+			updatedIDs, affected, err = s.hubRepo.AckOutboundDeliveredBatchReturningWithStatus(ctx, channel, accountID, conversationID, terminalStatus, toAck)
+		}
 		if err != nil {
 			return nil, err
 		}

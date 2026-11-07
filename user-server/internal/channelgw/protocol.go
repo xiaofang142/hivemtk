@@ -239,6 +239,13 @@ type OutboundReply struct {
 	MediaURL       string `json:"media_url,omitempty"`
 	ReplyToEventID string `json:"reply_to_event_id,omitempty"`
 	Truncated      bool   `json:"truncated,omitempty"`
+
+	// CH-37b 刀2：认领租约透出（claim 时服务端写下的乐观并发锚点，均为 message_hub 既有列）。
+	// 客户端回 ack 时原样带回（fence 入参按 msg_id → claimed_at），服务端据此做栅栏校验：
+	// 仅当行仍 inflight 且 claimed_at 与认领所见一致才翻转。缺省省略（旧客户端不认识
+	// 这些键也安全：JSON 反序列化忽略未知字段）。
+	ClaimedAt    *time.Time `json:"claimed_at,omitempty"`
+	PushAttempts int        `json:"push_attempts,omitempty"`
 }
 
 type OutboxMessage struct {
@@ -261,7 +268,8 @@ type OutboxMessage struct {
 //   - Message: 单条上行消息（inbound_message / history / register 帧）
 //   - Messages: 批量上行消息（inbound_message 帧可选，与 Message 合并处理）
 //   - Reply: 下行回复（outbound_reply 帧载荷），MsgID 为下发队列关联键（ack 回写用）
-//   - MsgIDs/Status: ack 帧（客户端确认下发 delivered）
+//   - MsgIDs/Status: ack 帧（客户端确认下发结果；Status 空=delivered（legacy），
+//     "failed"=发送失败终态，未知值按协议错误打点拒翻转——CH-37b 刀2 起 WS 消费）
 //   - Results: ack 帧（服务端回执上行处理结果）
 type Frame struct {
 	V         int              `json:"v,omitempty"`
@@ -280,6 +288,18 @@ type Frame struct {
 	Results   []*IngestResult  `json:"results,omitempty"`
 	Reason    string           `json:"reason,omitempty"`
 }
+
+// ack 帧 Status 字段的合法取值（CH-37b 刀2 起 WS 开始消费）：
+//   - 空 / "delivered"：确认送达（legacy 仅-delivered 帧继续可用，行为不变）
+//   - "failed"：确认发送失败，走详细 ack 的 failed 终态路径（停止重推）
+//   - 其余值：协议错误——本刀只做「拒翻转 + Warn + FrameAckUnknownStatusCount 打点」，
+//     unknown 值的完整语义（重试/断连策略）归 CH-37b 刀4（R2/R6）。
+//
+// 值复用 model.BridgeAckStatusDelivered / model.BridgeAckStatusFailed，不再另立词表。
+
+// FrameAckUnknownStatusCount ack 帧 Status 为未知值（既非 delivered/failed 也非空）的
+// 累计计数。进程级原子计数，供后续 metrics 接线（与 IngestExtraDroppedKeys 同款前置）。
+var FrameAckUnknownStatusCount atomic.Int64
 
 // MessageEventID 透传帧内单条上行消息的 EventID（便于日志/去重）。
 func (f *Frame) MessageEventID() string {
