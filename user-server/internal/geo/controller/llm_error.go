@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"

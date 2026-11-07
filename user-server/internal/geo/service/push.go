@@ -549,7 +549,6 @@ type PushService struct {
 	pushers  map[string]Pusher
 	quota    *QuotaManager
 	quotaDay string
-	mu       sync.Mutex
 }
 
 func NewPushService(

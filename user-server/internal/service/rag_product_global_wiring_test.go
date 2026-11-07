@@ -1,8 +1,10 @@
 // rag_product_global_wiring_test.go RagProduct 全局装配桥回归（AV-04c 批次6 刀2）。
 //
-// NewRagProductServiceFromGlobal 收口为 repository.NewRagConfigRepositoryFromGlobal
-// 桥接构造（kbrepo 仓储 + 全局句柄在仓储包内拼装）后：有库时仓储绑到测试库、
-// 读写路径行为不变；service 文件不再出现任何 .GetDB（AST 守卫棘轮锁定）。
+// NewRagProductServiceFromGlobal 收口为 kbrepo.NewRagConfigRepositoryDefault
+// 默认构造（AV-09 回归修复：批次6 的根 repository 桥与 knowledge/repository
+// 测试闭合成 test-only import 环，桥撤除，装配改走 kbrepo 仓储侧 Default
+// 构造）后：有库时仓储绑到测试库、读写路径行为不变；service 文件不再出现
+// 任何 .GetDB（AST 守卫棘轮锁定）。
 package service
 
 import (

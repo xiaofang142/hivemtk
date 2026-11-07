@@ -7,7 +7,6 @@ import (
 
 	kbrepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
@@ -22,11 +21,14 @@ func NewRagProductService(repo *kbrepo.RagConfigRepository) *RagProductService {
 
 // NewRagProductServiceFromGlobal 全局 DB 装配入口。
 // 供 router 装配层调用，controller 不直连 gorm（depguard controller-layer 规则）。
-// AV-04c 批次6：gorm 句柄的解析收回仓储层（repository.NewRagConfigRepositoryFromGlobal
-// 桥接构造，kbrepo 仓储 + 全局句柄在仓储包内拼装），service 不再触碰 DB 句柄；
-// 连接与解析时刻和原 `kbrepo.NewRagConfigRepository(repository.GetDB())` 完全一致。
+// AV-04c 批次6：gorm 句柄的解析收回仓储层，service 不再触碰 DB 句柄；
+// AV-09 回归修复：原批次6 在根 repository 包的 NewRagConfigRepositoryFromGlobal 桥
+// （root repository → kbrepo）令 knowledge/repository 的测试经 testmigrate→
+// migration→根 repository 闭合成 test-only import 环，桥撤除；装配改走批次7
+// 刀4 的 kbrepo.NewRagConfigRepositoryDefault（句柄在 kbrepo 仓储内解析，与
+// knowledge/service 既有装配同源，连接与解析时刻和原写法完全一致）。
 func NewRagProductServiceFromGlobal() *RagProductService {
-	return NewRagProductService(repository.NewRagConfigRepositoryFromGlobal())
+	return NewRagProductService(kbrepo.NewRagConfigRepositoryDefault())
 }
 
 func (s *RagProductService) List(ctx context.Context) ([]*model.RagProduct, error) {
