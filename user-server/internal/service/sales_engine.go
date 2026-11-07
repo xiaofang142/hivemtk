@@ -259,6 +259,18 @@ func agentIDFromCtx(req *SalesRequest) uint {
 
 type SalesResponse = dto.SalesResponse
 
+// salesEngineHandleFault 引擎故障注入接缝（仅测试装配；生产恒 nil，行为零差异）。
+// CS-02 引擎降级链用例（cs02_degraded_caliber_and_engine_fault_test.go）用它让
+// Handle 入口直接失败，从而真实驱动编排器的 L1 备用 Handle 重试 → L2 RuleEngine
+// → L3 转人工全链——生产代码里 Handle 除空参数外不返回错误，没有这条接缝那条
+// 降级链的中间两级对测试永远不可达。
+var salesEngineHandleFault func(req *SalesRequest) error
+
+// SetSalesEngineHandleFault 注入/清除引擎故障（fn=nil 恢复生产语义）。仅测试调用。
+func SetSalesEngineHandleFault(fn func(req *SalesRequest) error) {
+	salesEngineHandleFault = fn
+}
+
 func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResponse, error) {
 	if req == nil {
 		return nil, fmt.Errorf("request is nil")
@@ -268,6 +280,11 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 	}
 	if req.Config == nil {
 		req.Config = DefaultSalesEngineConfig()
+	}
+	if salesEngineHandleFault != nil {
+		if err := salesEngineHandleFault(req); err != nil {
+			return nil, err
+		}
 	}
 
 	// Layer1 FAQ 快速通道：命中就用标准答案直接回复，跳过 LLM 与 RAG。
@@ -481,6 +498,14 @@ func (e *SalesEngine) Handle(ctx context.Context, req *SalesRequest) (*SalesResp
 				},
 			})
 		}
+	}
+	// 模型空输出的降级兜底（emptyReplyFallback）不是模型答案：打上 Degraded 标记，
+	// 编排器透传到出站行 extra.degraded 并摘掉继承来的意图置信度（CS-02 口径）。
+	// 判定点在 generateCandidate 返回处、polish 之前——humanize/语言校准层改写文本
+	// 不影响标记；两条 fallback 注入点（plain dispatch 的空回复分支与 agent loop 的
+	// 空输出分支）产出的都是同一个常量串，字节等值判定即覆盖。
+	if candidate == e.emptyReplyFallback() {
+		resp.Degraded = true
 	}
 	if llmResult != nil {
 		resp.LLMProvider = llmResult.Provider

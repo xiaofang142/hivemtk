@@ -941,7 +941,10 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				outMsg.Extra["agent_id"] = agentID
 			}
 			if result := HandleResultFromContext(ctx); result != nil {
-				if result.Confidence > 0 {
+				// 降级轮（模型空输出 → emptyReplyFallback）没有模型答案：摘掉继承来的
+				// 意图置信度并写 degraded 标记——应答质量指标据此把降级轮与正常 AI
+				// 回答分开计数（CS-02 口径修复；handler_type/scenario/放行语义不变）。
+				if result.Confidence > 0 && !result.Degraded {
 					outMsg.Extra["confidence"] = result.Confidence
 				}
 				if result.SalesResponse != nil && result.SalesResponse.Intent != nil && result.SalesResponse.Intent.IntentType != "" {
@@ -949,6 +952,9 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				}
 				if result.HandlerType != "" {
 					outMsg.Extra["handler_type"] = string(result.HandlerType)
+				}
+				if result.Degraded {
+					outMsg.Extra["degraded"] = "model_empty_reply"
 				}
 			}
 			// 桥接族的出库载体只有文本列（content + msg_type=text），富卡到这里没有可挂的下游

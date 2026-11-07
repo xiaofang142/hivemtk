@@ -318,7 +318,13 @@ type SalesResponse struct {
 	// DefiniteAnswer 标记本条回复来自确定答案（FAQ 标准答案 / 人工标注答案），
 	// 而不是模型现场生成。编排器据此跳过置信度判据——确定答案就是标准答案本身，
 	// 不需要再判"这个回答可不可信"。
-	DefiniteAnswer bool           `json:"definite_answer,omitempty"`
+	DefiniteAnswer bool `json:"definite_answer,omitempty"`
+
+	// Degraded 标记本条回复是引擎的降级兜底文案（模型空输出 → emptyReplyFallback），
+	// 不是模型生成的答案。编排器透传到出站行 extra.degraded，并把意图置信度从出站行
+	// extra.confidence 摘掉——降级轮没有模型答案，不得声称任何置信度，否则应答质量
+	// 指标把降级轮当正常 AI 回答计数（CS-02 口径修复；放行语义不变）。
+	Degraded       bool           `json:"degraded,omitempty"`
 	TransferReason string         `json:"transfer_reason,omitempty"`
 	Cards          []RichCard     `json:"cards,omitempty"`
 	Steps          []SalesStepLog `json:"steps"`

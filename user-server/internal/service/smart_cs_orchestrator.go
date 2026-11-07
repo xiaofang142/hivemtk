@@ -251,6 +251,11 @@ type HandleResult struct {
 	// Citations 答案引用溯源（T2）：透传本轮回答的引用（旁路字段），
 	// 转人工轮次恒为空。webhook/桥接出站侧不拼接（IM 无富文本引用 UI）。
 	Citations []dto.Citation `json:"citations,omitempty"`
+	// Degraded 本轮回复是引擎的降级兜底文案（模型空输出 → emptyReplyFallback），
+	// 不是模型生成的答案。透传自 SalesResponse.Degraded；出站侧据此写
+	// extra.degraded 并摘掉继承的意图置信度——应答质量指标把降级轮与正常
+	// AI 回答分开计数（CS-02 口径修复）。
+	Degraded bool `json:"degraded,omitempty"`
 }
 
 // HandleIncoming 处理入站消息（智能体主入口，默认配置）
@@ -489,6 +494,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	result.HandlerType = model.HandlerTypeAI
 	result.AIReplied = true
 	result.Reply = salesResp.Reply
+	result.Degraded = salesResp.Degraded
 	sla.Record(sla.SLOInboundHandled, true)
 
 	// FAQ 答案缓存写入守卫：只有当 top1 RAG 召回分数达到置信度阈值时才缓存。
