@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"strconv"
@@ -152,15 +151,16 @@ func (s *InboxIngressService) SetPendingOutboundProbe(repo *repository.DelayedOu
 }
 
 func NewInboxIngressService() *InboxIngressService {
-	db := dbUtil.GetDB()
 	// 与原 WithDB 语义一致：全局无 DB 时 repo 留 nil，落库路径 no-op（单测密封验证依赖此行为）。
+	// AV-04c 批次6：句柄判断收回 repository.DBReady() 探针，仓储走包内捕获全局句柄
+	// 的 Default/无参构造——连接与原「取一次句柄传三个构造」完全一致。
 	var hubRepo *repository.MessageHubRepository
 	var feedbackRepo *repository.FeedbackRecordRepository
 	var pendingOutbound *repository.DelayedOutboundRepository
-	if db != nil {
-		hubRepo = repository.NewMessageHubRepositoryWithDB(db)
-		feedbackRepo = repository.NewFeedbackRecordRepository(db)
-		pendingOutbound = repository.NewDelayedOutboundRepository(db)
+	if repository.DBReady() {
+		hubRepo = repository.NewMessageHubRepository()
+		feedbackRepo = repository.NewFeedbackRecordRepositoryDefault()
+		pendingOutbound = repository.NewDelayedOutboundRepositoryDefault()
 	}
 	return &InboxIngressService{
 		hubRepo:         hubRepo,

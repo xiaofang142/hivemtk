@@ -22,9 +22,13 @@ type DataExportService struct {
 }
 
 // NewDataExportService 创建服务实例
+//
+// AV-04c 批次6：仓储改 Default 构造在仓储包内捕获全局句柄——连接、解析时刻与原
+// `NewDataExportRepository(repository.GetDB())` 完全一致；全局无句柄时得到 db=nil
+// 的仓储，Export 走既有 r.db == nil 守卫返回 gorm.ErrInvalidDB（错误路径不变）。
 func NewDataExportService() *DataExportService {
 	return &DataExportService{
-		repo: repository.NewDataExportRepository(repository.GetDB()),
+		repo: repository.NewDataExportRepositoryDefault(),
 	}
 }
 

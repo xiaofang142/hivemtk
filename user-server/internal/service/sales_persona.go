@@ -13,18 +13,21 @@ type SalesPersonaService struct {
 }
 
 // NewSalesPersonaService 创建服务
+//
+// AV-04c 批次6：仓储改 Default 构造在仓储包内捕获全局句柄；全局无句柄时仓储为
+// nil，读路径由 BuildReport/ListStaffs 先经 ensureReposFromDB 再用仓储，8 个聚合
+// 查询方法自带 r == nil || r.db == nil 守卫，输出与原「直取句柄拼仓储」一致。
 func NewSalesPersonaService() *SalesPersonaService {
-	return &SalesPersonaService{repo: repository.NewSalesPersonaRepository(repository.GetDB())}
+	return &SalesPersonaService{repo: repository.NewSalesPersonaRepositoryDefault()}
 }
 
-// ensureReposFromDB repo 缺失时从全局 DB 懒构造（fail-open，无 DB 时由调用方空值防御兜底）
+// ensureReposFromDB repo 缺失时从全局 DB 懒构造（fail-open，无 DB 时由调用方空值防御兜底）。
+// Default 构造在无句柄时返回 nil：s.repo 保持 nil，下次调用再试（原懒构造语义不变）。
 func (s *SalesPersonaService) ensureReposFromDB(ctx context.Context) {
 	if s.repo != nil {
 		return
 	}
-	if db := repository.GetDB(); db != nil {
-		s.repo = repository.NewSalesPersonaRepository(db)
-	}
+	s.repo = repository.NewSalesPersonaRepositoryDefault()
 }
 
 // PersonaItem 能力画像项

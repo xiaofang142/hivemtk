@@ -51,6 +51,15 @@ func NewDelayedOutboundRepository(db *gorm.DB) *DelayedOutboundRepository {
 	return &DelayedOutboundRepository{db: db}
 }
 
+// NewDelayedOutboundRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+//
+// AV-04c 批次6：service/inbox_ingress.go 装配（SetPendingOutboundProbe 的默认探针）
+// 原先自己取全局句柄再传进来（service 直取 DB 句柄的宽口径），收口为包级构造——
+// 调用方以 repository.DBReady() 探针保持「无库即留 nil」的原装配语义。
+func NewDelayedOutboundRepositoryDefault() *DelayedOutboundRepository {
+	return NewDelayedOutboundRepository(GetDB())
+}
+
 // CreatePending 写入 pending 延迟回复记录。
 //
 // 句柄缺失 ⇒ 报错而不是静默成功：调用方把 nil 读成「已入队」，于是这条

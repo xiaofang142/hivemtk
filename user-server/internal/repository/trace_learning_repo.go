@@ -24,6 +24,32 @@ func NewTraceLearningRepository(db *gorm.DB) *TraceLearningRepository {
 	return &TraceLearningRepository{db: db}
 }
 
+// NewTraceLearningRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+//
+// AV-04c 批次6：trace_learning.Service 兜底装配（repo==nil 时）原先在 service 里
+// 取 repository.GetDB() 拼本仓储（service 直取 DB 句柄的宽口径），收口为本构造——
+// 句柄在仓储包内解析，连接、解析时刻与原写法完全一致（全局无句柄时得到 db=nil
+// 的仓储，DBReady/Upsert 系既有守卫兜底，无库语义不变）。
+func NewTraceLearningRepositoryDefault() *TraceLearningRepository {
+	return NewTraceLearningRepository(GetDB())
+}
+
+// Connection 在本仓储绑定的连接上执行独占连接回调（gorm (*gorm.DB).Connection
+// 同形接缝，AV-04c 批次6 下沉；AV-03 钉住的根域唯一合法事务档接缝——RunBatch 的
+// session 级 advisory lock——沿原形状保留在 service 侧）。
+//
+// 为什么 service 需要「独占连接」：session 级 advisory lock 只对**同一连接**生效，
+// 锁的获取/释放与锁内的 ListPendingTraceIDs 扫描必须走同一个 session，否则各拿
+// 各的连接，锁形同虚设。与直接暴露 GetDB() 的区别：句柄不出仓储，service 只能在
+// 回调作用域内使用这条连接。WithContext(ctx) → Connection(fn) 的链路形状与原
+// `s.repo.GetDB().WithContext(ctx).Connection(fn)` 逐字等价。
+func (r *TraceLearningRepository) Connection(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	if r == nil || r.db == nil {
+		return gorm.ErrInvalidDB
+	}
+	return r.db.WithContext(ctx).Connection(fn)
+}
+
 // GetDB 暴露底层连接（仅供 trace_learning 聚合/权重调整等只读协作方复用同一连接/事务）
 func (r *TraceLearningRepository) GetDB() *gorm.DB {
 	if r == nil {

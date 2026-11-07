@@ -19,6 +19,15 @@ func NewFeedbackRecordRepository(db *gorm.DB) *FeedbackRecordRepository {
 	return &FeedbackRecordRepository{db: db}
 }
 
+// NewFeedbackRecordRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+//
+// AV-04c 批次6：service/inbox_ingress.go 装配原先自己取全局句柄再传进来
+// （service 直取 DB 句柄的宽口径），收口为包级构造——调用方以 repository.DBReady()
+// 探针保持「无库即留 nil」的原装配语义（单测密封验证依赖）。
+func NewFeedbackRecordRepositoryDefault() *FeedbackRecordRepository {
+	return NewFeedbackRecordRepository(GetDB())
+}
+
 func NewFeedbackRecordRepositoryWithTx(tx *gorm.DB) *FeedbackRecordRepository {
 	return &FeedbackRecordRepository{db: tx}
 }

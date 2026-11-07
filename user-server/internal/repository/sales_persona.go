@@ -19,6 +19,20 @@ func NewSalesPersonaRepository(db *gorm.DB) *SalesPersonaRepository {
 	return &SalesPersonaRepository{db: db}
 }
 
+// NewSalesPersonaRepositoryDefault 默认构造（全局句柄；未装配时返回 nil，调用方按
+// 「repo 未装配」处理——NewFAQRepositoryDefault 同款语义）。
+//
+// AV-04c 批次6：service/sales_persona.go 的构造期装配与 ensureReposFromDB 懒构造
+// 原先都自己取 repository.GetDB()（service 直取 DB 句柄的宽口径），收口为本构造。
+// 全局无句柄时返回 nil：懒构造侧保持「本轮回退、下轮再试」的原语义；全部 8 个
+// 查询方法既有 r == nil || r.db == nil 守卫（fail-open 记零分），无库输出不变。
+func NewSalesPersonaRepositoryDefault() *SalesPersonaRepository {
+	if db := GetDB(); db != nil {
+		return NewSalesPersonaRepository(db)
+	}
+	return nil
+}
+
 // AvgHumanResponseSec 统计近 30 天人工座席的平均响应时长（秒），
 // 按 session_id 分区取相邻消息时间差。
 func (r *SalesPersonaRepository) AvgHumanResponseSec(ctx context.Context) (float64, error) {

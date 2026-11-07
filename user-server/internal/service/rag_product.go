@@ -22,9 +22,11 @@ func NewRagProductService(repo *kbrepo.RagConfigRepository) *RagProductService {
 
 // NewRagProductServiceFromGlobal 全局 DB 装配入口。
 // 供 router 装配层调用，controller 不直连 gorm（depguard controller-layer 规则）。
-// gorm 句柄经 repository 层 GetDB() 访问器获取，service 自身不 import pkg/db。
+// AV-04c 批次6：gorm 句柄的解析收回仓储层（repository.NewRagConfigRepositoryFromGlobal
+// 桥接构造，kbrepo 仓储 + 全局句柄在仓储包内拼装），service 不再触碰 DB 句柄；
+// 连接与解析时刻和原 `kbrepo.NewRagConfigRepository(repository.GetDB())` 完全一致。
 func NewRagProductServiceFromGlobal() *RagProductService {
-	return NewRagProductService(kbrepo.NewRagConfigRepository(repository.GetDB()))
+	return NewRagProductService(repository.NewRagConfigRepositoryFromGlobal())
 }
 
 func (s *RagProductService) List(ctx context.Context) ([]*model.RagProduct, error) {

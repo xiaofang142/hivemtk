@@ -105,15 +105,17 @@ func NewFAQServiceDefault() *FAQService {
 //
 // 句柄由 repository 自取全局库（测试用 db.SetTestDB／testutil 换库）；库未就绪时两个
 // repo 都留 nil。bindingRepo 也可在装配后走 SetBindingRepo 注入。
+// AV-04c 批次6：句柄判断收回 repository.DBReady() 探针，仓储走 Default 构造在
+// 仓储包内捕获全局句柄——连接与原「取一次句柄传两个构造」完全一致。
 func NewFAQService() *FAQService {
 	svc := &FAQService{
 		clock:  realClock{},
 		cache:  make(map[uint][]model.FAQEntry),
 		loaded: make(map[uint]time.Time),
 	}
-	if db := repository.GetDB(); db != nil {
-		svc.repo = repository.NewFAQRepository(db)
-		svc.bindingRepo = repository.NewAgentKBBindingRepository(db)
+	if repository.DBReady() {
+		svc.repo = repository.NewFAQRepositoryDefault()
+		svc.bindingRepo = repository.NewAgentKBBindingRepositoryDefault()
 	}
 	return svc
 }

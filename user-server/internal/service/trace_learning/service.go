@@ -46,7 +46,8 @@ func New(repo *repository.TraceLearningRepository, dispatcher *llm.Dispatcher, c
 		}
 	}
 	if repo == nil {
-		repo = repository.NewTraceLearningRepository(repository.GetDB())
+		// AV-04c 批次6：兜底装配改 Default 构造（句柄解析下沉仓储层，同连接同时刻）。
+		repo = repository.NewTraceLearningRepositoryDefault()
 	}
 	return &Service{repo: repo, dispatcher: dispatcher, cfg: cfg}
 }
@@ -143,7 +144,9 @@ const runBatchLockKey int64 = 9173001
 
 func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRun bool) (*BatchResult, error) {
 	ctx = ensureCtx(ctx)
-	if s.repo == nil || s.repo.GetDB() == nil {
+	// AV-04c 批次6：句柄判断改 DBReady() 就绪探针（nil 接收者安全，语义同原
+	// `s.repo == nil || s.repo.GetDB() == nil`），错误文案保持「db nil」。
+	if !s.repo.DBReady() {
 		return nil, fmt.Errorf("db nil")
 	}
 	if batchSize <= 0 || batchSize > 500 {
@@ -158,7 +161,10 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 	var previewMu sync.Mutex
 	var previewBuf []*model.TraceEvalLog
 
-	connErr := s.repo.GetDB().WithContext(ctx).Connection(func(conn *gorm.DB) error {
+	// AV-03 钉住的合法 Connection 接缝（advisory lock）：回调体逐字保留，仅把
+	// 「取句柄再开独占连接」换成仓储同名 Connection 接缝（WithContext→Connection
+	// 链路等价，锁与锁内扫描仍同一条连接）。
+	connErr := s.repo.Connection(ctx, func(conn *gorm.DB) error {
 		held, e := dbutil.TryAdvisoryLock(ctx, conn, runBatchLockKey)
 		if e != nil {
 			return e

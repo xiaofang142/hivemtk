@@ -575,8 +575,16 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// SessionMessageRepository.MarkMessageDelivered（delivered_at 单字段白名单）；
 	// 谓词/排序/分页/租户语义逐项不变（回归见 repository/customer_session_pending_pool_test.go
 	// 与 service/customer_session_pending_pool_test.go）。
-	"user-server/internal/service/data_export.go": {getdb: 1},
-	"user-server/internal/service/faq.go":         {getdb: 1},
+	// AV-04c 批次6（2026-11-07）刀1+刀2：data_export/faq/inbox/inbox_ingress/
+	// inbox_scope/objection_handler/rag_product/sales_persona/sop_template 九文件
+	// getdb 清零除名 —— 装配收口为包级 DBReady() 探针 + Default/FromGlobal 构造
+	//（inbox 坐席投影查询下沉 InboxConversationRepository.ListAssignableAgents，
+	// rag_product 经 repository.NewRagConfigRepositoryFromGlobal 桥接 kbrepo 仓储，
+	// objection_handler 兜底版本回填改 FromGlobal 预解析仓储），SQL/错误路径逐字
+	// 不变（回归见 repository/inbox_assignable_agents_test.go、service/
+	// inbox_scope_agents_test.go、sales_persona_wiring_test.go、
+	// rag_product_global_wiring_test.go、objection_handler_fallback_version_test.go、
+	// sop/sop_template_wiring_test.go）。
 	// AV-04c 批次5（2026-11-07）：feedback_learning getdb 2、feedback_learning_cron
 	// getdb 2 清零除名 —— SOP 兄弟仓储改包级 Shared 构造共享注入连接
 	//（NewSopAgentRepositoryShared/NewSopExecutionRepositoryShared，批次4
@@ -584,18 +592,22 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// feedback_loop_cron getdb 1 清零除名 —— 两仓储改 Default 构造 + 包级 DBReady()
 	// 探针（NewSopAgentRepositoryDefault/NewFeedbackLoopRepositoryDefault 先例）。
 	// feedback_loop_init.go 仍登记 {getdb: 2}（移交批次 6）。
-	"user-server/internal/service/feedback_loop_init.go":     {getdb: 2},
-	"user-server/internal/service/inbox.go":                  {getdb: 1},
-	"user-server/internal/service/inbox_ingress.go":          {getdb: 1},
-	"user-server/internal/service/inbox_scope.go":            {getdb: 1},
-	"user-server/internal/service/knowledge_base.go":         {getdb: 1},
-	"user-server/internal/service/objection_handler.go":      {getdb: 1},
-	"user-server/internal/service/openapi.go":                {getdb: 2},
-	"user-server/internal/service/rag_product.go":            {getdb: 1},
-	"user-server/internal/service/sales_persona.go":          {getdb: 2},
-	"user-server/internal/service/sop/sop_template.go":       {getdb: 1},
-	"user-server/internal/service/tenant.go":                 {getdb: 1},
-	"user-server/internal/service/trace_learning/service.go": {tx: 1, getdb: 3}, // tx=1：原基线的 Connection 接缝（advisory lock），沿原基线
+	// AV-04c 批次6（2026-11-07）刀3：feedback_loop_init getdb 2 清零除名 ——
+	// InitFeedbackCollector / InitFeedbackLoopComponents 两个装配点改
+	// NewFeedbackLoopRepositoryDefault（句柄解析下沉仓储层，同连接同时刻；
+	// 回归见 service/feedback_loop_init_wiring_test.go）。
+	"user-server/internal/service/knowledge_base.go": {getdb: 1},
+	"user-server/internal/service/openapi.go":        {getdb: 2},
+	// AV-04c 批次6（2026-11-07）刀3+刀4：tenant/feedback_loop_init/trace_learning
+	// 四文件 getdb 全部清零 —— tenant 开户赠送改 NewStarterKitRepositoryDefault、
+	// feedback 两个装配点改 NewFeedbackLoopRepositoryDefault（句柄解析下沉仓储层）；
+	// trace_learning 兜底装配改 NewTraceLearningRepositoryDefault、RunBatch 前置
+	// 判断改 DBReady() 探针、独占连接改仓储同名 Connection 接缝（WithContext→
+	// Connection 链路等价）。tx=1 保留：AV-03 钉住的根域唯一合法事务档接缝
+	//（session 级 advisory lock），回调体逐字未动。
+	// 回归见 service/feedback_loop_init_wiring_test.go 与
+	// service/trace_learning/run_batch_conn_seam_test.go。
+	"user-server/internal/service/trace_learning/service.go": {tx: 1},
 	"user-server/internal/service/webhook.go":                {getdb: 2},
 	"user-server/internal/service/wecom.go":                  {getdb: 1},
 }

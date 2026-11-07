@@ -18,6 +18,16 @@ func NewDataExportRepository(db *gorm.DB) *DataExportRepository {
 	return &DataExportRepository{db: db}
 }
 
+// NewDataExportRepositoryDefault 默认构造（全局句柄；与传 GetDB() 同语义）。
+//
+// AV-04c 批次6：service/data_export.go 装配原先自己取 repository.GetDB() 拼本仓储
+// （service 直取 DB 句柄的宽口径），收口为包级构造——句柄在仓储包内解析，连接、
+// 解析时刻与原写法完全一致（全局无句柄时得到 db=nil 的仓储，GetCustomer 等方法
+// 既有 r == nil || r.db == nil 守卫，错误路径不变）。
+func NewDataExportRepositoryDefault() *DataExportRepository {
+	return NewDataExportRepository(GetDB())
+}
+
 // GetCustomer 按主键取客户
 func (r *DataExportRepository) GetCustomer(ctx context.Context, customerID string) (*model.Customer, error) {
 	if r == nil || r.db == nil {

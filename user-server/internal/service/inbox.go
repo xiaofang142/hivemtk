@@ -17,7 +17,6 @@ import (
 
 	"hivemtk-user/internal/repository"
 
-	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"sort"
 
@@ -145,17 +144,18 @@ type InboxService struct {
 }
 
 func NewInboxService() *InboxService {
-	db := dbUtil.GetDB()
 	// 与原 WithDB 语义一致：全局无 DB 时 repo 留 nil，读路径返回空（单测 NilDB 家族依赖此行为）。
+	// AV-04c 批次6：句柄判断收回 repository.DBReady() 探针，四个仓储走无参构造
+	// 在仓储包内捕获全局句柄——连接与原「取一次句柄传四个 WithDB」完全一致。
 	var inboxRepo *repository.InboxConversationRepository
 	var assignmentRepo *repository.InboxAssignmentRepository
 	var hubRepo *repository.MessageHubRepository
 	var sessionMsgRepo *repository.SessionMessageRepository
-	if db != nil {
-		inboxRepo = repository.NewInboxConversationRepositoryWithDB(db)
-		assignmentRepo = repository.NewInboxAssignmentRepositoryWithDB(db)
-		hubRepo = repository.NewMessageHubRepositoryWithDB(db)
-		sessionMsgRepo = repository.NewSessionMessageRepositoryWithDB(db)
+	if repository.DBReady() {
+		inboxRepo = repository.NewInboxConversationRepository()
+		assignmentRepo = repository.NewInboxAssignmentRepository()
+		hubRepo = repository.NewMessageHubRepository()
+		sessionMsgRepo = repository.NewSessionMessageRepository()
 	}
 	return &InboxService{
 		inboxRepo:      inboxRepo,

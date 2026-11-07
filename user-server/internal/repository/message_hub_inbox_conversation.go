@@ -56,6 +56,37 @@ func SetInboxConversationRepoDB(r *InboxConversationRepository, db *gorm.DB) {
 	r.SetDB(context.Background(), db)
 }
 
+// AssignableAgentRow 收件箱「可分配坐席」的脱敏投影：分配下拉框只用的四列。
+// （service.InboxAgent 是 controller 响应视图，带 json tag；本行结构是仓储投影，
+// 两者字段一一对应，由 service 层做同构搬运。）
+type AssignableAgentRow struct {
+	ID       uint
+	Username string
+	RealName string
+	Role     string
+}
+
+// ListAssignableAgents 列出能接手会话的在职坐席（客服／员工两档）。
+//
+// 原写在 service/inbox_scope.go（经 dbUtil.GetDB() 直查，AV-04c 批次6 下沉）：
+// SQL 逐字保留 —— agent_statuses AS a JOIN system_users，只出 u.id/u.username/
+// u.real_name/u.role 四列；坐席口径是「有坐席档案且未删除（a.deleted_at IS NULL），
+// 且账号 enabled=true、status=1」（2026-11-04 T1 线上验收 BUG-2 口径修正：按档案
+// join 而不是角色白名单，停用账号不进候选名单）；按 u.username 升序稳定输出。
+func (r *InboxConversationRepository) ListAssignableAgents(ctx context.Context) ([]AssignableAgentRow, error) {
+	if r == nil || r.db == nil {
+		return nil, nil
+	}
+	var rows []AssignableAgentRow
+	err := r.db.WithContext(ctx).Table("agent_statuses AS a").
+		Select("u.id", "u.username", "u.real_name", "u.role").
+		Joins("JOIN system_users AS u ON u.id = a.agent_id AND u.enabled = ? AND u.status = ?", true, 1).
+		Where("a.deleted_at IS NULL").
+		Order("u.username").
+		Scan(&rows).Error
+	return rows, err
+}
+
 // InboxConversationQuery 会话列表查询条件（与 service.InboxQuery 字段对齐）
 type InboxConversationQuery struct {
 	Platform    string

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	dbUtil "hivemtk-user/internal/pkg/db"
 )
 
 // ErrInboxForbidden 非超管访问了未分配给自己的会话（数据权限拦截）
@@ -170,6 +169,10 @@ type InboxAgent struct {
 // 是可以授予坐席的——于是"页面打得开、分配下拉永远空"。这里单独出一条口，只出四列
 // （不含 email/phone/data_scope/口令形态这类只有账号管理页才该看见的东西），
 // 且只出 enabled 且 status=1 的行：停用账号继续出现在候选名单里，等于把会话分配给没人接的坐席。
+//
+// AV-04c 批次6：agent_statuses⋈system_users 的四列投影查询下沉
+// InboxConversationRepository.ListAssignableAgents（SQL 逐字保留），本层只做
+// 脱敏视图搬运；controller 响应契约（json 字段、空名单为 null）不变。
 func (s *InboxService) ListAssignableAgents(ctx context.Context) ([]InboxAgent, error) {
 	if s.inboxRepo == nil {
 		// 与其余读路径同一套"无库回空"语义（全局句柄未注入时不报错、不查库）。
@@ -180,12 +183,18 @@ func (s *InboxService) ListAssignableAgents(ctx context.Context) ([]InboxAgent, 
 	// 新租户上永远为空——租户唯一账号是 admin 角色，而坐席档案（agent_statuses）
 	// 在注册/首次上线时就已建好。按档案 join 后：admin 老板兼客服出现在名单里；
 	// 反过来，仅账号域的 admin（无坐席档案）依旧不会混进脱敏投影。
+	rows, err := s.inboxRepo.ListAssignableAgents(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var agents []InboxAgent
-	err := dbUtil.GetDB().WithContext(ctx).Table("agent_statuses AS a").
-		Select("u.id", "u.username", "u.real_name", "u.role").
-		Joins("JOIN system_users AS u ON u.id = a.agent_id AND u.enabled = ? AND u.status = ?", true, 1).
-		Where("a.deleted_at IS NULL").
-		Order("u.username").
-		Scan(&agents).Error
-	return agents, err
+	for _, row := range rows {
+		agents = append(agents, InboxAgent{
+			ID:       row.ID,
+			Username: row.Username,
+			RealName: row.RealName,
+			Role:     row.Role,
+		})
+	}
+	return agents, nil
 }

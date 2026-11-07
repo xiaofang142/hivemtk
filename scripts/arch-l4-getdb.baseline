@@ -13,25 +13,8 @@
 # 连接构造兄弟仓储/在启动期装配，收口需构造注入，登记同样只是承认存量。
 存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 存量：service 直接取 DB 句柄，收口需改构造注入（三个构造器各取 1–2 处：NewAIAgentService/NewChannelAgentBindingService/NewCustomerServiceAgentService）
-user-server/internal/service/customer_session.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/customer_session_scope.go	2	存量：service 经 sessionRepo.GetDB 取句柄做只读作用域过滤（RBAC 隔离批次新增，同 R22 口径待收口为构造注入）
-user-server/internal/service/data_export.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/faq.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/feedback_learning.go	2	存量：服务用同一连接构造两个 SOP 仓储（W-2 H4 域，收口需构造注入）
-user-server/internal/service/feedback_learning_cron.go	2	存量：cron 用同一连接构造 SOP 仓储（W-2 H4 域，收口需构造注入）
-user-server/internal/service/feedback_loop_cron.go	1	存量：cron 构造期取全局库句柄装配两仓储（W-2 H4 域，收口需构造注入）
-user-server/internal/service/feedback_loop_init.go	2	存量：启动期装配反馈组件时取全局库句柄（W-2 H4 域，收口需构造注入）
-user-server/internal/service/inbox.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/inbox_ingress.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/inbox_scope.go	1	存量：作用域过滤直接查 system_users 表，走的是全局库句柄，收口需改构造注入
 user-server/internal/service/knowledge_base.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/objection_handler.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/openapi.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/rag_product.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/sales_persona.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
-user-server/internal/service/sop/sop_template.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增；2026-11-05 拆包迁入 sop/ 子包，处数不变）
-user-server/internal/service/tenant.go	1	存量：起步赠送经 tenantRepo.GetDB 取句柄（RBAC/sessionRepo 同款口径，2026-10-20 登记；全局 _db.GetDB 已改写清零）
 user-server/internal/service/cards/tiktok_card.go	1	存量：卡片服务构造时取全局库句柄，收口需改构造注入（2026-11-05 拆包迁入 cards/ 子包，处数不变）
-user-server/internal/service/trace_learning/service.go	3	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/webhook.go	2	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）
 user-server/internal/service/wecom.go	1	存量：service 直接取 DB 句柄，收口需改构造注入（R22 登记，勿新增）

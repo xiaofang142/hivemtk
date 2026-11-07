@@ -75,15 +75,15 @@ func NewSOPTemplateServiceDefault() *SOPTemplateService {
 
 // NewSOPTemplateService 创建 SOP Service（句柄由 repository 自取全局库；
 // bindingRepo 走 SetBindingRepo 注入）。
+// AV-04c 批次6：句柄判断收回 repository.DBReady() 探针，两仓储走 Default 构造在
+// 仓储包内捕获全局句柄——连接与原「取一次句柄传两个构造」完全一致；无库时两
+// 仓储都留 nil（读路径回空语义不变）。
 func NewSOPTemplateService() *SOPTemplateService {
-	db := repository.GetDB()
 	var iface sopRepoIface
-	if db != nil {
-		iface = repository.NewSOPTemplateRepository(db)
-	}
 	var bindingIface sopBindingRepoIface
-	if db != nil {
-		bindingIface = repository.NewAgentKBBindingRepository(db)
+	if repository.DBReady() {
+		iface = repository.NewSOPTemplateRepositoryDefault()
+		bindingIface = repository.NewAgentKBBindingRepositoryDefault()
 	}
 	return &SOPTemplateService{
 		repo:        iface,

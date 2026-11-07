@@ -58,10 +58,13 @@ func (a *feedbackLLMAdapter) Dispatch(ctx context.Context, scenario string, prom
 // InitFeedbackCollector 初始化反馈采集器（启动时调用一次）
 //
 // 启动后会异步消费事件队列（每 2s 刷盘），调用 Stop() 优雅关闭
+// AV-04c 批次6：仓储改 Default 构造在仓储包内捕获全局句柄——连接、解析时刻与原
+// `NewFeedbackLoopRepositoryWithDB(repository.GetDB())` 完全一致（全局无句柄时
+// 同样得到 db=nil 的仓储，落库路径行为不变）。
 func InitFeedbackCollector() *feedbackloop.FeedbackCollector {
 	feedbackCollectorOnce.Do(func() {
 		cfg := FeedbackCollectorConfigFromParams(context.Background())
-		feedbackCollector = feedbackloop.NewFeedbackCollector(repository.NewFeedbackLoopRepositoryWithDB(repository.GetDB()), cfg)
+		feedbackCollector = feedbackloop.NewFeedbackCollector(repository.NewFeedbackLoopRepositoryDefault(), cfg)
 	})
 	return feedbackCollector
 }
@@ -80,8 +83,9 @@ func InitFeedbackLoopComponents(dispatcher *llm.Dispatcher, embedder *embedding.
 	llmAdapter := &feedbackLLMAdapter{dispatcher: dispatcher}
 
 	// 五个组件的配置全部走参数中心（feedback 组，22 条，构造期读，Restart=true）。
+	// AV-04c 批次6：仓储改 Default 构造（同 InitFeedbackCollector，句柄解析下沉仓储层）。
 	bg := context.Background()
-	flrepo := repository.NewFeedbackLoopRepositoryWithDB(repository.GetDB())
+	flrepo := repository.NewFeedbackLoopRepositoryDefault()
 	collector := feedbackloop.NewFeedbackCollector(flrepo, FeedbackCollectorConfigFromParams(bg))
 	analyzer := feedbackloop.NewChampionDialogueAnalyzer(flrepo, embAdapter, llmAdapter, ChampionAnalyzerConfigFromParams(bg))
 	iterator := feedbackloop.NewPromptIterator(flrepo, llmAdapter, PromptIteratorConfigFromParams(bg))

@@ -407,13 +407,14 @@ func fallbackVersionOf(ctx context.Context, templateID uint) int {
 	}
 	versionCacheMu.RUnlock()
 
-	// 句柄必须在 spawning 之前解析：repository.GetDB() 读的是 pkg/db 的包级全局，
-	// 放进下面的异步体就会与别的 goroutine（测试里 100 处 db.SetTestDB，进程里任何一次
+	// 句柄必须在 spawning 之前解析：全局句柄读的是 pkg/db 的包级全局，放进下面的
+	// 异步体就会与别的 goroutine（测试里 100 处 db.SetTestDB，进程里任何一次
 	// 重初始化）抢同一地址。同形状的 fire-and-forget 见 session_chain.go:TriggerCSATOnClose。
-	handle := repository.GetDB()
+	// AV-04c 批次6：解析动作下沉仓储层——FromGlobal 构造在 spawning 之前同步取
+	// 全局句柄并拼好仓储，解析时刻与原「service 取句柄再传构造」完全一致。
+	repo := repository.NewScriptLibraryRepositoryFromGlobal()
 	go func(id uint) {
 		defer func() { _ = recover() }()
-		repo := repository.NewScriptLibraryRepository(handle)
 		if repo == nil {
 			return
 		}
