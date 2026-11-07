@@ -199,6 +199,64 @@ func (r *CustomerSessionRepository) GetByMerchantForAgent(ctx context.Context, s
 	return sessions, total, err
 }
 
+// ----------------------------------------------------------------------------
+// 待处理池读口（AV-04c 批次5 刀1 自 service/customer_session.go、
+// customer_session_scope.go 下沉）：原先 service 经 sessionRepo.GetDB(ctx)
+// 直拼 Where/Order/Offset/Limit，此处按原谓词、原排序、原分页语义逐字收口。
+// 状态集合由调用方传入（pending/ai_handling/waiting 的领域口径留在 service），
+// 谓词与排序是查询细节，归仓储。
+// ----------------------------------------------------------------------------
+
+// ListPending 待处理池列表（管理员口径）：按 priority DESC、
+// COALESCE(last_message_at, created_at) ASC 排序，offset/pageSize 由调用方夹取。
+func (r *CustomerSessionRepository) ListPending(ctx context.Context, statuses []model.SessionStatus, offset, pageSize int) ([]*model.CustomerSession, error) {
+	var sessions []*model.CustomerSession
+	err := r.db.WithContext(ctx).Where("status IN ?", statuses).
+		Order("priority DESC, COALESCE(last_message_at, created_at) ASC").
+		Offset(offset).Limit(pageSize).Find(&sessions).Error
+	if err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// ListPendingForAgent 待处理池列表（数据隔离口径）：自己名下 + 未分配池(agent_id=0)，
+// 其余与 ListPending 同谓词同排序。
+func (r *CustomerSessionRepository) ListPendingForAgent(ctx context.Context, statuses []model.SessionStatus, agentID uint, offset, pageSize int) ([]*model.CustomerSession, error) {
+	var sessions []*model.CustomerSession
+	err := r.db.WithContext(ctx).Where("status IN ?", statuses).
+		Where("(agent_id = 0 OR agent_id = ?)", agentID).
+		Order("priority DESC, COALESCE(last_message_at, created_at) ASC").
+		Offset(offset).Limit(pageSize).Find(&sessions).Error
+	if err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// CountByStatuses 待处理池计数（管理员口径）。
+func (r *CustomerSessionRepository) CountByStatuses(ctx context.Context, statuses []model.SessionStatus) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("status IN ?", statuses).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CountByStatusesForAgent 待处理池计数（数据隔离口径，与 ListPendingForAgent 同谓词）。
+func (r *CustomerSessionRepository) CountByStatusesForAgent(ctx context.Context, statuses []model.SessionStatus, agentID uint) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("status IN ?", statuses).
+		Where("(agent_id = 0 OR agent_id = ?)", agentID).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // GetByUserID 获取某用户的所有会话（CC- N+1 优化）
 //
 // 替代 service 层「GetByMerchant(空 merchant, 1, 1000) + 内存过滤」模式，

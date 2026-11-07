@@ -20,12 +20,15 @@ type FeedbackLearningCron struct {
 }
 
 func NewFeedbackLearningCron(repo *repository.FeedbackLearningRepository) *FeedbackLearningCron {
-	if repo == nil || repo.GetDB() == nil {
+	// AV-04c 批次5 刀2：句柄判断改仓储 DBReady() 就绪探针（原 repo.GetDB() == nil），
+	// SOP 仓储改包级 Shared 构造共享注入连接（批次4 先例），service 不再取句柄。
+	// 未装配时返回 nil 的语义不变。
+	if repo == nil || !repo.DBReady() {
 		return nil
 	}
 	c := &FeedbackLearningCron{
 		svc:     NewFeedbackLearningService(repo),
-		sopRepo: repository.NewSopAgentRepository(repo.GetDB()),
+		sopRepo: repository.NewSopAgentRepositoryShared(repo),
 		stopCh:  make(chan struct{}),
 	}
 	c.wg.Add(1)

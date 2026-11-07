@@ -65,14 +65,9 @@ func (s *CustomerSessionService) GetPendingSessionsScoped(ctx context.Context, p
 	}
 
 	offset := (page - 1) * pageSize
-	var sessions []*model.CustomerSession
-	if err := s.sessionRepo.GetDB(ctx).Where("status IN ?", statuses).
-		Where("(agent_id = 0 OR agent_id = ?)", scope.UserID).
-		Order("priority DESC, COALESCE(last_message_at, created_at) ASC").
-		Offset(offset).Limit(pageSize).Find(&sessions).Error; err != nil {
-		return nil, err
-	}
-	return sessions, nil
+	// AV-04c 批次5 刀1：隔离查询下沉 sessionRepo.ListPendingForAgent
+	// （agent_id 过滤、排序、分页逐字保留），service 不再经 GetDB 取句柄。
+	return s.sessionRepo.ListPendingForAgent(ctx, statuses, scope.UserID, offset, pageSize)
 }
 
 // CountPendingSessionsScoped 待处理池计数（数据隔离版，与 GetPendingSessionsScoped 同口径）。
@@ -85,14 +80,8 @@ func (s *CustomerSessionService) CountPendingSessionsScoped(ctx context.Context,
 		model.SessionStatusAIHandling,
 		model.SessionStatusWaiting,
 	}
-	var count int64
-	if err := s.sessionRepo.GetDB(ctx).Model(&model.CustomerSession{}).
-		Where("status IN ?", statuses).
-		Where("(agent_id = 0 OR agent_id = ?)", scope.UserID).
-		Count(&count).Error; err != nil {
-		return 0, err
-	}
-	return count, nil
+	// AV-04c 批次5 刀1：隔离计数下沉 sessionRepo.CountByStatusesForAgent。
+	return s.sessionRepo.CountByStatusesForAgent(ctx, statuses, scope.UserID)
 }
 
 // GetSessionByIDScoped 详情读口（数据隔离版）：不可见返回 ErrSessionForbidden。

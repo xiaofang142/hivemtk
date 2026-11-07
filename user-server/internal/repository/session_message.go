@@ -309,3 +309,17 @@ func (r *SessionMessageRepository) ListRecentDescBySessionID(ctx context.Context
 		Order("id desc").Limit(clampSessionMessageLimit(limit)).Find(&hist).Error
 	return hist, err
 }
+
+// MarkMessageDelivered 标记消息已送达（访客在线推送成功后回写 delivered_at）。
+//
+// AV-04c 批次5 刀1 自 service/customer_session.go pushToVisitor 下沉：
+// 原 service 经 sessionRepo.GetDB(ctx) 直拼 Model(&SessionMessage{}).Update，
+// 谓词与写入字段（仅 delivered_at，白名单单字段）逐字保留；错误路径不变 ——
+// 调用方（pushToVisitor）依旧丢弃错误（best-effort 记账）。
+func (r *SessionMessageRepository) MarkMessageDelivered(ctx context.Context, messageID uint, deliveredAt time.Time) error {
+	if r == nil || r.db == nil {
+		return errSessionMessageUnavailable
+	}
+	return r.db.WithContext(ctx).Model(&model.SessionMessage{}).
+		Where("id = ?", messageID).Update("delivered_at", &deliveredAt).Error
+}

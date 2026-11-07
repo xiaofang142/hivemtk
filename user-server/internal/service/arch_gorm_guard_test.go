@@ -555,22 +555,35 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// CustomerBehavior / ListRecentPurchaseEventPayloads，SQL 逐字保留）；ltc_rates
 	// 句柄 1 清零除名（WithDB 形参改 WithRepo 仓储注入）；web_vital getdb 1 清零
 	// 除名（直写下沉 WebVitalRepository.Create，repository/web_vital.go）。
-	"user-server/internal/ops/service/custom_report.go":    {handles: 2, getdb: 1},
-	"user-server/internal/ops/service/dashboard_screen.go": {handles: 2, getdb: 2}, // h=2：scope 闭包（回调外句柄，旧度量会冒充事务例外）
-	"user-server/internal/ops/service/report_filter.go":    {handles: 2},
+	// AV-04c 批次5（2026-11-07）：dashboard_screen 句柄 2 + getdb 2 清零除名 ——
+	// h=2 的 scope 闭包实为恒等函数（两分支同实现，非事务例外，随下沉删除），
+	// AggregateDashboardData/FetchRealtimeActivities 查询组下沉
+	// DashboardScreenRepository（ops/repository/dashboard_screen.go，谓词/投影/
+	// 排序/HasTable 守卫逐字保留）；report_filter.go 仍登记 {handles: 2}（applyConds
+	// 形参+返回值，唯一调用方 custom_report.go 在途未收口，随其批次一并清零）。
+	"user-server/internal/ops/service/custom_report.go": {handles: 2, getdb: 1},
+	"user-server/internal/ops/service/report_filter.go": {handles: 2},
 	// ---- 根域 internal/service（0 句柄 / 1 事务 / 34 GetDB）----
 	// AV-04c 批次4（2026-11-07）：auth.go getdb 1 清零除名（开户赠送改
 	// NewStarterKitRepositoryDefault，repository/starter_kit.go）；feedback_loop/
 	// sop_optimization_gate.go getdb 1 清零除名（改 FeedbackLoopRepository.
 	// TraceLearningRepo() 共享连接，FeedbackLoopRepository.GetDB 方法随之删除）。
-	"user-server/internal/service/cards/tiktok_card.go":      {getdb: 1},
-	"user-server/internal/service/customer_session.go":       {getdb: 3},
-	"user-server/internal/service/customer_session_scope.go": {getdb: 2},
-	"user-server/internal/service/data_export.go":            {getdb: 1},
-	"user-server/internal/service/faq.go":                    {getdb: 1},
-	"user-server/internal/service/feedback_learning.go":      {getdb: 2},
-	"user-server/internal/service/feedback_learning_cron.go": {getdb: 2},
-	"user-server/internal/service/feedback_loop_cron.go":     {getdb: 1},
+	"user-server/internal/service/cards/tiktok_card.go": {getdb: 1},
+	// AV-04c 批次5（2026-11-07）：customer_session getdb 3、customer_session_scope
+	// getdb 2 清零除名 —— 待处理池列表/计数（管理员与坐席隔离两口径）下沉
+	// CustomerSessionRepository.ListPending* / CountByStatuses*，送达回写下沉
+	// SessionMessageRepository.MarkMessageDelivered（delivered_at 单字段白名单）；
+	// 谓词/排序/分页/租户语义逐项不变（回归见 repository/customer_session_pending_pool_test.go
+	// 与 service/customer_session_pending_pool_test.go）。
+	"user-server/internal/service/data_export.go": {getdb: 1},
+	"user-server/internal/service/faq.go":         {getdb: 1},
+	// AV-04c 批次5（2026-11-07）：feedback_learning getdb 2、feedback_learning_cron
+	// getdb 2 清零除名 —— SOP 兄弟仓储改包级 Shared 构造共享注入连接
+	//（NewSopAgentRepositoryShared/NewSopExecutionRepositoryShared，批次4
+	// NewTraceLearningRepositoryShared 先例），cron 句柄判断改仓储 DBReady() 探针；
+	// feedback_loop_cron getdb 1 清零除名 —— 两仓储改 Default 构造 + 包级 DBReady()
+	// 探针（NewSopAgentRepositoryDefault/NewFeedbackLoopRepositoryDefault 先例）。
+	// feedback_loop_init.go 仍登记 {getdb: 2}（移交批次 6）。
 	"user-server/internal/service/feedback_loop_init.go":     {getdb: 2},
 	"user-server/internal/service/inbox.go":                  {getdb: 1},
 	"user-server/internal/service/inbox_ingress.go":          {getdb: 1},

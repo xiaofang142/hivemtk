@@ -165,13 +165,9 @@ func (s *CustomerSessionService) GetPendingSessions(ctx context.Context, page, p
 	}
 
 	offset := (page - 1) * pageSize
-	var sessions []*model.CustomerSession
-	if err := s.sessionRepo.GetDB(ctx).Where("status IN ?", statuses).
-		Order("priority DESC, COALESCE(last_message_at, created_at) ASC").
-		Offset(offset).Limit(pageSize).Find(&sessions).Error; err != nil {
-		return nil, err
-	}
-	return sessions, nil
+	// AV-04c 批次5 刀1：查询下沉 sessionRepo.ListPending（同谓词同排序同分页），
+	// service 不再经 GetDB 取句柄。
+	return s.sessionRepo.ListPending(ctx, statuses, offset, pageSize)
 }
 
 // CountPendingSessions 统计待处理会话数
@@ -181,13 +177,8 @@ func (s *CustomerSessionService) CountPendingSessions(ctx context.Context) (int6
 		model.SessionStatusAIHandling,
 		model.SessionStatusWaiting,
 	}
-	var count int64
-	if err := s.sessionRepo.GetDB(ctx).Model(&model.CustomerSession{}).
-		Where("status IN ?", statuses).
-		Count(&count).Error; err != nil {
-		return 0, err
-	}
-	return count, nil
+	// AV-04c 批次5 刀1：查询下沉 sessionRepo.CountByStatuses。
+	return s.sessionRepo.CountByStatuses(ctx, statuses)
 }
 
 // GetSessionByID 获取会话详情
@@ -353,8 +344,9 @@ func (s *CustomerSessionService) pushToVisitor(ctx context.Context, sessionID st
 	if websocket.IsVisitorOnline(sessionID) {
 		_ = websocket.SendToVisitor(websocket.TypeMessage, payload, sessionID)
 		now := time.Now()
-		_ = s.sessionRepo.GetDB(ctx).Model(&model.SessionMessage{}).
-			Where("id = ?", message.ID).Update("delivered_at", &now).Error
+		// AV-04c 批次5 刀1：送达回写下沉 messageRepo.MarkMessageDelivered
+		// （仅 delivered_at 单字段白名单，错误路径不变：best-effort 丢弃）。
+		_ = s.messageRepo.MarkMessageDelivered(ctx, message.ID, now)
 	}
 }
 

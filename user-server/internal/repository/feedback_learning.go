@@ -18,12 +18,33 @@ func NewFeedbackLearningRepository(db *gorm.DB) *FeedbackLearningRepository {
 	return &FeedbackLearningRepository{db: db}
 }
 
-// GetDB 暴露底层连接（供 feedback_learning_cron 派生 SopAgentRepository 用）。
-func (r *FeedbackLearningRepository) GetDB() *gorm.DB {
-	if r == nil {
+// DBReady 就绪探针：底层连接是否已注入（不触库）。service 用它替代
+// repo.GetDB() == nil 的句柄判断——句柄判断收回仓储内部，service 不再经
+// GetDB 转手（trace_learning/adjuster.go 同款收口）。
+func (r *FeedbackLearningRepository) DBReady() bool {
+	return r != nil && r.db != nil
+}
+
+// NewSopAgentRepositoryShared 构造与反馈学习仓储**共享同一条连接**的
+// SopAgentRepository。service 侧唯一需求是「用同一条连接派生兄弟仓储」
+// （原 service 经 repo.GetDB() 取句柄转手 NewSopAgentRepository）——把连接
+// 共享收口成包级构造函数（不持 ctx、也不触库），service 不再取句柄。
+// 与 NewTraceLearningRepositoryShared（feedback_loop.go，批次4 先例）同族。
+// repo 为 nil 时返回 nil（调用方按「仓储未装配」处理）。
+func NewSopAgentRepositoryShared(flRepo *FeedbackLearningRepository) *SopAgentRepository {
+	if flRepo == nil {
 		return nil
 	}
-	return r.db
+	return NewSopAgentRepository(flRepo.db)
+}
+
+// NewSopExecutionRepositoryShared 构造与反馈学习仓储**共享同一条连接**的
+// SopExecutionRepository（同 NewSopAgentRepositoryShared 的收口理由）。
+func NewSopExecutionRepositoryShared(flRepo *FeedbackLearningRepository) *SopExecutionRepository {
+	if flRepo == nil {
+		return nil
+	}
+	return NewSopExecutionRepository(flRepo.db)
 }
 
 // ListAIMessagesByPeriod 查询指定时间段内的 AI 回复消息（sender_type=ai，

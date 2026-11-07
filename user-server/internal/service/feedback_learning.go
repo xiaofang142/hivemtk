@@ -21,12 +21,15 @@ type FeedbackLearningService struct {
 // NewFeedbackLearningService 创建反馈学习服务
 //
 // repo 为空时 repos 保持 nil（service 各方法会返回 "db not configured" 错误）。
+// AV-04c 批次5 刀2：两个 SOP 兄弟仓储改经包级 Shared 构造共享注入连接，
+// service 不再经 repo.GetDB() 取句柄转手（批次4 NewTraceLearningRepositoryShared
+// 先例）。
 func NewFeedbackLearningService(repo *repository.FeedbackLearningRepository) *FeedbackLearningService {
 	s := &FeedbackLearningService{}
 	if repo != nil {
 		s.feedbackRepo = repo
-		s.sopAgentRepo = repository.NewSopAgentRepository(repo.GetDB())
-		s.sopExecRepo = repository.NewSopExecutionRepository(repo.GetDB())
+		s.sopAgentRepo = repository.NewSopAgentRepositoryShared(repo)
+		s.sopExecRepo = repository.NewSopExecutionRepositoryShared(repo)
 	}
 	return s
 }

@@ -30,9 +30,13 @@ func NewFeedbackLoopCron(components *FeedbackLoopComponents) *FeedbackLoopCron {
 		components: components,
 		stopCh:     make(chan struct{}),
 	}
-	if gdb := repository.GetDB(); gdb != nil {
-		c.sopRepo = repository.NewSopAgentRepository(gdb)
-		c.abTestRepo = repository.NewFeedbackLoopRepositoryWithDB(gdb)
+	// AV-04c 批次5 刀2：构造期不再经 repository.GetDB() 直取句柄。装配态由包级
+	// DBReady() 探针判定（句柄判断收口），两仓储改 Default 构造（同取全局句柄；
+	// 构造同步执行、句柄单例，与原「取一次句柄传两仓储」等价）；未装配时两仓储
+	// 保持 nil、各任务跳过对应 DB 操作的语义不变。
+	if repository.DBReady() {
+		c.sopRepo = repository.NewSopAgentRepositoryDefault()
+		c.abTestRepo = repository.NewFeedbackLoopRepositoryDefault()
 	}
 	c.wg.Add(6)
 	go c.runChampionBaselineMonthly(context.Background())
