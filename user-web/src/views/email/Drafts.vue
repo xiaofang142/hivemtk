@@ -117,6 +117,60 @@
         </span>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="sendDialogVisible"
+      title="发送草稿"
+      width="560px"
+    >
+      <el-form
+        ref="sendFormRef"
+        :model="sendForm"
+        :rules="sendRules"
+        label-width="90px"
+      >
+        <el-form-item label="主题">
+          <el-input
+            :model-value="sendForm.subject"
+            disabled
+          />
+        </el-form-item>
+        <el-form-item
+          label="收件人"
+          prop="to"
+        >
+          <el-input
+            v-model="sendForm.to"
+            placeholder="收件人邮箱，多个用逗号分隔"
+          />
+        </el-form-item>
+        <el-form-item
+          label="发件账号"
+          prop="smtpId"
+        >
+          <el-select
+            v-model="sendForm.smtpId"
+            placeholder="请选择邮件代理"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in smtpList"
+              :key="item.id"
+              :label="item.name ? `${item.name} (${item.username})` : (item.username || item.server || item.id)"
+              :value="String(item.id)"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sendDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="sending"
+          @click="submitSend"
+        >发送</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -143,13 +197,36 @@ const draftForm = reactive({
 });
 
 const sendDialogVisible = ref(false);
+const sendFormRef = ref(null);
+const sending = ref(false);
+const smtpList = ref([]);
 const sendForm = reactive({
   id: '',
   subject: '',
   content: '',
   attachments: [],
-  other: ''
+  to: '',
+  smtpId: ''
 });
+
+const validateRecipients = (rule, value, callback) => {
+  const list = String(value || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+  if (!list.length) {
+    callback(new Error('请输入收件人'))
+    return
+  }
+  const bad = list.find(addr => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr))
+  if (bad) {
+    callback(new Error(`收件人格式不正确：${bad}`))
+    return
+  }
+  callback()
+}
+
+const sendRules = {
+  to: [{ required: true, validator: validateRecipients, trigger: 'blur' }],
+  smtpId: [{ required: true, message: '请选择发件账号', trigger: 'change' }]
+};
 
 
 const formRules = {
@@ -286,31 +363,57 @@ const handleSend = (draft) => {
     id: draft.id,
     subject: draft.subject,
     content: draft.content,
-    attachments: draft.attachments || []
+    attachments: draft.attachments || [],
+    to: '',
+    smtpId: ''
   });
-  submitSend();
+  sendDialogVisible.value = true;
+  if (!smtpList.value.length)
+    fetchSmtpList();
+};
+
+const fetchSmtpList = async () => {
+  try {
+    const res = await emailApi.getEmailSmtpList()
+    smtpList.value = res.list || []
+  } catch (error) {
+    console.error('获取邮件代理失败:', error)
+    ElMessage.error(i18n.global.t('获取邮件代理失败'))
+  }
 };
 
 const submitSend = async () => {
+  if (sendFormRef.value) {
     try {
-      const sendData = {
-        id: sendForm.id,
-        subject: sendForm.subject,
-        content: sendForm.content,
-        attachments: []
-      };
-      let res  = await emailApi.sendEmail(sendData)
-
-      ElMessage.success('邮件写入计划条数：' + (res.total || 0));
-      sendDialogVisible.value = false
-    } catch (error) {
-      console.error('发送邮件失败:', error)
-      ElMessage.error(i18n.global.t('发送邮件失败'))
+      await sendFormRef.value.validate()
+    } catch {
+      return
     }
   }
+  sending.value = true
+  try {
+    await emailApi.sendEmail({
+      draftId: sendForm.id,
+      to: sendForm.to.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(','),
+      subject: sendForm.subject,
+      content: sendForm.content,
+      attachments: [],
+      smtpId: sendForm.smtpId,
+      immediateSend: true
+    })
+    ElMessage.success('发送成功');
+    sendDialogVisible.value = false
+  } catch (error) {
+    console.error('发送邮件失败:', error)
+    ElMessage.error(i18n.global.t('发送邮件失败'))
+  } finally {
+    sending.value = false
+  }
+}
 
 onMounted(() => {
   fetchDrafts()
+  fetchSmtpList()
 });
 </script>
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -119,7 +120,7 @@ func (s *SchemaTemplateService) Delete(ctx context.Context, id string) error {
 
 func requiredTrimmed(v *string, field string) (string, error) {
 	if v == nil || strings.TrimSpace(*v) == "" {
-		return "", errors.New(field + " required")
+		return "", fmt.Errorf("%s不能为空", field)
 	}
 	return strings.TrimSpace(*v), nil
 }
@@ -127,14 +128,14 @@ func requiredTrimmed(v *string, field string) (string, error) {
 // validateTemplateJSON 必须是 JSON 对象：模板按 @type 取键值，数组/标量无法套用。
 func validateTemplateJSON(raw datatypes.JSON) error {
 	if len(raw) == 0 {
-		return errors.New("template_json required")
+		return errors.New("模板 JSON（template_json）不能为空")
 	}
 	if !json.Valid(raw) {
 		return errors.New("template_json 不是合法 JSON")
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return errors.New("template_json 必须是 JSON 对象")
+		return errors.New("模板 JSON（template_json）必须是 JSON 对象")
 	}
 	return nil
 }

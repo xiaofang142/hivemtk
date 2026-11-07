@@ -504,7 +504,8 @@ const glossaryCovPercent = (row) => {
   const active = Number(row?.active_count || 0)
   if (!total) return 0
   const p = (active / total) * 100
-  return Math.min(100, Math.max(0, p))
+  // 保留 1 位小数：直接返回原始浮点会让进度条文案出现 66.66666666666666%
+  return Math.round(Math.min(100, Math.max(0, p)) * 10) / 10
 };
 
 const covColor = (p) => {

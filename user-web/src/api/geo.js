@@ -80,11 +80,11 @@ export const geoApi = {
   },
 
   deploySite() {
-    return http.post('/api/geo/site/deploy')
+    return http.post('/api/geo/site/deploy', undefined, { _silent: true })
   },
 
   siteFullPipeline() {
-    return http.post('/api/geo/site/full-pipeline')
+    return http.post('/api/geo/site/full-pipeline', undefined, { _silent: true })
   },
 
   getLlmsTxtPreview(domain) {

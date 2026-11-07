@@ -73,9 +73,24 @@ func (s *PusherConfigService) Create(ctx context.Context, in PusherConfigInput) 
 		cfg.Active = *in.Active
 	}
 	if err := s.repo.Create(ctx, cfg); err != nil {
+		// 平台唯一索引（idx_geo_pusher_configs_platform）冲突时给可执行的提示：
+		// 原样透传会让管理端只看到「操作失败，请稍后重试」，用户不知道是重复配置。
+		if isPusherPlatformConflict(err) {
+			return nil, fmt.Errorf("平台 %s 已存在配置，请直接编辑现有配置", platform)
+		}
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// isPusherPlatformConflict 认 SQLSTATE 23505 + 本表平台唯一索引名。
+// 本仓连接未开 gorm TranslateError，拿到的是底层 *pgconn.PgError 的错误串。
+func isPusherPlatformConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "23505") && strings.Contains(msg, "idx_geo_pusher_configs_platform")
 }
 
 func (s *PusherConfigService) Update(ctx context.Context, id string, in PusherConfigInput) (*model.GeoPusherConfig, error) {
@@ -143,7 +158,7 @@ func validatePusherConfigJSON(raw datatypes.JSON) error {
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return errors.New("config_json 必须是 JSON 对象")
+		return errors.New("配置 JSON（config_json）必须是 JSON 对象")
 	}
 	return nil
 }

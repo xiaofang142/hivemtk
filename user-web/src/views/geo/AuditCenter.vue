@@ -747,13 +747,31 @@ async function openReport (row) {
 async function downloadReport (format, id = null) {
   const runId = id || current.value?.run?.id
   if (!runId) return
-  const blob = await fetchAuditReport(runId, format)
+  // 必须在用户手势内同步开窗：await 之后再 window.open 会被浏览器当弹窗拦截，
+  // 表现就是「报告」点了没反应。先占位，拿到 blob 再把 location 指过去。
+  const reportWindow = format === 'html' ? window.open('', '_blank') : null
+  let blob
+  try {
+    blob = await fetchAuditReport(runId, format)
+  } catch (e) {
+    if (reportWindow) reportWindow.close()
+    throw e
+  }
   const typed = new Blob([blob], {
     type: format === 'csv' ? 'text/csv;charset=utf-8' : 'text/html;charset=utf-8'
   })
   const url = URL.createObjectURL(typed)
   if (format === 'html') {
-    window.open(url, '_blank')
+    if (reportWindow) {
+      reportWindow.location.href = url
+    } else {
+      // 占位窗仍被拦截时退回 <a target=_blank>，至少不是无声失败
+      const a = document.createElement('a')
+      a.href = url
+      a.target = '_blank'
+      a.rel = 'noopener'
+      a.click()
+    }
   } else {
     const a = document.createElement('a')
     a.href = url

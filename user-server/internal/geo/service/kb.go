@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 
 	"hivemtk-user/internal/geo/dto"
 
@@ -142,6 +143,25 @@ func (s *KBService) search(ctx context.Context, q string, limit int, publicOnly 
 		return nil, fmt.Errorf("检索词不能为空")
 	}
 
+	results := s.matchDocs(docs, ql)
+	// 整句子串匹配对「自然语言问句」几乎必然落空（"HiveMTK 是什么？" 没有任何
+	// 文档包含这整串），Ask 会因此返回「暂无相关内容」。整句 0 命中时退化为
+	// 按词元（≥2 字符）逐个匹配，取任一命中并按命中词元数打分。
+	if len(results) == 0 {
+		tokens := kbQueryTokens(ql)
+		if len(tokens) > 0 {
+			results = s.matchDocsAnyToken(docs, tokens)
+		}
+	}
+	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	return results, nil
+}
+
+// matchDocs 整串子串匹配（标题 0.6 / 正文 0.4）
+func (s *KBService) matchDocs(docs []*model.GeoKnowledgeDocument, ql string) []*dto.KBSearchResult {
 	results := make([]*dto.KBSearchResult, 0, len(docs))
 	for _, d := range docs {
 		titleMatch := strings.Contains(strings.ToLower(d.Title), ql)
@@ -161,11 +181,57 @@ func (s *KBService) search(ctx context.Context, q string, limit int, publicOnly 
 			Score:                     score,
 		})
 	}
-	sort.Slice(results, func(i, j int) bool { return results[i].Score > results[j].Score })
-	if len(results) > limit {
-		results = results[:limit]
+	return results
+}
+
+// matchDocsAnyToken 词元级兜底：任一 token 命中即算相关，命中越多分越高（上限 0.95）。
+func (s *KBService) matchDocsAnyToken(docs []*model.GeoKnowledgeDocument, tokens []string) []*dto.KBSearchResult {
+	results := make([]*dto.KBSearchResult, 0, len(docs))
+	for _, d := range docs {
+		title := strings.ToLower(d.Title)
+		content := strings.ToLower(d.Content)
+		hits := 0
+		for _, tok := range tokens {
+			if strings.Contains(title, tok) {
+				hits += 2
+			} else if strings.Contains(content, tok) {
+				hits++
+			}
+		}
+		if hits == 0 {
+			continue
+		}
+		score := 0.5 + 0.05*float64(hits)
+		if score > 0.95 {
+			score = 0.95
+		}
+		results = append(results, &dto.KBSearchResult{
+			KnowledgeDocumentResponse: toDocResponse(d),
+			Score:                     score,
+		})
 	}
-	return results, nil
+	return results
+}
+
+// kbQueryTokens 把问句切成检索词元（字母/数字/汉字连续段），丢掉单字符噪音。
+func kbQueryTokens(ql string) []string {
+	fields := strings.FieldsFunc(ql, func(r rune) bool {
+		return !(unicode.IsLetter(r) || unicode.IsDigit(r))
+	})
+	out := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	for _, f := range fields {
+		f = strings.ToLower(f)
+		if len([]rune(f)) < 2 {
+			continue
+		}
+		if _, ok := seen[f]; ok {
+			continue
+		}
+		seen[f] = struct{}{}
+		out = append(out, f)
+	}
+	return out
 }
 
 // Ask RAG 问答：检索 Top5 片段作为上下文交给 LLM

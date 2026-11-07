@@ -319,7 +319,10 @@ const onSelectEntity = async (row) => {
 }
 
 const onGenerateSchema = async () => {
-  if (!currentEntity.value) return
+  if (!currentEntity.value) {
+    ElMessage.warning('请先在左侧选择一个实体')
+    return
+  }
   schemaLoading.value = true
   try {
     let brandName = 'HiveMTK', domain = '';

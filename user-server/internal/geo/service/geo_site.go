@@ -123,7 +123,7 @@ func (s *SiteConfigService) Get(ctx context.Context, id string) (*model.GeoSite,
 }
 
 func (s *SiteConfigService) Create(ctx context.Context, in SiteConfigInput) (*model.GeoSite, error) {
-	domain, err := requiredTrimmed(in.Domain, "domain")
+	domain, err := requiredTrimmed(in.Domain, "域名")
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *SiteConfigService) Update(ctx context.Context, id string, in SiteConfig
 		return nil, err
 	}
 	if in.Domain != nil {
-		domain, err := requiredTrimmed(in.Domain, "domain")
+		domain, err := requiredTrimmed(in.Domain, "域名")
 		if err != nil {
 			return nil, err
 		}

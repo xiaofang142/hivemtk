@@ -254,7 +254,17 @@ const handleOptimize = async () => {
     optimizedContent.value = res?.optimized_content || res?.content || ''
     const raw = res?.suggestions || '';
     suggestions.value = Array.isArray(raw) ? raw : String(raw).split('\n').map((s) => s.trim()).filter(Boolean)
-    ElMessage.success('文章优化完成')
+    // 优化接口会带回评分；不回填的话「优化前/优化后」永远显示 —，用户以为没评分。
+    // 只在有有效分（>0）时覆盖：heuristic_fallback 会回 0，不能把用户刚点出来的分冲掉。
+    if (typeof res?.score_before === 'number' && res.score_before > 0) scoreBefore.value = { total: res.score_before }
+    if (typeof res?.score_after === 'number' && res.score_after > 0) scoreAfter.value = { total: res.score_after }
+    // 未配置大模型时后端走 heuristic_fallback：原文原样返回、建议为空。
+    // 这时说「优化完成」是误导，必须显式告诉用户本次没有改写。
+    if (res?.model === 'heuristic_fallback') {
+      ElMessage.warning('未配置可用大模型，本次仅做规则检查，正文未改写')
+    } else {
+      ElMessage.success('文章优化完成')
+    }
   } catch (e) {
     if (!isUserReportedError(e)) ElMessage.error(e.message || '文章优化失败')
   } finally {
@@ -272,8 +282,11 @@ const handleScore = async (stage) => {
   loading.value = true
   try {
     const res = await geoApi.scoreContent({ content, brand_name: form.brand_name, keyword: '' })
-    if (stage === 'before') scoreBefore.value = res
-    else scoreAfter.value = res
+    // 接口把分数放在 data.scores（total 在其内）；直接存整个 data 会让模板
+    // 的 scoreBefore.total 取到 undefined，界面上永远显示「—」。
+    const score = res?.scores || res
+    if (stage === 'before') scoreBefore.value = score
+    else scoreAfter.value = score
     ElMessage.success('评分完成')
   } catch (e) {
     if (!isUserReportedError(e)) ElMessage.error(e.message || '评分失败')

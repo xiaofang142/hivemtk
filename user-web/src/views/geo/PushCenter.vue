@@ -91,7 +91,14 @@ async function loadQuota() {
 }
 async function push() {
   const urls = urlsText.value.split('\n').map(s => s.trim()).filter(Boolean)
-  if (!urls.length) return
+  if (!urls.length) {
+    ElMessage.warning('请先粘贴要推送的 URL（每行一个）')
+    return
+  }
+  if (!selectedPlatforms.value.length) {
+    ElMessage.warning('请至少选择一个推送平台')
+    return
+  }
   try {
     await geoApi.pushUrls({ urls, platforms: selectedPlatforms.value })
     ElMessage.success('推送成功')

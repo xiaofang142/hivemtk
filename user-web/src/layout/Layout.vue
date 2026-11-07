@@ -199,7 +199,10 @@
           </el-breadcrumb>
         </div>
         <router-view v-slot="{ Component }">
-          <transition name="fade">
+          <transition
+            name="fade"
+            mode="out-in"
+          >
             <component
               :is="Component"
               :key="$route.fullPath"
@@ -227,7 +230,7 @@ import { Warning, Bell, Menu, SwitchButton, Fold, Expand, QuestionFilled, Refres
 import { routeIconMap, resolveRouteIcon } from '@/utils/iconMap'
 void Bell; void Warning; void Menu; void SwitchButton; void Fold; void Expand; void Refresh; void Compass; void Guide
 
-const { startGlobalTour, startPageTour, getPageTourState, destroyPageTour, isTourActive, isPageSeen } = useOnboarding()
+const { startGlobalTour, startPageTour, getPageTourState, destroyPageTour, destroy: destroyTour, isTourActive, isPageSeen } = useOnboarding()
 
 // 传给 SubMenuItem 的仍是整张表（它内部走 resolveRouteIcon 逐个解析），
 // 顶层菜单这里也走同一个解析函数：2026-10-12 之前这里写的是
@@ -416,6 +419,11 @@ watch(
 
 onUnmounted(() => {
   stopPageTour()
+  // driver.js 把弹层 append 到 document.body，不随 Layout 卸载；
+  // 从带外壳的页面切到 /login、/help-center、/chat/embed 等裸页时，
+  // 只停定时器会留下上一页的引导气泡和遮罩（2026-11-06 线上实测复现）。
+  // 外壳没了，任何导览都没有可锚定的目标，必须一并销毁。
+  destroyTour()
 })
 
 const handleTopMenuSelect = (key) => {

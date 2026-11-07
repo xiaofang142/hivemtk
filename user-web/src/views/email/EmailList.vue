@@ -117,16 +117,50 @@
       width="640px"
     >
       <el-form
+        ref="sendFormRef"
         :model="sendForm"
+        :rules="sendRules"
         label-width="80px"
       >
-        <el-form-item :label="$t('主题')">
+        <el-form-item
+          label="收件人"
+          prop="to"
+        >
+          <el-input
+            v-model="sendForm.to"
+            placeholder="收件人邮箱，多个用逗号分隔"
+          />
+        </el-form-item>
+        <el-form-item
+          label="发件账号"
+          prop="smtpId"
+        >
+          <el-select
+            v-model="sendForm.smtpId"
+            placeholder="请选择邮件代理"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in smtpList"
+              :key="item.id"
+              :label="item.name ? `${item.name} (${item.username})` : (item.username || item.server || item.id)"
+              :value="String(item.id)"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          :label="$t('主题')"
+          prop="subject"
+        >
           <el-input
             v-model="sendForm.subject"
             :placeholder="$t('主题')"
           />
         </el-form-item>
-        <el-form-item label="内容">
+        <el-form-item
+          label="内容"
+          prop="content"
+        >
           <el-input
             v-model="sendForm.content"
             type="textarea"
@@ -207,8 +241,31 @@ const loading = ref(false);
 
 const sendVisible = ref(false);
 const submitting = ref(false)
-const sendForm = reactive({ subject: '', content: '' })
+const sendFormRef = ref(null)
+const sendForm = reactive({ to: '', subject: '', content: '', smtpId: '' })
+const smtpList = ref([])
 const attachmentsText = ref('')
+
+const validateRecipients = (rule, value, callback) => {
+  const list = String(value || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean)
+  if (!list.length) {
+    callback(new Error('请输入收件人'))
+    return
+  }
+  const bad = list.find(addr => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr))
+  if (bad) {
+    callback(new Error(`收件人格式不正确：${bad}`))
+    return
+  }
+  callback()
+}
+
+const sendRules = {
+  to: [{ required: true, validator: validateRecipients, trigger: 'blur' }],
+  smtpId: [{ required: true, message: '请选择发件账号', trigger: 'change' }],
+  subject: [{ required: true, message: '请填写主题', trigger: 'blur' }],
+  content: [{ required: true, message: '请填写内容', trigger: 'blur' }]
+}
 
 const traceVisible = ref(false);
 const traceLoading = ref(false)
@@ -238,19 +295,37 @@ const fetchEmailList = async () => {
 }
 onMounted(() => {
   fetchEmailList()
+  fetchSmtpList()
 });
 
+const fetchSmtpList = async () => {
+  try {
+    const res = await emailApi.getEmailSmtpList()
+    smtpList.value = res.list || []
+  } catch (error) {
+    console.error('获取邮件代理失败:', error)
+    ElMessage.error(i18n.global.t('获取邮件代理失败'))
+  }
+}
+
 const openSend = () => {
+  sendForm.to = ''
   sendForm.subject = ''
   sendForm.content = ''
+  sendForm.smtpId = ''
   attachmentsText.value = ''
   sendVisible.value = true
+  if (!smtpList.value.length)
+    fetchSmtpList()
 }
 
 const submitSend = async () => {
-  if (!sendForm.subject) {
-    ElMessage.warning('请填写主题')
-    return
+  if (sendFormRef.value) {
+    try {
+      await sendFormRef.value.validate()
+    } catch {
+      return
+    }
   }
   submitting.value = true
   try {
@@ -258,7 +333,14 @@ const submitSend = async () => {
       .split(/[\n,]/)
       .map(s => s.trim())
       .filter(Boolean)
-    await emailApi.sendEmail({ subject: sendForm.subject, content: sendForm.content, attachments })
+    await emailApi.sendEmail({
+      to: sendForm.to.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean).join(','),
+      subject: sendForm.subject,
+      content: sendForm.content,
+      attachments,
+      smtpId: sendForm.smtpId,
+      immediateSend: true
+    })
     ElMessage.success('发送成功')
     sendVisible.value = false
     fetchEmailList()

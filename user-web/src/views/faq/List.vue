@@ -285,7 +285,7 @@
         >
           <template #default="{ row }">
             <el-progress
-              :percentage="Math.round((row.confidence || 0) * 100)"
+              :percentage="Math.min(100, Math.round((row.confidence || 0) * 100))"
               :stroke-width="10"
               :show-text="true"
               :color="getConfColor(row.confidence)"
@@ -367,8 +367,8 @@
 
       <div class="pagination-wrap">
         <el-pagination
-          v-model:current-page="filter.page"
-          v-model:page-size="filter.page_size"
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
           :total="total"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
@@ -459,7 +459,7 @@
                 :type="getMatchTagType(row.score)"
                 size="small"
               >
-                {{ (row.score * 100).toFixed(0) }}%
+                {{ Math.min(100, (row.score * 100)).toFixed(0) }}%
               </el-tag>
             </template>
           </el-table-column>
@@ -490,7 +490,7 @@
 
 <script setup>
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, Aim } from '@element-plus/icons-vue'
 import { faqApi } from '@/api/faq'
@@ -499,6 +499,7 @@ import { listEnabledAgents } from '@/api/aiAgent'
 import { isUserReportedError } from '@/utils/errorReporting'
 
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(false);
 const list = ref([])
@@ -738,6 +739,13 @@ onMounted(() => {
   loadKBMap()
   loadList()
   loadStats()
+  // 入口页「匹配测试」卡片跳到本页时带 ?match=1，这里直接打开匹配测试弹窗；
+  // 打开后用 history.replaceState 清掉 query（不能走 router.replace：那会让本页
+  // 重新挂载，刚打开的弹窗会在 3 秒内被关掉，2026-11-07 拟人点验实测）。
+  if (route.query.match === '1') {
+    testDialogVisible.value = true
+    window.history.replaceState({ ...window.history.state }, '', '#/faq/list')
+  }
 })
 </script>
 

@@ -72,7 +72,9 @@ async function deployOnly() {
     lastResult.value = `部署地址：${res?.site_url || '—'}`
     ElMessage.success('部署成功')
   } catch (e) {
-    // 失败原因由 request 拦截器统一提示（配置问题 400 / 上游 502），不再叠一条「部署失败」
+    // 部署失败原因通常是命令级细节（如 git push 的具体报错），
+    // 拦截器对 500 只给通用文案，所以这里 _silent 后自行展示 e.message。
+    ElMessage.error(e?.message ? `部署失败：${e.message}` : '部署失败')
   }
 }
 async function fullPipeline() {
@@ -82,6 +84,9 @@ async function fullPipeline() {
     step.value = 4
     lastResult.value = `导出 ${res?.exported} 篇 → ${res?.site_url}`
     ElMessage.success('全链路完成！')
-  } catch (e) { step.value = 0 }
+  } catch (e) {
+    step.value = 0
+    ElMessage.error(e?.message ? `全链路失败：${e.message}` : '全链路失败')
+  }
 }
 </script>

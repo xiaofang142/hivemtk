@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/geo/model"
@@ -16,6 +18,7 @@ type stubPusherConfigRepo struct {
 	created   *model.GeoPusherConfig
 	updated   *model.GeoPusherConfig
 	deletedID string
+	createErr error
 }
 
 func (r *stubPusherConfigRepo) List(context.Context, int, int) ([]*model.GeoPusherConfig, int64, error) {
@@ -30,6 +33,9 @@ func (r *stubPusherConfigRepo) GetByID(_ context.Context, id string) (*model.Geo
 }
 
 func (r *stubPusherConfigRepo) Create(_ context.Context, cfg *model.GeoPusherConfig) error {
+	if r.createErr != nil {
+		return r.createErr
+	}
 	r.created = cfg
 	return nil
 }
@@ -91,6 +97,22 @@ func TestPusherConfigService_Create校验(t *testing.T) {
 	}
 	if repo.created != cfg {
 		t.Fatal("Create 未落库")
+	}
+}
+
+func TestPusherConfigService_Create平台重复给可执行提示(t *testing.T) {
+	dup := errors.New(`ERROR: duplicate key value violates unique constraint "idx_geo_pusher_configs_platform" (SQLSTATE 23505)`)
+	svc := NewPusherConfigService(&stubPusherConfigRepo{createErr: dup})
+	platform := "baidu"
+	_, err := svc.Create(context.Background(), PusherConfigInput{
+		Platform:   &platform,
+		ConfigJSON: datatypes.JSON(`{"token":"x"}`),
+	})
+	if err == nil {
+		t.Fatal("平台重复应报错")
+	}
+	if !strings.Contains(err.Error(), "已存在配置") {
+		t.Fatalf("重复平台应给可执行提示，实际: %v", err)
 	}
 }
 

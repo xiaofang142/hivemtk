@@ -465,7 +465,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { listWorkflows, saveWorkflow, updateWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { fmtTime } from '@/utils/time'
@@ -554,6 +554,16 @@ const onSaveWorkflow = async () => {
 
 const onDeleteWorkflow = async () => {
   if (!currentWorkflow.value?.id) return
+  // 删除不可恢复：此前点了就删，没有任何确认步骤。
+  try {
+    await ElMessageBox.confirm(
+      `确认删除工作流「${currentWorkflow.value.name || currentWorkflow.value.id}」？删除后不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   try {
     await deleteWorkflow(currentWorkflow.value.id)
     ElMessage.success('已删除')
