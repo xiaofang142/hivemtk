@@ -94,7 +94,14 @@ func (r *Registry) Names() []string {
 	return names
 }
 
-// Default 全局默认注册表：5 大社交平台网页桥接渠道（HTTP + WebSocket 双传输）。
+// Default 全局默认注册表：九个桥接渠道（HTTP + WebSocket 双传输）。
+// 成熟度两级以 ChannelSpec.Experimental 为准（CS-07 支持等级口径）：
+//   - 正式（未标实验）：douyin/xiaohongshu/xianyu/tiktok——2026-07~08 真机校准与风控实测记录在案；
+//   - 实验性（Experimental: true）：kuaishou（B8 纯模式猜测零真机）与 jd/bilibili/weibo/personal_wx
+//     （2026-11 六渠道统一接待，选择器未真机校准/伴生未交付）。
+//
+// 实验集合与扩展侧 EXPERIMENTAL_CHANNELS（user-web/bridge/src/core/constants.js）同步维护，
+// 由 registry_parity_test.go 双向钉住；注册但缺扩展适配器的渠道不得宣传为全支持。
 //
 // HTTP 传输：bridge 扩展三通道（POST /api/bridge/ingest、GET /api/bridge/outbox、
 // POST /api/bridge/outbox/ack）。

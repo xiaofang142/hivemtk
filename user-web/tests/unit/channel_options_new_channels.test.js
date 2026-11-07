@@ -45,3 +45,31 @@ describe('渠道表：2026-11 新增渠道与公众号别名', () => {
     expect(CHANNEL_LABEL_MAP.weibo).toBe('微博');
   });
 });
+
+// CS-07（2026-11-07）实验渠道等级必须以文字标注，不得仅靠 tag 颜色表达；
+// 个人微信与公众号分格，伴生未交付要在提示面写明。
+describe('渠道表：实验等级文字标注（CS-07）', () => {
+  const optionByValue = (v) => CHANNEL_OPTIONS.find((o) => o.value === v);
+
+  it('四个实验渠道的描述含「实验」文字', () => {
+    for (const ch of ['kuaishou', 'jd', 'bilibili', 'weibo']) {
+      const opt = optionByValue(ch);
+      expect(opt, `${ch} 应存在`).toBeTruthy();
+      expect(opt.description).toContain('实验');
+    }
+  });
+
+  it('个人微信提示面写明伴生未交付，与公众号区分', () => {
+    const pw = optionByValue('personal_wx');
+    expect(pw.description).toContain('伴生未交付');
+    const wx = optionByValue('weixin');
+    expect(wx.label).toBe('微信公众号');
+    expect(pw.label).toBe('个人微信');
+  });
+
+  it('正式桥接渠道描述不携带实验标注', () => {
+    for (const ch of ['douyin', 'xiaohongshu', 'xianyu', 'tiktok']) {
+      expect(optionByValue(ch).description).not.toContain('实验');
+    }
+  });
+});

@@ -23,7 +23,7 @@ export const CHANNEL_OPTIONS = Object.freeze([
     icon: 'Share',
     description: '抖音私信'
   },
-  { value: 'kuaishou',      label: '快手',      tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'Share',           description: '快手私信' },
+  { value: 'kuaishou',      label: '快手',      tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'Share',           description: '快手私信（实验，选择器未经真机校准）' },
   { value: 'xiaohongshu',   label: '小红书',    tagType: 'danger',  group: CHANNEL_GROUP.SOCIAL, icon: 'Postcard',        description: '小红书私信' },
   { value: 'xianyu',        label: '闲鱼',      tagType: 'warning', group: CHANNEL_GROUP.SOCIAL, icon: 'Goods',           description: '闲鱼私信' },
   { value: 'tiktok',        label: 'TikTok',    tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'TikTok 私信' },
