@@ -401,7 +401,7 @@ const submitSend = async () => {
       smtpId: sendForm.smtpId,
       immediateSend: true
     })
-    ElMessage.success('发送成功');
+    ElMessage.success('已提交发送，投递结果以服务端日志为准');
     sendDialogVisible.value = false
   } catch (error) {
     console.error('发送邮件失败:', error)

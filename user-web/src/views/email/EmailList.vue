@@ -341,7 +341,7 @@ const submitSend = async () => {
       smtpId: sendForm.smtpId,
       immediateSend: true
     })
-    ElMessage.success('发送成功')
+    ElMessage.success('已提交发送，投递结果以服务端日志为准')
     sendVisible.value = false
     fetchEmailList()
   } catch (e) {
