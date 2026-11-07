@@ -104,7 +104,7 @@
 | 71 | [x] | GET | `/api/backups/{id}` | 用户端 | path: id | 200 code=0 详情（备份异步执行 status→completed） | `src/api/backup.js` | 8 |
 | 72 | [x] | POST | `/api/backups` | 用户端 | body: { backup_name, backup_type } | 200 建 id=206 pending（backup_name 仅 [A-Za-z0-9_-]，中文名 400 提示准确） | `src/api/backup.js` | 12 |
 | 73 | [x] | DELETE | `/api/backups/{id}` | 用户端 | path: id | 200 code=0 删除成功 | `src/api/backup.js` | 16 |
-| 74 | [~] | POST | `/api/restore` | 用户端 | body: { backup_id } | 404「备份不存在，无法恢复」/400「backup_id 必填」验证通过；**真实恢复路径未执行**（会回写共享 DB，破坏并行会话数据，只验证拒绝路径） | `src/api/backup.js` | 20 |
+| 74 | [x] | POST | `/api/restore` | 用户端 | body: { backup_id } | 200「创建恢复任务成功」；**隔离实例全链实测**（专用 DB `user_db_restore_e2e_20261107`@8217 + PORT 18204，不触碰共享库）：建短链 `restoree2e` → 备份 `data.json` stats.short_links=1 → 删除（list total=0）→ `POST /api/restore {backup_id:1}` 200 → `/api/restore/last` status=completed → 短链以同 short_code/original_url 重建（id=2）→ restore_tmp 自动清理；404/400 拒绝路径同前。测后停实例并 DROP DB | `src/api/backup.js` | 20 |
 | 75 | [x] | GET | `/api/restore/list` | 用户端 | query: params | 200 code=0 list+分页 | `src/api/backup.js` | 24 |
 | 76 | [x] | GET | `/api/restore/last` | 用户端 | - | 200 code=0 最近恢复记录 | `src/api/backup.js` | 28 |
 | 77 | [x] | GET | `/api/bad-cases` | 用户端 | query: params（label 可重复键） | 200 code=0 list | `src/api/badCase.js` | 44 |
@@ -135,7 +135,7 @@
 | 102 | [x] | PUT | `/api/browser-automation/tasks/{id}` | 用户端 | path: id / body: data（同 create 全量） | 200 code=0 更新成功 | `src/api/browserAutomation.js` | 15 |
 | 103 | [x] | DELETE | `/api/browser-automation/tasks/{id}` | 用户端 | path: id | 200「已删除」 | `src/api/browserAutomation.js` | 18 |
 | 104 | [x] | POST | `/api/browser-automation/tasks/{id}/publish` | 用户端 | path: id | 200「已发布」 | `src/api/browserAutomation.js` | 21 |
-| 105 | [~] | POST | `/api/browser-automation/tasks/{id}/run` | 用户端 | path: id / body: {} | 8001 BROWSER_HOST_OFFLINE「browser host 未连接…」——环境依赖（本机 Chrome 扩展未连），非代码缺陷 | `src/api/browserAutomation.js` | 27 |
+| 105 | [x] | POST | `/api/browser-automation/tasks/{id}/run` | 用户端 | path: id / body: {} | 200 code=0 `{session_id:668,status:created}`；临时把本机 `nm_host.conf` 指向 `127.0.0.1:8204` 并重启扩展后 host 在线（servable=true,user_id=26），真实执行 4/5 步成功：open_tab/wait/extract（取到 titles/authors/comments）/click，仅 screenshot 失败「Failed to capture tab: image readback failed」（本机 Chrome 截图回读能力问题，非接口缺陷）；另 #585 无 open_tab 的旧任务 200 session_id=667 后因 chrome_tab_id=0 失败（任务编排前置缺失）。测后已还原 nm_host.conf/token 并停 host | `src/api/browserAutomation.js` | 27 |
 | 106 | [x] | POST | `/api/browser-automation/tasks/{id}/pause` | 用户端 | path: id | 8003 状态机校验「仅执行中任务可暂停，当前状态: draft」业务正确（running 态需 browser host） | `src/api/browserAutomation.js` | 30 |
 | 107 | [x] | POST | `/api/browser-automation/tasks/{id}/resume` | 用户端 | path: id | 8003「仅暂停任务可恢复」业务正确 | `src/api/browserAutomation.js` | 33 |
 | 108 | [x] | POST | `/api/browser-automation/tasks/{id}/archive` | 用户端 | path: id | 200「已归档」 | `src/api/browserAutomation.js` | 36 |
