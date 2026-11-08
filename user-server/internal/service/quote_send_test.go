@@ -36,12 +36,16 @@ import (
 
 // qssSetupDB 在 T-P6-02 那五张表之上再加两张：审批与事件。
 // 分库建会把要证的因果链切成两半各测各的（同 setupApprovalTaskLinkDB 的理由）。
+// MessageHub 也在列：CS-01 样本③断言「无任何 delivered/外发行」直接数 message_hub，
+// 而同包样本①会经编排器写入该表——不注册则表不被 TRUNCATE，样本①的残留行
+// 被样本③数进去（批跑红、隔离绿的跨测试污染，CS-02 轮已登记）。
 func qssSetupDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	return testutil.NewTestDB(t,
 		&model.Opportunity{}, &model.Quote{}, &model.QuoteLineItem{},
 		&model.ScriptLibrary{}, &model.ScriptVersion{},
 		&model.ApprovalRequest{}, &model.SalesEvent{},
+		&model.MessageHub{},
 	)
 }
 
