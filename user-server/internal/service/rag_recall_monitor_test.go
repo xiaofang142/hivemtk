@@ -81,6 +81,38 @@ func TestRagRecallMonitor_StartStop(t *testing.T) {
 	s.Stop(context.Background())
 }
 
+// #791 回归：start→stop 后必须能再次 start。
+//
+// 原实现 stopCh 只在构造函数里建一次：Stop 后 channel 保持已关闭，
+// 再 Start 时 goroutine 立即从 <-s.stopCh 退出（采集静默停摆），
+// 再 Stop 对已关闭 channel 二次 close → panic → HTTP 500。
+// 线上连续 3 轮 start→stop 每轮 stop 均 500 实证。
+func TestRagRecallMonitor_RestartAfterStop(t *testing.T) {
+	s := NewRagRecallMonitorService(nil, 50*time.Millisecond, time.Hour)
+	for round := 1; round <= 3; round++ {
+		s.Start(context.Background())
+		s.Stop(context.Background()) // 修复前：第 2 轮起对已关闭 stopCh 二次 close panic
+	}
+	// 三轮后仍能再走完一轮完整周期。
+	s.Start(context.Background())
+	s.Stop(context.Background())
+}
+
+// #791 伴生断言：Stop 之后再 Start，后台 goroutine 必须真的在跑，
+// 而不是拿着已关闭的 stopCh 立即退出（那会让采集静默停摆，比 panic 更隐蔽）。
+func TestRagRecallMonitor_StartAfterStopKeepsGoroutineAlive(t *testing.T) {
+	s := NewRagRecallMonitorService(nil, 20*time.Millisecond, time.Hour)
+	s.Start(context.Background())
+	s.Stop(context.Background())
+
+	s.Start(context.Background())
+	// 修复前：goroutine 第一轮 select 就命中已关闭 stopCh 退出；这里隔 3 个 tick
+	// 再 Stop——若 goroutine 已死，started 仍为 true，Stop 会 close 已关闭的
+	// channel panic，测试以 panic 失败暴露"停摆"。
+	time.Sleep(70 * time.Millisecond)
+	s.Stop(context.Background())
+}
+
 // 5) EnsureSchema
 func TestRagRecallMonitor_EnsureSchema_NilDB(t *testing.T) {
 	s := newRecallMonitor()

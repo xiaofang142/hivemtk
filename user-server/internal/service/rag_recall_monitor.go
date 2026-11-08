@@ -77,6 +77,12 @@ func NewRagRecallMonitorService(repo repository.RagRecallMonitorRepository, inte
 }
 
 // Start 启动后台定时采集
+//
+// stopCh 在这里重建而不是只在构造函数里建：Stop 后 stopCh 已关闭，
+// 若不换新，下一次 Start 的 goroutine 立即从 `<-s.stopCh` 退出（采集静默不跑），
+// 再下一次 Stop 会对已关闭 channel 二次 close panic → HTTP 500（#791 线上实证：
+// 连续 start→stop 三轮每轮 stop 都 500，且采集在第一轮 stop 后就停摆）。
+// started 标志挡住了并发 Start/Stop 的竞态，重建只发生在独占持锁的停→启间隙。
 func (s *RagRecallMonitorService) Start(ctx context.Context) {
 	s.mu.Lock()
 	if s.started {
@@ -84,6 +90,7 @@ func (s *RagRecallMonitorService) Start(ctx context.Context) {
 		return
 	}
 	s.started = true
+	s.stopCh = make(chan struct{})
 	s.mu.Unlock()
 
 	s.wg.Add(1)

@@ -3,7 +3,9 @@ package controller
 import (
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,6 +17,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// isEmptyJSONObject 判断请求体是不是空 JSON 对象（{} 或纯空白）。
+// 空 body 是文档化的"按默认 90 天清理"入参，不触发未知字段守卫。
+func isEmptyJSONObject(raw []byte) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(bytes.TrimSpace(raw), &m); err != nil {
+		return false
+	}
+	return len(m) == 0
+}
 
 // OperationLogController 操作日志控制器
 //
@@ -224,13 +236,26 @@ func (c *OperationLogController) ExportLogs(ctx *gin.Context) {
 // CleanLogs 清理指定日期之前的操作日志
 // 入参 JSON 可选: { before_date: "" } 或 { days: 90 }，缺省默认清理 90 天前
 func (c *OperationLogController) CleanLogs(ctx *gin.Context) {
+	// Raw 保留原始 body：破坏性接口必须能识别"参数根本没带上"的请求。
+	// #825：前端曾传 { beforeDate }（camelCase），binding 只认 before_date，
+	// 字段被静默忽略后回落 90 天默认窗口照删——"没报错"掩盖了参数没生效。
+	raw, _ := ctx.GetRawData()
 	var req struct {
 		BeforeDate string `json:"before_date"`
 		Days       int    `json:"days"`
 	}
-
+	// 重新填回 body 供 ShouldBindJSON 读取（GetRawData 消费过流）。
+	ctx.Request.Body = io.NopCloser(bytes.NewReader(raw))
 	if err := ctx.ShouldBindJSON(&req); err != nil && err.Error() != "EOF" {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
+		return
+	}
+	// 两键全缺 = 调用方以为传了但没传对键：拒绝靠猜的默认清理。
+	// 空 body（EOF/{}）维持文档化的 90 天缺省行为。
+	hasKnownField := req.BeforeDate != "" || req.Days > 0
+	if len(bytes.TrimSpace(raw)) > 0 && !hasKnownField && !isEmptyJSONObject(raw) {
+		response.Error(ctx, http.StatusBadRequest,
+			"请求参数无法识别：清理日期字段为 before_date（YYYY-MM-DD），天数板块为 days；未识别任何有效字段时拒绝执行破坏性清理")
 		return
 	}
 	var cutoff time.Time

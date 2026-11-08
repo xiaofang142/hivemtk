@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
 
@@ -44,6 +46,67 @@ func (s *SystemConfigService) ResolveUploadMaxBytes(ctx context.Context) int64 {
 		return 0
 	}
 	return int64(config.MaxUploadSizeMB) * 1024 * 1024
+}
+
+// FillUnsetFromExisting 用既有行的值补齐"请求里没出现的 bool/int 键"。
+//
+// #968：整行回写模型下，JSON 绑定后零值 = "传了 false/0" = "没传"，三者不可分，
+// 部分保存会把开着的开关静默关掉。controller 已把原始 body 的键存在性传进来：
+// 键没出现的 bool/int 字段从既有行（或文档默认）取值；**键出现了的一律不补**——
+// 显式传 false/0 是合法的关闭动作。读不到既有行时补文档默认（true/50），
+// 与 model 标签的 default 语义一致。
+func (s *SystemConfigService) FillUnsetFromExisting(ctx context.Context, req *model.SystemConfig, keys map[string]json.RawMessage) *model.SystemConfig {
+	if req == nil {
+		return req
+	}
+	has := func(field string) bool { _, ok := keys[field]; return ok }
+	if keys == nil {
+		// body 不是对象（理论上报 400 拦截过）或拿不到原始键：按"全传了"处理，
+		// 保持旧行为，避免误覆盖显式关闭。
+		return req
+	}
+	existing, err := s.repo.GetConfig(ctx)
+	if err != nil || existing == nil {
+		// 没有既有行：补文档默认，与列 default 标签对齐。
+		if !has("enable_register") {
+			req.EnableRegister = true
+		}
+		if !has("enable_email_marketing") {
+			req.EnableEmailMarketing = true
+		}
+		if !has("enable_rag") {
+			req.EnableRAG = true
+		}
+		if !has("maintenance_mode") {
+			req.MaintenanceMode = false
+		}
+		if !has("max_users") {
+			req.MaxUsers = 0
+		}
+		if !has("max_upload_size_mb") {
+			req.MaxUploadSizeMB = 50
+		}
+		return req
+	}
+	if !has("enable_register") {
+		req.EnableRegister = existing.EnableRegister
+	}
+	if !has("enable_email_marketing") {
+		req.EnableEmailMarketing = existing.EnableEmailMarketing
+	}
+	if !has("enable_rag") {
+		req.EnableRAG = existing.EnableRAG
+	}
+	if !has("maintenance_mode") {
+		req.MaintenanceMode = existing.MaintenanceMode
+	}
+	if !has("max_users") {
+		req.MaxUsers = existing.MaxUsers
+	}
+	if !has("max_upload_size_mb") {
+		req.MaxUploadSizeMB = existing.MaxUploadSizeMB
+	}
+	return req
 }
 
 // SaveConfig 保存系统配置

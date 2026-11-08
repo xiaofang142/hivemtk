@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 )
@@ -338,6 +339,11 @@ func TestBatchM_DeleteConfigCannotRemoveDefault(t *testing.T) {
 	err := svc.DeleteConfig(ctx, a.ID)
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("默认")) {
 		t.Errorf("删除默认配置的返回 = %v，期望错误里点名默认", err)
+	}
+	// #806：错误必须携带 ErrInvalidInput 哨兵——controller 的 HandleDBError 走
+	// ErrorFromDB 时据它映射 400；裸 errors.New 会被兜成 500「服务端故障」。
+	if !errors.Is(err, utils.ErrInvalidInput) {
+		t.Errorf("删除默认配置的错误应包 ErrInvalidInput（映射 400），实际: %v", err)
 	}
 	if len(repo.deleted) != 1 {
 		t.Errorf("预检就该挡下，不该还调删除口（deleted = %v）", repo.deleted)

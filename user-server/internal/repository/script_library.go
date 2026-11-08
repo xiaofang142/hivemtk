@@ -120,10 +120,19 @@ func (r *ScriptLibraryRepository) UpdateScriptActivation(ctx context.Context, sc
 		updates["status"] = status
 	}
 	updates["expires_at"] = expiresAt
-	return r.db.WithContext(ctx).
+	res := r.db.WithContext(ctx).
 		Model(&model.ScriptLibrary{}).
 		Where("id = ?", scriptID).
-		Updates(updates).Error
+		Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	// 命中 0 行 = 话术不存在：不能当成功——expire 对不存在 id 回过
+	// 200「话术已过期下线」的假成功（#896，D-35 同型）。
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // CreateScriptExposure 写入曝光记录（fire-and-forget 调用方负责降级）

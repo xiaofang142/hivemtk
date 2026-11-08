@@ -11,11 +11,11 @@ import (
 
 	"hivemtk-user/internal/geo/dto"
 
+	"gorm.io/gorm"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
-
-	"gorm.io/gorm"
 )
 
 // KBService GEO 品牌知识库服务
@@ -29,8 +29,29 @@ func NewKBService(dr repository.GeoKnowledgeDocumentRepository, adapter *LLMAdap
 	return &KBService{docRepo: dr, llm: adapter}
 }
 
+// validSourceLevel 信源等级的合法值域：单字母 A-D（前端下拉仅此四项），
+// 空 = 不设置。列是 varchar(2)，放任意字符串进来会在落库时炸成 500（#499），
+// 必须在 service 层先拒——controller 的 ErrorFromDB 会把 utils.ErrInvalidInput
+// 翻成 400，调用方拿到的是"改一下就行"的参数错误，而不是"服务坏了"。
+func validSourceLevel(level string) bool {
+	if level == "" {
+		return true
+	}
+	if len(level) != 1 {
+		return false
+	}
+	switch level {
+	case "A", "B", "C", "D":
+		return true
+	}
+	return false
+}
+
 // Save 新增/更新文档
 func (s *KBService) Save(ctx context.Context, req *dto.SaveKnowledgeDocumentRequest) (*model.GeoKnowledgeDocument, error) {
+	if !validSourceLevel(req.SourceLevel) {
+		return nil, fmt.Errorf("%w: source_level 只支持 A/B/C/D（收到 %q）", utils.ErrInvalidInput, req.SourceLevel)
+	}
 	metadataJSON := ""
 	if req.Metadata != nil {
 		b, err := json.Marshal(req.Metadata)

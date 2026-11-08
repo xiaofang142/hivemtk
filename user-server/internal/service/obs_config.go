@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/storage"
@@ -174,7 +175,10 @@ func (s *obsConfigService) DeleteConfig(ctx context.Context, id string) error {
 	}
 
 	if config.IsDefault {
-		return errors.New("不能删除默认配置")
+		// ErrInvalidInput 哨兵让 HandleDBError → ErrorFromDB 映射 400；
+		// 裸 errors.New 会落到 500「删除OBS配置失败」——"不能删默认"是
+		// 客户端换个对象就能解决的事，不是服务端故障（#806）。
+		return fmt.Errorf("不能删除默认配置: %w", utils.ErrInvalidInput)
 	}
 
 	return s.repo.DeleteNonDefault(ctx, id)

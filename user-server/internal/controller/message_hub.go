@@ -211,6 +211,14 @@ func (c *MessageHubController) Recall(ctx *gin.Context) {
 			response.ErrorWithCode(ctx, utils.ErrorCodeMessageRecallWindowExpired, http.StatusConflict, err.Error())
 		case errors.Is(err, service.ErrMessageHubRecallUnavailable):
 			response.Error(ctx, http.StatusServiceUnavailable, err.Error())
+		case errors.Is(err, service.ErrMessageHubRecallFailed):
+			// 502 而不是 default 的 ErrorFromDB 500：这是上游渠道失败（网络/
+			// 平台拒绝/凭据缺失），哨兵注释即写明 502。default 分支的
+			// ErrorFromDB 把它兜成 500「操作失败，请稍后重试」（#757），
+			// 语义成了"我们服务坏了"；上游失败该回 UPSTREAM_FAILURE_5005。
+			// 另有一类混进来的确定性业务态（如企微 extra 缺 msgid）同样先落
+			// 这里，502 语义是"上游现在给不了"，比 500"我坏了"更接近真相。
+			response.ErrorWithCode(ctx, utils.ErrorCodeUpstreamFailure, http.StatusBadGateway, err.Error())
 		default:
 			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		}

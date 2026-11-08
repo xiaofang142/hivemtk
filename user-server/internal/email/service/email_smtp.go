@@ -126,28 +126,27 @@ func (s *EmailSmtpService) GetEmailSmtpDTO(ctx context.Context, id string) (*dto
 }
 
 func (s *EmailSmtpService) UpdateEmailSmtpDTO(ctx context.Context, req dto.UpdateEmailSmtpRequest) error {
+	// 旧行无论如何都要取：password/port/limit 零值保留要用，TenantID 也要——
+	// repo.Update 是整行回写（saveWholeRow Select("*")），DTO 不带租户字段，
+	// 落下去的 tenant_id=0 会被多租户守卫 fail-closed 拒掉，
+	// 更新配置 100% 报 500「更新 SMTP 配置失败」（#376 线上实证）。
+	old, err := s.GetEmailSmtp(ctx, req.ID)
+	if err != nil {
+		return err
+	}
 	if req.Password == "" {
-		old, err := s.GetEmailSmtp(ctx, req.ID)
-		if err != nil {
-			return err
-		}
 		req.Password = old.Password
 	}
 	// 零值=保留原值：防止部分字段漏传把端口/限额静默清零（对齐 Password 的保留语义）
-	if req.Port == 0 || req.Limit == 0 {
-		old, err := s.GetEmailSmtp(ctx, req.ID)
-		if err != nil {
-			return err
-		}
-		if req.Port == 0 {
-			req.Port = old.Port
-		}
-		if req.Limit == 0 {
-			req.Limit = old.Limit
-		}
+	if req.Port == 0 {
+		req.Port = old.Port
+	}
+	if req.Limit == 0 {
+		req.Limit = old.Limit
 	}
 	return s.UpdateEmailSmtp(ctx, model.EmailSmtp{
 		ID:       req.ID,
+		TenantID: old.TenantID,
 		Name:     req.Name,
 		Server:   req.Server,
 		Port:     req.Port,

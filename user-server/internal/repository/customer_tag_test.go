@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"testing"
@@ -276,6 +277,44 @@ func TestCustomerTagRepository_Delete(t *testing.T) {
 
 	if deleted != nil {
 		t.Error("Expected nil after deletion")
+	}
+}
+
+// TestCustomerTagRepository_Delete_NotFound 删除不存在的 id 必须报 not found。
+//
+// #981：原实现直接返回 Delete().Error，GORM 命中 0 行不报错，
+// 接口回 200「删除成功」而规则原样还在（假成功）。与同文件 Update 的
+// RowsAffected 守卫同一口径，D-35 同型缺陷。
+func TestCustomerTagRepository_Delete_NotFound(t *testing.T) {
+	repo := setupCustomerTagRepository(t)
+	ctx := context.Background()
+
+	err := repo.Delete(ctx, "no-such-tag-id")
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("删除不存在的标签应报 ErrRecordNotFound，实际: %v", err)
+	}
+}
+
+// TestCustomerTagRepository_Delete_TwiceSecondIsNotFound 已删再删同 id 同样是 not found，
+// 不许第二次也回成功（幂等删除不是本接口的契约——前端要靠 404 知道行已不在）。
+func TestCustomerTagRepository_Delete_TwiceSecondIsNotFound(t *testing.T) {
+	repo := setupCustomerTagRepository(t)
+	ctx := context.Background()
+
+	tag := &model.CustomerTag{
+		ID:       "delete-twice-id",
+		Name:     "Tag Delete Twice",
+		Category: model.TagCategoryDemographic,
+		Source:   model.TagSourceManual,
+	}
+	if err := repo.Create(ctx, tag); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := repo.Delete(ctx, tag.ID); err != nil {
+		t.Fatalf("第一次删除应成功，实际: %v", err)
+	}
+	if err := repo.Delete(ctx, tag.ID); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("第二次删除应报 ErrRecordNotFound，实际: %v", err)
 	}
 }
 

@@ -68,7 +68,16 @@ func (r *customerTagRepository) ListAutoTags(ctx context.Context) ([]*model.Cust
 }
 
 func (r *customerTagRepository) Delete(ctx context.Context, id string) error {
-	return _db.GetDB().WithContext(ctx).Delete(&model.CustomerTag{}, "id = ?", id).Error
+	// 与下方 Update 同一口径：命中 0 行（不存在/别的租户）不许当成功——
+	// 管理端会显示「删除成功」而规则原样还在（#981，D-35 同型）。
+	res := _db.GetDB().WithContext(ctx).Delete(&model.CustomerTag{}, "id = ?", id)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // Update 按主键白名单更新标签规则（name/category/rule）。
