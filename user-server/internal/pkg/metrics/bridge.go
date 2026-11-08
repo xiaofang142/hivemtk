@@ -20,6 +20,10 @@ type BridgeMetrics struct {
 	EmergencyStop       *GaugeVec
 	IdempotencyHits     *CounterVec
 	PIIRedactions       *CounterVec
+	// FrameAckUnknownStatus CH-37b 刀5：WS ack 帧 Status 非法值的 metrics 暴露面。
+	// 数值与 channelgw.FrameAckUnknownStatusCount 同源（ws.go 接线处双写）——
+	// 原子计数留在 channelgw 是因为打点在帧处理热路径，metrics 包不反向依赖 channelgw。
+	FrameAckUnknownStatus *CounterVec
 }
 
 var (
@@ -103,6 +107,11 @@ func GetBridge() *BridgeMetrics {
 				"bridge_pii_redactions_total",
 				"Total PII redactions (sanitization)",
 				[]string{"field"},
+			),
+			FrameAckUnknownStatus: NewCounter(
+				"bridge_frame_ack_unknown_status_total",
+				"Total WS ack frames with invalid Status (neither delivered/failed/unknown nor empty)",
+				[]string{"channel"},
 			),
 		}
 	})

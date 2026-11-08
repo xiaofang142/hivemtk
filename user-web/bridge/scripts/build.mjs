@@ -25,6 +25,7 @@ const entries = {
   'content-jd': 'src/content/jd.js',
   'content-bilibili': 'src/content/bilibili.js',
   'content-weibo': 'src/content/weibo.js',
+  'content-pdd': 'src/content/pdd.js',
   popup: 'src/popup/index.js',
 };
 

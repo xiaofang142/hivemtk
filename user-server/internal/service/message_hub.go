@@ -73,6 +73,8 @@ var messageHubPlatforms = map[string]bool{
 	// 平台枚举都该认识它）——缺词等于 /api/message-hub/platforms 枚举看不到
 	// 网页客服、push 落库被拒或枚举失真。
 	"web_embed": true,
+	// CH-16 首切片（2026-11-09）：拼多多商家网页聊天（canonical=pdd），桥接渠道。
+	"pdd": true,
 }
 
 var messageHubMsgTypes = map[string]bool{
@@ -513,6 +515,9 @@ type HubStats struct {
 	ByMsgType   map[string]int64 `json:"by_msg_type"`
 	ByAccount   map[string]int64 `json:"by_account"`
 	Recent24h   int64            `json:"recent_24h"`
+	// OutboundUnknown CH-37b 刀5：出站「结果不明」行数（unknown 对账待办读数，
+	// 治理动作见 /api/inbox/outbound-unknown*）。跟请求窗口走。
+	OutboundUnknown int64 `json:"outbound_unknown"`
 }
 
 // GetStats 统计
@@ -528,15 +533,16 @@ func (s *MessageHubService) GetStats(ctx context.Context, start, end *time.Time)
 		return &HubStats{ByPlatform: map[string]int64{}, ByDirection: map[string]int64{}, ByMsgType: map[string]int64{}, ByAccount: map[string]int64{}}, nil
 	}
 	return &HubStats{
-		Total:       res.Total,
-		Inbound:     res.Inbound,
-		Outbound:    res.Outbound,
-		Unread:      res.Unread,
-		ByPlatform:  res.ByPlatform,
-		ByDirection: res.ByDirection,
-		ByMsgType:   res.ByMsgType,
-		ByAccount:   res.ByAccount,
-		Recent24h:   res.Recent24h,
+		Total:           res.Total,
+		Inbound:         res.Inbound,
+		Outbound:        res.Outbound,
+		Unread:          res.Unread,
+		ByPlatform:      res.ByPlatform,
+		ByDirection:     res.ByDirection,
+		ByMsgType:       res.ByMsgType,
+		ByAccount:       res.ByAccount,
+		Recent24h:       res.Recent24h,
+		OutboundUnknown: res.OutboundUnknown,
 	}, nil
 }
 

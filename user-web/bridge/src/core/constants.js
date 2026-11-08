@@ -211,6 +211,8 @@ export const CHANNEL_DISPLAY = Object.freeze({
   jd: '京东',
   bilibili: 'B站',
   weibo: '微博',
+  // CH-16 首切片（2026-11-09）：拼多多商家网页聊天，与后端 registry.Label 一致。
+  pdd: '拼多多',
 });
 
 // B8（2026-09-19）实验渠道清单——与 user-server internal/channelgw/registry.go 的
@@ -218,7 +220,10 @@ export const CHANNEL_DISPLAY = Object.freeze({
 // 链路可跑但不保证生产级正确率。语义是「如实降级声明」：只影响日志/诊断展示，
 // 不拦截任何功能（未证伪不删除）。
 // 2026-11 新增 jd/bilibili/weibo：选择器有公开页面结构证据但未真机校准，同样标实验。
-export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true, jd: true, bilibili: true, weibo: true });
+// 2026-11-09 新增 pdd（CH-16 首切片）：选择器为 X 级历史源码实证（ChatGPT-On-CS
+// v1.4.5 静态源，2026-11-06 评估报告 §5.1），本方真机未校准，同样标实验。
+// 与 user-server registry_parity_test.go TestExperimentalFlagsParityWithBridgeExtension 双向钉住。
+export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true, jd: true, bilibili: true, weibo: true, pdd: true });
 
 export function isExperimentalChannel(channel) {
   return !!EXPERIMENTAL_CHANNELS[channel];
@@ -233,7 +238,7 @@ export function isExperimentalChannel(channel) {
 // 2026-08-05 渠道编码统一：CHANNELS 值改为平台全名（去掉 _web 后缀），与后端
 // model.ChannelXHS/Douyin/Kuaishou/Xianyu/TikTok 一一对应。
 export const PROTOCOL = Object.freeze({
-  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou', JD: 'jd', BILIBILI: 'bilibili', WEIBO: 'weibo' },
+  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou', JD: 'jd', BILIBILI: 'bilibili', WEIBO: 'weibo', PDD: 'pdd' },
   FRAME: {
     REGISTER: 'register',
     INBOUND: 'inbound_message',

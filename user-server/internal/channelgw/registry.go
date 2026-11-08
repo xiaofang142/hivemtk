@@ -175,6 +175,12 @@ func init() {
 		{Name: model.ChannelBilibili, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "B站", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
 		{Name: model.ChannelWeibo, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "微博", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
 		{Name: model.ChannelPersonalWX, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "个人微信", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		// CH-16（2026-11-09 首切片，CH-37a 批准选定渠道）：拼多多商家网页聊天。
+		// 入口 https://mms.pinduoduo.com/chat-merchant/index.html（A+V 实证，登录墙后）；
+		// 选择器为 X 级历史源码实证（ChatGPT-On-CS v1.4.5 静态源：.msg-list/.onemsg/
+		// .buyer-item/.cs-item/#replyTextarea/.reply-footer .send-btn 等，2026-11-06
+		// 评估报告 §5.1 复读），本方真机未校准——一律 Experimental，能力如实降级。
+		{Name: model.ChannelPDD, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "拼多多", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
 	} {
 		Default.Register(spec)
 	}

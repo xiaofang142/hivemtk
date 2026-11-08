@@ -499,6 +499,55 @@ func (r *MessageHubRepository) CountOutboundUnknown(ctx context.Context, channel
 	return n, err
 }
 
+// OutboundUnknownRow unknown 对账管理面的行视图（CH-37b 刀5）：只暴露对账需要的字段，
+// 不整行返回——content 等大字段与客户侧消息体对管理动作无用且可能含 PII。
+type OutboundUnknownRow struct {
+	ID             uint       `json:"id"`
+	Platform       string     `json:"platform"`
+	AccountID      string     `json:"account_id"`
+	ConversationID string     `json:"conversation_id"`
+	MsgID          string     `json:"msg_id"`
+	Status         string     `json:"status"`
+	PushError      string     `json:"push_error"`
+	PushAttempts   int        `json:"push_attempts"`
+	CreatedAt      time.Time  `json:"created_at"`
+	SentAt         *time.Time `json:"sent_at"`
+}
+
+// ListOutboundUnknown CH-37b 刀5：unknown 行清单（对账入口的待办读数，与
+// CountOutboundUnknown 同谓词同作用域）。id 游标升序分页——对账操作按行 id 定位，
+// 稳定排序保证翻页不重不漏。channel/accountID 传空串 = 不按该维过滤（全局口径）；
+// 租户作用域同 CountOutboundUnknown 依赖隔离 callback。limit<=0 用默认 50，上界 200
+// （管理读口不承载全量导出）。
+func (r *MessageHubRepository) ListOutboundUnknown(ctx context.Context, channel, accountID string, limit, offset int) ([]OutboundUnknownRow, error) {
+	if r == nil || r.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	q := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = 'outbound' AND status = ?", model.BridgeAckStatusUnknown).
+		Select("id, platform, account_id, conversation_id, msg_id, status, push_error, push_attempts, created_at, sent_at").
+		Order("id ASC").
+		Limit(limit).Offset(offset)
+	if channel != "" {
+		q = q.Where("platform = ?", channel)
+	}
+	if accountID != "" {
+		q = q.Where("account_id = ?", accountID)
+	}
+	rows := make([]OutboundUnknownRow, 0, limit)
+	err := q.Scan(&rows).Error
+	return rows, err
+}
+
 func (r *MessageHubRepository) AnyExistsByMsgIDs(ctx context.Context, channel string, msgIDs []string) (map[string]bool, error) {
 	if r == nil || r.db == nil || len(msgIDs) == 0 || channel == "" {
 		return map[string]bool{}, nil

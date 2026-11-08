@@ -289,16 +289,19 @@ type Frame struct {
 	Reason    string           `json:"reason,omitempty"`
 }
 
-// ack 帧 Status 字段的合法取值（CH-37b 刀2 起 WS 开始消费）：
+// ack 帧 Status 字段的合法取值（CH-37b 刀2 起 WS 开始消费；刀4 R2/R6 起三值）：
 //   - 空 / "delivered"：确认送达（legacy 仅-delivered 帧继续可用，行为不变）
 //   - "failed"：确认发送失败，走详细 ack 的 failed 终态路径（停止重推）
-//   - 其余值：协议错误——本刀只做「拒翻转 + Warn + FrameAckUnknownStatusCount 打点」，
-//     unknown 值的完整语义（重试/断连策略）归 CH-37b 刀4（R2/R6）。
+//   - "unknown"：「已提交但结果不明」真终态（刀2 时拒翻转，刀4 起真翻转入 unknown 态，
+//     永不自动重发，对账走 /api/inbox/outbound-unknown/reconcile 显式迁移）
+//   - 其余值：协议错误——拒翻转 + Warn + FrameAckUnknownStatusCount 打点。
 //
-// 值复用 model.BridgeAckStatusDelivered / model.BridgeAckStatusFailed，不再另立词表。
+// 值复用 model.BridgeAckStatusDelivered / model.BridgeAckStatusFailed /
+// model.BridgeAckStatusUnknown（model.IsBridgeAckTerminalStatus 判定），不再另立词表。
 
-// FrameAckUnknownStatusCount ack 帧 Status 为未知值（既非 delivered/failed 也非空）的
-// 累计计数。进程级原子计数，供后续 metrics 接线（与 IngestExtraDroppedKeys 同款前置）。
+// FrameAckUnknownStatusCount ack 帧 Status 为未知值（既非 delivered/failed/unknown 也
+// 非空）的累计计数。进程级原子计数（与 IngestExtraDroppedKeys 同款），同时暴露在
+// metrics.GetBridge().FrameAckUnknownStatus（刀5 接线）。
 var FrameAckUnknownStatusCount atomic.Int64
 
 // MessageEventID 透传帧内单条上行消息的 EventID（便于日志/去重）。

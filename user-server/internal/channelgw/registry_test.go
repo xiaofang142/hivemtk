@@ -71,7 +71,8 @@ func TestKuaishouExperimentalDeclared(t *testing.T) {
 	}
 }
 
-// TestDefaultRegistry 默认注册表覆盖九大渠道，且均支持 HTTP + WebSocket 双传输。
+// TestDefaultRegistry 默认注册表覆盖十大渠道（九桥接 + CH-16 pdd，2026-11-09 首切片），
+// 且均支持 HTTP + WebSocket 双传输。
 func TestDefaultRegistry(t *testing.T) {
 	want := []string{
 		model.ChannelDouyin,
@@ -83,6 +84,7 @@ func TestDefaultRegistry(t *testing.T) {
 		model.ChannelBilibili,
 		model.ChannelWeibo,
 		model.ChannelPersonalWX,
+		model.ChannelPDD,
 	}
 	for _, ch := range want {
 		if !Default.IsChannel(ch) {

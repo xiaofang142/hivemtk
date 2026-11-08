@@ -212,6 +212,12 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	// 与 message-hub / platform-accounts 那几个全局治理口同一档。
 	inboxAdmin := auth.Group("", middleware.RequireAdminMiddleware())
 	inboxAdmin.POST("/inbox/reconcile", inboxCtrl.Reconcile)
+	// 出站 unknown（结果不明）对账管理面（CH-37b 刀5）：清单/计数是跨账号全局读口，
+	// 迁移是显式人工动作（operator 落 push_error 留痕）——同收 admin 档。
+	// 迁移 operator 从 JWT username 取，路由组带 JWTAuth+RequireAdmin 双闸。
+	inboxAdmin.GET("/inbox/outbound-unknown", inboxIngressCtrl.ListOutboundUnknown)
+	inboxAdmin.GET("/inbox/outbound-unknown/count", inboxIngressCtrl.CountOutboundUnknown)
+	inboxAdmin.POST("/inbox/outbound-unknown/reconcile", inboxIngressCtrl.ReconcileOutboundUnknown)
 }
 
 func setupPlatformAccountRoutes(auth *gin.RouterGroup) {

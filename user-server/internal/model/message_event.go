@@ -18,10 +18,12 @@ const (
 	ChannelBilibili   = "bilibili"
 	ChannelWeibo      = "weibo"
 	ChannelPersonalWX = "personal_wx"
-	ChannelEmail      = "email"
-	ChannelFeishu     = "feishu"
-	ChannelDingTalk   = "dingtalk"
-	ChannelQQ         = "qq"
+	// CH-16 首切片（2026-11-09）：拼多多商家网页聊天，canonical=pdd。
+	ChannelPDD      = "pdd"
+	ChannelEmail    = "email"
+	ChannelFeishu   = "feishu"
+	ChannelDingTalk = "dingtalk"
+	ChannelQQ       = "qq"
 )
 
 // 消息类型

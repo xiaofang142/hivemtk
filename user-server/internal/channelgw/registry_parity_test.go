@@ -177,8 +177,9 @@ func TestSyntheticRegistrationDegradedNotPromoted(t *testing.T) {
 //
 // 另附一道静态闸：sendOutbound 分支表不得再把桥接渠道常量写回 case 清单（防双清单回潮）。
 func TestBridgeOutboxParityWithWebhookOutbound(t *testing.T) {
-	// 批准决议口径：Default 九渠道全部登记 bridge_outbox。集合变化属于注册表事件，
-	// 必须显式改这里（与 TestExperimentalFlagsParityWithBridgeExtension 钉扩展集合同一方式）。
+	// 批准决议口径：Default 十渠道全部登记 bridge_outbox（九桥接 + CH-16 拼多多首切片
+	// 2026-11-09，Experimental）。集合变化属于注册表事件，必须显式改这里
+	// （与 TestExperimentalFlagsParityWithBridgeExtension 钉扩展集合同一方式）。
 	wantOutbox := map[string]bool{
 		"douyin":      true,
 		"xiaohongshu": true,
@@ -189,6 +190,7 @@ func TestBridgeOutboxParityWithWebhookOutbound(t *testing.T) {
 		"bilibili":    true,
 		"weibo":       true,
 		"personal_wx": true,
+		"pdd":         true,
 	}
 
 	gotOutbox := Default.OutboundChannels(OutboundPathBridgeOutbox)
@@ -204,7 +206,7 @@ func TestBridgeOutboxParityWithWebhookOutbound(t *testing.T) {
 	}
 	for n := range wantOutbox {
 		if !gotSet[n] {
-			t.Errorf("渠道 %q 应登记 OutboundPath=bridge_outbox（九桥接渠道能力位缺失）", n)
+			t.Errorf("渠道 %q 应登记 OutboundPath=bridge_outbox（十桥接渠道能力位缺失）", n)
 		}
 	}
 
