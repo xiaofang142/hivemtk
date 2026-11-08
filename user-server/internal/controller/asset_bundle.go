@@ -10,6 +10,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/service"
 )
 
@@ -106,10 +108,28 @@ func (c *AssetBundleController) SubmitToPlatform(ctx *gin.Context) {
 	platformAssetID, err := c.svc.SubmitToPlatform(ctx.Request.Context(), assetID)
 	if err != nil {
 		logger.Errorf("[asset-bundle] submit to platform failed: %v", err)
-		response.ErrorFromDB(ctx, err, "提交平台失败，请稍后重试")
+		respondSubmitPlatformError(ctx, err)
 		return
 	}
 	response.Success(ctx, gin.H{"platform_asset_id": platformAssetID}, "已提交平台审核")
+}
+
+// respondSubmitPlatformError 区分"平台侧没配好"和"我们自己的服务出错"。
+//
+// 贡献者身份依赖商户密钥 + platform.secret，缺任一项时 contributorIdentity 返回
+// ErrPlatformNotConfigured。这条错误原先落到 ErrorFromDB 的兜底 500，把部署配置
+// 缺失报成了服务端故障；对调用方而言重试无用，状态码应当明确是"暂时不可用"。
+func respondSubmitPlatformError(ctx *gin.Context, err error) {
+	switch {
+	case errors.Is(err, platform.ErrPlatformNotConfigured):
+		response.Error(ctx, http.StatusServiceUnavailable,
+			"平台集成未配置，暂时无法提交上架，请联系平台管理员")
+	case errors.Is(err, platform.ErrContributorUnauthorized):
+		response.Error(ctx, http.StatusBadGateway,
+			"平台贡献者认证失败，请检查平台集成配置")
+	default:
+		response.ErrorFromDB(ctx, err, "提交平台失败，请稍后重试")
+	}
 }
 
 // assetBundleWriteError 统一资产包写操作的错误出口：

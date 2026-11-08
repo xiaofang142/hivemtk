@@ -23,6 +23,14 @@ var (
 	contribExpireAt time.Time
 )
 
+// ResetContributorTokenForTest 清空贡献者 token 缓存（测试隔离用：缓存的 token 会绕过
+// contributorIdentity 的配置校验，让“未配置”用例误命中）。
+func ResetContributorTokenForTest() {
+	contribMu.Lock()
+	defer contribMu.Unlock()
+	contribToken, contribExpireAt = "", time.Time{}
+}
+
 // CreateAssetPayload 平台贡献者端创建资产请求体（资产 data 为 OpenAI 兼容 messages 数组）
 type CreateAssetPayload struct {
 	AssetType   string          `json:"asset_type"`

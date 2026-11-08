@@ -216,3 +216,74 @@ func TestSubmitToPlatformUnknownNumericIDReportsNotFound(t *testing.T) {
 		t.Errorf("主键查不到时不得再拿数字主键当 asset_id 撞库，实际=%v", repo.findByAssetIDKeys)
 	}
 }
+
+// TestSubmitToPlatformUnconfiguredReports503 平台集成缺配置时必须报 503「暂时不可用」，
+// 不能落进 ErrorFromDB 的兜底 500 —— 那是"我们服务坏了"的语义，会诱导客户端重试。
+func TestSubmitToPlatformUnconfiguredReports503(t *testing.T) {
+	repo := newFakeBundleRepo()
+	repo.byAssetID["starter-bundle"] = &model.AssetBundle{
+		ID: 160, AssetID: "starter-bundle", Title: "起步资产包", Version: "1.0.0",
+		Messages: []model.AssetBundleMessage{{Role: "system", Content: "欢迎语"}},
+	}
+
+	ps := newPlatformStub(t)
+	t.Setenv("PLATFORM_ENABLED", "true")
+	orig := config.PlatformCfg
+	oldMK := platform.GetMerchantKey()
+	t.Cleanup(func() {
+		config.PlatformCfg = orig
+		platform.SetMerchantKeyForTest(oldMK)
+		platform.ResetContributorTokenForTest()
+	})
+	// 地址有、密钥空：contributorIdentity 会在发请求前就判定未配置。
+	config.PlatformCfg = &config.PlatformConfig{APIURL: ps.srv.URL}
+	platform.SetMerchantKeyForTest("mk-apitest")
+	platform.ResetContributorTokenForTest()
+
+	svc := service.NewAssetBundleService(repo, nil)
+	router := newSubmitPlatformRouter(svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/asset-bundle/starter-bundle/submit-platform", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("平台未配置应返回 503，实际 %d，body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "平台集成未配置") {
+		t.Errorf("响应应说明平台集成未配置，body=%s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "SERVICE_UNAVAILABLE_6003") {
+		t.Errorf("响应业务码应为 SERVICE_UNAVAILABLE_6003，body=%s", w.Body.String())
+	}
+	if len(ps.createdBodies) != 0 {
+		t.Errorf("未配置时不应向平台发出创建请求，实际 %d 次", len(ps.createdBodies))
+	}
+}
+
+// TestRespondSubmitPlatformErrorMapping 错误分流必须按哨兵错误走，不能被包一层就失效。
+func TestRespondSubmitPlatformErrorMapping(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []struct {
+		name     string
+		err      error
+		wantHTTP int
+		wantCode string
+	}{
+		{"platform-not-configured", fmt.Errorf("wrap: %w", platform.ErrPlatformNotConfigured), http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE_6003"},
+		{"contributor-unauthorized", fmt.Errorf("wrap: %w", platform.ErrContributorUnauthorized), http.StatusBadGateway, "UPSTREAM_FAILURE_5005"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(w)
+			respondSubmitPlatformError(ctx, c.err)
+			if w.Code != c.wantHTTP {
+				t.Fatalf("HTTP=%d, want %d, body=%s", w.Code, c.wantHTTP, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), c.wantCode) {
+				t.Errorf("body 缺业务码 %s: %s", c.wantCode, w.Body.String())
+			}
+		})
+	}
+}
