@@ -33,6 +33,7 @@ import (
 
 var envRefRe = regexp.MustCompile(`os\.(Getenv|LookupEnv)\("([A-Z][A-Z_0-9]+)"\)`)
 var envConstRe = regexp.MustCompile(`os\.(Getenv|LookupEnv)\(([A-Z][A-Za-z0-9_]*)\)`)
+
 // 常量声明形态宽松匹配：const XxxYyy = "ENV_KEY"（XxxYyy 以 Env/EnvKey/FlagEnv 结尾优先，
 // 但不做后缀硬限定——宽松提取后由「被 os.Getenv(常量名) 引用」这个条件自然收口，
 // 不会把无关常量误算进键集）。
@@ -80,6 +81,10 @@ func collect() (map[string]*keyInfo, error) {
 		if testInfraKeys[name] {
 			return
 		}
+		// F-4-4（2026-11-09）：读取点统一用 "/" 分隔——filepath.Walk 在 Windows
+		// 产出反斜杠，若原样写进文档，Linux CI 再生成时 -check 会因分隔符
+		// 不同而恒红。文档是跨平台契约，不是本机构建产物。
+		src = strings.ReplaceAll(src, "\\", "/")
 		k, ok := keys[name]
 		if !ok {
 			k = &keyInfo{Name: name}

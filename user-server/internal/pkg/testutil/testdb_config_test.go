@@ -161,6 +161,10 @@ func TestReadTestDBConfig(t *testing.T) {
 		{"foreign host", map[string]string{"POSTGRES_TEST_HOST": "db.example.internal"}, "pinned"},
 		{"business dsn port", map[string]string{"POSTGRES_TEST_DSN": "postgres://admin:test-secret@127.0.0.1:8202/user_db_test?sslmode=disable"}, "pinned"},
 		{"url", map[string]string{"POSTGRES_TEST_DSN": "postgres://admin:test-secret@localhost:8217/user_db_test?sslmode=disable"}, ""},
+		// F-4-1（2026-11-09）：DSN 自带口令时环境口令可以为空——"DSN 显式覆盖
+		// 一切"是文档承诺；前置门只看环境变量会把合法配置误拒。缺口令仍由
+		// 下面的 "missing dsn password ignores ambient" 兜底。
+		{"url embedded password without env", map[string]string{"POSTGRES_TEST_DSN": "postgres://admin:test-secret@localhost:8217/user_db_test?sslmode=disable", "POSTGRES_TEST_PASSWORD": "", "POSTGRES_PASSWORD": ""}, ""},
 		{"quoted", map[string]string{"POSTGRES_TEST_PASSWORD": "secret ' with \\ spaces"}, ""},
 		{"business database", map[string]string{"POSTGRES_TEST_DBNAME": "user_db"}, "must be user_db_test"},
 		{"injection", map[string]string{"POSTGRES_TEST_DBNAME": "user_db_test\"; DROP DATABASE user_db;--"}, "must be user_db_test"},
