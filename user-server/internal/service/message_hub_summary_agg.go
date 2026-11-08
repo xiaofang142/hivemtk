@@ -93,7 +93,15 @@ func aggregateHubRows(rows []model.MessageHub) ([]repository.MsgHourlyDelta, int
 		}
 		a.delta.MessageCount++
 		if h.IsAIReply {
-			a.delta.AICount++
+			// CS-04 观测口径：转接公告与 AI 回复同行走同一条出库链，桥接出站行统一
+			// 打 IsAIReply=true / scenario=auto_reply 常量——但公告不是 AI 应答
+			// （SampleB 实测形态：低置信转人工轮的那条「已转人工」提示）。行上
+			// handler_type=human（HandleResultToContext 注入，审计分流的凭据）即公告
+			// /人工提示，不计 AICount；也不冒充 HumanCount（坐席没回话），只随
+			// MessageCount 口径走。AI 回复行 handler_type=ai，照旧计数。
+			if ht, _ := h.Extra["handler_type"].(string); ht != string(model.HandlerTypeHuman) {
+				a.delta.AICount++
+			}
 		} else if h.Direction == "outbound" {
 			a.delta.HumanCount++
 		}

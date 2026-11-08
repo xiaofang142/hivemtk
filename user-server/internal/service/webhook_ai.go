@@ -574,6 +574,22 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 	}
 
 	if result.AIReplied && (result.Reply != "" || len(result.Cards) > 0) {
+		// CS-04 发送前复核：入站判锁通过后 AI 腿已在异步生成（入站锁判定 :416 只护
+		// 触发点），这期间坐席接管（TakeoverByAgent→handler=human+LockSessionForHuman
+		// 人工锁）就是实测的抢答窗口——生成完成直接 sendOutbound 的话，客户会在人工
+		// 持有期收到 AI 文案。发送点以编排器稳定会话 ID 复核同一把锁，持有即静默放弃：
+		// 锁由接管链负责，出站链只放行/不释放（契约钉在 cs04_takeover_race_presend_test）。
+		// 读锁故障沿用入站侧同一 fail-open 口径（IsSessionHumanLocked 内部已按关键词保守
+		// 判定并留痕），这里不重复判定。
+		if s.ingressSvc != nil && result.SessionID != "" {
+			if locked, _ := s.ingressSvc.IsSessionHumanLocked(ctx, result.SessionID); locked {
+				logger.Ctx(ctx).Info().
+					Str("session_id", result.SessionID).
+					Str("event_id", p.EventID).
+					Msg("发送前复核：会话已被人工接管，AI 回复静默放弃（防抢答）")
+				return
+			}
+		}
 		outCtx := HandleResultToContext(ctx, result)
 		if agentCtx != nil && agentCtx.AgentCode != "" {
 			outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)

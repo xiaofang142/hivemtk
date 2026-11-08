@@ -23,6 +23,15 @@ const (
 
 	InboxPendingKey = "hivemtk:pending:"
 
+	// InboxLockTTL 人工接管锁的兜底 TTL（可被参数中心覆盖，见 lock_idempotency_params.go）。
+	//
+	// 跨进程/重启语义（CS-04 显式声明）：锁是**带 TTL 的缓存键**（Redis/进程内存），
+	// 不是库行——进程重启不销毁它，重启后该会话依旧人工持有，AI 在 TTL 内不会抢答，
+	// 这是有意为之（接管是坐席的明确意图，重启不该替坐席放手）。锁随两条路径消失：
+	// ① 坐席显式释放/再回复完成（unlockHumanSession）② TTL 到期自然蒸发（兜底 24h，
+	// 防坐席离职/进程故障后永久哑火）。到期后 AI 恢复托管，会话行 handler_type 仍是
+	// human——库态与锁态可能短暂不一致，入站判锁（IsSessionHumanLocked）与发送前
+	// 复核（webhook_ai.go）都只认缓存键，这是既有口径：库态给工作台看，锁态管 AI 放行。
 	InboxLockTTL = 24 * time.Hour
 
 	InboxAILockTTL = 15 * time.Second

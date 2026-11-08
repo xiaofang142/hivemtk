@@ -163,10 +163,15 @@ func (r *dashboardStatsRepo) LatestSummaryBucket(ctx context.Context) (*time.Tim
 
 func (r *dashboardStatsRepo) QueryMessageVolumeRaw(ctx context.Context, since time.Time) ([]MessageVolumeRawRow, error) {
 	var rows []MessageVolumeRawRow
+	// CS-04 观测口径与 summary 主路径（message_hub_summary_agg.go）同一条：桥接出站行
+	// IsAIReply=true 是全桥接常量，转接公告（Extra.handler_type=human，SampleB 形态）
+	// 不是 AI 应答，不计 ai_count、也不冒充 human_count。summary 兜底到本 raw 聚合时
+	// 口径必须一致，否则驾驶舱曲线在主/兜底切换点跳变。handler_type=ai 与无标记的
+	// 既有行照旧计 ai_count。
 	err := r.db.WithContext(ctx).Table("message_hub").
 		Select("date_trunc('hour', created_at) AS hour_bucket, platform, "+
 			"COUNT(DISTINCT conversation_id) AS session_count, "+
-			"COUNT(*) FILTER (WHERE is_ai_reply) AS ai_count, "+
+			"COUNT(*) FILTER (WHERE is_ai_reply AND COALESCE(extra::jsonb->>'handler_type','') <> 'human') AS ai_count, "+
 			"COUNT(*) FILTER (WHERE direction = 'outbound' AND NOT is_ai_reply) AS human_count, "+
 			"COUNT(*) AS message_count").
 		Where("created_at >= ?", since).
