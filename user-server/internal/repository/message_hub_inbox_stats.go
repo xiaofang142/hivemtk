@@ -20,6 +20,9 @@ type HubStatsResult struct {
 	ByMsgType   map[string]int64
 	ByAccount   map[string]int64
 	Recent24h   int64
+	// OutboundUnknown CH-37b 刀5：出站「结果不明」终态行数（unknown 对账待办读数）。
+	// 跟请求窗口走（与其他字段同口径：hubWindow 套每一条统计）。
+	OutboundUnknown int64
 }
 
 // hubWindow 把调用方给的起止界加到一条统计查询上。
@@ -115,6 +118,13 @@ func (r *MessageHubRepository) GetHubStats(ctx context.Context, start, end *time
 	r.db.WithContext(ctx).Model(&model.MessageHub{}).
 		Where("sent_at >= ?", threshold24h).
 		Count(&stats.Recent24h)
+
+	// CH-37b 刀5：unknown 对账待办。outbound 的子集——单独一条计数而不是并进
+	// ByStatus 之类的新维度：这个数的管理动作（显式对账迁移）只有 unknown 有，
+	// 其他状态没有对应治理面，开维度只会给消费者留一列永远用不上的键。
+	hubWindow(r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = ? AND status = ?", "outbound", model.BridgeAckStatusUnknown), start, end).
+		Count(&stats.OutboundUnknown)
 
 	return stats, nil
 }

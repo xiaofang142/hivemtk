@@ -382,7 +382,7 @@
       </el-table-column>
       <el-table-column
         label="状态"
-        width="110"
+        width="150"
       >
         <template #default="{ row }">
           <!-- 撤回是**另一个维度**：recalled_at 非空与已读/未读互不影响（后端也没把撤回写进 status，理由见 model.MessageHub 注释）。 -->
@@ -394,6 +394,16 @@
             :title="$t('messageHubPage.recall.confirmed')"
           >
             {{ $t('messageHubPage.recall.recalled') }}
+          </el-tag>
+          <!-- CH-37b 刀5：出站「结果不明」行露出（unknown 不冒充已送达/失败；
+               治理动作在后端 /api/inbox/outbound-unknown/reconcile，运营从这里看见待办）。 -->
+          <el-tag
+            v-if="row.direction === 'outbound' && row.status === 'unknown'"
+            type="warning"
+            size="small"
+            title="已提交但结果不明，待人工对账"
+          >
+            结果不明
           </el-tag>
           <el-tag
             :type="row.is_read ? 'info' : 'danger'"

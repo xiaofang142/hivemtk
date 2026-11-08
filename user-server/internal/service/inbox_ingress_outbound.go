@@ -518,7 +518,7 @@ type BridgeOutboundAckInput struct {
 //     跨租户行不在谓词命中集合，受影响行数 0。
 //
 // 返回实际迁移行数（幂等：非 unknown 行不计入，不报错——重复对账天然收敛）。
-// 管理侧 HTTP API 装配归后续刀（本刀交付 repo+service 两级能力与验收）。
+// 管理侧 HTTP API 刀5 起在 /api/inbox/outbound-unknown*（admin 组）。
 func (s *InboxIngressService) ReconcileUnknownOutbound(ctx context.Context, channel, accountID string, ids []uint, target, operator string) (int64, error) {
 	if s.hubRepo == nil {
 		return 0, errors.New("reconcile failed: hub repo not configured")
@@ -532,4 +532,41 @@ func (s *InboxIngressService) ReconcileUnknownOutbound(ctx context.Context, chan
 			channel, accountID, ids, target, operator, affected)
 	}
 	return affected, nil
+}
+
+// OutboundUnknownListResult CH-37b 刀5：unknown 清单 + 总数（一问两答，管理面一次拉平）。
+type OutboundUnknownListResult struct {
+	Total int64                           `json:"total"`
+	Rows  []repository.OutboundUnknownRow `json:"rows"`
+}
+
+// ListOutboundUnknownOutbound CH-37b 刀5：unknown 行清单（对账待办读数）。
+// 调用方（管理侧 API）先取清单拿行 id，再走 ReconcileUnknownOutbound 显式迁移；
+// 同样的 (channel, accountID, unknown) 谓词，清单与迁移看到的行集合一致。
+// hubRepo 未装配返回 ErrDBNotReady——管理读口不静默给空（空清单会被误读为「无待办」）。
+func (s *InboxIngressService) ListOutboundUnknownOutbound(ctx context.Context, channel, accountID string, limit, offset int) (*OutboundUnknownListResult, error) {
+	if s.hubRepo == nil {
+		return nil, repository.ErrDBNotReady
+	}
+	rows, err := s.hubRepo.ListOutboundUnknown(ctx, channel, accountID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	total, err := s.hubRepo.CountOutboundUnknown(ctx, channel, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		rows = []repository.OutboundUnknownRow{}
+	}
+	return &OutboundUnknownListResult{Total: total, Rows: rows}, nil
+}
+
+// CountOutboundUnknownOutbound CH-37b 刀5：unknown 行数直读（仪表盘/巡检轮询用，
+// 不拉行清单）。hubRepo 未装配同样 ErrDBNotReady。
+func (s *InboxIngressService) CountOutboundUnknownOutbound(ctx context.Context, channel, accountID string) (int64, error) {
+	if s.hubRepo == nil {
+		return 0, repository.ErrDBNotReady
+	}
+	return s.hubRepo.CountOutboundUnknown(ctx, channel, accountID)
 }

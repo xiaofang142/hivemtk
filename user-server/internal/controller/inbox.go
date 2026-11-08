@@ -578,3 +578,87 @@ func (c *InboxIngressController) UnlockHuman(ctx *gin.Context) {
 	}
 	response.Success(ctx, gin.H{"session_id": sessionID, "unlocked": true}, "解除人工接管成功")
 }
+
+// @Summary      出站结果不明（unknown）清单
+// @Tags      inbox-ingress
+// @Router    /api/inbox/outbound-unknown [get]
+// ListOutboundUnknown CH-37b 刀5：unknown 对账待办清单。
+//
+// 挂 admin 组（与 /inbox/reconcile 同一档：跨账号全局读口，不是坐席工作台动作）。
+// channel/account_id 可选过滤；分页 limit/offset（limit≤0 默认 50，上界 200）。
+// 返回 total + 行视图（行 id 是对账定位键）。hubRepo 未装配 fail-closed 503，
+// 不静默给空清单（空会被误读为「无待办」）。
+func (c *InboxIngressController) ListOutboundUnknown(ctx *gin.Context) {
+	limit, offset := 0, 0
+	if v := ctx.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			limit = n
+		}
+	}
+	if v := ctx.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	res, err := c.svc.ListOutboundUnknownOutbound(ctx.Request.Context(),
+		ctx.Query("channel"), ctx.Query("account_id"), limit, offset)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
+		return
+	}
+	response.Success(ctx, res, "查询成功")
+}
+
+// @Summary      出站结果不明（unknown）计数
+// @Tags      inbox-ingress
+// @Router    /api/inbox/outbound-unknown/count [get]
+// CountOutboundUnknown CH-37b 刀5：unknown 行数直读（仪表盘/巡检轮询，不拉行清单）。
+func (c *InboxIngressController) CountOutboundUnknown(ctx *gin.Context) {
+	n, err := c.svc.CountOutboundUnknownOutbound(ctx.Request.Context(),
+		ctx.Query("channel"), ctx.Query("account_id"))
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
+		return
+	}
+	response.Success(ctx, gin.H{"total": n}, "查询成功")
+}
+
+// @Summary      出站结果不明（unknown）对账迁移
+// @Tags      inbox-ingress
+// @Router    /api/inbox/outbound-unknown/reconcile [post]
+// ReconcileOutboundUnknown CH-37b 刀5：把指定行 id 的 unknown 行显式迁移到 delivered
+// 或 failed（unknown 的唯一出路，规格见 service.ReconcileUnknownOutbound）。
+//
+// 鉴权=JWT+admin（路由组）；operator 从 JWT username 取——对账必须留操作来源，
+// 未登录上下文（无 username）fail-closed 拒绝。ids 由清单端点取得，按行 id 定位
+// （msg_id 是内容哈希会撞多行，规格禁止按 msg_id 对账）。
+func (c *InboxIngressController) ReconcileOutboundUnknown(ctx *gin.Context) {
+	var req struct {
+		Channel   string `json:"channel" binding:"required"`
+		AccountID string `json:"account_id" binding:"required"`
+		IDs       []uint `json:"ids" binding:"required"`
+		Target    string `json:"target" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：channel/account_id/ids/target 均必填（target=delivered 或 failed）")
+		return
+	}
+	operator := ctx.GetString("username")
+	if operator == "" {
+		// 对账是显式人工动作，不留来源的迁移拒绝执行（service 层 operator 必填的同源前置：
+		// API 层拦掉空来源，避免落库侧报错才暴露）。
+		response.Error(ctx, http.StatusForbidden, "对账必须留操作来源（当前登录态无 username）")
+		return
+	}
+	affected, err := c.svc.ReconcileUnknownOutbound(ctx.Request.Context(),
+		req.Channel, req.AccountID, req.IDs, req.Target, operator)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
+		return
+	}
+	response.Success(ctx, gin.H{
+		"affected": affected,
+		"target":   req.Target,
+		"operator": operator,
+	}, "对账完成")
+}

@@ -15,6 +15,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -135,6 +136,19 @@ func TestWS_AckFrame_BogusStatus_StillRejected(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("非法 Status 未被打点（FrameAckUnknownStatusCount 未增加）")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// 刀5 接线格：同一事件同步暴露到 bridge metrics（双写同源）。
+	// 轮询到 metrics 计数也涨为止——两计数在同一函数体里先后落，先后差窗口极小，
+	// 但 fake pipeline 异步路径下仍轮询兜底，不比时序运气。
+	metricsDeadline := time.Now().Add(3 * time.Second)
+	for {
+		if metrics.GetBridge().FrameAckUnknownStatus.WithLabel(model.ChannelDouyin).Value() > 0 {
+			break
+		}
+		if time.Now().After(metricsDeadline) {
+			t.Fatalf("非法 Status 未暴露到 bridge metrics（bridge_frame_ack_unknown_status_total 未增加）")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils"
@@ -309,6 +310,8 @@ func (c *wsConn) handleAckFrame(f *Frame) {
 	if status == "" {
 		// 协议错误：未知 Status 一律不翻转任何行（宁可不 ack 重发，不可错标终态）。
 		FrameAckUnknownStatusCount.Add(1)
+		// 刀5：同步暴露到 bridge metrics（双写同源，见 FrameAckUnknownStatusCount 注释）。
+		metrics.GetBridge().FrameAckUnknownStatus.WithLabel(c.channel).Inc()
 		logger.Warnf("[ChannelGW WS] ack 帧 Status 非法（协议错误，已拒翻转）: channel=%s account=%s status=%q msg_ids=%d",
 			c.channel, c.accountID, f.Status, len(f.MsgIDs))
 		return
