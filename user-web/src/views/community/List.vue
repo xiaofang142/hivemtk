@@ -30,6 +30,7 @@
         type="file"
         accept="application/json,.json"
         class="hidden-file-input"
+        aria-label="导入分组 JSON 文件"
         @change="onImportFileChange"
       >
     </div>
@@ -702,7 +703,7 @@ const handleImport = () => {
 const onImportFileChange = async (event) => {
   const file = event?.target?.files?.[0]
   if (!file) return
-  let payload = null
+  let payload
   try {
     const parsed = JSON.parse(await file.text())
     payload = Array.isArray(parsed) ? { groups: parsed } : parsed

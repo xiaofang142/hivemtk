@@ -413,14 +413,13 @@ async function submit() {
   // 后端 whatsAppCloudCreateReq 的必填字段是 account_name / phone_number_id /
   // whatsapp_business_id / access_token（json tag 就是这几个名字）。原来发的是 `name`
   // 且空值用 `undefined`（JSON 序列化直接丢字段），于是每次保存都拿到 Go validator 原文。
+  // A-2：此前字面量里 phone_number_id/whatsapp_business_id/access_token 各出现两次，
+  // 后组（无 trim 的原始值）覆盖前组（trim 过的），trim 修复从未真正生效——合并为一组同型。
   const payload = {
     account_name: String(form.name || '').trim(),
-    phone_number_id: String(form.phone_number_id || '').trim(),
-    whatsapp_business_id: String(form.whatsapp_business_id || '').trim(),
-    access_token: String(form.access_token || '').trim(),
-    phone_number_id: form.phone_number_id || undefined,
-    whatsapp_business_id: form.whatsapp_business_id || undefined,
-    access_token: form.access_token || undefined,
+    phone_number_id: String(form.phone_number_id || '').trim() || undefined,
+    whatsapp_business_id: String(form.whatsapp_business_id || '').trim() || undefined,
+    access_token: String(form.access_token || '').trim() || undefined,
     app_secret: form.app_secret || undefined,
     verify_token: form.verify_token || undefined,
     webhook_enabled: form.webhook_enabled,

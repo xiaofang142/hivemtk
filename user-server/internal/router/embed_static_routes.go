@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/controller"
+	"hivemtk-user/internal/middleware"
 )
 
 func setupEmbedStaticRoutes(r *gin.Engine) {
@@ -43,7 +44,10 @@ func setupEmbedStaticRoutes(r *gin.Engine) {
 
 	if userWebDist != "" {
 		if _, err := os.Stat(userWebDist); err == nil {
-			r.Static("/assets", filepath.Join(userWebDist, "assets"))
+			// A-18（2026-11-09）：改用 StaticGuard 对齐 /files/* 的防护基线
+			// （危险扩展名 403 + nosniff/sandbox）。构建产物本无可执行内容，
+			// 但防"部署目录被篡改/未来部署形态变化"的纵深成本一行装配。
+			r.GET("/assets/*filepath", middleware.StaticGuard(filepath.Join(userWebDist, "assets")))
 			r.StaticFile("/favicon.ico", filepath.Join(userWebDist, "favicon.ico"))
 			r.StaticFile("/logo.png", filepath.Join(userWebDist, "logo.png"))
 
@@ -64,7 +68,8 @@ func setupEmbedStaticRoutes(r *gin.Engine) {
 
 	if embedDist != "" {
 		if _, err := os.Stat(embedDist); err == nil {
-			r.Static("/embed", embedDist)
+			// A-18：同 /assets——embed SDK 是匿名公开面，守卫不带签名层
+			r.GET("/embed/*filepath", middleware.StaticGuard(embedDist))
 		}
 	}
 }

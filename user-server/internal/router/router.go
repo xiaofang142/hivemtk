@@ -34,11 +34,19 @@ var allowedCORSOrigins = parseCORSOrigins(os.Getenv("CORS_ALLOW_ORIGINS_USER"))
 
 var sseAllowedCORSOrigins = parseCORSOrigins(os.Getenv("SSE_CORS_ALLOW_ORIGINS"))
 
+// isLocalEnv 判定是否本地/开发环境（控制 /__debug__/routes 等调试面的注册）。
+//
+// A-15 收口（2026-11-09）：空值一律视为**非本地**（安全默认值）——原实现空值=本地，
+// 生产忘设 APP_ENV/MODE 时调试路由照样注册（虽有 JWT+AdminAuth 双守卫，但
+// "未配置即放行"的默认方向与安全基线相反）。本地开发者显式写
+// APP_ENV=dev（或 development/debug/test/local）即可，.env-example 有文档。
+// 与 config.IsDevelopmentEnv 的职责分界：那边管 secrets fail-fast（GIN_MODE=debug
+// 可兜底），这边只认显式环境声明，不读 GIN_MODE（gin 日志档不是部署环境）。
 func isLocalEnv() bool {
 	for _, k := range []string{"APP_ENV", "MODE"} {
 		v := strings.ToLower(strings.TrimSpace(os.Getenv(k)))
 		switch v {
-		case "", "dev", "development", "debug", "test", "local":
+		case "dev", "development", "debug", "test", "local":
 			return true
 		}
 	}

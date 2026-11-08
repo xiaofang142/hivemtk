@@ -489,6 +489,19 @@ fmt-check:
 # 全量 —— 坏密码快速退出且不回退空口令/业务端口，由 testutil 配置门 + 本门共同保证。
 TESTDB_AUTH_GATE := go test ./internal/pkg/testutil -count=1 -run '^TestTestDBAuthenticationPreflight$$'
 
+# A-13 DX：本地跑测试前自动从 hivemtk/.env 导出 POSTGRES_TEST_PASSWORD
+# （已在环境里的不覆盖；不写死密钥，仅转发）。test-go-fast/test-service-fast
+# 已自带凭证获取，无需此段。
+test-env:
+	@if [ -z "$$POSTGRES_TEST_PASSWORD" ] && [ -f .env ]; then \
+		_password=$$(grep -E "^POSTGRES_PASSWORD=" .env | head -1 | cut -d= -f2-); \
+		if [ -n "$$_password" ]; then \
+			echo "[test-env] POSTGRES_PASSWORD 在 .env 中找到；make 无法向父 shell 导出，请复制执行下面这行：" \
+			echo "  export POSTGRES_TEST_PASSWORD=\"$$_password\""; \
+		else echo "[test-env] .env 无 POSTGRES_PASSWORD"; fi; \
+	elif [ -n "$$POSTGRES_TEST_PASSWORD" ]; then echo "[test-env] POSTGRES_TEST_PASSWORD 已设置"; \
+	else echo "[test-env] 未找到 .env 且 POSTGRES_TEST_PASSWORD 未设置"; fi
+
 test-go:
 	cd user-server && EMBEDDING_ALLOW_FALLBACK=true $(TESTDB_AUTH_GATE) && \
 	EMBEDDING_ALLOW_FALLBACK=true go test ./... -count=1 -p 1 -timeout 1800s

@@ -3,6 +3,8 @@
 package controller
 
 import (
+	"errors"
+	"io"
 	"strconv"
 
 	"hivemtk-user/internal/model"
@@ -293,7 +295,11 @@ func (ctrl *AssetStoreController) Suspend(c *gin.Context) {
 	var req struct {
 		Reason string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	// A-14：reason 可选——EOF 放行，malformed JSON 400（静默吞掉会让备注丢失无感知）。
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(c, 400, "请求参数错误：请检查字段类型")
+		return
+	}
 	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, model.AssetListingSuspended, userClaimID(c), req.Reason); err != nil {
 		storeFail(c, err)
 		return
@@ -330,7 +336,11 @@ func (ctrl *AssetStoreController) HandleReport(c *gin.Context) {
 		Confirm bool   `json:"confirm"`
 		Reason  string `json:"reason"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	// A-14：同 Suspend——EOF 放行，malformed 400。
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(c, 400, "请求参数错误：请检查字段类型")
+		return
+	}
 	if err := ctrl.svc.HandleReport(c.Request.Context(), tenantIDOf(c), id, userClaimID(c), req.Confirm, req.Reason); err != nil {
 		storeFail(c, err)
 		return

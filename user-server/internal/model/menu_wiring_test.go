@@ -89,8 +89,11 @@ func TestMenuWiring_TemplateMarketRow(t *testing.T) {
 	if parent.Key != "templateMarketGroup" {
 		t.Errorf("templateMarket 的父分组是 %q，应为 templateMarketGroup", parent.Key)
 	}
-	if len(parent.Roles) != 2 || !hasRole(parent.Roles, "admin") || !hasRole(parent.Roles, "manager") {
-		t.Errorf("templateMarketGroup 的角色是 %v，应恰为 [admin manager]（specs/013/delivery.md §4）", parent.Roles)
+	// A-8 死词清理：注册表 Roles 里的 "manager" 已删（3 档角色不可签发、
+	// roleAllowsMenu 对它 default-false，specs/013 时代的词表残留）。
+	// templateMarketGroup 收敛为恰 [admin]——超管恒可见，词表只约束 staff/customer_service。
+	if len(parent.Roles) != 1 || !hasRole(parent.Roles, "admin") {
+		t.Errorf("templateMarketGroup 的角色是 %v，应恰为 [admin]（死词 manager 清理后口径）", parent.Roles)
 	}
 	for _, key := range []string{"templateMarketGroup", "templateMarket"} {
 		if owner := OwnerOfMenuKey(key); owner != ModulePlatformLink {

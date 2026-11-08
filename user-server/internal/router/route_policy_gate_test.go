@@ -154,7 +154,6 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /share/kuaishou/:id":                             "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /share/xianyu/:id":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /share/xiaohongshu/:id":                          "前端静态产物与分享页：只有模板与图片，无商户数据",
-	"HEAD /assets/*filepath":                              "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"HEAD /favicon.ico":                                   "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"HEAD /logo.png":                                      "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"POST /api/auth/login":                                "登录前必须可达（登录、注册、口令找回、站点公开配置、帮助中心）",

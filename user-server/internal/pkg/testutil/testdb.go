@@ -81,12 +81,27 @@ func SlotLockHeld() bool {
 
 // endpoint 解析结果进程级缓存：同一进程里数百次 NewTestDB 不需要反复
 // 做 2s 超时的 TCP 探测。失败不缓存，允许 PG 中途启动后重试。
+//
+// endpointFingerprint 是缓存键的一部分：显式配置（DSN/host/端口候选集）变化时
+// 旧缓存立即作废重探，不得让缓存端点顶替新配置（A-1 接手原稿 endpointConfig
+// 未定义变量所承载的语义——配置指纹即它本来的样子）。
 var (
-	endpointMu     sync.Mutex
-	endpointHost   string
-	endpointPort   string
-	endpointCached bool
+	endpointMu          sync.Mutex
+	endpointHost        string
+	endpointPort        string
+	endpointFingerprint string
+	endpointCached      bool
 )
+
+// endpointConfigFingerprint 汇总影响端点选择的环境变量为一条指纹。
+// 只读 os.Getenv，不触网；候选集顺序参与指纹（显式覆盖在前）。
+func endpointConfigFingerprint() string {
+	return strings.Join([]string{
+		os.Getenv("POSTGRES_TEST_DSN"),
+		os.Getenv("POSTGRES_TEST_HOST"),
+		strings.Join(testDBPortCandidates(), ","),
+	}, "\x00")
+}
 
 // schema 登记表：key 为实际表名（GORM 的 TableName() 结果）。
 // 首次见到的表才 AutoMigrate；后续用例只 TRUNCATE。
@@ -148,9 +163,15 @@ func closeTimeout() time.Duration {
 //
 // 常量取自 config 包（DefaultDBPortDev / DefaultDBPortDocker），与 ports.go 同源，
 // 避免文档与代码各说各话。
+// testDBPortCandidates 测试库端点候选（AV-02 钉扎版）：
+//   - 显式 POSTGRES_TEST_PORT 即唯一候选——不再向业务端口（8202/8232）回退探测，
+//     显式配置错了就让它错（fail fast），这正是 TestTestDBExplicitPortDoesNotFallback 的语义；
+//   - 否则只认专用快测实例：USER_POSTGRES_TEST_HOST_PORT（声明过才可用）→ 8217 默认。
+//
+// 与 testdb_config.go 的钉扎门同一口径：业务端点（8202/8232）永远不会被测试入口触碰。
 func testDBPortCandidates() []string {
-	out := make([]string, 0, 5)
-	seen := make(map[string]bool, 5)
+	out := make([]string, 0, 2)
+	seen := make(map[string]bool, 2)
 	add := func(p string) {
 		if p == "" || seen[p] {
 			return
@@ -158,11 +179,12 @@ func testDBPortCandidates() []string {
 		seen[p] = true
 		out = append(out, p)
 	}
-	add(os.Getenv("POSTGRES_TEST_PORT"))          // 显式覆盖（CI 注入 5432）
-	add(os.Getenv("USER_POSTGRES_HOST_PORT"))     // 与 docker-compose / .env 同源
-	add(os.Getenv("DB_PORT"))                     // 与 config.yaml 同源
-	add(strconv.Itoa(config.DefaultDBPortDev))    // 8232 宿主机直连
-	add(strconv.Itoa(config.DefaultDBPortDocker)) // 8202 容器内 / 默认映射
+	if explicit := os.Getenv("POSTGRES_TEST_PORT"); explicit != "" {
+		add(explicit)
+		return out
+	}
+	add(os.Getenv("USER_POSTGRES_TEST_HOST_PORT")) // 声明为快测实例端口才可探测
+	add(strconv.Itoa(8217))                        // 专用快测实例默认端口
 	return out
 }
 
@@ -181,12 +203,15 @@ func dialTestDB(host, port string) error {
 func resolveTestDBEndpoint() (string, string, error) {
 	endpointMu.Lock()
 	defer endpointMu.Unlock()
-	if endpointCached {
+	fp := endpointConfigFingerprint()
+	if endpointCached && endpointFingerprint == fp {
 		return endpointHost, endpointPort, nil
 	}
 	host, port, err := resolveTestDBEndpointUncached()
 	if err == nil {
-		endpointHost, endpointPort, endpointCached = host, port, true
+		endpointHost, endpointPort = host, port
+		endpointFingerprint = fp
+		endpointCached = true
 	}
 	return host, port, err
 }
@@ -293,6 +318,16 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	last := started
 	var tEndpoint, tEnsure, tOpen, tSettings, tDrop, tMigrate, tNormalize, tRegistry, tTruncate time.Duration
 	newCount := 0
+
+	// 配置门先于一切网络行为（AV-02 口径"连网之前 fail closed"）：
+	// DBNAME 白名单 / PGSERVICE 拒绝 / 口令缺失 / 实例钉扎（host loopback、
+	// port 仅快测实例）都在这里拒绝，探测与建库永远不触碰业务实例。
+	// 配置门的错误文本本身已设计为脱敏（"must be user_db_test"/"pinned"等
+	// 固定文案，不含输入值），safeTestDBError 会把它压成通用句——这里直接
+	// 透传原错误，让负例矩阵与运维提示能对上具体是哪条门拦的。
+	if _, cfgErr := readTestDBConfig(); cfgErr != nil {
+		t.Fatalf("测试库配置未通过安全门（未发起任何连接）：%v", cfgErr)
+	}
 
 	host, port, dialErr := resolveTestDBEndpoint()
 	if dialErr != nil {
@@ -802,14 +837,19 @@ func getTestDSN(port string) string {
 	user := getEnvOr("POSTGRES_TEST_USER", "admin")
 	password := getEnvOr("POSTGRES_TEST_PASSWORD", os.Getenv("POSTGRES_PASSWORD"))
 	if password == "" {
-		// 兜底：CI 的容器密码。本地 .env 的密码不同，届时会走到下面的
-		// 认证失败分支并给出明确提示（不在此硬编码本地密码 —— 那是密钥）。
-		password = "password123"
+		// 缺配置快速失败（AV-02 口径，与平台端一致）：口令缺失不再是静默
+		// 兜底"password123"——那会把"没配口令"变成"用错口令认证失败"，
+		// 288 个测试文件按 skip/fail 混合形态掩盖真实配置问题。生产链的
+		// readTestDBConfig 在组 DSN 之前就已拦截（"test password is missing"），
+		// 这里只在直接调用 getTestDSN 的旧路径上给一个显式占位。
+		password = "missing-test-password"
 	}
 	dbname := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
 	sslmode := getEnvOr("POSTGRES_TEST_SSLMODE", "disable")
+	// 口令/库名经 testDSNQuote 包裹：含空格、引号、反斜杠的值不再截断或
+	// 被误当成下一个 key（testDSNFields 是关键词式解析器，裸值按空白分词）。
 	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Shanghai",
-		host, port, user, password, dbname, sslmode)
+		host, port, user, testDSNQuote(password), testDSNQuote(dbname), sslmode)
 }
 
 func getEnvOr(key, fallback string) string {
@@ -821,15 +861,80 @@ func getEnvOr(key, fallback string) string {
 
 func maskedDSN(dsn string) string {
 	out := []byte(dsn)
+	// 三类形态全覆盖（TestMaskedDSN 的四个用例）：
+	//   1. keyword 式 password=（引号口令含空格——掩到闭引号，不止首个空格）
+	//   2. 多个 password= 参数（不 break，每个都掩）
+	//   3. URL 式 userinfo（postgres://user:secret@host）——scheme 前缀识别后
+	//      掩 "@" 之前最后一段 credential。
+	maskKeywordPasswords(out)
+	maskURLUserInfo(out)
+	return string(out)
+}
+
+func maskKeywordPasswords(out []byte) {
 	for i := 0; i < len(out)-8; i++ {
-		if string(out[i:i+9]) == "password=" {
-			j := i + 9
+		if string(out[i:i+9]) != "password=" {
+			continue
+		}
+		j := i + 9
+		if j < len(out) && out[j] == '\'' {
+			// 引号口令：掩到闭引号（转义 \X 原样掩过，闭引号=未被 \ 前缀的 '）。
+			j++
+			for j < len(out) {
+				if out[j] == '\\' && j+1 < len(out) {
+					j += 2
+					continue
+				}
+				if out[j] == '\'' {
+					j++
+					break
+				}
+				j++
+			}
+		} else {
 			for j < len(out) && out[j] != ' ' {
 				out[j] = '*'
 				j++
 			}
-			break
+		}
+		for k := i + 9; k < j && k < len(out); k++ {
+			out[k] = '*'
+		}
+		i = j - 1
+	}
+}
+
+func maskURLUserInfo(out []byte) {
+	// postgres://user:secret@host → 掩 "://host" 里 scheme 后到 "@" 前的最后一段。
+	schemes := []string{"postgres://", "postgresql://"}
+	for _, scheme := range schemes {
+		for i := 0; i+len(scheme) <= len(out); i++ {
+			if string(out[i:i+len(scheme)]) != scheme {
+				continue
+			}
+			end := i + len(scheme)
+			at := -1
+			for end < len(out) && out[end] != '/' && out[end] != '?' {
+				if out[end] == '@' {
+					at = end
+				}
+				end++
+			}
+			if at > i+len(scheme) {
+				// 掩 userinfo 里的口令段（最后一个 ':' 之后到 '@'）。
+				colon := -1
+				for k := i + len(scheme); k < at; k++ {
+					if out[k] == ':' {
+						colon = k
+					}
+				}
+				if colon >= 0 {
+					for k := colon + 1; k < at; k++ {
+						out[k] = '*'
+					}
+				}
+			}
+			i = end - 1
 		}
 	}
-	return string(out)
 }
