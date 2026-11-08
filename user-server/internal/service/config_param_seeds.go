@@ -481,8 +481,8 @@ func DefaultParamDefs() []ParamDef {
 			ValueType:   "float", DefaultValue: "0.95", Min: strPtr("0.5"), Max: strPtr("1.0"), Step: strPtr("0.05")},
 
 		{Group: "embedding", Key: "global_override", Name: "全局 Embedding 提供商覆盖（整份 JSON）",
-			Description: "整份 JSON：{enabled,base_url,api_key,model}。enabled 为真且 base_url 非空时，EmbeddingService.DefaultConfig 用它顶掉 config.yaml/env 那一层，指向云端 OpenAI 兼容端点；关掉只需把 enabled 写成 false。维度硬约束 1024（pgvector 兼容），非 1024 维模型在调用侧强制回落并告警。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/embedding_global_config.go，写路径由管理端 PUT /api/llm/embedding-config 走本条（带操作者审计）",
-			ValueType:   "json", Risk: "danger", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":""}`,
+			Description: "整份 JSON：{enabled,base_url,api_key,model,protocol}。enabled 为真且 base_url 非空时，EmbeddingService.DefaultConfig 用它顶掉 config.yaml/env 那一层；protocol 空/openai 走 {base}/v1/embeddings，tei 走 TEI 原生 {base}/embed。关掉只需把 enabled 写成 false。维度硬约束 1024（pgvector 兼容），非 1024 维模型在调用侧强制回落并告警。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/embedding_global_config.go，写路径由管理端 PUT /api/llm/embedding-config 走本条（带操作者审计）",
+			ValueType:   "json", Risk: "danger", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":"","protocol":""}`,
 			Category: "LLM"},
 
 		{Group: "knowledge", Key: "max_upload_file_size", Name: "知识库上传大小上限",

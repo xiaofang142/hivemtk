@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -21,13 +22,14 @@ import (
 func GetEmbeddingConfig(ctx *gin.Context) {
 	o := llm.GetGlobalEmbeddingOverride()
 	if o == nil {
-		response.Success(ctx, gin.H{"enabled": false, "base_url": "", "api_key_set": false, "model": ""}, "ok")
+		response.Success(ctx, gin.H{"enabled": false, "base_url": "", "api_key_set": false, "model": "", "protocol": ""}, "ok")
 		return
 	}
 	response.Success(ctx, gin.H{
 		"enabled":     o.Enabled,
 		"base_url":    o.BaseURL,
 		"model":       o.Model,
+		"protocol":    o.Protocol,
 		"api_key_set": o.APIKey != "",
 	}, "ok")
 }
@@ -40,20 +42,28 @@ func GetEmbeddingConfig(ctx *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        body   body    object  true  "enabled/base_url/api_key/model（启用时 base_url 与 model 必填）"
+// @Param        body   body    object  true  "enabled/base_url/api_key/model/protocol（启用时 base_url 与 model 必填；protocol 空或 openai=OpenAI 兼容，tei=TEI 原生）"
 // @Success      200    {object}  response.Response
 // @Failure      400    {object}  response.Response  "body 形状不对，或启用时缺 base_url/model"
 // @Failure      500    {object}  response.Response  "保存失败（含参数中心写口未注入）"
 // @Router       /api/llm/embedding-config [put]
 func UpdateEmbeddingConfig(ctx *gin.Context) {
 	var req struct {
-		Enabled bool   `json:"enabled"`
-		BaseURL string `json:"base_url"`
-		APIKey  string `json:"api_key"`
-		Model   string `json:"model"`
+		Enabled  bool   `json:"enabled"`
+		BaseURL  string `json:"base_url"`
+		APIKey   string `json:"api_key"`
+		Model    string `json:"model"`
+		Protocol string `json:"protocol"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "invalid body: "+err.Error())
+		return
+	}
+	req.Protocol = strings.ToLower(strings.TrimSpace(req.Protocol))
+	switch req.Protocol {
+	case "", "openai", "tei":
+	default:
+		response.Error(ctx, http.StatusBadRequest, "protocol 仅支持 openai 或 tei")
 		return
 	}
 	if req.Enabled && (req.BaseURL == "" || req.Model == "") {
@@ -73,10 +83,11 @@ func UpdateEmbeddingConfig(ctx *gin.Context) {
 		}
 	}
 	if err := llm.SetGlobalEmbeddingOverride(&llm.GlobalEmbeddingOverride{
-		Enabled: req.Enabled,
-		BaseURL: req.BaseURL,
-		APIKey:  req.APIKey,
-		Model:   req.Model,
+		Enabled:  req.Enabled,
+		BaseURL:  req.BaseURL,
+		APIKey:   req.APIKey,
+		Model:    req.Model,
+		Protocol: req.Protocol,
 	}, actorID); err != nil {
 		response.ErrorFromDB(ctx, err, "保存失败，请稍后重试")
 		return
