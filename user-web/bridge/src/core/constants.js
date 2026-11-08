@@ -100,6 +100,8 @@ export const PLATFORM_ENTRY_URLS = {
   jd: 'https://jdm.jd.com/',
   bilibili: 'https://message.bilibili.com/',
   weibo: 'https://weibo.com/chat',
+  // CH-16 首切片（2026-11-09）：拼多多商家聊天页（登录墙后）。
+  pdd: 'https://mms.pinduoduo.com/chat-merchant/index.html',
 };
 
 // =============================================================

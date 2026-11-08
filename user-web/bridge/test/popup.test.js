@@ -342,7 +342,7 @@ describe('popup selfCheck 流程', () => {
     exported.selfCheck();
     expect(chrome.calls).toEqual([]);
     expect(elements['selfOut'].textContent).toContain('example.com');
-    expect(elements['selfOut'].textContent).toContain('抖音/小红书/TikTok');
+    expect(elements['selfOut'].textContent).toContain('不是已支持平台的网页');
   });
 
   it('A. ping 失败（典型 Chrome 错误）→ 输出诊断文案，不再显示 "undefined"', async () => {

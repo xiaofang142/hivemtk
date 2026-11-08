@@ -26,6 +26,10 @@ func init() {
 	Register(Entry{Platform: "weibo", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
 	Register(Entry{Platform: "personal_wx", Cap: CapDMReceive, Via: "bridge", Note: "桌面伴生上报；伴生未交付（外部工程）"})
 	Register(Entry{Platform: "personal_wx", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；伴生未交付（外部工程）"})
+	// CH-16 首切片（2026-11-09，二次审核补齐）：拼多多商家网页私信，桥接收发链路与
+	// 既有网页渠道同源；Experimental（选择器为 X 级历史源码实证，本方真机未校准）。
+	Register(Entry{Platform: "pdd", Cap: CapDMReceive, Via: "bridge", Note: "拼多多商家网页（mms.pinduoduo.com/chat-merchant）；Experimental，选择器待真机"})
+	Register(Entry{Platform: "pdd", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
 
 	// 官方 API/webhook 渠道
 	Register(Entry{Platform: "wechat", Cap: CapWebhook, Via: "webhook", Note: "公众号回调验签（/api/webhook/wechat/:account_id）"})

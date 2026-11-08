@@ -215,7 +215,8 @@ function broadcastToAllTabs(payload) {
       const list = Array.isArray(tabs) ? tabs : [];
       for (const t of list) {
         if (!t || !t.id || !t.url) continue;
-        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com/i.test(t.url)) continue;
+        // CH-16 首切片（2026-11-09）：pinduoduo.com 一并广播（kill switch 对 pdd 同样即时生效）。
+        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(t.url)) continue;
         try {
           chrome.tabs.sendMessage(t.id, payload, () => { try { void chrome.runtime.lastError; } catch (_) {} });
         } catch (_) {  }

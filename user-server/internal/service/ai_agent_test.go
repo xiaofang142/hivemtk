@@ -638,6 +638,10 @@ func TestNormalizeChannelType(t *testing.T) {
 		{"xianyu", "xianyu"},
 		{"tiktok", "tiktok"},
 		{"  Telegram  ", "telegram"},
+		// CH-16 首切片（2026-11-09）：拼多多三写法归一到 canonical pdd。
+		{"pdd", "pdd"},
+		{"pdd_web", "pdd"},
+		{"pinduoduo", "pdd"},
 	}
 	for _, c := range cases {
 		got := NormalizeChannelType(c.input)
