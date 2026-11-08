@@ -20,6 +20,18 @@ describe('渠道表：2026-11 新增渠道与公众号别名', () => {
     }
   });
 
+  // CH-16 首切片（2026-11-09）：拼多多商家聊天进前端渠道表，分组 social。
+  it('CH-16 拼多多（pdd）进渠道表，social 分组，别名归一', () => {
+    expect(values).toContain('pdd');
+    const opt = CHANNEL_OPTIONS.find((o) => o.value === 'pdd');
+    expect(opt.group).toBe('social');
+    expect(opt.label).toBe('拼多多');
+    expect(getChannelLabel('pdd_web')).toBe('拼多多');
+    expect(getChannelLabel('pinduoduo')).toBe('拼多多');
+    expect(PLATFORM_GROUP_MEMBERS.pdd).toEqual(['pdd', 'pdd_web', 'pinduoduo']);
+    expect(CHANNEL_LABEL_MAP.pdd).toBe('拼多多');
+  });
+
   it('公众号入站码 wechat 归一为「微信公众号」', () => {
     expect(getChannelLabel('wechat')).toBe('微信公众号');
     expect(getChannelLabel('weixin')).toBe('微信公众号');
@@ -57,6 +69,13 @@ describe('渠道表：实验等级文字标注（CS-07）', () => {
       expect(opt, `${ch} 应存在`).toBeTruthy();
       expect(opt.description).toContain('实验');
     }
+  });
+
+  it('CH-16 拼多多实验标注：描述含「实验」与未校准声明', () => {
+    const opt = optionByValue('pdd');
+    expect(opt, 'pdd 应存在').toBeTruthy();
+    expect(opt.description).toContain('实验');
+    expect(opt.description).toContain('未经真机校准');
   });
 
   it('个人微信提示面写明伴生未交付，与公众号区分', () => {

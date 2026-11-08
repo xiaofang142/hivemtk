@@ -109,6 +109,14 @@
       "js": ["content-weibo.js"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "https://*.pinduoduo.com/*"
+      ],
+      "js": ["content-pdd.js"],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ]
 }

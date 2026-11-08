@@ -19,6 +19,8 @@ export const SUPPORTED_HOSTS = [
   'im.jd.com',
   'message.bilibili.com',
   'weibo.com',
+  // CH-16 首切片：拼多多商家后台（chat-merchant 聊天页所在域，登录墙后）。
+  'pinduoduo.com',
 ];
 
 // isSupportedHost：运行时域名校验。manifest.matches 是入口校验，
@@ -49,7 +51,9 @@ function pickContentScriptFile(url) {
     if (/(^|\.)(jdm|dongdong|chat|im)\.jd\.com$/.test(host)) return 'content-jd.js';
     if (/(^|\.)message\.bilibili\.com$/.test(host)) return 'content-bilibili.js';
     if (/(^|\.)weibo\.com$/.test(host)) return 'content-weibo.js';
-    return null; 
+    // CH-16 首切片：拼多多商家后台（mms.pinduoduo.com/chat-merchant）。
+    if (/(^|\.)pinduoduo\.com$/.test(host)) return 'content-pdd.js';
+    return null;
   } catch (_) {
     return null;
   }

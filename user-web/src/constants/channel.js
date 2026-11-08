@@ -30,6 +30,7 @@ export const CHANNEL_OPTIONS = Object.freeze([
   { value: 'jd',            label: '京东',      tagType: 'danger',      group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: '京东（京麦/咚咚私信，实验）' },
   { value: 'bilibili',      label: 'B站',       tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'B站私信（实验）' },
   { value: 'weibo',         label: '微博',      tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',    description: '微博聊天（实验）' },
+  { value: 'pdd',           label: '拼多多',    tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: '拼多多商家聊天（实验，选择器未经真机校准）' },
   { value: 'sms',           label: '短信',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Cellphone',       description: '短信触达（模板/直发）' },
   { value: 'email',         label: '邮件',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Message',         description: '邮件触达（支持附件）' },
   { value: 'card',          label: '卡片',      tagType: 'info',    group: CHANNEL_GROUP.CARD,   icon: 'Postcard',        description: '卡片消息（子渠道）' },
@@ -46,6 +47,9 @@ export const PLATFORM_GROUP_MEMBERS = Object.freeze({
   jd: ['jd', 'jd_web'],
   bilibili: ['bilibili', 'bilibili_web', 'bili'],
   weibo: ['weibo', 'weibo_web', 'wb'],
+  // CH-16 首切片（2026-11-09）：拼多多商家聊天，canonical=pdd，别名与后端
+  // bridge.NormalizeBridgeChannel（pinduoduo/pdd_web→pdd）一致。
+  pdd: ['pdd', 'pdd_web', 'pinduoduo'],
   personal_wx: ['personal_wx', 'wx_personal', 'wechat_personal']
 });
 
@@ -81,6 +85,10 @@ export const CHANNEL_LEGACY_WEB_TO_CANONICAL = Object.freeze({
   'bilibili_web': 'bilibili',
   'wb': 'weibo',
   'weibo_web': 'weibo',
+  // CH-16 首切片（2026-11-09）：拼多多旧写法归一 canonical=pdd（与后端
+  // bridge.NormalizeBridgeChannel 的 pinduoduo/pdd_web 别名一致）。
+  'pdd_web': 'pdd',
+  'pinduoduo': 'pdd',
   'wx_personal': 'personal_wx',
   'wechat_personal': 'personal_wx'
 });

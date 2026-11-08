@@ -73,6 +73,8 @@ var messageHubPlatforms = map[string]bool{
 	// 平台枚举都该认识它）——缺词等于 /api/message-hub/platforms 枚举看不到
 	// 网页客服、push 落库被拒或枚举失真。
 	"web_embed": true,
+	// CH-16 首切片（2026-11-09）：拼多多商家网页聊天（canonical=pdd），桥接渠道。
+	"pdd": true,
 }
 
 var messageHubMsgTypes = map[string]bool{

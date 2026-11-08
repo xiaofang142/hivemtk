@@ -31,6 +31,7 @@ func TestMessageHubPlatformsCoverAllChannelConstants(t *testing.T) {
 		model.ChannelBilibili,
 		model.ChannelWeibo,
 		model.ChannelPersonalWX,
+		model.ChannelPDD,
 	}
 	for _, ch := range channels {
 		if !messageHubPlatforms[ch] {

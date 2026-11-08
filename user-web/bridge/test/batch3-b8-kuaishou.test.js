@@ -36,14 +36,16 @@ describe('B8 getAccountId 只信 /profile/<id> 形态', () => {
 });
 
 describe('B8 实验渠道声明', () => {
-  it('kuaishou 与 2026-11 新增三渠道是实验渠道；其余不拦截', () => {
+  it('kuaishou 与 2026-11 新增渠道是实验渠道；其余不拦截', () => {
     expect(isExperimentalChannel('kuaishou')).toBe(true);
     expect(isExperimentalChannel('jd')).toBe(true);
     expect(isExperimentalChannel('bilibili')).toBe(true);
     expect(isExperimentalChannel('weibo')).toBe(true);
+    // CH-16 首切片（2026-11-09）：pdd 选择器为 X 级历史源码实证未真机校准，同标实验。
+    expect(isExperimentalChannel('pdd')).toBe(true);
     expect(isExperimentalChannel('douyin')).toBe(false);
     expect(isExperimentalChannel(undefined)).toBe(false);
-    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou', 'jd', 'bilibili', 'weibo']);
+    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou', 'jd', 'bilibili', 'weibo', 'pdd']);
   });
 
   it('content 启动路径引用实验告警（源码契约）', () => {

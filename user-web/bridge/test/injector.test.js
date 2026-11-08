@@ -52,6 +52,14 @@ describe('pickContentScriptFile / URL 路由', () => {
   it('闲鱼子域 m.goofish.com → content-xianyu.js', () => {
     expect(pickContentScriptFile('https://m.goofish.com/im')).toBe('content-xianyu.js');
   });
+
+  it('拼多多商家后台 → content-pdd.js（CH-16 首切片）', () => {
+    expect(pickContentScriptFile('https://mms.pinduoduo.com/chat-merchant/index.html')).toBe('content-pdd.js');
+    expect(pickContentScriptFile('https://pinduoduo.com/')).toBe('content-pdd.js');
+    // 邻近平台不误命中。
+    expect(pickContentScriptFile('https://yangkeduo.com/')).toBe(null);
+    expect(SUPPORTED_HOSTS).toContain('pinduoduo.com');
+  });
 });
 
 describe('isSupportedHost / 运行时白名单', () => {
