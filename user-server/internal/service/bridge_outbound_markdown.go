@@ -49,6 +49,8 @@ var markdownDMChannels = map[string]bool{
 	"bilibili":    true,
 	"weibo":       true,
 	"personal_wx": true,
+	// CH-16 首切片（2026-11-09）：拼多多输入框是 id=replyTextarea 的纯 textarea。
+	"pdd": true,
 }
 
 // StripMarkdownForDM 把 Markdown 语法标记剥成纯文本，供网页私信输入框直发。

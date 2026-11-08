@@ -538,6 +538,9 @@ func NormalizeChannelType(ch string) string {
 		return string(model.ChannelTypeWeibo)
 	case "personal_wx", "wx_personal", "wechat_personal":
 		return string(model.ChannelTypePersonalWX)
+	// CH-16 首切片（2026-11-09）：拼多多商家网页渠道，别名与 bridge.NormalizeBridgeChannel 同源。
+	case "pdd", "pdd_web", "pinduoduo":
+		return string(model.ChannelTypePDD)
 	case "web_embed", "webembed":
 		return string(model.ChannelTypeWebEmbed)
 	default:

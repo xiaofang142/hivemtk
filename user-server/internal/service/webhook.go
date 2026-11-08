@@ -368,9 +368,11 @@ var webhookInboundRejectHints = map[WebhookChannel]string{
 	ChannelBilibili:    "B站无公开私信回调，入站只走浏览器桥 POST /api/bridge/ingest",
 	ChannelWeibo:       "微博无公开私信回调，入站只走浏览器桥 POST /api/bridge/ingest",
 	ChannelPersonalWX:  "个人微信无公开服务端回调，入站走桌面伴生 POST /api/bridge/ingest（伴生为外部工程）",
-	ChannelWechat:      "微信公众号入站走专用回调 POST /api/webhook/wechat/{account_id}（自行验签），通用路由不处理",
-	ChannelDingTalk:    "钉钉入站走专用回调 POST /api/webhook/dingtalk/{account_id}（机器人/事件订阅报文），通用路由不处理",
-	ChannelCustom:      "custom 无入站适配器：消息落库后既不进收件箱也不会触发 AI，通用路由不受理",
+	// CH-16 首切片（2026-11-09，二次审核补齐）：pdd 无公开私信回调，只走浏览器桥。
+	WebhookChannel(model.ChannelPDD): "拼多多无公开私信回调，入站只走浏览器桥 POST /api/bridge/ingest",
+	ChannelWechat:                    "微信公众号入站走专用回调 POST /api/webhook/wechat/{account_id}（自行验签），通用路由不处理",
+	ChannelDingTalk:                  "钉钉入站走专用回调 POST /api/webhook/dingtalk/{account_id}（机器人/事件订阅报文），通用路由不处理",
+	ChannelCustom:                    "custom 无入站适配器：消息落库后既不进收件箱也不会触发 AI，通用路由不受理",
 }
 
 func webhookInboundRejectReason(channel WebhookChannel) string {

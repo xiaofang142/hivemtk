@@ -115,8 +115,10 @@ const (
 	ChannelTypeBilibili    ChannelType = "bilibili"
 	ChannelTypeWeibo       ChannelType = "weibo"
 	ChannelTypePersonalWX  ChannelType = "personal_wx"
-	ChannelTypeWeb         ChannelType = "web"
-	ChannelTypeWebEmbed    ChannelType = "web_embed"
+	// CH-16 首切片（2026-11-09）：拼多多商家网页渠道，与 model.ChannelPDD 同名。
+	ChannelTypePDD      ChannelType = "pdd"
+	ChannelTypeWeb      ChannelType = "web"
+	ChannelTypeWebEmbed ChannelType = "web_embed"
 )
 
 // ChannelAgentBinding 渠道账号 ↔ 智能体绑定

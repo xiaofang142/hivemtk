@@ -16,6 +16,8 @@
 | jd | `dm.send` | bridge | outbox 下发；Experimental |
 | kuaishou | `dm.receive` | bridge |  |
 | kuaishou | `dm.send` | bridge |  |
+| pdd | `dm.receive` | bridge | 拼多多商家网页（mms.pinduoduo.com/chat-merchant）；Experimental，选择器待真机 |
+| pdd | `dm.send` | bridge | outbox 下发；Experimental |
 | personal_wx | `dm.receive` | bridge | 桌面伴生上报；伴生未交付（外部工程） |
 | personal_wx | `dm.send` | bridge | outbox 下发；伴生未交付（外部工程） |
 | sms | `sms` | aliyun-sms | 需后台配置 AccessKey/签名/模板 |

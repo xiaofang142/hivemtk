@@ -50,6 +50,13 @@ func TestStripMarkdownForBridgeChannel(t *testing.T) {
 	if stripMarkdownForBridgeChannel("wecom", "text") {
 		t.Fatal("非网页桥接渠道（wecom 自有富文本）不清洗")
 	}
+	// CH-16 首切片（2026-11-09，二次审核补齐）：pdd 输入框是纯 textarea，同样要清洗。
+	if !stripMarkdownForBridgeChannel("pdd", "text") {
+		t.Fatal("pdd text 应清洗（纯文本输入框）")
+	}
+	if stripMarkdownForBridgeChannel("pdd", "image") {
+		t.Fatal("pdd 非文本不清洗")
+	}
 }
 
 func TestDeliverBridgeOutboundSanitizesDouyinText(t *testing.T) {
