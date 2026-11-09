@@ -95,7 +95,10 @@ type LLMRoutingAudit struct {
 	Action       string    `gorm:"type:varchar(32);column:action;not null" json:"action"`
 	Operator     string    `gorm:"type:varchar(64);column:operator" json:"operator"`
 	TraceID      string    `gorm:"type:varchar(64);column:trace_id" json:"trace_id"`
-	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+	// created_at 对齐迁移 SQL 的 NOT NULL DEFAULT NOW()：审计写入走 map Create，
+	// gorm autoCreateTime 对 map 形态不生效 ⇒ 必须给 DB 默认值，否则 AutoMigrate
+	// 路径的行 created_at 全 NULL（2026-11-10 二次审核 F-4-7 实测）。
+	CreatedAt    time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 }
 
 // TableName 表名

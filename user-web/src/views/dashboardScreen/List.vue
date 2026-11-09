@@ -188,10 +188,14 @@ const updateTime = () => {
 }
 
 const loadData = async () => {
-  const res = await getDashboardData()
-  const data = res;
-  kpis.value = data.kpis || []
-  initCharts(data)
+  try {
+    const res = await getDashboardData()
+    const data = res;
+    kpis.value = data.kpis || []
+    initCharts(data)
+  } catch {
+    // 拦截器已提示（模块闸/网络失败）；大屏是挂载即拉的页面，拒绝不外抛。
+  }
 }
 
 const activityMeta = {
@@ -208,14 +212,18 @@ const pickIcon = (t) => markRaw(activityMeta[t]?.icon || Bell)
 const pickColor = (t) => (activityMeta[t]?.color) || '#909399'
 
 const loadRealtime = async () => {
-  const res = await getRealtimeActivities()
-  const list = Array.isArray(res) ? res : [];
-  realtimeActivities.value = list.map((a) => ({
+  try {
+    const res = await getRealtimeActivities()
+    const list = Array.isArray(res) ? res : [];
+    realtimeActivities.value = list.map((a) => ({
     text: a.title || a.user_name || '',
     time: a.created_at ? new Date(a.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : '',
     color: pickColor(a.type),
     icon: pickIcon(a.type)
   }))
+  } catch {
+    // 5s 轮询入口：失败留给下一轮，拒绝不外抛成 unhandledrejection（同 ego/Executions H-1）。
+  }
 }
 
 const initCharts = (data) => {

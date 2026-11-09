@@ -192,6 +192,8 @@ async function load() {
     } else if (pollTimer) {
       clearInterval(pollTimer); pollTimer = null
     }
+  } catch {
+    // 拦截器已提示；running 态 5s 轮询入口，拒绝不外抛（同 H-1 口径）。
   } finally {
     loading.value = false
   }
