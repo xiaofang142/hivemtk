@@ -84,3 +84,27 @@ func InitRecoveryWorker(db *gorm.DB) *service.RecoveryQueueWorker {
 		worker.Mode(), service.RecoveryWorkerFlagEnv)
 	return worker
 }
+
+// InitRecoveryQueueRuntime 装配挽回队列 HTTP 读写面用的那份服务（MD-06：把
+// router/content_routes.go 里就地构造的依赖显式收到装配层）。
+//
+// 为什么单独装：router.Setup 原先在 setupRecoveryQueueRoutes 里直接
+// service.NewRecoveryQueueService()，走全局 DB 句柄的隐式回落 —— 与本文件
+// worker 那份、collection 那份同一个口径问题：装配点拿错了 db 是运行期才
+// 显形的跨库读写。显式句柄版构造函数已存在（NewRecoveryQueueRepositoryWithDB），
+// 本函数只是把调用点从 Router 挪到装配层，路由表/守卫/阶段机一概不动。
+//
+// 与 InitRecoveryWorker 的关系：worker 那份是 cron 消费侧实例，HTTP 这份是
+// 读写面实例；RecoveryQueueService 只有 repo+nowFunc 两格、没有实例内状态，
+// 幂等判据在库里，各建一份不产生裂脑（与 collection_wiring.go 待办服务同口径）。
+// 本函数不启动协程、不挂闸门 —— 外发策略仍在 worker 那条腿上。
+func InitRecoveryQueueRuntime(db *gorm.DB) *service.RecoveryQueueService {
+	if db == nil {
+		logger.Warnf("[RecoveryQueueRuntime] ⚠️ db 为 nil ⇒ 挽回队列 HTTP 读写面不装配" +
+			"（/api/recovery-queue/* 没有服务实例可读写）")
+		return nil
+	}
+	return service.NewRecoveryQueueServiceWithRepo(
+		repository.NewRecoveryQueueRepositoryWithDB(db),
+	)
+}

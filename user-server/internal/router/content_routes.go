@@ -84,8 +84,8 @@ func setupCustomerRFMRoutes(auth *gin.RouterGroup) {
 	admin.POST("/compute-all", rfmCtrl.ComputeAll)
 }
 
-func setupRecoveryQueueRoutes(auth *gin.RouterGroup) {
-	ctrl := controller.NewRecoveryQueueController()
+func setupRecoveryQueueRoutes(auth *gin.RouterGroup, svc *service.RecoveryQueueService) {
+	ctrl := controller.NewRecoveryQueueController(svc)
 	auth.GET("/recovery-queue/list", ctrl.ListByStage)
 	auth.GET("/recovery-queue/distribution", ctrl.Distribution)
 	auth.GET("/recovery-queue/ready", ctrl.ListReadyForAttempt)

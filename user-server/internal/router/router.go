@@ -530,7 +530,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupCustomerRFMRoutes(auth)
 
-		setupRecoveryQueueRoutes(auth)
+		// 挽回队列读写面：服务实例由装配层显式构造（MD-06：Router 不就地建
+		// RecoveryQueueService，全局句柄隐式回落已从这条路由链路移除）；
+		// 路由表与守卫链（AdminAuth 收写口）原样。
+		setupRecoveryQueueRoutes(auth, app.InitRecoveryQueueRuntime(gormDB))
 
 		// 统一人工待办 /api/human-tasks/*：必须挂在这个块里 —— auth 组在本块
 		// 入口已 Use(JWTAuthMiddleware())，动作端点的操作者身份取自令牌里的 user_id。

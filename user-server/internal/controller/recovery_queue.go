@@ -33,9 +33,12 @@ type RecoveryQueueController struct {
 	svc *service.RecoveryQueueService
 }
 
-// NewRecoveryQueueController 创建控制器
-func NewRecoveryQueueController() *RecoveryQueueController {
-	return &RecoveryQueueController{svc: service.NewRecoveryQueueService()}
+// NewRecoveryQueueController 创建控制器。
+//
+// MD-06：依赖由装配层显式给（app.InitRecoveryQueueRuntime），控制器不再自构
+// 全局句柄版服务 —— 装配点拿错 db 是运行期才显形的跨库读写。
+func NewRecoveryQueueController(svc *service.RecoveryQueueService) *RecoveryQueueController {
+	return &RecoveryQueueController{svc: svc}
 }
 
 // Enqueue 手动入队
