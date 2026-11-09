@@ -74,7 +74,11 @@ var SystemMenuTree = []SystemMenuNode{
 			{Key: "customerEvent", Title: "客户事件", Icon: "Bell", Path: "/customerEvent/list"},
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "viewer"}},
-			{Key: "unifiedMessage", Title: "统一消息", Icon: "Message", Path: "/unifiedMessage/list", Roles: []string{"admin"}},
+			// unifiedMessage（统一消息，/unifiedMessage/list）已于 2026-11-10 除名：
+			// 与「统一收件箱」用户视角重复（同一批渠道入站消息），且同一数据面
+			// 已有两个更精确的消费入口——收件箱按会话呈现、客户 360 按
+			// message_history 呈现（unifiedMsgRepo）。unified_messages 表与
+			// /api/unified-messages 别名接口按 J-7/D-8 保守口径保留不删。
 			{
 				Key: "customerIdentity", Title: "客户身份", Icon: "Connection",
 				Roles: []string{"admin"},
@@ -448,7 +452,12 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "systemGuide", Title: "系统使用指南", Icon: "Document", Path: "/system/guide"},
 					{Key: "domainPool", Title: "域名池", Icon: "Link", Path: "/domainPool"},
 					{Key: "backupList", Title: "备份恢复", Icon: "FolderOpened", Path: "/backup/list"},
-					{Key: "backupEnhanced", Title: "备份高级版", Icon: "FolderChecked", Path: "/backup/enhanced"},
+					// backupEnhanced（备份高级版，/backup/enhanced）已于 2026-11-10 除名：
+					// 与「备份恢复」打的是同一组后端端点（/api/backup/* 别名组与
+					// /api/backups 权威组包同一个 BackupService/RestoreService），
+					// 两页=同一服务的两个皮。Enhanced 独有的备份策略编辑与恢复影响
+					// 预览已并入备份恢复页（views/backup/List.vue），能力面
+					// /api/backup/* 的 MenuKeys 同步改指 backupList。
 					{Key: "automationCenter", Title: "自动化中心", Icon: "Operation", Path: "/system/automation-hub", Roles: []string{"admin"}},
 					{Key: "dynamicThreshold", Title: "动态阈值参数", Icon: "DataLine", Path: "/system/config-params", Roles: []string{"admin"}},
 					// 下面两项与动态阈值参数是同一族配置治理界面，放在它后面而不是塞到别的分组，

@@ -215,16 +215,18 @@ var ModuleMenuBindings = map[string][]string{
 		"observabilityDashboard",
 		// D01 能力运行诊断：读的是本二进制的执行路径与配置，属于部署级诊断能力。
 		"capabilityDiagnostics",
-		// 备份
-		"backupList", "backupEnhanced",
+		// 备份（backupEnhanced 已除名：页面并入 backupList，见 menu.go 同日注释）
+		"backupList",
 		// 客服 Web Widget 渠道（embed-sdk 在客户网站上的凭据来源，见文件头原则 1）
 		"chatChannelList",
 	},
 
-	// ========== customer：客户中心（13 节点）==========
+	// ========== customer：客户中心（12 节点）==========
 	ModuleCustomer: {
 		"customer", "clueList", "clueStatistics", "leadMining",
-		"customer360", "customerConsents", "customerEvent", "tagSegmentation", "userSegment", "unifiedMessage",
+		// unifiedMessage 已除名（2026-11-10 内容重复菜单收口）：与统一收件箱
+		// 用户视角重复，数据面由客户 360 message_history 与收件箱承载。
+		"customer360", "customerConsents", "customerEvent", "tagSegmentation", "userSegment",
 		"customerIdentity", "oneidList", "oneidConflicts", "oneidMergeRules",
 	},
 

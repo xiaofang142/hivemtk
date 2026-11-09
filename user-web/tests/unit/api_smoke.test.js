@@ -48,7 +48,7 @@ const API_FILES = [
   'persona', 'platform', 'platformAccount', 'reachPipeline',
   'scriptTemplate', 'securityAudit', 'shortLink', 'sms', 'sopAgent', 'stats', 'system', 'tagSegmentation',
   'telegram', 'tiktokCard', 'tuning',
-  'unifiedMessage', 'userSegment', 'users', 'wecomAccount', 'whatsapp', 'xianyuCard',
+  'userSegment', 'users', 'wecomAccount', 'whatsapp', 'xianyuCard',
   'xiaohongshuCard'
 ]
 

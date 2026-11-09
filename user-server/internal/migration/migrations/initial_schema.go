@@ -306,4 +306,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 凭据落库加密（enc:v1 AES-256-GCM）——扩列 text 容纳密文 + 存量明文回填；
 	// 仓储读写出口统一加解密，双轨（明文/密文）读取兜底。
 	register(NewObsConfigEncryptFieldsMigration(db))
+	// v3.89.0（2026-11-10 内容重复菜单收口轮）：备份高级版并入备份恢复、
+	// 统一消息并入收件箱/客户360 之后，摘掉两节点在 role_menu_permissions
+	// 的存量分配行——防未来同名节点静默复权（v3.55.0 收敛迁移同一取舍）。
+	register(NewMenuGrantRemovedNodesCleanupMigration(db))
 }

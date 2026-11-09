@@ -343,31 +343,6 @@ test.describe('客户中心深层功能验证', () => {
     })
   })
 
-  // ===================== 7. 统一消息 =====================
-  test.describe('unifiedMessage/List 统一消息', () => {
-    test('列表渲染 + 搜索空态 + 详情打开 + API对账', async ({ page }) => {
-      await gotoPage(page, 'unifiedMessage/list', '.el-main .unified-message-container')
-      await expect(page.locator('.el-main .unified-message-container .el-table')).toBeVisible()
-      await page.waitForTimeout(600)
-
-      await page.locator('.unified-message-container input[placeholder="标题/内容"]').fill('E2E_NOMATCH_' + Date.now())
-      await page.locator('.unified-message-container button:has-text("搜索")').click()
-      await page.waitForTimeout(800)
-      expect(await rowCount(page)).toBe(0)
-      await page.locator('.unified-message-container button:has-text("重置")').click()
-      await page.waitForTimeout(800)
-
-      const total = await rowCount(page)
-      expect(Number.isFinite(total)).toBeTruthy()
-      if (total > 0) {
-        await page.locator('.el-main ' + rowSel).first().locator('button:has-text("详情")').click()
-        await expect(page.locator('.el-main .el-descriptions').first()).toBeVisible({ timeout: 8000 })
-      }
-
-      const r = await apiGet(API + '/api/unified-messages?page=1&page_size=10')
-      expect(r.status).toBe(200)
-    })
-  })
 
   // ===================== 9. 聊天渠道（chatChannel/list） =====================
   // 客户中心第 7 个菜单，原 deep spec 缺口补齐。

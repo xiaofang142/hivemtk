@@ -122,9 +122,15 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doReg("GET", "/user-segments/layers", userSegmentCtrl.GetLayerDescription)
 
 	unifiedMsgCtrl := controller.NewUnifiedMessageController()
-	doReg("GET", "/unified-messages", unifiedMsgCtrl.GetMessages)
-	doReg("GET", "/unified-messages/list", unifiedMsgCtrl.GetMessages)
-	doReg("GET", "/unified-messages/:id", unifiedMsgCtrl.GetMessageByID)
+	// 2026-11-10 内容重复菜单收口：unifiedMessage 菜单已除名（与统一收件箱
+	// 用户视角重复，数据面由客户 360 message_history 承载），能力表里指向该
+	// key 的两行同步删除。这三个只读别名从 auth 档提到 admin 档（与下面
+	// oneid merge-rules 同款 doRegAdmin）——除名前它的实际口径就是仅 admin
+	// （注册表 Roles=admin ⇒ 非超管无从获得授予，能力面恒拦），提到路由级
+	// admin 门只是把同一口径落到更直接的机制上，无放宽。
+	doRegAdmin("GET", "/unified-messages", unifiedMsgCtrl.GetMessages)
+	doRegAdmin("GET", "/unified-messages/list", unifiedMsgCtrl.GetMessages)
+	doRegAdmin("GET", "/unified-messages/:id", unifiedMsgCtrl.GetMessageByID)
 
 	oneIDCtrl := controller.NewCustomerOneIDController()
 	doReg("GET", "/oneid/identities", oneIDCtrl.ListOneID)
@@ -610,6 +616,10 @@ func setupBackupAliases(systemAdmin *gin.RouterGroup, gormDB *gorm.DB) {
 	backupGapCtrl := controller.NewBackupGapController(newBackupService(gormDB), newRestoreService(gormDB))
 	systemAdmin.GET("/backup/list", backupGapCtrl.List)
 	systemAdmin.GET("/backup/stats", backupGapCtrl.Stats)
+	// GET strategy（2026-11-10）：备份策略编辑并入「备份恢复」页后，页面需要
+	// 回显当前策略——此前只有 PUT 能保存、读不到当前值，表单只能摆默认值。
+	// GetStrategy 控制器方法本来就在（r44_gap_endpoints.go），补的是路由。
+	systemAdmin.GET("/backup/strategy", backupGapCtrl.GetStrategy)
 	systemAdmin.PUT("/backup/strategy", backupGapCtrl.SaveStrategy)
 	systemAdmin.POST("/backup/create", backupGapCtrl.Create)
 	systemAdmin.GET("/backup/:id/preview", backupGapCtrl.Preview)

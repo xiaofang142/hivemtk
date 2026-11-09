@@ -77,6 +77,71 @@
       </el-col>
     </el-row>
 
+    <el-card
+      v-if="userStore.isAdmin"
+      class="strategy-card"
+    >
+      <template #header>
+        <div class="strategy-header">
+          <span>{{ $t('备份策略') }}</span>
+          <el-button
+            type="primary"
+            :loading="savingStrategy"
+            @click="saveStrategy"
+          >
+            {{ $t('保存策略') }}
+          </el-button>
+        </div>
+      </template>
+      <el-form
+        :model="strategy"
+        label-width="120px"
+        class="strategy-form"
+      >
+        <el-form-item :label="$t('自动备份')">
+          <el-switch v-model="strategy.enabled" />
+        </el-form-item>
+        <el-form-item :label="$t('每日备份')">
+          <el-time-picker
+            v-model="dailyTime"
+            format="HH:mm"
+            :placeholder="$t('02:00')"
+          />
+        </el-form-item>
+        <el-form-item :label="$t('每周备份')">
+          <el-select
+            v-model="strategy.weeklyDay"
+            style="width: 120px"
+          >
+            <el-option
+              :label="$t('周日')"
+              :value="0"
+            />
+            <el-option
+              :label="$t('周一')"
+              :value="1"
+            />
+          </el-select>
+          <el-time-picker
+            v-model="weeklyTime"
+            format="HH:mm"
+            :placeholder="$t('03:00')"
+            style="margin-left: 8px"
+          />
+        </el-form-item>
+        <el-form-item :label="$t('保留天数')">
+          <el-input-number
+            v-model="strategy.retentionDays"
+            :min="7"
+            :max="365"
+          />
+        </el-form-item>
+        <el-form-item :label="$t('校验和')">
+          <el-switch v-model="strategy.checksum" />
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-tabs
       v-model="activeTab"
       @tab-change="onTabChange"
@@ -229,6 +294,14 @@
                   @click="viewDetail(row)"
                 >
                   详情
+                </el-button>
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="row.status !== 'completed'"
+                  @click="openPreview(row)"
+                >
+                  预览影响
                 </el-button>
                 <el-button
                   link
@@ -557,6 +630,55 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <!--
+      恢复影响预览（自 2026-11-10「备份高级版」并入：原 Enhanced.vue 独有功能）。
+      预览走 /api/backup/:id/preview 别名（表级行数估算），确认恢复仍走本页
+      原有的 /api/backups 权威恢复通道（callRestoreApi），两条路径同源同服务。
+    -->
+    <el-dialog
+      v-model="previewVisible"
+      :title="$t('恢复影响预览')"
+      width="600px"
+    >
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        <template #title>
+          {{ $t('即将恢复此备份：会影响以下数据（行数估算）') }}
+        </template>
+      </el-alert>
+      <el-table
+        v-loading="previewLoading"
+        :data="previewData"
+        max-height="320"
+        style="margin-top: 12px"
+      >
+        <el-table-column
+          prop="table"
+          :label="$t('表名')"
+        />
+        <el-table-column
+          prop="rows"
+          :label="$t('行数估算')"
+          width="160"
+        />
+      </el-table>
+      <template #footer>
+        <el-button @click="previewVisible = false">
+          {{ $t('取消') }}
+        </el-button>
+        <el-button
+          type="danger"
+          :loading="restoring"
+          @click="confirmRestoreFromPreview"
+        >
+          {{ $t('确认恢复') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -566,6 +688,8 @@ import i18n from '@/i18n'
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
+import { useUserStore } from '@/stores/user'
+import { http } from '@/utils/request'
 import {
   getBackupList,
   createBackup,
@@ -578,6 +702,8 @@ import {
   getStatusLabel as getStatusLabelFromArr,
   getStatusTagType as getStatusTagTypeFromArr,
 } from '@/constants/status';
+
+const userStore = useUserStore()
 
 const activeTab = ref('backup')
 
@@ -611,6 +737,109 @@ const restoreTarget = ref(null)
 
 const detailVisible = ref(false);
 const detailRecord = ref(null)
+
+// ---- 备份策略（自 2026-11-10「备份高级版」并入；策略端点挂 systemAdmin 组，非 admin 隐藏此卡）----
+const savingStrategy = ref(false)
+const strategy = reactive({
+  enabled: true,
+  dailyHour: 2,
+  dailyMinute: 0,
+  weeklyDay: 0,
+  weeklyHour: 3,
+  weeklyMinute: 0,
+  retentionDays: 30,
+  checksum: true
+})
+
+const toDateOf = (hour, minute) => {
+  const d = new Date(2024, 0, 1, 0, 0)
+  d.setHours(hour || 0, minute || 0, 0, 0)
+  return d
+}
+const dailyTime = computed({
+  get: () => toDateOf(strategy.dailyHour, strategy.dailyMinute),
+  set: (d) => {
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      strategy.dailyHour = d.getHours()
+      strategy.dailyMinute = d.getMinutes()
+    }
+  }
+})
+const weeklyTime = computed({
+  get: () => toDateOf(strategy.weeklyHour, strategy.weeklyMinute),
+  set: (d) => {
+    if (d instanceof Date && !isNaN(d.getTime())) {
+      strategy.weeklyHour = d.getHours()
+      strategy.weeklyMinute = d.getMinutes()
+    }
+  }
+})
+
+const loadStrategy = async () => {
+  if (!userStore.isAdmin) return
+  try {
+    const s = await http.get('/api/backup/strategy')
+    if (s && typeof s === 'object') Object.assign(strategy, s)
+  } catch { /* 策略回显失败不阻塞页面，保持默认值 */ }
+}
+
+const saveStrategy = async () => {
+  savingStrategy.value = true
+  try {
+    await http.put('/api/backup/strategy', {
+      enabled: strategy.enabled,
+      daily_hour: strategy.dailyHour,
+      daily_minute: strategy.dailyMinute,
+      weekly_day: strategy.weeklyDay,
+      weekly_hour: strategy.weeklyHour,
+      weekly_minute: strategy.weeklyMinute,
+      retention_days: strategy.retentionDays,
+      checksum: strategy.checksum
+    })
+    ElMessage.success(i18n.global.t('策略已保存'))
+  } catch (e) {
+    ElMessage.error(e?.message || i18n.global.t('保存策略失败'))
+  } finally {
+    savingStrategy.value = false
+  }
+}
+
+// ---- 恢复影响预览（自「备份高级版」并入）----
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewData = ref([])
+const previewTarget = ref(null)
+
+const openPreview = async (row) => {
+  previewTarget.value = row
+  previewData.value = []
+  previewVisible.value = true
+  previewLoading.value = true
+  try {
+    const data = await http.get(`/api/backup/${row.id}/preview`)
+    previewData.value = Array.isArray(data) ? data : (data?.list || [])
+  } catch (e) {
+    ElMessage.error(e?.message || i18n.global.t('加载影响预览失败'))
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const confirmRestoreFromPreview = async () => {
+  if (!previewTarget.value) return
+  restoring.value = true
+  try {
+    await callRestoreApi({ backup_id: previewTarget.value.id })
+    ElMessage.success(i18n.global.t('恢复任务已创建，请稍后查看进度'))
+    previewVisible.value = false
+    activeTab.value = 'restore'
+    await loadRestores()
+  } catch (e) {
+    ElMessage.error(e?.message || '恢复失败')
+  } finally {
+    restoring.value = false
+  }
+}
 
 const stats = computed(() => {
   const result = { completed: 0, running: 0, failed: 0, pending: 0 }
@@ -789,7 +1018,10 @@ const viewRestoreDetail = (row) => {
   detailVisible.value = true
 }
 
-onMounted(() => loadData())
+onMounted(() => {
+  loadData()
+  loadStrategy()
+})
 </script>
 
 <style scoped lang="scss">
@@ -816,6 +1048,17 @@ onMounted(() => loadData())
   gap: 10px;
   margin-bottom: 15px;
   flex-wrap: wrap;
+}
+.strategy-card {
+  margin-bottom: 20px;
+  .strategy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .strategy-form {
+    max-width: 480px;
+  }
 }
 .error-text { color: #EF4444; }
 </style>
