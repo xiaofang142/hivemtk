@@ -2,10 +2,7 @@ package testutil
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
-	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -238,32 +235,4 @@ func TestTestDSNFieldsRejectMalformed(t *testing.T) {
 			t.Error("malformed/ambiguous DSN was accepted")
 		}
 	}
-}
-
-// testDSNWithDatabase 不用正则替换 dbname，避免 URL DSN 留在原库执行 DDL。
-// （G 轮收口：仅测试使用，从 testdb_config.go 移入本文件消除 unused。）
-func testDSNWithDatabase(dsn, database string) string {
-	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
-		u, err := url.Parse(dsn)
-		if err != nil {
-			// 只供 readTestDBConfig 校验后的 DSN 调用，错误输入保持拒绝。
-			return "invalid-test-dsn"
-		}
-		u.Path, u.RawPath = "/"+database, ""
-		q := u.Query()
-		q.Del("dbname")
-		q.Del("database")
-		u.RawQuery = q.Encode()
-		return u.String()
-	}
-	return dsn + " dbname=" + testDSNQuote(database)
-}
-
-// 数据库错误可能含连接串或原始输入；保留 SQLSTATE 而不是原文。
-func safeTestDBError(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return fmt.Errorf("PostgreSQL test connection/operation failed (SQLSTATE %s)", pgErr.Code)
-	}
-	return errors.New("PostgreSQL test connection/operation failed (connection details redacted)")
 }

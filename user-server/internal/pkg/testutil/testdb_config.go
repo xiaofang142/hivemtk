@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"sort"
@@ -205,4 +206,34 @@ func testDSNFields(dsn string) (map[string]string, error) {
 
 func testDSNQuote(value string) string {
 	return "'" + strings.NewReplacer(`\`, `\\`, "'", `\'`).Replace(value) + "'"
+}
+
+// testDSNWithDatabase 不用正则替换 dbname，避免 URL DSN 留在原库执行 DDL。
+// （H 轮收口：testdb.go 非_test 路径 procDB 兜底也要换库名，helper 必须活在
+// 非_test 文件——此前 G 轮为消 unused 移进 test 文件，上游在 testdb.go 新增
+// 调用点后跨包测试二进制编译断，2026-11-10 合并回归实测。）
+func testDSNWithDatabase(dsn, database string) string {
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		u, err := url.Parse(dsn)
+		if err != nil {
+			// 只供 readTestDBConfig 校验后的 DSN 调用，错误输入保持拒绝。
+			return "invalid-test-dsn"
+		}
+		u.Path, u.RawPath = "/"+database, ""
+		q := u.Query()
+		q.Del("dbname")
+		q.Del("database")
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return dsn + " dbname=" + testDSNQuote(database)
+}
+
+// 数据库错误可能含连接串或原始输入；保留 SQLSTATE 而不是原文。
+func safeTestDBError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return fmt.Errorf("PostgreSQL test connection/operation failed (SQLSTATE %s)", pgErr.Code)
+	}
+	return errors.New("PostgreSQL test connection/operation failed (connection details redacted)")
 }

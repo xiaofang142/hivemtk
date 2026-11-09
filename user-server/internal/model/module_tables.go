@@ -67,7 +67,7 @@ var coreOwnedTables = []string{
 	// 橱窗/购买入口——购买入口不能被购买条件关闭，两表随基座常在，归 core。
 	"market_catalog_entries", "market_entry_orders",
 	"llm_providers", "llm_routing_rules", "llm_routing_logs", "llm_usage_records",
-	"llm_usage_daily", "trace_events",
+	"llm_usage_daily", "llm_routing_audit", "trace_events",
 	// 升级 / 迁移 / 运维
 	"upgrade_tasks", "migration_checkpoints", "migration_records",
 	"backups", "restore_records", "system_metrics", "visit_logs",
