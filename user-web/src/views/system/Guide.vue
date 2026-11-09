@@ -137,7 +137,7 @@ const steps = [
       '启动自动回复(抖音/快手/小红书/闲鱼)',
       '配置邮件/短信营销活动'
     ],
-    path: '/system/rag-product-config'
+    path: '/system/rag-product'
   }
 ]
 

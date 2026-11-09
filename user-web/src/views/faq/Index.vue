@@ -58,7 +58,7 @@
           <el-button
             type="primary"
             plain
-            @click="$router.push('/faq/list')"
+            @click="$router.push({ path: '/faq/list', query: { match: '1' } })"
           >
             打开
             <el-icon class="el-icon--right">

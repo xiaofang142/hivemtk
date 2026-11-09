@@ -292,11 +292,11 @@
 
     
     <agent-binding-dialog
-      v-model:visible="bindVisible"
+      v-model="bindVisible"
       channel-type="whatsapp"
       :account-id="String(bindRow?.id)"
-      :account-name="bindRow?.name"
-      :current-agent-id="bindRow?.ai_agent_id ? String(bindRow.ai_agent_id) : ''"
+      :account-label="bindRow?.account_name || bindRow?.name"
+      :account-enabled="bindRow?.webhook_enabled !== false"
       @saved="onBindSaved"
     />
   </div>

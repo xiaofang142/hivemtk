@@ -947,8 +947,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				if result.Confidence > 0 && !result.Degraded {
 					outMsg.Extra["confidence"] = result.Confidence
 				}
-				if result.SalesResponse != nil && result.SalesResponse.Intent != nil && result.SalesResponse.Intent.IntentType != "" {
-					outMsg.Extra["intent"] = string(result.SalesResponse.Intent.IntentType)
+				if result.IntentType != "" {
+					outMsg.Extra["intent"] = result.IntentType
 				}
 				if result.HandlerType != "" {
 					outMsg.Extra["handler_type"] = string(result.HandlerType)

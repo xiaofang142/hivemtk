@@ -118,9 +118,11 @@ func (s *douyinCardService) Update(ctx context.Context, req *dto.DouyinCardUpdat
 		return nil, err
 	}
 
-	if originalDomainPoolID != req.DomainPoolID {
+	// 短链重建失败不该让整次更新失败：卡片字段已经落库，返回错误会让客户端以为没改成而重试；
+	// 与 kuaishou/tiktok 保持同一口径（记日志继续），Create 里也是这么处理的。
+	if originalDomainPoolID != req.DomainPoolID || updatedCard.ShortLinkID == 0 {
 		if err := s.GenerateShortLink(ctx, updatedCard); err != nil {
-			return nil, err
+			logger.Errorf("警告：生成短链失败：%v", err)
 		}
 	}
 

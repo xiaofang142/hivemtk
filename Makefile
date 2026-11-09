@@ -657,6 +657,8 @@ audit:
 	@python3 scripts/check-tenant-ctx-writes.py
 	@echo "── 事件发布租户门（租户域事件只能经 event.PublishCtx 盖章）──"
 	@python3 scripts/check-event-publish-tenant.py
+	@echo "── 服务面禁 stdout 直出门（fmt.Print 绕 zerolog=丢租户上下文/脱敏链；migration/cmd/_test 按口径排除）──"
+	@python3 scripts/check-stdout-print.py
 	@echo "── 跨包端口单一源 ──"
 	@bash scripts/audit-cross-package-ports.sh
 	@echo "── 组件类型声明不得指向已删除的组件 ──"

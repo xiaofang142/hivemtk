@@ -284,7 +284,7 @@
                 :type="statusType(row.status)"
                 size="small"
               >
-                {{ row.status }}
+                {{ statusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -345,7 +345,7 @@
                 :type="statusType(row.status)"
                 size="small"
               >
-                {{ row.status }}
+                {{ statusLabel(row.status) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -377,7 +377,8 @@
           <el-table-column
             prop="created_at"
             label="时间"
-            width="180">
+            width="180"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.created_at) }}
             </template>
@@ -479,7 +480,6 @@ const availablePlatforms = computed(() => {
   })
 });
 
-const hiddenCount = computed(() => allPlatforms.value.length - availablePlatforms.value.length)
 const filteredCount = computed(() => availablePlatforms.value.length)
 
 const realApiPlatforms = computed(() =>
@@ -507,6 +507,12 @@ const articleTitle = (id) => {
   const found = articles.value.find(a => a.id === id)
   return found?.title || id
 }
+
+// 记录状态（pending/success/failed/copied）→ 中文，避免表里出现英文枚举。
+const statusLabel = (s) => ({
+  pending: '待发布', running: '发布中', success: '成功', done: '完成',
+  failed: '失败', error: '失败', copied: '已复制'
+}[s] || s || '-')
 
 const statusType = (s) => {
   if (s === 'success' || s === 'done' || s === 'copied') return 'success'

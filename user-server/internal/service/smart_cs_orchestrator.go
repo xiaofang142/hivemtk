@@ -256,6 +256,10 @@ type HandleResult struct {
 	// extra.degraded 并摘掉继承的意图置信度——应答质量指标把降级轮与正常
 	// AI 回答分开计数（CS-02 口径修复）。
 	Degraded bool `json:"degraded,omitempty"`
+	// IntentType 本轮引擎意图类型（批准输出）：只在引擎真实应答路径填充；
+	// 缓存命中/转人工/降级链路径恒为空。出站侧据此写 extra.intent，
+	// 不必再拆 result.SalesResponse 的嵌套 nil 链（MD-05 契约收窄）。
+	IntentType string `json:"intent_type,omitempty"`
 }
 
 // HandleIncoming 处理入站消息（智能体主入口，默认配置）
@@ -441,6 +445,9 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		}
 	}
 	result.SalesResponse = salesResp
+	if salesResp != nil && salesResp.Intent != nil {
+		result.IntentType = salesResp.Intent.IntentType
+	}
 	conf, confDec := o.extractConfidenceWithTopK(ctx, salesResp, session.SessionID, in.Content, ragTopKOf(finalAgentCtx))
 	result.Confidence = conf
 	result.Cards = RichCardsFromDTO(salesResp.Cards)

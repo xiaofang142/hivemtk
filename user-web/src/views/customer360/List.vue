@@ -156,7 +156,14 @@
           name="behavior"
         >
           <el-card>
-            <el-timeline>
+            <!-- 空态：后端 message_history 为空时，时间线什么都不渲染，
+                 留下一张空白卡片像是页面没加载完。 -->
+            <el-empty
+              v-if="!behaviors.length"
+              description="暂无行为记录"
+              :image-size="80"
+            />
+            <el-timeline v-else>
               <el-timeline-item
                 v-for="(item, idx) in behaviors"
                 :key="idx"
@@ -175,7 +182,12 @@
           name="communications"
         >
           <el-card>
-            <el-timeline>
+            <el-empty
+              v-if="!communications.length"
+              description="暂无沟通记录"
+              :image-size="80"
+            />
+            <el-timeline v-else>
               <el-timeline-item
                 v-for="(item, idx) in communications"
                 :key="idx"
@@ -259,7 +271,8 @@
               <el-table-column
                 prop="pay_time"
                 label="支付时间"
-                width="160">
+                width="160"
+              >
                 <template #default="{ row }">
                   {{ fmtTime(row.pay_time) }}
                 </template>
@@ -325,7 +338,7 @@ import i18n from '@/i18n'
 
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getCustomerList, getCustomerDetail, addCustomerTag, removeCustomerTag } from '@/api/customer360.js'
+import { getCustomerList, getCustomerDetail, addCustomerTag, removeCustomerTag, getCustomerEvents, getCustomerMessages } from '@/api/customer360.js'
 import { createSession, sendMessage } from '@/api/customerSession.js'
 import { getExternalOrdersByCustomer } from '@/api/integration.js'
 import { toList } from '@/utils/list'
@@ -411,18 +424,29 @@ const selectCustomer = async (row) => {
   // 竞态守卫：快速连点客户行时，先点客户的慢响应不得覆盖后点客户的面板
   selectingId.value = row.id
   try {
-    const raw = await getCustomerDetail(row.id)
+    // 详情接口只返回 basic + tags（message_history 恒为空数组），
+    // 行为轨迹要事件流水、沟通记录要消息流水，必须各自单独拉。
+    const [raw, eventsRes, messagesRes] = await Promise.allSettled([
+      getCustomerDetail(row.id),
+      getCustomerEvents(row.id, { limit: 50 }),
+      getCustomerMessages(row.id, { limit: 50 })
+    ])
     if (selectingId.value !== row.id) return
-    current.value = toCustomerModel(raw, row.id)
-    const messages = raw?.message_history || []
-    behaviors.value = messages.map((m) => ({
-      time: m.created_at,
-      type: m.sender_type === 'user' ? 'primary' : 'success',
-      action: m.sender_name || (m.sender_type === 'user' ? '客户' : '坐席'),
-      detail: m.content
+    const detail = eventsRes.status === 'fulfilled' ? eventsRes.value : null
+    const msgs = messagesRes.status === 'fulfilled' ? messagesRes.value : null
+    current.value = toCustomerModel(raw.value, row.id)
+    // 行为轨迹：customer_events 事件流水（event_type / event_source / event_data）
+    const events = toList(detail?.events)
+    behaviors.value = events.map((ev) => ({
+      time: fmtTime(ev.occurred_at || ev.created_at),
+      type: 'primary',
+      action: ev.event_type || '-',
+      detail: [ev.event_source, ev.event_data].filter(Boolean).join(' · ')
     }))
+    // 沟通记录：消息流水（sender_type=user 为「客户」，其余为「我方」）
+    const messages = toList(msgs?.message_history)
     communications.value = messages.map((m) => ({
-      time: m.created_at,
+      time: fmtTime(m.created_at),
       channel: 'web',
       direction: m.sender_type === 'user' ? 'in' : 'out',
       content: m.content
@@ -440,7 +464,7 @@ const loadOrders = async (phone, name) => {
   try {
     const res = await getExternalOrdersByCustomer(phone, name)
     orders.value = toList(res?.list)
-  } catch (e) {
+  } catch {
     orders.value = []
   } finally {
     ordersLoading.value = false
@@ -473,7 +497,7 @@ const submitContact = async () => {
     await sendMessage({ sessionId, content: contactForm.value.content, sender_type: 'agent' })
     ElMessage.success(i18n.global.t('会话已创建，消息已发送'))
     contactVisible.value = false
-  } catch (e) {
+  } catch {
     ElMessage.error(i18n.global.t('发送失败，请稍后重试'))
   } finally {
     submittingContact.value = false

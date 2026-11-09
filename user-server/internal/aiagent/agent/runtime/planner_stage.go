@@ -5,9 +5,20 @@ import (
 	"time"
 )
 
+// TB-01 数据驱动意图→工具链：类型/白名单/渲染/构造在 planner_chain.go；
+// 本文件只保留规划器对绑定层的集成钩子（ChainLookup 注入 + Plan 查询点）。
+
 // DefaultTaskPlanner 默认任务规划器
 type DefaultTaskPlanner struct {
 	FAQLibrary func(ctx context.Context, content string) (bool, string)
+
+	// ChainLookup 意图→工具链绑定数据源（TB-01）；nil = 未装配，行为与硬编码规划完全一致。
+	ChainLookup IntentChainLookup
+}
+
+// SetChainLookup 注入绑定数据源（装配层调用；运行期只读）。
+func (p *DefaultTaskPlanner) SetChainLookup(l IntentChainLookup) {
+	p.ChainLookup = l
 }
 
 // NewDefaultTaskPlanner 构造默认任务规划器
@@ -49,7 +60,7 @@ func (p *DefaultTaskPlanner) Execute(ctx context.Context, ic *InferenceContext) 
 	ic.Stages = append(ic.Stages, StageDecision{
 		Stage:    p.Name(),
 		Action:   "plan",
-		Reason:   "type=" + plan.PlanType + " tools=" + itoa(len(plan.ToolCalls)) + " skip_llm=" + boolStr(plan.SkipLLM),
+		Reason:   "type=" + plan.PlanType + " tools=" + itoa(len(plan.ToolCalls)) + " skip_llm=" + boolStr(plan.SkipLLM) + chainSourceSuffix(plan.PlanSource),
 		Duration: time.Since(start),
 		Success:  true,
 	})
@@ -72,6 +83,21 @@ func (p *DefaultTaskPlanner) Plan(ctx context.Context, ic *InferenceContext) (*A
 			plan.Confidence = 0.95
 			return plan, nil
 		}
+	}
+
+	// TB-01 绑定层：先查数据驱动的意图→工具链；命中即按数据规划，
+	// 未命中/禁用/渲染失败/查询错误一律回落下方既有硬编码 case（零行为变化）。
+	if p.ChainLookup != nil {
+		chainSrc := "miss"
+		if spec, err := p.ChainLookup.LookupIntentChain(ctx, string(ic.Intent.Primary)); err != nil {
+			chainSrc = "error"
+		} else if spec != nil {
+			if chainPlan, ok := buildChainPlan(spec, ic); ok {
+				return chainPlan, nil
+			}
+			chainSrc = "rejected"
+		}
+		plan.PlanSource = "builtin:" + chainSrc
 	}
 
 	switch ic.Intent.Primary {
@@ -199,4 +225,12 @@ func boolStr(b bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+// chainSourceSuffix 阶段观测用规划来源后缀（未装配绑定层时为空串，观测文本零变化）。
+func chainSourceSuffix(src string) string {
+	if src == "" {
+		return ""
+	}
+	return " src=" + src
 }

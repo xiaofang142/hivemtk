@@ -4,6 +4,7 @@ import (
 	"context"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/dbencrypt"
 
 	"gorm.io/gorm"
 )
@@ -48,8 +49,18 @@ func NewObsConfigRepositoryWithDB(db *gorm.DB) ObsConfigRepository {
 	return &obsConfigRepo{db: db}
 }
 
+// 凭据加解密边界（AUD-03 / 迁移 v3_88_0）：写出口 dbencrypt.Encrypt、
+// 读出口 dbencrypt.Decrypt。dbencrypt 未就绪时写出口降级明文、读出口对非
+// enc:v1: 前缀原样透传，双轨读取兼容存量明文行。
+//
+// 写出口**只改落库值，不动调用方内存快照**：服务层拿到的是明文语义的
+// config，响应渲染由 service.convertToDTO 统一掩码（AK/SK 均不回显）。
 func (r *obsConfigRepo) Create(ctx context.Context, config *model.ObsConfig) error {
-	return r.db.WithContext(ctx).Create(config).Error
+	origAK, origSK := config.AccessKey, config.SecretKey
+	config.AccessKey, config.SecretKey = dbencrypt.Encrypt(origAK), dbencrypt.Encrypt(origSK)
+	err := r.db.WithContext(ctx).Create(config).Error
+	config.AccessKey, config.SecretKey = origAK, origSK
+	return err
 }
 
 // GetByID 取一台配置；不存在时返回 (nil, gorm.ErrRecordNotFound)。
@@ -62,6 +73,8 @@ func (r *obsConfigRepo) GetByID(ctx context.Context, id string) (*model.ObsConfi
 	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&config).Error; err != nil {
 		return nil, err
 	}
+	config.AccessKey = dbencrypt.Decrypt(config.AccessKey)
+	config.SecretKey = dbencrypt.Decrypt(config.SecretKey)
 	return &config, nil
 }
 
@@ -97,31 +110,42 @@ func (r *obsConfigRepo) GetList(ctx context.Context, page int, limit int, provid
 	}
 
 	err = query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&configs).Error
-	return configs, total, err
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, config := range configs {
+		config.AccessKey = dbencrypt.Decrypt(config.AccessKey)
+		config.SecretKey = dbencrypt.Decrypt(config.SecretKey)
+	}
+	return configs, total, nil
 }
 
 // Update 写回一台配置的**可编辑列白名单**（编辑口；唯一生产调用方 = service.UpdateConfig）。
 //
 // 为什么不是整行 Save：调用方传回来的多半是一份快照，而快照除了可编辑列还带着
 // is_default / status / file_count / total_size —— 前两列归 SetDefault 与库级偏唯一
-// 索引管，后两列归 IncrementUsage 管。整行写回会把"读完快照之后"发生的两件事一起
+// 索引管，后两列归 IncrementUsage 管。整行写回会把"读完快照后"发生的两件事一起
 // 抹掉：默认切换 ⇒ 刚被摘掉的那台复活成第二条默认；上传计数 ⇒ 计数器被旧值覆盖
 // 且无人知晓。用**白名单**而不是 Omit 黑名单，是因为模型以后加列时黑名单会静默失守
 // （与 IncrementUsage 只点两列同一个理由）。
 //
 // 为什么也不是 Save 的另一半：Save 在主键为零值时会退化成 INSERT，编辑口不该有
 // 第二身份；建配置走 Create。
+//
+// 凭据两列在落库前加密（见文件头边界约定）；调用方内存快照保持明文语义，
+// service.UpdateConfig 的「req 空 = 不改」部分更新判断不受影响。
 func (r *obsConfigRepo) Update(ctx context.Context, config *model.ObsConfig) error {
 	if config == nil || config.ID == "" {
 		return gorm.ErrRecordNotFound
 	}
 	// 0 行 ⇒ 该行不存在（`db.EnsureAffected`）：不该回一句"已更新"却没发生任何事。
+	accessKey, secretKey := dbencrypt.Encrypt(config.AccessKey), dbencrypt.Encrypt(config.SecretKey)
 	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.ObsConfig{}).Where("id = ?", config.ID).
 		Updates(map[string]any{
 			"name":        config.Name,
 			"provider":    config.Provider,
-			"access_key":  config.AccessKey,
-			"secret_key":  config.SecretKey,
+			"access_key":  accessKey,
+			"secret_key":  secretKey,
 			"bucket":      config.Bucket,
 			"region":      config.Region,
 			"endpoint":    config.Endpoint,
@@ -159,6 +183,8 @@ func (r *obsConfigRepo) GetDefault(ctx context.Context) (*model.ObsConfig, error
 	if err != nil {
 		return nil, err
 	}
+	config.AccessKey = dbencrypt.Decrypt(config.AccessKey)
+	config.SecretKey = dbencrypt.Decrypt(config.SecretKey)
 	return &config, nil
 }
 

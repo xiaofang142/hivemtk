@@ -563,9 +563,9 @@ var DefaultIntents = []IntentDef{
 	},
 	{
 		Type: IntentAskService, Name: "服务咨询",
-		Keywords:    []string{"售后", "保修", "维修", "包邮", "多久到", "发货", "物流", "客服"},
-		Examples:    []string{"售后怎么保障？", "多久能到？", "包邮吗？"},
-		Description: "客户咨询售后服务",
+		Keywords:    []string{"售后", "保修", "维修", "包邮", "多久到", "发货", "物流", "客服", "快递", "运单", "快递单号", "物流单号", "到货", "收货"},
+		Examples:    []string{"售后怎么保障？", "多久能到？", "包邮吗？", "我的快递到哪了？", "帮我查下物流"},
+		Description: "客户咨询售后服务（含快递/物流/运单查询）",
 	},
 	{
 		Type: IntentAfterSale, Name: "售后问题",

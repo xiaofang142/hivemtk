@@ -2,12 +2,12 @@
 // 本系统仅使用 PostgreSQL，测试环境必须连接真实 PG（不允许任何非 PG 数据库）。
 //
 // 连接配置来源（优先级）：
-//  1. POSTGRES_TEST_DSN（完整连接串，显式覆盖一切）
+//  1. POSTGRES_TEST_DSN（完整连接串，显式覆盖一切；keyword/URL 均可）
 //  2. POSTGRES_TEST_HOST / POSTGRES_TEST_PORT / POSTGRES_TEST_USER / POSTGRES_TEST_PASSWORD
-//  3. 宿主机端口回落到 USER_POSTGRES_HOST_PORT / DB_PORT，再回落到
-//     config.DefaultDBPortDev(8232) / config.DefaultDBPortDocker(8202) 的实际探测
+//  3. 端口只认专用快测实例：USER_POSTGRES_TEST_HOST_PORT（声明过才可用）→ 8217 默认
 //
-// 端口探测存在的理由见 testDBPortCandidates 注释（避免硬编码 8202 导致本地假绿）。
+// AV-02 之后不再向业务端口（8202/8232）回退探测：显式配置错了就 fail fast，
+// 业务端点永远不会被测试入口触碰。配置校验见 readTestDBConfig。
 //
 // 性能口径（2026-11-05）：
 //   - 进程级只建一个库；
@@ -50,8 +50,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
-
-var dbnameRe = regexp.MustCompile(`dbname=[^\s]+`)
 
 var (
 	dsnHostRe = regexp.MustCompile(`host=([^\s]+)`)
@@ -149,26 +147,14 @@ func closeTimeout() time.Duration {
 	return d
 }
 
-// testDBPortCandidates 返回宿主机测试库端口候选（按优先级去重）。
-//
-// ⚠️ 为什么不能像原实现那样写死单一端口 8202：
-//   - 8202 是 **容器内** 端口。宿主机映射端口由 docker-compose 的
-//     `ports: "127.0.0.1:${USER_POSTGRES_HOST_PORT:-8202}:8202"` 决定，
-//     本机 .env 覆盖为 8232（见 docs/PORT_REGISTRY.md §一 / §二）。
-//   - 写死 8202 时，本机 `go test ./...` 连不上 → 依赖本辅助的 288 个测试文件
-//     全部 t.Skipf → go test 退出 0，断言变假绿（同源问题，
-//     只是触发点从 CI 换成了本地）。
-//   - docs/PORT_REGISTRY.md 已把"硬编码 8202 但 ports.go 说 8232"列为缺陷模式，
-//     并记录了 2026-09 CV 验收时因此产生大面积假失败的历史事故。
-//
-// 常量取自 config 包（DefaultDBPortDev / DefaultDBPortDocker），与 ports.go 同源，
-// 避免文档与代码各说各话。
-// testDBPortCandidates 测试库端点候选（AV-02 钉扎版）：
+// testDBPortCandidates 返回测试库端点候选（AV-02 钉扎版）：
 //   - 显式 POSTGRES_TEST_PORT 即唯一候选——不再向业务端口（8202/8232）回退探测，
 //     显式配置错了就让它错（fail fast），这正是 TestTestDBExplicitPortDoesNotFallback 的语义；
 //   - 否则只认专用快测实例：USER_POSTGRES_TEST_HOST_PORT（声明过才可用）→ 8217 默认。
 //
 // 与 testdb_config.go 的钉扎门同一口径：业务端点（8202/8232）永远不会被测试入口触碰。
+// 历史背景：写死容器内 8202 而宿主机映射到 8232，曾使依赖本辅助的测试全部 Skipf、
+// 断言变假绿（见 docs/PORT_REGISTRY.md）。
 func testDBPortCandidates() []string {
 	out := make([]string, 0, 2)
 	seen := make(map[string]bool, 2)
@@ -325,7 +311,8 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	// 配置门的错误文本本身已设计为脱敏（"must be user_db_test"/"pinned"等
 	// 固定文案，不含输入值），safeTestDBError 会把它压成通用句——这里直接
 	// 透传原错误，让负例矩阵与运维提示能对上具体是哪条门拦的。
-	if _, cfgErr := readTestDBConfig(); cfgErr != nil {
+	cfg, cfgErr := readTestDBConfig()
+	if cfgErr != nil {
 		t.Fatalf("测试库配置未通过安全门（未发起任何连接）：%v", cfgErr)
 	}
 
@@ -357,7 +344,9 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 
 	ensureProcTestDB(t)
 	tEnsure = time.Since(last)
-	testDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname="+procDBName)
+	// 用 testDSNWithDatabase 切换库名：keyword 与 URL 两种 DSN 都能正确落到
+	// 进程槽位库（dbname 正则只认 keyword= 形态，URL DSN 会连回基名库）。
+	testDSN := testDSNWithDatabase(cfg.dsn, procDBName)
 
 	legacy := os.Getenv("TESTDB_LEGACY") == "1"
 	var database *gorm.DB
@@ -432,7 +421,7 @@ func openTestDB(t testing.TB, testDSN string) (database *gorm.DB, open, settings
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), err)
+		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), safeTestDBError(err))
 	}
 	open = time.Since(begin)
 
@@ -732,16 +721,19 @@ func acquireTestDBSlot(conn *sql.Conn, t testing.TB) (slot int, ok bool) {
 
 func ensureProcTestDB(t testing.TB) {
 	procDBInit.Do(func() {
-		// 基名与 getTestDSN 同源（POSTGRES_TEST_DBNAME，默认 user_db_test）。
+		// 基名与 readTestDBConfig 同源（POSTGRES_TEST_DBNAME，默认 user_db_test）。
 		//
-		// ⚠️ 此处不能硬编码 `"user_db_test_%d"`。而 NewTestDB 会把
-		// getTestDSN() 里的 dbname 整体替换成 procDBName（见 NewTestDB 内
-		// `dbnameRe.ReplaceAllString(..., "dbname="+procDBName)`），
-		// 于是 POSTGRES_TEST_DBNAME **设了也不生效** —— 典型"配置项名承诺了它不做的事"。
-		// 现改为共用同一基名，两边不再各说各话。
-		base := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
-		_, port, _ := resolveTestDBEndpoint()
-		maintDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname=postgres")
+		// ⚠️ 此处不能硬编码 `"user_db_test_%d"`：NewTestDB 会用
+		// testDSNWithDatabase(cfg.dsn, procDBName) 把连接串里的库名换成进程槽位库，
+		// 两边必须共用同一基名，否则 POSTGRES_TEST_DBNAME 设了也不生效——
+		// 典型"配置项名承诺了它不做的事"。
+		cfg, err := readTestDBConfig()
+		if err != nil {
+			procDBInitErr = err
+			return
+		}
+		base := cfg.database
+		maintDSN := testDSNWithDatabase(cfg.dsn, "postgres")
 		m, err := gorm.Open(postgres.Open(maintDSN), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Silent),
 		})
@@ -819,6 +811,11 @@ func ensureProcTestDB(t testing.TB) {
 func NewTestDBOrSkip(t testing.TB, models ...any) *gorm.DB {
 	t.Helper()
 
+	// 配置错误不能被 Skip 掩盖：非法库名/缺口令/非快测实例一律 Fatal，
+	// 只有「配置合法但实例当前不可达」才允许跳过。
+	if _, err := readTestDBConfig(); err != nil {
+		t.Fatalf("PostgreSQL 测试配置拒绝：%v", err)
+	}
 	if _, _, err := resolveTestDBEndpoint(); err != nil {
 		t.Skipf("PostgreSQL 测试库不可达（已按优先级尝试 %v）：%v；按设计本测试可跳过",
 			testDBPortCandidates(), err)

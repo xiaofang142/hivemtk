@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -29,7 +28,7 @@ type controllablePipeline struct {
 	ackOutboundErr    error
 }
 
-func (c *controllablePipeline) IngestBatch(ctx context.Context, events []*model.MessageEvent) (*service.InboxIngressBatchResult, error) {
+func (c *controllablePipeline) IngestBatch(ctx context.Context, events []*model.MessageEvent) (*IngestBatchResult, error) {
 	if c.ingestBatchErr != nil {
 		c.fakePipeline.ingested = append(c.fakePipeline.ingested, events...)
 		return nil, c.ingestBatchErr

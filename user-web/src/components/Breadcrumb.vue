@@ -57,7 +57,6 @@ const subMenusMap = {
   customerEvent: { parent: 'customer', title: i18n.global.t('客户事件') },
   tagSegmentation: { parent: 'customer', title: i18n.global.t('标签分层') },
   userSegment: { parent: 'customer', title: i18n.global.t('用户分层 RFM') },
-  unifiedMessage: { parent: 'customer', title: i18n.global.t('客户消息轨迹') },
   oneid: { parent: 'customer', title: i18n.global.t('客户身份') },
   aiAgent: { parent: 'aiAgent', title: i18n.global.t('智能体管理') },
   customerSession: { parent: 'aiAgent', title: i18n.global.t('客服会话') },

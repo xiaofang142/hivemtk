@@ -12,7 +12,6 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
-	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -38,11 +37,11 @@ func (p *recordingPipeline) record(sink *[]uint, ctx context.Context) {
 	*sink = append(*sink, tid)
 }
 
-func (p *recordingPipeline) IngestBatch(ctx context.Context, events []*model.MessageEvent) (*service.InboxIngressBatchResult, error) {
+func (p *recordingPipeline) IngestBatch(ctx context.Context, events []*model.MessageEvent) (*IngestBatchResult, error) {
 	p.record(&p.ingestCtx, ctx)
-	res := &service.InboxIngressBatchResult{PerEvent: make([]*service.InboxIngressResult, len(events))}
+	res := &IngestBatchResult{PerEvent: make([]*IngestEventResult, len(events))}
 	for i := range events {
-		res.PerEvent[i] = &service.InboxIngressResult{Accepted: true}
+		res.PerEvent[i] = &IngestEventResult{Accepted: true}
 	}
 	return res, nil
 }
@@ -75,11 +74,11 @@ func (p *recordingPipeline) AckOutbound(ctx context.Context, _ string, _ string,
 
 // AckOutboundDetailed CH-37b 刀2 接口新增方法：租户透传语义与 AckOutbound 同源（同 ctx 记账），
 // 本 fake 不承载业务分类，只保证接口可实现且 ctx 带租户。
-func (p *recordingPipeline) AckOutboundDetailed(ctx context.Context, _ string, _ string, msgIDs []string, _, _ string, _ map[string]service.BridgeOutboundAckInput, _ service.AckOutboundClaimFence) (*service.AckOutboundResult, error) {
+func (p *recordingPipeline) AckOutboundDetailed(ctx context.Context, _ string, _ string, msgIDs []string, _, _ string, _ map[string]OutboundAckInput, _ AckOutboundClaimFence) (*AckOutboundResult, error) {
 	p.record(&p.ackCtx, ctx)
-	res := &service.AckOutboundResult{Items: make([]service.AckOutboundItem, 0, len(msgIDs))}
+	res := &AckOutboundResult{Items: make([]OutboundAckItem, 0, len(msgIDs))}
 	for _, id := range msgIDs {
-		res.Items = append(res.Items, service.AckOutboundItem{MsgID: id, Status: model.BridgeAckStatusAcked})
+		res.Items = append(res.Items, OutboundAckItem{MsgID: id, Status: model.BridgeAckStatusAcked})
 	}
 	res.AckedItemsCount = len(msgIDs)
 	return res, nil

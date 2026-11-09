@@ -14,6 +14,7 @@ type BackupDataRepository interface {
 	DumpClues(ctx context.Context) (json.RawMessage, error)
 	DumpUsers(ctx context.Context, limit, offset int) (json.RawMessage, error)
 	DumpShortLinks(ctx context.Context, limit, offset int) (json.RawMessage, error)
+	DumpTable(ctx context.Context, table string) (json.RawMessage, error)
 	ClueExists(ctx context.Context, tenantID uint, id string) (bool, error)
 	RestoreClue(ctx context.Context, row map[string]any) error
 	UserExistsByUsername(ctx context.Context, tenantID uint, username string) (bool, error)
@@ -98,6 +99,22 @@ func (r *backupDataRepo) DumpShortLinks(ctx context.Context, limit, offset int) 
 	return json.Marshal(rows)
 }
 
+// DumpTable 通用整表导出（按 id 升序单次查询）。扩表均为配置/记录类小表，
+// 整表读入可接受；users 等大表不走此路径（仍有专用分页 dumper）。
+func (r *backupDataRepo) DumpTable(ctx context.Context, table string) (json.RawMessage, error) {
+	if !allowedBackupTables[table] {
+		return nil, fmt.Errorf("表 %s 不在备份白名单内", table)
+	}
+	var rows []map[string]any
+	if err := r.db.WithContext(ctx).Table(table).Order("id ASC").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if rows == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(rows)
+}
+
 func (r *backupDataRepo) ClueExists(ctx context.Context, tenantID uint, id string) (bool, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Table("clues").
@@ -141,6 +158,8 @@ func (r *backupDataRepo) RestoreShortLink(ctx context.Context, row map[string]an
 }
 
 // allowedBackupTables 备份/恢复白名单，key 为数据库真实表名。
+// 与 service.backupExtraTables 同源（导出/恢复两端共用一份键→表清单），
+// 任何一端新增表必须同步另一端，否则恢复端 fail-closed 探针会拦下残缺备份。
 var allowedBackupTables = map[string]bool{
 	"user_mfa":                true,
 	"obs_config":              true,
@@ -150,6 +169,21 @@ var allowedBackupTables = map[string]bool{
 	"system_config":           true,
 	"webhook_subscriptions":   true,
 	"password_history":        true,
+	"customer_sessions":       true,
+	"message":                 true,
+	"csat_surveys":            true,
+	"customers":               true,
+	"agent_statuses":          true,
+	"alert_rules":             true,
+	"automation_rules":        true,
+	"bridge_accounts":         true,
+	"operation_logs":          true,
+	"login_events":            true,
+	"security_alerts":         true,
+	"password_reset_tokens":   true,
+	"prompts":                 true,
+	"ai_agents":               true,
+	"feature_flags":           true,
 }
 
 // RestoreTable 恢复单表：DELETE 备份覆盖到的租户 + 逐行 Create 包在同一个事务里，

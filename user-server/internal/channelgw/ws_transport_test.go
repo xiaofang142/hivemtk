@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/service"
 
 	"net/http/httptest"
 
@@ -34,13 +33,13 @@ type detailedAckCall struct {
 	fenceLen           int
 }
 
-func (f *fakePipeline) IngestBatch(_ context.Context, events []*model.MessageEvent) (*service.InboxIngressBatchResult, error) {
+func (f *fakePipeline) IngestBatch(_ context.Context, events []*model.MessageEvent) (*IngestBatchResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ingested = append(f.ingested, events...)
-	res := &service.InboxIngressBatchResult{PerEvent: make([]*service.InboxIngressResult, len(events))}
+	res := &IngestBatchResult{PerEvent: make([]*IngestEventResult, len(events))}
 	for i := range events {
-		res.PerEvent[i] = &service.InboxIngressResult{Accepted: true, QueuedForAI: true}
+		res.PerEvent[i] = &IngestEventResult{Accepted: true, QueuedForAI: true}
 	}
 	return res, nil
 }
@@ -74,7 +73,7 @@ func (f *fakePipeline) AckOutbound(_ context.Context, _, _ string, msgIDs []stri
 	return len(msgIDs), nil
 }
 
-func (f *fakePipeline) AckOutboundDetailed(_ context.Context, channel, accountID string, msgIDs []string, conversationID, terminalStatus string, _ map[string]service.BridgeOutboundAckInput, fence service.AckOutboundClaimFence) (*service.AckOutboundResult, error) {
+func (f *fakePipeline) AckOutboundDetailed(_ context.Context, channel, accountID string, msgIDs []string, conversationID, terminalStatus string, _ map[string]OutboundAckInput, fence AckOutboundClaimFence) (*AckOutboundResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.detailed = append(f.detailed, detailedAckCall{
@@ -83,16 +82,16 @@ func (f *fakePipeline) AckOutboundDetailed(_ context.Context, channel, accountID
 		conversationID: conversationID, terminalStatus: terminalStatus,
 		fenceLen: len(fence),
 	})
-	items := make([]service.AckOutboundItem, 0, len(msgIDs))
-	res := &service.AckOutboundResult{Items: items}
+	items := make([]OutboundAckItem, 0, len(msgIDs))
+	res := &AckOutboundResult{Items: items}
 	for _, id := range msgIDs {
 		if terminalStatus == model.BridgeAckStatusFailed {
 			res.FailedItemsCount++
-			res.Items = append(res.Items, service.AckOutboundItem{MsgID: id, Status: model.BridgeAckStatusFailed})
+			res.Items = append(res.Items, OutboundAckItem{MsgID: id, Status: model.BridgeAckStatusFailed})
 			continue
 		}
 		res.AckedItemsCount++
-		res.Items = append(res.Items, service.AckOutboundItem{MsgID: id, Status: model.BridgeAckStatusAcked})
+		res.Items = append(res.Items, OutboundAckItem{MsgID: id, Status: model.BridgeAckStatusAcked})
 	}
 	return res, nil
 }

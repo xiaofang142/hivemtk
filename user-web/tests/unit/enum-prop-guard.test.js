@@ -286,8 +286,6 @@ describe('枚举 prop 防回归闸门', () => {
       ['views/confidence/Panel.vue', 'decisionTagType'],
       ['views/workflowOrchestrator/List.vue', 'statusType'],
       ['views/workflowOrchestrator/List.vue', 'execStatusType'],
-      ['views/unifiedMessage/List.vue', 'getTypeTagType'],
-      ['views/unifiedMessage/List.vue', 'getStatusTagType'],
     ]
 
     it.each(CASES)('%s 的 %s 恒返回合法 el-tag type', (file, fn) => {
@@ -305,8 +303,6 @@ describe('枚举 prop 防回归闸门', () => {
       ['views/kuaishouCard/CardStats.vue', 'typeMap'],
       ['views/intentRecognition/List.vue', 'RECOGNIZE_METHOD_TAG'],
       ['views/intentRecognition/List.vue', 'FINE_METHOD_TAG'],
-      ['views/unifiedMessage/List.vue', 'TYPE_TAG'],
-      ['views/unifiedMessage/List.vue', 'STATUS_TAG'],
     ]
 
     it.each(MAPS)('%s 的 %s 每个值都合法', (file, name) => {
@@ -373,7 +369,6 @@ describe('枚举 prop 防回归闸门', () => {
       ['views/kuaishouCard/Stats.vue', 'getActionType'],
       ['views/kuaishouCard/CardStats.vue', 'getActionType'],
       ['views/tiktokCard/Stats.vue', 'getActionType'],
-      ['views/unifiedMessage/List.vue', 'getTypeTagType'],
       ['views/workflowOrchestrator/List.vue', 'statusType'],
     ]
 

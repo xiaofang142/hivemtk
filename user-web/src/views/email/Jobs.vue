@@ -42,14 +42,15 @@
             flex="1"
           >
             <template #default="scope">
-              {{ scope.row.success_total - scope.row.read_total }}
+              {{ Math.max(0, (scope.row.success_total || 0) - (scope.row.read_total || 0)) }}
             </template>
           </el-table-column>
           <el-table-column
             prop="created_at"
             label="创建时间"
             width="300"
-            flex="1">
+            flex="1"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.created_at) }}
             </template>
@@ -72,8 +73,8 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { emailApi } from '@/api/email'
 import { fmtTime } from '@/utils/time'
 

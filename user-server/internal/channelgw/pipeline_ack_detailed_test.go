@@ -114,7 +114,7 @@ func TestPipeline_AckOutboundDetailed_DelegationClassification(t *testing.T) {
 	if res.NotFoundCount != 1 || res.NotInScopeCount != 1 {
 		t.Errorf("NotFound/NotInScope = %d/%d, want 1/1", res.NotFoundCount, res.NotInScopeCount)
 	}
-	byID := map[string]service.AckOutboundItem{}
+	byID := map[string]OutboundAckItem{}
 	for _, it := range res.Items {
 		byID[it.MsgID] = it
 	}
@@ -251,7 +251,7 @@ func TestPipeline_AckOutboundDetailed_Fence_MatchingClaimFlips(t *testing.T) {
 	lease := mustClaimedAt(t, hubs[0])
 
 	res, err := p.AckOutboundDetailed(ctx, channel, accountID, []string{idM}, "", model.BridgeAckStatusDelivered, nil,
-		service.AckOutboundClaimFence{idM: lease})
+		AckOutboundClaimFence{idM: lease})
 	if err != nil {
 		t.Fatalf("栅栏 ack 不应失败: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestPipeline_AckOutboundDetailed_Fence_StaleClaimedAtNotFlipped(t *testing.
 
 	// 旧 acker 迟到的 ack（带旧租约）→ 不翻转，duplicate 分类。
 	res, err := p.AckOutboundDetailed(ctx, channel, accountID, []string{idS}, "", model.BridgeAckStatusDelivered, nil,
-		service.AckOutboundClaimFence{idS: staleLease})
+		AckOutboundClaimFence{idS: staleLease})
 	if err != nil {
 		t.Fatalf("过期租约 ack 不应报错: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestPipeline_AckOutboundDetailed_Fence_StaleClaimedAtNotFlipped(t *testing.
 
 	// 新 acker（带新租约）→ 翻转成功。
 	res2, err := p.AckOutboundDetailed(ctx, channel, accountID, []string{idS}, "", model.BridgeAckStatusDelivered, nil,
-		service.AckOutboundClaimFence{idS: freshLease})
+		AckOutboundClaimFence{idS: freshLease})
 	if err != nil {
 		t.Fatalf("新租约 ack 不应失败: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestPipeline_AckOutboundDetailed_Fence_ConcurrentAckersSingleWinner(t *test
 		go func(idx int) {
 			defer wg.Done()
 			res, err := p.AckOutboundDetailed(ctx, channel, accountID, []string{idR}, "", model.BridgeAckStatusDelivered, nil,
-				service.AckOutboundClaimFence{idR: lease})
+				AckOutboundClaimFence{idR: lease})
 			if err != nil {
 				t.Errorf("竞速 ack 不应报错: %v", err)
 				return

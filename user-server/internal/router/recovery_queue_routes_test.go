@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"hivemtk-user/internal/service"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -28,7 +30,9 @@ func recoveryQueueEngine(role string) *gin.Engine {
 		}
 		c.Next()
 	})
-	setupRecoveryQueueRoutes(api)
+	// 接线条测试：handler 不会被触达（写口先被 AdminAuthMiddleware 拦），
+	// 这里不需要真库，只要一份真实服务实例过构造器即可。
+	setupRecoveryQueueRoutes(api, service.NewRecoveryQueueService())
 	return r
 }
 

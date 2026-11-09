@@ -110,7 +110,11 @@
               end-placeholder="结束"
               value-format="YYYY-MM-DD"
               style="width: 240px"
+              @change="loadStats"
             />
+            <!-- 统计卡有窗口口径（缺省=上个自然月 1 日至今），列表接口无时间过滤：
+                 列表能看到窗口外的旧事件而统计卡为 0 并不矛盾，这里给出口径提示。 -->
+            <span class="stats-window-hint">统计卡按所选日期范围（缺省本月窗口）</span>
           </div>
         </div>
       </template>
@@ -163,7 +167,8 @@
         <el-table-column
           prop="createdAt"
           label="时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.createdAt) }}
           </template>
@@ -347,7 +352,7 @@ import i18n from '@/i18n'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getCustomerEventHistory, getEventStats, trackEvent, getGlobalEvents } from '@/api/customerEvent.js'
+import { getEventStats, trackEvent, getGlobalEvents } from '@/api/customerEvent.js'
 import { getCustomerList } from '@/api/customer360.js'
 import { fmtTime } from '@/utils/time'
 
@@ -376,7 +381,7 @@ const mapEvent = (e) => {
   let data = {}
   try {
     data = typeof e.event_data === 'string' ? JSON.parse(e.event_data) : (e.event_data || {})
-  } catch (_) {
+  } catch {
     // JSON 解析失败时维持初始空对象
   }
   return {
@@ -396,7 +401,9 @@ const mapEvent = (e) => {
 const loadEvents = async () => {
   loading.value = true
   try {
-    const res = await getGlobalEvents({ page: pagination.value.page || 1, page_size: pagination.value.pageSize || 50 });
+    const res = await getGlobalEvents({ page: pagination.value.page || 1, page_size: pagination.value.size || 50 });
+    // 注意：列表接口没有时间/类型过滤，类型筛选在 filteredEvents 前端过滤、
+    // 日期范围只联动统计卡窗口（loadStats），两者口径不同是后端契约决定。
     const raw = Array.isArray(res) ? res : (res?.list || [])
     events.value = raw.map(mapEvent)
     pagination.value.total = res?.total ?? raw.length
@@ -407,7 +414,15 @@ const loadEvents = async () => {
 
 const loadStats = async () => {
   try {
-    const res = await getEventStats()
+    // 与日期范围控件联动：选了区间就按区间查统计，否则用后端缺省窗口。
+    // 注意列表接口（ListGlobal）没有时间过滤，统计卡有窗口口径——列表显示
+    // 窗口外的旧事件、统计卡显示 0 并不矛盾，卡片副标题已注明「（本月窗口）」。
+    const params = {}
+    if (Array.isArray(dateRange.value) && dateRange.value.length === 2 && dateRange.value[0] && dateRange.value[1]) {
+      params.start = dateRange.value[0]
+      params.end = dateRange.value[1]
+    }
+    const res = await getEventStats(params)
     const byType = res?.by_event_type || []
     const bySource = res?.by_event_source || []
     stats.value = {
@@ -425,7 +440,23 @@ const customerOptions = ref([])
 const loadCustomerOptions = async () => {
   try {
     const res = await getCustomerList({ page_size: 200 })
-    customerOptions.value = res?.list || []
+    // /api/customer-360/list 的 list 是「uid -> 客户聚合对象」的 map（basic_info 包着
+    // user_id/user_name/user_phone），不是数组；el-option 直接 v-for 它拿到的 c.name/c.id
+    // 全是 undefined（UI 审计实测下拉 95 个选项全渲染 "undefined"）。
+    // 这里按 customer360/List.vue 的同款逻辑拍平成 {id,name,phone}。
+    const raw = res?.list
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      customerOptions.value = Object.entries(raw).map(([uid, c]) => {
+        const b = c?.basic_info || {}
+        return {
+          id: b.user_id || uid,
+          name: b.user_name || b.user_id || uid,
+          phone: b.user_phone || '',
+        }
+      })
+    } else {
+      customerOptions.value = Array.isArray(raw) ? raw : []
+    }
   } catch (e) {
     console.error('加载客户选项失败', e)
   }
@@ -466,6 +497,7 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .customer-event-page { padding: 20px; }
+.stats-window-hint { margin-left: 12px; color: #909399; font-size: 12px; }
 .header-card {
   margin-bottom: 20px;
   :deep(.el-card__body) { display: flex; justify-content: space-between; align-items: center; }

@@ -3,7 +3,8 @@ package dto
 import "time"
 
 // ObsConfigRequest OBS配置请求。
-// provider 校验规则：local 只需 Name，Endpoint 存本地目录（默认 ./uploads），
+// provider 校验规则：local 只需 Name，Endpoint 存本地目录（默认 ./uploads，
+// 必须为本地路径形态，URL 形态被 storage.ValidateLocalEndpoint 拒绝），
 // Domain 存公开访问前缀（默认 /files）；
 // 云厂商 (aliyun/qiniu/tencent/aws) 必须填 AccessKey/SecretKey/Bucket/Region。
 type CreateObsConfigRequest struct {

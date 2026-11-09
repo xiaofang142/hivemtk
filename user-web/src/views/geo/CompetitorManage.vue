@@ -90,7 +90,7 @@
               size="small"
               :type="row.status === 'active' ? 'success' : 'info'"
             >
-              {{ row.status }}
+              {{ statusLabel(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -202,8 +202,8 @@
             v-model="form.status"
             active-value="active"
             inactive-value="paused"
-            active-text="active"
-            inactive-text="paused"
+            active-text="启用"
+            inactive-text="暂停"
           />
         </el-form-item>
         <el-form-item label="备注">
@@ -246,6 +246,9 @@ const form = ref({
   name: '', domain: '', paths: ['/', '/product'],
   category: 'direct', priority: 5, status: 'active', notes: ''
 })
+
+// 后端存量同时存在 active/inactive/paused：统一映射成中文，避免状态列直接显示英文枚举。
+const statusLabel = (v) => ({ active: '启用', paused: '暂停', inactive: '停用' }[v] || v || '-')
 
 const categoryLabel = (c) => ({ direct: '直接竞品', global: '海外巨头', indirect: '间接竞品' }[c] || c || '—')
 const categoryTag = (c) => ({ direct: 'success', global: 'warning', indirect: 'info' }[c] || 'info')

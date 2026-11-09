@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
@@ -78,8 +79,18 @@ type SalesEngine struct {
 
 	permissionChecker AgentToolPermissionChecker
 
+	// intentChain 意图→工具调用流绑定层（TB-03）；nil=未装配，行为与既有链路完全一致。
+	// 命中绑定时：绑定工具晋升到可用清单前部（保证过 maxTools 截断）+ 系统提示
+	// 注入"按链优先调用"指引；LLM 仍自主决策，绑定失效安全回落。
+	intentChain agent_runtime.IntentChainLookup
+
 	glossary   GlossaryRenderer
 	calibrator OutputCalibrator
+}
+
+// SetIntentChainLookup 注入意图→工具调用流绑定层（装配层调用；运行期只读）。
+func (e *SalesEngine) SetIntentChainLookup(l agent_runtime.IntentChainLookup) {
+	e.intentChain = l
 }
 
 func (e *SalesEngine) SetPermissionChecker(pc AgentToolPermissionChecker) {

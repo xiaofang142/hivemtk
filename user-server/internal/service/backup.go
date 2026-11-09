@@ -19,6 +19,39 @@ import (
 	"time"
 )
 
+// backupExtraTables 是导出/恢复共认的扩表清单（data.json 键 → 数据库表名）。
+// 两端必须同源：历史上恢复端认 23 张而导出端只写 3 张，导致恢复对缺表静默
+// no-op 并最终报 completed（备份实际残缺）。任何一端变更都必须同步另一端。
+var backupExtraTables = []struct {
+	key       string
+	tableName string
+}{
+	{"mfa", "user_mfa"},
+	{"obs_config", "obs_config"},
+	{"email_accounts", "email_accounts"},
+	{"email_jobs", "email_jobs"},
+	{"dnc", "customer_do_not_contact"},
+	{"system_config", "system_config"},
+	{"webhook_subscriptions", "webhook_subscriptions"},
+	{"password_history", "password_history"},
+
+	{"customer_sessions", "customer_sessions"},
+	{"messages", "message"},
+	{"csat_scores", "csat_surveys"},
+	{"customers", "customers"},
+	{"agent_statuses", "agent_statuses"},
+	{"alert_rules", "alert_rules"},
+	{"automation_rules", "automation_rules"},
+	{"bridge_accounts", "bridge_accounts"},
+	{"operation_logs", "operation_logs"},
+	{"login_events", "login_events"},
+	{"security_alerts", "security_alerts"},
+	{"password_reset_tokens", "password_reset_tokens"},
+	{"prompts", "prompts"},
+	{"ai_agents", "ai_agents"},
+	{"feature_flags", "feature_flags"},
+}
+
 // BackupService 备份服务
 type BackupService struct {
 	backupRepo     *repository.BackupRepository
@@ -145,7 +178,7 @@ func (s *BackupService) executeBackup(ctx context.Context, backup *model.Backup)
 
 	backupRoot, _ := storage.BackupSource()
 	backupDir := filepath.Join(backupRoot, backup.BackupName)
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	if err := os.MkdirAll(backupDir, 0700); err != nil {
 		backup.Status = model.BackupStatusFailed
 		backup.ErrorMessage = err.Error()
 		if err := s.backupRepo.Update(ctx, backup); err != nil {
@@ -175,6 +208,12 @@ func (s *BackupService) executeBackup(ctx context.Context, backup *model.Backup)
 		return
 	}
 
+	// 备份含 PII 与口令哈希：zip 本体收紧到 0600，与 data.json 同级，
+	// 不给同组/其他用户留可读面（AUD-09）。
+	if e := os.Chmod(backupFile, 0600); e != nil {
+		logger.Warnf("[Backup] 备份文件权限收紧失败 path=%s: %v", backupFile, e)
+	}
+
 	if info, err := os.Stat(backupFile); err == nil {
 		backup.FileSize = info.Size()
 	}
@@ -184,6 +223,35 @@ func (s *BackupService) executeBackup(ctx context.Context, backup *model.Backup)
 	backup.CompletedAt = &now
 	if err := s.backupRepo.Update(ctx, backup); err != nil {
 		logger.Errorf("[backup] update backup status failed: %v", err)
+	}
+
+	// 保留策略：备份成功后清点同型旧备份，防含 PII 的备份无限累积（AUD-05）。
+	s.pruneBackups(ctx, backup)
+}
+
+// backupRetentionCount 每种备份类型在本机保留的最大份数；超出后删除最旧的
+// 目录与记录。备份是运维自救手段，份数无上限既撑爆磁盘也扩大泄露面。
+const backupRetentionCount = 30
+
+// pruneBackups 保留策略清扫：同类型只留最新 backupRetentionCount 份。
+// 清扫失败只告警不阻断——本次备份已成功落盘，不因清扫把状态改坏。
+func (s *BackupService) pruneBackups(ctx context.Context, keep *model.Backup) {
+	list, err := s.backupRepo.ListByType(ctx, keep.BackupType)
+	if err != nil {
+		logger.Warnf("[Backup] 保留策略列举失败 type=%s: %v", keep.BackupType, err)
+		return
+	}
+	excess := len(list) - backupRetentionCount
+	if excess <= 0 {
+		return
+	}
+	for _, old := range list[:excess] {
+		if old.ID == keep.ID {
+			continue
+		}
+		if err := s.DeleteBackup(ctx, old.ID); err != nil {
+			logger.Warnf("[Backup] 保留策略删除旧备份失败 id=%d: %v", old.ID, err)
+		}
 	}
 }
 
@@ -223,6 +291,8 @@ func (s *BackupService) exportData(ctx context.Context) ([]byte, error) {
 	userCount := jsonArrayLen(users)
 	linkCount := jsonArrayLen(links)
 
+	// 扩表与恢复端 backupExtraTables 同源：导出缺键会被恢复端 fail-closed
+	// 探针拦下，但与其靠恢复报错，不如导出端就不产生残缺备份（AUD-04）。
 	data := map[string]any{
 		"backup_time": now.Format("2006-01-02 15:04:05"),
 		"version":     "1.0.0",
@@ -234,6 +304,15 @@ func (s *BackupService) exportData(ctx context.Context) ([]byte, error) {
 		"clues":      rawMessage(clues),
 		"users":      rawMessage(users),
 		"short_link": rawMessage(links),
+	}
+	stats := data["stats"].(map[string]int)
+	for _, t := range backupExtraTables {
+		rows, err := s.backupDataRepo.DumpTable(ctx, t.tableName)
+		if err != nil {
+			return nil, fmt.Errorf("导出扩表 %s 失败: %w", t.tableName, err)
+		}
+		data[t.key] = rawMessage(rows)
+		stats[t.key] = jsonArrayLen(rows)
 	}
 	return json.Marshal(data)
 }
@@ -376,8 +455,10 @@ func (s *BackupService) DeleteBackup(ctx context.Context, id uint) error {
 	}
 
 	if backup.FilePath != "" {
-		if e := os.Remove(backup.FilePath); e != nil && !os.IsNotExist(e) {
-			logger.Warnf("[Backup] 删除备份文件失败 path=%s: %v", backup.FilePath, e)
+		// 备份目录内除 zip 外还有 data.json，整目录清除而非只删 zip，
+		// 避免含 PII 的明文 json 留在磁盘上（AUD-05/09 一并收口）。
+		if e := os.RemoveAll(filepath.Dir(backup.FilePath)); e != nil && !os.IsNotExist(e) {
+			logger.Warnf("[Backup] 删除备份目录失败 path=%s: %v", filepath.Dir(backup.FilePath), e)
 		}
 	}
 
@@ -547,34 +628,32 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 		Clues     []map[string]any `json:"clues"`
 		Users     []map[string]any `json:"users"`
 		ShortLink []map[string]any `json:"short_link"`
-
-		MFA             []map[string]any `json:"mfa"`
-		OBSConfig       []map[string]any `json:"obs_config"`
-		EmailAccounts   []map[string]any `json:"email_accounts"`
-		EmailJobs       []map[string]any `json:"email_jobs"`
-		DNC             []map[string]any `json:"dnc"`
-		SystemConfig    []map[string]any `json:"system_config"`
-		WebhookSubs     []map[string]any `json:"webhook_subscriptions"`
-		PasswordHistory []map[string]any `json:"password_history"`
-
-		CustomerSessions    []map[string]any `json:"customer_sessions"`
-		Messages            []map[string]any `json:"messages"`
-		CsatScores          []map[string]any `json:"csat_scores"`
-		Customers           []map[string]any `json:"customers"`
-		AgentStatuses       []map[string]any `json:"agent_statuses"`
-		AlertRules          []map[string]any `json:"alert_rules"`
-		AutomationRules     []map[string]any `json:"automation_rules"`
-		BridgeAccounts      []map[string]any `json:"bridge_accounts"`
-		OperationLogs       []map[string]any `json:"operation_logs"`
-		LoginEvents         []map[string]any `json:"login_events"`
-		SecurityAlerts      []map[string]any `json:"security_alerts"`
-		PasswordResetTokens []map[string]any `json:"password_reset_tokens"`
-		Prompts             []map[string]any `json:"prompts"`
-		AIAgents            []map[string]any `json:"ai_agents"`
-		FeatureFlags        []map[string]any `json:"feature_flags"`
 	}
 	if err := json.Unmarshal(data, &backupData); err != nil {
 		return err
+	}
+
+	// fail-closed 完整性探针：导出端与恢复端共用 backupExtraTables 同源清单；
+	// 缺任一键说明是清单不一致时代的残缺备份，拒绝按"空扩表"静默恢复并报
+	// completed（AUD-04：旧格式只有 clues/users/short_link 三键）。
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	var missingKeys []string
+	for _, key := range []string{"clues", "users", "short_link"} {
+		if _, ok := raw[key]; !ok {
+			missingKeys = append(missingKeys, key)
+		}
+	}
+	for _, t := range backupExtraTables {
+		if _, ok := raw[t.key]; !ok {
+			missingKeys = append(missingKeys, t.key)
+		}
+	}
+	if len(missingKeys) > 0 {
+		return fmt.Errorf("备份格式不完整，缺少键: %s（该备份产生于导出/恢复清单不一致的旧版本，请用当前版本程序重新执行备份）",
+			strings.Join(missingKeys, ", "))
 	}
 
 	restoredClues := 0
@@ -666,47 +745,19 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 		restoredLinks++
 	}
 
-	type restoreExtra struct {
-		key       string
-		tableName string
-		rows      []map[string]any
-	}
-	extras := []restoreExtra{
-
-		{"mfa", "user_mfa", backupData.MFA},
-		{"obs_config", "obs_config", backupData.OBSConfig},
-		{"email_accounts", "email_accounts", backupData.EmailAccounts},
-		{"email_jobs", "email_jobs", backupData.EmailJobs},
-		{"dnc", "customer_do_not_contact", backupData.DNC},
-		{"system_config", "system_config", backupData.SystemConfig},
-		{"webhook_subscriptions", "webhook_subscriptions", backupData.WebhookSubs},
-		{"password_history", "password_history", backupData.PasswordHistory},
-
-		{"customer_sessions", "customer_sessions", backupData.CustomerSessions},
-		{"messages", "message", backupData.Messages},
-		{"csat_scores", "csat_surveys", backupData.CsatScores},
-		{"customers", "customers", backupData.Customers},
-		{"agent_statuses", "agent_statuses", backupData.AgentStatuses},
-		{"alert_rules", "alert_rules", backupData.AlertRules},
-		{"automation_rules", "automation_rules", backupData.AutomationRules},
-		{"bridge_accounts", "bridge_accounts", backupData.BridgeAccounts},
-		{"operation_logs", "operation_logs", backupData.OperationLogs},
-		{"login_events", "login_events", backupData.LoginEvents},
-		{"security_alerts", "security_alerts", backupData.SecurityAlerts},
-		{"password_reset_tokens", "password_reset_tokens", backupData.PasswordResetTokens},
-		{"prompts", "prompts", backupData.Prompts},
-		{"ai_agents", "ai_agents", backupData.AIAgents},
-		{"feature_flags", "feature_flags", backupData.FeatureFlags},
-	}
 	restoredExtraTables := 0
 	var failedExtraTables []string
-	for _, e := range extras {
-		if len(e.rows) == 0 {
+	for _, t := range backupExtraTables {
+		var rows []map[string]any
+		if err := json.Unmarshal(raw[t.key], &rows); err != nil {
+			return fmt.Errorf("解析扩表 %s 失败: %w", t.tableName, err)
+		}
+		if len(rows) == 0 {
 			continue
 		}
-		if err := s.backupDataRepo.RestoreTable(ctx, e.tableName, e.rows); err != nil {
-			logger.Error(err, fmt.Sprintf("恢复扩表 %s 失败", e.tableName))
-			failedExtraTables = append(failedExtraTables, e.tableName)
+		if err := s.backupDataRepo.RestoreTable(ctx, t.tableName, rows); err != nil {
+			logger.Error(err, fmt.Sprintf("恢复扩表 %s 失败", t.tableName))
+			failedExtraTables = append(failedExtraTables, t.tableName)
 			continue
 		}
 		restoredExtraTables++

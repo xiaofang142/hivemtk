@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/app"
@@ -193,6 +192,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	// G-4：HTTP 请求级指标接线（MetricsMiddleware 早有实现但零接线=有实现无暴露；
 	// 随 /metrics 端点一同闭环。放在 Recovery 之后，panic 恢复后的 500 也入指标）。
 	r.Use(middleware.MetricsMiddleware())
+	// 全局安全响应头（AUD-08）：CSP/nosniff/Referrer-Policy 兜底；
+	// /files 守卫与 embed 路由在 handler 内覆盖 CSP，语义不变。
+	r.Use(middleware.SecurityHeaders())
 
 	// 全局请求体封顶：注册位置必须在**任何会读 body 的中间件与鉴权之前** ——
 	// gin 的引擎级 Use 只对注册它之后登记的路由生效，晚一步就等于给已注册的路由留口子。
@@ -537,7 +539,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupCustomerRFMRoutes(auth)
 
-		setupRecoveryQueueRoutes(auth)
+		// 挽回队列读写面：服务实例由装配层显式构造（MD-06：Router 不就地建
+		// RecoveryQueueService，全局句柄隐式回落已从这条路由链路移除）；
+		// 路由表与守卫链（AdminAuth 收写口）原样。
+		setupRecoveryQueueRoutes(auth, app.InitRecoveryQueueRuntime(gormDB))
 
 		// 统一人工待办 /api/human-tasks/*：必须挂在这个块里 —— auth 组在本块
 		// 入口已 Use(JWTAuthMiddleware())，动作端点的操作者身份取自令牌里的 user_id。
@@ -693,34 +698,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		{
 		}
 
-		app.SetBridgeIngressSvc(bridgeIngressSvc)
-		bridgeHandler := bridge.NewBridgeIngestHandler(bridgeIngressSvc)
-
-		messageHubRepo := repository.NewMessageHubRepositoryWithDB(gormDB)
-		bridgeHandler.SetOutboxQuerier(messageHubRepo)
-
-		service.SetGlobalSSEPublisher(func(ctx context.Context, channel, accountID string, hubID uint64, convID, msgType, receiverID, content, mediaURL string, isAIReply bool, createdAt time.Time) {
-			// R-B1：总线 Data 与 DB 补拉路径逐键一致（msg_id 必带——扩展端复合去重键
-			// msg_id|conversation_id 依赖它；曾缺 msg_id 致同会话第二条起静默丢消息）。
-			// msg_id 与落库行同源：service.ContentHashMsgID ≡ DeliverBridgeOutbound 赋值处。
-			// 用 PublishCtx 而非 Publish：认领那一步要 UPDATE message_hub（租户表），
-			// on 模式下 ctx 不带租户会被隔离守卫 fail-closed 拒绝
-			// （"[SSE] 出站认领报错，放弃本次推送"）。ctx 由 service 侧派生，
-			// 已带租户归属。
-			bridge.GlobalSSEBus.PublishCtx(ctx, bridge.BuildOutboundSSEEvent(bridge.OutboundEventData{
-				HubID:          hubID,
-				MsgID:          service.ContentHashMsgID(channel, convID, content),
-				Platform:       channel,
-				AccountID:      accountID,
-				ConversationID: convID,
-				Content:        content,
-				MsgType:        msgType,
-				MediaURL:       mediaURL,
-				ReceiverID:     receiverID,
-				IsAIReply:      isAIReply,
-				CreatedAt:      createdAt,
-			}))
-		})
+		bridgeHandler := app.WireBridgeGlobals(gormDB, bridgeIngressSvc)
 
 		douyinLeadMiner := webhookSvc.DouyinLeadMiner()
 		bridgeHandler.SetLeadMiner(douyinLeadMiner)
@@ -765,21 +743,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		tracing.Init(gormDB)
 		tooluse.ToolTraceSink = tracing.ReportToolCall
 
-		bridgeRepo := bridge.NewBridgeAccountRepository(gormDB)
-		bridge.RegisterBridgeAccountRepo(bridgeRepo)
-		// 归属判据：user_id=0 是租户资产（HTTP 登记入口只认实例级桥接凭证，没有用户身份），
-		// 对租户内用户可见；非零是显式认领，只对本人放行。查无此行（含被隔离 callback
-		// 挡掉的跨租户行）⇒ 不归当前用户，不能当成"尚未注册所以放行"。
-		bridge.RegisterOwnershipChecker(func(ctx context.Context, userID uint, channel, accountID string) (bool, uint, error) {
-			acc, err := bridgeRepo.GetByChannelAccount(ctx, channel, accountID)
-			if err != nil {
-				return false, 0, err
-			}
-			if acc == nil {
-				return false, 0, nil
-			}
-			return acc.UserID == 0 || acc.UserID == userID, acc.TenantID, nil
-		})
 		bridgeAccountCtrl := controller.NewBridgeAccountController()
 		bridgeAccountCtrl.RegisterRoutes(auth)
 
@@ -811,7 +774,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupEventRoutes(auth)
 
-		setupMessageRoutes(auth, gormDB)
+		setupMessageRoutes(auth, gormDB, bridgeIngressSvc)
 
 		setupPlatformAccountRoutes(auth)
 

@@ -109,11 +109,18 @@
         prop="last_check"
         label="最后检查时间"
         width="180"
-      />
+      >
+        <template #default="{ row }">
+          <!-- 未检查过的域名后端返回 Go 零值时间（0001-01-01T00:00:00Z），
+               直接绑定 prop 会把它渲染成「0001-01-01 08:05:43」这种垃圾；统一走 fmtTime 显示占位符。 -->
+          {{ fmtTime(row.last_check) }}
+        </template>
+      </el-table-column>
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180">
+        width="180"
+      >
         <template #default="{ row }">
           {{ fmtTime(row.created_at) }}
         </template>
@@ -384,7 +391,15 @@ const handleCheck = async (row) => {
   row.checking = true;
   try {
     const res = await domainPoolApi.checkDomain(row.id)
-    ElMessage.success(`检查完成：${res.msg || 'OK'}`)
+    // 后端响应是 { code, message:"检查完成", data:{ id, healthy } }：
+    // 旧代码读 res.msg（不存在）后用 'OK' 兜底，导致「检查结果是不可访问」也弹「检查完成：OK」，
+    // 用户会以为域名是通的。这里按 data.healthy 如实提示。
+    const healthy = res?.healthy ?? res?.data?.healthy
+    if (healthy === false) {
+      ElMessage.warning('检查完成：不可访问')
+    } else {
+      ElMessage.success('检查完成：可访问')
+    }
     fetchDomainList();
   } catch (error) {
     ElMessage.error(i18n.global.t('检查失败'))

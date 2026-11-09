@@ -78,6 +78,17 @@ var (
 	memCostTracker *tooluse.MemoryCostTracker
 )
 
+// GlobalToolExecutorReady 回答全局 ToolExecutor 的就绪态（MD-02 生命周期观测口）。
+//
+// 口径：InitGlobalToolExecutor 是 Construct+Ready 一体（建链后立即 SetGlobalExecutor，
+// 无独立 Start/Stop —— executor 不持协程，注册即就绪，生命周期止于进程）。
+// 依赖校验在装配内完成：PermissionChecker 走 GetGlobalPermissionChecker 惰性非 nil
+// （defaultAllow 兜底是既有语义，不在此次改变），DB 落库/风险统计对 nil 句柄各有
+// 降级分支。本口供观测面与启动顺序测试断言「工具注入先于依赖它的 Worker 启动」。
+func GlobalToolExecutorReady() bool {
+	return tooluse.GetGlobalExecutor() != nil
+}
+
 // GetGlobalMemoryAuditLogger 返回全局内存审计日志器
 //
 // 调用方：tool_debug_routes.go handleToolAudit

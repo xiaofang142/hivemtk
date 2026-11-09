@@ -51,19 +51,19 @@
             style="width: 140px"
           >
             <el-option
-              label="Draft"
+              :label="t('ab.statusDraft')"
               value="draft"
             />
             <el-option
-              label="Running"
+              :label="t('ab.statusRunning')"
               value="running"
             />
             <el-option
-              label="Paused"
+              :label="t('ab.statusPaused')"
               value="paused"
             />
             <el-option
-              label="Completed"
+              :label="t('ab.statusCompleted')"
               value="completed"
             />
           </el-select>
@@ -386,7 +386,7 @@
           v-loading="resultsLoading"
           :data="results"
           stripe
-          empty-text="No data"
+          :empty-text="t('common.noData')"
         >
           <el-table-column
             prop="variant_name"
@@ -411,7 +411,7 @@
                 v-if="row.is_winner"
                 type="success"
               >
-                Winner
+                {{ t('ab.winner') }}
               </el-tag>
               <span v-else>-</span>
             </template>
@@ -746,7 +746,7 @@ async function showDetail(row) {
   try {
     const res = await getExperimentResults(row.id)
     results.value = Array.isArray(res) ? res : (res.list || [])
-  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
     resultsLoading.value = false
   }
 }

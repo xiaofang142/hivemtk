@@ -12,6 +12,16 @@ export const getCustomerSessions = (id, params, signal) =>
 export const getCustomerTags = (id, signal) =>
   http.get(`/api/customer-360/tags?user_id=${id}`, undefined, { signal })
 
+/**
+ * 客户消息记录（沟通记录 tab 用）。
+ *
+ * 不能复用 getCustomerDetail：那里把 message_history 写死成空数组（只拉了
+ * basic + tags），于是「行为轨迹」「沟通记录」两个 tab 永远是空白——UI 审计
+ * 实测点击两个 tab 都只有一张空卡片。这里单独走 /messages 接口取真实数据。
+ */
+export const getCustomerMessages = (id, params, signal) =>
+  http.get(`/api/customer-360/messages`, { user_id: id, ...params }, { signal })
+
 
 export const getCustomerOrders = (id, params, signal) =>
   http.get(`/api/customer-360/orders`, { user_id: id, ...params }, { signal })

@@ -699,6 +699,10 @@ func main() {
 	// 首轮同步完成之前存在一个「全放行」窗口，而那恰好是并发最高的启动瞬间。
 	moduleSync := service.StartModuleSync(context.Background())
 	defer moduleSync.Stop()
+	// 同步闸就绪才服务请求（MD-02）：首轮同步在 StartModuleSync 内已同步执行，
+	// 这里显式 WaitFirstSync 是把「模块闸的数据已就位」钉成调用点上的硬工序 ——
+	// router.Setup 装上的模块闸读的是这张表，HTTP 开始收流量前必须等它落地。
+	moduleSync.WaitFirstSync()
 
 	// ── 站内消息：平台消息投递同步 ──────────────────────────────
 	//
@@ -720,6 +724,10 @@ func main() {
 	if contentGuard := app.InitContentGuardRuntime(db.GetDB()); contentGuard != nil {
 		defer app.StopContentGuardRuntime(contentGuard)
 	}
+
+	// TB-01 意图→工具链绑定层：必须先于 router.Setup——router.Setup 内的
+	// InitInferenceOrchestrator 将其注入规划器（nil 时规划器回落硬编码，零行为变化）。
+	app.InitIntentChainRuntime(db.GetDB())
 
 	router.Setup(r, db.GetDB())
 

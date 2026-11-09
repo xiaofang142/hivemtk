@@ -62,7 +62,7 @@ const moduleNames = [
   "oneid",
   'dashboardScreen', 'integration', 'marketingFlow', 'operationLog',
   'ragProductConfig', 'scriptTemplate', 'userSegment',
-  'community', 'unifiedMessage', 'platformAccount', 'messageHub',
+  'community', 'platformAccount', 'messageHub',
   "intentRecognition", 'dialogueMemory', 'sopAgent',
   "reachPipeline", 'wecomAccount',
   'inbox',

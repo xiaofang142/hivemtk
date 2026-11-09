@@ -302,4 +302,12 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.87.0（006-geo-autopilot 审计轮）：geo_autopilot_runs 每租户至多一条
 	// running 的部分唯一索引——服务层「先查后插」存在 TOCTOU 窗口，DB 兜底。
 	register(NewGeoAutopilotSingleRunMigration(db))
+	// v3.88.0（2026-11-09 审计轮 AUD-03）：obs_config.access_key/secret_key
+	// 凭据落库加密（enc:v1 AES-256-GCM）——扩列 text 容纳密文 + 存量明文回填；
+	// 仓储读写出口统一加解密，双轨（明文/密文）读取兜底。
+	register(NewObsConfigEncryptFieldsMigration(db))
+	// v3.89.0（2026-11-10 内容重复菜单收口轮）：备份高级版并入备份恢复、
+	// 统一消息并入收件箱/客户360 之后，摘掉两节点在 role_menu_permissions
+	// 的存量分配行——防未来同名节点静默复权（v3.55.0 收敛迁移同一取舍）。
+	register(NewMenuGrantRemovedNodesCleanupMigration(db))
 }

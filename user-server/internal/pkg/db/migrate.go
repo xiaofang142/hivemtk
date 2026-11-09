@@ -216,6 +216,7 @@ func allModels() []any {
 		&model.LearningInsight{},
 		&model.WeComAccountHealth{},
 		&model.IntentRecord{},
+		&model.IntentToolChain{},
 		&model.DialogueMemory{},
 		&model.SOPAgent{},
 		&model.SOPExecution{},
@@ -695,6 +696,16 @@ func AutoMigrate() *gorm.DB {
 	// `WHERE tenant_id = 1` 直接报 "operator does not exist"，而 AutoMigrate
 	// 因 DEFAULT 无法转换而中断整表迁移。
 	normalizeTenantIDColumns(DB)
+
+	// JSON 文本列的历史空串归一化（同样必须在 AutoMigrate 之前）。
+	//
+	// 背景：GORM 做 text↔jsonb 类型变更时会生成 `USING col::jsonb`，而历史数据里的
+	// **空串**不是合法 JSON（PostgreSQL 直接报 SQLSTATE 22P02 invalid input syntax），
+	// AutoMigrate 抛错 → 启动 panic。实测 knowledge_import_logs.error_detail 曾有
+	// 5 行空串（2026-11-07 UI 全量复测轮；D-29 已把该列按人读文案语义改回 text）。
+	// 空串在这些列上语义等价于「没有内容」，归一成 NULL 既符合列语义，也让任何
+	// 后续类型变更不会被脏数据卡死。
+	nullifyEmptyJSONTextColumns(DB)
 
 	tolerated := 0
 	all := append(allModels(), ExtraModels()...)
@@ -1288,4 +1299,46 @@ func dropColumnIfExists(db *gorm.DB, table, col string) {
 		return
 	}
 	logger.Warnf("[migrate] 已删除废弃列 %s.%s（不再被任何模型声明）", table, col)
+}
+
+// nullifyEmptyJSONTextColumns 把「即将升级为 jsonb 的历史文本列」里的空串归一成 NULL。
+//
+// 背景：GORM 对 text↔jsonb 的列变更会生成 `USING col::jsonb`，空串不是合法 JSON，
+// PostgreSQL 抛 22P02 并让 AutoMigrate panic（服务直接起不来）。空串在这些列上
+// 语义等价于「无内容」，因此归一成 NULL 既安全又能让迁移通过。
+//
+// 只登记**确有证据**的列，不做全库无条件处理：很多 text 列的空串是业务上有意义
+// 的取值（例如 description 就是空串），全量改 NULL 会改变接口语义。
+//
+// 只处理 text 列：历史库上该列可能已经是 jsonb（例如模型改回 text 前的旧槽位库），
+// 对 jsonb 用空串做等值比较会先按 jsonb 强转并报错，既产生无意义告警也扫一遍全表。
+func nullifyEmptyJSONTextColumns(db *gorm.DB) {
+	targets := []struct {
+		table  string
+		column string
+	}{
+		{"knowledge_import_logs", "error_detail"},
+	}
+	for _, t := range targets {
+		if !db.Migrator().HasTable(t.table) || !db.Migrator().HasColumn(t.table, t.column) {
+			continue
+		}
+		if !isTextColumn(db, t.table, t.column) {
+			continue
+		}
+		sql := fmt.Sprintf(`UPDATE %s SET %s = NULL WHERE %s = ''`, t.table, t.column, t.column)
+		if err := db.Exec(sql).Error; err != nil {
+			logger.Warnf("[migrate] 归一化 %s.%s 的历史空串失败: %v", t.table, t.column, err)
+		}
+	}
+}
+
+// isTextColumn 直读 information_schema 判断列类型；查询失败按「不是 text」处理，
+// 保持本归一化是尽力而为、不阻塞 AutoMigrate 的定位。
+func isTextColumn(db *gorm.DB, table, column string) bool {
+	var dataType string
+	err := db.Raw(`SELECT data_type FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
+		table, column).Scan(&dataType).Error
+	return err == nil && dataType == "text"
 }

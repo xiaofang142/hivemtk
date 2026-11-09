@@ -818,6 +818,11 @@ func (c *hotPlugCache) candidateIDs(ctx context.Context) []string {
 			logger.Warnf("[asset_bundle] hotplug index unmarshal failed err=%v", uerr)
 		}
 	}
+	// 去重合并必须以副本为遍历源、以 seen 为唯一判重依据：
+	// 之前直接 range merged 自身又往 merged append，merged 的每个元素
+	// 都会被「再见到」一次（seen 初始为空），本地缓存每过一次 TTL 重合并
+	// 就翻倍（2→4→8），enabled/list 随进程存活时间无限膨胀。
+	dedup := make([]string, 0, len(merged)+len(remote))
 	seen := make(map[string]struct{}, len(merged)+len(remote))
 	for _, id := range append(append([]string{}, merged...), remote...) {
 		if id == "" {
@@ -827,8 +832,9 @@ func (c *hotPlugCache) candidateIDs(ctx context.Context) []string {
 			continue
 		}
 		seen[id] = struct{}{}
-		merged = append(merged, id)
+		dedup = append(dedup, id)
 	}
+	merged = dedup
 	c.mu.Lock()
 	if c.index == nil {
 		c.index = make(map[uint]hotPlugIndex)

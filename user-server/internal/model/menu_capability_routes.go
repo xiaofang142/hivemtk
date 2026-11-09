@@ -43,12 +43,16 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/asset-bundle/by-aid/*", MenuKeys: []string{"aiAgentCreate", "assetBundleList", "assetBundleMerchant", "assetBundlePlayground"}},
 	{Pattern: "/api/asset-bundle/enabled/list", MenuKeys: []string{"aiAgentCreate", "assetBundleList", "assetBundleMerchant", "assetBundlePlayground"}},
 	{Pattern: "/api/asset-bundle/list", MenuKeys: []string{"aiAgentCreate", "assetBundleList", "assetBundleMerchant", "assetBundlePlayground"}},
-	{Pattern: "/api/backup/*", MenuKeys: []string{"backupEnhanced"}},
-	{Pattern: "/api/backup/*/preview", MenuKeys: []string{"backupEnhanced"}},
-	{Pattern: "/api/backup/create", MenuKeys: []string{"backupEnhanced"}},
-	{Pattern: "/api/backup/list", MenuKeys: []string{"backupEnhanced"}},
-	{Pattern: "/api/backup/stats", MenuKeys: []string{"backupEnhanced"}},
-	{Pattern: "/api/backup/strategy", MenuKeys: []string{"backupEnhanced"}},
+	// /api/backup/* 是 /api/backups 权威组的前端兼容别名（同一 BackupService/
+	// RestoreService）。backupEnhanced 菜单 2026-11-10 除名（页面并入备份恢复），
+	// 这组 MenuKeys 从 backupEnhanced 改指 backupList——别名路由本体仍挂
+	// systemAdmin 组（路由级 admin 门），能力面口径与权威组一致。
+	{Pattern: "/api/backup/*", MenuKeys: []string{"backupList"}},
+	{Pattern: "/api/backup/*/preview", MenuKeys: []string{"backupList"}},
+	{Pattern: "/api/backup/create", MenuKeys: []string{"backupList"}},
+	{Pattern: "/api/backup/list", MenuKeys: []string{"backupList"}},
+	{Pattern: "/api/backup/stats", MenuKeys: []string{"backupList"}},
+	{Pattern: "/api/backup/strategy", MenuKeys: []string{"backupList"}},
 	{Pattern: "/api/backups", MenuKeys: []string{"backupList"}},
 	{Pattern: "/api/backups/*", MenuKeys: []string{"backupList"}},
 	{Pattern: "/api/batch/export", MenuKeys: []string{"batchOperation"}},
@@ -268,8 +272,8 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/platform-accounts/*", MenuKeys: []string{"platformAccount"}},
 	{Pattern: "/api/platform-accounts/*/status", MenuKeys: []string{"platformAccount"}},
 	{Pattern: "/api/platform-accounts/platforms", MenuKeys: []string{"platformAccount"}},
-	{Pattern: "/api/quick-replies", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "unifiedMessage"}},
-	{Pattern: "/api/quick-replies/*", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "unifiedMessage"}},
+	{Pattern: "/api/quick-replies", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag"}},
+	{Pattern: "/api/quick-replies/*", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag"}},
 	{Pattern: "/api/rag/eval/diff", MenuKeys: []string{"knowledgeRagEval"}},
 	{Pattern: "/api/rag/eval/latest", MenuKeys: []string{"knowledgeRagEval"}},
 	{Pattern: "/api/rag/eval/run", MenuKeys: []string{"knowledgeRagEval"}},
@@ -292,8 +296,8 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/restore/list", MenuKeys: []string{"backupList"}},
 	{Pattern: "/api/security/audit/*", MenuKeys: []string{"securityAudit"}},
 	{Pattern: "/api/security/audit/list", MenuKeys: []string{"securityAudit"}},
-	{Pattern: "/api/session-tags", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "tagSegmentation", "unifiedMessage"}},
-	{Pattern: "/api/session-tags/*", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "tagSegmentation", "unifiedMessage"}},
+	{Pattern: "/api/session-tags", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "tagSegmentation"}},
+	{Pattern: "/api/session-tags/*", MenuKeys: []string{"agentStatus", "aiSuggestion", "customerSession", "messageHub", "quickReply", "sessionTag", "tagSegmentation"}},
 	{Pattern: "/api/shortlink/*", MenuKeys: []string{"shortLinkList", "shortLinkStats"}},
 	{Pattern: "/api/shortlink/*/stats", MenuKeys: []string{"shortLinkList", "shortLinkStats"}},
 	{Pattern: "/api/shortlink/list", MenuKeys: []string{"shortLinkList", "shortLinkStats"}},
@@ -305,8 +309,10 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/sop/match", MenuKeys: []string{"aiAgentCreate", "sopAgent"}},
 	{Pattern: "/api/sop/stats", MenuKeys: []string{"aiAgentCreate", "sopAgent"}},
 	{Pattern: "/api/system/stats", MenuKeys: []string{"opsOverview", "salesCockpit"}},
-	{Pattern: "/api/unified-messages", MenuKeys: []string{"unifiedMessage"}},
-	{Pattern: "/api/unified-messages/*", MenuKeys: []string{"unifiedMessage"}},
+	// unifiedMessage 菜单 2026-11-10 除名后，/api/unified-messages 的能力行
+	// 一并删除（TestRouteGuardChain_CapabilityMenuKeysExist 要求 MenuKeys 全部
+	// 命中注册表）：三个只读别名已提到 admin 路由档（frontend_aliases.go
+	// doRegAdmin），除名前后的实际口径都是仅 admin，见彼处注释。
 	{Pattern: "/api/upload", MenuKeys: []string{"aiAgentCreate", "assetBundleList", "assetBundleMerchant", "assetBundlePlayground", "emailDrafts", "emailJobs", "emailList", "emailSmtp"}},
 	{Pattern: "/api/whatsapp/accounts", MenuKeys: []string{"whatsappAccount", "whatsappDrafts", "whatsappGroupMessaging", "whatsappJobs"}},
 	{Pattern: "/api/whatsapp/accounts/*/login/status", MenuKeys: []string{"whatsappAccount", "whatsappDrafts", "whatsappGroupMessaging", "whatsappJobs"}},

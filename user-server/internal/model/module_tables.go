@@ -147,6 +147,9 @@ var aiAgentOwnedTables = []string{
 var aiSalesOwnedTables = []string{
 	"dialogue_memories", "business_memories", "memory_items",
 	"intent_records", "intent_examples", "sales_intent_scores",
+	// intent_tool_chains：TB-01 绑定层（意图→工具链的租户级数据配置），
+	// 与 intent_records 同属意图域数据面。
+	"intent_tool_chains",
 	"objection_templates", "sales_personas",
 	"sales_champion_profile_snapshots", "champion_baselines",
 	"champion_dialogues", "champion_phrases",

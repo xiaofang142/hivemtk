@@ -35,6 +35,13 @@ import (
 // 装配顺序有硬依赖：AttachReachGate 要读 W-1 的 checker，而那个是在 router.Setup 里的
 // InitGlobalToolExecutor 才建的 ⇒ 本函数**必须**在 router.Setup 之后调用（见 cmd/api/main.go
 // 里那句注释）。顺序错了不会 panic，只会静默"不装门 + 一条告警"，这正是最难发现的那种失效。
+//
+// 生命周期（MD-02）：Construct（本函数装配）→ 依赖校验（AttachReachGate + 快照判
+// DependencyUnmet）→ Start（worker.Start，旗子 off 时 service 内 no-op）→ Stop（main 的
+// defer，幂等由 service.RecoveryQueueWorker.Stop 保证）。**配置关闭**（FF_LTC_REACH_GATE=off，
+// 预期默认）与**必需依赖缺失**（旗子开着但 W-1 checker 没接线）不是同一失败：前者照常装配
+// 只留痕，后者拒启 —— 拒启时返回 nil 且不起协程，外发恒为 0，绝不静默裸发。off 档 worker
+// 本就不起协程（无裸发可言），其「依赖缺失」不拒启，装配与观测语义照旧。
 func InitRecoveryWorker(db *gorm.DB) *service.RecoveryQueueWorker {
 	if db == nil {
 		logger.Warn("[RecoveryWorker] ⚠️ db 为 nil，挽回队列消费者未装配（入队照常，到期项无人消费）")
@@ -58,12 +65,46 @@ func InitRecoveryWorker(db *gorm.DB) *service.RecoveryQueueWorker {
 	gated := AttachReachGate(reach)
 
 	worker := service.NewRecoveryQueueWorker(service.NewRecoveryQueueService(), reach)
+	if !gated {
+		if snap, _ := GetReachGateSnapshot(); snap.DependencyUnmet && worker.Mode() != service.RecoveryWorkerModeOff {
+			// 旗子开着但裁决来源（W-1 checker）没接线，而这台 worker 又不是 off 档
+			// （off 档不起协程、不外发，无裸发可言）：装上也是恒放或恒拒的假闸门，
+			// 不如拒启 —— 一旦起来每轮都会走裸外发路径。
+			logger.Errorf("[RecoveryWorker] ❌ 拒启：%s=%s 但 %s 未接线（依赖缺失，非配置关闭）"+
+				"⇒ 不装门、不起协程、不外发；先开 %s=shadow|block 再重启",
+				ReachGateFlagEnv, snap.Mode, ApprovalGateFlagEnv, ApprovalGateFlagEnv)
+			return nil
+		}
+		LogReachGateSkippedAssemblyPoint("app.InitRecoveryWorker")
+	}
+
 	worker.Start(context.Background())
 	logger.Infof("[RecoveryWorker] ✅ 挽回队列消费者已装配：mode=%s（开关 %s；off 时不启动，"+
 		"shadow 只试发不外发，enforce 才真发；外发受全局退订与触达频控约束）",
 		worker.Mode(), service.RecoveryWorkerFlagEnv)
-	if !gated {
-		LogReachGateSkippedAssemblyPoint("app.InitRecoveryWorker")
-	}
 	return worker
+}
+
+// InitRecoveryQueueRuntime 装配挽回队列 HTTP 读写面用的那份服务（MD-06：把
+// router/content_routes.go 里就地构造的依赖显式收到装配层）。
+//
+// 为什么单独装：router.Setup 原先在 setupRecoveryQueueRoutes 里直接
+// service.NewRecoveryQueueService()，走全局 DB 句柄的隐式回落 —— 与本文件
+// worker 那份、collection 那份同一个口径问题：装配点拿错了 db 是运行期才
+// 显形的跨库读写。显式句柄版构造函数已存在（NewRecoveryQueueRepositoryWithDB），
+// 本函数只是把调用点从 Router 挪到装配层，路由表/守卫/阶段机一概不动。
+//
+// 与 InitRecoveryWorker 的关系：worker 那份是 cron 消费侧实例，HTTP 这份是
+// 读写面实例；RecoveryQueueService 只有 repo+nowFunc 两格、没有实例内状态，
+// 幂等判据在库里，各建一份不产生裂脑（与 collection_wiring.go 待办服务同口径）。
+// 本函数不启动协程、不挂闸门 —— 外发策略仍在 worker 那条腿上。
+func InitRecoveryQueueRuntime(db *gorm.DB) *service.RecoveryQueueService {
+	if db == nil {
+		logger.Warnf("[RecoveryQueueRuntime] ⚠️ db 为 nil ⇒ 挽回队列 HTTP 读写面不装配" +
+			"（/api/recovery-queue/* 没有服务实例可读写）")
+		return nil
+	}
+	return service.NewRecoveryQueueServiceWithRepo(
+		repository.NewRecoveryQueueRepositoryWithDB(db),
+	)
 }

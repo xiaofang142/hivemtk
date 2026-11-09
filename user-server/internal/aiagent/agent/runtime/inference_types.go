@@ -134,6 +134,8 @@ type ActionPlan struct {
 	SkipLLM    bool              `json:"skip_llm"`
 	SkipReason string            `json:"skip_reason,omitempty"`
 	Confidence float64           `json:"confidence"`
+	// PlanSource 规划来源观测（TB-01）："chain"=绑定层数据驱动；"builtin:miss/rejected/error"=回落硬编码及原因；空=未装配绑定层的既有行为。
+	PlanSource string `json:"plan_source,omitempty"`
 }
 
 // PlannedToolCall 计划工具调用

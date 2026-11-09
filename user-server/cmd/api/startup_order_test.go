@@ -274,3 +274,57 @@ func TestComplianceAuditLoggerWiredAfterDB(t *testing.T) {
 		t.Errorf("合规审计装配(偏移 %d)早于 db.InitDB(偏移 %d) ⇒ GetDB 返回 nil，永久退化为只 WARN 不落库", at, initDB)
 	}
 }
+
+// TestModuleSyncGateReadyBeforeServing（MD-02）同步闸就绪才服务请求：WaitFirstSync 必须
+// 显式落在 StartModuleSync 之后、router.Setup 与 serveHTTP 之前。
+//
+// 首轮同步本身在 StartModuleSync 内是同步执行的，但"同步执行过"与"调用点上显式等过"
+// 是两回事：前者靠读注释才能知道，后者是代码里的硬工序。把显式等待钉在偏移量上，
+// 谁把 serveHTTP 挪到 WaitFirstSync 之前（或者删掉这行）都会当场红 —— 那等于让
+// 模块闸在「本地表还没首轮镜像」的状态下就开始判请求。
+func TestModuleSyncGateReadyBeforeServing(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("读取 main.go: %v", err)
+	}
+	s := string(src)
+
+	syncStart := strings.Index(s, "service.StartModuleSync(")
+	waitFirst := strings.Index(s, "moduleSync.WaitFirstSync()")
+	setup := strings.Index(s, "router.Setup(r")
+	serve := strings.Index(s, "serveHTTP(")
+	if syncStart < 0 || waitFirst < 0 || setup < 0 || serve < 0 {
+		t.Fatalf("启动链判据失效：StartModuleSync=%d WaitFirstSync=%d router.Setup=%d serveHTTP=%d",
+			syncStart, waitFirst, setup, serve)
+	}
+	if waitFirst < syncStart {
+		t.Errorf("WaitFirstSync(偏移 %d) 早于 StartModuleSync(偏移 %d)，等的是一个还没起的首轮", waitFirst, syncStart)
+	}
+	if setup < waitFirst {
+		t.Errorf("router.Setup(偏移 %d) 早于 WaitFirstSync(偏移 %d) ⇒ 模块闸装上时首轮镜像可能还没落地", setup, waitFirst)
+	}
+	if serve < waitFirst {
+		t.Errorf("serveHTTP(偏移 %d) 早于 WaitFirstSync(偏移 %d) ⇒ 同步闸未就绪就开始服务请求", serve, waitFirst)
+	}
+}
+
+// TestWorkerAssemblyRefusalKeptInMain（MD-02）main 对两个外发 Worker 的装配必须保留
+// nil 返回分支：缺必需审批依赖时 wiring 层拒启返回 nil，main 据此跳过 Stop。
+// 分支被改成「无条件 defer Stop」会让拒启后的 nil 句柄在关停时 panic；
+// 分支被删掉则拒启形同虚设（nil 也照常 defer，Stop 的 nil-safe 只掩盖问题）。
+func TestWorkerAssemblyRefusalKeptInMain(t *testing.T) {
+	src, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("读取 main.go: %v", err)
+	}
+	s := string(src)
+
+	for _, want := range []string{
+		"if recoveryWorker := app.InitRecoveryWorker(db.GetDB()); recoveryWorker != nil {",
+		"if collectionJob := app.InitCollectionRuntime(db.GetDB()); collectionJob != nil {",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("main.go 里已找不到 %q ⇒ 拒启返回 nil 的分支契约被破坏", want)
+		}
+	}
+}
