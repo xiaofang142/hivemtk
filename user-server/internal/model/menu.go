@@ -106,6 +106,9 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "customerSession", Title: "客服会话", Icon: "Service", Path: "/customerSession/list"},
 					{Key: "intentRecognition", Title: "意图识别", Icon: "Aim", Path: "/intentRecognition/list"},
+					// intentToolFlow（意图→工具调用流编排，TB-02）：识别到意图后调用什么工具/顺序/参数，
+					// 数据面在 intent_tool_chains（TB-01）；管理动作（编排/启停）属 admin 职责。
+					{Key: "intentToolFlow", Title: "意图工具流", Icon: "Operation", Path: "/intentRecognition/tool-flow", Roles: []string{"admin"}},
 					{Key: "dialogueMemory", Title: "对话记忆", Icon: "ChatDotRound", Path: "/dialogueMemory/list"},
 					{Key: "llmRouting", Title: "LLM 路由", Icon: "Cpu", Path: "/llmRouting/list"},
 					// T1 未知问题运营页（低置信度回流 → FAQ 提交审核）：页面与接口

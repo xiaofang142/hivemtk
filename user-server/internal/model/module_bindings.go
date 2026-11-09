@@ -306,6 +306,9 @@ var ModuleMenuBindings = map[string][]string{
 	// ========== ai-sales：AI 销冠（17 节点）==========
 	ModuleAISales: {
 		"agentPassive", "intentRecognition", "dialogueMemory",
+		// intentToolFlow（意图→工具调用流编排）：与 intentRecognition 同链路（识别→调用），
+		// 随 ai-sales 开关。
+		"intentToolFlow",
 		// unknownQuestions（未知问题运营）：意图识别低置信度回流的运营面，
 		// 与 agentPassive 同链路（识别不出的问题 → 人工补 FAQ），随 ai-sales 开关。
 		"unknownQuestions",

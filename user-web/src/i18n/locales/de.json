@@ -125,6 +125,7 @@
     "unifiedInbox": "Unified Inbox",
     "customerSession": "Service Session",
     "intentRecognition": "Intent Recognition",
+    "intentToolFlow": "Intentions-Toolflows",
     "dialogueMemory": "Dialogue Memory",
     "llmRouting": "LLM Routing",
     "agentActive": "Active Outreach",
