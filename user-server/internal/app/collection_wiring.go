@@ -30,6 +30,14 @@
 // 理由同一条 —— AttachReachGate 要读 W-1 的 checker，而那个 checker 是
 // router.Setup 里的 InitGlobalToolExecutor 才建的。排在前面不 panic、不报错，
 // 只留一条"依赖未成立 ⇒ 不装门"的告警，也就是这条外发路径静默地不受审批约束。
+//
+// 生命周期（MD-02）：Construct（本函数装配五把依赖）→ 依赖校验（AttachReachGate +
+// 快照判 DependencyUnmet）→ Start（job.Start，旗子 off 时 service 内 no-op）→ Stop
+// （main 的 defer，幂等由 service.CollectionJob.Stop 保证）。**配置关闭**
+// （FF_LTC_REACH_GATE=off，预期默认）与**必需依赖缺失**（旗子开着但 W-1 checker
+// 没接线）不是同一失败：前者照常装配只留痕，后者拒启 —— job 构造了也绝不 Start、
+// 不登记全局，上一份实例已在函数开头停掉，外发恒为 0，绝不静默裸发。off 档的
+// 「依赖缺失」不在拒行之列（不起协程即无裸发），装配与观测语义照旧。
 package app
 
 import (
@@ -103,9 +111,6 @@ func InitCollectionRuntime(db *gorm.DB) *service.CollectionJob {
 		Wechat: service.NewWechatService(),
 	})
 	gated := AttachReachGate(collectionReach)
-	if !gated {
-		LogReachGateSkippedAssemblyPoint("app.InitCollectionRuntime")
-	}
 
 	job := service.NewCollectionJob(
 		repository.NewBillRepositoryWithDB(db),
@@ -117,6 +122,16 @@ func InitCollectionRuntime(db *gorm.DB) *service.CollectionJob {
 		),
 		service.GlobalLTCConfig(),
 	)
+	if !gated {
+		if snap, _ := GetReachGateSnapshot(); snap.DependencyUnmet && job.Mode() != service.RecoveryWorkerModeOff {
+			// 旗子开着但裁决来源（W-1 checker）没接线，而这台 job 又不是 off 档
+			// （off 档不起协程、不外发，无裸发可言）：装上也是恒放或恒拒的假闸门，
+			// 不如拒启 —— 一旦起来每轮都会走裸外发路径。
+			logger.Errorf("[collection] ❌ 拒启催收腿：%s", collectionGateNote(false))
+			return nil
+		}
+		LogReachGateSkippedAssemblyPoint("app.InitCollectionRuntime")
+	}
 
 	rt := &CollectionRuntime{job: job, reachGated: gated, reachNote: collectionGateNote(gated)}
 	job.Start(context.Background())

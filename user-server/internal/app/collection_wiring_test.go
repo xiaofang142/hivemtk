@@ -398,3 +398,87 @@ func TestInitCollectionRuntime_ConcurrentReinitAndSnapshot(t *testing.T) {
 		t.Error("并发阶段之后 Available=false ⇒ 五把依赖在重复装配中丢了一把")
 	}
 }
+
+// ---- MD-02 生命周期行为断言：缺必需审批依赖拒启，不静默裸发 ----
+
+// TestInitCollectionRuntime_RefusesWhenApprovalDependencyUnmet 拒启的完整因果链：
+// 旗子开着但 W-1 裁决来源没接线 ⇒ 返回 nil、上一份在跑的实例被停（协程不泄漏）、
+// 全局清空（端点不回旧读数）、闸门不装（AttachedServices 不涨）。
+// "配置关闭"与"依赖缺失"在这里分开：off 档照常装配（见 OffMode 用例），
+// 只有门旗子开着而 checker 没接才拒启。
+func TestInitCollectionRuntime_RefusesWhenApprovalDependencyUnmet(t *testing.T) {
+	restoreApprovalState(t)
+	restoreReachGateState(t)
+	wireToolGate(t, "shadow")
+	t.Setenv(ReachGateFlagEnv, "shadow")
+	t.Setenv(service.CollectionJobFlagEnv, "shadow")
+	t.Setenv(service.CollectionJobIntervalEnv, "1h")
+	db := testutil.NewTestDB(t)
+
+	old := InitCollectionRuntime(db)
+	if old == nil || !old.Running() {
+		t.Fatal("前置不成立：依赖齐全档应先装出一份在跑的实例")
+	}
+
+	// 抽走裁决来源、把门拧到 block：依赖缺失，必须拒启而非裸发。
+	wireToolGate(t, "off")
+	t.Setenv(ReachGateFlagEnv, "block")
+	before, _ := GetReachGateSnapshot()
+	j := InitCollectionRuntime(db)
+	if j != nil {
+		j.Stop(context.Background())
+		t.Fatalf("审批依赖缺失应拒启（返回 nil，不静默裸发），got mode=%s", j.Mode())
+	}
+	if old.Running() {
+		t.Error("拒启时上一份实例应已被停（协程泄漏）")
+	}
+	if snap := GetCollectionSnapshot(context.Background()); snap.Assembled {
+		t.Error("拒启后全局仍报已装配 ⇒ 端点会对着拒启事实回旧读数")
+	}
+	after, _ := GetReachGateSnapshot()
+	if after.AttachedServices != before.AttachedServices {
+		t.Errorf("拒启不应装上外发闸门：AttachedServices %d→%d", before.AttachedServices, after.AttachedServices)
+	}
+	if !after.DependencyUnmet {
+		t.Error("前置不成立：快照未报 DependencyUnmet，拒启分支根本没被走到")
+	}
+}
+
+// TestInitCollectionRuntime_DepsCompleteStartsPerFlag 依赖齐全按旗子原档启动，
+// Stop 幂等，重复 Init 后写覆盖且旧实例被停、端点读新实例。
+func TestInitCollectionRuntime_DepsCompleteStartsPerFlag(t *testing.T) {
+	restoreApprovalState(t)
+	restoreReachGateState(t)
+	wireToolGate(t, "shadow")
+	t.Setenv(ReachGateFlagEnv, "shadow")
+	t.Setenv(service.CollectionJobFlagEnv, "shadow")
+	t.Setenv(service.CollectionJobIntervalEnv, "1h")
+	db := testutil.NewTestDB(t)
+
+	j := InitCollectionRuntime(db)
+	if j == nil || !j.Running() || !j.Available() {
+		t.Fatal("依赖齐全 + shadow 档应装配出可用实例并起协程")
+	}
+	snap := GetCollectionSnapshot(context.Background())
+	if !snap.Assembled || !snap.Running || !snap.Available {
+		t.Errorf("快照=%+v，期望 assembled/running/available 全真", snap)
+	}
+	j.Stop(context.Background())
+	j.Stop(context.Background())
+	if j.Running() {
+		t.Error("Stop 应幂等：第二次 Stop 后不应仍在运行")
+	}
+
+	j2 := InitCollectionRuntime(db) // 重复初始化：后写覆盖
+	if j2 == nil || !j2.Running() {
+		t.Fatal("重复 Init 应装配出第二份实例并启动")
+	}
+	if j.Running() {
+		t.Error("重复 Init 后旧实例仍在跑 ⇒ 协程泄漏")
+	}
+	snap2 := GetCollectionSnapshot(context.Background())
+	if !snap2.Assembled || !snap2.Running {
+		t.Errorf("重复 Init 后端点应读新实例：%+v", snap2)
+	}
+	InitCollectionRuntime(nil) // 收尾：清全局
+}
