@@ -7,6 +7,7 @@ import (
 
 	"time"
 
+	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/aiagent/llm"
 
@@ -87,11 +88,21 @@ func (e *SalesEngine) runAgentLoop(
 	// TB-03 意图→工具调用流绑定层：命中绑定 → 绑定工具晋升到清单前部
 	//（stable 前置保证过 maxTools 截断）+ 系统提示注入"按链优先调用"指引。
 	// 未命中/禁用/查询错误一律零变化；LLM 仍自主决策，绑定只是软引导。
+	// TB-08 槽位门：required 槽位缺失 → 严格模式本轮强制 0 工具调用
+	//（ToolChoice=none）+ 追问指引注入；集齐后恢复按链调用。
 	chainFlowHint := ""
+	slotGateNone := false
 	if e.intentChain != nil && intent != nil && intent.IntentType != "" {
 		if spec, err := e.intentChain.LookupIntentChain(ctx, intent.IntentType); err == nil && spec != nil {
-			availableTools = promoteIntentChainTools(availableTools, spec)
-			chainFlowHint = renderIntentChainHint(spec)
+			missing := missingRequiredSlots(spec, intent, req)
+			if len(missing) > 0 {
+				// 严格模式：本轮不调工具，先向客户追问缺失槽位（Rasa 式追问循环的轻量形态）。
+				slotGateNone = true
+				chainFlowHint = renderSlotAskHint(missing)
+			} else {
+				availableTools = promoteIntentChainTools(availableTools, spec)
+				chainFlowHint = renderIntentChainHint(spec)
+			}
 		}
 	}
 
@@ -270,7 +281,7 @@ func (e *SalesEngine) runAgentLoop(
 			MaxTokens:    curMaxTokens,
 			Temperature:  req.Config.Temperature,
 			Tools:        curTools,
-			ToolChoice:   "auto",
+			ToolChoice:   slotToolChoice(slotGateNone),
 			Messages:     messages,
 		})
 		iterCancel()
@@ -413,6 +424,71 @@ func (e *SalesEngine) runAgentLoop(
 	exhaustedErr := fmt.Errorf("agent loop exhausted with no final content")
 	writeLoopSpan("", exhaustedErr)
 	return "", nil, nil, exhaustedErr
+}
+
+// slotToolChoice TB-08 槽位门：缺失追问轮强制 none（保证 0 工具调用），否则 auto。
+func slotToolChoice(gateNone bool) string {
+	if gateNone {
+		return "none"
+	}
+	return "auto"
+}
+
+// missingRequiredSlots required 槽位判定：SourceVar=entity.<key> 从 intent.Entities 取，
+// customer_id/session_id/content 从请求取。返回缺失项（保序）。
+func missingRequiredSlots(spec *agent_runtime.IntentChainSpec, intent *dto.RecognizeResult, req *dto.SalesRequest) []agent_runtime.IntentChainSlot {
+	missing := make([]agent_runtime.IntentChainSlot, 0, 2)
+	for _, sl := range spec.Slots {
+		if !sl.Required {
+			continue
+		}
+		if !slotValueAvailable(sl.SourceVar, intent, req) {
+			missing = append(missing, sl)
+		}
+	}
+	return missing
+}
+
+func slotValueAvailable(sourceVar string, intent *dto.RecognizeResult, req *dto.SalesRequest) bool {
+	if val, _ := slotValueOf(sourceVar, intent, req); val != "" {
+		return true
+	}
+	return false
+}
+
+func slotValueOf(sourceVar string, intent *dto.RecognizeResult, req *dto.SalesRequest) (string, bool) {
+	if strings.HasPrefix(sourceVar, "entity.") {
+		key := strings.TrimPrefix(sourceVar, "entity.")
+		if intent != nil && intent.Entities != nil {
+			if v, ok := intent.Entities[key]; ok {
+				return fmt.Sprintf("%v", v), true
+			}
+		}
+		return "", false
+	}
+	switch sourceVar {
+	case "customer_id":
+		return req.CustomerID, true
+	case "session_id":
+		return req.SessionID, true
+	case "content":
+		return req.UserMessage, true
+	}
+	return "", false
+}
+
+// renderSlotAskHint 缺失槽位追问指引（严格模式）。
+func renderSlotAskHint(missing []agent_runtime.IntentChainSlot) string {
+	if len(missing) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n# 本轮任务：追问缺失信息（禁止调用任何工具）\n")
+	sb.WriteString("以下信息尚未收集齐全，本轮请自然地向客户追问其中第一项（一轮只追问一项），拿到后再按工具调用流执行：\n")
+	for _, sl := range missing {
+		sb.WriteString(fmt.Sprintf("- %s：%s\n", sl.Slot, sl.Question))
+	}
+	return sb.String()
 }
 
 // 兜底文案必须给出一条真能走通出路：

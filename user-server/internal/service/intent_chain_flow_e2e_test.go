@@ -82,6 +82,7 @@ type captureScriptedLLM struct {
 
 	mu       sync.Mutex
 	prompts  []string // 每次派发的 system prompt 原文
+	choices  []string // 每次派发的 tool_choice 原文（TB-08 槽位门断言）
 	dispatch atomic.Int32
 }
 
@@ -96,6 +97,7 @@ func newCaptureScriptedLLM(t *testing.T, steps []scriptedLLMStep) *captureScript
 				Role    string `json:"role"`
 				Content string `json:"content"`
 			} `json:"messages"`
+			ToolChoice string `json:"tool_choice"`
 		}
 		_ = json.Unmarshal(body, &req)
 		var sys strings.Builder
@@ -106,6 +108,7 @@ func newCaptureScriptedLLM(t *testing.T, steps []scriptedLLMStep) *captureScript
 		}
 		cap.mu.Lock()
 		cap.prompts = append(cap.prompts, sys.String())
+		cap.choices = append(cap.choices, req.ToolChoice)
 		cap.mu.Unlock()
 
 		idx := int(cap.dispatch.Add(1)) - 1
@@ -149,6 +152,15 @@ func (c *captureScriptedLLM) systemPrompts() []string {
 	defer c.mu.Unlock()
 	out := make([]string, len(c.prompts))
 	copy(out, c.prompts)
+	return out
+}
+
+// toolChoices 每次派发的 tool_choice 序列（TB-08 槽位门断言）。
+func (c *captureScriptedLLM) toolChoices() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, len(c.choices))
+	copy(out, c.choices)
 	return out
 }
 

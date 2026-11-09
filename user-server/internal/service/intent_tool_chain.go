@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -201,6 +202,14 @@ func (s *IntentToolChainService) chainRowToSpec(ctx context.Context, rec *model.
 		ReplyHint:  rec.ReplyHint,
 		Steps:      make([]agent_runtime.IntentChainStep, 0, len(steps)),
 	}
+	for _, sl := range unmarshalChainSlots(rec.SlotsJSON) {
+		spec.Slots = append(spec.Slots, agent_runtime.IntentChainSlot{
+			Slot:      sl.Slot,
+			Question:  sl.Question,
+			SourceVar: sl.SourceVar,
+			Required:  sl.Required,
+		})
+	}
 	for _, st := range steps {
 		spec.Steps = append(spec.Steps, agent_runtime.IntentChainStep{
 			ToolName: st.ToolName,
@@ -226,8 +235,10 @@ type ChainUpsertInput struct {
 	Name       string                        `json:"name"`
 	IntentCode string                        `json:"intent_code"`
 	Steps      []model.IntentChainStepConfig `json:"steps"`
-	ReplyHint  string                        `json:"reply_hint"`
-	Enabled    *bool                         `json:"enabled"`
+	// Slots 必填槽位（TB-08）：集齐 required 前严格模式 0 工具调用+追问客户。
+	Slots     []model.IntentSlotConfig `json:"slots"`
+	ReplyHint string                   `json:"reply_hint"`
+	Enabled   *bool                    `json:"enabled"`
 }
 
 // Create 新建绑定。校验：意图词表/步骤 1~N/工具名非空/模板变量白名单预检；
@@ -245,6 +256,7 @@ func (s *IntentToolChainService) Create(ctx context.Context, in ChainUpsertInput
 		Name:       in.Name,
 		IntentCode: in.IntentCode,
 		StepsJSON:  marshalChainSteps(in.Steps),
+		SlotsJSON:  marshalChainSlots(in.Slots),
 		ReplyHint:  in.ReplyHint,
 		Enabled:    in.Enabled == nil || *in.Enabled,
 	}
@@ -274,6 +286,7 @@ func (s *IntentToolChainService) Update(ctx context.Context, id uint, in ChainUp
 	rec.Name = in.Name
 	rec.IntentCode = in.IntentCode
 	rec.StepsJSON = marshalChainSteps(in.Steps)
+	rec.SlotsJSON = marshalChainSlots(in.Slots)
 	rec.ReplyHint = in.ReplyHint
 	if in.Enabled != nil {
 		rec.Enabled = *in.Enabled
@@ -319,6 +332,9 @@ func (s *IntentToolChainService) validateChainUpsert(ctx context.Context, in Cha
 		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("工具链步骤数须在 1~%d 之间", agent_runtime.ChainMaxSteps))
 	}
 	seen := make(map[string]bool, len(in.Steps))
+	if err := validateChainSlots(in.Slots); err != nil {
+		return err
+	}
 	for i, st := range in.Steps {
 		name := trimChainToolName(st.ToolName)
 		if name == "" {
@@ -541,4 +557,84 @@ func (s *IntentToolChainService) isBindableIntent(ctx context.Context, code stri
 		return s.customIntents.IsCustomIntentType(ctx, code)
 	}
 	return false
+}
+
+// ---- TB-08 槽位：校验与映射 ----
+
+// chainSlotSourceContextVars 槽位来源变量的上下文白名单（entity.* 之外的形态）。
+var chainSlotSourceContextVars = map[string]bool{"customer_id": true, "session_id": true, "content": true}
+
+// validateChainSlots 槽位形态校验：slot/question 非空、SourceVar = entity.<key> 或白名单变量、
+// slot 名不重复、步数上限复用（≤8）。空 Slots = 无槽位门（既有行为）。
+func validateChainSlots(slots []model.IntentSlotConfig) error {
+	if len(slots) == 0 {
+		return nil
+	}
+	if len(slots) > agent_runtime.ChainMaxSteps {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("槽位数上限 %d", agent_runtime.ChainMaxSteps))
+	}
+	seen := make(map[string]bool, len(slots))
+	for i, sl := range slots {
+		slot := trimChainToolName(sl.Slot)
+		if slot == "" {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("第 %d 个槽位 slot 不能为空", i+1))
+		}
+		if seen[slot] {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("槽位 %q 重复", slot))
+		}
+		seen[slot] = true
+		if strings.TrimSpace(sl.Question) == "" {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("槽位 %q 缺少追问话术", slot))
+		}
+		if !isValidSlotSourceVar(sl.SourceVar) {
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("槽位 %q 的 source_var %q 不合法（entity.<key> 或 %s）",
+				slot, sl.SourceVar, joinSlotContextVars()))
+		}
+	}
+	return nil
+}
+
+func isValidSlotSourceVar(sv string) bool {
+	if chainSlotSourceContextVars[sv] {
+		return true
+	}
+	if strings.HasPrefix(sv, "entity.") && len(sv) > len("entity.") {
+		return customIntentTypeRe.MatchString(strings.TrimPrefix(sv, "entity.")) || entityKeyRe.MatchString(strings.TrimPrefix(sv, "entity."))
+	}
+	return false
+}
+
+// entityKeyRe 实体键形态（字母/数字/下划线）。
+var entityKeyRe = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]{0,49}$`)
+
+func joinSlotContextVars() string {
+	keys := make([]string, 0, len(chainSlotSourceContextVars))
+	for k := range chainSlotSourceContextVars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, "/") + "/entity.<key>"
+}
+
+func marshalChainSlots(slots []model.IntentSlotConfig) string {
+	if len(slots) == 0 {
+		return ""
+	}
+	buf, err := json.Marshal(slots)
+	if err != nil {
+		return ""
+	}
+	return string(buf)
+}
+
+// unmarshalChainSlots 行→槽位（解析失败 fail-closed 跳过=无槽位门）。
+func unmarshalChainSlots(raw string) []model.IntentSlotConfig {
+	if raw == "" {
+		return nil
+	}
+	var slots []model.IntentSlotConfig
+	if err := json.Unmarshal([]byte(raw), &slots); err != nil {
+		return nil
+	}
+	return slots
 }

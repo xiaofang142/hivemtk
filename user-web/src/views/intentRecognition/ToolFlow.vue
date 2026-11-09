@@ -106,6 +106,22 @@
           </div>
         </el-form-item>
 
+        <el-form-item label="必填槽位">
+          <div class="slots-editor">
+            <div v-for="(sl, idx) in form.slots" :key="idx" class="slot-row">
+              <el-input v-model="sl.slot" placeholder="槽位名，如 tracking_no" class="slot-name" />
+              <el-input v-model="sl.question" placeholder="追问话术，如：请提供您的运单号" class="slot-question" />
+              <el-select v-model="sl.source_var" filterable allow-create default-first-option placeholder="来源变量" class="slot-source">
+                <el-option v-for="v in slotSourceOptions" :key="v" :label="v" :value="v" />
+              </el-select>
+              <el-checkbox v-model="sl.required">必填</el-checkbox>
+              <el-button link type="danger" @click="removeSlot(idx)">删除</el-button>
+            </div>
+            <el-button size="small" plain @click="addSlot">添加槽位</el-button>
+            <div class="form-hint">必填槽位集齐前：本轮强制不调工具（ToolChoice=none），AI 只向客户追问（一轮一项）；集齐后按上方调用流执行。来源变量=entity.&lt;键&gt;（从客户消息抽取）或上下文变量。</div>
+          </div>
+        </el-form-item>
+
         <el-form-item label="回复提示">
           <el-input v-model="form.reply_hint" type="textarea" :rows="3" placeholder="留空则使用系统默认提示。可写该意图下模型应当如何组织回答的指引。" />
         </el-form-item>
@@ -205,7 +221,13 @@ const vocab = ref({ intents: [], intent_families: {}, template_vars: [], tools: 
 const rows = ref([]);
 const filterIntent = ref('');
 
-const form = ref({ name: '', intent_code: '', steps: [], reply_hint: '', enabled: true });
+const form = ref({ name: '', intent_code: '', steps: [], slots: [], reply_hint: '', enabled: true });
+
+// 槽位来源变量选项（上下文变量 + entity.<key> 自由创建）
+const slotSourceOptions = computed(() => [
+  ...(vocab.value.template_vars || []).map((v) => `{{${v}}}`),
+  'entity.tracking_no', 'entity.order_id', 'entity.phone', 'entity.address',
+]);
 const argsEditing = ref({});
 const argsDraft = ref({});
 
@@ -277,7 +299,7 @@ function blankStep() {
 
 function openCreate() {
   editingId.value = null;
-  form.value = { name: '', intent_code: '', steps: [blankStep()], reply_hint: '', enabled: true };
+  form.value = { name: '', intent_code: '', steps: [blankStep()], slots: [], reply_hint: '', enabled: true };
   argsEditing.value = { 0: false };
   argsDraft.value = { 0: { key: '', value: '' } };
   dialogVisible.value = true;
@@ -291,10 +313,17 @@ function openEdit(row) {
     steps = [];
   }
   if (!steps.length) steps = [blankStep()];
+  let slots = [];
+  try {
+    slots = JSON.parse(row.slots_json || '[]');
+  } catch {
+    slots = [];
+  }
   form.value = {
     name: row.name || '',
     intent_code: row.intent_code || '',
     steps: steps.map((s) => ({ tool_name: s.tool_name || '', args: s.args || {}, priority: s.priority || 0, enabled: !!s.enabled })),
+    slots: slots.map((sl) => ({ slot: sl.slot || '', question: sl.question || '', source_var: sl.source_var || '', required: !!sl.required })),
     reply_hint: row.reply_hint || '',
     enabled: !!row.enabled,
   };
@@ -310,6 +339,12 @@ function openEdit(row) {
   dialogVisible.value = true;
 }
 
+function addSlot() {
+  form.value.slots.push({ slot: '', question: '', source_var: 'entity.tracking_no', required: true });
+}
+function removeSlot(idx) {
+  form.value.slots.splice(idx, 1);
+}
 function addStep() {
   form.value.steps.push(blankStep());
   const idx = form.value.steps.length - 1;
@@ -368,6 +403,18 @@ function validate() {
   if (!form.value.name.trim()) return '请填写名称';
   if (!form.value.intent_code) return '请选择意图';
   if (!form.value.steps.length) return '至少一个工具步骤';
+  if (form.value.slots.length > 8) return '槽位数上限 8';
+  const seenSlots = new Set();
+  for (let i = 0; i < form.value.slots.length; i++) {
+    const sl = form.value.slots[i];
+    if (!sl.slot.trim()) return `第 ${i + 1} 个槽位名为空`;
+    if (seenSlots.has(sl.slot)) return `槽位 ${sl.slot} 重复`;
+    seenSlots.add(sl.slot);
+    if (!sl.question.trim()) return `槽位 ${sl.slot} 缺少追问话术`;
+    if (!/^entity\.[a-zA-Z][a-zA-Z0-9_]{0,49}$/.test(sl.source_var) && !['customer_id', 'session_id', 'content'].includes(sl.source_var)) {
+      return `槽位 ${sl.slot} 的来源变量不合法（entity.<键> 或上下文变量）`;
+    }
+  }
   const seen = new Set();
   for (let i = 0; i < form.value.steps.length; i++) {
     const st = form.value.steps[i];
@@ -404,6 +451,7 @@ async function save() {
       name: form.value.name.trim(),
       intent_code: form.value.intent_code,
       steps: form.value.steps.map((s, i) => ({ tool_name: s.tool_name.trim(), args: s.args || {}, priority: i + 1, enabled: !!s.enabled })),
+      slots: form.value.slots.map((sl) => ({ slot: sl.slot.trim(), question: sl.question.trim(), source_var: sl.source_var, required: !!sl.required })),
       reply_hint: form.value.reply_hint || '',
       enabled: !!form.value.enabled,
     };
@@ -430,10 +478,17 @@ async function toggleEnabled(row, v) {
   } catch {
     steps = [];
   }
+  let slots = [];
+  try {
+    slots = JSON.parse(row.slots_json || '[]');
+  } catch {
+    slots = [];
+  }
   await updateIntentToolChain(row.id, {
     name: row.name,
     intent_code: row.intent_code,
     steps,
+    slots,
     reply_hint: row.reply_hint || '',
     enabled: !!v,
   });
@@ -670,5 +725,26 @@ onMounted(async () => {
 .ci-keywords {
   font-family: monospace;
   font-size: 12px;
+}
+.slots-editor {
+  width: 100%;
+}
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.slot-name {
+  width: 150px;
+  flex-shrink: 0;
+}
+.slot-question {
+  flex: 1;
+}
+.slot-source {
+  width: 190px;
+  flex-shrink: 0;
+  font-family: monospace;
 }
 </style>

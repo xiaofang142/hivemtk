@@ -24,6 +24,17 @@ type IntentChainSpec struct {
 	IntentCode string
 	Steps      []IntentChainStep
 	ReplyHint  string
+	// Slots 必填槽位（TB-08）：agentloop 严格模式强制缺失追问（ToolChoice=none）；
+	// planner 路径 v1 仅透传不作强制（无实体抽取面）。
+	Slots []IntentChainSlot
+}
+
+// IntentChainSlot 必填槽位定义。
+type IntentChainSlot struct {
+	Slot      string
+	Question  string
+	SourceVar string
+	Required  bool
 }
 
 // IntentChainLookup 消费方侧接口：意图→工具链绑定数据源。
@@ -87,11 +98,43 @@ func validateChainTemplateVars(tpl string) error {
 			return fmt.Errorf("模板占位符未闭合: %q", tpl)
 		}
 		name := strings.TrimSpace(rest[open+2 : open+close])
-		if _, ok := chainTemplateVars[name]; !ok {
-			return fmt.Errorf("模板变量 %q 不在白名单内（可用: %s）", name, strings.Join(ChainTemplateVarNames(), "/"))
+		if !isChainTemplateVarAllowed(name) {
+			return fmt.Errorf("模板变量 %q 不在白名单内（可用: %s 或 entity.<key>）", name, strings.Join(ChainTemplateVarNames(), "/"))
 		}
 		rest = rest[open+close+2:]
 	}
+}
+
+// isChainTemplateVarAllowed 白名单判定：固定上下文变量或 entity.<key> 形态（TB-08 实体槽位）。
+// entity 键形态与绑定层写侧校验一致（字母/数字/下划线）。
+func isChainTemplateVarAllowed(name string) bool {
+	if _, ok := chainTemplateVars[name]; ok {
+		return true
+	}
+	if rest := strings.TrimPrefix(name, "entity."); rest != name {
+		return len(rest) > 0 && isEntityKeyForm(rest)
+	}
+	return false
+}
+
+// isEntityKeyForm 实体键形态（字母开头的字母/数字/下划线，≤50）。
+func isEntityKeyForm(key string) bool {
+	if len(key) == 0 || len(key) > 50 {
+		return false
+	}
+	for i, r := range key {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9', r == '_':
+			if i == 0 {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	first := rune(key[0])
+	return (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z')
 }
 
 // renderChainArgs 渲染步骤 Args 模板。失败（未知变量/非字符串模板形态）返回 nil。
@@ -130,13 +173,20 @@ func renderChainTemplate(tpl string, ic *InferenceContext) (string, bool) {
 			return "", false
 		}
 		name := strings.TrimSpace(rest[open+2 : open+close])
-		fn, ok := chainTemplateVars[name]
-		if !ok {
-			return "", false
+		if fn, ok := chainTemplateVars[name]; ok {
+			b.WriteString(rest[:open])
+			b.WriteString(fn(ic))
+			rest = rest[open+close+2:]
+			continue
 		}
-		b.WriteString(rest[:open])
-		b.WriteString(fn(ic))
-		rest = rest[open+close+2:]
+		// TB-08：entity.<key> 在 planner 路径渲染为空串（advisory 提示面，无实体抽取源）；
+		// 真实执行面 agentloop 由 LLM 供参+槽位门保障。
+		if isChainTemplateVarAllowed(name) {
+			b.WriteString(rest[:open])
+			rest = rest[open+close+2:]
+			continue
+		}
+		return "", false
 	}
 }
 
