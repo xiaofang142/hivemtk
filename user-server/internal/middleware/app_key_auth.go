@@ -70,6 +70,14 @@ func AppKeyResolve(resolver ChatChannelResolver) gin.HandlerFunc {
 				channelID = bid
 			}
 		}
+		// 路径参数槽位：/channel/:app_key/info 这类把 app_key 建立在路径上的公开口
+		// （安装引导「测试 API 连通性」）。此前只认 header/query/body，路径参数被
+		// 漏掉——该口在库里没有名为 default 的渠道时永远 401（2026-11-10 实测回归）。
+		if channelID == "" {
+			if pk := c.Param("app_key"); pk != "" {
+				channelID = pk
+			}
+		}
 		if channelID == "" {
 			channelID = DefaultChannelID
 		}

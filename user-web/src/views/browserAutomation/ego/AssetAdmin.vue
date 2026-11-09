@@ -322,6 +322,8 @@ const loadFlows = async () => {
   try {
     const data = await listEgoAdminFlows({ status: 'submitted', page: 1, page_size: 100 })
     flows.value = data?.list || []
+  } catch {
+    // 拦截器已提示（4301 模块闸/网络失败）；页面留空态即可，拒绝不外抛。
   } finally {
     loadingFlows.value = false
   }
@@ -332,6 +334,8 @@ const loadAssets = async () => {
   try {
     const data = await listEgoAdminAssets({ page: 1, page_size: 100 })
     assets.value = data?.list || []
+  } catch {
+    // 同 loadFlows：空态 + 不外抛。
   } finally {
     loadingAssets.value = false
   }

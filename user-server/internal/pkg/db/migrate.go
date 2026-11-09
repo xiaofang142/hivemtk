@@ -491,6 +491,10 @@ func allModels() []any {
 		&model.KBChangeRequest{},
 		&model.KBRelease{},
 		&model.LLMRoutingLog{},
+		// LLMRoutingAudit（表 llm_routing_audit）：此前只有原始 SQL 迁移建表、无 Go
+		// 模型，AutoMigrate 库上表缺失 ⇒ /api/llm/audit 稳定 500（2026-11-10 回归
+		// 实测）。同 OrderDraft 口径：版本化迁移在本仓固定空跑，AutoMigrate 是事实源。
+		&model.LLMRoutingAudit{},
 		&model.LoginEvent{},
 		// OrderDraft（表 order_drafts）：T-P2-01 前草稿只活在 service 的内存 map 里，
 		// 全仓无 model 无 repo，所以这里是第一次建表登记（走版本化迁移在本仓不生效，

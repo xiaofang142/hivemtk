@@ -80,3 +80,22 @@ func WarnIfCloudURLIsBuiltinDefault() {
 		"env PLATFORM_CLOUD_URL 或平台配置的 cloud_url（任一处显式配置后本行不再出现）",
 		url, source)
 }
+
+// WarnIfVisitorTokenSecretMissing 启动期提示：访客会话 HMAC 密钥未配置。
+//
+// 背景（2026-11-10 embed 全链回归实测）：config.yaml 的
+// security.visitor_token_secret 是 `${VISITOR_TOKEN_SECRET:}` 空默认展开——
+// 漏配不会阻断启动，而是让 **每一次** 访客客服请求都在运行期 fail-closed
+// （POST /api/chat/public/sessions 稳定 400「生成 visitor_token 失败:
+// secret 不能为空」），症状离根因隔了三层， fresh 部署极易当成"渠道坏了"排查。
+//
+// 定位与 A11 同款：运行期 fail-closed 是正确的安全默认（绝不为漏配放行），
+// 但**沉默失败**必须配一行响亮的启动期告警，写明影响面与消音办法。
+func WarnIfVisitorTokenSecretMissing() {
+	if config.GetAppConfig().Security.VisitorTokenSecret != "" {
+		return
+	}
+	logger.Warnf("[chat] VISITOR_TOKEN_SECRET 未配置：访客客服（embed widget）打开会话将全部失败" +
+		"（fail-closed，报「生成 visitor_token 失败: secret 不能为空」）。" +
+		"请设置 env VISITOR_TOKEN_SECRET（建议 32+ 字符随机串）后重启；不使用客服挂件可忽略本行")
+}

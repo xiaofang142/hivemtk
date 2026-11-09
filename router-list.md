@@ -270,42 +270,41 @@
 | 227 | [x] | `/template-market` | TemplateMarket | 模板/技能市场 | 否 | `views/templateMarket/Market.vue` | `src/router/modules/templateMarket.js` | - 模板市场(发布/审核/刷新 + 内置可用/即将上线/查看详情)正常 |
 | 228 | [x] | `/template-market/my` | TemplateMarketMy | 我的发布/订单 | 是 | `views/templateMarket/MyWorkspace.vue` | `src/router/modules/templateMarket.js` | - 我的发布/订单空态 + 我要发布正常 |
 | 229 | [x] | `/template-market/review` | TemplateMarketReview | 发布审核 | 是 | `views/templateMarket/ReviewConsole.vue` | `src/router/modules/templateMarket.js` | - 发布审核 5 条(订单/金额/状态/下架)正常 |
-| 230 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | - 24 条 TikTok 卡片/搜索/重置/分页/编辑·删除·统计·复制链接正常 |
-| 231 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | - TikTok 统计(卡片数/浏览量/热门卡片/最近活动)/刷新/单卡统计正常 |
-| 232 | [x] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | - 卡片统计 id=16 正常(卡片信息/总浏览/趋势/最近活动)；非法 id 提示卡不存在 |
-| 233 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | - 同 #230 卡片列表；双端正常 |
-| 234 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | - 置信度看板 31 行(策略/阈值/权重)/刷新/新建策略/编辑/967条分页正常 |
-| 235 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | - 拟人度看板空态+3 处刷新/100 条上限说明正常 |
-| 236 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | - 反馈闭环 399 条(评分/标签)/刷新/立即触发分析/分页正常 |
-| 237 | [x] | `/unifiedMessage/list` | UnifiedMessageList | 统一消息 | - | `views/unifiedMessage/List.vue` | `src/router/modules/unifiedMessage.js` | - 296 条统一消息(平台/状态)/刷新/搜索/重置/详情/重发/复制/分页正常 |
-| 238 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | - 3 条未知问题(问题/次数/来源/状态)/刷新/去FAQ库/查询/详情正常 |
-| 239 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | - 52 条用户分群(规则/人数)/创建分群/规则构建器/刷新/查看用户/编辑/删除正常 |
-| 240 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | - RFM 矩阵(3×2 分群/人数/GMV)/导出到触达/保存为分群/详情/触达正常 |
-| 241 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | - 规则构建器(AND/OR/条件节点)+命中数+触发器(手动/定时/事件)+同步触达/保存分群正常 |
-| 242 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | - 1 条企微账号(在线/警告/配额)/新增/刷新/详情/编辑/删除/更多正常 |
-| 243 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | - 企微数据(客户/群/标签/消息 4 tab 空态)/刷新数据正常 |
-| 244 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - 30 条 WhatsApp 账号(pending)/前往 WhatsApp Cloud/添加/状态/绑定AI正常 |
-| 245 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | - 同 #244 组件；双端正常 |
-| 246 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | - 30 条 WhatsApp 草稿(编辑/删除)/新建草稿/搜索/分页正常 |
-| 247 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | - WhatsApp 群发任务空态+新建任务/搜索正常 |
-| 248 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | - 线索分组选择 7 条(clue/80分/新线索/联系人)/筛选/重置正常 |
-| 249 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | - 批量群发(选择联系人/消息预览/计划时间/立即发送/重置)正常 |
-| 250 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | - Bulk Matrix(模板/目标群体/速率/变量JSON/预览/开始发送/实时进度)正常 |
-| 251 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | - WhatsApp Cloud 账号空态+新增账号正常 |
-| 252 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | - 工作流编排 2 条(版本/状态/编辑/发布/执行/删除/测试)正常 |
-| 253 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | - 画布编辑器(保存/保存为新版本/节点库/自动布局/节点属性/JSON预览)正常 |
-| 254 | [x] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | - 执行详情(wf-e2e-test/1v/耗时27s/manual stopped/节点时间线空态)/停止·刷新正常 |
-| 255 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | - 18 条闲鱼卡片(图片加载失败占位/统计/复制链接)/搜索/添加卡片/分页正常 |
-| 256 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | - 闲鱼统计(卡片数18/激活0/浏览量·点击量趋势/热门卡片)正常 |
-| 257 | [x] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | - 卡片统计 id=29(浏览/点击/分享/趋势/明细/分页)正常；非法 id 提示记录不存在 |
-| 258 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | - 18 条小红书卡片(访问链接/浏览/启用)/统计/复制链接/编辑/删除正常 |
-| 259 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | - 小红书统计(11 行最近活动/刷新数据/统计)正常 |
-| 260 | [x] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | - 卡片统计 id=29(浏览/互动率/独立访客/平均时长/趋势/最近活动)正常；非法 id 提示记录不存在 |
+| 230 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：卡片列表/操作，0报错 |
+| 231 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：统计 KPI/热门卡片，0报错 |
+| 232 | [~] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：上轮 id=16 数据已清→404 数据态优雅处理，0报错 |
+| 233 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | 11-09双端：重定向列表，0报错 |
+| 234 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：策略看板/阈值，0报错 |
+| 235 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：拟人度看板，0报错 |
+| 236 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：反馈闭环列表，0报错 |
+| 237 | [x] | `/unifiedMessage/list` | UnifiedMessageList | 统一消息 | - | `views/unifiedMessage/List.vue` | `src/router/modules/unifiedMessage.js` | 11-09双端复验：消息列表/重发，0报错 |
+| 238 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | 11-09双端复验：未知问题列表，0报错 |
+| 239 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：分群列表/创建，0报错 |
+| 240 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：矩阵/导出触达，0报错 |
+| 241 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：规则构建器，0报错 |
+| 242 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：账号列表/操作，0报错 |
+| 243 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：4 tab 数据看板，0报错 |
+| 244 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：账号列表，0报错 |
+| 245 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：同组件（A-2 修复保持），0报错 |
+| 246 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：草稿列表，0报错 |
+| 247 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发任务，0报错 |
+| 248 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：分组选择，0报错 |
+| 249 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发表单，0报错 |
+| 250 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：矩阵配置，0报错 |
+| 251 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | 11-09双端复验：账号空态+新增（A-2 三键合并修复保持），0报错 |
+| 252 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：工作流列表，0报错 |
+| 253 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：画布/节点库/保存入口，0报错 |
+| 254 | [~] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：无效 id 404 数据态优雅处理，0报错 |
+| 255 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：卡片列表/操作，0报错 |
+| 256 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：统计 KPI/趋势，0报错 |
+| 257 | [~] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：上轮 id=29 已清→404「记录不存在」优雅，0报错 |
+| 258 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：卡片列表，0报错 |
+| 259 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：统计渲染，0报错 |
+| 260 | [~] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：数据已清→404「记录不存在」优雅，0报错 |
 
-## 进度
+## 进度（2026-11-09/10 全量回归轮：双形态逐路由复验完成）
 
-- 已验证无错误 `[x]`：**246** 条
-- 已验证·设计内拒绝 `[~]`：**14** 条
-- 待点验 `[ ]`：**0** 条
-- 已点出缺陷 `[!]`：**0** 条
-- 任务六已写页面导览 `G`：**0** 条
+- 本轮复验通过 `[x]`：**242** 条
+- 本轮复验·设计内拒绝/数据态 `[~]`：**18** 条
+- 本轮点出缺陷并当轮修复：**4** 个（H-1 4301 轮询逃逸 / H-2 AppKeyResolve 路径参数 / H-3 VISITOR_TOKEN_SECRET 沉默失败 / H-4 LLM 报表与审计 schema 漂移双 500），详见未完成任务清单.md H 区
+- 待点验 `[ ]`：**0** 条；缺陷未闭环 `[!]`：**0** 条

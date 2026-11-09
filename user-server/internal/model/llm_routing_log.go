@@ -43,6 +43,12 @@ type LLMRoutingLog struct {
 	LatencyMs        int     `gorm:"column:latency_ms;not null;default:0" json:"latency_ms"`
 	Success          bool    `gorm:"column:success;not null;default:true" json:"success"`
 	ErrorMsg         string  `gorm:"type:text;column:error_msg" json:"error_msg"`
+	// ErrorClass 错误分类（timeout/network/auth/rate_limit/upstream/unknown）。
+	// 历史上无写入方（报表读取侧用 errorClassExpr 按 error_msg 回推），但
+	// llm_usage_report 的聚合/明细 SQL 引用了该列——模型缺字段时 AutoMigrate
+	// 不会建列，全新 AutoMigrate 库上 LLM 用量报表 500（2026-11-10 回归实测）。
+	// 先补列对齐读取侧契约；写入侧标注留后续（表达式对空值回推分类）。
+	ErrorClass       string  `gorm:"type:varchar(32);not null;default:''" json:"error_class"`
 	FromCache        bool    `gorm:"column:from_cache;not null;default:false" json:"from_cache"`
 
 	ModelType        string  `gorm:"type:varchar(16);column:model_type;not null;default:'local'" json:"model_type"`
@@ -69,3 +75,28 @@ type LLMRoutingLog struct {
 
 // TableName 表名
 func (LLMRoutingLog) TableName() string { return "llm_routing_logs" }
+
+// LLMRoutingAudit 路由变更审计（scenario 路由升级/灰度/回滚留痕）。
+//
+// 历史上只有原始 SQL 迁移建表（llm_routing_logs_migration.go），无 Go 模型 ⇒
+// AutoMigrate 主导的库上该表不存在，/api/llm/audit 稳定 500（2026-11-10 回归实测）。
+// 按「AutoMigrate 单一事实源」补模型进 allModels；列定义与迁移 SQL 逐列对齐
+// （含 tenant_id：审计行归属租户，on 模式行自证）。
+type LLMRoutingAudit struct {
+	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
+
+	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Scenario     string    `gorm:"type:varchar(64);column:scenario;not null" json:"scenario"`
+	Version      int       `gorm:"column:version;not null;default:1" json:"version"`
+	PrevProvider string    `gorm:"type:varchar(64);column:prev_provider" json:"prev_provider"`
+	NewProvider  string    `gorm:"type:varchar(64);column:new_provider;not null" json:"new_provider"`
+	PrevFallback string    `gorm:"type:text;column:prev_fallbacks" json:"prev_fallbacks"`
+	NewFallback  string    `gorm:"type:text;column:new_fallbacks" json:"new_fallbacks"`
+	Action       string    `gorm:"type:varchar(32);column:action;not null" json:"action"`
+	Operator     string    `gorm:"type:varchar(64);column:operator" json:"operator"`
+	TraceID      string    `gorm:"type:varchar(64);column:trace_id" json:"trace_id"`
+	CreatedAt    time.Time `gorm:"column:created_at;autoCreateTime" json:"created_at"`
+}
+
+// TableName 表名
+func (LLMRoutingAudit) TableName() string { return "llm_routing_audit" }

@@ -416,6 +416,9 @@ const load = async () => {
       const fresh = list.value.find((x) => x.id === current.value.id)
       if (fresh) current.value = fresh
     }
+  } catch {
+    // 拦截器已把服务端原因弹给用户（4301 模块闸/网络抖动等）；这里是 3s 轮询
+    // 入口，拒绝若再往外抛就是每轮一条 unhandledrejection——吞掉等下一轮。
   } finally {
     loading.value = false
   }
@@ -435,17 +438,21 @@ const openDetail = async (row) => {
 const lastEventId = ref(0)
 const loadEvents = async (reset) => {
   if (!current.value) return
-  const params = reset
-    ? { limit: 200 }
-    : { after_id: lastEventId.value, limit: 200 }
-  const data = await listEgoEvents(current.value.id, params)
-  const fresh = data?.list || []
-  if (reset) {
-    events.value = fresh
-  } else if (fresh.length) {
-    events.value = events.value.concat(fresh).slice(-1000)
+  try {
+    const params = reset
+      ? { limit: 200 }
+      : { after_id: lastEventId.value, limit: 200 }
+    const data = await listEgoEvents(current.value.id, params)
+    const fresh = data?.list || []
+    if (reset) {
+      events.value = fresh
+    } else if (fresh.length) {
+      events.value = events.value.concat(fresh).slice(-1000)
+    }
+    if (fresh.length) lastEventId.value = fresh[fresh.length - 1].id
+  } catch {
+    // 事件流是增量补帧：失败留给下一轮 3s 自动刷新兜底，不外抛成 unhandledrejection。
   }
-  if (fresh.length) lastEventId.value = fresh[fresh.length - 1].id
 }
 
 const onAbort = async (row) => {

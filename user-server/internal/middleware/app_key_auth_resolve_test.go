@@ -209,3 +209,80 @@ func TestAppKeyResolveInactiveAppKeyRefStill403(t *testing.T) {
 		t.Fatalf("回退命中但渠道禁用必须 403，实际 %d %s", w.Code, w.Body.String())
 	}
 }
+
+// pathParamEchoRouter 挂 :app_key 路径参数形态的公开口（对齐
+// chat_routes.go 的 GET /api/chat/public/channel/:app_key/info——安装引导
+// 「测试 API 连通性」的真实路由形状），把中间件注入的上下文原样回读。
+func pathParamEchoRouter(res ChatChannelResolver) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.GET("/api/chat/public/channel/:app_key/info", AppKeyResolve(res), func(c *gin.Context) {
+		chID, _ := c.Get("chat_channel_id")
+		appKey, hasAppKey := c.Get("chat_app_key")
+		tid, bound := tenant.FromContext(c.Request.Context())
+		c.JSON(http.StatusOK, gin.H{
+			"channel_id":   chID,
+			"app_key":      appKey,
+			"has_app_key":  hasAppKey,
+			"tenant_id":    tid,
+			"tenant_bound": bound,
+		})
+	})
+	return r
+}
+
+// TestAppKeyResolvePathParamSlot 钉住路径参数槽位（bug 现场：AppKeyResolve 此前
+// 只认 header/query/body 三槽位，GET /channel/:app_key/info 在库里没有名为
+// default 的渠道时永远 401 "渠道未配置或不可用: default"，安装引导连通性测试
+// 对任何合法渠道都报「连接失败」——2026-11-10 全量回归实测）。修复后路径参数
+// 与 ref 槽位同语义：channel_id 列先试、app_key 列回退、命中注入 canonical
+// channel_id + chat_app_key + 渠道行租户。
+func TestAppKeyResolvePathParamSlot(t *testing.T) {
+	prev := IsTestMode
+	IsTestMode = false
+	defer func() { IsTestMode = prev }()
+
+	const (
+		canonical = "2c781d29-5457-4169-b967-b0040f2b2c5c"
+		appKey    = "ak_YvcfQRsqdz9eF9YwnE5PjmT2"
+	)
+	res := &fakeChannelResolver{
+		byAppKey: map[string]*ChatChannelView{appKey: {ChannelID: canonical, Active: true, TenantID: 9}},
+	}
+	r := pathParamEchoRouter(res)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/public/channel/"+appKey+"/info", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("路径参数槽位必须回退命中放行，实际 %d %s", w.Code, w.Body.String())
+	}
+	var echo resolveEcho
+	_ = json.Unmarshal(w.Body.Bytes(), &echo)
+	if echo.ChannelID != canonical {
+		t.Errorf("上下文 channel_id 必须是渠道行 canonical 值 %q，实际 %q", canonical, echo.ChannelID)
+	}
+	if !echo.HasAppKey || echo.AppKey != appKey {
+		t.Errorf("路径 app_key 命中应注入 chat_app_key=%q，实际 has=%v val=%q", appKey, echo.HasAppKey, echo.AppKey)
+	}
+	if !echo.TenantBound || echo.TenantID != 9 {
+		t.Errorf("必须绑定渠道行租户 9，实际 bound=%v tenant=%d", echo.TenantBound, echo.TenantID)
+	}
+	if len(res.appKeyHits) != 1 || res.appKeyHits[0] != appKey {
+		t.Errorf("应恰按 app_key 列回退一次，实际 %v", res.appKeyHits)
+	}
+
+	// 无该参数的路由不受影响：默认槽位语义保持（不产生 app_key 查询）
+	res2 := &fakeChannelResolver{}
+	r2 := resolveEchoRouter(res2)
+	req2 := httptest.NewRequest(http.MethodPost, "/api/chat/public/open", strings.NewReader(`{}`))
+	req2.Header.Set("Content-Type", "application/json")
+	w2 := httptest.NewRecorder()
+	r2.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusUnauthorized {
+		t.Fatalf("无槽位请求仍应走 default 兜底 401，实际 %d", w2.Code)
+	}
+	if len(res2.appKeyHits) != 1 || res2.appKeyHits[0] != "default" {
+		t.Errorf("default 兜底语义保持：channel_id 列失败后按 app_key 列回退恰一次，实际 %v", res2.appKeyHits)
+	}
+}
