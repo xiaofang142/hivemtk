@@ -297,11 +297,11 @@ graph LR
 | CH-24 | 美团（分业态） | 网页客服（买药/外卖/闪购分别定，V） | 未实现 | 未实现 | 无 | **未交付** | CH-37a；按业态分子项 |
 | CH-25 | 饿了么/淘宝闪购 | 官方 IM WS（open.shop.ele.me，P） | 未实现 | 未实现 | 无 | **未交付** | CH-37a；接入资格先审 |
 | CH-26 | 1688·千牛共享伴生 | 桌面共享（官方仅客户端下载，P）+独立业务接缝 | 未实现 | 未实现 | 无 | **未交付** | CH-15a 载体决策；B2B 能力按实际 |
-| CH-27 | TikTok Shop·CS API | API（partner.tiktokshop.com，P；US Seller Center） | 未实现（tiktok 社交≠Shop） | 未实现 | 无 | **未交付** | CH-37a；区域以 Seller 为准 |
+| CH-27 | TikTok Shop·CS API | API（partner.tiktokshop.com，P；US Seller Center） | 未实现（tiktok 社交≠Shop） | 未实现 | 无 | **未交付** | CH-37a；区域以 Seller 为准；TB-07 协议取证已备（docs/research/API-CHANNEL-PUBLIC-PROTOCOLS-2026-11.md：OAuth2+仅 Shop 会话+窗口过期拒发+webhook 收件；V 级） |
 | CH-28 | Shopee | Webchat/API（各区，P） | 未实现（API 需审批） | 未实现 | 无 | **未交付** | CH-37a |
 | CH-29 | Lazada | 官方 IM API（P） | 未实现 | 未实现 | 无 | **未交付** | CH-37a |
-| CH-30 | Amazon | 邮件+订单授权（V/P；**非通用全双向 IM**） | 未实现 | 未实现 | 无 | **未交付** | CH-37a；Messaging Permissions/OAuth |
-| CH-31 | eBay | Message API（P，现行 getConversations/sendMessage） | 未实现 | 未实现 | 无 | **未交付** | CH-37a |
+| CH-30 | Amazon | 邮件+订单授权（V/P；**非通用全双向 IM**） | 未实现 | 未实现 | 无 | **未交付** | CH-37a；Messaging Permissions/OAuth；TB-07 取证（docs/research/API-CHANNEL-PUBLIC-PROTOCOLS-2026-11.md：Messaging API 仅发送腿+getMessagingActionsForOrder 前置+24h=响应 SLA 非 API 窗口；收件仍走 M 包邮箱；V 级） |
+| CH-31 | eBay | Message API（P，现行 getConversations/sendMessage） | 未实现 | 未实现 | 无 | **未交付** | CH-37a；TB-07 取证（docs/research/API-CHANNEL-PUBLIC-PROTOCOLS-2026-11.md：Message API v1 会话读+sendMessage+conversation_type 必填；旧 Post-Order 非唯一；V 级） |
 | CH-32 | Shopify | 原生 Inbox / 自有 widget 二选一（P） | 未实现 | 未实现 | 无 | **未交付** | CH-37a |
 | CH-33 | AliExpress | 商家 PC 会话（商品 message 与 M-site 转 App，P；完整 IM 权限 U） | 未实现 | 未实现 | 无 | **未交付** | CH-37a |
 | CH-34 | Etsy | 网页 Messages 桥（P：Shop Manager→Messages） | 未实现 | 未实现 | 无 | **未交付** | CH-37a |

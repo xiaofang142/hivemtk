@@ -112,6 +112,10 @@ func (p *BusinessToolProvider) Provide(ctx tooluse.ProviderContext) ([]tooluse.T
 		afterSalePort,
 		ctx.DB,
 	)
+	// TB-05 改单申请单 Port：绑定层/改单域装配存在才暴露工具（service 单例 nil-safe）。
+	if svc := service.GetOrderChangeService(); svc != nil {
+		deps.OrderChange = service.NewOrderChangeRequestPortAdapter(svc)
+	}
 	return tooluse.BuildBusinessTools(deps), nil
 }
 

@@ -17,10 +17,11 @@ import (
 //
 // 方法统一走 portcontract 各 Port；未注入的 Port 对应工具返回 "port not injected"。
 type BusinessToolDeps struct {
-	FollowUp  portcontract.FollowUpPort
-	Order     portcontract.OrderPort
-	AfterSale portcontract.AfterSalePort
-	Logistics portcontract.LogisticsPort
+	FollowUp    portcontract.FollowUpPort
+	Order       portcontract.OrderPort
+	AfterSale   portcontract.AfterSalePort
+	Logistics   portcontract.LogisticsPort
+	OrderChange OrderChangeRequestPort // TB-05 改单申请单（nil=工具不可用）
 }
 
 // NewBusinessToolDeps 创建业务工具依赖（各 Port 均未注入，需装配层补齐）
@@ -165,7 +166,7 @@ func snakeCaseFieldName(name string) string {
 //
 // 调用方：BusinessToolProvider.Provide()
 func BuildBusinessTools(deps BusinessToolDeps) []Tool {
-	return []Tool{
+	tools := []Tool{
 		NewFollowTaskCreateTool(deps),
 		NewFollowTaskUpdateTool(deps),
 		NewOrderLookupTool(deps),
@@ -173,6 +174,11 @@ func BuildBusinessTools(deps BusinessToolDeps) []Tool {
 		NewAfterSaleQueryTool(deps),
 		NewLogisticsTrackTool(deps),
 	}
+	// TB-05 改单申请：依赖注入才注册（Port 缺席=该高危工具不暴露，fail-closed）。
+	if deps.OrderChange != nil {
+		tools = append(tools, WithApproval(NewOrderModifyRequestTool(deps.OrderChange)))
+	}
+	return tools
 }
 
 // RegisterBusinessTools 注册业务工具到 registry

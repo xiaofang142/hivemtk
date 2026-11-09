@@ -152,6 +152,9 @@ var aiSalesOwnedTables = []string{
 	"intent_tool_chains",
 	// custom_intents：T-09 自定义意图词条（意图目录数据化），同属意图域数据面。
 	"custom_intents",
+	// order_change_requests：TB-05 改单申请单（客服侧申请+审批+能力路由执行），
+	// 与意图/订单镜像同属客服运营数据面。
+	"order_change_requests",
 	"objection_templates", "sales_personas",
 	"sales_champion_profile_snapshots", "champion_baselines",
 	"champion_dialogues", "champion_phrases",

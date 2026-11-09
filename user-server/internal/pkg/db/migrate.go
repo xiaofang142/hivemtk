@@ -218,6 +218,7 @@ func allModels() []any {
 		&model.IntentRecord{},
 		&model.IntentToolChain{},
 		&model.CustomIntent{},
+		&model.OrderChangeRequest{},
 		&model.DialogueMemory{},
 		&model.SOPAgent{},
 		&model.SOPExecution{},
