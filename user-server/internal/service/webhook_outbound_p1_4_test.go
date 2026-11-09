@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
 )
@@ -50,9 +49,8 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 		AIReplied:   true,
 		Confidence:  0.86,
 		Reply:       "您好，关于代码二开请查看 Gitee AGPL-3.0 协议。",
-		SalesResponse: &SalesResponse{
-			Intent: &dto.RecognizeResult{IntentType: "inquiry"},
-		},
+		// MD-05：意图类型走批准输出字段（出站侧不再拆 SalesResponse 嵌套 nil 链）。
+		IntentType: "inquiry",
 	}
 	ctx := AgentIDToContext(HandleResultToContext(context.Background(), result), "sales-prod-v1")
 
@@ -84,7 +82,7 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 		t.Errorf("Extra.confidence expected 0.86 (from HandleResult), got %v", v)
 	}
 	if v, _ := out.Extra["intent"].(string); v != "inquiry" {
-		t.Errorf("Extra.intent expected 'inquiry' (from SalesResponse.Intent), got %q", v)
+		t.Errorf("Extra.intent expected 'inquiry' (from HandleResult.IntentType), got %q", v)
 	}
 	if v, _ := out.Extra["handler_type"].(string); v != string(model.HandlerTypeAI) {
 		t.Errorf("Extra.handler_type expected %q, got %q", model.HandlerTypeAI, v)
