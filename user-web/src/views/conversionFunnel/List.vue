@@ -92,19 +92,29 @@
                 prop="count"
                 label="数量"
               />
+              <!--
+                上一阶段为 0 时，后端 rate/drop_rate 都是零值 0——那是「除不出比值」，
+                不是「比值真的是 0%」。直接渲染 0.0% 会让「访问 0 → 会话 118」看起来
+                像转化率为 0，属于把未定义值当实测值展示（UI 审计实测）。这里显式给 —。
+              -->
               <el-table-column>
                 <template #header>
-                  <el-tooltip :content="$t('conversionFunnelPage.tip')" placement="top">
+                  <el-tooltip
+                    :content="$t('conversionFunnelPage.tip')"
+                    placement="top"
+                  >
                     <span>{{ $t('conversionFunnelPage.stageRatio') }}</span>
                   </el-tooltip>
                 </template>
-                <template #default="{ row }">
-                  {{ (row.rate || 0).toFixed(1) }}%
+                <template #default="{ row, $index }">
+                  <span v-if="$index > 0 && !stageTable[$index - 1].count">—</span>
+                  <span v-else>{{ (row.rate || 0).toFixed(1) }}%</span>
                 </template>
               </el-table-column>
               <el-table-column label="流失率">
-                <template #default="{ row }">
-                  {{ (row.dropRate || 0).toFixed(1) }}%
+                <template #default="{ row, $index }">
+                  <span v-if="$index > 0 && !stageTable[$index - 1].count">—</span>
+                  <span v-else>{{ (row.dropRate || 0).toFixed(1) }}%</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -179,7 +189,6 @@
 </template>
 
 <script>
-import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import ConversionFunnelApi from '@/api/conversionFunnel'
 import { getChannelLabel } from '@/constants/channel'
@@ -209,6 +218,14 @@ export default {
       chartInst: null
     }
   },
+  computed: {
+    // D-3：降级态的逐段点名文案（stage_errors 来自后端显式降级契约）。
+    degradedDetail() {
+      const errs = Array.isArray(this.report?.stage_errors) ? this.report.stage_errors : []
+      if (!errs.length) return '具体失败阶段未点名（旧版响应）。'
+      return '失败阶段：' + errs.map((e) => e.name || e.stage).join('、')
+    }
+  },
   mounted() {
     this.chartInst = safeInit(this.$refs.funnelChart)
     this.loadAll()
@@ -218,14 +235,6 @@ export default {
     if (this.chartInst) {
       this.chartInst.dispose()
       this.chartInst = null
-    }
-  },
-  computed: {
-    // D-3：降级态的逐段点名文案（stage_errors 来自后端显式降级契约）。
-    degradedDetail() {
-      const errs = Array.isArray(this.report?.stage_errors) ? this.report.stage_errors : []
-      if (!errs.length) return '具体失败阶段未点名（旧版响应）。'
-      return '失败阶段：' + errs.map((e) => e.name || e.stage).join('、')
     }
   },
   methods: {

@@ -157,7 +157,6 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
-import * as echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { http } from '@/utils/request'
 import { fmtTime } from '@/utils/time'
@@ -272,7 +271,7 @@ async function compareWith(row) {
     const fmt = (v) => `${v > 0 ? '+' : ''}${(Number(v || 0) * 100).toFixed(1)}%`
     await ElMessageBox.alert(
       `基线 Run #${res.baseline_id} → 当前 Run #${res.latest_id}\n` +
-        `Recall@5 ${fmt(res.recall5Delta)}　MRR ${fmt(res.mrrDelta)}　NDCG@5 ${fmt(res.ndcg5Delta)}`,
+        `Recall@5 ${fmt(res.recall5Delta)} MRR ${fmt(res.mrrDelta)} NDCG@5 ${fmt(res.ndcg5Delta)}`,
       '与最新评测对比',
       { confirmButtonText: '知道了', customStyle: { whiteSpace: 'pre-line' } }
     )

@@ -192,7 +192,7 @@ for (const r of rows) byFile.get(r.file).push(r)
 const L = []
 L.push('# API 全量清单（user-web/src/api → user-server）')
 L.push('')
-L.push(`> 生成：\`node user-web/scripts/gen-api-list.mjs\`　扫描文件：${files.length} 个　端点数：${rows.length} 条`)
+L.push(`> 生成：\`node user-web/scripts/gen-api-list.mjs\` 扫描文件：${files.length} 个 端点数：${rows.length} 条`)
 L.push('> 状态图例：`☐ 待测` · `✅ 通过` · `🔧 已修复` · `⛔ 阻塞` · `➖ 不适用`（off=独立部署 / on=SaaS 双形态各记一次）')
 L.push('> 复核判据：HTTP 状态 + 响应体 `code` + 数据落库（写操作）+ 租户隔离（on 模式）')
 L.push('')

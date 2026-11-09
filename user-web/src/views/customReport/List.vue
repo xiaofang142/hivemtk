@@ -94,7 +94,8 @@
         <el-table-column
           prop="created_at"
           label="创建时间"
-          min-width="170">
+          min-width="170"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.created_at) }}
           </template>
@@ -459,7 +460,7 @@ const parseMetrics = (raw) => safeParseArray(raw).map((m) => (typeof m === 'stri
 function safeParseArray(raw) {
   if (Array.isArray(raw)) return raw
   if (typeof raw !== 'string' || !raw) return []
-  try { return JSON.parse(raw) } catch (e) { return [] }
+  try { return JSON.parse(raw) } catch { return [] }
 }
 
 const refreshData = async () => {
@@ -552,10 +553,13 @@ const viewReport = async (row) => {
     const rows = Array.isArray(payload) ? payload : (payload.data || [])
     if (rows.length) {
       const keys = Object.keys(rows[0])
-      reportColumns.value = keys.map((k) => ({ key: k, label: k, minWidth: 120 }))
+      // 列头不能直接拿字段名：接口返回的是 date/count 这类内部字段，
+      // 直接渲染等于把技术字段名暴露给用户（旧实现正是这样，表头显示 "count"/"date"）。
+      // 维度/指标表里都有对应的中文标签，按字段名回查一次。
+      reportColumns.value = keys.map((k) => ({ key: k, label: fieldLabel(k), minWidth: 120 }))
       reportData.value = rows
     } else if (payload && payload.dimensions) {
-      reportColumns.value = (payload.dimensions || []).map((d) => ({ key: d, label: d, minWidth: 120 }))
+      reportColumns.value = (payload.dimensions || []).map((d) => ({ key: d, label: fieldLabel(d), minWidth: 120 }))
     }
   } catch (e) {
     ElMessage.error(i18n.global.t('获取报表数据失败') + '：' + (e && e.message ? e.message : ''))
@@ -569,10 +573,36 @@ const exportReport = async (row) => {
     const res = await exportCustomReport(row.id)
     const payload = res?.data ?? res
     const rows = Array.isArray(payload) ? payload : (payload && payload.data) || []
+    if (!rows.length) {
+      ElMessage.warning('没有可导出的数据')
+      return
+    }
+    // 旧实现只弹了一句「导出成功，共 N 行」，什么文件都没有落盘——
+    // 用户以为拿到了报表，实际磁盘上什么都没有。这里真的生成 CSV 并触发下载。
+    downloadCsv(`${row.name || 'report'}.csv`, rows)
     ElMessage.success(`导出成功，共 ${rows.length} 行`)
   } catch (e) {
     ElMessage.error('导出失败：' + (e && e.message ? e.message : ''))
   }
+}
+
+/** 字段名 → 中文标签（维度/指标表里查得到就用标签，查不到原样返回） */
+const fieldLabel = (key) => DIM_MAP[key]?.label || METRIC_MAP[key]?.label || key
+
+/** 把查询结果导出成 CSV（带 BOM，Excel 打开中文不乱码） */
+const downloadCsv = (filename, rows) => {
+  const keys = Object.keys(rows[0] || {})
+  if (!keys.length) return
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+  const header = keys.map((k) => esc(fieldLabel(k))).join(',')
+  const body = rows.map((r) => keys.map((k) => esc(r[k])).join(',')).join('\n')
+  const blob = new Blob([`\ufeff${header}\n${body}`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 const deleteReport = async (row) => {

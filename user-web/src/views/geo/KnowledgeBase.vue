@@ -10,7 +10,7 @@
             <el-card>
               <el-statistic
                 title="文档总数"
-                :value="docs.length"
+                :value="totalDocs"
               />
             </el-card>
           </el-col>
@@ -35,17 +35,29 @@
         <el-card style="flex:1">
           <template #header>
             <div class="flex items-center justify-between">
-              <span class="font-bold">GEO 知识库</span>
+              <span class="font-bold">
+                GEO 知识库
+                <span
+                  v-if="keyword"
+                  class="filter-hint"
+                >筛选「{{ keyword }}」：{{ docs.length }} / {{ totalDocs }} 条</span>
+              </span>
               <div class="flex items-center gap-2">
                 <el-input
                   v-model="keyword"
-                  placeholder="搜索标题/内容"
+                  placeholder="搜索标题/内容（回车或点搜索）"
                   size="small"
-                  style="width:220px"
+                  style="width:240px"
                   clearable
                   @clear="loadDocs"
                   @keyup.enter="loadDocs"
                 />
+                <el-button
+                  size="small"
+                  @click="loadDocs"
+                >
+                  搜索
+                </el-button>
                 <el-upload
                   :show-file-list="false"
                   :before-upload="onUpload"
@@ -124,7 +136,8 @@
             </el-table-column>
             <el-table-column
               label="上传时间"
-              width="170">
+              width="170"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.created_at || row.uploaded_at) }}
               </template>
@@ -223,7 +236,11 @@ const loading = ref(false)
 const keyword = ref('')
 const extractLoading = ref(null)
 
-const aLevelCount = computed(() => docs.value.filter(d => d.source_level === 'A').length)
+// 搜索时 docs 只是结果子集：统计卡要展示全量口径，否则搜索一下「文档总数」就变 0，
+// 看起来像库被清空了。allDocs 只在无关键词时刷新。
+const allDocs = ref([])
+const totalDocs = computed(() => (allDocs.value.length ? allDocs.value.length : docs.value.length))
+const aLevelCount = computed(() => (allDocs.value.length ? allDocs.value : docs.value).filter(d => d.source_level === 'A').length)
 // 后端 KB 文档行没有 entity_count 字段，实体数与文档无外键关联，
 // 因此「总实体数」改用实体库真实总数（/api/geo/entity/list 的 total），原来按行求和永远是 0。
 const entityTotal = ref(0)
@@ -237,6 +254,7 @@ const loadDocs = async () => {
   try {
     const data = await listKBDocuments(keyword.value)
     docs.value = Array.isArray(data) ? data : (data?.list || data?.items || [])
+    if (!keyword.value) allDocs.value = docs.value
   } catch { docs.value = [] }
   loading.value = false
 }
@@ -388,5 +406,11 @@ onMounted(() => {
 .chat-message.user .chat-bubble {
   background: var(--el-color-primary-light-9);
   color: var(--el-text-color-primary);
+}
+.filter-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #909399;
 }
 </style>

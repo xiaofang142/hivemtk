@@ -10,6 +10,11 @@ import { formatDate, getLocale } from './format'
  */
 export const fmtTime = (value, opts = { dateStyle: 'medium', timeStyle: 'short' }, empty = '-') => {
   if (value === null || value === undefined || value === '') return empty
+  // 后端的零值时间有两种形态：RFC3339 的 `0001-01-01T00:00:00Z`，以及数据库直出的
+  // `0001-01-01 08:05:43`。后一种在部分浏览器里会被宽松解析成 2001 年，只靠
+  // `getFullYear() <= 1` 拦不住，会显示成「2001年1月1日 08:05」这种假日期。
+  // 所以前缀直接判定为零值。
+  if (typeof value === 'string' && /^0001-01-01/.test(value.trim())) return empty
   const date = new Date(value)
   if (Number.isNaN(date.getTime()) || date.getFullYear() <= 1) return empty
   return formatDate(value, getLocale(), opts) || String(value)

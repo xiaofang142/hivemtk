@@ -496,12 +496,22 @@
                       size="small"
                       effect="plain"
                     >
-                      SOP: {{ s.sop_id || s.sop_name || '-' }}
+                      <!-- RecordSOP 后端把历史存成纯字符串数组（service/dialogue_memory.go
+                           SOPHistory []string append sopName），对象字段（sop_id/node_id…）
+                           只在将来升级为结构化记录时才有值；这里兼容两种形态，
+                           字符串直接显示，对象按字段取值。 -->
+                      SOP: {{ typeof s === 'string' ? s : (s.sop_id || s.sop_name || '-') }}
                     </el-tag>
-                    <span class="sop-node">节点: {{ s.node_id || '-' }}</span>
-                    <span class="sop-action">动作: {{ s.action || '-' }}</span>
                     <span
-                      v-if="s.time || s.created_at"
+                      v-if="typeof s !== 'string'"
+                      class="sop-node"
+                    >节点: {{ s.node_id || '-' }}</span>
+                    <span
+                      v-if="typeof s !== 'string'"
+                      class="sop-action"
+                    >动作: {{ s.action || '-' }}</span>
+                    <span
+                      v-if="typeof s !== 'string' && (s.time || s.created_at)"
                       class="sop-time"
                     >{{ formatTime(s.time || s.created_at) }}</span>
                   </div>
@@ -733,14 +743,17 @@ const buildContext = async (row) => {
 }
 
 const updateIntent = async (level) => {
-  if (!currentMemory.value?.customer_id) {
-    ElMessage.warning(i18n.global.t('缺少客户 ID'))
+  // 后端契约：POST /api/memory/purchase-intent 要求 {session_id, level}（都必填），
+  // 按 session 定位记忆行；旧实现传 {customer_id, intent_level} 字段名完全不匹配，
+  // 后端 400 但 radio UI 已切换，看起来像保存了实际没存（UI 审计实测）。
+  if (!currentMemory.value?.session_id) {
+    ElMessage.warning(i18n.global.t('缺少会话 ID'))
     return
   }
   try {
     await memoryApi.updatePurchaseIntent({
-      customer_id: currentMemory.value.customer_id,
-      intent_level: level
+      session_id: currentMemory.value.session_id,
+      level
     })
     currentMemory.value.intent_level = level
     currentMemory.value.purchase_intent = level

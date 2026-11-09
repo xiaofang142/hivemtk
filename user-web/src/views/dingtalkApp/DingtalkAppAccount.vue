@@ -247,11 +247,11 @@
 
     
     <agent-binding-dialog
-      v-model:visible="bindVisible"
+      v-model="bindVisible"
       channel-type="dingtalk"
       :account-id="String(bindRow?.id)"
-      :account-name="bindRow?.account_name"
-      :current-agent-id="bindRow?.ai_agent_id ? String(bindRow.ai_agent_id) : ''"
+      :account-label="bindRow?.account_name"
+      :account-enabled="bindRow?.inbound_enabled !== false"
       @saved="onBindSaved"
     />
   </div>

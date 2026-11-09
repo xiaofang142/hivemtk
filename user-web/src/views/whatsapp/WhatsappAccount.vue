@@ -63,9 +63,18 @@
           label="备注"
         />
         <el-table-column
-          prop="status"
           label="状态"
-        />
+          width="110"
+        >
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              :type="statusTagType(row.status)"
+            >
+              {{ statusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column
           label="操作"
           width="340"
@@ -75,7 +84,7 @@
               size="small"
               @click="refreshStatus(row)"
             >
-              状态
+              刷新状态
             </el-button>
             <el-button
               size="small"
@@ -130,6 +139,16 @@ import { ElMessage } from 'element-plus'
 import { toList } from '@/utils/list'
 import { computed } from 'vue'
 import { isUserReportedError } from '@/utils/errorReporting'
+
+// 状态枚举来自后端（pending/connected/...），列表直接显示英文会让中文界面出现生词。
+const statusLabel = (v) => ({
+  pending: '待连接', connected: '已连接', disconnected: '已断开',
+  logged_in: '已登录', logged_out: '未登录', qr_required: '待扫码'
+}[v] || v || '-')
+
+const statusTagType = (v) => (v === 'connected' || v === 'logged_in' ? 'success'
+  : v === 'pending' || v === 'qr_required' ? 'warning' : 'info')
+
 
 const accounts = ref([])
 const loading = ref(false)

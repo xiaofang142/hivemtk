@@ -292,11 +292,11 @@
 
     
     <agent-binding-dialog
-      v-model:visible="bindVisible"
+      v-model="bindVisible"
       channel-type="whatsapp"
       :account-id="String(bindRow?.id)"
-      :account-name="bindRow?.name"
-      :current-agent-id="bindRow?.ai_agent_id ? String(bindRow.ai_agent_id) : ''"
+      :account-label="bindRow?.account_name || bindRow?.name"
+      :account-enabled="bindRow?.webhook_enabled !== false"
       @saved="onBindSaved"
     />
   </div>
@@ -418,9 +418,6 @@ async function submit() {
     phone_number_id: String(form.phone_number_id || '').trim(),
     whatsapp_business_id: String(form.whatsapp_business_id || '').trim(),
     access_token: String(form.access_token || '').trim(),
-    phone_number_id: form.phone_number_id || undefined,
-    whatsapp_business_id: form.whatsapp_business_id || undefined,
-    access_token: form.access_token || undefined,
     app_secret: form.app_secret || undefined,
     verify_token: form.verify_token || undefined,
     webhook_enabled: form.webhook_enabled,

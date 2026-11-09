@@ -193,7 +193,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       const res = await getSessionTags()
       const data = res || [];
       allTags.value = Array.isArray(data) ? data : data.list || []
-    } catch (e) {
+    } catch {
       allTags.value = []
     }
   };
@@ -204,13 +204,16 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       return
     }
     const raw = currentSession.value.tags
-    let ids = []
+    let ids
     try {
       ids = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw || []
     } catch {
       ids = []
     }
-    sessionTags.value = (allTags.value || []).filter((t) => ids.includes(t.id))
+    // DB 里 tags 存的是 JSON 字符串数组（["17"]），JSON.parse 后是 string，
+    // 而 allTags.id 是 number——两边统一 String 化比对，否则刷新后标签会"丢"。
+    const idSet = new Set(ids.map((x) => String(x)))
+    sessionTags.value = (allTags.value || []).filter((t) => idSet.has(String(t.id)))
   };
 
   const addSessionTag = async (tagId) => {
@@ -236,10 +239,12 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
 
   const persistSessionTags = async () => {
     const tagService = await import('@/api/customerService.js');
-    const ids = sessionTags.value.map((t) => t.id)
+    // 后端 TagSession 的 Tags 是 []string + binding:required——传 number[] 会
+    // 400「tags 必须是非空字符串数组」。统一 String 化再发（DB 也按字符串存）。
+    const ids = sessionTags.value.map((t) => String(t.id))
     try {
       await tagService.tagSession(currentSession.value.id, { tags: ids })
-    } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   const loadQuickReplies = async () => {
@@ -251,7 +256,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       const data = Array.isArray(rRes) ? rRes : (rRes?.data || rRes?.list || [])
       allQuickReplies.value = Array.isArray(data) ? data : data.list || []
       quickReplies.value = allQuickReplies.value
-    } catch (e) {
+    } catch {
       allQuickReplies.value = []
       quickReplies.value = []
     }
@@ -286,7 +291,7 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
       const res = await getAISuggestions(currentSession.value.sessionId || currentSession.value.id)
       const data = res || [];
       aiSuggestions.value = Array.isArray(data) ? data : data.list || []
-    } catch (e) {
+    } catch {
       aiSuggestions.value = []
     }
   };
@@ -344,6 +349,8 @@ export function useSessionList({ sessions, inputMsg, findSession, upsertSession 
     sendMessage,
     scrollToBottom,
     loadAllTags,
+    addSessionTag,
+    removeSessionTag,
     loadSessionTags,
     loadQuickReplies,
     onQuickReplySearch,

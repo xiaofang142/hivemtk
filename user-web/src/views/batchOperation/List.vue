@@ -46,28 +46,31 @@
         :data="histories"
         stripe
       >
+        <!-- 后端 BatchOperationHistory 的 JSON 字段是 operation_type/data_type/
+             total_count/success_count/failed_count/created_at（蛇形命名）。
+             旧代码绑定 tool/target/totalCount…，列全部渲染成空白。 -->
         <el-table-column
-          prop="tool"
+          prop="operation_type"
           label="工具"
           width="150"
         />
         <el-table-column
-          prop="target"
+          prop="data_type"
           label="目标"
           min-width="200"
         />
         <el-table-column
-          prop="totalCount"
+          prop="total_count"
           label="总数"
           width="100"
         />
         <el-table-column
-          prop="successCount"
+          prop="success_count"
           label="成功"
           width="100"
         />
         <el-table-column
-          prop="failedCount"
+          prop="failed_count"
           label="失败"
           width="100"
         />
@@ -83,11 +86,12 @@
           </template>
         </el-table-column>
         <el-table-column
-          prop="createdAt"
+          prop="created_at"
           label="执行时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
-            {{ fmtTime(row.createdAt) }}
+            {{ fmtTime(row.created_at) }}
           </template>
         </el-table-column>
         <el-table-column
@@ -338,11 +342,13 @@
             <el-descriptions-item label="任务ID">
               {{ taskDetail.id }}
             </el-descriptions-item>
+            <!-- 后端字段是 operation_type / data_type / created_at / finished_at /
+                 total_count / success_count / failed_count（蛇形），旧绑定全空。 -->
             <el-descriptions-item label="工具名称">
-              {{ taskDetail.tool }}
+              {{ taskDetail.operation_type }}
             </el-descriptions-item>
             <el-descriptions-item label="目标">
-              {{ taskDetail.target }}
+              {{ taskDetail.data_type }}
             </el-descriptions-item>
             <el-descriptions-item label="状态">
               <el-tag :type="getStatusType(taskDetail.status)">
@@ -350,22 +356,22 @@
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item label="执行时间">
-              {{ fmtTime(taskDetail.createdAt) }}
+              {{ fmtTime(taskDetail.created_at) }}
             </el-descriptions-item>
             <el-descriptions-item label="完成时间">
-              {{ fmtTime(taskDetail.finishedAt) }}
+              {{ fmtTime(taskDetail.finished_at) }}
             </el-descriptions-item>
             <el-descriptions-item label="总数量">
-              {{ taskDetail.totalCount }}
+              {{ taskDetail.total_count }}
             </el-descriptions-item>
             <el-descriptions-item label="成功数量">
-              <span style="color: #10B981">{{ taskDetail.successCount }}</span>
+              <span style="color: #10B981">{{ taskDetail.success_count }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="失败数量">
-              <span style="color: #EF4444">{{ taskDetail.failedCount }}</span>
+              <span style="color: #EF4444">{{ taskDetail.failed_count }}</span>
             </el-descriptions-item>
             <el-descriptions-item label="跳过数量">
-              {{ taskDetail.skippedCount || 0 }}
+              0
             </el-descriptions-item>
           </el-descriptions>
 
@@ -435,7 +441,6 @@ import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, User, ChatLineRound, Promotion, Money, Document, Bell, ShoppingCart } from '@element-plus/icons-vue'
 import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, getBatchDetail, batchImportFile } from '@/api/batchOperation.js'
 import { toList } from '@/utils/list.js'
 import { isUserReportedError } from '@/utils/errorReporting'

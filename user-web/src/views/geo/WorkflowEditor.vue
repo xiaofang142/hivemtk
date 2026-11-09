@@ -418,7 +418,7 @@
                   :type="execStatusType(row.status)"
                   size="small"
                 >
-                  {{ row.status }}
+                  {{ execStatusLabel(row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -443,7 +443,8 @@
             <el-table-column
               prop="started_at"
               label="开始时间"
-              width="180">
+              width="180"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.started_at) }}
               </template>
@@ -451,7 +452,8 @@
             <el-table-column
               prop="finished_at"
               label="结束时间"
-              width="180">
+              width="180"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.finished_at || row.completed_at) }}
               </template>
@@ -464,7 +466,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listWorkflows, saveWorkflow, updateWorkflow, deleteWorkflow, runWorkflow, listWorkflowExecutions } from '@/api/geoEntity.js'
 import { isUserReportedError } from '@/utils/errorReporting'
@@ -604,6 +606,12 @@ const onRunNow = async () => {
     running.value = false
   }
 }
+
+// 执行状态枚举（success/failed/running）直接显示英文，中文界面里像调试残留。
+const execStatusLabel = (s) => ({
+  success: '成功', done: '完成', failed: '失败', error: '失败',
+  running: '运行中', pending: '排队中', stopped: '已停止'
+}[s] || s || '-')
 
 const execStatusType = (s) => {
   if (s === 'running' || s === 'pending') return 'warning'

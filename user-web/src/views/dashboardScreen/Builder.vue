@@ -161,12 +161,11 @@
 
 <script setup>
 import i18n from '@/i18n'
-import { ref, reactive, markRaw, h, onMounted, onBeforeUnmount } from 'vue';
+import { ref, markRaw, h, onMounted, onBeforeUnmount } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   DataLine, PieChart, Document, Histogram, TrendCharts, LocationInformation
 } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
 import { safeInit, safeDispose } from '@/utils/echarts'
 import { http } from '@/utils/request'
 
@@ -307,7 +306,11 @@ async function save() {
     })
     // 注意：不持有响应对象引用——拦截器返回的对象进入响应式链会触发
     // Vue Object.create(undefined)（R5-4，堆栈 vue Object.create cf/ae/Q）
-    ElMessage.success(`看板「${autoName}」已保存（公开可访问）`, { duration: 5000 })
+    // R5-5 修复：ElMessage.success(options, appContext) 的第二参是 appContext 而不是
+    // 选项对象！旧写法 success(msg, { duration: 5000 }) 把 {duration:5000} 当 appContext
+    // 挂到 vnode 上，Vue 挂载 toast 时 Object.create(undefined) 崩溃，异常被下面
+    // catch 误判成「保存失败」（后端实际已保存成功）。单参对象形式才支持 duration。
+    ElMessage.success({ message: `看板「${autoName}」已保存（公开可访问）`, duration: 5000 })
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') {
       // 非 HTTP 错误（如 JSON 序列化失败）兜底提示；HTTP 错误由拦截器统一 toast

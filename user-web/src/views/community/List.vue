@@ -30,6 +30,7 @@
         type="file"
         accept="application/json,.json"
         class="hidden-file-input"
+        aria-label="导入分组文件"
         @change="onImportFileChange"
       >
     </div>
@@ -46,22 +47,6 @@
             :placeholder="$t('请输入分组名称')"
             clearable
           />
-        </el-form-item>
-        <el-form-item :label="$t('状态')">
-          <el-select
-            v-model="searchForm.status"
-            :placeholder="$t('请选择状态')"
-            clearable
-          >
-            <el-option
-              :label="$t('正常')"
-              value="1"
-            />
-            <el-option
-              :label="$t('禁用')"
-              value="2"
-            />
-          </el-select>
         </el-form-item>
         <el-form-item>
           <el-button
@@ -108,26 +93,14 @@
         :label="$t('成员数')"
         width="100"
       />
-      <el-table-column
-        prop="message_count"
-        :label="$t('消息数')"
-        width="100"
-      />
-      <el-table-column
-        prop="status"
-        :label="$t('状态')"
-        width="100"
-      >
-        <template #default="scope">
-          <el-tag :type="scope.row.status === 1 ? 'success' : 'danger'">
-            {{ scope.row.status === 1 ? '正常' : '禁用' }}
-          </el-tag>
-        </template>
-      </el-table-column>
+      <!-- 后端 community_groups 表没有 status / message_count 字段
+           （dto.CommunityGroupResponse 只回 id/name/description/member_count/时间），
+           状态列与消息数列对着不存在的字段恒显示「禁用/空」，已按后端真实模型删除。 -->
       <el-table-column
         prop="created_at"
         label="创建时间"
-        width="180">
+        width="180"
+      >
         <template #default="{ row }">
           {{ fmtTime(row.created_at) }}
         </template>
@@ -228,19 +201,6 @@
             placeholder="请输入分组描述"
           />
         </el-form-item>
-        <el-form-item
-          label="状态"
-          prop="status"
-        >
-          <el-radio-group v-model="form.status">
-            <el-radio :label="1">
-              正常
-            </el-radio>
-            <el-radio :label="2">
-              禁用
-            </el-radio>
-          </el-radio-group>
-        </el-form-item>
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -287,7 +247,8 @@
         <el-table-column
           prop="join_time"
           label="加入时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.join_time) }}
           </template>
@@ -342,7 +303,8 @@
         <el-table-column
           prop="created_at"
           label="时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.created_at) }}
           </template>
@@ -416,9 +378,6 @@
           <el-descriptions-item label="创建时间">
             {{ fmtTime(currentGroup.created_at) }}
           </el-descriptions-item>
-          <el-descriptions-item label="状态">
-            {{ currentGroup.status === 1 ? '正常' : '禁用' }}
-          </el-descriptions-item>
         </el-descriptions>
       </div>
     </el-dialog>
@@ -456,8 +415,7 @@ const messageList = ref([])
 const currentStats = ref({})
 
 const searchForm = reactive({
-  name: '',
-  status: ''
+  name: ''
 });
 
 const pagination = reactive({
@@ -481,8 +439,7 @@ const messagesPagination = reactive({
 const form = reactive({
   id: null,
   name: '',
-  description: '',
-  status: 1
+  description: ''
 });
 
 const rules = {
@@ -506,8 +463,7 @@ const fetchGroupList = async () => {
     const params = {
       page: pagination.page,
       page_size: pagination.pageSize,
-      name: searchForm.name,
-      status: searchForm.status ? parseInt(searchForm.status) : undefined
+      name: searchForm.name
     }
     const res = await communityApi.getGroups(params)
     groupList.value = res.list || []
@@ -526,7 +482,6 @@ const handleSearch = () => {
 
 const resetSearch = () => {
   searchForm.name = ''
-  searchForm.status = ''
   pagination.page = 1
   fetchGroupList()
 }
@@ -554,7 +509,6 @@ const handleEdit = (row) => {
   form.id = row.id
   form.name = row.name
   form.description = row.description
-  form.status = row.status
 }
 
 const handleDelete = (row) => {
@@ -614,7 +568,6 @@ const resetForm = () => {
   form.id = null
   form.name = ''
   form.description = ''
-  form.status = 1
   if (formRef.value) {
     formRef.value.resetFields()
   }
@@ -702,11 +655,11 @@ const handleImport = () => {
 const onImportFileChange = async (event) => {
   const file = event?.target?.files?.[0]
   if (!file) return
-  let payload = null
+  let payload
   try {
     const parsed = JSON.parse(await file.text())
     payload = Array.isArray(parsed) ? { groups: parsed } : parsed
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('导入文件不是合法的 JSON'))
     return
   }

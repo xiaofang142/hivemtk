@@ -375,6 +375,7 @@ import i18n from '@/i18n'
 
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { isUserReportedError } from '@/utils/errorReporting'
 import { Refresh } from '@element-plus/icons-vue'
 import { toList } from '@/utils/list'
 import {
@@ -442,7 +443,7 @@ const fetchAccounts = async () => {
     const res = await listAccounts()
     accounts.value = toList(res)
   } catch (e) {
-    ElMessage.error('网络错误：' + e.message)
+    if (!isUserReportedError(e)) ElMessage.error('网络错误：' + (e?.message || ''))
   } finally {
     loading.value = false
   }
@@ -499,7 +500,7 @@ const handleSubmit = async () => {
       dialogVisible.value = false
       await fetchAccounts()
     } catch (e) {
-      ElMessage.error('网络错误：' + e.message)
+      if (!isUserReportedError(e)) ElMessage.error('网络错误：' + (e?.message || ''))
     } finally {
       submitting.value = false
     }
@@ -552,7 +553,7 @@ const submitTestSend = async () => {
     ElMessage.success(i18n.global.t('测试消息已发送'))
     testSendVisible.value = false
   } catch (e) {
-    ElMessage.error('网络错误：' + e.message)
+    if (!isUserReportedError(e)) ElMessage.error('网络错误：' + (e?.message || ''))
   } finally {
     testSending.value = false
   }
@@ -563,7 +564,7 @@ const handleRefreshToken = async (row) => {
     await refreshToken(row.id)
     ElMessage.success(i18n.global.t('Token 刷新成功'))
     await fetchAccounts()
-  } catch (e) {
+  } catch {
     // 失败提示由 request 拦截器统一弹出（502/400 展示服务端原因，网络错误展示超时）。
     // 这里再弹一条「网络错误：…」只会和拦截器那条叠成两条同义报错。
   }
@@ -590,7 +591,7 @@ const submitBinding = async () => {
     bindingVisible.value = false
     await fetchAccounts()
   } catch (e) {
-    ElMessage.error('网络错误：' + e.message)
+    if (!isUserReportedError(e)) ElMessage.error('网络错误：' + (e?.message || ''))
   } finally {
     bindingSubmitting.value = false
   }
