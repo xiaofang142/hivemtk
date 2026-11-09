@@ -219,7 +219,6 @@
     "knowledgeStatistics": "知识库统计",
     "knowledgeOpenAPI": "OpenAPI 集成",
     "ragProductConfig": "RAG 知识库",
-    "ragMainConfig": "RAG 主配置",
     "ragAccount": "RAG 账号配置",
     "ragProduct": "RAG 产品管理",
     "ragOverview": "RAG 概览",

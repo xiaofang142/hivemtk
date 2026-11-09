@@ -238,7 +238,7 @@ var ModuleMenuBindings = map[string][]string{
 		"agentWorkbench", "agentStatus", "csatDashboard", "quickReply", "sessionTag", "aiSuggestion",
 	},
 
-	// ========== knowledge：知识库（17 节点）==========
+	// ========== knowledge：知识库（16 节点）==========
 	ModuleKnowledge: {
 		"knowledge", "knowledgeWorkspace",
 		"knowledgeManagement", "knowledgeBatchImport", "knowledgePlayground",
@@ -247,7 +247,7 @@ var ModuleMenuBindings = map[string][]string{
 		// kbImportConnectors（第三方知识库导入器）：把 IMA 等第三方 KB 拉进本地 RAG，
 		// 与 knowledgeConnectors（外部凭据连接器）同组不同职，随 knowledge 开关。
 		"kbImportConnectors",
-		"ragProductConfig", "ragMainConfig", "ragAccount", "ragProduct", "ragOverview",
+		"ragProductConfig", "ragAccount", "ragProduct", "ragOverview",
 		"faqKb",
 	},
 

@@ -199,7 +199,6 @@
     "knowledgeStatistics": "ナレッジベース統計",
     "knowledgeOpenAPI": "OpenAPI 統合",
     "ragProductConfig": "RAG ナレッジベース",
-    "ragMainConfig": "RAG メイン設定",
     "ragAccount": "RAG アカウント設定",
     "ragProduct": "RAG プロダクト管理",
     "ragOverview": "RAG 概要",

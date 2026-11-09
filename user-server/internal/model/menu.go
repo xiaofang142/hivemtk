@@ -313,7 +313,12 @@ var SystemMenuTree = []SystemMenuNode{
 				Key: "ragProductConfig", Title: "RAG 知识库", Icon: "ChatLineRound",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
-					{Key: "ragMainConfig", Title: "RAG 主配置", Icon: "Setting", Path: "/system/rag-product-config"},
+					// ragMainConfig（RAG 主配置，/system/rag-product-config）已于
+					// 2026-11-10 除名：它只是个 tabs 包装页（RagProductConfig/index.vue），
+					// 挂载的 RagProductManagement / AccountConfig 本身就是独立路由的
+					// ragProduct / ragAccount 两页——三个菜单两条内容。包装页全仓
+					// 扫描仅此一例。该节点在 ragProductConfig 组（Roles=admin）内，
+					// 非超管从来无从获得授予 ⇒ 无存量授权行，无需清理迁移。
 					{Key: "ragAccount", Title: "RAG 账号配置", Icon: "Key", Path: "/system/rag-account"},
 					{Key: "ragProduct", Title: "RAG 产品管理", Icon: "Goods", Path: "/system/rag-product"},
 				},

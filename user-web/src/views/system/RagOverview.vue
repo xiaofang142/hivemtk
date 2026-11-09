@@ -309,11 +309,13 @@ const STATUS_ZH_LABEL = { '成功': '成功', '失败': '失败', '进行中': '
 const getStatusLabel = (status) => STATUS_ZH_LABEL[status] || (status === 'success' ? '成功' : status === 'failed' ? '失败' : status === 'running' ? '进行中' : status)
 
 const goToConfig = () => {
-  router.push('/system/rag-product-config')
+  // 2026-11-10：RAG 主配置包装页下线后，两个按钮分别直达各自的独立页
+  //（此前都指向同一个 tabs 包装页，按钮语义早已名存实亡）。
+  router.push('/system/rag-product')
 };
 
 const goToAccountConfig = () => {
-  router.push('/system/rag-product-config')
+  router.push('/system/rag-account')
 };
 
 const helpDialogVisible = ref(false);

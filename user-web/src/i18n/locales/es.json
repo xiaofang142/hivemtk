@@ -211,7 +211,6 @@
     "knowledgeStatistics": "Knowledge Base Statistics",
     "knowledgeOpenAPI": "OpenAPI Integration",
     "ragProductConfig": "RAG Knowledge Base",
-    "ragMainConfig": "RAG Main Config",
     "ragAccount": "RAG Account Config",
     "ragProduct": "RAG Product Management",
     "ragOverview": "RAG Overview",
