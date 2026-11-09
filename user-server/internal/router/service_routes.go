@@ -155,7 +155,7 @@ func setupCustomerServiceRoutes(auth *gin.RouterGroup, aiAgentSvc *service.AIAge
 
 }
 
-func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
+func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB, ingressSvc *service.InboxIngressService) {
 	unifiedMsgCtrl := controller.NewUnifiedMessageController()
 	// 统一消息（跨平台消息归档）无用户归属字段，按共享全量读会把全部平台消息
 	// 暴露给任意登录用户 —— 收紧为仅管理员可读（菜单 unifiedMessage 同步限 admin/manager）。
@@ -182,7 +182,7 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	// 不是"某个会话里的某条平台号"，按主键寻址才不会跨账号撤错。
 	hub.POST("/:id/recall", messageHubCtrl.Recall)
 
-	inboxIngressCtrl := controller.NewInboxIngressController(service.NewInboxIngressService())
+	inboxIngressCtrl := controller.NewInboxIngressController(ingressSvc)
 	// lock-human 的 session_id 走 body 寻址，行级守卫的登记表只认路径参数扫不到它，
 	// 所以在 controller 里补一道服务层 scope；这里把会话服务装配上（漏装即 fail-closed）。
 	inboxIngressCtrl.SetSessionService(service.NewCustomerSessionService())
