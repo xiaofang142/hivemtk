@@ -12,6 +12,7 @@ import (
 	emailservice "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/middleware"
 	opsctrl "hivemtk-user/internal/ops/controller"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 	cardsvc "hivemtk-user/internal/service/cards"
@@ -46,7 +47,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("doReg %s %s -> %v\n%s", method, path, r, debug.Stack())
 				aliasRegFailures = append(aliasRegFailures, msg)
-				fmt.Printf("[WARN] %s\n", msg)
+				logger.Warn(msg)
 			}
 		}()
 		switch method {
@@ -68,7 +69,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("doRegAdmin %s %s -> %v\n%s", method, path, r, debug.Stack())
 				aliasRegFailures = append(aliasRegFailures, msg)
-				fmt.Printf("[WARN] %s\n", msg)
+				logger.Warn(msg)
 			}
 		}()
 		adminHandlers := append([]gin.HandlerFunc{middleware.AdminAuthMiddleware()}, handlers...)
@@ -84,7 +85,7 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 		case "PATCH":
 			auth.PATCH(path, adminHandlers...)
 		}
-		fmt.Printf("[OK] doRegAdmin registered: %s %s (handlers=%d)\n", method, path, len(adminHandlers))
+		logger.Infof("doRegAdmin registered: %s %s (handlers=%d)", method, path, len(adminHandlers))
 	}
 
 	notifCtrl := controller.NewNotificationController(service.NewNotificationService())

@@ -189,6 +189,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	r.Use(corsMiddleware)
 	r.Use(gin.Recovery())
+	// 全局安全响应头（AUD-08）：CSP/nosniff/Referrer-Policy 兜底；
+	// /files 守卫与 embed 路由在 handler 内覆盖 CSP，语义不变。
+	r.Use(middleware.SecurityHeaders())
 
 	// 全局请求体封顶：注册位置必须在**任何会读 body 的中间件与鉴权之前** ——
 	// gin 的引擎级 Use 只对注册它之后登记的路由生效，晚一步就等于给已注册的路由留口子。

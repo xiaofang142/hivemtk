@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -111,14 +112,14 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 	cutoff := time.Now().Add(-claimTimeout)
 
 	if err := r.exhaustOutbound(ctx, channel, accountID, cutoff); err != nil {
-		fmt.Printf("[ClaimPendingOutbound] 到界行升级终态失败（继续认领）: %v\n", err)
+		logger.Warnf("[ClaimPendingOutbound] 到界行升级终态失败（继续认领）: %v", err)
 	}
 
 	if err := r.db.WithContext(ctx).
 		Model(&model.MessageHub{}).
 		Where("platform = ? AND account_id = ? AND direction = 'outbound' AND status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?", channel, accountID, cutoff).
 		Updates(map[string]any{"status": "pending", "claimed_at": nil}).Error; err != nil {
-		fmt.Printf("[ClaimPendingOutbound] 回收超时 inflight 失败（继续认领）: %v\n", err)
+		logger.Warnf("[ClaimPendingOutbound] 回收超时 inflight 失败（继续认领）: %v", err)
 	}
 
 	list := make([]model.MessageHub, 0, limit)
@@ -202,7 +203,7 @@ func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, cha
 	}
 	cutoff := time.Now().Add(-claimTimeout)
 	if err := r.exhaustOutbound(ctx, channel, accountID, cutoff); err != nil {
-		fmt.Printf("[FetchOutboundUndelivered] 到界行升级终态失败（继续取待推）: %v\n", err)
+		logger.Warnf("[FetchOutboundUndelivered] 到界行升级终态失败（继续取待推）: %v", err)
 	}
 	var rows []model.MessageHub
 	err := r.db.WithContext(ctx).

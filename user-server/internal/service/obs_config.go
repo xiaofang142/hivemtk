@@ -136,6 +136,9 @@ func (s *obsConfigService) UpdateConfig(ctx context.Context, id string, req *dto
 		config.Region = req.Region
 	}
 	if req.Endpoint != "" {
+		if err := storage.ValidateLocalEndpoint(req.Endpoint); err != nil {
+			return nil, err
+		}
 		config.Endpoint = req.Endpoint
 	}
 	if req.Domain != "" {
@@ -335,6 +338,9 @@ func (s *obsConfigService) validateCreateRequest(ctx context.Context, req *dto.C
 				req.Domain = publicURL
 			}
 		}
+		if err := storage.ValidateLocalEndpoint(req.Endpoint); err != nil {
+			return err
+		}
 		return nil
 	case model.ObsProviderAliyun, model.ObsProviderTencent, model.ObsProviderQiniu, model.ObsProviderAWS:
 		if req.AccessKey == "" {
@@ -358,24 +364,27 @@ func (s *obsConfigService) convertToDTO(ctx context.Context, config *model.ObsCo
 		Name:         config.Name,
 		Provider:     string(config.Provider),
 		ProviderName: obsConfigProviderName(config),
-		AccessKey:    config.AccessKey,
-		SecretKey:    "***",
-		Bucket:       config.Bucket,
-		Region:       config.Region,
-		Endpoint:     config.Endpoint,
-		Domain:       config.Domain,
-		PathPrefix:   config.PathPrefix,
-		Config:       config.Config,
-		MaxSize:      config.MaxSize,
-		MaxCount:     config.MaxCount,
-		Status:       string(config.Status),
-		LastError:    config.LastError,
-		LastTestAt:   config.LastTestAt,
-		TotalSize:    config.TotalSize,
-		FileCount:    config.FileCount,
-		IsDefault:    config.IsDefault,
-		CreatedAt:    config.CreatedAt,
-		UpdatedAt:    config.UpdatedAt,
+		// AUD-03：AK 与 SK 同口径掩码。此前 AK 明文回显而 SK 掩码，不对称——
+		// 列表/详情接口的响应面不该出现任何凭据原文；TestConnection 走控制器
+		// 直收请求体 DTO，不经过本转换，不受影响。
+		AccessKey:  "***",
+		SecretKey:  "***",
+		Bucket:     config.Bucket,
+		Region:     config.Region,
+		Endpoint:   config.Endpoint,
+		Domain:     config.Domain,
+		PathPrefix: config.PathPrefix,
+		Config:     config.Config,
+		MaxSize:    config.MaxSize,
+		MaxCount:   config.MaxCount,
+		Status:     string(config.Status),
+		LastError:  config.LastError,
+		LastTestAt: config.LastTestAt,
+		TotalSize:  config.TotalSize,
+		FileCount:  config.FileCount,
+		IsDefault:  config.IsDefault,
+		CreatedAt:  config.CreatedAt,
+		UpdatedAt:  config.UpdatedAt,
 	}
 }
 

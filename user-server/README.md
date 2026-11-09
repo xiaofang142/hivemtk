@@ -11,7 +11,7 @@
 ### 核心业务能力
 
 - **多渠道 CDP 客户数据平台**：抖音 / 快手 / 小红书 / 闲鱼 / 微信 / 短信 / 邮件 / WhatsApp / Telegram 统一接入与 OneID 合并
-- **AI 智能体客服（ReAct 引擎）**：[41 个原子工具](docs/AGENT_TOOLS.md)（触达 / 项目管理 / 客户 / 知识库 / 业务）的多智能体编排
+- **AI 智能体客服（ReAct 引擎）**：[15 个内置原子工具](docs/AGENT_TOOLS.md)（触达 / 项目管理 / 客户 / 知识库 / 业务）的多智能体编排（口径：tooluse 包非测试代码 `.Register()` 调用数；运行时另有自定义/OpenAPI/MCP 动态工具，不计入静态数）
 - **RAG 知识库**：pgvector 1024 维向量检索 + BGE Reranker 精排 + Redis LRU 双层缓存
 - **智能卡片**：抖音 / 快手 / 小红书 / 闲鱼 / TikTok 五平台卡券生成 + 短链追踪 + 转化漏斗
 - **SOP 自动化营销**：AB 实验、销冠 Prompt 库、营销画布、用户旅程编排
@@ -67,9 +67,9 @@
 
 跨层调用一律视为架构违规，CI 静态检查会拦截。
 
-## 🤖 AI Agent 41 工具
+## 🤖 AI Agent 内置工具集（15 个注册工具）
 
-ReAct 引擎内置 41 个原子工具，按域分组：
+ReAct 引擎内置 15 个原子工具（口径：tooluse包非测试代码 .Register() 调用数；运行时另有自定义/OpenAPI/MCP 动态工具，不计入静态数），按域分组：
 
 - **触达域**：短信 / 邮件 / WhatsApp / 微信群发 / 活码 / 短链
 - **项目管理域**：营销画布、SOP 编排、AB 实验
@@ -298,7 +298,7 @@ go run ./cmd/routeinspect -format=md > ROUTES.md
 - 仓库根 [README](../README.md)
 - 架构图 [../docs/architecture/ARCHITECTURE_DIAGRAM.md](../docs/architecture/ARCHITECTURE_DIAGRAM.md)
 - Go 五层架构规范 [../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md](../docs/architecture/GO_FIVE_LAYER_ARCHITECTURE.md)
-- AI Agent 41 工具清单 [../docs/architecture/agent-tools-inventory.md](docs/AGENT_TOOLS.md)
+- AI Agent 内置工具清单（15 个注册工具口径） [../docs/architecture/agent-tools-inventory.md](docs/AGENT_TOOLS.md)
 - 宿主机推理栈方案 [../docs/architecture/HOST_INFERENCE_PLAN.md](../docs/architecture/HOST_INFERENCE_PLAN.md)
 - 商户部署手册 [../docs/operations/MERCHANT_DEPLOYMENT.md](../docs/operations/MERCHANT_DEPLOYMENT.md)
 

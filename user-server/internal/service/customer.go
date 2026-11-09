@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -420,7 +421,7 @@ func (s *CustomerService) writeMergeAuditLog(ctx context.Context, primary, secon
 		auditRepo = repository.NewOperationLogRepository()
 	}
 	if err := auditRepo.Create(ctx, log); err != nil {
-		fmt.Printf("[audit][WARN] 合并审计写入失败: primary=%s secondary=%s op=%s err=%v\n",
+		logger.Warnf("[audit][WARN] 合并审计写入失败: primary=%s secondary=%s op=%s err=%v",
 			primary.ID, secondary.ID, op.Username, err)
 	}
 }

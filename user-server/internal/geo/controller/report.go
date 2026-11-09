@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/geo/service"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 
@@ -205,11 +205,11 @@ func (c *ReportController) RunCrawler(ctx *gin.Context) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Printf("[GEO Crawler] panic: %v\n%s", r, debug.Stack())
+				logger.Errorf("[GEO Crawler] panic: %v\n%s", r, debug.Stack())
 			}
 		}()
 		if _, err := service.CrawlerMonitorCronWithContext(runCtx); err != nil {
-			fmt.Printf("[GEO Crawler] 竞品监控同步失败: %v\n", err)
+			logger.Errorf("[GEO Crawler] 竞品监控同步失败: %v", err)
 		}
 	}()
 	response.Success(ctx, map[string]string{"status": "started"}, "爬虫已启动")

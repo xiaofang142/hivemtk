@@ -53,6 +53,16 @@ func (r *BackupRepository) GetByID(ctx context.Context, id uint) (*model.Backup,
 	return &backup, err
 }
 
+// ListByType 按备份类型全量列举（created_at 升序），供保留策略清点同型备份。
+func (r *BackupRepository) ListByType(ctx context.Context, backupType model.BackupType) ([]*model.Backup, error) {
+	var list []*model.Backup
+	err := r.db.WithContext(ctx).
+		Where("backup_type = ?", backupType).
+		Order("created_at ASC, id ASC").
+		Find(&list).Error
+	return list, err
+}
+
 // GetAll 获取所有备份记录列表
 func (r *BackupRepository) GetAll(ctx context.Context, page, pageSize int) ([]*model.Backup, int64, error) {
 	var backups []*model.Backup

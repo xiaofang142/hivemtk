@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hivemtk-user/internal/model"
 	"io"
@@ -11,6 +12,24 @@ import (
 	"time"
 )
 
+// ErrInvalidEndpoint local Endpoint 形态非法（含 URL/协议头/网络路径）。
+var ErrInvalidEndpoint = errors.New("invalid local endpoint")
+
+// ValidateLocalEndpoint 守 local Endpoint 必须是本地目录路径，不能是 URL。
+// 背景（AUD-01）：曾经把 https://... 直接当 baseDir，在磁盘建成 "https:/host/..."
+// 目录并往里面写文件；配置面与构造面都要 fail-closed。空值合法（由调用方走
+// 环境变量/默认值），其余含 "://" 或 "//" 开头一律拒绝。
+func ValidateLocalEndpoint(endpoint string) error {
+	ep := strings.TrimSpace(endpoint)
+	if ep == "" {
+		return nil
+	}
+	if strings.Contains(ep, "://") || strings.HasPrefix(ep, "//") {
+		return fmt.Errorf("%w: %q 是 URL/网络路径形态，local 存储只接受本地目录路径", ErrInvalidEndpoint, ep)
+	}
+	return nil
+}
+
 // Factory 从 ObsConfig 构造对应 Driver
 func Factory(cfg *model.ObsConfig) (Driver, error) {
 	if cfg == nil {
@@ -18,7 +37,7 @@ func Factory(cfg *model.ObsConfig) (Driver, error) {
 	}
 	switch cfg.Provider {
 	case model.ObsProviderLocal:
-		return newLocalFromConfig(cfg), nil
+		return newLocalFromConfig(cfg)
 	case model.ObsProviderAliyun, model.ObsProviderTencent, model.ObsProviderQiniu, model.ObsProviderAWS:
 
 		return newCloudStub(cfg), nil
@@ -27,13 +46,16 @@ func Factory(cfg *model.ObsConfig) (Driver, error) {
 	}
 }
 
-func newLocalFromConfig(cfg *model.ObsConfig) Driver {
+func newLocalFromConfig(cfg *model.ObsConfig) (Driver, error) {
 	baseDir := strings.TrimSpace(cfg.Endpoint)
 	if baseDir == "" {
 		baseDir = os.Getenv("STORAGE_LOCAL_BASE_DIR")
 	}
 	if baseDir == "" {
 		baseDir = "./uploads"
+	}
+	if err := ValidateLocalEndpoint(baseDir); err != nil {
+		return nil, err
 	}
 
 	publicURL := strings.TrimSpace(cfg.Domain)
@@ -44,7 +66,7 @@ func newLocalFromConfig(cfg *model.ObsConfig) Driver {
 		publicURL = "/files"
 	}
 
-	return NewLocalDriver(baseDir, publicURL)
+	return NewLocalDriver(baseDir, publicURL), nil
 }
 
 func newCloudStub(cfg *model.ObsConfig) Driver {
@@ -95,15 +117,31 @@ func (c *cloudStub) Exists(_ context.Context, storagePath string) (bool, error) 
 
 func (c *cloudStub) Type() string { return string(c.cfg.Provider) }
 
+// withHttpsScheme 给无 scheme 的 Domain 补 https://；http:// 升级为 https://
+// （AUD-02：签名链接不得明文传输）。
+func withHttpsScheme(domain string) string {
+	switch {
+	case strings.HasPrefix(domain, "https://"):
+		return domain
+	case strings.HasPrefix(domain, "http://"):
+		return "https://" + strings.TrimPrefix(domain, "http://")
+	default:
+		return "https://" + domain
+	}
+}
+
 func obsConfigAccessURL(c *model.ObsConfig, filePath string) string {
-	if c.Domain != "" {
-		return c.Domain + "/" + filePath
+	domain := strings.TrimSpace(c.Domain)
+	if domain != "" {
+		return withHttpsScheme(domain) + "/" + filePath
 	}
 	switch c.Provider {
 	case model.ObsProviderAliyun:
 		return "https://" + c.Bucket + "." + c.Region + ".aliyuncs.com/" + filePath
 	case model.ObsProviderQiniu:
-		return "http://" + c.Domain + "/" + filePath
+		// qiniu 无可安全合成的全局默认域名；Domain 未配时返回对象路径，
+		// 不再拼 "http:///file" 畸形串（AUD-02 fail-closed）。
+		return filePath
 	case model.ObsProviderTencent:
 		return "https://" + c.Bucket + ".cos." + c.Region + ".myqcloud.com/" + filePath
 	case model.ObsProviderAWS:

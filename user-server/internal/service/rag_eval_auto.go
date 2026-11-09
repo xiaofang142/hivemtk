@@ -17,6 +17,7 @@ import (
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	dto "hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -146,7 +147,7 @@ func (s *RagEvalAutoService) generateQuestions(ctx context.Context, cfg *RagEval
 func (s *RagEvalAutoService) evaluateRetrievalHit(ctx context.Context, questions []*model.RagEvalQuestion) {
 	searcher := knowledgesvc.NewRagSearcher()
 	if searcher == nil || searcher.HybridSearcher() == nil {
-		fmt.Println("[rag_eval] 检索器未就绪（HybridSearcher nil），本 run hit 保持未判定")
+		logger.Warn("[rag_eval] 检索器未就绪（HybridSearcher nil），本 run hit 保持未判定")
 		return
 	}
 	for _, q := range questions {
