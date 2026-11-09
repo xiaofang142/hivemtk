@@ -46,6 +46,17 @@ func InitInferenceOrchestrator() {
 	inferenceOrchestratorOnce.Do(func() {
 		cycle := agent_runtime.NewInferenceCycle()
 
+		// TB-01：把意图→工具链绑定层注入规划器（数据驱动规划；未装配/nil 时
+		// 规划器行为与硬编码完全一致）。
+		if p, ok := cycle.PlannerStage.(*agent_runtime.DefaultTaskPlanner); ok {
+			if chainSvc := GetIntentToolChainService(); chainSvc != nil {
+				p.SetChainLookup(chainSvc)
+				logger.Info("[inference] ✅ IntentChainLookup 已注入（TB-01 数据驱动意图→工具链）")
+			} else {
+				logger.Warn("[inference] ⚠️ 意图→工具链绑定层未装配，规划器走硬编码路径")
+			}
+		}
+
 		if ms := service.GetMemorySystem(); ms != nil {
 			cycle.SetMemoryProvider(&memoryProviderAdapter{ms: ms})
 			logger.Info("[inference] ✅ EpisodicMemoryProvider 已注入（包装 MemorySystem.BuildFullContext）")

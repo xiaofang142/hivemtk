@@ -268,6 +268,14 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	admin.PUT("/intent/config", intentCtrl.UpdateConfig)
+
+	// TB-01 意图→工具链绑定（管理端 CRUD + 词表；未装配时控制器回 503）。
+	chainCtrl := controller.NewIntentToolChainController(app.GetIntentToolChainService())
+	admin.GET("/intent/tool-chains", chainCtrl.List)
+	admin.GET("/intent/tool-chains/vocab", chainCtrl.Vocab)
+	admin.POST("/intent/tool-chains", chainCtrl.Create)
+	admin.PUT("/intent/tool-chains/:id", chainCtrl.Update)
+	admin.DELETE("/intent/tool-chains/:id", chainCtrl.Delete)
 }
 
 func setupLLMProviderRoutes(auth *gin.RouterGroup) {

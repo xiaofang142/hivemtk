@@ -216,6 +216,7 @@ func allModels() []any {
 		&model.LearningInsight{},
 		&model.WeComAccountHealth{},
 		&model.IntentRecord{},
+		&model.IntentToolChain{},
 		&model.DialogueMemory{},
 		&model.SOPAgent{},
 		&model.SOPExecution{},

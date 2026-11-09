@@ -721,6 +721,10 @@ func main() {
 		defer app.StopContentGuardRuntime(contentGuard)
 	}
 
+	// TB-01 意图→工具链绑定层：必须先于 router.Setup——router.Setup 内的
+	// InitInferenceOrchestrator 将其注入规划器（nil 时规划器回落硬编码，零行为变化）。
+	app.InitIntentChainRuntime(db.GetDB())
+
 	router.Setup(r, db.GetDB())
 
 	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），
