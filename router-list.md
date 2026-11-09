@@ -169,9 +169,9 @@
 | 126 | [x] | `/geo-tools/dual-engine` | GeoDualEngine | 双端监测 | 是 | `views/geo/DualEngineBoard.vue` | `src/router/modules/geoTools.js` | AI探针KPI/引擎明细4行/GSC查询明细/导入GSC弹窗/刷新/近30天窗口；无BAD |
 | 127 | [x] | `/geo-tools/capture-links` | GeoCaptureLinks | 承接链接 | 是 | `views/geo/CaptureLinks.vue` | `src/router/modules/geoTools.js` | 新建承接链接(目标链接必填校验+取消)/列表1行/搜索框；行内统计无可见弹窗(待定)；无BAD |
 | 128 | [x] | `/geo-tools/alerts` | GeoAlertCenter | 告警中心 | 是 | `views/geo/AlertCenter.vue` | `src/router/modules/geoTools.js` | 预警中心表20行(已确认·未确认/级别/类型/引擎/关键词/摘要)+刷新+本页全部确认；无BAD |
-| 129 | [x] | `/glossary` | GlossaryList | 术语表管理 | 是 | `views/glossary/List.vue` | `src/router/modules/glossary.js` | - 新增术语(term_id/分类/保留原样/译法至少一条校验+创建)/校验预览/关键词搜索/重置/删除(确认)全通；双端 |
-| 130 | [x] | `/i18n/dashboard` | I18nDashboard | 多语言监控 | 是 | `views/i18n/Dashboard.vue` | `src/router/modules/i18nStats.js` | - 缺陷修复：术语覆盖率进度条显示 66.66666666666666%，已四舍五入到 1 位；KPI/语言分布空态/缓存命中/质量趋势/延迟统计/刷新全通；双端 |
-| 131 | [x] | `/inbox/list` | InboxList | 统一收件箱 | - | `views/inbox/List.vue` | `src/router/modules/inbox.js` | - 会话列表16会话分页/选中会话加载消息/刷新统计/刷新/会话补建按钮全通；双端 |
+| 129 | [x] | `/glossary` | GlossaryList | 术语表管理 | 是 | `views/glossary/List.vue` | `src/router/modules/glossary.js` | 新增术语弹窗(术语ID/分类/保留原样/译法/正则)/筛选/表格2行/刷新全通；无 BAD |
+| 130 | [x] | `/i18n/dashboard` | I18nDashboard | 多语言监控 | 是 | `views/i18n/Dashboard.vue` | `src/router/modules/i18nStats.js` | 时间窗/刷新/KPI(无翻译流量真实空态)/术语覆盖表(English 75%·简体中文66.7%)全通；无 BAD |
+| 131 | [x] | `/inbox/list` | InboxList | 统一收件箱 | - | `views/inbox/List.vue` | `src/router/modules/inbox.js` |  |
 | 132 | [x] | `/integration/list` | IntegrationList | 第三方对接 | 是 | `views/integration/List.vue` | `src/router/modules/integration.js` | - 19条集成/添加集成弹窗(平台/账号/Key/Secret/回调/JSON扩展)/日志弹窗/配置弹窗全通；双端 |
 | 133 | [x] | `/intentRecognition/list` | IntentRecognitionList | 意图识别 | 是 | `views/intentRecognition/List.vue` | `src/router/modules/intentRecognition.js` | - 46条意图词表/词表配置弹窗/填入示例/开始识别/批量识别/查询全通；双端 |
 | 134 | [x] | `/kb/connectors` | KbConnectors | 知识库连接器 | 是 | `views/kb/Connectors.vue` | `src/router/modules/kbConnector.js` | - 连接器列表/新建弹窗(IMA/webhttp 类型字段)/同步失败给出可执行原因(HTML 清单非 JSON)全通；双端 |
