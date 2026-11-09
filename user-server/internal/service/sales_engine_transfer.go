@@ -163,11 +163,28 @@ func truncateForReply(s string, maxRunes int) string {
 	return string(runes[:maxRunes]) + "…"
 }
 
+// customerNameOf 客户展示名（TB-13）：真实姓名优先，缺名时脱敏手机兜底。
+// 完整手机号不进 LLM 上下文（隐私面：每轮请求都在扩散敏感标识）；
+// 服务端身份解析（ToolContext.CustomerID→CustomerLookup）承担工具侧身份供给。
 func customerNameOf(c *model.Customer) string {
 	if c == nil {
 		return ""
 	}
-	return c.Phone
+	if name := c.Name; name != "" {
+		return name
+	}
+	return maskPhoneForPrompt(c.Phone)
+}
+
+// maskPhoneForPrompt 手机脱敏（138****777 形态；短号/空号原样掩盖）。
+func maskPhoneForPrompt(phone string) string {
+	if phone == "" {
+		return ""
+	}
+	if len(phone) < 8 {
+		return "***"
+	}
+	return phone[:3] + "****" + phone[len(phone)-4:]
 }
 
 // ChannelMessage 渠道无关的入站消息（WebhookService → SalesEngine 桥接）

@@ -687,8 +687,10 @@ func (e *SalesEngine) buildPrompt(
 		if name != "" {
 			sb.WriteString(fmt.Sprintf("【客户昵称】: %s\n", name))
 		}
-		if customer.Phone != "" {
-			sb.WriteString(fmt.Sprintf("【客户手机】: %s\n", customer.Phone))
+		// TB-13：完整手机号不进 prompt（服务端身份解析承担工具侧身份供给），
+		// 只露脱敏形态供模型理解会话主体。
+		if masked := maskPhoneForPrompt(customer.Phone); masked != "" {
+			sb.WriteString(fmt.Sprintf("【客户手机】: %s\n", masked))
 		}
 	}
 
