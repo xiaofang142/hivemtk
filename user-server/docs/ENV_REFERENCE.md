@@ -11,16 +11,16 @@
 | `ADMIN_EMAIL` |  | `internal/config/admin.go:91` |
 | `ADMIN_REAL_NAME` |  | `internal/config/admin.go:94` |
 | `ADMIN_USERNAME` |  | `internal/config/admin.go:88` |
-| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:781` |
+| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:797` |
 | `AI_DEBOUNCE_SECONDS` |  | `internal/service/ai_debounce.go:24` |
-| `ALERT_EMAIL_ENABLED` |  | `cmd/api/main.go:656` |
-| `ALERT_EMAIL_RECIPIENTS` |  | `cmd/api/main.go:657` |
-| `ALERT_WEBHOOK_URL` |  | `cmd/api/main.go:664<br>internal/router/service_routes.go:412` |
+| `ALERT_EMAIL_ENABLED` |  | `cmd/api/main.go:660` |
+| `ALERT_EMAIL_RECIPIENTS` |  | `cmd/api/main.go:661` |
+| `ALERT_WEBHOOK_URL` |  | `cmd/api/main.go:668<br>internal/router/service_routes.go:443` |
 | `ALLOWED_WS_ORIGINS` |  | `internal/config/ws_origin.go:47` |
-| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 危险：允许 Telegram webhook 免签（dev 双护栏） | `internal/channelbot/telegram/telegram.go:549<br>internal/service/webhook.go:649` |
-| `ALLOW_INSECURE_WEBHOOK` | 危险：允许 webhook 免 HTTPS（dev） | `internal/service/webhook.go:629<br>internal/service/webhook.go:649` |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 危险：允许 Telegram webhook 免签（dev 双护栏） | `internal/channelbot/telegram/telegram.go:549<br>internal/service/webhook.go:651` |
+| `ALLOW_INSECURE_WEBHOOK` | 危险：允许 webhook 免 HTTPS（dev） | `internal/service/webhook.go:631<br>internal/service/webhook.go:651` |
 | `ALLOW_SELF_RESTART` | 允许进程自重启（离线升级面） | `internal/controller/system_ops.go:59` |
-| `APP_ENV` |  | `internal/pkg/db/db.go:54<br>internal/service/webhook.go:648` |
+| `APP_ENV` |  | `internal/pkg/db/db.go:54<br>internal/service/webhook.go:650` |
 | `AUTO_LOGIN_ENABLED` |  | `internal/config/admin.go:98` |
 | `BACKUP_BASE_DIR` |  | `internal/storage/backup_source.go:25` |
 | `BRAIN_TOKEN_BUDGET` |  | `internal/browser_automation/service/brain_constants.go:17` |
@@ -32,7 +32,7 @@
 | `BROWSER_JEV_ENDPOINT` |  | `internal/browser_automation/service/jev.go:71` |
 | `BROWSER_JEV_MODEL` |  | `internal/browser_automation/service/jev.go:73` |
 | `BRUTE_FORCE_DISABLED` | 危险：置 1/true 关闭登录爆破防护（仅诊断临时用） | `internal/middleware/brute_force.go:16<br>internal/middleware/brute_force.go:16` |
-| `CHANNEL_WS_ALLOWED_ORIGINS` |  | `internal/channelgw/ws.go:99` |
+| `CHANNEL_WS_ALLOWED_ORIGINS` |  | `internal/channelgw/ws.go:100` |
 | `CONTENT_GUARD_API_ENDPOINT` |  | `internal/app/content_guard_wiring.go:129` |
 | `CONTENT_GUARD_API_HOSTS` |  | `internal/app/content_guard_wiring.go:135` |
 | `CONTENT_GUARD_API_TOKEN` |  | `internal/app/content_guard_wiring.go:142` |
@@ -60,7 +60,7 @@
 | `EMBEDDING_MODEL` |  | `internal/aiagent/llm/embedding.go:187` |
 | `EMBEDDING_PROTOCOL` |  | `config.yaml:103<br>internal/aiagent/llm/embedding.go:190` |
 | `EMBED_SDK_DIST` |  | `internal/router/embed_static_routes.go:31` |
-| `ENABLE_DEBUG_ROUTES` |  | `internal/router/router.go:229` |
+| `ENABLE_DEBUG_ROUTES` |  | `internal/router/router.go:240` |
 | `ENABLE_SWAGGER` |  | `internal/router/swagger.go:22` |
 | `ERNIE_API_KEY` |  | `cmd/geo-run/main.go:77` |
 | `EXPOSURE_DIAL_TIMEOUT_MS` |  | `internal/security/network_exposure_guard.go:26` |
@@ -87,9 +87,9 @@
 | `GEO_SEED_DSN` |  | `cmd/seedkw/main.go:14` |
 | `GEO_SITE_BASE_URL` |  | `internal/config/website.go:31` |
 | `GEO_SITE_ROOT` |  | `internal/geo/service/geo_site.go:21` |
-| `GIN_MODE` |  | `cmd/api/main.go:431<br>internal/config/init.go:56<br>internal/pkg/db/db.go:54<br>…共 4 处` |
+| `GIN_MODE` |  | `cmd/api/main.go:435<br>internal/config/init.go:56<br>internal/pkg/db/db.go:54<br>…共 4 处` |
 | `HEALTH_EMBEDDING_CRITICAL` |  | `internal/health/health.go:168<br>internal/health/health.go:218` |
-| `HIVEMTK_SECRETS_DIR` |  | `cmd/api/main.go:311` |
+| `HIVEMTK_SECRETS_DIR` |  | `cmd/api/main.go:315` |
 | `HIVE_MTK_HOST_TOKEN` |  | `cmd/nm-host/main.go:105` |
 | `HIVE_MTK_WS_URL` |  | `cmd/nm-host/main.go:94` |
 | `HTTPS_PROXY` |  | `internal/config/server.go:365` |
@@ -113,7 +113,7 @@
 | `MOCK_AI_DELAY_MS` |  | `cmd/bridge-mock/main.go:141` |
 | `MOCK_AI_REPLY` |  | `cmd/bridge-mock/main.go:149` |
 | `MOCK_PORT` |  | `cmd/bridge-mock/main.go:136` |
-| `MODE` |  | `internal/service/webhook.go:648` |
+| `MODE` |  | `internal/service/webhook.go:650` |
 | `MTK_HUMANIZE_EVAL_DISABLED` |  | `internal/service/humanize_init.go:66` |
 | `MTK_HUMANIZE_EVAL_THRESHOLD` |  | `internal/service/humanize_init.go:96` |
 | `NOTION_API_KEY` | Notion API key | `internal/aiagent/knowledge/service/knowledge_merchant_external.go:349` |
@@ -130,9 +130,9 @@
 | `PLATFORM_API_URL` |  | `config.yaml:18<br>internal/config/platform.go:258<br>internal/platform/llm_proxy_client.go:119` |
 | `PLATFORM_CLOUD_URL` |  | `internal/config/platform.go:86` |
 | `PLATFORM_CONFIG_PATH` |  | `internal/config/platform.go:231<br>internal/config/platform.go:235` |
-| `PLATFORM_ENABLED` |  | `cmd/api/main.go:392<br>cmd/api/main.go:398<br>internal/config/platform.go:118` |
+| `PLATFORM_ENABLED` |  | `cmd/api/main.go:396<br>cmd/api/main.go:402<br>internal/config/platform.go:118` |
 | `PLATFORM_MERCHANT_KEY` |  | `internal/platform/asset_market_client.go:36<br>internal/platform/llm_proxy_client.go:128` |
-| `PORT` |  | `cmd/api/main.go:760<br>internal/config/ports.go:85` |
+| `PORT` |  | `cmd/api/main.go:776<br>internal/config/ports.go:85` |
 | `POSTGRES_PASSWORD` |  | `cmd/seed/main.go:190<br>cmd/websitekb/main.go:43<br>internal/config/server.go:623<br>…共 6 处` |
 | `PUBLIC_BASE_URL` |  | `cmd/api/main.go:144<br>config.yaml:35<br>internal/config/server.go:448<br>…共 4 处` |
 | `QINIU_ACCESS_KEY` |  | `config.yaml:154` |
@@ -149,7 +149,7 @@
 | `REDIS_HOST` |  | `cmd/api/main.go:73` |
 | `REDIS_PASSWORD` |  | `cmd/api/main.go:89` |
 | `REDIS_PORT` |  | `cmd/api/main.go:77` |
-| `REFLUX_ENABLED` |  | `internal/app/sales_engine_factory.go:149` |
+| `REFLUX_ENABLED` |  | `internal/app/sales_engine_factory.go:155` |
 | `REQUIRE_PRIVATE_NETWORK` |  | `cmd/api/main.go:144<br>internal/security/network_exposure_guard.go:31` |
 | `RERANK_API_KEY` | Rerank 端点密钥 | `internal/aiagent/rag/retrieval/rerank.go:201` |
 | `RERANK_BASE_URL` |  | `config.yaml:117<br>internal/aiagent/rag/retrieval/rerank.go:175` |
@@ -159,7 +159,7 @@
 | `RERANK_TIMEOUT` |  | `internal/aiagent/rag/retrieval/rerank.go:195` |
 | `RESTORE_TMP_DIR` |  | `internal/storage/backup_source.go:29` |
 | `SERVER_API_BASE` |  | `internal/config/server.go:559` |
-| `SERVER_HOST` |  | `cmd/api/main.go:760` |
+| `SERVER_HOST` |  | `cmd/api/main.go:776` |
 | `SHOW_DEFAULT_CREDENTIALS` |  | `internal/config/admin.go:109` |
 | `SITE_TENANT_CODE` |  | `internal/controller/auth_register.go:64` |
 | `SMS_ALLOW_NIGHT_SEND` |  | `internal/service/sms/sms.go:295` |
@@ -171,8 +171,8 @@
 | `SMTP_SSL` |  | `internal/service/email/email.go:232` |
 | `SMTP_USER` |  | `internal/email/service/email_send.go:527<br>internal/service/email/email.go:237` |
 | `SSE_CORS_ALLOW_ORIGINS` |  | `internal/router/router.go:35` |
-| `STORAGE_LOCAL_BASE_DIR` |  | `internal/storage/attachment_source.go:32<br>internal/storage/factory.go:33` |
-| `STORAGE_LOCAL_PUBLIC_URL` |  | `internal/storage/attachment_source.go:42<br>internal/storage/factory.go:41` |
+| `STORAGE_LOCAL_BASE_DIR` |  | `internal/storage/attachment_source.go:32<br>internal/storage/factory.go:52` |
+| `STORAGE_LOCAL_PUBLIC_URL` |  | `internal/storage/attachment_source.go:42<br>internal/storage/factory.go:63` |
 | `TELEGRAM_POLLING_ENABLED` |  | `internal/service/telegram_polling.go:225<br>internal/service/telegram_polling.go:272` |
 | `TENANT_MODE` |  | `internal/pkg/tenant/tenant.go:68` |
 | `TOOL_PERMISSION_DEFAULT_DENY` |  | `internal/aiagent/agent/tooluse/permission_whitelist.go:141` |

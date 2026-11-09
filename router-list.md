@@ -1,7 +1,7 @@
 # 前端页面路由清单（任务四逐页点验 + 任务六新手引导文案）
 
 - 来源：`user-web/src/router/index.js` + `src/router/modules/*.js`（85 个模块文件）
-- 规模：**257 条页面路由**
+- 规模：**258 条页面路由**
 - 生成方式：`scripts/gen_router_list.py`（只做索引，不开浏览器；重跑保留既有勾选状态）
 - 校验口径：逐条路由**拟人点击**页面元素/表单/交互（每个元素显式指定，禁止枚举循环），
   比对**浏览器控制台报错**与 **Network 里的非 2xx API 响应**；发现错误即本地修复并回归
@@ -173,136 +173,137 @@
 | 130 | [x] | `/inbox/list` | InboxList | 统一收件箱 | - | `views/inbox/List.vue` | `src/router/modules/inbox.js` |  |
 | 131 | [x] | `/integration/list` | IntegrationList | 第三方对接 | 是 | `views/integration/List.vue` | `src/router/modules/integration.js` | - 19条集成/添加集成弹窗(平台/账号/Key/Secret/回调/JSON扩展)/日志弹窗/配置弹窗全通；双端 |
 | 132 | [x] | `/intentRecognition/list` | IntentRecognitionList | 意图识别 | 是 | `views/intentRecognition/List.vue` | `src/router/modules/intentRecognition.js` | - 46条意图词表/词表配置弹窗/填入示例/开始识别/批量识别/查询全通；双端 |
-| 133 | [x] | `/kb/connectors` | KbConnectors | 知识库连接器 | 是 | `views/kb/Connectors.vue` | `src/router/modules/kbConnector.js` | - 连接器列表/新建弹窗(IMA/webhttp 类型字段)/同步失败给出可执行原因(HTML 清单非 JSON)全通；双端 |
-| 134 | [x] | `/cap/matrix` | CapabilityMatrix | 能力矩阵 | 是 | `views/cap/Matrix.vue` | `src/router/modules/kbConnector.js` | - 32条能力矩阵/运行诊断跳转 /cap/diagnostics 命中；双端 |
-| 135 | [x] | `/cap/diagnostics` | CapabilityDiagnostics | 能力运行诊断 | 是 | `views/cap/Diagnostics.vue` | `src/router/modules/kbConnector.js` | - 32条诊断表(就绪/通道/依赖)/刷新/重置全通；双端 |
-| 136 | [x] | `/knowledge/management` | KnowledgeManagement | 知识库管理 | 是 | `views/KnowledgeWorkspace/KnowledgeManagement.vue` | `src/router/modules/knowledge.js` | - 43条知识库分页/搜索(标题)/详情(文档明细)/导入资料弹窗(文件+文本+URL)/重建索引与删除按钮在位全通；双端 |
-| 137 | [x] | `/knowledge/batch-import` | KnowledgeBatchImport | 批量导入 | 是 | `views/KnowledgeWorkspace/BatchImport.vue` | `src/router/modules/knowledge.js` | - 载入模板/解析预览(2条CSV模板)/确认导入(计数)全通；双端 |
-| 138 | [x] | `/knowledge/playground` | KnowledgePlayground | 检索 Playground | 是 | `views/KnowledgeWorkspace/Playground.vue` | `src/router/modules/knowledge.js` | - 产品选择(重名追加ID)/查询必填禁用/开始检索(5条命中+相关度+调试信息)/相关·一般·不相关反馈按钮全通；双端 |
-| 139 | [x] | `/knowledge/connectors` | KnowledgeConnectors | 外部连接器 | 是 | `views/KnowledgeWorkspace/Connectors.vue` | `src/router/modules/knowledge.js` | - Notion/钉钉/自定义CRM 三连接器状态与凭据配置/测试连接(401明确)/一键拉取导入全通；双端 |
-| 140 | [x] | `/knowledge/crawler-sources` | KnowledgeCrawlerSources | 网站爬取 | 是 | `views/KnowledgeWorkspace/CrawlerSources.vue` | `src/router/modules/knowledge.js` | - 5条爬取源(Sitemap/URL/已验证/异常/暂停恢复)/新建爬取源弹窗(知识库/类型/起始地址/白名单/页数/周期/QA拆分)/立即同步·验证站点·批次·删除按钮在位；双端 |
-| 141 | [x] | `/knowledge/qa-candidates` | KnowledgeQACandidates | QA 审核队列 | 是 | `views/KnowledgeWorkspace/QACandidates.vue` | `src/router/modules/knowledge.js` | - 筛选(全部/网站拆分/客户反馈/手动)+刷新/1条候选(问题/答案/锚点/状态)全通；双端 |
-| 142 | [x] | `/knowledge/feedbacks` | KnowledgeFeedbacks | 反馈管理 | 是 | `views/KnowledgeWorkspace/FeedbackList.vue` | `src/router/modules/knowledge.js` | - 8条反馈(星级/问题/答案/用户/会话/评论)搜索+刷新全通；双端 |
-| 143 | [x] | `/knowledge/tokens` | KnowledgeTokens | API Token | 是 | `views/KnowledgeWorkspace/ApiToken.vue` | `src/router/modules/knowledge.js` | - 5条Token列表/按产品筛选/新建Token(名称必填+产品+读写权限+过期时间)/一次性明文弹窗/吊销(确认)全通；测试Token已吊销清理；双端 |
-| 144 | [~] | `/knowledge/external` | KnowledgeExternal | 外部系统接入 | 是 | `views/KnowledgeWorkspace/ExternalImport.vue` | `src/router/modules/knowledge.js` | - 外部导入: 载入模板(JSON)/历史任务(EXT-* 2条)/刷新正常；仅载入模板未选关联产品时提交无反馈(需先选产品)，双端无报错 |
-| 145 | [x] | `/knowledge/statistics` | KnowledgeStatistics | 知识库统计 | 是 | `views/KnowledgeWorkspace/KnowledgeStatistics.vue` | `src/router/modules/knowledge.js` | - 12条导入任务(批量/文本/API来源)/OpenAPI同步状态 2/2/0/刷新全通；双端 |
-| 146 | [~] | `/knowledge/openapi` | KnowledgeOpenAPI | OpenAPI 集成 | 是 | `views/KnowledgeWorkspace/OpenAPIIntegration.vue` | `src/router/modules/knowledge.js` | - 2条OpenAPI数据源/新建数据源弹窗(名称/产品/URL/方法/认证/响应路径/映射/定时)全通；测试与立即同步指向 api.example.com 无响应，上游不可达属设计内；双端 |
-| 147 | [~] | `/knowledge/rag-eval` | RagEvaluation | RAG 评测 | 是 | `views/knowledge/RagEvaluation.vue` | `src/router/modules/knowledge.js` | - 20条评估历史(失败态)/上传评估集/运行评估/对比当前在位；未执行真实评估(需评估集+LLM)，双端无报错 |
-| 148 | [x] | `/knowledgeBase` | KnowledgeBase | 知识库管理 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 知识库列表(2条)/搜索/重置/新建知识库弹窗(KB编码必填校验)/详情/编辑/禁用/删除按钮在位；双端 |
-| 149 | [x] | `/knowledgeBase/list` | KnowledgeBaseList | 知识库列表 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 同 #149 组件列表；双端 |
-| 150 | [x] | `/knowledgeBase/create` | KnowledgeBaseCreate | 新建知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 新建知识库弹窗(KB编码/类型/名称/描述)空校验提示“请输入 KB 编码”；双端 |
-| 151 | [x] | `/knowledgeBase/edit/:id` | KnowledgeBaseEdit | 编辑知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 按路由 :id 单条读取并打开编辑弹窗(id=12 预填 kb_code/名称)；非法 id 提示不存在的文案清晰；双端 |
-| 152 | [x] | `/kuaishouCard` | KuaishouCard | 快手卡片 | - | `views/kuaishouCard/List.vue` | `src/router/modules/kuaishouCard.js` | - 20条快手卡片/搜索/重置/分页/添加卡片弹窗(标题/描述/图片/跳转/域名池/标签/激活)/编辑·统计·复制链接·删除在位；双端 |
-| 153 | [x] | `/kuaishou/stats` | KuaishouStats | 快手卡片统计 | - | `views/kuaishouCard/Stats.vue` | `src/router/modules/kuaishouCard.js` | - 快手统计KPI/访问趋势/热门卡片/最近活动/刷新/单卡统计跳转全通；双端 |
-| 154 | [x] | `/kuaishou-card-stats/:id` | KuaishouCardStats | 快手卡片详情统计 | - | `views/kuaishouCard/CardStats.vue` | `src/router/modules/kuaishouCard.js` | - 有效卡片 id=22 详情/浏览趋势/最近活动/刷新/返回全通；无效 id 显示“卡片已被删除”而非假零数据；双端 |
-| 155 | [x] | `/lead-mining/index` | LeadMining | 线索发掘 | - | `views/leadMining/Index.vue` | `src/router/modules/leadMining.js` | - 线索挖掘渠道勾选/关键词/标签/意向阈值/模型/保存设置/重置/刷新全通；双端 |
-| 156 | [x] | `/livecode` | LiveCodeManagement | 活码管理 | - | `views/livecode/LiveCodeManagement.vue` | `src/router/modules/livecode.js` | - 活码列表(空态)/新增活码/名称·状态筛选/查询/重置/分页正常 |
-| 157 | [x] | `/reports/llm` | LlmUsageDashboard | LLM用量报表 | 是 | `views/reports/LlmUsageDashboard.vue` | `src/router/modules/llmReport.js` | - LLM 用量报表(6227字/20行 含上游 invalid_api_key 明细)/查询/分页正常；双端 |
-| 158 | [x] | `/llmRouting/list` | LlmRoutingList | LLM路由 | 是 | `views/llmRouting/List.vue` | `src/router/modules/llmRouting.js` | - 104 条模型路由(供应商/模型/启用/配额/端点/能力)/新增模型·成本看板·测试·启用·编辑·删除在位 |
-| 159 | [x] | `/llmRouting/cost` | LlmRoutingCostDashboard | 成本看板 | 是 | `views/llmRouting/CostDashboard.vue` | `src/router/modules/llmRouting.js` | - 成本看板(30天 ¥0.00/10.4万 Token/成功率100%/按场景·模型·智能体三维度)渲染正常 |
-| 160 | [x] | `/marketingFlow/list` | MarketingFlowList | 营销自动化 | 是 | `views/marketingFlow/List.vue` | `src/router/modules/marketingFlow.js` | - 营销流程空态/新建流程入口正常 |
-| 161 | [x] | `/mcp/credentials` | McpCredentials | MCP凭证 | 是 | `views/mcp/Credentials.vue` | `src/router/modules/mcpCredential.js` | - 4 条 MCP 凭证/签发新凭证/停用/删除在位 |
-| 162 | [x] | `/messageHub/list` | MessageHubList | 消息中台 | - | `views/messageHub/List.vue` | `src/router/modules/messageHub.js` | - 579 条消息(平台/方向/类型/会话/AI/已读)分页/搜索/重置/详情/撤回/推送消息在位 |
-| 163 | [x] | `/messageHub/dashboard` | MessageHubDashboard | 消息总览 | - | `views/messageHub/Dashboard.vue` | `src/router/modules/messageHub.js` | - 消息中台看板(近1h窗口/方向类型分布/DLQ 0条/批量重试)渲染正常，空态有解释 |
-| 164 | [x] | `/module-market` | ModuleMarket | 功能模块市场 | 否 | `views/moduleMarket/Market.vue` | `src/router/modules/moduleMarket.js` | - 模块市场卡片(已开通/免费开通/依赖/页面数)/查询/刷新/我的模块·订单/查看详情正常 |
-| 165 | [x] | `/module-market/detail/:key` | ModuleMarketDetail | 模块详情 | 否 | `views/moduleMarket/Detail.vue` | `src/router/modules/moduleMarket.js` | - 模块详情(core): 含页面与依赖说明、已开通/订阅按钮与“未连接平台”提示正常 |
-| 166 | [x] | `/module-market/my` | ModuleMy | 我的模块 | 是 | `views/moduleMarket/MyModules.vue` | `src/router/modules/moduleMarket.js` | - 我的模块 44 行(同步状态/耗时)/立即同步/去市场/我的订单/详情正常 |
-| 167 | [x] | `/module-market/orders` | ModuleOrders | 我的订单 | 是 | `views/moduleMarket/Orders.vue` | `src/router/modules/moduleMarket.js` | - 32 条订单(模块/金额/状态/付款指引)/刷新/分页正常 |
-| 168 | [x] | `/subscription-wall` | SubscriptionWall | 订阅续费 | 是 | `views/subscription/Wall.vue` | `src/router/modules/moduleMarket.js` | - 订阅墙: 当前体验期/截止时间/价格 ¥9/月/镜像同步提示/返回工作台(公共独立页)正常 |
-| 169 | [x] | `/register` | Register | 商户注册 | 否 | `views/register/Register.vue` | `src/router/modules/moduleMarket.js` | - 商户注册 3 步(账户信息/开户登记/确认告知)/空提交 4 项必填校验/去登录正常 |
-| 170 | [x] | `/objection/list` | ObjectionList | 异议处理 | 是 | `views/objection/List.vue` | `src/router/modules/objection.js` | - 异议处理: 智能处理/刷新分类/智能匹配/仅分类/清空 + 会话使用记录空态正常 |
-| 171 | [x] | `/observability-dashboard` | ObservabilityDashboard | AI 观测与渠道健康 | - | `views/observabilityDashboard/Index.vue` | `src/router/modules/observabilityDashboard.js` | - 可观测看板: 25 行模型调用(Tokens/成本/均延迟 1037ms)渲染正常 |
-| 172 | [x] | `/oneid/list` | OneIDList | OneID 列表 | 是 | `views/oneid/List.vue` | `src/router/modules/oneid.js` | - 132 条 OneID 身份/搜索/解析·创建 OneID/查看身份/链接身份/分页正常 |
-| 173 | [x] | `/oneid/conflicts` | OneIDConflicts | 身份冲突解决 | 是 | `views/oneid/Conflicts.vue` | `src/router/modules/oneid.js` | - 身份冲突空态+刷新正常 |
-| 174 | [x] | `/oneid/merge-rules` | OneIDMergeRules | 合并规则配置 | 是 | `views/oneid/MergeRuleConfig.vue` | `src/router/modules/oneid.js` | - 6 条合并规则(确定性/概率/相似度阈值)/新增·编辑·删除/命中预览空态正常 |
-| 175 | [x] | `/operationLog/list` | OperationLogList | 操作日志 | 是 | `views/operationLog/List.vue` | `src/router/modules/operationLog.js` | - 72079 条操作日志/增强视图/导出/刷新/详情/分页正常 |
-| 176 | [x] | `/operationLog/enhanced` | OperationLogEnhanced | 操作日志(增强) | 是 | `views/operationLog/Enhanced.vue` | `src/router/modules/operationLog.js` | - 增强视图 20 行(模块/动作/回滚/详情)/导出/刷新/查询正常 |
-| 177 | [x] | `/ops-overview` | OpsOverview | 运维总览 | - | `views/OpsOverview/Index.vue` | `src/router/modules/ops.js` | - 运维总览 18 行(账号/状态/卡死/失败/最近活跃)渲染正常 |
-| 178 | [x] | `/sales-cockpit` | SalesCockpitIndex | AI 销冠驾驶舱 | - | `views/SalesCockpit/Index.vue` | `src/router/modules/ops.js` | - 销售驾驶舱 14 行(会话链路/各环节计数)渲染正常 |
-| 179 | [~] | `/dashboard/drafts` | OrderDraftList | 订单草稿 | 是 | `views/orderDraft/List.vue` | `src/router/modules/orderDraft.js` | - 草稿池空态+归属筛选+刷新；“本进程未装配草稿运行时⇒计数未读取”显式区分非0(设计内) |
-| 180 | [~] | `/dashboard/drafts/:id` | OrderDraftDetail | 草稿详情 | 是 | `views/orderDraft/Detail.vue` | `src/router/modules/orderDraft.js` | - 草稿详情页命中 DRAFT_DB=off 的装配提示，文案明确“不是草稿没了、重试无用、需重启”(设计内) |
-| 181 | [x] | `/system/permissions` | PermissionPanel | permission.title | 是 | `views/system/PermissionPanel.vue` | `src/router/modules/permission.js` | - 8 条权限审计(账号/权限/时间)/启用账号/重置密码/刷新正常 |
-| 182 | [x] | `/persona/list` | PersonaList | 销冠画像 | 是 | `views/persona/List.vue` | `src/router/modules/persona.js` | - 10 条销冠画像指标(满意度/跟进及时性/稳定·上升)/刷新/对比模式/重新生成正常 |
-| 183 | [x] | `/platformAccount/list` | PlatformAccountList | 平台账号 | 是 | `views/platformAccount/List.vue` | `src/router/modules/platformAccount.js` | - 30 条平台账号(平台/状态/最近错误)/支持平台/新增账号/搜索/重置/登录·检查·删除正常 |
-| 184 | [x] | `/qq` | QQBot | QQ 机器人 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - QQ 机器人空态+添加机器人/刷新正常 |
-| 185 | [x] | `/qq/account` | QQAccount | 机器人账号 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - 同 #185 组件；双端正常 |
-| 186 | [x] | `/system/rag-account` | RagProductAccountConfig | RAG 账号配置 | 是 | `views/RagProductConfig/AccountConfig.vue` | `src/router/modules/ragProductConfig.js` | - RAG 账号配置表单(平台/账号ID/关联产品/每日上限/功能开关/回复规则)/添加规则/保存/重置正常 |
-| 187 | [x] | `/system/rag-product` | RagProductManagement | RAG 产品管理 | 是 | `views/RagProductConfig/RagProductManagement.vue` | `src/router/modules/ragProductConfig.js` | - 同 #187 产品列表；双端正常 |
-| 188 | [x] | `/reachPipeline/list` | ReachPipelineList | 触达Pipeline | - | `views/reachPipeline/List.vue` | `src/router/modules/reachPipeline.js` | - 3 条 Pipeline(渠道/状态/限流)/重置限流/可视化编辑器/新建/查看·暂停·归档·删除正常 |
-| 189 | [x] | `/reachPipeline/editor/:id?` | ReachPipelineEditor | Pipeline 编辑 | 是 | `views/reachPipeline/Editor.vue` | `src/router/modules/reachPipeline.js` | - 可视化编辑器(节点库:触发器/渠道/延时/条件/A-B/AI生成/结束 + 校验·保存)；id=20 正常加载，非法 id 提示不存在 |
-| 190 | [x] | `/reachPipeline/deferred-outbound` | ReachDeferredOutbound | 延迟出站管理 | 是 | `views/reachPipeline/DeferredOutbound.vue` | `src/router/modules/reachPipeline.js` | - 延迟出站空态+状态·渠道筛选+重置正常 |
-| 191 | [x] | `/system/roles` | RoleList | role.title | 是 | `views/system/RoleList.vue` | `src/router/modules/role.js` | - 角色卡(超级管理员/客服/员工, 成员数/查看成员/分配菜单权限)正常 |
-| 192 | [x] | `/sales-workbench` | SalesWorkbenchIndex | 销售工作台 | 是 | `views/salesWorkbench/Index.vue` | `src/router/modules/salesWorkbench.js` | - 销售工作台(新建订单/AI接管/今日跟进 + AI成单/应答率/转化/Token 指标)正常 |
-| 193 | [x] | `/scriptTemplate/list` | ScriptTemplateList | 话术库 | 是 | `views/scriptTemplate/List.vue` | `src/router/modules/scriptTemplate.js` | - 10 条话术模板(使用/编辑/复制/删除)/新增话术正常 |
-| 194 | [x] | `/scriptTemplate/ab-stats` | ScriptTemplateAbStats | 话术AB测试 | 是 | `views/scriptTemplate/AbStats.vue` | `src/router/modules/scriptTemplate.js` | - 话术 AB 统计: 选择话术后展示版本/曝光/转化(未选时提示“请先选择一个话术”)正常 |
-| 195 | [x] | `/securityAudit/list` | SecurityAuditList | 安全审计 | 是 | `views/securityAudit/List.vue` | `src/router/modules/securityAudit.js` | - 70 条安全审计(风险分/等级/详情)/刷新/立即审计/查询/分页正常 |
-| 196 | [x] | `/shortLink` | ShortLink | 短链管理 | - | `views/shortLink/List.vue` | `src/router/modules/shortLink.js` | - 176 条短链(短码/目标/访问/状态/过期)/添加·搜索·重置·编辑·统计·分享·删除/分页正常 |
-| 197 | [x] | `/shortLink/stats` | ShortLinkStats | 短链统计 | - | `views/shortLink/Stats.vue` | `src/router/modules/shortLink.js` | - 短链统计(总体统计/搜索/重置/单条统计/分享)正常 |
-| 198 | [x] | `/sms/list` | SmsList | 短信列表 | - | `views/sms/List.vue` | `src/router/modules/sms.js` | - 43 条短信(手机号/内容/状态/查看/重发)/发送短信/搜索/重置正常 |
-| 199 | [x] | `/sms/drafts` | SmsDrafts | 短信草稿 | - | `views/sms/Drafts.vue` | `src/router/modules/sms.js` | - 19 条短信草稿(编辑/发送/删除)/新建草稿/分页正常 |
-| 200 | [x] | `/sms/jobs` | SmsJobs | 短信任务 | - | `views/sms/Jobs.vue` | `src/router/modules/sms.js` | - 短信任务 1 条(计划/已发/完成状态)/创建任务/查看/删除正常 |
-| 201 | [x] | `/sms/config` | SmsConfig | 短信配置 | - | `views/sms/Config.vue` | `src/router/modules/sms.js` | - 短信配置(阿里云/腾讯云/华为云 三套密钥与签名)/保存配置正常 |
-| 202 | [x] | `/sopAgent/list` | SopAgentList | 销冠 SOP 智能体 | 是 | `views/sopAgent/List.vue` | `src/router/modules/sopAgent.js` | - 5 条 SOP(已激活/详情/编辑/停用/删除)/刷新/查询/创建 SOP 正常 |
-| 203 | [x] | `/sop-template` | SOPTemplate | SOP 模板库 | - | `views/sopTemplate/Index.vue` | `src/router/modules/sopTemplateKb.js` | - SOP 落地页(进入/打开/去绑定) 正常 |
-| 204 | [x] | `/sop-template/list` | SOPTemplateList | SOP 模板列表 | - | `views/sopTemplate/List.vue` | `src/router/modules/sopTemplateKb.js` | - 368 条 SOP 模板(意图/阶段/置信度/命中)/刷新/新建/搜索/重置/分页/编辑/删除正常 |
-| 205 | [x] | `/sop-template/market` | SOPTemplateMarket | SOP 模板市场 | - | `views/sopTemplate/Market.vue` | `src/router/modules/sopTemplateKb.js` | - 模板市场(搜索/重置/一键导入/详情)正常 |
-| 206 | [x] | `/sop-template/editor` | SOPTemplateEditor | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - SOP 编辑器(新建): 模板/变量/匹配参数/置信度/启用 + 取消·创建模板正常 |
-| 207 | [x] | `/sop-template/editor/:id` | SOPTemplateEditorEdit | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - 编辑器编辑态: id=4340 预填并显示“保存更新”；非法 id 提示模板不存在 |
-| 208 | [x] | `/system/config` | SystemConfig | 站点设置 | 是 | `views/system/Config.vue` | `src/router/modules/system.js` | - 站点配置(站点/备案/客服/功能开关/限制/上传大小)/保存·清空正常 |
-| 209 | [x] | `/system/obs-config` | SystemObsConfig | 存储配置 | 是 | `views/system/ObsConfig.vue` | `src/router/modules/system.js` | - 3 条存储配置(本地/S3等)/新增/测试/编辑/设为默认/删除正常 |
-| 210 | [x] | `/system/material-library` | SystemMaterialLibrary | 素材库 | 是 | `views/system/MaterialLibrary.vue` | `src/router/modules/system.js` | - 素材库空态(上传素材/新建分类/分类·类型·关键词筛选/分页)正常 |
-| 211 | [x] | `/system/monitor` | SystemMonitor | 监控 | 是 | `views/system/Monitor.vue` | `src/router/modules/system.js` | - 监控(运行时间/服务器时间/主机名/Go版本)/刷新正常 |
-| 212 | [x] | `/system/trace` | TraceMonitor | 链路追踪 | 是 | `views/system/TraceMonitor.vue` | `src/router/modules/system.js` | - 链路追踪(Trace/会话/消息/渠道 查询/重置 + 手动触发评估)正常 |
-| 213 | [x] | `/system/guide` | SystemGuide | 使用引导 | 是 | `views/system/Guide.vue` | `src/router/modules/system.js` | - 系统使用引导 5 步 + 前往操作正常 |
-| 214 | [x] | `/system/rag-overview` | RagOverview | RAG概览 | 是 | `views/system/RagOverview.vue` | `src/router/modules/system.js` | - RAG 概览 5 行同步记录(产品/system/成功时间)正常 |
-| 215 | [x] | `/system/automation-hub` | AutomationHub | 自动化中心 | 是 | `views/system/AutomationHub.vue` | `src/router/modules/system.js` | - 自动化中心(时段/策略/宏/邮箱频率 + AI代理绩效7/30天)正常 |
-| 216 | [x] | `/system/config-params` | ConfigParams | 动态阈值参数 | 是 | `views/system/ConfigParams.vue` | `src/router/modules/system.js` | - 19 条动态阈值参数(键/值/范围/编辑/重置/审计日志)正常 |
-| 217 | [x] | `/system/dictionaries` | SystemDictionaries | 业务字典 | 是 | `views/system/DictionaryManager.vue` | `src/router/modules/system.js` | - 2 条业务字典 + 状态跃迁(纯枚举域提示)正常 |
-| 218 | [x] | `/system/feature-flags` | SystemFeatureFlags | 功能开关 | 是 | `views/system/FeatureFlags.vue` | `src/router/modules/system.js` | - 6 条功能开关(开/疑似闲置/全量/从未)/刷新/新建/编辑/日志/删除正常 |
-| 219 | [x] | `/system/ltc-config` | LTCConfig | LTC 运营开关 | 是 | `views/system/LTCConfig.vue` | `src/router/modules/system.js` | - LTC 运营开关策略表单/KV键·上限·TTL 说明/保存整份策略/重新读取正常 |
-| 220 | [x] | `/system/users` | SystemUserList | systemUser.title | 是 | `views/system/UserList.vue` | `src/router/modules/systemUser.js` | - 57 条系统用户(角色/状态)/新建·编辑·重置密码·删除/分页正常 |
-| 221 | [x] | `/tagSegmentation/list` | TagSegmentationList | 标签分层 | 是 | `views/tagSegmentation/List.vue` | `src/router/modules/tagSegmentation.js` | - 31 条标签(手动/默认/启用禁用)/新增标签/刷新/编辑/删除正常 |
-| 222 | [x] | `/telegram` | Telegram | TG 机器人 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - 4 条 Telegram 机器人(状态/最近错误 connection refused)/添加/刷新/编辑/注册Webhook/测试发送/绑定AI/删除正常 |
-| 223 | [x] | `/telegram/account` | TelegramAccount | 机器人账号 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - 同 #224 组件；双端正常 |
-| 224 | [x] | `/telegram/gate` | TelegramGate | 入群管控 | - | `views/telegram/gate.vue` | `src/router/modules/telegram.js` | - 群组管控 2 条(群名/ID/禁言解锁策略/成员台账)/添加/刷新/编辑/删除正常 |
-| 225 | [x] | `/template-market` | TemplateMarket | 模板/技能市场 | 否 | `views/templateMarket/Market.vue` | `src/router/modules/templateMarket.js` | - 模板市场(发布/审核/刷新 + 内置可用/即将上线/查看详情)正常 |
-| 226 | [x] | `/template-market/my` | TemplateMarketMy | 我的发布/订单 | 是 | `views/templateMarket/MyWorkspace.vue` | `src/router/modules/templateMarket.js` | - 我的发布/订单空态 + 我要发布正常 |
-| 227 | [x] | `/template-market/review` | TemplateMarketReview | 发布审核 | 是 | `views/templateMarket/ReviewConsole.vue` | `src/router/modules/templateMarket.js` | - 发布审核 5 条(订单/金额/状态/下架)正常 |
-| 228 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：卡片列表/操作，0报错 |
-| 229 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：统计 KPI/热门卡片，0报错 |
-| 230 | [~] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：上轮 id=16 数据已清→404 数据态优雅处理，0报错 |
-| 231 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | 11-09双端：重定向列表，0报错 |
-| 232 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：策略看板/阈值，0报错 |
-| 233 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：拟人度看板，0报错 |
-| 234 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：反馈闭环列表，0报错 |
-| 235 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | 11-09双端复验：未知问题列表，0报错 |
-| 236 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：分群列表/创建，0报错 |
-| 237 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：矩阵/导出触达，0报错 |
-| 238 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：规则构建器，0报错 |
-| 239 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：账号列表/操作，0报错 |
-| 240 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：4 tab 数据看板，0报错 |
-| 241 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：账号列表，0报错 |
-| 242 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：同组件（A-2 修复保持），0报错 |
-| 243 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：草稿列表，0报错 |
-| 244 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发任务，0报错 |
-| 245 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：分组选择，0报错 |
-| 246 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发表单，0报错 |
-| 247 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：矩阵配置，0报错 |
-| 248 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | 11-09双端复验：账号空态+新增（A-2 三键合并修复保持），0报错 |
-| 249 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：工作流列表，0报错 |
-| 250 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：画布/节点库/保存入口，0报错 |
-| 251 | [~] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：无效 id 404 数据态优雅处理，0报错 |
-| 252 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：卡片列表/操作，0报错 |
-| 253 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：统计 KPI/趋势，0报错 |
-| 254 | [~] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：上轮 id=29 已清→404「记录不存在」优雅，0报错 |
-| 255 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：卡片列表，0报错 |
-| 256 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：统计渲染，0报错 |
-| 257 | [~] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：数据已清→404「记录不存在」优雅，0报错 |
+| 133 | [x] | `/intentRecognition/tool-flow` | IntentToolFlow | 意图工具流 | 是 | `views/intentRecognition/ToolFlow.vue` | `src/router/modules/intentRecognition.js` | 11-10新路由（tb-02）实测：编排页渲染/按意图筛选/新增弹窗(3必填+自定义validate→warning toast)/取消/自定义意图入口，0报错 |
+| 134 | [x] | `/kb/connectors` | KbConnectors | 知识库连接器 | 是 | `views/kb/Connectors.vue` | `src/router/modules/kbConnector.js` | - 连接器列表/新建弹窗(IMA/webhttp 类型字段)/同步失败给出可执行原因(HTML 清单非 JSON)全通；双端 |
+| 135 | [x] | `/cap/matrix` | CapabilityMatrix | 能力矩阵 | 是 | `views/cap/Matrix.vue` | `src/router/modules/kbConnector.js` | - 32条能力矩阵/运行诊断跳转 /cap/diagnostics 命中；双端 |
+| 136 | [x] | `/cap/diagnostics` | CapabilityDiagnostics | 能力运行诊断 | 是 | `views/cap/Diagnostics.vue` | `src/router/modules/kbConnector.js` | - 32条诊断表(就绪/通道/依赖)/刷新/重置全通；双端 |
+| 137 | [x] | `/knowledge/management` | KnowledgeManagement | 知识库管理 | 是 | `views/KnowledgeWorkspace/KnowledgeManagement.vue` | `src/router/modules/knowledge.js` | - 43条知识库分页/搜索(标题)/详情(文档明细)/导入资料弹窗(文件+文本+URL)/重建索引与删除按钮在位全通；双端 |
+| 138 | [x] | `/knowledge/batch-import` | KnowledgeBatchImport | 批量导入 | 是 | `views/KnowledgeWorkspace/BatchImport.vue` | `src/router/modules/knowledge.js` | - 载入模板/解析预览(2条CSV模板)/确认导入(计数)全通；双端 |
+| 139 | [x] | `/knowledge/playground` | KnowledgePlayground | 检索 Playground | 是 | `views/KnowledgeWorkspace/Playground.vue` | `src/router/modules/knowledge.js` | - 产品选择(重名追加ID)/查询必填禁用/开始检索(5条命中+相关度+调试信息)/相关·一般·不相关反馈按钮全通；双端 |
+| 140 | [x] | `/knowledge/connectors` | KnowledgeConnectors | 外部连接器 | 是 | `views/KnowledgeWorkspace/Connectors.vue` | `src/router/modules/knowledge.js` | - Notion/钉钉/自定义CRM 三连接器状态与凭据配置/测试连接(401明确)/一键拉取导入全通；双端 |
+| 141 | [x] | `/knowledge/crawler-sources` | KnowledgeCrawlerSources | 网站爬取 | 是 | `views/KnowledgeWorkspace/CrawlerSources.vue` | `src/router/modules/knowledge.js` | - 5条爬取源(Sitemap/URL/已验证/异常/暂停恢复)/新建爬取源弹窗(知识库/类型/起始地址/白名单/页数/周期/QA拆分)/立即同步·验证站点·批次·删除按钮在位；双端 |
+| 142 | [x] | `/knowledge/qa-candidates` | KnowledgeQACandidates | QA 审核队列 | 是 | `views/KnowledgeWorkspace/QACandidates.vue` | `src/router/modules/knowledge.js` | - 筛选(全部/网站拆分/客户反馈/手动)+刷新/1条候选(问题/答案/锚点/状态)全通；双端 |
+| 143 | [x] | `/knowledge/feedbacks` | KnowledgeFeedbacks | 反馈管理 | 是 | `views/KnowledgeWorkspace/FeedbackList.vue` | `src/router/modules/knowledge.js` | - 8条反馈(星级/问题/答案/用户/会话/评论)搜索+刷新全通；双端 |
+| 144 | [x] | `/knowledge/tokens` | KnowledgeTokens | API Token | 是 | `views/KnowledgeWorkspace/ApiToken.vue` | `src/router/modules/knowledge.js` | - 5条Token列表/按产品筛选/新建Token(名称必填+产品+读写权限+过期时间)/一次性明文弹窗/吊销(确认)全通；测试Token已吊销清理；双端 |
+| 145 | [~] | `/knowledge/external` | KnowledgeExternal | 外部系统接入 | 是 | `views/KnowledgeWorkspace/ExternalImport.vue` | `src/router/modules/knowledge.js` | - 外部导入: 载入模板(JSON)/历史任务(EXT-* 2条)/刷新正常；仅载入模板未选关联产品时提交无反馈(需先选产品)，双端无报错 |
+| 146 | [x] | `/knowledge/statistics` | KnowledgeStatistics | 知识库统计 | 是 | `views/KnowledgeWorkspace/KnowledgeStatistics.vue` | `src/router/modules/knowledge.js` | - 12条导入任务(批量/文本/API来源)/OpenAPI同步状态 2/2/0/刷新全通；双端 |
+| 147 | [~] | `/knowledge/openapi` | KnowledgeOpenAPI | OpenAPI 集成 | 是 | `views/KnowledgeWorkspace/OpenAPIIntegration.vue` | `src/router/modules/knowledge.js` | - 2条OpenAPI数据源/新建数据源弹窗(名称/产品/URL/方法/认证/响应路径/映射/定时)全通；测试与立即同步指向 api.example.com 无响应，上游不可达属设计内；双端 |
+| 148 | [~] | `/knowledge/rag-eval` | RagEvaluation | RAG 评测 | 是 | `views/knowledge/RagEvaluation.vue` | `src/router/modules/knowledge.js` | - 20条评估历史(失败态)/上传评估集/运行评估/对比当前在位；未执行真实评估(需评估集+LLM)，双端无报错 |
+| 149 | [x] | `/knowledgeBase` | KnowledgeBase | 知识库管理 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 知识库列表(2条)/搜索/重置/新建知识库弹窗(KB编码必填校验)/详情/编辑/禁用/删除按钮在位；双端 |
+| 150 | [x] | `/knowledgeBase/list` | KnowledgeBaseList | 知识库列表 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 同 #149 组件列表；双端 |
+| 151 | [x] | `/knowledgeBase/create` | KnowledgeBaseCreate | 新建知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 新建知识库弹窗(KB编码/类型/名称/描述)空校验提示“请输入 KB 编码”；双端 |
+| 152 | [x] | `/knowledgeBase/edit/:id` | KnowledgeBaseEdit | 编辑知识库 | - | `views/knowledgeBase/List.vue` | `src/router/modules/knowledgeBase.js` | - 按路由 :id 单条读取并打开编辑弹窗(id=12 预填 kb_code/名称)；非法 id 提示不存在的文案清晰；双端 |
+| 153 | [x] | `/kuaishouCard` | KuaishouCard | 快手卡片 | - | `views/kuaishouCard/List.vue` | `src/router/modules/kuaishouCard.js` | - 20条快手卡片/搜索/重置/分页/添加卡片弹窗(标题/描述/图片/跳转/域名池/标签/激活)/编辑·统计·复制链接·删除在位；双端 |
+| 154 | [x] | `/kuaishou/stats` | KuaishouStats | 快手卡片统计 | - | `views/kuaishouCard/Stats.vue` | `src/router/modules/kuaishouCard.js` | - 快手统计KPI/访问趋势/热门卡片/最近活动/刷新/单卡统计跳转全通；双端 |
+| 155 | [x] | `/kuaishou-card-stats/:id` | KuaishouCardStats | 快手卡片详情统计 | - | `views/kuaishouCard/CardStats.vue` | `src/router/modules/kuaishouCard.js` | - 有效卡片 id=22 详情/浏览趋势/最近活动/刷新/返回全通；无效 id 显示“卡片已被删除”而非假零数据；双端 |
+| 156 | [x] | `/lead-mining/index` | LeadMining | 线索发掘 | - | `views/leadMining/Index.vue` | `src/router/modules/leadMining.js` | - 线索挖掘渠道勾选/关键词/标签/意向阈值/模型/保存设置/重置/刷新全通；双端 |
+| 157 | [x] | `/livecode` | LiveCodeManagement | 活码管理 | - | `views/livecode/LiveCodeManagement.vue` | `src/router/modules/livecode.js` | - 活码列表(空态)/新增活码/名称·状态筛选/查询/重置/分页正常 |
+| 158 | [x] | `/reports/llm` | LlmUsageDashboard | LLM用量报表 | 是 | `views/reports/LlmUsageDashboard.vue` | `src/router/modules/llmReport.js` | - LLM 用量报表(6227字/20行 含上游 invalid_api_key 明细)/查询/分页正常；双端 |
+| 159 | [x] | `/llmRouting/list` | LlmRoutingList | LLM路由 | 是 | `views/llmRouting/List.vue` | `src/router/modules/llmRouting.js` | - 104 条模型路由(供应商/模型/启用/配额/端点/能力)/新增模型·成本看板·测试·启用·编辑·删除在位 |
+| 160 | [x] | `/llmRouting/cost` | LlmRoutingCostDashboard | 成本看板 | 是 | `views/llmRouting/CostDashboard.vue` | `src/router/modules/llmRouting.js` | - 成本看板(30天 ¥0.00/10.4万 Token/成功率100%/按场景·模型·智能体三维度)渲染正常 |
+| 161 | [x] | `/marketingFlow/list` | MarketingFlowList | 营销自动化 | 是 | `views/marketingFlow/List.vue` | `src/router/modules/marketingFlow.js` | - 营销流程空态/新建流程入口正常 |
+| 162 | [x] | `/mcp/credentials` | McpCredentials | MCP凭证 | 是 | `views/mcp/Credentials.vue` | `src/router/modules/mcpCredential.js` | - 4 条 MCP 凭证/签发新凭证/停用/删除在位 |
+| 163 | [x] | `/messageHub/list` | MessageHubList | 消息中台 | - | `views/messageHub/List.vue` | `src/router/modules/messageHub.js` | - 579 条消息(平台/方向/类型/会话/AI/已读)分页/搜索/重置/详情/撤回/推送消息在位 |
+| 164 | [x] | `/messageHub/dashboard` | MessageHubDashboard | 消息总览 | - | `views/messageHub/Dashboard.vue` | `src/router/modules/messageHub.js` | - 消息中台看板(近1h窗口/方向类型分布/DLQ 0条/批量重试)渲染正常，空态有解释 |
+| 165 | [x] | `/module-market` | ModuleMarket | 功能模块市场 | 否 | `views/moduleMarket/Market.vue` | `src/router/modules/moduleMarket.js` | - 模块市场卡片(已开通/免费开通/依赖/页面数)/查询/刷新/我的模块·订单/查看详情正常 |
+| 166 | [x] | `/module-market/detail/:key` | ModuleMarketDetail | 模块详情 | 否 | `views/moduleMarket/Detail.vue` | `src/router/modules/moduleMarket.js` | - 模块详情(core): 含页面与依赖说明、已开通/订阅按钮与“未连接平台”提示正常 |
+| 167 | [x] | `/module-market/my` | ModuleMy | 我的模块 | 是 | `views/moduleMarket/MyModules.vue` | `src/router/modules/moduleMarket.js` | - 我的模块 44 行(同步状态/耗时)/立即同步/去市场/我的订单/详情正常 |
+| 168 | [x] | `/module-market/orders` | ModuleOrders | 我的订单 | 是 | `views/moduleMarket/Orders.vue` | `src/router/modules/moduleMarket.js` | - 32 条订单(模块/金额/状态/付款指引)/刷新/分页正常 |
+| 169 | [x] | `/subscription-wall` | SubscriptionWall | 订阅续费 | 是 | `views/subscription/Wall.vue` | `src/router/modules/moduleMarket.js` | - 订阅墙: 当前体验期/截止时间/价格 ¥9/月/镜像同步提示/返回工作台(公共独立页)正常 |
+| 170 | [x] | `/register` | Register | 商户注册 | 否 | `views/register/Register.vue` | `src/router/modules/moduleMarket.js` | - 商户注册 3 步(账户信息/开户登记/确认告知)/空提交 4 项必填校验/去登录正常 |
+| 171 | [x] | `/objection/list` | ObjectionList | 异议处理 | 是 | `views/objection/List.vue` | `src/router/modules/objection.js` | - 异议处理: 智能处理/刷新分类/智能匹配/仅分类/清空 + 会话使用记录空态正常 |
+| 172 | [x] | `/observability-dashboard` | ObservabilityDashboard | AI 观测与渠道健康 | - | `views/observabilityDashboard/Index.vue` | `src/router/modules/observabilityDashboard.js` | - 可观测看板: 25 行模型调用(Tokens/成本/均延迟 1037ms)渲染正常 |
+| 173 | [x] | `/oneid/list` | OneIDList | OneID 列表 | 是 | `views/oneid/List.vue` | `src/router/modules/oneid.js` | - 132 条 OneID 身份/搜索/解析·创建 OneID/查看身份/链接身份/分页正常 |
+| 174 | [x] | `/oneid/conflicts` | OneIDConflicts | 身份冲突解决 | 是 | `views/oneid/Conflicts.vue` | `src/router/modules/oneid.js` | - 身份冲突空态+刷新正常 |
+| 175 | [x] | `/oneid/merge-rules` | OneIDMergeRules | 合并规则配置 | 是 | `views/oneid/MergeRuleConfig.vue` | `src/router/modules/oneid.js` | - 6 条合并规则(确定性/概率/相似度阈值)/新增·编辑·删除/命中预览空态正常 |
+| 176 | [x] | `/operationLog/list` | OperationLogList | 操作日志 | 是 | `views/operationLog/List.vue` | `src/router/modules/operationLog.js` | - 72079 条操作日志/增强视图/导出/刷新/详情/分页正常 |
+| 177 | [x] | `/operationLog/enhanced` | OperationLogEnhanced | 操作日志(增强) | 是 | `views/operationLog/Enhanced.vue` | `src/router/modules/operationLog.js` | - 增强视图 20 行(模块/动作/回滚/详情)/导出/刷新/查询正常 |
+| 178 | [x] | `/ops-overview` | OpsOverview | 运维总览 | - | `views/OpsOverview/Index.vue` | `src/router/modules/ops.js` | - 运维总览 18 行(账号/状态/卡死/失败/最近活跃)渲染正常 |
+| 179 | [x] | `/sales-cockpit` | SalesCockpitIndex | AI 销冠驾驶舱 | - | `views/SalesCockpit/Index.vue` | `src/router/modules/ops.js` | - 销售驾驶舱 14 行(会话链路/各环节计数)渲染正常 |
+| 180 | [~] | `/dashboard/drafts` | OrderDraftList | 订单草稿 | 是 | `views/orderDraft/List.vue` | `src/router/modules/orderDraft.js` | - 草稿池空态+归属筛选+刷新；“本进程未装配草稿运行时⇒计数未读取”显式区分非0(设计内) |
+| 181 | [~] | `/dashboard/drafts/:id` | OrderDraftDetail | 草稿详情 | 是 | `views/orderDraft/Detail.vue` | `src/router/modules/orderDraft.js` | - 草稿详情页命中 DRAFT_DB=off 的装配提示，文案明确“不是草稿没了、重试无用、需重启”(设计内) |
+| 182 | [x] | `/system/permissions` | PermissionPanel | permission.title | 是 | `views/system/PermissionPanel.vue` | `src/router/modules/permission.js` | - 8 条权限审计(账号/权限/时间)/启用账号/重置密码/刷新正常 |
+| 183 | [x] | `/persona/list` | PersonaList | 销冠画像 | 是 | `views/persona/List.vue` | `src/router/modules/persona.js` | - 10 条销冠画像指标(满意度/跟进及时性/稳定·上升)/刷新/对比模式/重新生成正常 |
+| 184 | [x] | `/platformAccount/list` | PlatformAccountList | 平台账号 | 是 | `views/platformAccount/List.vue` | `src/router/modules/platformAccount.js` | - 30 条平台账号(平台/状态/最近错误)/支持平台/新增账号/搜索/重置/登录·检查·删除正常 |
+| 185 | [x] | `/qq` | QQBot | QQ 机器人 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - QQ 机器人空态+添加机器人/刷新正常 |
+| 186 | [x] | `/qq/account` | QQAccount | 机器人账号 | - | `views/qq/account.vue` | `src/router/modules/qq.js` | - 同 #185 组件；双端正常 |
+| 187 | [x] | `/system/rag-account` | RagProductAccountConfig | RAG 账号配置 | 是 | `views/RagProductConfig/AccountConfig.vue` | `src/router/modules/ragProductConfig.js` | - RAG 账号配置表单(平台/账号ID/关联产品/每日上限/功能开关/回复规则)/添加规则/保存/重置正常 |
+| 188 | [x] | `/system/rag-product` | RagProductManagement | RAG 产品管理 | 是 | `views/RagProductConfig/RagProductManagement.vue` | `src/router/modules/ragProductConfig.js` | - 同 #187 产品列表；双端正常 |
+| 189 | [x] | `/reachPipeline/list` | ReachPipelineList | 触达Pipeline | - | `views/reachPipeline/List.vue` | `src/router/modules/reachPipeline.js` | - 3 条 Pipeline(渠道/状态/限流)/重置限流/可视化编辑器/新建/查看·暂停·归档·删除正常 |
+| 190 | [x] | `/reachPipeline/editor/:id?` | ReachPipelineEditor | Pipeline 编辑 | 是 | `views/reachPipeline/Editor.vue` | `src/router/modules/reachPipeline.js` | - 可视化编辑器(节点库:触发器/渠道/延时/条件/A-B/AI生成/结束 + 校验·保存)；id=20 正常加载，非法 id 提示不存在 |
+| 191 | [x] | `/reachPipeline/deferred-outbound` | ReachDeferredOutbound | 延迟出站管理 | 是 | `views/reachPipeline/DeferredOutbound.vue` | `src/router/modules/reachPipeline.js` | - 延迟出站空态+状态·渠道筛选+重置正常 |
+| 192 | [x] | `/system/roles` | RoleList | role.title | 是 | `views/system/RoleList.vue` | `src/router/modules/role.js` | - 角色卡(超级管理员/客服/员工, 成员数/查看成员/分配菜单权限)正常 |
+| 193 | [x] | `/sales-workbench` | SalesWorkbenchIndex | 销售工作台 | 是 | `views/salesWorkbench/Index.vue` | `src/router/modules/salesWorkbench.js` | - 销售工作台(新建订单/AI接管/今日跟进 + AI成单/应答率/转化/Token 指标)正常 |
+| 194 | [x] | `/scriptTemplate/list` | ScriptTemplateList | 话术库 | 是 | `views/scriptTemplate/List.vue` | `src/router/modules/scriptTemplate.js` | - 10 条话术模板(使用/编辑/复制/删除)/新增话术正常 |
+| 195 | [x] | `/scriptTemplate/ab-stats` | ScriptTemplateAbStats | 话术AB测试 | 是 | `views/scriptTemplate/AbStats.vue` | `src/router/modules/scriptTemplate.js` | - 话术 AB 统计: 选择话术后展示版本/曝光/转化(未选时提示“请先选择一个话术”)正常 |
+| 196 | [x] | `/securityAudit/list` | SecurityAuditList | 安全审计 | 是 | `views/securityAudit/List.vue` | `src/router/modules/securityAudit.js` | - 70 条安全审计(风险分/等级/详情)/刷新/立即审计/查询/分页正常 |
+| 197 | [x] | `/shortLink` | ShortLink | 短链管理 | - | `views/shortLink/List.vue` | `src/router/modules/shortLink.js` | - 176 条短链(短码/目标/访问/状态/过期)/添加·搜索·重置·编辑·统计·分享·删除/分页正常 |
+| 198 | [x] | `/shortLink/stats` | ShortLinkStats | 短链统计 | - | `views/shortLink/Stats.vue` | `src/router/modules/shortLink.js` | - 短链统计(总体统计/搜索/重置/单条统计/分享)正常 |
+| 199 | [x] | `/sms/list` | SmsList | 短信列表 | - | `views/sms/List.vue` | `src/router/modules/sms.js` | - 43 条短信(手机号/内容/状态/查看/重发)/发送短信/搜索/重置正常 |
+| 200 | [x] | `/sms/drafts` | SmsDrafts | 短信草稿 | - | `views/sms/Drafts.vue` | `src/router/modules/sms.js` | - 19 条短信草稿(编辑/发送/删除)/新建草稿/分页正常 |
+| 201 | [x] | `/sms/jobs` | SmsJobs | 短信任务 | - | `views/sms/Jobs.vue` | `src/router/modules/sms.js` | - 短信任务 1 条(计划/已发/完成状态)/创建任务/查看/删除正常 |
+| 202 | [x] | `/sms/config` | SmsConfig | 短信配置 | - | `views/sms/Config.vue` | `src/router/modules/sms.js` | - 短信配置(阿里云/腾讯云/华为云 三套密钥与签名)/保存配置正常 |
+| 203 | [x] | `/sopAgent/list` | SopAgentList | 销冠 SOP 智能体 | 是 | `views/sopAgent/List.vue` | `src/router/modules/sopAgent.js` | - 5 条 SOP(已激活/详情/编辑/停用/删除)/刷新/查询/创建 SOP 正常 |
+| 204 | [x] | `/sop-template` | SOPTemplate | SOP 模板库 | - | `views/sopTemplate/Index.vue` | `src/router/modules/sopTemplateKb.js` | - SOP 落地页(进入/打开/去绑定) 正常 |
+| 205 | [x] | `/sop-template/list` | SOPTemplateList | SOP 模板列表 | - | `views/sopTemplate/List.vue` | `src/router/modules/sopTemplateKb.js` | - 368 条 SOP 模板(意图/阶段/置信度/命中)/刷新/新建/搜索/重置/分页/编辑/删除正常 |
+| 206 | [x] | `/sop-template/market` | SOPTemplateMarket | SOP 模板市场 | - | `views/sopTemplate/Market.vue` | `src/router/modules/sopTemplateKb.js` | - 模板市场(搜索/重置/一键导入/详情)正常 |
+| 207 | [x] | `/sop-template/editor` | SOPTemplateEditor | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - SOP 编辑器(新建): 模板/变量/匹配参数/置信度/启用 + 取消·创建模板正常 |
+| 208 | [x] | `/sop-template/editor/:id` | SOPTemplateEditorEdit | SOP 模板编辑 | - | `views/sopTemplate/Editor.vue` | `src/router/modules/sopTemplateKb.js` | - 编辑器编辑态: id=4340 预填并显示“保存更新”；非法 id 提示模板不存在 |
+| 209 | [x] | `/system/config` | SystemConfig | 站点设置 | 是 | `views/system/Config.vue` | `src/router/modules/system.js` | - 站点配置(站点/备案/客服/功能开关/限制/上传大小)/保存·清空正常 |
+| 210 | [x] | `/system/obs-config` | SystemObsConfig | 存储配置 | 是 | `views/system/ObsConfig.vue` | `src/router/modules/system.js` | - 3 条存储配置(本地/S3等)/新增/测试/编辑/设为默认/删除正常 |
+| 211 | [x] | `/system/material-library` | SystemMaterialLibrary | 素材库 | 是 | `views/system/MaterialLibrary.vue` | `src/router/modules/system.js` | - 素材库空态(上传素材/新建分类/分类·类型·关键词筛选/分页)正常 |
+| 212 | [x] | `/system/monitor` | SystemMonitor | 监控 | 是 | `views/system/Monitor.vue` | `src/router/modules/system.js` | - 监控(运行时间/服务器时间/主机名/Go版本)/刷新正常 |
+| 213 | [x] | `/system/trace` | TraceMonitor | 链路追踪 | 是 | `views/system/TraceMonitor.vue` | `src/router/modules/system.js` | - 链路追踪(Trace/会话/消息/渠道 查询/重置 + 手动触发评估)正常 |
+| 214 | [x] | `/system/guide` | SystemGuide | 使用引导 | 是 | `views/system/Guide.vue` | `src/router/modules/system.js` | - 系统使用引导 5 步 + 前往操作正常 |
+| 215 | [x] | `/system/rag-overview` | RagOverview | RAG概览 | 是 | `views/system/RagOverview.vue` | `src/router/modules/system.js` | - RAG 概览 5 行同步记录(产品/system/成功时间)正常 |
+| 216 | [x] | `/system/automation-hub` | AutomationHub | 自动化中心 | 是 | `views/system/AutomationHub.vue` | `src/router/modules/system.js` | - 自动化中心(时段/策略/宏/邮箱频率 + AI代理绩效7/30天)正常 |
+| 217 | [x] | `/system/config-params` | ConfigParams | 动态阈值参数 | 是 | `views/system/ConfigParams.vue` | `src/router/modules/system.js` | - 19 条动态阈值参数(键/值/范围/编辑/重置/审计日志)正常 |
+| 218 | [x] | `/system/dictionaries` | SystemDictionaries | 业务字典 | 是 | `views/system/DictionaryManager.vue` | `src/router/modules/system.js` | - 2 条业务字典 + 状态跃迁(纯枚举域提示)正常 |
+| 219 | [x] | `/system/feature-flags` | SystemFeatureFlags | 功能开关 | 是 | `views/system/FeatureFlags.vue` | `src/router/modules/system.js` | - 6 条功能开关(开/疑似闲置/全量/从未)/刷新/新建/编辑/日志/删除正常 |
+| 220 | [x] | `/system/ltc-config` | LTCConfig | LTC 运营开关 | 是 | `views/system/LTCConfig.vue` | `src/router/modules/system.js` | - LTC 运营开关策略表单/KV键·上限·TTL 说明/保存整份策略/重新读取正常 |
+| 221 | [x] | `/system/users` | SystemUserList | systemUser.title | 是 | `views/system/UserList.vue` | `src/router/modules/systemUser.js` | - 57 条系统用户(角色/状态)/新建·编辑·重置密码·删除/分页正常 |
+| 222 | [x] | `/tagSegmentation/list` | TagSegmentationList | 标签分层 | 是 | `views/tagSegmentation/List.vue` | `src/router/modules/tagSegmentation.js` | - 31 条标签(手动/默认/启用禁用)/新增标签/刷新/编辑/删除正常 |
+| 223 | [x] | `/telegram` | Telegram | TG 机器人 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - 4 条 Telegram 机器人(状态/最近错误 connection refused)/添加/刷新/编辑/注册Webhook/测试发送/绑定AI/删除正常 |
+| 224 | [x] | `/telegram/account` | TelegramAccount | 机器人账号 | - | `views/telegram/account.vue` | `src/router/modules/telegram.js` | - 同 #224 组件；双端正常 |
+| 225 | [x] | `/telegram/gate` | TelegramGate | 入群管控 | - | `views/telegram/gate.vue` | `src/router/modules/telegram.js` | - 群组管控 2 条(群名/ID/禁言解锁策略/成员台账)/添加/刷新/编辑/删除正常 |
+| 226 | [x] | `/template-market` | TemplateMarket | 模板/技能市场 | 否 | `views/templateMarket/Market.vue` | `src/router/modules/templateMarket.js` | - 模板市场(发布/审核/刷新 + 内置可用/即将上线/查看详情)正常 |
+| 227 | [x] | `/template-market/my` | TemplateMarketMy | 我的发布/订单 | 是 | `views/templateMarket/MyWorkspace.vue` | `src/router/modules/templateMarket.js` | - 我的发布/订单空态 + 我要发布正常 |
+| 228 | [x] | `/template-market/review` | TemplateMarketReview | 发布审核 | 是 | `views/templateMarket/ReviewConsole.vue` | `src/router/modules/templateMarket.js` | - 发布审核 5 条(订单/金额/状态/下架)正常 |
+| 229 | [x] | `/tiktok/list` | TikTokList | TikTok卡片 | 是 | `views/tiktokCard/List.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：卡片列表/操作，0报错 |
+| 230 | [x] | `/tiktok/stats` | TikTokStats | TikTok统计 | 是 | `views/tiktokCard/Stats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：统计 KPI/热门卡片，0报错 |
+| 231 | [~] | `/tiktok-card-stats/:id` | TikTokCardStats | TikTok卡片统计 | 是 | `views/tiktokCard/CardStats.vue` | `src/router/modules/tiktok.js` | 11-09双端复验：上轮 id=16 数据已清→404 数据态优雅处理，0报错 |
+| 232 | [x] | `/tiktok` | TikTok | TikTok | - | `-` | `src/router/modules/tiktok.js` | 11-09双端：重定向列表，0报错 |
+| 233 | [x] | `/confidence/panel` | ConfidencePanel | 置信度运营 | 是 | `views/confidence/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：策略看板/阈值，0报错 |
+| 234 | [x] | `/humanize/panel` | HumanizePanel | 拟人度评估 | 是 | `views/humanize/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：拟人度看板，0报错 |
+| 235 | [x] | `/feedbackLoop/panel` | FeedbackLoopPanel | 反馈学习闭环 | 是 | `views/feedbackLoop/Panel.vue` | `src/router/modules/tuning.js` | 11-09双端复验：反馈闭环列表，0报错 |
+| 236 | [x] | `/unknown-questions` | UnknownQuestionList | 未知问题运营 | 是 | `views/unknownQuestion/List.vue` | `src/router/modules/unknownQuestion.js` | 11-09双端复验：未知问题列表，0报错 |
+| 237 | [x] | `/userSegment/list` | UserSegmentList | 用户分层 RFM | 是 | `views/userSegment/List.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：分群列表/创建，0报错 |
+| 238 | [x] | `/userSegment/rfm-matrix` | RfmMatrix | RFM 矩阵 | 是 | `views/userSegment/RfmMatrix.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：矩阵/导出触达，0报错 |
+| 239 | [x] | `/userSegment/builder` | UserSegmentBuilder | 分层规则构建 | 是 | `views/userSegment/Builder.vue` | `src/router/modules/userSegment.js` | 11-09双端复验：规则构建器，0报错 |
+| 240 | [x] | `/wecomAccount/list` | WecomAccountList | 企微账号管理 | - | `views/wecomAccount/List.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：账号列表/操作，0报错 |
+| 241 | [x] | `/wecomAccount/data` | WecomAccountData | 企微数据看板 | - | `views/wecomAccount/Data.vue` | `src/router/modules/wecomAccount.js` | 11-09双端复验：4 tab 数据看板，0报错 |
+| 242 | [x] | `/whatsapp` | Whatsapp | WhatsApp 社群 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：账号列表，0报错 |
+| 243 | [x] | `/whatsapp/account` | WhatsappAccount | 账号管理 | - | `views/whatsapp/WhatsappAccount.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：同组件（A-2 修复保持），0报错 |
+| 244 | [x] | `/whatsapp/drafts` | WhatsappDrafts | 草稿箱 | - | `views/whatsapp/WhatsappDrafts.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：草稿列表，0报错 |
+| 245 | [x] | `/whatsapp/jobs` | WhatsappJobs | 群发 | - | `views/whatsapp/WhatsappJobs.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发任务，0报错 |
+| 246 | [x] | `/whatsapp/lead-group-selection` | LeadGroupSelection | 从线索库选择群体 | 是 | `views/whatsappBot/LeadGroupSelection.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：分组选择，0报错 |
+| 247 | [x] | `/whatsapp/group-messaging` | BulkMessaging | 批量消息发送 | 是 | `views/whatsappBot/BulkMessaging.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：群发表单，0报错 |
+| 248 | [x] | `/whatsapp/bulk-matrix` | WhatsappBulkMatrix | 群发矩阵 | 是 | `views/whatsapp/BulkMatrix.vue` | `src/router/modules/whatsapp.js` | 11-09双端复验：矩阵配置，0报错 |
+| 249 | [x] | `/whatsapp-cloud` | WhatsappCloud | WhatsApp Cloud | - | `views/whatsappCloud/WhatsappCloudAccount.vue` | `src/router/modules/whatsappCloud.js` | 11-09双端复验：账号空态+新增（A-2 三键合并修复保持），0报错 |
+| 250 | [x] | `/workflow-orchestrator/list` | WorkflowOrchestratorList | 工作流编排 | 是 | `views/workflowOrchestrator/List.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：工作流列表，0报错 |
+| 251 | [x] | `/workflow-orchestrator/editor/:workflow_id` | WorkflowOrchestratorEditor | 工作流编辑 | 是 | `views/workflowOrchestrator/Editor.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：画布/节点库/保存入口，0报错 |
+| 252 | [~] | `/workflow-orchestrator/execution/:id` | WorkflowOrchestratorExecution | 执行详情 | 是 | `views/workflowOrchestrator/Execution.vue` | `src/router/modules/workflowOrchestrator.js` | 11-09双端复验：无效 id 404 数据态优雅处理，0报错 |
+| 253 | [x] | `/xianyuCard` | XianyuCard | 闲鱼卡片 | - | `views/xianyuCard/List.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：卡片列表/操作，0报错 |
+| 254 | [x] | `/xianyu/stats` | XianyuStats | 闲鱼卡片统计 | - | `views/xianyuCard/Stats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：统计 KPI/趋势，0报错 |
+| 255 | [~] | `/xianyu-card-stats/:id` | XianyuCardStats | 闲鱼卡片详情统计 | - | `views/xianyuCard/CardStats.vue` | `src/router/modules/xianyuCard.js` | 11-09双端复验：上轮 id=29 已清→404「记录不存在」优雅，0报错 |
+| 256 | [x] | `/xiaohongshuCard` | XiaohongshuCard | 小红书卡片 | - | `views/xiaohongshuCard/List.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：卡片列表，0报错 |
+| 257 | [x] | `/xiaohongshu/stats` | XiaohongshuStats | 小红书卡片统计 | - | `views/xiaohongshuCard/Stats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：统计渲染，0报错 |
+| 258 | [~] | `/xiaohongshu-card-stats/:id` | XiaohongshuCardStats | 小红书卡片详情统计 | - | `views/xiaohongshuCard/CardStats.vue` | `src/router/modules/xiaohongshuCard.js` | 11-09双端复验：数据已清→404「记录不存在」优雅，0报错 |
 
 ## 进度
 
 - 已验证无错误 `[x]`：**239** 条
 - 已验证·设计内拒绝 `[~]`：**18** 条
-- 待点验 `[ ]`：**0** 条
+- 待点验 `[ ]`：**1** 条
 - 已点出缺陷 `[!]`：**0** 条
 - 任务六已写页面导览 `G`：**0** 条
