@@ -236,12 +236,15 @@ var ModuleMenuBindings = map[string][]string{
 		"agentWorkbench", "agentStatus", "csatDashboard", "quickReply", "sessionTag", "aiSuggestion",
 	},
 
-	// ========== knowledge：知识库（16 节点）==========
+	// ========== knowledge：知识库（17 节点）==========
 	ModuleKnowledge: {
 		"knowledge", "knowledgeWorkspace",
 		"knowledgeManagement", "knowledgeBatchImport", "knowledgePlayground",
 		"knowledgeFeedbacks", "knowledgeTokens", "knowledgeExternal", "knowledgeStatistics",
 		"knowledgeRagEval", "knowledgeOpenAPI", "knowledgeConnectors",
+		// kbImportConnectors（第三方知识库导入器）：把 IMA 等第三方 KB 拉进本地 RAG，
+		// 与 knowledgeConnectors（外部凭据连接器）同组不同职，随 knowledge 开关。
+		"kbImportConnectors",
 		"ragProductConfig", "ragMainConfig", "ragAccount", "ragProduct", "ragOverview",
 		"faqKb",
 	},
@@ -253,9 +256,12 @@ var ModuleMenuBindings = map[string][]string{
 		"scriptTemplate", "scriptTemplateAbStats",
 	},
 
-	// ========== llm-self：自有模型接入（1 节点）==========
+	// ========== llm-self：自有模型接入（2 节点）==========
 	ModuleLLMSelf: {
 		"llmRouting",
+		// llmUsageReport（LLM 用量报表）：llm_usage_daily 聚合读数，
+		// 是「用量与成本可视化」这半句承诺的报表面，随 llm-self 开关。
+		"llmUsageReport",
 	},
 
 	// ========== platform-link：平台对接（3 菜单节点）==========
@@ -284,17 +290,23 @@ var ModuleMenuBindings = map[string][]string{
 	// 但**接口层仍过闸**（/api/llm/wallet、/api/llm/plans 等按本 key 拦截）。
 	ModuleLLMCloud: {},
 
-	// ========== ai-agent：AI 智能体（5 节点）==========
+	// ========== ai-agent：AI 智能体（6 节点）==========
 	ModuleAIAgent: {
 		"aiAgent", "agentManage", "aiAgentList", "aiAgentCreate", "aiToolManagement",
 		// aiCustomIntegration（工具接入）：P1-3 的自定义工具/MCP server 配置面，
 		// 与 aiToolManagement 同一装配链（"AI 能调用什么"），随 ai-agent 开关。
 		"aiCustomIntegration",
+		// mcpCredentials（MCP 凭证）：MCP server 凭据管理，是上一行的凭据侧，
+		// 同随 ai-agent 开关。
+		"mcpCredentials",
 	},
 
-	// ========== ai-sales：AI 销冠（16 节点）==========
+	// ========== ai-sales：AI 销冠（17 节点）==========
 	ModuleAISales: {
 		"agentPassive", "intentRecognition", "dialogueMemory",
+		// unknownQuestions（未知问题运营）：意图识别低置信度回流的运营面，
+		// 与 agentPassive 同链路（识别不出的问题 → 人工补 FAQ），随 ai-sales 开关。
+		"unknownQuestions",
 		"agentSupport", "sopAgent", "sopTemplate", "sopTemplateMarket", "knowledgeBase",
 		"agentSalesIntel", "objectionList", "personaList",
 		"confidencePanel", "humanizePanel", "feedbackLoopPanel",
@@ -341,7 +353,7 @@ var ModuleMenuBindings = map[string][]string{
 	// ========== im-intl：海外与协作 IM（12 节点）==========
 	ModuleIMIntl: {
 		"agentChannel", "whatsappCloud", "dingtalkApp",
-		"telegram", "telegramAccount",
+		"telegram", "telegramAccount", "telegramGate",
 		"qq", "qqAccount",
 		"feishu", "feishuAccount",
 		"whatsapp", "whatsappAccount", "whatsappDrafts", "whatsappJobs",
@@ -360,10 +372,13 @@ var ModuleMenuBindings = map[string][]string{
 		"abExperiment", "churnPrediction",
 	},
 
-	// ========== browser-automation：浏览器自动化（10 节点）==========
+	// ========== browser-automation：浏览器自动化（11 节点）==========
 	ModuleBrowserAutomation: {
 		"browserAutomation", "baTasks", "baCreate", "baCron", "baStatus",
 		"egoFlows", "egoSessions", "egoExecutions", "egoRunner", "egoAssets", "egoAssetAdmin",
+		// egoTelemetry（遥测看板）：ego 腿执行聚合读数（count/成功率/p95），
+		// 同一付费能力的观测面，不新增模块条目。
+		"egoTelemetry",
 	},
 
 	// ========== geo：GEO 智能优化（32 节点）==========

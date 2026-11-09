@@ -75,41 +75,10 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="目标群体">
-          <el-select v-model="form.audienceType">
-            <el-option
-              label="全部客户"
-              value="all"
-            />
-            <el-option
-              label="按分群"
-              value="segment"
-            />
-            <el-option
-              label="按线索"
-              value="clue"
-            />
-            <el-option
-              label="上传 CSV"
-              value="csv"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item
-          v-if="form.audienceType === 'segment'"
-          label="选择分群"
-        >
-          <el-select
-            v-model="form.segmentId"
-            filterable
-          >
-            <el-option
-              v-for="s in segments"
-              :key="s.id"
-              :label="s.name"
-              :value="s.id"
-            />
-          </el-select>
+        <el-form-item label="发送对象">
+          <el-tag type="info">
+            全部 WhatsApp 线索（自动获取）
+          </el-tag>
         </el-form-item>
         <el-form-item label="发送速率">
           <el-input-number
@@ -190,13 +159,10 @@ import { http } from '@/utils/request'
 const stats = ref({ sent: 0, delivered: 0, read: 0, failed: 0 })
 const form = ref({
   templateId: null,
-  audienceType: 'all',
-  segmentId: null,
   ratePerMinute: 20,
   variablesJson: '{}'
 })
 const templates = ref([])
-const segments = ref([])
 const showPreview = ref(false)
 const sending = ref(false)
 const progress = ref(0)
@@ -204,17 +170,15 @@ const progressList = ref([])
 const progressStatus = ref('')
 
 async function load() {
-  // 这两个端点的 data 不是裸数组：/api/whatsapp/templates 返回 { data: [...] }，
-  // /api/user-segments 返回 { list: [...], total }。http 拦截器已解一层信封
-  // （utils/request.js:155 return data.data），这里必须再解一层，
+  // /api/whatsapp/templates 的 data 不是裸数组：返回 { data: [...] }。http 拦截器
+  // 已解一层信封（utils/request.js:155 return data.data），这里必须再解一层，
   // 否则 v-for 遍历的是对象的属性值，option 的 label/value 全 undefined，
-  // 模板与分群下拉实际渲染空白且选不中（实测 12 条 ElOption type check 告警）。
-  const [tplRes, segRes] = await Promise.all([
-    http.get('/api/whatsapp/templates'),
-    http.get('/api/user-segments')
-  ])
+  // 模板下拉实际渲染空白且选不中（实测 12 条 ElOption type check 告警）。
+  // （2026-11-09 审计移除分群下拉：后端 BulkSend 对 segment/clue/csv 一律
+  // 发全部 WhatsApp 线索、segment_id 从不参与过滤——下拉是假选项，删掉
+  // 比留着骗人诚实；后端真过滤后可再恢复。）
+  const tplRes = await http.get('/api/whatsapp/templates')
   templates.value = tplRes?.data || []
-  segments.value = segRes?.list || []
 }
 
 const progressStats = computed(() => {
@@ -241,7 +205,7 @@ async function send() {
   try {
     const job = await http.post('/api/whatsapp/bulk-send', {
       template_id: form.value.templateId,
-      audience: { type: form.value.audienceType, segment_id: form.value.segmentId },
+      audience: { type: 'all' },
       rate_per_minute: form.value.ratePerMinute,
       variables
     })

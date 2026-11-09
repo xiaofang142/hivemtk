@@ -104,6 +104,11 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "intentRecognition", Title: "意图识别", Icon: "Aim", Path: "/intentRecognition/list"},
 					{Key: "dialogueMemory", Title: "对话记忆", Icon: "ChatDotRound", Path: "/dialogueMemory/list"},
 					{Key: "llmRouting", Title: "LLM 路由", Icon: "Cpu", Path: "/llmRouting/list"},
+					// T1 未知问题运营页（低置信度回流 → FAQ 提交审核）：页面与接口
+					// 2026-10 起就在（src/views/unknownQuestion/List.vue、/api/unknown-questions），
+					// 但注册表一直没有入口，只有 URL 深链可达——2026-11-09 全路由审计
+					// 证实三面（菜单/页内跳转/路由名引用）都查不到它，这里补上。
+					{Key: "unknownQuestions", Title: "未知问题运营", Icon: "QuestionFilled", Path: "/unknown-questions", Roles: []string{"admin"}},
 				},
 			},
 			{
@@ -128,6 +133,9 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "scriptTemplateAbStats", Title: "话术 AB 统计", Icon: "DataLine", Path: "/scriptTemplate/ab-stats"},
 					{Key: "aiToolManagement", Title: "AI 工具管理", Icon: "Tools", Path: "/aiAgent/tools", Roles: []string{"admin"}},
 					{Key: "aiCustomIntegration", Title: "工具接入", Icon: "Link", Path: "/aiAgent/integrations", Roles: []string{"admin"}},
+					// MCP 凭证（src/views/mcp/Credentials.vue，/api/mcp/credentials）：
+					// 与上面 aiCustomIntegration 同属「AI 能调用什么」这一摊，同轮审计补的入口。
+					{Key: "mcpCredentials", Title: "MCP 凭证", Icon: "Key", Path: "/mcp/credentials", Roles: []string{"admin"}},
 				},
 			},
 			{
@@ -145,7 +153,7 @@ var SystemMenuTree = []SystemMenuNode{
 				Key: "agentChannel", Title: "客服渠道", Icon: "Connection",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
-					{Key: "chatChannelList", Title: "客服渠道", Icon: "Connection", Path: "/chatChannel/list"},
+					{Key: "chatChannelList", Title: "网页客服渠道", Icon: "Connection", Path: "/chatChannel/list"},
 					{Key: "whatsappCloud", Title: "WhatsApp Cloud", Icon: "Connection", Path: "/whatsapp-cloud"},
 					{Key: "dingtalkApp", Title: "钉钉应用账号", Icon: "Connection", Path: "/dingtalk-app"},
 				},
@@ -226,10 +234,14 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "whatsappAccount", Title: "账号管理", Icon: "Cpu", Path: "/whatsapp/account"},
 					{Key: "whatsappDrafts", Title: "草稿箱", Icon: "Document", Path: "/whatsapp/drafts"},
-					{Key: "whatsappJobs", Title: "群发", Icon: "Promotion", Path: "/whatsapp/jobs"},
+					// 菜单名与页面内容对齐（2026-11-09 全路由审计）：jobs=群发任务链
+					// （草稿→任务→进度）；bulk-matrix=统计卡+模板群发表单（发对象=全部
+					// WhatsApp 线索）；group-messaging=群组发送+模板管理。原「群发/
+					// 群发统计矩阵/群发矩阵」三个名字指向不清且与页面内容错位。
+					{Key: "whatsappJobs", Title: "群发任务", Icon: "Promotion", Path: "/whatsapp/jobs"},
 					{Key: "whatsappLeadGroup", Title: "群发线索分组", Icon: "UserFilled", Path: "/whatsapp/lead-group-selection"},
-					{Key: "whatsappBulkMatrix", Title: "群发统计矩阵", Icon: "Grid", Path: "/whatsapp/bulk-matrix"},
-					{Key: "whatsappGroupMessaging", Title: "群发矩阵", Icon: "Grid", Path: "/whatsapp/group-messaging"},
+					{Key: "whatsappBulkMatrix", Title: "模板群发", Icon: "Grid", Path: "/whatsapp/bulk-matrix"},
+					{Key: "whatsappGroupMessaging", Title: "群组发送", Icon: "Grid", Path: "/whatsapp/group-messaging"},
 				},
 			},
 			{
@@ -237,6 +249,9 @@ var SystemMenuTree = []SystemMenuNode{
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
 					{Key: "telegramAccount", Title: "机器人", Icon: "Cpu", Path: "/telegram/account"},
+					// 入群管控（src/views/telegram/gate.vue，/api/telegram/gates CRUD）：
+					// 页面 2026-09 交付，菜单一直没接，同轮审计补上。
+					{Key: "telegramGate", Title: "入群管控", Icon: "Lock", Path: "/telegram/gate"},
 				},
 			},
 			{
@@ -284,6 +299,10 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "knowledgeRagEval", Title: "RAG 评测", Icon: "CircleCheck", Path: "/knowledge/rag-eval"},
 					{Key: "knowledgeOpenAPI", Title: "OpenAPI 集成", Icon: "Connection", Path: "/knowledge/openapi"},
 					{Key: "knowledgeConnectors", Title: "连接器配置", Icon: "Link", Path: "/knowledge/connectors"},
+					// 第三方知识库导入器（src/views/kb/Connectors.vue，把 IMA 等第三方
+					// 知识库文档拉进本地 RAG）。与上面 knowledgeConnectors（Notion/飞书/
+					// 钉钉凭据连接器）同组不同职：那个管凭据连通，这个管文档导入。
+					{Key: "kbImportConnectors", Title: "第三方知识库导入", Icon: "Connection", Path: "/kb/connectors", Roles: []string{"admin"}},
 				},
 			},
 			{
@@ -312,6 +331,9 @@ var SystemMenuTree = []SystemMenuNode{
 		Children: []SystemMenuNode{
 			{Key: "dashboardScreen", Title: "数据大屏", Icon: "DataBoard", Path: "/dashboardScreen/list"},
 			{Key: "conversionFunnel", Title: "转化漏斗", Icon: "Filter", Path: "/conversionFunnel/list"},
+			// T3 LLM 观测报表（src/views/reports/LlmUsageDashboard.vue，/api/reports/llm/*）：
+			// llm_usage_daily 日聚合 + 当日明细兜底。交付时只有深链无菜单，同轮审计补上。
+			{Key: "llmUsageReport", Title: "LLM 用量报表", Icon: "TrendCharts", Path: "/reports/llm", Roles: []string{"admin", "viewer"}},
 			{Key: "aiProductivity", Title: "AI 产能分析", Icon: "DataAnalysis", Path: "/aiProductivity/list", Roles: []string{"admin", "viewer"}},
 			{Key: "customReport", Title: "自定义报表", Icon: "Document", Path: "/customReport/list"},
 			{Key: "abExperiment", Title: "A/B 实验", Icon: "DataLine", Path: "/abExperiment/list", Roles: []string{"admin", "viewer"}},
@@ -338,6 +360,9 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "egoAssets", Title: "资产中心", Icon: "Shop", Path: "/browser-automation/ego/assets"},
 					// 平台端 = 本实例管理端；Roles 收窄到 admin（用户端橱窗是 egoAssets）
 					{Key: "egoAssetAdmin", Title: "资产发布台", Icon: "Upload", Path: "/browser-automation/ego/assets/admin", Roles: []string{"admin"}},
+					// 遥测看板（S-9，src/views/browserAutomation/ego/Telemetry.vue）：
+					// 只回聚合桶（count/成功率/p95），与路由 meta 的 admin 限定一致。
+					{Key: "egoTelemetry", Title: "遥测看板", Icon: "DataBoard", Path: "/browser-automation/ego/telemetry", Roles: []string{"admin"}},
 				},
 			},
 			{
