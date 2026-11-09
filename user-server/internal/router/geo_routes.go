@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/config"
 	maindto "hivemtk-user/internal/dto"
 	geoctrl "hivemtk-user/internal/geo/controller"
@@ -106,7 +107,10 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 			mainrepo.NewLLMProviderRepositoryWithDB(gormDB),
 			georepo.NewGeoConfigRepositoryWithDB(gormDB))
 	}
-	kwMiningSvc := geoservice.NewKeywordMiningService(keywordRepo, llmAdapter)
+	// MD-07：关键词挖掘组装配归位 internal/app（geo_wiring.go），Router 只收
+	// 已构造依赖。llmAdapter 仍在本文件为其余 GEO 组构造（等价性边界见
+	// geo_wiring.go 文件头；本组迁走后它仍被 keywordSvc/contentSvc 等使用）。
+	kwMiningRT := app.InitGeoKeywordMiningRuntime(gormDB)
 	pushSvc := geoservice.NewPushService(
 		georepo.NewGeoPusherConfigRepositoryWithDB(gormDB),
 		georepo.NewGeoPushRecordRepositoryWithDB(gormDB),
@@ -121,11 +125,9 @@ func SetupGeoRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		georepo.NewGeoDailyStatRepositoryWithDB(gormDB),
 	)
 	indexTrackerSvc.SetProbeResolver(probeResolver)
-	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningSvc)
-	seedTermSvc := geoservice.NewSeedTermService(georepo.NewGeoSeedTermRepositoryWithDB(gormDB))
-	seedTermCtrl := geoctrl.NewSeedTermController(seedTermSvc)
-	dictSvc := geoservice.NewDictService(georepo.NewGeoDictRepositoryWithDB(gormDB))
-	dictCtrl := geoctrl.NewDictController(dictSvc)
+	kwMiningCtrl := geoctrl.NewKeywordMiningController(kwMiningRT.KeywordMining)
+	seedTermCtrl := geoctrl.NewSeedTermController(kwMiningRT.SeedTerm)
+	dictCtrl := geoctrl.NewDictController(kwMiningRT.Dict)
 	pushCtrl := geoctrl.NewPushController(pushSvc)
 	siteCtrl := geoctrl.NewSiteController(siteSvc, pushSvc, configRepo)
 	indexCtrl := geoctrl.NewIndexTrackerController(indexTrackerSvc)
