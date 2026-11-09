@@ -576,6 +576,14 @@ func entryToDTO(e *model.FAQEntry) *dto.FAQEntry {
 	if e.Enabled != nil {
 		enabled = *e.Enabled
 	}
+	// 存量数据里有 confidence>1 的行（早期学习回路按累加写过），列表按百分比展示
+	// 会显示 104%/243%。展示出口统一夹到 [0,1]；匹配排序分另由 toMatchResults 夹紧。
+	confidence := e.Confidence
+	if confidence > 1 {
+		confidence = 1
+	} else if confidence < 0 {
+		confidence = 0
+	}
 	return &dto.FAQEntry{
 		ID:         e.ID,
 		Question:   e.Question,
@@ -583,7 +591,7 @@ func entryToDTO(e *model.FAQEntry) *dto.FAQEntry {
 		Keywords:   []string(e.Keywords),
 		Category:   e.Category,
 		Intent:     e.Intent,
-		Confidence: e.Confidence,
+		Confidence: confidence,
 		HitCount:   e.HitCount,
 		Enabled:    &enabled,
 		AgentID:    e.AgentID,

@@ -452,7 +452,10 @@ func (s *SSOService) provisionUser(ctx context.Context, nu *sso.NormalizedUser, 
 	username := s.uniqueUsername(ctx, nu.Username, nu.Email)
 	email := nu.Email
 	if email != "" {
-		if exists, _ := s.userRepo.EmailExists(ctx, email, 0); exists {
+		// 邮箱唯一性是跨租户全局的（global_uniq_system_users_email 部分唯一索引）。
+		// 按当前租户查重会漏掉别的租户已占用的同一邮箱，落库时才被唯一索引
+		// 拒绝（SQLSTATE 23505）→ 自动开户失败。这里必须走全局查重。
+		if exists, _ := s.userRepo.EmailExistsGlobal(ctx, email); exists {
 			email = ""
 		}
 	}
