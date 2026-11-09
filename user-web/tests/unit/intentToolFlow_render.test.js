@@ -19,7 +19,11 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
   remove: vi.fn(),
-  vocab: vi.fn()
+  vocab: vi.fn(),
+  ciList: vi.fn(),
+  ciCreate: vi.fn(),
+  ciUpdate: vi.fn(),
+  ciRemove: vi.fn()
 }))
 
 vi.mock('@/api/intentToolChain', () => ({
@@ -27,7 +31,11 @@ vi.mock('@/api/intentToolChain', () => ({
   createIntentToolChain: api.create,
   updateIntentToolChain: api.update,
   deleteIntentToolChain: api.remove,
-  getIntentToolChainVocab: api.vocab
+  getIntentToolChainVocab: api.vocab,
+  listCustomIntents: api.ciList,
+  createCustomIntent: api.ciCreate,
+  updateCustomIntent: api.ciUpdate,
+  deleteCustomIntent: api.ciRemove
 }))
 
 import ToolFlow from '@/views/intentRecognition/ToolFlow.vue'
@@ -74,9 +82,10 @@ const ROW = {
 }
 
 beforeEach(() => {
-  for (const fn of [api.list, api.create, api.update, api.remove, api.vocab]) {
+  for (const fn of [api.list, api.create, api.update, api.remove, api.vocab, api.ciList, api.ciCreate, api.ciUpdate, api.ciRemove]) {
     fn.mockReset()
   }
+  api.ciList.mockResolvedValue({ data: { list: [], total: 0 } })
   api.vocab.mockResolvedValue({ data: VOCAB })
   api.list.mockResolvedValue({ data: { list: [ROW], total: 1 } })
   api.create.mockResolvedValue({ code: 0 })
@@ -144,6 +153,47 @@ describe('意图→工具调用流编排页（TB-02）', () => {
     w.vm.form.steps = [{ tool_name: 'order.lookup', args: { k: '{{open' }, priority: 1, enabled: true }]
     await w.vm.save()
     expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('自定义意图：type 形态/空词面前置拦截，不发起请求', async () => {
+    const w = mountPage()
+    await settle(w)
+    w.vm.ciOpenCreate()
+    w.vm.ciForm.type = 'Bad-Type'
+    w.vm.ciForm.name = 'x'
+    w.vm.ciForm.keywords = ['词']
+    await w.vm.ciSave()
+    expect(api.ciCreate).not.toHaveBeenCalled()
+
+    w.vm.ciForm.type = 'return_policy'
+    w.vm.ciForm.keywords = []
+    await w.vm.ciSave()
+    expect(api.ciCreate).not.toHaveBeenCalled()
+  })
+
+  it('自定义意图：合法词条创建成功并刷新词表（动态进入挂载面）', async () => {
+    const w = mountPage()
+    await settle(w)
+    w.vm.ciOpenCreate()
+    w.vm.ciForm.type = 'return_policy'
+    w.vm.ciForm.name = '退换货政策'
+    w.vm.ciForm.keywords = ['怎么退', '如何退货']
+    w.vm.ciForm.description = '客户咨询退换货'
+    await w.vm.ciSave()
+    expect(api.ciCreate).toHaveBeenCalledTimes(1)
+    const payload = api.ciCreate.mock.calls[0][0]
+    expect(payload.keywords).toEqual(['怎么退', '如何退货'])
+    // 词表刷新被触发（loadVocab 重跑 → 动态 family=custom 可选）
+    expect(api.vocab.mock.calls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('自定义意图：编辑态 type 输入框禁用（type 不可改契约）', async () => {
+    const w = mountPage()
+    await settle(w)
+    w.vm.ciOpenEdit({ id: 7, type: 'return_policy', name: '退换货政策', keywords_json: '["怎么退"]', examples_json: '[]', description: '', enabled: true })
+    expect(w.vm.ciEditingId).toBe(7)
+    expect(w.vm.ciForm.type).toBe('return_policy')
+    expect(w.vm.ciForm.keywords).toEqual(['怎么退'])
   })
 
   it('空工具名被客户端拦截', async () => {

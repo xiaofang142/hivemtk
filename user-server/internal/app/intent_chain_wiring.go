@@ -25,6 +25,7 @@ import (
 var (
 	intentChainOnce sync.Once
 	intentChainSvc  *service.IntentToolChainService
+	customIntentSvc *service.CustomIntentService
 )
 
 // InitIntentChainRuntime 装配意图→工具链绑定服务（幂等；db=nil 不装配）。
@@ -35,6 +36,10 @@ func InitIntentChainRuntime(gdb *gorm.DB) *service.IntentToolChainService {
 			return
 		}
 		intentChainSvc = service.NewIntentToolChainService(repository.NewIntentToolChainRepositoryWithDB(gdb))
+		// T-09：自定义意图词条服务（识别器词典合并 + 绑定校验动态放行）。
+		customIntentSvc = service.NewCustomIntentService(repository.NewCustomIntentRepositoryWithDB(gdb))
+		service.SetCustomIntentService(customIntentSvc)
+		intentChainSvc.SetCustomIntentService(customIntentSvc)
 		// TB-03 默认种子：只读查询链（快递/售后）幂等写入默认租户；已有配置（含禁用）跳过。
 		seedCtx := tenant.ContextWithDefault(context.Background())
 		if n, err := intentChainSvc.SeedDefaultIntentChains(seedCtx); err != nil {
@@ -50,4 +55,9 @@ func InitIntentChainRuntime(gdb *gorm.DB) *service.IntentToolChainService {
 // GetIntentToolChainService 取绑定服务实例（未装配返回 nil）。
 func GetIntentToolChainService() *service.IntentToolChainService {
 	return intentChainSvc
+}
+
+// GetCustomIntentService 取自定义意图服务实例（未装配返回 nil）。
+func GetCustomIntentService() *service.CustomIntentService {
+	return customIntentSvc
 }

@@ -276,6 +276,13 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.POST("/intent/tool-chains", chainCtrl.Create)
 	admin.PUT("/intent/tool-chains/:id", chainCtrl.Update)
 	admin.DELETE("/intent/tool-chains/:id", chainCtrl.Delete)
+
+	// T-09 自定义意图词条（管理端 CRUD；识别词典合并 + 绑定动态放行）。
+	ciCtrl := controller.NewCustomIntentController(app.GetCustomIntentService())
+	admin.GET("/intent/custom", ciCtrl.List)
+	admin.POST("/intent/custom", ciCtrl.Create)
+	admin.PUT("/intent/custom/:id", ciCtrl.Update)
+	admin.DELETE("/intent/custom/:id", ciCtrl.Delete)
 }
 
 func setupLLMProviderRoutes(auth *gin.RouterGroup) {

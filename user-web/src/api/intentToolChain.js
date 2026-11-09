@@ -22,3 +22,20 @@ export function deleteIntentToolChain(id) {
 export function getIntentToolChainVocab() {
   return http.get('/api/intent/tool-chains/vocab');
 }
+
+// ---- 自定义意图词条（T-09） ----
+export function listCustomIntents(params) {
+  return http.get('/api/intent/custom', params);
+}
+
+export function createCustomIntent(data) {
+  return http.post('/api/intent/custom', data);
+}
+
+export function updateCustomIntent(id, data) {
+  return http.put(`/api/intent/custom/${id}`, data);
+}
+
+export function deleteCustomIntent(id) {
+  return http.delete(`/api/intent/custom/${id}`);
+}

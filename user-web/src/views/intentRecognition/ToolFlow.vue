@@ -21,6 +21,7 @@
           <el-option v-for="i in vocab.intents || []" :key="i" :label="intentLabel(i)" :value="i" />
         </el-select>
         <el-button type="primary" @click="openCreate">新增调用流</el-button>
+        <el-button @click="ciDialogVisible = true">自定义意图</el-button>
         <el-button @click="loadList">刷新</el-button>
       </div>
 
@@ -117,6 +118,66 @@
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 自定义意图管理（T-09）：加词条→进识别词典→可直接挂载工具调用流 -->
+    <el-dialog v-model="ciDialogVisible" title="自定义意图" width="680px" destroy-on-close>
+      <div class="ci-hint">新增词条后进入识别词典（词面规则+LLM 候选，约 30 秒内生效），并可在上方调用流编排里作为意图挂载。内置意图不可覆盖；type 不可修改。</div>
+      <div class="ci-toolbar">
+        <el-button type="primary" size="small" @click="ciOpenCreate">新增词条</el-button>
+      </div>
+      <el-table :data="ciRows" size="small" max-height="360">
+        <el-table-column label="type" prop="type" min-width="130" show-overflow-tooltip />
+        <el-table-column label="名称" prop="name" min-width="110" show-overflow-tooltip />
+        <el-table-column label="词面" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span class="ci-keywords">{{ parseKeywords(row.keywords_json).join(' / ') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="启用" width="70">
+          <template #default="{ row }">
+            <el-switch :model-value="row.enabled" @change="(v) => ciToggle(row, v)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="ciOpenEdit(row)">编辑</el-button>
+            <el-button link type="danger" @click="ciRemove(row)">删除</el-button>
+          </template>
+        </el-table-column>
+        <template #empty>暂无自定义意图</template>
+      </el-table>
+
+      <el-dialog v-model="ciFormVisible" :title="ciEditingId ? '编辑词条' : '新增词条'" width="520px" append-to-body destroy-on-close>
+        <el-form :model="ciForm" label-width="80px">
+          <el-form-item label="type" required>
+            <el-input v-model="ciForm.type" :disabled="!!ciEditingId" placeholder="小写字母/数字/下划线，如 return_policy" />
+          </el-form-item>
+          <el-form-item label="名称" required>
+            <el-input v-model="ciForm.name" maxlength="100" placeholder="如：退换货政策" />
+          </el-form-item>
+          <el-form-item label="命中词面" required>
+            <el-select v-model="ciForm.keywords" multiple filterable allow-create default-first-option placeholder="输入词面后回车，如：怎么退" style="width: 100%">
+              <el-option v-for="k in ciForm.keywords" :key="k" :label="k" :value="k" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="示例问句">
+            <el-select v-model="ciForm.examples" multiple filterable allow-create default-first-option placeholder="可选；v1 不进向量检索，仅作展示" style="width: 100%">
+              <el-option v-for="k in ciForm.examples" :key="k" :label="k" :value="k" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="描述">
+            <el-input v-model="ciForm.description" maxlength="500" placeholder="进入 LLM 意图候选的描述文案" />
+          </el-form-item>
+          <el-form-item label="启用">
+            <el-switch v-model="ciForm.enabled" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="ciFormVisible = false">取消</el-button>
+          <el-button type="primary" :loading="ciSaving" @click="ciSave">保存</el-button>
+        </template>
+      </el-dialog>
+    </el-dialog>
   </div>
 </template>
 
@@ -124,10 +185,14 @@
 import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
+  createCustomIntent,
   createIntentToolChain,
+  deleteCustomIntent,
   deleteIntentToolChain,
   getIntentToolChainVocab,
+  listCustomIntents,
   listIntentToolChains,
+  updateCustomIntent,
   updateIntentToolChain,
 } from '@/api/intentToolChain';
 
@@ -387,6 +452,108 @@ async function removeRow(row) {
   await loadList();
 }
 
+// ---- 自定义意图管理（T-09） ----
+const ciDialogVisible = ref(false);
+const ciFormVisible = ref(false);
+const ciSaving = ref(false);
+const ciEditingId = ref(null);
+const ciRows = ref([]);
+const ciForm = ref({ type: '', name: '', keywords: [], examples: [], description: '', enabled: true });
+
+function parseKeywords(json) {
+  try {
+    return JSON.parse(json || '[]');
+  } catch {
+    return [];
+  }
+}
+
+async function ciLoad() {
+  const res = await listCustomIntents({ page: 1, page_size: 100 });
+  ciRows.value = res?.data?.list || [];
+}
+
+function ciOpenCreate() {
+  ciEditingId.value = null;
+  ciForm.value = { type: '', name: '', keywords: [], examples: [], description: '', enabled: true };
+  ciFormVisible.value = true;
+  ciLoad();
+}
+
+function ciOpenEdit(row) {
+  ciEditingId.value = row.id;
+  ciForm.value = {
+    type: row.type,
+    name: row.name,
+    keywords: parseKeywords(row.keywords_json),
+    examples: parseKeywords(row.examples_json),
+    description: row.description || '',
+    enabled: !!row.enabled,
+  };
+  ciFormVisible.value = true;
+}
+
+async function ciSave() {
+  if (!/^[a-z][a-z0-9_]{1,49}$/.test(ciForm.value.type)) {
+    ElMessage.warning('type 仅允许小写字母/数字/下划线');
+    return;
+  }
+  if (!ciForm.value.name.trim()) {
+    ElMessage.warning('请填写名称');
+    return;
+  }
+  if (!ciForm.value.keywords.length) {
+    ElMessage.warning('至少一个命中词面');
+    return;
+  }
+  ciSaving.value = true;
+  try {
+    const payload = {
+      type: ciForm.value.type,
+      name: ciForm.value.name.trim(),
+      keywords: ciForm.value.keywords,
+      examples: ciForm.value.examples,
+      description: ciForm.value.description || '',
+      enabled: !!ciForm.value.enabled,
+    };
+    if (ciEditingId.value) {
+      await updateCustomIntent(ciEditingId.value, payload);
+      ElMessage.success('已更新，约 30 秒内生效');
+    } else {
+      await createCustomIntent(payload);
+      ElMessage.success('已创建，约 30 秒内进入识别词典与挂载面');
+    }
+    ciFormVisible.value = false;
+    await Promise.all([ciLoad(), loadVocab()]);
+  } finally {
+    ciSaving.value = false;
+  }
+}
+
+async function ciToggle(row, v) {
+  await updateCustomIntent(row.id, {
+    type: row.type,
+    name: row.name,
+    keywords: parseKeywords(row.keywords_json),
+    examples: parseKeywords(row.examples_json),
+    description: row.description || '',
+    enabled: !!v,
+  });
+  ElMessage.success(v ? '已启用' : '已停用');
+  await Promise.all([ciLoad(), loadVocab()]);
+}
+
+async function ciRemove(row) {
+  try {
+    await ElMessageBox.confirm(`确认删除自定义意图 ${row.type}？其工具调用流配置会保留但立即失效。`, '删除确认', { type: 'warning' });
+  } catch {
+    return;
+  }
+  await deleteCustomIntent(row.id);
+  ElMessage.success('已删除');
+  await Promise.all([ciLoad(), loadVocab()]);
+}
+
 onMounted(async () => {
   await loadVocab();
   await loadList();
@@ -490,5 +657,18 @@ onMounted(async () => {
   font-size: 12px;
   margin-left: 8px;
   font-family: monospace;
+}
+.ci-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 10px;
+}
+.ci-toolbar {
+  margin-bottom: 8px;
+}
+.ci-keywords {
+  font-family: monospace;
+  font-size: 12px;
 }
 </style>
