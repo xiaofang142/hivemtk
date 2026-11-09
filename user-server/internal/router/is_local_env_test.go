@@ -23,15 +23,15 @@ func TestIsLocalEnv_EmptyMeansNotLocal(t *testing.T) {
 
 func TestIsLocalEnv_ExplicitLocalValues(t *testing.T) {
 	cases := map[string]bool{
-		"dev":        true,
+		"dev":         true,
 		"development": true,
-		"debug":      true,
-		"test":       true,
-		"local":      true,
-		" DEV ":      true, // 大小写与空白容忍保持
-		"production": false,
-		"prod":       false,
-		"release":    false,
+		"debug":       true,
+		"test":        true,
+		"local":       true,
+		" DEV ":       true, // 大小写与空白容忍保持
+		"production":  false,
+		"prod":        false,
+		"release":     false,
 	}
 	for val, want := range cases {
 		t.Setenv("APP_ENV", val)

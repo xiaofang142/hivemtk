@@ -27,8 +27,9 @@ func newMCPTestDB(t *testing.T) {
 func TestMCPClient_CreateUnreachableSavesRowWithError(t *testing.T) {
 	newMCPTestDB(t)
 	svc := NewMCPClientService()
+	// G-1 后 127.0.0.1 在 Create 期即被拒；这里改用公网 TEST-NET-1 文档地址（不可达但合法）
 	row, n, err := svc.Create(context.Background(), MCPImportInput{
-		Name: "gone", Endpoint: "http://127.0.0.1:1", TimeoutSeconds: 1,
+		Name: "gone", Endpoint: "http://192.0.2.1:1", TimeoutSeconds: 1,
 	})
 	if err != nil {
 		t.Fatalf("配置应落库成功（不可达只影响发现）: %v", err)
@@ -43,7 +44,8 @@ func TestMCPClient_CreateUnreachableSavesRowWithError(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("列表 = %d err=%v want 1", len(rows), err)
 	}
-	if rows[0].LastStatus != "error" || !strings.Contains(rows[0].LastError, "refused") {
+	if rows[0].LastStatus != "error" || rows[0].LastError == "" {
+		// TEST-NET-1 不可达错误文关怀环境（timeout/unreachable/refused），只钉非空
 		t.Errorf("应记连接错误：status=%q err=%q", rows[0].LastStatus, rows[0].LastError)
 	}
 }
@@ -51,10 +53,10 @@ func TestMCPClient_CreateUnreachableSavesRowWithError(t *testing.T) {
 func TestMCPClient_CreateRejectsDuplicate(t *testing.T) {
 	newMCPTestDB(t)
 	svc := NewMCPClientService()
-	if _, _, err := svc.Create(context.Background(), MCPImportInput{Name: "dup", Endpoint: "http://127.0.0.1:1", TimeoutSeconds: 1}); err != nil {
+	if _, _, err := svc.Create(context.Background(), MCPImportInput{Name: "dup", Endpoint: "http://192.0.2.1:1", TimeoutSeconds: 1}); err != nil {
 		t.Fatalf("首次创建失败: %v", err)
 	}
-	if _, _, err := svc.Create(context.Background(), MCPImportInput{Name: "dup", Endpoint: "http://127.0.0.1:1", TimeoutSeconds: 1}); err == nil {
+	if _, _, err := svc.Create(context.Background(), MCPImportInput{Name: "dup", Endpoint: "http://192.0.2.1:1", TimeoutSeconds: 1}); err == nil {
 		t.Fatal("重名应拒绝")
 	}
 }
@@ -92,5 +94,69 @@ func TestMCPClient_ListTenantScopedInMultiTenantMode(t *testing.T) {
 			names = append(names, r.Name)
 		}
 		t.Fatalf("租户 2 只应看到 t2，实际 %v", names)
+	}
+}
+
+// —— G-1 stored-SSRF 防线：配置期三入口（Create/SetEnabled/Test）统一拒绝内网端点 ——
+
+func TestMCPClient_CreateRejectsInternalEndpoint(t *testing.T) {
+	newMCPTestDB(t)
+	svc := NewMCPClientService()
+	for _, raw := range []string{
+		"http://127.0.0.1:1", "http://localhost:1", "http://192.168.1.1",
+		"http://169.254.169.254/latest/meta-data", "http://100.64.0.1",
+	} {
+		_, _, err := svc.Create(context.Background(), MCPImportInput{Name: "ssrf-" + raw, Endpoint: raw})
+		if err == nil || !strings.Contains(err.Error(), "SSRF") {
+			t.Errorf("内网端点 %q 应拒绝且报 SSRF，实际 err=%v", raw, err)
+		}
+	}
+	rows, err := svc.List(context.Background())
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("拒绝的用例不应落库，实际 %d 行 err=%v", len(rows), err)
+	}
+}
+
+func TestMCPClient_SetEnabledRejectsLegacyInternalRow(t *testing.T) {
+	newMCPTestDB(t)
+	svc := NewMCPClientService()
+	db := testutil.NewTestDB(t, &model.MCPServer{})
+	if err := db.Create(&model.MCPServer{TenantID: 1, Name: "legacy", Endpoint: "http://[::1]:8080"}).Error; err != nil {
+		t.Fatalf("种 legacy 行失败: %v", err)
+	}
+	// 显式置停用：Enabled 带 default:true 且零值省略，Create 无法表达"禁用出生"，
+	// 必须用 Update 落 false，否则"拒绝后保持停用"断言失去前提。
+	if err := db.Model(&model.MCPServer{}).Where("name = ?", "legacy").Update("enabled", false).Error; err != nil {
+		t.Fatalf("置 legacy 行为停用失败: %v", err)
+	}
+	row, err := svc.List(context.Background())
+	if err != nil || len(row) != 1 {
+		t.Fatalf("种品行应可列出: %+v err=%v", row, err)
+	}
+	if row[0].Enabled {
+		t.Fatalf("种子行应为停用态（Update 置 false 后），实际 enabled=%v", row[0].Enabled)
+	}
+	if _, _, err := svc.SetEnabled(context.Background(), row[0].ID, true); err == nil || !strings.Contains(err.Error(), "SSRF") {
+		t.Fatalf("启用内网 legacy 行应拒绝，实际 err=%v", err)
+	}
+	after, err := svc.List(context.Background())
+	if err != nil || after[0].Enabled {
+		t.Fatalf("拒绝后行应保持停用: %+v", after)
+	}
+}
+
+func TestMCPClient_TestRejectsInternalEndpoint(t *testing.T) {
+	newMCPTestDB(t)
+	svc := NewMCPClientService()
+	db := testutil.NewTestDB(t, &model.MCPServer{})
+	if err := db.Create(&model.MCPServer{TenantID: 1, Name: "t-ssrf", Endpoint: "http://10.0.0.1:9200"}).Error; err != nil {
+		t.Fatalf("种行失败: %v", err)
+	}
+	row, err := svc.List(context.Background())
+	if err != nil || len(row) != 1 {
+		t.Fatalf("种品行应可列出: %+v err=%v", row, err)
+	}
+	if _, err := svc.Test(context.Background(), row[0].ID); err == nil || !strings.Contains(err.Error(), "SSRF") {
+		t.Fatalf("Test 内网端点应拒绝，实际 err=%v", err)
 	}
 }

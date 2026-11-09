@@ -215,20 +215,15 @@ func (t *openAPITool) Parameters() ToolParameters {
 
 // Execute HTTP 转发。返回体截断到 64KB（LLM 上下文保护）。
 func (t *openAPITool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
-	url := strings.TrimRight(t.spec.BaseURL, "/") + t.op.Path
+	target := strings.TrimRight(t.spec.BaseURL, "/") + t.op.Path
 	for _, p := range t.op.Params {
 		if p.In == "path" {
 			v := args[p.Name]
-			url = strings.ReplaceAll(url, "{"+p.Name+"}", fmt.Sprintf("%v", v))
+			target = strings.ReplaceAll(target, "{"+p.Name+"}", fmt.Sprintf("%v", v))
 		}
 	}
-	q := url
-	if strings.Contains(url, "?") {
-		q += "&"
-	} else {
-		q += "?"
-	}
-	first := true
+	// G-2：query 参数统一 url.Values 编码（值里的 &/#/空格/= 不再污染上游请求）
+	query := url.Values{}
 	for _, p := range t.op.Params {
 		if p.In != "query" {
 			continue
@@ -237,11 +232,15 @@ func (t *openAPITool) Execute(ctx context.Context, args map[string]any) (ToolRes
 		if !ok {
 			continue
 		}
-		if !first {
-			q += "&"
+		query.Add(p.Name, fmt.Sprintf("%v", v))
+	}
+	q := target
+	if len(query) > 0 {
+		sep := "?"
+		if strings.Contains(target, "?") {
+			sep = "&"
 		}
-		q += fmt.Sprintf("%s=%v", p.Name, v)
-		first = false
+		q += sep + query.Encode()
 	}
 
 	var body io.Reader

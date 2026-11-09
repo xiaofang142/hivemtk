@@ -20,6 +20,7 @@ import (
 	"hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbencrypt"
+	"hivemtk-user/internal/pkg/urlguard"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -52,6 +53,10 @@ func (s *MCPClientService) Create(ctx context.Context, in MCPImportInput) (*mode
 	}
 	if strings.TrimSpace(in.Endpoint) == "" {
 		return nil, 0, bizerr.New(bizerr.CodeParamInvalid, "endpoint 不能为空")
+	}
+	// G-1：配置期 SSRF 防线（与 openapi_tools 同口径，拒绝内网/保留/元数据地址）
+	if err := urlguard.ValidatePublicHTTPURL(in.Endpoint); err != nil {
+		return nil, 0, bizerr.New(bizerr.CodeParamInvalid, "endpoint 不合法（SSRF 防护）: "+err.Error())
 	}
 	if _, err := s.repo.FindByName(ctx, in.Name); err == nil {
 		return nil, 0, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("MCP server %q 已存在，请先删除", in.Name))
@@ -115,6 +120,12 @@ func (s *MCPClientService) SetEnabled(ctx context.Context, id uint, enabled bool
 		}
 		return nil, 0, errors.New("读取 MCP 配置失败")
 	}
+	// G-1：启用 legacy 行（修复前落库的内网地址）同样过配置期校验，不改库直接拒绝
+	if enabled {
+		if err := urlguard.ValidatePublicHTTPURL(row.Endpoint); err != nil {
+			return nil, 0, bizerr.New(bizerr.CodeParamInvalid, "endpoint 不合法（SSRF 防护）: "+err.Error())
+		}
+	}
 	if err := s.repo.SetEnabled(ctx, id, enabled); err != nil {
 		return nil, 0, err
 	}
@@ -138,6 +149,10 @@ func (s *MCPClientService) Test(ctx context.Context, id uint) ([]string, error) 
 			return nil, bizerr.New(bizerr.CodeNotFound, fmt.Sprintf("MCP 配置不存在（id=%d）", id))
 		}
 		return nil, errors.New("读取 MCP 配置失败")
+	}
+	// G-1：Test 是「触发服务端出站」的入口，防御在纵深两层（这里 + NewClient 拨号期）
+	if err := urlguard.ValidatePublicHTTPURL(row.Endpoint); err != nil {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "endpoint 不合法（SSRF 防护）: "+err.Error())
 	}
 	client := mcp.NewClient(mcp.ServerConfigFromRow(row))
 	tools, err := client.ListTools(ctx)

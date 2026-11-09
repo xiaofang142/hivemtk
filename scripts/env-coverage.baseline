@@ -112,3 +112,5 @@ MOCK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/bri
 PERF_PASSWORD	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 PERF_USERNAME	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 QWEN_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+PGSERVICE	testdb 安全门只读以拒绝（external service files not allowed，非消费型配置）；读取点 user-server/internal/pkg/testutil/testdb_config.go
+PGSERVICEFILE	testdb 安全门只读以拒绝（passfile 拒绝同源，非消费型配置）；读取点 user-server/internal/pkg/testutil/testdb_config.go

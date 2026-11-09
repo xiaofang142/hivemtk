@@ -74,6 +74,7 @@ func (l *recordingLimiter) Acquire(_ context.Context, key string) error {
 }
 
 func TestE2E_DiscoverRegisterExecuteAndIsolation(t *testing.T) {
+	withTestTransport(t)
 	upstream := newUpstreamMCPServer(t)
 	defer upstream.Close()
 
@@ -135,6 +136,7 @@ func TestE2E_DiscoverRegisterExecuteAndIsolation(t *testing.T) {
 }
 
 func TestE2E_CircuitBreakerOnDeadServer(t *testing.T) {
+	withTestTransport(t)
 	db := testutil.NewTestDB(t, &model.MCPServer{})
 	dead := model.MCPServer{Name: "gone", Endpoint: "http://127.0.0.1:1", TimeoutSeconds: 1, FailLimit: 1, CooldownSeconds: 30}
 	if err := db.Create(&dead).Error; err != nil {

@@ -25,6 +25,7 @@ import (
 	knowledgeModel "hivemtk-user/internal/aiagent/knowledge/model"
 	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/urlguard"
 
 	"gorm.io/gorm"
 )
@@ -100,27 +101,10 @@ func (s *CrawlerService) SetQASplitService(qa *QASplitService) { s.qa = qa }
 // KB 返回底层 KnowledgeBaseService（controller publish 链路用）
 func (s *CrawlerService) KB() *KnowledgeBaseService { return s.kb }
 
-// checkPublicAddr SSRF：解析地址属内网段则拒绝建连
+// checkPublicAddr SSRF：解析地址属内网段则拒绝建连。
+// 委托 urlguard 单一事实源（§8.1 口径升级：补齐 CGNAT/云元数据显式拒绝）。
 func checkPublicAddr(address string) error {
-	host, _, err := net.SplitHostPort(address)
-	if err != nil {
-		return err
-	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		addrs, err := net.LookupHost(host)
-		if err != nil || len(addrs) == 0 {
-			return fmt.Errorf("域名解析失败: %s", host)
-		}
-		ip = net.ParseIP(addrs[0])
-		if ip == nil {
-			return fmt.Errorf("无效地址: %s", host)
-		}
-	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-		return fmt.Errorf("禁止访问内网地址: %s", ip)
-	}
-	return nil
+	return urlguard.DialControl("tcp", address, nil)
 }
 
 // —— 源管理（§6.1 校验顺序：参数绑定 → 枚举 → scheme → 归属 → 配额 → 落库）——

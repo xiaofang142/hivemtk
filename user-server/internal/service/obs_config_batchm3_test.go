@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"testing"
 
@@ -283,8 +284,12 @@ func TestBatchM_TestConnectionLocalProbesDirectory(t *testing.T) {
 	})
 
 	// 只读目录这一档要求进程不是 root（root 无视 0500），CI 上常以 root 跑 ⇒ 显式跳过，
-	// 而不是让这一档在别人的环境里以错误的理由红。
+	// 而不是让这一档在别人的环境里以错误的理由红。Windows 同理：Go 的 chmod
+	// 不影响 NTFS ACL，0500 目录照样可写（A-6 先例：环境语义不成立的档显式跳过）。
 	t.Run("不可写目录要报不可写", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows 上 chmod 不改变 NTFS 可写性，这一档无判据")
+		}
 		if os.Geteuid() == 0 {
 			t.Skip("以 root 运行，0500 目录照样可写，这一档无判据")
 		}

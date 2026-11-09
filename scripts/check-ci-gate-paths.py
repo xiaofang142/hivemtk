@@ -174,7 +174,9 @@ def main() -> int:
                         if not cand.is_file():
                             cand = root / "scripts" / name
                         if cand.is_file():
-                            required.append(str(cand.relative_to(root)))
+                            # as_posix()：workflow 的 paths 恒为 / 分隔；Windows 上
+                            # relative_to 返回 \ 分隔，不归一会整面假红（CI/Linux 不受影响）。
+                            required.append(cand.relative_to(root).as_posix())
                     for name in sorted(set(DOC_INPUT.findall(src))):
                         if (root / name).is_file():
                             doc_inputs += 1

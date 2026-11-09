@@ -98,6 +98,15 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    # G-3 容器加固（保守子集：不改首启语义。cap_drop: ALL 需先验证官方镜像
+    # entrypoint 的 chown/gosu 依赖，留待一次性环境验证后补，见清单 G-3）
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run/postgresql
     logging: *default-logging
     deploy:
       resources:
@@ -146,6 +155,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    # G-3 容器加固（同 mtk-postgres 口径的保守子集）
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
     logging: *default-logging
     deploy:
       resources:

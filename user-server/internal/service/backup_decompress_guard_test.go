@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"hivemtk-user/internal/storage"
@@ -77,8 +78,12 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 		if err != nil {
 			t.Fatalf("应解出 %s: %v", p, err)
 		}
-		if mode := st.Mode().Perm(); mode != 0o600 {
-			t.Errorf("%s 权限 = %o, want 600", p, mode)
+		// A-6 同款：NTFS 上 Go chmod 只能切只读位，600/666 语义不可表达，
+		// 权限档在 Windows 开发机上跳过（CI Linux 仍全量断言）。
+		if runtime.GOOS != "windows" {
+			if mode := st.Mode().Perm(); mode != 0o600 {
+				t.Errorf("%s 权限 = %o, want 600", p, mode)
+			}
 		}
 	}
 	// 目录条目须落在暂存根内（旧实现漏了前缀，会在 CWD 造出散目录）
@@ -88,7 +93,9 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 	if _, err := os.Stat("d"); !os.IsNotExist(err) {
 		t.Error("目录条目泄漏到暂存根之外")
 	}
-	if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
-		t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
+			t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
+		}
 	}
 }

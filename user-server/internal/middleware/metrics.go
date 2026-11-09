@@ -70,15 +70,14 @@ func initHTTPMetrics(buckets []float64) {
 	)
 }
 
+// normalizePath 路由模板作 label；未匹配路由（404/405）固定占位 "unmatched"。
+// 此前把原始 URL.Path 截断 64 当 label——接线后扫描器的随机路径会打爆
+// label 基数（每个不同路径一个 cell），故未匹配一律不落原始路径。
 func normalizePath(c *gin.Context) string {
-	path := c.FullPath()
-	if path == "" {
-		path = c.Request.URL.Path
-		if len(path) > 64 {
-			path = path[:64]
-		}
+	if path := c.FullPath(); path != "" {
+		return path
 	}
-	return path
+	return "unmatched"
 }
 
 // MetricsMiddleware 指标采集中间件

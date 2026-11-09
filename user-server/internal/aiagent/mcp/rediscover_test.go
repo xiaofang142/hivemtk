@@ -14,6 +14,7 @@ import (
 )
 
 func TestDiscoverAndRegister_SecondDiscoveryStillCounts(t *testing.T) {
+	withTestTransport(t)
 	upstream := newUpstreamMCPServer(t)
 	defer upstream.Close()
 

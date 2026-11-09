@@ -53,7 +53,9 @@ def main(root):
                 if not path:
                     continue
                 cand = os.path.normpath(os.path.join(os.path.dirname(fp), path))
-                relc = os.path.relpath(cand, root)
+                # git ls-files 恒为 / 分隔；Windows 上 relpath 返回 \ 分隔，
+                # 不归一会让集合比对全失配（684 处假断链，CI/Linux 不受影响）。
+                relc = os.path.relpath(cand, root).replace(os.sep, "/")
                 if relc.startswith(".."):
                     why = "跨出仓库（CI checkout 里没有对端仓）"
                 elif relc in tracked:

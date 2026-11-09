@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/pkg/urlguard"
 )
 
 // ClientConfig MCP server 连接配置。
@@ -49,6 +50,12 @@ type Client struct {
 	sessionID string
 }
 
+// newClientTransport 出站 Transport 工厂。默认=守闸（拨号期 SSRF 复校，G-1）；
+// 测试替身穿透用：httptest 服务器绑 127.0.0.1，守闸按设计拒绝环路地址，
+// 协议层用例经 withTestTransport 注入普通 Transport（守闸本身由 urlguard 与
+// service 层用例覆盖）。生产路径零注入，行为不变。
+var newClientTransport = func() http.RoundTripper { return urlguard.GuardedTransport() }
+
 // NewClient 构造。
 func NewClient(cfg ClientConfig) *Client {
 	if cfg.Timeout <= 0 {
@@ -60,7 +67,8 @@ func NewClient(cfg ClientConfig) *Client {
 	if cfg.Cooldown <= 0 {
 		cfg.Cooldown = 60 * time.Second
 	}
-	return &Client{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}, nextID: 1}
+	// G-1：拨号期复校（重定向/rebinding 后仍生效），所有 MCP 出站请求统一过闸
+	return &Client{cfg: cfg, client: &http.Client{Timeout: cfg.Timeout, Transport: newClientTransport()}, nextID: 1}
 }
 
 // rpcRequest JSON-RPC 2.0 请求。

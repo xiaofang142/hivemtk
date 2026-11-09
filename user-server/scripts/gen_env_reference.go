@@ -11,7 +11,7 @@
 //	go run ./scripts/gen_env_reference.go -check   # 校验文档与代码一致（CI 用）
 //
 // 提取口径（与 checklist A-17 审计一致）：
-//   - 扫 internal/ cmd/ 的非 _test.go 文件中 os.Getenv("KEY") / os.LookupEnv("KEY")
+//   - 扫 internal/ cmd/ 的非 _test.go 文件中 os.Getenv(<键名字面量>) / os.LookupEnv(<键名字面量>)
 //   - 叠加 config.yaml 里 ${VAR:default} 展开引用的键
 //   - 排除清单：纯测试脚手架键（LOADER_TEST_* 等只出现在 _test.go，天然被排除；
 //     TESTDB_*/TEST_ADMIN_* 等 testutil/CI 专用键单列"测试基建"节不混入部署键）

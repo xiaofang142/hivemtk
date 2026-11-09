@@ -70,6 +70,7 @@ import re
 import sys
 import tempfile
 from datetime import date
+import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -151,9 +152,11 @@ class Finding:
 
 def rel(p: Path, root: Path) -> str:
     try:
-        return str(p.relative_to(root))
+        # as_posix()：seam/策略比对口径恒为 / 分隔；Windows 上 relative_to 返回
+        # \ 分隔会把 in-seam 文件误判成「引用面漏出」（CI/Linux 不受影响）。
+        return p.relative_to(root).as_posix()
     except ValueError:
-        return str(p)
+        return str(p).replace(os.sep, "/")
 
 
 # ── 解析：一律做成「吃文本、吐结构」的纯函数，自检才能在内存里喂夹具 ────────────

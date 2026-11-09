@@ -28,6 +28,7 @@ type orphanFixture struct {
 	stale  string // 注册过、但 last_sync_at 早于阈值
 	fresh  string // 注册过且刚同步
 	nonce  string
+	seq    int // putRow 的行序号：MsgID 不依赖时钟（Windows 壁钟粒度粗，UnixNano 会撞）
 	ttl    time.Duration
 	cutoff time.Time
 }
@@ -78,10 +79,11 @@ func (f *orphanFixture) upsertAccount(t *testing.T, channel, accountID string, l
 func (f *orphanFixture) putRow(t *testing.T, platform, accountID, status string, age time.Duration) uint {
 	t.Helper()
 	created := time.Now().Add(-age)
+	f.seq++ // MsgID 不依赖时钟（Windows 壁钟粒度粗，UnixNano 会撞唯一键）
 	row := model.MessageHub{
 		Platform:       platform,
 		AccountID:      accountID,
-		MsgID:          fmt.Sprintf("orphmsg-%s-%d", f.nonce, time.Now().UnixNano()),
+		MsgID:          fmt.Sprintf("orphmsg-%s-%d", f.nonce, f.seq),
 		Direction:      "outbound",
 		Status:         status,
 		MsgType:        "text",

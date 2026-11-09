@@ -17,6 +17,7 @@ import (
 	"hivemtk-user/internal/health"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/monitor"
+	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -189,6 +190,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 	r.Use(corsMiddleware)
 	r.Use(gin.Recovery())
+	// G-4：HTTP 请求级指标接线（MetricsMiddleware 早有实现但零接线=有实现无暴露；
+	// 随 /metrics 端点一同闭环。放在 Recovery 之后，panic 恢复后的 500 也入指标）。
+	r.Use(middleware.MetricsMiddleware())
 
 	// 全局请求体封顶：注册位置必须在**任何会读 body 的中间件与鉴权之前** ——
 	// gin 的引擎级 Use 只对注册它之后登记的路由生效，晚一步就等于给已注册的路由留口子。
@@ -219,6 +223,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	r.GET("/health", healthCtl.Check)
 	r.GET("/healthz", healthCtl.Live)
 	r.GET("/readyz", healthCtl.Ready)
+
+	// G-4：内部指标采集端点（pkg/metrics.Handler 现成实现，此前零接线=有实现无暴露）。
+	// 口径与 /__debug__/routes 同级：指标含工具调用统计/队列深度等运营面数据，
+	// 挂 JWT+Admin 双守卫，不做匿名公开（抓取方持超管 JWT）。
+	r.GET("/metrics", middleware.JWTAuthMiddleware(), middleware.AdminAuthMiddleware(), gin.WrapH(metrics.Handler()))
 
 	// 路由表调试端点：默认仅本地/开发环境开放；生产需显式 ENABLE_DEBUG_ROUTES=true
 	//

@@ -187,7 +187,9 @@ def scan(producers: dict[Path, set[str]]) -> tuple[dict[str, list[int]], dict[st
                 test.read_text(encoding="utf-8", errors="replace")
             ).splitlines()
             types = var_types(lines)
-            rel = str(test.relative_to(REPO_ROOT))
+            # as_posix()：基线与汇总口径恒为 / 分隔；Windows 上 relative_to
+            # 返回 \ 分隔会让每个站点都同时判 NEW+STALE 假红（CI/Linux 不受影响）。
+            rel = test.relative_to(REPO_ROOT).as_posix()
             for idx, line in enumerate(lines):
                 m = ASSIGN.match(line)
                 if not m:

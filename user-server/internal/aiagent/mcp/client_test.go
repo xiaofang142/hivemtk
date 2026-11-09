@@ -14,6 +14,15 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 )
 
+// withTestTransport 换出站 Transport 为普通实现：httptest 替身绑 127.0.0.1，
+// SSRF 守闸按设计拒绝环路地址，协议层用例需要穿透（守闸覆盖在 urlguard/service 层）。
+func withTestTransport(t *testing.T) {
+	t.Helper()
+	orig := newClientTransport
+	newClientTransport = func() http.RoundTripper { return &http.Transport{} }
+	t.Cleanup(func() { newClientTransport = orig })
+}
+
 // fakeMCPServer 标准形状的 MCP JSON-RPC server（initialize/tools/list/tools/call）。
 func fakeMCPServer(t *testing.T, failFirst int32) *httptest.Server {
 	var calls int32
@@ -45,6 +54,7 @@ func fakeMCPServer(t *testing.T, failFirst int32) *httptest.Server {
 }
 
 func TestDiscoverAndRegister(t *testing.T) {
+	withTestTransport(t)
 	srv := fakeMCPServer(t, 0)
 	defer srv.Close()
 	reg := tooluse.NewToolRegistry()
@@ -78,6 +88,7 @@ func TestDiscoverAndRegister(t *testing.T) {
 }
 
 func TestClientCircuitBreaker(t *testing.T) {
+	withTestTransport(t)
 	srv := fakeMCPServer(t, 100) // 永远 500
 	defer srv.Close()
 	c := NewClient(ClientConfig{Name: "bad", Endpoint: srv.URL, FailLimit: 2, Cooldown: 50 * time.Millisecond})
@@ -101,6 +112,7 @@ func TestClientCircuitBreaker(t *testing.T) {
 }
 
 func TestClientProtocolErrorNotCircuit(t *testing.T) {
+	withTestTransport(t)
 	srv := fakeMCPServer(t, 0)
 	defer srv.Close()
 	c := NewClient(ClientConfig{Name: "ok", Endpoint: srv.URL, FailLimit: 1})

@@ -49,9 +49,19 @@ func (r *backupDataRepo) DumpClues(ctx context.Context) (json.RawMessage, error)
 		Address  string `json:"address"`
 		Desc     string `json:"desc"`
 	}
-	var rows []clueRow
-	if err := r.db.WithContext(ctx).Table("clues").Order("id ASC").Find(&rows).Error; err != nil {
-		return nil, err
+	// G-6：分批拉取（对齐 DumpUsers 的 limit/offset 口径）。clues 全表单次 Find
+	// 会随数据增长变内存炸弹；批大小 1000，空批即终止，签名与返回口径不变。
+	const batchSize = 1000
+	rows := make([]clueRow, 0, batchSize)
+	for offset := 0; ; offset += batchSize {
+		var batch []clueRow
+		if err := r.db.WithContext(ctx).Table("clues").Order("id ASC").Limit(batchSize).Offset(offset).Find(&batch).Error; err != nil {
+			return nil, err
+		}
+		rows = append(rows, batch...)
+		if len(batch) < batchSize {
+			break
+		}
 	}
 	return json.Marshal(rows)
 }

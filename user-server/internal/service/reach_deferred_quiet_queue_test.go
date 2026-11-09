@@ -54,6 +54,12 @@ func deferredTestReq() *ReachSendRequest {
 	}
 }
 
+// deferredDBTimeEqual A-4 同款容差断言：PG timestamptz 微秒截断 vs Go 纳秒
+// （写入 .6571514 读回 .657151），逐相等比较在本机必红；2µs 容差不放走业务语义。
+func deferredDBTimeEqual(got, want time.Time) bool {
+	return got.Sub(want).Abs() <= 2*time.Microsecond
+}
+
 // Defer 必须持久落库：完整请求快照 + 到期时刻 + job id 回填。
 func TestPersistentQuietQueue_DeferPersistsIntent(t *testing.T) {
 	q, repo, _ := setupDeferredQueue(t)
@@ -75,7 +81,7 @@ func TestPersistentQuietQueue_DeferPersistsIntent(t *testing.T) {
 	if total != 1 || len(rows) != 1 {
 		t.Fatalf("应恰有 1 条 pending，got %d/%d", len(rows), total)
 	}
-	if !rows[0].SendAt.Equal(sendAt) {
+	if !deferredDBTimeEqual(rows[0].SendAt, sendAt) {
 		t.Errorf("send_at = %v, want %v", rows[0].SendAt, sendAt)
 	}
 	if rows[0].Channel != "wecom" || rows[0].RecipientID != "cust-1" {
@@ -249,7 +255,7 @@ func TestPersistentQuietQueue_ReDeferredReschedulesSameRow(t *testing.T) {
 	if total != 1 || len(rows) != 1 {
 		t.Fatalf("再次判延必须改期同一行（不得产生重复行），got %d/%d", len(rows), total)
 	}
-	if !rows[0].SendAt.Equal(next) {
+	if !deferredDBTimeEqual(rows[0].SendAt, next) {
 		t.Errorf("send_at 应改为 %v，got %v", next, rows[0].SendAt)
 	}
 }

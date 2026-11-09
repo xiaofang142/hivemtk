@@ -10,9 +10,9 @@ import (
 
 // A-5 复检钉子：agent_id 与令牌 user_id 不符必须 403（admin 例外）。
 // 用例钉住三件事：
-//   1. 坐席角色（staff）自报他人 agent_id → 403，且在 Upgrade 之前拒绝（不产生半开连接）；
-//   2. admin 自报任意 agent_id → 放行（管理台代看任意坐席队列是设计行为）；
-//   3. WS_AGENT_ALLOW_ALL_USERS=true 的调试后门不受本轮校验约束（保持原语义）。
+//  1. 坐席角色（staff）自报他人 agent_id → 403，且在 Upgrade 之前拒绝（不产生半开连接）；
+//  2. admin 自报任意 agent_id → 放行（管理台代看任意坐席队列是设计行为）；
+//  3. WS_AGENT_ALLOW_ALL_USERS=true 的调试后门不受本轮校验约束（保持原语义）。
 func wsIdentityContext(agentIDStr string, tokenUID uint, role string) (*gin.Context, *httptest.ResponseRecorder) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

@@ -725,3 +725,11 @@ cd user-web/bridge && npm run build
 - [ ] popup「自检」按钮能正确识别当前页面
 
 校准流程见 [./docs/dev/DEVELOPMENT.md §6.2](./docs/dev/DEVELOPMENT.md)。
+
+---
+
+## 安全说明（权限面）
+
+- `host_permissions` 全域 + ws/wss：桥接扩展需要注入任意社媒域名页面并回连本地 user-server，属设计所需（多平台私信桥接），不是配置失误。
+- 风险口径：扩展一旦被 XSS/供应链污染即全域浏览器控制权（MV3 已限制：无持久后台、无 cookie 权限）。发布前人工核对 `content_scripts.matches` 与版本号；`manifest.json` 的 `content_security_policy.extension_pages` 已显式收紧（`script-src 'self'; object-src 'self'`）。
+- `browser_automation` 扩展另持 `debugger`（CDP 全控）+ `nativeMessaging`，权限更高，仅限自动化场景分发，不做通用渠道。

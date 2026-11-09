@@ -162,7 +162,9 @@ def collect_reads() -> tuple[dict[str, list[str]], int]:
             via_helper.add(key)
 
     for path, text in sources.items():
-        rel = str(path.relative_to(REPO_ROOT))
+        # as_posix()：is_tooling_only 等前缀判据恒为 / 分隔；Windows 上
+        # relative_to 返回 \ 分隔会让工具豁免整面失效（CI/Linux 不受影响）。
+        rel = path.relative_to(REPO_ROOT).as_posix()
         table = pkg_consts.get(path.parent, {})
         for key in ENV_READ.findall(text):
             add(key, rel)

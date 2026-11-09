@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -112,6 +113,46 @@ func TestOpenAPITool_ExecutePathAndQuery(t *testing.T) {
 	}
 	if res.Error != "" {
 		t.Errorf("不应报错: %s", res.Error)
+	}
+}
+
+func TestOpenAPITool_ExecuteQueryEncoding(t *testing.T) {
+	var gotQuery, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		gotPath = r.URL.Path
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	ops, err := ParseOpenAPISchema(petstoreMini)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var getOp openAPIOperation
+	for _, op := range ops {
+		if op.ToolName == "getpetbyid" {
+			getOp = op
+		}
+	}
+	tool := &openAPITool{op: getOp, spec: OpenAPIImportSpec{Name: "pets", BaseURL: srv.URL}, client: srv.Client()}
+	// G-2：值里带 & # 空格 = —— 修复前会把它们裸拼进 query，污染/注入上游参数
+	if _, err := tool.Execute(context.Background(), map[string]any{"petId": 42, "verbose": "a&b=c d#e"}); err != nil {
+		t.Fatal(err)
+	}
+	vals, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("上游收到的 query 非法: %q", gotQuery)
+	}
+	if vals.Get("verbose") != "a&b=c d#e" {
+		t.Errorf("query 值应原样往返，实际 %q (raw=%q)", vals.Get("verbose"), gotQuery)
+	}
+	// petId 是 path 参数（替换进 /pets/{petId}），不应出现在 query 里
+	if gotPath != "/pets/42" {
+		t.Errorf("path 参数应替换进路径，实际 %q", gotPath)
+	}
+	if len(vals) != 1 {
+		t.Errorf("query 应只有 verbose 一个参数，实际 %v", vals)
 	}
 }
 
