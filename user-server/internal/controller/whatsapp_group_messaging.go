@@ -650,11 +650,7 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 
 	var leads []map[string]any
 	switch req.Audience.Type {
-	case "segment":
-		if req.Audience.SegmentID == "" {
-			response.Error(c, http.StatusBadRequest, "请选择目标分群")
-			return
-		}
+	case "", "all":
 		clues, _, err := gmc.clueSvc.GetWhatsappClues(c.Request.Context())
 		if err != nil {
 			response.ErrorFromDB(c, err, "获取线索失败")
@@ -666,18 +662,15 @@ func (gmc *GroupMessagingController) BulkSend(c *gin.Context) {
 				"email": "", "company": clue.Address, "source": "whatsapp",
 			})
 		}
-	default: // all / clue / csv 均按全部 WhatsApp 线索发送
-		clues, _, err := gmc.clueSvc.GetWhatsappClues(c.Request.Context())
-		if err != nil {
-			response.ErrorFromDB(c, err, "获取线索失败")
-			return
-		}
-		for _, clue := range clues {
-			leads = append(leads, map[string]any{
-				"id": clue.ID, "name": clue.Name, "phone": clue.Account,
-				"email": "", "company": clue.Address, "source": "whatsapp",
-			})
-		}
+	default:
+		// fail-closed（2026-11-10 全模块审计收口）：segment/clue/csv 此前与 all
+		// 走同一分支——调用方选什么受众实际都发全部 WhatsApp 线索，是「选项
+		// 是假的」的诚实性缺陷（前端 BulkMatrix.vue 已于 2026-11-09 先行收窄
+		// 为只发 all）。在真过滤实现落地前，未支持的受众类型必须显式拒绝，
+		// 而不是静默按全量发——那等于拿用户的名义群发了他没选的人。
+		response.Error(c, http.StatusBadRequest,
+			"暂不支持的目标群体类型："+req.Audience.Type+"（当前仅支持 all=全部 WhatsApp 线索）")
+		return
 	}
 	if len(leads) == 0 {
 		response.Error(c, http.StatusBadRequest, "目标群体为空，无可发送对象")

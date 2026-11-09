@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { readdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flattenApiExports, clearMocks, getCalls, hasValidUrl, ARG_SETS } from './apitest-helper.js'
 
 // 同时 mock 三种 API 调用约定：
@@ -18,6 +20,10 @@ const mocks = vi.hoisted(() => {
     post: vi.fn(ok),
     put: vi.fn(ok),
     delete: vi.fn(ok),
+    // patch（2026-11-10）：faq.toggle / orderDraft.update / sopTemplate.toggle
+    // 用的是 http.patch——mock 缺这个方法时，凡带 PATCH 的 api 模块进 smoke
+    // 必红（扩充清单后实测暴露）。补齐使 mock 方法面与真实 client 对齐。
+    patch: vi.fn(ok),
     upload: vi.fn(ok)
   }
   const axios = {
@@ -37,20 +43,13 @@ vi.mock('@/utils/request', () => ({
 }))
 vi.mock('axios', () => ({ default: mocks.axios, __esModule: true }))
 
-const API_FILES = [
-  'abExperiment', 'aiAgent', 'aiProductivity', 'approval', 'backup', 'batchOperation',
-  'bulkMessaging', 'channelAgentBinding', 'chat', 'chatChannel', 'chatPublic', 'churnPrediction',
-  'clue', 'community', 'conversionFunnel', 'customReport', 'customer360', 'customerEvent',
-  'customerJourney', 'customerService', 'customerSession', 'dashboardScreen',
-  'dialogueMemory', 'domainPool', 'douyinCard', 'email', 'feishu', 'humanTask', 'integration', 'intentRecognition',
-  'knowledge', 'knowledgeBase', 'knowledgeMerchant', 'kuaishouCard', 'livecode', 'llmRouting',
-  'marketingFlow', 'material', 'messageHub', 'objection', 'obs', 'oneid', 'operationLog',
-  'persona', 'platform', 'platformAccount', 'reachPipeline',
-  'scriptTemplate', 'securityAudit', 'shortLink', 'sms', 'sopAgent', 'stats', 'system', 'tagSegmentation',
-  'telegram', 'tiktokCard', 'tuning',
-  'userSegment', 'users', 'wecomAccount', 'whatsapp', 'xianyuCard',
-  'xiaohongshuCard'
-]
+// API_FILES 不再手写：2026-11-10 全模块审计实测手写清单与磁盘漂移 63 个模块
+//（全部被 smoke 跳过，覆盖缺口静默长大）。改从目录直读——新增/删除 api 模块
+// 自动进/出 smoke，这类缺口从此打不开。
+const API_FILES = readdirSync(resolve(process.cwd(), 'src/api'))
+  .filter((f) => f.endsWith('.js'))
+  .map((f) => f.replace(/\.js$/, ''))
+  .sort()
 
 for (const file of API_FILES) {
   describe(`${file} API`, () => {
