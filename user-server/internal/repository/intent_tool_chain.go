@@ -73,6 +73,7 @@ func (r *intentToolChainRepo) Update(ctx context.Context, rec *model.IntentToolC
 	res := db.Where("id = ?", rec.ID).Updates(map[string]any{
 		"name":       rec.Name,
 		"steps_json": rec.StepsJSON,
+		"slots_json": rec.SlotsJSON,
 		"reply_hint": rec.ReplyHint,
 		"enabled":    rec.Enabled,
 	})

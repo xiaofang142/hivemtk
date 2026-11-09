@@ -38,8 +38,14 @@ const (
 var ErrCapabilityNotAvailable = fmt.Errorf("该平台执行通路未接入（凭证/连接器待配置）")
 
 // platformCapabilityRules 平台→能力路由（v1 静态规则；未知平台=manual 兜底）。
-// 依据：京东 JOS 改址 API 公开存在（需商家授权）；抖音/闲鱼无卖家直改（买家发起型）；
-// 管家婆=ERP 通道。外部事实来源见 docs/research/INTENT-TOOL-UNIFIED-BASE-DESIGN-2026-11.md。
+// 证据级（二次审核 2026-11-10 补标）：
+//   - jd=direct_api：京东 JOS 修改收货地址 API 公开实证（SOP 类型+等待出库+一单一次）；
+//   - taobao/tmall=direct_api：【预留】本轮未做平台级取证（闲鱼 ISV 家族旁证），
+//     v1 执行通路对 direct_api 统一显式拒绝，路由标签不构成可用性承诺；
+//   - douyin/xianyu=buyer_initiated：平台事实（无卖家直改地址 API，买家发起型）；
+//   - grasp=via_erp：管家婆云版 Open API 在案（辉煌单机版无公开 API）。
+//
+// 外部事实来源见 docs/research/INTENT-TOOL-UNIFIED-BASE-DESIGN-2026-11.md §五。
 var platformCapabilityRules = map[string]string{
 	"jd":        CapabilityDirectAPI,
 	"taobao":    CapabilityDirectAPI,
@@ -208,7 +214,7 @@ func (s *OrderChangeService) Execute(ctx context.Context, id uint, operator stri
 	case CapabilityManual:
 		return s.finishExecute(ctx, rec.ID, operator, "已派人工坐席在平台后台处理（manual），完成后请回填执行结果。")
 	case CapabilityBuyerInitiate:
-		return s.finishExecute(ctx, rec.ID, operator, "该平台为买家发起型变更（buyer_initiated）：已按引导话术请买家自助修改，客服侧留单跟踪。")
+		return s.finishExecute(ctx, rec.ID, operator, "该平台为买家发起型变更（buyer_initiated）：本申请单转为引导工单——由坐席向客户发送平台自助修改引导（话术模板待配置），完成后回填执行结果；本执行动作本身未向客户发送任何消息。")
 	case CapabilityDirectAPI, CapabilityViaERP:
 		// 显式拒绝而非静默降级：真实凭证/连接器未接（🔵），不承诺未验证能力。
 		return nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("capability=%s: %v", rec.Capability, ErrCapabilityNotAvailable))

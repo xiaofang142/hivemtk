@@ -196,6 +196,33 @@ describe('意图→工具调用流编排页（TB-02）', () => {
     expect(w.vm.ciForm.keywords).toEqual(['怎么退'])
   })
 
+  it('槽位：非法 source_var 客户端拦截（不发起请求）', async () => {
+    const w = mountPage()
+    await settle(w)
+    w.vm.openCreate()
+    w.vm.form.name = '槽位链'
+    w.vm.form.intent_code = 'ask_service'
+    w.vm.form.steps = [{ tool_name: 'logistics.track', args: {}, priority: 1, enabled: true }]
+    w.vm.form.slots = [{ slot: 'tracking_no', question: '请提供运单号', source_var: 'system.prompt', required: true }]
+    await w.vm.save()
+    expect(api.create).not.toHaveBeenCalled()
+  })
+
+  it('槽位：合法槽位随 payload 保存（slot/question/source_var/required）', async () => {
+    const w = mountPage()
+    await settle(w)
+    w.vm.openCreate()
+    w.vm.form.name = '槽位链'
+    w.vm.form.intent_code = 'ask_service'
+    w.vm.form.steps = [{ tool_name: 'logistics.track', args: {}, priority: 1, enabled: true }]
+    w.vm.form.slots = [{ slot: 'tracking_no', question: '请提供您的运单号', source_var: 'entity.tracking_no', required: true }]
+    await w.vm.save()
+    expect(api.create).toHaveBeenCalledTimes(1)
+    expect(api.create.mock.calls[0][0].slots).toEqual([
+      { slot: 'tracking_no', question: '请提供您的运单号', source_var: 'entity.tracking_no', required: true }
+    ])
+  })
+
   it('空工具名被客户端拦截', async () => {
     const w = mountPage()
     await settle(w)

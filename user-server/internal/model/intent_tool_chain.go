@@ -31,6 +31,9 @@ type IntentToolChain struct {
 	StepsJSON string `gorm:"type:text;not null" json:"steps_json"`
 	// ReplyHint 绑定层自定义回复提示（空 = planner 用默认提示兜底）。
 	ReplyHint string `gorm:"type:text" json:"reply_hint"`
+	// SlotsJSON 必填槽位定义（TB-08）：[{"slot":"tracking_no","question":"请提供您的运单号","source_var":"entity.tracking_no","required":true}]
+	// 集齐 required 槽位前，agentloop 严格模式强制本轮 0 工具调用（ToolChoice=none）并向客户追问。
+	SlotsJSON string `gorm:"type:text" json:"slots_json"`
 	Enabled   bool   `gorm:"not null;default:true" json:"enabled"`
 
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -47,4 +50,14 @@ type IntentChainStepConfig struct {
 	Args     map[string]any `json:"args,omitempty"`
 	Priority int            `json:"priority"`
 	Enabled  bool           `json:"enabled"`
+}
+
+// IntentSlotConfig slots_json 数组元素（TB-08 必填槽位）。
+// SourceVar 形态：entity.<key>（客户消息抽取实体，LLM 层 Entities）或上下文白名单变量
+// （customer_id/session_id/content）。
+type IntentSlotConfig struct {
+	Slot      string `json:"slot"`
+	Question  string `json:"question"`
+	SourceVar string `json:"source_var"`
+	Required  bool   `json:"required"`
 }
