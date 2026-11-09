@@ -11,8 +11,10 @@
 package app
 
 import (
+	"context"
 	"sync"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -33,6 +35,13 @@ func InitIntentChainRuntime(gdb *gorm.DB) *service.IntentToolChainService {
 			return
 		}
 		intentChainSvc = service.NewIntentToolChainService(repository.NewIntentToolChainRepositoryWithDB(gdb))
+		// TB-03 默认种子：只读查询链（快递/售后）幂等写入默认租户；已有配置（含禁用）跳过。
+		seedCtx := tenant.ContextWithDefault(context.Background())
+		if n, err := intentChainSvc.SeedDefaultIntentChains(seedCtx); err != nil {
+			logger.Warnf("[intent_chain] ⚠️ 默认工具调用流种子失败（不阻塞启动）: %v", err)
+		} else if n > 0 {
+			logger.Infof("[intent_chain] ✅ 默认工具调用流种子已写入 %d 条（TB-03 只读链）", n)
+		}
 		logger.Info("[intent_chain] ✅ 意图→工具链绑定服务已装配（TB-01）")
 	})
 	return intentChainSvc

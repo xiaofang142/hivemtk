@@ -97,6 +97,12 @@ func BuildSalesEngine(gormDB *gorm.DB) *service.SalesEngine {
 	if toolExec != nil {
 		engine.SetToolExecutor(context.Background(), NewToolExecutorAdapter(toolExec))
 		logger.Info("[agent] ✅ SalesEngine 已注入 ToolExecutor（Agent Loop 已启用）")
+
+		// TB-03：意图→工具调用流绑定层注入（命中绑定=工具晋升+按链提示；未装配/未命中零变化）。
+		if chainSvc := GetIntentToolChainService(); chainSvc != nil {
+			engine.SetIntentChainLookup(chainSvc)
+			logger.Info("[agent] ✅ SalesEngine 已注入意图→工具调用流绑定层（TB-03）")
+		}
 	} else {
 		logger.Warn("[agent] SalesEngine 未注入 ToolExecutor（globalExecutor 未初始化，走原 9 步流水线）")
 	}

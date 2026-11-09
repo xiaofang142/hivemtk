@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,14 +48,61 @@ var validChainIntents = map[string]bool{
 	string(agent_runtime.IntentUnknown):        true,
 }
 
-// ChainIntentVocabulary 返回可绑定意图清单（升序；供管理端 UI 与 vocab 端点）。
+// validChainServiceIntents service 家族意图词表（CS 主链路 intent.Type 消费方，
+// TB-03 扩容；编译期引用 service 常量）。重叠键（greeting/complaint/unknown）语义一致。
+var validChainServiceIntents = map[string]bool{
+	IntentPriceInquiry:        true,
+	IntentObjectionPrice:      true,
+	IntentObjectionNeed:       true,
+	IntentObjectionTrust:      true,
+	IntentObjectionCompetitor: true,
+	IntentObjectionTiming:     true,
+	IntentPurchase:            true,
+	IntentAskProduct:          true,
+	IntentAskService:          true,
+	IntentAfterSale:           true,
+	IntentChurn:               true,
+	IntentSocial:              true,
+	IntentGreeting:            true,
+	IntentComplaint:           true,
+	IntentUnknown:             true,
+	IntentClarify:             true,
+}
+
+// isValidChainIntent 双家族校验：任一家族命中即可绑定。
+func isValidChainIntent(code string) bool {
+	return validChainIntents[code] || validChainServiceIntents[code]
+}
+
+// ChainIntentVocabulary 返回可绑定意图清单（升序、双家族并集；供管理端 UI 与 vocab 端点）。
 func ChainIntentVocabulary() []string {
-	names := make([]string, 0, len(validChainIntents))
+	names := make([]string, 0, len(validChainIntents)+len(validChainServiceIntents))
 	for name := range validChainIntents {
 		names = append(names, name)
 	}
+	for name := range validChainServiceIntents {
+		if !validChainIntents[name] {
+			names = append(names, name)
+		}
+	}
 	sort.Strings(names)
 	return names
+}
+
+// ChainIntentFamily 键→家族归属（"runtime"/"service"/"both"；vocab 端点分组展示用）。
+func ChainIntentFamily(code string) string {
+	inRuntime := validChainIntents[code]
+	inService := validChainServiceIntents[code]
+	switch {
+	case inRuntime && inService:
+		return "both"
+	case inRuntime:
+		return "runtime"
+	case inService:
+		return "service"
+	default:
+		return ""
+	}
 }
 
 // IntentToolChainService 意图→工具链绑定服务。
@@ -130,7 +178,7 @@ func (s *IntentToolChainService) invalidateCache(tenantID uint) {
 
 // chainRowToSpec 行→runtime 契约映射；解析失败/意图不在词表返回 nil（fail-closed 跳过）。
 func chainRowToSpec(rec *model.IntentToolChain) *agent_runtime.IntentChainSpec {
-	if rec == nil || !validChainIntents[rec.IntentCode] {
+	if rec == nil || !isValidChainIntent(rec.IntentCode) {
 		return nil
 	}
 	var steps []model.IntentChainStepConfig
@@ -256,7 +304,7 @@ func (s *IntentToolChainService) List(ctx context.Context, intentCode string, pa
 // ---- 校验与序列化 ----
 
 func validateChainUpsert(in ChainUpsertInput) error {
-	if !validChainIntents[in.IntentCode] {
+	if !isValidChainIntent(in.IntentCode) {
 		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("intent_code %q 不在可绑定意图词表内（可用: %s）",
 			in.IntentCode, joinChainVocab()))
 	}
@@ -314,11 +362,12 @@ func joinChainVocab() string {
 	return out
 }
 
-// ChainVocabulary vocab 端点数据：意图词表 + 模板变量白名单 + 注册中心工具名清单。
+// ChainVocabulary vocab 端点数据：意图词表（含家族归属）+ 模板变量白名单 + 注册中心工具名清单。
 type ChainVocabulary struct {
-	Intents      []string `json:"intents"`
-	TemplateVars []string `json:"template_vars"`
-	Tools        []string `json:"tools"`
+	Intents        []string          `json:"intents"`
+	IntentFamilies map[string]string `json:"intent_families"`
+	TemplateVars   []string          `json:"template_vars"`
+	Tools          []string          `json:"tools"`
 }
 
 // GetChainVocabulary 管理端配置页取词表/变量/工具三项（单一事实源出口）。
@@ -327,9 +376,135 @@ func (s *IntentToolChainService) GetChainVocabulary() ChainVocabulary {
 	if reg := tooluse.GetGlobalRegistry(); reg != nil {
 		tools = reg.ListNames()
 	}
-	return ChainVocabulary{
-		Intents:      ChainIntentVocabulary(),
-		TemplateVars: agent_runtime.ChainTemplateVarNames(),
-		Tools:        tools,
+	intents := ChainIntentVocabulary()
+	families := make(map[string]string, len(intents))
+	for _, code := range intents {
+		families[code] = ChainIntentFamily(code)
 	}
+	return ChainVocabulary{
+		Intents:        intents,
+		IntentFamilies: families,
+		TemplateVars:   agent_runtime.ChainTemplateVarNames(),
+		Tools:          tools,
+	}
+}
+
+// ---- CS 主链路消费（TB-03）：工具晋升 + 调用流提示 ----
+
+// promoteIntentChainTools 绑定命中的工具 stable 前置（其余保序），保证过 maxTools
+// 截断后绑定链仍完整在列；不删任何既有工具，仅重排。
+func promoteIntentChainTools(tools []AgentToolDef, spec *agent_runtime.IntentChainSpec) []AgentToolDef {
+	if spec == nil || len(spec.Steps) == 0 || len(tools) == 0 {
+		return tools
+	}
+	rank := make(map[string]int, len(spec.Steps))
+	order := 0
+	for _, st := range spec.Steps {
+		if st.Enabled && st.ToolName != "" {
+			if _, seen := rank[st.ToolName]; !seen {
+				rank[st.ToolName] = order
+				order++
+			}
+		}
+	}
+	if len(rank) == 0 {
+		return tools
+	}
+	promoted := make([]AgentToolDef, 0, len(tools))
+	rest := make([]AgentToolDef, 0, len(tools))
+	for _, t := range tools {
+		if _, hit := rank[t.Name]; hit {
+			promoted = append(promoted, t)
+		} else {
+			rest = append(rest, t)
+		}
+	}
+	sort.SliceStable(promoted, func(i, j int) bool {
+		return rank[promoted[i].Name] < rank[promoted[j].Name]
+	})
+	return append(promoted, rest...)
+}
+
+// renderIntentChainHint 绑定命中时注入系统提示的"按链优先调用"指引。
+// 只引导不强制：LLM 仍自主决策；未命中=空串（提示零变化）。
+func renderIntentChainHint(spec *agent_runtime.IntentChainSpec) string {
+	if spec == nil || len(spec.Steps) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(spec.Steps))
+	for _, st := range spec.Steps {
+		if st.Enabled && st.ToolName != "" {
+			names = append(names, st.ToolName)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n- 已识别的客户意图绑定了工具调用流（按此顺序优先调用，拿到结果后再综合作答；工具不适用时可跳过并说明原因）：")
+	sb.WriteString(strings.Join(names, " → "))
+	sb.WriteString("\n")
+	return sb.String()
+}
+
+// ---- 默认种子（TB-03）：只读链 Enabled=true；写链类动作禁止出现在种子里 ----
+
+// defaultIntentChainSeeds 只读查询链种子：快递/物流查询与售后查询主载。
+// 步骤全部是 RiskReadonly 工具（order.lookup/logistics.track），无写动作。
+func defaultIntentChainSeeds() []ChainUpsertInput {
+	enabled := true
+	return []ChainUpsertInput{
+		{
+			Name:       "快递/物流查询调用流（默认）",
+			IntentCode: IntentAskService,
+			Steps: []model.IntentChainStepConfig{
+				{ToolName: "order.lookup", Args: map[string]any{"customer_id": "{{customer_id}}"}, Priority: 1, Enabled: true},
+				{ToolName: "logistics.track", Args: map[string]any{"channel_type": "{{channel_type}}"}, Priority: 2, Enabled: true},
+			},
+			ReplyHint: "客户询问快递/物流。优先调 order.lookup 关联客户订单，再调 logistics.track 查询轨迹；查不到运单号时礼貌引导客户提供，不要编造轨迹。",
+			Enabled:   &enabled,
+		},
+		{
+			Name:       "售后查询调用流（默认）",
+			IntentCode: IntentAfterSale,
+			Steps: []model.IntentChainStepConfig{
+				{ToolName: "order.lookup", Args: map[string]any{"customer_id": "{{customer_id}}"}, Priority: 1, Enabled: true},
+			},
+			ReplyHint: "客户有售后诉求。先调 order.lookup 关联订单掌握上下文，再按售后政策答复；无法处理时按转人工口径引导。",
+			Enabled:   &enabled,
+		},
+	}
+}
+
+// SeedDefaultIntentChains 幂等种子：同租户同意图已存在任何绑定（含禁用）即跳过；
+// 只写 DefaultTenantID（多租户其他租户经 UI 自配）。返回新建条数。
+func (s *IntentToolChainService) SeedDefaultIntentChains(ctx context.Context) (int, error) {
+	if s == nil || s.repo == nil {
+		return 0, nil
+	}
+	created := 0
+	for _, in := range defaultIntentChainSeeds() {
+		existing, err := s.repo.GetByIntent(ctx, in.IntentCode)
+		if err != nil {
+			return created, err
+		}
+		if existing != nil {
+			continue
+		}
+		rec := &model.IntentToolChain{
+			Name:       in.Name,
+			IntentCode: in.IntentCode,
+			StepsJSON:  marshalChainSteps(in.Steps),
+			ReplyHint:  in.ReplyHint,
+			Enabled:    in.Enabled != nil && *in.Enabled,
+		}
+		if err := s.repo.Create(ctx, rec); err != nil {
+			return created, err
+		}
+		created++
+	}
+	if created > 0 {
+		s.invalidateCache(chainTenantID(ctx))
+	}
+	return created, nil
 }

@@ -83,6 +83,18 @@ func (e *SalesEngine) runAgentLoop(
 	availableTools = filterDisabledTools(availableTools, disabledTools)
 
 	availableTools = filterToolsForScenario(scenario, availableTools)
+
+	// TB-03 意图→工具调用流绑定层：命中绑定 → 绑定工具晋升到清单前部
+	//（stable 前置保证过 maxTools 截断）+ 系统提示注入"按链优先调用"指引。
+	// 未命中/禁用/查询错误一律零变化；LLM 仍自主决策，绑定只是软引导。
+	chainFlowHint := ""
+	if e.intentChain != nil && intent != nil && intent.IntentType != "" {
+		if spec, err := e.intentChain.LookupIntentChain(ctx, intent.IntentType); err == nil && spec != nil {
+			availableTools = promoteIntentChainTools(availableTools, spec)
+			chainFlowHint = renderIntentChainHint(spec)
+		}
+	}
+
 	filteredTools := limitToolsForAgent(availableTools, maxTools, allowed)
 	toolDefs := make([]llm.ToolDefinition, 0, len(filteredTools))
 	for _, fn := range filteredTools {
@@ -129,7 +141,7 @@ func (e *SalesEngine) runAgentLoop(
 	messages := make([]llm.ChatMessage, 0, 4+maxIter*2)
 	messages = append(messages, llm.ChatMessage{
 		Role:    "system",
-		Content: buildAgentSystemPrompt(e.personaWithLang(ctx, req.Config.Persona, targetLang), intent, mem, customer, ragChunks, guard),
+		Content: buildAgentSystemPrompt(e.personaWithLang(ctx, req.Config.Persona, targetLang), intent, mem, customer, ragChunks, guard, chainFlowHint),
 	})
 	messages = append(messages, llm.ChatMessage{
 		Role:    "user",
@@ -446,7 +458,7 @@ func (e *SalesEngine) plainDispatchSystemPrompt(ctx context.Context, req *SalesR
 	return e.personaWithLang(ctx, req.Config.Persona, targetLang) + renderRAGReferenceBlock(ragChunks)
 }
 
-func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *model.DialogueMemory, customer *model.Customer, ragChunks []RAGChunk, guard *agentLoopGuard) string {
+func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *model.DialogueMemory, customer *model.Customer, ragChunks []RAGChunk, guard *agentLoopGuard, chainFlowHint string) string {
 	var sb strings.Builder
 	sb.WriteString(persona)
 
@@ -461,6 +473,10 @@ func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *mo
 	sb.WriteString("- 当用户询问商品/产品推荐、清单、对比，或提到“有哪些产品/适合新手/推荐几款/给我看看”时，必须调用 card.show 工具返回结构化卡片，禁止只在文本里描述卡片。\n")
 
 	sb.WriteString("- 系统已为你预检索相关知识库内容（见下方【知识库参考】），优先基于其回答，避免重复调用 rag.search；仅当用户问题明显超出已给范围、需要更多资料时，才调用 rag.search 补充检索。\n")
+
+	if chainFlowHint != "" {
+		sb.WriteString(chainFlowHint)
+	}
 
 	if len(ragChunks) > 0 {
 		sb.WriteString(renderRAGReferenceBlock(ragChunks))
