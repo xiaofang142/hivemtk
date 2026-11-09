@@ -15,15 +15,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"hivemtk-user/internal/pkg/urlguard"
 )
 
 // ValidateOpenAPIBaseURL 出站基址 SSRF 防线：仅允许 http(s)，拒绝环回/链路本地/
-// 私有网段/元数据地址。导入工具是「LLM 决定调用」的高危面，放宽等于把内网
+// 私有网段/元数据地址（判据统一走 urlguard，覆盖 IPv6 ULA/0.0.0.0/8 段/广播）。导入工具是「LLM 决定调用」的高危面，放宽等于把内网
 // 打通给模型；确需访问内网服务的部署应走正向代理并在代理侧做访问控制。
 func ValidateOpenAPIBaseURL(raw string) error {
 	u, err := url.Parse(raw)
@@ -37,24 +38,10 @@ func ValidateOpenAPIBaseURL(raw string) error {
 	if host == "" {
 		return fmt.Errorf("base_url 缺少主机名")
 	}
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return fmt.Errorf("base_url 主机解析失败: %w", err)
-	}
-	for _, ip := range ips {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
-			return fmt.Errorf("base_url 指向环回/链路本地地址，拒绝导入")
-		}
-		if ip4 := ip.To4(); ip4 != nil {
-			if ip4[0] == 10 || ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31 || ip4[0] == 192 && ip4[1] == 168 ||
-				ip4[0] == 169 && ip4[1] == 254 || ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
-				return fmt.Errorf("base_url 指向私有网段，拒绝导入")
-			}
-		}
-		// 云元数据
-		if ip.Equal(net.ParseIP("169.254.169.254")) {
-			return fmt.Errorf("base_url 指向元数据地址，拒绝导入")
-		}
+	// 网段判据统一委托 urlguard 单一事实源（G-10 二次审核：原手写版漏拒
+	// IPv6 ULA fc00::/7 与 0.0.0.0/8 段，与 urlguard 双源漂移）。
+	if err := urlguard.CheckHost(host); err != nil {
+		return fmt.Errorf("base_url 指向非公网目标: %w", err)
 	}
 	return nil
 }

@@ -12,8 +12,8 @@ import (
 
 type BackupDataRepository interface {
 	DumpClues(ctx context.Context) (json.RawMessage, error)
-	DumpUsers(ctx context.Context, limit, offset int) (json.RawMessage, error)
-	DumpShortLinks(ctx context.Context, limit, offset int) (json.RawMessage, error)
+	DumpUsers(ctx context.Context) (json.RawMessage, error)
+	DumpShortLinks(ctx context.Context) (json.RawMessage, error)
 	DumpTable(ctx context.Context, table string) (json.RawMessage, error)
 	ClueExists(ctx context.Context, tenantID uint, id string) (bool, error)
 	RestoreClue(ctx context.Context, row map[string]any) error
@@ -50,24 +50,34 @@ func (r *backupDataRepo) DumpClues(ctx context.Context) (json.RawMessage, error)
 		Address  string `json:"address"`
 		Desc     string `json:"desc"`
 	}
-	// G-6：分批拉取（对齐 DumpUsers 的 limit/offset 口径）。clues 全表单次 Find
-	// 会随数据增长变内存炸弹；批大小 1000，空批即终止，签名与返回口径不变。
+	// G-6：分批拉取，clues 全表单次 Find 会随数据增长变内存炸弹；批大小 1000。
+	// G-10 二次审核：offset 分页在导出窗口内有并发写入时会整窗漏行（窗口位移），
+	// 改 id 游标（clues.id 是 TEXT 业务键，PG 字典序与 ORDER BY 一致）不漏不重。
 	const batchSize = 1000
 	rows := make([]clueRow, 0, batchSize)
-	for offset := 0; ; offset += batchSize {
+	cursor := ""
+	for {
 		var batch []clueRow
-		if err := r.db.WithContext(ctx).Table("clues").Order("id ASC").Limit(batchSize).Offset(offset).Find(&batch).Error; err != nil {
+		q := r.db.WithContext(ctx).Table("clues").Order("id ASC").Limit(batchSize)
+		if cursor != "" {
+			q = q.Where("id > ?", cursor)
+		}
+		if err := q.Find(&batch).Error; err != nil {
 			return nil, err
 		}
 		rows = append(rows, batch...)
 		if len(batch) < batchSize {
 			break
 		}
+		cursor = batch[len(batch)-1].ID
 	}
 	return json.Marshal(rows)
 }
 
-func (r *backupDataRepo) DumpUsers(ctx context.Context, limit, offset int) (json.RawMessage, error) {
+// DumpUsers 整表导出：内部 keyset 分批（G-10 二次审核：caller 驱动的 offset 分页
+// 在导出窗口内有并发写入时整窗漏行）。user 表 id 列是 TEXT（model.User string 主键），
+// 与 clues 同为字典序游标，单查询即可。
+func (r *backupDataRepo) DumpUsers(ctx context.Context) (json.RawMessage, error) {
 	type userRow struct {
 		TenantID uint   `json:"tenant_id"`
 		ID       string `json:"id"`
@@ -76,38 +86,87 @@ func (r *backupDataRepo) DumpUsers(ctx context.Context, limit, offset int) (json
 		Phone    string `json:"phone"`
 		Password string `json:"password"`
 	}
-	var rows []userRow
-	if err := r.db.WithContext(ctx).Table("user").
-		Order("id ASC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
-		return nil, err
+	const batchSize = 1000
+	rows := make([]userRow, 0, batchSize)
+	cursor := ""
+	for {
+		var batch []userRow
+		q := r.db.WithContext(ctx).Table("user").Order("id ASC").Limit(batchSize)
+		if cursor != "" {
+			q = q.Where("id > ?", cursor)
+		}
+		if err := q.Find(&batch).Error; err != nil {
+			return nil, err
+		}
+		rows = append(rows, batch...)
+		if len(batch) < batchSize {
+			break
+		}
+		cursor = batch[len(batch)-1].ID
 	}
 	return json.Marshal(rows)
 }
 
-func (r *backupDataRepo) DumpShortLinks(ctx context.Context, limit, offset int) (json.RawMessage, error) {
+func (r *backupDataRepo) DumpShortLinks(ctx context.Context) (json.RawMessage, error) {
 	type row struct {
 		TenantID    uint   `json:"tenant_id"`
 		ID          uint   `json:"id"`
 		ShortCode   string `json:"short_code"`
 		OriginalURL string `gorm:"column:original_url" json:"original_url"`
 	}
-	var rows []row
-	if err := r.db.WithContext(ctx).Table("short_links").
-		Order("id ASC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
-		return nil, err
+	const batchSize = 1000
+	rows := make([]row, 0, batchSize)
+	var cursor uint
+	for {
+		var batch []row
+		q := r.db.WithContext(ctx).Table("short_links").Order("id ASC").Limit(batchSize)
+		if cursor > 0 {
+			q = q.Where("id > ?", cursor)
+		}
+		if err := q.Find(&batch).Error; err != nil {
+			return nil, err
+		}
+		rows = append(rows, batch...)
+		if len(batch) < batchSize {
+			break
+		}
+		cursor = batch[len(batch)-1].ID
 	}
 	return json.Marshal(rows)
 }
 
-// DumpTable 通用整表导出（按 id 升序单次查询）。扩表均为配置/记录类小表，
-// 整表读入可接受；users 等大表不走此路径（仍有专用分页 dumper）。
+// DumpTable 通用整表导出，白名单内 id 主键一律 keyset 分批（G-10 二次审核：
+// 白名单含 message/customer_sessions/login_events 等增长型大表，「扩表均为
+// 小表」的旧假设不成立；offset 分页另有并发窗口漏行问题，一并消除）。
+// 单表大结果仍受签名 json.RawMessage 约束整体物化——与 DumpClues 同口径。
 func (r *backupDataRepo) DumpTable(ctx context.Context, table string) (json.RawMessage, error) {
 	if !allowedBackupTables[table] {
 		return nil, fmt.Errorf("表 %s 不在备份白名单内", table)
 	}
+	const batchSize = 1000
 	var rows []map[string]any
-	if err := r.db.WithContext(ctx).Table(table).Order("id ASC").Find(&rows).Error; err != nil {
-		return nil, err
+	var cursor int64
+	for {
+		var batch []map[string]any
+		q := r.db.WithContext(ctx).Table(table).Order("id ASC").Limit(batchSize)
+		if cursor > 0 {
+			q = q.Where("id > ?", cursor)
+		}
+		if err := q.Find(&batch).Error; err != nil {
+			return nil, err
+		}
+		if len(batch) == 0 {
+			break
+		}
+		rows = append(rows, batch...)
+		if len(batch) < batchSize {
+			break
+		}
+		lastID, ok := batch[len(batch)-1]["id"].(int64)
+		if !ok {
+			return nil, fmt.Errorf("表 %s 的 id 列不是整数主键，无法游标分批", table)
+		}
+		cursor = lastID
 	}
 	if rows == nil {
 		return []byte("[]"), nil

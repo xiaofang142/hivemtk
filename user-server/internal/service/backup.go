@@ -324,56 +324,16 @@ func rawMessage(b []byte) json.RawMessage {
 	return json.RawMessage(b)
 }
 
-const backupPageSize = 1000
-
+// dumpAllUsers 分页循环已下沉到 repo（keyset 分批，见 backup_data.go DumpUsers）：
+// caller 驱动的 offset 分页在导出窗口内有并发写入时整窗漏行（G-10 二次审核）。
 func (s *BackupService) dumpAllUsers(ctx context.Context) ([]byte, error) {
-	var all []json.RawMessage
-	for offset := 0; ; offset += backupPageSize {
-		batch, err := s.backupDataRepo.DumpUsers(ctx, backupPageSize, offset)
-		if err != nil {
-			return nil, err
-		}
-		var arr []json.RawMessage
-		if err := json.Unmarshal(batch, &arr); err != nil {
-			return nil, fmt.Errorf("unmarshal users batch: %w", err)
-		}
-		if len(arr) == 0 {
-			break
-		}
-		all = append(all, arr...)
-		if len(arr) < backupPageSize {
-			break
-		}
-	}
-	if all == nil {
-		return []byte("[]"), nil
-	}
-	return json.Marshal(all)
+	return s.backupDataRepo.DumpUsers(ctx)
 }
 
+// dumpAllShortLinks 分页循环已下沉到 repo（keyset 分批，见 DumpShortLinks），
+// 理由同 dumpAllUsers。
 func (s *BackupService) dumpAllShortLinks(ctx context.Context) ([]byte, error) {
-	var all []json.RawMessage
-	for offset := 0; ; offset += backupPageSize {
-		batch, err := s.backupDataRepo.DumpShortLinks(ctx, backupPageSize, offset)
-		if err != nil {
-			return nil, err
-		}
-		var arr []json.RawMessage
-		if err := json.Unmarshal(batch, &arr); err != nil {
-			return nil, fmt.Errorf("unmarshal short_links batch: %w", err)
-		}
-		if len(arr) == 0 {
-			break
-		}
-		all = append(all, arr...)
-		if len(arr) < backupPageSize {
-			break
-		}
-	}
-	if all == nil {
-		return []byte("[]"), nil
-	}
-	return json.Marshal(all)
+	return s.backupDataRepo.DumpShortLinks(ctx)
 }
 
 func jsonArrayLen(b []byte) int {

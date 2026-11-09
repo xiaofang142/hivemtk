@@ -253,7 +253,7 @@ def main() -> int:
             print(f"SEAM-GUARD：{g} 在登记文件 {e['file']} 里找不到 var 声明处")
         allowed: dict[Path, list[tuple[int, int]]] = {home: decl + getter}
         allowed[sethome] = allowed.get(sethome, []) + setter
-        hits = [f"{f.relative_to(REPO_ROOT)}:{i}" for f, i in mentions.get(g, [])
+        hits = [f"{f.relative_to(REPO_ROOT).as_posix()}:{i}" for f, i in mentions.get(g, [])
                 if not inside(i, allowed.get(f, []))]
         if hits:
             rc = 1

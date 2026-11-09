@@ -33,6 +33,15 @@ func CheckIP(ip net.IP) error {
 		return fmt.Errorf("拒绝内网/保留地址: %s", ip)
 	}
 	if ip4 := ip.To4(); ip4 != nil {
+		// 0.0.0.0/8（"this network"）：精确 0.0.0.0 已被 IsUnspecified 拦下，
+		// 但 0.x.x.x 段在 Linux 上常被按环回/本地网络处理，是经典 SSRF 过滤绕行段。
+		if ip4[0] == 0 {
+			return fmt.Errorf("拒绝 0.0.0.0/8 地址: %s", ip)
+		}
+		// 受限广播 255.255.255.255：可被用作对局域网的探测跳板。
+		if ip.Equal(net.IPv4bcast) {
+			return fmt.Errorf("拒绝受限广播地址: %s", ip)
+		}
 		// CGNAT 共享地址段（100.64/10）：同样不是真正的公网目标。
 		if ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 {
 			return fmt.Errorf("拒绝 CGNAT 地址: %s", ip)

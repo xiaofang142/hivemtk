@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -40,11 +41,11 @@ func (f *auditDumpRepo) DumpClues(ctx context.Context) (json.RawMessage, error) 
 	return json.RawMessage(`[{"id":"c1"}]`), nil
 }
 
-func (f *auditDumpRepo) DumpUsers(ctx context.Context, limit, offset int) (json.RawMessage, error) {
+func (f *auditDumpRepo) DumpUsers(ctx context.Context) (json.RawMessage, error) {
 	return json.RawMessage(`[{"id":"u1"}]`), nil
 }
 
-func (f *auditDumpRepo) DumpShortLinks(ctx context.Context, limit, offset int) (json.RawMessage, error) {
+func (f *auditDumpRepo) DumpShortLinks(ctx context.Context) (json.RawMessage, error) {
 	return json.RawMessage(`[{"id":"s1"}]`), nil
 }
 
@@ -211,19 +212,23 @@ func TestBackupService_ExecuteBackup_ZipAndDirModeRestricted(t *testing.T) {
 	if backup.Status != model.BackupStatusCompleted {
 		t.Fatalf("executeBackup status=%s err=%s，期望 completed", backup.Status, backup.ErrorMessage)
 	}
-	info, err := os.Stat(backup.FilePath)
-	if err != nil {
-		t.Fatalf("stat zip: %v", err)
-	}
-	if info.Mode().Perm() != 0600 {
-		t.Errorf("zip 权限=%o，期望 0600（含 PII 不应对同组/其他用户可读）", info.Mode().Perm())
-	}
-	dirInfo, err := os.Stat(filepath.Dir(backup.FilePath))
-	if err != nil {
-		t.Fatalf("stat dir: %v", err)
-	}
-	if dirInfo.Mode().Perm() != 0700 {
-		t.Errorf("备份目录权限=%o，期望 0700", dirInfo.Mode().Perm())
+	// A-6/G-9-8 同款：NTFS 上 Go chmod 只能切只读位，600/700 语义不可表达，
+	// 权限档在 Windows 开发机上跳过（CI Linux 仍全量断言）。
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(backup.FilePath)
+		if err != nil {
+			t.Fatalf("stat zip: %v", err)
+		}
+		if info.Mode().Perm() != 0600 {
+			t.Errorf("zip 权限=%o，期望 0600（含 PII 不应对同组/其他用户可读）", info.Mode().Perm())
+		}
+		dirInfo, err := os.Stat(filepath.Dir(backup.FilePath))
+		if err != nil {
+			t.Fatalf("stat dir: %v", err)
+		}
+		if dirInfo.Mode().Perm() != 0700 {
+			t.Errorf("备份目录权限=%o，期望 0700", dirInfo.Mode().Perm())
+		}
 	}
 	// 清理：本测试在真实备份根目录落盘，清掉避免污染 backups/。
 	if err := os.RemoveAll(filepath.Dir(backup.FilePath)); err != nil {

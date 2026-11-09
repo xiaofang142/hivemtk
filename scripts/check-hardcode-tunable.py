@@ -284,7 +284,7 @@ def scan_go() -> tuple[list[tuple[str, str]], set[str]]:
                 t = p.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            rel = str(p.relative_to(REPO_ROOT))
+            rel = p.relative_to(REPO_ROOT).as_posix()
             for m in CONST_DECL.finditer(t):
                 out.append((rel, m.group(1)))
             fallback |= collect_fallback_idents(t)

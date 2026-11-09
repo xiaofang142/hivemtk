@@ -116,7 +116,7 @@ func TestBackupDataRepo_DumpsCoverAllTenantsAndCarryTenantID(t *testing.T) {
 		t.Fatalf("DumpClues 租户覆盖不全: %v", gotClueTenants)
 	}
 
-	userRows, err := repo.DumpUsers(sys, 100, 0)
+	userRows, err := repo.DumpUsers(sys)
 	if err != nil {
 		t.Fatalf("DumpUsers: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestBackupDataRepo_DumpsCoverAllTenantsAndCarryTenantID(t *testing.T) {
 		}
 	}
 
-	linkRows, err := repo.DumpShortLinks(sys, 100, 0)
+	linkRows, err := repo.DumpShortLinks(sys)
 	if err != nil {
 		t.Fatalf("DumpShortLinks: %v", err)
 	}

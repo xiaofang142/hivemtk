@@ -242,7 +242,7 @@ def main() -> int:
                         continue
                     for name, rx in matchers.items():
                         if rx.search(line):
-                            found[str(f.relative_to(REPO_ROOT))].append((start_line + offset, name))
+                            found[f.relative_to(REPO_ROOT).as_posix()].append((start_line + offset, name))
 
     rel_files = sorted(found)
     current = {rel: len(found[rel]) for rel in rel_files}
