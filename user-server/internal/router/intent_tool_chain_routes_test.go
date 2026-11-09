@@ -141,20 +141,20 @@ func TestIntentToolChainRoutes(t *testing.T) {
 		t.Fatalf("vocab 数据不全: %s", w.Body.String())
 	}
 
-	// Update（改意图 → refund）→ 200。用 create 返回的自建行 ID，不硬编码 /1：
-	// InitIntentChainRuntime 会先播 2 条 TB-03 只读种子链占住前两个 ID，真库跑
-	// 时 /1 是种子行（2026-11-10 本地真库回归实测；CI 无测试库时本用例 Skip 故未暴露）。
-	if w := intentChainDo(r, "PUT", fmt.Sprintf("/api/intent/tool-chains/%d", created.Data.ID), "admin", intentChainTestBody("refund")); w.Code != http.StatusOK {
+	// Update（改意图 → refund）→ 200（种子会使自增 id 偏移，必须用创建响应里的真实 id）
+	updatePath := fmt.Sprintf("/api/intent/tool-chains/%d", created.Data.ID)
+	if w := intentChainDo(r, "PUT", updatePath, "admin", intentChainTestBody("refund")); w.Code != http.StatusOK {
 		t.Fatalf("update 应 200, got %d body=%s", w.Code, w.Body.String())
 	}
 	// Delete → 200
-	if w := intentChainDo(r, "DELETE", fmt.Sprintf("/api/intent/tool-chains/%d", created.Data.ID), "admin", ""); w.Code != http.StatusOK {
+	if w := intentChainDo(r, "DELETE", updatePath, "admin", ""); w.Code != http.StatusOK {
 		t.Fatalf("delete 应 200, got %d", w.Code)
 	}
-	// 删除后再 list（按改后的意图过滤，种子链不参与断言）→ total=0
-	w = intentChainDo(r, "GET", "/api/intent/tool-chains?intent_code=refund", "admin", "")
+	// 删除后再按本意图过滤 → total=0（InitIntentChainRuntime 种子会写入
+	// ask_service/after_sale 两条只读链，total 全量口径不再是 0，用意图过滤隔离种子）。
+	w = intentChainDo(r, "GET", "/api/intent/tool-chains?intent_code=order_status", "admin", "")
 	_ = json.Unmarshal(w.Body.Bytes(), &listed)
 	if listed.Data.Total != 0 {
-		t.Fatalf("删除后 total 应 0, got %d", listed.Data.Total)
+		t.Fatalf("删除后本意图 total 应 0, got %d", listed.Data.Total)
 	}
 }

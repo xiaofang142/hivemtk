@@ -17,10 +17,15 @@ import (
 //
 // 方法统一走 portcontract 各 Port；未注入的 Port 对应工具返回 "port not injected"。
 type BusinessToolDeps struct {
-	FollowUp  portcontract.FollowUpPort
-	Order     portcontract.OrderPort
-	AfterSale portcontract.AfterSalePort
-	Logistics portcontract.LogisticsPort
+	FollowUp    portcontract.FollowUpPort
+	Order       portcontract.OrderPort
+	AfterSale   portcontract.AfterSalePort
+	Logistics   portcontract.LogisticsPort
+	OrderChange OrderChangeRequestPort // TB-05 改单申请单（nil=工具不可用）
+	// CustomerStore TB-13 服务端身份解析：order.lookup/follow_task.create 在 LLM
+	// 未提供身份参数时按 ToolContext.CustomerID 服务端解析（nil=不做解析，
+	// 行为回落 LLM 供给）。身份主权在服务端，LLM/客户自报只做线索。
+	CustomerStore CustomerDataStore
 }
 
 // NewBusinessToolDeps 创建业务工具依赖（各 Port 均未注入，需装配层补齐）
@@ -165,7 +170,7 @@ func snakeCaseFieldName(name string) string {
 //
 // 调用方：BusinessToolProvider.Provide()
 func BuildBusinessTools(deps BusinessToolDeps) []Tool {
-	return []Tool{
+	tools := []Tool{
 		NewFollowTaskCreateTool(deps),
 		NewFollowTaskUpdateTool(deps),
 		NewOrderLookupTool(deps),
@@ -173,6 +178,11 @@ func BuildBusinessTools(deps BusinessToolDeps) []Tool {
 		NewAfterSaleQueryTool(deps),
 		NewLogisticsTrackTool(deps),
 	}
+	// TB-05 改单申请：依赖注入才注册（Port 缺席=该高危工具不暴露，fail-closed）。
+	if deps.OrderChange != nil {
+		tools = append(tools, WithApproval(NewOrderModifyRequestTool(deps.OrderChange)))
+	}
+	return tools
 }
 
 // RegisterBusinessTools 注册业务工具到 registry
@@ -232,6 +242,13 @@ func NewFollowTaskCreateTool(deps BusinessToolDeps) *FollowTaskCreateTool {
 //
 // 走 portcontract.FollowUpPort；未注入返回 "port not injected"。
 func (t *FollowTaskCreateTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
+	// TB-13 服务端身份解析：customer_id 缺省时取 ToolContext.CustomerID（服务端主权）。
+	// 默认填充必须在必填校验之前——校验的是"补全后"的参数集。
+	if getArgString(args, "customer_id") == "" {
+		if tc := GetToolContext(ctx); tc != nil && tc.CustomerID != "" {
+			args["customer_id"] = tc.CustomerID
+		}
+	}
 	if err := ValidateRequired(args, []string{"customer_id"}); err != nil {
 		return ErrorResult(t.Name(), err), err
 	}
@@ -419,6 +436,23 @@ func NewOrderLookupTool(deps BusinessToolDeps) *OrderLookupTool {
 	}
 }
 
+// resolveIdentityFromContext 服务端身份解析：ToolContext.CustomerID → CustomerStore.GetByID
+// → (phone, name)。store/ctx 未就绪返回空串（fail-open 回落 LLM 供给，行为不变）。
+func (t *OrderLookupTool) resolveIdentityFromContext(ctx context.Context) (string, string) {
+	if t.deps.CustomerStore == nil {
+		return "", ""
+	}
+	tc := GetToolContext(ctx)
+	if tc == nil || tc.CustomerID == "" {
+		return "", ""
+	}
+	customer, err := t.deps.CustomerStore.GetByID(ctx, tc.CustomerID)
+	if err != nil || customer == nil {
+		return "", ""
+	}
+	return customer.Phone, customer.Name
+}
+
 // Execute 执行订单查询
 func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
 	orderPort := t.deps.orderPort()
@@ -428,6 +462,16 @@ func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (Too
 
 	orderID := getArgString(args, "order_id")
 	phone := getArgString(args, "phone")
+	// TB-13 服务端身份解析：LLM 未提供任何身份键时，按 ToolContext.CustomerID
+	// 经 CustomerStore 服务端解析（手机号不进 prompt，由执行层供给）。
+	if orderID == "" && phone == "" && getArgString(args, "name") == "" {
+		if resolvedPhone, resolvedName := t.resolveIdentityFromContext(ctx); resolvedPhone != "" || resolvedName != "" {
+			phone = resolvedPhone
+			if phone == "" {
+				phone = resolvedName
+			}
+		}
+	}
 	name := getArgString(args, "name")
 	platform := getArgString(args, "platform")
 

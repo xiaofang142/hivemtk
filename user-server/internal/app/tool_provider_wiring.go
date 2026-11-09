@@ -112,6 +112,13 @@ func (p *BusinessToolProvider) Provide(ctx tooluse.ProviderContext) ([]tooluse.T
 		afterSalePort,
 		ctx.DB,
 	)
+	// TB-05 改单申请单 Port：绑定层/改单域装配存在才暴露工具（service 单例 nil-safe）。
+	if svc := service.GetOrderChangeService(); svc != nil {
+		deps.OrderChange = service.NewOrderChangeRequestPortAdapter(svc)
+	}
+	// TB-13 服务端身份解析：CustomerStore 注入（order.lookup/follow_task.create
+	// 在 LLM 未供身份参数时按 ToolContext.CustomerID 服务端解析）。
+	deps.CustomerStore = NewCustomerDataStore()
 	return tooluse.BuildBusinessTools(deps), nil
 }
 

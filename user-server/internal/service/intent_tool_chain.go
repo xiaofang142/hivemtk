@@ -109,6 +109,9 @@ func ChainIntentFamily(code string) string {
 type IntentToolChainService struct {
 	repo repository.IntentToolChainRepository
 
+	// customIntents 自定义意图词条服务（T-09 动态放行面）；nil=仅静态双家族词表。
+	customIntents *CustomIntentService
+
 	mu            sync.RWMutex
 	cache         map[uint]map[string]*agent_runtime.IntentChainSpec
 	cacheLoadedAt map[uint]time.Time
@@ -132,7 +135,9 @@ func (s *IntentToolChainService) LookupIntentChain(ctx context.Context, intent s
 		return nil, nil
 	}
 	tenantID := chainTenantID(ctx)
-	if spec, ok := s.cachedSpec(tenantID, intent); ok {
+	// 缓存命中后仍复验可绑定面（T-09 动态放行）：自定义词条被删除时立即 fail-closed
+	// （其缓存随词条写失效）；新建词条的绑定行反向生效走 30s TTL（缓存装载时放行）。
+	if spec, ok := s.cachedSpec(tenantID, intent); ok && s.isBindableIntent(ctx, intent) {
 		return spec, nil
 	}
 	rows, err := s.repo.ListEnabled(ctx)
@@ -141,7 +146,7 @@ func (s *IntentToolChainService) LookupIntentChain(ctx context.Context, intent s
 	}
 	specs := make(map[string]*agent_runtime.IntentChainSpec, len(rows))
 	for i := range rows {
-		spec := chainRowToSpec(&rows[i])
+		spec := s.chainRowToSpec(ctx, &rows[i])
 		if spec == nil {
 			continue
 		}
@@ -177,8 +182,10 @@ func (s *IntentToolChainService) invalidateCache(tenantID uint) {
 }
 
 // chainRowToSpec 行→runtime 契约映射；解析失败/意图不在词表返回 nil（fail-closed 跳过）。
-func chainRowToSpec(rec *model.IntentToolChain) *agent_runtime.IntentChainSpec {
-	if rec == nil || !isValidChainIntent(rec.IntentCode) {
+// chainRowToSpec 行→runtime 契约映射；解析失败/意图不在可绑定面返回 nil（fail-closed 跳过）。
+// 可绑定面=静态双家族 ∪ 本租户启用中的自定义词条（T-09 动态放行）。
+func (s *IntentToolChainService) chainRowToSpec(ctx context.Context, rec *model.IntentToolChain) *agent_runtime.IntentChainSpec {
+	if rec == nil || !s.isBindableIntent(ctx, rec.IntentCode) {
 		return nil
 	}
 	var steps []model.IntentChainStepConfig
@@ -226,7 +233,7 @@ type ChainUpsertInput struct {
 // Create 新建绑定。校验：意图词表/步骤 1~N/工具名非空/模板变量白名单预检；
 // 同租户同意图唯一（软删行不占用：写侧显式查重）。
 func (s *IntentToolChainService) Create(ctx context.Context, in ChainUpsertInput) (*model.IntentToolChain, error) {
-	if err := validateChainUpsert(in); err != nil {
+	if err := s.validateChainUpsert(ctx, in); err != nil {
 		return nil, err
 	}
 	if existing, err := s.repo.GetByIntent(ctx, in.IntentCode); err != nil {
@@ -250,7 +257,7 @@ func (s *IntentToolChainService) Create(ctx context.Context, in ChainUpsertInput
 
 // Update 更新绑定（按 id；租户作用域在仓储层）。
 func (s *IntentToolChainService) Update(ctx context.Context, id uint, in ChainUpsertInput) (*model.IntentToolChain, error) {
-	if err := validateChainUpsert(in); err != nil {
+	if err := s.validateChainUpsert(ctx, in); err != nil {
 		return nil, err
 	}
 	rec, err := s.repo.GetByID(ctx, id)
@@ -303,8 +310,8 @@ func (s *IntentToolChainService) List(ctx context.Context, intentCode string, pa
 
 // ---- 校验与序列化 ----
 
-func validateChainUpsert(in ChainUpsertInput) error {
-	if !isValidChainIntent(in.IntentCode) {
+func (s *IntentToolChainService) validateChainUpsert(ctx context.Context, in ChainUpsertInput) error {
+	if !s.isBindableIntent(ctx, in.IntentCode) {
 		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("intent_code %q 不在可绑定意图词表内（可用: %s）",
 			in.IntentCode, joinChainVocab()))
 	}
@@ -371,7 +378,8 @@ type ChainVocabulary struct {
 }
 
 // GetChainVocabulary 管理端配置页取词表/变量/工具三项（单一事实源出口）。
-func (s *IntentToolChainService) GetChainVocabulary() ChainVocabulary {
+// 意图清单 = 静态双家族 ∪ 本租户启用中的自定义词条（family=custom，T-09）。
+func (s *IntentToolChainService) GetChainVocabulary(ctx context.Context) ChainVocabulary {
 	tools := []string{}
 	if reg := tooluse.GetGlobalRegistry(); reg != nil {
 		tools = reg.ListNames()
@@ -380,6 +388,15 @@ func (s *IntentToolChainService) GetChainVocabulary() ChainVocabulary {
 	families := make(map[string]string, len(intents))
 	for _, code := range intents {
 		families[code] = ChainIntentFamily(code)
+	}
+	if s.customIntents != nil {
+		for _, def := range s.customIntents.EffectiveCustomIntentDefs(ctx) {
+			if _, dup := families[def.Type]; dup {
+				continue
+			}
+			intents = append(intents, def.Type)
+			families[def.Type] = "custom"
+		}
 	}
 	return ChainVocabulary{
 		Intents:        intents,
@@ -507,4 +524,21 @@ func (s *IntentToolChainService) SeedDefaultIntentChains(ctx context.Context) (i
 		s.invalidateCache(chainTenantID(ctx))
 	}
 	return created, nil
+}
+
+// SetCustomIntentService 注入自定义意图词条服务（T-09）：绑定校验与行映射对
+// service 家族的自定义意图 type 动态放行；nil=仅静态词表（TB-01 行为不变）。
+func (s *IntentToolChainService) SetCustomIntentService(svc *CustomIntentService) {
+	s.customIntents = svc
+}
+
+// isBindableIntent 静态双家族 OR 动态自定义词条放行。
+func (s *IntentToolChainService) isBindableIntent(ctx context.Context, code string) bool {
+	if isValidChainIntent(code) {
+		return true
+	}
+	if s.customIntents != nil {
+		return s.customIntents.IsCustomIntentType(ctx, code)
+	}
+	return false
 }

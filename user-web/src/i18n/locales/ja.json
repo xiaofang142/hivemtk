@@ -125,6 +125,7 @@
     "unifiedInbox": "統一受信箱",
     "customerSession": "カスタマーサポートセッション",
     "intentRecognition": "意図認識",
+    "intentToolFlow": "インテントツールフロー",
     "dialogueMemory": "対話メモリ",
     "llmRouting": "LLM ルーティング",
     "agentActive": "能動的リーチ",

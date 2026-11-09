@@ -766,8 +766,9 @@ func (s *IntentRecognizer) recognizeByRule(ctx context.Context, text string) *dt
 }
 
 func (s *IntentRecognizer) recognizeByLLM(ctx context.Context, text string) (*dto.RecognizeResult, error) {
-	intentList := make([]string, 0, len(DefaultIntents))
-	for _, def := range DefaultIntents {
+	allDefs := append(append([]IntentDef(nil), DefaultIntents...), effectiveCustomIntentDefs(ctx)...)
+	intentList := make([]string, 0, len(allDefs))
+	for _, def := range allDefs {
 		intentList = append(intentList, fmt.Sprintf("%s: %s", def.Type, def.Description))
 	}
 	prompt := fmt.Sprintf(`你是销售对话意图识别专家。分析以下客户消息，从给定意图列表中选择最匹配的 1 个意图。
@@ -817,7 +818,7 @@ unknown: 无法确定或消息不属于以上任何意图（这是合法答案�
 	}
 	intentName := parsed.IntentType
 	known := false
-	for _, def := range DefaultIntents {
+	for _, def := range allDefs {
 		if def.Type == parsed.IntentType {
 			intentName = def.Name
 			known = true
@@ -1239,6 +1240,24 @@ func InitIntentKeywordOverride(ctx context.Context) {
 }
 
 func intentsForRule(ctx context.Context) []IntentDef {
+	merged := intentsForRuleMerged(ctx)
+	if len(merged) == 0 {
+		return DefaultIntents
+	}
+	return merged
+}
+
+// intentsForRuleMerged 默认词典 + 词面覆盖 + 自定义词条（T-09）。
+// 自定义词条追加在默认词典之后（词面计分语义不变，默认优先）。
+func intentsForRuleMerged(ctx context.Context) []IntentDef {
+	out := intentsForRuleWithOverride(ctx)
+	if svc := GetCustomIntentService(); svc != nil {
+		out = append(out, svc.EffectiveCustomIntentDefs(ctx)...)
+	}
+	return out
+}
+
+func intentsForRuleWithOverride(ctx context.Context) []IntentDef {
 	override := intentOverrideFor(ctx)
 	if len(override) == 0 {
 		return DefaultIntents

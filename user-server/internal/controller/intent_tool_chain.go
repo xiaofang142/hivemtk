@@ -109,5 +109,5 @@ func (c *IntentToolChainController) Vocab(ctx *gin.Context) {
 	if !c.ready(ctx) {
 		return
 	}
-	response.Success(ctx, c.svc.GetChainVocabulary(), "获取成功")
+	response.Success(ctx, c.svc.GetChainVocabulary(ctx.Request.Context()), "获取成功")
 }

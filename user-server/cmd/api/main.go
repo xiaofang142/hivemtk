@@ -729,6 +729,10 @@ func main() {
 	// InitInferenceOrchestrator 将其注入规划器（nil 时规划器回落硬编码，零行为变化）。
 	app.InitIntentChainRuntime(db.GetDB())
 
+	// TB-05 改单申请单：必须先于 router.Setup（工具提供者在 router.Setup 内
+	// 经 GetOrderChangeService 决定是否注册 order.modify_request 高风险工具）。
+	app.InitOrderChangeRuntime(db.GetDB())
+
 	router.Setup(r, db.GetDB())
 
 	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），

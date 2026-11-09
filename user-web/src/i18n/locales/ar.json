@@ -83,6 +83,7 @@
     "unifiedInbox": "صندوق الوارد الموحد",
     "customerSession": "جلسة خدمة العملاء",
     "intentRecognition": "التعرف على النية",
+    "intentToolFlow": "تدفقات أدوات النوايا",
     "dialogueMemory": "ذاكرة الحوار",
     "llmRouting": "توجيه LLM",
     "agentActive": "الوصول النشط",

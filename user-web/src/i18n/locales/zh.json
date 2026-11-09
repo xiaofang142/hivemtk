@@ -125,6 +125,7 @@
     "unifiedInbox": "统一收件箱",
     "customerSession": "客服会话",
     "intentRecognition": "意图识别",
+    "intentToolFlow": "意图工具流",
     "dialogueMemory": "对话记忆",
     "llmRouting": "LLM 路由",
     "agentActive": "主动触达",

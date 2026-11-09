@@ -276,6 +276,23 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.POST("/intent/tool-chains", chainCtrl.Create)
 	admin.PUT("/intent/tool-chains/:id", chainCtrl.Update)
 	admin.DELETE("/intent/tool-chains/:id", chainCtrl.Delete)
+
+	// T-09 自定义意图词条（管理端 CRUD；识别词典合并 + 绑定动态放行）。
+	ciCtrl := controller.NewCustomIntentController(app.GetCustomIntentService())
+	admin.GET("/intent/custom", ciCtrl.List)
+	admin.POST("/intent/custom", ciCtrl.Create)
+	admin.PUT("/intent/custom/:id", ciCtrl.Update)
+	admin.DELETE("/intent/custom/:id", ciCtrl.Delete)
+
+	// TB-05 改单申请单（管理端：创建/审批/拒绝/执行/取消；能力路由冻结在创建期）。
+	ocCtrl := controller.NewOrderChangeController(app.GetOrderChangeService())
+	admin.GET("/order-change-requests", ocCtrl.List)
+	admin.GET("/order-change-requests/:id", ocCtrl.Get)
+	admin.POST("/order-change-requests", ocCtrl.Create)
+	admin.POST("/order-change-requests/:id/approve", ocCtrl.Approve)
+	admin.POST("/order-change-requests/:id/reject", ocCtrl.Reject)
+	admin.POST("/order-change-requests/:id/execute", ocCtrl.Execute)
+	admin.POST("/order-change-requests/:id/cancel", ocCtrl.Cancel)
 }
 
 func setupLLMProviderRoutes(auth *gin.RouterGroup) {
