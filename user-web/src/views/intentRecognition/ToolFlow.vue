@@ -313,7 +313,7 @@ function openEdit(row) {
     steps = [];
   }
   if (!steps.length) steps = [blankStep()];
-  let slots = [];
+  let slots;
   try {
     slots = JSON.parse(row.slots_json || '[]');
   } catch {
@@ -478,7 +478,7 @@ async function toggleEnabled(row, v) {
   } catch {
     steps = [];
   }
-  let slots = [];
+  let slots;
   try {
     slots = JSON.parse(row.slots_json || '[]');
   } catch {
