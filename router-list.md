@@ -10,9 +10,9 @@
 
 | 形态 | 访问入口 | 后端 | 账号 | 标识 |
 |---|---|---|---|---|
-| SaaS 云端（线上） | `https://work.xapptool.cn/` | 线上租户 18（tz3rmdj） | `jideilvluoqun@gmail.com` / `Admin@123456` | `tenant_mode=true` / `edition=saas` |
-| SaaS 本地 | `127.0.0.1:8321` | `127.0.0.1:8315`（`TENANT_MODE=on`） | `uit_admin` / `Hive@Test123`（tenant_id=1） | `tenant_mode=true` / `edition=saas` |
-| 私域独立部署 | `127.0.0.1:8320` | `127.0.0.1:8314`（`TENANT_MODE=off`） | `uit_admin` / `Hive@Test123` | `tenant_mode=false` / `edition=opensource` |
+| SaaS 云端（线上） | `https://work.xapptool.cn/` | 线上租户 18（tz3rmdj） | `jideilvluoqun@gmail.com`（口令不入库） | `tenant_mode=true` / `edition=saas` |
+| SaaS 本地 | `127.0.0.1:8321` | `127.0.0.1:8315`（`TENANT_MODE=on`） | `uit_admin`（tenant_id=1；口令不入库） | `tenant_mode=true` / `edition=saas` |
+| 私域独立部署 | `127.0.0.1:8320` | `127.0.0.1:8314`（`TENANT_MODE=off`） | `uit_admin`（口令不入库） | `tenant_mode=false` / `edition=opensource` |
 
 - 浏览器：ego lite（`ego-browser`，复用登录态；控制台 + Network 全量采集）
 - 两种形态**都要过**：SaaS 页出现的租户/商务属性，独立部署页必须不出现且不报错

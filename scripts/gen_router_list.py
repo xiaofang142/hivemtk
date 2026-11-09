@@ -185,11 +185,12 @@ def parse_routes(src):
 
 
 def load_existing_status():
-    """读取既有 router-list.md 的勾选状态，按 (path, name) 记住。
+    """读取既有 router-list.md 的勾选状态，按 path 记住。
 
-    重新生成清单**不能**把已验证的路由打回未验证——那样每次跑一次脚本
-    就等于把全部人工点击结论清零。状态以 (path, name) 为主键：path 相同
-    但 name 不同（重定向 vs 页面）是两条不同的路由，必须分别记录。
+    重新生成清单**不能**把已验证的路由打回未验证——那样每跑一次脚本
+    就等于把全部人工点击结论清零。键只用 path：路由改名（如
+    FaqList→FAQList）不应把已点验状态清零；同一 path 在路由表里是唯一的，
+    name 只是展示名。
     """
     status = {}
     if not os.path.exists(OUT):
@@ -205,18 +206,18 @@ def load_existing_status():
             if not idx_cell.isdigit():
                 continue
             st = cells[1]
+            # 用 path 做键：路由改名（如 FaqList→FAQList）不应把已点验状态清零。
             path = cells[2].strip("`")
-            name = cells[3]
-            status[(path, name)] = st
+            status[path] = st
     return status
 
 
 def load_existing_guide():
-    """读取既有 router-list.md 的「引导」列状态，按 (path, name) 记住。
+    """读取既有 router-list.md 的「引导」列状态，按 path 记住。
 
-    任务六：这一列记的是「这一页的新手引导写没写」。跟点验状态一样，
+    任务六：这一列记的是「这一页的新手导航写没写」。跟点验状态一样，
     重跑脚本不能把已经写好的导览打回未写——否则每次重新生成清单就等于
-    把全部人工结论清零。
+    把全部人工结论清零。键与 load_existing_status 一致，用稳定的 path。
     """
     guide = {}
     if not os.path.exists(OUT):
@@ -231,9 +232,9 @@ def load_existing_guide():
             idx_cell = cells[0]
             if not idx_cell.isdigit():
                 continue
+            # 同 status：path 是稳定键，name 可能随命名规范调整。
             path = cells[2].strip("`")
-            name = cells[3]
-            guide[(path, name)] = cells[8]
+            guide[path] = cells[8]
     return guide
 
 
@@ -263,18 +264,18 @@ def main():
     lines.append(f"- 来源：`user-web/src/router/index.js` + `src/router/modules/*.js`（{n_mod} 个模块文件）")
     lines.append(f"- 规模：**{len(rows)} 条页面路由**")
     lines.append("- 生成方式：`scripts/gen_router_list.py`（只做索引，不开浏览器；重跑保留既有勾选状态）")
-    lines.append("- 校验口径：本地起 user-server + user-web，逐条路由**拟人点击**页面所有元素/表单/交互，")
-    lines.append("  比对**浏览器控制台报错**与 **Network 里的非 2xx API 响应**；发现错误即修复")
+    lines.append("- 校验口径：逐条路由**拟人点击**页面元素/表单/交互（每个元素显式指定，禁止枚举循环），")
+    lines.append("  比对**浏览器控制台报错**与 **Network 里的非 2xx API 响应**；发现错误即本地修复并回归")
     lines.append("")
-    lines.append("## 测试环境（本轮）")
+    lines.append("## 测试环境（2026-11-06 全量复测轮）")
     lines.append("")
-    lines.append("| 形态 | 后端 | 前端 | 标识 |")
-    lines.append("|---|---|---|---|")
-    lines.append("| SaaS 多租户 | `127.0.0.1:8315`（`TENANT_MODE=on`） | `127.0.0.1:8321` | `tenant_mode=true` / `edition=saas` |")
-    lines.append("| 私域独立部署 | `127.0.0.1:8314`（`TENANT_MODE=off`） | `127.0.0.1:8320` | `tenant_mode=false` / `edition=opensource` |")
+    lines.append("| 形态 | 访问入口 | 后端 | 账号 | 标识 |")
+    lines.append("|---|---|---|---|---|")
+    lines.append("| SaaS 云端（线上） | `https://work.xapptool.cn/` | 线上租户 18（tz3rmdj） | `jideilvluoqun@gmail.com`（口令不入库） | `tenant_mode=true` / `edition=saas` |")
+    lines.append("| SaaS 本地 | `127.0.0.1:8321` | `127.0.0.1:8315`（`TENANT_MODE=on`） | `uit_admin`（tenant_id=1；口令不入库） | `tenant_mode=true` / `edition=saas` |")
+    lines.append("| 私域独立部署 | `127.0.0.1:8320` | `127.0.0.1:8314`（`TENANT_MODE=off`） | `uit_admin`（口令不入库） | `tenant_mode=false` / `edition=opensource` |")
     lines.append("")
-    lines.append("- 浏览器：Qoder 内置 Chrome DevTools MCP（独立测试 profile，9222 端口侧）")
-    lines.append("- 登录账号：`uit_admin` / `Hive@Test123`（id=26，tenant_id=1）")
+    lines.append("- 浏览器：ego lite（`ego-browser`，复用登录态；控制台 + Network 全量采集）")
     lines.append("- 两种形态**都要过**：SaaS 页出现的租户/商务属性，独立部署页必须不出现且不报错")
     lines.append("")
     lines.append("## 状态图例")
@@ -305,8 +306,8 @@ def main():
     existing_guide = load_existing_guide()
     for i, r in enumerate(rows, 1):
         auth = "是" if r["auth"] == "true" else ("否" if r["auth"] == "false" else "-")
-        st = existing.get((r["path"], r["name"]), "[ ]")
-        guide = existing_guide.get((r["path"], r["name"]), "-")
+        st = existing.get(r["path"], "[ ]")
+        guide = existing_guide.get(r["path"], "-")
         lines.append(
             f"| {i} | {st} | `{r['path']}` | {r['name']} | {r['title']} | {auth} | "
             f"`{r['comp']}` | `{r['src']}` | {guide} |"
