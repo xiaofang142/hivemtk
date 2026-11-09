@@ -1,9 +1,0 @@
-基线字节：仓库 HEAD 6a5c854c2441e46fa9fd2fe15bf0c362387eb639
-取证器 scripts/menu-route-role-audit.py md5 ad5da9a19eb7f88c610cc4b2f9b9db65
-事实源 docs/superpowers/specs/ledger/logs/MenuRouteAudit/20261012-184252/guard_tiers.tsv md5 ab70d213918158cae80dcb5637439d7a
-复现命令：python3 scripts/menu-route-role-audit.py --check-go user-server/internal/model/menu_capability_routes.go
-读数：档位 1757 行 · 菜单 path 节点 170 · 页面 218 · 归属节点 170 · LEAK 216（未收口 0／已收口 216）· SHARED 117 · BLOCK 188 · ORPHAN 0 · GLOBAL 7 · PENDING 27
-壳层形状 58 个 · 菜单外路由页形状另计
-口径自检：14 枚控制，失败 0 枚
-限制：可见性按首空表 seed 折算，库里 role_menu_permissions 被人工改过则真值在库里
-落盘时间：20261012-184304+0800
