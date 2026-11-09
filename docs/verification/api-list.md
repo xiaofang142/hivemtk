@@ -653,7 +653,7 @@
 | 564 | [x] | POST | `/api/inbox/conversations/{id}/pin` | 用户端 | `src/api/inbox.js` | POST pin {pinned:true} 200 再false还原 200 data.pinned回显 | 200 置顶状态切换（已还原） | 27 |
 | 565 | [x] | POST | `/api/inbox/conversations/{id}/star` | 用户端 | `src/api/inbox.js` | POST star {starred:true} 200 再false还原 200 | 200 星标状态切换（已还原） | 31 |
 | 566 | [x] | POST | `/api/inbox/conversations/{id}/mute` | 用户端 | `src/api/inbox.js` | POST mute {muted:true} 200 再false还原 200 | 200 免打扰状态切换（已还原） | 35 |
-| 567 | [x] | POST | `/api/inbox/conversations/{id}/tags` | 用户端 | `src/api/inbox.js` | POST tags r526_tag 200 添加成功且GET可见tags=[r526_tag]; 清理后tags=[](还原) | 200 打标签成功 | 40 |
+| 567 | [x] | POST | `/api/inbox/conversations/{id}/tags` | 用户端 | `src/api/inbox.js` | POST tags r526_tag 200 添加成功且GET可见tags=[r526_tag]; 清理后tags=[]（还原） | 200 打标签成功 | 40 |
 | 568 | [x] | DELETE | `/api/inbox/conversations/{id}/tags/{tag}` | 用户端 | `src/api/inbox.js` | DELETE /api/inbox/conversations/999999/tags/apitest568 -> 404 NOT_FOUND_1002 会话不存在（本账号 scope 无会话，错误路径正确） | 200 移除标签成功 | 44 |
 | 569 | [x] | DELETE | `/api/inbox/conversations/{id}/messages/{mid}?source={source}` | 用户端 | `src/api/inbox.js` | DELETE /api/inbox/conversations/999999/messages/1?source=hub -> 404 会话不存在；source=bogus -> 400 INVALID_PARAM_1001 无效的消息来源，校验正确 | source 只支持 hub/session → 404 "消息不存在" | 49 |
 | 570 | [x] | POST | `/api/inbox/assign` | 用户端 | `src/api/inbox.js` | POST /api/inbox/assign 缺 action -> 400 请求参数错误；body 寻址不存在会话 -> 404 会话不存在（controller 先做 scoped 可见性检查，正确） | 缺 action → 400；human+assignee_id=54 → 200 分派成功 | 54 |
