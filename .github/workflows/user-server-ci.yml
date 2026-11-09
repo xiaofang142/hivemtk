@@ -197,6 +197,10 @@ env:
   # 留空即用默认前缀 user_db_test，语义自明。
   POSTGRES_TEST_HOST: 127.0.0.1
   POSTGRES_TEST_PORT: "5432"
+  # testutil 的实例钉扎只认「显式声明的快测端口」（8217 或本变量）。
+  # CI 的 service 容器映射到标准 5432，必须在这里一并声明，否则配置门会以
+  # "pinned to the dedicated fast instance" 拒绝，288 个依赖测试库的文件全部失败。
+  USER_POSTGRES_TEST_HOST_PORT: "5432"
   POSTGRES_TEST_USER: admin
   POSTGRES_TEST_PASSWORD: password123
 

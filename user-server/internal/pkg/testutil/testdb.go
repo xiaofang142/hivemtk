@@ -4,10 +4,11 @@
 // 连接配置来源（优先级）：
 //  1. POSTGRES_TEST_DSN（完整连接串，显式覆盖一切）
 //  2. POSTGRES_TEST_HOST / POSTGRES_TEST_PORT / POSTGRES_TEST_USER / POSTGRES_TEST_PASSWORD
-//  3. 宿主机端口回落到 USER_POSTGRES_HOST_PORT / DB_PORT，再回落到
-//     config.DefaultDBPortDev(8232) / config.DefaultDBPortDocker(8202) 的实际探测
+//  3. 端口缺省为专用测试实例 8217；CI 等需要映射到别的端口时经
+//     USER_POSTGRES_TEST_HOST_PORT 显式声明
 //
-// 端口探测存在的理由见 testDBPortCandidates 注释（避免硬编码 8202 导致本地假绿）。
+// 端口固定为单一来源，不再做多端口探测（AV-01）：探测会让"连错库"也表现为成功，
+// 并掩盖端口配置错误。配置校验见 readTestDBConfig。
 //
 // 性能口径（2026-11-05）：
 //   - 进程级只建一个库；
@@ -35,13 +36,11 @@ import (
 	"net"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenancyidx"
 	"hivemtk-user/internal/pkg/tenant"
@@ -49,13 +48,6 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-)
-
-var dbnameRe = regexp.MustCompile(`dbname=[^\s]+`)
-
-var (
-	dsnHostRe = regexp.MustCompile(`host=([^\s]+)`)
-	dsnPortRe = regexp.MustCompile(`port=([0-9]+)`)
 )
 
 var (
@@ -86,6 +78,7 @@ var (
 	endpointHost   string
 	endpointPort   string
 	endpointCached bool
+	endpointConfig string
 )
 
 // schema 登记表：key 为实际表名（GORM 的 TableName() 结果）。
@@ -134,36 +127,19 @@ func closeTimeout() time.Duration {
 	return d
 }
 
-// testDBPortCandidates 返回宿主机测试库端口候选（按优先级去重）。
+// testDBPortCandidates 返回宿主机测试库端口候选。
 //
-// ⚠️ 为什么不能像原实现那样写死单一端口 8202：
-//   - 8202 是 **容器内** 端口。宿主机映射端口由 docker-compose 的
-//     `ports: "127.0.0.1:${USER_POSTGRES_HOST_PORT:-8202}:8202"` 决定，
-//     本机 .env 覆盖为 8232（见 docs/PORT_REGISTRY.md §一 / §二）。
-//   - 写死 8202 时，本机 `go test ./...` 连不上 → 依赖本辅助的 288 个测试文件
-//     全部 t.Skipf → go test 退出 0，断言变假绿（同源问题，
-//     只是触发点从 CI 换成了本地）。
-//   - docs/PORT_REGISTRY.md 已把"硬编码 8202 但 ports.go 说 8232"列为缺陷模式，
-//     并记录了 2026-09 CV 验收时因此产生大面积假失败的历史事故。
+// AV-01 之后这里只剩一个候选：端口必须显式配置为 8217
+// （docker-compose 的 mtk-postgres-test 映射口），或由调用方经
+// POSTGRES_TEST_PORT / USER_POSTGRES_TEST_HOST_PORT 指定。
+// 不再按多个端口探测 —— 探测会让"连错库"也表现为成功，且掩盖端口配置错误。
+// readTestDBConfig 还会把端口钉死在这两个来源上（CI 经
+// USER_POSTGRES_TEST_HOST_PORT=5432 显式声明）。
 //
-// 常量取自 config 包（DefaultDBPortDev / DefaultDBPortDocker），与 ports.go 同源，
-// 避免文档与代码各说各话。
+// 历史背景：写死容器内 8202 而宿主机映射到 8232，曾使 `go test ./...` 连不上、
+// 依赖本辅助的测试文件全部 Skipf，断言变假绿（见 docs/PORT_REGISTRY.md）。
 func testDBPortCandidates() []string {
-	out := make([]string, 0, 5)
-	seen := make(map[string]bool, 5)
-	add := func(p string) {
-		if p == "" || seen[p] {
-			return
-		}
-		seen[p] = true
-		out = append(out, p)
-	}
-	add(os.Getenv("POSTGRES_TEST_PORT"))          // 显式覆盖（CI 注入 5432）
-	add(os.Getenv("USER_POSTGRES_HOST_PORT"))     // 与 docker-compose / .env 同源
-	add(os.Getenv("DB_PORT"))                     // 与 config.yaml 同源
-	add(strconv.Itoa(config.DefaultDBPortDev))    // 8232 宿主机直连
-	add(strconv.Itoa(config.DefaultDBPortDocker)) // 8202 容器内 / 默认映射
-	return out
+	return []string{getEnvOr("POSTGRES_TEST_PORT", getEnvOr("USER_POSTGRES_TEST_HOST_PORT", "8217"))}
 }
 
 func dialTestDB(host, port string) error {
@@ -174,50 +150,34 @@ func dialTestDB(host, port string) error {
 	return conn.Close()
 }
 
-// resolveTestDBEndpoint 选出实际可建连的宿主机测试库端点。
+// resolveTestDBEndpoint 返回配置校验后的宿主机测试库端点并试拨一次。
 //
-// 返回 (host, port, err)。err 非 nil 表示所有候选都不可达，此时 port 为首个候选，
-// 便于错误信息指向最可能的配置项。
+// 返回 (host, port, err)。err 非 nil 表示端点不可达；host/port 一并返回，
+// 便于错误信息直接指向被拒绝的那个配置项（不再有多个候选）。
 func resolveTestDBEndpoint() (string, string, error) {
+	cfg, err := readTestDBConfig()
+	if err != nil {
+		return "", "", err
+	}
 	endpointMu.Lock()
 	defer endpointMu.Unlock()
-	if endpointCached {
+	if endpointCached && endpointConfig == cfg.dsn {
 		return endpointHost, endpointPort, nil
 	}
-	host, port, err := resolveTestDBEndpointUncached()
+	host, port, err := cfg.host, cfg.port, dialTestDB(cfg.host, cfg.port)
 	if err == nil {
 		endpointHost, endpointPort, endpointCached = host, port, true
+		endpointConfig = cfg.dsn
 	}
 	return host, port, err
 }
 
 func resolveTestDBEndpointUncached() (string, string, error) {
-	// POSTGRES_TEST_DSN 显式给出完整连接串时以它为准，不再猜端口。
-	if dsn := os.Getenv("POSTGRES_TEST_DSN"); dsn != "" {
-		host := getEnvOr("POSTGRES_TEST_HOST", "127.0.0.1")
-		port := strconv.Itoa(config.DefaultDBPortDocker)
-		if m := dsnHostRe.FindStringSubmatch(dsn); m != nil {
-			host = m[1]
-		}
-		if m := dsnPortRe.FindStringSubmatch(dsn); m != nil {
-			port = m[1]
-		}
-		return host, port, dialTestDB(host, port)
+	cfg, err := readTestDBConfig()
+	if err != nil {
+		return "", "", err
 	}
-
-	host := getEnvOr("POSTGRES_TEST_HOST", "127.0.0.1")
-	cands := testDBPortCandidates()
-	var firstErr error
-	for _, p := range cands {
-		err := dialTestDB(host, p)
-		if err == nil {
-			return host, p, nil
-		}
-		if firstErr == nil {
-			firstErr = fmt.Errorf("%s:%s: %w", host, p, err)
-		}
-	}
-	return host, cands[0], firstErr
+	return cfg.host, cfg.port, dialTestDB(cfg.host, cfg.port)
 }
 
 // testDBMaxOpenConns／testDBMaxIdleConns 给本辅助开出的每个句柄上连接池上界。
@@ -265,10 +225,11 @@ const (
 //     过表时 TRUNCATE 会失败，此时回退 DROP+AutoMigrate 并重试。
 //  5. 通过 t.Cleanup 还原 dbstate 并关闭本用例连接池。
 //
-// 优雅降级：当 PostgreSQL 测试库不可达时（如本地开发无 PG），
-// 自动调用 t.Skipf 跳过本测试，保证 go test 不会因环境差异大面积失败。
-// 强依赖真实 DB 的集成/E2E 测试在此场景下整体跳过，不影响纯单元测试。
-// 注意：CI 环境（CI 环境变量非空）下改为 t.Fatalf —— 见函数体内注释。
+// 优雅降级：本地未配置测试库且端点不可达时自动 t.Skipf，保证 go test 不会因环境差异
+// 大面积失败；强依赖真实 DB 的集成/E2E 测试在此场景下整体跳过，不影响纯单元测试。
+// 但配置本身不合法（缺口令、库名不是测试库、非回环地址、端口未钉死）时一律 Fatal——
+// 配置错误不能被 Skip 掩盖。CI 或显式指定了 POSTGRES_TEST_PORT/DSN 时不可达也 Fatal，
+// 见函数体内注释。
 //
 // 注意：本辅助在创建成功后会自动 dbstate.Set(database) 并在 t.Cleanup 里还原为 nil。
 //
@@ -286,6 +247,10 @@ const (
 // 既有调用方无需改动。
 func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 	t.Helper()
+	cfg, configErr := readTestDBConfig()
+	if configErr != nil {
+		t.Fatalf("PostgreSQL 测试配置拒绝：%v", configErr)
+	}
 
 	// TESTDB_TIMING=1 时输出分阶段耗时，用于定位整套用例的建库成本。
 	// 默认关闭，不改变任何行为。
@@ -304,15 +269,16 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 		// 依赖本辅助的 **288 个测试文件全部走 t.Skipf**，`go test` 依然退出 0。
 		// 阻断式测试断言因此长期形同虚设（且掩盖过 4 个包的真实失败）。
 		//
-		// 现约定：CI 环境（GitHub Actions 自动设置 CI=true）下连不上测试库即 **Fatal**，
-		// 让"没跑"这件事本身变成红色，而不是变成一句没人看的 SKIP。
-		// 本地开发保留跳过语义，便于不装 PG 也能跑纯单元测试。
-		if os.Getenv("CI") != "" {
-			t.Fatalf("CI 环境下 PostgreSQL 测试库不可达（%s:%s）：%v。\n"+
-				"不允许静默跳过（会产生假绿）。请检查 CI 是否设置了 POSTGRES_TEST_HOST / "+
+		// 现约定：CI（GitHub Actions 自动设置 CI=true），或本地显式给了
+		// POSTGRES_TEST_DSN / POSTGRES_TEST_PORT（说明本意就是要跑真实库）时，
+		// 连不上即 **Fatal**，让"没跑"这件事本身变成红色。
+		// 两者都没有的本地开发才保留跳过语义，便于不装 PG 也能跑纯单元测试。
+		if os.Getenv("CI") != "" || os.Getenv("POSTGRES_TEST_DSN") != "" || os.Getenv("POSTGRES_TEST_PORT") != "" {
+			t.Fatalf("已配置 PostgreSQL 测试库但不可达（%s:%s）：%v。\n"+
+				"不允许静默跳过（会产生假绿）。请检查 POSTGRES_TEST_HOST / "+
 				"POSTGRES_TEST_PORT / POSTGRES_TEST_USER / POSTGRES_TEST_PASSWORD。", host, port, dialErr)
 		}
-		t.Skipf("PostgreSQL 测试库不可达（已按优先级尝试 %v）：%v；按设计本测试可跳过",
+		t.Skipf("PostgreSQL 测试库不可达（候选端口 %v）：%v；按设计本测试可跳过",
 			testDBPortCandidates(), dialErr)
 		return nil
 	}
@@ -322,7 +288,7 @@ func NewTestDB(t testing.TB, models ...any) *gorm.DB {
 
 	ensureProcTestDB(t)
 	tEnsure = time.Since(last)
-	testDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname="+procDBName)
+	testDSN := testDSNWithDatabase(cfg.dsn, procDBName)
 
 	legacy := os.Getenv("TESTDB_LEGACY") == "1"
 	var database *gorm.DB
@@ -397,7 +363,7 @@ func openTestDB(t testing.TB, testDSN string) (database *gorm.DB, open, settings
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), err)
+		t.Fatalf("连接 PostgreSQL 测试库失败（dsn=%s）: %v", maskedDSN(testDSN), safeTestDBError(err))
 	}
 	open = time.Since(begin)
 
@@ -697,21 +663,24 @@ func acquireTestDBSlot(conn *sql.Conn, t testing.TB) (slot int, ok bool) {
 
 func ensureProcTestDB(t testing.TB) {
 	procDBInit.Do(func() {
-		// 基名与 getTestDSN 同源（POSTGRES_TEST_DBNAME，默认 user_db_test）。
+		// 基名与 readTestDBConfig 同源（POSTGRES_TEST_DBNAME，默认 user_db_test）。
 		//
-		// ⚠️ 此处不能硬编码 `"user_db_test_%d"`。而 NewTestDB 会把
-		// getTestDSN() 里的 dbname 整体替换成 procDBName（见 NewTestDB 内
-		// `dbnameRe.ReplaceAllString(..., "dbname="+procDBName)`），
-		// 于是 POSTGRES_TEST_DBNAME **设了也不生效** —— 典型"配置项名承诺了它不做的事"。
-		// 现改为共用同一基名，两边不再各说各话。
-		base := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
-		_, port, _ := resolveTestDBEndpoint()
-		maintDSN := dbnameRe.ReplaceAllString(getTestDSN(port), "dbname=postgres")
+		// ⚠️ 此处不能硬编码 `"user_db_test_%d"`：NewTestDB 会用
+		// testDSNWithDatabase(cfg.dsn, procDBName) 把连接串里的库名换成进程槽位库，
+		// 两边必须共用同一基名，否则 POSTGRES_TEST_DBNAME 设了也不生效——
+		// 典型"配置项名承诺了它不做的事"。
+		cfg, err := readTestDBConfig()
+		if err != nil {
+			procDBInitErr = err
+			return
+		}
+		base := cfg.database
+		maintDSN := testDSNWithDatabase(cfg.dsn, "postgres")
 		m, err := gorm.Open(postgres.Open(maintDSN), &gorm.Config{
 			Logger: logger.Default.LogMode(logger.Silent),
 		})
 		if err != nil {
-			procDBInitErr = err
+			procDBInitErr = safeTestDBError(err)
 			return
 		}
 		s, err := m.DB()
@@ -783,9 +752,12 @@ func ensureProcTestDB(t testing.TB) {
 // 强依赖 DB 的测试仍使用 NewTestDB（不可达则 fail）。
 func NewTestDBOrSkip(t testing.TB, models ...any) *gorm.DB {
 	t.Helper()
+	if _, err := readTestDBConfig(); err != nil {
+		t.Fatalf("PostgreSQL 测试配置拒绝：%v", err)
+	}
 
 	if _, _, err := resolveTestDBEndpoint(); err != nil {
-		t.Skipf("PostgreSQL 测试库不可达（已按优先级尝试 %v）：%v；按设计本测试可跳过",
+		t.Skipf("PostgreSQL 测试库不可达（候选端口 %v）：%v；按设计本测试可跳过",
 			testDBPortCandidates(), err)
 		return nil
 	}
@@ -801,15 +773,10 @@ func getTestDSN(port string) string {
 	host := getEnvOr("POSTGRES_TEST_HOST", "127.0.0.1")
 	user := getEnvOr("POSTGRES_TEST_USER", "admin")
 	password := getEnvOr("POSTGRES_TEST_PASSWORD", os.Getenv("POSTGRES_PASSWORD"))
-	if password == "" {
-		// 兜底：CI 的容器密码。本地 .env 的密码不同，届时会走到下面的
-		// 认证失败分支并给出明确提示（不在此硬编码本地密码 —— 那是密钥）。
-		password = "password123"
-	}
 	dbname := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
 	sslmode := getEnvOr("POSTGRES_TEST_SSLMODE", "disable")
-	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Shanghai",
-		host, port, user, password, dbname, sslmode)
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=Asia/Shanghai connect_timeout=2",
+		testDSNQuote(host), testDSNQuote(port), testDSNQuote(user), testDSNQuote(password), testDSNQuote(dbname), testDSNQuote(sslmode))
 }
 
 func getEnvOr(key, fallback string) string {
@@ -820,16 +787,6 @@ func getEnvOr(key, fallback string) string {
 }
 
 func maskedDSN(dsn string) string {
-	out := []byte(dsn)
-	for i := 0; i < len(out)-8; i++ {
-		if string(out[i:i+9]) == "password=" {
-			j := i + 9
-			for j < len(out) && out[j] != ' ' {
-				out[j] = '*'
-				j++
-			}
-			break
-		}
-	}
-	return string(out)
+	// 不尝试从可能畸形/重复/URL 形式的连接串中只抹一部分密码。
+	return "[redacted test DSN]"
 }
