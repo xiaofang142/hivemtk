@@ -52,9 +52,13 @@ import (
 )
 
 // tenantResolvers 在链上就能看出"按行/按键解析归属租户"的中间件。
-// 名字取自构造器（`router.setupPublicRoutes.PublicCodeTenant.publicResourceTenant.func7`），
-// 只写构造器名、不写包前缀与 .funcN 后缀：内联方式一变，后两者就跟着变。
+// 名字取自 gin 暴露的 HandlerFunc 名：Public*Tenant 是具名包装，但其实现
+// 是闭包 publicResourceTenant——gin 的 HandlerNames 记录的是闭包实际函数名
+// `middleware.publicResourceTenant.funcN`（小写、带 .funcN），构造器名
+// PublicIDTenant 反而不出现在链上（A-3：词表失配曾让闸一误报 14 条、闸二空转）。
+// 两层名都进词表：构造器改名或闭包内联方式变化时，另一层仍兜得住。
 var tenantResolvers = []string{
+	"publicResourceTenant", // 闭包实际名（gin HandlerNames 暴露的形态）
 	"PublicIDTenant",       // 按数字主键 :id 反查行所属租户
 	"PublicStringIDTenant", // 按字符串主键 :id
 	"PublicCodeTenant",     // 按业务码 :code
@@ -165,10 +169,10 @@ func TestAnonymousParamRoutesDeclareTenantMechanism(t *testing.T) {
 func TestAnonymousRowScopedRoutesRejectUnknownKey(t *testing.T) {
 	chains := liveRouteGuardChains(t)
 
-	// 只挑"按行/按码定位租户"的三类（Public*Tenant）：它们的契约就是"定位不到行 ⇒ 拒"，
+	// 只挑"按行/按码定位租户"的三类：它们的契约就是"定位不到行 ⇒ 拒"，
 	// 所以未知键必须 404。AppKeyResolve 那组还要看请求头里的 AppKey，拒绝形态不同，
-	// 由访客链自己的用例管，这里不掺和。
-	rowScoped := []string{"PublicIDTenant", "PublicStringIDTenant", "PublicCodeTenant"}
+	// 由访客链自己的用例管，这里不掺和。匹配走闭包实际名（A-3，同 tenantResolvers）。
+	rowScoped := []string{"publicResourceTenant"}
 
 	db := testutil.NewTestDB(t,
 		&model.ShortLink{}, &model.LiveCode{},

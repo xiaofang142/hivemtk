@@ -49,7 +49,9 @@ type RerankConfig struct {
 	// Protocol 重排协议：空 = 按 base_url 特征推断（InferRerankProtocol）；
 	// "openai" = OpenAI 兼容（TEI/llama.cpp 单数 /rerank；DashScope 兼容模式复数 /reranks）；
 	// "dashscope" = DashScope 原生 text-rerank 端点（BaseURL 即完整端点路径，
-	//   裸域名/缺 /rerank 时由 NormalizeRerankConfig 自动补全，不做 /v1 补齐）
+	//   裸域名/缺 /rerank 时由 NormalizeRerankConfig 自动补全，不做 /v1 补齐）；
+	// "tei" = TEI 原生协议（POST {base}/rerank，请求 {query,texts,truncate}，
+	//   响应 [{index,score}]；用于公开 TEI Space 等非 OpenAI 兼容端点）
 	Protocol string
 }
 
@@ -66,6 +68,9 @@ type RerankConfig struct {
 //     POST {BaseURL}/reranks（复数，官方兼容端点，仅 qwen3-rerank）
 //   - DashScope/MaaS 原生（裸域名或已带完整端点）：
 //     POST {origin}/api/v1/services/rerank/text-rerank/text-rerank（协议 dashscope）
+//   - TEI 原生（协议 tei，显式配置）：
+//     BaseURL=http://host:port    → POST {BaseURL}/rerank
+//     BaseURL=http://host:port/rerank → 原样（不补 /v1）
 //
 // 代码层会自动补齐 /v1（与 embedding_service.go 一致），config.yaml 中 base_url
 // 无论是否带 /v1 后缀都能正确路由；协议误配由 NormalizeRerankConfig 启动期自愈 + WARN。
@@ -142,6 +147,8 @@ func newRerankHTTPClient(timeoutSec int) *http.Client {
 // 通过 RERANK_MODEL 环境变量或 config.yaml 切换；BaseURL 不变。
 const (
 	rerankScoreFloor = 0.3
+	// teiProtocol 标识 TEI 原生 rerank 协议（请求 query/texts，响应 [{index,score}]）
+	teiProtocol = "tei"
 )
 
 // DefaultRerankConfig 读取重排配置（配置文件为准，其次环境变量，最后内置默认）
@@ -326,6 +333,7 @@ func InferRerankProtocol(base string) string {
 //     protocol=openai，端点 = base + 复数 /reranks（官方兼容端点）。
 //  3. DashScope/MaaS 原生（裸域名、/api/v1、或已带 /api/v1/services/rerank/...）：
 //     protocol=dashscope，端点 = {origin}/api/v1/services/rerank/text-rerank/text-rerank。
+//  4. TEI 原生（显式 protocol=tei）：端点 = base + /rerank（已带 /rerank 则原样），不补 /v1。
 //
 // 自愈动作：
 //   - protocol 为空 → 按 InferRerankProtocol(base) 推断
@@ -344,6 +352,10 @@ func NormalizeRerankConfig(cfg *RerankConfig, warn bool) *RerankConfig {
 	if protocol == "" {
 		protocol = InferRerankProtocol(base)
 		cfg.Protocol = protocol
+	}
+
+	if isTeiProtocol(protocol) {
+		return cfg
 	}
 
 	if isDashscopeProtocol(protocol) {
@@ -383,9 +395,17 @@ func warnRerankOnce(format string, args ...any) {
 	logger.Warnf("%s", msg)
 }
 
-// resolveRerankEndpoint 依 base_url 特征解析最终 POST 端点（与 NormalizeRerankConfig 三类 base 对应，幂等）
+// resolveRerankEndpoint 依 base_url 特征解析最终 POST 端点（与 NormalizeRerankConfig 四类 base 对应，幂等）
 func resolveRerankEndpoint(cfg *RerankConfig) string {
 	base := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+
+	// ④ TEI 原生：base 可为裸 host 或已带 /rerank 的完整端点，不补 /v1
+	if isTeiProtocol(cfg.Protocol) {
+		if strings.HasSuffix(rerankBasePath(base), "/rerank") {
+			return base
+		}
+		return base + "/rerank"
+	}
 
 	// ③ DashScope 原生：base 即完整端点（NormalizeRerankConfig 已补全，这里再兜底一次）
 	if isDashscopeProtocol(cfg.Protocol) {
@@ -460,6 +480,48 @@ const dashscopeProtocol = "dashscope"
 // isDashscopeProtocol 判断是否走 DashScope 原生协议（空 / openai 均为 OpenAI 兼容现状）
 func isDashscopeProtocol(protocol string) bool {
 	return strings.ToLower(strings.TrimSpace(protocol)) == dashscopeProtocol
+}
+
+// isTeiProtocol 判断是否走 TEI 原生协议（请求 query/texts，响应 [{index,score}]）
+func isTeiProtocol(protocol string) bool {
+	return strings.ToLower(strings.TrimSpace(protocol)) == teiProtocol
+}
+
+// teiRerankRequest TEI 原生请求体：
+// POST {base_url}/rerank
+// {"query":"...","texts":["..."],"truncate":true}
+//
+// TEI 的 request schema 不要求 model 字段；多传未知字段可能被严格反序列化拒绝，故不发送。
+type teiRerankRequest struct {
+	Query    string   `json:"query"`
+	Texts    []string `json:"texts"`
+	Truncate bool     `json:"truncate"`
+}
+
+// teiRerankResult TEI 原生单条结果：
+// [{"index":0,"score":0.98},{"index":1,"score":0.01}]
+type teiRerankResult struct {
+	Index int     `json:"index"`
+	Score float64 `json:"score"`
+}
+
+// toRerankResponseFromTEI 把 TEI 原生数组转换成既有 rerankResponse 形状，
+// 使 mapRerankResults / normalizeRerankScores / rerankScoreFloor 等下游逻辑完全复用。
+// TEI 分数为 sigmoid 后的 0~1 概率域，normalizeRerankScores 会原样通过。
+func toRerankResponseFromTEI(model string, items []teiRerankResult) *rerankResponse {
+	rr := &rerankResponse{Model: model}
+	if len(items) == 0 {
+		return rr
+	}
+	rr.Results = make([]struct {
+		Index          int     `json:"index"`
+		RelevanceScore float64 `json:"relevance_score"`
+	}, len(items))
+	for i, it := range items {
+		rr.Results[i].Index = it.Index
+		rr.Results[i].RelevanceScore = it.Score
+	}
+	return rr
 }
 
 // dashscopeRequest DashScope 原生请求体：
@@ -588,16 +650,20 @@ func isRetryableRerankErr(err error) bool {
 }
 
 func (r *LocalReranker) callOnce(ctx context.Context, endpoint string, timeout time.Duration, cfg *RerankConfig, query string, texts []string) (*rerankResponse, error) {
+	tei := isTeiProtocol(cfg.Protocol)
 	dashscope := isDashscopeProtocol(cfg.Protocol)
 	var body []byte
 	var err error
-	if dashscope {
+	switch {
+	case tei:
+		body, err = json.Marshal(teiRerankRequest{Query: query, Texts: texts, Truncate: true})
+	case dashscope:
 		body, err = json.Marshal(dashscopeRequest{
 			Model:      cfg.Model,
 			Input:      dashscopeInput{Query: query, Documents: texts},
 			Parameters: dashscopeParameters{ReturnDocuments: false},
 		})
-	} else {
+	default:
 		body, err = json.Marshal(rerankRequest{Model: cfg.Model, Query: query, Documents: texts})
 	}
 	if err != nil {
@@ -610,7 +676,7 @@ func (r *LocalReranker) callOnce(ctx context.Context, endpoint string, timeout t
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	// 鉴权两种协议一致：Authorization: Bearer <key>
+	// 鉴权三种协议一致：Authorization: Bearer <key>
 	if strings.TrimSpace(cfg.APIKey) != "" {
 		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	}
@@ -627,6 +693,14 @@ func (r *LocalReranker) callOnce(ctx context.Context, endpoint string, timeout t
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, &rerankStatusError{StatusCode: resp.StatusCode, Body: string(respBody)}
+	}
+
+	if tei {
+		var items []teiRerankResult
+		if err := json.Unmarshal(respBody, &items); err != nil {
+			return nil, fmt.Errorf("decode TEI rerank response: %w (body=%s)", err, string(respBody))
+		}
+		return toRerankResponseFromTEI(cfg.Model, items), nil
 	}
 
 	if dashscope {

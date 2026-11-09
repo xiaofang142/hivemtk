@@ -147,6 +147,17 @@ func (h *WSHandler) HandleWebSocket(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员或坐席可订阅坐席通知"})
 			return
 		}
+		// 坐席身份自证（P2-3）：agent_id ≡ 系统用户 ID（GetOrCreateAgentStatusByUserID
+		// 以 user_id 建行），query 自报他人 agent_id = 冒名收听其通知队列 + 代打心跳。
+		// 与令牌 user_id 不一致一律拒绝；admin 例外（管理台可代看任意坐席的队列）。
+		uid, _ := c.Get("user_id")
+		tokenUID, _ := uid.(uint)
+		role, _ := c.Get("role")
+		if uint(agentID) != tokenUID && roleStrOf(role) != "admin" {
+			logger.Warnf("[SECURITY] ws agent_id 与令牌身份不符，拒绝订阅 claimed_agent_id=%d", agentID)
+			c.JSON(http.StatusForbidden, gin.H{"error": "agent_id 与登录身份不符"})
+			return
+		}
 	}
 
 	ctx := logger.WithTraceID(c.Request.Context(), c.GetHeader("X-Trace-Id"))

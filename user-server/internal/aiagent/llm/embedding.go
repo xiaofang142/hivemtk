@@ -23,13 +23,15 @@ import (
 // 跑真实 BGE 模型（bge-m3，1024 维），不允许静默走公网 LLM 厂商 API，
 // 也不允许静默降级到哈希伪向量。
 //
-//   - 正常路径：POST {BaseURL}/v1/embeddings（bge-m3，dim=1024）
+//   - 正常路径：POST {BaseURL}/v1/embeddings（OpenAI 兼容，bge-m3，dim=1024）；
+//     显式设置 protocol=tei 时改为 POST {BaseURL}/embed（TEI 原生，请求 {inputs}）
 //   - 强约束：BaseURL 默认 http://mtk-embedding:8208/v1（docker 网络）或 http://127.0.0.1:8208/v1（宿主机）
 //   - 离线/单测：需显式设置 EMBEDDING_ALLOW_FALLBACK=true 才允许 hash 降级
 type EmbeddingConfig struct {
 	APIKey         string
 	BaseURL        string
 	APIType        string
+	Protocol       string
 	Model          string
 	Dimension      int
 	RequestTimeout int
@@ -176,12 +178,16 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 	dim := fileCfg.Dimension
 	allowFallback := fileCfg.AllowFallback
 	apiKey := fileCfg.APIKey
+	protocol := strings.ToLower(strings.TrimSpace(fileCfg.Protocol))
 
 	if baseURL == "" {
 		baseURL = os.Getenv("EMBEDDING_BASE_URL")
 	}
 	if model == "" {
 		model = os.Getenv("EMBEDDING_MODEL")
+	}
+	if protocol == "" {
+		protocol = strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROTOCOL")))
 	}
 	if dim <= 0 {
 		if v := os.Getenv("EMBEDDING_DIM"); v != "" {
@@ -201,8 +207,11 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 		baseURL = strings.TrimSpace(o.BaseURL)
 		model = strings.TrimSpace(o.Model)
 		apiKey = o.APIKey
+		if p := strings.ToLower(strings.TrimSpace(o.Protocol)); p != "" {
+			protocol = p
+		}
 		allowFallback = false // 手动指定云端提供商时禁止静默回落哈希伪向量
-		logger.Infof("[embedding] 使用全局手动配置 base_url=%s model=%s", baseURL, model)
+		logger.Infof("[embedding] 使用全局手动配置 base_url=%s model=%s protocol=%s", baseURL, model, protocol)
 	}
 
 	if baseURL == "" {
@@ -233,6 +242,7 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 		APIKey:         apiKey,
 		BaseURL:        baseURL,
 		APIType:        "openai",
+		Protocol:       protocol,
 		Model:          model,
 		Dimension:      dim,
 		RequestTimeout: 60,
@@ -406,7 +416,10 @@ func isUnreachable(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "no such host") || strings.Contains(msg, "connection refused")
+	return strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "connection refused") ||
+		// Windows: "No connection could be made because the target machine actively refused it."
+		strings.Contains(msg, "actively refused")
 }
 
 func isRateLimited(err error) bool {
@@ -456,16 +469,45 @@ type embeddingResponse struct {
 	} `json:"error,omitempty"`
 }
 
+// embeddingTEIProtocol 标识 TEI 原生 embedding 协议
+// （POST {base}/embed，请求 {inputs}，响应 [[float,...],...]）。
+const embeddingTEIProtocol = "tei"
+
+// isTeiEmbeddingProtocol 判断是否走 TEI 原生 embedding 协议
+func isTeiEmbeddingProtocol(protocol string) bool {
+	return strings.ToLower(strings.TrimSpace(protocol)) == embeddingTEIProtocol
+}
+
+// teiEmbeddingRequest TEI 原生 embedding 请求体
+type teiEmbeddingRequest struct {
+	Inputs []string `json:"inputs"`
+}
+
+// resolveEmbeddingEndpoint 依协议解析最终 POST 端点：
+//   - OpenAI 兼容（默认）：{base}/v1/embeddings（base 已带 /v1 时不再重复补齐）
+//   - TEI 原生：{base}/embed（base 已带 /embed 时原样）
+func resolveEmbeddingEndpoint(baseURL string, tei bool) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if tei {
+		if strings.HasSuffix(base, "/embed") {
+			return base
+		}
+		return base + "/embed"
+	}
+	if !strings.HasSuffix(base, "/v1") && !strings.HasSuffix(base, "/v1/") {
+		base += "/v1"
+	}
+	return base + "/embeddings"
+}
+
 func (s *EmbeddingService) callProvider(ctx context.Context, cfg *EmbeddingConfig, texts []string) ([][]float32, error) {
 	baseURL := strings.TrimRight(cfg.BaseURL, "/")
 	if baseURL == "" {
 		return nil, fmt.Errorf("EMBEDDING_BASE_URL 未配置")
 	}
 
-	if !strings.HasSuffix(baseURL, "/v1") && !strings.HasSuffix(baseURL, "/v1/") {
-		baseURL = baseURL + "/v1"
-	}
-	endpoint := baseURL + "/embeddings"
+	tei := isTeiEmbeddingProtocol(cfg.Protocol)
+	endpoint := resolveEmbeddingEndpoint(baseURL, tei)
 	timeout := time.Duration(cfg.RequestTimeout) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -473,7 +515,11 @@ func (s *EmbeddingService) callProvider(ctx context.Context, cfg *EmbeddingConfi
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	body, err := json.Marshal(embeddingRequest{Model: cfg.Model, Input: texts})
+	var reqBody any = embeddingRequest{Model: cfg.Model, Input: texts}
+	if tei {
+		reqBody = teiEmbeddingRequest{Inputs: texts}
+	}
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
@@ -506,6 +552,26 @@ func (s *EmbeddingService) callProvider(ctx context.Context, cfg *EmbeddingConfi
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("embedding API error status=%d body=%s", resp.StatusCode, string(respBody))
+	}
+
+	if tei {
+		var vectors [][]float32
+		if err := json.Unmarshal(respBody, &vectors); err != nil {
+			return nil, fmt.Errorf("decode TEI response: %w (body=%s)", err, string(respBody))
+		}
+		if len(vectors) != len(texts) {
+			return nil, fmt.Errorf("embedding 返回数量不匹配: expect %d, got %d", len(texts), len(vectors))
+		}
+		dim := cfg.Dimension
+		if dim <= 0 {
+			dim = 1024
+		}
+		for i, v := range vectors {
+			if len(v) != dim {
+				return nil, fmt.Errorf("embedding 维度不匹配: 第 %d 条 expect %d, got %d", i, dim, len(v))
+			}
+		}
+		return vectors, nil
 	}
 
 	var er embeddingResponse

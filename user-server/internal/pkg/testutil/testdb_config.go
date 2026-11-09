@@ -29,6 +29,17 @@ func readTestDBConfig() (testDBConfig, error) {
 	if os.Getenv("PGSERVICE") != "" || os.Getenv("PGSERVICEFILE") != "" {
 		return testDBConfig{}, errors.New("PGSERVICE/PGSERVICEFILE are not supported by the test entry")
 	}
+	// 口令缺失在组 DSN 之前拦截：缺配置快速失败，不让"没配口令"流成
+	// "用占位口令断连"的混淆报错。
+	//
+	// 仅限未显式给 DSN 的路径。POSTGRES_TEST_DSN 是"完整连接串，显式覆盖
+	// 一切"（见 testdb.go 顶部），URL 式 DSN 可自带 userinfo 口令；此时
+	// 环境口令为空是合法配置，前置门跳过，由下面 DSN 解析后的 cfg.Password
+	// 检查兜底（缺口令仍报同一句"password is missing"）。F-4-1（2026-11-09）。
+	if os.Getenv("POSTGRES_TEST_DSN") == "" &&
+		os.Getenv("POSTGRES_TEST_PASSWORD") == "" && os.Getenv("POSTGRES_PASSWORD") == "" {
+		return testDBConfig{}, errors.New("test password is missing; set POSTGRES_TEST_PASSWORD or POSTGRES_PASSWORD")
+	}
 	fields, err := testDSNFields(getTestDSN(testDBPortCandidates()[0]))
 	if err != nil {
 		return testDBConfig{}, err

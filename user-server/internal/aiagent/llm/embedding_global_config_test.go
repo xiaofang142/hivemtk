@@ -106,7 +106,7 @@ func TestEmbeddingOverrideSetThenGetRoundTrip(t *testing.T) {
 	})
 
 	const plainKey = "sk-unit-test-key"
-	in := &GlobalEmbeddingOverride{Enabled: true, BaseURL: "https://api.example.com/v1", APIKey: plainKey, Model: "BAAI/bge-m3"}
+	in := &GlobalEmbeddingOverride{Enabled: true, BaseURL: "https://api.example.com/v1", APIKey: plainKey, Model: "BAAI/bge-m3", Protocol: "tei"}
 	if err := SetGlobalEmbeddingOverride(in, 4242); err != nil {
 		t.Fatalf("Set 失败: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestEmbeddingOverrideSetThenGetRoundTrip(t *testing.T) {
 	if back == nil {
 		t.Fatalf("Set 之后读回 nil，stored=%s", stored)
 	}
-	if back.Enabled != in.Enabled || back.BaseURL != in.BaseURL || back.Model != in.Model {
+	if back.Enabled != in.Enabled || back.BaseURL != in.BaseURL || back.Model != in.Model || back.Protocol != in.Protocol {
 		t.Errorf("读回的字段与写入不一致：got %+v want %+v", back, in)
 	}
 	if back.APIKey != plainKey {

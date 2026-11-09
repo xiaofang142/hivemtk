@@ -42,6 +42,9 @@ type GlobalEmbeddingOverride struct {
 	BaseURL string `json:"base_url"`
 	APIKey  string `json:"api_key"`
 	Model   string `json:"model"`
+	// Protocol 向量端点协议：空/openai={base}/v1/embeddings，tei={base}/embed。
+	// 与 config.yaml inference.embedding.protocol 同义，落库后不必再依赖环境变量。
+	Protocol string `json:"protocol,omitempty"`
 }
 
 var (

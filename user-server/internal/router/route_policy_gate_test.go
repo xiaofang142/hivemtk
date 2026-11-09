@@ -141,6 +141,9 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /api/webhook/whatsapp/:account_id":               "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
 	"GET /api/ws/visitor":                                 "访客 WebSocket：握手内校验 visitor_token",
 	"GET /assets/*filepath":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
+	"HEAD /assets/*filepath":                              "前端静态产物 HEAD 探测面（r.Static 原行为，F-4-3）：middleware.StaticGuard 防篡改扩展名",
+	"GET /embed/*filepath":                                "embed SDK 构建产物：匿名公开引用面（第三方站点 <script src>），middleware.StaticGuard 防篡改扩展名",
+	"HEAD /embed/*filepath":                               "embed SDK HEAD 探测面（同 GET，F-4-3）",
 	"GET /chat/embed":                                     "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /chat/embed/*path":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /favicon.ico":                                    "前端静态产物与分享页：只有模板与图片，无商户数据",
@@ -154,7 +157,6 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /share/kuaishou/:id":                             "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /share/xianyu/:id":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"GET /share/xiaohongshu/:id":                          "前端静态产物与分享页：只有模板与图片，无商户数据",
-	"HEAD /assets/*filepath":                              "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"HEAD /favicon.ico":                                   "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"HEAD /logo.png":                                      "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"POST /api/auth/login":                                "登录前必须可达（登录、注册、口令找回、站点公开配置、帮助中心）",
@@ -194,9 +196,12 @@ var anonymousAllowedRoutes = map[string]string{
 // liveRouteGuardChains 装配生产路由表并抓每条路由注册时的完整 handler 链。
 // 前提与 liveRoutes 对齐（USER_WEB_DIST 指向空临时目录），否则前端静态面按目录
 // 是否存在条件注册，清单会在"有没有跑过 npm build"的机器上给出不同读数。
+// F-4-3（2026-11-09）：EMBED_SDK_DIST 同样指向空临时目录，让 /embed/* 与
+// /assets/* 一并进清单——否则该匿名面不受"恰好等于白名单"约束（覆盖缺口）。
 func liveRouteGuardChains(t *testing.T) map[string][]string {
 	t.Helper()
 	t.Setenv("USER_WEB_DIST", t.TempDir())
+	t.Setenv("EMBED_SDK_DIST", t.TempDir())
 	// 调试路由的注册条件是"本地/开发环境"，测试里 APP_ENV 通常为空即命中，
 	// 但生产态环境变量会让它不注册；显式打开，让清单与判据都不随机器环境变量摆动。
 	t.Setenv("ENABLE_DEBUG_ROUTES", "true")

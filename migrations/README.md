@@ -83,6 +83,25 @@
 | `extension "vector" is not available` | pgvector 镜像未启用 | 确认使用 `pgvector/pgvector:pg15` 镜像 |
 | `permission denied for extension vector` | 数据库非 superuser | 切换 `admin` / `postgres` 角色建库后，普通用户使用 |
 
+## 参考残留（死表）说明（A-16/B-清1 审计标注，2026-11-08）
+
+> **本目录 SQL 不是 schema 事实源。** 生产 schema 由 `user-server/internal/pkg/db/migrate.go` 的
+> AutoMigrate 单一事实源生成（missingTables 终局校验兜底）。执行顺序表仅供离线部署对照。
+
+以下 22 张表在 SQL 文件中定义，但**全仓 Go 代码零引用**（既无对应 model/TableName，
+也无原生 SQL 访问），属历史设计残留——新部署可安全跳过它们；已部署环境若已建出，
+留着无调用方、无风险，可自行 DROP：
+
+ai_sales_logs、assignment_rules、companies、email_lists、email_smtps、
+feature_flag_evaluations、knowledge_embeddings（被 knowledge_chunks 取代）、
+moments_posts、obs_configs、personal_wechat_accounts、rag_safety_audit_logs、
+satisfaction_followups、satisfaction_survey_templates、satisfaction_surveys（被 csat_surveys 取代）、
+script_recommends、site_contact_config、user_role、role_definition、role_permission、
+role_data_scope（角色已收进 system_users.role 列）
+
+注：rag_sessions / rag_messages 在 SQL 有定义、Go 亦有同名 model（AutoMigrate 管理），
+不算死表——列入本说明只为澄清 knowledge_embeddings 的取代关系。
+
 ## 开源协议
 
 本目录文件以 **AGPL-3.0** 发布，详见 [../LICENSE](../LICENSE) 与 [../NOTICE](../NOTICE)。

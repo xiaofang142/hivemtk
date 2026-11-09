@@ -122,6 +122,12 @@ func isPrivateDomainBaseURL(u string) bool {
 }
 
 func TestInferenceConfigLoads(t *testing.T) {
+	// 本用例断言的是仓库里 config.yaml 的**私域基线**，不是测试期降级开关。
+	// CI/Makefile 为了让 embedding 用例不连未启动的 8208，全局设了
+	// EMBEDDING_ALLOW_FALLBACK=true；不在这里钉回 false，下面的
+	// SecurityBaseline_PrivateDomain 会被测试环境变量污染而误红。
+	t.Setenv("EMBEDDING_ALLOW_FALLBACK", "false")
+
 	p := filepath.Join("..", "..", "config.yaml")
 	data, err := os.ReadFile(p)
 	if err != nil {

@@ -30,7 +30,7 @@
         type="file"
         accept="application/json,.json"
         class="hidden-file-input"
-        aria-label="导入分组文件"
+        aria-label="导入分组 JSON 文件"
         @change="onImportFileChange"
       >
     </div>

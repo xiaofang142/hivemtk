@@ -32,8 +32,13 @@ import (
 const unk5Platform = "b37b_unk5"
 
 func TestOutboundUnknownAdminAPI_GateAndFlow(t *testing.T) {
+	// F-4-6：tenant 模式是进程级全局态，cleanup 必须恢复**进入前**的模式。
+	// 原实现硬编码恢复 ModeOn，在默认 off 的测试进程里会把后续用例（按文件名序
+	// 排在 cs06b 之后的 data_scope_gate 等）推进多租户模式，其无租户 ctx 的
+	// 直写被隔离 callback 拒绝而红。
+	prevMode := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOff)
-	t.Cleanup(func() { tenant.SetMode(tenant.ModeOn) })
+	t.Cleanup(func() { tenant.SetMode(prevMode) })
 	engine, database := gateEngineAndDB(t)
 	_, admin := gateTokens(t)
 	staff := gateRoleToken(t, "customer_service")

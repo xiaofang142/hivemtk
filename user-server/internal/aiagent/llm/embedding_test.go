@@ -195,7 +195,7 @@ func formatFloat(f float32) string {
 func clearEmbeddingEnv(t *testing.T) {
 	t.Helper()
 	keys := []string{
-		"EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIM",
+		"EMBEDDING_BASE_URL", "EMBEDDING_MODEL", "EMBEDDING_DIM", "EMBEDDING_PROTOCOL",
 		"EMBEDDING_API_KEY", "EMBEDDING_ALLOW_FALLBACK",
 		"LLM_BASE_URL", "LLM_API_KEY", "OPENAI_BASE_URL", "OPENAI_API_KEY",
 	}

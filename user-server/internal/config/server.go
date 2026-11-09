@@ -203,12 +203,15 @@ type InferenceTierConfig struct {
 //   - dimension:向量维度（默认 1024，与 bge-m3 一致）
 //   - allow_fallback: 是否允许哈希伪向量降级（默认 false，仅单测显式开启）
 type InferenceEmbeddingConfig struct {
-	Mode          InferenceMode `yaml:"mode" json:"mode"`
-	BaseURL       string        `yaml:"base_url" json:"base_url"`
-	Model         string        `yaml:"model" json:"model"`
-	Dimension     int           `yaml:"dimension" json:"dimension"`
-	APIKey        string        `yaml:"api_key" json:"api_key"`
-	AllowFallback bool          `yaml:"allow_fallback" json:"allow_fallback"`
+	Mode      InferenceMode `yaml:"mode" json:"mode"`
+	BaseURL   string        `yaml:"base_url" json:"base_url"`
+	Model     string        `yaml:"model" json:"model"`
+	Dimension int           `yaml:"dimension" json:"dimension"`
+	APIKey    string        `yaml:"api_key" json:"api_key"`
+	// Protocol embedding 协议：空或 "openai" = {base}/v1/embeddings；
+	// "tei" = TEI 原生 {base}/embed（请求 {inputs}，响应 [[float]]）。
+	Protocol      string `yaml:"protocol" json:"protocol"`
+	AllowFallback bool   `yaml:"allow_fallback" json:"allow_fallback"`
 }
 
 // InferenceRerankConfig 重排配置
@@ -223,7 +226,8 @@ type InferenceRerankConfig struct {
 	APIKey  string        `yaml:"api_key" json:"api_key"`
 	// Protocol 重排协议：空或 "openai" = OpenAI 兼容 /v1/rerank（现状）；
 	// "dashscope" = DashScope 原生 text-rerank 端点
-	// （POST {base_url}/api/v1/services/rerank/text-rerank/text-rerank，base_url 即完整端点路径）。
+	// （POST {base_url}/api/v1/services/rerank/text-rerank/text-rerank，base_url 即完整端点路径）；
+	// "tei" = TEI 原生协议（POST {base_url}/rerank，请求 query/texts，响应 [{index,score}]）。
 	Protocol string `yaml:"protocol" json:"protocol"`
 }
 

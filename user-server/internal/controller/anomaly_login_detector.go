@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -124,7 +126,12 @@ func (c *AnomalyLoginDetectorController) ResolveAlert(ctx *gin.Context) {
 	var body struct {
 		Note string `json:"note"`
 	}
-	_ = ctx.ShouldBindJSON(&body)
+	// A-14：note 可选——空体（EOF）合法放行；真绑定错（malformed JSON/类型错）回 400，
+	// 不再静默吞掉导致备注丢失客户端无感知。与 knowledge_base.go 同款语义。
+	if err := ctx.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型")
+		return
+	}
 
 	if err := c.detector.ResolveAlert(ctx.Request.Context(), uint(alertID), uid, body.Note); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
@@ -158,7 +165,11 @@ func (c *AnomalyLoginDetectorController) IgnoreAlert(ctx *gin.Context) {
 	var body struct {
 		Note string `json:"note"`
 	}
-	_ = ctx.ShouldBindJSON(&body)
+	// A-14：同 ResolveAlert——EOF 放行，malformed 400。
+	if err := ctx.ShouldBindJSON(&body); err != nil && !errors.Is(err, io.EOF) {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型")
+		return
+	}
 
 	if err := c.detector.IgnoreAlert(ctx.Request.Context(), uint(alertID), uid, body.Note); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())

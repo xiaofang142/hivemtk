@@ -94,10 +94,14 @@ inference:
   profile: dev
   embedding:
     mode: local
-    base_url: "http://127.0.0.1:8208/v1"
+    # base_url/protocol/allow_fallback 可用环境变量覆盖（${VAR:default} 语法，config 加载时展开）；
+    # protocol 留空=OpenAI 兼容 /v1/embeddings；tei=TEI 原生 /embed（请求 {inputs}）。
+    # allow_fallback=true 仅供离线/单测（哈希伪向量，语义检索质量下降，生产禁用）。
+    base_url: "${EMBEDDING_BASE_URL:http://127.0.0.1:8208/v1}"
     model: "bge-m3"
     dimension: 1024
-    allow_fallback: false
+    protocol: "${EMBEDDING_PROTOCOL:}"
+    allow_fallback: ${EMBEDDING_ALLOW_FALLBACK:false}
   rerank:
     mode: local
     # base_url/model 可用环境变量覆盖（${VAR:default} 语法，config 加载时 expandEnvWithDefault 展开）：
@@ -106,8 +110,13 @@ inference:
     #    RERANK_PROTOCOL=dashscope
     #    RERANK_BASE_URL=https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank
     #    RERANK_MODEL=qwen3-rerank  RERANK_API_KEY=sk-...）。
+    #   （TEI 原生端点示例（本地开发用公开 TEI Space）：
+    #    RERANK_PROTOCOL=tei
+    #    RERANK_BASE_URL=https://anupamabalaji-tei-bge-reranker.hf.space
+    #    RERANK_MODEL=BAAI/bge-reranker-base）。
     base_url: "${RERANK_BASE_URL:http://127.0.0.1:8209/v1}"
     model: "${RERANK_MODEL:bge-reranker-v2-m3}"
+    protocol: "${RERANK_PROTOCOL:}"
     enabled: true
   llm:
     # 2026-09-10：本地 llama-server(8207) 已下线省资源，LLM 统一走 freeapi 线上网关。
@@ -115,15 +124,17 @@ inference:
     # 「cloud_providers 必须为空」基线；产码识别点见 internal/geo/service/search_probe.go:209。
     # 注意：provider/路由真相源在 llm_providers/llm_routing_rules 表（DB 覆盖本节），
     # 本节 base_url 仅作 default provider 与 humanize 评估器检测的兜底值。
+    # base_url/model/api_key 可用环境变量覆盖（${VAR:default} 语法），默认值保持私域基线；
+    # 部署时通过 .env 注入线上 OpenAI 兼容端点即可，无需改本文件。
     mode: remote
-    base_url: "http://127.0.0.1:8787/v1"
-    model: "step-3.7-flash"
+    base_url: "${LLM_BASE_URL:http://127.0.0.1:8787/v1}"
+    model: "${LLM_MODEL:step-3.7-flash}"
     temperature: 0.7
     max_tokens: 1024
     timeout_seconds: 720
     max_retries: 1
     primary_provider: ""
-    api_key: ""
+    api_key: "${LLM_API_KEY:}"
     cloud_providers: []
   # 推理降级档（C2）：本地 LLM 不可达时是否允许回退云端 LLM。
   # 默认 false（合规基线：云端出域必须显式开启）；开启后还需在 llm.cloud_providers
