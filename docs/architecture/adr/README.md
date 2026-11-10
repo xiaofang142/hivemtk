@@ -2,7 +2,7 @@
 
 > **位置**：`hivemtk/docs/architecture/adr/`  
 > **状态**：2026-09-29 整理
-> **总 ADR 数**：16 份
+> **总 ADR 数**：17 份
 
 ---
 
@@ -26,11 +26,15 @@
 | [ADR-015](ADR-015-empty-package-disposition.md) | 空壳包处置策略 | ✅ Accepted | 2026-Q3 | 仓库清理 |
 | ADR-016（文件 `ADR-016-telegram-group-gate-policy.md`，入库后把本列换成链接）| Telegram 社群门控的三项处置口径 | ✅ Accepted | 2026-09-29 | Telegram 渠道 / 后台任务 |
 | [ADR-017](ADR-017-content-guard-async-pipeline.md) | 内容安全闸：离线词库 + 异步流水线 + 双主体处置 | ✅ Accepted | 2026-10-23 | 内容合规 / 全局 |
+| [ADR-018](ADR-018-inproc-state-multi-instance-constraints.md) | user-server 进程内状态的多实例部署约束与 Redis 化路线（审计 N-3） | ✅ Accepted | 2026-11-11 | user-server 限流/防爆破 / 部署 |
 
 **统计**：
 - Accepted：10 份
-- Merged：5 份
+- Merged：6 份
 - Simplified：1 份
+
+> 统计口径 = 上表逐行核对（2026-11-11 增补 ADR-018 时修正：Merged 实为 6 份
+> （ADR-005/006/007/008/009/010），此前记 5 份系存量笔误；ADR-018 计入 Accepted）。
 
 ---
 
@@ -57,8 +61,8 @@
 |------|------|------|
 | ADR-003 | ❌ 已删除 | 原为 WebSocket 方案决策；该方案已弃用（现行为 HTTP 长轮询 + SSE），故编号作废且**不复用**，以保持历史引用的稳定性 |
 
-> 现有编号：001、002、004~017 共 **16 份**（ADR-003 缺号）。
-> 新增 ADR 请从 **ADR-018** 起顺延，不要回填 ADR-003。
+> 现有编号：001、002、004~018 共 **17 份**（ADR-003 缺号）。
+> 新增 ADR 请从 **ADR-019** 起顺延，不要回填 ADR-003。
 
 ### 已合并说明
 
@@ -90,3 +94,4 @@
 | v1.2 | 2026-09-15 | audit-agent | 修复 ADR-001 死链（`ADR-001-layered-architecture.md` → `ADR-001-five-layer-architecture.md`）；将 ADR-003 缺号说明从修订历史提升为独立小节，避免新 ADR 回填该编号 |
 | v1.3 | 2026-09-29 | @maintainer-team | 增补 ADR-016（Telegram 社群门控三项处置口径）；总数 14→15、Accepted 8→9、起始编号改 ADR-017 |
 | v1.4 | 2026-10-23 | @maintainer-team | 增补 ADR-017（内容安全闸架构选型）；总数 15→16、Accepted 9→10、起始编号改 ADR-018 |
+| v1.5 | 2026-11-11 | @maintainer-team | 增补 ADR-018（user-server 进程内状态多实例部署约束与 Redis 化路线，审计 N-3）；总数 16→17、起始编号改 ADR-019；修正统计块存量笔误（Merged 5→6，按上表逐行核对） |
