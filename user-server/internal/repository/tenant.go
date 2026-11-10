@@ -50,6 +50,9 @@ type TenantRepository interface {
 	UpdateRegistration(ctx context.Context, id uint, fields map[string]any) error
 	// List 运营清单：分页 + 状态/关键词过滤，每行附活跃度概览
 	List(ctx context.Context, f TenantFilter) ([]TenantWithActivity, int64, error)
+	// ListForRegistrationRetry 取开户登记待补偿重报的租户行
+	// （platform_sync ∈ {pending, failed}），供登记补偿扫描 runner 逐行重报。
+	ListForRegistrationRetry(ctx context.Context, limit int) ([]*model.Tenant, error)
 
 	// CreateWithAdmin 事务内建租户与首位管理员：全成或全回滚
 	//
@@ -148,6 +151,34 @@ func (r *tenantRepo) UpdateRegistration(ctx context.Context, id uint, fields map
 	fields["updated_at"] = time.Now()
 	return db.EnsureAffected(r.db.WithContext(ctx).Model(&model.Tenant{}).
 		Where("id = ?", id).Updates(fields))
+}
+
+// ListForRegistrationRetry 取开户登记待补偿的租户行（platform_sync ∈ {pending, failed}）。
+//
+// 补偿扫描（tenant_reg_compensation_runner）的取数口。三条口径：
+//   - pending 与 failed 都是"平台端可能没收到"的态；skipped（离线部署）与
+//     synced（已确认）永不入列 —— 扫描器在 off 模式根本不启动，这里再挡一道
+//     skipped 纯属防御，真正不能漏的是 synced 不被重报（避免无意义出域）。
+//   - 不按 status=active 过滤：登记是监管留痕，停用租户的"它曾经开户"记录
+//     同样要补到平台（与手动重试按钮口径一致，见 RetryRegistrationSync——
+//     它也不看租户状态）。
+//   - 按 id ASC + limit 圈批：行数异常多时单轮有界，余下行下一轮接续，
+//     避免一轮扫描拉出无界长事务。
+//
+// tenants 是全局表（豁免隔离，见接口注释），不需要租户上下文。
+func (r *tenantRepo) ListForRegistrationRetry(ctx context.Context, limit int) ([]*model.Tenant, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrTenantStoreUnavailable
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	var rows []*model.Tenant
+	err := r.db.WithContext(ctx).Model(&model.Tenant{}).
+		Where("platform_sync IN ?", []string{model.TenantSyncPending, model.TenantSyncFailed}).
+		Order("id ASC").Limit(limit).
+		Find(&rows).Error
+	return rows, err
 }
 
 func (r *tenantRepo) CreateWithAdmin(ctx context.Context, t *model.Tenant, admin *model.SystemUser) error {

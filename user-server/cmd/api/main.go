@@ -715,6 +715,18 @@ func main() {
 	noticeSync := service.StartNoticeSync(context.Background())
 	defer noticeSync.Stop()
 
+	// ── 开户登记自动补偿扫描（PLT-03）──────────────────────────
+	//
+	// 开户上报失败此前被置 pending/failed 后再无人过问，补同步只有管理端
+	// 「立即重试」按钮 —— 没人点按钮，合规登记/merchants 镜像/租户维度
+	// 钱包订阅行就永远缺漏。本任务周期（10min，与模块同步对齐）扫描
+	// pending/failed 逐行重报，与手动按钮并存不互斥。
+	//
+	// 平台未启用（PLATFORM_ENABLED=false）时整个不启动：不查库、不起协程、
+	// 零出站请求 —— 离线部署没有"登记补偿"这个概念。
+	regCompensation := service.StartTenantRegistrationCompensation(context.Background())
+	defer regCompensation.Stop()
+
 	// ── 内容安全闸：词库/策略/异步审查/处置 ──────────────────────
 	//
 	// 必须先于 router.Setup：路由挂载点（setupContentGuardRoutes）从全局登记处取运行时，
