@@ -48,8 +48,8 @@ type LLMRoutingLog struct {
 	// llm_usage_report 的聚合/明细 SQL 引用了该列——模型缺字段时 AutoMigrate
 	// 不会建列，全新 AutoMigrate 库上 LLM 用量报表 500（2026-11-10 回归实测）。
 	// 先补列对齐读取侧契约；写入侧标注留后续（表达式对空值回推分类）。
-	ErrorClass       string  `gorm:"type:varchar(32);not null;default:''" json:"error_class"`
-	FromCache        bool    `gorm:"column:from_cache;not null;default:false" json:"from_cache"`
+	ErrorClass string `gorm:"type:varchar(32);not null;default:''" json:"error_class"`
+	FromCache  bool   `gorm:"column:from_cache;not null;default:false" json:"from_cache"`
 
 	ModelType        string  `gorm:"type:varchar(16);column:model_type;not null;default:'local'" json:"model_type"`
 	Vendor           string  `gorm:"type:varchar(64);column:vendor;not null;default:'unknown'" json:"vendor"`
@@ -85,20 +85,20 @@ func (LLMRoutingLog) TableName() string { return "llm_routing_logs" }
 type LLMRoutingAudit struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Scenario     string    `gorm:"type:varchar(64);column:scenario;not null" json:"scenario"`
-	Version      int       `gorm:"column:version;not null;default:1" json:"version"`
-	PrevProvider string    `gorm:"type:varchar(64);column:prev_provider" json:"prev_provider"`
-	NewProvider  string    `gorm:"type:varchar(64);column:new_provider;not null" json:"new_provider"`
-	PrevFallback string    `gorm:"type:text;column:prev_fallbacks" json:"prev_fallbacks"`
-	NewFallback  string    `gorm:"type:text;column:new_fallbacks" json:"new_fallbacks"`
-	Action       string    `gorm:"type:varchar(32);column:action;not null" json:"action"`
-	Operator     string    `gorm:"type:varchar(64);column:operator" json:"operator"`
-	TraceID      string    `gorm:"type:varchar(64);column:trace_id" json:"trace_id"`
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Scenario     string `gorm:"type:varchar(64);column:scenario;not null" json:"scenario"`
+	Version      int    `gorm:"column:version;not null;default:1" json:"version"`
+	PrevProvider string `gorm:"type:varchar(64);column:prev_provider" json:"prev_provider"`
+	NewProvider  string `gorm:"type:varchar(64);column:new_provider;not null" json:"new_provider"`
+	PrevFallback string `gorm:"type:text;column:prev_fallbacks" json:"prev_fallbacks"`
+	NewFallback  string `gorm:"type:text;column:new_fallbacks" json:"new_fallbacks"`
+	Action       string `gorm:"type:varchar(32);column:action;not null" json:"action"`
+	Operator     string `gorm:"type:varchar(64);column:operator" json:"operator"`
+	TraceID      string `gorm:"type:varchar(64);column:trace_id" json:"trace_id"`
 	// created_at 对齐迁移 SQL 的 NOT NULL DEFAULT NOW()：审计写入走 map Create，
 	// gorm autoCreateTime 对 map 形态不生效 ⇒ 必须给 DB 默认值，否则 AutoMigrate
 	// 路径的行 created_at 全 NULL（2026-11-10 二次审核 F-4-7 实测）。
-	CreatedAt    time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
+	CreatedAt time.Time `gorm:"column:created_at;not null;default:now()" json:"created_at"`
 }
 
 // TableName 表名

@@ -1,4 +1,4 @@
-# 存量「可调旋钮」常量名基线（scripts/check-hardcode-tunable.py 读取）。
+﻿# 存量「可调旋钮」常量名基线（scripts/check-hardcode-tunable.py 读取）。
 # 一行一个 Go 常量名。它代表的是「存量已经数过、判定为存量待收口」，
 # 不是「这样写是对的」——本表只挡新增，不发合格证。
 # 来源：hardcode-sweep/hardcode-sweep-classified.json 的 TUNABLE 归类；刷新命令：
@@ -421,3 +421,9 @@ AssetPackageMaxTotalBytes
 # 运维单边调大只会让 API 文档、前端校验、服务端判定三者互相打架。
 MaxUserTagRunes
 MaxUserTags
+# ── B1-e（2026-11-10）：规划链单链步数上限，刻意**不入参数中心** ────────────
+# 判据：同 B1-b/B1-d 的「防线不是运维旋钮」——ChainMaxSteps 是 planner 链的
+#   校验上界（防御 UI 误配超长链把执行拖死），错误路径断言「超界拒链回落」
+#   （planner_chain_test.go）直接引用该值；运维单边调大等于给「灌爆执行器」
+#   开合法入口，与参数中心「运维改了就改变系统行为」的语义相反。
+ChainMaxSteps
