@@ -124,6 +124,53 @@ type ChannelHealthView struct {
 	Status        string  `json:"status"` // healthy/degraded/offline/banned/empty
 }
 
+// RouteSection TB-11 · 意图路由观测（北极星三指标 + 三图）。
+type RouteSection struct {
+	NorthStar          RouteNorthStarView `json:"north_star"`
+	IntentDistribution []RouteIntentView  `json:"intent_distribution"`
+	ChainHitRate       []RouteChainView   `json:"chain_hit_rate"`
+	ToolSuccessRate    []RouteToolView    `json:"tool_success_rate"`
+}
+
+// RouteNorthStarView 北极星三指标 + 分子分母读数。
+// 口径（TB-11 冻结，2026-11-10）：
+//   - 转人工率 = handoff_at 非空会话 / 窗口会话（customer_sessions.handoff_at）；
+//   - 解决率 = closed_at/resolved_at 有值且 handoff_at 空 / 窗口会话；
+//   - 意图准确率（纠错采样口径）= 1 − 窗口纠错数 / 窗口 intent_records 识别量
+//     （纠错数 = intent_route_daily '__correction__' 行 tool_calls 之和）。
+type RouteNorthStarView struct {
+	IntentAccuracy   float64 `json:"intent_accuracy"` // 0–100，一位小数
+	ResolveRate      float64 `json:"resolve_rate"`    // 0–100，一位小数
+	HandoffRate      float64 `json:"handoff_rate"`    // 0–100，一位小数
+	Corrections      int64   `json:"corrections"`
+	IntentRecognized int64   `json:"intent_recognized"`
+	Sessions         int64   `json:"sessions"`
+	Resolved         int64   `json:"resolved"`
+	Handoff          int64   `json:"handoff"`
+}
+
+// RouteIntentView 意图分布一行。
+type RouteIntentView struct {
+	IntentType string `json:"intent_type"`
+	Count      int64  `json:"count"`
+}
+
+// RouteChainView 链命中率一行。
+type RouteChainView struct {
+	ChainName string  `json:"chain_name"`
+	Hits      int64   `json:"hits"`
+	Misses    int64   `json:"misses"`
+	HitRate   float64 `json:"hit_rate"` // 0–100，一位小数
+}
+
+// RouteToolView 工具成功率一行。
+type RouteToolView struct {
+	ToolName    string  `json:"tool_name"`
+	Calls       int64   `json:"calls"`
+	Success     int64   `json:"success"`
+	SuccessRate float64 `json:"success_rate"` // 0–100，一位小数
+}
+
 // DashboardSnapshot 统一看板快照。
 type ObsDashSnapshot struct {
 	GeneratedAt   time.Time            `json:"generated_at"`
@@ -132,6 +179,7 @@ type ObsDashSnapshot struct {
 	Delivery      DeliverySection      `json:"delivery"`
 	Funnel        FunnelSection        `json:"funnel"`
 	ChannelHealth ChannelHealthSection `json:"channel_health"`
+	Route         RouteSection         `json:"route"`
 }
 
 // ObservabilityDashboardService 统一看板服务。
@@ -179,6 +227,22 @@ func (s *ObservabilityDashboardService) Snapshot(ctx context.Context, window str
 	if err != nil {
 		return nil, fmt.Errorf("读取域名封禁失败: %w", err)
 	}
+	routeIntentRows, err := s.repo.RouteIntentDistribution(ctx, since)
+	if err != nil {
+		return nil, fmt.Errorf("聚合意图分布失败: %w", err)
+	}
+	routeChainRows, err := s.repo.RouteChainHitRate(ctx, since)
+	if err != nil {
+		return nil, fmt.Errorf("聚合链命中率失败: %w", err)
+	}
+	routeToolRows, err := s.repo.RouteToolSuccessRate(ctx, since)
+	if err != nil {
+		return nil, fmt.Errorf("聚合工具成功率失败: %w", err)
+	}
+	routeNS, err := s.repo.RouteNorthStar(ctx, since)
+	if err != nil {
+		return nil, fmt.Errorf("聚合路由北极星失败: %w", err)
+	}
 
 	return &ObsDashSnapshot{
 		GeneratedAt:   s.now(),
@@ -187,6 +251,7 @@ func (s *ObservabilityDashboardService) Snapshot(ctx context.Context, window str
 		Delivery:      buildDeliverySection(deliveryRows),
 		Funnel:        buildFunnelSection(funnelRows),
 		ChannelHealth: buildChannelHealthSection(accountRows, selectorRows, domainBan, s.onlineDegradedBelow(ctx)),
+		Route:         buildRouteSection(routeIntentRows, routeChainRows, routeToolRows, routeNS),
 	}, nil
 }
 
@@ -261,6 +326,29 @@ func OnlineRate(online, accounts int64) float64 {
 // FunnelConversion 本阶段 / 上一阶段 × 100。上一阶段 0 → 0。
 func FunnelConversion(prev, curr int64) float64 {
 	return percent(curr, prev)
+}
+
+// RouteIntentAccuracy 意图准确率（纠错采样口径）= 1 − 窗口纠错数 / 窗口识别量。
+// 识别量 0 → 0；纠错数比识别量还大（脏数据）时夹到 0，不产出负准确率。
+func RouteIntentAccuracy(corrections, recognized int64) float64 {
+	if recognized == 0 {
+		return 0
+	}
+	numerator := recognized - corrections
+	if numerator < 0 {
+		numerator = 0
+	}
+	return percent(numerator, recognized)
+}
+
+// RouteResolveRate 解决率 = 已了结（closed_at/resolved_at 有值且 handoff_at 空）/ 窗口会话。
+func RouteResolveRate(resolved, sessions int64) float64 {
+	return percent(resolved, sessions)
+}
+
+// RouteHandoffRate 转人工率 = handoff_at 非空会话 / 窗口会话。
+func RouteHandoffRate(handoff, sessions int64) float64 {
+	return percent(handoff, sessions)
 }
 
 // ClassifyChannelHealth 判定渠道健康状态。
@@ -384,6 +472,52 @@ func dashboardNodeLabel(node string) string {
 		return l
 	}
 	return node
+}
+
+// buildRouteSection 拼装 TB-11 路由观测段：比率全部走纯函数（RouteIntentAccuracy
+// /RouteResolveRate/RouteHandoffRate 与 percent），本函数只做组装。
+func buildRouteSection(intentRows []repository.ObsDashRouteIntentRow,
+	chainRows []repository.ObsDashRouteChainRow,
+	toolRows []repository.ObsDashRouteToolRow,
+	ns repository.ObsDashRouteNorthStarRow) RouteSection {
+	sec := RouteSection{
+		NorthStar: RouteNorthStarView{
+			Corrections:      ns.Corrections,
+			IntentRecognized: ns.Recognized,
+			Sessions:         ns.Sessions,
+			Resolved:         ns.Resolved,
+			Handoff:          ns.Handoff,
+		},
+		IntentDistribution: make([]RouteIntentView, 0, len(intentRows)),
+		ChainHitRate:       make([]RouteChainView, 0, len(chainRows)),
+		ToolSuccessRate:    make([]RouteToolView, 0, len(toolRows)),
+	}
+	sec.NorthStar.IntentAccuracy = RouteIntentAccuracy(ns.Corrections, ns.Recognized)
+	sec.NorthStar.ResolveRate = RouteResolveRate(ns.Resolved, ns.Sessions)
+	sec.NorthStar.HandoffRate = RouteHandoffRate(ns.Handoff, ns.Sessions)
+	for _, r := range intentRows {
+		sec.IntentDistribution = append(sec.IntentDistribution, RouteIntentView{
+			IntentType: r.IntentType,
+			Count:      r.Cnt,
+		})
+	}
+	for _, r := range chainRows {
+		sec.ChainHitRate = append(sec.ChainHitRate, RouteChainView{
+			ChainName: r.ChainName,
+			Hits:      r.Hits,
+			Misses:    r.Misses,
+			HitRate:   percent(r.Hits, r.Hits+r.Misses),
+		})
+	}
+	for _, r := range toolRows {
+		sec.ToolSuccessRate = append(sec.ToolSuccessRate, RouteToolView{
+			ToolName:    r.ToolName,
+			Calls:       r.Calls,
+			Success:     r.Success,
+			SuccessRate: percent(r.Success, r.Calls),
+		})
+	}
+	return sec
 }
 
 func buildChannelHealthSection(accountRows []repository.ObsDashChannelAccountRow,

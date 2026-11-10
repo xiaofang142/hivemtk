@@ -92,8 +92,21 @@ func (e *SalesEngine) runAgentLoop(
 	//（ToolChoice=none）+ 追问指引注入；集齐后恢复按链调用。
 	chainFlowHint := ""
 	slotGateNone := false
+	// TB-11 刀2：命中绑定即登记链级观测上下文，loop 出口一次写
+	// 链内工具命中/跳过 diff（defer 覆盖全部出口，含槽位门 0 工具调用轮）。
+	var routeChainName string
+	var routeBoundTools []string
+	var routeCalls []agentLoopToolCallOutcome
 	if e.intentChain != nil && intent != nil && intent.IntentType != "" {
 		if spec, err := e.intentChain.LookupIntentChain(ctx, intent.IntentType); err == nil && spec != nil {
+			routeChainName = spec.IntentCode
+			routeBoundTools = make([]string, 0, len(spec.Steps))
+			for _, st := range spec.Steps {
+				routeBoundTools = append(routeBoundTools, st.ToolName)
+			}
+			defer func() {
+				e.writeIntentRouteDiff(ctx, intent.IntentType, routeChainName, routeBoundTools, routeCalls)
+			}()
 			missing := missingRequiredSlots(spec, intent, req)
 			if len(missing) > 0 {
 				// 严格模式：本轮不调工具，先向客户追问缺失槽位（Rasa 式追问循环的轻量形态）。
@@ -374,6 +387,15 @@ func (e *SalesEngine) runAgentLoop(
 		}
 		totalToolCalls += len(toolResults)
 
+		// TB-11 刀2：记录本轮工具调用结果序列（loop 出口写 diff 埋点用）。
+		for i, tr := range toolResults {
+			name := ""
+			if i < len(result.ToolCalls) {
+				name = result.ToolCalls[i].Function.Name
+			}
+			routeCalls = append(routeCalls, agentLoopToolCallOutcome{name: name, success: tr.Success})
+		}
+
 		for i, tr := range toolResults {
 
 			var toolName string
@@ -424,6 +446,59 @@ func (e *SalesEngine) runAgentLoop(
 	exhaustedErr := fmt.Errorf("agent loop exhausted with no final content")
 	writeLoopSpan("", exhaustedErr)
 	return "", nil, nil, exhaustedErr
+}
+
+// agentLoopToolCallOutcome 链内一次工具调用结果（TB-11 diff 埋点最小面）。
+type agentLoopToolCallOutcome struct {
+	name    string
+	success bool
+}
+
+// writeIntentRouteDiff TB-11 刀2：loop 出口一次写链内工具命中/跳过 diff。
+//
+// 口径（冻结 2026-11-10）：
+//   - chainName 为空（未命中绑定）不写；
+//   - 链级行 chain_name=IntentCode 且 tool_name 为空串：本轮有任一调用命中绑定工具
+//     → chain_hits+1，否则（含 slotGateNone 0 工具调用轮）chain_misses+1；
+//   - 工具级按实际调用序列：命中绑定工具 tool_hits+1、未命中 tool_skips+1；
+//     tool_calls 累加调用总数，tool_success/tool_fail 按 AgentToolResult.Success 分流；
+//   - DB 失败 fail-open：仅 logger，不阻断客户回复。
+func (e *SalesEngine) writeIntentRouteDiff(ctx context.Context, intentType, chainName string, boundTools []string, calls []agentLoopToolCallOutcome) {
+	if e.intentRouteDaily == nil || chainName == "" {
+		return
+	}
+	bound := make(map[string]struct{}, len(boundTools))
+	for _, n := range boundTools {
+		bound[n] = struct{}{}
+	}
+	row := &model.IntentRouteDaily{
+		Date:       time.Now().Format("2006-01-02"),
+		IntentType: intentType,
+		ChainName:  chainName,
+	}
+	chainHit := false
+	for _, c := range calls {
+		row.ToolCalls++
+		if c.success {
+			row.ToolSuccess++
+		} else {
+			row.ToolFail++
+		}
+		if _, ok := bound[c.name]; ok {
+			row.ToolHits++
+			chainHit = true
+		} else {
+			row.ToolSkips++
+		}
+	}
+	if chainHit {
+		row.ChainHits++
+	} else {
+		row.ChainMisses++
+	}
+	if err := e.intentRouteDaily.UpsertDiff(ctx, row); err != nil {
+		logger.Warnf("[AgentLoop] intent_route_daily upsert failed (fail-open): %v", err)
+	}
 }
 
 // slotToolChoice TB-08 槽位门：缺失追问轮强制 none（保证 0 工具调用），否则 auto。

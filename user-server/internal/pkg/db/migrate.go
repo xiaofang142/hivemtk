@@ -217,6 +217,7 @@ func allModels() []any {
 		&model.WeComAccountHealth{},
 		&model.IntentRecord{},
 		&model.IntentToolChain{},
+		&model.IntentRouteDaily{},
 		&model.CustomIntent{},
 		&model.OrderChangeRequest{},
 		&model.DialogueMemory{},

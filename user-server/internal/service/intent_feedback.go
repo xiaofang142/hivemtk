@@ -13,8 +13,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -23,6 +25,9 @@ import (
 type IntentFeedbackService struct {
 	logRepo       *repository.IntentLogRepository
 	customIntents *CustomIntentService
+
+	// routeDaily TB-11 纠错事件聚合写侧（刀3）；nil=未装配，纠错主流程零变化。
+	routeDaily repository.IntentRouteDailyRepository
 }
 
 func NewIntentFeedbackService() *IntentFeedbackService {
@@ -34,6 +39,11 @@ func NewIntentFeedbackService() *IntentFeedbackService {
 // SetCustomIntentService 注入自定义词条服务（纠正目标包含自定义意图；nil-safe）。
 func (s *IntentFeedbackService) SetCustomIntentService(svc *CustomIntentService) {
 	s.customIntents = svc
+}
+
+// SetIntentRouteDailyRepository 注入路由观测聚合仓储（TB-11 刀3；装配层调用，运行期只读）。
+func (s *IntentFeedbackService) SetIntentRouteDailyRepository(repo repository.IntentRouteDailyRepository) {
+	s.routeDaily = repo
 }
 
 // IntentFeedbackCorrectInput 纠错入参。
@@ -90,6 +100,19 @@ func (s *IntentFeedbackService) CorrectIntent(ctx context.Context, in IntentFeed
 		return nil, err
 	}
 	logger.Infof("[intent_feedback] 纠错落库：log=%d %q→%s keyword=%q operator=%s", in.LogID, rec.IntentMajor, in.CorrectedType, keyword, in.Operator)
+	// TB-11 刀3：纠错事件落路由聚合表（tool_name='__correction__' 行，
+	// intent_type=原错误意图，tool_calls+1）；fail-open，埋点失败不回滚纠错主流程。
+	if s.routeDaily != nil {
+		if err := s.routeDaily.UpsertDiff(ctx, &model.IntentRouteDaily{
+			Date:       time.Now().Format("2006-01-02"),
+			IntentType: rec.IntentMajor,
+			ChainName:  "",
+			ToolName:   "__correction__",
+			ToolCalls:  1,
+		}); err != nil {
+			logger.Warnf("[intent_feedback] intent_route_daily 纠错行 upsert 失败（fail-open）: %v", err)
+		}
+	}
 	return map[string]any{
 		"log_id":         in.LogID,
 		"from_intent":    rec.IntentMajor,

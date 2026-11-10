@@ -103,6 +103,10 @@ func BuildSalesEngine(gormDB *gorm.DB) *service.SalesEngine {
 			engine.SetIntentChainLookup(chainSvc)
 			logger.Info("[agent] ✅ SalesEngine 已注入意图→工具调用流绑定层（TB-03）")
 		}
+
+		// TB-11 刀2：路由观测聚合写侧注入（agentloop 出口 diff 埋点；写侧 nil 守卫 fail-open）。
+		engine.SetIntentRouteDailyRepository(repository.NewIntentRouteDailyRepositoryWithDB(gormDB))
+		logger.Info("[agent] ✅ SalesEngine 已注入路由观测聚合仓储（TB-11）")
 	} else {
 		logger.Warn("[agent] SalesEngine 未注入 ToolExecutor（globalExecutor 未初始化，走原 9 步流水线）")
 	}
