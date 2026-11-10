@@ -284,6 +284,11 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.PUT("/intent/custom/:id", ciCtrl.Update)
 	admin.DELETE("/intent/custom/:id", ciCtrl.Delete)
 
+	// TB-09 意图纠错反馈（管理端：改判日志→词面覆盖热生效）。
+	fbCtrl := controller.NewIntentFeedbackController(service.NewIntentFeedbackService())
+	admin.POST("/intent/feedback/correct", fbCtrl.Correct)
+	admin.GET("/intent/feedback/override", fbCtrl.Override)
+
 	// TB-05 改单申请单（管理端：创建/审批/拒绝/执行/取消；能力路由冻结在创建期）。
 	ocCtrl := controller.NewOrderChangeController(app.GetOrderChangeService())
 	admin.GET("/order-change-requests", ocCtrl.List)

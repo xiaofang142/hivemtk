@@ -520,6 +520,22 @@
                 {{ formatTime(row.created_at) }}
               </template>
             </el-table-column>
+            <el-table-column
+              label="操作"
+              width="90"
+              fixed="right"
+            >
+              <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  size="small"
+                  @click="openCorrect(row)"
+                >
+                  纠错
+                </el-button>
+              </template>
+            </el-table-column>
             <template #empty>
               <el-empty
                 description="暂无记录"
@@ -948,6 +964,38 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 意图纠错（TB-09）：改判意图→原文作词面写覆盖→热生效 -->
+    <el-dialog
+      v-model="correctVisible"
+      title="意图纠错"
+      width="480px"
+      destroy-on-close
+    >
+      <el-form label-width="92px">
+        <el-form-item label="原话术">
+          <div class="correct-text">{{ correctForm.message }}</div>
+        </el-form-item>
+        <el-form-item label="纠正为" required>
+          <el-select v-model="correctForm.corrected_type" filterable placeholder="选择正确意图" style="width: 100%">
+            <el-option
+              v-for="d in intentDict"
+              :key="d.type"
+              :label="d.name"
+              :value="d.type"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="写入词面">
+          <el-input v-model="correctForm.keyword" placeholder="默认取原话术，可改" />
+          <div class="form-hint">词面写入后规则层立即命中（覆盖词表热更新）；只影响识别，不改模型。</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="correctVisible = false">取消</el-button>
+        <el-button type="primary" :loading="correctSaving" @click="submitCorrect">确认纠错</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -957,7 +1005,7 @@ import i18n from '@/i18n'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
-import { intentApi } from '@/api/intentRecognition.js'
+import { intentApi, correctIntentApi, getIntentOverrideApi } from '@/api/intentRecognition.js'
 import { getChannelLabel } from '@/constants/channel'
 // disabled = 意图识别功能开关关闭时后端返回的 method（原样展示会变成「方法: disabled」）
 const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合', disabled: '未启用' };
@@ -977,6 +1025,11 @@ const statsData = ref({})
 
 const recentLoading = ref(false);
 const recentList = ref([])
+
+// TB-09 意图纠错
+const correctVisible = ref(false)
+const correctSaving = ref(false)
+const correctForm = ref({ log_id: null, message: '', corrected_type: '', keyword: '' })
 const filterIntentType = ref('')
 const recentPagination = ref({ page: 1, pageSize: 20, total: 0 })
 
