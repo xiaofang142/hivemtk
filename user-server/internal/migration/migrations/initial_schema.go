@@ -310,4 +310,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 统一消息并入收件箱/客户360 之后，摘掉两节点在 role_menu_permissions
 	// 的存量分配行——防未来同名节点静默复权（v3.55.0 收敛迁移同一取舍）。
 	register(NewMenuGrantRemovedNodesCleanupMigration(db))
+	// v3.90.0（PLT-01 刀1 单价落地）：llm_providers 加平台套餐单价快照两列
+	// （sync 按 plan_code 关联套餐价落列；写入时点算成本，读侧不重算不回填）。
+	register(NewLLMProviderPlanPriceMigration(db))
 }

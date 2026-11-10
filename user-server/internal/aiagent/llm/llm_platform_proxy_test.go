@@ -262,13 +262,22 @@ func TestDispatchPlatformProviderEndToEnd(t *testing.T) {
 	var events []PlatformUsageEvent
 	SetPlatformUsageSink(func(e PlatformUsageEvent) { events = append(events, e) })
 	t.Cleanup(func() { SetPlatformUsageSink(nil) })
+	// 平台套餐单价快照（PLT-01 刀1）：平台 provider 的计价唯一来源是快照整数分
+	// （写入时点按 plan_code 取本地镜像价列），自带 CostPer1k* 浮点字段不再参与。
+	// 0.5 元/1k = 50 分/1k、3 元/1k = 300 分/1k。
+	SetPlatformPlanPriceResolver(func(planCode string) (int64, int64) {
+		return 50, 300
+	})
+	t.Cleanup(func() { SetPlatformPlanPriceResolver(nil) })
 
 	d := NewDispatcher(NewLLMService())
 	d.AddProvider(ProviderConfig{
 		Name: "plat", Model: "gpt-4o",
-		Source: "platform",
-		// 分别计价：输入 0.5 元/1k、输出 3 元/1k
-		CostPer1kInput: 0.5, CostPer1kOutput: 3,
+		Source:   "platform",
+		PlanCode: "plan-e2e",
+		// 刻意填非零浮点价：钉死「平台调用不再消费这两个字段（那是第二定价源）」
+		// ——下面的断言值全部来自 resolver 快照，填 999 若再生效断言必红。
+		CostPer1kInput: 999, CostPer1kOutput: 999,
 		Enabled: true, QualityScore: 1,
 	})
 	d.SetRoute(ScenarioRoute{
@@ -290,9 +299,9 @@ func TestDispatchPlatformProviderEndToEnd(t *testing.T) {
 	if res.Content != "平台回复" {
 		t.Errorf("未取到代理响应内容: %q", res.Content)
 	}
-	// 分别计价：1000×0.5/1000 = 0.5；400×3/1000 = 1.2。
-	// 用容差比较：成本是 float 元，0.5 与 1.2 在二进制里都不精确，
-	// 直接 == 会让这条用例在别的机器/架构上随机红。
+	// 分别计价：1000×50/1000 = 50 分 = 0.5 元；400×300/1000 = 120 分 = 1.2 元。
+	// 整数分 ÷100 的元值在 numeric(14,6) 上精确两位小数，容差比较只为 float
+	// 序列化噪声（0.5/1.2 二进制不精确）。
 	if !almostEq(res.PromptCost, 0.5) || !almostEq(res.CompletionCost, 1.2) {
 		t.Errorf("分别计价不符: prompt=%v completion=%v（期望 0.5 / 1.2）",
 			res.PromptCost, res.CompletionCost)
@@ -306,6 +315,45 @@ func TestDispatchPlatformProviderEndToEnd(t *testing.T) {
 	}
 	if e.AgentID != "agent-1" || e.UserID != "user-1" {
 		t.Errorf("归因上下文未透传（商户无法回答谁用掉的）: %+v", e)
+	}
+	// 整数分快照逐分对齐（PLT-01 判据）：事件携带的分必须与 tokens*price/1000
+	// 整数换算一致，且不经 float 元 ×100 往返。
+	if e.InputCostCents != 50 || e.OutputCostCents != 120 {
+		t.Errorf("整数分快照不符: in=%d out=%d（期望 50 / 120，tokens×price/1000 整数口径）",
+			e.InputCostCents, e.OutputCostCents)
+	}
+}
+
+// TestPriceTokensCentsMatchesPlatform 整数计价与平台 PriceTokens 同式同截断
+// （platform-server llm_billing_service.go：tokens*price/1000，向下取整不四舍五入）。
+// 固定值断言，不锁平台文案。
+func TestPriceTokensCentsMatchesPlatform(t *testing.T) {
+	cases := []struct {
+		name          string
+		tokens, price int64
+		want          int64
+	}{
+		{"整除", 1000, 50, 50},
+		{"截断 1500x7=10.5 取 10", 1500, 7, 10},
+		{"极小金额归零 1x7", 1, 7, 0},
+		{"零 token", 0, 50, 0},
+		{"负 token", -5, 50, 0},
+		{"零价（join 不上降级格）", 1000, 0, 0},
+		{"负价", 1000, -1, 0},
+		{"大数不溢出", 1_000_000, 9_999, 9_999_000},
+	}
+	for _, c := range cases {
+		if got := PriceTokensCents(c.tokens, c.price); got != c.want {
+			t.Errorf("%s: PriceTokensCents(%d,%d)=%d，期望 %d", c.name, c.tokens, c.price, got, c.want)
+		}
+	}
+}
+
+// TestPlatformCostWithoutResolverDegradesToZero 未注入单价 resolver（或镜像无价）
+// 时成本如实记 0：不报错、不编价（join 失败降级格的 dispatcher 侧）。
+func TestPlatformCostWithoutResolverDegradesToZero(t *testing.T) {
+	if PriceTokensCents(1000, 0) != 0 {
+		t.Fatal("无价必须降级 0 分")
 	}
 }
 

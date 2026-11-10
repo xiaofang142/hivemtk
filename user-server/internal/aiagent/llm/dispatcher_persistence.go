@@ -120,7 +120,12 @@ func (d *Dispatcher) UpsertProviderToDB(pc ProviderConfig) error {
 	}
 	row.ID = exist.ID
 	row.CreatedAt = exist.CreatedAt
-	if err := g.Save(&row).Error; err != nil {
+	// 平台套餐单价快照两列（input/output_price_per_1k_cents）只归平台 sync 写
+	// （repository.UpsertProviders）：admin 后台的 Save 一律 Omit。ProviderConfig
+	// 不携带价列（价格不进内存注册表，取价走 resolver 读库），原样 Save 会把
+	// 后台一次「启用/停用」变成把平台价抹成 0 —— 此后所有平台调用的本地成本
+	// 全部归零，直到下一次重启同步才恢复。
+	if err := g.Omit("input_price_per_1k_cents", "output_price_per_1k_cents").Save(&row).Error; err != nil {
 		logger.Errorf("[LLM] UpsertProviderToDB 更新 %s 失败: %v", pc.Name, err)
 		return err
 	}

@@ -16,9 +16,10 @@ import (
 
 // savePlatformProvidersViaRepo 仓储化后的等价入口：映射留 service，落库走
 // PlatformLLMUsageRepository（savePlatformProviders 已按 L3 铁律下沉删除）。
+// 价目映射缺省 nil = 单价快照列落 0（价目拉取失败的同格降级）。
 func savePlatformProvidersViaRepo(db *gorm.DB, rows []platform.PlatformLLMProvider) (int, error) {
 	sysCtx := tenant.WithSystemScope(context.Background())
-	return repository.NewPlatformLLMUsageRepositoryWithDB(db).UpsertProviders(sysCtx, platformProviderRowsToModels(rows))
+	return repository.NewPlatformLLMUsageRepositoryWithDB(db).UpsertProviders(sysCtx, platformProviderRowsToModels(rows, nil))
 }
 
 // 回归钉死 TENANT_MODE=on 时「平台 provider 同步」落库被隔离 fail-closed 拦截的缺陷

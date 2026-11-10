@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -49,6 +50,8 @@ func (r *PlatformLLMUsageRepository) InsertUsageRecord(ctx context.Context, rec 
 // 「no unique or exclusion constraint matching the ON CONFLICT specification」。
 // 只更新平台下发的元信息与 source，**不动 api_key**——商户自己填的密钥要留着，
 // 否则 provider 从 platform 转回 self 就废了。
+// 单价快照两列（input/output_price_per_1k_cents）是平台 sync 的专属写权限：
+// 服务层已按 plan_code 关联套餐价（join 不上 = 0 = 如实降级），这里原样落列。
 func (r *PlatformLLMUsageRepository) UpsertProviders(ctx context.Context, rows []model.LLMProvider) (int, error) {
 	if r.db == nil {
 		return 0, ErrDBNotReady
@@ -64,6 +67,7 @@ func (r *PlatformLLMUsageRepository) UpsertProviders(ctx context.Context, rows [
 			DoUpdates: clause.AssignmentColumns([]string{
 				"display_name", "model", "api_type", "vendor",
 				"source", "plan_code", "enabled", "updated_at",
+				"input_price_per_1k_cents", "output_price_per_1k_cents",
 			}),
 		}).Create(&row).Error; err != nil {
 			// 逐行容错（原 savePlatformProviders 语义）：单行失败不阻断整批，
@@ -77,4 +81,35 @@ func (r *PlatformLLMUsageRepository) UpsertProviders(ctx context.Context, rows [
 		n++
 	}
 	return n, firstErr
+}
+
+// GetPlatformPlanPriceByCode 按 plan_code 读本地 provider 镜像上的套餐单价快照
+// （分/1k token）。
+//
+// 快照由 sync 落列（Providers()×Plans() 按 plan_code 关联）；同一 plan_code 挂在
+// 多个 provider 行上时取最近同步的一行——sync 在同一趟里对同 plan_code 写同价，
+// 正常无歧义，排序只为把「provider 已从下发列表消失、行还残留旧价」的窗口收窄。
+//
+// 查不到（未同步/套餐下架/plan_code 为空）返回 (0,0,nil)：调用侧如实降级 cost 0，
+// 不报错、不编价。读走 system scope（调用方负责）：平台价是商户级配置，镜像行
+// 归属默认租户，租户 ctx 的隔离过滤会让非默认租户永远读不到价。
+func (r *PlatformLLMUsageRepository) GetPlatformPlanPriceByCode(ctx context.Context, planCode string) (inputCents, outputCents int64, err error) {
+	if r.db == nil {
+		return 0, 0, ErrDBNotReady
+	}
+	code := strings.TrimSpace(planCode)
+	if code == "" {
+		return 0, 0, nil
+	}
+	var row model.LLMProvider
+	qerr := r.db.WithContext(ctx).
+		Where("source = ? AND plan_code = ?", model.LLMSourcePlatform, code).
+		Order("updated_at DESC, id DESC").First(&row).Error
+	if errors.Is(qerr, gorm.ErrRecordNotFound) {
+		return 0, 0, nil
+	}
+	if qerr != nil {
+		return 0, 0, qerr
+	}
+	return row.InputPricePer1kCents, row.OutputPricePer1kCents, nil
 }

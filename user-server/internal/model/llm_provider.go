@@ -36,15 +36,26 @@ type LLMProvider struct {
 	//
 	// 判空回落 self 而不是 platform：漏填的绝大多数是用户自己加的 provider，
 	// 落成 platform 会凭空记一笔欠平台的账。
-	Source       string    `gorm:"column:source;not null;default:'self';index" json:"source"`
-	PlanCode     string    `gorm:"column:plan_code;type:varchar(32)" json:"plan_code"`
-	AvgLatencyMs int       `gorm:"column:avg_latency_ms;default:0" json:"avg_latency_ms"`
-	NoFC         bool      `gorm:"column:no_fc;default:false" json:"no_fc"`
-	Vendor       string    `gorm:"column:vendor;size:64" json:"vendor"`
-	Tags         string    `gorm:"column:tags;type:text" json:"-"`
-	SortOrder    int       `gorm:"column:sort_order;default:0" json:"sort_order"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	Source   string `gorm:"column:source;not null;default:'self';index" json:"source"`
+	PlanCode string `gorm:"column:plan_code;type:varchar(32)" json:"plan_code"`
+	// InputPricePer1kCents / OutputPricePer1kCents 平台套餐单价快照（分/1k token）。
+	//
+	// 来源唯一：sync 时 Providers()×Plans() 按 plan_code 关联（平台下发的
+	// provider 视图不带价，套餐接口带）。join 不上（套餐下架/不可见）= 恒 0 =
+	// 调用侧如实降级 cost 0，不编价。self provider 恒 0（自带 Key 不按平台价计）。
+	//
+	// **写入时点按当次快照落列，读侧不重算不回填** —— 平台改价后历史明细不漂移
+	// （对齐平台 RecordUsage 的写时计算口径）。落库写权限只归平台 sync 一条链路
+	// （repository.UpsertProviders），admin 后台的 provider 保存路径不得触碰。
+	InputPricePer1kCents  int64     `gorm:"column:input_price_per_1k_cents;not null;default:0" json:"input_price_per_1k_cents"`
+	OutputPricePer1kCents int64     `gorm:"column:output_price_per_1k_cents;not null;default:0" json:"output_price_per_1k_cents"`
+	AvgLatencyMs          int       `gorm:"column:avg_latency_ms;default:0" json:"avg_latency_ms"`
+	NoFC                  bool      `gorm:"column:no_fc;default:false" json:"no_fc"`
+	Vendor                string    `gorm:"column:vendor;size:64" json:"vendor"`
+	Tags                  string    `gorm:"column:tags;type:text" json:"-"`
+	SortOrder             int       `gorm:"column:sort_order;default:0" json:"sort_order"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 
 // TableName 指定表名
