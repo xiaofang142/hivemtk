@@ -9,6 +9,7 @@ package service
 // 桥接族额外把张数写进出站行 Extra["cards_dropped"]（管理端读的是那一行）。
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -150,9 +151,16 @@ func TestSendOutbound_Bridge_CardsDropWarns(t *testing.T) {
 	// 正对照：只换 os.Stdout 不重建日志器会一行也抓不到（GetLogger 缓存实例），
 	// 缺这行探针的话"没抓到"就分不清是接缝坏了还是代码没出声。
 	logger.GetLogger().Info().Msg("r26-capture-probe")
+	// 并发排空读端：正文执行期间全局 logger 仍会被本用例与他用例泄漏的后台协程持续写，
+	// 无人读则管道缓冲写满 ⇒ 写端永久阻塞（2026-11-10 全包挂死实录：zerolog→os.File.Write）。
+	var capBuf bytes.Buffer
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 	t.Cleanup(func() {
+		_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 		os.Stdout = oldOut
 		logger.InitLogger(logger.DefaultConfig())
+		<-drainDone
 	})
 
 	if _, sendErr := svc.sendOutbound(context.Background(), ChannelXiaohongshu, hub.AccountID, p, "看下这款", hub, bridgeCardsForTest(3)); sendErr != nil {
@@ -165,11 +173,8 @@ func TestSendOutbound_Bridge_CardsDropWarns(t *testing.T) {
 		t.Fatalf("关闭写端失败：%v", closeErr)
 	}
 	os.Stdout = oldOut
-	captured, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("读取日志失败：%v", readErr)
-	}
-	logged := string(captured)
+	<-drainDone
+	logged := capBuf.String()
 	lines := linesWith(logged, "no card transport, rich cards dropped")
 	if len(lines) != 1 {
 		t.Fatalf("一次带卡出库应当且仅当打一条丢弃日志，实际 %d 条，捕获到的日志：\n%s", len(lines), logged)
@@ -210,9 +215,15 @@ func TestSendOutbound_CardlessChannelWarns(t *testing.T) {
 	os.Stdout = w
 	logger.InitLogger(logger.LoggingConfig{Level: "info", Format: "json", Output: "stdout"})
 	logger.GetLogger().Info().Msg("r26-capture-probe")
+	// 并发排空读端：同上（管道缓冲写满 ⇒ 写端阻塞 ⇒ 全包挂死实录）。
+	var capBuf bytes.Buffer
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 	t.Cleanup(func() {
+		_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 		os.Stdout = oldOut
 		logger.InitLogger(logger.DefaultConfig())
+		<-drainDone
 	})
 
 	// 出站成功与否不在本用例的判据里（企微没有可用账号必然失败），只判"丢弃有没有出声"。
@@ -222,11 +233,8 @@ func TestSendOutbound_CardlessChannelWarns(t *testing.T) {
 		t.Fatalf("关闭写端失败：%v", closeErr)
 	}
 	os.Stdout = oldOut
-	captured, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("读取日志失败：%v", readErr)
-	}
-	logged := string(captured)
+	<-drainDone
+	logged := capBuf.String()
 	// 判据按整行匹配（行里含 "message" 键那句文案）：只在整个日志块里找子串的话，
 	// 计数与渠道可以来自两条不同的行，一次真丢弃都没发生过也能拼出绿。
 	lines := linesWith(logged, "no card transport, rich cards dropped")
@@ -281,9 +289,15 @@ func TestSendOutbound_CardCapableChannelStaysQuiet(t *testing.T) {
 			os.Stdout = w
 			logger.InitLogger(logger.LoggingConfig{Level: "info", Format: "json", Output: "stdout"})
 			logger.GetLogger().Info().Msg("r26-capture-probe")
+			// 并发排空读端：同上（管道缓冲写满 ⇒ 写端阻塞 ⇒ 全包挂死实录）。
+			var capBuf bytes.Buffer
+			drainDone := make(chan struct{})
+			go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 			t.Cleanup(func() {
+				_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 				os.Stdout = oldOut
 				logger.InitLogger(logger.DefaultConfig())
+				<-drainDone
 			})
 
 			// 下发成败不在本用例判据里（没有可用账号必然失败），只判"有没有把这批卡报成丢弃"。
@@ -293,11 +307,8 @@ func TestSendOutbound_CardCapableChannelStaysQuiet(t *testing.T) {
 				t.Fatalf("关闭写端失败：%v", closeErr)
 			}
 			os.Stdout = oldOut
-			captured, readErr := io.ReadAll(r)
-			if readErr != nil {
-				t.Fatalf("读取日志失败：%v", readErr)
-			}
-			logged := string(captured)
+			<-drainDone
+			logged := capBuf.String()
 			if !strings.Contains(logged, "r26-capture-probe") {
 				t.Fatalf("探针行都没抓到，日志接缝已坏，本用例的负断言不作证据：\n%s", logged)
 			}

@@ -13,6 +13,7 @@ package service
 //	   免得把垃圾 POST 打进同机其他会话的服务）。
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -120,9 +121,16 @@ func TestTGGroupShouldTriggerAILogsWithReason(t *testing.T) {
 	logger.InitLogger(logger.LoggingConfig{Level: "info", Format: "json", Output: "stdout"})
 	// 正对照：只换 os.Stdout 不重建日志器会一行也抓不到（GetLogger 缓存实例）。
 	logger.GetLogger().Info().Msg("tg-quiet-capture-probe")
+	// 并发排空读端：正文执行期间全局 logger 仍会被本用例与他用例泄漏的后台协程持续写，
+	// 无人读则管道缓冲写满 ⇒ 写端永久阻塞（2026-11-10 全包挂死实录：zerolog→os.File.Write）。
+	var capBuf bytes.Buffer
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 	t.Cleanup(func() {
+		_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 		os.Stdout = oldOut
 		logger.InitLogger(logger.DefaultConfig())
+		<-drainDone
 	})
 
 	tgGroupShouldTriggerAI(true, false, false, func() bool { return false }, "evt-mention", "-100", "777", "text", "今天天气不错")
@@ -137,11 +145,8 @@ func TestTGGroupShouldTriggerAILogsWithReason(t *testing.T) {
 		t.Fatalf("关闭写端失败：%v", closeErr)
 	}
 	os.Stdout = oldOut
-	captured, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("读取日志失败：%v", readErr)
-	}
-	logged := string(captured)
+	<-drainDone
+	logged := capBuf.String()
 
 	if n := len(linesWith(logged, "[Webhook] TG 群消息未触发 AI")); n != 3 {
 		t.Errorf("未触发行应恰好 3 条，实际 %d 条，捕获日志：\n%s", n, logged)
@@ -524,23 +529,26 @@ func r49CaptureLogs(t *testing.T, fn func()) string {
 	os.Stdout = w
 	logger.InitLogger(logger.LoggingConfig{Level: "info", Format: "json", Output: "stdout"})
 	logger.GetLogger().Info().Msg("r49-capture-probe")
+	// 并发排空读端：同上（管道缓冲写满 ⇒ 写端阻塞 ⇒ 全包挂死实录）。
+	var capBuf bytes.Buffer
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 	t.Cleanup(func() {
+		_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 		os.Stdout = oldOut
 		logger.InitLogger(logger.DefaultConfig())
+		<-drainDone
 	})
 	fn()
 	if closeErr := w.Close(); closeErr != nil {
 		t.Fatalf("关闭写端失败：%v", closeErr)
 	}
 	os.Stdout = oldOut
-	captured, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("读取日志失败：%v", readErr)
-	}
-	if len(linesWith(string(captured), "r49-capture-probe")) != 1 {
+	<-drainDone
+	if len(linesWith(capBuf.String(), "r49-capture-probe")) != 1 {
 		t.Fatal("日志捕获是哑的（正对照没收到）：本用例读不到任何判定行")
 	}
-	return string(captured)
+	return capBuf.String()
 }
 
 // handleJob 那一跳也要有用例：门控服务与判定函数都只是产出事实，真正决定"发不发"的是

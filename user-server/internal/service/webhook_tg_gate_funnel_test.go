@@ -10,6 +10,7 @@ package service
 //	   等于绕过网关拿到回复。
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -164,9 +165,16 @@ func TestTriggerInboundAIGateGuardForTelegramGroups(t *testing.T) {
 	os.Stdout = w
 	logger.InitLogger(logger.LoggingConfig{Level: "info", Format: "json", Output: "stdout"})
 	logger.GetLogger().Info().Msg("r55-funnel-capture-probe")
+	// 并发排空读端：正文执行期间全局 logger 仍会被本用例与他用例泄漏的后台协程持续写，
+	// 无人读则管道缓冲写满 ⇒ 写端永久阻塞（2026-11-10 全包挂死实录：zerolog→os.File.Write）。
+	var capBuf bytes.Buffer
+	drainDone := make(chan struct{})
+	go func() { defer close(drainDone); io.Copy(&capBuf, r) }()
 	t.Cleanup(func() {
+		_ = w.Close() // 兜底：正文 t.Fatalf/Goexit 时也让排空协程见到 EOF
 		os.Stdout = oldOut
 		logger.InitLogger(logger.DefaultConfig())
+		<-drainDone
 	})
 
 	ctx := context.Background()
@@ -188,11 +196,8 @@ func TestTriggerInboundAIGateGuardForTelegramGroups(t *testing.T) {
 		t.Fatalf("关闭写端失败：%v", closeErr)
 	}
 	os.Stdout = oldOut
-	captured, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("读取日志失败：%v", readErr)
-	}
-	logged := string(captured)
+	<-drainDone
+	logged := capBuf.String()
 
 	blocked := linesWith(logged, "TriggerInboundAI skipped: 门控群未验证成员")
 	if len(blocked) != 1 {
