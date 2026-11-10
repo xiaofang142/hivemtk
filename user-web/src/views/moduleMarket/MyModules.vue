@@ -79,7 +79,7 @@
       </template>
 
       <el-alert
-        v-if="!platformEnabled"
+        v-if="!platformEnabled && !wallet.exists"
         type="info"
         :closable="false"
         title="平台未连接"
@@ -121,6 +121,16 @@
           </div>
         </el-col>
       </el-row>
+      <!-- 平台不可达（离线档）时余额来自本地镜像快照：必须标出同步时间，
+           否则旧数字会被当成实时余额 —— 镜像表没有 Low/Expired 列，
+           离线档不冒充"低量/过期"判定，只如实给出"这个数是什么时候的"。
+           判定用本页权威闸值 platformEnabled（市场下发），镜像行自证其时间。 -->
+      <div
+        v-if="!platformEnabled && wallet.exists && wallet.updated_at"
+        class="wallet-synced-at"
+      >
+        离线展示：以上余额同步于 {{ fmtTime(wallet.updated_at) }}（平台恢复连接后自动刷新）
+      </div>
       <el-empty
         v-else-if="llmCloudOwned"
         description="尚未购买平台模型套餐"
@@ -438,6 +448,7 @@ import {
   priceLabel, fmtPrice, fmtTokens,
   MODULE_CATEGORY_LABEL, MODULE_SOURCE_LABEL, MODULE_STATUS_LABEL
 } from '@/api/moduleMarket'
+import { fmtTime } from '@/utils/time'
 import { useUserStore } from '@/stores/user'
 import CashierDialog from '@/components/CashierDialog.vue'
 
@@ -513,19 +524,21 @@ async function fetch () {
     } catch {
       logs.value = []
     }
-    // 4) 只有平台闸开着才拉余额/套餐；llm-cloud 未开通时 4301 由 _silent 拦下，
-    //    不 toast、不跳转，用户留在本页。
-    if (platformEnabled.value) await loadLLM()
+    // 4) 余额镜像**离线也读**（PLT-01 刀3）：平台不可达时本地镜像是唯一的
+    //    可解释余额来源（GET /api/llm/wallet 离线档返回镜像+synced_at，不报错）；
+    //    llm-cloud 未开通时 4301 由 _silent 拦下，不 toast、不跳转，用户留在本页。
+    //    套餐列表仍只在线拉（离线档没有可买的套餐）。
+    await loadLLM()
   } finally {
     loading.value = false
   }
 }
 
 async function loadLLM () {
-  if (!platformEnabled.value) return
   try {
     wallet.value = (await llmWallet({ _silent: true })) || {}
   } catch { wallet.value = {} }
+  if (!platformEnabled.value) return
   try {
     plans.value = (await llmPlans({ _silent: true }))?.list || []
   } catch { plans.value = [] }
@@ -632,5 +645,10 @@ onUnmounted(() => document.removeEventListener('visibilitychange', handleVisibil
   gap: 12px; flex-wrap: wrap;
   padding: 8px 12px; border-radius: 6px;
   background: var(--el-fill-color-light); font-size: 13px;
+}
+.wallet-synced-at {
+  margin-top: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 </style>

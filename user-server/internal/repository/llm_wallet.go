@@ -16,6 +16,10 @@ import (
 // 镜像的作用是平台不可达时仍能给用户一个可解释的余额数字。
 type LLMWalletRepository interface {
 	ApplyMirror(ctx context.Context, inputRemaining, outputRemaining int64) error
+	// GetMirror 读本租户的镜像行（PLT-01 刀3）。没有镜像（从未在线查过余额）
+	// 返回 (nil, nil)：调用侧据此区分「离线但有上次快照」与「从没有过数据」，
+	// 两者都不是错误。
+	GetMirror(ctx context.Context) (*model.LLMWallet, error)
 	ListTxns(ctx context.Context, reason string, page, pageSize int) ([]*model.LLMWalletTxn, int64, error)
 }
 
@@ -46,6 +50,25 @@ func (r *llmWalletRepo) ApplyMirror(ctx context.Context, inputRemaining, outputR
 			"input_tokens_remaining", "output_tokens_remaining", "synced_at",
 		}),
 	}).Create(row).Error
+}
+
+// GetMirror 读本租户的镜像行。租户作用域不在这里手拼 WHERE：llm_wallets 是
+// 租户表，隔离 callback 按 ctx 绑定的租户注入过滤（off 模式=默认租户行）——
+// 与 ApplyMirror 的写作用域同一口径，读到的就是本租户自己那一份快照。
+// 无行返回 (nil, nil)（从未在线查过余额 ≠ 故障）；db 未就绪返回错误。
+func (r *llmWalletRepo) GetMirror(ctx context.Context) (*model.LLMWallet, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("[llm-wallet] 仓储未初始化（DB 未就绪）")
+	}
+	var row model.LLMWallet
+	err := r.db.WithContext(ctx).Order("id ASC").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (r *llmWalletRepo) ListTxns(ctx context.Context, reason string, page, pageSize int) ([]*model.LLMWalletTxn, int64, error) {
