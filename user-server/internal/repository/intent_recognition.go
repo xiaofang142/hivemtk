@@ -123,6 +123,15 @@ func (r *IntentLogRepository) Create(ctx context.Context, log *model.IntentLog) 
 }
 
 // List 查询精细意图识别日志（customerID/major 空字符串表示不筛选；limit 收口到 1~1000）。
+// GetByID 单条日志（TB-09 纠错面）。
+func (r *IntentLogRepository) GetByID(ctx context.Context, id uint) (*model.IntentLog, error) {
+	var rec model.IntentLog
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&rec).Error; err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
 func (r *IntentLogRepository) List(ctx context.Context, customerID, major string, limit int) ([]model.IntentLog, error) {
 	q := r.db.WithContext(ctx).Model(&model.IntentLog{}).
 		Where("source = ?", model.IntentLogSource)

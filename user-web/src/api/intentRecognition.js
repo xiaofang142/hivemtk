@@ -47,5 +47,14 @@ export const intentApi = {
 
   updateKeywordOverride(data) {
     return http.put('/api/intent-records/keywords-override', data)
-  }
-};
+  },
+
+  // TB-09 意图纠错反馈：改判→原文作词面写覆盖（热生效）
+  correctIntent(data) {
+    return http.post('/api/intent/feedback/correct', data)
+  },
+
+  getIntentOverride() {
+    return http.get('/api/intent/feedback/override')
+  },
+}

@@ -24,6 +24,7 @@ import (
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/connector"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -385,12 +386,14 @@ func joinChainVocab() string {
 	return out
 }
 
-// ChainVocabulary vocab 端点数据：意图词表（含家族归属）+ 模板变量白名单 + 注册中心工具名清单。
+// ChainVocabulary vocab 端点数据：意图词表（含家族归属）+ 模板变量白名单 + 注册中心工具名清单
+// +连接器方言清单（TB-06b：插件清单面）。
 type ChainVocabulary struct {
-	Intents        []string          `json:"intents"`
-	IntentFamilies map[string]string `json:"intent_families"`
-	TemplateVars   []string          `json:"template_vars"`
-	Tools          []string          `json:"tools"`
+	Intents           []string          `json:"intents"`
+	IntentFamilies    map[string]string `json:"intent_families"`
+	TemplateVars      []string          `json:"template_vars"`
+	Tools             []string          `json:"tools"`
+	ConnectorDialects []string          `json:"connector_dialects"`
 }
 
 // GetChainVocabulary 管理端配置页取词表/变量/工具三项（单一事实源出口）。
@@ -415,10 +418,11 @@ func (s *IntentToolChainService) GetChainVocabulary(ctx context.Context) ChainVo
 		}
 	}
 	return ChainVocabulary{
-		Intents:        intents,
-		IntentFamilies: families,
-		TemplateVars:   agent_runtime.ChainTemplateVarNames(),
-		Tools:          tools,
+		Intents:           intents,
+		IntentFamilies:    families,
+		TemplateVars:      agent_runtime.ChainTemplateVarNames(),
+		Tools:             tools,
+		ConnectorDialects: connectorList(),
 	}
 }
 
@@ -637,4 +641,9 @@ func unmarshalChainSlots(raw string) []model.IntentSlotConfig {
 		return nil
 	}
 	return slots
+}
+
+// connectorList 连接器方言清单（TB-06b 插件清单面）；connector 包未装配时返回空。
+func connectorList() []string {
+	return connector.List()
 }
