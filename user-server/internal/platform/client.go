@@ -98,6 +98,25 @@ func GetMerchantSecret() string {
 	return ""
 }
 
+// maxRespBodyBytes 出站响应体封顶（MA-06）：Timeout 限时不限长——对端慢慢吐
+// GB 级响应会吃光进程内存。同仓口径：llm_proxy 32MB / openapi 64KB / api_logger
+// 8-16KB，平台客户端此前是唯一无上限出站读法。
+const maxRespBodyBytes = int64(32 << 20)
+
+// readPlatformBody 读平台响应体，封顶 32MB。
+// 读 cap+1 字节：超出即报错——**不静默截断**（截断会把坏数据当好数据用，
+// 与 llm_proxy 同口径）。
+func readPlatformBody(r io.Reader) ([]byte, error) {
+	b, err := io.ReadAll(io.LimitReader(r, maxRespBodyBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(b)) > maxRespBodyBytes {
+		return nil, fmt.Errorf("响应体超 %dMB 上限，已停止读取", maxRespBodyBytes>>20)
+	}
+	return b, nil
+}
+
 func (c *Client) sign(method, path string, body []byte) (string, string, error) {
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	pathNoQuery := path
@@ -173,7 +192,7 @@ func (c *Client) ensureJWTToken() error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(resp.Body)
+		body, readErr := readPlatformBody(resp.Body)
 		if readErr != nil {
 			return fmt.Errorf("平台登录返回 %d (读取响应体失败: %v)", resp.StatusCode, readErr)
 		}
@@ -188,7 +207,7 @@ func (c *Client) ensureJWTToken() error {
 			Expires int64  `json:"expires"`
 		} `json:"data"`
 	}
-	bodyBytes, err := io.ReadAll(resp.Body)
+	bodyBytes, err := readPlatformBody(resp.Body)
 	if err != nil {
 		return fmt.Errorf("读取登录响应失败: %w", err)
 	}
@@ -283,7 +302,7 @@ func (c *Client) doRetry(ctx context.Context, method, path string, reqData, resp
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		rawBody, readErr := io.ReadAll(resp.Body)
+		rawBody, readErr := readPlatformBody(resp.Body)
 		bodyStr := ""
 		if readErr == nil {
 			bodyStr = string(rawBody)
@@ -308,7 +327,7 @@ func (c *Client) doRetry(ctx context.Context, method, path string, reqData, resp
 	}
 
 	var respBody []byte
-	respBody, err = io.ReadAll(resp.Body)
+	respBody, err = readPlatformBody(resp.Body)
 	if err != nil {
 		logger.Error(err, "读取响应体失败")
 		return err
@@ -566,14 +585,17 @@ func (c *Client) ReportInstall(req *ReportInstallReq) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := readPlatformBody(resp.Body)
 		noteContractVerdict("/api/platform/install", resp.StatusCode, raw)
+		if readErr != nil {
+			return fmt.Errorf("上报安装信息返回 %d (响应体读取失败或超限: %v)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("上报安装信息返回 %d: %s", resp.StatusCode, string(raw))
 	}
 	// 200 ⇒ 闸放行了（含"运维开了兼容窗口"这种情形）：清掉可能残留的 426 告警。
 	// 只在受闸路径上有清除资格 —— install 就在闸下，所以它有。
 	noteContractVerdict("/api/platform/install", resp.StatusCode, nil)
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readPlatformBody(resp.Body)
 	if err != nil {
 		return fmt.Errorf("读取安装响应失败: %w", err)
 	}
@@ -631,15 +653,18 @@ func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := readPlatformBody(resp.Body)
 		noteContractVerdict("/api/platform/heartbeat", resp.StatusCode, raw)
+		if readErr != nil {
+			return fmt.Errorf("上报心跳返回 %d (响应体读取失败或超限: %v)", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("上报心跳返回 %d: %s", resp.StatusCode, string(raw))
 	}
 	// 200 ⇒ 闸放行了：清掉告警。这一条尤其要紧 —— 心跳是周期性调用的，
 	// 若只在 /merchant-api 上清，那么"运维已开窗口、平台不再拒我们"这件事
 	// 会一直显示成 426，管理员只能看到一个不再更新的旧告警。
 	noteContractVerdict("/api/platform/heartbeat", resp.StatusCode, nil)
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readPlatformBody(resp.Body)
 	if err != nil {
 		return fmt.Errorf("读取心跳响应失败: %w", err)
 	}

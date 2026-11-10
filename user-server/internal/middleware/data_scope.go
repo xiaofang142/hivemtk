@@ -2,13 +2,13 @@ package middleware
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strconv"
 	"sync"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -93,14 +93,14 @@ func DataScopeGuard() gin.HandlerFunc {
 		}
 		if scope == model.DataScopeDepartment || scope == model.DataScopeTeam {
 			narrowScopeLog.Do(func() {
-				log.Printf("[WARN] 行级隔离：data_scope=%s 没有成员关系事实源（team_users 已 DROP），按 self 收口执行",
+				logger.Warnf("行级隔离：data_scope=%s 没有成员关系事实源（team_users 已 DROP），按 self 收口执行",
 					scope)
 			})
 		}
 
 		lookup := currentOwnerLookup()
 		if lookup == nil {
-			log.Printf("[WARN] 行级隔离没拿到归属查询源（装配缺 SetOwnerLookup），按无归属拦 path=%s role=%s",
+			logger.Warnf("行级隔离没拿到归属查询源（装配缺 SetOwnerLookup），按无归属拦 path=%s role=%s",
 				c.FullPath(), role)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": http.StatusForbidden, "message": DataScopeDeniedMessage,
@@ -110,7 +110,7 @@ func DataScopeGuard() gin.HandlerFunc {
 
 		idValue := c.Param(row.Param)
 		if idValue == "" {
-			log.Printf("[WARN] 行级隔离登记表与路由形状不符：path=%s 上没有参数 :%s（装配错，按拦处理）",
+			logger.Warnf("行级隔离登记表与路由形状不符：path=%s 上没有参数 :%s（装配错，按拦处理）",
 				c.FullPath(), row.Param)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": http.StatusForbidden, "message": DataScopeDeniedMessage,
@@ -120,7 +120,7 @@ func DataScopeGuard() gin.HandlerFunc {
 
 		owner, found, err := lookup(c.Request.Context(), row.Table, row.IDColumn, row.OwnerColumn, idValue)
 		if err != nil {
-			log.Printf("[WARN] 行级隔离查归属失败 table=%s %s=%s: %v", row.Table, row.IDColumn, idValue, err)
+			logger.Warnf("行级隔离查归属失败 table=%s %s=%s: %v", row.Table, row.IDColumn, idValue, err)
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 				"code": http.StatusInternalServerError, "message": "数据权限校验失败",
 			})
@@ -155,7 +155,7 @@ func DataScopeGuard() gin.HandlerFunc {
 			// 行上有归属值却读不到调用者身份：守卫挂在没跑 JWT 的组上，或令牌缺字段。
 			// 两种都是装配错，向拒的方向收（401）——把"读不到自己是谁"当成不匹配会给出 403，
 			// 当成放行则是整层静默失效。
-			log.Printf("[WARN] 行级隔离读不到调用者身份 path=%s usernameKind=%v（守卫挂在 JWT 之前？）",
+			logger.Warnf("行级隔离读不到调用者身份 path=%s usernameKind=%v（守卫挂在 JWT 之前？）",
 				c.FullPath(), row.OwnerIsUsername)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code": http.StatusUnauthorized, "message": "未授权",
@@ -163,7 +163,7 @@ func DataScopeGuard() gin.HandlerFunc {
 			return
 		}
 		if caller != owner {
-			log.Printf("[WARN] 行级隔离拒 path=%s table=%s %s=%s 归属=%s 调用者=%s role=%s",
+			logger.Warnf("行级隔离拒 path=%s table=%s %s=%s 归属=%s 调用者=%s role=%s",
 				c.FullPath(), row.Table, row.IDColumn, idValue, owner, caller, role)
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 				"code": http.StatusForbidden, "message": DataScopeDeniedMessage,

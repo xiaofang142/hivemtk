@@ -443,9 +443,10 @@ func TestDataChangeMiddleware_POST(t *testing.T) {
 // TestAuditResponseWriter_WriteString 测试 WriteString 方法
 func TestAuditResponseWriter_WriteString(t *testing.T) {
 	baseWriter := httptest.NewRecorder()
+	// MA-03：body 由 bytes.Buffer 改为有界 cappedBufferWriter（16KB cap）。
 	w := &auditResponseWriter{
 		ResponseWriter: &testResponseWriter{ResponseRecorder: baseWriter},
-		body:           &bytes.Buffer{},
+		body:           &cappedBufferWriter{cap: auditRespBodyCap},
 	}
 
 	n, err := w.WriteString("test string")
@@ -455,8 +456,8 @@ func TestAuditResponseWriter_WriteString(t *testing.T) {
 	if n != 11 {
 		t.Errorf("Expected 11 bytes written, got %d", n)
 	}
-	if w.body.String() != "test string" {
-		t.Errorf("Expected buffer 'test string', got %s", w.body.String())
+	if string(w.body.Bytes()) != "test string" {
+		t.Errorf("Expected buffer 'test string', got %s", string(w.body.Bytes()))
 	}
 }
 

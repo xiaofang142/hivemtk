@@ -10,7 +10,7 @@ package tenant
 import (
 	"context"
 	"fmt"
-	"log"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"sync"
 )
 
@@ -29,7 +29,7 @@ func RedisKey(ctx context.Context, key string) string {
 		// on 模式下无租户 ctx：保持裸键（全局语义），但只告警一次——
 		// 请求路径的键都应经中间件绑定租户，走到这里的多是系统级键
 		bareKeyWarnOnce.Do(func() {
-			log.Printf("[tenant] on 模式下 Redis 键 %q 无租户上下文，按全局键处理（请确认是全局语义）", key)
+			logger.Warnf("[tenant] on 模式下 Redis 键 %q 无租户上下文，按全局键处理（请确认是全局语义）", key)
 		})
 		return key
 	}

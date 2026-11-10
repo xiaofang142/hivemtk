@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"crypto/subtle"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/service/translation"
@@ -105,7 +105,7 @@ func (c *WebhookController) bindCallbackTenant(ctx *gin.Context, reqCtx context.
 	}
 	tid, terr := c.svc.ResolveTenantByChannelAccount(ctx.Request.Context(), channel, accountID)
 	if terr != nil {
-		log.Printf("[SECURITY] webhook 租户解析失败 channel=%s account=%s ip=%s: %v",
+		logger.Errorf("[SECURITY] webhook 租户解析失败 channel=%s account=%s ip=%s: %v",
 			channel, accountID, ctx.ClientIP(), terr)
 		response.Envelope(ctx, http.StatusNotFound, gin.H{"accepted": false, "reason": "unknown account"})
 		return reqCtx, false

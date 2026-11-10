@@ -503,9 +503,10 @@ func TestAuditMiddleware_GETRequest(t *testing.T) {
 
 func TestAuditResponseWriter(t *testing.T) {
 	baseWriter := &testResponseWriter{ResponseRecorder: httptest.NewRecorder()}
+	// MA-03：body 由 bytes.Buffer 改为有界 cappedBufferWriter（16KB cap）。
 	w := &auditResponseWriter{
 		ResponseWriter: baseWriter,
-		body:           &bytes.Buffer{},
+		body:           &cappedBufferWriter{cap: auditRespBodyCap},
 	}
 
 	n, err := w.Write([]byte("test"))
@@ -515,8 +516,8 @@ func TestAuditResponseWriter(t *testing.T) {
 	if n != 4 {
 		t.Errorf("Expected 4 bytes written, got %d", n)
 	}
-	if w.body.String() != "test" {
-		t.Errorf("Expected buffer 'test', got %s", w.body.String())
+	if string(w.body.Bytes()) != "test" {
+		t.Errorf("Expected buffer 'test', got %s", string(w.body.Bytes()))
 	}
 }
 

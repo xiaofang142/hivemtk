@@ -1,0 +1,26 @@
+基线字节：`449e4991`｜未入库字节 23 处｜就地注码：未入库字节也在本轮读数里
+[OK] M20 写闸门只认 effectWrite（unknown 步绕过四道）（executor.go）原文命中=1
+[OK] M21 会话收口不清降级表（executor.go）原文命中=1
+[OK] M22 isNeverExecuted 摘掉 inject_timeout 分支（write_ledger.go）原文命中=1
+[OK] M23 步重试退避改线性（timeouts.go）原文命中=1
+[OK] M24 台账回查改成取最新（step.go）原文命中=1
+[OK] M25 闸门键丢掉 Anchor/ButtonText（write_ledger.go）原文命中=1
+[OK] M26 未命中发送位也判成写步（write_ledger.go）原文命中=1
+[OK] M27 双发闸+降级拒绝整块只认 effectWrite（executor.go）原文命中=1
+[OK] M28 D7 确认闸门只认 effectWrite（executor.go）原文命中=1
+[OK] M29 降级表不再拦在写步下发之前（executor.go）原文命中=1
+[OK] M30 只把「钳 retries」收窄回 effectWrite（executor.go）原文命中=1
+[OK] M31 失败路径台账只给 effectWrite 落（executor.go）原文命中=1
+[OK] M32 两个台账落点之间长出早返（M7 等价类的前提）（executor.go）原文命中=1
+[OK] 用例 TestUnknownEffectStepHoldsDoubleSendGate 在
+[OK] 用例 TestUnknownEffectStepRefusedAfterLedgerDegrade 在
+[OK] 用例 TestUnknownEffectStepHoldsConfirmGate 在
+[OK] 用例 TestLedgerDegradeClearedWhenSessionEnds 在
+[OK] 用例 TestInjectTimeoutStepStaysReDispatchable 在
+[OK] 用例 TestRetryBackoffGrowsExponentially 在
+[OK] 用例 TestFindSubmitAttemptReturnsEarliestAttempt 在
+[OK] 用例 TestWriteStepKeyDistinguishesLocatorFacets 在
+[OK] 用例 TestSentToFinalLedgerWritePathHasNoEarlyReturn 在
+[OK] 用例 TestWSE2E_UnknownLocatorTableTreatedAsWrite 在
+[OK] 用例 TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly 在
+预检: 锚点全部唯一、用例名全部存在

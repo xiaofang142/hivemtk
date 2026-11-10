@@ -421,3 +421,8 @@ AssetPackageMaxTotalBytes
 # 运维单边调大只会让 API 文档、前端校验、服务端判定三者互相打架。
 MaxUserTagRunes
 MaxUserTags
+# ── MA 轮（2026-11-10）：TB-08（0283e485）引入的链长硬上限，刻意不入库 ──────
+# 判据：ChainMaxSteps 是「单链步数上限（防御 UI 误配超长链）」的硬闸，与
+# B1-a 的 SelectorHealth* 同型——闸不是旋钮；入库成参数等于允许把闸开到
+# 无限。超限由写侧 ValidateChainArgs 拒配，运行期不再读参数中心。
+ChainMaxSteps

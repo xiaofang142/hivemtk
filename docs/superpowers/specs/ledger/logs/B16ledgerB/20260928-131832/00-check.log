@@ -1,0 +1,24 @@
+基线字节：`449e4991`｜未入库字节 22 处｜就地注码：未入库字节也在本轮读数里
+[OK] M9 D7 post_comment 确认闸门摘掉（executor.go）原文命中=1 替身本来出现=0
+[OK] M10 台账 0 行受影响放回 nil（step.go）原文命中=1 替身本来出现=0
+[OK] M11 缺口查询恒为「无缺口」（接线失效）（feedback.go）原文命中=1 替身本来出现=0
+[OK] M12 OnSessionFinished 不再因缺口抑制（feedback.go）原文命中=1 替身本来出现=0
+[OK] M13 runRetry 侧第二道摘掉（feedback.go）原文命中=1 替身本来出现=0
+[OK] M14 未跨越也被停摆（对照腿反向）（feedback.go）原文命中=1 替身本来出现=0
+[OK] M15 步终态写回挂回执行 ctx（executor.go）原文命中=1 替身本来出现=0
+[OK] M16 缺口集合不再按键去重（write_ledger.go）原文命中=1 替身本来出现=0
+[OK] M17 无正文写步的闸门键退化成空串（write_ledger.go）原文命中=1 替身本来出现=0
+[OK] M18 台账写不再退避重试（1 次即判负）（write_ledger.go）原文命中=1 替身本来出现=0
+[OK] M19 通用写步「命令成功即绿」不受台账约束（executor.go）原文命中=1 替身本来出现=0
+[OK] 用例 TestBlockedWriteStepReasonSurvivesCanceledCtx 在
+[OK] 用例 TestCrossedLedgerGapSuppressesAutoRetry 在
+[OK] 用例 TestPreparedLedgerFailureStillSchedulesRetry 在
+[OK] 用例 TestRunRetryRefusesTaskWithLedgerGap 在
+[OK] 用例 TestLedgerUpdateOnMissingRowFails 在
+[OK] 用例 TestLedgerGapSetGrowsOnlyPerDistinctKey 在
+[OK] 用例 TestWriteStepKeyNeverEmpty 在
+[OK] 用例 TestGenericWriteStepLedgerFailureJudgedRed 在
+[OK] 用例 TestTransientLedgerWriteFailureRecoversWithoutGap 在
+[OK] 用例 TestWSE2E_D7GateHoldsSendUntilConfirmed 在
+[OK] 用例 TestWSE2E_D7AbortBeforeConfirmNeverSends 在
+预检: 锚点全部唯一、用例名全部存在

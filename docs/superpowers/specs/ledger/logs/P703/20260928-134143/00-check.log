@@ -1,0 +1,5 @@
+基线字节：`449e4991`｜未入库字节 36 处｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p703mut-s19rq4vz
+基线字节：克隆 HEAD `449e4991`；本卡文件已在 HEAD 8/8；装配锚点 7 处各命中 1 次
+锚点校验：116 格，0 格锚点有问题
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p703mut-s19rq4vz/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p703mut-s19rq4vz

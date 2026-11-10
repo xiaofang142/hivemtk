@@ -108,23 +108,10 @@ NOT_A_BATTERY = {
                 "重定向落盘；`mut_ingest_dedup_r23.py` 的代码里没有仓库内落点（只在 docstring 里"
                 "引用这一族），故它不进成员名单——这条登记同时是本门的一处口径盲区：argv 指进树内"
                 "的一次性读数不会有驱动归属",
-
-    "P903": "常驻变异电池 `mut_journey_stage_index_p903.sh`（.sh 驱动）；本门驱动轴只覆盖 `mut_*.py`"
-            "（ast/tokenize 解析），.sh 候选不进 drivers() ⇒ 无身份发射点可挂；"
-            "产物为 `go test -overlay` customer_journey 阶段索引变异读数，非人工重定向",
-    "RouteTriage": "静态取证器 `scripts/route-consumer-triage.py`（路由消费面四档分诊）的轮次名册，"
-                   "不是变异电池：没有格子、不注码、不 overlay，所以驱动轴（只 ast 解析 `mut_*.py`）"
-                   "本就不该认领它。它也不是人工重定向的产物——产物由工具自己落盘，"
-                   "且每轮带 `00-provenance.log` 的 `基线字节` 身份行（HEAD＋工具与事实源的 md5＋自检枚数），"
-                   "复跑 `python3 scripts/route-consumer-triage.py --self-check` 可验它的 9 枚控制",
-    "MenuRouteAudit": "静态取证器 `scripts/menu-route-role-audit.py`（菜单×live 路由档位×前端调用图"
-                      "三方对账，产出能力面归属表与 BLOCK/LEAK/ORPHAN 名册）的轮次名册，"
-                      "同 RouteTriage：没有格子、不注码、不 overlay，驱动轴（只 ast 解析 `mut_*.py`）"
-                      "不该认领它；产物由工具自己落盘且每轮带 `00-provenance.log` 的 `基线字节` 身份行"
-                      "（HEAD＋工具与事实源 md5＋自检枚数）。离线复跑 "
-                      "`python3 scripts/menu-route-role-audit.py --self-check` 现证 11 枚控制，"
-                      "带仓库读数的同一趟共 14 枚（多出的 3 枚要测试库）",
 }
+# P903／RouteTriage／MenuRouteAudit 三条豁免已于 2026-11-10 归档清剿（f360b412 删其轮次目录）后按
+# A5「豁免条目过期 ⇒ 删」口径删除：族目录已不在树里，登记即成空头豁免；相关工具（.sh 驱动与两个
+# 静态取证器）再跑再落盘时，A5 会重新点名其归属，届时按彼时树状补登记或补驱动轴。
 
 # 合并带进来的**他人泳道**常驻电池：它们确实把逐格产物写进仓库树，但驱动里没有身份发射点
 # （有的连族目录都还没在树里长出来）。补齐要改别人的驱动＋重跑别人的电池（每枚一趟 Go/vitest

@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"log"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"sync"
 )
 
@@ -90,5 +90,5 @@ type ChatChannelResolver interface {
 type TenantCodeResolver func(ctx context.Context, code string) (uint, error)
 
 func warnPortMissing(port string) {
-	log.Printf("[middleware] %s 未注入（装配遗漏），已降级处理", port)
+	logger.Warnf("[middleware] %s 未注入（装配遗漏），已降级处理", port)
 }

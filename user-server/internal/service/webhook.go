@@ -20,7 +20,6 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
-	"log"
 	"os"
 	"runtime/debug"
 	"strconv"
@@ -642,7 +641,7 @@ func guardInsecureWebhookAtStartup() {
 		// 护栏要拦的是常驻服务进程，不是 go test：判定只看 APP_ENV/MODE/GIN_MODE，
 		// 而仓库 .env 里 GIN_MODE=release，用例又各自 t.Setenv(ALLOW_INSECURE_WEBHOOK)，
 		// 于是"本进程第一个 NewWebhookService 来自哪个用例"决定整个测试二进制会不会
-		// 被 log.Fatalf 打死 —— 全量跑绿、按 -run 过滤跑就只剩一行无声 FAIL。
+		// 被 logger.Fatalf 打死（结构化管道同语义 fail-fast）—— 全量跑绿、按 -run 过滤跑就只剩一行无声 FAIL。
 		if runningUnderGoTest() {
 			return
 		}
@@ -650,7 +649,7 @@ func guardInsecureWebhookAtStartup() {
 			os.Getenv("APP_ENV"), os.Getenv("MODE"), os.Getenv("GIN_MODE"),
 			os.Getenv("ALLOW_INSECURE_WEBHOOK"), os.Getenv("ALLOW_INSECURE_TELEGRAM_WEBHOOK"),
 		); err != nil {
-			log.Fatalf("[SECURITY] %v", err)
+			logger.Fatalf("[SECURITY] %v", err)
 		}
 	})
 }

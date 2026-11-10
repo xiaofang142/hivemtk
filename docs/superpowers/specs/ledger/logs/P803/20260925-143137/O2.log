@@ -1,0 +1,128 @@
+2026-09-25T14:36:01+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBadCaseMarkBadCase_NilMarkerIsNoop
+--- PASS: TestBadCaseMarkBadCase_NilMarkerIsNoop (0.00s)
+=== RUN   TestBadCaseMarkBadCase_Gates
+=== RUN   TestBadCaseMarkBadCase_Gates/低于阈值_→_留痕
+=== RUN   TestBadCaseMarkBadCase_Gates/高于阈值且有命中_→_不留痕
+=== RUN   TestBadCaseMarkBadCase_Gates/正好等于阈值_→_不留痕（判据是_<）
+=== RUN   TestBadCaseMarkBadCase_Gates/零命中但高置信_→_留痕
+=== RUN   TestBadCaseMarkBadCase_Gates/空回答_→_不留痕（评测集里是一条无法判定的样本）
+=== RUN   TestBadCaseMarkBadCase_Gates/nil_resp_→_不留痕
+=== RUN   TestBadCaseMarkBadCase_Gates/nil_in_→_不留痕
+--- PASS: TestBadCaseMarkBadCase_Gates (1.06s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/低于阈值_→_留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/高于阈值且有命中_→_不留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/正好等于阈值_→_不留痕（判据是_<） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/零命中但高置信_→_留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/空回答_→_不留痕（评测集里是一条无法判定的样本） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/nil_resp_→_不留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_Gates/nil_in_→_不留痕 (0.15s)
+=== RUN   TestBadCaseMarkBadCase_CarriesTheFacts
+--- PASS: TestBadCaseMarkBadCase_CarriesTheFacts (0.15s)
+=== RUN   TestBadCaseMarkBadCase_NoDecisionNoFabricatedSignal
+--- PASS: TestBadCaseMarkBadCase_NoDecisionNoFabricatedSignal (0.15s)
+=== RUN   TestBadCaseMarkBadCase_EmptyVetoLeavesNoTrailingFragment
+--- PASS: TestBadCaseMarkBadCase_EmptyVetoLeavesNoTrailingFragment (0.15s)
+=== RUN   TestBadCaseMarkBadCase_UsesEffectiveConfidence
+--- PASS: TestBadCaseMarkBadCase_UsesEffectiveConfidence (0.15s)
+=== RUN   TestBadCaseMarkBadCase_UsesFreshContextNotRequestContext
+    bad_case_marker_test.go:246: 留痕的 ctx 一进来就带着取消信号：它继承了请求 ctx
+    bad_case_marker_test.go:255: 留痕协程用的是请求 ctx：请求一结束这次写入就被取消掉
+--- FAIL: TestBadCaseMarkBadCase_UsesFreshContextNotRequestContext (0.00s)
+=== RUN   TestBadCaseMarkBadCase_MarkerPanicIsRecovered
+2026-09-25T14:36:03+08:00 WRN [bad-case] 留痕 panic 已 recover，不影响会话主链路: 留痕里炸了\ngoroutine 75 [running]:\nruntime/debug.Stack()\n	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/debug/stack.go:26 +0x64\nhivemtk-user/internal/service.(*SmartCSOrchestrator).markBadCase.func1.1()\n	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p/clone/user-server/internal/service/smart_cs_orchestrator.go:898 +0x2c\npanic({0x10656a360?, 0x106892030?})\n	/Users/xiaofang/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.6.darwin-arm64/src/runtime/panic.go:860 +0x12c\nhivemtk-user/internal/service.TestBadCaseMarkBadCase_MarkerPanicIsRecovered.func1({0x65038ebc56c8?, 0x2?}, {{0x105469d04, 0xa}, {0x10546549b, 0x9}, {0x0, 0x0}, {0x0, 0x0}, ...})\n	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p/clone/user-server/internal/service/bad_case_marker_test.go:267 +0x34\nhivemtk-user/internal/service.(*SmartCSOrchestrator).markBadCase.func1({{0x105469d04, 0xa}, {0x10546549b, 0x9}, {0x0, 0x0}, {0x0, 0x0}, {0x0, 0x0}, ...})\n	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p/clone/user-server/internal/service/smart_cs_orchestrator.go:903 +0xc0\ncreated by hivemtk-user/internal/service.(*SmartCSOrchestrator).markBadCase in goroutine 74\n	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p/clone/user-server/internal/service/smart_cs_orchestrator.go:895 +0x30c\n component=user-server
+--- PASS: TestBadCaseMarkBadCase_MarkerPanicIsRecovered (0.15s)
+=== RUN   TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError
+2026-09-25T14:36:03+08:00 WRN [BadCase] 自动标记失败（不影响本轮回答） error="bad_case: 查询条件非法: 自动标记必须有 message_id（session=s_mk source=low_confidence），否则同键互吞" component=user-server message_id= session_id=s_mk
+2026-09-25T14:36:03+08:00 INF [BadCase] 自动标记一条低质回答 case_id=bc_1790318163844736000_1 component=user-server confidence=0.1 session_id=s_mk source=low_confidence threshold=0.7
+--- PASS: TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError (0.21s)
+=== RUN   TestBadCaseMarkBadCase_PregateMatchesServiceGate
+--- PASS: TestBadCaseMarkBadCase_PregateMatchesServiceGate (0.91s)
+=== RUN   TestBadCaseSetAndReadMarker
+--- PASS: TestBadCaseSetAndReadMarker (0.00s)
+=== RUN   TestBadCaseIntentOf
+--- PASS: TestBadCaseIntentOf (0.00s)
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/引擎自行转人工_+_零命中_→_不留痕（该事实已有人工任务那一行）
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/引擎自行转人工_+_有检回_→_同样不留痕（挡的是轮次不是判据）
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：只差_TransferredToHuman_这一个信号_→_留痕
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/追问澄清_→_不留痕（含糊的是问句，不是知识库缺料）
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：意图已识别且零命中_→_留痕（无本之木正是要收的那类）
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/生成失败（回复是兜底文案）→_不留痕
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：同一步骤_status=ok_→_留痕（闸认的是显式失败，不是步骤缺席）
+=== RUN   TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/layer1_fastpath（整条没有_6_generate_candidate_步骤）→_留痕
+--- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked (1.22s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/引擎自行转人工_+_零命中_→_不留痕（该事实已有人工任务那一行） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/引擎自行转人工_+_有检回_→_同样不留痕（挡的是轮次不是判据） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：只差_TransferredToHuman_这一个信号_→_留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/追问澄清_→_不留痕（含糊的是问句，不是知识库缺料） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：意图已识别且零命中_→_留痕（无本之木正是要收的那类） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/生成失败（回复是兜底文案）→_不留痕 (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/对照：同一步骤_status=ok_→_留痕（闸认的是显式失败，不是步骤缺席） (0.15s)
+    --- PASS: TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked/layer1_fastpath（整条没有_6_generate_candidate_步骤）→_留痕 (0.15s)
+=== RUN   TestBadCaseMarkTimeoutSharesOneSource
+--- PASS: TestBadCaseMarkTimeoutSharesOneSource (0.00s)
+=== RUN   TestBadCaseMarkBadCase_SourceComesFromServiceGate
+--- PASS: TestBadCaseMarkBadCase_SourceComesFromServiceGate (0.15s)
+=== RUN   TestBadCaseShouldMark
+=== RUN   TestBadCaseShouldMark/零命中优先于置信度（两者都低）
+=== RUN   TestBadCaseShouldMark/零命中但置信度很高也要记
+=== RUN   TestBadCaseShouldMark/负数检回数按零命中算
+=== RUN   TestBadCaseShouldMark/低于阈值
+=== RUN   TestBadCaseShouldMark/正好等于阈值不记（判据是_<，不是_<=）
+=== RUN   TestBadCaseShouldMark/高于阈值不记
+=== RUN   TestBadCaseShouldMark/阈值缺位时按默认档：低于默认档要记
+=== RUN   TestBadCaseShouldMark/阈值负数同样走默认档
+=== RUN   TestBadCaseShouldMark/阈值缺位但高于默认档不记
+--- PASS: TestBadCaseShouldMark (0.00s)
+    --- PASS: TestBadCaseShouldMark/零命中优先于置信度（两者都低） (0.00s)
+    --- PASS: TestBadCaseShouldMark/零命中但置信度很高也要记 (0.00s)
+    --- PASS: TestBadCaseShouldMark/负数检回数按零命中算 (0.00s)
+    --- PASS: TestBadCaseShouldMark/低于阈值 (0.00s)
+    --- PASS: TestBadCaseShouldMark/正好等于阈值不记（判据是_<，不是_<=） (0.00s)
+    --- PASS: TestBadCaseShouldMark/高于阈值不记 (0.00s)
+    --- PASS: TestBadCaseShouldMark/阈值缺位时按默认档：低于默认档要记 (0.00s)
+    --- PASS: TestBadCaseShouldMark/阈值负数同样走默认档 (0.00s)
+    --- PASS: TestBadCaseShouldMark/阈值缺位但高于默认档不记 (0.00s)
+=== RUN   TestBadCaseShouldMark_ZeroThresholdNeverDisablesMarking
+--- PASS: TestBadCaseShouldMark_ZeroThresholdNeverDisablesMarking (0.00s)
+=== RUN   TestBadCaseService_UnavailableRejectsEveryEntry
+=== RUN   TestBadCaseService_UnavailableRejectsEveryEntry/nil_服务
+=== RUN   TestBadCaseService_UnavailableRejectsEveryEntry/nil_仓储
+=== RUN   TestBadCaseService_UnavailableRejectsEveryEntry/nil_句柄的仓储
+=== RUN   TestBadCaseService_UnavailableRejectsEveryEntry/空壳服务
+--- PASS: TestBadCaseService_UnavailableRejectsEveryEntry (0.00s)
+    --- PASS: TestBadCaseService_UnavailableRejectsEveryEntry/nil_服务 (0.00s)
+    --- PASS: TestBadCaseService_UnavailableRejectsEveryEntry/nil_仓储 (0.00s)
+    --- PASS: TestBadCaseService_UnavailableRejectsEveryEntry/nil_句柄的仓储 (0.00s)
+    --- PASS: TestBadCaseService_UnavailableRejectsEveryEntry/空壳服务 (0.00s)
+=== RUN   TestBadCaseGlobalServiceRoundTrip
+    bad_case_test.go:178: 起始全局实例为 nil（未装配）
+--- PASS: TestBadCaseGlobalServiceRoundTrip (0.00s)
+=== RUN   TestBadCaseService_MarkAuto
+2026-09-25T14:36:06+08:00 INF [BadCase] 自动标记一条低质回答 case_id=bc_1790318166217358000_2 component=user-server confidence=0.42 session_id=sess_mark source=low_confidence threshold=0.7
+2026-09-25T14:36:06+08:00 INF [BadCase] 自动标记一条低质回答 case_id=bc_1790318166228756000_4 component=user-server confidence=0.3 session_id=sess_mark source=low_confidence threshold=0.7
+2026-09-25T14:36:06+08:00 INF [BadCase] 自动标记一条低质回答 case_id=bc_1790318166234759000_5 component=user-server confidence=0.95 session_id=sess_mark source=zero_hit threshold=0.7
+--- PASS: TestBadCaseService_MarkAuto (0.11s)
+=== RUN   TestBadCaseService_MarkRequiresMessageID
+--- PASS: TestBadCaseService_MarkRequiresMessageID (0.08s)
+=== RUN   TestBadCaseService_MarkManual
+--- PASS: TestBadCaseService_MarkManual (0.09s)
+=== RUN   TestBadCaseService_Label
+--- PASS: TestBadCaseService_Label (0.10s)
+=== RUN   TestBadCaseService_Dismiss
+--- PASS: TestBadCaseService_Dismiss (0.10s)
+=== RUN   TestBadCaseService_ExportEvalSet
+2026-09-25T14:36:06+08:00 INF [BadCase] 导出一批评测集样本 component=user-server count=2 eval_set_id=bce_1790318166697621000_11
+2026-09-25T14:36:06+08:00 INF [BadCase] 导出一批评测集样本 component=user-server count=1 eval_set_id=bce_1790318166709155000_13
+2026-09-25T14:36:06+08:00 INF [BadCase] 导出一批评测集样本 component=user-server count=1 eval_set_id=bce_1790318166724433000_14
+--- PASS: TestBadCaseService_ExportEvalSet (0.11s)
+=== RUN   TestBadCaseEvalExport_HasNoExpectedColumns
+--- PASS: TestBadCaseEvalExport_HasNoExpectedColumns (0.00s)
+=== RUN   TestBadCaseService_ListAndStats
+--- PASS: TestBadCaseService_ListAndStats (0.08s)
+=== RUN   TestBadCaseService_Get
+--- PASS: TestBadCaseService_Get (0.06s)
+FAIL
+FAIL	hivemtk-user/internal/service	5.716s
+FAIL

@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"strings"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -59,7 +59,7 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 
 		claims, err := jwtUtils.ParseToken(parts[1])
 		if err != nil {
-			log.Printf("[WARN] JWT 校验失败: %v", err)
+			logger.Warnf("JWT 校验失败: %v", err)
 			recordAuthFailure(model.SecurityAccessKindTokenInvalid, c)
 			response.Error(c, http.StatusUnauthorized, "无效的认证令牌")
 			c.Abort()

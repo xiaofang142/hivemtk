@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -473,7 +472,7 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
 			hub := &model.MessageHub{

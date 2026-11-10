@@ -8,6 +8,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
+
+	"hivemtk-user/internal/pkg/urlguard"
 )
 
 const petstoreMini = `{
@@ -208,4 +211,81 @@ func keys(m map[string]openAPIOperation) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// ===== MA-01：运行期 SSRF 第二层（GuardedTransport 拨号期复校）=====
+
+// TestOpenAPIRunDialControlRejections 钉 urlguard.DialControl 的拒绝清单：
+// 环回/云元数据/CGNAT 一律拒绝，公网形态放行。重定向跳内网与 DNS rebinding
+// 最终都落到这一把拨号期闸门上（对每一次 dial 生效），本用例即该闸的在位证明。
+func TestOpenAPIRunDialControlRejections(t *testing.T) {
+	rejected := []string{
+		"127.0.0.1:8080",
+		"[::1]:8080",
+		"169.254.169.254:80",
+		"10.0.0.5:443",
+		"192.168.1.10:443",
+		"172.16.0.9:443",
+		"100.64.0.7:443",
+	}
+	for _, addr := range rejected {
+		if err := urlguard.DialControl("tcp", addr, nil); err == nil {
+			t.Errorf("DialControl(%q) 应拒绝，实际放行", addr)
+		}
+	}
+	// 公网形态：example.com 解析出的地址不在保留段（CI 无外网时该断言退化为
+	// 解析失败也算放行路径以外的分支——故改用字面公网 IP，不做 DNS）。
+	for _, addr := range []string{"93.184.216.34:443", "1.1.1.1:53"} {
+		if err := urlguard.DialControl("tcp", addr, nil); err != nil {
+			t.Errorf("DialControl(%q) 应放行公网字面地址，实际拒绝: %v", addr, err)
+		}
+	}
+}
+
+// TestOpenAPITool_BuildOpsClientIsGuarded 结构性断言：buildOps 的 client 挂了
+// 带 DialContext（拨号期复校）的传输，且 Timeout 语义保留。
+func TestOpenAPITool_BuildOpsClientIsGuarded(t *testing.T) {
+	ops, err := ParseOpenAPISchema(petstoreMini)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := OpenAPIImportSpec{Name: "pets", BaseURL: "https://api.example.com"}
+	tools := buildOps(ops, spec, 3*time.Second)
+	if len(tools) == 0 {
+		t.Fatal("无工具")
+	}
+	tool := tools[0].(*openAPITool)
+	if tool.client.Timeout != 3*time.Second {
+		t.Errorf("Timeout = %v want 3s", tool.client.Timeout)
+	}
+	tr, ok := tool.client.Transport.(*http.Transport)
+	if !ok || tr.DialContext == nil {
+		t.Fatalf("client.Transport 应为带 DialContext 的守卫传输，实际 %T", tool.client.Transport)
+	}
+}
+
+// TestOpenAPITool_ExecuteRefusesPrivateDial 负例（红转绿锚点）：修前裸
+// http.Client 会把请求打到环回 httptest 上游并返回 200；修后拨号期闸门
+// 必须在 Execute 阶段拒绝（模拟「导入时公网、调用时已指向内网」的
+// rebinding/重定向终态）。
+func TestOpenAPITool_ExecuteRefusesPrivateDial(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	ops, err := ParseOpenAPISchema(petstoreMini)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := OpenAPIImportSpec{Name: "pets", BaseURL: srv.URL}
+	tool := buildOps(ops, spec, 3*time.Second)[0].(*openAPITool)
+	_, err = tool.Execute(context.Background(), map[string]any{"petId": 42})
+	if err == nil {
+		t.Fatal("对环回上游的执行应被拨号期闸门拒绝（MA-01 运行期层未生效）")
+	}
+	if !strings.Contains(err.Error(), "拒绝") {
+		t.Errorf("拒绝原因应来自 SSRF 复校，实际: %v", err)
+	}
 }

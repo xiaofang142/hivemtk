@@ -1005,7 +1005,7 @@ import i18n from '@/i18n'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, MagicStick, Refresh, Loading, EditPen } from '@element-plus/icons-vue'
-import { intentApi, correctIntentApi, getIntentOverrideApi } from '@/api/intentRecognition.js'
+import { intentApi } from '@/api/intentRecognition.js'
 import { getChannelLabel } from '@/constants/channel'
 // disabled = 意图识别功能开关关闭时后端返回的 method（原样展示会变成「方法: disabled」）
 const RECOGNIZE_METHOD = { llm: 'LLM', rule: '规则', keyword: '关键词', bert: 'BERT', hybrid: '混合', disabled: '未启用' };
@@ -1030,6 +1030,42 @@ const recentList = ref([])
 const correctVisible = ref(false)
 const correctSaving = ref(false)
 const correctForm = ref({ log_id: null, message: '', corrected_type: '', keyword: '' })
+
+const openCorrect = (row) => {
+  correctForm.value = {
+    log_id: row.id,
+    message: row.message || row.raw_text,
+    corrected_type: '',
+    keyword: row.message || row.raw_text
+  }
+  correctVisible.value = true
+}
+
+const submitCorrect = async () => {
+  if (!correctForm.value.log_id) {
+    ElMessage.error('缺少识别记录 ID')
+    return
+  }
+  if (!correctForm.value.corrected_type) {
+    ElMessage.error('请选择纠正后的意图')
+    return
+  }
+  correctSaving.value = true
+  try {
+    await intentApi.correctIntent({
+      log_id: correctForm.value.log_id,
+      corrected_type: correctForm.value.corrected_type,
+      keyword: correctForm.value.keyword
+    })
+    ElMessage.success('纠错成功（词面已热生效）')
+    correctVisible.value = false
+    loadRecent()
+  } catch (e) {
+    ElMessage.error('纠错失败：' + (e.message || '未知错误'))
+  } finally {
+    correctSaving.value = false
+  }
+}
 const filterIntentType = ref('')
 const recentPagination = ref({ page: 1, pageSize: 20, total: 0 })
 

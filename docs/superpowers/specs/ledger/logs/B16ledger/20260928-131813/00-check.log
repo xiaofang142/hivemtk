@@ -1,0 +1,18 @@
+基线字节：`449e4991`｜未入库字节 21 处｜就地注码：未入库字节也在本轮读数里
+[OK] M1 prepared 台账写失败不再拦下 send（executor.go）原文命中=1 替身本来出现=0
+[OK] M2 会话级降级检查摘掉（executor.go）原文命中=1 替身本来出现=0
+[OK] M3 越点未落账的进程内兜底不再记（write_ledger.go）原文命中=1 替身本来出现=0
+[OK] M4 双发闸查询失败退回 fail-open（write_ledger.go）原文命中=1 替身本来出现=7
+[OK] M5 定位表报错不再升未知态（write_ledger.go）原文命中=1 替身本来出现=0
+[OK] M6 越点未落账的步仍可报成功（executor.go）原文命中=1 替身本来出现=0
+[OK] M7 sent 落账调用点不再标 crossed（executor.go）原文命中=1 替身本来出现=0
+[OK] M8 闸门早返挪到落 sent 之后（executor.go）原文命中=1 替身本来出现=0
+[OK] 用例 TestWSE2E_LedgerWriteFailureAbortsBeforeSend 在
+[OK] 用例 TestWSE2E_LedgerWriteFailureDegradesRestOfSession 在
+[OK] 用例 TestWSE2E_SentLedgerGapStillBlocksRetryRound 在
+[OK] 用例 TestWSE2E_GuardQueryFailureFailsClosed 在
+[OK] 用例 TestWSE2E_UnknownLocatorTableTreatedAsWrite 在
+[OK] 用例 TestWSE2E_RegisteredPlatformNonMatchingStepStaysReadOnly 在
+[OK] 用例 TestClassifyStepEffectThreeStates 在
+[OK] 用例 TestSendGateOrderedBeforeSentLedger 在
+预检: 锚点全部唯一、用例名全部存在

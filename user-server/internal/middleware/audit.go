@@ -1,11 +1,9 @@
 package middleware
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -121,7 +120,7 @@ func (m *AuditManager) saveAuditBatch(logs []*AuditEntry) {
 	sink := getAuditSink()
 	if sink == nil {
 		warnPortMissing("AuditSink")
-		log.Printf("[audit] 丢弃 %d 条审计日志", len(logs))
+		logger.Warnf("[audit] 丢弃 %d 条审计日志", len(logs))
 		return
 	}
 
@@ -142,7 +141,7 @@ func (m *AuditManager) saveAuditBatch(logs []*AuditEntry) {
 		}
 
 		if attempt == maxRetries-1 {
-			log.Printf("[audit] %d 条审计日志在 %d 次重试后仍写入失败", len(failedLogs), maxRetries)
+			logger.Errorf("[audit] %d 条审计日志在 %d 次重试后仍写入失败", len(failedLogs), maxRetries)
 		}
 
 		if attempt < maxRetries-1 {
@@ -162,7 +161,7 @@ func (m *AuditManager) saveAuditLog(entry *AuditEntry) {
 		m.droppedCount.Add(1)
 		if sink := getAuditSink(); sink != nil {
 			if err := sink.Save(auditEntryContext(entry), entry); err != nil {
-				log.Printf("[audit] 同步落库失败（已记入降级计数）: %v", err)
+				logger.Errorf("[audit] 同步落库失败（已记入降级计数）: %v", err)
 			}
 		}
 	}
@@ -234,15 +233,18 @@ func AuditMiddleware() gin.HandlerFunc {
 
 		startTime := time.Now()
 
-		var requestBody []byte
+		// MA-03：请求体只取首 auditBodyPreviewCap 做审计预览（TeeReader 不截断
+		// handler 可读的完整 body）——BodyLimit 显式豁免 multipart，此前
+		// io.ReadAll 会把 50MB 知识库导入整份读进内存（audit+handler 双份）。
+		var reqPreview *cappedBufferWriter
 		if c.Request.Body != nil {
-			requestBody, _ = io.ReadAll(c.Request.Body)
-			c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
+			reqPreview = &cappedBufferWriter{cap: auditBodyPreviewCap}
+			c.Request.Body = io.NopCloser(io.TeeReader(c.Request.Body, reqPreview))
 		}
 
 		responseWriter := &auditResponseWriter{
 			ResponseWriter: c.Writer,
-			body:           &bytes.Buffer{},
+			body:           &cappedBufferWriter{cap: auditRespBodyCap},
 		}
 		c.Writer = responseWriter
 
@@ -261,10 +263,12 @@ func AuditMiddleware() gin.HandlerFunc {
 		}
 
 		var sanitizedRequest any
-		if len(requestBody) > 0 {
-			var reqMap map[string]any
-			if err := json.Unmarshal(requestBody, &reqMap); err == nil {
-				sanitizedRequest = sanitizeMap(reqMap)
+		if reqPreview != nil {
+			if preview := reqPreview.Bytes(); len(preview) > 0 {
+				var reqMap map[string]any
+				if err := json.Unmarshal(preview, &reqMap); err == nil {
+					sanitizedRequest = sanitizeMap(reqMap)
+				}
 			}
 		}
 
@@ -307,18 +311,26 @@ func AuditMiddleware() gin.HandlerFunc {
 	}
 }
 
+// 审计有界常量（MA-03）：请求体预览 1MB（JSON 审计面够用，multipart 大文件
+// 不整读——BodyLimit 对 multipart 豁免，此前是 audit 整读的缺口）；
+// 响应缓冲 16KB 与 api_logger 同档（detail.error 仅 ≥400 消费，截断不损排障）。
+const (
+	auditBodyPreviewCap = 1 << 20
+	auditRespBodyCap    = 16 << 10
+)
+
 type auditResponseWriter struct {
 	gin.ResponseWriter
-	body *bytes.Buffer
+	body *cappedBufferWriter
 }
 
 func (w *auditResponseWriter) Write(b []byte) (int, error) {
-	w.body.Write(b)
+	_, _ = w.body.Write(b)
 	return w.ResponseWriter.Write(b)
 }
 
 func (w *auditResponseWriter) WriteString(s string) (int, error) {
-	w.body.WriteString(s)
+	_, _ = w.body.Write([]byte(s))
 	return w.ResponseWriter.WriteString(s)
 }
 

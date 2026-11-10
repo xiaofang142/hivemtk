@@ -35,6 +35,12 @@ var apiLogSensitiveKeys = map[string]struct{}{
 	"jwt":                             {},
 	"secret_token":                    {},
 	"x-telegram-bot-api-secret-token": {},
+	// MA-02：键级清单补 PII 标识列（内容级脱敏由 SanitizeString 承担，
+	// 这里管"这个字段本身就是手机号/邮箱"）。
+	"phone":    {},
+	"mobile":   {},
+	"email":    {},
+	"phone_no": {},
 }
 
 // APIInteractionLogger 记录每个 /api 请求的交互数据（请求 + 响应）。
@@ -44,6 +50,11 @@ var apiLogSensitiveKeys = map[string]struct{}{
 //   - 读取并记录请求体（随后还原，handler 仍可读到），敏感字段自动脱敏。
 //   - 包装响应写入器捕获响应体；SSE/流式响应自动跳过，其余按上限截断。
 //   - 状态码 >=500 记 Error、>=400 记 Warn、其余记 Info，事件名 api_interaction。
+//
+// 响应体落日志口径（MA-02）：**仅 status >= 400 记**，且键级 redact +
+// 内容级 SanitizeString（手机号/邮箱/身份证/银行卡/长 token 段）双保险；
+// 2xx 响应体（含 /api/customer 等全量客户数据的成功响应）不落日志——
+// 成功面没有排障价值，却全量携带 PII。
 //
 // 注册顺序：须在 TraceMiddleware 之后，使日志自动携带 trace_id。
 func APIInteractionLogger() gin.HandlerFunc {
@@ -79,7 +90,9 @@ func APIInteractionLogger() gin.HandlerFunc {
 		}
 
 		status := c.Writer.Status()
-		respBodyLog := w.snapshot()
+		// MA-02：仅 ≥400 记响应体（键级 redact + 内容级脱敏），2xx 不记——
+		// 成功面无排障价值却全量携带客户 PII。
+		respBodyLog := apiLogResponseSnapshot(status, w.snapshot())
 
 		log := logger.Ctx(c.Request.Context())
 		var ev *zerolog.Event
@@ -182,6 +195,17 @@ func (w *cappedBufferWriter) Write(p []byte) (int, error) {
 }
 
 func (w *cappedBufferWriter) Bytes() []byte { return w.buf.Bytes() }
+
+// apiLogResponseSnapshot 响应体落日志口径（MA-02）：
+//   - status < 400 ⇒ 空串（成功面不记——/api/customer 等成功响应全量携带客户数据，
+//     排障价值低而 PII 落盘风险高）；
+//   - status >= 400 ⇒ 键级 redact + 内容级 SanitizeString 双保险后的 ≤cap 片段。
+func apiLogResponseSnapshot(status int, raw string) string {
+	if status < 400 {
+		return ""
+	}
+	return SanitizeString(redactJSON([]byte(raw), apiLogRespBodyCap))
+}
 
 func redactJSON(b []byte, capSize int) string {
 	if len(b) == 0 {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,31 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
+
+// gitCredentialRe 匹配 URL 里的 userinfo（user:pass@ / token@）。私库惯例把
+// PAT 嵌进 https 远端 URL，git 报错（如 push 失败的 unable to access）会
+// 原样回显该 URL——进 stdout/服务器日志即跨租户凭证泄漏（MA-04，S-36
+// 「错误原文不出安全面」口径的凭证类收敛）。
+var gitCredentialRe = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^/@\s:]+):([^@\s]+)@`)
+
+// gitUserOnlyCredentialRe 匹配「仅用户名即凭证」形态（https://token@host，
+// GitHub 细粒度 PAT 常见贴法，无冒号）。
+var gitUserOnlyCredentialRe = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.-]*://)([^/@\s:]+)@`)
+
+// scrubGitCredentialURL 把 URL userinfo 的口令段替换为 ***（用户名保留便于排障定位）。
+// 顺序敏感：先剥「仅用户名即凭证」形态再剥 user:pass 形态（RE2 无 lookahead，
+// 反序会把已脱敏串的 *** 段二次误伤成 https://***@host 丢掉用户名）。
+// ssh 形态 git@host:path 无 scheme userinfo，不受影响。
+func scrubGitCredentialURL(s string) string {
+	s = gitUserOnlyCredentialRe.ReplaceAllString(s, "${1}***@")
+	return gitCredentialRe.ReplaceAllString(s, "${1}${2}:***@")
+}
+
+// gitDeployError 构造 deploy 失败错误：args 经凭证剥离后再进文案
+// （remote set-url origin <repo> 的 args 含租户配置原文）。
+func gitDeployError(args []string, err error) error {
+	return fmt.Errorf("%v: %w", scrubGitCredentialURL(strings.Join(args, " ")), err)
+}
 
 // ErrSiteConfigInvalid 站点配置不完整（未启用站点 / 目录不存在）。
 // 这类错误是用户在「静态站部署」页可以自行修正的配置问题，控制器应回 400，
@@ -324,7 +350,8 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 		c.Env = deployEnv
 		out, err := c.CombinedOutput()
 		if len(out) > 0 {
-			_, _ = os.Stdout.Write(out)
+			// MA-04：git 报错会原样回显远端 URL（含嵌入凭证），落 stdout 前剥离。
+			logger.Infof("[geo-deploy] git 输出:\n%s", scrubGitCredentialURL(string(out)))
 		}
 		if err != nil {
 			// 没有任何内容可提交时 git commit 会以非 0 退出；这不是部署失败，
@@ -341,7 +368,8 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 				continue
 			}
 			logger.Warnf("TriggerDeploy 失败: %v", err)
-			return "", fmt.Errorf("%v: %w", strings.Join(args, " "), err)
+			// MA-04：args 含 remote set-url 的 repo 原文（可能嵌凭证），进错误文案前剥离。
+			return "", gitDeployError(args, err)
 		}
 	}
 

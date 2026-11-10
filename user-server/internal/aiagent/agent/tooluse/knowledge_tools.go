@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // KnowledgeToolDeps 知识工具依赖
@@ -213,7 +213,7 @@ func (t *RagSearchTool) Execute(ctx context.Context, args map[string]any) (ToolR
 		if len(filtered) > 0 {
 			avgScore = sumScore / float64(len(filtered))
 		}
-		log.Printf("[rag.search][降级] 阈值=%.2f 过滤后为空，降级返回原始 topK=%d 候选（产品=%s query=%q）", threshold, n, productNumericID, query)
+		logger.Warnf("[rag.search][降级] 阈值=%.2f 过滤后为空，降级返回原始 topK=%d 候选（产品=%s query=%q）", threshold, n, productNumericID, query)
 	}
 
 	if t.deps.ChunkRepo != nil {

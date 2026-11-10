@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/reporting"
 	"hivemtk-user/internal/repository"
 )
@@ -217,7 +217,7 @@ func (s *RagEvalGapService) RunAsync(parent context.Context, productID string) (
 	go func(runID uint, pid string) {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		ctx, cancel := context.WithTimeout(tenant.BackgroundWithTenant(parent), utils.CronMediumTimeout)

@@ -46,6 +46,9 @@ func StopBruteForceJanitor() {
 
 func startBruteForceJanitor() {
 	bruteForceJanitorOnce.Do(func() {
+		// 进协程前把包级注入点快照成本地值（协程体不得直读会被测试改写的
+		// globalBruteForce；审计门「协程体不得直读测试会改写的包级注入点」）
+		p := globalBruteForce
 		utils.SafeGo(context.Background(), "brute_force.janitor", func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Minute)
 			defer ticker.Stop()
@@ -58,16 +61,29 @@ func startBruteForceJanitor() {
 				case <-ticker.C:
 				}
 				now := time.Now()
-				globalBruteForce.mu.Lock()
-				for k, e := range globalBruteForce.entries {
-					if e.failures == 0 && now.After(e.lockedUntil) {
-						delete(globalBruteForce.entries, k)
-					}
-				}
-				globalBruteForce.mu.Unlock()
+				p.mu.Lock()
+				p.cleanupStaleLocked(now)
+				p.mu.Unlock()
 			}
 		})
 	})
+}
+
+// cleanupStaleLocked 清理死条目（调用方持锁）。
+//
+// MA-05：修前条件为 `failures == 0 && 超锁`，而 RecordBruteForceFailure 创建即
+// failures≥1、窗口重置在同调用内立即 ++ ⇒ failures==0 的条目实际不存在，
+// janitor 恒不删，entries map 只增不减（每 IP 失败 ≤4 次即永久驻留，
+// IPv6 扫描长驻进程可持续放大）。口径对齐同包 RateLimiter/pathQuota 的
+// lastSeen 清理：**锁已过期且最后活动超窗**的条目即死条目（下次尝试的窗口
+// 重置语义与本删除等价）。
+func (p *bruteForceProtector) cleanupStaleLocked(now time.Time) {
+	window := DefaultBruteForceConfig.Window
+	for k, e := range p.entries {
+		if now.Sub(e.firstAt) > window && now.After(e.lockedUntil) {
+			delete(p.entries, k)
+		}
+	}
 }
 
 // BruteForceLockCallback 锁定时触发的回调

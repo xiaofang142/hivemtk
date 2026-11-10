@@ -87,3 +87,38 @@ func TestAPIInteractionLogger_SmallBodyCaptured(t *testing.T) {
 		t.Fatalf("status=%d want 200", w.Code)
 	}
 }
+
+// ===== MA-02：响应体落日志口径（≥400 才记 + 内容级脱敏）=====
+
+// TestAPIInteractionLogger_ResponsePIIMasked 负例（红转绿锚点）：
+// 含手机号的错误响应落日志时必须呈掩码形态；2xx 响应体一律不记。
+func TestAPIInteractionLogger_ResponsePIIMasked(t *testing.T) {
+	// ≥400：内容级脱敏生效（手机号 138****7777 形态）。
+	got := apiLogResponseSnapshot(500, `{"message":"customer 13812345678 not found","phone":"13900001111"}`)
+	if !strings.Contains(got, "138****5678") {
+		t.Errorf("内容级手机号未掩码: %q", got)
+	}
+	if !strings.Contains(got, "***REDACTED***") {
+		t.Errorf("phone 键级未掩码: %q", got)
+	}
+	if strings.Contains(got, "13812345678") || strings.Contains(got, "13900001111") {
+		t.Errorf("完整手机号泄漏进日志: %q", got)
+	}
+	// <400：不记（最小化口径）。
+	if s := apiLogResponseSnapshot(200, `{"phone":"13812345678","name":"alice"}`); s != "" {
+		t.Errorf("2xx 响应体不应落日志，实际: %q", s)
+	}
+	if s := apiLogResponseSnapshot(302, `{"phone":"13812345678"}`); s != "" {
+		t.Errorf("3xx 响应体不应落日志，实际: %q", s)
+	}
+}
+
+// TestAPIInteractionLogger_SensitiveKeyList 钉住键级清单扩张（MA-02 判据之一）：
+// phone/mobile/email 键名请求体落日志时键级掩码生效。
+func TestAPIInteractionLogger_SensitiveKeyList(t *testing.T) {
+	for _, k := range []string{"phone", "mobile", "email", "phone_no"} {
+		if _, ok := apiLogSensitiveKeys[k]; !ok {
+			t.Errorf("apiLogSensitiveKeys 缺 %q（MA-02 键级清单）", k)
+		}
+	}
+}

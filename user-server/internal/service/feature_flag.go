@@ -12,13 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
 	"log/slog"
 	"runtime/debug"
 	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -270,7 +270,7 @@ func (s *FeatureFlagService) auditAsync(ctx context.Context, f *model.FeatureFla
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		if err := s.repo.CreateAudit(detached, a); err != nil {
@@ -296,7 +296,7 @@ func (s *FeatureFlagService) logEvalAsync(ctx context.Context, key string, attri
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		if err := s.repo.CreateEvalLog(detached, e); err != nil {

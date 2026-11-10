@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/pagination"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -59,7 +59,7 @@ func (c *MessageHubController) Push(ctx *gin.Context) {
 		go func(m *model.MessageHub) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
 			ctx2, cancel := context.WithTimeout(bg, 30*time.Second)

@@ -1,0 +1,66 @@
+私有作业目录：/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p
+逐格日志目录：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/docs/superpowers/specs/ledger/logs/P803/20260925-143137
+取证基线：HEAD=0787e406 工作树=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk 14:31  up 2 days,  4:19, 2 users, load averages: 1.56 2.32 2.86 日志 tag=20260925-143137
+覆盖 19 个脏文件、同步 0 个删除进克隆
+测试库：127.0.0.1:8232 可达（口令不回显）
+本轮基线字节（注码前 == 还原后 才算干净）：
+  41fee4212dda74817756fb62289dd3cc  user-server/internal/app/bad_case_wiring.go
+  c0c77900ad863d01edcc4886510aeae6  user-server/internal/controller/bad_case.go
+  a65d72f2c122a297e6e2d8f644331cf5  user-server/internal/model/bad_case.go
+  338e02f679ece0d7e753c264ce8e5c5c  user-server/internal/repository/bad_case.go
+  b5ae3767f3f0f74f05fa266f5933eefb  user-server/internal/service/bad_case.go
+  2e2eb22d25959b4567772c63d52af693  user-server/internal/service/smart_cs_orchestrator.go
+[控制组 ./internal/model/] rc=0 settled=6 skip=0 红名=—
+[控制组 ./internal/repository/] rc=0 settled=14 skip=0 红名=—
+[控制组 ./internal/service/] rc=0 settled=28 skip=0 红名=—
+[控制组 ./internal/router/] rc=0 settled=11 skip=0 红名=—
+[控制组 ./internal/app/] rc=0 settled=5 skip=0 红名=—
+M1   exported 不再是终态（判完的样本能回炉）                       杀掉                           红=TestBadCase_Transitions settled=6/6
+M2   dismissed 可重开（同一现场判两次）                         杀掉                           红=TestBadCase_Transitions settled=6/6
+M3   类目接错责任层（intent 接到 knowledge）                   杀掉                           红=TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable settled=6/6
+M4   类目没有责任层（少一条映射）                                 杀掉                           红=TestBadCase_EveryLabelHasAFixLayerAndEveryLayerIsReachable settled=6/6
+M5   自动来源缺 message_id 的键守卫反向                        杀掉                           红=TestBadCaseDedupKey settled=6/6
+M6   幂等键里不含来源（两判据抢同一条键）                             杀掉                           红=TestBadCaseDedupKey settled=6/6
+M7   值域外的状态被判成已知                                    杀掉                           红=TestBadCase_StatusesAreClosed settled=6/6
+R1   冲突识别不认约束名（主键冲突读成已存在）                           杀掉                           红=TestBadCaseRepo_ConflictIdentityIsExact settled=14/14
+R2   写回白名单少一列（判定依据落不了地）                             杀掉                           红=TestBadCaseRepo_ApplyActionExpectsStatus,TestBadCaseRepo_ApplyActionWriteWhitelist settled=14/14
+R3   写回白名单多了现场列（判完还能改现场）                            杀掉                           红=TestBadCaseRepo_ApplyActionWriteWhitelist settled=14/14
+R4   值域外的状态过滤器不再报错（空列表冒充业务结论）                       杀掉                           红=TestBadCaseRepo_ListFilters settled=14/14
+R5   默认视图从只列 pending 放开                             杀掉                           红=TestBadCaseRepo_ListFilters settled=14/14
+R6   单页上限的夹住失效                                      杀掉                           红=TestBadCaseRepo_ClampsAreExact settled=14/14
+R7   单次导出上限的夹住失效                                    杀掉                           红=TestBadCaseRepo_ClampsAreExact settled=14/14
+R8   导出条件丢了「必须已打标」（pending 被灌进评测集）                  杀掉                           红=TestBadCaseRepo_ClaimForExport settled=14/14
+R9   空批不报 AlreadyClaimed（静默空集）                      杀掉                           红=TestBadCaseRepo_ClaimForExport settled=14/14
+R10  聚合读数少键（前端的 0 变 undefined）                      杀掉                           红=TestBadCaseRepo_CountByStatusKeysAreAlwaysPresent settled=14/14
+R11  值域外的脏 label 被悄悄丢行                              杀掉                           红=TestBadCaseRepo_CountByFixLayer settled=14/14
+S1   零命中判据失效（无本之木不再被记）                              杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_SourceComesFromServiceGate,TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked,TestBadCaseService_MarkAuto,TestBadCaseShouldMark settled=28/28
+S2   门槛边界改成 <=（等于阈值也算低质）                            杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_UsesEffectiveConfidence,TestBadCaseShouldMark settled=28/28
+S3   阈值缺位时的兜底撤掉（整条自动标记静默停摆）                         杀掉                           红=TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError,TestBadCaseService_MarkAuto,TestBadCaseService_MarkRequiresMessageID,TestBadCaseShouldMark,TestBadCaseShouldMark_ZeroThresholdNeverDisablesMarking settled=28/28
+S4   负 limit 又当成「没给」（静默导出默认档那一批）                    杀掉                           红=TestBadCaseService_ExportEvalSet settled=28/28
+S5   打标可以不给依据                                       杀掉                           红=TestBadCaseService_Label settled=28/28
+S6   责任层不再由类目派生（写死成 knowledge）                      杀掉                           红=TestBadCaseService_Label settled=28/28
+S7   撤销可以不给理由                                       杀掉                           红=TestBadCaseService_Dismiss settled=28/28
+S8   CAS 落败被当成成功（重复打标静默覆盖）                          杀掉                           红=TestBadCaseService_Label settled=28/28
+S9   底座未装配也造出标记器（关闸失效）                              杀掉                           红=TestBadCaseMarker_NilWhenUnavailableAndSwallowsMarkError,TestBadCaseService_UnavailableRejectsEveryEntry settled=28/28
+S10  已判率分母口径写歪（闭环转没转看不出来）                           杀掉                           红=TestBadCaseService_ListAndStats settled=28/28
+S11  自动标记缺 message_id 变成静默跳过                        杀掉                           红=TestBadCaseService_MarkRequiresMessageID settled=28/28
+O1   先判门槛再起协程这道预筛撤掉（每轮白起一条协程）                       杀掉                           红=TestBadCaseMarkBadCase_Gates,TestBadCaseMarkBadCase_PregateMatchesServiceGate,TestBadCaseMarkBadCase_UsesEffectiveConfidence settled=28/28
+O2   留痕沿用请求 ctx（请求一返回就写不进库）                         杀掉                           红=TestBadCaseMarkBadCase_UsesFreshContextNotRequestContext settled=28/28
+O3   留痕超时与草稿超时不同源                                   杀掉                           红=TestBadCaseMarkTimeoutSharesOneSource settled=28/28
+O4   留痕的 recover 撤掉（panic 逃逸到主链路）                   杀掉（panic 族）                  红=— settled=7/28
+O5   转人工那一轮不再排除（系统公告被记成知识缺口）                        杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O6   追问澄清那一轮不再排除（含糊的问句算到知识库头上）                      杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O7   生成失败那一轮不再排除（兜底文案当成模型答案收进评测集）                   杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+O8   这道闸整句不再被调用（helper 还在、留痕照旧，没人拦那三类轮次）            杀掉                           红=TestBadCaseMarkBadCase_TurnsWithNoAnswerAreNotMarked settled=28/28
+A1   无 DB 句柄时不清空全局（路由对着未装配回 200）                    杀掉                           红=TestBadCaseMarkerFor_BoundAtAttachTimeNotPerCall,TestInitBadCaseRuntime_NilDBClearsGlobal settled=5/5
+A2   attach 在未装配时谎报成功                               杀掉                           红=TestBadCaseMarkerFor_NilWhenNotAssembled settled=5/5
+A3   标记器不取全局那份（装配与使用两套状态）                           杀掉                           红=TestBadCaseMarkerFor_BoundAtAttachTimeNotPerCall,TestBadCaseMarkerFor_WritesThroughProductionClosure settled=5/5
+C1   底座不可用回 500 而不是 503                             杀掉                           红=TestBadCaseRoutes_SetupUsesGlobalRegistry,TestBadCaseRoutes_UnavailableIs503WithDataless settled=11/11
+C2   缺身份回 403 而不是 401                               杀掉                           红=TestBadCaseRoutes_IdentityIsRequiredOnWriteEntries settled=11/11
+C3   记录不存在回 500（前端会无限打圈）                            杀掉                           红=TestBadCaseRoutes_LabelAndDismissCodes settled=11/11
+C4   路径参数长度上限失效（响应体放大器）                             杀掉                           红=TestBadCaseRoutes_GetByID settled=11/11
+C6   筛选器里的空值被透传（队列打不开）                              杀掉                           红=TestBadCaseRoutes_QueryParams settled=11/11
+
+结果：杀掉 45/45 格 
+终态：全部格子杀掉，逐文件 md5 已复原，控制组与取证日志见上面的 tag。
+收尾：带走 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p/clone、/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/p803mut-68ub3b0p

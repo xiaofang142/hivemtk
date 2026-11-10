@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -553,7 +553,7 @@ func MaybeSendAwayReply(ctx context.Context, sessionID, conversationID, platform
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		// 请求 ctx 会随响应取消，但租户归属必须带进协程：裸 Background 在 on 模式下
