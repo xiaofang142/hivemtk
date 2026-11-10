@@ -384,7 +384,7 @@ func (e *SalesEngine) runAgentLoop(
 				Role:       "tool",
 				ToolCallID: tr.ToolCallID,
 				Name:       toolName,
-				Content:    tr.Content,
+				Content:    truncateToolResultForLLM(toolName, tr.Content),
 			})
 		}
 
@@ -432,6 +432,25 @@ func slotToolChoice(gateNone bool) string {
 		return "none"
 	}
 	return "auto"
+}
+
+// agentLoopToolResultMaxChars 单个工具结果回填 LLM 的字符上限（TB-12 结果摘要化）：
+// 长结果（大轨迹列表/大 JSON）顶爆上下文会把后续轮次全部挤废；完整结果已在
+// 审计/工具层留痕，这里只保证"最新节点事实在前"（列表型结果天然 newest-first）。
+const agentLoopToolResultMaxChars = 6000
+
+// truncateToolResultForLLM 回填前截断：超限时保留头部（newest-first 语义）+截断标记。
+// 按 rune 边界截断（中文不撕裂）；空名/短结果原样返回。
+func truncateToolResultForLLM(toolName, content string) string {
+	if len(content) <= agentLoopToolResultMaxChars {
+		return content
+	}
+	runes := []rune(content)
+	if len(runes) <= agentLoopToolResultMaxChars {
+		return content
+	}
+	head := string(runes[:agentLoopToolResultMaxChars])
+	return head + "\n...[结果过长已截断（完整结果在审计留痕），如需更多请缩小查询范围]"
 }
 
 // missingRequiredSlots required 槽位判定：SourceVar=entity.<key> 从 intent.Entities 取，
