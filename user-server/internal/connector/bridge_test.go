@@ -360,29 +360,45 @@ func TestBridge_Negative_SSRFRefusedNoOutflow(t *testing.T) {
 // ---------- 桥接器装配面：Provider 形态 + 空表零行为 ----------
 
 func TestBridge_ProviderAndEmptyRegistry(t *testing.T) {
-	// preset 表为空（或显式传空）→ 零工具零行为变化（生产装配面契约）。
-	tools, skipped, errs := BridgePresetsWithExecutor(NewExecutorWithValidator(func(string) error { return nil }))
-	_ = tools // 全局表内容取决于其它测试是否注册过；只断言无错误路径 panic
-	_ = skipped
-	_ = errs
-
 	p := &BridgeProvider{}
 	if p.Name() != "connector_bridge" || p.Category() != tooluse.CategoryBusiness {
 		t.Fatalf("Provider 元信息不符: %s %v", p.Name(), p.Category())
 	}
-	provided, err := p.Provide(tooluse.ProviderContext{})
-	if err != nil {
-		t.Fatalf("空表 Provide 不应报错: %v", err)
-	}
-	if len(provided) != 0 {
-		t.Fatalf("空 preset 表应零工具, got %v", namesOf(provided))
-	}
 
-	// 方言未注册时 Provide 返回工具+错误汇总（单 preset 失败不中断其余装配）。
-	provided2, err2 := (&BridgeProvider{Executor: NewExecutorWithValidator(func(string) error { return nil })}).Provide(
+	// 好 preset + 坏 preset（方言未注册）同表：Provide 不返回 error（RegisterAll 对
+	// Provider error 的语义是丢弃该 Provider 全部工具——无辜 preset 不得被拖下水），
+	// 坏 preset 端点缺席即 fail-closed，其余照常成工具。
+	RegisterPreset(ConnectorPreset{
+		Name:      "prov_good",
+		Config:    ConnectorConfig{BaseURL: "https://prov.example.com", Provider: "generic"},
+		Endpoints: []EndpointConfig{{Name: "query_thing", Method: "GET", Path: "/t", Capabilities: []string{"query_thing"}}},
+	})
+	RegisterPreset(ConnectorPreset{
+		Name:      "prov_bad_dialect",
+		Config:    ConnectorConfig{BaseURL: "https://bad.example.com", Provider: "no_such_dialect_prov"},
+		Endpoints: []EndpointConfig{{Name: "query_bad", Method: "GET", Path: "/b", Capabilities: []string{"query_bad"}}},
+	})
+	provided, err := (&BridgeProvider{Executor: NewExecutorWithValidator(func(string) error { return nil })}).Provide(
 		tooluse.ProviderContext{})
-	_ = provided2
-	_ = err2 // 全局表内容不定，仅保证两形态可执行
+	if err != nil {
+		t.Fatalf("Provide 不得因单个坏 preset 报错（会丢弃无辜工具）: %v", err)
+	}
+	got := namesOf(provided)
+	if !containsSlice(got, "connector.prov_good.query_thing") {
+		t.Fatalf("好 preset 工具应在列: %v", got)
+	}
+	if containsSlice(got, "connector.prov_bad_dialect.query_bad") {
+		t.Fatalf("方言未注册的 preset 端点不得成为工具: %v", got)
+	}
+}
+
+func containsSlice(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------- 边界：sanitize 与重名 ----------

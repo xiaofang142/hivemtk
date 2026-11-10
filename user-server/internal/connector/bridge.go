@@ -37,6 +37,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // BridgeSkipReason 单个端点未桥接的原因（负例可观测：为什么没成为工具）。
@@ -222,15 +223,22 @@ func (p *BridgeProvider) Description() string {
 }
 
 // Provide 桥接当前 preset 注册表（无 DB 依赖：preset 数据进程内）。
+//
+// 单个 preset 配置错误（方言未注册/端点名非法/能力标签缺失）**不返回 error**：
+// RegisterAll 对 Provider error 的语义是丢弃该 Provider 全部工具——那会把无辜
+// preset 的工具一并拖下水。fail-closed 的正确落点=坏 preset 的端点缺席 + WARN
+// 留痕（「为什么我的 preset 没成工具」按此日志排查）。
 func (p *BridgeProvider) Provide(ctx tooluse.ProviderContext) ([]tooluse.Tool, error) {
 	exec := p.Executor
 	if exec == nil {
 		exec = NewExecutor()
 	}
-	tools, _, presetErrs := bridgePresetsWithExecutor(ListPresets(), exec)
-	// 单个 preset 方言未注册不中断装配（其余 preset 照常成工具），错误汇总上报。
-	if len(presetErrs) > 0 {
-		return tools, fmt.Errorf("部分 preset 未桥接: %s", strings.Join(presetErrs, "; "))
+	tools, skipped, presetErrs := bridgePresetsWithExecutor(ListPresets(), exec)
+	for _, s := range skipped {
+		logger.Warnf("[connector_bridge] 端点未桥接 preset=%s endpoint=%s reason=%s", s.Preset, s.Endpoint, s.Reason)
+	}
+	for _, e := range presetErrs {
+		logger.Warnf("[connector_bridge] preset 未桥接: %s", e)
 	}
 	return tools, nil
 }
