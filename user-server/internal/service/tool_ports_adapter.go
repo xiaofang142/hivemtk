@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/portcontract"
@@ -105,12 +106,15 @@ func (a *SessionPortAdapter) SendMessage(ctx context.Context, in *portcontract.S
 	if ct == "" {
 		ct = model.MessageTypeText
 	}
+	// media_url 列宽收口（F2）：session_messages.media_url varchar(500)。
 	return a.svc.SendMessage(ctx, &SendMessageRequest{
 		SessionID:   in.SessionID,
 		SenderType:  in.SenderType,
 		SenderID:    in.SenderID,
+		SenderName:  in.SenderName,
 		Content:     in.Content,
 		ContentType: ct,
+		MediaURL:    model.TruncateMediaURL(strings.TrimSpace(in.MediaURL)),
 	})
 }
 

@@ -1,14 +1,19 @@
 import { postIngest, HTTP_INGEST_DEFAULTS } from './http-ingest.js';
 import { DEFAULT_USER_SERVER, BRIDGE_THREE_CHANNEL } from './constants.js';
-import { contentHash } from './types.js';
+import { contentHash, typedContentHash, isMediaMsgType } from './types.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('uplink');
 
 // 前端完成消息 hash（稳定幂等）：同一消息产出同一 id。
-// 与服务端 ContentHashMsgID 严格一致（channel|conversationID|trim(content)，FNV-1a 32 位，带 mh: 前缀），
-// 作为回环去重钩子2（GetByMsgID）的兜底依据。
-export function computeMsgID({ channel, accountId, conversationId, content }) {
+// 2026-11-10 审计 F7：媒体消息（msg_type 非 text）改用 typedContentHash（并入
+// msg_type+media_url，与服务端 ContentHashMsgIDTyped 同构）——旧口径对「[图片]」
+// 占位符 content 只算 content 维度，兜底生成的 event_id/content_hash 会让同会话
+// 两张不同图共享身份。文本消息逐字节不变。
+export function computeMsgID({ channel, accountId, conversationId, content, msgType, mediaUrl }) {
+  if (isMediaMsgType(msgType)) {
+    return typedContentHash(channel, conversationId, msgType, mediaUrl || '', content || '');
+  }
   return contentHash(channel, conversationId, content);
 }
 
@@ -80,14 +85,22 @@ export class Uplink {
         accountId,
         conversationId,
         content: message.content,
+        msgType: message.msg_type,
+        mediaUrl: message.media_url,
       });
     }
     if (!message.content_hash) {
-      message.content_hash = contentHash(
-        message.channel || this.channel,
+      // content_hash 与 event_id 同口径（F7）：媒体消息用 typed 哈希。服务端消费点
+      // （inbox_ingress.go 的 Extra["content_hash"] 等值查找）拿到的键由此与
+      // 落库行的 typed msg_id 对齐，语义从「占位符哈希」修正为「消息身份哈希」。
+      message.content_hash = computeMsgID({
+        channel: message.channel || this.channel,
+        accountId,
         conversationId,
-        message.content
-      );
+        content: message.content,
+        msgType: message.msg_type,
+        mediaUrl: message.media_url,
+      });
     }
     const key = `${accountId}|${conversationId}`;
     let buf = this.buffers.get(key);
@@ -134,6 +147,9 @@ export class Uplink {
       conversation_id: conversationId,
       account_name: '',
       agent_id: 0,
+      // 协议白名单映射：makeUnifiedMessage 的 raw（DOM outerHTML 截断）**有意不上行**
+      // —— 服务端 IngestMessage 无 Raw 字段（400KB 级外链协议面不收 DOM 快照），
+      // 发了也会被 Go json 忽略。此处显式列出全部上行字段，防止「加了字段以为会透传」。
       messages: pending.map((m) => ({
         event_id: m.event_id || '',
         channel: m.channel || ch,

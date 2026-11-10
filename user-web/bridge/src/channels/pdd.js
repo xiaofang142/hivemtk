@@ -3,7 +3,7 @@ import { CHANNELS, SENDER } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort,
+  assertConvOrAbort, absoluteMediaUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -193,8 +193,11 @@ function extractContent(item) {
   // A 源分型：.msg-content 内按 class 分图片/商品卡/订单卡/lego 卡；先给文本兜底，
   // 媒体/卡片消息统一占位（与既有渠道同一占位词表：占位文案 + msg_type 标注，
   // 卡片/订单上下文本体不拼进 content——16d 专属实现前降级不可发送）。
-  const img = item.querySelector('.msg-content img[src], img[src]');
-  const mediaUrl = img ? (img.getAttribute('src') || '') : '';
+  // 头像过滤（2026-11-10 审计 F4）+ URL 绝对化（F5），与 xhs/xianyu/tiktok 同口径
+  const img = Array.from(item.querySelectorAll('.msg-content img[src], img[src]')).find(
+    (el) => !(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'))
+  ) || null;
+  const mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
   if (item.querySelector('.image-msg, [class*="image-msg" i]')) {
     return { text: mediaPlaceholder('image'), mediaUrl, msgType: 'image' };
   }

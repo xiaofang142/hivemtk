@@ -3,7 +3,7 @@ import { CHANNELS, SENDER } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort,
+  assertConvOrAbort, absoluteMediaUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -182,10 +182,14 @@ function parseMessageItem(item) {
   const textEl = item.querySelector(SEL.TEXT);
   let text = textEl ? cleanText(textEl) : '';
   if (!text) text = cleanText(item);
-  // 图片/视频优先（实证：div.card > div > img|video），有媒体时文本只作占位
-  const img = item.querySelector(SEL.CARD_IMG) || item.querySelector('img[src]');
+  // 图片/视频优先（实证：div.card > div > img|video），有媒体时文本只作占位。
+  // 头像过滤（2026-11-10 审计 F4，与 xhs/xianyu/tiktok 同口径）+ URL 绝对化（F5）：
+  // 通用 `img[src]` 兜底会命中发送者头像，不能当消息图片。
+  const isAvatarImg = (el) => !!(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'));
+  const img = [item.querySelector(SEL.CARD_IMG), ...Array.from(item.querySelectorAll('img[src]'))]
+    .find((el) => el && !isAvatarImg(el)) || null;
   const video = item.querySelector(SEL.CARD_VIDEO) || item.querySelector('video[src]');
-  const mediaUrl = (img && img.getAttribute('src')) || (video && video.getAttribute('src')) || '';
+  const mediaUrl = absoluteMediaUrl((img && img.getAttribute('src')) || (video && video.getAttribute('src')) || '');
   if (!text && !mediaUrl) return null;
   const senderType = directionOf(item);
   return {

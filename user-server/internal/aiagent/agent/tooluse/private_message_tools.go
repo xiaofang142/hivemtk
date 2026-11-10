@@ -202,18 +202,20 @@ func (t *sendPrivateMessageTool) Execute(ctx context.Context, args map[string]an
 		SessionID:   sessionID,
 		SenderType:  senderType,
 		SenderID:    senderID,
+		SenderName:  senderName,
 		Content:     content,
 		ContentType: contentType,
+		MediaURL:    mediaURL,
 	})
 	if err != nil {
 		return ErrorResult(t.Name(), err), nil
 	}
-	_ = mediaURL
-	_ = senderName
 	return SuccessResult(t.Name(), map[string]any{
 		"message_id":  msg.ID,
 		"session_id":  msg.SessionID,
 		"sender_type": msg.SenderType,
+		"content_type": msg.ContentType,
+		"media_url":   msg.MediaURL,
 	}).WithTiming(t.Name(), start), nil
 }
 

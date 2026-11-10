@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"runtime/debug"
-	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -64,7 +63,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		SenderName:     event.SenderName,
 		ReceiverID:     event.ReceiverID,
 		Content:        event.Content,
-		MediaURL:       event.MediaURL,
+		MediaURL:       model.TruncateMediaURL(event.MediaURL),
 		ConversationID: event.ConversationID,
 		IsGroup:        event.IsGroup,
 		GroupID:        event.GroupID,
@@ -75,7 +74,9 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		Extra:          nil,
 	}
 
-	hub.DedupHash = ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), strings.TrimSpace(event.Content))
+	// dedup_hash 列与 interceptInbound 的 Redis 窗口键共用 MediaAwareDedupInput（F1 收口）：
+	// 媒体消息并入 msg_type+media_url，键与列可互相对账；文本消息逐字节与旧口径一致。
+	hub.DedupHash = ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), MediaAwareDedupInput(event.MsgType, event.MediaURL, event.Content))
 
 	if hub.Direction == "inbound" {
 		hub.Status = "received"
@@ -349,7 +350,7 @@ func (s *InboxIngressService) persistHistoryMessage(ctx context.Context, event *
 		SenderName:     event.SenderName,
 		ReceiverID:     event.ReceiverID,
 		Content:        event.Content,
-		MediaURL:       event.MediaURL,
+		MediaURL:       model.TruncateMediaURL(event.MediaURL),
 		ConversationID: event.ConversationID,
 		IsGroup:        event.IsGroup,
 		GroupID:        event.GroupID,

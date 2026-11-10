@@ -229,7 +229,10 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 	// 再按内容拦就等于把第二条真实消息吞在入库前。
 	claimedKey := ""
 	if s.cache != nil && chanMsgID == "" && !eventAssertsDistinctMessage(event.EventID) {
-		dedupHash := ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), content)
+		// F1（002-multi-type-messages，2026-11-10）：媒体消息的判重输入并入 msg_type 与
+		// media_url —— content 只到「[图片]」占位符粒度，两张不同图必须各自成键。
+		// 文本消息输入逐字节不变（见 MediaAwareDedupInput）。
+		dedupHash := ContentHashWithSender(event.Channel, s.senderKeyForDedup(event), MediaAwareDedupInput(event.MsgType, event.MediaURL, content))
 		dupKey := InboxSenderContentDedupKey + dedupHash + ":" + event.ConversationID
 		ok, derr := s.cache.SetNX(ctx, dupKey, "1", s.contentDedupWindow())
 		if derr == nil {

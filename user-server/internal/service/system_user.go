@@ -49,12 +49,14 @@ func isValidCreateRole(role string) bool {
 }
 
 // UpdateUserRequest 更新用户请求
+// Phone 用 *string：nil=不修改，空串=显式清空（与 UpdateByAdmin 的指针语义对齐；
+// 旧 string + != "" 会把「清空手机号」当「未提供」吞掉，前端却提示保存成功）。
 type UpdateUserRequest struct {
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	RealName string `json:"real_name"`
-	Role     string `json:"role" binding:"omitempty,oneof=admin user staff customer_service"`
-	Status   int    `json:"status"`
+	Email    string  `json:"email"`
+	Phone    *string `json:"phone"`
+	RealName string  `json:"real_name"`
+	Role     string  `json:"role" binding:"omitempty,oneof=admin user staff customer_service"`
+	Status   int     `json:"status"`
 }
 
 // SystemUserService 系统用户服务
@@ -210,8 +212,8 @@ func (s *SystemUserService) UpdateUser(ctx context.Context, id uint, req *Update
 	if req.Email != "" {
 		user.Email = req.Email
 	}
-	if req.Phone != "" {
-		user.Phone = req.Phone
+	if req.Phone != nil {
+		user.Phone = *req.Phone
 	}
 	if req.RealName != "" {
 		user.RealName = req.RealName

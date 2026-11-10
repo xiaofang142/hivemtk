@@ -25,6 +25,12 @@ type SendMessageInput struct {
 	SenderID    string
 	Content     string
 	ContentType string
+	// MediaURL 媒体附件地址（ContentType 非 text 时有效）。002-multi-type-messages：
+	// 工具层此前把 media_url 参数丢弃（`_ = mediaURL`），智能体永远发不出媒体——
+	// 投影补上该字段，由 SessionPortAdapter 映射进 SendMessageRequest.MediaURL。
+	MediaURL string
+	// SenderName 发送者昵称（可选）。此前同样被工具层丢弃；会话 UI 归因需要它。
+	SenderName string
 }
 
 // SessionPort 私信 / 会话域端口

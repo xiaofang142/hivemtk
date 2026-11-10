@@ -190,6 +190,28 @@ func AppendMediaContextToContent(content, msgType, mediaURL string) string {
 	return content + "\n" + tag
 }
 
+// mediaAwareDedupSeparator MediaAwareDedupInput 的段分隔符。用 \x1f（ASCII Unit Separator）：
+// 任何平台正文/媒体 URL 里都不会出现，杜绝「正文尾 + 类型首」拼接出与真实消息同哈希的歧义。
+const mediaAwareDedupSeparator = "\x1f"
+
+// MediaAwareDedupInput 内容窗口去重键（Redis）与 message_hub.dedup_hash 列共用的哈希输入。
+//
+// 002-multi-type-messages 收口（2026-11-10 审计 F1）：非文本消息的 content 常是「[图片]」
+// 占位符，media_url 才是这条消息的身份。只按 content 判重时，同一客户在同一会话 5 分钟
+// 窗口内连发的两张不同图 dupKey 完全相同 —— 第二张被判 duplicate 落库留痕但 AI 永远
+// 看不到（「发了图不回」）。非文本消息把 msg_type 与 media_url 并入输入段；
+// 文本/空类型/system/recall 与旧口径逐字节一致（存量行为不变，dedup_hash 列不重算）。
+//
+// 调用点：interceptInbound（Redis 窗口键）与 persistMessage（dedup_hash 列）——
+// 两处必须同源，否则键与列各说各话，排查时无法对账。
+func MediaAwareDedupInput(msgType, mediaURL, content string) string {
+	t := strings.ToLower(strings.TrimSpace(msgType))
+	if t == "" || t == model.MsgTypeText || t == "system" || t == "recall" {
+		return strings.TrimSpace(content)
+	}
+	return strings.TrimSpace(content) + mediaAwareDedupSeparator + t + mediaAwareDedupSeparator + strings.TrimSpace(mediaURL)
+}
+
 // ContentHashWithSender 统一收件去重哈希（渠道 + 发送者名称 + 消息内容）。
 //
 // 这是「渠道+发送者+消息内容」唯一去重依据的权威实现，前端（types.js::sharedContentHash）

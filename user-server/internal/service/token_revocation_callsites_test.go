@@ -134,7 +134,7 @@ func TestSystemUserService_UpdateUser_RevokesOnPrivilegeChange(t *testing.T) {
 	svc := NewSystemUserServiceWithRepo(newFakeRevocationRepo(plainUser(uid, model.SystemUserRoleUser)))
 	seedStaleWatermark(t, uid)
 
-	if _, err := svc.UpdateUser(context.Background(), uid, &UpdateUserRequest{Phone: "13800000000"}); err != nil {
+	if _, err := svc.UpdateUser(context.Background(), uid, &UpdateUserRequest{Phone: &[]string{"13800000000"}[0]}); err != nil {
 		t.Fatalf("UpdateUser(仅改电话) 失败: %v", err)
 	}
 	assertNoRevocation(t, uid)

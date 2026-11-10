@@ -244,6 +244,33 @@ export function cleanText(el) {
   return (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * absoluteMediaUrl 把渠道气泡里抓到的媒体 src 规范成绝对 URL（2026-11-10 审计 F5）。
+ *
+ * 平台 DOM 常写协议相对地址（`//p3-sign.douyinpic.com/...`）——在站内 <img> 可解析，
+ * 落库/给 AI/下行降级文本后就是一堆歧义字符串。这里统一补全：
+ *   - http(s)/blob:/data: 原样返回（blob: 出页即死、data: 自携带数据，都不属于"站内相对"）;
+ *   - 其余按当前页面 location.href 解析（jsdom/无 location 环境回退 https://localhost/）;
+ *   - 解析失败原样返回（宁存原值也不吞消息）。
+ * @param {string} src 渠道气泡里抓到的原始 src/href
+ * @returns {string} 绝对 URL（或无法解析时的原值）
+ */
+export function absoluteMediaUrl(src) {
+  const s = String(src == null ? '' : src).trim();
+  if (!s) return '';
+  if (/^(https?:|blob:|data:)/i.test(s)) return s;
+  let base = 'https://localhost/';
+  try {
+    if (typeof location !== 'undefined' && location.href) base = location.href;
+  } catch (_) { /* jsdom 极简环境 */ }
+  try {
+    return new URL(s, base).href;
+  } catch (_) {
+    return s;
+  }
+}
+
+
 /** 清空消息输入框（textarea 走 setValue，contenteditable 摘空子节点并派发 input） */
 export function clearMessageInput(el) {
   if (!el) return;

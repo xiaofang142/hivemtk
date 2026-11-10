@@ -1,6 +1,6 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort } from '../core/dom.js';
+import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
@@ -204,7 +204,11 @@ function extractMessageContent(item) {
   if (text && /^(\d{1,2}:\d{2}|(昨天|前天)?\s*\d{1,2}月\d{1,2}日?\s*\d{1,2}:\d{2}|\d{4}-\d{2}-\d{2})$/.test(text)) {
     return { msgType: 'text', mediaUrl: '', text: '' };
   }
-  const imgs = item.querySelectorAll('img');
+  // 头像过滤（2026-11-10 审计 F4，与 xhs/xianyu/tiktok 同口径）：气泡节点里若含
+  // 头像 <img>，原 `imgs[0]` 会把头像 URL 当图片消息的 media_url 上报。
+  const imgs = Array.from(item.querySelectorAll('img')).filter(
+    (img) => !(img.closest && img.closest('[class*="avatar" i], [class*="Avatar" i]'))
+  );
   const vids = item.querySelectorAll('video, [class*="video"], [class*="Video"]');
   const audio = item.querySelectorAll('[class*="voice"], [class*="Voice"], [class*="audio"], [class*="Audio"]');
   const emoji = item.querySelectorAll('[class*="emoji"], [class*="Emoji"], [draggable="false"][alt]');
@@ -219,19 +223,21 @@ function extractMessageContent(item) {
   }
   let mediaUrl = '';
   let msgType = 'text';
+  // 媒体 URL 统一绝对化（2026-11-10 审计 F5）：协议相对 src（//p3-sign…）落库后必须是
+  // 可独立解析的完整 URL，不能依赖页面上下文。
   if (vids.length) {
     msgType = 'video';
-    mediaUrl = vids[0].getAttribute('src') || vids[0].querySelector('video')?.getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(vids[0].getAttribute('src') || vids[0].querySelector('video')?.getAttribute('src') || '');
   } else if (imgs.length) {
     msgType = 'image';
-    mediaUrl = imgs[0].getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(imgs[0].getAttribute('src') || '');
   } else if (audio.length) {
     msgType = 'voice';
   } else if (emoji.length && !text) {
     msgType = 'emoji';
   } else if (links.length && !text) {
     msgType = 'link';
-    mediaUrl = links[0].getAttribute('href') || '';
+    mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');
   }
   return { msgType, mediaUrl, text };
 }

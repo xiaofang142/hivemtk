@@ -3,7 +3,7 @@ import { CHANNELS } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort,
+  assertConvOrAbort, absoluteMediaUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -171,8 +171,11 @@ function parseMessageItem(item) {
   } catch (_) {  }
   const textEl = item.querySelector(SEL.TEXT);
   const text = cleanText(textEl || item);
-  const img = item.querySelector('img[src]');
-  const mediaUrl = img ? (img.getAttribute('src') || '') : '';
+  // 头像过滤（2026-11-10 审计 F4）+ URL 绝对化（F5），与 xhs/xianyu/tiktok 同口径
+  const img = Array.from(item.querySelectorAll('img[src]')).find(
+    (el) => !(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'))
+  ) || null;
+  const mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
   if (!text && !mediaUrl) return null;
   return {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,

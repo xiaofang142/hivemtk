@@ -2,7 +2,7 @@ import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
-import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort } from '../core/dom.js';
+import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
@@ -252,15 +252,15 @@ function extractMessageContent(item) {
   let msgType = 'text';
   if (typeAttr === 'IMAGE' || (imgs.length && !text)) {
     msgType = 'image';
-    mediaUrl = imgs[0]?.getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(imgs[0]?.getAttribute('src') || '');
   } else if (typeAttr === 'VIDEO' || vids.length) {
     msgType = 'video';
-    mediaUrl = vids[0]?.getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(vids[0]?.getAttribute('src') || '');
   } else if (typeAttr === 'VOICE' || typeAttr === 'AUDIO' || audio.length) {
     msgType = 'voice';
   } else if (links.length && !text) {
     msgType = 'link';
-    mediaUrl = links[0].getAttribute('href') || '';
+    mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');
   }
   return { msgType, mediaUrl, text };
 }

@@ -98,7 +98,10 @@ function extractMessageContent(item) {
   if (text && /^\d{1,2}:\d{2}$/.test(text)) {
     return { msgType: 'text', mediaUrl: '', text: '' };
   }
-  const imgs = item.querySelectorAll('img');
+  // 头像过滤 + URL 绝对化（2026-11-10 审计 F4/F5，与 douyin/xhs 同口径）
+  const imgs = Array.from(item.querySelectorAll('img')).filter(
+    (img) => !(img.closest && img.closest('[class*="avatar" i], [class*="Avatar" i]'))
+  );
   const vids = item.querySelectorAll('video, [class*="video"]');
   const sysTxt = text || '';
   if (/撤回了?一条消息|recalled/i.test(sysTxt)) {
@@ -108,10 +111,10 @@ function extractMessageContent(item) {
   let msgType = 'text';
   if (vids.length) {
     msgType = 'video';
-    mediaUrl = vids[0].getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(vids[0].getAttribute('src') || '');
   } else if (imgs.length) {
     msgType = 'image';
-    mediaUrl = imgs[0].getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(imgs[0].getAttribute('src') || '');
   }
   return { msgType, mediaUrl, text };
 }

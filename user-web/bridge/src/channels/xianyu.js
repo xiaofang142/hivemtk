@@ -5,7 +5,7 @@ import { SelectorEngine } from '../core/selector-engine.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick,
   simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage,
-  sanitizePeerName, assertConvOrAbort,
+  sanitizePeerName, assertConvOrAbort, absoluteMediaUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -377,7 +377,7 @@ function extractMessageContent(item) {
     const title = cleanText(card?.querySelector('[class*="title" i]'));
     const info = cleanText(card?.querySelector('[class*="info" i], [class*="desc" i]'));
     const img = card?.querySelector('img');
-    return { msgType: 'card', mediaUrl: img?.getAttribute('src') || '', text: info || title || '商品卡片' };
+    return { msgType: 'card', mediaUrl: absoluteMediaUrl(img?.getAttribute('src') || ''), text: info || title || '商品卡片' };
   }
   if (/撤回了?一条消息|撤回了一条|recalled a message/i.test(text)) {
     return { msgType: 'recall', mediaUrl: '', text };
@@ -391,17 +391,18 @@ function extractMessageContent(item) {
   const links = item.querySelectorAll('a[href*="http"]');
   let mediaUrl = '';
   let msgType = 'text';
+  // 媒体 URL 绝对化（2026-11-10 审计 F5，与 xhs/douyin 同口径）
   if (typeAttr === 'IMAGE' || (imgs.length && !text)) {
     msgType = 'image';
-    mediaUrl = imgs[0]?.getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(imgs[0]?.getAttribute('src') || '');
   } else if (typeAttr === 'VIDEO' || vids.length) {
     msgType = 'video';
-    mediaUrl = vids[0]?.getAttribute('src') || '';
+    mediaUrl = absoluteMediaUrl(vids[0]?.getAttribute('src') || '');
   } else if (typeAttr === 'VOICE' || typeAttr === 'AUDIO' || audio.length) {
     msgType = 'voice';
   } else if (links.length && !text) {
     msgType = 'link';
-    mediaUrl = links[0].getAttribute('href') || '';
+    mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');
   }
   return { msgType, mediaUrl, text };
 }

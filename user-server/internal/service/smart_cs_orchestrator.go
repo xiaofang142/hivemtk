@@ -851,7 +851,7 @@ func (o *SmartCSOrchestrator) saveInboundMessage(ctx context.Context, session *m
 		SessionID:   session.SessionID,
 		Content:     in.Content,
 		ContentType: model.MessageTypeText,
-		MediaURL:    in.MediaURL,
+		MediaURL:    model.TruncateMediaURL(in.MediaURL),
 		SenderType:  "user",
 		SenderID:    in.SenderID,
 		SenderName:  in.SenderName,

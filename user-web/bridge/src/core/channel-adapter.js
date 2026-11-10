@@ -293,20 +293,20 @@ export class BaseAdapter {
 
   // 内容键相同的气泡在本轮 items 顺序里排在该节点之前有几条 —— 增量路径一次只拿到一个
   // 节点，编号只能从 DOM 顺序数出来（批量路径用同一份语义的 per-pass 计数器）。
-  // 002-multi-type-messages：非文本消息的可见文本口径。渠道解析器对媒体气泡给出的
-  // text 可能为空（纯图无字）；上行时用统一占位符补齐，让服务端 content 永不为空
-  // （占位符与直连渠道同词表，见 types.js::mediaPlaceholder）。
-  _uptextContent(parsed) {
-    const type = (parsed.msg_type || '').toLowerCase();
-    if (!isMediaMsgType(type)) return parsed.text || '';
-    return parsed.text || mediaPlaceholder(type);
-  }
+  // （历史备注：这里曾有 _uptextContent——媒体气泡占位符补齐的统一出口；实际补齐
+  // 发生在 _emitMessage/_historyItem/_emitPatrolMessage 三处内联，本方法从未被调用，
+  // 2026-11-10 审计 F8 按死代码移除。）
 
-  // 媒体消息是否可上行：msg_type 非文本且（有媒体 URL 或有文字）。
+  // 媒体消息是否可上行：msg_type 非文本即可。
+  // 2026-11-10 审计 F3：旧口径要求「有媒体 URL 或有文字」，但纯语音/emoji 气泡在
+  // 渠道解析器里本就不产 URL（douyin.js 的 voice 分支不取 src）——纯语音/纯表情被
+  // 四条采集路径整条蒸发，服务端的 [语音] 占位词表形同虚设。放宽为非文本即可上行：
+  // content 缺失由上行构造时补占位符（_emitMessage/_historyItem/_emitPatrolMessage），
+  // media_url 允许为空（服务端 AppendMediaContextToContent 对空 URL 原样返回）。
   // system/recall 不在此列（走各自的消息 id 前缀路径，由调用方单独处理）。
   _isUplodableMedia(parsed) {
     const type = (parsed.msg_type || '').toLowerCase();
-    return isMediaMsgType(type) && (!!parsed.media_url || !!parsed.text);
+    return isMediaMsgType(type);
   }
 
   _occurrenceInList(item, cid, parsed) {

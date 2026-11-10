@@ -39,6 +39,8 @@ func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.Mess
 	if h.Status == "" {
 		h.Status = "pending"
 	}
+	// F2：media_url 列宽收口（varchar(500)），人工/代发等任何生产者进 outbox 前统一截断。
+	h.MediaURL = model.TruncateMediaURL(h.MediaURL)
 	if h.SentAt.IsZero() {
 		h.SentAt = time.Now()
 	}

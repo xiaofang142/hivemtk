@@ -86,6 +86,20 @@ func DeliverBridgeOutbound(ctx context.Context, channel, accountID, conversation
 // 透给上层响应（ProactiveReachResponse.HubID / MessageID），操作者才有可反查的凭据——
 // Recall（IntegrationReachAdapter.Recall）正是按 msg_id 反查 hub 行的。
 func DeliverBridgeOutboundWithReceipt(ctx context.Context, channel, accountID, conversationID, msgType, content, eventID string) (hubID uint64, msgID string, err error) {
+	return DeliverBridgeOutboundMedia(ctx, channel, accountID, conversationID, msgType, content, "", eventID)
+}
+
+// DeliverBridgeOutboundMedia 带媒体出站入队（002-multi-type-messages 下行通路的服务端生产者出口）。
+//
+// 2026-11-10 审计 F6：下行媒体协议三端早已就绪（OutboxMessage.MediaURL、SSE media_url、
+// 扩展 sendOutbound 的 msgType/mediaUrl 分派），但服务端所有 AI/触达/重放入口都是
+// text-only 入队——扩展端永远收不到带 media_url 的下行行。本函数补上生产者出口：
+//   - msgType 非 text 且 mediaURL 非空时，msg_id 用 typed 口径（ContentHashMsgIDTyped，
+//     与扩展 typedContentHash 同构）：outbound 行的 content 也可能是「[图片]」占位符，
+//     旧口径会让同会话两张图的 pending 行 msg_id 碰撞（ack 误翻、去重互吞）；
+//   - 文本消息（msgType 空/text 或 mediaURL 空）与旧口径逐字节一致；
+//   - mediaURL 统一 TruncateMediaURL（F2 列宽收口）。
+func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, conversationID, msgType, content, mediaURL, eventID string) (hubID uint64, msgID string, err error) {
 	if globalInboxIngressService == nil {
 		return 0, "", errBridgeOutboundNotReady
 	}
@@ -110,8 +124,14 @@ func DeliverBridgeOutboundWithReceipt(ctx context.Context, channel, accountID, c
 	if stripMarkdownForBridgeChannel(channel, msgType) {
 		content = StripMarkdownForDM(content)
 	}
+	mediaURL = model.TruncateMediaURL(strings.TrimSpace(mediaURL))
+	if msgType == "" || strings.EqualFold(strings.TrimSpace(msgType), "text") {
+		mediaURL = ""
+	}
+	// msgID 是命名返回值（回执键），此处用 = 赋值而非 :=。
+	msgID = ContentHashMsgIDTyped(channel, conversationID, msgType, mediaURL, content)
 	h := &model.MessageHub{
-		MsgID:          ContentHashMsgID(channel, conversationID, content),
+		MsgID:          msgID,
 		Platform:       channel,
 		AccountID:      accountID,
 		Direction:      "outbound",
@@ -120,6 +140,7 @@ func DeliverBridgeOutboundWithReceipt(ctx context.Context, channel, accountID, c
 		SenderID:       accountID,
 		ReceiverID:     conversationID,
 		Content:        content,
+		MediaURL:       mediaURL,
 		ConversationID: conversationID,
 		IsAIReply:      false,
 		IsRead:         true,
