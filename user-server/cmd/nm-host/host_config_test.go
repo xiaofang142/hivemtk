@@ -64,6 +64,12 @@ func extensionManifestPath(t *testing.T) string {
 }
 
 func TestInstallScriptDerivesExtensionID(t *testing.T) {
+	// Windows 上 System32\bash.exe 是 WSL 占位 stub（未装发行版时输出
+	// "适用于 Linux 的 Windows 子系统…"），exec.Command("bash") 若解析到它
+	// 必失败且与判据无关 —— 仅在真实 bash 上验证脚本推导。
+	if out, err := exec.Command("bash", "-c", "echo probe").Output(); err != nil || string(out) != "probe\n" {
+		t.Skipf("本机 bash 不可用（可能是 WSL 占位 stub）: %v %q", err, out)
+	}
 	manifestPath := extensionManifestPath(t)
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {

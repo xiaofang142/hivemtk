@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -309,7 +310,9 @@ func TestSaveLeavesNoTempFileAndKeepsMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Save 后读不到文件：%v", err)
 	}
-	if info.Mode().Perm() != 0o644 {
+	// POSIX-only 断言：NTFS 不可表达 per-file 0644 权限位（G-10-7 同族口径，
+	// Windows 上 os.Stat 的 Mode().Perm() 恒返回 0666）。
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o644 {
 		t.Errorf("install.lock 权限应为 0644，实得 %v", info.Mode().Perm())
 	}
 	readBackFromDisk(t, path)

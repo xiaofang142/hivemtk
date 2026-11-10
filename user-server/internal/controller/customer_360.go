@@ -241,11 +241,23 @@ func (c *Customer360Controller) GetCustomerOrders(ctx *gin.Context) {
 // @Tags      customer360
 // @Router    /api/customer-360/messages [get]
 // GetCustomerMessages 获取客户消息记录
+//
+// limit 必须真正生效：前端 customer360/List.vue 的「沟通记录」tab 传 limit=50，
+// 而本 handler 早前忽略该参数（恒返回 DTO 全量 message_history）——客户消息一多
+// 就是几百条一次性渲染，且与同页 /events、/orders 的 limit 语义不一致。
+// 截断口径与 /events 保持一致：非法值回默认 50，上限 200。
 func (c *Customer360Controller) GetCustomerMessages(ctx *gin.Context) {
 	userID := ctx.Query("user_id")
 	if userID == "" {
 		response.Error(ctx, http.StatusBadRequest, "缺少 user_id 参数")
 		return
+	}
+	limit := 50
+	if v, err := strconv.Atoi(ctx.Query("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	if limit > 200 {
+		limit = 200
 	}
 
 	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
@@ -254,9 +266,15 @@ func (c *Customer360Controller) GetCustomerMessages(ctx *gin.Context) {
 		return
 	}
 
+	history := dto.MessageHistory
+	total := len(history)
+	if total > limit {
+		history = history[:limit]
+	}
+
 	response.Success(ctx, gin.H{
-		"message_history": dto.MessageHistory,
-		"total":           len(dto.MessageHistory),
+		"message_history": history,
+		"total":           total,
 	}, "获取成功")
 }
 

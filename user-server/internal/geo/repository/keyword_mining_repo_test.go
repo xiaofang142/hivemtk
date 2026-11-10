@@ -63,7 +63,9 @@ func TestKeywordMiningRepo_TouchMinedAtByIDsWhitelist(t *testing.T) {
 	if err := repo.Create(ctx, row); err != nil {
 		t.Fatalf("创建失败: %v", err)
 	}
-	createdAt := row.CreatedAt
+	// PG timestamp 只存到微秒：内存里的 CreatedAt 带纳秒，先对齐精度再比对，
+	// 否则等值断言会因截断而假红（本仓统一口径，见 audit_test.go）。
+	createdAt := row.CreatedAt.Truncate(time.Microsecond)
 	now := time.Now()
 	if err := repo.TouchMinedAtByIDs(ctx, []string{row.ID}, now); err != nil {
 		t.Fatalf("TouchMinedAtByIDs 失败: %v", err)
@@ -81,7 +83,7 @@ func TestKeywordMiningRepo_TouchMinedAtByIDsWhitelist(t *testing.T) {
 		t.Fatalf("白名单外字段不得被触碰: %+v", got)
 	}
 	if !got.CreatedAt.Equal(createdAt) {
-		t.Fatalf("created_at 不得被改: %v → %v", createdAt, got.CreatedAt)
+		t.Fatalf("created_at 不得被改: %v → %v", createdAt.Truncate(time.Microsecond), got.CreatedAt)
 	}
 
 	// 空切片：与改前 GORM 行为一致——WHERE 恒假，不更新不报错（服务层另有 len>0 守卫）。
@@ -100,7 +102,9 @@ func TestKeywordMiningRepo_UpdateMiningFieldsWhitelist(t *testing.T) {
 	if err := repo.Create(ctx, row); err != nil {
 		t.Fatalf("创建失败: %v", err)
 	}
-	createdAt := row.CreatedAt
+	// PG timestamp 只存到微秒：内存里的 CreatedAt 带纳秒，先对齐精度再比对，
+	// 否则等值断言会因截断而假红（本仓统一口径，见 audit_test.go）。
+	createdAt := row.CreatedAt.Truncate(time.Microsecond)
 	now := time.Now()
 	patch := GeoKeywordMiningPatch{
 		Layer:          "suggest",
@@ -136,7 +140,7 @@ func TestKeywordMiningRepo_UpdateMiningFieldsWhitelist(t *testing.T) {
 		t.Fatalf("白名单外字段被改写: %+v", got)
 	}
 	if !got.CreatedAt.Equal(createdAt) {
-		t.Fatalf("created_at 不得被改: %v → %v", createdAt, got.CreatedAt)
+		t.Fatalf("created_at 不得被改: %v → %v", createdAt.Truncate(time.Microsecond), got.CreatedAt)
 	}
 }
 

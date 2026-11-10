@@ -144,6 +144,11 @@ func (s *WorkflowService) Update(ctx context.Context, id string, req *dto.SaveWo
 	if err := s.wfRepo.Update(ctx, wf); err != nil {
 		return nil, err
 	}
+	// 回写本次更新时间：仓层用 map 直接写 updated_at（绕过 GORM 的 autoUpdateTime），
+	// 内存里的 wf 拿不到新值 —— 不回填的话 PUT 响应会回显更新前的旧时间戳，
+	// 与随后 GET 的结果不一致（前端拿响应里的 updated_at 做乐观更新会显示陈旧时间）。
+	// 与 SiteConfigService.Update / SchemaTemplateService.Update 同一口径。
+	wf.UpdatedAt = time.Now()
 	return s.toWorkflowResponse(wf)
 }
 

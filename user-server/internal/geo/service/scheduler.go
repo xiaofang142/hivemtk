@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
+
+	"gorm.io/gorm"
 )
 
 func runeTruncate(s string, n int) string {
@@ -196,6 +199,28 @@ func loadNegativeKeywords(ctx context.Context, config *model.GeoConfig) []string
 	return out
 }
 
+// loadGeoConfigForJob 定时任务读取本租户 geo_config，并把「无行」当空配置。
+//
+// 为什么需要这层分档：`geo_config` 是每个租户一行的按需表，新租户在首次保存
+// 配置前**本来就没有行**。ConfigService.GetConfig 对同一情形返回默认配置
+// （前端首次进页面即可用）、cfgRepo.Update 对同一情形直接创建 —— 定时任务此前
+// 却把 ErrRecordNotFound 当执行失败，于是未配置的租户每轮都往 geo_job_runs
+// 写一条 failed，日志只有 "读取 GeoConfig 失败: record not found"，把真正的
+// 故障淹没在噪声里（2026-11-10 本地实证：12:00 与 12:30 两轮均如此）。
+//
+// 分档边界必须守住：只有 ErrRecordNotFound 归为「空配置」，其余错误（表缺失、
+// 连接断开、租户隔离 fail-closed 等）仍然上报 —— 把真故障吞成"跳过"比噪声更坏。
+func loadGeoConfigForJob(ctx context.Context, cfgRepo repository.GeoConfigRepository) (*model.GeoConfig, error) {
+	config, err := cfgRepo.Get(ctx)
+	if err == nil {
+		return config, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("读取 GeoConfig 失败: %w", err)
+	}
+	return &model.GeoConfig{Language: "zh"}, nil
+}
+
 func negativeMonitorJob(ctx context.Context) (string, error) {
 	// 触达租户表 —— geo_config（读**本租户**品牌名/负面词）、
 	// geo_probe_runs（探针落行）、geo_alerts（命中写告警）。品牌名是逐租户配置，
@@ -206,9 +231,9 @@ func negativeMonitorJob(ctx context.Context) (string, error) {
 	cfgRepo := repository.NewGeoConfigRepository()
 	probeRepo := repository.NewGeoProbeRunRepository()
 	alertRepo := repository.NewGeoAlertRepository()
-	config, err := cfgRepo.Get(ctx)
+	config, err := loadGeoConfigForJob(ctx, cfgRepo)
 	if err != nil {
-		return "", fmt.Errorf("读取 GeoConfig 失败: %w", err)
+		return "", err
 	}
 
 	brandName := strings.TrimSpace(config.BrandName)

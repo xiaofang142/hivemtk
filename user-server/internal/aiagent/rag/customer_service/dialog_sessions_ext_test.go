@@ -165,8 +165,14 @@ func TestUpdateSessionMetadataMerges(t *testing.T) {
 	if got.Metadata["stage"] != "quote" || got.Metadata["owner"] != "agent-1" {
 		t.Errorf("元数据未合并: %v", got.Metadata)
 	}
-	if !got.UpdatedAt.After(before) {
+	if got.UpdatedAt.Before(before) {
 		t.Error("更新元数据应刷新 UpdatedAt")
+	}
+	// 不用 After() 钉"必须严格变新"：Windows 墙钟粒度 ~15ms，before 与两次
+	// 更新落进同一 tick 时 got.UpdatedAt == before，After() 恒 false（本仓
+	// A-4/G-9-11 同族教训——time.Time 精度比较一律用 Before + Truncate 口径）。
+	if got.UpdatedAt.Equal(before) && got.Metadata["stage"] != "quote" {
+		t.Error("UpdatedAt 未刷新且元数据未落，更新链路没生效")
 	}
 
 	if err := dm.UpdateSessionMetadata(ctx, "", map[string]any{"k": 1}); err == nil {

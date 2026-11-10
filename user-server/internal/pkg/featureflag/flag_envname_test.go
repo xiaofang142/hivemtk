@@ -40,8 +40,10 @@ func TestEnvNameOf_IsSettableInShell(t *testing.T) {
 // TestEnvNameOf_DottedFormIsNotExportable 把"点号那份真的开不上"钉成跑出来的事实，
 // 而不是靠人记得 shell 标识符规则。少了这一格，上面那个归一化就只是"我觉得更好"。
 func TestEnvNameOf_DottedFormIsNotExportable(t *testing.T) {
-	if _, err := exec.LookPath("bash"); err != nil {
-		t.Skip("本机没有 bash，无法验证点号名不可 export")
+	// 不能只 LookPath：Windows 上 System32\bash.exe 是 WSL 占位 stub，路径存在但
+	// 执行必失败（未装发行版）。探针要求 bash 真的能跑出 "ok"。
+	if out, err := exec.Command("bash", "-c", "echo probe-ok").Output(); err != nil || string(out) != "probe-ok\n" {
+		t.Skipf("本机 bash 不可用（可能是 WSL 占位 stub）: %v %q", err, out)
 	}
 	dotted := "FF_" + strings.ToUpper(approvalFlagKeyShape)
 	// 新名字必须能被 bash 接受（正向对照）：只测坏的会因 PATH/别名问题两头都红。

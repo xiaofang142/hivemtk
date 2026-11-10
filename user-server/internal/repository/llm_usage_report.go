@@ -191,11 +191,22 @@ func (r *LLMUsageReportRepository) AggregateWindow(ctx context.Context, from, to
 
 // AggregateWindowLocked 在会话级 advisory lock 保护下跑一次窗口聚合。
 //
-// 返回 locked=false 表示锁被别的实例持有（本轮跳过，不是错误）。锁的释放不依赖调用方
-// ctx（其可能已随请求结束被取消）：与 geo/job_manager 同形，用短超时 Background，
-// 保证锁一定被还回去。锁载体（恒一行派生表）与判读见 internal/pkg/db/advisory_lock.go。
+// 返回 locked=false 表示锁被别的实例持有（本轮跳过，不是错误）。
+//
+// ⚠️ 2026-11-10 修：原实现用 `TryAdvisoryLock(ctx, r.db, ...)` + defer
+// `ReleaseAdvisoryLock(..., r.db, ...)`，两次都从**连接池取任意连接**。会话级
+// advisory lock 的解锁落在别的会话上时返回 false 且**不报错** ⇒ 锁永久滞留在
+// 加锁那条连接上，此后每次聚合都读成"别人在跑"并静默跳过（生产实证：锁键
+// 830083 从 12:16 起一直卡在同一后端会话）。
+// 现在用 TryAdvisoryLockOnConn 拿到**扣住独占连接的句柄**，解锁走同一连接。
+//
+// 锁的释放不依赖调用方 ctx（其可能已随请求结束被取消）：用短超时 Background，
+// 保证锁一定被还回去。
 func (r *LLMUsageReportRepository) AggregateWindowLocked(ctx context.Context, key int64, from, to time.Time) (locked bool, buckets int, err error) {
-	locked, err = _db.TryAdvisoryLock(ctx, r.db, key)
+	if r == nil || r.db == nil {
+		return false, 0, fmt.Errorf("llm usage report repository: db handle is nil")
+	}
+	handle, locked, err := _db.TryAdvisoryLockOnConn(ctx, r.db, key)
 	if err != nil {
 		return false, 0, fmt.Errorf("advisory lock: %w", err)
 	}
@@ -205,7 +216,12 @@ func (r *LLMUsageReportRepository) AggregateWindowLocked(ctx context.Context, ke
 	defer func() {
 		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = _db.ReleaseAdvisoryLock(rctx, r.db, key)
+		if rerr := handle.Release(rctx); rerr != nil {
+			// 解锁失败 = 锁可能滞留到连接断开为止：不能吞，否则下一轮又静默跳过。
+			if err == nil {
+				err = rerr
+			}
+		}
 	}()
 	buckets, err = r.AggregateWindow(ctx, from, to)
 	return true, buckets, err

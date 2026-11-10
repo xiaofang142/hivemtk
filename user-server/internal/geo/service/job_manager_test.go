@@ -156,24 +156,32 @@ func containsStr(s, sub string) bool {
 }
 
 // fakeJobLockRepo 分布式锁接缝的行为桩（AV-04c 批次3：句柄字段改仓储注入后的
-// 接缝语义锁）。held 决定 TryLock 返回值；err 决定错误路径。
+// 接缝语义锁）。acquired 决定 Acquire 返回值；err 决定错误路径。
+//
+// 2026-11-10：接口从 TryLock/Unlock 两方法改成 Acquire 返回**持有独占连接的
+// 句柄** —— 那正是修「加解锁落在不同池连接 ⇒ 锁永久泄漏」的核心。桩照新接口
+// 形态实现；生产句柄的真实加解锁语义由 internal/pkg/db 的句柄测试覆盖（桩不连库）。
 type fakeJobLockRepo struct {
-	// acquired 是 TryLock 的返回值：true = 本次拿到锁；false = 锁在别人手里
+	// acquired 是 Acquire 的返回值：true = 本次拿到锁；false = 锁在别人手里
 	//（调用方跳过本轮）。err 决定错误路径（锁状态未知 ⇒ 调用方放行）。
 	acquired bool
 	err      error
 
 	lockedCalls int
-	unlockCalls int
+	// released 记录 JobManager 是否把句柄交回释放（真实句柄的 Release 在
+	// 桩造的零值句柄上是空操作，只能靠仓储侧计数证明调用链完整）。
+	released bool
 }
 
-func (f *fakeJobLockRepo) TryLock(_ context.Context, key int64) (bool, error) {
+func (f *fakeJobLockRepo) Acquire(_ context.Context, key int64) (*db.AdvisoryLockHandle, bool, error) {
 	f.lockedCalls++
-	return f.acquired, f.err
-}
-
-func (f *fakeJobLockRepo) Unlock(_ context.Context, key int64) {
-	f.unlockCalls++
+	if f.err != nil {
+		return nil, false, f.err
+	}
+	if !f.acquired {
+		return nil, false, nil
+	}
+	return &db.AdvisoryLockHandle{OnRelease: func() { f.released = true }}, true, nil
 }
 
 // TestJobManager_LockSeam 锁接缝三态：被别人锁定 ⇒ 跳过本轮且不落运行记录；
@@ -231,8 +239,8 @@ func TestJobManager_LockSeam(t *testing.T) {
 		if m.startJobForTenant(def, ctx, "manual", tid) {
 			t.Fatal("锁被他人持有时应跳过本次触发")
 		}
-		if lock.lockedCalls != 1 || lock.unlockCalls != 0 {
-			t.Fatalf("应恰好尝试一次加锁且不释放，实际 locked=%d unlock=%d", lock.lockedCalls, lock.unlockCalls)
+		if lock.lockedCalls != 1 || lock.released {
+			t.Fatalf("应恰好尝试一次加锁且不释放，实际 locked=%d released=%v", lock.lockedCalls, lock.released)
 		}
 		if n := countRuns(t, m, def.Name); n != 0 {
 			t.Fatalf("跳过轮不该落运行记录，实际 %d 条", n)
@@ -252,8 +260,8 @@ func TestJobManager_LockSeam(t *testing.T) {
 		if n := countRuns(t, m, def.Name); n != 1 {
 			t.Fatalf("放行轮应落 1 条运行记录，实际 %d 条", n)
 		}
-		if lock.unlockCalls < 1 {
-			t.Fatalf("任务收口应释放锁，unlock=%d", lock.unlockCalls)
+		if lock.released {
+			t.Fatal("没拿到锁的轮次不该调用释放")
 		}
 	})
 

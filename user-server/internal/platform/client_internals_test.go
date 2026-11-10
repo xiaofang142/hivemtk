@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -346,8 +347,11 @@ func TestRegisterMerchantPersistsSecret(t *testing.T) {
 	if string(b) != "persisted-secret" {
 		t.Errorf("落盘内容=%q", string(b))
 	}
-	if fi, sErr := os.Stat(secretPath); sErr != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("secret 文件权限应为 0600, got %v %v", fi.Mode(), sErr)
+	if runtime.GOOS != "windows" {
+		// POSIX-only 断言：NTFS 不可表达 per-file 0644/0600 位（G-10-7 同族口径）。
+		if fi, sErr := os.Stat(secretPath); sErr != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("secret 文件权限应为 0600, got %v %v", fi.Mode(), sErr)
+		}
 	}
 
 	c2 := NewPlatformClient("mk") // 从盘上加载
@@ -405,8 +409,10 @@ func TestMerchantSecretFollowsStateDir(t *testing.T) {
 	if string(b) != "state-dir-secret" {
 		t.Errorf("落盘内容=%q", string(b))
 	}
-	if fi, sErr := os.Stat(want); sErr != nil || fi.Mode().Perm() != 0o600 {
-		t.Errorf("secret 文件权限应为 0600, got %v %v", fi.Mode(), sErr)
+	if runtime.GOOS != "windows" {
+		if fi, sErr := os.Stat(want); sErr != nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("secret 文件权限应为 0600, got %v %v", fi.Mode(), sErr)
+		}
 	}
 	// 同一目录构造的客户端要读得回来（不依赖 CWD）
 	if got := NewPlatformClient("mk").merchantSecret; got != "state-dir-secret" {

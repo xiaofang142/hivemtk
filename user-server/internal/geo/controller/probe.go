@@ -41,10 +41,26 @@ func (c *ProbeController) TestSingle(ctx *gin.Context) {
 	}
 	result, err := c.probeSvc.TestSingle(ctx.Request.Context(), body.Engine, body.Query)
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, err.Error())
+		// 分档（对齐 llm_error.go 的既有口径）：
+		//   - engine 名不存在 → 400：这是调用方写错了参数，改参数即可。
+		//   - 引擎调用失败（上游 429/5xx/超时、无可用 provider）→ 502/503：
+		//     原来一律回 400 INVALID_PARAM_1001，把「上游配额超限，54 秒后重试」
+		//     这种**可重试的服务端问题**报成了「你的请求参数无效」，前端因此
+		//     把可重试错误当成用户输入错误，也让运维在 400 里找不见上流故障。
+		if isUnknownProbeEngineErr(err) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondGeoLLMError(ctx, err, "单引擎探针")
 		return
 	}
 	response.Success(ctx, result, "ok")
+}
+
+// isUnknownProbeEngineErr 判定「引擎名不存在」（service: `engine %s not found`）。
+// 这是唯一属于调用方参数错误的探针失败；其余失败都是上游/装配问题。
+func isUnknownProbeEngineErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "not found (available:")
 }
 
 // @Summary      触发所有引擎探针

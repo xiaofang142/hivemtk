@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -95,8 +96,9 @@ func TestLoadOrInitMerchantKeyWritesDurableFile(t *testing.T) {
 	}
 	if fi, err := os.Stat(filepath.Join(dir, ".merchant_key")); err != nil {
 		t.Fatalf("stat: %v", err)
-	} else if perm := fi.Mode().Perm(); perm != 0o600 {
-		t.Errorf("key 文件权限=%o want 600", perm)
+	} else if runtime.GOOS != "windows" && func() bool { return fi.Mode().Perm() != 0o600 }() {
+		// POSIX-only：NTFS 不可表达 per-file 权限位（G-10-7 同族口径）。
+		t.Errorf("key 文件权限=%o want 600", fi.Mode().Perm())
 	}
 
 	// 目录不同的两台实例必须是两个身份，否则共享状态盘会把它们并成一个商户

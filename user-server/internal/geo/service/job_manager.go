@@ -14,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -388,15 +389,34 @@ func (m *JobManager) startJobForTenant(def geoJobDef, ctx context.Context, trigg
 	}
 
 	// 分布式锁：多实例部署时防止同一任务（同一租户）重复执行。
+	// handle 非 nil 表示本次真的拿到了会话级 advisory lock —— 它扣住一条独占连接，
+	// 必须在任务结束时用同一条连接解锁（见 releaseDistributedLock 与
+	// repository/job_lock.go 的 2026-11-10 修法说明）。
+	var lockHandle *_db.AdvisoryLockHandle
 	if m.lockRepo != nil {
-		locked, err := m.acquireDistributedLock(def.Name, tid, def.Timeout)
-		if err != nil {
+		handle, locked, err := m.acquireDistributedLock(def.Name, tid, def.Timeout)
+		switch {
+		case err != nil:
 			logger.Warn(fmt.Sprintf("[GEO Jobs] 任务 %s（租户 %d）获取分布式锁失败: %v", def.Name, tid, err))
-		} else if !locked {
+		case !locked:
 			logger.Info(fmt.Sprintf("[GEO Jobs] 任务 %s（租户 %d）已被其他实例锁定，跳过本次触发（trigger=%s）", def.Name, tid, trigger))
 			flag.Store(false)
 			return false
+		default:
+			lockHandle = handle
 		}
+	}
+
+	// 兜底：拿锁之后若在交给 execute 之前出现任何非预期退出（Create panic 等），
+	// 必须把锁还回去 —— 否则又是一次锁泄漏，而这正是本轮修的缺陷。
+	handedOff := false
+	if lockHandle != nil {
+		defer func() {
+			if !handedOff {
+				m.releaseDistributedLock(lockHandle)
+				flag.Store(false)
+			}
+		}()
 	}
 
 	run := &model.GeoJobRun{
@@ -416,7 +436,10 @@ func (m *JobManager) startJobForTenant(def geoJobDef, ctx context.Context, trigg
 		runID = run.ID
 	}
 
-	go m.execute(def, runID, trigger, ctx, tid, flag)
+	// 先把锁的所有权交接出去，再起 goroutine：否则 execute 若瞬间跑完并已释放，
+	// 上面的兜底 defer 会以为"没交接"而重复释放（Release 幂等，但语义上不该发生）。
+	handedOff = true
+	go m.execute(def, runID, trigger, ctx, tid, flag, lockHandle)
 	return true
 }
 
@@ -425,24 +448,30 @@ func (m *JobManager) startJobForTenant(def geoJobDef, ctx context.Context, trigg
 // 不触达租户表 —— 裸 Background 不构成隔离 callback 触点，故保持不动。
 // 锁键含租户（lockKey）：调度是逐租户的，租户 A 的任务不该挡住租户 B。
 //
-// SQL 形态（恒一行派生表载体、GORM Select 陷阱）见 repository.GeoJobLockRepository
-// 与 internal/pkg/db/advisory_lock.go——AV-04c 批次3 起查询经锁仓储下沉，本层不再持句柄。
-func (m *JobManager) acquireDistributedLock(jobName string, tenantID uint, timeout time.Duration) (bool, error) {
+// 返回值 handle 是**持有该锁的那条独占连接**，调用方必须原样交回
+// releaseDistributedLock —— 会话级锁只能由加锁的那个会话解锁。
+// SQL 形态与陷阱见 internal/pkg/db/advisory_lock.go。
+func (m *JobManager) acquireDistributedLock(jobName string, tenantID uint, timeout time.Duration) (*_db.AdvisoryLockHandle, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	return m.lockRepo.TryLock(ctx, advisoryLockKey(lockKey(jobName, tenantID)))
+	return m.lockRepo.Acquire(ctx, advisoryLockKey(lockKey(jobName, tenantID)))
 }
 
-// releaseDistributedLock 释放分布式锁
+// releaseDistributedLock 释放在同一条连接上持有的分布式锁，并归还那条连接。
 // 判读同 acquireDistributedLock：pg_advisory_unlock 不触达租户表，裸 Background 保持不动。
-func (m *JobManager) releaseDistributedLock(jobName string, tenantID uint) {
-	if m.lockRepo == nil {
+//
+// 解锁失败（含 unlock 返回 false = 解锁落错会话）不再静默：那是锁泄漏的
+// 直接症状（2026-11-10 修前的形态），必须留痕。
+func (m *JobManager) releaseDistributedLock(handle *_db.AdvisoryLockHandle) {
+	if handle == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	m.lockRepo.Unlock(ctx, advisoryLockKey(lockKey(jobName, tenantID)))
+	if err := handle.Release(ctx); err != nil {
+		logger.Error(err, fmt.Sprintf("[GEO Jobs] 释放分布式锁失败（锁键=%d）：该锁可能滞留到本进程连接断开", handle.Key()))
+	}
 }
 
 // advisoryLockKey 把锁键字符串压成 int64（advisory lock 收 int64）。
@@ -455,9 +484,9 @@ func advisoryLockKey(key string) int64 {
 
 // execute 在**单租户**上下文里跑一次任务体并回写运行记录。
 // ctx 已绑定本租户（cron 闭包 / StartJob 的 Fanout 回调），tid 与之一致。
-func (m *JobManager) execute(def geoJobDef, runID uint, trigger string, ctx context.Context, tid uint, flag *atomic.Bool) {
+func (m *JobManager) execute(def geoJobDef, runID uint, trigger string, ctx context.Context, tid uint, flag *atomic.Bool, lockHandle *_db.AdvisoryLockHandle) {
 	defer flag.Store(false)
-	defer m.releaseDistributedLock(def.Name, tid)
+	defer m.releaseDistributedLock(lockHandle)
 
 	start := time.Now()
 	// 每租户一份超时预算：任务级 def.Timeout 叠在本租户 ctx 上，先跑的租户不会

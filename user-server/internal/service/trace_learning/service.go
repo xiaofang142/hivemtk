@@ -165,7 +165,9 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 	// 「取句柄再开独占连接」换成仓储同名 Connection 接缝（WithContext→Connection
 	// 链路等价，锁与锁内扫描仍同一条连接）。
 	connErr := s.repo.Connection(ctx, func(conn *gorm.DB) error {
-		held, e := dbutil.TryAdvisoryLock(ctx, conn, runBatchLockKey)
+		// 会话固定：这条 conn 由 GORM Connection 扣住，加锁与 defer 解锁都在
+		// 同一后端会话上 —— 这是 advisory lock 唯一正确的用法。
+		held, e := dbutil.TryAdvisoryLockConn(ctx, conn, runBatchLockKey)
 		if e != nil {
 			return e
 		}
