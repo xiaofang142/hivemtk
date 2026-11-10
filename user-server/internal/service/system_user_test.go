@@ -866,6 +866,58 @@ func TestSystemUserService_UpdateUser_EmptyFields(t *testing.T) {
 	}
 }
 
+// TestSystemUserService_UpdateUser_PhoneClear 回归 user-profile-phone-clear-ignored：
+// Phone 为 *string 后，空串=显式清空、nil=不修改。旧实现 `if req.Phone != ""`
+// 会把「清空手机号」当「未提供」静默吞掉，接口却返回成功（假成功）。
+func TestSystemUserService_UpdateUser_PhoneClear(t *testing.T) {
+	database := setupSystemUserServiceTestDB(t)
+	service := NewSystemUserService()
+
+	user := model.SystemUser{
+		Username: "testuser",
+		Password: "Password123",
+		Email:    "test@example.com",
+		Phone:    "13800000000",
+		RealName: "Test User",
+		Role:     "user",
+		Status:   1,
+	}
+	database.Create(&user)
+
+	// 空串 = 显式清空：必须真的把库里的手机号清掉，而不是静默跳过。
+	req := &UpdateUserRequest{Phone: &[]string{""}[0]}
+	updatedUser, err := service.UpdateUser(context.Background(), user.ID, req)
+	if err != nil {
+		t.Fatalf("UpdateUser(phone 清空) failed: %v", err)
+	}
+	if updatedUser.Phone != "" {
+		t.Errorf("Expected phone cleared in response, got %q", updatedUser.Phone)
+	}
+	var reloaded model.SystemUser
+	if err := database.First(&reloaded, user.ID).Error; err != nil {
+		t.Fatalf("reload user failed: %v", err)
+	}
+	if reloaded.Phone != "" {
+		t.Errorf("Expected phone cleared in DB, got %q", reloaded.Phone)
+	}
+
+	// nil = 未提供：不修改（与旧 != "" 对无值场景的语义等价）。
+	if err := database.Model(&model.SystemUser{}).Where("id = ?", user.ID).
+		Update("phone", "13900000000").Error; err != nil {
+		t.Fatalf("re-seed phone failed: %v", err)
+	}
+	if _, err := service.UpdateUser(context.Background(), user.ID, &UpdateUserRequest{}); err != nil {
+		t.Fatalf("UpdateUser(nil phone) failed: %v", err)
+	}
+	var reloaded2 model.SystemUser
+	if err := database.First(&reloaded2, user.ID).Error; err != nil {
+		t.Fatalf("reload user failed: %v", err)
+	}
+	if reloaded2.Phone != "13900000000" {
+		t.Errorf("Expected phone unchanged for nil, got %q", reloaded2.Phone)
+	}
+}
+
 // TestSystemUserService_toUserResponse 测试 toUserResponse 方法
 func TestSystemUserService_toUserResponse(t *testing.T) {
 	database := setupSystemUserServiceTestDB(t)
