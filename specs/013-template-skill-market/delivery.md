@@ -31,7 +31,7 @@
 > callback 照常生效）。同买家同条目活跃单幂等回显，不重复建单。
 >
 > **建表登记**：`internal/pkg/db/migrate.go` allModels()（MarketCatalogEntry/MarketEntryOrder）
-> + `internal/model/module_tables.go` coreOwnedTables（市场是 platform-link 基础模块的
+> ＋ `internal/model/module_tables.go` coreOwnedTables（市场是 platform-link 基础模块的
 > 橱窗/购买入口，购买入口不能被购买条件关闭，两表随基座常在——与 module_orders 同一条）。
 >
 > **菜单**：`menu.go` templateMarketGroup 下补 `templateMarketMy`（我的发布/订单，

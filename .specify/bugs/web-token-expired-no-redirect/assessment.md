@@ -46,7 +46,7 @@ vue-router 4 中，guard 自身的 pending `next()` 在导航被外部 push 打�
 `initAuth()`（store 创建时）从 localStorage 读一次。401 处理不清 ref →
 `isLoggedIn` 仍为 true → 守卫 `if (to.path === '/login') { if (userStore.isLoggedIn) next('/dashboard') }`
 **把刚要到的 /login 弹回 /dashboard** → 页面请求再次 401 → 循环若干轮后停在
-#/dashboard（数据全空、只有过期 toast）。登录表单永远不出现。
+\#/dashboard（数据全空、只有过期 toast）。登录表单永远不出现。
 
 ## Files likely to change
 

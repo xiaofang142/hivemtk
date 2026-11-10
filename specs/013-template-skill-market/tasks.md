@@ -43,7 +43,7 @@
 - [x] T021 repository：`MarketEntryRepository`（条目/订单存取 + 条件跃迁乐观并发）+ 真库用例 3 条
   （平台级匿名读不受租户闸拦、条件跃迁 0 行语义、订单租户隔离）
 - [x] T022 service：`MarketEntryService`（提审/审核/下架复架/下单/撤单/收款确认/我的三表）
-  + `TemplateMarketService` 合并 DB approved 条目上橱窗（读失败降级纯种子）+ 真库用例 4 条
+  ＋ `TemplateMarketService` 合并 DB approved 条目上橱窗（读失败降级纯种子）+ 真库用例 4 条
   （主线闭环 / 免费直通 / fail-closed 面 / 租户 on 隔离）
 - [x] T023 controller/router：`controller/market_entry.go` 9 端点；module_routes.go
   auth 档 6 条 + tenantAdmin(admin) 档 4 条；哨兵→业务码映射（查无/越态/重复/参数不落 500）

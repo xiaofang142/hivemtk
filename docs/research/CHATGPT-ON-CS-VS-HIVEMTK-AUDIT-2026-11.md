@@ -78,7 +78,7 @@ setup(): while(true):
 ## A6. 对方的结构性局限（我们的机会面）
 
 1. **无幂等**：消息无稳定 ID 唯一键，靠"最后一条消息 class"判定方向，innerHTML 快照重扫
-   + 每轮全量 action——重发/漏发靠 `NO_REPLY` 与人工，无 at-least-once 保障。
+   ＋ 每轮全量 action——重发/漏发靠 `NO_REPLY` 与人工，无 at-least-once 保障。
 2. **无投递状态机**：回复发出即结束，发送失败仅日志；无 ack/重推/死信。
 3. **单机单用户**：SQLite + 本地 Chrome + 2s 串行节拍——平台数 × 实例数一多，轮询周期即膨胀；
    无水平扩展。
