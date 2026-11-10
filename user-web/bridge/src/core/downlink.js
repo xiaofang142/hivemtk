@@ -483,6 +483,9 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
           // 批24：与 ok 同行的只有「点了」这一件事；sendVerified 才是「窗口里见着自己的气泡」。
           // 原样打印不做 `!!`：没走到回查的出路必须是 undefined，折成 false 就是把三态洗成二态。
           sendVerified: result && result.sendVerified,
+          // M-3：媒体下行路径标记（sendMedia 原生 / text-fallback:no-hook|sendmedia-failed|
+          // sendmedia-error）——纯文本出站为 undefined，降级口径在结果日志可见。
+          via: result && result.via,
         });
         if (result && result.ok) {
           cache.add(cacheKey);

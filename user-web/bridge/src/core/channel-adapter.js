@@ -108,6 +108,10 @@ export class BaseAdapter {
     this._outboundStartedAt = 0;
     this._outboundLingerUntil = 0;
     this._patrolYield = { sendInFlight: 0 };
+    // M-3：在途 sendMedia 的弃用令牌。sendMedia 被 withTimeout 放弃后，在途 hook 在
+    // 点发送等不可逆动作前自检该令牌，命中即清场退出 —— 防降级文本已发出、
+    // 被弃的 hook 迟到又点一次发送的双发（详见 media-inject.js 顶部注释）。
+    this._activeMediaAbort = null;
   }
 
   setAccount(account) { this.account = account; }
@@ -1554,23 +1558,50 @@ export class BaseAdapter {
     // 两段等待（风控提示 + 全局最小间隔）能睡到秒级，其间客户自己也可能说过同一句话——
     // 用睡前的基线会把别人的那条气泡算成我们发出去的。
     const verifyMs = opts.sendVerifyMs != null ? opts.sendVerifyMs : BRIDGE_THREE_CHANNEL.sendVerifyMs;
+    // 批25：最后一道闸 —— 点发送前复核会话归属。
+    //   锁（_outboundInFlight）能挡住巡检，但挡不住 SPA 自己改路由和用户手点别的会话；
+    //   一旦漂移，"点之前"就是唯一止损点（点下去＝发给了下一个用户，不可撤回）。
+    //   判据挂在渠道 sendText / sendMedia 的点击前一刻（渠道 hook 调 assertConvOrAbort），
+    //   漂移 ⇒ 清空输入框 + 抛 conv-drift ⇒ 本条不 ack、留 pending 由下一轮重投。
+    //   （M-3：定义提前到媒体分派之前 —— sendMedia 原生发送同样要过这道闸。）
+    const assertConv = () => {
+      const now = this.getConversationId();
+      return !now || now === conv;
+    };
     // 002-multi-type-messages：媒体出站分派。
     //   - opts.msgType 非 text 且有 mediaUrl：优先渠道原生 hooks.sendMedia（若实现）；
     //     未实现则统一降级为「[图片] URL」文本走 rawSendText —— 降级也是一次真实投递，
     //     成功即 ack，行不再无限重推（原先非文本出站在扩展端静默失败、行反复重推）。
     //   - 降级文本参与同一套限速/回查/自报管线，行为与纯文本完全一致。
+    //   - M-3（2026-11-11）：降级可观测 —— via 标记区分 sendMedia 原生成功 /
+    //     text-fallback:no-hook（渠道未实现）/ text-fallback:sendmedia-failed（hook 返回
+    //     未成功）/ text-fallback:sendmedia-error（hook 抛错含超时），随结果上行日志可见。
+    //   - M-3：assertConv / abortToken 随 opts 透传给 hook（原生发送同样过会话复核闸；
+    //     超时弃用的 hook 在点发送前自检 abortToken 退出，防双发）。
     const outType = (opts.msgType || '').toLowerCase();
     const isMediaOut = isMediaMsgType(outType) && !!opts.mediaUrl;
+    let mediaVia = '';
     let sendText = text;
     let sendMetaType = 'text';
     let sendMetaUrl = '';
-    if (isMediaOut && typeof this.hooks.sendMedia === 'function') {
-      try {
-        const mres = await withTimeout(
-          this.hooks.sendMedia(outType, opts.mediaUrl, conv, { text }),
-          BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs,
-          `sendMedia(${this.channel})`
-        );
+    if (isMediaOut) {
+      if (typeof this.hooks.sendMedia === 'function') {
+        const mediaAbort = { aborted: false, reason: '' };
+        const prevMediaAbort = this._activeMediaAbort;
+        this._activeMediaAbort = mediaAbort;
+        let mres = null;
+        let mediaErr = null;
+        try {
+          mres = await withTimeout(
+            this.hooks.sendMedia(outType, opts.mediaUrl, conv, { text, assertConv, abortToken: mediaAbort }),
+            BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs,
+            `sendMedia(${this.channel})`
+          );
+        } catch (e) {
+          mediaErr = e;
+        } finally {
+          this._activeMediaAbort = prevMediaAbort;
+        }
         if (mres && mres.ok) {
           this.rateLimiter.markSent(this.channel, account, conv, opts.mediaUrl);
           stampGlobalSendAt();
@@ -1578,29 +1609,31 @@ export class BaseAdapter {
             { sender_type: SENDER.AGENT, text: text || mediaPlaceholder(outType), media_url: opts.mediaUrl, msg_type: outType, timestamp: Date.now(), message_id: typedContentHash(this.channel, conv, outType, opts.mediaUrl, text || '') },
             { send_verified: true }
           );
-          return { ok: true, sendVerified: true, rateLimited: false, notFound: false, via: 'sendMedia' };
+          return { ok: true, sendVerified: true, rateLimited: false, notFound: false, via: 'sendMedia', mediaMethod: (mres && mres.method) || '' };
         }
-        this.log.warn('sendMedia 未成功，降级为 URL 文本投递', { channel: this.channel, type: outType });
-      } catch (e) {
-        this.log.warn('sendMedia 异常，降级为 URL 文本投递', { channel: this.channel, err: String(e?.message || e) });
+        // 降级：先弃用在途 hook（若已超时仍在跑，点发送前自检会退出），再走文本路径
+        mediaAbort.aborted = true;
+        mediaAbort.reason = (mres && mres.reason) || 'failed';
+        if (mediaErr) {
+          mediaVia = 'text-fallback:sendmedia-error';
+          this.log.warn('sendMedia 异常，降级为 URL 文本投递', { channel: this.channel, type: outType, via: mediaVia, err: String(mediaErr?.message || mediaErr) });
+        } else {
+          mediaVia = 'text-fallback:sendmedia-failed';
+          this.log.warn('sendMedia 未成功，降级为 URL 文本投递', { channel: this.channel, type: outType, via: mediaVia, reason: (mres && mres.reason) || '' });
+        }
+      } else {
+        // M-3：渠道未实现 sendMedia —— 保留文本降级（不丢行），via 标记可观测；
+        // 节流告警：同渠道 15s 一次，避免媒体下行密集时刷屏。
+        mediaVia = 'text-fallback:no-hook';
+        throttledWarn(this.log, `sendMediaNoHook:${this.channel}`, WARN_THROTTLE_MS,
+          '渠道未实现 sendMedia，媒体下行降级为 URL 文本投递', { channel: this.channel, type: outType, via: mediaVia });
       }
-    }
-    if (isMediaOut) {
       sendText = `${text ? text + ' ' : ''}${mediaPlaceholder(outType)} ${opts.mediaUrl}`;
       sendMetaType = outType;
       sendMetaUrl = opts.mediaUrl;
     }
     const textBaseline = this._countVisibleText(sendText);
     let ok;
-    // 批25：最后一道闸 —— 点发送前复核会话归属。
-    //   锁（_outboundInFlight）能挡住巡检，但挡不住 SPA 自己改路由和用户手点别的会话；
-    //   一旦漂移，"点之前"就是唯一止损点（点下去＝发给了下一个用户，不可撤回）。
-    //   判据挂在渠道 sendText 的点击前一刻（各渠道 sendText 调 assertConvOrAbort），
-    //   漂移 ⇒ 清空输入框 + 抛 conv-drift ⇒ 本条不 ack、留 pending 由下一轮重投。
-    const assertConv = () => {
-      const now = this.getConversationId();
-      return !now || now === conv;
-    };
     try {
       // B4（批3）：rawSendText 裸 await——sendText 卡死（DOM 阻塞/框架吞事件）会永久挂起
       // 整条按会话串行的下行队列。统一 withTimeout，预算随文案长度伸缩（B7 拟人键入时长）。
@@ -1644,7 +1677,10 @@ export class BaseAdapter {
         });
       }
     }
-    return { ok, sendVerified, rateLimited: false, notFound: false };
+    // M-3：媒体出站带 via 标记（sendMedia / text-fallback:*）；纯文本不带（结果形状不变）
+    return isMediaOut
+      ? { ok, sendVerified, rateLimited: false, notFound: false, via: mediaVia }
+      : { ok, sendVerified, rateLimited: false, notFound: false };
   }
 }
 

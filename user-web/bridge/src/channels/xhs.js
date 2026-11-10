@@ -4,6 +4,7 @@ import { mergeSelectors, customConversationListSelectors } from '../core/selecto
 import { SelectorEngine } from '../core/selector-engine.js';
 import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
+import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
 const log = createLogger('xhs', CHANNELS.XHS);
@@ -682,6 +683,21 @@ const hooks = {
       }
     } catch (_) {  }
   },
+  // M-3 下行媒体原生发送（2026-11-11）：媒体 URL 下载（content 直取 → background
+  // bridge:fetchMedia 代理兜底）→ 编辑器注入（会话面板内 input[type=file] DataTransfer
+  // 优先，合成 paste 兜底）→ DOM 校验媒体落地 →（可选文案拟人键入，不清空保留媒体）
+  // → assertConv 复核 → 既有发送按钮/回车路径。任一步失败清理编辑器后抛错，
+  // adapter 统一降级「[图片] URL」文本（via=text-fallback:*，不丢行）。风控不另设
+  // 通道：sendMedia 由 adapter 在 rateLimiter.tryAcquire + 全局最小间隔通过后才分派。
+  // 真机形态（xhs-im-input-bar-editor 对 DataTransfer/paste 的响应）待真机校准。
+  sendMedia: makeSendMediaHook({
+    channelKey: CHANNELS.XHS,
+    channelLabel: '小红书',
+    findInput: findInputEl,
+    findSend: findSendButton,
+    getAccount: getAccountId,
+    log,
+  }),
 };
 
 export { getAccountId, getConversationId, getConversationList, normalizeContactId, isXhsMessagePage, isXhsChatUrl, getPeerName, getPeerAvatar };
