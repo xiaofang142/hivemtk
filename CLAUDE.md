@@ -2,6 +2,11 @@
 
 > **与工作区版的关系**：工作区根目录另有一份 `CLAUDE.md`（不入库），其 Git 协作规则
 > 已指针化到本页（E-5/D-5 收口，2026-10-23）；两版冲突时以本页为准。
+>
+> **工作区全局导航**：父目录 `..\README.md`（不入库）是双仓库工作区的全局 README——
+> 记录两仓库定位与各子项目功能承载（user-server / user-web+bridge / embed-sdk / packages /
+> website；platform-server / platform-web / platform-contributor）、远程与端口约定、
+> 文档归属规则；涉及跨仓结构、端口冲突、文档放哪里的问题先读它。
 
 ## 🏆 规则-1：UI 测试必须逐元素显式操作（凌驾一切，2026-10-31 用户强制）
 
