@@ -10,7 +10,6 @@ package service
 
 import (
 	"context"
-	"log"
 	"regexp"
 	"runtime/debug"
 	"strconv"
@@ -307,7 +306,7 @@ func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.
 	// 由本段既有的 defer recover 兜底。
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+			logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 		}
 	}()
 	scoreSvc := NewClueScoreServiceWithRepos(

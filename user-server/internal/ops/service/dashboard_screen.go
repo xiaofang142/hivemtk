@@ -259,7 +259,7 @@ type RealtimeActivity struct {
 // AggregateDashboardData 聚合大屏数据（Service 层）
 // isAdmin=true  → 返回全租户数据；
 // isAdmin=false → 按 data_scope 过滤（私域单租户当前无实际隔离，预留接口）。
-// 错误不再用 log.Printf 吞掉，而是向上返回，让 Controller 包装成 500 响应。
+// 错误不再直出吞掉，而是向上返回，让 Controller 包装成 500 响应。
 //
 // AV-04c 批次5 刀1：查询组下沉 DashboardScreenRepository（同谓词同投影同排序），
 // service 不再持 gorm 句柄；原 scope 闭包是恒等函数（两分支同实现），随下沉删除。

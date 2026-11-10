@@ -8,6 +8,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -19,7 +20,7 @@ func TestTB09_FeedbackLoop_E2E(t *testing.T) {
 	// ⚠️ intent_records 的唯一 automigrate 来源是 IntentRecord（22 列全集）；
 	// IntentLog 同表不同列，列入会自动重建缺列表（message_id 等）——
 	// 模型头注释明确禁止（历史 42703 事故面），这里钉死正确形态。
-	db := testutil.NewTestDB(t, &model.IntentRecord{}, &model.CustomIntent{}, &model.SystemConfigKV{})
+	db := testutil.NewTestDB(t, &model.IntentRecord{}, &model.CustomIntent{}, &model.SystemConfigKV{}, &model.IntentRouteDaily{})
 	ctx := tenant.ContextWithDefault(context.Background())
 
 	// 1) 预置一条错判日志（客服话术被误判为 price_inquiry）
@@ -32,6 +33,8 @@ func TestTB09_FeedbackLoop_E2E(t *testing.T) {
 	}
 
 	svc := NewIntentFeedbackService()
+	// TB-11 刀3：纠错事件聚合写侧注入（真库 E2E 断言 __correction__ 行）
+	svc.SetIntentRouteDailyRepository(repository.NewIntentRouteDailyRepositoryWithDB(db))
 	// 自定义意图服务注入（纠正目标可为自定义词条）
 	ciSvc := NewCustomIntentService(repository.NewCustomIntentRepositoryWithDB(db))
 	SetCustomIntentService(ciSvc)
@@ -57,6 +60,16 @@ func TestTB09_FeedbackLoop_E2E(t *testing.T) {
 	r3 := rec2.recognizeByRule(ctx, "我的包裹咋还没到啊")
 	if r3 == nil || r3.IntentType != IntentAskService || r3.Method != "rule" {
 		t.Fatalf("纠错后应直接规则命中, got %+v", r3)
+	}
+
+	// 4b) TB-11 刀3：纠错事件同步落聚合表（__correction__ 行：原错误意图+tool_calls=1）
+	rdRepo := repository.NewIntentRouteDailyRepositoryWithDB(db)
+	corr, err := rdRepo.GetRow(ctx, time.Now().Format("2006-01-02"), IntentPriceInquiry, "", "__correction__")
+	if err != nil {
+		t.Fatalf("读 __correction__ 行失败: %v", err)
+	}
+	if corr == nil || corr.ToolCalls != 1 {
+		t.Fatalf("__correction__ 行错误（期望 intent_type=%s tool_calls=1）: %+v", IntentPriceInquiry, corr)
 	}
 
 	// 5) 负例矩阵

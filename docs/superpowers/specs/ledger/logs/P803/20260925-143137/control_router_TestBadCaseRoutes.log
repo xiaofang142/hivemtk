@@ -1,0 +1,29 @@
+2026-09-25T14:32:07+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestBadCaseRoutes_AllEightRegistered
+--- PASS: TestBadCaseRoutes_AllEightRegistered (0.25s)
+=== RUN   TestBadCaseRoutes_UnavailableIs503WithDataless
+--- PASS: TestBadCaseRoutes_UnavailableIs503WithDataless (0.00s)
+=== RUN   TestBadCaseRoutes_SetupUsesGlobalRegistry
+2026-09-25T14:32:08+08:00 INF [Router] bad_case 路由已挂载，但未装配服务 ⇒ 全部端点回 503（检查 app.InitBadCaseRuntime 是否在路由之前跑过） component=user-server
+2026-09-25T14:32:08+08:00 INF [bad-case] ✅ Bad Case 底座已装配（表 bad_cases）：两条自动判据（低置信度 / 零命中）+ 人工补录，打标七类目归四层，导出即盖 eval_set_id 防重导 component=user-server
+2026-09-25T14:32:08+08:00 WRN [bad-case] ⚠️ 无 DB 句柄 ⇒ Bad Case 底座不装配：/api/bad-cases/* 全部回 503、低质回答不再留痕（回答本身照常发出，本卡不改变那条路径） component=user-server
+--- PASS: TestBadCaseRoutes_SetupUsesGlobalRegistry (0.07s)
+=== RUN   TestBadCaseRoutes_IdentityIsRequiredOnWriteEntries
+--- PASS: TestBadCaseRoutes_IdentityIsRequiredOnWriteEntries (0.10s)
+=== RUN   TestBadCaseRoutes_QueryParams
+--- PASS: TestBadCaseRoutes_QueryParams (0.10s)
+=== RUN   TestBadCaseRoutes_GetByID
+--- PASS: TestBadCaseRoutes_GetByID (0.08s)
+=== RUN   TestBadCaseRoutes_LabelAndDismissCodes
+--- PASS: TestBadCaseRoutes_LabelAndDismissCodes (0.11s)
+=== RUN   TestBadCaseRoutes_Export
+2026-09-25T14:32:08+08:00 INF [BadCase] 导出一批评测集样本 component=user-server count=1 eval_set_id=bce_1790317928716486000_8
+--- PASS: TestBadCaseRoutes_Export (0.09s)
+=== RUN   TestBadCaseRoutes_TaxonomyMatchesModelTables
+--- PASS: TestBadCaseRoutes_TaxonomyMatchesModelTables (0.07s)
+=== RUN   TestBadCaseRoutes_Stats
+--- PASS: TestBadCaseRoutes_Stats (0.07s)
+=== RUN   TestBadCaseRoutes_CreateManual
+--- PASS: TestBadCaseRoutes_CreateManual (0.08s)
+PASS
+ok  	hivemtk-user/internal/router	1.816s

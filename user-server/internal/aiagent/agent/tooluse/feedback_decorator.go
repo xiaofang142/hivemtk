@@ -3,7 +3,7 @@ package tooluse
 import (
 	"context"
 	"errors"
-	"log"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -52,7 +52,7 @@ type ToolCallEvent struct {
 //
 // 通过 MonitoredFeedbackSink 包装，对 sink.RecordToolCall 错误进行监控
 //   - 错误计数（atomic，无锁）
-//   - 错误日志（log.Printf，便于运维定位）
+//   - 错误日志（logger.Errorf，便于运维定位）
 //   - 错误率超阈值告警（10s 窗口内错误率 > 50% 时输出告警日志）
 //
 // 装饰器链位置：审计计费之后、handler 之前
@@ -97,7 +97,7 @@ func FeedbackCollectorDecorator(sink FeedbackSink) ToolDecorator {
 				sinkCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if sinkErr := sink.RecordToolCall(sinkCtx, ev); sinkErr != nil {
-					log.Printf("[WARN] FeedbackSink.RecordToolCall failed: tool=%s trace_id=%s err=%v",
+					logger.Warnf("FeedbackSink.RecordToolCall failed: tool=%s trace_id=%s err=%v",
 						ev.ToolName, ev.TraceID, sinkErr)
 				}
 			}(event)

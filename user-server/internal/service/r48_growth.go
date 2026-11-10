@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -20,6 +19,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
@@ -96,7 +96,7 @@ func (s *WebhookSubService) PublishEvent(ctx context.Context, event string, payl
 		go func(sub model.WebhookSubscription, body []byte) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
 			reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)

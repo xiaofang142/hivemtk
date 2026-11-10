@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // CategoryCard 会话内富卡片工具分类
@@ -157,7 +157,7 @@ func BuildCardTools() []Tool {
 func RegisterCardTools(registry *ToolRegistry) {
 	for _, tool := range BuildCardTools() {
 		if err := registry.Register(tool); err != nil {
-			log.Printf("[WARN] register card tool %s failed: %v", tool.Name(), err)
+			logger.Warnf("register card tool %s failed: %v", tool.Name(), err)
 		}
 	}
 }

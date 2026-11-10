@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -122,7 +121,7 @@ func (s *TelegramDMOutreachService) recordDMOutreachEvent(ctx context.Context, a
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+			logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 		}
 	}()
 

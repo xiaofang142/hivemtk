@@ -96,6 +96,12 @@ func TestLoadCustomToolProviders_RestoresFromTable(t *testing.T) {
 		t.Fatalf("构造本地 Provider 失败: %v", err)
 	}
 	localTools, _ := local.Provide(ProviderContext{})
+	// MA-01：生产 client 挂 GuardedTransport（拨号期拒环回），解密腿验证用
+	// httptest 假上游，同包直接把测试客户端换回去（SSRF 闸在位由
+	// TestOpenAPITool_ExecuteRefusesPrivateDial 钉死，不在本用例重复验证）。
+	if ot, ok := localTools[0].(*openAPITool); ok {
+		ot.client = srv.Client()
+	}
 	if _, err := localTools[0].Execute(context.Background(), map[string]any{"sku": "A-1"}); err != nil {
 		t.Fatalf("执行失败: %v", err)
 	}

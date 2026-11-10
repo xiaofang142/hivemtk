@@ -30,6 +30,12 @@ type fakeDashRepo struct {
 	selectorRows []model.BridgeSelectorHealth
 	domainBan    repository.ObsDashDomainBanSummaryRow
 	err          error
+
+	// TB-11 刀4：路由观测四读
+	routeIntentRows []repository.ObsDashRouteIntentRow
+	routeChainRows  []repository.ObsDashRouteChainRow
+	routeToolRows   []repository.ObsDashRouteToolRow
+	routeNS         repository.ObsDashRouteNorthStarRow
 }
 
 func (f *fakeDashRepo) LLMCost(ctx context.Context, since time.Time) ([]repository.ObsDashLLMCostRow, error) {
@@ -72,6 +78,34 @@ func (f *fakeDashRepo) DomainBanSummary(ctx context.Context) (repository.ObsDash
 		return repository.ObsDashDomainBanSummaryRow{}, f.err
 	}
 	return f.domainBan, nil
+}
+
+func (f *fakeDashRepo) RouteIntentDistribution(ctx context.Context, since time.Time) ([]repository.ObsDashRouteIntentRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.routeIntentRows, nil
+}
+
+func (f *fakeDashRepo) RouteChainHitRate(ctx context.Context, since time.Time) ([]repository.ObsDashRouteChainRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.routeChainRows, nil
+}
+
+func (f *fakeDashRepo) RouteToolSuccessRate(ctx context.Context, since time.Time) ([]repository.ObsDashRouteToolRow, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.routeToolRows, nil
+}
+
+func (f *fakeDashRepo) RouteNorthStar(ctx context.Context, since time.Time) (repository.ObsDashRouteNorthStarRow, error) {
+	if f.err != nil {
+		return repository.ObsDashRouteNorthStarRow{}, f.err
+	}
+	return f.routeNS, nil
 }
 
 func newDashSvc() (*ObservabilityDashboardService, *fakeDashRepo) {
@@ -239,6 +273,19 @@ func TestSnapshot_AggregatesAllSections(t *testing.T) {
 		{Channel: "douyin", Field: "messageItem", Attempts: 500, Hits: 0}, // broken
 	}
 	repo.domainBan = repository.ObsDashDomainBanSummaryRow{Blacklisted: 2, Total: 5}
+	repo.routeIntentRows = []repository.ObsDashRouteIntentRow{
+		{IntentType: "order_status", Cnt: 7},
+		{IntentType: "complaint", Cnt: 3},
+	}
+	repo.routeChainRows = []repository.ObsDashRouteChainRow{
+		{ChainName: "order_status", Hits: 6, Misses: 2},
+	}
+	repo.routeToolRows = []repository.ObsDashRouteToolRow{
+		{ToolName: "order.lookup", Calls: 5, Success: 4},
+	}
+	repo.routeNS = repository.ObsDashRouteNorthStarRow{
+		Sessions: 10, Resolved: 7, Handoff: 2, Corrections: 1, Recognized: 8,
+	}
 
 	snap, err := svc.Snapshot(context.Background(), "7d")
 	if err != nil {
@@ -295,6 +342,55 @@ func TestSnapshot_AggregatesAllSections(t *testing.T) {
 	}
 	if snap.ChannelHealth.DomainBanned != 2 || snap.ChannelHealth.DomainTotal != 5 {
 		t.Fatalf("域名封禁聚合错：%+v", snap.ChannelHealth)
+	}
+
+	// TB-11 路由观测：北极星比率走纯函数口径，分布/链/工具行不串位。
+	ns := snap.Route.NorthStar
+	if ns.IntentAccuracy != 87.5 { // (8-1)/8
+		t.Fatalf("意图准确率应为 87.5，实际 %v", ns.IntentAccuracy)
+	}
+	if ns.ResolveRate != 70 || ns.HandoffRate != 20 {
+		t.Fatalf("解决率/转人工率应为 70/20，实际 %v/%v", ns.ResolveRate, ns.HandoffRate)
+	}
+	if ns.Sessions != 10 || ns.Resolved != 7 || ns.Handoff != 2 || ns.Corrections != 1 || ns.IntentRecognized != 8 {
+		t.Fatalf("北极星读数错：%+v", ns)
+	}
+	if len(snap.Route.IntentDistribution) != 2 ||
+		snap.Route.IntentDistribution[0].IntentType != "order_status" || snap.Route.IntentDistribution[0].Count != 7 {
+		t.Fatalf("意图分布错：%+v", snap.Route.IntentDistribution)
+	}
+	if len(snap.Route.ChainHitRate) != 1 || snap.Route.ChainHitRate[0].HitRate != 75 { // 6/(6+2)
+		t.Fatalf("链命中率错：%+v", snap.Route.ChainHitRate)
+	}
+	if len(snap.Route.ToolSuccessRate) != 1 || snap.Route.ToolSuccessRate[0].SuccessRate != 80 { // 4/5
+		t.Fatalf("工具成功率错：%+v", snap.Route.ToolSuccessRate)
+	}
+}
+
+func TestRouteIntentAccuracy_ZeroRecognizedAndCorrectionsExceedRecognized(t *testing.T) {
+	if got := RouteIntentAccuracy(0, 0); got != 0 {
+		t.Fatalf("识别量 0 应回 0，实得 %v", got)
+	}
+	if got := RouteIntentAccuracy(5, 2); got != 0 {
+		t.Fatalf("纠错数超识别量应夹到 0，实得 %v", got)
+	}
+	if got := RouteIntentAccuracy(1, 4); got != 75 { // (4-1)/4
+		t.Fatalf("1−1/4 应为 75，实得 %v", got)
+	}
+}
+
+func TestRouteResolveRate_And_HandoffRate_ZeroDenominator(t *testing.T) {
+	if got := RouteResolveRate(0, 0); got != 0 {
+		t.Fatalf("解决率分母 0 应回 0，实得 %v", got)
+	}
+	if got := RouteHandoffRate(0, 0); got != 0 {
+		t.Fatalf("转人工率分母 0 应回 0，实得 %v", got)
+	}
+	if got := RouteResolveRate(3, 4); got != 75 {
+		t.Fatalf("解决率 3/4 应为 75，实得 %v", got)
+	}
+	if got := RouteHandoffRate(1, 4); got != 25 {
+		t.Fatalf("转人工率 1/4 应为 25，实得 %v", got)
 	}
 }
 

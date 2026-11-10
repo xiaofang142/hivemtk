@@ -1,0 +1,8 @@
+=== RUN   TestNewTestDBBoundsPool
+    testdb_pool_test.go:31: 测试库句柄的 MaxOpenConns = 200，期望 32（0 表示根本没设上界，database/sql 里 0＝不限）
+--- FAIL: TestNewTestDBBoundsPool (0.09s)
+FAIL
+FAIL	hivemtk-user/internal/pkg/testutil	0.458s
+FAIL
+
+===== CONNECT =====

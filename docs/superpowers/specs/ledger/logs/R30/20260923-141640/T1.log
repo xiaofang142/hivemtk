@@ -1,0 +1,11 @@
+2026-09-23T14:28:03+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestE2E_Telegram_AccountCreateAndGet
+2026-09-23T14:28:03+08:00 WRN [TG] 账号 1(测试TG) 异步 setWebhook 失败: e2e: 建号用例不发起真实 setWebhook (可在 UI 手动重试) component=user-server
+    channel_fullchain_e2e_test.go:284: getMe 腿没被走到：BotUsername 自动获取那一步（feishu.go 的 CreateAccount 第 2 步）没执行，本用例并没有覆盖它
+--- FAIL: TestE2E_Telegram_AccountCreateAndGet (15.49s)
+FAIL
+FAIL	hivemtk-user/internal/service	16.108s
+FAIL
+
+===== CONNECT =====
+14:28:03 CONNECT api.telegram.org:443

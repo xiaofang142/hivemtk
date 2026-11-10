@@ -31,6 +31,21 @@ type ObservabilityDashboardRepository interface {
 	SelectorHealthRows(ctx context.Context) ([]model.BridgeSelectorHealth, error)
 	// DomainBanSummary domain_pool 的封禁/风险域名计数。
 	DomainBanSummary(ctx context.Context) (ObsDashDomainBanSummaryRow, error)
+
+	// ── TB-11 意图路由观测（刀4） ──────────────────────────────────────────
+	// RouteIntentDistribution 窗口内 intent_records 按 intent_type 聚合计数
+	// （真实识别分布，含未绑定链路的意图）。
+	RouteIntentDistribution(ctx context.Context, since time.Time) ([]ObsDashRouteIntentRow, error)
+	// RouteChainHitRate 窗口内 intent_route_daily 链级行按 chain_name 聚合
+	// 命中/跳过（tool_name='' 的链级行；含本轮 0 工具调用的 miss 行）。
+	RouteChainHitRate(ctx context.Context, since time.Time) ([]ObsDashRouteChainRow, error)
+	// RouteToolSuccessRate 窗口内 intent_route_daily 工具级行按 tool_name 聚合
+	// 调用数/成功数（过滤伪行：链级空串行与 '__correction__' 纠错事件行）。
+	RouteToolSuccessRate(ctx context.Context, since time.Time) ([]ObsDashRouteToolRow, error)
+	// RouteNorthStar 窗口内北极星三指标的分子/分母读数：
+	// sessions/resolved/handoff（customer_sessions）+ corrections（纠错事件行
+	// 计数）+ recognized（intent_records 识别量），比率在 service 层算。
+	RouteNorthStar(ctx context.Context, since time.Time) (ObsDashRouteNorthStarRow, error)
 }
 
 // ObsDashLLMCostRow 一条 (provider, scenario) 聚合。
@@ -70,6 +85,38 @@ type ObsDashChannelAccountRow struct {
 type ObsDashDomainBanSummaryRow struct {
 	Blacklisted int64 `gorm:"column:blacklisted"`
 	Total       int64 `gorm:"column:total"`
+}
+
+// ── TB-11 意图路由观测行结构（刀4） ──────────────────────────────────────
+
+// ObsDashRouteIntentRow 意图分布一行（intent_type → 识别量）。
+type ObsDashRouteIntentRow struct {
+	IntentType string `gorm:"column:intent_type"`
+	Cnt        int64  `gorm:"column:cnt"`
+}
+
+// ObsDashRouteChainRow 链命中率一行（chain_name → 命中/跳过）。
+type ObsDashRouteChainRow struct {
+	ChainName string `gorm:"column:chain_name"`
+	Hits      int64  `gorm:"column:hits"`
+	Misses    int64  `gorm:"column:misses"`
+}
+
+// ObsDashRouteToolRow 工具成功率一行（tool_name → 调用数/成功数）。
+type ObsDashRouteToolRow struct {
+	ToolName string `gorm:"column:tool_name"`
+	Calls    int64  `gorm:"column:calls"`
+	Success  int64  `gorm:"column:success"`
+}
+
+// ObsDashRouteNorthStarRow 北极星读数行（sessions/resolved/handoff 来自
+// customer_sessions；corrections/recognized 来自意图路由聚合表与 intent_records）。
+type ObsDashRouteNorthStarRow struct {
+	Sessions    int64 `gorm:"column:sessions"`
+	Resolved    int64 `gorm:"column:resolved"`
+	Handoff     int64 `gorm:"column:handoff"`
+	Corrections int64 `gorm:"column:corrections"`
+	Recognized  int64 `gorm:"column:recognized"`
 }
 
 type observabilityDashboardRepo struct {
@@ -176,5 +223,88 @@ func (r *observabilityDashboardRepo) DomainBanSummary(ctx context.Context) (ObsD
 	if err != nil {
 		return ObsDashDomainBanSummaryRow{}, err
 	}
+	return row, nil
+}
+
+// RouteIntentDistribution 窗口内 intent_records 按 intent_type 聚合计数。
+// 直接查 intent_records（IntentLog.TableName）：含未绑定链路的意图，分布才 truthful。
+func (r *observabilityDashboardRepo) RouteIntentDistribution(ctx context.Context, since time.Time) ([]ObsDashRouteIntentRow, error) {
+	var rows []ObsDashRouteIntentRow
+	err := r.db.WithContext(ctx).Model(&model.IntentLog{}).
+		Select("intent_type, COUNT(*) AS cnt").
+		Where("created_at >= ?", since).
+		Group("intent_type").
+		Order("cnt desc, intent_type asc").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RouteChainHitRate 窗口内链级行（tool_name=”）按 chain_name 聚合命中/跳过。
+func (r *observabilityDashboardRepo) RouteChainHitRate(ctx context.Context, since time.Time) ([]ObsDashRouteChainRow, error) {
+	var rows []ObsDashRouteChainRow
+	err := r.db.WithContext(ctx).Table("intent_route_daily").
+		Select("chain_name, COALESCE(SUM(chain_hits),0) AS hits, COALESCE(SUM(chain_misses),0) AS misses").
+		Where("tool_name = '' AND created_at >= ?", since).
+		Group("chain_name").
+		Order("chain_name asc").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RouteToolSuccessRate 窗口内工具级行按 tool_name 聚合调用数/成功数；
+// 伪行（链级空串行与 '__correction__' 纠错事件行）不是真实工具调用，排除。
+func (r *observabilityDashboardRepo) RouteToolSuccessRate(ctx context.Context, since time.Time) ([]ObsDashRouteToolRow, error) {
+	var rows []ObsDashRouteToolRow
+	err := r.db.WithContext(ctx).Table("intent_route_daily").
+		Select("tool_name, COALESCE(SUM(tool_calls),0) AS calls, COALESCE(SUM(tool_success),0) AS success").
+		Where("tool_name NOT IN ('', '__correction__') AND created_at >= ?", since).
+		Group("tool_name").
+		Order("tool_name asc").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RouteNorthStar 窗口内北极星读数：会话三计数 + 纠错数 + 识别量。
+// 会话口径在 customer_sessions（软删由 Model 查询自动排除）；纠错数取
+// intent_route_daily '__correction__' 行 tool_calls 之和；识别量取 intent_records 计数。
+func (r *observabilityDashboardRepo) RouteNorthStar(ctx context.Context, since time.Time) (ObsDashRouteNorthStarRow, error) {
+	var row ObsDashRouteNorthStarRow
+	err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Select("COUNT(*) AS sessions, "+
+			"COALESCE(SUM(CASE WHEN closed_at IS NOT NULL OR resolved_at IS NOT NULL THEN 1 ELSE 0 END),0) AS resolved, "+
+			"COALESCE(SUM(CASE WHEN handoff_at IS NOT NULL THEN 1 ELSE 0 END),0) AS handoff").
+		Where("created_at >= ?", since).
+		Scan(&row).Error
+	if err != nil {
+		return ObsDashRouteNorthStarRow{}, err
+	}
+	var corr struct {
+		Corrections int64 `gorm:"column:corrections"`
+	}
+	err = r.db.WithContext(ctx).Table("intent_route_daily").
+		Select("COALESCE(SUM(tool_calls),0) AS corrections").
+		Where("tool_name = '__correction__' AND created_at >= ?", since).
+		Scan(&corr).Error
+	if err != nil {
+		return ObsDashRouteNorthStarRow{}, err
+	}
+	var recognized int64
+	err = r.db.WithContext(ctx).Model(&model.IntentLog{}).
+		Where("created_at >= ?", since).
+		Count(&recognized).Error
+	if err != nil {
+		return ObsDashRouteNorthStarRow{}, err
+	}
+	row.Corrections = corr.Corrections
+	row.Recognized = recognized
 	return row, nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"time"
@@ -492,7 +491,7 @@ func DispatchSessionEventAsync(ctx context.Context, event, sessionID string, ses
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		dctx, cancel := context.WithTimeout(bg, utils.DefaultHTTPTimeout)

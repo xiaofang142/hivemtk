@@ -73,7 +73,14 @@ for (const file of API_FILES) {
         for (const args of ARG_SETS) {
           clearMocks(mocks)
           try {
-            await fn(...args)
+            const _ret = fn(...args)
+            // SSE 型导出（如 streamEgoEvents）返回 {done,abort}：done 内部 fetch
+            // 已点火却无人 await，相对 URL 在 Node 直接 TypeError reject，记成
+            // 未处理 rejection 假红（基线债：干净 HEAD 单跑同文件亦 RC=1，
+            // 2026-11-10 复现证实）。smoke 只断言「可调用且触发 HTTP」，
+            // 给 done 挂 noop catch 兜住，不断言流内容。
+            if (_ret && typeof _ret.done?.catch === 'function') _ret.done.catch(() => {})
+            await _ret
             const calls = getCalls(mocks)
             const urlOk = hasValidUrl(calls)
             if (calls.length > 0 && urlOk === false) {

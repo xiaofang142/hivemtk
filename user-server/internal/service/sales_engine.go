@@ -84,6 +84,9 @@ type SalesEngine struct {
 	// 注入"按链优先调用"指引；LLM 仍自主决策，绑定失效安全回落。
 	intentChain agent_runtime.IntentChainLookup
 
+	// intentRouteDaily 意图路由日聚合写侧（TB-11 刀2）；nil=未装配，loop 出口零变化。
+	intentRouteDaily repository.IntentRouteDailyRepository
+
 	glossary   GlossaryRenderer
 	calibrator OutputCalibrator
 }
@@ -91,6 +94,11 @@ type SalesEngine struct {
 // SetIntentChainLookup 注入意图→工具调用流绑定层（装配层调用；运行期只读）。
 func (e *SalesEngine) SetIntentChainLookup(l agent_runtime.IntentChainLookup) {
 	e.intentChain = l
+}
+
+// SetIntentRouteDailyRepository 注入路由观测聚合仓储（TB-11 刀2；装配层调用，运行期只读）。
+func (e *SalesEngine) SetIntentRouteDailyRepository(repo repository.IntentRouteDailyRepository) {
+	e.intentRouteDaily = repo
 }
 
 func (e *SalesEngine) SetPermissionChecker(pc AgentToolPermissionChecker) {

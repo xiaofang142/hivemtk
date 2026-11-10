@@ -24,9 +24,9 @@
 //
 //	r := modulekit.NewRegistry()
 //	for _, m := range modulekit.BuiltinModules() {
-//	    if err := r.Register(m); err != nil { log.Fatal(err) }
+//	    if err := r.Register(m); err != nil { logger.Fatalf("%v", err) }
 //	}
-//	if err := r.EnableAll(ctx); err != nil { log.Fatal(err) }
+//	if err := r.EnableAll(ctx); err != nil { logger.Fatalf("%v", err) }
 //
 // 巡检期（并发安全，可与请求同时跑）：
 //

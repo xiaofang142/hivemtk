@@ -289,7 +289,10 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.POST("/connector/ping", connCtrl.Ping)
 
 	// TB-09 意图纠错反馈（管理端：改判日志→词面覆盖热生效）。
-	fbCtrl := controller.NewIntentFeedbackController(service.NewIntentFeedbackService())
+	fbSvc := service.NewIntentFeedbackService()
+	// TB-11 刀3：纠错事件同步落路由聚合表（__correction__ 行；写侧 nil 守卫 fail-open）。
+	fbSvc.SetIntentRouteDailyRepository(repository.NewIntentRouteDailyRepositoryWithDB(db))
+	fbCtrl := controller.NewIntentFeedbackController(fbSvc)
 	admin.POST("/intent/feedback/correct", fbCtrl.Correct)
 	admin.GET("/intent/feedback/override", fbCtrl.Override)
 

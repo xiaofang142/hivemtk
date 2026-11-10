@@ -13,7 +13,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/egolite"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/storage"
 )
@@ -444,5 +444,5 @@ func egoErrorMessage(err error, fallback string) string {
 
 // egoLogWarnf egolite 控制器层的轻量告警出口。
 func egoLogWarnf(format string, args ...any) {
-	log.Printf("[WARN] "+format, args...)
+	logger.Warnf(format, args...)
 }

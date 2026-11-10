@@ -150,6 +150,9 @@ var aiSalesOwnedTables = []string{
 	// intent_tool_chains：TB-01 绑定层（意图→工具链的租户级数据配置），
 	// 与 intent_records 同属意图域数据面。
 	"intent_tool_chains",
+	// intent_route_daily：TB-11 意图路由日聚合（租户×意图×链×工具×日
+	// 计数行），与 intent_tool_chains 同属意图域数据面。
+	"intent_route_daily",
 	// custom_intents：T-09 自定义意图词条（意图目录数据化），同属意图域数据面。
 	"custom_intents",
 	// order_change_requests：TB-05 改单申请单（客服侧申请+审批+能力路由执行），

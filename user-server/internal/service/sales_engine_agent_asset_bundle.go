@@ -2,10 +2,10 @@ package service
 
 import (
 	"context"
-	"log"
 	"sync"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // AssetBundleResolver 资产包解析器接口
@@ -46,7 +46,7 @@ func resolveAssetBundlePersona(ctx context.Context, agentCtx *dto.AgentContext, 
 	}
 	prompt, err := resolver.ResolveSystemPrompt(ctx, agentCtx.AssetBundleID)
 	if err != nil {
-		log.Printf("[sales_engine] resolve asset bundle persona failed: asset=%s err=%v (fallback to original persona)",
+		logger.Warnf("[sales_engine] resolve asset bundle persona failed: asset=%s err=%v (fallback to original persona)",
 			agentCtx.AssetBundleID, err)
 		return ""
 	}

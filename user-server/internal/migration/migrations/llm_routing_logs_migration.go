@@ -78,16 +78,19 @@ func (m *LLMRoutingLogsMigration) Up(ctx context.Context) error {
 }
 
 func (m *LLMRoutingLogsMigration) Down(ctx context.Context) error {
+	// llm_routing_audit 与 llm_routing_logs 同由模型（LLMRoutingAudit/LLMRoutingLog）
+	// 经 AutoMigrate 持有：基线已建表，Up 的 CREATE TABLE IF NOT EXISTS 是幂等空转，
+	// Down 不得删表（删表连带销毁模型列与 tenant_id 索引＝销毁在用数据，
+	// a_full_chain_migration_test.go 逐迁移归属比对钉死）；仅撤销 Up 新建的索引。
 	stmts := []string{
 		"DROP INDEX IF EXISTS idx_llm_routing_audit_created_at",
 		"DROP INDEX IF EXISTS idx_llm_routing_audit_scenario",
-		"DROP TABLE IF EXISTS llm_routing_audit",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_trace_id",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_created_at",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_provider",
 		"DROP INDEX IF EXISTS idx_llm_routing_logs_scenario",
 	}
-	declineTableDrop(m.Version(), "llm_routing_logs")
+	declineTableDrop(m.Version(), "llm_routing_logs", "llm_routing_audit")
 	for _, s := range stmts {
 		if err := m.db.WithContext(ctx).Exec(s).Error; err != nil {
 			return fmt.Errorf("llm_routing_logs/audit 回滚失败: %w", err)

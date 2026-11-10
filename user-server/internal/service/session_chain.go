@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"runtime/debug"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -44,7 +44,7 @@ func (s *SessionChainService) TriggerCSATOnClose(session *model.CustomerSession)
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+				logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 			}
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), utils.RagMetricsTimeout)

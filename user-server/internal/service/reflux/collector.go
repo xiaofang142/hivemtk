@@ -6,12 +6,12 @@ package reflux
 
 import (
 	"context"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -74,7 +74,7 @@ func (c *Collector) Stop() {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		log.Println("[reflux] collector stop timeout, queue not drained")
+		logger.Warnf("[reflux] collector stop timeout, queue not drained")
 	}
 }
 
@@ -127,7 +127,7 @@ func (c *Collector) processOne(ev Event) {
 		UpdatedAt:    now,
 	}
 	if err := c.repo.UpsertUnknownQuestion(ctx, &row); err != nil {
-		log.Printf("[reflux] upsert unknown_question: %v (q=%q)", err, ev.Question)
+		logger.Errorf("[reflux] upsert unknown_question: %v (q=%q)", err, ev.Question)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (c *Collector) processOne(ev Event) {
 		cl := c.clusterer
 		c.mu.Unlock()
 		if err := cl.Assign(ctx, hash, ev.Question); err != nil {
-			log.Printf("[reflux] cluster assign: %v", err)
+			logger.Warnf("[reflux] cluster assign: %v", err)
 		}
 	}
 }

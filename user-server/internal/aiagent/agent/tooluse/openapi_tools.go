@@ -7,6 +7,10 @@
 //
 // 解析自实现（零新依赖）：只取工具面需要的字段（paths/methods/params/schema），
 // 不引入 kin-openapi 全量校验栈。
+//
+// SSRF 两层防线（urlguard.go:6「缺一不可」口径，MA-01）：配置期 ValidateOpenAPIBaseURL
+// 把写进配置的坏地址挡在落库前；运行期 buildOps 的 client 挂 GuardedTransport——
+// 拨号期复校对重定向跳内网、DNS rebinding 依然生效（kb_crawler/mcp client 同款）。
 package tooluse
 
 import (
@@ -23,9 +27,11 @@ import (
 	"hivemtk-user/internal/pkg/urlguard"
 )
 
-// ValidateOpenAPIBaseURL 出站基址 SSRF 防线：仅允许 http(s)，拒绝环回/链路本地/
-// 私有网段/元数据地址（判据统一走 urlguard，覆盖 IPv6 ULA/0.0.0.0/8 段/广播）。导入工具是「LLM 决定调用」的高危面，放宽等于把内网
+// ValidateOpenAPIBaseURL 出站基址 SSRF 防线（配置期第一层）：仅允许 http(s)，拒绝
+// 环回/链路本地/私有网段/元数据地址。导入工具是「LLM 决定调用」的高危面，放宽等于把内网
 // 打通给模型；确需访问内网服务的部署应走正向代理并在代理侧做访问控制。
+// 注意这层只护导入时刻：基址解析结果随 DNS/重定向可变，运行期靠 buildOps 的
+// GuardedTransport 拨号期复校兜底（MA-01）。
 func ValidateOpenAPIBaseURL(raw string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -38,8 +44,8 @@ func ValidateOpenAPIBaseURL(raw string) error {
 	if host == "" {
 		return fmt.Errorf("base_url 缺少主机名")
 	}
-	// 网段判据统一委托 urlguard 单一事实源（G-10 二次审核：原手写版漏拒
-	// IPv6 ULA fc00::/7 与 0.0.0.0/8 段，与 urlguard 双源漂移）。
+	// 网段判据统一委托 urlguard 单一事实源（G-10 二次审核口径：手写版漏拒
+	// IPv6 ULA fc00::/7、0.0.0.0/8 段与受限广播，双源漂移即绕行面）。
 	if err := urlguard.CheckHost(host); err != nil {
 		return fmt.Errorf("base_url 指向非公网目标: %w", err)
 	}
@@ -294,7 +300,9 @@ func NewOpenAPIToolProvider(spec OpenAPIImportSpec) (ToolProvider, error) {
 }
 
 func buildOps(ops []openAPIOperation, spec OpenAPIImportSpec, timeout time.Duration) []Tool {
-	client := &http.Client{Timeout: timeout}
+	// 运行期 SSRF 第二层（MA-01）：拨号期复校（GuardedTransport.DialControl），
+	// 重定向跳内网/DNS rebinding 后依然生效；Timeout 语义保持不变。
+	client := &http.Client{Timeout: timeout, Transport: urlguard.GuardedTransport()}
 	tools := make([]Tool, 0, len(ops))
 	for _, op := range ops {
 		tools = append(tools, &openAPITool{op: op, spec: spec, client: client})

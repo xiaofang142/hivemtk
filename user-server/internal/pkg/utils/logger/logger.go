@@ -265,6 +265,11 @@ func Error(err error, msg string) { GetLogger().Error().Err(err).Msg(msg) }
 // Errorf 格式化记录 error 级日志。
 func Errorf(format string, args ...any) { GetLogger().Error().Msgf(format, args...) }
 
+// Fatalf 格式化记录 fatal 级日志并退出进程（os.Exit(1)）。
+// MA-07：替代服务面 stdlib Fatal ——语义不变（启动期 fail-fast 护栏靠它），
+// 但进 zerolog 管道（带 trace_id/级别/时间戳），不再绕过结构化日志。
+func Fatalf(format string, args ...any) { GetLogger().Fatal().Msgf(format, args...) }
+
 type rotatingWriter struct {
 	mu       sync.Mutex
 	path     string

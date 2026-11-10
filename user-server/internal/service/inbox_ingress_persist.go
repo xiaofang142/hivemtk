@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 
-	"log"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -111,7 +110,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
 			if s.leadMiningSvc != nil {

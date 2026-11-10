@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -83,7 +82,7 @@ func (s *WebhookService) annotateBridgeDMOutreachEvent(ctx context.Context, chan
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+			logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 		}
 	}()
 

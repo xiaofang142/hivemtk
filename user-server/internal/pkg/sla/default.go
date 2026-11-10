@@ -1,7 +1,7 @@
 package sla
 
 import (
-	"log"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"sync"
 	"time"
 )
@@ -48,7 +48,7 @@ func Default() *SLOTracker {
 			Description: "人工首响 SLA 达成率",
 		})
 		t.OnBreach(func(s SLO, state SLOState) {
-			log.Printf("[SLO-BREACH] %s: achievement=%.4f target=%.4f budget_used=%.4f",
+			logger.Warnf("[SLO-BREACH] %s: achievement=%.4f target=%.4f budget_used=%.4f",
 				s.Name, state.Achievement, s.SLITarget, state.BudgetUsed)
 		})
 		defaultTracker = t

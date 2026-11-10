@@ -40,15 +40,18 @@ func TestOpenAPITool_ExecutesThroughDecoratorChain(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	provider, err := NewOpenAPIToolProvider(OpenAPIImportSpec{
-		Name: "stock", BaseURL: upstream.URL, SchemaJSON: decoratorTestSchema, TimeoutMS: 3000,
-	})
+	// MA-01：buildOps 的生产客户端已挂 GuardedTransport（拨号期拒内网），
+	// 对环回 httptest 上游执行必须注入测试客户端——本用例验证的是装饰器链
+	// 与上游转发的接缝，不是 SSRF 闸（闸由 TestOpenAPITool_ExecuteRefusesPrivateDial
+	// 与 TestOpenAPIRunDialControlRejections 承载），故同包直接构造 openAPITool。
+	ops, err := ParseOpenAPISchema(decoratorTestSchema)
 	if err != nil {
-		t.Fatalf("构造 Provider 失败: %v", err)
+		t.Fatalf("解析 schema 失败: %v", err)
 	}
-	tools, err := provider.Provide(ProviderContext{})
-	if err != nil || len(tools) != 1 {
-		t.Fatalf("工具数 = %d err=%v", len(tools), err)
+	spec := OpenAPIImportSpec{Name: "stock", BaseURL: upstream.URL, TimeoutMS: 3000}
+	tools := []Tool{&openAPITool{op: ops[0], spec: spec, client: upstream.Client()}}
+	if len(tools) != 1 {
+		t.Fatalf("工具数 = %d", len(tools))
 	}
 
 	reg := NewToolRegistry()

@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
 
 	ksvc "hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/reporting"
 	"hivemtk-user/internal/service"
@@ -117,9 +117,9 @@ func NewRagEvalGapController() *RagEvalGapController {
 	})
 	// 上次进程的评测 goroutine 已随进程结束，残留的 running 行原地标失败，避免列表永远显示「进行中」。
 	if n, err := svc.ReconcileInterrupted(context.Background()); err != nil {
-		log.Printf("[rag-eval] 清理中断评测失败: %v", err)
+		logger.Errorf("[rag-eval] 清理中断评测失败: %v", err)
 	} else if n > 0 {
-		log.Printf("[rag-eval] 已把 %d 条中断的评测标记为失败", n)
+		logger.Infof("[rag-eval] 已把 %d 条中断的评测标记为失败", n)
 	}
 	return &RagEvalGapController{svc: svc}
 }

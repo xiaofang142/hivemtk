@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -521,7 +520,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		go func(answer string, vec []float32) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
 			if err := o.faqCache.Store(storeCtx, ragcache.StoreRequest{
@@ -609,7 +608,7 @@ func (o *SmartCSOrchestrator) resolveFAQKB(ctx context.Context, agentCtx *AgentC
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+			logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 		}
 	}()
 	if o.kbRepo == nil {
@@ -639,7 +638,7 @@ func (o *SmartCSOrchestrator) resolveFAQKB(ctx context.Context, agentCtx *AgentC
 func (o *SmartCSOrchestrator) embedFAQQuery(ctx context.Context, text string) []float32 {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
+			logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 		}
 	}()
 	vec, err := o.faqEmbedder.EmbedOne(ctx, o.faqEmbedder.DefaultConfig(), text)

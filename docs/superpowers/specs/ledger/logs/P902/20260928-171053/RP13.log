@@ -1,0 +1,81 @@
+2026-09-28T17:23:23+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
+=== RUN   TestKBReleaseRepo_LockReleaseEnsuresRow
+--- PASS: TestKBReleaseRepo_LockReleaseEnsuresRow (4.80s)
+=== RUN   TestKBReleaseRepo_SetGovernedIdempotent
+--- PASS: TestKBReleaseRepo_SetGovernedIdempotent (0.79s)
+=== RUN   TestKBReleaseRepo_PublishJudgments
+=== RUN   TestKBReleaseRepo_PublishJudgments/没进发布制的库拒绝发布
+    kb_release_test.go:347: 实得 kb_release: 该库没有待发布内容（product=kbrepo_p4：无已批准的变更、待发布桶为空）
+=== RUN   TestKBReleaseRepo_PublishJudgments/既没变更又没待发布桶
+=== RUN   TestKBReleaseRepo_PublishJudgments/桶号不高于在服版本就停下
+=== RUN   TestKBReleaseRepo_PublishJudgments/跨号发布被禁令挡住
+=== RUN   TestKBReleaseRepo_PublishJudgments/缺归属或操作者
+=== RUN   TestKBReleaseRepo_PublishJudgments/未装配底座
+--- FAIL: TestKBReleaseRepo_PublishJudgments (4.84s)
+    --- FAIL: TestKBReleaseRepo_PublishJudgments/没进发布制的库拒绝发布 (0.71s)
+    --- PASS: TestKBReleaseRepo_PublishJudgments/既没变更又没待发布桶 (1.47s)
+    --- PASS: TestKBReleaseRepo_PublishJudgments/桶号不高于在服版本就停下 (1.29s)
+    --- PASS: TestKBReleaseRepo_PublishJudgments/跨号发布被禁令挡住 (0.91s)
+    --- PASS: TestKBReleaseRepo_PublishJudgments/缺归属或操作者 (0.46s)
+    --- PASS: TestKBReleaseRepo_PublishJudgments/未装配底座 (0.00s)
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/add_无内容
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/add_无文档
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/未知动作
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/revise_目标不存在
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/retire_目标不存在
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/retire_目标属于别库
+=== RUN   TestKBReleaseRepo_PublishRejectsBadChanges/revise_目标属于别库
+--- PASS: TestKBReleaseRepo_PublishRejectsBadChanges (1.11s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/add_无内容 (0.01s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/add_无文档 (0.01s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/未知动作 (0.01s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/revise_目标不存在 (0.03s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/retire_目标不存在 (0.01s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/retire_目标属于别库 (0.01s)
+    --- PASS: TestKBReleaseRepo_PublishRejectsBadChanges/revise_目标属于别库 (0.01s)
+=== RUN   TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending
+--- PASS: TestKBReleaseRepo_PublishRolledBackWhenChangeNotPending (1.11s)
+=== RUN   TestKBReleaseRepo_PublishAddStampsAndAdvances
+--- PASS: TestKBReleaseRepo_PublishAddStampsAndAdvances (1.13s)
+=== RUN   TestKBReleaseRepo_PublishPublishesDraftBucket
+--- PASS: TestKBReleaseRepo_PublishPublishesDraftBucket (0.58s)
+=== RUN   TestKBReleaseRepo_ReviseAndRetireShape
+--- PASS: TestKBReleaseRepo_ReviseAndRetireShape (1.79s)
+=== RUN   TestKBReleaseRepo_RollbackTouchesNoCorpus
+--- PASS: TestKBReleaseRepo_RollbackTouchesNoCorpus (1.68s)
+=== RUN   TestKBReleaseRepo_PointerMovesRefuseCleanRows
+--- PASS: TestKBReleaseRepo_PointerMovesRefuseCleanRows (1.29s)
+=== RUN   TestKBReleaseRepo_CountChunksInForce
+--- PASS: TestKBReleaseRepo_CountChunksInForce (1.41s)
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/off_档不拦（即使已治理）
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/shadow_档不拦
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档拦已治理的库
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档放行未治理
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档放行没有行的库
+=== RUN   TestKBReleaseRepo_DirectWriteBlockedWithRealRows/空库号不拦
+--- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows (1.05s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/off_档不拦（即使已治理） (0.00s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/shadow_档不拦 (0.00s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档拦已治理的库 (0.00s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档放行未治理 (0.00s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/on_档放行没有行的库 (0.00s)
+    --- PASS: TestKBReleaseRepo_DirectWriteBlockedWithRealRows/空库号不拦 (0.00s)
+=== RUN   TestKBReleaseRepo_StampForWriteRealRows
+--- PASS: TestKBReleaseRepo_StampForWriteRealRows (1.09s)
+=== RUN   TestKBReleaseRepo_EnsureDraftStampConcurrent
+--- PASS: TestKBReleaseRepo_EnsureDraftStampConcurrent (1.35s)
+=== RUN   TestKBReleaseRepo_ChangeViews
+--- PASS: TestKBReleaseRepo_ChangeViews (0.72s)
+=== RUN   TestKBReleaseRepo_ClampsAreExact
+--- PASS: TestKBReleaseRepo_ClampsAreExact (2.33s)
+=== RUN   TestKBReleaseRepo_WithdrawCAS
+--- PASS: TestKBReleaseRepo_WithdrawCAS (0.48s)
+=== RUN   TestKBReleaseRepo_AuditShape
+--- PASS: TestKBReleaseRepo_AuditShape (1.01s)
+=== RUN   TestKBReleaseRepo_UnavailableEveryMethod
+--- PASS: TestKBReleaseRepo_UnavailableEveryMethod (0.00s)
+FAIL
+FAIL	hivemtk-user/internal/repository	29.108s
+FAIL
