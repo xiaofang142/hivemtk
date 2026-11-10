@@ -7,24 +7,24 @@
 
 ### I. 五层架构（NON-NEGOTIABLE）
 
-所有 Go 代码严格遵循 `Router → Handler → Service → Repository → Model`。
+所有 Go 代码严格遵循 `Router → Controller → Service → Repository → Model`。
 
 | 层 | 职责 | 禁止 |
 |----|------|------|
-| Router | 仅 URL→Handler 映射 | 业务逻辑、内联 handler |
-| Handler | 参数绑定 + 调 Service + 返回响应 | SQL、业务判断 |
+| Router | 仅 URL→Controller 映射 | 业务逻辑、内联闭包 |
+| Controller | 参数绑定 + 调 Service + 返回响应 | SQL、业务判断 |
 | Service | 业务逻辑 | 直接操作 DB |
 | Repository | GORM 数据访问 | 业务判断 |
 | Model | 纯数据结构 | 外部依赖 |
 
 **铁律**
 
-1. 禁止跨层调用 —— Handler → Repository 即属违规。
-2. 禁止内联 handler —— `func(c *gin.Context){c.JSON(...)}` 不得出现在 router.go。
-3. 每域四层齐全 —— 一个业务域的 Handler/Service/Repository/Model 四文件必须完整。
+1. 禁止跨层调用 —— Controller → Repository 即属违规。
+2. 禁止内联闭包（旧称"内联 handler"）—— `func(c *gin.Context){c.JSON(...)}` 不得出现在 router.go。
+3. 每域四层齐全 —— 一个业务域的 Controller/Service/Repository/Model 四文件必须完整。
 4. Router 只做映射 —— DI 装配在 `main.go` 完成。
 
-**Gate**：改动若新增跨层调用或内联 handler，直接判不合规，不接受"临时"。
+**Gate**：改动若新增跨层调用或内联闭包，直接判不合规，不接受"临时"。
 
 ### II. 禁止子 Agent 并行（NON-NEGOTIABLE）
 
@@ -133,5 +133,9 @@
   禁止小步中途提交」。原因：任务执行中频繁提交制造噪音、污染历史；改动留在工作区，
   任务整体完成且验证全绿后一次性 commit + push。影响：spec-kit 各阶段不再各自提交，
   三份报告 + 源码 + 回归测试随整个任务一次提交（与 CLAUDE.md 规则1、3.3.6、4.5.5 同步）。
+- 2026-11-10 · v1.0.2：原则 I 层命名 Handler→Controller 对齐 CLAUDE.md 与代码现实
+  （`internal/controller/` 全部为 `XxxController`，本仓无 `handler` 包，2026-11-10 复核）。
+  原因：宪法仍用 Handler 口径，与 CLAUDE.md「无 handler 包」铁律冲突。影响：纯文档口径，
+  无存量代码改动；spec-kit 闸门文案按 Controller 理解。
 
-**Version**: 1.0.1 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-10-17
+**Version**: 1.0.2 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-11-10

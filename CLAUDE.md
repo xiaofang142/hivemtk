@@ -1,7 +1,7 @@
 # CLAUDE.md - 最高规则
 
-> **与工作区版的关系**：工作区根目录另有一份 `CLAUDE.md`（不入库），其 Git 协作规则
-> 已指针化到本页（E-5/D-5 收口，2026-10-23）；两版冲突时以本页为准。
+> **与工作区版的关系**：工作区根目录**没有** CLAUDE.md（2026-11-10 实测）——跨仓协作约束
+> 由父目录全局 `README.md`（不入库）承载；与本页冲突时以本页为准。
 >
 > **工作区全局导航**：父目录 `..\README.md`（不入库）是双仓库工作区的全局 README——
 > 记录两仓库定位与各子项目功能承载（user-server / user-web+bridge / embed-sdk / packages /
@@ -179,16 +179,14 @@ go test ./internal/<改动包>/...
 
 **实现 → 收敛 → 实现 循环，直到 converge 判 `Converged` 才停。** 单轮不许只跑一遍就宣称完成。
 
-### 4.2 constitution 空模板——SDD 开工前必须先立宪
+### 4.2 constitution 状态——已立宪（2026-11-10 复核）
 
-`.specify/memory/constitution.md` **当前仍是未填模板**（`[PROJECT_NAME]`、`[PRINCIPLE_1_NAME]`
-等占位符原样在位，2026-10-13 实测）。这意味着本仓处于「装了 skill、没立宪」状态。
+`.specify/memory/constitution.md` 已完成立宪（v1.0.2，2026-11-10 修订；占位符零残留实测），
+五层架构 / 禁子 Agent / 验证纪律 / 业务码契约 / API 契约均已固化为 spec-kit 闸门。
 
-- 进入新功能车道时，**先 Read `.specify/memory/constitution.md` 检查占位符**；
-  仍是模板 ⇒ **先跑 speckit-constitution 把宪立起来**（把本项目真实铁律写进去：规则0/0b、五层架构、
-  API 响应契约、前端规范、spec-kit 工作流本身），再进 specify 阶段。
-- **不许假装已立宪直接开跑**——spec-kit 的 gate 会把空模板判为不通过，硬闯等于自己捏造。
-- 宪立起来后，后续 SDD 不必重复跑；但要保持其内容与本 CLAUDE.md 一致，改规则时同步改宪。
+- 进入新功能车道**不必重复立宪**，但每次开工前仍须 Read 一次宪法做闸门对照。
+- 保持宪法与本 CLAUDE.md 一致：改规则时同步改宪；宪法与本页冲突时以本页为准（宪法 Governance 节同口径）。
+- 宪法五层命名已对齐本页口径：Router→Controller→Service→Repository→Model（本仓无 `handler` 包）。
 
 ### 4.3 本仓落地约束（SDD 产物必须遵守，不能与 CLAUDE.md 已有规范冲突）
 
@@ -424,6 +422,6 @@ Router → Controller → Service → Repository → Model
 - **spec-kit 资产**（规则3/规则4 的执行体，不要凭空捏造流程，一律 Read 这些文件）：
   - SDD 十skill：`.qoder/skills/speckit-{constitution,specify,plan,tasks,implement,converge,clarify,analyze,checklist,taskstoissues}/SKILL.md`
   - Bug 三命令体：`.specify/extensions/bug/commands/speckit.bug.{assess,fix,test}.md`
-  - 项目宪法：`.specify/memory/constitution.md`（当前仍是未填模板，见规则 4.2）
+  - 项目宪法：`.specify/memory/constitution.md`（已立宪 v1.0.2，见规则 4.2）
   - 模板：`.specify/templates/{spec,plan,tasks,checklist,constitution}.md`；脚本：`.specify/scripts/bash/`
   - 已归档样例：`.specify/bugs/business-error-code-panic/`（三阶段跑通一轮的产物）
