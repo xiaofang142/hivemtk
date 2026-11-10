@@ -195,19 +195,7 @@ describe('background EventSource 版 SSE（不支持自定义头）走 bridge_to
     expect(es.url).not.toMatch(/[?&]token=/);
   });
 
-  it('SSE ack 回发带 X-Bridge-Token 头', async () => {
-    await loadBackgroundSSE();
-    for (const fn of listeners) {
-      fn(
-        { type: 'BRIDGE_SSE_ACK', channel: 'xianyu', accountId: 'acc-1', msgIds: ['mh:1'] },
-        { tab: { id: 1 } },
-        () => {}
-      );
-    }
-    await new Promise((r) => setTimeout(r, 30));
-    expect(captured).toHaveLength(1);
-    expect(captured[0].url).toContain('/api/bridge/outbox/ack');
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
-    expect(captured[0].url).not.toContain(TOKEN);
-  });
+  // M-1（2026-11-11）：BRIDGE_SSE_ACK 处理器已删除（全仓无发送方的死路径），
+  // 其「SSE ack 回发带 X-Bridge-Token 头」用例一并移除；下发 ack 活链路由
+  // downlink → ackOutbox 承担（test/downlink-r23-sse-ack-drain.test.js）。
 });

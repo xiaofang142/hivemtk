@@ -24,35 +24,53 @@ export class Uplink {
     this.channel = channel;
     this.getConfig = getConfig || (async () => ({}));
     this.retryOpts = retryOpts || null;
-    this.buffers = new Map(); 
+    this.buffers = new Map();
     this.mergeWindowMs = BRIDGE_THREE_CHANNEL.uplinkMergeWindowMs;
     this.maxBatch = BRIDGE_THREE_CHANNEL.uplinkMaxBatch;
     this._confirmed = new Set();
     this._confirmedLoaded = false;
+    // M-1（2026-11-11）：服务端逐条明确拒绝（accepted=false 且非 duplicate）的 event_id
+    // 落放弃集合——与 _confirmed 同为终态，均不再上行（审计 M-1(a)：rejected 不在 confirmed
+    // 集合导致每轮 flush 无上限重传）。
+    this._abandoned = new Set();
+    this._abandonedLoaded = false;
+    // 实例级计数（仓库暂无 metrics 基建，沿用简单计数惯例）：
+    // rejectedDropped = 服务端明确拒绝后放弃的条数（逐条 rejected + 4xx 整批拒绝）；
+    // requeued = 瞬态失败回插待重传条数。
+    this.metrics = { rejectedDropped: 0, requeued: 0 };
+  }
+
+  // 终态集合（confirmed / abandoned）的 chrome.storage 读取：键 mtk_uplink_<name>，
+  // 失败/无 storage 环境一律降级为内存态（返回 null 表示未读到）。
+  async _loadSet(key) {
+    try {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const r = await chrome.storage.local.get(key);
+        const arr = (r && r[key]) || [];
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch (_) {
+    }
+    return null;
   }
 
   async _loadConfirmed() {
     if (this._confirmedLoaded) return;
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const r = await chrome.storage.local.get('mtk_uplink_confirmed');
-        const arr = (r && r.mtk_uplink_confirmed) || [];
-        if (Array.isArray(arr)) this._confirmed = new Set(arr);
-      }
-    } catch (_) {
-    }
+    this._confirmed = (await this._loadSet('mtk_uplink_confirmed')) || this._confirmed;
     this._confirmedLoaded = true;
   }
 
-  async _saveConfirmed() {
+  async _loadAbandoned() {
+    if (this._abandonedLoaded) return;
+    this._abandoned = (await this._loadSet('mtk_uplink_abandoned')) || this._abandoned;
+    this._abandonedLoaded = true;
+  }
+
+  // 写入串行化沿用 _saveChain；超过 5000 条裁剪到最近 2000（同原 confirmed 口径）。
+  async _saveSet(key, set) {
     try {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const write = () => {
-          if (this._confirmed.size > 5000) {
-            this._confirmed = new Set([...this._confirmed].slice(-2000));
-          }
-          return chrome.storage.local.set({ mtk_uplink_confirmed: [...this._confirmed] });
-        };
+        const write = () => chrome.storage.local.set({ [key]: [...set] });
         this._saveChain = (this._saveChain || Promise.resolve()).then(write).catch(() => {});
         await this._saveChain;
       }
@@ -60,18 +78,58 @@ export class Uplink {
     }
   }
 
-  _markConfirmedFromResponse(resp, items) {
-    if (!resp || !Array.isArray(resp.ingested)) return;
-    const byEvent = new Map();
-    for (const it of items) {
-      if (it.event_id) byEvent.set(it.event_id, true);
+  async _saveConfirmed() {
+    if (this._confirmed.size > 5000) {
+      this._confirmed = new Set([...this._confirmed].slice(-2000));
     }
+    await this._saveSet('mtk_uplink_confirmed', this._confirmed);
+  }
+
+  async _saveAbandoned() {
+    if (this._abandoned.size > 5000) {
+      this._abandoned = new Set([...this._abandoned].slice(-2000));
+    }
+    await this._saveSet('mtk_uplink_abandoned', this._abandoned);
+  }
+
+  // 终态判定：confirmed（服务端已收 / duplicate 已存在）或 abandoned（服务端明确拒绝）
+  // 均不再上行。
+  _isSettled(eventId) {
+    return !!eventId && (this._confirmed.has(eventId) || this._abandoned.has(eventId));
+  }
+
+  // M-1（2026-11-11）：ingest 响应逐条结果分三类落账（审计 M-1(a)）——
+  //   accepted  → confirmed（服务端已收）
+  //   duplicate → confirmed（服务端已有同 event_id，等同确认终态）
+  //   rejected（accepted=false 且非 duplicate，如 ingress 校验不过）→ abandoned 放弃集合，
+  //   记日志 + metrics 计数，绝不回插。仅登记本次上行批次内的 event_id（byEvent 防越批串写）。
+  _applyIngestResults(resp, items) {
+    if (!resp || !Array.isArray(resp.ingested)) return;
+    const byEvent = new Set();
+    for (const it of items) {
+      if (it.event_id) byEvent.add(it.event_id);
+    }
+    let confirmedNew = 0;
+    const rejected = [];
     for (const r of resp.ingested) {
-      if (r && (r.accepted || r.duplicate) && r.event_id && byEvent.has(r.event_id)) {
+      if (!r || !r.event_id || !byEvent.has(r.event_id)) continue;
+      if (r.accepted || r.duplicate) {
         this._confirmed.add(r.event_id);
+        confirmedNew++;
+      } else {
+        this._abandoned.add(r.event_id);
+        rejected.push(r);
       }
     }
-    if (this._confirmed.size) this._saveConfirmed();
+    if (rejected.length) {
+      this.metrics.rejectedDropped += rejected.length;
+      log.warn(`uplink 服务端明确拒绝 ${rejected.length} 条，放弃重传（不回插）`, {
+        reasons: rejected.slice(0, 5).map((r) => r.reason || '(无 reason)'),
+        event_ids: rejected.slice(0, 5).map((r) => String(r.event_id).slice(-12)),
+      });
+      this._saveAbandoned();
+    }
+    if (confirmedNew) this._saveConfirmed();
   }
 
   enqueue(message) {
@@ -127,7 +185,8 @@ export class Uplink {
     const items = buf.items;
     if (!items.length) return;
     await this._loadConfirmed();
-    const pending = items.filter((m) => !(m.event_id && this._confirmed.has(m.event_id)));
+    await this._loadAbandoned();
+    const pending = items.filter((m) => !this._isSettled(m.event_id));
     if (!pending.length) return;
     const sample = pending[0];
     let cfg;
@@ -188,15 +247,27 @@ export class Uplink {
           ...(this.retryOpts || {}),
         }
       );
-      this._markConfirmedFromResponse(resp, pending);
+      this._applyIngestResults(resp, pending);
     } catch (e) {
+      // M-1（2026-11-11）：服务端明确拒绝（HTTP 4xx——参数违规/租户解析失败/凭证失效等，
+      // fetchWithRetry 已标 nonRetryable 判定重试无意义）不回插，直接放弃并计数，否则
+      // 每轮 flush 无上限重传死循环打无效请求（审计 M-1(a)）。不入 _abandoned 持久集合：
+      // 4xx 拒绝的是整次请求且原因多为配置类，消息本体可能无辜——放弃本次即可，
+      // 重新捕获时允许一次新尝试。
+      if (e && e.nonRetryable) {
+        this.metrics.rejectedDropped += items.length;
+        log.warn(`uplink flush 被服务端拒绝（4xx），${items.length} 条放弃重传`, String(e?.message || e));
+        return;
+      }
       // B4（批3）：原 catch(e){} 吞错且 buffer 已从 map 摘除 = 瞬态网络故障直接丢消息。
       // 修复：未确认条目回插队首（保留原顺序，封顶 maxBatch*5 防离线期无界堆积）+ Warn 日志。
       // 回插项不自动重排 timer：由后续 enqueue/onFlushed 驱动再 flush；flushAll 亦兜底。
+      // 重传仅发生在瞬态故障（网络失败/5xx/429/408/超时）——终态（confirmed/abandoned）不回插。
       const existing = this.buffers.get(key) || { items: [], timer: null };
-      const restored = items.filter((m) => !(m.event_id && this._confirmed.has(m.event_id)));
+      const restored = items.filter((m) => !this._isSettled(m.event_id));
       existing.items = [...restored, ...existing.items].slice(-this.maxBatch * 5);
       this.buffers.set(key, existing);
+      this.metrics.requeued += restored.length;
       log.warn(`uplink flush 失败，${restored.length} 条回插待重传`, String(e?.message || e));
     }
   }

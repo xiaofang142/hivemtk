@@ -497,7 +497,6 @@ user-web/bridge/
       selector-engine.js     # 选择器引擎
       selector-ai.js         # 选择器 UI 配置面板（chrome.storage 持久化）
       fallback.js            # account_id fallback 派生
-      offline-cache.js       # 离线缓存
       logger.js              # 频道着色 + 敏感字段脱敏
       constants.js           # ⭐ 默认值单一源
     channels/                # 各平台适配层

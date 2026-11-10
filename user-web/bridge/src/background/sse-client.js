@@ -108,34 +108,8 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
     return false;
   }
 
-  if (msg.type === 'BRIDGE_SSE_ACK') {
-    // Content Script 确认消息已送达
-    getBaseUrl().then((baseUrl) => {
-      const url = `${baseUrl}/api/bridge/outbox/ack?channel=${encodeURIComponent(msg.channel)}&account_id=${encodeURIComponent(msg.accountId)}`;
-      const token = getAuthToken();
-      const tenantCode = getTenantCode();
-      return Promise.all([url, token, tenantCode]);
-    }).then(([rawUrl, token, tenantCode]) => {
-      const url = appendTenantCode(rawUrl, tenantCode);
-      const headers = { 'Content-Type': 'application/json' };
-      const t = (token || '').trim();
-      if (t) {
-        headers['X-Bridge-Token'] = t;
-        headers['Authorization'] = `Bearer ${t}`;
-      }
-      return fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ v: 2, msg_ids: msg.msgIds, status: 'delivered' }),
-      });
-    }).then(() => {
-      log.info(`SSE ack 成功: ${msg.channel}`, { msgIds: msg.msgIds });
-    }).catch((err) => {
-      log.error('SSE ack 失败', err);
-    });
-    sendResponse?.({ ok: true });
-    return false;
-  }
+  // M-1（2026-11-11）：BRIDGE_SSE_ACK 死路径已删除（全仓无发送方；下发 ack 的活链路
+  // 是 content 侧 downlink → http-ingest.ackOutbox，见 test/downlink-r23-sse-ack-drain.test.js）。
 
   return false;
 });

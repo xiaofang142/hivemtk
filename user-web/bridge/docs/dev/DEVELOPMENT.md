@@ -150,7 +150,6 @@ user-web/bridge/
 │   │   ├── selector-engine.js        选择器引擎
 │   │   ├── selector-ai.js            选择器 UI 配置面板（chrome.storage 持久化）
 │   │   ├── fallback.js               account_id fallback 派生
-│   │   ├── offline-cache.js          离线缓存
 │   │   ├── logger.js                 日志脱敏
 │   │   └── constants.js              ⭐ 单一源：所有默认值（端口/URL/限速/协议）
 │   └── popup/                        popup UI
