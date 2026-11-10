@@ -21,7 +21,7 @@ import (
 
 // IntentFeedbackService 意图纠错反馈服务。
 type IntentFeedbackService struct {
-	logRepo  *repository.IntentLogRepository
+	logRepo       *repository.IntentLogRepository
 	customIntents *CustomIntentService
 }
 
@@ -38,7 +38,7 @@ func (s *IntentFeedbackService) SetCustomIntentService(svc *CustomIntentService)
 
 // IntentFeedbackCorrectInput 纠错入参。
 type IntentFeedbackCorrectInput struct {
-	LogID        uint   `json:"log_id" binding:"required"`
+	LogID         uint   `json:"log_id" binding:"required"`
 	CorrectedType string `json:"corrected_type" binding:"required"`
 	// Keyword 覆盖写入的词面（缺省取日志原文 raw_text）
 	Keyword string `json:"keyword"`

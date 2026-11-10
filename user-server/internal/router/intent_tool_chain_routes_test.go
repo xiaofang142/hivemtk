@@ -150,6 +150,14 @@ func TestIntentToolChainRoutes(t *testing.T) {
 	if w := intentChainDo(r, "DELETE", updatePath, "admin", ""); w.Code != http.StatusOK {
 		t.Fatalf("delete 应 200, got %d", w.Code)
 	}
+	// Ping 连通性自检：坏基址→400（SSRF 严格口径），未注册方言→400
+	if w := intentChainDo(r, "POST", "/api/connector/ping", "admin", `{"base_url":"http://127.0.0.1:1/"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("环回基址应被 SSRF 口径拒绝, got %d", w.Code)
+	}
+	if w := intentChainDo(r, "POST", "/api/connector/ping", "admin", `{"base_url":"https://example.com","provider":"no_such"}`); w.Code != http.StatusBadRequest {
+		t.Fatalf("未注册方言应 400, got %d", w.Code)
+	}
+
 	// 删除后再按本意图过滤 → total=0（InitIntentChainRuntime 种子会写入
 	// ask_service/after_sale 两条只读链，total 全量口径不再是 0，用意图过滤隔离种子）。
 	w = intentChainDo(r, "GET", "/api/intent/tool-chains?intent_code=order_status", "admin", "")

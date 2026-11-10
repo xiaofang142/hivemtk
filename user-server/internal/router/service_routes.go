@@ -284,6 +284,10 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.PUT("/intent/custom/:id", ciCtrl.Update)
 	admin.DELETE("/intent/custom/:id", ciCtrl.Delete)
 
+	// TB-06b 连接器连通性自检（管理端；凭证只进请求不透响应）。
+	connCtrl := controller.NewConnectorController()
+	admin.POST("/connector/ping", connCtrl.Ping)
+
 	// TB-09 意图纠错反馈（管理端：改判日志→词面覆盖热生效）。
 	fbCtrl := controller.NewIntentFeedbackController(service.NewIntentFeedbackService())
 	admin.POST("/intent/feedback/correct", fbCtrl.Correct)
