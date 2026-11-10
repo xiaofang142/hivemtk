@@ -7,6 +7,15 @@ description: "站内消息通知模块实施任务清单"
 **Input**: 设计文档 `.specify/004-inapp-notification/`
 （spec.md / plan.md / research.md / data-model.md / contracts/ / quickstart.md）
 
+> **✅ 状态收口（2026-11-10 清单整理轮）**：本特性已全部实现并经审计验证——双仓产物在位：
+> 用户端 `user-server`（`model/notification.go` + `model/notification_read.go` + `migration/migrations/inapp_notification_migration.go`，`NotificationRead` 已登记 `allModels`）；
+> 平台端 `platform-server`（`model/notice_delivery_log.go` + `repository/notice_delivery_log.go` + `service/notice_service.go` + `message_service.go` 写 `PublishedAt`，`/merchant-api/tenant/notice`、`/notices/list`、`/notices/report` 路由在位）；
+> 用户端前端（`src/views/Notifications.vue` + `components/MessageNotification.vue` + `api/notification.js`）已上线；
+> 平台→用户同步链经《未完成任务清单》B-流4 审计 ✅（notice_sync 钉扎写面/游标自恢复/回执对账）；
+> 通知中心页正由 K 轮线上 UI 测试覆盖（清单 K-线上-1）。
+> 下方 58 条任务**不再逐条回填勾选**（避免虚报）；本文件自此降级为 spec-kit 设计交付记录，
+> 任务跟踪唯一入口 = 工作区根 `未完成任务清单.md`。
+
 **仓库归属**：本任务跨 **两个独立 git 仓库** ——
 `hivemtk/`（用户端）与 `hivemtk-platform/`（平台端）。
 下文路径以仓库为根，`USER=` 指 `hivemtk/`，`PLAT=` 指 `hivemtk-platform/`。

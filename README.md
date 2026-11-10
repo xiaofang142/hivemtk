@@ -245,7 +245,6 @@ hivemtk/                        # 用户端仓库
 | 🚀 部署指南 / 排查手册 | [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | 📦 94 个功能模块明细 | [docs/marketing-features/README.md](docs/marketing-features/README.md) |
 | 📕 **功能文档 · 操作手册**（人读 / AI 读 四册） | [docs/handbook/README.md](docs/handbook/README.md) |
-| 🧭 路线图 | [.github/ROADMAP.md](.github/ROADMAP.md) |
 | 🤝 贡献指南 / 安全策略 | [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) |
 
 ---

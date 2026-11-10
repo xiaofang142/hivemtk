@@ -242,7 +242,6 @@ hivemtk/                        # User-side repo
 | 📚 Doc index | [docs/INDEX.md](docs/INDEX.md) |
 | 🚀 Deployment guide / Troubleshooting | [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) · [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) |
 | 📦 94 feature modules in detail | [docs/marketing-features/README.md](docs/marketing-features/README.md) |
-| 🧭 Roadmap | [.github/ROADMAP.md](.github/ROADMAP.md) |
 | 🤝 Contributing / Security | [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) |
 
 ---

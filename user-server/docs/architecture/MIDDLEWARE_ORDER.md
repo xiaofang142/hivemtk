@@ -153,7 +153,7 @@ r.Use(middleware.RateLimitMiddleware(middleware.RateLimitConfig{...}))
 
 - [ ] `r.Use(middleware.TraceMiddleware())` 是**第一个**业务中间件
 - [ ] `r.Use(corsMiddleware())` 在 trace 之后
-- [ ] `r.Use(middleware.MetricsMiddleware())` 在 recovery 之前（**注意当前缺失**）
+- [ ] `r.Use(middleware.MetricsMiddleware())` 在 recovery **之后**（2026-11-09 G-4 接线并有意置后：panic 恢复产生的 500 也入指标；原 v1 版本"recovery 之前+当前缺失"的口径作废）
 - [ ] `r.Use(gin.Recovery())` 包住 handler 之前的所有中间件
 - [ ] `r.Use(middleware.APIInteractionLogger())` 在 trace 之后，能读到 trace_id
 - [ ] 所有限流 / 鉴权 / 归属中间件在 handler 之前
@@ -164,6 +164,6 @@ r.Use(middleware.RateLimitMiddleware(middleware.RateLimitConfig{...}))
 
 | 缺口 | 影响 | 责任迭代 |
 |------|------|----------|
-| `MetricsMiddleware` 未注册 | panic 请求无 metric，监控盲区 | R38+1 |
+| ~~`MetricsMiddleware` 未注册~~ | ✅ 已解决（2026-11-09 G-4：全局接线 + /metrics 端点，置于 Recovery 之后） | R38+1 |
 | `TraceMiddleware` 注册位置错误 | 5 个中间件日志无 trace_id | R38+1 |
 | 无 CI 兜底校验顺序 | 后续 PR 可随手打乱 | R38+1 |
