@@ -218,6 +218,7 @@ func allModels() []any {
 		&model.IntentRecord{},
 		&model.IntentToolChain{},
 		&model.IntentRouteDaily{},
+		&model.IntentCatalog{},
 		&model.CustomIntent{},
 		&model.OrderChangeRequest{},
 		&model.DialogueMemory{},

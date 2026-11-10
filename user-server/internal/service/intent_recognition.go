@@ -766,7 +766,13 @@ func (s *IntentRecognizer) recognizeByRule(ctx context.Context, text string) *dt
 }
 
 func (s *IntentRecognizer) recognizeByLLM(ctx context.Context, text string) (*dto.RecognizeResult, error) {
-	allDefs := append(append([]IntentDef(nil), DefaultIntents...), effectiveCustomIntentDefs(ctx)...)
+	var allDefs []IntentDef
+	if cat := GetIntentCatalogService(); cat != nil {
+		allDefs = cat.EffectiveCatalogDefs(ctx)
+	}
+	if len(allDefs) == 0 {
+		allDefs = append(append([]IntentDef(nil), DefaultIntents...), effectiveCustomIntentDefs(ctx)...)
+	}
 	intentList := make([]string, 0, len(allDefs))
 	for _, def := range allDefs {
 		intentList = append(intentList, fmt.Sprintf("%s: %s", def.Type, def.Description))
@@ -1247,9 +1253,15 @@ func intentsForRule(ctx context.Context) []IntentDef {
 	return merged
 }
 
-// intentsForRuleMerged 默认词典 + 词面覆盖 + 自定义词条（T-09）。
-// 自定义词条追加在默认词典之后（词面计分语义不变，默认优先）。
+// intentsForRuleMerged 统一意图目录（TB-10）优先：default 行在前+override 先合+
+// custom 行追加在后（词面计分语义不变，默认优先）。
+// 目录未装配/未播种/读失败 → 回落原式：默认词典+词面覆盖+自定义词条（T-09）。
 func intentsForRuleMerged(ctx context.Context) []IntentDef {
+	if cat := GetIntentCatalogService(); cat != nil {
+		if defs := cat.EffectiveCatalogDefs(ctx); len(defs) > 0 {
+			return defs
+		}
+	}
 	out := intentsForRuleWithOverride(ctx)
 	if svc := GetCustomIntentService(); svc != nil {
 		out = append(out, svc.EffectiveCustomIntentDefs(ctx)...)

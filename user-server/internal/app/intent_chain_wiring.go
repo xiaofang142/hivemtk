@@ -47,6 +47,16 @@ func InitIntentChainRuntime(gdb *gorm.DB) *service.IntentToolChainService {
 		} else if n > 0 {
 			logger.Infof("[intent_chain] ✅ 默认工具调用流种子已写入 %d 条（TB-03 只读链）", n)
 		}
+		// TB-10：统一意图目录（双词表收敛）；内置种子幂等写入默认租户，失败不阻塞启动。
+		catalogSvc := service.NewIntentCatalogService(repository.NewIntentCatalogRepositoryWithDB(gdb))
+		service.SetIntentCatalogService(catalogSvc)
+		// TB-10 刀4：custom_intents 写面同步写 catalog（source=custom 行）。
+		customIntentSvc.SetIntentCatalogDependency(catalogSvc)
+		if n, err := catalogSvc.SeedBuiltinDefaults(seedCtx); err != nil {
+			logger.Warnf("[intent_chain] ⚠️ 意图目录种子失败（不阻塞启动）: %v", err)
+		} else if n > 0 {
+			logger.Infof("[intent_chain] ✅ 意图目录种子已写入 %d 条（TB-10 内置词表）", n)
+		}
 		logger.Info("[intent_chain] ✅ 意图→工具链绑定服务已装配（TB-01）")
 	})
 	return intentChainSvc

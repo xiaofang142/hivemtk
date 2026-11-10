@@ -397,24 +397,37 @@ type ChainVocabulary struct {
 }
 
 // GetChainVocabulary 管理端配置页取词表/变量/工具三项（单一事实源出口）。
-// 意图清单 = 静态双家族 ∪ 本租户启用中的自定义词条（family=custom，T-09）。
+// 意图清单 = 统一意图目录（TB-10）优先：catalog 行 family 列直出（custom 行
+// family=custom）；目录未装配/未播种/读失败 → 回落静态双家族 ∪ 本租户启用中的
+// 自定义词条（family=custom，T-09）。
 func (s *IntentToolChainService) GetChainVocabulary(ctx context.Context) ChainVocabulary {
 	tools := []string{}
 	if reg := tooluse.GetGlobalRegistry(); reg != nil {
 		tools = reg.ListNames()
 	}
-	intents := ChainIntentVocabulary()
-	families := make(map[string]string, len(intents))
-	for _, code := range intents {
-		families[code] = ChainIntentFamily(code)
-	}
-	if s.customIntents != nil {
-		for _, def := range s.customIntents.EffectiveCustomIntentDefs(ctx) {
-			if _, dup := families[def.Type]; dup {
-				continue
+	families := make(map[string]string)
+	var intents []string
+	if cat := GetIntentCatalogService(); cat != nil {
+		if rows := cat.loadCatalogForVocab(ctx); len(rows) > 0 {
+			for _, row := range rows {
+				intents = append(intents, row.IntentKey)
+				families[row.IntentKey] = row.Family
 			}
-			intents = append(intents, def.Type)
-			families[def.Type] = "custom"
+		}
+	}
+	if len(intents) == 0 {
+		intents = ChainIntentVocabulary()
+		for _, code := range intents {
+			families[code] = ChainIntentFamily(code)
+		}
+		if s.customIntents != nil {
+			for _, def := range s.customIntents.EffectiveCustomIntentDefs(ctx) {
+				if _, dup := families[def.Type]; dup {
+					continue
+				}
+				intents = append(intents, def.Type)
+				families[def.Type] = "custom"
+			}
 		}
 	}
 	return ChainVocabulary{
@@ -552,8 +565,14 @@ func (s *IntentToolChainService) SetCustomIntentService(svc *CustomIntentService
 	s.customIntents = svc
 }
 
-// isBindableIntent 静态双家族 OR 动态自定义词条放行。
+// isBindableIntent 统一意图目录（TB-10）优先放行；目录未装配/未播种/读失败
+// 回落：静态双家族 OR 动态自定义词条（T-09）。
 func (s *IntentToolChainService) isBindableIntent(ctx context.Context, code string) bool {
+	if cat := GetIntentCatalogService(); cat != nil {
+		if cat.IsCatalogIntent(ctx, code) {
+			return true
+		}
+	}
 	if isValidChainIntent(code) {
 		return true
 	}

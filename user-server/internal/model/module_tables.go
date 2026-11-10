@@ -153,6 +153,9 @@ var aiSalesOwnedTables = []string{
 	// intent_route_daily：TB-11 意图路由日聚合（租户×意图×链×工具×日
 	// 计数行），与 intent_tool_chains 同属意图域数据面。
 	"intent_route_daily",
+	// intent_catalog：TB-10 统一意图目录（双词表收敛单表，source=default/
+	// custom），同属意图域数据面。
+	"intent_catalog",
 	// custom_intents：T-09 自定义意图词条（意图目录数据化），同属意图域数据面。
 	"custom_intents",
 	// order_change_requests：TB-05 改单申请单（客服侧申请+审批+能力路由执行），

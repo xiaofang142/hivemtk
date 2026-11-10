@@ -25,6 +25,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
 
@@ -53,10 +54,75 @@ func GetCustomIntentService() *CustomIntentService {
 // CustomIntentService 自定义意图词条服务。
 type CustomIntentService struct {
 	repo repository.CustomIntentRepository
+	// catalog TB-10 刀4：custom_intents 写面同步写统一目录（source=custom 行）；
+	// nil 容忍（单测/未装配场景跳过同步）。
+	catalog *IntentCatalogService
 
 	mu            sync.RWMutex
 	cache         map[uint][]IntentDef
 	cacheLoadedAt map[uint]time.Time
+}
+
+// SetIntentCatalogDependency 装配层注入目录服务（刀4 写面同步；nil 跳过同步）。
+func (s *CustomIntentService) SetIntentCatalogDependency(catalog *IntentCatalogService) {
+	s.catalog = catalog
+}
+
+// syncCatalogUpsert 把 custom_intents 行同步 upsert 到统一目录（source=custom）。
+// 同步失败不阻塞主写（catalog 有 30s TTL + 回落链兜底），只记日志。
+func (s *CustomIntentService) syncCatalogUpsert(ctx context.Context, rec *model.CustomIntent) {
+	if s.catalog == nil || s.catalog.repo == nil {
+		return
+	}
+	existing, err := s.catalog.repo.GetByKeyAny(ctx, rec.Type)
+	if err != nil {
+		logger.Warnf("[custom_intent] ⚠️ 目录同步读失败（type=%s）: %v", rec.Type, err)
+		return
+	}
+	family := intentCatalogFamilyCustom
+	if existing != nil && existing.Source == intentCatalogSourceCustom {
+		family = existing.Family
+	}
+	row := &model.IntentCatalog{
+		TenantID:     rec.TenantID,
+		IntentKey:    rec.Type,
+		Source:       intentCatalogSourceCustom,
+		Family:       family,
+		Name:         rec.Name,
+		KeywordsJSON: rec.KeywordsJSON,
+		ExamplesJSON: rec.ExamplesJSON,
+		Description:  rec.Description,
+		Enabled:      rec.Enabled,
+	}
+	if existing != nil && existing.Source == intentCatalogSourceCustom {
+		row.ID = existing.ID
+		if err := s.catalog.repo.Update(ctx, row); err != nil {
+			logger.Warnf("[custom_intent] ⚠️ 目录同步更新失败（type=%s）: %v", rec.Type, err)
+			return
+		}
+	} else {
+		if err := s.catalog.repo.Create(ctx, row); err != nil {
+			logger.Warnf("[custom_intent] ⚠️ 目录同步写入失败（type=%s）: %v", rec.Type, err)
+			return
+		}
+	}
+	s.catalog.invalidate(tenantIDOfCtx(ctx))
+}
+
+// syncCatalogDelete 把目录中 source=custom 的同键行软删（fail-open）。
+func (s *CustomIntentService) syncCatalogDelete(ctx context.Context, intentType string) {
+	if s.catalog == nil || s.catalog.repo == nil {
+		return
+	}
+	existing, err := s.catalog.repo.GetByKeyAny(ctx, intentType)
+	if err != nil || existing == nil || existing.Source != intentCatalogSourceCustom {
+		return
+	}
+	if err := s.catalog.repo.Delete(ctx, existing.ID); err != nil {
+		logger.Warnf("[custom_intent] ⚠️ 目录同步删除失败（type=%s）: %v", intentType, err)
+		return
+	}
+	s.catalog.invalidate(tenantIDOfCtx(ctx))
 }
 
 func NewCustomIntentService(repo repository.CustomIntentRepository) *CustomIntentService {
@@ -93,6 +159,7 @@ func (s *CustomIntentService) Create(ctx context.Context, in CustomIntentUpsertI
 	if err := s.repo.Create(ctx, rec); err != nil {
 		return nil, err
 	}
+	s.syncCatalogUpsert(ctx, rec)
 	s.invalidate(tenantIDOfCtx(ctx))
 	return rec, nil
 }
@@ -122,18 +189,21 @@ func (s *CustomIntentService) Update(ctx context.Context, id uint, in CustomInte
 	if err := s.repo.Update(ctx, rec); err != nil {
 		return nil, err
 	}
+	s.syncCatalogUpsert(ctx, rec)
 	s.invalidate(tenantIDOfCtx(ctx))
 	return rec, nil
 }
 
 // Delete 删除词条（软删）。
 func (s *CustomIntentService) Delete(ctx context.Context, id uint) error {
-	if _, err := s.repo.GetByID(ctx, id); err != nil {
+	rec, err := s.repo.GetByID(ctx, id)
+	if err != nil {
 		return err
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
+	s.syncCatalogDelete(ctx, rec.Type)
 	s.invalidate(tenantIDOfCtx(ctx))
 	return nil
 }
