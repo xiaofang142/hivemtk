@@ -3,7 +3,7 @@ import { CHANNELS, SENDER } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -194,6 +194,19 @@ function getPeerName() {
   return el ? sanitizePeerName(cleanText(el)) : '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
+// B 站私信结构样本不足，仅抓会话窗口（.dialog / .message-header，与 PEER_NAME 同容器口径）
+// 内头像 img；抓不到保持为空，不报错（真机校准缺口见 M-2 报告）。
+function getPeerAvatar() {
+  for (const sel of ['.dialog img', '.message-header img', '[class*="message-header" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  return '';
+}
+
 function isSystemMessage(item) {
   try {
     return !!item.matches(SEL.SYSTEM);
@@ -230,6 +243,7 @@ function parseMessageItem(item) {
       group_id: '',
       group_name: '',
       sender_name: '',
+      sender_avatar: '',
       timestamp: Date.now(),
       raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
     };
@@ -254,6 +268,8 @@ function parseMessageItem(item) {
     group_id: '',
     group_name: '',
     sender_name: senderType === SENDER.CUSTOMER ? getPeerName() : '',
+    // M-2 客户头像链路：仅客户方向带对方头像（directionOf 判定，与 sender_name 同口径）。
+    sender_avatar: senderType === SENDER.CUSTOMER ? getPeerAvatar() : '',
     timestamp: Date.now(),
     raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
   };
@@ -305,6 +321,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const input = findInputEl();
     if (!input) throw new Error('bilibili input not found');
@@ -348,7 +365,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, isBiliHost, isMessageCenterUrl };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isBiliHost, isMessageCenterUrl };
 
 export function buildBilibiliAdapter() {
   return new BaseAdapter({

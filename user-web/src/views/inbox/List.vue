@@ -173,6 +173,14 @@
           >
             <div class="conv-item-top">
               <span class="conv-name">
+                <!-- M-2 客户头像链路：会话列表展示客户头像，空头像降级为默认人像图标 -->
+                <el-avatar
+                  :size="22"
+                  :src="conv.sender_avatar || ''"
+                  class="conv-avatar"
+                >
+                  <el-icon><User /></el-icon>
+                </el-avatar>
                 <el-icon
                   v-if="conv.pinned"
                   class="pin-icon"
@@ -265,6 +273,14 @@
             class="thread-header"
           >
             <div class="thread-title">
+              <!-- M-2 客户头像链路：线程头部展示客户头像，空头像降级为默认人像图标 -->
+              <el-avatar
+                :size="32"
+                :src="currentConv.sender_avatar || ''"
+                class="thread-avatar"
+              >
+                <el-icon><User /></el-icon>
+              </el-avatar>
               <span class="thread-name">{{ currentConv.customer_name || currentConv.customer_id || '-' }}</span>
               <el-tag
                 size="small"
@@ -379,6 +395,15 @@
             class="msg-row"
             :class="{ mine: isOutbound(msg) }"
           >
+            <!-- M-2 客户头像链路：入站消息展示发送者头像，空头像降级为默认人像图标 -->
+            <el-avatar
+              v-if="!isOutbound(msg)"
+              :size="28"
+              :src="msg.sender_avatar || ''"
+              class="msg-avatar"
+            >
+              <el-icon><User /></el-icon>
+            </el-avatar>
             <div class="msg-bubble">
               <div class="msg-meta">
                 <span class="msg-sender">{{ msg.sender_name || msg.sender_id || '-' }}</span>
@@ -708,7 +733,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Search, RefreshRight, Refresh, DataAnalysis, Top, Star, StarFilled, Mute,
-  Delete, ArrowDown, Document
+  Delete, ArrowDown, Document, User
 } from '@element-plus/icons-vue'
 import { inboxApi } from '@/api/inbox'
 import { http } from '@/utils/request'
@@ -1230,6 +1255,12 @@ onUnmounted(stopPolling)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* M-2 客户头像链路：会话列表头像（空 src 时 el-avatar 显示默认人像插槽） */
+.conv-avatar {
+  flex-shrink: 0;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+}
 .pin-icon { color: var(--el-color-primary); }
 .mute-icon { color: var(--el-color-info); }
 .conv-time {
@@ -1282,6 +1313,12 @@ onUnmounted(stopPolling)
   align-items: center;
   gap: 8px;
 }
+/* M-2 客户头像链路：线程头部头像（空 src 时 el-avatar 显示默认人像插槽） */
+.thread-avatar {
+  flex-shrink: 0;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+}
 .thread-name {
   font-weight: 600;
   font-size: 15px;
@@ -1299,10 +1336,21 @@ onUnmounted(stopPolling)
 }
 .msg-row {
   display: flex;
+  align-items: flex-start;
+  gap: 8px;
   margin-bottom: 12px;
+}
+/* M-2 客户头像链路：入站消息头像（空 src 时 el-avatar 显示默认人像插槽） */
+.msg-avatar {
+  flex-shrink: 0;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
 }
 .msg-row.mine {
   justify-content: flex-end;
+}
+.msg-row.mine .msg-avatar {
+  display: none;
 }
 .msg-bubble {
   max-width: 72%;

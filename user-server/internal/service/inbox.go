@@ -119,6 +119,13 @@ func inboxCustomerName(msg *model.MessageHub) string {
 	return name
 }
 
+// inboxCustomerAvatar 会话列表客户头像（M-2 客户头像链路，2026-11-11）：
+// 与 inboxCustomerName 同语义 —— 直接取消息行 sender_avatar（桥端 1v1 抓「对方」头像，
+// 群聊/抓不到为空）；仓储层按 firstNonEmpty「新值优先、空值保旧」刷新，出站行空头像不会清掉已有值。
+func inboxCustomerAvatar(msg *model.MessageHub) string {
+	return msg.SenderAvatar
+}
+
 func cleanConversationTitle(convID string) string {
 	if convID == "" {
 		return ""
@@ -275,6 +282,7 @@ func (s *InboxService) UpsertFromHubMessageTx(ctx context.Context, msg *model.Me
 		AccountID:          msg.AccountID,
 		CustomerID:         customerID,
 		CustomerName:       inboxCustomerName(msg),
+		CustomerAvatar:     inboxCustomerAvatar(msg),
 		ConversationID:     msg.ConversationID,
 		LastMessageID:      msg.ID,
 		LastMessagePreview: preview,
@@ -326,6 +334,7 @@ func (s *InboxService) upsertInternal(ctx context.Context, msg *model.MessageHub
 		AccountID:          msg.AccountID,
 		CustomerID:         customerID,
 		CustomerName:       inboxCustomerName(msg),
+		CustomerAvatar:     inboxCustomerAvatar(msg),
 		ConversationID:     msg.ConversationID,
 		LastMessageID:      msg.ID,
 		LastMessagePreview: preview,

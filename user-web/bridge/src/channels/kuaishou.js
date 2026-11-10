@@ -1,6 +1,6 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, fillContentEditableHumanized, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort } from '../core/dom.js';
+import { qs, qsa, cleanText, fillContentEditableHumanized, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -161,6 +161,19 @@ function getPeerName() {
   return '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
+// 快手 IM 结构样本不足，仅抓聊天 header 头像 img（与 getPeerName 同容器口径）；
+// 抓不到保持为空，不报错（真机校准缺口见 M-2 报告）。
+function getPeerAvatar() {
+  for (const sel of ['[class*="chat-header" i] img', '[class*="dialog-header" i] img', '[class*="header" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  return '';
+}
+
 // 群聊识别
 function detectGroup(item) {
   let isGroup = false;
@@ -303,6 +316,7 @@ const hooks = {
         group_id: '',
         group_name: '',
         sender_name: '',
+        sender_avatar: '',
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
@@ -315,6 +329,11 @@ const hooks = {
     if (!senderName && !groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
       senderName = getPeerName();
     }
+    // M-2 客户头像链路：1v1 客户消息 → 对方头像（尽力而为，抓不到为空）。
+    let senderAvatar = '';
+    if (!groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
+      senderAvatar = getPeerAvatar();
+    }
     const mid = item.getAttribute('data-id') || item.id || `c:${text}`;
     return {
       message_id: mid,
@@ -326,6 +345,7 @@ const hooks = {
       group_id: groupInfo.groupId,
       group_name: groupInfo.groupName,
       sender_name: senderName,
+      sender_avatar: senderAvatar,
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -335,6 +355,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const editor = findInputEl();
     if (!editor) {
@@ -354,7 +375,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, isSystemMessage, isKuaishouMessagePage };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isSystemMessage, isKuaishouMessagePage };
 
 export function buildKuaishouAdapter() {
   return new BaseAdapter({

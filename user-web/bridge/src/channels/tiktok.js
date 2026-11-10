@@ -5,7 +5,7 @@ import { SelectorEngine } from '../core/selector-engine.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick,
   simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage,
-  sanitizePeerName, assertConvOrAbort, absoluteMediaUrl,
+  sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -245,6 +245,27 @@ function getPeerName() {
     const t = sanitizePeerName(nameEl ? cleanText(nameEl) : '');
     if (t && !/messages|message|chat/i.test(t)) return t;
   }
+  return '';
+}
+
+// —— 对方头像（M-2 客户头像链路，2026-11-11）——
+// 1v1 私信客户头像 = 「对方」头像，与 getPeerName 同一语义（只抓对方，不区分气泡侧）：
+//   ① 聊天 header（dm-new-chatbox）头像 img
+//   ② 活动会话列表项头像 img（dm-new-conversation-item[aria-selected="true"]，
+//      活动项判定与 getPeerName 第 3 层同源）
+//   ③ 都取不到 → 空串（提取不到保持为空，不报错；真机校准缺口见 M-2 报告）
+function getPeerAvatar() {
+  for (const sel of ['[data-e2e="dm-new-chatbox"] img', '[class*="chat-header" i] img', '[class*="ChatHeader" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  try {
+    const active = document.querySelector('[data-e2e="dm-new-conversation-item"][aria-selected="true"]');
+    const u = avatarImgUrl(active && active.querySelector('img'));
+    if (u) return u;
+  } catch (_) {  }
   return '';
 }
 
@@ -587,6 +608,7 @@ const hooks = {
         group_id: '',
         group_name: '',
         sender_name: '',
+        sender_avatar: '',
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
@@ -602,6 +624,12 @@ const hooks = {
     let senderName = groupInfo.senderName || '';
     if (!senderName && !groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
       senderName = getPeerName();
+    }
+    // M-2 客户头像链路：1v1 客户消息 → 对方头像（getPeerAvatar，与 sender_name 同语义）；
+    // 群聊/自己消息留空（宁空不错）。
+    let senderAvatar = '';
+    if (!groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
+      senderAvatar = getPeerAvatar();
     }
     // ⑥ 消息 id
     // 兜底 msg_id：优先取 DOM 自带 id，否则按文本内容生成确定性 id。
@@ -622,6 +650,7 @@ const hooks = {
       group_id: groupInfo.groupId,
       group_name: groupInfo.groupName,
       sender_name: senderName,
+      sender_avatar: senderAvatar,
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -631,6 +660,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const input = findInputEl();
     if (!input) {
@@ -658,7 +688,7 @@ const hooks = {
 
 export {
   getAccountId, getConversationId, getConversationList,
-  normalizeContactId, isTiktokMessagePage, isTiktokChatUrl, getPeerName,
+  normalizeContactId, isTiktokMessagePage, isTiktokChatUrl, getPeerName, getPeerAvatar,
   isSystemMessage, isTimeText, isSystemText,
   isCenterAligned, isListNoise, detectUnread, detectGroup,
   findSendButton, findInputEl,

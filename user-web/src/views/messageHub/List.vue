@@ -333,9 +333,23 @@
       <el-table-column
         prop="sender_name"
         label="发送方"
-        width="140"
+        width="160"
         show-overflow-tooltip
-      />
+      >
+        <template #default="{ row }">
+          <!-- M-2 客户头像链路：发送方列展示头像，空头像降级为默认人像图标 -->
+          <div class="sender-cell">
+            <el-avatar
+              :size="22"
+              :src="row.sender_avatar || ''"
+              class="sender-avatar"
+            >
+              <el-icon><User /></el-icon>
+            </el-avatar>
+            <span class="sender-name">{{ row.sender_name || row.sender_id || '-' }}</span>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column
         prop="receiver_name"
         label="接收方"
@@ -677,7 +691,17 @@
             {{ currentMessage.msg_type }}
           </el-descriptions-item>
           <el-descriptions-item label="发送方">
-            {{ currentMessage.sender_name || currentMessage.sender_id || '-' }}
+            <!-- M-2 客户头像链路：详情抽屉展示发送者头像，空头像降级为默认人像图标 -->
+            <div class="sender-cell">
+              <el-avatar
+                :size="24"
+                :src="currentMessage.sender_avatar || ''"
+                class="sender-avatar"
+              >
+                <el-icon><User /></el-icon>
+              </el-avatar>
+              <span>{{ currentMessage.sender_name || currentMessage.sender_id || '-' }}</span>
+            </div>
           </el-descriptions-item>
           <el-descriptions-item label="接收方">
             {{ currentMessage.receiver_name || currentMessage.receiver_id || '-' }}
@@ -783,7 +807,7 @@ import i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshRight, DataAnalysis } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshRight, DataAnalysis, User } from '@element-plus/icons-vue'
 import { messageHubApi } from '@/api/messageHub'
 import { getMyAgent } from '@/api/customerService'
 import AgentSocket from '@/utils/agentSocket'
@@ -1293,6 +1317,26 @@ const submitPush = async () => {
       overflow-x: auto;
       margin: 0;
     }
+  }
+}
+
+/* M-2 客户头像链路：发送方单元格（表格列与详情抽屉共用），空头像降级为默认人像 */
+.sender-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+
+  .sender-avatar {
+    flex-shrink: 0;
+    background: var(--el-fill-color);
+    color: var(--el-text-color-secondary);
+  }
+
+  .sender-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

@@ -2,7 +2,7 @@ import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
-import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl } from '../core/dom.js';
+import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
@@ -312,6 +312,33 @@ function getPeerName() {
   return '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11）——
+// 1v1 私信客户头像 = 「对方」头像，与 getPeerName 同一语义（只抓对方，不区分气泡侧）：
+//   ① 聊天 header 头像 img（chat-window/chat-header 容器内，昵称标题旁）
+//   ② 活动会话列表项头像 img（.xhs-im-conv-item--active / .active / aria-selected，
+//      活动项判定与 getPeerName 第 3 层同源）
+//   ③ 都取不到 → 空串（提取不到保持为空，不报错；真机校准缺口见 M-2 报告）
+// 不读消息项内头像：私信每条气泡两侧各有头像，前端不分侧别，抓消息项头像可能抓到自己的。
+function getPeerAvatar() {
+  for (const sel of ['[class*="chat-window"] [class*="header"] img', '.im-chat-window [class*="header"] img', '[class*="chat-header" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  try {
+    const active = qsa(SEL.CHAT_LIST).find(
+      (el) =>
+        el.classList.contains('xhs-im-conv-item--active') ||
+        el.classList.contains('active') ||
+        el.getAttribute('aria-selected') === 'true'
+    );
+    const u = avatarImgUrl(active && active.querySelector('img'));
+    if (u) return u;
+  } catch (_) {  }
+  return '';
+}
+
 // —— 群聊识别 ——
 // 小红书群聊特征：① 聊天 header 标题含「群」；② 消息内「@昵称」前缀；③ URL 群 id。
 function detectGroup(item) {
@@ -549,6 +576,7 @@ const hooks = {
         group_id: '',
         group_name: '',
         sender_name: '',
+        sender_avatar: '',
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
@@ -566,6 +594,12 @@ const hooks = {
     let senderName = groupInfo.senderName || '';
     if (!senderName && !groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
       senderName = getPeerName();
+    }
+    // M-2 客户头像链路：1v1 客户消息 → 对方头像（getPeerAvatar，与 sender_name 同语义）；
+    // 群聊/自己消息留空（宁空不错）。
+    let senderAvatar = '';
+    if (!groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
+      senderAvatar = getPeerAvatar();
     }
     // 消息 id：新版 .chat-item 用 data-message-id（唯一幂等键）；旧版 data-id/data-msg-id
     //
@@ -587,8 +621,9 @@ const hooks = {
       group_id: groupInfo.groupId,
       group_name: groupInfo.groupName,
       sender_name: senderName,
-      sender_id: getConversationId() || '', 
-      conversation_id: getConversationId() || '', 
+      sender_avatar: senderAvatar,
+      sender_id: getConversationId() || '',
+      conversation_id: getConversationId() || '',
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -598,6 +633,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const input = findInputEl();
     if (!input) {
@@ -648,7 +684,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, normalizeContactId, isXhsMessagePage, isXhsChatUrl, getPeerName };
+export { getAccountId, getConversationId, getConversationList, normalizeContactId, isXhsMessagePage, isXhsChatUrl, getPeerName, getPeerAvatar };
 
 export function buildXhsAdapter() {
   return new BaseAdapter({

@@ -234,6 +234,9 @@ type UpsertFromMessageInput struct {
 	AccountID          string
 	CustomerID         string
 	CustomerName       string
+	// CustomerAvatar 客户头像 URL（M-2，2026-11-11）：落 inbox_conversations.sender_avatar，
+	// 与 CustomerName 同款「新值优先、空值保旧」刷新语义；空串不清掉已有头像。
+	CustomerAvatar     string
 	ConversationID     string
 	LastMessageID      uint
 	LastMessagePreview string
@@ -263,6 +266,7 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 
 	in.LastMessagePreview = sanitizeUTF8(in.LastMessagePreview)
 	in.CustomerName = sanitizeUTF8(in.CustomerName)
+	in.CustomerAvatar = sanitizeUTF8(in.CustomerAvatar)
 	var conv model.InboxConversation
 	err := tx.Where("platform = ? AND account_id = ? AND customer_id = ?",
 		in.Platform, in.AccountID, in.CustomerID).
@@ -274,6 +278,7 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 			AccountID:          in.AccountID,
 			CustomerID:         in.CustomerID,
 			CustomerName:       in.CustomerName,
+			SenderAvatar:       in.CustomerAvatar,
 			ConversationID:     in.ConversationID,
 			Status:             "unread",
 			UnreadCount:        0,
@@ -302,6 +307,8 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 		"last_message_from":    in.LastMessageFrom,
 		"total_count":          conv.TotalCount + 1,
 		"customer_name":        firstNonEmpty(in.CustomerName, conv.CustomerName),
+		// 客户头像「新值优先、空值保旧」：与 customer_name 同语义，出站/空头像行不清掉已有值。
+		"sender_avatar":        firstNonEmpty(in.CustomerAvatar, conv.SenderAvatar),
 		"conversation_id":      firstNonEmpty(in.ConversationID, conv.ConversationID),
 	}
 	if in.LastMessageFrom == "customer" {

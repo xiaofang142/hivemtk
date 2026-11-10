@@ -31,6 +31,9 @@ export function makeUnifiedMessage({
   sender_type = SENDER.CUSTOMER,
   sender_id,
   sender_name = '',
+  // M-2 客户头像链路（2026-11-11）：发送者头像 URL（绝对地址），1v1 抓「对方」，
+  // 群聊/抓不到为空。与服务端 IngestMessage.SenderAvatar 字段名严格一致。
+  sender_avatar = '',
   receiver_id = '',
   msg_type = 'text',
   content = '',
@@ -75,6 +78,7 @@ export function makeUnifiedMessage({
     sender_type,
     sender_id: resolvedSenderId,
     sender_name,
+    sender_avatar: sender_avatar || '',
     receiver_id,
     msg_type,
     content: content || '',

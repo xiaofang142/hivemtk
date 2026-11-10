@@ -1,6 +1,6 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl } from '../core/dom.js';
+import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
@@ -356,6 +356,30 @@ function getPeerName() {
   return '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11）——
+// 1v1 私信客户头像 = 「对方」头像，与 getPeerName 同一语义（只抓对方，不区分气泡侧）：
+//   ① 聊天 header 头像 img（chat-header 容器内，昵称标题旁）
+//   ② 活动会话列表项头像 img（curConversation / aria-selected，候选与 getConversationId 同源）
+//   ③ 都取不到 → 空串（提取不到保持为空，不报错；选择器以 fixture 口径实现，真机校准缺口见 M-2 报告）
+// 不读消息项内头像：1v1 气泡两侧各有头像（自己/对方），前端不分侧别，抓消息项头像可能
+// 抓到自己的头像，与 sender_name 的「对方」语义不一致。
+function getPeerAvatar() {
+  for (const sel of ['[class*="chat-header" i] img', '[data-e2e="chat-header"] img', '[class*="ChatHeader" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  try {
+    const active = qsa(
+      '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
+    ).find((el) => el.offsetParent !== null);
+    const u = avatarImgUrl(active && active.querySelector('img'));
+    if (u) return u;
+  } catch (_) {  }
+  return '';
+}
+
 // —— 群聊识别（问题 2）——
 // 抖音群聊特征：① 会话标题非单一用户（群名常含「群」「家族」「同学」等或含多成员）；
 // ② 单条消息含「@昵称 」前缀或「[群成员]」结构；③ 一屏内出现多个不同昵称气泡。
@@ -495,8 +519,7 @@ function getConversationList() {
     if (!item || !item.offsetParent) continue; 
     // 会话 id：优先 data-conversation-id（ConversationShortID，与后端 webhook 格式一致）；
     // 其次会话项内 /user/<id> 链接；最后用昵称文本派生（兜底）。
-    let id = null;
-    id = item.getAttribute('data-conversation-id') || item.getAttribute('data-sec_uid') || item.getAttribute('data-id') || null;
+    let id = item.getAttribute('data-conversation-id') || item.getAttribute('data-sec_uid') || item.getAttribute('data-id') || null;
     if (!id) {
       const link = item.querySelector('a[href*="/user/"]');
       if (link) {
@@ -622,6 +645,7 @@ const hooks = {
         group_id: '',
         group_name: '',
         sender_name: '',
+        sender_avatar: '',
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
@@ -642,6 +666,12 @@ const hooks = {
     if (!senderName && !groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
       senderName = getPeerName();
     }
+    // M-2 客户头像链路：1v1 客户消息 → 对方头像（getPeerAvatar，与 sender_name 同语义）；
+    // 群聊/自己消息留空（成员头像不区分侧别抓取，宁空不错）。
+    let senderAvatar = '';
+    if (!groupInfo.isGroup && sender_type === SENDER.CUSTOMER) {
+      senderAvatar = getPeerAvatar();
+    }
     // 兜底 msg_id：优先取 DOM 自带 id，否则按文本内容生成确定性 id。
     // 幂等去重（消息ID / 内容hash）已由后端统一负责，前端不再计算内容 hash。
     const mid =
@@ -659,6 +689,7 @@ const hooks = {
       group_id: groupInfo.groupId,
       group_name: groupInfo.groupName,
       sender_name: senderName,
+      sender_avatar: senderAvatar,
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -668,6 +699,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const editor = findInputEl();
     if (!editor) {
@@ -687,7 +719,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, isListNoise, detectUnread, isSystemMessage, isTimeText, isSystemText, isCenterAligned, isDouyinMessagePage, isConversationListNode, hasUserProfileLink };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isListNoise, detectUnread, isSystemMessage, isTimeText, isSystemText, isCenterAligned, isDouyinMessagePage, isConversationListNode, hasUserProfileLink };
 
 export function buildDouyinAdapter() {
   return new BaseAdapter({

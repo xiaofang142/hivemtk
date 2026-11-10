@@ -3,7 +3,7 @@ import { CHANNELS, SENDER } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -181,6 +181,19 @@ function getPeerName() {
   return el ? sanitizePeerName(cleanText(el)) : '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
+// 拼多多商家版结构样本不足，仅抓对方信息栏（.base-info，与 PEER_NAME 同容器口径）
+// 与聊天 header 内头像 img；抓不到保持为空，不报错（真机校准缺口见 M-2 报告）。
+function getPeerAvatar() {
+  for (const sel of ['.base-info img', '[class*="base-info" i] img', '[class*="chat-header" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  return '';
+}
+
 function isSystemMessage(item) {
   try {
     if (item.matches(SEL.SYSTEM)) return true;
@@ -228,6 +241,7 @@ function parseMessageItem(item) {
       group_id: '',
       group_name: '',
       sender_name: '',
+      sender_avatar: '',
       timestamp: Date.now(),
       raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
     };
@@ -251,6 +265,8 @@ function parseMessageItem(item) {
     group_id: '',
     group_name: '',
     sender_name: getPeerName(),
+    // M-2 客户头像链路：尽力而为抓对方头像，抓不到为空。
+    sender_avatar: getPeerAvatar(),
     timestamp: Date.now(),
     raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
   };
@@ -298,6 +314,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const input = findInputEl();
     if (!input) throw new Error('pdd input not found');
@@ -338,7 +355,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, isPddHost };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isPddHost };
 
 export function buildPddAdapter() {
   return new BaseAdapter({

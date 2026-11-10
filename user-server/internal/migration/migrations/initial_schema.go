@@ -310,4 +310,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 统一消息并入收件箱/客户360 之后，摘掉两节点在 role_menu_permissions
 	// 的存量分配行——防未来同名节点静默复权（v3.55.0 收敛迁移同一取舍）。
 	register(NewMenuGrantRemovedNodesCleanupMigration(db))
+	// v3.90.0（M-2 客户头像链路）：message_hub / inbox_conversations 各加可空
+	// sender_avatar varchar(500) 列——桥端提取的客户头像经协议落库、管理台展示；
+	// 无回填，历史行头像保持为空（读侧降级为默认形态）。
+	register(NewSenderAvatarMigration(db))
 }

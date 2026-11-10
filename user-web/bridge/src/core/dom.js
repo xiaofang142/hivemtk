@@ -148,7 +148,7 @@ export async function fillContentEditableHumanized(el, text, { clearBefore = fal
   el.focus();
   if (clearBefore) clearEditable(el);
   for (const burst of planTypingBursts(text)) {
-    let ok = false;
+    let ok;
     try {
       ok = document.execCommand('insertText', false, burst.text);
     } catch (e) {
@@ -270,6 +270,23 @@ export function absoluteMediaUrl(src) {
   }
 }
 
+/**
+ * avatarImgUrl 从头像 <img> 元素读 URL 并绝对化（M-2 客户头像链路，2026-11-11）。
+ *
+ * 与 absoluteMediaUrl 同口径：src 优先、data-src 兜底（平台头像常懒加载），
+ * 协议相对地址统一补全为绝对 URL。img 为空/无属性时返回空串——调用方
+ * （各渠道 getPeerAvatar）提取不到保持为空，不报错。
+ * 注意：这里读的是「头像判据命中」的 img（[class*="avatar"] 容器内），与
+ * extractMessageContent 的头像排除判据互补——同一 DOM 读取的两种用途互不干扰。
+ * @param {Element|null} img 头像 <img> 元素
+ * @returns {string} 绝对 URL（或空串）
+ */
+export function avatarImgUrl(img) {
+  if (!img || !img.getAttribute) return '';
+  const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+  return absoluteMediaUrl(src);
+}
+
 
 /** 清空消息输入框（textarea 走 setValue，contenteditable 摘空子节点并派发 input） */
 export function clearMessageInput(el) {
@@ -297,7 +314,7 @@ export function clearMessageInput(el) {
  */
 export function assertConvOrAbort(el, assertConv) {
   if (typeof assertConv !== 'function') return;
-  let ok = true;
+  let ok;
   try { ok = assertConv() !== false; } catch (_) { ok = true; }
   if (ok) return;
   clearMessageInput(el);

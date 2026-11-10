@@ -3,7 +3,7 @@ import { CHANNELS } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -164,6 +164,19 @@ function getPeerName() {
   return el ? sanitizePeerName(cleanText(el)) : '';
 }
 
+// —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
+// 京东咚咚结构样本不足，仅抓聊天 header 容器内头像 img（与 PEER_NAME 同 header 口径）；
+// 抓不到保持为空，不报错（真机校准缺口见 M-2 报告）。
+function getPeerAvatar() {
+  for (const sel of ['[class*="chat-header" i] img', '[class*="header" i] img']) {
+    try {
+      const u = avatarImgUrl(qs(sel));
+      if (u) return u;
+    } catch (_) {  }
+  }
+  return '';
+}
+
 function parseMessageItem(item) {
   if (!item) return null;
   try {
@@ -187,6 +200,8 @@ function parseMessageItem(item) {
     group_id: '',
     group_name: '',
     sender_name: getPeerName(),
+    // M-2 客户头像链路：尽力而为抓对方头像，抓不到为空。
+    sender_avatar: getPeerAvatar(),
     timestamp: Date.now(),
     raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
   };
@@ -234,6 +249,7 @@ const hooks = {
   getConversationList,
   mergedSelectors,
   getPeerName,
+  getPeerAvatar,
   async sendText(text, opts = {}) {
     const input = findInputEl();
     if (!input) throw new Error('jd input not found');
@@ -274,7 +290,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, isJdHost };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isJdHost };
 
 export function buildJdAdapter() {
   return new BaseAdapter({

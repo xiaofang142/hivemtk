@@ -216,6 +216,9 @@ export class Uplink {
         conversation_id: conversationId,
         sender_id: m.sender_id || '',
         sender_name: m.sender_name || '',
+        // M-2 客户头像链路（2026-11-11）：白名单新增 sender_avatar 透传（服务端
+        // IngestMessage.SenderAvatar 已有同名字段）。抓不到为空串，服务端按空处理。
+        sender_avatar: m.sender_avatar || '',
         sender_type: m.sender_type || 'customer',
         msg_type: m.msg_type || 'text',
         content: m.content || '',

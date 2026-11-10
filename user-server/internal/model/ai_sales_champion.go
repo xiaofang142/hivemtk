@@ -25,6 +25,9 @@ type MessageHub struct {
 	MsgType        string     `gorm:"type:varchar(20);not null" json:"msg_type"`
 	SenderID       string     `gorm:"type:varchar(100);index" json:"sender_id"`
 	SenderName     string     `gorm:"type:varchar(200)" json:"sender_name"`
+	// SenderAvatar 发送者头像 URL（M-2 客户头像链路，2026-11-11）：桥端抓「对方」头像，
+	// 与 media_url 同款 varchar(500) 列宽（TruncateMediaURL 入库前收口）；抓不到为空串。
+	SenderAvatar   string     `gorm:"type:varchar(500)" json:"sender_avatar"`
 	ReceiverID     string     `gorm:"type:varchar(100)" json:"receiver_id"`
 	ReceiverName   string     `gorm:"type:varchar(200)" json:"receiver_name"`
 	Content        string     `gorm:"type:text" json:"content"`
@@ -457,6 +460,9 @@ type InboxConversation struct {
 	AccountID          string         `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
 	CustomerID         string         `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
 	CustomerName       string         `gorm:"type:varchar(200)" json:"customer_name"`
+	// SenderAvatar 客户头像（M-2，2026-11-11）：随 last message upsert 按「新值优先、空值保旧」
+	// 刷新（与 CustomerName 同款 firstNonEmpty 语义）；列名沿用消息侧 sender_avatar。
+	SenderAvatar       string         `gorm:"type:varchar(500)" json:"sender_avatar"`
 	ConversationID     string         `gorm:"type:varchar(100);index" json:"conversation_id"`
 	Status             string         `gorm:"type:varchar(20);default:'unread';index" json:"status"`
 	AssignedTo         string         `gorm:"type:varchar(64);index" json:"assigned_to"`

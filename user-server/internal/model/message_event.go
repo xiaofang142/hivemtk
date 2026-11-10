@@ -55,6 +55,10 @@ type MessageEvent struct {
 	Channel        string                    `json:"channel"`
 	SenderID       string                    `json:"sender_id"`
 	SenderName     string                    `json:"sender_name,omitempty"`
+	// SenderAvatar 发送者头像 URL（M-2 客户头像链路，2026-11-11）：与 SenderName 同语义 ——
+	// 桥端 1v1 私信抓「对方」头像，群聊/抓不到时为空。列宽同 media_url（varchar(500)），
+	// 入库前由 TruncateMediaURL 收口（channelgw ToEvent/HistoryToEvent 与 persist 双保险）。
+	SenderAvatar   string                    `json:"sender_avatar,omitempty"`
 	SenderType     string                    `json:"sender_type,omitempty"`
 	ReceiverID     string                    `json:"receiver_id,omitempty"`
 	MsgType        string                    `json:"msg_type"`
@@ -72,12 +76,13 @@ type MessageEvent struct {
 
 // MessageEventHistoryItem 多轮历史中的单轮（与扩展 HistoryItem 对齐的轻量镜像）
 type MessageEventHistoryItem struct {
-	EventID    string `json:"event_id,omitempty"`
-	SenderType string `json:"sender_type,omitempty"`
-	SenderID   string `json:"sender_id,omitempty"`
-	SenderName string `json:"sender_name,omitempty"`
-	ReceiverID string `json:"receiver_id,omitempty"`
-	MsgType    string `json:"msg_type"`
+	EventID      string `json:"event_id,omitempty"`
+	SenderType   string `json:"sender_type,omitempty"`
+	SenderID     string `json:"sender_id,omitempty"`
+	SenderName   string `json:"sender_name,omitempty"`
+	SenderAvatar string `json:"sender_avatar,omitempty"`
+	ReceiverID   string `json:"receiver_id,omitempty"`
+	MsgType      string `json:"msg_type"`
 	Content    string `json:"content"`
 	MediaURL   string `json:"media_url,omitempty"`
 	Timestamp  int64  `json:"timestamp"`

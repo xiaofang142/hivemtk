@@ -41,19 +41,20 @@ const (
 
 // HistoryItem 会话级 history 中的单轮消息（一个会话 = 一条消息，内含多轮历史）。
 type HistoryItem struct {
-	EventID    string `json:"event_id,omitempty"`
-	SenderType string `json:"sender_type,omitempty"`
-	SenderID   string `json:"sender_id,omitempty"`
-	SenderName string `json:"sender_name,omitempty"`
-	ReceiverID string `json:"receiver_id,omitempty"`
-	MsgType    string `json:"msg_type"`
-	Content    string `json:"content"`
-	MediaURL   string `json:"media_url,omitempty"`
-	Timestamp  int64  `json:"timestamp"`
-	Direction  string `json:"direction,omitempty"`
-	IsGroup    bool   `json:"is_group,omitempty"`
-	GroupID    string `json:"group_id,omitempty"`
-	GroupName  string `json:"group_name,omitempty"`
+	EventID      string `json:"event_id,omitempty"`
+	SenderType   string `json:"sender_type,omitempty"`
+	SenderID     string `json:"sender_id,omitempty"`
+	SenderName   string `json:"sender_name,omitempty"`
+	SenderAvatar string `json:"sender_avatar,omitempty"`
+	ReceiverID   string `json:"receiver_id,omitempty"`
+	MsgType      string `json:"msg_type"`
+	Content      string `json:"content"`
+	MediaURL     string `json:"media_url,omitempty"`
+	Timestamp    int64  `json:"timestamp"`
+	Direction    string `json:"direction,omitempty"`
+	IsGroup      bool   `json:"is_group,omitempty"`
+	GroupID      string `json:"group_id,omitempty"`
+	GroupName    string `json:"group_name,omitempty"`
 }
 
 // IngestMessage 渠道 -> 服务器 上行统一消息（唯一线路协议）。
@@ -79,6 +80,7 @@ type IngestMessage struct {
 	ConversationID string         `json:"conversation_id"`
 	SenderID       string         `json:"sender_id"`
 	SenderName     string         `json:"sender_name,omitempty"`
+	SenderAvatar   string         `json:"sender_avatar,omitempty"`
 	ReceiverID     string         `json:"receiver_id,omitempty"`
 	SenderType     string         `json:"sender_type,omitempty"`
 	MsgType        string         `json:"msg_type"`
@@ -357,6 +359,7 @@ func (m *IngestMessage) ToEvent(transport string) *model.MessageEvent {
 		Channel:        m.Channel,
 		SenderID:       m.SenderID,
 		SenderName:     m.SenderName,
+		SenderAvatar:   model.TruncateMediaURL(m.SenderAvatar),
 		SenderType:     m.SenderType,
 		ReceiverID:     m.ReceiverID,
 		MsgType:        m.MsgType,
@@ -404,19 +407,20 @@ func (m *IngestMessage) ToEventFull(transport string) *model.MessageEvent {
 			continue
 		}
 		hist = append(hist, model.MessageEventHistoryItem{
-			EventID:    it.EventID,
-			SenderType: it.SenderType,
-			SenderID:   it.SenderID,
-			SenderName: it.SenderName,
-			ReceiverID: it.ReceiverID,
-			MsgType:    it.MsgType,
-			Content:    it.Content,
-			MediaURL:   it.MediaURL,
-			Timestamp:  it.Timestamp,
-			Direction:  it.Direction,
-			IsGroup:    it.IsGroup,
-			GroupID:    it.GroupID,
-			GroupName:  it.GroupName,
+			EventID:      it.EventID,
+			SenderType:   it.SenderType,
+			SenderID:     it.SenderID,
+			SenderName:   it.SenderName,
+			SenderAvatar: it.SenderAvatar,
+			ReceiverID:   it.ReceiverID,
+			MsgType:      it.MsgType,
+			Content:      it.Content,
+			MediaURL:     it.MediaURL,
+			Timestamp:    it.Timestamp,
+			Direction:    it.Direction,
+			IsGroup:      it.IsGroup,
+			GroupID:      it.GroupID,
+			GroupName:    it.GroupName,
 		})
 	}
 	ev.History = hist
@@ -440,6 +444,7 @@ func HistoryToEvent(parent *IngestMessage, it *HistoryItem) *model.MessageEvent 
 		Channel:        parent.Channel,
 		SenderID:       it.SenderID,
 		SenderName:     it.SenderName,
+		SenderAvatar:   model.TruncateMediaURL(it.SenderAvatar),
 		ReceiverID:     firstNonEmpty(it.ReceiverID, parent.ReceiverID),
 		MsgType:        it.MsgType,
 		Content:        it.Content,

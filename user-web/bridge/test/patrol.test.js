@@ -139,7 +139,7 @@ describe('BaseAdapter.patrol 巡检一轮', () => {
     expect(onInbound).toHaveBeenCalledTimes(1);
   });
 
-  it('需求⑥：非文字消息（image）在巡检中被跳过，仅上行文字消息', async () => {
+  it('002-multi-type-messages：非文字消息（image）不再被巡检丢弃，与文字消息同入 history（客户图片上行蒸发修复，2026-11-11 对齐过期断言）', async () => {
     const A = makeConv('a1', '张三', { unread: true });
     const convList = [A];
     const messagesByConv = {
@@ -153,10 +153,13 @@ describe('BaseAdapter.patrol 巡检一轮', () => {
     adapter.callbacks.onMessage = onInbound;
 
     const r = await adapter.patrol({ throttleMs: 1, waitActiveMs: 200, switchMinMs: 0, switchMaxMs: 0 });
-    expect(r.captured).toBe(1); 
+    // 媒体消息自 002 刀起放行（原「直接 continue」是客户图片上行蒸发的根因，
+    // 见 channel-adapter.js _collectUnseenText 注释）；本用例从「断言丢弃」改为「断言放行」。
+    expect(r.captured).toBe(2);
     const msg = onInbound.mock.calls[0][0];
-    expect(msg.history.length).toBe(1);
-    expect(msg.history[0].content).toBe('这是文字消息');
+    expect(msg.history.length).toBe(2);
+    expect(msg.history[0].content).toBe('[图片]');
+    expect(msg.history[1].content).toBe('这是文字消息');
   });
 
   it('多轮历史：一个未读会话含多条新消息 → 一条 inbound 帧的 history[] 含全部多轮', async () => {

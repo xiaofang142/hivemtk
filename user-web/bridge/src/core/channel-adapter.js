@@ -1259,6 +1259,8 @@ export class BaseAdapter {
     const groupId = (groupItem && groupItem.group_id) || '';
     const groupName = (groupItem && groupItem.group_name) || '';
     const senderName = (conv && conv.name) || batch.find((p) => p.sender_name)?.sender_name || '';
+    // M-2 客户头像链路：巡检帧也带上客户头像（最后一条有头像的消息优先，1v1 各轮同源）。
+    const senderAvatar = last.sender_avatar || batch.find((p) => p.sender_avatar)?.sender_avatar || '';
     // sender_type 取最后一条消息的 sender_type（可能为 system）；event_id 取其 message_id（稳定）。
     const lastSenderType = last.sender_type || SENDER.CUSTOMER;
     const msg = makeUnifiedMessage({
@@ -1268,6 +1270,7 @@ export class BaseAdapter {
       sender_type: lastSenderType,
       sender_id: isGroup && groupId ? groupId : (last.sender_id || cid),
       sender_name: senderName,
+      sender_avatar: senderAvatar,
       // 002-multi-type-messages：顶层 content/msg_type 按最后一条真实类型输出，
       // 媒体消息 text 为空时补占位符（原先写死 'text'，媒体帧到服务端类型失真）。
       content: last.text || mediaPlaceholder(last.msg_type),
@@ -1402,6 +1405,8 @@ export class BaseAdapter {
       sender_type: st,
       sender_id: senderId,
       sender_name: parsed.sender_name || '',
+      // M-2 客户头像链路：历史轮也带发送者头像（服务端 HistoryItem.SenderAvatar 落库）。
+      sender_avatar: parsed.sender_avatar || '',
       // 002-multi-type-messages：媒体消息无文字时补占位符，content 永不为空。
       content: parsed.text || mediaPlaceholder(parsed.msg_type),
       media_url: parsed.media_url || '',
@@ -1469,6 +1474,8 @@ export class BaseAdapter {
       group_id: parsed.group_id || '',
       group_name: parsed.group_name || '',
       sender_name: parsed.sender_name || '',
+      // M-2 客户头像链路：实时帧带客户头像（parsed.sender_avatar，1v1 为「对方」头像）。
+      sender_avatar: parsed.sender_avatar || '',
       raw: parsed.raw || null,
       extra,
       history: windowMsgs.map((m) => this._historyItem(m, m.sender_type === SENDER.CUSTOMER ? DIRECTION.INBOUND : DIRECTION.OUTBOUND)),
