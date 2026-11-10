@@ -8,6 +8,7 @@ import (
 
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -77,7 +78,9 @@ func NewABExperiment(exposureRepo *repository.ABExposureRepository, bufferSize i
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.wg.Add(1)
-	go func() {
+	// SafeGo：曝光消费循环常驻，但单条曝光落库 panic 只回收该条（worker 存活），
+	// 不能击穿进程——曝光事件来自请求路径（LLM/用户面数据）。
+	utils.SafeGo(ctx, "ab_experiment.consumer", func(ctx context.Context) {
 		defer a.wg.Done()
 		for {
 			select {
@@ -85,10 +88,17 @@ func NewABExperiment(exposureRepo *repository.ABExposureRepository, bufferSize i
 				close(a.done)
 				return
 			case e := <-a.ch:
-				a.insert(e)
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.Errorf("[T-7] 曝光落库 panic recovered exp=%s: %v", e.ExperimentID, r)
+						}
+					}()
+					a.insert(e)
+				}()
 			}
 		}
-	}()
+	})
 	return a
 }
 

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -121,7 +123,10 @@ func (r *EgoRunnerRegistry) Unregister(ctx context.Context, userID uint, c *EgoR
 	defer r.mu.Unlock()
 	if cur, ok := r.conns[userID]; ok && cur == c {
 		delete(r.conns, userID)
-		go r.onDisconnect(ctx, userID)
+		// SafeGo：断连钩子写 egolite_executions，panic 不能击穿进程
+		utils.SafeGo(ctx, "egolite.runner_on_disconnect", func(_ context.Context) {
+			r.onDisconnect(ctx, userID)
+		})
 		return true
 	}
 	return false

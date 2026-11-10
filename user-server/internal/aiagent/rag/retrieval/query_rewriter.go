@@ -11,6 +11,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -96,7 +97,10 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 			if err := json.Unmarshal([]byte(cached), &rw); err == nil {
 				rw.CacheHit = true
 				rw.Original = query
-				go q.updateCacheStats(tenant.BackgroundWithTenant(ctx), hash)
+				// hash 为本调用局部值；SafeGo 防 updateCacheStats panic 击穿进程
+				utils.SafeGo(nil, "rag.query_rewriter.cache_stats", func(_ context.Context) {
+					q.updateCacheStats(tenant.BackgroundWithTenant(ctx), hash)
+				})
 				return &rw, nil
 			}
 		}
@@ -125,17 +129,17 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 	var wg sync.WaitGroup
 	if q.hydeGen != nil && q.hydeGen.IsEnabled() {
 		wg.Add(1)
-		go func() {
+		utils.SafeGo(ctx, "rag.query_rewriter.hyde", func(_ context.Context) {
 			defer wg.Done()
 			hydeDoc, hydeErr = q.hydeGen.Generate(ctx, query)
-		}()
+		})
 	}
 	if q.multiGen != nil && q.multiGen.IsEnabled() {
 		wg.Add(1)
-		go func() {
+		utils.SafeGo(ctx, "rag.query_rewriter.multi_query", func(_ context.Context) {
 			defer wg.Done()
 			multiQueries, multiErr = q.multiGen.Generate(ctx, query)
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -162,7 +166,10 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 		}
 	}
 	if q.db != nil {
-		go q.persistToDB(tenant.BackgroundWithTenant(ctx), hash, query, rw)
+		// hash/query/rw 均为本调用局部值；SafeGo 防 persistToDB panic 击穿进程
+		utils.SafeGo(nil, "rag.query_rewriter.persist", func(_ context.Context) {
+			q.persistToDB(tenant.BackgroundWithTenant(ctx), hash, query, rw)
+		})
 	}
 
 	return rw, nil

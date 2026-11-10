@@ -442,11 +442,12 @@ func (s *FAQService) IncrementHitCount(ctx context.Context, id uint) {
 	if s.repo == nil || id == 0 {
 		return
 	}
-	go func() {
+	// SafeGo：FAQ 命中计数在问答请求路径上，panic 不能击穿进程
+	utils.SafeGo(nil, "faq.increment_hit_count", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
 		_ = s.repo.IncrementHitCount(bgCtx, id)
-	}()
+	})
 }
 
 // WarmupCache 预热缓存 (Task 15: 按 agentID 分片)

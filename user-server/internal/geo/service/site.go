@@ -16,6 +16,7 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -400,12 +401,13 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 		// 推送记录 Create / 配额 Update 全被隔离 callback fail-closed ⇒ 记账与配额
 		// 静默全丢（推送本身照发，事后完全无账可查）。
 		pushCtx := tenant.WithTenantID(context.Background(), siteCfg.TenantID)
-		go func() {
+		// SafeGo：部署后蜘蛛推送 panic 不能击穿进程（部署 API 请求路径）
+		utils.SafeGo(pushCtx, "geo.site_deploy.push_urls", func(_ context.Context) {
 			// 推送失败必须出声：这里在 goroutine 里，丢弃错误等于零日志。
 			if err := s.pushSvc.PushURLs(pushCtx, urls); err != nil {
 				logger.Warnf("部署后蜘蛛推送失败: %v", err)
 			}
-		}()
+		})
 	}
 
 	return fmt.Sprintf("https://%s", siteCfg.Domain), nil

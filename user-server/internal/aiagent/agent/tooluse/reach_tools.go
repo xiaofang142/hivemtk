@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"hivemtk-user/internal/pkg/utils"
 )
 
 type ReachAdapter interface {
@@ -634,24 +636,25 @@ func (t *ReachBatchTool) Execute(ctx context.Context, args map[string]any) (Tool
 			continue
 		}
 		wg.Add(1)
-		go func(cid, aid string, p map[string]any) {
+		// customerID/accountID/payload 均为循环体内局部变量，直接捕获与原传参语义等价
+		utils.SafeGo(ctx, "tooluse.ReachBatchEnqueue", func(_ context.Context) {
 			defer wg.Done()
 			req := &ReachJobRequest{
 				PipelineID: pipelineID,
 				Channel:    channel,
-				CustomerID: cid,
-				AccountID:  aid,
-				Payload:    p,
+				CustomerID: customerID,
+				AccountID:  accountID,
+				Payload:    payload,
 			}
 			job, err := t.deps.Pipeline.EnqueueJob(ctx, req)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failed = append(failed, fmt.Sprintf("%s: %v", cid, err))
+				failed = append(failed, fmt.Sprintf("%s: %v", customerID, err))
 				return
 			}
 			jobIDs = append(jobIDs, fmt.Sprintf("%d", job.ID))
-		}(customerID, accountID, payload)
+		})
 	}
 	wg.Wait()
 

@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"time"
@@ -52,7 +53,10 @@ func (s *MigrationService) ExecuteUpgrade(ctx context.Context, fromVersion, toVe
 		return nil, err
 	}
 
-	go s.executeUpgradeAsync(ctx, task.ID, fromVersion, toVersion)
+	// SafeGo：升级任务异步执行跑 DDL/数据迁移链，panic 不能击穿进程
+	utils.SafeGo(ctx, "migration.execute_upgrade", func(_ context.Context) {
+		s.executeUpgradeAsync(ctx, task.ID, fromVersion, toVersion)
+	})
 	return task, nil
 }
 

@@ -49,7 +49,10 @@ func (s *IntentRecognizer) RecognizeSpeculative(
 		s.saveRecord(ctx, sessionID, customerID, text, r, "", 0, 0)
 		ch := make(chan *dto.RecognizeResult, 1)
 		if s.dispatcher != nil {
-			go s.runLLMAsync(ctx, sessionID, customerID, text, ch, true)
+			// SafeGo：runLLMAsync 跑 LLM 链，panic 不能击穿进程
+			utils.SafeGo(ctx, "intent.speculative_llm_rule_hit", func(_ context.Context) {
+				s.runLLMAsync(ctx, sessionID, customerID, text, ch, true)
+			})
 		} else {
 			ch <- r
 			close(ch)
@@ -67,7 +70,10 @@ func (s *IntentRecognizer) RecognizeSpeculative(
 	}
 	ch := make(chan *dto.RecognizeResult, 1)
 	if s.dispatcher != nil {
-		go s.runLLMAsync(ctx, sessionID, customerID, text, ch, false)
+		// SafeGo：runLLMAsync 跑 LLM 链，panic 不能击穿进程
+		utils.SafeGo(ctx, "intent.speculative_llm_placeholder", func(_ context.Context) {
+			s.runLLMAsync(ctx, sessionID, customerID, text, ch, false)
+		})
 	} else {
 		ch <- placeholder
 		close(ch)

@@ -145,7 +145,11 @@ func StartTelegramPolling(acc *model.TelegramAccount) {
 	botToken := acc.BotToken
 	accountName := acc.AccountName
 
-	go runTelegramPollingWorker(ctx, accountID, botToken, accountName, acc.WebhookSecret, state.done, state)
+	// SafeGo：polling worker 长跑解析 Telegram 外部更新，panic 不能击穿进程
+	// （worker 终止可经 StartPolling 重启恢复，进程崩溃则全部账号断流）
+	utils.SafeGo(ctx, "telegram.polling_worker", func(_ context.Context) {
+		runTelegramPollingWorker(ctx, accountID, botToken, accountName, acc.WebhookSecret, state.done, state)
+	})
 	logger.Infof("[TG-Polling] 账号 %d(%s) polling 协程已启动", accountID, accountName)
 }
 

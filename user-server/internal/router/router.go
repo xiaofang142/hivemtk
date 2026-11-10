@@ -19,6 +19,7 @@ import (
 	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
@@ -423,11 +424,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			return
 		}
 		// 写库失败必须留痕，不能静默归零。
-		go func() {
+		utils.SafeGo(context.Background(), "geo.crawler_visit_record", func(_ context.Context) {
 			if err := crawlerVisitSvc.RecordAnonymous(context.Background(), engine, path, ua, ip); err != nil {
 				logger.Warnf("[GEO] 记录 AI 爬虫访问失败（engine=%s path=%s）: %v", engine, path, err)
 			}
-		}()
+		})
 	}))
 
 	bridgeTokenCtrl := controller.NewBridgeTokenController()

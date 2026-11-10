@@ -695,6 +695,8 @@ audit:
 	@python3 scripts/check-test-nil-deref.py
 	@echo "── 协程体不得直读「测试会改写」的包级注入点（进协程前快照成本地值）──"
 	@python3 scripts/check-async-global-read.py
+	@echo "── 裸 go 语句门（不带 recover 的 go 站点数棘轮：请求路径已清零，存量见 scripts/bare-go.baseline；自测 bash scripts/check-bare-go.test.sh）──"
+	@python3 scripts/check-bare-go.py --repo .
 	@echo "── 第二跳：被异步链经默认实现读到的全局，读写必须各走自己的 accessor（注册表 seam-guard.registry）──"
 	@python3 scripts/check-seam-guard.py
 	@echo "── 全仓 shell 文件：shellcheck error 级零容忍 ──"

@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
 	dbutil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -193,7 +194,9 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 			var processed int32
 			for _, tid := range traceIDs {
 				wg.Add(1)
-				go func(tid string) {
+				// tid 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
+				// SafeGo：批量评估跑 LLM 链，单条 panic 不能击穿进程
+				utils.SafeGo(ctx, "trace_learning.evaluate_trace", func(_ context.Context) {
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()
@@ -208,7 +211,7 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 						previewBuf = append(previewBuf, log)
 						previewMu.Unlock()
 					}
-				}(tid)
+				})
 			}
 			wg.Wait()
 			result.Processed += int(atomic.LoadInt32(&processed))

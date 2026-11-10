@@ -7,6 +7,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // BatchImportCluesFromDTO 批量导入线索（请求 DTO 已在 controller 完成类型校验）
@@ -53,7 +54,10 @@ func (s *ClueService) BatchImportCluesFromDTO(ctx context.Context, reqs []dto.Im
 	if success > 0 && s.scoreSvc != nil {
 		// 评分是导入后的尽力而为补算。评分服务随 ClueService 在装配点注入，
 		// 不在请求/协程体里现造（那会退回全局句柄，测试 cleanup 置 nil 后直接 panic）。
-		go s.scoreImportedClues(tenant.BackgroundWithTenant(ctx), s.scoreSvc, clues)
+		// SafeGo：补算 panic 不能击穿进程（ clues 为本调用局部值，直接捕获与原传参等价）。
+		utils.SafeGo(ctx, "clue.score_imported", func(_ context.Context) {
+			s.scoreImportedClues(tenant.BackgroundWithTenant(ctx), s.scoreSvc, clues)
+		})
 	}
 	return success, skipped, nil
 }

@@ -584,7 +584,10 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		if isDelayedReplay(ctx) {
 			return
 		}
-		go s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
+		// SafeGo：出站消息链上的补触发 panic 不能击穿进程
+		utils.SafeGo(ctx, "outbound.recheck_unreplied", func(_ context.Context) {
+			s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
+		})
 	}()
 	// 分支表里只有飞书与 TG 真把富卡下发（各自一个 `for _, card := range cards`）；
 	// 其余渠道的 outbound 载荷没有卡片载体，这批卡走到这里就是整批丢掉，而文本回复照标 sent。

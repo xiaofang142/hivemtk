@@ -21,6 +21,13 @@ import (
 //   - 外部数据同步
 func RunWithTimeout(ctx context.Context, timeout time.Duration, fn func(ctx context.Context)) {
 	go func() {
+		// 本包是异步启动的统一入口（HTTP 请求路径大量复用）：fn 的 panic
+		// 在这里兜底，不能击穿进程（与下方 SafeGo 同一口径）。
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[RunWithTimeout] panic recovered: %v\n%s", r, debug.Stack())
+			}
+		}()
 		newCtx, cancel := context.WithTimeout(DetachContext(ctx), timeout)
 		defer cancel()
 		fn(newCtx)
@@ -30,6 +37,11 @@ func RunWithTimeout(ctx context.Context, timeout time.Duration, fn func(ctx cont
 // RunDetach 启动异步任务，不带超时控制（适用于长时间任务）
 func RunDetach(ctx context.Context, fn func(ctx context.Context)) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Errorf("[RunDetach] panic recovered: %v\n%s", r, debug.Stack())
+			}
+		}()
 		fn(DetachContext(ctx))
 	}()
 }

@@ -16,6 +16,7 @@ import (
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/security"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service/translation"
 
@@ -221,10 +222,18 @@ func (h *VisitorWSHandler) HandleVisitorWebSocket(c *gin.Context) {
 		Str("channel_id", channelID).
 		Msg("visitor connected")
 
-	go h.writePump(client, conn)
-	go h.readPump(client, conn, ctx)
+	// SafeGo：访客 readPump 解析用户可控 WS 消息、writePump 常驻写泵、onConnect
+	// 做欢迎/续传——任一 panic 不能击穿进程（连接级 defer 清理照常执行）
+	utils.SafeGo(ctx, "ws.visitor.write_pump", func(_ context.Context) {
+		h.writePump(client, conn)
+	})
+	utils.SafeGo(ctx, "ws.visitor.read_pump", func(_ context.Context) {
+		h.readPump(client, conn, ctx)
+	})
 
-	go h.onConnect(client, sinceSeq, ctx)
+	utils.SafeGo(ctx, "ws.visitor.on_connect", func(_ context.Context) {
+		h.onConnect(client, sinceSeq, ctx)
+	})
 }
 
 func (h *VisitorWSHandler) onConnect(client *Client, sinceSeq uint64, ctx context.Context) {
@@ -415,7 +424,10 @@ func (h *VisitorWSHandler) readPump(client *Client, conn *websocket.Conn, ctx co
 					Msg("[WS] epoch mismatch on resume, full resync")
 			}
 			logger.Ctx(ctx).Info().Str("session_id", client.sessionID).Uint64("since_seq", sinceSeq).Msg("resume requested")
-			go h.onConnect(client, sinceSeq, ctx)
+			// SafeGo：resume 续传 panic 不能击穿进程
+			utils.SafeGo(ctx, "ws.visitor.resume", func(_ context.Context) {
+				h.onConnect(client, sinceSeq, ctx)
+			})
 		case "delivered":
 			logger.Ctx(ctx).Debug().Str("session_id", client.sessionID).Interface("ack", msg).Msg("received delivered ack (legacy)")
 		case "close":

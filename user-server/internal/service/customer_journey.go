@@ -12,6 +12,7 @@ import (
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -479,7 +480,11 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 	s.putL1(journeyScope(ctx), customerID, &state)
 	s.persistState(ctx, &state)
 	for _, sub := range s.subscribers {
-		go sub.OnJourneyEvent(ctx, customerID, event)
+		// sub 为 go 1.22+ 逐轮 range 变量，直接捕获与原传参等价；
+		// SafeGo：订阅者回调 panic 不能击穿进程（journey 事件在消息链上触发）。
+		utils.SafeGo(ctx, "journey.subscriber_event", func(_ context.Context) {
+			sub.OnJourneyEvent(ctx, customerID, event)
+		})
 	}
 	return event, nil
 }

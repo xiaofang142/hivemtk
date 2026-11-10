@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service/translation"
 
@@ -180,8 +181,14 @@ func (h *WSHandler) HandleWebSocket(c *gin.Context) {
 
 	h.hub.Register(client)
 
-	go h.writePump(client, conn, ctx)
-	go h.readPump(client, conn, uint(agentID), ctx)
+	// SafeGo：readPump 解析用户可控 WS 消息、writePump 常驻写泵——任一 panic
+	// 不能击穿进程（连接级 defer 清理在 panic 展开时照常执行，SafeGo 只兜底层）
+	utils.SafeGo(ctx, "ws.agent.write_pump", func(_ context.Context) {
+		h.writePump(client, conn, ctx)
+	})
+	utils.SafeGo(ctx, "ws.agent.read_pump", func(_ context.Context) {
+		h.readPump(client, conn, uint(agentID), ctx)
+	})
 
 	logger.Ctx(ctx).Info().
 		Str("agent_name", agentName).

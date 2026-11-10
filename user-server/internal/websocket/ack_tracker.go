@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // PendingAck 待 ACK 跟踪表
@@ -162,11 +163,12 @@ func (p *pendingRedisBacked) asyncSetJSON(sessionID string, snapshot map[uint64]
 	for k, v := range snapshot {
 		isolated[k] = v
 	}
-	go func() {
+	// SafeGo：ACK 快照异步落 Redis 在 WS 消息链上，panic 不能击穿进程
+	utils.SafeGo(nil, "ws.ack_snapshot_persist", func(_ context.Context) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = c.SetJSON(ctx, pendingKey(sessionID), isolated, 24*time.Hour)
-	}()
+	})
 }
 
 func (p *pendingRedisBacked) loadRemote(sessionID string) map[uint64]time.Time {

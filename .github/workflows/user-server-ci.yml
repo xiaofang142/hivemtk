@@ -82,6 +82,11 @@ on:
       - 'scripts/check-tenant-ctx-writes.py'
       - 'scripts/tenant-ctx-cron.registry'
       - 'scripts/check-tenant-ctx-writes.test.sh'
+      # 裸 go 语句门（N-2）：判据脚本本体、棘轮基线与自检脚本都进触发面 ——
+      # 只改判据、只放宽基线、或"门自己坏掉"的提交必须重跑这道门。
+      - 'scripts/check-bare-go.py'
+      - 'scripts/bare-go.baseline'
+      - 'scripts/check-bare-go.test.sh'
       # 事件发布租户门（A9）：判据脚本本体进触发面 ——
       # 只改判据的提交必须重跑这道门，否则它退化成恒绿也没人发现。
       - 'scripts/check-event-publish-tenant.py'
@@ -145,6 +150,10 @@ on:
       - 'scripts/check-tenant-ctx-writes.py'
       - 'scripts/tenant-ctx-cron.registry'
       - 'scripts/check-tenant-ctx-writes.test.sh'
+      # 与 push 段同因：裸 go 语句门的判据本体、棘轮基线与自检脚本。
+      - 'scripts/check-bare-go.py'
+      - 'scripts/bare-go.baseline'
+      - 'scripts/check-bare-go.test.sh'
       # 事件发布租户门（A9）：判据脚本本体进触发面 ——
       # 只改判据的提交必须重跑这道门，否则它退化成恒绿也没人发现。
       - 'scripts/check-event-publish-tenant.py'
@@ -290,6 +299,16 @@ jobs:
         # 判据同 check-gorm-only：把执行者收成唯一一个 —— internal/ 里禁止裸 event.Publish( 与
         # .Publish(event.Event{，必须走 PublishCtx/PublishEventCtx（从 ctx 盖章）。纯静态。
         run: python3 scripts/check-event-publish-tenant.py
+
+      - name: 裸 go 语句门（不带 recover 的 go 站点数棘轮）＋用例（15 枚夹具控制）
+        # 2026-11-11（N-2）：gin.Recovery 只保护请求 goroutine 本身，handler/middleware/
+        # 同步 service 调用链里裸 go 起的协程 panic 会击穿整个进程。请求路径已全部收口
+        # 到 utils.SafeGo/内联 recover，存量（后台/cron/启动期，逐处评估保留）登记在
+        # scripts/bare-go.baseline；新增裸站点 ⇒ NEW 红，修掉 ⇒ STALE 红逼着划掉。
+        # 自测先跑（假树夹具逐条注入 NEW/STALE/OVER/缺基线），恒绿的门与坏掉的门长得一样。
+        run: |
+          bash scripts/check-bare-go.test.sh
+          python3 scripts/check-bare-go.py --repo .
 
       - name: 参数中心读取点门（要么有人读、要么承认未接线）
         # 2026-10-09（B7）：同上从 make audit 常驻化到 CI。判据现读 user-server 种子与

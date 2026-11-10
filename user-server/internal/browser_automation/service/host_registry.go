@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"github.com/google/uuid"
@@ -264,12 +265,22 @@ func (r *HostRegistry) Register(userID uint, version string, pid int, conn *webs
 			userID, incumbent.Version, incumbent.PID, version, pid)
 		// 先发退出控制帧再断：让前者进程退出（Chrome 会重拉一个新 host 走完整注册），
 		// 而不是揣着一条已让位的 WS 立刻重连回来把这一轮再顶掉。
-		go incumbent.forceSelfHeal(hostEvictReplaced)
+		// SafeGo：驱逐自愈帧走宿主连接，panic 不能击穿进程
+		utils.SafeGo(context.Background(), "browser_automation.evict_selfheal", func(_ context.Context) {
+			incumbent.forceSelfHeal(hostEvictReplaced)
+		})
 	}
 	logger.Infof("[BrowserHost] Host 已注册 user=%d version=%s pid=%d", userID, version, pid)
-	go hc.readLoop()
-	go hc.pingLoop() // D4a：心跳探测，僵尸连接最迟 90s 判死
-	go r.probeServable(hc)
+	// SafeGo：host WS 读泵/心跳/可服务探测 panic 不能击穿进程（连接级 defer 清理照常执行）
+	utils.SafeGo(context.Background(), "browser_automation.host_read_loop", func(_ context.Context) {
+		hc.readLoop()
+	})
+	utils.SafeGo(context.Background(), "browser_automation.host_ping_loop", func(_ context.Context) {
+		hc.pingLoop() // D4a：心跳探测，僵尸连接最迟 90s 判死
+	})
+	utils.SafeGo(context.Background(), "browser_automation.host_probe_servable", func(_ context.Context) {
+		r.probeServable(hc)
+	})
 	return hc
 }
 

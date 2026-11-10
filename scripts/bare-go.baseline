@@ -1,0 +1,85 @@
+# 裸 go 语句门基线 —— scripts/check-bare-go.py 的比对表（N-2 · 2026-11-11）
+#
+# 格式：`<相对仓库根的产码文件路径><空格><该文件允许的裸站点数>`；空行与 `#` 开头行忽略。
+# 判定：现算 > 登记 ⇒ OVER 红；文件不在本表却出现站点 ⇒ NEW 红；
+#       登记数额大于现算 ⇒ STALE 红（修掉就划掉，不许留旧数额养僵尸条目）。
+#
+# 本表登记的是**允许保持现状**的裸站点，全部为非 HTTP 请求路径（逐处人工评估，2026-11-11）。
+# 请求路径（handler/middleware/同步 service 调用链）的裸 go 已在本轮全部收口到
+# utils.SafeGo / SafeGoDetached / 内联 defer recover，不在本表 —— 新增请求路径裸 go 即 NEW 红。
+# 分组理由（每文件按行归属）：
+#   [A] cmd/ 辅助二进制：bridge-mock=本地联调 mock；ego-runner/nm-host=独立子进程，
+#       panic 只终止自身进程，不击穿 user-server 主服务。
+#   [B] 跨文件已兜底：目标函数 ProcessDocumentByID（knowledge_base_import.go:190）
+#       自带 defer recover + markDocumentFailed；闸的同文件口径盲区，此处人工背书。
+#   [C] 启动期常驻循环：New/Start/Init 装配点起的 worker/清理/flush 循环，进程生命周期
+#       一个实例，输入源为本进程自身状态，非请求路径可达。
+#   [D] cron/后台作业族：*cron/*job/*sweep/*worker/*dispatcher/loop 的启动循环
+#       （robfig cron 侧另有 Recover+SkipIfStillRunning 双保险，见 internal/pkg/cron/cron.go:37）。
+#   [E] 优雅停机助手：`go func(){ wg.Wait(); close(done) }()` 形态，Stop() 内瞬时协程。
+#   [F] 特例：system_ops.go=ALLOW_SELF_RESTART 下 time.Sleep+os.Exit（无 panic 面）；
+#       performance_testing.go:86=纯数学/计时体（rand/atomic/append，无 panic 面）；
+#       testdb.go=测试基建；integration_smoke/perflib=开发工具（go run 跑批脚本）。
+user-server/cmd/bridge-mock/main.go 2 # [A]
+user-server/cmd/ego-runner/main.go 9 # [A]
+user-server/cmd/ego-runner/telemetry.go 2 # [A]
+user-server/cmd/nm-host/main.go 2 # [A]
+user-server/internal/aiagent/agent/tooluse/db_audit_persister.go 1 # [C] go l.consume() 持久化 worker 循环
+user-server/internal/aiagent/knowledge/service/kb_crawler.go 2 # [B] ProcessDocumentByID 跨文件自带 recover
+user-server/internal/aiagent/knowledge/service/kb_qa_split.go 1 # [B] 同上
+user-server/internal/aiagent/llm/provider_failover.go 1 # [C] go f.healthCheckLoop(ctx) 启动循环
+user-server/internal/aiagent/llm/trace_sink.go 1 # [C] go s.flushLoop() 启动循环
+user-server/internal/aiagent/rag/customer_service/dialog_manager.go 1 # [C] go startSessionCleanup() 构造期启动
+user-server/internal/aiagent/rag/customer_service/pg_dialog_manager.go 1 # [C] 同上
+user-server/internal/aiagent/rag/retrieval/default_implementations.go 1 # [C] go cache.startCleanup() 启动循环
+user-server/internal/app/permission_wiring.go 1 # [C] 工具风险统计 flush 循环（装配期启动）
+user-server/internal/browser_automation/service/feedback.go 1 # [D] StartRetryScanner 每分钟扫描循环
+user-server/internal/browser_automation/service/retention.go 1 # [D] StartAuditRetention 每小时裁剪循环
+user-server/internal/browser_automation/service/stale_reconcile.go 1 # [D] StartStaleTaskReconcile 对账循环
+user-server/internal/cache/memory.go 1 # [C] go cache.cleanup() 启动循环
+user-server/internal/contentguard/service/pipeline.go 2 # [C]+[E] 204=worker 循环启动；219=Stop() wg.Wait 助手
+user-server/internal/controller/system_ops.go 1 # [F] time.Sleep+os.Exit(0) 无 panic 面
+user-server/internal/email/service/email_drain_worker.go 1 # [D] go w.loop(ctx) 投递 worker 启动
+user-server/internal/event/bus.go 2 # [C] go b.worker(...) 事件总线 worker 池启动
+user-server/internal/middleware/audit.go 1 # [C] go m.processAuditLogs() 中间件装配期启动
+user-server/internal/middleware/rate_quota.go 1 # [C] go cleanupLoop() 装配期启动
+user-server/internal/middleware/ratelimit.go 1 # [C] 同上
+user-server/internal/middleware/visitor_rate_limit.go 1 # [C] 同上
+user-server/internal/ops/service/performance_testing.go 1 # [F] 压测内层纯数学/计时体（rand/atomic/append）
+user-server/internal/pkg/cron/wecom_quota_reset_cron.go 1 # [D] go c.loop(ctx) cron 循环
+user-server/internal/pkg/featureflag/flag.go 1 # [C] startPoller 参数轮询循环
+user-server/internal/pkg/metrics/bridge_sink.go 1 # [C] metrics flush 循环
+user-server/internal/pkg/testutil/testdb.go 1 # [F] 测试基建（_test 之外的 testutil 工具）
+user-server/internal/pkg/tracing/tracing.go 1 # [C] go flushLoop(d) 启动循环
+user-server/internal/router/egolite_routes.go 2 # [C] 124=启动期 RestoreAll；207=看门狗 ticker 循环
+user-server/internal/router/router.go 1 # [C] 启动期 Telegram webhook 对账（Setup 内一次性）
+user-server/internal/service/alert_checker.go 1 # [D] go c.loop() 启动循环
+user-server/internal/service/alert_dispatcher.go 1 # [D] go d.worker(ctx, i) worker 池启动
+user-server/internal/service/approval/approval_sweep.go 1 # [D] go w.loop(ctx) 扫描循环
+user-server/internal/service/churn_score_job.go 1 # [D] go c.loop(ctx)
+user-server/internal/service/collection_job.go 1 # [D] go j.loop(ctx)
+user-server/internal/service/confidence/aggregator.go 1 # [D] go BackgroundRunner(ctx)
+user-server/internal/service/customer_journey.go 1 # [D] go c.loop(ctx) 订阅者循环启动
+user-server/internal/service/customer_rfm_cron.go 1 # [D] go c.loop(ctx)
+user-server/internal/service/customer_session_cron.go 2 # [D] 35=go c.run(...); 48=go func 循环
+user-server/internal/service/dialogue_eval_cron.go 1 # [D] go c.loop(ctx)
+user-server/internal/service/feedback_learning_cron.go 2 # [D] 35=go c.runDaily; 46=go func 循环
+user-server/internal/service/feedback_loop_cron.go 6 # [D] 6 个 cron 循环启动
+user-server/internal/service/human_task_sla_job.go 1 # [D] go w.loop(ctx)
+user-server/internal/service/message_hub_summary_agg.go 2 # [D]+[E] 146=go c.run 启动; 199=wg.Wait 助手
+user-server/internal/service/message_trace_cleanup_cron.go 2 # [D]+[E] 117=go t.run 启动; 156=wg.Wait 助手
+user-server/internal/service/order_draft_sweep.go 1 # [D] go w.loop(ctx)
+user-server/internal/service/rag_eval_cron.go 1 # [D] go c.loop(ctx)
+user-server/internal/service/rag_metrics.go 2 # [D] 66=flushLoop 启动; 477=go c.run 启动
+user-server/internal/service/rag_recall_monitor.go 1 # [D] go s.run(ctx)
+user-server/internal/service/reach_pipeline_claim.go 1 # [E→D] 77=job 心跳 ticker 协程；176=dispatchLoop 启动
+user-server/internal/service/reach_send_pipeline_compliance.go 1 # [C] go flushLoop() 启动
+user-server/internal/service/recovery_queue_worker.go 1 # [D] go w.loop(ctx)
+user-server/internal/service/reflux/collector.go 2 # [C]+[E] 51=consumeLoop 启动; 73=wg.Wait 助手
+user-server/internal/service/sop/sop_dispatcher.go 1 # [D] go d.worker(workerCtx, i)
+user-server/internal/service/sop/sop_outbox_dispatcher.go 2 # [D] 82/484=loop 启动
+user-server/internal/service/sop/sop_scheduler.go 1 # [D] go s.loop(...)
+user-server/internal/service/webhook.go 1 # [E] Stop() 内 wg.Wait+close(done) 停机助手
+user-server/internal/websocket/hub.go 1 # [C] go globalHub.Run() 单例启动
+user-server/scripts/integration_smoke.go 2 # [F] 开发冒烟工具（go run）
+user-server/tests/perf/perflib/runner.go 1 # [F] 压测工具库

@@ -16,6 +16,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -217,16 +218,17 @@ func (t *RagSearchTool) Execute(ctx context.Context, args map[string]any) (ToolR
 	}
 
 	if t.deps.ChunkRepo != nil {
-		go func(chunks []knowledgesvc.MerchantRAGChunk) {
+		// filtered 为单次调用局部变量，直接捕获与原 go func(chunks) 传参语义等价
+		utils.SafeGo(nil, "knowledge.rag_hit_count", func(_ context.Context) {
 			bgCtx := tenant.BackgroundWithTenant(ctx)
-			ids := make([]uint64, 0, len(chunks))
-			for _, c := range chunks {
+			ids := make([]uint64, 0, len(filtered))
+			for _, c := range filtered {
 				ids = append(ids, c.ID)
 			}
 			if len(ids) > 0 {
 				_ = t.deps.ChunkRepo.IncrementHitCount(bgCtx, ids)
 			}
-		}(filtered)
+		})
 	}
 
 	if t.deps.SearchLogRepo != nil {

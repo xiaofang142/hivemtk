@@ -14,6 +14,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -229,7 +230,9 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 		err    error
 	}
 	ch := make(chan planResult, 1)
-	go func() {
+	// SafeGo：LLM 编排跑不可信内容，panic 不能击穿进程；
+	// panic 时本路不发结果，主线程走 select 的看门狗/ctx 分支兜底。
+	utils.SafeGo(ctx, "browser_automation.brain.plan", func(_ context.Context) {
 		result, err := dispatcher.DispatchStructured(ctx, req, &p)
 		if err != nil {
 			ch <- planResult{err: fmt.Errorf("LLM 编排失败: %w", err)}
@@ -241,7 +244,7 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 			tokIn:  result.Usage.PromptTokens,
 			tokOut: result.Usage.CompletionTokens,
 		}
-	}()
+	})
 	select {
 	case <-ctx.Done():
 		return nil, false, ctx.Err()

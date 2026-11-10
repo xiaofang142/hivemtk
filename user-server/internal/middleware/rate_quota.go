@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 
@@ -280,7 +281,10 @@ func PathQuotaMiddleware() gin.HandlerFunc {
 		}
 		clientKey := scopedRateLimitKey(c, c.ClientIP())
 		if !getPathQuotaManager().allow(clientKey, path, cfg) {
-			go recordQuotaTrigger(path, clientKey)
+			// path/clientKey 为请求级稳定值；SafeGo 防 recordQuotaTrigger panic 击穿进程
+			utils.SafeGo(nil, "ratelimit.quota_trigger", func(_ context.Context) {
+				recordQuotaTrigger(path, clientKey)
+			})
 			c.JSON(429, gin.H{
 				"code":        429,
 				"msg":         "该接口请求过于频繁，请稍后再试",

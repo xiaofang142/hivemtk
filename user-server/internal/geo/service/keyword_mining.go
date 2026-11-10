@@ -15,6 +15,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -644,7 +645,9 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 	for si, seed := range seedWords {
 		for ei, eng := range targetEngines {
 			wg.Add(1)
-			go func(seed string, eng SuggestEngine, si, ei int) {
+			// seed/eng/si/ei 均为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
+			// SafeGo：下拉抓取并发跑外部引擎，panic 不能击穿进程（挖掘 API 触发）
+			utils.SafeGo(ctx, "geo.keyword_mining.suggest", func(_ context.Context) {
 				defer wg.Done()
 				suggests, err := eng.Fetch(ctx, seed)
 				mu.Lock()
@@ -659,7 +662,7 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 						seedIdx: si, engIdx: ei, kwIdx: ki,
 					})
 				}
-			}(seed, eng, si, ei)
+			})
 		}
 	}
 	wg.Wait()

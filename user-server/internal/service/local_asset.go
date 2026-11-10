@@ -322,7 +322,10 @@ func (s *LocalAssetService) LoadByType(ctx context.Context, assetType string) ([
 		}
 		if la.PurchaseID != nil {
 			_ = s.assetRepo.IncrementUseCount(ctx, la.ID, 1)
-			go s.reportUsageAsync(ctx, la.AssetID)
+			// SafeGo：用量上报 panic 不能击穿进程（la 为 go 1.22+ 逐轮局部量，捕获等价）
+			utils.SafeGo(ctx, "asset.report_usage_load_by_type", func(_ context.Context) {
+				s.reportUsageAsync(ctx, la.AssetID)
+			})
 		}
 	}
 	return list, datas, nil
@@ -345,7 +348,10 @@ func (s *LocalAssetService) LoadOne(ctx context.Context, assetID string) (*model
 	}
 	if la.PurchaseID != nil {
 		_ = s.assetRepo.IncrementUseCount(ctx, la.ID, 1)
-		go s.reportUsageAsync(ctx, la.AssetID)
+		// SafeGo：用量上报 panic 不能击穿进程（资产加载在智能体请求链上）
+		utils.SafeGo(ctx, "asset.report_usage_load_one", func(_ context.Context) {
+			s.reportUsageAsync(ctx, la.AssetID)
+		})
 	}
 	return la, lad.Data, nil
 }

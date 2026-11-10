@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"io"
@@ -186,7 +187,9 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 	for i, dp := range domainPools {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, dp *model.DomainPool) {
+		// i/dp 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
+		// SafeGo：域名健康探测由管理端 API 触发，panic 不能击穿进程
+		utils.SafeGo(ctx, "domain_pool.check_all", func(_ context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -221,7 +224,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 				Status: status,
 				Msg:    msg,
 			}
-		}(i, dp)
+		})
 	}
 	wg.Wait()
 	return results, nil

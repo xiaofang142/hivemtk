@@ -14,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
@@ -614,7 +615,8 @@ func (s *MessageHubService) consumeFromStream(ctx context.Context, stream *hubSt
 			return nil, nil
 		}
 		done := make(chan struct{})
-		go func() {
+		// SafeGo：长轮询唤醒计时器协程 panic 不能击穿进程（cond 唤醒链在请求路径上）
+		utils.SafeGo(ctx, "message_hub.consume_wakeup", func(_ context.Context) {
 			timer := time.NewTimer(wait)
 			defer timer.Stop()
 			select {
@@ -625,7 +627,7 @@ func (s *MessageHubService) consumeFromStream(ctx context.Context, stream *hubSt
 			stream.cond.Broadcast()
 			stream.mu.Unlock()
 			close(done)
-		}()
+		})
 		stream.cond.Wait()
 		<-done
 	}

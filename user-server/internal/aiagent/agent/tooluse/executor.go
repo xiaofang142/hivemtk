@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/trace"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // ===== 可观测性 observer（与追踪系统解耦：默认 nil，由 router 在启动时接线） =====
@@ -412,13 +413,14 @@ func (e *ToolExecutor) BatchExecute(ctx context.Context, req BatchExecuteRequest
 			if sem != nil {
 				sem <- struct{}{}
 			}
-			go func(idx int, er ExecuteRequest) {
+			// go 1.22+ 循环变量逐轮实例化：直接捕获 i/r 与原 go func(idx, er) 传参语义等价
+			utils.SafeGo(ctx, "tooluse.BatchExecute", func(_ context.Context) {
 				defer wg.Done()
 				if sem != nil {
 					defer func() { <-sem }()
 				}
-				results[idx] = e.Execute(ctx, er)
-			}(i, r)
+				results[i] = e.Execute(ctx, r)
+			})
 		}
 		wg.Wait()
 	} else {
@@ -492,11 +494,12 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 	for i, call := range toolCalls {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(idx int, c LLMToolCall) {
+		// go 1.22+ 循环变量逐轮实例化：直接捕获 i/call 与原 go func(idx, c) 传参语义等价
+		utils.SafeGo(ctx, "tooluse.DispatchLLMToolCall", func(_ context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[idx] = e.executeSingleLLMToolCall(dispatchCtx, c, toolCtx)
-		}(i, call)
+			results[i] = e.executeSingleLLMToolCall(dispatchCtx, call, toolCtx)
+		})
 	}
 	wg.Wait()
 	turnStatus := tracing.StatusOk

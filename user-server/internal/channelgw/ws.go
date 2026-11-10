@@ -182,8 +182,14 @@ func (t *WSTransport) HandleWS(c *gin.Context) {
 		})
 	}
 
-	go cn.readPump()
-	go cn.pushPump()
+	// SafeGo：渠道桥接 read/pump 双泵常驻解析外部渠道帧，panic 不能击穿进程
+	// （连接级 defer 清理在 panic 展开时照常执行，SafeGo 只兜底层）
+	utils.SafeGo(context.Background(), "channelgw.ws.read_pump", func(_ context.Context) {
+		cn.readPump()
+	})
+	utils.SafeGo(context.Background(), "channelgw.ws.push_pump", func(_ context.Context) {
+		cn.pushPump()
+	})
 	<-cn.done
 	logger.Infof("[ChannelGW WS] 渠道连接已断开: channel=%s account=%s", channel, accountID)
 }

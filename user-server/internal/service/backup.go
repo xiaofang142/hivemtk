@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/storage"
@@ -125,9 +126,10 @@ func (s *BackupService) CreateBackup(ctx context.Context, createdBy uint, req *C
 	// 备份是全实例动作：必须走 SystemScope 才能跨租户读取，否则 on 模式下
 	// 隔离 callback 只会导出调用方所属租户的数据，备份"成功"但内容残缺。
 	job := *backup
-	go func(b *model.Backup) {
-		s.executeBackup(tenant.WithSystemScope(context.WithoutCancel(ctx)), b)
-	}(&job)
+	// SafeGo：备份长跑任务由 API 触发，panic 不能击穿进程
+	utils.SafeGo(ctx, "backup.execute", func(_ context.Context) {
+		s.executeBackup(tenant.WithSystemScope(context.WithoutCancel(ctx)), &job)
+	})
 
 	return backup, nil
 }
@@ -481,10 +483,13 @@ func (s *RestoreService) RestoreBackup(ctx context.Context, createdBy uint, req 
 		return nil, err
 	}
 
-	go func(src model.RestoreRecord) {
-		// 与备份对称：恢复要写回备份覆盖的全部租户，不能被调用方租户截断。
+	// SafeGo：恢复长跑任务由 API 触发，panic 不能击穿进程
+	// （与备份对称：恢复要写回备份覆盖的全部租户，不能被调用方租户截断；
+	//  快照拷贝 *record 与原 go func(src) 传参语义逐字节等价）
+	src := *record
+	utils.SafeGo(ctx, "backup.execute_restore", func(_ context.Context) {
 		s.executeRestore(tenant.WithSystemScope(context.WithoutCancel(ctx)), &src, backup)
-	}(*record)
+	})
 
 	return record, nil
 }

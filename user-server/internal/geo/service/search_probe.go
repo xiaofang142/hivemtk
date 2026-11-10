@@ -17,6 +17,7 @@ import (
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/platform"
 	mainrepo "hivemtk-user/internal/repository"
 )
@@ -564,7 +565,9 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 	var wg sync.WaitGroup
 	for i, p := range probes {
 		wg.Add(1)
-		go func(i int, p SearchProbe) {
+		// i/p 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
+		// SafeGo：探针并发跑外部搜索引擎，panic 不能击穿进程（探针 API/排程触发）
+		utils.SafeGo(ctx, "geo.search_probe.concurrent", func(_ context.Context) {
 			defer wg.Done()
 			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {
@@ -572,7 +575,7 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 				return
 			}
 			outcomes[i] = probeOutcome{run: s.buildProbeRun(ctx, p, pr)}
-		}(i, p)
+		})
 	}
 	wg.Wait()
 

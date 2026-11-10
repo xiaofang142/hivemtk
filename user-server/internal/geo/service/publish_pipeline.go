@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 const (
@@ -188,12 +189,13 @@ func (p *PublishPipeline) Publish(ctx context.Context, req PublishRequest) ([]Pu
 	var wg sync.WaitGroup
 	for i := 0; i < p.workerCount; i++ {
 		wg.Add(1)
-		go func() {
+		// SafeGo：多平台发布 worker 跑外部平台 API，panic 不能击穿进程
+		utils.SafeGo(ctx, "geo.publish_pipeline.worker", func(_ context.Context) {
 			defer wg.Done()
 			for j := range jobs {
 				results <- p.publishOne(ctx, article, j.platform)
 			}
-		}()
+		})
 	}
 	for _, pl := range platforms {
 		jobs <- job{platform: pl}

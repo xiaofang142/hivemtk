@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -61,7 +62,10 @@ func MarkMFAVerified(userID uint) {
 	}
 
 	mfaCleanupTrigger.Do(func() {
-		go mfaCleanupLoop()
+		// MarkMFAVerified 在登录/敏感操作请求路径触发；cleanup 循环 panic 不得击穿进程
+		utils.SafeGo(context.Background(), "middleware.mfa_cleanup_loop", func(_ context.Context) {
+			mfaCleanupLoop()
+		})
 	})
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // PerformanceTestService 性能压测服务
@@ -57,7 +58,10 @@ func (s *PerformanceTestService) RunTest(ctx context.Context, req TestRequest) (
 		return nil, err
 	}
 
-	go s.executeTest(record.ID, req)
+	// SafeGo：压测由 API 触发的长跑任务，panic 不能击穿进程
+	utils.SafeGo(context.Background(), "ops.performance_test.execute", func(_ context.Context) {
+		s.executeTest(record.ID, req)
+	})
 
 	return record, nil
 }

@@ -88,8 +88,11 @@ func TestFanOutIllegalStrategyRejectedBeforeDispatch(t *testing.T) {
 	}
 }
 
-// 顺序锁：准入校验必须在并发发起的 go 语句之前。这条判据是源码级的，
+// 顺序锁：准入校验必须在并发发起的发起语句之前。这条判据是源码级的，
 // 因为运行期无法稳定区分"没发起"与"发起了但被 fanCtx 取消"。
+// 2026-11-11（N-2）：并发发起由裸 `go func(idx, prov)` 收口为 utils.SafeGo
+// （panic 不击穿进程），形态锁同步更新——锚的还是 dispatchFanOut 内唯一的
+// 并发发起语句，锁的语义（准入先于发起）不变。
 func TestFanOutAdmissionPrecedesDispatch(t *testing.T) {
 	src, err := os.ReadFile("dispatcher.go")
 	if err != nil {
@@ -97,7 +100,7 @@ func TestFanOutAdmissionPrecedesDispatch(t *testing.T) {
 	}
 	body := string(src)
 	admission := strings.Index(body, "if !fanOutStrategyImplemented(strategy) {")
-	firstGo := strings.Index(body, "go func(idx int, prov *ProviderConfig) {")
+	firstGo := strings.Index(body, "utils.SafeGo(ctx, \"llm.dispatcher.fanout\"")
 	if admission < 0 {
 		t.Fatal("找不到准入校验语句：fan-out 非法策略的门不见了")
 	}
