@@ -171,9 +171,24 @@ function getConversationList() {
     if (!id && name) id = 'conv:' + name.slice(0, 80);
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, name, el });
+    // M-5：未读徽章（SEL.UNREAD 口径）。供巡检「未读优先」调度使用；
+    //   拼多多商家版徽章 DOM 未经真机校准，未读优先开关默认不对本渠道开启。
+    const unread = detectUnread(el);
+    out.push({ id, name, el, unread });
   }
   return out;
+}
+
+// 未读检测（M-5）：会话项自身带未读 class/红点，或其内部含未读徽章，即视为有新消息。
+// 口径 = 本渠道既有 SEL.UNREAD 选择器（与 douyin/xianyu 的 detectUnread 同一模式）。
+// 真机校准缺口：拼多多商家版徽章结构样本不足，检出率未验证（见 M-5 报告）。
+function detectUnread(item) {
+  if (!item) return false;
+  try {
+    if (item.matches && item.matches(SEL.UNREAD)) return true;
+    if (item.querySelector && item.querySelector(SEL.UNREAD)) return true;
+  } catch (_) {  }
+  return false;
 }
 
 function getPeerName() {
@@ -355,7 +370,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isPddHost };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isPddHost, detectUnread };
 
 export function buildPddAdapter() {
   return new BaseAdapter({

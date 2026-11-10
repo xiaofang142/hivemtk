@@ -120,6 +120,40 @@ func BridgeOnlineGraceWindow(ctx context.Context) time.Duration {
 	return GlobalConfigParam().GetDuration(ctx, "bridge", BridgeOnlineGraceParam, BridgeOnlineGraceDefault)
 }
 
+// PatrolUnreadFirstChannelsParam / PatrolUnreadFirstChannelsDefault 是"巡检要不要未读优先"的唯一下发源。
+//
+// M-5（2026-11-11）巡检机制优化：扩展 patrol 原先每 30s 全量遍历会话列表（未读数恒为 0、
+// 各渠道 detectUnread 的结果被丢弃）。开启未读优先的渠道，巡检只点开带未读徽章的会话，
+// 未读为 0 的会话靠活动会话 MutationObserver + 全量 rescan 兜底。渠道徽章检测不可靠时
+// 把渠道移出清单即回退现行顺序遍历（关 = 完全旧行为）。
+// 默认值与 config_params 里 bridge/patrol_unread_first_channels 的 DefaultValue 同值，改动要一起改。
+const (
+	PatrolUnreadFirstChannelsParam   = "patrol_unread_first_channels"
+	PatrolUnreadFirstChannelsDefault = `["douyin","tiktok","xianyu","kuaishou"]`
+)
+
+// PatrolUnreadFirstChannels 读巡检未读优先渠道清单（JSON 字符串数组）；参数未装配/解析失败
+// 按默认清单回落（GlobalConfigParam 本身 nil-safe）。空数组合法 = 全渠道关（现行行为）。
+func PatrolUnreadFirstChannels(ctx context.Context) []string {
+	raw := GlobalConfigParam().GetString(ctx, "bridge", PatrolUnreadFirstChannelsParam, PatrolUnreadFirstChannelsDefault)
+	return parsePatrolUnreadFirstChannels(raw)
+}
+
+// parsePatrolUnreadFirstChannels 把参数值解析为渠道清单。
+// 非法 JSON / 非字符串数组 → 回落默认清单（fail-open 到「已知渠道未读优先」，与未装配同形）；
+// 空数组合法 = 全渠道关（扩展侧顺序遍历现行行为）。
+func parsePatrolUnreadFirstChannels(raw string) []string {
+	var out []string
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		logger.Warnf("[ConfigParam] bridge/%s 解析失败（%v），回落默认清单", PatrolUnreadFirstChannelsParam, err)
+		out = nil
+	}
+	if out == nil {
+		_ = json.Unmarshal([]byte(PatrolUnreadFirstChannelsDefault), &out)
+	}
+	return out
+}
+
 const (
 	AbExposureBufferParam      = "ab_exposure_buffer"
 	InboxOverdueThresholdParam = "inbox_overdue_threshold"

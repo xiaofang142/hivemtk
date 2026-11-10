@@ -160,6 +160,24 @@ export const PATROL_DEFAULTS = Object.freeze({
 });
 
 // =============================================================
+// 4b) 全量 rescan（兜底同步）调度（M-5 巡检机制优化，2026-11-11）
+// =============================================================
+// 语义：启动后 initialSyncDelayMs 做首次全量遍历同步；此后每 intervalMs 周期性
+//   全量 rescan 一次（syncAllConversations，持久化续传，见 _syncedConvIds）。
+// 双档间隔（M-5）：
+//   - intervalMs（10min）＝未读优先开关**关闭**渠道的现行值，行为不变；
+//   - intervalMsUnreadFirst（30min）＝开关**开启**渠道的降频值：常规覆盖已交给
+//     未读优先巡检（只点开带未读徽章的会话）+ 活动会话 MutationObserver/3s
+//     fallbackTimer，rescan 从"每 10min 的第二巡检"降为纯兜底（漏检最后防线）。
+// 两档均可被 localStorage `hivebridge:rescan:<channel>`（毫秒数）覆盖，
+// 与 `hivebridge:patrol:<channel>` 同一覆盖模式。
+export const RESCAN_DEFAULTS = Object.freeze({
+  initialSyncDelayMs: 8000,
+  intervalMs: 10 * 60 * 1000,
+  intervalMsUnreadFirst: 30 * 60 * 1000,
+});
+
+// =============================================================
 // 5) 历史回填宽限期（per-channel，2026-08-05 审计 P0/A6）
 // =============================================================
 // 语义：会话初次挂载/切换后的一段时间内，新出现的客户消息仅回填历史（落库），

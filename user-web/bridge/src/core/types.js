@@ -1,5 +1,5 @@
 
-import { PROTOCOL, RATE_LIMIT_DEFAULTS, PATROL_DEFAULTS } from './constants.js';
+import { PROTOCOL, RATE_LIMIT_DEFAULTS, PATROL_DEFAULTS, RESCAN_DEFAULTS } from './constants.js';
 
 // 协议字段：导出 constants.js 中的 PROTOCOL（保持单源）
 export const CHANNELS = PROTOCOL.CHANNELS;
@@ -16,6 +16,9 @@ export const DIRECTION = PROTOCOL.DIRECTION;
 export { RATE_LIMIT_DEFAULTS };
 
 export { PATROL_DEFAULTS };
+
+// M-5（2026-11-11）：全量 rescan（兜底同步）调度默认值，单源在 constants.js
+export { RESCAN_DEFAULTS };
 
 // 实时 inbound 帧携带的「会话上下文窗口」长度：让「一条消息 = 一个会话、内含多轮历史」成立，
 // AI 侧得到该会话最近 N 轮作为上下文。服务端也可自取已存历史，窗口仅作即时上下文与冗余。

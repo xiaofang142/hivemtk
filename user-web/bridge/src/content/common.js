@@ -2,7 +2,7 @@ import { DEFAULT_USER_SERVER, isExperimentalChannel } from '../core/constants.js
 import { createLogger } from '../core/logger.js';
 import { hydrateSelectors, SELECTOR_UPDATE_MSG } from '../core/selector-ai.js';
 import { Uplink } from '../core/uplink.js';
-import { PollingLoop } from '../core/polling-loop.js';
+import { PollingLoop, getServerCapabilities } from '../core/polling-loop.js';
 
 const log = createLogger('content', 'bridge');
 
@@ -468,6 +468,16 @@ export function startBridge(channel, buildAdapter) {
       if (!message.account_id) message.account_id = resolveAccountId();
       uplink.enqueue(message);
     };
+
+    // M-5（2026-11-11）：巡检未读优先的渠道开关来自参数中心（/api/bridge/capabilities 下发）。
+    //   异步拉取不阻塞启动：patrol() 每轮实时读开关值，拉到后下一轮生效；rescan 间隔
+    //   由 setPatrolUnreadFirstChannels 在开关翻转时重排。拉取失败/字段缺失 = 开关关
+    //   = 现行顺序遍历（fail-open）。
+    try {
+      getServerCapabilities(getConfig())
+        .then((caps) => { try { adapter.setPatrolUnreadFirstChannels(caps.patrol_unread_first_channels || []); } catch (_) {  } })
+        .catch(() => {  });
+    } catch (_) {  }
 
     adapter.start({
       onMessage: (message) => {

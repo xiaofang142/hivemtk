@@ -4,7 +4,7 @@ import { makeUnifiedMessage, SENDER, DIRECTION, HISTORY_CONTEXT_WINDOW, PATROL_D
 import { mergeSelectors } from './selector-ai.js';
 import { createSelectorHealthTracker } from './selector-health.js';
 import { simulateRealClick } from './dom.js';
-import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL } from './constants.js';
+import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL, RESCAN_DEFAULTS } from './constants.js';
 import { withTimeout } from './downlink.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -102,7 +102,7 @@ export class BaseAdapter {
     //   ② sender 绑定：1v1 私信里 parsed.sender_name 与锚点 peerName 不一致 ⇒
     //     判跨会话残留拒收（线上实证 tz3rmdj：说缘 的消息被归到 做点吃的 的会话）。
     this._convAnchor = { cid: null, peerName: '', ts: 0 };      
-    this._patrolStats = { rounds: 0, visited: 0, withNew: 0, captured: 0, failures: 0, lastRoundAt: 0, lastDurationMs: 0 };
+    this._patrolStats = { rounds: 0, visited: 0, withNew: 0, captured: 0, failures: 0, lastRoundAt: 0, lastDurationMs: 0, lastScheduleMode: 'sequential', lastUnreadCount: 0 };
     // 批25：换会话互斥（下发优先，巡检让路）——见 beginOutbound 处的论证。
     this._outboundInFlight = 0;
     this._outboundStartedAt = 0;
@@ -112,6 +112,9 @@ export class BaseAdapter {
     // 点发送等不可逆动作前自检该令牌，命中即清场退出 —— 防降级文本已发出、
     // 被弃的 hook 迟到又点一次发送的双发（详见 media-inject.js 顶部注释）。
     this._activeMediaAbort = null;
+    // M-5：未读优先巡检的渠道开关集合（来自参数中心，经 /api/bridge/capabilities 下发）。
+    //   空集 = 开关关 = 现行顺序遍历。本地 localStorage 覆盖优先级更高（见 _patrolUnreadFirstEnabled）。
+    this._unreadFirstChannels = new Set();
   }
 
   setAccount(account) { this.account = account; }
@@ -722,14 +725,74 @@ export class BaseAdapter {
     this._initialSyncDone = true;
     setTimeout(() => {
       this.syncAllConversations({ throttleMs: 1500 }).catch(() => {});
-    }, 8000);
+    }, RESCAN_DEFAULTS.initialSyncDelayMs);
+  }
+
+  // M-5：rescan 间隔三档取值——localStorage 覆盖 > 未读优先档 > 现行档。
+  //   开关关 = intervalMs（10min，现行值逐字节不变）；开关开 = intervalMsUnreadFirst
+  //   （30min 降频：常规覆盖交给未读优先巡检，rescan 只当漏检兜底）。
+  _rescanIntervalMs() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const v = localStorage.getItem(`hivebridge:rescan:${this.channel}`);
+        if (v) {
+          const n = parseInt(v, 10);
+          if (Number.isFinite(n) && n > 0) return n;
+        }
+      }
+    } catch (_) {  }
+    return this._patrolUnreadFirstEnabled()
+      ? RESCAN_DEFAULTS.intervalMsUnreadFirst
+      : RESCAN_DEFAULTS.intervalMs;
   }
 
   _startRescan() {
     if (this._rescanTimer) clearInterval(this._rescanTimer);
     this._rescanTimer = setInterval(() => {
       this.syncAllConversations({ throttleMs: 1500 }).catch(() => {});
-    }, 10 * 60 * 1000);
+    }, this._rescanIntervalMs());
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // M-5（2026-11-11）：巡检未读优先 —— 渠道级开关与调度
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 现行问题：patrol 每轮全量遍历会话列表、只访问前 maxPerRound=6 个（从未读徽章
+  //   视角看是"盲访"——unreadCount 恒为 0，各渠道 detectUnread 的结果被丢弃）。
+  // 新调度：开关开启的渠道，巡检只把带未读徽章的会话放进本轮访问配额；未读为 0
+  //   的会话不再进全量遍历（活动会话靠 MutationObserver + 3s fallbackTimer 实时
+  //   覆盖，非活动会话靠降频后的 rescan 兜底）。
+  // 回退安全（不能因新逻辑漏消息）：
+  //   - 开关关 = 完全现行行为（顺序遍历）；
+  //   - 列表项缺 unread 布尔字段（渠道未接线/返回异常）→ 该轮 fail-open 回顺序遍历；
+  //   - 调度分区自身抛错 → 该轮 fail-open 回顺序遍历。
+  // 开关来源与优先级：
+  //   1. 本地 localStorage `hivebridge:patrolUnreadFirst:<channel>`（"1"/"0"，应急覆盖）；
+  //   2. 参数中心经 /api/bridge/capabilities 下发的渠道清单（setPatrolUnreadFirstChannels）；
+  //   3. 默认关。
+  setPatrolUnreadFirstChannels(list) {
+    const prev = this._patrolUnreadFirstEnabled();
+    const set = new Set();
+    if (Array.isArray(list)) {
+      for (const ch of list) {
+        if (typeof ch === 'string' && ch) set.add(ch);
+      }
+    }
+    this._unreadFirstChannels = set;
+    const next = this._patrolUnreadFirstEnabled();
+    // 开关状态翻转且 rescan 已在跑 → 按新模式重排间隔（关=10min / 开=30min；覆盖值优先）。
+    if (prev !== next && this._rescanTimer) this._startRescan();
+    return next;
+  }
+
+  _patrolUnreadFirstEnabled() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const v = localStorage.getItem(`hivebridge:patrolUnreadFirst:${this.channel}`);
+        if (v === '1') return true;
+        if (v === '0') return false;
+      }
+    } catch (_) {  }
+    return this._unreadFirstChannels instanceof Set && this._unreadFirstChannels.has(this.channel);
   }
 
   async _waitForActiveConversation(targetId, prevCid, timeout = 5000, exact = false) {
@@ -1078,7 +1141,10 @@ export class BaseAdapter {
     if (typeof hook !== 'function') { return { skipped: true, reason: 'no-hook' }; }
     this._patrolling = true;
     const startedAt = Date.now();
-    let visited = 0, withNew = 0, captured = 0, failures = 0, scannedTotal, unreadCount = 0;
+    let visited = 0, withNew = 0, captured = 0, failures = 0, scannedTotal, unreadCount;
+    // M-5：本轮调度模式——sequential（现行顺序遍历）/ unread-first（未读优先）/
+    //   unread-first-fallback（未读优先开启但信息不可靠，fail-open 回顺序遍历）。
+    let scheduleMode = 'sequential';
     let yieldReason = null;   // 批25：本轮因"下发在途（含 linger）"让路的判据（null=没让路）
     let yieldSkipped = 0;
 
@@ -1087,9 +1153,10 @@ export class BaseAdapter {
 
     try {
       // ============ 阶段 1：扫描左侧列表（轻量级）============
-      //   直接遍历所有会话，不判断未读（小红书未读徽章 DOM 不稳定，
-      //   detectUnread 不可靠）。靠 _collectUnseenText 的 seenNodes/seen 去重，
-      //   只有真正新增的消息才上行 inbound 触发 AI（"合理评论" = 不重复触发已处理消息）。
+      //   读取会话列表并统计未读数。未读徽章只在「未读优先」开关开启的渠道上参与
+      //   调度（开关关 = 完全现行行为：顺序遍历，仅顺手统计未读数供可观测）。
+      //   采集面不变：靠 _collectUnseenText 的 seenNodes/seen 去重，只有真正新增的
+      //   消息才上行 inbound 触发 AI（"合理评论" = 不重复触发已处理消息）。
       const allList = [];
       try {
         const list = hook() || [];
@@ -1099,14 +1166,48 @@ export class BaseAdapter {
       const seenIds = new Set();
       const uniqList = allList.filter((c) => c && c.id && !seenIds.has(c.id) && seenIds.add(c.id));
       scannedTotal = uniqList.length;
+      unreadCount = this._countUnread(uniqList);
 
       if (scanOnly) {
-        this.log.debug(`巡检扫描-only 完成：总 ${scannedTotal}`);
-        return { scannedTotal, unreadCount: 0, visited: 0, withNew: 0, captured: 0, failures: 0, durationMs: Date.now() - startedAt };
+        this.log.debug(`巡检扫描-only 完成：总 ${scannedTotal}，未读 ${unreadCount}`);
+        return { scannedTotal, unreadCount, scheduleMode, visited: 0, withNew: 0, captured: 0, failures: 0, durationMs: Date.now() - startedAt };
       }
 
-      // 直接遍历所有会话，靠 seenNodes/seen 去重确保只捕获新消息
+      // ============ 阶段 1.5：本轮访问对象选择（M-5 未读优先调度）============
+      //   顺序模式（开关关）：targets = 全量列表 —— 现行行为逐字节保留。
+      //   未读优先模式（开关开）：只访问带未读徽章的会话；未读为 0 的会话靠活动会话
+      //     MutationObserver/fallbackTimer + rescan 兜底，不再进全量遍历。
+      //   fail-open：渠道列表没带 unread 布尔字段（未接线/异常）或分区抛错 ⇒ 本轮
+      //     回退顺序遍历（宁可多访，不能漏访）。
       let targets = uniqList;
+      if (this._patrolUnreadFirstEnabled()) {
+        try {
+          if (uniqList.length === 0) {
+            scheduleMode = 'unread-first';
+            targets = [];
+          } else {
+            const unreadWired = uniqList.every((c) => c && typeof c.unread === 'boolean');
+            if (unreadWired) {
+              scheduleMode = 'unread-first';
+              if (unreadCount > 0) {
+                targets = uniqList.filter((c) => c.unread);
+              } else if (visitAllWhenNoUnread) {
+                targets = uniqList;   // 兼容选项：无未读时仍全量访问（靠 seen 去重只报新消息）
+              } else {
+                targets = [];
+              }
+            } else {
+              throttledWarn(this.log, `patrolUnreadFallback:${this.channel}`, WARN_THROTTLE_MS,
+                '未读优先开启但会话列表未带 unread 布尔字段（渠道未接线或 detectUnread 异常），本轮回退顺序遍历');
+              scheduleMode = 'unread-first-fallback';
+            }
+          }
+        } catch (e) {
+          targets = uniqList;
+          scheduleMode = 'unread-first-fallback';
+          this.log.warn('未读优先调度异常，本轮回退顺序遍历', e && e.message);
+        }
+      }
       if (maxPerRound > 0 && targets.length > maxPerRound) targets = targets.slice(0, maxPerRound);
 
       // ============ 阶段 2：分批点开未读会话（限并发）============
@@ -1170,14 +1271,29 @@ export class BaseAdapter {
     this._patrolStats.failures += failures;
     this._patrolStats.lastRoundAt = startedAt;
     this._patrolStats.lastDurationMs = dur;
-    this.log.debug(`巡检一轮完成：扫描 ${scannedTotal} 个会话，访问 ${visited}，有新消息 ${withNew}，捕获新消息 ${captured}，失败 ${failures}，用时 ${dur}ms`);
+    // M-5：调度模式与未读数进统计面（patrolStatus 展开 _patrolStats 即可见）。
+    //   运维据此回答「未读检测是不是全瞎了」：unread-first 模式下 lastUnreadCount
+    //   长期为 0 而实际有新消息 ⇒ 该渠道徽章选择器失效，应把渠道移出未读优先清单。
+    this._patrolStats.lastScheduleMode = scheduleMode;
+    this._patrolStats.lastUnreadCount = unreadCount;
+    this.log.debug(`巡检一轮完成：扫描 ${scannedTotal} 个会话（未读 ${unreadCount}，调度 ${scheduleMode}），访问 ${visited}，有新消息 ${withNew}，捕获新消息 ${captured}，失败 ${failures}，用时 ${dur}ms`);
     if (yieldReason) {
       this.log.info(`巡检本轮让路 ${yieldSkipped} 个会话（${yieldReason}）：下发优先，下一轮再访`);
     }
     return {
-      scannedTotal, unreadCount, visited, withNew, captured, failures, durationMs: dur,
+      scannedTotal, unreadCount, scheduleMode, visited, withNew, captured, failures, durationMs: dur,
       yielded: yieldReason, skippedByYield: yieldSkipped,
     };
+  }
+
+  // M-5：未读数统计（只读，不影响调度）。渠道列表带 unread 布尔字段才计数，
+  //   否则返回 0（与现行口径一致：不产生未读信息时不再编造）。
+  _countUnread(list) {
+    try {
+      if (!Array.isArray(list) || list.length === 0) return 0;
+      if (!list.every((c) => c && typeof c.unread === 'boolean')) return 0;
+      return list.reduce((n, c) => n + (c.unread ? 1 : 0), 0);
+    } catch (_) { return 0; }
   }
 
   async _patrolVisit(conv, { throttleMs, waitActiveMs }) {

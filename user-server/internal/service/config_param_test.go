@@ -296,7 +296,9 @@ func TestFallbackNilDB(t *testing.T) {
 // telemetry.channel_online_degraded_below ⇒ 241 → 243。
 // 2026-11-05 9d6477c9 geo 承接链接新增 geo.capture_ask_daily_limit +
 // geo.capture_lead_daily_limit ⇒ 243 → 245。
-const defaultParamDefsWant = 245
+// 2026-11-11 M-5 巡检未读优先新增 bridge.patrol_unread_first_channels
+// （读取口 service.PatrolUnreadFirstChannels / 下发面 /api/bridge/capabilities）⇒ 245 → 246。
+const defaultParamDefsWant = 246
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

@@ -17,12 +17,30 @@ const log = createLogger('bridge', 'bg');
 // ---- 服务端能力查询 ----
 
 /**
+ * 解析 capabilities 里的「巡检未读优先渠道清单」。
+ * 服务端（参数中心 bridge/patrol_unread_first_channels）下发 JSON 字符串数组；
+ * 字段缺失（旧服务端）/非数组/解析失败 → 空数组 = 扩展侧开关全关（现行顺序遍历）。
+ * 兼容两种形状：直接数组（容错）与 JSON 字符串（服务端实际形状）。
+ */
+function parseUnreadFirstChannels(data) {
+  try {
+    let raw = data ? data.patrol_unread_first_channels : null;
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch (_) { return []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((ch) => typeof ch === 'string' && ch);
+  } catch (_) { return []; }
+}
+
+/**
  * getServerCapabilities 查询服务端下行能力。
- * 请求 GET /api/bridge/capabilities，返回 { sse_enabled, poll_interval_ms }。
- * 请求失败时返回保守的 fallback（sse_enabled: false）。
+ * 请求 GET /api/bridge/capabilities，
+ * 返回 { sse_enabled, poll_interval_ms, patrol_unread_first_channels }。
+ * 请求失败时返回保守的 fallback（sse_enabled: false；未读优先清单 = 空 = 开关关）。
  *
  * @param {object} [cfg] 可选配置 { serverUrl, token }
- * @returns {Promise<{sse_enabled: boolean, poll_interval_ms: number}>}
+ * @returns {Promise<{sse_enabled: boolean, poll_interval_ms: number, patrol_unread_first_channels: string[]}>}
  */
 export async function getServerCapabilities(cfg) {
   const baseUrl = (cfg && cfg.serverUrl) || DEFAULT_USER_SERVER.baseUrl;
@@ -49,16 +67,18 @@ export async function getServerCapabilities(cfg) {
 
     if (!resp.ok) {
       log.warn(`capabilities 响应非 OK: ${resp.status}`);
-      return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs };
+      return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs, patrol_unread_first_channels: [] };
     }
     const data = await resp.json();
     return {
       sse_enabled: !!(data && data.sse_enabled),
       poll_interval_ms: (data && data.poll_interval_ms) || BRIDGE_THREE_CHANNEL.outboxPollIntervalMs,
+      // M-5：参数中心下发的未读优先巡检渠道清单（缺失/解析失败 = 空 = 现行行为）
+      patrol_unread_first_channels: parseUnreadFirstChannels(data),
     };
   } catch (err) {
     log.warn('capabilities 查询失败，使用 fallback', err && err.message);
-    return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs };
+    return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs, patrol_unread_first_channels: [] };
   }
 }
 

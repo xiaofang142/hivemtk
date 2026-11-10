@@ -103,6 +103,13 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "bridge", Key: "outbound_orphan_dry_run", Name: "出站孤儿行结算只报数",
 			Description: "true（缺省）＝后台回扫只统计并打印候选行数，不写库；确认过报数后改 false 才真正把孤儿行落 failed。落 failed 不可逆（内容不动，但状态离开待办集合），所以开关默认停在报数一侧",
 			ValueType:   "bool", Risk: "warning", DefaultValue: "true"},
+		{Group: "bridge", Key: "patrol_unread_first_channels", Name: "巡检未读优先渠道清单",
+			Description: "JSON 字符串数组：启用「未读优先巡检」的渠道编码，经 GET /api/bridge/capabilities 下发给扩展。" +
+				"开启后扩展巡检只点开带未读徽章的会话（未读为 0 的会话靠活动会话 MutationObserver + 全量 rescan 兜底，rescan 间隔随之降频）；" +
+				"清单外的渠道保持现行顺序遍历（关 = 完全旧行为）。徽章检测不可靠时把该渠道移出清单即回退。" +
+				"默认仅含徽章检测结构可靠的 douyin/tiktok/xianyu/kuaishou；xiaohongshu 徽章 DOM 不稳定默认关闭，jd/bilibili/weibo/pdd 未真机校准默认关闭。" +
+				"渠道未接线或 detectUnread 异常时扩展侧自动 fail-open 回顺序遍历。",
+			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","xianyu","kuaishou"]`, Category: "桥接"},
 
 		{Group: "knowledge", Key: "default_top_k", Name: "默认 Top-K 检索数",
 			Description: "向量检索返回的候选文档数",
