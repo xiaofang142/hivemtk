@@ -16,7 +16,10 @@ import (
 )
 
 func TestTB09_FeedbackLoop_E2E(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.IntentLog{}, &model.CustomIntent{}, &model.SystemConfigKV{})
+	// ⚠️ intent_records 的唯一 automigrate 来源是 IntentRecord（22 列全集）；
+	// IntentLog 同表不同列，列入会自动重建缺列表（message_id 等）——
+	// 模型头注释明确禁止（历史 42703 事故面），这里钉死正确形态。
+	db := testutil.NewTestDB(t, &model.IntentRecord{}, &model.CustomIntent{}, &model.SystemConfigKV{})
 	ctx := tenant.ContextWithDefault(context.Background())
 
 	// 1) 预置一条错判日志（客服话术被误判为 price_inquiry）
