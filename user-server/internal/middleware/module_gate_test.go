@@ -73,6 +73,8 @@ func TestModuleOwnerOf(t *testing.T) {
 		{"/api/knowledge/search", "knowledge"},
 		{"/api/customer/oneid/list", "customer"},
 		{"/api/llm/wallet", "llm-cloud"},
+		// 平台垫资用量明细（PLT-01 刀2）：与 wallet 同档，漏了就是 llm-cloud 白送
+		{"/api/llm/platform-usage", "llm-cloud"},
 		{"/api/modules/my", "platform-link"},
 	}
 	for _, c := range cases {

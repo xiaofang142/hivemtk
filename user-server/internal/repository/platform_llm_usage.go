@@ -113,3 +113,32 @@ func (r *PlatformLLMUsageRepository) GetPlatformPlanPriceByCode(ctx context.Cont
 	}
 	return row.InputPricePer1kCents, row.OutputPricePer1kCents, nil
 }
+
+// ListUsageRecords 分页读平台垫资用量明细（PLT-01 刀2 最小读面）。
+//
+// 租户作用域不在这里手拼 WHERE：platform_llm_usage_records 是租户表，隔离
+// callback 按 ctx 绑定的租户注入过滤（off 模式退化为默认租户全量）——与
+// ListTxns 同一口径。字段=既有记录列，读侧不做任何重算/回填。
+func (r *PlatformLLMUsageRepository) ListUsageRecords(ctx context.Context, page, pageSize int) ([]*model.PlatformLLMUsageRecord, int64, error) {
+	if r.db == nil {
+		return nil, 0, ErrDBNotReady
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+	// Count 与 Find 必须各起一条 query：同一条链上先 Count 再 Find 会就地改 Statement。
+	base := func() *gorm.DB {
+		return r.db.WithContext(ctx).Model(&model.PlatformLLMUsageRecord{})
+	}
+	var total int64
+	if err := base().Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var out []*model.PlatformLLMUsageRecord
+	err := base().Order("occurred_at DESC, id DESC").
+		Offset((page - 1) * pageSize).Limit(pageSize).Find(&out).Error
+	return out, total, err
+}

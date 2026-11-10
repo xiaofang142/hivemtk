@@ -66,6 +66,12 @@ export const LlmRoutingApi = {
     return http.get('/api/llm/usage', { window })
   },
 
+  // 平台垫资用量明细（PLT-01 刀2）：GET /api/llm/platform-usage，分页参数
+  // { page, page_size }，行=既有记录列（成本三列为写入时点整数分快照）。
+  getPlatformUsage: (params) => {
+    return http.get('/api/llm/platform-usage', params)
+  },
+
   getCostStats: (window = 'month') => {
     return http.get('/api/llm/cost-stats', { window })
   },

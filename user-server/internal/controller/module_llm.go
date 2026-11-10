@@ -92,6 +92,24 @@ func (c *ModuleMarketController) LLMWalletTxns(ctx *gin.Context) {
 	response.Success(ctx, gin.H{"list": list, "total": total}, "ok")
 }
 
+// @Summary      平台垫资用量明细
+// @Tags      module-market
+// @Router    /api/llm/platform-usage [get]
+// LLMPlatformUsage GET /api/llm/platform-usage
+//
+// 平台垫资模型（source=platform）每次调用的本地用量明细：输入/输出 token 与
+// 成本分列（写入时点的整数分快照，读侧不重算）。租户作用域由隔离 callback
+// 按 ctx 注入；分页参数钳制沿用 pageOf/pageSizeOf。
+func (c *ModuleMarketController) LLMPlatformUsage(ctx *gin.Context) {
+	list, total, err := service.NewLLMWalletService().PlatformUsage(ctx.Request.Context(),
+		pageOf(ctx), pageSizeOf(ctx))
+	if err != nil {
+		response.Error(ctx, http.StatusInternalServerError, "查询平台用量明细失败")
+		return
+	}
+	response.Success(ctx, gin.H{"list": list, "total": total}, "ok")
+}
+
 // @Summary      平台未连接，无法查看 LLM 套餐
 // @Tags      module-market
 // @Router    /api/llm/plans [get]

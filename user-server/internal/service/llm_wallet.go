@@ -82,6 +82,17 @@ func (s *LLMWalletService) Wallet(ctx context.Context) (*WalletView, error) {
 	return v, nil
 }
 
+// PlatformUsage 平台垫资用量明细分页（刀2 最小读面；租户作用域由隔离 callback
+// 按 ctx 注入）。
+//
+// 这是 platform_llm_usage_records 的**唯一读端**（此前全仓零读面）：商户在
+// 本地看得见"谁在什么场景用了多少、按什么口径折了多少钱"。行结构=既有记录列
+// 原样透出（model json tag 即契约），读侧不重算不回填 —— 成本三列是写入时点
+// 的整数分快照。
+func (s *LLMWalletService) PlatformUsage(ctx context.Context, page, pageSize int) ([]*model.PlatformLLMUsageRecord, int64, error) {
+	return repository.NewPlatformLLMUsageRepository().ListUsageRecords(ctx, page, pageSize)
+}
+
 // PlanView 套餐视图
 type PlanView struct {
 	PlanCode              string `json:"plan_code"`
