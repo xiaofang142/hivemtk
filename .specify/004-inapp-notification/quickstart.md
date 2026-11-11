@@ -51,7 +51,7 @@ go test ./internal/service/... ./internal/repository/... ./internal/controller/.
 ### 3.1 平台端发布
 
 ```bash
-# 平台超管登录（线上实际生效的是 user 栈 .env 的 PLATFORM_ADMIN_PASSWORD）
+# 平台超管登录（口令来自平台栈 .env 的 PLATFORM_ADMIN_PASSWORD seed 的首个超管；用户栈自 L-1 2026-11-11 起不再读取该键）
 curl -s -X POST http://127.0.0.1:8205/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"Admin123"}'

@@ -59,10 +59,9 @@ JWT_SECRET=$(openssl rand -hex 32)
 # 只有你自建了本地 platform-server 并要用资产市场，才需要打开：
 #   PLATFORM_ENABLED=true
 #   PLATFORM_API_HOST=http://127.0.0.1:8205      # 跨机/自建有公网域时换成你自己的
-#   PLATFORM_ADMIN_PASSWORD=$(openssl rand -hex 16)
 ```
 
-> 本版**没有授权密钥**要生成：`PLATFORM_LICENSE_SECRET`、`LicenseKey` 一类字段已从配置结构中下线。开启平台集成时 `LoadPlatform` 只校验三项本地凭据——`api_url`、`secret`（与自建 platform-server 共享的 HMAC 签名密钥，不是授权凭证）、`admin_password`；缺任一项即报错且不装配半截配置（`user-server/internal/config/platform.go`）。
+> 本版**没有授权密钥**要生成：`PLATFORM_LICENSE_SECRET`、`LicenseKey` 一类字段已从配置结构中下线。开启平台集成时 `LoadPlatform` 只校验本地凭据——`api_url`（解析后的最终地址）与 `secret`（与自建 platform-server 共享的 HMAC 签名密钥，不是授权凭证）；缺任一项即报错且不装配半截配置（`user-server/internal/config/platform.go`）。`admin_password` 已随 L-1（2026-11-11 删 `/platform/*` JWT 代理通道）退出校验与配置面：用户端不再读取 `PLATFORM_ADMIN_PASSWORD`；平台端（hivemtk-platform）仍用它 seed 首个平台超管（配置在平台仓自己的 `.env`）。
 
 ### 步骤 3：启动本地推理栈
 

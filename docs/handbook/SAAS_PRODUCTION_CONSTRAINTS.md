@@ -132,7 +132,10 @@ fail-closed 5000**（"需要租户上下文但 ctx 未绑定"）。
   商户上报/续费下单/模块同步全部"平台配置未初始化"。
 - **现行契约**（commit 见 deploy 仓）：Dockerfile COPY `config/platform.yaml`
   ＋ deploy.sh 同步该文件到服务器 ＋ 服务器 .env 必须有
-  `PLATFORM_ADMIN_PASSWORD`（yaml 里 `${PLATFORM_ADMIN_PASSWORD}` 展开用）。
+  `MERCHANT_API_SECRET`（yaml 里 `${MERCHANT_API_SECRET}` 展开用）。
+  `PLATFORM_ADMIN_PASSWORD` 已随 L-1（2026-11-11 删 `/platform/*` JWT 代理通道）退出用户端
+  装配链——platform.yaml 无该展开行、user 栈 .env 不再需要；平台栈 .env 仍需要它 seed
+  首个平台超管。
 - **规则**：user-server 新增任何"仓库内配置文件依赖"，必须同时改
   Dockerfile COPY + deploy.sh rsync，否则线上容器缺文件。
 
@@ -143,11 +146,13 @@ fail-closed 5000**（"需要租户上下文但 ctx 未绑定"）。
 | user | `TENANT_MODE=on` | SaaS 形态开关（配 P0 装配修复后才真正生效） |
 | user | `PLATFORM_ENABLED=true` + `PLATFORM_API_HOST=https://manageapi.xapptool.cn` | 平台集成 |
 | user | `MERCHANT_API_SECRET` | 必须与 platform 栈**同值**（HMAC 对齐） |
-| user | `PLATFORM_ADMIN_PASSWORD` | platform.yaml 展开用 |
 | user | `MASTER_KEY` | 生产必需（首次生成永不覆盖） |
 | platform | `EPAY_GATEWAY_URL/EPAY_PID/EPAY_API_KEY/EPAY_TRADE_TYPES` | 易支付真实凭据 |
 | platform | `PAYMENT_ENC_KEY` | 通道 api_key 加密 |
 | platform | `PLATFORM_PUBLIC_URL=https://manageapi.xapptool.cn` | 回调可达前提 |
+
+> `PLATFORM_ADMIN_PASSWORD` 原列在 user 栈（platform.yaml 展开用）；L-1（2026-11-11）删除
+> JWT 代理通道后 user 栈不再读取该键，仅 platform 栈 `.env` 需要（seed 首个平台超管）。
 
 ### 3.3 env 改动必须 `docker compose up -d` 重建
 

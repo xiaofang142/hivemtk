@@ -383,11 +383,10 @@ USER_SERVER_PORT=8204
 # {{ $t('JWT / 安全密钥（务必修改为随机串）') }}
 JWT_SECRET=ChangeMe_To_32Char_Random_JWT_Secret_Key_For_Production
 
-# {{ $t('平台端（可选本地组件，默认关闭；只有开启时才读取下面三项）') }}
+# {{ $t('平台端（可选本地组件，默认关闭；只有开启时才读取下面两项）') }}
 PLATFORM_ENABLED=false
 PLATFORM_API_HOST=http://127.0.0.1:8205   # {{ $t('指向本机自建的平台端') }}
-MERCHANT_API_SECRET=ChangeMe_To_Random_Secret   # {{ $t('用户端与平台端共用的签名密钥') }}
-PLATFORM_ADMIN_PASSWORD=ChangeMe_To_Strong_Password   # {{ $t('平台代理口令：不是 8204 的登录口令，超管口令在 /setup 向导里设置') }}</code></pre>
+MERCHANT_API_SECRET=ChangeMe_To_Random_Secret   # {{ $t('用户端与平台端共用的签名密钥') }}</code></pre>
 
           <h4>{{ $t('端口对照表') }}</h4>
           <div class="table-wrap">
@@ -539,7 +538,6 @@ JWT_SECRET
 # {{ $t('平台端（默认关闭；PLATFORM_ENABLED=false 时下面几项都不生效）') }}
 PLATFORM_ENABLED=false
 PLATFORM_API_HOST=http://127.0.0.1:8205
-PLATFORM_ADMIN_PASSWORD
 
 # {{ $t('AI 模型') }}
 LLM_BASE_URL / LLM_API_KEY / LLM_MODEL

@@ -98,8 +98,9 @@ make sdk-build      # 嵌入 SDK 产物
 
 | 变量 | 说明 |
 |------|------|
-| `PLATFORM_ADMIN_PASSWORD` | 平台超管密码 |
 | `MERCHANT_API_SECRET` | 商户 API 密钥 |
+
+> `PLATFORM_ADMIN_PASSWORD` 已不在本仓 `.env` 配置面：L-1（2026-11-11）删除 `/platform/*` JWT 代理通道后 user-server 不再读取该键；平台端（hivemtk-platform）仍消费同名键 seed 首个平台超管，配置在平台仓自己的 `.env`。
 
 按场景挑的常用可选项：
 

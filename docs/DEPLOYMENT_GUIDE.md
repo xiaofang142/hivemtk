@@ -133,12 +133,16 @@ FIELD_ENCRYPTION_KEY=     # 第四把：只服务"加密落库"这条路径。�
                           # 但没配的话写 SMTP 凭据时会 fail-closed 直接报错
                           # （internal/email/service/email_smtp.go:24），
                           # GEO 平台凭据则降级明文存储并打告警
-PLATFORM_ADMIN_PASSWORD=  # 仅开启平台集成（PLATFORM_ENABLED=true）时需要
 MERCHANT_API_SECRET=      # 仅开启平台集成时需要：出站请求的 HMAC 签名密钥（internal/platform/client.go:79）
 ```
 
 > 历史版本这里还要求 `PLATFORM_LICENSE_SECRET`（商户授权签名）。该键在 user-server 与
 > platform-server 两侧代码里都已无任何读取点（2026-09-21 逐仓 grep 复核），授权流程整体下线后不再需要设置。
+>
+> `PLATFORM_ADMIN_PASSWORD` 同样已退出用户端配置面（2026-11-11 L-1）：`/platform/*` JWT 代理
+> 通道整体删除后 user-server 不再读取该键（历史占位、零消费者），开启平台集成只需
+> `MERCHANT_API_SECRET`。平台端（hivemtk-platform）仍消费同名键 seed 首个平台超管——配置在
+> 平台仓自己的 `.env`，本仓 `.env` 无需设置。第十二节部署向导仍会收集该键属历史遗留，写入与否不影响用户端运行。
 
 > **推荐：用部署向导代替手工编辑 `.env`。** `python3 scripts/deploy-wizard.py` 会交互收集
 > 上面这些密钥，对仍是占位值（`ChangeMe_*` / `your_*`）的自动替换为强随机值，其余键与注释
@@ -553,7 +557,7 @@ python3 scripts/deploy-wizard.py
 - 对仍是占位值（`ChangeMe_*` / `your_*`）的密钥，回车即自动替换为强随机值（`secrets.token_hex(32)`，64 字符）；
   已设置成非占位值的则回车保持不变；
 - 可选补齐 `MASTER_KEY`（生产环境缺失会拒绝启动，向导默认生成）与 `SEED_PASSWORD`；
-- 询问是否开启平台集成（`PLATFORM_ENABLED`），开启时再补齐 `MERCHANT_API_SECRET`、`PLATFORM_ADMIN_PASSWORD`；
+- 询问是否开启平台集成（`PLATFORM_ENABLED`），开启时再补齐 `MERCHANT_API_SECRET`、`PLATFORM_ADMIN_PASSWORD`（后者为向导的历史遗留收集项：L-1 后用户端不再读取该键，仅平台仓 `.env` 需要同值键；写入与否不影响用户端运行）；
 - 写入 `.env` 时保留全部注释与既有键（原子写入：临时文件 + rename）。
 
 非交互初始化（CI / 一键脚本用）：

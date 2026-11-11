@@ -57,7 +57,7 @@
 | JWT 密钥 | env `USER_JWT_SECRET` 或 `JWT_SECRET` | ≥32 字符，二选一 |
 | 字段加密 | env `FIELD_ENCRYPTION_KEY` | ≥32；**不可直接轮换**（先解密存量） |
 | 主加密根 | env `MASTER_KEY` | ≥32 字节，**非 dev 缺失即退出**；⚠️ 不在 `.env-example` 里 |
-| 平台集成 | `PLATFORM_ENABLED` / `PLATFORM_API_HOST` / `MERCHANT_API_SECRET` / `PLATFORM_ADMIN_PASSWORD` | 开态必配，且与平台端**两侧同值** |
+| 平台集成 | `PLATFORM_ENABLED` / `PLATFORM_API_HOST` / `MERCHANT_API_SECRET` | 开态必配；`MERCHANT_API_SECRET` 与平台端**两侧同值**。`PLATFORM_ADMIN_PASSWORD` 用户端自 L-1（2026-11-11 删 JWT 代理通道）起不再读取——仅平台仓 `.env` 需要（seed 平台超管） |
 | 租户开关 | env `TENANT_MODE` | `off`（默认，离线单机）/ `on`（SaaS 多租户）；未知值按 off 并告警 |
 | 公网基座 | env `PUBLIC_BASE_URL`（> yaml `external.public_base_url`） | https、无尾斜杠；留空 → Telegram 等降级 polling |
 | 监听 | env `SERVER_HOST` / `PORT` | 默认 `0.0.0.0:8204` |
@@ -105,7 +105,7 @@
 1. `cmd/api/main.go:40` `config.LoadDotEnv(".env")`（CWD 相对，不覆盖已有环境变量 → 编排注入优先）。
 2. `SERVER_CONFIG` env 可整体替换配置文件路径；否则按 `config.yaml` → `../` → `../../` → `/etc/marketing/` 回退（`internal/config/config_viper.go:120-132`）。
 3. 读文件后先做 `${VAR}` / `${VAR:-default}` 展开，再喂 viper；viper env 覆盖前缀 `MARKETING_`（实际很少用）。
-4. **fail-closed 校验：`POSTGRES_PASSWORD` / `PLATFORM_ADMIN_PASSWORD` / `MERCHANT_API_SECRET` / `JWT_SECRET` 四项任一为空 → 启动报错**（`parseConfig()`）。
+4. **fail-closed 校验：`POSTGRES_PASSWORD` / `PLATFORM_ADMIN_PASSWORD` / `MERCHANT_API_SECRET` / `JWT_SECRET` 四项任一为空 → 启动报错**（`parseConfig()`；本节为平台端口径，四项经 2026-11-11 复核仍全部在验——`PLATFORM_ADMIN_PASSWORD` 仅平台端必填，用户端 L-1 后不读取该键）。
 5. JWT secret：`JWT_SECRET`（备选 `PLATFORM_JWT_SECRET`），<32 字符拒绝；expire 默认 86400 秒。
 6. ⚠️ DSN 由 host/port/user/password/dbname **重组**，config.yaml 里的 `dsn` 字段实际不被 `db.Init` 使用。
 7. DB 密码同样**只认 `POSTGRES_PASSWORD`**（compose 里 `${POSTGRES_PASSWORD:?}` 强制校验）。
@@ -149,9 +149,9 @@
 
 ## 3. 两端对接点
 
-- 用户端读 `R/user-server/config/platform.yaml`（仅 `PLATFORM_ENABLED=true`）：`api_url: "${PLATFORM_API_HOST}"`、`secret: "${MERCHANT_API_SECRET}"`、`admin_password: "${PLATFORM_ADMIN_PASSWORD}"`。
+- 用户端读 `R/user-server/config/platform.yaml`（仅 `PLATFORM_ENABLED=true`）：`api_url: "${PLATFORM_API_HOST}"`、`secret: "${MERCHANT_API_SECRET}"`。`admin_password` 展开行已随 L-1（2026-11-11）从 yaml 删除——JWT 代理通道下线，该文件不再读 `PLATFORM_ADMIN_PASSWORD`。
 - 地址优先级：`PLATFORM_API_HOST` > `PLATFORM_API_URL` > yaml `api_url`。
-- **共享密钥两侧必须同值**：`MERCHANT_API_SECRET`、`PLATFORM_ADMIN_PASSWORD`（轮换时用 `scripts/rotate-secrets.sh merchant_hmac` 双侧同步）。
+- **共享密钥两侧必须同值**：`MERCHANT_API_SECRET`（轮换时用 `scripts/rotate-secrets.sh merchant_hmac` 双侧同步）。`PLATFORM_ADMIN_PASSWORD` 仅平台仓 `.env` 消费（seed 首个平台超管），用户端 L-1 后不再读取、无需同值。
 - 上报/心跳用 `install_id` 作为商户凭证（`internal/service/tenant.go currentInstallID`）。
 
 ---
@@ -215,7 +215,8 @@
 | `JWT_SECRET` 或 `USER_JWT_SECRET` | ≥32（一把即可） | 启动 panic |
 | `MASTER_KEY` | ≥32 字节 | **非 dev 直接 `os.Exit(1)`** |
 | `FIELD_ENCRYPTION_KEY` | ≥32；轮换前先解密存量 | 存量 api_logs/audit/SMTP 凭据失效 |
-| `PLATFORM_ADMIN_PASSWORD` + `MERCHANT_API_SECRET` | 仅平台开态，两侧同值 | 平台端启动报错 / 用户端对接失败 |
+| `MERCHANT_API_SECRET` | 仅平台开态，与平台端同值 | 用户端 `LoadPlatform` 报错（开态缺 secret 不装配）/ 平台端启动报错 |
+| `PLATFORM_ADMIN_PASSWORD` | 仅平台仓 `.env`（seed 平台超管）；用户端不读取 | 平台端启动报错 |
 | `SEED_PASSWORD` | 对外必设（默认 `Seed@123456` 是公开值） | 演示口令泄露 |
 
 ### 5.3 换机核对项

@@ -150,7 +150,8 @@ make install
 
 # 3. 改密钥
 vim .env   # 必改：POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET
-           # 只有把平台端跑起来（PLATFORM_ENABLED=true）才用到：PLATFORM_ADMIN_PASSWORD / MERCHANT_API_SECRET
+           # 只有把平台端跑起来（PLATFORM_ENABLED=true）才用到：MERCHANT_API_SECRET
+           # （PLATFORM_ADMIN_PASSWORD 用户端已不读取：L-1 删 JWT 通道；仅平台仓 hivemtk-platform 的 .env 需要，seed 平台超管）
 
 # 4. 启动
 make dev                    # user-server 热更新 → http://localhost:8204

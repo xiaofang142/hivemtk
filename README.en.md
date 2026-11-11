@@ -146,8 +146,10 @@ git clone https://gitee.com/xhpmayun/hivemtk.git && cd hivemtk
 # 2. One-click install: .env template + build frontends + download models + start data layer & inference stack
 make install
 
-# 3. Set 4 secrets
-vim .env   # POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET / PLATFORM_ADMIN_PASSWORD
+# 3. Set 3 secrets
+vim .env   # POSTGRES_PASSWORD / REDIS_PASSWORD / JWT_SECRET
+           # PLATFORM_ADMIN_PASSWORD is no longer read by user-server (JWT proxy channel removed in L-1);
+           # only the platform repo (hivemtk-platform) .env needs it, to seed the platform super admin
 
 # 4. Start
 make dev                    # user-server with hot reload → http://localhost:8204

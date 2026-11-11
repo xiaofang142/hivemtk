@@ -94,7 +94,8 @@
 | PostgreSQL 密码 | `POSTGRES_PASSWORD` | `openssl rand -hex 24` |
 | Redis 密码 | `REDIS_PASSWORD` | `openssl rand -hex 24` |
 | JWT 签名密钥 | `JWT_SECRET` | `openssl rand -hex 32` |
-| 平台代理密码 | `PLATFORM_ADMIN_PASSWORD` | 自定义强密码（与平台端 .env 保持一致） |
+
+> 注：`PLATFORM_ADMIN_PASSWORD` 已不在用户端必填清单——L-1（2026-11-11）删除 `/platform/*` JWT 代理通道后，user-server 不再读取该键（历史占位、零消费者）；平台端（hivemtk-platform）仍消费同名键 seed 首个平台超管，配置在平台仓自己的 `.env`。
 
 ### 4.2 鉴权模型
 
