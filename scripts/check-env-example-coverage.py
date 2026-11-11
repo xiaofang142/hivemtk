@@ -52,8 +52,9 @@ ALLOWED_MISSING = {
     "PLATFORM_CONFIG_PATH", "SERVER_API_BASE", "USER_WEB_DIST",
     # 可选增强键（缺失=无告警/无 MCP 接入，非故障面）
     "ALERT_WEBHOOK_URL", "ORDER_WEBHOOK_NONCE_STRICT",
-    # ⚠️ 疑似安全键待核（N-19 观察项）：MCP 接入令牌读取点存在而 example 无定义，
-    # 暂列豁免；核清 fail-closed 语义后应转 REQUIRED_KEYS
+    # 可选增强键（N-19 已核清 2026-11-12）：MCP 专用凭证，不配时回落桥接凭证仍
+    # fail-closed（mcp_guard.go:48-51,117 无任何凭证 503）——非必查键；已补 example
+    # 定义行（含可选语义与生成命令），此处豁免表留名防未来误判为新漂移
     "MCP_TOKEN", "MCP_TOKEN_PREV",
 }
 KEY_RE = re.compile(r'os\.Getenv\("([A-Z][A-Z0-9_]+)"\)')
