@@ -8,6 +8,8 @@ import (
 	"context"
 	"sort"
 	"sync"
+
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // Sampler 多采样接口
@@ -67,14 +69,15 @@ func (sc *SelfConsistency[T]) Run(ctx context.Context, sampler Sampler[T], voter
 	errCh := make(chan error, sc.samples)
 	for i := 0; i < sc.samples; i++ {
 		wg.Add(1)
-		go func(idx int) {
+		// utils.SafeGo 收口：多采样 LLM 调用 panic 不击穿进程，该样本槽零值由 wg.Wait 后投票逻辑跳过
+		utils.SafeGo(ctx, "llm.selfconsistency.sample", func(ctx context.Context) {
 			defer wg.Done()
 			ans, err := sampler.Sample(ctx)
-			results[idx] = sampledAnswer[T]{answer: ans, err: err}
+			results[i] = sampledAnswer[T]{answer: ans, err: err}
 			if err != nil {
 				errCh <- err
 			}
-		}(i)
+		})
 	}
 	wg.Wait()
 	close(errCh)

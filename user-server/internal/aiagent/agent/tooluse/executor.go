@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/trace"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // ===== 可观测性 observer（与追踪系统解耦：默认 nil，由 router 在启动时接线） =====
@@ -412,13 +413,15 @@ func (e *ToolExecutor) BatchExecute(ctx context.Context, req BatchExecuteRequest
 			if sem != nil {
 				sem <- struct{}{}
 			}
-			go func(idx int, er ExecuteRequest) {
+			// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+			// 并行工具执行体 panic 不击穿进程，该结果槽保留零值由 wg.Wait 后既有汇总逻辑兜底
+			utils.SafeGo(ctx, "tooluse.executor.parallel", func(ctx context.Context) {
 				defer wg.Done()
 				if sem != nil {
 					defer func() { <-sem }()
 				}
-				results[idx] = e.Execute(ctx, er)
-			}(i, r)
+				results[i] = e.Execute(ctx, r)
+			})
 		}
 		wg.Wait()
 	} else {
@@ -492,11 +495,13 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 	for i, call := range toolCalls {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(idx int, c LLMToolCall) {
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// 并行 LLM 工具调用（HTTP/JSON）panic 不击穿进程，结果槽零值由既有汇总兜底
+		utils.SafeGo(dispatchCtx, "tooluse.executor.llmCall", func(_ context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[idx] = e.executeSingleLLMToolCall(dispatchCtx, c, toolCtx)
-		}(i, call)
+			results[i] = e.executeSingleLLMToolCall(dispatchCtx, call, toolCtx)
+		})
 	}
 	wg.Wait()
 	turnStatus := tracing.StatusOk

@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/browser_automation/repository"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -62,7 +63,8 @@ func StartAuditRetention(ctx context.Context, cmdLogRepo repository.BrowserComma
 	if !retentionEnabled(cmdLogRepo, planRepo) {
 		return
 	}
-	go func() {
+	// 长驻裁剪循环（每小时）：utils.SafeGo 收口 panic，防批量删除链 panic 击穿进程
+	utils.SafeGo(ctx, "browser.retention.audit", func(ctx context.Context) {
 		t := time.NewTicker(time.Hour)
 		defer t.Stop()
 		for {
@@ -73,7 +75,7 @@ func StartAuditRetention(ctx context.Context, cmdLogRepo repository.BrowserComma
 				pruneAuditOnce(ctx, cmdLogRepo, planRepo)
 			}
 		}
-	}()
+	})
 }
 
 // retentionEnabled 是启动那道门：保留期禁用或仓储没装配齐就不起 goroutine。

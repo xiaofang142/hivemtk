@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"io"
@@ -186,7 +187,9 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 	for i, dp := range domainPools {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, dp *model.DomainPool) {
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// 域名连通性探测（HTTP）panic 不击穿进程，该结果槽零值由 wg.Wait 后既有汇总兜底
+		utils.SafeGo(ctx, "domainpool.check", func(ctx context.Context) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
@@ -221,7 +224,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 				Status: status,
 				Msg:    msg,
 			}
-		}(i, dp)
+		})
 	}
 	wg.Wait()
 	return results, nil

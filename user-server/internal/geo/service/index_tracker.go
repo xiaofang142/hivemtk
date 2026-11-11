@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	"hivemtk-user/internal/pkg/timeutil"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -103,7 +104,9 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 		var wg sync.WaitGroup
 		for i, p := range probes {
 			wg.Add(1)
-			go func(i int, p SearchProbe) {
+			// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+			// 探针 HTTP/引用解析 panic 不击穿进程
+			utils.SafeGo(ctx, "geo.indexTracker.probe", func(ctx context.Context) {
 				defer wg.Done()
 				pctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 				defer cancel()
@@ -113,7 +116,7 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 					oc.cited = countCitationMatches(article.SiteURL, pr.Citations)
 				}
 				outcomes[i] = oc
-			}(i, p)
+			})
 		}
 		wg.Wait()
 

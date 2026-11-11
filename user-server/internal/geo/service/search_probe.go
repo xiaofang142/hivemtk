@@ -17,6 +17,7 @@ import (
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/platform"
 	mainrepo "hivemtk-user/internal/repository"
 )
@@ -564,7 +565,9 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 	var wg sync.WaitGroup
 	for i, p := range probes {
 		wg.Add(1)
-		go func(i int, p SearchProbe) {
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// 探针重试/落库链 panic 不击穿进程
+		utils.SafeGo(ctx, "geo.searchProbe.run", func(ctx context.Context) {
 			defer wg.Done()
 			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {
@@ -572,7 +575,7 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 				return
 			}
 			outcomes[i] = probeOutcome{run: s.buildProbeRun(ctx, p, pr)}
-		}(i, p)
+		})
 	}
 	wg.Wait()
 

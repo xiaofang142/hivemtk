@@ -83,13 +83,14 @@ func (s *EmailOpenTrackerService) RenderPixel(ctx context.Context, token, ip, ua
 	if !MarkOpenSeen(token) {
 		return EmailOpenPixel, EmailOpenPixelContentType, EmailOpenPixelMaxAge, nil
 	}
-	go func(t, ipAddr, userAgent string) {
+	// utils.SafeGo 收口：打开事件落库（DB）panic 不击穿进程
+	utils.SafeGo(context.Background(), "email.openTracker", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
-		if err := s.tracking.RecordOpenEvent(bgCtx, t, ipAddr, userAgent); err != nil {
-			logger.Warnf("[email_open] 打开事件记录失败 token=%s: %v", t, err)
+		if err := s.tracking.RecordOpenEvent(bgCtx, token, ip, ua); err != nil {
+			logger.Warnf("[email_open] 打开事件记录失败 token=%s: %v", token, err)
 		}
-	}(token, ip, ua)
+	})
 
 	return EmailOpenPixel, EmailOpenPixelContentType, EmailOpenPixelMaxAge, nil
 }

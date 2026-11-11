@@ -442,11 +442,11 @@ func (s *FAQService) IncrementHitCount(ctx context.Context, id uint) {
 	if s.repo == nil || id == 0 {
 		return
 	}
-	go func() {
+	utils.SafeGo(ctx, "faq.IncrementHitCount", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
 		_ = s.repo.IncrementHitCount(bgCtx, id)
-	}()
+	})
 }
 
 // WarmupCache 预热缓存 (Task 15: 按 agentID 分片)

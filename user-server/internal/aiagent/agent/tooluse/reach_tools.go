@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
+
 	"gorm.io/gorm"
 )
 
@@ -634,24 +636,26 @@ func (t *ReachBatchTool) Execute(ctx context.Context, args map[string]any) (Tool
 			continue
 		}
 		wg.Add(1)
-		go func(cid, aid string, p map[string]any) {
+		// utils.SafeGo 收口：批量入队（DB）panic 不击穿进程（Go 1.22+ 循环变量逐迭代
+		// 语义下闭包捕获 customerID/accountID/payload 与原参数传递等价）
+		utils.SafeGo(ctx, "tooluse.reach.enqueueJob", func(ctx context.Context) {
 			defer wg.Done()
 			req := &ReachJobRequest{
 				PipelineID: pipelineID,
 				Channel:    channel,
-				CustomerID: cid,
-				AccountID:  aid,
-				Payload:    p,
+				CustomerID: customerID,
+				AccountID:  accountID,
+				Payload:    payload,
 			}
 			job, err := t.deps.Pipeline.EnqueueJob(ctx, req)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				failed = append(failed, fmt.Sprintf("%s: %v", cid, err))
+				failed = append(failed, fmt.Sprintf("%s: %v", customerID, err))
 				return
 			}
 			jobIDs = append(jobIDs, fmt.Sprintf("%d", job.ID))
-		}(customerID, accountID, payload)
+		})
 	}
 	wg.Wait()
 

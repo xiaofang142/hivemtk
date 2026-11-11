@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	hrepo "hivemtk-user/internal/repository"
 
 	"github.com/gin-gonic/gin"
@@ -155,7 +156,8 @@ func (h *EgoRunnerWSHandler) Handle(ctx *gin.Context) {
 	// 让读循环走既有断连收尾（Unregister + 钩子）。
 	pingStop := make(chan struct{})
 	defer close(pingStop)
-	go func() {
+	// 长驻心跳循环（每连接一个）：utils.SafeGo 收口 panic，防 WS 心跳链 panic 击穿进程
+	utils.SafeGo(context.Background(), "egolite.runnerPing", func(_ context.Context) {
 		t := time.NewTicker(egoPingInterval)
 		defer t.Stop()
 		for {
@@ -169,7 +171,7 @@ func (h *EgoRunnerWSHandler) Handle(ctx *gin.Context) {
 				}
 			}
 		}
-	}()
+	})
 
 	// 业务读循环（事件 ingest / 心跳，runner_events.go）
 	h.readEvents(conn, userID)

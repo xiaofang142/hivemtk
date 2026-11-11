@@ -3,6 +3,7 @@ package tooluse
 import (
 	"context"
 	"errors"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"sync"
 	"sync/atomic"
@@ -93,14 +94,15 @@ func FeedbackCollectorDecorator(sink FeedbackSink) ToolDecorator {
 				event.Source = tc.Source
 			}
 
-			go func(ev ToolCallEvent) {
+			// utils.SafeGo 收口：审计落库（DB）panic 不击穿进程
+			utils.SafeGo(context.Background(), "tooluse.feedback.sink", func(_ context.Context) {
 				sinkCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				if sinkErr := sink.RecordToolCall(sinkCtx, ev); sinkErr != nil {
+				if sinkErr := sink.RecordToolCall(sinkCtx, event); sinkErr != nil {
 					logger.Warnf("FeedbackSink.RecordToolCall failed: tool=%s trace_id=%s err=%v",
-						ev.ToolName, ev.TraceID, sinkErr)
+						event.ToolName, event.TraceID, sinkErr)
 				}
-			}(event)
+			})
 
 			return result, err
 		}

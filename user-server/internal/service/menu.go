@@ -57,7 +57,7 @@ func (s *MenuService) GetUserMenuTree(ctx context.Context, role string) ([]model
 
 	// 第 1 道：模块闸。未装配判定函数时 FilterMenuTreeByModule 原样返回全树
 	// （离线首启 / 单测不注入），保证不会因为"闸没接上"而空菜单。
-	moduleTree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.ModuleEnabledFilter)
+	moduleTree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
 
 	if role == model.SystemRoleCodeAdmin {
 		return moduleTree, nil

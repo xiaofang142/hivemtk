@@ -13,6 +13,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -74,7 +75,8 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
-	go func() {
+	// 心跳循环（job 执行期间常驻）：utils.SafeGo 收口 panic，防心跳落库链 panic 击穿进程
+	utils.SafeGo(ctx, "reachpipeline.heartbeat", func(ctx context.Context) {
 		defer close(hbDone)
 		ticker := time.NewTicker(reachJobHeartbeatInterval)
 		defer ticker.Stop()
@@ -88,7 +90,7 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 				_ = s.repo.TouchRunningJob(context.WithoutCancel(ctx), job.ID)
 			}
 		}
-	}()
+	})
 	defer func() {
 		close(hbStop)
 		<-hbDone

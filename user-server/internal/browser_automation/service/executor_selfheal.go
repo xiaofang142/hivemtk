@@ -19,6 +19,7 @@ import (
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/browser_automation/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -47,10 +48,11 @@ func defaultRelocateLLM(ctx context.Context, systemPrompt, prompt string) (reloc
 		MaxTokens:    1024,
 	}
 	ch := make(chan error, 1)
-	go func() {
+	// utils.SafeGo 收口：LLM 结构化调用 panic 不击穿进程（看门狗超时路径语义不变）
+	utils.SafeGo(ctx, "browser.selfheal.relocateLLM", func(ctx context.Context) {
 		_, err := llm.GetGlobalDispatcher().DispatchStructured(ctx, req, &out)
 		ch <- err
-	}()
+	})
 	timer := time.NewTimer(relocateLLMWatchdog)
 	defer timer.Stop()
 	select {

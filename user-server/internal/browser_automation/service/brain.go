@@ -14,6 +14,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -229,7 +230,8 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 		err    error
 	}
 	ch := make(chan planResult, 1)
-	go func() {
+	// utils.SafeGo 收口：LLM 结构化编排（JSON 解析/HTTP）panic 不击穿进程
+	utils.SafeGo(ctx, "browser.brain.plan", func(ctx context.Context) {
 		result, err := dispatcher.DispatchStructured(ctx, req, &p)
 		if err != nil {
 			ch <- planResult{err: fmt.Errorf("LLM 编排失败: %w", err)}
@@ -241,7 +243,7 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 			tokIn:  result.Usage.PromptTokens,
 			tokOut: result.Usage.CompletionTokens,
 		}
-	}()
+	})
 	select {
 	case <-ctx.Done():
 		return nil, false, ctx.Err()

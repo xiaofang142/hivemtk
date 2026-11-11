@@ -410,11 +410,12 @@ func (s *SmsDeliveryTrackerService) RecordFromProvider(ctx context.Context, r *P
 
 	s.markLedgerByMsgID(ctx, r)
 
-	go func(phone, carrier string) {
+	// utils.SafeGo 收口：携号转网探测（外部查询）panic 不击穿进程
+	utils.SafeGo(context.Background(), "sms.portability", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(tenant.BackgroundWithTenant(ctx), utils.ShortTimeout)
 		defer cancel()
-		_ = s.DetectAndRecordPortability(bgCtx, phone, carrier)
-	}(r.Phone, r.Carrier)
+		_ = s.DetectAndRecordPortability(bgCtx, r.Phone, r.Carrier)
+	})
 
 	if r.ErrorCode != "" {
 		s.RecordBlacklistEvent(ctx, r.Phone, r.ErrorCode, r.ErrorMsg, r.JobID, r.MessageID)

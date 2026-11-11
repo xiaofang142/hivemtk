@@ -8,6 +8,7 @@ import (
 
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -77,7 +78,8 @@ func NewABExperiment(exposureRepo *repository.ABExposureRepository, bufferSize i
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.wg.Add(1)
-	go func() {
+	// 长驻消费循环（进程生命周期）：utils.SafeGo 收口 panic，防曝光落库链 panic 击穿进程
+	utils.SafeGo(ctx, "abexperiment.consume", func(ctx context.Context) {
 		defer a.wg.Done()
 		for {
 			select {
@@ -88,7 +90,7 @@ func NewABExperiment(exposureRepo *repository.ABExposureRepository, bufferSize i
 				a.insert(e)
 			}
 		}
-	}()
+	})
 	return a
 }
 

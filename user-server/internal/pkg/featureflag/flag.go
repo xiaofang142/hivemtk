@@ -10,11 +10,14 @@
 package featureflag
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"hivemtk-user/internal/pkg/utils"
 )
 
 const (
@@ -100,7 +103,8 @@ func (m *FlagManager) register(name string, defaultValue bool) *Flag {
 func (m *FlagManager) startPoller() {
 	m.pollOnce.Do(func() {
 		m.stopCh = make(chan struct{})
-		go func() {
+		// 长驻热加载轮询循环：utils.SafeGo 收口 panic，防 env 重读链 panic 击穿进程
+		utils.SafeGo(context.Background(), "featureflag.poller", func(_ context.Context) {
 			ticker := time.NewTicker(PollInterval())
 			defer ticker.Stop()
 			for {
@@ -111,7 +115,7 @@ func (m *FlagManager) startPoller() {
 					m.ReloadAll()
 				}
 			}
-		}()
+		})
 	})
 }
 

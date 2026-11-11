@@ -97,7 +97,9 @@ func TestFanOutAdmissionPrecedesDispatch(t *testing.T) {
 	}
 	body := string(src)
 	admission := strings.Index(body, "if !fanOutStrategyImplemented(strategy) {")
-	firstGo := strings.Index(body, "go func(idx int, prov *ProviderConfig) {")
+	// CC-01 刀1：并发发起语句已换装 utils.SafeGo（panic 收口），顺序锁锚点随形态更新——
+	// 锁的语义不变：准入校验必须仍排在并发发起（现在是 SafeGo 调用）之前。
+	firstGo := strings.Index(body, `utils.SafeGo(fanCtx, "llm.dispatcher.fanout", func(_ context.Context) {`)
 	if admission < 0 {
 		t.Fatal("找不到准入校验语句：fan-out 非法策略的门不见了")
 	}

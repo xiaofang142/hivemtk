@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	textutil "hivemtk-user/internal/pkg/utils/text"
 	"strings"
@@ -555,10 +556,12 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 			ch <- fanResult{idx: i, err: fmt.Errorf("provider %s not available", providerName)}
 			continue
 		}
-		go func(idx int, prov *ProviderConfig) {
-			r, err := d.callProvider(fanCtx, prov, req, route)
-			ch <- fanResult{r: r, err: err, idx: idx}
-		}(i, provider)
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// provider HTTP/JSON 链 panic 不击穿进程（同包 dispatcher_observability.go 既有惯例）
+		utils.SafeGo(fanCtx, "llm.dispatcher.fanout", func(_ context.Context) {
+			r, err := d.callProvider(fanCtx, provider, req, route)
+			ch <- fanResult{r: r, err: err, idx: i}
+		})
 	}
 
 	switch strategy {
