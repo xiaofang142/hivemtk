@@ -12,15 +12,27 @@
 #         node_modules 缺失时仅列出包名+版本，许可证标记"待确认"。
 #
 # 用法：
-#   bash scripts/gen-third-party-notice.sh
+#   bash scripts/gen-third-party-notice.sh            # 生成/刷新 THIRD_PARTY_LICENSES.md
+#   bash scripts/gen-third-party-notice.sh --check    # 对账闸（O-1）：不落盘，校验
+#                                                     # THIRD_PARTY_LICENSES.md 是否覆盖当前
+#                                                     # go list -m all / bridge lock 的全部 依赖|版本
+#                                                     # 行；缺行/版本漂移即 exit 1。许可证列不入对账
+#                                                     # 口径（受本地模块缓存影响，非确定性）。
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+CHECK_MODE=0
+if [ "${1:-}" = "--check" ]; then CHECK_MODE=1; fi
+
 OUTPUT="THIRD_PARTY_LICENSES.md"
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
+if [ "$CHECK_MODE" = "1" ]; then
+    # 对账模式：生成到临时候选件，与仓库内正式清单对账，不改动工作区文件
+    OUTPUT="$TMPDIR/candidate.md"
+fi
 
 # ---------- 许可证识别（启发式） ----------
 # 从 LICENSE 文本前若干行中识别 SPDX 风格许可证标识。
@@ -155,11 +167,15 @@ const rows = [];
 for (const [name, meta] of Object.entries(pkgs)) {
   if (name === "") continue;                       // 跳过根包
   let lic = "待确认";
-  const local = path.join("user-web/bridge", name); // package-lock 的 key 已含 node_modules/ 前缀
-  try {
-    const sub = JSON.parse(fs.readFileSync(path.join(local, "package.json"), "utf8"));
-    lic = sub.license || (sub.licenses && sub.licenses[0] && sub.licenses[0].type) || "待确认";
-  } catch (e) {}
+  // O-1：安装根回退链——bridge 本地 node_modules 优先，回退 user-web 提升安装
+  // （bridge 无独立 node_modules，其 devDeps 实际装在 user-web/node_modules）
+  for (const root of ["user-web/bridge", "user-web"]) {
+    try {
+      const sub = JSON.parse(fs.readFileSync(path.join(root, name, "package.json"), "utf8"));
+      lic = sub.license || (sub.licenses && sub.licenses[0] && sub.licenses[0].type) || "待确认";
+      if (lic !== "待确认") break;
+    } catch (e) {}
+  }
   rows.push(`| ${name} | ${meta.version || "-"} | ${lic} |`);
 }
 process.stdout.write(rows.join("\n") + (rows.length ? "\n" : ""));
@@ -258,6 +274,32 @@ EOF
 sed -i '' "s/PLACEHOLDER_DATE/$(date +%Y-%m-%d)/" "$OUTPUT" 2>/dev/null || sed -i "s/PLACEHOLDER_DATE/$(date +%Y-%m-%d)/" "$OUTPUT"
 sed -i '' "s/COUNT_GO/$COUNT_GO/" "$OUTPUT" 2>/dev/null || sed -i "s/COUNT_GO/$COUNT_GO/" "$OUTPUT"
 sed -i '' "s/COUNT_NPM/$COUNT_NPM/" "$OUTPUT" 2>/dev/null || sed -i "s/COUNT_NPM/$COUNT_NPM/" "$OUTPUT"
+
+# ---------- 6. 对账闸（--check，O-1）----------
+# 只对「依赖名|版本」行对账（许可证列受本地模块缓存影响，非确定性，不入口径）。
+# 候选件代表当前依赖现实；正式清单缺行/版本不一致 = 落后于依赖现实 = 门红。
+if [ "$CHECK_MODE" = "1" ]; then
+    REPO_FILE="THIRD_PARTY_LICENSES.md"
+    if [ ! -f "$REPO_FILE" ]; then
+        echo "❌ --check: $REPO_FILE 不存在，先跑 bash scripts/gen-third-party-notice.sh 生成"
+        exit 1
+    fi
+    extract_rows() {
+        grep -E '^\| [^|]+ \| (v?[0-9][0-9A-Za-z.-]*) \| ' "$1" \
+            | sed -E 's/^\| ([^|]+) \| ([^|]+) \| .*/\1|\2/'
+    }
+    comm -23 \
+        <(extract_rows "$OUTPUT" | sort -u) \
+        <(extract_rows "$REPO_FILE" | sort -u) > "$TMPDIR/missing.txt"
+    if [ -s "$TMPDIR/missing.txt" ]; then
+        echo "❌ --check: THIRD_PARTY_LICENSES.md 落后于依赖现实——以下 依赖|版本 缺失或版本漂移："
+        head -20 "$TMPDIR/missing.txt"
+        echo "（共 $(wc -l < "$TMPDIR/missing.txt" | tr -d ' ') 条；请跑 bash scripts/gen-third-party-notice.sh 刷新后一并提交）"
+        exit 1
+    fi
+    echo "✅ --check: THIRD_PARTY_LICENSES.md 与依赖现实对账通过（无缺行/版本漂移）"
+    exit 0
+fi
 
 echo "✅ 已生成: $OUTPUT"
 echo "📊 Go 模块数: $COUNT_GO"
