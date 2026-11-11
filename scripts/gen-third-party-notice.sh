@@ -93,17 +93,26 @@ if command -v go &>/dev/null; then
             lic="待确认"
             if [ -n "$GOMODCACHE" ] && [ -n "$ver" ]; then
                 # 模块缓存目录可能带大小写转义（!lowercase），先试原始路径，再试转义路径
+                found_dir=0
                 for base in "$GOMODCACHE/${mod%@*}" "$GOMODCACHE/$(echo "$mod" | sed 's/\([A-Z]\)/!\L\1/g')"; do
-                    [ -f "$base@$ver/LICENSE" ] && { lic=$(detect_license "$base@$ver/LICENSE"); break; }
-                    [ -f "$base@$ver/LICENSE.md" ] && { lic=$(detect_license "$base@$ver/LICENSE.md"); break; }
-                    [ -f "$base@$ver/LICENSE.txt" ] && { lic=$(detect_license "$base@$ver/LICENSE.txt"); break; }
-                    [ -f "$base@$ver/COPYING" ] && { lic=$(detect_license "$base@$ver/COPYING"); break; }
-                    # 部分模块把 LICENSE 放在模块根下（如 github.com/x/y 下的 LICENSE）
                     if [ -d "$base@$ver" ]; then
+                        found_dir=1
+                        [ -f "$base@$ver/LICENSE" ] && { lic=$(detect_license "$base@$ver/LICENSE"); break; }
+                        [ -f "$base@$ver/LICENSE.md" ] && { lic=$(detect_license "$base@$ver/LICENSE.md"); break; }
+                        [ -f "$base@$ver/LICENSE.txt" ] && { lic=$(detect_license "$base@$ver/LICENSE.txt"); break; }
+                        [ -f "$base@$ver/COPYING" ] && { lic=$(detect_license "$base@$ver/COPYING"); break; }
+                        # 部分模块把 LICENSE 放在模块根下（如 github.com/x/y 下的 LICENSE）
                         lf=$(find "$base@$ver" -maxdepth 1 \( -iname 'LICENSE*' -o -iname 'COPYING*' \) 2>/dev/null | head -1)
-                        [ -n "$lf" ] && { lic=$(detect_license "$lf"); break; }
+                        if [ -n "$lf" ]; then lic=$(detect_license "$lf"); break; fi
                     fi
                 done
+                # O-1 残余语义区分：模块 zip 已抽取但上游没有随包分发任何许可证文件
+                # → 不是「待确认」（探测无能为力），而是「上游未分发」，合规审查时
+                # 需人工去上游仓库核对后补录；
+                # dir 不存在 = 模块未抽取到本地缓存 → 维持「待确认」。
+                if [ "$lic" = "待确认" ] && [ "$found_dir" = "1" ]; then
+                    lic="未随包分发许可证文件（需人工核对上游仓库）"
+                fi
             fi
             echo "| $mod | $ver | $lic |" >> "$GO_TABLE"
             echo $(( $(cat "$GO_COUNT_FILE") + 1 )) > "$GO_COUNT_FILE"
@@ -174,6 +183,19 @@ for (const [name, meta] of Object.entries(pkgs)) {
       const sub = JSON.parse(fs.readFileSync(path.join(root, name, "package.json"), "utf8"));
       lic = sub.license || (sub.licenses && sub.licenses[0] && sub.licenses[0].type) || "待确认";
       if (lic !== "待确认") break;
+    } catch (e) {}
+  }
+  // O-1 残余：双安装根都不在本地 → 从 npm registry 元数据取权威 license 字段。
+  // 每包一次 npm view（手动重生成时才付网络成本；--check 与 CI 不走本路径）。
+  if (lic === "待确认" && meta.version && meta.version !== "-") {
+    try {
+      const out = require("child_process").execSync(
+        `npm view "${name.replace(/^node_modules\//, "")}@${meta.version}" license --json`,
+        { timeout: 20000, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+      );
+      const v = JSON.parse(out);
+      if (typeof v === "string" && v) lic = v;
+      else if (Array.isArray(v) && v.length) lic = v.join(",");
     } catch (e) {}
   }
   rows.push(`| ${name} | ${meta.version || "-"} | ${lic} |`);
