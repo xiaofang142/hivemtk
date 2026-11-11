@@ -97,7 +97,7 @@ func TestLoadPlatformRequiredFieldsOnlyWhenEnabled(t *testing.T) {
 	t.Cleanup(func() { PlatformCfg = orig })
 
 	p := filepath.Join(t.TempDir(), "platform.yaml")
-	body := "api_url: \"\"\nsecret: \"\"\nadmin_password: \"\"\n"
+	body := "api_url: \"\"\nsecret: \"\"\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -116,35 +116,28 @@ func TestLoadPlatformRequiredFieldsOnlyWhenEnabled(t *testing.T) {
 		t.Fatal("关闭态 LoadPlatform 必须把 PlatformCfg 置 nil（残留在外的开关会让出站路径继续跑）")
 	}
 
-	// 开态：必填校验必须逐个生效。缺一报缺哪一，报不全等于校验形同虚设。
+	// 开态：必填校验必须生效。缺 secret 必须报错且点名该字段，报不点名等于校验形同虚设。
+	//（admin_password 曾是必填项，2026-11-11 L-1 方案A 随 JWT 代理通道删除而下线。）
 	//
 	// api_url 不在这份必填清单里：地址可以来自参数中心 platform.api_host
 	// （管理端在线改），装配期 yaml 的 api_url 本来就允许为空。只判 yaml 会让
 	// "在数据库里配地址"这条路径在启动期直接报错 —— 功能还没上线就先把门堵死。
 	// 地址的必填性由「解析后的最终地址为空」来判（见下面的 TestLoadPlatformAddressRequired）。
 	t.Setenv("PLATFORM_ENABLED", "true")
-	for _, missing := range []string{"secret", "admin_password"} {
-		text := "api_url: http://127.0.0.1:8205\nsecret: s3cr3t\nadmin_username: admin\nadmin_password: pw\n"
-		switch missing {
-		case "secret":
-			text = "api_url: http://127.0.0.1:8205\nadmin_password: pw\n"
-		case "admin_password":
-			text = "api_url: http://127.0.0.1:8205\nsecret: s3cr3t\n"
-		}
-		if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		PlatformCfg = nil
-		err := LoadPlatform(p)
-		if err == nil {
-			t.Fatalf("开启态缺 %s 必须报错", missing)
-		}
-		if !strings.Contains(err.Error(), missing) {
-			t.Fatalf("缺 %s 时报错必须点名该字段，实际=%v", missing, err)
-		}
-		if PlatformCfg != nil {
-			t.Fatalf("开启态校验失败时不得装配半截 PlatformCfg（缺 %s）", missing)
-		}
+	text := "api_url: http://127.0.0.1:8205\nadmin_username: admin\n"
+	if err := os.WriteFile(p, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	PlatformCfg = nil
+	err := LoadPlatform(p)
+	if err == nil {
+		t.Fatal("开启态缺 secret 必须报错")
+	}
+	if !strings.Contains(err.Error(), "secret") {
+		t.Fatalf("缺 secret 时报错必须点名该字段，实际=%v", err)
+	}
+	if PlatformCfg != nil {
+		t.Fatal("开启态校验失败时不得装配半截 PlatformCfg（缺 secret）")
 	}
 }
 
@@ -172,7 +165,7 @@ func TestLoadPlatformAddressRequired(t *testing.T) {
 	t.Cleanup(func() { PlatformCfg = nil })
 
 	p := filepath.Join(t.TempDir(), "platform.yaml")
-	if err := os.WriteFile(p, []byte("secret: s3cr3t\nadmin_password: pw\n"), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte("secret: s3cr3t\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PLATFORM_CONFIG_PATH", p)
@@ -199,7 +192,7 @@ func TestLoadPlatformAddressRequired(t *testing.T) {
 	}
 
 	// 3. yaml 有值 ⇒ 不报错
-	if err := os.WriteFile(p, []byte("api_url: http://127.0.0.1:8205\nsecret: s3cr3t\nadmin_password: pw\n"), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte("api_url: http://127.0.0.1:8205\nsecret: s3cr3t\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	PlatformCfg = nil
@@ -283,7 +276,7 @@ func TestLoadPlatformEnabledLoadsFully(t *testing.T) {
 	PlatformCfg = nil
 
 	p := filepath.Join(t.TempDir(), "platform.yaml")
-	body := "api_url: http://127.0.0.1:8205\nsecret: s3cr3t\nadmin_username: admin\nadmin_password: pw\nlog_report_interval: 30\nlicense_sync_interval: 60\n"
+	body := "api_url: http://127.0.0.1:8205\nsecret: s3cr3t\nadmin_username: admin\nlog_report_interval: 30\nlicense_sync_interval: 60\n"
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

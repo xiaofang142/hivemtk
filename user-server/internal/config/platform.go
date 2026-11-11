@@ -11,11 +11,14 @@ import (
 )
 
 // PlatformConfig 平台上报配置（开源版精简版）：仅保留"商户上报"用到的配置
-// （APIURL / Secret / Admin*）。兼容老字段（LogReportInterval / LicenseSyncInterval）
-// 仅作占位，读不到也允许（给前端 / 监控保持 schema 兼容）。
+// （APIURL / Secret）。兼容老字段（LogReportInterval / LicenseSyncInterval 与
+// Admin*）仅作占位，读不到也允许（给前端 / 监控保持 schema 兼容）。
 type PlatformConfig struct {
-	APIURL              string `yaml:"api_url" json:"api_url"`
-	Secret              string `yaml:"secret" json:"secret"`
+	APIURL string `yaml:"api_url" json:"api_url"`
+	Secret string `yaml:"secret" json:"secret"`
+	// AdminUsername / AdminPassword 原为 /platform/* JWT 代理通道的登录凭据，
+	// 该通道已整体删除（方案A，2026-11-11 L-1）：全仓再无消费者，仅作占位
+	// 保持旧 yaml / schema 兼容，不参与任何必填校验。
 	AdminUsername       string `yaml:"admin_username" json:"admin_username"`
 	AdminPassword       string `yaml:"admin_password" json:"admin_password"`
 	LogReportInterval   int    `yaml:"log_report_interval" json:"log_report_interval"`
@@ -95,7 +98,7 @@ func CloudURLSource(ctx context.Context) (url, source string) {
 // CloudURL 无 ctx 形态：平台级调用（无租户归属）等价于未绑定租户读取。
 func CloudURL() string { return CloudURLFor(context.Background()) }
 
-// PlatformCfg 全局平台配置（运行时唯一实例）：仅承载"上报地址 + 签名密钥 + 平台管理员账号"。
+// PlatformCfg 全局平台配置（运行时唯一实例）：仅承载"上报地址 + 签名密钥"。
 var PlatformCfg *PlatformConfig
 
 // PlatformEnabled 平台集成总开关。默认关闭 = 纯本地模式：
@@ -211,7 +214,7 @@ var platformConfigRootDir = GetRootDir
 // 不读文件、不校验字段——nil 就是下游每条出站路径共用的"快速失败"信号。
 //
 // 失败策略（仅开启态）：
-//   - 必填字段缺失（secret / admin_password）→ 返回错误，且不装配半截配置
+//   - 必填字段缺失（secret）→ 返回错误，且不装配半截配置
 //   - 可选字段缺失 → 使用 0 值
 //
 // api_url 的必填判定是**解析后的最终地址**而不是 yaml 字段本身：
@@ -260,9 +263,6 @@ func LoadPlatform(path string) error {
 	}
 	if cfg.Secret == "" {
 		return fmt.Errorf("平台配置缺少必填字段 secret（HMAC 签名密钥）")
-	}
-	if cfg.AdminPassword == "" {
-		return fmt.Errorf("平台配置缺少必填字段 admin_password（用于 /platform/* JWT 登录）")
 	}
 	PlatformCfg = &cfg
 	// 装配后再判地址：此刻 PlatformCfg 已就位，PlatformURL() 才能按

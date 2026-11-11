@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"hivemtk-user/internal/config"
 )
@@ -129,103 +128,16 @@ func TestSignSecretPrecedence(t *testing.T) {
 	}
 }
 
-func TestEnsureJWTTokenBranches(t *testing.T) {
-	var loginHits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/auth/login" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		loginHits++
-		switch loginHits {
-		case 1: // 缺 token
-			_, _ = w.Write([]byte(`{"code":0,"data":{"token":""}}`))
-		case 2: // 非法 JSON
-			_, _ = w.Write([]byte(`{not json`))
-		case 3: // 非 200
-			w.WriteHeader(http.StatusForbidden)
-			_, _ = w.Write([]byte(`denied`))
-		case 4: // 成功且带 expires
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"code": 0,
-				"data": map[string]any{"token": "jwt-1", "expires": time.Now().Add(time.Hour).Unix()},
-			})
-		default: // 成功但无 expires → 回落 1h
-			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"token": "jwt-2"}})
-		}
-	}))
-	defer srv.Close()
-	t.Setenv("MERCHANT_API_SECRET", "s")
-
-	// 配置未初始化
-	withPlatformConfig(t, nil)
-	c := NewPlatformClient("mk")
-	// 「未配置」必须是哨兵错误：调用方（轮询型端点、独立部署的降级判定）只能靠 errors.Is 分支，
-	// 字符串匹配会在改文案的那一刻静默失效。
-	if err := c.ensureJWTToken(); !errors.Is(err, ErrPlatformNotConfigured) {
-		t.Errorf("nil 配置应报 ErrPlatformNotConfigured, got %v", err)
-	}
-
-	// 管理员密码未配置
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL})
-	if err := c.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "admin_password") {
-		t.Errorf("空密码应报错并提示配置项, got %v", err)
-	}
-
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, AdminPassword: "p", Secret: "s"})
-	if err := c.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "缺少 token") {
-		t.Errorf("响应无 token 应报错, got %v", err)
-	}
-	if err := c.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "解析登录响应失败") {
-		t.Errorf("非法 JSON 应报错, got %v", err)
-	}
-	if err := c.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "平台登录返回 403") {
-		t.Errorf("非 200 应带状态码, got %v", err)
-	}
-	if err := c.ensureJWTToken(); err != nil {
-		t.Fatalf("第 4 次应成功: %v", err)
-	}
-	if c.jwtToken != "jwt-1" || time.Until(c.jwtExpireAt) < 50*time.Minute {
-		t.Errorf("expires 未正确解析: token=%q expire=%v", c.jwtToken, c.jwtExpireAt)
-	}
-	if err := c.ensureJWTToken(); err != nil {
-		t.Fatalf("token 有效期内应复用不报错: %v", err)
-	}
-	if loginHits != 4 {
-		t.Errorf("有效期内不应重复登录: loginHits=%d want 4", loginHits)
-	}
-
-	// 清空缓存后第 5 次登录走「响应无 expires」分支 → 回落 now+1h
-	c.jwtToken = ""
-	c.jwtExpireAt = time.Time{}
-	if err := c.ensureJWTToken(); err != nil {
-		t.Fatalf("无 expires 响应应成功并回落 1h: %v", err)
-	}
-	if c.jwtToken != "jwt-2" {
-		t.Errorf("token=%q want jwt-2", c.jwtToken)
-	}
-	if d := time.Until(c.jwtExpireAt); d < 59*time.Minute || d > 61*time.Minute {
-		t.Errorf("无 expires 时应回落 1h, got %v", d)
-	}
-
-	// 服务端不可达
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: "http://127.0.0.1:1", AdminPassword: "p", Secret: "s"})
-	c2 := NewPlatformClient("mk")
-	if err := c2.ensureJWTToken(); err == nil || !strings.Contains(err.Error(), "平台登录失败") {
-		t.Errorf("连接失败应包装为登录失败, got %v", err)
-	}
-}
-
-func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
+func TestDoRetryPlatformPrefixSignedAndNilRespDataIsOK(t *testing.T) {
 	// 响应头经 channel 回传：handler 在另一个 goroutine 里写变量，直接读会构成数据竞争。
-	authCh := make(chan string, 4)
+	sigCh := make(chan [2]string, 4)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/auth/login":
-			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"token": "jwt"}})
 		case "/platform/anything":
+			// JWT 通道已删（方案A，2026-11-11 L-1）：/platform/ 前缀不再触发管理员
+			// JWT 登录，与其他路径同走商户签名分支。
 			select {
-			case authCh <- r.Header.Get("Authorization"):
+			case sigCh <- [2]string{r.Header.Get("X-Signature"), r.Header.Get("X-Merchant-Key")}:
 			default:
 			}
 			_, _ = w.Write([]byte(`{"code":0}`))
@@ -237,14 +149,18 @@ func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
 	}))
 	defer srv.Close()
 	t.Setenv("MERCHANT_API_SECRET", "s")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, AdminPassword: "p", Secret: "s"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s"})
 
 	c := NewPlatformClient("mk")
 	if err := c.Do("GET", "/platform/anything", nil, nil); err != nil {
 		t.Fatalf("Do(nil respData) 应成功: %v", err)
 	}
-	if got := <-authCh; got != "Bearer jwt" {
-		t.Errorf("JWT 未随 /platform/ 前缀下发: %q", got)
+	hdr := <-sigCh
+	if len(hdr[0]) != 64 {
+		t.Errorf("X-Signature 应为 64 位 hex, got %q", hdr[0])
+	}
+	if hdr[1] != "mk" {
+		t.Errorf("X-Merchant-Key=%q", hdr[1])
 	}
 	if err := c.Do("POST", "/merchant-api/x", map[string]any{"bad": make(chan int)}, nil); err == nil ||
 		!strings.Contains(err.Error(), "序列化请求数据失败") {
@@ -262,7 +178,6 @@ func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
 		!strings.Contains(err.Error(), "unexpected end of JSON input") {
 		t.Errorf("200 空响应体应报反序列化错误, got %v", err)
 	}
-	// 配置缺失时 doRetry 直接短路报错（不发出任何请求）
 	// 配置缺失时 doRetry 直接短路报错（不发出任何请求），且必须是哨兵错误：
 	// 调用方靠 errors.Is 区分「本机没接平台」与「接了但挂了」，裸 fmt.Errorf 同文案也匹配不上。
 	withPlatformConfig(t, nil)
@@ -275,13 +190,10 @@ func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
 	}
 
 	// /merchant-api/ 前缀走签名分支：X-Merchant-Key 与 X-Signature 必须都在
-	sigCh := make(chan [2]string, 4)
 	sigSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/auth/login" {
-			select {
-			case sigCh <- [2]string{r.Header.Get("X-Signature"), r.Header.Get("X-Merchant-Key")}:
-			default:
-			}
+		select {
+		case sigCh <- [2]string{r.Header.Get("X-Signature"), r.Header.Get("X-Merchant-Key")}:
+		default:
 		}
 		_, _ = w.Write([]byte(`{"code":0}`))
 	}))
@@ -290,7 +202,7 @@ func TestDoRetryPlatformPrefixUsesJWTAndNilRespDataIsOK(t *testing.T) {
 	if err := NewPlatformClient("mk-key").do("GET", "/merchant-api/ping", nil, &BaseResp{}); err != nil {
 		t.Fatalf("签名分支请求失败: %v", err)
 	}
-	hdr := <-sigCh
+	hdr = <-sigCh
 	if len(hdr[0]) != 64 {
 		t.Errorf("X-Signature 应为 64 位 hex, got %q", hdr[0])
 	}

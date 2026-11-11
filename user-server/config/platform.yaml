@@ -20,8 +20,12 @@ api_url: "${PLATFORM_API_HOST}"
 secret: "${MERCHANT_API_SECRET}"
 # 异步日志上报间隔（秒）
 log_report_interval: 60
-# 平台管理员账号（用于商户服务代理调用平台 /platform/* 路由）
+# 平台管理员账号（历史占位：原 /platform/* JWT 代理通道的登录名，该通道已随方案A
+# 整体删除，2026-11-11 L-1；保留字段仅为兼容旧 yaml / schema，不再有任何消费者）
 admin_username: "admin"
-# 私域合规基线 §7.2：平台代理管理员密码通过环境变量 PLATFORM_ADMIN_PASSWORD 注入，禁止明文落库
-# 部署时必须在 .env 或环境变量中设置 PLATFORM_ADMIN_PASSWORD（与平台端 .env 保持一致）
-admin_password: "${PLATFORM_ADMIN_PASSWORD}"
+# 【JWT 代理通道已删 · 方案A · 2026-11-11 L-1】
+# admin_password 曾是「平台最高权限凭据下发到每个商户本地」的通道入口：唯一消费者
+# ensureJWTToken 走 /platform/ 前缀自动附管理员 JWT，而生产代码早已无任何 /platform/
+# 前缀出站调用。裁决：整通道删除（消灭凭据分发面，git 可逆）。
+# 触发条件：未来确需 /platform/ 代理时，按方案C 重建——平台端新增「租户代理」角色
+# 体系并签发专用低权账号（最小权限、仅限必要路由），禁止复用平台管理员凭据。

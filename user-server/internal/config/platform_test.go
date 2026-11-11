@@ -24,7 +24,6 @@ secret: test_secret
 log_report_interval: 30
 license_sync_interval: 60
 admin_username: admin
-admin_password: test_password
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
@@ -50,9 +49,6 @@ admin_password: test_password
 	}
 	if PlatformCfg.LicenseSyncInterval != 60 {
 		t.Errorf("Expected LicenseSyncInterval 60, got %d", PlatformCfg.LicenseSyncInterval)
-	}
-	if PlatformCfg.AdminPassword != "test_password" {
-		t.Errorf("Expected AdminPassword 'test_password', got %s", PlatformCfg.AdminPassword)
 	}
 }
 
@@ -84,27 +80,8 @@ invalid: yaml: content
 	}
 }
 
-// TestLoadPlatform_MissingPassword 验证：管理员密码缺失时必须返回错误（合规基线 §7.2）
-func TestLoadPlatform_MissingPassword(t *testing.T) {
-	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "platform.yaml")
-
-	configContent := `
-api_url: http://test.example.com
-secret: test_secret
-admin_username: admin
-`
-	err := os.WriteFile(configPath, []byte(configContent), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create temp config file: %v", err)
-	}
-
-	err = LoadPlatform(configPath)
-	if err == nil {
-		t.Fatal("Expected error for missing admin_password, got nil")
-	}
-}
+// TestLoadPlatform_MissingPassword 已删（2026-11-11 L-1 方案A）：admin_password 不再是
+// 必填字段，LoadPlatform 不再校验它，原测试断言的报错分支已不存在。
 
 // TestLoadPlatform_MissingSecret 验证：商户 API 密钥缺失时必须返回错误（合规基线 §7.2）
 func TestLoadPlatform_MissingSecret(t *testing.T) {
@@ -114,7 +91,6 @@ func TestLoadPlatform_MissingSecret(t *testing.T) {
 
 	configContent := `
 api_url: http://test.example.com
-admin_password: test_password
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
@@ -130,7 +106,6 @@ admin_password: test_password
 // TestLoadPlatform_EnvExpansion 验证：${VAR} 形式的环境变量能被正确展开
 func TestLoadPlatform_EnvExpansion(t *testing.T) {
 	t.Setenv("PLATFORM_ENABLED", "true") // 本组用例验的是"开启态"的加载与必填校验；默认关态会在 LoadPlatform 早退
-	t.Setenv("TEST_PLATFORM_ADMIN_PW", "env_injected_password")
 	t.Setenv("TEST_PLATFORM_SECRET", "env_injected_secret")
 
 	tempDir := t.TempDir()
@@ -139,7 +114,6 @@ func TestLoadPlatform_EnvExpansion(t *testing.T) {
 	configContent := `
 api_url: http://env.example.com
 secret: "${TEST_PLATFORM_SECRET}"
-admin_password: "${TEST_PLATFORM_ADMIN_PW}"
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	if err != nil {
@@ -152,9 +126,6 @@ admin_password: "${TEST_PLATFORM_ADMIN_PW}"
 	}
 	if PlatformCfg.Secret != "env_injected_secret" {
 		t.Errorf("Expected Secret 'env_injected_secret', got %s", PlatformCfg.Secret)
-	}
-	if PlatformCfg.AdminPassword != "env_injected_password" {
-		t.Errorf("Expected AdminPassword 'env_injected_password', got %s", PlatformCfg.AdminPassword)
 	}
 }
 
@@ -177,7 +148,6 @@ func TestLoadPlatform_FallsBackToExecutableDir(t *testing.T) {
 	content := `
 api_url: https://exe-dir.example.com
 secret: exe_dir_secret
-admin_password: exe_dir_password
 `
 	if err := os.WriteFile(filepath.Join(exeDir, "config", "platform.yaml"), []byte(content), 0o644); err != nil {
 		t.Fatalf("写二进制旁配置失败: %v", err)
@@ -210,7 +180,6 @@ func TestLoadPlatform_NoFallbackWhenPathExplicit(t *testing.T) {
 	content := `
 api_url: https://exe-dir.example.com
 secret: exe_dir_secret
-admin_password: exe_dir_password
 `
 	if err := os.WriteFile(filepath.Join(exeDir, "config", "platform.yaml"), []byte(content), 0o644); err != nil {
 		t.Fatalf("写二进制旁配置失败: %v", err)

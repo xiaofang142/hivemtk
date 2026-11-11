@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -41,9 +40,6 @@ type Client struct {
 	merchantSecret string
 	merchantKey    string
 	httpClient     *http.Client
-	jwtToken       string
-	jwtExpireAt    time.Time
-	jwtMu          sync.Mutex
 }
 
 func NewPlatformClient(merchantKey string) *Client {
@@ -153,82 +149,6 @@ func (c *Client) DoContext(ctx context.Context, method, path string, reqData, re
 	return c.doRetry(ctx, method, path, reqData, respData, false)
 }
 
-func (c *Client) ensureJWTToken() error {
-	c.jwtMu.Lock()
-	defer c.jwtMu.Unlock()
-
-	if c.jwtToken != "" && time.Now().Before(c.jwtExpireAt.Add(-60*time.Second)) {
-		return nil
-	}
-
-	if config.PlatformCfg == nil {
-		return fmt.Errorf("%w: 无法获取平台 JWT", ErrPlatformNotConfigured)
-	}
-
-	username := config.PlatformCfg.AdminUsername
-	password := config.PlatformCfg.AdminPassword
-	if username == "" {
-		username = "admin"
-	}
-	if password == "" {
-		return fmt.Errorf("平台管理员密码未配置，请设置 config/platform.yaml 中的 admin_password")
-	}
-
-	loginBody, _ := json.Marshal(map[string]string{
-		"username": username,
-		"password": password,
-	})
-	loginURL := config.PlatformURL() + "/api/auth/login"
-	req, err := newPlatformRequest(context.Background(), "POST", loginURL, loginBody)
-	if err != nil {
-		return fmt.Errorf("构造平台登录请求失败: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("平台登录失败: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, readErr := readPlatformBody(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("平台登录返回 %d (读取响应体失败: %v)", resp.StatusCode, readErr)
-		}
-		return fmt.Errorf("平台登录返回 %d: %s", resp.StatusCode, string(body))
-	}
-
-	var loginResp struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-		Data struct {
-			Token   string `json:"token"`
-			Expires int64  `json:"expires"`
-		} `json:"data"`
-	}
-	bodyBytes, err := readPlatformBody(resp.Body)
-	if err != nil {
-		return fmt.Errorf("读取登录响应失败: %w", err)
-	}
-	if err := json.Unmarshal(bodyBytes, &loginResp); err != nil {
-		return fmt.Errorf("解析登录响应失败: %w", err)
-	}
-	if loginResp.Data.Token == "" {
-		return fmt.Errorf("平台登录响应缺少 token")
-	}
-
-	c.jwtToken = loginResp.Data.Token
-	expireAt := loginResp.Data.Expires
-	if expireAt > 0 {
-		c.jwtExpireAt = time.Unix(expireAt, 0)
-	} else {
-		c.jwtExpireAt = time.Now().Add(time.Hour)
-	}
-	logger.Info(fmt.Sprintf("平台 JWT token 获取成功，过期时间: %s", c.jwtExpireAt.Format("2006-01-02 15:04:05")))
-	return nil
-}
-
 func (c *Client) do(method, path string, reqData, respData any) error {
 	return c.doRetry(context.Background(), method, path, reqData, respData, false)
 }
@@ -264,22 +184,16 @@ func (c *Client) doRetry(ctx context.Context, method, path string, reqData, resp
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	if strings.HasPrefix(path, "/platform/") {
-		if err := c.ensureJWTToken(); err != nil {
-			logger.Error(err, "获取平台 JWT token 失败")
-			return err
-		}
-		req.Header.Set("Authorization", "Bearer "+c.jwtToken)
-	} else {
-		sig, timestamp, err := c.sign(method, path, body)
-		if err != nil {
-			logger.Error(err, "商户签名失败")
-			return err
-		}
-		req.Header.Set("X-Merchant-Key", c.merchantKey)
-		req.Header.Set("X-Timestamp", timestamp)
-		req.Header.Set("X-Signature", sig)
+	// JWT 代理通道已删（方案A，2026-11-11 L-1）：不再有 /platform/ 前缀的
+	// 管理员 JWT 分支，所有出站路径统一走商户签名。
+	sig, timestamp, err := c.sign(method, path, body)
+	if err != nil {
+		logger.Error(err, "商户签名失败")
+		return err
 	}
+	req.Header.Set("X-Merchant-Key", c.merchantKey)
+	req.Header.Set("X-Timestamp", timestamp)
+	req.Header.Set("X-Signature", sig)
 
 	start := time.Now()
 	resp, err := c.httpClient.Do(req)
@@ -292,12 +206,9 @@ func (c *Client) doRetry(ctx context.Context, method, path string, reqData, resp
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized && !retried {
-		c.jwtMu.Lock()
-		c.jwtToken = ""
-		c.jwtExpireAt = time.Time{}
-		c.jwtMu.Unlock()
-		logger.Debugf("[platform-client] JWT refreshed path=%s", path)
-		logger.Warn(fmt.Sprintf("平台 JWT 失效(401)，清空缓存并重试一次: %s %s", method, url))
+		// JWT 代理通道已删（方案A，2026-11-11 L-1）：不再有 token 缓存可清，
+		// 只保留「401 重试一次」的通用自愈（TestClient_Do_401SelfHeal 钉住）。
+		logger.Warn(fmt.Sprintf("平台返回 401，重试一次: %s %s", method, url))
 		return c.doRetry(ctx, method, path, reqData, respData, true)
 	}
 
@@ -489,8 +400,8 @@ func (c *Client) loadMerchantSecret() error {
 
 // CheckConnection 探测平台是否可达：只打平台真实存在的存活性端点 GET {APIURL}/health。
 //
-// 不走 doRetry —— 那条路会做商户签名并可能拉 JWT，把一个连通性探针绑到鉴权链上等于
-// 多造两类假故障（签名没配好 / 登录不上都会被判成"平台挂了"）。
+// 不走 doRetry —— 那条路会做商户签名，把一个连通性探针绑到鉴权链上等于
+// 多造一类假故障（签名没配好会被判成"平台挂了"）。
 // 也不要恢复成"查授权状态"：平台从未实现授权端点（开源版连 License 概念都移除了），
 // 拿它做探针会让健康平台恒被判成 unreachable。
 func (c *Client) CheckConnection() error {
