@@ -68,10 +68,10 @@ ingress:
 # env 列表只有 GIN_MODE / LOG_LEVEL / DB_HOST / DB_PASSWORD 四条（最后那个连名字都是错的，见下面的
 # 注释），照本 README 装一遍的结果是 Pod 直接 CrashLoopBackOff。逐条出处与故障形态在 README
 # §已知限制「2026-09-22 修掉的四处」，这里不重复结论。
-#   - MASTER_KEY：≥32 字节。cmd/api/main.go:183-189 在非 development 下取不到就 os.Exit(1)，
+#   - MASTER_KEY：≥32 字节。cmd/api/main.go:325-332 在非 development 下取不到就 os.Exit(1)，
 #     而本 chart 设了 GIN_MODE=release ⇒ config.IsDevelopmentEnv()（internal/config/init.go:44-58，
 #     只认 APP_ENV/MODE，两者为空才退到 GIN_MODE=="debug"）返回 false，走的就是拒绝启动那一支。
-#   - JWT_SECRET：缺失或短于 32 字符时 internal/pkg/utils/jwt.go:63-72 直接 panic
+#   - JWT_SECRET：缺失或短于 32 字符时 internal/pkg/utils/jwt.go:64-80 直接 panic
 #     （那个"固定测试密钥"分支只在 go test 下可达）；internal/middleware/permission.go:137 读同名变量。
 #   - DB_PORT：user-server/config.yaml 里 database.postgres.port 写的是 `${DB_PORT:8232}`（现第 67 行），
 #     那是"宿主机直连 Dev 模式"的口；集群里的 PG Service 一般听 5432 ⇒ 不注入就是连一个没人听的端口，

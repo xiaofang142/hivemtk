@@ -547,8 +547,14 @@ func GetLoggingConfig() logger.LoggingConfig {
 }
 
 func GetServerBaseURL() string {
-	data, err := os.ReadFile("config.yaml")
-	if err == nil {
+	// 路径解析与 loadAppConfigOnce 共用同一条搜索链（CF-05）：此前这里裸读
+	// "config.yaml" 单路径，与主装载的多路搜索口径分裂。逐次重读+展开的语义
+	// 不动（env_expand_test.go 钉住：同一进程内改 env 立即生效），只统一找文件的方式。
+	for _, p := range configSearchPaths() {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
 		var cfg platformAPIYAML
 		// config.yaml 里写的是 `${PLATFORM_API_URL:http://127.0.0.1:8205}`；
 		// 不先展开就直接 Unmarshal，拿到的是字面占位符，会被拼进跟踪/退订链接。
@@ -590,21 +596,32 @@ func SetAppConfig(cfg *AppConfig) {
 
 var appConfig *AppConfig
 
-func loadAppConfigOnce() AppConfig {
-	var config AppConfig
-
-	configPaths := []string{
-		"config.yaml",
-		"../config.yaml",
-		"user-server/config.yaml",
+// configSearchPaths 返回 config.yaml 的搜索链（CF-05，2026-11-12 §3.17 配置审计批）。
+//
+// CONFIG_PATH 环境变量显式设置时插到链头（未设置时链与历史逐字节一致，行为零变更）；
+// 其余为：CWD → 父目录 → user-server 子目录（兼容从仓库根/从子目录启动两种姿势）→
+// 可执行文件目录及其父目录（兼容编译产物单文件部署）。
+// GetServerBaseURL 与 loadAppConfigOnce 共用本链，两处口径不再分裂。
+func configSearchPaths() []string {
+	paths := make([]string, 0, 6)
+	if p := os.Getenv("CONFIG_PATH"); p != "" {
+		paths = append(paths, p)
 	}
+	paths = append(paths, "config.yaml", "../config.yaml", "user-server/config.yaml")
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
-		configPaths = append(configPaths,
+		paths = append(paths,
 			filepath.Join(exeDir, "config.yaml"),
 			filepath.Join(exeDir, "..", "config.yaml"),
 		)
 	}
+	return paths
+}
+
+func loadAppConfigOnce() AppConfig {
+	var config AppConfig
+
+	configPaths := configSearchPaths()
 
 	var data []byte
 	var err error
@@ -616,6 +633,18 @@ func loadAppConfigOnce() AppConfig {
 		}
 	}
 	if err != nil {
+		// 沉默失败家族（CF-05）：config.yaml 缺失曾静默回落全默认值，部署方从
+		// 非预期工作目录启动时拿到的是 Docker 网络默认档，症状是"我的配置没生效"
+		// 却没有任何日志线索。这里响亮一行把尝试过的路径和 CWD 都说清——
+		// 默认值回落本身保留（config.yaml 缺失不挡启动是既有口径），只补可观测性。
+		logger.Warnf("[config] 搜索链内未找到 config.yaml（尝试过 %v，CWD=%s），已回落内置默认配置——"+
+			"若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动", configPaths, func() string {
+			wd, e := os.Getwd()
+			if e != nil {
+				return "<unknown>"
+			}
+			return wd
+		}())
 		config.Database.Type = DBTypePostgres
 		config.Database.Postgres.Host = "postgres-user"
 		config.Database.Postgres.Port = DefaultDBPortDocker

@@ -90,10 +90,10 @@ ingress:
 2. **env 段漏了三条密钥，其中两条不给就起不来。** 旧 env 只有
    `GIN_MODE`/`LOG_LEVEL`/`DB_HOST`/`DB_PASSWORD`
    （那个 `DB_PASSWORD` 的名字本身也是错的 ⇒ 第 3 条）：
-   `MASTER_KEY` 缺失时 `cmd/api/main.go:183-189` 在非 development 下 `os.Exit(1)`，而本 chart 设了
+   `MASTER_KEY` 缺失时 `cmd/api/main.go:325-332` 在非 development 下 `os.Exit(1)`，而本 chart 设了
    `GIN_MODE=release` ⇒ `config.IsDevelopmentEnv()`（`internal/config/init.go:44-58`：只认
    `APP_ENV`/`MODE`，两者为空才退到 `GIN_MODE=="debug"`）返回 false，正走那条拒绝启动的分支；
-   `JWT_SECRET` 缺失或短于 32 字符时 `internal/pkg/utils/jwt.go:63-72` 直接 panic
+   `JWT_SECRET` 缺失或短于 32 字符时 `internal/pkg/utils/jwt.go:64-80` 直接 panic
    （那个"固定测试密钥"分支只在 go test 下可达）。而 README 的 `kubectl create secret` 里
    本来就有 `jwt-secret`，只是没有任何东西把它变成 env ⇒ 挂上了也读不到。
    现在 `env` 段补齐 `JWT_SECRET`/`MASTER_KEY`/`FIELD_ENCRYPTION_KEY` 三条 secretKeyRef，
