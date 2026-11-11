@@ -8,8 +8,8 @@
 //
 // 本层三件事，与 controller/human_task.go 同一分工：
 //  1. **身份**：decided_by 是"人工放行率"这个数的归人依据，取不到身份就 401；
-//  2. **权限**：裁决落在 middleware.ManagerOrAdminMiddleware 上（在 handler 之前），
-//     所以缺 role 的请求先到 403，到不了本层的 401 判据；
+//  2. **权限**：裁决落在 middleware.RequireAdminMiddleware 上（在 handler 之前），
+//     所以缺 role 的请求先到 401，到不了本层的 401 判据；
 //  3. **状态码**：服务侧 sentinel → 400/404/409/500。
 //
 // 刻意**没有** GET /api/approvals 列表口：待办中心要看的"等谁裁决"是待办池的事实，
@@ -53,7 +53,7 @@ func (c *ApprovalController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/approvals")
 	{
 		g.GET("/:id", c.Get)
-		g.POST("/:id/decide", middleware.ManagerOrAdminMiddleware(), c.Decide)
+		g.POST("/:id/decide", middleware.RequireAdminMiddleware(), c.Decide)
 	}
 }
 

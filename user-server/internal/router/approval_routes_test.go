@@ -8,9 +8,9 @@
 //  1. **resume_token 不出现在任何响应体**（⑫ 的边界收口）：泄漏一次就是永久可伪造续跑；
 //  2. **裁决 → 待办 done 这条链在 HTTP 上真的通**：服务层用例各自绿，
 //     中间断一环（controller 忘了 sink / wiring 没装）就是"批了但池子里那条还在"；
-//  3. **403 与 401 分开**：权限中间件在 handler 之前，所以缺 role 只会到 403；
-//     有 role 却没有 user_id 才是 401（否则一次裁决会记下空裁决者，
-//     而 decided_by 正是"人工放行率"这个数的分母）。
+//  3. **401（无身份）与 403（有身份无权）分开**：RequireAdminMiddleware 在 handler
+//     之前，缺 role 只会到 401；有 role 却没有 user_id 也是 401（否则一次裁决会记下
+//     空裁决者，而 decided_by 正是"人工放行率"这个数的分母）；非 admin 角色才是 403。
 package router
 
 import (
@@ -181,7 +181,7 @@ func TestApprovalAPI_GetDetail(t *testing.T) {
 }
 
 // 读口不判角色：待办池本来就全池可见（否则坐席看不到自己名下那条审批的对象是什么），
-// 这条钉的是"别顺手把 manager 门槛加到 GET 上"。
+// 这条钉的是"别顺手把 admin 门槛加到 GET 上"。
 func TestApprovalAPI_GetNeedsNoManagerRole(t *testing.T) {
 	svc, _, _ := setupApprovalRoutesDB(t)
 	row := submitApprovalViaSvc(t, svc, "q_http_role")
@@ -212,7 +212,7 @@ func TestApprovalAPI_GetMissingIs404(t *testing.T) {
 func TestApprovalAPI_DecideApproveClosesTask(t *testing.T) {
 	svc, tasks, _ := setupApprovalRoutesDB(t)
 	row := submitApprovalViaSvc(t, svc, "q_http_ok")
-	h := newApprovalTestEngine(svc, uint(42), "manager")
+	h := newApprovalTestEngine(svc, uint(42), "admin")
 
 	code, body, _ := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
 		`{"verdict":"approved","note":"金额在授权范围内"}`)
@@ -264,13 +264,13 @@ func TestApprovalAPI_DecideReject(t *testing.T) {
 func TestApprovalAPI_DecideTwiceIs409WithCurrentRow(t *testing.T) {
 	svc, _, _ := setupApprovalRoutesDB(t)
 	row := submitApprovalViaSvc(t, svc, "q_http_twice")
-	first := newApprovalTestEngine(svc, uint(42), "manager")
+	first := newApprovalTestEngine(svc, uint(42), "admin")
 	if code, _, _ := doApproval(t, first, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
 		`{"verdict":"approved"}`); code != http.StatusOK {
 		t.Fatalf("前置条件破了：首次裁决没成功 %d", code)
 	}
 
-	second := newApprovalTestEngine(svc, uint(43), "manager")
+	second := newApprovalTestEngine(svc, uint(43), "admin")
 	code, body, raw := doApproval(t, second, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
 		`{"verdict":"rejected"}`)
 	if code != http.StatusConflict {
@@ -284,7 +284,9 @@ func TestApprovalAPI_DecideTwiceIs409WithCurrentRow(t *testing.T) {
 	}
 }
 
-// 权限与身份：缺 role ⇒ 403（中间件在 handler 之前），有 role 无 user_id ⇒ 401。
+// 权限与身份（A-8 收口后口径，门为 RequireAdminMiddleware）：
+// 缺 role ⇒ 401（门读不到身份先拒登录）；role 非 admin（user/manager）⇒ 403；
+// 有 role 无 user_id / user_id=0 ⇒ 401（controller 的身份判据，防空裁决者）。
 func TestApprovalAPI_DecidePermissionAndIdentity(t *testing.T) {
 	svc, _, _ := setupApprovalRoutesDB(t)
 	row := submitApprovalViaSvc(t, svc, "q_http_perm")
@@ -295,11 +297,12 @@ func TestApprovalAPI_DecidePermissionAndIdentity(t *testing.T) {
 		role string
 		want int
 	}{
-		{"无 role（未鉴权到角色）", uint(42), "", http.StatusForbidden},
+		{"无 role（未鉴权到角色）", uint(42), "", http.StatusUnauthorized},
 		{"role=user（坐席无裁决权）", uint(42), "user", http.StatusForbidden},
-		{"有 role 无 user_id", nil, "manager", http.StatusUnauthorized},
-		{"user_id=0", uint(0), "manager", http.StatusUnauthorized},
-		{"manager", uint(42), "manager", http.StatusOK},
+		{"role=manager（A-8：manager 无签发链，与 user 同拒）", uint(42), "manager", http.StatusForbidden},
+		{"有 role 无 user_id（admin 过门，身份判据归 controller）", nil, "admin", http.StatusUnauthorized},
+		{"user_id=0（同上，空裁决者防线）", uint(0), "admin", http.StatusUnauthorized},
+		{"admin", uint(42), "admin", http.StatusOK},
 	}
 	for _, c := range cases {
 		h := newApprovalTestEngine(svc, c.uid, c.role)
@@ -314,7 +317,7 @@ func TestApprovalAPI_DecidePermissionAndIdentity(t *testing.T) {
 func TestApprovalAPI_DecideValidatesVerdict(t *testing.T) {
 	svc, _, _ := setupApprovalRoutesDB(t)
 	row := submitApprovalViaSvc(t, svc, "q_http_verify")
-	h := newApprovalTestEngine(svc, uint(42), "manager")
+	h := newApprovalTestEngine(svc, uint(42), "admin")
 
 	for _, body := range []string{`{}`, `{"verdict":"maybe"}`, `{"verdict":"approve"}`, `not json`, `{"verdict":100}`} {
 		code, resp, _ := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide", body)
@@ -339,7 +342,7 @@ func TestApprovalAPI_DecideOnDecidedRowIs409(t *testing.T) {
 	}
 	_ = database
 
-	h := newApprovalTestEngine(svc, uint(42), "manager")
+	h := newApprovalTestEngine(svc, uint(42), "admin")
 	code, body, _ := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
 		`{"verdict":"rejected"}`)
 	if code != http.StatusConflict {
@@ -409,7 +412,7 @@ func TestApprovalAPI_DecidePastDeadlineIs409AndWritesNothing(t *testing.T) {
 	row := submitApprovalViaSvc(t, svc, "q_http_late")
 	pushApprovalDeadline(t, database, row.ID, time.Now().Add(-time.Minute))
 
-	h := newApprovalTestEngine(svc, uint(42), "manager")
+	h := newApprovalTestEngine(svc, uint(42), "admin")
 	code, body, raw := doApproval(t, h, http.MethodPost, "/api/approvals/"+row.ID+"/decide",
 		`{"verdict":"approved","note":"想起来还有一单没批"}`)
 	if code != http.StatusConflict {
@@ -458,7 +461,7 @@ func TestApprovalAPI_DecidePastDeadlineIs409AndWritesNothing(t *testing.T) {
 // 与 human_task 同一口径 —— "没读到"不能伪装成"读到的答案是空"。
 func TestApprovalAPI_UnavailableHandleIs503(t *testing.T) {
 	svc := service.NewApprovalRequestService(repository.NewApprovalRequestRepositoryWithDB(nil), nil)
-	h := newApprovalTestEngine(svc, uint(42), "manager")
+	h := newApprovalTestEngine(svc, uint(42), "admin")
 
 	code, body, raw := doApproval(t, h, http.MethodGet, "/api/approvals/apr_1", "")
 	if code != http.StatusServiceUnavailable {

@@ -65,33 +65,6 @@ func AdminOnlyMiddleware() gin.HandlerFunc {
 	}
 }
 
-// ManagerOrAdminMiddleware 经理或管理员访问中间件
-func ManagerOrAdminMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		role, exists := c.Get("role")
-		if !exists {
-			response.Error(c, utils.ErrorCodeForbidden, "未找到角色信息")
-			c.Abort()
-			return
-		}
-
-		roleStr, ok := role.(string)
-		if !ok {
-			response.Error(c, utils.ErrorCodeInternalError, "角色类型异常")
-			c.Abort()
-			return
-		}
-
-		if roleStr != "admin" && roleStr != "manager" {
-			response.Error(c, utils.ErrorCodeForbidden, "需要经理或管理员权限")
-			c.Abort()
-			return
-		}
-
-		c.Next()
-	}
-}
-
 // TeamJWTAuthMiddleware JWT 认证中间件 - 支持团队用户
 func TeamJWTAuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

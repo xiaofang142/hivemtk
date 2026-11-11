@@ -6,8 +6,9 @@ import { http } from '@/utils/request'
 // 事实源），再加一个审批列表就是第二个事实源 —— 两边未读数迟早有一天各说各话。
 // 已落定的历史审批只能按 id 读，那是有意的。
 //
-// 裁决端点在后端挂 ManagerOrAdminMiddleware()：坐席视角能读到详情（GET 不设角色门，
-// 他要知道自己为什么被驳回），但只有管理岗点得动按钮。前端不做角色判断来替代它 ——
+// 裁决端点在后端挂 RequireAdminMiddleware()（A-8 收口：旧 ManagerOrAdmin 门里的
+// manager 角色已无签发链）：坐席视角能读到详情（GET 不设角色门，
+// 他要知道自己为什么被驳回），但只有超管点得动按钮。前端不做角色判断来替代它 ——
 // 403 就是 403，把按钮按角色藏起来只是让"为什么点不动"变成第二个问题。
 const base = '/api/approvals'
 const seg = (id) => encodeURIComponent(id)

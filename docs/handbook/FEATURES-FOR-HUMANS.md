@@ -376,7 +376,7 @@ SOP 执行用 DAG + AB 实验（权重和 = 100，FNV-1a 哈希做粘性分配�
 flowchart LR
     CLUE["线索<br/>/api/clue/*"] --> OPP["商机<br/>/api/opportunity/*<br/>阶段 · 赢输 · 取消 · 重开"]
     OPP --> QUOTE["报价<br/>/api/quote/*<br/>生成 · 改版 · 版本 · 发送"]
-    QUOTE --> APPROVE{"审批<br/>/api/approvals/:id/decide<br/>(ManagerOrAdmin)"}
+    QUOTE --> APPROVE{"审批<br/>/api/approvals/:id/decide<br/>(RequireAdmin)"}
     APPROVE -->|通过| BILL["账单<br/>/api/bill/*<br/>(accepted 为唯一生产写入口)"]
     APPROVE -->|驳回| OPP
     BILL --> PAY["回款"]

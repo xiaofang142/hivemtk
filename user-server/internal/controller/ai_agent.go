@@ -502,11 +502,12 @@ func NewChannelAgentBindingControllerWithService(svc *service.ChannelAgentBindin
 func (ctrl *ChannelAgentBindingController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/channel-agent-bindings")
 	{
-		// 绑定关系只读对 staff 开放（aiAgent List 页展示），写操作仅 admin/manager（对齐 chatChannel 菜单 roles）
+		// 绑定关系只读对 staff 开放（aiAgent List 页展示），写操作仅超管（A-8 收口：
+		// 旧 ManagerOrAdmin 门里的 manager 角色已无签发链，RequireAdmin 与其行为等价）
 		g.GET("", ctrl.List)
-		g.POST("", middleware.ManagerOrAdminMiddleware(), ctrl.Create)
-		g.PUT("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Update)
-		g.DELETE("/:id", middleware.ManagerOrAdminMiddleware(), ctrl.Delete)
+		g.POST("", middleware.RequireAdminMiddleware(), ctrl.Create)
+		g.PUT("/:id", middleware.RequireAdminMiddleware(), ctrl.Update)
+		g.DELETE("/:id", middleware.RequireAdminMiddleware(), ctrl.Delete)
 		g.GET("/by-agent/:agent_id", ctrl.ListByAgent)
 	}
 }

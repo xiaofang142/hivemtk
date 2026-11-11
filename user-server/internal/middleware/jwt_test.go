@@ -408,17 +408,25 @@ func TestAdminOnlyMiddleware(t *testing.T) {
 	})
 }
 
-func TestManagerOrAdminMiddleware(t *testing.T) {
+// TestRequireAdminMiddleware A-8 收口后的等价性钉子：旧 ManagerOrAdmin 门
+// （role 为 admin/manager 之一放行）已删除——manager 角色无签发链（system_users.role
+// 白名单 admin/user/staff/customer_service），收口为 RequireAdminMiddleware。
+// 本用例钉住新门的行为：admin 放行、manager 拒绝（403）。
+func TestRequireAdminMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	// 关掉测试模式短路，否则 role 校验整段被跳过，测不到门本身
+	prevTestMode := IsTestMode
+	IsTestMode = false
+	defer func() { IsTestMode = prevTestMode }()
 
-	t.Run("Manager role", func(t *testing.T) {
+	t.Run("Admin role passes", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(w)
 		req, _ := http.NewRequest("GET", "http://test.com/test", nil)
 		ctx.Request = req
-		ctx.Set("role", "manager")
+		ctx.Set("role", "admin")
 
-		middleware := ManagerOrAdminMiddleware()
+		middleware := RequireAdminMiddleware()
 		middleware(ctx)
 
 		if w.Code != http.StatusOK {
@@ -426,18 +434,32 @@ func TestManagerOrAdminMiddleware(t *testing.T) {
 		}
 	})
 
-	t.Run("Admin role", func(t *testing.T) {
+	t.Run("Manager role rejected (A-8: no issuance chain)", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		ctx, _ := gin.CreateTestContext(w)
 		req, _ := http.NewRequest("GET", "http://test.com/test", nil)
 		ctx.Request = req
-		ctx.Set("role", "admin")
+		ctx.Set("role", "manager")
 
-		middleware := ManagerOrAdminMiddleware()
+		middleware := RequireAdminMiddleware()
 		middleware(ctx)
 
-		if w.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", w.Code)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("Expected status 403 for manager, got %d", w.Code)
+		}
+	})
+
+	t.Run("Missing role unauthorized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(w)
+		req, _ := http.NewRequest("GET", "http://test.com/test", nil)
+		ctx.Request = req
+
+		middleware := RequireAdminMiddleware()
+		middleware(ctx)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 for missing role, got %d", w.Code)
 		}
 	})
 }

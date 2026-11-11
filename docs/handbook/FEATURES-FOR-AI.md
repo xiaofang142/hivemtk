@@ -219,7 +219,7 @@ sequenceDiagram
 | `/api/bill/*` | 3 | `bill.go:123-127`，`accepted` 为唯一生产写入口 |
 | `/api/opportunity/*` | 9 | `opportunity.go:66-75` |
 | `/api/human-tasks/*` | 7 | `human_task.go:46-54` |
-| `/api/approvals/:id` + `/api/approvals/:id/decide` | 2 | `approval.go:53-56`，ManagerOrAdmin |
+| `/api/approvals/:id` + `/api/approvals/:id/decide` | 2 | `approval.go:53-56`，RequireAdmin |
 | `/api/bad-cases/*` | 8 | `bad_case.go:42-51` |
 | `/api/kb-changes/*` + `/api/kb-releases/*` | 组 | `kb_release.go:48,57` |
 | `/api/manage/ltc/{config,collection}` | 2 | `ltc_routes.go:28-32`，admin |

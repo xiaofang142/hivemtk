@@ -254,7 +254,7 @@
 | 功能名称 | 状态 | 所在包 | API 路由 | 关联文档（计划文件名，尚未编写） |
 | --- | --- | --- | --- | --- |
 | 多 AI 智能体管理（CRUD/测试/上下文加载） | ✅ | `controller/ai_agent.go` · `service/ai_agent.go` · `repository/ai_agent.go` · `model/ai_agent.go` | `GET/POST/PUT/DELETE /api/ai-agents` / `POST /api/ai-agents/:id/test` / `GET /api/ai-agents/:id/context` | `ai-agent.md` |
-| 渠道账号绑定智能体 | ✅ | `controller/ai_agent.go`（`ChannelAgentBindingController` 路由在 :461-469，写操作带 `ManagerOrAdminMiddleware`）· `service/ai_agent.go`（:267）· `model/`（`channel_agent_bindings` 表） | `GET/POST /api/channel-agent-bindings` · `PUT/DELETE /api/channel-agent-bindings/:id` · `GET /api/channel-agent-bindings/by-agent/:agent_id` | `channel-agent-binding.md` |
+| 渠道账号绑定智能体 | ✅ | `controller/ai_agent.go`（`ChannelAgentBindingController` 路由在 :461-469，写操作带 `RequireAdminMiddleware`）· `service/ai_agent.go`（:267）· `model/`（`channel_agent_bindings` 表） | `GET/POST /api/channel-agent-bindings` · `PUT/DELETE /api/channel-agent-bindings/:id` · `GET /api/channel-agent-bindings/by-agent/:agent_id` | `channel-agent-binding.md` |
 | 客服座席挂载智能体 | ✅ | `controller/ai_agent.go`（`CustomerServiceAgentController` :593、路由 :601-612）· `service/ai_agent.go`（`NewCustomerServiceAgentService` :460）· `repository/ai_agent.go`（:321） | `GET/POST /api/customer-service-agents` · `PUT/DELETE /api/customer-service-agents/:id` · `GET/POST /api/customer-service-agents/by-user/:user_id` · `GET /api/customer-service-agents/by-ai-agent/:ai_agent_id` | `cs-agent-mount.md` |
 
 ---
