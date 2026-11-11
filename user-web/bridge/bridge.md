@@ -633,6 +633,24 @@ sendOutbound(text, targetConvId)
 - 凭证只认 `X-Bridge-Token` Header，SSE 可用 `?bridge_token=`（服务端剥离 + 日志脱敏）；
 - `account_id` 缺失 / `channel` 非白名单 → 400 拒绝（不写 `default` 兜底）。
 
+### 7.6 共享 token 威胁模型与轮换（N-9 方案②文档兜底，2026-11-12）
+
+**风险清单**（审计 N-9，证据 `channelgw/ws.go validateRegister` + `bridge/tenant_binding.go BridgeTenantForRequest`）：
+
+1. **闸是实例级共享 token**：`BridgeIngressGuard` fail-closed（未配置 503 / 缺错 401，见 §7.5），但凭证是**部署级一份**（env `BRIDGE_INGEST_TOKEN` / `system_config_kv.bridge_ingest_token`），不做 per-account 区分；
+2. **WS register 帧身份自证**：`/api/ws/channel` 的 register 帧（`WSTransport.validateRegister`）只验帧类型与渠道白名单，**(channel, account_id) 由帧自证**，租户归属按 DB 反查——**持有共享 token 者自证任意 (channel, account_id) 即可订阅该账号的下行 outbox 消息流（含发往客户的正文）**；
+3. **风险收敛**：匿名不可达（token 闸 fail-closed）+ CSWSH 面闭合（浏览器 WS 带不了自定义头，query token 需知值）⇒ 实际风险 =「**token 泄漏 = 全账号下行流可听**」+「共享 token 持有者内部横向」；
+4. **相关面**：`/api/platform/heartbeat|install` 为公开统计口（A-9），merchant_key 关联变更/刷活已加 HMAC 闸（L-3），纯心跳公开口径不变。
+
+**轮换规程（定期轮换 / 泄漏应急）**：
+
+1. 生成新 token：`openssl rand -hex 32`；
+2. 双窗轮换：旧值先写入 `BRIDGE_INGEST_TOKEN_PREV`（`bridge_ingress_guard.go` 新旧双读过渡窗），再把 `BRIDGE_INGEST_TOKEN` 更新为新值，重启服务端；
+3. 扩展端全部更新配置后清空 `BRIDGE_INGEST_TOKEN_PREV`（`system_config_kv` 路径同理，键 `bridge_ingest_token`）；
+4. **泄漏应急**：跳过过渡窗直接轮换，并按「全账号下行内容已暴露」评估（见风险 2），不视为单账号事件。
+
+**根治项（未排期）**：per-account HMAC——register 帧携带 per-account 签名，涉及 bridge_accounts 表与扩展端凭证分发改造，单独立项评估（N-9①）；落地前以本节轮换规程为运行期兜底。
+
 ---
 
 ## 8. 配置与默认值
