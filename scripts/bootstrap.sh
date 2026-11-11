@@ -32,6 +32,14 @@
 #                      注：历史版本还强制要求 PLATFORM_LICENSE_SECRET（商户授权签名密钥）。
 #                      2026-09 授权链路下线后两侧 Go 代码均已无任何读取点，故不再要求设置；
 #                      旧 .env 里残留该键不影响运行，可自行删除。
+#   MASTER_KEY
+#                      生产（非 development）必须：字段加密主钥（internal/secrets AEAD，密文前缀
+#                      enc:v1:，覆盖 LLM provider key/dbencrypt 敏感列/SSO/工具集成凭据）。
+#                      缺它 user-server 启动在 secrets.InitFromEnv 处 os.Exit(1)（cmd/api/main.go）；
+#                      本地 development 缺它降级明文仅 warn。与 FIELD_ENCRYPTION_KEY 分工：
+#                      后者只覆盖 geo 平台凭据与 SMTP 密码（internal/pkg/crypto，缺它不挡启动只降级）。
+#                      两把都要求 ≥32 字节（openssl rand -hex 32）；K8s 注入对照见
+#                      deploy/helm/hivemtk/values.yaml env 段注释。
 #   MERCHANT_API_SECRET
 #                      仅 PLATFORM_ENABLED=true 时必须：它只被 config/platform.yaml 的
 #                      出站 HMAC 签名消费，平台端关态（离线部署默认）下整条链路不装配，
@@ -109,6 +117,12 @@ fi
 if [ "${PLATFORM_ENABLED:-false}" = "true" ] && [ -z "${MERCHANT_API_SECRET:-}" ]; then
   err "PLATFORM_ENABLED=true 需要 MERCHANT_API_SECRET（生成一个：openssl rand -hex 32）"
   exit 1
+fi
+# MASTER_KEY 不拦安装（development 环境合法缺省，user-server 自己在生产档 fail-closed），
+# 但响亮提醒一句：按 .env 样例配齐之前启动会在末段才失败，别让它误导排障方向。
+if [ -z "${MASTER_KEY:-}" ] && [ "${APP_ENV:-}" != "development" ]; then
+  warn "MASTER_KEY 未设置：非 development 环境 user-server 启动将拒绝（secrets.InitFromEnv os.Exit(1)）；"
+  warn "  生成一个：openssl rand -hex 32。与 FIELD_ENCRYPTION_KEY 分工见 .env.example 注释。"
 fi
 command -v psql >/dev/null || { err "psql 未安装"; exit 1; }
 command -v go   >/dev/null || { err "go  未安装"; exit 1; }

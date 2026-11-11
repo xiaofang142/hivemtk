@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -137,5 +138,24 @@ func TestGetServerBaseURLExpandsEnvPlaceholder(t *testing.T) {
 	t.Setenv("PLATFORM_API_URL", "https://platform.example.com")
 	if got := GetServerBaseURL(); got != "https://platform.example.com" {
 		t.Fatalf("设置 PLATFORM_API_URL 后 GetServerBaseURL() = %q，期望环境变量值", got)
+	}
+}
+
+// CF-05（2026-11-12 §3.17 配置审计批）：CONFIG_PATH 显式指向配置文件时插搜索链头——
+// 从任意工作目录启动都能命中；未设置时搜索链与历史逐字节一致（行为零变更由既有用例守护）。
+// 断言用 logging.component：AppConfig 不含 platform_api 段（那是 platformAPIYAML 专属解析）。
+func TestLoadAppConfigHonorsConfigPathEnv(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "custom-config.yaml")
+	body := "logging:\n  component: via-config-path\n"
+	if err := os.WriteFile(cfgPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("写入自定义配置失败: %v", err)
+	}
+	t.Setenv("CONFIG_PATH", cfgPath)
+	t.Chdir(t.TempDir()) // CWD 与父目录都没有 config.yaml，逼出 CONFIG_PATH 生效
+
+	cfg := loadAppConfigOnce()
+	if cfg.Logging.Component != "via-config-path" {
+		t.Fatalf("CONFIG_PATH 指向的配置未生效：Logging.Component = %q", cfg.Logging.Component)
 	}
 }

@@ -110,9 +110,22 @@ func (a redisPingerAdapter) Ping(ctx context.Context) error {
 // @description					Bearer JWT，格式：Bearer <token>
 func main() {
 
+	bootStart := time.Now()
+	// CF-06（2026-11-12 §3.17 配置审计批）：启动分段耗时观测。尺子不动装配——
+	// 只在各装配块末尾取一个时间点，HTTP listen 前打**一条**汇总（不逐点刷屏），
+	// 为未来「启动成本优化」议题提供基线读数；段名与下方装配块一一对应。
+	var phaseMarks []string
+	phaseStart := bootStart
+	markPhase := func(name string) {
+		now := time.Now()
+		phaseMarks = append(phaseMarks, name+"="+strconv.FormatInt(now.Sub(phaseStart).Milliseconds(), 10)+"ms")
+		phaseStart = now
+	}
+
 	utils.LoadDotEnv(".env")
 
 	logger.InitLogger(config.GetLoggingConfig())
+	markPhase("env_logger")
 
 	// TENANT_MODE 装配（001 多租户双形态）：必须在 db.InitDB/router.Setup 之前生效——
 	// 十二个 callback/中间件/登录通道全部读 tenant.IsMultiTenant()，
@@ -132,6 +145,7 @@ func main() {
 	} else {
 		logger.Info("[tenant] TENANT_MODE=off：离线单机形态已启用")
 	}
+	markPhase("tenant")
 
 	featureflag.DefaultManager()
 	logger.Info("User Server Starting")
@@ -159,6 +173,7 @@ func main() {
 
 	db.InitDB()
 	db.AutoMigrate()
+	markPhase("db_migrate")
 
 	// W-6 工具审计落库：退出前排空异步队列（见 internal/app/tool_audit_wiring.go）。
 	//
@@ -296,6 +311,7 @@ func main() {
 	if wired := app.WireReportingConfigParams(); len(wired) > 0 {
 		logger.Info("[ConfigParam] reporting 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
+	markPhase("seeds_wiring")
 
 	service.InitDefaultStorageIfEmpty(repository.NewObsConfigRepositoryWithDB(db.GetDB()))
 	service.BindAssetLoaderRepository(repository.NewAssetLoaderRepository(db.GetDB()))
@@ -330,6 +346,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	markPhase("secrets")
 	llm.InitGlobalDispatcherWithDB(llm.NewDispatcherFromConfig(appCfg), db.GetDB())
 
 	// ── 功能模块化 · 平台垫资模型装配 ──────────────────────────────
@@ -359,6 +376,7 @@ func main() {
 	} else {
 		logger.Info("[LLM] 已从数据库加载持久化场景路由规则")
 	}
+	markPhase("llm_providers")
 
 	// C2 推理降级档：启动时显式定档并记录，不修改 Dispatcher 运行时路由。
 	//
@@ -429,6 +447,7 @@ func main() {
 	}
 	middleware.InitInstallStatus()
 	logger.Info("[启动] 初始化安装态检查器（只读本地 install.lock，无平台依赖）")
+	markPhase("platform")
 
 	install.SetAdminProbe(service.NewSystemUserService().GetFirstAdminUsername)
 
@@ -746,6 +765,7 @@ func main() {
 	app.InitOrderChangeRuntime(db.GetDB())
 
 	router.Setup(r, db.GetDB())
+	markPhase("router_setup")
 
 	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），
 	// 开关 FF_LTC_RECOVERY_WORKER=off（默认）时 Start 直接 no-op。
@@ -771,6 +791,7 @@ func main() {
 	if collectionJob := app.InitCollectionRuntime(db.GetDB()); collectionJob != nil {
 		defer collectionJob.Stop(context.Background())
 	}
+	markPhase("workers")
 
 	// Telegram polling 的分布式锁在关停时必须交回：polling 协程随进程消失后，
 	// DB 里的 polling_owner 仍写着这个已死进程，60s 心跳陈旧窗口内启动的新实例会判定
@@ -786,6 +807,10 @@ func main() {
 	defer service.StopGateSweeper(context.Background())
 
 	addr := resolveListenAddr(os.Getenv("SERVER_HOST"), os.Getenv("PORT"))
+	// CF-06：装配全程只打这一条汇总（段名与上方 markPhase 一一对应），读数作为
+	// 「启动成本」议题的基线；任何一段异常膨胀都是未来裁剪/延迟装配的候选证据。
+	logger.Infof("[startup] 启动装配分段耗时汇总: %s（listen 前累计 %dms）",
+		strings.Join(phaseMarks, " "), time.Since(bootStart).Milliseconds())
 	logger.Infof("营销后端服务启动于 %s", addr)
 	// serveHTTP 按平台拆分:Unix 走 endless(零停机热重启),Windows 走标准 http
 	// (见 serve_unix.go / serve_windows.go)
