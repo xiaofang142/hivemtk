@@ -19,6 +19,7 @@
 |---|---|
 | [SLA_SLO.md](SLA_SLO.md) | 服务等级承诺 |
 | [secret_rotation.md](secret_rotation.md) | 密钥轮换指南 |
+| [INSPECTION_SQL_LAYER_DECISION_AUDIT.md](INSPECTION_SQL_LAYER_DECISION_AUDIT.md) | 巡检 SQL 手册：layer_decision_logs 与审计操作日志（RM-1⑦；audit_logs 名不副实，真实表 operation_logs） |
 | [LICENSE_COMPLIANCE.md](LICENSE_COMPLIANCE.md) | LICENSE 合规自检（AGPL-3.0 第 13 条） |
 | [PERFORMANCE_BENCHMARK.md](PERFORMANCE_BENCHMARK.md) | 性能基准与 SLA 阐明（报告） |
 
