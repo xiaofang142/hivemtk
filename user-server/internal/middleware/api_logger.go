@@ -229,12 +229,16 @@ func redactJSON(b []byte, capSize int) string {
 	return string(out)
 }
 
+// apiLogRedactedMask 键级脱敏统一掩码。query 串、请求体、响应体三处同用此常量，
+// 防脱敏口径再次分化（N-1：audit 与 api_logger 共用同一掩码）。
+const apiLogRedactedMask = "***REDACTED***"
+
 func redactValue(v any) {
 	switch t := v.(type) {
 	case map[string]any:
 		for k, val := range t {
 			if _, ok := apiLogSensitiveKeys[strings.ToLower(k)]; ok {
-				t[k] = "***REDACTED***"
+				t[k] = apiLogRedactedMask
 			} else {
 				redactValue(val)
 			}
@@ -246,14 +250,23 @@ func redactValue(v any) {
 	}
 }
 
-func redactQuery(q url.Values) string {
+// redactQueryValues 返回 q 的脱敏副本：键名（不区分大小写）命中 apiLogSensitiveKeys
+// 时值替换为 apiLogRedactedMask，其余键值原样保留。它是 API 交互日志（api_logger.go
+// 的 query 字段）与审计中间件（audit.go 的 detail.query，落 audit_logs 持久表）共享的
+// 唯一实现——两处同用此函数 + 同一张键表 + 同一掩码，防脱敏口径再次分化（N-1）。
+func redactQueryValues(q url.Values) url.Values {
 	clone := url.Values{}
 	for k, vs := range q {
 		if _, ok := apiLogSensitiveKeys[strings.ToLower(k)]; ok {
-			clone[k] = []string{"***REDACTED***"}
+			clone[k] = []string{apiLogRedactedMask}
 		} else {
 			clone[k] = vs
 		}
 	}
-	return clone.Encode()
+	return clone
+}
+
+// redactQuery 返回脱敏后的编码 query 串（API 交互日志 query 字段用）。
+func redactQuery(q url.Values) string {
+	return redactQueryValues(q).Encode()
 }

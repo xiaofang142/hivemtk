@@ -277,9 +277,11 @@ func AuditMiddleware() gin.HandlerFunc {
 		resource := getResourceFromPath(path)
 
 		detail := map[string]any{
-			"method":      method,
-			"path":        path,
-			"query":       c.Request.URL.Query(),
+			"method": method,
+			"path":   path,
+			// N-1：query 与 api_logger 同走共享 redactQueryValues（同一键表 + 同一掩码），
+			// 敏感键落 audit_logs 前脱敏，防审计侧与访问日志侧口径分化。
+			"query":       redactQueryValues(c.Request.URL.Query()),
 			"status_code": c.Writer.Status(),
 			"latency":     time.Since(startTime).Milliseconds(),
 			"request":     sanitizedRequest,
