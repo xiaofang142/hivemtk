@@ -767,6 +767,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			logger.Infof("[Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通）")
 			bridgeIngressSvc.SetLeadMining(service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB)))
 			logger.Infof("[Bridge] bridge LeadMining 已注入（线索发掘异步监听已连通）")
+			// M-6（2026-11-11）：新用户（非关注好友）首触登记 + 自动关注策略。
+			// 登记（观测）恒生效；关注动作另受参数中心 bridge/follow_user_enabled
+			// （默认 false）与 follow_user_channels 双闸控制，默认关闭不动任何现网行为。
+			bridgeIngressSvc.SetBridgeFollowService(service.NewBridgeFollowService(repository.NewBridgeFollowEventRepository()))
+			logger.Infof("[Bridge] bridge BridgeFollowService 已注入（新用户首触登记 + 自动关注策略已连通）")
 		}
 
 		setupChatChannelAdminRoutes(auth, gormDB)

@@ -10,6 +10,9 @@ import {
 import { humanDelay } from '../core/humanize.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
+// M-6 新用户（非关注好友）识别 + followUser hook（fixture 口径，默认开关关）
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 
 const log = createLogger('tiktok', CHANNELS.TIKTOK);
 
@@ -599,7 +602,9 @@ const hooks = {
     if (isListNoise(item)) return null;
     if (isSystemMessage(item)) {
       const sysText = cleanText(item);
-      return {
+      // M-6：关注关系系统文案（followed you / follow each other…）命中时打
+      // new_user_unfollowed 标记（只加 extra 字段；system 归类与不触发 AI 现状不变）。
+      const sysParsed = {
         message_id: item.getAttribute('data-message-id') || item.getAttribute('data-id') || item.id || `sys:${sysText}`,
         sender_type: SENDER.SYSTEM,
         text: sysText,
@@ -613,6 +618,7 @@ const hooks = {
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
+      return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.TIKTOK, sysText));
     }
     // ② 内容提取
     const { msgType, mediaUrl, text } = extractMessageContent(item);
@@ -698,6 +704,21 @@ const hooks = {
     findInput: findInputEl,
     findSend: findSendButton,
     getAccount: getAccountId,
+    log,
+  }),
+  // M-6 followUser（模拟点击 Follow/Follow back）：服务端策略触发（默认关），
+  // adapter.followUser 统一风控后分派。按钮只在 DM header 容器内找；
+  // following/friends/pending 等已关注态词表命中绝不点击（toggle 防误取关）。
+  // 词表与容器为 fixture 口径，真机未校准。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.TIKTOK,
+    channelLabel: 'TikTok',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="dm-new-chatbox"], [class*="chat-header" i], [class*="ChatHeader" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [data-e2e*="follow" i], [class*="follow" i], [class*="Follow" i]', root);
+    },
+    clickFn: simulateRealClick,
     log,
   }),
 };

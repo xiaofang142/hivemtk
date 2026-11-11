@@ -34,13 +34,36 @@ function parseUnreadFirstChannels(data) {
 }
 
 /**
+ * M-6：解析 capabilities 里的 followUser 自动关注配置。
+ *   follow_user_enabled  bool（参数中心 bridge/follow_user_enabled，默认 false）
+ *   follow_user_channels JSON 字符串数组（bridge/follow_user_channels）
+ * 字段缺失/解析失败 = 默认关（扩展侧永不执行关注动作）。
+ */
+function parseFollowUserCapabilities(data) {
+  const fallback = { follow_user_enabled: false, follow_user_channels: [] };
+  try {
+    let channels = data ? data.follow_user_channels : null;
+    if (typeof channels === 'string') {
+      try { channels = JSON.parse(channels); } catch (_) { channels = []; }
+    }
+    if (!Array.isArray(channels)) channels = [];
+    return {
+      follow_user_enabled: !!(data && data.follow_user_enabled === true),
+      follow_user_channels: channels.filter((ch) => typeof ch === 'string' && ch),
+    };
+  } catch (_) { return fallback; }
+}
+
+/**
  * getServerCapabilities 查询服务端下行能力。
  * 请求 GET /api/bridge/capabilities，
- * 返回 { sse_enabled, poll_interval_ms, patrol_unread_first_channels }。
- * 请求失败时返回保守的 fallback（sse_enabled: false；未读优先清单 = 空 = 开关关）。
+ * 返回 { sse_enabled, poll_interval_ms, patrol_unread_first_channels,
+ *        follow_user_enabled, follow_user_channels }（M-6）。
+ * 请求失败时返回保守的 fallback（sse_enabled: false；未读优先清单 = 空 = 开关关；
+ * follow_user_enabled = false = 关注动作永不执行）。
  *
  * @param {object} [cfg] 可选配置 { serverUrl, token }
- * @returns {Promise<{sse_enabled: boolean, poll_interval_ms: number, patrol_unread_first_channels: string[]}>}
+ * @returns {Promise<{sse_enabled: boolean, poll_interval_ms: number, patrol_unread_first_channels: string[], follow_user_enabled: boolean, follow_user_channels: string[]}>}
  */
 export async function getServerCapabilities(cfg) {
   const baseUrl = (cfg && cfg.serverUrl) || DEFAULT_USER_SERVER.baseUrl;
@@ -67,7 +90,13 @@ export async function getServerCapabilities(cfg) {
 
     if (!resp.ok) {
       log.warn(`capabilities 响应非 OK: ${resp.status}`);
-      return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs, patrol_unread_first_channels: [] };
+      return {
+        sse_enabled: false,
+        poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs,
+        patrol_unread_first_channels: [],
+        follow_user_enabled: false,
+        follow_user_channels: [],
+      };
     }
     const data = await resp.json();
     return {
@@ -75,10 +104,18 @@ export async function getServerCapabilities(cfg) {
       poll_interval_ms: (data && data.poll_interval_ms) || BRIDGE_THREE_CHANNEL.outboxPollIntervalMs,
       // M-5：参数中心下发的未读优先巡检渠道清单（缺失/解析失败 = 空 = 现行行为）
       patrol_unread_first_channels: parseUnreadFirstChannels(data),
+      // M-6：followUser 自动关注配置（缺失/解析失败 = 默认关）
+      ...parseFollowUserCapabilities(data),
     };
   } catch (err) {
     log.warn('capabilities 查询失败，使用 fallback', err && err.message);
-    return { sse_enabled: false, poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs, patrol_unread_first_channels: [] };
+    return {
+      sse_enabled: false,
+      poll_interval_ms: BRIDGE_THREE_CHANNEL.outboxPollIntervalMs,
+      patrol_unread_first_channels: [],
+      follow_user_enabled: false,
+      follow_user_channels: [],
+    };
   }
 }
 
@@ -95,6 +132,15 @@ export class PollingLoop {
     this._preferSSE = preferSSE !== false; // 默认尝试 SSE
     this._sseCleanups = new Map(); // channel -> cleanup function
     this._sseActive = false;
+  }
+
+  // M-6：follow_user 动作行执行器（adapter.followUser 统一开关/风控/冷却）。
+  // adapter 缺方法（老渠道/测试桩）= 无执行器，动作行留 pending（与未知行同形）。
+  _followActionFor(adapter) {
+    if (adapter && typeof adapter.followUser === 'function') {
+      return (convId) => adapter.followUser({ conversationId: convId });
+    }
+    return undefined;
   }
 
   async start() {
@@ -141,6 +187,7 @@ export class PollingLoop {
         // 通过 startSSEDelivery 启动 SSE 下行
         const cleanup = await startSSEDelivery(ch, accountId, {
           sendOutbound,
+          followAction: this._followActionFor(adapter),
           onMessage: (msg) => {
             log.info(`SSE 下行成功: ${ch}`, {
               msgId: msg.msgId,
@@ -222,6 +269,7 @@ export class PollingLoop {
           : undefined;
         await pollDownlink(ch, accountId, () => this.getConfig(), {
           sendOutbound,
+          followAction: this._followActionFor(adapter),
           sendOutboundTimeoutMs: BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs,
           outboxBatchSize: BRIDGE_THREE_CHANNEL.outboxBatchSize,
         });

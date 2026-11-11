@@ -8,6 +8,11 @@ import {
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
+// M-6 新用户（非关注好友）识别：tab 归属（未关注人消息）打标 + followUser hook。
+// UNFOLLOWED_TAB 选择器此前为死定义（无引用），本刀接线为消息打标的归属判据。
+// 激活态判定 fixture 口径、真机未校准：判不出激活态 → 不打标（宁缺勿错）。
+import { applyFollowSignal, followSignalFromSystemText, FOLLOW_SIGNAL_SOURCES } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 
 const log = createLogger('bilibili', CHANNELS.BILIBILI);
 
@@ -245,10 +250,33 @@ function directionOf(item) {
   return FRONTEND_DEFAULT_SENDER_TYPE;
 }
 
+// activeTabIsUnfollowed 判定「未关注人消息」tab 是否处于激活态（M-6）。
+// UNFOLLOWED_TAB 选择器（[title='未关注人消息']）2026-11-10 审计登记为死定义，
+// 本刀接线：激活态 = tab 自身/最近容器 class 命中 active/selected/current/checked，
+// 或 aria-selected=true。fixture 口径（真机未校准）：判不出激活态一律返回 false
+// ——打标 fail-safe，宁缺勿错（不激活误标 = 误伤；这里不可能误标）。
+function activeTabIsUnfollowed() {
+  try {
+    const tab = qs(SEL.UNFOLLOWED_TAB);
+    if (!tab) return false;
+    const host = (tab.closest && tab.closest('[class*="tab" i], [class*="item" i], li')) || tab;
+    const cls = `${(host && host.className) || ''} ${(tab && tab.className) || ''}`;
+    if (/\b(active|selected|current|checked)\b/i.test(cls)) return true;
+    if (host && host.getAttribute && String(host.getAttribute('aria-selected') || '') === 'true') return true;
+    if (tab.getAttribute && String(tab.getAttribute('aria-selected') || '') === 'true') return true;
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 function parseMessageItem(item) {
   if (!item) return null;
+  // M-6：当前激活 tab 为「未关注人消息」⇒ 该会话归属未关注用户，全部消息打标
+  // （来源 unfollowed_tab；只加 extra 字段，sender_type/msg_type 语义不变）。
+  const tabSignal = activeTabIsUnfollowed() ? FOLLOW_SIGNAL_SOURCES.TAB : null;
   if (isSystemMessage(item)) {
-    return {
+    const sysParsed = {
       message_id: item.getAttribute('data-id') || item.id || `sys:${cleanText(item).slice(0, 40)}`,
       sender_type: SENDER.SYSTEM,
       text: cleanText(item),
@@ -262,6 +290,8 @@ function parseMessageItem(item) {
       timestamp: Date.now(),
       raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
     };
+    applyFollowSignal(sysParsed, tabSignal || followSignalFromSystemText(CHANNELS.BILIBILI, sysParsed.text));
+    return sysParsed;
   }
   const textEl = item.querySelector(SEL.TEXT) || item;
   const text = cleanText(textEl);
@@ -273,7 +303,7 @@ function parseMessageItem(item) {
   const msgType = !text && mediaUrl ? 'image' : 'text';
   if (!text && !mediaUrl) return null;
   const senderType = directionOf(item);
-  return {
+  const parsed = {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,
     sender_type: senderType,
     text: text || '[图片]',
@@ -288,6 +318,7 @@ function parseMessageItem(item) {
     timestamp: Date.now(),
     raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
   };
+  return applyFollowSignal(parsed, tabSignal);
 }
 
 function getMessageItems() {
@@ -378,9 +409,22 @@ const hooks = {
       }
     } catch (_) {  }
   },
+  // M-6 followUser（模拟点击关注）：服务端策略触发（默认关）。与渠道 sendText
+  // 同一点击原语（el.click()）；已关注态词表命中绝不点击。fixture 口径，真机未校准。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.BILIBILI,
+    channelLabel: 'B站',
+    findCandidates: () => {
+      const scope = qs('.dialog, [class*="dialog" i], [class*="message-header" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i]', root);
+    },
+    clickFn: (el) => { try { el.click(); } catch (_) {  } },
+    log,
+  }),
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isBiliHost, isMessageCenterUrl, detectUnread };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isBiliHost, isMessageCenterUrl, detectUnread, activeTabIsUnfollowed };
 
 export function buildBilibiliAdapter() {
   return new BaseAdapter({

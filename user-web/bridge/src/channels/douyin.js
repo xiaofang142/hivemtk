@@ -6,6 +6,10 @@ import { makeSendMediaHook } from '../core/media-inject.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
+// M-6 新用户（非关注好友）识别：系统文案命中打标（随消息 extra 上报，不改 system 归类）
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+// M-6 followUser 渠道 hook 工厂（真机未校准，fixture 口径；默认开关关）
+import { createFollowUserHook } from '../core/follow-action.js';
 
 const log = createLogger('douyin', CHANNELS.DOUYIN);
 
@@ -636,7 +640,10 @@ const hooks = {
     if (isListNoise(item)) return null;
     if (isSystemMessage(item)) {
       const sysText = cleanText(item);
-      return {
+      // M-6：关注关系系统文案（互相关注/已添加好友/关注了你…）命中时打
+      // new_user_unfollowed 标记（只加 extra 字段；msg_type='system' 归类与
+      // 「系统消息不触发 AI」现状不变）。仅在已判 system 的分支打标 = 零误伤面。
+      const sysParsed = {
         message_id: item.getAttribute('data-id') || item.getAttribute('data-msg-id') || item.id || `sys:${sysText}`,
         sender_type: SENDER.SYSTEM,
         text: sysText,
@@ -650,6 +657,7 @@ const hooks = {
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
+      return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.DOUYIN, sysText));
     }
     // 先判定消息类型（问题 3：非文字消息）。
     const { msgType, mediaUrl, text } = extractMessageContent(item);
@@ -733,6 +741,21 @@ const hooks = {
     getAccount: getAccountId,
     log,
     clickFn: simulateRealClick,
+  }),
+  // M-6 followUser（模拟点击关注/回关）：服务端策略（bridge/follow_user_enabled，默认关）
+  // 经 outbox msg_type=follow_user 动作行触发，adapter.followUser 统一做开关/限速/
+  // 会话冷却后分派到这里。按钮只在聊天 header 范围内找（已关注/互相关注态词表命中
+  // 绝不点击——部分平台关注按钮是 toggle）。候选选择器为 fixture 口径，真机未校准。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.DOUYIN,
+    channelLabel: '抖音',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="chat-header"], [class*="chat-header" i], [class*="ChatHeader" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i], [data-e2e*="follow" i]', root);
+    },
+    clickFn: simulateRealClick,
+    log,
   }),
 };
 

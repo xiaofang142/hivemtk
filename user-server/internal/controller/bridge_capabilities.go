@@ -43,7 +43,9 @@ func NewBridgeCapabilitiesController() *BridgeCapabilitiesController {
 //	  "sse_enabled":      true|false,
 //	  "poll_interval_ms": 1500,
 //	  "sse_heartbeat_ms": 15000,
-//	  "patrol_unread_first_channels": ["douyin","tiktok","xianyu","kuaishou"]
+//	  "patrol_unread_first_channels": ["douyin","tiktok","xianyu","kuaishou"],
+//	  "follow_user_enabled":          false,
+//	  "follow_user_channels":         ["douyin","tiktok","bilibili"]
 //	}
 //
 // 用 response.Envelope 直写裸 schema 而非 response.Success：此端点被前端桥接模块调用，
@@ -56,5 +58,10 @@ func (c *BridgeCapabilitiesController) GetCapabilities(ctx *gin.Context) {
 		"sse_heartbeat_ms": 15000,
 		// M-5：巡检未读优先渠道清单。清单外渠道（或旧扩展不认识该字段）保持现行行为。
 		"patrol_unread_first_channels": service.PatrolUnreadFirstChannels(ctx.Request.Context()),
+		// M-6（2026-11-11）：followUser 自动关注配置。默认 false（参数中心
+		// bridge/follow_user_enabled）；false 时扩展对 follow_user 动作行一律
+		// 跳过收口（fail-safe：不可逆写动作缺字段/拉取失败=不执行）。
+		"follow_user_enabled":  service.FollowUserEnabled(ctx.Request.Context()),
+		"follow_user_channels": service.FollowUserChannels(ctx.Request.Context()),
 	})
 }

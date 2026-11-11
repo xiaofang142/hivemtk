@@ -473,9 +473,15 @@ export function startBridge(channel, buildAdapter) {
     //   异步拉取不阻塞启动：patrol() 每轮实时读开关值，拉到后下一轮生效；rescan 间隔
     //   由 setPatrolUnreadFirstChannels 在开关翻转时重排。拉取失败/字段缺失 = 开关关
     //   = 现行顺序遍历（fail-open）。
+    // M-6（2026-11-11）：followUser 自动关注开关同路径下发（bridge/follow_user_enabled，
+    //   默认 false）。拉取失败/字段缺失 = 默认关 = 关注动作永不执行（fail-safe：
+    //   与 M-5 相反，这里 fail-closed——不可逆的写动作宁可不执行）。
     try {
       getServerCapabilities(getConfig())
-        .then((caps) => { try { adapter.setPatrolUnreadFirstChannels(caps.patrol_unread_first_channels || []); } catch (_) {  } })
+        .then((caps) => {
+          try { adapter.setPatrolUnreadFirstChannels(caps.patrol_unread_first_channels || []); } catch (_) {  }
+          try { adapter.setFollowUserEnabled(caps.follow_user_enabled === true, caps.follow_user_channels || []); } catch (_) {  }
+        })
         .catch(() => {  });
     } catch (_) {  }
 

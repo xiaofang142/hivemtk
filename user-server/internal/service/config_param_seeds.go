@@ -110,6 +110,19 @@ func DefaultParamDefs() []ParamDef {
 				"默认仅含徽章检测结构可靠的 douyin/tiktok/xianyu/kuaishou；xiaohongshu 徽章 DOM 不稳定默认关闭，jd/bilibili/weibo/pdd 未真机校准默认关闭。" +
 				"渠道未接线或 detectUnread 异常时扩展侧自动 fail-open 回顺序遍历。",
 			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","xianyu","kuaishou"]`, Category: "桥接"},
+		// M-6（2026-11-11）：新用户（非关注好友）识别已随消息 extra 上报并登记观测（恒开，无开关）；
+		// 「自动关注/回关」动作默认关——关注是不可逆对外写动作且各渠道关注按钮词表未经真机校准。
+		{Group: "bridge", Key: "follow_user_enabled", Name: "自动关注/回关动作总开关",
+			Description: "true ＝ 命中「新用户（非关注好友）」信号且信号可动作时，服务端经 outbox 下发 follow_user 动作行，扩展模拟点击关注/回关。" +
+				"false（默认）＝ 只登记观测（bridge_follow_events 首触事件），永不触发关注动作。" +
+				"识别信号登记与消息链路/AI 回复完全解耦；动作行不阻塞 AI 回复主链路（异步旁路 + 扩展侧独立 ack）。" +
+				"开启前置条件：先完成各渠道关注按钮词表真机校准（当前为 fixture 口径）。",
+			ValueType: "bool", Risk: "warning", DefaultValue: "false", Category: "桥接"},
+		{Group: "bridge", Key: "follow_user_channels", Name: "自动关注动作渠道清单",
+			Description: "JSON 字符串数组：允许自动关注动作的渠道编码（与 follow_user_enabled 双闸，均满足才触发），经 GET /api/bridge/capabilities 下发给扩展。" +
+				"扩展侧还有第三道闸：渠道 hooks 未实现 followUser（如 xianyu 好友制无关注模型）或渠道不在清单内，动作行按 delivered 收口跳过。" +
+				"默认仅含关注按钮模型成立且已按 fixture 口径实现 hook 的 douyin/tiktok/bilibili；开启前务必真机校准关注按钮词表。",
+			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","bilibili"]`, Category: "桥接"},
 
 		{Group: "knowledge", Key: "default_top_k", Name: "默认 Top-K 检索数",
 			Description: "向量检索返回的候选文档数",

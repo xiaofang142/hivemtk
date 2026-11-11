@@ -178,6 +178,22 @@ export const RESCAN_DEFAULTS = Object.freeze({
 });
 
 // =============================================================
+// 4c) followUser 自动关注动作（M-6，2026-11-11）
+// =============================================================
+// 语义：服务端策略（参数中心 bridge/follow_user_enabled，默认 false）下发
+//   msg_type=follow_user 的 outbox 动作行后，adapter.followUser 在目标会话模拟点击
+//   关注/回关按钮。动作不阻塞 AI 回复主链路（downlink 独立处理 + 独立 ack）。
+// 风控：不另建通道——点击动作复用 adapter.rateLimiter（拟人最小间隔/账号桶/会话桶）
+//   与 globalSendWaitMs 跨页全局间隔；本默认值只补一段「关注动作会话冷却」：
+//   同一会话在窗口内只执行一次（重复动作行/ack 丢包重推时跳过并原样 ack delivered）。
+//   followUserEnabled 默认 false：caps 缺字段/拉取失败/服务端开关未开，一律拒绝执行。
+export const FOLLOW_ACTION_DEFAULTS = Object.freeze({
+  sessionCooldownMs: 30 * 60 * 1000,
+  // 动作行执行超时（含 openConversation 切会话 + 拟人延迟 + 点击）
+  actionTimeoutMs: 20000,
+});
+
+// =============================================================
 // 5) 历史回填宽限期（per-channel，2026-08-05 审计 P0/A6）
 // =============================================================
 // 语义：会话初次挂载/切换后的一段时间内，新出现的客户消息仅回填历史（落库），

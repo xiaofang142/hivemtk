@@ -58,6 +58,10 @@ var coreOwnedTables = []string{
 	// 页面/接口面（读数是运营排障用）。挂到某个模块下就意味着"关掉那个模块后
 	// 这张表不再被清理"，而写入方（扩展上报口）根本不受模块闸管。
 	"bridge_selector_health",
+	// M-6（2026-11-11）：新用户（非关注好友）首触事件 + 自动关注动作审计。
+	// 同 bridge_selector_health 口径：写入方是桥接入站链路（inbox_ingress 钩子，
+	// 消息入库的旁路登记），不随任何可售模块开关；归 core 随基座常在。
+	"bridge_follow_events",
 	// 租户与模块化本体
 	"tenants", "tenant_modules", "module_sync_logs", "module_orders",
 	"tenant_subscription_mirror",

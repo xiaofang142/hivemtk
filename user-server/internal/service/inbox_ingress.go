@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"strconv"
@@ -134,6 +136,10 @@ type InboxIngressService struct {
 	inboxSvc      *InboxService
 	leadMiningSvc *Service
 
+	// bridgeFollow 新用户（非关注好友）事件登记与自动关注策略（M-6）。
+	// 为 nil 时（未装配/单测）识别信号不打扰任何既有路径，行为与接入前一致。
+	bridgeFollow *BridgeFollowService
+
 	// pendingOutbound 延迟出站队列探针：查「该会话是否还有一条排队待投的回复」。
 	// 为 nil 时（未接库/单测）视为无排队，行为与接入前一致。
 	pendingOutbound *repository.DelayedOutboundRepository
@@ -190,6 +196,107 @@ func (s *InboxIngressService) SetInboxService(svc *InboxService) {
 
 func (s *InboxIngressService) SetLeadMining(svc *Service) {
 	s.leadMiningSvc = svc
+}
+
+// SetBridgeFollowService 注入新用户（非关注好友）登记与自动关注策略（M-6）。
+func (s *InboxIngressService) SetBridgeFollowService(svc *BridgeFollowService) {
+	if s == nil {
+		return
+	}
+	s.bridgeFollow = svc
+}
+
+// followSignalOfEvent 从事件 Extra 提取 M-6 关注信号（未标记返回空串）。
+// 键经 channelgw 显式白名单（IngestExtraAllowKeys）透传，键名与扩展端 follow-signal.js 一致。
+func followSignalOfEvent(event *model.MessageEvent) (marked bool, signal string) {
+	if event == nil || event.Extra == nil {
+		return false, ""
+	}
+	if v, ok := event.Extra["new_user_unfollowed"]; ok {
+		switch t := v.(type) {
+		case bool:
+			marked = t
+		case string:
+			marked = t == "true" || t == "1"
+		}
+	}
+	if sv, ok := event.Extra["new_user_signal"].(string); ok {
+		signal = sv
+	}
+	if marked && signal == "" {
+		signal = model.FollowSignalUnfollowedTab
+	}
+	return marked, signal
+}
+
+// maybeRegisterNewUserUnfollowed M-6 钩子：识别信号登记 + 策略触发自动关注。
+//
+// 调用点：HandleIngressMessage / handleIngressSingleForBatch 两路 persistMessage
+// 成功之后（含 system 消息——信号主要由系统文案承载，system 归类与「不触发 AI」
+// 现状不变，本钩子只登记/触发，不影响消息流向）。
+//
+// 硬性边界：
+//   - 未装配 bridgeFollow / 未标记 → no-op；
+//   - 登记/触发任何一步失败只留日志（fail-open），绝不影响入库结果与 AI 触发；
+//   - 关注动作经 utils.SafeGo 异步旁路（panic-safe），默认开关关时连 goroutine 都不起。
+func (s *InboxIngressService) maybeRegisterNewUserUnfollowed(ctx context.Context, event *model.MessageEvent) {
+	if s == nil || s.bridgeFollow == nil || event == nil {
+		return
+	}
+	marked, signal := followSignalOfEvent(event)
+	if !marked {
+		return
+	}
+	if _, err := s.bridgeFollow.RegisterUnfollowedFirstTouch(ctx, event, signal); err != nil {
+		logger.Ctx(ctx).Warn().
+			Str("module", "bridge_follow").
+			Str("channel", event.Channel).
+			Str("conv_id", event.ConversationID).
+			Err(err).
+			Msg("[BridgeFollow] 首触事件登记失败（不影响消息链路）")
+	}
+	// 策略预检（默认关）：开关关 / 渠道不在清单 / 信号不可动作（互关已建立）→ 不触发。
+	if !FollowUserEnabled(ctx) {
+		return
+	}
+	allowed := FollowUserChannels(ctx)
+	if !containsChannelName(allowed, event.Channel) {
+		return
+	}
+	if !FollowSignalActionable(signal) {
+		return
+	}
+	accountID := resolveAccountID(event)
+	convID := event.ConversationID
+	channel := event.Channel
+	senderName := event.SenderName
+	sourceEventID := event.EventID
+	// 异步旁路（panic-safe）：DeliverBridgeOutboundMedia 落库 + SSE 推送都在这里做，
+	// 不阻塞 ingest 主链路。ctx 派生保留租户、丢请求取消（动作行必须落库成功）。
+	utils.SafeGo(ctx, "bridge_follow.trigger", func(_ context.Context) {
+		triggerCtx := tenant.BackgroundWithTenant(ctx)
+		if err := s.bridgeFollow.TriggerFollowUser(triggerCtx, channel, accountID, convID, senderName, signal, sourceEventID, "first_touch"); err != nil {
+			logger.Ctx(triggerCtx).Warn().
+				Str("module", "bridge_follow").
+				Str("channel", channel).
+				Str("conv_id", convID).
+				Err(err).
+				Msg("[BridgeFollow] 关注动作触发失败（留痕于日志，不影响消息链路）")
+		}
+	})
+}
+
+// containsChannelName 渠道清单包含判定（空清单 = 全关）。
+func containsChannelName(list []string, name string) bool {
+	if len(list) == 0 || name == "" {
+		return false
+	}
+	for _, c := range list {
+		if c == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *InboxIngressService) IsSessionHumanLocked(ctx context.Context, sessionID string, recentUserMsg ...string) (bool, error) {
@@ -430,6 +537,8 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		if err := s.persistMessage(ctx, event); err != nil {
 			return result, fmt.Errorf("持久化消息失败: %w", err)
 		}
+		// M-6：识别信号登记（人工接管中的会话同样登记首触，供运营观测）
+		s.maybeRegisterNewUserUnfollowed(ctx, event)
 		return result, nil
 	}
 
@@ -455,6 +564,9 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 			if err := s.persistMessage(ctx, event); err != nil {
 				return result, fmt.Errorf("持久化消息失败: %w", err)
 			}
+			// M-6：重复消息的信号登记是幂等的（dedup_key 唯一索引）——
+			// 仍走一遍，防「首触消息被前序拦截判定吃掉」的极端时序漏登记。
+			s.maybeRegisterNewUserUnfollowed(ctx, event)
 		}
 		return result, nil
 	}
@@ -466,6 +578,10 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		return result, fmt.Errorf("持久化消息失败: %w", err)
 	}
 	result.Accepted = true
+
+	// M-6：识别信号登记 + 策略触发自动关注（异步旁路；system 消息同样登记，
+	// 但 system 归类与「不触发 AI」现状不变——见下方 isSystemMsg 早退分支）。
+	s.maybeRegisterNewUserUnfollowed(ctx, event)
 
 	if isSystemMsg {
 		result.QueuedForAI = false
@@ -927,6 +1043,8 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		if err := s.persistMessage(ctx, event); err != nil {
 			return result, fmt.Errorf("持久化消息失败: %w", err)
 		}
+		// M-6：批次路径同钩子（幂等，见单条路径注释）
+		s.maybeRegisterNewUserUnfollowed(ctx, event)
 		return result, nil
 	}
 
@@ -950,6 +1068,8 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 			if err := s.persistMessage(ctx, event); err != nil {
 				return result, fmt.Errorf("持久化消息失败: %w", err)
 			}
+			// M-6：批次路径同钩子（幂等）
+			s.maybeRegisterNewUserUnfollowed(ctx, event)
 		}
 		return result, nil
 	}
@@ -961,6 +1081,9 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		return result, fmt.Errorf("持久化消息失败: %w", err)
 	}
 	result.Accepted = true
+
+	// M-6：批次主落库后同钩子（幂等；system 消息同样登记，AI 触发现状不变）
+	s.maybeRegisterNewUserUnfollowed(ctx, event)
 
 	if isSystemMsg {
 		result.QueuedForAI = false

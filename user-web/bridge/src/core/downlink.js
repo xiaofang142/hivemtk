@@ -353,6 +353,9 @@ export function dmAwareConvId(row, fallbackConvId) {
 //   ③ 每次下发转发消息先清空输入框内容——见 xhs.js sendText fillContentEditable 调用前先清空。
 export async function pollDownlink(channel, accountId, getConfig, options = {}) {
   const sendOutbound = options && typeof options.sendOutbound === 'function' ? options.sendOutbound : null;
+  // M-6：follow_user 动作行执行器（adapter.followUser）；未提供 = 旧调用方，动作行留 pending。
+  const followAction = options && typeof options.followAction === 'function' ? options.followAction : null;
+  const followActionTimeoutMs = (options && options.followActionTimeoutMs) || BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs;
   // 下发转发超时（实现 BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs）：sendOutbound 卡死时
   // 不应永久阻塞整个轮询，超时则视为失败，下个周期重试。
   const sendTimeoutMs = options && options.sendOutboundTimeoutMs
@@ -391,10 +394,18 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
 
   // —— 按 conversation_id 分组（同会话内保留原顺序以维持单会话限速语义）——
   const groups = new Map();
+  // M-6：follow_user 动作行不进文本下发队列（不阻塞 AI 回复主链路），单独收集，
+  // 文本组全部处理完后再执行（文本优先）。
+  const followRows = [];
   // 批11：cache 命中但服务端仍下发的行 → 补确认（见 reAckSentDuplicates 注释）
   const dupEntries = [];
   for (const m of messages) {
     if (!m || !m.msg_id) continue;
+    // M-6：动作行分型（先于 !raw 判空——动作行 content 为空，走文本路径会被静默跳过）
+    if (((m.msg_type || '').toLowerCase()) === FOLLOW_ACTION_MSG_TYPE) {
+      followRows.push(m);
+      continue;
+    }
     // SentCache key 必须用 msg_id|conversation_id 复合键：
     //   AI 回复 msg_id = contentHash(channel, content)，不含 conversation_id（patrol 回环去重需要）。
     //   跨会话同 content 的 AI 回复 msg_id 相同，若只用 msg_id 做 key，
@@ -597,6 +608,26 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
       }
     }
   }
+  // —— M-6：follow_user 动作行（文本组全部处理完后执行；文本优先 = 不阻塞主链路）——
+  for (const m of followRows) {
+    const convId = dmAwareConvId(m, m.conversation_id || '_unknown_');
+    try {
+      await processFollowActionRow({
+        cred: { serverUrl, channel, accountId, token, tenantCode },
+        msgId: m.msg_id,
+        conversationId: m.conversation_id || '',
+        convId,
+        followAction,
+        cache,
+        cacheKey: `${m.msg_id}|${convId}`,
+        label: `[follow_user] ${channel}:${convId}`,
+        timeoutMs: followActionTimeoutMs,
+      });
+    } catch (e) {
+      log.warn(`follow_user 动作行处理异常（留 pending 重推）`, { channel, conv_id: convId, err: String(e && e.message || e) });
+    }
+  }
+
   await cache.flush();
   if (allAckIds.length) log.info(`下行完成: ${channel} 共 ${allAckIds.length} 条已 ack`, { convs: groups.size });
 }
@@ -740,6 +771,107 @@ async function ackTargetMissing(cred, msgId, conversationId, label) {
   } catch (_) {
     return false;
   }
+}
+
+// =============================================================
+// M-6（2026-11-11）：follow_user 动作行（自动关注/回关）
+// =============================================================
+// 服务端策略（参数中心 bridge/follow_user_enabled，默认关）经 DeliverBridgeOutbound
+// 入队 msg_type=follow_user、content 为空的 outbox 行。HTTP 轮询与 SSE 双传输按同一
+// helper 收口：SentCache/跨页互斥 → adapter.followUser（开关/风控/冷却在 adapter 内）
+// → ack delivered / failed。动作不进文本下发队列，不阻塞 AI 回复主链路。
+export const FOLLOW_ACTION_MSG_TYPE = 'follow_user';
+
+// follow_user 终态失败 ack（与 ackTargetMissing 同形：status=failed 停止重推，留痕）。
+async function ackFollowTerminal(cred, msgId, conversationId, label) {
+  if (!msgId) return false;
+  try {
+    const res = await ackOutbox(cred, [msgId], {
+      label,
+      ...(conversationId && conversationId !== '_unknown_'
+        ? { items: [{ msg_id: msgId, conversation_id: conversationId }] }
+        : {}),
+      status: BRIDGE_PROTOCOL_V2.TERMINAL.FAILED,
+    });
+    return !!(res && res.status === 'ok');
+  } catch (_) {
+    return false;
+  }
+}
+
+// processFollowActionRow 处理一条 follow_user 动作行（两种传输共用）。
+// 返回值仅用于日志/测试：{ delivered | skipped | failed | rateLimited | noExecutor | ackFailed }
+export async function processFollowActionRow({
+  cred, msgId, conversationId, convId, followAction, cache, cacheKey, label, timeoutMs,
+}) {
+  const outcome = await withOutboundLock(cacheKey, async () => {
+    await cache.refresh();
+    if (cache.has(cacheKey)) return { skipped: true };
+    if (!followAction) {
+      log.warn('follow_user 动作行无执行器（旧扩展/未接线），留 pending（与未知行同形）', {
+        channel: cred.channel, conv_id: convId, msg_id: msgId,
+      });
+      return { noExecutor: true };
+    }
+    let result = null;
+    try {
+      result = await withTimeout(
+        Promise.resolve(followAction(convId)),
+        timeoutMs || BRIDGE_THREE_CHANNEL.sendOutboundTimeoutMs,
+        `followAction(${cred.channel}:${convId})`
+      );
+    } catch (_) {
+      // result 保持 null（超时/异常 = 视为失败，走 failed ack 留痕）
+    }
+    // B4 同口径：日志只带键与状态位，不带内容（动作行本无内容）。
+    log.debug('followAction 结果', {
+      channel: cred.channel, conv_id: convId, msg_id: msgId,
+      ok: !!(result && result.ok),
+      skipped: result && result.skipped,
+      rateLimited: !!(result && result.rateLimited),
+      notFound: !!(result && result.notFound),
+      error: result && result.error,
+    });
+    if (result && result.ok) {
+      cache.add(cacheKey);
+      await cache.flush();
+      return { delivered: true };
+    }
+    if (result && result.skipped) {
+      // adapter 明确跳过（disabled/no-hook/channel-not-allowed/busy/cooldown）：
+      // 决策已定，重推不会改变结果 → 原样收口 delivered 防重推死循环（warn 已留痕）。
+      cache.add(cacheKey);
+      await cache.flush();
+      return { skipped: true };
+    }
+    if (result && result.rateLimited) return { rateLimited: true }; // 留 pending 重推（与文本行一致）
+    if (result && result.notFound) return { notFound: true };
+    return { failed: true, reason: (result && result.error) || 'follow_action_failed' };
+  });
+
+  if (outcome.delivered || outcome.skipped) {
+    const ackRes = await ackOutbox(cred, [msgId], {
+      label,
+      ...(conversationId && conversationId !== '_unknown_'
+        ? { items: [{ msg_id: msgId, conversation_id: conversationId }] }
+        : {}),
+    });
+    if (!ackRes || ackRes.status !== 'ok') {
+      addPendingAck(cred.channel, msgId, 'follow_ack_failed', conversationId || '');
+      return { ...outcome, ackFailed: true };
+    }
+    return outcome;
+  }
+  if (outcome.notFound || outcome.failed) {
+    const acked = await ackFollowTerminal(cred, msgId, conversationId, `${label || '[follow_user failed]'} ${cred.channel}:${convId}`);
+    if (!acked) {
+      addPendingAck(cred.channel, msgId, `follow_failed_ack_${outcome.notFound ? 'notfound' : 'failed'}`, conversationId || '');
+      return { ...outcome, ackFailed: true };
+    }
+    return outcome;
+  }
+  // rateLimited / noExecutor：不 ack（留 pending 重推）
+  return outcome;
 }
 
 // =============================================================
@@ -1001,6 +1133,25 @@ export async function startSSEDelivery(channel, accountId, handlers) {
             // 批11：主动私信与轮询同源重映射——dbConvId 是 DB 行归属（ack 用），
             // convId 是页面会话定位键（打开会话/入队/发送用）。二者只在 DM 场景分叉。
             const convId = dmAwareConvId(data, dbConvId);
+
+            // M-6：follow_user 动作行与轮询路径同一 helper 收口（不进文本下发队列）。
+            if (((data.msg_type || '').toLowerCase()) === FOLLOW_ACTION_MSG_TYPE) {
+              try {
+                await processFollowActionRow({
+                  cred: { serverUrl, channel, accountId, token, tenantCode },
+                  msgId: data.msg_id || msgId,
+                  conversationId: data.conversation_id || '',
+                  convId,
+                  followAction: handlers.followAction,
+                  cache,
+                  cacheKey: `${msgId}|${convId}`,
+                  label: `[SSE follow_user] ${channel}:${convId}`,
+                });
+              } catch (e) {
+                log.warn('SSE follow_user 动作行处理异常（留 pending 重推）', { channel, conv_id: convId, err: String(e && e.message || e) });
+              }
+              return;
+            }
 
             // SentCache 防重（复合键：msg_id|conversation_id）
             const cacheKey = `${msgId}|${convId}`;

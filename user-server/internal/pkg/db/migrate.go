@@ -141,6 +141,11 @@ func allModels() []any {
 		// tenancyidx.Normalize 复合化为 (tenant_id, app_id) / (tenant_id, msg_id)。
 		&model.WechatAccount{},
 		&model.WechatMessage{},
+		// BridgeFollowEvent（表 bridge_follow_events，M-6 2026-11-11）：新用户（非关注好友）
+		// 首触事件 + 自动关注动作审计。dedup_key 唯一索引经 tenancyidx.Normalize 复合化为
+		// (tenant_id, dedup_key)——首触幂等键在租户内唯一。此前未登记建表 ⇒ 首触登记全部
+		// 报 relation does not exist（只留日志不影响消息链路），运营观测落空。
+		&model.BridgeFollowEvent{},
 		&model.TelegramAccount{},
 		&model.QQAccount{},
 		&model.TelegramGroupGate{},

@@ -134,9 +134,17 @@ const (
 // 扩展端生产者（驱动/适配器负责写入这些键）属 CH-16 刀；本刀只修服务端通路与词表。
 const IngestExtraAllowPrefix = "ctx."
 
-// IngestExtraAllowKeys ctx. 前缀之外的显式透传白名单。当前为空：CH-16 扩展生产者落地前
-// 不保留任何非 ctx. 键位；后续如需放行新键，在此登记并同步补 protocol_extra_test.go 用例。
-var IngestExtraAllowKeys = map[string]struct{}{}
+// IngestExtraAllowKeys ctx. 前缀之外的显式透传白名单。
+// M-6（2026-11-11）登记两个键：扩展端 parseMessageItem 命中「关注关系」系统文案
+// （互相关注/你还不是对方好友/followed you 等）或 bilibili「未关注人消息」tab 归属时，
+// 给消息 extra 打 new_user_unfollowed=true + new_user_signal=<来源>。服务端据此登记
+// 新用户（非关注好友）首触事件并按策略触发自动回关（bridge/follow_user_enabled，默认关）。
+// 键名与扩展端 user-web/bridge/src/core/follow-signal.js 逐字一致，改动两端同步；
+// 登记新键必须同步补 protocol_extra_test.go 用例。
+var IngestExtraAllowKeys = map[string]struct{}{
+	"new_user_unfollowed": {},
+	"new_user_signal":     {},
+}
 
 // ingestExtraServerKeys 服务端固定键：转换层权威写入，线路侧 Extra 不得覆盖。
 // 与 ToEvent/HistoryToEvent 的写入键位逐一对应（account_id/bridge/sender_type/transport/

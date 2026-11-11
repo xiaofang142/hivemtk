@@ -4,13 +4,17 @@ import { makeUnifiedMessage, SENDER, DIRECTION, HISTORY_CONTEXT_WINDOW, PATROL_D
 import { mergeSelectors } from './selector-ai.js';
 import { createSelectorHealthTracker } from './selector-health.js';
 import { simulateRealClick } from './dom.js';
-import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL, RESCAN_DEFAULTS } from './constants.js';
+import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL, RESCAN_DEFAULTS, FOLLOW_ACTION_DEFAULTS } from './constants.js';
 import { withTimeout } from './downlink.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // 批25：出站临界区释放后仍算"忙"的尾巴时长（口径见 constants.js:outboundLingerMs）。
 const OUTBOUND_LINGER_MS = BRIDGE_THREE_CHANNEL.outboundLingerMs;
+
+// M-6：followUser 让路下发的短等上限。关注动作是低优先旁路——主链路（AI 回复下发）
+// 在途时不与之抢单页 DOM，短等后仍忙即跳过（动作行收口+留痕），绝不阻塞下行轮询。
+const FOLLOW_ACTION_YIELD_WAIT_MS = 3000;
 
 
 // 下行告警去抖：下行被全局最小间隔 / 会话未找到拦截时，若每轮轮询都打印会刷屏。
@@ -26,6 +30,33 @@ function throttledWarn(log, key, intervalMs, msg, extra) {
   }
 }
 const WARN_THROTTLE_MS = 15000;
+
+// M-6（2026-11-11）：parsed.extra（渠道打标：new_user_unfollowed 等）与调用方显式
+// extra（如 send_verified 结论位）的合并。只加字段不改语义：两键冲突时调用方
+// （既有调用点）优先；两侧皆空返回 undefined（makeUnifiedMessage 对空 extra 无键输出，
+// 与既有帧形状逐字节一致）。
+function mergeParsedExtra(parsed, callerExtra) {
+  const base = parsed && parsed.extra && typeof parsed.extra === 'object' ? { ...parsed.extra } : null;
+  const over = callerExtra && typeof callerExtra === 'object' ? callerExtra : null;
+  if (!base && !over) return undefined;
+  return { ...(base || {}), ...(over || {}) };
+}
+
+// collectBatchExtra 聚合一批 parsed 的 extra（巡检/会话回填批次里任意一条带
+// new_user_unfollowed 标记即随批透传——信号不因批次合帧而丢失）。
+function collectBatchExtra(items) {
+  let out = null;
+  for (const it of items || []) {
+    const ex = it && it.parsed ? it.parsed.extra : (it ? it.extra : null);
+    if (ex && typeof ex === 'object') {
+      out = out || {};
+      for (const k of Object.keys(ex)) {
+        if (!(k in out)) out[k] = ex[k];
+      }
+    }
+  }
+  return out;
+}
 // 批24：出站回查的文本归一化。平台会在气泡里把 NBSP 换成普通空格、把连续空白折叠、
 // 在两端留换行；不归一化就会把「发出去了、只是渲染差异」判成未见（假红方向，可接受），
 // 但那是纯噪声，所以按空白归一后再比。这里不做包含匹配：长文案被平台分段时空白归一
@@ -115,6 +146,11 @@ export class BaseAdapter {
     // M-5：未读优先巡检的渠道开关集合（来自参数中心，经 /api/bridge/capabilities 下发）。
     //   空集 = 开关关 = 现行顺序遍历。本地 localStorage 覆盖优先级更高（见 _patrolUnreadFirstEnabled）。
     this._unreadFirstChannels = new Set();
+    // M-6：followUser 自动关注动作。默认关（caps 下发 bridge/follow_user_enabled）；
+    //   _followUserAt 为会话级关注冷却表（内存，见 FOLLOW_ACTION_DEFAULTS）。
+    this._followUserEnabled = false;
+    this._followUserChannels = [];
+    this._followUserAt = new Map();
   }
 
   setAccount(account) { this.account = account; }
@@ -426,6 +462,95 @@ export class BaseAdapter {
   //   调 assertConvOrAbort 复核会话归属，漂移就清框中止。不传 = 旧行为（无复核）。
   rawSendText(text, opts) { return this.hooks.sendText ? this.hooks.sendText(text, opts) : Promise.resolve(false); }
   selfTest() { return this.hooks.selfTest ? this.hooks.selfTest() : []; }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // M-6（2026-11-11）：followUser 自动关注/回关动作
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 触发面：服务端策略（参数中心 bridge/follow_user_enabled，默认 false）经 outbox
+  // msg_type=follow_user 动作行下发（HTTP 轮询与 SSE 双传输同形），downlink 分派到此。
+  // 硬性边界：
+  //   - 默认关：caps 未拉到/字段缺失/服务端开关关/渠道不在清单 → 一律拒绝执行；
+  //   - 不阻塞 AI 回复主链路：本方法由 downlink 独立分派，且入口处让路
+  //     （isSendBusy 时短等后跳过，绝不与 sendOutbound 临界区抢单页 DOM）；
+  //   - 复用既有风控：rateLimiter（拟人最小间隔/账号桶/会话桶/会话冷却）+
+  //     globalSendWaitMs 跨页全局间隔 + FOLLOW_ACTION_DEFAULTS.sessionCooldownMs
+  //     会话级关注冷却，不另建节奏通道；
+  //   - 失败留痕：结果经 downlink ack（delivered/failed）回写 hub 行终态，
+  //     服务端 bridge_follow_events 审计表登记动作行。
+  setFollowUserEnabled(enabled, channels) {
+    this._followUserEnabled = enabled === true;
+    this._followUserChannels = Array.isArray(channels) ? channels.filter((c) => typeof c === 'string' && c) : [];
+    this.log.info('followUser 开关更新', { enabled: this._followUserEnabled, channels: this._followUserChannels.length });
+  }
+
+  async followUser({ conversationId } = {}) {
+    // 闸1：默认关——caps 缺字段/拉取失败/服务端开关未开，永不执行。
+    if (this._followUserEnabled !== true) {
+      return { ok: false, skipped: 'disabled', via: 'follow_user' };
+    }
+    // 闸2：渠道未实现 followUser hook（如 xianyu 好友制无关注模型）。
+    if (!this.hooks || typeof this.hooks.followUser !== 'function') {
+      return { ok: false, skipped: 'no-hook', via: 'follow_user' };
+    }
+    // 闸3：渠道清单防御（caps 下发的 follow_user_channels）。fail-safe：清单缺省/为空
+    // = 未授权（不可逆写动作，宁可不执行），与服务端 fail-open 默认清单互补——
+    // 服务端保证了清单字段总在，扩展侧拿不到清单只可能是拉取异常。
+    if (!Array.isArray(this._followUserChannels) || !this._followUserChannels.includes(this.channel)) {
+      return { ok: false, skipped: 'channel-not-allowed', via: 'follow_user' };
+    }
+    const conv = String(conversationId || '').trim();
+    if (!conv) return { ok: false, notFound: true, via: 'follow_user' };
+    // 闸4：让路下发——AI 回复主链路优先。sendOutbound 临界区在途/linger 内短等，
+    // 仍忙则跳过（动作行按 delivered 收口，warn 留痕；不重试不阻塞下行轮询）。
+    const yieldBlocker = await this._waitForSwitchWindow(FOLLOW_ACTION_YIELD_WAIT_MS, PATROL_DEFAULTS.switchBlockPollMs);
+    if (yieldBlocker) {
+      this.log.warn('followUser 让路：下发在途，跳过本次关注动作', { conv_id: conv, blocker: yieldBlocker });
+      return { ok: false, skipped: 'busy', via: 'follow_user' };
+    }
+    // 闸5：会话级关注冷却——重复动作行/ack 丢包重推不重复点击（跳过按 delivered 收口）。
+    const lastAt = (this._followUserAt && this._followUserAt.get(conv)) || 0;
+    if (Date.now() - lastAt < FOLLOW_ACTION_DEFAULTS.sessionCooldownMs) {
+      this.log.info('followUser 会话冷却中，跳过', { conv_id: conv });
+      return { ok: true, skipped: 'cooldown', via: 'follow_user' };
+    }
+    // 定位会话：与 sendOutbound 同一原语；目标非当前会话时切换（preemptible:false，
+    // 已过闸4 = 此刻无下发在途，切换不可再让路给巡检，否则点错会话的关注按钮）。
+    const account = this.getAccountId();
+    const current = this.getConversationId();
+    if (current !== conv) {
+      const opened = await this.openConversation(conv, { backfill: false, exact: true, preemptible: false });
+      if (!opened) {
+        return { ok: false, notFound: true, via: 'follow_user' };
+      }
+    }
+    // 闸6：复用既有拟人限速（与文本发送同一条 rateLimiter）。
+    // 'follow_user' 占位作为同文案去重键；拒绝时不重试——rateLimited 交由动作行
+    // 留 pending 重推（与文本 rateLimited 行为一致），其余失败 ack failed 终态。
+    const decision = this.rateLimiter.tryAcquire(this.channel, account, conv, 'follow_user');
+    if (!decision.allowed) {
+      this.log.warn('followUser 被风控拦截', { conv_id: conv, reason: decision.reason });
+      return { ok: false, rateLimited: true, reason: decision.reason, via: 'follow_user' };
+    }
+    const gateWaitMs = await globalSendWaitMs(this.rateLimiter.cfg.minIntervalMs);
+    const waitMs = Math.max(gateWaitMs, decision.waitHintMs || 0);
+    if (waitMs > 0) await sleep(Math.min(waitMs, 5000));
+    let result;
+    try {
+      result = await this.hooks.followUser({ conversationId: conv });
+    } catch (e) {
+      result = { ok: false, error: 'hook_error:' + String((e && e.message) || e) };
+    }
+    if (result && result.ok) {
+      this._followUserAt.set(conv, Date.now());
+      this.rateLimiter.markSent(this.channel, account, conv, 'follow_user');
+      stampGlobalSendAt();
+    } else {
+      this.log.warn('followUser 执行失败（动作行 ack failed 留痕 + 服务端审计登记）', {
+        conv_id: conv, skipped: result && result.skipped, error: result && result.error,
+      });
+    }
+    return { ...(result || { ok: false, error: 'no-result' }), via: 'follow_user' };
+  }
 
   getMessages({ limit = 100 } = {}) {
     this._refreshConvAnchor();
@@ -1401,6 +1526,8 @@ export class BaseAdapter {
       is_group: isGroup,
       group_id: groupId,
       group_name: groupName,
+      // M-6：批次内任一条带 new_user_unfollowed 标记即随巡检帧透传。
+      extra: collectBatchExtra(batch),
       history,
     });
     this.log.info(`巡检上行消息: 会话 ${cid}（${history.length} 轮新消息）`);
@@ -1569,6 +1696,8 @@ export class BaseAdapter {
       is_group: isGroup,
       group_id: groupId,
       group_name: groupName,
+      // M-6：批次内任一条带 new_user_unfollowed 标记即随会话级帧透传。
+      extra: collectBatchExtra(batch),
       history,
     });
     this.log.debug(`回填会话 ${cid}: 1 条会话级消息（${history.length} 轮历史, ${summaryDirection}）`);
@@ -1597,7 +1726,9 @@ export class BaseAdapter {
       // M-2 客户头像链路：实时帧带客户头像（parsed.sender_avatar，1v1 为「对方」头像）。
       sender_avatar: parsed.sender_avatar || '',
       raw: parsed.raw || null,
-      extra,
+      // M-6：parsed.extra（渠道 parseMessageItem 打的 new_user_unfollowed 标记等）
+      // 随帧透传；调用方显式 extra（如批24 send_verified 结论位）优先，同键不覆盖。
+      extra: mergeParsedExtra(parsed, extra),
       history: windowMsgs.map((m) => this._historyItem(m, m.sender_type === SENDER.CUSTOMER ? DIRECTION.INBOUND : DIRECTION.OUTBOUND)),
     });
     this.log.info('上行消息:', (msg.content || `[${msg.msg_type}]`).slice(0, 40));

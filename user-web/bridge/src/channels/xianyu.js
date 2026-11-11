@@ -10,6 +10,10 @@ import {
 import { humanDelay } from '../core/humanize.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
+// M-6 新用户（非关注好友）识别：系统文案（你还不是对方好友/互相关注后/请勿向陌生人…）
+// 命中打标随 extra 上报。闲鱼无「关注」动作模型（好友制），不接 followUser hook；
+// 服务端 follow_user_channels 清单不含 xianyu，策略不会对其下发关注动作。
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
 
 const log = createLogger('xianyu', CHANNELS.XIANYU);
 
@@ -659,7 +663,9 @@ const hooks = {
     if (isListNoise(item)) return null;
     if (isSystemMessage(item)) {
       const sysText = cleanText(item);
-      return {
+      // M-6：陌生人/非好友系统文案命中打 new_user_unfollowed 标记（只加 extra 字段，
+      // system 归类与不触发 AI 现状不变）。仅在已判 system 的分支打标 = 零误伤面。
+      const sysParsed = {
         message_id: item.getAttribute('data-message-id') || item.getAttribute('data-id') || item.id || `sys:${sysText}`,
         sender_type: SENDER.SYSTEM,
         text: sysText,
@@ -673,6 +679,7 @@ const hooks = {
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
+      return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.XIANYU, sysText));
     }
     // ② 内容提取（卡片/图片/语音/视频/链接/撤回/系统）
     const { msgType, mediaUrl, text } = extractMessageContent(item);

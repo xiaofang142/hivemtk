@@ -26,10 +26,12 @@ func TestBridgeCapabilitiesController_IncludesPatrolUnreadFirstChannels(t *testi
 		t.Fatalf("Expected status OK, got %d, body: %s", w.Code, w.Body.String())
 	}
 	var body struct {
-		SseEnabled      bool     `json:"sse_enabled"`
-		PollIntervalMs  int      `json:"poll_interval_ms"`
-		SseHeartbeatMs  int      `json:"sse_heartbeat_ms"`
-		UnreadFirstList []string `json:"patrol_unread_first_channels"`
+		SseEnabled         bool     `json:"sse_enabled"`
+		PollIntervalMs     int      `json:"poll_interval_ms"`
+		SseHeartbeatMs     int      `json:"sse_heartbeat_ms"`
+		UnreadFirstList    []string `json:"patrol_unread_first_channels"`
+		FollowUserEnabled  bool     `json:"follow_user_enabled"`
+		FollowUserChannels []string `json:"follow_user_channels"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("响应体不是合法 JSON：%v body=%s", err, w.Body.String())
@@ -49,6 +51,18 @@ func TestBridgeCapabilitiesController_IncludesPatrolUnreadFirstChannels(t *testi
 	for _, ch := range body.UnreadFirstList {
 		if !want[ch] {
 			t.Errorf("默认清单含意外渠道 %q（xiaohongshu 徽章不稳定、jd/bilibili/weibo/pdd 未校准，均不应默认开）", ch)
+		}
+	}
+	// M-6：followUser 配置字段必须下发，且默认关（参数未装配 = fallback false）
+	if body.FollowUserChannels == nil {
+		t.Fatalf("follow_user_channels 字段缺失：扩展侧关注渠道防御将无法判定")
+	}
+	if body.FollowUserEnabled {
+		t.Errorf("follow_user_enabled 未装配时 = true，期望默认关（false，硬性边界）")
+	}
+	for _, ch := range body.FollowUserChannels {
+		if ch != "douyin" && ch != "tiktok" && ch != "bilibili" {
+			t.Errorf("follow_user_channels 默认清单含意外渠道 %q", ch)
 		}
 	}
 }
