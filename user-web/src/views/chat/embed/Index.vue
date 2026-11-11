@@ -8,6 +8,7 @@
       :widget-color="widgetColor"
       :source="source"
       :card-id="cardId"
+      :initial-welcome="welcomeMessage"
       fullscreen
       @close="onClose"
     />
@@ -47,6 +48,9 @@ const channelTitle = computed(() => String(route.query.title || '在线客服'))
 const widgetColor = computed(() => String(route.query.color || '#1989fa'))
 const source = computed(() => String(route.query.source || ''))
 const cardId = computed(() => String(route.query.card_id || ''))
+// N-20：welcome/lang 经 URL query 生效（原 mcw-config 死协议承诺的三项配置）
+const welcomeMessage = computed(() => String(route.query.welcome || ''))
+const embedLang = computed(() => String(route.query.lang || ''))
 // 渠道标识/配置任一变化整体重挂 ChatWindow：openSession 只在挂载时触发，
 // key 变化才能让新渠道拿到干净会话，而不是复用旧渠道的会话态。
 const widgetKey = computed(() => [channelId.value, channelTitle.value, widgetColor.value, source.value, cardId.value].join('|'))
@@ -75,6 +79,10 @@ const onClose = () => {
 
 onMounted(() => {
   loaded.value = true
+  // N-20：lang 覆盖（embed 独立 i18n 实例，非空才切，i18n 内部对未知 locale 回退）
+  if (embedLang.value) {
+    try { i18n.global.locale.value = embedLang.value } catch { /* 非法 locale 忽略 */ }
+  }
 })
 </script>
 

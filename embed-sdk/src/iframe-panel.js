@@ -115,7 +115,12 @@ export class IframePanel {
     const channelRef = this.getChannelRef()
     // mcwParent（N-6③）：iframe 端 postMessage 的目标 origin 协商参数（hash 内 query），
     // 缺省由 iframe 端回退 document.referrer 推导——消除双端 '*' 通配。
-    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}?mcwParent=${encodeURIComponent(window.location.origin)}#/chat/embed/${encodeURIComponent(channelRef)}`
+    // N-20：welcome/lang 经 URL query 生效（appKey 已走路径参数 getChannelRef）；
+    // query 挂在 hash 内（embed 端 vue-router hash 模式 route.query 只认 hash 内参数）。
+    var extraQ = ''
+    if (this.welcome) extraQ += '&welcome=' + encodeURIComponent(this.welcome)
+    if (this.lang) extraQ += '&lang=' + encodeURIComponent(this.lang)
+    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}?mcwParent=${encodeURIComponent(window.location.origin)}${extraQ}#/chat/embed/${encodeURIComponent(channelRef)}`
     iframe.allow = 'clipboard-write'
     if (this.cspNonce) {
       iframe.setAttribute('nonce', this.cspNonce)
