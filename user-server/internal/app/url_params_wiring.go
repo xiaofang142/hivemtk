@@ -4,8 +4,17 @@ import (
 	"context"
 
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/pkg/metrics"
 	"hivemtk-user/internal/pkg/utils/logger"
 	appsvc "hivemtk-user/internal/service"
+)
+
+// visitorTokenWeakSecretTotal 访客会话 HMAC 密钥启动审计计数（F-6-5①）：
+// 密钥缺失或长度 <32 时 +1，供 /metrics 面观测弱密钥部署面。
+var visitorTokenWeakSecretTotal = metrics.NewCounter(
+	"app_visitor_token_secret_weak_total",
+	"Startup audits where VISITOR_TOKEN_SECRET is missing or shorter than 32 chars",
+	[]string{},
 )
 
 // WireURLsConfigParams 注入 urls 组的 config 侧参数中心取值口
@@ -81,7 +90,7 @@ func WarnIfCloudURLIsBuiltinDefault() {
 		url, source)
 }
 
-// WarnIfVisitorTokenSecretMissing 启动期提示：访客会话 HMAC 密钥未配置。
+// AuditVisitorTokenSecretAtStartup 启动期审计访客会话 HMAC 密钥（缺失/强度不足两档）。
 //
 // 背景（2026-11-10 embed 全链回归实测）：config.yaml 的
 // security.visitor_token_secret 是 `${VISITOR_TOKEN_SECRET:}` 空默认展开——
@@ -91,11 +100,23 @@ func WarnIfCloudURLIsBuiltinDefault() {
 //
 // 定位与 A11 同款：运行期 fail-closed 是正确的安全默认（绝不为漏配放行），
 // 但**沉默失败**必须配一行响亮的启动期告警，写明影响面与消音办法。
-func WarnIfVisitorTokenSecretMissing() {
-	if config.GetAppConfig().Security.VisitorTokenSecret != "" {
-		return
+//
+// F-6-5①（2026-11-11 裁决：轻量强校验）：强度不足（非空但 <32 字符）从「文案建议」
+// 升级为 Error 级启动告警 + metrics 计数（visitorTokenWeakSecretTotal），文案附生成
+// 命令；**不硬拒启动**（既有部署可能已用弱密钥，硬拒=断服），既有密钥平滑轮换。
+// 管理台提示随 N-7 env 闸一并评估（不在本处展开）。
+func AuditVisitorTokenSecretAtStartup() {
+	secret := config.GetAppConfig().Security.VisitorTokenSecret
+	switch {
+	case secret == "":
+		visitorTokenWeakSecretTotal.WithLabel().Inc()
+		logger.Errorf("[chat] VISITOR_TOKEN_SECRET 未配置：访客客服（embed widget）打开会话将全部失败" +
+			"（fail-closed，报「生成 visitor_token 失败: secret 不能为空」）。" +
+			"请设置 env VISITOR_TOKEN_SECRET（建议 32+ 字符随机串）后重启；不使用客服挂件可忽略本行")
+	case len(secret) < 32:
+		visitorTokenWeakSecretTotal.WithLabel().Inc()
+		logger.Errorf("[chat] VISITOR_TOKEN_SECRET 强度不足（当前 %d 字符 < 32）：短密钥显著降低访客 token 的 HMAC 伪造成本。" +
+			"建议轮换：openssl rand -hex 32 生成新密钥写入 env VISITOR_TOKEN_SECRET 后重启" +
+			"（不硬拒启动，既有部署可平滑迁移；不使用客服挂件可忽略本行）", len(secret))
 	}
-	logger.Warnf("[chat] VISITOR_TOKEN_SECRET 未配置：访客客服（embed widget）打开会话将全部失败" +
-		"（fail-closed，报「生成 visitor_token 失败: secret 不能为空」）。" +
-		"请设置 env VISITOR_TOKEN_SECRET（建议 32+ 字符随机串）后重启；不使用客服挂件可忽略本行")
 }

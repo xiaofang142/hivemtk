@@ -289,7 +289,7 @@ func main() {
 
 	// 访客会话 HMAC 密钥漏配 ⇒ embed 全链每请求 fail-closed（2026-11-10 回归实测）：
 	// 同款"沉默失败"告警——运行期安全默认不动，只把根因搬到启动日志里。
-	app.WarnIfVisitorTokenSecretMissing()
+	app.AuditVisitorTokenSecretAtStartup()
 
 	// reporting 组：报表默认窗口天数。点位横跨 repository/controller/geo/
 	// knowledge/ops 等不能反向 import service 的包，走 provider 注入。
