@@ -51,6 +51,9 @@ func (s *stubPlatformClient) MyPurchases(_ context.Context) ([]map[string]any, e
 	return nil, s.err
 }
 func (s *stubPlatformClient) ReportUsage(_ context.Context, _ string, _ int64) error { return s.err }
+func (s *stubPlatformClient) GetCredits(_ context.Context) (map[string]any, error) {
+	return map[string]any{"exists": false, "balance": 0}, s.err
+}
 
 var _ repository.PlatformAPIClient = (*stubPlatformClient)(nil)
 

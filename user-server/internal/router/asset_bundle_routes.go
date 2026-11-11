@@ -57,6 +57,7 @@ func setupAssetMarketRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		market.POST("/sync", h.Sync)
 		market.POST("/report-usage", h.ReportUsage)
 		market.GET("/my-purchases", h.MyPurchases)
+		market.GET("/credits", h.Credits)
 		market.POST("/bind", h.BindToAgent)
 	}
 

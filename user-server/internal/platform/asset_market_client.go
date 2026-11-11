@@ -140,6 +140,21 @@ func (c *AssetMarketClient) MyPurchases(ctx context.Context) ([]map[string]any, 
 	return list, nil
 }
 
+// GetCredits 商户积分余额自查（AM-02）：GET /merchant-api/asset-market/credits。
+// 返回平台 MerchantCreditView（exists/balance/total_topup/total_spent/recent_logs）。
+func (c *AssetMarketClient) GetCredits(ctx context.Context) (map[string]any, error) {
+	var view map[string]any
+	path := "/merchant-api/asset-market/credits?tenant_code=" +
+		url.QueryEscape(TenantCodeFromContext(ctx)) + "&log_limit=10"
+	if err := c.doData("GET", path, nil, &view); err != nil {
+		return nil, err
+	}
+	if view == nil {
+		view = map[string]any{}
+	}
+	return view, nil
+}
+
 // ReportUsage 上报资产使用次数（商户端 → 平台），POST /merchant-api/asset-market/report-usage
 func (c *AssetMarketClient) ReportUsage(ctx context.Context, assetID string, delta int64) error {
 	return c.doData("POST", "/merchant-api/asset-market/report-usage",

@@ -12,6 +12,10 @@ export const purchaseAsset = (data) =>
 export const syncAsset = (data) =>
   http.post('/api/v1/asset-market/sync', data)
 
+// AM-02：商户积分余额自查（透传平台 MerchantCreditView）
+export const getAssetCredits = () =>
+  http.get('/api/v1/asset-market/credits')
+
 export const reportUsage = (data) =>
   http.post('/api/v1/asset-market/report-usage', data)
 

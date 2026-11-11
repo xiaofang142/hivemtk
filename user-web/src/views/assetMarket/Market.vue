@@ -48,6 +48,13 @@
           </el-select>
         </el-form-item>
         <el-form-item>
+          <el-tag
+            effect="plain"
+            type="warning"
+            class="credits-tag"
+          >
+            积分余额：{{ creditsText }}
+          </el-tag>
           <el-button
             type="primary"
             @click="fetchList"
@@ -150,8 +157,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { listAssets, purchaseAsset } from '@/api/assetMarket'
+import { ref, computed, onMounted } from 'vue'
+import { listAssets, purchaseAsset, getAssetCredits } from '@/api/assetMarket'
 import { INDUSTRY_VALUES } from '@/constants/industry'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -160,6 +167,20 @@ const filter = ref({ asset_type: '', industry: '', page: 1, size: 20 })
 const list = ref([])
 const total = ref(0)
 const loading = ref(false)
+// AM-02：积分余额自查（平台不可达时显示未知，不打断市场浏览）
+const credits = ref(null)
+const creditsText = computed(() => {
+  if (!credits.value) return '未知'
+  return `${Number(credits.value.balance ?? 0).toFixed(2)}（累计充值 ${Number(credits.value.total_topup ?? 0).toFixed(2)} / 消耗 ${Number(credits.value.total_spent ?? 0).toFixed(2)}）`
+})
+
+const fetchCredits = async () => {
+  try {
+    credits.value = await getAssetCredits()
+  } catch {
+    credits.value = null
+  }
+}
 
 const typeLabel = (t) =>
   ({
@@ -212,7 +233,10 @@ const handlePurchase = async (asset) => {
   fetchList()
 }
 
-onMounted(fetchList)
+onMounted(() => {
+  fetchList()
+  fetchCredits()
+})
 </script>
 
 <style scoped lang="scss">

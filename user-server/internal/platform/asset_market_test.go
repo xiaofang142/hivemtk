@@ -67,6 +67,15 @@ func newMarketTestServer(t *testing.T) *httptest.Server {
 			}})
 		case r.URL.Path == "/merchant-api/asset-market/my-purchases":
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": []map[string]any{{"purchase_id": 5}}})
+		case r.URL.Path == "/merchant-api/asset-market/credits":
+			if r.URL.Query().Get("log_limit") != "10" {
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 4000, "msg": "bad log_limit"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{
+				"exists": true, "balance": 66.6, "total_topup": 100, "total_spent": 33.4,
+				"recent_logs": []map[string]any{{"delta": -9.9}},
+			}})
 		case r.URL.Path == "/merchant-api/asset-market/report-usage":
 			var b map[string]any
 			_ = json.Unmarshal(body, &b)
@@ -143,6 +152,11 @@ func TestAssetMarketClient(t *testing.T) {
 	}
 	if purchases, err := c.MyPurchases(ctx); err != nil || len(purchases) != 1 {
 		t.Fatalf("MyPurchases: %v %v", purchases, err)
+	}
+	// AM-02：积分余额自查透传
+	view, err := c.GetCredits(ctx)
+	if err != nil || view["exists"] != true || view["balance"] != 66.6 {
+		t.Fatalf("GetCredits: %v %v", view, err)
 	}
 	if err := c.ReportUsage(ctx, "a1", 3); err != nil {
 		t.Fatalf("ReportUsage: %v", err)
