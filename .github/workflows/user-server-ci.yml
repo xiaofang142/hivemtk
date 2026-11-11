@@ -3,6 +3,11 @@
 # 触发：push / pull_request 作用于 master / main 分支
 name: user-server-ci
 
+# N-8②：最小权限基线——本 workflow 此前无顶级 permissions 块，依赖仓库默认
+# token 权限；仓库设置若放宽则 runner 获写权。统一钉 contents: read 基线。
+permissions:
+  contents: read
+
 on:
   push:
     branches: [master, main]
