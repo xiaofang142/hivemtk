@@ -104,8 +104,9 @@ jobs:
       actions: read # 读取上游 artifact digest
       id-token: write # Sigstore keyless 签名需要 OIDC token
       contents: write # tag 触发时把 provenance 作为 release asset 上传
-    # 官方通用生成器（非内部 delegator）。必须锁定 tag，勿用分支引用。
-    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    # 官方通用生成器（非内部 delegator）。N-8：pin 到 v2.1.0 指向的 commit SHA
+    # （tag 可变性=供应链注入面；升级时换 SHA+注释版本）。
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
     with:
       base64-subjects: ${{ needs.build.outputs.hashes }}
       provenance-name: hivemtk.intoto.jsonl
@@ -123,7 +124,7 @@ jobs:
       actions: read # download-artifact 需要
     steps:
       - name: Install slsa-verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@v2.7.1
+        uses: slsa-framework/slsa-verifier/actions/installer@ea58f44502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
 
       - name: Download artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
