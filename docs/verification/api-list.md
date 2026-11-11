@@ -465,8 +465,8 @@
 | 432 | [x] | GET | `/api/geo/push/sitemap` | 用户端 | - | - | `src/api/geo.js` | 43 | 〈2026-11-12 K-4-1：200+code=0 合法空 sitemap XML〉
 | 433 | [x] | POST | `/api/geo/index-tracking/verify/{articleId}` | 用户端 | path: articleId | - | `src/api/geo.js` | 48 | 〈2026-11-12 K-4-1：NOT_FOUND_1002 文章不存在=设计内拒绝（假 id 探测）〉
 | 434 | [x] | GET | `/api/geo/index-tracking/funnel` | 用户端 | - | - | `src/api/geo.js` | 52 | 〈2026-11-12 K-4-1：200+code=0 漏斗字段完整零值合理〉
-| 435 | [ ] | POST | `/api/geo/index-tracking/verify-all` | 用户端 | - | - | `src/api/geo.js` | 56 |
-| 436 | [ ] | GET | `/api/geo/citations/drift` | 用户端 | query: params | - | `src/api/geo.js` | 61 |
+| 435 | [x] | POST | `/api/geo/index-tracking/verify-all` | 用户端 | - | - | `src/api/geo.js` | 56 | 〈2026-11-12 K-4-1：started=true 异步启动确认（设计内）〉
+| 436 | [x] | GET | `/api/geo/citations/drift` | 用户端 | query: params | - | `src/api/geo.js` | 61 | 〈2026-11-12 K-4-1：无参数→今日无快照 NOT_FOUND_1002 设计内拒〉
 | 437 | [ ] | GET | `/api/geo/citations/domains` | 用户端 | body: { days } | - | `src/api/geo.js` | 65 |
 | 438 | [ ] | GET | `/api/geo/citations/matrix` | 用户端 | body: { days, top_queries: topQueries, top_domains: topDomains } | - | `src/api/geo.js` | 69 |
 | 439 | [ ] | POST | `/api/geo/site/export` | 用户端 | - | - | `src/api/geo.js` | 79 |
