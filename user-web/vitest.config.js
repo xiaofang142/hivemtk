@@ -9,6 +9,11 @@ export default mergeConfig(
     test: {
       globals: true,
       environment: 'jsdom',
+      // N-21（2026-11-12）：默认 5s testTimeout 在本机高负载（多 lane 并行构建/测试）
+      // 下会误杀确定性完成的用例（clue_list_filter_push 20s 实跑 9/9 全绿=纯慢非悬挂，
+      // settle 确定式等待已排除假绿）。容量兜底 15s——与 be969108「timeout 零放大」
+      // 不冲突：那条纪律禁的是放大超时掩盖真悬挂，此处已实证非悬挂。
+      testTimeout: 15000,
       include: ['tests/unit/**/*.{test,spec}.{js,mjs,ts}'],
       exclude: ['node_modules', 'dist', 'tests/e2e/**'],
       // 并行跑测试文件。恢复并行的前提已成立：所有组件用例的等待模式都换成了
