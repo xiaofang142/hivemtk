@@ -970,5 +970,45 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "content_guard", Key: "max_scan_runes", Name: "单条内容审查长度上限",
 			Description: "单条内容送审时的截断上限（rune）。超过它的部分不参与词库匹配，记录里 Truncated=true，默认按「内容超长」转人工（不判 pass）。兜底常量 internal/contentguard/service/engine.go 的 MaxScanRunes=20000，可用区间是它的 [1/20, ×10]。调大＝长文（商户长文案/KB 文档）被完整审，代价是单条扫描更久（匹配随长度线性增长，且它是防 DoS 的上界，不是越大越好）。读取点 internal/app/content_guard_wiring.go 的 contentGuardMaxScanRunes，**装配期读一次 ⇒ 改完要重启 user-server**；越界一律回落到兜底值并打 warn",
 			ValueType:   "int", Unit: "字符", DefaultValue: "20000", Min: strPtr("1000"), Max: strPtr("200000"), Step: strPtr("1000"), Restart: true},
+		// —— retention 组：高写入自观测/审计表保留窗口（CC-04 刀2）。
+		//
+		// 九张表此前全部零清理路径（写入频率从「每 HTTP 请求」到「每 LLM 调用」
+		// 不等，仓内 geo job_run/message trace/password_reset/egolite 四先例都定了
+		// 窗口，这批新表未跟进=先例漂移）。后台保留清理
+		// （internal/service/retention_cleanup_cron.go，24h 一轮）逐表热读本组天数，
+		// 删除时间列早于「现在-天数」的行：逐租户 Fanout 扇出（他租户行结构上够不到），
+		// 单条 DELETE 每批最多 1000 行（id IN 子查询圈批，PG 无 DELETE LIMIT，防长事务锁），
+		// 循环删完为止、重复执行幂等（窗外删空后重跑 0 行）。
+		// 生效时机：无需重启——每轮清理重读（受参数缓存 TTL 60s 约束）。
+		// 共同后果口径：调大保留更久但表体积线性上涨；调小省空间但对应读侧只能
+		// 回看到本窗口（见各条）。非正数一律回落代码兜底（0 不是「永不清理」，
+		// 要停清理请摘调度而不是配 0）。
+		{Group: "retention", Key: "api_logs_days", Name: "API 访问日志保留天数",
+			Description: "api_logs（引擎级每 HTTP 请求落一行，请求/响应体可达 16KB）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。这张表全仓零读端（纯引擎自观测），是八表里写入频率最高、单行最重的；窗口 30 天对齐 message_trace 掩码窗量级，调小省磁盘代价是排障可回看变短。读取点 internal/service/retention_cleanup_tables.go 的 api_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "llm_routing_logs_days", Name: "LLM 路由日志保留天数",
+			Description: "llm_routing_logs（每 LLM 调用落一行，用量/成本/延迟明细）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。读侧（AI 产能报表/用量日报/错误明细/i18n 统计）全部是有界窗口查询（controller 缺省 7 天、月度类 ≤90 天），90 天对齐 operation_log 缺省窗口；调小代价是历史报表只能回看到 daily 聚合层。读取点 internal/service/retention_cleanup_tables.go 的 llm_routing_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "tool_call_audits_days", Name: "工具调用审计保留天数",
+			Description: "tool_call_audits（每次工具调用落一行，W-6 审计落库链）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。审计面从宽定 90 天；读侧只有近期列表（Recent/CountAll/CostAggregates）与管理端分页，调小代价是历史工具调用审计不可追溯。读取点 internal/service/retention_cleanup_tables.go 的 tool_call_audits Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "feature_flag_eval_logs_days", Name: "特性开关评估日志保留天数",
+			Description: "feature_flag_eval_logs（每次 Evaluate/EvaluateBatch 异步落一行）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。纯自观测表，读侧 ListEvalLogs 只读近期 limit，调小只是开关评估历史变短。读取点 internal/service/retention_cleanup_tables.go 的 feature_flag_eval_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "layer_decision_logs_days", Name: "分层路由决策日志保留天数",
+			Description: "layer_decision_logs（每消息路由决策落一行）保留多少天：后台保留清理物理删除 created_at 早于「现在-本参数天」的行（本表带软删列，保留清理走 Unscoped 物理删回收空间）。读侧 Recent/GetByTraceID 只服务近期排障，调小代价是历史路由决策不可回放。读取点 internal/service/retention_cleanup_tables.go 的 layer_decision_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "handoff_decisions_days", Name: "转人工决策记录保留天数",
+			Description: "handoff_decisions（每次转人工决策落一行）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。转派链 cron 扫的是 customer_sessions，本表无活链读依赖；审计面从宽定 90 天，调小代价是历史转派决策不可追溯。读取点 internal/service/retention_cleanup_tables.go 的 handoff_decisions Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "trace_events_days", Name: "调用链事件保留天数",
+			Description: "trace_events（每 LLM 调用批量落链事件，度量列是事件时刻 timestamp 而非 created_at）保留多少天：后台保留清理删除 timestamp 早于「现在-本参数天」的行。trace 列表只展示近期（limit 50）且按 trace_id 精确查，调小只是长尾调用链详情不可回放。读取点 internal/service/retention_cleanup_tables.go 的 trace_events Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "platform_llm_usage_records_days", Name: "平台 LLM 用量记录保留天数",
+			Description: "platform_llm_usage_records（每平台 LLM 调用落一行，PLT-01 用量读端已上线）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。有消费端后仍从宽定 180 天：运营分析价值+表数据刚起步+审计对账长尾需要（2026-11-11 校准批裁决）；调小代价是平台用量 Tab 与对账只能回看到本窗口。读取点 internal/service/retention_cleanup_tables.go 的 platform_llm_usage_records Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "180", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+		{Group: "retention", Key: "operation_logs_days", Name: "操作日志保留天数（自动调度）",
+			Description: "operation_logs（每管理操作落一行）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。这是自动调度口径；人工清理端点 POST /api/operation-logs/clean（before_date/days，缺省 90 天）原样保留，两者幂等叠加不冲突。90 天对齐人工端点缺省。读取点 internal/service/retention_cleanup_tables.go 的 operation_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
+			ValueType:   "int", Unit: "天", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
 	}
 }

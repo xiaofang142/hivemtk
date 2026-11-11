@@ -91,9 +91,9 @@ func (t *RetentionCleanupTask) Stop(ctx context.Context) {
 var retentionCleanupCron *RetentionCleanupTask
 
 func init() {
-	// 刀1 阶段表清单为空（九表规格在刀2 接入，见 retention_cleanup_tables.go）；
-	// 看门狗先行就位，空 specs 的 RunOnce 是 no-op。
-	cleaner := NewRetentionCleaner(repository.NewRetentionCleanupRepo(), nil)
+	// 九表接入规格在 retention_cleanup_tables.go（CC-04 刀2）；每轮热读
+	// retention.<表名>_days，天数经 config_param 调，无需重启。
+	cleaner := NewRetentionCleaner(repository.NewRetentionCleanupRepo(), retentionTableSpecs())
 	retentionCleanupCron = NewRetentionCleanupTask(cleaner)
 	retentionCleanupCron.Start(context.Background())
 }
