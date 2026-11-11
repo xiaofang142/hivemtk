@@ -47,19 +47,6 @@ func TestRequireAdmin(t *testing.T) {
 	}
 }
 
-// TestRequireManagerOrAdmin 测试 manager 或 admin
-func TestRequireManagerOrAdmin(t *testing.T) {
-	if err := RequireManagerOrAdmin("admin"); err != nil {
-		t.Errorf("admin should pass, got %v", err)
-	}
-	if err := RequireManagerOrAdmin("manager"); err != nil {
-		t.Errorf("manager should pass, got %v", err)
-	}
-	if err := RequireManagerOrAdmin("viewer"); err == nil {
-		t.Errorf("viewer should not pass")
-	}
-}
-
 // TestRequireNotViewer 测试非 viewer
 func TestRequireNotViewer(t *testing.T) {
 	if err := RequireNotViewer("admin"); err != nil {
@@ -121,7 +108,9 @@ func TestAssertCanOperateSystemUser(t *testing.T) {
 		{name: "admin reset_password other", operatorID: 1, operatorRole: "admin", action: "reset_password", targetID: 5, wantErr: false},
 		{name: "admin update other", operatorID: 1, operatorRole: "admin", action: "update", targetID: 5, wantErr: false},
 
-		{name: "manager update other", operatorID: 1, operatorRole: "manager", action: "update", targetID: 5, wantErr: false},
+		// A-23：manager 为死词（system_users.role 白名单无 manager，无签发链恒假）——
+		// 死分支已删，manager 角色一切动作一律拒绝（fail-closed 语义不变）
+		{name: "manager update 拒绝（A-23 死词）", operatorID: 1, operatorRole: "manager", action: "update", targetID: 5, wantErr: true},
 		{name: "manager create 拒绝", operatorID: 1, operatorRole: "manager", action: "create", targetID: 0, wantErr: true},
 		{name: "manager delete 拒绝", operatorID: 1, operatorRole: "manager", action: "delete", targetID: 5, wantErr: true},
 		{name: "manager reset 拒绝", operatorID: 1, operatorRole: "manager", action: "reset_password", targetID: 5, wantErr: true},

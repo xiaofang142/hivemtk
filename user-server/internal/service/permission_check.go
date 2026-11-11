@@ -19,7 +19,6 @@ const (
 // 兼容旧 TeamUser 角色名（过渡期使用）
 const (
 	LegacyTeamUserRoleAdmin   = "admin"
-	LegacyTeamUserRoleManager = "manager"
 	LegacyTeamUserRoleViewer  = "viewer"
 )
 
@@ -60,22 +59,6 @@ func RequireAdmin(operatorRole string) error {
 	return RequireRole(operatorRole, SystemUserRoleAdmin)
 }
 
-// RequireManagerOrAdmin 要求操作者是 manager/admin/customer_service 之一
-//
-// system_users.role 仅有 3 档，customer_service 视为可执行"经理级"操作。
-// 兼容：旧 manager 角色 token 仍能通过（按历史契约）。
-func RequireManagerOrAdmin(operatorRole string) error {
-	if operatorRole == "" {
-		return ErrServiceRoleMissing
-	}
-	switch operatorRole {
-	case SystemUserRoleAdmin, SystemUserRoleCustomerService, LegacyTeamUserRoleManager:
-		return nil
-	default:
-		return ErrServicePermissionDenied
-	}
-}
-
 // RequireNotViewer 要求操作者不是 viewer/staff（仅 admin/manager/customer_service 可执行）
 func RequireNotViewer(operatorRole string) error {
 	if operatorRole == "" {
@@ -113,7 +96,7 @@ func IsReadOnlyRole(role string) bool {
 // AssertCanOperateSystemUser 断言操作者有权操作 SystemUser
 // 规则：
 //   - 仅 admin 可以创建/删除/重置其他 SystemUser
-//   - customer_service/manager 可以更新其他人的基本资料（除角色外）
+//   - customer_service 可以更新其他人的基本资料（除角色外）
 //   - staff/viewer 不能操作其他用户
 //
 // operatorID: 操作者 ID
@@ -130,7 +113,7 @@ func AssertCanOperateSystemUser(operatorID uint, operatorRole, action string, ta
 	if operatorRole == SystemUserRoleAdmin {
 		return nil
 	}
-	if operatorRole == SystemUserRoleCustomerService || operatorRole == LegacyTeamUserRoleManager {
+	if operatorRole == SystemUserRoleCustomerService {
 		switch action {
 		case "update":
 			return nil
@@ -214,7 +197,7 @@ func defaultRolePermissions(roleCode string) []string {
 	switch roleCode {
 	case SystemUserRoleAdmin:
 		return []string{"*"}
-	case SystemUserRoleCustomerService, LegacyTeamUserRoleManager:
+	case SystemUserRoleCustomerService:
 		return []string{
 			"cards.*", "shortlinks.*", "clues.*", "autoreply.*",
 		}

@@ -52,10 +52,10 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// wsAgentAllowedRoles 允许订阅坐席 WS 的角色集合（admin/manager + 坐席角色）
+// wsAgentAllowedRoles 允许订阅坐席 WS 的角色集合（admin + 坐席角色；
+// manager 死词已随 A-23 清除——system_users.role 白名单无 manager，无签发链恒假）
 var wsAgentAllowedRoles = map[string]bool{
 	"admin":            true,
-	"manager":          true,
 	"staff":            true,
 	"customer_service": true,
 }

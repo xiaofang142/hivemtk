@@ -60,7 +60,7 @@ func TestD13_MissingRoleFailClosed(t *testing.T) {
 	if !ps.CheckPermission(context.Background(), SystemUserRoleStaff, "cards.view") {
 		t.Error("staff cards.view 应命中")
 	}
-	if ps.CheckPermission(context.Background(), LegacyTeamUserRoleManager, "cards.view") {
+	if ps.CheckPermission(context.Background(), "manager", "cards.view") {
 		t.Error("manager 不在配置表应 fail-closed 拒绝")
 	}
 }
