@@ -43,7 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24
+        uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
         # 阻断：发现违规即失败（非软门槛）。
         # continue-on-error 是步骤级属性，写在 with: 下会被 action 静默忽略。
         continue-on-error: false
