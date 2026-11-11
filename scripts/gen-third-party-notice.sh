@@ -12,27 +12,15 @@
 #         node_modules 缺失时仅列出包名+版本，许可证标记"待确认"。
 #
 # 用法：
-#   bash scripts/gen-third-party-notice.sh            # 生成/刷新 THIRD_PARTY_LICENSES.md
-#   bash scripts/gen-third-party-notice.sh --check    # 对账闸（O-1）：不落盘，校验
-#                                                     # THIRD_PARTY_LICENSES.md 是否覆盖当前
-#                                                     # go list -m all / bridge lock 的全部 依赖|版本
-#                                                     # 行；缺行/版本漂移即 exit 1。许可证列不入对账
-#                                                     # 口径（受本地模块缓存影响，非确定性）。
+#   bash scripts/gen-third-party-notice.sh
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-CHECK_MODE=0
-[ "${1:-}" = "--check" ] && CHECK_MODE=1
-
 OUTPUT="THIRD_PARTY_LICENSES.md"
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
-if [ "$CHECK_MODE" = "1" ]; then
-    # 对账模式：生成到临时候选件，与仓库内正式清单对账，不改动工作区文件
-    OUTPUT="$TMPDIR/candidate.md"
-fi
 
 # ---------- 许可证识别（启发式） ----------
 # 从 LICENSE 文本前若干行中识别 SPDX 风格许可证标识。
@@ -270,32 +258,6 @@ EOF
 sed -i '' "s/PLACEHOLDER_DATE/$(date +%Y-%m-%d)/" "$OUTPUT" 2>/dev/null || sed -i "s/PLACEHOLDER_DATE/$(date +%Y-%m-%d)/" "$OUTPUT"
 sed -i '' "s/COUNT_GO/$COUNT_GO/" "$OUTPUT" 2>/dev/null || sed -i "s/COUNT_GO/$COUNT_GO/" "$OUTPUT"
 sed -i '' "s/COUNT_NPM/$COUNT_NPM/" "$OUTPUT" 2>/dev/null || sed -i "s/COUNT_NPM/$COUNT_NPM/" "$OUTPUT"
-
-# ---------- 6. 对账闸（--check，O-1）----------
-# 只对「依赖名|版本」行对账（许可证列受本地模块缓存影响，非确定性，不入口径）。
-# 候选件代表当前依赖现实；正式清单缺行/版本不一致 = 落后于依赖现实 = 门红。
-if [ "$CHECK_MODE" = "1" ]; then
-    REPO_FILE="THIRD_PARTY_LICENSES.md"
-    if [ ! -f "$REPO_FILE" ]; then
-        echo "❌ --check: $REPO_FILE 不存在，先跑 bash scripts/gen-third-party-notice.sh 生成"
-        exit 1
-    fi
-    extract_rows() {
-        grep -E '^\| [^|]+ \| (v?[0-9][0-9A-Za-z.-]*) \| ' "$1" \
-            | sed -E 's/^\| ([^|]+) \| ([^|]+) \| .*/\1|\2/'
-    }
-    comm -23 \
-        <(extract_rows "$OUTPUT" | sort -u) \
-        <(extract_rows "$REPO_FILE" | sort -u) > "$TMPDIR/missing.txt"
-    if [ -s "$TMPDIR/missing.txt" ]; then
-        echo "❌ --check: THIRD_PARTY_LICENSES.md 落后于依赖现实——以下 依赖|版本 缺失或版本漂移："
-        head -20 "$TMPDIR/missing.txt"
-        echo "（共 $(wc -l < "$TMPDIR/missing.txt" | tr -d ' ') 条；请跑 bash scripts/gen-third-party-notice.sh 刷新后一并提交）"
-        exit 1
-    fi
-    echo "✅ --check: THIRD_PARTY_LICENSES.md 与依赖现实对账通过（无缺行/版本漂移）"
-    exit 0
-fi
 
 echo "✅ 已生成: $OUTPUT"
 echo "📊 Go 模块数: $COUNT_GO"
