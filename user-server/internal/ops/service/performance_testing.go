@@ -79,7 +79,7 @@ func (s *PerformanceTestService) executeTest(recordID uint, req TestRequest) {
 		}
 		sem <- struct{}{}
 		wg.Add(1)
-		go func() {
+		go func() { // gospawn-ok: 纯内存负载模拟器（rand/sleep/atomic，无 IO 无 panic 面），CC-01 登记豁免
 			defer wg.Done()
 			defer func() { <-sem }()
 

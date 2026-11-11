@@ -196,7 +196,7 @@ func StopMessageHubSummaryAggCron(ctx context.Context) {
 	done := make(chan struct{})
 	// 协程体只读这个本地快照：包级全局是测试会改写的注入点，
 	// 若在这里仍写 hubSummaryAggCronInst，等的那把 wg 可能已不是刚关闭的那把。
-	go func() { inst.wg.Wait(); close(done) }()
+	go func() { inst.wg.Wait(); close(done) }() // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 	select {
 	case <-done:
 	case <-ctx.Done():

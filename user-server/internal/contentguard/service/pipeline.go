@@ -216,7 +216,7 @@ func (p *Pipeline) Stop(ctx context.Context) {
 	p.stopOnce.Do(func() {
 		close(p.stopCh)
 		done := make(chan struct{})
-		go func() {
+		go func() { // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 			p.wg.Wait()
 			close(done)
 		}()

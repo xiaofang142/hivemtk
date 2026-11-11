@@ -70,7 +70,7 @@ func (c *Collector) Stop() {
 	}
 	c.enabled = false
 	done := make(chan struct{})
-	go func() { c.wg.Wait(); close(done) }()
+	go func() { c.wg.Wait(); close(done) }() // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):

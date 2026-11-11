@@ -57,7 +57,7 @@ func (c *SystemOpsController) RestartServer(ctx *gin.Context) {
 	logger.Info("收到系统热重启请求")
 	response.Success(ctx, nil, "重启指令已下发，服务即将重启")
 	if os.Getenv("ALLOW_SELF_RESTART") == "true" {
-		go func() {
+		go func() { // gospawn-ok: os.Exit 自尽 helper（CC-01 审计口径排除），sleep/exit 无 panic 面
 			time.Sleep(300 * time.Millisecond)
 			os.Exit(0)
 		}()
