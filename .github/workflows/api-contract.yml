@@ -30,6 +30,9 @@ on:
       - 'scripts/audit-cross-package-ports.sh'
       - 'scripts/check_component_types.py'
       - 'scripts/check_model_migration.py'
+      - 'user-server/internal/platform/contract_header.go'
+      - 'scripts/contract_guarded_prefixes.vendor.txt'
+      - 'scripts/check-contract-prefixes-vendor.py'
       - 'user-server/internal/pkg/db/migrate.go'
       - 'user-web/src/types/components.d.ts'
       - 'user-web/src/components/**'
@@ -46,6 +49,9 @@ on:
       - 'scripts/audit-cross-package-ports.sh'
       - 'scripts/check_component_types.py'
       - 'scripts/check_model_migration.py'
+      - 'user-server/internal/platform/contract_header.go'
+      - 'scripts/contract_guarded_prefixes.vendor.txt'
+      - 'scripts/check-contract-prefixes-vendor.py'
       - 'user-server/internal/pkg/db/migrate.go'
       - 'user-web/src/types/components.d.ts'
       - 'user-web/src/components/**'
@@ -74,3 +80,6 @@ jobs:
 
       - name: 有写入路径的模型必须登记 AutoMigrate（阻断）
         run: python3 scripts/check_model_migration.py
+
+      - name: 跨仓契约前缀对账（L-13：contractGuardedPrefixes vs vendor 快照，漂移即红）
+        run: python3 scripts/check-contract-prefixes-vendor.py

@@ -1,0 +1,9 @@
+# L-13 跨仓契约闸前缀 vendor 快照——单一事实源的**快照**，双仓各存一份。
+# 「清单变更双仓同改」规程：改任一侧实现清单，必须同 PR 内双仓各改本文件+对侧实现；
+# 任一侧实现与 vendor 不一致 → 双仓 CI 各自红（check-contract-prefixes-vendor.py）。
+# 用户侧实现：user-server/internal/platform/contract_header.go contractGuardedPrefixes（带尾斜杠）
+# 平台侧实现：platform-server/scripts/check-merchant-scope.py CONTRACT_GUARDED（无尾斜杠）
+# 对账口径：strip 尾斜杠后集合相等（顺序不敏感）；空行与 # 注释忽略。
+/merchant-api
+/llm-api/v1
+/api/platform
