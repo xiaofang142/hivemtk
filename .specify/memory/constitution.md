@@ -26,15 +26,17 @@
 
 **Gate**：改动若新增跨层调用或内联闭包，直接判不合规，不接受"临时"。
 
-### II. 禁止子 Agent 并行（NON-NEGOTIABLE）
+### II. 允许子 Agent 并行，并行数不超 3-5（NON-NEGOTIABLE）
 
-因 RPM（请求速率）限制，**禁止调用子 Agent（Task/搜索子代理等）并行执行任务**。
-所有任务由主 Agent 直接执行、串行推进，不依赖子 Agent 分担。
+主 Agent **允许调用子 Agent（Task/搜索子代理等）并行执行任务**，可多智能体并发编排。
+**同一批次并行子 Agent 数一般不超过 3-5 个**；任务量大时拆批串行执行，不一次性全量铺开
+（RPM 请求速率限制下的护栏）。
 
 本规则**优先于其他一切规则**，与本文件任何条目冲突时以本规则为准。需要
-探索/搜索/实现时，直接使用主 Agent 自己的工具（Read/Grep/Glob/LS/WebSearch）。
+探索/搜索/实现时，既可直接使用主 Agent 自己的工具（Read/Grep/Glob/LS/WebSearch），
+也可派发子 Agent 分担。
 
-**Gate**：不得以"并行更快"为由调用子 Agent。
+**Gate**：同一批次并行子 Agent 数超过 3-5 个即视为不合规。
 
 ### III. 验证纪律：不许吹大
 
@@ -137,5 +139,10 @@
   （`internal/controller/` 全部为 `XxxController`，本仓无 `handler` 包，2026-11-10 复核）。
   原因：宪法仍用 Handler 口径，与 CLAUDE.md「无 handler 包」铁律冲突。影响：纯文档口径，
   无存量代码改动；spec-kit 闸门文案按 Controller 理解。
+- 2026-11-11 · v1.0.3：原则 II 由「禁止子 Agent 并行」改为「允许子 Agent 并行，同一批次
+  并行数一般不超 3-5」。原因：用户 2026-11-11 指示放开并发多智能体限制，保留 3-5 上限作为
+  RPM 请求速率护栏。影响：CLAUDE.md 规则 0b、工作区 README 协作约束、平台端 CLAUDE.md 规则 0b
+  同步改写；spec-kit 各阶段间依赖不变（仍串行），阶段内派子 Agent 同一批次不超 3-5；
+  存量 spec/plan/tasks 归档文档不追溯。
 
-**Version**: 1.0.2 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-11-10
+**Version**: 1.0.3 | **Ratified**: 2026-10-14 | **Last Amended**: 2026-11-11
