@@ -33,6 +33,10 @@ func (a *AssetMarketClientAdapter) Purchase(ctx context.Context, assetID string)
 	return a.inner.Purchase(ctx, assetID)
 }
 
+func (a *AssetMarketClientAdapter) GetCredits(ctx context.Context) (map[string]any, error) {
+	return a.inner.GetCredits(ctx)
+}
+
 func (a *AssetMarketClientAdapter) PullData(ctx context.Context, assetID string) (*repository.PlatformAssetPayload, error) {
 	p, err := a.inner.PullData(ctx, assetID)
 	if err != nil {

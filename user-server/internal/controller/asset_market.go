@@ -352,6 +352,22 @@ func (h *AssetMarketController) MyPurchases(c *gin.Context) {
 	assetOK(c, list)
 }
 
+// @Summary GET /api/v1/asset-market/credits
+// @Tags      asset-market
+// @Router    /api/v1/asset-market/credits [get]
+// Credits GET /api/v1/asset-market/credits —— 商户积分余额自查（AM-02 代理面）
+func (h *AssetMarketController) Credits(c *gin.Context) {
+	if rejectPlatformDisabled(c) {
+		return
+	}
+	view, err := h.marketSvc.GetCredits(c.Request.Context())
+	if err != nil {
+		assetFail(c, err)
+		return
+	}
+	assetOK(c, view)
+}
+
 // @Summary POST /api/v1/asset-market/bind
 // @Tags      asset-market
 // @Router    /api/v1/asset-market/bind [post]

@@ -32,6 +32,11 @@ func (disabledClient) MyPurchases(_ context.Context) ([]map[string]any, error) {
 	return []map[string]any{}, nil
 }
 
+func (disabledClient) GetCredits(_ context.Context) (map[string]any, error) {
+	// 关态读面：无平台即无积分概念，零值视图（exists=false），不是错误
+	return map[string]any{"exists": false, "balance": 0, "total_topup": 0, "total_spent": 0, "recent_logs": []any{}}, nil
+}
+
 func (disabledClient) Purchase(_ context.Context, _ string) error {
 	return ErrPlatformNotConfigured
 }

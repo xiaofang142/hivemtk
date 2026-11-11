@@ -30,4 +30,6 @@ type PlatformAPIClient interface {
 	PullData(ctx context.Context, assetID string) (*PlatformAssetPayload, error)
 	MyPurchases(ctx context.Context) ([]map[string]any, error)
 	ReportUsage(ctx context.Context, assetID string, delta int64) error
+	// GetCredits 商户积分余额自查（AM-02）：GET /merchant-api/asset-market/credits
+	GetCredits(ctx context.Context) (map[string]any, error)
 }

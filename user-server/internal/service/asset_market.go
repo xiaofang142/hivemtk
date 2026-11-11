@@ -32,6 +32,20 @@ func (s *AssetMarketService) GetMarketAssetDetail(ctx context.Context, assetID s
 	return detail, nil
 }
 
+// GetCredits 商户积分余额自查（AM-02）：透传平台 MerchantCreditView。
+// 平台不可达时报平台不可用业务码（读面失败要可见——余额看不见比报错更误事，
+// 与资产列表读面「空列表」语义不同：余额是资金事实，空值会误导购买决策）。
+func (s *AssetMarketService) GetCredits(ctx context.Context) (map[string]any, error) {
+	view, err := s.platformClient.GetCredits(ctx)
+	if err != nil {
+		return nil, bizerr.Wrap(bizerr.CodePlatformUnavail, "获取积分余额失败", err)
+	}
+	if view == nil {
+		view = map[string]any{}
+	}
+	return view, nil
+}
+
 func (s *AssetMarketService) MyPurchases(ctx context.Context) ([]map[string]any, error) {
 	list, err := s.platformClient.MyPurchases(ctx)
 	if err != nil {
