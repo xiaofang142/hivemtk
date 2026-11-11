@@ -314,7 +314,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// sender_avatar varchar(500) 列——桥端提取的客户头像经协议落库、管理台展示；
 	// 无回填，历史行头像保持为空（读侧降级为默认形态）。
 	register(NewSenderAvatarMigration(db))
-	// v3.90.0（PLT-01 刀1 单价落地）：llm_providers 加平台套餐单价快照两列
+	// v3.91.0（PLT-01 刀1 单价落地，合并撞号升版）：llm_providers 加平台套餐单价快照两列
 	// （sync 按 plan_code 关联套餐价落列；写入时点算成本，读侧不重算不回填）。
 	register(NewLLMProviderPlanPriceMigration(db))
 }

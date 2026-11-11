@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// LLMProviderPlanPriceMigration v3.90.0（PLT-01 刀1 单价落地）：
+// LLMProviderPlanPriceMigration v3.91.0（PLT-01 刀1 单价落地）：
 // llm_providers 加平台套餐单价快照两列（分/1k token）。
 //
 // 背景：平台下发的 provider 视图（ProviderViewsForDeliver）不带价，商户端
@@ -27,12 +27,12 @@ type LLMProviderPlanPriceMigration struct {
 
 var _ migration.Migration = (*LLMProviderPlanPriceMigration)(nil)
 
-// NewLLMProviderPlanPriceMigration 构造 v3.90.0 迁移
+// NewLLMProviderPlanPriceMigration 构造 v3.91.0 迁移
 func NewLLMProviderPlanPriceMigration(db *gorm.DB) *LLMProviderPlanPriceMigration {
 	return &LLMProviderPlanPriceMigration{db: db}
 }
 
-func (m *LLMProviderPlanPriceMigration) Version() string { return "v3.90.0" }
+func (m *LLMProviderPlanPriceMigration) Version() string { return "v3.91.0" }
 
 func (m *LLMProviderPlanPriceMigration) Name() string {
 	return "llm_providers 平台套餐单价快照列"
