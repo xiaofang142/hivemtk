@@ -224,10 +224,14 @@ class MarketingChatWidget {
    */
   _bindMessageListener() {
     this._onWindowMessage = (e) => {
-      // 跨域安全:仅允许白名单 origin
-      if (this.config.allowedOrigins && this.config.allowedOrigins.length > 0) {
-        if (!this.config.allowedOrigins.includes(e.origin)) return
-      }
+      // 跨域安全:仅允许白名单 origin；空白名单时回退 apiBaseURL origin（N-6②：
+      // 对齐 iframe-panel.js 兜底——此前空数组可被显式传入绕过默认填充 → 全放行）
+      var allowedOrigins = (this.config.allowedOrigins && this.config.allowedOrigins.length > 0)
+        ? this.config.allowedOrigins
+        : [(function () {
+            try { return new URL(this.config.apiBaseURL).origin } catch (_) { return window.location.origin }
+          }).call(this)]
+      if (!allowedOrigins.includes(e.origin)) return
       const data = e.data
       if (!data || typeof data !== 'object') return
 

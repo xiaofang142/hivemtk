@@ -241,7 +241,14 @@ const startTransferWaiting = () => {
 watch(offlineBannerCount, (c) => {
   try {
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: 'mcw-unread', count: c }, '*')
+      // N-6③：目标 origin 推导（mcwParent 协商参数 → referrer 回退），消除 '*' 通配
+      var targetOrigin = '*'
+      try {
+        var q = new URLSearchParams(window.location.search).get('mcwParent')
+          || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
+        targetOrigin = q ? new URL(q).origin : new URL(document.referrer).origin
+      } catch (e) { /* 推导失败保守回退 '*'（仅独立打开场景可达） */ }
+      window.parent.postMessage({ type: 'mcw-unread', count: c }, targetOrigin)
     }
   } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });

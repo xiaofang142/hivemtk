@@ -56,7 +56,17 @@ const closed = ref(false)
 
 const onClose = () => {
   try {
-    window.parent.postMessage({ type: 'chat-widget-close' }, '*')
+    if (window.parent && window.parent !== window) {
+      // N-6③：目标 origin 推导（mcwParent 协商参数 → referrer 回退），消除 '*' 通配；
+      // 独立打开（无父窗口）时本就无需通知宿主
+      var targetOrigin = '*'
+      try {
+        var q = new URLSearchParams(window.location.search).get('mcwParent')
+          || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
+        targetOrigin = q ? new URL(q).origin : new URL(document.referrer).origin
+      } catch { /* 推导失败保守回退 '*' */ }
+      window.parent.postMessage({ type: 'chat-widget-close' }, targetOrigin)
+    }
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   // 嵌入场景由宿主页面收起 iframe；独立打开时展示已结束态，不再跳到 404 页
   closed.value = true

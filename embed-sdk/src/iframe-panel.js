@@ -81,27 +81,9 @@ export class IframePanel {
     }
     this.iframe.style.display = 'block'
     this.shown = true
-    setTimeout(() => {
-      try {
-        const targetOrigin = (() => {
-          try { return new URL(this.apiBaseURL).origin } catch (_) { return window.location.origin }
-        })()
-        this.iframe.contentWindow.postMessage({
-          type: 'mcw-config',
-          payload: {
-            appKey: this.appKey,
-            channelId: this.channelId,
-            channelRef: this.getChannelRef(),
-            apiBaseURL: this.apiBaseURL,
-            color: this.color,
-            title: this.title,
-            welcome: this.welcome,
-            lang: this.lang,
-            visitorIdKey: this.visitorIdKey
-          }
-        }, targetOrigin)
-      } catch (e) {
-      }
+    // mcw-config 死协议已删除（N-6①）：iframe 端从未监听该消息，配置实际全靠
+    // iframe URL（title/color/source/card_id 走 query；welcome/lang/appKey 的生效化
+    // 见任务清单 N-20）。删除以消除「发出去没人收」的假通道与维护误导。
       this.setupVisualViewport()
     }, 100)
   }
@@ -131,7 +113,9 @@ export class IframePanel {
     iframe.className = 'mcw-iframe'
     iframe.title = this.title
     const channelRef = this.getChannelRef()
-    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}#/chat/embed/${encodeURIComponent(channelRef)}`
+    // mcwParent（N-6③）：iframe 端 postMessage 的目标 origin 协商参数（hash 内 query），
+    // 缺省由 iframe 端回退 document.referrer 推导——消除双端 '*' 通配。
+    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}?mcwParent=${encodeURIComponent(window.location.origin)}#/chat/embed/${encodeURIComponent(channelRef)}`
     iframe.allow = 'clipboard-write'
     if (this.cspNonce) {
       iframe.setAttribute('nonce', this.cspNonce)
