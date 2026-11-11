@@ -225,7 +225,7 @@
 | node_modules/@esbuild/win32-ia32 | 0.28.2 | 待确认 |
 | node_modules/@esbuild/win32-x64 | 0.28.2 | MIT |
 | node_modules/@eslint-community/eslint-utils | 4.10.1 | MIT |
-| node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys | 3.4.3 | 待确认 |
+| node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys | 3.4.3 | Apache-2.0 |
 | node_modules/@eslint-community/regexpp | 4.12.2 | MIT |
 | node_modules/@eslint/config-array | 0.23.5 | Apache-2.0 |
 | node_modules/@eslint/config-helpers | 0.7.0 | Apache-2.0 |
@@ -267,8 +267,8 @@
 | node_modules/@types/estree | 1.0.9 | MIT |
 | node_modules/@types/json-schema | 7.0.15 | MIT |
 | node_modules/@vitest/coverage-v8 | 5.0.3 | MIT |
-| node_modules/@vitest/istanbul-lib-coverage | 1.0.2 | 待确认 |
-| node_modules/@vitest/istanbul-lib-report | 1.0.2 | 待确认 |
+| node_modules/@vitest/istanbul-lib-coverage | 1.0.2 | MIT |
+| node_modules/@vitest/istanbul-lib-report | 1.0.2 | MIT |
 | node_modules/@vitest/mocker | 5.0.3 | MIT |
 | node_modules/@vitest/spy | 5.0.3 | MIT |
 | node_modules/acorn | 8.18.0 | MIT |
@@ -305,13 +305,13 @@
 | node_modules/fast-deep-equal | 3.1.3 | MIT |
 | node_modules/fast-json-stable-stringify | 2.1.0 | MIT |
 | node_modules/fast-levenshtein | 2.0.6 | MIT |
-| node_modules/fdir | 6.5.0 | 待确认 |
+| node_modules/fdir | 6.5.0 | MIT |
 | node_modules/file-entry-cache | 11.1.5 | MIT |
 | node_modules/find-up | 5.0.0 | MIT |
 | node_modules/flat-cache | 6.1.23 | MIT |
 | node_modules/flatted | 3.4.4 | ISC |
 | node_modules/fsevents | 2.3.3 | 待确认 |
-| node_modules/glob-parent | 6.0.2 | 待确认 |
+| node_modules/glob-parent | 6.0.2 | ISC |
 | node_modules/globals | 17.13.0 | MIT |
 | node_modules/hashery | 1.5.1 | MIT |
 | node_modules/hookified | 1.15.1 | MIT |
@@ -345,7 +345,7 @@
 | node_modules/magic-string | 1.4.3 | MIT |
 | node_modules/magicast | 0.5.5 | MIT |
 | node_modules/mdn-data | 2.27.1 | CC0-1.0 |
-| node_modules/minimatch | 10.2.6 | ISC |
+| node_modules/minimatch | 10.2.6 | BlueOak-1.0.0 |
 | node_modules/ms | 2.1.3 | MIT |
 | node_modules/nanoid | 3.3.20 | MIT |
 | node_modules/natural-compare | 1.4.0 | MIT |
@@ -357,7 +357,7 @@
 | node_modules/path-exists | 4.0.0 | MIT |
 | node_modules/path-key | 3.1.1 | MIT |
 | node_modules/picocolors | 1.1.1 | ISC |
-| node_modules/picomatch | 4.0.7 | 待确认 |
+| node_modules/picomatch | 4.0.7 | MIT |
 | node_modules/postcss | 8.5.29 | MIT |
 | node_modules/prelude-ls | 1.2.1 | MIT |
 | node_modules/punycode | 2.3.1 | MIT |
