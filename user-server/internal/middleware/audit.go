@@ -340,7 +340,7 @@ func sanitizeMap(m map[string]any) map[string]any {
 	result := make(map[string]any)
 	for k, v := range m {
 		if isSensitiveField(k) {
-			result[k] = "******"
+			result[k] = apiLogRedactedMask
 		} else {
 			switch val := v.(type) {
 			case map[string]any:

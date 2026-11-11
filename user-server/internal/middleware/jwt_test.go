@@ -559,7 +559,7 @@ func TestSanitizeMap(t *testing.T) {
 	if result["name"] != "John" {
 		t.Errorf("Expected name 'John', got %v", result["name"])
 	}
-	if result["password"] != "******" {
+	if result["password"] != apiLogRedactedMask {
 		t.Errorf("Expected password to be masked, got %v", result["password"])
 	}
 
@@ -567,7 +567,7 @@ func TestSanitizeMap(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected nested to be a map")
 	}
-	if nested["secret"] != "******" {
+	if nested["secret"] != apiLogRedactedMask {
 		t.Errorf("Expected nested secret to be masked, got %v", nested["secret"])
 	}
 }
