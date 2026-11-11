@@ -553,11 +553,33 @@ func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 		return fmt.Errorf("序列化心跳数据失败: %w", err)
 	}
 	url := strings.TrimRight(config.PlatformURL(), "/") + "/api/platform/heartbeat"
+	// L-15：平台心跳闸（L-3 方案B）对「非空 merchant_key 声明」要求 HMAC 签名
+	//（X-Merchant-Key/X-Timestamp/X-Signature，payload = method+"\n"+path+"\n"+timestamp+"\n"+body，
+	// 口径与 Client.sign / 平台 VerifyHeartbeatSignature 三方一致）。secret 缺失时
+	// 降级为纯心跳（剥离关联声明）保活统计面——带关联硬发会被平台 401 信封拒。
+	headerKey, headerTS, headerSig := "", "", ""
+	if req.MerchantKey != "" {
+		if sig, ts, serr := c.sign("POST", "/api/platform/heartbeat", body); serr != nil {
+			logger.Warnf("心跳签名失败（%v）：本次降级为纯心跳（剥离 merchant_key 关联声明）。"+
+				"配置 PlatformCfg.Secret 后恢复关联上报", serr)
+			req.MerchantKey = ""
+			if body, err = json.Marshal(req); err != nil {
+				return fmt.Errorf("序列化降级心跳数据失败: %w", err)
+			}
+		} else {
+			headerKey, headerTS, headerSig = req.MerchantKey, ts, sig
+		}
+	}
 	httpReq, err := newPlatformRequest(context.Background(), "POST", url, body)
 	if err != nil {
 		return fmt.Errorf("构造心跳上报请求失败: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	if headerSig != "" {
+		httpReq.Header.Set("X-Merchant-Key", headerKey)
+		httpReq.Header.Set("X-Timestamp", headerTS)
+		httpReq.Header.Set("X-Signature", headerSig)
+	}
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("上报心跳失败: %w", err)
