@@ -1,0 +1,53 @@
+# env-example 覆盖闸（N-7）：安全键必查 + os.Getenv 读点棘轮
+#
+# 为什么单独一个作业（同 seam-guard 的理由）：`make audit` 只在本地跑，CI 从不执行它。
+# 守什么：scripts/check-env-example-coverage.py ——
+#   1. REQUIRED_KEYS（漏配=fail-closed 故障面的键）必须在 .env-example 有定义行；
+#   2. user-server {middleware,router,config} 三包 os.Getenv("KEY") 读点键集与
+#      .env-example 键集求差，差集必须 ⊆ 豁免表（棘轮），表外新键即红——
+#      防止「新安全键冒出来没人进 example」的静默漂移（N-7 四键缺案的同型）。
+# 触发面写三包 Go 树而不只脚本自己：新加一处 os.Getenv 读点的提交必须重跑这道门。
+# 牙齿：`python3 scripts/check-env-example-coverage.py --self-test`（假新键/缺失必查键都判红）。
+name: Env Example Gate
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - '.env-example'
+      - 'scripts/check-env-example-coverage.py'
+      - 'user-server/internal/middleware/**/*.go'
+      - 'user-server/internal/router/**/*.go'
+      - 'user-server/internal/config/**/*.go'
+      - '.github/workflows/env-example-gate.yml'
+  pull_request:
+    paths:
+      - '.env-example'
+      - 'scripts/check-env-example-coverage.py'
+      - 'user-server/internal/middleware/**/*.go'
+      - 'user-server/internal/router/**/*.go'
+      - 'user-server/internal/config/**/*.go'
+      - '.github/workflows/env-example-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  env-example-gate:
+    name: 安全键必查 + Getenv 读点棘轮
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: env-example 覆盖闸（N-7，必查键 + 棘轮）
+        run: python3 scripts/check-env-example-coverage.py
+
+      - name: 闸自测（红/绿用例自证有牙）
+        run: python3 scripts/check-env-example-coverage.py --self-test

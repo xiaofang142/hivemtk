@@ -649,6 +649,8 @@ go-cache-trim:
 #   需要时直接 `bash scripts/check-architecture.sh`。
 # =============================================================================
 audit:
+	@echo "── env-example 覆盖闸（N-7：安全键必查+Getenv 读点棘轮）──"
+	@python3 scripts/check-env-example-coverage.py
 	@echo "── 前后端 API 契约（UNMATCHED 必须为 0，且不得出现通配 key）──"
 	@python3 scripts/audit_api_contract.py --strict
 	@echo "── GORM-only 门禁（业务包禁 Exec/Raw，strict：违规即红）──"
