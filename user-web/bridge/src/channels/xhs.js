@@ -2,7 +2,7 @@ import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
-import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
+import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -259,6 +259,8 @@ function extractMessageContent(item) {
     mediaUrl = absoluteMediaUrl(vids[0]?.getAttribute('src') || '');
   } else if (typeAttr === 'VOICE' || typeAttr === 'AUDIO' || audio.length) {
     msgType = 'voice';
+    // M-4：语音 URL 尽力提取（audio[src] > 容器 data-src），提取不到保持类型标注
+    mediaUrl = absoluteMediaUrl(extractVoiceSrc(item, audio));
   } else if (links.length && !text) {
     msgType = 'link';
     mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');

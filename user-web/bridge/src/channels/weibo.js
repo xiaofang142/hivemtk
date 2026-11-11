@@ -1,9 +1,9 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
-import { CHANNELS, SENDER } from '../core/types.js';
+import { CHANNELS, SENDER, mediaPlaceholder } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, extractEmojiSrc,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -217,15 +217,42 @@ function parseMessageItem(item) {
   const img = [item.querySelector(SEL.CARD_IMG), ...Array.from(item.querySelectorAll('img[src]'))]
     .find((el) => el && !isAvatarImg(el)) || null;
   const video = item.querySelector(SEL.CARD_VIDEO) || item.querySelector('video[src]');
-  const mediaUrl = absoluteMediaUrl((img && img.getAttribute('src')) || (video && video.getAttribute('src')) || '');
-  if (!text && !mediaUrl) return null;
+  // M-4 媒体分支补齐（审计登记缺口 voice/card/link；fixture 口径，真机未校准）。
+  // card 提前：div.card 含标题/摘要文本时按 card 上报（链接卡/商品卡），纯图/视频卡
+  // （无标题摘要）仍走既有 image/video 实证口径；voice/emoji URL 尽力提取、提取不
+  // 到保持类型标注；纯媒体门禁由「!text && !mediaUrl」放宽为「!text && msgType==='text'」
+  // ——严格加法，纯语音/表情此前在渠道侧整条被丢弃。
+  const card = item.querySelector('[class*="card" i]');
+  const cardTitle = cleanText(card?.querySelector('[class*="title" i], [class*="Title" i]') || '');
+  const cardInfo = cleanText(card?.querySelector('[class*="info" i], [class*="desc" i]') || '');
+  const audio = item.querySelectorAll('[class*="voice" i], [class*="Voice" i], [class*="audio" i], [class*="Audio" i]');
+  const emoji = item.querySelectorAll('[class*="emoji" i], [class*="Emoji" i], [draggable="false"][alt]');
+  const links = item.querySelectorAll('a[href*="http"]');
+  let mediaUrl = absoluteMediaUrl((img && img.getAttribute('src')) || (video && video.getAttribute('src')) || '');
+  let msgType = 'text';
+  if (card && (cardTitle || cardInfo)) {
+    msgType = 'card';
+    text = cardInfo || cardTitle;
+  } else if (mediaUrl && !text) {
+    msgType = video ? 'video' : 'image';
+  } else if (audio.length) {
+    msgType = 'voice';
+    mediaUrl = mediaUrl || absoluteMediaUrl(extractVoiceSrc(item, audio));
+  } else if (emoji.length && !text) {
+    msgType = 'emoji';
+    mediaUrl = mediaUrl || absoluteMediaUrl(extractEmojiSrc(emoji));
+  } else if (links.length && !text) {
+    msgType = 'link';
+    mediaUrl = mediaUrl || absoluteMediaUrl(links[0].getAttribute('href') || '');
+  }
+  if (!text && msgType === 'text') return null;
   const senderType = directionOf(item);
   return {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,
     sender_type: senderType,
-    text: text || '[图片]',
+    text: text || mediaPlaceholder(msgType),
     media_url: mediaUrl,
-    msg_type: mediaUrl && !text ? (video ? 'video' : 'image') : 'text',
+    msg_type: msgType,
     is_group: false,
     group_id: '',
     group_name: '',

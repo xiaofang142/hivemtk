@@ -1,6 +1,6 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, fillContentEditableHumanized, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
+import { qs, qsa, cleanText, fillContentEditableHumanized, simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, extractEmojiSrc } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -92,6 +92,10 @@ function getAccountId() {
 }
 
 // 消息内容提取
+// M-4（2026-11-11）：补 voice/emoji/link/card 四分支（审计登记缺口），模板同
+//   douyin/xhs 主力口径：card 结构提前（标题/摘要进 content，缩略图 URL 进 media_url，
+//   卡内头像图仍走排除过滤器），voice/emoji 尽力提取 URL、提取不到保持类型标注，
+//   link 仅认「无文本时的 http 链接」。选择器为 fixture 口径，真机未校准（BR-1 同源）。
 function extractMessageContent(item) {
   const text = cleanText(item.querySelector(SEL.TEXT) || item);
   // 纯时间戳过滤
@@ -103,9 +107,24 @@ function extractMessageContent(item) {
     (img) => !(img.closest && img.closest('[class*="avatar" i], [class*="Avatar" i]'))
   );
   const vids = item.querySelectorAll('video, [class*="video"]');
+  const audio = item.querySelectorAll('[class*="voice"], [class*="Voice"], [class*="audio"], [class*="Audio"]');
+  const emoji = item.querySelectorAll('[class*="emoji"], [class*="Emoji"], [draggable="false"][alt]');
+  const links = item.querySelectorAll('a[href*="http"]');
+  const typeAttr = (item.getAttribute('data-msg-type') || item.querySelector(SEL.MSG_TYPE)?.getAttribute('data-msg-type') || '').toUpperCase();
   const sysTxt = text || '';
   if (/撤回了?一条消息|recalled/i.test(sysTxt)) {
     return { msgType: 'recall', mediaUrl: '', text: sysTxt };
+  }
+  // 卡片（商品卡/链接卡，SEL.CARD 口径）：标题/摘要进 content，缩略图 URL 进 media_url；
+  // 卡内头像图同样走排除过滤器（M-2 硬约束），不把头像当卡片缩略图。
+  const card = item.querySelector(SEL.CARD);
+  if (card || typeAttr === 'CARD') {
+    const title = cleanText(card?.querySelector('[class*="title"], [class*="Title"]') || '');
+    const info = cleanText(card?.querySelector('[class*="info"], [class*="desc"]') || '');
+    const cardImg = Array.from(card?.querySelectorAll('img') || []).find(
+      (el) => !(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'))
+    );
+    return { msgType: 'card', mediaUrl: absoluteMediaUrl(cardImg?.getAttribute('src') || ''), text: info || title || '卡片消息' };
   }
   let mediaUrl = '';
   let msgType = 'text';
@@ -115,6 +134,17 @@ function extractMessageContent(item) {
   } else if (imgs.length) {
     msgType = 'image';
     mediaUrl = absoluteMediaUrl(imgs[0].getAttribute('src') || '');
+  } else if (audio.length) {
+    msgType = 'voice';
+    // 语音 URL 尽力提取（audio[src] > 容器 data-src），提取不到保持类型标注
+    mediaUrl = absoluteMediaUrl(extractVoiceSrc(item, audio));
+  } else if (emoji.length && !text) {
+    msgType = 'emoji';
+    // 表情 URL 尽力提取（emoji img/容器 data-src），提取不到保持类型标注
+    mediaUrl = absoluteMediaUrl(extractEmojiSrc(emoji));
+  } else if (links.length && !text) {
+    msgType = 'link';
+    mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');
   }
   return { msgType, mediaUrl, text };
 }

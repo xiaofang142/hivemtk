@@ -287,6 +287,55 @@ export function avatarImgUrl(img) {
   return absoluteMediaUrl(src);
 }
 
+/**
+ * extractVoiceSrc 语音消息 URL 尽力提取（M-4，2026-11-11）。
+ *
+ * 语音气泡 DOM 形态平台差异大（<audio src> / 播放器容器 data-src / 仅图标无直链），
+ * 统一尽力口径：① <audio src|data-src>（气泡内任意位置）> ② voice/audio 容器自身
+ * data-src/src。提取不到返回 ''——调用方保持「仅类型标注」语义（AI 侧已按类型拼
+ * 上下文，channel-adapter 对空 media_url 原样放行占位符）。
+ * 注意：这里读的是「voice/audio 判据命中」的容器，与头像排除判据无关；返回值
+ * 一律由调用方走 absoluteMediaUrl 绝对化。
+ * @param {Element} item 消息气泡节点
+ * @param {NodeList|Array} audioEls 渠道已查询的 voice/audio 容器列表
+ * @returns {string} 原始 src（未绝对化；空串=提取不到）
+ */
+export function extractVoiceSrc(item, audioEls) {
+  try {
+    const direct = item.querySelector && item.querySelector('audio[src], audio[data-src]');
+    if (direct) return direct.getAttribute('src') || direct.getAttribute('data-src') || '';
+    for (const el of audioEls || []) {
+      if (!el || !el.getAttribute) continue;
+      const s = el.getAttribute('data-src') || el.getAttribute('src');
+      if (s) return s;
+    }
+  } catch (_) {  }
+  return '';
+}
+
+/**
+ * extractEmojiSrc 表情消息 URL 尽力提取（M-4，2026-11-11）。
+ *
+ * 表情 DOM 两种形态：① <img class*="emoji">（自身即图）> ② 表情容器内 <img>
+ * （class 命中或 draggable=false+alt 的容器套图）。font-icon/纯文本形态无 src →
+ * 返回 ''（保持类型标注，与 voice 同口径）。注意 imgs 分支优先的渠道里，
+ * 表情 <img> 会先被 image 分支捕获，本 helper 覆盖的是容器形态与 data-src 兜底。
+ * @param {NodeList|Array} emojiEls 渠道已查询的 emoji 元素列表
+ * @returns {string} 原始 src（未绝对化；空串=提取不到）
+ */
+export function extractEmojiSrc(emojiEls) {
+  try {
+    for (const el of emojiEls || []) {
+      if (!el) continue;
+      const self = el.getAttribute && (el.getAttribute('src') || el.getAttribute('data-src'));
+      if (self) return self;
+      const inner = el.querySelector && el.querySelector('img[src], img[data-src]');
+      if (inner) return inner.getAttribute('src') || inner.getAttribute('data-src') || '';
+    }
+  } catch (_) {  }
+  return '';
+}
+
 
 /** 清空消息输入框（textarea 走 setValue，contenteditable 摘空子节点并派发 input） */
 export function clearMessageInput(el) {

@@ -1,9 +1,9 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
-import { CHANNELS, SENDER } from '../core/types.js';
+import { CHANNELS, SENDER, mediaPlaceholder } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, extractEmojiSrc,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -37,6 +37,12 @@ function mergedSelectors() {
 //   方向按 .msg-item class 含 not-me / .message-content class 含 is-me；
 //   输入 #editor，发送 [class*='btn-box send-btn']，图片 .image-upload-btn。
 // 旧 bundle 线索保留为兜底候选。改版后在 popup 选择器面板覆盖即可。
+// M-4（2026-11-11）：IMAGE_UPLOAD（.image-upload-btn, input[type="file"]）删除——
+//   2026-11-10 审计登记的死选择器（全仓零引用）：它是发送侧入口（点开文件选择器），
+//   解析侧无消费者；下行 sendMedia 归 M-3 工厂（media-inject.js）且本轮纪律冻结不
+//   得动，接线无落点；实证证据已保留在上方文件头注释（图片 .image-upload-btn）。
+//   论证同 M-1 offline-cache 死代码清除模式（接线无消费者 / 删除无损 / 保留只留
+//   死定义），故三选一取「删除」。
 export const SEL = {
   CHAT_LIST: ".list-container div[class='list-item'], .message-sidebar__item, [class*=\"session-item\" i]",
   MSG_LIST: ".message-list, .message-content__inner, [class*=\"message-list\" i]",
@@ -48,7 +54,6 @@ export const SEL = {
   UNREAD: '.notify.notify-number, .message-sidebar__item-num, [class*="unread" i]',
   UNFOLLOWED_TAB: "[title='未关注人消息']",
   MY_MSG_TAB: "[title='我的消息']",
-  IMAGE_UPLOAD: '.image-upload-btn, input[type="file"]',
   SYSTEM: '.message-divider, [class*="system" i], [class*="notice" i]',
 };
 
@@ -294,19 +299,49 @@ function parseMessageItem(item) {
     return sysParsed;
   }
   const textEl = item.querySelector(SEL.TEXT) || item;
-  const text = cleanText(textEl);
+  let text = cleanText(textEl);
   // 头像过滤（2026-11-10 审计 F4）+ URL 绝对化（F5），与 xhs/xianyu/tiktok 同口径
   const img = Array.from(item.querySelectorAll('img[src]')).find(
     (el) => !(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'))
   ) || null;
-  const mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
-  const msgType = !text && mediaUrl ? 'image' : 'text';
-  if (!text && !mediaUrl) return null;
+  // M-4 媒体分支补齐（审计登记：bilibili 仅 image；补 video/voice/emoji/link/card。
+  // fixture 口径，真机未校准）。模板同 douyin/xhs：card 结构提前（标题/摘要进 content，
+  // 缩略图沿用首个非头像 img），voice/emoji URL 尽力提取、提取不到保持类型标注；
+  // image 语义保持既有口径（无文本才归 image），纯媒体门禁由「!text && !mediaUrl」
+  // 放宽为「!text && msgType==='text'」——严格加法，纯语音/表情此前在渠道侧整条被丢弃。
+  const card = item.querySelector('[class*="card" i]');
+  const cardTitle = cleanText(card?.querySelector('[class*="title" i], [class*="Title" i]') || '');
+  const cardInfo = cleanText(card?.querySelector('[class*="info" i], [class*="desc" i]') || '');
+  const vids = item.querySelectorAll('video, [class*="video" i], [class*="Video" i]');
+  const audio = item.querySelectorAll('[class*="voice" i], [class*="Voice" i], [class*="audio" i], [class*="Audio" i]');
+  const emoji = item.querySelectorAll('[class*="emoji" i], [class*="Emoji" i], [draggable="false"][alt]');
+  const links = item.querySelectorAll('a[href*="http"]');
+  let mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
+  let msgType = 'text';
+  if (card && (cardTitle || cardInfo)) {
+    msgType = 'card';
+    text = cardInfo || cardTitle;
+  } else if (vids.length) {
+    msgType = 'video';
+    mediaUrl = absoluteMediaUrl(vids[0].getAttribute('src') || vids[0].querySelector('video')?.getAttribute('src') || '');
+  } else if (img && !text) {
+    msgType = 'image';
+  } else if (audio.length) {
+    msgType = 'voice';
+    mediaUrl = mediaUrl || absoluteMediaUrl(extractVoiceSrc(item, audio));
+  } else if (emoji.length && !text) {
+    msgType = 'emoji';
+    mediaUrl = mediaUrl || absoluteMediaUrl(extractEmojiSrc(emoji));
+  } else if (links.length && !text) {
+    msgType = 'link';
+    mediaUrl = mediaUrl || absoluteMediaUrl(links[0].getAttribute('href') || '');
+  }
+  if (!text && msgType === 'text') return null;
   const senderType = directionOf(item);
   const parsed = {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,
     sender_type: senderType,
-    text: text || '[图片]',
+    text: text || mediaPlaceholder(msgType),
     media_url: mediaUrl,
     msg_type: msgType,
     is_group: false,

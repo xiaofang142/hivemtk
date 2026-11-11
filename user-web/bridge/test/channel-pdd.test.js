@@ -198,3 +198,47 @@ describe('pdd adapter（CH-16 首切片，实验渠道）', () => {
     meta.remove();
   });
 });
+
+// M-4（2026-11-11）：pdd 评估结论 = 上行媒体解析已对齐 A 源证据（text/image/card），
+// 「16d 专属实现前降级不可发送」注释属下行 sendMedia 口径（M-3 已录实验渠道保持文本降级），
+// 本轮不新增分支；补 avatar 排除回归 + 语音缺口如实登记（A 源无语音形态证据）。
+describe('M-4 pdd 上行解析对齐评估（不新增分支）', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    stubLocation('https://mms.pinduoduo.com/chat-merchant/index.html');
+    document.body.innerHTML = '';
+  });
+
+  it('回归：头像图不误判为消息图（文本+头像 → text + media_url 空）', () => {
+    const a = buildPddAdapter();
+    document.body.innerHTML = `
+      <div class="msg-list">
+        <div class="onemsg" data-id="m9"><div class="msg-content"><img class="avatar" src="https://img.pinduoduo.com/av.jpg">纯文本</div></div>
+      </div>
+      <textarea id="replyTextarea"></textarea>
+      <div class="reply-footer"><button class="send-btn">发送</button></div>
+    `;
+    const items = a.getMessageItems();
+    const p = a.parseMessageItem(items[0]);
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('text');
+    expect(p.media_url).toBe('');
+    expect(p.text).toBe('纯文本');
+  });
+
+  it('缺口登记：纯语音气泡当前整条丢弃（A 源无语音形态证据，随 BR-1 真机校准补 voice 分支）', () => {
+    // 诚实钉住现状：pdd 解析器无 voice 分支，纯语音（无文本无图）过不了
+    // 「!text && !mediaUrl → null」门禁。真机校准前不补齐 = 不凭空捏造选择器。
+    const a = buildPddAdapter();
+    document.body.innerHTML = `
+      <div class="msg-list">
+        <div class="onemsg" data-id="m10"><div class="msg-content"><div class="voice"></div></div></div>
+      </div>
+      <textarea id="replyTextarea"></textarea>
+      <div class="reply-footer"><button class="send-btn">发送</button></div>
+    `;
+    const items = a.getMessageItems();
+    expect(a.parseMessageItem(items[0])).toBeNull();
+  });
+});

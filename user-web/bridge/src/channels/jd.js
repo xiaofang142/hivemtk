@@ -1,9 +1,9 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
-import { CHANNELS } from '../core/types.js';
+import { CHANNELS, mediaPlaceholder } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
-  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
+  assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { mergeSelectors } from '../core/selector-ai.js';
@@ -198,19 +198,43 @@ function parseMessageItem(item) {
     if (item.matches(SEL.SYSTEM)) return null;
   } catch (_) {  }
   const textEl = item.querySelector(SEL.TEXT);
-  const text = cleanText(textEl || item);
+  let text = cleanText(textEl || item);
   // 头像过滤（2026-11-10 审计 F4）+ URL 绝对化（F5），与 xhs/xianyu/tiktok 同口径
   const img = Array.from(item.querySelectorAll('img[src]')).find(
     (el) => !(el.closest && el.closest('[class*="avatar" i], [class*="Avatar" i]'))
   ) || null;
-  const mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
-  if (!text && !mediaUrl) return null;
+  // M-4 媒体分支补齐（审计登记缺口 video/voice/card；fixture 口径，真机未校准）。
+  // 模板同 douyin/xhs：card 结构提前（标题/摘要进 content，缩略图 URL 沿用首个非头像
+  // img），voice URL 尽力提取、提取不到保持类型标注。image 语义保持既有口径不变
+  // （无文本才归 image，与 xhs/xianyu/tiktok 同源），纯媒体门禁由「!text && !mediaUrl」
+  // 放宽为「!text && msgType==='text'」——严格加法：纯语音此前在渠道侧整条被丢弃，
+  // channel-adapter 的 F3 放宽救不到渠道侧门禁。
+  const card = item.querySelector('[class*="card" i]');
+  const cardTitle = cleanText(card?.querySelector('[class*="title" i], [class*="Title" i]') || '');
+  const cardInfo = cleanText(card?.querySelector('[class*="info" i], [class*="desc" i]') || '');
+  const vids = item.querySelectorAll('video, [class*="video" i], [class*="Video" i]');
+  const audio = item.querySelectorAll('[class*="voice" i], [class*="Voice" i], [class*="audio" i], [class*="Audio" i]');
+  let mediaUrl = absoluteMediaUrl(img ? (img.getAttribute('src') || '') : '');
+  let msgType = 'text';
+  if (card && (cardTitle || cardInfo)) {
+    msgType = 'card';
+    text = cardInfo || cardTitle;
+  } else if (vids.length) {
+    msgType = 'video';
+    mediaUrl = absoluteMediaUrl(vids[0].getAttribute('src') || vids[0].querySelector('video')?.getAttribute('src') || '');
+  } else if (img && !text) {
+    msgType = 'image';
+  } else if (audio.length) {
+    msgType = 'voice';
+    mediaUrl = mediaUrl || absoluteMediaUrl(extractVoiceSrc(item, audio));
+  }
+  if (!text && msgType === 'text') return null;
   return {
     message_id: item.getAttribute('data-id') || item.id || `c:${text || mediaUrl}`,
     sender_type: FRONTEND_DEFAULT_SENDER_TYPE,
-    text: text || '[图片]',
+    text: text || mediaPlaceholder(msgType),
     media_url: mediaUrl,
-    msg_type: !text && mediaUrl ? 'image' : 'text',
+    msg_type: msgType,
     is_group: false,
     group_id: '',
     group_name: '',

@@ -8,6 +8,10 @@ import {
   isMediaMsgType,
   MEDIA_PLACEHOLDERS,
 } from '../src/core/types.js';
+import { buildDouyinAdapter } from '../src/channels/douyin.js';
+import { buildXhsAdapter } from '../src/channels/xhs.js';
+import { buildXianyuAdapter } from '../src/channels/xianyu.js';
+import { buildTiktokAdapter } from '../src/channels/tiktok.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -230,5 +234,94 @@ describe('002 多类型消息：sendOutbound 媒体路径', () => {
     const selfReport = onMessage.mock.calls.find((c) => c[0].sender_type === SENDER.AGENT)?.[0];
     expect(selfReport.msg_type).toBe('text');
     expect(selfReport.event_id).toBe(contentHash('douyin_web', 'conv1', 'hello'));
+  });
+});
+
+// ── M-4（2026-11-11）：voice/emoji URL 提取（全渠道 media_url 恒空收口）──
+// 审计登记：voice/emoji 全渠道标类型但 media_url 恒空，AI 只能收到类型占位符；
+// 且 media_url 参与 _dedupKey 与 event_id（typedContentHash），URL 恒空 ⇒ 同会话
+// 连续两条语音键全同 ⇒ 第二条起被客户端 _hasSent + 服务端 msg_id 幂等双重吞掉。
+// 收口口径：DOM 有可提取 src 一并提取，提取不到保持类型标注（AI 侧已按类型拼上下文）。
+
+describe('M-4 voice/emoji URL 提取（主力 4 渠道）', () => {
+  beforeEach(() => { document.body.innerHTML = ''; });
+
+  const dyItem = (html) => {
+    document.body.innerHTML = `<div class="msg-list">${html}</div>`;
+    return document.querySelector('.msg-list > div');
+  };
+
+  it('douyin：纯语音 audio[src] → msg_type=voice + media_url（此前恒空）', () => {
+    const a = buildDouyinAdapter();
+    const p = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/v.m4a"></audio></div></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('https://p3.douyinvod.com/v.m4a');
+  });
+
+  it('douyin：语音容器 data-src 兜底提取（无 audio 元素形态）', () => {
+    const a = buildDouyinAdapter();
+    const p = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg" data-src="//p3.douyinvod.com/x.m4a"></div></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('http://p3.douyinvod.com/x.m4a');
+  });
+
+  it('douyin：语音提取不到 URL → 保持 voice 类型标注（media_url 空，不丢消息）', () => {
+    const a = buildDouyinAdapter();
+    const p = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg"></div></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('');
+  });
+
+  it('douyin：表情容器 data-src → emoji + media_url；font-icon 无 src → 仅类型标注', () => {
+    const a = buildDouyinAdapter();
+    const withUrl = a.parseMessageItem(dyItem('<div class="bubble"><span class="emoji emoji-1" data-src="//sf1-ttcdn-tos.pstatp.com/e.png"></span></div>'));
+    expect(withUrl.msg_type).toBe('emoji');
+    expect(withUrl.media_url).toBe('http://sf1-ttcdn-tos.pstatp.com/e.png');
+    const fontIcon = a.parseMessageItem(dyItem('<div class="bubble"><span class="emoji emoji-smile"></span></div>'));
+    expect(fontIcon).not.toBeNull();
+    expect(fontIcon.msg_type).toBe('emoji');
+    expect(fontIcon.media_url).toBe('');
+  });
+
+  it('douyin：两条不同 URL 的语音 dedupKey/event_id 互不碰撞（此前恒空键全同互吞）', () => {
+    const a = buildDouyinAdapter();
+    const p1 = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/1.m4a"></audio></div></div>'));
+    const p2 = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/2.m4a"></audio></div></div>'));
+    expect(a._dedupKey('conv1', p1)).not.toBe(a._dedupKey('conv1', p2));
+    expect(a._canonicalMsgId(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/1.m4a"></audio></div></div>'), 'conv1', p1, 0))
+      .not.toBe(a._canonicalMsgId(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/2.m4a"></audio></div></div>'), 'conv1', p2, 0));
+    // 同 URL 重渲染仍幂等（去重语义不破坏）
+    const p1b = a.parseMessageItem(dyItem('<div class="bubble"><div class="voice-msg"><audio src="https://p3.douyinvod.com/1.m4a"></audio></div></div>'));
+    expect(a._dedupKey('conv1', p1)).toBe(a._dedupKey('conv1', p1b));
+  });
+
+  it('xhs：data-msg-type=VOICE + audio[data-src] → voice + media_url', () => {
+    const a = buildXhsAdapter();
+    document.body.innerHTML = '<div class="im-msg-item" data-msg-type="VOICE"><div class="left"><audio data-src="https://sig.xhscdn.com/v.m4a"></audio></div></div>';
+    const p = a.parseMessageItem(document.querySelector('.im-msg-item'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('https://sig.xhscdn.com/v.m4a');
+  });
+
+  it('xianyu：voice 容器 audio[src] → voice + media_url', () => {
+    const a = buildXianyuAdapter();
+    document.body.innerHTML = '<div class="msg-item"><div class="voice"><audio src="https://xianyu.im/v.m4a"></audio></div></div>';
+    const p = a.parseMessageItem(document.querySelector('.msg-item'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('https://xianyu.im/v.m4a');
+  });
+
+  it('tiktok：voice 容器 audio[src] → voice + media_url', () => {
+    const a = buildTiktokAdapter();
+    document.body.innerHTML = '<div class="msg-item"><div class="voice"><audio src="https://tiktok.im/v.m4a"></audio></div></div>';
+    const p = a.parseMessageItem(document.querySelector('.msg-item'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('voice');
+    expect(p.media_url).toBe('https://tiktok.im/v.m4a');
   });
 });

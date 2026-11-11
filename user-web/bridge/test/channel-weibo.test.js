@@ -87,3 +87,69 @@ describe('weibo adapter（实验渠道）', () => {
     expect(getAccountId()).toBe('weibo-unknown');
   });
 });
+
+// M-4（2026-11-11）：weibo 媒体分支补齐（审计缺口 voice/card/link）。
+// fixture 口径（模板同 douyin/xhs 主力渠道 + 实证 CARD_IMG/CARD_VIDEO 同源 div.card），
+// Experimental 渠道真机未校准（BR-1 同源缺口）。
+describe('M-4 weibo 媒体分支补齐', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    stubLocation('https://weibo.com/chat');
+    document.body.innerHTML = '';
+  });
+
+  const wbItem = (html) => {
+    document.body.innerHTML = `<ul class="chat-content">${html}</ul>`;
+    return document.querySelector('.chat-content > li');
+  };
+
+  it('卡片（链接卡：标题/缩略图）→ msg_type=card，标题进 content，缩略图进 media_url', () => {
+    const a = buildWeiboAdapter();
+    const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><div class="card"><div><img src="https://wx1.sinaimg.cn/t.jpg"></div><div class="title">链接标题</div></div></div></li>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('card');
+    expect(p.text).toBe('链接标题');
+    expect(p.media_url).toBe('https://wx1.sinaimg.cn/t.jpg');
+    expect(p.sender_type).toBe(SENDER.CUSTOMER);
+  });
+
+  it('语音 audio[src] → msg_type=voice + media_url；提取不到保持类型标注不丢弃', () => {
+    const a = buildWeiboAdapter();
+    const withUrl = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><div class="voice"><audio src="https://w.im/v.m4a"></audio></div></div></li>'));
+    expect(withUrl).not.toBeNull();
+    expect(withUrl.msg_type).toBe('voice');
+    expect(withUrl.media_url).toBe('https://w.im/v.m4a');
+    // 纯语音无 URL：旧门禁「!text && !mediaUrl → null」整条丢弃；M-4 放宽后保留类型标注
+    const noUrl = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><div class="voice"></div></div></li>'));
+    expect(noUrl).not.toBeNull();
+    expect(noUrl.msg_type).toBe('voice');
+    expect(noUrl.media_url).toBe('');
+    expect(noUrl.text).toBe('[语音]');
+  });
+
+  it('纯链接（空锚点）→ msg_type=link + href 绝对化', () => {
+    const a = buildWeiboAdapter();
+    const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><a href="https://m.weibo.cn/x"></a></div></li>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('link');
+    expect(p.media_url).toBe('https://m.weibo.cn/x');
+  });
+
+  it('回归：纯图卡（div.card 无标题摘要）仍归 image（实证口径不被 card 分支抢走）', () => {
+    const a = buildWeiboAdapter();
+    const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><div class="card"><div><img src="https://wx1.sinaimg.cn/x.jpg"></div></div></div></li>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('image');
+    expect(p.media_url).toBe('https://wx1.sinaimg.cn/x.jpg');
+  });
+
+  it('回归：头像图不误判为消息图（文本+头像 → text + media_url 空）', () => {
+    const a = buildWeiboAdapter();
+    const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><img class="avatar" src="https://wx1.sinaimg.cn/av.jpg"><p class="puretext">你好</p></div></li>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('text');
+    expect(p.media_url).toBe('');
+    expect(p.text).toBe('你好');
+  });
+});

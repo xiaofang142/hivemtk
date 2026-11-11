@@ -1,6 +1,6 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
-import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl } from '../core/dom.js';
+import { qs, qsa, cleanText, simulateRealClick, fillContentEditableHumanized, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, extractEmojiSrc } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { SelectorEngine } from '../core/selector-engine.js';
@@ -238,8 +238,15 @@ function extractMessageContent(item) {
     mediaUrl = absoluteMediaUrl(imgs[0].getAttribute('src') || '');
   } else if (audio.length) {
     msgType = 'voice';
+    // M-4：语音 URL 尽力提取（audio[src] > 容器 data-src），提取不到保持类型标注。
+    //   此前 media_url 恒空 ⇒ 同会话连续语音 dedupKey/event_id 全同，第二条起被
+    //   客户端 _hasSent 与服务端 msg_id 幂等双重吞掉（审计 F3 只放了行，没解决键碰撞）。
+    mediaUrl = absoluteMediaUrl(extractVoiceSrc(item, audio));
   } else if (emoji.length && !text) {
     msgType = 'emoji';
+    // M-4：表情 URL 尽力提取（emoji img/容器 data-src）；imgs 分支优先的口径下
+    //   表情 <img> 已归 image，本分支主要覆盖 font-icon/容器形态，提取不到保持类型标注。
+    mediaUrl = absoluteMediaUrl(extractEmojiSrc(emoji));
   } else if (links.length && !text) {
     msgType = 'link';
     mediaUrl = absoluteMediaUrl(links[0].getAttribute('href') || '');

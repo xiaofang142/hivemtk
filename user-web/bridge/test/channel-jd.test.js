@@ -80,3 +80,67 @@ describe('jd adapter（实验渠道）', () => {
     expect(getAccountId()).toBe('jd-unknown');
   });
 });
+
+// M-4（2026-11-11）：jd 媒体分支补齐（审计缺口 video/voice/card）。
+// fixture 口径（模板同 douyin/xhs 主力渠道），Experimental 渠道真机未校准（BR-1 同源缺口）。
+describe('M-4 jd 媒体分支补齐', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    stubLocation('https://jdm.jd.com/');
+    document.body.innerHTML = '';
+  });
+
+  const jdItem = (html) => {
+    document.body.innerHTML = `<div class="message-list">${html}</div>`;
+    return document.querySelector('.message-list > div');
+  };
+
+  it('视频 video[src] → msg_type=video + media_url（此前缺 video 分支）', () => {
+    const a = buildJdAdapter();
+    const p = a.parseMessageItem(jdItem('<div class="message-item"><video src="https://jd.im/v.mp4"></video></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('video');
+    expect(p.media_url).toBe('https://jd.im/v.mp4');
+  });
+
+  it('语音 audio[src] → msg_type=voice + media_url；提取不到保持类型标注不丢弃', () => {
+    const a = buildJdAdapter();
+    const withUrl = a.parseMessageItem(jdItem('<div class="message-item"><div class="voice-wrap"><audio src="https://jd.im/v.m4a"></audio></div></div>'));
+    expect(withUrl).not.toBeNull();
+    expect(withUrl.msg_type).toBe('voice');
+    expect(withUrl.media_url).toBe('https://jd.im/v.m4a');
+    // 纯语音无 URL：旧门禁「!text && !mediaUrl → null」整条丢弃；M-4 放宽后保留类型标注
+    const noUrl = a.parseMessageItem(jdItem('<div class="message-item"><div class="voice-wrap"></div></div>'));
+    expect(noUrl).not.toBeNull();
+    expect(noUrl.msg_type).toBe('voice');
+    expect(noUrl.media_url).toBe('');
+    expect(noUrl.text).toBe('[语音]');
+  });
+
+  it('卡片（标题/缩略图）→ msg_type=card，标题进 content', () => {
+    const a = buildJdAdapter();
+    const p = a.parseMessageItem(jdItem('<div class="message-item"><div class="card"><div class="title">订单卡</div><img src="https://jd.im/t.jpg"></div></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('card');
+    expect(p.text).toBe('订单卡');
+    expect(p.media_url).toBe('https://jd.im/t.jpg');
+  });
+
+  it('回归：头像图不误判为消息图（文本+头像 → text + media_url 空）', () => {
+    const a = buildJdAdapter();
+    const p = a.parseMessageItem(jdItem('<div class="message-item"><img class="avatar" src="https://jd.im/av.jpg"><span class="message-text">在吗</span></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('text');
+    expect(p.media_url).toBe('');
+    expect(p.text).toBe('在吗');
+  });
+
+  it('回归：带文字图片仍按既有口径归 text（M-4 不改 image 语义）', () => {
+    const a = buildJdAdapter();
+    const p = a.parseMessageItem(jdItem('<div class="message-item"><span class="message-text">看图</span><img src="https://jd.im/p.jpg"></div>'));
+    expect(p).not.toBeNull();
+    expect(p.msg_type).toBe('text');
+    expect(p.media_url).toBe('https://jd.im/p.jpg');
+  });
+});
