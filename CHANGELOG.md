@@ -11,10 +11,10 @@
 
 #### 2026-11 收口批次（L/M/N/A/CC/CS 系列 · 未完成任务清单驱动）（2026-11-11/12）
 
-- **新增**：CC-04 八表通用保留清理器（刀1 33667e19 + 刀2 b68f4793）；CC-01 裸 goroutine 白名单静态门挂 make audit（16de6671）；CS-01 升级后再验黑盒复测脚本（de013c4f）；RM-1⑦ 巡检 SQL 手册（8087c62e）；N-7 .env-example 补安全键六项+闸脚本+CI（d2705931）；L-13 跨仓契约前缀 vendor 对账用户侧半边（75322017）；M-4 渠道媒体解析补齐 5 渠道（9b523041）
+- **新增**：CC-04 八表通用保留清理器（刀1 33667e19 + 刀2 b68f4793）；CC-01 裸 goroutine 白名单静态门挂 make audit（16de6671）；CS-01 升级后再验黑盒复测脚本（de013c4f）；RM-1⑦ 巡检 SQL 手册（8087c62e）；N-7 .env-example 补安全键六项+闸脚本+CI（d2705931）；L-13 跨仓契约前缀 vendor 对账用户侧半边（75322017）；M-1 上报 ack 收口（2061942e）；M-2 客户头像全链路集成（2766b301）；M-3 下行媒体原生发送（0a012209）；M-4 渠道媒体解析补齐 5 渠道（9b523041）；M-5 巡检未读优先增量调度（54ba724c）；M-6 新用户识别上报+自动关注（afc58eef）
 - **修复**：A-22 迁移版本撞号启动 panic（417ef045）；A-23 service 层 manager 死词清零（f0ad47ad）；A-20 用户资料清空手机号「假成功」（f795f99c）；A-21 markdownlint 存量红清零（93c1ec5c）；N-1 AuditMiddleware query 脱敏对齐（02324a3f）；N-2 请求路径裸 goroutine 全量收口 SafeGo（b8d14c17）
 - **安全**：L-1 删平台管理员 JWT 通道——消灭凭据分发面（72b88577）；A-8 ManagerOrAdminMiddleware 收口 RequireAdminMiddleware（9c352849）；F-6-5① VISITOR_TOKEN_SECRET 弱密钥启动强校验（075d78a7）；N-9② Bridge 共享 token 威胁模型与轮换规程文档（48dcedbf）
-- **文档/治理**：N-12 audit 掩码口径统一 ***REDACTED***（7ecdb837）；L-14 PLATFORM_ADMIN_PASSWORD 文档残留对齐（47e2892c）；N-19 MCP_TOKEN 语义核清为可选增强键（931e2420）；I-5 历史轮次日志压缩归档 169 份（87e82dad）；协作规则 0b 收紧为「禁止子智能体并行、主智能体线性调用」（宪法 v1.0.4）；AM-02 商户积分余额自查三仓贯通（d4711890）
+- **文档/治理**：N-12 audit 掩码口径统一 ***REDACTED***（7ecdb837）；N-3 多实例约束 ADR-018（6ddd2476）；L-14 PLATFORM_ADMIN_PASSWORD 文档残留对齐（47e2892c）；N-19 MCP_TOKEN 语义核清为可选增强键（931e2420）；I-5 历史轮次日志压缩归档 169 份（87e82dad）；协作规则 0b 收紧为「禁止子智能体并行、主智能体线性调用」（宪法 v1.0.4）；AM-02 商户积分余额自查三仓贯通（d4711890）
 
 #### 005 · 主动触达合规策略（地区×行业可配置）（2026-10-23，`specs/005-reach-compliance-policy`）
 
