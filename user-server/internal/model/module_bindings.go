@@ -1,6 +1,9 @@
 package model
 
-import "sort"
+import (
+	"sort"
+	"sync"
+)
 
 // ModuleMenuBindings 功能模块 ↔ 菜单节点归属表（功能模块化改造的事实源）
 //
@@ -433,15 +436,35 @@ func OwnerOfMenuKey(menuKey string) string {
 	return MenuKeyOwner[menuKey]
 }
 
-// ModuleEnabledFilter 是菜单过滤用的「已开通模块」判定函数签名。
+// moduleEnabledFilter 是菜单过滤用的「已开通模块」判定函数签名（原导出 var 收进
+// RWMutex accessor 对，R28 seam-guard 同口径）。
 //
 // 注入而非直连：model 包不能依赖 repository/service（会被 middleware 反向 import
 // 成环）。cmd/api/main.go 在装配阶段注入真实实现；未注入时返回 nil，
 // FilterMenuTreeByModule 视为「无限制」，保证测试与离线首启不被空实现卡死。
-var ModuleEnabledFilter func(moduleKey string) bool
+//
+// 并发口径（CC-01 -race 实证）：除了装配期的 InstallWiring，模块同步链
+// （Sync → bootstrapOffline → refreshProcessGate）也会经 SetModuleEnabledFilter
+// 重灌闸函数——开户即起 SafeGoDetached 后台同步，两条注册并发时两个写入方
+// 同时落这个包级变量 ⇒ DATA RACE。读写各收进 accessor、由 RWMutex 守。
+var (
+	moduleEnabledFilterMu sync.RWMutex
+	moduleEnabledFilter   func(moduleKey string) bool
+)
 
-// SetModuleEnabledFilter 注入模块启用判定（装配期调用一次）。
-func SetModuleEnabledFilter(fn func(moduleKey string) bool) { ModuleEnabledFilter = fn }
+// GetModuleEnabledFilter 读出已注入的模块启用判定（未注入为 nil）。
+func GetModuleEnabledFilter() func(moduleKey string) bool {
+	moduleEnabledFilterMu.RLock()
+	defer moduleEnabledFilterMu.RUnlock()
+	return moduleEnabledFilter
+}
+
+// SetModuleEnabledFilter 注入模块启用判定（装配期调用一次；模块同步链会重灌，并发安全）。
+func SetModuleEnabledFilter(fn func(moduleKey string) bool) {
+	moduleEnabledFilterMu.Lock()
+	defer moduleEnabledFilterMu.Unlock()
+	moduleEnabledFilter = fn
+}
 
 // FilterMenuTreeByModule 先按「模块是否开通」裁菜单，再交给角色授权裁剪。
 //
@@ -450,7 +473,7 @@ func SetModuleEnabledFilter(fn func(moduleKey string) bool) { ModuleEnabledFilte
 // 菜单还看得见、点进去才 403，正是 ADR 里点名要避免的症状。
 func FilterMenuTreeByModule(tree []SystemMenuNode, enabled func(moduleKey string) bool) []SystemMenuNode {
 	if enabled == nil {
-		enabled = ModuleEnabledFilter
+		enabled = GetModuleEnabledFilter()
 	}
 	if enabled == nil {
 		return tree

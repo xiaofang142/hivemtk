@@ -189,8 +189,8 @@ func (p *PublishPipeline) Publish(ctx context.Context, req PublishRequest) ([]Pu
 	var wg sync.WaitGroup
 	for i := 0; i < p.workerCount; i++ {
 		wg.Add(1)
-		// SafeGo：多平台发布 worker 跑外部平台 API，panic 不能击穿进程
-		utils.SafeGo(ctx, "geo.publish_pipeline.worker", func(_ context.Context) {
+		// utils.SafeGo 收口：发布 worker（HTTP/Headless 链）panic 不击穿进程
+		utils.SafeGo(ctx, "geo.publish.worker", func(ctx context.Context) {
 			defer wg.Done()
 			for j := range jobs {
 				results <- p.publishOne(ctx, article, j.platform)

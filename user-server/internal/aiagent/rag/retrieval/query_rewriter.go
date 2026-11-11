@@ -129,14 +129,16 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 	var wg sync.WaitGroup
 	if q.hydeGen != nil && q.hydeGen.IsEnabled() {
 		wg.Add(1)
-		utils.SafeGo(ctx, "rag.query_rewriter.hyde", func(_ context.Context) {
+		// utils.SafeGo 收口：HyDE 生成（LLM）panic 不击穿进程（失败路径同 hydeErr 降级语义）
+		utils.SafeGo(ctx, "rag.rewrite.hyde", func(ctx context.Context) {
 			defer wg.Done()
 			hydeDoc, hydeErr = q.hydeGen.Generate(ctx, query)
 		})
 	}
 	if q.multiGen != nil && q.multiGen.IsEnabled() {
 		wg.Add(1)
-		utils.SafeGo(ctx, "rag.query_rewriter.multi_query", func(_ context.Context) {
+		// utils.SafeGo 收口：多查询改写（LLM）panic 不击穿进程（失败路径同 multiErr 降级语义）
+		utils.SafeGo(ctx, "rag.rewrite.multiQuery", func(ctx context.Context) {
 			defer wg.Done()
 			multiQueries, multiErr = q.multiGen.Generate(ctx, query)
 		})

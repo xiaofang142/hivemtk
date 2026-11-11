@@ -78,9 +78,8 @@ func NewABExperiment(exposureRepo *repository.ABExposureRepository, bufferSize i
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.wg.Add(1)
-	// SafeGo：曝光消费循环常驻，但单条曝光落库 panic 只回收该条（worker 存活），
-	// 不能击穿进程——曝光事件来自请求路径（LLM/用户面数据）。
-	utils.SafeGo(ctx, "ab_experiment.consumer", func(ctx context.Context) {
+	// 长驻消费循环（进程生命周期）：utils.SafeGo 收口 panic，防曝光落库链 panic 击穿进程
+	utils.SafeGo(ctx, "abexperiment.consume", func(ctx context.Context) {
 		defer a.wg.Done()
 		for {
 			select {

@@ -94,8 +94,8 @@ func FeedbackCollectorDecorator(sink FeedbackSink) ToolDecorator {
 				event.Source = tc.Source
 			}
 
-			// event 为单次调用局部变量，直接捕获与原 go func(ev) 传参语义等价
-			utils.SafeGo(nil, "tooluse.FeedbackSink.Record", func(_ context.Context) {
+			// utils.SafeGo 收口：审计落库（DB）panic 不击穿进程
+			utils.SafeGo(context.Background(), "tooluse.feedback.sink", func(_ context.Context) {
 				sinkCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if sinkErr := sink.RecordToolCall(sinkCtx, event); sinkErr != nil {

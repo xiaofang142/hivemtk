@@ -83,9 +83,8 @@ func (s *EmailOpenTrackerService) RenderPixel(ctx context.Context, token, ip, ua
 	if !MarkOpenSeen(token) {
 		return EmailOpenPixel, EmailOpenPixelContentType, EmailOpenPixelMaxAge, nil
 	}
-	// t/ipAddr/userAgent 为请求级稳定值，直接捕获与原传参语义等价；
-	// SafeGo：打开像素是 HTTP 请求路径，异步记录 panic 不能击穿进程
-	utils.SafeGo(nil, "email_open.record", func(_ context.Context) {
+	// utils.SafeGo 收口：打开事件落库（DB）panic 不击穿进程
+	utils.SafeGo(context.Background(), "email.openTracker", func(_ context.Context) {
 		bgCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		defer cancel()
 		if err := s.tracking.RecordOpenEvent(bgCtx, token, ip, ua); err != nil {

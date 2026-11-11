@@ -104,9 +104,9 @@ func (s *IndexTrackerService) VerifyArticleFull(ctx context.Context, articleID s
 		var wg sync.WaitGroup
 		for i, p := range probes {
 			wg.Add(1)
-			// i/p 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
-			// SafeGo：AI 探针并发验证跑外部引擎，panic 不能击穿进程（管理端 API 触发）
-			utils.SafeGo(ctx, "geo.index_tracker.probe", func(_ context.Context) {
+			// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+			// 探针 HTTP/引用解析 panic 不击穿进程
+			utils.SafeGo(ctx, "geo.indexTracker.probe", func(ctx context.Context) {
 				defer wg.Done()
 				pctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 				defer cancel()

@@ -424,7 +424,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			return
 		}
 		// 写库失败必须留痕，不能静默归零。
-		utils.SafeGo(context.Background(), "geo.crawler_visit_record", func(_ context.Context) {
+		// utils.SafeGo 收口：爬虫访问记录落库（DB）panic 不击穿进程
+		utils.SafeGo(context.Background(), "router.crawlerVisit", func(_ context.Context) {
 			if err := crawlerVisitSvc.RecordAnonymous(context.Background(), engine, path, ua, ip); err != nil {
 				logger.Warnf("[GEO] 记录 AI 爬虫访问失败（engine=%s path=%s）: %v", engine, path, err)
 			}

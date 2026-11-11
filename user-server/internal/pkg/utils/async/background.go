@@ -15,17 +15,19 @@ import (
 // 此函数保留原 ctx 的 trace ID 等 Value，但用 context.Background() 作为 parent，
 // 应用指定 timeout 控制最大运行时长，防止文档永久卡在 processing 状态。
 //
+// panic 收口：goroutine 内 recover（对齐本包文档「统一处理 panic 恢复」自述），
+// recover 后 logger.Errorf 带 name/stack（形态对齐 utils/recover.go 的 defaultOnPanic）；
+// 仅防进程崩，不吞业务错误语义。生产调用点在知识库导入/重建索引链。
+//
 // 使用场景：
 //   - 文档导入后的异步处理
 //   - 索引重建
 //   - 外部数据同步
 func RunWithTimeout(ctx context.Context, timeout time.Duration, fn func(ctx context.Context)) {
 	go func() {
-		// 本包是异步启动的统一入口（HTTP 请求路径大量复用）：fn 的 panic
-		// 在这里兜底，不能击穿进程（与下方 SafeGo 同一口径）。
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Errorf("[RunWithTimeout] panic recovered: %v\n%s", r, debug.Stack())
+				logger.Errorf("[async.RunWithTimeout] panic recovered: %v\n%s", r, debug.Stack())
 			}
 		}()
 		newCtx, cancel := context.WithTimeout(DetachContext(ctx), timeout)
@@ -35,11 +37,13 @@ func RunWithTimeout(ctx context.Context, timeout time.Duration, fn func(ctx cont
 }
 
 // RunDetach 启动异步任务，不带超时控制（适用于长时间任务）
+//
+// panic 收口同 RunWithTimeout：recover 后 logger.Errorf 带 name/stack。
 func RunDetach(ctx context.Context, fn func(ctx context.Context)) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				logger.Errorf("[RunDetach] panic recovered: %v\n%s", r, debug.Stack())
+				logger.Errorf("[async.RunDetach] panic recovered: %v\n%s", r, debug.Stack())
 			}
 		}()
 		fn(DetachContext(ctx))
@@ -54,16 +58,4 @@ func RunDetach(ctx context.Context, fn func(ctx context.Context)) {
 //	return context.WithoutCancel(ctx)
 func DetachContext(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
-}
-
-// SafeGo 安全启动 goroutine，捕获 panic 防止进程崩溃
-func SafeGo(fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Errorf("[SafeGo] panic recovered: %v\n%s", r, debug.Stack())
-			}
-		}()
-		fn()
-	}()
 }

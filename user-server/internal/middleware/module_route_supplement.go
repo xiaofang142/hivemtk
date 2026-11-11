@@ -26,6 +26,9 @@ var ModuleRouteSupplement = []ModuleRouteRule{
 	{Pattern: "/api/llm/wallet", ModuleKey: "llm-cloud"},
 	{Pattern: "/api/llm/wallet/*", ModuleKey: "llm-cloud"},
 	{Pattern: "/api/llm/plans", ModuleKey: "llm-cloud"},
+	// 平台垫资用量明细（PLT-01 刀2）：与 wallet 同属"平台代付能力的账"，
+	// 开通后才看。生成件同样收不到它（无独立菜单页，挂在 LLM 路由页新 Tab）。
+	{Pattern: "/api/llm/platform-usage", ModuleKey: "llm-cloud"},
 
 	// ---- platform-link：模块下发与我的模块 ----
 	// 为什么不生成：纯控制面，无菜单页消费。

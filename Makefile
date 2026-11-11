@@ -699,6 +699,8 @@ audit:
 	@python3 scripts/check-bare-go.py --repo .
 	@echo "── 第二跳：被异步链经默认实现读到的全局，读写必须各走自己的 accessor（注册表 seam-guard.registry）──"
 	@python3 scripts/check-seam-guard.py
+	@echo "── 业务面裸 go func( 收口门（CC-01 刀2）：spawn 闭包体须自带 recover 或带 gospawn-ok 豁免标记；cmd/_test/测试基建/async 实现层按口径排除 ──"
+	@python3 scripts/check-naked-goroutine.py
 	@echo "── 全仓 shell 文件：shellcheck error 级零容忍 ──"
 	@bash scripts/check-shellcheck.sh
 	@echo "── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──"

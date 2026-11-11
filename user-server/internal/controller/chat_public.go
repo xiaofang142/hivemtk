@@ -587,18 +587,25 @@ func (ctrl *ChatPublicController) GetUploadToken(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "缺少 ext 参数")
 		return
 	}
-	if list, ok := allowedExts[fileType]; ok {
-		valid := false
-		for _, e := range list {
-			if e == extLower {
-				valid = true
-				break
-			}
+	// fail-closed：file_type 必须命中白名单（image/file/audio/video 四已知值）。
+	// 历史写法 `if list, ok := allowedExts[fileType]; ok` 在未知 file_type 时 ok=false
+	// 会静默跳过整段白名单——`?file_type=x&ext=exe` 拿到 exe 扩展名的 ≤20MB 上传凭证
+	// （fail-open）。未知 file_type 与白名单外 ext 一律 400。
+	list, ok := allowedExts[fileType]
+	if !ok {
+		response.Error(c, http.StatusBadRequest, "file_type 不被允许: "+fileType)
+		return
+	}
+	valid := false
+	for _, e := range list {
+		if e == extLower {
+			valid = true
+			break
 		}
-		if !valid {
-			response.Error(c, http.StatusBadRequest, "文件类型不被允许: "+ext)
-			return
-		}
+	}
+	if !valid {
+		response.Error(c, http.StatusBadRequest, "文件类型不被允许: "+ext)
+		return
 	}
 
 	now := time.Now()

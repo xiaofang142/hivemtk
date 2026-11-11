@@ -296,11 +296,8 @@ func TestFallbackNilDB(t *testing.T) {
 // telemetry.channel_online_degraded_below ⇒ 241 → 243。
 // 2026-11-05 9d6477c9 geo 承接链接新增 geo.capture_ask_daily_limit +
 // geo.capture_lead_daily_limit ⇒ 243 → 245。
-// 2026-11-11 M-5 巡检未读优先新增 bridge.patrol_unread_first_channels
-// （读取口 service.PatrolUnreadFirstChannels / 下发面 /api/bridge/capabilities）⇒ 245 → 246。
-// 2026-11-11 M-6 自动关注动作新增 bridge.follow_user_enabled + bridge.follow_user_channels
-// （读取口 service.FollowUserEnabled/FollowUserChannels / 下发面同 capabilities）⇒ 246 → 248。
-const defaultParamDefsWant = 248
+// 2026-11-11 CC-04 高写入表 retention 九参数（retention 组 8 表+operation_logs）⇒ 245 → 254；与 M-5(+1)/M-6(+2) 合计 245 → 257。
+const defaultParamDefsWant = 257
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

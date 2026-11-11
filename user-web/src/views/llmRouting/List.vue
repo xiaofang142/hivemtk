@@ -651,7 +651,113 @@
         </el-card>
       </el-tab-pane>
 
-      
+
+      <el-tab-pane
+        label="平台用量"
+        name="platform"
+      >
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>平台垫资用量明细（平台模型每次调用的 token 与成本分列）</span>
+              <el-button
+                size="small"
+                @click="loadPlatformUsage"
+              >
+                <el-icon><Refresh /></el-icon> 刷新
+              </el-button>
+            </div>
+          </template>
+          <el-table
+            v-loading="loading.platform"
+            :data="platformUsage.list"
+            stripe
+          >
+            <template #empty>
+              <el-empty description="暂无平台用量明细（使用平台垫资模型后自动落账）" />
+            </template>
+            <el-table-column
+              label="时间"
+              min-width="160"
+            >
+              <template #default="{ row }">
+                {{ formatTime(row.occurred_at) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              prop="provider"
+              label="Provider"
+              min-width="130"
+            />
+            <el-table-column
+              prop="model"
+              label="模型"
+              min-width="130"
+            />
+            <el-table-column
+              prop="plan_code"
+              label="套餐"
+              width="110"
+            />
+            <el-table-column
+              prop="scenario"
+              label="场景"
+              min-width="120"
+            />
+            <el-table-column
+              prop="prompt_tokens"
+              label="输入 Token"
+              width="110"
+              align="center"
+            />
+            <el-table-column
+              prop="completion_tokens"
+              label="输出 Token"
+              width="110"
+              align="center"
+            />
+            <el-table-column
+              label="输入成本"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                {{ formatCents(row.input_cost_cents) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="输出成本"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                {{ formatCents(row.output_cost_cents) }}
+              </template>
+            </el-table-column>
+            <el-table-column
+              label="总成本"
+              width="100"
+              align="center"
+            >
+              <template #default="{ row }">
+                {{ formatCents(row.total_cost_cents) }}
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-pagination
+            v-model:current-page="platformPage"
+            v-model:page-size="platformPageSize"
+            :total="platformUsage.total"
+            :page-sizes="[20, 50, 100]"
+            layout="total, sizes, prev, pager, next"
+            style="margin-top: 16px; justify-content: flex-end"
+            @current-change="loadPlatformUsage"
+            @size-change="onPlatformPageSizeChange"
+          />
+        </el-card>
+      </el-tab-pane>
+
+
       <el-tab-pane
         label="路由审计"
         name="audit"
@@ -1226,7 +1332,7 @@ import { fmtTime } from '@/utils/time'
 import { isUserReportedError } from '@/utils/errorReporting'
 
 const activeTab = ref('models')
-const loading = reactive({ models: false, routing: false, fallback: false, cost: false, audit: false, modelType: false, health: false, egress: false, daily: false })
+const loading = reactive({ models: false, routing: false, fallback: false, cost: false, audit: false, modelType: false, health: false, egress: false, daily: false, platform: false })
 
 const models = ref([]);
 const sceneRouting = ref([])
@@ -1241,6 +1347,12 @@ const modelTypeWindow = ref('month');
 const modelTypeStats = ref({ by_provider_type: [], self_sufficiency: 0, total_calls: 0 })
 const llmHealth = ref({ status: 'unknown', providers: [], healthy_providers: 0, total_providers: 0 })
 const egressAlerts = ref([])
+
+// 平台垫资用量明细（PLT-01 刀2）：GET /api/llm/platform-usage 的唯一消费方。
+// 后端行=既有记录列原样透出，成本三列是写入时点的整数分快照（读侧不重算）。
+const platformUsage = ref({ list: [], total: 0 })
+const platformPage = ref(1)
+const platformPageSize = ref(20)
 
 const fallbackRows = computed(() => sceneRouting.value.map(r => ({
   scenario: r.scenario,
@@ -1367,6 +1479,29 @@ const loadAudit = async () => {
   }
 }
 
+// loadPlatformUsage 读平台垫资用量明细（分页）。空列表不等于故障：
+// 未使用平台模型/未开通 llm-cloud 时后端返回空。
+const loadPlatformUsage = async () => {
+  loading.platform = true
+  try {
+    const res = await LlmRoutingApi.getPlatformUsage({
+      page: platformPage.value,
+      page_size: platformPageSize.value
+    })
+    platformUsage.value = { list: res?.list || [], total: res?.total || 0 }
+  } catch {
+    // 读取失败回落空列表（与既有 load* 同口径；失败详情由请求层统一上报）
+    platformUsage.value = { list: [], total: 0 }
+  } finally {
+    loading.platform = false
+  }
+}
+
+const onPlatformPageSizeChange = () => {
+  platformPage.value = 1
+  loadPlatformUsage()
+}
+
 const loadModelType = async () => {
   loading.modelType = true
   try {
@@ -1441,6 +1576,7 @@ const refreshAll = () => {
   loadModelType()
   loadHealth()
   loadEgressAlerts()
+  loadPlatformUsage()
 }
 
 const showModelDialog = (row) => {
@@ -1594,6 +1730,13 @@ const formatNumber = (n) => {
 const formatTime = (s) => {
   if (!s) return '-'
   return new Date(s).toLocaleString('zh-CN')
+}
+
+// formatCents 整数分 → 元展示（两位小数）。后端落的是写入时点整数分快照，
+// 这里只做展示换算，不做任何重算/取整口径变更。
+const formatCents = (cents) => {
+  const n = Number(cents || 0)
+  return `¥${(n / 100).toFixed(2)}`
 }
 
 const calcRatio = (cost) => {

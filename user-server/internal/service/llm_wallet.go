@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/config"
 	bizerr "hivemtk-user/internal/domain/errors"
@@ -54,9 +55,22 @@ type WalletView struct {
 // Wallet 查询平台余额并落本地镜像
 func (s *LLMWalletService) Wallet(ctx context.Context) (*WalletView, error) {
 	if !config.PlatformEnabled() {
-		// 离线：读本地镜像，没有就返回空钱包（exists=false），而不是报错
-		if _, total, err := s.repo.ListTxns(ctx, "recharge", 1, 1); err == nil && total > 0 {
-			return &WalletView{PlatformEnabled: false, Exists: true}, nil
+		// 离线：读本地镜像（最后一次在线查询落下的余额快照）。有镜像 → 可解释
+		// 余额 + synced_at（UpdatedAt 透出，前端展示"数据同步于"）；没有镜像
+		// → 空钱包（exists=false），而不是报错。
+		//
+		// **不冒充平台判定**：Low/Expired 恒零值 —— 镜像表没有这两列，离线时
+		// 无从判定"是否低量/已过期"，宁可留空也不拿旧快照编一个结论出来
+		// （旧快照的 Low=0 不代表现在不低，编出来的判定会误导充值决策）。
+		// 本地预检阻断不做（镜像新鲜度无保障，误拦比放行更贵）。
+		if mirror, err := s.repo.GetMirror(ctx); err == nil && mirror != nil {
+			return &WalletView{
+				InputRemaining:  mirror.InputTokensRemaining,
+				OutputRemaining: mirror.OutputTokensRemaining,
+				Exists:          true,
+				PlatformEnabled: false,
+				UpdatedAt:       mirror.SyncedAt.Format(time.RFC3339),
+			}, nil
 		}
 		return &WalletView{PlatformEnabled: false}, nil
 	}
@@ -80,6 +94,17 @@ func (s *LLMWalletService) Wallet(ctx context.Context) (*WalletView, error) {
 		PlatformEnabled: true,
 	}
 	return v, nil
+}
+
+// PlatformUsage 平台垫资用量明细分页（刀2 最小读面；租户作用域由隔离 callback
+// 按 ctx 注入）。
+//
+// 这是 platform_llm_usage_records 的**唯一读端**（此前全仓零读面）：商户在
+// 本地看得见"谁在什么场景用了多少、按什么口径折了多少钱"。行结构=既有记录列
+// 原样透出（model json tag 即契约），读侧不重算不回填 —— 成本三列是写入时点
+// 的整数分快照。
+func (s *LLMWalletService) PlatformUsage(ctx context.Context, page, pageSize int) ([]*model.PlatformLLMUsageRecord, int64, error) {
+	return repository.NewPlatformLLMUsageRepository().ListUsageRecords(ctx, page, pageSize)
 }
 
 // PlanView 套餐视图

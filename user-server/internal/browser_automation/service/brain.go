@@ -230,9 +230,8 @@ func (s *BrainService) planOnce(ctx context.Context, dispatcher *llm.Dispatcher,
 		err    error
 	}
 	ch := make(chan planResult, 1)
-	// SafeGo：LLM 编排跑不可信内容，panic 不能击穿进程；
-	// panic 时本路不发结果，主线程走 select 的看门狗/ctx 分支兜底。
-	utils.SafeGo(ctx, "browser_automation.brain.plan", func(_ context.Context) {
+	// utils.SafeGo 收口：LLM 结构化编排（JSON 解析/HTTP）panic 不击穿进程
+	utils.SafeGo(ctx, "browser.brain.plan", func(ctx context.Context) {
 		result, err := dispatcher.DispatchStructured(ctx, req, &p)
 		if err != nil {
 			ch <- planResult{err: fmt.Errorf("LLM 编排失败: %w", err)}

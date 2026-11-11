@@ -169,13 +169,24 @@ func (c *RagEvalGapController) Run(ctx *gin.Context) {
 // @Tags      rag-eval-gap
 // @Router    /api/rag/eval/upload [post]
 // Upload POST /api/rag/eval/upload (multipart file)
+//
+// 体积护栏：BodyLimit 中间件显式豁免 multipart（body_limit.go「跳过 multipart」
+// 分支），本端点必须自带上限——服务层 csv.ReadAll 把请求体整读进内存，无上限时
+// 认证用户可 POST 多 GB CSV 打出内存尖峰。档位对齐 egolite UploadArtifact 的
+// 8MB 先例（评测集 CSV 行粒度小，8MB 远超实际量级）。
 func (c *RagEvalGapController) Upload(ctx *gin.Context) {
-	file, _, err := ctx.Request.FormFile("file")
+	const maxEvalCSV = 8 << 20
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxEvalCSV+1024)
+	file, header, err := ctx.Request.FormFile("file")
 	if err != nil {
-		response.Error(ctx, http.StatusBadRequest, "缺少 file 字段")
+		response.Error(ctx, http.StatusBadRequest, "缺少 file 字段或超出 8MB 大小上限")
 		return
 	}
 	defer func() { _ = file.Close() }()
+	if header.Size > maxEvalCSV {
+		response.Error(ctx, http.StatusRequestEntityTooLarge, "CSV 超过 8MB 上限")
+		return
+	}
 	n, err := c.svc.UploadCSV(ctx.Request.Context(), file, ctx.PostForm("product_id"))
 	if HandleServiceError(ctx, err) {
 		return

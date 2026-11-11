@@ -69,5 +69,8 @@ func DefaultParamGroupDefs() []ParamGroupDef {
 		// 与种子文件里「content_guard 组」的注释块位置对应。
 		{Group: "content_guard", Label: "内容安全", Description: "内容审查流水线的长度上限与转人工口径", SortOrder: 284},
 		{Group: "smart_cs", Label: "智能客服", Description: "智能客服编排的阈值与开关", SortOrder: 290},
+		// retention 组：高写入自观测/审计表保留窗口（CC-04）。SortOrder 随尾巴递增，
+		// 与种子文件里「retention 组」的注释块位置对应。
+		{Group: "retention", Label: "日志保留", Description: "自观测与审计日志表的保留窗口（后台每 24h 一轮清理）", SortOrder: 291},
 	}
 }

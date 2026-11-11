@@ -565,9 +565,9 @@ func (s *ProbeService) ProbeAllEnginesConcurrent(ctx context.Context, query stri
 	var wg sync.WaitGroup
 	for i, p := range probes {
 		wg.Add(1)
-		// i/p 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
-		// SafeGo：探针并发跑外部搜索引擎，panic 不能击穿进程（探针 API/排程触发）
-		utils.SafeGo(ctx, "geo.search_probe.concurrent", func(_ context.Context) {
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// 探针重试/落库链 panic 不击穿进程
+		utils.SafeGo(ctx, "geo.searchProbe.run", func(ctx context.Context) {
 			defer wg.Done()
 			pr, err := probeWithRetry(ctx, p, query)
 			if err != nil {

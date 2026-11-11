@@ -268,7 +268,7 @@ func (s *WebhookService) Stop(ctx context.Context) {
 	s.mu.Unlock()
 
 	done := make(chan struct{})
-	go func() {
+	go func() { // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 		s.wg.Wait()
 		close(done)
 	}()

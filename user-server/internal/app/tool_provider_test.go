@@ -485,10 +485,12 @@ func TestInitBuiltinToolProviders_RegistersAll(t *testing.T) {
 	registry := tooluse.NewProviderRegistry()
 	initBuiltinToolProviders(registry)
 
-	if registry.Count() != 5 {
-		t.Errorf("Count = %d, want 5", registry.Count())
+	// 6=reach/pm/customer/knowledge/business+connector_bridge（§3.12 刀1：
+	// 连接器 preset 桥接器进内置 Provider 花名册）。
+	if registry.Count() != 6 {
+		t.Errorf("Count = %d, want 6", registry.Count())
 	}
-	expected := []string{"reach", "pm", "customer", "knowledge", "business"}
+	expected := []string{"reach", "pm", "customer", "knowledge", "business", "connector_bridge"}
 	for _, name := range expected {
 		if !registry.HasProvider(name) {
 			t.Errorf("provider %s not registered", name)

@@ -48,8 +48,8 @@ func defaultRelocateLLM(ctx context.Context, systemPrompt, prompt string) (reloc
 		MaxTokens:    1024,
 	}
 	ch := make(chan error, 1)
-	// SafeGo：relocate LLM 调用 panic 不能击穿进程；主线程走看门狗超时兜底。
-	utils.SafeGo(ctx, "browser_automation.relocate_llm", func(_ context.Context) {
+	// utils.SafeGo 收口：LLM 结构化调用 panic 不击穿进程（看门狗超时路径语义不变）
+	utils.SafeGo(ctx, "browser.selfheal.relocateLLM", func(ctx context.Context) {
 		_, err := llm.GetGlobalDispatcher().DispatchStructured(ctx, req, &out)
 		ch <- err
 	})

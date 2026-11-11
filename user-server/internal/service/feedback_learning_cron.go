@@ -43,7 +43,7 @@ func (c *FeedbackLearningCron) Stop(ctx context.Context) {
 	}
 	c.stopOnce.Do(func() { close(c.stopCh) })
 	done := make(chan struct{})
-	go func() {
+	go func() { // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 		c.wg.Wait()
 		close(done)
 	}()

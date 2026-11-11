@@ -58,6 +58,7 @@ import (
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/egolite"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	hrepo "hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -204,7 +205,8 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 	engine.GET("/api/egolite/runner-ws", wsHandler.Handle)
 
 	// 看门狗（60s 扫描：confirm TTL + 硬超时；WatchdogSweep 幂等，扫不到就空转）
-	go func() {
+	// 长驻扫描循环：utils.SafeGo 收口 panic，防看门狗/留存清理链 panic 击穿进程
+	utils.SafeGo(context.Background(), "egolite.watchdog", func(_ context.Context) {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		// 观测留存清理（T19/J-6 D6 收口）：挂进同一循环、日级节流——每个 UTC 日
@@ -225,7 +227,7 @@ func SetupEgoLiteRoutes(auth *gin.RouterGroup, engine *gin.Engine, gormDB *gorm.
 			}
 			cancel()
 		}
-	}()
+	})
 
 	eg := auth.Group("/egolite")
 	{

@@ -90,6 +90,9 @@ func setupModuleRoutes(public, auth, tenantAdmin, systemAdmin *gin.RouterGroup) 
 		auth.GET("/llm/wallet", ctrl.LLMWallet)
 		auth.GET("/llm/plans", ctrl.LLMPlans)
 		auth.GET("/llm/wallet/txns", ctrl.LLMWalletTxns)
+		// 平台垫资用量明细（PLT-01 刀2）：与 wallet 同档 —— llm-cloud 的账，
+		// 开通后才看（闸条目见 module_route_supplement.go）。
+		auth.GET("/llm/platform-usage", ctrl.LLMPlatformUsage)
 		auth.POST("/llm/recharge", ctrl.CreateLLMOrder)
 
 		// 订阅状态与续费（003 T018/T022）。两条都在订阅闸白名单内

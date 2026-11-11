@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/browser_automation/model"
 	"hivemtk-user/internal/browser_automation/repository"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -45,7 +46,8 @@ func StartStaleTaskReconcile(ctx context.Context, taskRepo repository.BrowserTas
 	if taskRepo == nil || sessRepo == nil {
 		return
 	}
-	go func() {
+	// 长驻对账循环（每分钟+启动首轮）：utils.SafeGo 收口 panic，防对账回写链 panic 击穿进程
+	utils.SafeGo(ctx, "browser.staleReconcile", func(ctx context.Context) {
 		t := time.NewTicker(staleScanInterval)
 		defer t.Stop()
 		// 首轮不等 tick：进程重启后砖态任务是立刻可感的，等到下一分钟只是把故障摊给运维
@@ -62,7 +64,7 @@ func StartStaleTaskReconcile(ctx context.Context, taskRepo repository.BrowserTas
 				}
 			}
 		}
-	}()
+	})
 }
 
 // reconcileStaleTasks 一轮对账，返回回填生效的任务数（导出点留给测试直接驱动，不起 goroutine）。

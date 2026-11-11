@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"gorm.io/gorm"
-
 	"hivemtk-user/internal/pkg/utils"
+
+	"gorm.io/gorm"
 )
 
 type ReachAdapter interface {
@@ -636,8 +636,9 @@ func (t *ReachBatchTool) Execute(ctx context.Context, args map[string]any) (Tool
 			continue
 		}
 		wg.Add(1)
-		// customerID/accountID/payload 均为循环体内局部变量，直接捕获与原传参语义等价
-		utils.SafeGo(ctx, "tooluse.ReachBatchEnqueue", func(_ context.Context) {
+		// utils.SafeGo 收口：批量入队（DB）panic 不击穿进程（Go 1.22+ 循环变量逐迭代
+		// 语义下闭包捕获 customerID/accountID/payload 与原参数传递等价）
+		utils.SafeGo(ctx, "tooluse.reach.enqueueJob", func(ctx context.Context) {
 			defer wg.Done()
 			req := &ReachJobRequest{
 				PipelineID: pipelineID,

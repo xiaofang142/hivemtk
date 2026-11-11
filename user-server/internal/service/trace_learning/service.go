@@ -194,9 +194,9 @@ func (s *Service) RunBatch(ctx context.Context, sinceHours, batchSize int, dryRu
 			var processed int32
 			for _, tid := range traceIDs {
 				wg.Add(1)
-				// tid 为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
-				// SafeGo：批量评估跑 LLM 链，单条 panic 不能击穿进程
-				utils.SafeGo(ctx, "trace_learning.evaluate_trace", func(_ context.Context) {
+				// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+				// 并行评估（LLM 链）panic 不击穿进程
+				utils.SafeGo(ctx, "tracelearning.evaluate", func(ctx context.Context) {
 					defer wg.Done()
 					sem <- struct{}{}
 					defer func() { <-sem }()

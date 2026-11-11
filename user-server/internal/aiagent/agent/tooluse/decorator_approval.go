@@ -108,6 +108,16 @@ func (a *approvalTool) Category() ToolCategory     { return a.inner.Category() }
 func (a *approvalTool) Description() string        { return a.inner.Description() }
 func (a *approvalTool) Parameters() ToolParameters { return a.inner.Parameters() }
 
+// IsApprovalWrapped 报告工具是否被 WithApproval/WithApprovalChecker 包装过（审批面在位）。
+//
+// §3.12 刀1 消费：连接器桥接的 RiskHighWrite 端点强制 WithApproval（沿改单先例），
+// 「动态工具不得成为审批旁路」这句承诺要可断言而非口头——治理报告与桥接层测试
+// 用本函数核验包装确实在工具上，而不是只看桥接器自己声称包了。
+func IsApprovalWrapped(t Tool) bool {
+	_, ok := t.(*approvalTool)
+	return ok
+}
+
 // RiskLevel 原样透出内层分级（含"内层没声明"）。
 func (a *approvalTool) RiskLevel() ToolRiskLevel { return DeclaredRisk(a.inner) }
 

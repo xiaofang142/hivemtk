@@ -272,6 +272,23 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 	// 计价：按输入/输出分别乘各自单价（computeCost），非「总价按比例劈两半」。
 	// 这决定了 llm_routing_logs 里 prompt_cost / completion_cost 两列的口径。
 	cost, promptCost, completionCost := computeCost(*provider, promptTokens, completionTokens)
+	// 平台垫资 provider：计价唯一来源是平台套餐单价快照（sync 按 plan_code 落到
+	// 本地镜像价列），整数运算 tokens*price/1000 与平台 PriceTokens 同式同截断。
+	// 自带的 CostPer1k* 浮点字段对平台调用不再生效（那是第二定价源，且 float
+	// 乘除与平台整数口径在边界值上会差一分）。取不到快照 → 0 分，如实降级。
+	// 分 → 元用除 100：整数分除以 100 在 numeric(14,6) 上精确两位小数，
+	// daily 聚合 SUM(cost)*100 往返无损。
+	var inputCostCents, outputCostCents int64
+	if provider.IsPlatformProvider() {
+		if resolver := PlatformPlanPriceResolver(); resolver != nil {
+			inPrice, outPrice := resolver(provider.PlanCode)
+			inputCostCents = PriceTokensCents(int64(promptTokens), inPrice)
+			outputCostCents = PriceTokensCents(int64(completionTokens), outPrice)
+		}
+		promptCost = float64(inputCostCents) / 100
+		completionCost = float64(outputCostCents) / 100
+		cost = promptCost + completionCost
+	}
 	tokenSource := InferTokenSource(result.Usage.TotalTokens, result.Content)
 	estimator := ClassifyEstimator(tokenSource)
 
@@ -323,8 +340,10 @@ func (d *Dispatcher) callProvider(ctx context.Context, provider *ProviderConfig,
 				TenantID:         tenantID,
 				PromptTokens:     int64(promptTokens),
 				CompletionTokens: int64(completionTokens),
-				InputCostCents:   int64(promptCost * 100),
-				OutputCostCents:  int64(completionCost * 100),
+				// 写入时点的整数分快照原样下发（不再经 float 元 ×100 往返）：
+				// sink 落 platform_llm_usage_records 三列与 routing_logs 同源同值。
+				InputCostCents:  inputCostCents,
+				OutputCostCents: outputCostCents,
 			})
 		}
 	}

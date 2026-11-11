@@ -153,7 +153,7 @@ func (t *MessageTraceCleanupTask) Stop(ctx context.Context) {
 	}
 	t.stopOnce.Do(func() { close(t.stopCh) })
 	done := make(chan struct{})
-	go func() { t.wg.Wait(); close(done) }()
+	go func() { t.wg.Wait(); close(done) }() // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
 	select {
 	case <-done:
 	case <-ctx.Done():

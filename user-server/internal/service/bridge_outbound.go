@@ -164,6 +164,10 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 	}
 
 	if GlobalSSEPublisher != nil {
+		// 进协程前把包级注入点快照成本地（check-async-global-read.py 同口径，reach 族
+		// 4176e599 同款）：体内直读全局会与测试 Cleanup 的 SetGlobalSSEPublisher 写回
+		// 构成 DATA RACE（-race 实证），生产语义不变（该 seam 运行期从不改）。
+		pub := GlobalSSEPublisher
 		// 派生带租户的 ctx：认领那一步要 UPDATE message_hub（租户表），
 		// on 模式下 ctx 不带租户会被隔离守卫 fail-closed 拒绝。
 		// BackgroundWithTenant 保留租户归属、丢掉请求的取消信号（请求早结束、
@@ -175,7 +179,7 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 					logger.Errorf("[SSE] GlobalSSEPublisher panic recovered: %v", r)
 				}
 			}()
-			GlobalSSEPublisher(
+			pub(
 				pubCtx,
 				channel, accountID,
 				uint64(h.ID),

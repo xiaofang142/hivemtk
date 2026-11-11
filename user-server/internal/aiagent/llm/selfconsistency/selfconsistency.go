@@ -69,9 +69,8 @@ func (sc *SelfConsistency[T]) Run(ctx context.Context, sampler Sampler[T], voter
 	errCh := make(chan error, sc.samples)
 	for i := 0; i < sc.samples; i++ {
 		wg.Add(1)
-		// SafeGo：并发采样跑不可信 LLM 输出链，panic 不能击穿进程；
-		// panic 路 wg.Done 已 defer，本轮结果保持零值参与聚合（降级不崩溃）。
-		utils.SafeGo(ctx, "llm.selfconsistency.sample", func(_ context.Context) {
+		// utils.SafeGo 收口：多采样 LLM 调用 panic 不击穿进程，该样本槽零值由 wg.Wait 后投票逻辑跳过
+		utils.SafeGo(ctx, "llm.selfconsistency.sample", func(ctx context.Context) {
 			defer wg.Done()
 			ans, err := sampler.Sample(ctx)
 			results[i] = sampledAnswer[T]{answer: ans, err: err}

@@ -126,6 +126,21 @@ func (r *RagEvalGapRepo) CreateQuestion(ctx context.Context, q *model.RagEvalQue
 	return r.db.WithContext(ctx).Create(q).Error
 }
 
+// CreateQuestionsInTx 批量落评测题库：单事务，任一行失败整体回滚。
+//
+// UploadCSV 原逐行 CreateQuestion（无事务），中断/中途失败会留下部分已提交行；
+// 收口为整批一事务。批内按 500 行分批 INSERT（CreateInBatches），既避免单条
+// INSERT 撞 Postgres 65535 参数上限（本表 16 列 ≈ 4000 行/语句），又不破坏
+// 事务原子性——分批语句同处一个 tx，失败一并回滚。
+func (r *RagEvalGapRepo) CreateQuestionsInTx(ctx context.Context, questions []*model.RagEvalQuestion) error {
+	if len(questions) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return tx.CreateInBatches(&questions, 500).Error
+	})
+}
+
 func (r *RagEvalGapRepo) CreateRun(ctx context.Context, run *model.RagEvalRun) error {
 	return r.db.WithContext(ctx).Create(run).Error
 }

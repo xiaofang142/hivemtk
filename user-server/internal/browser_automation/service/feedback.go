@@ -12,6 +12,7 @@ import (
 	emailsvc "hivemtk-user/internal/email/service"
 	"hivemtk-user/internal/pkg/mail"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	mainrepo "hivemtk-user/internal/repository"
 )
@@ -198,7 +199,8 @@ func (f *FeedbackService) scheduleRetry(ctx context.Context, task *model.Browser
 // 保证多副本/双 tick 不双触发；认领后进程崩溃则该次重试放弃（与旧语义一致，但正常运行期重启不再丢）。
 // 认领前过归属门（见 scanDueRetries）。
 func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
-	go func() {
+	// 长驻扫描循环（每分钟）：utils.SafeGo 收口 panic，防重试链 panic 击穿进程
+	utils.SafeGo(ctx, "browser.feedback.retryScanner", func(ctx context.Context) {
 		t := time.NewTicker(time.Minute)
 		defer t.Stop()
 		for {
@@ -209,7 +211,7 @@ func (f *FeedbackService) StartRetryScanner(ctx context.Context) {
 				f.scanDueRetries(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // scanDueRetries 认领并触发一轮到期重试。

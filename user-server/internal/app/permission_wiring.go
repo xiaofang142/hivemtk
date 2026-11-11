@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -263,7 +264,8 @@ func startToolRiskStatsPersistence(obs *tooluse.MemoryRiskObserver, store toolRi
 	toolRiskStatsLastErr = ""
 	toolRiskStatsMu.Unlock()
 
-	go func() {
+	// 长驻 flush 循环：utils.SafeGo 收口 panic，防统计落库链 panic 击穿进程
+	utils.SafeGo(runCtx, "toolrisk.statsFlush", func(c context.Context) {
 		defer close(done)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -272,7 +274,7 @@ func startToolRiskStatsPersistence(obs *tooluse.MemoryRiskObserver, store toolRi
 			case <-runCtx.Done():
 				return
 			case <-ticker.C:
-				flushCtx, flushCancel := context.WithTimeout(runCtx, toolRiskStatsWriteTimeout)
+				flushCtx, flushCancel := context.WithTimeout(c, toolRiskStatsWriteTimeout)
 				err := flushToolRiskStats(flushCtx, obs, store)
 				flushCancel()
 				recordToolRiskStatsFlush(err)
@@ -281,7 +283,7 @@ func startToolRiskStatsPersistence(obs *tooluse.MemoryRiskObserver, store toolRi
 				}
 			}
 		}
-	}()
+	})
 
 	logger.Infof("[tool-risk] ✅ would_deny 统计已接落库：key=%s 周期=%s 启动读回 %d 条计数（重启不再归零）",
 		ToolRiskStatsKVKey, interval, restored)

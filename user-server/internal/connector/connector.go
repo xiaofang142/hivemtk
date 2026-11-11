@@ -64,6 +64,10 @@ type EndpointConfig struct {
 	Path         string            `json:"path"`
 	Capabilities []string          `json:"capabilities"` // 能力标签（query_express/...）
 	ParamMap     map[string]string `json:"param_map"`    // 调用参数→平台参数名（缺省同名）
+	// Headers preset 声明的静态出站头（§3.12 刀2 收编 CourierClient 时补：鉴权之外
+	// 的固定头如 X-Api-Secret 归 preset 数据而非调用方代码）。generic 方言消费；
+	// 同名时**不覆盖**鉴权头（鉴权优先），form/签名类方言按各自语义可忽略。
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // ---------- 注册表 ----------
@@ -125,6 +129,19 @@ func NewExecutorWithValidator(validator func(string) error) *Executor {
 	return &Executor{
 		http:             &http.Client{Timeout: 10 * time.Second},
 		baseURLValidator: validator,
+	}
+}
+
+// NewExecutorUnrestricted 不做基址 SSRF 校验的执行器——**服务侧管理面客户端专用**。
+//
+// 适用面收窄到一句话：base_url 来自管理员配置（LLM 不可控）的既有服务侧客户端，
+// 且其行为等价契约要求保留既有网络口径——§3.12 刀2 CourierClient 收编 generic
+// 方言：旧实现无基址校验，内网快递镜像是合法部署形态（TB-03 E2E 即环回镜像）。
+// LLM 可控出站面（桥接工具/openapi 导入/自定义工具）**禁用**本构造——那些面的
+// 基址选择权在模型手里，必须走 NewExecutor 严格口径（缺口=把内网打通给模型）。
+func NewExecutorUnrestricted() *Executor {
+	return &Executor{
+		http: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -259,6 +276,13 @@ func (GenericDialect) BuildRequest(ctx context.Context, cfg ConnectorConfig, ep 
 			header = "Authorization"
 		}
 		req.Header.Set(header, cfg.Auth.Key)
+	}
+	// preset 声明的静态头：鉴权头之后补，同名不覆盖鉴权（鉴权优先语义）。
+	for k, v := range ep.Headers {
+		if v == "" || req.Header.Get(k) != "" {
+			continue
+		}
+		req.Header.Set(k, v)
 	}
 	return req, nil
 }

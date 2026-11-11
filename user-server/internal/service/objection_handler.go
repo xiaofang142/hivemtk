@@ -366,8 +366,8 @@ func (s *ObjectionHandlerService) recordUsageAsync(ctx context.Context, template
 		return
 	}
 	detached := context.WithoutCancel(ctx)
-	// SafeGo：objection 用量落库 panic 不能击穿进程（消息链请求路径）
-	utils.SafeGo(ctx, "objection.record_usage", func(_ context.Context) {
+	// utils.SafeGo 收口：用量统计落库（DB）panic 不击穿进程
+	utils.SafeGo(context.Background(), "objection.recordUsage", func(_ context.Context) {
 		if err := s.scriptRepo.IncrementUsageStats(detached, templateID, false); err != nil {
 			slog.Warn("objection handler auto record usage failed", "template_id", templateID, "error", err)
 		}

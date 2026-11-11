@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	mcpclient "hivemtk-user/internal/aiagent/mcp"
 	"hivemtk-user/internal/bridge"
+	"hivemtk-user/internal/connector"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -191,6 +192,10 @@ func initBuiltinToolProviders(registry *tooluse.ProviderRegistry) {
 		&CustomerToolProvider{},
 		&KnowledgeToolProvider{},
 		&BusinessToolProvider{},
+		// §3.12 刀1：连接器 preset 桥接器（connector.<preset>.<endpoint>）。
+		// preset 表为空时 Provide 返回零工具（零行为变化）；注册进目录后与内置工具
+		// 同权走 executor 装饰器链，RiskHighWrite 端点已被桥接器强制 WithApproval。
+		&connector.BridgeProvider{},
 	}
 	for _, p := range providers {
 		if err := registry.RegisterProvider(p); err != nil {

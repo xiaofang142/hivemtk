@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -91,7 +92,8 @@ func StartBridgeMetricsSink(w BridgeMetricWriter, interval time.Duration) (stop 
 	done := make(chan struct{})
 	var once sync.Once
 
-	go func() {
+	// 长驻落库循环：utils.SafeGo 收口 panic，防指标批量写库 panic 击穿进程
+	utils.SafeGo(context.Background(), "metrics.bridgeSink", func(_ context.Context) {
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
@@ -104,7 +106,7 @@ func StartBridgeMetricsSink(w BridgeMetricWriter, interval time.Duration) (stop 
 				return
 			}
 		}
-	}()
+	})
 
 	return func() { once.Do(func() { close(done) }) }
 }

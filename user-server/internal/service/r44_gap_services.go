@@ -163,7 +163,17 @@ func (s *RagEvalGapService) searchTop5(ctx context.Context, productID, question 
 	return s.searchFn(ctx, productID, question)
 }
 
+// maxEvalCSVRows 单次上传评测集 CSV 的有效数据行上限。
+// 评测集实度量级为数百行（RunAsync 逐题同步检索+打分），1 万行已是宽松上限；
+// 超限在**任何写库之前**拒绝，不给单请求写库行数失控的口子。
+const maxEvalCSVRows = 10000
+
 // UploadCSV 解析 CSV（列: question,answer）入库
+//
+// 事务化：原先逐行 CreateQuestion 无事务，中断/中途失败会留下部分已提交行；
+// 现整批经 gapRepo.CreateQuestionsInTx 单事务落库，任一行失败整体回滚。
+// 返回值 imported 语义不变：成功 = 实际入库行数（header/空行跳过不计）；
+// 失败 = 0 + error（调用方 HandleServiceError 只看 error，契约不破坏）。
 func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productID string) (int, error) {
 	if s == nil || s.gapRepo == nil {
 		return 0, fmt.Errorf("service or repository is nil")
@@ -182,7 +192,7 @@ func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productI
 	if len(records[0]) > 0 && strings.Contains(strings.ToLower(records[0][0]), "question") {
 		start = 1
 	}
-	n := 0
+	var questions []*model.RagEvalQuestion
 	for i := start; i < len(records); i++ {
 		row := records[i]
 		if len(row) == 0 || strings.TrimSpace(row[0]) == "" {
@@ -192,16 +202,18 @@ func (s *RagEvalGapService) UploadCSV(ctx context.Context, r io.Reader, productI
 		if len(row) > 1 {
 			ans = strings.TrimSpace(row[1])
 		}
-		q := &model.RagEvalQuestion{ProductID: productID, Question: strings.TrimSpace(row[0]), Answer: ans}
-		if err := s.gapRepo.CreateQuestion(ctx, q); err != nil {
-			return n, err
-		}
-		n++
+		questions = append(questions, &model.RagEvalQuestion{ProductID: productID, Question: strings.TrimSpace(row[0]), Answer: ans})
 	}
-	if n == 0 {
+	if len(questions) == 0 {
 		return 0, fmt.Errorf("CSV 无有效行（需 question,answer 两列）")
 	}
-	return n, nil
+	if len(questions) > maxEvalCSVRows {
+		return 0, fmt.Errorf("CSV 有效数据行超出上限（%d > %d），请拆分上传", len(questions), maxEvalCSVRows)
+	}
+	if err := s.gapRepo.CreateQuestionsInTx(ctx, questions); err != nil {
+		return 0, err
+	}
+	return len(questions), nil
 }
 
 func (s *RagEvalGapService) RunAsync(parent context.Context, productID string) (*model.RagEvalRun, error) {

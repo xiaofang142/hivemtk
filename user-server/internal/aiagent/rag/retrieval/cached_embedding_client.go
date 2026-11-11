@@ -11,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -197,14 +198,8 @@ func (c *CachedEmbeddingClient) submit(task func()) {
 func (c *CachedEmbeddingClient) startWorkers() {
 	for i := 0; i < defaultWorkerCount; i++ {
 		c.workerWg.Add(1)
-		go func() {
-			// worker 常驻消费任意 embedding 任务：单任务 panic 必须只回收该任务，
-			// 不能击穿进程、也不能让 worker 循环退出（worker 数随 recover 减员的形态不收）。
-			defer func() {
-				if r := recover(); r != nil {
-					logger.Errorf("[cached_embedding] worker panic recovered: %v", r)
-				}
-			}()
+		// 长驻缓存 worker（进程生命周期消费 task 队列）：utils.SafeGo 收口 panic
+		utils.SafeGo(context.Background(), "rag.embeddingCache.worker", func(ctx context.Context) {
 			defer c.workerWg.Done()
 			for task := range c.workerPool {
 				func() {
@@ -216,7 +211,7 @@ func (c *CachedEmbeddingClient) startWorkers() {
 					task()
 				}()
 			}
-		}()
+		})
 	}
 }
 

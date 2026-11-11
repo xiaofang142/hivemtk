@@ -171,3 +171,41 @@ func SetPlatformUsageSink(fn func(PlatformUsageEvent)) { platformUsageSink = fn 
 
 // PlatformUsageSink 取当前注入的 sink
 func PlatformUsageSink() func(PlatformUsageEvent) { return platformUsageSink }
+
+// ============================================================
+// 平台套餐单价快照（平台 provider 写入时点计价的唯一来源）
+//
+// 平台不下发 provider 价格（ProviderViewsForDeliver 无价列），但套餐接口
+// （Plans()）带「分/1k token」单价。用户端 sync 把两者按 plan_code 关联落到
+// 本地 provider 镜像的价列上；这里只留一个取价 seam（装配期由 service 注入，
+// 理由与 sink 相同：llm 是底层包，不能反向依赖 service/repository）。
+//
+// 取不到价（未同步/套餐下架/库未就绪/未注入）→ (0,0) → 成本如实记 0，
+// 不报错、不编价。平台 provider 自带的 CostPer1k* 浮点字段**不再**作为
+// 平台调用的计价来源 —— 那等于第二定价源，且 float 乘除与平台的整数口径
+// 在边界值上会差一分。
+// ============================================================
+
+// platformPlanPriceResolver 平台套餐单价解析（plan_code → 分/1k 单价对）
+var platformPlanPriceResolver func(planCode string) (inputPer1kCents, outputPer1kCents int64)
+
+// SetPlatformPlanPriceResolver 注入平台套餐单价解析实现；传 nil 视为取消注入
+func SetPlatformPlanPriceResolver(fn func(planCode string) (inputPer1kCents, outputPer1kCents int64)) {
+	platformPlanPriceResolver = fn
+}
+
+// PlatformPlanPriceResolver 取当前注入的单价解析实现
+func PlatformPlanPriceResolver() func(planCode string) (inputPer1kCents, outputPer1kCents int64) {
+	return platformPlanPriceResolver
+}
+
+// PriceTokensCents 按「分/1k token」整数计价，与平台侧 PriceTokens
+// （platform-server llm_billing_service.go）同式同截断：整数乘除、向下取整、
+// 不四舍五入 —— 少收一分比多收一分安全。禁 float64：浮点乘除会在边界值上
+// 与平台口径差出一分（如 tokens*price 恰好差 1e-9 跨过整数线）。
+func PriceTokensCents(tokens, pricePer1kCents int64) int64 {
+	if tokens <= 0 || pricePer1kCents <= 0 {
+		return 0
+	}
+	return tokens * pricePer1kCents / 1000
+}

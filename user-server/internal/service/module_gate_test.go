@@ -381,7 +381,7 @@ func TestOfflineBootstrapUpgradesExistingDeployment(t *testing.T) {
 	gate.Refresh(ctx)
 	model.SetModuleEnabledFilter(gate.ModuleEnabledFunc())
 	t.Cleanup(func() { model.SetModuleEnabledFilter(nil) })
-	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.ModuleEnabledFilter)
+	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
 
 	for _, k := range baseMenuKeys() {
 		if findMenuKey(tree, k) < 0 {
@@ -639,7 +639,7 @@ func TestMenuTreeFilteredByClosedModule(t *testing.T) {
 	gate.Refresh(ctx)
 	model.SetModuleEnabledFilter(gate.ModuleEnabledFunc())
 
-	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.ModuleEnabledFilter)
+	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
 
 	// geo 已关闭 → 它的目录节点必须消失
 	if findMenuKey(tree, "geoTools") >= 0 {

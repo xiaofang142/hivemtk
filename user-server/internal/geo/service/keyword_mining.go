@@ -645,9 +645,9 @@ func (s *KeywordMiningService) CrawlSuggest(ctx context.Context, seedWords []str
 	for si, seed := range seedWords {
 		for ei, eng := range targetEngines {
 			wg.Add(1)
-			// seed/eng/si/ei 均为 go 1.22+ 逐轮局部量，直接捕获与原传参等价；
-			// SafeGo：下拉抓取并发跑外部引擎，panic 不能击穿进程（挖掘 API 触发）
-			utils.SafeGo(ctx, "geo.keyword_mining.suggest", func(_ context.Context) {
+			// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+			// suggest 引擎 HTTP 抓取/编码转换 panic 不击穿进程
+			utils.SafeGo(ctx, "geo.suggest.fetch", func(ctx context.Context) {
 				defer wg.Done()
 				suggests, err := eng.Fetch(ctx, seed)
 				mu.Lock()

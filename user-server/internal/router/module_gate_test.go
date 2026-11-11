@@ -28,7 +28,7 @@ func TestAdminAlsoSeesModuleGate(t *testing.T) {
 		return opened[mk]
 	})
 
-	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.ModuleEnabledFilter)
+	tree := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
 
 	if hasKey(tree, "geoTools") {
 		t.Error("未开通的 geo 模块菜单不应出现在树中（对 admin 也一样）")
@@ -39,7 +39,7 @@ func TestAdminAlsoSeesModuleGate(t *testing.T) {
 
 	// 开通 geo 后应立刻出现 —— 证明这是"闸"而不是"硬编码的清单"
 	opened[model.ModuleGEO] = true
-	tree2 := model.FilterMenuTreeByModule(model.SystemMenuTree, model.ModuleEnabledFilter)
+	tree2 := model.FilterMenuTreeByModule(model.SystemMenuTree, model.GetModuleEnabledFilter())
 	if !hasKey(tree2, "geoTools") {
 		t.Error("已开通的 geo 模块菜单应出现在树中")
 	}

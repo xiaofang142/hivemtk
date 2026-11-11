@@ -556,10 +556,9 @@ func (d *Dispatcher) dispatchFanOut(ctx context.Context, req DispatchRequest, ro
 			ch <- fanResult{idx: i, err: fmt.Errorf("provider %s not available", providerName)}
 			continue
 		}
-		// i/provider 为循环体逐轮局部量（go 1.22+），直接捕获与原传参语义等价；
-		// SafeGo：fan-out 并发跑不可信 provider，panic 不能击穿进程。
-		// panic 时本路不发结果，消费侧走 fanCtx.Done() 超时兜底（不击穿，降级为超时错误）。
-		utils.SafeGo(ctx, "llm.dispatcher.fanout", func(_ context.Context) {
+		// utils.SafeGo 收口（Go 1.22+ 循环变量逐迭代语义下闭包捕获与原参数传递等价）：
+		// provider HTTP/JSON 链 panic 不击穿进程（同包 dispatcher_observability.go 既有惯例）
+		utils.SafeGo(fanCtx, "llm.dispatcher.fanout", func(_ context.Context) {
 			r, err := d.callProvider(fanCtx, provider, req, route)
 			ch <- fanResult{r: r, err: err, idx: i}
 		})
