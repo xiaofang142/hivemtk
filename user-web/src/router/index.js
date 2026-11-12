@@ -251,6 +251,15 @@ async function ensureRouteLoaded(path) {
   }
 }
 
+// fallbackLandingPath 非管理员「默认落地页不可访问」时的回退落地路径。
+// menuPaths[0] 可用则用它；菜单树为空（新注册用户尚未被分配任何菜单）时
+// 回退 /profile —— 个人资料在 personalPaths 白名单里恒可达，保证不落 403。
+// 旧回退 /inbox/list 不是恒可达路径：零菜单用户登录后直接撞 403（2026-11-13
+// SaaS 注册实测实锤），守卫「避免登录后直接 403」的意图被自己的回退打破。
+export function fallbackLandingPath(menuPaths) {
+  return (Array.isArray(menuPaths) && menuPaths[0]) || '/profile'
+}
+
 router.beforeEach(async (to, from, next) => {
   // guard 开始时的登录态快照：await 期间 401 处理可能清掉 token，
   // 两道 401 竞态闸靠「曾有 token 而现在没了」识别这种会话失效（见下）。
@@ -345,7 +354,7 @@ router.beforeEach(async (to, from, next) => {
       if (!isPersonal && !permissionStore.canAccessPath(to.path)) {
         // 默认落地页不可访问时重定向到首个授权菜单，避免登录后直接 403
         if (to.path === '/messageHub/list') {
-          next({ path: permissionStore.menuPaths[0] || '/inbox/list', replace: true })
+          next({ path: fallbackLandingPath(permissionStore.menuPaths), replace: true })
           return
         }
         ElMessage.error('无权访问（403）：请联系管理员分配菜单权限')

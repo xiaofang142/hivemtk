@@ -1,6 +1,7 @@
 # user-web API 清单（api-list.md）
 
-> 来源：`user-web/src/api/*.js` 静态提取 v3，共 1167 个 HTTP 调用（124 个文件）。
+> 来源：`user-web/src/api/*.js` 静态提取 v4，共 1167 个 HTTP 调用（124 个文件）。
+> v4 非破坏式（2026-11-13）：重跑按（文件|方法|动词|路径）保留既有「实测/问题-修复」列，新行才落 ⬜——v3 整表覆写曾清掉 281 条实测证据，勿回退。裸变量路径（const base）解析为字面量，模板串保持原文；helper 伪行（VAR:xxx）弱匹配人工勘注整行沿用。
 > 响应信封：`{code, data, message}`，code=0 成功；400 参数 / 401 认证 / 403 权限 / 404 不存在 / 409 冲突 / 500 服务端；业务码 4301=模块未开通、4305=订阅到期。
 > 「实测」列：✅=curl 验证通过；❌=验证发现问题（注明）；⬜=未测。修复内容写入对应行「问题/修复」。
 
@@ -206,10 +207,10 @@
 | 198 | configParams.js | —（模块级函数） | list | GET | `/api/manage/config-params` | — | ✅ |  |
 | 199 | configParams.js | —（模块级函数） | listGroups | GET | `/api/manage/config-params/groups` | — | ✅ |  |
 | 200 | configParams.js | —（模块级函数） | auditLogs | GET | `/api/manage/config-params/audit-logs` | — | ✅ |  |
-| 201 | configParams.js | —（模块级函数） | update | PUT | `/api/manage/config-params/${group}/${key}` | — | ✅ 未知 group/key 原透传 GORM record not found 且 code=400（违反 404 规范+泄露原生报错），已修：service errConfigParamNotFound 折 bizerr.CodeNotFound(4004)「配置参数不存在（group.key）」，控制器 replyConfigParamWriteErr 透传业务码；只读/类型错/缺 value 校验链不变 |
+| 201 | configParams.js | —（模块级函数） | update | PUT | `/api/manage/config-params/${group}/${key}` | — | ✅ 未知 group/key 原透传 GORM record not found 且 code=400（违反 404 规范+泄露原生报错），已修：service errConfigParamNotFound 折 bizerr.CodeNotFound(4004)「配置参数不存在（group.key）」，控制器 replyConfigParamWriteErr 透传业务码；只读/类型错/缺 value 校验链不变 |  |
 | 202 | configParams.js | —（模块级函数） | reset | POST | `/api/manage/config-params/${group}/${key}/reset` | — | ✅ |  |
 | 203 | configParams.js | —（模块级函数） | bulkReset | POST | `/api/manage/config-params/${group}/reset` | — | ✅ |  |
-| 204 | configParams.js | —（模块级函数） | setPlatformHost | PUT | `/api/manage/platform-host` | — | ✅ 空地址原被守卫 400 且指引「参数中心重置」（SaaS 下该重置只删租户覆盖行、清不到平台默认行=恢复路径断裂），已修：空地址=清空回部署默认 '' 直写平台默认行；非法格式仍 400；租户 admin 403 守卫正确；写响应 reachable=false 系 60s 缓存未生效（message 已声明），connectivity 复探可达 |
+| 204 | configParams.js | —（模块级函数） | setPlatformHost | PUT | `/api/manage/platform-host` | — | ✅ 空地址原被守卫 400 且指引「参数中心重置」（SaaS 下该重置只删租户覆盖行、清不到平台默认行=恢复路径断裂），已修：空地址=清空回部署默认 '' 直写平台默认行；非法格式仍 400；租户 admin 403 守卫正确；写响应 reachable=false 系 60s 缓存未生效（message 已声明），connectivity 复探可达 |  |
 | 205 | configParams.js | —（模块级函数） | testPlatformConnectivity | POST | `/api/manage/platform-host/connectivity` | — | ✅ |  |
 | 206 | contactConsent.js | contactConsentApi | getTimeline | GET | `/api/contacts/${encodeURIComponent(customerId)}/consents` | — | ✅ |  |
 | 207 | contactConsent.js | contactConsentApi | record | POST | `/api/contacts/${encodeURIComponent(customerId)}/consents` | — | ✅ |  |
@@ -234,14 +235,14 @@
 | 226 | customIntegration.js | —（模块级函数） | testMcpServer | GET | `/api/mcp-servers/${id}/test` | — | ✅ |  |
 | 227 | customReport.js | —（模块级函数） | getReportList | GET | `/api/custom-reports` | — | ✅ |  |
 | 228 | customReport.js | —（模块级函数） | getReport | GET | `/api/custom-reports/${id}` | — | ✅ |  |
-| 229 | customReport.js | —（模块级函数） | createReport | POST | `/api/custom-reports` | — | ✅ |   缺 name 原静默创建空名报表（控制器 binding 只盯 JSON 结构、service 不拦），已修：CreateReport/UpdateReport 加 TrimSpace(name)==''→400「name 不能为空」（UpdateReport 锚在权限行后）；复测缺名/空白名/空名 update 均 400 |
+| 229 | customReport.js | —（模块级函数） | createReport | POST | `/api/custom-reports` | — | ✅ | 缺 name 原静默创建空名报表（控制器 binding 只盯 JSON 结构、service 不拦），已修：CreateReport/UpdateReport 加 TrimSpace(name)==''→400「name 不能为空」（UpdateReport 锚在权限行后）；复测缺名/空白名/空名 update 均 400 |
 | 230 | customReport.js | —（模块级函数） | updateReport | PUT | `/api/custom-reports/${id}` | — | ✅ |  |
 | 231 | customReport.js | —（模块级函数） | deleteReport | DELETE | `/api/custom-reports/${id}` | — | ✅ |  |
 | 232 | customReport.js | —（模块级函数） | getPublicTemplates | GET | `/api/custom-reports/templates` | — | ✅ |  |
 | 233 | customReport.js | —（模块级函数） | useReportTemplate | POST | `/api/custom-reports/templates/${id}/use` | — | ✅ |  |
-| 234 | customReport.js | —（模块级函数） | queryReportData | GET | `/api/custom-reports/${id}/data` | — | ✅ |   users 源聚合 customers 表；dimensions[0].field 未知值（如 platform）回退 DATE(created_at)（repo default 分支，注释「逐字保留」）=设计；缺 start/end_time 不报错=全量；坏日期 400「start_time 必须是 YYYY-MM-DD」；不存在报表 404 |
-| 235 | customReport.js | —（模块级函数） | exportCustomReport | GET | `/api/custom-reports/${id}/data?format=export` | — | ✅ |   后端 QueryReportData 忽略 format 参数（与 /data 同响应 JSON）；前端 List.vue:573 拿 JSON 数组自行 downloadCsv 转 CSV；另有 /custom-reports/:id/export 直出 CSV 路由未被前端调用=双实现非 bug |
-| 236 | customReport.js | —（模块级函数） | runCustomReport | GET | `/api/custom-reports/${id}/data?format=run` | — | ✅ |   同 235：format 参数后端未消费，/data?format=run 与 /data 响应一致 |
+| 234 | customReport.js | —（模块级函数） | queryReportData | GET | `/api/custom-reports/${id}/data` | — | ✅ | users 源聚合 customers 表；dimensions[0].field 未知值（如 platform）回退 DATE(created_at)（repo default 分支，注释「逐字保留」）=设计；缺 start/end_time 不报错=全量；坏日期 400「start_time 必须是 YYYY-MM-DD」；不存在报表 404 |
+| 235 | customReport.js | —（模块级函数） | exportCustomReport | GET | `/api/custom-reports/${id}/data?format=export` | — | ✅ | 后端 QueryReportData 忽略 format 参数（与 /data 同响应 JSON）；前端 List.vue:573 拿 JSON 数组自行 downloadCsv 转 CSV；另有 /custom-reports/:id/export 直出 CSV 路由未被前端调用=双实现非 bug |
+| 236 | customReport.js | —（模块级函数） | runCustomReport | GET | `/api/custom-reports/${id}/data?format=run` | — | ✅ | 同 235：format 参数后端未消费，/data?format=run 与 /data 响应一致 |
 | 237 | customer360.js | —（模块级函数） | getCustomerBasic | GET | `/api/customer-360/basic?user_id=${id}` | — | ✅ |  |
 | 238 | customer360.js | —（模块级函数） | getCustomerEvents | GET | `/api/customer-360/events` | — | ✅ |  |
 | 239 | customer360.js | —（模块级函数） | getCustomerSessions | GET | `/api/customer-360/sessions` | — | ✅ |  |
@@ -262,7 +263,7 @@
 | 254 | customerEvent.js | —（模块级函数） | trackAddToCart | POST | `/api/events/add-to-cart` | — | ✅ |  |
 | 255 | customerEvent.js | —（模块级函数） | getCustomerEventHistory | GET | `/api/events/customer/${encodeURIComponent(customerId)}` | — | ✅ |  |
 | 256 | customerEvent.js | —（模块级函数） | getEventStats | GET | `/api/events/stats` | — | ✅ |  |
-| 257 | customerEvent.js | —（模块级函数） | deleteEvent | DELETE | `/api/events/customer/${encodeURIComponent(id)}` | — | ✅ |   语义=按 customer_id 删该客户全部事件（非按事件 id）；deleteEvent 为死导出无前端调用方，若未来按事件 id 调会删错范围——记设计注记；deleted_count 真实生效（7→0），再删/非法 id 均 deleted_count=0 |
+| 257 | customerEvent.js | —（模块级函数） | deleteEvent | DELETE | `/api/events/customer/${encodeURIComponent(id)}` | — | ✅ | 语义=按 customer_id 删该客户全部事件（非按事件 id）；deleteEvent 为死导出无前端调用方，若未来按事件 id 调会删错范围——记设计注记；deleted_count 真实生效（7→0），再删/非法 id 均 deleted_count=0 |
 | 258 | customerEvent.js | —（模块级函数） | getGlobalEvents | GET | `/api/customer-events/list` | — | ✅ |  |
 | 259 | customerJourney.js | —（模块级函数） | getJourneyOverview | GET | `/api/customer-journey/overview` | — | ✅ |  |
 | 260 | customerJourney.js | —（模块级函数） | getJourneyState | GET | `/api/customer-journey/overview?customer_id=${customerId}` | — | ✅ |  |
@@ -360,7 +361,7 @@
 | 352 | douyinCard.js | —（模块级函数） | generateShortLink | POST | `/api/douyin/${id}/generate-short-link` | — | ⬜ |  |
 | 353 | egolite.js | —（模块级函数） | listEgoFlows | GET | `/api/egolite/flows` | — | ⬜ |  |
 | 354 | egolite.js | —（模块级函数） | getEgoFlow | GET | `/api/egolite/flows/${id}` | — | ⬜ |  |
-| 355 | egolite.js | —（模块级函数） | saveEgoFlow | POST | `/api/egolite/flows`（id 走 query ?id=） | — | ⬜ |  |
+| 355 | egolite.js | —（模块级函数） | saveEgoFlow | POST | `VAR:id` | — | ⬜ |  |
 | 356 | egolite.js | —（模块级函数） | rescanEgoFlow | POST | `/api/egolite/flows/${id}/rescan` | — | ⬜ |  |
 | 357 | egolite.js | —（模块级函数） | publishEgoFlow | POST | `/api/egolite/flows/${id}/publish` | — | ⬜ |  |
 | 358 | egolite.js | —（模块级函数） | submitEgoFlow | POST | `/api/egolite/flows/${id}/submit` | — | ⬜ |  |
@@ -462,7 +463,7 @@
 | 454 | geo.js | geoApi | getCitationDrift | GET | `/api/geo/citations/drift` | — | ⬜ |  |
 | 455 | geo.js | geoApi | getCitationDomains | GET | `/api/geo/citations/domains` | — | ⬜ |  |
 | 456 | geo.js | geoApi | getCitationMatrix | GET | `/api/geo/citations/matrix` | — | ⬜ |  |
-| 457 | geo.js | geoApi | downloadCitationCSV | GET | `/api/geo/citations/matrix` 或 `/api/geo/citations/domains`（kind 决定） | — | ⬜ |  |
+| 457 | geo.js | geoApi | downloadCitationCSV | GET | `VAR:path` | — | ⬜ |  |
 | 458 | geo.js | geoApi | exportSite | POST | `/api/geo/site/export` | — | ⬜ |  |
 | 459 | geo.js | geoApi | deploySite | POST | `/api/geo/site/deploy` | — | ⬜ |  |
 | 460 | geo.js | geoApi | siteFullPipeline | POST | `/api/geo/site/full-pipeline` | — | ⬜ |  |
