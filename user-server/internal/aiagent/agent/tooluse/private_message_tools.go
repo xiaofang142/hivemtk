@@ -211,11 +211,11 @@ func (t *sendPrivateMessageTool) Execute(ctx context.Context, args map[string]an
 		return ErrorResult(t.Name(), err), nil
 	}
 	return SuccessResult(t.Name(), map[string]any{
-		"message_id":  msg.ID,
-		"session_id":  msg.SessionID,
-		"sender_type": msg.SenderType,
+		"message_id":   msg.ID,
+		"session_id":   msg.SessionID,
+		"sender_type":  msg.SenderType,
 		"content_type": msg.ContentType,
-		"media_url":   msg.MediaURL,
+		"media_url":    msg.MediaURL,
 	}).WithTiming(t.Name(), start), nil
 }
 

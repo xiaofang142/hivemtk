@@ -266,7 +266,7 @@ func (h *SSEHub) Publish(ctx context.Context, event SSEEvent) {
 	for _, c := range clients {
 		if !c.Send(ctx, event) {
 			// c 为逐轮局部量；SafeGo：SSE 失联清理 panic 不能击穿进程
-			utils.SafeGo(nil, "sse.unregister_dead_client", func(_ context.Context) {
+			utils.SafeGo(context.Background(), "sse.unregister_dead_client", func(_ context.Context) {
 				h.Unregister(context.Background(), c.id)
 			})
 		}

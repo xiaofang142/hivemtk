@@ -3,8 +3,10 @@
 // 回归背景（2026-11-10 双模式 API 验证 #523 POST /api/geo/probe/test）：
 // 上游模型回 429「Daily token quota exceeded. Retry after 54 seconds」时，
 // handler 把 service 返回的任何 error 一律回 400 INVALID_PARAM_1001 —— 于是
-//   · 前端把它当「用户输入写错了」，不让用户重试；
-//   · 运维在 400 里找不到上流故障，retry_after 这类可操作信息也丢了。
+//
+//	· 前端把它当「用户输入写错了」，不让用户重试；
+//	· 运维在 400 里找不到上流故障，retry_after 这类可操作信息也丢了。
+//
 // 现在的分档：engine 名不存在 → 400（真的是参数错）；其余 → 502/503（上游）。
 package controller
 

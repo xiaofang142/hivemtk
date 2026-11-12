@@ -115,8 +115,8 @@ func AuditVisitorTokenSecretAtStartup() {
 			"请设置 env VISITOR_TOKEN_SECRET（建议 32+ 字符随机串）后重启；不使用客服挂件可忽略本行")
 	case len(secret) < 32:
 		visitorTokenWeakSecretTotal.WithLabel().Inc()
-		logger.Errorf("[chat] VISITOR_TOKEN_SECRET 强度不足（当前 %d 字符 < 32）：短密钥显著降低访客 token 的 HMAC 伪造成本。" +
-			"建议轮换：openssl rand -hex 32 生成新密钥写入 env VISITOR_TOKEN_SECRET 后重启" +
+		logger.Errorf("[chat] VISITOR_TOKEN_SECRET 强度不足（当前 %d 字符 < 32）：短密钥显著降低访客 token 的 HMAC 伪造成本。"+
+			"建议轮换：openssl rand -hex 32 生成新密钥写入 env VISITOR_TOKEN_SECRET 后重启"+
 			"（不硬拒启动，既有部署可平滑迁移；不使用客服挂件可忽略本行）", len(secret))
 	}
 }

@@ -282,7 +282,7 @@ func PathQuotaMiddleware() gin.HandlerFunc {
 		clientKey := scopedRateLimitKey(c, c.ClientIP())
 		if !getPathQuotaManager().allow(clientKey, path, cfg) {
 			// path/clientKey 为请求级稳定值；SafeGo 防 recordQuotaTrigger panic 击穿进程
-			utils.SafeGo(nil, "ratelimit.quota_trigger", func(_ context.Context) {
+			utils.SafeGo(context.Background(), "ratelimit.quota_trigger", func(_ context.Context) {
 				recordQuotaTrigger(path, clientKey)
 			})
 			c.JSON(429, gin.H{

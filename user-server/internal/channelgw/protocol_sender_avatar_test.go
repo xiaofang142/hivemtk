@@ -82,12 +82,12 @@ func TestHistoryToEvent_SenderAvatarPassthroughAndClamp(t *testing.T) {
 func TestToEventFull_HistorySenderAvatarCopied(t *testing.T) {
 	const u = "https://f/av.png"
 	m := &IngestMessage{
-		Channel:         "xianyu",
-		ConversationID:  "c2",
-		MsgType:         "text",
-		Content:         "hi",
-		Timestamp:       time.Now().UnixMilli(),
-		SenderAvatar:    "https://f/top.png",
+		Channel:        "xianyu",
+		ConversationID: "c2",
+		MsgType:        "text",
+		Content:        "hi",
+		Timestamp:      time.Now().UnixMilli(),
+		SenderAvatar:   "https://f/top.png",
 		History: []*HistoryItem{
 			{EventID: "e1", MsgType: "text", Content: "hi", SenderAvatar: u, Timestamp: time.Now().UnixMilli()},
 		},

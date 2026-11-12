@@ -124,7 +124,7 @@ jobs:
       actions: read # download-artifact 需要
     steps:
       - name: Install slsa-verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@ea58f44502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
+        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
 
       - name: Download artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8

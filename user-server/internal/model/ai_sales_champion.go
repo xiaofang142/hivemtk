@@ -19,12 +19,12 @@ type MessageHub struct {
 	// 同会话内"客户发 X（inbound）+ AI 回复恰好也是 X（outbound）"两行三元组相同会撞
 	// 唯一索引（d2_msg_id_cross_direction_test.go 实测 23505 证实）。加 direction 后
 	// 跨方向可共存；同方向重复仍被索引兜底去重（入站重复去重语义不变）。
-	Direction      string     `gorm:"type:varchar(10);not null;uniqueIndex:uni_message_hub_platform_msg_conv,priority:4" json:"direction"`
-	AccountID      string     `gorm:"type:varchar(100);not null;index" json:"account_id"`
-	Status         string     `gorm:"type:varchar(20);default:'pending';index" json:"status"`
-	MsgType        string     `gorm:"type:varchar(20);not null" json:"msg_type"`
-	SenderID       string     `gorm:"type:varchar(100);index" json:"sender_id"`
-	SenderName     string     `gorm:"type:varchar(200)" json:"sender_name"`
+	Direction  string `gorm:"type:varchar(10);not null;uniqueIndex:uni_message_hub_platform_msg_conv,priority:4" json:"direction"`
+	AccountID  string `gorm:"type:varchar(100);not null;index" json:"account_id"`
+	Status     string `gorm:"type:varchar(20);default:'pending';index" json:"status"`
+	MsgType    string `gorm:"type:varchar(20);not null" json:"msg_type"`
+	SenderID   string `gorm:"type:varchar(100);index" json:"sender_id"`
+	SenderName string `gorm:"type:varchar(200)" json:"sender_name"`
 	// SenderAvatar 发送者头像 URL（M-2 客户头像链路，2026-11-11）：桥端抓「对方」头像，
 	// 与 media_url 同款 varchar(500) 列宽（TruncateMediaURL 入库前收口）；抓不到为空串。
 	SenderAvatar   string     `gorm:"type:varchar(500)" json:"sender_avatar"`
@@ -455,11 +455,11 @@ func (SalesPersona) TableName() string { return "sales_personas" }
 type InboxConversation struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID                 uint           `gorm:"primaryKey;autoIncrement" json:"id"`
-	Platform           string         `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
-	AccountID          string         `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
-	CustomerID         string         `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
-	CustomerName       string         `gorm:"type:varchar(200)" json:"customer_name"`
+	ID           uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	Platform     string `gorm:"type:varchar(30);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"platform"`
+	AccountID    string `gorm:"type:varchar(100);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"account_id"`
+	CustomerID   string `gorm:"type:varchar(64);not null;uniqueIndex:uk_inbox_conv_channel;index" json:"customer_id"`
+	CustomerName string `gorm:"type:varchar(200)" json:"customer_name"`
 	// SenderAvatar 客户头像（M-2，2026-11-11）：随 last message upsert 按「新值优先、空值保旧」
 	// 刷新（与 CustomerName 同款 firstNonEmpty 语义）；列名沿用消息侧 sender_avatar。
 	SenderAvatar       string         `gorm:"type:varchar(500)" json:"sender_avatar"`

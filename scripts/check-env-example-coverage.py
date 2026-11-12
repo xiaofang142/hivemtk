@@ -44,6 +44,10 @@ ALLOWED_MISSING = {
     "ADMIN_CONFIG_FILE", "EMBED_SDK_DIST", "EMBEDDING_BASE_URL",
     "LLM_BASE_URL", "GEO_SITE_BASE_URL", "ALLOWED_WS_ORIGINS",
     "CORS_ALLOW_ORIGINS_USER", "MAX_JSON_BODY_MB",
+    # CONFIG_PATH（2026-11-12 收口）：config.yaml 搜索链头的显式覆盖，双形态同机
+    # 部署时分开两实例配置用；不配=全链回落，无 fail-closed 故障面（同
+    # PLATFORM_CONFIG_PATH 类别，用法已注释登记 .env-example INSTALL_LOCK_PATH 段后）。
+    "CONFIG_PATH",
     # 旧键兼容占位（读取点为空值回退路径）
     "BRIDGE_INGEST_TOKEN_PREV",
     # 种子/装配键（初始化向导与本地装配，无 fail-closed 故障面）

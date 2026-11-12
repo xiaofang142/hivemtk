@@ -81,16 +81,33 @@ RUNTIMES = {
     "release-drafter/release-drafter@v7": "node24",
     "slsa-framework/slsa-verifier/actions/installer@v2.7.1": "node20",
     "softprops/action-gh-release@v3": "node24",
+    # —— SHA pin 条目（2026-11-13 逐个真读该 SHA 的 action.yml 所得，非按版本推断）：
+    # Dependabot 已把全部 uses 抬成 SHA 锁定，tag 形条目对站点匹配失效，逐条登记。
+    "DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff": "node24",
+    "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": "node24",
+    "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333": "node24",
+    "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e": "node24",
+    "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": "node24",
+    "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0": "node24",
+    "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9": "node24",
+    "codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5": "composite",
+    "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e": "node24",
+    "golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a": "node24",
+    "lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8": "composite",
+    "release-drafter/release-drafter@978bb0b30c5ee8cdd332ced253758157150d43f0": "node24",
+    "slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6": "node20",
+    "softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3": "node24",
 }
 
 # (工作流文件名, pin) -> (原因, 站点数上界)。
-# 这些是本仓库当前动不了的部分：user-server-ci.yml 整份在并行泳道手里（未提交改动），
-# 逐条抬 pin 会撞对方正在编辑的 hunk；slsa-verifier 则是上游根本没发过 node24 的版本。
+# 豁免账本必须随迁移一起收（R3）：2026-11-13 user-server-ci.yml 两处 codecov 已从
+# v4(node20) 抬到 v7(composite，与 ci-bridge.yml 同 pin)，条目随之删除——不再留空账。
+# 仅剩 slsa-verifier installer 一条：上游 v2.7.1 的 runs.using 仍是 node20（2026-11-13
+# 现读该 tag action.yml 证实），无 node24 可抬目标。
 # 每条都必须有真站点对着：站点被抬走而不删条目，R3 会直接报 STALE（曾有
 # actions/setup-go@v5 那一条，user-server-ci.yml 全量升到 v7 后账本没跟着收）。
 GRANDFATHER = {
-    ("user-server-ci.yml", "codecov/codecov-action@v4"): (2, "同上"),
-    ("slsa.yml", "slsa-framework/slsa-verifier/actions/installer@v2.7.1"):
+    ("slsa.yml", "slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6"):
         (1, "上游最新 tag 仍是 v2.7.1=node20，无可抬目标；等上游发 node24 版"),
 }
 

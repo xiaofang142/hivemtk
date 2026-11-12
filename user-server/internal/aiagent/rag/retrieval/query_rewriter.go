@@ -98,7 +98,7 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 				rw.CacheHit = true
 				rw.Original = query
 				// hash 为本调用局部值；SafeGo 防 updateCacheStats panic 击穿进程
-				utils.SafeGo(nil, "rag.query_rewriter.cache_stats", func(_ context.Context) {
+				utils.SafeGo(context.Background(), "rag.query_rewriter.cache_stats", func(_ context.Context) {
 					q.updateCacheStats(tenant.BackgroundWithTenant(ctx), hash)
 				})
 				return &rw, nil
@@ -169,7 +169,7 @@ func (q *QueryRewriter) Rewrite(ctx context.Context, query string) (*RewrittenQu
 	}
 	if q.db != nil {
 		// hash/query/rw 均为本调用局部值；SafeGo 防 persistToDB panic 击穿进程
-		utils.SafeGo(nil, "rag.query_rewriter.persist", func(_ context.Context) {
+		utils.SafeGo(context.Background(), "rag.query_rewriter.persist", func(_ context.Context) {
 			q.persistToDB(tenant.BackgroundWithTenant(ctx), hash, query, rw)
 		})
 	}

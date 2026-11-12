@@ -50,11 +50,11 @@ const (
 //  3. 不映射到数据库表，仅作为运行时事件结构在内存与 Redis 中流转
 //  4. 与 model.MessageHub（持久化消息）通过 Normalize 转换：MessageEvent -> MessageHub
 type MessageEvent struct {
-	EventID        string                    `json:"event_id"`
-	SessionID      string                    `json:"session_id"`
-	Channel        string                    `json:"channel"`
-	SenderID       string                    `json:"sender_id"`
-	SenderName     string                    `json:"sender_name,omitempty"`
+	EventID    string `json:"event_id"`
+	SessionID  string `json:"session_id"`
+	Channel    string `json:"channel"`
+	SenderID   string `json:"sender_id"`
+	SenderName string `json:"sender_name,omitempty"`
 	// SenderAvatar 发送者头像 URL（M-2 客户头像链路，2026-11-11）：与 SenderName 同语义 ——
 	// 桥端 1v1 私信抓「对方」头像，群聊/抓不到时为空。列宽同 media_url（varchar(500)），
 	// 入库前由 TruncateMediaURL 收口（channelgw ToEvent/HistoryToEvent 与 persist 双保险）。
@@ -83,11 +83,11 @@ type MessageEventHistoryItem struct {
 	SenderAvatar string `json:"sender_avatar,omitempty"`
 	ReceiverID   string `json:"receiver_id,omitempty"`
 	MsgType      string `json:"msg_type"`
-	Content    string `json:"content"`
-	MediaURL   string `json:"media_url,omitempty"`
-	Timestamp  int64  `json:"timestamp"`
-	Direction  string `json:"direction,omitempty"`
-	IsGroup    bool   `json:"is_group,omitempty"`
-	GroupID    string `json:"group_id,omitempty"`
-	GroupName  string `json:"group_name,omitempty"`
+	Content      string `json:"content"`
+	MediaURL     string `json:"media_url,omitempty"`
+	Timestamp    int64  `json:"timestamp"`
+	Direction    string `json:"direction,omitempty"`
+	IsGroup      bool   `json:"is_group,omitempty"`
+	GroupID      string `json:"group_id,omitempty"`
+	GroupName    string `json:"group_name,omitempty"`
 }

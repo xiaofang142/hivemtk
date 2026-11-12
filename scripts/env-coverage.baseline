@@ -21,11 +21,9 @@ BRAIN_TOKEN_BUDGET	待补文档（第三十五轮登记为债）；读取点 use
 BROWSER_AUDIT_RETENTION_DAYS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/browser_automation/service/retention.go
 CHANNEL_WS_ALLOWED_ORIGINS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/channelgw/ws.go
 CONTRIBUTOR_DEV	待补文档（第三十五轮登记为债）；读取点 user-server/internal/platform/contributor_client.go
-CORS_ALLOWED_EXTENSIONS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/router.go
 DEFAULT_CREDENTIALS_HINT	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/admin.go
 DISABLE_AI_QUIET_HOURS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/webhook_outbound.go
 EMAIL_WEBHOOK_SECRET	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/email_open_tracker.go
-EMBEDDING_CONCURRENCY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/llm/embedding.go
 EMBEDDING_MODEL	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/embedding-server/main.go
 EMBED_SDK_DIST	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/embed_static_routes.go
 ENABLE_DEBUG_ROUTES	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/router.go
@@ -47,8 +45,6 @@ MERCHANT_STATE_DIR	待补文档（第三十五轮登记为债）；读取点 use
 MTK_HUMANIZE_EVAL_DISABLED	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/humanize_init.go
 MTK_HUMANIZE_EVAL_THRESHOLD	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/humanize_init.go
 NOTION_API_KEY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/knowledge/service/knowledge_merchant_external.go
-OPENAI_API_KEY	待补文档（第三十五轮登记为债）；读取点 user-server/internal/content/service/ai_content.go
-OPENAI_BASE_URL	待补文档（第三十五轮登记为债）；读取点 user-server/internal/content/service/ai_content.go
 ORDER_WEBHOOK_MAX_BODY_BYTES	待补文档（第三十五轮登记为债）；读取点 user-server/internal/middleware/webhook_signature.go
 ORDER_WEBHOOK_MAX_SKEW_SECONDS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/middleware/webhook_signature.go
 PLATFORM_CONFIG_PATH	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/platform.go
@@ -64,8 +60,6 @@ QQ_API_BASE_URL	待补文档（第三十五轮登记为债）；读取点 user-s
 RAG_CONTEXTUAL_ENHANCE	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/knowledge/service/knowledge_service_contextual.go
 REACH_DISABLE_QUIET_HOURS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/app/reach_tool_wiring.go
 REDIS_DB	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/api/main.go
-RERANK_MODEL	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/rag/retrieval/rerank.go
-RERANK_TIMEOUT	待补文档（第三十五轮登记为债）；读取点 user-server/internal/aiagent/rag/retrieval/rerank.go
 SERVER_API_BASE	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/server.go
 SHOW_DEFAULT_CREDENTIALS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/admin.go
 SMTP_FROM	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/email.go
@@ -75,7 +69,6 @@ SMTP_PASSWORD	待补文档（第三十五轮登记为债）；读取点 user-ser
 SMTP_PORT	待补文档（第三十五轮登记为债）；读取点 user-server/internal/email/service/email_send.go
 SMTP_SSL	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/email.go
 SMTP_USER	待补文档（第三十五轮登记为债）；读取点 user-server/internal/email/service/email_send.go
-SSE_CORS_ALLOW_ORIGINS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/router.go
 STORAGE_LOCAL_BASE_DIR	待补文档（第三十五轮登记为债）；读取点 user-server/internal/browser_automation/service/storage_util.go
 STORAGE_LOCAL_PUBLIC_URL	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go
 UPLOAD_FOLDER	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/upload.go

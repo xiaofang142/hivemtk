@@ -195,7 +195,6 @@ func TryAdvisoryLockConn(ctx context.Context, conn *gorm.DB, key int64) (bool, e
 	return held, nil
 }
 
-
 // TryAdvisoryXactLock 尝试获取**事务级** advisory lock（pg_try_advisory_xact_lock）。
 //
 // 与会话级那两条的分工：事务级锁在 tx 结束（commit/rollback）时自动释放，

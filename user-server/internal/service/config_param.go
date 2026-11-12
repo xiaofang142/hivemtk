@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	llmpkg "hivemtk-user/internal/aiagent/llm"
 	bizerr "hivemtk-user/internal/domain/errors"
@@ -18,7 +19,6 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
-	"gorm.io/gorm"
 )
 
 // errConfigParamNotFound 把仓储层的 gorm.ErrRecordNotFound 折成业务码 4004。

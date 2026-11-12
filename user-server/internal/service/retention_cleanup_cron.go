@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -42,7 +43,8 @@ func (t *RetentionCleanupTask) Start(ctx context.Context) {
 		return
 	}
 	t.wg.Add(1)
-	go t.run(ctx)
+	// SafeGo 而非裸 go（裸 go 闸 2026-11-13）：panic 面收进 recover，行为不变。
+	utils.SafeGo(ctx, "retention_cleanup_cron.run", t.run)
 }
 
 func (t *RetentionCleanupTask) run(ctx context.Context) {
@@ -81,7 +83,12 @@ func (t *RetentionCleanupTask) Stop(ctx context.Context) {
 	}
 	t.stopOnce.Do(func() { close(t.stopCh) })
 	done := make(chan struct{})
-	go func() { t.wg.Wait(); close(done) }() // gospawn-ok: 等待型 helper（wg.Wait→close done，CC-01 白名单），无业务 panic 面
+	// SafeGo 而非裸 go（裸 go 闸 2026-11-13，原 gospawn-ok 白名单注记随之撤销）：
+	// 等待型 helper（wg.Wait→close done），SafeGo 语义等价且统一走 recover。
+	utils.SafeGo(ctx, "retention_cleanup_cron.stop_wait", func(_ context.Context) {
+		t.wg.Wait()
+		close(done)
+	})
 	select {
 	case <-done:
 	case <-ctx.Done():

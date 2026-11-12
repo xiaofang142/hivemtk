@@ -66,7 +66,7 @@ func TestGeoJobLockRepo_AcquireAndRelease(t *testing.T) {
 }
 
 // TestGeoJobLockRepo_ReleaseIdempotent 重复 Release 不得报错、不得 panic
-//（JobManager 的 defer 与异常路径可能各调一次）。
+// （JobManager 的 defer 与异常路径可能各调一次）。
 func TestGeoJobLockRepo_ReleaseIdempotent(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	if db == nil {

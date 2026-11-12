@@ -430,3 +430,10 @@ MaxUserTags
 #   B1-a 的 SelectorHealth* 同型——闸不是旋钮；入库成参数等于允许把闸开到
 #   无限。超限由写侧 ValidateChainArgs 拒配，运行期不再读参数中心。
 ChainMaxSteps
+# ── F2（2026-11-10 审计）/ 2026-11-13 收口：media_url 列宽镜像，刻意**不入参数中心** ──
+# 判据：MaxMediaURLLen 是 message_hub / session_messages / unified_messages /
+#   unified_replies 四表 varchar(500) 列宽的 Go 侧镜像——真正的界是 PG 列本身
+#   （调大须走 DDL 迁移，不是改常量；调小则截断已有签名 URL）。入库成参数会让
+#   「参数中心改了、列宽没改」的半态成为可能，与列宽这一硬约束的语义相反。
+#   截断副作用（签名参数破坏→链接失效可观测）见 TruncateMediaURL 注释。
+MaxMediaURLLen

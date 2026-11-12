@@ -230,10 +230,10 @@ func (r *InboxConversationRepository) ListByAccount(ctx context.Context, platfor
 }
 
 type UpsertFromMessageInput struct {
-	Platform           string
-	AccountID          string
-	CustomerID         string
-	CustomerName       string
+	Platform     string
+	AccountID    string
+	CustomerID   string
+	CustomerName string
 	// CustomerAvatar 客户头像 URL（M-2，2026-11-11）：落 inbox_conversations.sender_avatar，
 	// 与 CustomerName 同款「新值优先、空值保旧」刷新语义；空串不清掉已有头像。
 	CustomerAvatar     string
@@ -308,8 +308,8 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 		"total_count":          conv.TotalCount + 1,
 		"customer_name":        firstNonEmpty(in.CustomerName, conv.CustomerName),
 		// 客户头像「新值优先、空值保旧」：与 customer_name 同语义，出站/空头像行不清掉已有值。
-		"sender_avatar":        firstNonEmpty(in.CustomerAvatar, conv.SenderAvatar),
-		"conversation_id":      firstNonEmpty(in.ConversationID, conv.ConversationID),
+		"sender_avatar":   firstNonEmpty(in.CustomerAvatar, conv.SenderAvatar),
+		"conversation_id": firstNonEmpty(in.ConversationID, conv.ConversationID),
 	}
 	if in.LastMessageFrom == "customer" {
 		updates["unread_count"] = conv.UnreadCount + 1

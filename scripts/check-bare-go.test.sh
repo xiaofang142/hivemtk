@@ -237,10 +237,10 @@ pass 7 "B12b：基线格式坏 ⇒ rc=1"
 
 # B15：真仓对账——门绿且站点数与基线总数一致
 rc=$(run_gate "$ROOT" "$REAL_BASE")
-[ "$rc" = "0" ] || fail 8 "真仓门应绿（基线与现算一致），实际 rc=$rc；若刚改了产码请同步基线"
+[ "$rc" = "0" ] || fail 8 "真仓门应绿（基线与现算一致），实际 rc=${rc}；若刚改了产码请同步基线"
 real_sites=$(python3 "$ROOT/scripts/check-bare-go.py" --repo "$ROOT" --baseline "$REAL_BASE" 2>&1 | head -1)
-echo "$real_sites" | grep -q "现算 91 处 / 基线 91 处" || fail 8 "真仓站点数对账失败: $real_sites"
-pass 8 "B15：真仓门绿，站点数 91/91 与基线一致"
+echo "$real_sites" | grep -q "现算 83 处 / 基线 83 处" || fail 8 "真仓站点数对账失败: $real_sites"
+pass 8 "B15：真仓门绿，站点数 83/83 与基线一致"
 
 echo "ALL PASS"
 exit 0

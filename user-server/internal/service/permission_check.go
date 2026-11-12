@@ -18,8 +18,8 @@ const (
 
 // 兼容旧 TeamUser 角色名（过渡期使用）
 const (
-	LegacyTeamUserRoleAdmin   = "admin"
-	LegacyTeamUserRoleViewer  = "viewer"
+	LegacyTeamUserRoleAdmin  = "admin"
+	LegacyTeamUserRoleViewer = "viewer"
 )
 
 // ErrServicePermissionDenied Service 层权限不足

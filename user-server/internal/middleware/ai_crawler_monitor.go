@@ -54,7 +54,7 @@ func AICrawlerMonitor(recorder func(engine, path, ua, ip string)) gin.HandlerFun
 			// 参数在请求 goroutine 内先取值：避免异步 goroutine 并发读 gin.Context
 			// （gin.Context 非并发安全，且请求结束后会被池化复用）。
 			path, ua, ip := c.Request.URL.Path, c.GetHeader("User-Agent"), c.ClientIP()
-			utils.SafeGo(nil, "middleware.ai_crawler_monitor", func(_ context.Context) {
+			utils.SafeGo(context.Background(), "middleware.ai_crawler_monitor", func(_ context.Context) {
 				recorder(engine, path, ua, ip)
 			})
 		}

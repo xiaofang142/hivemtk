@@ -911,7 +911,7 @@ jobs:
         #   本步骤只负责「上传报告供趋势查看」，故 fail_ci_if_error 保持 false ——
         #   缺 CODECOV_TOKEN 时不应让构建失败。codecov 侧策略见仓库根 codecov.yml。
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: user-server/coverage/go-cover.out
           flags: go
@@ -1137,7 +1137,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: user-web/bridge/coverage/lcov.info
           flags: bridge

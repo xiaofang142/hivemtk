@@ -12,10 +12,10 @@ import (
 // 2026-11-10 审计 F6：DeliverBridgeOutboundMedia 补上下行媒体的服务端生产者出口。
 // 下行媒体协议三端（OutboxMessage.MediaURL / SSE media_url / 扩展 sendOutbound 分派）
 // 早已就绪，此前所有出站入口都 text-only 入队。本文件钉三个口径：
-//   1. 带媒体出站：pending 行带 media_url + msg_type，msg_id 用 typed 口径（同占位符
-//      两张图的行 msg_id 不碰撞）；
-//   2. 文本出站（旧签名）：msg_id 与 ContentHashMsgID 逐字节一致（存量不变）；
-//   3. media_url 列宽收口（F2）与 text 类型强制清空 media_url。
+//  1. 带媒体出站：pending 行带 media_url + msg_type，msg_id 用 typed 口径（同占位符
+//     两张图的行 msg_id 不碰撞）；
+//  2. 文本出站（旧签名）：msg_id 与 ContentHashMsgID 逐字节一致（存量不变）；
+//  3. media_url 列宽收口（F2）与 text 类型强制清空 media_url。
 func TestDeliverBridgeOutboundMedia_TwoImagesDistinctMsgIDs(t *testing.T) {
 	setupBridgeWhitelistForTest(t, "douyin")
 	testutil.NewTestDB(t, &model.MessageHub{})
