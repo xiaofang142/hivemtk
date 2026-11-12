@@ -75,10 +75,17 @@ export function enhancedClick(element) {
 /** 小红书 setValue：textarea 设值 + 触发 input（domUtils.js 同款） */
 export function setValue(el, value) {
   if (!el) return;
-  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-  if (setter) setter.call(el, value);
-  else el.value = value;
+  const tag = String(el.tagName || '').toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'INPUT') {
+    const proto = tag === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+    if (setter) setter.call(el, value);
+    else el.value = value;
+  } else {
+    // 非 INPUT/TEXTAREA（如 DIV 占位壳）没有原生 value setter 语义，
+    // 直接走属性赋值，避免对 DIV 调 HTMLInputElement.prototype setter 抛 Illegal invocation。
+    el.value = value;
+  }
   el.dispatchEvent(new Event('input', { bubbles: true }));
   el.dispatchEvent(new Event('change', { bubbles: true }));
 }

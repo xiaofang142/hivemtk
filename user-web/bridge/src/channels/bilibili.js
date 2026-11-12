@@ -416,6 +416,11 @@ const hooks = {
     const input = findInputEl();
     if (!input) throw new Error('bilibili input not found');
     const isEditable = input.isContentEditable || input.getAttribute('contenteditable') === 'true';
+    const isField = input.tagName === 'TEXTAREA' || input.tagName === 'INPUT';
+    // 2026-11-13：.msb-textarea 等 DIV 容器在未开会话时是占位壳（contenteditable=false），
+    // 对其走原生 value setter 会抛 Illegal invocation（prod 实证 mh:a825b262 回写失败 20 次 exhaust）；
+    // 非编辑态一律视为输入框不可用，明确失败交下行重投，不冒用占位壳。
+    if (!isEditable && !isField) throw new Error('bilibili input not editable');
     if (isEditable) {
       await fillContentEditableHumanized(input, text, { clearBefore: true });
     } else {

@@ -7,7 +7,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "version": "1.1.0",
+  "version": "1.2.1",
   "description": "将抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博 网页私信实时桥接到 HiveMTK AI 智能体（user-server），支持多账号、消息历史回填与拟人限速风控。快手/京东/B站/微博为实验渠道（选择器未经真机校准）。",
   "permissions": [
     "alarms",
@@ -48,7 +48,9 @@
       "matches": [
         "https://*.douyin.com/*"
       ],
-      "js": ["content-douyin.js"],
+      "js": [
+        "content-douyin.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -56,7 +58,9 @@
       "matches": [
         "https://*.xiaohongshu.com/*"
       ],
-      "js": ["content-xhs.js"],
+      "js": [
+        "content-xhs.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -64,7 +68,9 @@
       "matches": [
         "https://*.tiktok.com/*"
       ],
-      "js": ["content-tiktok.js"],
+      "js": [
+        "content-tiktok.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -73,7 +79,9 @@
         "https://*.goofish.com/*",
         "https://*.xianyu.com/*"
       ],
-      "js": ["content-xianyu.js"],
+      "js": [
+        "content-xianyu.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -81,7 +89,9 @@
       "matches": [
         "https://*.kuaishou.com/*"
       ],
-      "js": ["content-kuaishou.js"],
+      "js": [
+        "content-kuaishou.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -92,7 +102,9 @@
         "https://chat.jd.com/*",
         "https://im.jd.com/*"
       ],
-      "js": ["content-jd.js"],
+      "js": [
+        "content-jd.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     },
@@ -101,7 +113,9 @@
         "https://message.bilibili.com/*",
         "https://www.bilibili.com/*"
       ],
-      "js": ["content-bilibili.js"],
+      "js": [
+        "content-bilibili.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -110,7 +124,9 @@
         "https://weibo.com/*",
         "https://*.weibo.com/*"
       ],
-      "js": ["content-weibo.js"],
+      "js": [
+        "content-weibo.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     },
@@ -118,7 +134,9 @@
       "matches": [
         "https://*.pinduoduo.com/*"
       ],
-      "js": ["content-pdd.js"],
+      "js": [
+        "content-pdd.js"
+      ],
       "run_at": "document_idle",
       "all_frames": false
     }

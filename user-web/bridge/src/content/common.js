@@ -309,6 +309,15 @@ function pickRecommendedSelector(visibleInputs) {
 }
 
 export function startBridge(channel, buildAdapter) {
+  // 幂等守卫（2026-11-13 生产实证）：manifest 静态注入 + background
+  // webNavigation.onCommitted autoInject 会双注同一 content script，
+  // _isRecent 1500ms 去重看不见静态注入 → 同世界跑两份 PollingLoop
+  // （下行日志 43ms 成对）。同世界只允许首份实例启动。
+  if (window.__bridgeStarted) {
+    log.info('桥接已启动（重复注入忽略）', channel);
+    return () => {};
+  }
+  window.__bridgeStarted = true;
   const adapter = buildAdapter();
   // 上报链路诊断状态（自检时返回给 popup，定位「解析到了但不上报」）。
   // 2026-08-05 HTTP-only 重构：移除 portAlive/connectError（无 port 概念），

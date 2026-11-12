@@ -386,6 +386,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     { label: `[下行 outbox] ${channel}`, batchSize: outboxBatchSize }
   );
   const messages = (res && res.messages) || [];
+  log.info(`[下行诊断] GET n=${messages.length}`);
   // B4（批3）：裸 console.log 全文泄露私信内容（控制台可被同浏览器其他扩展读取）
   // → 降为 verbose-gated debug 且不再携带 content 字段（脱敏=不进参数，而非事后打码）。
   log.debug('pollDownlink 分组前', {
@@ -415,7 +416,9 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
     // 而非原群会话 conversation_id——抖音私信会话 id 即成员标识，列表匹配可打开已有私信会话。
     const convId = dmAwareConvId(m, m.conversation_id || '_unknown_');
     const cacheKey = `${m.msg_id}|${convId}`;
-    if (cache.has(cacheKey)) {
+    const cacheHit = cache.has(cacheKey);
+    log.info(`[下行诊断] 行 ${m.msg_id} conv=${convId} cacheHit=${cacheHit}`);
+    if (cacheHit) {
       dupEntries.push({ msg_id: m.msg_id, conversation_id: m.conversation_id || '' });
       continue;
     }
@@ -472,6 +475,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         await cache.refresh();
         if (cache.has(cacheKey)) return { skipped: true };
         let result = null;
+        log.info(`[下行诊断] 临界区 ${cacheKey}`);
         try {
           if (sendOutbound) {
             // 002-multi-type-messages：媒体出站透传 msgType/mediaUrl（sendOutbound 内分派）。
@@ -486,6 +490,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         } catch (e) {
           result = null;
         }
+        log.info(`[下行诊断] send结果 ${msg.msg_id} ${JSON.stringify({ ok: !!(result && result.ok), nf: !!(result && result.notFound), rl: !!(result && result.rateLimited) })}`);
         // B4：同上——结果日志只带键与状态位，不带私信内容（verbose-gated）
         log.debug('sendOutbound 结果', {
           channel, conv_id: convId, msg_id: msg.msg_id,
@@ -528,6 +533,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         }
         return {};
       });
+      log.info(`[下行诊断] outcome ${JSON.stringify(outcome)}`);
       if (outcome.sent || outcome.skipped) { recordSent(msg); continue; }
       if (outcome.notFound) {
         log.debug(`下行目标会话不存在: ${convId}`, { msg_id: msg.msg_id });

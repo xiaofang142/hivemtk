@@ -151,39 +151,46 @@ async function bridgeFetch(url, options) {
   const hasRuntime =
     typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
   if (inExtension || !hasRuntime) return fetch(url, options);
-  try {
-    const res = await Promise.race([
-      chrome.runtime.sendMessage({
-        type: 'bridgeFetch',
-        url,
-        options: {
-          method: options && options.method,
-          headers: options && options.headers,
-          body: options && options.body,
-        },
-      }),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error('bridgeFetch: SW 30s 超时')),
-          30000
-        )
-      ),
-    ]);
-    if (!res || res.__err)
-      throw new Error((res && res.__err) || 'bridgeFetch: no response');
-    // 透传状态与响应体；调用方只读 status/text/json/headers.get，够用。
-    return {
-      ok: res.status >= 200 && res.status < 300,
-      status: res.status,
-      statusText: res.statusText || '',
-      headers: new Map(res.headers || []),
-      text: async () => res.body || '',
-      json: async () => JSON.parse(res.body || 'null'),
-    };
-  } catch (e) {
-    // SW 未醒/消息失败时回退直连（本地 dev 无 CSP 场景仍可用）
-    return fetch(url, options);
-  }
+  // 页面上下文一律经 SW 中转，禁止回退直连：生产 workapi 对页面源不放行
+  // CORS，直连必然 Failed to fetch；更糟的是 relay 那次 fetch 已在服务端
+  // 认领下行行，直连回退 = 对同一行重复认领（幽灵认领 pa+1 → 30s 惰性回收
+  // → 再认领 → exhaustOutbound 误判 failed）。2026-11-13 生产实证。
+  const res = await Promise.race([
+    chrome.runtime.sendMessage({
+      type: 'bridgeFetch',
+      url,
+      options: {
+        method: options && options.method,
+        headers: options && options.headers,
+        body: options && options.body,
+      },
+    }),
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error('bridgeFetch: SW 30s 超时')),
+        30000
+      )
+    ),
+  ]);
+  if (!res || res.__err)
+    throw new Error((res && res.__err) || 'bridgeFetch: no response');
+  // 透传状态与响应体；调用方只读 status/text/json/headers.get，够用。
+  // headers 兼容两种形状：background 发 Object.fromEntries() 的普通对象，
+  // 老版本发 entries 数组——普通对象不可迭代，直接 new Map(obj) 会抛
+  // TypeError（2026-11-13 生产实证：每个成功 relay 都在这一行炸掉，
+  // 落入直连回退 → 生产 CORS 判死刑 → 幽灵认领 pa+1）。
+  return {
+    ok: res.status >= 200 && res.status < 300,
+    status: res.status,
+    statusText: res.statusText || '',
+    headers: new Map(
+      Array.isArray(res.headers)
+        ? res.headers
+        : Object.entries(res.headers || {})
+    ),
+    text: async () => res.body || '',
+    json: async () => JSON.parse(res.body || 'null'),
+  };
 }
 
 async function fetchWithRetry(url, options, retryOpts = {}) {
@@ -401,5 +408,6 @@ export {
   postIngest,
   getOutbox,
   ackOutbox,
+  bridgeFetch,
 };
 
