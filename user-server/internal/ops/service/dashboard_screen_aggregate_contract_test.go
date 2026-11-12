@@ -83,7 +83,18 @@ func TestDashboardScreenService_AggregateDashboardData_Contract(t *testing.T) {
 
 	// 30 天趋势：日期长度 30。原实现（保真保留）的日期数组是
 	// [thirtyDaysAgo .. thirtyDaysAgo+29d=昨天]，**不含今天**——今日线索不进趋势，
-	// 逐日求和只应命中昨日那条种子（now-26h）。
+	// 逐日求和只应命中「本地日期已非今天」的种子。
+	// 期望值不写死 1：种子用 now-1h/-2h/-26h 相对时间，00:00-02:00 之间运行时
+	// 「今日种子」会跨过午夜落到昨天（2026-11-13 01:14 实测 sum=2：now-2h=昨 23:14），
+	// 按实现同款「本地日期 < 今天」边界从种子推导期望，契约本身（30 天长、
+	// 今日不计入、昨日计入）不变。
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	wantTrendSum := int64(0)
+	for _, at := range []time.Time{now.Add(-1 * time.Hour), now.Add(-2 * time.Hour), now.Add(-26 * time.Hour)} {
+		if at.Before(todayStart) {
+			wantTrendSum++
+		}
+	}
 	if len(agg.Trend.Dates) != 30 || len(agg.Trend.Clues) != 30 {
 		t.Fatalf("趋势应 30 天，实际 dates=%d clues=%d", len(agg.Trend.Dates), len(agg.Trend.Clues))
 	}
@@ -91,8 +102,8 @@ func TestDashboardScreenService_AggregateDashboardData_Contract(t *testing.T) {
 	for _, v := range agg.Trend.Clues {
 		sum += v
 	}
-	if sum != 1 {
-		t.Errorf("趋势逐日求和应为 1（昨日种子；原语义日期窗止于昨天，今日两条不计入），实际 %d", sum)
+	if sum != wantTrendSum {
+		t.Errorf("趋势逐日求和应为 %d（日期早于今天的种子数；契约=窗口止于昨天、今日不计入），实际 %d", wantTrendSum, sum)
 	}
 
 	// 渠道/地区：空 source_id 归「未知」，计数降序。

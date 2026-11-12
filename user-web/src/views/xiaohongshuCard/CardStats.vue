@@ -342,7 +342,7 @@ const fetchCardInfo = async () => {
     // 拦截器已经按状态码弹过一次，这里再弹一条是两句同义 toast；
     // 页面用常驻告警说结论——toast 三秒就没了，卡片框的空标题不会。
     cardLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   }
 };
 
@@ -386,7 +386,7 @@ const fetchCardStats = async () => {
   } catch (error) {
     // 同上：统计读失败时拦截器已经出声，页面把「这一屏的 0 不是真值」常驻说出口。
     statsLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   } finally {
     loading.value = false
   }

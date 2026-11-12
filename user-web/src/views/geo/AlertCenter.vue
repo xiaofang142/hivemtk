@@ -264,7 +264,7 @@ const load = async () => {
     const unreadData = unreadRes?.data || unreadRes
     unreadCount.value = unreadData?.count || 0
   } catch (e) {
-    console.error('加载告警失败', e)
+    console.warn('加载告警失败', e)
   } finally {
     loading.value = false
   }

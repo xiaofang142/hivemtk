@@ -394,7 +394,7 @@ const fetchCardInfo = async () => {
   } catch (error) {
     // 拦截器已经按状态码弹过一次，这里不再补第二句同义 toast。
     cardLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   }
 };
 
@@ -426,7 +426,7 @@ const fetchStats = async () => {
     }
   } catch (error) {
     statsLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   } finally {
     loading.value = false
   }

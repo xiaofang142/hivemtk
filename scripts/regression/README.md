@@ -13,6 +13,7 @@
 | `ego-helpers.mjs` | ego-browser 助手函数：console/网络采集、双形态登录（逐元素显式填值）、带 token 的接口探针 |
 | `../mark.py` | router-list.md 行级状态/证据维护（`--stats` / `--status` / `--note` / `--show`） |
 | `../gen_router_list.py` | 由 `user-web/src/router/*` 重建 258 行索引，**重跑保留既有勾选** |
+| `nr-batch.mjs` | N2 轮逐路由批次运行器：about:blank 跳板单挂载、单次事件采集（console+Network 同批分类）、安全钮候选依次尝试；只做逐路由串行，无元素枚举循环 |
 | `../../user-web/scripts/gen_api_list.cjs` | 由 `src/api/*.js` 重建 api-list.md，**v4 起非破坏式：按（文件\|方法\|动词\|路径）保留既有「实测/问题-修复」列**（v3 曾整表覆写清掉 281 条实测证据，勿回退该行为） |
 
 ## 一、环境启动配方（双形态，2026-11-13 实测）
@@ -62,6 +63,24 @@ cd user-web && npx vite --config vite.audit.saas.config.js &         # 8321
 4. 每页收口四件事：① console.error 计数 ② 非 2xx 请求逐条归因（设计内拒绝 vs 缺陷）
    ③ 关键交互的 toast/页面状态 ④ 变更类操作后 `page.fetch` 复核 API。
 5. 落证据：`python3 scripts/mark.py <行号> --status x --note "11-13 M轮：…（round-N）"`。
+   全量回归（N2 轮口径）用 `nr-batch.mjs` 批次推进 + `/tmp/mark_batch.py` 批量落证。
+
+### N2 轮协议教训（2026-11-13 实测，勿回退）
+
+1. **每路由 about:blank 跳板再 goto**：长 SPA 会话内直接 hash 跳转会让懒加载路由模块
+   静默失挂载（/followups/today 主区空渲染实锤）；goto+reload 又会打断在途 XHR 产生
+   假 console.error（#82 cerr=4 工件根因）。跳板=单次全新挂载，两头都避。
+2. **page.events() 取走即清空**：每路由只许调一次，console 与 Network 同批分类；
+   调两次第二次恒空（非 2xx 采集全废的第一版缺陷）。
+3. **安全钮候选依次尝试**：首个匹配钮可能在隐藏 tab 容器里不可点（#66）或是
+   设计内禁用态（空表单/未选客户，#66/#151）——点不动≠页面坏，结合 contentOK 与
+   cerr 判定，如实记「设计内禁用」。
+4. **主区空挂载哨兵**（.el-main textContent>20）只适用 Layout 内页；公开页/Widget/登录页
+   恒 false（#1-#5/#166-170），按页型豁免。
+5. **设计内拒绝的 console 降噪口径**：组件 catch 里对设计内拒绝（404 卡片不存在、
+   模块未开通 4302）应 console.warn 而非 error——与 ChatWindow 策略门（#4）同口径；
+   L 轮对 #82 的「0 console.error」记录与当时代码不符（组件 catch 用了 error 级），
+   已按 warn 口径修正四处 CardStats + AlertCenter。
 6. 发现缺陷：当轮修复（规则2），修完回归本页 + 相关门禁，才允许标 [x]。
 7. 双形态都要过：SaaS 出现的租户/商务属性，独立部署页必须不出现且不报错。
 
@@ -87,8 +106,9 @@ EOF
 
 - 注册：`POST /api/auth/register`（on 模式必填 `tenant_code` + 开户登记字段 +
   `regulatory_ack:true`，缺一回 `INVALID_PARAM_1001` 具体项）
-- 已有：`mround_audit01 / Audit#20261113 / tenant tei6385`（本地 user_db，role=user，
-  零菜单——正好用于回归「新用户落地 /profile 不落 403」这一口径）
+- 每轮回归按上行配方**现注册**一次性账号（口令自拟不入库）；提权 admin（用于全页
+  回归）在本地 user_db 执行 `UPDATE system_users SET role='admin' WHERE username='<账号>';`
+  后重登取新 JWT。历史账号 mround_audit01（tenant tei6385）注册于 11-13 M轮，口令不入库。
 
 ## 四、已知设计内拒绝（[~] 的定性依据，回归时勿当缺陷）
 

@@ -233,7 +233,7 @@ const fetchCardInfo = async () => {
     // 页面改用常驻的 cardLoadFailed 说结论：toast 三秒就没了，标题的「加载中...」不会。
     cardInfo.value = {}
     cardLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   }
 };
 
@@ -259,7 +259,7 @@ const fetchCardStats = async () => {
   } catch (error) {
     // 同上：统计读失败时拦截器已经出声，页面把「这一屏的 0 不是真值」常驻说出口。
     statsLoadFailed.value = true
-    console.error(error)
+    console.warn(error)
   } finally {
     loading.value = false
   }

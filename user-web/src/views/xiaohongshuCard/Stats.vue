@@ -295,7 +295,7 @@ const fetchOverallStats = async () => {
     });
   } catch (error) {
     ElMessage.error(i18n.global.t('获取统计数据失败'))
-    console.error(error)
+    console.warn(error)
   } finally {
     loading.value = false
   }
