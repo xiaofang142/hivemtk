@@ -41,6 +41,7 @@ type AIAgentCreateDTO struct {
 	Persona              string          `json:"persona"`
 	SystemPrompt         string          `json:"system_prompt"`
 	Greeting             string          `json:"greeting"`
+	AssetBundleID        string          `json:"asset_bundle_id"`
 	RagProductIDs        []string        `json:"rag_product_ids"`
 	SOPIDs               []string        `json:"sop_ids"`
 	ScriptLibraryIDs     []string        `json:"script_library_ids"`
@@ -84,6 +85,7 @@ func (s *AIAgentService) CreateAIAgent(ctx context.Context, req *AIAgentCreateDT
 		Persona:          req.Persona,
 		SystemPrompt:     systemPrompt,
 		Greeting:         greeting,
+		AssetBundleID:    req.AssetBundleID,
 		RagProductIDs:    req.RagProductIDs,
 		SOPIDs:           req.SOPIDs,
 		ScriptLibraryIDs: req.ScriptLibraryIDs,
@@ -170,6 +172,9 @@ func (s *AIAgentService) UpdateAIAgentFromJSON(ctx context.Context, id uint, raw
 	}
 	if hasKey("persona") && req.Persona != "" {
 		existing.Persona = req.Persona
+	}
+	if hasKey("asset_bundle_id") {
+		existing.AssetBundleID = req.AssetBundleID
 	}
 	if hasKey("description") {
 		existing.Description = req.Description

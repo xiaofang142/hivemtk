@@ -1087,6 +1087,8 @@ const onSave = async () => {
         persona: form.persona,
         system_prompt: form.system_prompt,
         greeting: form.greeting,
+        // 资产包绑定（购买/同步入库的资产）：创建与更新都要带，否则运行时拿不到已购资产
+        asset_bundle_id: form.asset_bundle_id || '',
         internal_language: form.internal_language || 'zh',
         target_language: form.target_language || '',
         kb_ids: form.kb_ids || [],
