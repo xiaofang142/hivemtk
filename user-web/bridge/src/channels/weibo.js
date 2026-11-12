@@ -96,6 +96,14 @@ function getAccountId() {
     const cached = localStorage.getItem(`hivebridge:account:${CHANNELS.WEIBO}`);
     if (cached) return cached;
   } catch (_) {  }
+  // 稳定占位（2026-11-12 口径收口）：与 douyin 的「兜底失败返回空串」是两种**有意不同**
+  // 的取舍，此处保留占位。依据：服务端契约对 account_id 硬性非空——
+  //   ① ingest：handler_http.go「account_id required」400（fix_2026_08_14_test 钉住）；
+  //   ② outbox/SSE 订阅：同样要求非空 account_id，且下行订阅身份=本函数返回值，
+  //      空串会让 http-ingest 的 `accountId || 'default'` 回退轮询一个永不有行的账号；
+  // 占位值保证「解析失败时传输链路仍活着」（历史/实时/AI 回复下发同键可达）。
+  // 代价：多标签页解析失败会归并进 'weibo-unknown' 账号行（多账号归并失真）——
+  // 真机校准轮若发现更高频的解析失败，需改走 douyin 的 fail-loud 口径或补 DOM 兜底层。
   return 'weibo-unknown';
 }
 
@@ -205,8 +213,69 @@ function directionOf(item) {
   return FRONTEND_DEFAULT_SENDER_TYPE;
 }
 
+// —— 系统消息识别（2026-11-12 收口：微博此前无过滤，「撤回了一条消息」等系统文案
+// 会以 customer 方向上行并触发 AI 误回复——douyin/kuaishou/bilibili 均有漏斗，微博补齐）——
+// 保守 fixture 口径（真机校准缺口见 CHANNEL-WEIBO.md §9）：
+//   ① 时间分隔文案（聊天流中的 "14:30" / "昨天 10:20" 等居中分隔）
+//   ② 居中对齐（通用信号，与 douyin isCenterAligned 同源）
+//   ③ 内容词表（撤回/加好友/正在输入/发送失败等系统文案，微博高频形态）
+// 与 douyin 的差异：**不带**「短文本且无头像无气泡即判系统」的激进启发层（⑤）——
+// 该层依赖 douyin 真机校准过的气泡/头像结构假设，微博结构样本不足，宁缺勿错；
+// 词表校准后如有专属 class/结构信号（SEL.SYSTEM），真机轮再补。
+const WEIBO_SYSTEM_TEXT_PATTERNS = [
+  /撤回了?一条消息/,
+  /recalled a message/i,
+  /你(已)?添加.*为好友/,
+  /已添加.*为好友/,
+  /对方正在输入/,
+  /typing/i,
+  /以下为新消息/,
+  /消息发送失败/,
+  /消息已发出.*被对方拒收/,
+];
+function isTimeText(text) {
+  if (!text) return false;
+  const t = text.trim();
+  if (/^\d{1,2}:\d{2}$/.test(t)) return true;
+  if (/^(今天|昨天|前天)\s*\d{1,2}:\d{2}$/.test(t)) return true;
+  if (/^\d{1,2}月\d{1,2}日(\s+\d{1,2}:\d{2})?$/.test(t)) return true;
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(t)) return true;
+  if (/^(上午|下午|凌晨)\s*\d{1,2}:\d{2}$/.test(t)) return true;
+  return false;
+}
+function isSystemText(text) {
+  if (!text) return false;
+  const t = text.trim();
+  return WEIBO_SYSTEM_TEXT_PATTERNS.some((re) => re.test(t));
+}
+function isCenterAligned(el) {
+  if (!el) return false;
+  try {
+    const ta = getComputedStyle(el).textAlign;
+    if (ta === 'center' || ta === '-webkit-center') return true;
+    const parent = el.parentElement;
+    if (parent) {
+      const jc = getComputedStyle(parent).justifyContent;
+      if (jc === 'center') return true;
+    }
+  } catch (_) {  }
+  return false;
+}
+function isSystemMessage(item) {
+  if (!item) return false;
+  // ①/② 通用信号：时间分隔 / 居中对齐（系统提示的常见版式）
+  const text = cleanText(item);
+  if (isTimeText(text)) return true;
+  if (isCenterAligned(item) && text && text.length < 60) return true;
+  // ③ 内容词表
+  if (isSystemText(text)) return true;
+  return false;
+}
+
 function parseMessageItem(item) {
   if (!item) return null;
+  // 系统消息不入上行（douyin:648 / kuaishou:337 同款守卫）：避免撤回/时间分隔触发 AI
+  if (isSystemMessage(item)) return null;
   const textEl = item.querySelector(SEL.TEXT);
   let text = textEl ? cleanText(textEl) : '';
   if (!text) text = cleanText(item);
@@ -270,10 +339,12 @@ function getMessageItems() {
   for (const sel of m.itemSelectors) {
     try {
       const items = Array.from(root.querySelectorAll(sel));
-      if (items.length) return items;
+      if (items.length) return items.filter((el) => !isSystemMessage(el));
     } catch (_) {  }
   }
-  if (root && root !== document) return Array.from(root.children).filter((el) => cleanText(el));
+  if (root && root !== document) {
+    return Array.from(root.children).filter((el) => cleanText(el) && !isSystemMessage(el));
+  }
   return [];
 }
 
@@ -348,7 +419,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isWeiboHost, isChatUrl, detectUnread };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isWeiboHost, isChatUrl, detectUnread, isSystemMessage, isSystemText, isTimeText };
 
 export function buildWeiboAdapter() {
   return new BaseAdapter({
