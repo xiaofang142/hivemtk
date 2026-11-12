@@ -44,11 +44,16 @@ function mergedSelectors() {
 //   论证同 M-1 offline-cache 死代码清除模式（接线无消费者 / 删除无损 / 保留只留
 //   死定义），故三选一取「删除」。
 export const SEL = {
-  CHAT_LIST: ".list-container div[class='list-item'], .message-sidebar__item, [class*=\"session-item\" i]",
-  MSG_LIST: ".message-list, .message-content__inner, [class*=\"message-list\" i]",
+  // 2026-11-12 校准（真机 message.bilibili.com/#/whisper 官方赛事会话实证）：
+  // 真实类名带 CSS Modules 哈希后缀（_SessionItem_t04g4_1 / _MessageList_1vip7_1 /
+  // _MessageSendBox__Textarea_1izxa_42 + msb-textarea / brt-editor），旧选择器
+  // 字面量全不命中 → looksLikeChatPage=false → match()=false → 无 loop 无上报。
+  // 加性扩展，不动既有候选。
+  CHAT_LIST: ".list-container div[class='list-item'], .message-sidebar__item, [class*=\"session-item\" i], [class*=\"_SessionItem_\" i]",
+  MSG_LIST: ".message-list, .message-content__inner, [class*=\"message-list\" i], [class*=\"_MessageList_\" i]",
   MSG_ITEM: '.msg-item, .interaction-item__content, [class*="message-item" i]',
   TEXT: '.message-content, .message-text-nodes, [class*="msg-content" i]',
-  INPUT: '#editor, .message-reply-box__input, textarea[class*="reply" i]',
+  INPUT: '#editor, .message-reply-box__input, textarea[class*="reply" i], .msb-textarea, .brt-editor, [class*="_MessageSendBox__Textarea" i]',
   SEND: "[class*='btn-box send-btn'], .message-reply-box__pub, button[class*=\"send\" i]",
   PEER_NAME: ".dialog div[class='title'] > span, .message-header__title, [class*=\"message-header\" i] [class*=\"title\" i]",
   UNREAD: '.notify.notify-number, .message-sidebar__item-num, [class*="unread" i]',
@@ -115,7 +120,11 @@ function getAccountId() {
     const cached = localStorage.getItem(`hivebridge:account:${CHANNELS.BILIBILI}`);
     if (cached) return cached;
   } catch (_) {  }
-  // 稳定占位，不返回空串：空串会让服务端 400，历史/实时全断。
+  // 稳定占位（口径依据 2026-11-12 收口补记）：空串会让服务端 400（ingest/outbox 都
+  // 硬性要求非空 account_id，见 handler_http.go「account_id required」），历史/实时全断；
+  // 且下行订阅身份=本函数返回值，空串经 http-ingest 的 `accountId || 'default'` 回退
+  // 会轮询一个永不有行的账号。占位与 weibo 同款（douyin 的「兜底失败返回空串」fail-loud
+  // 口径是另一种有意取舍，代价是多标签页解析失败会归并进同一占位账号行）。
   return 'bilibili-unknown';
 }
 
