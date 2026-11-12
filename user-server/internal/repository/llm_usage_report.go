@@ -258,6 +258,9 @@ func (r *LLMUsageReportRepository) Totals(ctx context.Context, from, to time.Tim
 // 报表「错误类型分布」只有 unknown 一片、明细「错误类型」列对排障没信息量；
 // 而 error_msg 里带着 status=401 / invalid_api_key / Invalid Authentication 等可分类特征，
 // 因此在读取侧用文本回推分类。success 行恒为空串，与 llm_usage_daily 存量口径一致。
+// 写入侧已由 dispatcher_observability.classifyErrorClass 标注（F-6-5②，2026-11-12）：
+// 新行自带分类走第二分支（error_class 非空直取）；本表达式保留为历史行
+// （error_class 空值）的回推口径，关键词表与写入侧单点对齐，改任一侧必须同改。
 const errorClassExpr = "CASE WHEN success THEN '' " +
 	"WHEN NULLIF(error_class, '') IS NOT NULL THEN error_class " +
 	"WHEN COALESCE(error_msg, '') ~* '(invalid_api_key|invalid authentication|unauthorized|status=401|incorrect api key)' THEN 'auth' " +
