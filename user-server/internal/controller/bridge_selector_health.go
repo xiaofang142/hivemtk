@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"hivemtk-user/internal/bridge"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -47,6 +48,15 @@ func (c *BridgeSelectorHealthController) Ingest(ctx *gin.Context) {
 		response.Envelope(ctx, http.StatusBadRequest, gin.H{"ok": false, "error": err.Error()})
 		return
 	}
+	// 租户守卫（与 bridge ingest 同口径）：公开桥路由无 auth/tenant 中间件，
+	// 账号行自证或显式 tenant_code 判不出租户时拒绝写入，不再放行进 repo
+	// 的多租户隔离 callback → 旧形态是 200+条 500 洪水（monitor FAIL）。
+	boundCtx, tenantErr := bridge.BridgeTenantForRequest(ctx.Request, rep.Channel, rep.AccountID)
+	if tenantErr != nil {
+		response.Envelope(ctx, http.StatusBadRequest, gin.H{"ok": false, "error": tenantErr.Error()})
+		return
+	}
+	ctx.Request = ctx.Request.WithContext(boundCtx)
 	views, err := c.svc.Ingest(ctx.Request.Context(), rep)
 	if err != nil {
 		status := http.StatusInternalServerError
