@@ -1,0 +1,5 @@
+基线字节：`4d3fe576`｜未入库字节 4 处｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）｜作业目录 C:\Users\xiaohp\AppData\Local\Temp\dbpool_clone
+CONTROL-GREEN ✅ ran=6 名单=TestNormalizePoolFallbacks、TestNormalizePoolFallbacks/只缺_ConnMaxLifetime⇒补_30_分钟、TestNormalizePoolFallbacks/只缺_MaxOpenConns⇒补_20、TestNormalizePoolFallbacks/四项齐全⇒原样穿过（else_腿）、TestNormalizePoolFallbacks/整条留空⇒采用生产默认表、TestPoolBoundLandsOnSQLHandle
+K1   摘掉 SetMaxOpenConns ⇒ 上界不落句柄              杀掉 by TestPoolBoundLandsOnSQLHandle｜红名单 1 条 ran=6
+RESTORE-MISMATCH：还原后字节与基线不同，停机
+收尾：带走 C:\Users\xiaohp\AppData\Local\Temp\dbpool_clone\clone
