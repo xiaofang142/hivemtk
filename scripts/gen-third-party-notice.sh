@@ -42,6 +42,13 @@ detect_license() {
     head=$(head -c 4096 "$file" 2>/dev/null || true)
     case "$head" in
         *"MIT License"*)      echo "MIT";;
+        # 裸 MIT 授权文本（无 "MIT License" 标题行）：以 MIT 标准授权子句开头。
+        # 子句取第一行内可判定的最短前缀——多份 LICENSE 在 "obtaining"/"a copy" 间有
+        # 换行断词（bsm/ginkgo、bsm/gomega、creack/pty、kr/pty），整句匹配会漏。
+        *"Permission is hereby granted, free of charge"*) echo "MIT";;
+        *"Creative Commons Attribution 4.0"*) echo "CC-BY-4.0";;
+        # golang/freetype：FTL（BSD+广告子句变体）与 GPL-2.0+ 双许可二选一（LICENSE 头明示）。
+        *"The FreeType License"*) echo "FTL OR GPL-2.0+";;
         *"Apache License"*"2.0"*) echo "Apache-2.0";;
         *"Apache License"*)   echo "Apache-2.0";;
         *"BSD 3-Clause"*)     echo "BSD-3-Clause";;
@@ -91,26 +98,31 @@ if command -v go &>/dev/null; then
             [ -z "$mod" ] && continue
             [ "$mod" = "hivemtk-user" ] && continue   # 主模块自身，不计入第三方依赖
             lic="待确认"
+            found_file=""
             if [ -n "$GOMODCACHE" ] && [ -n "$ver" ]; then
                 # 模块缓存目录可能带大小写转义（!lowercase），先试原始路径，再试转义路径
                 found_dir=0
                 for base in "$GOMODCACHE/${mod%@*}" "$GOMODCACHE/$(echo "$mod" | sed 's/\([A-Z]\)/!\L\1/g')"; do
                     if [ -d "$base@$ver" ]; then
                         found_dir=1
-                        [ -f "$base@$ver/LICENSE" ] && { lic=$(detect_license "$base@$ver/LICENSE"); break; }
-                        [ -f "$base@$ver/LICENSE.md" ] && { lic=$(detect_license "$base@$ver/LICENSE.md"); break; }
-                        [ -f "$base@$ver/LICENSE.txt" ] && { lic=$(detect_license "$base@$ver/LICENSE.txt"); break; }
-                        [ -f "$base@$ver/COPYING" ] && { lic=$(detect_license "$base@$ver/COPYING"); break; }
+                        [ -f "$base@$ver/LICENSE" ] && { lic=$(detect_license "$base@$ver/LICENSE"); found_file="$base@$ver/LICENSE"; break; }
+                        [ -f "$base@$ver/LICENSE.md" ] && { lic=$(detect_license "$base@$ver/LICENSE.md"); found_file="$base@$ver/LICENSE.md"; break; }
+                        [ -f "$base@$ver/LICENSE.txt" ] && { lic=$(detect_license "$base@$ver/LICENSE.txt"); found_file="$base@$ver/LICENSE.txt"; break; }
+                        [ -f "$base@$ver/COPYING" ] && { lic=$(detect_license "$base@$ver/COPYING"); found_file="$base@$ver/COPYING"; break; }
                         # 部分模块把 LICENSE 放在模块根下（如 github.com/x/y 下的 LICENSE）
                         lf=$(find "$base@$ver" -maxdepth 1 \( -iname 'LICENSE*' -o -iname 'COPYING*' \) 2>/dev/null | head -1)
-                        if [ -n "$lf" ]; then lic=$(detect_license "$lf"); break; fi
+                        if [ -n "$lf" ]; then lic=$(detect_license "$lf"); found_file="$lf"; break; fi
                     fi
                 done
-                # O-1 残余语义区分：模块 zip 已抽取但上游没有随包分发任何许可证文件
-                # → 不是「待确认」（探测无能为力），而是「上游未分发」，合规审查时
-                # 需人工去上游仓库核对后补录；
-                # dir 不存在 = 模块未抽取到本地缓存 → 维持「待确认」。
-                if [ "$lic" = "待确认" ] && [ "$found_dir" = "1" ]; then
+                # O-1 残余语义区分（三态）：
+                # ① 许可证文件存在但 detect_license 未识别出类型（如裸 MIT 授权文本无
+                #    "MIT License" 头部）→「文件存在但类型未识别」，人工读一眼即可定案；
+                # ② 模块 zip 已抽取但上游没有随包分发任何许可证文件 →「上游未分发」，
+                #    合规审查时需人工去上游仓库核对后补录；
+                # ③ dir 不存在 = 模块未抽取到本地缓存 → 维持「待确认」。
+                if [ "$lic" = "待确认" ] && [ -n "$found_file" ]; then
+                    lic="许可证文件存在但类型未识别（需人工读取：${found_file#"$GOMODCACHE"/}）"
+                elif [ "$lic" = "待确认" ] && [ "$found_dir" = "1" ]; then
                     lic="未随包分发许可证文件（需人工核对上游仓库）"
                 fi
             fi
