@@ -82,6 +82,28 @@ func main() {
 		}
 		return raw
 	})
+	// 全局 LLM / Rerank 覆盖同口径装上（独立进程没走完整装配，provider 为 nil
+	// 时会回落本地默认地址，向量化/重排必然失败）。
+	llm.SetLLMOverrideProvider(func(c context.Context) string {
+		var raw string
+		if err := db.WithContext(c).Raw(
+			`SELECT param_value FROM config_params
+			  WHERE param_group = 'llm' AND key = 'global_override' LIMIT 1`,
+		).Scan(&raw).Error; err != nil {
+			return ""
+		}
+		return raw
+	})
+	llm.SetRerankOverrideProvider(func(c context.Context) string {
+		var raw string
+		if err := db.WithContext(c).Raw(
+			`SELECT param_value FROM config_params
+			  WHERE param_group = 'rerank' AND key = 'global_override' LIMIT 1`,
+		).Scan(&raw).Error; err != nil {
+			return ""
+		}
+		return raw
+	})
 
 	// 先修 FAQ 里"配置"这类泛化词造成的歧义，再补知识库。
 	if err := fixFAQKeywords(ctx, db); err != nil {

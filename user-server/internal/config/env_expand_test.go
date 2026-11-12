@@ -8,13 +8,13 @@ import (
 
 func TestExpandEnvWithDefault(t *testing.T) {
 	oldVars := map[string]string{
-		"LLM_BASE_URL":        os.Getenv("LLM_BASE_URL"),
-		"EMBEDDING_BASE_URL":  os.Getenv("EMBEDDING_BASE_URL"),
+		"SAMPLE_APP_URL":      os.Getenv("SAMPLE_APP_URL"),
+		"SAMPLE_DOC_URL":      os.Getenv("SAMPLE_DOC_URL"),
 		"TEST_PLAIN_VAR":      os.Getenv("TEST_PLAIN_VAR"),
 		"TEST_VAR_WITH_COLON": os.Getenv("TEST_VAR_WITH_COLON"),
 	}
-	_ = os.Unsetenv("LLM_BASE_URL")
-	_ = os.Unsetenv("EMBEDDING_BASE_URL")
+	_ = os.Unsetenv("SAMPLE_APP_URL")
+	_ = os.Unsetenv("SAMPLE_DOC_URL")
 	_ = os.Unsetenv("TEST_PLAIN_VAR")
 	_ = os.Unsetenv("TEST_VAR_WITH_COLON")
 	defer func() {
@@ -40,14 +40,14 @@ func TestExpandEnvWithDefault(t *testing.T) {
 		},
 		{
 			name: "env var unset → use default (bash style)",
-			in:   "${LLM_BASE_URL:http://127.0.0.1:8207/v1}",
+			in:   "${SAMPLE_APP_URL:http://127.0.0.1:8207/v1}",
 			want: "http://127.0.0.1:8207/v1",
 		},
 		{
 			name: "env var set → override default",
-			in:   "${LLM_BASE_URL:http://127.0.0.1:8207/v1}",
+			in:   "${SAMPLE_APP_URL:http://127.0.0.1:8207/v1}",
 			want: "https://my-llm.example.com/v1",
-			pre:  func() { _ = os.Setenv("LLM_BASE_URL", "https://my-llm.example.com/v1") },
+			pre:  func() { _ = os.Setenv("SAMPLE_APP_URL", "https://my-llm.example.com/v1") },
 		},
 		{
 			name: "plain ${VAR} (no default) - unset returns empty",
@@ -62,7 +62,7 @@ func TestExpandEnvWithDefault(t *testing.T) {
 		},
 		{
 			name: "default contains port+colon, must not break regex",
-			in:   "${EMBEDDING_BASE_URL:http://127.0.0.1:8208/v1}",
+			in:   "${SAMPLE_DOC_URL:http://127.0.0.1:8208/v1}",
 			want: "http://127.0.0.1:8208/v1",
 		},
 		{

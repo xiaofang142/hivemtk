@@ -501,7 +501,17 @@ func DefaultParamDefs() []ParamDef {
 			ValueType:   "float", DefaultValue: "0.95", Min: strPtr("0.5"), Max: strPtr("1.0"), Step: strPtr("0.05")},
 
 		{Group: "embedding", Key: "global_override", Name: "全局 Embedding 提供商覆盖（整份 JSON）",
-			Description: "整份 JSON：{enabled,base_url,api_key,model,protocol}。enabled 为真且 base_url 非空时，EmbeddingService.DefaultConfig 用它顶掉 config.yaml/env 那一层；protocol 空/openai 走 {base}/v1/embeddings，tei 走 TEI 原生 {base}/embed。关掉只需把 enabled 写成 false。维度硬约束 1024（pgvector 兼容），非 1024 维模型在调用侧强制回落并告警。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/embedding_global_config.go，写路径由管理端 PUT /api/llm/embedding-config 走本条（带操作者审计）",
+			Description: "整份 JSON：{enabled,base_url,api_key,model,protocol}。enabled 为真且 base_url 非空时，EmbeddingService.DefaultConfig 用它顶掉 config.yaml 那一层；protocol 空/openai 走 {base}/v1/embeddings，tei 走 TEI 原生 {base}/embed。关掉只需把 enabled 写成 false。维度硬约束 1024（pgvector 兼容），非 1024 维模型在调用侧强制回落并告警。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/embedding_global_config.go，写路径由管理端 PUT /api/llm/embedding-config 走本条（带操作者审计）",
+			ValueType:   "json", Risk: "danger", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":"","protocol":""}`,
+			Category: "LLM"},
+
+		{Group: "llm", Key: "global_override", Name: "全局 LLM 提供商覆盖（整份 JSON）",
+			Description: "整份 JSON：{enabled,base_url,api_key,model,api_type}。SaaS 兼容要求 LLM API 连接信息禁止走环境变量：enabled 为真且 base_url 非空时，GetDefaultConfig 用它顶掉 config.yaml inference.llm 那一层；api_type 空/openai/azure/anthropic 决定 endpoint 构造方式。关掉只需把 enabled 写成 false。每租户/每知识库自己的 LLM 配置仍走 rag_products / ai_agents 的 llm_* 列，优先级高于本条。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/llm_global_config.go，写路径由管理端 PUT /api/llm/llm-config 走本条（带操作者审计）",
+			ValueType:   "json", Risk: "danger", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":"","api_type":""}`,
+			Category: "LLM"},
+
+		{Group: "rerank", Key: "global_override", Name: "全局 Rerank 提供商覆盖（整份 JSON）",
+			Description: "整份 JSON：{enabled,base_url,api_key,model,protocol}。SaaS 兼容要求 rerank API 连接信息禁止走环境变量：enabled 为真且 base_url 非空时，DefaultRerankConfig 用它顶掉 config.yaml inference.rerank 那一层；protocol 空/openai 走 {base}/v1/rerank，tei 走 TEI 原生，dashscope 走阿里云原生 text-rerank 端点。关掉只需把 enabled 写成 false。每知识库自己的 rerank 配置仍走 rag_products 的 rerank_* 列，优先级高于本条。api_key 落库前已按 llm_providers 同一套加密，页面上看到的是密文。读路径在 internal/aiagent/llm/rerank_global_config.go，写路径由管理端 PUT /api/llm/rerank-config 走本条（带操作者审计）",
 			ValueType:   "json", Risk: "danger", DefaultValue: `{"enabled":false,"base_url":"","api_key":"","model":"","protocol":""}`,
 			Category: "LLM"},
 

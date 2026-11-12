@@ -209,9 +209,10 @@ var securityKeys = map[string]string{
 	"QQ_EMAIL_PASSWORD":                "QQ 邮箱授权码",
 	"FEISHU_APP_SECRET":                "飞书应用 secret",
 	"NOTION_API_KEY":                   "Notion API key",
-	"OPENAI_API_KEY":                   "OpenAI 兼容端点密钥（LLM 池）",
-	"EMBEDDING_API_KEY":                "Embedding 端点密钥",
-	"RERANK_API_KEY":                   "Rerank 端点密钥",
+	// 2026-11-12 SaaS 兼容：LLM / embedding / rerank 的 API key 禁止走 env，
+	// 改由数据库驱动（参数中心 llm/embedding/rerank.global_override +
+	// rag_products / ai_agents 的连接列），故 OPENAI_API_KEY / EMBEDDING_API_KEY /
+	// RERANK_API_KEY 三个 env 从本表移除。
 	"DEEPL_API_KEY":                    "DeepL 翻译密钥",
 	"CONTRIBUTOR_JWT_SECRET":           "贡献者门户独立 JWT 密钥（平台端）",
 	"PLATFORM_JWT_SECRET":              "平台管理端 JWT 密钥（平台端）",

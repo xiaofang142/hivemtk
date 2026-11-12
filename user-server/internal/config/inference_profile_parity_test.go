@@ -44,14 +44,6 @@ func TestDefaultModelsMatchEnvExample(t *testing.T) {
 		})
 	}
 
-	t.Run("LLM_MODEL_与_SERVED_NAME_一致", func(t *testing.T) {
-		// .env-example 自己也得内部自洽：user-server 读 LLM_MODEL，推理栈读 LLM_SERVED_NAME，
-		// 两者不等则同一次安装里后端与推理服务就会各说各话。
-		if env["LLM_MODEL"] != env["LLM_SERVED_NAME"] {
-			t.Errorf(".env-example 内部不一致：LLM_MODEL(%s) != LLM_SERVED_NAME(%s)",
-				env["LLM_MODEL"], env["LLM_SERVED_NAME"])
-		}
-	})
 }
 
 // TestNoStaleModelNameLiteral 锁住「模型名字面量只准出现在 getter 里」这条仓内约定。

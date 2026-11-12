@@ -2,21 +2,16 @@ package rag_core
 
 import (
 	"context"
-	"os"
-	"strings"
 	"testing"
 	"time"
 )
 
 func requireLocalEmbedding(t *testing.T) {
 	t.Helper()
-	if strings.EqualFold(os.Getenv("EMBEDDING_ALLOW_FALLBACK"), "true") {
-		return
-	}
-	if os.Getenv("EMBEDDING_BASE_URL") == "" {
-		return
-	}
-	t.Skip("跳过依赖真实本地 embedding 的测试：未设置 EMBEDDING_ALLOW_FALLBACK=true，且本地无 embedding 服务可达")
+	// 2026-11-12 §3.13：embedding 连接配置已迁移至参数中心 embedding.global_override，
+	// EMBEDDING_ALLOW_FALLBACK/EMBEDDING_BASE_URL env 已移除；依赖真实本地
+	// embedding 服务的集成测试默认跳过，需要时由开发者配置 DB 后手工运行。
+	t.Skip("集成测试默认跳过：embedding 连接配置已迁移至参数中心 embedding.global_override")
 }
 
 func newTestRAGEngine(config *RAGConfig) *RAGEngine {

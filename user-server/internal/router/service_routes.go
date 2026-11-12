@@ -319,6 +319,10 @@ func setupLLMProviderRoutes(auth *gin.RouterGroup) {
 	{
 		authPlainAdmin.GET("/llm/embedding-config", controller.GetEmbeddingConfig)
 		authPlainAdmin.PUT("/llm/embedding-config", controller.UpdateEmbeddingConfig)
+		authPlainAdmin.GET("/llm/llm-config", controller.GetLLMConfig)
+		authPlainAdmin.PUT("/llm/llm-config", controller.UpdateLLMConfig)
+		authPlainAdmin.GET("/llm/rerank-config", controller.GetRerankConfig)
+		authPlainAdmin.PUT("/llm/rerank-config", controller.UpdateRerankConfig)
 		authPlainAdmin.GET("/kb-connectors", controller.ListKBConnectors)
 		authPlainAdmin.POST("/kb-connectors", controller.CreateKBConnector)
 		authPlainAdmin.PUT("/kb-connectors/:id", controller.UpdateKBConnector)

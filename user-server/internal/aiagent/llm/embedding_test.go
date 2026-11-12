@@ -54,35 +54,10 @@ func TestEmbeddingService_DefaultConfig_NotFallBackToLLMBaseURL(t *testing.T) {
 	}
 }
 
-// TestEmbeddingService_DefaultConfig_OverrideByEnv 验证 env 变量覆盖语义。
-//
-// 文档源：embedding.go DefaultConfig 注释 §2/§3
-// 优先级：config.yaml > env 变量（base_url/model/dim 三项仅在 file 为空时回退）>
-//
-//	内置默认；EMBEDDING_ALLOW_FALLBACK 显式覆盖（不论 file 是否有值）
-func TestEmbeddingService_DefaultConfig_OverrideByEnv(t *testing.T) {
-	clearEmbeddingEnv(t)
-	t.Setenv("EMBEDDING_BASE_URL", "http://my-tei:9000")
-	t.Setenv("EMBEDDING_MODEL", "BAAI/bge-large-zh-v1.5")
-	t.Setenv("EMBEDDING_DIM", "768")
-	t.Setenv("EMBEDDING_ALLOW_FALLBACK", "true")
-
-	svc := NewEmbeddingService()
-	cfg := svc.DefaultConfig()
-
-	if !strings.HasPrefix(cfg.BaseURL, "http://127.0.0.1:8208/") {
-		t.Errorf("BaseURL 应来自 config.yaml（127.0.0.1:8208 宿主机部署），env 变量不覆盖已配置值，实际: %s", cfg.BaseURL)
-	}
-	if cfg.Model != "bge-m3" {
-		t.Errorf("Model 应来自 config.yaml（bge-m3），env 变量不覆盖已配置值，实际: %s", cfg.Model)
-	}
-	if cfg.Dimension != 1024 {
-		t.Errorf("Dimension 应来自 config.yaml=1024，env=768 不覆盖，实际: %d", cfg.Dimension)
-	}
-	if !cfg.AllowFallback {
-		t.Error("EMBEDDING_ALLOW_FALLBACK=true 应生效（env 覆盖 file）")
-	}
-}
+// 2026-11-12 §3.13：TestEmbeddingService_DefaultConfig_OverrideByEnv 与
+// TestEmbeddingService_Embed_AllowFallback_Works 已删——EMBEDDING_* env 读取点随
+// env→DB 迁移全部移除（连接配置改由参数中心 embedding.global_override 驱动，
+// EMBEDDING_ALLOW_FALLBACK 生产恒 false），原测试验证的 env 覆盖语义不复存在。
 
 // TestEmbeddingService_Embed_NoFallback_ReturnsError 验证默认配置下，
 // 不可达时直接返回错误（不再静默降级到 hash）。
@@ -114,29 +89,8 @@ func TestEmbeddingService_Embed_NoFallback_ReturnsError(t *testing.T) {
 	}
 }
 
-// TestEmbeddingService_Embed_AllowFallback_Works 验证显式开启降级时
-// 允许使用 hash 伪向量（仅供单测）。
-func TestEmbeddingService_Embed_AllowFallback_Works(t *testing.T) {
-	clearEmbeddingEnv(t)
-	t.Setenv("EMBEDDING_ALLOW_FALLBACK", "true")
-	t.Setenv("EMBEDDING_DIM", "1024")
-
-	svc := NewEmbeddingService()
-	cfg := svc.DefaultConfig()
-
-	vectors, err := svc.Embed(context.Background(), cfg, []string{"hello", "world"})
-	if err != nil {
-		t.Fatalf("AllowFallback=true 时应当能正常返回: %v", err)
-	}
-	if len(vectors) != 2 {
-		t.Fatalf("期望 2 个向量，实际 %d", len(vectors))
-	}
-	for i, v := range vectors {
-		if len(v) != 1024 {
-			t.Errorf("向量 %d 维度应为 1024，实际 %d", i, len(v))
-		}
-	}
-}
+// 2026-11-12 §3.13：TestEmbeddingService_Embed_AllowFallback_Works 已删——
+// EMBEDDING_ALLOW_FALLBACK 生产恒 false（私域红线），env 开关已移除。
 
 // TestEmbeddingService_Embed_RealLocalServer 验证对接真实 TEI 兼容服务（mock 一个）
 //

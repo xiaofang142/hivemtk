@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -65,6 +63,9 @@ type EmbeddingService struct {
 }
 
 var sharedEmbeddingTransport = &http.Transport{
+	// Proxy: http.ProxyFromEnvironment —— 2026-11-12：云端 embedding（如 Jina）经系统代理出网；
+	// 不加则 Go 进程内直连 api.jina.ai 超时（本机无直连路由），而 http.Client 默认不读系统代理。
+	Proxy:               http.ProxyFromEnvironment,
 	MaxIdleConns:        200,
 	MaxIdleConnsPerHost: 50,
 	IdleConnTimeout:     90 * time.Second,
@@ -101,13 +102,10 @@ func newEmbeddingLanesFrom(n int) *embeddingLanes {
 }
 
 func newEmbeddingLanes() *embeddingLanes {
-	n := 1
-	if v := strings.TrimSpace(os.Getenv("EMBEDDING_CONCURRENCY")); v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 1 && parsed <= 16 {
-			n = parsed
-		}
-	}
-	return newEmbeddingLanesFrom(n)
+	// EMBEDDING_CONCURRENCY env 已移除（SaaS 兼容：API 连接信息禁止走 env）；
+	// 并发度是性能旋钮而非 API 配置，且包级初始化只跑一次、无法热更，
+	// 固定单 lane（与私域红线的小内存部署一致）。
+	return newEmbeddingLanesFrom(1)
 }
 
 func (l *embeddingLanes) laneChannel(lane EmbeddingLane) chan struct{} {
@@ -158,16 +156,18 @@ func NewEmbeddingServiceWithConfig(cfg *EmbeddingConfig) *EmbeddingService {
 	}
 }
 
-// DefaultConfig 读取配置得到默认配置（配置文件为准，其次环境变量，最后内置默认）
+// DefaultConfig 读取配置得到默认配置（配置文件为准，其次参数中心全局覆盖，最后内置默认）
 //
 // 优先级（私域部署基线）：
-//  1. config.yaml 的 embedding 段（为准）：
+//  1. 每知识库覆盖（rag_products 的 EmbeddingProviderConfig，调用侧覆盖）
+//  2. 参数中心 embedding.global_override（DB 驱动，管理端在线改，SaaS 多租户）
+//  3. config.yaml 的 embedding 段（为准）：
 //     - 宿主机：http://127.0.0.1:8208/v1（llama.cpp / MLX，端口 8208）
-//  2. 环境变量（EMBEDDING_*）仅在配置文件未指定时回退读取，便于部署层/调试显式覆盖
-//  3. 内置默认：http://127.0.0.1:8208/v1（仅当配置与环境都缺失时生效）
+//  4. 内置默认：http://127.0.0.1:8208/v1（仅当配置文件未指定时生效）
 //
 // 注意：必须以配置文件为准，否则被错误的服务名带偏
 // （宿主机无法解析容器服务名，导致 embedding 不可达并静默降级哈希伪向量）。
+// EMBEDDING_* 环境变量层已移除（2026-11-12 SaaS 兼容改造：API 连接信息禁止走 env）。
 func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 	if s.defaultConfig != nil {
 		return s.defaultConfig
@@ -180,27 +180,7 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 	apiKey := fileCfg.APIKey
 	protocol := strings.ToLower(strings.TrimSpace(fileCfg.Protocol))
 
-	if baseURL == "" {
-		baseURL = os.Getenv("EMBEDDING_BASE_URL")
-	}
-	if model == "" {
-		model = os.Getenv("EMBEDDING_MODEL")
-	}
-	if protocol == "" {
-		protocol = strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_PROTOCOL")))
-	}
-	if dim <= 0 {
-		if v := os.Getenv("EMBEDDING_DIM"); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
-				dim = n
-			}
-		}
-	}
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("EMBEDDING_ALLOW_FALLBACK"))); v != "" {
-		allowFallback = v == "true" || v == "1" || v == "yes"
-	}
-
-	// 全局手动配置（管理端在线改，存参数中心 embedding.global_override）：优先级在文件/env 之后、
+	// 全局手动配置（管理端在线改，存参数中心 embedding.global_override）：优先级在文件之后、
 	// 内置默认之前。enabled=true 且 base_url 非空才生效——只想关掉本地栈而不给
 	// 云端地址时保持 enabled=false，走原有回落链。
 	if o := GetGlobalEmbeddingOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {
@@ -235,9 +215,6 @@ func (s *EmbeddingService) DefaultConfig() *EmbeddingConfig {
 		dim = 1024
 	}
 
-	if apiKey == "" {
-		apiKey = os.Getenv("EMBEDDING_API_KEY")
-	}
 	return &EmbeddingConfig{
 		APIKey:         apiKey,
 		BaseURL:        baseURL,

@@ -292,6 +292,15 @@ func main() {
 		logger.Info("[ConfigParam] Embedding 全局覆盖接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// 全局 LLM / Rerank 提供商覆盖：与 embedding 同构的一读一写两条缝
+	// （SaaS 兼容：LLM/embedding/rerank API 连接信息禁止走 env，全走参数中心）。
+	if wired := app.WireLLMConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] LLM 全局覆盖接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+	if wired := app.WireRerankConfigParams(); len(wired) > 0 {
+		logger.Info("[ConfigParam] Rerank 全局覆盖接线 " + strconv.Itoa(len(wired)) + " 条")
+	}
+
 	// urls 组两条：cloud_url / geo_site_base_url 的读取点在 internal/config
 	// （config 不能反向 import service），只能由装配层注入 provider。frontend_url
 	// 走 service 直连范式，不在这里。

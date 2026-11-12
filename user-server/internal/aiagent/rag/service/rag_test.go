@@ -2,7 +2,6 @@ package rag_service
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"hivemtk-user/internal/aiagent/llm"
@@ -36,9 +35,9 @@ func (m *mockThreeTier) Stats() ThreeTierStats {
 
 func requireRealAPIKey(t *testing.T) {
 	t.Helper()
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Skip("需要 OPENAI_API_KEY 环境变量，跳过此集成测试")
-	}
+	// 2026-11-12 §3.13：LLM 连接配置已迁移至参数中心 llm.global_override，
+	// 集成测试不再从 env 取密钥；默认跳过，需要时由开发者配置 DB 后手工运行。
+	t.Skip("集成测试默认跳过：LLM 连接配置已迁移至参数中心 llm.global_override")
 }
 
 func TestNewRAGService(t *testing.T) {
@@ -59,7 +58,7 @@ func TestRAGService_Query_WithContext(t *testing.T) {
 	req := QueryRequest{
 		Query: "What is marketing?",
 		LLMConfig: &llm.LLMConfig{
-			APIKey:    os.Getenv("OPENAI_API_KEY"),
+			APIKey:    "",
 			MaxTokens: 100,
 			Model:     "gpt-4",
 		},
@@ -89,7 +88,7 @@ func TestRAGService_Query_EmptyQuery(t *testing.T) {
 	req := QueryRequest{
 		Query: "",
 		LLMConfig: &llm.LLMConfig{
-			APIKey:    os.Getenv("OPENAI_API_KEY"),
+			APIKey:    "",
 			MaxTokens: 100,
 			Model:     "gpt-4",
 		},
@@ -113,7 +112,7 @@ func TestRAGService_Query_WithLLMConfig(t *testing.T) {
 	req := QueryRequest{
 		Query: "Test query",
 		LLMConfig: &llm.LLMConfig{
-			APIKey:    os.Getenv("OPENAI_API_KEY"),
+			APIKey:    "",
 			MaxTokens: 100,
 			Model:     "gpt-4",
 		},

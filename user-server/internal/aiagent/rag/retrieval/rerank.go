@@ -10,13 +10,12 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	llmpkg "hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -83,6 +82,8 @@ type LocalReranker struct {
 }
 
 var sharedRerankTransport = &http.Transport{
+	// Proxy: http.ProxyFromEnvironment —— 同 sharedEmbeddingTransport，云端 rerank 经系统代理出网。
+	Proxy:               http.ProxyFromEnvironment,
 	MaxIdleConns:        100,
 	MaxIdleConnsPerHost: 20,
 	IdleConnTimeout:     90 * time.Second,
@@ -156,9 +157,11 @@ const (
 // 优先级（私域基线）：
 //  1. config.yaml 的 rerank 段（为准）
 //     - 宿主机：http://127.0.0.1:8209/v1（llama.cpp / MLX，端口 8209）
-//  2. 环境变量（RERANK_*）仅在配置文件未指定时回退读取
-//  3. 内置默认：http://127.0.0.1:8209/v1（仅当配置与环境都缺失时生效）
+//  2. 参数中心 rerank.global_override（管理端在线改，本函数每次读源；
+//     enabled=true 且 base_url 非空时顶掉 config.yaml 那一层）
+//  3. 内置默认：http://127.0.0.1:8209/v1（仅当配置未指定时生效）
 //
+// env 层已移除：SaaS 兼容要求 rerank API 连接信息禁止走环境变量，全部数据库驱动。
 // 必须以配置文件为准，否则被错误的服务名带偏（宿主机无法解析容器服务名）。
 func DefaultRerankConfig() *RerankConfig {
 	fileCfg := config.GetAppConfig().Inference.Rerank
@@ -171,18 +174,17 @@ func DefaultRerankConfig() *RerankConfig {
 		enabled = false
 	}
 
-	if baseURL == "" {
-		baseURL = os.Getenv("RERANK_BASE_URL")
-	}
-	if model == "" {
-		model = os.Getenv("RERANK_MODEL")
-	}
-	if protocol == "" {
-		protocol = os.Getenv("RERANK_PROTOCOL")
-	}
-	protocol = strings.ToLower(strings.TrimSpace(protocol))
-	if v := strings.ToLower(strings.TrimSpace(os.Getenv("RERANK_ENABLED"))); v == "false" || v == "0" || v == "no" {
-		enabled = false
+	// 全局 rerank 手动配置（参数中心 rerank.global_override）：enabled=true
+	// 且 base_url 非空才生效；生效时允许把 enabled 拉回 true（显式开启云端档）。
+	if o := llmpkg.GetGlobalRerankOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {
+		baseURL = strings.TrimSpace(o.BaseURL)
+		model = strings.TrimSpace(o.Model)
+		apiKey = o.APIKey
+		if p := strings.ToLower(strings.TrimSpace(o.Protocol)); p != "" {
+			protocol = p
+		}
+		enabled = true
+		logger.Infof("[rerank] 使用全局手动配置 base_url=%s model=%s protocol=%s", baseURL, model, protocol)
 	}
 
 	if baseURL == "" {
@@ -192,14 +194,6 @@ func DefaultRerankConfig() *RerankConfig {
 		model = config.DefaultRerankModel()
 	}
 	timeout := 30
-	if v := os.Getenv("RERANK_TIMEOUT"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			timeout = n
-		}
-	}
-	if apiKey == "" {
-		apiKey = os.Getenv("RERANK_API_KEY")
-	}
 	cfg := &RerankConfig{
 		APIKey:     apiKey,
 		BaseURL:    baseURL,

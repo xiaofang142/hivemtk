@@ -98,6 +98,8 @@ var adminOnlyRoutes = []adminRouteRule{
 	{Pattern: "/api/llm/strategies"},
 	{Pattern: "/api/llm/scenario-stats"},
 	{Pattern: "/api/llm/embedding-config"},
+	{Pattern: "/api/llm/llm-config"},
+	{Pattern: "/api/llm/rerank-config"},
 	{Pattern: "/api/llm-routings/policy"},
 
 	// —— 知识库发布治理：发布/回滚/恢复会改动线上产物 ——

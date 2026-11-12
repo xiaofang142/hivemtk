@@ -8,7 +8,6 @@ import (
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
-	"os"
 	"strings"
 
 	"gorm.io/gorm"
@@ -384,23 +383,21 @@ func (s *PromptTemplateService) GetTemplateTypes() []map[string]string {
 	}
 }
 
-// resolveAPIKey 与 aiagent/llm 同口径：LLM 密钥只来自环境变量，不读库。
+// resolveAPIKey 与 aiagent/llm 同口径：LLM 密钥只来自参数中心 llm.global_override，
+// 不读环境变量（SaaS 兼容：LLM API 连接信息禁止走 env，由平台端在线配）。
 // 原实现绕道 loadSystemLLMConfig，而那个「Config」也只读环境变量（ctx 从头到尾没用过，
 // BaseURL/Model 两个字段没有任何读者），错误信息却写「数据库无 LLM 配置」——
-// 三跳之后交出的还是同一个 os.Getenv，故直接收口为一次查表。
+// 三跳之后交出的还是同一个环境变量，故直接收口为一次查表。
 func (s *AIContentService) resolveAPIKey() string {
-	if v := os.Getenv("LLM_API_KEY"); v != "" {
-		return v
+	if o := llm.GetGlobalLLMOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {
+		return o.APIKey
 	}
-	return os.Getenv("OPENAI_API_KEY")
+	return ""
 }
 
 func (s *AIContentService) resolveBaseURL() string {
-	if v := os.Getenv("LLM_BASE_URL"); v != "" {
-		return v
-	}
-	if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
-		return v
+	if o := llm.GetGlobalLLMOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {
+		return o.BaseURL
 	}
 	return "https://api.openai.com"
 }

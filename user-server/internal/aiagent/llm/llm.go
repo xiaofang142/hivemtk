@@ -204,25 +204,6 @@ type chatResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func applyEnvDefaults(cfg *LLMConfig) {
-	if cfg == nil {
-		return
-	}
-	if cfg.APIKey == "" {
-		cfg.APIKey = os.Getenv("LLM_API_KEY")
-	}
-	if cfg.BaseURL == "" {
-		if v := os.Getenv("LLM_BASE_URL"); v != "" {
-			cfg.BaseURL = v
-		}
-	}
-	if cfg.Model == "" || cfg.Model == "gpt-3.5-turbo" {
-		if v := os.Getenv("LLM_MODEL"); v != "" {
-			cfg.Model = v
-		}
-	}
-}
-
 // GenerateResult LLM 调用结果（智能体支持）
 //
 // 字段含义：
@@ -266,7 +247,6 @@ func sanitizeToolName(name string) string {
 }
 
 func (s *LLMService) GenerateWithTools(ctx context.Context, config *LLMConfig, prompt string) (*GenerateResult, error) {
-	applyEnvDefaults(config)
 	if err := s.ValidateConfig(config); err != nil {
 		return nil, err
 	}
@@ -612,33 +592,39 @@ func (s *LLMService) ValidateConfig(config *LLMConfig) error {
 
 // GetDefaultConfig 获取默认配置（本地优先）
 //
-// 优先级：config.yaml inference.llm > 环境变量 LLM_* > 内置本地默认（127.0.0.1:8207）。
+// 优先级：config.yaml inference.llm > 参数中心 llm.global_override（DB 驱动，
+// SaaS 多租户在线改）> 内置本地默认（127.0.0.1:8207）。
 // 默认即本地 mtk-llm（llama.cpp，OpenAI 兼容）；用户配置线上 base_url+api_key 即切线上。
+// LLM API 连接信息禁止走环境变量：env 层已移除（2026-11-12 SaaS 兼容改造）。
 func (s *LLMService) GetDefaultConfig() *LLMConfig {
 	inf := config.GetAppConfig().Inference.LLM
 	baseURL := inf.BaseURL
 	model := inf.Model
 	apiKey := inf.APIKey
-	if baseURL == "" {
-		baseURL = os.Getenv("LLM_BASE_URL")
+	apiType := "openai"
+
+	// 全局 LLM 手动配置（参数中心 llm.global_override）：优先级在 config.yaml 之后、
+	// 内置默认之前。enabled=true 且 base_url 非空才生效——只想关掉线上指向时
+	// 保持 enabled=false，走原有回落链。
+	if o := GetGlobalLLMOverride(); o != nil && o.Enabled && strings.TrimSpace(o.BaseURL) != "" {
+		baseURL = strings.TrimSpace(o.BaseURL)
+		model = strings.TrimSpace(o.Model)
+		apiKey = o.APIKey
+		if p := strings.ToLower(strings.TrimSpace(o.APIType)); p != "" {
+			apiType = p
+		}
+		logger.Infof("[llm] 使用全局手动配置 base_url=%s model=%s api_type=%s", baseURL, model, apiType)
 	}
+
 	if baseURL == "" {
 		baseURL = config.DefaultLLMBaseURLDev
 	}
 	if model == "" {
-		if v := os.Getenv("LLM_MODEL"); v != "" {
-			model = v
-		}
-	}
-	if model == "" {
 		model = config.DefaultLLMModel()
-	}
-	if apiKey == "" {
-		apiKey = os.Getenv("LLM_API_KEY")
 	}
 	return &LLMConfig{
 		Model:            model,
-		APIType:          "openai",
+		APIType:          apiType,
 		BaseURL:          baseURL,
 		APIKey:           apiKey,
 		MaxRetries:       3,

@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
@@ -15,12 +14,12 @@ func TestNewLLMService(t *testing.T) {
 
 // TestLLMService_Generate 集成测试：需要真实 LLM API，跳过若缺少 API Key
 func TestLLMService_Generate(t *testing.T) {
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Skip("需要 OPENAI_API_KEY 环境变量，跳过此集成测试")
-	}
+	// 2026-11-12 §3.13：LLM 连接配置已迁移至参数中心 llm.global_override，
+	// 集成测试不再从 env 取密钥；默认跳过，需要时由开发者配置 DB 后手工运行。
+	t.Skip("集成测试默认跳过：LLM 连接配置已迁移至参数中心 llm.global_override")
 	svc := NewLLMService()
 	config := &LLMConfig{
-		APIKey:  os.Getenv("OPENAI_API_KEY"),
+		APIKey:  "",
 		BaseURL: "https://api.openai.com/v1",
 		Model:   "gpt-4",
 	}
@@ -34,12 +33,12 @@ func TestLLMService_Generate(t *testing.T) {
 }
 
 func TestLLMService_GenerateStructured(t *testing.T) {
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		t.Skip("需要 OPENAI_API_KEY 环境变量，跳过此集成测试")
-	}
+	// 2026-11-12 §3.13：LLM 连接配置已迁移至参数中心 llm.global_override，
+	// 集成测试不再从 env 取密钥；默认跳过，需要时由开发者配置 DB 后手工运行。
+	t.Skip("集成测试默认跳过：LLM 连接配置已迁移至参数中心 llm.global_override")
 	svc := NewLLMService()
 	config := &LLMConfig{
-		APIKey:  os.Getenv("OPENAI_API_KEY"),
+		APIKey:  "",
 		BaseURL: "https://api.openai.com/v1",
 		Model:   "gpt-4",
 	}
