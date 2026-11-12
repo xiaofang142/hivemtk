@@ -136,7 +136,7 @@ inference:
   # 推理降级档（C2）：本地 LLM 不可达时是否允许回退云端 LLM。
   # 默认 false（合规基线：云端出域必须显式开启）；开启后还需在 llm.cloud_providers
   # 里配好 enabled + api_key + base_url 三样齐的云端 provider 才会真正降级。
-  # Embedding 无论档位都保持本地（数据不出域），不参与本开关。
+  # Embedding 不参与本开关（其提供商由参数中心 embedding.global_override / per-KB 配置驱动）。
   tier:
     fallback_to_cloud_llm: false
 

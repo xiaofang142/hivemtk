@@ -17,9 +17,9 @@ import (
 
 // EmbeddingConfig Embedding 配置
 //
-// 私域部署基线：Embedding 必须在本地推理服务内完成，
-// 跑真实 BGE 模型（bge-m3，1024 维），不允许静默走公网 LLM 厂商 API，
-// 也不允许静默降级到哈希伪向量。
+// 默认部署形态：Embedding 对接本地推理服务，
+// 跑真实 BGE 模型（bge-m3，1024 维），不允许静默降级到哈希伪向量。
+// 提供商由参数中心 embedding.global_override / per-KB 配置驱动（含云端档）。
 //
 //   - 正常路径：POST {BaseURL}/v1/embeddings（OpenAI 兼容，bge-m3，dim=1024）；
 //     显式设置 protocol=tei 时改为 POST {BaseURL}/embed（TEI 原生，请求 {inputs}）
@@ -46,12 +46,12 @@ type EmbeddingServiceInterface interface {
 
 // EmbeddingService 真实 Embedding 服务
 //
-// 默认对接本地推理服务（http://mtk-embedding:8208/v1 docker / http://127.0.0.1:8208/v1 宿主机，私域部署强制）；
+// 默认对接本地推理服务（http://mtk-embedding:8208/v1 docker / http://127.0.0.1:8208/v1 宿主机）；
 // 调用 /v1/embeddings（OpenAI 兼容协议，底层跑真实 bge-m3 模型）。
 //
 // 强约束：
-//  1. 不再 fallback 到任何云端 LLM 厂商（OpenAI/Azure/通义/智谱/Moonshot）
-//     私域数据禁止出域；LLM 走 API ≠ Embedding 走 API。
+//  1. Embedding 与 LLM 是两条独立链路（LLM 走 API ≠ Embedding 走 API），
+//     Embedding 提供商由参数中心 embedding.global_override / per-KB 配置驱动。
 //  2. 当 EMBEDDING_ALLOW_FALLBACK=false（默认）时，
 //     若本地 embedding 不可达直接返回错误，禁止静默使用哈希伪向量。
 //  3. 当 EMBEDDING_ALLOW_FALLBACK=true 时（仅单测），
@@ -104,7 +104,7 @@ func newEmbeddingLanesFrom(n int) *embeddingLanes {
 func newEmbeddingLanes() *embeddingLanes {
 	// EMBEDDING_CONCURRENCY env 已移除（SaaS 兼容：API 连接信息禁止走 env）；
 	// 并发度是性能旋钮而非 API 配置，且包级初始化只跑一次、无法热更，
-	// 固定单 lane（与私域红线的小内存部署一致）。
+	// 固定单 lane（小内存部署形态一致）。
 	return newEmbeddingLanesFrom(1)
 }
 
@@ -158,7 +158,7 @@ func NewEmbeddingServiceWithConfig(cfg *EmbeddingConfig) *EmbeddingService {
 
 // DefaultConfig 读取配置得到默认配置（配置文件为准，其次参数中心全局覆盖，最后内置默认）
 //
-// 优先级（私域部署基线）：
+// 优先级：
 //  1. 每知识库覆盖（rag_products 的 EmbeddingProviderConfig，调用侧覆盖）
 //  2. 参数中心 embedding.global_override（DB 驱动，管理端在线改，SaaS 多租户）
 //  3. config.yaml 的 embedding 段（为准）：

@@ -56,8 +56,8 @@ type RerankConfig struct {
 
 // LocalReranker 基于本地推理服务的重排实现（OpenAI 兼容 /v1/rerank）
 //
-// 私域部署基线（修订）：rerank 与 embedding 同走本地推理服务（llama.cpp），
-// 使用 bge-reranker-v2-m3（跨编码器），数据不出域。
+// 默认部署形态（修订）：rerank 与 embedding 同走本地推理服务（llama.cpp），
+// 使用 bge-reranker-v2-m3（跨编码器）。
 //
 // 端点约定（按 base_url 特征分三类，见 resolveRerankEndpoint / NormalizeRerankConfig）：
 //   - TEI / llama.cpp / 自建 OpenAI 代理（非阿里云域名）：
@@ -139,7 +139,7 @@ func newRerankHTTPClient(timeoutSec int) *http.Client {
 	return &http.Client{Transport: sharedRerankTransport, Timeout: t}
 }
 
-// 私域部署 rerank 模型支持表：
+// rerank 模型支持表：
 //   - bge-reranker-base       轻量基线，CPU 可跑，单文档 <50ms
 //   - bge-reranker-large      高精度，GPU 推荐，单文档 <200ms
 //   - bge-reranker-v2-m3      多语种，默认推荐
@@ -154,7 +154,7 @@ const (
 
 // DefaultRerankConfig 读取重排配置（配置文件为准，其次环境变量，最后内置默认）
 //
-// 优先级（私域基线）：
+// 优先级：
 //  1. config.yaml 的 rerank 段（为准）
 //     - 宿主机：http://127.0.0.1:8209/v1（llama.cpp / MLX，端口 8209）
 //  2. 参数中心 rerank.global_override（管理端在线改，本函数每次读源；
@@ -765,6 +765,9 @@ func mapRerankResults(docs []RerankDoc, rr *rerankResponse) []RerankResult {
 		if score >= rerankScoreFloor {
 			results = append(results, scored{id: d.ID, score: score})
 		}
+	}
+	if len(results) == 0 && len(docs) > 0 {
+		logger.Warnf("[rerank] 整批 %d 候选均低于 scoreFloor=%.2f，疑似模型/阈值不匹配或查询过短", len(docs), rerankScoreFloor)
 	}
 	sort.SliceStable(results, func(a, b int) bool {
 		return results[a].score > results[b].score
