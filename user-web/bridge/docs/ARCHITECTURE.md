@@ -129,8 +129,12 @@ content script 加载 / onConversationChange
 | TikTok | `[data-e2e="chat-list"]` / DraftEditor `[data-e2e="message-input"]` | `div[contenteditable]` / `[role="textbox"]` |
 | 闲鱼 | 会话列表 data-* | URL path / query |
 | 快手 | 会话列表 data-* | URL path / query |
+| B站 | `.list-container > .list-item` / `.msg-item`（not-me/is-me）/ `#editor` + `btn-box send-btn` | `www.bilibili.com/message/` 入口（2026-11-12 注入面扩展） |
+| 微博 | `.chatlist-box .sessionlist` / 气泡 `.bubble_cont.basi` left/right / `#webchat-textarea` + Enter | 系统消息过滤词表（2026-11-12 补齐） |
 
 > 平台改版后仅需在 `src/channels/<platform>.js` 的 `SEL` 追加候选，无需发版即可自愈。
+> 京东 / B站 / 微博 / 拼多多选择器为公开页面结构证据（ChatGPT-On-CS v1.4.5 sourcemap 还原），
+> **未真机校准**——真机校准前一律 Experimental，如实降级（与 registry_parity_test 双向钉住）。
 
 ## 6. 限速 / 风控（详见 [./../bridge.md](../bridge.md) §7）
 

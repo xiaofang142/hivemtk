@@ -66,7 +66,8 @@
         <el-table-column
           prop="createdAt"
           label="创建时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.createdAt) }}
           </template>
@@ -339,7 +340,8 @@
           <el-table-column
             prop="sendTime"
             label="发送时间"
-            width="180">
+            width="180"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.sendTime) }}
             </template>

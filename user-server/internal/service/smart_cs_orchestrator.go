@@ -227,6 +227,10 @@ type IncomingContext struct {
 	IsGroup    bool
 	GroupID    string
 	GroupName  string
+	// SessionID 调用方已明确的会话（如官网访客 HTTP 发消息时按 visitor_token 校验通过的那条）。
+	// 非空时 findOrCreateSession 直接复用，不再按 OneID/UserID 猜，避免同一条消息被
+	// 编排器二次保存进别的活跃会话（chat 双发 bug 的根因）。
+	SessionID string
 }
 
 // HandleResult 处理结果
@@ -764,6 +768,12 @@ func (o *SmartCSOrchestrator) findOrCreateSession(ctx context.Context, in *Incom
 			return nil, err
 		}
 		return session, nil
+	}
+
+	if in.SessionID != "" {
+		if existing, err := o.sessionRepo.GetByIDString(ctx, in.SessionID); err == nil && existing != nil {
+			return existing, nil
+		}
 	}
 
 	if in.OneID != "" {

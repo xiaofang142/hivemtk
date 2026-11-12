@@ -123,21 +123,29 @@
 | 文档/Markdown | `python3 scripts/check-md-links-offline.py .`（**只认 git 索引**，先 `git add` 再跑） |
 | 提交前总门禁 | `make audit` + `make lint` + `make vet` + `make test-go` |
 
-**跑 Go 测试前必须先导出测试库连接变量**，否则 `testdb.go:346` 会用空密码连 8202，批量报
+**跑 Go 测试前必须先导出测试库连接变量**，否则 `testdb.go:346` 会用空密码连库，批量报
 `初始化进程级测试库失败: ... password authentication failed for user "admin" (SQLSTATE 28P01)`
-——**这是环境失败，不是代码 bug**，不许当缺陷去「修」（2026-10-13 实测：不导出时
-`./internal/aiagent/...` 21 个 FAIL，导出后全绿）：
+——**这是环境失败，不是代码 bug**，不许当缺陷去「修」：
 
 ```bash
 cd user-server
-export POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=8202 \
-       POSTGRES_TEST_PASSWORD="$(grep '^POSTGRES_PASSWORD=' ../.env | cut -d= -f2)"
+export POSTGRES_TEST_HOST=127.0.0.1 POSTGRES_TEST_PORT=8217 \
+       POSTGRES_TEST_PASSWORD="$(grep '^POSTGRES_PASSWORD=' ../.env | head -1 | cut -d= -f2-)"
 go test ./internal/<改动包>/...
 ```
 
+**端口钉扎（2026-11-12 实测更新）**：`testdb_config.go` 的 AV-01/AV-02 加固把测试入口
+**钉死在专用快测实例 127.0.0.1:8217**（`mtk-postgres-test`，docker-compose.test.yml；
+连 8202 业务库会报 `test entry is pinned to the dedicated fast instance (port 8217 /
+USER_POSTGRES_TEST_HOST_PORT)`——旧口径「连 8202」已作废）。快测库容器只在**首次初始化**
+时取 `.env` 的 `POSTGRES_PASSWORD`：`.env` 轮换密码后旧容器仍持旧口令（28P01），
+处置=按设计重建（测试数据可丢）：
+`export $(grep -E '^(POSTGRES_PASSWORD|POSTGRES_USER)=' .env | head -2)` →
+`docker compose -f docker-compose.test.yml down -v` → `make test-db-fast-up`。
+
 变量名是 `POSTGRES_TEST_*` 前缀，**与 `.env` 的 `POSTGRES_PASSWORD` 不同名**，不会自动继承；
-`testdb.go:91` 也支持 `POSTGRES_TEST_DSN` 一把梭。判据：报错含 `SQLSTATE 28P01` 或
-`初始化进程级测试库失败` ⇒ 先查环境，不是 bug。
+`testdb.go:91` 也支持 `POSTGRES_TEST_DSN` 一把梭。判据：报错含 `SQLSTATE 28P01`、
+`初始化进程级测试库失败` 或 `pinned to the dedicated fast instance` ⇒ 先查环境，不是 bug。
 
 `make audit` 已知会因**在途未提交修改**在 `check-test-nil-deref.py` 报 Error 1
 （`internal/service/inbox_test.go`、`message_hub_test.go`）——那是别人 lane 的存量改动，

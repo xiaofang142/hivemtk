@@ -17,7 +17,10 @@
       >
         {{ e.name }} · {{ modeText(e.mode) }}
       </el-tag>
-      <span v-if="realCount === 0" class="muted">
+      <span
+        v-if="realCount === 0"
+        class="muted"
+      >
         当前全部为模拟探针（LLM 扮演 AI 搜索），不能当作真实 AI 引擎读数。
       </span>
     </template>

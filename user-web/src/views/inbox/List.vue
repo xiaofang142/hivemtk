@@ -479,7 +479,9 @@
                     type="primary"
                     :underline="false"
                   >
-                    <el-icon class="msg-file-icon"><Document /></el-icon>
+                    <el-icon class="msg-file-icon">
+                      <Document />
+                    </el-icon>
                     {{ mediaFileName(msg.media_url) }}
                   </el-link>
                 </div>

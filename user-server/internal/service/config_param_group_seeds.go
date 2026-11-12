@@ -27,8 +27,13 @@ type ParamGroupDef struct {
 func DefaultParamGroupDefs() []ParamGroupDef {
 	return []ParamGroupDef{
 		{Group: "agent_llm", Label: "AI 大模型", Description: "LLM 调用、供应商降级、熔断与健康检查", SortOrder: 10},
+		// llm / rerank 组（2026-11-12）：§3.13 LLM/embedding/rerank 连接配置 env→DB
+		// 迁移各带入一条 global_override 种子，组元数据此前漏登记——参数中心侧栏
+		// 回落显示英文 key（TestParamGroupCoversEverySeedGroup 钉住）。
+		{Group: "llm", Label: "全局 LLM 连接", Description: "全局 LLM API 连接覆盖（base_url/api_key/model，按租户整份 JSON）", SortOrder: 15},
 		{Group: "agent_tool", Label: "AI 工具", Description: "工具调用并发、内容截断、失败换路与冷却", SortOrder: 20},
 		{Group: "embedding", Label: "向量嵌入", Description: "Embedding 提供商与批量参数", SortOrder: 30},
+		{Group: "rerank", Label: "全局 Rerank 连接", Description: "全局 Rerank API 连接覆盖（base_url/api_key/model，按租户整份 JSON）", SortOrder: 35},
 		{Group: "cache", Label: "缓存策略", Description: "内存缓存容量与 TTL、FAQ 衰减批次", SortOrder: 40},
 		{Group: "rag_health", Label: "RAG 健康度", Description: "RAG 质量分权重与低召回告警线", SortOrder: 45},
 		{Group: "feedback", Label: "反馈闭环", Description: "对话反馈驱动的策略迭代与 bandit 分配", SortOrder: 46},

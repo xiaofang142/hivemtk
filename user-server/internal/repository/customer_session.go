@@ -404,6 +404,10 @@ func (r *CustomerSessionRepository) GetAgentSessions(ctx context.Context, agentI
 // 活跃状态：pending / ai_handling / waiting / human_handling。
 // 若存在多条，返回最近一条有消息记录的会话。
 //
+// 排序必须 NULLS LAST：Postgres 里 `ORDER BY last_message_at DESC` 默认把 NULL 排最前，
+// 会让"从未收到过消息"的会话压过"刚收到消息"的会话，编排器据此挑错会话并把同一条
+// 访客消息二次写进错误会话（chat 双发 bug 的根因之一）。
+//
 // TTL 语义（参数 session.active_ttl，默认 24h）：只返回 last_message_at 在
 // SessionActiveTTL() 之内的会话。超过该时长的会话视为历史会话，避免被复用导致
 // AI 上下文被无关历史污染。
@@ -419,7 +423,7 @@ func (r *CustomerSessionRepository) GetActiveByUserID(ctx context.Context, userI
 		model.SessionStatusWaiting,
 		model.SessionStatusHumanHandling,
 	}).Where("COALESCE(last_message_at, created_at) > ?", cutoff).
-		Order("last_message_at DESC, id DESC").First(&session).Error
+		Order("last_message_at DESC NULLS LAST, id DESC").First(&session).Error
 	if err != nil {
 		return nil, err
 	}

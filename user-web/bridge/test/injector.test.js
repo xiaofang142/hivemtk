@@ -60,6 +60,20 @@ describe('pickContentScriptFile / URL 路由', () => {
     expect(pickContentScriptFile('https://yangkeduo.com/')).toBe(null);
     expect(SUPPORTED_HOSTS).toContain('pinduoduo.com');
   });
+
+  // 2026-11-12 B站注入面扩展：新私信中心 www.bilibili.com/message/ 与 #/whisper 等
+  // hash 入口（hash 无法进 manifest matches，只能靠 onCommitted 按 host 路由）。
+  // 广注入 + adapter match() 严格门激活——douyin/weibo 同款规范。
+  it('B站旧私信中心 message.bilibili.com → content-bilibili.js', () => {
+    expect(pickContentScriptFile('https://message.bilibili.com/#/whisper')).toBe('content-bilibili.js');
+  });
+
+  it('B站主站 www.bilibili.com → content-bilibili.js（广路由，激活由 match() 决定）', () => {
+    expect(pickContentScriptFile('https://www.bilibili.com/message/')).toBe('content-bilibili.js');
+    expect(pickContentScriptFile('https://www.bilibili.com/#/whisper')).toBe('content-bilibili.js');
+    expect(pickContentScriptFile('https://www.bilibili.com/video/BVxx')).toBe('content-bilibili.js');
+    expect(SUPPORTED_HOSTS).toContain('www.bilibili.com');
+  });
 });
 
 describe('isSupportedHost / 运行时白名单', () => {

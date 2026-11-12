@@ -297,7 +297,9 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-11-05 9d6477c9 geo 承接链接新增 geo.capture_ask_daily_limit +
 // geo.capture_lead_daily_limit ⇒ 243 → 245。
 // 2026-11-11 CC-04 高写入表 retention 九参数（retention 组 8 表+operation_logs）⇒ 245 → 254；与 M-5(+1)/M-6(+2) 合计 245 → 257。
-const defaultParamDefsWant = 257
+// 2026-11-12 §3.13 LLM/rerank 连接配置 env→DB 迁移新增 llm.global_override +
+// rerank.global_override 两条 ⇒ 257 → 259。
+const defaultParamDefsWant = 259
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

@@ -4,6 +4,11 @@
 > 状态：**选择器已实证**（2026-11-06 从 ChatGPT-On-CS v1.4.5 官方安装包内嵌 sourcemap 还原的
 > `platforms/weibo/index.ts` 取得全套选择器，方向判定 left/right 系其文件尾注释原文），
 > 实现已落地（`user-web/bridge/src/channels/weibo.js`），仍标 Experimental（待真机登录回归）。
+> 2026-11-12 收口：补系统消息过滤（`isSystemMessage`：词表+时间分隔+居中短文案，
+> 「撤回了一条消息」等不再以 customer 方向上行触发 AI 误回复）；account_id 占位口径
+> （`weibo-unknown`）按服务端 account_id 非空契约钉死并注释（与 douyin 空串 fail-loud 口径
+> 的取舍见 `weibo.js` getAccountId 注释）；新增 BaseAdapter.sendOutbound 下行流测试
+> （send_verified 回查 + 自报 agent 帧 extra.send_verified）。
 > 证据链见 [真实驱动还原报告](../../research/CHATGPT-ON-CS-REAL-DRIVER-2026-11.md)。
 
 ---
@@ -157,7 +162,7 @@ export const SEL = {
 
 | 层 | 用例 |
 |---|---|
-| 扩展 | jsdom fixture：会话列表/消息解析（self/other）/会话 ID/Enter 发送 |
+| 扩展 | jsdom fixture：会话列表/消息解析（self/other）/会话 ID/Enter 发送；系统消息过滤（2026-11-12 补）；sendOutbound 下行流（send_verified 回查/自报帧）；detectUnread（M-5） |
 | Go | registry/别名/reach 分派/message_hub 词表 |
 | curl | `channel=weibo` ingest → 查库 → outbox → ack |
 | 前端 | 标签/分组 |

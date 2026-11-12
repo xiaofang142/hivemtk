@@ -162,6 +162,9 @@ function getAccountId() {
   // 2026-08-17 治本：DOM 兜底失败时返回空串（不返回 douyin-unknown 占位值）。
   // types.js buildMessage 在 account_id 为空时 delete 该字段，后端层0 改用
   // (platform+sender_name+content) 三元组命中 outbound，避免占位值污染入库链路。
+  // 口径注记（2026-11-12）：空串在服务端会命中 ingest/outbox 的「account_id required」
+  // 400（fail-loud：宁可丢这条也不造占位账号行）；weibo/bilibili 走的是另一种有意
+  // 取舍（稳定占位保传输链路），双方注释互相引用，改动任一口径需同步评估另一侧。
   return '';
 }
 

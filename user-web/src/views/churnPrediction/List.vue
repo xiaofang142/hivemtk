@@ -142,7 +142,8 @@
             <el-table-column
               prop="last_activity_at"
               label="最后活跃"
-              min-width="180">
+              min-width="180"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.last_activity_at) }}
               </template>
@@ -150,7 +151,8 @@
             <el-table-column
               prop="predicted_at"
               label="预测时间"
-              min-width="180">
+              min-width="180"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.predicted_at) }}
               </template>

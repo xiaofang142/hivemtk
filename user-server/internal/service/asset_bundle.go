@@ -789,7 +789,19 @@ func (c *hotPlugCache) appendIndex(ctx context.Context, kv repository.SystemConf
 	}
 	if _, err := kv.Upsert(ctx, bundleHotPlugIndexKey, string(data)); err != nil {
 		logger.Warnf("[asset_bundle] hotplug index persist failed err=%v", err)
+		return
 	}
+	// 持久化成功后同步刷新本地索引缓存：appendIndex 此前只写 KV，本地 index 仍停在
+	// 旧值（常见是"KV 里还没有索引行"时空数组），enabled/list 在
+	// bundleHotPlugLocalTTL 窗口内读这份空缓存、根本不会回源 KV，于是刚 enable 的
+	// 资产包要等满 TTL 才进得了列表。enable→list 立即可见是这两个接口的契约
+	// （同进程同租户），缓存必须与 KV 同帧更新。
+	c.mu.Lock()
+	if c.index == nil {
+		c.index = make(map[uint]hotPlugIndex)
+	}
+	c.index[tenantScopeID(ctx)] = hotPlugIndex{ids: ids, at: time.Now()}
+	c.mu.Unlock()
 }
 
 func (c *hotPlugCache) candidateIDs(ctx context.Context) []string {
@@ -800,10 +812,15 @@ func (c *hotPlugCache) candidateIDs(ctx context.Context) []string {
 	merged := append([]string(nil), idx.ids...)
 	kv := c.kv
 	c.mu.RUnlock()
-	if localFresh || kv == nil {
+	if localFresh {
 		return merged
 	}
-	kv = c.ensureKV()
+	// kv 尚未注入（DI 未接线或进程刚启动）时不能直接返回空本地索引，
+	// 否则重启后首读永远看不到 KV 里的远端索引，enabled/list 恒空、
+	// weave 的热启用闸门随之失效。必须先尝试 ensureKV 初始化。
+	if kv == nil {
+		kv = c.ensureKV()
+	}
 	if kv == nil {
 		return merged
 	}
@@ -1067,7 +1084,7 @@ func ParseBundleToMerchantForm(bundle *model.AssetBundle) dto.MerchantFormParseR
 		if m := regexp.MustCompile(`客服联系方式[:：]\s*(.+)`).FindStringSubmatch(content); len(m) > 1 {
 			resp.SupportContact = strings.TrimSpace(m[1])
 		}
-		if m := regexp.MustCompile(`危机感触发阈值[:：]\s*(\d+)`).FindStringSubmatch(content); len(m) > 1 {
+		if m := regexp.MustCompile(`危机感触发阈值[:：]\s*([^\n（]+)`).FindStringSubmatch(content); len(m) > 1 {
 			resp.CrisisThreshold = strings.TrimSpace(m[1])
 		}
 		if m := regexp.MustCompile(`语气词等级[:：]\s*(\S+)`).FindStringSubmatch(content); len(m) > 1 {
@@ -1079,7 +1096,14 @@ func ParseBundleToMerchantForm(bundle *model.AssetBundle) dto.MerchantFormParseR
 		if m := regexp.MustCompile(`启用结算意图[:：]\s*([\w,]+)`).FindStringSubmatch(content); len(m) > 1 {
 			resp.EnabledIntents = strings.Split(strings.TrimSpace(m[1]), ",")
 		}
+		if m := regexp.MustCompile(`触发意图结算类型[:：]\s*(\S+)`).FindStringSubmatch(content); len(m) > 1 {
+			resp.CardConfig.IntentType = strings.TrimSpace(m[1])
+		}
+		if m := regexp.MustCompile(`绑定商品主图[:：]\s*(\S+)`).FindStringSubmatch(content); len(m) > 1 {
+			resp.CardConfig.ProductImage = strings.TrimSpace(m[1])
+		}
 	}
+	parseMerchantButtons(bundle.Messages, &resp.CardConfig)
 	jsonBlockRE := regexp.MustCompile(`\n*\x60{3}json[\s\S]*?\x60{3}\s*$`)
 	jsonBodyRE := regexp.MustCompile(`\x60{3}json\s*([\s\S]*?)\s*\x60{3}`)
 	for i := 0; i < len(bundle.Messages)-1; i++ {
@@ -1108,6 +1132,52 @@ func ParseBundleToMerchantForm(bundle *model.AssetBundle) dto.MerchantFormParseR
 		}
 	}
 	return resp
+}
+
+var (
+	merchantCardTitleRE = regexp.MustCompile(`^\d+\. \[(.+)\]$`)
+	merchantCardURLRE   = regexp.MustCompile(`^跳转 URL[:：]\s*(.+)$`)
+	merchantCardAPIRE   = regexp.MustCompile(`^触发本地工具[:：]\s*(.+)$`)
+)
+
+// parseMerchantButtons 从 system 消息回显动作按钮链。
+//
+// 写入格式见 buildMerchantCardSystemMessage：`- 动作按钮链:` 之后每按钮两行——
+// 序号行 `N. [title]`，其下缩进行 `跳转 URL: x` 或 `触发本地工具: y`。
+// 只认带「# 多媒体卡片消息配置」头的 system 段，避免把 QA 回复里形如
+// `1. [优惠]` 的正文行误当按钮。
+func parseMerchantButtons(messages []model.AssetBundleMessage, cfg *dto.MerchantCardConfig) {
+	buttons := make([]dto.MerchantCardButton, 0)
+	var cur *dto.MerchantCardButton
+	for _, m := range messages {
+		if m.Role != "system" || !strings.Contains(m.Content, "# 多媒体卡片消息配置") {
+			continue
+		}
+		for _, line := range strings.Split(m.Content, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if sm := merchantCardTitleRE.FindStringSubmatch(trimmed); len(sm) > 1 {
+				if cur != nil {
+					buttons = append(buttons, *cur)
+				}
+				cur = &dto.MerchantCardButton{Title: sm[1], Order: len(buttons)}
+				continue
+			}
+			if cur == nil {
+				continue
+			}
+			if um := merchantCardURLRE.FindStringSubmatch(trimmed); len(um) > 1 {
+				cur.Action = "open_url"
+				cur.URL = strings.TrimSpace(um[1])
+			} else if am := merchantCardAPIRE.FindStringSubmatch(trimmed); len(am) > 1 {
+				cur.Action = "call_api"
+				cur.APIName = strings.TrimSpace(am[1])
+			}
+		}
+	}
+	if cur != nil {
+		buttons = append(buttons, *cur)
+	}
+	cfg.Buttons = buttons
 }
 
 var platformSubmitBannedWords = []string{

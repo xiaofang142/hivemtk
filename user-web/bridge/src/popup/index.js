@@ -69,7 +69,7 @@ function lastError() {
 //   - "Message manager disconnected"                                   → MV3 通道关闭
 function diagnoseUninjected(errMsg, tabUrl) {
   // CH-16 首切片（2026-11-09）：pinduoduo.com 纳入支持域（自检/注入/广播/巡检同源）。
-  const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tabUrl || '');
+  const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tabUrl || '');
   const lines = [];
   if (errMsg && /Could not establish connection|Receiving end does not exist|port closed|disconnected/i.test(errMsg)) {
     if (!onSupportedHost) {
@@ -512,7 +512,7 @@ function selfCheck() {
         return;
       }
       // 第一道闸：域名白名单
-      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url);
+      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url);
       if (!onSupportedHost) {
         $('selfOut').textContent = `当前标签页不是已支持平台的网页：\n${tab.url}\n\n请在对应平台网页（已登录）上点击。`;
         return;
@@ -783,7 +783,7 @@ function syncAllConversations() {
         $('selfOut').textContent = '无活动标签页';
         return;
       }
-      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url || '');
+      const onSupportedHost = /douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url || '');
       if (!onSupportedHost) {
         $('selfOut').textContent = '当前标签页不是已支持平台的网页：\n' + (tab.url || '');
         return;
@@ -905,7 +905,7 @@ function broadcastSelectorsUpdated() {
       const list = Array.isArray(tabs) ? tabs : [];
       for (const t of list) {
         if (!t || !t.id || !t.url) continue;
-        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(t.url)) continue;
+        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(t.url)) continue;
         try {
           chrome.tabs.sendMessage(t.id, { type: 'selectorsUpdated' }, () => {  try { void chrome.runtime.lastError; } catch (_) {} });
         } catch (_) {  }
@@ -978,7 +978,7 @@ function sendToActiveTab(msg, cb) {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       const tab = tabs && tabs[0];
       if (!tab || !tab.id) { cb && cb({ ok: false, reason: 'no-active-tab' }); return; }
-      if (!tab.url || !/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url)) {
+      if (!tab.url || !/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(tab.url)) {
         cb && cb({ ok: false, reason: 'not-supported-host', url: tab.url });
         return;
       }

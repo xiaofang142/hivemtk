@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"errors"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
@@ -269,6 +271,11 @@ func (c *RestoreController) RestoreBackup(ctx *gin.Context) {
 	record, err := c.restoreService.RestoreBackup(ctx.Request.Context(), uid, &req)
 	if err != nil && errhttp.IsNotFoundError(err) {
 		response.NotFound(ctx, "备份不存在，无法恢复")
+		return
+	}
+	var be *bizerr.BizError
+	if errors.As(err, &be) {
+		response.ErrorWithBusinessCode(ctx, be.Code, be.Message, gin.H{})
 		return
 	}
 	if HandleDBError(ctx, err, "恢复备份") {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
@@ -48,7 +49,9 @@ var backupExtraTables = []struct {
 	{"login_events", "login_events"},
 	{"security_alerts", "security_alerts"},
 	{"password_reset_tokens", "password_reset_tokens"},
-	{"prompts", "prompts"},
+	// 史上无 "prompts" 表（迁移与 model 均不存在；真实表为 prompt_templates/
+	// prompt_ab_tests/prompt_candidates）。AUD 批误加入此 stale 条目后导出端
+	// DumpTable("prompts") 必返 42P01，全量备份全部 failed（2026-11-12 实测）。
 	{"ai_agents", "ai_agents"},
 	{"feature_flags", "feature_flags"},
 }
@@ -468,7 +471,9 @@ func (s *RestoreService) RestoreBackup(ctx context.Context, createdBy uint, req 
 		return nil, fmt.Errorf("备份记录不存在")
 	}
 	if backup.Status != model.BackupStatusCompleted {
-		return nil, fmt.Errorf("备份未完成，无法恢复")
+		// typed 业务码：控制器原样透出「备份未完成，无法恢复」，
+		// 而不是让 HandleDBError 把具体原因吞成 INTERNAL_ERROR_6002（2026-11-12 API 实测定位）。
+		return nil, bizerr.New(bizerr.CodeConflict, "备份未完成，无法恢复")
 	}
 
 	record := &model.RestoreRecord{

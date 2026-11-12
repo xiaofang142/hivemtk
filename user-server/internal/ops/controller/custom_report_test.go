@@ -88,14 +88,16 @@ func TestCustomReportController_CreateReport(t *testing.T) {
 			expectSuccess:  true,
 		},
 		{
+			// 2026-11-12 收口：service 层名称必填（空名会落库「无名报表」且无入口
+			// 能改名），missing_name 从「接受」改为 errhttp 按 CodeParamInvalid 回 400。
 			name: "missing_name",
 			requestBody: gin.H{
 				"description": "A test report",
 				"data_source": "sessions",
 				"chart_type":  "bar",
 			},
-			expectedStatus: 200,
-			expectSuccess:  true,
+			expectedStatus: 400,
+			expectSuccess:  false,
 		},
 		{
 			name: "invalid_data_source",

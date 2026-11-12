@@ -6,7 +6,9 @@
     :class="bannerClass"
     role="status"
   >
-    <el-icon class="sub-banner-icon"><component :is="bannerIcon" /></el-icon>
+    <el-icon class="sub-banner-icon">
+      <component :is="bannerIcon" />
+    </el-icon>
     <span class="sub-banner-text">{{ bannerText }}</span>
     <el-button
       v-if="expired"

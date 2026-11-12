@@ -18,6 +18,9 @@ export const SUPPORTED_HOSTS = [
   'chat.jd.com',
   'im.jd.com',
   'message.bilibili.com',
+  // 2026-11-12 注入面扩展：B站新私信中心路径 www.bilibili.com/message/（adapter
+  // isMessageCenterUrl 本就认得该入口，此前 manifest/injector 不认导致永不注入）。
+  'www.bilibili.com',
   'weibo.com',
   // CH-16 首切片：拼多多商家后台（chat-merchant 聊天页所在域，登录墙后）。
   'pinduoduo.com',
@@ -49,7 +52,7 @@ function pickContentScriptFile(url) {
     if (/(^|\.)xianyu\.com$/.test(host)) return 'content-xianyu.js';
     if (/(^|\.)kuaishou\.com$/.test(host)) return 'content-kuaishou.js';
     if (/(^|\.)(jdm|dongdong|chat|im)\.jd\.com$/.test(host)) return 'content-jd.js';
-    if (/(^|\.)message\.bilibili\.com$/.test(host)) return 'content-bilibili.js';
+    if (/(^|\.)(message|www)\.bilibili\.com$/.test(host)) return 'content-bilibili.js';
     if (/(^|\.)weibo\.com$/.test(host)) return 'content-weibo.js';
     // CH-16 首切片：拼多多商家后台（mms.pinduoduo.com/chat-merchant）。
     if (/(^|\.)pinduoduo\.com$/.test(host)) return 'content-pdd.js';

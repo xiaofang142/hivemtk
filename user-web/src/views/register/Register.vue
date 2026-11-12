@@ -39,192 +39,192 @@
       </el-result>
 
       <template v-if="!cloudRegistrationOnly">
-      <el-steps
-        :active="step"
-        align-center
-        finish-status="success"
-        class="mb-16"
-      >
-        <el-step title="账户信息" />
-        <el-step title="开户登记" />
-        <el-step title="确认告知" />
-      </el-steps>
+        <el-steps
+          :active="step"
+          align-center
+          finish-status="success"
+          class="mb-16"
+        >
+          <el-step title="账户信息" />
+          <el-step title="开户登记" />
+          <el-step title="确认告知" />
+        </el-steps>
 
-      <!-- 第 1 步：账户信息 -->
-      <el-form
-        v-show="step === 0"
-        ref="formRef"
-        :model="form"
-        :rules="rules"
-        label-width="110px"
-      >
-        <el-form-item
-          label="用户名"
-          prop="username"
+        <!-- 第 1 步：账户信息 -->
+        <el-form
+          v-show="step === 0"
+          ref="formRef"
+          :model="form"
+          :rules="rules"
+          label-width="110px"
         >
-          <el-input
-            v-model="form.username"
-            placeholder="3-32 位字母数字下划线"
-          />
-        </el-form-item>
-        <el-form-item
-          label="密码"
-          prop="password"
-        >
-          <el-input
-            v-model="form.password"
-            type="password"
-            show-password
-            placeholder="至少 8 位，含大小写字母与数字"
-          />
-        </el-form-item>
-        <el-form-item
-          label="确认密码"
-          prop="confirmPassword"
-        >
-          <el-input
-            v-model="form.confirmPassword"
-            type="password"
-            show-password
-          />
-        </el-form-item>
-        <el-form-item
-          label="登录邮箱"
-          prop="email"
-        >
-          <el-input
-            v-model="form.email"
-            placeholder="用于登录与接收系统通知"
-          />
-        </el-form-item>
-        <!-- 租户代码（SaaS 多租户形态才有这个概念）：
+          <el-form-item
+            label="用户名"
+            prop="username"
+          >
+            <el-input
+              v-model="form.username"
+              placeholder="3-32 位字母数字下划线"
+            />
+          </el-form-item>
+          <el-form-item
+            label="密码"
+            prop="password"
+          >
+            <el-input
+              v-model="form.password"
+              type="password"
+              show-password
+              placeholder="至少 8 位，含大小写字母与数字"
+            />
+          </el-form-item>
+          <el-form-item
+            label="确认密码"
+            prop="confirmPassword"
+          >
+            <el-input
+              v-model="form.confirmPassword"
+              type="password"
+              show-password
+            />
+          </el-form-item>
+          <el-form-item
+            label="登录邮箱"
+            prop="email"
+          >
+            <el-input
+              v-model="form.email"
+              placeholder="用于登录与接收系统通知"
+            />
+          </el-form-item>
+          <!-- 租户代码（SaaS 多租户形态才有这个概念）：
              填了 = 加入已有商户（走 /api/auth/register，账号落在该租户下）；
              留空 = 新商户开户（走 /api/tenant/register，顺带拿到自己的租户代码）。
              私域独立部署(off)没有租户概念，整块隐藏。 -->
-        <el-form-item
-          v-if="tenantMode"
-          label="租户代码"
-          prop="tenant_code"
-        >
-          <el-input
-            v-model="form.tenant_code"
-            placeholder="加入已有商户时填写（如：tz3rmdj）；留空表示新商户开户"
-          />
-        </el-form-item>
-      </el-form>
+          <el-form-item
+            v-if="tenantMode"
+            label="租户代码"
+            prop="tenant_code"
+          >
+            <el-input
+              v-model="form.tenant_code"
+              placeholder="加入已有商户时填写（如：tz3rmdj）；留空表示新商户开户"
+            />
+          </el-form-item>
+        </el-form>
 
-      <!-- 第 2 步：开户登记（监管必需项）-->
-      <el-form
-        v-show="step === 1"
-        :model="form"
-        :rules="regRules"
-        label-width="110px"
-      >
-        <el-alert
-          type="info"
-          :closable="false"
-          class="mb-12"
-          title="为什么需要这些信息"
-          description="公司名称、负责人、联系电话、邮箱是平台履行监管责任时能够联系到经营主体的最小信息集。这些信息只用于合规登记与必要联系，不用于任何其它用途。"
-        />
-        <el-form-item
-          label="公司名称"
-          prop="company_name"
+        <!-- 第 2 步：开户登记（监管必需项）-->
+        <el-form
+          v-show="step === 1"
+          :model="form"
+          :rules="regRules"
+          label-width="110px"
         >
-          <el-input
-            v-model="form.company_name"
-            placeholder="营业执照上的名称（个人使用可填本人姓名）"
+          <el-alert
+            type="info"
+            :closable="false"
+            class="mb-12"
+            title="为什么需要这些信息"
+            description="公司名称、负责人、联系电话、邮箱是平台履行监管责任时能够联系到经营主体的最小信息集。这些信息只用于合规登记与必要联系，不用于任何其它用途。"
           />
-        </el-form-item>
-        <el-form-item
-          label="负责人/法人"
-          prop="real_name"
-        >
-          <el-input
-            v-model="form.real_name"
-            placeholder="负责人/法人姓名"
-          />
-        </el-form-item>
-        <el-form-item
-          label="联系电话"
-          prop="phone"
-        >
-          <el-input
-            v-model="form.phone"
-            placeholder="手机号或固定电话"
-          />
-        </el-form-item>
-        <el-form-item label="统一社会信用代码">
-          <el-input
-            v-model="form.license_no"
-            placeholder="选填，建议填写以便后续快速核验"
-          />
-        </el-form-item>
-        <el-form-item
-          label="通信地址"
-          prop="address"
-        >
-          <el-input
-            v-model="form.address"
-            placeholder="必填，用于监管问询联系"
-          />
-        </el-form-item>
-      </el-form>
+          <el-form-item
+            label="公司名称"
+            prop="company_name"
+          >
+            <el-input
+              v-model="form.company_name"
+              placeholder="营业执照上的名称（个人使用可填本人姓名）"
+            />
+          </el-form-item>
+          <el-form-item
+            label="负责人/法人"
+            prop="real_name"
+          >
+            <el-input
+              v-model="form.real_name"
+              placeholder="负责人/法人姓名"
+            />
+          </el-form-item>
+          <el-form-item
+            label="联系电话"
+            prop="phone"
+          >
+            <el-input
+              v-model="form.phone"
+              placeholder="手机号或固定电话"
+            />
+          </el-form-item>
+          <el-form-item label="统一社会信用代码">
+            <el-input
+              v-model="form.license_no"
+              placeholder="选填，建议填写以便后续快速核验"
+            />
+          </el-form-item>
+          <el-form-item
+            label="通信地址"
+            prop="address"
+          >
+            <el-input
+              v-model="form.address"
+              placeholder="必填，用于监管问询联系"
+            />
+          </el-form-item>
+        </el-form>
 
-      <!-- 第 3 步：监管告知确认 -->
-      <div v-show="step === 2">
-        <el-alert
-          type="warning"
-          show-icon
-          :closable="false"
-          title="平台监管责任告知"
-          class="mb-12"
-        />
-        <div class="notice">
-          {{ notice.notice || '加载中…' }}
+        <!-- 第 3 步：监管告知确认 -->
+        <div v-show="step === 2">
+          <el-alert
+            type="warning"
+            show-icon
+            :closable="false"
+            title="平台监管责任告知"
+            class="mb-12"
+          />
+          <div class="notice">
+            {{ notice.notice || '加载中…' }}
+          </div>
+          <div class="notice-meta">
+            协议版本 <span class="mono">{{ notice.agreement_version || '—' }}</span>
+          </div>
+          <el-checkbox
+            v-model="form.regulatory_ack"
+            class="mt-12"
+          >
+            我已阅读并同意上述告知，确认所填信息真实有效
+          </el-checkbox>
         </div>
-        <div class="notice-meta">
-          协议版本 <span class="mono">{{ notice.agreement_version || '—' }}</span>
-        </div>
-        <el-checkbox
-          v-model="form.regulatory_ack"
-          class="mt-12"
-        >
-          我已阅读并同意上述告知，确认所填信息真实有效
-        </el-checkbox>
-      </div>
 
-      <div class="actions">
-        <el-button
-          v-if="step > 0"
-          @click="step--"
-        >
-          上一步
-        </el-button>
-        <el-button
-          v-if="step < 2"
-          type="primary"
-          :loading="submitting"
-          @click="next"
-        >
-          下一步
-        </el-button>
-        <el-button
-          v-else
-          type="primary"
-          :loading="submitting"
-          @click="submit"
-        >
-          完成注册
-        </el-button>
-        <el-button
-          link
-          type="primary"
-          @click="$router.push('/login')"
-        >
-          已有账号，去登录
-        </el-button>
-      </div>
+        <div class="actions">
+          <el-button
+            v-if="step > 0"
+            @click="step--"
+          >
+            上一步
+          </el-button>
+          <el-button
+            v-if="step < 2"
+            type="primary"
+            :loading="submitting"
+            @click="next"
+          >
+            下一步
+          </el-button>
+          <el-button
+            v-else
+            type="primary"
+            :loading="submitting"
+            @click="submit"
+          >
+            完成注册
+          </el-button>
+          <el-button
+            link
+            type="primary"
+            @click="$router.push('/login')"
+          >
+            已有账号，去登录
+          </el-button>
+        </div>
       </template>
     </el-card>
   </div>

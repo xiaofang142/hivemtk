@@ -120,7 +120,7 @@ export async function getServerCapabilities(cfg) {
 }
 
 export class PollingLoop {
-  constructor({ channels, getConfig, getMeta, getAdapter, uplinks, preferSSE }) {
+  constructor({ channels, getConfig, getMeta, getAdapter, uplinks, preferSSE, pageContext }) {
     this.channels = channels || [];
     this.getConfig = getConfig;
     this.getMeta = getMeta;
@@ -130,6 +130,10 @@ export class PollingLoop {
     this._downlinkTimer = null;
     this._downlinkInFlight = false;
     this._preferSSE = preferSSE !== false; // 默认尝试 SSE
+    // pageContext=true：content script 显式声明「我运行在页面源下」，SSE 会被
+    // 生产 CORS 拦截，强制轮询模式（getOutbox 走 bridgeFetch 已免 CORS）。
+    // 未声明（扩展页 popup/SW）= 保留 SSE 语义；测试桩不传 = 默认 SSE。
+    this._pageContext = pageContext === true;
     this._sseCleanups = new Map(); // channel -> cleanup function
     this._sseActive = false;
   }
@@ -151,7 +155,12 @@ export class PollingLoop {
     initDownlink(this.channels);
 
     // 尝试 SSE 模式
-    if (this._preferSSE) {
+    // 页面上下文（content script 运行在页面源下）直连 SSE 会被生产 CORS 拦截：
+    // connectSSE 的 fetch 跑在 douyin/weibo 等页面源，workapi 不放行这些源 →
+    // 出站全部卡 inflight/20 次后 exhausted（2026-11-12 生产实证）。页面上下文
+    // 由构造方显式声明 pageContext:true 强制轮询（getOutbox 走 bridgeFetch 已免
+    // CORS）；扩展页（popup/SW）不受 CORS 限制，未声明时保留 SSE 语义。
+    if (this._preferSSE && !this._pageContext) {
       const cfg = await this.getConfig();
       const capabilities = await getServerCapabilities(cfg);
 

@@ -152,14 +152,16 @@ func (c *PlatformConnectivityController) SetPlatformHost(ctx *gin.Context) {
 		return
 	}
 	address := strings.TrimRight(strings.TrimSpace(req.Address), "/")
-	if address == "" {
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "平台地址不能为空（要清空请用参数中心的「重置为默认值」）"})
-		return
+	if address != "" {
+		if err := validatePlatformHost(address); err != nil {
+			response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "平台地址格式非法: " + err.Error()})
+			return
+		}
 	}
-	if err := validatePlatformHost(address); err != nil {
-		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": "平台地址格式非法: " + err.Error()})
-		return
-	}
+	// address == "" 视为「清空回部署默认」：平台默认行原本就是 ""，SaaS 模式下
+	// 参数中心的「重置为默认值」只删租户覆盖行、清不到平台默认行，旧守卫把空地址
+	// 一律 400 会让平台默认行被写脏后没有任何 API 能收回 ""; 空地址直接走
+	// UpdatePlatformDefault 写回默认 ""。
 
 	cpSvc := service.GlobalConfigParam()
 	if cpSvc == nil {

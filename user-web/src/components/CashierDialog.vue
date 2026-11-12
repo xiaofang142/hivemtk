@@ -7,28 +7,47 @@
     @closed="onClosed"
   >
     <!-- 在线支付：跳转收银台 -->
-    <div v-if="payment && payment.pay_url" class="cashier-body">
+    <div
+      v-if="payment && payment.pay_url"
+      class="cashier-body"
+    >
       <p class="cashier-hint">
         订单 <b>{{ orderNo }}</b> 金额 <b>¥{{ amountText }}</b>
       </p>
       <p class="cashier-sub">
         {{ payment.mock ? '当前为模拟支付通道（EPAY_MOCK），点击下方按钮完成模拟付款。' : '点击下方按钮跳转支付页面完成付款。' }}
       </p>
-      <div class="cashier-wait" v-if="polling">
-        <el-icon class="is-loading"><Loading /></el-icon>
+      <div
+        v-if="polling"
+        class="cashier-wait"
+      >
+        <el-icon class="is-loading">
+          <Loading />
+        </el-icon>
         <span>等待支付确认…（{{ pollCount }}/{{ maxPolls }}）</span>
       </div>
-      <div class="cashier-done" v-else-if="paid">
-        <el-icon color="#67c23a"><CircleCheckFilled /></el-icon>
+      <div
+        v-else-if="paid"
+        class="cashier-done"
+      >
+        <el-icon color="#67c23a">
+          <CircleCheckFilled />
+        </el-icon>
         <span>支付成功，权益开通中…</span>
       </div>
-      <div class="cashier-exhausted" v-else-if="exhausted">
+      <div
+        v-else-if="exhausted"
+        class="cashier-exhausted"
+      >
         <span>轮询超时 —— 若已完成支付，可点击「手动刷新」。</span>
       </div>
     </div>
 
     <!-- 无在线支付参数：线下付款指引 -->
-    <div v-else class="cashier-body">
+    <div
+      v-else
+      class="cashier-body"
+    >
       <el-alert
         type="warning"
         :closable="false"
@@ -36,11 +55,18 @@
         title="在线支付通道未启用"
         description="本单未返回在线支付参数，请按下方指引联系平台运营完成线下付款；付款确认后权益自动开通。"
       />
-      <p class="cashier-guide" v-if="guide">{{ guide }}</p>
+      <p
+        v-if="guide"
+        class="cashier-guide"
+      >
+        {{ guide }}
+      </p>
     </div>
 
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
+      <el-button @click="visible = false">
+        关闭
+      </el-button>
       <el-button
         v-if="payment && payment.pay_url && !paid"
         type="primary"

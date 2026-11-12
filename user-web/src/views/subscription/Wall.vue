@@ -1,8 +1,14 @@
 <template>
   <div class="sub-wall">
-    <el-card class="wall-card" shadow="never">
+    <el-card
+      class="wall-card"
+      shadow="never"
+    >
       <div class="wall-head">
-        <el-icon :size="40" :color="expired ? '#f56c6c' : '#e6a23c'">
+        <el-icon
+          :size="40"
+          :color="expired ? '#f56c6c' : '#e6a23c'"
+        >
           <Lock v-if="expired" />
           <Clock v-else />
         </el-icon>
@@ -10,32 +16,63 @@
       </div>
 
       <!-- 加载中 -->
-      <div v-if="loading" class="wall-loading">
-        <el-icon class="is-loading"><Loading /></el-icon>
+      <div
+        v-if="loading"
+        class="wall-loading"
+      >
+        <el-icon class="is-loading">
+          <Loading />
+        </el-icon>
         <span>正在获取订阅状态…</span>
       </div>
 
       <!-- 状态卡 -->
       <template v-else-if="snap">
-        <el-descriptions :column="1" border class="wall-desc">
+        <el-descriptions
+          :column="1"
+          border
+          class="wall-desc"
+        >
           <el-descriptions-item label="当前状态">
-            <el-tag :type="statusTag">{{ STATUS_LABEL[snap.status] || snap.status }}</el-tag>
+            <el-tag :type="statusTag">
+              {{ STATUS_LABEL[snap.status] || snap.status }}
+            </el-tag>
           </el-descriptions-item>
-          <el-descriptions-item v-if="periodEndText" label="有效期至">
+          <el-descriptions-item
+            v-if="periodEndText"
+            label="有效期至"
+          >
             {{ periodEndText }}
           </el-descriptions-item>
-          <el-descriptions-item v-else-if="trialEndText" label="体验期截止">
+          <el-descriptions-item
+            v-else-if="trialEndText"
+            label="体验期截止"
+          >
             {{ trialEndText }}
           </el-descriptions-item>
-          <el-descriptions-item v-if="priceText" label="订阅价格">
+          <el-descriptions-item
+            v-if="priceText"
+            label="订阅价格"
+          >
             {{ priceText }} / 月（按 30 天计）
           </el-descriptions-item>
-          <el-descriptions-item v-if="snap.stale" label="同步状态">
-            <el-tag type="warning" size="small">镜像数据较旧，以平台最终确认为准</el-tag>
+          <el-descriptions-item
+            v-if="snap.stale"
+            label="同步状态"
+          >
+            <el-tag
+              type="warning"
+              size="small"
+            >
+              镜像数据较旧，以平台最终确认为准
+            </el-tag>
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-if="snap.no_data" class="wall-nodata">
+        <div
+          v-if="snap.no_data"
+          class="wall-nodata"
+        >
           <el-alert
             type="info"
             :closable="false"
@@ -46,7 +83,9 @@
         </div>
 
         <div class="wall-actions">
-          <el-button @click="goWorkbench">返回工作台</el-button>
+          <el-button @click="goWorkbench">
+            返回工作台
+          </el-button>
           <el-button
             v-if="snap.locked"
             type="primary"
@@ -59,7 +98,10 @@
       </template>
 
       <!-- 读取失败 -->
-      <div v-else class="wall-error">
+      <div
+        v-else
+        class="wall-error"
+      >
         <el-alert
           type="error"
           :closable="false"
@@ -68,8 +110,12 @@
           description="请稍后重试；若持续失败请联系平台运营。"
         />
         <div class="wall-actions">
-          <el-button @click="load">重试</el-button>
-          <el-button @click="goWorkbench">返回工作台</el-button>
+          <el-button @click="load">
+            重试
+          </el-button>
+          <el-button @click="goWorkbench">
+            返回工作台
+          </el-button>
         </div>
       </div>
     </el-card>

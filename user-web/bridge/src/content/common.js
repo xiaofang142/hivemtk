@@ -477,7 +477,7 @@ export function startBridge(channel, buildAdapter) {
     //   默认 false）。拉取失败/字段缺失 = 默认关 = 关注动作永不执行（fail-safe：
     //   与 M-5 相反，这里 fail-closed——不可逆的写动作宁可不执行）。
     try {
-      getServerCapabilities(getConfig())
+      getConfig().then((cfg) => getServerCapabilities(cfg))
         .then((caps) => {
           try { adapter.setPatrolUnreadFirstChannels(caps.patrol_unread_first_channels || []); } catch (_) {  }
           try { adapter.setFollowUserEnabled(caps.follow_user_enabled === true, caps.follow_user_channels || []); } catch (_) {  }
@@ -515,6 +515,9 @@ export function startBridge(channel, buildAdapter) {
       getConfig,
       getMeta: () => ({ accountId: resolveAccountId() }),
       channels: [channel],
+      // content script 运行在页面源下：SSE 直连会被生产 CORS 拦截（2026-11-12
+      // 生产实证出站全卡 inflight/exhausted），显式声明页面上下文强制轮询。
+      pageContext: true,
     });
     pollingLoop.start();
 

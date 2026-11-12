@@ -554,7 +554,8 @@
           <el-table-column
             prop="first_at"
             label="首节点"
-            width="180">
+            width="180"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.first_at) }}
             </template>
@@ -562,7 +563,8 @@
           <el-table-column
             prop="last_at"
             label="末节点"
-            width="180">
+            width="180"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.last_at) }}
             </template>
@@ -803,7 +805,8 @@
           <el-table-column
             prop="created_at"
             label="评估时间"
-            width="180">
+            width="180"
+          >
             <template #default="{ row }">
               {{ fmtTime(row.created_at) }}
             </template>
@@ -926,7 +929,8 @@ import { ElMessage } from 'element-plus'
 import { MonitorApi as monitorApi } from '@/api/monitor'
 import { fmtTime } from '@/utils/time'
 
-const channels = ['douyin', 'xiaohongshu', 'wechat', 'telegram', 'whatsapp', 'instagram', 'facebook', 'line', 'kuaishou', 'weibo']
+// 渠道筛选下拉：与 bridge 渠道注册表对齐（2026-11-12 补 bilibili——原清单有 weibo 缺 bilibili）
+const channels = ['douyin', 'xiaohongshu', 'wechat', 'telegram', 'whatsapp', 'instagram', 'facebook', 'line', 'kuaishou', 'weibo', 'bilibili']
 
 const activeTab = ref('trace')
 const form = reactive({ trace_id: '', conversation_id: '', msg_id: '', channel: '' })

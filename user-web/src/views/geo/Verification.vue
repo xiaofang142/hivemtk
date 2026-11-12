@@ -162,7 +162,11 @@
           align="center"
         >
           <template #default="{ row }">
-            <el-tag v-if="row.brand_context" size="small" type="warning">
+            <el-tag
+              v-if="row.brand_context"
+              size="small"
+              type="warning"
+            >
               {{ row.brand_context }}
             </el-tag>
             <span v-else>—</span>
@@ -288,7 +292,7 @@
         v-model="importText"
         type="textarea"
         :rows="12"
-        placeholder='JSON 数组：[{"engine":"perplexity","query":"...","response":"...","citations":["https://..."],"sentiment":"neutral"}]'
+        placeholder="JSON 数组：[{&quot;engine&quot;:&quot;perplexity&quot;,&quot;query&quot;:&quot;...&quot;,&quot;response&quot;:&quot;...&quot;,&quot;citations&quot;:[&quot;https://...&quot;],&quot;sentiment&quot;:&quot;neutral&quot;}]"
       />
       <template #footer>
         <el-button @click="importVisible = false">

@@ -574,6 +574,10 @@ func TestE2E_WebhookService_ShouldTriggerAI_FourChannels(t *testing.T) {
 		// 避免误杀既有 AI 链路」）中刻意改为放行并新增 channelHasAIAgentSwitch，
 		// 用例未同步才长期失败。
 		{ChannelDouyin, "1", true},
+		// 2026-11-12 收口：微博/B站同为桥接渠道，同样走「无账号级 AI 开关直接放行」
+		// 的 default 分支——全自动 AI 回复链路对两渠道不被此处拦截。
+		{ChannelWeibo, "1", true},
+		{ChannelBilibili, "1", true},
 		// 账号 ID 非法（不可解析 / 为 0）在任何渠道都应拦截
 		{ChannelDouyin, "abc", false},
 		{ChannelDouyin, "0", false},

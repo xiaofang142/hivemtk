@@ -119,7 +119,7 @@ function getConversationIdFromUrl() {
 }
 
 // 当前登录的闲鱼账号 id
-// 多层兜底：会话列表项内 /user/ 链接（最可靠，含真实 token id） → 左导航/header「我的」主页链接 → 任意 /user/ 链接 → localStorage 缓存 → 稳定 unknown
+// 多层兜底：aside/header/nav 的 /user/（自身资料链接） → 会话列表项内 /user/ 链接 → personal?userId= → localStorage 缓存 → 稳定 unknown
 function getAccountId() {
   const candidates = [];
   // 1) 会话列表项里的真实用户链接（最可靠，含 token 形式 id）
@@ -131,6 +131,10 @@ function getAccountId() {
     '[class*="ConversationItem"] a[href*="/user/"]',
     '.ant-layout-sider a[href*="/user/"]',
   ];
+  qsa('aside a[href*="/user/"], header a[href*="/user/"], nav a[href*="/user/"]').forEach((a) => {
+    const m = a.getAttribute('href')?.match(/\/user\/([\w.-]+)/);
+    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
+  });
   for (const sel of convLinkSelectors) {
     try {
       qsa(sel).forEach((a) => {
@@ -139,10 +143,6 @@ function getAccountId() {
       });
     } catch (_) {  }
   }
-  qsa('aside a[href*="/user/"], header a[href*="/user/"], nav a[href*="/user/"]').forEach((a) => {
-    const m = a.getAttribute('href')?.match(/\/user\/([\w.-]+)/);
-    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
-  });
   qsa('a[href*="personal?userId="], a[href*="personal?userId="]').forEach((a) => {
     const m = a.getAttribute('href')?.match(/userId=([\w.-]+)/);
     if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);

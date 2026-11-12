@@ -12,12 +12,24 @@ import (
 
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
 	llmpkg "hivemtk-user/internal/aiagent/llm"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
+	"gorm.io/gorm"
 )
+
+// errConfigParamNotFound 把仓储层的 gorm.ErrRecordNotFound 折成业务码 4004。
+// 控制器原本把 "record not found" 原样透传且 code=400，页面读起来既不像
+// 「参数不存在」也违反 API 规范（404=不存在），这里统一收口。
+func errConfigParamNotFound(group, key string, err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return bizerr.New(bizerr.CodeNotFound, fmt.Sprintf("配置参数不存在（%s.%s）", group, key))
+	}
+	return err
+}
 
 type paramEntry struct {
 	value     string
@@ -726,7 +738,7 @@ func (s *ConfigParamService) UpdateValue(ctx context.Context, group, key, newVal
 
 	p, err := s.repo.GetByGroupKey(ctx, group, key)
 	if err != nil {
-		return err
+		return errConfigParamNotFound(group, key, err)
 	}
 	// 只读在 service 层先判一次：仓储层同样会拦，但它拦下时给的是
 	// 「这一行不存在」那种形状，而这一行明明就在页面上。
@@ -752,7 +764,7 @@ func (s *ConfigParamService) UpdateValue(ctx context.Context, group, key, newVal
 func (s *ConfigParamService) definitionForWrite(ctx context.Context, group, key string) (*model.ConfigParam, error) {
 	p, err := s.repo.GetByGroupKey(ctx, group, key)
 	if err != nil {
-		return nil, err
+		return nil, errConfigParamNotFound(group, key, err)
 	}
 	if p.ReadOnly {
 		return nil, repository.ErrParamReadOnly
@@ -859,7 +871,7 @@ func (s *ConfigParamService) ResetToDefault(ctx context.Context, group, key stri
 		return repository.ErrTenantParamContextMissing
 	}
 	if err := s.repo.ResetToDefault(ctx, group, key, actorID); err != nil {
-		return err
+		return errConfigParamNotFound(group, key, err)
 	}
 	s.invalidate(group, key)
 	return nil

@@ -560,6 +560,7 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 		SenderName: session.UserName,
 		Content:    req.Content,
 		MessageID:  strconv.FormatUint(uint64(userMsg.ID), 10),
+		SessionID:  session.SessionID,
 	}
 
 	var agentCtxFromChannel *AgentContext

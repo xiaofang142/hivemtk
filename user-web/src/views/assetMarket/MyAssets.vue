@@ -149,7 +149,8 @@
         <el-table-column
           prop="synced_at"
           label="同步时间"
-          width="170">
+          width="170"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.synced_at) }}
           </template>

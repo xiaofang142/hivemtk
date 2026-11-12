@@ -317,4 +317,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.91.0（PLT-01 刀1 单价落地，合并撞号升版）：llm_providers 加平台套餐单价快照两列
 	// （sync 按 plan_code 关联套餐价落列；写入时点算成本，读侧不重算不回填）。
 	register(NewLLMProviderPlanPriceMigration(db))
+	// v3.92.0（桥接渠道枚举扩容）：channel_type_enum 补 jd/bilibili/weibo/personal_wx/pdd
+	// 五值——v3.22.2 建枚举时渠道白名单只有 12 值，2026-11 渠道注册表扩容后运行时会以
+	// 这些值写 channel_agent_bindings.channel_type，存量库上被 ENUM 拒写。
+	register(NewChannelTypeEnumBridgeValuesMigration(db))
 }

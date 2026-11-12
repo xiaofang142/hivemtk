@@ -24,7 +24,13 @@ func (s *RagConfigService) GetAccountConfig(ctx context.Context, accountID, plat
 
 // UpdateAccountConfig 更新账号配置
 func (s *RagConfigService) UpdateAccountConfig(ctx context.Context, req *model.PlatformAccountConfig) error {
-	validPlatforms := []string{"douyin", "kuaishou", "xiaohongshu", "xianyu"}
+	// 平台白名单与 channelgw/registry.go 桥接渠道注册表对齐（2026-11-12 收口）：
+	// weibo/bilibili 等桥接渠道此前不在清单内，账号级 RAG/自动回复配置无法开启。
+	// tiktok/jd/pdd/personal_wx 同批补齐，消除「注册表已注册、配置白名单缺失」的镜像缺口。
+	validPlatforms := []string{
+		"douyin", "kuaishou", "xiaohongshu", "xianyu", "tiktok",
+		"jd", "bilibili", "weibo", "personal_wx", "pdd",
+	}
 	isValidPlatform := false
 	for _, p := range validPlatforms {
 		if req.Platform == p {
@@ -33,7 +39,7 @@ func (s *RagConfigService) UpdateAccountConfig(ctx context.Context, req *model.P
 		}
 	}
 	if !isValidPlatform {
-		return errors.New("invalid platform, must be one of: douyin, kuaishou, xiaohongshu, xianyu")
+		return errors.New("invalid platform, must be one of: douyin, kuaishou, xiaohongshu, xianyu, tiktok, jd, bilibili, weibo, personal_wx, pdd")
 	}
 
 	if req.IsRagEnabled && req.RagProductID != nil {

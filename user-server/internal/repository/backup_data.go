@@ -240,9 +240,10 @@ var allowedBackupTables = map[string]bool{
 	"login_events":            true,
 	"security_alerts":         true,
 	"password_reset_tokens":   true,
-	"prompts":                 true,
-	"ai_agents":               true,
-	"feature_flags":           true,
+	// 无 "prompts" 表（stale 条目曾让全量备份导出 42P01 必败；与
+	// service.backupExtraTables 同源删除，2026-11-12 API 实测定位）。
+	"ai_agents":     true,
+	"feature_flags": true,
 }
 
 // RestoreTable 恢复单表：DELETE 备份覆盖到的租户 + 逐行 Create 包在同一个事务里，

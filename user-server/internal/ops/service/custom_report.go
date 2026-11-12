@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	sysmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
@@ -85,6 +86,11 @@ type UpdateReportRequest struct {
 
 // CreateReport 创建报表
 func (s *CustomReportService) CreateReport(ctx context.Context, createdBy uint, req *CreateReportRequest) (*model.CustomReport, error) {
+	// 名称必填：控制器 binding 只盯 JSON 结构，service 不拦就会落库空名报表，
+	// 列表页出现一行点开全是空的「无名报表」，且没有任何入口能改名（更新同样必填）。
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "name 不能为空")
+	}
 	if !isValidDataSource(req.DataSource) {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的数据源类型")
 	}
@@ -152,6 +158,10 @@ func (s *CustomReportService) UpdateReport(ctx context.Context, id uint, userID 
 		return nil, fmt.Errorf("%w：该报表属于他人（id=%d）", ErrReportForbidden, id)
 	}
 
+	// 名称必填：PUT 全量覆盖，空名会把好报表改成「无名报表」。
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "name 不能为空")
+	}
 	if !isValidDataSource(req.DataSource) {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "不支持的数据源类型")
 	}

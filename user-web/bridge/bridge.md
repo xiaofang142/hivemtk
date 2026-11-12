@@ -461,7 +461,7 @@ func (a *BridgeReachAdapter) Send(ctx, req) (string, error) {
 
 ### 6.1 设计原则
 
-1. **按渠道封装**：`channels/{douyin,xhs,tiktok,xianyu,kuaishou}.js` 各自独立；
+1. **按渠道封装**：`channels/{douyin,xhs,tiktok,xianyu,kuaishou,jd,bilibili,weibo,pdd}.js` 各自独立；
 2. **渠道内保持抽象，便于扩展评论/回关等**：每个渠道实现统一接口 `ChannelAdapter`（`src/core/channel-adapter.js`）；
 3. **桥接职责单一**：background service worker 只负责 HTTP 三通道调度与路由；content script 只负责 DOM 操作；
 4. **左列表驱动**：上行先点开会话再读消息，下行先点开目标用户再发送；不依赖"当前恰好打开的会话"。
@@ -520,7 +520,7 @@ user-web/bridge/
     ARCHITECTURE.md          # 架构总览
     DEFAULTS.md              # 默认值单一文档源
     dev/DEVELOPMENT.md       # 二次开发手册
-  test/                      # Vitest 单测（44 文件，674 用例）
+  test/                      # Vitest 单测（88 文件，1148 用例）
   assets/
     icon.svg logo.svg icons/  # 蜂巢 logo + 栅格图标
   dist/                      # esbuild 产物（不入仓）
@@ -696,7 +696,10 @@ cd user-web/bridge
 npx vitest run
 ```
 
-当前覆盖（44 文件 / 674 用例）：
+当前覆盖（88 文件 / 1148 用例全绿；`p3h-e2e.test.js` 7 例需真 user-server
+可达，按设计 skip。历史注记：`send-media.test.js` 曾因 jsdom 未实现
+`File.arrayBuffer` 必败，2026-11-12 经 test/setup.js 用 FileReader polyfill
+修复，套件 1141 过 / 0 失败）：
 
 - `constants.test.js` — 与 DEFAULTS.md 字面一致；
 - `protocol.test.js` — 帧类型与字段名；
@@ -704,6 +707,8 @@ npx vitest run
 - `uplink.test.js` / `downlink.test.js` / `polling-loop.test.js` — 三通道调度；
 - `p3d-contract.test.js` / `p3h-e2e.test.js` — 前后端契约 + e2e；
 - `adapter*.test.js` / `douyin-*.test.js` / `xhs-*.test.js` / `xianyu.test.js` — 各渠道 DOM 解析与发送；
+- `channel-bilibili.test.js` / `channel-weibo.test.js` / `channel-weibo-bili-outbound.test.js` —
+  2026-11 新增两渠道 fixture 解析 + BaseAdapter.sendOutbound 下行流（send_verified 回查 / 自报 agent 帧）；
 - `rate-limiter*.test.js` / `circuit-breaker*.test.js` / `humanize.test.js` — 风控三件套；
 - `sanitize.test.js` / `fallback.test.js` / `popup*.test.js` / `background.test.js` — UI 与基础。
 
@@ -735,7 +740,9 @@ cd user-web/bridge && npm run build
 - [ ] 小红书：`/chat` 路由 + 活动项 `.xhs-im-conv-item` + 气泡 `.chat-item` + 输入框 `[contenteditable]` 真实生效
 - [ ] TikTok：DraftEditor 输入框 / 发送动作（Enter vs 飞机按钮）/ 消息气泡
 - [ ] 闲鱼 / 快手：会话列表 / 消息气泡 / 输入框真实生效
-- [ ] `account_id` 派生规则（平台账号标识稳定可取）
+- [ ] B站：`message.bilibili.com/#/whisper` 与 `www.bilibili.com/message/` 双入口（2026-11-12 注入面已扩）/ `.list-container > .list-item` 会话列表 / `.msg-item` 气泡（not-me/is-me）/ `#editor` + `btn-box send-btn` 发送 / 未关注人消息 tab 信号
+- [ ] 微博：`weibo.com/chat` 入口 / `.chatlist-box .sessionlist` 会话列表 / 气泡 `.bubble_cont.basi` left/right 方向 / `#webchat-textarea` + Enter 发送 / 系统消息过滤词表（撤回/加好友/正在输入等）真机复核
+- [ ] `account_id` 派生规则（平台账号标识稳定可取；weibo/bilibili 当前为 `*-unknown` 占位兜底，真机轮评估是否升格 DOM 兜底层）
 - [ ] 受控输入框填值不被框架拦截（粘贴 + input 事件双写）
 - [ ] 会话切换时历史回填进入 `user-server`（`history` 帧，不触发 AI）
 - [ ] 拟人节奏不触发平台风控（连续点击 / 高频发送不出现滑块 / 封号预警）

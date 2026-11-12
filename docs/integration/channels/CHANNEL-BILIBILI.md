@@ -4,6 +4,11 @@
 > 路线：蜂桥网页私信桥接。状态：**选择器已实证**（2026-11-06 从 ChatGPT-On-CS v1.4.5 官方安装包
 > 内嵌 sourcemap 还原的 `platforms/bilibili/index.ts` 取得全套选择器，实现已落地
 > `user-web/bridge/src/channels/bilibili.js`），仍标 Experimental（待真机登录回归）。
+> 2026-11-12 收口：注入面扩展（manifest/injector/popup 5 处主机正则补 `www.bilibili.com`，
+> 新私信中心路径与 `#/whisper` 等 hash 入口不再永不注入；广注入 + adapter match() 严格门激活，
+> 与 douyin/weibo 同款规范）；account_id 占位口径（`bilibili-unknown`）按服务端 account_id
+> 非空契约注释钉死；新增 BaseAdapter.sendOutbound 下行流测试（send_verified 回查 +
+> 自报 agent 帧 extra.send_verified + 错会话 notFound 拒发）。
 > 证据链见 [真实驱动还原报告](../../research/CHATGPT-ON-CS-REAL-DRIVER-2026-11.md)。
 
 ---
@@ -161,7 +166,7 @@ export const SEL = {
 
 | 层 | 用例 |
 |---|---|
-| 扩展 | jsdom fixture：私信会话列表（过滤导航项）、消息解析、会话 ID、发送（按钮/Enter） |
+| 扩展 | jsdom fixture：私信会话列表（过滤导航项）、消息解析、会话 ID、发送（按钮/Enter）；sendOutbound 下行流（send_verified 回查/自报帧/错会话 notFound 拒发）；注入面路由（www.bilibili.com/message 入口，2026-11-12 补） |
 | Go | registry/别名/reach 分派/message_hub 词表 |
 | curl | `channel=bilibili` ingest → 查库 → outbox → ack |
 | 前端 | 标签/分组 |

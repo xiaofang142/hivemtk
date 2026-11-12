@@ -11,10 +11,18 @@
         v-model="hours"
         @change="load"
       >
-        <el-radio-button :value="1">近 1 小时</el-radio-button>
-        <el-radio-button :value="24">近 24 小时</el-radio-button>
-        <el-radio-button :value="168">近 7 天</el-radio-button>
-        <el-radio-button :value="720">近 30 天</el-radio-button>
+        <el-radio-button :value="1">
+          近 1 小时
+        </el-radio-button>
+        <el-radio-button :value="24">
+          近 24 小时
+        </el-radio-button>
+        <el-radio-button :value="168">
+          近 7 天
+        </el-radio-button>
+        <el-radio-button :value="720">
+          近 30 天
+        </el-radio-button>
       </el-radio-group>
       <el-button
         :loading="loading"

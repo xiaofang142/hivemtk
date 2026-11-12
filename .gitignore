@@ -339,6 +339,12 @@ ehthumbs.db
 fix-api-config*.html
 hardcode-sweep/
 install.lock
+# 双形态本地联调工件（2026-11-12）：同目录跑独立部署/SaaS 两实例时切换产生的
+# 机器本地文件——install 锁变体与 dbname=user_db_standalone 的配置副本，
+# 均含本机 install_id / 拓扑，不属于仓库内容（同 install.lock 口径）。
+install-standalone.lock
+install.lock.*-backup
+user-server/config.standalone.yaml
 internal-docs/
 logs/
 main

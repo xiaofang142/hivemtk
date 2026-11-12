@@ -156,7 +156,9 @@
               class="citation-close"
               type="button"
               @click="citationDetail = null"
-            >×</button>
+            >
+              ×
+            </button>
           </div>
           <template v-if="citationDetail.type === 'faq' && citationDetail.faq">
             <div class="citation-q-block">

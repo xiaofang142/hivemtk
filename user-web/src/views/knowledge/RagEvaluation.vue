@@ -119,7 +119,8 @@
         <el-table-column
           prop="created_at"
           label="时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.created_at) }}
           </template>

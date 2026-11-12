@@ -99,7 +99,8 @@
         <el-table-column
           prop="updatedAt"
           label="更新时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.updatedAt) }}
           </template>

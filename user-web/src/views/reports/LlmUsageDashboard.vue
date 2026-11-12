@@ -1,7 +1,10 @@
 <template>
   <div class="llm-report-page">
     <!-- 筛选栏 -->
-    <el-card shadow="never" class="filter-card">
+    <el-card
+      shadow="never"
+      class="filter-card"
+    >
       <div class="filter-bar">
         <el-date-picker
           v-model="dateRange"
@@ -13,81 +16,214 @@
           :clearable="false"
           style="width: 260px"
         />
-        <el-select v-model="filters.channel" placeholder="渠道" clearable style="width: 140px">
-          <el-option label="官网" value="web" />
-          <el-option label="用户端" value="app" />
-          <el-option label="扩展" value="extension" />
-          <el-option label="API" value="api" />
+        <el-select
+          v-model="filters.channel"
+          placeholder="渠道"
+          clearable
+          style="width: 140px"
+        >
+          <el-option
+            label="官网"
+            value="web"
+          />
+          <el-option
+            label="用户端"
+            value="app"
+          />
+          <el-option
+            label="扩展"
+            value="extension"
+          />
+          <el-option
+            label="API"
+            value="api"
+          />
         </el-select>
-        <el-select v-model="filters.source" placeholder="计费来源" clearable style="width: 140px">
-          <el-option label="自有模型" value="self" />
-          <el-option label="平台垫资" value="platform" />
+        <el-select
+          v-model="filters.source"
+          placeholder="计费来源"
+          clearable
+          style="width: 140px"
+        >
+          <el-option
+            label="自有模型"
+            value="self"
+          />
+          <el-option
+            label="平台垫资"
+            value="platform"
+          />
         </el-select>
-        <el-select v-model="filters.model" placeholder="模型" clearable filterable style="width: 180px">
-          <el-option v-for="m in modelOptions" :key="m" :label="m" :value="m" />
+        <el-select
+          v-model="filters.model"
+          placeholder="模型"
+          clearable
+          filterable
+          style="width: 180px"
+        >
+          <el-option
+            v-for="m in modelOptions"
+            :key="m"
+            :label="m"
+            :value="m"
+          />
         </el-select>
-        <el-button type="primary" :loading="loading" @click="refresh">查询</el-button>
+        <el-button
+          type="primary"
+          :loading="loading"
+          @click="refresh"
+        >
+          查询
+        </el-button>
       </div>
     </el-card>
 
     <!-- KPI 卡片行 -->
-    <el-row :gutter="12" class="kpi-row">
-      <el-col :span="5" v-for="k in kpiCards" :key="k.label">
+    <el-row
+      :gutter="12"
+      class="kpi-row"
+    >
+      <el-col
+        v-for="k in kpiCards"
+        :key="k.label"
+        :span="5"
+      >
         <el-card shadow="hover">
-          <div class="kpi-label">{{ k.label }}</div>
-          <div class="kpi-value" :class="k.danger ? 'kpi-danger' : ''">{{ k.value }}</div>
+          <div class="kpi-label">
+            {{ k.label }}
+          </div>
+          <div
+            class="kpi-value"
+            :class="k.danger ? 'kpi-danger' : ''"
+          >
+            {{ k.value }}
+          </div>
         </el-card>
       </el-col>
     </el-row>
 
     <!-- 趋势图（双轴：调用数柱 + 错误率线） -->
-    <el-card shadow="never" class="chart-card">
-      <template #header>调用趋势与错误率</template>
-      <div ref="trendRef" class="chart chart-tall" />
+    <el-card
+      shadow="never"
+      class="chart-card"
+    >
+      <template #header>
+        调用趋势与错误率
+      </template>
+      <div
+        ref="trendRef"
+        class="chart chart-tall"
+      />
     </el-card>
 
     <el-row :gutter="12">
       <el-col :span="14">
-        <el-card shadow="never" class="chart-card">
+        <el-card
+          shadow="never"
+          class="chart-card"
+        >
           <template #header>
             <div class="card-header-row">
               <span>模型分布（调用数 / 成本）</span>
-              <el-select v-model="breakdownBy" size="small" style="width: 130px" @change="loadBreakdown">
-                <el-option label="按模型" value="model" />
-                <el-option label="按场景" value="scenario" />
-                <el-option label="按渠道" value="channel" />
-                <el-option label="按厂商" value="provider" />
+              <el-select
+                v-model="breakdownBy"
+                size="small"
+                style="width: 130px"
+                @change="loadBreakdown"
+              >
+                <el-option
+                  label="按模型"
+                  value="model"
+                />
+                <el-option
+                  label="按场景"
+                  value="scenario"
+                />
+                <el-option
+                  label="按渠道"
+                  value="channel"
+                />
+                <el-option
+                  label="按厂商"
+                  value="provider"
+                />
               </el-select>
             </div>
           </template>
-          <div ref="breakdownRef" class="chart chart-mid" />
+          <div
+            ref="breakdownRef"
+            class="chart chart-mid"
+          />
         </el-card>
       </el-col>
       <el-col :span="10">
-        <el-card shadow="never" class="chart-card">
-          <template #header>错误类型分布</template>
-          <div ref="errorPieRef" class="chart chart-mid" />
+        <el-card
+          shadow="never"
+          class="chart-card"
+        >
+          <template #header>
+            错误类型分布
+          </template>
+          <div
+            ref="errorPieRef"
+            class="chart chart-mid"
+          />
         </el-card>
       </el-col>
     </el-row>
 
     <!-- 错误明细表 -->
-    <el-card shadow="never" class="chart-card">
-      <template #header>错误明细</template>
-      <el-table :data="errorRows" size="small" stripe>
-        <el-table-column prop="created_at" label="时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column prop="trace_id" label="TraceID" width="180" show-overflow-tooltip />
-        <el-table-column prop="model" label="模型" width="160" show-overflow-tooltip />
-        <el-table-column label="错误类型" width="140">
+    <el-card
+      shadow="never"
+      class="chart-card"
+    >
+      <template #header>
+        错误明细
+      </template>
+      <el-table
+        :data="errorRows"
+        size="small"
+        stripe
+      >
+        <el-table-column
+          prop="created_at"
+          label="时间"
+          width="170"
+        >
           <template #default="{ row }">
-            <el-tag :type="errorClassTagType(row.error_class)" size="small">
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="trace_id"
+          label="TraceID"
+          width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="model"
+          label="模型"
+          width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="错误类型"
+          width="140"
+        >
+          <template #default="{ row }">
+            <el-tag
+              :type="errorClassTagType(row.error_class)"
+              size="small"
+            >
               {{ errorClassLabel(row.error_class) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="error_msg" label="错误消息" show-overflow-tooltip />
+        <el-table-column
+          prop="error_msg"
+          label="错误消息"
+          show-overflow-tooltip
+        />
       </el-table>
       <el-pagination
         v-model:current-page="errorPage"

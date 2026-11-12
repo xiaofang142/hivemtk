@@ -270,7 +270,8 @@
         <el-table-column
           prop="createdAt"
           label="创建时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.createdAt) }}
           </template>
@@ -487,7 +488,8 @@
         <el-table-column
           prop="lastOrderTime"
           label="最近消费时间"
-          width="170">
+          width="170"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.lastOrderTime) }}
           </template>

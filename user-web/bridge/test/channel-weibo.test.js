@@ -153,3 +153,72 @@ describe('M-4 weibo 媒体分支补齐', () => {
     expect(p.text).toBe('你好');
   });
 });
+
+// 系统消息过滤（2026-11-12 收口）：微博此前无 isSystemMessage，「撤回了一条消息」等
+// 系统文案会以 customer 方向上行并触发 AI 误回复（douyin/kuaishou/bilibili 均有漏斗）。
+// 保守 fixture 口径：词表 + 时间分隔 + 居中短文案；**不带** douyin 的
+// 「短文本且无头像无气泡即判系统」激进启发层——微博结构样本不足，宁缺勿错。
+describe('weibo 系统消息过滤（isSystemMessage）', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    stubLocation('https://weibo.com/chat');
+    document.body.innerHTML = '';
+  });
+
+  const wbItem = (html) => {
+    document.body.innerHTML = `<ul class="chat-content">${html}</ul>`;
+    return document.querySelector('.chat-content > li');
+  };
+
+  it('撤回/加好友/正在输入/发送失败等系统文案 → parseMessageItem 返回 null', () => {
+    const a = buildWeiboAdapter();
+    for (const text of [
+      '你撤回了一条消息',
+      '对方撤回了一条消息',
+      '你已添加对方为好友',
+      '已添加对方为好友',
+      '对方正在输入…',
+      '消息发送失败',
+    ]) {
+      const item = wbItem(`<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">${text}</p></div></li>`);
+      expect(a.parseMessageItem(item), `系统文案应被过滤: ${text}`).toBeNull();
+    }
+  });
+
+  it('时间分隔文案（"14:30" / "昨天 10:20"）→ null；正常短消息不受影响', () => {
+    const a = buildWeiboAdapter();
+    expect(a.parseMessageItem(wbItem('<li class="message-item"><p class="puretext">14:30</p></li>'))).toBeNull();
+    expect(a.parseMessageItem(wbItem('<li class="message-item"><p class="puretext">昨天 10:20</p></li>'))).toBeNull();
+    const normal = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">有货吗</p></div></li>'));
+    expect(normal).not.toBeNull();
+    expect(normal.sender_type).toBe(SENDER.CUSTOMER);
+  });
+
+  it('getMessageItems 过滤系统消息（气泡与系统文案混排只留气泡）', () => {
+    document.body.innerHTML = `
+      <ul class="chat-content">
+        <li class="message-item"><div class="bubble_cont basi left"><p class="puretext">在吗</p></div></li>
+        <li class="message-item"><div class="bubble_cont basi left"><p class="puretext">你撤回了一条消息</p></div></li>
+        <li class="message-item"><div class="bubble_cont basi left"><p class="puretext">有现货吗</p></div></li>
+      </ul>`;
+    const a = buildWeiboAdapter();
+    const items = a.getMessageItems();
+    expect(items.length).toBe(2);
+    expect(a.parseMessageItem(items[0]).text).toBe('在吗');
+    expect(a.parseMessageItem(items[1]).text).toBe('有现货吗');
+  });
+
+  it('居中短文案（系统提示版式，词表外）→ null（isCenterAligned 信号层）', () => {
+    const a = buildWeiboAdapter();
+    const item = wbItem('<li class="message-item" style="text-align:center"><p class="puretext">会话已超时关闭</p></li>');
+    expect(a.parseMessageItem(item)).toBeNull();
+  });
+
+  it('词表外左对齐气泡短文案不误杀（保守口径：宁缺勿错）', () => {
+    const a = buildWeiboAdapter();
+    const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">在吗</p></div></li>'));
+    expect(p).not.toBeNull();
+    expect(p.text).toBe('在吗');
+  });
+});

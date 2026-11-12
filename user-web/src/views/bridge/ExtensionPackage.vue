@@ -83,7 +83,9 @@
         </li>
       </ol>
       <div class="mt-2 text-sm text-gray-600">
-        <div class="mb-1 font-medium">服务端地址（点「复制」后粘贴进扩展）：</div>
+        <div class="mb-1 font-medium">
+          服务端地址（点「复制」后粘贴进扩展）：
+        </div>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span
             v-for="item in serverUrls"

@@ -107,7 +107,7 @@ function getAccountId() {
     const mid = st && st.userInfo && st.userInfo.mid;
     if (mid) return String(mid);
   } catch (_) {  }
-  const links = qsa('header a[href*="/u/"], header a[href*="space.bilibili.com/"], nav a[href*="/u/"], nav a[href*="space.bilibili.com/"], .bili-header a[href*="space.bilibili.com/"]');
+  const links = qsa('header a[href*="/u/"], header a[href*="space.bilibili.com/"], nav a[href*="/u/"], nav a[href*="space.bilibili.com/"], .bili-header a[href*="space.bilibili.com/"], a[href*="space.bilibili.com/"]');
   for (const a of links) {
     const href = a.getAttribute('href') || '';
     const m = href.match(/(?:space\.bilibili\.com\/|\/u\/)(\d+)/);

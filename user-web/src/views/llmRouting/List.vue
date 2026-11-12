@@ -608,10 +608,20 @@
           <template #header>
             <div style="display: flex; align-items: center; justify-content: space-between">
               <span>按日用量趋势</span>
-              <el-radio-group v-model="dailyGroupBy" size="small" @change="loadDaily">
-                <el-radio-button value="day">按日</el-radio-button>
-                <el-radio-button value="day_scenario">按日+场景</el-radio-button>
-                <el-radio-button value="day_provider">按日+提供方</el-radio-button>
+              <el-radio-group
+                v-model="dailyGroupBy"
+                size="small"
+                @change="loadDaily"
+              >
+                <el-radio-button value="day">
+                  按日
+                </el-radio-button>
+                <el-radio-button value="day_scenario">
+                  按日+场景
+                </el-radio-button>
+                <el-radio-button value="day_provider">
+                  按日+提供方
+                </el-radio-button>
               </el-radio-group>
             </div>
           </template>
@@ -624,29 +634,61 @@
             <template #empty>
               <el-empty description="暂无按日数据（当日未聚合时由日志兜底，需有真实调用）" />
             </template>
-            <el-table-column prop="stat_date" label="日期" width="130">
+            <el-table-column
+              prop="stat_date"
+              label="日期"
+              width="130"
+            >
               <template #default="{ row }">
                 {{ fmtTime(row.stat_date) }}
               </template>
             </el-table-column>
-            <el-table-column prop="scenario" label="场景" min-width="140">
+            <el-table-column
+              prop="scenario"
+              label="场景"
+              min-width="140"
+            >
               <template #default="{ row }">
                 {{ row.scenario || '—' }}
               </template>
             </el-table-column>
-            <el-table-column prop="provider" label="提供方" min-width="140">
+            <el-table-column
+              prop="provider"
+              label="提供方"
+              min-width="140"
+            >
               <template #default="{ row }">
                 {{ row.provider || '—' }}
               </template>
             </el-table-column>
-            <el-table-column prop="call_count" label="调用" width="90" align="center" />
-            <el-table-column prop="failed_count" label="失败" width="90" align="center" />
-            <el-table-column prop="total_tokens" label="Token" width="120" align="center">
+            <el-table-column
+              prop="call_count"
+              label="调用"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              prop="failed_count"
+              label="失败"
+              width="90"
+              align="center"
+            />
+            <el-table-column
+              prop="total_tokens"
+              label="Token"
+              width="120"
+              align="center"
+            >
               <template #default="{ row }">
                 {{ formatNumber(row.total_tokens) }}
               </template>
             </el-table-column>
-            <el-table-column prop="avg_latency_ms" label="平均延迟(ms)" width="130" align="center" />
+            <el-table-column
+              prop="avg_latency_ms"
+              label="平均延迟(ms)"
+              width="130"
+              align="center"
+            />
           </el-table>
         </el-card>
       </el-tab-pane>

@@ -1,196 +1,579 @@
 <template>
   <div class="tool-flow-page">
     <!-- 页头说明 -->
-    <el-card shadow="never" class="intro-card">
+    <el-card
+      shadow="never"
+      class="intro-card"
+    >
       <div class="intro">
-        <div class="intro-title">意图 → 工具调用流编排</div>
+        <div class="intro-title">
+          意图 → 工具调用流编排
+        </div>
         <div class="intro-desc">
           为识别到的意图配置要调用的工具序列（如：查订单 → 查物流）。保存即生效（约 30 秒内热更新，无需重启服务）；
           参数支持上下文变量，白名单外的变量会被拒绝。未配置调用流的意图沿用系统默认行为。
         </div>
-        <div class="intro-vars" v-if="vocab.template_vars && vocab.template_vars.length">
+        <div
+          v-if="vocab.template_vars && vocab.template_vars.length"
+          class="intro-vars"
+        >
           <span class="vars-label">可用变量：</span>
-          <el-tag v-for="v in vocab.template_vars" :key="v" size="small" type="info" class="var-tag">{{ varLabel(v) }}</el-tag>
+          <el-tag
+            v-for="v in vocab.template_vars"
+            :key="v"
+            size="small"
+            type="info"
+            class="var-tag"
+          >
+            {{ varLabel(v) }}
+          </el-tag>
         </div>
       </div>
     </el-card>
 
     <el-card shadow="never">
       <div class="toolbar">
-        <el-select v-model="filterIntent" placeholder="按意图筛选" clearable filterable style="width: 240px">
-          <el-option v-for="i in vocab.intents || []" :key="i" :label="intentLabel(i)" :value="i" />
+        <el-select
+          v-model="filterIntent"
+          placeholder="按意图筛选"
+          clearable
+          filterable
+          style="width: 240px"
+        >
+          <el-option
+            v-for="i in vocab.intents || []"
+            :key="i"
+            :label="intentLabel(i)"
+            :value="i"
+          />
         </el-select>
-        <el-button type="primary" @click="openCreate">新增调用流</el-button>
-        <el-button @click="ciDialogVisible = true">自定义意图</el-button>
-        <el-button @click="loadList">刷新</el-button>
+        <el-button
+          type="primary"
+          @click="openCreate"
+        >
+          新增调用流
+        </el-button>
+        <el-button @click="ciDialogVisible = true">
+          自定义意图
+        </el-button>
+        <el-button @click="loadList">
+          刷新
+        </el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" row-key="id">
-        <el-table-column label="名称" prop="name" min-width="160" show-overflow-tooltip />
-        <el-table-column label="意图" min-width="150">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        row-key="id"
+      >
+        <el-table-column
+          label="名称"
+          prop="name"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="意图"
+          min-width="150"
+        >
           <template #default="{ row }">
-            <el-tag size="small">{{ row.intent_code }}</el-tag>
-            <el-tag size="small" type="warning" class="family-tag" v-if="familyOf(row.intent_code)">{{ familyText(familyOf(row.intent_code)) }}</el-tag>
+            <el-tag size="small">
+              {{ row.intent_code }}
+            </el-tag>
+            <el-tag
+              v-if="familyOf(row.intent_code)"
+              size="small"
+              type="warning"
+              class="family-tag"
+            >
+              {{ familyText(familyOf(row.intent_code)) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="工具调用流" min-width="240">
+        <el-table-column
+          label="工具调用流"
+          min-width="240"
+        >
           <template #default="{ row }">
             <span class="flow-steps">{{ stepsPreview(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="启用" width="80">
+        <el-table-column
+          label="启用"
+          width="80"
+        >
           <template #default="{ row }">
-            <el-switch :model-value="row.enabled" @change="(v) => toggleEnabled(row, v)" />
+            <el-switch
+              :model-value="row.enabled"
+              @change="(v) => toggleEnabled(row, v)"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="更新时间" prop="updated_at" width="170" show-overflow-tooltip />
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column
+          label="更新时间"
+          prop="updated_at"
+          width="170"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="操作"
+          width="140"
+          fixed="right"
+        >
           <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="removeRow(row)">删除</el-button>
+            <el-button
+              link
+              type="primary"
+              @click="openEdit(row)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              @click="removeRow(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
-        <template #empty>暂无调用流配置</template>
+        <template #empty>
+          暂无调用流配置
+        </template>
       </el-table>
     </el-card>
 
     <!-- 编辑对话框 -->
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑调用流' : '新增调用流'" width="760px" destroy-on-close>
-      <el-form :model="form" label-width="92px">
-        <el-form-item label="名称" required>
-          <el-input v-model="form.name" placeholder="如：快递/物流查询调用流" maxlength="100" />
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑调用流' : '新增调用流'"
+      width="760px"
+      destroy-on-close
+    >
+      <el-form
+        :model="form"
+        label-width="92px"
+      >
+        <el-form-item
+          label="名称"
+          required
+        >
+          <el-input
+            v-model="form.name"
+            placeholder="如：快递/物流查询调用流"
+            maxlength="100"
+          />
         </el-form-item>
-        <el-form-item label="意图" required>
-          <el-select v-model="form.intent_code" filterable placeholder="选择识别意图" style="width: 100%">
-            <el-option-group v-for="g in intentGroups" :key="g.label" :label="g.label">
-              <el-option v-for="i in g.items" :key="i" :label="intentLabel(i)" :value="i" />
+        <el-form-item
+          label="意图"
+          required
+        >
+          <el-select
+            v-model="form.intent_code"
+            filterable
+            placeholder="选择识别意图"
+            style="width: 100%"
+          >
+            <el-option-group
+              v-for="g in intentGroups"
+              :key="g.label"
+              :label="g.label"
+            >
+              <el-option
+                v-for="i in g.items"
+                :key="i"
+                :label="intentLabel(i)"
+                :value="i"
+              />
             </el-option-group>
           </el-select>
-          <div class="form-hint">已绑定其他调用流的意图会被拒绝（一个意图一条调用流）；重复键表示两套识别体系共用该意图。</div>
+          <div class="form-hint">
+            已绑定其他调用流的意图会被拒绝（一个意图一条调用流）；重复键表示两套识别体系共用该意图。
+          </div>
         </el-form-item>
 
-        <el-form-item label="工具调用流" required>
+        <el-form-item
+          label="工具调用流"
+          required
+        >
           <div class="steps-editor">
-            <div v-for="(st, idx) in form.steps" :key="idx" class="step-row">
+            <div
+              v-for="(st, idx) in form.steps"
+              :key="idx"
+              class="step-row"
+            >
               <div class="step-head">
                 <span class="step-no">{{ idx + 1 }}</span>
-                <el-select v-model="st.tool_name" filterable placeholder="选择工具" style="width: 260px">
-                  <el-option v-for="t in vocab.tools || []" :key="t" :label="t" :value="t" />
+                <el-select
+                  v-model="st.tool_name"
+                  filterable
+                  placeholder="选择工具"
+                  style="width: 260px"
+                >
+                  <el-option
+                    v-for="t in vocab.tools || []"
+                    :key="t"
+                    :label="t"
+                    :value="t"
+                  />
                 </el-select>
-                <el-checkbox v-model="st.enabled">启用</el-checkbox>
+                <el-checkbox v-model="st.enabled">
+                  启用
+                </el-checkbox>
                 <div class="step-ops">
-                  <el-button link :disabled="idx === 0" @click="moveStep(idx, -1)">上移</el-button>
-                  <el-button link :disabled="idx === form.steps.length - 1" @click="moveStep(idx, 1)">下移</el-button>
-                  <el-button link type="danger" @click="removeStep(idx)">删除</el-button>
+                  <el-button
+                    link
+                    :disabled="idx === 0"
+                    @click="moveStep(idx, -1)"
+                  >
+                    上移
+                  </el-button>
+                  <el-button
+                    link
+                    :disabled="idx === form.steps.length - 1"
+                    @click="moveStep(idx, 1)"
+                  >
+                    下移
+                  </el-button>
+                  <el-button
+                    link
+                    type="danger"
+                    @click="removeStep(idx)"
+                  >
+                    删除
+                  </el-button>
                 </div>
               </div>
-              <div class="args-editor" v-if="Object.keys(st.args || {}).length || argsEditing[idx]">
-                <div v-for="(val, key) in st.args" :key="key" class="arg-row">
-                  <el-input :model-value="key" disabled class="arg-key" />
-                  <el-input v-model="st.args[key]" placeholder="参数值，可含变量占位符" class="arg-val" />
-                  <el-button link type="danger" @click="removeArg(st, key)">删</el-button>
+              <div
+                v-if="Object.keys(st.args || {}).length || argsEditing[idx]"
+                class="args-editor"
+              >
+                <div
+                  v-for="(val, key) in st.args"
+                  :key="key"
+                  class="arg-row"
+                >
+                  <el-input
+                    :model-value="key"
+                    disabled
+                    class="arg-key"
+                  />
+                  <el-input
+                    v-model="st.args[key]"
+                    placeholder="参数值，可含变量占位符"
+                    class="arg-val"
+                  />
+                  <el-button
+                    link
+                    type="danger"
+                    @click="removeArg(st, key)"
+                  >
+                    删
+                  </el-button>
                 </div>
                 <div class="arg-add">
-                  <el-input v-model="argsDraft[idx].key" placeholder="参数名" class="arg-key" />
-                  <el-input v-model="argsDraft[idx].value" placeholder="参数值，可含 {{var}}" class="arg-val" />
-                  <el-button link type="primary" @click="addArg(st, idx)">添加</el-button>
+                  <el-input
+                    v-model="argsDraft[idx].key"
+                    placeholder="参数名"
+                    class="arg-key"
+                  />
+                  <el-input
+                    v-model="argsDraft[idx].value"
+                    placeholder="参数值，可含 {{var}}"
+                    class="arg-val"
+                  />
+                  <el-button
+                    link
+                    type="primary"
+                    @click="addArg(st, idx)"
+                  >
+                    添加
+                  </el-button>
                 </div>
               </div>
               <div class="arg-toggle">
-                <el-button link @click="toggleArgsEditor(idx)">{{ argsEditing[idx] ? '收起参数' : '展开参数' }}</el-button>
-                <span v-if="vocab.templateVars && vocab.templateVars.length" class="arg-hint">{{ varsHint() }}</span>
+                <el-button
+                  link
+                  @click="toggleArgsEditor(idx)"
+                >
+                  {{ argsEditing[idx] ? '收起参数' : '展开参数' }}
+                </el-button>
+                <span
+                  v-if="vocab.templateVars && vocab.templateVars.length"
+                  class="arg-hint"
+                >{{ varsHint() }}</span>
               </div>
             </div>
-            <el-button type="primary" plain @click="addStep">添加步骤</el-button>
-            <div class="form-hint">按顺序执行；只引导模型优先按此链调用，工具不适用时模型可跳过并说明。查询类工具（只读）可直接启用；写操作类工具需走审批档。</div>
+            <el-button
+              type="primary"
+              plain
+              @click="addStep"
+            >
+              添加步骤
+            </el-button>
+            <div class="form-hint">
+              按顺序执行；只引导模型优先按此链调用，工具不适用时模型可跳过并说明。查询类工具（只读）可直接启用；写操作类工具需走审批档。
+            </div>
           </div>
         </el-form-item>
 
         <el-form-item label="必填槽位">
           <div class="slots-editor">
-            <div v-for="(sl, idx) in form.slots" :key="idx" class="slot-row">
-              <el-input v-model="sl.slot" placeholder="槽位名，如 tracking_no" class="slot-name" />
-              <el-input v-model="sl.question" placeholder="追问话术，如：请提供您的运单号" class="slot-question" />
-              <el-select v-model="sl.source_var" filterable allow-create default-first-option placeholder="来源变量" class="slot-source">
-                <el-option v-for="v in slotSourceOptions" :key="v" :label="v" :value="v" />
+            <div
+              v-for="(sl, idx) in form.slots"
+              :key="idx"
+              class="slot-row"
+            >
+              <el-input
+                v-model="sl.slot"
+                placeholder="槽位名，如 tracking_no"
+                class="slot-name"
+              />
+              <el-input
+                v-model="sl.question"
+                placeholder="追问话术，如：请提供您的运单号"
+                class="slot-question"
+              />
+              <el-select
+                v-model="sl.source_var"
+                filterable
+                allow-create
+                default-first-option
+                placeholder="来源变量"
+                class="slot-source"
+              >
+                <el-option
+                  v-for="v in slotSourceOptions"
+                  :key="v"
+                  :label="v"
+                  :value="v"
+                />
               </el-select>
-              <el-checkbox v-model="sl.required">必填</el-checkbox>
-              <el-button link type="danger" @click="removeSlot(idx)">删除</el-button>
+              <el-checkbox v-model="sl.required">
+                必填
+              </el-checkbox>
+              <el-button
+                link
+                type="danger"
+                @click="removeSlot(idx)"
+              >
+                删除
+              </el-button>
             </div>
-            <el-button size="small" plain @click="addSlot">添加槽位</el-button>
-            <div class="form-hint">必填槽位集齐前：本轮强制不调工具（ToolChoice=none），AI 只向客户追问（一轮一项）；集齐后按上方调用流执行。来源变量=entity.&lt;键&gt;（从客户消息抽取）或上下文变量。</div>
+            <el-button
+              size="small"
+              plain
+              @click="addSlot"
+            >
+              添加槽位
+            </el-button>
+            <div class="form-hint">
+              必填槽位集齐前：本轮强制不调工具（ToolChoice=none），AI 只向客户追问（一轮一项）；集齐后按上方调用流执行。来源变量=entity.&lt;键&gt;（从客户消息抽取）或上下文变量。
+            </div>
           </div>
         </el-form-item>
 
         <el-form-item label="回复提示">
-          <el-input v-model="form.reply_hint" type="textarea" :rows="3" placeholder="留空则使用系统默认提示。可写该意图下模型应当如何组织回答的指引。" />
+          <el-input
+            v-model="form.reply_hint"
+            type="textarea"
+            :rows="3"
+            placeholder="留空则使用系统默认提示。可写该意图下模型应当如何组织回答的指引。"
+          />
         </el-form-item>
         <el-form-item label="启用">
           <el-switch v-model="form.enabled" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+        <el-button @click="dialogVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="save"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
 
     <!-- 自定义意图管理（T-09）：加词条→进识别词典→可直接挂载工具调用流 -->
-    <el-dialog v-model="ciDialogVisible" title="自定义意图" width="680px" destroy-on-close>
-      <div class="ci-hint">新增词条后进入识别词典（词面规则+LLM 候选，约 30 秒内生效），并可在上方调用流编排里作为意图挂载。内置意图不可覆盖；type 不可修改。</div>
-      <div class="ci-toolbar">
-        <el-button type="primary" size="small" @click="ciOpenCreate">新增词条</el-button>
+    <el-dialog
+      v-model="ciDialogVisible"
+      title="自定义意图"
+      width="680px"
+      destroy-on-close
+    >
+      <div class="ci-hint">
+        新增词条后进入识别词典（词面规则+LLM 候选，约 30 秒内生效），并可在上方调用流编排里作为意图挂载。内置意图不可覆盖；type 不可修改。
       </div>
-      <el-table :data="ciRows" size="small" max-height="360">
-        <el-table-column label="type" prop="type" min-width="130" show-overflow-tooltip />
-        <el-table-column label="名称" prop="name" min-width="110" show-overflow-tooltip />
-        <el-table-column label="词面" min-width="180" show-overflow-tooltip>
+      <div class="ci-toolbar">
+        <el-button
+          type="primary"
+          size="small"
+          @click="ciOpenCreate"
+        >
+          新增词条
+        </el-button>
+      </div>
+      <el-table
+        :data="ciRows"
+        size="small"
+        max-height="360"
+      >
+        <el-table-column
+          label="type"
+          prop="type"
+          min-width="130"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="名称"
+          prop="name"
+          min-width="110"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="词面"
+          min-width="180"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">
             <span class="ci-keywords">{{ parseKeywords(row.keywords_json).join(' / ') }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="启用" width="70">
+        <el-table-column
+          label="启用"
+          width="70"
+        >
           <template #default="{ row }">
-            <el-switch :model-value="row.enabled" @change="(v) => ciToggle(row, v)" />
+            <el-switch
+              :model-value="row.enabled"
+              @change="(v) => ciToggle(row, v)"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right"
+        >
           <template #default="{ row }">
-            <el-button link type="primary" @click="ciOpenEdit(row)">编辑</el-button>
-            <el-button link type="danger" @click="ciRemove(row)">删除</el-button>
+            <el-button
+              link
+              type="primary"
+              @click="ciOpenEdit(row)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              @click="ciRemove(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
-        <template #empty>暂无自定义意图</template>
+        <template #empty>
+          暂无自定义意图
+        </template>
       </el-table>
 
-      <el-dialog v-model="ciFormVisible" :title="ciEditingId ? '编辑词条' : '新增词条'" width="520px" append-to-body destroy-on-close>
-        <el-form :model="ciForm" label-width="80px">
-          <el-form-item label="type" required>
-            <el-input v-model="ciForm.type" :disabled="!!ciEditingId" placeholder="小写字母/数字/下划线，如 return_policy" />
+      <el-dialog
+        v-model="ciFormVisible"
+        :title="ciEditingId ? '编辑词条' : '新增词条'"
+        width="520px"
+        append-to-body
+        destroy-on-close
+      >
+        <el-form
+          :model="ciForm"
+          label-width="80px"
+        >
+          <el-form-item
+            label="type"
+            required
+          >
+            <el-input
+              v-model="ciForm.type"
+              :disabled="!!ciEditingId"
+              placeholder="小写字母/数字/下划线，如 return_policy"
+            />
           </el-form-item>
-          <el-form-item label="名称" required>
-            <el-input v-model="ciForm.name" maxlength="100" placeholder="如：退换货政策" />
+          <el-form-item
+            label="名称"
+            required
+          >
+            <el-input
+              v-model="ciForm.name"
+              maxlength="100"
+              placeholder="如：退换货政策"
+            />
           </el-form-item>
-          <el-form-item label="命中词面" required>
-            <el-select v-model="ciForm.keywords" multiple filterable allow-create default-first-option placeholder="输入词面后回车，如：怎么退" style="width: 100%">
-              <el-option v-for="k in ciForm.keywords" :key="k" :label="k" :value="k" />
+          <el-form-item
+            label="命中词面"
+            required
+          >
+            <el-select
+              v-model="ciForm.keywords"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="输入词面后回车，如：怎么退"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="k in ciForm.keywords"
+                :key="k"
+                :label="k"
+                :value="k"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="示例问句">
-            <el-select v-model="ciForm.examples" multiple filterable allow-create default-first-option placeholder="可选；v1 不进向量检索，仅作展示" style="width: 100%">
-              <el-option v-for="k in ciForm.examples" :key="k" :label="k" :value="k" />
+            <el-select
+              v-model="ciForm.examples"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              placeholder="可选；v1 不进向量检索，仅作展示"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="k in ciForm.examples"
+                :key="k"
+                :label="k"
+                :value="k"
+              />
             </el-select>
           </el-form-item>
           <el-form-item label="描述">
-            <el-input v-model="ciForm.description" maxlength="500" placeholder="进入 LLM 意图候选的描述文案" />
+            <el-input
+              v-model="ciForm.description"
+              maxlength="500"
+              placeholder="进入 LLM 意图候选的描述文案"
+            />
           </el-form-item>
           <el-form-item label="启用">
             <el-switch v-model="ciForm.enabled" />
           </el-form-item>
         </el-form>
         <template #footer>
-          <el-button @click="ciFormVisible = false">取消</el-button>
-          <el-button type="primary" :loading="ciSaving" @click="ciSave">保存</el-button>
+          <el-button @click="ciFormVisible = false">
+            取消
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="ciSaving"
+            @click="ciSave"
+          >
+            保存
+          </el-button>
         </template>
       </el-dialog>
     </el-dialog>

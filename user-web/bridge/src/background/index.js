@@ -66,6 +66,23 @@ function setConfig(cfg) {
 // USR-BR-01: 健康度上报增强
 // 后端聚合：channel 错误率告警 / popup 实时卡片 / 异常自动暂停
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === 'bridgeFetch') {
+    // content script 在页面源下直连服务端受 CORS/CSP 限制（生产实证
+    // TypeError: Failed to fetch），统一经 SW 中转：SW 是扩展页，
+    // host_permissions 豁免 CORS。响应只回状态/头/正文，调用方只读这些。
+    fetch(msg.url, msg.options || {})
+      .then(async (r) => {
+        const body = await r.text();
+        sendResponse({
+          status: r.status,
+          statusText: r.statusText,
+          headers: Object.fromEntries(r.headers.entries()),
+          body,
+        });
+      })
+      .catch((e) => sendResponse({ __err: String((e && e.message) || e) }));
+    return true;
+  }
   if (msg && msg.type === 'getStatus') {
     chrome.storage.local.get([KEY_ACTIVE, KEY_HEALTH], (res) => {
       const statuses = res[KEY_ACTIVE] || {};
@@ -235,7 +252,7 @@ function broadcastToAllTabs(payload) {
       for (const t of list) {
         if (!t || !t.id || !t.url) continue;
         // CH-16 首切片（2026-11-09）：pinduoduo.com 一并广播（kill switch 对 pdd 同样即时生效）。
-        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(t.url)) continue;
+        if (!/douyin\.com|xiaohongshu\.com|tiktok\.com|goofish\.com|xianyu\.com|kuaishou\.com|jdm\.jd\.com|dongdong\.jd\.com|chat\.jd\.com|im\.jd\.com|message\.bilibili\.com|www\.bilibili\.com|weibo\.com|pinduoduo\.com/i.test(t.url)) continue;
         try {
           chrome.tabs.sendMessage(t.id, payload, () => { try { void chrome.runtime.lastError; } catch (_) {} });
         } catch (_) {  }

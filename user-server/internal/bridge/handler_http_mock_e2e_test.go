@@ -324,12 +324,16 @@ func TestBridgeHTTP_Dedup(t *testing.T) {
 	}
 }
 
-// 五个渠道都能正常上报。
+// 注册表桥接渠道都能正常上报（2026-11-12 收口：从「五端」扩到注册表全量十渠道，
+// 微博/B站/京东/个人微信/拼多多同批纳入——渠道注册一处，mock e2e 全量覆盖）。
 func TestBridgeHTTP_MultiChannel(t *testing.T) {
 	m, base, _, stop := startMockServer()
 	defer stop()
 
-	channels := []string{ChannelDouyinWeb, ChannelXHSWeb, ChannelTikTok, ChannelKuaishouWeb, ChannelXianyuWeb}
+	channels := []string{
+		ChannelDouyinWeb, ChannelXHSWeb, ChannelTikTok, ChannelKuaishouWeb, ChannelXianyuWeb,
+		ChannelJDWeb, ChannelBilibiliWeb, ChannelWeiboWeb, ChannelPersonalWX, ChannelPDDWeb,
+	}
 	for i, ch := range channels {
 		got := doIngest(t, base, ch, "1", fmt.Sprintf("c%d", i+1),
 			fmt.Sprintf("evt-ch-%d", i), "customer", "hi")
@@ -337,8 +341,8 @@ func TestBridgeHTTP_MultiChannel(t *testing.T) {
 			t.Fatalf("渠道 %s 上报失败: %+v", ch, got)
 		}
 	}
-	if m.accepted != 5 {
-		t.Fatalf("应接受 5 条, 实际 %d", m.accepted)
+	if m.accepted != len(channels) {
+		t.Fatalf("应接受 %d 条, 实际 %d", len(channels), m.accepted)
 	}
 }
 
@@ -375,50 +379,55 @@ func TestBridgeHTTP_Concurrent(t *testing.T) {
 }
 
 // 三通道完整闭环：上报 → 下发队列 → 拉取 → 确认 → 队列清空。
+// 2026-11-12 收口：除 douyin 基线外，微博/B站两个目标渠道同批钉住同一条闭环。
 func TestBridgeOutboxAck_RoundTrip(t *testing.T) {
-	_, base, _, stop := startMockServer()
-	defer stop()
+	for _, ch := range []string{ChannelDouyinWeb, ChannelWeiboWeb, ChannelBilibiliWeb} {
+		t.Run(ch, func(t *testing.T) {
+			_, base, _, stop := startMockServer()
+			defer stop()
 
-	_ = doIngest(t, base, ChannelDouyinWeb, "1", "c1", "evt-rt", "customer", "在吗")
-	resp, err := http.Get(base + "/api/bridge/outbox?channel=" + ChannelDouyinWeb + "&account_id=1")
-	if err != nil {
-		t.Fatalf("GET outbox 失败: %v", err)
-	}
-	var ob struct {
-		Status   string       `json:"status"`
-		Messages []outboxItem `json:"messages"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&ob)
-	resp.Body.Close()
-	if len(ob.Messages) != 1 {
-		t.Fatalf("outbox 应返回 1 条待发, 实际 %d", len(ob.Messages))
-	}
-	msgID := ob.Messages[0].MsgID
+			_ = doIngest(t, base, ch, "1", "c1", "evt-rt-"+ch, "customer", "在吗")
+			resp, err := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=1")
+			if err != nil {
+				t.Fatalf("GET outbox 失败: %v", err)
+			}
+			var ob struct {
+				Status   string       `json:"status"`
+				Messages []outboxItem `json:"messages"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&ob)
+			resp.Body.Close()
+			if len(ob.Messages) != 1 {
+				t.Fatalf("outbox 应返回 1 条待发, 实际 %d", len(ob.Messages))
+			}
+			msgID := ob.Messages[0].MsgID
 
-	ackBody, _ := json.Marshal(map[string]interface{}{"msg_ids": []string{msgID}})
-	aresp, err := http.Post(base+"/api/bridge/outbox/ack?channel="+ChannelDouyinWeb+"&account_id=1",
-		"application/json", bytes.NewReader(ackBody))
-	if err != nil {
-		t.Fatalf("POST ack 失败: %v", err)
-	}
-	var ares struct {
-		Status string `json:"status"`
-		Acked  int    `json:"acked"`
-	}
-	_ = json.NewDecoder(aresp.Body).Decode(&ares)
-	aresp.Body.Close()
-	if ares.Acked != 1 {
-		t.Fatalf("ack 应标记 1 条, 实际 %d", ares.Acked)
-	}
+			ackBody, _ := json.Marshal(map[string]interface{}{"msg_ids": []string{msgID}})
+			aresp, err := http.Post(base+"/api/bridge/outbox/ack?channel="+ch+"&account_id=1",
+				"application/json", bytes.NewReader(ackBody))
+			if err != nil {
+				t.Fatalf("POST ack 失败: %v", err)
+			}
+			var ares struct {
+				Status string `json:"status"`
+				Acked  int    `json:"acked"`
+			}
+			_ = json.NewDecoder(aresp.Body).Decode(&ares)
+			aresp.Body.Close()
+			if ares.Acked != 1 {
+				t.Fatalf("ack 应标记 1 条, 实际 %d", ares.Acked)
+			}
 
-	resp2, _ := http.Get(base + "/api/bridge/outbox?channel=" + ChannelDouyinWeb + "&account_id=1")
-	var ob2 struct {
-		Messages []outboxItem `json:"messages"`
-	}
-	_ = json.NewDecoder(resp2.Body).Decode(&ob2)
-	resp2.Body.Close()
-	if len(ob2.Messages) != 0 {
-		t.Fatalf("ack 后 outbox 应清空, 实际 %d", len(ob2.Messages))
+			resp2, _ := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=1")
+			var ob2 struct {
+				Messages []outboxItem `json:"messages"`
+			}
+			_ = json.NewDecoder(resp2.Body).Decode(&ob2)
+			resp2.Body.Close()
+			if len(ob2.Messages) != 0 {
+				t.Fatalf("ack 后 outbox 应清空, 实际 %d", len(ob2.Messages))
+			}
+		})
 	}
 }
 

@@ -974,10 +974,20 @@
     >
       <el-form label-width="92px">
         <el-form-item label="原话术">
-          <div class="correct-text">{{ correctForm.message }}</div>
+          <div class="correct-text">
+            {{ correctForm.message }}
+          </div>
         </el-form-item>
-        <el-form-item label="纠正为" required>
-          <el-select v-model="correctForm.corrected_type" filterable placeholder="选择正确意图" style="width: 100%">
+        <el-form-item
+          label="纠正为"
+          required
+        >
+          <el-select
+            v-model="correctForm.corrected_type"
+            filterable
+            placeholder="选择正确意图"
+            style="width: 100%"
+          >
             <el-option
               v-for="d in intentDict"
               :key="d.type"
@@ -987,13 +997,26 @@
           </el-select>
         </el-form-item>
         <el-form-item label="写入词面">
-          <el-input v-model="correctForm.keyword" placeholder="默认取原话术，可改" />
-          <div class="form-hint">词面写入后规则层立即命中（覆盖词表热更新）；只影响识别，不改模型。</div>
+          <el-input
+            v-model="correctForm.keyword"
+            placeholder="默认取原话术，可改"
+          />
+          <div class="form-hint">
+            词面写入后规则层立即命中（覆盖词表热更新）；只影响识别，不改模型。
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="correctVisible = false">取消</el-button>
-        <el-button type="primary" :loading="correctSaving" @click="submitCorrect">确认纠错</el-button>
+        <el-button @click="correctVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="correctSaving"
+          @click="submitCorrect"
+        >
+          确认纠错
+        </el-button>
       </template>
     </el-dialog>
   </div>

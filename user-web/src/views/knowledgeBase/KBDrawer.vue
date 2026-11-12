@@ -97,7 +97,10 @@
                 </div>
                 <div class="mini-stat-hint">
                   <span v-if="stats.item_count == null">未接入</span>
-                  <span v-else class="text-secondary">按成员绑定计数</span>
+                  <span
+                    v-else
+                    class="text-secondary"
+                  >按成员绑定计数</span>
                 </div>
               </div>
             </el-col>

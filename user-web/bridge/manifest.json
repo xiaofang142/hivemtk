@@ -98,7 +98,8 @@
     },
     {
       "matches": [
-        "https://message.bilibili.com/*"
+        "https://message.bilibili.com/*",
+        "https://www.bilibili.com/*"
       ],
       "js": ["content-bilibili.js"],
       "run_at": "document_idle",

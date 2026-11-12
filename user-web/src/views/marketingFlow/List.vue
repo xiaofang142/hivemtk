@@ -27,17 +27,26 @@
           :label="$t('流程名称')"
           min-width="150"
         />
-        <el-table-column label="触发条件" min-width="150">
+        <el-table-column
+          label="触发条件"
+          min-width="150"
+        >
           <template #default="{ row }">
             {{ triggerLabel(row.trigger_type) }}
           </template>
         </el-table-column>
-        <el-table-column label="步骤数" width="90">
+        <el-table-column
+          label="步骤数"
+          width="90"
+        >
           <template #default="{ row }">
             {{ stepCountOf(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column
+          label="状态"
+          width="100"
+        >
           <template #default="{ row }">
             <el-tag
               :type="statusTagType(row.status)"
@@ -47,12 +56,18 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="版本" width="80">
+        <el-table-column
+          label="版本"
+          width="80"
+        >
           <template #default="{ row }">
             v{{ row.version || 1 }}
           </template>
         </el-table-column>
-        <el-table-column label="更新时间" width="180">
+        <el-table-column
+          label="更新时间"
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.updated_at) }}
           </template>
@@ -241,7 +256,8 @@
         <el-table-column
           prop="started_at"
           label="执行时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.started_at) }}
           </template>

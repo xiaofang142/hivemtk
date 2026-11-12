@@ -3,11 +3,13 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
@@ -16,6 +18,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// replyConfigParamWriteErr 配置参数写入口的统一错误出口：
+// service 折成的业务错（如 4004 配置参数不存在）按原码回显，
+// 其余走原 400 兜底；禁止再把 gorm "record not found" 原样透传给页面。
+func replyConfigParamWriteErr(ctx *gin.Context, err error) bool {
+	var be *bizerr.BizError
+	if errors.As(err, &be) {
+		response.Envelope(ctx, http.StatusOK, gin.H{"code": be.Code, "message": be.Message})
+		return true
+	}
+	return false
+}
 
 // ConfigParamController 动态阈值参数管理端 CRUD
 //
@@ -104,6 +118,9 @@ func (c *ConfigParamController) Update(ctx *gin.Context) {
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.UpdateValue(ctx.Request.Context(), group, key, value, actorID); err != nil {
 		logger.Warnf("[ConfigParam] Update %s.%s err=%v", group, key, err)
+		if replyConfigParamWriteErr(ctx, err) {
+			return
+		}
 		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
@@ -174,6 +191,9 @@ func (c *ConfigParamController) ResetToDefault(ctx *gin.Context) {
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.ResetToDefault(ctx.Request.Context(), group, key, actorID); err != nil {
 		logger.Warnf("[ConfigParam] ResetToDefault %s.%s err=%v", group, key, err)
+		if replyConfigParamWriteErr(ctx, err) {
+			return
+		}
 		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
@@ -190,6 +210,9 @@ func (c *ConfigParamController) BulkResetGroup(ctx *gin.Context) {
 	actorID := c.currentUserID(ctx)
 	if err := c.svc.BulkResetGroup(ctx.Request.Context(), group, actorID); err != nil {
 		logger.Warnf("[ConfigParam] BulkResetGroup %s err=%v", group, err)
+		if replyConfigParamWriteErr(ctx, err) {
+			return
+		}
 		response.Envelope(ctx, http.StatusOK, gin.H{"code": 400, "message": err.Error()})
 		return
 	}

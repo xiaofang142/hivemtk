@@ -1,7 +1,10 @@
 <template>
   <div class="autopilot">
     <!-- 傻瓜式入口：一个输入框 -->
-    <el-card shadow="hover" class="hero-card">
+    <el-card
+      shadow="hover"
+      class="hero-card"
+    >
       <div class="hero-title">
         <h2>GEO 自动驾驶</h2>
         <p>输入一个关键词，系统自动完成：关键词扩展 → 下拉词抓取 → 长尾展开 → 关键词落库 → 文章生成（可选：蜘蛛推送、站点审计）。文章只生成不发布。</p>
@@ -45,12 +48,18 @@
     </el-card>
 
     <!-- 步骤时间线 -->
-    <el-card v-if="run" shadow="hover" class="steps-card">
+    <el-card
+      v-if="run"
+      shadow="hover"
+      class="steps-card"
+    >
       <template #header>
         <div class="steps-header">
           <span>运行详情</span>
           <div class="steps-meta">
-            <el-tag :type="statusTagType(run.status)">{{ statusText(run.status) }}</el-tag>
+            <el-tag :type="statusTagType(run.status)">
+              {{ statusText(run.status) }}
+            </el-tag>
             <el-progress
               type="circle"
               :percentage="run.progress"
@@ -78,9 +87,19 @@
         >
           <div class="step-row">
             <span class="step-label">{{ step.label }}</span>
-            <el-tag size="small" :type="statusTagType(step.status)">{{ statusText(step.status) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="statusTagType(step.status)"
+            >
+              {{ statusText(step.status) }}
+            </el-tag>
           </div>
-          <div v-if="step.detail" class="step-detail">{{ step.detail }}</div>
+          <div
+            v-if="step.detail"
+            class="step-detail"
+          >
+            {{ step.detail }}
+          </div>
         </el-timeline-item>
       </el-timeline>
       <el-result
@@ -90,34 +109,82 @@
         :sub-title="run.summary"
       >
         <template #extra>
-          <el-button @click="goKeywords">查看关键词</el-button>
-          <el-button @click="goArticles">查看文章</el-button>
+          <el-button @click="goKeywords">
+            查看关键词
+          </el-button>
+          <el-button @click="goArticles">
+            查看文章
+          </el-button>
         </template>
       </el-result>
     </el-card>
 
     <!-- 历史记录 -->
-    <el-card shadow="hover" class="history-card">
+    <el-card
+      shadow="hover"
+      class="history-card"
+    >
       <template #header>
         <span>运行历史</span>
       </template>
-      <el-table :data="history" size="small" empty-text="暂无运行记录">
-        <el-table-column prop="keyword" label="关键词" min-width="140" />
-        <el-table-column label="状态" width="90">
+      <el-table
+        :data="history"
+        size="small"
+        empty-text="暂无运行记录"
+      >
+        <el-table-column
+          prop="keyword"
+          label="关键词"
+          min-width="140"
+        />
+        <el-table-column
+          label="状态"
+          width="90"
+        >
           <template #default="{ row }">
-            <el-tag size="small" :type="statusTagType(row.status)">{{ statusText(row.status) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="statusTagType(row.status)"
+            >
+              {{ statusText(row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="progress" label="进度" width="70">
-          <template #default="{ row }">{{ row.progress }}%</template>
-        </el-table-column>
-        <el-table-column prop="summary" label="摘要" min-width="240" show-overflow-tooltip />
-        <el-table-column label="启动时间" width="170">
-          <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column
+          prop="progress"
+          label="进度"
+          width="70"
+        >
           <template #default="{ row }">
-            <el-button link type="primary" @click="viewRun(row.id)">详情</el-button>
+            {{ row.progress }}%
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="summary"
+          label="摘要"
+          min-width="240"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          label="启动时间"
+          width="170"
+        >
+          <template #default="{ row }">
+            {{ formatTime(row.started_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="操作"
+          width="80"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              @click="viewRun(row.id)"
+            >
+              详情
+            </el-button>
           </template>
         </el-table-column>
       </el-table>

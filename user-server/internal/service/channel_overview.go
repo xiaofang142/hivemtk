@@ -178,6 +178,30 @@ func (s *ChannelOverviewService) GetOverview(ctx context.Context) dto.ChannelOve
 			RequiredFields:   []string{"chrome_extension_installed", "user_login_xianyu"},
 			ConfigURLs:       []string{"Chrome 扩展: ingestBridge.js", "/api/bridge/account (POST)"},
 		},
+		// 2026-11-12 收口：微博/B站桥接卡片补进总览（此前 registry 已注册但观测面缺失，
+		// 运营看不到两渠道的账号数/在线数）。
+		{
+			Channel:          "weibo",
+			ChannelName:      "微博（Bridge）",
+			Category:         "bridge",
+			AccountCount:     s.bridgeCount(ctx, "weibo"),
+			OnlineCount:      s.bridgeOnlineCount(ctx, "weibo"),
+			IntegrationReady: true,
+			RequiredFields:   []string{"chrome_extension_installed", "user_login_weibo"},
+			ConfigURLs:       []string{"Chrome 扩展: content-weibo.js", "/api/bridge/account (POST)"},
+			HealthURL:        "/api/bridge/outbox?channel=weibo&account_id=...",
+		},
+		{
+			Channel:          "bilibili",
+			ChannelName:      "B站（Bridge）",
+			Category:         "bridge",
+			AccountCount:     s.bridgeCount(ctx, "bilibili"),
+			OnlineCount:      s.bridgeOnlineCount(ctx, "bilibili"),
+			IntegrationReady: true,
+			RequiredFields:   []string{"chrome_extension_installed", "user_login_bilibili"},
+			ConfigURLs:       []string{"Chrome 扩展: content-bilibili.js", "/api/bridge/account (POST)"},
+			HealthURL:        "/api/bridge/outbox?channel=bilibili&account_id=...",
+		},
 		{
 			Channel:          "wechat",
 			ChannelName:      "微信公众号",

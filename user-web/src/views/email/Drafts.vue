@@ -163,12 +163,16 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="sendDialogVisible = false">取消</el-button>
+        <el-button @click="sendDialogVisible = false">
+          取消
+        </el-button>
         <el-button
           type="primary"
           :loading="sending"
           @click="submitSend"
-        >发送</el-button>
+        >
+          发送
+        </el-button>
       </template>
     </el-dialog>
   </div>

@@ -174,7 +174,8 @@
         <el-table-column
           prop="failedAt"
           label="失败时间"
-          width="180">
+          width="180"
+        >
           <template #default="{ row }">
             {{ fmtTime(row.failedAt) }}
           </template>

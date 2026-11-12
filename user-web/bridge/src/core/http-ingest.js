@@ -139,13 +139,60 @@ function _logRequest(label, serverUrl, params, body, extra) {
   return { url, payload };
 }
 
+// content script 运行在页面源下：直连 fetch 受目标页 CSP + 服务端 CORS 双重限制
+// （生产 workapi 对 douyin.com 等页面源不放行 → 实证 TypeError: Failed to fetch，
+// ingest 全灭；popup/SW 是扩展页，host_permissions 豁免 CORS）。
+// 页面上下文（非 chrome-extension: 协议）一律经 background SW 中转；
+// 扩展页自身（popup/SW）直连不变。
+async function bridgeFetch(url, options) {
+  const inExtension =
+    typeof location === 'undefined' ||
+    (location.protocol || '').startsWith('chrome-extension');
+  const hasRuntime =
+    typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id;
+  if (inExtension || !hasRuntime) return fetch(url, options);
+  try {
+    const res = await Promise.race([
+      chrome.runtime.sendMessage({
+        type: 'bridgeFetch',
+        url,
+        options: {
+          method: options && options.method,
+          headers: options && options.headers,
+          body: options && options.body,
+        },
+      }),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error('bridgeFetch: SW 30s 超时')),
+          30000
+        )
+      ),
+    ]);
+    if (!res || res.__err)
+      throw new Error((res && res.__err) || 'bridgeFetch: no response');
+    // 透传状态与响应体；调用方只读 status/text/json/headers.get，够用。
+    return {
+      ok: res.status >= 200 && res.status < 300,
+      status: res.status,
+      statusText: res.statusText || '',
+      headers: new Map(res.headers || []),
+      text: async () => res.body || '',
+      json: async () => JSON.parse(res.body || 'null'),
+    };
+  } catch (e) {
+    // SW 未醒/消息失败时回退直连（本地 dev 无 CSP 场景仍可用）
+    return fetch(url, options);
+  }
+}
+
 async function fetchWithRetry(url, options, retryOpts = {}) {
   const maxRetries = retryOpts.maxRetries ?? HTTP_INGEST_DEFAULTS.maxRetries;
   const retryBaseMs = retryOpts.retryBaseMs ?? HTTP_INGEST_DEFAULTS.retryBaseMs;
   let lastErr = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const res = await fetch(url, options);
+      const res = await bridgeFetch(url, options);
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         // 429 限流 / 408 超时：可重试（退避后大概率恢复）；

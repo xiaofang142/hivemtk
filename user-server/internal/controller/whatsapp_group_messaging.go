@@ -533,18 +533,26 @@ func (gmc *GroupMessagingController) UpdateTemplate(c *gin.Context) {
 		return
 	}
 
-	// PATCH 语义：model 绑定的是非指针 bool，需按原始 key 判断 is_active 是否显式提供，
-	// 未提供时保留原值，防止漏字段把模板意外停用
+	// PATCH 语义：model 绑定的是非指针字段，需按原始 key 判断各字段是否显式提供，
+	// 未提供时保留原值，防止部分更新把模板其余内容整体清空
 	var rawKeys map[string]json.RawMessage
 	_ = json.Unmarshal(body, &rawKeys)
 
-	existingTemplate.Name = req.Name
-	existingTemplate.Content = req.Content
-	existingTemplate.Category = req.Category
+	if _, ok := rawKeys["name"]; ok {
+		existingTemplate.Name = req.Name
+	}
+	if _, ok := rawKeys["content"]; ok {
+		existingTemplate.Content = req.Content
+	}
+	if _, ok := rawKeys["category"]; ok {
+		existingTemplate.Category = req.Category
+	}
 	if _, ok := rawKeys["is_active"]; ok {
 		existingTemplate.IsActive = req.IsActive
 	}
-	existingTemplate.Description = req.Description
+	if _, ok := rawKeys["description"]; ok {
+		existingTemplate.Description = req.Description
+	}
 
 	updated, err := gmc.templateService.UpdateTemplate(c.Request.Context(), existingTemplate)
 	if HandleDBError(c, err, "更新模板") {
