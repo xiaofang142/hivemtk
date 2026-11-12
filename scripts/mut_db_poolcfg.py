@@ -307,8 +307,13 @@ def main() -> int:
             return do_check(clone)
 
         src = clone / SRC_REL
-        original = read(src)
-        orig_md5 = md5_bytes(src)
+        # A-25（2026-11-12）：Windows 上 write_text 的默认 newline=None 会把 \n 翻译成
+        # os.linesep（\r\n），而 read_text 又把 \r\n 归一成 \n——文本 roundtrip 不可逆，
+        # 还原后的磁盘字节必然偏离基线（RESTORE-MISMATCH 误红）。改为整轮按字节读写：
+        # original_bytes 是唯一事实源，注码文本经 sub_once 后显式 encode 回字节落盘。
+        original_bytes = src.read_bytes()
+        original = original_bytes.decode("utf-8")
+        orig_md5 = hashlib.md5(original_bytes).hexdigest()
         bad, lines = check_cells(original, CELLS, defined_tests(clone / PKG_REL))
         if bad:
             for ln in lines:
@@ -334,7 +339,7 @@ def main() -> int:
         problems = []
         for code, desc, old, new, expect in CELLS:
             try:
-                src.write_text(sub_once(original, old, new, code), encoding="utf-8")
+                src.write_bytes(sub_once(original, old, new, code).encode("utf-8"))
             except SystemExit as e:
                 problems.append(str(e))
                 tally["BUILD-BROKEN"] += 1
@@ -352,7 +357,7 @@ def main() -> int:
                 problems.append(f"{code} 判为 {v}（不是干净的杀掉）：{desc}")
                 print(f"{code:<4} {desc[:38]:<40} {v} rc={rc} ran={ran}")
                 print(out[-1500:])
-            src.write_text(original, encoding="utf-8")
+            src.write_bytes(original_bytes)
             if md5_bytes(src) != orig_md5:
                 print("RESTORE-MISMATCH：还原后字节与基线不同，停机")
                 return 8

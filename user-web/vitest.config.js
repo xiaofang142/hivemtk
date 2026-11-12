@@ -9,6 +9,16 @@ export default mergeConfig(
     test: {
       globals: true,
       environment: 'jsdom',
+      // N-21（2026-11-12）：默认 5s testTimeout 在本机高负载（多 lane 并行构建/测试）
+      // 下会误杀确定性完成的用例（clue_list_filter_push 20s 实跑 9/9 全绿=纯慢非悬挂，
+      // settle 确定式等待已排除假绿）。容量兜底 15s——与 be969108「timeout 零放大」
+      // 不冲突：那条纪律禁的是放大超时掩盖真悬挂，此处已实证非悬挂。
+      testTimeout: 15000,
+      // N-21 同族第二刀（2026-11-12）：默认 10s hookTimeout 会误杀 beforeEach 里
+      // 的模块图冷 import（request_502_upstream 的 freshRequest() 链上 i18n/
+      // element-plus/http-core 全图 transform 在高负载下 >10s，hook 超时=用例未执行
+      // 即判红；单跑缓存热了就绿=纯慢非悬挂）。容量兜底 30s，纪律口径同上。
+      hookTimeout: 30000,
       include: ['tests/unit/**/*.{test,spec}.{js,mjs,ts}'],
       exclude: ['node_modules', 'dist', 'tests/e2e/**'],
       // 并行跑测试文件。恢复并行的前提已成立：所有组件用例的等待模式都换成了

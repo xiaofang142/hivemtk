@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"hash/fnv"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -297,6 +298,7 @@ func LogRoutingDecision(ctx context.Context, entry *LogEntry) {
 		"latency_ms":        entry.LatencyMs,
 		"success":           entry.Success,
 		"error_msg":         entry.ErrorMsg,
+		"error_class":       classifyErrorClass(entry.Success, entry.ErrorMsg),
 		"from_cache":        entry.FromCache,
 		"model_type":        entry.ModelType,
 		"vendor":            entry.Vendor,
@@ -320,6 +322,38 @@ func LogRoutingDecision(ctx context.Context, entry *LogEntry) {
 		logger.Warnf("[LLM] LogRoutingDecision write failed: %v (entry=%+v)", err, entry)
 	}
 	updateMissingCounter(entry)
+}
+
+// errorClassRules 把读取侧 errorClassExpr 的文本回推口径镜像到写入侧（F-6-5②）。
+//
+// 背景：llm_routing_logs.error_class 历史上无写入方，失败行清一色落 unknown，
+// 报表「错误类型分布」只有 unknown 一片。写入侧按关键词即时标注后，新行自带分类；
+// 读取侧表达式对历史行（error_class 空值）保持回推。两侧口径由本表单点对齐：
+// 关键词表与判定顺序（auth→rate_limit→timeout→upstream→unknown）逐字对齐
+// repository/llm_usage_report.go 的 errorClassExpr（含大小写不敏感与 status=5xx 通配），
+// 改任一侧必须同改。success 行恒空串，与 llm_usage_daily 存量口径一致。
+var errorClassRules = []struct {
+	class string
+	re    *regexp.Regexp
+}{
+	{"auth", regexp.MustCompile(`(?i)invalid_api_key|invalid authentication|unauthorized|status=401|incorrect api key`)},
+	{"rate_limit", regexp.MustCompile(`(?i)status=429|rate limit|quota|insufficient_quota`)},
+	{"timeout", regexp.MustCompile(`(?i)timeout|timed out|deadline exceeded`)},
+	{"upstream", regexp.MustCompile(`(?i)status=5[0-9][0-9]|connection refused|no such host|bad gateway|service unavailable`)},
+}
+
+// classifyErrorClass 失败调用按 error_msg 关键词归一分类；成功行恒空串。
+// 词表与读取侧 errorClassExpr 单点对齐（见 errorClassRules 注释）。
+func classifyErrorClass(success bool, errMsg string) string {
+	if success {
+		return ""
+	}
+	for _, r := range errorClassRules {
+		if r.re.MatchString(errMsg) {
+			return r.class
+		}
+	}
+	return "unknown"
 }
 
 func updateMissingCounter(entry *LogEntry) {

@@ -43,11 +43,12 @@ type LLMRoutingLog struct {
 	LatencyMs        int     `gorm:"column:latency_ms;not null;default:0" json:"latency_ms"`
 	Success          bool    `gorm:"column:success;not null;default:true" json:"success"`
 	ErrorMsg         string  `gorm:"type:text;column:error_msg" json:"error_msg"`
-	// ErrorClass 错误分类（timeout/network/auth/rate_limit/upstream/unknown）。
+	// ErrorClass 错误分类（auth/rate_limit/timeout/upstream/unknown，success 行恒空串）。
 	// 历史上无写入方（报表读取侧用 errorClassExpr 按 error_msg 回推），但
 	// llm_usage_report 的聚合/明细 SQL 引用了该列——模型缺字段时 AutoMigrate
 	// 不会建列，全新 AutoMigrate 库上 LLM 用量报表 500（2026-11-10 回归实测）。
-	// 先补列对齐读取侧契约；写入侧标注留后续（表达式对空值回推分类）。
+	// 先补列对齐读取侧契约；写入侧已由 dispatcher_observability.classifyErrorClass
+	// 标注（F-6-5②，2026-11-12，口径与表达式单点对齐），表达式保留为历史行回推。
 	ErrorClass string `gorm:"type:varchar(32);not null;default:''" json:"error_class"`
 	FromCache  bool   `gorm:"column:from_cache;not null;default:false" json:"from_cache"`
 

@@ -1,0 +1,4 @@
+基线字节：`12a15d37`｜未入库字节 0 处｜本轮读私有 `--shared` 克隆的 HEAD（来树未入库字节不进本轮读数）｜作业目录 C:\Users\xiaohp\AppData\Local\Temp\dbpool_clone
+CONTROL-RED：没放刀就红 ⇒ 判据未验证（红因末 8 行）
+build cache is required, but could not be located: GOCACHE is not an absolute path
+收尾：带走 C:\Users\xiaohp\AppData\Local\Temp\dbpool_clone\clone

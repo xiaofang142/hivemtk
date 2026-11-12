@@ -195,6 +195,7 @@ const props = defineProps({
   widgetColor: { type: String, default: '#1989fa' },
   source: { type: String, default: '' },
   cardId: { type: String, default: '' },
+  initialWelcome: { type: String, default: '' },
   fullscreen: { type: Boolean, default: false }
 })
 
@@ -323,6 +324,14 @@ const openSession = async (resume = true) => {
       messages.value.push({
         sender_type: 'system',
         content: data.welcome_message,
+        created_at: new Date().toISOString()
+      })
+    } else if (props.initialWelcome) {
+      // N-20：SDK config.welcome（商户本地配置欢迎语）——服务端渠道欢迎语优先，
+      // 无服务端配置时用之（同一 system 消息形状）
+      messages.value.push({
+        sender_type: 'system',
+        content: props.initialWelcome,
         created_at: new Date().toISOString()
       })
     }

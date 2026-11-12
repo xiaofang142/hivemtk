@@ -461,12 +461,12 @@
 | 428 | [x] | POST | `/api/geo/keyword-mining/longtail` | 用户端 | body: data | 200 code=0 data={count:23,keywords:[...]}（template_combined 长尾组合）；缺 seeds 回 400（校验正确） | `src/api/geo.js` | 26 |
 | 429 | [x] | GET | `/api/geo/keyword-mining/funnel` | 用户端 | - | 200 code=0 data={seed_count,related_count,suggest_count,longtail_count,total,intents,funnel_stages} 漏斗聚合齐全 | `src/api/geo.js` | 30 |
 | 430 | [~] | POST | `/api/geo/push/urls` | 用户端 | body: data | D-21 疑似复发：POST /api/geo/push/urls 未配置推送平台时回 500 INTERNAL_ERROR_6002「没有启用的推送平台，请先在「蜘蛛推送配置」添加凭据」，而非修复后的 503 SERVICE_UNAVAILABLE_6003（respondGeoConfigError 走 503+原文案）；本地仓 internal/geo/controller/llm_error.go 已修，线上 2026-11-07 实测仍 500，判定线上二进制为 D-21 修复部署前版本 | `src/api/geo.js` | 35 |
-| 431 | [ ] | GET | `/api/geo/push/quota` | 用户端 | - | - | `src/api/geo.js` | 39 |
-| 432 | [ ] | GET | `/api/geo/push/sitemap` | 用户端 | - | - | `src/api/geo.js` | 43 |
-| 433 | [ ] | POST | `/api/geo/index-tracking/verify/{articleId}` | 用户端 | path: articleId | - | `src/api/geo.js` | 48 |
-| 434 | [ ] | GET | `/api/geo/index-tracking/funnel` | 用户端 | - | - | `src/api/geo.js` | 52 |
-| 435 | [ ] | POST | `/api/geo/index-tracking/verify-all` | 用户端 | - | - | `src/api/geo.js` | 56 |
-| 436 | [ ] | GET | `/api/geo/citations/drift` | 用户端 | query: params | - | `src/api/geo.js` | 61 |
+| 431 | [x] | GET | `/api/geo/push/quota` | 用户端 | - | - | `src/api/geo.js` | 39 | 〈2026-11-12 K-4-1：200+code=0 空配额零值合理〉
+| 432 | [x] | GET | `/api/geo/push/sitemap` | 用户端 | - | - | `src/api/geo.js` | 43 | 〈2026-11-12 K-4-1：200+code=0 合法空 sitemap XML〉
+| 433 | [x] | POST | `/api/geo/index-tracking/verify/{articleId}` | 用户端 | path: articleId | - | `src/api/geo.js` | 48 | 〈2026-11-12 K-4-1：NOT_FOUND_1002 文章不存在=设计内拒绝（假 id 探测）〉
+| 434 | [x] | GET | `/api/geo/index-tracking/funnel` | 用户端 | - | - | `src/api/geo.js` | 52 | 〈2026-11-12 K-4-1：200+code=0 漏斗字段完整零值合理〉
+| 435 | [x] | POST | `/api/geo/index-tracking/verify-all` | 用户端 | - | - | `src/api/geo.js` | 56 | 〈2026-11-12 K-4-1：started=true 异步启动确认（设计内）〉
+| 436 | [x] | GET | `/api/geo/citations/drift` | 用户端 | query: params | - | `src/api/geo.js` | 61 | 〈2026-11-12 K-4-1：无参数→今日无快照 NOT_FOUND_1002 设计内拒〉
 | 437 | [ ] | GET | `/api/geo/citations/domains` | 用户端 | body: { days } | - | `src/api/geo.js` | 65 |
 | 438 | [ ] | GET | `/api/geo/citations/matrix` | 用户端 | body: { days, top_queries: topQueries, top_domains: topDomains } | - | `src/api/geo.js` | 69 |
 | 439 | [ ] | POST | `/api/geo/site/export` | 用户端 | - | - | `src/api/geo.js` | 79 |

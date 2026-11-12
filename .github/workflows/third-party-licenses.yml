@@ -1,0 +1,52 @@
+# 第三方依赖清单对账闸（O-1，2026-11-12）
+#
+# THIRD_PARTY_LICENSES.md 由 scripts/gen-third-party-notice.sh 自动生成，此前零接线
+# ——go.mod / package-lock 变更后清单必然持续漂移（2026-08-15→11-12 间 gin/gorm 版本
+# 已实际漂移过一轮）。本闸在依赖文件变更时跑 --check 对账：清单缺行/版本漂移即红。
+# 许可证列不入对账口径（受本地模块缓存影响非确定性），只锁「依赖名|版本」覆盖面。
+#
+# 本地同口径：make audit（第三步）或 bash scripts/gen-third-party-notice.sh --check
+name: third-party-licenses
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'user-server/go.mod'
+      - 'user-server/go.sum'
+      - 'user-web/bridge/package.json'
+      - 'user-web/bridge/package-lock.json'
+      - 'scripts/gen-third-party-notice.sh'
+      - 'THIRD_PARTY_LICENSES.md'
+      - '.github/workflows/third-party-licenses.yml'
+  pull_request:
+    paths:
+      - 'user-server/go.mod'
+      - 'user-server/go.sum'
+      - 'user-web/bridge/package.json'
+      - 'user-web/bridge/package-lock.json'
+      - 'scripts/gen-third-party-notice.sh'
+      - 'THIRD_PARTY_LICENSES.md'
+      - '.github/workflows/third-party-licenses.yml'
+
+jobs:
+  check:
+    name: License notice sync check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: user-server/go.mod
+          cache: true
+          cache-dependency-path: user-server/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+
+      - name: 对账（清单必须覆盖全部 依赖|版本 行）
+        run: bash scripts/gen-third-party-notice.sh --check
