@@ -540,9 +540,11 @@ const fetchShortLinkList = async () => {
       status: searchForm.status ? parseInt(searchForm.status) : undefined
     }
     const res = await shortLinkApi.getList(params)
-    if (res && res.list) {
-      shortLinkList.value = res.list
-      pagination.total = res.total
+    // 空列表时后端返回 list:null（total:0），不能当成失败——否则「没有短链」
+    // 会被误报成「获取短链列表失败」（2026-11-13 O轮线上实测，生产租户 0 条）。
+    if (res) {
+      shortLinkList.value = res.list || []
+      pagination.total = res.total || 0
     } else {
       error.value = i18n.global.t('获取短链列表失败')
     }

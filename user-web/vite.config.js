@@ -231,11 +231,16 @@ export default defineConfig({
         clientsClaim: true,
         // 每次构建动态变更 precache manifest (buildId 作为缓存键)
         // 让 workbox 正确区分新旧版本
-        additionalManifestEntries: [
-          // version.json 也 precache, 但 main.js 会用 cache:no-store 绕过
-          // (留作离线 fallback)
-          { url: 'version.json', revision: BUILD_ID },
-        ],
+        //
+        // ⚠️ version.json 绝不进 precache（2026-11-13 O 轮实证修）：
+        // workbox 的 precache 路由按 **URL** 匹配，与请求的 cache mode 无关——
+        // main.js 里 fetch('/version.json', { cache: 'no-store' }) 照样被旧 SW 的
+        // precache 命中，拿到的是**旧 version.json** ⇒ localBuildId===remoteBuildId
+        // ⇒ 版本自检永远判"一致" ⇒ 不 unregister、不 reload，用户被钉死在旧版。
+        // 实测：线上 d5ce0d15(11-10) 的 SW 让 ego 浏览器停留 4 天旧版，手动
+        // unregister+清 caches 才加载到 11-13 新版（index-BHp1VXUp.js）。
+        // 移除后自检请求必走网络；离线时 fetch 失败仅 console.warn 后 return，
+        // 不影响任何功能（globIgnores 已同步排除 version.json）。
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           // i18n 语言包 chunk: StaleWhileRevalidate（先用缓存秒开，后台更新）
