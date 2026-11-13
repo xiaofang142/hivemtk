@@ -130,7 +130,11 @@ cd user-web && npx eslint src --max-warnings 80   # 全量 warning 基线 63、�
 |---|---|
 | 完整最高规则（含 spec-kit SDD 流程） | `CLAUDE.md` |
 | AI 必须逐条遵守的契约 | `docs/standards/AI-EDITOR-CONTRACT.md` |
-| 编码主规则 / i18n 策略 / 文档模板 | `docs/standards/` |
+| **后端编码规范**（改 `user-server/**` 前必读） | `docs/standards/BACKEND-CODING-STANDARDS.md` |
+| **前端编码规范**（改 `user-web/**` 前必读） | `docs/standards/FRONTEND-CODING-STANDARDS.md` |
+| **交互规范**（改接口/toast/i18n/路由前必读） | `docs/standards/INTERACTION-STANDARDS.md` |
+| **测试规范**（写测试/判读失败前必读） | `docs/standards/TESTING-STANDARDS.md` |
+| 编码主规则 / i18n 策略 / 文档模板 | `docs/standards/`（索引见其 README） |
 | 开发手册（AI 版 / 人类版） | `docs/handbook/` |
 | 协作规范 / 代码地图 / Git 规则 | `docs/contribute/`（CODE_COLLABORATION.md / CODEBASE_MAP.md / GIT_RULES.md） |
 | 发布链 / 线上拓扑台账 / 排障 | `docs/operations/`、`docs/TROUBLESHOOTING.md` |

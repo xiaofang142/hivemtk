@@ -10,6 +10,10 @@
 |---|---|
 | [MASTER_RULES.md](MASTER_RULES.md) | 项目核心规则（工程铁律，handbook README 也引用） |
 | [AI-EDITOR-CONTRACT.md](AI-EDITOR-CONTRACT.md) | **AI 编辑器契约**：所有 AI 编辑器必须逐条遵守（入口 `AGENTS.md`，最详细 `CLAUDE.md`） |
+| [BACKEND-CODING-STANDARDS.md](BACKEND-CODING-STANDARDS.md) | **后端编码规范**：五层职责/命名/controller 样板/响应错误表/并发与数据访问门禁（改动落 `user-server/**` 前必读） |
+| [FRONTEND-CODING-STANDARDS.md](FRONTEND-CODING-STANDARDS.md) | **前端编码规范**：管理端 Vue3+EP 与桥接 MV3 扩展双前端（api 层铁律 / eslint / 路由台账 / 隐私红线 / 发版两道门） |
+| [INTERACTION-STANDARDS.md](INTERACTION-STANDARDS.md) | **交互规范**：API 路径与响应信封（含 202 Accepted 语义）/ 401·403·404 分档 / 登录端点裸调 / toast 去重 / i18n 10 语言 / 新手引导三层 |
+| [TESTING-STANDARDS.md](TESTING-STANDARDS.md) | **测试规范**：Go 标准库写法与 DB 门禁判读 / vitest 配置口径与 settle 等待 / UI 规则-1 逐元素 / 扩展 fixture 必须真机实证 |
 | [FEATURE_DOCUMENTATION_TEMPLATE.md](FEATURE_DOCUMENTATION_TEMPLATE.md) | 功能文档 8 节模板（人读版功能文档的写作规范） |
 | [BACKEND_MESSAGE_I18N_POLICY.md](BACKEND_MESSAGE_I18N_POLICY.md) | 后端文案国际化口径与清单（F3 交付：必须 i18n / 不 i18n / 改造顺序 + 未覆盖清单） |
 
