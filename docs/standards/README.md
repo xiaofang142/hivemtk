@@ -9,6 +9,7 @@
 | 文档 | 说明 |
 |---|---|
 | [MASTER_RULES.md](MASTER_RULES.md) | 项目核心规则（工程铁律，handbook README 也引用） |
+| [AI-EDITOR-CONTRACT.md](AI-EDITOR-CONTRACT.md) | **AI 编辑器契约**：所有 AI 编辑器必须逐条遵守（入口 `AGENTS.md`，最详细 `CLAUDE.md`） |
 | [FEATURE_DOCUMENTATION_TEMPLATE.md](FEATURE_DOCUMENTATION_TEMPLATE.md) | 功能文档 8 节模板（人读版功能文档的写作规范） |
 | [BACKEND_MESSAGE_I18N_POLICY.md](BACKEND_MESSAGE_I18N_POLICY.md) | 后端文案国际化口径与清单（F3 交付：必须 i18n / 不 i18n / 改造顺序 + 未覆盖清单） |
 

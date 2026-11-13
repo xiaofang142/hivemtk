@@ -1,0 +1,7 @@
+See AGENTS.md at the repository root — it is the single entry point for all AI editors.
+
+```bash
+cat AGENTS.md
+```
+
+Deep rules: docs/standards/AI-EDITOR-CONTRACT.md
