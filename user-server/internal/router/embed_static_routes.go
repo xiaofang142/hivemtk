@@ -5,6 +5,7 @@ package router
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -60,8 +61,40 @@ func setupEmbedStaticRoutes(r *gin.Engine) {
 			r.GET("/chat/embed/*path", sc.EmbedPath)
 			r.GET("/chat/embed", sc.EmbedRoot)
 			r.GET("/", sc.SPA)
-			r.NoRoute(sc.NotFound)
 			r.GET("/index.html", sc.Index)
+			// PWA 五件套（2026-11-13 O 轮二次审核补修）：
+			// Go 托管模式下此前只注册了 /assets/*、favicon.ico、logo.png、/、/index.html，
+			// /sw.js、/version.json、/manifest.webmanifest、/workbox-*.js、/favicon.svg
+			// 全部落入 NoRoute ⇒ StaticController.NotFound 的 SPA 回落返回
+			// index.html（200 HTML）⇒ navigator.serviceWorker.register('/sw.js')
+			// 的 MIME 校验失败、main.js 拉 version.json 解析抛错 ⇒ SW 永不注册、
+			// 版本自检永不运行，整套 PWA 静默死亡。
+			// 生产走 nginx 静态站（work.xapptool.cn.conf 对三件套 no-cache 回源）
+			// 不受影响，但 DEPLOYMENT_GUIDE.md 声明 Go 托管受支持 ⇒ 此处补齐。
+			// 五件套统一 Cache-Control: no-cache，与 nginx 侧口径一致。
+			pwaRootFiles := map[string]bool{
+				"/sw.js":                true,
+				"/version.json":         true,
+				"/manifest.webmanifest": true,
+				"/favicon.svg":          true,
+			}
+			r.NoRoute(func(c *gin.Context) {
+				p := c.Request.URL.Path
+				if !pwaRootFiles[p] &&
+					!(strings.HasPrefix(p, "/workbox-") && strings.HasSuffix(p, ".js")) {
+					sc.NotFound(c)
+					return
+				}
+				// Clean+Join 防目录穿越；文件不存在（未构建产物）则交回 SPA 回落，
+				// 保持既有行为不变。
+				f := filepath.Join(userWebDist, filepath.Clean(p))
+				if fi, err := os.Stat(f); err != nil || fi.IsDir() {
+					sc.NotFound(c)
+					return
+				}
+				c.Header("Cache-Control", "no-cache")
+				c.File(f)
+			})
 		} else {
 			sc := controller.NewStaticController("")
 			r.GET("/chat/embed/*path", sc.EmbedDistMissing)

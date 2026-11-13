@@ -152,7 +152,9 @@ O 轮 = 用户指令的新一轮全量回归，主验环境=线上 SaaS `https:/
 （jideilvluoqun@gmail.com，ego lite TaskSpace `hivemtk-route-test` p1；线上原构建落后
 本地 121 个提交，先部署最新代码再测）。流程与资产：
 
-1. **部署**：`cd user-web && npm run build` → `rsync -az --exclude='.user.ini' -e 'ssh -p 57122'
+1. **部署**：`cd user-web && npm run build` → **部署前检查**：
+   `grep -o '"buildId": *"[^"]*"' dist/version.json dist/manifest.webmanifest`
+   两文件 buildId 必须一致（曾出现旧构建残留的混合 dist）→ `rsync -az --exclude='.user.ini' -e 'ssh -p 57122'
    dist/ mtk-prod:/www/wwwroot/hivemtk/user-web/`（**不加 --delete**，保留旧 chunk 防 SW 404；
    线上备份在 `user-web.bak.<日期>`）。**回滚三步**（新构建出问题时）：
    ① `ssh mtk-prod 'mv /www/wwwroot/hivemtk/user-web /www/wwwroot/hivemtk/user-web.bad.<日期>'`
@@ -183,6 +185,31 @@ O 轮 = 用户指令的新一轮全量回归，主验环境=线上 SaaS `https:/
    URL 匹配，与 main.js 的 `cache:no-store` 无关）。自愈链靠新 sw.js 字节变化触发
    skipWaiting/clientsClaim。**回归口径**：部署后 `grep -c version.json dist/sw.js` 必须为 0。
 
+### O 轮二次审核补修（2026-11-13 深夜轮，用户指令「遗留问题全部处理 + 二次审核」）
+
+对两个修复做对抗性复审（同类漏网 bug / 修复引入新风险 / 回归资产可信度三轴）：
+
+1. **【中危】Go 托管模式整套 PWA 静默死亡**（`user-server/internal/router/embed_static_routes.go`）：
+   只注册了 `/assets/*`、favicon.ico、logo.png、`/`、`/index.html`、`/chat/embed*`；
+   `/sw.js`、`/version.json`、`/manifest.webmanifest`、`/workbox-*.js`、`/favicon.svg`
+   全部落入 NoRoute ⇒ StaticController.NotFound 的 SPA 回落返回 index.html（200 HTML）⇒
+   `register('/sw.js')` MIME 校验失败、main.js 拉 version.json 解析抛错 ⇒ SW 永不注册、
+   版本自检永不运行。生产走 nginx 静态站不受影响（`work.xapptool.cn.conf` 对三件套
+   no-cache 回源），但 DEPLOYMENT_GUIDE.md 声明 Go 托管受支持 ⇒ 已补：NoRoute 包一层
+   PWA 白名单 + `workbox-*.js` 前缀判断，统一 `Cache-Control: no-cache` 服务。
+   **回归口径**：Go 托管部署时 `curl -sI` 应得 200 + 正确 Content-Type
+   （sw.js→application/javascript、version.json→application/json）+ no-cache。
+2. **messageHub 平台选项硬化**（防御性，`views/messageHub/List.vue`）：`res.platforms` →
+   `res?.platforms || []`。同型于短链 bug（API 200 但 data=null 时 TypeError 进 catch
+   误报「平台选项加载失败」）；后端恒返字段故未触发，属堵漏。
+3. **删死代码/死规则**：`user-web/src/utils/sw-register.js`（0 引用，`injectRegister:false`
+   本就关闭注入）+ `vite.config.js` 的 `/api/static/` CacheFirst 规则（user-server 0 路由、
+   nginx 无匹配，永不命中）。
+4. **子代理幻觉教训**：同类 bug 全量排查子代理第一份报告称 20 处 BUG，实测 10/11 引用
+   文件不存在，子代理已自行撤回（终版「无残留」）。我独立复核 `grep 'res && res\.' views/`
+   18 处全部安全（`|| []`/`?? 0`/三目默认值/业务语义分支）⇒ 0 残留。
+   **教训：子代理的路径级结论必须抽样实测文件存在性后再采信。**
+
 ### O 轮环境与账号备忘
 
 | 项 | 值 |
@@ -204,3 +231,4 @@ O 轮 = 用户指令的新一轮全量回归，主验环境=线上 SaaS `https:/
 | M | 11-13 | 对抗性抽查 + 门禁收口 | 见 router-list 各行「11-13 M轮」注记 |
 | N2 | 11-13 | 258 路由 × 双形态逐路由 reload 单挂载探针 | 全绿；nr-batch.mjs/mark_batch.py 固化 |
 | O | 11-13 | 线上 SaaS 258 路由只读点验 + 对抗复扫 + 核心路由显式点击 | 258/258 落证；修短链误报 + SW 自更新两真 bug（见第五节） |
+| O-2 | 11-13 | 遗留问题处理 + 二次审核（同类 bug/PWA/资产可信度三轴） | 0 同类残留；补 Go 托管 PWA 五件套路由 + messageHub 硬化 + 删死代码（见第五节） |

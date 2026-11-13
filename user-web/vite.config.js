@@ -265,15 +265,9 @@ export default defineConfig({
               expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },
-          // API 静态资源: CacheFirst
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/static/'),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'api-static-v1',
-              expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 * 7 },
-            },
-          },
+          // （2026-11-13 O 轮二次审核移除）/api/static/ CacheFirst 死规则：
+          // user-server 全仓 0 条 /api/static 路由、nginx 也无该前缀匹配，
+          // 这条运行时缓存永远不会命中，白占一条规则。
           // 字体文件: CacheFirst
           {
             urlPattern: ({ request }) =>

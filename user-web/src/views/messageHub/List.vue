@@ -952,8 +952,11 @@ onUnmounted(() => {
 const loadPlatforms = async () => {
   try {
     const res = await messageHubApi.getPlatforms()
-    platformOptions.value = res.platforms || []
-    msgTypeOptions.value = res.msg_types || []
+    // res?. 防同型误报：API 200 但 data 为 null 时 res=null，
+    // 直接 res.platforms 会 TypeError 进 catch 误报「平台选项加载失败」
+    // （与 shortLink/List.vue 空数据误报同型，2026-11-13 二次审核补）
+    platformOptions.value = res?.platforms || []
+    msgTypeOptions.value = res?.msg_types || []
   } catch (e) {
     console.error('加载平台列表失败', e)
     ElMessage.error('平台选项加载失败')
