@@ -7,14 +7,22 @@ description: "Publishes HiveMtk changes: chain A deploys the Go API to productio
 
 代码改完了，怎么让它到用户手里——**只走本 skill 的三条链，别自己另造流程**。
 
-## 0. 先定位仓库（不要在命令里写死个人路径）
+## 0. 先定位主代码目录（不要在命令里写死个人路径）
+
+**本仓是嵌套 git 仓库**：外层 `.../go/hivemtk` 与内层 `.../go/hivemtk/hivemtk` 各有 `.git`，
+真实代码（`deploy/`、`user-server/`、`user-web/`）在**内层**。所以
+`git rev-parse --show-toplevel` + `"/hivemtk"` 后缀的写法在正常场景下会指错
+（2026-11-13 实测踩到，勿再用）。正确做法是**从当前目录向上找含 `deploy/deploy-api.sh` 的那层**：
 
 ```bash
-ROOT=$(git rev-parse --show-toplevel)   # 仓根，如 .../go/hivemtk
-APP="$ROOT/hivemtk"                     # 主代码：Go 在 user-server/，扩展在 user-web/bridge/
+APP=$PWD
+while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
+[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）"; exit 1; }
+echo "主代码目录: $APP"
 ```
 
-后续所有命令都基于 `$APP`，这样在任何编辑器/任何克隆位置都能跑。
+后续所有命令都基于 `$APP`（Go 在 `$APP/user-server/`，扩展在 `$APP/user-web/bridge/`），
+这样在任何编辑器、任何子目录、任何克隆位置都能跑。
 
 ## 1. 铁律（用户 2026-11-13 定，违反即返工）
 
@@ -136,3 +144,4 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
   （线上 SPA 由 nginx 直接伺服 `user-web` 目录，需另行同步）。
 - 问「线上现在是什么版本」⇒ 不要猜，读 `PROD_TOPOLOGY_CHANGES.md` 台账。
 - `go test` 报 `test password is missing` ⇒ 环境问题，不是回归，不要当作发布阻塞。
+- **定位目录一律用 §0 的向上查找**，不要用 `git rev-parse --show-toplevel` 猜层级（本仓嵌套仓库，会指错）。
