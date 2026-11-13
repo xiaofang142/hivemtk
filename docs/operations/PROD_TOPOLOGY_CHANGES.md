@@ -168,3 +168,53 @@ location ^~ /files/extensions/ {
 `rateLimitExemptPrefixes`），无需服务器侧配置；此处仅登记口径：`/llm-api/v1/`
 已有 HMAC + nonce + 钱包扣费三道闸，不再叠 IP 桶（否则一次 AI 编排十余次
 并发调用必被 20rps 全站桶打爆）。
+
+## 2026-11-13 · 扩展包分发链修复（0bae3039）+ 链 C 上链全自动打通
+
+**背景**：用户规则「设计了 API 就发布线上 / bridge 有变更就更新谷歌扩展」。本轮排查
+「扩展包上传到平台后租户端仍读不到」的完整根因并修复。
+
+**根因（两条，均为平台侧口径，线上实证）**：
+1. **purchase 门**：平台 `detail` 接口的 `version_info` 只在资产 `purchased=true`
+   后才返回 `file_url`/`filename`/`file_sha256`/`size_bytes`；未购买时只有
+   `{changelog, created_at, schema_version, version}`。`bridge_extension.go Latest()`
+   原先没先 purchase 就读 detail ⇒ file_url 恒空 ⇒ 一律 `ErrBridgeExtensionOffline`。
+2. **不能取 list[0]**：平台 ListAssets 按 `updated_at` 倒序，而 purchase 会刷新
+   `updated_at`（实测：买过旧版本后旧资产被顶到第一位，租户端因此拿到 1.0.5
+   而非刚上传的 1.3.0）。
+
+**修复（`internal/service/bridge_extension.go`，API 变更）**：
+`Latest()` 改为 ListAssets(size 50) → `latestExtensionAssetID()` 按 `latest_version`
+语义比较挑最新 → 先 `Purchase` → 再 `GetAssetDetail` → 读 `version_info` 文件字段。
+新增 `compareVersionStrings`/`splitVersion`（点分逐段比、缺段按 0、非点分版本小于
+任何正常版本）。配套 7 例单测（purchase 门、purchase 失败不吞成 Offline、
+多资产选最新、脏行跳过、版本比较口径）。
+
+**发布**：`deploy/deploy-api.sh` 全自动跑通（20:33 之后的第二次真实发布）。
+- 代码 `0bae3039`（1 个 user-server 提交）
+- 线上二进制 sha256=cf6d33b14a609f64…
+- 运行镜像=fcd0e6f557c323b93c7，容器启动 2026-11-13T13:46:35Z
+- 回滚点：镜像 `mtk-user-server:rollback-20261113-214426` / 二进制
+  `/www/wwwroot/hivemtk/user-server/user-server.bak-20261113-214426`
+- 容器内 + 公网 `/api/health` 均 200
+
+**链 C 上链（本轮首次跑通）**：
+- 平台上传路由真实存在，在 **admin 侧**：`POST /platform/asset-market/file-assets`
+  （multipart，字段 file/name/industry/version/changelog，Bearer JWT）。此前「零上传
+  路由」的结论是只查了 merchant-api 侧，误判。
+- 平台后台「上传扩展包」按钮**本身是坏的**（bundle `f=t=>e.upload(...)`，而 multipart
+  能力在 `l.upload` 上、`e` 是裸 axios 实例 ⇒ 真人点也报 `e.upload is not a function`
+  且零网络请求）⇒ 只能绕开 UI 直调接口。
+- 执行器：`user-web/bridge/scripts/lib/platform-asset.mjs` + `scripts/upload-platform-asset.mjs`
+  （ego-browser 复用平台运营登录态；zip 走 base64 经 evaluate argument 传入——
+  Chrome 禁止 fetch file://，实测 `TypeError: Failed to fetch`）。
+- 成果：`hivebridge-1.3.0.zip`（441803B）上链为资产
+  `ast-general-4990ec7278b9fcd06e`（id=153 / approved / `asset_versions` id=172 /
+  file_url `/files/extensions/2026/11/bd55744d-4c0b-4c07-b675-7efc6028c3df.zip`）。
+- 生效实证：`GET /api/bridge/extension/package` 回 200，
+  `download_url=https://manageapi.xapptool.cn/files/extensions/2026/11/bd55744d-….zip`；
+  租户端页面显示「版本 1.3.0 / 431.4 KB / SHA256 77f0357b… / 下载安装包」。
+
+**遗留观察（非阻断）**：平台库现有 2 条 browser_extension 资产（旧 id=2 / 1.0.5 /
+approved / 10-22；新 id=153 / 1.3.0 / 11-13）。上传接口对同名资产新建 asset 而非加
+版本，旧资产可按需在平台后台「下架」。

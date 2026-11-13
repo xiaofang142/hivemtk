@@ -13,7 +13,7 @@
 |---|---|---|
 | `user-server/**`（Go API） | **链 A：发布线上** | ✅ 全自动：`deploy/deploy-api.sh`（变更驱动 + 双健康检查 + 自动回滚） |
 | `user-web/bridge/**`（谷歌扩展） | **链 B：本机构建 + 装进 Chrome + 重载** | ✅ 全自动：`npm run publish -- --reload` |
-| 上面任一条合并后 | **链 C：安装包上链平台** | ⛔ 无法自动：平台端**零资产上传 HTTP 路由**（2026-11-13 二进制 strings 全量提取实证），只能平台运营后台上传 |
+| 上面任一条合并后 | **链 C：安装包上链平台** | ✅ 全自动：`node scripts/upload-platform-asset.mjs`（ego-browser 复用平台运营登录态直调 `POST /platform/asset-market/file-assets`） |
 
 铁律（两条，来自用户 2026-11-13 指令）：
 1. **设计了 API 就发布线上**；
@@ -150,40 +150,77 @@ Chrome 扩展 ID 由加载目录路径决定。**路径变化 = ID 变化 = `chr
 MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（package 漏 bump）→
 `1.3.0` 四渠道真机校准修复 + 版本双源一致性修复（35e288db）。
 
-## 3. 链 C：安装包上链平台（阻塞，无法自动）
+## 3. 链 C：安装包上链平台（全自动，一条命令）
 
 - 平台端代码**不在本仓**（全仓仅 `user-server/go.mod` 一个 go.mod；
   `AssetTypeBrowserExtension` 定义在平台仓），服务器上也只有编译产物。
-- user-server 侧只有只读/购买/拉取/上报用量的客户端
-  （`internal/platform/asset_market_client.go`：`ListAssets`/`GetAssetDetail`/`Purchase`/
-  `PullData`/`MyPurchases`/`GetCredits`/`ReportUsage`），**没有上传方法**。
-- **2026-11-13 实证（服务器 `platform-server` 二进制 strings 全量提取）**：全部路由中
-  merchant-api 侧仅 asset-market 的 list/detail/purchase/my-purchases/report-usage/sync；
-  platform 侧仅 asset-market 的 all/revenue-summary/pending/contributors/credits/withdrawals
-  与 assets 的 batch-approve/batch-publish/{id}/approve/{id}/reject/{id}/offline、playground
-  preview-parse/test-run。**零资产上传路由**（无 upload/file-post 类接口）⇒ 不是"缺凭证"，
-  而是接口本身不存在，上传只能在平台管理后台 UI 完成。
-- ⇒ 上传只能由平台运营操作，把 `user-web/bridge/release/hivebridge-<version>.zip`
-  作为 `browser_extension` 资产上传。上传后用户端「桥接扩展安装包」页的版本徽章自动变新
-  （平台侧文件由 `work.xapptool.cn` 的 `^~ /files/extensions/` 反代 8205 托管）。
-- 平台商户端认证三头（对接平台 API 时用）：`X-Merchant-Key` / `X-Timestamp` /
-  `X-Signature`（HMAC，payload = `method\npath\ntimestamp\nbody`，密钥为 merchant key）。
+- user-server 侧有完整客户端（`internal/platform/asset_market_client.go`：
+  `ListAssets`/`GetAssetDetail`/`Purchase`/`PullData`/`MyPurchases`/`GetCredits`/`ReportUsage`）。
+- **2026-11-13 实证（服务器 `platform-server` 二进制 strings 全量提取 + 平台前端 bundle 反查）**：
+  平台确有资产上传路由，但**不在 merchant-api，而在 admin 侧**：
+  - merchant-api：`/asset-market/list`、`/detail/{asset_id}`、`/purchase`、`/purchases`、
+    `/my-purchases`、`/report-usage`、`/sync`、`/assets/{id}/purchase|sync`
+  - platform（admin，Bearer JWT）：`/asset-market/all`、`/assets`、`/assets/batch-approve`、
+    `/assets/batch-publish`、`/assets/{id}/approve|reject|offline`、`/pending`、`/contributors`、
+    `/revenue(-summary)`、`/withdrawals`、`/playground/preview-parse|test-run`、`/credits/*`
+  - **上传路由 = `POST /platform/asset-market/file-assets`**（multipart/form-data，
+    字段 `file`/`name`/`industry`/`version`/`changelog`）。此路由只存在于 admin 侧，
+    merchant-api 没有上传能力 —— 这是此前误判「零上传路由」的原因。
+- **平台后台「上传扩展包」按钮本身是坏的**（bundle `assetMarket-*.js`：
+  `f=t=>e.upload('/platform/asset-market/file-assets',t)`，而 multipart 能力在
+  `l.upload` 上、`e` 是裸 axios 实例 ⇒ **真人点也报 `e.upload is not a function`
+  且零网络请求**）。⇒ 只能绕开 UI，在已登录页面上下文里直调同一接口。
+- **上传命令（全自动）**：
+
+  ```bash
+  cd user-web/bridge
+  BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run release   # 先出包
+  node scripts/upload-platform-asset.mjs                            # 再上链（默认 --verify）
+  ```
+
+  `scripts/lib/platform-asset.mjs` 用 ego-browser 打开
+  `https://manage.xapptool.cn/#/platform/asset-market/list`（复用平台运营登录态），
+  在页面上下文里 `fetch('/platform/asset-market/file-assets')` 上传
+  （zip 由父进程读成 base64 经 evaluate argument 传入——Chrome 禁止 fetch file://，
+  实测 `TypeError: Failed to fetch`），成功后调 `batch-publish` 留痕，
+  再回验 `https://work.xapptool.cn/#/bridge/extension`。
+- **下载链的平台侧口径（2026-11-13 线上实证，user-server 侧已适配，见 0bae3039）**：
+  1. **purchase 门**：平台 detail 的 `version_info` **只在资产 `purchased=true` 后才返回
+     `file_url`/`filename`/`file_sha256`/`size_bytes`**；未购买时只有
+     `{changelog, created_at, schema_version, version}`。⇒ `bridge_extension.go Latest()`
+     必须先 `Purchase` 再 `GetAssetDetail`（免费资产 price=0，零成本幂等）。
+  2. **不能取 list[0]**：平台 ListAssets 按 `updated_at` 倒序，而 purchase 会刷新
+     `updated_at`（实测：买过旧版本后旧资产被顶到第一位，用户端因此拿到 1.0.5
+     而非刚上传的 1.3.0）⇒ 按 `latest_version` 语义比较挑最新。
+  3. `POST /api/v1/asset-market/sync` 恒回 `{"code":5000,"message":"操作失败，请稍后重试"}`
+     ⇒ sync 路径不可用，不要走。
+- 平台商户端认证三头（对接 merchant API 时用）：`X-Merchant-Key` / `X-Timestamp` /
+  `X-Signature`（HMAC-SHA256 hex，payload = `method\npathNoQuery\ntimestamp\nbody`）。
   契约闸：`/merchant-api/`、`/llm-api/v1/`、`/api/platform/` 三组必须带
   `X-Contract-Version: 1`（十进制 "1"，传 "v1" 会按 v0 处理 ⇒ 426）。
-- **2026-11-13 现状**：线上 `https://workapi.xapptool.cn/api/system/info` 回
-  `{"platform_enabled":true}`（线上已接入平台），但租户端安装包页显示
-  「当前部署未接入平台，或平台尚未上架桥接扩展包」⇒ 平台上**没有**已上架的
-  browser_extension 资产。**1.3.0 安装包尚未上链**（`user-web/bridge/release/hivebridge-1.3.0.zip`）。
+- **⚠️ 从 manage.xapptool.cn 页面上下文调 `/merchant-api/...` 会拿到 SPA index.html**
+  （nginx 上 `/merchant-api` 只在 work.xapptool.cn vhost 反代 8204；manage vhost 只反代
+  `/platform/` 与静态资源）。merchant-api 只能在容器内或经 user-server 代理端点调。
+- **2026-11-13 现状**：链 C 已全自动跑通并生效——`hivebridge-1.3.0.zip` 已上链
+  （资产 `ast-general-4990ec7278b9fcd06e` / approved / `asset_versions` id=172 /
+  file_url `/files/extensions/2026/11/bd55744d-….zip` / 441803B），
+  user-server 0bae3039 已发布上线，租户端页面显示「版本 1.3.0 / 431.4 KB / 下载安装包」，
+  `GET /api/bridge/extension/package` 回 200 且 `download_url` 指向
+  `https://manageapi.xapptool.cn/files/extensions/...`。
+- 历史遗留：平台库现有 2 条 browser_extension 资产（旧 id=2 / 1.0.5 / approved /
+  10-22 建；新 id=153 / 1.3.0 / 11-13 建）。上传接口对同名资产**新建 asset**
+  （不给旧资产加版本），旧资产可按需在后台「下架」。
 
 ## 4. 收尾清单（每次发布后逐项打勾）
 
 - [ ] 链 A：`deploy/deploy-api.sh` 全绿、容器内 + 公网 `/api/health` 200、`PROD_TOPOLOGY_CHANGES.md` 台账已更新
 - [ ] 链 B：`npm run publish -- --reload` 全绿、chrome://extensions 快照版本号 = 目标版本
 - [ ] 链 B 租户侧安装：`node scripts/install-extension.mjs --zip release/hivebridge-<v>.zip` 全绿
-- [ ] 链 C：安装包已由平台运营上传、租户端页面版本徽章已变（**人工项，无接口可自动化**）
+- [ ] 链 C：`node scripts/upload-platform-asset.mjs` 全绿、租户端页面版本徽章已变（ego-browser 全自动）
 
-> 2026-11-13 本轮状态：链 A ✅（2d910841 已上线，9 个 user-server 提交追平）；
-> 链 B ✅（1.3.0 已装进 Chrome 并重载；安装链执行器 install-extension.mjs 已实测：
-> `--zip` 全自动覆盖安装 + 重载、`--download` 在平台无资产时正确报错、互斥门生效）；
-> 链 C ⛔ 待平台运营上传 1.3.0。
+> 2026-11-13 本轮状态：链 A ✅（0bae3039 已上线，含扩展包分发链修复：先 purchase
+> 解锁 file_url + 多资产按版本选最新）；链 B ✅（1.3.0 已装进 Chrome 并重载；
+> 安装链执行器 install-extension.mjs 已实测）；链 C ✅（hivebridge-1.3.0.zip 已上链
+> ast-general-4990ec7278b9fcd06e，租户端页面显示「版本 1.3.0 / 431.4 KB / 下载安装包」，
+> GET /api/bridge/extension/package 回 200 且 download_url 正确）。
 - [ ] 双远端已同步（`gitee-upstream` + `upstream`）
