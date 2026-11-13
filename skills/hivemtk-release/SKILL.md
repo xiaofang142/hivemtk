@@ -1,6 +1,6 @@
 ---
 name: "hivemtk-release"
-description: "Publishes HiveMtk changes: chain A deploys the Go API to production, chain B builds+installs+reloads the Chrome bridge extension, chain C uploads the extension zip to the platform. Invoke whenever changes are finished and need to ship — 发布线上/部署/上线/发版, 更新扩展/装进Chrome/重载扩展, 上传安装包/上链平台, release/deploy/publish/ship, or after any change under user-server/ or user-web/bridge/, or when asking how this repo gets changes to users."
+description: "Publishes HiveMtk changes: chain A deploys the Go API to production, chain B builds+installs+reloads the Chrome bridge extension, chain C uploads the extension zip to the platform. Invoke whenever changes are finished and need to ship — 发布线上/部署/上线/发版, 更新扩展/装进Chrome/重载扩展, 上传安装包/上链平台, release/deploy/publish/ship, or after any change under user-server/ or user-web/bridge/, or when asking how this repo gets changes to users. NOT for pure SPA edits under user-web/src/** (管理端前端，不属于本 skill)."
 ---
 
 # HiveMtk 发布链（链 A API 上线 / 链 B 谷歌扩展 / 链 C 平台上链）
@@ -17,6 +17,11 @@ description: "Publishes HiveMtk changes: chain A deploys the Go API to productio
 ```bash
 APP=$PWD
 while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
+if [ ! -f "$APP/deploy/deploy-api.sh" ]; then
+  # 兜底：从外层仓（含其 docs/ 等子目录）启动时向上找不到——主代码在外层根的 hivemtk/ 内层仓。
+  # 只在向上已失败后才允许 show-toplevel，此时必然不在内层，不存在歧义。
+  T=$(git rev-parse --show-toplevel 2>/dev/null) && [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"
+fi
 [ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）"; exit 1; }
 echo "主代码目录: $APP"
 ```
@@ -60,8 +65,11 @@ cd "$APP" && ./deploy/deploy-api.sh                                          # �
 cd "$APP/user-web/bridge"
 BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run publish -- --reload # 链 B
 node scripts/upload-platform-asset.mjs                                       # 链 C
-cd "$APP" && git add -A && git commit && git push gitee-upstream master && git push upstream master
+cd "$APP" && git add -A && git commit -m "build: <一句话说明本轮发版内容>" \
+  && git push gitee-upstream master && git push upstream master
 ```
+> commit-msg hook 只收 Conventional Commits 白名单类型（`release` 被拒，用 `build`）；
+> 工作区有并行会话未提交文件时，不要 `git add -A` 一把梭，改为逐个 add 自己的文件。
 
 ### 场景 4：换机器 / 新加载目录（全程唯一需要人工的一次性步骤）
 
@@ -71,7 +79,7 @@ cd "$APP" && git add -A && git commit && git push gitee-upstream master && git p
 
 | 链 | 命令 | 机制 |
 |---|---|---|
-| A | `./deploy/deploy-api.sh` | 预检（master/无未提交/已 push/变更门：对比 `deploy/.api-deploy-state.json` 的 `deployed_sha` 与 `git log <基线>..HEAD -- user-server/`，零改动直接 exit 0）→ go vet + go test → `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 交叉编译 → scp + 双端 sha256 校验 → 镜像打 `rollback-<时间戳>` 标签 + 二进制 `.bak` 备份 → `docker compose up -d --build user-server` → 容器内 + 公网双健康检查 → 失败自动回滚（二进制 → 镜像标签两级）→ 写台账 |
+| A | `./deploy/deploy-api.sh` | 预检（master/无未提交/已 push/变更门：对比 `deploy/.api-deploy-state.json` 的 `deployed_sha` 与 `git log <基线>..HEAD -- user-server/`，零改动直接 exit 0）→ go vet + go test → `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 交叉编译 → scp + 双端 sha256 校验 → 镜像打 `rollback-<时间戳>` 标签 + 二进制 `.bak` 备份 → `docker compose up -d --build user-server` → 容器内 + 公网双健康检查 → 失败自动回滚（二进制 → 镜像标签两级）→ 写 `deploy/.api-deploy-state.json`（**台账 doc `PROD_TOPOLOGY_CHANGES.md` 不会自动写**，仍需按 §2 场景 1 收尾人工登记） |
 | B | `npm run publish -- --reload` | 版本一致性门 → 发行口径门（缺 `BRIDGE_ONLINE_SERVER` 拒绝构建，防 localhost 包当线上包发）→ `npm run release` + 产物校验（dist/zip 内 manifest 版本、popup.js 注入串）→ 备份旧加载目录（保留最近 5 份）→ `rsync -a --delete` → ego-browser 打开 `chrome://extensions`、搜索框过滤到唯一卡片、点「重新加载」、快照读回版本号回验 |
 | C | `node scripts/upload-platform-asset.mjs` | ego-browser 打开 `https://manage.xapptool.cn/#/platform/asset-market/list`（复用平台运营登录态）→ 页面上下文直调 `POST /platform/asset-market/file-assets`（multipart，Bearer；zip 由父进程读成 base64 经 evaluate argument 传入）→ 调 `batch-publish` 留痕 → 回验 `https://work.xapptool.cn/#/bridge/extension` |
 
@@ -132,6 +140,9 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
 
 ## 6. 深度文档与源码
 
+- **本 skill 的权威源在内层仓 `$APP/skills/hivemtk-release/SKILL.md`**：要改本 skill，先改仓库
+  权威源，再重跑 `$APP/skills/README.md` 的安装命令同步到本机部署副本（`~/.agents/skills` 等）。
+  只改部署副本不改权威源 = 下次安装被覆盖，视为违规。
 - 权威文档（含全部历史证据与拓扑台账）：
   `$APP/docs/operations/RELEASE-PIPELINE.md`、`$APP/docs/operations/PROD_TOPOLOGY_CHANGES.md`
 - 执行器源码：`$APP/deploy/deploy-api.sh`、`$APP/user-web/bridge/scripts/{publish,install-extension,upload-platform-asset}.mjs`、
@@ -140,8 +151,9 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
 
 ## 7. 常见误触发与边界
 
-- 只改前端 `user-web/src/**`（管理端页面）⇒ **不属于本 skill**，不走这三条链，正常 commit+push 即可
-  （线上 SPA 由 nginx 直接伺服 `user-web` 目录，需另行同步）。
+- 只改前端 `user-web/src/**`（管理端页面）⇒ **不属于本 skill**，不走这三条链，正常 commit+push 即可。
+  线上 SPA 由 nginx 伺服服务器上 `state/user-web-dist` 目录（PROD_TOPOLOGY 台账 volumes 注释，2026-11-14 核实）；
+  **目前没有自动同步链，同步方式未成文**——改 SPA 后向用户确认同步方式，不要自行 rsync 线上。
 - 问「线上现在是什么版本」⇒ 不要猜，读 `PROD_TOPOLOGY_CHANGES.md` 台账。
 - `go test` 报 `test password is missing` ⇒ 环境问题，不是回归，不要当作发布阻塞。
 - **定位目录一律用 §0 的向上查找**，不要用 `git rev-parse --show-toplevel` 猜层级（本仓嵌套仓库，会指错）。

@@ -8,7 +8,7 @@
 
 | # | 契约 | 自检方式 |
 |---|---|---|
-| A1 | 先用向上查找法定位应用根目录，确认 `deploy/deploy-api.sh` 存在 | `APP=$PWD; while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done` |
+| A1 | 先用向上查找法定位应用根目录，确认 `deploy/deploy-api.sh` 存在（从外层仓启动时向上找不到，走 `git rev-parse --show-toplevel` + `/hivemtk` 兜底，见 `AGENTS.md` §0） | `APP=$PWD; while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done; [ -f "$APP/deploy/deploy-api.sh" ] \|\| { T=$(git rev-parse --show-toplevel 2>/dev/null); [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"; }` |
 | A2 | 读 `git status --short`，识别并行会话未提交文件，**只 stage 自己本轮改的文件** | 提交前 `git status --short` 复核 |
 | A3 | 涉及浏览器/页面验证先加载 skill `browser-debug-rule`，主方案 ego-browser | `ego-browser skill` 能输出完整指南 |
 
@@ -27,7 +27,7 @@
 
 | # | 契约 |
 |---|---|
-| C1 | 五层架构 Router→Handler→Service→Repository→Model，**禁跨层**：Handler 不碰 DB、Service 不写 SQL、Repository 不写业务规则 |
+| C1 | 五层架构 Router→Controller→Service→Repository→Model，**禁跨层**：Controller 不碰 DB / 不 import repository 或 gorm、Service 不写 SQL / 不碰 `gin.Context`、Repository 不写业务规则 / 不碰 HTTP。**本仓无 `handler` 包，新域一律 `XxxController`**。分层由静态门强制：`python3 scripts/check-layer-boundary.py`（CI `Layer Boundary` 作业，存量例外在 `scripts/layer-boundary.baseline`） |
 | C2 | API 路径 `/api/{domain}/{resource}`；响应格式与错误码双通道口径见 `CLAUDE.md` §API 规范 |
 | C3 | 多租户 fail-closed：所有表访问必须带租户上下文，缺上下文一律拒绝 |
 | C4 | 改 `user-server/` 必跑 `go build ./...` + `go vet ./...` + `go test`；DB 门禁失败（缺 `POSTGRES_TEST_PASSWORD`）单独识别，不当代码问题 |

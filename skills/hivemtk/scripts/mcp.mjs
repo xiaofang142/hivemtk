@@ -10,14 +10,14 @@
 //   2. 环境变量: HIVEMTK_MCP_CLIENT_ID / HIVEMTK_MCP_API_KEY
 //   3. 配置文件: ~/.hivemtk/skill.json {"client_id":"...","api_key":"...","server":"..."}
 //
-// 服务器默认 https://api.xjznpt.com，可用 --server 或配置文件覆盖。
+// 服务器默认 https://workapi.xapptool.cn（2026-11-14 实测 /api/mcp 存活；旧 api.xjznpt.com TLS 已死），可用 --server 或配置文件覆盖。
 
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 function parseArgs(argv) {
-  const opts = { server: 'https://api.xjznpt.com' };
+  const opts = { server: 'https://workapi.xapptool.cn' };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];

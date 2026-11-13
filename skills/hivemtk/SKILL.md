@@ -13,8 +13,12 @@ description: HiveMTK/WeGEO 私域营销中台的 MCP 工具入口——查客户
    得到 `client_id`（`mcp-` 开头）与 `api_key`（`wgk_` 开头，**只显示一次**）。
 2. 保存到 `~/.hivemtk/skill.json`：
    ```json
-   {"client_id":"mcp-xxxx","api_key":"wgk_xxxx","server":"https://api.xjznpt.com"}
+   {"client_id":"mcp-xxxx","api_key":"wgk_xxxx","server":"https://workapi.xapptool.cn"}
    ```
+   server 默认 `https://workapi.xapptool.cn`（2026-11-14 实测 `/api/mcp` 存活，
+   回 `UNAUTHORIZED_2001` 未授权提示 = 端点在且门正常；旧默认 `api.xjznpt.com`
+   TLS 握手已失败，勿再用）。认证走 `X-Client-Id` + `X-API-Key` 凭证对链
+   （`user-server/internal/middleware/mcp_guard.go:91-95`），与签发的凭证一一对应。
 
 ## 调用
 
@@ -40,4 +44,5 @@ node scripts/mcp.mjs tools-call rag.search '{"query":"全包多少钱"}'
 - 工具报错时先 `tools-list` 确认参数形状，不要盲目重试；
   涉及风控/配额类错误（如 429）直接停下询问用户。
 
-详细参数见 `reference/tools.md`（由 tools-list 生成）。
+工具清单与参数形状**以 `node scripts/mcp.mjs tools-list` 实时返回为准**（配好凭证后先跑一次再调用；
+报错时也先 tools-list 核对参数，勿凭记忆猜）。

@@ -10,15 +10,23 @@
 ## 0. 先定位仓库根目录（本仓是嵌套 git 仓库，勿猜层级）
 
 外层 `~/Documents/www/go/hivemtk` 与内层 `~/Documents/www/go/hivemtk/hivemtk`
-**各有一个 `.git`**；真实代码（`deploy/`、`user-server/`、`user-web/`、`skills/`）在**内层**，
-外层没有 `deploy/`。`git rev-parse --show-toplevel` 从内层子目录跑会返回内层本身，
+**各有一个 `.git`**；真实代码（`deploy/`、`user-server/`、`user-web/`、`skills/`）在**内层**。
+外层也有一个 `deploy/`——那是平台侧另一套发布入口（`deploy.sh` + `deploy.conf`），
+**不含判据文件 `deploy-api.sh`**（判据文件只在内层存在，2026-11-14 实测）。
+`git rev-parse --show-toplevel` 从内层子目录跑会返回内层本身，
 但 `--show-superproject-working-tree` 为空（**不是 submodule 关系**，勿按 submodule 处理）。
 
-⇒ 任何脚本/命令要拿"应用根目录"必须**向上查找**，不许用 `show-toplevel` 拼 `$ROOT/hivemtk`：
+⇒ 拿"应用根目录"必须**向上查找判据文件**，不许在主链路用 `show-toplevel` 拼 `$ROOT/hivemtk`；
+从**外层仓任意目录**（含外层根、外层 docs/ 等）启动时向上找不到，走兜底（兜底里才允许 show-toplevel，
+因为它只在"向上已失败"后执行，此时必然不在内层，不存在歧义）：
 
 ```bash
 APP=$PWD
 while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
+if [ ! -f "$APP/deploy/deploy-api.sh" ]; then
+  T=$(git rev-parse --show-toplevel 2>/dev/null) && [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"
+fi
+[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）"; exit 1; }
 # APP = /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
 ```
 
@@ -55,17 +63,21 @@ while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirnam
 
 ### 后端（`user-server/`，Go）
 
-**五层架构：Router → Handler → Service → Repository → Model，禁跨层。**
+**五层架构：Router → Controller → Service → Repository → Model，禁跨层。**
 
 | 层 | 职责 | 禁止 |
 |---|---|---|
 | Router | 只注册路由与中间件 | 写业务逻辑 |
-| Handler | 解析入参、调 Service、组响应 | 直接碰 DB / 调 Repository |
+| Controller | 解析入参、调 Service、组响应 | 直接碰 DB / 调 Repository |
 | Service | 业务编排、事务边界 | 写 SQL / 碰 `*gin.Context` 细节 |
 | Repository | 数据访问（SQL/GORM） | 写业务规则 |
 | Model | 数据结构与表映射 | 带行为逻辑 |
 
-- 代码位置：`user-server/internal/{router,handler/controller,service,repository,model}/`。
+- 代码位置：`user-server/internal/{router,controller,service,repository,model}/`。
+  **本仓无 `handler` 包**：新域一律 `XxxController`，不引入 handler 同义词
+  （实测 Controller 类型 205 个、`XxxHandler` 零命中，口径与 `CLAUDE.md` §五层架构一致）。
+- 分层有 CI 静态门：`python3 scripts/check-layer-boundary.py`（GitHub Actions `Layer Boundary`
+  作业强制，新增跨层 import 即红，存量例外走 `scripts/layer-boundary.baseline`）。
 - API 路径规范 `/api/{domain}/{resource}`；响应格式、错误码双通道口径见 `CLAUDE.md` §API 规范。
 - 多租户 fail-closed：任何表访问必须带租户上下文，缺上下文一律拒绝而非放行。
 
@@ -98,7 +110,7 @@ cd user-web && npx eslint src --max-warnings 80   # 全量 warning 基线 63、�
 ## 4. 发布（改完了怎么到用户手里）
 
 完整 SOP 见 `docs/operations/RELEASE-PIPELINE.md` §0.1，也可直接加载 Skill `hivemtk-release`。
-四条链路，一条命令一步：
+三条链（A/B/C）+ 换机人工步，一条命令一步：
 
 | 改动范围 | 命令 |
 |---|---|

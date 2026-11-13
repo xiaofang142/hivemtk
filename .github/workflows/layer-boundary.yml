@@ -1,0 +1,57 @@
+# 五层架构分层静态门（Router→Controller→Service→Repository→Model，禁跨层）
+#
+# 为什么单独一个作业：AGENTS.md §2 / AI-EDITOR-CONTRACT.md C1 的「禁跨层」此前只有
+# 评审这一层保障，恒绿的规范与没人执行的规范长得一样（seam-guard 作业头注释记的是
+# 同一件事在异步全局上的另一例）。本门把可静态判定的 import 边界落成 CI 闸门：
+#   1. --selftest 先跑内置夹具（检测/基线豁免/注释豁免/测试豁免/import _ 别名形态），
+#      门的输入是它自己——牙齿坏了必须当场红，而不是悄悄恒绿；
+#   2. 全树扫描 user-server/internal（非测试 .go，1522 个，2026-11-14 实测），
+#      存量例外 34 对在 scripts/layer-boundary.baseline（router 层既有 DI 装配口径 33 处
+#      等），只拦**新增**跨层 import；基线条目对应的违规消失时打印「过期条目」提示，
+#      重构消除一处就删一行，逐步清零。
+#
+# 触发面写整棵 Go 树而不是只写脚本自己：只登记脚本路径会让「新加一处绕层 import」
+# 那类提交根本不重跑这道门（与 seam-guard 同理）。
+#
+# 「Service 不写 SQL」这类语义规则静态判定不可靠（gorm 事务句柄在 service 传阅是既成
+# 架构），仍留给评审，本门不越权——见 scripts/check-layer-boundary.py 头注释。
+name: Layer Boundary
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'scripts/check-layer-boundary.py'
+      - 'scripts/layer-boundary.baseline'
+      - 'user-server/*.go'
+      - 'user-server/**/*.go'
+      - '.github/workflows/layer-boundary.yml'
+  pull_request:
+    paths:
+      - 'scripts/check-layer-boundary.py'
+      - 'scripts/layer-boundary.baseline'
+      - 'user-server/*.go'
+      - 'user-server/**/*.go'
+      - '.github/workflows/layer-boundary.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  layer-boundary:
+    name: 五层 import 边界（禁跨层，基线 34 对）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: 门自检（牙齿验证，10 夹具）
+        run: python3 scripts/check-layer-boundary.py --selftest
+
+      - name: 全树扫描（新增跨层 import 即红，存量走基线）
+        run: python3 scripts/check-layer-boundary.py

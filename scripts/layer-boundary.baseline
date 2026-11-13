@@ -1,0 +1,38 @@
+# 五层分层门存量豁免（scripts/check-layer-boundary.py 生成于 2026-11-14）
+# 口径：规则|相对 user-server/internal 的路径。只豁免既有违规，新增跨层 import 一律红。
+# router→repository/model 共 33 处是既有「路由层做 DI 装配」的既成口径，清零待重构；
+# controller→gorm(datatypes) 2 处、service→gin 3 处同理。重构消除一处就删一行。
+controller|geo/controller/geo_pusher_config.go
+controller|geo/controller/geo_schema_template.go
+router|router/admin_routes.go
+router|router/asset_bundle_routes.go
+router|router/auth_routes.go
+router|router/browser_automation_routes.go
+router|router/business_routes.go
+router|router/capability_runtime_routes.go
+router|router/card_routes.go
+router|router/channel_overview_routes.go
+router|router/chat_routes.go
+router|router/cmd/dump_routes/main.go
+router|router/competitor_routes.go
+router|router/contact_consent_routes.go
+router|router/content_routes.go
+router|router/dictionary_routes.go
+router|router/egolite_routes.go
+router|router/frontend_aliases.go
+router|router/geo_routes.go
+router|router/knowledge_ports.go
+router|router/middleware_ports.go
+router|router/observability_dashboard_routes.go
+router|router/platform_routes.go
+router|router/r39_panel_routes.go
+router|router/reach_deferred_routes.go
+router|router/report_routes.go
+router|router/router.go
+router|router/self_service_routes.go
+router|router/service_routes.go
+router|router/system_routes.go
+router|router/workflow_orchestrator_routes.go
+service|service/guard.go
+service|service/llm_wallet.go
+service|service/sse_hub.go
