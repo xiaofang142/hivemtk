@@ -1,0 +1,58 @@
+# 提交信息规范门（服务端兜底）
+#
+# 为什么需要：commit-msg 白名单（.githooks/commit-msg，`release` 被拒用 `build`）只在
+# 本机 `git config core.hooksPath .githooks` 之后生效——2026-11-14 实测沙盒克隆默认未配置，
+# 新机器/CI 直接提交即绕过。客户端钩子永远只能「自觉」，服务端才能「强制」；
+# 本作业复刻钩子的同一条正则，作为最后防线（与 seam-guard「客户端门必须有 CI 门兜底」
+# 的既有结论同构）。
+#
+# 口径与 .githooks/commit-msg 完全一致：Conventional Commits 白名单类型
+# feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert（release 不在其中 = 被拒）；
+# 豁免 GitHub 自动生成的 Merge 提交（本仓线性推 master，正常不出现）。
+name: Commit Lint
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  commit-lint:
+    name: Conventional Commits 白名单（服务端兜底）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout（全历史，取本次推送区间）
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: 校验本次推送的全部提交信息
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, sys, os
+          TYPES = "feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+          PAT = re.compile(rf"^({TYPES})(\(.+\))?!?: .+")
+          before = os.environ.get("EVENT_BEFORE", "")
+          sha = os.environ.get("GITHUB_SHA", "HEAD")
+          if before and set(before) != {"0"}:
+              rng = f"{before}..{sha}"
+          else:  # 新分支/首次推送：只校验 tip
+              rng = "-1..HEAD"
+          subjects = subprocess.run(
+              ["git", "log", "--format=%s", rng],
+              capture_output=True, text=True, check=True).stdout.splitlines()
+          subjects = [s for s in subjects if s]
+          bad = [s for s in subjects if not PAT.match(s) and not s.startswith("Merge ")]
+          print(f"校验区间 {rng}：{len(subjects)} 条提交")
+          if bad:
+              print("❌ 以下提交信息不符 Conventional Commits 白名单（release 被拒，用 build）：")
+              for s in bad:
+                  print(f"   {s}")
+              sys.exit(1)
+          print("✅ 全部合规")
+          PY

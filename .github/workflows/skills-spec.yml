@@ -1,0 +1,45 @@
+# skills/ 权威源规范门（agentskills.io 可判定约束）
+#
+# 为什么单独一个作业：skills/*/SKILL.md 靠 description 决定模型是否加载——name 写错或
+# description 缺失/超限，部署后就是静默失效（列表里看不到或永不触发），与没写这个 skill
+# 无异。此前的保障只有「装上后肉眼看一眼」，恰是「恒绿的门与坏门长得一样」的又一例。
+# 本门校验：name 与目录一致且符合 ^[a-z0-9-]+$ ≤64；description 必填 ≤1024 且含
+# 「何时触发」语义；正文非空；文件尾单换行。见 scripts/check-skills.py 头注释。
+name: Skills Spec
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'skills/**/SKILL.md'
+      - 'skills/README.md'
+      - 'scripts/check-skills.py'
+      - '.github/workflows/skills-spec.yml'
+  pull_request:
+    paths:
+      - 'skills/**/SKILL.md'
+      - 'skills/README.md'
+      - 'scripts/check-skills.py'
+      - '.github/workflows/skills-spec.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  skills-spec:
+    name: agentskills.io 可判定约束（name/description/正文）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: 门自检（牙齿验证）
+        run: python3 scripts/check-skills.py --selftest
+
+      - name: 扫描 skills/ 权威源
+        run: python3 scripts/check-skills.py

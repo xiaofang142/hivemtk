@@ -28,6 +28,12 @@ done
 | `hivemtk` | HiveMTK/WeGEO 私域营销中台的 MCP 工具入口（查客户 / 知识库 / 跨渠道发消息 / 触达管线） | 查客户、发消息、触达、知识库、MCP |
 | `browser-debug-rule` | 浏览器调试/自动化全局强制规则（主方案 ego lite，复用登录态，禁独立 profile/重登录） | 浏览器调试、页面验证、截图取证、console/network 排查 |
 
+## 跨编辑器分发（业界通用路径，可选）
+
+业界主流分发是 Vercel 的 `npx skills` CLI（自动探测本机已装的 70+ 编辑器，装到各自目录，
+skills.sh 为其排行榜）：`npx skills add <owner>/<repo> --skill <name>`。本仓 skills/ 与
+agentskills.io 开放规范兼容，天然可用该通道；日常用上节自带安装命令即可（零依赖、不联网）。
+
 ## 新增 Skill 的约定
 
 1. 在 `skills/<name>/SKILL.md` 写**权威源**，`description` 必须同时写清「做什么」和「何时触发」，
