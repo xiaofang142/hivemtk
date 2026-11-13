@@ -111,7 +111,6 @@ const SW_RELOAD_COUNT_KEY = 'hivemtk-sw-reload-count'
 async function manageServiceWorker() {
   // SW 不可用 (HTTP、隐私模式、老浏览器) — 跳过, 不影响功能
   if (!('serviceWorker' in navigator)) {
-    console.info('[SW] serviceWorker 不可用, 跳过注册')
     return
   }
 
@@ -166,7 +165,6 @@ async function manageServiceWorker() {
 
       // 4. 等 1 帧让 unregister 生效, 然后 reload (绕过 HTTP 缓存)
       await new Promise(r => setTimeout(r, 100))
-      console.info('[SW] 旧版本已清理, 即将 reload 到新版本')
       location.reload()
       return // reload 后就不会执行下面的注册逻辑了
       }
@@ -187,11 +185,9 @@ async function manageServiceWorker() {
     registration.addEventListener('updatefound', () => {
       const newSW = registration.installing
       if (!newSW) return
-      console.info('[SW] 新版本下载中...')
       newSW.addEventListener('statechange', () => {
         if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
           // 新 SW 准备好了, 立即激活 (不等所有 tab 关)
-          console.info('[SW] 新版本已就绪, 正在 activate...')
           newSW.postMessage({ type: 'SKIP_WAITING' })
         }
       })
@@ -200,7 +196,6 @@ async function manageServiceWorker() {
     // 页面首次加载时也主动触发一次 SW 检测 (避开 HTTP 缓存)
     registration.update().catch(() => {})
 
-    console.info(`[SW] 已注册, buildId=${remoteBuildId}`)
   } catch (err) {
     // SW 注册失败不应影响主流程 — 用户照样能正常用
     console.warn('[SW] 注册失败 (不影响功能):', err.message)

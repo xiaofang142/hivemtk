@@ -153,7 +153,6 @@ export class ChatSocket {
       const { refreshAccessToken } = await import('@/utils/request')
       const token = await refreshAccessToken({ force: authFailed })
       if (token) {
-        console.info('[ChatSocket] token 已确认，重连')
         this.connect()
         return
       }
@@ -246,7 +245,6 @@ export class ChatSocket {
         last_seq: this.lastSeq,
         frames: sorted
       }))
-      console.debug(`[ChatSocket] flushBuffer sent ${sorted.length} frames`)
     } catch (err) {
       console.warn('[ChatSocket] flushBuffer 失败：', err)
     }

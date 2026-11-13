@@ -100,7 +100,7 @@ async function flush() {
     await http.post('/api/customer-events/batch', { events: queue }, { _silent: true })
     saveQueue([])
   } catch (e) {
-    console.debug('[journey] 事件上报失败，保留队列');
+    console.warn('[journey] 事件上报失败，保留队列');
   }
 }
 

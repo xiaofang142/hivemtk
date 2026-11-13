@@ -349,7 +349,6 @@ export function useOnboarding() {
     // 且 onHighlighted 会拿到 undefined 元素抛 TypeError。
     // 所以外壳不在就不启动全局导览——没东西可引导。
     if (!hasLayoutChrome(steps)) {
-      console.info('[Onboarding] 跳过全局导览：当前页面无布局外壳')
       return
     }
     // 全局导览的「完成」标记也写在 onDestroyed：旧实现只挂在最后一步的
@@ -377,7 +376,6 @@ export function useOnboarding() {
     if (!userStore.isLoggedIn) return false
     const tour = getPageTour(getTours(), pattern)
     if (!tour) {
-      console.info(`[Onboarding] 该页面没有导览配置：${pattern}`)
       return false
     }
     if (!force && isPageSeen(pattern)) return false
@@ -432,7 +430,6 @@ export function useOnboarding() {
   function startModuleTour(moduleKey: string): void {
     if (!userStore.isLoggedIn) return
     currentTourType = 'module'
-    console.info(`[Onboarding] 模块导览未配置：${moduleKey}`)
   }
 
   function restart(tourType: TourType = 'global'): void {
@@ -521,7 +518,6 @@ export function useOnboardingAutoStart() {
         setTimeout(tick, 200)
         return
       }
-      console.info('[Onboarding] 跳过全局导览：当前页面无布局外壳')
     }
     tick()
   }

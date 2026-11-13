@@ -175,7 +175,7 @@ export default class AgentSocket {
       case 'heartbeat':
         break;
       default:
-        console.debug('[AgentSocket] 未处理事件:', event)
+        break
     }
   }
 

@@ -74,10 +74,6 @@ class MarketingChatWidget {
    * @returns {void}
    */
   init() {
-    if (!this.config.appKey && !this.config.channelId) {
-      console.info('[MarketingChatWidget] 未指定 appKey/channelId,使用默认 channel(私域部署模式)')
-    }
-
     // USR-EM-04: 多实例支持：使用 z-index 隔离
     if (this.config.zIndex === undefined) {
       this.config.zIndex = 9999 + (MarketingChatWidget._instanceCount * 2)
