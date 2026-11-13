@@ -265,7 +265,6 @@ const fmt = (v) => {
   try { return JSON.stringify(v) ?? String(v) } catch { return String(v) }
 }
 
-// ════════════════════════════════════════════════════════════════════════
 describe('枚举 prop 防回归闸门', () => {
   describe('1. 映射函数：任何入参都不得返回非法 type', () => {
     const CASES = [

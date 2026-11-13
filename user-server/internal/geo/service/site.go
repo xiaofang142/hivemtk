@@ -182,7 +182,6 @@ Sitemap: /sitemap.xml
 // ExportToHugo 文章导出到 Hugo content/ 目录
 // 同时写 llms.txt + robots.txt + sitemap.xml 到 Hugo static/
 func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
-	// 读配置
 	siteCfg, err := s.sites.GetActive(ctx)
 	if err != nil {
 		// 无启用站点是用户可自行补救的配置态而非服务端故障（2026-11-13 K-4 台账轮实测
@@ -210,7 +209,6 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 		}
 	}
 
-	// 读已发布文章
 	articles, err := s.articles.ListPublished(ctx)
 	if err != nil {
 		return 0, err
@@ -269,12 +267,10 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 		logger.Warnf("写 llms.txt 失败: %v", err)
 	}
 
-	// 写 robots.txt
 	if err := os.WriteFile(filepath.Join(staticDir, "robots.txt"), []byte(GenerateSiteRobots(siteCfg.Domain)), 0o644); err != nil {
 		logger.Warnf("写 robots.txt 失败: %v", err)
 	}
 
-	// 写 sitemap.xml
 	sitemap := s.buildSitemapXML(siteCfg.Domain, derefArticles(articles))
 	if err := os.WriteFile(filepath.Join(staticDir, "sitemap.xml"), []byte(sitemap), 0o644); err != nil {
 		logger.Warnf("写 sitemap.xml 失败: %v", err)
