@@ -34,6 +34,39 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.0': `- 四渠道真机核对补修（2026-11-13 ego-browser 只读核对，复用登录态）：
+  B站（P0）消息气泡改用现网 CSS Modules 哈希类 [class*="_Msg_"]/[class*="_Msg__Content"]，
+  并新增 outermost 去嵌套（哈希类同时命中 _Msg__Time/__Wrap/__Main/__Content 等 6+ 节点）；
+  会话列表同法去嵌套（54 个子元素收敛为 6 个根行，patrol 不再点错目标）；
+  会话 id 改读根行 data-id（去 contact_ 前缀）与 location.hash 的 /whisper/mid(\\d+)/；
+  激活判定改 /active/i（现网类名 _SessionItemIsActive_*，classList.contains('active') 必失）；
+  getPeerName 排除「我的消息」等页面级标题（原兜底命中页面标题 ⇒ 常数 conv:我的消息 串台）；
+  新增系统消息漏斗（登录操作通知/系统通知/账号在新设备或平台登录成功）；
+  match() 增补「消息中心 URL + 会话列表或消息列表」即真（bot 会话无输入框，
+  B 站设计如此，原鸡生蛋导致 bot-only 账号适配器永不启动）；getPeerAvatar 增补激活会话行头像。
+  小红书（P1）新增系统消息漏斗：24小时内最多只能发1条/暂不支持该消息类型/请到手机端查看
+  （真机 .chat-item 里躺着 2 条限流文案 + 1 条不支持卡片，此前以客户消息上行触发 AI）；
+  sendText Enter 兜底改 simulateEnterKey（keydown+keypress+keyup）——真机实证输入栏
+  唯一按钮无 aria-label、草稿探针形态不变，无发送按钮，Enter 是唯一下行路径。
+  微博（P1/P2）match() 增补「chat URL + 会话列表」即真（未开会话无输入框的鸡生蛋）；
+  账号改读 .user 盒隐藏 uid（真机 7911766916，此前 $CONFIG 无 uid、全页零 /u/ 链接
+  ⇒ 恒返回 weibo-unknown 占位）；会话 id 改读会话项 .name 内隐藏 uid（替代不稳定的
+  data-datas 序号与昵称派生 conv: 前缀）；itemName 与 header 反查按盒内真实 uid 剥离尾部 uid 串。
+  抖音（P2 升级为账号身份错误）getAccountId 把 window.SSR_RENDER_DATA.app.user.info.secUid
+  提为第一候选——真机实证 localStorage 陈旧值与现网 SSR secUid 完全不同，而 /chat 页零
+  /user/ 链接，原链路只能落到陈旧缓存 ⇒ 上行账号身份错；会话项 /user/ 链接（指向对端
+  用户）降为末位 DOM 兜底。
+- 新增回归 test/channel-realdom-20261113.test.js（23 例，fixture 全部按真机 DOM 结构构造）。
+- 修复 package.json 与 manifest.json 版本不一致（055fa098 只 bump 了 manifest 到 1.2.1，
+  package.json 停在 1.1.0，npm run release 前置门必红）。`,
+  '1.2.1': `- 修复下行 inflight 死锁根因：bridgeFetch headers 双形状兼容 + 删页面直连回退 +
+  startBridge 幂等 + setValue tagName 守卫 + bili sendText fail-loud（055fa098）。
+- 补记 1.2.0 漏登的变更：bilibili 选择器校准（CSS Modules 哈希类名
+  _SessionItem_/_MessageList_/msb-textarea 致 match()=false 无上行，04821491）、
+  weibo 选择器校准（chatlist/input/chat-url 漂移致 match()=false 无上行，212afeb7）、
+  拼多多商家网页桥 pdd 全链注册（Experimental，2732f9a4）。
+- 注：1.2.x 的 manifest 版本为手工 bump，未走 npm run release，故 CHANGELOGS 缺条；
+  本版补齐，并在 1.3.0 修复 package/manifest 版本双源不一致。`,
   '1.1.0': `- 新增三个网页私信渠道：京东（jdm.jd.com / dongdong.jd.com，all_frames）、
   B站（message.bilibili.com）、微博（weibo.com/chat）。三条均为实验渠道：
   选择器来自公开页面结构，未真机校准，popup 与后端均标 Experimental。
