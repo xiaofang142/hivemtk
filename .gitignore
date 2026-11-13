@@ -413,3 +413,6 @@ yarn-error.log*
 
 # ego-runner 本机构建产物（scripts/ego-runner/install.sh 编译输出；B8/017 清理批次）
 /user-server/ego-runner
+
+# Step-1 初始路由任务单（权威台账=仓根 router-list.md，勿重复提交）
+user-web/src/router/router-list.md
