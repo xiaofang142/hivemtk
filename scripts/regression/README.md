@@ -154,7 +154,11 @@ O 轮 = 用户指令的新一轮全量回归，主验环境=线上 SaaS `https:/
 
 1. **部署**：`cd user-web && npm run build` → `rsync -az --exclude='.user.ini' -e 'ssh -p 57122'
    dist/ mtk-prod:/www/wwwroot/hivemtk/user-web/`（**不加 --delete**，保留旧 chunk 防 SW 404；
-   线上备份在 `user-web.bak.<日期>`）。
+   线上备份在 `user-web.bak.<日期>`）。**回滚三步**（新构建出问题时）：
+   ① `ssh mtk-prod 'mv /www/wwwroot/hivemtk/user-web /www/wwwroot/hivemtk/user-web.bad.<日期>'`
+   ② `ssh mtk-prod 'mv /www/wwwroot/hivemtk/user-web.bak.<日期> /www/wwwroot/hivemtk/user-web'`
+   ③ 浏览器侧 `navigator.serviceWorker.getRegistrations()` 全 unregister + `caches.keys()`
+   全 delete + 带 `?cb=<ts>` 重载（SW 修复前旧版会被 precache 钉死；修复后新 sw.js 自动覆盖）。
 2. **只读探针批跑**（规则-1 合规：全程不点任何元素）：`o-probe.mjs`（console/非2xx/路由名/
    主区文本/可见按钮名 → JSON）+ `o_mark.py` 落证（本轮在 /tmp，用法见 git log 与 router-list.md
    「O轮线上」行）。258 条分 10 批跑完，逐行落证。

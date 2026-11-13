@@ -49,6 +49,11 @@ def main():
         note = f"11-13 O轮线上：只读点验，console.error={cerr}，非2xx：{badtxt}，主区渲染正常{cflag}{extra}"
         last = len(cells) - 2
         tail = cells[last].rstrip()
+        # 幂等：同一 JSON 重跑时跳过，避免重复追加（不同内容的证据仍正常叠加，
+        # 如邮件模块 83-86 行的「显式点击」+「只读点验」两层证据）
+        if note in tail:
+            print(f"行 {n} 已有相同注记，跳过")
+            continue
         sep = "" if not tail else "；"
         cells[last] = (tail + sep + note) if tail else note
         lines[idx] = "|".join(cells)
