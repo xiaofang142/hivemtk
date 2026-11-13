@@ -1,6 +1,6 @@
 ---
 name: hivemtk-coding
-description: HiveMtk 编码约束编排器——写代码前/中/后的统一动作序列，保证任何成员、任何智能体产出同一标准的代码。当用户要求写代码、编码、开发、新增功能、加接口、改 user-server/、改 user-web/、修 bug、写 controller/service/repository/model、写 Vue 组件、加路由时使用。只编排顺序与自检命令，规则本体一律指向权威文档，禁止在此复述。
+description: HiveMtk 编码约束编排器——写代码前/中/后的统一动作序列，保证任何成员、任何智能体产出同一标准的代码。当用户要求写代码、编码、开发、新增功能、加接口、改 user-server/、改 user-web/、改 embed-sdk/、改 packages/、改 website/、修 bug、写 controller/service/repository/model、写 Vue 组件、加路由时使用——目录下三个代码区（user-server / user-web / embed-sdk+packages）全部覆盖。只编排顺序与自检命令，规则本体一律指向权威文档，禁止在此复述。
 ---
 
 # 编码约束编排器（统一标准的动作序列）
@@ -16,6 +16,8 @@ description: HiveMtk 编码约束编排器——写代码前/中/后的统一动
    |---|---|
    | `user-server/**` | `docs/standards/BACKEND-CODING-STANDARDS.md`（五层职责/命名/Controller 样板/响应错误表）+ `AGENTS.md` §2 硬规则 |
    | `user-web/**` | `docs/standards/FRONTEND-CODING-STANDARDS.md`（api 层铁律/路由台账/隐私红线/引导体系） |
+   | `embed-sdk/**`、`packages/**` | 同上 §5（ADR-011 零依赖/iframe 隔离/IIFE；packages 被管理端 request.js 消费，两侧测试都要跑） |
+   | `website/**` | `website/TERMINOLOGY.md`（命名权威）+ `CLAUDE.md` 数据零出域 |
    | 接口/toast/i18n/路由 | `docs/standards/INTERACTION-STANDARDS.md` |
    | 写测试/判读失败 | `docs/standards/TESTING-STANDARDS.md` |
 3. **读可判定契约**：`docs/standards/AI-EDITOR-CONTRACT.md` 逐条对照（C/D 系为编码契约）。

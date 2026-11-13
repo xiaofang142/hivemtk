@@ -14,12 +14,13 @@
 
 ---
 
-## 0. 两个前端，两套约束
+## 0. 三个前端产物，三套约束（embed-sdk 2026-11-14 补入）
 
 | 前端 | 位置 | 技术栈 | 跑什么命令 |
 |---|---|---|---|
 | **管理端** | `user-web/src/` | Vue 3 + Element Plus + Vite + vue-i18n | `npm run lint:check` / `npm run test` |
 | **桥接扩展** | `user-web/bridge/` | Chrome MV3（manifest_version 3），原生 JS content script + Vue3 popup | `npm run lint` / `npm run test` |
+| **客服 Widget** | `embed-sdk/`（共享库 `packages/`） | 原生 JS 单文件 IIFE（ADR-011，零运行时依赖） | `npm run test:all`（node:test 62 用例） |
 
 **铁律**：改哪个前端跑哪个的门，不要只跑一个就当全绿。
 
@@ -194,3 +195,15 @@ user-web/bridge/
 | 测试规范 | `docs/standards/TESTING-STANDARDS.md` |
 | 桥接架构 | `docs/bridge/BRIDGE-ARCHITECTURE-2026-08-14.md`（注意：该目录被 .gitignore 忽略，未入仓） |
 | 路由台账 | `router-list.md` / `user-web/router-list.md` |
+
+## 5. embed-sdk（客服 Widget，ADR-011，2026-11-14 补章）
+
+背景：初心审核实测发现本目录此前无标准章节、无机器门——自带 62 用例测试套件从未在 CI 跑过。本章与新增 CI 门 `ci-embed-sdk.yml` 一起补平。决策全文见 `docs/architecture/adr/ADR-011-chat-widget-embed.md`，此处只放编码必须踩住的口径：
+
+1. **零运行时依赖是硬约束**：客户官网技术栈不可控（Vue/React/jQuery/原生），SDK 必须纯 JS 单文件 IIFE 嵌入（`marketing-chat-widget.iife.js`）；禁止引入任何 npm 运行时依赖，构建期也不得把依赖打进产物以外的方式引用。
+2. **iframe 隔离**：Widget UI 跑在 iframe 里（嵌 `user-web` 的 `/chat/embed/:channel_ref`），外层只留悬浮按钮与通信；不直连业务 API。
+3. **AppKey 软解析（可选）+ WebSocket 无鉴权**：接入口径见 ADR-011 §2.2/§2.3；改 `config.js`/连接逻辑前先读。
+4. **附件访客直传七牛**（可 MinIO/OSS 替代）；**转人工走 NLP 关键词自动触发**（§2.6）。
+5. **测试口径**：`node:test` 原生 runner、零 npm 依赖——`npm run test:all`（unit+boundary，62 用例基线，2026-11-14 实测全绿）；改 `src/**` 后必跑，CI `ci-embed-sdk.yml` 随 `embed-sdk/**`、`packages/**` 改动强制。
+6. **packages/ 共享库**（browser-core/http-core）被管理端 `src/utils/request.js` 消费：改它 = 同时影响 Widget 与管理端请求层，两侧测试都要跑。
+7. **发布口径未成文**：`dist/` 本地产出、git 不入库，PROD_TOPOLOGY 台账与 deploy-api.sh 均无 widget 上线记载——上线方式待立项补台账，在此之前不要臆测 widget 的线上版本。

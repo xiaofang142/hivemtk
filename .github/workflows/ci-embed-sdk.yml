@@ -1,0 +1,45 @@
+# embed-sdk + packages 静态门（2026-11-14 初心审核补缺）
+#
+# 为什么单独一个作业：初心审核实测发现内层三个代码区覆盖不均——user-server 门最全
+# （layer-boundary/api-contract/enum-consistency/seam-guard…），user-web 有 ci-bridge + eslint 门，
+# 而 embed-sdk（客服 Widget，ADR-011）自带 62 用例测试套件（unit/boundary/ws，node 原生
+# test runner 零 npm 依赖）却从未在 CI 跑过；packages/browser-core 被 user-web 主工程
+# src/utils/request.js 消费（坏了就是管理端请求层坏），同样零门。本作业补平。
+#
+# 口径：embed-sdk 测试是纯 node:test（unit+boundary），不需要 npm install；
+# packages/ 无独立测试，由消费方 user-web vitest 门与本作业的引用完整性（若后续加）
+# 覆盖——当前至少保证 embed-sdk 测试门随两个目录的改动必跑。
+name: Embed SDK
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'embed-sdk/**'
+      - 'packages/**'
+      - '.github/workflows/ci-embed-sdk.yml'
+  pull_request:
+    paths:
+      - 'embed-sdk/**'
+      - 'packages/**'
+      - '.github/workflows/ci-embed-sdk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  embed-sdk:
+    name: Widget 测试门（unit + boundary，62 用例基线）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+
+      - name: 跑 embed-sdk 测试（零 npm 依赖，node:test 直跑）
+        run: npm run test:all
+        working-directory: embed-sdk
