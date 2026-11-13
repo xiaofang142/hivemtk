@@ -78,7 +78,43 @@ function looksLikeChatPage() {
   return !!(findInputEl() && (chatRoot() || qs(SEL.CHAT_LIST)));
 }
 
+// 隐藏 uid 读取（2026-11-13 真机实证，api.weibo.com/chat）：微博把 uid 放在
+// display:none 的 .hidden 节点里（自我盒 .user .hidden=7911766916；会话项
+// .name 盒内嵌 <div class="hidden">2671109275</div>）。真机样例 uid 位数不一：
+// 新手指南=2671109275（10 位）、活动通知=4771252927990411（16 位），故放宽到 6-20 位。
+// 真浏览器 innerText 对隐藏节点返回空串，故这里直读 textContent（jsdom 亦走同一路径）。
+function hiddenUid(scope) {
+  if (!scope || !scope.querySelectorAll) return '';
+  const nodes = scope.querySelectorAll('.hidden, [class*="hidden" i]');
+  for (const el of nodes) {
+    const t = String(el.textContent || '').replace(/\s+/g, '');
+    if (/^\d{6,20}$/.test(t)) return t;
+  }
+  return '';
+}
+
 function getAccountId() {
+  // ① 自我盒 .user 的隐藏 uid（2026-11-13 真机实证，优先级高于 $CONFIG）：
+  //    该页 $CONFIG 只剩 setting_open、无 uid，全页零 /u/ 链接，localStorage 无
+  //    缓存 → 旧链路只能返回 'weibo-unknown' 占位（P2-7 多账号归并失真）。
+  //    .user 盒在 chat 页唯一（document.querySelectorAll('.user').length=1）。
+  try {
+    const uid = hiddenUid(qs('.user') || qs('[class*="user" i]'));
+    if (uid) {
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.WEIBO}`, uid); } catch (_) {  }
+      return uid;
+    }
+  } catch (_) {  }
+  // ①.5 可见昵称兜底：<span class="name">用户7911766916</span> → 数字段即 uid
+  try {
+    const nameEl = qs('.user .name, .user [class*="name" i]');
+    const t = nameEl ? cleanText(nameEl) : '';
+    const m = t.match(/^用户(\d{6,15})$/);
+    if (m && m[1]) {
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.WEIBO}`, m[1]); } catch (_) {  }
+      return m[1];
+    }
+  } catch (_) {  }
   try {
     const cfg = typeof window !== 'undefined' ? window.$CONFIG : null;
     const uid = (cfg && (cfg.uid || (cfg.user && cfg.user.id))) || null;
@@ -111,15 +147,31 @@ function convElements() {
   return qsa(SEL.CHAT_LIST);
 }
 
+// 会话项昵称剥离尾部隐藏 uid：真机 .name 盒内嵌 display:none 的 <div class="hidden">
+// 2671109275</div>，innerText 环境本无该串，但 textContent/jsdom 兜底环境会出现
+// 「新手指南 2671109275」。只按**盒内真实存在的隐藏 uid** 精确剥离尾部串，不按
+// 「纯数字尾巴」泛化剥离（避免误伤「客服 1234567」这类真昵称）。
+function stripTrailingHiddenUid(text, item) {
+  const uid = hiddenUid(item);
+  if (!uid || !text) return text;
+  const stripped = String(text).replace(new RegExp(`\\s*${uid}\\s*$`), '').trim();
+  return stripped || text;
+}
+
 function itemName(el) {
   const nameEl = el.querySelector('[class*="name" i], .nick, .remark');
-  return sanitizePeerName(nameEl ? cleanText(nameEl) : cleanText(el));
+  const raw = nameEl ? cleanText(nameEl) : cleanText(el);
+  return sanitizePeerName(stripTrailingHiddenUid(raw, el));
 }
 
 function itemId(el) {
   const raw = el.getAttribute('data-uid') || el.getAttribute('data-id') ||
     el.getAttribute('data-userid') || el.getAttribute('data-key') || el.id;
   if (raw) return String(raw).trim();
+  // 隐藏 uid（真机实证，2026-11-13）：会话项 .name 盒内嵌 .hidden 纯数字 uid。
+  // 优先级高于 /u/ 链接（chat 页全页零 /u/ 链接，旧链路在此断掉 → 昵称派生）。
+  const uid = hiddenUid(el);
+  if (uid) return uid;
   const link = el.querySelector('a[href*="/u/"]');
   const m = link ? (link.getAttribute('href') || '').match(/\/u\/(\d+)/) : null;
   return m ? m[1] : '';
@@ -143,8 +195,19 @@ function getConversationId() {
     const link = header.querySelector('a[href*="/u/"]');
     const m = link ? (link.getAttribute('href') || '').match(/\/u\/(\d+)/) : null;
     if (m && m[1]) return m[1];
-    const name = sanitizePeerName(cleanText(header));
-    if (name) return 'conv:' + name.slice(0, 80);
+    const name = sanitizePeerName(stripTrailingHiddenUid(cleanText(header), header));
+    if (name) {
+      // 2026-11-13 真机缺口修复（P2-8）：header 只有昵称、无 /u/ 链接时，旧链路直接
+      // 派生 conv:<昵称>（改昵/同名即串台）。改为按昵称反查会话列表项的隐藏 uid
+      // （稳定 id），查不到才回落 conv:<昵称>。
+      // 注意 qs(SEL.PEER_NAME) 在文档序上可能先命中会话列表里的 .name 节点
+      // （候选含 [class*="chat"] [class*="name" i]），其 cleanText 在 textContent
+      // 环境会粘上隐藏 uid 串，故上面先做同一套 uid 剥离再比较。
+      const hit = convElements().find((el) => itemName(el) === name);
+      const hid = hit ? itemId(hit) : '';
+      if (hid && !hid.startsWith('conv:')) return hid;
+      return 'conv:' + name.slice(0, 80);
+    }
   }
   if (active) {
     const name = itemName(active);
@@ -352,6 +415,11 @@ const hooks = {
   match() {
     if (!isWeiboHost()) return false;
     if (looksLikeChatPage()) return true;
+    // 2026-11-13 真机缺口修复（P1-5 鸡生蛋）：未开会话时 #webchat-textarea 尚未
+    // 渲染（输入框随会话挂载）→ looksLikeChatPage()=false 且 findAnyMessageInput()=0
+    // → match()=false → 巡检永远无法自主点开第一个会话。chat URL + 会话列表已在 DOM
+    // 即视为聊天页（start() 后由 patrol 自主 openConversation 开会话再收上行）。
+    if (isChatUrl() && qs(SEL.CHAT_LIST)) return true;
     if (isChatUrl() && findAnyMessageInput() && looksLikeMessagePage()) {
       log.warn('match() 走 fallback 模式：微博选择器未命中，使用通用 DOM 扫描');
       return true;
@@ -361,6 +429,8 @@ const hooks = {
   matchMode() {
     if (!isWeiboHost()) return null;
     if (looksLikeChatPage()) return 'strict';
+    // 与 match() 新增分支同步：会话列表命中即 strict（CHAT_LIST 严格选择器生效）
+    if (isChatUrl() && qs(SEL.CHAT_LIST)) return 'strict';
     return 'fallback';
   },
   selectors: SEL,

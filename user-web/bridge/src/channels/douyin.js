@@ -114,13 +114,43 @@ function closestScrollable(el) {
 
 
 // 当前登录的抖音账号 id。
-// 多层兜底：浮层（/jingxuan 等）下左导航/header 的个人链接常缺失或指向 /user/self（占位），
-// 导致返回空串 → WS 握手持空 account_id → 服务端 401 拒绝 → 历史/实时全不上行。
-// 故优先取「会话项里的真实用户链接」（含 MS4w... token 形式 id），其次「我的」链接，
-// 再次 chrome.storage 缓存（同一账号即使浮层取不到也可恢复），最后稳定 unknown 而非空串。
+// 多层兜底（2026-11-13 重排优先级，真机实证）：
+//   0) window.SSR_RENDER_DATA.app.user.info.secUid —— **当前登录用户**，最高优先级；
+//   1) 左导航/header 「我的」链接；
+//   2) 全页 /user/ 链接；
+//   3) 会话列表项 /user/ 链接（**指向对端用户**，仅作末位兜底）；
+//   4) chrome.storage 缓存；最后空串（fail-loud，不造占位账号行）。
+// 重排依据（P2-6 升级为「账号身份错误」）：/chat 页零「我的」/header 个人链接，旧口径把
+// 会话项链接当头号候选，而会话项链接指向**对端**用户 → 首个候选即污染缓存。真机实证：
+//   localStorage hivebridge:account:douyin=MS4wLjABAAAABBUWE3vvGspw8V3XnrK33HwpFUOgq5Ay33HSYfunpW4
+//   与现网 window.SSR_RENDER_DATA.app.user.info.secUid=MS4wLjABAAAAizL-ZXZsdIxqxP65DyHdUJnw7j7ogvrnFTJA8yhlKP-...
+//   完全不同，且该陈旧值在全页 HTML 与全部 window 对象路径零出现（只在 localStorage 自身）
+//   → 缓存已被对端 secUid 污染，上行账号身份错。
 function getAccountId() {
+  // 0) SSR_RENDER_DATA 当前登录用户（真机实证 /chat 页存在，secUid 形如 MS4wLjABAAAA…）
+  try {
+    const ssr = typeof window !== 'undefined' ? window.SSR_RENDER_DATA : null;
+    const info = ssr && ssr.app && ssr.app.user && ssr.app.user.info;
+    const secUid = info && (info.secUid || info.sec_uid);
+    if (secUid && /^MS4wLjABAAAA/.test(String(secUid))) {
+      const v = String(secUid).trim();
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.DOUYIN}`, v); } catch (_) {  }
+      return v;
+    }
+  } catch (_) {  }
   const candidates = [];
-  // 1) 会话列表项里的真实用户链接（最可靠，含 token 形式 id）
+  // 1) 左导航/header 「我的」链接
+  const self = qs('aside a[href*="/user/"], header a[href*="/user/"]') || qs('a[href*="/user/"]');
+  if (self) {
+    const m = self.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
+    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
+  }
+  // 2) 全页 /user/ 链接
+  qsa('a[href*="/user/"]').forEach((a) => {
+    const m = a.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
+    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
+  });
+  // 3) 会话列表项里的用户链接（降级为末位：链接指向**对端**用户，见文件头注释）
   //    注意：SEL.CHAT_LIST 含逗号，直接拼接后代选择器只有最后一项生效——
   //    故拆成独立候选逐项 query（避免 /chat 页漏取账号）。
   const convLinkSelectors = [
@@ -139,16 +169,6 @@ function getAccountId() {
       });
     } catch (_) {  }
   }
-  // 2) 左导航/header 「我的」链接
-  const self = qs('aside a[href*="/user/"], header a[href*="/user/"]') || qs('a[href*="/user/"]');
-  if (self) {
-    const m = self.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
-    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
-  }
-  qsa('a[href*="/user/"]').forEach((a) => {
-    const m = a.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
-    if (m && m[1] && m[1] !== 'self') candidates.push(m[1]);
-  });
   for (const c of candidates) {
     if (c && c.trim()) {
       try { localStorage.setItem(`hivebridge:account:${CHANNELS.DOUYIN}`, c.trim()); } catch (e) {  }

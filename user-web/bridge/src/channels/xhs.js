@@ -2,7 +2,7 @@ import { BaseAdapter } from '../core/channel-adapter.js';
 import { CHANNELS, SENDER } from '../core/types.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { SelectorEngine } from '../core/selector-engine.js';
-import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc } from '../core/dom.js';
+import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, simulateEnterKey } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
@@ -222,11 +222,45 @@ function findSendButton() {
 // —— 非文字消息提取 ——
 // 小红书气泡类型：text | card(笔记卡片) | image | voice | video | link | recall | system(聚光进线)
 // data-msg-type 属性为主信号；缺失时按 DOM 结构兜底（头像图绝不当作消息图片）。
+// —— 系统消息文案漏斗（2026-11-13 真机缺口修复）——
+// 小红书 IM 没有系统消息 class 字段（SEL.SPOTLIGHT 只覆盖聚光/ spotlight 场景），
+// 平台风控/兼容提示与真人客户消息共用 .chat-item 气泡结构 → 不拦即被当客户消息上行、
+// 触发 AI 回复（真机实证：.chat-item 里躺着 2 条「对方关注或回复你之前，24小时内最多
+// 只能发1条文字消息」+1 条卡片「暂不支持该消息类型，请到手机端查看」）。
+// 口径：与 douyin 同款词表（douyin.js SYSTEM_TEXT_PATTERNS）+ 小红书专属两句。
+// 宁缺勿错：只收窄到明确非真人对话文案，不碰任何可能含客户诉求的句子。
+const SYSTEM_TEXT_PATTERNS = [
+  /24小时内最多只能发/,
+  /暂不支持该消息类型/,
+  /请到手机端查看/,
+  /你(已)?添加.*为好友/,
+  /已添加.*为好友/,
+  /撤回了?一条消息/,
+  /recalled a message/i,
+  /对方正在输入/,
+  /互相关注/,
+  /以下为新消息/,
+  /^={3,}$/,
+  /^-{3,}$/,
+  /对方已开启.*验证/,
+  /消息发送失败/,
+  /消息已发出.*被对方拒收/,
+];
+function isSystemText(text) {
+  if (!text) return false;
+  return SYSTEM_TEXT_PATTERNS.some((re) => re.test(text.trim()));
+}
+
 function extractMessageContent(item) {
   const typeAttr = (item.getAttribute('data-msg-type') || item.querySelector(SEL.MSG_TYPE)?.getAttribute('data-msg-type') || '').toUpperCase();
   const text = cleanText(item.querySelector(SEL.TEXT) || item);
   if (text && /^(\d{1,2}:\d{2}|(昨天|前天)?\s*\d{1,2}月\d{1,2}日?\s*\d{1,2}:\d{2}|\d{4}-\d{2}-\d{2})$/.test(text)) {
     return { msgType: 'text', mediaUrl: '', text: '' };
+  }
+  // 系统消息漏斗（时间文案之后、卡片分支之前）：风控提示/兼容提示优先于卡片判定，
+  // 因为「暂不支持该消息类型」本身就以卡片形态呈现（真机实证），晚一步判会归 card。
+  if (isSystemText(text)) {
+    return { msgType: 'system', mediaUrl: '', text };
   }
   // 笔记卡片消息（data-msg-type=CARD 或含 card_container）
   const card = item.querySelector(SEL.CARD);
@@ -673,9 +707,13 @@ const hooks = {
       } catch (_) {  }
       return;
     }
-    log.warn('未找到小红书发送按钮，改用回车发送');
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
-    input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+    // 真机实证（2026-11-13，ego-browser 复用登录态只读核对 www.xiaohongshu.com/chat）：
+    // 输入栏唯一按钮 BUTTON.xhs-im-input-bar-action-btn（无 aria-label），且插入草稿
+    // 文本后按钮形态不变（既非禁用态也无发送态）→ 判定为无发送按钮；Enter 是唯一下行
+    // 路径。此前只派发 keydown+keyup（缺 keypress），Slate/Lexical 系编辑器有丢键风险，
+    // 现统一改用 dom.js simulateEnterKey（keydown+keypress+keyup，TikTok 同源实现）。
+    log.warn('未找到小红书发送按钮，改用回车发送（真机实证：小红书输入栏无发送按钮）');
+    simulateEnterKey(input);
     try {
       if (isContentEditable) {
         while (input.firstChild) input.removeChild(input.firstChild);

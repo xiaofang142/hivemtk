@@ -51,8 +51,13 @@ export const SEL = {
   // 加性扩展，不动既有候选。
   CHAT_LIST: ".list-container div[class='list-item'], .message-sidebar__item, [class*=\"session-item\" i], [class*=\"_SessionItem_\" i]",
   MSG_LIST: ".message-list, .message-content__inner, [class*=\"message-list\" i], [class*=\"_MessageList_\" i]",
-  MSG_ITEM: '.msg-item, .interaction-item__content, [class*="message-item" i]',
-  TEXT: '.message-content, .message-text-nodes, [class*="msg-content" i]',
+  // A1（2026-11-13 真机缺口修复，P0-1）：现网消息气泡类名为 CSS Modules 哈希后缀
+  //   _Msg_o7f0t_1（外层）/ _Msg__Wrap_ / _Msg__Main_ / _Msg__Content_o7f0t_12（正文），
+  //   旧字面量 .msg-item / [class*="message-item"] 全不命中 → getMessageItems=0 零上行。
+  //   注意 [class*="_Msg_"] 会同时命中嵌套子节点（见 A8 outermost 过滤）。
+  MSG_ITEM: '.msg-item, .interaction-item__content, [class*="message-item" i], [class*="_Msg_" i]',
+  // A2：正文文本候选（_Msg__Content_o7f0t_12），与 SEL.TEXT 旧字面量并集。
+  TEXT: '.message-content, .message-text-nodes, [class*="msg-content" i], [class*="_Msg__Content" i]',
   INPUT: '#editor, .message-reply-box__input, textarea[class*="reply" i], .msb-textarea, .brt-editor, [class*="_MessageSendBox__Textarea" i]',
   SEND: "[class*='btn-box send-btn'], .message-reply-box__pub, button[class*=\"send\" i]",
   PEER_NAME: ".dialog div[class='title'] > span, .message-header__title, [class*=\"message-header\" i] [class*=\"title\" i]",
@@ -78,6 +83,66 @@ function isMessageCenterUrl() {
   } catch (_) {
     return false;
   }
+}
+
+// —— A3 outermost 过滤（2026-11-13 真机缺口修复，P0-1/P1-2）——
+// 现网 B站私信 DOM 用 CSS Modules 哈希类名，一个逻辑节点是一棵嵌套树：
+//   会话行：_SessionItem_t04g4_1（根，带 data-id=contact_<mid>）
+//             └ _SessionItem__Avatar / __Main / __Title / __Name / __Info / __Message …
+//   消息泡：_Msg_o7f0t_1（根，textContent 含时间前缀）
+//             └ _Msg__Time_o7f0t_25（时间分隔）/ _Msg__Wrap_ / _Msg__Main_ / _Msg__Content
+// [class*="_SessionItem_"] 命中 54 个（6 根行 × 9 子元素），[class*="_Msg_"] 同理。
+// 只保留「祖先链上没有同类命中」的最外层节点：6 根行 / 每泡 1 个。
+// 口径与 douyin SelectorEngine.expandMultiBubbleItems 的 outermost 语义一致。
+function keepOutermost(nodes) {
+  const arr = Array.from(nodes || []);
+  const set = new Set(arr);
+  return arr.filter((el) => {
+    let p = el.parentElement;
+    while (p) {
+      if (set.has(p)) return false;
+      p = p.parentElement;
+    }
+    return true;
+  });
+}
+
+// —— A9 系统消息文案漏斗（2026-11-13 真机实证）——
+// B站私信没有稳定的系统消息 class（SEL.SYSTEM 的 .message-divider 在现网不存在），
+// 官方账号（社区中心/哔哩哔哩智能机/英雄联盟赛事…）的通知以普通气泡形态下发：
+//   「今天 09:13 登录操作通知 账号在新设备或平台登录成功…」——不拦即被当客户消息
+//   上行触发 AI 回复官方 bot。口径同 douyin：词表 + 时间分隔文案，宁缺勿错。
+const SYSTEM_TEXT_PATTERNS = [
+  /登录操作通知/,
+  /系统通知/,
+  /账号在新设备或平台登录成功/,
+  /你(已)?添加.*为好友/,
+  /已添加.*为好友/,
+  /撤回了?一条消息/,
+  /recalled a message/i,
+  /对方正在输入/,
+  /typing/i,
+  /互相关注/,
+  /以下为新消息/,
+  /^={3,}$/,
+  /^-{3,}$/,
+  /对方已开启.*验证/,
+  /消息发送失败/,
+  /消息已发出.*被对方拒收/,
+];
+function isTimeText(text) {
+  if (!text) return false;
+  const t = text.trim();
+  if (/^\d{1,2}:\d{2}$/.test(t)) return true;
+  if (/^(今天|昨天|前天)\s*\d{1,2}:\d{2}$/.test(t)) return true;
+  if (/^\d{1,2}月\d{1,2}日(\s+\d{1,2}:\d{2})?$/.test(t)) return true;
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(t)) return true;
+  if (/^(上午|下午|凌晨)\s*\d{1,2}:\d{2}$/.test(t)) return true;
+  return false;
+}
+function isSystemText(text) {
+  if (!text) return false;
+  return SYSTEM_TEXT_PATTERNS.some((re) => re.test(text.trim()));
 }
 
 // 输入框：优先 textarea，其次 contenteditable，最后通用扫描。
@@ -130,8 +195,13 @@ function getAccountId() {
 
 // 会话列表：.message-sidebar__item 首先是左侧导航（回复我的/@我/赞），
 // 只有带 data-uid/data-mid 或 /u/<id> 链接的才算私信会话。
+// A4（2026-11-13 真机缺口修复，P1-2）：[class*="_SessionItem_"] 在现网命中 54 个节点
+//   （6 个根行 _SessionItem_t04g4_1 + 48 个子元素 _SessionItem__Avatar/__Main/__Name…），
+//   靠 name 兜底去重虽能收敛成 6 项，但 el 是子 span 非根行 → patrol simulateRealClick
+//   点错目标（子元素里恰好有 _SessionItem__RemoveBtn 删除按钮，无 name 侥幸跳过）。
+//   故先做 outermost 过滤只留根行，再走原有导航/链接过滤。
 function conversationItems() {
-  const all = qsa(SEL.CHAT_LIST);
+  const all = keepOutermost(qsa(SEL.CHAT_LIST));
   const NAV_TEXT = /^(回复我的|@我|收到的赞|系统通知|我的消息|消息中心|未读)$/;
   return all.filter((el) => {
     if (el.classList && el.classList.contains('message-sidebar__item')) {
@@ -154,9 +224,13 @@ function itemName(el) {
 }
 
 function itemId(el) {
+  // A5（2026-11-13 真机实证）：现网会话根行 data-id="contact_844424930131964"，
+  //   其中 844424930131964 即对端 mid（与激活时 URL hash #/whisper/mid844424930131964
+  //   一致）。此前裸返回 "contact_844424930131964"，与 hash 路由层/上行 conversation_id
+  //   口径不一致 → 去 contact_ 前缀归一为 mid。
   const raw = el.getAttribute('data-uid') || el.getAttribute('data-mid') ||
     el.getAttribute('data-id') || el.getAttribute('data-key') || el.id;
-  if (raw) return String(raw).trim();
+  if (raw) return String(raw).trim().replace(/^contact_/, '');
   const link = el.querySelector('a[href*="/u/"], a[href*="space.bilibili.com/"]');
   const href = link ? (link.getAttribute('href') || '') : '';
   const m = href.match(/(?:space\.bilibili\.com\/|\/u\/)(\d+)/);
@@ -171,8 +245,17 @@ function getConversationId() {
     if (m && m[1]) return m[1];
   }
   // 2) 活动会话项
-  const active = qsa(SEL.CHAT_LIST).find((el) =>
-    el.classList && (el.classList.contains('is-active') || el.classList.contains('active') || el.getAttribute('aria-selected') === 'true'));
+  //    A6a（2026-11-13 真机实证）：现网激活行 class=
+  //    "_SessionItem_t04g4_1 _SessionItemIsActive_t04g4_12"，classList.contains('active')
+  //    精确匹配必失（类名带 IsActive 中缀与哈希后缀）；is-active 亦不存在。
+  //    改 /active/i 子串判定，并显式排除 inactive（防误判）。
+  const active = qsa(SEL.CHAT_LIST).find((el) => {
+    if (!el.classList) return false;
+    const cls = String(el.className || '');
+    if (/\binactive\b/i.test(cls)) return false;
+    return /\bactive\b/i.test(cls) || /IsActive/i.test(cls) ||
+      el.getAttribute('aria-selected') === 'true';
+  });
   if (active) {
     const id = itemId(active);
     if (id) return id;
@@ -183,7 +266,14 @@ function getConversationId() {
     const fromQuery = q.get('uid') || q.get('mid') || q.get('talker_id');
     if (fromQuery) return String(fromQuery);
   } catch (_) {  }
+  // 3.2) A6b：hash 路由层（真机实证 https://message.bilibili.com/#/whisper/mid844424930131964）
+  //    B站消息中心是 SPA hash 路由，会话 id 在 hash 不在 query。
+  try {
+    const hm = String(location.hash || '').match(/whisper\/mid(\d+)/i);
+    if (hm && hm[1]) return hm[1];
+  } catch (_) {  }
   // 3.5) 会话面板（.dialog）标题昵称（实证：ChatGPT-On-CS 从 .title > span 取名）
+  //    A7：getPeerName 已排除页面级通用标题（"我的消息"等），不会返回常数串台 id。
   const dialogName = getPeerName();
   if (dialogName) return 'conv:' + dialogName.slice(0, 80);
   // 4) 昵称派生
@@ -223,14 +313,27 @@ function detectUnread(item) {
   return false;
 }
 
+// A7（2026-11-13 真机实证）：现网 headerTitle 选择器
+//   [class*="message-header" i] [class*="title" i] 命中的是**页面级**标题
+//   「我的消息」（消息中心总标题，非对端昵称）。此前它直接透传 → getPeerName 返回
+//   "我的消息" → getConversationId 3.5 层返回常数 'conv:我的消息'，所有会话串台。
+//   对端昵称改由激活会话行 _SessionItem__Name_* 提供（itemName 的 [class*="name" i]）。
+//   通用标题词表与 douyin.js getPeerName 的排除口径同源。
+const PAGE_LEVEL_TITLES = /^(我的消息|消息中心|消息|私信|聊天|全部消息|消息列表)$/;
 function getPeerName() {
   const el = qs(SEL.PEER_NAME);
-  return el ? sanitizePeerName(cleanText(el)) : '';
+  if (!el) return '';
+  const t = sanitizePeerName(cleanText(el));
+  if (t && PAGE_LEVEL_TITLES.test(t)) return '';
+  return t;
 }
 
 // —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
 // B 站私信结构样本不足，仅抓会话窗口（.dialog / .message-header，与 PEER_NAME 同容器口径）
 // 内头像 img；抓不到保持为空，不报错（真机校准缺口见 M-2 报告）。
+// A11（2026-11-13 真机实证补齐）：现网 header 无头像 img（headerTitle 命中页面级
+//   「我的消息」），对方头像实际挂在激活会话行 _SessionItem__Avatar_*。补一层
+//   激活行头像（与 getConversationId 的 active 判定同源：/active/i + IsActive）。
 function getPeerAvatar() {
   for (const sel of ['.dialog img', '.message-header img', '[class*="message-header" i] img']) {
     try {
@@ -238,15 +341,32 @@ function getPeerAvatar() {
       if (u) return u;
     } catch (_) {  }
   }
+  try {
+    const active = qsa(SEL.CHAT_LIST).find((el) => {
+      if (!el.classList) return false;
+      const cls = String(el.className || '');
+      if (/\binactive\b/i.test(cls)) return false;
+      return /\bactive\b/i.test(cls) || /IsActive/i.test(cls) ||
+        el.getAttribute('aria-selected') === 'true';
+    });
+    const u = avatarImgUrl(active && active.querySelector('img'));
+    if (u) return u;
+  } catch (_) {  }
   return '';
 }
 
+// A9 补齐（2026-11-13）：在 class 信号之外增加「时间分隔文案 + 系统文案词表」两层。
+// 现网官方账号通知（登录操作通知…）走普通气泡 class，无 .message-divider 包裹，
+// 只靠 SEL.SYSTEM class 判不出来 → 必须以文案兜底（真机实证）。
 function isSystemMessage(item) {
+  if (!item) return false;
   try {
-    return !!item.matches(SEL.SYSTEM);
-  } catch (_) {
-    return false;
-  }
+    if (item.matches && item.matches(SEL.SYSTEM)) return true;
+    if (item.querySelector && item.querySelector(SEL.SYSTEM)) return true;
+  } catch (_) {  }
+  const text = cleanText(item);
+  if (isTimeText(text) || isSystemText(text)) return true;
+  return false;
 }
 
 // 方向判定（实证，ChatGPT-On-CS v1.4.5 platforms/bilibili）：
@@ -370,14 +490,18 @@ function getMessageItems() {
   const m = mergedSelectors();
   for (const sel of m.itemSelectors) {
     try {
+      // A8（2026-11-13 真机缺口修复）：[class*="_Msg_"] 同时命中外层气泡
+      // _Msg_o7f0t_1 与嵌套的 _Msg__Time/_Msg__Wrap/_Msg__Main/_Msg__Content
+      // （一层泡 6+ 节点）→ 不过滤会把一条消息上报 6 次（去重层虽能挡，但
+      // msg_id/raw/方向判定都会被嵌套节点带偏）。outermost 只留气泡根。
       const items = Array.from(root.querySelectorAll(sel)).filter((el) => el.offsetParent !== null || true);
-      const filtered = items.filter((it) => !isSystemMessage(it));
+      const filtered = keepOutermost(items).filter((it) => !isSystemMessage(it));
       if (filtered.length) return filtered;
     } catch (_) {  }
   }
   // 兜底：线程容器下的直接子元素
   if (root && root !== document) {
-    return Array.from(root.children).filter((el) => cleanText(el));
+    return Array.from(root.children).filter((el) => cleanText(el) && !isSystemMessage(el));
   }
   return [];
 }
@@ -386,6 +510,11 @@ const hooks = {
   match() {
     if (!isBiliHost()) return false;
     if (looksLikeChatPage()) return true;
+    // A10（2026-11-13 真机缺口修复，鸡生蛋）：官方 bot 会话无输入框（B站设计如此，
+    //   inputPresent=false）→ looksLikeChatPage()=false 且 findAnyMessageInput()=0
+    //   → match()=false → bot-only 账号适配器永不启动，收不到任何官方通知。
+    //   消息中心 URL + 会话列表或消息列表已在 DOM 即视为命中（patrol 可自主开会话）。
+    if (isMessageCenterUrl() && (qs(SEL.CHAT_LIST) || qs(SEL.MSG_LIST))) return true;
     if (isMessageCenterUrl() && findAnyMessageInput() && looksLikeMessagePage()) {
       log.warn('match() 走 fallback 模式：B站选择器未命中，使用通用 DOM 扫描');
       return true;
@@ -395,6 +524,8 @@ const hooks = {
   matchMode() {
     if (!isBiliHost()) return null;
     if (looksLikeChatPage()) return 'strict';
+    // 与 match() 新增分支同步：CHAT_LIST/MSG_LIST 严格选择器命中即 strict
+    if (isMessageCenterUrl() && (qs(SEL.CHAT_LIST) || qs(SEL.MSG_LIST))) return 'strict';
     return 'fallback';
   },
   selectors: SEL,
