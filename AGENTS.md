@@ -30,6 +30,15 @@ fi
 # APP = /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
 ```
 
+**新机器/新 clone 第零步（缺了它约束体系静默残缺，2026-11-14 初心审核实测）**：
+
+```bash
+bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到本机编辑器目录 + 自检
+```
+
+不做这步：commit-msg 白名单不生效、本机 agent 身上没有任何本仓 skill（编码动作序列
+`hivemtk-coding`、发布链 `hivemtk-release`、浏览器规则 `browser-debug-rule` 全部缺失）。
+
 ## 1. 最高规则（凌驾一切，违反即失败）
 
 ### 规则 -1：UI 测试 / 页面点验 / 拟人点击 —— 只允许逐元素显式操作

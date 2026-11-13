@@ -8,13 +8,10 @@ agent harness 能直接读；Cursor / Trae 等不读 SKILL.md 的编辑器则靠
 ## 安装到本机（改完 SKILL.md 后重跑一次）
 
 ```bash
-ROOT=$(git rev-parse --show-toplevel)
-[ -d "$ROOT/skills" ] || ROOT="$ROOT/hivemtk"    # skills/ 只在内层仓；从外层仓执行时落到 $ROOT/hivemtk
-for d in "$HOME/.config/opencode/skills" "$HOME/.agents/skills"; do   # 两处都是复数 skills，单数目录 OpenCode 不读（2026-11-14 核对官方文档）
-  mkdir -p "$d"
-  cp -R "$ROOT/skills/." "$d/"
-done
+bash scripts/bootstrap-agent-env.sh   # 新机器第一步（AGENTS.md §0 第零步）：钩子 + skills + 自检，幂等
 ```
+
+上节脚本即本节安装命令的超集（多做了钩子配置与一致性自检）；日常改完 SKILL.md 重跑它即可。
 
 > 2026-11-14 两处修正：① 旧命令写死 `$ROOT/hivemtk/skills`，只在外层仓执行才成立，
 > 从内层仓跑指向不存在的路径——改为按 `skills/` 是否存在自适应；② OpenCode 全局技能目录
@@ -24,6 +21,7 @@ done
 
 | 名称 | 用途 | 触发词 |
 |---|---|---|
+| `hivemtk-coding` | 编码约束编排器——写码前/中/后的统一动作序列，保证全员产出同一标准代码（规则本体指向权威文档，零复述） | 写代码、编码、开发、新增功能、加接口、修 bug、改 user-server/user-web |
 | `hivemtk-release` | HiveMtk 三条发布链（API 上线 / 谷歌扩展 / 平台上链）的固定流程 | 发布线上、部署、上线、发版、更新扩展、装进 Chrome、重载扩展、上传安装包、上链平台、release/deploy/publish |
 | `hivemtk` | HiveMTK/WeGEO 私域营销中台的 MCP 工具入口（查客户 / 知识库 / 跨渠道发消息 / 触达管线） | 查客户、发消息、触达、知识库、MCP |
 | `browser-debug-rule` | 浏览器调试/自动化全局强制规则（主方案 ego lite，复用登录态，禁独立 profile/重登录） | 浏览器调试、页面验证、截图取证、console/network 排查 |
