@@ -118,15 +118,22 @@ node scripts/install-extension.mjs --download                           # 从用
 - **已登记**（目录里有 manifest.json）⇒ 原地 rsync 覆盖 + 重新加载，
   **全自动，零人工**。日常版本更新都走这条。
 - **未登记**（全新机器）⇒ 解压就位后调「加载未打包的扩展程序」。
-  这一步**无法全自动**，实测结论（2026-11-13）：ego-browser 能点到按钮，但
+  这一步**默认无法全自动**，实测结论（2026-11-13）：ego-browser 能点到按钮，但
   Chrome 对 CDP 合成点击不弹出文件选择器（`waitForFileChooser` 8s 超时），
-  macOS 原生目录面板也不受 CDP 键盘事件控制。脚本会点开按钮并尝试接管
-  chooser（`tryLoadUnpacked()`），失败则打印一次性人工三步指引
-  （点按钮 / 选目录 / 点打开）。此后的版本更新回到全自动。
+  macOS 原生目录面板也不受 CDP 键盘事件控制（CDP Input 只到 web 页）。
+  脚本会点开按钮并尝试接管 chooser（`tryLoadUnpacked()`），失败则打印
+  一次性人工三步指引（点按钮 / 选目录 / 点打开）。此后的版本更新回到全自动。
+  - **想彻底免人工的路径**：一次性授予 macOS Accessibility 权限后用 AppleScript
+    驱动原生面板。实测 `tarsx doctor --json` 当前 `event_delivery: false`
+    （TarsX.app 已在 `~/Applications/TarsX.app`，但未被授权）。授权方式：
+    系统设置 → 隐私与安全性 → 辅助功能，添加 `TarsX.app`（或终端 app）；
+    授权后 `tarsx doctor` 应变绿，此时可用
+    `tarsx osa 'tell application "System Events" to tell process "Chrome" to ...'`
+    在原生面板里填路径并按回车。这是 OS 级硬边界，非代码可解。
 
-`--download` 的前提是平台已上架 `browser_extension` 资产（链 C）。当前线上
-用户端页面显示「当前部署未接入平台，或平台尚未上架桥接扩展包」、无下载按钮，
-脚本会明确报这个错并退出（不是脚本故障）。
+`--download` 的前提是平台已上架 `browser_extension` 资产（链 C）。链 C 未跑通时
+用户端页面无下载按钮，脚本会明确报这个错并退出（不是脚本故障）。
+2026-11-13 起链 C 已全自动打通，`--download` 已可用（1.3.0 在架）。
 
 ### 2.3 为什么必须保留加载目录路径
 
