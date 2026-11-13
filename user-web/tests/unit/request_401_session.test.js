@@ -176,21 +176,42 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
     expect(Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())).toEqual([])
   })
 
-  it('请求拦截器不给登录/注册端点带 Authorization（旧令牌不该跟着凭据一起出去）', async () => {
+  it('请求拦截器不给登录/注册/MFA 校验端点带 Authorization（旧令牌不该跟着凭据一起出去）', async () => {
     localStorage.setItem('token', 'jwt-valid')
     let seenLogin = 'unset'
     let seenRegister = 'unset'
+    let seenMfaVerify = 'unset'
     always401((config) => {
       const h = config.headers
       const raw = typeof h.get === 'function' ? String(h.get('Authorization') || '') : String(h.Authorization || '')
       if (String(config.url).includes('/api/auth/login')) seenLogin = raw
       if (String(config.url).includes('/api/auth/register')) seenRegister = raw
+      if (String(config.url).includes('/api/auth/mfa/verify')) seenMfaVerify = raw
     })
     await hit('/api/auth/login')
     await hit('/api/auth/register')
+    await hit('/api/auth/mfa/verify')
     expect(seenLogin).toBe('')
     expect(seenRegister).toBe('')
+    expect(seenMfaVerify).toBe('')
     // 其余业务请求照旧带头部（这条腿不能被修坏）
     expect(localStorage.getItem('token')).toBe('jwt-valid')
+  })
+
+  // 第五步对抗性检查补缺：/auth/mfa/verify 与 login/register 同属 public 组免登录端点
+  // （admin_routes.go：temp token 校验 MFA 码，401=码错），已登录用户走 MFA 登录流程
+  // 输错码时同样会双 toast+连坐清会话，必须一并裸调。
+  it('MFA 校验端点带旧令牌 401（已登录用户输错 MFA 码）：不清会话、不跳转、不弹过期提示', async () => {
+    localStorage.setItem('token', 'jwt-valid')
+    localStorage.setItem('refreshToken', 'rt-valid')
+
+    const out = await hit('/api/auth/mfa/verify')
+
+    expect(out.rejected).toBe(true)
+    expect(out.status).toBe(401)
+    expect(localStorage.getItem('token')).toBe('jwt-valid')
+    expect(localStorage.getItem('refreshToken')).toBe('rt-valid')
+    expect(routerPush).not.toHaveBeenCalled()
+    expect(Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())).toEqual([])
   })
 })

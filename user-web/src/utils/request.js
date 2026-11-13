@@ -29,11 +29,12 @@ const t = (key) => {
   }
 }
 
-// 登录/注册类端点必须"裸调"：它们自己就是凭据校验入口。若把 localStorage 里的
+// 登录/注册/MFA 校验类端点必须"裸调"：它们自己就是凭据校验入口。若把 localStorage 里的
 // 旧令牌一起带过去，凭据错误返回的 401 会被 expireSession 误判成"会话过期"——
-// 用户只是打错了密码，却连坐清掉仍然有效的会话还弹「登录已过期，请重新登录」
-// （O 轮线上 #/login 实测复现：错口令 → 双 toast + 会话被清）。
-const UNAUTHENTICATED_AUTH_PATHS = ['/api/auth/login', '/api/auth/register']
+// 用户只是打错了密码/MFA 码，却连坐清掉仍然有效的会话还弹「登录已过期，请重新登录」
+// （O 轮线上 #/login 实测复现：错口令 → 双 toast + 会话被清；/auth/mfa/verify 同属
+// public 组免登录端点（admin_routes.go 用 temp token 校验 MFA 码），第五步对抗性检查补入）。
+const UNAUTHENTICATED_AUTH_PATHS = ['/api/auth/login', '/api/auth/register', '/api/auth/mfa/verify']
 
 function isUnauthenticatedAuthPath(url) {
   const path = typeof url === 'string' ? url : ''
