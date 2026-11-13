@@ -16,6 +16,9 @@
 | `nr-batch.mjs` | N2 轮逐路由批次运行器：about:blank 跳板单挂载、单次事件采集（console+Network 同批分类）、安全钮候选依次尝试；只做逐路由串行，无元素枚举循环 |
 | `gen_route_queue.py` | 由 router-list.md 生成逐路由导航队列（实参化口径同历轮：:id→1、:channel_ref→k_test_20261110、通配→/no-such-page-xyz） |
 | `mark_batch.py` | 读 /tmp/nr-batch.json 批量落证（nr-batch.mjs 每批末尾写它）；即 mark.py 的批处理形态，用法见下 |
+| `o-probe.mjs` | O 轮逐路由只读探针（console/非2xx/路由名/主区文本/按钮名）；`__S__`/`__E__` 占位 sed 替换后 `ego-browser nodejs <` 跑 |
+| `o-scan.mjs` | O 轮对抗性复扫：采集 #app 全文扫「误报失败」关键词，专抓 API 200 但前端误报失败的盲区缺陷 |
+| `o_mark.py` | O 轮落证：读探针 JSON（`PROBE_JSON`，默认 /tmp/o-probe.json）把「11-13 O轮线上」证据追加进 router-list.md |
 | `../../user-web/scripts/gen_api_list.cjs` | 由 `src/api/*.js` 重建 api-list.md，**v4 起非破坏式：按（文件\|方法\|动词\|路径）保留既有「实测/问题-修复」列**（v3 曾整表覆写清掉 281 条实测证据，勿回退该行为） |
 
 ## 一、环境启动配方（双形态，2026-11-13 实测）
@@ -140,8 +143,54 @@ EOF
 - 发送测试邮件 503：本地未配发件账号
 - 卡片详情 404：`/api/tiktok-card/1` 等 → 页面「这张卡片读不到了」明确降级
 - 认证策略门：`/chat/embed/*` visitors 401（AppKeyResolve fail-closed，前端显式捕获展示）
+- 短链空列表：`/api/shortlink/list` 空数据返回 `{list:null,total:0}` → 前端须按 `res.list||[]`
+  兜底（2026-11-13 O轮修：曾误报「获取短链列表失败」，见下）
 
-## 五、历史轮次索引
+## 五、O 轮（2026-11-13，线上 SaaS 全量 + 对抗性复扫）
+
+O 轮 = 用户指令的新一轮全量回归，主验环境=线上 SaaS `https://work.xapptool.cn/`
+（jideilvluoqun@gmail.com，ego lite TaskSpace `hivemtk-route-test` p1；线上原构建落后
+本地 121 个提交，先部署最新代码再测）。流程与资产：
+
+1. **部署**：`cd user-web && npm run build` → `rsync -az --exclude='.user.ini' -e 'ssh -p 57122'
+   dist/ mtk-prod:/www/wwwroot/hivemtk/user-web/`（**不加 --delete**，保留旧 chunk 防 SW 404；
+   线上备份在 `user-web.bak.<日期>`）。
+2. **只读探针批跑**（规则-1 合规：全程不点任何元素）：`o-probe.mjs`（console/非2xx/路由名/
+   主区文本/可见按钮名 → JSON）+ `o_mark.py` 落证（本轮在 /tmp，用法见 git log 与 router-list.md
+   「O轮线上」行）。258 条分 10 批跑完，逐行落证。
+3. **对抗性复扫**（堵「API 200 但前端误报失败」盲区）：`o-scan.mjs` 采集 #app 全文扫 13 个
+   失败关键词。258 条复扫结论：0 console.error；命中 4 处全部设计内（#26 资产包 playground
+   :id=1 不存在、#82/#155/#231 抖音/快手/TikTok 卡片统计 :id=1 不存在，页面均明示
+   「读不到 ≠ 真的没有」并禁用保存）。
+4. **核心路由显式单元素点击**（读快照后逐个指定 ref/loc）：messageHub「刷新统计」、
+   inbox「刷新」、notifications「刷新」均 0 console.error、0 非2xx。
+
+### O 轮修的两个真 bug（勿回退）
+
+1. **短链空数据误报失败**（`user-web/src/views/shortLink/List.vue`）：`if (res && res.list)`
+   在 API 返回 `list:null` 时走 else 分支误报「获取短链列表失败」。修：`if (res) { list =
+   res.list || []; total = res.total || 0 }`。**同类模式回归口径**：grep `res && res.` 于
+   `views/`，凡「判真后才赋值、else 报错」的形态都必须确认有空值兜底；
+   `whatsapp/WhatsappDrafts.vue`、`WhatsappJobs.vue` 的 `else if (res && res.list)` 已有兜底。
+2. **PWA 自更新被自己的 precache 打死**（`user-web/vite.config.js`）：
+   `workbox.additionalManifestEntries` 把 `version.json` 显式加进 precache，旧 SW 把旧
+   version.json 返回给 main.js 的版本自检 ⇒ localBuildId===remoteBuildId ⇒ 永不
+   unregister/reload，用户被钉死旧版（实测停留 4 天）。修：删除该条目（precache 路由按
+   URL 匹配，与 main.js 的 `cache:no-store` 无关）。自愈链靠新 sw.js 字节变化触发
+   skipWaiting/clientsClaim。**回归口径**：部署后 `grep -c version.json dist/sw.js` 必须为 0。
+
+### O 轮环境与账号备忘
+
+| 项 | 值 |
+|---|---|
+| 线上主验 | `https://work.xapptool.cn/`（hash 路由：所有深链必须 `/#/path`） |
+| 账号 | `jideilvluoqun@gmail.com`（生产租户 18 tz3rmdj 超管，口令不入库） |
+| SSH 部署 | 别名 `mtk-prod` = root@101.35.252.112:57122；站点根 `/www/wwwroot/hivemtk/user-web` |
+| ego TaskSpace | `hivemtk-route-test`（page p1；同轮复用同一 space） |
+| CDP 打补丁教训 | `Page.addScriptToEvaluateOnNewDocument` 在 ego-browser 不生效；须 goto 后 `page.evaluate` 打补丁 + 同文档 hash 导航 |
+| goto 等待 | `waitUntil:'load'`（本应用有长连接，networkidle 常超时；不支持 networkidle2） |
+
+## 六、历史轮次索引
 
 | 轮 | 日期 | 范围 | 结论 |
 |---|---|---|---|
@@ -149,3 +198,5 @@ EOF
 | K | 11-10 | 线上 SaaS 抽验 | 云端口径补齐 |
 | L | 11-12 | 258 路由双形态全覆盖 | 240 [x] + 18 [~]，0 缺陷在册 |
 | M | 11-13 | 对抗性抽查 + 门禁收口 | 见 router-list 各行「11-13 M轮」注记 |
+| N2 | 11-13 | 258 路由 × 双形态逐路由 reload 单挂载探针 | 全绿；nr-batch.mjs/mark_batch.py 固化 |
+| O | 11-13 | 线上 SaaS 258 路由只读点验 + 对抗复扫 + 核心路由显式点击 | 258/258 落证；修短链误报 + SW 自更新两真 bug（见第五节） |
