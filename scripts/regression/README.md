@@ -14,6 +14,8 @@
 | `../mark.py` | router-list.md 行级状态/证据维护（`--stats` / `--status` / `--note` / `--show`） |
 | `../gen_router_list.py` | 由 `user-web/src/router/*` 重建 258 行索引，**重跑保留既有勾选** |
 | `nr-batch.mjs` | N2 轮逐路由批次运行器：about:blank 跳板单挂载、单次事件采集（console+Network 同批分类）、安全钮候选依次尝试；只做逐路由串行，无元素枚举循环 |
+| `gen_route_queue.py` | 由 router-list.md 生成逐路由导航队列（实参化口径同历轮：:id→1、:channel_ref→k_test_20261110、通配→/no-such-page-xyz） |
+| `mark_batch.py` | 读 /tmp/nr-batch.json 批量落证（nr-batch.mjs 每批末尾写它）；即 mark.py 的批处理形态，用法见下 |
 | `../../user-web/scripts/gen_api_list.cjs` | 由 `src/api/*.js` 重建 api-list.md，**v4 起非破坏式：按（文件\|方法\|动词\|路径）保留既有「实测/问题-修复」列**（v3 曾整表覆写清掉 281 条实测证据，勿回退该行为） |
 
 ## 一、环境启动配方（双形态，2026-11-13 实测）
@@ -63,7 +65,8 @@ cd user-web && npx vite --config vite.audit.saas.config.js &         # 8321
 4. 每页收口四件事：① console.error 计数 ② 非 2xx 请求逐条归因（设计内拒绝 vs 缺陷）
    ③ 关键交互的 toast/页面状态 ④ 变更类操作后 `page.fetch` 复核 API。
 5. 落证据：`python3 scripts/mark.py <行号> --status x --note "11-13 M轮：…（round-N）"`。
-   全量回归（N2 轮口径）用 `nr-batch.mjs` 批次推进 + `/tmp/mark_batch.py` 批量落证。
+   全量回归（N2 轮口径）用 `nr-batch.mjs` 批次推进 + `python3 scripts/regression/mark_batch.py <形态标签>` 批量落证
+   （读 /tmp/nr-batch.json；导航队列用 `python3 scripts/regression/gen_route_queue.py` 重建，与 nr-batch.mjs 的 6 列解析对齐）。
 
 ### N2 轮协议教训（2026-11-13 实测，勿回退）
 
@@ -81,6 +84,25 @@ cd user-web && npx vite --config vite.audit.saas.config.js &         # 8321
    模块未开通 4302）应 console.warn 而非 error——与 ChatWindow 策略门（#4）同口径；
    L 轮对 #82 的「0 console.error」记录与当时代码不符（组件 catch 用了 error 级），
    已按 warn 口径修正四处 CardStats + AlertCenter。
+
+## 多角色审计矩阵（2026-11-13 审计轮实测口径）
+
+| 角色 | 形态 | 验证点 | 结论 |
+|---|---|---|---|
+| 独立部署超管 admin | 8320 | N2 全量 258 路由 | 全绿 |
+| SaaS 租户 admin（mround_audit01，提权后） | 8321 | N2 全量 258 路由 | 全绿（SaaS 模块门重定向为设计态） |
+| **游客（未登录）** | 8320+8321 | 受保护页→#/login 重定向、登录表单渲染（SaaS 多租户代码字段）、公开页可达、API 401 边界 | PASS（curl 独立验证服务端 401；浏览器端见下方方法论） |
+| **零菜单用户** | 8321 | 登录落地不落 403 → /profile | PASS（M 轮 fallbackLandingPath 修复） |
+| **部分授权角色 customer_service（55 菜单）** | 8321 | 落地=首个授权菜单 /inbox/list；授权页渲染；未授权页 403；全局 GEO 徽标 403 静默降级 | PASS |
+| 生产云访客 | work.xapptool.cn | 登录页/帮助中心/聊天挂件只读 | PASS（挂件 401=策略门设计内） |
+
+### 游客态方法论（必读，否则测了个寂寞）
+
+浏览器里「清掉 localStorage token」≠ 游客：旧文档的轮询 timer 会在 removeItem 与
+reload 之间的窗口把**内存态 token 回写** localStorage（启动期无任何 refresh 网络调用，
+纯前端回写），假登录态随之复活——2026-11-13 实测连清三次都中招。真游客启动只有一种
+做法：**Storage.prototype.setItem 守卫封死 token/user_info 回写 → removeItem → 同 tick
+内 location.reload()**。服务端边界另用 curl 无 token 直连验证（401 为正确形态）。
 6. 发现缺陷：当轮修复（规则2），修完回归本页 + 相关门禁，才允许标 [x]。
 7. 双形态都要过：SaaS 出现的租户/商务属性，独立部署页必须不出现且不报错。
 

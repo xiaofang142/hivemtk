@@ -44,7 +44,7 @@ func (c *PerformanceTestController) GetResult(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "无效的ID")
 		return
 	}
-	r, err := c.svc.GetResult(uint(id))
+	r, err := c.svc.GetResult(ctx.Request.Context(), uint(id))
 	if err != nil {
 		if errhttp.IsNotFoundError(err) {
 			response.Error(ctx, http.StatusNotFound, "压测记录不存在")
@@ -60,7 +60,7 @@ func (c *PerformanceTestController) GetResult(ctx *gin.Context) {
 func (c *PerformanceTestController) ListResults(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
-	list, total, err := c.svc.ListResults(page, pageSize)
+	list, total, err := c.svc.ListResults(ctx.Request.Context(), page, pageSize)
 	if err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return

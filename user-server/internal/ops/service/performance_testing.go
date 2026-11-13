@@ -58,8 +58,11 @@ func (s *PerformanceTestService) RunTest(ctx context.Context, req TestRequest) (
 		return nil, err
 	}
 
-	// SafeGo：压测由 API 触发的长跑任务，panic 不能击穿进程
-	utils.SafeGo(context.Background(), "ops.performance_test.execute", func(_ context.Context) {
+	// SafeGoDetached：压测由 API 触发的长跑任务，panic 不能击穿进程；
+	// 用 Detached（WithoutCancel）而非 Background——租户 Value 必须随行，否则
+	// executeTest 的 UpdateFields 在租户模式被「需要租户上下文」闸拒（结果永不落库，
+	// 2026-11-13 api_verify 实测 /api/perf 同病灶定位）。无硬超时：时长由 req.DurationSec 决定。
+	utils.SafeGoDetached(ctx, "ops.performance_test.execute", 0, func(_ context.Context) {
 		s.executeTest(record.ID, req)
 	})
 
@@ -135,20 +138,21 @@ func (s *PerformanceTestService) executeTest(recordID uint, req TestRequest) {
 	_ = s.repo.UpdateFields(context.Background(), recordID, updates)
 }
 
-// GetResult 获取压测结果
-func (s *PerformanceTestService) GetResult(id uint) (*model.PerformanceTestResult, error) {
-	return s.repo.GetByID(context.Background(), id)
+// GetResult 获取压测结果（ctx 必传：performance_test_results 是租户表，
+// 裸 Background 会被租户闸拒成 500——2026-11-13 api_verify 实测）
+func (s *PerformanceTestService) GetResult(ctx context.Context, id uint) (*model.PerformanceTestResult, error) {
+	return s.repo.GetByID(ctx, id)
 }
 
-// ListResults 列出压测历史
-func (s *PerformanceTestService) ListResults(page, pageSize int) ([]*model.PerformanceTestResult, int64, error) {
+// ListResults 列出压测历史（ctx 必传，同 GetResult）
+func (s *PerformanceTestService) ListResults(ctx context.Context, page, pageSize int) ([]*model.PerformanceTestResult, int64, error) {
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 20
 	}
 	if page <= 0 {
 		page = 1
 	}
-	return s.repo.List(context.Background(), page, pageSize)
+	return s.repo.List(ctx, page, pageSize)
 }
 
 func percentile(data []float64, p int) float64 {

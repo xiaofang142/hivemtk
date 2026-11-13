@@ -147,6 +147,12 @@ func (t *SLOTracker) State(name string) SLOState {
 		if state.FailureEvents > state.AllowedFailure {
 			state.Remaining = 0
 			state.BudgetUsed = 1.0
+		} else if state.AllowedFailure == 0 {
+			// AllowedFailure==0（SLITarget=1.0 且无失败）：0/0=NaN 会让
+			// json.Marshal 失败、gin 静默写出 200 空响应体（2026-11-13
+			// api_verify 实测 /api/manage/slo size=0 的根因）。无失败=预算未耗。
+			state.Remaining = 0
+			state.BudgetUsed = 0
 		} else {
 			state.Remaining = state.AllowedFailure - state.FailureEvents
 			state.BudgetUsed = float64(state.FailureEvents) / float64(state.AllowedFailure)

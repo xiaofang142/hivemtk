@@ -1,6 +1,8 @@
 package sla
 
 import (
+	"encoding/json"
+	"math"
 	"testing"
 	"time"
 )
@@ -126,4 +128,41 @@ func TestSLOTracker_UnknownSLO(t *testing.T) {
 		t.Error("expected empty state for unknown SLO")
 	}
 	tr.Record("nonexistent", true)
+}
+
+// TestSLOTracker_AllStatesJSONSerializable 回归（2026-11-13 api_verify 实测）：
+// BudgetUsed = FailureEvents/AllowedFailure 在 SLITarget=1.0 且零失败时是 0/0=NaN，
+// json.Marshal 报错 → gin 静默写出 200 空响应体（/api/manage/slo size=0 的根因）。
+// 契约：任何 tracker 状态下 AllStates 都必须可 JSON 序列化且无 NaN/Inf。
+func TestSLOTracker_AllStatesJSONSerializable(t *testing.T) {
+	tr := NewSLOTracker()
+	tr.Define(SLO{
+		Name:      "json_safe",
+		Service:   "test",
+		SLITarget: 1.0, // 极端 SLI：1.0 ⇒ AllowedFailure 恒 0
+		Window:    1 * time.Hour,
+	})
+	tr.Record("json_safe", true)
+	tr.Record("json_safe", false)
+
+	states := tr.AllStates()
+	if len(states) != 1 {
+		t.Fatalf("应 1 条状态，实际 %d", len(states))
+	}
+	b, err := json.Marshal(states)
+	if err != nil {
+		t.Fatalf("AllStates 必须可 JSON 序列化（NaN/Inf 会让 gin 静默空响应）: %v", err)
+	}
+	var back []SLOState
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("序列化结果必须可反序列化: %v", err)
+	}
+	for _, s := range back {
+		if math.IsNaN(s.BudgetUsed) || math.IsInf(s.BudgetUsed, 0) {
+			t.Errorf("BudgetUsed 不得为 NaN/Inf，实际 %v", s.BudgetUsed)
+		}
+		if math.IsNaN(s.Achievement) || math.IsInf(s.Achievement, 0) {
+			t.Errorf("Achievement 不得为 NaN/Inf，实际 %v", s.Achievement)
+		}
+	}
 }
