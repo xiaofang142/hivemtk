@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"context"
 	"errors"
 	"strings"
@@ -69,7 +70,7 @@ func TestPusherConfigService_Create校验(t *testing.T) {
 	}
 	// 数组/标量不是对象：装配期按 key 取值会静默失效，必须拒绝。
 	if _, err := svc.Create(ctx, PusherConfigInput{
-		Platform: &platform, ConfigJSON: datatypes.JSON(`["x"]`),
+		Platform: &platform, ConfigJSON: json.RawMessage(`["x"]`),
 	}); err == nil {
 		t.Fatal("config_json 非对象应报错")
 	}
@@ -78,7 +79,7 @@ func TestPusherConfigService_Create校验(t *testing.T) {
 	// 否则调用方拿到 code=0 却一条记录都不会推送（D-22）。
 	bogus := "bogus"
 	if _, err := svc.Create(ctx, PusherConfigInput{
-		Platform: &bogus, ConfigJSON: datatypes.JSON(`{"token":"x"}`),
+		Platform: &bogus, ConfigJSON: json.RawMessage(`{"token":"x"}`),
 	}); err == nil {
 		t.Fatal("未知 platform 应报错")
 	}
@@ -87,7 +88,7 @@ func TestPusherConfigService_Create校验(t *testing.T) {
 	svc = NewPusherConfigService(repo)
 	cfg, err := svc.Create(ctx, PusherConfigInput{
 		Platform:   &platform,
-		ConfigJSON: datatypes.JSON(`{"token":"x"}`),
+		ConfigJSON: json.RawMessage(`{"token":"x"}`),
 	})
 	if err != nil {
 		t.Fatalf("合法入参创建失败: %v", err)
@@ -106,7 +107,7 @@ func TestPusherConfigService_Create平台重复给可执行提示(t *testing.T) 
 	platform := "baidu"
 	_, err := svc.Create(context.Background(), PusherConfigInput{
 		Platform:   &platform,
-		ConfigJSON: datatypes.JSON(`{"token":"x"}`),
+		ConfigJSON: json.RawMessage(`{"token":"x"}`),
 	})
 	if err == nil {
 		t.Fatal("平台重复应报错")
@@ -146,7 +147,7 @@ func TestPusherConfigService_Update只改可编辑字段(t *testing.T) {
 	}
 	// 无效 config_json 必须在落库前拒绝。
 	if _, err := svc.Update(context.Background(), "cfg-1", PusherConfigInput{
-		ConfigJSON: datatypes.JSON(`{oops`),
+		ConfigJSON: json.RawMessage(`{oops`),
 	}); err == nil {
 		t.Fatal("非法 config_json 应报错")
 	}

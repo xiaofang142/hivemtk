@@ -84,6 +84,32 @@ export const getAsset = (id) => http.get(`/api/v1/local-assets/${id}`);
 | `vue/multi-word-component-names` | `off` | 见 §1.4 |
 | warning 门 | **基线 63、门 80** | `npm run lint` 用 `--max-warnings=80`；新增 warning 会吃掉余量，**别留 warning** |
 
+### 1.6 新手引导体系（CLAUDE.md 规则 5 的完整落地口径）
+
+**任何新增业务功能（页面、模块、组件），开发完成前必须同步实现对应层级的新手引导**，纳入统一的三层引导体系，零例外。未实现引导的新功能 = 未完成，不允许提交推送。
+
+体系已实现于 `user-web/src/composables/useOnboarding.ts`，三层结构：
+
+| 层级 | 覆盖范围 | 触发方式 | 存储键前缀 |
+|------|---------|----------|-----------|
+| **全局导览** | 品牌/导航/侧边栏/通知/用户菜单/主内容区（6 步） | 首次登录自动 + 用户菜单「全局导览」 | `hivemtk_onboarding_completed_global` |
+| **模块导览** | 14 大核心模块（各 3-4 步） | 进入模块首页自动 / `useModuleOnboarding(moduleKey)` | `hivemtk_onboarding_completed_module` |
+| **页面导览** | 6 个核心页面（各 4 步） | 进入具体页面自动 / `usePageOnboarding(pageKey)` | `hivemtk_onboarding_completed_page` |
+
+新增功能必须同步实现（同一任务内）：
+
+1. **模块导览**（新增顶级菜单模块时）：在 `getModuleTourSteps()` 添加 `moduleKey` 配置（3-4 步：element 选择器、titleKey、descriptionKey、side），`zh.json`/`en.json` 的 `onboarding.module.{moduleKey}` 补中英文文案。
+2. **页面导览**（新增核心业务页面时）：在 `getPageTourSteps()` 添加 `pageKey`（格式 `{routeName}`，如 `customer360-list`），4 步覆盖「筛选/工具栏 → 列表/主内容 → 详情/交互区 → 操作/配置区」，`onboarding.page.{pageKey}` 补文案。
+3. **组件级引导**（复杂交互组件）：`driver.js` 的 `highlight(element, options)` 即时高亮，适用于首次使用的复杂表单、向导式流程。
+
+选择器规范：全局/模块级用**语义化 class**（`.mh-stats-cards`、`.inbox-filter-bar`）；页面级在组件根元素加唯一标识 class（`<div class="c360-search-box">`）；**禁止** `nth-child`、深层嵌套 `> div > div`、动态生成 ID；新页面主容器加 `class="{pageKey}-page"`，关键区域 `{feature}-{area}`。
+
+i18n 口径：命名空间 `onboarding.global` / `onboarding.module.{key}` / `onboarding.page.{key}`；每步含 `title` + `description`；中英文必须同时添加，描述需包含**功能定位 + 核心操作 + 关键特性**。
+
+验收标准（新功能上线前逐项过）：模块/页面导览自动触发且高亮准确；4 步覆盖「筛选→列表→详情→操作」；中英文文案 100% 无缺 key；点击「完成」后 `localStorage` 正确标记不再弹；用户菜单/右键菜单可手动重看；切换语言文案即时生效。
+
+技术栈锁定：**driver.js (MIT)** 已锁版本禁止更换；统一组合式 API `useOnboarding()` / `useModuleOnboarding()` / `usePageOnboarding()`；`App.vue` 首次登录自动启动全局导览，模块/页面级在对应组件 `onMounted` 调 `tryStart()`。文案缺失/选择器失效 = 构建时 i18n 检查失败或运行时控制台报警，必须修复；复用旧选择器导致高亮偏移 = 必须新增专用 class，禁止偷懒复用。
+
 ---
 
 ## 2. 桥接扩展（Chrome MV3，`user-web/bridge/`）

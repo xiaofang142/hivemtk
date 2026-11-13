@@ -21,7 +21,7 @@ import (
 type SchemaTemplateInput struct {
 	PageType     *string
 	SchemaType   *string
-	TemplateJSON datatypes.JSON
+	TemplateJSON json.RawMessage
 	Active       *bool
 }
 
@@ -67,7 +67,7 @@ func (s *SchemaTemplateService) Create(ctx context.Context, in SchemaTemplateInp
 	tpl := &model.GeoSchemaTemplate{
 		PageType:     pageType,
 		SchemaType:   schemaType,
-		TemplateJSON: in.TemplateJSON,
+		TemplateJSON: datatypes.JSON(in.TemplateJSON),
 		Active:       true,
 	}
 	if in.Active != nil {
@@ -102,7 +102,7 @@ func (s *SchemaTemplateService) Update(ctx context.Context, id string, in Schema
 		if err := validateTemplateJSON(in.TemplateJSON); err != nil {
 			return nil, err
 		}
-		tpl.TemplateJSON = in.TemplateJSON
+		tpl.TemplateJSON = datatypes.JSON(in.TemplateJSON)
 	}
 	if in.Active != nil {
 		tpl.Active = *in.Active
@@ -126,7 +126,7 @@ func requiredTrimmed(v *string, field string) (string, error) {
 }
 
 // validateTemplateJSON 必须是 JSON 对象：模板按 @type 取键值，数组/标量无法套用。
-func validateTemplateJSON(raw datatypes.JSON) error {
+func validateTemplateJSON(raw json.RawMessage) error {
 	if len(raw) == 0 {
 		return errors.New("模板 JSON（template_json）不能为空")
 	}

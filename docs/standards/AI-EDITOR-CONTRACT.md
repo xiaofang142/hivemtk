@@ -27,7 +27,7 @@
 
 | # | 契约 |
 |---|---|
-| C1 | 五层架构 Router→Controller→Service→Repository→Model，**禁跨层**：Controller 不碰 DB / 不 import repository 或 gorm、Service 不写 SQL / 不碰 `gin.Context`、Repository 不写业务规则 / 不碰 HTTP。**本仓无 `handler` 包，新域一律 `XxxController`**。分层由静态门强制：`python3 scripts/check-layer-boundary.py`（CI `Layer Boundary` 作业，存量例外在 `scripts/layer-boundary.baseline`） |
+| C1 | 五层架构 Router→Controller→Service→Repository→Model，**禁跨层**：Controller 不碰 DB / 不 import repository 或 gorm、Service 不写 SQL / 不碰 `gin.Context`（SSE 等流式场景用 `http.ResponseWriter` + `context.Context` 签名）、Repository 不写业务规则 / 不碰 HTTP。**本仓无 `handler` 包，新域一律 `XxxController`**。Router 层职责 = 路由映射 + 依赖装配（AV-04c 既成口径），禁业务逻辑/内联闭包。分层由静态门强制：`python3 scripts/check-layer-boundary.py`（CI `Layer Boundary` 作业；存量例外 2026-11-14 已清零，`scripts/layer-boundary.baseline` 目标恒空） |
 | C2 | API 路径 `/api/{domain}/{resource}`；响应格式与错误码双通道口径见 `CLAUDE.md` §API 规范 |
 | C3 | 多租户 fail-closed：所有表访问必须带租户上下文，缺上下文一律拒绝 |
 | C4 | 改 `user-server/` 必跑 `go build ./...` + `go vet ./...` + `go test`；DB 门禁失败（缺 `POSTGRES_TEST_PASSWORD`）单独识别，不当代码问题 |

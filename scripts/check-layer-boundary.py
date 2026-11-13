@@ -6,12 +6,17 @@
   AGENTS.md §2 / AI-EDITOR-CONTRACT.md C1 把「禁跨层」定为铁律，但长期只有
   「有人评审时看过」这一层保障——恒绿的规范与没人执行的规范长得一样
   （.github/workflows/seam-guard.yml 头注释记的是同一件事在异步全局上的另一例）。
-  本门把分层规则里**可静态判定**的部分（import 边界）落成 CI 闸门：
+  本门把分层规则里**可静态判定**的部分（import 边界）落成 CI 闸门（2026-11-14 基线已清零，
+  存量例外文件机制保留于 scripts/layer-boundary.baseline）：
     - Controller 层禁 import repository / gorm（不直接碰 DB，2026-11-14 实测基线 0）；
     - Service 层禁 import controller / router / gin（不碰 HTTP 细节）；
     - Repository 层禁 import controller / service / router / gin（不碰 HTTP / 不反向依赖）；
     - Model 层禁 import controller / service / repository / router / gin；
-    - Router 层禁 import repository / model（路由装配不下沉取数）。
+    - Router 层：**2026-11-14 经 AV-04c 溯源修正**——装配点已在 router（27 个路由文件
+      实测 import repository 做依赖装配，material.go 等处注明「装配由 router 直接填」），
+      规则对齐实态：Router = 路由映射 + 依赖装配，禁业务逻辑/内联闭包（评审纪律，
+      静态门不越权）；禁 import repository/model 的旧理想口径作为重构方向保留在
+      CLAUDE.md 五层节，不再由本门强制。
   注释/字符串里提到别的层不算违规：只解析真正的 import 块与单行 import。
   「Service 不写 SQL」这类语义规则静态判定不可靠（gorm 事务句柄在 service 传阅是既成架构），
   仍留给评审，本门不越权。
@@ -39,7 +44,7 @@ FORBIDDEN = {
                    "github.com/gin-gonic/gin"),
     "model": ("internal/controller", "internal/service", "internal/repository",
               "internal/router", "github.com/gin-gonic/gin"),
-    "router": ("internal/repository", "internal/model"),
+    # router 层无 import 禁令：装配口径修正（见头注释）；业务逻辑/内联闭包仍靠评审 + spec-kit 闸门
 }
 LAYERS = ("controller", "service", "repository", "model", "router")
 
@@ -84,7 +89,7 @@ def scan(root):
             except OSError:
                 continue
             for imp in go_imports(src):
-                for tok in FORBIDDEN[layer]:
+                for tok in FORBIDDEN.get(layer, ()):
                     if tok in imp:
                         violations.append((layer, tok, rel.replace(os.sep, "/"), imp))
     return violations, scanned
@@ -151,9 +156,9 @@ SELFTEST_CASES = [
      {("model", "github.com/gin-gonic/gin")}),
     ("model/ok_gorm.go",
      'package model\n\nimport "gorm.io/gorm"\n', set()),  # model 用 gorm 是本职
-    ("router/bad.go",
-     'package router\n\nimport "hivemtk-user/internal/model"\n',
-     {("router", "internal/model")}),
+    ("router/assembly_ok.go",
+     'package router\n\nimport "hivemtk-user/internal/repository"\n',
+     set()),  # AV-04c 后 router 做依赖装配合法（2026-11-14 口径修正，防回退）
     ("controller/alias_import.go",
      'package controller\n\nimport _ "hivemtk-user/internal/repository"\n',
      {("controller", "internal/repository")}),

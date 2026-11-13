@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -13,7 +14,6 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 
-	"github.com/gin-gonic/gin"
 )
 
 // SSE Topic 常量
@@ -440,28 +440,34 @@ func splitComma(s string) []string {
 	return out
 }
 
-// SSEWriteHeartbeat 写心跳消息（:ping 注释行，不计入 event-stream）
-func SSEWriteHeartbeat(c *gin.Context) {
-	_, _ = c.Writer.WriteString(":ping\n\n")
-	c.Writer.Flush()
+// SSEWriteHeartbeat 写心跳消息（:ping 注释行，不计入 event-stream）。
+// 接口只吃 http.ResponseWriter：gin 的 c.Writer 天然实现该接口，SSE 细节留在写侧。
+func SSEWriteHeartbeat(w http.ResponseWriter) {
+	_, _ = io.WriteString(w, ":ping\n\n")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // SSEWriteEvent 写 SSE 事件
-func SSEWriteEvent(c *gin.Context, event SSEEvent) error {
+func SSEWriteEvent(w http.ResponseWriter, event SSEEvent) error {
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(c.Writer, "event: %s\n", event.EventType)
-	_, _ = fmt.Fprintf(c.Writer, "data: %s\n\n", string(data))
-	c.Writer.Flush()
+	_, _ = fmt.Fprintf(w, "event: %s\n", event.EventType)
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", string(data))
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 	return nil
 }
 
 // SSEStreamHandler SSE 流处理（在 controller 中调用）
 //
 // 参数：
-//   - c: gin context
+//   - ctx: 请求上下文（客户端断开即取消，驱动退出）
+//   - w: 响应写出（gin 传 ctx.Writer 即可）
 //   - hub: SSE Hub 实例
 //   - client: 已注册的 SSE 客户端
 //
@@ -470,19 +476,19 @@ func SSEWriteEvent(c *gin.Context, event SSEEvent) error {
 //   - 每 15 秒发送心跳
 //   - 监听 client.Events() 推送事件
 //   - 客户端断开或 Hub 停止时退出
-func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.WriteHeader(http.StatusOK)
+func SSEStreamHandler(ctx context.Context, w http.ResponseWriter, hub *SSEHub, client *SSEClient) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
 
-	_ = SSEWriteEvent(c, SSEEvent{
+	_ = SSEWriteEvent(w, SSEEvent{
 		Topic:     "system_alerts",
 		EventType: "connected",
 		Data: map[string]any{
 			"client_id": client.id,
-			"topics":    client.Topics(c.Request.Context()),
+			"topics":    client.Topics(ctx),
 			"message":   "SSE connected",
 		},
 		Timestamp: time.Now(),
@@ -491,7 +497,7 @@ func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
 	heartbeatTicker := time.NewTicker(runtimeSSEHeartbeatInterval(context.Background()))
 	defer heartbeatTicker.Stop()
 
-	clientClosed := c.Request.Context().Done()
+	clientClosed := ctx.Done()
 
 	for {
 		select {
@@ -499,14 +505,14 @@ func SSEStreamHandler(c *gin.Context, hub *SSEHub, client *SSEClient) {
 			return
 		case <-hub.stopCh:
 			return
-		case <-client.CloseCh(c.Request.Context()):
+		case <-client.CloseCh(ctx):
 			return
-		case event := <-client.Events(c.Request.Context()):
-			if err := SSEWriteEvent(c, event); err != nil {
+		case event := <-client.Events(ctx):
+			if err := SSEWriteEvent(w, event); err != nil {
 				return
 			}
 		case <-heartbeatTicker.C:
-			SSEWriteHeartbeat(c)
+			SSEWriteHeartbeat(w)
 		}
 	}
 }

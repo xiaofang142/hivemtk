@@ -9,7 +9,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/datatypes"
+	"encoding/json"
 )
 
 // GeoPusherConfigController 蜘蛛平台配置 CRUD
@@ -24,7 +24,7 @@ func NewGeoPusherConfigController(svc *service.PusherConfigService) *GeoPusherCo
 // pusherConfigRequest 只含可编辑字段；id/tenant_id/used_today/last_reset_at 由系统维护。
 type pusherConfigRequest struct {
 	Platform   *string        `json:"platform"`
-	ConfigJSON datatypes.JSON `json:"config_json"`
+	ConfigJSON json.RawMessage `json:"config_json"`
 	DailyLimit *int           `json:"daily_limit"`
 	Active     *bool          `json:"active"`
 }

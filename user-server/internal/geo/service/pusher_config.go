@@ -21,7 +21,7 @@ import (
 // 后两个是配额回写的运行时状态，允许外部写入等于让人随意清空/放大当日额度。
 type PusherConfigInput struct {
 	Platform   *string
-	ConfigJSON datatypes.JSON
+	ConfigJSON json.RawMessage
 	DailyLimit *int
 	Active     *bool
 }
@@ -63,7 +63,7 @@ func (s *PusherConfigService) Create(ctx context.Context, in PusherConfigInput) 
 	}
 	cfg := &model.GeoPusherConfig{
 		Platform:   platform,
-		ConfigJSON: in.ConfigJSON,
+		ConfigJSON: datatypes.JSON(in.ConfigJSON),
 		Active:     true,
 	}
 	if in.DailyLimit != nil {
@@ -109,7 +109,7 @@ func (s *PusherConfigService) Update(ctx context.Context, id string, in PusherCo
 		if err := validatePusherConfigJSON(in.ConfigJSON); err != nil {
 			return nil, err
 		}
-		cfg.ConfigJSON = in.ConfigJSON
+		cfg.ConfigJSON = datatypes.JSON(in.ConfigJSON)
 	}
 	if in.DailyLimit != nil {
 		cfg.DailyLimit = *in.DailyLimit
@@ -149,7 +149,7 @@ func normalizePlatform(platform *string) (string, error) {
 }
 
 // validatePusherConfigJSON 必须是 JSON 对象（各平台按 key 取值，数组/标量会让装配静默失效）
-func validatePusherConfigJSON(raw datatypes.JSON) error {
+func validatePusherConfigJSON(raw json.RawMessage) error {
 	if len(raw) == 0 {
 		return errors.New("config_json 必填")
 	}

@@ -7,7 +7,7 @@
 # 用法：
 #   deploy/deploy-api.sh                 # 变更驱动：检测到 user-server 有未发布提交才部署
 #   deploy/deploy-api.sh --force         # 跳过变更门（例如线上二进制与台账不一致需对齐）
-#   deploy/deploy-api.sh --dry-run       # 只打印计划与预检结果，不碰任何机器
+#   deploy/deploy-api.sh --dry-run       # 只打印计划与预检结果，不改动任何线上状态（含一次只读 SSH 探测收敛基线）
 #   deploy/deploy-api.sh --skip-tests    # 跳过 go test（默认跑，DB 门禁失败会单独列出）
 #
 # 前置条件：

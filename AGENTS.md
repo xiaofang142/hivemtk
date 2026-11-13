@@ -67,7 +67,7 @@ fi
 
 | 层 | 职责 | 禁止 |
 |---|---|---|
-| Router | 只注册路由与中间件 | 写业务逻辑 |
+| Router | URL→Controller 映射 + **依赖装配**（AV-04c 后的既成装配点，2026-11-14 溯源修正） | 写业务逻辑、内联闭包 |
 | Controller | 解析入参、调 Service、组响应 | 直接碰 DB / 调 Repository |
 | Service | 业务编排、事务边界 | 写 SQL / 碰 `*gin.Context` 细节 |
 | Repository | 数据访问（SQL/GORM） | 写业务规则 |
@@ -77,7 +77,9 @@ fi
   **本仓无 `handler` 包**：新域一律 `XxxController`，不引入 handler 同义词
   （实测 Controller 类型 205 个、`XxxHandler` 零命中，口径与 `CLAUDE.md` §五层架构一致）。
 - 分层有 CI 静态门：`python3 scripts/check-layer-boundary.py`（GitHub Actions `Layer Boundary`
-  作业强制，新增跨层 import 即红，存量例外走 `scripts/layer-boundary.baseline`）。
+  作业强制，新增跨层 import 即红）。存量例外 2026-11-14 已清零：router 层 33 处装配经
+  AV-04c 溯源转为合法口径，controller→gorm 与 service→gin 共 5 处已重构消除；
+  `scripts/layer-boundary.baseline` 机制保留，目标恒空。
 - API 路径规范 `/api/{domain}/{resource}`；响应格式、错误码双通道口径见 `CLAUDE.md` §API 规范。
 - 多租户 fail-closed：任何表访问必须带租户上下文，缺上下文一律拒绝而非放行。
 
@@ -146,6 +148,7 @@ cd user-web && npx eslint src --max-warnings 80   # 全量 warning 基线 63、�
 | **前端编码规范**（改 `user-web/**` 前必读） | `docs/standards/FRONTEND-CODING-STANDARDS.md` |
 | **交互规范**（改接口/toast/i18n/路由前必读） | `docs/standards/INTERACTION-STANDARDS.md` |
 | **测试规范**（写测试/判读失败前必读） | `docs/standards/TESTING-STANDARDS.md` |
+| **spec-kit 双车道执行手册**（规则3/4 分流表/命令体/铁律全文） | `docs/standards/SPEC-KIT-WORKFLOW.md` |
 | 编码主规则 / i18n 策略 / 文档模板 | `docs/standards/`（索引见其 README） |
 | 开发手册（AI 版 / 人类版） | `docs/handbook/` |
 | 协作规范 / 代码地图 / Git 规则 | `docs/contribute/`（CODE_COLLABORATION.md / CODEBASE_MAP.md / GIT_RULES.md） |

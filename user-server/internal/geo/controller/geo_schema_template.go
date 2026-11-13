@@ -9,7 +9,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/datatypes"
+	"encoding/json"
 )
 
 // GeoSchemaTemplateController Schema 模板库 CRUD
@@ -25,7 +25,7 @@ func NewGeoSchemaTemplateController(svc *service.SchemaTemplateService) *GeoSche
 type schemaTemplateRequest struct {
 	PageType     *string        `json:"page_type"`
 	SchemaType   *string        `json:"schema_type"`
-	TemplateJSON datatypes.JSON `json:"template_json"`
+	TemplateJSON json.RawMessage `json:"template_json"`
 	Active       *bool          `json:"active"`
 }
 

@@ -14,6 +14,7 @@
 | [FRONTEND-CODING-STANDARDS.md](FRONTEND-CODING-STANDARDS.md) | **前端编码规范**：管理端 Vue3+EP 与桥接 MV3 扩展双前端（api 层铁律 / eslint / 路由台账 / 隐私红线 / 发版两道门） |
 | [INTERACTION-STANDARDS.md](INTERACTION-STANDARDS.md) | **交互规范**：API 路径与响应信封（含 202 Accepted 语义）/ 401·403·404 分档 / 登录端点裸调 / toast 去重 / i18n 10 语言 / 新手引导三层 |
 | [TESTING-STANDARDS.md](TESTING-STANDARDS.md) | **测试规范**：Go 标准库写法与 DB 门禁判读 / vitest 配置口径与 settle 等待 / UI 规则-1 逐元素 / 扩展 fixture 必须真机实证 |
+| [SPEC-KIT-WORKFLOW.md](SPEC-KIT-WORKFLOW.md) | **spec-kit 双车道执行手册**：规则 3/4 的分流表 / 命令体 / 阶段职责 / slug 解析 / 铁律全文（CLAUDE.md 只留口径与指针） |
 | [FEATURE_DOCUMENTATION_TEMPLATE.md](FEATURE_DOCUMENTATION_TEMPLATE.md) | 功能文档 8 节模板（人读版功能文档的写作规范） |
 | [BACKEND_MESSAGE_I18N_POLICY.md](BACKEND_MESSAGE_I18N_POLICY.md) | 后端文案国际化口径与清单（F3 交付：必须 i18n / 不 i18n / 改造顺序 + 未覆盖清单） |
 

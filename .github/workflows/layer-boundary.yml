@@ -5,10 +5,10 @@
 # 同一件事在异步全局上的另一例）。本门把可静态判定的 import 边界落成 CI 闸门：
 #   1. --selftest 先跑内置夹具（检测/基线豁免/注释豁免/测试豁免/import _ 别名形态），
 #      门的输入是它自己——牙齿坏了必须当场红，而不是悄悄恒绿；
-#   2. 全树扫描 user-server/internal（非测试 .go，1522 个，2026-11-14 实测），
-#      存量例外 34 对在 scripts/layer-boundary.baseline（router 层既有 DI 装配口径 33 处
-#      等），只拦**新增**跨层 import；基线条目对应的违规消失时打印「过期条目」提示，
-#      重构消除一处就删一行，逐步清零。
+#   2. 全树扫描 user-server/internal（非测试 .go，1522 个，2026-11-14 实测）。
+#      存量例外已于 2026-11-14 清零：router 层 33 处装配经 AV-04c 溯源转为合法口径（门内不再
+#      设 router 禁令），controller→gorm 2 处与 service→gin 3 处重构消除——baseline 现无条目，
+#      机制保留、目标恒空；再出违规即红。
 #
 # 触发面写整棵 Go 树而不是只写脚本自己：只登记脚本路径会让「新加一处绕层 import」
 # 那类提交根本不重跑这道门（与 seam-guard 同理）。
@@ -40,7 +40,7 @@ permissions:
 
 jobs:
   layer-boundary:
-    name: 五层 import 边界（禁跨层，基线 34 对）
+    name: 五层 import 边界（禁跨层，存量例外应恒空）
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

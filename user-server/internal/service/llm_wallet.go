@@ -13,8 +13,6 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
-
-	"github.com/gin-gonic/gin"
 )
 
 // LLM 钱包（用户端视图）
@@ -291,7 +289,6 @@ func (s *LLMWalletService) PlatformProviders(ctx context.Context) ([]platform.Pl
 var (
 	_ = errors.Is
 	_ = model.TenantModuleActive
-	_ = gin.Context{}
 	_ = json.Marshal
 )
 

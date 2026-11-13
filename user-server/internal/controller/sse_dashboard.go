@@ -59,7 +59,7 @@ func (c *SSEDashboardController) Stream(ctx *gin.Context) {
 	}
 	defer c.hub.Unregister(ctx.Request.Context(), clientID)
 
-	service.SSEStreamHandler(ctx, c.hub, client)
+	service.SSEStreamHandler(ctx.Request.Context(), ctx.Writer, c.hub, client)
 }
 
 // @Summary      列出所有 SSE 客户端
