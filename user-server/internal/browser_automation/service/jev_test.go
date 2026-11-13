@@ -350,7 +350,6 @@ func TestPlanRoundJevBlockedAndDone(t *testing.T) {
 	if fb.calls != 0 {
 		t.Fatal("BLOCKED 不应再调 Brain")
 	}
-	// DONE
 	fd2 := mkOp("DONE")
 	e.SetJevClient(NewJevClientWithConfig(JevConfig{Enabled: true}, fd2))
 	seq = 0

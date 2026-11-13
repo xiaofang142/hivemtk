@@ -9,8 +9,6 @@ import { setup } from '@storybook/vue3';
 // 1) 全局 i18n 注入 — 让组件的 $t() 调用不报错
 setup((app) => {
   // 这里仅做骨架占位; 真实环境应 import i18n 实例
-  // const i18n = createI18n({ legacy: false, locale: 'zh', messages: {...} });
-  // app.use(i18n);
 });
 
 // 2) 全局装饰器: 给所有 story 套一层容器, 统一 padding/背景

@@ -180,7 +180,6 @@ async function clickAsideSubMenu(page, text) {
   await page.waitForTimeout(800)
 }
 
-// ============================================================
 test.describe('权限系统 UI 多角色验证', () => {
   let adminToken = ''
   let adminPassword = ''
