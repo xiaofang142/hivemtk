@@ -32,6 +32,7 @@ import { readFileSync, existsSync, cpSync, rmSync, readdirSync, statSync } from 
 import { homedir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { reloadExtension } from './lib/ego-browser.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -210,62 +211,17 @@ if (!opt.reload) {
   log(`\n✅ 完成。手动收尾：chrome://extensions 搜 HiveBridge -> 点「重新加载」\n`);
 } else {
   log(`\n==> [4/4] 重新加载扩展（ego-browser）`);
-  const resultPath = '/tmp/hivebridge-reload-result.json';
-  if (existsSync(resultPath)) rmSync(resultPath);
-  // 注意：这个脚本跑在 ego-browser 的 Node 运行时里，顶层可用 await。
-  const reloadScript = `
-const fs = require('node:fs');
-const RESULT = ${JSON.stringify(resultPath)};
-const write = (o) => fs.writeFileSync(RESULT, JSON.stringify(o));
-(async () => {
-  try {
-    const ts = await taskSpace('hivebridge-publish');
-    const p = await ts.page('p1');
-    await p.goto('chrome://extensions/');
-    await p.waitForTimeout(1200);
-    let snap = await p.snapshot({ scope: 'full_page' });
-    let text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const boxRef = (text.match(/searchbox "搜索扩展程序" \\[ref=(\\d+)[,\\]]/) || [])[1];
-    if (!boxRef) return write({ ok: false, step: 'searchbox' });
-    await p.fill(boxRef, 'HiveBridge');
-    await p.waitForTimeout(600);
-    snap = await p.snapshot({ scope: 'full_page' });
-    text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const refs = [...text.matchAll(/button "重新加载" \\[ref=(\\d+)[,\\]]/g)].map((m) => m[1]);
-    if (refs.length !== 1) return write({ ok: false, step: 'reload-button', count: refs.length });
-    await p.click(refs[0]);
-    await p.waitForTimeout(1500);
-    snap = await p.snapshot({ scope: 'full_page' });
-    text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const ver = (text.match(/\\b(\\d+\\.\\d+\\.\\d+)\\b/) || [])[1];
-    const card = text.split('\\n').filter((l) => /HiveBridge/.test(l)).slice(0, 2).join(' | ');
-    write({ ok: true, version: ver || null, card });
-    await ts.finish({ keep: [] });
-  } catch (e) {
-    write({ ok: false, step: 'exception', error: String((e && e.message) || e) });
-  }
-})();
-`;
-  if (opt.dryRun) {
-    log('    （dry-run）将调 ego-browser 打开 chrome://extensions 并点「重新加载」');
-  } else {
-    try {
-      execFileSync('ego-browser', ['nodejs', '-e', reloadScript], { stdio: 'inherit', timeout: 180000 });
-    } catch (e) {
-      fail(`ego-browser 调用失败：${e.message}\n   请手动到 chrome://extensions 点「重新加载」。`);
-    }
-    if (!existsSync(resultPath)) fail('ego-browser 未回写结果文件，重新加载状态未知——请手动确认。');
-    const r = JSON.parse(readFileSync(resultPath, 'utf8'));
+  const r = reloadExtension({ name: manifest.name, expectVersion: version, dryRun: opt.dryRun });
+  if (!opt.dryRun) {
     if (!r.ok) {
       fail(
         `重新加载未完成（step=${r.step}${r.count ? ` count=${r.count}` : ''}${r.error ? ` error=${r.error}` : ''}）。\n` +
-        '   请手动：chrome://extensions 搜 HiveBridge -> 点「重新加载」',
+          '   请手动：chrome://extensions 搜 HiveBridge -> 点「重新加载」',
       );
     }
-    if (r.version && r.version !== version) {
-      fail(`重新加载后快照里版本是 ${r.version}，期望 ${version}——可能没加载成功，请手动确认。`);
-    }
     log(`    ✅ 已重新加载，快照中版本=${r.version || '未读到'}`);
+  } else {
+    log('    （dry-run）将调 ego-browser 打开 chrome://extensions 并点「重新加载」');
   }
   log(`\n✅ 发布链完成：v${version} 已构建、已安装、已重新加载。\n`);
 }

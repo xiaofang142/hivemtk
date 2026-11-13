@@ -100,6 +100,34 @@ npm run publish -- --reload
 
 选项：`--skip-build`（只安装现有 dist）、`--dry-run`（只打印）、`--self-hosted`（自部署产物）。
 
+### 2.2b 租户侧安装链（下载 → 解压 → 安装 → 重载）
+
+```bash
+cd hivemtk/user-web/bridge
+node scripts/install-extension.mjs --zip release/hivebridge-1.3.0.zip   # 本地 zip
+node scripts/install-extension.mjs --dir /path/to/unpacked              # 已解压目录
+node scripts/install-extension.mjs --download                           # 从用户端页面下载
+```
+
+`scripts/install-extension.mjs` 与 publish.mjs 共用 `scripts/lib/ego-browser.mjs`
+的 `reloadExtension()`。三种取包来源互斥（`--zip` / `--dir` / `--download`），
+安装后同样走「备份 → rsync → 重新加载 → 版本回验」。
+
+安装策略分两种，判据是**目标加载目录是否已被 Chrome 登记**：
+
+- **已登记**（目录里有 manifest.json）⇒ 原地 rsync 覆盖 + 重新加载，
+  **全自动，零人工**。日常版本更新都走这条。
+- **未登记**（全新机器）⇒ 解压就位后调「加载未打包的扩展程序」。
+  这一步**无法全自动**，实测结论（2026-11-13）：ego-browser 能点到按钮，但
+  Chrome 对 CDP 合成点击不弹出文件选择器（`waitForFileChooser` 8s 超时），
+  macOS 原生目录面板也不受 CDP 键盘事件控制。脚本会点开按钮并尝试接管
+  chooser（`tryLoadUnpacked()`），失败则打印一次性人工三步指引
+  （点按钮 / 选目录 / 点打开）。此后的版本更新回到全自动。
+
+`--download` 的前提是平台已上架 `browser_extension` 资产（链 C）。当前线上
+用户端页面显示「当前部署未接入平台，或平台尚未上架桥接扩展包」、无下载按钮，
+脚本会明确报这个错并退出（不是脚本故障）。
+
 ### 2.3 为什么必须保留加载目录路径
 
 Chrome 扩展 ID 由加载目录路径决定。**路径变化 = ID 变化 = `chrome.storage` 全丢**
@@ -151,8 +179,11 @@ MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（
 
 - [ ] 链 A：`deploy/deploy-api.sh` 全绿、容器内 + 公网 `/api/health` 200、`PROD_TOPOLOGY_CHANGES.md` 台账已更新
 - [ ] 链 B：`npm run publish -- --reload` 全绿、chrome://extensions 快照版本号 = 目标版本
+- [ ] 链 B 租户侧安装：`node scripts/install-extension.mjs --zip release/hivebridge-<v>.zip` 全绿
 - [ ] 链 C：安装包已由平台运营上传、租户端页面版本徽章已变（**人工项，无接口可自动化**）
 
 > 2026-11-13 本轮状态：链 A ✅（2d910841 已上线，9 个 user-server 提交追平）；
-> 链 B ✅（1.3.0 已装进 Chrome 并重载）；链 C ⛔ 待平台运营上传 1.3.0。
+> 链 B ✅（1.3.0 已装进 Chrome 并重载；安装链执行器 install-extension.mjs 已实测：
+> `--zip` 全自动覆盖安装 + 重载、`--download` 在平台无资产时正确报错、互斥门生效）；
+> 链 C ⛔ 待平台运营上传 1.3.0。
 - [ ] 双远端已同步（`gitee-upstream` + `upstream`）
