@@ -3,7 +3,13 @@
 > 基线：2026-11-13（考古 `.github/workflows/`、`deploy/`、`docs/operations/PROD_TOPOLOGY_CHANGES.md`、
 > `user-web/bridge/scripts/` 与历史提交后重建）。
 >
-> 配套执行器：`user-web/bridge/scripts/publish.mjs`（链 B 一键完成）。
+> 配套执行器（三条链各一个，均在仓内、可重复跑）：
+> - 链 A `deploy/deploy-api.sh`
+> - 链 B `user-web/bridge/scripts/publish.mjs`（+ `install-extension.mjs` 租户侧安装链）
+> - 链 C `user-web/bridge/scripts/upload-platform-asset.mjs`（+ `lib/platform-asset.mjs`）
+>
+> **日常使用先看 §0.1 固定流程（SOP）**，按改动范围选场景照做即可；
+> §1~§3 是每条链的原理、口径与踩过的坑（改链前必读）。
 
 ## 0. 一页结论
 
@@ -18,6 +24,62 @@
 铁律（两条，来自用户 2026-11-13 指令）：
 1. **设计了 API 就发布线上**；
 2. **设计了 bridge 就更新谷歌扩展**。
+
+## 0.1 固定流程（SOP：改动完成后照这个顺序做）
+
+先判改动范围，再走对应场景。**一条命令 = 一步，顺序固定，不要跳步。**
+
+### 场景 1：只改了 Go API（`user-server/**`）
+
+```bash
+cd hivemtk/user-server
+go test ./internal/service/ ./internal/bridge/... ./internal/channelgw/...   # DB 门禁失败=环境缺 POSTGRES_TEST_PASSWORD，非代码问题
+cd ../..
+deploy/deploy-api.sh          # 变更驱动；确认要发可加 --force
+```
+收尾：更新 `docs/operations/PROD_TOPOLOGY_CHANGES.md` 台账 → commit + push 双远端。
+
+### 场景 2：只改了扩展（`user-web/bridge/**`）
+
+```bash
+cd hivemtk/user-web/bridge
+# ① 三处同版本：package.json、manifest.json、scripts/release.mjs 的 CHANGELOGS
+BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run publish -- --reload
+node scripts/install-extension.mjs --zip release/hivebridge-<新版本>.zip   # 可选：以租户安装链复核一遍
+```
+收尾：commit + push 双远端。
+
+### 场景 3：完整发版（API + 扩展 + 平台上链）
+
+```bash
+deploy/deploy-api.sh                                              # 链 A
+cd hivemtk/user-web/bridge
+BRIDGE_ONLINE_SERVER=https://workapi.xapptool.cn npm run publish -- --reload   # 链 B
+node scripts/upload-platform-asset.mjs                           # 链 C（租户下载源）
+cd ../..
+git add -A && git commit && git push gitee-upstream master && git push upstream master
+```
+
+### 场景 4：换机器 / 新加载目录（全程唯一需要人工的一次性步骤）
+
+见 §2.2b。稳态版本更新（场景 2）不需要重复这一步。
+
+## 0.2 实现原理（每个执行器内部在做什么）
+
+三条链都不是"人登服务器敲命令"的手工活，而是**本地脚本 + 已具备的通道**把重复动作固化成可重放的一步。核心机制：
+
+| 链 | 执行器 | 内部机制 | 依赖的既有通道 |
+|---|---|---|---|
+| A | `deploy/deploy-api.sh` | 变更门（对比 `deploy/.api-deploy-state.json` 的 `deployed_sha` 与 `git log <基线>..HEAD -- user-server/`）→ 质量门 → `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 交叉编译 → scp + 双端 sha256 → 镜像/二进制双备份 → `docker compose up -d --build` → 容器内 + 公网双健康检查 → 失败自动回滚 → 写台账 | SSH `mtk-prod` 免密（`~/.ssh/config`） |
+| B | `scripts/publish.mjs` | 版本一致性门 → 发行口径门（缺 `BRIDGE_ONLINE_SERVER` 拒绝构建）→ `npm run release` + 产物校验 → 备份旧加载目录（保留 5 份）→ `rsync -a --delete` → ego-browser 打开 `chrome://extensions`、搜索框过滤到唯一卡片、点「重新加载」、快照读回版本号回验 | ego-browser（复用登录态，独立 Space 不抢标签页） |
+| C | `scripts/upload-platform-asset.mjs` | ego-browser 打开平台后台（复用运营登录态）→ 页面上下文 `fetch` 直调 `POST /platform/asset-market/file-assets`（zip 由父进程读成 base64 经 evaluate argument 传入）→ 调 `batch-publish` 留痕 → 回验租户端页面 | ego-browser + 平台后台登录态 |
+
+三条链共用的两个工程约束（改脚本前必读）：
+
+1. **ego-browser 子进程的 `console.log` 会透传到父终端，`execFileSync` 的 stdout 捕获为空**
+   ⇒ 状态必须写文件（如 `/tmp/hivebridge-*.json`）回传，父进程再读。
+2. **ego-browser 的 `nodejs` 不接受脚本文件路径参数**，必须 heredoc 或 `-e <script>` 传参；
+   脚本里读本地文件用 `await import('node:fs')` 动态导入。
 
 ## 1. 链 A：API 发布线上（2026-11-13 起全自动）
 
@@ -118,18 +180,31 @@ node scripts/install-extension.mjs --download                           # 从用
 - **已登记**（目录里有 manifest.json）⇒ 原地 rsync 覆盖 + 重新加载，
   **全自动，零人工**。日常版本更新都走这条。
 - **未登记**（全新机器）⇒ 解压就位后调「加载未打包的扩展程序」。
-  这一步**默认无法全自动**，实测结论（2026-11-13）：ego-browser 能点到按钮，但
-  Chrome 对 CDP 合成点击不弹出文件选择器（`waitForFileChooser` 8s 超时），
-  macOS 原生目录面板也不受 CDP 键盘事件控制（CDP Input 只到 web 页）。
-  脚本会点开按钮并尝试接管 chooser（`tryLoadUnpacked()`），失败则打印
-  一次性人工三步指引（点按钮 / 选目录 / 点打开）。此后的版本更新回到全自动。
-  - **想彻底免人工的路径**：一次性授予 macOS Accessibility 权限后用 AppleScript
-    驱动原生面板。实测 `tarsx doctor --json` 当前 `event_delivery: false`
-    （TarsX.app 已在 `~/Applications/TarsX.app`，但未被授权）。授权方式：
-    系统设置 → 隐私与安全性 → 辅助功能，添加 `TarsX.app`（或终端 app）；
-    授权后 `tarsx doctor` 应变绿，此时可用
-    `tarsx osa 'tell application "System Events" to tell process "Chrome" to ...'`
-    在原生面板里填路径并按回车。这是 OS 级硬边界，非代码可解。
+   这一步**无法全自动，需人工一次**（2026-11-13 实测结论，勿再试探）：
+   1. ego-browser 能点到按钮，但 Chrome 对 CDP 合成点击**不弹出**文件选择器
+      （`waitForFileChooser` 8s 超时）；ego-browser 的 CDP 白名单里没有
+      `Page.handleFileChooser`，`page.waitForEvent` 只支持 popup/download。
+   2. macOS 原生目录面板不受 CDP 键盘控制（CDP Input 只到 web 页）。
+   3. AppleScript 真实点击这条路也不通：`osascript` 本身有权限
+      （`ai.opencode.desktop` 在 TCC.db 辅助功能授权列表里，子孙进程继承），
+      但 ego-browser 的页面渲染在 **isolated Space 的不可见窗口**里，
+      System Events / `tarsx windows` 只能看到 ego lite 一个可见窗口
+      ⇒ 拿不到 `chrome://extensions` 按钮的坐标。
+   4. TarsX.app 授权路作废：bundle id `ai.topgemstoken.tarsx` **不在** TCC.db，
+      macOS 只把真正发起过权限请求的进程加进列表，用户在辅助功能面板里搜不到它。
+   5. ego-browser 官方指南亦明确：权限提示、设备选择器等**浏览器拥有的提示必须由用户处理**。
+
+  ⇒ **本机固定安装地址（在「加载未打包的扩展程序」面板里选这个目录）**：
+
+  ```
+  /Users/xiaofang/Documents/tool/hivebridge-1.0.2
+  ```
+
+  人工一次性三步：`chrome://extensions/` → 开「开发者模式」→ 点「加载未打包的扩展程序」
+  → 选上面这个目录 → 「打开」。目录名里的 `1.0.2` 是历史误导命名，**实际内容就是当前版本**
+  （以目录内 `manifest.json` 的 `version` 为准）。
+  新发行产物：`user-web/bridge/release/hivebridge-<版本>.zip`，解压后可作为新加载目录。
+  此后所有版本更新回到全自动（rsync + 重新加载 + 版本回验）。
 
 `--download` 的前提是平台已上架 `browser_extension` 资产（链 C）。链 C 未跑通时
 用户端页面无下载按钮，脚本会明确报这个错并退出（不是脚本故障）。
@@ -219,6 +294,8 @@ MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（
   （不给旧资产加版本），旧资产可按需在后台「下架」。
 
 ## 4. 收尾清单（每次发布后逐项打勾）
+
+> 顺序即 §0.1 的场景编号；哪几条链动了就打勾哪几条。
 
 - [ ] 链 A：`deploy/deploy-api.sh` 全绿、容器内 + 公网 `/api/health` 200、`PROD_TOPOLOGY_CHANGES.md` 台账已更新
 - [ ] 链 B：`npm run publish -- --reload` 全绿、chrome://extensions 快照版本号 = 目标版本
