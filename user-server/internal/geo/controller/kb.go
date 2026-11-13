@@ -1,11 +1,14 @@
 package controller
 
 import (
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 
 	"hivemtk-user/internal/geo/dto"
 	"hivemtk-user/internal/geo/service"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 
 	"github.com/gin-gonic/gin"
@@ -62,6 +65,13 @@ func (c *KBController) Save(ctx *gin.Context) {
 	}
 	doc, err := c.svc.Save(ctx.Request.Context(), &req)
 	if err != nil {
+		// 入参校验错误（source_level 只支持 A/B/C/D 等）的文案是服务层自撰的
+		// 操作引导，不是 DB/驱动原文——直接透传比 safeFallback 的通用
+		// 「保存文档失败」更能让用户照着改（2026-11-13 K-4 台账轮实测）。
+		if errors.Is(err, utils.ErrInvalidInput) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.ErrorFromDB(ctx, err, "保存文档失败")
 		return
 	}

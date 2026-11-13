@@ -37,6 +37,10 @@ func NewSiteController(deploySvc *service.SiteDeployService, pushSvc *service.Pu
 func (c *SiteController) ExportToHugo(ctx *gin.Context) {
 	n, err := c.deploySvc.ExportToHugo(ctx.Request.Context())
 	if err != nil {
+		if errors.Is(err, service.ErrSiteConfigInvalid) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -68,6 +72,10 @@ func (c *SiteController) TriggerDeploy(ctx *gin.Context) {
 func (c *SiteController) FullPipeline(ctx *gin.Context) {
 	n, err := c.deploySvc.ExportToHugo(ctx.Request.Context())
 	if err != nil {
+		if errors.Is(err, service.ErrSiteConfigInvalid) {
+			response.Error(ctx, http.StatusBadRequest, "export: "+err.Error())
+			return
+		}
 		response.Error(ctx, http.StatusInternalServerError, "export: "+err.Error())
 		return
 	}

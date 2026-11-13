@@ -47,6 +47,35 @@ func (r *GlossaryRepository) Create(ctx context.Context, g *model.Glossary) erro
 	if g == nil {
 		return errors.New("glossary: nil entity")
 	}
+	// 软删除行仍占着 term_id 唯一索引：删除术语后重新添加同 term_id，直接 Create
+	// 会抛 23505（service 层归一为 GlossaryDuplicateError「术语已存在」），而
+	// Get/List 只看活跃行永远查不到——同 term_id 永久无法重建。命中历史行时
+	// 原位复活并覆盖可编辑字段（与 geo site repo Create 同一模式，2026-11-13
+	// K-4 台账轮实测复现后修复）。
+	var existing model.Glossary
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("term_id = ?", g.TermID).First(&existing).Error; err == nil && existing.DeletedAt.Valid {
+		now := time.Now()
+		if err := r.db.WithContext(ctx).Unscoped().Model(&model.Glossary{}).
+			Where("id = ?", existing.ID).
+			Updates(map[string]any{
+				"category":     g.Category,
+				"preserve":     g.Preserve,
+				"translations": g.Translations,
+				"pattern":      g.Pattern,
+				"status":       g.Status,
+				"deleted_at":   nil,
+				"updated_at":   now,
+			}).Error; err != nil {
+			return err
+		}
+		g.ID = existing.ID
+		g.TenantID = existing.TenantID
+		g.CreatedAt = existing.CreatedAt
+		g.UpdatedAt = now
+		g.DeletedAt = gorm.DeletedAt{}
+		return nil
+	}
 	now := time.Now()
 	if g.CreatedAt.IsZero() {
 		g.CreatedAt = now

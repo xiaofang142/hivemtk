@@ -321,4 +321,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 五值——v3.22.2 建枚举时渠道白名单只有 12 值，2026-11 渠道注册表扩容后运行时会以
 	// 这些值写 channel_agent_bindings.channel_type，存量库上被 ENUM 拒写。
 	register(NewChannelTypeEnumBridgeValuesMigration(db))
+	// v3.93.0（K-4 API 台账轮）：旧 bootstrap 库 knowledge_documents.filename NOT NULL
+	// 残留放宽为可空（file_name 空行先回填历史值）——AutoMigrate 只加列不降约束，
+	// 存量库上任何文档插入都 23502「保存文档记录失败」。
+	register(NewKnowledgeDocumentsLegacyFilenameMigration(db))
 }

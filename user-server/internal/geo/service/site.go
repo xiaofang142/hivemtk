@@ -185,6 +185,12 @@ func (s *SiteDeployService) ExportToHugo(ctx context.Context) (int, error) {
 	// 读配置
 	siteCfg, err := s.sites.GetActive(ctx)
 	if err != nil {
+		// 无启用站点是用户可自行补救的配置态而非服务端故障（2026-11-13 K-4 台账轮实测
+		// 无站点配置时 export 500「geo_site 未配置」，与 TriggerDeploy 同根不同命）：
+		// 对齐 TriggerDeploy 的 ErrSiteConfigInvalid→400 口径，文案保留操作引导。
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, fmt.Errorf("%w: 尚未启用静态站，请先在「静态站部署」保存并启用一个站点", ErrSiteConfigInvalid)
+		}
 		return 0, fmt.Errorf("geo_site 未配置: %w", err)
 	}
 	hugoPath, err := validateHugoPath(ctx, siteCfg.HugoPath)

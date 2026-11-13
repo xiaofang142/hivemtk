@@ -37,9 +37,22 @@ func (m *ShortLinkColumnsMigration) Up(ctx context.Context) error {
 	}
 
 	stmts := []string{
+		// 幂等三态（2026-11-12 修）：目标列不存在且源列存在才 RENAME；
+		// 两列并存（AutoMigrate 已按模型补了 expire_time、bootstrap 旧库还留着
+		// expire_at）时不再 RENAME——那会 42701「column expire_time already exists」，
+		// 让整条迁移链在此卡死、后续迁移全部不执行（本地 8401 实测 task 32~35 连环失败）。
+		// 并存态改为把 expire_at 的历史值合并进 expire_time（expire_time 空行才回填），
+		// expire_at 列保留不销毁（与 v3.92.0 filename 同一取舍：遗留列留而不删）。
 		`DO $$ BEGIN
-      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expire_at') THEN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expire_at')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expire_time') THEN
         ALTER TABLE short_links RENAME COLUMN expire_at TO expire_time;
+      END IF;
+    END $$;`,
+		`DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expire_at')
+         AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='short_links' AND column_name='expire_time') THEN
+        UPDATE short_links SET expire_time = expire_at WHERE expire_time IS NULL AND expire_at IS NOT NULL;
       END IF;
     END $$;`,
 		`ALTER TABLE short_links ADD COLUMN IF NOT EXISTS expire_time TIMESTAMP`,
