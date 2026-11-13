@@ -57,9 +57,19 @@ func NewBridgeExtensionService(pc repository.PlatformAPIClient) *BridgeExtension
 
 // Latest 取平台上最新一版桥接扩展安装包。
 //
-// 流程与资产市场的商品流一致：先列市场（只看已上架），取 browser_extension
-// 类型的最新一条，再拉详情拿 file_url —— file_url 在 asset_versions 行上，
-// 列表接口不带它。
+// 流程与资产市场的商品流一致：先列市场（只看已上架），在候选里挑出版本号
+// 最新的 browser_extension，先 purchase（免费资产零成本、幂等）再拉详情拿
+// file_url —— file_url 在 asset_versions 行上，列表接口不带它。
+//
+// 两处关键口径（2026-11-13 线上排查实证，别改）：
+//  1. **必须先 purchase 再 detail**：平台 GetMarketAssetDetail 的 version_info
+//     只在资产已购买（purchased=true）后才带 file_url/filename/file_sha256/
+//     size_bytes；未购买时 version_info 只有 changelog/created_at/
+//     schema_version/version ⇒ 不 purchase 就永远拿不到 file_url，线上表现为
+//     一律报「平台尚未上架桥接扩展包」。免费资产 price=0，购买零成本。
+//  2. **不能取 list[0]**：平台 ListAssets 按 updated_at 倒序，而 purchase 会
+//     刷新 updated_at ⇒ 买过的旧资产会被顶到第一位，取 list[0] 会把租户导到
+//     旧版本（实测 1.3.0 上传后用户端返回 1.0.5）。故按版本号语义比较挑最新。
 func (s *BridgeExtensionService) Latest(ctx context.Context) (*BridgeExtensionPackage, error) {
 	if !config.PlatformEnabled() {
 		return nil, ErrBridgeExtensionOffline
@@ -67,18 +77,18 @@ func (s *BridgeExtensionService) Latest(ctx context.Context) (*BridgeExtensionPa
 	if s.platformClient == nil {
 		return nil, ErrBridgeExtensionOffline
 	}
-	list, _, err := s.platformClient.ListAssets(ctx, bridgeExtensionAssetType, "", 1, 20)
+	list, _, err := s.platformClient.ListAssets(ctx, bridgeExtensionAssetType, "", 1, 50)
 	if err != nil {
 		return nil, err
 	}
-	if len(list) == 0 {
-		return nil, ErrBridgeExtensionOffline
-	}
-	// 列表按创建时间倒序（平台 repo 的 ListAssets 默认排序），取第一条即最新。
-	// 但列表项的 asset_id 字段名以平台返回为准，故从 map 里取，不假设结构。
-	assetID := stringField(list[0], "asset_id")
+	assetID := latestExtensionAssetID(list)
 	if assetID == "" {
 		return nil, ErrBridgeExtensionOffline
+	}
+	// 先购买（免费资产零成本、幂等）：只有 purchased=true 的平台详情才会在
+	// version_info 里带出 file_url 等文件字段。
+	if err := s.platformClient.Purchase(ctx, assetID); err != nil {
+		return nil, err
 	}
 	detail, err := s.platformClient.GetAssetDetail(ctx, assetID)
 	if err != nil {
@@ -161,4 +171,81 @@ func stringField(m map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(s)
+}
+
+// latestExtensionAssetID 从平台市场列表里挑出版本号最新的 browser_extension
+// 资产 ID。
+//
+// 为什么不取 list[0]：平台 ListAssets 按 updated_at 倒序，而 purchase 会刷新
+// updated_at（2026-11-13 实测：买过旧版本后旧资产被顶到第一位，用户端因此
+// 拿到 1.0.5 而不是刚上传的 1.3.0）。故按 latest_version 语义比较挑最新。
+//
+// 版本号按「点分数字段逐段比，缺段按 0」处理：1.3.0 > 1.0.5 > 1.0.2；
+// 版本相同（或都解析不出）时保持列表原顺序，让平台排序兜底。
+func latestExtensionAssetID(list []map[string]any) string {
+	best := ""
+	bestVer := ""
+	for _, item := range list {
+		id := stringField(item, "asset_id")
+		if id == "" {
+			continue
+		}
+		ver := stringField(item, "latest_version")
+		if best == "" || compareVersionStrings(ver, bestVer) > 0 {
+			best, bestVer = id, ver
+		}
+	}
+	return best
+}
+
+// compareVersionStrings 比较两个点分版本号：a>b 返回 1，相等 0，a<b 返回 -1。
+// 非点分版本（如 "v1"、空串）按小于任何正常版本处理，保证有版本号的优先。
+func compareVersionStrings(a, b string) int {
+	as, bs := splitVersion(a), splitVersion(b)
+	n := len(as)
+	if len(bs) > n {
+		n = len(bs)
+	}
+	for i := 0; i < n; i++ {
+		x, y := 0, 0
+		if i < len(as) {
+			x = as[i]
+		}
+		if i < len(bs) {
+			y = bs[i]
+		}
+		if x != y {
+			if x > y {
+				return 1
+			}
+			return -1
+		}
+	}
+	return 0
+}
+
+// splitVersion 把 "1.3.0" 切成 [1,3,0]；非数字段按 0 处理（宁小勿大）。
+func splitVersion(v string) []int {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	parts := strings.Split(v, ".")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n := 0
+		digits := 0
+		for _, r := range p {
+			if r < '0' || r > '9' {
+				break
+			}
+			n = n*10 + int(r-'0')
+			digits++
+		}
+		if digits == 0 {
+			n = 0
+		}
+		out = append(out, n)
+	}
+	return out
 }
