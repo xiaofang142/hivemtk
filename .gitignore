@@ -416,3 +416,6 @@ yarn-error.log*
 
 # Step-1 初始路由任务单（权威台账=仓根 router-list.md，勿重复提交）
 user-web/src/router/router-list.md
+
+# 链 A 部署台账（本机状态，不入库）
+deploy/.api-deploy-state.json

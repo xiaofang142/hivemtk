@@ -4,6 +4,49 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-13 · 链 A 自动部署器上线 + user-server 追平 9 个提交
+
+**背景**：线上 user-server 二进制停在 `89af3ba1`（容器 2026-11-12 17:08 启动），
+此后 `user-server/` 又积累 9 个提交未发布（PWA 五件套路由、messageHub 空值硬化、
+K-4 台账轮回归修复、selector-health 租户守卫、两轮回归门禁等）。用户规则
+「设计了 API 就发布线上」要求补齐。
+
+**新增仓库资产**：`deploy/deploy-api.sh`（链 A 执行器，`--dry-run/--force/--skip-tests`）。
+把原先「人工 SSH 敲命令」固化为带安全门的可重复流程：
+
+| 阶段 | 门/动作 |
+|---|---|
+| 预检 | 仅 master、user-server 无未提交改动、HEAD 已被任一远端包含、变更门（`deploy/.api-deploy-state.json` 台账；零改动不发布） |
+| 质量 | `go vet` + `go test`（DB 门禁失败单独识别，不当阻断） |
+| 构建 | `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 静态交叉编译（线上 x86_64） |
+| 上传 | scp 后**双端 sha256 校验**，不一致即删半截文件中止 |
+| 备份 | 镜像打 `mtk-user-server:rollback-<时间戳>` + 二进制 `user-server.bak-<时间戳>` |
+| 上线 | `mv` 就位 → `docker compose up -d --build user-server` |
+| 验收 | 容器内 `127.0.0.1:8204/api/health` 60s 重试 + 公网 `workapi.xapptool.cn/api/health`；失败自动回滚（二进制 → 镜像标签两级） |
+| 台账 | 成功后写 `deploy/.api-deploy-state.json`（不入库，`.gitignore` 已加） |
+
+**本次发布**（2026-11-13 20:33）：
+
+- 代码 `2d910841`（含 9 个 user-server 提交，详见 `deploy/.api-deploy-state.json` 的 commits 段）
+- 线上二进制 sha256 `840655c8520d1720…`；运行镜像 `333dbf445aa7`；容器启动 `2026-11-13T12:35:40Z`
+- 回滚点：镜像 `mtk-user-server:rollback-20261113-203352` / 二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261113-203352`
+
+**校验**（发布后公网实测）：
+
+```text
+/sw.js                HTTP 200 text/javascript  34442B  cache-control: no-cache   ← 6bffa64b 修复点：不再被 SPA 回落成 index.html
+/version.json         HTTP 200 application/json buildId=6607189c-1794566399696     ← 证明 6607189c 已在线上
+/manifest.webmanifest HTTP 200 text/plain       329B    cache-control: no-cache
+/favicon.svg          HTTP 200 image/svg+xml    1111B
+/api/health           {"code":0,"message":"ok","data":{"status":"ok"}}
+```
+
+启动装配：`db_migrate=5884ms seeds_wiring=56ms router_setup=858ms`，listen 前累计 6876ms。
+
+**遗留观察（非阻断）**：后台 `[rag-eval] 清理中断评测失败: 表 rag_eval_runs 需要租户上下文但 ctx 未绑定`——
+多租户模式下 fail-closed 拒执行，属既有设计口径（该后台任务本身没有租户上下文入口），
+服务正常 listen 并对外提供。若后续要修，应给该 worker 补 TenantRunner 包裹，不在本次发布范围。
+
 ## 2026-11-05 · 租户 1 平台 LLM 钱包与高优路由兜底
 
 **问题**：线上租户 1（`tenant_code=local-xw0hgtdo`）能查到平台下发的

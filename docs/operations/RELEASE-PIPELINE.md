@@ -11,46 +11,61 @@
 
 | 改动范围 | 链路 | 现状 |
 |---|---|---|
-| `user-server/**`（Go API） | **链 A：发布线上** | 无 CI 自动部署；远程服务器人工构建 + systemd/helm。需服务器凭证 |
+| `user-server/**`（Go API） | **链 A：发布线上** | ✅ 全自动：`deploy/deploy-api.sh`（变更驱动 + 双健康检查 + 自动回滚） |
 | `user-web/bridge/**`（谷歌扩展） | **链 B：本机构建 + 装进 Chrome + 重载** | ✅ 全自动：`npm run publish -- --reload` |
-| 上面任一条合并后 | **链 C：安装包上链平台** | 需平台端上传凭证；本仓无上传代码路径，靠平台运营后台上传 |
+| 上面任一条合并后 | **链 C：安装包上链平台** | ⛔ 无法自动：平台端**零资产上传 HTTP 路由**（2026-11-13 二进制 strings 全量提取实证），只能平台运营后台上传 |
 
 铁律（两条，来自用户 2026-11-13 指令）：
 1. **设计了 API 就发布线上**；
 2. **设计了 bridge 就更新谷歌扩展**。
 
-## 1. 链 A：API 发布线上（人工 + 凭证）
+## 1. 链 A：API 发布线上（2026-11-13 起全自动）
 
-### 1.1 现状（考古结论）
+### 1.1 现状
 
-- **没有任何自动化部署 job**。`.github/workflows/release.yml` 只在 tag 推送时打 zip + SBOM +
+- **CI 仍无部署 job**。`.github/workflows/release.yml` 只在 tag 推送时打 zip + SBOM +
   GitHub Release 附件；镜像发行链已删（注释：恢复镜像发行时先补 Dockerfile）。
-- 线上形态：远程服务器 `nginx` 反代 + `systemd`（`deploy/systemd/hivemtk-user.service`）/
-  `helm`（`deploy/helm/hivemtk`），域名 `workapi.xapptool.cn` → `127.0.0.1:8204`。
+- 线上形态（2026-11-13 实测 `mtk-prod`，勿臆测）：**Docker**，非 systemd/helm。
+  服务器 `/www/wwwroot/hivemtk/user-server/`（非 git 仓）+ `docker-compose.yml`，
+  容器 `mtk-user-server`（image `mtk-user-server:latest`，`127.0.0.1:8204→8204`），
+  同 compose 内 `mtk-postgres`（pgvector/pg15，容器内 8202）、`mtk-redis`（8203），
+  共享外部网络 `hivemtk-cloud`。nginx：`workapi.xapptool.cn` → 全量 8204；
+  `work.xapptool.cn` 静态 SPA + `/api/`、`/ws/`、`/files/`、`/share/`、`/s/` 等反代 8204，
+  `^~ /files/extensions/`、`^~ /files/covers/` 反代 8205（平台端）。
 - 历史证据：212505db（O 轮）记录「已部署线上 buildId=83832743-1794542399855」——
   即代码 push 后**人工**在服务器拉取构建部署。
-- 服务器侧不同步的配置（nginx 片段、systemd 环境变量等）登记在
+- 服务器侧不同步的配置（nginx 片段、compose environment 等）登记在
   `docs/operations/PROD_TOPOLOGY_CHANGES.md`，改线上拓扑必须同步更新该台账。
 
 ### 1.2 判定「是否需要发布」
 
-- `user-server/` 自上次线上部署以来有提交 ⇒ 需要发布。
+- 变更门由 `deploy/deploy-api.sh` 自动判：以 `deploy/.api-deploy-state.json` 的
+  `deployed_sha` 为基线，`git log <基线>..HEAD -- user-server/` 为空 ⇒ **不发布**
+  （零改动不该无脑重发）。台账缺失时按服务器二进制 mtime 收敛基线并强制 `--force`。
 - 可观测佐证：`https://workapi.xapptool.cn/version.json` 的 `buildId` 只反映**前端**
   （user-web）构建，**不能**反映 Go 后端版本；后端无公开版本接口
   （`GET /api/system/info` 匿名只回 `platform_enabled`）。
-  ⇒ 后端线上版本只能以 `PROD_TOPOLOGY_CHANGES.md` / 部署记录台账为准，不要臆测。
+  ⇒ 后端线上版本只能以 `PROD_TOPOLOGY_CHANGES.md` / `deploy/.api-deploy-state.json` 台账为准。
 
-### 1.3 执行（需服务器凭证，agent 无法代做）
+### 1.3 执行（一条命令）
 
 ```bash
-# 服务器侧（示例，实际以 deploy/ 资产与现场约定为准）
-cd /path/to/hivemtk && git pull
-cd hivemtk/user-server && go build -o /tmp/hivemtk-user .
-sudo systemctl stop hivemtk-user && sudo cp /tmp/hivemtk-user <安装路径> && sudo systemctl start hivemtk-user
-curl -sS https://workapi.xapptool.cn/api/health   # 200 = 上线
+deploy/deploy-api.sh              # 变更驱动：检测到未发布提交才部署
+deploy/deploy-api.sh --dry-run    # 只预检+编译，不碰线上
+deploy/deploy-api.sh --force      # 跳过变更门（首次/台账失效时）
+deploy/deploy-api.sh --skip-tests # 跳过 go test
 ```
 
-发布后必须：①更新 `PROD_TOPOLOGY_CHANGES.md` 台账；②如涉及迁移，按仓内迁移规程执行。
+流程：预检（master / 无未提交 / 已 push / 变更门）→ `go vet` + `go test`
+（DB 门禁失败单独识别）→ `CGO_ENABLED=0 GOOS=linux GOARCH=amd64` 交叉编译 →
+scp + **双端 sha256 校验** → 镜像打 `rollback-<时间戳>` 标签 + 二进制 `.bak` 备份 →
+`docker compose up -d --build user-server` → 容器内与公网双健康检查 →
+失败**自动回滚**（二进制 → 镜像标签两级）→ 写台账。
+
+前置：本机 `~/.ssh/config` 有 `mtk-prod` 且 BatchMode 免密可用（已具备）。
+
+发布后必须：①更新 `PROD_TOPOLOGY_CHANGES.md` 台账（脚本会提示）；②如涉及迁移，
+按仓内迁移规程执行（db_migrate 在容器启动时自动跑，耗时见启动日志汇总）。
 
 ## 2. 链 B：蜂桥扩展（全自动）
 
@@ -107,15 +122,22 @@ Chrome 扩展 ID 由加载目录路径决定。**路径变化 = ID 变化 = `chr
 MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（package 漏 bump）→
 `1.3.0` 四渠道真机校准修复 + 版本双源一致性修复（35e288db）。
 
-## 3. 链 C：安装包上链平台（阻塞，需凭证）
+## 3. 链 C：安装包上链平台（阻塞，无法自动）
 
 - 平台端代码**不在本仓**（全仓仅 `user-server/go.mod` 一个 go.mod；
-  `AssetTypeBrowserExtension` 定义在平台仓）。
+  `AssetTypeBrowserExtension` 定义在平台仓），服务器上也只有编译产物。
 - user-server 侧只有只读/购买/拉取/上报用量的客户端
   （`internal/platform/asset_market_client.go`：`ListAssets`/`GetAssetDetail`/`Purchase`/
   `PullData`/`MyPurchases`/`GetCredits`/`ReportUsage`），**没有上传方法**。
-- ⇒ 上传只能由平台运营在平台管理后台操作，把 `release/hivebridge-<version>.zip`
-  作为 `browser_extension` 资产上传。上传后用户端「桥接扩展安装包」页的版本徽章自动变新。
+- **2026-11-13 实证（服务器 `platform-server` 二进制 strings 全量提取）**：全部路由中
+  merchant-api 侧仅 asset-market 的 list/detail/purchase/my-purchases/report-usage/sync；
+  platform 侧仅 asset-market 的 all/revenue-summary/pending/contributors/credits/withdrawals
+  与 assets 的 batch-approve/batch-publish/{id}/approve/{id}/reject/{id}/offline、playground
+  preview-parse/test-run。**零资产上传路由**（无 upload/file-post 类接口）⇒ 不是"缺凭证"，
+  而是接口本身不存在，上传只能在平台管理后台 UI 完成。
+- ⇒ 上传只能由平台运营操作，把 `user-web/bridge/release/hivebridge-<version>.zip`
+  作为 `browser_extension` 资产上传。上传后用户端「桥接扩展安装包」页的版本徽章自动变新
+  （平台侧文件由 `work.xapptool.cn` 的 `^~ /files/extensions/` 反代 8205 托管）。
 - 平台商户端认证三头（对接平台 API 时用）：`X-Merchant-Key` / `X-Timestamp` /
   `X-Signature`（HMAC，payload = `method\npath\ntimestamp\nbody`，密钥为 merchant key）。
   契约闸：`/merchant-api/`、`/llm-api/v1/`、`/api/platform/` 三组必须带
@@ -123,11 +145,14 @@ MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（
 - **2026-11-13 现状**：线上 `https://workapi.xapptool.cn/api/system/info` 回
   `{"platform_enabled":true}`（线上已接入平台），但租户端安装包页显示
   「当前部署未接入平台，或平台尚未上架桥接扩展包」⇒ 平台上**没有**已上架的
-  browser_extension 资产。1.3.0 安装包尚未上链。
+  browser_extension 资产。**1.3.0 安装包尚未上链**（`user-web/bridge/release/hivebridge-1.3.0.zip`）。
 
 ## 4. 收尾清单（每次发布后逐项打勾）
 
-- [ ] 链 A：服务器已部署、`/api/health` 200、`PROD_TOPOLOGY_CHANGES.md` 台账已更新
-- [ ] 链 B：`npm run publish -- --reload` 全绿、快照版本号 = 目标版本
-- [ ] 链 C：安装包已由平台运营上传、租户端页面版本徽章已变
+- [ ] 链 A：`deploy/deploy-api.sh` 全绿、容器内 + 公网 `/api/health` 200、`PROD_TOPOLOGY_CHANGES.md` 台账已更新
+- [ ] 链 B：`npm run publish -- --reload` 全绿、chrome://extensions 快照版本号 = 目标版本
+- [ ] 链 C：安装包已由平台运营上传、租户端页面版本徽章已变（**人工项，无接口可自动化**）
+
+> 2026-11-13 本轮状态：链 A ✅（2d910841 已上线，9 个 user-server 提交追平）；
+> 链 B ✅（1.3.0 已装进 Chrome 并重载）；链 C ⛔ 待平台运营上传 1.3.0。
 - [ ] 双远端已同步（`gitee-upstream` + `upstream`）
