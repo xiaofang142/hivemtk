@@ -8,6 +8,7 @@
 | 文档 | 说明 |
 |---|---|
 | [MERCHANT_DEPLOYMENT.md](MERCHANT_DEPLOYMENT.md) | 商户部署手册 |
+| [RELEASE-PIPELINE.md](RELEASE-PIPELINE.md) | 发布链总入口：API 线上 / 蜂桥扩展（`npm run publish`）/ 安装包上链平台 |
 | [MERCHANT_INITIALIZATION_FLOW.md](MERCHANT_INITIALIZATION_FLOW.md) | 首次启动初始化流程（/setup 开户字段、静默合规采集、开户赠送） |
 | [HA_DEPLOYMENT.md](HA_DEPLOYMENT.md) | 高可用部署（单机 + 备份） |
 | [DR_RECOVERY.md](DR_RECOVERY.md) | 灾难恢复方案 |
