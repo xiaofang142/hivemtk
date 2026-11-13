@@ -84,6 +84,7 @@ export class IframePanel {
     // mcw-config 死协议已删除（N-6①）：iframe 端从未监听该消息，配置实际全靠
     // iframe URL（title/color/source/card_id 走 query；welcome/lang/appKey 的生效化
     // 见任务清单 N-20）。删除以消除「发出去没人收」的假通道与维护误导。
+    setTimeout(() => {
       this.setupVisualViewport()
     }, 100)
   }

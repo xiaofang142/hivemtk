@@ -114,3 +114,50 @@ describe('资产包 Playground 的上架入口：跟随 platform_enabled', () =>
     expect(api.submitToPlatform).not.toHaveBeenCalled()
   })
 })
+
+describe('消息链编排：首位「固化首项」钉死在位置 0', () => {
+  // O 轮线上点验 /asset-bundle/playground/:aid 发现：原模板只禁了首行的 ↑/删除，
+  // 第二行的 ↑ 可把首行 system 顶到位置 1；保存后端按 messages[0].content 做商户表单
+  // 回显解析（dto MerchantFormParseResponse 注释），位置 0 被顶替=回显错位。
+  // 修法：位置 0 钉死——首行无 ↓、第二行无 ↑、handler 双重防护。
+  const msgs = [
+    { role: 'system', content: 'SYS' },
+    { role: 'user', content: 'U1' },
+    { role: 'assistant', content: 'A1' },
+    { role: 'user', content: 'U2' },
+    { role: 'assistant', content: 'A2' }
+  ]
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.getBundleByAssetID.mockResolvedValue({
+      id: 7, asset_id: 'ASSET-1', title: '测试包', version: '1.0.0',
+      scope: 'private', status: 'draft', messages: msgs.map((m) => ({ ...m }))
+    })
+    api.getInfo.mockResolvedValue({ platform_enabled: false })
+  })
+
+  const cards = (wrapper) => wrapper.findAll('.message-card')
+  const actionTexts = (card) => card.findAll('.message-actions button').map((b) => b.text().trim())
+  const editorOrder = (wrapper) =>
+    wrapper.findAll('.message-card .el-textarea__inner').map((t) => t.element.value)
+
+  it('首行没有任何移动/删除按钮，第二行没有 ↑（进不了 0 位）', async () => {
+    const wrapper = await mountPlayground()
+    const cs = cards(wrapper)
+    expect(cs.length).toBe(5)
+    expect(actionTexts(cs[0])).toEqual([])
+    expect(actionTexts(cs[1])).toEqual(['↓', '删除'])
+    expect(actionTexts(cs[2])).toEqual(['↑', '↓', '删除'])
+    expect(actionTexts(cs[4])).toEqual(['↑', '删除'])
+  })
+
+  it('点第二行 ↓ 只与第三行交换，位置 0 永远是首条 system', async () => {
+    const wrapper = await mountPlayground()
+    const down = cards(wrapper)[1].findAll('.message-actions button').find((b) => b.text().trim() === '↓')
+    await down.trigger('click')
+    await settle(wrapper)
+    expect(editorOrder(wrapper)).toEqual(['SYS', 'A1', 'U1', 'U2', 'A2'])
+    // 交换后新第二行（A1）依然没有 ↑，顶不上去
+    expect(actionTexts(cards(wrapper)[1])).toEqual(['↓', '删除'])
+  })
+})

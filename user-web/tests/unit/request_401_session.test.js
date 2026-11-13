@@ -155,4 +155,42 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
     await hit()
     expect(seen).toBe('Bearer jwt-check-header')
   })
+
+  // O 轮（2026-11-13）线上 #/login 实测复现的缺陷：已登录用户在登录页打错口令，
+  // POST /api/auth/login 带着 localStorage 里仍然有效的令牌 401 → expireSession
+  // 判定"正是这把"→ 清会话 + 弹「登录已过期，请重新登录」+ 登录页再弹一条
+  // 「用户名或密码错误」。用户只是打错密码，却把自己有效的会话弄死了。
+  // 修法两层：请求拦截器不给 /api/auth/login、/api/auth/register 带头部；
+  // 响应侧再兜一层——登录端点的 401 一律不终结会话。
+  it('登录端点带旧令牌 401（已登录用户打错口令）：不清会话、不跳转、不弹过期提示', async () => {
+    localStorage.setItem('token', 'jwt-valid')
+    localStorage.setItem('refreshToken', 'rt-valid')
+
+    const out = await hit('/api/auth/login')
+
+    expect(out.rejected).toBe(true)
+    expect(out.status).toBe(401)
+    expect(localStorage.getItem('token')).toBe('jwt-valid')
+    expect(localStorage.getItem('refreshToken')).toBe('rt-valid')
+    expect(routerPush).not.toHaveBeenCalled()
+    expect(Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())).toEqual([])
+  })
+
+  it('请求拦截器不给登录/注册端点带 Authorization（旧令牌不该跟着凭据一起出去）', async () => {
+    localStorage.setItem('token', 'jwt-valid')
+    let seenLogin = 'unset'
+    let seenRegister = 'unset'
+    always401((config) => {
+      const h = config.headers
+      const raw = typeof h.get === 'function' ? String(h.get('Authorization') || '') : String(h.Authorization || '')
+      if (String(config.url).includes('/api/auth/login')) seenLogin = raw
+      if (String(config.url).includes('/api/auth/register')) seenRegister = raw
+    })
+    await hit('/api/auth/login')
+    await hit('/api/auth/register')
+    expect(seenLogin).toBe('')
+    expect(seenRegister).toBe('')
+    // 其余业务请求照旧带头部（这条腿不能被修坏）
+    expect(localStorage.getItem('token')).toBe('jwt-valid')
+  })
 })

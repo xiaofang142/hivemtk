@@ -122,7 +122,7 @@
 
     <el-dialog
       v-model="dialogVisible"
-      :title="currentTool?.name"
+      :title="currentTool?.label || currentTool?.name"
       width="800px"
     >
       <el-form
@@ -131,7 +131,7 @@
       >
         <el-form-item label="操作类型">
           <el-input
-            :value="currentTool?.name"
+            :value="currentTool?.label || currentTool?.name"
             disabled
           />
         </el-form-item>

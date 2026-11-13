@@ -29,6 +29,17 @@ const t = (key) => {
   }
 }
 
+// 登录/注册类端点必须"裸调"：它们自己就是凭据校验入口。若把 localStorage 里的
+// 旧令牌一起带过去，凭据错误返回的 401 会被 expireSession 误判成"会话过期"——
+// 用户只是打错了密码，却连坐清掉仍然有效的会话还弹「登录已过期，请重新登录」
+// （O 轮线上 #/login 实测复现：错口令 → 双 toast + 会话被清）。
+const UNAUTHENTICATED_AUTH_PATHS = ['/api/auth/login', '/api/auth/register']
+
+function isUnauthenticatedAuthPath(url) {
+  const path = typeof url === 'string' ? url : ''
+  return UNAUTHENTICATED_AUTH_PATHS.some((p) => path.includes(p))
+}
+
 const createRequestInstance = () => {
   let apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || '';
   // localStorage 覆盖仅允许在开发环境生效；生产构建一律走 env 配置，
@@ -267,7 +278,9 @@ const addInterceptors = () => {
         } catch { /* 已静默清凭据并跳登录，请求继续即可 */ }
       }
       const token = localStorage.getItem('token');
-      if (token) {
+      // 登录/注册端点裸调（见 isUnauthenticatedAuthPath）：带着旧令牌去登录，
+      // 凭据错误的 401 会被误判为会话过期，连坐清掉用户仍然有效的会话。
+      if (token && !isUnauthenticatedAuthPath(config.url)) {
         config.headers.Authorization = `Bearer ${token}`
       }
       config.headers['Accept-Language'] = getStoredLocale();
@@ -364,6 +377,10 @@ const addInterceptors = () => {
 
         switch (status) {
           case 401: {
+            // 登录/注册端点的 401 是"凭据/租户码不对"，不是"会话过期"：
+            // 既不清会话也不弹过期提示，具体错误由页面自己展示
+            // （双保险：请求拦截器已不给这些端点带头部）。
+            if (isUnauthenticatedAuthPath(config && config.url)) break
             // 只有"存储里这把令牌正是被打回的那把"才清凭据跳登录。
             // silent 请求同样要清——token 已过期时留着它只会让后续请求反复失败。
             if (expireSession(bearerSentWith(config)) && !silent) {

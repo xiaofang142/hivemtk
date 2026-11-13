@@ -132,7 +132,7 @@
                 >（Few-Shot AI 回复）</span>
                 <div class="message-actions">
                   <el-button
-                    v-if="idx > 0"
+                    v-if="idx > 1"
                     size="small"
                     link
                     @click="moveUp(idx)"
@@ -140,7 +140,7 @@
                     ↑
                   </el-button>
                   <el-button
-                    v-if="idx < bundle.messages.length - 1"
+                    v-if="idx > 0 && idx < bundle.messages.length - 1"
                     size="small"
                     link
                     @click="moveDown(idx)"
@@ -460,14 +460,16 @@ const removeMessage = (idx) => {
 }
 
 const moveUp = (idx) => {
-  if (idx <= 0) return
+  // 首位（固化首项 system）钉死在位置 0：任何行不得上移进 0 位
+  if (idx <= 1) return
   const arr = bundle.messages
   ;[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]
 }
 
 const moveDown = (idx) => {
   const arr = bundle.messages
-  if (idx >= arr.length - 1) return
+  // 位置 0 不得下移，避免「固化首项」被顶替导致 messages[0] 非 system
+  if (idx <= 0 || idx >= arr.length - 1) return
   ;[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]
 }
 
