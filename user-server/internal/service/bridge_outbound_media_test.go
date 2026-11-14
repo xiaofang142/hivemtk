@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"strings"
 	"testing"
@@ -23,7 +24,7 @@ func TestDeliverBridgeOutboundMedia_TwoImagesDistinctMsgIDs(t *testing.T) {
 	SetGlobalInboxIngressService(svc)
 	defer SetGlobalInboxIngressService(nil)
 
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	const (
 		channel = "douyin"
 		account = "acc_media_out"

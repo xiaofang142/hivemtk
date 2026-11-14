@@ -298,10 +298,10 @@ func TestFallbackNilDB(t *testing.T) {
 // geo.capture_lead_daily_limit ⇒ 243 → 245。
 // 2026-11-11 CC-04 高写入表 retention 九参数（retention 组 8 表+operation_logs）⇒ 245 → 254；与 M-5(+1)/M-6(+2) 合计 245 → 257。
 // 2026-11-12 §3.13 LLM/rerank 连接配置 env→DB 迁移新增 llm.global_override +
-// rerank.global_override 两条 ⇒ 257 → 259。
-// 2026-11-14 37463dec bridge 服务端下发限速兜底新增 1 条 ⇒ 259 → 260
-// （该提交漏更此断言，审计二轮补记）。
-const defaultParamDefsWant = 260
+// rerank.global_override 两条 ⇒ 257 → 259。2026-11-14 37463dec bridge 服务端下发
+// 限速兜底新增 1 条 ⇒ 260（该提交漏更此断言，审计二轮补记）；662722a0 二次论证轮
+// 再增 bridge/ai_trigger_binding_required ⇒ 261。
+const defaultParamDefsWant = 261
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

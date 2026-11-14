@@ -445,6 +445,17 @@ func (s *WebhookService) recoverStuckDelayedOutbound(ctx context.Context, now ti
 }
 
 func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *DelayedOutboundReply) {
+	// 租户收口（2026-11-14 4610 同源修复）：延迟重放 worker 的调度 ctx 是平台级
+	// （无租户/SystemScope），而重放落库与后续认领都打在租户表上。按行自带归属
+	// （rec.TenantID，入队时抄写）以 OnlyTenant 钉死；行缺归属则 fail-closed
+	// abandon——绝不静默写 default 租户孤儿。
+	if tid, ok := tenant.FromContext(ctx); !ok || tid == 0 {
+		if rec.TenantID == 0 {
+			s.abandonReplay(ctx, rec, "重放行缺租户归属（fail-closed，拒绝无归属落库）")
+			return
+		}
+		ctx = tenant.OnlyTenant(ctx, rec.TenantID)
+	}
 	channel := WebhookChannel(rec.Platform)
 	now := time.Now()
 	isRetry := rec.Kind == model.DelayedKindSendRetry
@@ -932,6 +943,21 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				SentAt:         time.Now(),
 			}
 			outMsg.TraceID = tracing.LinkOutboundTraceID(ctx, hubMsg.ConversationID)
+			// AI 回复的租户归属 = 触发它的入站行（2026-11-14 生产事故根修，douyin 4610）：
+			// 重试/补触发等异步路径的 ctx 可能丢租户（detached/后台 ctx），此前 outMsg
+			// 不带 TenantID → 隔离 callback 不填列 → gorm default:1 落进 tenant 1，
+			// 成为认领/管理台双盲孤儿（AI 侧却记 ai_replied=true 三重静默）。
+			// 入站行才是归属权威：继承它的租户；ctx 租户仅作兜底。**只填行列、不重建
+			// ctx**——OnlyTenant 的 detachedCtx 会剥掉全部 value（HandleResult/tracing
+			// 载体），下游 result 注入与轨迹链都会断；两者皆缺则由
+			// CreateMessageHubIdempotent 的 fail-closed 门显式拒绝（不静默写孤儿）。
+			if outMsg.TenantID == 0 {
+				if hubMsg.TenantID != 0 {
+					outMsg.TenantID = hubMsg.TenantID
+				} else if tid, tok := tenant.FromContext(ctx); tok && tid != 0 {
+					outMsg.TenantID = tid
+				}
+			}
 
 			outMsg.DedupHash = ContentHashWithSender(string(channel), accountID, content)
 
@@ -987,6 +1013,10 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			if _, err := s.delayedRepo.CreateMessageHubIdempotent(ctx, outMsg); err != nil {
 				retryMsg := &model.MessageHub{
 					MsgID:          outMsg.MsgID + ":" + hubMsg.ConversationID,
+					// 租户必须显式随行（2026-11-14 生产事故修复）：此前的重试行靠 gorm
+					// default:1 兜底落进 tenant 1，成为认领/管理台双盲的孤儿——即使
+					// CreateMessageHubIdempotent 已加 fail-closed，这里也要带上正确租户。
+					TenantID:       outMsg.TenantID,
 					Platform:       outMsg.Platform,
 					AccountID:      outMsg.AccountID,
 					Direction:      "outbound",

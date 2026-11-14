@@ -151,6 +151,26 @@ func BridgeDeliverRateLimitPerMin(ctx context.Context) int {
 	return GlobalConfigParam().GetInt(ctx, "bridge", BridgeDeliverRateLimitParam, BridgeDeliverRateLimitDefault)
 }
 
+// BridgeAITriggerBindingRequiredParam / BridgeAITriggerBindingRequiredDefault
+// 是"桥接渠道 AI 触发是否要求渠道绑定"的唯一开关来源。
+//
+// 背景（2026-11-14 生产实证）：桥接渠道在 shouldTriggerAI 的 default 分支恒放行
+//（webhook_ai.go：桥接五端无账号级 AI 开关字段），无 channel_agent_bindings 绑定的
+// 渠道经 LoadAgentForChannel 返回 nil 后**回退租户级默认引擎**——租户 18 的微博账号
+// 因此对「微博新手指南/新浪新闻」官方系统推送自动回复 6 条/5min（刷官方号有平台风控风险）。
+// false（默认）＝现行为零变化；true＝桥接渠道必须有 enabled 的渠道绑定才触发 AI
+//（绑定面板即租户的 AI 开关面板：有绑定的渠道（如 douyin）不受影响，无绑定的渠道静默）。
+// 默认值与 config_params 里 bridge/ai_trigger_binding_required 的 DefaultValue("false") 同值，改动要一起改。
+const (
+	BridgeAITriggerBindingRequiredParam   = "ai_trigger_binding_required"
+	BridgeAITriggerBindingRequiredDefault = false
+)
+
+// BridgeAITriggerBindingRequired 读桥接 AI 触发绑定门开关（nil-safe）。
+func BridgeAITriggerBindingRequired(ctx context.Context) bool {
+	return GlobalConfigParam().GetBool(ctx, "bridge", BridgeAITriggerBindingRequiredParam, BridgeAITriggerBindingRequiredDefault)
+}
+
 // PatrolUnreadFirstChannelsParam / PatrolUnreadFirstChannelsDefault 是"巡检要不要未读优先"的唯一下发源。
 //
 // M-5（2026-11-11）巡检机制优化：扩展 patrol 原先每 30s 全量遍历会话列表（未读数恒为 0、

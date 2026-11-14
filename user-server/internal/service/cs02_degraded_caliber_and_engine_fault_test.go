@@ -17,6 +17,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"errors"
 	"strings"
@@ -63,7 +64,7 @@ func cs02SetupEmptyEngine(t *testing.T, rag *fakeRAGSearcher) (*WebhookService, 
 func TestCS02_ModelEmptyReply_DegradedRowCaliber(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, database := cs02SetupEmptyEngine(t, rag)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "cs02-evt-empty-1"
 
 	if _, err := NewInboxIngressService().HandleIngressMessage(ctx, c01DouyinSampleEvent(evt, cs02ConvEmpty, cs02CustEmpty, c01AccountA1, c01Question)); err != nil {
@@ -115,7 +116,7 @@ func TestCS02_ModelEmptyReply_DegradedRowCaliber(t *testing.T) {
 func TestCS02_Douyin_EngineFault_L3FallbackTransferToHuman(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "cs02-evt-fault-l3-1"
 
 	SetSalesEngineHandleFault(func(*SalesRequest) error { return errors.New("cs02: engine fault injected (always)") })
@@ -174,7 +175,7 @@ func TestCS02_Douyin_EngineFault_L3FallbackTransferToHuman(t *testing.T) {
 func TestCS02_Douyin_EngineFault_L1BackupHandleRecovers(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "cs02-evt-fault-l1-1"
 
 	calls := 0

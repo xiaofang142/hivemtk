@@ -272,7 +272,7 @@ func c01OutboundRows(t *testing.T, db *gorm.DB, conv string) []*model.MessageHub
 func TestSmartCS01_SampleA_KnowledgeHit_AIReplyApprovedOutbound(t *testing.T) {
 	rag := newC01RAGHit() // 可计数检索 fake：1 条命中块（含已发布 FAQ 标记）
 	ws, _, db := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 
 	// 步骤1：入站落库（生产入口；channelgw pipeline 的委托体 HandleIngressBatch 的单条路径）。
 	ingress := NewInboxIngressService()
@@ -374,7 +374,7 @@ func TestSmartCS01_SampleA_KnowledgeHit_AIReplyApprovedOutbound(t *testing.T) {
 func TestSmartCS01_SampleB_LowConfidence_TransferToHuman_NoAIOutbound(t *testing.T) {
 	rag := &fakeRAGSearcher{} // 无命中：0 块
 	ws, _, db := c01SetupAI(t, rag, c01LowConfIntent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 
 	const (
 		evt  = "cs01-evt-a-0002"
@@ -480,7 +480,7 @@ func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *test
 	t.Cleanup(func() { ws.Stop(context.Background()) })
 	ws.SetSmartOrchestrator(context.Background(), orch)
 
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const (
 		evt  = "cs01-evt-a-0003"
 		conv = "cs01-conv-a1-003"
@@ -532,7 +532,7 @@ func TestHandleIngressCS01_ReplayNegative_SameEventIDNoSecondInbound(t *testing.
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 
 	// 专用 conv/sender/content：内容窗口去重键在进程级缓存里，与其他样本隔离
 	// （同 event_id 原帧重放的判定对象是 hook2 的 msg_id 幂等，不得被别格的键提前命中）。
@@ -588,7 +588,7 @@ func TestSmartCS01_SampleC_ApprovalRejected_ZeroSenderCalls(t *testing.T) {
 	db := qssSetupDB(t)
 	rowID := qssDraftOn(t, db, "opp_cs01_quote", "douyin:"+c01CustA)
 	p := qssSvc(t, db)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 
 	// 步骤1：明确必需审批——首次发送只换来一条 pending 待办，外发计数 0。
 	first := qssMustSend(t, p, ctx, qssSendInput(rowID))

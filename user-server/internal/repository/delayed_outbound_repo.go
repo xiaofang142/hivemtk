@@ -9,6 +9,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -372,9 +373,24 @@ func truncateForColumn(s string, max int) string {
 
 // CreateMessageHubIdempotent 幂等写 message_hub（platform+msg_id+conversation_id 冲突忽略），
 // 返回实际持久化的行与首次错误（供调用方重试判定）。
+//
+// 租户 fail-closed（2026-11-14 生产事故修复）：msg.TenantID==0 时先从 ctx 补租户；
+// ctx 也没有则**拒绝落库**而非放行——隔离 callback 对无租户 ctx 不填列，gorm
+// default:1 会把行写进 tenant 1，成为"认领查不到、管理台看不见、AI 侧却记已回复"
+// 的三重静默孤儿（2026-11-14 douyin 4610 行实证；10-22/11-04 另有 3 条同型孤儿）。
+// 唯一索引 (tenant_id,platform,msg_id,conversation_id,direction) 含 tenant_id：
+// 缺租户还会绕过与真实租户行的幂等冲突判定，造成跨租户重复回复。
 func (r *DelayedOutboundRepository) CreateMessageHubIdempotent(ctx context.Context, msg *model.MessageHub) (persisted *model.MessageHub, firstErr error) {
 	if r.db == nil {
 		return msg, nil
+	}
+	if msg != nil && msg.TenantID == 0 {
+		if tid, ok := tenant.FromContext(ctx); ok && tid != 0 {
+			msg.TenantID = tid
+		} else {
+			return nil, fmt.Errorf("message_hub 落库缺租户上下文（fail-closed）：platform=%s msg_id=%s conv=%s",
+				msg.Platform, msg.MsgID, msg.ConversationID)
+		}
 	}
 	// D-2（2026-10-23）：唯一索引 uni_message_hub_platform_msg_conv 已加 direction
 	//（priority:4），ON CONFLICT 的列清单必须与索引形状一致，否则 PG 报

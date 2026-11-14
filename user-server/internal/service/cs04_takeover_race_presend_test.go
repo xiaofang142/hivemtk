@@ -21,6 +21,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func cs04WaitFor(t *testing.T, what string, ch <-chan struct{}) {
 func TestCS04_TakeoverDuringAIGeneration_PreSendLockCheck(t *testing.T) {
 	rag := &fakeRAGSearcher{} // 无知识命中：走高置信直答，最快到发送点
 	ws, _, db := c01SetupAI(t, rag, cs04RacingIntent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 
 	// —— 格①：AI 腿启动（无锁放行）→ 生成中段坐席接管 → 发送点复核拦下。
 	// 接缝只在本格持有；放行后立即摘除，格②不受影响。

@@ -5,6 +5,7 @@ package service
 // 时也会走错链路。这里要求：解析逻辑可以共用，**平台标记与幂等键必须按渠道分开**。
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"strings"
 	"testing"
@@ -138,7 +139,7 @@ func TestDispatchDouyin_LeadRowKeepsPlatform(t *testing.T) {
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.Clue{},
 	)
 	svc := NewWebhookService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	t.Cleanup(func() { svc.Stop(ctx) })
 
 	if _, _, err := svc.dispatchDouyin(ctx, ChannelDouyin, "71001", &ParsedPayload{},
@@ -176,7 +177,7 @@ func TestTriggerBridgeDMOutreach_EnqueuesUnderOwnChannel(t *testing.T) {
 	t.Cleanup(func() { SetGlobalInboxIngressService(nil) })
 
 	svc := NewWebhookService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	t.Cleanup(func() { svc.Stop(ctx) })
 
 	// 走适配器入口：适配器把哪个渠道传给私信逻辑也是本用例要守的（否则写死 douyin 一样能过）。
@@ -243,7 +244,7 @@ func TestDispatchToChannel_DouyinFamilyKeepsChannel(t *testing.T) {
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.Clue{},
 	)
 	svc := NewWebhookService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	t.Cleanup(func() { svc.Stop(ctx) })
 
 	ttHub, _, err := svc.dispatchToChannel(ctx, ChannelTiktok, "71009", &ParsedPayload{},

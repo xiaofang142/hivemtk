@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"testing"
 	"time"
@@ -17,7 +18,7 @@ func TestInboxIngress_ClaimPendingOutbound_NoDuplicateForward(t *testing.T) {
 		t.Fatalf("清理失败: %v", err)
 	}
 	svc := NewInboxIngressService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	const (
 		channel   = "douyin_web"
@@ -97,7 +98,7 @@ func TestInboxIngress_ClaimPendingOutbound_StaleReset(t *testing.T) {
 		t.Fatalf("清理失败: %v", err)
 	}
 	svc := NewInboxIngressService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	const (
 		channel   = "douyin_web"
@@ -154,7 +155,7 @@ func TestInboxIngress_InterceptEcho_DistinguishesSelfAndCustomer(t *testing.T) {
 		t.Fatalf("清理失败: %v", err)
 	}
 	svc := NewInboxIngressService()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	const (
 		channel   = "douyin_web"

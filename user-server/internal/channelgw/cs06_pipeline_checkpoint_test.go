@@ -287,7 +287,7 @@ func cg06OutboundRows(t *testing.T, d *gorm.DB, conv string) []*model.MessageHub
 //	  inbound 与 outbound 行 trace_id 相等（LinkInbound/LinkOutbound 同源派生）。
 func TestCS06_PipelineSampleA_KnowledgeHit_FullChainWithTraceReconciliation(t *testing.T) {
 	p, _, _, d := cg06Setup(t, cg06Intent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 501)
 
 	cg06SeedAgentAndBinding(t, d, ctx, 6101, cg06AccountA1)
 	cg06SeedFAQ(t, d, ctx, 6101, cg06Question, cg06Answer)
@@ -542,7 +542,7 @@ func cg06SeedOpp(t *testing.T, d *gorm.DB, id, oneID string) {
 // 唯一出站行=转接公告（handler_type=human），无模型文案泄漏；B 账号并行会话各自独立。
 func TestCS06_PipelineSampleB_LowConfidence_HandoffNoticeNotModelReply(t *testing.T) {
 	p, _, _, d := cg06Setup(t, cg06LowIntent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 501)
 
 	cg06SeedAgentAndBinding(t, d, ctx, 6102, cg06AccountA1)
 	// 检索无命中形态：不给本会话的问题可命中的 FAQ 行（真库查过但 0 命中）。
@@ -624,7 +624,7 @@ func TestCS06_PipelineSampleC_QuoteApprovalRejected_ZeroSenderCalls(t *testing.T
 	)
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 501)
 	service.SetBridgeChannels([]string{cg06Channel})
 	t.Cleanup(func() { service.SetBridgeChannels(nil) })
 	service.SetGlobalInboxIngressService(service.NewInboxIngressService())
@@ -733,7 +733,7 @@ func TestCS06_PipelineSampleC_QuoteApprovalRejected_ZeroSenderCalls(t *testing.T
 //	   错误不冒充送达（不进 pending 出库队列）。
 func TestCS06_PipelineReplayAndSendFailure_Negatives(t *testing.T) {
 	p, _, _, d := cg06Setup(t, cg06Intent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 501)
 
 	// —— ① 重放负例（专用 conv/content：内容窗口去重键在进程级缓存，须隔离） ——
 	const (

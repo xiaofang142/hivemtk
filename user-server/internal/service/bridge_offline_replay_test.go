@@ -2,6 +2,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"testing"
 	"time"
@@ -60,7 +61,7 @@ func hubOutbound(t *testing.T, db *gorm.DB, convID string) []model.MessageHub {
 // TestOfflineReplayService_DeliversAndCloses 一次回扫：文本入站管道、行收口 sent，重跑不双发。
 func TestOfflineReplayService_DeliversAndCloses(t *testing.T) {
 	svc, db := setupOfflineReplaySvc(t)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	id := seedDelayed(t, db, &model.DelayedOutboundReply{
 		Platform: "tg", AccountID: "acc_ok", ConversationID: "conv_ok",
@@ -102,7 +103,7 @@ func TestOfflineReplayService_DeliversAndCloses(t *testing.T) {
 // TestOfflineReplayService_SkipsCardsAndClaimed 富卡行交给主链路、已被抢占的行不得再投。
 func TestOfflineReplayService_SkipsCardsAndClaimed(t *testing.T) {
 	svc, db := setupOfflineReplaySvc(t)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	cardID := seedDelayed(t, db, &model.DelayedOutboundReply{
 		Platform: "tg", AccountID: "acc_skip", ConversationID: "conv_card",
@@ -136,7 +137,7 @@ func TestOfflineReplayService_SkipsCardsAndClaimed(t *testing.T) {
 // TestOfflineReplayService_ConvergesAfterRetries 投递持续失败必须收敛，不能每 5 分钟重投到永远。
 func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 	svc, db := setupOfflineReplaySvc(t)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	// 占位账号会被出站管道拒收 → 每轮都失败
 	id := seedDelayed(t, db, &model.DelayedOutboundReply{
@@ -196,7 +197,7 @@ func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
 	SetGlobalInboxIngressService(ingress)
 	t.Cleanup(func() { SetGlobalInboxIngressService(prev) })
 	svc := NewBridgeOfflineReplayService().WithDB(db)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	// 本用例只钉检测腿（R14）：补投门显式全放行，免得探针默认值变化把它变成门的用例。
 	useOnlineProbe(t, func(context.Context, string, string) bool { return true })
 
@@ -240,7 +241,7 @@ func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
 func TestOfflineReplayService_DetectPartitionsByReachability(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.BridgeAccount{})
 	svc := NewBridgeOfflineReplayService().WithDB(db)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	now := time.Now()
 	stale := now.Add(-time.Hour)

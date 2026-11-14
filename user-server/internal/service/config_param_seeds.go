@@ -102,6 +102,11 @@ func DefaultParamDefs() []ParamDef {
 				"前端扩展本有拟人节奏三层限速，这是服务端最后防线：前端被关闭/篡改/AI 批量误生成时不至于向平台页面倾泻消息。" +
 				"超限时本轮认领返回空（下轮窗口自动恢复），不报错不落失败态。0 = 停用兜底（默认 60，架构文档 §4.2 承诺值的落地）",
 			ValueType: "int", Risk: "warning", DefaultValue: "60", Min: strPtr("0"), Max: strPtr("600"), Step: strPtr("10"), Category: "桥接"},
+		{Group: "bridge", Key: "ai_trigger_binding_required", Name: "桥接渠道 AI 触发绑定门",
+			Description: "true ＝ 桥接渠道（抖音/小红书/微博等）入站消息必须存在 enabled 的渠道绑定（channel_agent_bindings）才触发 AI 自动回复，" +
+				"无绑定的渠道保持静默（绑定面板即租户的 AI 开关面板）。false（缺省）＝现行行为：无绑定回退租户级默认引擎。" +
+				"开启动机（2026-11-14 生产实证）：微博账号无绑定仍对官方系统推送自动回复 6 条/5min，刷官方号有平台风控风险。有绑定的渠道不受影响",
+			ValueType: "bool", Risk: "warning", DefaultValue: "false", Category: "桥接"},
 		{Group: "bridge", Key: "outbound_orphan_ttl", Name: "出站孤儿行结算阈值",
 			Description: "桥接渠道出站消息在「账号未注册或已超过此时长未同步」时，行本身超过此时长即落 failed（原因 outbound_orphan_expired）；0 表示停用该结算",
 			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("0"), Max: strPtr("7776000"), Step: strPtr("3600")},

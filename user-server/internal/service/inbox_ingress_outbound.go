@@ -47,6 +47,10 @@ func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.Mess
 	if h.TraceID == "" {
 		h.TraceID = tracing.LinkOutboundTraceID(ctx, h.ConversationID)
 	}
+	// 租户收口在 DeliverBridgeOutboundMedia 入口统一做（反查 bridge_accounts 归属，
+	// 2026-11-14 生产事故修复）；repo 层 CreateMessageHubIdempotent 另有 fail-closed
+	// 兜底（AI 出站幂等写路径）。本函数不再重复设门——历史上在此拦会把
+	// 无租户 worker 的**全部**既有调用转红，打击面过宽；孤儿治理收口在上述两层。
 	if err := s.hubRepo.Create(ctx, h); err != nil {
 		return err
 	}

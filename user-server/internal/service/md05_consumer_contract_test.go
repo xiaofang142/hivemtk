@@ -12,6 +12,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"errors"
 	"strings"
@@ -69,7 +70,7 @@ func md05DriveIngressAndAI(t *testing.T, ws *WebhookService, evt, conv, cust, co
 func TestMD05_ConsumerContract_KnowledgeHit_ApprovedOutputs(t *testing.T) {
 	rag := md05RAGWithKB()
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-hit-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-hit", "md05-cust-hit", c01Question, ctx)
@@ -107,7 +108,7 @@ func TestMD05_ConsumerContract_KnowledgeHit_ApprovedOutputs(t *testing.T) {
 func TestMD05_ConsumerContract_LowConfidence_TransferKeepsIntentSemantics(t *testing.T) {
 	rag := md05RAGWithKB()
 	ws, _, database := c01SetupAI(t, rag, md05LowConfidenceIntent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-lowconf-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-lowconf", "md05-cust-lowconf", c01Question, ctx)
@@ -144,7 +145,7 @@ func TestMD05_ConsumerContract_LowConfidence_TransferKeepsIntentSemantics(t *tes
 func TestMD05_ConsumerContract_NoKnowledge_EngineStillAnswers(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-nokb-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-nokb", "md05-cust-nokb", c01Question, ctx)
@@ -170,7 +171,7 @@ func TestMD05_ConsumerContract_NoKnowledge_EngineStillAnswers(t *testing.T) {
 func TestMD05_ConsumerContract_EngineFault_L3NoIntentLeak(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-fault-1"
 
 	SetSalesEngineHandleFault(func(*SalesRequest) error { return errors.New("md05: engine fault injected (always)") })
@@ -218,7 +219,7 @@ func TestMD05_ConsumerContract_FAQCacheMountedUnresolved_NoContractChange(t *tes
 			ragcache.NewPGAnswerCacheStore(database), ragcache.NewPGKBMetaReader(database), 0, 0),
 		llm.NewEmbeddingService())
 
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-cachemount-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-cachemount", "md05-cust-cachemount", c01Question, ctx)
@@ -247,7 +248,7 @@ func TestMD05_ConsumerContract_FAQCacheMountedUnresolved_NoContractChange(t *tes
 func TestMD05_ConsumerContract_HumanHeld_AIDoesNotSteal(t *testing.T) {
 	rag := md05RAGWithKB()
 	ws, _, database := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-humanheld-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-humanheld", "md05-cust-humanheld", c01Question, ctx)
@@ -294,7 +295,7 @@ func TestMD05_ConsumerContract_CtxCancelled_NoWrites(t *testing.T) {
 	const evt = "md05-evt-ctxcancel-1"
 	const conv = "md05-conv-ctxcancel"
 	const cust = "md05-cust-ctxcancel"
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	// 入站用正常 ctx（持久化层用 ctx，取消态下写入本就该失败，不属本用例断言面）。
 	if _, err := NewInboxIngressService().HandleIngressMessage(ctx, c01DouyinSampleEvent(evt, conv, cust, c01AccountA1, c01Question)); err != nil {
 		t.Fatalf("入站失败: %v", err)
@@ -338,7 +339,7 @@ func TestMD05_ConsumerContract_CtxCancelled_NoWrites(t *testing.T) {
 func TestMD05_ConsumerContract_LowConfidenceAndNoKnowledge(t *testing.T) {
 	rag := &fakeRAGSearcher{}
 	ws, _, database := c01SetupAI(t, rag, md05LowConfidenceIntent{})
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
 	const evt = "md05-evt-combo-1"
 
 	md05DriveIngressAndAI(t, ws, evt, "md05-conv-combo", "md05-cust-combo", c01Question, ctx)

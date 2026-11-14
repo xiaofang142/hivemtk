@@ -323,6 +323,23 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 			Msg("[Webhook] TriggerInboundAI skipped: channel AI agent disabled")
 		return
 	}
+	// 桥接渠道 AI 触发绑定门（bridge/ai_trigger_binding_required，默认 false=现行为）：
+	// 开启后桥接渠道必须有 enabled 渠道绑定才触发 AI——租户的绑定面板即其 AI 开关面板，
+	// 无绑定的渠道静默。动机见 2026-11-14 生产实证：微博无绑定仍回退默认引擎对官方
+	// 系统推送刷屏（6 条/5min）。绑定判定用 LoadAgentForChannel（chat 精确 → account 级），
+	// 与实际回复时用到的 agent 解析同一入口，避免「门放行、引擎无 agent」错位。
+	if channel != "" && BridgeAITriggerBindingRequired(ctx) {
+		if _, ok := bridgeChannels[channel]; ok {
+			bound, berr := s.loadAgentForChannel(ctx, WebhookChannel(channel), accountID, conversationID)
+			if berr != nil || bound == nil {
+				logger.Ctx(ctx).Info().Str("channel", channel).Str("account_id", accountID).
+					Str("conv_id", conversationID).
+					Err(berr).
+					Msg("[Webhook] TriggerInboundAI skipped: bridge channel has no enabled agent binding (ai_trigger_binding_required=true)")
+				return
+			}
+		}
+	}
 	rateKey := string(channel) + ":" + accountID
 	if !s.allowRate(ctx, rateKey) {
 		logger.Ctx(ctx).Warn().Str("channel", channel).Str("account_id", accountID).

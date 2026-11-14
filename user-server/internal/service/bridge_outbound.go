@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -123,6 +124,19 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 	// 语法符号在入队前剥成纯文本，覆盖 AI 回复/SOP/触达/主动私信全部出站路径。
 	if stripMarkdownForBridgeChannel(channel, msgType) {
 		content = StripMarkdownForDM(content)
+	}
+	// 租户收口（2026-11-14 生产事故修复）：本函数的调用者遍布人工代发/主动触达/
+	// 离线重放/CSAT/lead 私信等链路，部分后台 worker 的 ctx 不带租户——行会经
+	// gorm default:1 落进 tenant 1，成为"认领查不到、管理台看不见"的双盲孤儿
+	// （douyin 4610 实证）。ctx 无租户时按 (channel, account_id) 反查
+	// bridge_accounts 归属租户并以 OnlyTenant 钉死（与入站 bindBridgeTenant 的
+	// 自证口径同源）；反查不到则维持原样，由 DeliverOutbound 的 fail-closed 门
+	// 显式拒绝——任何路径要么带对租户、要么出声失败，不再静默写孤儿。
+	if tid, ok := tenant.FromContext(ctx); !ok || tid == 0 {
+		if resolved, rerr := tenant.SingleTenantByKey(ctx, dbstate.Get(), "bridge_accounts",
+			"channel = ? AND account_id = ?", channel, accountID); rerr == nil && resolved != 0 {
+			ctx = tenant.OnlyTenant(ctx, resolved)
+		}
 	}
 	mediaURL = model.TruncateMediaURL(strings.TrimSpace(mediaURL))
 	if msgType == "" || strings.EqualFold(strings.TrimSpace(msgType), "text") {

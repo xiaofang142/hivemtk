@@ -1,9 +1,18 @@
-# HiveBridge 蜂桥 v1.3.0 发布包
+# HiveBridge 蜂桥 v1.3.1 发布包
 
-- 产物：`release/hivebridge-1.3.0.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
-- 构建时间：2026-11-13T12:19:29.233Z
+- 产物：`release/hivebridge-1.3.1.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
+- 构建时间：2026-11-14T07:03:08.492Z
 
-## 本版变更（v1.3.0）
+## 本版变更（v1.3.1）
+- 二次论证修复（2026-11-14 生产数据实证驱动）：
+  微博自身标签守卫：PEER_NAME 逗号并集在文档序上先命中自我盒 .user .name，导致 sender_name 全为
+  「用户<自身uid>」、720 条落 conv:用户<uid> 自指会话并诱导人工误发；新增 isSelfAccountLabel
+  结果守卫（header 命中自我盒时昵称返回空、禁止派生自指会话 id），选择器匹配面不动；
+  抖音双写折叠补口：双写以空白连接时总长奇数（如「蜂桥下行手动L 732783」×2），既有对半守卫
+  从连接空格起头错位必漏 → 补「去空白对半」折叠，双写不再原样上行打穿服务端自回显精确匹配；
+  导出 dedupeRepeatedText 补 7 用例、weibo 守卫补 4 用例。
+
+## 历史变更（v1.3.0）
 - 四渠道真机核对补修（2026-11-13 ego-browser 只读核对，复用登录态）：
   B站（P0）消息气泡改用现网 CSS Modules 哈希类 [class*="_Msg_"]/[class*="_Msg__Content"]，
   并新增 outermost 去嵌套（哈希类同时命中 _Msg__Time/__Wrap/__Main/__Content 等 6+ 节点）；
