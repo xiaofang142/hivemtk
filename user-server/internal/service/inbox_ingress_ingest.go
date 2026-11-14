@@ -191,14 +191,19 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 						if inSorted == outSorted || inSorted == doubleSorted(outSorted) {
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-multiset match)"}, nil
 						}
-						// 频率相似度判据（2026-11-14 第三形态 4848 实证）：混合变形（双份中
-						// 一份缺 7 字等）既非同频也非整倍——改为逐字符频率重合度。**双重
-						// 闸**：覆盖率 ≥85% 且入站字符集 ⊆ 出站字符集（stray=0）——纯回声
-						//（双写/变形）没有任何出站外字符；客户引用+追问/尾部提问必有出站
-						// 外新字符（stray>0）→ 放行（inbox_ingress_recent_echo/tail_echo
-						// 两个既有契约测试钉住，2026-11-14 部署预检曾抓过 0.85 单闸过宽）。
-						if cover, stray, ok := charCoverage(inSorted, outSorted); ok && cover >= 0.85 && stray == 0 {
-							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-frequency ≥85%)"}, nil
+						// 频率相似度判据（2026-11-14 第三形态 4848 实证）+ 分级阈值（2026-11-14
+						// 第四形态 4867-4871 实证：xhs 自家气泡五连变形收录，覆盖率判据穿透）。
+						// 出站 <5 分钟（自己刚说的话）→ 宽松闸：覆盖率 ≥70% 且 stray ≤3——
+						// 客户一分钟内逐字复读并变形我们刚发的话概率趋零；5 分钟-2h → 严格闸：
+						// 覆盖率 ≥85% 且 stray=0（客户引用+追问必有出站外新字符，既有契约
+						// 测试 inbox_ingress_recent_echo/tail_echo 钉住放行）。
+						recentSent := rows[i].SentAt.After(time.Now().Add(-5 * time.Minute))
+						coverGate, strayGate := 0.85, 0
+						if recentSent {
+							coverGate, strayGate = 0.70, 3
+						}
+						if cover, stray, ok := charCoverage(inSorted, outSorted); ok && cover >= coverGate && stray <= strayGate {
+							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-frequency match)"}, nil
 						}
 					}
 				}
