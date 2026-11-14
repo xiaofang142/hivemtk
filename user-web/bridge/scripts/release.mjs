@@ -34,6 +34,11 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.4': `- 【对抗审查回退】hidden 页跳过认领/处理（1.3.3 引入）已回退——本扩展常态运行
+  形态就是后台/不可见页（ego 隔离窗口恒 hidden），6 小时 14 条 delivered 全部发生在
+  hidden 页；hidden 跳过 = 全渠道下发静默死亡（18:05-18:30 生产回归实证，用户截图
+  抓到）。回归钉改写：hidden 页必须照常认领与处理。B站 hidden 空转的真因是实验
+  渠道会话列表定位失败，20 次重投预算即其收敛机制。`,
   '1.3.3': `- hidden 页架构收口（2026-11-14 三层分析轮）：后台页签（用户切走/自动化后台页）
   visibilityState=hidden 时会话 DOM 不渲染，openConversation 假失败——B站 9 条在
   hidden 页空转烧重投预算（每次认领 push_attempts+1，20 次即 failed）。
