@@ -265,3 +265,29 @@ approved / 10-22；新 id=153 / 1.3.0 / 11-13）。上传接口对同名资产�
 - `bridge_accounts` 硬删 3 行（id 8/12/20：probe-cors-2 / weibo-unknown / xianyu 100）
 - 验证：tenant 18 可见消息 weibo 1948→1573（732 净删+自然流入）、账户 weibo 3→1、
   xianyu 6→5；capabilities 门 401 正常
+
+---
+
+## 2026-11-14 16:39 链 A 第二轮：AI 出站租户归属根修 + 桥接 AI 触发绑定门（`eeb0e193`）
+
+**事故**：用户实测「三渠道有消息都没回复」。排查链（生产数据→trace→代码）定位两个根因：
+
+1. **douyin 4610 三重静默孤儿**：AI 已生成回复（trace ai_replied=true）但落库进 tenant 1
+   （重试/重放 worker ctx 无租户 + 隔离 callback 对无租户 CREATE 放行 default + retryMsg
+   漏 TenantID + ON CONFLICT DO NOTHING 吞掉首次冲突返回 id=0）→ 认领查不到、管理台
+   看不见、客户永收不到。同型历史孤儿 3 条（10-22/11-04）。
+2. **微博无绑定仍自动回官方号**：桥接渠道无账号级 AI 开关字段（shouldTriggerAI default
+   放行），无渠道绑定时 LoadAgentForChannel 回退租户级默认引擎——官方系统推送被当客户
+   消息 6 条/5min 刷屏（风控风险）。
+
+**修复**（`662722a0`→rebase `eeb0e193`，四包真库全绿）：
+- 入站行租户继承（sendOutbound 只填行列不重建 ctx）；CreateMessageHubIdempotent
+  fail-closed；DeliverBridgeOutboundMedia 反查 bridge_accounts 收口全部 worker 链；
+  replayDelayedOutbound 按行租户钉死、缺归属 abandon 出声；retryMsg 补 TenantID
+- `bridge/ai_trigger_binding_required`（平台默认 false 零变化；**租户 18 已开启 true**
+  ——tenant_config_params 覆盖行，缓存 60s 生效）：无绑定的桥接渠道不再触发 AI
+- 数据修复：4610 归正租户 18 后已被认领下发（inflight→客户收到）；3 条过期孤儿软删
+
+**验证**：修复后 4610 认领投递实证；微博/抖音页巡检恢复（138 轮询/3min）；微博自指
+污染归零（47 条新消息 0 自标签）；gate 生效观察点=新官方推送出现 skip 日志且 outbound
+不增长。回滚点：镜像 `mtk-user-server:rollback-20261114-163904`。
