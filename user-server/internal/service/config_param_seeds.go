@@ -102,6 +102,11 @@ func DefaultParamDefs() []ParamDef {
 				"前端扩展本有拟人节奏三层限速，这是服务端最后防线：前端被关闭/篡改/AI 批量误生成时不至于向平台页面倾泻消息。" +
 				"超限时本轮认领返回空（下轮窗口自动恢复），不报错不落失败态。0 = 停用兜底（默认 60，架构文档 §4.2 承诺值的落地）",
 			ValueType: "int", Risk: "warning", DefaultValue: "60", Min: strPtr("0"), Max: strPtr("600"), Step: strPtr("10"), Category: "桥接"},
+		{Group: "bridge", Key: "ai_debounce_seconds", Name: "客户连发消息合并窗（秒）",
+			Description: "客户短时间连发多条消息时，合并为一批发给 AI 一次应答（防逐条轰炸）。" +
+				"窗口内后续消息与首条合并成上下文，窗口关闭即触发一次回复。0 = 关闭合并逐条即答（旧行为，默认 12）。" +
+				"上限 30 秒。全渠道通用（抖音/小红书/微博等桥接入站统一走此合并）",
+			ValueType: "int", DefaultValue: "12", Min: strPtr("0"), Max: strPtr("30"), Step: strPtr("1"), Category: "桥接"},
 		{Group: "bridge", Key: "ai_trigger_binding_required", Name: "桥接渠道 AI 触发绑定门",
 			Description: "true ＝ 桥接渠道（抖音/小红书/微博等）入站消息必须存在 enabled 的渠道绑定（channel_agent_bindings）才触发 AI 自动回复，" +
 				"无绑定的渠道保持静默（绑定面板即租户的 AI 开关面板）。false（缺省）＝现行行为：无绑定回退租户级默认引擎。" +

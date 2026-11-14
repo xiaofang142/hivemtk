@@ -193,16 +193,16 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 						}
 						// 频率相似度判据（2026-11-14 第三形态 4848 实证）+ 分级阈值（2026-11-14
 						// 第四形态 4867-4871 实证：xhs 自家气泡五连变形收录，覆盖率判据穿透）。
-						// 出站 <5 分钟（自己刚说的话）→ 宽松闸：覆盖率 ≥70% 且 stray ≤3——
-						// 客户一分钟内逐字复读并变形我们刚发的话概率趋零；5 分钟-2h → 严格闸：
-						// 覆盖率 ≥85% 且 stray=0（客户引用+追问必有出站外新字符，既有契约
-						// 测试 inbox_ingress_recent_echo/tail_echo 钉住放行）。
+						// 出站 <5 分钟（自己刚说的话）→ 宽松闸：覆盖率 ≥70% 且 stray=0——
+						// 自家气泡变体（双写/缺字）不含出站外字符；客户追问必有出站外新字
+						//（stray>0 放行，「那价格呢」实测 stray=3）。5 分钟-2h → 严格闸：
+						// 覆盖率 ≥85% 且 stray=0（引用+追问契约测试钉住放行）。
 						recentSent := rows[i].SentAt.After(time.Now().Add(-5 * time.Minute))
-						coverGate, strayGate := 0.85, 0
+						coverGate := 0.85
 						if recentSent {
-							coverGate, strayGate = 0.70, 3
+							coverGate = 0.70
 						}
-						if cover, stray, ok := charCoverage(inSorted, outSorted); ok && cover >= coverGate && stray <= strayGate {
+						if cover, stray, ok := charCoverage(inSorted, outSorted); ok && cover >= coverGate && stray == 0 {
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-frequency match)"}, nil
 						}
 					}

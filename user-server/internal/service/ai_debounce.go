@@ -20,7 +20,9 @@ const (
 )
 
 func aiDebounceSeconds(event *model.MessageEvent) int {
-	def := 0
+	// 参数中心优先（2026-11-14 参数化并默认启用 12s：客户连发消息合并一批应答，
+	// 防逐条轰炸——机制本就存在于本文件，此前仅 env 可开、生产恒 0 形同虚设）。
+	def := BridgeAIDebounceSeconds(context.Background())
 	if v := os.Getenv("AI_DEBOUNCE_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			def = n

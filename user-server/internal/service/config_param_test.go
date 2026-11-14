@@ -300,8 +300,9 @@ func TestFallbackNilDB(t *testing.T) {
 // 2026-11-12 §3.13 LLM/rerank 连接配置 env→DB 迁移新增 llm.global_override +
 // rerank.global_override 两条 ⇒ 257 → 259。2026-11-14 37463dec bridge 服务端下发
 // 限速兜底新增 1 条 ⇒ 260（该提交漏更此断言，审计二轮补记）；662722a0 二次论证轮
-// 再增 bridge/ai_trigger_binding_required ⇒ 261。
-const defaultParamDefsWant = 261
+// 再增 bridge/ai_trigger_binding_required ⇒ 261；b69c1971 追问轮
+// bridge/ai_debounce_seconds ⇒ 262。
+const defaultParamDefsWant = 262
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()

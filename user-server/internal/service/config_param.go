@@ -171,6 +171,24 @@ func BridgeAITriggerBindingRequired(ctx context.Context) bool {
 	return GlobalConfigParam().GetBool(ctx, "bridge", BridgeAITriggerBindingRequiredParam, BridgeAITriggerBindingRequiredDefault)
 }
 
+// BridgeAIDebounceParam / BridgeAIDebounceDefault 是"客户连发消息合并窗"的唯一来源
+//（2026-11-14 客户连发追问被 AI 逐条长文轰炸实证：系统自带 debounce 机制
+//（ai_debounce.go 连发合并→一次触发覆盖整批）但默认关闭（env-only）——参数中心化
+// 并默认启用 12 秒合并窗：客户连发节奏通常 <12s，等待感低，批量应答不轰炸。
+// 0 = 关闭合并（逐条即答，旧行为）。上限 30s（aiDebounceMaxSeconds 钳制）。
+// 默认值与 config_params 里 bridge/ai_debounce_seconds 的 DefaultValue("12") 同值，改动要一起改。
+const (
+	BridgeAIDebounceParam   = "ai_debounce_seconds"
+	BridgeAIDebounceDefault = 12
+)
+
+// BridgeAIDebounceSeconds 读客户连发合并窗（秒；nil-safe）。
+// 未装配时回落 0（关闭合并、逐条即答=旧行为）：生产 main 启动必 Seed（参数行 12），
+// 测试/未装配环境保持逐条语义，既有触发契约测试不因合并窗翻转。
+func BridgeAIDebounceSeconds(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, "bridge", BridgeAIDebounceParam, 0)
+}
+
 // PatrolUnreadFirstChannelsParam / PatrolUnreadFirstChannelsDefault 是"巡检要不要未读优先"的唯一下发源。
 //
 // M-5（2026-11-11）巡检机制优化：扩展 patrol 原先每 30s 全量遍历会话列表（未读数恒为 0、
