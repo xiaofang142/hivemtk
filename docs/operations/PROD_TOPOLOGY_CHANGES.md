@@ -440,3 +440,17 @@ pending（新内容/预算清零）；delivered/pending/inflight 维持 DO NOTHI
 （「那价格呢」stray=3 误吞实证修复）。service 真库全绿。
 **渠道核查**：该闸在触发层（TriggerInboundAI），抖音/小红书/微博/闲鱼等全渠道自动覆盖。
 闲鱼页签自 11-13 关闭未开（用户侧动作）。
+
+## 2026-11-14 23:00 渠道全面接入 + AI 回复格式 prompt 层优化
+
+**渠道矩阵终态**（绑定面板=AI 开关面板）：douyin/xiaohongshu/bilibili/xianyu 全部绑定
+agent 18（本轮新增 bilibili/xianyu 绑定，闲鱼页签已重开心跳恢复）；**weibo 暂不绑定**
+——其入站 98% 为官方服务号推送（新浪新闻/新手指南持续洪泛），绑定即自动回复推送
+（账号风控风险），待推送过滤能力后另行决策。
+
+**AI 回复格式 prompt 层优化**（用户约束：不动代码）：
+- agent 18 system_prompt 为空是格式失控的 prompt 层根源 → 写入格式铁律：≤80 字/
+  口语短句/禁编号列表/一次只答一件事/先答后引/禁照搬知识库原文/追问换角度不重复
+- 高频 FAQ 答案压缩（内容层，5 条：id 1/5/28/29/30）——fastpath 直出即短版口语；
+  其余 25 条知识库详实版保留（客户追问时 LLM 深答）
+- 生效路径：LLM 路径受 system_prompt 约束；fastpath 直出受压缩后的 FAQ 答案约束
