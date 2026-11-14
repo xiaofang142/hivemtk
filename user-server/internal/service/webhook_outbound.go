@@ -1019,6 +1019,10 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			}
 
 			persisted := outMsg
+			// duplicateOccupied：Create 无错但 ID 未回填 = ON CONFLICT DO NOTHING 命中
+			//（同键占位：同会话同文案已 delivered/pending 在途）——与真 DB 错误严格区分，
+			// 两者在 id=0 分支走不同处置（占位=转人工旁路不可重试；真错误=可重试进队列）。
+			duplicateOccupied := false
 			if _, err := s.delayedRepo.CreateMessageHubIdempotent(ctx, outMsg); err != nil {
 				retryMsg := &model.MessageHub{
 					MsgID:          outMsg.MsgID + ":" + hubMsg.ConversationID,
@@ -1049,6 +1053,8 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 				} else {
 					persisted = retryMsg
 				}
+			} else if persisted.ID == 0 {
+				duplicateOccupied = true
 			}
 			if s.inboxConvRepo != nil && persisted.ID != 0 {
 
@@ -1139,7 +1145,50 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			// 未落库 / 被标 failed / 无入站上下文都不能算成功，否则重放 worker
 			// 会把这条 MarkSent 掉，回复静默丢失。
 			switch {
+			case persisted.ID == 0 && duplicateOccupied:
+				// 同键占位（同会话同文案已 delivered/pending 在途）——AI 对重复问题
+				// 确定性输出同一话术时的必然分支（2026-11-14 生产终局实证：19:10/19:12/
+				// 19:14 三次重试全部 id=0，客户「给我一份功能清单」两次追问石沉大海）。
+				// 处置三件事：①落一条 failed 占位行（坐席在收件箱看得到「客户问过且
+				// 未解决」）；②markSendFailed 置不可重试（同一占位行不会消失，重试
+				// 只制造噪音——19:10 批三次重试全部 id=0 即实证）；③Error 级出声。
+				dupRow := &model.MessageHub{
+					TenantID:       persisted.TenantID,
+					MsgID:          persisted.MsgID + ":dup",
+					Platform:       string(channel),
+					AccountID:      accountID,
+					Direction:      "outbound",
+					Status:         "failed",
+					MsgType:        "text",
+					SenderID:       accountID,
+					ReceiverID:     hubMsg.ReceiverID,
+					Content:        content,
+					ConversationID: persisted.ConversationID,
+					IsAIReply:      true,
+					AIAgent:        "sales_engine",
+					IsRead:         false,
+					SentAt:         time.Now(),
+					TraceID:        persisted.TraceID,
+					Extra:          model.JSONMap{"duplicate_of": persisted.MsgID, "duplicate_reason": "same reply already delivered/pending"},
+				}
+				if _, derr := s.delayedRepo.CreateMessageHubIdempotent(ctx, dupRow); derr != nil {
+					logger.Ctx(ctx).Warn().Err(derr).Str("module", "bridge").
+						Str("conv_id", persisted.ConversationID).Msg("[Bridge] 重复话术占位行落库失败（坐席可见性降级）")
+				}
+				logger.Ctx(ctx).Error().
+					Str("module", "bridge").
+					Str("channel", string(channel)).
+					Str("conv_id", persisted.ConversationID).
+					Str("msg_id", persisted.MsgID).
+					Msg("[Bridge] AI 重复话术已投递过（同会话同文案占位）——本条转 failed 占位行，需人工跟进客户追问")
+				markSendFailed(&ChannelError{
+					Category:  CategoryBadRequest,
+					Retryable: false,
+					Raw:       "duplicate reply already delivered/pending (same conv+content); needs human follow-up",
+				})
 			case persisted.ID == 0:
+				// 真 DB 错误（非占位冲突）：保持可重试——回复既没出库也没人再投就永久丢了
+				//（webhook_batchc_bridge_sent_test 契约），占位冲突走上面的 duplicateOccupied 分支。
 				markSendFailed(&ChannelError{
 					Category:  CategoryUnknown,
 					Retryable: true,

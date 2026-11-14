@@ -395,9 +395,35 @@ func (r *DelayedOutboundRepository) CreateMessageHubIdempotent(ctx context.Conte
 	// D-2（2026-10-23）：唯一索引 uni_message_hub_platform_msg_conv 已加 direction
 	//（priority:4），ON CONFLICT 的列清单必须与索引形状一致，否则 PG 报
 	// "no unique or exclusion constraint matching the ON CONFLICT specification"。
+	//
+	// 冲突复活语义（2026-11-14 生产终局修复）：AI 对同一问题会确定性输出同一话术
+	//（知识库直出），同 (tenant,platform,msg_id,conv,direction) 的历史行——failed/
+	// 软删的（从没成功投出或已被清理）——会永久占位唯一索引，DO NOTHING 把 AI 新
+	// 生成的回复静默吞掉（19:10/19:12/19:14/19:19 四次 id=0 实证，客户「给我一份
+	// 功能清单」两次追问全部石沉大海）。语义修正：冲突行 status='failed' 或已软删
+	// → **复活为新 pending**（旧回复从未成功触达，让位给新回复）；冲突行
+	// delivered/inflight/pending（在途或已触达）→ 维持 DO NOTHING（防同文案刷屏，
+	// 上层据 id=0 走人工跟进旁路）。
 	conflict := clause.OnConflict{
-		Columns:   []clause.Column{{Name: "tenant_id"}, {Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}, {Name: "direction"}},
-		DoNothing: true,
+		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}, {Name: "direction"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"status":       "pending",
+			"deleted_at":   nil,
+			"claimed_at":   nil,
+			"push_attempts": 0,
+			"push_error":   "",
+			"content":      clause.Column{Table: "excluded", Name: "content"},
+			"msg_type":     clause.Column{Table: "excluded", Name: "msg_type"},
+			"media_url":    clause.Column{Table: "excluded", Name: "media_url"},
+			"sent_at":      clause.Column{Table: "excluded", Name: "sent_at"},
+			"trace_id":     clause.Column{Table: "excluded", Name: "trace_id"},
+			"is_ai_reply":  clause.Column{Table: "excluded", Name: "is_ai_reply"},
+			"ai_agent":     clause.Column{Table: "excluded", Name: "ai_agent"},
+			"extra":        clause.Column{Table: "excluded", Name: "extra"},
+			"receiver_id":  clause.Column{Table: "excluded", Name: "receiver_id"},
+			"sender_id":    clause.Column{Table: "excluded", Name: "sender_id"},
+		}),
+		Where: clause.Where{Exprs: []clause.Expression{gorm.Expr("message_hub.status = 'failed' OR message_hub.deleted_at IS NOT NULL")}},
 	}
 	if err := r.db.WithContext(ctx).Clauses(conflict).Create(msg).Error; err != nil {
 		return nil, err
