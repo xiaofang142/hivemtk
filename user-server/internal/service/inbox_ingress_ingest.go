@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"regexp"
+	"sort"
 	"time"
 	"unicode"
 
@@ -175,6 +176,22 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 						remainder = strings.ReplaceAll(remainder, outNorm, "")
 						strippedAny = true
 					}
+					// 字符多重集比对（2026-11-14 生产实证 4836）：抖音 DOM 会把自家出站气泡
+					// 抓成**交错拼接**（4836 长度 204 ≈ 出站 107 的字符交错双写），与任何
+					// 「等值/包含」判据全部错位——等值不等、包含不连、剥后非空。字符频率
+					// 与顺序无关：
+					//   - 同频（入站排序 == 出站排序）：同一句话被打乱重排，必为回声；
+					//   - 双倍频（入站排序 == 出站排序×2）：同一句话完整双份拼接，必为回声。
+					// 真实客户消息恰好与本账号某条近期出站同字符集（或恰为双倍）的概率趋零，
+					// 与「等值/包含」判据同一取舍。长度护栏：出站 <16 字不参与（同剥离护栏），
+					// 防短出站（"好的~"）频率撞车误吞真实发言。
+					if len([]rune(outNorm)) >= 16 {
+						inSorted := sortedRunes(norm)
+						outSorted := sortedRunes(outNorm)
+						if inSorted == outSorted || inSorted == doubleSorted(outSorted) {
+							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-multiset match)"}, nil
+						}
+					}
 				}
 				if strippedAny && len([]rune(remainder)) < 4 {
 					return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
@@ -308,4 +325,23 @@ func normalizeEchoText(s string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// sortedRunes 返回归一化文本的字符多重集签名（排序后拼接，与顺序无关）。
+// 供自回显的字符多重集比对用（2026-11-14 4836 交错双写实证）。
+func sortedRunes(s string) string {
+	rs := []rune(s)
+	sort.Slice(rs, func(i, j int) bool { return rs[i] < rs[j] })
+	return string(rs)
+}
+
+// doubleSorted 返回签名 s 的「双倍频」签名（每字符出现次数×2）。
+// 入站文本恰为某条出站的完整双份拼接（含交错形态）时，其多重集必为出站的二倍。
+func doubleSorted(s string) string {
+	rs := []rune(s)
+	dbl := make([]rune, 0, len(rs)*2)
+	for _, r := range rs {
+		dbl = append(dbl, r, r)
+	}
+	return string(dbl)
 }
