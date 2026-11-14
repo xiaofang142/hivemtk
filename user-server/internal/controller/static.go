@@ -70,6 +70,36 @@ func (s *StaticController) NotFound(c *gin.Context) {
 	serveSPAWithFramePolicy(c, s.userWebDist, c.Query("embed") == "1")
 }
 
+// PWARootFiles NoRoute 兜底：PWA 五件套（/sw.js、/version.json、/manifest.webmanifest、
+// /favicon.svg 与 /workbox-*.js 运行时 chunk）按 no-cache 直服，其余交回 SPA 回落。
+//
+// 背景（2026-11-13 O 轮）：这五个路径落 NoRoute 后被 SPA 回落成 index.html（200 HTML）
+// ⇒ SW 注册 MIME 校验失败 ⇒ 整套 PWA 静默死亡。五件套统一 Cache-Control: no-cache，
+// 与 nginx 静态站口径一致。Clean+Join 防目录穿越；文件不存在（未构建产物）则交回
+// SPA 回落，保持既有行为不变。
+// （架构审计轮：从 router 内联闭包迁入——[L2] 门禁禁 router 内联处理器。）
+func (s *StaticController) PWARootFiles(c *gin.Context) {
+	p := c.Request.URL.Path
+	pwaRootFiles := map[string]bool{
+		"/sw.js":                true,
+		"/version.json":         true,
+		"/manifest.webmanifest": true,
+		"/favicon.svg":          true,
+	}
+	if !pwaRootFiles[p] &&
+		!(strings.HasPrefix(p, "/workbox-") && strings.HasSuffix(p, ".js")) {
+		s.NotFound(c)
+		return
+	}
+	f := filepath.Join(s.userWebDist, filepath.Clean(p))
+	if fi, err := os.Stat(f); err != nil || fi.IsDir() {
+		s.NotFound(c)
+		return
+	}
+	c.Header("Cache-Control", "no-cache")
+	c.File(f)
+}
+
 // EmbedDistMissing user-web dist 路径配置了但不存在。
 func (s *StaticController) EmbedDistMissing(c *gin.Context) {
 	response.Envelope(c, http.StatusNotFound, gin.H{

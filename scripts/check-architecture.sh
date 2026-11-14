@@ -181,7 +181,9 @@ echo "    合计 ${#SERVICE_DOMAIN_DIRS[@]} 域 / 目录树计 $SERVICE_DOMAIN_T
 # 对 AST 守卫是 Fatal。同一道门在 shell 侧用 gofmt -e 实现（解析失败退出码 2）。
 if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
   PARSE_ERR_LOG="$(mktemp "${TMPDIR:-/tmp}/arch-parse.XXXXXX")"
-  if gofmt -e "${SERVICE_FILES[@]}" >/dev/null 2>"$PARSE_ERR_LOG"; then
+  # xargs 分批传参：643 文件全量展开在 Windows Git Bash 下会撞命令行长度上限
+  # （"Argument list too long"，2026-11-14 架构审计实测）；任一批 gofmt 非零 ⇒ xargs 非零 ⇒ 门红。
+  if printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 gofmt -e >/dev/null 2>"$PARSE_ERR_LOG"; then
     log_pass "[L4] ${#SERVICE_FILES[@]} 个 service 生产文件全部可解析（gofmt -e 门）"
   else
     log_fail "[L4] service 生产文件存在解析失败（文本/AST 扫描对该文件不可信，先修语法）:"
@@ -194,7 +196,7 @@ fi
 
 # 2.1 service 不应调 controller / router
 if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
-  if grep -rn "hivemtk-user/internal/controller\|hivemtk-user/internal/router" "${SERVICE_FILES[@]}" 2>/dev/null; then
+  if printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 grep -n "hivemtk-user/internal/controller\|hivemtk-user/internal/router" 2>/dev/null; then
     log_fail "[L4] service 引用 controller/router,违反分层"
   else
     log_pass "[L4] service 未引用 controller/router"
@@ -211,9 +213,9 @@ fi
 #       注：允许在 struct 定义行（type xxx struct { db *gorm.DB }）和注释行出现 .db.，不视为违规
 SERVICE_DB_HITS=""
 if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
-  SERVICE_DB_HITS=$(grep -rnE \
+  SERVICE_DB_HITS=$(printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 grep -rnE \
     "db\.GetDB()|_db\.GetDB()|[a-zA-Z_]+\.db\.(WithContext|Raw|Exec|Create|Save|Update|Delete|Find|First|Where|Model|Transaction|Begin|Count|Clauses|Scan|Order|Dialector)" \
-    "${SERVICE_FILES[@]}" 2>/dev/null \
+    2>/dev/null \
     | grep -vE ':[[:space:]]*//' \
     | grep -vE ':[[:space:]]*\*' \
     | grep -vE ':[[:space:]]*/\*' \
@@ -247,9 +249,9 @@ fi
 #      - 形参行 `db *gorm.DB,` 与 `db *gorm.DB)` 均不再命中。
 SERVICE_DB_FIELDS=""
 if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
-  SERVICE_DB_FIELDS=$(grep -rnE \
+  SERVICE_DB_FIELDS=$(printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 grep -rnE \
     '^[[:space:]]*db[[:space:]]+\*gorm\.DB([[:space:]]+`[^`]*`)?[[:space:]]*$' \
-    "${SERVICE_FILES[@]}" 2>/dev/null \
+    2>/dev/null \
     | grep -vE '://' \
     || true)
 fi
@@ -286,8 +288,8 @@ ARCH_L4_BASELINE="$SCRIPT_DIR/arch-l4-getdb.baseline"
 if [ -f "$ARCH_L4_BASELINE" ]; then
   SERVICE_DB_WIDE=""
   if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
-    SERVICE_DB_WIDE=$(grep -rnE \
-      '[a-zA-Z0-9_]+\.GetDB\b|[)]\.GetDB\b' "${SERVICE_FILES[@]}" 2>/dev/null \
+    SERVICE_DB_WIDE=$(printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 grep -rnE \
+      '[a-zA-Z0-9_]+\.GetDB\b|[)]\.GetDB\b' 2>/dev/null \
       | grep -vE ':[[:space:]]*//' \
       | grep -vE ':[[:space:]]*\*' \
       | grep -vE ':[[:space:]]*/\*' \
@@ -328,7 +330,7 @@ fi
 # 2.3 service 不应写 SQL 字符串拼接（AV-03 起同一全域目录集）
 SERVICE_SQL_CONCAT=""
 if [ "${#SERVICE_FILES[@]}" -gt 0 ]; then
-  SERVICE_SQL_CONCAT=$(grep -rn '\.Raw(.*+.*)' "${SERVICE_FILES[@]}" 2>/dev/null || true)
+  SERVICE_SQL_CONCAT=$(printf '%s\0' "${SERVICE_FILES[@]}" | xargs -0 grep -rn '\.Raw(.*+.*)' 2>/dev/null || true)
 fi
 if [ -n "$SERVICE_SQL_CONCAT" ]; then
   log_fail "[L4] service 含 SQL 字符串拼接,应封装到 repository"

@@ -5,7 +5,6 @@ package router
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -72,29 +71,9 @@ func setupEmbedStaticRoutes(r *gin.Engine) {
 			// 生产走 nginx 静态站（work.xapptool.cn.conf 对三件套 no-cache 回源）
 			// 不受影响，但 DEPLOYMENT_GUIDE.md 声明 Go 托管受支持 ⇒ 此处补齐。
 			// 五件套统一 Cache-Control: no-cache，与 nginx 侧口径一致。
-			pwaRootFiles := map[string]bool{
-				"/sw.js":                true,
-				"/version.json":         true,
-				"/manifest.webmanifest": true,
-				"/favicon.svg":          true,
-			}
-			r.NoRoute(func(c *gin.Context) {
-				p := c.Request.URL.Path
-				if !pwaRootFiles[p] &&
-					!(strings.HasPrefix(p, "/workbox-") && strings.HasSuffix(p, ".js")) {
-					sc.NotFound(c)
-					return
-				}
-				// Clean+Join 防目录穿越；文件不存在（未构建产物）则交回 SPA 回落，
-				// 保持既有行为不变。
-				f := filepath.Join(userWebDist, filepath.Clean(p))
-				if fi, err := os.Stat(f); err != nil || fi.IsDir() {
-					sc.NotFound(c)
-					return
-				}
-				c.Header("Cache-Control", "no-cache")
-				c.File(f)
-			})
+			// PWA 五件套兜底归 StaticController.PWARootFiles（架构审计轮：
+			// 内联闭包迁出——[L2] 门禁禁 router 内联处理器）。
+			r.NoRoute(sc.PWARootFiles)
 		} else {
 			sc := controller.NewStaticController("")
 			r.GET("/chat/embed/*path", sc.EmbedDistMissing)

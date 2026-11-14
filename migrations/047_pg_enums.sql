@@ -40,6 +40,11 @@
 --   - 嵌入状态: hivemtk/user-server/internal/model/kb_workspace.go (EmbedStatusXxx)
 --   - 文档来源: hivemtk/user-server/internal/model/kb_workspace.go (SourceTypeXxx)
 --
+--   值域修正（2026-11-14 架构审计轮，check-enum-consistency.sh 红灯驱动）：
+--   - platform_type_enum 补 'bilibili'/'jd'/'pdd'/'personal_wx'/'weibo'
+--     （v3.92.0 渠道注册表扩容只补了 channel_type_enum，本枚举漏跟——
+--      离线 SQL 部署库中这五个渠道的 message_hub 行会被 PG 拒写）
+--   - source_type_enum 补 'manual'（kb_crawler.go QACandidateSourceTypeManual）
 --   值域修正（2026-09-15）：
 --   - platform_type_enum 补 'qq'（ChannelTypeQQ 存在但原枚举遗漏）
 --   - platform_type_enum 补 'system'（本迁移自身第 2 节会把未知值归一化为
@@ -66,9 +71,10 @@ BEGIN
     CREATE TYPE platform_type_enum AS ENUM (
       'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
-      'web', 'web_embed', 'system'
+      'web', 'web_embed', 'system',
+      'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo'
     );
-    RAISE NOTICE 'Created enum platform_type_enum (14 values)';
+    RAISE NOTICE 'Created enum platform_type_enum (19 values)';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'intent_major_enum') THEN
@@ -95,9 +101,9 @@ BEGIN
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'source_type_enum') THEN
     CREATE TYPE source_type_enum AS ENUM (
-      'upload', 'text', 'url', 'batch', 'openapi', 'system_seed'
+      'upload', 'text', 'url', 'batch', 'openapi', 'system_seed', 'manual'
     );
-    RAISE NOTICE 'Created enum source_type_enum (6 values, matches Go SourceTypeXxx + seed data)';
+    RAISE NOTICE 'Created enum source_type_enum (7 values, matches Go SourceTypeXxx + seed data + manual)';
   END IF;
 END $$;
 
@@ -118,7 +124,8 @@ BEGIN
     UPDATE message_hub SET platform = 'system' WHERE platform NOT IN (
       'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
-      'web', 'web_embed', 'system'
+      'web', 'web_embed', 'system',
+      'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo'
     );
 
     SELECT COUNT(*) INTO bad_count
@@ -127,7 +134,8 @@ BEGIN
       AND platform NOT IN (
         'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
         'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
-        'web', 'web_embed', 'system'
+        'web', 'web_embed', 'system',
+        'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo'
       );
     IF bad_count > 0 THEN
       RAISE WARNING 'message_hub.platform still has % unknown values after normalization, skipping ENUM conversion', bad_count;
@@ -256,7 +264,7 @@ BEGIN
 
     SELECT COUNT(*) INTO bad_count FROM knowledge_documents
     WHERE source_type IS NOT NULL
-      AND source_type NOT IN ('upload', 'text', 'url', 'batch', 'openapi', 'system_seed');
+      AND source_type NOT IN ('upload', 'text', 'url', 'batch', 'openapi', 'system_seed', 'manual');
 
     IF bad_count > 0 THEN
       RAISE WARNING 'knowledge_documents.source_type has % unknown values, skipping', bad_count;

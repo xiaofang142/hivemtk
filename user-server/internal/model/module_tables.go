@@ -129,7 +129,7 @@ var knowledgeOwnedTables = []string{
 // asset 模块独占
 var assetOwnedTables = []string{
 	"local_assets", "local_asset_data", "local_asset_sync_log",
-	"asset_bundles", "asset_bundle_version_logs", "script_library",
+	"asset_bundles", "asset_bundle_version_logs", "asset_bundle_ratings", "script_library",
 	"script_versions", "script_exposure_logs", "prompt_ab_tests",
 	"prompt_candidates",
 	// T5 资产市场商店化五表：上架单/版本/举报/评分/扩展用量月账，随 asset 模块开关
