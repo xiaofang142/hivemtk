@@ -191,6 +191,13 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 						if inSorted == outSorted || inSorted == doubleSorted(outSorted) {
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-multiset match)"}, nil
 						}
+						// 频率相似度判据（2026-11-14 第三形态 4848 实证）：混合变形（双份中
+						// 一份缺 7 字等）既非同频也非整倍——改为逐字符频率重合度：出站全部
+						// 字符在入站中的频率覆盖率 ≥85% 即判回声。真实客户引用+追问的追问
+						// 部分会把覆盖率拉低，实测放行（见 echo_multiset_test）。
+						if cover, ok := charCoverage(inSorted, outSorted); ok && cover >= 0.85 {
+							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-frequency ≥85%)"}, nil
+						}
 					}
 				}
 				if strippedAny && len([]rune(remainder)) < 4 {
@@ -344,4 +351,29 @@ func doubleSorted(s string) string {
 		dbl = append(dbl, r, r)
 	}
 	return string(dbl)
+}
+
+// charCoverage 计算入站签名对出站签名的逐字符频率覆盖率：出站每个字符的入站出现
+// 次数（封顶出站次数）之和 / 出站总长。ok=false 表示入站短于出站 70%（覆盖判据
+// 无意义，直接放行给其他判据）。两个签名均已排序 → 线性双指针。
+func charCoverage(inSorted, outSorted string) (float64, bool) {
+	in, out := []rune(inSorted), []rune(outSorted)
+	if len(out) == 0 || len(in) < len(out)*7/10 {
+		return 0, false
+	}
+	covered := 0
+	i, j := 0, 0
+	for j < len(out) {
+		if i >= len(in) || in[i] > out[j] {
+			return float64(covered) / float64(len(out)), true // 出站该字符入站不足
+		}
+		if in[i] == out[j] {
+			covered++
+			j++
+			i++
+		} else { // in[i] < out[j]：入站有多余字符，消耗之
+			i++
+		}
+	}
+	return float64(covered) / float64(len(out)), true
 }

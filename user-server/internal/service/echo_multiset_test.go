@@ -67,3 +67,25 @@ func TestEchoMultiset_DoesNotSwallowRealCustomerMessage(t *testing.T) {
 		t.Error("引用+追问场景被误吞——16 字护栏/频率判据过宽")
 	}
 }
+
+func TestEchoMultiset_ThirdFormMixedDeformation(t *testing.T) {
+	// 生产实证 4848（第三形态）：出站 204 字，入站 401 字=双份拼接中一份缺 7 字的
+	// 混合变形——既非同频也非整倍，多重集判据穿透；频率覆盖率 100% ≥85% 必须拦截。
+	const outT = "功能清单给您整理好了：① 渠道接入：抖音/小红书/微博/B站/闲鱼/TikTok 等 13+ 平台私信统一收件；② AI 自动接待：挂知识库 RAG 问答、意图识别、低置信转人工；③ 主动触达：SOP 流程、批量营销、频控合规；④ 数据与运营：客户画像、会话工作台、坐席分配、质检统计"
+	outR := []rune(outT)
+	// 构造双份拼接且第二份缺 7 个尾部字符
+	dbl := outT + string(outR[:len(outR)-7])
+	inbound := normalizeEchoText(dbl)
+	outbound := normalizeEchoText(outT)
+	inS, outS := sortedRunes(inbound), sortedRunes(outbound)
+	if inS == outS || inS == doubleSorted(outS) {
+		t.Fatal("测试构造失效：该形态不应被同频/双倍判据覆盖")
+	}
+	cover, ok := charCoverage(inS, outS)
+	if !ok {
+		t.Fatal("长度护栏不应触发（入站远长于出站）")
+	}
+	if cover < 0.85 {
+		t.Fatalf("第三形态覆盖率应 ≥0.85，实际 %v", cover)
+	}
+}
