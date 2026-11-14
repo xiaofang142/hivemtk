@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenancyidx"
 	"hivemtk-user/internal/pkg/tenant"
 )
 
@@ -40,6 +41,13 @@ func TestPublicConfig_FallsBackToSiteTenantCode(t *testing.T) {
 	if err := db.GetDB().WithContext(tenant.OnlyTenant(context.Background(), 1)).
 		AutoMigrate(&model.SystemConfig{}); err != nil {
 		t.Fatalf("建 system_config 表失败: %v", err)
+	}
+	// 手动建表发生在 NewTestDB 的登记表快照之后：登记表是一次性内省，
+	// 不重建的话 system_config 不在租户登记表内 ⇒ 隔离 callback 判它为
+	// 非租户表不注入 WHERE ⇒ 测试读到跨租户配置行（实测踩中：显式短码
+	// 请求读到了站点租户的行）。InitTenantRegistry 幂等，重建即可。
+	if err := tenancyidx.InitTenantRegistry(db.GetDB()); err != nil {
+		t.Fatalf("重建租户登记表失败: %v", err)
 	}
 
 	// 站点归属租户：官网域名的主体（四川同咨科技有限公司）
@@ -109,6 +117,13 @@ func TestPublicConfig_ExplicitTenantCodeWinsOverSiteFallback(t *testing.T) {
 	if err := db.GetDB().WithContext(tenant.OnlyTenant(context.Background(), 1)).
 		AutoMigrate(&model.SystemConfig{}); err != nil {
 		t.Fatalf("建 system_config 表失败: %v", err)
+	}
+	// 手动建表发生在 NewTestDB 的登记表快照之后：登记表是一次性内省，
+	// 不重建的话 system_config 不在租户登记表内 ⇒ 隔离 callback 判它为
+	// 非租户表不注入 WHERE ⇒ 测试读到跨租户配置行（实测踩中：显式短码
+	// 请求读到了站点租户的行）。InitTenantRegistry 幂等，重建即可。
+	if err := tenancyidx.InitTenantRegistry(db.GetDB()); err != nil {
+		t.Fatalf("重建租户登记表失败: %v", err)
 	}
 
 	// 清掉可能残留的站点配置（测试库跨用例复用，唯一约束 uni_system_config_tenant 会撞）。
