@@ -151,6 +151,16 @@ export class PollingLoop {
     if (this._running) return;
     this._running = true;
 
+    // visible 恢复补偿（2026-11-14，配套 downlink 的 hidden 页跳过认领）：页面切回
+    // 可见时立即补一轮下发，不等下一个轮询周期——hidden 期间挂起的行最快路径接手。
+    // SSE 模式同样受益（SSE 推送在 hidden 期间被跳过，挂起行靠此补偿 + 服务端重推）。
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      this._visibilityHandler = () => {
+        if (document.visibilityState === 'visible') this._downlinkSafe();
+      };
+      document.addEventListener('visibilitychange', this._visibilityHandler);
+    }
+
     // 初始化下发缓存
     initDownlink(this.channels);
 
@@ -233,6 +243,10 @@ export class PollingLoop {
 
   stop() {
     this._running = false;
+    if (this._visibilityHandler && typeof document !== 'undefined' && document.removeEventListener) {
+      document.removeEventListener('visibilitychange', this._visibilityHandler);
+      this._visibilityHandler = null;
+    }
 
     // 清理 SSE
     for (const [ch, cleanup] of this._sseCleanups) {

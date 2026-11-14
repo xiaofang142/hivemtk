@@ -34,6 +34,12 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.3': `- hidden 页架构收口（2026-11-14 三层分析轮）：后台页签（用户切走/自动化后台页）
+  visibilityState=hidden 时会话 DOM 不渲染，openConversation 假失败——B站 9 条在
+  hidden 页空转烧重投预算（每次认领 push_attempts+1，20 次即 failed）。
+  轮询路 hidden 跳过认领（ack 排水保留）；SSE 路 hidden 跳过处理（行留服务端等
+  租约回收重推）；页面切回可见立即补偿一轮（visibilitychange）。省预算+离线语义
+  真实化，下发永远发生在页面可操作时。`,
   '1.3.2': `- 出站互斥队列（2026-11-14 生产实证修复）：批25 的 _outboundInFlight 是计数器，
   sendOutbound 入口不检查就 begin——SSE 推送与轮询双路的两条下发可并发进入临界区，
   A 拟人键入到一半（30 字≈2.7s）B 并发切入另一会话，后半段打进 B 的输入框，

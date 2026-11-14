@@ -29,6 +29,7 @@ import (
 	"hivemtk-user/internal/model"
 
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -446,15 +447,23 @@ func (s *WebhookService) recoverStuckDelayedOutbound(ctx context.Context, now ti
 
 func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *DelayedOutboundReply) {
 	// 租户收口（2026-11-14 4610 同源修复）：延迟重放 worker 的调度 ctx 是平台级
-	// （无租户/SystemScope），而重放落库与后续认领都打在租户表上。按行自带归属
-	// （rec.TenantID，入队时抄写）以 OnlyTenant 钉死；行缺归属则 fail-closed
-	// abandon——绝不静默写 default 租户孤儿。
+	// （无租户/SystemScope），而重放落库与后续认领都打在租户表上。归属判定以
+	// **账号反查为权威**（bridge_accounts 行归属，与 DeliverBridgeOutboundMedia
+	// 收口同源）——存量队列里可能带着入队事故抄错的 rec.TenantID（=1 毒行），
+	// 盲信行值会把毒租户继续写下去；反查不到再退行值，行值也没有才 fail-closed
+	// abandon 出声。绝不静默写 default 租户孤儿。
 	if tid, ok := tenant.FromContext(ctx); !ok || tid == 0 {
-		if rec.TenantID == 0 {
-			s.abandonReplay(ctx, rec, "重放行缺租户归属（fail-closed，拒绝无归属落库）")
+		resolved, rerr := tenant.SingleTenantByKey(ctx, dbstate.Get(), "bridge_accounts",
+			"channel = ? AND account_id = ?", string(rec.Platform), rec.AccountID)
+		switch {
+		case rerr == nil && resolved != 0:
+			ctx = tenant.OnlyTenant(ctx, resolved)
+		case rec.TenantID != 0:
+			ctx = tenant.OnlyTenant(ctx, rec.TenantID)
+		default:
+			s.abandonReplay(ctx, rec, "重放行缺租户归属（fail-closed，账号反查与行值均无）")
 			return
 		}
-		ctx = tenant.OnlyTenant(ctx, rec.TenantID)
 	}
 	channel := WebhookChannel(rec.Platform)
 	now := time.Now()

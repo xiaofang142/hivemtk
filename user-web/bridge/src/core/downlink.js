@@ -381,6 +381,16 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
   // 必要性：ack 是"后端记账"，失败不能让"用户已收到"这件事回滚。排水语义见 drainPendingAcks。
   await drainPendingAcks(channel, { serverUrl, accountId, token, tenantCode });
 
+  // hidden 页不认领（2026-11-14 架构收口）：后台页签（用户切走/ego 后台页）
+  // visibilityState=hidden 时会话 DOM 不渲染，openConversation 会假失败——B站 9 条
+  // 在 hidden 页空转烧重投预算（每次认领 push_attempts+1，20 次即 failed）就是实证。
+  // hidden 时页面根本没有可操作的 DOM，认领纯属烧预算+假在线。跳过认领：行留在
+  // 服务端等租约回收重推，页面可见后下一轮恢复认领（ack 排水在上面已做，不受影响）。
+  if (pageIsHidden()) {
+    log.debug('页面 hidden，跳过本轮认领（等可见后恢复下发）', { channel });
+    return;
+  }
+
   const res = await getOutbox(
     { serverUrl, channel, accountId, token, tenantCode },
     { label: `[下行 outbox] ${channel}`, batchSize: outboxBatchSize }
@@ -1133,6 +1143,13 @@ export async function startSSEDelivery(channel, accountId, handlers) {
           lastEventId: getLastEventID(channel, accountId), // 每次重连获取最新的 lastEventId
           onMessage: async (data) => {
             if (stopped) return;
+            // hidden 页不处理下发（2026-11-14 架构收口，与轮询路同口径）：后台页 DOM
+            // 不渲染，键入/点击不可靠。SSE 推送前服务端已单行认领——直接 return 不
+            // sendOutbound 不 ack，行等租约回收重推，页面可见后轮询/补拉自然接手。
+            if (pageIsHidden()) {
+              log.debug('SSE 推送到达但页面 hidden，等可见后由重推/补拉接手', { channel });
+              return;
+            }
 
             // B1：键解析收敛到 resolveSSEOutboundKeys（msg_id 缺失回退 contentHash，绝不回退 data.id）
             const { msgId, convId: dbConvId } = resolveSSEOutboundKeys(data, channel);
