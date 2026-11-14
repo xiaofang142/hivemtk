@@ -59,8 +59,26 @@ const write = (o) => fs.writeFileSync(RESULT, JSON.stringify(o));
     text = typeof snap === 'string' ? snap : JSON.stringify(snap);
     const ver = (text.match(/\\b(\\d+\\.\\d+\\.\\d+)\\b/) || [])[1];
     const card = text.split('\\n').filter((l) => new RegExp(NAME.split(/[\\s—]/)[0]).test(l)).slice(0, 2).join(' | ');
-    write({ ok: true, version: ver || null, card });
-    await ts.finish({ keep: [] });
+    // MV3 重载后 content script 需页面重新加载才重新注入（2026-11-14 三次生产实证：
+    // 重载后渠道页签失效=巡检/认领静默停摆，补回复挂起 30 分钟无人认领）。发布链
+    // 收尾自动重开四个桥接渠道页并 keep 常驻——发布即恢复，不再依赖人工补开。
+    let pagesRestored = 0;
+    const CHANNEL_URLS = [
+      'https://weibo.com/chat',
+      'https://www.douyin.com/chat',
+      'https://message.bilibili.com/',
+      'https://www.xiaohongshu.com/chat',
+    ];
+    for (const u of CHANNEL_URLS) {
+      try {
+        const cp = await ts.newPage();
+        await cp.goto(u, { timeout: 45000 });
+        await cp.waitForTimeout(2500);
+        pagesRestored++;
+      } catch (_) { /* 单渠道失败不阻塞发布链，监控心跳项会兜底报警 */ }
+    }
+    write({ ok: true, version: ver || null, card, pagesRestored });
+    await ts.finish({ keep: 'all' });
   } catch (e) {
     write({ ok: false, step: 'exception', error: String((e && e.message) || e) });
   }
