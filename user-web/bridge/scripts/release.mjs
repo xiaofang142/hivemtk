@@ -34,6 +34,13 @@ if (manifest.version !== version) {
 // 发 1.0.3 时又只改了标题、正文还是上一版内容 —— 两次都把变更说明说错。
 // 现在发版前必须为当前 package.json version 补一节，漏了 npm run release 直接红。
 const CHANGELOGS = {
+  '1.3.2': `- 出站互斥队列（2026-11-14 生产实证修复）：批25 的 _outboundInFlight 是计数器，
+  sendOutbound 入口不检查就 begin——SSE 推送与轮询双路的两条下发可并发进入临界区，
+  A 拟人键入到一半（30 字≈2.7s）B 并发切入另一会话，后半段打进 B 的输入框，
+  assertConv 弃用时留半截文字、两段键入交错 ⇒ 下发消息被截断/多段/串台
+  （抖音/小红书/微博均有截图实证）。修复：同 tab sendOutbound 严格串行队列，
+  每条独占整个临界区（切换+键入+发送+回查）；beginOutbound 重入出声；
+  新增 3 用例钉住（并发串行/错误不传染/重入告警）。`,
   '1.3.1': `- 二次论证修复（2026-11-14 生产数据实证驱动）：
   微博自身标签守卫：PEER_NAME 逗号并集在文档序上先命中自我盒 .user .name，导致 sender_name 全为
   「用户<自身uid>」、720 条落 conv:用户<uid> 自指会话并诱导人工误发；新增 isSelfAccountLabel

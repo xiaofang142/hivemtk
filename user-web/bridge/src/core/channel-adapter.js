@@ -136,6 +136,8 @@ export class BaseAdapter {
     this._patrolStats = { rounds: 0, visited: 0, withNew: 0, captured: 0, failures: 0, lastRoundAt: 0, lastDurationMs: 0, lastScheduleMode: 'sequential', lastUnreadCount: 0 };
     // 批25：换会话互斥（下发优先，巡检让路）——见 beginOutbound 处的论证。
     this._outboundInFlight = 0;
+    // 2026-11-14：出站互斥队列（sendOutbound 串行化）——见 sendOutbound 处的论证。
+    this._outboundQueue = Promise.resolve();
     this._outboundStartedAt = 0;
     this._outboundLingerUntil = 0;
     this._patrolYield = { sendInFlight: 0 };
@@ -193,6 +195,14 @@ export class BaseAdapter {
   //   再留 lingerMs 的尾巴：downlink 是逐条 sendOutbound 的，两条消息之间有 await 空档，
   //   不留尾巴巡检就会插进来切一次会话、下一条再切回去（白跑两次切换）。
   beginOutbound() {
+    // 重入即 bug（2026-11-14 出站互斥队列后不应再出现并发 begin）：计数 >1 只会
+    // 掩盖两段键入互相打断，直接出声定位。
+    if ((this._outboundInFlight || 0) > 0) {
+      this.log.warn('beginOutbound 重入：出站临界区已有人在途（队列化后不应发生）', {
+        channel: this.channel,
+        inFlight: this._outboundInFlight,
+      });
+    }
     this._outboundInFlight = (this._outboundInFlight || 0) + 1;
     this._outboundStartedAt = Date.now();
     this._outboundLingerUntil = 0;
@@ -1747,12 +1757,21 @@ export class BaseAdapter {
       this.log.warn('回复内容为空，跳过');
       return { ok: false, rateLimited: false, notFound: false };
     }
-    this.beginOutbound();
-    try {
-      return await this._sendOutboundLocked(text, targetConvId, opts);
-    } finally {
-      this.endOutbound();
-    }
+    // 出站互斥队列（2026-11-14 二次论证修复）：批25 的 _outboundInFlight 是**计数器**，
+    // sendOutbound 入口不检查就 begin —— SSE 推送与轮询（或 SSE 事件连发）的两条
+    // sendOutbound 可并发进入临界区：A 拟人键入到一半（30 字≈2.7s），B 并发切入另一个
+    // 会话，A 的后半段打进 B 的输入框 → assertConv 弃用时留下半截文字、两段键入交错
+    // ⇒ 串台/多段/不全（生产实证 2026-11-14 用户截图）。这里把同 tab 的 sendOutbound
+    // 串行化成严格队列：每条独占整个临界区（切换+键入+发送+回查），前一条完整落盘
+    // （endOutbound 计数归零）后一条才开始；错误不入链（队列只串行时序，不传染结果）。
+    const run = (this._outboundQueue || Promise.resolve())
+      .then(() => {
+        this.beginOutbound();
+        return this._sendOutboundLocked(text, targetConvId, opts);
+      })
+      .finally(() => this.endOutbound());
+    this._outboundQueue = run.catch(() => {});
+    return run;
   }
 
   async _sendOutboundLocked(text, targetConvId, opts = {}) {
