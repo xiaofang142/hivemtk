@@ -540,7 +540,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
         return {};
       });
       log.info(`[下行诊断] outcome ${JSON.stringify(outcome)}`);
-      if (outcome.sent || outcome.skipped) { recordSent(msg); continue; }
+      if (outcome.sent || outcome.skipped) { recordSent(msg); if (msg.content) recordSentText(msg.content); continue; }
       if (outcome.notFound) {
         log.debug(`下行目标会话不存在: ${convId}`, { msg_id: msg.msg_id });
         if (!pageIsHidden()) {
@@ -760,6 +760,39 @@ async function reAckSentDuplicates(cred, entries, label) {
   log.info(`${label} 已补确认`, {
     channel: cred.channel, total: ids.length, settled, retried: ids.length - settled,
   });
+}
+
+// —— 近期发送文本表（2026-11-14 上行回声源头过滤）——
+// 巡检采集自家刚发出的气泡（DOM 变形/方向误判）是自回声假入站的根源。扩展自己
+// 知道「刚发过什么」：发送成功时记录归一化文本（10 分钟 TTL），采集侧命中即跳过
+// 上行。简单规则：10 分钟内自己发过的话，不可能同时是客户说的新消息。
+const RECENT_SENT_TTL_MS = 10 * 60 * 1000;
+const recentSentTexts = new Map();
+
+function normSentText(s) {
+  return String(s || '').replace(/\s+/g, '').trim();
+}
+
+export function recordSentText(content) {
+  const k = normSentText(content);
+  if (!k) return;
+  recentSentTexts.set(k, Date.now());
+  if (recentSentTexts.size > 500) {
+    const oldest = [...recentSentTexts.entries()].sort((a, b) => a[1] - b[1])[0];
+    if (oldest) recentSentTexts.delete(oldest[0]);
+  }
+}
+
+export function wasSentRecently(content, windowMs = RECENT_SENT_TTL_MS) {
+  const k = normSentText(content);
+  if (!k) return false;
+  const ts = recentSentTexts.get(k);
+  if (ts === undefined) return false;
+  if (Date.now() - ts > windowMs) {
+    recentSentTexts.delete(k);
+    return false;
+  }
+  return true;
 }
 
 // pageIsHidden：后台标签页可能不渲染会话 DOM，openConversation 的精确匹配会假失败。

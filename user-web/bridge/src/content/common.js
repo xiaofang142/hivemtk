@@ -1,3 +1,4 @@
+import { wasSentRecently } from '../core/downlink.js';
 import { DEFAULT_USER_SERVER, isExperimentalChannel } from '../core/constants.js';
 import { createLogger } from '../core/logger.js';
 import { hydrateSelectors, SELECTOR_UPDATE_MSG } from '../core/selector-ai.js';
@@ -474,6 +475,15 @@ export function startBridge(channel, buildAdapter) {
     const uplink = new Uplink({ channel, getConfig });
     const submitIngest = (message) => {
       if (!message) return;
+      // 上行回声源头过滤（2026-11-14）：10 分钟内自己发过的内容不再上行——巡检采集
+      // 到自家刚发出的气泡（DOM 变形/方向误判）是自回声假入站的根源。变形漏网由
+      // 服务端分级阈值兜底（inbox_ingress_ingest 近5分钟宽松闸）。
+      if (message.content && wasSentRecently(message.content)) {
+        log.info('上行跳过：内容为 10 分钟内本账号已发送（自回声源头过滤）', {
+          conv: message.conversation_id, len: message.content.length,
+        });
+        return;
+      }
       if (!message.account_id) message.account_id = resolveAccountId();
       uplink.enqueue(message);
     };
