@@ -35,7 +35,7 @@ type ChannelSpec struct {
 	Experimental bool
 	// OutboundPath 出站路径能力位（B5）：取值 OutboundPathBridgeOutbox /
 	// OutboundPathNone。空串 = 未声明（语义同 none，但没有出站分支会认它）。
-	// 九个桥接渠道登记 bridge_outbox；webhook 直发渠道（wecom/telegram/whatsapp/
+	// 十个桥接渠道登记 bridge_outbox（CH-16 PDD 加入后由九变十，2026-11-14 复核）；webhook 直发渠道（wecom/telegram/whatsapp/
 	// qq/feishu/dingtalk/weixin）不在本注册表，不受影响。
 	OutboundPath string
 }
@@ -138,7 +138,7 @@ func (r *Registry) Names() []string {
 	return names
 }
 
-// Default 全局默认注册表：九个桥接渠道（HTTP + WebSocket 双传输）。
+// Default 全局默认注册表：十个桥接渠道（HTTP + WebSocket 双传输；CH-16 PDD 加入后由九变十）。
 // 成熟度两级以 ChannelSpec.Experimental 为准（CS-07 支持等级口径）：
 //   - 正式（未标实验）：douyin/xiaohongshu/xianyu/tiktok——2026-07~08 真机校准与风控实测记录在案；
 //   - 实验性（Experimental: true）：kuaishou（B8 纯模式猜测零真机）与 jd/bilibili/weibo/personal_wx

@@ -105,6 +105,24 @@ func terminalAckUpdates(terminalStatus string) map[string]any {
 	return upd
 }
 
+// CountRecentOutboundClaims 统计某 (channel, account_id) 在 since 以来被认领下发的出站行数。
+//
+// 服务端下发限速兜底的计数口径（DeliverRateLimitPerMin，架构文档 §4.2 承诺的落地）：
+// 认领即「交给桥端去发」，claimed_at 在 ack 翻转 delivered/unknown 时保留、仅超时回收清空，
+// 因此 outbound 行 claimed_at > since 的集合 = 该窗口内真实交给桥端的次数（inflight+终态都算）。
+// 只读 COUNT，不加锁不写库；限速判定本身在 service 层（可单测）。
+func (r *MessageHubRepository) CountRecentOutboundClaims(ctx context.Context, channel, accountID string, since time.Time) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("platform = ? AND account_id = ? AND direction = 'outbound' AND claimed_at IS NOT NULL AND claimed_at > ?",
+			channel, accountID, since).
+		Count(&n).Error
+	return n, err
+}
+
 func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int, claimTimeout time.Duration) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || limit <= 0 {
 		return nil, nil

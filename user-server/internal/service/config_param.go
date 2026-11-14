@@ -132,6 +132,25 @@ func BridgeOnlineGraceWindow(ctx context.Context) time.Duration {
 	return GlobalConfigParam().GetDuration(ctx, "bridge", BridgeOnlineGraceParam, BridgeOnlineGraceDefault)
 }
 
+// BridgeDeliverRateLimitParam / BridgeDeliverRateLimitDefault 是"服务端下发限速兜底"的唯一来源。
+//
+// 权威架构文档 BRIDGE-ARCHITECTURE-2026-08-14.md §4.2 明文承诺「限速（后端）：兜底 60/min
+// （防 AI 失控）」，但代码从未落地（2026-11-14 二次论证全库 grep 零命中）——本条补齐承诺。
+// 语义：单 (channel, account_id) 每 60s 内最多被认领下发 N 次（认领即「交给桥端去发」，
+// 计数口径= outbound 行 claimed_at）。前端本有拟人节奏限速（rate-limiter.js 三层），这里
+// 是服务端最后防线：前端被关闭/篡改/AI 批量误生成时不至于向平台页面倾泻消息。
+// 0 = 停用兜底（前端限速独挑）；默认 60 与文档承诺同值。
+// 默认值与 config_params 里 bridge/deliver_rate_limit_per_min 的 DefaultValue("60") 同值，改动要一起改。
+const (
+	BridgeDeliverRateLimitParam   = "deliver_rate_limit_per_min"
+	BridgeDeliverRateLimitDefault = 60
+)
+
+// BridgeDeliverRateLimitPerMin 读服务端下发限速兜底阈值；参数未装配时按默认值（nil-safe）。
+func BridgeDeliverRateLimitPerMin(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, "bridge", BridgeDeliverRateLimitParam, BridgeDeliverRateLimitDefault)
+}
+
 // PatrolUnreadFirstChannelsParam / PatrolUnreadFirstChannelsDefault 是"巡检要不要未读优先"的唯一下发源。
 //
 // M-5（2026-11-11）巡检机制优化：扩展 patrol 原先每 30s 全量遍历会话列表（未读数恒为 0、

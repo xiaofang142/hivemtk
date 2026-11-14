@@ -4,7 +4,7 @@ vi.mock('../src/core/humanize.js', () => ({
   humanDelay: async () => {},
 }));
 
-import { buildWeiboAdapter, getAccountId } from '../src/channels/weibo.js';
+import { buildWeiboAdapter, getAccountId, getPeerName, isSelfAccountLabel } from '../src/channels/weibo.js';
 import { SENDER } from '../src/core/types.js';
 
 function stubLocation(url) {
@@ -220,5 +220,60 @@ describe('weibo 系统消息过滤（isSystemMessage）', () => {
     const p = a.parseMessageItem(wbItem('<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">在吗</p></div></li>'));
     expect(p).not.toBeNull();
     expect(p.text).toBe('在吗');
+  });
+});
+
+// —— 自身标签守卫（2026-11-14 二次论证修复）——
+// 生产实证：PEER_NAME 第三候选在真机文档序上先命中自我盒 .user .name，导致
+// 1807 条 inbound sender_name=「用户<自身uid>」、720 条落 conv:用户<uid> 自指会话。
+describe('weibo 自身标签守卫（isSelfAccountLabel）', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    stubLocation('https://weibo.com/chat');
+  });
+
+  it('header 命中自我盒（文档序在前）→ getPeerName 返回空，不把「自己」当对端', () => {
+    // 复刻真机文档序：自我盒 .user 在 chat 容器内且出现在 header 之前
+    document.body.innerHTML = `
+      <div class="webchat">
+        <div class="user"><span class="name">用户7911766916</span><div class="hidden">7911766916</div></div>
+        <div class="chat-header"><div class="friendname"><div><span></span></div></div></div>
+      </div>`;
+    const a = buildWeiboAdapter();
+    expect(getPeerName()).toBe('');
+  });
+
+  it('对端昵称正常时守卫不误杀（对端节点文档序在前）', () => {
+    // CSS 逗号并集按文档序取第一个匹配：对端 header 在前即正常返回；
+    // 自我盒在前则返回空（宁缺勿错，见上一用例）。
+    document.body.innerHTML = `
+      <div class="webchat">
+        <div class="chat-header"><div class="friendname"><div><span>微博好友A</span></div></div></div>
+        <div class="user"><span class="name">用户7911766916</span><div class="hidden">7911766916</div></div>
+      </div>`;
+    const a = buildWeiboAdapter();
+    expect(getPeerName()).toBe('微博好友A');
+  });
+
+  it('header 为自我标签时 getConversationId 禁止派生 conv:用户<uid>，回落会话项真实 id', () => {
+    document.body.innerHTML = `
+      <div class="chatlist-box"><ul class="sessionlist">
+        <li class="sessionlist active" data-uid="2671109275"><div class="name">微博新手指南</div></li>
+      </ul></div>
+      <div class="webchat">
+        <div class="user"><span class="name">用户7911766916</span><div class="hidden">7911766916</div></div>
+        <div class="chat-header"><div class="friendname"><div><span>用户7911766916</span></div></div></div>
+      </div>`;
+    const a = buildWeiboAdapter();
+    expect(a.getConversationId()).toBe('2671109275');
+  });
+
+  it('isSelfAccountLabel 直测：自身 uid 与「用户+uid」两种形态均判中，他人昵称不判中', () => {
+    document.body.innerHTML = `<div class="webchat"><div class="user"><div class="hidden">7911766916</div></div></div>`;
+    expect(isSelfAccountLabel('7911766916')).toBe(true);
+    expect(isSelfAccountLabel('用户7911766916')).toBe(true);
+    expect(isSelfAccountLabel('微博好友A')).toBe(false);
+    expect(isSelfAccountLabel('')).toBe(false);
   });
 });

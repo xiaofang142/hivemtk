@@ -223,6 +223,20 @@ function dedupeRepeatedText(raw) {
   if (half >= 20 && text.slice(0, half) === text.slice(half, half * 2)) {
     return text.slice(0, half);
   }
+  // 连接空格错位补口（2026-11-14 二次论证）：双写以空白连接时（生产实证
+  // 「蜂桥下行手动L 732783 蜂桥下行手动L 732783」，总长奇数=14+1+14），
+  // 上面的对半比较从连接空白起头错位 1 字节必不命中 → 双写原样上行，
+  // 服务端自回显精确匹配 content 失败。改用去空白串做对半判定，命中后取
+  // 原串前半（即第一份拷贝，天然甩掉连接空白与第二份拷贝）。
+  // 启发式风险：真实文本去空白后恰好成对半（如「AABB」型）会被折叠一次——
+  // 概率极低且该形态本就是重复语义，与既有「前半==后半」守卫同一取舍。
+  const flat = text.replace(/\s+/g, '');
+  if (flat.length >= 20 && flat.length % 2 === 0) {
+    const fh = flat.length / 2;
+    if (flat.slice(0, fh) === flat.slice(fh)) {
+      return text.slice(0, half).trimEnd();
+    }
+  }
   return text;
 }
 
@@ -789,7 +803,7 @@ const hooks = {
   }),
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isListNoise, detectUnread, isSystemMessage, isTimeText, isSystemText, isCenterAligned, isDouyinMessagePage, isConversationListNode, hasUserProfileLink };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isListNoise, detectUnread, isSystemMessage, isTimeText, isSystemText, isCenterAligned, isDouyinMessagePage, isConversationListNode, hasUserProfileLink, dedupeRepeatedText };
 
 export function buildDouyinAdapter() {
   return new BaseAdapter({

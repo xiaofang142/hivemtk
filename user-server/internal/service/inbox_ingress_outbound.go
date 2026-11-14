@@ -134,11 +134,41 @@ func (s *InboxIngressService) ListPendingOutbound(ctx context.Context, channel, 
 // 须大于单轮「下发+ack」时延（前端 pollInterval≈3s、发送+网络往返通常 < 数秒），留足余量。
 const InboxOutboundClaimTimeout = 30 * time.Second
 
+// deliverClaimThrottled 判定本轮认领是否被「服务端下发限速兜底」拦下（纯函数，可单测）。
+//
+// 权威架构文档 §4.2「限速（后端）：兜底 60/min（防 AI 失控）」的判定核——2026-11-14
+// 二次论证发现该承诺从未落地（全库无 DeliverRateLimitPerMin），本函数连同
+// ClaimPendingOutbound 的调用点补齐。limit<=0 = 参数侧停用（永不限）；
+// 窗口固定 60s（参数名 per_min 的语义），近窗认领数 ≥ limit 即拦。
+func deliverClaimThrottled(recentClaims int64, limit int) bool {
+	if limit <= 0 {
+		return false
+	}
+	return recentClaims >= int64(limit)
+}
+
 // ClaimPendingOutbound 服务端权威认领下发消息（根除重复转发）。详见 repository.ClaimPendingOutbound。
 // 由桥接 GetBridgeOutbox 调用，取代旧的「仅 SELECT pending 不排他」查询。
+//
+// 认领前过一道「服务端下发限速兜底」（bridge/deliver_rate_limit_per_min，默认 60/min）：
+// 计数口径 = 近 60s 该 (channel, account_id) 被认领的出站行数（inflight+终态，claimed_at）。
+// 超限本轮返回空列表——不报错、不动 pending 行、不落失败态，下个窗口自动恢复；
+// 前端限速（rate-limiter 三层拟人节奏）失效/被篡改/AI 批量误生成时的最后防线。
+// 计数查询失败按放行处理（fail-open）：兜底限速不应把正常下发卡死在自己的故障上。
 func (s *InboxIngressService) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int) ([]*model.MessageHub, error) {
 	if s.hubRepo == nil {
 		return nil, nil
+	}
+	rateLimit := BridgeDeliverRateLimitPerMin(ctx)
+	if rateLimit > 0 {
+		recent, err := s.hubRepo.CountRecentOutboundClaims(ctx, channel, accountID, time.Now().Add(-time.Minute))
+		if err != nil {
+			logger.Warnf("[ClaimPendingOutbound] 限速计数查询失败，放行本轮（fail-open）: %v", err)
+		} else if deliverClaimThrottled(recent, rateLimit) {
+			logger.Warnf("[ClaimPendingOutbound] 服务端下发限速兜底命中: channel=%s account=%s recent_claims=%d limit=%d/min（本轮返回空，下个窗口恢复）",
+				channel, accountID, recent, rateLimit)
+			return []*model.MessageHub{}, nil
+		}
 	}
 	rows, err := s.hubRepo.ClaimPendingOutbound(ctx, channel, accountID, limit, InboxOutboundClaimTimeout)
 	if err != nil {

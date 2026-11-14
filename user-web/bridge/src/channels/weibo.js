@@ -143,6 +143,21 @@ function getAccountId() {
   return 'weibo-unknown';
 }
 
+// —— 自身标签守卫（2026-11-14 二次论证修复）——
+// PEER_NAME 第三候选 `[class*="chat"] [class*="name" i]` 在文档序上可能先命中
+// 自我盒 `.user .name`（自我盒在 chat 容器内，标签形如「用户7911766916」，见
+// getAccountId ①.5 注释）。真机实证（生产 message_hub 租户 18）：1807 条 inbound
+// 的 sender_name 全是该自我标签、720 条落进 conv:用户7911766916 自指会话并诱导
+// 人工把回复发进伪会话。选择器本身不动（真机结构样本不足，收窄匹配面有破坏
+// 已命中场景的风险），改为**结果守卫**：抓到的对端名若等于自身账号标签即判
+// 无效——纯逻辑防线，不依赖 DOM 真机校准，jsdom 可测。
+function isSelfAccountLabel(name) {
+  if (!name) return false;
+  const uid = String(getAccountId() || '');
+  if (!uid) return false;
+  return name === uid || name === `用户${uid}`;
+}
+
 function convElements() {
   return qsa(SEL.CHAT_LIST);
 }
@@ -196,7 +211,9 @@ function getConversationId() {
     const m = link ? (link.getAttribute('href') || '').match(/\/u\/(\d+)/) : null;
     if (m && m[1]) return m[1];
     const name = sanitizePeerName(stripTrailingHiddenUid(cleanText(header), header));
-    if (name) {
+    // 自身标签守卫（2026-11-14）：header 命中自我盒时禁止派生 conv:<自我标签>
+    // （生产实证 720 条自指会话的来源），落到下方 active 分支用会话项真实 id。
+    if (name && !isSelfAccountLabel(name)) {
       // 2026-11-13 真机缺口修复（P2-8）：header 只有昵称、无 /u/ 链接时，旧链路直接
       // 派生 conv:<昵称>（改昵/同名即串台）。改为按昵称反查会话列表项的隐藏 uid
       // （稳定 id），查不到才回落 conv:<昵称>。
@@ -247,7 +264,12 @@ function detectUnread(item) {
 
 function getPeerName() {
   const el = qs(SEL.PEER_NAME);
-  return el ? sanitizePeerName(cleanText(el)) : '';
+  if (!el) return '';
+  const name = sanitizePeerName(cleanText(el));
+  // 自身标签守卫：header 候选命中自我盒 .user .name 时返回空（宁可丢昵称，
+  // 不可把「自己」当成对端——错误昵称会污染 sender_name 并派生自指会话）。
+  if (isSelfAccountLabel(name)) return '';
+  return name;
 }
 
 // —— 对方头像（M-2 客户头像链路，2026-11-11，尽力而为渠道）——
@@ -489,7 +511,7 @@ const hooks = {
   },
 };
 
-export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isWeiboHost, isChatUrl, detectUnread, isSystemMessage, isSystemText, isTimeText };
+export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isSelfAccountLabel, isWeiboHost, isChatUrl, detectUnread, isSystemMessage, isSystemText, isTimeText };
 
 export function buildWeiboAdapter() {
   return new BaseAdapter({

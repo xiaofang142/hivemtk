@@ -97,6 +97,11 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "bridge", Key: "online_grace_window", Name: "在线状态宽限窗口",
 			Description: "渠道账号心跳丢失后仍判定为在线的宽限时间（秒）",
 			ValueType:   "duration", DefaultValue: "30", Min: strPtr("10"), Max: strPtr("300"), Step: strPtr("5")},
+		{Group: "bridge", Key: "deliver_rate_limit_per_min", Name: "服务端下发限速兜底（条/分钟）",
+			Description: "单 (channel, account_id) 每 60s 内最多被认领下发的出站消息数（认领即「交给桥端去发」，按 claimed_at 计数）。" +
+				"前端扩展本有拟人节奏三层限速，这是服务端最后防线：前端被关闭/篡改/AI 批量误生成时不至于向平台页面倾泻消息。" +
+				"超限时本轮认领返回空（下轮窗口自动恢复），不报错不落失败态。0 = 停用兜底（默认 60，架构文档 §4.2 承诺值的落地）",
+			ValueType: "int", Risk: "warning", DefaultValue: "60", Min: strPtr("0"), Max: strPtr("600"), Step: strPtr("10"), Category: "桥接"},
 		{Group: "bridge", Key: "outbound_orphan_ttl", Name: "出站孤儿行结算阈值",
 			Description: "桥接渠道出站消息在「账号未注册或已超过此时长未同步」时，行本身超过此时长即落 failed（原因 outbound_orphan_expired）；0 表示停用该结算",
 			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("0"), Max: strPtr("7776000"), Step: strPtr("3600")},
