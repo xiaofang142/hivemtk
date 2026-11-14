@@ -218,3 +218,38 @@ location ^~ /files/extensions/ {
 **遗留观察（非阻断）**：平台库现有 2 条 browser_extension 资产（旧 id=2 / 1.0.5 /
 approved / 10-22；新 id=153 / 1.3.0 / 11-13）。上传接口对同名资产新建 asset 而非加
 版本，旧资产可按需在平台后台「下架」。
+
+---
+
+## 2026-11-14 15:0x 链 A 发布 + 链 B 扩展 1.3.1（二次论证修复轮）
+
+**驱动**：五核心点调研 + 四线交叉论证 + 二次论证（生产数据实证）发现的三个修复项。
+
+**链 A**：`deploy/deploy-api.sh` 全自动跑通。
+- 代码 `37463dec`（3 个 user-server 提交：限速兜底落地 / 注册表注释 / 测试）
+- 线上二进制 sha256=6d2cdd92561d154e…；镜像 29313c1ef5dbffcf6944
+- 回滚点：镜像 `mtk-user-server:rollback-20261114-150036` / 二进制
+  `/www/wwwroot/hivemtk/user-server/user-server.bak-20261114-150036`
+- 容器内 + 公网 `/api/health` 双 200
+- 生效实证：新参数 `bridge/deliver_rate_limit_per_min=60` 启动 seed 落库
+  （架构文档 §4.2「后端限速兜底 60/min」承诺首次落地）
+
+**链 B**：扩展 `1.3.1`（两道门齐：package.json+manifest.json 同 bump + CHANGELOGS 条目）。
+- 构建→产物校验（zip 内 manifest 版本/popup 注入串）→原地 rsync（旧版已备份
+  `hivebridge-rollback-v1.3.0-2026-11-14_07-03-08`）→ego-browser 重载回验 v1.3.1
+- 修复内容：微博 `isSelfAccountLabel` 自身标签守卫（阻断 conv:用户<uid> 自指会话
+  新增源）；抖音 `dedupeRepeatedText` 去空白对半补口（空白连接双写不再上行）
+
+**链 C：本轮未完成（唯一人工项）**——`upload-platform-asset.mjs` 两试均败：
+首试 `page.goto` 超时（ego 隔离环境瞬时网络，本机 curl manage/work 均 0.12s 正常）；
+重试 `step=not-logged-in`（平台运营登录态过期）。**需要人工在 ego lite 里重新登录
+manage.xapptool.cn 后重跑 `node scripts/upload-platform-asset.mjs`**（zip 已就绪
+`release/hivebridge-1.3.1.zip` 441962B）。仓库硬规则禁止动登录态，此处如实交底。
+
+**生产数据治理**（同轮执行，备份 `backups/prod-cleanup-20261114/`，gitignore 不入库）：
+- `message_hub` 软删 733 行（weibo `conv:用户7911766916` 720 + `probe-c2` 12 +
+  bilibili `conv:我的消息` 1；deleted_at 即回滚锚点）
+- `inbox_conversations` 软删 3 行（同键）
+- `bridge_accounts` 硬删 3 行（id 8/12/20：probe-cors-2 / weibo-unknown / xianyu 100）
+- 验证：tenant 18 可见消息 weibo 1948→1573（732 净删+自然流入）、账户 weibo 3→1、
+  xianyu 6→5；capabilities 门 401 正常
