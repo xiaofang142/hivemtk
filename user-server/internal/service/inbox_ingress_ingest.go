@@ -369,30 +369,31 @@ func charCoverage(inSorted, outSorted string) (float64, int, bool) {
 	if len(out) == 0 || len(in) < len(out)*7/10 {
 		return 0, 0, false
 	}
-	outSet := make(map[rune]struct{}, len(out))
+	// 频率差集算法（2026-11-14 引用追问误拦修复，实锤：排序双指针的
+	// `in[i] < out[j] → i++` 分支会把排序位置落在出站范围**内部**的入站新字符
+	// 全部静默跳过——「那半包呢？能便宜多少？」的 8 种新字符 unicode 大多
+	// 落在出站字符排序区间内，stray 被少计成 1，cover 虚高 1.0 → 宽松闸命中，
+	// 客户「引用我们刚说的话再追问」被当回声吞掉（=该形态永不回复）。
+	// 改为频率多重集语义（与字符多重集判据同一套数学）：
+	//   covered = Σ_c min(in_f[c], out_f[c])（出站被入站覆盖的总量）
+	//   stray   = 种数{ c ∈ in : c ∉ outSet }（入站独有字符种数，全量统计）
+	// 对真回声（同频/双倍频/变形收录）数学结论不变；对引用追问 stray 恢复真实值。
+	outFreq := make(map[rune]int, len(out))
 	for _, r := range out {
-		outSet[r] = struct{}{}
+		outFreq[r]++
+	}
+	inFreq := make(map[rune]int, len(in))
+	for _, r := range in {
+		inFreq[r]++
 	}
 	covered := 0
-	i, j := 0, 0
-	for j < len(out) && i < len(in) {
-		switch {
-		case in[i] == out[j]:
-			covered++
-			i++
-			j++
-		case in[i] < out[j]:
-			i++ // 入站多余字符（可能是双倍超额），不计覆盖
-		default:
-			j++ // 出站该字符入站不足
-		}
+	for r, of := range outFreq {
+		covered += min(inFreq[r], of)
 	}
 	strayKinds := 0
-	prevStray := rune(0)
-	for ; i < len(in); i++ { // 入站剩余尾部：出站集之外才算 stray（双倍超额不算）
-		if _, inSet := outSet[in[i]]; !inSet && in[i] != prevStray {
+	for r := range inFreq {
+		if _, inSet := outFreq[r]; !inSet {
 			strayKinds++
-			prevStray = in[i]
 		}
 	}
 	return float64(covered) / float64(len(out)), strayKinds, true
