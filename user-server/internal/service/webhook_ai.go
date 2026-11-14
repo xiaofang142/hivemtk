@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"context"
 
 	"fmt"
@@ -614,7 +616,28 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)
 		}
 		// 同上：失败落轨迹与改投重发均在 sendOutbound 内部收口。
-		_, _ = s.sendOutbound(outCtx, channel, accountID, p, result.Reply, hubMsg, result.Cards)
+		sent, sendErr := s.sendOutbound(outCtx, channel, accountID, p, result.Reply, hubMsg, result.Cards)
+		// 重复答案降级重生成（2026-11-14 生产实证：客户追问「详细介绍 sop 流程」，
+		// FAQ fastpath 又回同一段总介绍 → 撞已投递占位 id=0 → 原回复标 send_failed
+		// 终态，客户永远等不到新答案）。判据=sendOutbound 回传的 duplicate 类错误：
+		// 禁用 fastpath 重跑一次完整 LLM（对话历史在记忆层，自然生成针对追问的
+		// 新回答）→ 新内容不撞占位 → 正常投递。只重试一次，仍重复则走 failed 占位行
+		// 坐席可见，不循环。
+		if !sent && sendErr != nil && strings.Contains(sendErr.Error(), "duplicate reply") {
+			logger.Ctx(ctx).Info().
+				Str("channel", string(channel)).
+				Str("conv_id", hubMsg.ConversationID).
+				Msg("[Webhook] FAQ 答案与会话近期已投递内容重复——禁用 fastpath 重跑编排器生成针对性回复")
+			in2 := *in
+			in2.NoFastpath = true
+			if result2, err2 := s.smartOrchestrator.HandleIncomingWithAgent(ctx, &in2, agentCtx); err2 == nil && result2 != nil && !result2.Transferred && result2.AIReplied && result2.Reply != "" && result2.Reply != result.Reply {
+				outCtx2 := HandleResultToContext(ctx, result2)
+				if agentCtx != nil && agentCtx.AgentCode != "" {
+					outCtx2 = AgentIDToContext(outCtx2, agentCtx.AgentCode)
+				}
+				_, _ = s.sendOutbound(outCtx2, channel, accountID, p, result2.Reply, hubMsg, result2.Cards)
+			}
+		}
 		return
 	}
 

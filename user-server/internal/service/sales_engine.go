@@ -208,6 +208,12 @@ func (e *SalesEngine) tryFAQFastPath(ctx context.Context, req *SalesRequest) (*S
 	if e.faqSvc == nil || req == nil || strings.TrimSpace(req.UserMessage) == "" {
 		return nil, false
 	}
+	// NoFastpath（2026-11-14 生产实证）：同会话已投递过相同标准答案（客户追问、答案
+	// 未解决）时编排器置位——固定文案再发一次只会撞已投递占位静默丢失，改走完整
+	// LLM 链结合对话历史生成针对性新回答。
+	if req.NoFastpath {
+		return nil, false
+	}
 	agentID := agentIDFromCtx(req)
 	if agentID == 0 {
 		// 没有挂载智能体时不走本通道：没有智能体归属就没有 FAQ 归属，

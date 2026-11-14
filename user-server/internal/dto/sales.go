@@ -292,6 +292,11 @@ type SalesRequest struct {
 	// EmotionHint 情感分层策略提示（焦虑=进度可视化 / 满意=裂变引导），空=无情绪干预；
 	// 由 SmartCSOrchestrator 按 ClassifyEmotion 结果注入，buildPrompt 消费。
 	EmotionHint string `json:"emotion_hint,omitempty"`
+
+	// NoFastpath 禁用 FAQ fastpath 直答（2026-11-14 生产实证）：同会话近期已投递过
+	// 相同标准答案时（客户在追问、答案未解决问题），由编排器置位重跑完整 LLM 链，
+	// 结合对话历史生成针对追问的新回答——否则固定文案撞已投递占位，回复静默丢失。
+	NoFastpath bool `json:"no_fastpath,omitempty"`
 }
 
 // SalesResponse 销售回复

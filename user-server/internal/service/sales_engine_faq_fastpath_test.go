@@ -145,3 +145,26 @@ func (r *faqFastPathRepo) ScoreCandidatesScored(ctx context.Context, entries []m
 	// 走真实 repo 的 ScoreCandidatesScored（真实打分口径 + 层信息）
 	return r.base.ScoreCandidatesScored(ctx, entries, msg, topK)
 }
+
+// NoFastpath 置位时 fastpath 必须让路（2026-11-14 生产实证回归钉）：
+// 同会话已投递过相同标准答案后客户追问，编排器置位重跑完整 LLM——固定文案
+// 再发一次只会撞已投递占位静默丢失。
+func TestTryFAQFastPath_NoFastpathBypassesHit(t *testing.T) {
+	enabled := true
+	agentID := uint(1)
+	engine := &SalesEngine{faqSvc: newFAQServiceForFastPath([]model.FAQEntry{
+		{ID: 1, Question: "HiveMTK 是什么？", Answer: "HiveMTK 是一款开源的智能营销系统…",
+			Keywords:   []string{"HiveMTK", "是什么", "介绍", "产品", "项目", "营销系统", "开源"},
+			Confidence: 0.95, Enabled: &enabled, AgentID: &agentID},
+	})}
+	req := &SalesRequest{
+		UserMessage: "介绍下项目",
+		AgentContext: &dto.AgentContext{
+			AgentID: 1,
+		},
+		NoFastpath: true,
+	}
+	if resp, hit := engine.tryFAQFastPath(context.Background(), req); hit {
+		t.Fatalf("NoFastpath 置位时不应命中 fastpath，实际返回 %+v", resp)
+	}
+}

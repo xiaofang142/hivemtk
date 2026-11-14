@@ -227,6 +227,10 @@ type IncomingContext struct {
 	IsGroup    bool
 	GroupID    string
 	GroupName  string
+	// NoFastpath 禁用 FAQ fastpath 直答（2026-11-14 生产实证）：同会话已投递过相同
+	// 标准答案时编排器置位重跑，走完整 LLM 结合对话历史生成针对追问的新回答。
+	NoFastpath bool
+
 	// SessionID 调用方已明确的会话（如官网访客 HTTP 发消息时按 visitor_token 校验通过的那条）。
 	// 非空时 findOrCreateSession 直接复用，不再按 OneID/UserID 猜，避免同一条消息被
 	// 编排器二次保存进别的活跃会话（chat 双发 bug 的根因）。
@@ -407,6 +411,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		UserMessage: in.Content,
 		Platform:    string(in.Platform),
 		EmotionHint: emotionHint,
+		NoFastpath:  in.NoFastpath,
 	}
 	salesResp, err := o.engine.HandleWithAgent(ctx, salesReq, finalAgentCtx)
 	if err != nil || salesResp == nil {
