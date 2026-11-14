@@ -638,6 +638,8 @@ var ErrBundleNotActive = bizerr.New(bizerr.CodeParamInvalid, "资产包未发布
 
 var ErrBundleNotSubmitted = bizerr.New(bizerr.CodeParamInvalid, "该资产包尚未提交平台审核")
 
+var ErrBundleDisabled = bizerr.New(bizerr.CodeParamInvalid, "资产包已被停用，请先调用 enable 接口恢复")
+
 func (s *AssetBundleService) EnableBundle(ctx context.Context, id int64) (*model.AssetBundle, error) {
 	m, err := s.repo.FindByID(ctx, id)
 	if err != nil {
@@ -694,13 +696,16 @@ func (s *AssetBundleService) ResolveSystemPrompt(ctx context.Context, assetBundl
 	}
 	bundle, err := s.repo.FindByAssetID(ctx, assetBundleID)
 	if err == nil && bundle != nil {
-		// 生效闸门（真实运行路径也必须受控）：已归档/未发布的包不得继续织入人设；
-		// 已采用热启用的租户（索引非空）还必须显式启用该包，disable 才能真正生效。
+		// 生效闸门（真实运行路径，kill-switch 语义，审计二轮修订）：
+		//   1. 非 active（draft/archived）→ 拦截：publish/archive 语义对执行链路生效；
+		//   2. 仅当管理员**明确调过 disable**（KV="0"）→ 拦截：停用是逐包 kill-switch。
+		// 不再沿用 weave API 的白名单语义（索引非空即要求显式启用）——那会把租户里
+		// 「publish 直接上线、从未参与托管」的包误杀（审计二轮自查回归）。
 		if bundle.Status != model.AssetBundleStatusActive {
 			return "", ErrBundleNotActive
 		}
-		if !s.hotPlug.isEmpty(ctx) && !s.hotPlug.has(ctx, assetBundleID) {
-			return "", ErrBundleNotHotEnabled
+		if s.hotPlug.disabled(ctx, assetBundleID) {
+			return "", ErrBundleDisabled
 		}
 		prompt := systemPromptFromMessages(bundle.Messages)
 		if prompt != "" {
@@ -883,7 +888,10 @@ const (
 )
 
 type hotPlugEntry struct {
-	enabled   bool
+	enabled bool
+	// raw 保存 KV 原始值（"1"=显式启用 / "0"=显式停用 / ""=从未启用过），
+	// 供 disabled() 区分「明确停用」与「从未启用」两种语义（审计二轮）。
+	raw       string
 	fetchedAt time.Time
 }
 
@@ -951,32 +959,63 @@ func (c *hotPlugCache) fetchEnabled(ctx context.Context, assetID string, fallbac
 	return strings.TrimSpace(val) == "1"
 }
 
-func (c *hotPlugCache) loadEnabled(ctx context.Context, assetID string) bool {
+// fetchState 拉取热启用原始 KV 值（"1"/"0"/缺失=空串）。
+func (c *hotPlugCache) fetchState(ctx context.Context, assetID, fallback string) string {
+	kv := c.ensureKV()
+	if kv == nil {
+		return fallback
+	}
+	val, err := kv.Get(ctx, bundleHotPlugKeyPrefix+assetID)
+	if err != nil {
+		logger.Warnf("[asset_bundle] hotplug kv get failed asset=%s err=%v", assetID, err)
+		return fallback
+	}
+	return strings.TrimSpace(val)
+}
+
+// loadState 返回热启用原始状态（带 30s 本地缓存）："1"=显式启用，"0"=显式停用，""=从未启用过。
+func (c *hotPlugCache) loadState(ctx context.Context, assetID string) string {
 	if assetID == "" {
-		return false
+		return ""
 	}
 	cacheKey := tenantScopedKey(ctx, assetID)
 	c.mu.RLock()
 	e, ok := c.entries[cacheKey]
-	fallback := ok && e.enabled
+	fallback := ""
+	if ok {
+		fallback = e.raw
+	}
 	fresh := ok && e.fresh()
 	kv := c.kv
 	c.mu.RUnlock()
 	if fresh {
-		return e.enabled
+		return e.raw
 	}
 	if kv == nil && c.ensureKV() == nil {
-
 		return fallback
 	}
-	enabled := c.fetchEnabled(ctx, assetID, fallback)
+	state := c.fetchState(ctx, assetID, fallback)
 	c.mu.Lock()
 	if c.entries == nil {
 		c.entries = make(map[string]hotPlugEntry)
 	}
-	c.entries[cacheKey] = hotPlugEntry{enabled: enabled, fetchedAt: time.Now()}
+	c.entries[cacheKey] = hotPlugEntry{enabled: state == "1", raw: state, fetchedAt: time.Now()}
 	c.mu.Unlock()
-	return enabled
+	return state
+}
+
+// disabled 显式停用判定（kill-switch 语义）：只有 KV 值为 "0"（管理员明确调过
+// disable）才算停用；键缺失 = 从未启用过，不构成停用。运行时生效闸门据此放行
+// 「已发布但从未参与托管」的包，避免白名单语义误杀 publish 直接上线的包。
+func (c *hotPlugCache) disabled(ctx context.Context, assetID string) bool {
+	return c.loadState(ctx, assetID) == "0"
+}
+
+func (c *hotPlugCache) loadEnabled(ctx context.Context, assetID string) bool {
+	if assetID == "" {
+		return false
+	}
+	return c.loadState(ctx, assetID) == "1"
 }
 
 func (c *hotPlugCache) upsert(ctx context.Context, assetID string, enabled bool) {
@@ -1001,7 +1040,11 @@ func (c *hotPlugCache) upsert(ctx context.Context, assetID string, enabled bool)
 	if c.entries == nil {
 		c.entries = make(map[string]hotPlugEntry)
 	}
-	c.entries[tenantScopedKey(ctx, assetID)] = hotPlugEntry{enabled: enabled, fetchedAt: time.Now()}
+	raw := "0"
+	if enabled {
+		raw = "1"
+	}
+	c.entries[tenantScopedKey(ctx, assetID)] = hotPlugEntry{enabled: enabled, raw: raw, fetchedAt: time.Now()}
 	c.mu.Unlock()
 }
 

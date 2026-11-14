@@ -115,13 +115,13 @@ func (ctrl *AssetStoreController) CreateListing(c *gin.Context) {
 // @Summary      提交资产上架审核
 // @Tags      asset-store
 // @Router    /api/v1/asset-store/listings/{id}/submit [post]
-// Submit POST /listings/:id/submit
+// Submit POST /listings/:id/submit（仅 listing 归属贡献者本人）
 func (ctrl *AssetStoreController) Submit(c *gin.Context) {
 	id, ok := listingIDParam(c)
 	if !ok {
 		return
 	}
-	if err := ctrl.svc.SubmitListing(c.Request.Context(), tenantIDOf(c), id); err != nil {
+	if err := ctrl.svc.SubmitListing(c.Request.Context(), tenantIDOf(c), id, userClaimID(c)); err != nil {
 		storeFail(c, err)
 		return
 	}
@@ -131,7 +131,8 @@ func (ctrl *AssetStoreController) Submit(c *gin.Context) {
 // @Summary      资产上架状态流转
 // @Tags      asset-store
 // @Router    /api/v1/asset-store/listings/{id}/transition [post]
-// Transition POST /listings/:id/transition（贡献者侧仅 suspended→draft 退回等合法链路）
+// Transition POST /listings/:id/transition（贡献者侧自助白名单：draft/rejected→submitted、
+// suspended→draft；归属校验本人。审核类流转只走 /v1/asset-admin）
 func (ctrl *AssetStoreController) Transition(c *gin.Context) {
 	id, ok := listingIDParam(c)
 	if !ok {
@@ -144,7 +145,7 @@ func (ctrl *AssetStoreController) Transition(c *gin.Context) {
 		response.Error(c, 400, "参数错误: "+err.Error())
 		return
 	}
-	if err := ctrl.svc.TransitionListing(c.Request.Context(), tenantIDOf(c), id, req.To, 0, ""); err != nil {
+	if err := ctrl.svc.MerchantTransitionListing(c.Request.Context(), tenantIDOf(c), id, req.To, userClaimID(c)); err != nil {
 		storeFail(c, err)
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -69,7 +70,13 @@ func (h *AssetMarketController) ListMarket(c *gin.Context) {
 	list, total, err := h.marketSvc.ListMarketAssets(c.Request.Context(),
 		c.Query("asset_type"), c.Query("industry"), page, size)
 	if err != nil {
-		response.SuccessWithList(c, []map[string]any{}, 0)
+		// 审计二轮：区分「平台未接入」（独立部署语义，空列表让页面正常渲染）
+		// 与「平台已接入但调用失败」（必须报错，空列表会让用户误以为市场没货）。
+		if errors.Is(err, platform.ErrPlatformNotConfigured) {
+			response.SuccessWithList(c, []map[string]any{}, 0)
+			return
+		}
+		assetFail(c, err)
 		return
 	}
 	response.SuccessWithList(c, list, total)

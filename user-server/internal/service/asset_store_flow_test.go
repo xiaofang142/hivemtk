@@ -24,14 +24,18 @@ func TestAssetStoreFlow(t *testing.T) {
 		t.Fatalf("CreateListing: %v", err)
 	}
 	// 无政策声明提审被拒
-	if err := svc.SubmitListing(ctx, 1, l.ID); err == nil {
+	if err := svc.SubmitListing(ctx, 1, l.ID, 100); err == nil {
 		t.Fatal("无政策声明应拒绝提审")
+	}
+	// 归属校验（审计二轮）：非本人提审被拒
+	if err := svc.SubmitListing(ctx, 1, l.ID, 999); err == nil {
+		t.Fatal("非本人提审应拒绝")
 	}
 	// 补政策声明后提审成功（产生版本行）
 	if err := db.Model(l).Update("policy_declaration", []byte(`{"collect":"none"}`)).Error; err != nil {
 		t.Fatalf("补声明: %v", err)
 	}
-	if err := svc.SubmitListing(ctx, 1, l.ID); err != nil {
+	if err := svc.SubmitListing(ctx, 1, l.ID, 100); err != nil {
 		t.Fatalf("SubmitListing: %v", err)
 	}
 	var vCnt int64
@@ -123,7 +127,7 @@ func TestSubmitListingLimit(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateListing %d: %v", i, err)
 		}
-		if err := svc.SubmitListing(ctx, 1, l.ID); err != nil {
+		if err := svc.SubmitListing(ctx, 1, l.ID, 7); err != nil {
 			t.Fatalf("SubmitListing %d: %v", i, err)
 		}
 	}
@@ -131,7 +135,7 @@ func TestSubmitListingLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateListing over: %v", err)
 	}
-	if err := svc.SubmitListing(ctx, 1, l.ID); err == nil {
+	if err := svc.SubmitListing(ctx, 1, l.ID, 7); err == nil {
 		t.Fatal("超过 7 天限额应被拦截")
 	}
 }
@@ -150,7 +154,7 @@ func TestAssetStoreOnModeTenantCtx(t *testing.T) {
 	if err != nil {
 		t.Fatalf("on 模式带租户 ctx 创建失败: %v", err)
 	}
-	if err := svc.SubmitListing(ctx, 7, l.ID); err != nil {
+	if err := svc.SubmitListing(ctx, 7, l.ID, 100); err != nil {
 		t.Fatalf("on 模式带租户 ctx 提审失败: %v", err)
 	}
 	if _, _, err := svc.ReviewQueue(ctx, "extension", 1, 20); err != nil {

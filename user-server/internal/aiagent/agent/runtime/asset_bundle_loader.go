@@ -143,9 +143,11 @@ func (l *AssetBundleLoader) LoadContext(ctx context.Context, payload CustomerMes
 }
 
 func (l *AssetBundleLoader) resolveAssetID(agentCtx *AgentContext) string {
+	// 审计二轮修复：此前把 agentCtx.Persona（自由文本人设）当 AssetID 用，
+	// Persona 非空时必然查不到包。正确次序 = 显式绑定字段 → 智能体编码兜底 → 默认值。
 	if agentCtx != nil {
-		if agentCtx.Persona != "" {
-			return agentCtx.Persona
+		if agentCtx.AssetBundleID != "" {
+			return agentCtx.AssetBundleID
 		}
 		if agentCtx.AgentCode != "" {
 			return agentCtx.AgentCode

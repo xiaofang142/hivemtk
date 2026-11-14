@@ -99,6 +99,10 @@ func contributorIdentity() (contributorAuth, error) {
 		}
 	}
 
+	// 口令=sha256(mk|secret) 截断 16 hex（64bit 熵）：审计标记过强度问题，但
+	// 派生式一旦变更会与平台侧已注册账号失配（重新注册=新账号=收益余额失联）。
+	// 64bit 熵远超登录限流下的暴力破解面，secret 泄露才是真实风险面（与截断无关）
+	// ——接受现状并留档，改派生式必须配套平台侧账号迁移方案。
 	sum := sha256.Sum256([]byte(mk + "|" + secret))
 	a.password = hex.EncodeToString(sum[:])[:16]
 	a.email = a.username + "@mtk.local"
@@ -133,33 +137,46 @@ func (r *contributorResp) decodeData(out any) error {
 }
 
 // ensureContributorToken 拿到可用的贡献者 token：登录 → 失败则自动注册（注册即签发 token）→ 再登录一次。
+//
+// 审计二轮：派生与登录/注册的**网络调用不再持全局锁**——持锁联网会让平台变慢时
+// 所有提交流程串行阻塞。并发下最多重复登录几次，多拿的 token 覆盖缓存且都有效，无害。
 func ensureContributorToken(cc *ContributorClient) (string, error) {
 	contribMu.Lock()
-	defer contribMu.Unlock()
 	if contribToken != "" && time.Now().Before(contribExpireAt.Add(-60*time.Second)) {
-		return contribToken, nil
+		tok := contribToken
+		contribMu.Unlock()
+		return tok, nil
 	}
+	contribMu.Unlock()
+
 	auth, err := contributorIdentity()
 	if err != nil {
 		return "", err
 	}
 	tok, loginErr := cc.login(auth.username, auth.password)
 	if loginErr == nil {
-		contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
+		cacheContributorToken(tok)
 		return tok, nil
 	}
 	registered, regErr := cc.register(auth.username, auth.password, auth.email, auth.displayName)
 	if regErr == nil {
-		contribToken, contribExpireAt = registered, time.Now().Add(24*time.Hour)
+		cacheContributorToken(registered)
 		return registered, nil
 	}
 	logger.Warn(fmt.Sprintf("contributor 自动注册失败(可忽略，登录重试): %v", regErr))
 	// 注册被拒最常见的原因是同号已由另一实例建好，再登一次
 	if tok, err2 := cc.login(auth.username, auth.password); err2 == nil {
-		contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
+		cacheContributorToken(tok)
 		return tok, nil
 	}
 	return "", fmt.Errorf("获取平台贡献者 token 失败: 登录=%v, 注册=%v", loginErr, regErr)
+}
+
+// cacheContributorToken 回写 token 缓存（锁内不做网络调用）
+func cacheContributorToken(tok string) {
+	contribMu.Lock()
+	defer contribMu.Unlock()
+	contribToken, contribExpireAt = tok, time.Now().Add(24*time.Hour)
 }
 
 // login 用派生身份换 token；平台把 token 放在 data.token。

@@ -34,6 +34,10 @@ type AgentContext struct {
 	Name      string
 	AgentType string
 
+	// AssetBundleID 绑定的资产包 asset_id（审计二轮补齐）：此前 runtime 侧
+	// 上下文根本没有该字段，加载器只能拿 Persona 自由文本当 AssetID（必然错）。
+	AssetBundleID string
+
 	Persona      string
 	SystemPrompt string
 	Greeting     string

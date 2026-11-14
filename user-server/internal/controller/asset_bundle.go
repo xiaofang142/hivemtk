@@ -58,6 +58,9 @@ func NewAssetBundleController(svc *service.AssetBundleService) *AssetBundleContr
 //	POST   /api/asset-bundle/:id/disable  热禁用（方向 D1，立即生效）
 //	POST   /api/asset-bundle/enabled/list 查询已热启用的资产包列表
 func (c *AssetBundleController) Register(rg *gin.RouterGroup) {
+	// 读面（Get/List/weave 结果之外的 by-aid）只要求登录态：资产包与智能体一样
+	// 是租户内共享资源（智能体编辑页需要下拉选包），owner 级隔离不在本期口径——
+	// 写面已全部收口 admin，提示词 IP 的租户内可见性与智能体一致（审计二轮留档）。
 	g := rg.Group("/asset-bundle")
 
 	g.GET("/:id", c.Get)

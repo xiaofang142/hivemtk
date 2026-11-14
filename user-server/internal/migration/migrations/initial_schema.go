@@ -332,4 +332,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.95.0（资产包全链路审计轮）：asset_bundle_ratings 评分表——
 	// 此前 rating/rating_count 无任何写路径，评分只展示不生效。
 	register(NewAssetBundleRatingMigration(db))
+	// v3.96.0（资产包全链路审计二轮）：生效闸门存量对齐——把已托管（热启用
+	// KV="1"）但 status 仍为 draft 的存量包提升为 active，闸门上线不误拦存量商户包。
+	register(NewAssetBundleGateBackfillMigration(db))
 }

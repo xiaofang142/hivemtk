@@ -60,10 +60,17 @@ func (s *AssetStoreService) CreateListing(ctx context.Context, tenantID, contrib
 
 // SubmitListing 提审：draft/rejected → submitted。
 // 政策声明是提审前置必填（GPT Store attestation）；7 天提审限额拦截。
-func (s *AssetStoreService) SubmitListing(ctx context.Context, tenantID uint, listingID int64) error {
+// SubmitListing 提审：draft/rejected → submitted（仅 listing 归属贡献者本人，审计二轮）。
+// 政策声明是提审前置必填（GPT Store attestation）；7 天提审限额拦截。
+func (s *AssetStoreService) SubmitListing(ctx context.Context, tenantID uint, listingID int64, contributorID int64) error {
 	l, err := s.repo.GetListing(ctx, tenantID, listingID)
 	if err != nil {
 		return fmt.Errorf("上架单不存在: %w", err)
+	}
+	// 归属校验（审计二轮）：此前任何登录用户可对任意 listing 提审，
+	// 既越权又可绕过他人视角下的限额语义
+	if l.ContributorID != contributorID {
+		return errors.New("仅可提审本人创建的上架单")
 	}
 	if len(l.PolicyDeclaration) == 0 {
 		return errors.New("提审前必须填写政策声明（数据收集项与用途）")
@@ -94,6 +101,30 @@ func (s *AssetStoreService) SubmitListing(ctx context.Context, tenantID uint, li
 		"reject_reason":      "",
 		"current_version_id": v.ID,
 	})
+}
+
+// merchantAllowedTransitions 贡献者侧允许的自助跃迁白名单（审计二轮）。
+// 其余流转（auto_check/manual_review/published/suspended 相关）都是审核动作，
+// 只能走 /v1/asset-admin 管理端——此前 merchant transition 端点接受任意 to，
+// 等于任何登录用户都能把任意 listing 置为 published/suspended。
+var merchantAllowedTransitions = map[string]bool{
+	model.AssetListingSubmitted: true, // draft/rejected → submitted（上架/重新上架）
+	model.AssetListingDraft:     true, // suspended → draft（退回修改）
+}
+
+// MerchantTransitionListing 贡献者侧状态流转：归属校验 + 自助跃迁白名单。
+func (s *AssetStoreService) MerchantTransitionListing(ctx context.Context, tenantID uint, listingID int64, to string, contributorID int64) error {
+	l, err := s.repo.GetListing(ctx, tenantID, listingID)
+	if err != nil {
+		return fmt.Errorf("上架单不存在: %w", err)
+	}
+	if l.ContributorID != contributorID {
+		return errors.New("仅可操作本人创建的上架单")
+	}
+	if !merchantAllowedTransitions[to] {
+		return fmt.Errorf("贡献者侧不允许跃迁到 %s（审核类流转请通过平台管理员）", to)
+	}
+	return s.TransitionListing(ctx, tenantID, listingID, to, 0, "")
 }
 
 // TransitionListing 状态跃迁（审核动作收口；to 状态合法性单点判定）。

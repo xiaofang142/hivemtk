@@ -265,6 +265,15 @@
             发布
           </el-button>
           <el-button
+            v-if="row.status === 'active' || row.status === 'inactive'"
+            size="small"
+            type="warning"
+            link
+            @click="handleArchive(row)"
+          >
+            归档
+          </el-button>
+          <el-button
             size="small"
             type="danger"
             link
@@ -292,7 +301,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listBundles, listEnabledBundles, enableBundle, disableBundle,
-  publishBundle, deleteBundle
+  publishBundle, archiveBundle, deleteBundle
 } from '@/api/assetBundle'
 
 const filter = reactive({
@@ -380,6 +389,17 @@ const handlePublish = async (row) => {
     ElMessage.success('已发布')
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('发布失败: ' + (e?.message || e))
+  }
+}
+
+const handleArchive = async (row) => {
+  try {
+    await ElMessageBox.confirm(`确认归档资产包「${row.title}」？归档后立即停止在智能体中生效`, '确认', { type: 'warning' })
+    await archiveBundle(row.id)
+    row.status = 'archived'
+    ElMessage.success('已归档')
+  } catch (e) {
+    if (e !== 'cancel') ElMessage.error('归档失败: ' + (e?.message || e))
   }
 }
 

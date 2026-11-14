@@ -153,10 +153,16 @@ func (s *AIAgentService) Update(ctx context.Context, a *model.AIAgent) error {
 		return errors.New("persona 不能为空")
 	}
 	a.Version = a.Version + 1
-	// 绑定校验：资产包必须存在且可用
+	// 绑定校验只在绑定发生**变更**时执行（审计二轮）：前端编辑表单会原样回显
+	// asset_bundle_id，若绑定的包此后被归档/停用，无条件校验会让智能体编辑
+	// 整体被卡死（用户没动绑定也保存不了）。绑定未变时运行期闸门已兜底
+	// （ResolveSystemPrompt 对失效包直接回退原人设并告警）。
 	if a.AssetBundleID != "" {
-		if err := ValidateAssetBundleForBind(ctx, a.AssetBundleID); err != nil {
-			return err
+		old, err := s.repo.GetByID(ctx, a.ID)
+		if err == nil && old != nil && old.AssetBundleID != a.AssetBundleID {
+			if err := ValidateAssetBundleForBind(ctx, a.AssetBundleID); err != nil {
+				return err
+			}
 		}
 	}
 	if err := s.repo.Update(ctx, a); err != nil {
