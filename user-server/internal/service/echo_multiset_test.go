@@ -81,11 +81,14 @@ func TestEchoMultiset_ThirdFormMixedDeformation(t *testing.T) {
 	if inS == outS || inS == doubleSorted(outS) {
 		t.Fatal("测试构造失效：该形态不应被同频/双倍判据覆盖")
 	}
-	cover, ok := charCoverage(inS, outS)
+	cover, stray, ok := charCoverage(inS, outS)
 	if !ok {
 		t.Fatal("长度护栏不应触发（入站远长于出站）")
 	}
 	if cover < 0.85 {
 		t.Fatalf("第三形态覆盖率应 ≥0.85，实际 %v", cover)
+	}
+	if stray != 0 {
+		t.Fatalf("第三形态为纯回声，stray 种类应为 0，实际 %d", stray)
 	}
 }

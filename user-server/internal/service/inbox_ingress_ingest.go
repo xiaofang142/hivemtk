@@ -192,10 +192,12 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-multiset match)"}, nil
 						}
 						// 频率相似度判据（2026-11-14 第三形态 4848 实证）：混合变形（双份中
-						// 一份缺 7 字等）既非同频也非整倍——改为逐字符频率重合度：出站全部
-						// 字符在入站中的频率覆盖率 ≥85% 即判回声。真实客户引用+追问的追问
-						// 部分会把覆盖率拉低，实测放行（见 echo_multiset_test）。
-						if cover, ok := charCoverage(inSorted, outSorted); ok && cover >= 0.85 {
+						// 一份缺 7 字等）既非同频也非整倍——改为逐字符频率重合度。**双重
+						// 闸**：覆盖率 ≥85% 且入站字符集 ⊆ 出站字符集（stray=0）——纯回声
+						//（双写/变形）没有任何出站外字符；客户引用+追问/尾部提问必有出站
+						// 外新字符（stray>0）→ 放行（inbox_ingress_recent_echo/tail_echo
+						// 两个既有契约测试钉住，2026-11-14 部署预检曾抓过 0.85 单闸过宽）。
+						if cover, stray, ok := charCoverage(inSorted, outSorted); ok && cover >= 0.85 && stray == 0 {
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound char-frequency ≥85%)"}, nil
 						}
 					}
@@ -354,26 +356,39 @@ func doubleSorted(s string) string {
 }
 
 // charCoverage 计算入站签名对出站签名的逐字符频率覆盖率：出站每个字符的入站出现
-// 次数（封顶出站次数）之和 / 出站总长。ok=false 表示入站短于出站 70%（覆盖判据
+// 次数（封顶出站次数）之和 / 出站总长；stray = 入站独有的字符**种类数**（出站之外
+// 的字符，>0 即客户有自己的新话→放行）。ok=false 表示入站短于出站 70%（覆盖判据
 // 无意义，直接放行给其他判据）。两个签名均已排序 → 线性双指针。
-func charCoverage(inSorted, outSorted string) (float64, bool) {
+func charCoverage(inSorted, outSorted string) (float64, int, bool) {
 	in, out := []rune(inSorted), []rune(outSorted)
 	if len(out) == 0 || len(in) < len(out)*7/10 {
-		return 0, false
+		return 0, 0, false
+	}
+	outSet := make(map[rune]struct{}, len(out))
+	for _, r := range out {
+		outSet[r] = struct{}{}
 	}
 	covered := 0
 	i, j := 0, 0
-	for j < len(out) {
-		if i >= len(in) || in[i] > out[j] {
-			return float64(covered) / float64(len(out)), true // 出站该字符入站不足
-		}
-		if in[i] == out[j] {
+	for j < len(out) && i < len(in) {
+		switch {
+		case in[i] == out[j]:
 			covered++
+			i++
 			j++
-			i++
-		} else { // in[i] < out[j]：入站有多余字符，消耗之
-			i++
+		case in[i] < out[j]:
+			i++ // 入站多余字符（可能是双倍超额），不计覆盖
+		default:
+			j++ // 出站该字符入站不足
 		}
 	}
-	return float64(covered) / float64(len(out)), true
+	strayKinds := 0
+	prevStray := rune(0)
+	for ; i < len(in); i++ { // 入站剩余尾部：出站集之外才算 stray（双倍超额不算）
+		if _, inSet := outSet[in[i]]; !inSet && in[i] != prevStray {
+			strayKinds++
+			prevStray = in[i]
+		}
+	}
+	return float64(covered) / float64(len(out)), strayKinds, true
 }
