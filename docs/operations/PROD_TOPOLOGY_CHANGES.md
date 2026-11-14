@@ -379,3 +379,20 @@ rec.TenantID=1 不再盲信。扩展 1.3.3（链 B 重载回验）+ Go 修复（
 出站 <16 字护栏防短话术误吞；「引用整句再追问」场景测试放行。4836 已软删。
 纯函数测试 4 用例 + 四包真库全绿。监控持续观察：后续出站投递后不再出现同 content
 假入站（理由 self-echo(recent outbound char-multiset match) 的 blocked 日志即生效实证）。
+
+## 2026-11-14 19:45 终局修复：AI 重复话术占位冲突（`9e4e81eb`，链 A `rollback-20261114-194308`）
+
+**终局根因**（用户三连报「不回复」的真正底层）：AI 对重复问题确定性输出同一话术
+（知识库直出）→ 同 (tenant,platform,msg_id,conv,direction) 历史行（delivered/failed/
+软删）占位唯一索引 → ON CONFLICT DO NOTHING 把新生成回复静默吞掉。19:10 客户
+「给我一份功能清单」→ AI 生成 → 三次 id=0（SendRetry 重放带毒租户加重）→ 客户
+两次追问石沉大海。此缺陷自 AI 上线起潜伏：**客户第二次问同款问题必然无回应**。
+
+**终局修复**：①CreateMessageHubIdempotent 冲突复活 upsert——failed/软删占位复活为
+pending（新内容/预算清零）；delivered/pending/inflight 维持 DO NOTHING（防刷屏）；
+②id=0 双分支——占位冲突落 failed 占位行（坐席收件箱可见）+不可重试+Error 出声；
+真 DB 错误保持可重试（既有契约）。回归钉：复活三态 DB 测试+真错误可重试契约。
+四包真库全绿。
+
+**客户补偿**：「功能清单」人工拟文经正式队列 delivered（一次认领零重试）。
+**后续立项**（AI 层治本，另行）：重复问题差异化回复（FAQ fastpath 加语境/历史感知）。
