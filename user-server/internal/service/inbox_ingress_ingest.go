@@ -185,7 +185,7 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 					// 真实客户消息恰好与本账号某条近期出站同字符集（或恰为双倍）的概率趋零，
 					// 与「等值/包含」判据同一取舍。长度护栏：出站 <16 字不参与（同剥离护栏），
 					// 防短出站（"好的~"）频率撞车误吞真实发言。
-					if len([]rune(outNorm)) >= 16 {
+				if len([]rune(outNorm)) >= 16 {
 						inSorted := sortedRunes(norm)
 						outSorted := sortedRunes(outNorm)
 						if inSorted == outSorted || inSorted == doubleSorted(outSorted) {
@@ -207,13 +207,13 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 						}
 					}
 				}
-				if strippedAny && len([]rune(remainder)) < 4 {
-					return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
-				}
 				// 线程容器：整段线程的结尾就是本账号最近发出去的话。逐条剥离后仍会剩下
-				// 客户更早的发言（≥4 字），上面的「剩余近空」判据会放行；这里用「入站尾部
-				// N 字原样出现在近期同会话出站文本里」判定这段内容以我方发言收尾——客户
-				// 在这段里没有新话，不能再触发一次回复。短入站不参与，避免吞掉「可以吗？」。
+					// 客户更早的发言（≥4 字），下面的「引用追问放行」会把它误当客户新话；
+					// 这里用「入站尾部 N 字原样出现在近期同会话出站文本里」判定这段内容以
+					// 我方发言收尾——客户在这段里没有新话，不能再触发一次回复。
+					// **必须先于引用追问放行执行**（架构师二审①顺序修正）：否则
+					// 「线程拼接（以我方话收尾）」会在剥离层被误放行。短入站不参与，
+					// 避免吞掉「可以吗？」。
 				if inRunes := []rune(norm); len(inRunes) >= echoTailWindowRunes {
 					tail := string(inRunes[len(inRunes)-echoTailWindowRunes:])
 					for i := range rows {
@@ -225,6 +225,22 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 							return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound tail match)"}, nil
 						}
 					}
+				}
+				// 引用追问判定（架构师二审①，2026-11-14，剥离层终结；tail 判据之后）：
+				// 剥离循环证明入站 = 完整出站句（≥16 字）+ 剩余内容。剥不动的才是
+				// 回声形态（4836 交错拼接、xhs 变形收录——它们不含任何完整出站子串）；
+				// **剥得动且剩余 ≥4 字实质新话（且尾部非我方发言，tail 已判）= 真客户
+				// 引用行为，必须在此终结放行**——不能让后续频率闸的 stray==0 把
+				// 「追问字符恰好 ⊆ 出站字符集」的引用追问（出站「这个款式还有货」
+				// 客户引用后问「还有货吗」，有/货/吗 全在出站内）误拦成静默不回复；
+				// 剩余 <4 字（引用后只回「好的」）= 无实质新话，仍按回声拦。
+				// 多出站场景（AI 拆多气泡+客户全引用）由循环把每条出站都剥净后再判，
+				// 不会把另一条出站原文误当「客户新话」。
+				if strippedAny && len([]rune(remainder)) >= 4 {
+					return nil, nil
+				}
+				if strippedAny && len([]rune(remainder)) < 4 {
+					return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(recent outbound contained in inbound)"}, nil
 				}
 			}
 		}
