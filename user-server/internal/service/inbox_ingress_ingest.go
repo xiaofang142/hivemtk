@@ -154,7 +154,13 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 	}
 
 	if event.ConversationID != "" && s.hubRepo != nil {
-		rows, rerr := s.hubRepo.ListRecentOutboundInConv(ctx, event.Channel, resolveAccountID(event), event.ConversationID, time.Now().Add(-InboxOutboundEchoWindow), 20)
+		// 回声窗按渠道分层：桥接 DOM 巡检渠道 7d（rescan 重采数天前气泡），
+		// 非桥接（官网浮标/API）2h 旧契约（客户重复发同段话=真实提问）。
+		echoWindow := InboxOutboundEchoWindow
+		if _, isBridge := bridgeChannels[string(event.Channel)]; !isBridge {
+			echoWindow = InboxOutboundEchoWindowShort
+		}
+		rows, rerr := s.hubRepo.ListRecentOutboundInConv(ctx, event.Channel, resolveAccountID(event), event.ConversationID, time.Now().Add(-echoWindow), 20)
 		if rerr == nil && len(rows) > 0 {
 			norm := normalizeEchoText(content)
 			if norm != "" {

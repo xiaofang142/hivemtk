@@ -51,7 +51,14 @@ const (
 	// InboxOutboundEchoWindow 出站回声的回看窗口：一条出站消息 only 在这个窗口内才有
 	// 「平台把它回显回来 / DOM 抖动重报」的可能，超出之后同内容命中就不再是回声，而是客户
 	// 把同一句话又说了一遍——此时按内容吞掉＝「说了没回」。入口与 hub 两层共用这一个界。
-	InboxOutboundEchoWindow = 2 * time.Hour
+	// 2026-11-14 由 2h 扩到 7d（仅桥接 DOM 巡检渠道）：xhs/douyin 历史回扫
+	//（rescan 每 10-30 分钟）会把数天前投递的出站气泡变形重采为假入站
+	//（第五形态 5033/5034：FAQ 原文逐字收录），2h 窗罩不住。非桥接渠道
+	//（官网浮标/API 直连，消息为真实 HTTP 发送、无 DOM 重采）维持 2h 旧契约
+	//（web_embed 客户重复发同一段话=真实提问，50h 后也应回应）。
+	// 使用点：inbox_ingress_ingest.go 的 echo 检查按 event.Channel 分层取窗。
+	InboxOutboundEchoWindow      = 7 * 24 * time.Hour
+	InboxOutboundEchoWindowShort = 2 * time.Hour
 
 	InboxReplyWindow = 5 * time.Minute
 

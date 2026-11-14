@@ -225,7 +225,7 @@ func TestInboxIngress_OldOutbound_NotBlockedByContentEcho(t *testing.T) {
 		ConversationID: conv,
 		SenderID:       account,
 		Content:        templText,
-		SentAt:         time.Now().Add(-3 * time.Hour),
+		SentAt:         time.Now().Add(-8 * 24 * time.Hour),
 	}).Error; err != nil {
 		t.Fatalf("插入 old outbound 失败: %v", err)
 	}

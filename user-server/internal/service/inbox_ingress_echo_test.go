@@ -130,6 +130,8 @@ func TestInboxIngress_PlatformEchoTextModified(t *testing.T) {
 	trigger := &fakeAITrigger{}
 	svc.SetAITrigger(trigger)
 
+	// 2026-11-14 语义更新：回声窗 2h→7d（xhs/douyin rescan 会把数天前出站气泡变形
+	// 重采为假入站，生产实证 5033/5034）——50h 在 7d 窗内，同文本变体现在应被拦截。
 	oldTime := time.Now().Add(-50 * time.Hour)
 	if err := db.Create(&model.MessageHub{
 		MsgID:          "mh:aabbcc01",
