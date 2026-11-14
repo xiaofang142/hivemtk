@@ -11,11 +11,13 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/model"
 
 	"github.com/lib/pq"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // applyListLimit 统一"可选 limit"查询语义:limit<=0 时默认 500,防止增长型表无界全表载入。
@@ -50,6 +52,10 @@ type AssetBundleRepository interface {
 	List(ctx context.Context, f AssetBundleFilter) ([]*model.AssetBundle, int64, error)
 	IncrementUseCount(ctx context.Context, assetID string) error
 	ExistsByAssetID(ctx context.Context, assetID string) (bool, error)
+	UpdatePlatformRef(ctx context.Context, id int64, platformAssetID int64, status, note string) error
+	UpsertRating(ctx context.Context, m *model.AssetBundleRating) error
+	RatingSummary(ctx context.Context, assetID string) (float64, int64, error)
+	ApplyRating(ctx context.Context, assetID string, rating float64, count int64) error
 }
 
 type assetBundleRepo struct {
@@ -184,4 +190,51 @@ func (r *assetBundleRepo) ExistsByAssetID(ctx context.Context, assetID string) (
 		return false, err
 	}
 	return c > 0, nil
+}
+
+// UpdatePlatformRef 落库平台提交回执（platform_asset_id + 审核状态）。
+// 独立于 Update 白名单：业务更新不得碰回执列，回执只由提交流程写入。
+func (r *assetBundleRepo) UpdatePlatformRef(ctx context.Context, id int64, platformAssetID int64, status, note string) error {
+	return r.db.WithContext(ctx).Model(&model.AssetBundle{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"platform_asset_id":     platformAssetID,
+			"platform_status":       status,
+			"platform_review_note":  note,
+			"platform_submitted_at": time.Now(),
+		}).Error
+}
+
+// UpsertRating 写入/更新评分（一人一包一票：唯一索引冲突则改分）。
+// 冲突列与 tenancyidx 规范化后的 (tenant_id,asset_id,user_id) 唯一索引对齐。
+func (r *assetBundleRepo) UpsertRating(ctx context.Context, m *model.AssetBundleRating) error {
+	if m == nil {
+		return errors.New("asset bundle rating is nil")
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "tenant_id"}, {Name: "asset_id"}, {Name: "user_id"}},
+			DoUpdates: clause.Assignments(map[string]any{"score": m.Score, "updated_at": time.Now()}),
+		}).
+		Create(m).Error
+}
+
+// RatingSummary 聚合评分（平均分 + 票数）
+func (r *assetBundleRepo) RatingSummary(ctx context.Context, assetID string) (float64, int64, error) {
+	var out struct {
+		Avg   float64 `gorm:"column:avg"`
+		Count int64   `gorm:"column:cnt"`
+	}
+	err := r.db.WithContext(ctx).Model(&model.AssetBundleRating{}).
+		Select("COALESCE(AVG(score), 0) AS avg, COUNT(*) AS cnt").
+		Where("asset_id = ?", assetID).
+		Scan(&out).Error
+	return out.Avg, out.Count, err
+}
+
+// ApplyRating 把聚合结果回写资产包 rating/rating_count 列（与 Update 白名单隔离的专用路径）
+func (r *assetBundleRepo) ApplyRating(ctx context.Context, assetID string, rating float64, count int64) error {
+	return r.db.WithContext(ctx).Model(&model.AssetBundle{}).
+		Where("asset_id = ?", assetID).
+		Updates(map[string]any{"rating": rating, "rating_count": count}).Error
 }

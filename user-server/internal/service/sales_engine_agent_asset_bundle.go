@@ -37,6 +37,35 @@ func GetAssetBundleResolver() AssetBundleResolver {
 	return assetBundleResolverForSalesEngine
 }
 
+// assetBundleBindValidator 绑定校验钩子：校验 asset_id 存在且可用。
+// 实现方 AssetBundleService.ValidateBundleForBind；装配点 router 层。
+var (
+	assetBundleBindValidator   func(ctx context.Context, assetID string) error
+	assetBundleBindValidatorMu sync.RWMutex
+)
+
+// SetAssetBundleBindValidator 注入绑定校验器
+func SetAssetBundleBindValidator(f func(ctx context.Context, assetID string) error) {
+	assetBundleBindValidatorMu.Lock()
+	defer assetBundleBindValidatorMu.Unlock()
+	assetBundleBindValidator = f
+}
+
+// ValidateAssetBundleForBind 智能体写入 asset_bundle_id 前的统一校验入口。
+// 校验器未注入（如部分测试场景）时放行——与解析器未注入时 Persona 直通同一口径。
+func ValidateAssetBundleForBind(ctx context.Context, assetID string) error {
+	if assetID == "" {
+		return nil
+	}
+	assetBundleBindValidatorMu.RLock()
+	f := assetBundleBindValidator
+	assetBundleBindValidatorMu.RUnlock()
+	if f == nil {
+		return nil
+	}
+	return f(ctx, assetID)
+}
+
 func resolveAssetBundlePersona(ctx context.Context, agentCtx *dto.AgentContext, resolver AssetBundleResolver) string {
 	if agentCtx == nil || agentCtx.AssetBundleID == "" {
 		return ""

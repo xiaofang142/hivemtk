@@ -113,7 +113,15 @@ type AssetBundle struct {
 	Rating             float64             `gorm:"default:0" json:"rating"`
 	RatingCount        int                 `gorm:"default:0" json:"rating_count"`
 	// CoverImage 资产包封面 URL（由统一存储服务返回，值形如 /files/covers/2026/09/03/uuid.jpg）
-	CoverImage string         `gorm:"size:500" json:"cover_image"`
+	CoverImage string `gorm:"size:500" json:"cover_image"`
+
+	// 平台提交回执（v3.94.0）：SubmitToPlatform 落库平台资产 ID 与审核状态，
+	// 重复提交据此复用既有平台资产（幂等），审核进度可回显。
+	PlatformAssetID     int64      `gorm:"default:0" json:"platform_asset_id"`
+	PlatformStatus      string     `gorm:"size:32;default:''" json:"platform_status"`
+	PlatformReviewNote  string     `gorm:"type:text" json:"platform_review_note"`
+	PlatformSubmittedAt *time.Time `json:"platform_submitted_at"`
+
 	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
@@ -138,3 +146,21 @@ type AssetBundleVersionLog struct {
 
 // TableName 表名
 func (AssetBundleVersionLog) TableName() string { return "asset_bundle_version_logs" }
+
+// AssetBundleRating 资产包评分记录（一人一包一票，唯一索引防重复评分；
+// (asset_id,user_id) 唯一索引由 tenancyidx 启动时规范化为含 tenant_id 前缀）
+type AssetBundleRating struct {
+	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
+
+	ID      int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	AssetID string `gorm:"size:64;uniqueIndex:idx_bundle_rating;not null" json:"asset_id"`
+	UserID  uint   `gorm:"uniqueIndex:idx_bundle_rating;not null" json:"user_id"`
+	Score   int    `gorm:"not null" json:"score"`
+
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TableName 表名
+func (AssetBundleRating) TableName() string { return "asset_bundle_ratings" }

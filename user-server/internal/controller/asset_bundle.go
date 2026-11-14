@@ -64,6 +64,7 @@ func (c *AssetBundleController) Register(rg *gin.RouterGroup) {
 	g.GET("/by-aid/:aid", c.GetByAssetID)
 	g.POST("/list", c.List)
 	g.POST("/enabled/list", c.GetEnabled)
+	g.POST("/:id/rate", c.Rate)
 
 	admin := rg.Group("/asset-bundle", middleware.AdminAuthMiddleware())
 	{
@@ -75,6 +76,8 @@ func (c *AssetBundleController) Register(rg *gin.RouterGroup) {
 		admin.POST("/:id/enable", c.Enable)
 		admin.POST("/:id/disable", c.Disable)
 		admin.POST("/:id/submit-platform", c.SubmitToPlatform)
+		admin.POST("/:id/platform-status/refresh", c.PlatformStatusRefresh)
+		admin.GET("/:id/versions", c.VersionLogs)
 		admin.POST("/weave", c.Weave)
 		admin.POST("/merchant-save", c.MerchantSave)
 		admin.POST("/merchant-parse/:aid", c.MerchantParse)
@@ -112,6 +115,37 @@ func (c *AssetBundleController) SubmitToPlatform(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{"platform_asset_id": platformAssetID}, "已提交平台审核")
+}
+
+// PlatformStatusRefresh 拉取平台审核状态并落库（审核结果回程）
+//
+// 平台 approve/reject 不回调 user-server，本地以拉取方式闭环；
+// 前端在列表/编辑页展示 platform_status 与驳回理由。
+// 状态码口径：200 已刷新并返回最新视图；404 包不存在；409 未提交过平台；503/502 平台侧异常。
+func (c *AssetBundleController) PlatformStatusRefresh(ctx *gin.Context) {
+	if rejectPlatformDisabled(ctx) {
+		return
+	}
+	rawID := ctx.Param("id")
+	bundleID, err := strconv.ParseInt(rawID, 10, 64)
+	if err != nil || bundleID <= 0 {
+		response.Error(ctx, http.StatusBadRequest, "非法资产包 ID")
+		return
+	}
+	bundle, err := c.svc.RefreshPlatformStatus(ctx.Request.Context(), bundleID)
+	if err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, assetBundleNotFoundMsg(bundleID))
+			return
+		}
+		if errors.Is(err, service.ErrBundleNotSubmitted) {
+			response.Error(ctx, http.StatusConflict, "该资产包尚未提交平台审核")
+			return
+		}
+		respondSubmitPlatformError(ctx, err)
+		return
+	}
+	response.Success(ctx, service.FromAssetBundleModel(bundle), "已刷新平台审核状态")
 }
 
 // respondSubmitPlatformError 区分"平台侧没配好"和"我们自己的服务出错"。
@@ -224,7 +258,10 @@ func (c *AssetBundleController) Update(ctx *gin.Context) {
 		Status:      model.AssetBundleStatus(req.Status),
 		CoverImage:  req.CoverImage,
 	}
-	if err := c.svc.UpdateBundle(ctx.Request.Context(), bundle); err != nil {
+	if err := c.svc.UpdateBundle(ctx.Request.Context(), bundle, service.BundleUpdateMeta{
+		ChangeNote: req.ChangeNote,
+		Operator:   ctx.GetString("username"),
+	}); err != nil {
 		logger.Errorf("[asset-bundle] update failed: %v", err)
 		assetBundleWriteError(ctx, err, assetBundleNotFoundMsg(id), "更新资产包失败")
 		return
@@ -314,6 +351,66 @@ func (c *AssetBundleController) List(ctx *gin.Context) {
 	response.Success(ctx, dto.AssetBundleListResponse{
 		List: service.FromAssetBundleModelList(list), Total: total, Page: page, Size: size,
 	}, "ok")
+}
+
+// @Summary      资产包评分（1-5 分，一人一包一票）
+// @Tags      asset-bundle
+// @Router    /api/asset-bundle/{id}/rate [post]
+// Rate 资产包评分（:id 支持数字主键或 asset_id slug，与 resolveAssetID 口径一致）
+func (c *AssetBundleController) Rate(ctx *gin.Context) {
+	assetID, err := c.resolveAssetID(ctx, ctx.Param("id"))
+	if err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "资产包不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "解析资产包失败")
+		return
+	}
+	var req struct {
+		Score int `json:"score" binding:"required"`
+	}
+	if !response.BindJSON(ctx, &req) {
+		return
+	}
+	userID := ctx.GetUint("user_id")
+	if userID == 0 {
+		response.Error(ctx, http.StatusUnauthorized, "未登录或登录态无效")
+		return
+	}
+	if err := c.svc.RateBundle(ctx.Request.Context(), assetID, userID, req.Score); err != nil {
+		response.ErrorFromDB(ctx, err, "评分失败")
+		return
+	}
+	response.Success(ctx, gin.H{"asset_id": assetID, "score": req.Score}, "评分成功")
+}
+
+// @Summary      版本轨迹
+// @Tags      asset-bundle
+// @Router    /api/asset-bundle/{id}/versions [get]
+// VersionLogs 版本轨迹读取（此前日志表只写不读）
+func (c *AssetBundleController) VersionLogs(ctx *gin.Context) {
+	assetID, err := c.resolveAssetID(ctx, ctx.Param("id"))
+	if err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "资产包不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "解析资产包失败")
+		return
+	}
+	limit := 50
+	if l := ctx.Query("limit"); l != "" {
+		if n, perr := strconv.Atoi(l); perr == nil && n > 0 {
+			limit = n
+		}
+	}
+	logs, err := c.svc.GetVersionLogs(ctx.Request.Context(), assetID, limit)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "版本轨迹查询失败")
+		return
+	}
+	response.Success(ctx, gin.H{"asset_id": assetID, "list": logs}, "ok")
 }
 
 // @Summary      启用
@@ -432,7 +529,12 @@ func (c *AssetBundleController) Weave(ctx *gin.Context) {
 		ChatHistory:  service.AssetBundleMessagesFromDTO(req.ChatHistory),
 		MerchantVars: req.MerchantVars,
 		Sandbox:      req.Sandbox,
+		// sandbox 只对管理员生效：普通用户（若未来开放 weave）传 sandbox 不得绕过闸门
+		AdminBypass: ctx.GetString("role") == "admin",
 	}
+	// stats 由 Weave 纯函数真实回填（此前 RAGMessages/StrippedFewShots 是恒 0/1 的假统计）
+	weaveStats := &service.WeaveResultStats{}
+	in.ResultStats = weaveStats
 	for _, d := range req.RAGDocs {
 		in.RAGDocs = append(in.RAGDocs, service.RAGDocument{
 			ID: d.ID, Title: d.Title, Content: d.Content, Score: d.Score, Source: d.Source,
@@ -453,13 +555,10 @@ func (c *AssetBundleController) Weave(ctx *gin.Context) {
 	}
 	stats := dto.WeaveStats{
 		AssetMessages:    len(in.Asset.Messages),
-		RAGMessages:      0,
+		RAGMessages:      weaveStats.RAGMessages,
 		HistoryMessages:  len(in.ChatHistory),
 		FinalTotal:       len(msgs),
-		StrippedFewShots: 0,
-	}
-	if len(req.RAGDocs) > 0 {
-		stats.RAGMessages = 1
+		StrippedFewShots: weaveStats.StrippedFewShots,
 	}
 	response.Success(ctx, dto.WeaveResponse{
 		Messages:     service.AssetBundleMessagesToDTO(msgs),
@@ -472,6 +571,8 @@ func (c *AssetBundleController) Weave(ctx *gin.Context) {
 // @Tags      asset-bundle
 // @Router    /api/asset-bundle/merchant-save [post]
 // MerchantSave 商户低代码表单保存（把表单反向翻译成标准 messages 数组）
+//
+// 状态码口径：200 保存成功；400/409 参数或 asset_id 冲突；500 系统错误。
 func (c *AssetBundleController) MerchantSave(ctx *gin.Context) {
 	var req dto.MerchantFormSaveRequest
 	if !response.BindJSON(ctx, &req) {
@@ -482,20 +583,13 @@ func (c *AssetBundleController) MerchantSave(ctx *gin.Context) {
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
 	}
-	existing, _ := c.svc.GetBundleByAssetID(ctx.Request.Context(), req.AssetID)
-	if existing != nil {
-		bundle.ID = existing.ID
-		if err := c.svc.UpdateBundle(ctx.Request.Context(), bundle); err != nil {
-			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
-			return
-		}
-	} else {
-		if err := c.svc.CreateBundle(ctx.Request.Context(), bundle); err != nil {
-			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
-			return
-		}
+	// upsert 语义（版本保留/保存即生效/查询错误不吞）收口在 Service 层
+	saved, err := c.svc.SaveMerchantBundle(ctx.Request.Context(), bundle)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
+		return
 	}
-	response.Success(ctx, bundle, "ok")
+	response.Success(ctx, saved, "ok")
 }
 
 // @Summary      解析 messages 数组为商户表单（前端回显用）

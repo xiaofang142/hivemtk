@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -500,7 +501,9 @@ func TestScanSystemPromptBannedWords(t *testing.T) {
 	} {
 		if err := ScanSystemPromptBannedWords(bad); err == nil {
 			t.Errorf("banned prompt not detected: %s", bad)
-		} else if !strings.Contains(err.Error(), "拒绝提交平台审核") {
+		} else if !strings.Contains(err.Error(), "违规敏感词") {
+			// 审计轮：扫描共用化后错误文案改为「内容包含违规敏感词 %q」，
+			// 本地发布与提交平台两条链共用同一份扫描
 			t.Errorf("error should mention rejection: %v", err)
 		}
 	}
@@ -601,6 +604,7 @@ type mockAssetBundleRepo struct {
 	mu      sync.Mutex
 	storage map[string]*model.AssetBundle
 	byID    map[int64]*model.AssetBundle
+	ratings map[string]int
 	nextID  int64
 }
 
@@ -608,6 +612,7 @@ func newMockAssetBundleRepo() *mockAssetBundleRepo {
 	return &mockAssetBundleRepo{
 		storage: make(map[string]*model.AssetBundle),
 		byID:    make(map[int64]*model.AssetBundle),
+		ratings: make(map[string]int),
 		nextID:  1,
 	}
 }
@@ -707,6 +712,62 @@ func (r *mockAssetBundleRepo) ExistsByAssetID(_ context.Context, assetID string)
 	return ok, nil
 }
 
+func (r *mockAssetBundleRepo) UpdatePlatformRef(_ context.Context, id int64, platformAssetID int64, status, note string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.byID[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	b.PlatformAssetID = platformAssetID
+	b.PlatformStatus = status
+	b.PlatformReviewNote = note
+	return nil
+}
+
+func (r *mockAssetBundleRepo) UpsertRating(_ context.Context, m *model.AssetBundleRating) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.storage[m.AssetID]; !ok {
+		return errors.New("not found")
+	}
+	r.ratings[m.AssetID+"/"+strconv.Itoa(int(m.UserID))] = m.Score
+	return nil
+}
+
+func (r *mockAssetBundleRepo) RatingSummary(_ context.Context, assetID string) (float64, int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	total, n := 0, 0
+	prefix := assetID + "/"
+	for k, v := range r.ratings {
+		if strings.HasPrefix(k, prefix) {
+			total += v
+			n++
+		}
+	}
+	if n == 0 {
+		return 0, 0, nil
+	}
+	return float64(total) / float64(n), int64(n), nil
+}
+
+func (r *mockAssetBundleRepo) ApplyRating(_ context.Context, assetID string, rating float64, count int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, ok := r.storage[assetID]
+	if !ok {
+		return errors.New("not found")
+	}
+	b.Rating = rating
+	b.RatingCount = int(count)
+	if cached, ok := r.byID[b.ID]; ok {
+		cached.Rating = rating
+		cached.RatingCount = int(count)
+	}
+	return nil
+}
+
 type mockVersionLogRepo struct {
 	mu   sync.Mutex
 	logs []*model.AssetBundleVersionLog
@@ -717,6 +778,22 @@ func (r *mockVersionLogRepo) Create(_ context.Context, m *model.AssetBundleVersi
 	defer r.mu.Unlock()
 	r.logs = append(r.logs, m)
 	return nil
+}
+
+func (r *mockVersionLogRepo) ListByAssetID(_ context.Context, assetID string, limit int) ([]*model.AssetBundleVersionLog, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*model.AssetBundleVersionLog, 0, len(r.logs))
+	for _, l := range r.logs {
+		if l.AssetID == assetID {
+			cp := *l
+			out = append(out, &cp)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (r *mockVersionLogRepo) snapshot() []*model.AssetBundleVersionLog {
@@ -892,6 +969,15 @@ func TestService_WeaveForRequest(t *testing.T) {
 	if err := svc.CreateBundle(context.Background(), bundle); err != nil {
 		t.Fatal(err)
 	}
+	// 生效闸门（审计轮）：draft 包不可织布，必须先发布（publish 含内容门禁）
+	if _, err := svc.WeaveForRequest(context.Background(), "weave_001", "用户问题", &WeaveInput{
+		Options: WeaveOptions{IncludeMerchantVars: false, StripFewShotJSON: false},
+	}); err == nil {
+		t.Error("weave on draft bundle should be rejected, got nil error")
+	}
+	if err := svc.PublishBundle(context.Background(), bundle.ID); err != nil {
+		t.Fatal(err)
+	}
 	out, err := svc.WeaveForRequest(context.Background(), "weave_001", "用户问题", &WeaveInput{
 		Options: WeaveOptions{IncludeMerchantVars: false, StripFewShotJSON: false},
 	})
@@ -953,6 +1039,10 @@ type failingVersionLogRepo struct{}
 
 func (failingVersionLogRepo) Create(context.Context, *model.AssetBundleVersionLog) error {
 	return errors.New("simulated db down")
+}
+
+func (failingVersionLogRepo) ListByAssetID(context.Context, string, int) ([]*model.AssetBundleVersionLog, error) {
+	return nil, errors.New("simulated db down")
 }
 
 // TestHotPlug_K2_PersistAcrossInstances 热插拔开关落库：跨实例可见、Disable 同步持久化

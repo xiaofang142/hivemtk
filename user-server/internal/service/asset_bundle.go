@@ -30,6 +30,8 @@ import (
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/safeprompt"
 	"strconv"
+
+	"gorm.io/gorm"
 )
 
 type WeaveInput struct {
@@ -46,6 +48,21 @@ type WeaveInput struct {
 	Options WeaveOptions
 
 	Sandbox bool
+
+	// AdminBypass 由 Controller 按 JWT 角色注入（role==admin）。
+	// sandbox 模式只对管理员生效：Playground 开发者调试台是管理员功能，
+	// 普通用户传 sandbox:true 不得绕过热启用闸门或读取 draft/archived 包全文。
+	AdminBypass bool
+
+	// ResultStats 织布统计出参（可选）：Weave 成功后真实回填 RAG 消息数与
+	// 被剥离的 few-shot JSON 条数。
+	ResultStats *WeaveResultStats
+}
+
+// WeaveResultStats 织布过程的真实统计（出参）
+type WeaveResultStats struct {
+	RAGMessages      int
+	StrippedFewShots int
 }
 
 type RAGDocument struct {
@@ -109,13 +126,13 @@ func Weave(in WeaveInput) ([]model.AssetBundleMessage, error) {
 	}
 
 	result := make([]model.AssetBundleMessage, 0, len(in.Asset.Messages)+8)
-	stripped := false
+	strippedCount := 0
 	for _, m := range in.Asset.Messages {
 		msg := m
 		if opts.StripFewShotJSON && msg.Role != "system" {
 			if cleaned, ok := stripTrailingJSONBlock(msg.Content); ok {
 				msg.Content = cleaned
-				stripped = true
+				strippedCount++
 			}
 		}
 		result = append(result, msg)
@@ -150,9 +167,15 @@ func Weave(in WeaveInput) ([]model.AssetBundleMessage, error) {
 		Content: in.UserQuery,
 	})
 
-	logger.Debugf("[weave] asset=%s rag=%d hist=%d merchant=%d result_len=%d stripped=%v",
+	// 织布统计真实回填（调用方传了 ResultStats 才填；此前响应里是恒 0/1 的假统计）
+	if in.ResultStats != nil {
+		in.ResultStats.RAGMessages = len(ragMsgs)
+		in.ResultStats.StrippedFewShots = strippedCount
+	}
+
+	logger.Debugf("[weave] asset=%s rag=%d hist=%d merchant=%d result_len=%d stripped=%d",
 		in.Asset.AssetID, len(in.RAGDocs), len(in.ChatHistory),
-		len(in.MerchantVars), len(result), stripped)
+		len(in.MerchantVars), len(result), strippedCount)
 	return result, nil
 }
 
@@ -321,6 +344,15 @@ func (s *AssetBundleService) CreateBundle(ctx context.Context, m *model.AssetBun
 	if !hasSystem {
 		return bizerr.New(bizerr.CodeParamInvalid, "messages 中至少需要一条 role=system 的提示词")
 	}
+	if err := validateBundleMeta(m.AssetID, m.Title, m.Version, m.CoverImage); err != nil {
+		return err
+	}
+	if err := validateBundleScope(m.Scope); err != nil {
+		return err
+	}
+	if err := validateBundleMessages(m.Messages); err != nil {
+		return err
+	}
 	if m.Status == "" {
 		m.Status = model.AssetBundleStatusDraft
 	}
@@ -340,10 +372,24 @@ func (s *AssetBundleService) CreateBundle(ctx context.Context, m *model.AssetBun
 	if exists {
 		return bizerr.New(bizerr.CodeConflict, fmt.Sprintf("asset_id %s 已存在，请更换后重试", m.AssetID))
 	}
-	return s.repo.Create(ctx, m)
+	if err := s.repo.Create(ctx, m); err != nil {
+		// 查重只排除未删行，而 (tenant_id,asset_id) 唯一索引仍含软删行——
+		// 删除后重建同 asset_id 会撞 23505，必须给可读提示而不是 500。
+		if strings.Contains(err.Error(), "23505") {
+			return bizerr.New(bizerr.CodeConflict, fmt.Sprintf("asset_id %s 已被占用（可能存在同 ID 的历史已删除包），请更换 asset_id", m.AssetID))
+		}
+		return err
+	}
+	return nil
 }
 
-func (s *AssetBundleService) UpdateBundle(ctx context.Context, m *model.AssetBundle) error {
+// BundleUpdateMeta 更新操作元信息（不落业务列，仅进版本审计日志）
+type BundleUpdateMeta struct {
+	ChangeNote string
+	Operator   string
+}
+
+func (s *AssetBundleService) UpdateBundle(ctx context.Context, m *model.AssetBundle, meta ...BundleUpdateMeta) error {
 	if m == nil || m.ID == 0 {
 		return bizerr.New(bizerr.CodeParamInvalid, "资产包 ID 不能为空")
 	}
@@ -389,32 +435,189 @@ func (s *AssetBundleService) UpdateBundle(ctx context.Context, m *model.AssetBun
 	if len(m.Messages) == 0 {
 		m.Messages = old.Messages
 	}
+	// 封面必须回填：Update 列白名单含 cover_image，不回填的话任何一次
+	// 不携带封面的普通更新都会把已有封面清空。
+	if m.CoverImage == "" {
+		m.CoverImage = old.CoverImage
+	}
+	// 状态/作用域/消息/元数据校验：active 只能经发布接口（含内容门禁）到达
+	if m.Status != old.Status {
+		if err := validateBundleStatusForUpdate(m.Status); err != nil {
+			return err
+		}
+	}
+	if err := validateBundleScope(m.Scope); err != nil {
+		return err
+	}
+	if err := validateBundleMessages(m.Messages); err != nil {
+		return err
+	}
+	if err := validateBundleMeta(m.AssetID, m.Title, m.Version, m.CoverImage); err != nil {
+		return err
+	}
 	if err := s.repo.Update(ctx, m); err != nil {
 		return err
 	}
-	if old.Version != m.Version {
+	// 版本审计：版本号变化必须记；内容（messages）变化而版本号没动的也要记
+	// （此前"改 messages 不 bump version 完全不审计"，版本追溯名存实亡）。
+	var updateMeta BundleUpdateMeta
+	if len(meta) > 0 {
+		updateMeta = meta[0]
+	}
+	if updateMeta.ChangeNote == "" {
+		updateMeta.ChangeNote = "manual update"
+	}
+	if updateMeta.Operator == "" {
+		updateMeta.Operator = m.Author
+	}
+	messagesChanged := !bundleMessagesEqual(old.Messages, m.Messages)
+	if old.Version != m.Version || messagesChanged {
 		if s.version == nil {
 			logger.Errorf("[asset_bundle] version log repo missing: version change NOT audited asset=%s %s->%s operator=%s",
-				m.AssetID, old.Version, m.Version, m.Author)
+				m.AssetID, old.Version, m.Version, updateMeta.Operator)
 		} else if err := s.version.Create(ctx, &model.AssetBundleVersionLog{
 			AssetID:    m.AssetID,
 			FromVer:    old.Version,
 			ToVer:      m.Version,
-			ChangeNote: "manual update",
-			Operator:   m.Author,
+			ChangeNote: updateMeta.ChangeNote,
+			Operator:   updateMeta.Operator,
 		}); err != nil {
 
 			logger.Errorf("[asset_bundle] version log write FAILED asset=%s %s->%s operator=%s err=%v",
-				m.AssetID, old.Version, m.Version, m.Author, err)
+				m.AssetID, old.Version, m.Version, updateMeta.Operator, err)
 		}
 	}
 	return nil
+}
+
+// bundleMessagesEqual 逐条比较 messages（role+content），用于内容变更审计判定
+func bundleMessagesEqual(a, b model.AssetBundleMessages) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Role != b[i].Role || a[i].Content != b[i].Content ||
+			a[i].Name != b[i].Name || a[i].ToolCallID != b[i].ToolCallID {
+			return false
+		}
+	}
+	return true
+}
+
+// GetVersionLogs 版本轨迹读取（此前日志表只写不读，追溯能力名存实亡）
+func (s *AssetBundleService) GetVersionLogs(ctx context.Context, assetID string, limit int) ([]*model.AssetBundleVersionLog, error) {
+	if s.version == nil {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "版本日志未启用")
+	}
+	return s.version.ListByAssetID(ctx, assetID, limit)
+}
+
+// localAssetMetaFinder 本地资产元数据只读能力（LocalAssetService 实现），
+// 用于绑定校验：LoadOne 会计数并上报平台，不能拿来做存在性检查。
+type localAssetMetaFinder interface {
+	FindByAssetID(ctx context.Context, assetID string) (*model.LocalAsset, error)
+}
+
+// ValidateBundleForBind 绑定前校验：包必须存在且处于可用状态
+// （asset_bundles 要求 active；平台购买/同步的本地资产要求 is_active）。
+// 此前绑定接受任意字符串——不存在/未购/已删包都能绑上，运行期静默回退原人设仅 warn。
+func (s *AssetBundleService) ValidateBundleForBind(ctx context.Context, assetID string) error {
+	b, err := s.repo.FindByAssetID(ctx, assetID)
+	if err == nil && b != nil {
+		if b.Status != model.AssetBundleStatusActive {
+			return bizerr.New(bizerr.CodeParamInvalid, "资产包未发布或已下架，无法绑定到智能体")
+		}
+		return nil
+	}
+	if finder, ok := s.localLoader.(localAssetMetaFinder); ok {
+		la, ferr := finder.FindByAssetID(ctx, assetID)
+		if ferr == nil && la != nil {
+			if !la.IsActive {
+				return bizerr.New(bizerr.CodeParamInvalid, "本地资产已停用，无法绑定到智能体")
+			}
+			return nil
+		}
+	}
+	return bizerr.New(bizerr.CodeParamInvalid, "资产包不存在，无法绑定到智能体")
+}
+
+// RateBundle 评分写路径（此前 rating/rating_count 无任何写入来源，评分只展示不生效）。
+// 一人一包一票：重复评分改票不增票；聚合后回写资产包。
+func (s *AssetBundleService) RateBundle(ctx context.Context, assetID string, userID uint, score int) error {
+	if score < 1 || score > 5 {
+		return bizerr.New(bizerr.CodeParamInvalid, "评分需在 1-5 分之间")
+	}
+	if _, err := s.repo.FindByAssetID(ctx, assetID); err != nil {
+		return err
+	}
+	if err := s.repo.UpsertRating(ctx, &model.AssetBundleRating{
+		AssetID: assetID,
+		UserID:  userID,
+		Score:   score,
+	}); err != nil {
+		return err
+	}
+	avg, count, err := s.repo.RatingSummary(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	return s.repo.ApplyRating(ctx, assetID, avg, count)
+}
+
+// SaveMerchantBundle 商户低代码表单的 upsert 语义（业务规则收口在 Service）。
+//
+// 与普通 Update 的差异：
+//  1. 版本不做降级——商户表单不做语义化版本管理，恒以既有版本号落库，
+//     避免 active/1.2.0 的包被一次表单保存打回 draft/1.0.0 并产生假版本日志；
+//  2. 保存即生效——商户控制台的启停语义由热启用开关承担，落库状态一律 active，
+//     与运行时生效闸门（ResolveSystemPrompt 要求 active）保持一致；
+//  3. 查询错误不吞——DB 故障不能被当成「包不存在」而误走创建分支。
+func (s *AssetBundleService) SaveMerchantBundle(ctx context.Context, bundle *model.AssetBundle) (*model.AssetBundle, error) {
+	if bundle == nil || bundle.AssetID == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_id 不能为空")
+	}
+	existing, err := s.repo.FindByAssetID(ctx, bundle.AssetID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		bundle.ID = existing.ID
+		bundle.Version = existing.Version
+		bundle.Status = model.AssetBundleStatusActive
+		// 商户保存即生效（落 active 直入执行链路），内容门禁与发布接口同源
+		if err := ScanBundleContent(bundle); err != nil {
+			return nil, bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("保存被内容门禁拦截：%v", err))
+		}
+		if err := s.repo.Update(ctx, bundle); err != nil {
+			return nil, err
+		}
+		return bundle, nil
+	}
+	bundle.Status = model.AssetBundleStatusActive
+	if err := ScanBundleContent(bundle); err != nil {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("保存被内容门禁拦截：%v", err))
+	}
+	if bundle.Version == "" {
+		bundle.Version = "1.0.0"
+	}
+	if err := s.repo.Create(ctx, bundle); err != nil {
+		if strings.Contains(err.Error(), "23505") {
+			return nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("asset_id %s 已被占用（可能存在同 ID 的历史已删除包），请更换 asset_id", bundle.AssetID))
+		}
+		return nil, err
+	}
+	return bundle, nil
 }
 
 func (s *AssetBundleService) PublishBundle(ctx context.Context, id int64) error {
 	m, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		return err
+	}
+	// 本地发布门禁：发布即进入执行链路（ResolveSystemPrompt 只认 active），
+	// 必须与提交平台共用同一份内容扫描，否则越狱话术包可绕过审核直接生效。
+	if err := ScanBundleContent(m); err != nil {
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("发布被内容门禁拦截：%v", err))
 	}
 	m.Status = model.AssetBundleStatusActive
 	return s.repo.Update(ctx, m)
@@ -430,6 +633,10 @@ func (s *AssetBundleService) ArchiveBundle(ctx context.Context, id int64) error 
 }
 
 var ErrBundleNotHotEnabled = bizerr.New(bizerr.CodeParamInvalid, "资产包未热启用，请先调用 enable 接口启用后再使用")
+
+var ErrBundleNotActive = bizerr.New(bizerr.CodeParamInvalid, "资产包未发布或已下架，请先发布后再使用")
+
+var ErrBundleNotSubmitted = bizerr.New(bizerr.CodeParamInvalid, "该资产包尚未提交平台审核")
 
 func (s *AssetBundleService) EnableBundle(ctx context.Context, id int64) (*model.AssetBundle, error) {
 	m, err := s.repo.FindByID(ctx, id)
@@ -487,7 +694,23 @@ func (s *AssetBundleService) ResolveSystemPrompt(ctx context.Context, assetBundl
 	}
 	bundle, err := s.repo.FindByAssetID(ctx, assetBundleID)
 	if err == nil && bundle != nil {
-		return systemPromptFromMessages(bundle.Messages), nil
+		// 生效闸门（真实运行路径也必须受控）：已归档/未发布的包不得继续织入人设；
+		// 已采用热启用的租户（索引非空）还必须显式启用该包，disable 才能真正生效。
+		if bundle.Status != model.AssetBundleStatusActive {
+			return "", ErrBundleNotActive
+		}
+		if !s.hotPlug.isEmpty(ctx) && !s.hotPlug.has(ctx, assetBundleID) {
+			return "", ErrBundleNotHotEnabled
+		}
+		prompt := systemPromptFromMessages(bundle.Messages)
+		if prompt != "" {
+			// 真实生效路径计数：此前 use_count 只统计 Weave API 调用，与线上生效量脱节
+			if uerr := s.repo.IncrementUseCount(ctx, assetBundleID); uerr != nil {
+				logger.Warnf("[asset_bundle] increment use_count (resolve) failed asset=%s err=%v", assetBundleID, uerr)
+			}
+			return prompt, nil
+		}
+		// messages 里没有可用的 system 内容时继续尝试本地资产回退
 	}
 	if s.localLoader != nil {
 		la, data, lerr := s.localLoader.LoadOne(ctx, assetBundleID)
@@ -622,7 +845,11 @@ func (s *AssetBundleService) WeaveForRequest(ctx context.Context, assetID, userQ
 	if assetID == "" {
 		return nil, bizerr.New(bizerr.CodeParamInvalid, "asset_id 不能为空")
 	}
-	if !s.hotPlug.isEmpty(ctx) && !in.Sandbox && !s.hotPlug.has(ctx, assetID) {
+	// sandbox 只对管理员生效（Playground 调试台）；普通用户的 sandbox 请求
+	// 一律按非沙箱处理：闸门、状态检查、计数全部适用，防止借 sandbox
+	// 绕过热启用闸门读取 draft/archived 包的提示词全文。
+	adminSandbox := in.Sandbox && in.AdminBypass
+	if !adminSandbox && !s.hotPlug.isEmpty(ctx) && !s.hotPlug.has(ctx, assetID) {
 		return nil, ErrBundleNotHotEnabled
 	}
 	if in.Asset == nil {
@@ -632,10 +859,14 @@ func (s *AssetBundleService) WeaveForRequest(ctx context.Context, assetID, userQ
 		}
 		in.Asset = b
 	}
+	// 非沙箱织布只允许已发布（active）的包：publish/archive 语义必须对执行链路生效
+	if !adminSandbox && in.Asset.Status != model.AssetBundleStatusActive {
+		return nil, ErrBundleNotActive
+	}
 	if in.UserQuery == "" {
 		in.UserQuery = userQuery
 	}
-	if !in.Sandbox {
+	if !adminSandbox {
 		if err := s.repo.IncrementUseCount(ctx, assetID); err != nil {
 			logger.Warnf("[asset_bundle] increment use_count failed asset=%s err=%v", assetID, err)
 		}
@@ -1196,7 +1427,7 @@ var (
 	censorConfigKeyLineRE = regexp.MustCompile(`(?m)^- 反审查尺度[:：].*$`)
 )
 
-// ScanSystemPromptBannedWords 对 system prompt 做敏感词黑名单扫描，
+// ScanSystemPromptBannedWords 对提示词文本做敏感词黑名单扫描，
 // 命中即返回包含命中词的明确错误。商户配置快照的固定键行除外。
 func ScanSystemPromptBannedWords(prompt string) error {
 	if strings.TrimSpace(prompt) == "" {
@@ -1204,31 +1435,103 @@ func ScanSystemPromptBannedWords(prompt string) error {
 	}
 	target := censorConfigKeyLineRE.ReplaceAllString(prompt, "")
 	if hit := bannedWordRE.FindString(target); hit != "" {
-		return fmt.Errorf("system prompt 包含违规敏感词 %q，拒绝提交平台审核", hit)
+		return fmt.Errorf("内容包含违规敏感词 %q", hit)
 	}
 	return nil
 }
 
-// ValidateBundleForPlatformSubmit 提交平台审核前的敏感词扫描入口（K-1）：
-// 遍历资产包全部 role=system 消息，依次执行：
+// ScanBundleContent 本地发布与提交平台共用的内容门禁：
+// 扫描标题/描述与**全部角色**的消息文本（此前只扫 system 消息，
+// user/assistant 与元数据字段可携带同样的话术绕过闸门）。
+// 依次执行：
 //  1. ScanSystemPromptBannedWords：黑名单越狱/对抗性话术扫描
 //  2. safeprompt.ScanOutput：PII + 运行时敏感词扫描
 //
-// 任一命中严重违规即拒绝提交。
-func ValidateBundleForPlatformSubmit(bundle *model.AssetBundle) error {
+// 任一命中严重违规即拒绝。
+func ScanBundleContent(bundle *model.AssetBundle) error {
 	if bundle == nil {
 		return errors.New("bundle is nil")
 	}
+	targets := make([]string, 0, len(bundle.Messages)+2)
+	targets = append(targets, bundle.Title, bundle.Description)
 	for _, m := range bundle.Messages {
-		if m.Role != "system" {
+		targets = append(targets, m.Content)
+	}
+	for _, t := range targets {
+		if strings.TrimSpace(t) == "" {
 			continue
 		}
-		if err := ScanSystemPromptBannedWords(m.Content); err != nil {
+		if err := ScanSystemPromptBannedWords(t); err != nil {
 			return err
 		}
-		if violations := safeprompt.ScanOutput(m.Content); safeprompt.HasCriticalViolation(violations) {
-			return fmt.Errorf("system prompt 包含严重违规内容: %v", violations)
+		if violations := safeprompt.ScanOutput(t); safeprompt.HasCriticalViolation(violations) {
+			return fmt.Errorf("内容包含严重违规: %v", violations)
 		}
 	}
 	return nil
 }
+
+// ValidateBundleForPlatformSubmit 提交平台审核前的敏感词扫描入口（K-1）。
+// 现与本地发布共用同一份全量扫描（ScanBundleContent）。
+func ValidateBundleForPlatformSubmit(bundle *model.AssetBundle) error {
+	return ScanBundleContent(bundle)
+}
+
+// validateBundleStatusForUpdate 更新接口允许写入的状态。
+// active 只能经 PublishBundle（含内容门禁）到达：Update 直写 active
+// 等于绕过发布扫描；inactive 为遗留枚举，保留可写以便兼容存量数据修正。
+func validateBundleStatusForUpdate(st model.AssetBundleStatus) error {
+	switch st {
+	case model.AssetBundleStatusDraft, model.AssetBundleStatusInactive, model.AssetBundleStatusArchived:
+		return nil
+	case model.AssetBundleStatusActive:
+		return bizerr.New(bizerr.CodeParamInvalid, "上线请使用发布接口（publish），更新接口不可直接置为 active")
+	default:
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("非法的资产包状态值：%s", st))
+	}
+}
+
+// validateBundleScope 作用域枚举校验（空值=创建时默认，允许）。
+func validateBundleScope(sc model.AssetBundleScope) error {
+	switch sc {
+	case "", model.AssetBundleScopePrivate, model.AssetBundleScopeShared, model.AssetBundleScopeOfficial:
+		return nil
+	default:
+		return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("非法的资产包作用域：%s", sc))
+	}
+}
+
+// validateBundleMessages 消息 role 枚举校验：任意字符串会原样发给 LLM，
+// 必须限制在 OpenAI ChatML 协议的合法集合内。
+func validateBundleMessages(msgs model.AssetBundleMessages) error {
+	for _, msg := range msgs {
+		switch msg.Role {
+		case "system", "user", "assistant", "tool":
+		default:
+			return bizerr.New(bizerr.CodeParamInvalid, fmt.Sprintf("非法的消息 role：%s（仅允许 system/user/assistant/tool）", msg.Role))
+		}
+	}
+	return nil
+}
+
+// validateBundleMeta 标题/asset_id/版本/封面 URL 的轻量格式校验。
+// 长度上限与 DB 列宽对齐（asset_id varchar(64)、title varchar(256)）；
+// 封面只允许站内相对路径与 http(s) 外链，防 javascript:/data: 伪协议注入。
+func validateBundleMeta(assetID, title, version, coverImage string) error {
+	if n := len(assetID); n > 64 {
+		return bizerr.New(bizerr.CodeParamInvalid, "asset_id 过长（最多 64 字符）")
+	}
+	if n := len([]rune(title)); n > 128 {
+		return bizerr.New(bizerr.CodeParamInvalid, "资产包名称过长（最多 128 字）")
+	}
+	if version != "" && !bundleSemverRE.MatchString(version) {
+		return bizerr.New(bizerr.CodeParamInvalid, "版本号需符合 x.y.z 数字格式，如 1.2.0")
+	}
+	if coverImage != "" && !strings.HasPrefix(coverImage, "/") &&
+		!strings.HasPrefix(coverImage, "http://") && !strings.HasPrefix(coverImage, "https://") {
+		return bizerr.New(bizerr.CodeParamInvalid, "封面地址仅支持站内路径或 http(s) 链接")
+	}
+	return nil
+}
+
+var bundleSemverRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)

@@ -62,6 +62,10 @@ func FromAssetBundleModel(b *model.AssetBundle) *dto.AssetBundleView {
 		UseCount:           b.UseCount,
 		Rating:             b.Rating,
 		RatingCount:        b.RatingCount,
+		CoverImage:         b.CoverImage,
+		PlatformAssetID:    b.PlatformAssetID,
+		PlatformStatus:     b.PlatformStatus,
+		PlatformReviewNote: b.PlatformReviewNote,
 		CreatedAt:          b.CreatedAt,
 		UpdatedAt:          b.UpdatedAt,
 	}

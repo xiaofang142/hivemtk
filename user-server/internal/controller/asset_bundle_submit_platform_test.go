@@ -40,6 +40,14 @@ type fakeBundleRepo struct {
 
 	findByIDCalls     []int64
 	findByAssetIDKeys []string
+	platformRefs      []string // 审计轮：记录 UpdatePlatformRef 落库（幂等提交回执）
+}
+
+// UpdatePlatformRef v3.94.0 提交幂等化后，提交流程会把 platform_asset_id/审核状态
+// 落库（此前不落，重复提交会造出多个平台资产）。fake 记录调用供断言。
+func (f *fakeBundleRepo) UpdatePlatformRef(_ context.Context, _ int64, platformAssetID int64, status, note string) error {
+	f.platformRefs = append(f.platformRefs, fmt.Sprintf("%d/%s/%s", platformAssetID, status, note))
+	return nil
 }
 
 func newFakeBundleRepo() *fakeBundleRepo {
@@ -87,6 +95,9 @@ func newPlatformStub(t *testing.T) *platformStub {
 			_ = json.Unmarshal(b, &m)
 			ps.createdBodies = append(ps.createdBodies, m)
 			_, _ = w.Write([]byte(`{"code":200,"msg":"创建成功","data":{"id":77}}`))
+		case "/contributor-api/v1/assets/77":
+			// 提交后回程拉审核状态（审计轮：审核结果回程落库回显）
+			_, _ = w.Write([]byte(`{"code":200,"msg":"ok","data":{"asset":{"status":"pending","review_note":""}}}`))
 		default:
 			_, _ = w.Write([]byte(`{"code":200,"msg":"提交成功"}`))
 		}
@@ -161,6 +172,10 @@ func TestSubmitToPlatformResolvesNumericBundleIDToAssetID(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "platform_asset_id") {
 		t.Errorf("响应应回 platform_asset_id，body=%s", w.Body.String())
+	}
+	// 审计轮（幂等提交）：平台资产 ID 与审核状态必须落库，重试才走复用分支
+	if len(repo.platformRefs) == 0 || repo.platformRefs[len(repo.platformRefs)-1] != "77/pending/" {
+		t.Errorf("platform ref 应落库为 77/pending，实际=%v", repo.platformRefs)
 	}
 }
 

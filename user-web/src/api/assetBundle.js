@@ -21,6 +21,14 @@ export const publishBundle = (id) =>
 export const submitToPlatform = (id) =>
   http.post(`/api/asset-bundle/${id}/submit-platform`);
 
+// 拉取平台审核状态并落库（审核结果回程：平台不回调，本地拉取闭环）
+export const refreshPlatformStatus = (id) =>
+  http.post(`/api/asset-bundle/${id}/platform-status/refresh`);
+
+// 版本轨迹（审计回溯）
+export const getBundleVersions = (id, limit = 50) =>
+  http.get(`/api/asset-bundle/${id}/versions?limit=${limit}`);
+
 export const archiveBundle = (id) =>
   http.post(`/api/asset-bundle/${id}/archive`);
 

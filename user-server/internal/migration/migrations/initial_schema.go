@@ -325,4 +325,11 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 残留放宽为可空（file_name 空行先回填历史值）——AutoMigrate 只加列不降约束，
 	// 存量库上任何文档插入都 23502「保存文档记录失败」。
 	register(NewKnowledgeDocumentsLegacyFilenameMigration(db))
+	// v3.94.0（资产包全链路审计轮）：asset_bundles 加平台提交回执四列
+	// （platform_asset_id/platform_status/platform_review_note/platform_submitted_at）——
+	// 提交平台幂等化（复用既有平台资产）且审核状态可回程回显。
+	register(NewAssetBundlePlatformRefMigration(db))
+	// v3.95.0（资产包全链路审计轮）：asset_bundle_ratings 评分表——
+	// 此前 rating/rating_count 无任何写路径，评分只展示不生效。
+	register(NewAssetBundleRatingMigration(db))
 }

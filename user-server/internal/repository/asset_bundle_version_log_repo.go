@@ -13,6 +13,7 @@ import (
 // AssetBundleVersionLogRepository 资产包版本日志仓储接口
 type AssetBundleVersionLogRepository interface {
 	Create(ctx context.Context, m *model.AssetBundleVersionLog) error
+	ListByAssetID(ctx context.Context, assetID string, limit int) ([]*model.AssetBundleVersionLog, error)
 }
 
 type assetBundleVersionLogRepo struct {
@@ -28,4 +29,21 @@ func (r *assetBundleVersionLogRepo) Create(ctx context.Context, m *model.AssetBu
 		return errors.New("asset bundle version log is nil")
 	}
 	return r.db.WithContext(ctx).Create(m).Error
+}
+
+// ListByAssetID 按 asset_id 倒序列出版本轨迹（新→旧）。limit<=0 默认 50，封顶 200。
+func (r *assetBundleVersionLogRepo) ListByAssetID(ctx context.Context, assetID string, limit int) ([]*model.AssetBundleVersionLog, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	list := make([]*model.AssetBundleVersionLog, 0, limit)
+	err := r.db.WithContext(ctx).
+		Where("asset_id = ?", assetID).
+		Order("id DESC").
+		Limit(limit).
+		Find(&list).Error
+	return list, err
 }

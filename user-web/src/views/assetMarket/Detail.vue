@@ -56,7 +56,7 @@
             type="primary"
             @click="handlePurchase"
           >
-            免费试用
+            {{ priceLabel }}
           </el-button>
         </div>
       </template>
@@ -82,6 +82,12 @@ const detail = ref(null)
 
 const asset = computed(() => detail.value?.asset || detail.value || {})
 const version = computed(() => detail.value?.version_info || {})
+// 价格文案与市场页（Market.vue）同一口径：price>0 显示积分数，<=0 才是免费试用。
+// 此前按钮硬编码「免费试用」，付费资产点确认后按服务端价格扣积分，构成扣费 surprise。
+const priceLabel = computed(() => {
+  const price = Number(asset.value.price || 0)
+  return price > 0 ? `${price} 积分购买` : '免费试用'
+})
 const previewText = computed(() => {
   const p = detail.value?.data_preview || detail.value?.data
   try {
@@ -107,8 +113,15 @@ const fetchDetail = async () => {
 }
 
 const handlePurchase = async () => {
+  const price = Number(asset.value.price || 0)
+  const isPaid = price > 0
   try {
-    await ElMessageBox.confirm(`确认免费试用「${asset.value.name}」？`, '免费试用')
+    await ElMessageBox.confirm(
+      isPaid
+        ? `确认以 ${price} 积分购买「${asset.value.name}」？余额不足将被拒绝。`
+        : `确认免费试用「${asset.value.name}」？`,
+      isPaid ? '积分购买' : '免费试用',
+    )
   } catch {
     return
   }
@@ -119,7 +132,7 @@ const handlePurchase = async () => {
     // 这里不接成功文案，也不让 promise 逸出成组件事件处理器里的未捕获错误。
     return
   }
-  ElMessage.success('试用并同步成功')
+  ElMessage.success(isPaid ? '购买并同步成功' : '试用并同步成功')
   router.push('/asset-market/my-assets')
 }
 

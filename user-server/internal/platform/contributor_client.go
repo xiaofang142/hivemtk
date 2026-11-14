@@ -85,9 +85,13 @@ func contributorIdentity() (contributorAuth, error) {
 		secret = config.PlatformCfg.Secret
 	}
 	if secret == "" {
-		if os.Getenv("CONTRIBUTOR_DEV") == "1" {
+		if os.Getenv("CONTRIBUTOR_DEV") == "1" && config.IsDevelopmentEnv() {
 			secret = devPlaceholderSecret
 			logger.Warn("contributor_identity: CONTRIBUTOR_DEV=1 detected, using placeholder secret. NEVER set this in production.")
+		} else if os.Getenv("CONTRIBUTOR_DEV") == "1" {
+			// 生产环境拒绝 DEV 后门（审计轮）：username=mtk_<merchantKey> 可预测，
+			// 占位密钥派生的口令一旦被推演，知道 merchant_key 即可冒充商户贡献者身份。
+			return a, fmt.Errorf("%w: CONTRIBUTOR_DEV=1 在生产环境被拒绝（占位密钥会暴露商户贡献者身份），请配置 platform.secret", ErrPlatformNotConfigured)
 		} else if config.PlatformCfg == nil {
 			return a, fmt.Errorf("%w: 无法派生贡献者身份，请先加载平台配置", ErrPlatformNotConfigured)
 		} else {
@@ -243,6 +247,39 @@ func (cc *ContributorClient) CreateAsset(p CreateAssetPayload) (int64, error) {
 // SubmitAudit 将平台资产提交审核上架
 func (cc *ContributorClient) SubmitAudit(assetID int64) error {
 	_, err := cc.doAuthorized("POST", fmt.Sprintf("/contributor-api/v1/assets/%d/submit", assetID), nil)
+	return err
+}
+
+// ContributorAssetInfo 平台资产的审核回执字段（GetAssetDetail 返回 asset 子对象）
+type ContributorAssetInfo struct {
+	Status     string `json:"status"`
+	ReviewNote string `json:"review_note"`
+}
+
+// GetAssetDetail 拉取平台资产的当前审核状态（审核结果回程：平台不回调 user-server，
+// 本地以拉取方式闭环；平台侧 GET /contributor-api/v1/assets/:id 仅返回贡献者自己的资产）
+func (cc *ContributorClient) GetAssetDetail(assetID int64) (*ContributorAssetInfo, error) {
+	env, err := cc.doAuthorized("GET", fmt.Sprintf("/contributor-api/v1/assets/%d", assetID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var data struct {
+		Asset ContributorAssetInfo `json:"asset"`
+	}
+	if err := env.decodeData(&data); err != nil {
+		return nil, err
+	}
+	return &data.Asset, nil
+}
+
+// UploadVersion 把最新内容推成既有平台资产的新版本（幂等重提时同步内容改动）
+func (cc *ContributorClient) UploadVersion(assetID int64, version, changelog string, data []byte) error {
+	body, _ := json.Marshal(map[string]any{
+		"version":   version,
+		"changelog": changelog,
+		"data":      json.RawMessage(data),
+	})
+	_, err := cc.doAuthorized("POST", fmt.Sprintf("/contributor-api/v1/assets/%d/versions", assetID), body)
 	return err
 }
 

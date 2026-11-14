@@ -80,6 +80,10 @@ type AssetBundleView struct {
 	Rating             float64              `json:"rating"`
 	RatingCount        int                  `json:"rating_count"`
 	CoverImage         string               `json:"cover_image"`
+	// 平台提交回执（v3.94.0）：审核进度回显（draft/pending/approved/rejected/offline）
+	PlatformAssetID    int64                `json:"platform_asset_id"`
+	PlatformStatus     string               `json:"platform_status"`
+	PlatformReviewNote string               `json:"platform_review_note"`
 	CreatedAt          time.Time            `json:"created_at"`
 	UpdatedAt          time.Time            `json:"updated_at"`
 }

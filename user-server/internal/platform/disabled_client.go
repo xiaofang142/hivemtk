@@ -49,4 +49,8 @@ func (disabledClient) ReportUsage(_ context.Context, _ string, _ int64) error {
 	return ErrPlatformNotConfigured
 }
 
+func (disabledClient) RefundPurchase(_ context.Context, _, _ string) error {
+	return ErrPlatformNotConfigured
+}
+
 var _ repository.PlatformAPIClient = disabledClient{}

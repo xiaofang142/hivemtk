@@ -155,8 +155,17 @@ func (c *AssetMarketClient) GetCredits(ctx context.Context) (map[string]any, err
 	return view, nil
 }
 
-// ReportUsage 上报资产使用次数（商户端 → 平台），POST /merchant-api/asset-market/report-usage
+// ReportUsage 上报资产使用次数（商户端 → 平台），POST /merchant-api/asset-market/report-usage。
+// body 带 tenant_code：平台把用量记到 (merchant_key, tenant_code, asset_id) 的
+// 租户段购买行——此前缺 tenant_code，多租户下用量错账到商户级兜底行。
 func (c *AssetMarketClient) ReportUsage(ctx context.Context, assetID string, delta int64) error {
 	return c.doData("POST", "/merchant-api/asset-market/report-usage",
-		map[string]any{"asset_id": assetID, "delta": delta}, nil)
+		map[string]any{"asset_id": assetID, "delta": delta, "tenant_code": TenantCodeFromContext(ctx)}, nil)
+}
+
+// RefundPurchase 退款补偿（扣费成功但数据交付失败时的自动冲正），
+// POST /merchant-api/asset-market/purchases/refund。平台侧幂等：重复退款不二次入账。
+func (c *AssetMarketClient) RefundPurchase(ctx context.Context, assetID, reason string) error {
+	return c.doData("POST", "/merchant-api/asset-market/purchases/refund",
+		map[string]any{"asset_id": assetID, "reason": reason, "tenant_code": TenantCodeFromContext(ctx)}, nil)
 }

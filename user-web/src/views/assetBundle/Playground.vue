@@ -337,12 +337,6 @@
               label-width="120px"
               size="small"
             >
-              <el-form-item label="商业买断价">
-                <el-input
-                  v-model="bundle.price"
-                  placeholder="$ 299.00"
-                />
-              </el-form-item>
               <el-form-item label="作用域">
                 <el-radio-group v-model="bundle.scope">
                   <el-radio label="private">
@@ -366,6 +360,26 @@
               {{ platformEnabled ? '🚀 审核上架到官方蜂巢商城' : '🚀 发布到本地资产库' }}
               <span class="publish-hint">（自动序列化为标准 messages 数组）</span>
             </el-button>
+            <div
+              v-if="platformEnabled && bundle.id"
+              class="platform-status-row"
+            >
+              <el-tag
+                size="small"
+                :type="platformStatusMeta.type"
+              >
+                平台审核：{{ platformStatusMeta.text }}
+              </el-tag>
+              <el-button
+                size="small"
+                text
+                type="primary"
+                :loading="refreshingStatus"
+                @click="onRefreshPlatformStatus"
+              >
+                刷新审核状态
+              </el-button>
+            </div>
           </div>
         </el-card>
       </el-col>
@@ -379,7 +393,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   createBundle, updateBundle, getBundleByAssetID,
-  weaveBundle, publishBundle, submitToPlatform
+  weaveBundle, publishBundle, submitToPlatform, refreshPlatformStatus
 } from '@/api/assetBundle'
 import { useUserStore } from '@/stores/user'
 import { SystemApi } from '@/api/system'
@@ -394,6 +408,40 @@ const loadFailed = ref(false)
 // 关态下后端对上架写接口回 403，入口直接不渲染；取不到就按关态处理
 const platformEnabled = ref(false)
 
+// 平台审核状态展示（v3.94.0 审核回程）：平台不回调，本地拉取平台审核结果并回显，
+// 商户终于能看到 审核中/已上架/被驳回(+理由) 而不是提交后石沉大海
+const PLATFORM_STATUS_META = {
+  draft: { text: '未提交', type: 'info' },
+  pending: { text: '审核中', type: 'warning' },
+  approved: { text: '已上架', type: 'success' },
+  rejected: { text: '被驳回', type: 'danger' },
+  offline: { text: '已下架', type: 'info' },
+}
+const platformStatusMeta = computed(() => {
+  const base = PLATFORM_STATUS_META[bundle.platform_status] || PLATFORM_STATUS_META.draft
+  return bundle.platform_review_note
+    ? { ...base, text: `${base.text}（${bundle.platform_review_note}）` }
+    : base
+})
+const refreshingStatus = ref(false)
+const onRefreshPlatformStatus = async () => {
+  if (!bundle.id || refreshingStatus.value) return
+  refreshingStatus.value = true
+  try {
+    const resp = await refreshPlatformStatus(bundle.id)
+    const data = resp?.data || resp
+    if (data) {
+      bundle.platform_status = data.platform_status || ''
+      bundle.platform_review_note = data.platform_review_note || ''
+      ElMessage.success('已刷新平台审核状态')
+    }
+  } catch {
+    // 失败原因 request.js 已统一提示
+  } finally {
+    refreshingStatus.value = false
+  }
+}
+
 const aid = computed(() => route.params.aid || '')
 const isEdit = computed(() => !!aid.value)
 
@@ -406,7 +454,8 @@ const bundle = reactive({
   author: '',
   scope: 'private',
   status: 'draft',
-  price: '',
+  platform_status: '',
+  platform_review_note: '',
   messages: [
     {
       role: 'system',
@@ -488,6 +537,8 @@ const loadBundle = async () => {
       bundle.author = data.author || ''
       bundle.scope = data.scope || 'private'
       bundle.status = data.status || 'draft'
+      bundle.platform_status = data.platform_status || ''
+      bundle.platform_review_note = data.platform_review_note || ''
       bundle.messages = (data.messages || []).map(m => ({ ...m }))
     }
   } catch (e) {
@@ -564,6 +615,7 @@ const handlePublish = async () => {
     }
     try {
       await submitToPlatform(bundle.id)
+      bundle.platform_status = 'pending'
       ElMessage.success('本地已发布，并已提交平台审核上架')
     } catch (e) {
       ElMessage.warning('本地已发布；提交平台审核失败：' + (e?.message || e))
@@ -876,5 +928,12 @@ onMounted(() => {
   font-size: 11px;
   color: #909399;
   margin-left: 4px;
+}
+.platform-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>

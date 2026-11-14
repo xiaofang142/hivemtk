@@ -20,7 +20,7 @@
           </el-icon>
           <div class="status-text">
             <div class="status-title">
-              <span v-if="form.status === 'active'">🤖 托管中（AI 正在使用该话术包服务独立站和 WhatsApp）</span>
+              <span v-if="hosting">🤖 托管中（AI 正在使用该话术包服务独立站和 WhatsApp）</span>
               <span v-else>⏸️ 已暂停托管</span>
             </div>
             <div class="status-sub">
@@ -30,7 +30,7 @@
         </div>
         <div class="status-right">
           <el-button
-            v-if="form.status === 'active'"
+            v-if="hosting"
             type="warning"
             @click="handleToggleStatus('pause')"
           >
@@ -471,7 +471,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Monitor, VideoPause, Goods, Lock, ChatDotRound, Grid } from '@element-plus/icons-vue'
-import { merchantSave, merchantParse, enableBundle, disableBundle, getBundleByAssetID, uploadCover } from '@/api/assetBundle'
+import { merchantSave, merchantParse, enableBundle, disableBundle, listEnabledBundles, getBundleByAssetID, uploadCover } from '@/api/assetBundle'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -481,6 +481,20 @@ const router = useRouter()
 const formRef = ref(null)
 const loading = ref(false)
 const saving = ref(false)
+
+// 托管开关（热启用 KV）与 DB status 是两个轴：托管态以 enabled/list 为准，
+// 不再把 enable/disable 误写成 form.status（刷新即回退的假状态）
+const hosting = ref(false)
+const refreshHosting = async () => {
+  if (!form.asset_id) return
+  try {
+    const resp = await listEnabledBundles()
+    const list = resp?.data?.list || resp?.data || resp
+    hosting.value = Array.isArray(list) && list.some(b => b?.asset_id === form.asset_id)
+  } catch {
+    // 查询失败保持当前态，不打断编辑流程
+  }
+}
 
 const aid = computed(() => route.params.aid || '')
 const isEdit = computed(() => !!aid.value)
@@ -553,6 +567,7 @@ const loadBundle = async () => {
       form.version = detail.version || '1.0.0'
       form.status = detail.status || 'draft'
     }
+    await refreshHosting()
     const parseResp = await merchantParse(aid.value);
     const parsed = parseResp?.data || parseResp
     if (parsed) {
@@ -625,6 +640,7 @@ const handleSave = async () => {
     if (data && data.id) {
       try {
         await enableBundle(data.id)
+        hosting.value = true
         ElMessage.success('保存并热启用成功')
       } catch (e) {
         ElMessage.warning('保存成功，但热启用失败，请手动启用')
@@ -656,11 +672,11 @@ const handleToggleStatus = async (action) => {
     }
     if (action === 'pause') {
       await disableBundle(detail.id)
-      form.status = 'inactive'
+      hosting.value = false
       ElMessage.success('已暂停托管')
     } else {
       await enableBundle(detail.id)
-      form.status = 'active'
+      hosting.value = true
       ElMessage.success('已恢复托管')
     }
   } catch (e) {

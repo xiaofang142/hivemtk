@@ -2,6 +2,7 @@ package router
 
 import (
 	"hivemtk-user/internal/controller"
+	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/platform"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -20,6 +21,8 @@ func setupAssetBundleRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	localAssetSvc := service.NewLocalAssetService(localAssetRepo, localAssetDataRepo, localAssetSyncLogRepo, platform.NewPlatformAPIClient())
 	assetBundleSvc.SetLocalLoader(localAssetSvc)
 	service.SetAssetBundleResolver(assetBundleSvc)
+	// 绑定校验：智能体绑 asset_bundle_id 前必须确认包存在且可用（发布/已购）
+	service.SetAssetBundleBindValidator(assetBundleSvc.ValidateBundleForBind)
 	ctrl := controller.NewAssetBundleController(assetBundleSvc)
 
 	for _, g := range []*gin.RouterGroup{
@@ -32,7 +35,8 @@ func setupAssetBundleRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	storeSvc := service.NewAssetStoreService()
 	storeCtrl := controller.NewAssetStoreController(storeSvc)
 	storeCtrl.RegisterMerchantRoutes(auth.Group("/v1/asset-store"))
-	storeCtrl.RegisterAdminRoutes(auth.Group("/v1/asset-admin"))
+	// 审核后台仅平台管理员可用（此前误挂普通 auth 组，任何登录用户可过审/驳回/下架）
+	storeCtrl.RegisterAdminRoutes(auth.Group("/v1/asset-admin", middleware.AdminAuthMiddleware()))
 }
 
 func setupAssetMarketRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {

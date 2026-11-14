@@ -76,6 +76,12 @@ func (s *AIAgentService) Create(ctx context.Context, a *model.AIAgent) error {
 	if existing, _ := s.repo.GetByCode(ctx, a.AgentCode); existing != nil {
 		return fmt.Errorf("agent_code %s 已存在", a.AgentCode)
 	}
+	// 绑定校验：资产包必须存在且可用，防任意字符串绑上后在运行期静默失效
+	if a.AssetBundleID != "" {
+		if err := ValidateAssetBundleForBind(ctx, a.AssetBundleID); err != nil {
+			return err
+		}
+	}
 	// GORM 的 `default:` 标签会在 INSERT 时把显式零值替换成默认值并回填结构体
 	// （status=0 被写成 1、temperature=0 被写成 0.7、top_p=0 被写成 0.9 …）。
 	// 这些 0 都是合法业务值（停用智能体、确定性采样），因此先记录，创建后按需回写。
@@ -147,6 +153,12 @@ func (s *AIAgentService) Update(ctx context.Context, a *model.AIAgent) error {
 		return errors.New("persona 不能为空")
 	}
 	a.Version = a.Version + 1
+	// 绑定校验：资产包必须存在且可用
+	if a.AssetBundleID != "" {
+		if err := ValidateAssetBundleForBind(ctx, a.AssetBundleID); err != nil {
+			return err
+		}
+	}
 	if err := s.repo.Update(ctx, a); err != nil {
 		return err
 	}
@@ -276,6 +288,10 @@ func (s *AIAgentService) invalidateCache(agentID uint) {
 func (s *AIAgentService) BindAssetBundle(ctx context.Context, agentID uint, assetBundleID string) error {
 	agent, err := s.repo.GetByID(ctx, agentID)
 	if err != nil {
+		return err
+	}
+	// 绑定校验：资产包必须存在且可用（发布/已购），空串=解绑放行
+	if err := ValidateAssetBundleForBind(ctx, assetBundleID); err != nil {
 		return err
 	}
 	agent.AssetBundleID = assetBundleID

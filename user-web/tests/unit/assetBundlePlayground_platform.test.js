@@ -84,7 +84,11 @@ describe('资产包 Playground 的上架入口：跟随 platform_enabled', () =>
     const text = wrapper.text()
     expect(text).toContain('生态上架配置')
     expect(text).toContain('官方蜂巢商城')
-    expect(text).toContain('商业买断价')
+    // 定价是平台运营专属（AM-01 全系统唯一定价入口），「商业买断价」是永不
+    // 随请求上行的死 UI，已移除；开态展示审核状态回程与刷新入口
+    expect(text).not.toContain('商业买断价')
+    expect(text).toContain('平台审核')
+    expect(text).toContain('刷新审核状态')
     expect(text).not.toContain('本地发布')
   })
 

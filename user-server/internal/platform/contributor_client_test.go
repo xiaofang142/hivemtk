@@ -100,14 +100,24 @@ func TestContributorIdentityEmptySecret(t *testing.T) {
 		}
 	}
 
+	// 审计轮加固：CONTRIBUTOR_DEV=1 仅在非生产环境生效（占位密钥在生产会被
+	// 拒绝，防止知道 merchant_key 的人冒充商户贡献者身份）
+	t.Setenv("APP_ENV", "dev")
 	t.Setenv("CONTRIBUTOR_DEV", "1")
-	auth, err := contributorIdentity() // 不应 panic，也不应报错
+	auth, err := contributorIdentity() // dev 环境不应 panic，也不应报错
 	if err != nil {
-		t.Fatalf("CONTRIBUTOR_DEV=1 时应允许占位派生: %v", err)
+		t.Fatalf("开发环境 CONTRIBUTOR_DEV=1 应允许占位派生: %v", err)
 	}
 	sum := sha256.Sum256([]byte("mk-abc|" + devPlaceholderSecret))
 	if got := hex.EncodeToString(sum[:])[:16]; auth.password != got {
 		t.Errorf("CONTRIBUTOR_DEV 占位口令派生错: %q want %q", auth.password, got)
+	}
+
+	// 生产环境必须拒绝 DEV 后门
+	t.Setenv("APP_ENV", "production")
+	_, err = contributorIdentity()
+	if err == nil || !errors.Is(err, ErrPlatformNotConfigured) {
+		t.Errorf("生产环境 CONTRIBUTOR_DEV=1 应被拒绝并报 ErrPlatformNotConfigured, got %v", err)
 	}
 }
 

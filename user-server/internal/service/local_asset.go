@@ -90,6 +90,29 @@ func purchaseFailMsg(err error) string {
 	return "平台购买失败: " + err.Error()
 }
 
+// pullDataWithRetry 拉取平台数据（交付失败的瞬时故障重试后大多可恢复；
+// 指数退避 200ms/400ms/800ms，总耗时 <1.5s，不阻塞购买请求太久）
+func (s *LocalAssetService) pullDataWithRetry(ctx context.Context, assetID string, attempts int) (*repository.PlatformAssetPayload, error) {
+	var lastErr error
+	backoff := 200 * time.Millisecond
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+			}
+			backoff *= 2
+		}
+		payload, err := s.platformClient.PullData(ctx, assetID)
+		if err == nil {
+			return payload, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
 func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID string) error {
 	existing, err := s.assetRepo.FindByAssetID(ctx, platformAssetID)
 	if err == nil && existing != nil {
@@ -103,9 +126,15 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 		return bizerr.New(bizerr.CodePlatformUnavail, purchaseFailMsg(err))
 	}
 
-	payload, err := s.platformClient.PullData(ctx, platformAssetID)
+	// 交付补偿（审计轮）：扣费成功但数据交付失败 = 钱扣了拿不到资产。
+	// PullData 重试 3 次（瞬时故障重试即可恢复）；仍失败 → 自动调平台退款端点冲正；
+	// 退款也失败才降级为人工介入提示。
+	payload, err := s.pullDataWithRetry(ctx, platformAssetID, 3)
 	if err != nil {
-		return bizerr.Wrap(bizerr.CodeSyncFailed, "拉取平台数据失败", err)
+		if rerr := s.platformClient.RefundPurchase(ctx, platformAssetID, "delivery_failed: pull_data"); rerr == nil {
+			return bizerr.New(bizerr.CodeSyncFailed, "购买已扣费但数据交付失败，扣除的积分已自动退回")
+		}
+		return bizerr.Wrap(bizerr.CodeSyncFailed, "购买成功但数据交付失败且自动退款失败，请联系平台管理员人工处理", err)
 	}
 	payload.Data = platformNameIntoData(payload.Data, payload.Name)
 	originalType := payload.AssetType
@@ -117,7 +146,11 @@ func (s *LocalAssetService) PurchaseAndSync(ctx context.Context, platformAssetID
 	// 资产 JSON 格式错误」，扩展永远买不下来。跳过内容校验，元数据照常落库。
 	if payload.AssetType != "browser_extension" {
 		if err := asset.ValidateAssetData(asset.AssetType(payload.AssetType), payload.Data); err != nil {
-			return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败："+err.Error(), err)
+			// 数据不合规同样走交付补偿：退款冲正，不留「钱扣了拿不到资产」
+			if rerr := s.platformClient.RefundPurchase(ctx, platformAssetID, "delivery_failed: invalid_data"); rerr == nil {
+				return bizerr.New(bizerr.CodeAssetInvalid, "平台数据校验失败（数据不合规），扣除的积分已自动退回："+err.Error())
+			}
+			return bizerr.Wrap(bizerr.CodeAssetInvalid, "平台数据校验失败且自动退款失败，请联系平台管理员："+err.Error(), err)
 		}
 	} else if len(payload.Data) == 0 {
 		// local_asset_data.data 是 NOT NULL（二次回归 5000 实锤）：扩展把安装包
@@ -354,6 +387,13 @@ func (s *LocalAssetService) LoadOne(ctx context.Context, assetID string) (*model
 		})
 	}
 	return la, lad.Data, nil
+}
+
+// FindByAssetID 仅读取资产元数据（不计数、不上报）。
+// 供绑定校验等"只查存在性/状态"的调用方使用；LoadOne 会在 PurchaseID 非空时
+// 累加使用次数并异步上报平台，用于校验会污染统计。
+func (s *LocalAssetService) FindByAssetID(ctx context.Context, assetID string) (*model.LocalAsset, error) {
+	return s.assetRepo.FindByAssetID(ctx, assetID)
 }
 
 var reportingInFlight sync.Map
