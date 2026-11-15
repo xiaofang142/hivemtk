@@ -69,6 +69,24 @@ func (s *DoNotContactService) defaultPhoneResolver() PhoneToOneIDResolver {
 	}
 }
 
+// ResolveOneID 标识 → 全局退订聚合键的公开反查（reach 外发前置检查用）。
+//
+// 口径与 PhoneToOneIDResolver 一致：identifier 视为手机号，优先经 customer 表
+// 反查真实 oneID；查不到（陌生号码/非手机标识）降级 "phone:"+id 归一键——
+// 保证该标识后续仍可被拦截，一旦关联到客户应以真实 oneID 为准。
+// 非 phone 形态的标识（chat_id/open_id 等）反查路径尚未建设，原样返回
+// （DNC 表无对应行 → 不拦），遗留面随各渠道反查实现逐步补齐。
+func (s *DoNotContactService) ResolveOneID(ctx context.Context, identifier string) string {
+	if s == nil || strings.TrimSpace(identifier) == "" {
+		return ""
+	}
+	if id := s.resolvePhoneToOneID(ctx, identifier); id != "" {
+		return id
+	}
+	// 反查失败/无结果：降级 phone: 归一键（该标识后续仍可被拦截）
+	return PhoneOneIDPrefix + identifier
+}
+
 // Block 写入全局退订标志位（幂等）并写审计日志
 //
 // channel 传空串表示全渠道退订；source 记录退订来源便于审计追溯。

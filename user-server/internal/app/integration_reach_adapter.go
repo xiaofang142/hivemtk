@@ -25,6 +25,7 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
+	dncsvc "hivemtk-user/internal/service/dnc"
 	smssvc "hivemtk-user/internal/service/sms"
 )
 
@@ -41,6 +42,11 @@ type IntegrationReachAdapter struct {
 	dingtalk *service.DingTalkService
 	sms      smssvc.SmsService
 	email    *email.EmailSendService
+	// dnc 全局勿扰标志位（架构师审计轮补口）：reach 营销外发的发送前置检查。
+	// 此前对话回复引擎（sales_engine）有 DNC 前置、AI 工具层有 decorator_dnc，
+	// 但营销外发（reach pipeline → 本适配器 → 真实渠道）完全绕过退订标志位
+	// ——用户退订后营销群发照发，合规高危。nil 时跳过检查（不阻断发送）。
+	dnc *dncsvc.DoNotContactService
 }
 
 // Sentinel errors
@@ -100,7 +106,38 @@ func NewIntegrationReachAdapterFromDB(db *gorm.DB) *IntegrationReachAdapter {
 		dingtalk: service.NewDingTalkService(),
 		sms:      smssvc.NewSmsService(repository.NewSmsRepository()),
 		email:    email.NewEmailSendService(),
+		dnc:      dncsvc.NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db)),
 	}
+}
+
+// SetDoNotContactService 注入/替换全局勿扰服务（reach 外发前置检查用；nil 跳过检查）。
+func (a *IntegrationReachAdapter) SetDoNotContactService(dnc *dncsvc.DoNotContactService) {
+	a.dnc = dnc
+}
+
+// dncGuard reach 外发的勿扰前置检查（架构师审计轮补口）。
+//
+// 标识反查口径（DNC 键 = oneID；phone 维度自带 phone: 降级键零成本命中退订）：
+//   - phone 类（sms/whatsapp 的 toPhone）：phone 降级键直查 + customer 表反查真实
+//     oneID（DNC 服务已内置该口径）；
+//   - 其余渠道标识（chat_id/open_id/external_user_id）的反查路径尚未建设，
+//     **查不到不拦（放行）**——遗留面如实留档，随各渠道反查实现逐步补齐。
+//
+// 返回 err=被勿扰拦截（该条消息不再发出）；nil=放行。
+// 查询失败按 fail-closed 处理：合规检查失败宁可少发，不把「不确定」当「可发」。
+func (a *IntegrationReachAdapter) dncGuard(ctx context.Context, channel, identifier string) error {
+	if a == nil || a.dnc == nil || identifier == "" {
+		return nil
+	}
+	oneID := a.dnc.ResolveOneID(ctx, identifier)
+	blocked, err := a.dnc.IsBlockedStrict(ctx, oneID, channel)
+	if err != nil {
+		return fmt.Errorf("dnc: %w", err)
+	}
+	if blocked {
+		return fmt.Errorf("dnc: %s %s 已全局退订，营销外发拦截", channel, identifier)
+	}
+	return nil
 }
 
 // SendTelegram 通过 TelegramIntegrationService 发送消息
@@ -111,6 +148,9 @@ func NewIntegrationReachAdapterFromDB(db *gorm.DB) *IntegrationReachAdapter {
 // 错误：IntegrationService 透传（网络错误、Bot Token 无效、chat 限流等）
 func (a *IntegrationReachAdapter) SendTelegram(ctx context.Context, accountID, chatID, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	if err := a.dncGuard(ctx, "telegram", chatID); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "telegram").Str("account_id", accountID).Str("chat_id", chatID).Int("content_len", len(content)).Msg("reach send start")
 	if a.tg == nil {
 		return "", fmt.Errorf("telegram: %w", ErrIntegrationServiceNotConfigured)
@@ -138,6 +178,9 @@ func (a *IntegrationReachAdapter) SendTelegram(ctx context.Context, accountID, c
 // 错误：透传 IntegrationService（401 token 失效、403 模板未审批、429 限流等）
 func (a *IntegrationReachAdapter) SendWhatsApp(ctx context.Context, accountID, toPhone, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	if err := a.dncGuard(ctx, "whatsapp", toPhone); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "whatsapp").Str("account_id", accountID).Int("content_len", len(content)).Msg("reach send start")
 	if a.wa == nil {
 		return "", fmt.Errorf("whatsapp: %w", ErrIntegrationServiceNotConfigured)
@@ -161,6 +204,9 @@ func (a *IntegrationReachAdapter) SendWhatsApp(ctx context.Context, accountID, t
 // 错误：透传 IntegrationService（token 过期、app_id 无效、用户不在可见范围等）
 func (a *IntegrationReachAdapter) SendFeishu(ctx context.Context, accountID, openID, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	if err := a.dncGuard(ctx, "feishu", openID); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "feishu").Str("account_id", accountID).Int("content_len", len(content)).Msg("reach send start")
 	if a.feishu == nil {
 		return "", fmt.Errorf("feishu: %w", ErrIntegrationServiceNotConfigured)
@@ -189,6 +235,11 @@ func (a *IntegrationReachAdapter) SendFeishu(ctx context.Context, accountID, ope
 // 错误：服务未注入 / session_id 为空 / content 为空 / 会话不存在。
 func (a *IntegrationReachAdapter) SendWeb(ctx context.Context, sessionID, content string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	// web 维度的 oneID 反查（sessionID→customer_session→one_id）尚未建设：
+	// guard 降级键不命中 DNC 行=放行。接线保证语义一致，反查随渠道补齐。
+	if err := a.dncGuard(ctx, "web", sessionID); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "web").Str("session_id", sessionID).Int("content_len", len(content)).Msg("reach send start")
 	if a.web == nil {
 		return "", fmt.Errorf("web: %w", ErrIntegrationServiceNotConfigured)
@@ -242,6 +293,9 @@ func NewWebReachAdapter(svc *service.CustomerSessionService) *WebReachAdapter {
 // templateID/params 为模板发送预留，当前透传至 service 时忽略（service 暂不含模板分支）。
 func (a *IntegrationReachAdapter) SendSMS(ctx context.Context, phone, content, templateID string, params map[string]string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	if err := a.dncGuard(ctx, "sms", phone); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "sms").Str("phone", phone).Int("content_len", len(content)).Msg("reach send start")
 	if a.sms == nil {
 		return "", fmt.Errorf("sms: %w", ErrIntegrationServiceNotConfigured)
@@ -264,6 +318,9 @@ func (a *IntegrationReachAdapter) SendSMS(ctx context.Context, phone, content, t
 // ImmediateSend=true：落库后立即异步发送（SMTP 配置缺失时仅记录失败状态，不阻塞主流程）。
 func (a *IntegrationReachAdapter) SendEmail(ctx context.Context, to, subject, content string, attachments []string) (string, error) {
 	ctx = logger.WithModule(ctx, "reach")
+	if err := a.dncGuard(ctx, "email", to); err != nil {
+		return "", err
+	}
 	logger.Ctx(ctx).Debug().Str("channel", "email").Str("to", to).Int("content_len", len(content)).Msg("reach send start")
 	if a.email == nil {
 		return "", fmt.Errorf("email: %w", ErrIntegrationServiceNotConfigured)
@@ -297,6 +354,9 @@ func (a *IntegrationReachAdapter) SendEmail(ctx context.Context, to, subject, co
 // 配置了真实企微凭证（CorpID/CorpSecret）时真实调企微 API；无凭证安全跳过
 //   - SelectHealthyAccount 自动选健康账号（忽略传入 AccountID，与既有出站一致）
 func (a *IntegrationReachAdapter) SendWeCom(ctx context.Context, accountID, externalUserID, msgType, content string) (string, error) {
+	if err := a.dncGuard(ctx, "wecom", externalUserID); err != nil {
+		return "", err
+	}
 	ctx = logger.WithModule(ctx, "reach")
 	logger.Ctx(ctx).Debug().Str("channel", "wecom").Str("account_id", accountID).Str("external_user_id", externalUserID).Int("content_len", len(content)).Msg("reach send start")
 	if a.wecom == nil {
@@ -331,6 +391,9 @@ func (a *IntegrationReachAdapter) SendWeCom(ctx context.Context, accountID, exte
 
 // SendWeixin 微信公众号（客服消息，通过 GlobalServiceRegistry 获取 WechatService）
 func (a *IntegrationReachAdapter) SendWeixin(ctx context.Context, openID, msgType, content string) (string, error) {
+	if err := a.dncGuard(ctx, "weixin", openID); err != nil {
+		return "", err
+	}
 	svc, err := tooluse.GlobalServiceRegistry().Wechat()
 	if err != nil {
 		return "", fmt.Errorf("weixin: %w", err)
@@ -347,11 +410,17 @@ func (a *IntegrationReachAdapter) SendWeixin(ctx context.Context, openID, msgTyp
 
 // SendDouyin 见上方说明：桥接渠道无直连出站，此处是 fail-closed 兜底。
 func (a *IntegrationReachAdapter) SendDouyin(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	if err := a.dncGuard(ctx, "douyin", openID); err != nil {
+		return "", err
+	}
 	return "", fmt.Errorf("douyin: %w", ErrChannelNotImplemented)
 }
 
 // SendKuaishou 见上方说明：桥接渠道无直连出站，此处是 fail-closed 兜底。
 func (a *IntegrationReachAdapter) SendKuaishou(ctx context.Context, accountID, openID, msgType, content string) (string, error) {
+	if err := a.dncGuard(ctx, "kuaishou", openID); err != nil {
+		return "", err
+	}
 	return "", fmt.Errorf("kuaishou: %w", ErrChannelNotImplemented)
 }
 
