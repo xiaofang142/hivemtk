@@ -53,16 +53,20 @@ func ExportSession(ctx context.Context, db *gorm.DB, userID uint, sessionID uint
 		Find(&out.Rounds).Error; err != nil {
 		return nil, err
 	}
+	// 导出封顶（架构审计轮）：审计导出是管理端低频操作，Events 随轮次线性增长，
+	// 超长会话全量加载有内存风险——各封顶 20000 行（约数十 MB CSV 上界），
+	// 超出部分按 id ASC 截断（最早优先保留，尾部丢新不丢旧审计语义）。
+	const auditExportCap = 20000
 	if err := db.WithContext(ctx).
 		Where("id IN (?)", db.Model(&model.EgoliteRound{}).Select("DISTINCT execution_id").
 			Where("session_id = ?", sessionID)).
-		Order("id ASC").Find(&out.Executions).Error; err != nil {
+		Order("id ASC").Limit(auditExportCap).Find(&out.Executions).Error; err != nil {
 		return nil, err
 	}
 	if err := db.WithContext(ctx).
 		Where("execution_id IN (?)", db.Model(&model.EgoliteRound{}).Select("DISTINCT execution_id").
 			Where("session_id = ?", sessionID)).
-		Order("id ASC").Find(&out.Events).Error; err != nil {
+		Order("id ASC").Limit(auditExportCap).Find(&out.Events).Error; err != nil {
 		return nil, err
 	}
 	for _, ev := range out.Events {

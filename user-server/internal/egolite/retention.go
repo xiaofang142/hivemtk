@@ -29,15 +29,28 @@ func RetentionSweep(ctx context.Context, db *gorm.DB, keepDays int) (int64, erro
 		return 0, nil // 永不清理档
 	}
 	cutoff := time.Now().UTC().Add(-time.Duration(keepDays) * 24 * time.Hour)
-	// UpdateColumn：与原 UPDATE 语义一致——只置 observation 为 NULL，不触碰
-	// updated_at，也不走 hooks（幂等重跑对已清理行是 no-op）。
-	res := db.WithContext(ctx).Model(&model.EgoliteRound{}).
-		Where("observation IS NOT NULL AND created_at < ?", cutoff).
-		UpdateColumn("observation", gorm.Expr("NULL"))
-	if res.Error != nil {
-		return 0, res.Error
+	// 分批清理（架构审计轮优化）：egolite_rounds 是高频写入表（每轮一行 +
+	// observation JSON 快照可达数十 KB），留存窗口首扫可能是几十万行的大事务
+	// （长时间行锁 + WAL 峰值）。改为每批 2000 行循环清到清空为止——单批事务
+	// 短、锁窗口小；幂等不变（where observation is not null 对已清行 no-op）。
+	const batchSize = 2000
+	var total int64
+	for {
+		res := db.WithContext(ctx).Model(&model.EgoliteRound{}).
+			Where("observation IS NOT NULL AND created_at < ?", cutoff).
+			Where("id IN (?)", db.Model(&model.EgoliteRound{}).
+				Select("id").
+				Where("observation IS NOT NULL AND created_at < ?", cutoff).
+				Order("id ASC").Limit(batchSize)).
+			UpdateColumn("observation", gorm.Expr("NULL"))
+		if res.Error != nil {
+			return total, res.Error
+		}
+		total += res.RowsAffected
+		if res.RowsAffected < batchSize {
+			return total, nil
+		}
 	}
-	return res.RowsAffected, nil
 }
 
 // ObserveRetentionDays 从 config_params 读保留天数（键不存在/非法 → 默认 30）。
