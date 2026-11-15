@@ -502,3 +502,25 @@ TriggerInboundAI/interceptInbound 早退。**回复决策交 LLM**：system_prom
 **数据修复**：两条被 dedup/AI锁 积压的真实提问代发（抖音 5096 功能清单→delivered；
 小红书 5066 桥接层→inflight 平台限额消耗中，终态 failed 由坐席旁路可见）；
 页签恢复（抖音/B站 12:19 心跳复鲜，闲鱼页需人工登录态）。
+
+## 2026-11-16 00:30 关注逻辑全平台实现上线（`7a545143`+`6b5bd7a9`，链 A `rollback-20261116-001838` / 链 B 1.3.6 / 链 C `ast-general-1d262f542f2277e27f` approved）
+
+用户裁决「未关注用户主动关注，所有平台都要实现」=两者都要（我们主动关注+检测对方
+关注我们后回关+补发积压）。M-6 子系统已建 80%，四个断点本轮补齐：
+① uplink.js extra 透传（此前白名单丢 extra，关注信号永不到服务端）；
+② 五渠道关注信号打标（xhs/weibo/kuaishou/jd/pdd；weibo 由丢弃改精准留痕——只留带
+关注词的系统消息，噪音仍丢弃）；③ 五渠道 followUser hook 接线（fixture 口径选择器，
+真机校准轮统一处理；xianyu 好友制排除）；④ 关注后补发积压（MarkDueByConversation
++ReviveSendFailedByConversation+FlushConversationBacklog，参数
+follow_flush_backlog_enabled 默认 true）。
+
+发布口径：follow_user_enabled 默认关（安全发布），部署后对租户 18 翻 true +
+follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从独立 worktree
+（/tmp/bridge-136）发布，隔离并行会话未提交改动。
+
+验证：扩展 vitest 1188+ 绿；service/repository 真库全绿（含新增 flush/复活/到期
+三组测试）；部署后 2h 内 0 关注事件=尚无客户关注（自然流量待验，非缺陷）。
+
+**注意**：并行会话（另一台电脑）工作树有未提交改动正在回退 1.3.5 上行回声源头
+过滤（downlink 删 recordSentText/recentSentTexts 模块）——若其发布将削弱回声防线，
+已向用户报告。
