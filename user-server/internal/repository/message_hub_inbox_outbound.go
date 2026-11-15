@@ -235,6 +235,27 @@ func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, cha
 	return rows, nil
 }
 
+// PrevInboundCreatedAt 查询同会话、早于 beforeTime 的最近一条 inbound 创建时刻。
+// 供自适应合并窗判定「客户是否在连发」用（2026-11-15 首响时延优化）：
+// 上一条 inbound 距本条 < 合并窗 = 客户连发中 → 进窗合并；否则静默后首条 → 立即触发。
+func (r *MessageHubRepository) PrevInboundCreatedAt(ctx context.Context, platform, accountID, conversationID string, beforeTime time.Time) (time.Time, error) {
+	if r == nil || r.db == nil {
+		return time.Time{}, nil
+	}
+	var row model.MessageHub
+	err := r.db.WithContext(ctx).
+		Where("platform = ? AND account_id = ? AND conversation_id = ? AND direction = 'inbound' AND deleted_at IS NULL AND created_at < ?",
+			platform, accountID, conversationID, beforeTime).
+		Order("id DESC").First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, err
+	}
+	return row.CreatedAt, nil
+}
+
 func (r *MessageHubRepository) GetByMsgIDsInScope(ctx context.Context, platform, accountID string, msgIDs []string) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || len(msgIDs) == 0 || platform == "" || accountID == "" {
 		return nil, nil

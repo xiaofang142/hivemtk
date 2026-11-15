@@ -11,6 +11,9 @@ import (
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 type stubAITrigger struct {
@@ -187,4 +190,63 @@ func TestAIDebounce_NewWindowAfterClose(t *testing.T) {
 	if !strings.Contains(stub.last().content, "第二窗口") {
 		t.Fatalf("第二窗口内容错误: %q", stub.last().content)
 	}
+}
+
+
+// 自适应合并（2026-11-15 首响时延优化）回归钉：
+//   - 会话静默后首条消息（上一条 inbound 距本条 ≥ 合并窗）→ 跳过合并窗立即触发；
+//   - 连发中（上一条 inbound 距本条 < 窗）→ 进窗合并（既有 TestAIDebounce_CoalesceWindow 已钉）。
+// 判定数据源 = PrevInboundCreatedAt（本条之前最近一条同会话 inbound），需 testdb。
+func TestAIDebounce_AdaptiveSilentFirstMessageImmediate(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.MessageHub{})
+	db.SetTestDB(database)
+	t.Cleanup(func() { db.SetTestDB(nil) })
+
+	svc, stub, sessionID := newDebounceFixture(t, 12)
+	// 自适应判定走 hubRepo（PrevInboundCreatedAt）——测试环境多租户 off 时
+	// NewInboxIngressService 不建 hubRepo，显式注入（SetTestDB 已生效）
+	svc.hubRepo = repository.NewMessageHubRepository()
+	conv := sessionID + "-conv"
+	const account = "acc-adaptive"
+
+	// 会话里只有一条更早的 inbound（2 分钟前 = 远超 12s 合并窗）→ 静默后首条
+	row := &model.MessageHub{
+		TenantID: 18, Platform: "douyin", AccountID: account, ConversationID: conv,
+		MsgID: "mh:adp-old", Direction: "inbound", MsgType: "text",
+		Content: "更早的一条", SenderID: "cust-adaptive", Status: "received",
+	}
+	if err := database.Create(row).Error; err != nil {
+		t.Fatalf("seed 旧 inbound 失败: %v", err)
+	}
+	// gorm autoCreateTime 会覆盖显式 CreatedAt——用 UpdateColumn 绕过（不触发钩子），
+	// 把旧 inbound 拨回 2 分钟前（远超 12s 合并窗 → 静默后首条场景）
+	old2min := time.Now().Add(-2 * time.Minute)
+	if err := database.Model(row).UpdateColumns(map[string]any{"created_at": old2min, "sent_at": old2min}).Error; err != nil {
+		t.Fatalf("拨回时间失败: %v", err)
+	}
+
+	ev := debounceEvent(sessionID, "你好，介绍下项目", 12)
+	ev.Channel = "douyin"
+	ev.Extra["account_id"] = account // 与 seed 行账号一致（自适应判定按账号+会话查询）
+	if dbg, derr := svc.hubRepo.PrevInboundCreatedAt(context.Background(), "douyin", "acc-adaptive", conv, time.Now()); derr != nil || dbg.IsZero() {
+		t.Logf("DEBUG prev inbound: %v err=%v（期望 2 分钟前）", dbg, derr)
+	} else {
+		t.Logf("DEBUG prev inbound: %v（since %v）", dbg, time.Since(dbg))
+	}
+	// 检查 triggerAIForEvent 前置闸：AI 处理锁（SetNX 2min，进程级/缓存级）
+	if busy, berr := svc.IsSessionAIBusy(context.Background(), conv); berr == nil && busy {
+		t.Logf("DEBUG: 会话 AI 锁在位（前序测试泄漏）——释放后重试")
+		svc.ReleaseAILock(context.Background(), conv)
+	}
+	svc.triggerAIWithDebounce(context.Background(), ev)
+
+	// 自适应：应立即触发（不进 12s 合并窗）——轮询 2s 内 stub 应收到调用
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if stub.count() > 0 {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("静默后首条消息应跳过合并窗立即触发 AI，实际 %d 次", stub.count())
 }

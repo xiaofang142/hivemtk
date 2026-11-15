@@ -67,6 +67,28 @@ func (s *InboxIngressService) triggerAIWithDebounce(ctx context.Context, event *
 		return
 	}
 
+	// 自适应合并（2026-11-15 首响时延优化）：合并窗只对「爆发中」的后续消息生效——
+	// 上一条同会话 inbound 距本条 < 合并窗（客户正在连发）→ 进窗合并；否则（静默后
+	// 首条）→ 立即触发，省掉整窗首响延迟（生产实测单条消息因固定窗多等 12s，
+	// 端到端 35-40s 的贡献项之一）。
+	if s.hubRepo != nil {
+		before := event.Timestamp
+		if before.IsZero() {
+			before = time.Now().Add(time.Millisecond) // 无时间戳时取全部（含本条由时间严格小于排除失败→按连发处理，保守）
+		}
+		if prev, perr := s.hubRepo.PrevInboundCreatedAt(ctx, event.Channel, resolveAccountID(event), event.ConversationID, before); perr == nil && !prev.IsZero() {
+			if since := time.Since(prev); since >= time.Duration(seconds)*time.Second {
+				logger.Ctx(ctx).Info().
+					Str("session_id", sessionID).
+					Str("conv_id", event.ConversationID).
+					Str("since_prev", since.String()).
+					Msg("[Inbox][Debounce] 会话静默后首条消息，跳过合并窗立即触发（首响提速）")
+				s.triggerAIForEvent(ctx, event)
+				return
+			}
+		}
+	}
+
 	if err := s.AppendPendingMessage(ctx, sessionID, content); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("session_id", sessionID).Msg("[Inbox][Debounce] append pending failed, fallback to immediate trigger")
 		s.triggerAIForEvent(ctx, event)
