@@ -125,6 +125,11 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 		return &IngressDecision{}, nil
 	}
 
+	// 平台公告输入卫生（批次路径与单条路径同闸）：公告不触发 AI、不进入去重统计。
+	if IsPlatformSystemNotice(content) {
+		return &IngressDecision{Blocked: true, Reason: "platform-system-notice(输入卫生，留痕不触发)"}, nil
+	}
+
 	chanMsgID := channelMsgIDOf(event)
 	if chanMsgID != "" && s.hubRepo != nil {
 		accID := resolveAccountID(event)

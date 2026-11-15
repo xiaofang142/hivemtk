@@ -46,6 +46,18 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 	if direction == "outbound" && event.ConversationID != "" && (event.ReceiverID == "" || event.ReceiverID == event.SenderID) {
 		event.ReceiverID = event.ConversationID
 	}
+	// 平台公告输入卫生（2026-11-15 xapptool 会话实证）：公告不是客户发言——
+	// outbound 方向永不被认领推送（status=received），inbound 方向不触发 AI；
+	// IsAIReply 不再按 direction==outbound 误标（采集回推的公告会被当 AI 回复）。
+	notice := IsPlatformSystemNotice(event.Content)
+	if notice {
+		if event.Extra == nil {
+			event.Extra = map[string]any{}
+		}
+		event.Extra["sender_type"] = "system"
+		event.IsAIReply = false
+	}
+
 	hub := &model.MessageHub{
 		// 非文本消息的 msg_id 用带类型口径（002-multi-type-messages）：event_id 为空时
 		// 兜底生成的哈希并入 msg_type+media_url，否则同会话两张图（content 同为「[图片]」
@@ -68,7 +80,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		ConversationID: event.ConversationID,
 		IsGroup:        event.IsGroup,
 		GroupID:        event.GroupID,
-		IsAIReply:      event.IsAIReply,
+		IsAIReply:      event.IsAIReply && !notice,
 		AIAgent:        event.AIAgent,
 		IsRead:         false,
 		SentAt:         sentAt,
@@ -81,6 +93,9 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 
 	if hub.Direction == "inbound" {
 		hub.Status = "received"
+	}
+	if notice && hub.Direction == "outbound" {
+		hub.Status = "received" // 公告留痕即可，永不进下行队列（不浪费平台额度）
 	}
 
 	if hub.TraceID == "" {
@@ -357,10 +372,18 @@ func (s *InboxIngressService) persistHistoryMessage(ctx context.Context, event *
 		IsGroup:        event.IsGroup,
 		GroupID:        event.GroupID,
 
-		IsAIReply: direction == "outbound",
+		IsAIReply: direction == "outbound" && !IsPlatformSystemNotice(event.Content),
 		AIAgent:   event.AIAgent,
 		IsRead:    direction == "outbound",
 		SentAt:    event.Timestamp,
+	}
+	if IsPlatformSystemNotice(event.Content) {
+		// 公告留痕即可：状态非 pending 永不被认领推送，extra 标 sender_type=system 供审计
+		if event.Extra == nil {
+			event.Extra = map[string]any{}
+		}
+		event.Extra["sender_type"] = "system"
+		hub.Status = "received"
 	}
 	if event.Extra != nil {
 		extra := model.JSONMap{}
@@ -369,7 +392,7 @@ func (s *InboxIngressService) persistHistoryMessage(ctx context.Context, event *
 		}
 		hub.Extra = extra
 
-		if v, ok := event.Extra["status"].(string); ok && v != "" {
+		if v, ok := event.Extra["status"].(string); ok && v != "" && hub.Status != "received" {
 			hub.Status = v
 		}
 	}

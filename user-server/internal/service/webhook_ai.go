@@ -306,6 +306,17 @@ func (s *WebhookService) TriggerInboundAI(ctx context.Context, channel, accountI
 		}
 	}()
 
+	// 输入卫生（2026-11-15）：平台系统公告不是客户发言——不触发 AI（各渠道通用）。
+	// 回复策略（是否应答/答什么）由 LLM 基于上下文判断，此处只拦非客户发言。
+	if IsPlatformSystemNotice(content) {
+		logger.Ctx(ctx).Info().
+			Str("channel", channel).
+			Str("conv_id", conversationID).
+			Str("content", content[:min(len(content), 30)]).
+			Msg("[Webhook] TriggerInboundAI skipped: platform system notice (not customer speech)")
+		return
+	}
+
 	if eventID != "" && s.isDuplicate(ctx, eventID) {
 		logger.Ctx(ctx).Debug().Str("event_id", eventID).Msg("[Webhook] TriggerInboundAI duplicate, skip")
 		return
@@ -591,6 +602,17 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			}
 			_, _ = s.sendOutbound(outCtx, channel, accountID, p, result.TransferNotice, hubMsg, nil)
 		}
+		return
+	}
+
+	// LLM 回复决策（2026-11-15 用户裁决：消息是否需要回复由 LLM 基于上下文综合判断）。
+	// 编排器 prompt 已指示：平台公告/近期已完整回答的问题 → 输出 NO_REPLY。
+	// 服务端只执行该决策：不发送、不落出站行（留 trace 供审计），不重试。
+	if result.AIReplied && strings.EqualFold(strings.TrimSpace(result.Reply), "NO_REPLY") {
+		logger.Ctx(ctx).Info().
+			Str("channel", string(channel)).
+			Str("conv_id", hubMsg.ConversationID).
+			Msg("[Webhook] LLM 判定本轮无需回复（NO_REPLY）——不发送不落库")
 		return
 	}
 

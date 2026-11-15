@@ -68,7 +68,8 @@ func TestHandleIngress_CrossConv_SameInboundContent_NotSkipped(t *testing.T) {
 	const (
 		platform = "xiaohongshu"
 		account  = "acct-cross-conv"
-		content  = "已连续聊天3天，解锁聊天状态去看看"
+		// 中性客户文本（2026-11-15 起平台公告由输入卫生层拦截，此处不得用公告文案）
+		content  = "你们支持哪些渠道接入？"
 	)
 
 	convA := "conv-cross-A"
