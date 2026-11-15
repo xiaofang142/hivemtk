@@ -8,18 +8,23 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/cache"
+	bizerr "hivemtk-user/internal/domain/errors"
 	"hivemtk-user/internal/geo/model"
 	"hivemtk-user/internal/geo/repository"
 	hivemodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 	mainrepo "hivemtk-user/internal/repository"
+	baseservice "hivemtk-user/internal/service"
 )
 
 var urlRegexp = regexp.MustCompile(`https?://[^\s"'\)\]\}\>,;]+`)
@@ -502,6 +507,9 @@ type SampleSummary struct {
 // ProbeAllEnginesSampled 多轮采样：同 query 跑 rounds 轮，返回全部 runs 与汇总。
 // rounds 越界时钳制到 [1, MaxProbeSampleRounds]。
 func (s *ProbeService) ProbeAllEnginesSampled(ctx context.Context, query string, rounds int) ([]*model.GeoProbeRun, []error, SampleSummary) {
+	if qerr := s.checkProbeDailyQuota(ctx, rounds); qerr != nil {
+		return nil, []error{qerr}, SampleSummary{}
+	}
 	if rounds < 1 {
 		rounds = 1
 	}
@@ -622,8 +630,52 @@ func probeModeOrDefault(mode string) string {
 	}
 }
 
+// checkProbeDailyQuota 每租户每日探针配额（架构师深度审计轮资金守卫）。
+//
+// 外部探针引擎（perplexity/kimi 等）按次计费，/geo/probe/test 与 /probe/all
+// 挂登录组且此前无任何配额——任意租户用户可无限触发真实消耗。
+// 计数走 Redis（cache 全局句柄，按租户+当日分键）；weight=本次消耗的引擎调用数。
+// Redis 不可用 fail-open 放行并告警（防滥用护栏非核心交易，不因护栏放大故障面）。
+// limit 读参数中心 geo.probe_daily_limit（默认 50，≤0 = 不限档）。
+func (s *ProbeService) checkProbeDailyQuota(ctx context.Context, weight int) error {
+	limit := baseservice.GlobalConfigParam().GetInt(ctx, "geo", "probe_daily_limit", 50)
+	if limit <= 0 {
+		return nil
+	}
+	tenantID, _ := tenant.FromContext(ctx)
+	key := fmt.Sprintf("geo:probe:daily:t%d:%s", tenantID, time.Now().Format("20060102"))
+	c := cache.GetGlobalCache()
+	if c == nil {
+		logger.Ctx(ctx).Warn().Msg("[geo-probe] 全局缓存未装配，探针配额 fail-open 放行")
+		return nil
+	}
+	curStr, gerr := c.Get(ctx, key)
+	cur := 0
+	if gerr == nil && curStr != "" {
+		cur, _ = strconv.Atoi(curStr)
+	}
+	if cur+weight > limit {
+		return bizerr.New(bizerr.CodeGeoProbeQuotaExceeded,
+			fmt.Sprintf("今日探针调用次数已达上限（%d 次），请明日再试或联系管理员调整 geo.probe_daily_limit", limit))
+	}
+	// 计数 +1；TTL 到当日午夜（次日键自然切换，TTL 只是防残留）
+	midnight := time.Now().Format("2006-01-02") + " 23:59:59"
+	exp, _ := time.ParseInLocation("2006-01-02 15:04:05", midnight, time.Local)
+	ttl := time.Until(exp)
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
+	if serr := c.Set(ctx, key, strconv.Itoa(cur+weight), ttl); serr != nil {
+		logger.Ctx(ctx).Warn().Err(serr).Msg("[geo-probe] 配额计数写缓存失败（本次放行，后续按 0 重计）")
+	}
+	return nil
+}
+
 // TestSingle 测试单个引擎
 func (s *ProbeService) TestSingle(ctx context.Context, engineName, query string) (*ProbeResult, error) {
+	if qerr := s.checkProbeDailyQuota(ctx, 1); qerr != nil {
+		return nil, qerr
+	}
 	probes := s.probesFor(ctx)
 	for _, p := range probes {
 		if engineName == "" || p.Name() == engineName {

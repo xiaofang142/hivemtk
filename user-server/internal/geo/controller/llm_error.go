@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
+
+	bizerr "hivemtk-user/internal/domain/errors"
 	"strings"
 
 	"hivemtk-user/internal/pkg/utils"
@@ -20,6 +23,13 @@ import (
 //     与 followup「服务未装配」保持同一语义：能力没就绪，不是请求写错了。
 //   - 其余 provider 调用失败 → 502 UPSTREAM_FAILURE_5005，客户端/运维知道该看上流。
 func respondGeoLLMError(c *gin.Context, err error, action string) {
+	// 探针每日配额超限（架构师深度审计轮）：429 + 可行动文案（参数中心键名），
+	// 不能落 502「模型调用失败」——那是运维故障口径，而配额是用户可自解的。
+	var be *bizerr.BizError
+	if errors.As(err, &be) && be.Code == bizerr.CodeGeoProbeQuotaExceeded {
+		response.ErrorWithCode(c, utils.ErrorCodeUpstreamFailure, http.StatusTooManyRequests, be.Message)
+		return
+	}
 	if isNoLLMProviderErr(err) {
 		logger.Warnf("[GEO] %s失败：无可用 LLM provider: %v", action, err)
 		response.ErrorWithCode(c, utils.ErrorCodeServiceUnavailable, http.StatusServiceUnavailable,

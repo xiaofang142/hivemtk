@@ -159,6 +159,13 @@ func Wrap(code int, msg string, cause error) *BizError {
 // 而余额不足是"你这个账号**可以**用，但账户没钱" —— 前者引导找管理员，
 // 后者引导去充值，混在一起前端无法分流。
 const (
+	// CodeGeoProbeQuotaExceeded 4290 GEO 探针每日配额超限
+	//
+	// 判据与 geo/service checkProbeDailyQuota 一一对应：外部探针引擎
+	//（perplexity/kimi 等）按次计费，登录用户无配额即可无限触发真实消耗。
+	// 每租户每日计数（Redis 计数器，geo.probe_test_daily_limit 可调），
+	// 超限返回本码（HTTP 429 语义），Redis 不可用时 fail-open 放行并告警。
+	CodeGeoProbeQuotaExceeded = 4290
 	// CodeLLMBalanceInsufficient 4401 平台模型余额不足
 	//
 	// 判据与 dispatcher 侧的 ErrInsufficientLLMBalance 一一对应：

@@ -302,7 +302,7 @@ func TestFallbackNilDB(t *testing.T) {
 // 限速兜底新增 1 条 ⇒ 260（该提交漏更此断言，审计二轮补记）；662722a0 二次论证轮
 // 再增 bridge/ai_trigger_binding_required ⇒ 261；b69c1971 追问轮
 // bridge/ai_debounce_seconds ⇒ 262。
-const defaultParamDefsWant = 262
+const defaultParamDefsWant = 263
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
