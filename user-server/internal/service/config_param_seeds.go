@@ -102,6 +102,9 @@ func DefaultParamDefs() []ParamDef {
 				"前端扩展本有拟人节奏三层限速，这是服务端最后防线：前端被关闭/篡改/AI 批量误生成时不至于向平台页面倾泻消息。" +
 				"超限时本轮认领返回空（下轮窗口自动恢复），不报错不落失败态。0 = 停用兜底（默认 60，架构文档 §4.2 承诺值的落地）",
 			ValueType: "int", Risk: "warning", DefaultValue: "60", Min: strPtr("0"), Max: strPtr("600"), Step: strPtr("10"), Category: "桥接"},
+		{Group: "bridge", Key: "follow_flush_backlog_enabled", Name: "关注后补发积压待发（总开关）",
+			Description: "检测到对方关注我们（平台限额解除）后，立即补发该会话积压的待发消息：延迟队列行到期 + 限额阻塞的 send_failed 行复活为 pending 重投。默认 true；翻 false 可一键关回保护面。",
+			ValueType:   "bool", DefaultValue: "true", Category: "桥接"},
 		{Group: "bridge", Key: "ai_debounce_seconds", Name: "客户连发消息合并窗（秒）",
 			Description: "客户短时间连发多条消息时，合并为一批发给 AI 一次应答（防逐条轰炸）。" +
 				"窗口内后续消息与首条合并成上下文，窗口关闭即触发一次回复。0 = 关闭合并逐条即答（旧行为，默认 12）。" +
@@ -136,8 +139,8 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "bridge", Key: "follow_user_channels", Name: "自动关注动作渠道清单",
 			Description: "JSON 字符串数组：允许自动关注动作的渠道编码（与 follow_user_enabled 双闸，均满足才触发），经 GET /api/bridge/capabilities 下发给扩展。" +
 				"扩展侧还有第三道闸：渠道 hooks 未实现 followUser（如 xianyu 好友制无关注模型）或渠道不在清单内，动作行按 delivered 收口跳过。" +
-				"默认仅含关注按钮模型成立且已按 fixture 口径实现 hook 的 douyin/tiktok/bilibili；开启前务必真机校准关注按钮词表。",
-			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","bilibili"]`, Category: "桥接"},
+				"2026-11-15 起含全部八个有关注模型的渠道（douyin/tiktok/xiaohongshu/weibo/bilibili/kuaishou/jd/pdd；xianyu 好友制无关注模型除外）；五渠道 hook 为 fixture 口径最佳猜测，开启前务必真机校准关注按钮词表。",
+			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","xiaohongshu","weibo","bilibili","kuaishou","jd","pdd"]`, Category: "桥接"},
 
 		{Group: "knowledge", Key: "default_top_k", Name: "默认 Top-K 检索数",
 			Description: "向量检索返回的候选文档数",

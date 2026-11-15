@@ -60,7 +60,14 @@ describe('follow-signal / followSignalFromSystemText 词表', () => {
     expect(followSignalFromSystemText('douyin', '')).toBe(null);
     expect(followSignalFromSystemText('douyin', null)).toBe(null);
     expect(followSignalFromSystemText('bilibili', '任意文本')).toBe(null);
-    expect(followSignalFromSystemText('weibo', '互相关注')).toBe(null);
+    expect(followSignalFromSystemText('weibo', '对方正在输入')).toBe(null);
+    // 2026-11-15 全平台补齐：weibo 接入关注信号词表（原断言「weibo 恒 null」前提过时）
+    expect(followSignalFromSystemText('weibo', '互相关注')).toBe('mutual_follow');
+    expect(followSignalFromSystemText('weibo', '关注了你')).toBe('peer_followed_you');
+    expect(followSignalFromSystemText('xiaohongshu', '已关注你')).toBe('peer_followed_you');
+    expect(followSignalFromSystemText('kuaishou', '成为你的粉丝')).toBe('peer_followed_you');
+    expect(followSignalFromSystemText('jd', '关注了我')).toBe('peer_followed_you');
+    expect(followSignalFromSystemText('pdd', '已添加我为好友')).toBe('friend_request');
   });
 });
 

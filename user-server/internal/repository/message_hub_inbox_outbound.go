@@ -256,6 +256,25 @@ func (r *MessageHubRepository) PrevInboundCreatedAt(ctx context.Context, platfor
 	return row.CreatedAt, nil
 }
 
+// ReviveSendFailedByConversation 关注事件驱动的限额行复活（2026-11-15）：客户关注
+// 我们后平台 24h 私信限额解除，该会话 send_failed 行复活为 pending 重投（预算清零、
+// 错误位清空）。delivered/pending 等活跃态不动（复活只针对终态失败行）。
+func (r *MessageHubRepository) ReviveSendFailedByConversation(ctx context.Context, platform, accountID, conversationID string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("platform = ? AND account_id = ? AND conversation_id = ? AND direction = 'outbound' AND status = 'send_failed' AND deleted_at IS NULL",
+			platform, accountID, conversationID).
+		Updates(map[string]any{
+			"status":        "pending",
+			"push_attempts": 0,
+			"push_error":    "", // NOT NULL 列，空串即清空（nil 违反约束）
+			"claimed_at":    nil,
+		})
+	return res.RowsAffected, res.Error
+}
+
 func (r *MessageHubRepository) GetByMsgIDsInScope(ctx context.Context, platform, accountID string, msgIDs []string) ([]model.MessageHub, error) {
 	if r == nil || r.db == nil || len(msgIDs) == 0 || platform == "" || accountID == "" {
 		return nil, nil

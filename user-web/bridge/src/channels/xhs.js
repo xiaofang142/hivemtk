@@ -4,6 +4,8 @@ import { mergeSelectors, customConversationListSelectors } from '../core/selecto
 import { SelectorEngine } from '../core/selector-engine.js';
 import { qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick, createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, simulateEnterKey } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 import { makeSendMediaHook } from '../core/media-inject.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
@@ -598,7 +600,7 @@ const hooks = {
     if (!text && msgType === 'text') return null; 
     if (msgType === 'system' || msgType === 'recall') {
       const sysText = text || (msgType === 'recall' ? '撤回了一条消息' : '系统消息');
-      return {
+      const sysParsed = {
         message_id:
           item.getAttribute('data-message-id') ||
           item.getAttribute('data-id') ||
@@ -617,6 +619,9 @@ const hooks = {
         timestamp: Date.now(),
         raw: item.outerHTML?.slice(0, 500),
       };
+      // M-6 全平台补齐（2026-11-15）：system 归类与 AI 触发现状不变，只加关注信号
+      // extra 标记，随上行透传（uplink extra 白名单修复后服务端可登记首触）。
+      return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.XHS, sysText));
     }
 
     // 自/他判定已移交后端（统一 customer 占位，回环防护由后端承担）。
@@ -736,6 +741,22 @@ const hooks = {
     findInput: findInputEl,
     findSend: findSendButton,
     getAccount: getAccountId,
+    log,
+  }),
+  // M-6 全平台主动关注（2026-11-15）：服务端策略（bridge/follow_user_enabled，
+    // 默认关）经 outbox msg_type=follow_user 动作行触发，adapter.followUser 统一做
+    // 开关/限速/会话冷却后分派到这里。按钮只在聊天 header 范围内找（已关注/互相关注
+    // 态词表命中绝不点击——部分平台关注按钮是 toggle）。候选选择器为 fixture 口径，
+    // 真机未校准（校准轮统一处理）；hook 内 log 候选数供观测。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.XHS,
+    channelLabel: '小红书',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="chat-header"], [class*="chat-header" i], [class*="ChatHeader" i], [class*="user-info" i], [class*="contact" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i], [class*="fan" i], [data-e2e*="follow" i]', root);
+    },
+    clickFn: enhancedClick,
     log,
   }),
 };

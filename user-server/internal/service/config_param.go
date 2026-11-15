@@ -182,6 +182,19 @@ const (
 	BridgeAIDebounceDefault = 12
 )
 
+// FollowFlushBacklogParam / FollowFlushBacklogDefault 是「关注后补发积压」的唯一开关源
+//（2026-11-15 用户裁决：检测到对方关注我们后补发积压待发）。默认 true（一键关回保护面）。
+// 默认值与 config_params 里 bridge/follow_flush_backlog_enabled 的 DefaultValue("true") 同值。
+const (
+	FollowFlushBacklogParam   = "follow_flush_backlog_enabled"
+	FollowFlushBacklogDefault = true
+)
+
+// FollowFlushBacklogEnabled 读关注后补发积压开关（nil-safe）。
+func FollowFlushBacklogEnabled(ctx context.Context) bool {
+	return GlobalConfigParam().GetBool(ctx, "bridge", FollowFlushBacklogParam, FollowFlushBacklogDefault)
+}
+
 // BridgeAIDebounceSeconds 读客户连发合并窗（秒；nil-safe）。
 // 未装配时回落 0（关闭合并、逐条即答=旧行为）：生产 main 启动必 Seed（参数行 12），
 // 测试/未装配环境保持逐条语义，既有触发契约测试不因合并窗翻转。

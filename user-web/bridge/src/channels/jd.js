@@ -4,8 +4,10 @@ import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
   assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc,
-} from '../core/dom.js';
+  enhancedClick} from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 import { mergeSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
@@ -195,7 +197,27 @@ function getPeerAvatar() {
 function parseMessageItem(item) {
   if (!item) return null;
   try {
-    if (item.matches(SEL.SYSTEM)) return null;
+    if (item.matches(SEL.SYSTEM)) {
+      // M-6 全平台补齐（2026-11-15）：system 由丢弃改留痕+打标，归类不变不触发 AI。
+      const sysText = cleanText(item);
+      if (sysText) {
+        return applyFollowSignal({
+          message_id: item.id || `sys:${sysText}`,
+          sender_type: SENDER.SYSTEM,
+          text: sysText,
+          media_url: '',
+          msg_type: 'system',
+          is_group: false,
+          group_id: '',
+          group_name: '',
+          sender_name: '',
+          sender_avatar: '',
+          timestamp: Date.now(),
+          raw: item.outerHTML?.slice(0, 500),
+        }, followSignalFromSystemText(CHANNELS.JD, sysText));
+      }
+      return null;
+    }
   } catch (_) {  }
   const textEl = item.querySelector(SEL.TEXT);
   let text = cleanText(textEl || item);
@@ -327,6 +349,22 @@ const hooks = {
       }
     } catch (_) {  }
   },
+  // M-6 全平台主动关注（2026-11-15）：服务端策略（bridge/follow_user_enabled，
+  // 默认关）经 outbox msg_type=follow_user 动作行触发，adapter.followUser 统一做
+  // 开关/限速/会话冷却后分派到这里。按钮只在聊天 header 范围内找（已关注/互相关注
+  // 态词表命中绝不点击——部分平台关注按钮是 toggle）。候选选择器为 fixture 口径，
+  // 真机未校准（校准轮统一处理）；hook 内 log 候选数供观测。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.JD,
+    channelLabel: '京东',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="chat-header"], [class*="chat-header" i], [class*="ChatHeader" i], [class*="user-info" i], [class*="contact" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i], [class*="fan" i], [data-e2e*="follow" i]', root);
+    },
+    clickFn: enhancedClick,
+    log,
+  }),
 };
 
 export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isJdHost, detectUnread };

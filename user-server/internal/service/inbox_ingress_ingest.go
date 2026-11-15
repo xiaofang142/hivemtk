@@ -146,10 +146,20 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 	// 出站回声检测（base hash 比对）：bridge 采集把 AI 出站回复从 DOM 抓回当 inbound 时，
 	// event_id 就是出站 msg_id 的 ContentHash（可能追加 #N 后缀）。剥离后缀后与出站 msg_id
 	// 精确比对，命中即判定为自回声。此检查不依赖 sender_name / content / 时间窗口，
-	// 是对下面三项内容维度嗅探的兜底加固。
-	if event.EventID != "" && s.hubRepo != nil {
+	// 但消息身份不是全局唯一：必须限定渠道、账号、会话，不能用异域历史消息拦当前客户。
+	// 作用域缺失时不退回全局查询，继续由平台 ID 和下面的内容维度闸判断。
+	accountID := resolveAccountID(event)
+	hasEchoScope := accountID != "" && event.ConversationID != ""
+	if event.EventID != "" && hasEchoScope {
 		baseID := stripOccurrenceSuffix(event.EventID)
-		if existing, err := s.hubRepo.GetByMsgID(ctx, baseID); err == nil && existing != nil && existing.Direction == "outbound" {
+		rows, err := s.hubRepo.GetByMsgIDsInScopeWithConv(
+			ctx,
+			event.Channel,
+			accountID,
+			event.ConversationID,
+			[]string{baseID},
+		)
+		if err == nil && len(rows) > 0 {
 			return &IngressDecision{Blocked: true, IsSelfEcho: true, Reason: "self-echo(event_id base hash match)"}, nil
 		}
 	}
@@ -196,7 +206,7 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 					// 真实客户消息恰好与本账号某条近期出站同字符集（或恰为双倍）的概率趋零，
 					// 与「等值/包含」判据同一取舍。长度护栏：出站 <16 字不参与（同剥离护栏），
 					// 防短出站（"好的~"）频率撞车误吞真实发言。
-				if len([]rune(outNorm)) >= 16 {
+					if len([]rune(outNorm)) >= 16 {
 						inSorted := sortedRunes(norm)
 						outSorted := sortedRunes(outNorm)
 						if inSorted == outSorted || inSorted == doubleSorted(outSorted) {
@@ -219,12 +229,12 @@ func (s *InboxIngressService) interceptInbound(ctx context.Context, event *model
 					}
 				}
 				// 线程容器：整段线程的结尾就是本账号最近发出去的话。逐条剥离后仍会剩下
-					// 客户更早的发言（≥4 字），下面的「引用追问放行」会把它误当客户新话；
-					// 这里用「入站尾部 N 字原样出现在近期同会话出站文本里」判定这段内容以
-					// 我方发言收尾——客户在这段里没有新话，不能再触发一次回复。
-					// **必须先于引用追问放行执行**（架构师二审①顺序修正）：否则
-					// 「线程拼接（以我方话收尾）」会在剥离层被误放行。短入站不参与，
-					// 避免吞掉「可以吗？」。
+				// 客户更早的发言（≥4 字），下面的「引用追问放行」会把它误当客户新话；
+				// 这里用「入站尾部 N 字原样出现在近期同会话出站文本里」判定这段内容以
+				// 我方发言收尾——客户在这段里没有新话，不能再触发一次回复。
+				// **必须先于引用追问放行执行**（架构师二审①顺序修正）：否则
+				// 「线程拼接（以我方话收尾）」会在剥离层被误放行。短入站不参与，
+				// 避免吞掉「可以吗？」。
 				if inRunes := []rune(norm); len(inRunes) >= echoTailWindowRunes {
 					tail := string(inRunes[len(inRunes)-echoTailWindowRunes:])
 					for i := range rows {

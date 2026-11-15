@@ -290,7 +290,49 @@ func (s *InboxIngressService) maybeRegisterNewUserUnfollowed(ctx context.Context
 				Err(err).
 				Msg("[BridgeFollow] 关注动作触发失败（留痕于日志，不影响消息链路）")
 		}
+		// 关注成立（动作行已入队或幂等命中）→ 限额解除，补发该会话积压待发。
+		// 幂等：重复关注事件只会把已到期行再标一次，无副作用。
+		s.FlushConversationBacklog(triggerCtx, channel, accountID, convID)
 	})
+}
+
+// FlushConversationBacklog 关注事件驱动的积压补发（2026-11-15，用户裁决「检测到
+// 对方关注我们后补发积压待发」）：客户关注我们后平台限额解除，该会话两类积压立即
+// 可投——① reach_delayed_outbound quiet_hours/send_retry 行到期（send_at=now，常规
+// 认领消费）；② message_hub 该会话 send_failed 行复活为 pending（预算清零重投）。
+// 参数 bridge/follow_flush_backlog_enabled（默认 true）一键关回。全部幂等，失败仅
+// 日志，不影响关注动作与消息主链路。
+func (s *InboxIngressService) FlushConversationBacklog(ctx context.Context, channel, accountID, conversationID string) {
+	if s == nil || channel == "" || accountID == "" || conversationID == "" {
+		return
+	}
+	if !FollowFlushBacklogEnabled(ctx) {
+		return
+	}
+	if s.pendingOutbound != nil {
+		n, err := s.pendingOutbound.MarkDueByConversation(ctx, channel, accountID, conversationID, time.Now())
+		if err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge_follow").
+				Str("channel", channel).Str("conv_id", conversationID).
+				Msg("[BridgeFollow] 积压补发：延迟行到期标记失败（不影响主链路）")
+		} else if n > 0 {
+			logger.Ctx(ctx).Info().Int64("rows", n).Str("module", "bridge_follow").
+				Str("channel", channel).Str("conv_id", conversationID).
+				Msg("[BridgeFollow] 积压补发：延迟行已到期，进入常规认领")
+		}
+	}
+	if s.hubRepo != nil {
+		n, err := s.hubRepo.ReviveSendFailedByConversation(ctx, channel, accountID, conversationID)
+		if err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge_follow").
+				Str("channel", channel).Str("conv_id", conversationID).
+				Msg("[BridgeFollow] 积压补发：send_failed 行复活失败（不影响主链路）")
+		} else if n > 0 {
+			logger.Ctx(ctx).Info().Int64("rows", n).Str("module", "bridge_follow").
+				Str("channel", channel).Str("conv_id", conversationID).
+				Msg("[BridgeFollow] 积压补发：限额阻塞行已复活为 pending")
+		}
+	}
 }
 
 // containsChannelName 渠道清单包含判定（空清单 = 全关）。

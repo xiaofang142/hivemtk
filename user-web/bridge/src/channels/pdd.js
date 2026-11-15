@@ -4,8 +4,11 @@ import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
   assertConvOrAbort, absoluteMediaUrl, avatarImgUrl,
+  enhancedClick,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 import { mergeSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 import { mediaPlaceholder } from '../core/types.js';
@@ -246,7 +249,7 @@ function parseMessageItem(item) {
   if (isSystemMessage(item)) {
     const sysText = cleanText(item);
     if (!sysText) return null;
-    return {
+    const sysParsed = {
       message_id: item.getAttribute('data-id') || item.id || `sys:${sysText}`,
       sender_type: SENDER.SYSTEM,
       text: sysText,
@@ -260,6 +263,8 @@ function parseMessageItem(item) {
       timestamp: Date.now(),
       raw: item.outerHTML ? item.outerHTML.slice(0, 500) : '',
     };
+    // M-6 全平台补齐（2026-11-15）：system 归类不变，只加关注信号标记。
+    return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.PDD, sysText));
   }
   const { text, mediaUrl, msgType } = extractContent(item);
   if (!text && !mediaUrl) return null;
@@ -368,6 +373,22 @@ const hooks = {
       }
     } catch (_) {  }
   },
+  // M-6 全平台主动关注（2026-11-15）：服务端策略（bridge/follow_user_enabled，
+  // 默认关）经 outbox msg_type=follow_user 动作行触发，adapter.followUser 统一做
+  // 开关/限速/会话冷却后分派到这里。按钮只在聊天 header 范围内找（已关注/互相关注
+  // 态词表命中绝不点击——部分平台关注按钮是 toggle）。候选选择器为 fixture 口径，
+  // 真机未校准（校准轮统一处理）；hook 内 log 候选数供观测。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.PDD,
+    channelLabel: '拼多多',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="chat-header"], [class*="chat-header" i], [class*="ChatHeader" i], [class*="user-info" i], [class*="contact" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i], [class*="fan" i], [data-e2e*="follow" i]', root);
+    },
+    clickFn: enhancedClick,
+    log,
+  }),
 };
 
 export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isPddHost, detectUnread };

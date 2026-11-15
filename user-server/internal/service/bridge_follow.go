@@ -34,7 +34,7 @@ import (
 const (
 	FollowUserEnabledParam    = "follow_user_enabled"
 	FollowUserChannelsParam   = "follow_user_channels"
-	FollowUserChannelsDefault = `["douyin","tiktok","bilibili"]`
+	FollowUserChannelsDefault = `["douyin","tiktok","xiaohongshu","weibo","bilibili","kuaishou","jd","pdd"]`
 )
 
 // FollowActionMsgType 自动关注动作行的 outbox msg_type（扩展端 downlink.js

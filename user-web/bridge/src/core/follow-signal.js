@@ -62,6 +62,34 @@ export const FOLLOW_SIGNAL_SYSTEM_PATTERNS = Object.freeze({
   ]),
   // bilibili 无关注类系统文案词表（tab 归属在渠道内单独判定）
   bilibili: Object.freeze([]),
+  // 2026-11-15 全平台补齐（用户裁决「所有平台都要实现」）：复用 douyin 口径，
+  // 各渠道文案差异仅在粉丝/关注动词变体（词表为既有 SYSTEM_TEXT_PATTERNS 子集口径，
+  // 调用方只在已判 system 的分支打标，不会把客户消息错标）。
+  xiaohongshu: Object.freeze([
+    { re: /互相关注(?!后)/, source: FOLLOW_SIGNAL_SOURCES.MUTUAL },
+    { re: /关注了你|已关注你|关注了我/, source: FOLLOW_SIGNAL_SOURCES.PEER_FOLLOW },
+    { re: /已添加.*为好友/, source: FOLLOW_SIGNAL_SOURCES.FRIEND_REQUEST },
+  ]),
+  weibo: Object.freeze([
+    { re: /互相关注(?!后)/, source: FOLLOW_SIGNAL_SOURCES.MUTUAL },
+    { re: /关注了你|已关注你|关注了我|加入了你的粉丝|成为你的粉丝/, source: FOLLOW_SIGNAL_SOURCES.PEER_FOLLOW },
+    { re: /已添加.*为好友/, source: FOLLOW_SIGNAL_SOURCES.FRIEND_REQUEST },
+  ]),
+  kuaishou: Object.freeze([
+    { re: /互相关注(?!后)/, source: FOLLOW_SIGNAL_SOURCES.MUTUAL },
+    { re: /关注了你|已关注你|关注了我|成为你的粉丝/, source: FOLLOW_SIGNAL_SOURCES.PEER_FOLLOW },
+    { re: /已添加.*为好友/, source: FOLLOW_SIGNAL_SOURCES.FRIEND_REQUEST },
+  ]),
+  jd: Object.freeze([
+    { re: /互相关注(?!后)/, source: FOLLOW_SIGNAL_SOURCES.MUTUAL },
+    { re: /关注了你|已关注你|关注了我|成为你的粉丝/, source: FOLLOW_SIGNAL_SOURCES.PEER_FOLLOW },
+    { re: /已添加.*为好友/, source: FOLLOW_SIGNAL_SOURCES.FRIEND_REQUEST },
+  ]),
+  pdd: Object.freeze([
+    { re: /互相关注(?!后)/, source: FOLLOW_SIGNAL_SOURCES.MUTUAL },
+    { re: /关注了你|已关注你|关注了我|成为你的粉丝/, source: FOLLOW_SIGNAL_SOURCES.PEER_FOLLOW },
+    { re: /已添加.*为好友/, source: FOLLOW_SIGNAL_SOURCES.FRIEND_REQUEST },
+  ]),
 });
 
 // followSignalFromSystemText 返回该渠道系统文案命中的关注信号来源（未命中 null）。

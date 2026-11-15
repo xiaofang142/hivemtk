@@ -171,18 +171,34 @@ describe('weibo 系统消息过滤（isSystemMessage）', () => {
     return document.querySelector('.chat-content > li');
   };
 
-  it('撤回/加好友/正在输入/发送失败等系统文案 → parseMessageItem 返回 null', () => {
+  it('撤回/正在输入/发送失败等系统文案 → parseMessageItem 返回 null', () => {
     const a = buildWeiboAdapter();
     for (const text of [
       '你撤回了一条消息',
       '对方撤回了一条消息',
-      '你已添加对方为好友',
-      '已添加对方为好友',
       '对方正在输入…',
       '消息发送失败',
     ]) {
       const item = wbItem(`<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">${text}</p></div></li>`);
       expect(a.parseMessageItem(item), `系统文案应被过滤: ${text}`).toBeNull();
+    }
+  });
+
+  it('加好友/关注类系统文案 → 留痕为 system 并打关注信号（M-6 全平台补齐 2026-11-15）', () => {
+    const a = buildWeiboAdapter();
+    for (const [text, signal] of [
+      ['你已添加对方为好友', 'friend_request'],
+      ['已添加对方为好友', 'friend_request'],
+      ['对方关注了你', 'peer_followed_you'],
+      ['互相关注', 'mutual_follow'],
+    ]) {
+      const item = wbItem(`<li class="message-item"><div class="bubble_cont basi left"><p class="puretext">${text}</p></div></li>`);
+      const p = a.parseMessageItem(item);
+      expect(p, `关注信号应留痕: ${text}`).not.toBeNull();
+      expect(p.sender_type).toBe(SENDER.SYSTEM);
+      expect(p.msg_type).toBe('system');
+      expect(p.extra.new_user_unfollowed).toBe(true);
+      expect(p.extra.new_user_signal).toBe(signal);
     }
   });
 

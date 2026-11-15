@@ -66,6 +66,20 @@ func NewDelayedOutboundRepositoryDefault() *DelayedOutboundRepository {
 // 句柄缺失 ⇒ 报错而不是静默成功：调用方把 nil 读成「已入队」，于是这条
 // 被延迟的回复既没进队列也没发出 —— 一条消息凭空消失，且日志里只有一行
 // "已进入延迟队列"。报错会让调用方退回直接发送，行为退化但消息不丢。
+// MarkDueByConversation 关注事件驱动的积压补发（2026-11-15）：客户关注我们后平台
+// 限额解除，该会话 quiet_hours/send_retry 延迟行立即到期（send_at=now），由常规
+// 认领链路消费。返回影响行数。幂等：已到期行再次更新无副作用。
+func (r *DelayedOutboundRepository) MarkDueByConversation(ctx context.Context, platform, accountID, conversationID string, now time.Time) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, nil
+	}
+	res := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
+		Where("platform = ? AND account_id = ? AND conversation_id = ? AND status IN ('pending','sending')",
+			platform, accountID, conversationID).
+		Updates(map[string]any{"send_at": now})
+	return res.RowsAffected, res.Error
+}
+
 func (r *DelayedOutboundRepository) CreatePending(ctx context.Context, rec *model.DelayedOutboundReply) error {
 	if r == nil || r.db == nil {
 		return errDelayedOutboundUnavailable

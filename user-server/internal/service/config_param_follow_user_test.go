@@ -101,9 +101,18 @@ func TestFollowUserParams_Seeded_ReadsBack(t *testing.T) {
 	if len(channels) == 0 {
 		t.Fatalf("seed 后 follow_user_channels 为空，期望默认清单")
 	}
+	// 2026-11-15 全平台关注逻辑（用户裁决）：默认清单扩为八个有关注模型的渠道；
+	// xianyu 好友制无关注模型，仍排除。
+	allowed := map[string]bool{
+		"douyin": true, "tiktok": true, "xiaohongshu": true, "weibo": true,
+		"bilibili": true, "kuaishou": true, "jd": true, "pdd": true,
+	}
 	for _, ch := range channels {
-		if ch != "douyin" && ch != "tiktok" && ch != "bilibili" {
+		if !allowed[ch] {
 			t.Errorf("默认清单含意外渠道 %q（xianyu 好友制无关注模型，不应默认开）", ch)
 		}
+	}
+	if len(channels) != 8 {
+		t.Errorf("默认清单应为 8 个渠道，实际 %d：%v", len(channels), channels)
 	}
 }

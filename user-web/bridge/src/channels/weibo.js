@@ -4,8 +4,10 @@ import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,
   assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc, extractEmojiSrc,
-} from '../core/dom.js';
+  enhancedClick} from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
+import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
+import { createFollowUserHook } from '../core/follow-action.js';
 import { mergeSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
 
@@ -308,6 +310,9 @@ function directionOf(item) {
 // 该层依赖 douyin 真机校准过的气泡/头像结构假设，微博结构样本不足，宁缺勿错；
 // 词表校准后如有专属 class/结构信号（SEL.SYSTEM），真机轮再补。
 const WEIBO_SYSTEM_TEXT_PATTERNS = [
+  // M-6 关注信号（2026-11-15 全平台补齐；follow-signal.js 词表子集口径）
+  /互相关注(?!后)/,
+  /关注了你|已关注你|关注了我|加入了你的粉丝|成为你的粉丝/,
   /撤回了?一条消息/,
   /recalled a message/i,
   /你(已)?添加.*为好友/,
@@ -359,8 +364,30 @@ function isSystemMessage(item) {
 
 function parseMessageItem(item) {
   if (!item) return null;
-  // 系统消息不入上行（douyin:648 / kuaishou:337 同款守卫）：避免撤回/时间分隔触发 AI
-  if (isSystemMessage(item)) return null;
+  // 系统消息留痕（2026-11-15 起，weibo 接入 M-6）：此前整体丢弃导致关注信号永远
+  // 到不了服务端。**只留痕带关注信号的 system 消息**——时间分隔/撤回/typing 等纯噪
+  // 音仍丢弃（行量零变化，旧契约不动）；命中关注词表的留痕为 sender_type=system
+  // （归类与 AI 触发现状不变，平台公告输入卫生闸 3348432b 兜底），extra 打标随上行
+  // 透传（uplink extra 白名单修复后服务端可登记首触/触发回关）。
+  if (isSystemMessage(item)) {
+    const sysText = cleanText(item.querySelector(SEL.TEXT) || item);
+    const signal = sysText ? followSignalFromSystemText(CHANNELS.WEIBO, sysText) : null;
+    if (!signal) return null;
+    return applyFollowSignal({
+      message_id: item.id || `sys:${sysText}`,
+      sender_type: SENDER.SYSTEM,
+      text: sysText,
+      media_url: '',
+      msg_type: 'system',
+      is_group: false,
+      group_id: '',
+      group_name: '',
+      sender_name: '',
+      sender_avatar: '',
+      timestamp: Date.now(),
+      raw: item.outerHTML?.slice(0, 500),
+    }, signal);
+  }
   const textEl = item.querySelector(SEL.TEXT);
   let text = textEl ? cleanText(textEl) : '';
   if (!text) text = cleanText(item);
@@ -509,6 +536,22 @@ const hooks = {
       }
     } catch (_) {  }
   },
+  // M-6 全平台主动关注（2026-11-15）：服务端策略（bridge/follow_user_enabled，
+  // 默认关）经 outbox msg_type=follow_user 动作行触发，adapter.followUser 统一做
+  // 开关/限速/会话冷却后分派到这里。按钮只在聊天 header 范围内找（已关注/互相关注
+  // 态词表命中绝不点击——部分平台关注按钮是 toggle）。候选选择器为 fixture 口径，
+  // 真机未校准（校准轮统一处理）；hook 内 log 候选数供观测。
+  followUser: createFollowUserHook({
+    channelKey: CHANNELS.WEIBO,
+    channelLabel: '微博',
+    findCandidates: () => {
+      const scope = qs('[data-e2e="chat-header"], [class*="chat-header" i], [class*="ChatHeader" i], [class*="user-info" i], [class*="contact" i]');
+      const root = scope || document;
+      return qsa('button, [role="button"], [class*="follow" i], [class*="Follow" i], [class*="fan" i], [data-e2e*="follow" i]', root);
+    },
+    clickFn: enhancedClick,
+    log,
+  }),
 };
 
 export { getAccountId, getConversationId, getConversationList, getPeerName, getPeerAvatar, isSelfAccountLabel, isWeiboHost, isChatUrl, detectUnread, isSystemMessage, isSystemText, isTimeText };

@@ -227,6 +227,11 @@ export class Uplink {
         is_group: !!m.is_group,
         group_id: m.group_id || '',
         group_name: m.group_name || '',
+        // M-6 关注信号透传（2026-11-15 修复）：follow-signal.js 打上的
+        // new_user_unfollowed / new_user_signal 此前被白名单丢掉，信号永不到服务端
+        // （模块注释声称透传，实际没有）。服务端 IngestExtraAllowKeys 二次过滤，
+        // account_id 等固定键由转换层权威写入，线路值丢弃——无越权面。
+        extra: m.extra || {},
         history: Array.isArray(m.history) ? m.history : [],
         content_hash: m.content_hash || '',
       })),

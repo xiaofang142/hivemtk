@@ -36,6 +36,20 @@ describe('uplink / enqueue + flushAll', () => {
   beforeEach(() => { realFetch = globalThis.fetch; });
   afterEach(() => { globalThis.fetch = realFetch; vi.restoreAllMocks(); });
 
+  it('M-6 关注信号透传：extra（new_user_unfollowed/new_user_signal）随上行体到达服务端', async () => {
+    let captured;
+    globalThis.fetch = vi.fn(async (url, init) => { captured = init.body; return new Response('{"ok":true,"ingested":[]}', { status: 200 }); });
+    const uplink = new Uplink({ channel: 'douyin', getConfig: async () => ({ serverUrl: 'http://x', token: 't' }) });
+    uplink.enqueue({
+      channel: 'douyin', account_id: 'acc1', conversation_id: 'c1', sender_type: 'system',
+      content: '对方关注了你', timestamp: 1,
+      extra: { new_user_unfollowed: true, new_user_signal: 'peer_followed_you' },
+    });
+    await uplink.flushAll();
+    const body = JSON.parse(captured);
+    expect(body.messages[0].extra).toEqual({ new_user_unfollowed: true, new_user_signal: 'peer_followed_you' });
+  });
+
   it('enqueue 兜底补全 event_id（前端 hash）', async () => {
     let captured;
     globalThis.fetch = vi.fn(async (url, init) => { captured = init.body; return new Response('{"ok":true,"ingested":[]}', { status: 200 }); });
