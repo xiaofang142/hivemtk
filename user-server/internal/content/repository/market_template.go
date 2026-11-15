@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	contentmodel "hivemtk-user/internal/content/model"
+	"hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 )
@@ -111,10 +112,10 @@ func (r *MarketTemplateRepository) SearchTemplates(ctx context.Context, keyword 
 	var templates []*contentmodel.MarketTemplate
 	var total int64
 
-	pattern := "%" + keyword + "%"
+	pattern := "%" + utils.EscapeLike(keyword) + "%"
 	cond := func() *gorm.DB {
 		return r.db.WithContext(ctx).Model(&contentmodel.MarketTemplate{}).
-			Where("name ILIKE ? OR description ILIKE ?", pattern, pattern)
+			Where("name ILIKE ? ESCAPE '\\' OR description ILIKE ? ESCAPE '\\'", pattern, pattern)
 	}
 
 	if err := cond().Count(&total).Error; err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/pkg/utils"
 	_db "hivemtk-user/internal/pkg/db"
 	"strings"
 	"time"
@@ -78,7 +79,8 @@ func (r *KnowledgeFeedbackRepository) List(ctx context.Context, filter FeedbackL
 		q = q.Where("rating = ?", filter.Rating)
 	}
 	if kw := strings.TrimSpace(filter.Keyword); kw != "" {
-		q = q.Where("query ILIKE ?", "%"+kw+"%")
+		// ILIKE 通配符转义（深度审计轮）：用户值里的 %/_ 会让条件退化为全表匹配
+		q = q.Where("query ILIKE ? ESCAPE '\\'", "%"+utils.EscapeLike(kw)+"%")
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

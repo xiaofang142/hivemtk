@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // TenantFilter 租户运营清单过滤条件（contracts/api.md GET /api/manage/tenants）
@@ -214,7 +215,7 @@ func (r *tenantRepo) List(ctx context.Context, f TenantFilter) ([]TenantWithActi
 		}
 		if kw := strings.TrimSpace(f.Keyword); kw != "" {
 			// 模糊匹配企业名或短码（转义 LIKE 通配符，避免 % 注入放大匹配面）
-			like := "%" + escapeLike(kw) + "%"
+			like := "%" + utils.EscapeLike(kw) + "%"
 			q = q.Where("name ILIKE ? ESCAPE '\\' OR code ILIKE ? ESCAPE '\\'", like, like)
 		}
 		return q
@@ -279,9 +280,4 @@ func (r *tenantRepo) activities(ctx context.Context, rows []*model.Tenant) (map[
 		out[s.TenantID] = TenantActivity{MemberCount: s.MemberCount, LastActiveAt: s.LastActiveAt}
 	}
 	return out, nil
-}
-
-func escapeLike(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-	return r.Replace(s)
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
@@ -128,7 +129,8 @@ func (r *RefluxRepository) ListQuestions(ctx context.Context, filter map[string]
 		q = q.Where("agent_id = ?", v)
 	}
 	if v, ok := filter["question_like"]; ok {
-		q = q.Where("question ILIKE ?", fmt.Sprintf("%%%v%%", v))
+		// 不再 Sprintf 拼 pattern（% 值退化全表匹配）——转义+参数化（深度审计轮）
+		q = q.Where("question ILIKE ? ESCAPE '\\'", "%"+utils.EscapeLike(fmt.Sprintf("%v", v))+"%")
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {

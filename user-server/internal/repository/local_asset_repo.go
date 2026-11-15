@@ -5,6 +5,7 @@ import (
 	"time"
 
 	bizerr "hivemtk-user/internal/domain/errors"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 
@@ -92,7 +93,7 @@ func (r *localAssetRepo) List(ctx context.Context, f LocalAssetFilter) ([]*model
 		q = q.Where("is_active = ?", *f.IsActive)
 	}
 	if f.Keyword != "" {
-		q = q.Where("name ILIKE ?", "%"+f.Keyword+"%")
+		q = q.Where("name ILIKE ? ESCAPE '\\'", "%"+utils.EscapeLike(f.Keyword)+"%")
 	}
 	if f.Page <= 0 {
 		f.Page = 1

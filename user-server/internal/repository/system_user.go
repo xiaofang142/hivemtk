@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 )
@@ -174,8 +175,8 @@ func (r *systemUserRepo) SearchUsers(ctx context.Context, keyword string, offset
 	base := func() *gorm.DB {
 		q := r.db.WithContext(ctx).Model(&model.SystemUser{})
 		if keyword != "" {
-			like := "%" + keyword + "%"
-			q = q.Where("username ILIKE ? OR email ILIKE ? OR real_name ILIKE ?", like, like, like)
+			like := "%" + utils.EscapeLike(keyword) + "%"
+			q = q.Where("username ILIKE ? ESCAPE '\\' OR email ILIKE ? ESCAPE '\\' OR real_name ILIKE ? ESCAPE '\\'", like, like, like)
 		}
 		return q
 	}

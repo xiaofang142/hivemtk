@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 )
@@ -26,9 +27,9 @@ type ClueQuery struct {
 func applyClueQuery(db *gorm.DB, q ClueQuery) *gorm.DB {
 	tx := db
 	if kw := strings.TrimSpace(q.Keyword); kw != "" {
-		like := "%" + kw + "%"
+		like := "%" + utils.EscapeLike(kw) + "%"
 		tx = tx.Where(
-			"(name ILIKE ? OR account ILIKE ? OR city ILIKE ? OR address ILIKE ? OR COALESCE(owner_account,'') ILIKE ?)",
+			"(name ILIKE ? ESCAPE '\\' OR account ILIKE ? ESCAPE '\\' OR city ILIKE ? ESCAPE '\\' OR address ILIKE ? ESCAPE '\\' OR COALESCE(owner_account,'') ILIKE ? ESCAPE '\\')",
 			like, like, like, like, like,
 		)
 	}
