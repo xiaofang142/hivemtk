@@ -4,6 +4,33 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-17 · 审计轮生产侧落地（TRUSTED_PROXIES + 备份 cron + 泄漏密钥闭环核查）
+
+**变更一：user-server `.env` 追加 `TRUSTED_PROXIES=127.0.0.1,::1`**（2026-11-16 审计 P2-2）
+- 判据：nginx 与 8204 同机——`/www/server/panel/vhost/nginx/work.xapptool.cn.conf`
+  三处 `proxy_pass http://127.0.0.1:8204`，反代 IP=127.0.0.1 属内置默认名单内但此前键缺失，
+  启动期打 WARN；显式声明后登录风控/频控/审计的来源 IP 不再塌成反代出口。
+- 动作：改前备份 `/root/hivemtk-env-backups/user-server.env.bak-20261117-071753`（0700）→
+  追加键 → `docker compose up -d user-server` 重建容器。
+- 验证：容器内 health ok；公网 `workapi.xapptool.cn/api/health` ok；启动日志实测
+  `可信反代名单来自 env TRUSTED_PROXIES：127.0.0.1,::1（2 条）`，`TRUSTED_PROXIES 未配置`
+  WARN 0 条。
+- 换机注意：新机 nginx 若不在同机，此处值必须改成反代真实地址/CIDR，照抄 127.0.0.1 会让
+  XFF 失配观测狂打 WARN（守卫自带，不会静默）。
+
+**变更二：备份 cron `/etc/cron.d/hivemtk-backup-offsite`**（2026-11-16 审计 P1-3/T-04）
+- 内容：每日 02:00，`set -a; . /www/wwwroot/hivemtk/user-server/.env; set +a` 后跑
+  `/www/wwwroot/hivemtk/scripts/ops/backup_offsite.sh`（COMPOSE_DIR 指向
+  /www/wwwroot/hivemtk/user-server），日志 `/var/log/hivemtk-backup.log`，本地保留 7 天。
+- 首跑实测：docker 形态 dump 107MB、PGDMP 魔数校验过、rc=0（见 DR_RECOVERY.md §1.5）。
+- 剩余：对象存储 `QINIU_*` 未配置（生产/本地均空）⇒ 异地副本上传待部署方注入凭证后
+  自动启用；当前 RPO=本机磁盘，每次运行有显式 WARN 不冒充绿。
+
+**核查（无变更）：泄漏密钥 48 位值在产线在用性**
+- `user-server/.env` / `platform-server/.env` 逐文件 grep 计数均 **0**（值本体不回显不入台账）；
+  现行 `MERCHANT_API_SECRET` 64 位、两侧同值。结论与本地核查合并记入
+  `docs/operations/secret_rotation.md` 二A.2-补（已无在用方 ⇒ 无需轮换，P0-1 闭环）。
+
 ## 2026-11-13 · 链 A 自动部署器上线 + user-server 追平 9 个提交
 
 **背景**：线上 user-server 二进制停在 `89af3ba1`（容器 2026-11-12 17:08 启动），

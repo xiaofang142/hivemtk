@@ -125,8 +125,9 @@ done
 | 公开判据 | `git log --all -S<值>` 全史命中 **1 枚提交**；`git merge-base --is-ancestor 974236ed master` 退 0 ⇒ 在已推双远端的 master 链上（口径：`--all` 全史 + 祖先判定，同二A.1） |
 | 与既有台账关系 | 该值 48 位、2026-10-18 生成，**晚于** 09-24 merchant_hmac 实转 ⇒ **不在既有 burned 覆盖内**；现行 `config/.merchant_api_secret`（64 位，2026-10-25）是另一枚值。旧 48 位值是否已随 10-25 换代在平台侧作废，**待平台侧实测**（走 user-server 代理端点验证，禁手工复算 HMAC） |
 | 已做（本轮 2026-11-17） | ① `git rm` 该文件（运行时消费者只读 `.merchant_api_secret` 精确名、无 glob，零功能影响）；② `check-secrets.sh` 新增 **B+ 裸值文件段**（嫌疑名单按文件名形状圈定 + 整行精判，gitignored 本地密钥不进候选面），反向测试 L11/L12/L13 三格落地 |
-| 待做（烧录，按"rotate, don't erase"口径） | `ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --dry-run merchant_hmac` 复核两落点后实转（user/platform 两侧 `.env` 同值更新 + 8204/8205 重启）；实转完成前本行状态 = **修复中**，实转后把本行改记 burned 并在二A.2 追加一行 |
-| 不改历史 | 理由同二A.2：该值已公开可查，烧录才终止价值；`filter-repo` 代价为共享现场破坏。若平台侧实测确认旧值从未被 10-25 换代覆盖为有效，烧录即闭环 |
+| **闭环（2026-11-17 实测：已无在用方，无需轮换）** | 全部凭证落点逐一实测：本地 `.env` / `user-server/.env` / `config/.merchant_api_secret` / `config/platform.yaml` **0 命中**；生产机 `user-server/.env` / `platform-server/.env` **0 命中**（SSH 实测，只出计数不回显值）；生产现行 `MERCHANT_API_SECRET` 为 64 位、user/platform 两侧同值（=10-25 换代后的新值）。平台侧为单值共享密钥（config/platform.yaml `secret: "\${MERCHANT_API_SECRET}"`，无历史值接受面）⇒ 泄漏的 48 位值**全网无任何接受方**，"可用性"已天然归零。按 license 腿先例（"已随功能下线，无需轮换"）登记为**已闭环**，不再执行 merchant_hmac 轮换（轮换只换符号、不减风险面） |
+| pickaxe 口径（2026-11-17 复核） | `git log --all -S<值>` = **2 枚提交**：974236ed（加）+ a56db231（删）——删除 diff 的 `-<值>` 行属 pickaxe 语义，非新暴露面（该值自 974236ed 起已公开，任何持仓者早已可得）；HEAD 工作树 0 命中；a56db231 提交 MESSAGE 0 命中；本台账 0 命中（值本体从未抄进台账）。双远端可见性实测：GitHub **PUBLIC**、Gitee **PUBLIC**（匿名 HTTP 200）⇒ 泄漏面确为公网，"无在用方"结论是唯一真闭环 |
+| 不改历史 | 理由同二A.2：该值已公开可查且已无在用方，改写历史只是把"可查"变"不可查"、代价为共享现场破坏；"rotate, don't erase" 在本例的终态=轮换目标天然达成（值已死） |
 
 ### 二A.3 为什么这些脚本命令不能手敲
 

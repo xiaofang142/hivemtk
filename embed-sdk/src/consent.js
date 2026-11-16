@@ -99,6 +99,28 @@ export class ConsentGate {
   }
 
   /**
+   * 内联样式（ADR-011 运行时零依赖；与 floating-button/iframe-panel 同一模式——
+   * styles.css 是源码侧文档产物，IIFE 构建不携带 CSS，运行时样式必须内联）。
+   * 2026-11-17 真浏览器回归发现纯 class 版本无样式，此处补齐。
+   * @param {string} part
+   * @returns {string}
+   */
+  getStyle(part) {
+    const mobile = (typeof window !== 'undefined' && window.innerWidth && window.innerWidth <= 480)
+    const styles = {
+      root: `position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:flex-end;justify-content:flex-end;padding:${mobile ? '0' : '24px'};z-index:${this.zIndex + 1};font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;`,
+      card: `width:${mobile ? '100vw' : '380px'};max-width:calc(100vw - ${mobile ? '0' : '48'}px);background:#fff;border-radius:${mobile ? '12px 12px 0 0' : '12px'};padding:20px;box-shadow:0 8px 30px rgba(0,0,0,0.2);box-sizing:border-box;`,
+      title: `font-size:15px;font-weight:600;color:#1f2329;margin-bottom:10px;`,
+      text: `font-size:13px;line-height:1.7;color:#4e5969;word-break:break-word;`,
+      link: `display:block;margin-top:8px;font-size:12px;color:#1989fa;word-break:break-all;`,
+      actions: `margin-top:16px;display:flex;gap:10px;justify-content:flex-end;`,
+      agree: `border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;background:#1989fa;color:#fff;`,
+      decline: `border:none;border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;background:#f2f3f5;color:#4e5969;`
+    }
+    return styles[part] || ''
+  }
+
+  /**
    * 渲染同意层。返回根元素；按钮点击回调构造时注入的 onAgree/onDecline。
    * @returns {Element|null} localStorage 不可用且 DOM 缺失时返回 null（沙箱测试形态）
    */
@@ -109,24 +131,28 @@ export class ConsentGate {
     const t = textFor(this.lang)
     const root = document.createElement('div')
     root.className = 'mcw-consent'
-    root.style.zIndex = String(this.zIndex + 1)
+    root.style.cssText = this.getStyle('root')
 
     const card = document.createElement('div')
     card.className = 'mcw-consent-card'
+    card.style.cssText = this.getStyle('card')
 
     const title = document.createElement('div')
     title.className = 'mcw-consent-title'
+    title.style.cssText = this.getStyle('title')
     title.textContent = t.title
     card.appendChild(title)
 
     const body = document.createElement('div')
     body.className = 'mcw-consent-text'
+    body.style.cssText = this.getStyle('text')
     body.textContent = this.notice.text || t.defaultText
     card.appendChild(body)
 
     if (this.notice.policyUrl) {
       const link = document.createElement('a')
       link.className = 'mcw-consent-link'
+      link.style.cssText = this.getStyle('link')
       link.href = this.notice.policyUrl
       link.target = '_blank'
       link.rel = 'noopener noreferrer'
@@ -136,9 +162,11 @@ export class ConsentGate {
 
     const actions = document.createElement('div')
     actions.className = 'mcw-consent-actions'
+    actions.style.cssText = this.getStyle('actions')
 
     const agree = document.createElement('button')
     agree.className = 'mcw-consent-agree'
+    agree.style.cssText = this.getStyle('agree')
     agree.type = 'button'
     agree.textContent = t.agree
     agree.addEventListener('click', () => {
@@ -150,6 +178,7 @@ export class ConsentGate {
 
     const decline = document.createElement('button')
     decline.className = 'mcw-consent-decline'
+    decline.style.cssText = this.getStyle('decline')
     decline.type = 'button'
     decline.textContent = t.decline
     decline.addEventListener('click', () => {

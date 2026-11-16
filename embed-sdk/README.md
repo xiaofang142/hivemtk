@@ -20,7 +20,7 @@
 |---|---|
 | 语言 | 原生 JavaScript（ES2018） |
 | 构建 | Vite 5（库模式：IIFE + ESM 双产物） |
-| 样式 | 原生 CSS（`src/styles.css`） |
+| 样式 | 原生 CSS（`src/styles.css` 为源码侧样式文档）；**运行时样式内联**（floating-button / iframe-panel / consent 同一 `style.cssText` 模式，IIFE 构建不携带 CSS 文件） |
 | 聊天窗加载 | iframe（同源或 `data-api-base-url` 跨源） |
 | 协议 | WebSocket（无鉴权，私域部署模式） |
 | 自动重连 | 内建断线重连 + 离线消息补发 |

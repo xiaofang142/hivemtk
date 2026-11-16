@@ -155,11 +155,11 @@ echo "[$(date)] Backup size: $(du -sh "$BACKUP_DIR" | cut -f1)"
 ```
 
 > 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标。~~此前注记称其"没带 -p 8202、
-> 现测不可用"~~ ⇒ **2026-11-17 复核作废**：当前 Makefile 的两个目标均已带 `-p 8202`
-> （`pg_dump -U … -p 8202` / `psql -U … -p 8202`），与容器内监听一致；
-> 若仍报 socket 连接错误，按 §1.3 末注记补 `-h 127.0.0.1` 后复测并回填本段。
-> 2026-11-17 复测窗口：本机 mtk-postgres 主库容器未运行，未能现场复跑——
-> **下次在跑着主库的机器上先 `make db-backup` 实测再更新本段**。
+> 现测不可用"~~ ⇒ **2026-11-17 已实测闭环（含恢复演练）**：`make db-backup` 实跑产出
+> 733MB dump（`pg_dump -U … -p 8202` 与容器内监听一致）；`make verify-restore
+> FILE=backup_20261117_071214.sql` 三项体检全过——表数一致（427）、Top-1 大表行数一致
+> （geo_keywords 610591 行）、恢复零 SQL 错误，耗时 67s，scratch 已丢弃。
+> 备份→恢复链在开发机全链路实测可用；生产机的异地副本装载状态见 §1.5。
 > 上面脚本里带全 `-h 127.0.0.1 -p 8202` 的写法是实测通过的版本。
 
 
@@ -187,15 +187,28 @@ echo "[$(date)] Backup size: $(du -sh "$BACKUP_DIR" | cut -f1)"
   → `/usr/local/bin/qshell`；凭证走 `.env` 的 `QINIU_ACCESS_KEY/SECRET_KEY/BUCKET`。
 - 首次上传后人工核对一次远端副本可恢复（qshell fget 到临时目录 → verify_restore.sh），
   之后按 size 抽查即可。
-- 生产机装载状态【待确认】：cron 是否已装、首次异地副本是否已产生，需在生产机
-  `crontab -l`/控制台核实后回填本节。
+- **生产装载状态（2026-11-17 已落地并实测）**：
+  - 脚本已部署 `mtk-prod:/www/wwwroot/hivemtk/scripts/ops/backup_offsite.sh`，双端 sha256
+    一致（`1e0a31cc…`，scp 后复核）；
+  - 首跑实测：docker 形态（宿主机无 pg_dump 客户端，走 `compose exec -T mtk-postgres
+    pg_dump -p 8202`）产出 `/var/backups/hivemtk/20261117_071859/user_db.dump`
+    **107MB、PGDMP 魔数校验过、sha256 已记录、rc=0**；
+  - `/etc/cron.d/hivemtk-backup-offsite` 已装（每日 02:00，先 source user-server/.env 再跑）；
+  - **唯一剩余项=异地副本上传**：qshell 未装、生产 `.env` 的 `QINIU_*` 四键全空（部署方
+    从未配置过七牛，本地亦无凭证可迁移）。凭证注入后 cron **自动启用上传**，零脚本改动；
+    在此之前每次运行都会打印显式 WARN（RPO=本地，不冒充绿）。给部署方的两个选项：
+    ① 注册七牛并填 `.env` 四键（推荐，分钟级）；② 指定第二台常开机器走 scp 拉取式异地。
+- 脚本适配记录（2026-11-17）：新增 docker dump 形态（宿主机无 pg_dump 时自动回退，容器内
+  端口钉 8202 与宿主机映射解耦）；产物校验改用 PGDMP 魔数（免宿主机 pg_restore 依赖）；
+  sha256 兼容 macOS `shasum -a 256`。双形态均在本机实测（host 113MB / docker 112MB，
+  魔数与 sha256 齐全），产线实测见上。
 
 > 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标。~~此前注记称其"没带 -p 8202、
-> 现测不可用"~~ ⇒ **2026-11-17 复核作废**：当前 Makefile 的两个目标均已带 `-p 8202`
-> （`pg_dump -U … -p 8202` / `psql -U … -p 8202`），与容器内监听一致；
-> 若仍报 socket 连接错误，按 §1.3 末注记补 `-h 127.0.0.1` 后复测并回填本段。
-> 2026-11-17 复测窗口：本机 mtk-postgres 主库容器未运行，未能现场复跑——
-> **下次在跑着主库的机器上先 `make db-backup` 实测再更新本段**。
+> 现测不可用"~~ ⇒ **2026-11-17 已实测闭环（含恢复演练）**：`make db-backup` 实跑产出
+> 733MB dump（`pg_dump -U … -p 8202` 与容器内监听一致）；`make verify-restore
+> FILE=backup_20261117_071214.sql` 三项体检全过——表数一致（427）、Top-1 大表行数一致
+> （geo_keywords 610591 行）、恢复零 SQL 错误，耗时 67s，scratch 已丢弃。
+> 备份→恢复链在开发机全链路实测可用；生产机的异地副本装载状态见 §1.5。
 
 ## 2. 恢复流程
 
