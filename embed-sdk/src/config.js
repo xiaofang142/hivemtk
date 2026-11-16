@@ -36,8 +36,21 @@
  * @property {string}    [mode='floating']      渲染模式:floating(浮标) | embedded(内嵌)
  * @property {string|Element} [targetElement]   mode=embedded 时的挂载目标(选择器或元素)
  * @property {string}    [cspNonce]             严格 CSP 站点下 iframe 的 nonce
+ * @property {PrivacyNoticeConfig} [privacyNotice] 访客隐私告知同意闸(specs/023):
+ *                                              null(缺省)=关闭,行为与历史一致;
+ *                                              required=true 时首次打开先展示同意层,
+ *                                              同意后才创建聊天 iframe(=后才建访客会话)
  * @property {string}    [id]                   实例 id(多实例场景可显式指定)
  * @property {boolean}   [debug]                调试模式
+ */
+
+/**
+ * 同意闸配置(specs/023)
+ * @typedef {Object} PrivacyNoticeConfig
+ * @property {boolean} [required=false]  是否启用同意闸
+ * @property {string}  [text]            告知文案;未配时按 lang 取内置默认(中/英)
+ * @property {string}  [policyUrl]       隐私政策链接;非空时渲染为新窗打开的 <a>
+ * @property {string}  [version='1']     文案版本;变更后已同意的访客会重新收到询问
  */
 
 const DEFAULTS = {
@@ -55,8 +68,9 @@ const DEFAULTS = {
   offsetY: 24,
   width: 380,
   height: 560,
-  allowedOrigins: null,   
-  events: {}              
+  allowedOrigins: null,
+  privacyNotice: null,
+  events: {}
 };
 
 function readDataAttrs(script) {
@@ -77,6 +91,8 @@ function readDataAttrs(script) {
   if (d.offsetY)       out.offsetY = parseInt(d.offsetY, 10) || DEFAULTS.offsetY
   if (d.width)         out.width = parseInt(d.width, 10) || DEFAULTS.width
   if (d.height)        out.height = parseInt(d.height, 10) || DEFAULTS.height
+  // specs/023 FR001 布尔简写：data-privacy-required="true" 等价 privacyNotice.required=true
+  if (d.privacyRequired === 'true') out.privacyNotice = { required: true }
   return out
 }
 
@@ -143,7 +159,28 @@ export function parseConfig() {
     config.allowedOrigins = Array.from(new Set(origins))
   }
 
+  config.privacyNotice = normalizePrivacyNotice(config.privacyNotice)
+
   return config
+}
+
+/**
+ * privacyNotice 形状消毒(specs/023 FR001)：非对象/数组/required 不为真 ⇒ 一律降级 null。
+ * parseConfig 与 Widget 构造器共用同一条路径——直接 new MarketingChatWidget(config)
+ * 不经过 parseConfig，消毒必须在构造入口同样生效（缺一处 = 宿主页两条接入形态行为分叉）。
+ * @param {*} raw
+ * @returns {PrivacyNoticeConfig|null}
+ */
+export function normalizePrivacyNotice(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !raw.required) {
+    return null
+  }
+  return {
+    required: true,
+    text: typeof raw.text === 'string' ? raw.text : '',
+    policyUrl: typeof raw.policyUrl === 'string' ? raw.policyUrl : '',
+    version: typeof raw.version === 'string' && raw.version ? raw.version : '1'
+  }
 }
 
 export { DEFAULTS }

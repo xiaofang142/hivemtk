@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # check-secrets.sh — 阻止明文凭证进入版本管理（T-P0-05 的防复发闸门）
 #
-# 两条判定，缺一不可：
+# 三条判定，缺一不可：
 #  A. 真值比对：把本机 .env 里 PASSWORD/SECRET/TOKEN 类键的**实际值**在待纳管文件中全量搜索，
 #     命中即 FAIL。零误报，且正是 bulk_seed/geo_full_test/deep_lib 那批事故的确切成因。
 #  B. 字面量模式：搜索 password/secret/token 等键被赋非变量、非占位符的长字面量，
 #     命中列在 scripts/.secret-allowlist 之外的即 FAIL。
+#  B+. 裸值文件：对「名字含 secret/token 的点文件、*.bak-YYYYMMDD、*.key/*.pem/…」圈出的
+#     嫌疑文件做整行裸值精判——B 段键名形态的盲区（2026-10-18 .merchant_api_secret.bak
+#     事故形状），见下方 B+ 段注释。
 #
 # 扫描范围 = `git ls-files --cached --others --exclude-standard`，即"已跟踪 + 已 add -N +
 # 未跟踪但未被 ignore"的文件，**按工作区内容**逐个 grep。
@@ -32,6 +35,13 @@
 # 这道门的输出会落在终端回滚、CI 作业日志和本仓 logs/ 取证日志里；命中项若确为真凭证，
 # 打印原文等于把它从 .env 抄进三个更公开的位置。豁免表需要"值形状"时请打开那个文件看：
 # 真凭证绝不该被抄进 scripts/.secret-allowlist（那才是把泄露固化入库）。
+#
+#   B+ 段（裸值文件，2026-11-16 审计补口）：B 段按「键名+[:=]+值」形态匹配，**裸密钥文件**
+#   （单行 hex/base64、无键名，如 config/.merchant_api_secret.bak-20261018 那次事故）永不命中。
+#   B+ 按「文件名形状」圈嫌疑面（名字含 secret/token 的点文件、*.bak-YYYYMMDD、*.key/*.pem/
+#   *.p12/*.pfx/*.gpg），再对整文件做「整行裸值」精判（≥32 纯 hex、≥40 且字母数字都有 base64 形态）。
+#   嫌疑名单天然不含 gitignored 的本地密钥（.merchant_api_secret 这类合法落盘已被
+#   --exclude-standard 排除在候选面外），不会把本机正常配置误报成泄露。
 #
 # 环境变量：ENV_FILE= 指 .env 的坐标；SECRET_ALLOWLIST_EXTRA= 追加一条豁免表（只追加、不替换，
 #                                          给 scripts/check-secrets-patterns.test.sh 的 L6 用）。
@@ -100,7 +110,8 @@ echo "══════ 待纳管文件清单 ══════"
 FILELIST=$(mktemp)
 PAIRS=$(mktemp)
 PATTERNS=$(mktemp)
-trap 'rm -f "$PAIRS" "$PATTERNS" "$FILELIST"' EXIT
+BARELIST=$(mktemp)
+trap 'rm -f "$PAIRS" "$PATTERNS" "$FILELIST" "$BARELIST"' EXIT
 git ls-files --cached --others --exclude-standard >"$FILELIST"
 echo "  候选文件 $(wc -l <"$FILELIST" | tr -d ' ') 个（git ls-files --cached --others --exclude-standard）"
 
@@ -223,6 +234,47 @@ while IFS= read -r h; do
     FAIL=1
   fi
 done < <(scan_literal "$PATTERN")
+
+# ══════ B+ 段：裸值文件扫描（2026-11-16 审计 P0-1 补口）══════
+# B 段要求「键名+[:=]+值」形态；裸密钥文件（单行 hex/base64、无键名）整类绕过。
+# 先按文件名形状圈嫌疑面（误报面 = 名字可疑但内容正常的文件，由精判兜住），
+# 再对嫌疑文件的每一行做「整行裸值」精判。gitignored 的本地密钥（合法落盘）
+# 天然不在 FILELIST 候选面里，不会被本段误伤。
+SUSPICIOUS_NAME_RE='(^|/)(\.[^/]*(secret|token)[^/]*|[^/]*\.bak-[0-9]{8}|[^/]*\.(key|pem|p12|pfx|gpg))$'
+BARE_HEX_RE='^[0-9a-fA-F]{32,}$'
+BARE_B64_RE='^[A-Za-z0-9+/]{40,}={0,2}$'
+if [[ -s $FILELIST ]] && grep -E -- "$SUSPICIOUS_NAME_RE" "$FILELIST" >"$BARELIST" && [[ -s $BARELIST ]]; then
+  echo "══════ B+. 裸值文件扫描（嫌疑文件 $(wc -l <"$BARELIST" | tr -d ' ') 个）══════"
+  BAREHITS=""
+  while IFS= read -r f; do
+    [[ -f $f ]] || continue
+    # 整行裸值精判：hex ≥32；base64 形态 ≥40 且字母与数字都有（防 aaaa…/1111… 平凡串）。
+    lineno=0
+    while IFS= read -r line; do
+      lineno=$((lineno + 1))
+      [[ -z $line ]] && continue
+      if printf '%s' "$line" | grep -qE -- "$BARE_HEX_RE" \
+        || { printf '%s' "$line" | grep -qE -- "$BARE_B64_RE" \
+             && printf '%s' "$line" | grep -q '[0-9]' && printf '%s' "$line" | grep -q '[A-Za-z]'; }; then
+        BAREHITS+="${f}:${lineno}:${line}"$'\n'
+      fi
+    done <"$f"
+  done <"$BARELIST"
+  if [[ -n $BAREHITS ]]; then
+    while IFS= read -r h; do
+      [[ -z $h ]] && continue
+      if is_allowed "$h"; then
+        [[ $VERBOSE == 1 ]] && echo "  (allow) $(hit_loc "$h")"
+      else
+        vlen=$(printf '%s' "$h" | cut -d: -f3- | tr -d '\n' | wc -c | tr -d ' ')
+        echo "  ❌ [BARE] $(hit_loc "$h") 命中（整行裸值，长 ${vlen}，本体不打印）"
+        FAIL=1
+      fi
+    done <<<"$BAREHITS"
+  else
+    echo "  ✓ 嫌疑文件中无整行裸值"
+  fi
+fi
 
 echo "════════════════════════════════════"
 if [[ $FAIL == 1 ]]; then

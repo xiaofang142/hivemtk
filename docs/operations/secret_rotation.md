@@ -116,6 +116,18 @@ done
   （`POSTGRES_PASSWORD` / `HIVEMTK_DB_PASSWORD` / `PGPASSWORD`，缺则 `sys.exit`），不再含明文；
   历史明文已于 `81955cfc` 清除。本节此前"顶层那份仍含同一枚明文"的说法已过期。
 
+### 二A.2-补 · 2026-11-16 审计新增泄漏：`.merchant_api_secret.bak-20261018`（裸值文件形状）
+
+| 项 | 读数 |
+|---|---|
+| 泄漏载体 | `user-server/config/.merchant_api_secret.bak-20261018`，单行 48 位 hex（无键名裸值） |
+| 入库提交 | `974236ed`（2026-10-18，feat(user-web): 集成 driver.js 新手引导——`git add -A` 误扫 config/ 备份文件） |
+| 公开判据 | `git log --all -S<值>` 全史命中 **1 枚提交**；`git merge-base --is-ancestor 974236ed master` 退 0 ⇒ 在已推双远端的 master 链上（口径：`--all` 全史 + 祖先判定，同二A.1） |
+| 与既有台账关系 | 该值 48 位、2026-10-18 生成，**晚于** 09-24 merchant_hmac 实转 ⇒ **不在既有 burned 覆盖内**；现行 `config/.merchant_api_secret`（64 位，2026-10-25）是另一枚值。旧 48 位值是否已随 10-25 换代在平台侧作废，**待平台侧实测**（走 user-server 代理端点验证，禁手工复算 HMAC） |
+| 已做（本轮 2026-11-17） | ① `git rm` 该文件（运行时消费者只读 `.merchant_api_secret` 精确名、无 glob，零功能影响）；② `check-secrets.sh` 新增 **B+ 裸值文件段**（嫌疑名单按文件名形状圈定 + 整行精判，gitignored 本地密钥不进候选面），反向测试 L11/L12/L13 三格落地 |
+| 待做（烧录，按"rotate, don't erase"口径） | `ROTATE_AUTHORIZED=1 bash scripts/rotate-secrets.sh --dry-run merchant_hmac` 复核两落点后实转（user/platform 两侧 `.env` 同值更新 + 8204/8205 重启）；实转完成前本行状态 = **修复中**，实转后把本行改记 burned 并在二A.2 追加一行 |
+| 不改历史 | 理由同二A.2：该值已公开可查，烧录才终止价值；`filter-repo` 代价为共享现场破坏。若平台侧实测确认旧值从未被 10-25 换代覆盖为有效，烧录即闭环 |
+
 ### 二A.3 为什么这些脚本命令不能手敲
 
 一次轮换要同时落到 4 个 `.env`、1 次 `ALTER USER`、2 个运行中服务的重启。少做任何一步，

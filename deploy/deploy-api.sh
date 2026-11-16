@@ -20,6 +20,8 @@
 #   3. 二进制整份备份为 user-server.bak-<时间戳>
 #   4. 健康检查失败自动回滚（恢复 .bak 二进制 → 重建 → 重启），仍失败则回滚镜像标签
 #   5. 部署成功后写 deploy/.api-deploy-state.json 作为下次变更门的基线
+#   6. 验收段跑默认口令探针（2026-11-16 审计 P1-2）：公开 seed 口令仍能登录 ⇒ 台账记 fail，
+#      下一轮部署变更门阻断（--force 显式放行；探针红灯不回滚——要修的是口令不是本次发布）
 
 set -Eeuo pipefail
 
@@ -84,6 +86,16 @@ fi
 LAST_SHA=""
 if [ -f "${STATE_FILE}" ]; then
   LAST_SHA="$(sed -n 's/.*"deployed_sha"[[:space:]]*:[[:space:]]*"\([0-9a-f]*\)".*/\1/p' "${STATE_FILE}" | head -1)"
+fi
+
+# 默认口令红灯阻断（2026-11-16 审计 P1-2）：上一轮部署验收段探出「仓库公开口令仍能登录」
+# 却没有先修掉，就不再放行新部署——防止"一边发新功能、一边 admin 用公开口令裸奔"。
+# --force 可跳过（与既有门同一语义：显式确认后由人工负责）。
+if [ -f "${STATE_FILE}" ] && [ "${FORCE}" = "0" ] && [ "${DRY_RUN}" = "0" ]; then
+  PREV_PROBE="$(sed -n 's/.*"default_credential_probe"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "${STATE_FILE}" | head -1)"
+  if [ "${PREV_PROBE}" = "fail" ]; then
+    die "上一轮部署的默认口令探针为 fail（公开 seed 口令仍可登录，见 scripts/check-admin-default-credential.sh）。先换掉线上 admin 口令（scripts/rotate-admin-password.sh）或 --force 显式放行"
+  fi
 fi
 
 if [ -n "${LAST_SHA}" ]; then
@@ -205,6 +217,28 @@ PUBLIC_BODY="$(curl -sf --max-time 10 "${HEALTH_URL_PUBLIC}" || true)"
 echo "${PUBLIC_BODY}" | grep -q '"status":"ok"' || warn "公网 ${HEALTH_URL_PUBLIC} 未取到 ok（可能 CDN/缓存，稍后复验）"
 ok "公网健康检查：${PUBLIC_BODY:-（见 warn）}"
 
+# ---------------------------------------------------------------- 步骤 5.5：默认口令探针
+# 「仓库公开的口令还能不能登进这套实例」（2026-11-16 审计 P1-2）。探针默认只发 1 次尝试
+# （seed 公开值，脚本自带防爆破锁预算），对公网域名打——公网侧绿才代表外部攻击面也绿。
+# rc 口径：0=公开口令不认（绿）/ 1=仍能登录（红，记台账，下一轮变更门阻断）/ 2=未得出结论
+# （服务不可达或触锁，不猜绿也不假红）。红灯不回滚：换口令修的不是这次部署引入的问题。
+PROBE_SCRIPT="${SCRIPT_DIR}/../scripts/check-admin-default-credential.sh"
+PROBE_URL="${HEALTH_URL_PUBLIC%/api/health}"
+PROBE_STATUS="inconclusive"
+PROBE_OUT=""
+if [ ! -f "${PROBE_SCRIPT}" ]; then
+  warn "探针脚本缺失：${PROBE_SCRIPT}（台账按 inconclusive 记）"
+else
+  PROBE_RC=0
+  PROBE_OUT="$(PROBE_BASE_URL="${PROBE_URL}" bash "${PROBE_SCRIPT}" 2>&1)" || PROBE_RC=$?
+  case "${PROBE_RC}" in
+    0) PROBE_STATUS="ok";    ok "默认口令探针：仓库公开口令已被拒绝（公网 ${PROBE_URL}）" ;;
+    1) PROBE_STATUS="fail";  warn "默认口令探针 fail：公开 seed 口令仍能登录！改法见输出尾部与 docs/DEPLOYMENT_GUIDE.md §6.2" ;;
+    *) PROBE_STATUS="inconclusive"; warn "默认口令探针未得出结论（rc=${PROBE_RC}），台账按 inconclusive 记、不阻断" ;;
+  esac
+  printf '%s\n' "${PROBE_OUT}" | tail -3
+fi
+
 # ---------------------------------------------------------------- 步骤 6：证据 + 台账
 NEW_IMAGE="$(rsh "docker inspect --format '{{.Image}}' ${CONTAINER_NAME}")"
 STARTED_AT="$(rsh "docker inspect --format '{{.State.StartedAt}}' ${CONTAINER_NAME}")"
@@ -219,6 +253,7 @@ cat > "${STATE_FILE}" <<EOF
   "container_started_at": "${STARTED_AT}",
   "rollback_image_tag": "${IMAGE_NAME}:rollback-${STAMP}",
   "rollback_binary": "${REMOTE_DIR}/user-server.bak-${STAMP}",
+  "default_credential_probe": "${PROBE_STATUS}",
   "commits": [
 $(printf '%s\n' "${CHANGED_COMMITS}" | sed 's/[\\"]/\\&/g; s/^/    "/; s/$/",/' | sed '$ s/,$//')
   ]

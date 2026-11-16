@@ -9,3 +9,74 @@
 .mcw-iframe {
   transition: opacity 0.2s;
 }
+
+/* specs/023 访客隐私同意层：盖在聊天面板位置上方，同意后才加载 iframe */
+.mcw-consent {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 24px;
+}
+.mcw-consent-card {
+  width: 380px;
+  max-width: calc(100vw - 48px);
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+  font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+.mcw-consent-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2329;
+  margin-bottom: 10px;
+}
+.mcw-consent-text {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #4e5969;
+  word-break: break-word;
+}
+.mcw-consent-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #1989fa;
+  word-break: break-all;
+}
+.mcw-consent-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.mcw-consent-agree,
+.mcw-consent-decline {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mcw-consent-agree {
+  background: #1989fa;
+  color: #fff;
+}
+.mcw-consent-decline {
+  background: #f2f3f5;
+  color: #4e5969;
+}
+@media (max-width: 480px) {
+  .mcw-consent {
+    padding: 0;
+  }
+  .mcw-consent-card {
+    width: 100vw;
+    max-width: none;
+    border-radius: 12px 12px 0 0;
+  }
+}

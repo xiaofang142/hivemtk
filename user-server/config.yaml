@@ -39,8 +39,11 @@ external:
 # ============================================================
 # 安全配置
 # ============================================================
+# ⚠️ 本块只有 visitor_token_secret 一个活键。历史上的 jwt_secret 行已在 2026-11-17 审计（P2-1）
+# 删除：SecurityConfig 结构体从未声明过该字段，yaml 解析直接丢弃、全仓零消费者——
+# 运维在这行配了密钥会得到「以为加固了、实际是幻觉」。JWT 密钥的唯一真相源是环境变量
+# USER_JWT_SECRET → JWT_SECRET（internal/pkg/utils/jwt.go loadJWTSecret，<32 字符启动 panic）。
 security:
-  jwt_secret: "${USER_JWT_SECRET:your-super-secret-jwt-key-at-least-32-chars-long}"
   visitor_token_secret: "${VISITOR_TOKEN_SECRET:}"
 
 logging:

@@ -8,7 +8,7 @@
 # 于是最常见的 `POSTGRES_PASSWORD=<字面量>` 整类不进粗筛 —— 一枚合成假凭证在"绿"的门里
 # 大摇大摆退 0。是这一族的反向格把它逼出来的，不是通读代码。
 #
-# 十格，逐格断言的是"哪条判据分支该开火"，不是只看终值：
+# 十三格，逐格断言的是"哪条判据分支该开火"，不是只看终值：
 #   L1 正控制      干净树 --patterns-only ⇒ rc=0，且闸自己报的"候选文件 N 个"必须 N>0
 #                  （枚举面为空时"零命中"是没扫到，不是干净）
 #   L2 参数解析    未知参数 ⇒ rc=2，且出声点名那个参数（不能静默当 --verbose 吞掉）
@@ -27,6 +27,13 @@
 #                  印出非空输出，否则"值没出现"是空输出而不是掩码（量的是 B 段那处 echo）
 #   L10 A 段同遮   合成 ENV_FILE + 含该值的探针文件 ⇒ A 段 rc=1、点名文件、值本体不出屏
 #                  （两处 echo 各自有一格，防止"改一处漏一处"的半修）
+#   L11 B+裸值红   种入「名字含 secret 的点文件 + 单行 48 位 hex」⇒ rc=1 且点名探针
+#                  （B 段对裸值文件天然失明 —— 2026-10-18 .merchant_api_secret.bak 事故就是
+#                  这个形状进的仓；本格证明 B+ 段的嫌疑名单+整行精判有牙）
+#   L12 B+同遮码   同一趟 B+ 红因里不得出现 hex 本体（与 L9 同口径，量的就是 B+ 那处 echo）
+#   L13 B+不误伤   摘除裸值探针 ⇒ 复绿；再种「可疑名字 + 模板展开内容」⇒ 仍绿
+#                  （嫌疑名单只圈文件名形状，内容精判放过 ${VAR} 形态——gitignored 的
+#                  本地合法密钥根本进不了候选面，这里测的是形状内误报那一维）
 #
 # 夹具全程是**仓根未跟踪文件**，走 rm -f / trap 清理，不碰 git add / checkout / restore / stash
 # —— 共享工作树里有别的泳道在途改动，任何 git 侧操作都可能把它们一起吞掉。
@@ -264,6 +271,56 @@ else
 fi
 rm -f "$PROBE" "$SYNTH_ENV"
 [[ -e $PROBE || -e $SYNTH_ENV ]] && bad "L10 收尾：夹具残留" "PROBE=${PROBE} SYNTH_ENV=${SYNTH_ENV}"
+
+# ── L11 B+ 段：裸值文件（无键名单行 hex）必须能红 ──────────────
+# 合成值：48 位 hex 哑串（纯编造，不对应任何系统、不是任何真凭证的片段）。
+# 探针名以 .tmp-bare-secret 开头 → 命中 B+ 的嫌疑名单形状（点文件名含 secret）。
+BARE_PROBE=".tmp-bare-secret-probe-$$"
+BARE_HEX='0011223344556677aabbccddeeff0011223344556677aabb'
+printf '%s\n' "$BARE_HEX" >"$BARE_PROBE"
+out=$(run_gate "" --patterns-only 2>&1); rc=$?
+named=$(printf '%s\n' "$out" | grep -cF "$BARE_PROBE" || true)
+if [[ $rc != 1 ]]; then
+  bad "L11 裸值文件应被 B+ 段抓住（rc=1）" "实退 $rc ⇒ B 段的键名形态盲区在 B+ 段依旧存在（.bak 事故同形状）"
+elif [[ $named -lt 1 ]]; then
+  bad "L11 B+ 退了 1 却没点名裸值探针" "红因：$(printf '%s' "$out" | grep '❌' | head -2 | tr '\n' ' ')"
+else
+  ok "L11 裸值文件被 B+ 抓红并点名 ${BARE_PROBE}"
+fi
+
+# ── L12 B+ 红因同样遮码 ──────────────────────────────────────
+leaked=$(printf '%s\n' "$out" | grep -cF "$BARE_HEX" || true)
+if [[ $rc != 1 ]]; then
+  bad "L12 这一格量不到遮码（L11 已红，此处引用同一趟输出）" "见 L11 红因"
+elif [[ $leaked -gt 0 ]]; then
+  bad "L12 B+ 红因里出现了裸值本体" "命中 ${leaked} 行 ⇒ B+ 的 echo 没走「只报位置＋值长」口径"
+else
+  ok "L12 B+ 红因只报位置＋值长，hex 本体不在输出里"
+fi
+rm -f "$BARE_PROBE"
+
+# ── L13 B+ 不误伤：摘除复绿 + 可疑名字的正常内容仍绿 ───────────
+if [[ -e $BARE_PROBE ]]; then
+  bad "L13 收尾：裸值探针残留" "$BARE_PROBE 还在树上 ⇒ 残迹会污染下一轮基线"
+else
+  out=$(run_gate "" --patterns-only 2>&1); rc=$?
+  if [[ $rc != 0 ]]; then
+    bad "L13 摘除裸值探针后应复绿" "实退 ${rc}：$(printf '%s' "$out" | grep '❌' | head -2 | tr '\n' ' ')"
+  else
+    ok "L13 摘除裸值探针后复绿"
+  fi
+fi
+# 嫌疑名单形状内、内容是模板展开 ⇒ B+ 精判必须放行（形状≠内容，不冤枉正常文件）。
+BARE_OK=".tmp-bare-secret-template-probe-$$"
+printf 'MERCHANT_API_SECRET=${MERCHANT_API_SECRET}\n' >"$BARE_OK"
+out=$(run_gate "" --patterns-only 2>&1); rc=$?
+if [[ $rc != 0 ]]; then
+  bad "L13 可疑名字+模板内容应放行" "实退 $rc ⇒ B+ 精判没放过 ${VAR} 形态：$(printf '%s' "$out" | grep '❌' | head -2 | tr '\n' ' ')"
+else
+  ok "L13 可疑名字 + 模板展开内容不误报（形状≠内容）"
+fi
+rm -f "$BARE_OK"
+[[ -e $BARE_OK ]] && bad "L13 收尾：模板探针残留" "$BARE_OK 还在树上"
 
 echo "══════════════════════════════════════════════════════"
 if [[ $FAILS != 0 ]]; then

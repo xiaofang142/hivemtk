@@ -32,9 +32,10 @@
  *   - 每实例独立 id,并按序号递增 z-index,避免多浮标互相遮挡
  */
 
-import { parseConfig } from './config.js'
+import { parseConfig, normalizePrivacyNotice } from './config.js'
 import { FloatingButton } from './floating-button.js'
 import { IframePanel } from './iframe-panel.js'
+import { ConsentGate } from './consent.js'
 
 /**
  * @typedef {import('./config.js').McwConfig} McwConfig
@@ -59,6 +60,8 @@ class MarketingChatWidget {
     this.id = config.id || `mcw_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     /** @type {McwConfig} */
     this.config = config
+    // specs/023：构造入口同样消毒——直接 new 不经过 parseConfig（两条接入形态行为必须一致）
+    this.config.privacyNotice = normalizePrivacyNotice(this.config.privacyNotice)
     /** @type {FloatingButton|null} */
     this.button = null
     /** @type {IframePanel|null} */
@@ -67,6 +70,8 @@ class MarketingChatWidget {
     this.opened = false
     /** @type {((e: MessageEvent) => void)|null} */
     this._onWindowMessage = null
+    /** @type {ConsentGate|null} 访客隐私同意闸(specs/023)；required=false 时恒 null */
+    this.consentGate = null
   }
 
   /**
@@ -115,6 +120,27 @@ class MarketingChatWidget {
       }
     })
 
+    if (this.config.privacyNotice && this.config.privacyNotice.required) {
+      this.consentGate = new ConsentGate({
+        notice: this.config.privacyNotice,
+        visitorIdKey: this.config.visitorIdKey,
+        lang: this.config.lang,
+        zIndex: this.config.zIndex,
+        onAgree: () => {
+          this.consentGate.destroy()
+          if (this.opened) {
+            if (this.panel) this.panel.show()
+            this._fireEvent('onPrivacyConsent', { accepted: true })
+          }
+        },
+        onDecline: () => {
+          this.consentGate.destroy()
+          this._fireEvent('onPrivacyConsent', { accepted: false })
+          this.close()
+        }
+      })
+    }
+
     this.button.mount()
 
     this._bindMessageListener()
@@ -134,6 +160,11 @@ class MarketingChatWidget {
   toggle(opened) {
     this.opened = opened
     if (opened) {
+      // specs/023：同 open() —— 未同意先弹同意层，不 show 面板
+      if (this.consentGate && this.consentGate.needsConsent()) {
+        this.consentGate.show()
+        return
+      }
       if (this.panel) this.panel.show()
       this._fireEvent('onOpen')
     } else {
@@ -150,6 +181,13 @@ class MarketingChatWidget {
     if (this.opened) return
     this.opened = true
     if (this.button) this.button.setOpen(true)
+    // specs/023：required=true 且未同意 ⇒ 只渲染同意层，不创建 iframe（= 不建访客会话、
+    // 不发任何请求）；同意后由 onAgree 回调补 show()。关闭形态（缺省/required=false）
+    // 走原路径，行为逐字节一致。
+    if (this.consentGate && this.consentGate.needsConsent()) {
+      this.consentGate.show()
+      return
+    }
     if (this.panel) this.panel.show()
     this._fireEvent('onOpen')
   }
@@ -188,8 +226,10 @@ class MarketingChatWidget {
     }
     if (this.button) this.button.unmount()
     if (this.panel) this.panel.destroy()
+    if (this.consentGate) this.consentGate.destroy()
     this.button = null
     this.panel = null
+    this.consentGate = null
     this.opened = false
   }
 

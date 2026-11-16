@@ -18,10 +18,23 @@ export interface WidgetConfig {
   language?: 'zh' | 'en' | 'ja' | 'ar'
   /** 主题色 */
   themeColor?: string
+  /** 访客隐私告知同意闸（specs/023）：缺省 null = 关闭，行为与历史一致 */
+  privacyNotice?: PrivacyNoticeConfig
   /** 自定义事件回调 */
   events?: WidgetEvents
   /** 调试模式（打印详细日志） */
   debug?: boolean
+}
+
+export interface PrivacyNoticeConfig {
+  /** 是否启用同意闸（required=true 时首次打开先询问，同意后才创建聊天 iframe） */
+  required?: boolean
+  /** 告知文案；未配时按 lang 取内置默认（中/英） */
+  text?: string
+  /** 隐私政策链接；非空时渲染为新窗打开的链接 */
+  policyUrl?: string
+  /** 文案版本；变更后已同意的访客会重新收到询问 */
+  version?: string
 }
 
 export interface WidgetEvents {
@@ -30,6 +43,8 @@ export interface WidgetEvents {
   onClose?: (payload?: any) => void
   onMessage?: (payload: { type: string; payload: any }) => void
   onUnread?: (payload: { count: number }) => void
+  /** specs/023：同意闸用户作出选择时触发 */
+  onPrivacyConsent?: (payload: { accepted: boolean }) => void
 }
 
 export interface UnreadPayload {

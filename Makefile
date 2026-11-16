@@ -736,6 +736,14 @@ audit:
 		echo "  go test ./internal/... -p 1 -short -coverprofile=user-server/coverage/go-cover.out -covermode=atomic"; \
 		echo "  本门在 CI 的 Coverage (user-server) 作业里无条件执行，本地跳过不等于通过"; \
 	fi
+	@# ── 默认口令探针（2026-11-16 审计 P1-2）：本机实例在跑才发请求；公开 seed 口令仍能登录⇒audit 红。
+	@# 不可达 ⇒ 大声 SKIP 不冒充绿（rc=2 口径见 scripts/check-admin-default-credential.sh 头注；
+	@# 部署链 deploy-api.sh 验收段无条件跑本探针，红灯记台账并阻断下一轮变更门）。
+	@if curl -sf --max-time 2 "http://127.0.0.1:$${USER_SERVER_PORT:-8204}/api/health" >/dev/null 2>&1; then \
+		bash scripts/check-admin-default-credential.sh || [ $$? -eq 2 ]; \
+	else \
+		echo "  SKIP(未判定)：127.0.0.1:$${USER_SERVER_PORT:-8204} 无响应——本机没起实例，探针这一维未跑（部署验收段无条件跑）"; \
+	fi
 	@echo "✅ 静态审计通过"
 
 # 交付前专用：构建产物里的凭证扫描。**不在 audit / CI 里** ——

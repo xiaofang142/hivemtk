@@ -137,7 +137,18 @@ const sandbox = {
   parseInt: parseInt,
   parseFloat: parseFloat,
   isNaN: isNaN,
-  Symbol: Symbol
+  Symbol: Symbol,
+  // specs/023：同意闸持久层 mock（SDK 经安全守卫读写；真实浏览器里是 window.localStorage）
+  localStorage: (() => {
+    const store = new Map()
+    return {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => store.set(k, String(v)),
+      removeItem: (k) => store.delete(k),
+      __clear: () => store.clear(),
+      __dump: () => Object.fromEntries(store)
+    }
+  })()
 }
 sandbox.globalThis = sandbox
 
@@ -303,6 +314,106 @@ if (existsSync(adr)) {
   const a = readFileSync(adr, 'utf8')
   assert(a.length > 500, 'ADR-011-chat-widget-embed.md 实质内容')
   assert(a.includes('\u72b6\u6001') || a.includes('Status') || a.includes('\u51b3\u7b56'), 'ADR-011 含 状态/决策 章节')
+}
+
+console.log('\n== 9. 访客隐私同意闸 (specs/023) ==')
+{
+  // 每个用例独立实例 + 独立存储复位；辅助：从 body 里找同意层根节点
+  const consentRoot = () => {
+    const kids = documentMock.body.children || []
+    for (let i = kids.length - 1; i >= 0; i--) {
+      if (kids[i].className === 'mcw-consent') return kids[i]
+    }
+    return null
+  }
+  const buttonIn = (root, cls) => {
+    // root -> card(children[0]) -> actions(最后一个 child) -> 按钮
+    const card = root.children[0]
+    const actions = card.children[card.children.length - 1]
+    for (const b of actions.children) {
+      if (b.className === cls) return b
+    }
+    return null
+  }
+
+  // 9.1 形状消毒：非对象 / required 不为真 ⇒ 一律 null（关闭）
+  const w1 = new cls({ apiBaseURL: 'http://localhost:8204', privacyNotice: 'yes' })
+  w1.init()
+  eq(w1.config.privacyNotice, null, 'privacyNotice 字符串形状 ⇒ 降级为 null')
+  const w2 = new cls({ apiBaseURL: 'http://localhost:8204', privacyNotice: { required: false } })
+  w2.init()
+  eq(w2.config.privacyNotice, null, 'privacyNotice.required=false ⇒ 降级为 null')
+  const w3 = new cls({ apiBaseURL: 'http://localhost:8204' })
+  w3.init()
+  eq(w3.config.privacyNotice, null, '缺省 privacyNotice ⇒ null（存量零行为变更）')
+  assert(w3.consentGate === null, '关闭形态不创建同意闸')
+
+  // 9.2 缺省关闭：open() 直接 show 面板（无同意层 DOM）
+  sandbox.localStorage.__clear()
+  w3.open()
+  assert(w3.panel.iframe !== null && w3.panel.shown === true, '缺省关闭：open() 即创建 iframe（历史行为）')
+  eq(consentRoot(), null, '缺省关闭：无同意层')
+  w3.destroy()
+
+  // 9.3 required=true + 未同意：open() 只弹同意层，不建 iframe（= 不建会话不发请求）
+  sandbox.localStorage.__clear()
+  let consentEvents = []
+  const w4 = new cls({
+    apiBaseURL: 'http://localhost:8204',
+    privacyNotice: { required: true, version: 'v9' },
+    events: { onPrivacyConsent: (p) => consentEvents.push(p) }
+  })
+  w4.init()
+  assert(w4.consentGate !== null, 'required=true 创建同意闸')
+  w4.open()
+  assert(consentRoot() !== null, '未同意：open() 渲染同意层')
+  assert(w4.panel.iframe === null && w4.panel.shown === false, '未同意：iframe 未创建（收集未开始）')
+  eq(consentEvents.length, 0, '未选择：onPrivacyConsent 未触发')
+
+  // 9.4 同意：落存储（version v9）→ 面板 show → 事件 accepted=true
+  const root4 = consentRoot()
+  const agree = buttonIn(root4, 'mcw-consent-agree')
+  assert(agree !== null, '同意层含「同意并继续」按钮')
+  agree.dispatchEvent({ type: 'click' })
+  eq(sandbox.localStorage.__dump()['mtk_visitor_id:privacy_consent'], 'v9', '同意后存储写入 version')
+  assert(w4.panel.iframe !== null && w4.panel.shown === true, '同意后聊天 iframe 才创建')
+  eq(consentRoot(), null, '同意后同意层移除')
+  assert(consentEvents.length === 1 && consentEvents[0].accepted === true, 'onPrivacyConsent accepted=true 且恰好一次')
+
+  // 9.5 同版本不再询问
+  w4.close()
+  w4.open()
+  eq(consentRoot(), null, '同版本已同意：再次打开不再询问，直接 show')
+  assert(w4.panel.shown === true, '再次打开直接进入聊天面板')
+
+  // 9.6 version 变更 ⇒ 重新询问
+  const w5 = new cls({
+    apiBaseURL: 'http://localhost:8204',
+    privacyNotice: { required: true, version: 'v10' },
+    events: { onPrivacyConsent: (p) => consentEvents.push(p) }
+  })
+  w5.init()
+  w5.open()
+  assert(consentRoot() !== null, 'version 变更：已同意旧版的访客重新收到询问')
+  assert(w5.panel.iframe === null, 'version 变更：重新询问期间 iframe 仍未创建')
+
+  // 9.7 拒绝：不写存储、窗关闭、事件 accepted=false
+  consentEvents = []
+  const decline = buttonIn(consentRoot(), 'mcw-consent-decline')
+  assert(decline !== null, '同意层含「暂不使用」按钮')
+  decline.dispatchEvent({ type: 'click' })
+  eq(sandbox.localStorage.__dump()['mtk_visitor_id:privacy_consent'], 'v9', '拒绝：存储未写入新 version')
+  eq(w5.opened, false, '拒绝：聊天窗回到关闭态')
+  eq(consentRoot(), null, '拒绝：同意层移除')
+  assert(consentEvents.length === 1 && consentEvents[0].accepted === false, 'onPrivacyConsent accepted=false')
+  w5.destroy()
+
+  // 9.8 data-* 布尔简写等价形状：readDataAttrs 产出的 {required:true} 经同一消毒路径进闸
+  sandbox.localStorage.__clear()
+  const w6 = new cls({ apiBaseURL: 'http://localhost:8204', privacyNotice: { required: true } })
+  w6.init()
+  assert(w6.consentGate !== null, '布尔简写等价形状（data-privacy-required 与对象配置同一条消毒路径）')
+  w6.destroy()
 }
 
 console.log(`\n== \u603b\u7ed3 ==`)

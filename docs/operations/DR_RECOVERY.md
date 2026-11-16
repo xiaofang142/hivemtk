@@ -154,10 +154,12 @@ echo "[$(date)] Backup completed: $BACKUP_DIR"
 echo "[$(date)] Backup size: $(du -sh "$BACKUP_DIR" | cut -f1)"
 ```
 
-> 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标，但**现测不可用**：
-> `hivemtk/Makefile:122-134` 的 `pg_dump -U $${POSTGRES_USER:-admin}` /
-> `psql -U ... -d ...` 都没带 `-p 8202`，而容器里 PostgreSQL 被显式改成了 8202 监听，
-> 直接跑报 `connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed`。
+> 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标。~~此前注记称其"没带 -p 8202、
+> 现测不可用"~~ ⇒ **2026-11-17 复核作废**：当前 Makefile 的两个目标均已带 `-p 8202`
+> （`pg_dump -U … -p 8202` / `psql -U … -p 8202`），与容器内监听一致；
+> 若仍报 socket 连接错误，按 §1.3 末注记补 `-h 127.0.0.1` 后复测并回填本段。
+> 2026-11-17 复测窗口：本机 mtk-postgres 主库容器未运行，未能现场复跑——
+> **下次在跑着主库的机器上先 `make db-backup` 实测再更新本段**。
 > 上面脚本里带全 `-h 127.0.0.1 -p 8202` 的写法是实测通过的版本。
 
 
@@ -167,6 +169,33 @@ echo "[$(date)] Backup size: $(du -sh "$BACKUP_DIR" | cut -f1)"
 # /etc/cron.d/hivemtk-backup
 0 2 * * * root /opt/hivemtk/scripts/backup.sh >> /var/log/hivemtk-backup.log 2>&1
 ```
+
+### 1.5 异地副本（2026-11-16 审计 P1-3 / T-04 补）
+
+§1.3 的 backup.sh 只落本机磁盘——宿主机盘损/被勒索时备份与源库一起消失。
+新增 `scripts/ops/backup_offsite.sh`：同一条 pg_dump（-Fc，可被 §3 verify_restore
+直接消费）后追加七牛上传 + 双端校验提示 + 分层保留（本地 7 天 / 对象存储 30 天）。
+
+```cron
+# /etc/cron.d/hivemtk-backup-offsite（与 §1.4 并存：本条含上传，二选一即可）
+0 2 * * * root set -a; . /opt/hivemtk/.env; set +a; bash /opt/hivemtk/scripts/ops/backup_offsite.sh >> /var/log/hivemtk-backup.log 2>&1
+```
+
+- 前置：`qshell` 安装并可用（未装/未配时脚本显式跳过上传并 WARN，**不冒充绿**——
+  此时 RPO 仍=本地，日志里看得到）。
+- qshell 获取：`curl -L https://github.com/qiniu/qshell/releases 最新版对应平台二进制`
+  → `/usr/local/bin/qshell`；凭证走 `.env` 的 `QINIU_ACCESS_KEY/SECRET_KEY/BUCKET`。
+- 首次上传后人工核对一次远端副本可恢复（qshell fget 到临时目录 → verify_restore.sh），
+  之后按 size 抽查即可。
+- 生产机装载状态【待确认】：cron 是否已装、首次异地副本是否已产生，需在生产机
+  `crontab -l`/控制台核实后回填本节。
+
+> 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标。~~此前注记称其"没带 -p 8202、
+> 现测不可用"~~ ⇒ **2026-11-17 复核作废**：当前 Makefile 的两个目标均已带 `-p 8202`
+> （`pg_dump -U … -p 8202` / `psql -U … -p 8202`），与容器内监听一致；
+> 若仍报 socket 连接错误，按 §1.3 末注记补 `-h 127.0.0.1` 后复测并回填本段。
+> 2026-11-17 复测窗口：本机 mtk-postgres 主库容器未运行，未能现场复跑——
+> **下次在跑着主库的机器上先 `make db-backup` 实测再更新本段**。
 
 ## 2. 恢复流程
 

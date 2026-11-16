@@ -153,6 +153,19 @@ case "$_seed_pw_lc" in
     ;;
 esac
 
+# 对外形态 fail-closed（2026-11-16 审计 P1-2）：SEED_PASSWORD 缺省时静默用仓库公开值
+# Seed@123456（cmd/seed/seed_users.go seedPasswordDefault），probe 探针（scripts/
+# check-admin-default-credential.sh）此前只挂在手工与部署验收段——安装那一刻就该拦。
+# 判据与 .env-example 口径一致：平台集成开启、或声明了公开访问 URL，即"对外形态"；
+# 此时公开默认口令一律拒绝，离线纯本地（默认）保留现状（幂等重跑与 e2e 不受影响）。
+if [ "${SEED_PASSWORD}" = "Seed@123456" ]; then
+  if [ "${PLATFORM_ENABLED:-false}" = "true" ] || [ -n "${PUBLIC_BASE_URL:-}" ]; then
+    err "对外形态（PLATFORM_ENABLED=true 或 PUBLIC_BASE_URL 非空）拒绝使用仓库公开默认口令 Seed@123456"
+    err "  显式设置后重跑：SEED_PASSWORD=\"<自定强口令>\" bash scripts/bootstrap.sh"
+    exit 1
+  fi
+fi
+
 export PGHOST="$PG_HOST"
 export PGPORT="$PG_PORT"
 # 库名/用户与 .env 同源（不再写字面量；与验收步骤同一口径）

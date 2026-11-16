@@ -135,6 +135,12 @@ services:
       - "yes"
       - --maxmemory
       - 1gb
+      # 2026-11-17 审计 T-07 实测后维持 allkeys-lru：安全相关键全部短 TTL——
+      # mtk:ratelimit:*（60s，计数后端异常显式 fail-open）、mtk:reply_guard:*（10min
+      # AI 回复幂等）、mtk:mfa:temp:*（MFA 临时令牌）；brute_force 计数是进程内 map
+      # 不走 Redis。内存压力下最坏后果 = 短窗口内限流/幂等短暂失效（代码本就按
+      # 可用性优先设计），不是防护被永久重置。若未来把长 TTL/无 TTL 的权威状态
+      # 放进 Redis，再评估拆专用逻辑 DB 或 noeviction。
       - --maxmemory-policy
       - allkeys-lru
       - --requirepass

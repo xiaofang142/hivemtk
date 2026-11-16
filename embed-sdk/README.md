@@ -139,7 +139,35 @@ npm run preview
 | `width` / `data-width` | ❌ | `380` | 聊天窗宽度（px），移动端自动全屏 |
 | `height` / `data-height` | ❌ | `560` | 聊天窗高度（px），移动端自动全屏 |
 | `allowedOrigins` | ❌ | 自动推导 | postMessage origin 白名单；留空则自动 = [apiBaseURL, window.location.origin] |
-| `events` | ❌ | `{}` | 事件回调集合（onReady/onOpen/onClose/onUnread/onMessage） |
+| `privacyNotice` | ❌ | `null` | 访客隐私告知同意闸（specs/023），见下节；缺省关闭、行为与历史一致 |
+| `events` | ❌ | `{}` | 事件回调集合（onReady/onOpen/onClose/onUnread/onMessage/onPrivacyConsent） |
+
+### 访客隐私告知同意闸（`privacyNotice`，specs/023）
+
+PIPL/个保法的告知-同意义务落在部署方；本配置给部署方一个开箱可用的询问层：
+
+```html
+<script>
+  window.MarketingChatWidgetConfig = {
+    apiBaseURL: 'https://api.example.com',
+    privacyNotice: {
+      required: true,                                   // 开闸；缺省 false = 关闭
+      text: '您发送的消息将用于客服回复…（自定义文案）',  // 未配时按 lang 取中/英内置文案
+      policyUrl: 'https://example.com/privacy',         // 可选，渲染为新窗打开的链接
+      version: '2026v1'                                 // 文案版本；变更后重新询问已同意访客
+    }
+  }
+</script>
+```
+
+- `required=true` 时**首次打开聊天窗只渲染同意层，不加载聊天 iframe**（iframe 加载即
+  创建访客会话，所以闸的位置在 iframe 之前 = 收集开始之前）；同意后写入
+  localStorage（键 `<visitorIdKey>:privacy_consent`，值为已同意的 version），
+  同版本不再询问；「拒绝」直接关闭且不写任何存储，下次打开重新询问。
+- localStorage 不可用（隐私模式等）按"未同意"处理——宁可多问一次，不静默跳过告知。
+- 事件 `onPrivacyConsent({ accepted: boolean })` 在访客作出选择时触发。
+- 布尔简写：`<script src="…chat-widget.js" data-privacy-required="true">`；
+  完整对象走 `window.MarketingChatWidgetConfig`。
 
 ### 解析优先级
 

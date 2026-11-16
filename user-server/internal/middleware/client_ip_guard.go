@@ -223,6 +223,14 @@ func ConfigureTrustedProxies(r *gin.Engine) ([]string, error) {
 	r.Use(guard.handler())
 	if fromEnv {
 		logger.Infof("[proxy] 可信反代名单来自 env TRUSTED_PROXIES：%s（%d 条）", strings.Join(list, ","), len(list))
+	} else if strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL")) != "" {
+		// 2026-11-16 审计 P2-2：PUBLIC_BASE_URL 非空 = 声明了反代/FRP 后的公开入口，
+		// 名单却还是内置私网默认值 ⇒ 前面的反代大概率不被 gin 认作可信，登录风控/频控/
+		// 审计里的来源 IP 从启动起就塌成同一个值。INFO 不够响，这里升 WARN（A13 同口径：
+		// 失配必须响亮；请求级证据仍走下方 XFF 失配观测，本行只是启动期提示，零行为变更）。
+		logger.Warnf("[proxy] 已声明 PUBLIC_BASE_URL（反代后的公开入口），但 TRUSTED_PROXIES 未配置，" +
+			"可信名单仍是内置私网默认值：若反代不在名单内，登录风控/频控/审计日志的来源 IP 将全部塌成反代出口地址。" +
+			"修复：TRUSTED_PROXIES=<反代IP或CIDR>（逗号分隔）")
 	} else {
 		logger.Infof("[proxy] 可信反代名单使用内置私网默认值（%d 条）。反代/云 LB 若在公网地址上，请设 env TRUSTED_PROXIES，"+
 			"否则 ClientIP() 会退化成反代出口地址（全站同一限流桶）", len(list))
