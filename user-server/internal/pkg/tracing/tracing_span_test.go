@@ -225,6 +225,16 @@ func TestToModelFromPendingMapsEveryColumn(t *testing.T) {
 
 func TestPublishIsNonBlockingAndNeverDrops(t *testing.T) {
 	// 本用例不调 Init/Stop，因此必须在「worker 未启动」与「已被同包其它用例启动」两种进程状态下都成立。
+	//
+	// 「已启动」状态下，同包先序用例可能向共享 channel 灌过突发流量（如 5 万条压测），
+	// 残留 span 未排空前本用例的三次发布会撞上满通道——那是前序用例的尾巴，不是本用例
+	// 的行为。测量前等通道排空（worker 未启动时 spanCh==nil，无需等待）；超时兜底防挂死。
+	if spanCh != nil {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) && len(spanCh) > 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 	pubBefore, droppedBefore := Stats()
 	Start(context.Background(), NodeIngest).Input("x").End("y", nil)
 	RecordNode(context.Background(), NodeSpan{Node: NodeInboxSync})

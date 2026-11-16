@@ -3,6 +3,7 @@ package tracing
 import (
 	"context"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
 )
@@ -45,6 +46,16 @@ func TestSinkNoDropsUnderNormalLoad(t *testing.T) {
 	}
 	if d := dropped - beforeDrop; d > 0 {
 		t.Logf("突发 5w 发送触发背压丢帧 %d（丢帧率 %.4f%%），符合设计预期", d, float64(d)/float64(n)*100)
+	}
+	// 收尾排空共享通道：本用例向 sink 灌了 5 万条，若带着残留 span 返回，
+	// 同包后续的「低负载不丢」用例（TestPublishIsNonBlockingAndNeverDrops）会撞上
+	// 满通道误报丢帧——那是前序用例的尾巴，不是被测行为。worker 未启动（spanCh 为 nil）
+	// 时无通道可排，直接返回。超时兜底防 flushLoop 意外停摆时用例挂死。
+	if spanCh != nil {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) && len(spanCh) > 0 {
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 }
 
