@@ -267,7 +267,24 @@ func assertNoBridgeChannelCaseList(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(string(raw), "bridgeOutboxCapable(channel)") {
-		t.Error("webhook_outbound.go 未发现桥接分支的 registry 能力查询（bridgeOutboxCapable(channel)），能力位驱动被拆除")
+	// 能力查询的住址（specs/024 B1 重构后迁移）：sendOutbound 本体不再含渠道分支，
+	// 桥接能力位查询收敛在 outbound_registry.go 的 outboundSenderFor 回退里
+	//（2026-11-17 B1 收口勘误：本闸此前仍要求 webhook_outbound.go 内出现
+	// bridgeOutboxCapable(channel) 字面量，与注册表化后的代码位置脱节）。
+	regRaw, err := os.ReadFile(filepath.Join(root, "user-server", "internal", "service", "outbound_registry.go"))
+	if err != nil {
+		t.Fatalf("读取 outbound_registry.go 失败: %v", err)
+	}
+	if !strings.Contains(string(regRaw), "bridgeOutboxCapable(") {
+		t.Error("outbound_registry.go 未发现桥接分支的 registry 能力查询（bridgeOutboxCapable），能力位驱动被拆除")
+	}
+	for i, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "func bridgeOutboxCapable") {
+			continue
+		}
+		if strings.Contains(trimmed, "bridgeOutboxCapable(") {
+			t.Errorf("webhook_outbound.go:%d 不应再直接做桥接能力查询（B1 注册表化：查询收口在 outbound_registry.go）", i+1)
+		}
 	}
 }

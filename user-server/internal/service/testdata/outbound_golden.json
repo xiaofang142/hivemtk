@@ -1,0 +1,449 @@
+[
+  {
+    "channel": "dingtalk",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/goldendt",
+        "body": {
+          "msgtype": "text",
+          "text": {
+            "content": "golden 您好，这是冻结样例回复"
+          }
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "dingtalk",
+    "sample": "missing_webhook",
+    "calls": [],
+    "sent": false,
+    "fail_category": "window_expired",
+    "fail_retryable": false
+  },
+  {
+    "channel": "dingtalk",
+    "sample": "platform_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/goldendt",
+        "body": {
+          "msgtype": "text",
+          "text": {
+            "content": "golden 您好，这是冻结样例回复"
+          }
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "unknown",
+    "fail_retryable": true
+  },
+  {
+    "channel": "feishu",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/open-apis/auth/v3/tenant_access_token/internal",
+        "body": {
+          "app_id": "cli_golden",
+          "app_secret": "sec_golden"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
+        "body": {
+          "content": "{\"text\":\"golden 飞书回复正文\"}",
+          "msg_type": "text",
+          "receive_id": "ou_golden"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "feishu",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
+        "body": {
+          "content": "{\"text\":\"golden 飞书回复正文\"}",
+          "msg_type": "text",
+          "receive_id": "ou_golden"
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "unknown",
+    "fail_retryable": true
+  },
+  {
+    "channel": "feishu",
+    "sample": "ok_card",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
+        "body": {
+          "content": "{\"text\":\"golden 飞书回复正文\"}",
+          "msg_type": "text",
+          "receive_id": "ou_golden"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
+        "body": {
+          "content": "{\"config\":{\"wide_screen_mode\":true},\"header\":{\"title\":{\"content\":\"报价单\",\"tag\":\"plain_text\"}},\"i18n_elements\":{\"zh_cn\":[{\"content\":\"golden 卡片正文\",\"tag\":\"markdown\"},{\"content\":\"**总额**: ¥12,000\",\"tag\":\"markdown\"},{\"actions\":[{\"tag\":\"button\",\"text\":{\"content\":\"查看详情\",\"tag\":\"plain_text\"},\"type\":\"default\",\"url\":\"https://example.com/golden\"}],\"tag\":\"action\"}]}}",
+          "msg_type": "interactive",
+          "receive_id": "ou_golden"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "telegram",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "text": "golden telegram 回复正文"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "telegram",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "text": "golden telegram 回复正文"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "text": "golden telegram 回复正文"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "text": "golden telegram 回复正文"
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "rate_limited",
+    "fail_retryable": true
+  },
+  {
+    "channel": "telegram",
+    "sample": "ok_card",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "disable_web_page_preview": true,
+          "parse_mode": "HTML",
+          "text": "golden telegram 回复正文"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/bottok-golden-tg/sendMessage",
+        "body": {
+          "chat_id": 555001,
+          "parse_mode": "HTML",
+          "reply_markup": {
+            "inline_keyboard": [
+              [
+                {
+                  "text": "查看详情",
+                  "url": "https://example.com/tg"
+                }
+              ]
+            ]
+          },
+          "text": "\u003cb\u003e工单进度\u003c/b\u003e\n\ngolden telegram 卡片"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "qq",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/app/getAppAccessToken",
+        "body": {
+          "appId": "qq-golden",
+          "clientSecret": "qq-sec-golden"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/v2/users/cs-golden-qq/messages",
+        "body": {
+          "content": "golden QQ 回复正文",
+          "msg_seq": 1,
+          "msg_type": 0
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "qq",
+    "sample": "missing_conv",
+    "calls": [],
+    "sent": false,
+    "fail_category": "bad_request",
+    "fail_retryable": false
+  },
+  {
+    "channel": "qq",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/app/getAppAccessToken",
+        "body": {
+          "appId": "qq-golden",
+          "clientSecret": "qq-sec-golden"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "/v2/users/cs-golden-qq/messages",
+        "body": {
+          "content": "golden QQ 回复正文",
+          "msg_seq": 1,
+          "msg_type": 0
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "auth",
+    "fail_retryable": false
+  },
+  {
+    "channel": "wechat",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/cgi-bin/token?grant_type=client_credential\u0026appid=wx_golden\u0026secret=wx-sec-golden"
+      },
+      {
+        "method": "POST",
+        "path": "/cgi-bin/message/custom/send?access_token=wx-token-golden",
+        "body": {
+          "msgtype": "text",
+          "text": {
+            "content": "golden 公众号回复正文"
+          },
+          "touser": "openid-golden"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "wechat",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/cgi-bin/message/custom/send?access_token=wx-token-golden",
+        "body": {
+          "msgtype": "text",
+          "text": {
+            "content": "golden 公众号回复正文"
+          },
+          "touser": "openid-golden"
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "quota_exhausted",
+    "fail_retryable": false
+  },
+  {
+    "channel": "wechat",
+    "sample": "ok_card_folded",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/cgi-bin/message/custom/send?access_token=wx-token-golden",
+        "body": {
+          "msgtype": "text",
+          "text": {
+            "content": "golden 公众号回复正文\n\n工单进度\ngolden 折叠卡片\n详情：https://example.com/wx"
+          },
+          "touser": "openid-golden"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "wecom",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/cgi-bin/gettoken?corpid=corp-golden\u0026corpsecret=corp-sec-golden"
+      },
+      {
+        "method": "POST",
+        "path": "/cgi-bin/externalcontact/message/send?access_token=wecom-token-golden",
+        "body": {
+          "agentid": 0,
+          "external_userid": [
+            "wo-golden"
+          ],
+          "msgtype": "text",
+          "text": {
+            "content": "golden 企微回复正文"
+          }
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "wecom",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/cgi-bin/externalcontact/message/send?access_token=wecom-token-golden",
+        "body": {
+          "agentid": 0,
+          "external_userid": [
+            "wo-golden"
+          ],
+          "msgtype": "text",
+          "text": {
+            "content": "golden 企微回复正文"
+          }
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "unknown",
+    "fail_retryable": true
+  },
+  {
+    "channel": "wecom",
+    "sample": "quota_exhausted",
+    "calls": [],
+    "sent": false,
+    "fail_category": "unknown",
+    "fail_retryable": true
+  },
+  {
+    "channel": "whatsapp",
+    "sample": "ok_text",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/v21.0/phone-golden/messages",
+        "body": {
+          "messaging_product": "whatsapp",
+          "text": {
+            "body": "golden whatsapp 回复正文"
+          },
+          "to": "8613800000000",
+          "type": "text"
+        }
+      }
+    ],
+    "sent": true
+  },
+  {
+    "channel": "whatsapp",
+    "sample": "api_err",
+    "calls": [
+      {
+        "method": "POST",
+        "path": "/v21.0/phone-golden/messages",
+        "body": {
+          "messaging_product": "whatsapp",
+          "text": {
+            "body": "golden whatsapp 回复正文"
+          },
+          "to": "8613800000000",
+          "type": "text"
+        }
+      }
+    ],
+    "sent": false,
+    "fail_category": "auth",
+    "fail_retryable": false
+  },
+  {
+    "channel": "whatsapp",
+    "sample": "account_missing",
+    "calls": [],
+    "sent": false,
+    "fail_category": "unknown",
+    "fail_retryable": true
+  },
+  {
+    "channel": "bridge",
+    "sample": "queued",
+    "calls": [],
+    "sent": true
+  },
+  {
+    "channel": "bridge",
+    "sample": "duplicate_occupied",
+    "calls": [],
+    "sent": false,
+    "fail_category": "bad_request",
+    "fail_retryable": false
+  },
+  {
+    "channel": "bridge",
+    "sample": "undeliverable",
+    "calls": [],
+    "sent": false,
+    "fail_category": "bad_request",
+    "fail_retryable": false
+  }
+]

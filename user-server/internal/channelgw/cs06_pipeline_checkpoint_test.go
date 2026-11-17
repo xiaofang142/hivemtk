@@ -101,6 +101,28 @@ func cg06WaitFor(t *testing.T, what string, cond func() bool) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+	// 临时诊断探针（024 B1 回归排查）：超时时转储延迟出站队与 message_hub，
+	// 看 AI 腿把回复写到了哪条管道。
+	var delayed []model.DelayedOutboundReply
+	if err := db.GetDB().Model(&model.DelayedOutboundReply{}).Find(&delayed).Error; err == nil {
+		for _, r := range delayed {
+			t.Logf("[probe] delayed_outbound_reply: kind=%s status=%s platform=%s conv=%s content=%.40s send_at=%s",
+				r.Kind, r.Status, r.Platform, r.ConversationID, r.Content, r.SendAt.Format("15:04:05"))
+		}
+	}
+	var hubs []model.MessageHub
+	if err := db.GetDB().Where("direction = 'outbound'").Find(&hubs).Error; err == nil {
+		for _, r := range hubs {
+			t.Logf("[probe] message_hub outbound: status=%s platform=%s conv=%s content=%.40s", r.Status, r.Platform, r.ConversationID, r.Content)
+		}
+	}
+	var traces []model.MessageTrace
+	if err := db.GetDB().Order("id asc").Limit(30).Find(&traces).Error; err == nil {
+		for _, r := range traces {
+			t.Logf("[probe] trace: conv=%s node=%s status=%s turn=%s", r.ConversationID, r.Node, r.Status, r.TurnID)
+		}
+	}
+	t.Logf("[probe] llm_calls=%d", atomic.LoadInt32(&cg06LLMCalls))
 	t.Fatalf("等待超时: %s", what)
 }
 
@@ -219,7 +241,7 @@ func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressP
 	previousMode := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(previousMode) })
-	defer service.DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	t.Cleanup(service.DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：helper 内 defer 会在 helper 返回时提前复位，AI 腿（异步）跑在 setup 之后——勿扰窗复活，23–7 点窗口内测试必红；改为挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.DelayedOutboundReply{},

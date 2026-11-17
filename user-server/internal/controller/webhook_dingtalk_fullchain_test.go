@@ -115,7 +115,7 @@ type dtFullchainEnv struct {
 
 func setupDingTalkFullchain(t *testing.T) *dtFullchainEnv {
 	t.Helper()
-	defer service.DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	t.Cleanup(service.DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：setup helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	t.Setenv("ALLOW_INSECURE_WEBHOOK", "")
 
 	database := testutil.NewTestDB(t,

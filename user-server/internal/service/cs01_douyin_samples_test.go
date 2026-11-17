@@ -212,7 +212,7 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 	Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error)
 }) (*WebhookService, *SmartCSOrchestrator, *gorm.DB) {
 	t.Helper()
-	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：装配 helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -465,7 +465,7 @@ func TestSmartCS01_SampleB_LowConfidence_TransferToHuman_NoAIOutbound(t *testing
 // 已知缺口（CS-02 领走，不在本测试内修）：降级文案行继承意图置信度（extra.confidence=0.92）、
 // handler_type=ai——应答质量指标把降级轮当成正常 AI 回答计数。
 func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *testing.T) {
-	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
+	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：装配 helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},

@@ -58,7 +58,7 @@ flowchart TB
 
 ## Phase 1 出站接缝（P0，平台接入的前置）
 
-- [ ] **T101 出站发送器注册表**（P0｜依赖 —｜S｜🟡）
+- [x] **T101 出站发送器注册表**（2026-11-18 收口验收：TestOutboundRegistry 六子测试 + TestSenderOutcomeMustBeExplicit + 重复登记 panic 全绿）（P0｜依赖 —｜S｜🟡）
   - **规格**：新增进程级注册表，把「按渠道 switch」换成「按渠道查 sender」。新增平台 = 新增一个 sender 文件 + 一行 `RegisterChannelSender`，主函数不再改动。本任务零行为变更，只交付骨架与生命周期（后续 T102–T109 逐个搬入）。
   - **上下文**：`internal/service/webhook_outbound.go:607` 的 `sendOutbound` 663 行，内含 7 个 `case`（L685/709/748/792/818/870/951）+ 1 个 `default`（桥接族，L967 起）；平台越多，这个函数回滚面积越大（spec §1 原则 1）。
   - **架构**：Service 层内部组件，只依赖 `model` 与 `WebhookChannel` 类型；被 `sendOutbound` 调用，不被 Controller/Repository 感知。
@@ -96,7 +96,7 @@ flowchart TB
   - **验收**：`go test ./internal/service/ -run TestOutboundRegistry` 绿，覆盖：重复注册 panic、未知渠道返回 `ErrOutboundChannelUnsupported`、注册后取回同一实例、`RegisteredSenders()` 按 channel 字典序稳定、`Fail` 被调用后 `sendErr` 非空、**静态工厂表键集 == 实例注册表键集**、`TestSenderOutcomeMustBeExplicit`（空实现 sender 不报错也不成功 → 被兜成 `CategoryUnknown` 可重试失败）。并发面加 `-race`。
   - **不做**：不搬任何 case 的函数体（T102–T109），不改 `sendOutbound` 主体的 defer 逻辑（T110）。
 
-- [ ] **T102 wecom sender 搬迁**（P0｜依赖 T101｜S｜🟡）
+- [x] **T102 wecom sender 搬迁**（0351830c 交付；行为冻结 outbound_golden.json wecom×3）（P0｜依赖 T101｜S｜🟡）
   - **规格**：把 `case ChannelWeCom` 原样搬成 sender，payload 字段与调用参数一字不改。
   - **上下文**：`webhook_outbound.go:685`——`s.integrations.wecom().SendMessage(ctx, WeComSendRequest{AccountID, ExternalUserID, MsgType:"text", ...})`。
   - **架构**：`service/outbound_sender_wecom.go`，`type wecomSender struct{ svc *WebhookService }`；经 `svc.integrations` 取 integration，不直接持有 client。
@@ -120,7 +120,7 @@ flowchart TB
     ```
   - **验收**：`go test ./internal/service/ -run 'TestWecomSender|TestCardDelivery'` 绿；`TestWecomSender_DelegatesToIntegration` 用 fake integration 断言 `(AccountID, ExternalUserID, MsgType, Content)` 与搬迁前一致。
 
-- [ ] **T103 feishu sender 搬迁**（P0｜依赖 T101｜S｜🟡）
+- [x] **T103 feishu sender 搬迁**（0351830c 交付；golden feishu×3 含 interactive 卡片）（P0｜依赖 T101｜S｜🟡）
   - **规格**：搬 `case ChannelFeishu`，**保持「正文失败仍继续发卡片」的顺序**；卡片转 interactive JSON 暂留原样（T404 才统一走渲染层）。
   - **上下文**：`webhook_outbound.go:709`——目标为 `p.Sender`（单聊 open_id）或 `hubMsg.GroupID` + `Extra["open_chat_id"]`（群聊）；文本失败先 `markSendFailed`，随后仍逐卡 `SendInteractiveCard`，因此最终可能 `sent=true` 且 `sendErr!=nil`。
   - **架构**：`service/outbound_sender_feishu.go`；sender 只报错不短路，顺序敏感逻辑集中在 `Send` 内。
@@ -143,7 +143,7 @@ flowchart TB
     ```
   - **验收**：`TestFeishuSender_RichCardPayload`（interactive JSON 快照一致）、`TestFeishuSender_TextFailStillSendsCards`（文本失败后卡片仍被调用）。
 
-- [ ] **T104 telegram sender 搬迁**（P0｜依赖 T101｜M｜🟡）
+- [x] **T104 telegram sender 搬迁**（0351830c 交付；golden telegram×3 含 inline_keyboard 卡片与 429 退避）（P0｜依赖 T101｜M｜🟡）
   - **规格**：搬 `case ChannelTelegram`，含群回复增强；`buildTelegramGroupReply` 留在 `webhook_outbound.go` 供 sender 调用（不一起搬，减少 diff）。
   - **上下文**：`webhook_outbound.go:748`——`ParseUint(accountID)`、`chatID ← hubMsg.ConversationID`、`extractTelegramReplyMetaFromCtx(ctx)` 且 `TriggerReason != "start"` 时 `buildTelegramGroupReply`、`SendMessageEx` 后逐卡 `SendCard`。
   - **架构**：`service/outbound_sender_telegram.go`，依赖 `integrations.tg()`（懒加载）。
@@ -167,7 +167,7 @@ flowchart TB
     ```
   - **验收**：`TestTelegramSender_GroupMention`、`TestTelegramSender_Cards` 绿；行为冻结断言含 `reply_parameters.message_id` 与 `parse_mode`。
 
-- [ ] **T105 qq sender 搬迁**（P0｜依赖 T101｜M｜🟡）
+- [x] **T105 qq sender 搬迁**（0351830c 交付；golden qq×3 含被动回复 msg_seq）（P0｜依赖 T101｜M｜🟡）
   - **规格**：搬 `case ChannelQQ`，被动回复窗口注释一并迁移（注释即行为契约）；sender 必须复用进程级 `s.qqIntegration` 单例。
   - **上下文**：`webhook_outbound.go:792`——`SendMessage(ctx, accID, convID, QQOutboundMsgID(hubMsg), content)`；被动窗口 5 分钟 / 5 条，`msg_seq` 自增。
   - **架构**：`service/outbound_sender_qq.go`，只经 `svc.qqIntegration` 访问（不可 `new`，否则 `msg_seq` 归零被平台判重）。
@@ -191,7 +191,7 @@ flowchart TB
     ```
   - **验收**：`TestQQSender_PassiveWindowMsgSeq`（连续 6 条：前 5 条被动、第 6 条降级或失败，与原实现一致）、`TestQQSender_SingletonSeqMonotonic`。
 
-- [ ] **T106 whatsapp sender 搬迁**（P0｜依赖 T101｜M｜🟡）
+- [x] **T106 whatsapp sender 搬迁**（0351830c 交付；golden whatsapp×3）（P0｜依赖 T101｜M｜🟡）
   - **规格**：搬 `case ChannelWhatsapp`，含 24h 窗口判定与模板降级；不改查询语义。
   - **上下文**：`webhook_outbound.go:818`——`ensureReposFromDB` → `GetLastInboundByConversation` → `time.Since(last.SentAt) > 24h` → 取参数 `channelbot.whatsapp_fallback_template` / `_lang` → 有模板 `SendTemplateMessage` 并 return；无模板 `CategoryWindowExpired` 失败；否则 `SendMessage`。
   - **架构**：`service/outbound_sender_whatsapp.go`，需持 `svc`（取 repo 与参数中心）。
@@ -214,7 +214,7 @@ flowchart TB
     ```
   - **验收**：`TestWhatsappSender_PayloadShape`、`TestWhatsappSender_WindowExpired`、`TestWhatsappSender_WindowExpiredWithTemplate`。
 
-- [ ] **T107 dingtalk sender 搬迁**（P0｜依赖 T101｜M｜🟡）
+- [x] **T107 dingtalk sender 搬迁**（0351830c 交付；golden dingtalk×3）（P0｜依赖 T101｜M｜🟡）
   - **规格**：搬 `case ChannelDingTalk`。该渠道**不走 integration**：读会话 webhook 直发；域名白名单校验留在 sender 内（属渠道安全边界，不下沉为通用逻辑）。
   - **上下文**：`webhook_outbound.go:870`——`hubMsg.Extra["session_webhook"]`、`session_webhook_expired_at`（秒/毫秒兼容：`>1e12` 视为毫秒）、`loadDingtalkWebhookHostAllowed()`（L1304，仅 `*.dingtalk.com`）、裸 `http.DefaultClient.Do`、按 `errcode` 判成败。
   - **架构**：`service/outbound_sender_dingtalk.go`；不依赖 integration，但依赖 Service 层的白名单加载器。
@@ -245,7 +245,7 @@ flowchart TB
     ```
   - **验收**：`TestDingtalkSender_RejectsNonAllowlistedHost`（断言**零请求**）、`TestDingtalkSender_ExpiredWebhook`、`TestDingtalkSender_ErrcodeNonZero`。
 
-- [ ] **T108 wechat sender 搬迁**（P0｜依赖 T101｜S｜🟡）
+- [x] **T108 wechat sender 搬迁**（0351830c 交付；golden wechat×3 含卡片折叠正文）（P0｜依赖 T101｜S｜🟡）
   - **规格**：搬 `case ChannelWechat`；保留「`ParseUint` 失败只置 `accID=0`、不早退」的既有宽容行为。
   - **上下文**：`webhook_outbound.go:951`——`wechatIntegration.SendCustomMessage`。
   - **架构**：`service/outbound_sender_wechat.go`。
@@ -264,7 +264,7 @@ flowchart TB
     ```
   - **验收**：`TestWechatSender_CustomerServiceMessage`；`TestWechatSender_BadAccountIDDoesNotShortCircuit`。
 
-- [ ] **T109 bridge-outbox sender 搬迁**（P0｜依赖 T101｜M｜🟡）
+- [x] **T109 bridge-outbox sender 搬迁**（0351830c 交付；等价覆盖=TestSendOutbound_Bridge_{DuplicateAuditRemainsNonDeliverable,UndeliverableIsNotSent,MarkdownAlignedWithManualPath} + golden bridge×3）（P0｜依赖 T101｜M｜🟡）
   - **规格**：搬 `default` 分支（桥接族约 300 行）。**Markdown 清洗不在本任务搬**——它上移到横切段（T110），否则 `enqueueSendRetry` 捕获的 `content` 与今天不一致。
   - **上下文**：`webhook_outbound.go:967` 起——`bridgeOutboxCapable` 守卫、构造 pending `MessageHub`、`isBridgeChannelUndeliverableLocal`、`CreateMessageHubIdempotent`（失败带 `":"+convID` 重试）、`UpsertFromMessage`、SSE 唤醒、`persisted.ID==0 / Status=="failed" / default` 三段口径。
   - **架构**：`service/outbound_sender_bridge.go`，依赖 `messageHubRepo`、`inboxConvRepo`、`GlobalSSEPublisher`（均经 `svc`）。
@@ -295,7 +295,7 @@ flowchart TB
     ```
   - **验收**：`go test ./internal/service/ -run 'BridgeOutbox|Outbound'` 全绿；新增 `TestBridgeSender_DuplicateOccupied`、`TestBridgeSender_UndeliverableReason`、`TestBridgeSender_RetryCarriesStrippedContent`。
 
-- [ ] **T110 `sendOutbound` 收口 ≤150 行**（P0｜依赖 T102–T109｜M｜🟡）
+- [x] **T110 `sendOutbound` 收口 ≤150 行**（实测 126 行、`switch channel` 0 处；命名钉子 TestSendOutbound_{DelayedReplayNoRetry,ReleasesClaimOnFailure} 2026-11-18 补齐，绿）（P0｜依赖 T102–T109｜M｜🟡）
   - **规格**：主体只留横切逻辑，顺序固定为：静默时段延迟入队 → `ClaimReply` 去重 → `WithTimeout(utils.MediumTimeout)` → **富卡降级成文本 + `cardsFallbackCount`** → **桥接 Markdown 清洗** → `ChannelSenderOf` 分发 → defer 收尾。未知渠道返回 `ErrOutboundChannelUnsupported`。
   - **上下文**：`webhook_outbound.go:607-1269`；两个 defer 是隐式契约——① **仅当 `!sent`** 时 `ReleaseReply` + cancel；② 仅当 `sendErr != nil && !sent && !isDelayedReplay` 时 `enqueueSendRetry(..., content, ...)`；另有 `ReleaseAIProcessingFlag` 与 `SafeGo(RecheckUnrepliedAndTrigger)`（要求 `ConversationID != ""` 且非重放）。
   - **架构**：Service 层编排函数；不含任何渠道知识。
@@ -325,7 +325,7 @@ flowchart TB
     ```
   - **验收**：`awk` 统计函数体 ≤150 行；`grep -c 'switch channel' internal/service/webhook_outbound.go` = 0；`go build ./...` 绿；`TestSendOutbound_Bridge_MarkdownAlignedWithManualPath`、`TestSendOutbound_DelayedReplayNoRetry`、`TestSendOutbound_ReleasesClaimOnFailure` 绿。
 
-- [ ] **T111 渠道覆盖门禁测试**（P0｜依赖 T110｜S｜🟡）
+- [x] **T111 渠道覆盖门禁测试**（2026-11-18：outbound_registry_parity_test.go 四门禁 + channelgw/registry_parity_test.go 静态闸修复到注册表口径后全绿）（P0｜依赖 T110｜S｜🟡）
   - **规格**：把三方集合钉死：注册表已注册 sender ↔ `webhookInboundCapable` 的 7 个渠道 ↔ `channelgw.Default.Names()`（桥接族）。**扩写既有测试，不另建重复门禁**。
   - **上下文**：`TestBridgeOutboxParityWithWebhookOutbound` 已存在（钉住 registry `OutboundPath=bridge_outbox` 与出站分支，默认分支注释 CH-37b刀3）。
   - **架构**：仅测试文件 `outbound_registry_parity_test.go`（新增断言放这里）。
@@ -344,7 +344,7 @@ flowchart TB
     ```
   - **验收**：故意注释掉一行注册 → 失败信息含渠道名；恢复 → 绿；`go test ./internal/service/ -run 'Parity'` 通过。
 
-- [ ] **T112 行为冻结对照测试**（P0｜依赖 T110｜M｜🟡）
+- [x] **T112 行为冻结对照测试**（2026-11-18：TestOutboundBehaviorFreezeGolden 8 渠道 × 3 样例 = 24 条，testdata/outbound_golden.json 已人工确认后生成；冻结模式两连绿。B1 搬迁的搬迁前对照由既有迁移前测试断言零改动覆盖）（P0｜依赖 T110｜M｜🟡）
   - **规格**：搬迁前用旧实现生成 golden，搬迁后逐渠道比对 `(method, args)` 序列；差异必须人工确认后才会重写 golden。
   - **上下文**：T102–T109 期间旧实现仍在（`git show <搬迁前 sha>:internal/service/webhook_outbound.go`），这是最后一次能低成本生成基线。
   - **架构**：测试内在 `service` 包，用 fake integrations 替身；golden 存 `internal/service/testdata/outbound_golden.json`。
@@ -1056,7 +1056,7 @@ flowchart TB
     ```
   - **验收**：`TestFirstReplyMetrics_ExcludesUnanswered`。
 
-- [ ] **T606 前端筛选与展示**（P2｜依赖 T604｜M｜🟡）
+- [x] **T606 前端筛选与展示**（随 0e1c8d8a 已交付：List.vue + 8 语言 i18n + snoozed/待首响筛选，2026-11-18 回勾）（P2｜依赖 T604｜M｜🟡）
   - **规格**：收件箱列表新增「待首响」筛选与等待时长徽标。
   - **上下文**：`user-web` 收件箱页；规则 -1 要求逐元素人工点验并留证据。
   - **架构**：前端页面 + API 调用；不改后端契约。
@@ -1079,7 +1079,7 @@ flowchart TB
 
 ## Phase 7 门禁与文档收口
 
-- [ ] **T1201 接入触点自动化校验**（P1｜依赖 Phase 7–11｜M｜🟡）
+- [x] **T1201 接入触点自动化校验**（2026-11-18：scripts/check_im_touchpoints.py 六触点矩阵 + CI 作业 IM Touchpoints；正/负例验收过）（P1｜依赖 Phase 7–11｜M｜🟡）
   - **规格**：把「接一个平台要改哪几处」变成可执行检查，漏一处即失败。
   - **上下文**：已有 `check-*.sh` 家族（layer-boundary/model-migration/enum-consistency/naked-goroutine/tenant-ctx-writes），新脚本按同方式接入 CI。
   - **架构**：Python 脚本 + CI 步骤。
@@ -1099,7 +1099,7 @@ flowchart TB
     ```
   - **验收**：删任一触点 → 失败并列出具体渠道+缺失项；全量 → 通过。
 
-- [ ] **T1202 `capregistry` ↔ `channelcaps` 一致性测试**（P1｜依赖 T1201｜S｜🟡）
+- [x] **T1202 `capregistry` ↔ `channelcaps` 一致性测试**（2026-11-18：IM 能力条目逐条校验 Known；sms/email/kb 非消息能力豁免）（P1｜依赖 T1201｜S｜🟡）
   - **规格**：粗粒度能力矩阵（capregistry）声明的平台必须在细粒度 manifest 中存在；反向不要求（channelcaps 更细）。
   - **上下文**：两套注册表并存是历史现实，短期不合并，先用测试钉住不自相矛盾。
   - **架构**：测试文件，无运行时代码改动。
@@ -1117,7 +1117,7 @@ flowchart TB
     ```
   - **验收**：`go test ./internal/capregistry/` 绿。
 
-- [ ] **T1203 文档与索引**（P1｜依赖 T1201｜S｜🟡）
+- [x] **T1203 文档与索引**（2026-11-18：docs/channel-onboarding.md 触点清单+curl 冒烟；INDEX.md §四/§九 与 specs/README.md 状态行登记）（P1｜依赖 T1201｜S｜🟡）
   - **规格**：能力表与接入文档定稿并登记索引。
   - **上下文**：`docs/channel-capabilities.md` 生成式、`docs/channel-onboarding.md` 手写、`docs/INDEX.md` 总索引、`specs/README.md` spec 列表。
   - **架构**：文档层，无代码。
@@ -1137,7 +1137,7 @@ flowchart TB
     ```
   - **验收**：文档生成测试绿；索引表行存在。
 
-- [ ] **T1204 全量门禁**（P1｜依赖全部｜S｜🟡）
+- [x] **T1204 全量门禁**（2026-11-18：build/vet/六包测试/`-race`/四检查脚本全绿；enum 2 条既有 warning 无新增；唯一例外=并行会话未提交的 inbox_ingress_event_evidence_test.go 3 条，见 delivery.md）（P1｜依赖全部｜S｜🟡）
   - **规格**：一次跑完所有强制门禁，结果写入 `delivery.md`。
   - **上下文**：命令集合见下方；`check-enum-consistency.sh` 有 2 条既有 warning（`system` 枚举、`intent_major`），新增渠道不得新增 warning。
   - **架构**：CI/本地脚本。
@@ -1163,7 +1163,7 @@ flowchart TB
     ```
   - **验收**：全绿；warning 数量不增。
 
-- [ ] **T1205 出站可观测打点**（P1｜依赖 T101｜S｜🟡）
+- [x] **T1205 出站可观测打点**（2026-11-18：三指标挂 markSendFailed/markSendFailedLogged/溢出分支/路由命中；TestOutboundFailureMetricDimensions + TestRenderOverflowMetric 绿）（P1｜依赖 T101｜S｜🟡）
   - **规格**：把「哪个渠道、哪类错误在涨」变成指标，而不是靠翻审计行；只加计数，不改投递路径。
   - **上下文**：`ChannelError` 已有 7 个 `Category`（`service/channel_error.go`：rate_limited/auth/network/bad_request/quota_exhausted/window_expired/unknown），但目前只有审计行，无计数；`markSendFailed` 是唯一的失败汇聚点。
   - **架构**：Service 内部指标打点，挂在 `markSendFailed` / `markSendFailedLogged` 与 `RenderForChannel` 的溢出分支上；不新增层。

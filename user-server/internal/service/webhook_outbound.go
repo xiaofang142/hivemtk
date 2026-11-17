@@ -11,7 +11,6 @@ import (
 
 	"regexp"
 	"sort"
-	"strconv"
 
 	"strings"
 
@@ -91,18 +90,26 @@ func aiQuietHoursDisabled(ctx context.Context) bool {
 // DisableAIQuietHoursForTest 测试装配口，替代已退役的 DISABLE_AI_QUIET_HOURS 环境变量
 // （仓内 9 处测试曾用它把勿扰窗顶掉）。与 SetGlobalForTest 同一先例：helper 放产码
 // 文件（不 import testing），跨包测试才能装。返回复位函数，调用方 `defer` 它。
+//
+// 实现走 aiReplyQuietHoursFn 替换缝而非全局配置桩：配置桩按「无租户前缀」塞缓存键，
+// 而测试（channelgw CS-06 等）跑在 tenant.ModeOn + 租户 ctx 下，getString 查的是
+// `tenant:<id>:agent_llm.…`，桩键必然 miss——勿扰窗照样激活，测试在 23:00–07:00
+// 窗口内必红（2026-11-17 024 B1 收口实测）。判定缝是全租户无关的单点，替换它
+// 对两种租户形态都成立。
 func DisableAIQuietHoursForTest(disabled bool) func() {
-	svc := &ConfigParamService{
-		cache:  make(map[string]paramEntry, 4),
-		loaded: make(map[string]bool, 4),
-		nowFn:  time.Now,
+	aiReplyQuietHoursMu.Lock()
+	orig := aiReplyQuietHoursFn
+	if disabled {
+		aiReplyQuietHoursFn = func(time.Time) bool { return false }
+	} else {
+		aiReplyQuietHoursFn = isAIReplyQuietHours
 	}
-	svc.cache["agent_llm."+AIAQuietHoursDisabledParam] = paramEntry{
-		value:     strconv.FormatBool(disabled),
-		expiresAt: time.Now().Add(time.Hour),
+	aiReplyQuietHoursMu.Unlock()
+	return func() {
+		aiReplyQuietHoursMu.Lock()
+		aiReplyQuietHoursFn = orig
+		aiReplyQuietHoursMu.Unlock()
 	}
-	SetGlobalForTest(svc)
-	return func() { SetGlobalForTest(nil) }
 }
 
 func isAIReplyQuietHours(t time.Time) bool {
@@ -622,6 +629,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	// 再走原有 outboundSendFailed（写终态失败轨迹 / 发布授权告警）。
 	markSendFailed := func(err error) {
 		sendErr = err
+		recordOutboundSendFailed(channel, err) // specs/024 T1205：失败打点旁路，不改口径
 		s.outboundSendFailed(ctx, channel, accountID, hubMsg, content, err)
 	}
 
@@ -629,6 +637,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	// 平台词表必然校验不过）：只把事实说清楚并留结构化日志，不尝试写库。
 	markSendFailedLogged := func(err error) {
 		sendErr = err
+		recordOutboundSendFailed(channel, err) // specs/024 T1205：失败打点旁路，不改口径
 		s.outboundSendFailed(ctx, channel, accountID, nil, content, err)
 	}
 
@@ -680,6 +689,7 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	}
 	if rendered.Overflow > 0 {
 		// 只上报不切分：切分归渠道自己（QQ 在 channelbot/qq 内按官方上限切）。
+		outboundTextOverflowTotal.WithLabel(string(channel)).Inc() // specs/024 T1205
 		logger.Ctx(ctx).Warn().
 			Str("module", "outbound").
 			Str("channel", string(channel)).
@@ -708,6 +718,14 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 	})
 	if res != nil {
 		sent = res.Sent
+	}
+	if !sent && sendErr == nil {
+		// R5 不变量（specs/024 T101 二次审核补）：sender 必须显式表态——
+		// 既没发成功也没调 Fail/FailUntracked 就返回，失败口径就会漏
+		//（重试不入队、审计不落行，调用方拿到「没发也没错」）。
+		// 兜成可重试的 unknown 失败：宁可多一次重试，也不能静默丢回复。
+		markSendFailedLogged(preSendFailure(channel, CategoryUnknown,
+			"sender reported neither success nor failure"))
 	}
 	return
 }

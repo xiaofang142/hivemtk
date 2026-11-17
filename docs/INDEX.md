@@ -57,6 +57,7 @@
 | [architecture/部署方案_用户端.md](architecture/部署方案_用户端.md) | 用户端部署架构 |
 | [architecture/HOST_INFERENCE_PLAN.md](architecture/HOST_INFERENCE_PLAN.md) | llama.cpp 推理方案 |
 | [architecture/adr/](architecture/adr/) | 架构决策记录 |
+| [channel-onboarding.md](channel-onboarding.md) | 渠道接入手册（六触点清单 + curl 冒烟；specs/024 T1203，配套机器门 `scripts/check_im_touchpoints.py`） |
 
 ---
 
@@ -113,6 +114,8 @@
 | [../specs/014-egolite-blocking-confirm-gate/](../specs/014-egolite-blocking-confirm-gate/) | 014 ego-lite 腿收口：事前阻塞写确认闸（decision 文件握手）+ runner 接线杂项（已交付，2026-10-27） |
 | [../specs/015-egolite-runtime-supervision/](../specs/015-egolite-runtime-supervision/) | 015 ego-lite 运行时监督：域白名单三层（静扫/守卫/事件审计）+ 官方升级指令 + macOS 安装器（已交付，2026-10-28） |
 | [../specs/016-egolite-scheduling-and-selfupdate/](../specs/016-egolite-scheduling-and-selfupdate/) | 016 ego-lite 调度闭环：流程 cron 触发 + egolite_run AI 工具 + runner 自更新（已交付，2026-10-28） |
+| [../specs/024-im-seam-alignment/](../specs/024-im-seam-alignment/) | 024 IM 接入接缝对齐：出站注册表 + 事件类型 + 路由 + 渲染 + 身份双层键 + 生命周期读侧 + 门禁收口（B1–B6 已交付，2026-11-18） |
+| [../specs/025-im-platforms/](../specs/025-im-platforms/) | 025 新平台接入：wecomcs / OneBot / Slack / wecombot / custom（待开工，依赖 024 的 B1+B2——已就绪） |
 | [../.specify/002-modular-subscription/](../.specify/002-modular-subscription/) | 002 模块订阅一期（模块闸、订单状态机、MarkPaid 唯一入账口、LLM 双轨计费） |
 | [../.specify/003-saas-billing-v2/](../.specify/003-saas-billing-v2/) | 003 SaaS 计费二期：订阅 + 易支付 + 初始化赠送 + 官网云端入口（`plan.md` 含 ADR-M8/M9 与「审查修订」） |
 

@@ -23,8 +23,8 @@
 | 014 | [014-egolite-blocking-confirm-gate/](014-egolite-blocking-confirm-gate/) | ego-lite 腿收口：事前阻塞写确认闸（decision 文件握手）+ runner 接线杂项（server-name 透传/键匹配/分型解帧） | 已交付 |
 | 015 | [015-egolite-runtime-supervision/](015-egolite-runtime-supervision/) | ego-lite 运行时监督：域白名单三层（静扫/守卫/事件审计）+ 官方升级指令 + macOS 安装器 + 前端契约提示 | 已交付 |
 | 016 | [016-egolite-scheduling-and-selfupdate/](016-egolite-scheduling-and-selfupdate/) | ego-lite 调度闭环：流程 cron 触发（纯读特权）+ egolite_run AI 工具 + runner 自更新（handoff 真机销账） | 已交付 |
-| 024 | [024-im-seam-alignment/](024-im-seam-alignment/) | IM 接入接缝：出站发送器注册表 + 事件类型（含交互回调上下文）+ 路由 + 渲染 + 身份双层键 + 生命周期读侧 | spec/plan/tasks 定稿，待施工（范围已收窄为接缝） |
-| 025 | [025-im-platforms/](025-im-platforms/) | 新平台接入：企业微信客服 wecomcs / OneBot v11 / Slack / wecombot / 通用 custom 入口 | spec/plan/tasks 定稿，待 024 的 B1+B2 交付后开工 |
+| 024 | [024-im-seam-alignment/](024-im-seam-alignment/) | IM 接入接缝：出站发送器注册表 + 事件类型（含交互回调上下文）+ 路由 + 渲染 + 身份双层键 + 生命周期读侧 + 门禁与文档收口 | 已交付（B1–B6 全批，2026-11-18；见 delivery.md） |
+| 025 | [025-im-platforms/](025-im-platforms/) | 新平台接入：企业微信客服 wecomcs / OneBot v11 / Slack / wecombot / 通用 custom 入口 | spec/plan/tasks 定稿，待开工（024 的 B1+B2 前置已交付，2026-11-18） |
 
 > 注：005–016 各目录均已有 `delivery.md`（已交付收口）；001/002 早于 delivery 机制，
 > 以既有收口结论为准。（原"007/012 并发 lane 在途（未提交）"注记已过期，2026-10-28 补录订正。）

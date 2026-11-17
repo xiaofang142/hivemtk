@@ -77,17 +77,36 @@ func (f *fakeFollowRepo) byType(eventType string) []*model.BridgeFollowEvent {
 	return out
 }
 
+// followActionMu 守动作行探针的读写两端：deliverFollowActionFn 经 utils.SafeGo
+// 异步调用（specs/024 T1204 把 -race 定为硬门禁），无锁的 []string 会被竞态检测器点名。
+var followActionMu sync.Mutex
+
 // swapDeliverFollowAction 注入动作行入队探针（记录调用并按需返回成功）。
+// 读取一律走 followActionLen / followActionAt，不许直读切片。
 func swapDeliverFollowAction(t *testing.T, record *[]string) {
 	t.Helper()
 	prev := deliverFollowActionFn
 	deliverFollowActionFn = func(_ context.Context, channel, _accountID, conversationID, msgType, _content, _mediaURL, _eventID string) (uint64, string, error) {
 		if record != nil {
+			followActionMu.Lock()
 			*record = append(*record, channel+"|"+conversationID+"|"+msgType)
+			followActionMu.Unlock()
 		}
 		return 1, "mh:fake_follow", nil
 	}
 	t.Cleanup(func() { deliverFollowActionFn = prev })
+}
+
+func followActionLen(record *[]string) int {
+	followActionMu.Lock()
+	defer followActionMu.Unlock()
+	return len(*record)
+}
+
+func followActionAt(record *[]string, i int) string {
+	followActionMu.Lock()
+	defer followActionMu.Unlock()
+	return (*record)[i]
 }
 
 // setFollowUserParamStub 注入参数中心 stub（开关值可指定）。
@@ -190,8 +209,8 @@ func TestMaybeRegisterNewUserUnfollowed_PolicyGate(t *testing.T) {
 		if len(repo.byType(model.BridgeFollowEventFirstTouch)) != 1 {
 			t.Fatalf("首触应登记 1 条")
 		}
-		if len(repo.byType(model.BridgeFollowEventFollowAction)) != 0 || len(delivered) != 0 {
-			t.Fatalf("开关默认关时不得触发动作行：delivered=%v actions=%d", delivered, len(repo.byType(model.BridgeFollowEventFollowAction)))
+		if len(repo.byType(model.BridgeFollowEventFollowAction)) != 0 || followActionLen(&delivered) != 0 {
+			t.Fatalf("开关默认关时不得触发动作行：delivered=%d actions=%d", followActionLen(&delivered), len(repo.byType(model.BridgeFollowEventFollowAction)))
 		}
 	})
 
@@ -206,15 +225,15 @@ func TestMaybeRegisterNewUserUnfollowed_PolicyGate(t *testing.T) {
 		// 动作经 utils.SafeGo 异步旁路：轮询等待（上限 2s），失败即主链路被阻塞的证据
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
-			if len(delivered) > 0 {
+			if followActionLen(&delivered) > 0 {
 				break
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		if len(delivered) != 1 {
-			t.Fatalf("动作行应入队 1 次，实际 %d（次）", len(delivered))
+		if followActionLen(&delivered) != 1 {
+			t.Fatalf("动作行应入队 1 次，实际 %d（次）", followActionLen(&delivered))
 		}
-		if got := delivered[0]; got != "douyin|conv-gate|"+FollowActionMsgType {
+		if got := followActionAt(&delivered, 0); got != "douyin|conv-gate|"+FollowActionMsgType {
 			t.Errorf("动作行形状 = %q，期望 douyin|conv-gate|%s", got, FollowActionMsgType)
 		}
 		if len(repo.byType(model.BridgeFollowEventFollowAction)) != 1 {
@@ -234,7 +253,7 @@ func TestMaybeRegisterNewUserUnfollowed_PolicyGate(t *testing.T) {
 		if len(repo.byType(model.BridgeFollowEventFirstTouch)) != 1 {
 			t.Fatalf("互关信号同样登记首触")
 		}
-		if len(delivered) != 0 {
+		if followActionLen(&delivered) != 0 {
 			t.Fatalf("互关已建立不应触发关注动作")
 		}
 	})
@@ -248,7 +267,7 @@ func TestMaybeRegisterNewUserUnfollowed_PolicyGate(t *testing.T) {
 		swapDeliverFollowAction(t, &delivered)
 		svc.maybeRegisterNewUserUnfollowed(ctx, newEvent(model.FollowSignalNotMutual, "xianyu"))
 		time.Sleep(150 * time.Millisecond)
-		if len(delivered) != 0 {
+		if followActionLen(&delivered) != 0 {
 			t.Fatalf("渠道不在 follow_user_channels 清单不应触发")
 		}
 	})
@@ -265,8 +284,8 @@ func TestMaybeRegisterNewUserUnfollowed_PolicyGate(t *testing.T) {
 			Extra: map[string]any{"account_id": "acc-3"},
 		})
 		time.Sleep(50 * time.Millisecond)
-		if len(repo.rows) != 0 || len(delivered) != 0 {
-			t.Fatalf("未标记消息不得登记/触发：rows=%d delivered=%d", len(repo.rows), len(delivered))
+		if len(repo.rows) != 0 || followActionLen(&delivered) != 0 {
+			t.Fatalf("未标记消息不得登记/触发：rows=%d delivered=%d", len(repo.rows), followActionLen(&delivered))
 		}
 	})
 

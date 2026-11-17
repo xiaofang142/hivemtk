@@ -78,6 +78,8 @@ func (e *ChannelRouteEngine) Resolve(ctx context.Context, event *model.MessageEv
 			e.skipped++
 			continue
 		}
+		// specs/024 T1205：规则命中计数（T305 决策落点的旁路观测，不改决策）。
+		routeRuleHitTotal.WithLabel(tenantID, target).Inc()
 		return &RouteDecision{RuleID: rule.ID, Target: target, TargetRef: rule.TargetRef}, nil
 	}
 	return nil, nil

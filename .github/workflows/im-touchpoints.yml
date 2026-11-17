@@ -1,0 +1,53 @@
+# IM 接入触点自动校验（specs/024-im-seam-alignment T1201）
+#
+# 「接一个平台要改哪几处」的可执行化：渠道常量 / channelcaps manifest / 账号表行 /
+# webhookInboundCapable 入站分支 / RegisterChannelSender sender 注册 / channelbot
+# client 包，六触点逐渠道比对，漏一处即失败并列出渠道 + 缺失项。
+# 提取逻辑与豁免集见 scripts/check_im_touchpoints.py 头注释（豁免必须给出来源）。
+#
+# 触发面写整个 Go 树 + manifests：只盯脚本自己会让「新增渠道漏改触点」的提交不重跑这道门。
+name: IM Touchpoints
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'scripts/check_im_touchpoints.py'
+      - 'user-server/internal/service/webhook.go'
+      - 'user-server/internal/service/webhook_channel_*.go'
+      - 'user-server/internal/service/outbound_sender_*.go'
+      - 'user-server/internal/service/outbound_registry.go'
+      - 'user-server/internal/channelcaps/**'
+      - 'user-server/internal/channelbot/**'
+      - 'user-server/internal/model/**'
+      - '.github/workflows/im-touchpoints.yml'
+  pull_request:
+    paths:
+      - 'scripts/check_im_touchpoints.py'
+      - 'user-server/internal/service/webhook.go'
+      - 'user-server/internal/service/webhook_channel_*.go'
+      - 'user-server/internal/service/outbound_sender_*.go'
+      - 'user-server/internal/service/outbound_registry.go'
+      - 'user-server/internal/channelcaps/**'
+      - 'user-server/internal/channelbot/**'
+      - 'user-server/internal/model/**'
+      - '.github/workflows/im-touchpoints.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  im-touchpoints:
+    name: 接入触点矩阵（六触点，漏一处即红）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+
+      - name: 触点矩阵全量校验
+        run: python3 scripts/check_im_touchpoints.py
