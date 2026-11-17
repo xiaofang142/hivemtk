@@ -216,6 +216,8 @@ func allModels() []any {
 		&model.MessageHub{},
 		// 平台事件审计（specs/024 D2/R3）：编辑/撤回/入群/机器人/交互回调的证据行。
 		&model.ChannelEventAudit{},
+		// 交互上下文（specs/024 D8）：卡片 ↔ 点击 ↔ 答复状态。
+		&model.ChannelInteraction{},
 		&model.InboxConversation{},
 		&model.InboxAssignment{},
 		&model.MessageTrace{},

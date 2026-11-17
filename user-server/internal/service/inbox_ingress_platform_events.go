@@ -43,10 +43,8 @@ func (s *InboxIngressService) handlePlatformEvent(ctx context.Context, event *mo
 		result.Accepted = ok
 		result.Reason = "deleted"
 	case model.EventTypeInteractionCallback:
-		// 交互回调的落表与答复在 T209/T210；这里先保证「不吞、不落消息、可追」。
 		result.Accepted = true
-		result.Reason = "interaction.callback"
-		result.InteractionID = extraString(event, "interaction_id")
+		result.Reason = s.recordInteractionCallback(ctx, event, accountID, result)
 	default:
 		// reaction / group.member_* / bot.*：只留证据。
 		result.Accepted = true
@@ -55,6 +53,49 @@ func (s *InboxIngressService) handlePlatformEvent(ctx context.Context, event *mo
 
 	s.recordChannelEventAudit(ctx, event, accountID, result.RouteRuleID)
 	return result, nil
+}
+
+// recordInteractionCallback 登记一次卡片点击（幂等），返回对外 reason。
+//
+// 只登记、不改消息表：点击不是消息，进 message_hub 会污染会话与未读数。
+// 答复（answerCallbackQuery）由 webhook 渠道层在拿到本结果后执行，成功后 MarkAnswered。
+func (s *InboxIngressService) recordInteractionCallback(ctx context.Context, event *model.MessageEvent, accountID string, result *InboxIngressResult) string {
+	interactionID := extraString(event, "interaction_id")
+	if interactionID == "" {
+		interactionID = event.EventID
+	}
+	result.InteractionID = interactionID
+	if s.interactionRepo == nil {
+		return "interaction.callback_no_repo"
+	}
+	row := &model.ChannelInteraction{
+		TenantID:       extraString(event, "tenant_id"),
+		Channel:        event.Channel,
+		AccountID:      accountID,
+		InteractionID:  interactionID,
+		ConversationID: event.ConversationID,
+		PlatformMsgID:  extraString(event, "platform_msg_id"),
+		SenderID:       event.SenderID,
+		Action:         extraString(event, "action"),
+		Payload:        model.JSONMap{},
+	}
+	for k, v := range event.Extra {
+		switch k {
+		case "account_id", "tenant_id":
+			continue
+		}
+		row.Payload[k] = v
+	}
+	created, err := s.interactionRepo.CreateIdempotent(ctx, row)
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("channel", event.Channel).
+			Str("interaction_id", interactionID).Msg("[Inbox] 交互回调登记失败")
+		return "interaction.callback_persist_failed"
+	}
+	if !created {
+		return "interaction.callback.replayed"
+	}
+	return "interaction.callback"
 }
 
 // recordChannelEventAudit 幂等写一条平台事件审计；失败只记日志——

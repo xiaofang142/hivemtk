@@ -160,6 +160,9 @@ type InboxIngressService struct {
 	// 但必须有证据落库——总线是 best-effort（队列满即丢），不能当证据。
 	auditRepo *repository.ChannelEventAuditRepository
 
+	// interactionRepo 交互上下文（specs/024 D8）：卡片点击 ↔ 答复状态。
+	interactionRepo *repository.ChannelInteractionRepository
+
 	// contentDedupTTL 是入口那把「渠道+发送者+内容」窗口键的存活时间，零值取 InboxContentDedupTTL。
 	// 做成字段而非常量，只为了让"窗口真的有界"这一句能被断言：常量下那条腿要睡满 5 分钟。
 	contentDedupTTL time.Duration
@@ -189,15 +192,18 @@ func NewInboxIngressService() *InboxIngressService {
 	var feedbackRepo *repository.FeedbackRecordRepository
 	var pendingOutbound *repository.DelayedOutboundRepository
 	var auditRepo *repository.ChannelEventAuditRepository
+	var interactionRepo *repository.ChannelInteractionRepository
 	if repository.DBReady() {
 		hubRepo = repository.NewMessageHubRepository()
 		auditRepo = repository.NewChannelEventAuditRepositoryDefault()
+		interactionRepo = repository.NewChannelInteractionRepositoryDefault()
 		feedbackRepo = repository.NewFeedbackRecordRepositoryDefault()
 		pendingOutbound = repository.NewDelayedOutboundRepositoryDefault()
 	}
 	return &InboxIngressService{
 		hubRepo:         hubRepo,
 		auditRepo:       auditRepo,
+		interactionRepo: interactionRepo,
 		feedbackRepo:    feedbackRepo,
 		pendingOutbound: pendingOutbound,
 		cache:           cache.GetGlobalCache(),
