@@ -63,6 +63,12 @@ var MenuCapabilitySupplement = []MenuCapability{
 	// 配置读写口 /api/sms/config 走 adminOnlyRoutes（smsConfig 已收归 admin），不在此表。
 	{Pattern: "/api/sms/send", MenuKeys: []string{"smsList"}},
 	{Pattern: "/api/sms/resend/*", MenuKeys: []string{"smsList"}},
+	// 2026-11-18 七审收口：流失预警是租户级经营分析（菜单注册表 Roles=admin,viewer；
+	// staff 未列入），登录档裸放 ⇒ staff 可直读全租户客户流失数据。按能力位收口，
+	// 正别名与 frontend_aliases 的连字别名都要覆盖。
+	// 匹配器只支持单段 *（无 **），正别名/连字别名各一条单段规则
+	{Pattern: "/api/churn/*", MenuKeys: []string{"churnPrediction"}},
+	{Pattern: "/api/churn-prediction/*", MenuKeys: []string{"churnPrediction"}},
 }
 
 // AllMenuCapabilities 返回补充件 + 生成件。补充件在前：同名形状以补充件的

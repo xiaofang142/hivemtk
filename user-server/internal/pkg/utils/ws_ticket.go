@@ -23,14 +23,16 @@ import (
 // + 单次消费 + 身份绑定（ visitor 票绑定 channel/visitor/session 三元组）三重
 // 收紧，重放与转用都无窗口。
 const (
-	wsTicketTTL = 60 * time.Second
+	wsTicketTTL   = 60 * time.Second
 	wsTicketBytes = 32
+	// wsTicketStoreCap 内存票据商店上限：防已认证调用方以铸造洪泛撑爆内存（janitor 只清过期项）。
+	wsTicketStoreCap = 100000
 )
 
 // WsTicketClaims ticket 里快照的身份。Visitor=true 的票走访客 WS 通道，
 // 其余字段（UserID 等）走坐席/管理端 JWT 通道，两类票互不通用。
 type WsTicketClaims struct {
-	Visitor      bool
+	Visitor bool
 	// 坐席/管理端身份快照（铸造时从 gin 上下文取，来源是已验签的 JWT）
 	UserID       uint
 	Username     string
@@ -66,6 +68,14 @@ func MintWSTicket(claims WsTicketClaims) string {
 	}
 	ticket := hex.EncodeToString(raw)
 	wsTicketMu.Lock()
+	// 2026-11-18 七审收口：内存商店上限（上限=10 万条 ≈ 满额 60s 窗口内的极端
+	// 铸造速率；正常流量远低于此）。超限时按"过期即弃"语义拒绝铸造新票，
+	// fail-closed——内存不设上限会被已认证调用方缓慢撑爆（janitor 只清过期项）。
+	if len(wsTicketStore) >= wsTicketStoreCap {
+		logger.Errorf("[SECURITY] WS ticket store full (%d)，拒绝铸造（60s 后随过期回收）", len(wsTicketStore))
+		wsTicketMu.Unlock()
+		return ""
+	}
 	wsTicketStore[ticket] = wsTicketEntry{claims: claims, expiresAt: time.Now().Add(wsTicketTTL)}
 	wsTicketMu.Unlock()
 	return ticket
