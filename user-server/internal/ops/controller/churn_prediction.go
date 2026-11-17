@@ -4,11 +4,14 @@ import (
 	"errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/service"
+	domainsvc "hivemtk-user/internal/service"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"io"
 	"net/http"
 	"strconv"
+
+	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,13 +19,43 @@ import (
 // ChurnPredictionController 流失预警控制器
 type ChurnPredictionController struct {
 	churnService *service.ChurnPredictionService
+	customer360  *domainsvc.Customer360Service
 }
 
 // NewChurnPredictionController 创建流失预警控制器实例
 func NewChurnPredictionController() *ChurnPredictionController {
 	return &ChurnPredictionController{
 		churnService: service.NewChurnPredictionService(),
+		// 可见性断言只走 sessionRepo/customerRepo，clueRepo 不在本链路（nil 即可）。
+		customer360: domainsvc.NewCustomer360Service(nil),
 	}
+}
+
+// churnScopeFromCtx 从登录态组装客户域数据隔离身份（与 customer_360 controller 同形）。
+func churnScopeFromCtx(ctx *gin.Context) domainsvc.SessionScope {
+	role, _ := ctx.Get("role")
+	roleStr, _ := role.(string)
+	uid, _ := ctx.Get("user_id")
+	uidNum, _ := uid.(uint)
+	return domainsvc.SessionScope{Role: roleStr, UserID: uidNum}
+}
+
+// ensureWarningCustomerVisible 流失预警写口的行级归属校验（2026-11-15 审计 M-5）。
+//
+// 预警按 customer 的 user_id 寻址且自身无归属列；复用客户域可见性判据
+// （Customer360Service.EnsureCustomerVisibleByKey）：超管全量，其余角色只能
+// 干预/处置自己名下（或未分配池）客户的预警——此前任意坐席可改任意客户的
+// 预警处置留痕、对任意客户发起流失干预。
+func (c *ChurnPredictionController) ensureWarningCustomerVisible(ctx *gin.Context, customerUserID string) bool {
+	if err := c.customer360.EnsureCustomerVisibleByKey(ctx.Request.Context(), customerUserID, churnScopeFromCtx(ctx)); err != nil {
+		if errors.Is(err, domainsvc.ErrCustomerForbidden) {
+			response.Error(ctx, http.StatusForbidden, domainsvc.ErrCustomerForbidden.Error())
+			return false
+		}
+		response.Error(ctx, http.StatusInternalServerError, "权限校验失败，请稍后重试")
+		return false
+	}
+	return true
 }
 
 // churnPaging 解析并归一化分页参数。
@@ -155,6 +188,22 @@ func (c *ChurnPredictionController) MarkWarningHandled(ctx *gin.Context) {
 	userID, _ := ctx.Get("user_id")
 	handledBy, _ := userID.(uint)
 
+	// 行级归属校验（2026-11-15 审计 M-5）：先取预警行拿 user_id，非超管只能处置
+	// 自己名下（或未分配池）客户的预警；行不存在与既有口径一致回 404。
+	warning, err := c.churnService.GetWarningByID(ctx.Request.Context(), uint(id))
+	if err != nil {
+		if errhttp.IsNotFoundError(err) || errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NotFound(ctx, "预警不存在（id="+idStr+"）")
+			return
+		}
+		if errhttp.HandleDBError(ctx, err, "标记预警") {
+			return
+		}
+	}
+	if !c.ensureWarningCustomerVisible(ctx, warning.UserID) {
+		return
+	}
+
 	err = c.churnService.MarkWarningHandled(ctx.Request.Context(), uint(id), handledBy, req.Note)
 	if errhttp.IsNotFoundError(err) {
 		response.NotFound(ctx, "预警不存在（id="+idStr+"）")
@@ -200,6 +249,10 @@ func (c *ChurnPredictionController) InterveneUser(ctx *gin.Context) {
 
 	warningID := req.WarningID
 	if warningID == 0 {
+		// 行级归属校验（2026-11-15 审计 M-5）：按 user_id 取最新未处理预警前先判客户可见性。
+		if !c.ensureWarningCustomerVisible(ctx, req.UserID) {
+			return
+		}
 		id, err := c.churnService.InterveneLatestByUser(ctx.Request.Context(), req.UserID, handledBy, req.InterventionType)
 		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "该用户没有待处理的流失预警（user_id="+req.UserID+"）")
@@ -210,6 +263,20 @@ func (c *ChurnPredictionController) InterveneUser(ctx *gin.Context) {
 		}
 		warningID = id
 	} else {
+		// 行级归属校验（2026-11-15 审计 M-5）：按预警 ID 寻址先取行拿 user_id 再判可见性。
+		warning, werr := c.churnService.GetWarningByID(ctx.Request.Context(), warningID)
+		if werr != nil {
+			if errhttp.IsNotFoundError(werr) || errors.Is(werr, gorm.ErrRecordNotFound) {
+				response.NotFound(ctx, "预警不存在（id="+strconv.FormatUint(uint64(warningID), 10)+"）")
+				return
+			}
+			if errhttp.HandleDBError(ctx, werr, "干预预警") {
+				return
+			}
+		}
+		if !c.ensureWarningCustomerVisible(ctx, warning.UserID) {
+			return
+		}
 		err := c.churnService.InterveneWarning(ctx.Request.Context(), warningID, handledBy, req.InterventionType)
 		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "预警不存在（id="+strconv.FormatUint(uint64(warningID), 10)+"）")

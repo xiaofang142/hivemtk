@@ -25,17 +25,18 @@ function seedFromEnvFile() {
   return first
 }
 
-// 口令链与 docs/DEPLOYMENT_GUIDE.md §6.2 同口径：显式入参 > 环境 > .env 现值 > 历史重置值，
+// 口令链与 docs/DEPLOYMENT_GUIDE.md §6.2 同口径：显式入参 > 环境（含 E2E_ADMIN_PASSWORD） > .env 现值，
+// 公开默认口令候选已按 T4-1 移除，一律经环境变量注入，不再写死在仓库里。
 // 逐一尝试直到登录成功。上一版注释承诺的 `PLATFORM_ADMIN_PASSWORD` 根本没进数组、也没有 SEED_PASSWORD
 // 入口 ⇒ 凡是跑过 scripts/rotate-admin-password.sh 的实例，这一格必然"所有候选密码均无法登录"。
 const CANDIDATES = [
   process.env.SEED_PASSWORD,
   seedFromEnvFile(),
   process.env.PLATFORM_ADMIN_PASSWORD,
-  'Admin@12345678',
-  'Admin@123456',
-  '62cfdc6bf1b075830734cc6f9a63501b'
+  process.env.E2E_ADMIN_PASSWORD
 ].filter((pw, i, arr) => typeof pw === 'string' && pw.trim() !== '' && arr.indexOf(pw) === i)
+
+test.skip(CANDIDATES.length === 0, 'E2E_ADMIN_PASSWORD not set')
 
 test.use({ baseURL: BASE })
 

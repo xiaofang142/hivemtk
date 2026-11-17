@@ -98,3 +98,42 @@ func TestBruteForceGuard_ClearResetsLock(t *testing.T) {
 		t.Fatal("handler should be reached")
 	}
 }
+
+// TestAccountDimensionLockout 账号维度防爆破（2026-11-15 审计 M-4 回归钉）：
+// IP 维度挡不住代理池/IPv6 轮换源对同一账号的分布式爆破；账号桶独立计数、
+// username 归一（trim+lower）防变体绕开同一桶，任一维度命中即拒。
+func TestAccountDimensionLockout(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ResetBruteForceForTest()
+	defer ResetBruteForceForTest()
+
+	if BruteForceDisabledForTest() {
+		t.Skip("BRUTE_FORCE_DISABLED=1，防爆破关闭")
+	}
+
+	// 5 次失败（含大小写/空白变体，归一后同桶）触发账号锁定
+	for i := 0; i < 5; i++ {
+		RecordBruteForceAccountFailure("auth.login", " Admin ")
+	}
+	locked, retryAfter := CheckBruteForceAccountLocked("auth.login", "admin")
+	if !locked {
+		t.Fatalf("5 次失败后账号应锁定（变体归一后同桶）")
+	}
+	if retryAfter < 1 {
+		t.Fatalf("Retry-After 应 >= 1 秒，实际 %d", retryAfter)
+	}
+	if locked2, _ := CheckBruteForceAccountLocked("auth.login", "ADMIN"); !locked2 {
+		t.Fatalf("大小写变体应命中同一账号桶")
+	}
+
+	// 其他账号不受影响（无横向误伤）
+	if locked3, _ := CheckBruteForceAccountLocked("auth.login", "cs01"); locked3 {
+		t.Fatalf("未失败的账号不应被锁定")
+	}
+
+	// 成功登录清零
+	ClearBruteForceAccountFailure("auth.login", "admin")
+	if locked4, _ := CheckBruteForceAccountLocked("auth.login", "admin"); locked4 {
+		t.Fatalf("Clear 后账号不应仍锁定")
+	}
+}

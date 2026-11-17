@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
 const BASE = 'http://localhost:8216'
 test('debug login+nav', async ({ page }) => {
   const logs = []
@@ -14,7 +16,7 @@ test('debug login+nav', async ({ page }) => {
   await page.waitForSelector('.login-box input', { timeout: 15000 })
   const inputs = page.locator('.login-box input')
   await inputs.nth(0).fill('admin')
-  await page.locator('.login-box input[type="password"]').fill('Admin@12345678')
+  await page.locator('.login-box input[type="password"]').fill(process.env.E2E_ADMIN_PASSWORD)
   await page.locator('.login-box .el-button--primary').click()
   await page.waitForSelector('.el-menu', { timeout: 20000 }).catch((e) => console.log('menu wait fail:', e.message))
   console.log('after login: menu=', await page.locator('.el-menu').count(), 'url=', page.url())

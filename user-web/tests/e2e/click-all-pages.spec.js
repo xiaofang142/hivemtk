@@ -7,7 +7,8 @@ import fs from 'fs'
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const ADMIN_USER = process.env.E2E_USER || 'admin'
-const ADMIN_PASS = process.env.E2E_PASS || 'Admin@12345678'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_PASS
+test.skip(!ADMIN_PASS, 'E2E_ADMIN_PASSWORD/E2E_PASS not set')
 const PATHS = JSON.parse(fs.readFileSync('/tmp/route-paths.json', 'utf8'))
 
 // 仅点击「打开/查询/切换/导出」类安全交互；排除会写库或退出的操作

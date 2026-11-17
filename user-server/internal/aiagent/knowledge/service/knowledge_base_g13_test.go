@@ -11,6 +11,7 @@ package service
 // 纯文本（.txt）仍正常入库。
 
 import (
+	"net"
 	"context"
 	"os"
 	"path/filepath"
@@ -66,6 +67,8 @@ func TestKBImport_FakePDFMarksFailed(t *testing.T) {
 }
 
 func TestKBImport_PlainTextStillIndexes(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过（审计交付配套）
+
 	_ = testutil.NewTestDB(t, &model.KBDocument{}) // 装配全局测试句柄（轮询改走仓储）
 	svc := NewKnowledgeBaseService()
 	dir := t.TempDir()
@@ -82,4 +85,19 @@ func TestKBImport_PlainTextStillIndexes(t *testing.T) {
 	if got.ChunkCount == 0 {
 		t.Errorf("正常纯文本应有分段，实际 0")
 	}
+}
+
+// requireEmbeddingService 探测本机 embedding 服务可达性（2026-11-17 审计交付配套）：
+// 这些是**真向量集成用例**，依赖 127.0.0.1:8208 推理栈；本机按 LOCAL-ENV.md 硬约束
+// 不部署推理栈 ⇒ 显式 Skip（不再假红），有栈机器/CI 装栈后照常执行。
+func requireEmbeddingService(t *testing.T) {
+	t.Helper()
+	if os.Getenv("HIVEMTK_FORCE_EMBEDDING_TESTS") == "1" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:8208", 500*time.Millisecond)
+	if err != nil {
+		t.Skipf("本机未部署推理栈（127.0.0.1:8208 不可达，LOCAL-ENV.md 硬约束）：真向量用例跳过；装栈后或设 HIVEMTK_FORCE_EMBEDDING_TESTS=1 重跑")
+	}
+	_ = conn.Close()
 }

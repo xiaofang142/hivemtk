@@ -3,7 +3,8 @@ import { test, expect } from '@playwright/test'
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const ADMIN_USER = 'admin'
-const ADMIN_PASS = 'Admin@12345678'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD
+test.skip(!ADMIN_PASS, 'E2E_ADMIN_PASSWORD not set')
 
 const CASES = [
   ['knowledge/batch-import', '确认导入 (0)'],

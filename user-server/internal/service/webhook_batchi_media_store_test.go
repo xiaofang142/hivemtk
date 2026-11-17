@@ -47,7 +47,13 @@ func batchIObjectKey(t *testing.T, url, publicBase string) string {
 	if !strings.HasPrefix(url, publicBase+"/") {
 		t.Fatalf("URL %q 不在公开前缀 %q 之下", url, publicBase)
 	}
-	return strings.TrimPrefix(url, publicBase+"/")
+	// 2026-11-17 审计 P3-2：off 模式 PublicURL 也带 ?s= 签名，URL→盘路径换算须剥掉
+	// query（生产侧唯一 URL→路径消费点 email_send.go 本就经 fileURLSignature 剥）。
+	key := strings.TrimPrefix(url, publicBase+"/")
+	if i := strings.IndexByte(key, '?'); i >= 0 {
+		key = key[:i]
+	}
+	return key
 }
 
 // TestBatchI_ChannelMediaPersistWritesUnderChannelFolder 兜底存储那一格：

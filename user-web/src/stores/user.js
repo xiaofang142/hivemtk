@@ -13,7 +13,12 @@ export const useUserStore = defineStore('user', () => {
   
   const token = ref('')
   
-  const isLoggedIn = computed(() => !!token.value)
+  // P2-7 会话恢复（2026-11-18 二审修复）：刷新后内存令牌丢失，但 HttpOnly Cookie
+  // 仍有效 —— isLoggedIn 不能只看内存令牌，否则刷新即被守卫弹回登录页。
+  // cookieSession 由 restoreSession() 探测 /api/auth/current-user 后置位；
+  // 登出/401 探针失败时清零。
+  const cookieSession = ref(false)
+  const isLoggedIn = computed(() => !!token.value || cookieSession.value)
   
   const username = computed(() => userInfo.value.username)
   const role = computed(() => userInfo.value.role || '')
@@ -39,12 +44,10 @@ export const useUserStore = defineStore('user', () => {
   }
   
   const setToken = (newToken) => {
+    // JWT 只进内存（HttpOnly Cookie 双通道）：不再持久化进 localStorage，
+    // 页面刷新后内存丢失时由 HttpOnly Cookie 在 API 调用时自动认证兜底
+    // （axios withCredentials + 后端 JWT 中间件回落读 Cookie）。
     token.value = newToken
-    if (newToken) {
-      localStorage.setItem('token', newToken)
-    } else {
-      localStorage.removeItem('token')
-    }
   }
   
   const login = (info, userToken) => {
@@ -52,6 +55,36 @@ export const useUserStore = defineStore('user', () => {
     setToken(userToken)
   }
   
+  let restorePromise = null
+  // restoreSession 刷新后的会话恢复：内存令牌在 ⇒ 直接过；否则若本机有上次登录
+  // 的用户档案（user_info 持久化，非 JWT），用 Cookie 探一次 current-user 复核会话。
+  // 探测 200 ⇒ cookieSession=true（后续 API 全走 Cookie）；401/异常 ⇒ 清档案弹登录。
+  // 结果缓存（单飞），守卫每路由调用零重复网络开销。
+  const restoreSession = () => {
+    if (token.value) return Promise.resolve(true)
+    if (!userInfo.value.id) return Promise.resolve(false)
+    if (!restorePromise) {
+      restorePromise = (async () => {
+        try {
+          const raw = (await import('axios')).default
+          const res = await raw.get('/api/auth/current-user', { withCredentials: true })
+          const user = res?.data?.data
+          if (res?.status === 200 && user && user.id) {
+            cookieSession.value = true
+            setUserInfo(user)
+            return true
+          }
+          logout()
+          return false
+        } catch {
+          logout()
+          return false
+        }
+      })()
+    }
+    return restorePromise
+  }
+
   const logout = () => {
     userInfo.value = {
       id: '',
@@ -62,14 +95,20 @@ export const useUserStore = defineStore('user', () => {
       tenant_code: ''
     }
     token.value = ''
+    cookieSession.value = false
+    restorePromise = null
     localStorage.removeItem('token')
     localStorage.removeItem('user_info')
   }
   
   const initAuth = () => {
-    const savedToken = localStorage.getItem('token')
-    if (savedToken) {
-      token.value = savedToken
+    // 一次性迁移（HttpOnly Cookie 双通道改造）：旧版本持久化在 localStorage 的
+    // JWT 迁入内存后立即删除。存量已登录用户本次会话不断线（带旧令牌发请求）；
+    // 之后页面刷新内存丢失，由 HttpOnly Cookie 认证兜底，localStorage 不再有 token。
+    const legacyToken = localStorage.getItem('token')
+    if (legacyToken) {
+      token.value = legacyToken
+      localStorage.removeItem('token')
     }
     const savedUserInfo = localStorage.getItem('user_info')
     if (savedUserInfo) {
@@ -95,6 +134,7 @@ export const useUserStore = defineStore('user', () => {
     userInfo,
     token,
     isLoggedIn,
+    restoreSession,
     username,
     role,
     isAdmin,

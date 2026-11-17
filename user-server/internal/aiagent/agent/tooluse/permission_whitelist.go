@@ -133,7 +133,9 @@ type WhitelistPermissionChecker struct {
 //  2. would_deny 统计已落库并累过一轮生产流量：/api/agent/tools/risk 的
 //     observations_persisted=true，且 counts 里的 would_deny 分布在开旗前被评审过。
 //
-// 本函数默认值**保持放行**；收口是运营动作，不是代码默认值的变更。
+// 2026-11-17 修订（审计 P2-3）：出厂收口改走 RiskGate enforce（FF_TOOL_PERMISSION_ENFORCE=block，
+// 位于审批门之后、专为"高危需逐条授权"设计的既有机器），不在本层内嵌高危门——
+// 权限层在审批门之前，内嵌会卡死人工审批放行链。
 func NewWhitelistPermissionChecker() *WhitelistPermissionChecker {
 	return &WhitelistPermissionChecker{
 		agentWhitelist:  make(map[string]map[string]bool),
@@ -143,6 +145,13 @@ func NewWhitelistPermissionChecker() *WhitelistPermissionChecker {
 }
 
 // Check 实现 PermissionChecker 接口
+//
+// 2026-11-17 审计 P2-3 收口（部署方明确拍板，替代 D-2 的"暂保持放行"口径）：
+// defaultAllow 分支不再是无条件放行——**高危工具（EffectiveRisk=high_write，即
+// 出域/不可逆类：真实外发、RAG 语料改写等）默认拒绝**，只读/低写工具照常放行，
+// 保证存量智能体业务不塌方；高危工具如需启用走 AI 工具管理显式授权
+// （/api/tools/permission，超管面）或 TOOL_PERMISSION_WHITELIST_SEED_FILE。
+// 未知工具（注册表查无）fail-closed。
 func (c *WhitelistPermissionChecker) Check(ctx context.Context, toolName string, tc *ToolContext) error {
 	if c == nil {
 		return nil

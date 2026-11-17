@@ -43,6 +43,7 @@ const (
 // 都只有在真建出这张表后才量得出来。
 var dataScopeGateModels = map[string]any{
 	"customer_sessions": &model.CustomerSession{},
+	"customers":         &model.Customer{},
 }
 
 // TestDataSetGate_RegistrationsAreLiveAndGuarded 一、二两条腿合一：

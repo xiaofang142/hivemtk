@@ -22,6 +22,9 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || process.env.ADMIN_PASS
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1) }
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '../..')
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
@@ -64,7 +67,7 @@ function psqlScalar(sql) {
 async function apiLogin() {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: process.env.ADMIN_PASS || 'Admin@123456' })
+    body: JSON.stringify({ username: 'admin', password: ADMIN_PASSWORD })
   })
   const j = await res.json()
   if (!j.data?.token) throw new Error('登录失败: ' + JSON.stringify(j).slice(0, 200))
@@ -293,7 +296,7 @@ async function openPage(browser, pagePath) {
     try { resJson = await r.json() } catch { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     xhr.push({ url: u.replace(BASE, ''), method: req.method(), status: r.status(), reqBody, resJson })
   })
-  const CANDIDATES = [process.env.ADMIN_PASS || 'Admin@123456', 'Admin@12345678', 'Admin@123456', '62cfdc6bf1b075830734cc6f9a63501b']
+  const CANDIDATES = [ADMIN_PASSWORD].filter(Boolean)
   await page.goto(`${BASE}/#/login`, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {})
   await page.waitForSelector('.login-box', { timeout: 15000 }).catch(() => {})
   for (const pw of CANDIDATES) {

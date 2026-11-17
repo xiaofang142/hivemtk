@@ -47,6 +47,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/system/install"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -121,6 +122,8 @@ func main() {
 		cleanOnly  = flag.Bool("clean", false, "仅清空所有种子数据，不写入")
 		moduleFlag = flag.String("module", "", "仅执行指定模块（逗号分隔，如 customers,sessions）")
 		listFlag   = flag.Bool("list", false, "列出所有可用模块后退出")
+		allowProd  = flag.Bool("allow-prod", false, "对已初始化（install.lock.Initialized=true）的库强制放行种子写入（2026-11-15 审计 L5 守卫的逃生门）")
+		allowPublicSeed = flag.Bool("allow-public-seed-password", false, "显式接受随开源仓库公开的演示口令（仅限本机 e2e/演示，不可对外）（2026-11-17 审计 P1-3 守卫的逃生门）")
 	)
 	flag.Parse()
 
@@ -130,6 +133,25 @@ func main() {
 			fmt.Printf("  %2d. %-12s - %s\n", i+1, s.Name(), s.Description())
 		}
 		return
+	}
+
+	// 公开口令守卫（2026-11-17 审计 P1-3 收口）：SEED_PASSWORD/ADMIN_PASSWORD 均未设置时，
+	// 口令会回落为随开源仓库公开的 Seed@123456——新装实例即"源码即口令库"。
+	// bootstrap.sh 已改为未设置时自动生成随机值，这里把直接手跑 seed 的残余路径也堵死；
+	// 确要演示口令（仅限本机 e2e/演示）显式加 --allow-public-seed-password。
+	if seedPassword == seedPasswordDefault && !*allowPublicSeed {
+		log.Fatalf("[SECURITY] SEED_PASSWORD/ADMIN_PASSWORD 未设置：种子将写入随开源仓库公开的演示口令，已拒绝。"+
+			"请设 SEED_PASSWORD=<强口令> 后重跑；确要演示口令（仅限本机，不可对外）加 --allow-public-seed-password。")
+	}
+
+	// 已初始化库守卫（2026-11-15 审计 L5）：种子命令会清理并重建 admin 与全部
+	// 演示账号，未配置 SEED_PASSWORD 时口令回落为**随开源仓库公开**的 Seed@123456。
+	// 运维误在生产/已装实例上执行 ⇒ admin 口令直接被公开值重置。这里在动库之前
+	// 拦一道：install.lock.Initialized=true 的库一律拒绝，显式 --allow-prod 才放行。
+	if lr, err := install.Load(); err == nil && lr != nil && lr.Initialized && !*allowProd {
+		log.Fatalf("[SECURITY] 目标库已初始化（install.lock.Initialized=true，admin=%q）。"+
+			"种子命令会用演示口令重建 admin 与全部演示账号，已拒绝；"+
+			"确要继续请加 --allow-prod，或先用 SEED_PASSWORD 指定非公开口令。", lr.AdminUsername)
 	}
 
 	database := initDB()

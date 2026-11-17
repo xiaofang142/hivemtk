@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -26,6 +27,24 @@ func ValidateLocalEndpoint(endpoint string) error {
 	}
 	if strings.Contains(ep, "://") || strings.HasPrefix(ep, "//") {
 		return fmt.Errorf("%w: %q 是 URL/网络路径形态，local 存储只接受本地目录路径", ErrInvalidEndpoint, ep)
+	}
+	// 2026-11-15 审计 L3：local 盘根误配（"."、".."、仓库根等）会让 /files 把
+	// 整个目录树当公开托管面——config.yaml/install.lock/backups 一次配置手滑
+	// 全部可达。这里拒绝"当前目录及以上"形态；命中时启动期即报错，而不是等
+	// 有人 GET /files/config.yaml 才暴露。
+	clean := filepath.Clean(ep)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("%w: %q 指向当前目录及以上，会被 /files 公开托管，禁止用作 local 存储根", ErrInvalidEndpoint, ep)
+	}
+	if fi, err := os.Stat(clean); err == nil {
+		if !fi.IsDir() {
+			return fmt.Errorf("%w: %q 不是目录", ErrInvalidEndpoint, ep)
+		}
+		for _, marker := range []string{"config.yaml", "install.lock", "config.docker.yaml"} {
+			if _, err := os.Stat(filepath.Join(clean, marker)); err == nil {
+				return fmt.Errorf("%w: %q 含应用根判据文件 %s，疑似仓库/应用根而非存储目录，会被 /files 公开托管，禁止用作 local 存储根", ErrInvalidEndpoint, ep, marker)
+			}
+		}
 	}
 	return nil
 }

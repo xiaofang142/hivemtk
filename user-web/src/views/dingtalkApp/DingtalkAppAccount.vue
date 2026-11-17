@@ -346,7 +346,8 @@ async function openEdit(row) {
       app_key: detail.app_key || '',
       app_secret: '',
       agent_id: detail.agent_id || '',
-      token: detail.token || '',
+      // 2026-11-17 审计 P3-1：VO 只回掩码，编辑表单不回填（与 app_secret/aes_key 同口径）
+      token: '',
       aes_key: '',
       inbound_enabled: !!detail.inbound_enabled,
       ai_agent_id: detail.ai_agent_id || ''

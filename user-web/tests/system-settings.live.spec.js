@@ -1,5 +1,7 @@
 import { test, expect, request } from '@playwright/test'
 
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
+
 // 系统设置模块全部页面（真实后端 + DB 级 E2E）
 const PAGES = [
   { group: '站点配置', name: '站点设置', path: '/system/config' },
@@ -29,7 +31,7 @@ const isApiUrl = (s) => s.includes('/api/') && !s.includes('/src/')
 let AUTH = { token: '', user: null }
 test.beforeAll(async () => {
   const ctx = await request.newContext({ baseURL: process.env.E2E_BASE_URL || 'http://localhost:8211' })
-  const resp = await ctx.post('/api/auth/login', { data: { username: 'admin', password: 'Admin@12345678' } })
+  const resp = await ctx.post('/api/auth/login', { data: { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD } })
   const body = await resp.json().catch(() => ({}))
   AUTH = { token: body?.data?.token || '', user: body?.data?.user || null }
   await ctx.dispose()

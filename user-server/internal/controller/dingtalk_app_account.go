@@ -61,6 +61,9 @@ type dingTalkAppAccountVO struct {
 	AccountName     string     `json:"account_name"`
 	AppKey          string     `json:"app_key"`
 	AgentID         string     `json:"agent_id"`
+	// Token 出参只回掩码（2026-11-17 审计 P3-1）：回调验签密钥明文出网后可伪造
+	// /api/webhook/dingtalk/:account_id 注入收件箱/AI 链；更新口带掩码守卫，
+	// 编辑表单不回填（与 AppSecret/AESKey 同口径）。
 	Token           string     `json:"token"`
 	AESKeyMasked    string     `json:"aes_key_masked"`
 	InboundEnabled  bool       `json:"inbound_enabled"`
@@ -79,7 +82,7 @@ func toDingTalkAppVO(a *model.DingTalkAppAccount) *dingTalkAppAccountVO {
 		AccountName:     a.AccountName,
 		AppKey:          a.AppKey,
 		AgentID:         a.AgentID,
-		Token:           a.Token,
+		Token:           maskFeishuSecret(a.Token),
 		AESKeyMasked:    maskFeishuSecret(a.AESKey),
 		InboundEnabled:  a.InboundEnabled,
 		AIAgentID:       a.AIAgentID,
@@ -199,7 +202,8 @@ func (ctrl *DingTalkAppAccountController) Update(c *gin.Context) {
 	if req.AppSecret != "" {
 		acc.AppSecret = req.AppSecret
 	}
-	if req.Token != "" {
+	// Token 同口径：VO 现回掩码，前端把掩码原样回传视为"未改"（审计 P3-1 配套守卫）
+	if req.Token != "" && !strings.Contains(req.Token, "****") {
 		acc.Token = req.Token
 	}
 	if req.AESKey != "" {

@@ -83,10 +83,29 @@ var adminOnlyRoutes = []adminRouteRule{
 	// —— 全局配置的写侧（读侧留给登录档：注册页要显示口令规则）——
 	{Methods: []string{"PUT"}, Pattern: "/api/auth/password-policy"},
 	{Pattern: "/api/system/configs/**"},
-	{Pattern: "/api/sms/configs/**"},
+	// 2026-11-17 审计 P2-2：原表写的是复数 /api/sms/configs/**，实际路由是
+	// /api/sms/config（GET 读凭证 + POST 写凭证），拼错导致守卫从未命中。
+	// 短信通道凭证属全局凭据（判据 1）；菜单注册表 smsConfig 节点同步收归 admin。
+	{Pattern: "/api/sms/config/**"},
 	{Pattern: "/api/manage/co-pilot/config"},
 	{Pattern: "/api/agent/co-pilot/config"},
 	{Methods: []string{"PUT"}, Pattern: "/api/agent/tool-integrations"},
+
+	// —— 2026-11-17 审计 P1-4：RAG 产品/账号配置是租户级 LLM/向量/重排凭据 ——
+	// 读侧不进表：产品列表被 staff 可见的 /aiAgent/edit 消费（RAG 产品下拉，
+	// 菜单注册表 aiAgent 组 Roles 含 staff），泄漏面已由控制器出参掩码收口；
+	// 写侧（增删改）按审计要求收 admin——消费页 RagProductManagement 在
+	// ragProductConfig 组（Roles=admin），判据 2 成立。
+	// /rag-config/query 与 /rag-config/process-message 是聊天运行时，留在登录档。
+	{Methods: []string{"POST"}, Pattern: "/api/rag-config/products"},
+	{Methods: []string{"PUT", "DELETE"}, Pattern: "/api/rag-config/products/*"},
+	// RAG 账号配置：写侧收 admin（消费页 AccountConfig 在 ragAccount，Roles=admin）。
+	// 读侧留登录档——/system/rag-overview（knowledge 组对 staff 开放）消费 GET
+	// accounts/config 做概览统计，其内嵌 RagProduct 已由控制器出参掩码脱敏。
+	{Methods: []string{"PUT"}, Pattern: "/api/rag-config/accounts/**"},
+	// —— 2026-11-17 审计 P2-1：第三方对接账号（api_key/config 含 ERP 签名密钥）——
+	// 消费页 /integration/list 在前端 meta 声明 requiresAdmin，判据 2 成立。
+	{Pattern: "/api/integrations/**"},
 
 	// —— 对象存储配置：回的是桶地址与凭据材料 ——
 	{Pattern: "/api/obs-configs/**"},

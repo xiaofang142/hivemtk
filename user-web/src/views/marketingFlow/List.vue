@@ -382,6 +382,13 @@ const form = ref({
   steps: [emptyStep()]
 })
 
+// 模板 :rules="formRules" 引用它；此前脚本里从未定义 ⇒ el-form 拿到 undefined、
+// 校验形同虚设，空流程名称一路提交到后端吃 400（2026-11-16 UI 全量回归实测）。
+const formRules = {
+  name: [{ required: true, message: i18n.global.t('请输入流程名称'), trigger: 'blur' }],
+  trigger_type: [{ required: true, message: i18n.global.t('请选择触发条件'), trigger: 'change' }]
+}
+
 // 把表单拼成后端 CreateFlowRequest/UpdateFlowRequest 的结构：
 // flow_data 必须至少有一个 type=trigger 的节点，动作节点用 next_nodes 串成链
 const buildPayload = () => {

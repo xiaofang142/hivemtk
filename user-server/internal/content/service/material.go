@@ -9,6 +9,7 @@ import (
 	"image"
 	"io"
 	"mime/multipart"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -340,10 +341,34 @@ func (s *materialService) DeleteMaterial(ctx context.Context, id string) error {
 	return nil
 }
 
+// materialAllowedExtensions 素材上传扩展名白名单（2026-11-15 审计 L1）。
+//
+// 此前素材上传只算哈希/尺寸、零扩展名校验，.exe/.bat 等可落盘并经 /files 匿名
+// 分发（UUID 不可枚举 + nosniff + CSP sandbox 只兜住"同源执行"，挡不住
+// "下载后运行"的样本分发面）。对齐 /api/upload 的白名单口径并按素材域实际
+// 支持的媒体类型（image/video/audio/doc，见 getMaterialTypeByMimeType）放宽：
+// 白名单之外一律 400，没有黑名单形态的"漏网"。
+var materialAllowedExtensions = map[string]bool{
+	// image
+	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".bmp": true,
+	// video
+	".mp4": true, ".mov": true, ".webm": true, ".avi": true, ".mkv": true,
+	// audio
+	".mp3": true, ".wav": true, ".m4a": true, ".aac": true, ".ogg": true, ".flac": true,
+	// doc
+	".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true,
+	".ppt": true, ".pptx": true, ".txt": true, ".md": true, ".csv": true,
+}
+
 func (s *materialService) UploadMaterial(ctx context.Context, file multipart.File, header *multipart.FileHeader, req *contentdto.UploadMaterialRequest) (*contentdto.MaterialResponse, error) {
 	mimeType := header.Header.Get("Content-Type")
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
+	}
+
+	// 扩展名白名单（2026-11-15 审计 L1）：落盘前拒绝白名单外的一切扩展名。
+	if ext := strings.ToLower(filepath.Ext(header.Filename)); !materialAllowedExtensions[ext] {
+		return nil, fmt.Errorf("不支持的素材格式（扩展名 %q 不在白名单内）", ext)
 	}
 
 	hash := md5.New()

@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"hivemtk-user/internal/pkg/metrics"
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 var (
@@ -87,6 +88,11 @@ func AuditDecorator(logger AuditLogger, costTracker CostTracker) ToolDecorator {
 					entry.CustomerID = tc.CustomerID
 					entry.SessionID = tc.SessionID
 					entry.AuditTrace = tc.AuditTrace
+				}
+				// 2026-11-17 审计 P1-5：内存审计行补租户归属（此前只有 DB 落库侧回填，
+				// 内存 Entries() 的消费口无法按租户过滤，SaaS 模式跨租户泄漏）。
+				if id, ok := tenant.FromContext(ctx); ok {
+					entry.TenantID = id
 				}
 				entry.ArgsSummary = summarizeArgs(args)
 

@@ -148,6 +148,41 @@
         />
       </el-table>
     </el-card>
+
+    <!-- 预览模板弹窗：此前只有按钮和 showPreview ref，模板里没有任何组件消费它，
+         点击「预览模板」毫无反应（2026-11-16 UI 全量回归实测死按钮）。 -->
+    <el-dialog
+      v-model="showPreview"
+      title="模板预览"
+      width="560px"
+    >
+      <template v-if="previewTemplate">
+        <el-descriptions
+          :column="1"
+          border
+          size="small"
+        >
+          <el-descriptions-item label="模板名称">
+            {{ previewTemplate.name }}
+          </el-descriptions-item>
+          <el-descriptions-item label="变量值">
+            {{ previewVariablesText }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="preview-bubble">
+          {{ previewBody }}
+        </div>
+      </template>
+      <el-empty
+        v-else
+        description="请先在上方选择模板"
+      />
+      <template #footer>
+        <el-button @click="showPreview = false">
+          关闭
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -183,6 +218,25 @@ async function load() {
 
 const progressStats = computed(() => {
   return { progress: progress.value, status: progressStatus.value }
+})
+
+// 预览：把变量 JSON 插值进模板正文，发给谁之前先看一眼实际效果
+const previewTemplate = computed(() => templates.value.find(t => t.id === form.value.templateId) || null)
+const previewVariables = computed(() => {
+  try { return JSON.parse(form.value.variablesJson || '{}') || {} } catch { return null }
+})
+const previewVariablesText = computed(() => previewVariables.value === null ? '（变量 JSON 格式错误，发送前请修正）' : JSON.stringify(previewVariables.value))
+const previewBody = computed(() => {
+  const tpl = previewTemplate.value
+  const vars = previewVariables.value
+  if (!tpl) return ''
+  let text = tpl.content || ''
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      text = text.split(`{{${k}}}`).join(String(v))
+    }
+  }
+  return text
 })
 
 function statusType(status) {
@@ -246,6 +300,16 @@ onMounted(load)
 .stat-card.success .stat-value { color: #10B981; }
 .stat-card.primary .stat-value { color: #4F46E5; }
 .stat-card.danger .stat-value { color: #EF4444; }
+.preview-bubble {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #E7F3EA;
+  color: #1F2937;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .progress-card { margin-top: 16px; }
 </style>

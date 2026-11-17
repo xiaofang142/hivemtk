@@ -34,9 +34,12 @@ PAGES = {
 
 
 def login(base):
+    pw = os.environ.get("E2E_ADMIN_PASSWORD")
+    if not pw:
+        raise SystemExit("E2E_ADMIN_PASSWORD 未设置，拒绝运行")
     req = urllib.request.Request(
         base + "/api/auth/login",
-        data=json.dumps({"username": "admin", "password": "Admin@123456"}).encode(),
+        data=json.dumps({"username": "admin", "password": pw}).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )

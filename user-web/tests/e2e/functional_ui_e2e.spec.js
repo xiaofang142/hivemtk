@@ -9,7 +9,8 @@ import { execSync } from 'child_process'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API_BASE = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN_USER = process.env.E2E_USER || 'admin'
-const ADMIN_PASS = process.env.E2E_PASS || 'Admin@12345678'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_PASS
+test.skip(!ADMIN_PASS, 'E2E_ADMIN_PASSWORD/E2E_PASS not set')
 const PG_PW = fs.existsSync('/tmp/pg_pw.txt') ? fs.readFileSync('/tmp/pg_pw.txt', 'utf8').trim() : ''
 
 function dbCount(sql) {

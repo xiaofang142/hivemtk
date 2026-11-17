@@ -209,7 +209,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { safeInit, safeDispose } from '@/utils/echarts'
 import { http } from '@/utils/request'
 import { getChannelLabel } from '@/constants/channel'
@@ -357,10 +357,22 @@ function failReason(...settled) {
 }
 
 async function batchRetry() {
+  // 批量重试影响全部死信，先确认再动手；失败要说出来，不能静默吞掉。
+  try {
+    await ElMessageBox.confirm(
+      `确认批量重试全部待重试死信（共 ${dlqTotal.value} 条）？将按原通道重新入队投递。`,
+      '批量重试死信',
+      { type: 'warning', confirmButtonText: '批量重试', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
   retrying.value = true
   try {
     const res = await http.post('/api/message-hub/dlq/batch-retry', {})
     ElMessage.success(`已重新入队 ${Number(res?.requeued) || 0} 条`)
+  } catch (e) {
+    ElMessage.error(e?.message || '批量重试失败')
   } finally {
     retrying.value = false
     await load()
@@ -368,12 +380,41 @@ async function batchRetry() {
 }
 
 async function retryOne(row) {
-  await http.post(`/api/message-hub/dlq/${row.id}/retry`, {})
+  try {
+    await ElMessageBox.confirm(
+      `确认重试死信 #${row.id}（${getChannelLabel(row.platform)} · ${directionLabel(row.direction)}）？将重新入队投递。`,
+      '重试死信',
+      { type: 'warning', confirmButtonText: '重试', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await http.post(`/api/message-hub/dlq/${row.id}/retry`, {})
+    ElMessage.success(`死信 #${row.id} 已重新入队`)
+  } catch (e) {
+    ElMessage.error(e?.message || '重试失败')
+  }
   await load()
 }
 
 async function dropOne(row) {
-  await http.delete(`/api/message-hub/dlq/${row.id}`)
+  // 丢弃是不可逆删除（DELETE），单击即毁：必须二次确认（2026-11-16 UI 全量回归发现）。
+  try {
+    await ElMessageBox.confirm(
+      `确认丢弃死信 #${row.id}（${getChannelLabel(row.platform)} · ${directionLabel(row.direction)}）？该记录将被永久删除，不再重试。`,
+      '丢弃死信',
+      { type: 'warning', confirmButtonText: '丢弃', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await http.delete(`/api/message-hub/dlq/${row.id}`)
+    ElMessage.success(`死信 #${row.id} 已丢弃`)
+  } catch (e) {
+    ElMessage.error(e?.message || '丢弃失败')
+  }
   await load()
 }
 

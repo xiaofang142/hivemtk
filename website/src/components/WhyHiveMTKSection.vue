@@ -1,5 +1,9 @@
 <script setup>
 import { useSite } from '../composables/useSite.js'
+import DOMPurify from "dompurify";
+
+// 2026-11-17 审计 P3-8：v-html 一律过 DOMPurify（数据源当前为 src/config/content.js 静态常量，此为纵深防御）。
+const svgSanitize = (svg) => DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
 const { whyHiveMTK } = useSite()
 </script>
 
@@ -31,7 +35,7 @@ const { whyHiveMTK } = useSite()
           :id="`why-${pillar.key}`"
         >
           <div class="pillar-card-head">
-            <div class="pillar-icon" v-html="pillar.icon"></div>
+                        <div class="pillar-icon" v-html="svgSanitize(pillar.icon)"></div>
             <div class="pillar-key">{{ pillar.key }}</div>
             <div class="pillar-num">{{ pillar.num }}</div>
           </div>

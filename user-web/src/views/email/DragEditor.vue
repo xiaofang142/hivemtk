@@ -148,7 +148,7 @@
     >
       <div
         class="preview-frame"
-        v-html="compiledHTML"
+        v-html="safePreviewHTML"
       />
     </el-dialog>
   </div>
@@ -161,6 +161,7 @@ import {
   Document, Picture, EditPen, PriceTag, Share, ChatLineRound, Loading
 } from '@element-plus/icons-vue'
 import mjml2html from 'mjml-browser'
+import DOMPurify from 'dompurify'
 import { http } from '@/utils/request'
 
 const BLOCK_TYPES = [
@@ -183,6 +184,11 @@ const sending = ref(false)
 const previewVisible = ref(false)
 const compiledHTML = ref('')
 const saving = ref(false)
+
+// P3-6 纵深防御：preview 弹窗的 v-html 消费 compileToHTML（mjml2html）的原始输出，
+// 统一过一遍 DOMPurify 再进 innerHTML（用法同 ChatMessages.vue 的 formatContent）。
+// 存稿/发信仍用 compiledHTML 原文，只有渲染入口走净化。
+const safePreviewHTML = computed(() => DOMPurify.sanitize(compiledHTML.value, { USE_PROFILES: { html: true } }))
 
 const builtinVars = [
   { key: '{{customer.name}}' },

@@ -7,7 +7,8 @@ import fs from 'fs'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API_BASE = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN_USER = 'admin'
-const ADMIN_PASS = 'Admin@12345678'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD
+test.skip(!ADMIN_PASS, 'E2E_ADMIN_PASSWORD not set')
 const PW = fs.existsSync('/tmp/pg_pw.txt') ? fs.readFileSync('/tmp/pg_pw.txt', 'utf8').trim() : ''
 
 function dbCount(sql) {

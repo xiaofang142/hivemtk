@@ -1,5 +1,9 @@
 <script setup>
 import { useSite } from '../composables/useSite.js'
+import DOMPurify from "dompurify";
+
+// 2026-11-17 审计 P3-8：v-html 一律过 DOMPurify（数据源当前为 src/config/content.js 静态常量，此为纵深防御）。
+const svgSanitize = (svg) => DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
 const { toolchainSection: section } = useSite()
 </script>
 
@@ -48,7 +52,7 @@ const { toolchainSection: section } = useSite()
           <p class="example-desc">{{ section.example.desc }}</p>
           <div class="guarantees">
             <div v-for="item in section.guarantees" :key="item.title" class="guarantee-item">
-              <span class="guarantee-icon" v-html="item.icon" aria-hidden="true"></span>
+                            <span class="guarantee-icon" v-html="svgSanitize(item.icon)" aria-hidden="true"></span>
               <div>
                 <div class="guarantee-title">{{ item.title }}</div>
                 <div class="guarantee-desc">{{ item.desc }}</div>
@@ -76,7 +80,7 @@ const { toolchainSection: section } = useSite()
       <div class="categories">
         <article v-for="category in section.categories" :key="category.name" class="category-card">
           <div class="category-header">
-            <div class="category-icon" v-html="category.icon" aria-hidden="true"></div>
+                        <div class="category-icon" v-html="svgSanitize(category.icon)" aria-hidden="true"></div>
             <div class="category-head-text">
               <h3 class="category-title">{{ category.title }}</h3>
               <span class="category-count">{{ category.count }} {{ $t('工具') }}</span>

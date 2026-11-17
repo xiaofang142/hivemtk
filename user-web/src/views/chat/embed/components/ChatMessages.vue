@@ -97,7 +97,7 @@
                 class="media-file"
               >
                 <a
-                  :href="msg.media_url"
+                  :href="safeMediaUrl(msg.media_url)"
                   target="_blank"
                   rel="noopener"
                   class="media-file-link"
@@ -276,6 +276,18 @@ const formatContent = (text) => {
 };
 
 // ---- 002-multi-type-messages：媒体渲染辅助 ----
+// 媒体链接协议白名单（2026-11-15 审计 M-2）：media_url 的上游含外部人可控数据
+// （访客消息服务端已加白名单，这里兜底防历史数据/其他写入源），不校验协议的话
+// javascript:/data: 伪协议 href 会成为注入点；与 RichCard.vue 的 safeUrl 同口径
+const safeMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return undefined
+  try {
+    const u = new URL(url, window.location.origin)
+    return ['http:', 'https:'].includes(u.protocol) ? url : undefined
+  } catch {
+    return undefined
+  }
+}
 const mediaFileName = (msg) => {
   try {
     return decodeURIComponent((msg.media_url || '').split('?')[0].split('/').pop() || i18n.global.t('文件'))

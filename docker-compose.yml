@@ -156,7 +156,8 @@ services:
           - mtk-redis
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -p 8203 -a \"$REDIS_PASSWORD\" ping >/dev/null 2>&1 || redis-cli -p 8203 ping"]
+      # 审计 P3-16：密码走 REDISCLI_AUTH 环境变量，不再进命令行（docker inspect/进程列表可见）
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli -p 8203 ping >/dev/null 2>&1 || redis-cli -p 8203 ping"]
       interval: 15s
       timeout: 5s
       retries: 5

@@ -39,11 +39,25 @@ func NewCustomer360Controller(customer360Service *service.Customer360Service) *C
 // 原来多数 handler 对任何错误都回 404 + err.Error()，DB 抖动会被伪装成
 // 「客户不存在」，同时把英文/驱动错误原文透给前端。
 func replyCustomer360Error(ctx *gin.Context, err error, fallback string) {
+	if errors.Is(err, service.ErrCustomerForbidden) {
+		// 行级隔离拒绝（2026-11-15 审计 H-1）：与 DataScopeGuard 的 403 同档，
+		// 文案按会话域既有口径，不区分「没这行」和「不是你的行」。
+		response.Error(ctx, http.StatusForbidden, service.ErrCustomerForbidden.Error())
+		return
+	}
 	if errors.Is(err, service.ErrCustomerNotFound) || errhttp.IsNotFoundError(err) {
 		response.NotFound(ctx, "客户不存在")
 		return
 	}
 	errhttp.HandleDBError(ctx, err, fallback)
+}
+
+// customerScopeFromCtx 从登录态组装客户域数据隔离身份（与会话域 sessionScopeFromCtx 同形）。
+func customerScopeFromCtx(ctx *gin.Context) service.SessionScope {
+	return service.SessionScope{
+		Role:   ctx.GetString("role"),
+		UserID: getUserIDFromContext(ctx),
+	}
 }
 
 // @Summary      获取客户 360° 视图
@@ -57,7 +71,7 @@ func (c *Customer360Controller) GetCustomer360(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
@@ -100,7 +114,7 @@ func (c *Customer360Controller) GetCustomerList(ctx *gin.Context) {
 		filters["purchase_power"] = purchasePower
 	}
 
-	result, total, err := c.customer360Service.GetCustomerList(ctx.Request.Context(), page, pageSize, filters)
+	result, total, err := c.customer360Service.GetCustomerList(ctx.Request.Context(), page, pageSize, filters, customerScopeFromCtx(ctx))
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return
@@ -125,7 +139,7 @@ func (c *Customer360Controller) GetCustomerBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
@@ -148,7 +162,7 @@ func (c *Customer360Controller) GetCustomerStats(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
@@ -171,7 +185,7 @@ func (c *Customer360Controller) GetCustomerSessions(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
@@ -196,6 +210,12 @@ func (c *Customer360Controller) GetCustomerEvents(ctx *gin.Context) {
 	limit := 50
 	if v, err := strconv.Atoi(ctx.Query("limit")); err == nil && v > 0 {
 		limit = v
+	}
+
+	// 行级隔离（2026-11-15 审计 H-1）：事件流水按任意键寻址，先判客户可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), customerID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "获取客户行为事件失败")
+		return
 	}
 
 	events, err := c.customer360Service.GetCustomerEvents(ctx.Request.Context(), customerID, limit)
@@ -223,6 +243,12 @@ func (c *Customer360Controller) GetCustomerOrders(ctx *gin.Context) {
 	limit := 20
 	if v, err := strconv.Atoi(ctx.Query("limit")); err == nil && v > 0 {
 		limit = v
+	}
+
+	// 行级隔离（2026-11-15 审计 H-1）：订单按任意键寻址，先判客户可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), customerID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "获取客户订单失败")
+		return
 	}
 
 	items, err := c.customer360Service.GetCustomerOrders(ctx.Request.Context(), customerID, limit)
@@ -260,7 +286,7 @@ func (c *Customer360Controller) GetCustomerMessages(ctx *gin.Context) {
 		limit = 200
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return
@@ -299,6 +325,12 @@ func (c *Customer360Controller) UpdateCustomerTags(ctx *gin.Context) {
 		return
 	}
 
+	// 行级隔离（2026-11-15 审计 H-1）：整体替换标签会清掉别人名下客户的标签集，先判可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), userID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "保存标签失败")
+		return
+	}
+
 	finalTags, err := c.userTagSvc.ReplaceUserTags(ctx.Request.Context(), userID, *req.Tags)
 	if err != nil {
 		if errors.Is(err, service.ErrUserTagInvalid) {
@@ -323,6 +355,12 @@ func (c *Customer360Controller) GetCustomerTags(ctx *gin.Context) {
 	userID := ctx.Query("user_id")
 	if userID == "" {
 		response.Error(ctx, http.StatusBadRequest, "缺少 user_id 参数")
+		return
+	}
+
+	// 行级隔离（2026-11-15 审计 H-1）：标签按任意键寻址，先判客户可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), userID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "获取标签失败")
 		return
 	}
 
@@ -383,6 +421,13 @@ func (c *Customer360Controller) AddCustomerTag(ctx *gin.Context) {
 		return
 	}
 
+	// 行级隔离（2026-11-15 审计 H-1）：:id 在此是 sessions.user_id 语义（非 customers.id，
+	// 不能登记进 dataScopeRoutes），按键解析会话集判可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), userID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "添加标签失败，请稍后重试")
+		return
+	}
+
 	tags, err := c.userTagSvc.AddUserTag(ctx.Request.Context(), userID, req.Tag)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "添加标签失败，请稍后重试")
@@ -409,6 +454,12 @@ func (c *Customer360Controller) RemoveCustomerTag(ctx *gin.Context) {
 	tagName := ctx.Param("tag")
 	if tagName == "" {
 		response.Error(ctx, http.StatusBadRequest, "缺少标签名称")
+		return
+	}
+
+	// 行级隔离（2026-11-15 审计 H-1）：:id 在此是 sessions.user_id 语义，按键解析会话集判可见性。
+	if err := c.customer360Service.EnsureCustomerVisibleByKey(ctx.Request.Context(), userID, customerScopeFromCtx(ctx)); err != nil {
+		replyCustomer360Error(ctx, err, "移除标签失败，请稍后重试")
 		return
 	}
 
@@ -522,7 +573,7 @@ func (c *Customer360Controller) GetCustomerBehaviors(ctx *gin.Context) {
 		return
 	}
 
-	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID)
+	dto, err := c.customer360Service.GetCustomer360(ctx.Request.Context(), userID, customerScopeFromCtx(ctx))
 	if err != nil {
 		replyCustomer360Error(ctx, err, "获取客户 360 视图失败")
 		return

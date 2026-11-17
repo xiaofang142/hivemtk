@@ -58,18 +58,32 @@ const widgetKey = computed(() => [channelId.value, channelTitle.value, widgetCol
 const loaded = ref(false)
 const closed = ref(false)
 
+// 目标 origin 推导（2026-11-15 审计 L8 收紧）：mcwParent 协商参数只在其 origin
+// 与宿主（document.referrer）一致时才被采纳——否则诱导访客打开
+// ?mcwParent=https://evil.com 就能把 close/unread 事件定向投递到第三方。
+// 采纳不了时回退 referrer origin；referrer 也没有（独立打开，无父窗口，本就无需
+// 通知宿主）返回空串，调用方据此跳过 postMessage——绝不用 '*' 兜底（P3-4/P3-22）。
+const resolveWidgetParentOrigin = () => {
+  var refOrigin = ''
+  try { refOrigin = new URL(document.referrer).origin } catch { refOrigin = '' }
+  var q = new URLSearchParams(window.location.search).get('mcwParent')
+    || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
+  if (q) {
+    try {
+      var qOrigin = new URL(q).origin
+      if (refOrigin && qOrigin === refOrigin) return qOrigin
+    } catch { /* fallthrough */ }
+  }
+  return refOrigin
+}
+
 const onClose = () => {
   try {
     if (window.parent && window.parent !== window) {
       // N-6③：目标 origin 推导（mcwParent 协商参数 → referrer 回退），消除 '*' 通配；
-      // 独立打开（无父窗口）时本就无需通知宿主
-      var targetOrigin = '*'
-      try {
-        var q = new URLSearchParams(window.location.search).get('mcwParent')
-          || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
-        targetOrigin = q ? new URL(q).origin : new URL(document.referrer).origin
-      } catch { /* 推导失败保守回退 '*' */ }
-      window.parent.postMessage({ type: 'chat-widget-close' }, targetOrigin)
+      // origin 推导不出来时直接不投递（fail-closed），绝不落 '*'
+      var targetOrigin = resolveWidgetParentOrigin()
+      if (targetOrigin) window.parent.postMessage({ type: 'chat-widget-close' }, targetOrigin)
     }
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   // 嵌入场景由宿主页面收起 iframe；独立打开时展示已结束态，不再跳到 404 页

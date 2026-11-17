@@ -74,6 +74,10 @@ func setupChatPublicRoutes(public *gin.RouterGroup, db *gorm.DB, orchestrator *s
 	chatPublic.GET("/agents/available", ctrl.CountAvailableAgents)
 
 	chatPublic.GET("/upload-token", ctrl.GetUploadToken)
+
+	// 2026-11-15 审计 L7：访客 WS 一次性 ticket 铸造（visitor_token 校验通过后
+	// 换发，连接 /api/ws/visitor 时 URL 只带 ticket，visitor_token 不进 access log）。
+	chatPublic.POST("/ws-ticket", ctrl.WsTicket)
 }
 
 func setupChatPublicWebSocket(r *gin.Engine, langResolver *translation.LangConfigResolver) {

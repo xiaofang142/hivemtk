@@ -11,6 +11,9 @@ import (
 // 与 repository UpdateRagProduct 中 updates["llm_model_detail"] 一致。
 type LLMProviderConfig struct {
 	APIKey         string `json:"api_key" gorm:"column:api_key"`
+	// APIKeySet 输出脱敏布尔（2026-11-17 审计 P1-4）：api_key 本体经控制器出参清空，
+	// 只回“是否已配置”；Update 侧“空 key=保留旧值”的 MERGE 语义保证前端不带 key 保存不清钥。
+	APIKeySet      bool   `json:"api_key_set" gorm:"-"`
 	BaseURL        string `json:"base_url" gorm:"column:base_url"`
 	APIType        string `json:"api_type" gorm:"column:api_type"`
 	Model          string `json:"model" gorm:"column:model_detail"`
@@ -24,6 +27,8 @@ type LLMProviderConfig struct {
 type EmbeddingProviderConfig struct {
 	TenantID  uint   `gorm:"not null;default:1;index" json:"tenant_id"`
 	APIKey    string `json:"api_key" gorm:"column:api_key"`
+	// 同 LLMProviderConfig.APIKeySet：出参脱敏布尔（审计 P1-4）。
+	APIKeySet bool   `json:"api_key_set" gorm:"-"`
 	BaseURL   string `json:"base_url" gorm:"column:base_url"`
 	APIType   string `json:"api_type" gorm:"column:api_type"`
 	Model     string `json:"model" gorm:"column:model"`
@@ -35,11 +40,13 @@ type EmbeddingProviderConfig struct {
 // 列前缀 rerank_（由 embeddedPrefix 自动添加），per 知识库覆盖全局 config.yaml inference.rerank
 // 注意：字段的 column 标签须为裸名（api_key 而非 rerank_api_key），否则会与 embeddedPrefix 叠加成 rerank_rerank_api_key
 type RerankProviderConfig struct {
-	APIKey  string `json:"api_key" gorm:"column:api_key"`
-	BaseURL string `json:"base_url" gorm:"column:base_url"`
-	APIType string `json:"api_type" gorm:"column:api_type"`
-	Model   string `json:"model" gorm:"column:model"`
-	Enabled bool   `json:"enabled" gorm:"column:enabled;default:true"`
+	APIKey string `json:"api_key" gorm:"column:api_key"`
+	// 同 LLMProviderConfig.APIKeySet：出参脱敏布尔（审计 P1-4）。
+	APIKeySet bool   `json:"api_key_set" gorm:"-"`
+	BaseURL   string `json:"base_url" gorm:"column:base_url"`
+	APIType   string `json:"api_type" gorm:"column:api_type"`
+	Model     string `json:"model" gorm:"column:model"`
+	Enabled   bool   `json:"enabled" gorm:"column:enabled;default:true"`
 	// Protocol 重排协议（列 rerank_protocol）：空 = 按 base_url 特征推断
 	// （ragretrieval.InferRerankProtocol）；"openai" = OpenAI 兼容；
 	// "dashscope" = DashScope 原生 text-rerank。

@@ -11,7 +11,10 @@ AUDIT = "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-web/tests/audit"
 routes = json.load(open(os.path.join(AUDIT, "backend_routes.json")))
 
 def login():
-    data = json.dumps({"username":"admin","password":"Admin@123456"}).encode()
+    pw = os.environ.get("E2E_ADMIN_PASSWORD")
+    if not pw:
+        raise SystemExit("E2E_ADMIN_PASSWORD 未设置，拒绝运行")
+    data = json.dumps({"username":"admin","password":pw}).encode()
     req = urllib.request.Request(BASE+"/api/auth/login", data=data, headers={"Content-Type":"application/json"})
     return json.loads(urllib.request.urlopen(req, timeout=20).read()).get("data",{}).get("token","")
 TOKEN = login()

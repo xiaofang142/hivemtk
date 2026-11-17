@@ -38,8 +38,46 @@ func JWTAuthMiddleware() gin.HandlerFunc {
 		}
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" && c.GetHeader("Upgrade") == "websocket" {
-			if q := c.Query("token"); q != "" {
-				authHeader = "Bearer " + q
+			// 一次性 ticket 优先（2026-11-15 审计 L7）：JWT 不再出现在 URL query
+			// （网关/反代 access log 会留 query 全量）。ticket 由 /api/ws/ticket
+			// 经 Authorization 头铸造，60s 单次消费，身份在铸造时已验签。
+			if tk := strings.TrimSpace(c.Query("ticket")); tk != "" {
+				claims, ok := utils.ConsumeWSTicket(tk)
+				if !ok || claims.Visitor {
+					recordAuthFailure(model.SecurityAccessKindTokenInvalid, c)
+					response.Error(c, http.StatusUnauthorized, "无效的认证令牌")
+					c.Abort()
+					return
+				}
+				c.Set("user_id", claims.UserID)
+				c.Set("username", claims.Username)
+				c.Set("role", claims.Role)
+				c.Set(TenantContextKey, claims.TenantID)
+				if claims.Role == "admin" {
+					c.Set("license_id", "system_admin")
+					c.Set("data_scope", "all")
+				} else {
+					if claims.DataScope != "" {
+						c.Set("data_scope", claims.DataScope)
+					} else {
+						c.Set("data_scope", "self")
+					}
+				}
+				c.Set("department_id", claims.DepartmentID)
+				c.Set("team_id", claims.TeamID)
+				c.Next()
+				return
+			}
+			// 2026-11-17 审计 P2-8 收口：WS 不再接受 URL query 携带 JWT（网关/反代
+			// access log 会留 query 全量）。前端已 ticket 化（agentSocket 无 ticket
+			// 拒绝建连）；同源浏览器 WS 由 Cookie 通道兜底（下方回落适用）。
+		}
+		if authHeader == "" {
+			// 2026-11-17 审计 P2-7：Authorization 头缺省时回落 HttpOnly Cookie
+			// （同源 Web 端刷新页面后内存令牌丢失的场景由 Cookie 无感续证；
+			// 桥接扩展/脚本客户端仍走头通道，不受影响）。
+			if ck := AuthCookieToken(c); ck != "" {
+				authHeader = "Bearer " + ck
 			}
 		}
 		if authHeader == "" {
@@ -147,6 +185,12 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 			return
 		}
 		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			// 可选认证中间件同样回落 Cookie（P2-7），保持与必选通道同口径。
+			if ck := AuthCookieToken(c); ck != "" {
+				authHeader = "Bearer " + ck
+			}
+		}
 		if authHeader == "" {
 			c.Next()
 			return

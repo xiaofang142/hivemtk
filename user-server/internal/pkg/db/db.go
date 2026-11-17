@@ -31,7 +31,17 @@ func InitDB() {
 
 	appConfig := config.GetAppConfig()
 
+	// 2026-11-17 审计 P3-18 收口：应用连接账号与 PG 超管分离。
+	// DB_USER 存在 ⇒ 应用以最小权限角色连接（口令取 DB_APP_PASSWORD），
+	// POSTGRES_PASSWORD 保留为超管（维护脚本/bootstrap 用）；不设则行为与旧版一致。
+	pgUser := appConfig.Database.Postgres.User
 	pgPassword := appConfig.Database.Postgres.Password
+	if v := os.Getenv("DB_USER"); v != "" {
+		pgUser = v
+		if v2 := os.Getenv("DB_APP_PASSWORD"); v2 != "" {
+			pgPassword = v2
+		}
+	}
 	if pgPassword == "" {
 		pgPassword = os.Getenv("POSTGRES_PASSWORD")
 	}
@@ -43,7 +53,7 @@ func InitDB() {
 	// 否则 DSN 解析错位导致 SASL 认证失败（宿主机 PGPASSWORD 走 libpq 直连不受影响）。
 	dsn := fmt.Sprintf("host=%s user=%s password='%s' dbname=%s port=%d sslmode=%s TimeZone=Asia/Shanghai",
 		appConfig.Database.Postgres.Host,
-		appConfig.Database.Postgres.User,
+		pgUser,
 		strings.ReplaceAll(pgPassword, "'", "\\'"),
 		appConfig.Database.Postgres.DBName,
 		appConfig.Database.Postgres.Port,

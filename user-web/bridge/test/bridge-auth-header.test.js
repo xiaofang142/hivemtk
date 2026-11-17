@@ -146,7 +146,7 @@ describe('能力探测（决定走 SSE 还是轮询）带服务端可读凭证',
   });
 });
 
-describe('background EventSource 版 SSE（不支持自定义头）走 bridge_token 查询参数', () => {
+describe('background SSE（T7：fetch 流式替代 EventSource）凭证走 X-Bridge-Token 头，URL 不带 token', () => {
   const listeners = [];
 
   beforeEach(() => {
@@ -156,25 +156,17 @@ describe('background EventSource 版 SSE（不支持自定义头）走 bridge_to
       storage: { local: { get: (key, cb) => cb({ bridgeConfig: { serverUrl: SERVER, token: TOKEN } }) } },
     };
     captured = [];
+    // 回空流（即刻 done）：connectSSE resolve 后 sse-client 侧只排一个 3s 重连定时器，
+    // 测试进程退出前无需清理。
     globalThis.fetch = vi.fn(async (url, init = {}) => {
       captured.push({ url: String(url), init });
-      return new Response(JSON.stringify({ status: 'ok', acked_items_count: 1 }), { status: 200 });
+      return new Response('{}', { status: 200 });
     });
-    globalThis.EventSource = class {
-      constructor(url) {
-        this.url = url;
-        globalThis.__lastEventSource = this;
-      }
-      addEventListener() {}
-      close() {}
-    };
   });
 
   afterEach(() => {
     delete globalThis.chrome;
     delete globalThis.fetch;
-    delete globalThis.EventSource;
-    delete globalThis.__lastEventSource;
   });
 
   async function loadBackgroundSSE() {
@@ -182,17 +174,22 @@ describe('background EventSource 版 SSE（不支持自定义头）走 bridge_to
     await import('../src/background/sse-client.js');
   }
 
-  it('注册 tab 建立的 EventSource URL 用 bridge_token=（服务端读的键名），不是 token=', async () => {
+  it('注册 tab 建立的 SSE 连接把凭证放 X-Bridge-Token 头，URL 不再出现 bridge_token=/token=', async () => {
     await loadBackgroundSSE();
     for (const fn of listeners) {
       fn({ type: 'BRIDGE_REGISTER_TAB', channel: 'xianyu', accountId: 'acc-1' }, { tab: { id: 1 } }, () => {});
     }
     await new Promise((r) => setTimeout(r, 30));
-    const es = globalThis.__lastEventSource;
-    expect(es).toBeTruthy();
-    expect(es.url).toContain('/api/bridge/outbox/sse');
-    expect(es.url).toContain(`bridge_token=${encodeURIComponent(TOKEN)}`);
-    expect(es.url).not.toMatch(/[?&]token=/);
+    const sseCall = captured.find((c) => String(c.url).includes('/api/bridge/outbox/sse'));
+    expect(sseCall).toBeTruthy();
+    const url = String(sseCall.url);
+    expect(url).toContain('/api/bridge/outbox/sse');
+    // T7 红线：任何形态的 token 都不许出现在 URL 里
+    expect(url).not.toMatch(/[?&]bridge_token=/);
+    expect(url).not.toMatch(/[?&]token=/);
+    // 服务端闸门真正读取的凭证位（middleware/bridge_ingress_guard.go）
+    expect(sseCall.init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(sseCall.init.headers['Authorization']).toBe(`Bearer ${TOKEN}`);
   });
 
   // M-1（2026-11-11）：BRIDGE_SSE_ACK 处理器已删除（全仓无发送方的死路径），

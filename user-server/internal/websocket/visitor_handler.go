@@ -153,9 +153,26 @@ func (h *VisitorWSHandler) HandleVisitorWebSocket(c *gin.Context) {
 	if visitorToken == "" {
 		visitorToken = strings.TrimSpace(c.Query("token"))
 	}
-	// fail-closed：session_id/visitor_id 已给出但缺 token 一律拒绝，
-	// 防止凭 session_id 冒连他人会话接收坐席/AI 回复
-	if visitorToken == "" && sessionID != "" && visitorID != "" {
+	// 一次性 ticket 优先（2026-11-15 审计 L7）：visitor_token 此前只能走 URL query
+	// （进网关/反代 access log）。ticket 由 /api/chat/public/ws-ticket 经
+	// visitor_token 头校验后铸造，绑定 (channel, visitor, session) 三元组且单次
+	// 消费；命中即视为身份已认证，跳过下面的 visitor_token 复核。
+	if tk := strings.TrimSpace(c.Query("ticket")); tk != "" {
+		claims, ok := utils.ConsumeWSTicket(tk)
+		if !ok || !claims.Visitor {
+			logger.Ctx(ctx).Warn().Str("session_id", sessionID).Str("visitor_id", visitorID).Msg("WebSocket 连接 ticket 无效或已消费，已拒绝")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or consumed ticket"})
+			return
+		}
+		// 绑定核对：ticket 三元组必须与连接参数一致，防转用到他人会话
+		if claims.ChannelID != channelID || claims.VisitorID != visitorID || claims.SessionID != sessionID {
+			logger.Ctx(ctx).Warn().Str("session_id", sessionID).Str("visitor_id", visitorID).Msg("WebSocket 连接 ticket 身份绑定不符，已拒绝")
+			c.JSON(http.StatusForbidden, gin.H{"error": "ticket identity mismatch"})
+			return
+		}
+	} else if visitorToken == "" && sessionID != "" && visitorID != "" {
+		// fail-closed：session_id/visitor_id 已给出但缺 token 一律拒绝，
+		// 防止凭 session_id 冒连他人会话接收坐席/AI 回复
 		logger.Ctx(ctx).Warn().Str("session_id", sessionID).Str("visitor_id", visitorID).Msg("WebSocket 连接无 visitor_token，已拒绝")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "visitor_token required"})
 		return

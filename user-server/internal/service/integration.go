@@ -8,6 +8,8 @@ import (
 
 	"encoding/json"
 
+	"strings"
+
 	"errors"
 
 	"hivemtk-user/internal/model"
@@ -164,17 +166,37 @@ func (s *IntegrationService) UpdateIntegrationAccount(ctx context.Context, id ui
 	if req.AccountName != nil {
 		account.AccountName = *req.AccountName
 	}
-	if req.APIKey != nil {
+	// 2026-11-17 审计 P2-1：GET 出参已把 api_key/api_secret 打码；若前端把掩码值
+	// 原样回传，这里不能让掩码覆盖真值——含 "****" 的值一律视为"未改"。
+	if req.APIKey != nil && !strings.Contains(*req.APIKey, "****") {
 		account.APIKey = *req.APIKey
 	}
-	if req.APISecret != nil {
+	if req.APISecret != nil && !strings.Contains(*req.APISecret, "****") {
 		account.APISecret = *req.APISecret
 	}
 	if req.WebhookURL != nil {
 		account.WebhookURL = *req.WebhookURL
 	}
 	if req.Config != nil {
-		data, _ := json.Marshal(req.Config)
+		// config 内敏感键若回传的是出参掩码，则该键视为"未改"，保留库里旧值：
+		// 以存量为底，覆盖非掩码键，再把结果整体写回——部分更新的请求不会把
+		// 被掩码的真值键挤掉。
+		sensitiveKeys := map[string]bool{
+			"key": true, "api_key": true, "apikey": true, "secret": true,
+			"secret_key": true, "server_key": true, "token": true,
+			"access_token": true, "app_secret": true, "password": true,
+		}
+		stored := map[string]any{}
+		if account.Config != "" {
+			_ = json.Unmarshal([]byte(account.Config), &stored)
+		}
+		for k, v := range req.Config {
+			if s, ok := v.(string); ok && sensitiveKeys[strings.ToLower(k)] && strings.Contains(s, "****") {
+				continue
+			}
+			stored[k] = v
+		}
+		data, _ := json.Marshal(stored)
 		account.Config = string(data)
 	}
 	if req.Status != nil {

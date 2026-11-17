@@ -1,4 +1,7 @@
 import { chromium } from 'playwright';
+
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
 const BASE_URL = 'http://localhost:8211';
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -9,7 +12,7 @@ await page.goto(BASE_URL + '/#/login', { waitUntil: 'networkidle', timeout: 1500
 await page.waitForTimeout(2000);
 const u = await page.$('input[type="text"], input[placeholder*="用户名"], input[placeholder*="username"], input[placeholder*="邮箱"]');
 const p = await page.$('input[type="password"]');
-await u.fill('admin'); await p.fill('Seed@123456');
+await u.fill('admin'); await p.fill(ADMIN_PASSWORD);
 const btn = await page.$('button[type="submit"], .el-button--primary');
 if (btn) await btn.click();
 await page.waitForTimeout(5000);

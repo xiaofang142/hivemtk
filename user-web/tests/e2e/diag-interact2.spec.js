@@ -3,9 +3,11 @@
 //   force 后仍报错/对话框异常 => 真 bug）。
 import { test, expect } from '@playwright/test'
 
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
+
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const ADMIN_USER = 'admin'
-const ADMIN_PASS = 'Admin@12345678'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD
 
 const CASES = [
   ['llmRouting/list', '新增映射'],

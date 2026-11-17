@@ -62,6 +62,8 @@ func TestProcessDocumentAsync_FakePDFMarksFailedNoChunks(t *testing.T) {
 }
 
 func TestProcessDocumentAsync_PlainTextFallbackPreserved(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过（审计交付配套）
+
 	db := testutil.NewTestDB(t, &model.KnowledgeDocument{}, &model.KnowledgeChunk{})
 	// embedding/embed_status 列不在 gorm model 上（走 UpdateEmbeddingsBatch 的裸 SQL），
 	// AutoMigrate 建不出，需手补；维度与 EmbeddingDim() 对齐或直接用 vector 无维约束。
@@ -104,3 +106,4 @@ func TestProcessDocumentAsync_PlainTextFallbackPreserved(t *testing.T) {
 		t.Errorf("纯文本正常路径应产出 chunk 行，实际 0 行")
 	}
 }
+

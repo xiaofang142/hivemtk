@@ -399,7 +399,13 @@ window.MarketingChatWidgetConfig = {
       var ts = [d.getHours(), d.getMinutes(), d.getSeconds()].map(function (n) { return n < 10 ? '0' + n : n }).join(':')
       var line = document.createElement('div')
       line.className = 'item'
-      line.innerHTML = '<span class="ts">[' + ts + ']</span> ' + type + (payload ? ' ' + JSON.stringify(payload) : '')
+      // 2026-11-15 审计 L8：payload 透传自 iframe postMessage（含客户消息内容），
+      // JSON.stringify 不转义 <>，改用 textContent 组装杜绝注入（时间戳 span 保留）
+      var tsEl = document.createElement('span')
+      tsEl.className = 'ts'
+      tsEl.textContent = '[' + ts + ']'
+      line.appendChild(tsEl)
+      line.appendChild(document.createTextNode(' ' + type + (payload ? ' ' + JSON.stringify(payload) : '')))
       box.appendChild(line)
       box.scrollTop = box.scrollHeight
     }

@@ -21,6 +21,8 @@ export default [
     path: '/sms/config',
     name: 'SmsConfig',
     component: () => import('@/views/sms/Config.vue'),
-    meta: { title: '短信配置', group: 'reach', icon: 'Setting' }
+    // 2026-11-17 审计 P2-2：后端口已收 admin（route_policy + 菜单注册表），
+    // 前端路由守卫同口径，防非 admin 直敲 URL 进到 403 页
+    meta: { title: '短信配置', group: 'reach', icon: 'Setting', requiresAdmin: true }
   }
 ]

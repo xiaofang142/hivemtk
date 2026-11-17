@@ -10,11 +10,11 @@ case_477_alerts_lifecycle() {
   echo "-- unread-count"; curl -sS -m 20 -H "$(auth)" "$K4_BASE/api/geo/alerts/unread-count"; echo
   ID=$(curl -sS -m 20 -H "$(auth)" "$K4_BASE/api/geo/alerts?page=1&page_size=1" \
     | python -X utf8 -I -c "import sys,json;items=json.load(sys.stdin).get('data',{}).get('list') or [];print(items[0].get('id','') if items else '')" 2>/dev/null || true)
-  echo "-- ack id=$ID（应 200 已确认）"
+  echo "-- ack id=${ID}（应 200 已确认）"
   [ -n "$ID" ] && curl -sS -m 20 -X POST -H "$(auth)" -H 'Content-Type: application/json' -d '{}' "$K4_BASE/api/geo/alerts/$ID/ack"; echo
   echo "-- unread-count（应减 1）"
   curl -sS -m 20 -H "$(auth)" "$K4_BASE/api/geo/alerts/unread-count"; echo
-  echo "-- delete id=$ID（应 200）"
+  echo "-- delete id=${ID}（应 200）"
   [ -n "$ID" ] && curl -sS -m 20 -X DELETE -H "$(auth)" "$K4_BASE/api/geo/alerts/$ID"; echo
   echo "-- repeat delete（应 404 告警不存在）"
   [ -n "$ID" ] && curl -sS -m 20 -X DELETE -H "$(auth)" "$K4_BASE/api/geo/alerts/$ID"; echo

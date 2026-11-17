@@ -171,7 +171,7 @@ type UserProfile struct {
 	PreferredTime     string   `json:"preferred_time"`
 }
 
-func (s *Customer360Service) GetCustomer360(ctx context.Context, userID string) (*Customer360DTO, error) {
+func (s *Customer360Service) GetCustomer360(ctx context.Context, userID string, scope SessionScope) (*Customer360DTO, error) {
 	dto := &Customer360DTO{}
 
 	userSessions, err := s.sessionRepo.GetByUserID(ctx, userID)
@@ -181,6 +181,15 @@ func (s *Customer360Service) GetCustomer360(ctx context.Context, userID string) 
 
 	if len(userSessions) == 0 {
 		return nil, ErrCustomerNotFound
+	}
+
+	// 行级隔离（2026-11-15 审计 H-1）：这族接口的寻址键是 sessions.user_id（查询参数
+	// 或 :id 传参），不在 model.dataScopeRoutes 登记表覆盖内（登记表只认 customers.id
+	// 语义的路由参数）。此处按会话域既定口径判可见性：超管全量；其余角色要该客户
+	// 任一会话归属自己或属于未分配池，否则 403——与 customer_session_scope.go 的
+	// sessionVisible 同口径，杜绝「列表看不到、按 id 读得到」的旁路。
+	if err := assertSessionsVisible(userSessions, scope); err != nil {
+		return nil, err
 	}
 
 	dto.BasicInfo = s.buildBasicInfo(ctx, userSessions)
@@ -211,6 +220,72 @@ func (s *Customer360Service) GetCustomer360(ctx context.Context, userID string) 
 	dto.UserProfile = s.buildUserProfile(ctx, userSessions, dto.InteractionStats, dto.OrderInfo, s.resolveCustomerIDForSessions(ctx, userSessions))
 
 	return dto, nil
+}
+
+// assertSessionsVisible 客户域行级隔离判据（纯函数，便于单测）。
+//
+// 口径与 customer_session_scope.go 的 sessionVisible 一致：超管（role 为空/admin）
+// 全量；其余角色要求该客户任一会话归属自己或属于未分配池（agent_id=0）。
+// 全部会话都归属他人 ⇒ ErrCustomerForbidden（controller 映射为 403）。
+func assertSessionsVisible(sessions []*model.CustomerSession, scope SessionScope) error {
+	if !sessionScopeRestricted(scope) {
+		return nil
+	}
+	for _, sess := range sessions {
+		if sessionVisible(sess, scope) {
+			return nil
+		}
+	}
+	return ErrCustomerForbidden
+}
+
+// EnsureCustomerVisibleByKey 按任意寻址键断言客户可见性（查询参数族接口用）。
+//
+// /customer-360/* 族的寻址键语义不一（sessions.user_id / customers.id /
+// customers.unified_id 三种都有），这里按同序逐键解析出会话集再判可见性：
+//  1. sessions.user_id 命中 ⇒ 直接用；
+//  2. customers.id 命中 ⇒ 按 one_id 取会话；
+//  3. customers.unified_id 命中 ⇒ 按 one_id 取会话；
+//  4. 全部落空 ⇒ 放行（该键不属于客户域，下游自会 404，不在此处伪造 NotFound）。
+//
+// 2026-11-15 审计 H-1：GetCustomerEvents/GetCustomerOrders/标签读写等
+// query/异构寻址口此前完全不认调用者，任何坐席可用任意 id 读他人客户的事件、
+// 订单与消息史——登记表（middleware.DataScopeGuard）只认路径参数形状，罩不住它们。
+func (s *Customer360Service) EnsureCustomerVisibleByKey(ctx context.Context, idKey string, scope SessionScope) error {
+	if !sessionScopeRestricted(scope) {
+		return nil
+	}
+	sessions, err := s.resolveSessionsByKey(ctx, idKey)
+	if err != nil {
+		return err
+	}
+	return assertSessionsVisible(sessions, scope)
+}
+
+// resolveSessionsByKey 按 idKey 语义逐键解析会话集（见 EnsureCustomerVisibleByKey）。
+func (s *Customer360Service) resolveSessionsByKey(ctx context.Context, idKey string) ([]*model.CustomerSession, error) {
+	sessions, err := s.sessionRepo.GetByUserID(ctx, idKey)
+	if err != nil {
+		return nil, err
+	}
+	if len(sessions) > 0 {
+		return sessions, nil
+	}
+
+	cust, err := s.customerRepo.GetByID(ctx, idKey)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if cust == nil {
+		cust, err = s.customerRepo.GetByUnifiedID(ctx, idKey)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
+	if cust == nil {
+		return nil, nil
+	}
+	return s.sessionRepo.GetByOneID(ctx, cust.UnifiedID)
 }
 
 // GetCustomer360ByCustomerID 按客户档案主键 id 获取客户 360° 视图。
@@ -877,8 +952,20 @@ func (s *Customer360Service) GetCustomerOrders(ctx context.Context, customerID s
 	return items, nil
 }
 
-func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize int, filters map[string]string) (map[string]*Customer360DTO, int64, error) {
-	sessions, total, err := s.sessionRepo.GetByMerchant(ctx, "", page, pageSize)
+func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize int, filters map[string]string, scope SessionScope) (map[string]*Customer360DTO, int64, error) {
+	// 行级隔离（2026-11-15 审计 H-1）：列表是 :id 旁路的前置枚举源。非超管按
+	// 会话域既定口径收敛到自己名下 + 未分配池（GetByMerchantForAgent 的谓词即
+	// (agent_id = 0 OR agent_id = ?)），与 customer-sessions 列表同口径。
+	var (
+		sessions []*model.CustomerSession
+		total    int64
+		err      error
+	)
+	if sessionScopeRestricted(scope) {
+		sessions, total, err = s.sessionRepo.GetByMerchantForAgent(ctx, "", page, pageSize, scope.UserID)
+	} else {
+		sessions, total, err = s.sessionRepo.GetByMerchant(ctx, "", page, pageSize)
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1135,7 +1222,7 @@ type Customer360ServiceForTest struct {
 }
 
 // GetCustomer360 获取客户 360 视图（测试版本）
-func (s *Customer360ServiceForTest) GetCustomer360(ctx context.Context, userID string) (*Customer360DTO, error) {
+func (s *Customer360ServiceForTest) GetCustomer360(ctx context.Context, userID string, scope SessionScope) (*Customer360DTO, error) {
 	realService := &Customer360Service{
 		sessionRepo:    s.SessionRepo,
 		messageRepo:    s.MessageRepo,
@@ -1143,11 +1230,11 @@ func (s *Customer360ServiceForTest) GetCustomer360(ctx context.Context, userID s
 		orderRepo:      s.OrderRepo,
 		unifiedMsgRepo: s.UnifiedMsgRepo,
 	}
-	return realService.GetCustomer360(ctx, userID)
+	return realService.GetCustomer360(ctx, userID, scope)
 }
 
 // GetCustomerList 获取客户列表（测试版本）
-func (s *Customer360ServiceForTest) GetCustomerList(ctx context.Context, page, pageSize int, filters map[string]string) (map[string]*Customer360DTO, int64, error) {
+func (s *Customer360ServiceForTest) GetCustomerList(ctx context.Context, page, pageSize int, filters map[string]string, scope SessionScope) (map[string]*Customer360DTO, int64, error) {
 	realService := &Customer360Service{
 		sessionRepo:    s.SessionRepo,
 		messageRepo:    s.MessageRepo,
@@ -1155,5 +1242,5 @@ func (s *Customer360ServiceForTest) GetCustomerList(ctx context.Context, page, p
 		orderRepo:      s.OrderRepo,
 		unifiedMsgRepo: s.UnifiedMsgRepo,
 	}
-	return realService.GetCustomerList(ctx, page, pageSize, filters)
+	return realService.GetCustomerList(ctx, page, pageSize, filters, scope)
 }

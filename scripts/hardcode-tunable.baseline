@@ -236,6 +236,10 @@ InboxDefaultStaffLoadLimit
 InboxLockTTL
 InboxOutboundClaimTimeout
 InboxOutboundEchoWindow
+#   InboxOutboundEchoWindowShort —— 与 InboxOutboundEchoWindow 同族（出站回声回看窗），
+#      非桥接渠道维持 2h 旧契约（inbox_ingress.go:48 注释）；改窗须与渠道 DOM 巡检
+#      节奏联判，不是运维旋钮。2026-11-17 缺陷猎捕轮随渠道分层化补登记。
+InboxOutboundEchoWindowShort
 InboxOverdueThreshold
 InboxPendingTTL
 InboxRecheckBudgetMax

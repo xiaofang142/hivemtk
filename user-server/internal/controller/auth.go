@@ -56,9 +56,18 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		return
 	}
 
+	// 账号维度防爆破（2026-11-15 审计 M-4）：IP 维度（路由上的 BruteForceGuard）
+	// 挡不住代理池/IPv6 轮换源对同一账号的分布式爆破，这里按 username 独立计数兜底。
+	if locked, retryAfter := middleware.CheckBruteForceAccountLocked("auth.login", req.Username); locked {
+		ctx.Header("Retry-After", strconv.Itoa(retryAfter))
+		response.Error(ctx, http.StatusTooManyRequests, "尝试次数过多，请稍后再试")
+		return
+	}
+
 	resp, err := c.authService.Login(ctx.Request.Context(), &req)
 	if err != nil {
 		middleware.RecordBruteForceFailure(ctx, "auth.login")
+		middleware.RecordBruteForceAccountFailure("auth.login", req.Username)
 
 		c.recordLoginRiskAsync(ctx, req.Username, false, err.Error())
 		response.Error(ctx, http.StatusUnauthorized, err.Error())
@@ -66,6 +75,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}
 
 	middleware.ClearBruteForceFailure(ctx, "auth.login")
+	middleware.ClearBruteForceAccountFailure("auth.login", req.Username)
 
 	// 登录是公开路由（不挂 TenantMiddleware），租户只能由命中的用户行携带。
 	// service 层的 bindUserTenant 只改了局部 ctx，不回流到 request ctx ⇒
@@ -78,6 +88,10 @@ func (c *AuthController) Login(ctx *gin.Context) {
 	}
 
 	c.recordLoginRiskAsync(ctx, req.Username, true, "")
+	// 2026-11-17 审计 P2-7：登录成功同步落 HttpOnly Cookie（localStorage 持久化退役）。
+	if resp != nil && resp.Token != "" {
+		middleware.SetAuthCookie(ctx, resp.Token)
+	}
 	response.Success(ctx, resp, "登录成功")
 }
 
@@ -172,6 +186,10 @@ func (c *AuthController) Register(ctx *gin.Context) {
 		return
 	}
 
+	// P2-7：注册即登录，同落 Cookie。
+	if resp != nil && resp.Token != "" {
+		middleware.SetAuthCookie(ctx, resp.Token)
+	}
 	response.Success(ctx, resp, "注册成功")
 }
 
@@ -187,6 +205,12 @@ func (c *AuthController) Register(ctx *gin.Context) {
 // @Router       /api/auth/refresh-token [post]
 func (c *AuthController) RefreshToken(ctx *gin.Context) {
 	authHeader := ctx.GetHeader("Authorization")
+	if authHeader == "" {
+		// P2-7：Cookie 通道同样可换发（同源 Web 端续期）
+		if ck := middleware.AuthCookieToken(ctx); ck != "" {
+			authHeader = "Bearer " + ck
+		}
+	}
 	if authHeader == "" {
 		response.Error(ctx, http.StatusUnauthorized, "未提供认证令牌")
 		return
@@ -209,6 +233,7 @@ func (c *AuthController) RefreshToken(ctx *gin.Context) {
 		return
 	}
 
+	middleware.SetAuthCookie(ctx, newToken) // P2-7：换发后 Cookie 同步轮换
 	response.Success(ctx, gin.H{
 		"token": newToken,
 	}, "刷新令牌成功")
@@ -229,8 +254,63 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		if token != "" {
 			_ = c.authService.Logout(ctx.Request.Context(), token)
 		}
+	} else if ck := middleware.AuthCookieToken(ctx); ck != "" {
+		// P2-7：Cookie 通道登出同样要拉黑令牌（HttpOnly 下前端拿不到值，
+		// 吊销只能在服务端做），并撤销 Cookie。
+		_ = c.authService.Logout(ctx.Request.Context(), ck)
 	}
+	middleware.ClearAuthCookie(ctx)
 	response.Success(ctx, nil, "登出成功")
+}
+
+// WsTicket godoc
+// @Summary      铸造 WebSocket 一次性 ticket
+// @Description  坐席/管理端 WS 连接用：JWT 在 Authorization 头里换一个 60s 单次消费
+// @Description      的一次性 ticket，连接 /api/ws/* 时 URL 只带 ticket，长期凭据不进 access log
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200   {object} response.Response "ticket + expires_in"
+// @Failure      401   {object} response.Response "未认证"
+// @Router       /api/ws/ticket [post]
+func (c *AuthController) WsTicket(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+	uid, _ := userID.(uint)
+	if uid == 0 {
+		response.Error(ctx, http.StatusUnauthorized, "未提供认证令牌")
+		return
+	}
+	role, _ := ctx.Get("role")
+	roleStr, _ := role.(string)
+	dataScope, _ := ctx.Get("data_scope")
+	scopeStr, _ := dataScope.(string)
+	deptID, _ := ctx.Get("department_id")
+	dept, _ := deptID.(uint)
+	teamID, _ := ctx.Get("team_id")
+	team, _ := teamID.(uint)
+	tenantID, _ := ctx.Get(middleware.TenantContextKey)
+	tid, _ := tenantID.(uint)
+	username, _ := ctx.Get("username")
+	uname, _ := username.(string)
+
+	ticket := utils.MintWSTicket(utils.WsTicketClaims{
+		UserID:       uid,
+		Username:     uname,
+		Role:         roleStr,
+		DataScope:    scopeStr,
+		DepartmentID: dept,
+		TeamID:       team,
+		TenantID:     tid,
+	})
+	if ticket == "" {
+		response.Error(ctx, http.StatusInternalServerError, "ticket 铸造失败，请稍后重试")
+		return
+	}
+	response.Success(ctx, gin.H{
+		"ticket":    ticket,
+		"expires_in": 60,
+	}, "ok")
 }
 
 // GetCurrentUser godoc
@@ -422,15 +502,26 @@ func (c *AuthController) VerifyMFALogin(ctx *gin.Context) {
 		return
 	}
 
+	// 账号维度防爆破前置检查（2026-11-15 审计 M-4，桶=temp_token）。
+	if locked, retryAfter := middleware.CheckBruteForceAccountLocked("auth.mfa", req.TempToken); locked {
+		ctx.Header("Retry-After", strconv.Itoa(retryAfter))
+		response.Error(ctx, http.StatusTooManyRequests, "尝试次数过多，请稍后再试")
+		return
+	}
+
 	userID, username, role, err := c.mfaService.VerifyMFALogin(ctx.Request.Context(), req.TempToken, req.Code)
 	if err != nil {
 		// 路由已挂 BruteForceGuard("auth.mfa")：失败必须在此单点计数，
 		// 否则守卫永不触发（TOTP 6 位码 ±90s 窗口可被持续爆破）。
 		middleware.RecordBruteForceFailure(ctx, "auth.mfa")
+		// 账号维度（2026-11-15 审计 M-4）：MFA 步骤尚无 username，以 temp_token
+		// （本次待验证登录的唯一标识）为桶——换 IP 轮换源对同一 temp_token 猜码同样受限。
+		middleware.RecordBruteForceAccountFailure("auth.mfa", req.TempToken)
 		response.Error(ctx, http.StatusUnauthorized, err.Error())
 		return
 	}
 	middleware.ClearBruteForceFailure(ctx, "auth.mfa")
+	middleware.ClearBruteForceAccountFailure("auth.mfa", req.TempToken)
 
 	// 终令牌按用户行签发，携带租户归属（T031：MFA 临时令牌不含租户）；
 	// 租户字段与普通登录响应同口径补齐（此前 MFA 响应缺 tenant_id/tenant_code，
@@ -445,6 +536,7 @@ func (c *AuthController) VerifyMFALogin(ctx *gin.Context) {
 	}
 
 	middleware.MarkMFAVerified(userID)
+	middleware.SetAuthCookie(ctx, token) // P2-7：MFA 终令牌同落 Cookie
 
 	resp := gin.H{
 		"token":   token,

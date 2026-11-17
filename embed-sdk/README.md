@@ -201,6 +201,23 @@ ${apiBaseURL}/chat/embed/{channel_ref}#/chat/embed/{channel_ref}
 | `GET /api/chat/public/sessions/{id}/messages` | 拉取历史消息 |
 | `WS /api/ws/visitor` | 实时消息推送（私域部署无鉴权） |
 
+## 🛡 宿主页 CSP 建议（P3-5 配套）
+
+宿主页一旦配置了 `Content-Security-Policy`，必须为 embed 组件放行以下资源，否则浮标/聊天窗会静默加载不出来（SDK 加载失败只会打一条 `console.error`）：
+
+| CSP 指令 | 需放行的源 | 原因 |
+|---|---|---|
+| `script-src` | SDK 所在的 origin（自托管时为 `'self'`，云端接入为 `https://work.xapptool.cn`） | `marketing-chat-widget.iife.js` 是宿主页直接加载的外部脚本 |
+| `frame-src` / `child-src` | `apiBaseURL` 对应的 origin（云端接入为 `https://work.xapptool.cn`） | 聊天窗以 iframe 加载 `/chat/embed/{channel_ref}` |
+| `style-src` | `'self' 'unsafe-inline'` | SDK 宿主侧用 `style.cssText` 定位浮标（style 属性受 `style-src` 管辖） |
+
+配套的 allowlist（域白名单）约束：
+
+1. **`apiBaseURL` 只能指向你控制的、且已启用 AppKey 渠道鉴权的部署**——iframe 加载的是一整个可交互页面，iframe 的源一旦被诱导指向第三方站点，宿主就把一个第三方页面嵌进了自己的文档树。生产环境建议把 `frame-src` 收死到单一固定 origin，不要用 `https:` 通配。
+2. **不要为 SDK 放行 `script-src *` 或 `'unsafe-eval'`**：SDK 产物是纯静态 IIFE，无需 eval；需要新的脚本源时先核对该源的归属。
+3. **iframe 内部文档的网络面（WS/API）由 iframe 自身文档的 CSP/部署侧管辖**，宿主页 CSP 的 `connect-src` 不约束它，无需为宿主额外放行 `connect-src`（参考本仓 `website/index.html` 的 meta CSP 注释）。
+4. **`frame-ancestors` 无法通过 `<meta>` 交付**（仅 HTTP 响应头有效），静态托管平台若支持自定义响应头（Cloudflare Pages `_headers`、Netlify、nginx `add_header`），建议给 `/embed/` 路径配 `frame-ancestors 'self' <宿主域名>` 白名单，防止聊天窗被第三方页面盗嵌。
+
 ## 🛠 常用命令
 
 ```bash

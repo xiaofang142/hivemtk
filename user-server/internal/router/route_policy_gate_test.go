@@ -140,6 +140,7 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /api/webhook/wecom/:account_id":                  "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
 	"GET /api/webhook/whatsapp/:account_id":               "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
 	"GET /api/ws/visitor":                                 "访客 WebSocket：握手内校验 visitor_token",
+	"POST /api/chat/public/ws-ticket":                     "访客 WS 换票口：匿名但 handler 内强制校验 visitor_token（缺 token 403），签发一次性 ticket（与 /api/ws/visitor 同型）",
 	"GET /assets/*filepath":                               "前端静态产物与分享页：只有模板与图片，无商户数据",
 	"HEAD /assets/*filepath":                              "前端静态产物 HEAD 探测面（r.Static 原行为，F-4-3）：middleware.StaticGuard 防篡改扩展名",
 	"GET /embed/*filepath":                                "embed SDK 构建产物：匿名公开引用面（第三方站点 <script src>），middleware.StaticGuard 防篡改扩展名",

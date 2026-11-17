@@ -130,6 +130,29 @@ var dataScopeRoutes = map[string]DataScopeRow{
 		OwnerColumn: "agent_id", AllowUnowned: true,
 		Note: "解除人工接管会把会话还给机器人，动的是别人正在处理的会话",
 	},
+	// 客户档案（customer 域）按行寻址的那批：2026-11-15 审计 H-1 修复前，这批接口
+	// 只挂 JWT，任何 data_scope=self 的坐席都能用客户主键 id 直读其他坐席名下客户的
+	// 360 视图与消息全文——同一份数据换 session-id 寻址会被上面那批登记行拦住，
+	// 换 customer-id 寻址即绕过。口径与 customer_sessions 一致：
+	// owner_agent_id 是客户归属（uint system_users.id），未分配（NULL/0）按未分配池放行。
+	// 注意 :id 语义是 customers 表主键（varchar(36)）——同一路径形状上 behaviors/tags
+	// 系列的 :id 实际是 sessions.user_id 语义（见 controller 各 handler），它们走
+	// service 层 ensureCustomerVisible 断言，不能登记成 customers.id（否则全片误 404）；
+	// PUT /api/customer/:id 落点是 legacy user 表（无归属列），已收 AdminAuthMiddleware。
+	"GET /api/customer/360/:id": {
+		Table: "customers", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_agent_id", AllowUnowned: true,
+		Note: "客户 360° 全量视图（含消息历史），读到即是客户隐私全量",
+	},
+	"GET /api/customer/:id": {
+		Table: "customers", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_agent_id", AllowUnowned: true,
+	},
+	"GET /api/customer/:id/communications": {
+		Table: "customers", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_agent_id", AllowUnowned: true,
+		Note: "客户沟通记录（消息史）",
+	},
 	// 收件箱按行寻址的那批（详情/消息/打标/置顶/静音/删除消息）已在 service 层过
 	// InboxScope，不再重复登记；这里没有 inbox_conversations 的行不是"漏了"，
 	// 是它们已有执行点。登记表与 live 路由的差集由

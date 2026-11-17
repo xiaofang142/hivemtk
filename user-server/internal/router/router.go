@@ -141,6 +141,9 @@ func corsMiddleware(c *gin.Context) {
 	if allow {
 		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Vary", "Origin")
+		// 2026-11-17 审计 P2-7：HttpOnly Cookie 通道需要 credentials。
+		// 白名单回显（非 '*'）是携带凭证的硬前提——星号 + credentials 会被浏览器拒绝。
+		c.Header("Access-Control-Allow-Credentials", "true")
 	}
 	c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
 	// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），

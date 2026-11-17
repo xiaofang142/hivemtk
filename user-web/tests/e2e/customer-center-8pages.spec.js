@@ -2,7 +2,7 @@
 // 覆盖 8 个客户中心相关页面：客户360、OneID、客户旅程、用户分层 RFM、标签分层、线索列表、线索统计、用户分群
 // 模式: A) 真实渲染(专属选择器)  B) 关键 API 直连 200  C) 至少 1 个交互
 // 运行: E2E_BASE_URL=http://localhost:8216 E2E_API_URL=http://localhost:8204 \
-//       E2E_ADMIN=admin E2E_ADMIN_PW=Admin@12345678 \
+//       E2E_ADMIN_PASSWORD=<实际口令> \
 //       npx playwright test tests/e2e/customer-center-8pages.spec.js --workers=1 --reporter=list
 
 import { test, expect } from '@playwright/test'
@@ -10,7 +10,8 @@ import { test, expect } from '@playwright/test'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8216'
 const API = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN = process.env.E2E_ADMIN || 'admin'
-const ADMIN_PW = process.env.E2E_ADMIN_PW || 'Admin@12345678'
+const ADMIN_PW = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_ADMIN_PW
+test.skip(!ADMIN_PW, 'E2E_ADMIN_PASSWORD/E2E_ADMIN_PW not set')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 

@@ -30,6 +30,20 @@ spec:
         - name: user-server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # 2026-11-17 审计 P2-12：最小权限基线。runAsNonRoot 要求镜像用户非 0
+          # （若基础镜像以 root 构建，需在 Dockerfile 加 USER）；uploads 卷写路径
+          # 由 volumeMount 挂载，readOnlyRootFilesystem 需为 /tmp 与上传目录留
+          # emptyDir/tmpfs，见下方 volumeMounts。
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: false
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: http
               # 从 values 取而不是硬编码：模板里再写死一个端口，就等于把同一个数放两处，

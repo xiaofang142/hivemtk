@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -390,6 +392,16 @@ type VisitorSendMessageRequest struct {
 	Timezone string `json:"timezone,omitempty"`
 }
 
+// VisitorWsTicketRequest 访客 WS ticket 铸造请求（2026-11-15 审计 L7）。
+// 三元组必须与随后 /api/ws/visitor 连接参数完全一致——ticket 铸造时按它们
+// 绑定 visitor_token，连接时按它们核对，转用到他人会话即拒。
+type VisitorWsTicketRequest struct {
+	ChannelID    string `json:"channel_id" binding:"required"`
+	VisitorID    string `json:"visitor_id" binding:"required"`
+	SessionID    string `json:"session_id" binding:"required"`
+	VisitorToken string `json:"visitor_token"`
+}
+
 // VisitorSendMessageResult 访客发送消息结果
 type VisitorSendMessageResult struct {
 	UserMessage    *model.SessionMessage `json:"user_message"`
@@ -425,6 +437,15 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 	// 防止会话关闭后旧 session_id/token 仍可写入并意外触发 AI 回复。
 	if !CustomerSessionCanSendMessage(session) {
 		return nil, fmt.Errorf("会话状态 %s 不允许发送消息，请开启新会话", session.Status)
+	}
+
+	// media_url 白名单校验（2026-11-15 审计 M-2）：此前完全零校验，任意串（含
+	// javascript:/data: 伪协议、外站钓鱼 URL）原样落库，坐席工作台/访客挂件按
+	// media_type 渲染成图片/文件卡片点击即触发。口径：空值放行；相对路径只认
+	// /files/ 前缀（本地存储交付形态）；绝对 URL 仅 http/https 且 host 必须命中
+	// 本实例存储域（七牛配置域，env CHAT_MEDIA_URL_EXTRA_HOSTS 可扩展自建 CDN 域）。
+	if err := validateVisitorMediaURL(req.MediaURL); err != nil {
+		return nil, err
 	}
 
 	channel, err := s.resolveChannel(ctx, req.ChannelID)
@@ -854,4 +875,50 @@ func (s *VisitorChatService) CountAvailableAgents(ctx context.Context) (int, err
 
 func shouldForceTransferByKeywords(content string) bool {
 	return MatchTransferKeywords(content)
+}
+
+// validateVisitorMediaURL 访客消息 media_url 白名单校验（2026-11-15 审计 M-2）。
+//
+// 规则（见 SendMessage 调用点注释）：
+//   - 空 ⇒ 放行（纯文本消息）；
+//   - 以 "/files/" 开头的站内相对路径 ⇒ 放行（本地存储驱动签发的公开交付形态）；
+//   - 其余按绝对 URL 解析：scheme 必须 http/https（堵 javascript:/data: 伪协议），
+//     host 必须命中存储域白名单（七牛配置域 + env CHAT_MEDIA_URL_EXTRA_HOSTS
+//     逗号分隔扩展，供自建 CDN/对象存储部署），大小写不敏感；
+//   - 解析失败/host 为空 ⇒ 拒绝。错误文案面向访客可读，不含内部配置细节。
+//
+// 白名单而不是黑名单：媒体 URL 会进坐席工作台与访客挂件的 href/src，只有
+// 「明确属于本实例存储域」才可放行；第三方图床不在默认白名单（需要时显式
+// 加 env，由部署方承担外链风险）。
+func validateVisitorMediaURL(mediaURL string) error {
+	mediaURL = strings.TrimSpace(mediaURL)
+	if mediaURL == "" {
+		return nil
+	}
+	if strings.HasPrefix(mediaURL, "/files/") {
+		return nil
+	}
+
+	u, err := url.Parse(mediaURL)
+	if err != nil || u.Host == "" {
+		return errors.New("media_url 格式无效")
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return errors.New("media_url 仅支持 http/https 链接")
+	}
+
+	allowed := map[string]bool{}
+	cfg := config.GetAppConfig()
+	if d := strings.TrimSpace(cfg.Storage.Qiniu.Domain); d != "" {
+		allowed[strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://"), "/"))] = true
+	}
+	for _, extra := range strings.Split(strings.TrimSpace(os.Getenv("CHAT_MEDIA_URL_EXTRA_HOSTS")), ",") {
+		if e := strings.ToLower(strings.TrimSpace(extra)); e != "" {
+			allowed[e] = true
+		}
+	}
+	if allowed[strings.ToLower(u.Hostname())] {
+		return nil
+	}
+	return errors.New("media_url 不在本实例允许的存储域内")
 }

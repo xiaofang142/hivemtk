@@ -20,6 +20,9 @@ func setupAuthRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.POST("/auth/logout", authCtrl.Logout)
 	auth.GET("/auth/current-user", authCtrl.GetCurrentUser)
 	auth.POST("/auth/change-password", authCtrl.ChangePassword)
+	// 2026-11-15 审计 L7：WS 一次性 ticket 铸造（JWT 在 Authorization 头里换，
+	// 连接时 URL 只带一次性 ticket，长期凭据不进 access log）。
+	auth.POST("/ws/ticket", authCtrl.WsTicket)
 
 	auth.POST("/auth/mfa/setup", authCtrl.SetupMFA)
 	auth.POST("/auth/mfa/confirm", authCtrl.ConfirmMFASetup)
@@ -56,15 +59,18 @@ func setupAuthRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 
 func setupUserRoutes(auth *gin.RouterGroup) {
 	userCtrl := controller.NewSystemUserController()
-	auth.GET("/user/list", userCtrl.GetUsers)
-	auth.GET("/users", userCtrl.GetUsers)
-	auth.GET("/users/search", userCtrl.SearchUsers)
-	auth.GET("/user/:id", userCtrl.GetUser)
-	auth.GET("/users/:id", userCtrl.GetUser)
-
+	// 2026-11-15 审计 M-3 收权：用户目录读口此前在裸 auth 组，任意登录角色可遍历
+	// 全库账号的 username/email/phone/real_name/role/status/last_login（撞库/钓鱼弹药）。
+	// user-web 对这几条读口零消费（usersApi 仅 Login.vue 用 login/mfaVerify，2026-11-15
+	// 实查），整体收进 admin 档；写侧原本就在 admin 组。
 	admin := auth.Group("")
 	admin.Use(middleware.AdminAuthMiddleware())
 	{
+		admin.GET("/user/list", userCtrl.GetUsers)
+		admin.GET("/users", userCtrl.GetUsers)
+		admin.GET("/users/search", userCtrl.SearchUsers)
+		admin.GET("/user/:id", userCtrl.GetUser)
+		admin.GET("/users/:id", userCtrl.GetUser)
 		admin.POST("/users", userCtrl.CreateUser)
 		admin.PUT("/users/:id", userCtrl.UpdateUser)
 		admin.DELETE("/users/:id", userCtrl.DeleteUser)

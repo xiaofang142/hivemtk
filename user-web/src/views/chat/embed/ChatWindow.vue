@@ -239,17 +239,31 @@ const startTransferWaiting = () => {
   }, 30000)
 }
 
+// 目标 origin 推导（2026-11-15 审计 L8 收紧）：mcwParent 仅在与宿主 referrer
+// origin 一致时采纳，防第三方定向接收 close/unread 事件（口径同 Index.vue）。
+// referrer 推导不出 origin 时返回空串，调用方据此跳过 postMessage——
+// 绝不用 '*' 兜底（P3-4/P3-22）。
+const resolveWidgetParentOrigin = () => {
+  var refOrigin = ''
+  try { refOrigin = new URL(document.referrer).origin } catch { refOrigin = '' }
+  var q = new URLSearchParams(window.location.search).get('mcwParent')
+    || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
+  if (q) {
+    try {
+      var qOrigin = new URL(q).origin
+      if (refOrigin && qOrigin === refOrigin) return qOrigin
+    } catch (e) { /* fallthrough */ }
+  }
+  return refOrigin
+}
+
 watch(offlineBannerCount, (c) => {
   try {
     if (window.parent && window.parent !== window) {
-      // N-6③：目标 origin 推导（mcwParent 协商参数 → referrer 回退），消除 '*' 通配
-      var targetOrigin = '*'
-      try {
-        var q = new URLSearchParams(window.location.search).get('mcwParent')
-          || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
-        targetOrigin = q ? new URL(q).origin : new URL(document.referrer).origin
-      } catch (e) { /* 推导失败保守回退 '*'（仅独立打开场景可达） */ }
-      window.parent.postMessage({ type: 'mcw-unread', count: c }, targetOrigin)
+      // N-6③：目标 origin 推导（mcwParent 协商参数 → referrer 回退），消除 '*' 通配；
+      // origin 推导不出来时直接不投递（fail-closed），绝不落 '*'
+      var targetOrigin = resolveWidgetParentOrigin()
+      if (targetOrigin) window.parent.postMessage({ type: 'mcw-unread', count: c }, targetOrigin)
     }
   } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });

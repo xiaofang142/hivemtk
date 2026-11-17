@@ -30,6 +30,8 @@ func toPgVector(vec []float32) string {
 //   - CI 的 hash 兜底：结构 + 维度/非零/确定性/降序断言，语义断言无对象可量，
 //     但既不降阈值也不跳过用例
 func TestRagSearcher_RealVectorSearch(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过（审计交付配套）
+
 	database := testutil.NewTestDB(t, &model.KnowledgeChunk{}, &model.KnowledgeDocument{})
 	testmigrate.RunTestMigrations(t, database)
 	s := NewRagSearcher()
@@ -256,3 +258,4 @@ func cosineSim(a, b []float32) float64 {
 	}
 	return dot / (math.Sqrt(na) * math.Sqrt(nb))
 }
+

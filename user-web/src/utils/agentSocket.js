@@ -1,5 +1,6 @@
 import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
 import { getApiConfig as getConfig } from './configManager'
+import { useUserStore } from '@/stores/user'
 
 const STORAGE_KEY_PREFIX = 'agentSocket:lastSeq:';
 
@@ -66,7 +67,12 @@ export default class AgentSocket {
     } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
-  buildWsUrl() {
+  // 2026-11-15 审计 L7：JWT 不再进 URL query（网关/反代 access log 会留 query 全量，
+  // 日志泄露即会话劫持）。唯一凭证形态是经 /api/ws/ticket（Authorization 头）换的
+  // 60s 单次消费一次性 ticket；ticket 缺失/换票失败时直接拒绝建连——connect() 的
+  // try/catch 会把它送进既有 onError 回调与 scheduleReconnect 重连上限逻辑，
+  // 绝不回退 ?token= 形态（T15）。
+  async buildWsUrl() {
     const cfg = getConfig()
     const base = cfg.baseUrl || ''
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -74,8 +80,26 @@ export default class AgentSocket {
     url.protocol = proto
     if (this.agentId != null) url.searchParams.set('agent_id', String(this.agentId))
     if (this.agentName) url.searchParams.set('agent_name', this.agentName)
-    const token = localStorage.getItem('token')
-    if (token) url.searchParams.set('token', token)
+    // 坐席令牌取自内存 store（JWT 不再持久化进 localStorage）。换票 fetch 同源默认
+    // 带 HttpOnly Cookie：刷新页面后内存为空时，/api/ws/ticket 由 Cookie 回落认证。
+    const token = useUserStore().token || ''
+    if (token) {
+      let ticket = null
+      try {
+        const res = await fetch(`${base || location.origin}/api/ws/ticket`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const body = await res.json()
+          ticket = body?.data?.ticket ?? body?.ticket ?? null
+        }
+      } catch { /* 换票失败按无 ticket 处理（下方拒绝建连） */ }
+      if (!ticket) {
+        throw new Error('agentSocket: WS ticket unavailable, refusing to put token in URL')
+      }
+      url.searchParams.set('ticket', ticket)
+    }
     const sticky = this._deriveSticky();
     if (sticky) url.searchParams.set('node_id', sticky)
     return url.toString()
@@ -91,11 +115,11 @@ export default class AgentSocket {
     return nodeId
   }
 
-  connect() {
+  async connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
     let ws
     try {
-      ws = new WebSocket(this.buildWsUrl())
+      ws = new WebSocket(await this.buildWsUrl())
     } catch (e) {
       this.onError(e)
       this.scheduleReconnect()

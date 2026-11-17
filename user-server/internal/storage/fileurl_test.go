@@ -29,22 +29,32 @@ func onMode(t *testing.T) {
 }
 
 // off 模式：不签名、URL 与历史逐字节一致（离线单机零回归）。
-func TestPublicURL_OffModeUnchanged(t *testing.T) {
+// 2026-11-17 审计 P3-2：off 模式同样签发（默认租户归属），URL 形状从
+// /files/<path> 变为 /files/<path>?s=<token>；签名可回验且路径段逐字节一致。
+func TestPublicURL_OffModeSigned(t *testing.T) {
 	withSigner(t, 0)
 	tenant.SetMode(tenant.ModeOff)
 
 	d := NewLocalDriver("/tmp/uploads", "")
 	for _, path := range []string{
 		"materials/2026/10/a.pdf",
-		"tenant_5/materials/2026/10/a.pdf",
 		"knowledge-base/20261023/legacy.pdf",
 	} {
-		if got, want := d.PublicURL(path), "/files/"+path; got != want {
-			t.Errorf("off 模式 PublicURL(%q) = %q，期望 %q（逐字节等价）", path, got, want)
+		got := d.PublicURL(path)
+		wantPrefix := "/files/" + path + "?s="
+		if !strings.HasPrefix(got, wantPrefix) {
+			t.Errorf("off 模式 PublicURL(%q) = %q，期望前缀 %q", path, got, wantPrefix)
+			continue
 		}
-	}
-	if _, _, ok := SignStoredPath("tenant_5/materials/a.pdf"); ok {
-		t.Error("off 模式不该签名：离线单机的 URL 里本来就没有租户段")
+		sig := got[len(wantPrefix):]
+		tid, rel, err := VerifyFileURL("/"+path, sig, time.Now())
+		if err != nil {
+			t.Errorf("off 模式签名验不过: %v", err)
+			continue
+		}
+		if rel != path || tid != tenant.DefaultTenantID {
+			t.Errorf("签名回验不符: rel=%q tid=%d，期望 rel=%q tid=%d", rel, tid, path, tenant.DefaultTenantID)
+		}
 	}
 }
 

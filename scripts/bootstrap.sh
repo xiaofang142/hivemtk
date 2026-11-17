@@ -86,10 +86,24 @@ USER_SERVER_PORT="${USER_SERVER_PORT:-8204}"
 PG_PORT="${PG_PORT:-${USER_POSTGRES_HOST_PORT:-${DB_PORT:-8202}}}"
 PG_HOST="${PG_HOST:-127.0.0.1}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
-# 口令只有一个事实源：SEED_PASSWORD（未设时取 ADMIN_PASSWORD，再未设时是公开默认值）。
+# 口令只有一个事实源：SEED_PASSWORD（未设时取 ADMIN_PASSWORD）。
 # 两者历史上各走各的——ADMIN_PASSWORD 只用于步骤 7 登录校验，Go seed 另用自己写死的常量，
 # 于是"设了 ADMIN_PASSWORD 却仍被种成默认口令"。这里合一后，seed 写入与登录校验必然同值。
-SEED_PASSWORD="${SEED_PASSWORD:-${ADMIN_PASSWORD:-Seed@123456}}"
+# 2026-11-17 审计 P1-3：两个都未设时不再静默回落公开演示值 Seed@123456（公网可达新装
+# 即裸奔），改为自动生成一次性随机口令；要复现旧行为（本机 e2e/演示）须显式
+# ALLOW_PUBLIC_SEED_PASSWORD=1，且沿用公开值的告警块照常触发。
+if [ -n "${SEED_PASSWORD:-}" ]; then
+  : # 已显式设置，直接用
+elif [ -n "${ADMIN_PASSWORD:-}" ]; then
+  SEED_PASSWORD="$ADMIN_PASSWORD"
+elif command -v openssl >/dev/null 2>&1; then
+  SEED_PASSWORD="$(openssl rand -base64 18 | tr '+/' '-_' | tr -d '=')"
+  _SEED_PW_GENERATED=1
+else
+  err "SEED_PASSWORD 未设置且找不到 openssl（生成一个：openssl rand -base64 18）"
+  err "或显式 ALLOW_PUBLIC_SEED_PASSWORD=1 使用仓库公开演示口令（仅限本机，不可对外）"
+  exit 1
+fi
 ADMIN_PASSWORD="$SEED_PASSWORD"
 export SEED_PASSWORD
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@hivemtk.local}"
@@ -104,6 +118,12 @@ NC='\033[0m'
 log()  { printf "${GREEN}[bootstrap]${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}[bootstrap]${NC} %s\n" "$*"; }
 err()  { printf "${RED}[bootstrap]${NC} %s\n" "$*" >&2; }
+
+# 审计 P1-3 配套：自动生成的口令只在终端明示一次，落库后不落任何文件。
+if [ "${_SEED_PW_GENERATED:-0}" = "1" ]; then
+  log "SEED_PASSWORD 未设置：已自动生成一次性随机管理员口令（仅此一次显示，请立即转存密码管理器）："
+  log "  $SEED_PASSWORD"
+fi
 
 # 预检
 [ -z "$POSTGRES_PASSWORD" ] && { err "POSTGRES_PASSWORD 未设置"; exit 1; }
@@ -212,6 +232,36 @@ JWT_SECRET="$JWT_SECRET" \
 MERCHANT_API_SECRET="$MERCHANT_API_SECRET" \
 SEED_PASSWORD="$SEED_PASSWORD" \
 go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
+
+# 4b) 审计 P3-18 收口：设置了 DB_USER 时，装配最小权限应用角色并把表所有权
+# 移交给它（AutoMigrate 需要 owner 做 ALTER；超管口令保留给维护路径）。
+# 幂等：角色已存在则改口令，所有权已是 DB_USER 的表跳过。
+if [ -n "${DB_USER:-}" ]; then
+    # 调用方未 source .env 时（CI/手工）这些键有默认值兜底，否则 4b 步连库必败
+    USER_DB_NAME="${USER_DB_NAME:-user_db}"
+    DB_HOST="${DB_HOST:-$PG_HOST}"
+    DB_PORT="${DB_PORT:-$PG_PORT}"
+    log "装配最小权限应用角色 ${DB_USER}（审计 P3-18）..."
+    if [ -z "${DB_APP_PASSWORD:-}" ]; then
+        err "DB_USER 已设置但 DB_APP_PASSWORD 为空——应用将无法连库"
+        exit 1
+    fi
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -v ON_ERROR_STOP=1 -tAc "
+        DO \$\$ BEGIN
+          IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
+            CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_APP_PASSWORD}';
+          ELSE
+            ALTER ROLE ${DB_USER} LOGIN PASSWORD '${DB_APP_PASSWORD}';
+          END IF;
+        END \$\$;
+        GRANT USAGE, CREATE ON SCHEMA public TO ${DB_USER};
+        GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${DB_USER};
+        GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${DB_USER};
+        ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${DB_USER};
+        ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${DB_USER};" >/dev/null 2>&1     && log "  角色与授权就绪"     || { err "  应用角色装配失败（检查 psql/口令）"; exit 1; }
+    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -Atc         "SELECT 'ALTER TABLE '||quote_ident(tablename)||' OWNER TO ${DB_USER};' FROM pg_tables WHERE schemaname='public' AND tableowner='${POSTGRES_USER}'"       | PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" >/dev/null 2>&1     && log "  表所有权已移交 ${DB_USER}"
+    PGPASSWORD="$DB_APP_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$DB_USER" -d "$USER_DB_NAME" -tAc "select 1" >/dev/null 2>&1     && log "  应用角色连通性验证通过"     || { err "  应用角色连通性验证失败"; exit 1; }
+fi
 
 # 5) 跑 Python 知识库种子
 log "执行 Python 知识库种子（hivemtk 产品 ${HIVEMTK_RAG_PRODUCT_ID}）..."

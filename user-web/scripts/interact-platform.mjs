@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 import { execSync } from 'child_process';
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
+
 const BASE = 'http://localhost:8212';
 const routes = [
   '/dashboard',
@@ -24,7 +27,7 @@ async function login(page) {
   const p = await page.$('input[type="password"]');
   if (u && p) {
     await u.fill('admin');
-    await p.fill('Seed@123456');
+    await p.fill(ADMIN_PASSWORD);
     const btn = await page.$('button[type="submit"], .el-button--primary');
     if (btn) await btn.click();
     await page.waitForTimeout(4000);

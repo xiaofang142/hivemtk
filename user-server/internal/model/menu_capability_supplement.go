@@ -58,6 +58,11 @@ var MenuCapabilitySupplement = []MenuCapability{
 	// 平台发布
 	{Pattern: "/api/geo/platform/publish", MenuKeys: []string{"geoPlatformPublish"}},
 	{Pattern: "/api/geo/platform/accounts/*", MenuKeys: []string{"geoPlatformPublish"}},
+	// 2026-11-17 审计 P2-2：短信发送/重发按"能力位"收口（判据来自消费页 sms/List.vue
+	// 的 smsList 菜单节点，staff 默认授予；未授予 smsList 的角色不可直调发送面）。
+	// 配置读写口 /api/sms/config 走 adminOnlyRoutes（smsConfig 已收归 admin），不在此表。
+	{Pattern: "/api/sms/send", MenuKeys: []string{"smsList"}},
+	{Pattern: "/api/sms/resend/*", MenuKeys: []string{"smsList"}},
 }
 
 // AllMenuCapabilities 返回补充件 + 生成件。补充件在前：同名形状以补充件的

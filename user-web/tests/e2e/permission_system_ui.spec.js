@@ -29,15 +29,15 @@ fs.mkdirSync(SCREENSHOT_DIR, { recursive: true })
 // E2E_ADMIN_USERNAME/E2E_ADMIN_PASSWORDS：显式注入被测库真实存在的 admin 账号。
 // 旧夹具把用户名写死为 'admin' 且口令只有 4 个硬编码候选 —— 换一个库（如本机
 // user_db，admin 行根本不存在）就整条 describe 全灭（2026-10-25 实测）。
-// 候选支持逗号分隔多值；注入值排在旧硬编码候选**之前**（显式注入优先）。
+// 候选支持逗号分隔多值；E2E_ADMIN_PASSWORD 作为兜底候选（显式注入优先）。
+// 公开默认口令候选已按 T4-1 移除，一律经环境变量注入，不再写死在仓库里。
 const envCandidates = (process.env.E2E_ADMIN_PASSWORDS || '').split(',').map(s => s.trim()).filter(Boolean)
 const envUsername = process.env.E2E_ADMIN_USERNAME || 'admin'
 const CANDIDATE_PASSWORDS = [...envCandidates,
-  'Admin@12345678',
-  'Admin@123456',
-  '62cfdc6bf1b075830734cc6f9a63501b',
-  '9eb623e1979ad575b98bad24e12669a2f58205e9a8c79f61a7083f8468fc18b3'
-]
+  process.env.E2E_ADMIN_PASSWORD
+].filter(Boolean)
+
+test.skip(CANDIDATE_PASSWORDS.length === 0, 'E2E_ADMIN_PASSWORD(S) not set')
 
 // ---- 工具函数 ----
 async function adminLogin() {

@@ -1,4 +1,5 @@
 import { http, getRequestInstance } from '@/utils/request'
+import { useUserStore } from '@/stores/user'
 
 // ego-lite 腿（浏览器自动化的第二种执行腿：用户自己的 ego-browser）
 //
@@ -49,7 +50,9 @@ export const listEgoEvents = (id, params) =>
 export const streamEgoEvents = (id, { afterId = 0, onEvent, onEnd } = {}) => {
   const inst = getRequestInstance()
   const base = inst?.defaults?.baseURL || ''
-  const token = localStorage.getItem('token') || ''
+  // 令牌取自内存 store（JWT 不再持久化进 localStorage）；SSE 的 fetch 同源默认带
+  // HttpOnly Cookie，内存为空时该流请求由服务端 Cookie 回落认证，功能不受影响。
+  const token = useUserStore().token || ''
   const controller = new AbortController()
   const url = `${base}/api/egolite/executions/${id}/stream${afterId ? `?after_id=${afterId}` : ''}`
 

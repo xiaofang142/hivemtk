@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -166,17 +167,21 @@ func BruteForceGuard(endpoint string) gin.HandlerFunc {
 // RecordBruteForceFailure 记录一次失败
 // 在 controller 中检测到失败时调用
 func RecordBruteForceFailure(c *gin.Context, endpoint string) {
+	recordBruteForceFailureByKey(c.ClientIP() + "|" + endpoint)
+}
+
+// recordBruteForceFailureByKey 计数/加锁单点（IP 维度与账号维度共用一套阈值与退避）。
+func recordBruteForceFailureByKey(key string) {
 	cfg := DefaultBruteForceConfig
-	clientKey := c.ClientIP() + "|" + endpoint
 	now := time.Now()
 
 	globalBruteForce.mu.Lock()
 	defer globalBruteForce.mu.Unlock()
 
-	entry, exists := globalBruteForce.entries[clientKey]
+	entry, exists := globalBruteForce.entries[key]
 	if !exists {
 		entry = &bruteForceEntry{firstAt: now}
-		globalBruteForce.entries[clientKey] = entry
+		globalBruteForce.entries[key] = entry
 	}
 
 	if now.Sub(entry.firstAt) > cfg.Window {
@@ -201,12 +206,63 @@ func RecordBruteForceFailure(c *gin.Context, endpoint string) {
 	}
 }
 
-// ClearBruteForceFailure 清除失败计数（成功时调用）
-func ClearBruteForceFailure(c *gin.Context, endpoint string) {
-	clientKey := c.ClientIP() + "|" + endpoint
+// bruteForceAccountKey 账号维度的桶键。
+//
+// 2026-11-15 审计 M-4：此前桶键只有 IP 维度，公网代理池/IPv6 大段轮换源地址可对
+// admin 等已知账号无限速在线爆破（每 IP 计数永远到不了阈值，LoginRisk 只事后告警
+// 不阻断）。账号维度与 IP 维度独立计数、共享同一套阈值/退避，任一命中即拒。
+// username 归一（trim+lower）防「Admin/admin 」变体绕开同一桶；不存在的用户名同样
+// 记账——既不泄露「账号是否存在」，也让按用户名字典的探测被限速。
+func bruteForceAccountKey(endpoint, username string) string {
+	return "account|" + endpoint + "|" + strings.ToLower(strings.TrimSpace(username))
+}
+
+// CheckBruteForceAccountLocked 账号维度锁定检查（公开路由的 handler 在解析出
+// username 后调用，如 auth.login / auth.mfa；命中即 429，与 IP 维度同文案同档）。
+func CheckBruteForceAccountLocked(endpoint, username string) (bool, int) {
+	if bruteForceDisabled {
+		return false, 0
+	}
+	globalBruteForce.mu.RLock()
+	entry, exists := globalBruteForce.entries[bruteForceAccountKey(endpoint, username)]
+	locked := false
+	var lockedUntil time.Time
+	if exists && !entry.lockedUntil.IsZero() && time.Now().Before(entry.lockedUntil) {
+		locked = true
+		lockedUntil = entry.lockedUntil
+	}
+	globalBruteForce.mu.RUnlock()
+
+	if !locked {
+		return false, 0
+	}
+	retryAfter := int(time.Until(lockedUntil).Seconds())
+	if retryAfter < 1 {
+		retryAfter = 1
+	}
+	return true, retryAfter
+}
+
+// RecordBruteForceAccountFailure 记录一次账号维度的失败（登录口令错等）。
+func RecordBruteForceAccountFailure(endpoint, username string) {
+	if bruteForceDisabled {
+		return
+	}
+	recordBruteForceFailureByKey(bruteForceAccountKey(endpoint, username))
+}
+
+// ClearBruteForceAccountFailure 登录成功时清除该账号的失败计数。
+func ClearBruteForceAccountFailure(endpoint, username string) {
 	globalBruteForce.mu.Lock()
 	defer globalBruteForce.mu.Unlock()
-	delete(globalBruteForce.entries, clientKey)
+	delete(globalBruteForce.entries, bruteForceAccountKey(endpoint, username))
+}
+
+// ClearBruteForceFailure 清除失败计数（成功时调用）
+func ClearBruteForceFailure(c *gin.Context, endpoint string) {
+	globalBruteForce.mu.Lock()
+	defer globalBruteForce.mu.Unlock()
+	delete(globalBruteForce.entries, c.ClientIP()+"|"+endpoint)
 }
 
 // IsBruteForceLocked 检查指定 IP+端点是否处于锁定状态

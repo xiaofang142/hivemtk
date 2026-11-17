@@ -71,6 +71,12 @@ type CustomerProfile struct {
 // ErrCustomerNotFound 客户未找到
 var ErrCustomerNotFound = errors.New("客户不存在")
 
+// ErrCustomerForbidden 客户行级隔离拒绝（2026-11-15 审计 H-1）：
+// 调用者不是该客户任一会话的归属坐席（且非超管）。middleware.DataScopeGuard
+// 只覆盖按路径参数寻址且登记进 model.dataScopeRoutes 的口，查询参数/异构 id 语义
+// 的口由 service 层本错误承担，controller 据此回 403。
+var ErrCustomerForbidden = errors.New("无权访问该客户数据")
+
 // ErrInvalidDTO DTO 无效
 var ErrInvalidDTO = errors.New("无效的客戶 DTO")
 

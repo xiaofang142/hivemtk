@@ -13,6 +13,9 @@
  * 安全规则：删除类按钮只点开确认框后取消；表单用假数据+测后清理
  */
 import { chromium } from 'playwright';
+
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
 import fs from 'fs';
 import path from 'path';
 
@@ -176,7 +179,7 @@ async function login(page) {
   const p = await page.$('input[type="password"]');
   if (!u || !p) throw new Error('登录页未找到输入框');
   await u.fill('admin');
-  await p.fill('Seed@123456');
+  await p.fill(ADMIN_PASSWORD);
   const btn = await page.$('button[type="submit"], .el-button--primary');
   if (btn) await btn.click();
   await page.waitForTimeout(5000);

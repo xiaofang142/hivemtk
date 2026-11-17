@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 
 	"hivemtk-user/internal/middleware"
@@ -58,6 +59,35 @@ func maskCredential(s string) string {
 	return s[:2] + "****" + s[len(s)-2:]
 }
 
+// maskConfigJSON config 自由 JSON 的按键名脱敏（2026-11-17 审计 P2-1）：
+// presets 里的 server_key 等签名密钥存在该列，整列明文回传可伪造对 ERP/电商侧的
+// 签名调用。命中敏感键名的值打码，其余键保留（管理员仍能核对配置形状）；
+// 非 JSON 或解析失败时整值打码，向拒的方向收。
+func maskConfigJSON(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil || obj == nil {
+		return maskCredential(raw)
+	}
+	sensitive := map[string]bool{
+		"key": true, "api_key": true, "apikey": true, "secret": true,
+		"secret_key": true, "server_key": true, "token": true,
+		"access_token": true, "app_secret": true, "password": true,
+	}
+	for k, v := range obj {
+		if s, ok := v.(string); ok && sensitive[strings.ToLower(k)] {
+			obj[k] = maskCredential(s)
+		}
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return maskCredential(raw)
+	}
+	return string(out)
+}
+
 // @Summary      获取平台集成账号列表
 // @Tags      integration
 // @Router    /api/integrations [get]
@@ -72,6 +102,11 @@ func (c *IntegrationController) GetAccountList(ctx *gin.Context) {
 		acc.APISecret = maskCredential(acc.APISecret)
 		acc.AccessToken = maskCredential(acc.AccessToken)
 		acc.RefreshToken = maskCredential(acc.RefreshToken)
+		// 2026-11-17 审计 P2-1：api_key 与 config（含 presets 的 server_key 签名密钥）
+		// 原明文出参，持之可伪造对 ERP/电商侧的签名调用。读口已收 admin（route_policy），
+		// 出参再按键名脱敏兜底。
+		acc.APIKey = maskCredential(acc.APIKey)
+		acc.Config = maskConfigJSON(acc.Config)
 	}
 
 	response.Success(ctx, accounts, "获取成功")
@@ -98,6 +133,9 @@ func (c *IntegrationController) GetAccountByID(ctx *gin.Context) {
 	account.APISecret = maskCredential(account.APISecret)
 	account.AccessToken = maskCredential(account.AccessToken)
 	account.RefreshToken = maskCredential(account.RefreshToken)
+	// 同 GetAccountList：api_key/config 出参脱敏（审计 P2-1）。
+	account.APIKey = maskCredential(account.APIKey)
+	account.Config = maskConfigJSON(account.Config)
 
 	response.Success(ctx, account, "获取成功")
 }

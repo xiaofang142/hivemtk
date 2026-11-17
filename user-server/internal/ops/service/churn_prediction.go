@@ -305,6 +305,12 @@ func (s *ChurnPredictionService) GetUnhandledWarnings(ctx context.Context, page,
 	return s.warningRepo.GetUnhandled(ctx, page, pageSize)
 }
 
+// GetWarningByID 按主键取单条预警（找不到 ⇒ gorm.ErrRecordNotFound）。
+// 2026-11-15 审计 M-5：controller 写口做行级归属校验时需要预警行的 user_id。
+func (s *ChurnPredictionService) GetWarningByID(ctx context.Context, id uint) (*model.ChurnWarning, error) {
+	return s.warningRepo.GetByID(ctx, id)
+}
+
 // MarkWarningHandled 标记预警为已处理
 func (s *ChurnPredictionService) MarkWarningHandled(ctx context.Context, id, handledBy uint, note string) error {
 	return s.warningRepo.MarkHandled(ctx, id, handledBy, note)

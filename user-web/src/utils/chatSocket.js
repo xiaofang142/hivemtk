@@ -1,4 +1,5 @@
 import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { useUserStore } from '@/stores/user'
 const STORAGE_KEY_PREFIX = 'chatSocket:lastSeq:';
 // 同 agentSocket：五个 WS 旋钮改由参数中心下发（frontend_ws 组），常量只作兜底。
 
@@ -70,7 +71,7 @@ export class ChatSocket {
     } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
-  connect() {
+  async connect() {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return
     }
@@ -78,8 +79,45 @@ export class ChatSocket {
     const protocol = this.baseURL.startsWith('https') ? 'wss' : 'ws'
     const host = this.baseURL.replace(/^https?:\/\//, '')
     const sinceSeqPart = this.lastSeq > 0 ? `&since_seq=${this.lastSeq}` : '';
-    const tokenPart = this.visitorToken ? `&visitor_token=${encodeURIComponent(this.visitorToken)}` : ''
-    const url = `${protocol}://${host}/api/ws/visitor?session_id=${encodeURIComponent(this.sessionId)}&visitor_id=${encodeURIComponent(this.visitorId)}&channel_id=${encodeURIComponent(this.channelId)}${sinceSeqPart}${tokenPart}`
+
+    // 2026-11-15 审计 L7：visitor_token 不再进 URL query（access log 留痕面）。
+    // 唯一凭证形态是经 /api/chat/public/ws-ticket（visitor_token 头）换的 60s 单次
+    // 消费一次性 ticket；ticket 缺失/换票失败时不再回退 ?visitor_token= 形态（P3-3），
+    // 直接拒绝建连并走下方既有的 onError + scheduleReconnect（重连上限）路径，
+    // 下一次重连会重新尝试换票。
+    let authPart = ''
+    if (this.visitorToken) {
+      let ticket = null
+      try {
+        const res = await fetch(`${this.baseURL}/api/chat/public/ws-ticket`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Chat-Visitor-Token': this.visitorToken,
+          },
+          body: JSON.stringify({
+            channel_id: this.channelId,
+            visitor_id: this.visitorId,
+            session_id: this.sessionId,
+            visitor_token: this.visitorToken,
+          }),
+        })
+        if (res.ok) {
+          const body = await res.json()
+          ticket = body?.data?.ticket ?? body?.ticket ?? null
+        }
+      } catch { /* 换票失败按无 ticket 处理（见下方拒绝建连） */ }
+      if (ticket) {
+        authPart = `&ticket=${encodeURIComponent(ticket)}`
+      } else {
+        const err = new Error('[ChatSocket] ws-ticket unavailable, refusing to put visitor_token in URL')
+        console.error('[ChatSocket] 创建失败：', err)
+        this.onError(err)
+        this.scheduleReconnect()
+        return
+      }
+    }
+    const url = `${protocol}://${host}/api/ws/visitor?session_id=${encodeURIComponent(this.sessionId)}&visitor_id=${encodeURIComponent(this.visitorId)}&channel_id=${encodeURIComponent(this.channelId)}${sinceSeqPart}${authPart}`
 
     try {
       this.ws = new WebSocket(url)
@@ -139,7 +177,9 @@ export class ChatSocket {
     // 与"token 失效"无关。访客端没有 agent token，不能因缺少它而放弃重连
     // （否则聊天窗口永久冻结，访客以为客服不理人）；有 agent token 的坐席端
     // 才走 token 刷新路径。访客侧走普通指数退避重连，resume 依赖 since_seq 续传。
-    const hasAgentToken = !!localStorage.getItem('token');
+    // 坐席令牌取自内存 store（JWT 不再持久化进 localStorage）；刷新页面后内存为空
+    // 时属 Cookie 兜底会话，走普通重连（无 Authorization 头的请求由服务端回落认证）。
+    const hasAgentToken = !!useUserStore().token;
     if (!hasAgentToken) {
       if (this.shouldReconnect) {
         this.scheduleReconnect()

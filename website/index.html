@@ -10,6 +10,17 @@
     <meta name="theme-color" content="#FAF7F2" />
     <meta name="format-detection" content="telephone=no" />
 
+    <!-- P3-5 内容安全策略（静态站无服务端响应头，meta 是 GitHub Pages 上唯一注入点）。
+         放行面依据实测资源清单：
+           - script-src https://work.xapptool.cn：网页客服浮标 SDK（body 尾部动态注入 marketing-chat-widget.iife.js）
+           - frame-src  https://work.xapptool.cn：SDK 聊天窗 iframe（/chat/embed/:channel）
+           - 字体经 @fontsource 打入 dist（'self'），微信二维码在 public/（'self'），站内无其他外域资源
+           - connect-src 收死 'self'：SDK 宿主侧脚本不发网络请求，WS/API 都发生在 iframe 文档内，
+             由 iframe 自身的文档源管辖，宿主 CSP 不约束
+           - frame-ancestors 不写：该指令经 <meta> 交付会被浏览器忽略（仅 HTTP 响应头有效），
+             GitHub Pages 也无法自定义响应头，写进 meta 只会每屏刷一条控制台告警 -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://work.xapptool.cn; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-src https://work.xapptool.cn" />
+
     <!-- Open Graph / 社交分享 -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="HiveMTK" />

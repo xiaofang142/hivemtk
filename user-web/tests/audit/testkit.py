@@ -20,7 +20,10 @@ def token(force=False):
     now = time.time()
     if not force and _token["t"] and now - _token["ts"] < 60:
         return _token["t"]
-    data = json.dumps({"username":"admin","password":"Admin@123456"}).encode()
+    pw = os.environ.get("E2E_ADMIN_PASSWORD")
+    if not pw:
+        raise SystemExit("E2E_ADMIN_PASSWORD 未设置，拒绝运行")
+    data = json.dumps({"username":"admin","password":pw}).encode()
     req = urllib.request.Request(BASE+"/api/auth/login", data=data, headers={"Content-Type":"application/json"})
     j = json.loads(urllib.request.urlopen(req, timeout=20).read())
     _token["t"] = j.get("data",{}).get("token","")

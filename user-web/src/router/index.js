@@ -261,18 +261,14 @@ export function fallbackLandingPath(menuPaths) {
 }
 
 router.beforeEach(async (to, from, next) => {
-  // guard 开始时的登录态快照：await 期间 401 处理可能清掉 token，
-  // 两道 401 竞态闸靠「曾有 token 而现在没了」识别这种会话失效（见下）。
-  const hadTokenAtGuardStart = !!localStorage.getItem('token')
-  // 登录态单一真相是 localStorage（bug: web-token-expired-no-redirect）：
-  // request.js 的 401 处理只清 localStorage，而 Pinia 的 token ref 只在
-  // initAuth 读过一次 —— 同文档内的 401 之后 store 里是僵尸 isLoggedIn，
-  // 会把已失效会话放进受保护页面（表现为"提示过期但停在原页"）。
-  // 守卫每次先对齐两者：localStorage 为空时把残留 ref 一并清掉。
+  // 登录态单一真相是内存令牌（Pinia store 的 token ref；JWT 不再持久化进
+  // localStorage，旧值由 stores/user.js 的 initAuth 一次性迁入内存）。
+  // request.js 的 401 处理清的就是这同一个 ref（clearAuthAndGoLogin → setToken('')），
+  // 两边天然一致，不会再出现「localStorage 与 Pinia 各存一份」的僵尸登录态。
   const userStoreEarly = useUserStore()
-  if (!hadTokenAtGuardStart && userStoreEarly.isLoggedIn) {
-    userStoreEarly.setToken('')
-  }
+  // guard 开始时的登录态快照：await 期间 401 处理可能清掉令牌，
+  // 两道 401 竞态闸靠「曾有令牌而现在没了」识别这种会话失效（见下）。
+  const hadTokenAtGuardStart = !!userStoreEarly.token
   const routeLoaded = await ensureRouteLoaded(to.path);
 
   if (to.path.startsWith('/system/')) {
@@ -317,19 +313,21 @@ router.beforeEach(async (to, from, next) => {
       next('/setup')
       return
     }    const userStore = useUserStore()
-    // 401 竞态闸（bug: web-token-expired-no-redirect）：guard 开始时持有 token、
+    // 401 竞态闸（bug: web-token-expired-no-redirect）：guard 开始时持有令牌、
     // 走到这里已被清掉的，说明 request.js 已在 await 期间 push('/login')；
     // 此时必须由本 guard 亲自去 /login 并返回，否则下方任何一个 next() 决策都会
     // 把被中断的原导航收尾回原页面，覆盖 /login（表现为"提示过期但不跳登录"）。
-    // 判据直读 localStorage（401 清空的正是它），不用 Pinia —— store 的 token ref
-    // 只在 initAuth 时读一次 localStorage，401 后是僵尸值，靠不住。
-    if (hadTokenAtGuardStart && !localStorage.getItem('token')) {
+    // 判据读内存令牌（401 清空的正是同一个 Pinia ref），单一真相不会错位。
+    if (hadTokenAtGuardStart && !userStoreEarly.token) {
       next('/login')
       return
     }
     // 系统已初始化：直接去登录页，绝不把“已初始化实例”的干净浏览器访客单机
     // 送进 /setup 安装向导。SaaS(tenant_mode=on) 多租户实例尤其如此——那里没有
     // “单机首次安装”场景，注册入口在登录页（Login.vue 的 enable_register 开关）。
+    // P2-7 会话恢复：刷新后内存令牌为空但 HttpOnly Cookie 有效 —— 先探测恢复，
+    // 再判 isLoggedIn（否则刷新即被弹回登录页，Cookie 化的功能回归）。
+    await userStore.restoreSession()
     if (!userStore.isLoggedIn) {
       next('/login')
       return
@@ -344,7 +342,7 @@ router.beforeEach(async (to, from, next) => {
     await permissionStore.ensureMenus()
     // 第二道 401 竞态闸：ensureMenus 的请求正是不带 _silent 的业务请求，
     // 过期 token 的 401 清会话就发生在上面的 await 期间——必须复查后再做决策。
-    if (hadTokenAtGuardStart && !localStorage.getItem('token')) {
+    if (hadTokenAtGuardStart && !userStoreEarly.token) {
       next('/login')
       return
     }

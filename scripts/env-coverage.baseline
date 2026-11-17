@@ -24,7 +24,6 @@ CONTRIBUTOR_DEV	待补文档（第三十五轮登记为债）；读取点 user-s
 DEFAULT_CREDENTIALS_HINT	待补文档（第三十五轮登记为债）；读取点 user-server/internal/config/admin.go
 DISABLE_AI_QUIET_HOURS	待补文档（第三十五轮登记为债）；读取点 user-server/internal/service/webhook_outbound.go
 EMAIL_WEBHOOK_SECRET	待补文档（第三十五轮登记为债）；读取点 user-server/internal/controller/email_open_tracker.go
-EMBEDDING_MODEL	待补文档（第三十五轮登记为债）；读取点 user-server/cmd/embedding-server/main.go
 EMBED_SDK_DIST	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/embed_static_routes.go
 ENABLE_DEBUG_ROUTES	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/router.go
 ENABLE_SWAGGER	待补文档（第三十五轮登记为债）；读取点 user-server/internal/router/swagger.go

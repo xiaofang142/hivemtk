@@ -1,5 +1,9 @@
 <script setup>
 import { featuresSection } from '../config/content.js'
+import DOMPurify from "dompurify";
+
+// 2026-11-17 审计 P3-8：v-html 一律过 DOMPurify（数据源当前为 src/config/content.js 静态常量，此为纵深防御）。
+const svgSanitize = (svg) => DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
 
 defineProps({
   hideHeader: { type: Boolean, default: false },
@@ -37,7 +41,7 @@ defineProps({
         >
           <div class="feature-card-head">
             <div class="feature-num">{{ String(index + 1).padStart(2, '0') }}</div>
-            <div class="feature-icon" v-html="feature.icon"></div>
+                        <div class="feature-icon" v-html="svgSanitize(feature.icon)"></div>
             <div class="feature-head-text">
               <h3 class="feature-title">{{ feature.title }}</h3>
               <div class="feature-industries">

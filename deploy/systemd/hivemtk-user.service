@@ -30,6 +30,17 @@ WorkingDirectory=/www/wwwroot/hivemtk/user-server
 ExecStart=/bin/bash -c 'set -a; source /www/wwwroot/hivemtk/.env; set +a; exec ./bin/user-server'
 Restart=always
 RestartSec=3
+# 2026-11-17 审计 P2-13：最小权限加固。专用低权账户按站点创建：
+#   useradd -r -s /sbin/nologin hivemtk && chown -R hivemtk:hivemtk /www/wwwroot/hivemtk
+# 不满足时 unit 会 fail（fail-closed，优于静默以 root 跑公网服务）；
+# 无法建账户的站点可注释 User=/Group= 行回退，其余行保留。
+User=hivemtk
+Group=hivemtk
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+RestrictSUIDSGID=true
 
 [Install]
 WantedBy=multi-user.target

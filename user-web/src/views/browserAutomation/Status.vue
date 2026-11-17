@@ -118,6 +118,7 @@
 </template>
 
 <script setup>
+import DOMPurify from 'dompurify'
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBrowserHostStatus, resetBrowserHostToken } from '@/api/browserAutomation'
@@ -172,8 +173,11 @@ async function onResetToken() {
   try {
     const res = await resetBrowserHostToken()
     const data = unpack(res)
+    // 2026-11-15 审计 L8：服务端返回值直插 HTML 前先过 DOMPurify（与本文件外
+    // chatChannel/List.vue 同类弹窗的既有口径一致，防御不一致即漏洞）
+    const tokenHtml = DOMPurify.sanitize(`${data?.token || ''}`)
     await ElMessageBox.alert(
-      `新 token：<code style="user-select:all">${data?.token || ''}</code><br/>请将其填入本机 ~/.hivemtk/nm_host.conf 的 token= 行，然后重启 Host 进程`,
+      `新 token：<code style="user-select:all">${tokenHtml}</code><br/>请将其填入本机 ~/.hivemtk/nm_host.conf 的 token= 行，然后重启 Host 进程`,
       '已重置', { dangerouslyUseHTMLString: true },
     )
   } catch (e) {

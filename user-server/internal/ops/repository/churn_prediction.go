@@ -175,6 +175,17 @@ func (r *ChurnWarningRepository) GetAll(ctx context.Context, page, pageSize int)
 	return warnings, total, err
 }
 
+// GetByID 按主键取单条预警（找不到 ⇒ gorm.ErrRecordNotFound）。
+// 2026-11-15 审计 M-5：写口（处置/干预）做行级归属校验前需要先取行拿 user_id。
+func (r *ChurnWarningRepository) GetByID(ctx context.Context, id uint) (*model.ChurnWarning, error) {
+	var w model.ChurnWarning
+	err := r.db.WithContext(ctx).First(&w, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
 // GetUnhandled 获取未处理的流失预警（Count/Find 拆链 + 夹取）。
 func (r *ChurnWarningRepository) GetUnhandled(ctx context.Context, page, pageSize int) ([]*model.ChurnWarning, int64, error) {
 	page, pageSize = clampPage(page, pageSize)

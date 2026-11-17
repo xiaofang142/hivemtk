@@ -499,7 +499,7 @@
                   class="msg-file"
                 >
                   <el-link
-                    :href="msg.media_url"
+                    :href="safeMediaUrl(msg.media_url)"
                     target="_blank"
                     type="primary"
                     :underline="false"
@@ -515,7 +515,7 @@
                   class="msg-file"
                 >
                   <el-link
-                    :href="msg.media_url"
+                    :href="safeMediaUrl(msg.media_url)"
                     target="_blank"
                     type="primary"
                   >
@@ -896,6 +896,17 @@ const isLink = (msg) => msg.content_type === 'link' && !!msg.media_url
 const MSG_TYPE_LABELS = { image: '图片', video: '视频', audio: '语音', file: '文件', link: '链接', card: '卡片', location: '位置' }
 const typeLabel = (msg) => MSG_TYPE_LABELS[msg.content_type] || msg.content_type || '消息'
 const hasMediaBody = (msg) => !!msg.media_url && (isImage(msg) || isVideo(msg) || isAudio(msg) || isFile(msg) || isLink(msg))
+// 媒体/链接 href 协议白名单（2026-11-15 审计 M-2）：media_url 上游含外部人可控数据，
+// javascript:/data: 伪协议直进 el-link href 是注入点；与 RichCard.vue 的 safeUrl 同口径
+const safeMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return undefined
+  try {
+    const u = new URL(url, window.location.origin)
+    return ['http:', 'https:'].includes(u.protocol) ? url : undefined
+  } catch {
+    return undefined
+  }
+}
 const mediaFileName = (url) => {
   try { return decodeURIComponent((url || '').split('?')[0].split('/').pop() || '文件') } catch { return '文件' }
 }

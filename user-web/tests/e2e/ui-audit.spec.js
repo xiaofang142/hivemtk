@@ -11,7 +11,8 @@ import fs from 'fs'
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const ADMIN_USER = process.env.E2E_USER || 'admin'
-const ADMIN_PASS = process.env.E2E_PASS || 'Admin@123456'
+const ADMIN_PASS = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_PASS
+test.skip(!ADMIN_PASS, 'E2E_ADMIN_PASSWORD/E2E_PASS not set')
 const ROUTES_FILE = process.env.ROUTES_FILE || '/tmp/uiwalk/routes.json'
 const REPORT_FILE = process.env.REPORT_FILE || '/tmp/uiwalk/report.jsonl'
 const START = parseInt(process.env.START || '0', 10)

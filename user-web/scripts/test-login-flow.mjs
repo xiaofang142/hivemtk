@@ -1,5 +1,8 @@
 import { chromium } from 'playwright';
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
+
 const BASE_URL = 'http://localhost:8211';
 
 async function main() {
@@ -25,7 +28,7 @@ async function main() {
 
   if (usernameInput && passwordInput) {
     await usernameInput.fill('admin');
-    await passwordInput.fill('Seed@123456');
+    await passwordInput.fill(ADMIN_PASSWORD);
     console.log('  已填写表单');
 
     const loginBtn = await page.$('button[type="submit"], .el-button--primary');

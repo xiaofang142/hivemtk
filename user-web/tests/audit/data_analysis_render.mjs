@@ -6,9 +6,12 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD || process.env.ADMIN_PASS
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1) }
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
-const CRED = { user: 'admin', pass: process.env.ADMIN_PASS || 'Admin@123456' }
+const CRED = { user: 'admin', pass: ADMIN_PASSWORD }
 const OUT_DIR = path.resolve(__dirname, 'reports')
 fs.mkdirSync(OUT_DIR, { recursive: true })
 

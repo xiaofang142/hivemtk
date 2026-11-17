@@ -1,6 +1,7 @@
 // 说明：web-vitals v4 已把 onFID 标为 deprecated（用 onINP 取代），
 // 这里采集 LCP / FCP / CLS / TTFB / INP —— 不再单独采 FID，避免重复与弃用告警。
 import { onLCP, onCLS, onFCP, onTTFB, onINP } from 'web-vitals';
+import { useUserStore } from '@/stores/user'
 
 const REPORT_URL = '/api/monitor/web-vitals'
 
@@ -25,7 +26,9 @@ function getSessionId() {
 
 function getAuthHeader() {
   try {
-    const token = localStorage.getItem('token')
+    // 令牌取自内存 store（JWT 不再持久化进 localStorage）；上报 fetch 同源默认带
+    // HttpOnly Cookie，内存为空（刷新后的 Cookie 兜底会话）时由服务端回落认证。
+    const token = useUserStore().token
     return token ? { Authorization: `Bearer ${token}` } : {}
   } catch {
     return {}

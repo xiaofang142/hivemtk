@@ -25,6 +25,7 @@ import (
 
 	"bytes"
 	_type "hivemtk-user/internal/pkg/utils/type"
+	"hivemtk-user/internal/pkg/urlguard"
 	"io"
 	"net/http"
 	"net/smtp"
@@ -588,8 +589,14 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 
 	req.Header.Set("X-Flow-User-ID", userID)
 
+	// SSRF 收口（2026-11-15 审计 M-1）：内网拦截从「parse 期 DNS 解析」升级为
+	// 「拨号期复校」（urlguard.GuardedTransport，与 kb_crawler 同一单一事实源）。
+	// validateWebhookURL 的解析期校验保留作快速失败，但它挡不住 DNS rebinding——
+	// 校验与建连之间目标域名可重解析到内网 IP；拨号期 Control 回调对 rebinding、
+	// 重定向、CGNAT/云元数据段全部生效。
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout:   30 * time.Second,
+		Transport: urlguard.GuardedTransport(),
 	}
 	resp, err := client.Do(req)
 	if err != nil {

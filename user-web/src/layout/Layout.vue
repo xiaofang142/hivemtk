@@ -228,6 +228,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import i18n from '@/i18n'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
+import { usersApi } from '@/api/users'
 import { useOnboarding, resolveRoutePattern } from '@/composables/useOnboarding'
 import { Warning, Bell, Menu, SwitchButton, Fold, Expand, QuestionFilled, Refresh, Compass, Guide } from '@element-plus/icons-vue'
 import { routeIconMap, resolveRouteIcon } from '@/utils/iconMap'
@@ -466,6 +467,10 @@ const handleUserCommand = (command) => {
       }
       break
     case 'logout':
+        // HttpOnly Cookie 双通道：登出必须先让后端把当前令牌拉黑并撤销 Cookie
+        // （内存里没有令牌值，吊销只能在服务端做）。best-effort：网络失败也照常
+        // 清前端会话并跳登录，后端令牌会随其自然过期。
+        usersApi.logout().catch(() => {})
         userStore.logout()
         // RBAC：清掉上一个身份的菜单缓存，防止残留授权面
         permissionStore.resetMenus()

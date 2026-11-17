@@ -108,9 +108,11 @@ func TestSignSecretPrecedence(t *testing.T) {
 		return func() (string, string, error) { return c.sign(method, path, body) }
 	}
 
-	// 带 query 的 path 只对 path 部分签名
-	if a, b := sameSecond(sigOf("POST", "/api/a?b=1", []byte("{}")), sigOf("POST", "/api/a?b=2", []byte("{}"))); a != b {
-		t.Error("query 部分不应参与签名串")
+	// 2026-11-17 审计 P3-9（与平台端 merchant_auth 同日收口）：签名串改为签
+	// RequestURI（含 query）——带 query 的 path 必须把 query 算进签名，否则
+	// ±300s 窗口内改参重放有效。
+	if a, b := sameSecond(sigOf("POST", "/api/a?b=1", []byte("{}")), sigOf("POST", "/api/a?b=2", []byte("{}"))); a == b {
+		t.Error("query 部分必须参与签名串（P3-9：改参重放要失效）")
 	}
 	if a, b := sameSecond(sigOf("POST", "/api/a?b=1", []byte("{}")), sigOf("POST", "/api/b?b=1", []byte("{}"))); a == b {
 		t.Error("不同 path 签名不应相同")

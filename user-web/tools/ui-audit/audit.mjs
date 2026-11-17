@@ -6,6 +6,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { MODULES, ALL_ROUTES } from './routes.mjs'
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1) }
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const BASE = process.argv[4] || 'http://127.0.0.1:8211'
 const MODE = process.argv[2] || 'audit'
@@ -103,7 +106,7 @@ async function login(page) {
   const inputs = page.locator('.login-box input.el-input__inner')
   if (await inputs.count()) {
     await inputs.nth(0).fill('admin')
-    await inputs.nth(1).fill('Seed@123456')
+    await inputs.nth(1).fill(ADMIN_PASSWORD)
     await page.click('.login-box button.el-button--primary')
     await page.waitForFunction(() => !!localStorage.getItem('token'), { timeout: 20000 })
   }

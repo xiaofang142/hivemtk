@@ -9,6 +9,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/app"
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -19,8 +20,10 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 	auth.GET("/agent/tools/list", handleToolList)
 	auth.GET("/agent/tools/get", handleToolGet)
 	auth.GET("/agent/tools/stats", handleToolStats)
+	// 2026-11-17 审计 P1-5：audit 读口留在登录档但按租户过滤（见 handleToolAudit）；
+	// cost 聚合无租户维度（内存 CostTracker 按工具名全局聚合，含他租户调用量与耗时），
+	// 收入 admin 组，属运营面板口径。
 	auth.GET("/agent/tools/audit", handleToolAudit)
-	auth.GET("/agent/tools/cost", handleToolCost)
 	auth.GET("/agent/tools/circuit", handleToolCircuitState)
 	auth.GET("/agent/tools/approval", handleToolApprovalState)
 	auth.GET("/agent/tools/reach-gate", handleReachGateState)
@@ -29,6 +32,7 @@ func setupToolDebugRoutes(auth *gin.RouterGroup) {
 
 	admin := auth.Group("", middleware.AdminAuthMiddleware())
 	{
+		admin.GET("/agent/tools/cost", handleToolCost)
 		admin.POST("/agent/tools/execute", handleToolExecute)
 		admin.POST("/agent/tools/circuit/reset", handleToolCircuitReset)
 		admin.POST("/agent/tools/approval/whitelist", handleToolApprovalWhitelist)
@@ -213,11 +217,29 @@ func handleToolAudit(c *gin.Context) {
 		return
 	}
 	entries := memLogger.Entries()
+	// 2026-11-17 审计 P1-5：内存审计器是进程级全局单例，Entries() 原样返回全部租户的
+	// 行；SaaS 模式下租户 A 的用户可用租户 B 的 CustomerID/SessionID 与参数、结果摘要。
+	// 这里按调用者租户过滤（TenantID==0 的旧残条按默认租户归属，与 DB 落库侧回填口径一致）。
+	callerTenant := uint(0)
+	if v, ok := c.Get(middleware.TenantContextKey); ok {
+		if t, ok := v.(uint); ok {
+			callerTenant = t
+		}
+	}
 	out := make([]tooluse.AuditEntry, 0, limit)
 	for i := len(entries) - 1; i >= 0 && len(out) < limit; i-- {
 		e := entries[i]
 		if toolName != "" && e.ToolName != toolName {
 			continue
+		}
+		if callerTenant != 0 {
+			entryTenant := e.TenantID
+			if entryTenant == 0 {
+				entryTenant = tenant.DefaultTenantID
+			}
+			if entryTenant != callerTenant {
+				continue
+			}
 		}
 		out = append(out, e)
 	}

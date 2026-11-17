@@ -5,7 +5,8 @@ import { test, expect } from '@playwright/test'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN = process.env.E2E_ADMIN || 'admin'
-const ADMIN_PW = process.env.E2E_ADMIN_PW || 'Admin@12345678'
+const ADMIN_PW = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_ADMIN_PW
+test.skip(!ADMIN_PW, 'E2E_ADMIN_PASSWORD/E2E_ADMIN_PW not set')
 
 // 客户中心 8 个页面
 const PAGES = [

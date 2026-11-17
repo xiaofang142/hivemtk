@@ -197,7 +197,9 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "smsList", Title: "短信列表", Icon: "ChatDotSquare", Path: "/sms/list"},
 					{Key: "smsDrafts", Title: "短信草稿", Icon: "Document", Path: "/sms/drafts"},
 					{Key: "smsJobs", Title: "短信任务", Icon: "List", Path: "/sms/jobs"},
-					{Key: "smsConfig", Title: "短信配置", Icon: "Setting", Path: "/sms/config"},
+					// 2026-11-17 审计 P2-2：短信通道凭证读写口收归 admin（与 adminOnlyRoutes
+					// 的 /api/sms/config/** 同口径；对照邮件配置口本就挂 admin）。
+					{Key: "smsConfig", Title: "短信配置", Icon: "Setting", Path: "/sms/config", Roles: []string{"admin"}},
 				},
 			},
 			{

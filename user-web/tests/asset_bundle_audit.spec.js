@@ -1,6 +1,8 @@
 import { test, expect, request } from '@playwright/test'
 import fs from 'fs'
 
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
+
 // 资产包全 UI 真实后端审计：逐个点击每个按钮，真实发起 API 调用（不 mock 写操作），
 // 捕获 API 请求体、响应体、HTTP 5xx 以及应用层错误（code != 成功）和控制台错误、页面异常。
 const PAGES = [
@@ -39,7 +41,7 @@ let AUTH = { token: '', user: null }
 test.beforeAll(async () => {
   const base = process.env.E2E_BASE_URL || 'http://localhost:8211'
   const ctx = await request.newContext({ baseURL: base })
-  const candidates = ['Seed@123456', 'Admin@12345678', 'Admin@123456', '62cfdc6bf1b075830734cc6f9a63501b']
+  const candidates = [process.env.E2E_ADMIN_PASSWORD].filter(Boolean)
   for (const pw of candidates) {
     const resp = await ctx.post('/api/auth/login', { data: { username: 'admin', password: pw } })
     const body = await resp.json().catch(() => ({}))

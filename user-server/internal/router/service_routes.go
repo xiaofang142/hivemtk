@@ -121,7 +121,11 @@ func setupCustomerServiceRoutes(auth *gin.RouterGroup, aiAgentSvc *service.AIAge
 	auth.GET("/customer/:id", customer360Ctrl.GetCustomerDetail)
 	auth.GET("/customer/:id/behaviors", customer360Ctrl.GetCustomerBehaviors)
 	auth.GET("/customer/:id/communications", customer360Ctrl.GetCustomerCommunications)
-	auth.PUT("/customer/:id", customer360Ctrl.UpdateCustomer)
+	// 2026-11-15 审计 H-1 收权：PUT /api/customer/:id 落点是 legacy user 表（无归属列，
+	// 无法按行判归属），任意登录角色此前可改任意客户资料/状态——客户身份字段（姓名/
+	// 邮箱/电话/状态）的写权收归管理员档。读口行级隔离见 model.dataScopeRoutes 与
+	// service 层 EnsureCustomerVisibleByKey（:id 语义按 handler 分流）。
+	auth.PUT("/customer/:id", middleware.AdminAuthMiddleware(), customer360Ctrl.UpdateCustomer)
 	auth.POST("/customer/:id/tags", customer360Ctrl.AddCustomerTag)
 	auth.DELETE("/customer/:id/tags/:tag", customer360Ctrl.RemoveCustomerTag)
 

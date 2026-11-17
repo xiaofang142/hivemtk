@@ -1,6 +1,9 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
+
 const OUT = 'C:/documents/www/hivemtk/docs/screenshots';
 mkdirSync(OUT, { recursive: true });
 
@@ -12,7 +15,7 @@ const page = await ctx.newPage();
 await page.goto('http://localhost:8211/#/login', { waitUntil: 'domcontentloaded' });
 await page.waitForTimeout(3000);
 await page.getByRole('textbox', { name: '用户名' }).fill('admin');
-await page.getByRole('textbox', { name: '密码' }).fill('Seed@123456');
+await page.getByRole('textbox', { name: '密码' }).fill(ADMIN_PASSWORD);
 await page.locator('button', { hasText: '登录' }).first().click();
 await page.waitForTimeout(6000);
 console.log('after login url:', page.url());

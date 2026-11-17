@@ -88,7 +88,13 @@ type Server struct {
 func main() {
 	port := flag.Int("port", envInt("EMBEDDING_PORT", config.DefaultEmbeddingPort), "HTTP 监听端口")
 	dim := flag.Int("dim", envInt("EMBEDDING_DIM", 1024), "向量维度（与 BGE 模型一致）")
-	model := flag.String("model", envStr("EMBEDDING_MODEL", "bge-m3"), "模型名（仅作声明，实际使用本地算法）")
+	// EMBEDDING_MODEL 用裸 os.Getenv 解析默认值：check-env-coverage 的 AST 读点扫描
+	// 只识别直接调用，envStr 包装内的 os.Getenv 对该门不可见，曾把键误判为 STALE。
+	modelDefault := os.Getenv("EMBEDDING_MODEL")
+	if modelDefault == "" {
+		modelDefault = "bge-m3"
+	}
+	model := flag.String("model", modelDefault, "模型名（仅作声明，实际使用本地算法）")
 	seed := flag.Int64("seed", 42, "投影矩阵随机种子（必须固定以保证决定性）")
 	flag.Parse()
 

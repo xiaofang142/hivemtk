@@ -5,6 +5,7 @@ import i18n from '@/i18n'
 import { getStoredLocale } from '@/i18n/locale'
 import { markUserReported } from './errorReporting'
 import { createTokenRefresher } from './tokenRefresh'
+import { useUserStore } from '@/stores/user'
 // OPT-FE-05（2026-10-24）：信封判定/业务码/错误形状抽到 @hivemtk/http-core
 // （与 bridge/platform-web 迁移后共用；拦截器装配仍留本文件——应用侧差异）。
 import {
@@ -56,6 +57,10 @@ const createRequestInstance = () => {
   }
   return axios.create({
     baseURL: apiBaseUrl,
+    // HttpOnly Cookie 双通道：跨源部署下 Cookie 属于凭据，必须显式开启才会随请求
+    // 发送/接收（同源时浏览器默认带，开了也无害）。登录/注册/MFA/refresh 的
+    // Set-Cookie 与无 Authorization 头时的服务端 Cookie 回落都靠它。
+    withCredentials: true,
     headers: {
       'Content-Type': 'application/json'
     }
@@ -194,9 +199,46 @@ function redirectTo(path) {
     })
 }
 
+// 内存令牌读取（Pinia store 是 JWT 的唯一持有处，localStorage 不再存）。
+// pinia 尚未激活的极早期调用按无令牌处理：请求不带 Authorization 头，
+// 由 HttpOnly Cookie 兜底认证（后端 JWT 中间件回落）。
+function getMemoryToken() {
+  try {
+    return useUserStore().token || ''
+  } catch { return '' }
+}
+
+// Cookie 兜底会话的 401 复核（2026-11-18 五审收口）：内存无令牌的 401 不再被
+// expireSession 直接忽略——单飞探针打一次 current-user 复核 Cookie 会话，
+// 探针 401/网络错 ⇒ 会话真失效（登出+跳登录）；200 ⇒ 该 401 是端点自身语义
+// （如访客面），不动登录态。防止"Cookie 中途失效后用户卡在满屏 401"。
+let cookieProbeInFlight = null
+function probeCookieSession() {
+  if (!cookieProbeInFlight) {
+    cookieProbeInFlight = (async () => {
+      try {
+        // baseURL 与业务实例同源（localStorage apiConfig → VITE_API_BASE_URL → 相对路径）
+        const raw = (await import('axios')).default
+        const res = await raw.get('/api/auth/current-user', {
+          withCredentials: true,
+          baseURL: (request && request.defaults && request.defaults.baseURL) || '',
+        })
+        return res?.status === 200
+      } catch {
+        return false
+      } finally {
+        setTimeout(() => { cookieProbeInFlight = null }, 0)
+      }
+    })()
+  }
+  return cookieProbeInFlight
+}
+
 function clearAuthAndGoLogin() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('refreshToken')
+  // 401 清会话：内存令牌 + Cookie 会话标记 + 用户档案一并清（logout 内含），
+  // 否则 isLoggedIn 靠 cookieSession/userInfo 残留恒真，守卫放行后接口继续 401。
+  // HttpOnly Cookie 本体由后端登出端点撤销；此处前端只需清可清的本地态。
+  try { useUserStore().logout() } catch { /* pinia 未激活时忽略 */ }
   redirectTo('/login')
 }
 
@@ -211,13 +253,13 @@ function bearerSentWith(config) {
   return raw.startsWith('Bearer ') ? raw.slice(7).trim() : ''
 }
 
-// 401 说的是"这把令牌不被认"，不是"此刻 localStorage 里这把不被认"。
+// 401 说的是"这把令牌不被认"，不是"此刻内存里这把不被认"。
 // 迟到的响应（用户在这条请求返回之前已经重新登录）会把刚换到的新令牌连带会话一起抹掉，
 // 表现为"登录成功后过一会儿又被踢回登录页"；没带令牌的请求（访客端点自己回 401）
-// 更不该动站点的登录态。第一个 401 清完令牌后 localStorage 就空了，
+// 更不该动站点的登录态。第一个 401 清完内存令牌后就没有可清的了，
 // 并发的其余 401 因此既不再重复清、也不再弹第二条"登录已过期"。
 function expireSession(sentWith) {
-  const current = localStorage.getItem('token')
+  const current = getMemoryToken()
   if (!current) return false
   if (!sentWith || sentWith !== current) return false
   clearAuthAndGoLogin()
@@ -238,13 +280,16 @@ function expireSession(sentWith) {
 // request 拦截器与 chatSocket 共用同一份状态（这是修“偶发被踢回登录”的关键：
 // 两个入口各自 refresh 会让后端轮换两次，后一次必 401，旧失败分支还会清掉新令牌）。
 const tokenRefresher = createTokenRefresher({
-  getToken: () => localStorage.getItem('token'),
-  setToken: (t) => localStorage.setItem('token', t),
+  // 令牌存取都在 Pinia store 内存态（JWT 不再持久化进 localStorage）
+  getToken: () => getMemoryToken(),
+  setToken: (t) => { try { useUserStore().setToken(t) } catch { /* pinia 未激活时忽略 */ } },
   onSessionInvalid: () => clearAuthAndGoLogin(),
   refreshCall: async (token) => {
     // 裸 axios 实例：不挂业务拦截器——刷新请求自身绝不能再触发续期 / 401 清会话
     const raw = axios.create({
       baseURL: request.defaults.baseURL,
+      // refresh 响应会重发 Set-Cookie（HttpOnly），跨源时必须带凭据
+      withCredentials: true,
       headers: { 'Content-Type': 'application/json' }
     })
     const res = await raw.post('/api/auth/refresh-token', null, {
@@ -256,7 +301,8 @@ const tokenRefresher = createTokenRefresher({
   }
 })
 
-// ensureFreshToken 确保 localStorage 里的令牌剩余寿命充足，不足则静默换发。
+// ensureFreshToken 确保内存令牌（Pinia store）剩余寿命充足，不足则静默换发。
+// 刷新页面后内存为空的 Cookie 兜底会话不续期：认证由 HttpOnly Cookie 承担。
 // 失败语义：只有「明确 401 且仍是同一把令牌」才清凭据跳登录（且不 toast）；
 // 网络错误 / 5xx / 并发轮换期间令牌已被别处换新，一律保留会话。
 function ensureFreshToken() {
@@ -278,7 +324,9 @@ const addInterceptors = () => {
           await ensureFreshToken()
         } catch { /* 已静默清凭据并跳登录，请求继续即可 */ }
       }
-      const token = localStorage.getItem('token');
+      const token = getMemoryToken();
+      // 内存有令牌就带头（脚本客户端兼容），没有就不带——认证由 HttpOnly Cookie
+      // 兜底（withCredentials 已开，浏览器自动携带）。
       // 登录/注册端点裸调（见 isUnauthenticatedAuthPath）：带着旧令牌去登录，
       // 凭据错误的 401 会被误判为会话过期，连坐清掉用户仍然有效的会话。
       if (token && !isUnauthenticatedAuthPath(config.url)) {
@@ -386,7 +434,21 @@ const addInterceptors = () => {
             // silent 请求同样要清——token 已过期时留着它只会让后续请求反复失败。
             if (expireSession(bearerSentWith(config)) && !silent) {
               showToast(t('http.loginExpired'))
+              break
             }
+            // Cookie 兜底会话：内存无令牌（或请求本就没带头）时 expireSession 不会清——
+            // 单飞探针复核一次，真失效才清态跳登录（端点自身语义的 401 不误杀）。
+            void (async () => {
+              try {
+                const store = useUserStore()
+                if (store.token || !store.isLoggedIn) return // 内存令牌路径已处理；未登录态不动
+                const ok = await probeCookieSession()
+                if (!ok) {
+                  clearAuthAndGoLogin()
+                  if (!silent) showToast(t('http.loginExpired'))
+                }
+              } catch { /* pinia 未激活等极端场景忽略 */ }
+            })()
             break
           }
           // 403/404 的服务端文案往往带「怎么才能用」的可执行信息
@@ -465,6 +527,7 @@ export const updateRequestConfig = async () => {
     
     request = axios.create({
       baseURL: apiBaseUrl,
+      withCredentials: true,
       headers: {
         'Content-Type': 'application/json'
       }

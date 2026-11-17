@@ -22,6 +22,24 @@ func NewRagConfigController(service *service.RagConfigService) *RagConfigControl
 	return &RagConfigController{service: service}
 }
 
+// sanitizeRagProduct 出参脱敏（2026-11-17 审计 P1-4）：三组 provider 的 api_key 本体
+// 一律不出网，改回 api_key_set 布尔（对齐全局 LLM 配置口的 api_key_set 形状）。
+// 入参侧 json tag 未动（创建/更新仍要收 key）；Update 走 SELECT-then-MERGE，
+// 空 key=保留旧值，前端不带 key 保存不会清掉已存密钥。
+func sanitizeRagProduct(p *model.RagProduct) *model.RagProduct {
+	if p == nil {
+		return nil
+	}
+	out := *p
+	out.LLMProviderConfig.APIKeySet = out.LLMProviderConfig.APIKey != ""
+	out.LLMProviderConfig.APIKey = ""
+	out.EmbeddingProviderConfig.APIKeySet = out.EmbeddingProviderConfig.APIKey != ""
+	out.EmbeddingProviderConfig.APIKey = ""
+	out.RerankProviderConfig.APIKeySet = out.RerankProviderConfig.APIKey != ""
+	out.RerankProviderConfig.APIKey = ""
+	return &out
+}
+
 func (ctrl *RagConfigController) RegisterRoutes(router *gin.RouterGroup) {
 	rag := router.Group("/rag-config")
 	{
@@ -57,7 +75,7 @@ func (ctrl *RagConfigController) CreateRagProduct(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, product, "RAG product created successfully")
+	response.Success(c, sanitizeRagProduct(product), "RAG product created successfully")
 }
 
 func (ctrl *RagConfigController) ListRagProducts(c *gin.Context) {
@@ -89,6 +107,9 @@ func (ctrl *RagConfigController) ListRagProducts(c *gin.Context) {
 	}
 
 	pagedProducts := products[start:end]
+	for i := range pagedProducts {
+		pagedProducts[i] = sanitizeRagProduct(pagedProducts[i])
+	}
 
 	response.SuccessWithPage(c, pagedProducts, int64(page), int64(pageSize), int64(len(products)))
 }
@@ -115,7 +136,7 @@ func (ctrl *RagConfigController) GetRagProduct(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, product, "Product retrieved successfully")
+	response.Success(c, sanitizeRagProduct(product), "Product retrieved successfully")
 }
 
 func (ctrl *RagConfigController) UpdateRagProduct(c *gin.Context) {
@@ -175,6 +196,10 @@ func (ctrl *RagConfigController) GetAccountConfig(c *gin.Context) {
 		return
 	}
 
+	// 账号配置内嵌 RagProduct（rag_product 字段），同走出参脱敏（审计 P1-4）。
+	if config != nil && config.RagProduct != nil {
+		config.RagProduct = sanitizeRagProduct(config.RagProduct)
+	}
 	response.Success(c, config, "Account config retrieved successfully")
 }
 

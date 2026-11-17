@@ -2,6 +2,9 @@ import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1); }
+
 const BASE_URL = 'http://localhost:8211';
 
 // 第四批：geo-tools 子页 + system 子页 + 分析/工作台类
@@ -61,7 +64,7 @@ async function main() {
   const passwordInput = await page.$('input[type="password"]');
   if (usernameInput && passwordInput) {
     await usernameInput.fill('admin');
-    await passwordInput.fill('Seed@123456');
+    await passwordInput.fill(ADMIN_PASSWORD);
     const loginBtn = await page.$('button[type="submit"], .el-button--primary');
     if (loginBtn) await loginBtn.click();
   }

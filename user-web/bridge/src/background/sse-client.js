@@ -1,13 +1,14 @@
 // background/sse-client.js
 // Service Worker 中的 SSE 客户端：
 // 1. 监听 chrome.alarms keepalive（每 15s 唤醒 Worker）
-// 2. 建立 EventSource 连接到 /api/bridge/outbox/sse
+// 2. 经 core/sse-fetch-client（fetch 流式，X-Bridge-Token 头携带凭证）连接 /api/bridge/outbox/sse
 // 3. 按 (channel, account_id) 路由消息到对应标签页的 Content Script
 // 4. 断线重连带 Last-Event-ID
 // 5. 持久化 Last-Event-ID 到 chrome.storage.local
 
 import { createLogger } from '../core/logger.js';
-import { DEFAULT_USER_SERVER, TENANT_CODE } from '../core/constants.js';
+import { DEFAULT_USER_SERVER } from '../core/constants.js';
+import { connectSSE, isConnected, stopSSE } from '../core/sse-fetch-client.js';
 
 const log = createLogger('sse', 'bg');
 
@@ -15,7 +16,7 @@ const SSE_KEEPALIVE_ALARM = 'bridge_sse_keepalive';
 const SSE_RECONNECT_DELAY_MS = 3000;
 
 // 全局状态
-let sseConnections = new Map(); // key = "channel:account_id" -> EventSource
+let sseConnections = new Map(); // key = "channel:account_id" -> 连接状态 { stopped, reconnectTimer, close }
 let lastEventIDs = new Map();   // key = "channel:account_id" -> last event ID
 let tabRegistry = new Map();    // key = "channel:account_id" -> Set of tabIds
 
@@ -49,6 +50,9 @@ function getAuthToken() {
 
 // 租户短码：SaaS 模式下服务端靠它（或账号行自证）定归属，见
 // user-server/internal/bridge/tenant_binding.go:47-56。离线单机留空。
+// T7：原 appendTenantCode（EventSource 路径手工拼 query）已由 core/sse-fetch-client
+// connectSSE 的 tenantCode 选项承担——同一 TENANT_CODE.QUERY_PARAM 键名、空值跳过、
+// searchParams.set 编码，行为不变。
 function getTenantCode() {
   return new Promise((resolve) => {
     try {
@@ -60,13 +64,6 @@ function getTenantCode() {
       resolve('');
     }
   });
-}
-
-// 把租户短码追加到已带 query 的 URL 上（EventSource 路径专用）。
-function appendTenantCode(url, tenantCode) {
-  const code = String(tenantCode || '').trim();
-  if (!code) return url;
-  return `${url}&${TENANT_CODE.QUERY_PARAM}=${encodeURIComponent(code)}`;
 }
 
 // ---- Tab 注册/注销（与 background/index.js 的消息监听器共存）----
@@ -95,10 +92,9 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
       if (tabRegistry.get(key).size === 0) {
         tabRegistry.delete(key);
         // 无 tab 注册时关闭 SSE 连接
-        const es = sseConnections.get(key);
-        if (es) {
-          es.close();
-          sseConnections.delete(key);
+        const st = sseConnections.get(key);
+        if (st) {
+          st.close();
           log.info(`SSE 连接已关闭（无 tab 注册）: ${key}`);
         }
       }
@@ -117,11 +113,19 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
   log.warn('chrome.runtime.onMessage 不可用，跳过消息监听器注册');
 }
 
-// ---- EventSource 管理 ----
+// ---- SSE 连接管理（T7，2026-11-17：fetch 流式替代 EventSource）----
+//
+// 旧实现用 EventSource，它不支持自定义 Header，只能把 bridge_token 拼进 URL 查询参数
+// ——凭证会落进网关访问日志/代理日志/Referer。现在统一走 core/sse-fetch-client.js 的
+// connectSSE（downlink.js 下行主通道同款实现）：token 经 X-Bridge-Token 头发送，
+// URL 上只剩 channel/account_id/last_event_id/tenant_code，不再有任何 token 参数。
+// 对外语义保持不变：onmessage（JSON 解析后路由到 tab）、onerror（日志 + 3s 重连）、
+// Last-Event-ID 持久化（内存缓存 + chrome.storage）、tenant_code 附加。
 
 async function ensureSSEConnection(channel, accountId) {
   const key = `${channel}:${accountId}`;
-  if (sseConnections.has(key)) return sseConnections.get(key);
+  const existing = sseConnections.get(key);
+  if (existing && !existing.stopped) return existing;
 
   // 读取保存的 Last-Event-ID
   let lastEventID = '';
@@ -134,65 +138,76 @@ async function ensureSSEConnection(channel, accountId) {
   const token = await getAuthToken();
   const tenantCode = await getTenantCode();
 
-  const url = `${baseUrl}/api/bridge/outbox/sse?channel=${encodeURIComponent(channel)}&account_id=${encodeURIComponent(accountId)}&last_event_id=${encodeURIComponent(lastEventID)}`;
-  // EventSource 不支持自定义 Header，Token 只能通过查询参数；
-  // 服务端闸门读的键名是 bridge_token（middleware/bridge_ingress_guard.go），
-  // 写成 token 会被当成"没带凭证"直接 401。
-  const fullUrl = appendTenantCode(
-    token ? `${url}&bridge_token=${encodeURIComponent(token)}` : url,
-    tenantCode
-  );
-
   log.info(`SSE 连接中: ${key}, lastEventID=${lastEventID || '(none)'}`);
 
-  try {
-    const es = new EventSource(fullUrl);
-    let connected = false;
+  const state = { stopped: false, reconnectTimer: null, close: null };
+  sseConnections.set(key, state);
 
-    es.addEventListener('open', () => {
-      connected = true;
-      log.info(`SSE 已连接: ${key}`);
-    });
+  // 关闭/清理（等价旧实现的 es.close() + sseConnections.delete + 内存缓存清理）
+  const close = () => {
+    state.stopped = true;
+    if (state.reconnectTimer) {
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = null;
+    }
+    try { stopSSE(channel, accountId); } catch (_) {}
+    if (sseConnections.get(key) === state) sseConnections.delete(key);
+    lastEventIDs.delete(key);
+  };
+  state.close = close;
 
-    es.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        // 保存 Last-Event-ID
-        if (event.lastEventId) {
-          chrome.storage.local.set({ [`last_event_${key}`]: event.lastEventId }).catch(() => {});
-        }
-        lastEventIDs.set(key, event.lastEventId);
-        // 路由到对应标签页
-        dispatchToTabs(channel, accountId, data);
-      } catch (err) {
-        log.error('SSE 消息解析失败', err);
-      }
-    });
-
-    es.addEventListener('error', () => {
-      log.warn(`SSE 连接错误: ${key}, 将在 ${SSE_RECONNECT_DELAY_MS}ms 后重连`);
-      es.close();
-      sseConnections.delete(key);
-      // 清理 lastEventID 内存缓存
-      lastEventIDs.delete(key);
-      // 重连
-      setTimeout(() => {
-        ensureSSEConnection(channel, accountId).catch((err) => {
-          log.error('SSE 重连失败', err);
-        });
-      }, SSE_RECONNECT_DELAY_MS);
-    });
-
-    sseConnections.set(key, es);
-    return es;
-  } catch (err) {
-    log.error('EventSource 创建失败', err);
-    // 重试
-    setTimeout(() => {
-      ensureSSEConnection(channel, accountId).catch(() => {});
+  // 断线重连：等价旧实现 error 监听器里的 setTimeout(ensureSSEConnection, 3s)。
+  // 到点时清掉本轮占位再重建——ensureSSEConnection 会重新读 storage 取最新 Last-Event-ID，
+  // 与旧实现的每次重连都走一遍完整建连路径一致。
+  const scheduleReconnect = () => {
+    if (state.reconnectTimer) return;
+    state.reconnectTimer = setTimeout(() => {
+      state.reconnectTimer = null;
+      if (state.stopped) return;
+      state.stopped = true;
+      if (sseConnections.get(key) === state) sseConnections.delete(key);
+      ensureSSEConnection(channel, accountId).catch((err) => {
+        log.error('SSE 重连失败', err);
+      });
     }, SSE_RECONNECT_DELAY_MS);
-    throw err;
-  }
+  };
+
+  // 一轮连接尝试。connectSSE 在流结束（服务端关流）时 resolve、出错时先调 onError 再 throw，
+  // 两条路都触发重连；主动关闭（close/stopSSE）以 AbortError 收尾，靠 state.stopped 区分。
+  (async () => {
+    if (state.stopped) return;
+    try {
+      const stop = await connectSSE(channel, accountId, {
+        serverUrl: baseUrl,
+        token,
+        tenantCode,
+        lastEventId: lastEventID,
+        onMessage: (data) => {
+          // 等价旧实现 message 监听器的 JSON.parse + dispatchToTabs（解析失败由
+          // connectSSE 内部按非 JSON 事件降级为 debug 日志，不会打断连接）
+          dispatchToTabs(channel, accountId, data);
+        },
+        onLastEventID: (id) => {
+          // 等价旧实现的 event.lastEventId 分支：内存缓存 + chrome.storage 持久化
+          lastEventIDs.set(key, id);
+          chrome.storage.local.set({ [`last_event_${key}`]: id }).catch(() => {});
+        },
+      });
+      void stop;
+      if (state.stopped) return;
+      log.warn(`SSE 流结束: ${key}, 将在 ${SSE_RECONNECT_DELAY_MS}ms 后重连`);
+      scheduleReconnect();
+    } catch (err) {
+      if (state.stopped) return;
+      log.warn(`SSE 连接错误: ${key}, 将在 ${SSE_RECONNECT_DELAY_MS}ms 后重连`, err && err.message);
+      // 清理 lastEventID 内存缓存（与旧实现 error 监听器一致；chrome.storage 里的
+      // 持久值保留，重连时用它续传）
+      lastEventIDs.delete(key);
+      scheduleReconnect();
+    }
+  })();
+
+  return state;
 }
 
 function dispatchToTabs(channel, accountId, data) {
@@ -219,10 +234,9 @@ function dispatchToTabs(channel, accountId, data) {
             tabRegistry.get(key).delete(tabId);
             if (tabRegistry.get(key).size === 0) {
               tabRegistry.delete(key);
-              const es = sseConnections.get(key);
-              if (es) {
-                es.close();
-                sseConnections.delete(key);
+              const st = sseConnections.get(key);
+              if (st) {
+                st.close();
               }
             }
           }
@@ -239,10 +253,12 @@ if (chrome && chrome.alarms && chrome.alarms.onAlarm) {
     if (alarm.name === SSE_KEEPALIVE_ALARM) {
       log.info('SSE keepalive alarm 触发');
       // 唤醒 Worker 并确保 SSE 连接存活
-      for (const [key, es] of sseConnections) {
-        if (es.readyState === EventSource.CLOSED) {
+      // T7：EventSource.readyState 判活改为 sse-fetch-client 的 isConnected；
+      // 若本轮连接仍在 3s 重连等待窗口里，ensureSSEConnection 会命中占位直接返回。
+      for (const [key, st] of sseConnections) {
+        const [channel, accountId] = key.split(':');
+        if (!st.stopped && !isConnected(channel, accountId)) {
           log.warn(`SSE 连接已关闭，尝试重连: ${key}`);
-          const [channel, accountId] = key.split(':');
           ensureSSEConnection(channel, accountId).catch(() => {});
         }
       }
@@ -293,8 +309,8 @@ export function _getSSEState() {
 }
 
 export function _resetSSEState() {
-  for (const [, es] of sseConnections) {
-    try { es.close(); } catch (_) {}
+  for (const [, st] of sseConnections) {
+    try { st.close(); } catch (_) {}
   }
   sseConnections.clear();
   lastEventIDs.clear();

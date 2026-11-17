@@ -115,11 +115,11 @@ func readPlatformBody(r io.Reader) ([]byte, error) {
 
 func (c *Client) sign(method, path string, body []byte) (string, string, error) {
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	pathNoQuery := path
-	if i := strings.IndexByte(path, '?'); i >= 0 {
-		pathNoQuery = path[:i]
-	}
-	payload := method + "\n" + pathNoQuery + "\n" + timestamp + "\n" + string(body)
+	// 2026-11-17 审计 P3-9（与平台端 merchant_auth.go 同日收口）：签名载荷改签
+	// RequestURI（含 query），与 merchant_llm_auth 的 RequestURI 口径对齐——
+	// 窗口内改 query 参数重放不再有效。path 即 doRetry 构造请求的
+	// URL.RequestURI() 相对形式（PlatformURL()+path），两侧逐字节一致。
+	payload := method + "\n" + path + "\n" + timestamp + "\n" + string(body)
 
 	// 实例值先手（它可能来自构造期注入的显式值），其余一律交给唯一事实源。
 	secret := c.merchantSecret

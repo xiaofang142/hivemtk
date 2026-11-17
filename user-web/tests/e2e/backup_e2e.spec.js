@@ -5,12 +5,14 @@
  */
 import { test, expect, request } from '@playwright/test'
 
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
+
 const API_BASE = 'http://localhost:8204'
 
 async function getAdminToken() {
   const ctx = await request.newContext({ baseURL: API_BASE })
   const resp = await ctx.post('/api/auth/login', {
-    data: { username: 'admin', password: 'Admin@12345678' }
+    data: { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD }
   })
   const body = await resp.json()
   return body.data?.token

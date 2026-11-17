@@ -9,20 +9,17 @@ import fs from 'fs'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8216'
 const API_BASE = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN = process.env.E2E_ADMIN || 'admin'
-const PW = process.env.E2E_ADMIN_PW || 'Admin@12345678'
+const PW = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_ADMIN_PW
 
-const CANDIDATES = [
-  'Admin@12345678',
-  'Admin@123456',
-  '62cfdc6bf1b075830734cc6f9a63501b',
-  '9eb623e1979ad575b98bad24e12669a2f58205e9a8c79f61a7083f8468fc18b3'
-]
+const CANDIDATES = [process.env.E2E_ADMIN_PASSWORD].filter(Boolean)
+
+test.skip(!PW && CANDIDATES.length === 0, 'E2E_ADMIN_PASSWORD not set')
 
 const RESULT_DIR = path.resolve(process.cwd(), 'tests/.audit/agent-domain')
 fs.mkdirSync(RESULT_DIR, { recursive: true })
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-const cachedCandidates = [PW, ...CANDIDATES.filter((c) => c !== PW)]
+const cachedCandidates = [PW, ...CANDIDATES.filter((c) => c !== PW)].filter(Boolean)
 
 let TOKEN = ''
 async function refreshToken() {

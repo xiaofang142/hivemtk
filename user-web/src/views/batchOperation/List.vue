@@ -230,7 +230,7 @@
               >
                 <template #suffix>
                   <el-icon color="#10B981">
-                    <component :is="'Check'" />
+                    <Check />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -242,7 +242,7 @@
               >
                 <template #suffix>
                   <el-icon color="#EF4444">
-                    <component :is="'Close'" />
+                    <Close />
                   </el-icon>
                 </template>
               </el-statistic>
@@ -441,6 +441,10 @@ import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+// 图标必须显式导入：模板里 <component :is="'Upload'" /> 是动态字符串,
+// unplugin-vue-components 的 ElementPlusResolver 只认字面标签,解析不到就渲染成空
+// （2026-11-16 UI 全量回归实测四张工具卡图标全空）。
+import { Upload, Download, Delete, Edit as EditIcon, Check, Close } from '@element-plus/icons-vue'
 import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, getBatchDetail, batchImportFile } from '@/api/batchOperation.js'
 import { toList } from '@/utils/list.js'
 import { isUserReportedError } from '@/utils/errorReporting'
@@ -470,10 +474,10 @@ const getStatusType = (s) => ({ running: 'warning', success: 'success', failed: 
 const getStatusText = (s) => ({ running: '执行中', success: '完成', failed: '失败', partial: '部分成功' }[s] || s)
 
 const TOOL_PRESENTATION = {
-  import: { icon: 'Upload', color: '#4F46E5' },
-  export: { icon: 'Download', color: '#10B981' },
-  delete: { icon: 'Delete', color: '#EF4444' },
-  update: { icon: 'Edit', color: '#F59E0B' }
+  import: { icon: Upload, color: '#4F46E5' },
+  export: { icon: Download, color: '#10B981' },
+  delete: { icon: Delete, color: '#EF4444' },
+  update: { icon: EditIcon, color: '#F59E0B' }
 }
 
 const loadTools = async () => {
@@ -490,10 +494,10 @@ const loadTools = async () => {
     ...(TOOL_PRESENTATION[t.name] || { icon: 'Operation', color: '#909399' })
   }))
   tools.value = mapped.length ? mapped : [
-    { name: 'import', label: '批量导入', description: '通过 CSV 文件批量导入数据', icon: 'Upload', color: '#4F46E5', usedCount: 0 },
-    { name: 'export', label: '批量导出', description: '导出数据为 CSV 文件', icon: 'Download', color: '#10B981', usedCount: 0 },
-    { name: 'update', label: '批量更新', description: '批量更新选中记录的字段', icon: 'Edit', color: '#F59E0B', usedCount: 0 },
-    { name: 'delete', label: '批量删除', description: '批量删除选中的记录', icon: 'Delete', color: '#EF4444', usedCount: 0 }
+    { name: 'import', label: '批量导入', description: '通过 CSV 文件批量导入数据', icon: Upload, color: '#4F46E5', usedCount: 0 },
+    { name: 'export', label: '批量导出', description: '导出数据为 CSV 文件', icon: Download, color: '#10B981', usedCount: 0 },
+    { name: 'update', label: '批量更新', description: '批量更新选中记录的字段', icon: EditIcon, color: '#F59E0B', usedCount: 0 },
+    { name: 'delete', label: '批量删除', description: '批量删除选中的记录', icon: Delete, color: '#EF4444', usedCount: 0 }
   ]
 }
 

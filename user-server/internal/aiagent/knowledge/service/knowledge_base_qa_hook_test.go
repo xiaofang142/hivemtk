@@ -62,6 +62,8 @@ func (r *recordingQA) snapshot() []uint {
 }
 
 func TestKBImport_QASplitEnqueuedOnlyWhenRequested(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过
+
 	svc, rec, path := newKBImportTestService(t)
 	// 先持住 channel 再启动：替身在投递后会把 rec.wait 置 nil，
 	// select 直接读字段会读到 nil 通道（永远阻塞）——这正是第一版超时的原因。
@@ -110,6 +112,8 @@ func TestKBImport_QASplitOffKeepsLegacyBehavior(t *testing.T) {
 }
 
 func TestKBImport_QASplitRequestedButNotWired(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过
+
 	db := testutil.NewTestDB(t, &model.KBDocument{})
 	svc := NewKnowledgeBaseService() // 不注入 qaEnqueue/qaSplit
 	dir := t.TempDir()

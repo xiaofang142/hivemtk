@@ -18,7 +18,7 @@ case_686_update_keeps_short_code() {
       -d "{\"id\":$ID,\"title\":\"k4 d33 title only update\",\"redirect_url\":\"https://example.com/target\"}" \
       "$K4_BASE/api/kuaishou/update"
     echo
-    echo "assert: short_code 应保持 $CODE（不重建短链）"
+    echo "assert: short_code 应保持 ${CODE}（不重建短链）"
     curl -sS -m 20 -X DELETE -H "$(auth)" "$K4_BASE/api/kuaishou/delete/$ID" >/dev/null
     echo "cleanup: 已删除临时卡 id=$ID"
   fi

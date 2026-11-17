@@ -386,7 +386,7 @@ func TestCustomer360Service_GetCustomer360(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := service.GetCustomer360(context.Background(), tt.userID)
+			result, err := service.GetCustomer360(context.Background(), tt.userID, SessionScope{Role: "admin"})
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetCustomer360(%q) error = %v, wantErr %v", tt.userID, err, tt.wantErr)

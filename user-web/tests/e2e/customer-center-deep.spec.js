@@ -8,7 +8,7 @@
 // 运行：
 //   export PATH=/usr/local/n/versions/node/22.12.0/bin:$PATH
 //   E2E_BASE_URL=http://localhost:8216 E2E_API_URL=http://localhost:8204 \
-//   E2E_ADMIN=admin E2E_ADMIN_PW=Admin@12345678 \
+//   E2E_ADMIN_PASSWORD=<实际口令> \
 //   npx playwright test tests/e2e/customer-center-deep.spec.js --workers=1 --reporter=line
 
 import { test, expect } from '@playwright/test'
@@ -16,7 +16,8 @@ import { test, expect } from '@playwright/test'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8216'
 const API = process.env.E2E_API_URL || 'http://localhost:8204'
 const ADMIN = process.env.E2E_ADMIN || 'admin'
-const ADMIN_PW = process.env.E2E_ADMIN_PW || 'Admin@12345678'
+const ADMIN_PW = process.env.E2E_ADMIN_PASSWORD || process.env.E2E_ADMIN_PW
+test.skip(!ADMIN_PW, 'E2E_ADMIN_PASSWORD/E2E_ADMIN_PW not set')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 

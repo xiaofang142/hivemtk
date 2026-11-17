@@ -1,5 +1,9 @@
 <script setup>
 import { useSite } from '../composables/useSite.js'
+import DOMPurify from "dompurify";
+
+// 2026-11-17 审计 P3-8：v-html 一律过 DOMPurify（数据源当前为 src/config/content.js 静态常量，此为纵深防御）。
+const svgSanitize = (svg) => DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
 const { hero } = useSite()
 </script>
 
@@ -88,7 +92,7 @@ const { hero } = useSite()
             :class="`cover-card-${index + 1}`"
           >
             <div class="cover-card-num">0{{ index + 1 }}</div>
-            <div class="cover-card-icon" v-html="card.icon"></div>
+                        <div class="cover-card-icon" v-html="svgSanitize(card.icon)"></div>
             <div class="cover-card-text">
               <strong>{{ card.title }}</strong>
               <span>{{ card.desc }}</span>

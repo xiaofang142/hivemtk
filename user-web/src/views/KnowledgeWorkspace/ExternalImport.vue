@@ -488,12 +488,21 @@ const formatDate = (d) => d ? new Date(d).toLocaleString('zh-CN') : '-'
 onMounted(async () => {
   await loadProducts()
   await loadJobs()
-  apiToken.value = localStorage.getItem('knowledge_merchant_token') || '';
+  // T16：第三方商户 token 只进 sessionStorage（标签页关闭即失效），不再 localStorage 永久持久化。
+  // 已有迁移：sessionStorage 无值而 localStorage 有值时迁移一次，随后清掉 localStorage 旧键。
+  if (!sessionStorage.getItem('knowledge_merchant_token')) {
+    const legacyToken = localStorage.getItem('knowledge_merchant_token');
+    if (legacyToken) {
+      sessionStorage.setItem('knowledge_merchant_token', legacyToken);
+      localStorage.removeItem('knowledge_merchant_token');
+    }
+  }
+  apiToken.value = sessionStorage.getItem('knowledge_merchant_token') || '';
 })
 
 import { watch } from 'vue';
 watch(apiToken, (val) => {
-  if (val) localStorage.setItem('knowledge_merchant_token', val)
+  if (val) sessionStorage.setItem('knowledge_merchant_token', val)
 })
 </script>
 

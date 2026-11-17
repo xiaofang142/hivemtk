@@ -3,9 +3,11 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'fs'
 
+test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
+
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8216'
 const API = process.env.E2E_API_URL || 'http://localhost:8204'
-const ADMIN = { username: 'admin', password: 'Admin@12345678' }
+const ADMIN = { username: 'admin', password: process.env.E2E_ADMIN_PASSWORD }
 
 // 数据分析菜单 7 页
 const PAGES = [

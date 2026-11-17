@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/storage"
 )
 
@@ -41,9 +42,26 @@ func FilesGuard(baseDir string) gin.HandlerFunc {
 			return
 		}
 
-		// off 模式：逐字节等价历史行为（离线单机不签名，路径里本就没有租户段）
+		// off 模式（2026-11-17 审计 P3-2）：URL 由 PublicURL 签发 ?s=（默认租户归属）。
+		//   - 带 ?s= ：验签，失败一律 404（与 on 模式同口径）
+		//   - 无 ?s= ：存量库里的历史无签名 URL——FILES_OFF_MODE_REQUIRE_SIGN=1 时 404
+		//     收口；默认放行但逐次留匿名访问审计，供消化存量后开闸。
 		if !tenant.IsMultiTenant() {
-			serveFile(c, base, filepath.Clean("/"+rel))
+			serveRel := filepath.Clean("/" + rel)
+			if sig := c.Query("s"); sig != "" {
+				if _, _, err := storage.VerifyFileURL(serveRel, sig, time.Now()); err != nil {
+					c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+					return
+				}
+				serveFile(c, base, serveRel)
+				return
+			}
+			if storage.OffModeFilesRequireSign() {
+				c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+				return
+			}
+			logger.Warnf("[FILES] off-mode anonymous access (unsigned url): %s ip=%s", serveRel, c.ClientIP())
+			serveFile(c, base, serveRel)
 			return
 		}
 

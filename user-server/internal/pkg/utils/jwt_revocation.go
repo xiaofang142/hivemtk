@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/cache"
@@ -55,6 +56,56 @@ func revokeKey(userID uint) string {
 	return jwtRevokeKeyPrefix + strconv.FormatUint(uint64(userID), 10)
 }
 
+// 本进程吊销水位线兜底（2026-11-15 审计 L6 同款）：Redis 写失败时把
+// (userID → cutoff) 记进本地，保证本实例上的「禁用/改密即踢会话」立即生效。
+// 边界与 jwt_blacklist.go 的 localBlacklist 相同：只覆盖本进程、重启即失、
+// 是抖动缓冲而非第二事实源。
+var (
+	localRevokeMu sync.RWMutex
+	localRevoke   = map[uint]revocationWatermark{}
+)
+
+type revocationWatermark struct {
+	cutoff int64
+	expiry time.Time
+}
+
+func localRevokeSet(userID uint, cutoff int64) {
+	localRevokeMu.Lock()
+	defer localRevokeMu.Unlock()
+	localRevoke[userID] = revocationWatermark{cutoff: cutoff, expiry: time.Now().Add(jwtRevokeTTL)}
+}
+
+func localRevokeCutoff(userID uint) (int64, bool) {
+	now := time.Now()
+	localRevokeMu.Lock()
+	defer localRevokeMu.Unlock()
+	wm, ok := localRevoke[userID]
+	if !ok {
+		return 0, false
+	}
+	if now.After(wm.expiry) {
+		delete(localRevoke, userID)
+		return 0, false
+	}
+	return wm.cutoff, true
+}
+
+func localRevokeMaxCutoff(userID uint, redisCutoff int64, hasRedis bool) (int64, bool) {
+	localCutoff, hasLocal := localRevokeCutoff(userID)
+	switch {
+	case hasLocal && hasRedis:
+		if localCutoff > redisCutoff {
+			return localCutoff, true
+		}
+		return redisCutoff, true
+	case hasLocal:
+		return localCutoff, true
+	default:
+		return redisCutoff, hasRedis
+	}
+}
+
 // RevokeUserTokens 作废 userID 在**本时刻之前**签发的全部 JWT。
 //
 // 调用即生效于下一个受保护的请求（无需等待令牌自然过期）。
@@ -74,7 +125,10 @@ func RevokeUserTokens(ctx context.Context, userID uint) {
 	wctx, cancel := detachedRevocationCtx(ctx)
 	defer cancel()
 	if err := cache.GetGlobalCache().Set(wctx, key, strconv.FormatInt(cutoff, 10), jwtRevokeTTL); err != nil {
-		logger.Errorf("RevokeUserTokens 写缓存失败（该用户旧令牌将退化为最长 24h 自然过期）user_id=%d: %v", userID, err)
+		// 写侧兜底（2026-11-15 审计 L6）：Redis 写失败时记进本进程，本实例上的
+		// 吊销立即生效（多实例/重启边界见 localRevoke 注释）。
+		localRevokeSet(userID, cutoff)
+		logger.Errorf("RevokeUserTokens 写缓存失败，已落本进程兜底水位线（其他实例最长 24h 自然过期窗口）user_id=%d: %v", userID, err)
 	}
 }
 
@@ -103,12 +157,24 @@ func IsTokenRevoked(ctx context.Context, userID uint, issuedAt *jwt.NumericDate)
 			logger.Errorf("IsTokenRevoked 水位线值非法，fail-closed 拒绝 user_id=%d val=%q: %v", userID, val, convErr)
 			return true
 		}
+		// 本进程兜底水位线并查（2026-11-15 审计 L6）：Redis 写丢的吊销在本实例上
+		// 依然生效，取两侧较新（更大）的水位线。
+		cutoff, _ = localRevokeMaxCutoff(userID, cutoff, true)
 		if issuedAt == nil {
 			return true
 		}
 		return issuedAt.Unix() < cutoff
 	case errors.Is(err, redis.Nil), errors.Is(err, cache.ErrCacheMiss):
-		return false
+		// Redis 无水位线 ≠ 未吊销：本进程兜底可能记着一次写失败的吊销。
+		localCutoff, has := localRevokeCutoff(userID)
+		if !has {
+			return false
+		}
+		if issuedAt == nil {
+			// 与成功分支同口径：无 iat 无法证明签发于吊销之后，存在水位线即失效
+			return true
+		}
+		return issuedAt.Unix() < localCutoff
 	default:
 		logger.Errorf("IsTokenRevoked 缓存读取失败（fail-closed，拒绝令牌）user_id=%d: %v", userID, err)
 		return true

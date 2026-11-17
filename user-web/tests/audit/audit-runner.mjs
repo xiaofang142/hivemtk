@@ -47,10 +47,7 @@ function envGet(key) {
 // 口径同 scripts/api_verify_full.py），拿它去登 admin 只会白烧防爆破阈值（5 次/15 分钟）。
 const ACCOUNTS = [
   { user: process.env.E2E_USER || 'e2e_admin', pass: process.env.E2E_PASS || envGet('HIVEMTK_ADMIN_PASS') },
-  { user: 'admin', pass: envGet('SEED_PASSWORD') },
-  { user: 'admin', pass: 'Admin@12345678' },
-  { user: 'admin', pass: 'Admin@123456' },
-  { user: 'admin', pass: '62cfdc6bf1b075830734cc6f9a63501b' }
+  { user: 'admin', pass: process.env.E2E_ADMIN_PASSWORD || envGet('SEED_PASSWORD') }
 ].filter((a, i, arr) => a.pass && arr.findIndex((x) => x.user === a.user && x.pass === a.pass) === i)
 
 function safeName(p) {

@@ -294,26 +294,37 @@ func fileURLSignature(value string) string {
 	return ""
 }
 
-// SignStoredPath 把 on 模式的存储路径拆成"不含租户段的相对路径 + 签名"。
+// SignStoredPath 把存储路径拆成"不含租户段的相对路径 + 签名"。
 //
-// 返回 ok=false 的三种情形（都不改变行为，只是不签名）：
-//   - off 模式：离线单机不签名，URL 与历史逐字节一致
-//   - 路径里没有 `tenant_{id}/` 段：系统级上传 / 存量根域文件（本来就不分租户）
+// 返回 ok=false 的情形（都不改变行为，只是不签名）：
+//   - off 模式：路径里没有 `tenant_{id}/` 段——2026-11-17 审计 P3-2 起改为同样签发
+//     （默认租户归属）；此前离线单机 URL 与历史逐字节一致、匿名可读
+//   - on 模式下路径里没有 `tenant_{id}/` 段：系统级上传 / 存量根域文件（本来就不分租户）
 //   - 签名器未装配：调用方 PublicURL 会退回明文并已响亮报错
 func SignStoredPath(storagePath string) (relPath string, sig string, ok bool) {
-	if !tenant.IsMultiTenant() {
+	s := currentFileURLSigner()
+	if s == nil {
+		if tenant.IsMultiTenant() && fileURLWarned.CompareAndSwap(false, true) {
+			logger.Errorf("[STORAGE] 多租户模式下文件 URL 无法签名（缺 FILE_URL_SECRET/JWT 密钥）："+
+				"公开外链将退回明文路径，无凭证访问 tenant_* 一律 404。URL=%q", storagePath)
+		}
 		return "", "", false
+	}
+	if !tenant.IsMultiTenant() {
+		// off 模式：落盘无租户段，整条相对路径按默认租户签发（审计 P3-2）。
+		rest := strings.TrimPrefix(strings.ReplaceAll(storagePath, "\\", "/"), "/")
+		if rest == "" {
+			return "", "", false
+		}
+		token, err := s.sign(rest, tenant.DefaultTenantID, time.Now())
+		if err != nil {
+			logger.Errorf("[STORAGE] off 模式文件 URL 签名失败（退回明文路径）: %v", err)
+			return "", "", false
+		}
+		return rest, token, true
 	}
 	tid, rest, matched := splitTenantPath(storagePath)
 	if !matched || rest == "" {
-		return "", "", false
-	}
-	s := currentFileURLSigner()
-	if s == nil {
-		if fileURLWarned.CompareAndSwap(false, true) {
-			logger.Errorf("[STORAGE] 多租户模式下文件 URL 无法签名（缺 FILE_URL_SECRET/JWT 密钥）："+
-				"公开外链将退回明文路径，无凭证访问 tenant_* 一律 404。URL=%q", rest)
-		}
 		return "", "", false
 	}
 	token, err := s.sign(rest, tid, time.Now())
@@ -322,6 +333,13 @@ func SignStoredPath(storagePath string) (relPath string, sig string, ok bool) {
 		return "", "", false
 	}
 	return rest, token, true
+}
+
+// OffModeFilesRequireSign off 模式 /files 是否拒绝无签名请求
+// （FILES_OFF_MODE_REQUIRE_SIGN=1）。默认 0：存量库里的无签名 URL 照常放行，
+// 但每次匿名访问留审计日志；确认存量已消化后打开即全量收口。
+func OffModeFilesRequireSign() bool {
+	return os.Getenv("FILES_OFF_MODE_REQUIRE_SIGN") == "1"
 }
 
 func (s *fileURLSigner) sign(relPath string, tenantID uint, now time.Time) (string, error) {

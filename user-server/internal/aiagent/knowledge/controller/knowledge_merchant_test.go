@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"time"
+	"os"
+	"net"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -476,6 +479,8 @@ var _ = context.Background
 
 // TestKM_Playground_WithData 测试 Playground 命中数据的场景
 func TestKM_Playground_WithData(t *testing.T) {
+	requireEmbeddingService(t) // 真向量用例：无栈环境显式跳过（审计交付配套）
+
 	ctrl := NewKnowledgeMerchantController()
 	r := setupKMRouter(t, ctrl)
 	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库）
@@ -855,4 +860,18 @@ func TestKM_BatchImport_MixedValidAndEmpty(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "rejected") {
 		t.Errorf("expected rejected field: %s", w.Body.String())
 	}
+}
+
+// requireEmbeddingService 探测本机 embedding 服务可达性（2026-11-17 审计交付配套）：
+// 真向量集成用例依赖 127.0.0.1:8208 推理栈；本机按 LOCAL-ENV.md 硬约束不部署 ⇒ 显式 Skip。
+func requireEmbeddingService(t *testing.T) {
+	t.Helper()
+	if os.Getenv("HIVEMTK_FORCE_EMBEDDING_TESTS") == "1" {
+		return
+	}
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:8208", 500*time.Millisecond)
+	if err != nil {
+		t.Skipf("本机未部署推理栈（127.0.0.1:8208 不可达，LOCAL-ENV.md 硬约束）：真向量用例跳过；装栈后或设 HIVEMTK_FORCE_EMBEDDING_TESTS=1 重跑")
+	}
+	_ = conn.Close()
 }

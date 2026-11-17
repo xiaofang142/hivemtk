@@ -1,6 +1,9 @@
 import { chromium } from 'playwright'
 import { readFileSync } from 'fs'
 
+const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD
+if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1) }
+
 // R47 UI 全交互覆盖：每页枚举所有可点元素(button/tab/链接/分页/开关)逐个点击
 // 记录: 页面×交互×结果; 判定: pageerror/5xx/页面白屏 = FAIL
 const BASE = 'http://localhost:8212'
@@ -18,7 +21,7 @@ page.on('response', (r) => {
 
 await page.goto(BASE + '/login', { waitUntil: 'networkidle', timeout: 30000 })
 await page.fill('input[type="text"]', 'admin')
-await page.fill('input[type="password"]', 'Admin@12345678')
+await page.fill('input[type="password"]', ADMIN_PASSWORD)
 await page.click('button:has-text("Log In")')
 await page.waitForTimeout(3000)
 
