@@ -101,12 +101,18 @@ func TestN14_IDLessEventStillDedupsByContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("intercept first: %v", err)
 	}
+	if first == nil {
+		t.Fatal("无平台身份事件的首条判定不能为空")
+	}
 	if first.Blocked {
 		t.Fatalf("首条不该被拦：%s", first.Reason)
 	}
 	second, err := ingest.interceptInbound(context.Background(), ev())
 	if err != nil {
 		t.Fatalf("intercept second: %v", err)
+	}
+	if second == nil {
+		t.Fatal("无平台身份事件的重复判定不能为空")
 	}
 	if !second.Blocked || !second.IsDup {
 		t.Errorf("无 channel_msg_id 的同内容第二条应仍被内容窗口去重拦下，got blocked=%v dup=%v reason=%q",

@@ -223,6 +223,12 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		return true, sqlDB.PingContext(ctx)
 	}
 	healthCtl := health.New(HealthRedis, dbProbe)
+	// SaaS 配置面改造（B14，2026-11-17）：HEALTH_EMBEDDING_CRITICAL env 退役，
+	// 探活关键标记入参数中心 rag_health.embedding_critical（router 是本仓合法装配点；
+	// health 包 import app，app 内装配会成环）。
+	health.SetEmbeddingCriticalProvider(func() bool {
+		return service.GlobalConfigParam().GetBool(context.Background(), "rag_health", "embedding_critical", false)
+	})
 	r.GET("/health", healthCtl.Check)
 	r.GET("/healthz", healthCtl.Live)
 	r.GET("/readyz", healthCtl.Ready)
@@ -704,8 +710,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		bridgeHandler := app.WireBridgeGlobals(gormDB, bridgeIngressSvc)
 
-		douyinLeadMiner := webhookSvc.DouyinLeadMiner()
-		bridgeHandler.SetLeadMiner(douyinLeadMiner)
+		bridgeIngressSvc.SetBridgeLeadProcessor(webhookSvc.ProcessBridgeLead)
 
 		bridgeWS := r.Group("/api")
 		bridgeWS.Use(middleware.InitGuard())
@@ -723,6 +728,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		bridgeWS.POST("/bridge/selector-health", selectorHealthCtrl.Ingest)
 
 		bridgeWS.GET("/bridge/outbox/sse", bridgeHandler.HandleOutboxSSE)
+		bridgeWS.GET("/bridge/outbox/wake", controller.NewBridgeOutboxWakeController(service.GlobalBridgeOutboxWake).Stream)
 
 		bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
 

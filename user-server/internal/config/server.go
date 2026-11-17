@@ -271,30 +271,12 @@ type PGVectorConfig struct {
 	Dimension int    `yaml:"dimension"`
 }
 
-// StorageConfig 存储配置
-type StorageConfig struct {
-	Type  string      `yaml:"type"`
-	Qiniu QiniuConfig `yaml:"qiniu"`
-}
-
-// QiniuConfig 七牛云配置
-type QiniuConfig struct {
-	AccessKey    string `yaml:"access_key"`
-	SecretKey    string `yaml:"secret_key"`
-	Bucket       string `yaml:"bucket"`
-	Domain       string `yaml:"domain"`
-	UploadDomain string `yaml:"upload_domain"`
-	Region       string `yaml:"region"`
-}
-
 // AppConfig 应用配置
 type AppConfig struct {
 	Database       DatabaseConfig       `yaml:"database"`
 	VectorDatabase VectorDatabaseConfig `yaml:"vector_database"`
 	Inference      InferenceConfig      `yaml:"inference"`
-	Storage        StorageConfig        `yaml:"storage"`
 	Logging        logger.LoggingConfig `yaml:"logging"`
-	I18n           I18nConfig           `yaml:"i18n"`
 	External       ExternalConfig       `yaml:"external"`
 	Proxy          ProxyConfig          `yaml:"proxy"`
 	SSO            SSOConfig            `yaml:"sso"`
@@ -437,22 +419,25 @@ func SetPublicBaseURLProvider(fn func(ctx context.Context) string) {
 
 // GetPublicBaseURLFor 解析公网基座 URL（用于自动推导渠道 webhook 回调地址）
 //
-// 解析顺序：
-//  1. 环境变量 PUBLIC_BASE_URL（部署期单点覆盖）
-//  2. config.yaml external.public_base_url
-//  3. 参数中心 urls.public_base_url（按 ctx 解析租户覆盖，未绑定租户读平台默认）
+// 解析顺序（SaaS 配置面改造 B18，2026-11-17 翻转：多租户下「参数中心」必须压过
+// 全局 env/yaml——env 是进程单值，排在前面会让某个租户在参数中心配的回调基址
+// 被部署 env 静默顶掉）：
+//  1. 参数中心 urls.public_base_url（按 ctx 解析租户覆盖，未绑定租户读平台默认；
+//     平台默认未配 = 空）
+//  2. 环境变量 PUBLIC_BASE_URL（部署级兜底，参数中心没配时沿用既有部署行为）
+//  3. config.yaml external.public_base_url（与 env 同源的遗留兜底，仅旧文件兼容）
 //  4. 返回空字符串 → 调用方回退到 X-Forwarded-* 头 / 请求 Host
 //
 // 返回值已去除尾部斜杠，scheme 强制 https（若用户误填 http+端口 自动升级，避免 Telegram 拒收）。
 func GetPublicBaseURLFor(ctx context.Context) string {
+	if v := strings.TrimSpace(publicBaseURLProvider(ctx)); v != "" {
+		return NormalizePublicBaseURL(v)
+	}
 	if v := strings.TrimSpace(os.Getenv("PUBLIC_BASE_URL")); v != "" {
 		return NormalizePublicBaseURL(v)
 	}
 	if cfg := GetAppConfig().External.PublicBaseURL; cfg != "" {
 		return NormalizePublicBaseURL(cfg)
-	}
-	if v := strings.TrimSpace(publicBaseURLProvider(ctx)); v != "" {
-		return NormalizePublicBaseURL(v)
 	}
 	return ""
 }
@@ -482,63 +467,6 @@ func NormalizePublicBaseURL(raw string) string {
 		return "https://" + rest
 	}
 	return v[:idx+3] + rest
-}
-
-// I18nConfig 多语言方案配置（v1.2 出海多语言）
-//
-// 包含三个子段：
-//   - embedding：bge-m3 多语言 embedding provider 配置（独立于 inference.embedding，
-//     可为多语言路径指定不同的 base_url/model/api_key）
-//   - cache：跨语言回复翻译缓存配置（Redis 后端）
-//
-// fallback：低资源语言降级桥配置（：DeepL 翻译降级）
-type I18nConfig struct {
-	Embedding I18nEmbeddingConfig `yaml:"embedding" json:"embedding"`
-	Cache     I18nCacheConfig     `yaml:"cache" json:"cache"`
-	Fallback  I18nFallbackConfig  `yaml:"fallback" json:"fallback"`
-}
-
-// I18nFallbackConfig 低资源语言降级桥配置。
-//
-// 启用条件：enabled=true 且 deepl.api_key 非空。
-// 未配置 api_key 时 FallbackBridge 自动禁用，不影响主流程。
-type I18nFallbackConfig struct {
-	Enabled          bool        `yaml:"enabled" json:"enabled"`
-	LowResourceLangs []string    `yaml:"low_resource_langs" json:"low_resource_langs"`
-	Translator       string      `yaml:"translator" json:"translator"`
-	DeepL            DeepLConfig `yaml:"deepl" json:"deepl"`
-}
-
-// DeepLConfig DeepL 翻译服务配置。
-type DeepLConfig struct {
-	APIKey  string `yaml:"api_key" json:"api_key"`
-	BaseURL string `yaml:"base_url" json:"base_url"`
-}
-
-// I18nEmbeddingConfig 多语言 embedding provider 配置
-//
-// provider 类型：
-//   - "openai"（默认）：复用 inference.embedding 配置（基于 llm.EmbeddingService）
-//   - "bge-m3"：显式 bge-m3 provider，走 OpenAI 兼容 /v1/embeddings，
-//     支持 normalize / batch_size 等 bge-m3 专属参数
-//
-// 向后兼容：provider 为空时回退 "openai"。
-type I18nEmbeddingConfig struct {
-	Provider  string `yaml:"provider" json:"provider"`
-	Model     string `yaml:"model" json:"model"`
-	BaseURL   string `yaml:"base_url" json:"base_url"`
-	APIKey    string `yaml:"api_key" json:"api_key"`
-	Dimension int    `yaml:"dimension" json:"dimension"`
-	Normalize bool   `yaml:"normalize" json:"normalize"`
-	BatchSize int    `yaml:"batch_size" json:"batch_size"`
-}
-
-// I18nCacheConfig 跨语言翻译缓存配置
-type I18nCacheConfig struct {
-	Enabled    bool   `yaml:"enabled" json:"enabled"`
-	TTL        int    `yaml:"ttl" json:"ttl"`
-	KeyPrefix  string `yaml:"key_prefix" json:"key_prefix"`
-	MaxEntries int    `yaml:"max_entries" json:"max_entries"`
 }
 
 // GetLoggingConfig 返回统一日志配置；缺省段时回落到日志包默认配置。

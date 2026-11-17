@@ -29,6 +29,8 @@ func WireBridgeGlobals(gormDB *gorm.DB, ingressSvc *service.InboxIngressService)
 	bridgeHandler.SetOutboxQuerier(messageHubRepo)
 
 	service.SetGlobalSSEPublisher(func(ctx context.Context, channel, accountID string, hubID uint64, convID, msgType, receiverID, content, mediaURL string, isAIReply bool, createdAt time.Time) {
+		// 独立信号不计入旧SSE订阅，不读取载荷、不认领或更新投递预算。
+		service.GlobalBridgeOutboxWake.Publish(ctx, channel, accountID)
 		// R-B1：总线 Data 与 DB 补拉路径逐键一致（msg_id 必带——扩展端复合去重键
 		// msg_id|conversation_id 依赖它；曾缺 msg_id 致同会话第二条起静默丢消息）。
 		// msg_id 与落库行同源：service.ContentHashMsgID ≡ DeliverBridgeOutbound 赋值处。

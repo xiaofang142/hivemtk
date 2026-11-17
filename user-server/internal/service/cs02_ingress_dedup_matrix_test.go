@@ -33,6 +33,7 @@ import (
 //	实际识别值，不是 self-echo 也不是 msg_id 幂等），库内留痕 1 行（§8.3-18 不销毁记录），
 //	AI 触发仍 1 次。
 func TestCS02_DupWindow_ReasonRowAndTriggerCount(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	db := testutil.NewTestDB(t, &model.MessageHub{})
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
@@ -94,6 +95,7 @@ func TestCS02_DupWindow_ReasonRowAndTriggerCount(t *testing.T) {
 //	被判窗口重复 —— 这证明 B 的整条路径（含落库成功后的钩子）没有把 A 的键放掉。
 //	若键被误放，C 会重新占坑并 queued_for_ai=true，同一句话得到第二次 AI 回复。
 func TestCS02_DupDecision_DoesNotReleaseFirstCallerKey(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	db := testutil.NewTestDB(t, &model.MessageHub{})
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}

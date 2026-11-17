@@ -16,6 +16,7 @@ import (
 // AI 开关 triggerSalesEngine，若中台 Ingress 也触发一次，同一条 wamid 就会跑出两份
 // 回复并各自真实投递（两条路径的去重键不同，互相挡不住）。
 func TestDispatchWhatsApp_IngressDoesNotTriggerAI(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	db := testutil.NewTestDBOrSkip(t,
 		&model.WhatsAppCloudAccount{}, &model.MessageHub{}, &model.InboxConversation{},
 		&model.UnifiedMessage{}, &model.WebhookEvent{}, &model.IntegrationAccount{},

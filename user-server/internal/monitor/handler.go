@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/pkg/utils/response"
+	"hivemtk-user/internal/repository"
 
 	"github.com/gin-gonic/gin"
 )
@@ -124,7 +125,9 @@ func traceTreeHandler(c *gin.Context) {
 	tid := c.Query("trace_id")
 	conv := c.Query("conversation_id")
 	msg := c.Query("msg_id")
-	tree, err := TraceTree(c.Request.Context(), tid, conv, msg)
+	tree, err := TraceTree(c.Request.Context(), tid, conv, msg, repository.TraceObservationScope{
+		TurnID: c.Query("turn_id"), Channel: c.Query("channel"), AccountID: c.Query("account_id"),
+	})
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return

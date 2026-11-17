@@ -52,12 +52,18 @@ func TestIngress_OccurrenceSuffixSkipsContentWindowDedup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("首条 interceptInbound: %v", err)
 	}
+	if first == nil {
+		t.Fatal("首条发生次数消息的判定不能为空")
+	}
 	if first.Blocked {
 		t.Fatalf("首条不该被拦：%s", first.Reason)
 	}
 	second, err := svc.interceptInbound(ctx, r23Event(nonce, base+"#1", conv, content))
 	if err != nil {
 		t.Fatalf("第二条 interceptInbound: %v", err)
+	}
+	if second == nil {
+		t.Fatal("第二条发生次数消息的判定不能为空")
 	}
 	if second.Blocked {
 		t.Errorf("§8.3-17 未达成：上报方已按出现次数给出独立身份，第二条仍被内容窗口去重拦下 ⇒ blocked=%v dup=%v reason=%q"+
@@ -79,13 +85,16 @@ func TestIngress_PlainContentHashStillContentDeduped(t *testing.T) {
 	platform := string(model.ChannelXHS)
 	base := r23OccurrenceHash(platform, conv, content)
 
-	if d, err := svc.interceptInbound(ctx, r23Event(nonce, base, conv, content)); err != nil || d.Blocked {
+	if d, err := svc.interceptInbound(ctx, r23Event(nonce, base, conv, content)); err != nil || d == nil || d.Blocked {
 		t.Fatalf("首条应放行: %+v err=%v", d, err)
 	}
 	// 同一条的二次上报（DOM 抖动 / _sentKeys 过期后重报）：身份没变，仍按内容窗口拦。
 	d, err := svc.interceptInbound(ctx, r23Event(nonce, base, conv, content))
 	if err != nil {
 		t.Fatalf("第二条 interceptInbound: %v", err)
+	}
+	if d == nil {
+		t.Fatal("裸内容哈希的重复判定不能为空")
 	}
 	if !d.Blocked || !d.IsDup {
 		t.Errorf("裸内容哈希的同内容第二条必须仍判重复，got blocked=%v dup=%v", d.Blocked, d.IsDup)
@@ -103,12 +112,15 @@ func TestIngress_NonOccurrenceHashLikeIDSuffixStillContentDeduped(t *testing.T) 
 	content := "发货了吗 " + nonce
 	conv := "conv-r23-shape"
 
-	if d, err := svc.interceptInbound(ctx, r23Event(nonce, "wamid.ABC#1", conv, content)); err != nil || d.Blocked {
+	if d, err := svc.interceptInbound(ctx, r23Event(nonce, "wamid.ABC#1", conv, content)); err != nil || d == nil || d.Blocked {
 		t.Fatalf("首条应放行: %+v err=%v", d, err)
 	}
 	d, err := svc.interceptInbound(ctx, r23Event(nonce, "wamid.DEF#2", conv, content))
 	if err != nil {
 		t.Fatalf("第二条 interceptInbound: %v", err)
+	}
+	if d == nil {
+		t.Fatal("非发生次数形状的入站判定不能为空")
 	}
 	if !d.Blocked {
 		t.Errorf("非 mh:<hash>#n 形状的后缀不该被当成独立身份豁免，got %+v", d)

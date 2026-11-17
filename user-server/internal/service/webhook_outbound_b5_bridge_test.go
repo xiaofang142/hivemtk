@@ -87,7 +87,7 @@ func TestBridgeOutboxChannels_EmptyInjectionIgnored(t *testing.T) {
 // TestSendOutbound_Bridge_UnknownChannelRejected registry 无能力的未知渠道：
 // 出站拒绝路径不变（宁可明确拒绝，也不静默收下），不落任何出站行。
 func TestSendOutbound_Bridge_UnknownChannelRejected(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -130,7 +130,7 @@ func TestSendOutbound_Bridge_UnknownChannelRejected(t *testing.T) {
 //   - 纯文本内容零变化（StripMarkdownForDM 对纯文本幂等，R5 只对含 Markdown 文本有意变化）；
 //   - 出站行形态不变（pending/text/AI 回复/会话号/收件人）。
 func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -205,7 +205,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 // rec.AccountID, ...)（replayDelayedOutbound），桥接分支落库的 SenderID 仍必须是
 // accountID，且与首发行一致。
 func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -275,7 +275,7 @@ func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 // 且都等于 StripMarkdownForDM 的剥离结果。变更前 AI 路径是原样入队（＝原始 Markdown），
 // 断言「出站内容 == 原始内容」即红，本用例对剥/不剥敏感。
 func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	setupBridgeWhitelistForTest(t, "douyin")
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},

@@ -222,11 +222,10 @@ func TestSidecar_E2E_TableOutputChunksKeepRows(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	oldURL := sidecarURL
-	t.Cleanup(func() { sidecarURL = oldURL })
+	SetSidecarURLProvider(func() string { return fake.URL }) // env 已退役 B6，测试走 provider
+	t.Cleanup(func() { SetSidecarURLProvider(nil) })
 
 	// 正控制：配置 sidecar ⇒ 结构化文档走外挂并命中 1 次
-	sidecarURL = fake.URL
 	text, err := ParseDocument(context.Background(), "report.pdf", []byte("%PDF-1.4 fake"))
 	if err != nil {
 		t.Fatalf("sidecar 解析失败: %v", err)
@@ -236,7 +235,6 @@ func TestSidecar_E2E_TableOutputChunksKeepRows(t *testing.T) {
 	}
 
 	// 关掉 sidecar ⇒ 零外网请求（hits 不增），且走 builtin
-	sidecarURL = ""
 	counter := hits
 	if _, err := ParseDocument(context.Background(), "plain.txt", []byte("纯文本内容")); err != nil {
 		t.Fatalf("builtin 解析失败: %v", err)
@@ -275,10 +273,8 @@ func TestImageDescribe_E2E_DescriptionBecomesSearchableChunk(t *testing.T) {
 	}))
 	defer fake.Close()
 
-	oldURL, oldModel := imageDescribeURL, imageDescribeModel
-	t.Cleanup(func() { imageDescribeURL, imageDescribeModel = oldURL, oldModel })
-	imageDescribeURL = fake.URL
-	imageDescribeModel = "test-vl"
+	SetImageDescribeConfigProvider(func() (string, string) { return fake.URL, "test-vl" }) // env 已退役 B6
+	t.Cleanup(func() { SetImageDescribeConfigProvider(nil) })
 
 	desc, err := DescribeImage(context.Background(), "pack.png", []byte("\x89PNG fake bytes"))
 	if err != nil {

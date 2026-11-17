@@ -2,6 +2,7 @@ package ragcache
 
 import (
 	"context"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type FAQAnswerCacheService struct {
 // maxAge 是条目的最长可用时间，命中前超过它就删掉该行并按未命中处理；
 // 传 0 表示不按时间过期（只靠知识库 updated_at 失效）。
 func NewFAQAnswerCacheService(store Store, kbMeta KBMetaReader, threshold float64, maxAge time.Duration) *FAQAnswerCacheService {
-	if threshold <= 0 {
+	if math.IsNaN(threshold) || math.IsInf(threshold, 0) || threshold <= 0 {
 		threshold = DefaultSemanticThreshold
 	}
 	if threshold < DefaultSemanticThreshold {
@@ -46,14 +47,15 @@ func (s *FAQAnswerCacheService) SetNowFunc(f func() time.Time) { s.now = f }
 // 任一层命中前都先做 kb 更新时间失效校验；Tier1 命中的 Similarity 恒为 1（按定义逐位相等），
 // 留 0 会被拿 Similarity 做置信度判断的调用方当成最不可信的一条丢掉。
 func (s *FAQAnswerCacheService) Lookup(ctx context.Context, req LookupRequest) (*LookupResult, error) {
-	if s == nil || s.store == nil || len(req.QueryVector) == 0 || req.KBID == "" {
+	if s == nil || s.store == nil || s.kbMeta == nil || ctx == nil || ctx.Err() != nil ||
+		!validCacheVector(req.QueryVector) || req.KBID == "" || req.PromptVersion == "" {
 		return &LookupResult{Tier: TierMiss}, nil
 	}
 
 	if e, err := s.store.GetExact(ctx, req.KBID, req.PromptVersion, req.QueryVector); err != nil {
 		logger.Warnf("[ragcache] tier1 exact lookup failed: %v", err)
 		ragRecallTotal.WithLabel("tier1", "false").Inc()
-	} else if e != nil && s.fresh(ctx, e) {
+	} else if s.entryMatchesRequest(e, req) && equalCacheVectors(e.QueryVector, req.QueryVector) && s.fresh(ctx, e) {
 		ragRecallTotal.WithLabel("tier1", "true").Inc()
 		return &LookupResult{Tier: TierExact, Answer: e.Answer, Similarity: 1}, nil
 	} else {
@@ -67,14 +69,14 @@ func (s *FAQAnswerCacheService) Lookup(ctx context.Context, req LookupRequest) (
 		ragRecallTotal.WithLabel("miss", "true").Inc()
 		return &LookupResult{Tier: TierMiss}, nil
 	}
-	if e == nil || !s.fresh(ctx, e) {
+	if !s.entryMatchesRequest(e, req) || !s.fresh(ctx, e) {
 		ragRecallTotal.WithLabel("tier2", "false").Inc()
 		ragRecallTotal.WithLabel("miss", "true").Inc()
 		return &LookupResult{Tier: TierMiss}, nil
 	}
 
 	sim := CosineSimilarity(req.QueryVector, e.QueryVector)
-	if sim < float64(s.threshold) {
+	if math.IsNaN(sim) || math.IsInf(sim, 0) || sim < s.threshold {
 		logger.Debugf("[ragcache] semantic hit below local threshold: sim=%.6f threshold=%.2f", sim, s.threshold)
 		ragRecallTotal.WithLabel("tier2", "false").Inc()
 		ragRecallTotal.WithLabel("miss", "true").Inc()
@@ -91,12 +93,16 @@ type StoreRequest struct {
 	QueryVector       []float32
 	Answer            string
 	FromKnowledgeBase bool
+	// SourceKBUpdatedAt 是生成前读取的知识版本；生产生成路径必须提供。
+	// nil 保留手动写入接口，不能作为生成期间版本未变化的证明。
+	SourceKBUpdatedAt *time.Time
 }
 
-// Store 写入缓存（过 CanCache 四道门 + 记录写入时的 kb 更新时间）。
+// Store 写入缓存（过 CanCache 四道门，并核对生成前后的知识版本）。
 // 任一门未通过则静默跳过（返回 nil，不视为错误——不入缓存是正常业务分支）。
 func (s *FAQAnswerCacheService) Store(ctx context.Context, req StoreRequest) error {
-	if s == nil || s.store == nil {
+	if s == nil || s.store == nil || s.kbMeta == nil || ctx == nil || ctx.Err() != nil ||
+		!validCacheVector(req.QueryVector) || req.KBID == "" || req.PromptVersion == "" {
 		return nil
 	}
 	if ok, reason := s.CanCache(req.Answer, req.FromKnowledgeBase); !ok {
@@ -107,6 +113,14 @@ func (s *FAQAnswerCacheService) Store(ctx context.Context, req StoreRequest) err
 	if err != nil {
 
 		logger.Warnf("[ragcache] read kb updated_at failed, skip caching: %v", err)
+		return nil
+	}
+	if kbUpdatedAt.IsZero() || (req.SourceKBUpdatedAt != nil &&
+		(req.SourceKBUpdatedAt.IsZero() || !req.SourceKBUpdatedAt.Equal(kbUpdatedAt))) {
+		logger.Debugf("[ragcache] skip caching: knowledge generation version unconfirmed")
+		return nil
+	}
+	if ctx.Err() != nil {
 		return nil
 	}
 	return s.store.Put(ctx, &Entry{
@@ -144,19 +158,58 @@ func (s *FAQAnswerCacheService) fresh(ctx context.Context, e *Entry) bool {
 		s.drop(ctx, e)
 		return false
 	}
-	if s.kbMeta == nil {
-		return true
+	if s.kbMeta == nil || e.KBUpdatedAt.IsZero() {
+		return false
 	}
 	cur, err := s.kbMeta.GetKBUpdatedAt(ctx, e.KBID)
 	if err != nil {
 
 		logger.Warnf("[ragcache] freshness check failed (kb_id=%s): %v", e.KBID, err)
-		return true
+		return false
 	}
-	if cur.After(e.KBUpdatedAt) {
+	if cur.IsZero() {
+		return false
+	}
+	if !cur.Equal(e.KBUpdatedAt) {
 		logger.Infof("[ragcache] kb updated since cached, invalidate entry id=%d kb_id=%s", e.ID, e.KBID)
 		s.drop(ctx, e)
 		return false
+	}
+	return true
+}
+
+func validCacheVector(vector []float32) bool {
+	if len(vector) == 0 {
+		return false
+	}
+	var norm float64
+	for _, value := range vector {
+		component := float64(value)
+		if math.IsNaN(component) || math.IsInf(component, 0) {
+			return false
+		}
+		norm += component * component
+	}
+	return norm > 0
+}
+
+func (s *FAQAnswerCacheService) entryMatchesRequest(entry *Entry, req LookupRequest) bool {
+	if entry == nil || entry.KBID != req.KBID || entry.PromptVersion != req.PromptVersion ||
+		len(entry.QueryVector) != len(req.QueryVector) || !validCacheVector(entry.QueryVector) {
+		return false
+	}
+	allowed, _ := s.CanCache(entry.Answer, true)
+	return allowed
+}
+
+func equalCacheVectors(left, right []float32) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index, value := range left {
+		if value != right[index] {
+			return false
+		}
 	}
 	return true
 }
@@ -183,6 +236,9 @@ var refusalKeywords = []string{
 func IsRefusalAnswer(answer string) bool {
 	a := strings.TrimSpace(answer)
 	if a == "" {
+		return true
+	}
+	if strings.EqualFold(a, "NO_REPLY") {
 		return true
 	}
 	for _, kw := range refusalKeywords {

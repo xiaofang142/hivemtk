@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
@@ -19,13 +20,15 @@ import (
 // 反向测试：删掉 webhook.go 中的 s.startDelayedOutboundDispatch() ⇒ 本测试 10s 内等不到
 // 出站行而 FAIL（ticker 亦未起来，无从兜底）。
 func TestNewWebhookService_DrainsDueDelayedOnBoot(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.InboxConversation{})
+	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{}, &model.InboxConversation{}, &model.CustomerSession{})
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 
 	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
 	account := "acct-boot-" + suffix
 	conv := "conv-boot-" + suffix
 
 	rec := &DelayedOutboundReply{
+		TenantID:       tenant.DefaultTenantID,
 		Platform:       string(ChannelDouyin),
 		AccountID:      account,
 		ConversationID: conv,
@@ -34,22 +37,23 @@ func TestNewWebhookService_DrainsDueDelayedOnBoot(t *testing.T) {
 		SendAt:         time.Now().Add(-time.Minute),
 		Status:         "pending",
 	}
-	if err := db.Create(rec).Error; err != nil {
+	if err := db.WithContext(ctx).Create(rec).Error; err != nil {
 		t.Fatalf("预置到期记录失败: %v", err)
 	}
+	seedReplayAISession(t, db, ctx, rec)
 
 	svc := NewWebhookService()
-	defer svc.Stop(context.Background())
+	defer svc.Stop(ctx)
 
 	deadline := time.Now().Add(10 * time.Second)
 	var out model.MessageHub
 	for {
-		if err := db.Where("direction = ? AND conversation_id = ?", "outbound", conv).
+		if err := db.WithContext(ctx).Where("direction = ? AND conversation_id = ?", "outbound", conv).
 			Order("id DESC").First(&out).Error; err == nil {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("服务装配后 10s 内到期回复未被投递 ⇒ 延迟出站队列消费者未在启动时注册")
+			t.Fatal("服务装配后10s内合法AI会话的到期回复未进入出站队列")
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -65,7 +69,7 @@ func TestNewWebhookService_DrainsDueDelayedOnBoot(t *testing.T) {
 	}
 
 	var after DelayedOutboundReply
-	if err := db.First(&after, rec.ID).Error; err != nil {
+	if err := db.WithContext(ctx).First(&after, rec.ID).Error; err != nil {
 		t.Fatalf("回读延迟记录失败: %v", err)
 	}
 	if after.Status == "pending" {

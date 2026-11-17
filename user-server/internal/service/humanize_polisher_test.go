@@ -20,12 +20,12 @@ func TestHumanize_RemoveAITraces(t *testing.T) {
 		{"作为人工智能", "作为人工智能，我帮您查一下", "帮您查一下", "作为人工智能"},
 		{"我是 AI", "我是 AI 没问题", "没问题", "我是 AI"},
 		{"我是人工智能", "我是人工智能 想帮您", "想帮您", "我是人工智能"},
-		{"很抱歉，我无法", "很抱歉，我无法完成此操作", "完成此操作", "很抱歉，我无法"},
-		{"作为一个", "作为一个 我来说下", "我来说下", "作为一个"},
+		{"保留否定能力", "很抱歉，我无法完成此操作", "我无法完成此操作", ""},
+		{"保留业务角色", "作为一个 我来说下", "作为一个 我来说下", ""},
 		{"我是一个 AI", "我是一个 AI 请稍等", "请稍等", "我是一个 AI"},
-		{"我的能力有限", "我的能力有限，需要时间", "需要时间", "我的能力有限"},
-		{"根据您提供的信息", "根据您提供的信息，推荐 A 方案", "推荐 A 方案", "根据您提供的信息"},
-		{"我理解您的", "我理解您的疑问，请稍等", "疑问，请稍等", "我理解您的"},
+		{"保留能力限制", "我的能力有限，需要时间", "我的能力有限，需要时间", ""},
+		{"保留事实来源", "根据您提供的信息，推荐 A 方案", "根据您提供的信息，推荐 A 方案", ""},
+		{"保留理解对象", "我理解您的疑问，请稍等", "我理解您的疑问，请稍等", ""},
 		{"作为您的销售顾问", "作为您的销售顾问 我建议您考虑", "我建议您考虑", "作为您的销售顾问"},
 		{"多重 AI 痕迹", "作为 AI 助手，根据您提供的信息，我推荐", "我推荐", "作为 AI 助手"},
 		{"无 AI 痕迹", "价格 199，下单包邮", "价格 199", ""},
@@ -146,6 +146,7 @@ func TestHumanize_Truncation(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			p := NewHumanizePolisher()
 			p.randFn = func() float64 { return 0.99 }
+			p.enableTruncation = true // 显式旧工具边界，自动润色默认不截断。
 			p.maxLength = c.maxLen
 			out, _ := p.Polish(context.Background(), c.input, &PolishContext{Platform: "wechat"})
 			runes := []rune(out)
@@ -262,8 +263,8 @@ func TestHumanize_EndToEnd(t *testing.T) {
 			name:     "微信完整流",
 			input:    "作为 AI 助手 根据您提供的信息 我推荐您看看 A 方案!!",
 			pctx:     &PolishContext{Platform: "wechat", CustomerName: "王女士", Intent: "product_recommend"},
-			mustHave: []string{"A 方案"},
-			mustMiss: []string{"作为 AI 助手", "!!", "根据您提供的信息"},
+			mustHave: []string{"A 方案", "根据您提供的信息"},
+			mustMiss: []string{"作为 AI 助手", "!!"},
 		},
 		{
 			name:     "邮件完整流",

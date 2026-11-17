@@ -234,11 +234,12 @@ type qqFullchainEnv struct {
 func setupQQFullchain(t *testing.T) *qqFullchainEnv {
 	t.Helper()
 	// 禁用 AI 回复静默时段(23:00-7:00 延迟队列会拦截出站,干扰测试断言)
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	t.Cleanup(service.DisableAIQuietHoursForTest(true)) // 异步回复完成前保留测试装配，结束时恢复。
 
 	database := testutil.NewTestDB(t,
 		&model.QQAccount{},
 		&model.MessageHub{},
+		&model.DelayedOutboundReply{},
 		&model.InboxConversation{},
 		&model.UnifiedMessage{},
 		&model.WebhookEvent{},
@@ -262,8 +263,9 @@ func setupQQFullchain(t *testing.T) *qqFullchainEnv {
 	platform := NewSimQQPlatform(t, secret)
 	botAPI := platform.StartSimBotAPI()
 	t.Cleanup(botAPI.Close)
-	// 出站模拟：QQIntegrationService 经 QQ_API_BASE_URL 指向模拟平台
-	t.Setenv("QQ_API_BASE_URL", botAPI.URL)
+	// 出站模拟：QQIntegrationService 经 channelbot.qq_api_base_url 指向模拟平台
+	// （QQ_API_BASE_URL env 已退役 B13，测试走装配口）
+	t.Cleanup(service.QQAPIBaseURLOverrideForTest(botAPI.URL))
 
 	// 种子 QQ 账号（webhook 验签 secret = 模拟平台 BotSecret）
 	acc := &model.QQAccount{

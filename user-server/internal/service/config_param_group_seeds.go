@@ -77,5 +77,8 @@ func DefaultParamGroupDefs() []ParamGroupDef {
 		// retention 组：高写入自观测/审计表保留窗口（CC-04）。SortOrder 随尾巴递增，
 		// 与种子文件里「retention 组」的注释块位置对应。
 		{Group: "retention", Label: "日志保留", Description: "自观测与审计日志表的保留窗口（后台每 24h 一轮清理）", SortOrder: 291},
+		// SaaS 配置面改造（B6/B15，2026-11-17）：env 迁移新增两组。
+		{Group: "etl", Label: "文档解析/ETL", Description: "外挂解析与图片理解等文档摄取推理服务端点", SortOrder: 292},
+		{Group: "alerting", Label: "告警通道", Description: "系统告警的邮件/Webhook 通知通道（实例级运维面）", SortOrder: 293},
 	}
 }

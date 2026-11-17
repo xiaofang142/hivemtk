@@ -230,6 +230,13 @@ func TestWebhookGroupSeedsMatchConstantDefaults(t *testing.T) {
 		// R2 新增：AI 回复免打扰窗口（每请求读，默认 23-7，与接线前硬编码一致）。
 		"ai_quiet_hours_start": {"23", 0},
 		"ai_quiet_hours_end":   {"7", 0},
+		// SaaS 配置面改造（B8/B9，2026-11-17）：WEBHOOK_RECOVERY_*/WEBHOOK_AI_TIMEOUT_SECONDS
+		// env 迁移批次。恢复器四条构造期读（Restart=true），ai_timeout 每请求读。
+		WebhookRecoveryEnabledParam:  {"true", 0},
+		WebhookRecoveryIntervalParam: {"30", 30},
+		WebhookRecoveryCooldownParam: {"60", 60},
+		WebhookRecoveryBatchParam:    {"100", 100},
+		WebhookAITimeoutParam:        {"180", 180},
 	}
 	defs := DefaultParamDefs()
 	index := make(map[string]ParamDef, len(want))
@@ -271,6 +278,12 @@ func TestWebhookConstructionTimeParamsAreMarkedRestart(t *testing.T) {
 		// R2 新增：AI 回复免打扰窗口是每请求读（参数中心 60s TTL 缓存），Restart=false。
 		"ai_quiet_hours_start": false,
 		"ai_quiet_hours_end":   false,
+		// SaaS 配置面改造（B8/B9）：恢复器四条构造期读 ⇒ Restart=true；ai_timeout 每请求读。
+		WebhookRecoveryEnabledParam:  true,
+		WebhookRecoveryIntervalParam: true,
+		WebhookRecoveryCooldownParam: true,
+		WebhookRecoveryBatchParam:    true,
+		WebhookAITimeoutParam:        false,
 	}
 	seen := 0
 	for _, d := range DefaultParamDefs() {

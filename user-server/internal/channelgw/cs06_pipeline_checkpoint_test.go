@@ -216,7 +216,10 @@ func cg06Frame(eventID, conv, sender, accountID, content string) *IngestMessage 
 //	（生产 NewIntentRecognizer(dispatcher)；样本②的低置信轮在此换件，CS-01 同口径）。
 func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressPipeline, *service.WebhookService, *service.InboxIngressService, *gorm.DB) {
 	t.Helper()
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	previousMode := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previousMode) })
+	defer service.DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.DelayedOutboundReply{},
@@ -256,7 +259,9 @@ func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressP
 		service.NewAIAgentServiceWithRepo(repository.NewAIAgentRepositoryWithDB(database)),
 	))
 
-	return NewPipeline(ingress), ws, ingress, database
+	// 返回的只读夹具默认钉住样本租户；生产全局连接不携带固定租户。
+	fixtureDB := database.WithContext(tenant.OnlyTenant(context.Background(), 501))
+	return NewPipeline(ingress), ws, ingress, fixtureDB
 }
 
 // cg06HubRowsByConv 按会话直读库行。

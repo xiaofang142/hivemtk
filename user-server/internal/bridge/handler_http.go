@@ -519,14 +519,11 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		return
 	}
 
-	if channel != "" {
-		req.Channel = channel
-	}
-	if accountID != "" {
-		req.AccountID = accountID
-	}
-	if conversationID != "" {
-		req.ConversationID = conversationID
+	// 必须在截断、账号登记、历史保存和实时处理之前验证所有消息。
+	if err := validateHTTPIngestScope(&req, channelNorm, accountID, conversationID); err != nil {
+		bridgeHTTPIngestError("scope_mismatch")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: err.Error()})
+		return
 	}
 	maxMessages := runtimeIngestMaxMessages(ctx0)
 	if len(req.Messages) > maxMessages {
@@ -700,11 +697,8 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		}
 	}
 
-	if h.leadMiner != nil && isLeadMiningChannel(channelNorm) {
-		for _, ev := range batchEvents {
-			h.leadMiner(ctx, ev)
-		}
-	}
+	// 可信资格已随正常入站消息写入；后台持久任务补齐和挖掘。
+	// Accepted也可能代表自回显/重复，不在HTTP路径据此调用矿工。
 
 	ingestedCount := len(resp.Ingested)
 	logger.Ctx(ctx).Info().
@@ -772,10 +766,6 @@ var leadMiningChannels = map[string]bool{
 	"kuaishou":    true,
 	"xiaohongshu": true,
 	"xianyu":      true,
-}
-
-func isLeadMiningChannel(channel string) bool {
-	return leadMiningChannels[strings.ToLower(channel)]
 }
 
 // AddLeadMiningChannel 动态扩展支持群聊线索挖掘的 Bridge 渠道（插件使用）。
@@ -877,13 +867,15 @@ func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 	if limit > 200 {
 		limit = 200
 	}
+	claimStarted := time.Now()
 	hubs, err := h.ingress.ClaimPendingOutbound(ctx, channel, accountID, limit)
+	claimCompleted := time.Now()
 	if err != nil {
 		logger.Ctx(ctx).Error().Err(err).Str("module", "bridge").Str("channel", channel).Msg("[Bridge] ListPendingOutbound failed")
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "query outbox failed"})
 		return
 	}
-	tracing.RecordDownlinkFetchBatch(ctx, channel, accountID, hubs)
+	tracing.RecordDownlinkClaimBatch(ctx, channel, accountID, hubs, &claimStarted, &claimCompleted)
 	logger.Ctx(ctx).Info().
 		Str("module", "bridge").
 		Str("event", "http_outbox_response").

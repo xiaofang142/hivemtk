@@ -237,7 +237,11 @@ func TestOfflineReplayStatusWritesLandOnTable(t *testing.T) {
 
 	// 1) 重放成功：收口到 sent，且不再被 pending 查询取到
 	okID := seedPendingDelayed(t, database, "acc-ok", "conv-ok")
-	if err := repo.MarkDelayedOutboundReplayed(ctx, okID); err != nil {
+	okClaim, err := repo.ClaimDelayedOutboundForReplay(ctx, okID, "tg", "acc-ok")
+	if err != nil || okClaim == nil {
+		t.Fatalf("成功回写前必须取得当前租约: %v", err)
+	}
+	if err := repo.MarkDelayedOutboundReplayed(ctx, okID, okClaim.ClaimToken); err != nil {
 		t.Fatalf("MarkDelayedOutboundReplayed: %v", err)
 	}
 	if st, _ := readDelayedStatus(t, database, okID); st != model.DelayedStatusSent {
@@ -246,7 +250,12 @@ func TestOfflineReplayStatusWritesLandOnTable(t *testing.T) {
 
 	// 2) 重放失败：回到 pending 并累计 attempts、留下失败原因，交给主链路按上限收敛
 	badID := seedPendingDelayed(t, database, "acc-bad", "conv-bad")
-	if err := repo.MarkDelayedOutboundReplayFailed(ctx, badID, "渠道未就绪"); err != nil {
+	badClaim, err := repo.ClaimDelayedOutboundForReplay(ctx, badID, "tg", "acc-bad")
+	if err != nil || badClaim == nil {
+		t.Fatalf("失败改排前必须取得当前租约: %v", err)
+	}
+	// 显式模拟退避到期，只测试下一轮可读取，不缩短生产退避。
+	if err := repo.MarkDelayedOutboundReplayFailed(ctx, badID, badClaim.ClaimToken, time.Now().Add(-time.Second), "渠道未就绪"); err != nil {
 		t.Fatalf("MarkDelayedOutboundReplayFailed: %v", err)
 	}
 	st, attempts := readDelayedStatus(t, database, badID)
@@ -278,15 +287,15 @@ func TestOfflineReplayClaimPreventsDoubleSend(t *testing.T) {
 	ctx := context.Background()
 
 	id := seedPendingDelayed(t, database, "acc-claim", "conv-claim")
-	first, err := repo.ClaimDelayedOutboundForReplay(ctx, id)
-	if err != nil || !first {
+	first, err := repo.ClaimDelayedOutboundForReplay(ctx, id, "tg", "acc-claim")
+	if err != nil || first == nil {
 		t.Fatalf("首次抢占应成功: won=%v err=%v", first, err)
 	}
-	second, err := repo.ClaimDelayedOutboundForReplay(ctx, id)
+	second, err := repo.ClaimDelayedOutboundForReplay(ctx, id, "tg", "acc-claim")
 	if err != nil {
 		t.Fatalf("二次抢占查询失败: %v", err)
 	}
-	if second {
+	if second != nil {
 		t.Error("同一行不得被抢占两次（双发入口）")
 	}
 	if st, _ := readDelayedStatus(t, database, id); st != model.DelayedStatusSending {
@@ -302,7 +311,11 @@ func TestOfflineReplayAbandonConverges(t *testing.T) {
 	ctx := context.Background()
 
 	id := seedPendingDelayedAt(t, database, "acc-ex", "conv-ex", time.Now().Add(-time.Hour), 3)
-	if err := repo.MarkDelayedOutboundAbandoned(ctx, id, "重投次数用尽"); err != nil {
+	claim, err := repo.ClaimDelayedOutboundForReplay(ctx, id, "tg", "acc-ex")
+	if err != nil || claim == nil {
+		t.Fatalf("终态收口前必须取得当前租约: %v", err)
+	}
+	if err := repo.MarkDelayedOutboundAbandoned(ctx, id, claim.ClaimToken, "重投次数用尽"); err != nil {
 		t.Fatalf("MarkDelayedOutboundAbandoned: %v", err)
 	}
 	st, attempts := readDelayedStatus(t, database, id)

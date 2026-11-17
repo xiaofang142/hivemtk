@@ -155,7 +155,7 @@ type KnowledgeSearchLog struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
 	ID                  uint64    `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProductID           string    `gorm:"index;default:''" json:"product_id"`
+	ProductID           string    `gorm:"type:text;index;default:''" json:"product_id"`
 	Query               string    `gorm:"type:text" json:"query"`
 	QueryHash           string    `gorm:"size:64;index" json:"query_hash"`
 	TopK                int       `json:"top_k"`
@@ -169,6 +169,34 @@ type KnowledgeSearchLog struct {
 	Source              string    `gorm:"size:32" json:"source"`
 	SessionID           string    `gorm:"size:120" json:"session_id"`
 	CreatedAt           time.Time `gorm:"autoCreateTime;index" json:"created_at"`
+
+	// 旧日志缺测保持空值；CreatedAt 是落库时间，不代替检索操作时间。
+	QueryChars         int        `json:"query_chars"`
+	TraceID            string     `gorm:"size:64;index" json:"trace_id"`
+	TurnID             string     `gorm:"size:64;index" json:"turn_id"`
+	Channel            string     `gorm:"size:30" json:"channel"`
+	AccountID          string     `gorm:"size:100" json:"account_id"`
+	ConversationID     string     `gorm:"size:100" json:"conversation_id"`
+	AnswerAttempt      int        `json:"answer_attempt"`
+	TimingVersion      int        `gorm:"not null;default:0" json:"timing_version"`
+	DurationMeasured   bool       `gorm:"not null;default:false" json:"duration_measured"`
+	StartedAt          *time.Time `json:"started_at"`
+	CompletedAt        *time.Time `json:"completed_at"`
+	EmbeddingLatencyMs *int64     `json:"embedding_latency_ms"`
+	VectorLatencyMs    *int64     `json:"vector_latency_ms"`
+	BM25LatencyMs      *int64     `gorm:"column:bm25_latency_ms" json:"bm25_latency_ms"`
+	RRFLatencyMs       *int64     `gorm:"column:rrf_latency_ms" json:"rrf_latency_ms"`
+	RerankLatencyMs    *int64     `json:"rerank_latency_ms"`
+	ParentLatencyMs    *int64     `json:"parent_latency_ms"`
+	RewriteLatencyMs   *int64     `json:"rewrite_latency_ms"`
+	VectorCount        int        `json:"vector_count"`
+	BM25Count          int        `gorm:"column:bm25_count" json:"bm25_count"`
+	FusedCount         int        `json:"fused_count"`
+	RerankCount        int        `json:"rerank_count"`
+	EmbeddingFailed    bool       `json:"embedding_failed"`
+	VectorFailed       bool       `json:"vector_failed"`
+	BM25Failed         bool       `gorm:"column:bm25_failed" json:"bm25_failed"`
+	RerankFailed       bool       `json:"rerank_failed"`
 }
 
 // TableName 表名

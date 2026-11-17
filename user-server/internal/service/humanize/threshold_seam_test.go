@@ -51,7 +51,7 @@ func TestNewServicePicksUpSeam(t *testing.T) {
 }
 
 // TestWithThresholdStillOverrides 显式的 WithThreshold 必须仍然压过参数中心。
-// 这是既有的运维接口（env MTK_HUMANIZE_EVAL_THRESHOLD 走的就是它），
+// 这是既有的运维接口（agent_llm.humanize_eval_threshold 参数接线走的就是它），
 // 接线不能把它顶掉。
 func TestWithThresholdStillOverrides(t *testing.T) {
 	restore := setThresholdProviderForTest(func() float64 { return 0.55 })

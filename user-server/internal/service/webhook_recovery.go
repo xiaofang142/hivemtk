@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -61,13 +60,16 @@ func newWebhookRecoveryScanner(svc *WebhookService) *webhookRecoveryScanner {
 		eventRepo = repository.NewWebhookEventRepository()
 	}
 	return &webhookRecoveryScanner{
-		svc:            svc,
-		eventRepo:      eventRepo,
-		handleFn:       svc.handleJob,
-		interval:       webhookEnvSeconds("WEBHOOK_RECOVERY_INTERVAL_SECONDS", webhookRecoveryIntervalDefault),
-		cooldown:       webhookEnvSeconds("WEBHOOK_RECOVERY_COOLDOWN_SECONDS", webhookRecoveryCooldownDefault),
-		batchSize:      webhookEnvInt("WEBHOOK_RECOVERY_BATCH", webhookRecoveryBatchDefault),
-		enabled:        os.Getenv("WEBHOOK_RECOVERY_ENABLED") != "false",
+		svc:       svc,
+		eventRepo: eventRepo,
+		handleFn:  svc.handleJob,
+		// SaaS 配置面改造（B8，2026-11-17）：WEBHOOK_RECOVERY_* 环境变量退役，
+		// 旋钮入参数中心 webhook 组（recovery_enabled/interval/cooldown/batch）。
+		// 构造期读，与 worker_count/queue_size 同批：改参数对下次启动的扫描器生效。
+		interval:       webhookRecoveryInterval(context.Background()),
+		cooldown:       webhookRecoveryCooldown(context.Background()),
+		batchSize:      webhookRecoveryBatch(context.Background()),
+		enabled:        webhookRecoveryEnabledRaw(context.Background()),
 		stopCh:         make(chan struct{}),
 		lastIDByTenant: map[uint]uint64{},
 	}
@@ -255,12 +257,4 @@ func (sc *webhookRecoveryScanner) incrRetry(ctx context.Context, eventID string)
 		return 0
 	}
 	return n
-}
-
-func webhookEnvSeconds(name string, def time.Duration) time.Duration {
-	n := webhookEnvInt(name, int(def/time.Second))
-	if n <= 0 {
-		return def
-	}
-	return time.Duration(n) * time.Second
 }

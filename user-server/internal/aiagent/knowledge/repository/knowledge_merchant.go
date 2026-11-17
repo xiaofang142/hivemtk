@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"hivemtk-user/internal/aiagent/knowledge/model"
-	"hivemtk-user/internal/pkg/utils"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 	"strings"
 	"time"
 

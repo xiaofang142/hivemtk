@@ -44,6 +44,9 @@ func TestIngress_ContentDedupKeyCarriesConversation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("interceptInbound(%s): %v", conv, err)
 		}
+		if d == nil {
+			t.Fatalf("会话 %s 的入站判定不能为空", conv)
+		}
 		return d
 	}
 
@@ -88,6 +91,9 @@ func TestIngress_ContentDedupWindowExpires(t *testing.T) {
 		if err != nil {
 			t.Fatalf("interceptInbound(%s): %v", eventID, err)
 		}
+		if d == nil {
+			t.Fatalf("事件 %s 的入站判定不能为空", eventID)
+		}
 		return d
 	}
 
@@ -128,6 +134,9 @@ func TestIngress_PlatformIDEventsSkipContentDedup(t *testing.T) {
 		d, err := svc.interceptInbound(ctx, evt)
 		if err != nil {
 			t.Fatalf("interceptInbound(%s): %v", eventID, err)
+		}
+		if d == nil {
+			t.Fatalf("interceptInbound(%s) 未返回判定", eventID)
 		}
 		return d
 	}

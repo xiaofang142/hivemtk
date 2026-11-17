@@ -48,6 +48,9 @@ func TestIngress_MisattributedSameMsgIDAcrossConversationsBlocked(t *testing.T) 
 	if err != nil {
 		t.Fatalf("interceptInbound(A): %v", err)
 	}
+	if d1 == nil {
+		t.Fatal("会话 A 的入站判定不能为空")
+	}
 	if d1.Blocked {
 		t.Fatalf("首条不该被拦：%s", d1.Reason)
 	}
@@ -64,6 +67,9 @@ func TestIngress_MisattributedSameMsgIDAcrossConversationsBlocked(t *testing.T) 
 	d2, err := svc.interceptInbound(ctx, misattribEvent(nonce, eventID, "conv:B-"+nonce, content))
 	if err != nil {
 		t.Fatalf("interceptInbound(B): %v", err)
+	}
+	if d2 == nil {
+		t.Fatal("会话 B 的入站判定不能为空")
 	}
 	if !d2.Blocked || !d2.IsDup {
 		t.Fatalf("错归闸未生效：同裸 msg_id 错归窗内跨会话二次上报应拦截，got blocked=%v dup=%v reason=%q",
@@ -97,6 +103,9 @@ func TestIngress_MisattribGateAllowsOccurrenceSuffixAndExpiredWindow(t *testing.
 	if err != nil {
 		t.Fatalf("interceptInbound(#N): %v", err)
 	}
+	if d1 == nil {
+		t.Fatal("带发生次数后缀的入站判定不能为空")
+	}
 	if d1.Blocked && d1.Reason == "duplicate(same msg_id ingested in another conversation within misattribution window)" {
 		t.Fatalf("#N 后缀不应被错归闸拦（上报方已断言独立消息），reason=%q", d1.Reason)
 	}
@@ -107,6 +116,9 @@ func TestIngress_MisattribGateAllowsOccurrenceSuffixAndExpiredWindow(t *testing.
 	d2, err := svc.interceptInbound(ctx, misattribEvent(nonce, base+"aaaa", "conv:D-"+nonce, "内容 "+nonce))
 	if err != nil {
 		t.Fatalf("interceptInbound(expired): %v", err)
+	}
+	if d2 == nil {
+		t.Fatal("窗口过期后的入站判定不能为空")
 	}
 	if d2.Blocked && d2.Reason == "duplicate(same msg_id ingested in another conversation within misattribution window)" {
 		t.Fatalf("错归窗外不应拦截（历史原话再说一遍是真实消息），reason=%q", d2.Reason)

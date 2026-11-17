@@ -5,9 +5,9 @@ import (
 	"time"
 
 	bizerr "hivemtk-user/internal/domain/errors"
-	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

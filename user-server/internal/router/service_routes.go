@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	knowledgectrl "hivemtk-user/internal/aiagent/knowledge/controller"
@@ -456,7 +455,9 @@ func setupSOPRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 
 func setupReachPipelineRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	reachSvc := service.NewReachPipelineService(repository.NewReachPipelineRepository(db))
-	if hook := service.NewHTTPAlertHook(os.Getenv("ALERT_WEBHOOK_URL")); hook != nil {
+	// SaaS 配置面改造（B15，2026-11-17）：ALERT_WEBHOOK_URL env 退役，改读参数中心
+	// alerting.webhook_url（与 cmd/api/main.go 的告警通道同一键，router 是合法装配层）。
+	if hook := service.NewHTTPAlertHook(service.GlobalConfigParam().GetString(context.Background(), "alerting", "webhook_url", "")); hook != nil {
 		reachSvc.SetAlertHook(hook)
 	}
 	reachSvc.SetReachSender(app.NewPipelineReachSender(db))

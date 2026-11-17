@@ -5,8 +5,8 @@ package repository
 // 事故：AI 对同一问题确定性输出同一话术 → 同键历史行（failed/软删/delivered）占位
 // 唯一索引 → DO NOTHING 把新生成的回复静默吞掉（19:10/19:12/19:14/19:19 四次
 // id=0，客户「给我一份功能清单」两次追问石沉大海）。
-// 契约：冲突行 failed/软删 → 复活为新 pending（同 id 回填）；delivered/pending/
-// inflight 占位 → DO NOTHING（防同文案刷屏，上层走人工跟进旁路）。
+// 契约：未尝试/未认领的 failed 或软删 pending 可恢复；审计、已尝试失败、
+// delivered/unknown 等终态不自动复活。恢复不能清空已经使用的预算。
 
 import (
 	"context"
@@ -37,18 +37,24 @@ func TestCreateMessageHubIdempotent_ConflictRevival(t *testing.T) {
 			Direction: "outbound", Status: status, MsgType: "text",
 			SenderID: "acc", ReceiverID: "cust", Content: "旧话术",
 			IsAIReply: true, IsRead: true, SentAt: time.Now().Add(-time.Hour),
-			ClaimedAt: nil, PushAttempts: 3, PushError: "旧错误",
+			ClaimedAt: nil, PushAttempts: 0, PushError: "旧错误",
 		}
 		if deleted {
-			g.Create(row)  // 先落库再软删（写 deleted_at）
-			g.Delete(row)
+			if err := g.Create(row).Error; err != nil {
+				t.Fatalf("准备软删行失败：%v", err)
+			}
+			if err := g.Delete(row).Error; err != nil {
+				t.Fatalf("软删准备行失败：%v", err)
+			}
 		} else {
-			g.Create(row)
+			if err := g.Create(row).Error; err != nil {
+				t.Fatalf("准备冲突行失败：%v", err)
+			}
 		}
 		return row
 	}
 
-	// ① failed 占位 → 复活为 pending（同 id），内容/错误位刷新
+	// ① 未尝试 failed 占位 → 复活为 pending（同 id），内容/错误位刷新
 	seed := mk("mh:rev-failed", "failed", false)
 	newMsg := &model.MessageHub{
 		TenantID: 18, Platform: "douyin", MsgID: "mh:rev-failed", ConversationID: "conv:rev",
@@ -66,7 +72,7 @@ func TestCreateMessageHubIdempotent_ConflictRevival(t *testing.T) {
 	var row model.MessageHub
 	g.First(&row, seed.ID)
 	if row.Status != "pending" || row.Content != "新生成的回复" || row.PushAttempts != 0 || row.PushError != "" {
-		t.Fatalf("复活后应 pending/新内容/预算清零，实际 %+v", row)
+		t.Fatalf("复活后应 pending/新内容/保留未使用预算，实际 %+v", row)
 	}
 
 	// ② 软删占位 → 复活（deleted_at 清空、回到待投）

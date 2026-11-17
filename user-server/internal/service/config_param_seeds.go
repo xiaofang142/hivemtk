@@ -142,6 +142,10 @@ func DefaultParamDefs() []ParamDef {
 				"2026-11-15 起含全部八个有关注模型的渠道（douyin/tiktok/xiaohongshu/weibo/bilibili/kuaishou/jd/pdd；xianyu 好友制无关注模型除外）；五渠道 hook 为 fixture 口径最佳猜测，开启前务必真机校准关注按钮词表。",
 			ValueType: "json", Risk: "warning", DefaultValue: `["douyin","tiktok","xiaohongshu","weibo","bilibili","kuaishou","jd","pdd"]`, Category: "桥接"},
 
+		// ── SaaS 配置面改造（B16，2026-11-17）：RAG_CONTEXTUAL_ENHANCE 环境变量退役。
+		{Group: "knowledge", Key: "contextual_enhance_enabled", Name: "RAG 上下文增强开关",
+			Description: "文档入库时是否做上下文增强（R-3：用 LLM 为分片补语境再向量化，提升检索召回）。false = 跳过增强直接向量化。装配期读，改完需重启（对增量入库生效）",
+			ValueType:   "bool", DefaultValue: "true", Restart: true},
 		{Group: "knowledge", Key: "default_top_k", Name: "默认 Top-K 检索数",
 			Description: "向量检索返回的候选文档数",
 			ValueType:   "int", Unit: "条", DefaultValue: "5", Min: strPtr("1"), Max: strPtr("50"), Step: strPtr("1")},
@@ -175,6 +179,21 @@ func DefaultParamDefs() []ParamDef {
 			Description: "单次 embedding 向量化调用的最大文本批数",
 			ValueType:   "int", Unit: "条", DefaultValue: "64", Min: strPtr("1"), Max: strPtr("1024"), Step: strPtr("8")},
 
+		// ── SaaS 配置面改造（B8/B17，2026-11-17）：DISABLE_AI_QUIET_HOURS /
+		//    MTK_HUMANIZE_EVAL_DISABLED / MTK_HUMANIZE_EVAL_THRESHOLD 环境变量退役。
+		{Group: "agent_llm", Key: "ai_quiet_hours_disabled", Name: "AI 回复勿扰时段停用",
+			Description: "true = 停用 AI 回复免打扰窗（webhook.ai_quiet_hours_start/end 不再生效，全天可回）。与 reach.quiet_hours_disabled（触达管线）是两条不同管道，禁止混用",
+			ValueType:   "bool", DefaultValue: "false", Restart: false},
+		// ── SaaS 配置面改造（B10，2026-11-17）：REACH_DISABLE_QUIET_HOURS 环境变量退役。
+		{Group: "reach", Key: "quiet_hours_disabled", Name: "触达免打扰停用",
+			Description: "true = 整条触达管线的免打扰静默窗停用（reach.quiet_hours_start/end 不再生效，营销消息全天可发，慎开——合规红线由 reach.compliance_policy_json 与 DNC 另管）。装配期读，改完需重启",
+			ValueType:   "bool", Risk: "danger", DefaultValue: "false", Restart: true},
+		{Group: "agent_llm", Key: "humanize_eval_disabled", Name: "拟人度评估器停用",
+			Description: "true = 强制停用拟人度评估（私域本地 LLM 模式；本地小模型拟人度天然 <0.85，评估只会引发无效重生成）。装配期读一次，改完需重启",
+			ValueType:   "bool", DefaultValue: "false", Restart: true},
+		{Group: "agent_llm", Key: "humanize_eval_threshold", Name: "拟人度达标阈值",
+			Description: "评估达标线（0<thr<=1）；0 = 不覆盖、走内置默认。装配期读一次，改完需重启",
+			ValueType:   "float", DefaultValue: "0", Min: strPtr("0"), Max: strPtr("1"), Step: strPtr("0.05"), Restart: true},
 		{Group: "agent_llm", Key: "temperature", Name: "LLM Temperature",
 			Description: "采样温度，越大输出越发散（0-2）",
 			ValueType:   "float", Risk: "warning", DefaultValue: "0.7", Min: strPtr("0.1"), Max: strPtr("2.0"), Step: strPtr("0.1")},
@@ -315,6 +334,20 @@ func DefaultParamDefs() []ParamDef {
 				"（`internal/content/controller/material.go`），它读 frontend_ui.material_max_size_mb 且前后端同源，改本参数**不影响**它——" +
 				"当初没把素材口接进本链，是因为这条链的兼容列默认 50MB，接过去等于给一个一直按 10MB 拦的端点静默放宽 5 倍",
 			ValueType: "int", Unit: "MB", Risk: "danger", DefaultValue: "0", Min: strPtr("0"), Max: strPtr("512"), Step: strPtr("1")},
+		// ── SaaS 配置面改造（B5/B11/B12，2026-11-17）：UPLOAD_VIRUS_SCAN / VIRUS_SCAN_URL /
+		//    BRAIN_TOKEN_BUDGET / FILE_URL_TTL 环境变量退役。
+		{Group: "misc", Key: "upload_virus_scan_enabled", Name: "上传病毒扫描开关",
+			Description: "true = 上传链路对文件做病毒扫描（须同时配 upload_virus_scan_url）。每请求读，改完即生效",
+			ValueType:   "bool", DefaultValue: "false", Restart: false},
+		{Group: "misc", Key: "upload_virus_scan_url", Name: "病毒扫描服务地址",
+			Description: "ICAP/HTTP 形态的病毒扫描服务地址；非空时自动启用扫描。每请求读，改完即生效",
+			ValueType:   "string", DefaultValue: "", Restart: false},
+		{Group: "misc", Key: "brain_token_budget", Name: "浏览器自动化 session token 预算",
+			Description: "Brain 轮内 plan+judge 的 token 总预算，超限熔断。0 = 代码兜底 200k。装配期读，改完需重启",
+			ValueType:   "int", Unit: "token", DefaultValue: "0", Min: strPtr("0"), Max: strPtr("2000000"), Step: strPtr("10000"), Restart: true},
+		{Group: "misc", Key: "file_url_ttl", Name: "本地文件签名 URL 时效（秒）",
+			Description: "本地存储 /files 签名 URL 的有效期；0 = 不过期（默认，历史 URL 被持久化，短时效会让历史图片某天全裂）。装配期读，改完需重启",
+			ValueType:   "int", Unit: "秒", DefaultValue: "0", Min: strPtr("0"), Max: strPtr("31536000"), Step: strPtr("3600"), Restart: true},
 		{Group: "misc", Key: "visitor_token_ttl", Name: "访客 Token TTL",
 			Description: "未登录访客的身份 Token 有效期（秒）",
 			ValueType:   "duration", DefaultValue: "604800", Min: strPtr("3600"), Max: strPtr("2592000"), Step: strPtr("3600")},
@@ -633,6 +666,17 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "channelbot", Key: "http_timeout", Name: "渠道外部依赖 HTTP 超时",
 			Description: "channelbot 各子包（QQ/TG/WhatsApp）访问平台 API 的默认 HTTP 超时（秒）。构造期读一次，改完需重启。写大＝外部依赖挂起时请求 goroutine 长时间占着不放，写小＝平台侧慢一点就误判超时（Telegram 的长轮询 getUpdates 天然需要几十秒，别把它调小）",
 			ValueType:   "duration", DefaultValue: "30", Min: strPtr("1"), Max: strPtr("120"), Step: strPtr("1"), Restart: true},
+		// ── SaaS 配置面改造（B7/B13，2026-11-17）：WHATSAPP_FALLBACK_TEMPLATE(_LANG) /
+		//    QQ_API_BASE_URL 环境变量退役。
+		{Group: "channelbot", Key: "whatsapp_fallback_template", Name: "WhatsApp 24h 窗口回退模板名",
+			Description: "超出 24h 客服窗口后 AI 文本回复降级使用的预审批模板名；空 = 不降级、标记发送失败（原语义）。每请求读，改完即生效",
+			ValueType:   "string", DefaultValue: "", Restart: false},
+		{Group: "channelbot", Key: "whatsapp_fallback_template_lang", Name: "WhatsApp 回退模板语言",
+			Description: "上述回退模板的语言码（如 zh_CN / en_US）；空走 Meta 默认。每请求读，改完即生效",
+			ValueType:   "string", DefaultValue: "", Restart: false},
+		{Group: "channelbot", Key: "qq_api_base_url", Name: "QQ 开放平台 API 基址",
+			Description: "QQ 机器人出站 API 的基址覆盖；空 = 官方 https://api.bot.qq.com。一般只在中转代理部署时填写。每请求读",
+			ValueType:   "string", Risk: "danger", DefaultValue: "", Restart: false},
 
 		// ── sse 组：业务侧 SSE 连接参数 ───────────────────────────────────
 		// 注意与 bridge.sse_* 区分：那两条管 bridge 长连接，这一组管业务 SSE Hub。
@@ -710,6 +754,23 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "webhook", Key: "max_retries", Name: "webhook 失败重试次数",
 			Description: "渠道投递失败后的重试轮数（不含首投）。写大＝下游长时间不可用时会一直重试，占用 worker 与令牌；写小＝一次瞬时失败就放弃（客户收不到回复）。只对「可重试」错误生效，不可重试错误立即放弃。注意与 agent_llm.max_retries 区分：那一条管 LLM 调用本身的重试，本条目管渠道出网投递",
 			ValueType:   "int", Unit: "次", DefaultValue: "3", Min: strPtr("0"), Max: strPtr("20"), Step: strPtr("1"), Restart: false},
+		// ── SaaS 配置面改造（B8/B9，2026-11-17）：WEBHOOK_RECOVERY_* / WEBHOOK_AI_TIMEOUT_SECONDS
+		//    环境变量退役。恢复扫描器四条是构造期读（Restart=true），ai_timeout 每请求读。
+		{Group: "webhook", Key: "recovery_enabled", Name: "webhook 恢复扫描器开关",
+			Description: "失败事件恢复重放扫描器总开关。关闭后 webhook_events 里的失败事件不再被自动重放（只能人工处理）。构造期读一次，改完需重启",
+			ValueType:   "bool", DefaultValue: "true", Restart: true},
+		{Group: "webhook", Key: "recovery_interval_seconds", Name: "webhook 恢复扫描间隔（秒）",
+			Description: "恢复扫描器的轮询间隔。写小＝失败事件更快被重放但扫库更频繁，写大＝积压恢复变慢。构造期读一次，改完需重启",
+			ValueType:   "int", Unit: "秒", DefaultValue: "30", Min: strPtr("5"), Max: strPtr("600"), Step: strPtr("5"), Restart: true},
+		{Group: "webhook", Key: "recovery_cooldown_seconds", Name: "webhook 恢复冷却（秒）",
+			Description: "恢复重放同一条失败事件的最小间隔（防风暴）。构造期读一次，改完需重启",
+			ValueType:   "int", Unit: "秒", DefaultValue: "60", Min: strPtr("5"), Max: strPtr("3600"), Step: strPtr("5"), Restart: true},
+		{Group: "webhook", Key: "recovery_batch", Name: "webhook 恢复单批容量",
+			Description: "恢复扫描每轮最多重放的事件条数（按租户分账防饿死）。构造期读一次，改完需重启",
+			ValueType:   "int", Unit: "条", DefaultValue: "100", Min: strPtr("1"), Max: strPtr("1000"), Step: strPtr("10"), Restart: true},
+		{Group: "webhook", Key: "ai_timeout_seconds", Name: "webhook AI 处理超时（秒）",
+			Description: "单条消息 AI 生成回复的超时上限（下限 60s）。每请求读，改完下一条消息即生效。写小＝慢 LLM 场景回复被截断，写大＝客户等待时间上限变长",
+			ValueType:   "int", Unit: "秒", DefaultValue: "180", Min: strPtr("60"), Max: strPtr("900"), Step: strPtr("10"), Restart: false},
 		// ── sop 组：SOP 调度器并发 与 Saga 补偿参数 ───────────────────────
 		// 六条全部是构造期读一次，故全标 Restart=true：调度器的 worker 数/队列容量/
 		// LLM 信号量在 NewSOPExecutionDispatcher 里 make(chan,N) 时定型，补偿的
@@ -750,6 +811,10 @@ func DefaultParamDefs() []ParamDef {
 		// ── rag_health 组：RAG 健康度窗口与六维权重 ───────────────────────
 		// 六个权重按总和归一化后使用（report.Score 是六个 WeightedScore 直接相加），
 		// 所以每个旋钮的语义是干净的"相对比重"，调哪一项都不会把总分推出 0-100。
+		// ── SaaS 配置面改造（B14，2026-11-17）：HEALTH_EMBEDDING_CRITICAL 环境变量退役。
+		{Group: "rag_health", Key: "embedding_critical", Name: "embedding 探活算整体健康",
+			Description: "true = /healthz 的 embedding 探活失败计入整体不健康（503）；false（默认）= 只报告不拦截。装配期读，改完需重启",
+			ValueType:   "bool", DefaultValue: "false", Restart: true},
 		{Group: "rag_health", Key: "default_window", Name: "RAG 健康度默认窗口",
 			Description: "计算 RAG 健康度时在调用方没给 window 的默认时间窗（秒）。写大＝一次要回更多行的指标按时间聚合，报告更稳但更钝（问题过去很久才从分数上消退）；写小＝样本不足（不足 2 天直接无环比），分数抖动明显",
 			ValueType:   "duration", DefaultValue: "3600", Min: strPtr("60"), Max: strPtr("604800"), Step: strPtr("60"), Restart: false},
@@ -987,8 +1052,8 @@ func DefaultParamDefs() []ParamDef {
 		// geo_site_base_url / public_base_url 读取点在 internal/config（config 不能
 		// 反向 import service，走 provider 注入，装配点 app/url_params_wiring.go）。
 		{Group: "urls", Key: "frontend_url", Name: "前端站点基址",
-			Description: "密码重置邮件里拼接 reset 链接用的前端站点基址。优先级 env FRONTEND_URL > 本参数 > 代码兜底 http://localhost:3000。SaaS 模式按租户覆盖（读取点透传重置用户所属租户 ctx；未绑定读平台默认）。读取点 service/password_reset.go 的 getFrontendBaseURL（发信时读，非高频）。默认与接线前代码兜底一致",
-			ValueType:   "string", DefaultValue: "http://localhost:3000", Restart: false},
+			Description: "密码重置邮件里拼接 reset 链接用的前端站点基址。优先级 本参数（按租户）> env FRONTEND_URL > 代码兜底 http://localhost:3000；默认空串=未设（B19 翻转后 env/兜底仍生效）。SaaS 模式按租户覆盖（读取点透传重置用户所属租户 ctx；未绑定读平台默认）。读取点 service/password_reset.go 的 getFrontendBaseURL（发信时读，非高频）。默认与接线前代码兜底一致",
+			ValueType:   "string", DefaultValue: "", Restart: false},
 		{Group: "urls", Key: "cloud_url", Name: "云端版对外地址",
 			Description: "public config 里展示给前端的云端版对外地址。优先级 平台配置 cloud_url > env PLATFORM_CLOUD_URL > 本参数 > 代码常量 https://work.xapptool.cn。SaaS 模式按租户覆盖（读取点透传请求 ctx；未绑定读平台默认）。读取点 internal/config/platform.go 的 CloudURLFor（provider 注入，60s TTL 缓存）。默认与代码常量一致；参数缺省（空）时回落常量，行为零变更",
 			ValueType:   "string", DefaultValue: "https://work.xapptool.cn", Restart: false},
@@ -1061,5 +1126,31 @@ func DefaultParamDefs() []ParamDef {
 		{Group: "retention", Key: "operation_logs_days", Name: "操作日志保留天数（自动调度）",
 			Description: "operation_logs（每管理操作落一行）保留多少天：后台保留清理删除 created_at 早于「现在-本参数天」的行。这是自动调度口径；人工清理端点 POST /api/operation-logs/clean（before_date/days，缺省 90 天）原样保留，两者幂等叠加不冲突。90 天对齐人工端点缺省。读取点 internal/service/retention_cleanup_tables.go 的 operation_logs Days 闭包，每轮清理热读（缓存 TTL 60s）",
 			ValueType:   "int", Unit: "天", DefaultValue: "90", Min: strPtr("1"), Max: strPtr("3650"), Step: strPtr("1"), Category: "日志清理"},
+
+		// —— etl 组：文档解析/图片理解的外部推理服务（SaaS 配置面改造 B6，2026-11-17）。
+		// PARSER_SIDECAR_URL / IMAGE_DESCRIBE_URL / IMAGE_DESCRIBE_MODEL 环境变量退役。
+		// 三条都是进程级推理端点（对应本机/内网推理服务），不是租户业务口径 ⇒ scope=platform。
+		{Group: "etl", Key: "parser_sidecar_url", Name: "外挂文档解析服务地址",
+			Description: "复杂版式（扫描件 PDF 等）文档解析的外挂服务地址（RAGFlow/MinerU 形态：HTTP POST multipart 返回纯文本）；空 = 只用内置解析器。装配期快照读，改完需重启（解析引擎切换影响索引一致性，不热切）",
+			ValueType:   "string", DefaultValue: "", Restart: true},
+		{Group: "etl", Key: "image_describe_url", Name: "图片描述服务地址",
+			Description: "图片知识库的本地 VL 推理服务（OpenAI chat completions 兼容形状）；空 = 图片按不支持格式处理（原语义）。装配期读，改完需重启",
+			ValueType:   "string", DefaultValue: "", Restart: true},
+		{Group: "etl", Key: "image_describe_model", Name: "图片描述视觉模型名",
+			Description: "描述请求里 model 字段填什么（服务侧路由用），如 vl / qwen-vl。装配期读，改完需重启",
+			ValueType:   "string", DefaultValue: "vl", Restart: true},
+
+		// —— alerting 组：告警通道（SaaS 配置面改造 B15，2026-11-17）。
+		// ALERT_EMAIL_ENABLED / ALERT_EMAIL_RECIPIENTS / ALERT_WEBHOOK_URL 环境变量退役。
+		// 告警是实例级运维面（告发给谁跟租户无关）⇒ scope=platform。
+		{Group: "alerting", Key: "email_enabled", Name: "告警邮件通知开关",
+			Description: "true = 系统告警（AlertChecker）追加邮件通知通道。装配期读，改完需重启",
+			ValueType:   "bool", DefaultValue: "false", Restart: true},
+		{Group: "alerting", Key: "email_recipients", Name: "告警邮件收件人",
+			Description: "逗号分隔的收件人邮箱列表。装配期读，改完需重启",
+			ValueType:   "string", DefaultValue: "", Restart: true},
+		{Group: "alerting", Key: "webhook_url", Name: "告警 Webhook 地址",
+			Description: "告警事件的 Webhook 推送地址（钉钉/飞书机器人聚合网关等）；空 = 不推。装配期读，改完需重启",
+			ValueType:   "string", DefaultValue: "", Restart: true},
 	}
 }

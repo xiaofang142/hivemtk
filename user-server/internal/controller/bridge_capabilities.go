@@ -53,9 +53,10 @@ func NewBridgeCapabilitiesController() *BridgeCapabilitiesController {
 // locale/i18n 影响（与平台约定一致）。
 func (c *BridgeCapabilitiesController) GetCapabilities(ctx *gin.Context) {
 	response.Envelope(ctx, http.StatusOK, gin.H{
-		"sse_enabled":      featureflag.Get(featureflag.FF_ENABLE_SSE_BRIDGE).Bool(),
-		"poll_interval_ms": 1500,
-		"sse_heartbeat_ms": 15000,
+		"sse_enabled":         featureflag.Get(featureflag.FF_ENABLE_SSE_BRIDGE).Bool(),
+		"outbox_wake_enabled": true,
+		"poll_interval_ms":    1500,
+		"sse_heartbeat_ms":    15000,
 		// M-5：巡检未读优先渠道清单。清单外渠道（或旧扩展不认识该字段）保持现行行为。
 		"patrol_unread_first_channels": service.PatrolUnreadFirstChannels(ctx.Request.Context()),
 		// M-6（2026-11-11）：followUser 自动关注配置。默认 false（参数中心

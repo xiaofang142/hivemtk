@@ -136,6 +136,7 @@ func dtRobotHeaders(secret string, ts int64) map[string]string {
 // ---------------------------------------------------------------------------
 
 func TestDingTalkInbound_RobotPlainCallbackHappyPath(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, id := setupDingTalkInbound(t, &model.DingTalkAppAccount{
 		AppKey: "ak-plain", AppSecret: "SECrobot", InboundEnabled: true, Status: 1,
 	})
@@ -210,6 +211,7 @@ func TestDingTalkInbound_RobotPlainCallbackWithoutAppSecretFailsClosed(t *testin
 // ---------------------------------------------------------------------------
 
 func TestDingTalkInbound_EventSubscriptionOfficialLayoutDecrypts(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	aesKey := newDingTalkTestAESKey(t)
 	svc, tr, id := setupDingTalkInbound(t, &model.DingTalkAppAccount{
 		AppKey: "ak-enc", AppSecret: "SECapp", Token: "evt-token", AESKey: aesKey,

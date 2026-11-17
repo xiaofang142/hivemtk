@@ -335,4 +335,6 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.96.0（资产包全链路审计二轮）：生效闸门存量对齐——把已托管（热启用
 	// KV="1"）但 status 仍为 draft 的存量包提升为 active，闸门上线不误拦存量商户包。
 	register(NewAssetBundleGateBackfillMigration(db))
+	// v3.97.0：日志知识库ID兼容字符串，阶段时间可空；历史缺测不回填为实测。
+	register(NewKnowledgeSearchObservationMigration(db))
 }

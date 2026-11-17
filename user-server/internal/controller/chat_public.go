@@ -1,10 +1,6 @@
 package controller
 
 import (
-	"crypto/hmac"
-	"crypto/sha1"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,7 +12,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -555,12 +550,8 @@ func (ctrl *ChatPublicController) GetUploadToken(c *gin.Context) {
 		return
 	}
 
-	cfg := config.GetAppConfig()
-	if cfg.Storage.Type != "qiniu" || cfg.Storage.Qiniu.AccessKey == "" {
-		response.Error(c, http.StatusServiceUnavailable, "对象存储未配置")
-		return
-	}
-
+	// SaaS 配置面改造（B1，2026-11-17）：七牛凭据改读租户级 obs_config 默认行
+	// （service.BuildQiniuUploadToken），config.yaml storage 节与 QINIU_* env 退役。
 	fileType := c.DefaultQuery("file_type", "file")
 	ext := c.DefaultQuery("ext", "")
 	sizeStr := c.DefaultQuery("size", "0")
@@ -612,34 +603,18 @@ func (ctrl *ChatPublicController) GetUploadToken(c *gin.Context) {
 	uid := uuid.NewString()
 	key := fmt.Sprintf("chat/%04d/%02d/%s.%s", now.Year(), now.Month(), uid, extLower)
 
-	expires := now.Add(1 * time.Hour).Unix()
-	policy := map[string]any{
-		"scope":      cfg.Storage.Qiniu.Bucket + ":" + key,
-		"deadline":   expires,
-		"fsizeLimit": maxSize,
-		"returnBody": `{"key":"$(key)","hash":"$(etag)","fsize":$(fsize),"fname":"$(fname)"}`,
+	tok, err := service.BuildQiniuUploadToken(c.Request.Context(), key, maxSize, time.Hour)
+	if err != nil {
+		response.Error(c, http.StatusServiceUnavailable, err.Error())
+		return
 	}
-	policyBytes, _ := json.Marshal(policy)
-	policyEncoded := base64.URLEncoding.EncodeToString(policyBytes)
-
-	mac := hmac.New(sha1.New, []byte(cfg.Storage.Qiniu.SecretKey))
-	mac.Write([]byte(policyEncoded))
-	signature := base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	token := cfg.Storage.Qiniu.AccessKey + ":" + signature + ":" + policyEncoded
-
-	uploadDomain := cfg.Storage.Qiniu.UploadDomain
-	if uploadDomain == "" {
-		uploadDomain = "up-z2.qiniup.com"
-	}
-	uploadURL := fmt.Sprintf("https://%s", uploadDomain)
-	publicURL := "https://" + strings.TrimSuffix(cfg.Storage.Qiniu.Domain, "/") + "/" + key
 
 	response.Success(c, gin.H{
-		"upload_url": uploadURL,
-		"token":      token,
+		"upload_url": tok.UploadURL,
+		"token":      tok.Token,
 		"key":        key,
-		"public_url": publicURL,
-		"expires_in": 3600,
+		"public_url": tok.PublicURL,
+		"expires_in": tok.ExpiresIn,
 	}, "ok")
 }
 

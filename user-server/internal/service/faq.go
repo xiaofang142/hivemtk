@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/repository"
 )
@@ -86,14 +87,31 @@ type faqBindingRepoIface interface {
 //   - 增加 bindingRepo 字段 (注入绑定仓库, 用于校验 agent ↔ KB 关系)
 //   - cache 由单片 []model.FAQEntry 改为 map[uint][]model.FAQEntry (按 agentID 分片)
 //   - 新增 sharedCache 概念: agentID=0 的桶存储"共享池"FAQ (向后兼容旧 Match API)
+type faqCacheKey struct {
+	tenantID uint
+	agentID  uint
+}
+
+func resolveFAQCacheKey(ctx context.Context, agentID uint) (faqCacheKey, error) {
+	id, _ := tenant.FromContext(ctx)
+	if id == 0 {
+		if tenant.IsMultiTenant() {
+			return faqCacheKey{}, errors.New("FAQ cache requires tenant scope")
+		}
+		id = tenant.DefaultTenantID
+	}
+	return faqCacheKey{tenantID: id, agentID: agentID}, nil
+}
+
 type FAQService struct {
 	repo        faqRepoIface
 	bindingRepo faqBindingRepoIface
 	clock       Clock
 
-	mu     sync.RWMutex
-	cache  map[uint][]model.FAQEntry
-	loaded map[uint]time.Time
+	mu         sync.RWMutex
+	cache      map[faqCacheKey][]model.FAQEntry
+	loaded     map[faqCacheKey]time.Time
+	generation uint64
 }
 
 // NewFAQServiceDefault 使用全局 DB 创建 FAQ Service（controller 层入口，避免 controller 持有 gorm.DB）。
@@ -110,8 +128,8 @@ func NewFAQServiceDefault() *FAQService {
 func NewFAQService() *FAQService {
 	svc := &FAQService{
 		clock:  realClock{},
-		cache:  make(map[uint][]model.FAQEntry),
-		loaded: make(map[uint]time.Time),
+		cache:  make(map[faqCacheKey][]model.FAQEntry),
+		loaded: make(map[faqCacheKey]time.Time),
 	}
 	if repository.DBReady() {
 		svc.repo = repository.NewFAQRepositoryDefault()
@@ -125,8 +143,8 @@ func NewFAQServiceWithRepo(repo faqRepoIface) *FAQService {
 	return &FAQService{
 		repo:   repo,
 		clock:  realClock{},
-		cache:  make(map[uint][]model.FAQEntry),
-		loaded: make(map[uint]time.Time),
+		cache:  make(map[faqCacheKey][]model.FAQEntry),
+		loaded: make(map[faqCacheKey]time.Time),
 	}
 }
 
@@ -136,8 +154,8 @@ func NewFAQServiceWithRepos(repo faqRepoIface, bindingRepo faqBindingRepoIface) 
 		repo:        repo,
 		bindingRepo: bindingRepo,
 		clock:       realClock{},
-		cache:       make(map[uint][]model.FAQEntry),
-		loaded:      make(map[uint]time.Time),
+		cache:       make(map[faqCacheKey][]model.FAQEntry),
+		loaded:      make(map[faqCacheKey]time.Time),
 	}
 }
 
@@ -156,9 +174,14 @@ func (s *FAQService) SetClock(c Clock) {
 }
 
 func (s *FAQService) cachedEntries(ctx context.Context, agentID uint) ([]model.FAQEntry, error) {
+	key, err := resolveFAQCacheKey(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.RLock()
-	if ents, ok := s.cache[agentID]; ok {
-		if t, ok2 := s.loaded[agentID]; ok2 && time.Since(t) < faqCacheTTL {
+	generation := s.generation
+	if ents, ok := s.cache[key]; ok {
+		if t, ok2 := s.loaded[key]; ok2 && time.Since(t) < faqCacheTTL {
 			s.mu.RUnlock()
 			return ents, nil
 		}
@@ -170,8 +193,12 @@ func (s *FAQService) cachedEntries(ctx context.Context, agentID uint) ([]model.F
 		return nil, err
 	}
 	s.mu.Lock()
-	s.cache[agentID] = ents
-	s.loaded[agentID] = time.Now()
+	if generation != s.generation {
+		s.mu.Unlock()
+		return []model.FAQEntry{}, nil
+	}
+	s.cache[key] = ents
+	s.loaded[key] = time.Now()
 	s.mu.Unlock()
 	return ents, nil
 }
@@ -464,8 +491,14 @@ func (s *FAQService) WarmupCache(ctx context.Context, agentID uint) error {
 	if s.repo == nil {
 		return nil
 	}
+	key, err := resolveFAQCacheKey(ctx, agentID)
+	if err != nil {
+		return err
+	}
+	s.mu.RLock()
+	generation := s.generation
+	s.mu.RUnlock()
 	var entries []model.FAQEntry
-	var err error
 	if agentID == faqAgentShared {
 		entries, err = s.repo.ListEnabled(ctx, faqCacheMaxN)
 	} else {
@@ -475,8 +508,12 @@ func (s *FAQService) WarmupCache(ctx context.Context, agentID uint) error {
 		return err
 	}
 	s.mu.Lock()
-	s.cache[agentID] = entries
-	s.loaded[agentID] = time.Now()
+	if generation != s.generation {
+		s.mu.Unlock()
+		return nil
+	}
+	s.cache[key] = entries
+	s.loaded[key] = time.Now()
 	s.mu.Unlock()
 	return nil
 }
@@ -497,8 +534,13 @@ func (s *FAQService) WarmupAll(ctx context.Context, agentIDs []uint) {
 // agentID > 0: 失效该 agent 私有桶
 func (s *FAQService) InvalidateCache(agentID uint) {
 	s.mu.Lock()
-	delete(s.cache, agentID)
-	delete(s.loaded, agentID)
+	s.generation++
+	for key := range s.cache {
+		if key.agentID == agentID {
+			delete(s.cache, key)
+			delete(s.loaded, key)
+		}
+	}
 	s.mu.Unlock()
 }
 
@@ -507,8 +549,9 @@ func (s *FAQService) InvalidateCache(agentID uint) {
 // 用于: 业务不确定受影响 agentID 时 (例如全局配置变更)。
 func (s *FAQService) InvalidateAllCache() {
 	s.mu.Lock()
-	s.cache = make(map[uint][]model.FAQEntry)
-	s.loaded = make(map[uint]time.Time)
+	s.generation++
+	s.cache = make(map[faqCacheKey][]model.FAQEntry)
+	s.loaded = make(map[faqCacheKey]time.Time)
 	s.mu.Unlock()
 }
 

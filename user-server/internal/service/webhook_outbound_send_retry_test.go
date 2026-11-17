@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -161,7 +162,7 @@ func TestSendOutbound_RetryableFailureEntersRetryLane(t *testing.T) {
 }
 
 // TestReplayDelayedOutbound_Outcomes 重放三种结局：成功落 sent、仍可重试则退避改排、
-// 次数用尽落 failed。免打扰首发记录维持一次性语义（失败也按 sent 收口）。
+// 次数用尽落 failed。免打扰首发维持一次性语义，失败不得伪报 sent。
 func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &DelayedOutboundReply{})
 	svc := NewWebhookService()
@@ -176,6 +177,19 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 	// 认领时，sendOutbound 直接按「已回复」跳过并返回 (false, nil)，本用例就被误判成
 	// 「放弃重投」（全量跑红、单跑绿）。用时间戳派生的大主键让键在本用例内唯一。
 	baseID := uint(800_000_000 + time.Now().UnixNano()%19_000_000)
+	seedClaimed := func(t *testing.T, rec *DelayedOutboundReply) {
+		t.Helper()
+		now := time.Now()
+		until := now.Add(time.Minute)
+		rec.Status = model.DelayedStatusSending
+		rec.ClaimToken = fmt.Sprintf("retry-test-token-%d", rec.ID)
+		rec.ClaimedAt = &now
+		rec.LeaseUntil = &until
+		if err := db.Create(rec).Error; err != nil {
+			t.Fatalf("seed valid claim: %v", err)
+		}
+		seedReplayAISession(t, db, context.Background(), rec)
+	}
 
 	t.Run("重投仍失败则原地退避改排", func(t *testing.T) {
 		rec := &DelayedOutboundReply{
@@ -185,9 +199,7 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 			SendAt: future, Status: model.DelayedStatusPending,
 			Kind: model.DelayedKindSendRetry,
 		}
-		if err := db.Create(rec).Error; err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+		seedClaimed(t, rec)
 		svc.replayDelayedOutbound(context.Background(), rec)
 
 		var got DelayedOutboundReply
@@ -223,9 +235,7 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 			SendAt: future, Status: model.DelayedStatusPending,
 			Kind: model.DelayedKindSendRetry, Attempts: sendRetryMaxAttempts,
 		}
-		if err := db.Create(rec).Error; err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+		seedClaimed(t, rec)
 		svc.replayDelayedOutbound(context.Background(), rec)
 
 		var got DelayedOutboundReply
@@ -259,6 +269,7 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 		}
 		if err := db.Create(&model.MessageHub{
 			MsgID: "mh:human-sup", Platform: "telegram", AccountID: "5", Direction: "outbound",
+			Status:  "delivered",
 			MsgType: "text", SenderID: "5", ReceiverID: conv, Content: "坐席已回复",
 			ConversationID: conv, SentAt: time.Now().Add(-time.Minute),
 		}).Error; err != nil {
@@ -268,12 +279,11 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 			ID:       baseID + 2,
 			Platform: string(ChannelTelegram), AccountID: "5", ConversationID: conv,
 			SenderID: conv, Content: "等待期间的旧 AI 回复",
-			SendAt: future, Status: model.DelayedStatusPending,
+			CreatedAt: time.Now().Add(-2 * time.Minute),
+			SendAt:    future, Status: model.DelayedStatusPending,
 			Kind: model.DelayedKindSendRetry,
 		}
-		if err := db.Create(rec).Error; err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+		seedClaimed(t, rec)
 		svc.replayDelayedOutbound(context.Background(), rec)
 
 		var got DelayedOutboundReply
@@ -301,17 +311,18 @@ func TestReplayDelayedOutbound_Outcomes(t *testing.T) {
 			SendAt: future, Status: model.DelayedStatusPending,
 			Kind: model.DelayedKindQuietHours,
 		}
-		if err := db.Create(rec).Error; err != nil {
-			t.Fatalf("seed: %v", err)
-		}
+		seedClaimed(t, rec)
 		svc.replayDelayedOutbound(context.Background(), rec)
 
 		var got DelayedOutboundReply
 		if err := db.First(&got, rec.ID).Error; err != nil {
 			t.Fatalf("read back: %v", err)
 		}
-		if got.Status != model.DelayedStatusSent {
-			t.Fatalf("quiet hours 首发应维持原有一次性收口(sent)，got %q", got.Status)
+		if got.Status != model.DelayedStatusFailed {
+			t.Fatalf("quiet hours 首发失败应如实收口(failed)，got %q", got.Status)
+		}
+		if got.LastError == "" {
+			t.Error("首发失败必须保留失败原因")
 		}
 		if got.Attempts != 0 {
 			t.Errorf("quiet hours 首发不该占用重试次数，got attempts=%d", got.Attempts)

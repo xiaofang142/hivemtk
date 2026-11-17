@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -227,6 +228,41 @@ func (s *ModuleGateService) IsEnabled(ctx context.Context, moduleKey string) boo
 		return false
 	}
 	return v
+}
+
+// ConfirmEnabledForExecution 确认本次后台执行许可；读取失败不能沿用旧快照。
+// 菜单和普通接口仍使用 IsEnabled 的既有缓存语义。
+func (s *ModuleGateService) ConfirmEnabledForExecution(ctx context.Context, moduleKey string) (bool, error) {
+	if s == nil || ctx == nil || moduleKey == "" || tenant.IsSystemScope(ctx) {
+		return false, errors.New("module execution scope unavailable")
+	}
+	id, bound := tenant.FromContext(ctx)
+	if !bound || id == 0 {
+		return false, errors.New("module execution tenant unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	rows, err := s.modules().ListAll(gateReadCtx(ctx, id))
+	if err != nil {
+		return false, errors.New("module execution permission could not be confirmed")
+	}
+	if len(rows) == 0 {
+		return isBaseModuleKey(moduleKey), nil
+	}
+	matched, enabled := false, false
+	for _, row := range rows {
+		if row.TenantID != id {
+			return false, errors.New("module execution tenant mismatch")
+		}
+		if row.ModuleKey == moduleKey {
+			if matched {
+				return false, errors.New("module execution permission ambiguous")
+			}
+			matched, enabled = true, model.TenantModuleUsable(row, time.Now())
+		}
+	}
+	return enabled, ctx.Err()
 }
 
 // EnabledKeys 已开通模块 key 列表（菜单过滤用）

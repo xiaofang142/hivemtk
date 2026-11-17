@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"gorm.io/gorm"
 
@@ -82,7 +81,9 @@ func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) toolu
 			return []service.QuotaScopeDef{{Key: "customer:" + who, Limit: limit}}
 		}
 	}
-	if os.Getenv("REACH_DISABLE_QUIET_HOURS") != "true" {
+	// SaaS 配置面改造（B10，2026-11-17）：REACH_DISABLE_QUIET_HOURS 环境变量退役，
+	// 总开关入参数中心 reach.quiet_hours_disabled（true=整条触达管线免打扰窗停用）。
+	if !service.GlobalConfigParam().GetBool(context.Background(), "reach", "quiet_hours_disabled", false) {
 		cfg.QuietHoursEnabled = true
 		var sp service.SendPipeline
 		if db != nil {

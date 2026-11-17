@@ -1,12 +1,7 @@
 package service
 
-// R26：sendOutbound 的分支表里只有飞书（webhook_outbound.go:476）与 TG（:525）两处
-// `for _, card := range cards` 真把富卡下发；桥接五族（抖音/小红书/TikTok/闲鱼/快手，
-// :707 起）与企微/QQ/WhatsApp/钉钉/公众号五族都不读 cards —— 富卡整批丢掉，而文本回复
-// 照标 sent / 队列行照走 MarkSent，日志、轨迹、落库行三处零观测（比"标成失败"更坏：
-// 它把丢失写成成功）。
-// 本文件把"丢了必须留痕"钉成两格：入口统一门出声一次（全渠道，含重放路径），
-// 桥接族额外把张数写进出站行 Extra["cards_dropped"]（管理端读的是那一行）。
+// R26：没有富卡载体的通道必须以完整文字替代，而不是丢掉事实仍标成功。
+// 统一入口单次记录替代计数，桥接出站行同样留痕；飞书/TG保留原富卡能力。
 
 import (
 	"bytes"
@@ -47,10 +42,9 @@ func bridgeCardsTestHub(platform, account, conv, sender string) *model.MessageHu
 	}
 }
 
-// TestSendOutbound_Bridge_CardsDroppedRecordedOnRow 丢弃的富卡数必须写进出站行：
-// 管理端读的是这一行，只有日志的话"这一单丢了卡"在界面上永远看不出来。
-func TestSendOutbound_Bridge_CardsDroppedRecordedOnRow(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+// TestSendOutbound_Bridge_CardsFallbackRecordedOnRow 验证实际载荷与替代计数一致。
+func TestSendOutbound_Bridge_CardsFallbackRecordedOnRow(t *testing.T) {
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -75,24 +69,27 @@ func TestSendOutbound_Bridge_CardsDroppedRecordedOnRow(t *testing.T) {
 		t.Fatalf("读回出站行: %v", err)
 	}
 	if out.Extra == nil {
-		t.Fatal("出站行 Extra 为空，丢弃计数无处可查")
+		t.Fatal("出站行 Extra 为空，文字替代计数无处可查")
 	}
-	raw, ok := out.Extra["cards_dropped"]
+	raw, ok := out.Extra["cards_fallback_count"]
 	if !ok {
-		t.Fatalf("丢弃的富卡必须写进 Extra[\"cards_dropped\"]，实际键集合 %v", keysOf(out.Extra))
+		t.Fatalf("文字替代必须写进 Extra[\"cards_fallback_count\"]，实际键集合 %v", keysOf(out.Extra))
 	}
 	if n := asCount(raw); n != 2 {
-		t.Errorf("cards_dropped = %v，期望 2", raw)
+		t.Errorf("cards_fallback_count = %v，期望 2", raw)
 	}
 	if out.MsgType != "text" {
-		t.Errorf("桥接出站行仍应是 text（卡片未降级渲染），got %q", out.MsgType)
+		t.Errorf("桥接出站行应为包含完整事实的 text，实际 %q", out.MsgType)
+	}
+	if !strings.Contains(out.Content, "卡片标题") || out.Extra["cards_dropped"] != nil {
+		t.Fatalf("替代应有可读事实，不标成丢弃：content=%q extra=%v", out.Content, out.Extra)
 	}
 }
 
 // TestSendOutbound_Bridge_NoCardsNoDroppedKey 没有卡片时不得凭空写键：
 // 否则"每单都丢了卡"与"这单本来没卡"在同一个字段上分不开。
 func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -119,14 +116,17 @@ func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
 	if _, ok := out.Extra["cards_dropped"]; ok {
 		t.Errorf("无卡片的出站不该出现 cards_dropped，实际 %v", out.Extra["cards_dropped"])
 	}
+	if _, ok := out.Extra["cards_fallback_count"]; ok {
+		t.Errorf("无卡片不能凭空出现文字替代计数：%v", out.Extra)
+	}
 }
 
 // TestSendOutbound_Bridge_CardsDropWarns 丢弃必须出声，且**只出声一次**：入口那道统一门
 // 是唯一的日志点（桥接族自己不再打一条），否则同一事件两行日志，按行数计数的告警会翻倍。
 // 断言按"整行"匹配而不是"整段日志里出现过某子串"：后者的话计数与渠道可以分别来自两条不同
 // 的行，一条真丢弃都没发生过也能拼出绿。
-func TestSendOutbound_Bridge_CardsDropWarns(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -175,14 +175,14 @@ func TestSendOutbound_Bridge_CardsDropWarns(t *testing.T) {
 	os.Stdout = oldOut
 	<-drainDone
 	logged := capBuf.String()
-	lines := linesWith(logged, "no card transport, rich cards dropped")
+	lines := linesWith(logged, "outbound rich cards rendered as complete text")
 	if len(lines) != 1 {
-		t.Fatalf("一次带卡出库应当且仅当打一条丢弃日志，实际 %d 条，捕获到的日志：\n%s", len(lines), logged)
+		t.Fatalf("一次带卡出库应当且仅当打一条替代日志，实际 %d 条，捕获到的日志：\n%s", len(lines), logged)
 	}
 	line := lines[0]
 	for _, want := range []string{
 		`"channel":"xiaohongshu"`,
-		`"cards_dropped":3`,
+		`"cards_fallback_count":3`,
 		`"conversation_id":"conv-r26-warn"`,
 		`"account_id":"acct-r26-warn"`,
 	} {
@@ -195,8 +195,8 @@ func TestSendOutbound_Bridge_CardsDropWarns(t *testing.T) {
 // TestSendOutbound_CardlessChannelWarns 丢弃不止桥接五族：sendOutbound 的分支表里只有
 // 飞书与 TG 真下发卡片（各自一个 `for _, card := range cards`），企微/QQ/WhatsApp/钉钉/公众号
 // 五族同样整批丢掉。出声口径必须覆盖"没有卡片载体"的全部渠道，不能只修被点名的那一族。
-func TestSendOutbound_CardlessChannelWarns(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+func TestSendOutbound_CardlessChannelFallbackLogsOnce(t *testing.T) {
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -237,12 +237,12 @@ func TestSendOutbound_CardlessChannelWarns(t *testing.T) {
 	logged := capBuf.String()
 	// 判据按整行匹配（行里含 "message" 键那句文案）：只在整个日志块里找子串的话，
 	// 计数与渠道可以来自两条不同的行，一次真丢弃都没发生过也能拼出绿。
-	lines := linesWith(logged, "no card transport, rich cards dropped")
+	lines := linesWith(logged, "outbound rich cards rendered as complete text")
 	if len(lines) != 1 {
-		t.Fatalf("wecom 丢弃 2 张卡应打且仅打一条丢弃日志，实际 %d 条，捕获到的日志：\n%s", len(lines), logged)
+		t.Fatalf("wecom 文字替代 2 张卡应当且仅当打一条日志，实际 %d 条，捕获到的日志：\n%s", len(lines), logged)
 	}
 	line := lines[0]
-	if !strings.Contains(line, `"channel":"wecom"`) || !strings.Contains(line, `"cards_dropped":2`) {
+	if !strings.Contains(line, `"channel":"wecom"`) || !strings.Contains(line, `"cards_fallback_count":2`) {
 		t.Errorf("丢弃日志必须在同一行带上渠道与张数才可能归因，实际该行：\n%s", line)
 	}
 	// hubMsg 为 nil 时该行不得出现会话号：判的是"统一门不许假设轨迹行一定在"。
@@ -257,7 +257,7 @@ func TestSendOutbound_CardlessChannelWarns(t *testing.T) {
 // 走到 guard 处一条 warn 都不该有。否则"每次正常发卡"都会刷成丢弃告警，
 // 这条日志在运维侧当场作废，桥接族那条真丢弃也被淹掉。
 func TestSendOutbound_CardCapableChannelStaysQuiet(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 
 	cases := []struct {
 		name    string
@@ -312,7 +312,7 @@ func TestSendOutbound_CardCapableChannelStaysQuiet(t *testing.T) {
 			if !strings.Contains(logged, "r26-capture-probe") {
 				t.Fatalf("探针行都没抓到，日志接缝已坏，本用例的负断言不作证据：\n%s", logged)
 			}
-			if strings.Contains(logged, "no card transport, rich cards dropped") {
+			if strings.Contains(logged, "outbound rich cards rendered as complete text") || strings.Contains(logged, "rich cards dropped") {
 				t.Errorf("%s 有卡片载体，正常下发不得报成丢弃，捕获到的日志：\n%s", tc.name, logged)
 			}
 		})

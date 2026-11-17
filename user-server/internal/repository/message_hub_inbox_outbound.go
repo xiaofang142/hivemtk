@@ -73,6 +73,7 @@ func (r *MessageHubRepository) exhaustOutbound(ctx context.Context, channel, acc
 		Where("platform = ? AND account_id = ? AND direction = 'outbound' AND push_attempts >= ? "+
 			"AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))",
 			channel, accountID, MaxOutboundPushAttempts, cutoff).
+		Where(outboundDeliveryPredicate("")).
 		Updates(map[string]any{
 			"status":     "failed",
 			"push_error": pushExhaustedError,
@@ -136,6 +137,7 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 	if err := r.db.WithContext(ctx).
 		Model(&model.MessageHub{}).
 		Where("platform = ? AND account_id = ? AND direction = 'outbound' AND status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?", channel, accountID, cutoff).
+		Where(outboundDeliveryPredicate("")).
 		Updates(map[string]any{"status": "pending", "claimed_at": nil}).Error; err != nil {
 		logger.Warnf("[ClaimPendingOutbound] 回收超时 inflight 失败（继续认领）: %v", err)
 	}
@@ -147,6 +149,7 @@ func (r *MessageHubRepository) ClaimPendingOutbound(ctx context.Context, channel
 		if e := tx.Model(&model.MessageHub{}).
 			Where("platform = ? AND account_id = ? AND direction = 'outbound' AND status = 'pending' AND push_attempts < ?",
 				channel, accountID, MaxOutboundPushAttempts).
+			Where(outboundDeliveryPredicate("")).
 			Order("id ASC").
 			Limit(limit).
 			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
@@ -197,6 +200,7 @@ func (r *MessageHubRepository) ClaimOutboundForPush(ctx context.Context, id uint
 		Where("id = ? AND direction = 'outbound' AND push_attempts < ? "+
 			"AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))",
 			id, MaxOutboundPushAttempts, cutoff).
+		Where(outboundDeliveryPredicate("")).
 		Updates(map[string]any{
 			"status":        "inflight",
 			"claimed_at":    time.Now(),
@@ -227,6 +231,7 @@ func (r *MessageHubRepository) FetchOutboundUndelivered(ctx context.Context, cha
 	err := r.db.WithContext(ctx).
 		Where("platform = ? AND account_id = ? AND direction = 'outbound'", channel, accountID).
 		Where("push_attempts < ?", MaxOutboundPushAttempts).
+		Where(outboundDeliveryPredicate("")).
 		Where("(status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))", cutoff).
 		Order("id ASC").Limit(limit).Find(&rows).Error
 	if err != nil {
@@ -257,8 +262,8 @@ func (r *MessageHubRepository) PrevInboundCreatedAt(ctx context.Context, platfor
 }
 
 // ReviveSendFailedByConversation 关注事件驱动的限额行复活（2026-11-15）：客户关注
-// 我们后平台 24h 私信限额解除，该会话 send_failed 行复活为 pending 重投（预算清零、
-// 错误位清空）。delivered/pending 等活跃态不动（复活只针对终态失败行）。
+// 我们后平台私信限制可能解除，该会话 send_failed 行可受控恢复 pending 重投。
+// 保留已用预算，排除审计、耗尽和未知对账来源；其他终态及活跃态不动。
 func (r *MessageHubRepository) ReviveSendFailedByConversation(ctx context.Context, platform, accountID, conversationID string) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, nil
@@ -266,11 +271,13 @@ func (r *MessageHubRepository) ReviveSendFailedByConversation(ctx context.Contex
 	res := r.db.WithContext(ctx).Model(&model.MessageHub{}).
 		Where("platform = ? AND account_id = ? AND conversation_id = ? AND direction = 'outbound' AND status = 'send_failed' AND deleted_at IS NULL",
 			platform, accountID, conversationID).
+		Where("push_attempts < ?", MaxOutboundPushAttempts).
+		Where(outboundDeliveryPredicate("")).
+		Where(outboundRecoverableErrorPredicate("")).
 		Updates(map[string]any{
-			"status":        "pending",
-			"push_attempts": 0,
-			"push_error":    "", // NOT NULL 列，空串即清空（nil 违反约束）
-			"claimed_at":    nil,
+			"status":     "pending",
+			"push_error": "", // NOT NULL 列，空串即清空（nil 违反约束）
+			"claimed_at": nil,
 		})
 	return res.RowsAffected, res.Error
 }
@@ -642,7 +649,8 @@ func (r *MessageHubRepository) FetchOutboundSince(ctx context.Context, channel, 
 	}
 	var rows []model.MessageHub
 	q := r.db.WithContext(ctx).
-		Where("platform = ? AND account_id = ? AND direction = 'outbound'", channel, accountID)
+		Where("platform = ? AND account_id = ? AND direction = 'outbound'", channel, accountID).
+		Where(outboundDeliveryPredicate(""))
 	if sinceID > 0 {
 		q = q.Where("id > ?", sinceID)
 	}

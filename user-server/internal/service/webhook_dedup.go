@@ -11,10 +11,6 @@ import (
 
 	"fmt"
 
-	"os"
-
-	"strconv"
-
 	"strings"
 
 	"sync"
@@ -67,15 +63,6 @@ const (
 
 	WebhookReplyConcurrency = 32
 )
-
-func webhookEnvInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			return n
-		}
-	}
-	return def
-}
 
 func groupNameFromHub(hub *model.MessageHub) string {
 	if hub == nil || hub.Extra == nil {

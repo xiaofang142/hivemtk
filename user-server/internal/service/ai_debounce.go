@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -19,10 +21,10 @@ const (
 	aiDebounceMaxMessages = 20
 )
 
-func aiDebounceSeconds(event *model.MessageEvent) int {
+func aiDebounceSeconds(ctx context.Context, event *model.MessageEvent) int {
 	// 参数中心优先（2026-11-14 参数化并默认启用 12s：客户连发消息合并一批应答，
 	// 防逐条轰炸——机制本就存在于本文件，此前仅 env 可开、生产恒 0 形同虚设）。
-	def := BridgeAIDebounceSeconds(context.Background())
+	def := BridgeAIDebounceSeconds(ctx)
 	if v := os.Getenv("AI_DEBOUNCE_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			def = n
@@ -53,7 +55,27 @@ func aiDebounceSeconds(event *model.MessageEvent) int {
 }
 
 func (s *InboxIngressService) triggerAIWithDebounce(ctx context.Context, event *model.MessageEvent) {
-	seconds := aiDebounceSeconds(event)
+	if s == nil || event == nil || ctx == nil || ctx.Err() != nil || tenant.IsSystemScope(ctx) {
+		return
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		logger.Ctx(ctx).Warn().Msg("AI debounce requires a confirmed tenant")
+		return
+	}
+	parent := tracing.CarrierFromContext(ctx)
+	if parent != nil && parent.TenantID != 0 && parent.TenantID != tenantID {
+		logger.Ctx(ctx).Warn().Msg("AI debounce carrier tenant does not match request")
+		return
+	}
+	// 只携带已确认租户和独立追踪副本，不向后续客户处理传递系统豁免。
+	ctx = tenant.OnlyTenant(ctx, tenantID)
+	if parent != nil {
+		carrier := parent.Child()
+		carrier.TenantID = tenantID
+		ctx = tracing.WithCarrier(ctx, carrier)
+	}
+	seconds := aiDebounceSeconds(ctx, event)
 	content := strings.TrimSpace(event.Content)
 
 	if seconds <= 0 || s.cache == nil || content == "" ||
@@ -125,9 +147,13 @@ func (s *InboxIngressService) triggerAIWithDebounce(ctx context.Context, event *
 		}
 		mergedEvent.Extra = extraCopy
 	}
+	callbackCtx := tenant.OnlyTenant(context.WithoutCancel(ctx), tenantID)
+	if carrier := tracing.CarrierFromContext(ctx); carrier != nil {
+		callbackCtx = tracing.WithCarrier(callbackCtx, carrier.Child())
+	}
 	time.AfterFunc(time.Duration(seconds)*time.Second, func() {
 
-		bctx := context.Background()
+		bctx := callbackCtx
 		pending, perr := s.PopPendingMessages(bctx, sessionID)
 
 		_, _ = s.cache.ReleaseLock(bctx, gate, gateToken)

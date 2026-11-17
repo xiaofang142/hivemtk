@@ -9,6 +9,7 @@ import (
 )
 
 func TestReproduce_XhsWeb_NoAITrigger(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)

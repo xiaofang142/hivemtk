@@ -99,8 +99,8 @@ func TestTracingAndMonitoring(t *testing.T) {
 	if len(first.Nodes) < 4 {
 		t.Fatalf("该轮节点数期望 >=4，实际 %d", len(first.Nodes))
 	}
-	if first.EndToEndMs == nil {
-		t.Fatalf("应计算出端到端时延")
+	if first.EndToEndMs != nil {
+		t.Fatalf("缺少操作时间及轮次的历史记录不能猜测端到端时延")
 	}
 
 	traces, err := Traces(ctx, 50)

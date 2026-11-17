@@ -93,6 +93,7 @@ func TestTelegramLeadAccountKey(t *testing.T) {
 }
 
 func TestMineTelegramGroupLead_CreateDedupUpgrade(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 	account := "@alice"
@@ -157,6 +158,7 @@ func TestMineTelegramGroupLead_CreateDedupUpgrade(t *testing.T) {
 }
 
 func TestMineTelegramGroupLead_NoiseSkipped(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 	account := "@bob"
@@ -175,6 +177,7 @@ func TestMineTelegramGroupLead_NoiseSkipped(t *testing.T) {
 }
 
 func TestMineTelegramGroupLead_FallbackID(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 	hub := &model.MessageHub{MsgID: "m-c", ConversationID: "conv-555", SenderID: "555"}
@@ -189,6 +192,7 @@ func TestMineTelegramGroupLead_FallbackID(t *testing.T) {
 }
 
 func TestDispatchTelegram_MinesHumanGroupMessage(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 
@@ -222,6 +226,7 @@ func TestDispatchTelegram_MinesHumanGroupMessage(t *testing.T) {
 }
 
 func TestDispatchTelegram_DoesNotMineBotItself(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 
@@ -244,6 +249,7 @@ func TestDispatchTelegram_DoesNotMineBotItself(t *testing.T) {
 }
 
 func TestDispatchTelegram_MinesPrivateHumanDM(t *testing.T) {
+	isolateTelegramMinerNetwork(t)
 	db := setupTelegramTestDB(t)
 	svc := newTestWebhookService(db)
 
@@ -311,4 +317,12 @@ func countClues(t *testing.T, db *gorm.DB, account string) int {
 		t.Fatalf("count clues failed: %v", err)
 	}
 	return len(list)
+}
+
+func isolateTelegramMinerNetwork(t *testing.T) {
+	t.Helper()
+	old := leadLLMRefineEnabledProvider
+	leadLLMRefineEnabledProvider = func() bool { return false }
+	t.Cleanup(func() { leadLLMRefineEnabledProvider = old })
+	t.Setenv("K_TRACE_LLM_REFINE", "")
 }

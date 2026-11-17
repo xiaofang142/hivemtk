@@ -70,7 +70,7 @@ func TestHumanizePolisher_P2_5_RemoveFlattery(t *testing.T) {
 		{
 			name:   "apology_1",
 			input:  "很抱歉，我无法直接操作您的设备。",
-			expect: "直接操作您的设备。",
+			expect: "很抱歉，我无法直接操作您的设备。",
 		},
 		{
 			name:   "apology_2",

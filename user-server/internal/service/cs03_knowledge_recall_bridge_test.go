@@ -223,10 +223,10 @@ func TestSmartCS03_PublishedFAQRow_RecalledViaAgentCtx(t *testing.T) {
 	ctxA := tenant.WithTenantID(context.Background(), cs03TenantA)
 	ctxB := tenant.WithTenantID(context.Background(), cs03TenantB)
 
-	faqA := cs03SeedFAQ(t, database, ctxA, cs03AgentFAQ, "售后开票流程说明", cs03FAQAnswerA, 0.9, true)
+	faqA := cs03SeedFAQ(t, database, ctxA, cs03AgentFAQ, cs03Question, cs03FAQAnswerA, 0.9, true)
 	// 未发布（enabled=false）：同关键词、更高置信度——若被召回立即在答案里现形。
 	cs03SeedFAQ(t, database, ctxA, cs03AgentFAQ, "未发布开票条目", cs03FAQDisabld, 0.99, false)
-	faqB := cs03SeedFAQ(t, database, ctxB, cs03AgentFAQB, "售后开票流程说明", cs03FAQAnswerB, 0.9, true)
+	faqB := cs03SeedFAQ(t, database, ctxB, cs03AgentFAQB, cs03Question, cs03FAQAnswerB, 0.9, true)
 
 	rag := &fakeRAGSearcher{}
 	llmCounter := &cs03LLMCounter{}
@@ -298,8 +298,9 @@ func TestSmartCS03_PublishedFAQRow_RecalledViaAgentCtx(t *testing.T) {
 
 // TestSmartCS03_FAQThresholdBoundary_EqualityRecalls 阈值等号边界（以当前比较符为准，
 // 不猜等号行为）：faqHitThresh=0.6，tryFAQFastPath 的判据是 `top.Score < faqHitThresh`
-// ⇒ 等于阈值即命中、低于阈值不命中。夹具把 jaccard 压到 0（问法与用户句零公共词元、
-// 关键词精确命中一次）使 score 恰为 (1.0×1+0.3×0)×Confidence，等号场景分数可精确构造。
+// ⇒ 等于阈值即命中、低于阈值不命中。Confidence 的数据库列仅保留四位小数，
+// 0.6/1.3 入库后为0.4615、真实分数0.59995，并不能构造严格等号。
+// 真库用相邻可表示值验证两侧；内存候选仍走真实打分和快答入口验证严格等号。
 func TestSmartCS03_FAQThresholdBoundary_EqualityRecalls(t *testing.T) {
 	prev := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
@@ -310,16 +311,42 @@ func TestSmartCS03_FAQThresholdBoundary_EqualityRecalls(t *testing.T) {
 		&model.AISuggestion{}, &model.AgentStatus{}, &model.Customer{},
 	)
 	ctxA := tenant.WithTenantID(context.Background(), cs03TenantA)
-	cs03SeedFAQ(t, database, ctxA, cs03AgentEq, cs03FAQEqQ, cs03FAQEqAns, 0.6, true)
-	cs03SeedFAQ(t, database, ctxA, cs03AgentLt, cs03FAQEqQ, cs03FAQLtAns, 0.55, true)
+	cs03SeedFAQ(t, database, ctxA, cs03AgentEq, cs03Question, cs03FAQEqAns, 0.4616, true)
+	cs03SeedFAQ(t, database, ctxA, cs03AgentLt, cs03Question, cs03FAQLtAns, 0.4615, true)
 
 	rag := &fakeRAGSearcher{}
 	engine := NewSalesEngine(cs03NewLLM(t, &cs03LLMCounter{}, c01FAQMarker, "命中"),
 		fakeIntentRecognizer{}, fakeMemory{}, fakeSOP{}, rag, fakeScript{}, fakeCustomerLookup{})
 	engine.SetFAQService(NewFAQService())
 	orch := NewSmartCSOrchestrator(engine, &OrchestratorConfig{ConfidenceThreshold: 0.7, EnableAutoReply: true, MaxAIConsecutive: 10}, nil)
+	matches, err := engine.faqSvc.MatchByAgent(ctxA, cs03AgentEq, cs03Question, 1)
+	if err != nil || len(matches) != 1 || matches[0].Score <= faqHitThresh {
+		t.Fatalf("数据库相邻上界必须高于阈值：%+v，错误=%v", matches, err)
+	}
+	below, err := engine.faqSvc.MatchByAgent(ctxA, cs03AgentLt, cs03Question, 1)
+	if err != nil || len(below) != 1 || below[0].Score >= faqHitThresh {
+		t.Fatalf("数据库相邻下界必须低于阈值：%+v，错误=%v", below, err)
+	}
+	enabled := true
+	exactAgentID := cs03AgentEq
+	// 使用运行时 float64 运算；Go 无类型常量的有理数除法再转换会落到相邻值。
+	exactConfidence := float64(faqHitThresh)
+	exactConfidence /= 1.3
+	exactEngine := &SalesEngine{faqSvc: newFAQServiceForFastPath([]model.FAQEntry{{
+		ID: 1, AgentID: &exactAgentID, Question: cs03Question, Answer: cs03FAQEqAns,
+		Keywords: []string{cs03FAQKeyword}, Confidence: exactConfidence, Enabled: &enabled,
+	}})}
+	exactMatches, err := exactEngine.faqSvc.MatchByAgent(ctxA, cs03AgentEq, cs03Question, 1)
+	if err != nil || len(exactMatches) != 1 || exactMatches[0].Score != faqHitThresh {
+		t.Fatalf("内存候选的真实打分必须形成严格等号：%+v，错误=%v", exactMatches, err)
+	}
+	if _, hit := exactEngine.tryFAQFastPath(ctxA, &SalesRequest{
+		UserMessage: cs03Question, AgentContext: &dto.AgentContext{AgentID: cs03AgentEq},
+	}); !hit {
+		t.Fatal("真实快答入口不能拒绝严格等于阈值的完整标准问")
+	}
 
-	// 等于阈值 → 命中（当前比较符 `<` 的等号语义：不跳过）。
+	// 真库相邻上界 → 命中，编排仍带真实知识行。
 	resEq, err := orch.HandleIncomingWithAgent(ctxA, &IncomingContext{
 		Platform: model.PlatformDouyin, AccountID: cs03AccA, SenderID: cs03CustA,
 		Content: cs03Question, MessageID: "cs03-msg-eq-1",
@@ -328,12 +355,12 @@ func TestSmartCS03_FAQThresholdBoundary_EqualityRecalls(t *testing.T) {
 		t.Fatalf("等号轮编排失败: %v", err)
 	}
 	if !resEq.AIReplied || !strings.Contains(resEq.Reply, "CS03-FAQ-EQ") {
-		t.Errorf("score==faqHitThresh 应命中快速通道（当前比较符 `<`），实际 reply=%q aiReplied=%v", resEq.Reply, resEq.AIReplied)
+		t.Errorf("数据库上界应命中完整标准问快答，实际 reply=%q aiReplied=%v", resEq.Reply, resEq.AIReplied)
 	}
 
 	// 低于阈值 → 不命中，落到正常链（本夹具 RAG 无命中 → 通用回复，无 FAQ 答案）。
 	resLt, err := orch.HandleIncomingWithAgent(ctxA, &IncomingContext{
-		Platform: model.PlatformDouyin, AccountID: cs03AccA, SenderID: cs03CustA,
+		Platform: model.PlatformDouyin, AccountID: cs03AccA, SenderID: cs03CustA + "-lower-bound",
 		Content: cs03Question, MessageID: "cs03-msg-lt-1",
 	}, &dto.AgentContext{AgentID: cs03AgentLt, EnableRAG: true})
 	if err != nil {
@@ -522,7 +549,7 @@ func cs03NewCacheFixture(t *testing.T, embedder cs03DetEmbedder, top1Score float
 	t.Helper()
 	database := testutil.NewTestDB(t,
 		&model.CustomerSession{}, &model.SessionMessage{}, &model.AISuggestion{},
-		&model.AgentStatus{}, &model.Customer{}, &model.KnowledgeBase{}, &model.RAGAnswerCache{},
+		&model.AgentStatus{}, &model.Customer{}, &model.KnowledgeBase{}, &model.RAGAnswerCache{}, &model.AgentKBBinding{},
 	)
 	f := &cs03CacheFixture{db: database, rag: &fakeRAGSearcher{}, llm: &cs03LLMCounter{}, top1Score: top1Score}
 	f.agentID = 9501
@@ -548,9 +575,13 @@ func cs03NewCacheFixture(t *testing.T, embedder cs03DetEmbedder, top1Score float
 }
 
 func (f *cs03CacheFixture) send(t *testing.T, msgID string) *HandleResult {
+	return f.sendForCustomer(t, msgID, cs03CustA)
+}
+
+func (f *cs03CacheFixture) sendForCustomer(t *testing.T, msgID, customerID string) *HandleResult {
 	t.Helper()
 	res, err := f.orch.HandleIncomingWithAgent(context.Background(), &IncomingContext{
-		Platform: model.PlatformDouyin, AccountID: cs03AccA, SenderID: cs03CustA,
+		Platform: model.PlatformDouyin, AccountID: cs03AccA, SenderID: customerID,
 		Content: cs03Question, MessageID: msgID,
 	}, &dto.AgentContext{AgentID: f.agentID, EnableRAG: true})
 	if err != nil {
@@ -602,7 +633,7 @@ func TestSmartCS03_FAQAnswerCache_StoreGuard_BelowThresholdSkips(t *testing.T) {
 }
 
 // TestSmartCS03_FAQAnswerCache_HitSkipsEngine_AndKBUpdateInvalidates 语义层读写闭环：
-// 第一轮回答入缓存 → 第二轮同问命中精确层（Tier=exact、Similarity=1、引擎/检索零调用）
+// 第一轮回答入缓存 → 已答会话仍正常生成 → 另一权威新会话同问命中精确层
 // → KB updated_at 变更后缓存失效回源（引擎重新被调用，不拿过期答案冒充命中）。
 func TestSmartCS03_FAQAnswerCache_HitSkipsEngine_AndKBUpdateInvalidates(t *testing.T) {
 	f := cs03NewCacheFixture(t, cs03DetEmbedder{}, 0.9)
@@ -621,19 +652,25 @@ func TestSmartCS03_FAQAnswerCache_HitSkipsEngine_AndKBUpdateInvalidates(t *testi
 	llmAfterRound1 := atomic.LoadInt32(&f.llm.calls)
 	cs03WaitFor(t, "第一轮回答入缓存", func() bool { return f.cacheRows(t) == 1 })
 
-	// 第二轮：同问命中缓存 → 引擎零调用（检索/LLM 计数冻结）、置信度=精确层 1.0。
-	res2 := f.send(t, "cs03-msg-cache-hit-2")
+	// 已答会话不免检，必须进入正常检索链，不用生成过的标准答案盖掉追问。
+	continued := f.send(t, "cs03-msg-cache-followup")
+	if !continued.AIReplied || f.rag.calls != 2 {
+		t.Fatalf("已答会话应重新处理问题：ai=%v 检索=%d", continued.AIReplied, f.rag.calls)
+	}
+	llmAfterFollowup := atomic.LoadInt32(&f.llm.calls)
+	// 新会话同问命中缓存 → 引擎零调用、置信度=精确层 1.0。
+	res2 := f.sendForCustomer(t, "cs03-msg-cache-hit-2", cs03CustA+"-cache-new")
 	if !res2.AIReplied {
 		t.Fatalf("缓存命中轮应 AI 回复: %+v", res2)
 	}
 	if res2.Reply != res1.Reply {
 		t.Errorf("缓存命中应返回缓存答案 %q，实际 %q", res1.Reply, res2.Reply)
 	}
-	if f.rag.calls != 1 {
+	if f.rag.calls != 2 {
 		t.Errorf("缓存命中轮不得再检索（快速通道语义），实际 %d 次", f.rag.calls)
 	}
-	if got := atomic.LoadInt32(&f.llm.calls); got != llmAfterRound1 {
-		t.Errorf("缓存命中轮不得再调模型：第一轮 %d 次，命中轮 %d 次", llmAfterRound1, got)
+	if got := atomic.LoadInt32(&f.llm.calls); got != llmAfterFollowup {
+		t.Errorf("缓存命中轮不得再调模型：此前 %d 次，命中轮 %d 次", llmAfterFollowup, got)
 	}
 	if res2.Confidence != 1 {
 		t.Errorf("精确层命中置信度应为 1，实际 %v", res2.Confidence)
@@ -644,11 +681,13 @@ func TestSmartCS03_FAQAnswerCache_HitSkipsEngine_AndKBUpdateInvalidates(t *testi
 		Update("updated_at", time.Now().Add(2*time.Hour)).Error; err != nil {
 		t.Fatalf("更新 KB updated_at 失败: %v", err)
 	}
-	res3 := f.send(t, "cs03-msg-cache-hit-3")
+	// 版本事实变化也进入模型上下文，避免独立调度缓存掩盖真实回源。
+	f.rag.chunks[0].Content += " 新知识版本：附加功能以本版文档为准。"
+	res3 := f.sendForCustomer(t, "cs03-msg-cache-hit-3", cs03CustA+"-cache-invalidated")
 	if !res3.AIReplied {
 		t.Fatalf("失效回源轮应正常 AI 回复: %+v", res3)
 	}
-	if f.rag.calls != 2 {
+	if f.rag.calls != 3 {
 		t.Errorf("失效后应重新检索回源（实际 %d 次）", f.rag.calls)
 	}
 	if got := atomic.LoadInt32(&f.llm.calls); got <= llmAfterRound1 {

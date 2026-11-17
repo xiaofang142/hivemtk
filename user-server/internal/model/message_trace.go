@@ -21,7 +21,7 @@ import "time"
 //
 // 关联键：
 //   - conversation_id：会话级串联（同一会话的全部节点可见，可还原单会话全链路）
-//   - trace_id：轮次级串联（同一轮 客户 inbound ↔ AI outbound 共享，可看一轮问答）
+//   - trace_id：兼容历史关联；部分调用按会话派生，不能作为轮次唯一键
 //   - node + node_order：节点在生命周期中的固定位置，用于画链路图 + 计算节点间时延
 //
 // 层级（hierarchy）：一个生命周期节点（span_kind=lifecycle）下可挂载 agent 多轮（span_kind=agent_turn）
@@ -36,28 +36,35 @@ import "time"
 type MessageTrace struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID             uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	TraceID        string    `gorm:"type:varchar(64);index:idx_mt_trace" json:"trace_id"`
-	ConversationID string    `gorm:"type:varchar(100);index:idx_mt_conv" json:"conversation_id"`
-	AccountID      string    `gorm:"type:varchar(100);index" json:"account_id"`
-	Channel        string    `gorm:"type:varchar(30);index:idx_mt_channel" json:"channel"`
-	Node           string    `gorm:"type:varchar(40);index:idx_mt_node" json:"node"`
-	NodeOrder      int       `gorm:"index" json:"node_order"`
-	Direction      string    `gorm:"type:varchar(10)" json:"direction"`
-	MsgID          string    `gorm:"type:varchar(100);index" json:"msg_id"`
-	Input          string    `gorm:"type:text" json:"input"`
-	Output         string    `gorm:"type:text" json:"output"`
-	DurationMs     int64     `gorm:"index:idx_mt_dur" json:"duration_ms"`
-	Expected       string    `gorm:"type:text" json:"expected"`
-	Status         string    `gorm:"type:varchar(20);index" json:"status"`
-	Abnormal       string    `gorm:"type:text" json:"abnormal"`
-	Error          string    `gorm:"type:text" json:"error"`
-	ParentNode     string    `gorm:"type:varchar(40);index:idx_mt_parent;default:''" json:"parent_node"`
-	SpanKind       string    `gorm:"type:varchar(20);index:idx_mt_kind;default:'lifecycle'" json:"span_kind"`
-	TurnIndex      int       `gorm:"index:idx_mt_turn;default:0" json:"turn_index"`
-	ToolName       string    `gorm:"type:varchar(96);default:''" json:"tool_name"`
-	AgentID        string    `gorm:"type:varchar(64);default:''" json:"agent_id"`
-	CreatedAt      time.Time `gorm:"autoCreateTime;index:idx_mt_created" json:"created_at"`
+	ID               uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	TraceID          string     `gorm:"type:varchar(64);index:idx_mt_trace" json:"trace_id"`
+	ConversationID   string     `gorm:"type:varchar(100);index:idx_mt_conv" json:"conversation_id"`
+	AccountID        string     `gorm:"type:varchar(100);index" json:"account_id"`
+	Channel          string     `gorm:"type:varchar(30);index:idx_mt_channel" json:"channel"`
+	Node             string     `gorm:"type:varchar(40);index:idx_mt_node" json:"node"`
+	NodeOrder        int        `gorm:"index" json:"node_order"`
+	Direction        string     `gorm:"type:varchar(10)" json:"direction"`
+	MsgID            string     `gorm:"type:varchar(100);index" json:"msg_id"`
+	Input            string     `gorm:"type:text" json:"input"`
+	Output           string     `gorm:"type:text" json:"output"`
+	DurationMs       int64      `gorm:"index:idx_mt_dur" json:"duration_ms"`
+	TurnID           string     `gorm:"type:varchar(64);index:idx_mt_business_turn;default:''" json:"turn_id"`
+	AnswerAttempt    int        `gorm:"not null;default:0" json:"answer_attempt"`
+	DeliveryAttempt  int        `gorm:"not null;default:0" json:"delivery_attempt"`
+	TimingVersion    int        `gorm:"not null;default:0" json:"timing_version"`
+	DurationMeasured bool       `gorm:"not null;default:false" json:"duration_measured"`
+	StartedAt        *time.Time `json:"started_at"`
+	CompletedAt      *time.Time `json:"completed_at"`
+	Expected         string     `gorm:"type:text" json:"expected"`
+	Status           string     `gorm:"type:varchar(20);index" json:"status"`
+	Abnormal         string     `gorm:"type:text" json:"abnormal"`
+	Error            string     `gorm:"type:text" json:"error"`
+	ParentNode       string     `gorm:"type:varchar(40);index:idx_mt_parent;default:''" json:"parent_node"`
+	SpanKind         string     `gorm:"type:varchar(20);index:idx_mt_kind;default:'lifecycle'" json:"span_kind"`
+	TurnIndex        int        `gorm:"index:idx_mt_turn;default:0" json:"turn_index"`
+	ToolName         string     `gorm:"type:varchar(96);default:''" json:"tool_name"`
+	AgentID          string     `gorm:"type:varchar(64);default:''" json:"agent_id"`
+	CreatedAt        time.Time  `gorm:"autoCreateTime;index:idx_mt_created" json:"created_at"`
 }
 
 func (MessageTrace) TableName() string { return "message_trace" }

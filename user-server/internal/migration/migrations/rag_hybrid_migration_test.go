@@ -281,43 +281,55 @@ func TestRagHybridMigration_DownCleansUp(t *testing.T) {
 
 // TestRagHybridMigration_KnowledgeSearchLogsEnhanced 集成测试：knowledge_search_logs 表增强字段
 func TestRagHybridMigration_KnowledgeSearchLogsEnhanced(t *testing.T) {
-	db := setupMigrationTestDB(t)
-	setupKnowledgeChunksBase(t, db)
+	for _, productType := range []string{"bigint", "text"} {
+		t.Run(productType, func(t *testing.T) {
+			db := setupMigrationTestDB(t)
+			setupKnowledgeChunksBase(t, db)
+			if err := db.Exec("DROP TABLE IF EXISTS knowledge_search_logs").Error; err != nil {
+				t.Fatal("无法重建专用日志夹具：", err)
+			}
 
-	m := NewRagHybridMigration(db)
-	if err := m.Up(context.Background()); err != nil {
-		t.Fatalf("Up() failed: %v", err)
-	}
+			m := NewRagHybridMigration(db)
+			if err := m.Up(context.Background()); err != nil {
+				t.Fatalf("Up() failed: %v", err)
+			}
+			if productType == "text" {
+				if err := db.Exec("ALTER TABLE knowledge_search_logs ALTER COLUMN product_id TYPE text USING product_id::text").Error; err != nil {
+					t.Fatal("无法建立当前字符串身份夹具：", err)
+				}
+			}
 
-	err := db.Exec(`
+			err := db.Exec(`
 		INSERT INTO knowledge_search_logs
 			(query, product_id, top_k, vector_count, bm25_count, fused_count, rerank_count,
 			 vector_latency_ms, bm25_latency_ms, rewrite_latency_ms, rerank_latency_ms,
 			 rewrite_used, cache_hit)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		VALUES ($1, CAST($2 AS BIGINT), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`, "如何退货", 1, 5, 10, 8, 18, 5, 120, 80, 200, 90, "hyde_multiquery", true).Error
-	if err != nil {
-		t.Fatalf("insert knowledge_search_logs failed: %v", err)
-	}
+			if err != nil {
+				t.Fatalf("insert knowledge_search_logs failed: %v", err)
+			}
 
-	var logRow struct {
-		VectorCount int    `gorm:"column:vector_count"`
-		BM25Count   int    `gorm:"column:bm25_count"`
-		FusedCount  int    `gorm:"column:fused_count"`
-		RewriteUsed string `gorm:"column:rewrite_used"`
-		CacheHit    bool   `gorm:"column:cache_hit"`
-	}
-	err = db.Raw(`SELECT vector_count, bm25_count, fused_count, rewrite_used, cache_hit FROM knowledge_search_logs ORDER BY id DESC LIMIT 1`).Scan(&logRow).Error
-	if err != nil {
-		t.Fatalf("query knowledge_search_logs failed: %v", err)
-	}
-	if logRow.VectorCount != 10 || logRow.BM25Count != 8 || logRow.FusedCount != 18 {
-		t.Errorf("counts: vec=%d bm25=%d fused=%d", logRow.VectorCount, logRow.BM25Count, logRow.FusedCount)
-	}
-	if logRow.RewriteUsed != "hyde_multiquery" {
-		t.Errorf("rewrite_used=%q want=hyde_multiquery", logRow.RewriteUsed)
-	}
-	if !logRow.CacheHit {
-		t.Error("cache_hit should be true")
+			var logRow struct {
+				VectorCount int    `gorm:"column:vector_count"`
+				BM25Count   int    `gorm:"column:bm25_count"`
+				FusedCount  int    `gorm:"column:fused_count"`
+				RewriteUsed string `gorm:"column:rewrite_used"`
+				CacheHit    bool   `gorm:"column:cache_hit"`
+			}
+			err = db.Raw(`SELECT vector_count, bm25_count, fused_count, rewrite_used, cache_hit FROM knowledge_search_logs ORDER BY id DESC LIMIT 1`).Scan(&logRow).Error
+			if err != nil {
+				t.Fatalf("query knowledge_search_logs failed: %v", err)
+			}
+			if logRow.VectorCount != 10 || logRow.BM25Count != 8 || logRow.FusedCount != 18 {
+				t.Errorf("counts: vec=%d bm25=%d fused=%d", logRow.VectorCount, logRow.BM25Count, logRow.FusedCount)
+			}
+			if logRow.RewriteUsed != "hyde_multiquery" {
+				t.Errorf("rewrite_used=%q want=hyde_multiquery", logRow.RewriteUsed)
+			}
+			if !logRow.CacheHit {
+				t.Error("cache_hit should be true")
+			}
+		})
 	}
 }

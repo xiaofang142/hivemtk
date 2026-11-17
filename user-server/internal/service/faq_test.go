@@ -8,6 +8,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
 
@@ -520,13 +521,13 @@ func TestFAQService_WarmupCache_PerAgent(t *testing.T) {
 
 	svc.mu.RLock()
 	defer svc.mu.RUnlock()
-	if _, ok := svc.cache[1]; !ok {
+	if _, ok := svc.cache[faqCacheKey{tenantID: tenant.DefaultTenantID, agentID: 1}]; !ok {
 		t.Error("expected cache entry for agent=1")
 	}
-	if _, ok := svc.cache[2]; !ok {
+	if _, ok := svc.cache[faqCacheKey{tenantID: tenant.DefaultTenantID, agentID: 2}]; !ok {
 		t.Error("expected cache entry for agent=2")
 	}
-	if _, ok := svc.cache[0]; !ok {
+	if _, ok := svc.cache[faqCacheKey{tenantID: tenant.DefaultTenantID}]; !ok {
 		t.Error("expected cache entry for shared pool (agentID=0)")
 	}
 	if len(svc.cache) != 3 {
@@ -551,10 +552,10 @@ func TestFAQService_InvalidateCache_PerAgent(t *testing.T) {
 
 	svc.mu.RLock()
 	defer svc.mu.RUnlock()
-	if _, ok := svc.cache[1]; ok {
+	if _, ok := svc.cache[faqCacheKey{tenantID: tenant.DefaultTenantID, agentID: 1}]; ok {
 		t.Error("expected agent=1 cache to be invalidated")
 	}
-	if _, ok := svc.cache[2]; !ok {
+	if _, ok := svc.cache[faqCacheKey{tenantID: tenant.DefaultTenantID, agentID: 2}]; !ok {
 		t.Error("expected agent=2 cache to be intact")
 	}
 }

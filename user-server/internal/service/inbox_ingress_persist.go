@@ -13,6 +13,10 @@ import (
 )
 
 func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.MessageEvent) error {
+	return s.persistMessageWithLeadEligibility(ctx, event, false)
+}
+
+func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Context, event *model.MessageEvent, trustedLive bool) error {
 	if s.hubRepo == nil {
 		return nil
 	}
@@ -112,11 +116,28 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		}
 		hub.Extra = extra
 	}
+	if hub.Extra != nil {
+		delete(hub.Extra, "bridge_lead_eligible")
+	}
+	hub.BridgeLeadEligible = trustedLive && bridgeLeadEventEligible(event, accountID, notice, now)
 	if len(event.History) > 0 {
 		if hub.Extra == nil {
 			hub.Extra = model.JSONMap{}
 		}
 		hub.Extra["history"] = event.History
+	}
+	// 关联由服务端完整作用域派生，不接受客户端自称的turn。
+	if hub.Extra != nil {
+		delete(hub.Extra, "turn_id")
+		delete(hub.Extra, "answer_attempt")
+	}
+	carrier := tracing.CarrierForHub(ctx, hub)
+	ctx = tracing.WithCarrier(ctx, carrier)
+	if hub.Extra == nil {
+		hub.Extra = model.JSONMap{}
+	}
+	if carrier.TurnID != "" {
+		hub.Extra["turn_id"] = carrier.TurnID
 	}
 
 	var persisted bool
@@ -157,6 +178,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		}()
 	}()
 
+	ingestStarted := time.Now()
 	_, err := s.withIngestLock(ctx, event.ConversationID, func() error {
 
 		if s.hubRepo != nil && event.ConversationID != "" {
@@ -174,7 +196,6 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 		}
 
 		if s.inboxSvc != nil && hub.Direction == "inbound" {
-			ingestTimer := tracing.StartSpan()
 			if _, uerr := s.inboxSvc.UpsertFromHubMessageTx(ctx, hub, s.hubRepo); uerr != nil {
 				if isDuplicateKey(uerr) {
 					logger.Warnf("[Inbox] message_hub duplicate msg_id (idempotent skip): msg_id=%s session=%s",
@@ -184,6 +205,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 				return uerr
 			}
 			persisted = true
+			ingestCompleted := time.Now()
 
 			tracing.RecordNode(ctx, tracing.NodeSpan{
 				TraceID:        hub.TraceID,
@@ -208,9 +230,12 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 					"status": hub.Status,
 					"id":     hub.ID,
 				},
-				DurationMs: ingestTimer.ElapsedMs(),
-				Expected:   "客户消息落库 message_hub + 同步 inbox_conversations（平台统一收件箱可见）",
-				Status:     tracing.StatusOk,
+				DurationMs:       ingestCompleted.Sub(ingestStarted).Milliseconds(),
+				StartedAt:        &ingestStarted,
+				CompletedAt:      &ingestCompleted,
+				DurationMeasured: true,
+				Expected:         "客户消息落库 message_hub + 同步 inbox_conversations（平台统一收件箱可见）",
+				Status:           tracing.StatusOk,
 			})
 
 			tracing.RecordNode(ctx, tracing.NodeSpan{
@@ -237,6 +262,7 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 			return cerr
 		}
 		persisted = true
+		ingestCompleted := time.Now()
 
 		tracing.RecordNode(ctx, tracing.NodeSpan{
 			TraceID:        hub.TraceID,
@@ -261,8 +287,12 @@ func (s *InboxIngressService) persistMessage(ctx context.Context, event *model.M
 				"status": hub.Status,
 				"id":     hub.ID,
 			},
-			Expected: "消息落库 message_hub",
-			Status:   tracing.StatusOk,
+			DurationMs:       ingestCompleted.Sub(ingestStarted).Milliseconds(),
+			StartedAt:        &ingestStarted,
+			CompletedAt:      &ingestCompleted,
+			DurationMeasured: true,
+			Expected:         "消息落库 message_hub",
+			Status:           tracing.StatusOk,
 		})
 		return nil
 	})

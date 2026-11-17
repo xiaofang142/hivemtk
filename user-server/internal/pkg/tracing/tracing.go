@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"hivemtk-user/internal/pkg/textutil"
 	"sync"
@@ -24,25 +23,29 @@ import (
 // ToolTraceEvent 工具层一次调用（agent 一轮 / 单次工具）的可观测事件。
 // 由 tooluse 包在 observer 中点出，tracing 包负责落库（见 ReportToolCall）。
 type ToolTraceEvent struct {
-	Kind       string
-	TraceID    string
-	AgentID    string
-	SessionID  string
-	CustomerID string
-	CallerID   string
-	ToolName   string
-	TurnIndex  int
-	Input      any
-	Output     any
-	Error      string
-	DurationMs int64
-	Status     string
+	Kind             string
+	TraceID          string
+	AgentID          string
+	SessionID        string
+	CustomerID       string
+	CallerID         string
+	ToolName         string
+	TurnIndex        int
+	Input            any
+	Output           any
+	Error            string
+	DurationMs       int64
+	Status           string
+	StartedAt        *time.Time
+	CompletedAt      *time.Time
+	DurationMeasured bool
 }
 
 // ===== 生命周期节点（固定顺序，用于画链路图 + 计算节点间时延） =====
 const (
 	NodeIngest          = "ingest"
 	NodeAIDispatch      = "ai_dispatch"
+	NodeAIResult        = "ai_result"
 	NodeOutboundEnqueue = "outbound_enqueue"
 	NodeInboxSync       = "inbox_sync"
 	NodeDownlinkFetch   = "downlink_fetch"
@@ -54,6 +57,7 @@ const (
 var nodeOrder = map[string]int{
 	NodeIngest:          1,
 	NodeAIDispatch:      2,
+	NodeAIResult:        2,
 	NodeOutboundEnqueue: 3,
 	NodeInboxSync:       4,
 	NodeDownlinkFetch:   5,
@@ -71,6 +75,7 @@ func NodeOrder(node string) int {
 var nodeLabels = map[string]string{
 	NodeIngest:          "消息上报接入",
 	NodeAIDispatch:      "AI 处理编排",
+	NodeAIResult:        "生成结果安全出口",
 	NodeOutboundEnqueue: "AI 回复出站入队",
 	NodeInboxSync:       "收件箱同步",
 	NodeDownlinkFetch:   "下行出库拉取",
@@ -99,28 +104,34 @@ var (
 const sinkBuffer = 8192
 
 type pendingSpan struct {
-	tenantID       uint
-	carrier        *Carrier
-	traceID        string
-	conversationID string
-	accountID      string
-	channel        string
-	node           string
-	nodeOrder      int
-	direction      string
-	msgID          string
-	input          any
-	output         any
-	durationMs     int64
-	expected       string
-	status         string
-	abnormal       string
-	errorStr       string
-	parentNode     string
-	spanKind       string
-	turnIndex      int
-	toolName       string
-	agentID        string
+	tenantID         uint
+	carrier          *Carrier
+	traceID          string
+	conversationID   string
+	accountID        string
+	channel          string
+	node             string
+	nodeOrder        int
+	direction        string
+	msgID            string
+	input            any
+	output           any
+	durationMs       int64
+	expected         string
+	status           string
+	abnormal         string
+	errorStr         string
+	parentNode       string
+	spanKind         string
+	turnIndex        int
+	toolName         string
+	agentID          string
+	turnID           string
+	answerAttempt    int
+	deliveryAttempt  int
+	startedAt        *time.Time
+	completedAt      *time.Time
+	durationMeasured bool
 }
 
 // Init 启动后台批量落库 worker。
@@ -259,12 +270,16 @@ type carrierKey struct{}
 
 // Carrier 一次业务处理的归属信息，随 context 透传。
 type Carrier struct {
-	TraceID        string
-	ConversationID string
-	AccountID      string
-	Channel        string
-	MsgID          string
-	Direction      string
+	TenantID        uint
+	TraceID         string
+	ConversationID  string
+	AccountID       string
+	Channel         string
+	MsgID           string
+	Direction       string
+	TurnID          string
+	AnswerAttempt   int
+	DeliveryAttempt int
 }
 
 // NewCarrier 构造新载体（自动生成 trace_id）。
@@ -392,7 +407,7 @@ type Span struct {
 func Start(ctx context.Context, node string) *Span {
 	return &Span{
 		ctx:     ctx,
-		carrier: CarrierFromContext(ctx),
+		carrier: CarrierFromContext(ctx).Child(),
 		node:    node,
 		order:   NodeOrder(node),
 		kind:    model.SpanKindLifecycle,
@@ -480,55 +495,75 @@ func (s *Span) toPending(dur int64, status, errStr string) pendingSpan {
 		ab = errStr
 	}
 	tenantID, _ := tenant.FromContext(s.ctx)
+	started := s.start
+	completed := time.Now()
+	msgID := s.msgID
+	if msgID == "" {
+		msgID = c.MsgID
+	}
 	return pendingSpan{
-		tenantID:       tenantID,
-		carrier:        c,
-		traceID:        tid,
-		conversationID: c.ConversationID,
-		accountID:      c.AccountID,
-		channel:        c.Channel,
-		node:           s.node,
-		nodeOrder:      s.order,
-		direction:      s.direction,
-		msgID:          s.msgID,
-		input:          s.input,
-		output:         s.output,
-		durationMs:     dur,
-		expected:       s.expected,
-		status:         status,
-		abnormal:       ab,
-		errorStr:       errStr,
-		parentNode:     parent,
-		spanKind:       kind,
-		turnIndex:      s.turn,
-		toolName:       s.tool,
-		agentID:        s.agent,
+		tenantID:         tenantID,
+		carrier:          c,
+		traceID:          tid,
+		conversationID:   c.ConversationID,
+		accountID:        c.AccountID,
+		channel:          c.Channel,
+		node:             s.node,
+		nodeOrder:        s.order,
+		direction:        s.direction,
+		msgID:            msgID,
+		input:            s.input,
+		output:           s.output,
+		durationMs:       dur,
+		expected:         s.expected,
+		status:           status,
+		abnormal:         ab,
+		errorStr:         errStr,
+		parentNode:       parent,
+		spanKind:         kind,
+		turnIndex:        s.turn,
+		toolName:         s.tool,
+		agentID:          s.agent,
+		turnID:           c.TurnID,
+		answerAttempt:    c.AnswerAttempt,
+		deliveryAttempt:  c.DeliveryAttempt,
+		startedAt:        &started,
+		completedAt:      &completed,
+		durationMeasured: !s.start.IsZero() && dur >= 0,
 	}
 }
 
 func toModelFromPending(p pendingSpan) *model.MessageTrace {
+	started, completed, measured := observationTimes(p.startedAt, p.completedAt, p.durationMeasured, p.durationMs)
 	return &model.MessageTrace{
-		TenantID:       p.tenantID,
-		TraceID:        p.traceID,
-		ConversationID: p.conversationID,
-		AccountID:      p.accountID,
-		Channel:        p.channel,
-		Node:           p.node,
-		NodeOrder:      p.nodeOrder,
-		Direction:      p.direction,
-		MsgID:          p.msgID,
-		Input:          textutil.TruncateText(toJSON(p.input), textutil.DefaultMaxBytes),
-		Output:         textutil.TruncateText(toJSON(p.output), textutil.DefaultMaxBytes),
-		DurationMs:     p.durationMs,
-		Expected:       textutil.TruncateText(p.expected, textutil.DefaultMaxBytes),
-		Status:         p.status,
-		Abnormal:       textutil.TruncateText(p.abnormal, textutil.DefaultMaxBytes),
-		Error:          textutil.TruncateText(p.errorStr, textutil.DefaultMaxBytes),
-		SpanKind:       p.spanKind,
-		ParentNode:     p.parentNode,
-		TurnIndex:      p.turnIndex,
-		ToolName:       p.toolName,
-		AgentID:        p.agentID,
+		TenantID:         p.tenantID,
+		TraceID:          p.traceID,
+		ConversationID:   p.conversationID,
+		AccountID:        p.accountID,
+		Channel:          p.channel,
+		Node:             p.node,
+		NodeOrder:        p.nodeOrder,
+		Direction:        p.direction,
+		MsgID:            p.msgID,
+		Input:            tracePayloadJSON(p.input),
+		Output:           tracePayloadJSON(p.output),
+		DurationMs:       p.durationMs,
+		TurnID:           p.turnID,
+		AnswerAttempt:    p.answerAttempt,
+		DeliveryAttempt:  p.deliveryAttempt,
+		TimingVersion:    TimingVersion,
+		DurationMeasured: measured,
+		StartedAt:        started,
+		CompletedAt:      completed,
+		Expected:         textutil.TruncateText(p.expected, textutil.DefaultMaxBytes),
+		Status:           p.status,
+		Abnormal:         textutil.TruncateText(safeTraceText(p.abnormal), textutil.DefaultMaxBytes),
+		Error:            textutil.TruncateText(safeTraceText(p.errorStr), textutil.DefaultMaxBytes),
+		SpanKind:         p.spanKind,
+		ParentNode:       p.parentNode,
+		TurnIndex:        p.turnIndex,
+		ToolName:         p.toolName,
+		AgentID:          p.agentID,
 	}
 }
 
@@ -536,21 +571,27 @@ func toModelFromPending(p pendingSpan) *model.MessageTrace {
 //
 // 业务重构后推荐使用流式 Span API；此处保留以兼容既有调用点与单测。
 type NodeSpan struct {
-	TraceID        string
-	ConversationID string
-	AccountID      string
-	Channel        string
-	Node           string
-	NodeOrder      int
-	Direction      string
-	MsgID          string
-	Input          any
-	Output         any
-	DurationMs     int64
-	Expected       string
-	Status         string
-	Abnormal       string
-	Error          string
+	TraceID          string
+	ConversationID   string
+	AccountID        string
+	Channel          string
+	Node             string
+	NodeOrder        int
+	Direction        string
+	MsgID            string
+	Input            any
+	Output           any
+	DurationMs       int64
+	Expected         string
+	Status           string
+	Abnormal         string
+	Error            string
+	StartedAt        *time.Time
+	CompletedAt      *time.Time
+	DurationMeasured bool
+	TurnID           string
+	AnswerAttempt    int
+	DeliveryAttempt  int
 }
 
 // 节点状态常量（兼容既有调用点 tracing.StatusOk / tracing.StatusAbnormal）。
@@ -561,8 +602,68 @@ const (
 	StatusSkipped  = "skipped"
 )
 
-// RecordNode 记录一个生命周期节点 span（异步非阻塞）。
+// RecordNodeContext 保留兼容直写的截止时间；异步模式成功仅表示已接收，非已落库。
+func RecordNodeContext(ctx context.Context, span NodeSpan) error {
+	if ctx == nil || tenant.IsSystemScope(ctx) {
+		return fmt.Errorf("controlled tracing requires a tenant context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return fmt.Errorf("controlled tracing requires a confirmed tenant")
+	}
+	carrier := CarrierFromContext(ctx)
+	if carrier != nil && carrier.TenantID != 0 && carrier.TenantID != tenantID {
+		return fmt.Errorf("controlled tracing carrier tenant mismatch")
+	}
+	p := nodeToPending(ctx, span)
+	p.tenantID = tenantID
+	if spanCh == nil {
+		return writeNodeContext(ctx, p)
+	}
+	// 有界sink沿用原租户投递，绝不为等待容量而阻塞业务。
+	atomic.AddInt64(&published, 1)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case spanCh <- p:
+	default:
+		atomic.AddInt64(&dropped, 1)
+		return fmt.Errorf("controlled tracing capacity exhausted")
+	}
+	return nil
+}
+
+func writeNodeContext(ctx context.Context, p pendingSpan) error {
+	if ctx == nil || tenant.IsSystemScope(ctx) {
+		return fmt.Errorf("controlled tracing requires a tenant context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 || p.tenantID != tenantID {
+		return fmt.Errorf("controlled tracing tenant mismatch")
+	}
+	database := db.GetDB()
+	if database == nil {
+		return gorm.ErrInvalidDB
+	}
+	err := database.WithContext(tenant.OnlyTenant(ctx, tenantID)).Create(toModelFromPending(p)).Error
+	if err != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+// RecordNode 保留旧节点写入语义。
 func RecordNode(ctx context.Context, span NodeSpan) {
+	Publish(nodeToPending(ctx, span))
+}
+
+func nodeToPending(ctx context.Context, span NodeSpan) pendingSpan {
 	carrier := CarrierFromContext(ctx)
 	if carrier == nil {
 		carrier = &Carrier{}
@@ -585,27 +686,45 @@ func RecordNode(ctx context.Context, span NodeSpan) {
 	if span.Status == "" {
 		span.Status = StatusOk
 	}
+	if span.TurnID == "" {
+		span.TurnID = carrier.TurnID
+	}
+	if span.AnswerAttempt == 0 {
+		span.AnswerAttempt = carrier.AnswerAttempt
+	}
+	if span.DeliveryAttempt == 0 {
+		span.DeliveryAttempt = carrier.DeliveryAttempt
+	}
+	if span.MsgID == "" {
+		span.MsgID = carrier.MsgID
+	}
 	tenantID, _ := tenant.FromContext(ctx)
-	Publish(pendingSpan{
-		tenantID:       tenantID,
-		carrier:        carrier,
-		traceID:        span.TraceID,
-		conversationID: span.ConversationID,
-		accountID:      span.AccountID,
-		channel:        span.Channel,
-		node:           span.Node,
-		nodeOrder:      span.NodeOrder,
-		direction:      span.Direction,
-		msgID:          span.MsgID,
-		input:          span.Input,
-		output:         span.Output,
-		durationMs:     span.DurationMs,
-		expected:       span.Expected,
-		status:         span.Status,
-		abnormal:       span.Abnormal,
-		errorStr:       span.Error,
-		spanKind:       model.SpanKindLifecycle,
-	})
+	return pendingSpan{
+		tenantID:         tenantID,
+		carrier:          carrier,
+		traceID:          span.TraceID,
+		conversationID:   span.ConversationID,
+		accountID:        span.AccountID,
+		channel:          span.Channel,
+		node:             span.Node,
+		nodeOrder:        span.NodeOrder,
+		direction:        span.Direction,
+		msgID:            span.MsgID,
+		input:            span.Input,
+		output:           span.Output,
+		durationMs:       span.DurationMs,
+		expected:         span.Expected,
+		status:           span.Status,
+		abnormal:         span.Abnormal,
+		errorStr:         span.Error,
+		spanKind:         model.SpanKindLifecycle,
+		turnID:           span.TurnID,
+		answerAttempt:    span.AnswerAttempt,
+		deliveryAttempt:  span.DeliveryAttempt,
+		startedAt:        span.StartedAt,
+		completedAt:      span.CompletedAt,
+		durationMeasured: span.DurationMeasured,
+	}
 }
 
 // ReportToolCall 由工具层 observer（tooluse.ToolTraceSink）调用，将一次工具/轮次事件转为层级 span。
@@ -636,70 +755,143 @@ func ReportToolCall(ctx context.Context, ev ToolTraceEvent) {
 	}
 	tenantID, _ := tenant.FromContext(ctx)
 	Publish(pendingSpan{
-		tenantID:       tenantID,
-		carrier:        carrier,
-		traceID:        tid,
-		conversationID: carrier.ConversationID,
-		accountID:      carrier.AccountID,
-		channel:        carrier.Channel,
-		node:           kind,
-		nodeOrder:      NodeOrder(NodeAIDispatch),
-		direction:      "outbound",
-		input:          ev.Input,
-		output:         ev.Output,
-		durationMs:     ev.DurationMs,
-		status:         status,
-		abnormal:       ev.Error,
-		errorStr:       ev.Error,
-		parentNode:     NodeAIDispatch,
-		spanKind:       kind,
-		turnIndex:      ev.TurnIndex,
-		toolName:       ev.ToolName,
-		agentID:        ev.AgentID,
+		tenantID:         tenantID,
+		carrier:          carrier,
+		traceID:          tid,
+		conversationID:   carrier.ConversationID,
+		accountID:        carrier.AccountID,
+		channel:          carrier.Channel,
+		node:             kind,
+		nodeOrder:        NodeOrder(NodeAIDispatch),
+		direction:        "outbound",
+		input:            ev.Input,
+		output:           ev.Output,
+		durationMs:       ev.DurationMs,
+		status:           status,
+		abnormal:         ev.Error,
+		errorStr:         ev.Error,
+		parentNode:       NodeAIDispatch,
+		spanKind:         kind,
+		turnIndex:        ev.TurnIndex,
+		toolName:         ev.ToolName,
+		agentID:          ev.AgentID,
+		msgID:            carrier.MsgID,
+		turnID:           carrier.TurnID,
+		answerAttempt:    carrier.AnswerAttempt,
+		deliveryAttempt:  carrier.DeliveryAttempt,
+		startedAt:        ev.StartedAt,
+		completedAt:      ev.CompletedAt,
+		durationMeasured: ev.DurationMeasured,
 	})
 }
 
-// RecordDownlinkFetchBatch 记录一次下行出库拉取（按 msg_id 去重：同一 msg 只记一次）。
+// RecordDownlinkFetchBatch 兼容没有操作计时的旧调用，不从写库时间反推认领耗时。
 func RecordDownlinkFetchBatch(ctx context.Context, channel, accountID string, hubs []*model.MessageHub) {
-	if len(hubs) == 0 {
-		return
-	}
-	carrier := CarrierFromContext(ctx)
-	if carrier == nil {
-		carrier = &Carrier{}
-	}
-	var existing []string
-	ids := make([]string, 0, len(hubs))
-	for _, h := range hubs {
-		ids = append(ids, h.MsgID)
-	}
-	if d := db.GetDB(); d != nil {
-		if err := d.WithContext(dbCtx(ctx)).Model(&model.MessageTrace{}).
-			Where("node = ? AND msg_id IN ?", NodeDownlinkFetch, ids).
-			Pluck("msg_id", &existing).Error; err != nil {
-			logger.Errorf("[tracing] RecordDownlinkFetchBatch dedup query failed (best-effort): %v", err)
+	RecordDownlinkClaimBatch(ctx, channel, accountID, hubs, nil, nil)
+}
+
+// RecordDownlinkClaimBatch 每个认领尝试独立可见；去重不参与业务投递决策。
+func RecordDownlinkClaimBatch(
+	ctx context.Context,
+	channel, accountID string,
+	hubs []*model.MessageHub,
+	started, completed *time.Time,
+) {
+	tenantID, _ := tenant.FromContext(ctx)
+	if tenantID == 0 {
+		if tenant.IsMultiTenant() {
+			return
 		}
+		tenantID = tenant.DefaultTenantID
 	}
-	existSet := make(map[string]struct{}, len(existing))
-	for _, e := range existing {
-		existSet[e] = struct{}{}
+	ctx = tenant.WithTenantID(dbCtx(ctx), tenantID)
+	type claimKey struct {
+		tenantID                                  uint
+		channel, accountID, conversationID, msgID string
+		attempt                                   int
 	}
+	type observation struct {
+		hub     model.MessageHub
+		carrier *Carrier
+		key     claimKey
+	}
+	seen := make(map[claimKey]struct{}, len(hubs))
+	batch := make([]observation, 0, len(hubs))
+	msgIDs := make([]string, 0, len(hubs))
 	for _, h := range hubs {
-		if _, ok := existSet[h.MsgID]; ok {
+		if h == nil || h.MsgID == "" || (h.TenantID != 0 && h.TenantID != tenantID) {
 			continue
 		}
-		existSet[h.MsgID] = struct{}{}
-		RecordNode(ctx, NodeSpan{
-			TraceID:        carrier.TraceID,
-			ConversationID: h.ConversationID,
-			AccountID:      accountID,
-			Channel:        channel,
-			Node:           NodeDownlinkFetch,
-			NodeOrder:      NodeOrder(NodeDownlinkFetch),
-			Direction:      "outbound",
-			MsgID:          h.MsgID,
-			Expected:       "从桥接出站队列取出待下发消息",
-			Status:         "ok",
+		copyHub := *h
+		copyHub.TenantID = tenantID
+		if copyHub.Platform == "" {
+			copyHub.Platform = channel
+		}
+		if copyHub.AccountID == "" {
+			copyHub.AccountID = accountID
+		}
+		if copyHub.Direction == "" {
+			copyHub.Direction = "outbound"
+		}
+		if copyHub.Platform != channel || copyHub.AccountID != accountID {
+			continue
+		}
+		c := CarrierForHub(ctx, &copyHub)
+		if c.TraceID == "" {
+			c.TraceID = TraceIDFromContext(ctx)
+		}
+		key := claimKey{tenantID, channel, accountID, h.ConversationID, h.MsgID, h.PushAttempts}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		batch = append(batch, observation{copyHub, c, key})
+		msgIDs = append(msgIDs, h.MsgID)
+	}
+	if len(batch) == 0 {
+		return
+	}
+	existing := make(map[claimKey]struct{}, len(batch))
+	if d := db.GetDB(); d != nil {
+		rows := []model.MessageTrace{}
+		err := d.WithContext(ctx).Model(&model.MessageTrace{}).
+			Select("tenant_id, channel, account_id, conversation_id, msg_id, delivery_attempt").
+			Where("tenant_id = ? AND node = ? AND channel = ? AND account_id = ? AND msg_id IN ?",
+				tenantID, NodeDownlinkFetch, channel, accountID, msgIDs).
+			Find(&rows).Error
+		if err != nil {
+			logger.Warnf("[tracing] claim observation dedup unavailable: %v", err)
+		} else {
+			for _, row := range rows {
+				existing[claimKey{row.TenantID, row.Channel, row.AccountID, row.ConversationID, row.MsgID, row.DeliveryAttempt}] = struct{}{}
+			}
+		}
+	}
+	for _, item := range batch {
+		if _, ok := existing[item.key]; ok {
+			continue
+		}
+		h, c := item.hub, item.carrier
+		var duration int64
+		if started != nil && completed != nil {
+			duration = completed.Sub(*started).Milliseconds()
+		}
+		RecordNode(WithCarrier(ctx, c), NodeSpan{
+			TraceID:          c.TraceID,
+			ConversationID:   h.ConversationID,
+			AccountID:        accountID,
+			Channel:          channel,
+			Node:             NodeDownlinkFetch,
+			NodeOrder:        NodeOrder(NodeDownlinkFetch),
+			Direction:        "outbound",
+			MsgID:            h.MsgID,
+			StartedAt:        started,
+			CompletedAt:      completed,
+			DurationMs:       duration,
+			DurationMeasured: started != nil && completed != nil,
+			Output:           map[string]any{"claimed": h.ID != 0 && h.ClaimedAt != nil, "delivery_attempt": h.PushAttempts},
+			Expected:         "从桥接出站队列取出待下发消息",
+			Status:           "ok",
 		})
 	}
 }
@@ -770,23 +962,6 @@ func StartSpan() *SpanTimer { return &SpanTimer{start: time.Now()} }
 
 // ElapsedMs 返回自 StartSpan 以来的毫秒数。
 func (t *SpanTimer) ElapsedMs() int64 { return time.Since(t.start).Milliseconds() }
-
-func toJSON(v any) string {
-	if v == nil {
-		return ""
-	}
-	switch s := v.(type) {
-	case string:
-		return s
-	case []byte:
-		return string(s)
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(b)
-}
 
 func sha1Sum(s string) string {
 	h := sha1.New()

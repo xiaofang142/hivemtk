@@ -138,10 +138,17 @@ func TestResolveTelegramWebhookURLForTenantBase(t *testing.T) {
 		t.Errorf("无租户 ctx: got %q, want 平台默认基址", got)
 	}
 
-	// env 仍是平台级最高优先：租户覆盖不得压过部署显式声明
+	// B18 翻转（2026-11-17 SaaS 配置面改造）：参数中心（租户覆盖）优先于部署 env——
+	// A 配了自己的回调域名后，部署 env 的全局单值不得再把它顶掉；env 只在
+	// 租户没配（provider 返回空）时兜底。
 	_ = os.Setenv("PUBLIC_BASE_URL", "https://env.example.com")
-	if got, _ := ResolveTelegramWebhookURLFor(ctxA, acc); got != "https://env.example.com/api/webhook/telegram/7" {
-		t.Errorf("env 应压过租户覆盖: got %q, want https://env.example.com/api/webhook/telegram/7", got)
+	if got, _ := ResolveTelegramWebhookURLFor(ctxA, acc); got != "https://t71.example.com/api/webhook/telegram/7" {
+		t.Errorf("租户覆盖应压过 env（B18）: got %q, want https://t71.example.com/api/webhook/telegram/7", got)
+	}
+	// provider 未配置的租户（ctxB 有 72 基址；换一个 provider 未覆盖的租户）回落 env。
+	ctxEmpty := tenant.WithTenantID(context.Background(), 777)
+	if got, _ := ResolveTelegramWebhookURLFor(ctxEmpty, acc); got != "https://env.example.com/api/webhook/telegram/7" {
+		t.Errorf("租户未配时应回落 env: got %q, want https://env.example.com/api/webhook/telegram/7", got)
 	}
 }
 

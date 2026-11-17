@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -323,25 +321,22 @@ func (s *EmailSendService) sendActualEmail(ctx context.Context, email *model.Ema
 		}
 	}
 
-	// 默认通道（R2 路径 A 接线 + F3 备用通道 DB 化）：env > DB > 无。
-	// env 保留为部署层应急开关；DB 是「运营在 /email/smtp 页面配的账号」，
-	// 接上之后运营改页面即驱动发送、免重启。表空/全不可用时 resolveSmtpFromDB 返 nil，
-	// 回落下面的报错分支，行为与接线前（无 env 即报错）一致。
+	// 默认通道（R2 路径 A 接线 + F3 备用通道 DB 化；SaaS 配置面改造 B3，2026-11-17）：
+	// 显式 SmtpID > DB > 无。EMAIL_163_*/QQ_EMAIL*/SMTP_* 环境变量回退已退役——
+	// DB 是「运营在 /email/smtp 页面配的账号」，改页面即驱动发送、免重启。
+	// 表空/全不可用时 resolveSmtpFromDB 返 nil，回落下面的报错分支（fail-closed）。
 	//
-	// F3：两条备用通道（163/QQ）同样可 DB 驱动——email_smtp 表里 Name 为
-	// "env:163" / "env:qq" 的行按 env 链同序顶替对应 env 通道（见 resolveSmtpFromDB）。
-	// 存量部署没有这两个名字的行，取径逐字节不变。
-	if smtpConfig == nil {
-		smtpConfig = resolveSmtpFromEnv()
-	}
+	// F3：两条备用通道（163/QQ）同样 DB 驱动——email_smtp 表里 Name 为
+	// "env:163" / "env:qq"（历史命名，语义已变为「命名备用通道」）的行
+	// 按 163 → QQ 同序优先于任意首条可用行被选中（见 resolveSmtpFromDB）。
 	if smtpConfig == nil {
 		smtpConfig = s.resolveSmtpFromDB(ctx)
 	}
 
 	if smtpConfig == nil {
-		logger.Errorf("邮件发送失败 [%s]: 无任何可用 SMTP 配置（SmtpID=%q 且未配置 EMAIL_163_*/QQ_EMAIL_*/SMTP_* 环境变量，email_smtp 表也无可用行）",
+		logger.Errorf("邮件发送失败 [%s]: 无任何可用 SMTP 配置（SmtpID=%q，email_smtp 表也无可用行）",
 			email.ID, email.SmtpID)
-		return fmt.Errorf("邮件发送失败：未找到可用的 SMTP 配置（请配置 SmtpID、EMAIL_163_*/QQ_EMAIL_*/SMTP_* 环境变量，或在邮件账号页新增一条 SMTP）")
+		return fmt.Errorf("邮件发送失败：未找到可用的 SMTP 配置（请配置 SmtpID，或在邮件账号页新增一条 SMTP）")
 	}
 
 	m := s.buildEmailMessage(ctx, smtpConfig, email)
@@ -496,51 +491,5 @@ func (s *EmailSendService) unsubscribeLink(ctx context.Context, to string) strin
 	return link
 }
 
-func resolveSmtpFromEnv() *model.EmailSmtp {
-	if user := os.Getenv("EMAIL_163_USER"); user != "" {
-		if pwd := os.Getenv("EMAIL_163_PASSWORD"); pwd != "" {
-			host := os.Getenv("EMAIL_163_SMTP_HOST")
-			if host == "" {
-				host = "smtp.163.com"
-			}
-			return &model.EmailSmtp{
-				Name:     "env:163",
-				Server:   host,
-				Port:     465,
-				Username: user,
-				Password: pwd,
-			}
-		}
-	}
-	if qq := os.Getenv("QQ_EMAIL"); qq != "" {
-		if pwd := os.Getenv("QQ_EMAIL_PASSWORD"); pwd != "" {
-			return &model.EmailSmtp{
-				Name:     "env:qq",
-				Server:   "smtp.qq.com",
-				Port:     465,
-				Username: qq,
-				Password: pwd,
-			}
-		}
-	}
-	if host := os.Getenv("SMTP_HOST"); host != "" {
-		if user := os.Getenv("SMTP_USER"); user != "" {
-			if pwd := os.Getenv("SMTP_PASSWORD"); pwd != "" {
-				port := 465
-				if p := os.Getenv("SMTP_PORT"); p != "" {
-					if n, err := strconv.Atoi(p); err == nil && n > 0 {
-						port = n
-					}
-				}
-				return &model.EmailSmtp{
-					Name:     "env:smtp",
-					Server:   host,
-					Port:     port,
-					Username: user,
-					Password: pwd,
-				}
-			}
-		}
-	}
-	return nil
-}
+// resolveSmtpFromEnv 已退役（SaaS 配置面改造 B3，2026-11-17）：EMAIL_163_*/QQ_EMAIL*/SMTP_*
+// 环境变量回退整体删除，发信通道唯一来源是显式 SmtpID 与 email_smtp 表。

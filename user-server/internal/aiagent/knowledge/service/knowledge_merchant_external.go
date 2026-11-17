@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -267,10 +266,15 @@ func (s *KnowledgeMerchantService) fetchFeishu(ctx context.Context, docID string
 		return nil, errors.New("飞书 docID 不能为空")
 	}
 
-	appID := os.Getenv("FEISHU_APP_ID")
-	appSecret := os.Getenv("FEISHU_APP_SECRET")
+	// SaaS 配置面改造（B4，2026-11-17）：凭证改读租户级 KV（knowledge.import_credentials），
+	// FEISHU_APP_ID/FEISHU_APP_SECRET 环境变量退役——全局 env 在多租户下会串租户凭证。
+	creds, err := LoadKnowledgeImportCredentials(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("读取知识导入凭证失败: %w", err)
+	}
+	appID, appSecret := creds.FeishuAppID, creds.FeishuAppSecret
 	if appID == "" || appSecret == "" {
-		return nil, errors.New("飞书抓取未配置凭证 (FEISHU_APP_ID/FEISHU_APP_SECRET)，请通过 items 字段直接传入结构化数据")
+		return nil, errors.New("飞书抓取未配置凭证，请先在「知识库 → 外部导入凭证」配置飞书 AppID/AppSecret（或通过 items 字段直接传入结构化数据）")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -346,9 +350,14 @@ func (s *KnowledgeMerchantService) fetchNotion(ctx context.Context, pageID strin
 	}
 	_ = tok
 
-	apiKey := os.Getenv("NOTION_API_KEY")
+	// SaaS 配置面改造（B4，2026-11-17）：NOTION_API_KEY 环境变量退役，改读租户级 KV。
+	creds, err := LoadKnowledgeImportCredentials(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("读取知识导入凭证失败: %w", err)
+	}
+	apiKey := creds.NotionAPIKey
 	if apiKey == "" {
-		return nil, errors.New("notion 抓取未配置凭证 (NOTION_API_KEY)，请通过 items 字段直接传入结构化数据")
+		return nil, errors.New("notion 抓取未配置凭证，请先在「知识库 → 外部导入凭证」配置 Notion API Key（或通过 items 字段直接传入结构化数据）")
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}

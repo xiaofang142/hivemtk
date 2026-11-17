@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"sort"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tracing"
+	"hivemtk-user/internal/repository"
 )
 
 // ErrNoDB 表示未初始化数据库句柄（测试/未连接场景）。
@@ -310,15 +310,17 @@ func Anomalies(ctx context.Context) (*AnomalyGroups, error) {
 // 按渠道节点健康：多渠道 + 每节点的响应时间、异常率
 // ───────────────────────────────────────────────────────────────────────────
 type NodeHealth struct {
-	Channel       string    `json:"channel"`
-	Node          string    `json:"node"`
-	NodeLabel     string    `json:"node_label"`
-	Total         int64     `json:"total"`
-	Abnormal      int64     `json:"abnormal"`
-	AbnormalRate  float64   `json:"abnormal_rate"`
-	AvgDurationMs int64     `json:"avg_duration_ms"`
-	P95DurationMs int64     `json:"p95_duration_ms"`
-	LastAbnormal  time.Time `json:"last_abnormal_at"`
+	Channel             string    `json:"channel"`
+	Node                string    `json:"node"`
+	NodeLabel           string    `json:"node_label"`
+	Total               int64     `json:"total"`
+	Abnormal            int64     `json:"abnormal"`
+	AbnormalRate        float64   `json:"abnormal_rate"`
+	AvgDurationMs       *int64    `json:"avg_duration_ms"`
+	P95DurationMs       *int64    `json:"p95_duration_ms"`
+	MeasuredCount       int64     `json:"measured_count"`
+	MeasurementCoverage float64   `json:"measurement_coverage"`
+	LastAbnormal        time.Time `json:"last_abnormal_at"`
 }
 
 func NodeHealthByChannel(ctx context.Context) ([]NodeHealth, error) {
@@ -326,28 +328,9 @@ func NodeHealthByChannel(ctx context.Context) ([]NodeHealth, error) {
 	if d == nil {
 		return nil, ErrNoDB
 	}
-	d = d.WithContext(ctx)
 	since := time.Now().Add(-NodeHealthWindow())
-
-	type aggRow struct {
-		Channel      string
-		Node         string
-		Total        int64
-		Abnormal     int64
-		AvgMs        float64
-		P95Ms        float64
-		LastAbnormal sql.NullTime
-	}
-	var rows []aggRow
-	if err := d.Table("message_trace").
-		Select("channel, node, count(*) AS total, "+
-			"COALESCE(SUM(CASE WHEN status='abnormal' THEN 1 ELSE 0 END),0) AS abnormal, "+
-			"COALESCE(AVG(duration_ms),0) AS avg_ms, "+
-			"COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms),0) AS p95_ms, "+
-			"MAX(created_at) FILTER (WHERE status='abnormal') AS last_abnormal").
-		Where("created_at >= ?", since).
-		Group("channel, node").
-		Scan(&rows).Error; err != nil {
+	rows, err := repository.NewTraceObservationRepository(d).NodeMeasurements(ctx, since)
+	if err != nil {
 		return nil, err
 	}
 
@@ -359,14 +342,16 @@ func NodeHealthByChannel(ctx context.Context) ([]NodeHealth, error) {
 			NodeLabel:     tracing.NodeLabel(r.Node),
 			Total:         r.Total,
 			Abnormal:      r.Abnormal,
-			AvgDurationMs: int64(r.AvgMs),
-			P95DurationMs: int64(r.P95Ms),
+			AvgDurationMs: r.AvgMs,
+			P95DurationMs: r.P95Ms,
+			MeasuredCount: r.MeasuredCount,
 		}
 		if r.Total > 0 {
 			nh.AbnormalRate = float64(r.Abnormal) / float64(r.Total)
+			nh.MeasurementCoverage = float64(r.MeasuredCount) / float64(r.Total)
 		}
-		if r.LastAbnormal.Valid {
-			nh.LastAbnormal = r.LastAbnormal.Time
+		if r.LastAbnormal != nil {
+			nh.LastAbnormal = *r.LastAbnormal
 		}
 		out = append(out, nh)
 	}
@@ -383,26 +368,35 @@ func NodeHealthByChannel(ctx context.Context) ([]NodeHealth, error) {
 // 单会话 / 单轮 生命周期视图（核心：节点入参/出参/响应时间/预期/异常 + 节点间时延）
 // ───────────────────────────────────────────────────────────────────────────
 type LifecycleNode struct {
-	TraceID        string    `json:"trace_id"`
-	ConversationID string    `json:"conversation_id"`
-	Node           string    `json:"node"`
-	NodeLabel      string    `json:"node_label"`
-	NodeOrder      int       `json:"node_order"`
-	Channel        string    `json:"channel"`
-	Direction      string    `json:"direction"`
-	MsgID          string    `json:"msg_id"`
-	Input          string    `json:"input"`
-	Output         string    `json:"output"`
-	DurationMs     int64     `json:"duration_ms"`
-	Expected       string    `json:"expected"`
-	Status         string    `json:"status"`
-	Abnormal       string    `json:"abnormal"`
-	Error          string    `json:"error"`
-	CreatedAt      time.Time `json:"created_at"`
-	GapMs          *int64    `json:"gap_ms_from_prev"`
+	TurnID           string     `json:"turn_id"`
+	AnswerAttempt    int        `json:"answer_attempt"`
+	DeliveryAttempt  int        `json:"delivery_attempt"`
+	DurationMeasured bool       `json:"duration_measured"`
+	TimingVersion    int        `json:"timing_version"`
+	StartedAt        *time.Time `json:"started_at"`
+	CompletedAt      *time.Time `json:"completed_at"`
+	TraceID          string     `json:"trace_id"`
+	ConversationID   string     `json:"conversation_id"`
+	Node             string     `json:"node"`
+	NodeLabel        string     `json:"node_label"`
+	NodeOrder        int        `json:"node_order"`
+	Channel          string     `json:"channel"`
+	Direction        string     `json:"direction"`
+	MsgID            string     `json:"msg_id"`
+	Input            string     `json:"input"`
+	Output           string     `json:"output"`
+	DurationMs       int64      `json:"duration_ms"`
+	Expected         string     `json:"expected"`
+	Status           string     `json:"status"`
+	Abnormal         string     `json:"abnormal"`
+	Error            string     `json:"error"`
+	CreatedAt        time.Time  `json:"created_at"`
+	GapMs            *int64     `json:"gap_ms_from_prev"`
 }
 
 type LifecycleData struct {
+	TurnID         string          `json:"turn_id"`
+	AccountID      string          `json:"account_id"`
 	TraceID        string          `json:"trace_id"`
 	ConversationID string          `json:"conversation_id"`
 	Channel        string          `json:"channel"`
@@ -419,22 +413,11 @@ func Lifecycle(ctx context.Context, conversationID, traceID string, limit int) (
 	if d == nil {
 		return nil, ErrNoDB
 	}
-	d = d.WithContext(ctx)
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
-	q := d.Model(&model.MessageTrace{})
-	if conversationID != "" {
-		q = q.Where("conversation_id = ?", conversationID)
-	} else if traceID != "" {
-		q = q.Where("trace_id = ?", traceID)
-	} else {
-		return nil, errors.New("conversation_id 或 trace_id 必填其一")
-	}
-	var traces []model.MessageTrace
-	if err := q.Order("trace_id, node_order, id").
-		Limit(limit * 12).
-		Find(&traces).Error; err != nil {
+	traces, err := repository.NewTraceObservationRepository(d).LifecycleRows(ctx, conversationID, traceID, limit)
+	if err != nil {
 		return nil, err
 	}
 	if len(traces) == 0 {
@@ -444,40 +427,60 @@ func Lifecycle(ctx context.Context, conversationID, traceID string, limit int) (
 	groups := map[string][]model.MessageTrace{}
 	order := []string{}
 	for _, t := range traces {
-		if _, ok := groups[t.TraceID]; !ok {
-			order = append(order, t.TraceID)
+		key := repository.TraceObservationGroupKey(t)
+		if _, ok := groups[key]; !ok {
+			order = append(order, key)
 		}
-		groups[t.TraceID] = append(groups[t.TraceID], t)
+		groups[key] = append(groups[key], t)
 	}
 
 	out := make([]LifecycleData, 0, len(order))
-	for _, tid := range order {
-		items := groups[tid]
-		lc := LifecycleData{TraceID: tid, ConversationID: items[0].ConversationID, Channel: items[0].Channel}
+	for _, key := range order {
+		items := groups[key]
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].NodeOrder != items[j].NodeOrder {
+				return items[i].NodeOrder < items[j].NodeOrder
+			}
+			if items[i].AnswerAttempt != items[j].AnswerAttempt {
+				return items[i].AnswerAttempt < items[j].AnswerAttempt
+			}
+			return items[i].ID < items[j].ID
+		})
+		lc := LifecycleData{TraceID: items[0].TraceID, TurnID: items[0].TurnID, AccountID: items[0].AccountID, ConversationID: items[0].ConversationID, Channel: items[0].Channel}
 		var prev *LifecycleNode
-		var ingestAt, deliveredAt *time.Time
 		for _, t := range items {
 			ln := LifecycleNode{
-				TraceID:        tid,
-				ConversationID: items[0].ConversationID,
-				Node:           t.Node,
-				NodeLabel:      tracing.NodeLabel(t.Node),
-				NodeOrder:      t.NodeOrder,
-				Channel:        t.Channel,
-				Direction:      t.Direction,
-				MsgID:          t.MsgID,
-				Input:          t.Input,
-				Output:         t.Output,
-				DurationMs:     t.DurationMs,
-				Expected:       t.Expected,
-				Status:         t.Status,
-				Abnormal:       t.Abnormal,
-				Error:          t.Error,
-				CreatedAt:      t.CreatedAt,
+				TraceID:          t.TraceID,
+				TurnID:           t.TurnID,
+				AnswerAttempt:    t.AnswerAttempt,
+				DeliveryAttempt:  t.DeliveryAttempt,
+				DurationMeasured: t.DurationMeasured,
+				TimingVersion:    t.TimingVersion,
+				StartedAt:        t.StartedAt,
+				CompletedAt:      t.CompletedAt,
+				ConversationID:   items[0].ConversationID,
+				Node:             t.Node,
+				NodeLabel:        tracing.NodeLabel(t.Node),
+				NodeOrder:        t.NodeOrder,
+				Channel:          t.Channel,
+				Direction:        t.Direction,
+				MsgID:            t.MsgID,
+				Input:            t.Input,
+				Output:           t.Output,
+				DurationMs:       t.DurationMs,
+				Expected:         t.Expected,
+				Status:           t.Status,
+				Abnormal:         t.Abnormal,
+				Error:            t.Error,
+				CreatedAt:        t.CreatedAt,
 			}
-			if prev != nil {
-				g := t.CreatedAt.Sub(prev.CreatedAt).Milliseconds()
-				ln.GapMs = &g
+			if prev != nil && prev.CompletedAt != nil && ln.StartedAt != nil && ln.DurationMeasured && prev.DurationMeasured &&
+				ln.TimingVersion > 0 && prev.TimingVersion > 0 && ln.AnswerAttempt == prev.AnswerAttempt &&
+				ln.DeliveryAttempt == prev.DeliveryAttempt && ln.MsgID != "" && ln.MsgID == prev.MsgID {
+				g := ln.StartedAt.Sub(*prev.CompletedAt).Milliseconds()
+				if g >= 0 {
+					ln.GapMs = &g
+				}
 			}
 			if t.Status == "abnormal" {
 				lc.HasAbnormal = true
@@ -485,22 +488,11 @@ func Lifecycle(ctx context.Context, conversationID, traceID string, limit int) (
 					lc.AbnormalDetail = tracing.NodeLabel(t.Node) + "：" + t.Abnormal
 				}
 			}
-			if t.Node == "ingest" {
-				at := t.CreatedAt
-				ingestAt = &at
-			}
-			if t.Node == "delivered_ack" {
-				at := t.CreatedAt
-				deliveredAt = &at
-			}
 			lc.Nodes = append(lc.Nodes, ln)
 			p := ln
 			prev = &p
 		}
-		if ingestAt != nil && deliveredAt != nil {
-			e2e := deliveredAt.Sub(*ingestAt).Milliseconds()
-			lc.EndToEndMs = &e2e
-		}
+		lc.EndToEndMs = repository.TraceMeasuredEndToEnd(items)
 		out = append(out, lc)
 	}
 	if len(out) > limit {
@@ -513,13 +505,15 @@ func Lifecycle(ctx context.Context, conversationID, traceID string, limit int) (
 // 追踪列表（按轮次聚合，便于从总览下钻）
 // ───────────────────────────────────────────────────────────────────────────
 type TraceSummary struct {
-	TraceID        string    `json:"trace_id"`
-	ConversationID string    `json:"conversation_id"`
-	Channel        string    `json:"channel"`
-	NodeCount      int64     `json:"node_count"`
-	AbnormalCount  int64     `json:"abnormal_count"`
-	FirstAt        time.Time `json:"first_at"`
-	LastAt         time.Time `json:"last_at"`
+	TurnID         string     `json:"turn_id"`
+	AccountID      string     `json:"account_id"`
+	TraceID        string     `json:"trace_id"`
+	ConversationID string     `json:"conversation_id"`
+	Channel        string     `json:"channel"`
+	NodeCount      int64      `json:"node_count"`
+	AbnormalCount  int64      `json:"abnormal_count"`
+	FirstAt        *time.Time `json:"first_at"`
+	LastAt         *time.Time `json:"last_at"`
 }
 
 // Traces 返回最近的 trace 轮次汇总。
@@ -528,60 +522,22 @@ func Traces(ctx context.Context, limit int) ([]TraceSummary, error) {
 	if d == nil {
 		return nil, ErrNoDB
 	}
-	d = d.WithContext(ctx)
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-
-	var recent []string
-	if err := d.Model(&model.MessageTrace{}).
-		Select("trace_id").
-		Group("trace_id").
-		Order("max(id) DESC").
-		Limit(limit).
-		Pluck("trace_id", &recent).Error; err != nil {
+	rows, err := repository.NewTraceObservationRepository(d).Summaries(ctx, limit)
+	if err != nil {
 		return nil, err
 	}
-	if len(recent) == 0 {
-		return []TraceSummary{}, nil
-	}
-
-	var rows []model.MessageTrace
-	if err := d.Where("trace_id IN ?", recent).
-		Order("trace_id, node_order, id").
-		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	groups := map[string][]model.MessageTrace{}
-	for _, t := range rows {
-		groups[t.TraceID] = append(groups[t.TraceID], t)
-	}
-	out := make([]TraceSummary, 0, len(recent))
-	for _, tid := range recent {
-		rs := groups[tid]
-		if len(rs) == 0 {
-			continue
-		}
-		ts := TraceSummary{
-			TraceID:        tid,
-			ConversationID: rs[0].ConversationID,
-			Channel:        rs[0].Channel,
-			FirstAt:        rs[0].CreatedAt,
-			LastAt:         rs[len(rs)-1].CreatedAt,
-			NodeCount:      int64(len(rs)),
-		}
-		for _, r := range rs {
-			if r.Status == "abnormal" {
-				ts.AbnormalCount++
-			}
-		}
-		out = append(out, ts)
+	out := make([]TraceSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, TraceSummary{TraceID: row.TraceID, TurnID: row.TurnID, AccountID: row.AccountID,
+			ConversationID: row.ConversationID, Channel: row.Channel, NodeCount: row.NodeCount,
+			AbnormalCount: row.AbnormalCount, FirstAt: row.FirstAt, LastAt: row.LastAt})
 	}
 	return out, nil
 }
 
 // TraceTreeData 单条消息 / 单轮对话的完整链路（层级 span 已排序）。
 type TraceTreeData struct {
+	TurnID         string               `json:"turn_id"`
 	TraceID        string               `json:"trace_id"`
 	ConversationID string               `json:"conversation_id"`
 	Channel        string               `json:"channel"`
@@ -591,52 +547,19 @@ type TraceTreeData struct {
 
 // TraceTree 取一条消息 / 单轮对话的完整链路明细。
 //   - traceID 优先；为空时用 msgID 反查其所属 trace；再为空用 conversationID 取最近一轮 trace。
-func TraceTree(ctx context.Context, traceID, conversationID, msgID string) (*TraceTreeData, error) {
+func TraceTree(ctx context.Context, traceID, conversationID, msgID string, scopes ...repository.TraceObservationScope) (*TraceTreeData, error) {
 	d := db.GetDB()
 	if d == nil {
 		return nil, ErrNoDB
 	}
-	d = d.WithContext(ctx)
-	var tid string
-	switch {
-	case traceID != "":
-		tid = traceID
-	case msgID != "":
-		var ids []string
-		if err := d.Model(&model.MessageTrace{}).
-			Where("msg_id = ?", msgID).
-			Order("id DESC").Limit(1).
-			Pluck("trace_id", &ids).Error; err != nil {
-			return nil, err
-		}
-		if len(ids) > 0 {
-			tid = ids[0]
-		}
-	default:
-		if conversationID != "" {
-			var ids []string
-			if err := d.Model(&model.MessageTrace{}).
-				Where("conversation_id = ?", conversationID).
-				Order("id DESC").Limit(1).
-				Pluck("trace_id", &ids).Error; err != nil {
-				return nil, err
-			}
-			if len(ids) > 0 {
-				tid = ids[0]
-			}
-		}
-	}
-	if tid == "" {
-		return &TraceTreeData{}, nil
-	}
-	var rows []model.MessageTrace
-	if err := d.Where("trace_id = ?", tid).
-		Order("node_order ASC, turn_index ASC, id ASC").
-		Find(&rows).Error; err != nil {
+	rows, err := repository.NewTraceObservationRepository(d).TraceTreeRows(ctx, traceID, conversationID, msgID, scopes...)
+	if err != nil {
 		return nil, err
 	}
-	data := &TraceTreeData{TraceID: tid, Spans: rows}
+	data := &TraceTreeData{Spans: rows}
 	if len(rows) > 0 {
+		data.TraceID = rows[0].TraceID
+		data.TurnID = rows[0].TurnID
 		data.ConversationID = rows[0].ConversationID
 		data.Channel = rows[0].Channel
 		data.AccountID = rows[0].AccountID
@@ -648,10 +571,12 @@ func TraceTree(ctx context.Context, traceID, conversationID, msgID string) (*Tra
 // 端到端时延（按渠道）：ingest → delivered_ack 的 p50 / p95
 // ───────────────────────────────────────────────────────────────────────────
 type LifecycleLatency struct {
-	Channel    string `json:"channel"`
-	P50Ms      int64  `json:"p50_ms"`
-	P95Ms      int64  `json:"p95_ms"`
-	SampleSize int64  `json:"sample_size"`
+	Channel             string  `json:"channel"`
+	P50Ms               *int64  `json:"p50_ms"`
+	P95Ms               *int64  `json:"p95_ms"`
+	SampleSize          int64   `json:"sample_size"`
+	TotalTurns          int64   `json:"total_turns"`
+	MeasurementCoverage float64 `json:"measurement_coverage"`
 }
 
 // LifecycleLatencyByChannel 按渠道统计端到端时延（上报接入 → 送达确认）。
@@ -661,38 +586,21 @@ func LifecycleLatencyByChannel(ctx context.Context) ([]LifecycleLatency, error) 
 		return nil, ErrNoDB
 	}
 
-	d = d.WithContext(ctx)
-
-	type pair struct {
-		Channel  string
-		IngestAt time.Time
-		DelivAt  time.Time
-	}
-	var pairs []pair
-	if err := d.Table("message_trace i").
-		Select("i.channel, i.created_at AS ingest_at, o.created_at AS deliv_at").
-		Joins("JOIN message_trace o ON o.trace_id = i.trace_id AND o.node = 'delivered_ack'").
-		Where("i.node = 'ingest' AND i.created_at > now() - interval '7 days' AND o.created_at > i.created_at").
-		Scan(&pairs).Error; err != nil {
+	rows, err := repository.NewTraceObservationRepository(d).LifecycleMeasurements(ctx, time.Now().Add(-7*24*time.Hour))
+	if err != nil {
 		return nil, err
 	}
-	byCh := map[string][]int64{}
-	for _, p := range pairs {
-		lat := p.DelivAt.Sub(p.IngestAt).Milliseconds()
-		if lat < 0 {
-			continue
+	out := make([]LifecycleLatency, 0, len(rows))
+	for _, row := range rows {
+		item := LifecycleLatency{Channel: row.Channel, SampleSize: int64(len(row.Samples)), TotalTurns: row.TotalTurns}
+		if len(row.Samples) > 0 {
+			p50, p95 := percentile(row.Samples, 50), percentile(row.Samples, 95)
+			item.P50Ms, item.P95Ms = &p50, &p95
 		}
-		byCh[p.Channel] = append(byCh[p.Channel], lat)
-	}
-	out := make([]LifecycleLatency, 0, len(byCh))
-	for ch, lats := range byCh {
-		sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
-		out = append(out, LifecycleLatency{
-			Channel:    ch,
-			P50Ms:      percentile(lats, 50),
-			P95Ms:      percentile(lats, 95),
-			SampleSize: int64(len(lats)),
-		})
+		if row.TotalTurns > 0 {
+			item.MeasurementCoverage = float64(item.SampleSize) / float64(row.TotalTurns)
+		}
+		out = append(out, item)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Channel < out[j].Channel })
 	return out, nil

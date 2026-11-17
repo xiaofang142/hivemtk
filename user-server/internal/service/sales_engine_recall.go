@@ -37,6 +37,12 @@ type IntentRecognizerInterface interface {
 	Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error)
 }
 
+// IntentPreviewer 可选的只读资格预判：不写业务记录，也不启动流程。
+// 未实现该能力的识别器仍可用于正常生成，但不能用于最终答案缓存检查。
+type IntentPreviewer interface {
+	PreviewIntent(ctx context.Context, text string) (*dto.RecognizeResult, error)
+}
+
 type DialogueMemoryInterface interface {
 	AppendMessage(ctx context.Context, sessionID, customerID string, msg dto.Message) error
 	GetOrCreateMemory(ctx context.Context, sessionID, customerID string) (*model.DialogueMemory, error)

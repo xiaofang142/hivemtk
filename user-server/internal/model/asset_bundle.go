@@ -122,9 +122,9 @@ type AssetBundle struct {
 	PlatformReviewNote  string     `gorm:"type:text" json:"platform_review_note"`
 	PlatformSubmittedAt *time.Time `json:"platform_submitted_at"`
 
-	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // TableName 表名

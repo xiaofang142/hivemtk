@@ -18,7 +18,7 @@ import (
 func newBridgeSentTestService(t *testing.T) (*WebhookService, context.Context) {
 	t.Helper()
 	// 免打扰窗口会把出站改判为「次日首发」直接 return，与 sent 口径无关，显式关掉。
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},

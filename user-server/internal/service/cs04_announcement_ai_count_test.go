@@ -85,7 +85,8 @@ func TestCS04_AnnouncementNotCountedAsAIReply(t *testing.T) {
 func TestCS04_AnnouncementNotCountedInRawFallback(t *testing.T) {
 	database := setupSummaryTestDB(t)
 	ctx := context.Background()
-	since := time.Now().Add(-2 * time.Hour)
+	// 三条消息属于同一个明确的历史小时，不能在当前小时末尾跨桶。
+	since := time.Now().Truncate(time.Hour).Add(-2 * time.Hour)
 
 	rows := []*model.MessageHub{
 		cs04HubRow(since.Add(1*time.Minute), true, "outbound", model.JSONMap{

@@ -53,6 +53,7 @@ func TestHumanizePolisher_RemoveExtraSymbols(t *testing.T) {
 func TestHumanizePolisher_TruncateByLength(t *testing.T) {
 	p := NewHumanizePolisher()
 	p.randFn = func() float64 { return 0.99 }
+	p.enableTruncation = true // 本用例验证显式截断工具，不改变自动回复保真默认值。
 	p.maxLength = 10
 	got, _ := p.Polish(context.Background(), "这是一段非常长的测试文本，包含很多很多字符", nil)
 	if len([]rune(got)) > 12 {

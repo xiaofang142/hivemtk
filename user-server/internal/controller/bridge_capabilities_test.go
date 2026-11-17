@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"hivemtk-user/internal/service"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,9 +62,22 @@ func TestBridgeCapabilitiesController_IncludesPatrolUnreadFirstChannels(t *testi
 	if body.FollowUserEnabled {
 		t.Errorf("follow_user_enabled 未装配时 = true，期望默认关（false，硬性边界）")
 	}
+	var defaults []string
+	if err := json.Unmarshal([]byte(service.FollowUserChannelsDefault), &defaults); err != nil {
+		t.Fatal("服务默认渠道定义必须是合法 JSON：", err)
+	}
+	if len(defaults) != 8 || len(body.FollowUserChannels) != len(defaults) {
+		t.Fatalf("默认能力清单数量不一致：服务=%v，接口=%v", defaults, body.FollowUserChannels)
+	}
+	expected := make(map[string]bool, len(defaults))
+	for _, ch := range defaults {
+		expected[ch] = true
+	}
+	seen := make(map[string]bool, len(defaults))
 	for _, ch := range body.FollowUserChannels {
-		if ch != "douyin" && ch != "tiktok" && ch != "bilibili" {
-			t.Errorf("follow_user_channels 默认清单含意外渠道 %q", ch)
+		if !expected[ch] || seen[ch] {
+			t.Errorf("默认能力清单含意外或重复渠道 %q", ch)
 		}
+		seen[ch] = true
 	}
 }

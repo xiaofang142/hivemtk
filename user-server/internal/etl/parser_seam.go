@@ -16,14 +16,24 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 // sidecarURL 外挂解析服务地址；空 = 不启用（builtin 路径）。
-// 启动时读一次（环境变量），运行期不热切——解析引擎切换影响索引一致性，不允许热切。
-var sidecarURL = strings.TrimSpace(os.Getenv("PARSER_SIDECAR_URL"))
+// SaaS 配置面改造（B6，2026-11-17）：PARSER_SIDECAR_URL 环境变量退役，改由参数中心
+// etl.parser_sidecar_url 经 provider 注入（装配点 internal/app）。运行期不热切——
+// 解析引擎切换影响索引一致性，不允许热切（provider 在装配期读一次快照进闭包）。
+var sidecarURLProvider = func() string { return "" }
+
+// SetSidecarURLProvider 注入外挂解析地址取值口。传 nil 是空操作而不是复位。
+func SetSidecarURLProvider(fn func() string) {
+	if fn != nil {
+		sidecarURLProvider = fn
+	}
+}
+
+func sidecarURL() string { return strings.TrimSpace(sidecarURLProvider()) }
 
 // sidecarTimeout 外挂解析超时（复杂版式解析比纯文本慢一个量级）。
 var sidecarTimeout = 120 * time.Second
@@ -31,7 +41,7 @@ var sidecarTimeout = 120 * time.Second
 // ParseDocument 统一解析入口（seam）。sidecar 未启用或非结构化后缀时
 // 走 builtin ExtractText——语义与现状完全一致。
 func ParseDocument(ctx context.Context, filename string, data []byte) (string, error) {
-	if sidecarURL == "" {
+	if sidecarURL() == "" {
 		return ExtractText(filename, data)
 	}
 	// 只有 builtin 明确「会失败或解析得差」的格式才值得走外挂；
@@ -72,7 +82,7 @@ func parseViaSidecar(ctx context.Context, filename string, data []byte) (string,
 		return "", err
 	}
 
-	req, err := http.NewRequestWithContext(cctx, http.MethodPost, sidecarURL, &buf)
+	req, err := http.NewRequestWithContext(cctx, http.MethodPost, sidecarURL(), &buf)
 	if err != nil {
 		return "", err
 	}
@@ -97,4 +107,4 @@ func parseViaSidecar(ctx context.Context, filename string, data []byte) (string,
 }
 
 // SidecarEnabled 测试/装配可观测：外挂解析是否启用。
-func SidecarEnabled() bool { return sidecarURL != "" }
+func SidecarEnabled() bool { return sidecarURL() != "" }

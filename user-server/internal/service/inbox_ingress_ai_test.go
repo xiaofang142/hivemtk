@@ -45,6 +45,7 @@ func (f *fakeAITrigger) TriggerInboundAI(ctx context.Context, channel, accountID
 //
 // 使用 nil DB（hubRepo==nil 时持久化 no-op），无需真实 Postgres 即可密封验证。
 func TestInbox_NewMessageTriggersAI_HistoryDoesNot(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)
@@ -88,6 +89,7 @@ func TestInbox_NewMessageTriggersAI_HistoryDoesNot(t *testing.T) {
 // TestInbox_GroupMessage_TriggersAI_WithMeta 验证群聊消息触发 AI 时透传 sender_name/群元数据
 // （需求3：群聊成员身份不得在 AI 编排路径丢失）。
 func TestInbox_GroupMessage_TriggersAI_WithMeta(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)

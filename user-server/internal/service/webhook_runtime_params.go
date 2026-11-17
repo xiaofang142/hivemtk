@@ -47,6 +47,14 @@ const (
 	WebhookWorkerCountParam      = "worker_count"
 	WebhookQueueSizeParam        = "queue_size"
 	WebhookReplyConcurrencyParam = "reply_concurrency"
+	// 恢复扫描器与 AI 超时（SaaS 配置面改造 B8/B9，2026-11-17）：
+	// WEBHOOK_RECOVERY_ENABLED/INTERVAL/COOLDOWN/BATCH 与 WEBHOOK_AI_TIMEOUT_SECONDS
+	// 环境变量退役，旋钮统一入参数中心 webhook 组。
+	WebhookRecoveryEnabledParam  = "recovery_enabled"
+	WebhookRecoveryIntervalParam = "recovery_interval_seconds"
+	WebhookRecoveryCooldownParam = "recovery_cooldown_seconds"
+	WebhookRecoveryBatchParam    = "recovery_batch"
+	WebhookAITimeoutParam        = "ai_timeout_seconds"
 )
 
 func positiveDurationOr(v, def time.Duration) time.Duration {
@@ -91,6 +99,54 @@ func webhookQueueSizeRaw(ctx context.Context) int {
 
 func webhookReplyConcurrencyRaw(ctx context.Context) int {
 	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookReplyConcurrencyParam, 0)
+}
+
+// ── 恢复扫描器 / AI 超时（B8/B9 接线）───────────────────────────────────────
+
+func webhookRecoveryEnabledRaw(ctx context.Context) bool {
+	return GlobalConfigParam().GetBool(ctx, ParamGroupWebhook, WebhookRecoveryEnabledParam, true)
+}
+
+func webhookRecoveryIntervalRaw(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryIntervalParam, 0)
+}
+
+func webhookRecoveryCooldownRaw(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryCooldownParam, 0)
+}
+
+func webhookRecoveryBatchRaw(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryBatchParam, 0)
+}
+
+func webhookAITimeoutRaw(ctx context.Context) int {
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookAITimeoutParam, 0)
+}
+
+// webhookRecoveryInterval 恢复扫描间隔。非正数回落常量默认 30s。
+func webhookRecoveryInterval(ctx context.Context) time.Duration {
+	if n := webhookRecoveryIntervalRaw(ctx); n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	return webhookRecoveryIntervalDefault
+}
+
+// webhookRecoveryCooldown 恢复扫描节流冷却。非正数回落常量默认 60s。
+func webhookRecoveryCooldown(ctx context.Context) time.Duration {
+	if n := webhookRecoveryCooldownRaw(ctx); n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	return webhookRecoveryCooldownDefault
+}
+
+// webhookRecoveryBatch 恢复扫描单批容量。非正数回落常量默认 100。
+func webhookRecoveryBatch(ctx context.Context) int {
+	return positiveIntOr(webhookRecoveryBatchRaw(ctx), webhookRecoveryBatchDefault)
+}
+
+// webhookAITimeoutSeconds AI 处理超时。下限 60s 的钳制在调用点（两处同口径），这里不重复。
+func webhookAITimeoutSeconds(ctx context.Context) int {
+	return positiveIntOr(webhookAITimeoutRaw(ctx), 180)
 }
 
 // ── 带兜底的读口 ──

@@ -17,6 +17,7 @@ import (
 //  2. 文本消息 → content 逐字节不变（存量文本链路零破坏）；
 //  3. 非文本但 media_url 为空 → content 不动（无从拼接，不留悬空尾巴）。
 func TestInboundMediaMessageTriggersAIWithMediaURL(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)

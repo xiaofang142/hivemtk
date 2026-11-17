@@ -1,8 +1,8 @@
 package service
 
 import (
-	"hivemtk-user/internal/pkg/tenant"
 	"context"
+	"hivemtk-user/internal/pkg/tenant"
 	"testing"
 	"time"
 
@@ -194,6 +194,9 @@ func TestInboxIngress_InterceptEcho_DistinguishesSelfAndCustomer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("interceptInbound(self) 失败: %v", err)
 	}
+	if dec == nil {
+		t.Fatal("self 回显判定不能为空")
+	}
 	if !dec.Blocked || !dec.IsSelfEcho {
 		t.Fatalf("self 回显应被拦截(IsSelfEcho)，实际 Blocked=%v IsSelfEcho=%v reason=%q", dec.Blocked, dec.IsSelfEcho, dec.Reason)
 	}
@@ -209,6 +212,9 @@ func TestInboxIngress_InterceptEcho_DistinguishesSelfAndCustomer(t *testing.T) {
 	dec2, err := svc.interceptInbound(ctx, customerEvent)
 	if err != nil {
 		t.Fatalf("interceptInbound(customer) 失败: %v", err)
+	}
+	if dec2 == nil {
+		t.Fatal("客户消息判定不能为空")
 	}
 	if dec2.Blocked {
 		t.Fatalf("客户复述 AI 原话不应被拦截（否则丢失客户消息），实际 reason=%q", dec2.Reason)

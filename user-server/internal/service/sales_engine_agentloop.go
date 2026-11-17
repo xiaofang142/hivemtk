@@ -165,7 +165,7 @@ func (e *SalesEngine) runAgentLoop(
 	messages := make([]llm.ChatMessage, 0, 4+maxIter*2)
 	messages = append(messages, llm.ChatMessage{
 		Role:    "system",
-		Content: buildAgentSystemPrompt(e.personaWithLang(ctx, req.Config.Persona, targetLang), intent, mem, customer, ragChunks, guard, chainFlowHint),
+		Content: buildAgentSystemPrompt(e.personaWithLang(ctx, req.Config.Persona, targetLang), intent, mem, customer, ragChunks, guard, chainFlowHint) + channelCardPrompt(req.Platform),
 	})
 	messages = append(messages, llm.ChatMessage{
 		Role:    "user",
@@ -625,12 +625,13 @@ func renderRAGReferenceBlock(ragChunks []RAGChunk) string {
 //
 // 两者都必须带上知识库参考，否则召回结果被丢弃（见 renderRAGReferenceBlock 注释）。
 func (e *SalesEngine) plainDispatchSystemPrompt(ctx context.Context, req *SalesRequest, targetLang string, ragChunks []RAGChunk) string {
-	return e.personaWithLang(ctx, req.Config.Persona, targetLang) + renderRAGReferenceBlock(ragChunks)
+	return e.personaWithLang(ctx, req.Config.Persona, targetLang) + renderRAGReferenceBlock(ragChunks) + channelCardPrompt(req.Platform) + compactReplyPolicy
 }
 
 func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *model.DialogueMemory, customer *model.Customer, ragChunks []RAGChunk, guard *agentLoopGuard, chainFlowHint string) string {
 	var sb strings.Builder
 	sb.WriteString(persona)
+	sb.WriteString(compactReplyPolicy)
 
 	if customer != nil {
 		name := customerNameOf(customer)
@@ -640,7 +641,7 @@ func buildAgentSystemPrompt(persona string, intent *dto.RecognizeResult, mem *mo
 	}
 
 	sb.WriteString("\n\n# 工具使用指引\n")
-	sb.WriteString("- 当用户询问商品/产品推荐、清单、对比，或提到“有哪些产品/适合新手/推荐几款/给我看看”时，必须调用 card.show 工具返回结构化卡片，禁止只在文本里描述卡片。\n")
+	sb.WriteString("- 产品推荐、清单或对比必须给出必要事实；card.show 可整理结构化事实，是否可展示由当前渠道交付能力决定，构造卡片不代表已送达。\n")
 
 	sb.WriteString("- 系统已为你预检索相关知识库内容（见下方【知识库参考】），优先基于其回答，避免重复调用 rag.search；仅当用户问题明显超出已给范围、需要更多资料时，才调用 rag.search 补充检索。\n")
 
@@ -921,7 +922,7 @@ func (e *SalesEngine) buildPrompt(
 
 	sb.WriteString("\n【回复要求】:\n")
 	sb.WriteString("1. 基于上述信息（含对话历史）生成回复，不要编造事实\n")
-	sb.WriteString("2. 简洁（≤80 字），分自然段\n")
+	sb.WriteString(compactReplyPolicy)
 	sb.WriteString("3. 语气亲切、像真人对话\n")
 	sb.WriteString("4. 若客户异议，按话术/SOP 引导\n")
 

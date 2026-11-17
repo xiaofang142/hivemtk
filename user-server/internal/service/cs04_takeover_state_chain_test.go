@@ -44,6 +44,7 @@ func (r *releaseAfterAITrigger) TriggerInboundAI(ctx context.Context, channel, a
 }
 
 func TestCS04_TakeoverStateChain_FullJourney(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	// 库先行：仓储构造时即捕获 _db.GetDB()（dbstate），必须 NewTestDB 之后建服务。
 	// 黑名单表在列：CreateSession 入口有 preCreateBlacklistGuard。
 	testutil.NewTestDB(t,

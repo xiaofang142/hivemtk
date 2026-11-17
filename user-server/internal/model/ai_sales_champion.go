@@ -49,6 +49,8 @@ type MessageHub struct {
 	ReadAt       *time.Time `json:"read_at"`
 	SentAt       time.Time  `gorm:"index" json:"sent_at"`
 	Extra        JSONMap    `gorm:"type:text" json:"extra"`
+	// BridgeLeadEligible 只由服务端实时入站判据写入；旧消息默认不参与后置触达。
+	BridgeLeadEligible bool `gorm:"not null;default:false;index:idx_hub_bridge_lead,priority:1" json:"-"`
 	// PlatformMsgID D-9（2026-10-24）：平台侧消息号（发送成功后由平台返回；
 	// hub 行键 msg_id 是 ContentHash/合成键，两者不是一回事）。可空：发送时
 	// 平台还没返回；历史行不回填（TG/飞书可按行键格式解析，见 platformMessageID）。

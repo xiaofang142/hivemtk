@@ -268,8 +268,8 @@ func TestLifecycleLatencyIsTenantScoped(t *testing.T) {
 
 	if lat, err := LifecycleLatencyByChannel(ctxA); err != nil {
 		t.Fatalf("租户 A 的端到端时延失败: %v", err)
-	} else if len(lat) != 0 {
-		t.Errorf("A 的时延样本 = %+v，期望 0（B 的送达确认不能与 A 的接入配对）", lat)
+	} else if len(lat) != 1 || lat[0].SampleSize != 0 || lat[0].P50Ms != nil || lat[0].MeasurementCoverage != 0 {
+		t.Errorf("A 保留自己的缺测覆盖率，但有效样本必须为0且分位数未知（B不能配入）：%+v", lat)
 	}
 	if _, err := LifecycleLatencyByChannel(context.Background()); err == nil {
 		t.Error("裸 ctx 的端到端时延未被拒绝")

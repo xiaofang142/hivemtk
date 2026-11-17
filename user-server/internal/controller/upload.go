@@ -128,11 +128,13 @@ func UploadFile(ctx *gin.Context) {
 	config := DefaultUploadConfig
 	config.MaxSize = resolveUploadMaxSize(ctx)
 
-	if envVirusScan := os.Getenv("UPLOAD_VIRUS_SCAN"); envVirusScan == "true" {
+	// SaaS 配置面改造（B5，2026-11-17）：UPLOAD_VIRUS_SCAN / VIRUS_SCAN_URL 环境变量退役，
+	// 入参数中心 misc 组（upload_virus_scan_enabled / upload_virus_scan_url）。
+	if service.GlobalConfigParam().GetBool(ctx, "misc", "upload_virus_scan_enabled", false) {
 		config.EnableVirusScan = true
 	}
-	if envVirusURL := os.Getenv("VIRUS_SCAN_URL"); envVirusURL != "" {
-		config.VirusScanURL = envVirusURL
+	if virusURL := service.GlobalConfigParam().GetString(ctx, "misc", "upload_virus_scan_url", ""); virusURL != "" {
+		config.VirusScanURL = virusURL
 		config.EnableVirusScan = true
 	}
 

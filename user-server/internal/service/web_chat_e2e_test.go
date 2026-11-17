@@ -54,6 +54,10 @@ func newFakeRAG() *fakeRAGSearcher {
 
 type fakeIntentRecognizer struct{}
 
+func (fakeIntentRecognizer) PreviewIntent(context.Context, string) (*dto.RecognizeResult, error) {
+	return &dto.RecognizeResult{IntentType: IntentPriceInquiry, IntentName: "价格咨询", Confidence: .92}, nil
+}
+
 func (fakeIntentRecognizer) Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error) {
 	return &dto.RecognizeResult{
 		IntentType: IntentPriceInquiry,

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,9 +48,9 @@ func (a *humanizeLLMAdapter) ChatSend(ctx context.Context, prompt string) (strin
 //   - 私域场景客户期望：LLM 推理成功即应自动回复，由真实人工按需接管
 //
 // 用法：
-// 私域本地 LLM 部署：设 MTK_HUMANIZE_EVAL_DISABLED=true 强制禁用（或自动检测本地 base_url 后禁用）
+// 私域本地 LLM 部署：参数 agent_llm.humanize_eval_disabled=true 强制禁用（或自动检测本地 base_url 后禁用）
 //   - 商业云端 SaaS：默认启用（保持商业场景的回复质量拦截）
-//   - 自定义阈值: 设 MTK_HUMANIZE_EVAL_THRESHOLD=0.50
+//   - 自定义阈值: 参数 agent_llm.humanize_eval_threshold=0.50
 //
 // 5 层架构：本开关在 Service 层，Router/Factory 层读取 env 后通过
 // SetHumanizeEvaluatorEnabled 注入。
@@ -63,11 +62,11 @@ var HumanizeEvaluatorEnabled = true
 //   - dispatcher: LLM 调度器
 func InitHumanizeEvalService(dispatcher *llm.Dispatcher) *humanizesvc.HumanizeEvalService {
 	humanizeEvalServiceOnce.Do(func() {
-		if v := os.Getenv("MTK_HUMANIZE_EVAL_DISABLED"); v != "" {
-			if disabled, _ := strconv.ParseBool(v); disabled {
-				HumanizeEvaluatorEnabled = false
-				logger.Info("[humanize] MTK_HUMANIZE_EVAL_DISABLED=true，拟人度评估器已禁用（私域本地 LLM 模式）")
-			}
+		// SaaS 配置面改造（B17，2026-11-17）：MTK_HUMANIZE_EVAL_DISABLED/THRESHOLD 环境变量
+		// 退役，旋钮入参数中心 agent_llm 组（启动期读一次，改参数下次重启生效）。
+		if GlobalConfigParam().GetBool(context.Background(), "agent_llm", "humanize_eval_disabled", false) {
+			HumanizeEvaluatorEnabled = false
+			logger.Info("[humanize] agent_llm.humanize_eval_disabled=true，拟人度评估器已禁用（私域本地 LLM 模式）")
 		}
 		if HumanizeEvaluatorEnabled {
 			llmBaseURL := config.GetAppConfig().Inference.LLM.BaseURL
@@ -93,13 +92,9 @@ func InitHumanizeEvalService(dispatcher *llm.Dispatcher) *humanizesvc.HumanizeEv
 			scoreRepo,
 			sampleCollector,
 		)
-		if v := os.Getenv("MTK_HUMANIZE_EVAL_THRESHOLD"); v != "" {
-			if thr, perr := strconv.ParseFloat(strings.TrimSpace(v), 64); perr == nil && thr > 0 && thr <= 1 {
-				svc = svc.WithThreshold(context.Background(), thr)
-				logger.Infof("[humanize] MTK_HUMANIZE_EVAL_THRESHOLD 生效 threshold=%.2f", thr)
-			} else {
-				logger.Warnf("[humanize] MTK_HUMANIZE_EVAL_THRESHOLD=%q 非法（须 0<thr<=1），使用 %.2f", v, humanizesvc.EffectiveThreshold())
-			}
+		if thr := GlobalConfigParam().GetFloat(context.Background(), "agent_llm", "humanize_eval_threshold", 0); thr > 0 && thr <= 1 {
+			svc = svc.WithThreshold(context.Background(), thr)
+			logger.Infof("[humanize] agent_llm.humanize_eval_threshold 生效 threshold=%.2f", thr)
 		}
 		humanizeEvalService = svc
 	})

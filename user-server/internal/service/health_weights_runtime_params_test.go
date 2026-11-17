@@ -224,6 +224,9 @@ func TestHealthWeightGroupsSeedsMatchConstantDefaults(t *testing.T) {
 		ParamGroupRagHealth + "." + RagHealthWeightCoverageParam:                {"0.15", 0},
 		ParamGroupRagHealth + "." + RagHealthWeightPerformanceParam:             {"0.15", 0},
 		ParamGroupRagHealth + "." + RagHealthWeightAlertsParam:                  {"0.15", 0},
+		// SaaS 配置面改造（B14，2026-11-17）：HEALTH_EMBEDDING_CRITICAL env 迁移批次。
+		// bool 探活关键标记（默认 false），不走权重常量对照。
+		ParamGroupRagHealth + "." + "embedding_critical": {"false", 0},
 	}
 	index := make(map[string]ParamDef, len(want))
 	for _, d := range DefaultParamDefs() {

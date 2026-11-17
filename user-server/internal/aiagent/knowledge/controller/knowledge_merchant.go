@@ -73,7 +73,71 @@ func (ctrl *KnowledgeMerchantController) RegisterRoutes(router *gin.RouterGroup)
 		g.POST("/tokens/:id/revoke", ctrl.RevokeToken)
 
 		g.GET("/external/jobs", ctrl.ListExternalJobs)
+
+		g.GET("/external/credentials", ctrl.GetExternalCredentials)
+		g.PUT("/external/credentials", ctrl.SaveExternalCredentials)
 	}
+}
+
+// GetExternalCredentials 读取外部导入凭证（GET /api/knowledge-merchant/external/credentials）。
+// 凭证字段脱敏返回：只回「是否已配置 + 尾 4 位」，明文永不出口（与工具集成配置同一安全取向）。
+func (ctrl *KnowledgeMerchantController) GetExternalCredentials(c *gin.Context) {
+	creds, err := service.LoadKnowledgeImportCredentials(c.Request.Context())
+	if err != nil {
+		response.ErrorFromDB(c, err, "读取外部导入凭证失败")
+		return
+	}
+	response.Success(c, gin.H{
+		"feishu_app_id":     creds.FeishuAppID,
+		"feishu_app_secret": maskCredential(creds.FeishuAppSecret),
+		"notion_api_key":    maskCredential(creds.NotionAPIKey),
+		"feishu_configured": creds.FeishuAppID != "" && creds.FeishuAppSecret != "",
+		"notion_configured": creds.NotionAPIKey != "",
+	}, "ok")
+}
+
+// SaveExternalCredentials 保存外部导入凭证（PUT /api/knowledge-merchant/external/credentials）。
+// 前端把未修改的脱敏值原样传回时按「保持不变」处理，避免把掩码串当新凭证存库。
+func (ctrl *KnowledgeMerchantController) SaveExternalCredentials(c *gin.Context) {
+	var req service.KnowledgeImportCredentials
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
+		return
+	}
+	existing, err := service.LoadKnowledgeImportCredentials(c.Request.Context())
+	if err != nil {
+		response.ErrorFromDB(c, err, "读取外部导入凭证失败")
+		return
+	}
+	if isMaskedCredential(req.FeishuAppSecret) {
+		req.FeishuAppSecret = existing.FeishuAppSecret
+	}
+	if isMaskedCredential(req.NotionAPIKey) {
+		req.NotionAPIKey = existing.NotionAPIKey
+	}
+	if err := service.SaveKnowledgeImportCredentials(c.Request.Context(), &req); err != nil {
+		response.ErrorFromDB(c, err, "保存外部导入凭证失败")
+		return
+	}
+	response.Success(c, gin.H{"saved": true}, "外部导入凭证已保存")
+}
+
+// maskCredentialNil 无人配置时的统一占位（空串），与 maskCredential 语义对齐。
+func maskCredential(v string) string {
+	if v == "" {
+		return ""
+	}
+	runes := []rune(v)
+	tail := 4
+	if len(runes) < tail {
+		tail = len(runes)
+	}
+	return "****" + string(runes[len(runes)-tail:])
+}
+
+// isMaskedCredential 判断请求里传来的是否还是上一条 GET 返回的掩码串。
+func isMaskedCredential(v string) bool {
+	return strings.HasPrefix(v, "****")
 }
 
 // BatchImport JSON 体导入

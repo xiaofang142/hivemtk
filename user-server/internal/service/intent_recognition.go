@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -610,6 +611,35 @@ var DefaultIntents = []IntentDef{
 //     b. 规则未命中 → LLM 识别（本地/云端 API 统一）
 //     c. 全部失败 → IntentUnknown 兜底
 //  4. 意图→SOP 联动
+//
+// PreviewIntent 只复用规则判定，不调用模型、不持久化、不累积弱标签或启动SOP。
+// 无规则证明的消息返回unknown，由调用方回到正常业务识别链。
+func (s *IntentRecognizer) PreviewIntent(ctx context.Context, text string) (*dto.RecognizeResult, error) {
+	if s == nil || ctx == nil || tenant.IsSystemScope(ctx) {
+		return nil, errors.New("intent preview requires a tenant context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return nil, errors.New("intent preview requires a confirmed tenant")
+	}
+	ctx = tenant.OnlyTenant(ctx, tenantID)
+	if loadIntentEnabledFor(ctx) && strings.TrimSpace(text) != "" {
+		if result := s.recognizeByRule(ctx, text); result != nil {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return result, nil
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &dto.RecognizeResult{IntentType: IntentUnknown, Confidence: 0, Method: "preview"}, nil
+}
+
 func (s *IntentRecognizer) Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error) {
 	if text == "" {
 		return &dto.RecognizeResult{IntentType: IntentUnknown, Confidence: 0, Method: "rule"}, nil

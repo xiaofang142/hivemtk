@@ -61,6 +61,58 @@ func NewDelayedOutboundRepositoryDefault() *DelayedOutboundRepository {
 	return NewDelayedOutboundRepository(GetDB())
 }
 
+// ReplayRepositories 保持回扫资格查询与任务仓储使用相同句柄，不向Service暴露数据库。
+func (r *DelayedOutboundRepository) ReplayRepositories() (*CustomerSessionRepository, *MessageHubRepository) {
+	if r == nil {
+		return nil, nil
+	}
+	return NewCustomerSessionRepositoryWithDB(r.db), NewMessageHubRepositoryWithDB(r.db)
+}
+
+// ClaimForReplay 只认领指定租户与账号的到期任务，返回含随机租约的权威载荷。
+func (r *DelayedOutboundRepository) ClaimForReplay(ctx context.Context, id uint, platform, accountID string) (*model.DelayedOutboundReply, error) {
+	if r == nil || r.db == nil {
+		return nil, errDelayedOutboundUnavailable
+	}
+	if ctx == nil || tenant.IsSystemScope(ctx) || id == 0 || platform == "" || accountID == "" {
+		return nil, errors.New("delayed replay claim scope unavailable")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return nil, errors.New("delayed replay claim tenant unavailable")
+	}
+	var current model.DelayedOutboundReply
+	err := r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("tenant_id = ? AND id = ? AND platform = ? AND account_id = ?", tenantID, id, platform, accountID).
+			Where("status = ? AND send_at <= clock_timestamp()", model.DelayedStatusPending).
+			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).First(&current).Error; err != nil {
+			return err
+		}
+		if current.ConversationID == "" || current.SenderID == "" {
+			return errors.New("delayed replay claim identity unavailable")
+		}
+		now := time.Now()
+		until := now.Add(DelayedOutboundLease)
+		current.ClaimToken, current.ClaimedAt, current.LeaseUntil = uuid.NewString(), &now, &until
+		current.Status = model.DelayedStatusSending
+		return _db.EnsureAffected(tx.Model(&model.DelayedOutboundReply{}).
+			Where("tenant_id = ? AND id = ? AND status = ?", tenantID, id, model.DelayedStatusPending).
+			Updates(map[string]any{"status": current.Status, "claim_token": current.ClaimToken,
+				"claimed_at": now, "lease_until": until}))
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 未到期或已被其它执行者认领属于正常空结果，不掩盖其它数据库错误。
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &current, nil
+}
+
 // CreatePending 写入 pending 延迟回复记录。
 //
 // 句柄缺失 ⇒ 报错而不是静默成功：调用方把 nil 读成「已入队」，于是这条
@@ -88,6 +140,44 @@ func (r *DelayedOutboundRepository) CreatePending(ctx context.Context, rec *mode
 		return errors.New("delayed outbound: nil 记录不是入队对象")
 	}
 	return r.db.WithContext(ctx).Create(rec).Error
+}
+
+// ConfirmReplayLease 在投递前确认当前租约和身份，返回数据库中的权威载荷。
+// 不持锁跨网络调用；后续回写仍须使用原有令牌栅栏。
+func (r *DelayedOutboundRepository) ConfirmReplayLease(ctx context.Context, snapshot *model.DelayedOutboundReply, now time.Time) (*model.DelayedOutboundReply, error) {
+	if r == nil || r.db == nil {
+		return nil, errDelayedOutboundUnavailable
+	}
+	if ctx == nil || tenant.IsSystemScope(ctx) || snapshot == nil {
+		return nil, errors.New("delayed outbound: 未确认重放上下文")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 || snapshot.TenantID != tenantID {
+		return nil, errors.New("delayed outbound: 重放租户不匹配")
+	}
+	if snapshot.ID == 0 || snapshot.ClaimToken == "" || snapshot.Platform == "" || snapshot.AccountID == "" || snapshot.ConversationID == "" || snapshot.SenderID == "" {
+		return nil, errors.New("delayed outbound: 重放身份或令牌缺失")
+	}
+	var current model.DelayedOutboundReply
+	err := r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).
+		Where("tenant_id = ? AND id = ? AND claim_token = ? AND status = ?", tenantID, snapshot.ID, snapshot.ClaimToken, model.DelayedStatusSending).
+		Where("lease_until > ? AND claimed_at IS NOT NULL", now).
+		Where("platform = ? AND account_id = ? AND conversation_id = ? AND sender_id = ?", snapshot.Platform, snapshot.AccountID, snapshot.ConversationID, snapshot.SenderID).
+		First(&current).Error
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// 查询等待也会消耗租约：SQL中的起始时间不能代替返回时的有效期。
+	if current.LeaseUntil == nil || !current.LeaseUntil.After(time.Now()) {
+		return nil, errors.New("delayed outbound: 查询返回时租约已失效")
+	}
+	return &current, nil
 }
 
 // PickDueForUpdate 事务：FOR UPDATE SKIP LOCKED 抢占到期的 pending 记录并置 sending，
@@ -217,21 +307,38 @@ func (r *DelayedOutboundRepository) ClaimSendingRows(ctx context.Context, ids []
 	return claimed, nil
 }
 
-// MarkSent 重放成功：status → sent。
+// replayUpdate 只允许仍持有效租约的当前执行者改写自己的租户行。
+// 使用数据库当前时钟，避免等待行锁后仍沿用进入方法时的过期许可。
+func (r *DelayedOutboundRepository) replayUpdate(ctx context.Context, id uint, token string) (*gorm.DB, error) {
+	if r == nil || r.db == nil {
+		return nil, errDelayedOutboundUnavailable
+	}
+	if ctx == nil || tenant.IsSystemScope(ctx) || id == 0 || token == "" {
+		return nil, errors.New("delayed outbound: 当前执行身份未确认")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return nil, errors.New("delayed outbound: 当前租户未确认")
+	}
+	return r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).Model(&model.DelayedOutboundReply{}).
+		Where("tenant_id = ? AND id = ? AND status = ? AND claim_token = ?", tenantID, id, model.DelayedStatusSending, token).
+		Where("claimed_at IS NOT NULL AND lease_until > clock_timestamp()"), nil
+}
+
+// MarkSent 重放成功：status → sent，仅代表已向下游交接。
 //
 // 0 行 ⇒ ErrRecordNotFound：可能是这行在投递途中被删，也可能（D03）是本 worker
 // 租约已过期、行已被重认领给新 token —— 两种情况都不得把「状态没回写」记成
 // 「已送达」。
 func (r *DelayedOutboundRepository) MarkSent(ctx context.Context, id uint, token string, sentAt time.Time) error {
-	if r == nil || r.db == nil {
-		return errDelayedOutboundUnavailable
+	q, err := r.replayUpdate(ctx, id, token)
+	if err != nil {
+		return err
 	}
-	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
-	if token != "" {
-		// 栅栏：旧 worker 的回写在行被重认领后必须 0 行拒绝。
-		q = q.Where("claim_token = ?", token)
-	}
-	return _db.EnsureAffected(q.Updates(map[string]any{"status": "sent", "sent_at": &sentAt}))
+	return _db.EnsureAffected(q.Updates(map[string]any{"status": model.DelayedStatusSent, "sent_at": &sentAt, "lease_until": nil}))
 }
 
 // HasPendingByConversation 该会话是否还有「尚未投递且仍会被投递」的延迟出站。
@@ -251,17 +358,11 @@ func (r *DelayedOutboundRepository) HasPendingByConversation(ctx context.Context
 
 // ScheduleRetry 重投失败后原地改排：回到 pending、send_at 推到 nextAt、attempts+1、记 last_error、
 // 清租约。不新建行：一条待投回复在队列里始终只有一行，避免同一份内容因多次失败被重放多次。
-// 带 token 时为栅栏写（行被重认领后旧 worker 改排 0 行拒绝）。
+// 必须持当前有效 token；终态、过期执行者和未认领行均不可改排。
 func (r *DelayedOutboundRepository) ScheduleRetry(ctx context.Context, id uint, token string, nextAt time.Time, lastError string) error {
-	if r == nil || r.db == nil {
-		return errDelayedOutboundUnavailable
-	}
-	if id == 0 {
-		return errors.New("delayed outbound: 空 ID 不是改排对象")
-	}
-	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
-	if token != "" {
-		q = q.Where("claim_token = ?", token)
+	q, err := r.replayUpdate(ctx, id, token)
+	if err != nil {
+		return err
 	}
 	return _db.EnsureAffected(q.Updates(map[string]any{
 		"status":      model.DelayedStatusPending,
@@ -271,25 +372,28 @@ func (r *DelayedOutboundRepository) ScheduleRetry(ctx context.Context, id uint, 
 		"claim_token": "",
 		"claimed_at":  nil,
 		"lease_until": nil,
+		"sent_at":     nil,
 	}))
 }
 
 // FinishReplay 重放收口到终态（sent / superseded / failed / unknown），失败原因留在 last_error。
-// 带 token 时为栅栏写（行被重认领后旧 worker 收口 0 行拒绝）。
+// 当前执行者仅可从有效 sending 租约收口；只有 sent 填写发送时间。
 func (r *DelayedOutboundRepository) FinishReplay(ctx context.Context, id uint, token, status string, at time.Time, lastError string) error {
-	if r == nil || r.db == nil {
-		return errDelayedOutboundUnavailable
+	switch status {
+	case model.DelayedStatusSent, model.DelayedStatusSuperseded, model.DelayedStatusFailed, model.DelayedStatusUnknown:
+	default:
+		return errors.New("delayed outbound: 非法执行收口状态")
 	}
-	if id == 0 {
-		return errors.New("delayed outbound: 空 ID 不是收口对象")
+	q, err := r.replayUpdate(ctx, id, token)
+	if err != nil {
+		return err
 	}
-	updates := map[string]any{"status": status, "sent_at": &at, "lease_until": nil}
+	updates := map[string]any{"status": status, "sent_at": nil, "lease_until": nil}
+	if status == model.DelayedStatusSent {
+		updates["sent_at"] = &at
+	}
 	if lastError != "" {
 		updates["last_error"] = truncateForColumn(lastError, 1024)
-	}
-	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id)
-	if token != "" {
-		q = q.Where("claim_token = ?", token)
 	}
 	return _db.EnsureAffected(q.Updates(updates))
 }
@@ -398,49 +502,84 @@ func (r *DelayedOutboundRepository) CreateMessageHubIdempotent(ctx context.Conte
 	if r.db == nil {
 		return msg, nil
 	}
-	if msg != nil && msg.TenantID == 0 {
-		if tid, ok := tenant.FromContext(ctx); ok && tid != 0 {
-			msg.TenantID = tid
-		} else {
-			return nil, fmt.Errorf("message_hub 落库缺租户上下文（fail-closed）：platform=%s msg_id=%s conv=%s",
-				msg.Platform, msg.MsgID, msg.ConversationID)
-		}
+	if err := prepareMessageHubTenant(ctx, msg); err != nil {
+		return nil, err
 	}
 	// D-2（2026-10-23）：唯一索引 uni_message_hub_platform_msg_conv 已加 direction
 	//（priority:4），ON CONFLICT 的列清单必须与索引形状一致，否则 PG 报
 	// "no unique or exclusion constraint matching the ON CONFLICT specification"。
 	//
-	// 冲突复活语义（2026-11-14 生产终局修复）：AI 对同一问题会确定性输出同一话术
-	//（知识库直出），同 (tenant,platform,msg_id,conv,direction) 的历史行——failed/
-	// 软删的（从没成功投出或已被清理）——会永久占位唯一索引，DO NOTHING 把 AI 新
-	// 生成的回复静默吞掉（19:10/19:12/19:14/19:19 四次 id=0 实证，客户「给我一份
-	// 功能清单」两次追问全部石沉大海）。语义修正：冲突行 status='failed' 或已软删
-	// → **复活为新 pending**（旧回复从未成功触达，让位给新回复）；冲突行
-	// delivered/inflight/pending（在途或已触达）→ 维持 DO NOTHING（防同文案刷屏，
-	// 上层据 id=0 走人工跟进旁路）。
+	// 未尝试/未认领的真实失败仍可恢复，避免唯一键静默吞回复；审计、已尝试失败、
+	// 已交付/未知/对账终态不得因同文案或软删自动复活。恢复不是新预算。
 	conflict := clause.OnConflict{
 		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}, {Name: "direction"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"status":       "pending",
-			"deleted_at":   nil,
-			"claimed_at":   nil,
-			"push_attempts": 0,
-			"push_error":   "",
-			"content":      clause.Column{Table: "excluded", Name: "content"},
-			"msg_type":     clause.Column{Table: "excluded", Name: "msg_type"},
-			"media_url":    clause.Column{Table: "excluded", Name: "media_url"},
-			"sent_at":      clause.Column{Table: "excluded", Name: "sent_at"},
-			"trace_id":     clause.Column{Table: "excluded", Name: "trace_id"},
-			"is_ai_reply":  clause.Column{Table: "excluded", Name: "is_ai_reply"},
-			"ai_agent":     clause.Column{Table: "excluded", Name: "ai_agent"},
-			"extra":        clause.Column{Table: "excluded", Name: "extra"},
-			"receiver_id":  clause.Column{Table: "excluded", Name: "receiver_id"},
-			"sender_id":    clause.Column{Table: "excluded", Name: "sender_id"},
+			"status":      "pending",
+			"deleted_at":  nil,
+			"claimed_at":  nil,
+			"push_error":  "",
+			"content":     clause.Column{Table: "excluded", Name: "content"},
+			"msg_type":    clause.Column{Table: "excluded", Name: "msg_type"},
+			"media_url":   clause.Column{Table: "excluded", Name: "media_url"},
+			"sent_at":     clause.Column{Table: "excluded", Name: "sent_at"},
+			"trace_id":    clause.Column{Table: "excluded", Name: "trace_id"},
+			"is_ai_reply": clause.Column{Table: "excluded", Name: "is_ai_reply"},
+			"ai_agent":    clause.Column{Table: "excluded", Name: "ai_agent"},
+			"extra":       clause.Column{Table: "excluded", Name: "extra"},
+			"receiver_id": clause.Column{Table: "excluded", Name: "receiver_id"},
+			"sender_id":   clause.Column{Table: "excluded", Name: "sender_id"},
 		}),
-		Where: clause.Where{Exprs: []clause.Expression{gorm.Expr("message_hub.status = 'failed' OR message_hub.deleted_at IS NOT NULL")}},
+		Where: clause.Where{Exprs: []clause.Expression{gorm.Expr(
+			"excluded.status = 'pending' AND excluded.direction = 'outbound' AND " +
+				outboundDeliveryPredicate("excluded") + " AND " +
+				outboundDeliveryPredicate("message_hub") + " AND " +
+				"(message_hub.status = 'failed' OR (message_hub.status = 'pending' AND message_hub.deleted_at IS NOT NULL)) AND " +
+				"message_hub.push_attempts = 0 AND message_hub.claimed_at IS NULL AND " +
+				outboundRecoverableErrorPredicate("message_hub"),
+		)}},
 	}
 	if err := r.db.WithContext(ctx).Clauses(conflict).Create(msg).Error; err != nil {
 		return nil, err
 	}
 	return msg, nil
+}
+
+// CreateMessageHubAudit 持久化不可投递的失败审计；同键重入只保留原记录，不改状态或预算。
+func (r *DelayedOutboundRepository) CreateMessageHubAudit(ctx context.Context, msg *model.MessageHub) (*model.MessageHub, error) {
+	if err := prepareMessageHubTenant(ctx, msg); err != nil {
+		return nil, err
+	}
+	msg.Status, msg.Direction = "failed", "outbound"
+	extra := make(model.JSONMap, len(msg.Extra)+1)
+	for key, value := range msg.Extra {
+		extra[key] = value
+	}
+	extra["delivery_kind"] = "audit"
+	msg.Extra = extra
+	if r.db == nil {
+		return msg, nil
+	}
+	conflict := clause.OnConflict{
+		Columns:   []clause.Column{{Name: "tenant_id"}, {Name: "platform"}, {Name: "msg_id"}, {Name: "conversation_id"}, {Name: "direction"}},
+		DoNothing: true,
+	}
+	if err := r.db.WithContext(ctx).Clauses(conflict).Create(msg).Error; err != nil {
+		return nil, err
+	}
+	return msg, nil
+}
+
+func prepareMessageHubTenant(ctx context.Context, msg *model.MessageHub) error {
+	if msg == nil {
+		return fmt.Errorf("message_hub 落库缺消息")
+	}
+	if msg.TenantID != 0 {
+		return nil
+	}
+	if tid, ok := tenant.FromContext(ctx); ok && tid != 0 {
+		msg.TenantID = tid
+		return nil
+	}
+	return fmt.Errorf("message_hub 落库缺租户上下文（fail-closed）：platform=%s msg_id=%s conv=%s",
+		msg.Platform, msg.MsgID, msg.ConversationID)
 }

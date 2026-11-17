@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -195,17 +196,22 @@ func (s *PasswordResetService) CleanupExpiredTokens(ctx context.Context) error {
 	return nil
 }
 
-// getFrontendBaseURL 解析前端站点基址：env > 参数中心 urls.frontend_url > 代码兜底。
+// getFrontendBaseURL 解析前端站点基址（SaaS 配置面改造 B19，2026-11-17 翻转）：
+// 参数中心 urls.frontend_url（按重置用户所属租户） > env FRONTEND_URL（部署级兜底）
+// > 代码兜底。参数中心排前是"多租户合理"：某租户在参数中心配了自己的前端站点后，
+// 不应被部署 env 的全局单值静默顶掉；种子默认值已改为 ""（未设语义），env 旧行为保留。
 //
 // ctx 必须带重置用户所属租户（RequestPasswordReset 经 resolveResetUser 绑定）：
 // SaaS 模式按租户读覆盖值；无绑定（off 模式或平台级调用）时读平台默认值。
 func getFrontendBaseURL(ctx context.Context) string {
-	if url := os.Getenv("FRONTEND_URL"); url != "" {
+	// 读取点形状：GetString( 与 group/key 字面量同一行，满足读取点硬闸。
+	if url := GlobalConfigParam().GetString(ctx, "urls", "frontend_url", ""); url != "" {
 		return url
 	}
-	// env > 参数 > 代码兜底（R2 参数化）。默认与接线前的 http://localhost:3000 一致。
-	// 读取点形状：GetString( 与 group/key 字面量同一行，满足读取点硬闸。
-	return GlobalConfigParam().GetString(ctx, "urls", "frontend_url", "http://localhost:3000")
+	if url := strings.TrimSpace(os.Getenv("FRONTEND_URL")); url != "" {
+		return url
+	}
+	return "http://localhost:3000"
 }
 
 // PasswordResetTokenIsValid 令牌是否有效（未过期且未使用）

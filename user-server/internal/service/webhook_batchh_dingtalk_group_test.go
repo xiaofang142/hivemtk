@@ -126,6 +126,7 @@ func batchHExtra(t *testing.T, hub model.MessageHub) map[string]any {
 
 // ① 群聊：官方身份面字段必须一路落到 hub 行与 AI 触发参数上。
 func TestBatchH_DingTalkGroupCallbackLandsGroupFaces(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, db, id := batchHSetup(t)
 	convID, err := batchHSend(t, svc, id, batchHPayload(t, nil))
 	if err != nil {
@@ -172,6 +173,7 @@ func TestBatchH_DingTalkGroupCallbackLandsGroupFaces(t *testing.T) {
 
 // ② 单聊：conversationType=1 不得带上任何群面，但 senderNick 仍要落。
 func TestBatchH_DingTalkSingleChatHasNoGroupFaces(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, db, id := batchHSetup(t)
 	convID, err := batchHSend(t, svc, id, batchHPayload(t, map[string]any{
 		"conversationType":  "1",
@@ -202,6 +204,7 @@ func TestBatchH_DingTalkSingleChatHasNoGroupFaces(t *testing.T) {
 // ③ 缺席 ≠ false：官方明写 isAdmin/isInAtList「机器人发布上线后生效，否则不返回」，
 // 未下发时 Extra 里必须**没有**这个键，而不是写一个 false 让 ops 误判成「非管理员」。
 func TestBatchH_DingTalkAbsentOptionalFlagsStayAbsent(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, db, id := batchHSetup(t)
 	convID, err := batchHSend(t, svc, id, batchHPayload(t, map[string]any{
 		"isAdmin": nil, "isInAtList": nil, "conversationType": nil, "conversationTitle": nil,
@@ -267,6 +270,7 @@ func TestBatchH_DingTalkNumericConversationTypeStillGroup(t *testing.T) {
 // ⑥ 旁证字段形态变化不许把整条消息带走：isAdmin 若哪天变成 1/0，
 // 为它报解析错 = 群里每条客户消息 400 且不重投，代价远大于少存一枚旗标。
 func TestBatchH_DingTalkUnknownBoolFormDoesNotSinkMessage(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, db, id := batchHSetup(t)
 	convID, err := batchHSend(t, svc, id, batchHPayload(t, map[string]any{"isAdmin": json.Number("1")}))
 	if err != nil {
@@ -284,6 +288,7 @@ func TestBatchH_DingTalkUnknownBoolFormDoesNotSinkMessage(t *testing.T) {
 // ⑦ 钉死「不加 @判定门」这个结论：群里既没有 atUsers 也没有 isInAtList 的回调
 // 仍然必须触发 AI。将来若有人按 N-22 旧口径补一道 @判定，这条会红。
 func TestBatchH_DingTalkGroupWithoutAtSignalStillTriggersAI(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc, tr, _, id := batchHSetup(t)
 	if _, err := batchHSend(t, svc, id, batchHPayload(t, map[string]any{
 		"atUsers": nil, "isInAtList": nil,

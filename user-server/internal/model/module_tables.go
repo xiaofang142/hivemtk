@@ -94,7 +94,7 @@ var customerOwnedTables = []string{
 	"customer_tag_assignments", "customer_segments", "customer_rfm",
 	"customer_rfms", "rfm_rules", "customer_do_not_contact", "customer_long_term_memory",
 	"clues", "clue_scores", "clue_engagement_events",
-	"user_tags", "user_rfms", "smlist", "lead_mining_configs",
+	"user_tags", "user_rfms", "smlist", "lead_mining_configs", "bridge_lead_tasks",
 }
 
 // inbox 模块独占

@@ -196,41 +196,42 @@ func (s *InboxIngressService) AckOutboundDelivered(ctx context.Context, channel,
 	if s.hubRepo == nil || len(msgIDs) == 0 {
 		return 0, nil
 	}
+	ackStarted := time.Now()
 
 	affected, err := s.hubRepo.AckOutboundDeliveredBatch(ctx, channel, accountID, msgIDs)
 	if err != nil {
 		return 0, err
 	}
 
-	ackTimer := tracing.StartSpan()
-	for _, id := range msgIDs {
-		if id == "" {
-			continue
-		}
-		hub, _ := s.hubRepo.GetByMsgID(ctx, id)
-		var traceID, convID string
-		if hub != nil {
-			traceID, convID = hub.TraceID, hub.ConversationID
-		}
-		tracing.RecordNode(ctx, tracing.NodeSpan{
-			TraceID:        traceID,
-			ConversationID: convID,
+	ackCompleted := time.Now()
+	// 旧批量协议不返回逐行翻转身份，只记录有范围的操作，不伪造逐消息交付样本。
+	rows, _ := s.hubRepo.GetByMsgIDsInScopeWithConv(ctx, channel, accountID, "", msgIDs)
+	for i := range rows {
+		hub := &rows[i]
+		tracing.RecordNode(tracing.WithCarrier(ctx, tracing.CarrierForHub(ctx, hub)), tracing.NodeSpan{
+			TraceID:        hub.TraceID,
+			ConversationID: hub.ConversationID,
 			AccountID:      accountID,
 			Channel:        channel,
 			Node:           tracing.NodeDeliveredAck,
 			Direction:      "outbound",
-			MsgID:          id,
+			MsgID:          hub.MsgID,
 			Input: map[string]any{
 				"channel":    channel,
 				"account_id": accountID,
-				"msg_id":     id,
+				"msg_id":     hub.MsgID,
 			},
 			Output: map[string]any{
-				"status": model.BridgeAckStatusDelivered,
+				"status":             model.BridgeAckStatusDelivered,
+				"transition_applied": false,
+				"legacy_batch":       true,
 			},
-			DurationMs: ackTimer.ElapsedMs(),
-			Expected:   "pending → delivered（桥接已成功转发到网页）",
-			Status:     tracing.StatusOk,
+			DurationMs:       ackCompleted.Sub(ackStarted).Milliseconds(),
+			StartedAt:        &ackStarted,
+			CompletedAt:      &ackCompleted,
+			DurationMeasured: true,
+			Expected:         "旧批量ACK操作完成；逐消息翻转身份未返回",
+			Status:           tracing.StatusSkipped,
 		})
 	}
 	return int(affected), nil
@@ -301,6 +302,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 	perItem map[string]BridgeOutboundAckInput,
 	fence AckOutboundClaimFence,
 ) (*AckOutboundResult, error) {
+	ackStarted := time.Now()
 	result := &AckOutboundResult{
 		Items: make([]AckOutboundItem, 0, len(msgIDs)),
 	}
@@ -474,7 +476,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 		}
 	}
 
-	ackTimer := tracing.StartSpan()
+	ackCompleted := time.Now()
 	for _, item := range result.Items {
 		if item.Status == model.BridgeAckStatusNotFound || item.Status == model.BridgeAckStatusNotInScope {
 			continue
@@ -493,7 +495,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 		case model.BridgeAckStatusDuplicate:
 			traceStatus = tracing.StatusSkipped
 		default:
-			traceStatus = tracing.StatusOk
+			traceStatus = tracing.StatusAbnormal
 		}
 		// Expected 文案随终态分叉（CH-37b 刀4）：unknown 不是「已确认送达/失败」，
 		// 是「结果不明待对账」，文案不能冒充确定性结论。
@@ -501,7 +503,7 @@ func (s *InboxIngressService) ackOutboundDetailed(
 		if terminalStatus == model.BridgeAckStatusUnknown {
 			expected = "pending → unknown（桥端结果不明：永不自动重发，待人工/API 对账）"
 		}
-		tracing.RecordNode(ctx, tracing.NodeSpan{
+		tracing.RecordNode(tracing.WithCarrier(ctx, tracing.CarrierForHub(ctx, h)), tracing.NodeSpan{
 			TraceID:        traceID,
 			ConversationID: convID,
 			AccountID:      accountID,
@@ -519,11 +521,15 @@ func (s *InboxIngressService) ackOutboundDetailed(
 				"conversation_id": conversationID,
 			},
 			Output: map[string]any{
-				"status": terminalStatus,
+				"status":             terminalStatus,
+				"transition_applied": item.Status != model.BridgeAckStatusDuplicate,
 			},
-			DurationMs: ackTimer.ElapsedMs(),
-			Expected:   expected,
-			Status:     traceStatus,
+			DurationMs:       ackCompleted.Sub(ackStarted).Milliseconds(),
+			StartedAt:        &ackStarted,
+			CompletedAt:      &ackCompleted,
+			DurationMeasured: true,
+			Expected:         expected,
+			Status:           traceStatus,
 		})
 	}
 	return result, nil

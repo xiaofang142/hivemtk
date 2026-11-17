@@ -2,7 +2,7 @@ package repository
 
 // 关注事件驱动的积压补发（2026-11-15 全平台关注逻辑）回归钉：
 //   - MarkDueByConversation：delayed 行 send_at 立即到期（常规认领消费）；
-//   - ReviveSendFailedByConversation：限额阻塞的 send_failed 行复活为 pending（预算清零）。
+//   - ReviveSendFailedByConversation：限额阻塞的 send_failed 行恢复 pending（保留预算）。
 
 import (
 	"context"
@@ -82,8 +82,8 @@ func TestFollowFlush_ReviveSendFailedByConversation(t *testing.T) {
 	}
 	var row model.MessageHub
 	g.Where("msg_id = ?", "mh:flush-sf").First(&row)
-	if row.Status != "pending" || row.PushAttempts != 0 || row.PushError != "" {
-		t.Fatalf("复活后应 pending/预算清零/错误位清空，实际 %+v", row)
+	if row.Status != "pending" || row.PushAttempts != 7 || row.PushError != "" {
+		t.Fatalf("复活后应 pending/保留7次已用预算/错误位清空，实际 %+v", row)
 	}
 
 	// delivered 终态不动

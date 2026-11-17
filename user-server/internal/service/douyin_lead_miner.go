@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -46,8 +48,9 @@ func bridgeDMKeyShort(channel string) string {
 // triggerBridgeDMOutreach 群线索转私信。渠道必须由调用方带进来：
 // 此前写死 douyin，TikTok/小红书/快手/闲鱼的商机会被投进抖音出站队列（D-01）。
 func (s *WebhookService) triggerBridgeDMOutreach(ctx context.Context, channel, accountID, fromID, groupID, groupTitle string, score int, originalText string) {
-	if strings.TrimSpace(channel) == "" {
-		channel = string(ChannelDouyin)
+	if s == nil || !bridgeDMOutreachIdentityValid(channel, accountID, fromID) {
+		logger.Ctx(ctx).Warn().Msg("bridge outreach rejected: channel or identity unconfirmed")
+		return
 	}
 	short := bridgeDMKeyShort(channel)
 
@@ -179,6 +182,27 @@ func (s *WebhookService) DouyinLeadMiner() func(ctx context.Context, ev *model.M
 		adapter := bridgeLeadAdapterForChannel(channel)
 		MineUnifiedLead(ctx, s, hub, adapter, accountID, ev.GroupID, groupName, ev.SenderID, ev.SenderName, "", ev.Content)
 	}
+}
+
+// ProcessBridgeLead 只接受已持久化并由服务端确认资格的入站引用。
+func (s *WebhookService) ProcessBridgeLead(ctx context.Context, hub *model.MessageHub) error {
+	id, ok := tenant.FromContext(ctx)
+	if s == nil || !ok || id == 0 || tenant.IsSystemScope(ctx) || hub == nil || hub.ID == 0 ||
+		hub.TenantID != id || !hub.BridgeLeadEligible || hub.Direction != "inbound" ||
+		!isBridgeLeadMiningChannel(hub.Platform) || hub.AccountID == "" || hub.AccountID == "default" ||
+		hub.ConversationID == "" || hub.SenderID == "" || hub.MsgID == "" || hub.IsAIReply {
+		return errors.New("bridge lead processing requires trusted persisted tenant and message scope")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if hub.SentAt.IsZero() || hub.SentAt.Before(time.Now().Add(-InboxReplyWindow)) || hub.SentAt.After(time.Now().Add(InboxBackfillFutureTolerance)) {
+		return errors.New("bridge lead input is no longer current")
+	}
+	groupName, _ := hub.Extra["group_name"].(string)
+	_, err := MineUnifiedLeadDetailed(ctx, s, hub, bridgeLeadAdapterForChannel(hub.Platform),
+		hub.AccountID, hub.GroupID, groupName, hub.SenderID, hub.SenderName, "", hub.Content)
+	return err
 }
 
 var leadMiningChannels = map[string]bool{

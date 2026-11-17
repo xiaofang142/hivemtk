@@ -17,19 +17,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 // ErrImageDescribeDisabled 未配置视觉服务（上游应按不支持格式处理）。
-var ErrImageDescribeDisabled = errors.New("图片描述服务未配置（IMAGE_DESCRIBE_URL）")
+var ErrImageDescribeDisabled = errors.New("图片描述服务未配置（etl.image_describe_url）")
 
-// imageDescribeURL 本地 VL 服务（OpenAI chat completions 兼容）。
-var imageDescribeURL = strings.TrimSpace(os.Getenv("IMAGE_DESCRIBE_URL"))
+// SaaS 配置面改造（B6，2026-11-17）：IMAGE_DESCRIBE_URL/MODEL 环境变量退役，
+// 改由参数中心 etl 组（image_describe_url / image_describe_model）经 provider 注入
+// （装配点 internal/app）。
+var imageDescribeConfigProvider = func() (string, string) { return "", "" }
 
-// imageDescribeModel 视觉模型名（服务侧路由用）。
-var imageDescribeModel = strings.TrimSpace(os.Getenv("IMAGE_DESCRIBE_MODEL"))
+// SetImageDescribeConfigProvider 注入图片描述服务取值口。传 nil 是空操作而不是复位。
+func SetImageDescribeConfigProvider(fn func() (string, string)) {
+	if fn != nil {
+		imageDescribeConfigProvider = fn
+	}
+}
+
+func imageDescribeConfig() (url, model string) { return imageDescribeConfigProvider() }
 
 var imageExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true}
 
@@ -46,7 +53,8 @@ func extOf(filename string) string {
 
 // DescribeImage 图片→文本描述。dataURL 形状（base64 内联），零外发文件。
 func DescribeImage(ctx context.Context, filename string, data []byte) (string, error) {
-	if imageDescribeURL == "" {
+	url, model := imageDescribeConfig()
+	if url == "" {
 		return "", ErrImageDescribeDisabled
 	}
 	cctx, cancel := context.WithTimeout(ctx, 90*time.Second)
@@ -65,7 +73,6 @@ func DescribeImage(ctx context.Context, filename string, data []byte) (string, e
 	}
 	dataURL := "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
 
-	model := imageDescribeModel
 	if model == "" {
 		model = "vl"
 	}
@@ -82,7 +89,7 @@ func DescribeImage(ctx context.Context, filename string, data []byte) (string, e
 	}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(cctx, http.MethodPost,
-		strings.TrimRight(imageDescribeURL, "/")+"/v1/chat/completions", bytes.NewReader(raw))
+		strings.TrimRight(url, "/")+"/v1/chat/completions", bytes.NewReader(raw))
 	if err != nil {
 		return "", err
 	}
@@ -116,7 +123,7 @@ func DescribeImage(ctx context.Context, filename string, data []byte) (string, e
 }
 
 // ImageDescribeEnabled 可观测。
-func ImageDescribeEnabled() bool { return imageDescribeURL != "" }
+func ImageDescribeEnabled() bool { u, _ := imageDescribeConfig(); return u != "" }
 
 func truncateStr(s string, n int) string {
 	if len(s) <= n {

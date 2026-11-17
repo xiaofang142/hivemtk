@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 const (
@@ -16,11 +17,34 @@ const (
 
 // dmOutreachAllowed 私信触达冷却闸：同一 key 在 dyDMOutreachCooldown 内只放行一次。
 func dmOutreachAllowed(ctx context.Context, key string) bool {
-	set, err := cache.GetGlobalCache().SetNX(ctx, key, "1", dyDMOutreachCooldown)
-	if err != nil {
-		return true
+	return dmOutreachAllowedWithCache(ctx, key, cache.GetGlobalCache())
+}
+
+// dmOutreachAllowedWithCache 在原共享缓存上确认许可；失败不换缓存、不释放已占预算。
+func dmOutreachAllowedWithCache(ctx context.Context, key string, c cache.Cache) bool {
+	if ctx == nil || c == nil || strings.TrimSpace(key) == "" || ctx.Err() != nil {
+		return false
 	}
-	return set
+	if tenant.IsSystemScope(ctx) {
+		return false
+	}
+	if _, ok := tenant.FromContext(ctx); tenant.IsMultiTenant() && !ok {
+		return false
+	}
+	set, err := c.SetNX(ctx, key, "1", dyDMOutreachCooldown)
+	return err == nil && set && ctx.Err() == nil
+}
+
+func bridgeDMOutreachIdentityValid(channel, accountID, fromID string) bool {
+	if strings.TrimSpace(accountID) == "" || accountID == "default" || strings.TrimSpace(fromID) == "" {
+		return false
+	}
+	switch channel {
+	case string(ChannelDouyin), string(ChannelTiktok), "xiaohongshu", "kuaishou", "xianyu":
+		return true
+	default:
+		return false
+	}
 }
 
 func BuildDouyinDMWelcome(groupTitle, originalText string) string {

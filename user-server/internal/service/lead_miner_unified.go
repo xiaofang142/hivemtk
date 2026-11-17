@@ -10,6 +10,8 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"runtime/debug"
 	"strconv"
@@ -173,24 +175,30 @@ func FormatUnifiedLeadDesc(prefix, leadTag, chatLabel, snippet string, score int
 // 幂等去重 + 意向分增量更新 + 评分记录 + 主动触达，全过程 best-effort。
 // 返回 newOpportunity：本次是否让该发言者「新晋为商机」（首次达到阈值，或由非商机→商机）。
 func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageHub, adapter ChannelLeadAdapter, accountID, groupID, groupTitle, fromID, fromName, username, text string) (newOpportunity bool) {
+	newOpportunity, _ = MineUnifiedLeadDetailed(ctx, s, hub, adapter, accountID, groupID, groupTitle, fromID, fromName, username, text)
+	return newOpportunity
+}
+
+// MineUnifiedLeadDetailed 保留旧打分和触达出口，给持久任务提供可判定的错误。
+func MineUnifiedLeadDetailed(ctx context.Context, s *WebhookService, hub *model.MessageHub, adapter ChannelLeadAdapter, accountID, groupID, groupTitle, fromID, fromName, username, text string) (newOpportunity bool, err error) {
 	if s == nil || adapter == nil {
-		return false
+		return false, errors.New("lead miner dependencies unavailable")
 	}
 	s.ensureReposFromDB(ctx)
 	if s.clueRepo == nil {
-		return false
+		return false, errors.New("lead miner clue repository unavailable")
 	}
 	t := strings.TrimSpace(text)
 	if t == "" || strings.HasPrefix(t, "/") {
-		return false
+		return false, nil
 	}
 	if !unifiedMeaningfulRe.MatchString(t) {
-		return false
+		return false, nil
 	}
 
 	account := adapter.AccountKey(fromID, fromName, username)
 	if account == "" {
-		return false
+		return false, nil
 	}
 	name := adapter.DisplayName(fromName, username, account)
 
@@ -198,6 +206,9 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 	score, signals, isOpp := DetectUnifiedIntent(t, extraHigh, extraMedium)
 	// LLM 复核：行业无关判别（词库结果仅作兜底），失败回落关键词结果
 	score, signals, isOpp = refineLeadWithLLM(ctx, t, score, signals, isOpp)
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
 	chatLabel := adapter.ChatLabel(groupTitle)
 	leadTag := adapter.LeadTag(isOpp)
 	desc := FormatUnifiedLeadDesc(adapter.DescPrefix(), leadTag, chatLabel, t, score, signals)
@@ -213,7 +224,7 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 	existing, err := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account)
 	if err != nil {
 		logger.Warnf("[UnifiedLeadMiner] 查询线索失败 channel=%s account=%s: %v", adapter.Channel(), account, err)
-		return false
+		return false, fmt.Errorf("find lead: %w", err)
 	}
 
 	isGroup := strings.TrimSpace(groupTitle) != "" || (hub != nil && hub.IsGroup)
@@ -241,24 +252,24 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 				if !isDuplicateKeyError(cerr) {
 					logger.Warnf("[UnifiedLeadMiner] 创建线索失败 channel=%s account=%s: %v", adapter.Channel(), account, cerr)
 				}
-				return false
+				return false, fmt.Errorf("create lead: %w", cerr)
 			}
 		} else {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
 			logger.Infof("[UnifiedLeadMiner] 新增线索 channel=%s account=%s 意向分=%d 商机=%v 会话=%s",
 				adapter.Channel(), account, score, isOpp, chatLabel)
 			newOpportunity = isOpp
 			recordUnifiedLeadScore(ctx, s, clue, adapter.Channel(), isOpp)
 			if isOpp && score >= adapter.OutreachMinScore() && adapter.OutreachMinScore() > 0 {
+				if err := ctx.Err(); err != nil {
+					return false, err
+				}
 				adapter.TriggerOutreach(ctx, s, accountID, fromID, groupID, groupTitle, score, text)
 			}
-			return newOpportunity
+			return newOpportunity, nil
 		}
-	}
-
-	if existing != nil && existing.IsOpportunity == 0 && isOpp && score >= adapter.OutreachMinScore() && adapter.OutreachMinScore() > 0 {
-		logger.Infof("[UnifiedLeadMiner] 线索首次升级为商机，触发触达 channel=%s account=%s", adapter.Channel(), account)
-		newOpportunity = true
-		adapter.TriggerOutreach(ctx, s, accountID, fromID, groupID, groupTitle, score, text)
 	}
 
 	if int64(score) > existing.IntentScore {
@@ -277,7 +288,11 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 		}
 		if uerr := s.clueRepo.UpdateByID(ctx, existing.ID, updates); uerr != nil {
 			logger.Warnf("[UnifiedLeadMiner] 更新线索失败 channel=%s id=%s: %v", adapter.Channel(), existing.ID, uerr)
+			return false, fmt.Errorf("update lead: %w", uerr)
 		} else {
+			if err := ctx.Err(); err != nil {
+				return false, err
+			}
 			existing.IntentScore = int64(score)
 			existing.IsOpportunity = boolToInt64(isOpp)
 			existing.Desc = desc
@@ -286,12 +301,15 @@ func MineUnifiedLead(ctx context.Context, s *WebhookService, hub *model.MessageH
 				adapter.Channel(), account, score, isOpp)
 			newOpportunity = isOpp && !wasOpp
 			if isOpp && score >= adapter.OutreachMinScore() && adapter.OutreachMinScore() > 0 && newOpportunity {
+				if err := ctx.Err(); err != nil {
+					return false, err
+				}
 				adapter.TriggerOutreach(ctx, s, accountID, fromID, groupID, groupTitle, score, text)
 			}
 		}
 	}
 	recordUnifiedLeadScore(ctx, s, existing, adapter.Channel(), isOpp)
-	return newOpportunity
+	return newOpportunity, nil
 }
 
 func recordUnifiedLeadScore(ctx context.Context, s *WebhookService, clue *model.Clue, channel string, isOpp bool) {

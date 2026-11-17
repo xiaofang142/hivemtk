@@ -173,7 +173,7 @@ func currentFileURLSigner() *fileURLSigner {
 		fileURLActive = nil
 		return nil
 	}
-	s, err := newFileURLSigner(secret, fileURLTTLFromEnv())
+	s, err := newFileURLSigner(secret, fileURLTTL())
 	if err != nil {
 		logger.Errorf("[STORAGE] 文件 URL 签名器装配失败（文件 URL 将退回明文路径）: %v", err)
 		fileURLActive = nil
@@ -199,18 +199,25 @@ func fileURLSecretFromEnv() string {
 	return ""
 }
 
-// fileURLTTLFromEnv 读 FILE_URL_TTL（Go duration 串）。空/非法 ⇒ 不过期。
-func fileURLTTLFromEnv() time.Duration {
-	raw := strings.TrimSpace(os.Getenv("FILE_URL_TTL"))
-	if raw == "" {
-		return 0
+// fileURLTTLProvider 是签名 URL 时效的取值口（Go duration 秒数；0 = 不过期）。
+// SaaS 配置面改造（B12，2026-11-17）：FILE_URL_TTL 环境变量退役，改由参数中心
+// misc.file_url_ttl（秒）经 provider 注入（装配点 internal/app）。默认 0 不过期：
+// 本地存储的 URL 会被持久化（materials.url、卡片 image_url…），短时 token 会在
+// 用户翻历史记录时自己到期变成"图片某天开始全裂"——需要短时的部署在参数中心配。
+var fileURLTTLProvider = func() int { return 0 }
+
+// SetFileURLTTLProvider 注入时效取值口。传 nil 是空操作而不是复位。
+func SetFileURLTTLProvider(fn func() int) {
+	if fn != nil {
+		fileURLTTLProvider = fn
 	}
-	d, err := time.ParseDuration(raw)
-	if err != nil || d < 0 {
-		logger.Warnf("[STORAGE] FILE_URL_TTL=%q 无法解析，按「不过期」处理（合法形态如 168h、30m）", raw)
-		return 0
+}
+
+func fileURLTTL() time.Duration {
+	if n := fileURLTTLProvider(); n > 0 {
+		return time.Duration(n) * time.Second
 	}
-	return d
+	return 0
 }
 
 // isTestProcess 与 utils.isTestProcess 同一判据（两边都判一次是为了不让存储层依赖 utils）。

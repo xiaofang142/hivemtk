@@ -127,11 +127,18 @@ func TestRecoveryScannerDisabled(t *testing.T) {
 	if db == nil {
 		t.Skip("test db unavailable")
 	}
-	t.Setenv("WEBHOOK_RECOVERY_ENABLED", "false")
+	// WEBHOOK_RECOVERY_ENABLED env 已退役（B8），改经参数中心 webhook.recovery_enabled 注入。
+	svc := &ConfigParamService{
+		cache:  map[string]paramEntry{"webhook." + WebhookRecoveryEnabledParam: {value: "false", expiresAt: time.Now().Add(time.Hour)}},
+		loaded: map[string]bool{},
+		nowFn:  time.Now,
+	}
+	SetGlobalForTest(svc)
+	t.Cleanup(func() { SetGlobalForTest(nil) })
 	repo := repository.NewWebhookEventRepository()
 	repository.SetWebhookEventRepoDB(repo, db)
-	svc := &WebhookService{eventRepo: repo}
-	svc.startRecoveryScanner()
+	ws := &WebhookService{eventRepo: repo}
+	ws.startRecoveryScanner()
 }
 
 func TestReplayMarksProcessedOnUnknownPlatform(t *testing.T) {

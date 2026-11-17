@@ -83,6 +83,7 @@ func hasSuffix(s, suf string) bool {
 
 // 桥端 voice 上报的完整链路：入站 → triggerAIForEvent → [语音] 标签（非 [voice]）。
 func TestInboundVoiceMessageTriggersAIWithNormalizedTag(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)

@@ -1,7 +1,7 @@
 package service
 
 // 关注后补发积压（2026-11-15 全平台关注逻辑 Phase 4）回归钉：
-//   - send_failed（限额阻塞）行复活为 pending（预算清零/错误位清空）；
+//   - send_failed（限额阻塞）行复活为 pending（保留已用预算/错误位清空）；
 //   - delayed quiet_hours/send_retry 行立即到期；
 //   - delivered 终态与无关会话不动；nil 仓储 no-op 不 panic。
 
@@ -69,22 +69,30 @@ func TestFlushConversationBacklog_RevivesAndMatures(t *testing.T) {
 	svc.FlushConversationBacklog(ctx, channel, account, conv)
 
 	var revived model.MessageHub
-	database.Where("msg_id = ?", "mh:flush-sf").First(&revived)
-	if revived.Status != "pending" || revived.PushAttempts != 0 || revived.PushError != "" {
-		t.Fatalf("send_failed 行应复活为 pending/预算清零，实际 %+v", revived)
+	if err := database.Where("msg_id = ?", "mh:flush-sf").First(&revived).Error; err != nil {
+		t.Fatalf("读取恢复行失败: %v", err)
+	}
+	if revived.Status != "pending" || revived.PushAttempts != 9 || revived.PushError != "" {
+		t.Fatalf("send_failed 行应复活为 pending/保留9次已用预算，实际 %+v", revived)
 	}
 	var done model.MessageHub
-	database.Where("msg_id = ?", "mh:flush-done").First(&done)
+	if err := database.Where("msg_id = ?", "mh:flush-done").First(&done).Error; err != nil {
+		t.Fatalf("读取已投递行失败: %v", err)
+	}
 	if done.Status != "delivered" {
 		t.Fatalf("delivered 终态不应被动，实际 %s", done.Status)
 	}
 	var other model.MessageHub
-	database.Where("msg_id = ?", "mh:flush-other").First(&other)
+	if err := database.Where("msg_id = ?", "mh:flush-other").First(&other).Error; err != nil {
+		t.Fatalf("读取无关会话行失败: %v", err)
+	}
 	if other.Status != "send_failed" {
 		t.Fatalf("无关会话不应被复活，实际 %s", other.Status)
 	}
 	var due model.DelayedOutboundReply
-	database.Where("conversation_id = ?", conv).First(&due)
+	if err := database.Where("conversation_id = ?", conv).First(&due).Error; err != nil {
+		t.Fatalf("读取延后回复失败: %v", err)
+	}
 	if due.SendAt.After(time.Now()) {
 		t.Fatalf("delayed 行应已到期，实际 send_at=%v", due.SendAt)
 	}

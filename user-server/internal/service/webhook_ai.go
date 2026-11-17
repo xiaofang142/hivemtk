@@ -1,8 +1,6 @@
 package service
 
 import (
-	"strings"
-
 	"context"
 
 	"fmt"
@@ -167,7 +165,7 @@ func (s *WebhookService) triggerSalesEngine(ctx context.Context, channel Webhook
 		parentCtx = trace.NewContextWithTraceID(parentCtx, parentTraceID)
 	}
 
-	aiTimeout := webhookEnvInt("WEBHOOK_AI_TIMEOUT_SECONDS", 180)
+	aiTimeout := webhookAITimeoutSeconds(ctx) // B8/B9：WEBHOOK_AI_TIMEOUT_SECONDS env 退役，入参数中心 webhook.ai_timeout_seconds
 	if aiTimeout < 60 {
 		aiTimeout = 60
 	}
@@ -484,7 +482,7 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 		parentCtx = trace.NewContextWithTraceID(parentCtx, parentTraceID)
 	}
 
-	aiTimeout := webhookEnvInt("WEBHOOK_AI_TIMEOUT_SECONDS", 180)
+	aiTimeout := webhookAITimeoutSeconds(ctx) // B8/B9：WEBHOOK_AI_TIMEOUT_SECONDS env 退役，入参数中心 webhook.ai_timeout_seconds
 	if aiTimeout < 60 {
 		aiTimeout = 60
 	}
@@ -496,12 +494,8 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 	if traceID == "" {
 		traceID = tracing.LinkInboundTraceID(ctx, hubMsg.ConversationID)
 	}
-	traceCarrier := &tracing.Carrier{
-		TraceID:        traceID,
-		ConversationID: hubMsg.ConversationID,
-		AccountID:      hubMsg.AccountID,
-		Channel:        string(channel),
-	}
+	traceCarrier := tracing.CarrierForHub(ctx, hubMsg).WithAnswerAttempt(1)
+	traceCarrier.TraceID = traceID
 	ctx = tracing.WithCarrier(ctx, traceCarrier)
 
 	ctx = tracing.InitRecalledChunks(ctx)
@@ -580,93 +574,10 @@ func (s *WebhookService) runAIGeneration(ctx context.Context, channel WebhookCha
 			Msg("orchestrator handle failed after retries")
 		return
 	}
-	if result == nil {
-		return
-	}
-
-	if result.Transferred {
-		logger.Ctx(ctx).Info().
-			Str("session_id", result.SessionID).
-			Str("reason", result.TransferReason).
-			Msg("transferred to human")
-		// 转接公告必须和 AI 回复走同一条出站链路（message_hub(status=pending) → outbox/SSE
-		// → 插件投递 → ack），插件才不需要为它单独加一条通道。
-		// 不发的后果是实测到的那一形态：客户照兜底文案回了「转人工」，会话被系统判成
-		// 等人工、待办也进了池子，但客户端一句回执都没有 —— 客户只知道没人理他。
-		// TransferNotice 为空表示"不是本轮接走的"（会话上一轮已在人工手里），
-		// 那时重复播报就是刷屏。
-		if result.TransferNotice != "" {
-			outCtx := HandleResultToContext(ctx, result)
-			if agentCtx != nil && agentCtx.AgentCode != "" {
-				outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)
-			}
-			_, _ = s.sendOutbound(outCtx, channel, accountID, p, result.TransferNotice, hubMsg, nil)
-		}
-		return
-	}
-
-	// LLM 回复决策（2026-11-15 用户裁决：消息是否需要回复由 LLM 基于上下文综合判断）。
-	// 编排器 prompt 已指示：平台公告/近期已完整回答的问题 → 输出 NO_REPLY。
-	// 服务端只执行该决策：不发送、不落出站行（留 trace 供审计），不重试。
-	if result.AIReplied && strings.EqualFold(strings.TrimSpace(result.Reply), "NO_REPLY") {
-		logger.Ctx(ctx).Info().
-			Str("channel", string(channel)).
-			Str("conv_id", hubMsg.ConversationID).
-			Msg("[Webhook] LLM 判定本轮无需回复（NO_REPLY）——不发送不落库")
-		return
-	}
-
-	if result.AIReplied && (result.Reply != "" || len(result.Cards) > 0) {
-		// CS-04 发送前复核：入站判锁通过后 AI 腿已在异步生成（入站锁判定 :416 只护
-		// 触发点），这期间坐席接管（TakeoverByAgent→handler=human+LockSessionForHuman
-		// 人工锁）就是实测的抢答窗口——生成完成直接 sendOutbound 的话，客户会在人工
-		// 持有期收到 AI 文案。发送点以编排器稳定会话 ID 复核同一把锁，持有即静默放弃：
-		// 锁由接管链负责，出站链只放行/不释放（契约钉在 cs04_takeover_race_presend_test）。
-		// 读锁故障沿用入站侧同一 fail-open 口径（IsSessionHumanLocked 内部已按关键词保守
-		// 判定并留痕），这里不重复判定。
-		if s.ingressSvc != nil && result.SessionID != "" {
-			if locked, _ := s.ingressSvc.IsSessionHumanLocked(ctx, result.SessionID); locked {
-				logger.Ctx(ctx).Info().
-					Str("session_id", result.SessionID).
-					Str("event_id", p.EventID).
-					Msg("发送前复核：会话已被人工接管，AI 回复静默放弃（防抢答）")
-				return
-			}
-		}
-		outCtx := HandleResultToContext(ctx, result)
-		if agentCtx != nil && agentCtx.AgentCode != "" {
-			outCtx = AgentIDToContext(outCtx, agentCtx.AgentCode)
-		}
-		// 同上：失败落轨迹与改投重发均在 sendOutbound 内部收口。
-		sent, sendErr := s.sendOutbound(outCtx, channel, accountID, p, result.Reply, hubMsg, result.Cards)
-		// 重复答案降级重生成（2026-11-14 生产实证：客户追问「详细介绍 sop 流程」，
-		// FAQ fastpath 又回同一段总介绍 → 撞已投递占位 id=0 → 原回复标 send_failed
-		// 终态，客户永远等不到新答案）。判据=sendOutbound 回传的 duplicate 类错误：
-		// 禁用 fastpath 重跑一次完整 LLM（对话历史在记忆层，自然生成针对追问的
-		// 新回答）→ 新内容不撞占位 → 正常投递。只重试一次，仍重复则走 failed 占位行
-		// 坐席可见，不循环。
-		if !sent && sendErr != nil && strings.Contains(sendErr.Error(), "duplicate reply") {
-			logger.Ctx(ctx).Info().
-				Str("channel", string(channel)).
-				Str("conv_id", hubMsg.ConversationID).
-				Msg("[Webhook] FAQ 答案与会话近期已投递内容重复——禁用 fastpath 重跑编排器生成针对性回复")
-			in2 := *in
-			in2.NoFastpath = true
-			if result2, err2 := s.smartOrchestrator.HandleIncomingWithAgent(ctx, &in2, agentCtx); err2 == nil && result2 != nil && !result2.Transferred && result2.AIReplied && result2.Reply != "" && result2.Reply != result.Reply {
-				outCtx2 := HandleResultToContext(ctx, result2)
-				if agentCtx != nil && agentCtx.AgentCode != "" {
-					outCtx2 = AgentIDToContext(outCtx2, agentCtx.AgentCode)
-				}
-				_, _ = s.sendOutbound(outCtx2, channel, accountID, p, result2.Reply, hubMsg, result2.Cards)
-			}
-		}
-		return
-	}
-
-	logger.Ctx(ctx).Info().
-		Str("session_id", result.SessionID).
-		Str("handler", string(result.HandlerType)).
-		Msg("no outbound")
+	s.deliverAIResult(ctx, webhookReplyRequest{
+		channel: channel, accountID: accountID, payload: p, hub: hubMsg,
+		incoming: in, agent: agentCtx,
+	}, result, s.smartOrchestrator.HandleIncomingWithAgent)
 }
 
 // defaultReplySemTimeout replySem 等待超时的代码兜底值，与参数中心

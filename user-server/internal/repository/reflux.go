@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/utils"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

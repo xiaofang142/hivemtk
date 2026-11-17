@@ -216,6 +216,10 @@ func main() {
 		logger.Info("[ConfigParam] confidence 组接线 " + strconv.Itoa(len(wired)) + " 条")
 	}
 
+	// SaaS 配置面改造（2026-11-17）：env→参数中心迁移批次（etl/health/browser_automation/
+	// storage/knowledge 五个下层包的 provider seam），详见 saas_config_params_wiring.go。
+	app.WireSaaSConfigParamSeams()
+
 	// agent_llm 组同理：熔断四件套、投票一致阈值、客户端 HTTP 超时、Trace DB Sink
 	// 停止截止，全都住在 internal/aiagent/llm 里，而这个包不能反向 import service。
 	if wired := app.WireAgentLLMConfigParams(); len(wired) > 0 {
@@ -685,15 +689,18 @@ func main() {
 	logger.Info("[GEO InitCron] 定时任务已注册（SOV刷新/负面监控/信源同步/竞品爬虫，经 JobManager 统一管理）")
 
 	alertNotifiers := []service.AlertNotifier{service.NewLogAlertNotifier()}
-	if os.Getenv("ALERT_EMAIL_ENABLED") == "true" {
-		if recps := os.Getenv("ALERT_EMAIL_RECIPIENTS"); recps != "" {
+	// SaaS 配置面改造（B15，2026-11-17）：ALERT_EMAIL_ENABLED/RECIPIENTS、ALERT_WEBHOOK_URL
+	// 环境变量退役，告警通道入参数中心 alerting 组（email_enabled/email_recipients/webhook_url）。
+	// 装配期读（告警是实例级运维面），改参数下次重启生效。
+	if service.GlobalConfigParam().GetBool(context.Background(), "alerting", "email_enabled", false) {
+		if recps := service.GlobalConfigParam().GetString(context.Background(), "alerting", "email_recipients", ""); recps != "" {
 			recipients := strings.Split(recps, ",")
 			emailSvc := service.NewEmailService()
 			alertNotifiers = append(alertNotifiers, service.NewEmailAlertNotifier(emailSvc, recipients, 0))
 			logger.Infof("[T8] alert email notifier enabled, recipients=%v", recipients)
 		}
 	}
-	if webhookURL := os.Getenv("ALERT_WEBHOOK_URL"); webhookURL != "" {
+	if webhookURL := service.GlobalConfigParam().GetString(context.Background(), "alerting", "webhook_url", ""); webhookURL != "" {
 		alertNotifiers = append(alertNotifiers, service.NewWebhookAlertNotifier(webhookURL))
 		logger.Info("[T8] alert webhook notifier enabled")
 	}
@@ -775,6 +782,17 @@ func main() {
 
 	router.Setup(r, db.GetDB())
 	markPhase("router_setup")
+	// 处理器、租户枚举和外发闸先装配；唯一后台实例先停，再关闭持久层。
+	leadWorker, leadErr := app.InitBridgeLeadRuntime(db.GetDB(), app.GetBridgeIngressSvc())
+	if leadErr != nil {
+		logger.Warn("bridge lead runtime unavailable; eligible messages retained for recovery")
+	} else {
+		defer func() {
+			if err := app.StopBridgeLeadRuntime(leadWorker); err != nil {
+				logger.Warn("bridge lead runtime did not stop within shutdown budget")
+			}
+		}()
+	}
 
 	// W-5 挽回队列消费：装配落在 internal/app（见 recovery_worker_wiring.go），
 	// 开关 FF_LTC_RECOVERY_WORKER=off（默认）时 Start 直接 no-op。

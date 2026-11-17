@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -63,7 +64,7 @@ func TestToModelFromPendingAppliesTruncation(t *testing.T) {
 	if m.Output != "ok" {
 		t.Fatal("short output must be unchanged (metadata/short fields untouched)")
 	}
-	if len(m.Input) <= textutil.DefaultMaxBytes || !strings.Contains(m.Input, "[truncated") {
-		t.Fatalf("input should be truncated, len=%d", len(m.Input))
+	if len(m.Input) > textutil.DefaultMaxBytes || !json.Valid([]byte(m.Input)) || !strings.Contains(m.Input, "sha256") {
+		t.Fatalf("巨大input应为合法、有界且标记缺测的摘要, len=%d", len(m.Input))
 	}
 }

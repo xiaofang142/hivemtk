@@ -10,9 +10,9 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils"
 )
 
 // ErrLastAdmin 系统至少需要保留一个 admin 账号

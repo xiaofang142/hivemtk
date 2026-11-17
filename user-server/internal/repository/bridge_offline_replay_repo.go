@@ -3,11 +3,13 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 )
@@ -65,16 +67,14 @@ func (r *BridgeOfflineReplayRepository) ListBridgeAccounts(ctx context.Context, 
 // 列集合必须与 model.DelayedOutboundReply 一致：表里没有 receiver_id / msg_type /
 // event_id / retry_count / replayed_at 这五列，结构体宣称有只会让 gorm 的 SELECT *
 // 静默把字段留成零值，重放带着空 msg_type 出站且无人报警。
-type DelayedOutboundRow struct {
-	ID             uint          `gorm:"column:id"`
-	Platform       string        `gorm:"column:platform"`
-	AccountID      string        `gorm:"column:account_id"`
-	ConversationID string        `gorm:"column:conversation_id"`
-	SenderID       string        `gorm:"column:sender_id"`
-	Content        string        `gorm:"column:content"`
-	Kind           string        `gorm:"column:kind"`
-	Cards          model.JSONMap `gorm:"column:cards"`
-	Attempts       int           `gorm:"column:attempts"`
+type DelayedOutboundRow = model.DelayedOutboundReply
+
+// DelayedRepository 与离线扫描共享数据库，由调用方沿用统一租约与回写协议。
+func (r *BridgeOfflineReplayRepository) DelayedRepository() *DelayedOutboundRepository {
+	if r == nil {
+		return NewDelayedOutboundRepository(nil)
+	}
+	return NewDelayedOutboundRepository(r.db)
 }
 
 // ListPendingDelayedOutbound 取指定渠道已到期的 pending 延迟出站消息
@@ -82,19 +82,24 @@ type DelayedOutboundRow struct {
 // 必须带 send_at <= now：quiet_hours 行的 send_at 就是窗口开放时刻，
 // 不看它等于在客户免打扰时段把回复推出去。
 func (r *BridgeOfflineReplayRepository) ListPendingDelayedOutbound(ctx context.Context, platform, accountID string, limit int) ([]DelayedOutboundRow, error) {
-	if r.db == nil {
-		return nil, nil
+	if r == nil || r.db == nil {
+		return nil, gorm.ErrInvalidDB
 	}
-	q := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
-		Select("id, platform, account_id, conversation_id, sender_id, content, kind, cards, attempts").
+	if ctx == nil || tenant.IsSystemScope(ctx) || tenant.WriteTenantID(ctx) == 0 {
+		return nil, errors.New("offline replay: tenant unconfirmed")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	q := r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).Model(&model.DelayedOutboundReply{}).
+		Where("tenant_id = ?", tenantID).
 		Where("platform = ? AND account_id = ? AND status = ? AND send_at <= ?",
 			platform, accountID, model.DelayedStatusPending, time.Now()).
 		Order("send_at ASC")
-	if limit > 0 {
-		q = q.Limit(limit)
-	}
+	q = q.Limit(clampBatchLimit(limit))
 	var msgs []DelayedOutboundRow
-	err := q.Scan(&msgs).Error
+	err := q.Find(&msgs).Error
 	return msgs, err
 }
 
@@ -102,52 +107,23 @@ func (r *BridgeOfflineReplayRepository) ListPendingDelayedOutbound(ctx context.C
 //
 // 主链路 drain 的是同一张表的同一批到期 pending 行，两边都直接投递就是
 // 一次周期里把同一份内容发给客户两次；只有把这条 CAS 的 RowsAffected 当门票才互斥。
-func (r *BridgeOfflineReplayRepository) ClaimDelayedOutboundForReplay(ctx context.Context, id uint) (bool, error) {
-	if r.db == nil {
-		return false, nil
-	}
-	res := r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).
-		Where("id = ? AND status = ?", id, model.DelayedStatusPending).
-		Update("status", model.DelayedStatusSending)
-	return res.RowsAffected == 1, res.Error
+func (r *BridgeOfflineReplayRepository) ClaimDelayedOutboundForReplay(ctx context.Context, id uint, platform, accountID string) (*model.DelayedOutboundReply, error) {
+	return r.DelayedRepository().ClaimForReplay(ctx, id, platform, accountID)
 }
 
 // MarkDelayedOutboundReplayFailed 重放失败：回到 pending 待下一轮，累计 attempts 并记错误
-func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayFailed(ctx context.Context, id uint, lastErr string) error {
-	if r.db == nil {
-		return nil
-	}
-	return r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":     model.DelayedStatusPending,
-			"attempts":   gorm.Expr("attempts + 1"),
-			"last_error": truncateForColumn(lastErr, 1024),
-		}).Error
+func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayFailed(ctx context.Context, id uint, token string, nextAt time.Time, lastErr string) error {
+	return r.DelayedRepository().ScheduleRetry(ctx, id, token, nextAt, lastErr)
 }
 
 // MarkDelayedOutboundReplayed 重放成功：收口到 sent
-func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayed(ctx context.Context, id uint) error {
-	if r.db == nil {
-		return nil
-	}
-	return r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":  model.DelayedStatusSent,
-			"sent_at": time.Now(),
-		}).Error
+func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayed(ctx context.Context, id uint, token string) error {
+	return r.DelayedRepository().MarkSent(ctx, id, token, time.Now())
 }
 
 // MarkDelayedOutboundAbandoned 重投次数用尽：收口到终态 failed，不再被回扫取到
-func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundAbandoned(ctx context.Context, id uint, reason string) error {
-	if r.db == nil {
-		return nil
-	}
-	return r.db.WithContext(ctx).Model(&model.DelayedOutboundReply{}).Where("id = ?", id).
-		Updates(map[string]any{
-			"status":     model.DelayedStatusFailed,
-			"sent_at":    time.Now(),
-			"last_error": truncateForColumn(reason, 1024),
-		}).Error
+func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundAbandoned(ctx context.Context, id uint, token, reason string) error {
+	return r.DelayedRepository().FinishReplay(ctx, id, token, model.DelayedStatusFailed, time.Now(), reason)
 }
 
 // OrphanOutboundGroup 一个「桥接渠道账号 + 已无望送达的 message_hub 出站行数」分组。

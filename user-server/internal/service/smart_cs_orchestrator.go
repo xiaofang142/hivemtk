@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
@@ -49,8 +50,11 @@ type SmartCSOrchestrator struct {
 	// refluxCollector 低置信问题回流收集器（T1，可注入可 nil；nil = 关闭，零开销）。
 	refluxCollector reflux.RefluxEmitter
 
-	faqCache    *ragcache.FAQAnswerCacheService
-	faqEmbedder llm.EmbeddingServiceInterface
+	faqCache                 *ragcache.FAQAnswerCacheService
+	faqEmbedder              llm.EmbeddingServiceInterface
+	answerCacheWriteOnce     sync.Once
+	answerCacheWriteSlots    chan struct{}
+	answerCacheWriteCounters answerCacheWriteCounters
 
 	dncChecker DoNotContactChecker
 
@@ -364,6 +368,16 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		emotionHint = emoStrat.ReplyHint
 	}
 
+	if MatchTransferKeywords(in.Content) || MatchExplicitKeywords(in.Content) {
+		result.HandlerType = model.HandlerTypeHuman
+		result.Transferred = true
+		result.TransferReason = "客户显式要求转人工"
+		if err := o.transferToHuman(ctx, session, result.TransferReason, result); err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
+
 	if o.engine == nil {
 		result.HandlerType = model.HandlerTypeHuman
 		result.Transferred = true
@@ -386,20 +400,25 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	}
 
 	faqKBID, faqVec := "", []float32(nil)
-	// 答案缓存命名空间每次入会话算一次，再透传给 Lookup 与 Store：两处各自现算的话，
-	// 中途有人抬灰度比例会把同一会话的读键和写键劈成两个版本（读不到自己刚写的行）。
-	// KBAnswerVersionFor 在灰度未开（或该 KB 没 publish 过）时恒返回 faqPromptVersion，
-	// 即挂载前的字面量 "v1" ⇒ 这一行本身不改变今天的缓存键。
-	faqPromptVer := faqPromptVersion
-	if o.faqCache != nil && o.faqEmbedder != nil {
+	var faqSourceKBUpdatedAt *time.Time
+	faqPromptVer, faqKBVersion := "", ""
+	noFastpath := in.NoFastpath || !faqFastQuestionSafe(in.Content) || o.faqHasPriorAnswer(ctx, in, session)
+	if !noFastpath && o.faqCache != nil && o.faqEmbedder != nil {
 		if kb := o.resolveFAQKB(ctx, finalAgentCtx); kb != nil {
 			faqKBID = strconv.FormatUint(uint64(kb.ID), 10)
-			faqPromptVer = KBAnswerVersionFor(kb, in.OneID)
-			faqVec = o.embedFAQQuery(ctx, in.Content)
+			if !kb.UpdatedAt.IsZero() {
+				version := kb.UpdatedAt
+				faqSourceKBUpdatedAt = &version
+			}
+			faqKBVersion = KBAnswerVersionFor(kb, in.OneID)
+			faqPromptVer = o.answerCacheNamespace(ctx, in, session, finalAgentCtx, faqKBVersion)
+			if faqPromptVer != "" && faqSourceKBUpdatedAt != nil {
+				faqVec = o.embedFAQQuery(ctx, in.Content)
+			}
 		}
 	}
 	if len(faqVec) > 0 {
-		if res, hit := o.lookupFAQAnswerCache(ctx, faqKBID, faqPromptVer, faqVec, result); hit {
+		if res, hit := o.lookupFAQAnswerCacheAtThreshold(ctx, faqKBID, faqPromptVer, faqVec, result, o.answerCacheThreshold(finalAgentCtx)); hit {
 			return res, nil
 		}
 	}
@@ -411,7 +430,7 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		UserMessage: in.Content,
 		Platform:    string(in.Platform),
 		EmotionHint: emotionHint,
-		NoFastpath:  in.NoFastpath,
+		NoFastpath:  noFastpath,
 	}
 	salesResp, err := o.engine.HandleWithAgent(ctx, salesReq, finalAgentCtx)
 	if err != nil || salesResp == nil {
@@ -512,38 +531,6 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 	result.Degraded = salesResp.Degraded
 	sla.Record(sla.SLOInboundHandled, true)
 
-	// FAQ 答案缓存写入守卫：只有当 top1 RAG 召回分数达到置信度阈值时才缓存。
-	// 无门槛写入会让低分召回（甚至幻觉拼接）的回复长期留在缓存里，
-	// 后续相似问题直接命中并绕过置信度→转人工判断（缓存投毒）。
-	faqStoreAllowed := false
-	if faqKBID != "" && len(faqVec) > 0 && len(salesResp.RAGChunks) > 0 && salesResp.Reply != "" {
-		top1Score := salesResp.RAGChunks[0].Score
-		faqStoreAllowed = top1Score >= o.confidenceThreshold
-		if !faqStoreAllowed {
-			logger.Infof("[ragcache] skip store answer: top1 rag score %.3f < threshold %.3f (kb_id=%s)",
-				top1Score, o.confidenceThreshold, faqKBID)
-		}
-	}
-	if faqStoreAllowed {
-		storeCtx := tenant.BackgroundWithTenant(ctx)
-		go func(answer string, vec []float32) {
-			defer func() {
-				if r := recover(); r != nil {
-					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
-				}
-			}()
-			if err := o.faqCache.Store(storeCtx, ragcache.StoreRequest{
-				KBID:              faqKBID,
-				PromptVersion:     faqPromptVer,
-				QueryVector:       vec,
-				Answer:            answer,
-				FromKnowledgeBase: true,
-			}); err != nil {
-				logger.Warnf("[ragcache] store answer failed (kb_id=%s): %v", faqKBID, err)
-			}
-		}(salesResp.Reply, faqVec)
-	}
-
 	if o.enableAutoReply && salesResp.Reply != "" {
 		if err := o.saveOutboundMessage(ctx, session, salesResp.Reply, true); err != nil {
 			sla.Record(sla.SLOInboundHandled, false)
@@ -560,6 +547,13 @@ func (o *SmartCSOrchestrator) HandleIncomingWithAgent(ctx context.Context, in *I
 		}
 		sla.Record(sla.SLOAIAutoReplyCoverage, true)
 	}
+
+	// 账本保存成功后才提交可选缓存；缓存失败或满容量不改变回复和发送风控。
+	o.queueAnswerCacheWrite(ctx, answerCacheWrite{
+		Incoming: in, Session: session, Agent: finalAgentCtx, KBVersion: faqKBVersion,
+		Namespace: faqPromptVer, KBID: faqKBID, Vector: faqVec,
+		SourceKBUpdatedAt: faqSourceKBUpdatedAt, Response: salesResp,
+	})
 
 	// 订单意向提取 → 建草稿（T-P2-06 的生产入口）。三点口径：
 	//   - 只在 AI 真的给出回复之后跑：转人工/降级链那几条出口上面已经 return 了，
@@ -657,7 +651,7 @@ func (o *SmartCSOrchestrator) embedFAQQuery(ctx context.Context, text string) []
 	return vec
 }
 
-func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, promptVersion string, vec []float32, result *HandleResult) (*HandleResult, bool) {
+func (o *SmartCSOrchestrator) lookupFAQAnswerCacheAtThreshold(ctx context.Context, kbID, promptVersion string, vec []float32, result *HandleResult, threshold float64) (*HandleResult, bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Warnf("[ragcache] lookup panic (kb_id=%s): %v\n%s", kbID, r, debug.Stack())
@@ -677,13 +671,20 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, pr
 	//
 	// 判据必须在改动 result 之前：调用方把同一个 result 交给后面的生成路径，
 	// 这里先写 Reply/AIReplied 再返回 false，等于"缓存没命中"的那次回答带着一份缓存答案的形状走出去。
-	if lr.Similarity < o.confidenceThreshold {
+	if lr.Similarity < threshold {
 		logger.Ctx(ctx).Info().
 			Str("kb_id", kbID).
 			Float64("similarity", lr.Similarity).
-			Float64("threshold", o.confidenceThreshold).
+			Float64("threshold", threshold).
 			Msg("[ragcache] similarity below confidence threshold, skip cache hit")
 		return nil, false
+	}
+	if o.enableAutoReply {
+		if _, err := o.sessionRepo.AcceptCachedAIReply(ctx, result.SessionID, lr.Answer, o.maxAIConsecutive); err != nil {
+			logger.Ctx(ctx).Warn().Str("session_id", result.SessionID).
+				Msg("[ragcache] session accounting unconfirmed; continue normal generation")
+			return nil, false
+		}
 	}
 	logger.Ctx(ctx).Info().
 		Str("kb_id", kbID).
@@ -695,26 +696,7 @@ func (o *SmartCSOrchestrator) lookupFAQAnswerCache(ctx context.Context, kbID, pr
 	result.AIReplied = true
 	result.Reply = lr.Answer
 	result.Confidence = lr.Similarity
-	if o.enableAutoReply {
-		if session := o.sessionOfResult(result); session != nil {
-			utils.WarnErrKV("smartcs.saveOutboundMessage.hit", o.saveOutboundMessage(ctx, session, lr.Answer, true), "session_id", session.SessionID, "source", "ragcache")
-			utils.WarnErrKV("smartcs.incrementAIReplyCount.hit", o.incrementAIReplyCount(ctx, session), "session_id", session.SessionID, "source", "ragcache")
-
-			utils.WarnErrKV("smartcs.UpdateLastMessage.hit", o.sessionRepo.UpdateLastMessage(ctx, session.ID, lr.Answer, "ai"), "session_id", session.SessionID, "source", "ragcache")
-		}
-	}
 	return result, true
-}
-
-func (o *SmartCSOrchestrator) sessionOfResult(result *HandleResult) *model.CustomerSession {
-	if result == nil || result.SessionID == "" {
-		return nil
-	}
-	session, err := o.sessionRepo.GetByIDString(context.Background(), result.SessionID)
-	if err != nil || session == nil {
-		return nil
-	}
-	return session
 }
 
 func (o *SmartCSOrchestrator) findOrCreateSession(ctx context.Context, in *IncomingContext) (*model.CustomerSession, error) {

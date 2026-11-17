@@ -946,19 +946,6 @@ func (c *hotPlugCache) ensureKV() repository.SystemConfigKVRepository {
 	return c.kv
 }
 
-func (c *hotPlugCache) fetchEnabled(ctx context.Context, assetID string, fallback bool) bool {
-	kv := c.ensureKV()
-	if kv == nil {
-		return fallback
-	}
-	val, err := kv.Get(ctx, bundleHotPlugKeyPrefix+assetID)
-	if err != nil {
-		logger.Warnf("[asset_bundle] hotplug kv get failed asset=%s err=%v", assetID, err)
-		return fallback
-	}
-	return strings.TrimSpace(val) == "1"
-}
-
 // fetchState 拉取热启用原始 KV 值（"1"/"0"/缺失=空串）。
 func (c *hotPlugCache) fetchState(ctx context.Context, assetID, fallback string) string {
 	kv := c.ensureKV()

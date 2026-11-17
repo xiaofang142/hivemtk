@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -82,18 +81,18 @@ func (s *EmailService) Send(ctx context.Context, accountID uint, to, subject, co
 		} else {
 
 			candidates, err := s.accRepo.ListActiveBelowQuota(ctx)
-			if err != nil || len(candidates) == 0 {
-				acc = emailFromEnv()
-			} else {
+			if err != nil {
+				return "", fmt.Errorf("查询邮件账号失败: %w", err)
+			}
+			if len(candidates) > 0 {
 				acc = &candidates[0]
 			}
 		}
 	}
 	if acc == nil {
-		acc = emailFromEnv()
-	}
-	if acc == nil {
-		return "", errors.New("no email account configured (set SMTP_HOST etc. or create via API)")
+		// SaaS 配置面改造（B3，2026-11-17）：SMTP_* 环境变量回退已退役，
+		// 邮件账号唯一来源是 email_accounts 表（管理端「邮件账号」页）。
+		return "", errors.New("no email account configured (create via 邮件账号管理页)")
 	}
 
 	msgID, err := s.smtpSend(ctx, acc, to, subject, content, attachments)
@@ -218,27 +217,4 @@ func sendMailSSL(addr, host string, auth smtp.Auth, from string, to []string, ms
 		return err
 	}
 	return w.Close()
-}
-
-func emailFromEnv() *model.EmailAccount {
-	host := os.Getenv("SMTP_HOST")
-	if host == "" {
-		return nil
-	}
-	port, _ := strconv.Atoi(os.Getenv("SMTP_PORT"))
-	if port == 0 {
-		port = 465
-	}
-	useSSL := os.Getenv("SMTP_SSL") != "false"
-	return &model.EmailAccount{
-		Name:     "env-default",
-		Host:     host,
-		Port:     port,
-		Username: os.Getenv("SMTP_USER"),
-		Password: os.Getenv("SMTP_PASSWORD"),
-		FromAddr: os.Getenv("SMTP_FROM"),
-		FromName: os.Getenv("SMTP_FROM_NAME"),
-		UseSSL:   useSSL,
-		Status:   "active",
-	}
 }

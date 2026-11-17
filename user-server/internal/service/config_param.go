@@ -155,11 +155,11 @@ func BridgeDeliverRateLimitPerMin(ctx context.Context) int {
 // 是"桥接渠道 AI 触发是否要求渠道绑定"的唯一开关来源。
 //
 // 背景（2026-11-14 生产实证）：桥接渠道在 shouldTriggerAI 的 default 分支恒放行
-//（webhook_ai.go：桥接五端无账号级 AI 开关字段），无 channel_agent_bindings 绑定的
+// （webhook_ai.go：桥接五端无账号级 AI 开关字段），无 channel_agent_bindings 绑定的
 // 渠道经 LoadAgentForChannel 返回 nil 后**回退租户级默认引擎**——租户 18 的微博账号
 // 因此对「微博新手指南/新浪新闻」官方系统推送自动回复 6 条/5min（刷官方号有平台风控风险）。
 // false（默认）＝现行为零变化；true＝桥接渠道必须有 enabled 的渠道绑定才触发 AI
-//（绑定面板即租户的 AI 开关面板：有绑定的渠道（如 douyin）不受影响，无绑定的渠道静默）。
+// （绑定面板即租户的 AI 开关面板：有绑定的渠道（如 douyin）不受影响，无绑定的渠道静默）。
 // 默认值与 config_params 里 bridge/ai_trigger_binding_required 的 DefaultValue("false") 同值，改动要一起改。
 const (
 	BridgeAITriggerBindingRequiredParam   = "ai_trigger_binding_required"
@@ -172,8 +172,8 @@ func BridgeAITriggerBindingRequired(ctx context.Context) bool {
 }
 
 // BridgeAIDebounceParam / BridgeAIDebounceDefault 是"客户连发消息合并窗"的唯一来源
-//（2026-11-14 客户连发追问被 AI 逐条长文轰炸实证：系统自带 debounce 机制
-//（ai_debounce.go 连发合并→一次触发覆盖整批）但默认关闭（env-only）——参数中心化
+// （2026-11-14 客户连发追问被 AI 逐条长文轰炸实证：系统自带 debounce 机制
+// （ai_debounce.go 连发合并→一次触发覆盖整批）但默认关闭（env-only）——参数中心化
 // 并默认启用 12 秒合并窗：客户连发节奏通常 <12s，等待感低，批量应答不轰炸。
 // 0 = 关闭合并（逐条即答，旧行为）。上限 30s（aiDebounceMaxSeconds 钳制）。
 // 默认值与 config_params 里 bridge/ai_debounce_seconds 的 DefaultValue("12") 同值，改动要一起改。
@@ -183,7 +183,7 @@ const (
 )
 
 // FollowFlushBacklogParam / FollowFlushBacklogDefault 是「关注后补发积压」的唯一开关源
-//（2026-11-15 用户裁决：检测到对方关注我们后补发积压待发）。默认 true（一键关回保护面）。
+// （2026-11-15 用户裁决：检测到对方关注我们后补发积压待发）。默认 true（一键关回保护面）。
 // 默认值与 config_params 里 bridge/follow_flush_backlog_enabled 的 DefaultValue("true") 同值。
 const (
 	FollowFlushBacklogParam   = "follow_flush_backlog_enabled"
@@ -196,10 +196,10 @@ func FollowFlushBacklogEnabled(ctx context.Context) bool {
 }
 
 // BridgeAIDebounceSeconds 读客户连发合并窗（秒；nil-safe）。
-// 未装配时回落 0（关闭合并、逐条即答=旧行为）：生产 main 启动必 Seed（参数行 12），
-// 测试/未装配环境保持逐条语义，既有触发契约测试不因合并窗翻转。
+// 缺少装配或参数读取失败时仍保留同源安全默认值，不能隐式关闭连发保护。
+// 需要逐条语义的受控测试应显式配置，不能依赖生产兜底变为零。
 func BridgeAIDebounceSeconds(ctx context.Context) int {
-	return GlobalConfigParam().GetInt(ctx, "bridge", BridgeAIDebounceParam, 0)
+	return GlobalConfigParam().GetInt(ctx, "bridge", BridgeAIDebounceParam, BridgeAIDebounceDefault)
 }
 
 // PatrolUnreadFirstChannelsParam / PatrolUnreadFirstChannelsDefault 是"巡检要不要未读优先"的唯一下发源。

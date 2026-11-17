@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +19,21 @@ import (
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 )
+
+// embeddingCriticalProvider 是「embedding 探活失败是否算整体不健康」的取值口。
+// SaaS 配置面改造（B14，2026-11-17）：HEALTH_EMBEDDING_CRITICAL 环境变量退役，
+// 旋钮入参数中心 rag_health 组（embedding_critical）。做成 provider 而不是直接调
+// config_param service：health 包刻意保持薄（见上），装配点在 internal/app。
+var embeddingCriticalProvider = func() bool { return false }
+
+// SetEmbeddingCriticalProvider 注入参数中心取值口。传 nil 是空操作而不是复位。
+func SetEmbeddingCriticalProvider(fn func() bool) {
+	if fn != nil {
+		embeddingCriticalProvider = fn
+	}
+}
+
+func embeddingCritical() bool { return embeddingCriticalProvider() }
 
 // Pinger Redis 健康检查接口（避免强制依赖 go-redis 模块）。
 type Pinger interface {
@@ -165,7 +179,7 @@ func (h *Handler) Check(c *gin.Context) {
 
 	embStatus, embErr := embeddingStatus()
 	checks["embedding"] = gin.H{"status": embStatus, "error": embErr}
-	if embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
+	if embStatus == "down" && embeddingCritical() {
 		overallOK = false
 	}
 
@@ -215,7 +229,7 @@ func (h *Handler) Ready(c *gin.Context) {
 		notReadyResponse(c, 50305, "inference: no healthy LLM provider")
 		return
 	}
-	if embStatus, embErr := embeddingStatus(); embStatus == "down" && os.Getenv("HEALTH_EMBEDDING_CRITICAL") == "true" {
+	if embStatus, embErr := embeddingStatus(); embStatus == "down" && embeddingCritical() {
 		notReadyResponse(c, 50306, "embedding: "+embErr)
 		return
 	}

@@ -219,6 +219,7 @@ func TestRunAIGeneration_ReleasesAILock_OnSemaphoreTimeout(t *testing.T) {
 // TestInboxIngress_WechatChannel_TriggersAI 验证修复 C：
 // wechat 渠道入站事件必须能通过去重/钩子3 全链路并触发 AI（渠道连通性回归护栏）。
 func TestInboxIngress_WechatChannel_TriggersAI(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	_ = testutil.NewTestDBOrSkip(t, &model.MessageHub{})
 	_mc3 := cache.NewMemoryCache()
 	defer _mc3.Close()

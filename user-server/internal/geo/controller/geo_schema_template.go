@@ -8,8 +8,8 @@ import (
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 
-	"github.com/gin-gonic/gin"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 )
 
 // GeoSchemaTemplateController Schema 模板库 CRUD
@@ -23,10 +23,10 @@ func NewGeoSchemaTemplateController(svc *service.SchemaTemplateService) *GeoSche
 
 // schemaTemplateRequest 只含可编辑字段；id/tenant_id/时间戳由系统维护。
 type schemaTemplateRequest struct {
-	PageType     *string        `json:"page_type"`
-	SchemaType   *string        `json:"schema_type"`
+	PageType     *string         `json:"page_type"`
+	SchemaType   *string         `json:"schema_type"`
 	TemplateJSON json.RawMessage `json:"template_json"`
-	Active       *bool          `json:"active"`
+	Active       *bool           `json:"active"`
 }
 
 func (r schemaTemplateRequest) toInput() service.SchemaTemplateInput {

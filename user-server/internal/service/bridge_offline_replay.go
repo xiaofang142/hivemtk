@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -167,11 +168,11 @@ func (s *BridgeOfflineReplayService) DetectOnlineChannels(ctx context.Context) (
 // ReplayDelayedOutbound 重放某个渠道累积的离线消息
 //
 // 从 reach_delayed_outbound 取到期的 pending 行，先抢占（pending→sending）再投到
-// DeliverBridgeOutbound 出站管道，成功收口 sent、失败回到 pending 累计 attempts。
+// DeliverBridgeOutbound 出站管道，成功收口 sent；只有可重试错误进入有界退避。
 // 收口写失败必须报警：用 `_ =` 吞掉 42703，行永远停在 pending，
 // 同一条消息每 5 分钟重投一次。
 func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, platform, accountID string, limit int) (replayed, failed int64) {
-	if s.repo == nil {
+	if s == nil || s.repo == nil || ctx == nil || ctx.Err() != nil {
 		return 0, 0
 	}
 	msgs, err := s.repo.ListPendingDelayedOutbound(ctx, platform, accountID, limit)
@@ -179,41 +180,67 @@ func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, 
 		logger.Warnf("[BridgeReplay] 查询 reach_delayed_outbound 失败: %v", err)
 		return 0, 0
 	}
+	delayed := s.repo.DelayedRepository()
+	permission := newDelayedReplayPermission(delayed, GlobalInboxIngressService())
 	for _, m := range msgs {
 		if len(m.Cards) > 0 {
 			// 带富卡体的回复交给 H-3 主链路投递：桥接管道只发文本，这里强投等于丢卡。
 			continue
 		}
-		if m.Attempts >= sendRetryMaxAttempts {
-			if aerr := s.repo.MarkDelayedOutboundAbandoned(ctx, m.ID,
+		current, cerr := s.repo.ClaimDelayedOutboundForReplay(ctx, m.ID, platform, accountID)
+		if cerr != nil {
+			failed++
+			logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 当前租约认领未确认")
+			continue
+		}
+		if current == nil {
+			continue
+		}
+		m = *current
+		if m.Kind == model.DelayedKindSendRetry && m.Attempts >= sendRetryMaxAttempts {
+			if aerr := s.repo.MarkDelayedOutboundAbandoned(ctx, m.ID, m.ClaimToken,
 				fmt.Sprintf("离线回扫重投次数用尽（%d 次）", m.Attempts)); aerr != nil {
 				failed++
 				logger.Warnf("[BridgeReplay] 判弃失败 id=%d: %v", m.ID, aerr)
 			}
 			continue
 		}
-		won, cerr := s.repo.ClaimDelayedOutboundForReplay(ctx, m.ID)
-		if cerr != nil {
-			failed++
-			logger.Warnf("[BridgeReplay] 抢占失败 id=%d: %v", m.ID, cerr)
+		_, answered, permissionErr := permission.confirm(ctx, &m)
+		if permissionErr != nil {
+			logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 人工状态或会话身份未确认，未发起投递")
 			continue
 		}
-		if !won {
-			// 主链路已把这条抢去投递了，这里再投就是双发。
+		if answered {
+			if err := delayed.FinishReplay(ctx, m.ID, m.ClaimToken, model.DelayedStatusSuperseded, time.Now(), ""); err != nil {
+				failed++
+				logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 旧回复作废回写未完成")
+			}
+			continue
+		}
+		if _, err := delayed.ConfirmReplayLease(ctx, &m, time.Now()); err != nil {
+			logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 发前租约已失效，未发起投递")
 			continue
 		}
 		err := DeliverBridgeOutbound(ctx, m.Platform, m.AccountID, m.ConversationID, "text", m.Content, "")
 		if err != nil {
 			failed++
-			logger.Warnf("[BridgeReplay] 重放失败 id=%d err=%v", m.ID, err)
-			if werr := s.repo.MarkDelayedOutboundReplayFailed(ctx, m.ID, err.Error()); werr != nil {
+			logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 下游交接失败")
+			var werr error
+			ce := AsChannelError(err)
+			undeliverable, _ := bridgeOutboundUndeliverable(m.AccountID, m.ConversationID)
+			if m.Kind == model.DelayedKindSendRetry && !undeliverable && ce != nil && ce.Retryable {
+				werr = s.repo.MarkDelayedOutboundReplayFailed(ctx, m.ID, m.ClaimToken, nextSendRetryAt(time.Now(), m.Attempts+1, ce), err.Error())
+			} else {
+				werr = delayed.FinishReplay(ctx, m.ID, m.ClaimToken, model.DelayedStatusFailed, time.Now(), err.Error())
+			}
+			if werr != nil {
 				logger.Warnf("[BridgeReplay] 失败回写未落库 id=%d: %v（行留在 sending，由主链路观测回收）", m.ID, werr)
 			}
 			continue
 		}
 		replayed++
-		if werr := s.repo.MarkDelayedOutboundReplayed(ctx, m.ID); werr != nil {
-			logger.Warnf("[BridgeReplay] 成功回写未落库 id=%d: %v（已送达客户，行留在 sending 仅为状态漂移）", m.ID, werr)
+		if werr := s.repo.MarkDelayedOutboundReplayed(ctx, m.ID, m.ClaimToken); werr != nil {
+			logger.Ctx(ctx).Warn().Uint("id", m.ID).Msg("[BridgeReplay] 下游交接成功但回写未完成，不能据此断言平台送达")
 		}
 	}
 	return replayed, failed

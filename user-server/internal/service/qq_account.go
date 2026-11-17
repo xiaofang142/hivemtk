@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,10 +221,22 @@ func (s *QQIntegrationService) NextMsgSeq(msgID string) int {
 	return 1
 }
 
-// qqAPIBaseOverride 测试/代理环境覆盖官方 API 域名（QQ_API_BASE_URL）。
-// 生产留空走官方 https://api.bot.qq.com；测试指向 httptest 模拟平台。
-func qqAPIBaseOverride() string {
-	return strings.TrimSpace(os.Getenv("QQ_API_BASE_URL"))
+// qqAPIBaseOverride 覆盖官方 API 域名（SaaS 配置面改造 B13，2026-11-17：
+// QQ_API_BASE_URL 环境变量退役，入参数中心 channelbot.qq_api_base_url）。
+// 生产留空走官方 https://api.bot.qq.com；测试经 QQAPIBaseURLOverrideForTest 指向模拟平台。
+func qqAPIBaseOverride(ctx context.Context) string {
+	return strings.TrimSpace(GlobalConfigParam().GetString(ctx, "channelbot", "qq_api_base_url", ""))
+}
+
+// QQAPIBaseURLOverrideForTest 测试装配口（跨包测试用，与 DisableAIQuietHoursForTest 同先例）。
+func QQAPIBaseURLOverrideForTest(base string) func() {
+	svc := &ConfigParamService{
+		cache:  map[string]paramEntry{"channelbot.qq_api_base_url": {value: base, expiresAt: time.Now().Add(time.Hour)}},
+		loaded: map[string]bool{},
+		nowFn:  time.Now,
+	}
+	SetGlobalForTest(svc)
+	return func() { SetGlobalForTest(nil) }
 }
 
 // SendMessage 出站发送 AI 回复。
@@ -237,7 +248,7 @@ func (s *QQIntegrationService) SendMessage(ctx context.Context, accountID uint, 
 		return fmt.Errorf("get qq account: %w", err)
 	}
 	opts := []core.ClientOption{core.WithHTTPClient(httpclient.Client)}
-	if base := qqAPIBaseOverride(); base != "" {
+	if base := qqAPIBaseOverride(ctx); base != "" {
 		opts = append(opts, core.WithBaseURL(base))
 	}
 	cli := qq.NewClient(acc.AppID, acc.AppSecret, opts...)

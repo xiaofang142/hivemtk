@@ -198,6 +198,7 @@ func TestSendOutbound_DingTalk_MissingOrExpiredWebhook_NoCall(t *testing.T) {
 }
 
 func TestDingTalkReceiveMessage_CapturesSessionWebhookAndTriggersAI(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0") // 本用例验证同步路由；合并窗口由防抖专测覆盖。
 	db := testutil.NewTestDBOrSkip(t, &model.DingTalkAppAccount{}, &model.MessageHub{})
 
 	aesKey := newDingTalkTestAESKey(t)

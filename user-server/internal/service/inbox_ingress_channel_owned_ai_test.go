@@ -61,6 +61,7 @@ func TestIngress_WithChannelOwnedAITrigger_PersistsButSkipsAI(t *testing.T) {
 
 // TestIngress_WithoutMarker_StillTriggersAI 反向对照：未打标记的入站（桥接/其他渠道）行为不变。
 func TestIngress_WithoutMarker_StillTriggersAI(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}
 	svc.SetAITrigger(tr)

@@ -192,6 +192,7 @@ func TestInboxIngress_HandleIngressMessage_HumanLockedBypassesAI(t *testing.T) {
 }
 
 func TestInboxIngress_HandleIngressMessage_TriggersAITrigger(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	ctx := context.Background()
 	c := cache.NewMemoryCache()
 	defer c.Close()

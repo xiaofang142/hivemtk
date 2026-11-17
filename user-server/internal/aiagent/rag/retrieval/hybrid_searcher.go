@@ -5,16 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/pkg/kbrelease"
 	"hivemtk-user/internal/pkg/pgvector"
-	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
@@ -31,19 +30,23 @@ type tsvectorConfig struct {
 }
 
 type HybridSearcher struct {
-	db              *gorm.DB
-	embeddingClient llm.EmbeddingServiceInterface
-	vectorSearcher  VectorSearcher
-	keywordSearcher KeywordSearcher
-	reranker        RerankerInterface
-	redisClient     RedisClient
-	llmChatClient   LLMChatClient
-	vectorWeight    float64
-	keywordWeight   float64
-	config          *HybridSearcherConfig
-	tsvectorCfg     *tsvectorConfig
-	tsvectorOnce    sync.Once
-	tsvectorMu      sync.RWMutex
+	db                *gorm.DB
+	embeddingClient   llm.EmbeddingServiceInterface
+	vectorSearcher    VectorSearcher
+	keywordSearcher   KeywordSearcher
+	reranker          RerankerInterface
+	redisClient       RedisClient
+	llmChatClient     LLMChatClient
+	vectorWeight      float64
+	keywordWeight     float64
+	config            *HybridSearcherConfig
+	tsvectorCfg       *tsvectorConfig
+	tsvectorOnce      sync.Once
+	tsvectorMu        sync.RWMutex
+	observationWriter retrievalObservationWriter
+	observationOnce   sync.Once
+	observationSlots  chan struct{}
+	observationCounts retrievalObservationCounters
 }
 
 // VectorSearcher 向量检索接口
@@ -107,6 +110,7 @@ func NewHybridSearcher(db *gorm.DB, embeddingClient llm.EmbeddingServiceInterfac
 		config:          cfg,
 	}
 	if db != nil {
+		h.observationWriter = knowledgeRepo.NewKnowledgeSearchLogRepository(db)
 		h.vectorSearcher = NewVectorRetriever(db, embeddingClient, cfg.EfSearch)
 		h.keywordSearcher = NewLexicalRetriever(db)
 	}
@@ -147,14 +151,16 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 		return nil, nil
 	}
 
-	vectorStart := time.Now()
+	operation := retrievalOperation{started: time.Now()}
+	operation.embedding = &retrievalPhase{started: time.Now()}
 	queryVec, err := h.embedQuery(ctx, query)
+	operation.embedding.completed = time.Now()
+	operation.embedding.failed = err != nil
 	if err != nil {
 
 		logger.Ctx(ctx).Warn().Err(err).Msg("[Hybrid] embedding query failed, degrade to keyword-only search")
 		queryVec = nil
 	}
-	vectorMs := time.Since(vectorStart).Milliseconds()
 
 	vecResults, kwResults := make([]Chunk, 0), make([]Chunk, 0)
 
@@ -167,13 +173,21 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 	}
 	if queryVec != nil {
 		if h.vectorSearcher != nil {
-			if res, err := h.vectorSearcher.SearchVector(ctx, productID, queryVec, vecTopK); err == nil {
+			operation.vector = &retrievalPhase{started: time.Now()}
+			res, err := h.vectorSearcher.SearchVector(ctx, productID, queryVec, vecTopK)
+			operation.vector.completed = time.Now()
+			operation.vector.failed = err != nil
+			if err == nil {
 				vecResults = res
 			} else {
 				logger.Ctx(ctx).Warn().Err(err).Msg("[Hybrid] vector search failed, continuing with empty results")
 			}
 		} else if h.db != nil {
-			if res, err := h.vectorSearchPG(ctx, productID, queryVec, vecTopK); err == nil {
+			operation.vector = &retrievalPhase{started: time.Now()}
+			res, err := h.vectorSearchPG(ctx, productID, queryVec, vecTopK)
+			operation.vector.completed = time.Now()
+			operation.vector.failed = err != nil
+			if err == nil {
 				vecResults = res
 			} else {
 				logger.Ctx(ctx).Warn().Err(err).Msg("[Hybrid] vectorSearchPG failed, continuing with empty results")
@@ -181,7 +195,6 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 		}
 	}
 
-	keywordStart := time.Now()
 	kwTopK := h.config.KeywordTopK
 	if kwTopK <= 0 {
 		kwTopK = topK * 6
@@ -190,24 +203,33 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 		}
 	}
 	if h.keywordSearcher != nil {
-		if res, err := h.keywordSearcher.SearchKeyword(ctx, productID, query, kwTopK); err == nil {
+		operation.keyword = &retrievalPhase{started: time.Now()}
+		res, err := h.keywordSearcher.SearchKeyword(ctx, productID, query, kwTopK)
+		operation.keyword.completed = time.Now()
+		operation.keyword.failed = err != nil
+		if err == nil {
 			kwResults = res
 		} else {
 			logger.Ctx(ctx).Warn().Err(err).Msg("[Hybrid] keyword search failed, continuing with empty results")
 		}
 	} else if h.db != nil {
-		if res, err := h.keywordSearchPG(ctx, productID, query, kwTopK); err == nil {
+		operation.keyword = &retrievalPhase{started: time.Now()}
+		res, err := h.keywordSearchPG(ctx, productID, query, kwTopK)
+		operation.keyword.completed = time.Now()
+		operation.keyword.failed = err != nil
+		if err == nil {
 			kwResults = res
 		} else {
 			logger.Ctx(ctx).Warn().Err(err).Msg("[Hybrid] keywordSearchPG failed, continuing with empty results")
 		}
 	}
-	bm25Ms := time.Since(keywordStart).Milliseconds()
-
+	operation.rrf = &retrievalPhase{started: time.Now()}
 	profile := ResolveQueryWeightProfile(query, h.vectorWeight, h.keywordWeight)
 	fused := h.reciprocalRankFusion(vecResults, kwResults, profile.VectorWeight, profile.KeywordWeight)
+	operation.rrf.completed = time.Now()
 
-	fused, rerankCount := h.applyRerankToFused(ctx, query, fused, topK)
+	fused, rerankCount, rerankPhase := h.applyRerankObserved(ctx, query, fused, topK)
+	operation.rerank = rerankPhase
 
 	if rerankCount == 0 && len(fused) > 0 {
 		normalizeRRFScores(fused)
@@ -229,22 +251,25 @@ func (h *HybridSearcher) SearchIndex(ctx context.Context, productID string, quer
 
 	// 父子分段：命中子块 → 回拼父块进 prompt（P1-1 前置小刀）。
 	// 放在 finalK 截断之后：只为本轮真正返回的条目取父块，不为候选池里的落选者付查询。
+	operation.parent = &retrievalPhase{started: time.Now()}
 	fused = h.attachParentContext(ctx, fused)
+	operation.parent.completed = time.Now()
+	operation.completed = time.Now()
 
-	h.logSearch(ctx, query, productID, finalK, len(vecResults), len(kwResults), len(fused), rerankCount, vectorMs, bm25Ms)
+	h.observeSearch(ctx, query, productID, finalK, len(vecResults), len(kwResults), len(fused), rerankCount, operation)
 
 	return fused, nil
 }
 
-// applyRerankToFused 对融合结果做重排，把名次分换成绝对相关度分。
+// applyRerankObserved 对融合结果做重排，把名次分换成绝对相关度分并记录实际操作时间。
 // 候选池不比 topK 大也必须做：rerank 的作用是换量纲，不是筛数量——
 // 若按「候选池 > topK」触发，小知识库的分数会永远停在 RRF 名次分上
 // （top1 恒 1.0、其余 0.1~0.3），被上层当绝对相关度用会把正常命中压到阈值以下。
 // 候选池为空、或重排未开启/不可用时原样返回（调用方据 rerankCount 决定
 // 要不要退回 RRF 归一化）。
-func (h *HybridSearcher) applyRerankToFused(ctx context.Context, query string, fused []Chunk, topK int) ([]Chunk, int) {
+func (h *HybridSearcher) applyRerankObserved(ctx context.Context, query string, fused []Chunk, topK int) ([]Chunk, int, *retrievalPhase) {
 	if !h.config.EnableRerank || h.reranker == nil || len(fused) == 0 {
-		return fused, 0
+		return fused, 0, nil
 	}
 	rerankTopN := h.config.FusedTopN
 	if rerankTopN <= 0 {
@@ -254,44 +279,19 @@ func (h *HybridSearcher) applyRerankToFused(ctx context.Context, query string, f
 		rerankTopN = len(fused)
 	}
 	rerankPool := fused[:rerankTopN]
+	phase := &retrievalPhase{started: time.Now()}
 	reranked, rerr := h.reranker.Rerank(ctx, query, toRerankDocs(rerankPool))
+	phase.completed = time.Now()
+	phase.failed = rerr != nil
 	if rerr != nil {
 		logger.Warnf("[Hybrid] rerank 失败，降级使用原始融合结果: %v", rerr)
-		return fused, 0
+		return fused, 0, phase
 	}
 	if len(reranked) == 0 {
 		logger.Infof("[Hybrid] rerank 全部文档低于阈值(floor=%.1f)，视为知识不足，降级使用原始融合结果", rerankScoreFloor)
-		return fused, 0
+		return fused, 0, phase
 	}
-	return applyRerank(fused, reranked), len(reranked)
-}
-
-func (h *HybridSearcher) logSearch(ctx context.Context, query, productID string, topK, vectorCount, bm25Count, fusedCount, rerankCount int, vectorMs, bm25Ms int64) {
-	if h.db == nil {
-		return
-	}
-	logCtx := tenant.BackgroundWithTenant(ctx)
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Warnf("[Hybrid] logSearch panic recovered: %v\n%s", r, debug.Stack())
-			}
-		}()
-		if err := h.db.WithContext(logCtx).Table("knowledge_search_logs").
-			Create(map[string]any{
-				"query":             query,
-				"product_id":        gorm.Expr("NULLIF(?::text, '')::bigint", productID),
-				"top_k":             topK,
-				"vector_count":      vectorCount,
-				"bm25_count":        bm25Count,
-				"fused_count":       fusedCount,
-				"rerank_count":      rerankCount,
-				"vector_latency_ms": vectorMs,
-				"bm25_latency_ms":   bm25Ms,
-			}).Error; err != nil {
-			logger.Warnf("[Hybrid] logSearch 写入 knowledge_search_logs 失败: %v", err)
-		}
-	}()
+	return applyRerank(fused, reranked), len(reranked), phase
 }
 
 func (h *HybridSearcher) embedQuery(ctx context.Context, query string) ([]float32, error) {

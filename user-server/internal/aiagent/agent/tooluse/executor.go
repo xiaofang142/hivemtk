@@ -225,6 +225,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 	}
 	start := time.Now()
 	result, err := handler(execCtx, req.Args)
+	completed := time.Now()
 	if result.Timing.DurationMs == 0 {
 		result.Timing.DurationMs = time.Since(start).Milliseconds()
 	}
@@ -250,15 +251,18 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 			status = "abnormal"
 		}
 		ev := tracing.ToolTraceEvent{
-			Kind:       model.SpanKindToolCall,
-			TraceID:    traceIDFromContext(execCtx),
-			ToolName:   req.ToolName,
-			TurnIndex:  GetTurnIndex(execCtx),
-			Input:      req.Args,
-			Output:     result.Data,
-			Error:      result.Error,
-			DurationMs: result.Timing.DurationMs,
-			Status:     status,
+			Kind:             model.SpanKindToolCall,
+			TraceID:          traceIDFromContext(execCtx),
+			ToolName:         req.ToolName,
+			TurnIndex:        GetTurnIndex(execCtx),
+			Input:            req.Args,
+			Output:           result.Data,
+			Error:            result.Error,
+			DurationMs:       completed.Sub(start).Milliseconds(),
+			StartedAt:        &start,
+			CompletedAt:      &completed,
+			DurationMeasured: true,
+			Status:           status,
 		}
 		if tc := GetToolContext(execCtx); tc != nil {
 			ev.AgentID = tc.AgentID
@@ -504,6 +508,7 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 		})
 	}
 	wg.Wait()
+	completed := time.Now()
 	turnStatus := tracing.StatusOk
 	turnErr := ""
 	if dispatchCtx.Err() != nil {
@@ -519,14 +524,17 @@ func (e *ToolExecutor) DispatchByLLMToolCall(ctx context.Context, toolCalls []LL
 	}
 	if ToolTraceSink != nil {
 		ev := tracing.ToolTraceEvent{
-			Kind:       model.SpanKindAgentTurn,
-			TraceID:    traceIDFromContext(dispatchCtx),
-			AgentID:    agentID,
-			TurnIndex:  turnIdx,
-			Input:      map[string]any{"tool_calls": len(toolCalls)},
-			DurationMs: time.Since(start).Milliseconds(),
-			Status:     turnStatus,
-			Error:      turnErr,
+			Kind:             model.SpanKindAgentTurn,
+			TraceID:          traceIDFromContext(dispatchCtx),
+			AgentID:          agentID,
+			TurnIndex:        turnIdx,
+			Input:            map[string]any{"tool_calls": len(toolCalls)},
+			DurationMs:       completed.Sub(start).Milliseconds(),
+			StartedAt:        &start,
+			CompletedAt:      &completed,
+			DurationMeasured: true,
+			Status:           turnStatus,
+			Error:            turnErr,
 		}
 		if turnStatus == tracing.StatusAbnormal && turnErr == "" {
 			for _, r := range results {

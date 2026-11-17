@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,15 +36,6 @@ func setupUploadTokenRouter(t *testing.T) (*gin.Engine, *service.VisitorChatServ
 	prevCfg := config.GetAppConfig()
 	config.SetAppConfig(&config.AppConfig{
 		Security: config.SecurityConfig{VisitorTokenSecret: secret},
-		Storage: config.StorageConfig{
-			Type: "qiniu",
-			Qiniu: config.QiniuConfig{
-				AccessKey: "test-ak",
-				SecretKey: "test-sk",
-				Bucket:    "test-bucket",
-				Domain:    "cdn.example.com",
-			},
-		},
 	})
 	t.Cleanup(func() { config.SetAppConfig(&prevCfg) })
 
@@ -58,9 +50,27 @@ func setupUploadTokenRouter(t *testing.T) (*gin.Engine, *service.VisitorChatServ
 		// OpenSession 有黑名单前置校验，缺这张表会直接报 relation 不存在
 		&model.UserBlacklist{},
 		&model.CSATSurvey{},
+		// B1 改造后上传凭证从租户级 obs_config 默认行取七牛凭据（不再是 config.yaml storage 节）
+		&model.ObsConfig{},
 	)
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
+
+	// 默认七牛存储行：AK/SK 明文落库（dbencrypt 无 MASTER_KEY 时降级明文，读取口原样返回），
+	// 凭据内容会被签进 token，正例断言 token 前缀即可验证读取链路真的走通了。
+	if err := database.Create(&model.ObsConfig{
+		TenantID:  1,
+		Name:      "上传凭证用例默认存储",
+		Provider:  model.ObsProviderQiniu,
+		AccessKey: "test-ak",
+		SecretKey: "test-sk",
+		Bucket:    "test-bucket",
+		Domain:    "cdn.example.com",
+		IsDefault: true,
+		Status:    model.ObsStatusActive,
+	}).Error; err != nil {
+		t.Fatalf("seed obs_config 默认行失败: %v", err)
+	}
 
 	channelSvc := service.MustNewChatChannelService(repository.NewChatChannelRepositoryWithDB(database))
 	visitorSvc := service.NewVisitorChatService(channelSvc, nil, service.NewChannelAgentBindingService())
@@ -145,6 +155,11 @@ func TestGetUploadToken_KnownFileType_AllowedExt(t *testing.T) {
 	}
 	if body.Code != 0 || body.Data.Token == "" || body.Data.ExpiresIn != 3600 {
 		t.Fatalf("凭证字段不全：code=%d token 空=%v expires_in=%d", body.Code, body.Data.Token == "", body.Data.ExpiresIn)
+	}
+	// B1 改造守卫：token 必须以 obs_config 行的 AccessKey 开头（AK:sign:policy），
+	// 证明凭据读取链路真的走了 DB 默认行，而不是任何残留的 env/yaml 兜底。
+	if !strings.HasPrefix(body.Data.Token, "test-ak:") {
+		t.Fatalf("token 应以 obs_config 行的 test-ak 开头，实际 %q", body.Data.Token[:min(20, len(body.Data.Token))])
 	}
 	if len(body.Data.Key) < 4 || body.Data.Key[len(body.Data.Key)-4:] != ".jpg" {
 		t.Fatalf("key 应以 .jpg 结尾，实际 %q", body.Data.Key)

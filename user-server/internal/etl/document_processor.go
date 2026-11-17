@@ -39,7 +39,7 @@ func NewDocumentProcessor(config *ProcessingConfig) *DocumentProcessor {
 			SimilarityThreshold: 0.8,
 			MaxLengthPerChunk:   1000,
 			MinLengthPerChunk:   50,
-			TableAware:          sidecarURL != "",
+			TableAware:          sidecarURL() != "",
 		}
 	}
 	return &DocumentProcessor{config: config}

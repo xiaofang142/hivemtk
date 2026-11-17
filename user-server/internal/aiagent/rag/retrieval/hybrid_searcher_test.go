@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
@@ -104,28 +105,14 @@ func setupHybridTestDB(t *testing.T) *gorm.DB {
 			BEFORE INSERT OR UPDATE ON knowledge_chunks
 			FOR EACH ROW EXECUTE FUNCTION knowledge_chunks_tsv_trigger()`,
 		`DROP TABLE IF EXISTS knowledge_search_logs`,
-		`CREATE TABLE knowledge_search_logs (
-			id BIGSERIAL PRIMARY KEY,
-			query TEXT,
-			product_id BIGINT,
-			top_k INT,
-			vector_count INT DEFAULT 0,
-			bm25_count INT DEFAULT 0,
-			fused_count INT DEFAULT 0,
-			rerank_count INT DEFAULT 0,
-			vector_latency_ms BIGINT DEFAULT 0,
-			bm25_latency_ms BIGINT DEFAULT 0,
-			rewrite_latency_ms BIGINT DEFAULT 0,
-			rerank_latency_ms BIGINT DEFAULT 0,
-			rewrite_used VARCHAR(50),
-			cache_hit BOOLEAN DEFAULT false,
-			created_at TIMESTAMP DEFAULT NOW()
-		)`,
 	}
 	for _, sql := range stmts {
 		if err := db.Exec(sql).Error; err != nil {
 			t.Fatalf("setup SQL failed (%s): %v", sql, err)
 		}
+	}
+	if err := db.AutoMigrate(&model.KnowledgeSearchLog{}); err != nil {
+		t.Fatalf("检索日志夹具必须与生产模型同源：%v", err)
 	}
 	return db
 }

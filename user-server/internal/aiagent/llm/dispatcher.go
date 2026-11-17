@@ -158,6 +158,10 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 	if canary := DecideCanaryRoute(route, req.CanaryKey); canary != nil {
 		activeRoute = canary
 	}
+	cacheRequest := req
+	responseCacheKey := d.scopedResponseCacheKey(ctx, cacheRequest)
+	// 只修改这次调用的局部副本；兼容调用方原有 CacheKey 生成接口。
+	req.CacheKey = responseCacheKey
 
 	if req.CacheKey != "" && req.CacheTTL > 0 {
 		if c, hit := d.getCache(ctx, req.CacheKey); hit {
@@ -316,7 +320,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 		if fo := GetGlobalFailover(); fo != nil {
 			fo.RecordSuccess(providerName, int64(result.LatencyMs))
 		}
-		if req.CacheKey != "" && req.CacheTTL > 0 {
+		if req.CacheKey != "" && req.CacheTTL > 0 && d.scopedResponseCacheKey(ctx, cacheRequest) == responseCacheKey {
 			d.setCache(ctx, req.CacheKey, req.CacheTTL, result.Content)
 		}
 
@@ -348,7 +352,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, req DispatchRequest) (*Dispat
 						fo.RecordSuccess(fb, int64(result.LatencyMs))
 					}
 					AlertProviderSuccess(string(req.Scenario), fb, traceID)
-					if req.CacheKey != "" && req.CacheTTL > 0 {
+					if req.CacheKey != "" && req.CacheTTL > 0 && d.scopedResponseCacheKey(ctx, cacheRequest) == responseCacheKey {
 						d.setCache(ctx, req.CacheKey, req.CacheTTL, result.Content)
 					}
 					fallbackEntry := NewLogEntry(req.Scenario, provider, result.Model,

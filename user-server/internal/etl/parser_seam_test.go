@@ -13,10 +13,10 @@ import (
 )
 
 func TestParseDocument_BuiltinUnchanged(t *testing.T) {
-	// sidecar 未启用（测试环境默认无 PARSER_SIDECAR_URL）→ 与 ExtractText 逐字节同路
-	t.Setenv("PARSER_SIDECAR_URL", "")
-	if sidecarURL != "" {
-		t.Skip("环境预置了 sidecar，跳过 builtin 对照")
+	// sidecar 未启用（测试默认 provider 返回空）→ 与 ExtractText 逐字节同路
+	// （PARSER_SIDECAR_URL env 已退役 B6，取值走 provider seam）
+	if sidecarURL() != "" {
+		t.Skip("预置了 sidecar provider，跳过 builtin 对照")
 	}
 	got, err := ParseDocument(context.Background(), "a.txt", []byte("hello\nworld"))
 	if err != nil || got != "hello\nworld" {
@@ -48,9 +48,8 @@ func TestParseDocument_SidecarEnabled(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	t.Setenv("PARSER_SIDECAR_URL", srv.URL)
-	sidecarURL = srv.URL // 包变量由 init 读 env；测试显式同步
-	defer func() { sidecarURL = "" }()
+	SetSidecarURLProvider(func() string { return srv.URL }) // env 已退役 B6，测试走 provider
+	defer SetSidecarURLProvider(nil)
 
 	got, err := ParseDocument(context.Background(), "scan.pdf", []byte("PDFBYTES"))
 	if err != nil || !strings.Contains(got, "PARSED TEXT") {
@@ -72,9 +71,8 @@ func TestParseDocument_SidecarFailureNoFallback(t *testing.T) {
 		_, _ = w.Write([]byte("sidecar down"))
 	}))
 	defer srv.Close()
-	t.Setenv("PARSER_SIDECAR_URL", srv.URL)
-	sidecarURL = srv.URL
-	defer func() { sidecarURL = "" }()
+	SetSidecarURLProvider(func() string { return srv.URL })
+	defer SetSidecarURLProvider(nil)
 
 	// sidecar 挂了不能静默回退 builtin（builtin 对扫描件必然也失败，回退只会掩盖故障）
 	_, err := ParseDocument(context.Background(), "scan.pdf", []byte("PDFBYTES"))
@@ -84,8 +82,7 @@ func TestParseDocument_SidecarFailureNoFallback(t *testing.T) {
 }
 
 func TestImageDescribe_DisabledAndEnabled(t *testing.T) {
-	t.Setenv("IMAGE_DESCRIBE_URL", "")
-	imageDescribeURL = ""
+	SetImageDescribeConfigProvider(func() (string, string) { return "", "" })
 	_, err := DescribeImage(context.Background(), "a.png", []byte("png"))
 	if !errors.Is(err, ErrImageDescribeDisabled) {
 		t.Errorf("未配置应返回哨兵错: %v", err)
@@ -104,9 +101,8 @@ func TestImageDescribe_DisabledAndEnabled(t *testing.T) {
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"图中是一张产品价目表，含价格 4999 元"}}]}`))
 	}))
 	defer srv.Close()
-	t.Setenv("IMAGE_DESCRIBE_URL", srv.URL)
-	imageDescribeURL = srv.URL
-	defer func() { imageDescribeURL = "" }()
+	SetImageDescribeConfigProvider(func() (string, string) { return srv.URL, "vl" }) // env 已退役 B6
+	defer SetImageDescribeConfigProvider(nil)
 
 	desc, err := DescribeImage(context.Background(), "price.png", []byte("PNGDATA"))
 	if err != nil || !strings.Contains(desc, "4999") {

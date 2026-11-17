@@ -212,7 +212,7 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 	Recognize(ctx context.Context, sessionID, customerID, text string) (*dto.RecognizeResult, error)
 }) (*WebhookService, *SmartCSOrchestrator, *gorm.DB) {
 	t.Helper()
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -465,7 +465,7 @@ func TestSmartCS01_SampleB_LowConfidence_TransferToHuman_NoAIOutbound(t *testing
 // 已知缺口（CS-02 领走，不在本测试内修）：降级文案行继承意图置信度（extra.confidence=0.92）、
 // handler_type=ai——应答质量指标把降级轮当成正常 AI 回答计数。
 func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *testing.T) {
-	t.Setenv("DISABLE_AI_QUIET_HOURS", "1")
+	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
@@ -528,6 +528,7 @@ func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *test
 // 同 event_id 原帧重放 ⇒ 幂等跳过（accepted=true、queued_for_ai=false）、
 // AI 触发仍 1 次、库内同 msg_id 行仍 1 条。
 func TestHandleIngressCS01_ReplayNegative_SameEventIDNoSecondInbound(t *testing.T) {
+	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	database := testutil.NewTestDB(t, &model.MessageHub{})
 	svc := NewInboxIngressService()
 	tr := &fakeAITrigger{}

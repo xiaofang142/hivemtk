@@ -46,7 +46,16 @@ func TestDelayedOutboundRetryLane(t *testing.T) {
 		t.Fatalf("未到期不得被抢占，实得 %d 条", len(picked))
 	}
 
-	if err := repo.ScheduleRetry(ctx, rec.ID, "", time.Now().Add(60*time.Second), "tg send exhausted 3 retries"); err != nil {
+	// 执行者改排必须先真实到期认领，不能将未开始的 pending 当作失败执行。
+	if err := db.Model(&model.DelayedOutboundReply{}).Where("id = ?", rec.ID).
+		Update("send_at", time.Now().Add(-time.Second)).Error; err != nil {
+		t.Fatal(err)
+	}
+	picked, err = repo.PickDueForUpdate(ctx, time.Now(), 10)
+	if err != nil || len(picked) != 1 || picked[0].ClaimToken == "" {
+		t.Fatalf("到期认领失败：%v / %d", err, len(picked))
+	}
+	if err := repo.ScheduleRetry(ctx, rec.ID, picked[0].ClaimToken, time.Now().Add(60*time.Second), "tg send exhausted 3 retries"); err != nil {
 		t.Fatalf("schedule retry: %v", err)
 	}
 	var after model.DelayedOutboundReply
@@ -63,8 +72,16 @@ func TestDelayedOutboundRetryLane(t *testing.T) {
 		t.Fatalf("last_error 未记录: %q", after.LastError)
 	}
 
-	// 收口：终态写 superseded 且不再被 HasPendingByConversation 视为待发。
-	if err := repo.FinishReplay(ctx, rec.ID, "", model.DelayedStatusSuperseded, time.Now(), "会话已被回复"); err != nil {
+	// 下一次认领后才可收口；保留已有 attempts，不以新租约重置预算。
+	if err := db.Model(&model.DelayedOutboundReply{}).Where("id = ?", rec.ID).
+		Update("send_at", time.Now().Add(-time.Second)).Error; err != nil {
+		t.Fatal(err)
+	}
+	picked, err = repo.PickDueForUpdate(ctx, time.Now(), 10)
+	if err != nil || len(picked) != 1 || picked[0].ClaimToken == "" {
+		t.Fatalf("改排后重新认领失败：%v / %d", err, len(picked))
+	}
+	if err := repo.FinishReplay(ctx, rec.ID, picked[0].ClaimToken, model.DelayedStatusSuperseded, time.Now(), "会话已被回复"); err != nil {
 		t.Fatalf("finish: %v", err)
 	}
 	pending, err = repo.HasPendingByConversation(ctx, "conv-retry-1")

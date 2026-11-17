@@ -103,6 +103,27 @@ var platformScopedParams = map[string]string{
 	// 按租户分叉会让「一个租户填错地址 ⇒ 全租户的资产市场/订阅/钱包一起拉空」，
 	// 而它们本该互不相干。SaaS 模式下所有租户连同一个平台。
 	"platform.api_host": "平台端 API 地址（部署级，租户写一律拒绝）",
+
+	// —— SaaS 配置面改造（2026-11-17）env→参数中心迁移批次：读取点带
+	//    context.Background()（进程级装配/异步链），租户写会被门禁对账判红。
+	"webhook.recovery_enabled":             "恢复扫描器总开关（构造期读）",
+	"webhook.recovery_interval_seconds":    "恢复扫描间隔（构造期读）",
+	"webhook.recovery_cooldown_seconds":    "恢复重放冷却（构造期读）",
+	"webhook.recovery_batch":               "恢复单批容量（构造期读）",
+	"agent_llm.ai_quiet_hours_disabled":    "AI 勿扰停用（异步排水链无请求 ctx）",
+	"agent_llm.humanize_eval_disabled":     "拟人评估停用（启动期读一次）",
+	"agent_llm.humanize_eval_threshold":    "拟人达标阈值（启动期读一次）",
+	"misc.brain_token_budget":              "浏览器自动化 token 预算（进程成本闸）",
+	"misc.file_url_ttl":                    "签名 URL 时效（进程级签名器）",
+	"etl.parser_sidecar_url":               "外挂解析端点（进程级，索引一致性）",
+	"etl.image_describe_url":               "图片描述端点（进程级推理服务）",
+	"etl.image_describe_model":             "图片描述模型名（随端点）",
+	"rag_health.embedding_critical":        "健康探活关键标记（实例级）",
+	"knowledge.contextual_enhance_enabled": "上下文增强开关（装配期读）",
+	"reach.quiet_hours_disabled":           "触达免打扰停用（装配期读）",
+	"alerting.email_enabled":               "告警邮件开关（实例级运维面）",
+	"alerting.email_recipients":            "告警邮件收件人（实例级运维面）",
+	"alerting.webhook_url":                 "告警 Webhook（实例级运维面）",
 }
 
 var tenantPendingParams = map[string]string{

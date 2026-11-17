@@ -42,7 +42,7 @@ type PolishContext struct {
 func NewHumanizePolisher() *HumanizePolisher {
 	return &HumanizePolisher{
 		enableParticles:  true,
-		enableTruncation: true,
+		enableTruncation: false,
 		maxLength:        200,
 		platformStyle: PlatformStyle{
 			AllowEmoji:     true,
@@ -142,10 +142,6 @@ func (p *HumanizePolisher) removeAITraces(ctx context.Context, text string) stri
 		"我是 AI",
 		"我是人工智能",
 		"我是一个 AI",
-		"作为一个",
-		"我的能力有限",
-		"根据您提供的信息",
-		"我理解您的",
 		"作为您的销售顾问",
 		"非常感谢您的咨询",
 		"非常感谢您的提问",
@@ -171,15 +167,30 @@ func (p *HumanizePolisher) removeAITraces(ctx context.Context, text string) stri
 		"没问题!",
 		"当然可以！",
 		"当然可以!",
-		"很抱歉，我无法",
-		"很抱歉，无法",
 		"非常抱歉，给您带来不便",
 		"造成不便深表歉意",
 		"请您谅解",
 		"请谅解",
 	}
-	for _, trace := range aiTraces {
-		text = strings.ReplaceAll(text, trace, "")
+	// 仅清理明确的句首套话；正文引用、来源说明与能力限制不是待删除的痕迹。
+	// 前缀必须有句界/空白，避免把同字开头的业务事实当套话。
+	for {
+		matched := false
+		for _, trace := range aiTraces {
+			if !strings.HasPrefix(text, trace) {
+				continue
+			}
+			after := strings.TrimPrefix(text, trace)
+			if after != "" && !strings.ContainsRune(" ，,。.!！?？:：;；\t\n\r", []rune(after)[0]) {
+				continue
+			}
+			text = strings.TrimLeft(after, " 。.　\t\n\r")
+			matched = true
+			break
+		}
+		if !matched {
+			break
+		}
 	}
 	return text
 }

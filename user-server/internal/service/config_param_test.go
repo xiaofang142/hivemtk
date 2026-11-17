@@ -302,7 +302,28 @@ func TestFallbackNilDB(t *testing.T) {
 // 限速兜底新增 1 条 ⇒ 260（该提交漏更此断言，审计二轮补记）；662722a0 二次论证轮
 // 再增 bridge/ai_trigger_binding_required ⇒ 261；b69c1971 追问轮
 // bridge/ai_debounce_seconds ⇒ 262。
-const defaultParamDefsWant = 264
+const defaultParamDefsWant = 288
+
+func TestBridgeAIDebounce_UnconfiguredFallbackMatchesSeed(t *testing.T) {
+	globalConfigParamMu.RLock()
+	previous := globalConfigParam
+	globalConfigParamMu.RUnlock()
+	SetGlobalForTest(nil)
+	t.Cleanup(func() { SetGlobalForTest(previous) })
+	got := BridgeAIDebounceSeconds(context.Background())
+	if got != BridgeAIDebounceDefault {
+		t.Fatalf("未装配参数时必须保留安全合并默认值：实际=%d，期望=%d", got, BridgeAIDebounceDefault)
+	}
+	for _, definition := range DefaultParamDefs() {
+		if definition.Group == "bridge" && definition.Key == BridgeAIDebounceParam {
+			if definition.DefaultValue != fmt.Sprint(got) {
+				t.Fatalf("种子与兜底必须同源：种子=%s，兜底=%d", definition.DefaultValue, got)
+			}
+			return
+		}
+	}
+	t.Fatal("合并默认参数种子必须存在")
+}
 
 func TestDefaultParamDefsCount(t *testing.T) {
 	defs := DefaultParamDefs()
@@ -351,6 +372,17 @@ func TestDefaultParamDefsEmptyDefaultRatchet(t *testing.T) {
 	allowedEmptyDefault := map[string]bool{
 		"urls.public_base_url": true,
 		"platform.api_host":    true,
+		// —— SaaS 配置面改造（2026-11-17）env 迁移批次：空默认=未配置语义
+		//（读侧各自回落代码兜底/env，见各读取点注释），空才是对的。
+		"urls.frontend_url":                 true,
+		"channelbot.whatsapp_fallback_template":      true,
+		"channelbot.whatsapp_fallback_template_lang": true,
+		"channelbot.qq_api_base_url":        true,
+		"misc.upload_virus_scan_url":        true,
+		"etl.parser_sidecar_url":            true,
+		"etl.image_describe_url":            true,
+		"alerting.email_recipients":         true,
+		"alerting.webhook_url":              true,
 	}
 	seen := map[string]bool{}
 	for _, d := range DefaultParamDefs() {

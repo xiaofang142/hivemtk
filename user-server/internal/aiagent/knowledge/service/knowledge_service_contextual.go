@@ -4,23 +4,28 @@ import (
 	"context"
 
 	"hivemtk-user/internal/aiagent/knowledge/kbsearch"
-	"os"
 	"runtime/debug"
-	"strings"
 
 	"hivemtk-user/internal/aiagent/llm"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-func contextualEnhanceEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("RAG_CONTEXTUAL_ENHANCE"))) {
-	case "0", "false", "off":
-		return false
-	default:
-		return true
+// contextualEnhanceProvider 是「上下文增强（R-3）总开关」的取值口。
+// SaaS 配置面改造（B16，2026-11-17）：RAG_CONTEXTUAL_ENHANCE 环境变量退役，
+// 改由参数中心 knowledge.contextual_enhance_enabled 经 provider 注入
+// （装配点 internal/app；knowledge 包不反向依赖 service，走 seam 范式）。
+// 默认 true（与退役前 env 未设时的语义一致）。
+var contextualEnhanceProvider = func() bool { return true }
+
+// SetContextualEnhanceProvider 注入取值口。传 nil 是空操作而不是复位。
+func SetContextualEnhanceProvider(fn func() bool) {
+	if fn != nil {
+		contextualEnhanceProvider = fn
 	}
 }
+
+func contextualEnhanceEnabled() bool { return contextualEnhanceProvider() }
 
 func (s *KnowledgeService) enhanceDocumentContextual(ctx context.Context, documentID uint64) {
 	defer func() {
