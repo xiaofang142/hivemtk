@@ -84,6 +84,15 @@ func RegisteredSenders() []channelSender      // 供文档生成与 parity 测�
 - **bridge 分支也是 sender**（`bridgeOutboxSender`），它的 `duplicateOccupied`/`undeliverable` 语义原样保留。
 - **失败即拒绝**：未知渠道 → `ErrOutboundChannelUnsupported`，不再静默走 bridge 兜底（今天的 default
   分支是「非 bridge 渠道打印 drift 然后失败」，语义上等价，但改成显式错误码便于告警）。
+- **结果必须自洽（二次审核补）**：登记表在 `Send` 返回后校验
+  `if !res.Sent && sendErr == nil → req.Fail(&ChannelError{Category: CategoryUnknown, Retryable: true, Raw: "sender reported neither success nor failure"})`。
+  今天失败全靠 `markSendFailed` 副作用（企微每条早退路径都是先 `markSendFailed` 再 `return`，
+  `webhook_outbound.go:685-706`），搬迁后漏调 `Fail` 就会造出「既没发也没错」的静默丢消息。
+  配套 `TestSenderOutcomeMustBeExplicit`，并约定 `Fail` 必须在 `Send` 返回前**同步**调用（`-race` 下跑）。
+- **两张注册表（二次审核补）**：sender 依赖 `WebhookService` 的集成单例与仓储（QQ 的 `msg_seq` 计数器必须跨调用存活），
+  若只在 `NewWebhookService` 里逐实例注册，`RegisteredSenders()` 会随装配顺序漂移，parity 测试与文档生成失去稳定基准。
+  故：静态工厂表 `var senderFactories = map[WebhookChannel]func(*WebhookService) channelSender`（编译期可枚举）
+  + 实例注册表（`NewWebhookService` 遍历工厂表构建，供热路径 `ChannelSenderOf`），两表键集由同一测试校验相等。
 - **parity 门禁**：`webhookInboundCapable` 里的每个渠道 + `channelgw.Default` 的每个渠道，都必须能查到
   sender，否则测试红。这条门禁替代「靠人记得改 switch」。
 
@@ -107,8 +116,9 @@ EventTypeInteractionCallback = "interaction.callback"
 
 - `MessageEvent.EventType` 新增；`NormalizeEvent` 在空值时归一为 `message.received`（存量调用零改动）。
 - **不新增 `MessageHub.event_type` 列**：`message_hub` 只承载「消息」语义；编辑走
-  `UpdateContentByChannelMsgID`（新增窄方法），撤回走 `MarkRecalled`（列已存在：`RecalledAt/RecallError`），
-  成员/机器人事件**不落消息表**，只发事件总线 + 审计。
+  `UpdateContentByChannelMsgID`（新增窄方法），入站撤回走 `MarkInboundRecalledByChannelMsgID`
+  （列复用 `RecalledAt/RecallError`，但**不能复用** `MarkRecalled`，理由见下一条），
+  成员/机器人事件**不落消息表**，但**同步写审计表**（见下条「事件出口」）。
 - 撤回必须区分方向：现有 `repository.MarkRecalled(id, at)` 的 WHERE 带 `direction='outbound'`
   （`message_hub_recall.go:29`，服务「我方撤回自己发的消息」），**不能拿来标客户的入站撤回**。
   入站撤回在本轮新增 `MarkInboundRecalledByChannelMsgID`（或把 `MarkRecalled` 的方向条件参数化），
@@ -117,7 +127,14 @@ EventTypeInteractionCallback = "interaction.callback"
   直接 `return nil,nil`（`webhook_channel_feishu.go:196`），Telegram 只处理了 edited（L268）。
   所以 D2 交付的是**中枢能力**（归一 + 分流 API + 测试），逐渠道接线放在各平台任务里，不在 T202 一口气全接。
 - 只有 `message.received` 触发 AI 回复（`shouldTriggerAI` 前置 `eventType == received` 守卫）。
-  `interaction.callback`：一期只做「答复 + 审计 + 路由留痕」，不做表单状态机。
+  `interaction.callback`：一期只做「**平台空 ack + 审计 + 路由留痕**」，不做表单状态机。
+  理由：真答复需要 `callback_query.id` / `response_code` 这类交互上下文，`MessageEvent` 目前不带，
+  引入 `channel_interactions` 表之后再谈改卡片/回填（已登记「需证据触发」）。
+- **事件出口（二次审核修正）**：进程内总线是 best-effort 且队列满即丢（`internal/event/bus.go:1-17`，
+  只有 `customer.message.received` 进 critical 队列），**不能作为需要留证的事件的唯一出口**。
+  故 `group.member_*` / `bot.*` / `interaction.callback` 一律**同步写审计表**（复用现成
+  `operation_log` / `security_audit`，幂等键 `(tenant_id, channel, channel_msg_id)` 唯一，防平台重投重复记账），
+  总线只做旁路通知；纯通知类事件才允许「只发总线」，且必须显式登记为可丢。
 - `channelcaps.Manifest` 增加 `Events []string`，声明每渠道能产出哪些事件；测试校验
   「已声明的事件 ⊆ 已知事件常量」+「渠道实现文件里出现的事件在 manifest 有声明」。
 
@@ -147,20 +164,41 @@ func RenderForChannel(ch WebhookChannel, msgType string, content string, cards [
 type RenderedOutbound struct{ Text string; Cards []model.RichCard; Chunks []string }
 ```
 
-规则：`plain` 渠道去 Markdown；无 `FeatureRichCard` 的渠道把卡片降级为文本；超长按 `MaxTextLen` 切块
-（最多 3 块，超出截断并附省略标记，与 LangBot `Message_too_long` 截 4000 字同口径）。
+规则：`plain` 渠道去 Markdown；无 `FeatureRichCard` 的渠道把卡片降级为文本；**不切块**。
+`MaxTextLen` 的语义是「超过即打点 `outbound_text_overflow{channel}`」，长度处理仍留在各渠道客户端——
+QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`（`channelbot/qq/qq.go:38-66,195`），
+在渲染层再切一次会造成双重切分、块数不可预期，并直接违反 FR006 的「搬迁前后调用序列一致」。
+（LangBot 的 4000 字截断发生在**适配器**里，不是渲染层；我们对应的是渠道客户端，层级一致。）
 现有 `outboundSupportsRichCards` / `stripMarkdownForBridgeChannel` / `htmlEscape*` 的调用点改由本函数统一，
 但**保留旧函数签名作为薄包装**，避免一次改爆调用方（`channel_card_delivery.go` 仍是未提交在制品，本 spec 不碰它）。
+每个渠道的 `OutboundFormat/MaxTextLen` 必须附「代码取证锚点」（该 sender 里处理换行/转义/HTML 的那几行），
+不得凭印象填 `markdown`——否则等于给能力表再造一个漂移源。
 
 ### D5 身份：唯一键补 `account_id`（含去重迁移）
 
-- 迁移 065：先把 `(tenant_id, one_id, channel, account_id)` 重复行按 `last_seen_at` 保留最新、其余软删，
-  再 `DROP INDEX idx_oneid_channel` + `CREATE UNIQUE INDEX idx_tenant_oneid_channel_account`。
+- **机制先对齐现实（二次审核修正）**：`tenancyidx.Normalize` 会把租户表上的唯一索引**原位重建**为
+  `(tenant_id, 原列…)`，并保留 `WHERE` 谓词（`internal/pkg/tenancyidx/tenancyidx.go:1-26,212,253`），
+  所以今天 `customer_channels` 的实际唯一键是 **`(tenant_id, one_id, channel)`**，不是 `(one_id, channel)`。
+  迁移 065 的目标形态因此写成 `(tenant_id, one_id, channel, account_id)`，索引**沿用原名** `idx_oneid_channel`
+  （原位重建、名字稳定，避免 AutoMigrate 按名判存在时又建一套）。
+- **三处必须同改，少一处就报错或无效**：
+  1. model tag：`AccountID` 加入 `uniqueIndex:idx_oneid_channel`（`model/customer_channel.go:25-27`）；
+  2. `ON CONFLICT` 目标：`repository/channel_overview.go:158-169` 写死 `tenant_id/one_id/channel`，
+     必须加 `account_id`，否则写入直接报 `no unique or exclusion constraint matching the ON CONFLICT specification`；
+  3. 迁移 065 用**换名法**：`CREATE UNIQUE INDEX CONCURRENTLY idx_oneid_channel_v2 (tenant_id, one_id, channel, account_id)`
+     → `DROP INDEX CONCURRENTLY idx_oneid_channel`（全新库无此索引，先判存在）→ `ALTER INDEX ... RENAME TO idx_oneid_channel`。
+     不用「DROP 后交 AutoMigrate 重建」：AutoMigrate 建索引是**非并发**的，大表会锁写；
+     换名法同时保证索引名稳定（AutoMigrate 按名判存在）且显式带 `tenant_id`（`Normalize` 复查幂等）。
+- 去重顺序：先按 `last_seen_at DESC` 保留最新、其余置 `deleted_at`，再换键。**软删行仍占唯一键**，
+  所以 `ON CONFLICT` 的 `DoUpdates` 必须带 `deleted_at = NULL`（复活被删绑定），否则更新会写进一条看不见的行。
 - `account_id` 空值统一存 `''`（不用 NULL，避免唯一索引失效）。
 - 不加 `MessageHub.origin` 列：出站回写 `platform_msg_id` + 入站同 msg_id 幂等已覆盖回声场景，
   再加一列是重复状态源（Chatwoot 的 `source_id.present?` 判定在我们这里是 `msg_id` 唯一索引）。
-- 唯一键更换**必须走显式 SQL**：GORM AutoMigrate 只加索引、不删不改已变形索引
-  （`repository/tenant_module.go:58` 同口径注释），只改 struct tag 会留下两套索引并存。
+- ⚖️ **待决策（二次审核提出）**：上面的键只解决「同渠道多账号互相覆盖」，没解决「同一个平台账号被识别成两个 OneID」——
+  `UpsertCustomerChannel` 只按 `(one_id, channel)` 定位，同一 `channel_user_id` 若先后落到两个 OneID 会写出两行、
+  指向两个客户（Chatwoot 的锚点是 `(inbox_id, source_id)`，即账号维度而非合成身份维度）。
+  候选方案 B：再加一条唯一键 `(tenant_id, channel, account_id, channel_user_id)` 作身份锚，`(tenant_id, one_id, channel, account_id)` 降为业务键。
+  **未拍板前按方案 A（单键）施工，方案 B 的成本与数据修复脚本已记录在本条。**
 
 ### D6 生命周期读侧收口
 
@@ -231,8 +269,10 @@ type RenderedOutbound struct{ Text string; Cards []model.RichCard; Chunks []stri
 
 ### FR-4 渲染
 
-- FR030 `channelcaps` 增 `OutboundFormat`、`MaxTextLen`（21 条 manifest 全量补齐，测试防漂移）。
-- FR031 `RenderForChannel` + 单测（plain 去 MD、卡片降级、超长切块、渠道未知即错）。
+- FR030 `channelcaps` 增 `OutboundFormat`、`MaxTextLen`（21 条 manifest 全量补齐，每条附「代码取证锚点」，
+  测试防漂移；不附锚点视为未完成）。
+- FR031 `RenderForChannel` + 单测（plain 去 MD、卡片降级、渠道未知即错）；**不切块**，
+  超 `MaxTextLen` 只打点 `outbound_text_overflow`（长度处理留在渠道客户端，见 D4）。
 - FR032 老函数改薄包装，调用方零改动；`bridge_outbound_markdown_test.go` 全绿。
 
 ### FR-5 身份
@@ -265,13 +305,21 @@ type RenderedOutbound struct{ Text string; Cards []model.RichCard; Chunks []stri
 | `channelcaps` manifest | `internal/channelcaps/manifests.go` | `TestEveryChannelConstantHasManifest` 红 |
 | 验签失败 4xx 不落库的非对称测试 | 渠道测试文件 | 安全面回退无门禁 |
 | 拒绝提示表同步 | `webhookInboundRejectHints` + `TestWebhookInbound_RejectHintsStayConsistentWithCapability` | 自相矛盾（已接入却仍写「不支持」）→ 门禁红 |
+| 口令存储与出口脱敏 | 新账号表 + controller 脱敏 helper | 平台凭据（`kf_aes_key`/`signing_secret`/`access_token`/`hmac_secret`）明文落库且随列表接口原样返回 → 只读 DB 账号即可伪造回调。现网先例：`model/wecom.go:13-17` 明文列 + `controller/wecom_secret_mask.go` 出口脱敏；加密先例：`internal/secrets/aesgcm.go` |
+| 长连接/游标生命周期 | 新平台各自的 worker | wecomcs 的 `sync_msg` 游标（`cursor`/`next_cursor`）、OneBot 反向 WS 连接，都属长生命周期组件，必须挂 app start/stop 并过 `check-naked-goroutine.sh`；只写「拉取」不写落点＝永远拉同一个游标 |
 
 - FR060 wecomcs：`kf/sync_msg` 游标拉取 + `kf/send_msg`，`msg_signature` 验签，`event_type` 映射
-  （`enter_session`/`msg_send_fail`/`session_status_change` → 事件总线）。账号走新表 `wecom_cs_accounts`
-  （`corp_id/kf_secret/kf_token/kf_aes_key/open_kfid`）。
+  （`enter_session`/`msg_send_fail`/`session_status_change` → 审计表 + 旁路总线，见 D2「事件出口」）。
+  账号走新表 `wecom_cs_accounts`（`corp_id/kf_secret/kf_token/kf_aes_key/open_kfid`
+  + **`sync_cursor varchar(512)` + `cursor_updated_at`**）；拉取 worker 沿用 T602 的 cron 先例，
+  单账号串行、失败退避、重启从列里续拉；`kf` 消息自带 `msgid`，直接复用 msg_id 幂等。
 - FR061 OneBot v11：HTTP 上报 `POST /api/webhook/onebot/{account_id}` + 反向 WS；事件映射
   `message/notice/request/meta_event`；`send_private_msg`/`send_group_msg`；`echo` 关联请求响应。
   注意与已有 `qq`（官方机器人）区分：`qq_accounts` 不能承载 OneBot 的 `self_id/access_token`，需新表。
+  反向 WS 是**长连接服务端**（我们 accept，OneBot 实现方连入），必须写清：升级路由宿主（gin `Upgrade`
+  或独立 `http.Server`，二选一并固定）、`Authorization: Bearer <token>` 鉴权、
+  `self_id → account_id` 连接注册表（同 `self_id` 重连顶掉旧连接）、心跳与断线清理、挂 app start/stop
+  并通过 `check-naked-goroutine.sh`；HTTP 上报另需 token/签名校验，失败 4xx 且不落库。
 - FR062 Slack：Events API `v0` 签名 + `url_verification` challenge；`app_mention`/`message.im`；
   `chat.postMessage` + `thread_ts` 线程回复；`event_id` 作幂等键（Slack 重投同一 event_id）。
 - FR063 wecombot：回调解密（AESKey）+ `template_card_event` + 主动推送 webhook。
@@ -301,11 +349,15 @@ type RenderedOutbound struct{ Text string; Cards []model.RichCard; Chunks []stri
 1. 每阶段独立可交付、可回滚；任一阶段失败不阻塞后续（除 FR-1 是 FR-7 的前置）。
 2. 每条 FR 至少一个可执行判据（测试名或命令），写在 `tasks.md` 对应任务的「验收」字段。
 3. 全量门禁：`go build ./... && go vet ./... && go test ./internal/service/ ./internal/channelbot/... ./internal/channelcaps/ ./internal/channelgw/...`；
+   **并发面另跑 `go test -race ./internal/service/ ./internal/channelbot/...`**（注册表 / snooze worker / OneBot WS 连接表）；
    `python3 scripts/check-layer-boundary.py`、`python3 scripts/check_model_migration.py`、
    `bash scripts/check-enum-consistency.sh`（新增渠道必跑，见 §七 门禁矩阵）。
 4. 新平台验收必须包含：验签失败 4xx 且不落库、同 msg_id 二次投递不重复、私聊与群聊各一条真实回放、
    渠道错误返回 `*ChannelError`。
 5. 现有行为零回归：`TestCardDelivery`、bridge outbox 全量测试、telegram/whatsapp 入站测试全绿。
+6. 可观测：按 `(channel, ChannelError.Category)` 计数打点（`outbound_send_failed_total`）+ 路由命中
+   （`route_rule_hit` 日志已有，需计数）+ 超长（`outbound_text_overflow`），各配一条单测；
+   否则上线后只能靠翻审计行判断某个渠道是否整体挂了。
 
 ## 六、风险
 
@@ -321,6 +373,11 @@ type RenderedOutbound struct{ Text string; Cards []model.RichCard; Chunks []stri
 
 复核方法：每条断言回到源码定位函数与行号，能用 `grep`/`awk` 判定的当场判定；不能就地判定的（如
 「飞书是否解析撤回」）读解析器全文确认。下表只列**改动了结论**的项，原文中已正确的锚点不重复。
+
+> 二次审核（换镜头找漏洞，不重复本节断言核对）见同目录 `review.md`（R1–R17）。
+> 其中已直接改进本文档与 `tasks.md`／`plan.md` 的项：R2 索引机制、R3 事件出口、R4 渲染不切块、
+> R5 sender 结果不变量、R6 双注册表、R8 游标落库、R9 WS 宿主与鉴权、R12 片段自相矛盾、
+> R13 工期、R14 `-race`、R15 可观测；**R1 范围拆分、R2 身份键形状、R7 交互回调降级**仍是 ⚖️ 待决策。
 
 ### 7.1 断言修正（文档原话 → 代码事实 → 处置）
 

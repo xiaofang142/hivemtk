@@ -79,8 +79,9 @@ flowchart TB
     }
     type OutboundResult struct{ Sent bool; PlatformMsgID string }
     ```
-    注册表：`map[WebhookChannel]channelSender` + `sync.RWMutex`；`RegisterChannelSender` 对空 Channel / 重复注册 `panic`（与 `capregistry.Register`、`channelcaps.Register` 同风格）。
+    注册表分两层：**静态工厂表** `senderFactories map[WebhookChannel]func(*WebhookService) channelSender`（编译期可枚举，供 parity 与文档生成）与**实例注册表** `map[WebhookChannel]channelSender` + `sync.RWMutex`（`NewWebhookService` 遍历工厂表构建）。`RegisterChannelSender` 对空 Channel / 重复注册 `panic`（与 `capregistry.Register`、`channelcaps.Register` 同风格）。
   - **数据流向**：`sendOutbound` → `ChannelSenderOf(ch)` → `sender.Send(ctx, req)` → `*OutboundResult`；失败不返回 error，走 `req.Fail(err)`，保证 `sendErr` 只有一个写入点。
+  - **不变量（二次审核补）**：`Send` 返回后校验 `!res.Sent && sendErr == nil` → 用 `req.Fail(&ChannelError{Category: CategoryUnknown, Retryable: true, Raw: "sender reported neither success nor failure"})` 兜底；`Fail` 约定在 `Send` 返回前同步调用。
   - **逻辑图**：
     ```mermaid
     flowchart LR
@@ -90,7 +91,7 @@ flowchart TB
       C -->|成功| E["OutboundResult{Sent:true}"]
       C -->|失败| F["req.Fail(err) → sendErr"]
     ```
-  - **验收**：`go test ./internal/service/ -run TestOutboundRegistry` 绿，覆盖：重复注册 panic、未知渠道返回 `ErrOutboundChannelUnsupported`、注册后取回同一实例、`RegisteredSenders()` 按 channel 字典序稳定、`Fail` 被调用后 `sendErr` 非空。
+  - **验收**：`go test ./internal/service/ -run TestOutboundRegistry` 绿，覆盖：重复注册 panic、未知渠道返回 `ErrOutboundChannelUnsupported`、注册后取回同一实例、`RegisteredSenders()` 按 channel 字典序稳定、`Fail` 被调用后 `sendErr` 非空、**静态工厂表键集 == 实例注册表键集**、`TestSenderOutcomeMustBeExplicit`（空实现 sender 不报错也不成功 → 被兜成 `CategoryUnknown` 可重试失败）。并发面加 `-race`。
   - **不做**：不搬任何 case 的函数体（T102–T109），不改 `sendOutbound` 主体的 defer 逻辑（T110）。
 
 - [ ] **T102 wecom sender 搬迁**（P0｜依赖 T101｜S｜🟡）
@@ -712,18 +713,18 @@ flowchart TB
       A["manifests.go 声明"] --> B["RenderForChannel"]
       B --> C["sender 拿到已渲染内容"]
     ```
-  - **验收**：`TestManifestRenderFieldsNonEmpty`；文档 diff 仅新增两列。
+  - **验收**：`TestManifestRenderFieldsNonEmpty` + `TestManifestRenderFormatHasEvidence`（每条 manifest 的 `OutboundFormat` 必须附代码锚点字符串，空锚点即红）；文档 diff 仅新增两列。
 
 - [ ] **T402 `RenderForChannel`**（P1｜依赖 T401｜M｜🟡）
-  - **规格**：一次调用完成「格式转换 + 富卡能力判定 + 超长拆块」；未知渠道返回错误而非静默透传。
-  - **上下文**：拆块上限与 Telegram 4096 / 微信 2048 等平台限制对齐；卡片降级文本能力来自 `cardTextDelivery`。
+  - **规格**：一次调用完成「格式转换 + 富卡能力判定 + 超长打点」；未知渠道返回错误而非静默透传。**不切块**（二次审核修正：QQ 客户端已有 `splitQQMessage` + 可注入 `QQMessageMaxLenEffective()`，`channelbot/qq/qq.go:38-66,195`；渲染层再切会造成双重切分，且违反 FR006 行为冻结）。
+  - **上下文**：`MaxTextLen` 只用于判定是否打点 `outbound_text_overflow{channel}`；卡片降级文本能力来自 `cardTextDelivery`；格式取值必须附 sender 代码取证锚点。
   - **架构**：Service 层纯函数（可单测）；不读写 DB。
   - **数据结构**：
     ```go
-    type RenderedOutbound struct { Text string; Cards []model.RichCard; Chunks []string }
+    type RenderedOutbound struct { Text string; Cards []model.RichCard; Overflow int }
     func RenderForChannel(ch string, msgType string, content string, cards []model.RichCard) (RenderedOutbound, error)
     ```
-  - **数据流向**：`sendOutbound` → `RenderForChannel` → `OutboundRequest{Content, Cards}`。
+  - **数据流向**：`sendOutbound` → `RenderForChannel` → `OutboundRequest{Content, Cards}`；`Overflow>0` 时打点，原文照发。
   - **逻辑图**：
     ```mermaid
     flowchart TD
@@ -734,12 +735,12 @@ flowchart TB
       D --> E
       E -->|否| F["卡片降级为文本"]
       E -->|是| G["保留卡片"]
-      F --> H{"超 MaxTextLen?"}
+      F --> H{"len > MaxTextLen?"}
       G --> H
-      H -->|是| I["切块 ≤3 段"]
+      H -->|是| I["打点 outbound_text_overflow，文本原样"]
       H -->|否| J["原样"]
     ```
-  - **验收**：`TestRender_PlainStripsMarkdown`、`TestRender_CardFoldedWhenUnsupported`、`TestRender_SplitsLongText`、`TestRender_UnknownChannelErrors`。
+  - **验收**：`TestRender_PlainStripsMarkdown`、`TestRender_CardFoldedWhenUnsupported`、`TestRender_OverflowCountsWithoutSplitting`（断言输出与输入等长、未产生 Chunks）、`TestRender_UnknownChannelErrors`。
 
 - [ ] **T403 旧函数薄包装**（P1｜依赖 T402｜S｜🟡）
   - **规格**：保留旧签名避免大面积改动，内部改调渲染层；`channel_card_delivery.go` 文件本身不动（在制品）。
@@ -784,16 +785,21 @@ flowchart TB
 ## Phase 5 身份键（P1）
 
 - [ ] **T501 去重与换键迁移 065**（P1｜依赖 —｜L｜🟡）
-  - **规格**：把 `customer_channels` 唯一键从 `(one_id, channel)` 换成 `(tenant_id, one_id, channel, account_id)`；重复行按最近活跃保留一条，其余软删。
-  - **上下文**：`model/customer_channel.go` 现唯一键仅 `idx_oneid_channel(one_id, channel)`，`account_id` 只是普通索引——同一客户在两个公众号/两个企微账号下会互相覆盖（Chatwoot 用 `(inbox_id, source_id)` 避免此类问题）。
-  - **架构**：迁移脚本（离线 SQL 部署路径）+ Model tag；不改业务逻辑。
+  - **规格**：把 `customer_channels` 唯一键从实际的 `(tenant_id, one_id, channel)` 换成 `(tenant_id, one_id, channel, account_id)`；重复行按最近活跃保留一条，其余软删。索引**沿用原名** `idx_oneid_channel`（原位重建，避免 AutoMigrate 按名判存在时再建一套）。
+  - **上下文**：`model/customer_channel.go:25-27` 的 `idx_oneid_channel(one_id, channel)` 是 tag 产物，`tenancyidx.Normalize` 启动时原位复合化为 `(tenant_id, one_id, channel)`（`internal/pkg/tenancyidx/tenancyidx.go:1-26,212,253`，保留 `WHERE` 谓词）；`migrations/` 里从没有 SQL 建过它，故 `DROP` 必须 `IF EXISTS`（覆盖全新库无索引的分支）。`account_id` 只是普通索引——同一客户在两个公众号/两个企微账号下会互相覆盖（Chatwoot 用 `(inbox_id, source_id)` 避免此类问题）。
+  - **架构**：迁移脚本（离线 SQL 部署路径）+ Model tag；不改业务逻辑。**三处必须同改**：model tag（T502）、`ON CONFLICT` 列清单（`repository/channel_overview.go:158-169` 写死 `tenant_id/one_id/channel`）、本迁移的索引换名（`CREATE UNIQUE INDEX CONCURRENTLY v2` → `DROP INDEX CONCURRENTLY` 旧键 → `ALTER INDEX ... RENAME TO idx_oneid_channel`，避免 AutoMigrate 非并发重建时锁写）。
   - **数据结构**：
     ```sql
     -- 065_customer_channel_account_key.sql
-    -- 1) account_id 空值统一 ''
-    -- 2) 窗口函数按 (tenant_id, one_id, channel, account_id) 分组，last_seen_at DESC 保留 rn=1，其余 deleted_at = now()
-    -- 3) CREATE UNIQUE INDEX CONCURRENTLY idx_tenant_oneid_channel_account ...
-    -- 4) DROP INDEX CONCURRENTLY idx_oneid_channel
+    -- 1) account_id 空值统一 ''（含 NULL → ''）
+    -- 2) 事务块：窗口函数按 (tenant_id, one_id, channel, account_id) 分组，last_seen_at DESC 保留 rn=1，
+    --    其余 deleted_at = now()；同组已有软删行则保留者复活（deleted_at = NULL）
+    -- 3) 事务外（CONCURRENTLY 不能进事务），三段换名法避免锁写：
+    --    CREATE UNIQUE INDEX CONCURRENTLY idx_oneid_channel_v2
+    --      ON customer_channels (tenant_id, one_id, channel, account_id);
+    --    DROP INDEX CONCURRENTLY idx_oneid_channel;      -- 全新库无此索引 → 先判存在
+    --    ALTER INDEX idx_oneid_channel_v2 RENAME TO idx_oneid_channel;
+    --    显式带 tenant_id，`tenancyidx.Normalize` 复查时无需再重建（幂等）
     ```
   - **数据流向**：迁移 → 表结构；应用侧 `ON CONFLICT` 目标随之改变（T502）。
   - **逻辑图**：
@@ -801,31 +807,37 @@ flowchart TB
     flowchart TD
       A["统计重复组"] --> B["窗口函数标记 rn"]
       B -->|rn>1| C["软删"]
-      B -->|rn=1| D["保留"]
-      C --> E["建新唯一索引 CONCURRENTLY"]
-      D --> E
-      E --> F["删旧索引 CONCURRENTLY"]
+      B -->|rn=1 且已软删| D["复活 deleted_at=NULL"]
+      B -->|rn=1| E["保留"]
+      C --> F["CREATE UNIQUE INDEX CONCURRENTLY v2"]
+      D --> F
+      E --> F
+      F --> G["DROP 旧索引 + RENAME 复用原名"]
     ```
-  - **验收**：含重复数据的测试库连跑两次无错；去重后行数 = 新键 `GROUP BY` 组数；`check_model_migration.py` 绿。
+  - **验收**：含重复数据的测试库连跑两次无错；去重后行数 = 新键 `GROUP BY` 组数；`pg_indexes` 断言 `idx_oneid_channel` 列序为 `(tenant_id, one_id, channel, account_id)`；`check_model_migration.py` 绿。
+  - **⚖️ 待决策**：若要同时补身份锚（`(tenant_id, channel, account_id, channel_user_id)`，解决「同一平台账号落到两个 OneID」），本迁移再加一条唯一索引并多做一轮去重；未拍板前按单键施工。
 
 - [ ] **T502 模型与写入路径**（P1｜依赖 T501｜M｜🟡）
-  - **规格**：gorm tag 与新键一致；写入用 `ON CONFLICT (tenant_id, one_id, channel, account_id)`。
-  - **上下文**：`UpsertByChannelAccount` 现按旧键冲突更新。
+  - **规格**：gorm tag 与新键一致；`ON CONFLICT` 目标改为 `(tenant_id, one_id, channel, account_id)`，且 `DoUpdates` 带 `deleted_at = NULL`（软删行仍占唯一键，不复活就写进一条看不见的行）。
+  - **上下文**：`repository/channel_overview.go:158-169` 的 `UpsertCustomerChannel` 写死 `tenant_id/one_id/channel`，不改会直接报 `no unique or exclusion constraint matching the ON CONFLICT specification`；调用点 `service/channel_overview.go:268`。
   - **架构**：Model + Repository。
   - **数据结构**：
     ```go
-    AccountID string `gorm:"type:varchar(64);not null;default:'';uniqueIndex:idx_tenant_oneid_channel_account,priority:4"`
+    AccountID string `gorm:"type:varchar(64);not null;default:'';uniqueIndex:idx_oneid_channel;priority:4"`
+    // ON CONFLICT 列：tenant_id, one_id, channel, account_id
+    // DoUpdates：channel_user_id, channel_name, is_primary, group_id, deleted_at, updated_at
     ```
-  - **数据流向**：入站身份识别 → `UpsertByChannelAccount` → 冲突更新。
+  - **数据流向**：入站身份识别 → `UpsertCustomerChannel` → 冲突更新（含复活）。
   - **逻辑图**：
     ```mermaid
     flowchart LR
-      A["入站事件"] --> B["UpsertByChannelAccount"]
+      A["入站事件"] --> B["UpsertCustomerChannel"]
       B --> C{"冲突键命中?"}
-      C -->|是| D["DO UPDATE"]
-      C -->|否| E["INSERT"]
+      C -->|是，未软删| D["DO UPDATE"]
+      C -->|是，已软删| E["DO UPDATE + deleted_at=NULL"]
+      C -->|否| F["INSERT"]
     ```
-  - **验收**：`TestCustomerChannel_SameOneIDTwoAccounts`、`TestCustomerChannel_UpsertIdempotent`、`TestCustomerChannel_EmptyAccountNormalized`。
+  - **验收**：`TestCustomerChannel_SameOneIDTwoAccounts`、`TestCustomerChannel_UpsertIdempotent`、`TestCustomerChannel_EmptyAccountNormalized`、`TestCustomerChannel_UpsertRevivesSoftDeleted`。
 
 ---
 
@@ -983,27 +995,30 @@ flowchart TB
   - **验收**：`channelbot/wecomcs/wecomcs_test.go` 用 `httptest` 回放：token 二次调用只请求一次、`SyncMsg` 游标原样透传、验签失败返回 false、`retcode != 0` 返回可判定错误。
 
 - [ ] **T702 入站 handler**（P0｜依赖 T701｜L｜🟡）
-  - **规格**：回调验签解密 → 拉增量 → 转 `MessageEvent` → 交 `Ingress`；非消息事件走事件总线；同 `msgid` 二次投递不重复入库。
-  - **上下文**：仿 `service/webhook_channel_qq.go`（153 行，Op13 challenge 短路 + `ToInbound` + `Ingress` 模板）。
-  - **架构**：`service/webhook_channel_wecomcs.go`，实现与其它渠道一致的 `dispatch<X>` + `Verify<X>`。
+  - **规格**：回调验签解密 → 拉增量 → 转 `MessageEvent` → 交 `Ingress`；非消息事件**写审计表**（`sync_cursor` 之外的 `event_type` 一律落审计，幂等键 `(tenant_id, channel, channel_msg_id)`），总线只做旁路通知；同 `msgid` 二次投递不重复入库。游标**必须落库续拉**：回包 `next_cursor` 写入 `wecom_cs_accounts.sync_cursor`，拉取 worker 重启后从这里继续。
+  - **上下文**：仿 `service/webhook_channel_qq.go`（153 行，Op13 challenge 短路 + `ToInbound` + `Ingress` 模板）；`model/wecom.go:8` 的 `WeComAccount` 没有 `kf_*` 字段，故游标列落在新表 `wecom_cs_accounts`。
+  - **架构**：`service/webhook_channel_wecomcs.go`（`dispatch<X>` + `Verify<X>`）+ `wecomcs_puller.go`（Ticker + `utils.SafeGo` + 成对 start/stop，过 `check-naked-goroutine.sh`）；单账号串行拉取、失败退避。
   - **数据结构**：
     ```go
     // 解密后关键字段：Token / OpenKfId / msgtype / msgid / send_time
-    // 事件映射：enter_session / msg_send_fail / session_status_change / reject_customer_msg_switch_change
+    // 事件映射：enter_session / msg_send_fail / session_status_change / reject_customer_msg_switch_change → 审计表
+    // wecom_cs_accounts: sync_cursor varchar(512), cursor_updated_at timestamptz
     ```
-  - **数据流向**：回调 → 验签 → 解密 → `SyncMsg(cursor)` → 逐条 `ToInbound` → `Ingress.HandleIngressMessage`。
+  - **数据流向**：回调 → 验签 → 解密 → `SyncMsg(cursor)` → 逐条 `ToInbound` → `Ingress.HandleIngressMessage` → 回写 `next_cursor`。
   - **逻辑图**：
     ```mermaid
     flowchart TD
       A["企微回调"] --> B["VerifySignature"]
       B -->|失败| C["4xx，不落库"]
       B -->|成功| D["解密取 Token/OpenKfId"]
-      D --> E["SyncMsg 增量"]
+      D --> E["读 sync_cursor → SyncMsg 增量"]
       E --> F{"msgtype"}
       F -->|text/image| G["ToInbound → Ingress"]
-      F -->|event| H["事件总线"]
+      F -->|event| H["审计表（幂等键去重）"]
+      G --> I["回写 next_cursor"]
+      H --> I
     ```
-  - **验收**：fixture 回放（文本/图片/事件）；`TestWecomcs_DuplicateCallbackIdempotent`。
+  - **验收**：fixture 回放（文本/图片/事件）；`TestWecomcs_DuplicateCallbackIdempotent`、`TestWecomcs_CursorPersistedAndResumed`（重启后从库里续拉）、`TestWecomcs_EventWrittenToAudit`（总线无订阅者也不丢）。
 
 - [ ] **T703 五处登记 + 账号表**（P0｜依赖 T702｜M｜🟡）
   - **规格**：让 webhook 通用链路认得这个渠道：能力判定、拒绝提示、分发、验签、租户解析表；账号表独立（不复用企微应用表）。
@@ -1162,26 +1177,28 @@ flowchart TB
   - **验收**：`httptest` 回放四种 `post_type`；`echo` 匹配到请求；token 缺失/错误返回可判定错误；`TestOnebot_ParseEventMatrix`。
 
 - [ ] **T802 反向 WS 接入**（P0｜依赖 T801｜L｜🟡）
-  - **规格**：提供 `/ws/onebot/:account_id` 让 NapCat 反连；维护连接表；发送优先走 WS，无连接回落 HTTP。
-  - **上下文**：`internal/channelgw` 已有 WS 升级与 ping/pong 机制，可复用其帧与连接管理形态。
+  - **规格**：提供 `/ws/onebot/:account_id` 让 NapCat 反连；维护连接表；发送优先走 WS，无连接回落 HTTP。升级时校验 `Authorization: Bearer <access_token>`（同账号表内 token），失败 401 且不登记；连接空闲超时与 ping/pong 保活；同一 `self_id` 重连**顶掉旧连接**（旧连接关闭 + 新连接接管）；连接表挂在 app start/stop 生命周期（过 `check-naked-goroutine.sh`），并发访问走 `RWMutex` 并跑 `-race`。
+  - **上下文**：`internal/channelgw` 已有 WS 升级与 ping/pong 机制，可复用其帧与连接管理形态；`self_id` 用于把「谁连上来的」映射到 `account_id`（多账号并存时避免互相顶替），从 `meta_event.lifecycle` 首帧读取并校验与配置一致。
   - **架构**：Router 入口 + Service 连接管理；不跨层访问 repository。
   - **数据结构**：
     ```go
-    type onebotConn struct{ accountID string; conn *websocket.Conn; sendCh chan []byte }
-    // 全局：map[string]*onebotConn + RWMutex
+    type onebotConn struct{ accountID, selfID string; conn *websocket.Conn; sendCh chan []byte; lastPong time.Time }
+    // 全局：map[string]*onebotConn（key=accountID）+ RWMutex；升级器独立 http.Server 或 gin 路由二选一并写死
     ```
-  - **数据流向**：WS 帧 → 解析 → 入站；出站 API 调用 → 若连接在则写 WS，否则 HTTP。
+  - **数据流向**：WS 帧 → 鉴权 → 首帧定 self_id → 解析 → 入站；出站 API 调用 → 若连接在则写 WS，否则 HTTP。
   - **逻辑图**：
     ```mermaid
     flowchart TD
-      A["NapCat 反连 /ws/onebot/:id"] --> B["登记连接"]
+      A["NapCat 反连 /ws/onebot/:id"] --> A2{"Bearer token 对?"}
+      A2 -->|否| A3["401，不登记"]
+      A2 -->|是| B["登记连接（同 self_id 顶掉旧连接）"]
       B --> C["收帧 → ParseEvent → 入站"]
       D["出站请求"] --> E{"连接存在?"}
       E -->|是| F["写 WS"]
       E -->|否| G["HTTP 调用"]
-      F --> H["断线移除连接"]
+      B --> H["心跳超时/断线 → 移除连接"]
     ```
-  - **验收**：`TestOnebotWS_ConnectSendReceive`、`TestOnebotWS_ReconnectReplacesConn`。
+  - **验收**：`TestOnebotWS_ConnectSendReceive`、`TestOnebotWS_ReconnectReplacesConn`、`TestOnebotWS_RejectsBadToken`（401 且未登记）、`TestOnebotWS_HeartbeatTimeoutDrops`；`go test -race` 跑连接表用例。
 
 - [ ] **T803 入站 handler + 登记**（P0｜依赖 T801/T802｜L｜🟡）
   - **规格**：message 入站；notice 映射撤回与成员变动；request 只发事件不自动同意。
@@ -1539,12 +1556,14 @@ flowchart TB
     cd user-server && go build ./... && go vet ./... \
       && go test ./internal/service/ ./internal/channelbot/... ./internal/channelcaps/ \
                 ./internal/channelgw/... ./internal/router/ ./internal/capregistry/ \
+      && go test -race ./internal/service/ ./internal/channelbot/... \
       && cd .. && python3 scripts/check-layer-boundary.py \
       && python3 scripts/check_model_migration.py \
       && bash scripts/check-enum-consistency.sh \
       && bash scripts/check-naked-goroutine.sh
     ```
   - **数据流向**：命令 → 输出 → 记录。
+  - **说明（二次审核补）**：`-race` 是本轮新增的硬门禁——三类新并发面（sender 注册表读写、snooze 到期 worker、OneBot WS 连接表）在现有 CI 里没有覆盖，不加等于把竞态留给线上。
   - **逻辑图**：
     ```mermaid
     flowchart LR
@@ -1553,6 +1572,28 @@ flowchart TB
       C --> D["delivery.md 记录"]
     ```
   - **验收**：全绿；warning 数量不增。
+
+- [ ] **T1205 出站可观测打点**（P1｜依赖 T101｜S｜🟡）
+  - **规格**：把「哪个渠道、哪类错误在涨」变成指标，而不是靠翻审计行；只加计数，不改投递路径。
+  - **上下文**：`ChannelError` 已有 7 个 `Category`（`service/channel_error.go`：rate_limited/auth/network/bad_request/quota_exhausted/window_expired/unknown），但目前只有审计行，无计数；`markSendFailed` 是唯一的失败汇聚点。
+  - **架构**：Service 内部指标打点，挂在 `markSendFailed` / `markSendFailedLogged` 与 `RenderForChannel` 的溢出分支上；不新增层。
+  - **数据结构**：
+    ```go
+    // 语义打点（按现有指标设施实现，沿用仓库命名）
+    outbound_send_failed_total{channel, category}
+    outbound_text_overflow_total{channel}
+    route_rule_hit_total{tenant, target}   // T305 命中时
+    ```
+  - **数据流向**：`markSendFailed(err)` → 从 `*ChannelError` 取 `Category` → 计数 → 原有审计照旧。
+  - **逻辑图**：
+    ```mermaid
+    flowchart LR
+      A["sender 失败"] --> B["req.Fail(err)"]
+      B --> C["markSendFailed"]
+      C --> D["审计行（原有）"]
+      C --> E["outbound_send_failed_total{channel,category}"]
+    ```
+  - **验收**：`TestOutboundFailureMetricDimensions`（同一 channel 两种 Category 分别计数）、`TestRenderOverflowMetric`；指标注册不 panic（重名）。
 
 ---
 
