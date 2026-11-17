@@ -218,6 +218,8 @@ func allModels() []any {
 		&model.ChannelEventAudit{},
 		// 交互上下文（specs/024 D8）：卡片 ↔ 点击 ↔ 答复状态。
 		&model.ChannelInteraction{},
+		// 入站事件路由规则（specs/024 T301）：无规则时行为与今天一致。
+		&model.ChannelRouteRule{},
 		&model.InboxConversation{},
 		&model.InboxAssignment{},
 		&model.MessageTrace{},

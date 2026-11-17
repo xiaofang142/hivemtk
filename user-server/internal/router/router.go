@@ -529,6 +529,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupCardRoutes(auth, gormDB)
 
+		setupChannelRouteRuleRoutes(auth, gormDB)
+
 		setupCardStatsRoutes(auth, gormDB)
 
 		setupMaterialRoutes(auth)

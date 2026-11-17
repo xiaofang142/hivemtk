@@ -373,7 +373,7 @@ flowchart TB
 
 ## Phase 2 事件类型体系（P0）
 
-- [ ] **T201 `EventType` 常量与字段**（P0｜依赖 —｜S｜🟡）
+- [x] **T201 `EventType` 常量与字段**（P0｜依赖 —｜S｜🟡）
   - **规格**：给 `MessageEvent` 增加一等公民事件类型，并规定空值语义 = `message.received`（存量构建路径零改动即保持旧行为）。
   - **上下文**：`model/message_event.go`（93 行）无该字段；`ParsedPayload.EventType`（`webhook.go:1006`）把 `event_type/event/type/msg_type` 一锅 coalesce，语义混杂，**不能作为类型来源**；`NormalizeEvent`（`inbox_ingress.go:480`）是 `channelbot.ToMessageEvent` 与各 `webhook_channel_*.go` 两条构建路径的唯一收口点。
   - **架构**：Model 层定义类型；`NormalizeEvent`（Service 层）负责归一；解析器（Service）只负责填值。
@@ -405,7 +405,7 @@ flowchart TB
     ```
   - **验收**：`TestNormalizeEvent_DefaultsToReceived`、`TestNormalizeEvent_PreservesExplicitType`；`channelbot/core` 既有测试仍绿。
 
-- [ ] **T202 消息编辑/撤回仓储能力**（P0｜依赖 T201｜M｜🟡）
+- [x] **T202 消息编辑/撤回仓储能力**（P0｜依赖 T201｜M｜🟡）
   - **规格**：补齐「客户编辑消息」与「客户撤回消息」两个窄方法；不改动出站撤回语义。
   - **上下文**：`MessageHub` 已有 `RecalledAt *time.Time` + `RecallError string`（`model/ai_sales_champion.go:71-72`）；`MarkRecalled(ctx, id, at)`（`message_hub_recall.go:25`）**WHERE 带 `direction='outbound'`**，只用于撤我发出的消息；编辑方向的窄方法不存在。
   - **架构**：Repository 层新增两个方法，沿用现有 `GetByMsgID` 的租户/方向约定。
@@ -430,7 +430,7 @@ flowchart TB
     ```
   - **验收**：`TestMessageHub_UpdateContentByChannelMsgID`、`TestMessageHub_MarkInboundRecalled_RejectsOutboundRow`、`TestMessageHub_MarkInboundRecalled_NotFound`。
 
-- [ ] **T203 入站按事件类型分流**（P0｜依赖 T201/T202｜M｜🟡）
+- [x] **T203 入站按事件类型分流**（P0｜依赖 T201/T202｜M｜🟡）
   - **规格**：归一之后先分流，只有 `message.received` 走原「落库 + 触发 AI」路径；其余事件不得污染未读计数与 AI 触发。
   - **上下文**：`HandleIngressMessage`（`inbox_ingress.go:546`）目前无类型分支；`InboxIngressResult`（L129）字段为 `Accepted/HumanLocked/QueuedForAI/SessionID/Reason`。
   - **架构**：Service 层单一分流点；下游分别调用 T202 仓储、事件总线（T204）、交互 ack（T207）。
@@ -458,7 +458,7 @@ flowchart TB
     ```
   - **验收**：`TestIngress_EditedUpdatesContent`、`TestIngress_DeletedMarksRecall`、`TestIngress_MemberEventDoesNotCreateMessage`、`TestIngress_NonReceivedDoesNotTouchUnread`。
 
-- [ ] **T204 事件总线扩展**（P0｜依赖 T203｜S｜🟡）
+- [x] **T204 事件总线扩展**（P0｜依赖 T203｜S｜🟡）
   - **规格**：非消息类事件走既有事件总线，新增 4 个 topic；订阅方缺位时不得阻塞入站。
   - **上下文**：`internal/event/types.go` 现有 8 个 topic（`operation.log`、`customer.message.received`、`knowledge.document.changed`、`dialogue.started/ended`、`asset.degraded`、`asset.degrade.warning`、`rag.corpus.updated`）；`Bus` 提供 `Publish/PublishCtx/PublishEventCtx` 与 `StampTenantFromCtx`。
   - **架构**：`internal/event` 扩展；Service 层只调 `PublishEventCtx`。
@@ -492,7 +492,7 @@ flowchart TB
     ```
   - **验收**：`TestEvent_AuditTopicDelivery`（订阅收到且租户正确）、`TestEvent_NoSubscriberDoesNotBlock`。
 
-- [ ] **T205 各渠道解析器填 `EventType`**（P0｜依赖 T201｜M｜🟡）
+- [x] **T205 各渠道解析器填 `EventType`**（P0｜依赖 T201｜M｜🟡）
   - **规格**：把各渠道原生事件映射成统一类型；映射不了的一律落到 `platform.specific` 语义（当前记录为 `message.received` 之外的显式值），**不得静默丢弃**。
   - **上下文**：`webhook_channel_{wecom,feishu,telegram,qq,whatsapp,douyin}.go` 只产出消息；feishu 在 `Event.Message == nil` 时返回 `nil,nil`（`webhook_channel_feishu.go:196`），撤回/成员事件被静默丢弃；telegram 仅 `EditedMessage` 分支（`webhook_channel_telegram.go:268`）。
   - **架构**：各渠道解析器（Service）内映射，只填 `EventType`，不改落库逻辑。
@@ -517,7 +517,7 @@ flowchart TB
     ```
   - **验收**：每渠道一条 fixture 断言 `EventType` 与「不产消息行」；`TestChannelParsers_EventTypeMatrix` 覆盖全表。
 
-- [ ] **T206 `channelcaps.Manifest.Events`**（P0｜依赖 T205｜S｜🟡）
+- [x] **T206 `channelcaps.Manifest.Events`**（P0｜依赖 T205｜S｜🟡）
   - **规格**：能力表从「消息类型」升级到「事件类型」，并让「解析器能产出的事件」必须先在 manifest 声明。
   - **上下文**：`internal/channelcaps/channelcaps.go` 的 `Manifest{Channel,Label,Via,Inbound,Outbound,Features,Note}` 无事件字段；文档由 `Markdown()` 生成、`TestCapabilityDocFreshness` 钉漂移。
   - **架构**：`channelcaps` 为纯声明包（无 service 依赖）；解析器通过测试反向校验声明。
@@ -540,7 +540,7 @@ flowchart TB
     ```
   - **验收**：`go test ./internal/channelcaps/` 绿；`UPDATE_GOLDEN=1` 后文档 diff 仅新增事件列。
 
-- [ ] **T207 交互回调最小闭环**（P1｜依赖 T203｜M｜🟡）
+- [x] **T207 交互回调最小闭环**（P1｜依赖 T203｜M｜🟡）
   - **规格**：按钮点击类回调必须回 ack（否则客户端转圈/提示失败），但不创建消息、不触发 AI；其余复杂交互留后续 spec。
   - **上下文**：BotMgr 侧 Telegram 用 `answerCallbackQuery`，失效时回文本提示（LangBot 深度剖析 §case2）；HiveMTK 当前无 `interaction.callback` 处理。
   - **架构**：Service 层新增回调处理分支；渠道差异封装在 `channelbot/<x>` 的 `AnswerCallback`。
@@ -572,7 +572,7 @@ flowchart TB
 
 ---
 
-- [ ] **T208 交互上下文表与仓储**（P0｜依赖 T201｜M｜🟡）
+- [x] **T208 交互上下文表与仓储**（P0｜依赖 T201｜M｜🟡）
   - **规格**：新建 `channel_interactions`，承载「我们发出去的可交互卡片 / 平台侧点击」的一次映射。只解决「这次点击对应哪条卡片、哪个动作、答复过没有」，**不做**表单状态机、不做多步会话流（那是 025 之后独立 spec）。重复 `interaction_id` 视为平台重投，幂等忽略。
   - **上下文**：今天按钮回调没有落点——Telegram `callback_query` 解析后只当作一条文本（`webhook_channel_telegram.go` callback 分支），`MessageEvent` 里没有 `callback_id`/`action` 字段，`MessageHub` 也不该背这个语义（它是消息表）。飞书/钉钉的卡片回调同样无处可查「这张卡的哪颗按钮被点」。
   - **数据结构**：
@@ -610,7 +610,7 @@ flowchart TB
     ```
   - **验收**：`TestChannelInteraction_CreateIdempotent`（同键两次 → 1 行）、`TestChannelInteraction_MarkAnsweredOnlyOnce`、`TestChannelInteraction_ExpiredNotAnswerable`。
 
-- [ ] **T209 入站交互回调：记录 + 幂等 + 审计 + 路由留痕**（P0｜依赖 T201、T208｜M｜🟡）
+- [x] **T209 入站交互回调：记录 + 幂等 + 审计 + 路由留痕**（P0｜依赖 T201、T208｜M｜🟡）
   - **规格**：`EventType == interaction.callback` 时**不落 `message_hub`、不计未读、不触发 AI**，改为：写 `channel_interactions`（若尚无对应卡片行则建 pending 行）→ 写审计（`operation_log` / `security_audit` 现有 sink，按租户）→ 记录 `RouteRuleID`（若命中规则）→ 交给 T210 ack。`discard` 规则命中时仍写审计，只是不 ack。
   - **上下文**：分流收口点在 `HandleIngressMessage`（`inbox_ingress.go:546`），`NormalizeEvent`（L480）是唯一归一入口；今天没有 `interaction.callback` 分支，回调会被当成普通文本落到消息表。
   - **数据结构**：`InboxIngressResult` 增 `InteractionID string`（与 T305 的 `RouteRuleID` 同批加字段）；审计体 `{tenant_id, channel, account_id, interaction_id, action, sender_id, route_rule_id, decision}`。
@@ -631,7 +631,7 @@ flowchart TB
     ```
   - **验收**：`TestIngress_InteractionCallback_NoMessageRow`、`TestIngress_InteractionCallback_DuplicateIsNoop`、`TestIngress_InteractionCallback_AuditWritten`。
 
-- [ ] **T210 交互答复能力接口 + Telegram 实现**（P1｜依赖 T208｜M｜🟡）
+- [x] **T210 交互答复能力接口 + Telegram 实现**（P1｜依赖 T208｜M｜🟡）
   - **规格**：`channelbot/core` 增 `InteractionAnswerer` 接口（`AnswerInteraction(ctx, accountID, interactionID, text string) error`）；Telegram 客户端实现 `answerCallbackQuery`（含 `show_alert` 透传）；对未实现该接口的渠道，退化为「空 ack + 审计」，并在 `channelcaps` 的 capabilities 里标注（`FeatureInteraction`）。
   - **上下文**：Telegram 现在的 callback 分支只把回调当文本，客户点了按钮看不到任何反馈（客户端一直转圈）；`channelbot/telegram` 已具备 `BaseClient.DoJSON`，加一个方法即可。
   - **数据结构**：接口定义在 `internal/channelbot/core/core.go`；Telegram 实现 `AnswerInteraction` 走 `POST /answerCallbackQuery`。
@@ -649,7 +649,7 @@ flowchart TB
     ```
   - **验收**：`TestTelegram_AnswerInteraction_OK`、`TestTelegram_AnswerInteraction_PlatformError`（httptest 回放）、`TestIngress_InteractionFallbackAckWhenUnsupported`。
 
-- [ ] **T211 卡片发送登记交互上下文 + 到期清理**（P2｜依赖 T208、T101｜M｜🟡）
+- [x] **T211 卡片发送登记交互上下文 + 到期清理**（P2｜依赖 T208、T101｜M｜🟡）
   - **规格**：出站发可交互卡片时登记 `platform_msg_id` + 动作集合（pending 行），让后续点击能定位到卡片；新增到期清理 worker（`expires_at < now → status=expired`），沿用 `retention_cleanup_cron.go` 的 Ticker + `utils.SafeGo` + 成对 start/stop 形态（须过 `check-naked-goroutine.sh`）。**不做**卡片内容回改（edit card），那是后续能力。
   - **上下文**：Telegram `SendCard`、飞书 `SendInteractiveCard` 今天发完就丢，没有「这条卡片消息 ↔ 哪次发送」的映射；`MessageHub.PlatformMsgID` 只覆盖文本回复。
   - **数据结构**：卡片内按钮的 `callback_data` 约定 `interaction_id:action`（或平台原生 payload），登记时写入 `Payload`；清理 worker 配置项 `channel_interaction_ttl_days`（默认 7）。
@@ -672,7 +672,7 @@ flowchart TB
 
 ## Phase 3 事件路由（P0）
 
-- [ ] **T301 规则模型 + 迁移 066**（P0｜依赖 T201｜M｜🟡）
+- [x] **T301 规则模型 + 迁移 066**（P0｜依赖 T201｜M｜🟡）
   - **规格**：用一张规则表表达「什么事件、命中什么条件、交给谁」；无规则时行为与今天完全一致。
   - **上下文**：现状是硬编码「入站即触发 AI」（`webhook_ai.go:63` `shouldTriggerAI`，无账号级开关的渠道 default 返回 true）。
   - **架构**：Model 层新增实体，必须登记 `internal/pkg/db/migrate.go` 的 `allModels()`，否则 `check_model_migration.py` 红。
@@ -703,7 +703,7 @@ flowchart TB
     ```
   - **验收**：`python3 scripts/check_model_migration.py` 绿；迁移在空库/有库各跑一次无错。
 
-- [ ] **T302 仓储**（P0｜依赖 T301｜S｜🟡）
+- [x] **T302 仓储**（P0｜依赖 T301｜S｜🟡）
   - **规格**：规则读写全部以 tenantID 为第一参，fail-closed；不提供跨租户批量接口。
   - **上下文**：项目惯例见 `repository/message_hub_inbox_conversation.go` 等（租户参数前置、无 ctx 泄漏）。
   - **架构**：Repository 层；不得被 Controller 直接调用。
@@ -723,7 +723,7 @@ flowchart TB
     ```
   - **验收**：`TestChannelRouteRule_TenantIsolation`（A 租户读不到 B 租户规则）。
 
-- [ ] **T303 匹配引擎**（P0｜依赖 T302｜M｜🟡）
+- [x] **T303 匹配引擎**（P0｜依赖 T302｜M｜🟡）
   - **规格**：纯函数式决策：事件类型通配 + `Extra` 嵌套路径匹配 + 优先级排序；无命中返回 `(nil, nil)` 表示放行。
   - **上下文**：可参照 LangBot 的 `_match_event_pattern` / `_match_event_filter`（深度剖析 §L3）——通配与嵌套取值分离，非法规则跳过而不报错。
   - **架构**：Service 层纯逻辑（可单测，无 IO）；规则由调用方注入。
@@ -747,7 +747,7 @@ flowchart TB
     ```
   - **验收**：`TestRouteEngine_Wildcard`、`TestRouteEngine_NestedMatch`、`TestRouteEngine_PriorityOrder`、`TestRouteEngine_NoMatchReturnsNil`、`TestRouteEngine_InvalidJSONRuleSkipped`。
 
-- [ ] **T304 接线 + 可观测**（P0｜依赖 T303/T203｜S｜🟡）
+- [x] **T304 接线 + 可观测**（P0｜依赖 T303/T203｜S｜🟡）
   - **规格**：在归一后、`triggerAIForEvent` 前决策；`discard` 不入库不回复但必须留审计；`IngressResult` 记录命中规则。
   - **上下文**：`HandleIngressMessage`（`inbox_ingress.go:546`）→ `triggerAIForEvent`（L709）；`InboxIngressResult`（L129）需加字段。
   - **架构**：Service 层单点接线；审计走 `operation.log`。
@@ -769,7 +769,7 @@ flowchart TB
     ```
   - **验收**：`TestIngress_DiscardRuleStopsPipeline`、`TestIngress_RouteRuleIDRecorded`、`TestIngress_NoRuleKeepsLegacyBehavior`。
 
-- [ ] **T305 规则管理 API**（P1｜依赖 T302｜M｜🟡）
+- [x] **T305 规则管理 API**（P1｜依赖 T302｜M｜🟡）
   - **规格**：租户内 CRUD；所有路由必须过权限与租户扫描门禁。
   - **上下文**：路由按域拆分 `internal/router/setup<X>Routes`，在 `router.go` 的 `auth` 组注册；`route_policy_gate_test.go` 与 `cross_tenant_scan_test.go` 会强制检查。
   - **架构**：Router → Controller → Service → Repository，严格五层。

@@ -78,6 +78,11 @@ var coreOwnedTables = []string{
 	"aggregation_watermarks", "macros",
 	// 消息基础（所有 IM/工作台共用）
 	"unified_messages", "unified_replies", "message_hub", "message",
+	// specs/024：入站接缝的三张表（平台事件审计 / 卡片交互上下文 / 事件路由规则）。
+	// 归属口径同 message_hub：写入方是渠道 webhook 入站链路，**不受任何模块开关管辖**
+	// （关掉业务模块也照样收消息）。挂到某个可售模块下会让「关模块 ⇒ 表停写」说假话；
+	// 它们也都有页面/接口面隶属 inbox 的产品语义，但生命周期由基座决定。
+	"channel_event_audits", "channel_interactions", "channel_route_rules",
 	"session_messages", "message_trace", "msg_hourly_summary",
 	"notifications", "notification_reads", "web_vital_records", "help_center_test_records",
 	"cron_job_leases", "account", "user", "order",

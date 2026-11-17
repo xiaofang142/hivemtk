@@ -163,6 +163,9 @@ type InboxIngressService struct {
 	// interactionRepo 交互上下文（specs/024 D8）：卡片点击 ↔ 答复状态。
 	interactionRepo *repository.ChannelInteractionRepository
 
+	// routeEngine 入站事件路由（specs/024 T304）。nil = 未装配（单测/无 DB），行为与今天一致。
+	routeEngine *ChannelRouteEngine
+
 	// contentDedupTTL 是入口那把「渠道+发送者+内容」窗口键的存活时间，零值取 InboxContentDedupTTL。
 	// 做成字段而非常量，只为了让"窗口真的有界"这一句能被断言：常量下那条腿要睡满 5 分钟。
 	contentDedupTTL time.Duration
@@ -193,10 +196,12 @@ func NewInboxIngressService() *InboxIngressService {
 	var pendingOutbound *repository.DelayedOutboundRepository
 	var auditRepo *repository.ChannelEventAuditRepository
 	var interactionRepo *repository.ChannelInteractionRepository
+	var routeEngine *ChannelRouteEngine
 	if repository.DBReady() {
 		hubRepo = repository.NewMessageHubRepository()
 		auditRepo = repository.NewChannelEventAuditRepositoryDefault()
 		interactionRepo = repository.NewChannelInteractionRepositoryDefault()
+		routeEngine = NewChannelRouteEngine(repository.NewChannelRouteRuleRepositoryDefault())
 		feedbackRepo = repository.NewFeedbackRecordRepositoryDefault()
 		pendingOutbound = repository.NewDelayedOutboundRepositoryDefault()
 	}
@@ -204,6 +209,7 @@ func NewInboxIngressService() *InboxIngressService {
 		hubRepo:         hubRepo,
 		auditRepo:       auditRepo,
 		interactionRepo: interactionRepo,
+		routeEngine:     routeEngine,
 		feedbackRepo:    feedbackRepo,
 		pendingOutbound: pendingOutbound,
 		cache:           cache.GetGlobalCache(),
@@ -575,6 +581,19 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		return result, err
 	}
 	result.SessionID = event.SessionID
+
+	// 路由决策（specs/024 T304）：归一之后、任何落库/触发之前。
+	// 无命中即放行——这是「没有规则时行为与今天完全一致」的唯一保证点。
+	if decision := s.resolveRoute(ctx, event, result); decision != nil {
+		if decision.Target == model.ChannelRouteTargetDiscard {
+			// discard 必须留证据：不落库不回复，但「这条事件来过、被哪条规则丢了」要查得到。
+			s.recordRouteDiscard(ctx, event, decision)
+			result.Accepted = false
+			result.QueuedForAI = false
+			result.Reason = fmt.Sprintf("discarded by route rule %d", decision.RuleID)
+			return result, nil
+		}
+	}
 
 	// 事件类型分流（specs/024 D2/T203）：非 message.received 的平台事件不进消息链路——
 	// 它们没有「一条新消息」的语义，进落库/去重/触发 AI 会制造幽灵回复与未读数。
