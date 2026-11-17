@@ -444,7 +444,7 @@ func (s *VisitorChatService) SendMessage(ctx context.Context, req *VisitorSendMe
 	// media_type 渲染成图片/文件卡片点击即触发。口径：空值放行；相对路径只认
 	// /files/ 前缀（本地存储交付形态）；绝对 URL 仅 http/https 且 host 必须命中
 	// 本实例存储域（七牛配置域，env CHAT_MEDIA_URL_EXTRA_HOSTS 可扩展自建 CDN 域）。
-	if err := validateVisitorMediaURL(req.MediaURL); err != nil {
+	if err := validateVisitorMediaURL(ctx, req.MediaURL); err != nil {
 		return nil, err
 	}
 
@@ -890,7 +890,7 @@ func shouldForceTransferByKeywords(content string) bool {
 // 白名单而不是黑名单：媒体 URL 会进坐席工作台与访客挂件的 href/src，只有
 // 「明确属于本实例存储域」才可放行；第三方图床不在默认白名单（需要时显式
 // 加 env，由部署方承担外链风险）。
-func validateVisitorMediaURL(mediaURL string) error {
+func validateVisitorMediaURL(ctx context.Context, mediaURL string) error {
 	mediaURL = strings.TrimSpace(mediaURL)
 	if mediaURL == "" {
 		return nil
@@ -910,7 +910,9 @@ func validateVisitorMediaURL(mediaURL string) error {
 	allowed := map[string]bool{}
 	// 域白名单唯一数据源改为租户级 obs_config 默认行（2026-11-17 SaaS 配置面改造 B1：
 	// config.yaml storage.qiniu 节与 QINIU_* env 已退役，此处的 cfg.Storage 引用随之失效）。
-	if oc, err := repository.NewObsUploadConfigRepository().GetDefaultForUpload(context.Background()); err == nil && oc != nil {
+	// ctx 必须是请求上下文：obs_config 走租户隔离回调读 ctx（on 模式下
+	// Background 会绕过租户过滤/取错租户，2026-11-18 六审修复）。
+	if oc, err := repository.NewObsUploadConfigRepository().GetDefaultForUpload(ctx); err == nil && oc != nil {
 		if d := strings.TrimSpace(oc.Domain); d != "" {
 			allowed[strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://"), "/"))] = true
 		}
