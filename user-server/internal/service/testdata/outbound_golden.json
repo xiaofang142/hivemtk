@@ -73,6 +73,14 @@
     "calls": [
       {
         "method": "POST",
+        "path": "/open-apis/auth/v3/tenant_access_token/internal",
+        "body": {
+          "app_id": "cli_golden",
+          "app_secret": "sec_golden"
+        }
+      },
+      {
+        "method": "POST",
         "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
         "body": {
           "content": "{\"text\":\"golden 飞书回复正文\"}",
@@ -89,6 +97,14 @@
     "channel": "feishu",
     "sample": "ok_card",
     "calls": [
+      {
+        "method": "POST",
+        "path": "/open-apis/auth/v3/tenant_access_token/internal",
+        "body": {
+          "app_id": "cli_golden",
+          "app_secret": "sec_golden"
+        }
+      },
       {
         "method": "POST",
         "path": "/open-apis/im/v1/messages?receive_id_type=open_id",
@@ -287,6 +303,10 @@
     "sample": "api_err",
     "calls": [
       {
+        "method": "GET",
+        "path": "/cgi-bin/token?grant_type=client_credential\u0026appid=wx_golden\u0026secret=wx-sec-golden"
+      },
+      {
         "method": "POST",
         "path": "/cgi-bin/message/custom/send?access_token=wx-token-golden",
         "body": {
@@ -306,6 +326,10 @@
     "channel": "wechat",
     "sample": "ok_card_folded",
     "calls": [
+      {
+        "method": "GET",
+        "path": "/cgi-bin/token?grant_type=client_credential\u0026appid=wx_golden\u0026secret=wx-sec-golden"
+      },
       {
         "method": "POST",
         "path": "/cgi-bin/message/custom/send?access_token=wx-token-golden",
@@ -349,6 +373,10 @@
     "channel": "wecom",
     "sample": "api_err",
     "calls": [
+      {
+        "method": "GET",
+        "path": "/cgi-bin/gettoken?corpid=corp-golden\u0026corpsecret=corp-sec-golden"
+      },
       {
         "method": "POST",
         "path": "/cgi-bin/externalcontact/message/send?access_token=wecom-token-golden",

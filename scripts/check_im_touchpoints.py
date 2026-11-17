@@ -80,14 +80,6 @@ def model_channel_constants():
         if not fn.endswith(".go"):
             continue
         src = read(os.path.join(MODEL, fn))
-        for m in re.finditer(r"Channel\w+\s*=\s*\"([a-z_]+)\"", src):
-            consts["Channel" + m.group(0)[len("Channel"):].split("=")[0].strip()] = m.group(1)
-    # 上面正则宽松，重跑一遍严格的：Channel<Name> = "<id>"
-    consts = {}
-    for fn in os.listdir(MODEL):
-        if not fn.endswith(".go"):
-            continue
-        src = read(os.path.join(MODEL, fn))
         for m in re.finditer(r"(Channel\w+)\s*=\s*\"([a-z_]+)\"", src):
             consts[m.group(1)] = m.group(2)
     return consts

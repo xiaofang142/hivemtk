@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 // specs/024 T110 验收的两条命名测试（零行为变更语义的钉子，钉钉 DB-free 夹具）：
@@ -33,8 +34,13 @@ func dingtalkRetryHub(t *testing.T, srvURL string) *model.MessageHub {
 
 func TestSendOutbound_DelayedReplayNoRetry(t *testing.T) {
 	allowAnyDingtalkHostForTest(t)
-	releaseReplyClaimForTest(t, "evt-t110-replay")
+	// DB-backed：delayedRepo 必须真实在位，「不入重试队」才有牙——
+	// 负对照（非重放同款失败）证明同款失败会入队 1 行，重放版必须 0 行。
+	database := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{})
+	svc := NewWebhookService()
+	t.Cleanup(func() { svc.Stop(context.Background()) })
 
+	releaseReplyClaimForTest(t, "evt-t110-replay-neg")
 	var mu sync.Mutex
 	calls := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,24 +52,42 @@ func TestSendOutbound_DelayedReplayNoRetry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	svc := &WebhookService{}
+	countRetries := func() int64 {
+		var n int64
+		if err := database.Model(&DelayedOutboundReply{}).Where("kind = ?", model.DelayedKindSendRetry).Count(&n).Error; err != nil {
+			t.Fatalf("数重试行失败: %v", err)
+		}
+		return n
+	}
+
 	hub := dingtalkRetryHub(t, srv.URL)
-	p := &ParsedPayload{EventID: "evt-t110-replay", Sender: "staff", Content: "在吗"}
+	// 负对照：非重放路径的同一款可重试失败 → 入队 1 行（证明断言有牙）。
+	sent0, err0 := svc.sendOutbound(context.Background(), ChannelDingTalk, "107",
+		&ParsedPayload{EventID: "evt-t110-replay-neg", Sender: "staff", Content: "在吗"},
+		"首发正文", hub, nil)
+	if sent0 || err0 == nil {
+		t.Fatalf("负对照必须失败: sent=%v err=%v", sent0, err0)
+	}
+	if n := countRetries(); n != 1 {
+		t.Fatalf("负对照应入重试队 1 行，实际 %d（断言无牙，夹具失效）", n)
+	}
+
+	// 正题：重放路径同款失败 → 不再入队（收尾 defer 的 isDelayedReplay 分支跳过）。
+	releaseReplyClaimForTest(t, "evt-t110-replay")
 	sent, sendErr := svc.sendOutbound(DelayedReplayToContext(context.Background()), ChannelDingTalk, "107",
-		p, "重放正文", hub, nil)
+		&ParsedPayload{EventID: "evt-t110-replay", Sender: "staff", Content: "在吗"},
+		"重放正文", hub, nil)
 	mu.Lock()
 	defer mu.Unlock()
 	if sent || sendErr == nil {
 		t.Fatalf("重放路径的平台失败必须原样失败: sent=%v err=%v", sent, sendErr)
 	}
-	if calls != 1 {
-		t.Fatalf("重放路径只投一次（内部退避重试归客户端），实际 HTTP %d 次", calls)
+	if calls != 2 { // 负对照 1 次 + 重放 1 次（内部退避重试归客户端）
+		t.Fatalf("HTTP 总次数应 2（负对照+重放各 1），实际 %d", calls)
 	}
-	// 重放失败不得再进 send_retry 延迟队列：enqueueSendRetry 对 isDelayedReplay(ctx) 直接跳过。
-	// bare &WebhookService{} 的 delayedRepo 为 nil，入队天然无处可写——这里断言的是收尾 defer
-	// 没有尝试入队的可见副作用：审计轨迹行必须是唯一的落库动作。
-	var retries int64
-	_ = retries // delayedRepo 为 nil 时无表可查；本断言由 sendOutbound defer 的 isDelayedReplay 分支保证
+	if n := countRetries(); n != 1 {
+		t.Fatalf("重放失败不得再入重试队列：重试行应仍为 1（只有负对照那条），实际 %d", n)
+	}
 	if AsChannelError(sendErr) == nil {
 		t.Fatalf("重放失败必须是 *ChannelError，got %T", sendErr)
 	}

@@ -49,7 +49,21 @@
 - T112 的「搬迁前 golden」窗口已过（B1 搬迁提交先于本批收口）：搬迁前后的等价性由**迁移前编写、断言零改动的既有测试**（channels_delivery_fix / bridge_sent / card_fallback / BF6 等）承载，金样冻结的是当前契约、防未来漂移。
 - 错误类别映射的个别口径（whatsapp 131047→auth、feishu 230013→unknown+可重试）按现状冻结，若要细化归 025 平台批的渠道错误分类整理。
 
-## 六、遗留与去向
+## 六、二次审核（二）：收口批对抗复核与修正（2026-11-18）
+
+- **R1 金样顺序依赖（严重，已修）**：feishu/wecom/wechat api_err 样例依赖 ok_text 暖 token 缓存、
+  qq msg_seq 跨样例递增 → 单样例 `-run` 必红。修：每样例独立 svc + DB token 清缓存 + qq 唯一 msg_id
+  + 冻结比对改按标签（子集可校验）。验证：全量冻结绿 ×2，三样例单独 `-run` 绿。
+- **R2 重放测试空断言（已修）**：`TestSendOutbound_DelayedReplayNoRetry` 改 DB-backed + 负对照
+  （非重放入队 1 行证明夹具有牙，重放 0 新增）。
+- **R3 触点脚本死代码（已修）**：`model_channel_constants` 双遍循环收敛为单遍。
+- **R4 UPDATE_GOLDEN 部分覆写漏洞（当场触发，已修）**：`-run` 过滤下重写会把 golden 截断；
+  加护栏「样例集不全拒绝重写」。
+- 无行动确认项与留观项见 `review2.md`。
+- 复核后回归：金样全量冻结 ×2、feishu/wecom/wechat api_err 单独 `-run`、
+  大回归集（registry/parity/metrics/claim/dingtalk/bridge）、`-race` 子集——全绿。
+
+## 七、遗留与去向
 
 - 025 平台接入（wecomcs/OneBot/Slack/wecombot/custom）：B1+B2 前置已就绪，按 025 spec 排期。
 - `webhttp/ima` 的粗细能力矩阵归位与 wecom_integration 死条件清理：归 025 首切片前的杂项。

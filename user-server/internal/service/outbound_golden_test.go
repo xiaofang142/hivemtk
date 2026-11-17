@@ -195,8 +195,6 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 		}
 	}
 
-	svc := NewWebhookService()
-	t.Cleanup(func() { svc.Stop(context.Background()) })
 	router := newGoldenRouter(t)
 	allowAnyDingtalkHostForTest(t)
 
@@ -214,6 +212,10 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 	run := make([]goldenCase, 0, len(cases))
 	for _, tc := range cases {
 		t.Run(tc.Channel+"/"+tc.Sample, func(t *testing.T) {
+			// 每样例独立 service：隔离 wechat tokenClients / qq msgSeq 等内存缓存，
+			// 保证「单独 -run 任一样例」与全量跑产出同一金样序列（R1 顺序依赖修复）。
+			svc := NewWebhookService()
+			t.Cleanup(func() { svc.Stop(context.Background()) })
 			calls := newCalls()
 			ctx := context.Background()
 
@@ -231,6 +233,12 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					})
 				}
 			case "feishu":
+				// 清 DB 行 token 缓存：feishu token 命中 acc.AccessToken+TokenExpires，
+				// 不清则 api_err 样例漏记 token 调用（顺序依赖）。wecom 同理。
+				if err := database.Model(&model.FeishuAccount{}).Where("id = ?", 101).
+					Updates(map[string]any{"access_token": "", "token_expires": nil}).Error; err != nil {
+					t.Fatalf("清 feishu token 缓存失败: %v", err)
+				}
 				msgBody := func(*http.Request) (int, string) {
 					if tc.Sample == "api_err" {
 						return 200, `{"code":230013,"msg":"target not in contact range"}`
@@ -290,6 +298,12 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 						t.Fatalf("清零企微配额失败: %v", err)
 					}
 				} else {
+					// 清 DB 行 token 缓存（GetAccessToken 命中 acc.AccessToken+TokenExpires 就不 fetch），
+					// 不清则 api_err 样例漏记 gettoken 调用（顺序依赖，R1 修复）。
+					if err := database.Model(&model.WeComAccount{}).Where("id = ?", 104).
+						Updates(map[string]any{"access_token": "", "token_expires": time.Time{}}).Error; err != nil {
+						t.Fatalf("清 wecom token 缓存失败: %v", err)
+					}
 					t.Setenv("WECOM_ALLOW_OUTBOUND", "1")    // IS_TEST_MODE=1 时企微出站被哨兵跳过
 					t.Setenv("WECOM_DISABLE_OUTBOUND", "0") // main_test.go 默认置 1，金样要钉真实 HTTP 形状
 					fake(t, "qyapi.weixin.qq.com", calls, map[string]func(*http.Request) (int, string){
@@ -360,7 +374,8 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					&ParsedPayload{EventID: "evt-golden-tg-" + tc.Sample, Sender: "555001", Content: "在吗"},
 					"golden telegram 回复正文", hub, tgCards)
 			case "qq":
-				hub := &model.MessageHub{Platform: "qq", ConversationID: "cs-golden-qq", MsgID: "qq-in-golden", SenderID: "cust-golden-qq"}
+				// msgID 每样例唯一：msg_seq 按 msg_id 独立从 1 起，样例间不递增。
+				hub := &model.MessageHub{Platform: "qq", ConversationID: "cs-golden-qq", MsgID: "qq-in-golden-" + tc.Sample, SenderID: "cust-golden-qq"}
 				if tc.Sample == "missing_conv" {
 					hub = nil
 				}
@@ -446,19 +461,27 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 	}
 
 	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if len(run) != len(cases) {
+			t.Fatalf("UPDATE_GOLDEN=1 但样例集不全（%d/%d）：-run 过滤下重写会截断冻结面，必须全量子测试下重写",
+				len(run), len(cases))
+		}
 		goldenSave(t, run)
 		t.Logf("UPDATE_GOLDEN=1：已重写 testdata/outbound_golden.json（%d 条）。差异必须经人工确认后才能使用。", len(run))
 		return
 	}
 
+	// 按标签比对（非按序全量对齐）：-run 过滤下只跑子集也能对子集做冻结校验
+	//（R1 自包含 + 子集可比，二者合起来才叫「单样例可独立验收」）。
 	want := goldenLoad(t)
-	if len(want) != len(run) {
-		t.Fatalf("样例集规模漂移：golden %d 条 vs 本次运行 %d 条——样例表改动必须人工确认后重写 golden", len(want), len(run))
+	wantByLabel := make(map[string]goldenCase, len(want))
+	for _, w := range want {
+		wantByLabel[w.Channel+"/"+w.Sample] = w
 	}
-	for i, w := range want {
-		g := run[i]
-		if w.Channel != g.Channel || w.Sample != g.Sample {
-			t.Fatalf("golden[%d] 标签错位: want %s/%s got %s/%s（样例表顺序被改动？）", i, w.Channel, w.Sample, g.Channel, g.Sample)
+	for _, g := range run {
+		w, ok := wantByLabel[g.Channel+"/"+g.Sample]
+		if !ok {
+			t.Fatalf("golden 里没有 %s/%s：样例表与 golden 漂移，人工确认后重写", g.Channel, g.Sample)
+			continue
 		}
 		if w.Sent != g.Sent {
 			t.Errorf("%s/%s: sent want %v got %v（fail=%v）", w.Channel, w.Sample, w.Sent, g.Sent, g.FailCategory)
