@@ -27,16 +27,9 @@ func (s *WebhookService) outboundBridge(ctx context.Context, channel WebhookChan
 			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
 		return
 	}
-	// R5（CH-37b刀3 批准的行为变更）：AI 桥接出站与人工/触达路径同一清洗口径——
-	// 网页私信输入框是纯文本，LLM 回复自带的 Markdown 语法符号会原样暴露给客户。
-	// 与 bridge_outbound.go DeliverBridgeOutbound 入队前完全同源（同一判定
-	// stripMarkdownForBridgeChannel + 同一函数 StripMarkdownForDM）。对纯文本幂等
-	// （九渠道既有行为零变化）；对含 Markdown 文本自此与人工路径一致——这是 R5
-	// 裁决批准的有意变化，前后对照见 TestSendOutbound_Bridge_MarkdownAlignedWithManualPath。
-	if stripMarkdownForBridgeChannel(string(channel), model.MsgTypeText) {
-		content = StripMarkdownForDM(content)
-	}
-
+	// Markdown 清洗已在 sendOutbound 的 RenderForChannel 里完成（specs/024 T404）：
+	// sender 只负责投递，不再做格式变换。重复清洗会掩盖渲染层的漏配——
+	// 渲染层少剥一次，这里也不会补上，问题会直接在客户侧暴露。
 	if hubMsg != nil {
 		outMsg := &model.MessageHub{
 			MsgID:          ContentHashMsgID(string(channel), hubMsg.ConversationID, content),

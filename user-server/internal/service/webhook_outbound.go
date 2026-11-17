@@ -653,16 +653,21 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
 		})
 	}()
-	// 无富卡载体时保留必要事实为一条文字；失败不能谎报已展示。
+	// 出站渲染只做一次（specs/024 T402/T404）：格式转换 + 富卡降级 + 溢出计数在这里收口，
+	// 之后 sender 拿到的 content 已是目标格式，不得再次转义/清洗。
+	// 放在分派之前的原因（R5/CH-37b 刀3）：defer 里的 enqueueSendRetry 捕获同一个 content 变量，
+	// 清洗必须已生效，重试才会投递与首投一致的内容。
+	originalCardCount := len(cards)
+	rendered, renderErr := RenderForChannel(string(channel), model.MsgTypeText, content, cards)
+	if renderErr != nil {
+		markSendFailed(preSendFailure(channel, CategoryBadRequest, renderErr.Error()))
+		return
+	}
+	content = rendered.Text
+	cards = rendered.Cards
 	cardsFallbackCount := 0
-	if len(cards) > 0 && !outboundSupportsRichCards(channel) {
-		text, err := cardTextDelivery(content, cards)
-		if err != nil {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest, err.Error()))
-			return
-		}
-		content = text
-		cardsFallbackCount = len(cards)
+	if originalCardCount > 0 && len(cards) == 0 {
+		cardsFallbackCount = originalCardCount
 		fallback := logger.Ctx(ctx).Info().
 			Str("module", "outbound").
 			Str("channel", string(channel)).
@@ -673,11 +678,14 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 		}
 		fallback.Msg("outbound rich cards rendered as complete text")
 	}
-	// R5（CH-37b刀3 批准的行为变更）：bridge 族的 Markdown 清洗必须在分派前完成——
-	// defer 里的 enqueueSendRetry 捕获的是同一个 content 变量，清洗放这里，重试才与搬迁前
-	// 一致地投递清洗后文本（specs/024 逐行复核 C4）。
-	if bridgeOutboxCapable(channel) && stripMarkdownForBridgeChannel(string(channel), model.MsgTypeText) {
-		content = StripMarkdownForDM(content)
+	if rendered.Overflow > 0 {
+		// 只上报不切分：切分归渠道自己（QQ 在 channelbot/qq 内按官方上限切）。
+		logger.Ctx(ctx).Warn().
+			Str("module", "outbound").
+			Str("channel", string(channel)).
+			Str("account_id", accountID).
+			Int("overflow_chars", rendered.Overflow).
+			Msg("outbound_text_overflow")
 	}
 
 	sender, ok := s.outboundSenderFor(channel)

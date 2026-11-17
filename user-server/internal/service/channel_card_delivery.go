@@ -1,20 +1,22 @@
 package service
 
 import (
-	"errors"
 	"net"
 	"net/url"
-	"sort"
 	"strings"
 	"unicode"
 
+	"hivemtk-user/internal/channelcaps"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/urlguard"
 )
 
-// outboundSupportsRichCards describes this sender, not unrelated web UI renderers.
+// outboundSupportsRichCards 是渲染层的兼容入口（specs/024 T403）。
+//
+// 事实源已迁到 channelcaps.FeatureRichCard：这里保留旧签名只为不惊动调用方与存量测试，
+// 新代码请直接用 channelcaps.SupportsRichCards。
 func outboundSupportsRichCards(channel WebhookChannel) bool {
-	return channel == ChannelFeishu || channel == ChannelTelegram
+	return channelcaps.SupportsRichCards(string(channel))
 }
 
 func channelCardPrompt(platform string) string {
@@ -24,72 +26,12 @@ func channelCardPrompt(platform string) string {
 	return "\n\n# 当前渠道交付能力\n当前渠道仅支持文字。必须用完整文字直接回答问题；card.show 如有调用仅提供结构化事实，系统会转换为同一条文字。不得声称已经展示卡片、让客户点击卡片或声称按钮操作已执行。链接只使用可信来源，不得编造。"
 }
 
-// cardTextDelivery keeps the candidate separate from the actual text payload.
-// It is deterministic and idempotent, so a durable replay cannot append facts twice.
+// cardTextDelivery 是 foldCardsToText 的兼容入口（specs/024 T403）。
+//
+// 旧签名保留：延迟重放/回放测试都在用它；实现已搬到 outbound_render.go，
+// 那里与 RenderForChannel 共用同一段折叠逻辑（一处实现，两处调用）。
 func cardTextDelivery(content string, cards []model.RichCard) (string, error) {
-	blocks := make([]string, 0, len(cards))
-	for _, card := range cards {
-		lines := make([]string, 0, 4+len(card.Fields)+len(card.Buttons))
-		for _, fact := range []string{card.Title, card.Subtitle, card.Description} {
-			if fact = strings.TrimSpace(fact); fact != "" {
-				lines = append(lines, fact)
-			}
-		}
-		keys := make([]string, 0, len(card.Fields))
-		for key := range card.Fields {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			value := strings.TrimSpace(card.Fields[key])
-			if value != "" {
-				lines = append(lines, strings.TrimSpace(key)+"："+value)
-			}
-		}
-		for _, button := range card.Buttons {
-			label := strings.TrimSpace(button.Text)
-			if label == "" {
-				label = "详情"
-			}
-			if link := cardPublicHTTPSLink(button.URL); link != "" {
-				lines = append(lines, label+"："+link)
-			} else if button.URL != "" || button.Action != "" {
-				lines = append(lines, label+"（当前渠道无法执行此操作，请联系人工确认）")
-			} else if button.Text != "" {
-				lines = append(lines, label)
-			}
-		}
-		for _, image := range []string{card.ImageURL, card.ThumbURL} {
-			if link := cardPublicHTTPSLink(image); link != "" {
-				lines = append(lines, "图片链接："+link)
-			}
-		}
-		if len(lines) > 0 {
-			blocks = append(blocks, strings.Join(lines, "\n"))
-		}
-	}
-	if len(blocks) == 0 {
-		return "", errors.New("卡片无法形成可读文字载荷")
-	}
-	// Neutralize only known presentation claims; preserve the rest of the answer's facts.
-	text := strings.NewReplacer(
-		"我已经为你展示了卡片", "以下是文字版信息",
-		"已经为您展示了卡片", "以下是文字版信息",
-		"请点击卡片查看详情", "请查看下方文字详情",
-		"点击卡片查看详情", "查看下方文字详情",
-		"请点击卡片", "请查看下方文字信息",
-		"请查看卡片", "请查看下方文字信息",
-	).Replace(strings.TrimSpace(content))
-	for _, block := range blocks {
-		if strings.Contains(text, block) {
-			continue
-		}
-		if text != "" {
-			text += "\n\n"
-		}
-		text += block
-	}
-	return text, nil
+	return foldCardsToText(content, cards)
 }
 
 // cardPublicHTTPSLink is a static presentation guard, not a trust/DNS guarantee.

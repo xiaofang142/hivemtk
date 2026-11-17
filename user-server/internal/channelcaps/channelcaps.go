@@ -50,7 +50,33 @@ type Manifest struct {
 	// 取值必须来自 model.EventType*；nil = 只有 message.received（纯消息渠道）。
 	Events   []string
 	Features []Feature
-	Note     string
+	// OutboundFormat 出站正文的目标格式（specs/024 T401）：plain | markdown | html。
+	// 出站渲染层按这个值决定要不要剥 Markdown 语法；不认识的值一律视为配置错误。
+	OutboundFormat string
+	// MaxTextLen 平台单条正文的字符上限（0 = 不设上限）。
+	// 只用于溢出计数（outbound_text_overflow），**不做切分**：
+	// 切分各渠道自己负责（QQ 在 channelbot/qq 内 splitQQMessage），两处各切一次会把一句话劈成两半。
+	MaxTextLen int
+	// FormatEvidence 格式取值的证据锚（代码位置或协议事实），空 = 未验证。
+	// 没有证据的格式声明等于猜的，出站行为一变就没人知道该改哪。
+	FormatEvidence string
+	Note           string
+}
+
+// 出站正文格式词表。
+const (
+	OutboundFormatPlain    = "plain"
+	OutboundFormatMarkdown = "markdown"
+	OutboundFormatHTML     = "html"
+)
+
+// IsKnownOutboundFormat 判定格式取值是否登记过。
+func IsKnownOutboundFormat(f string) bool {
+	switch f {
+	case OutboundFormatPlain, OutboundFormatMarkdown, OutboundFormatHTML:
+		return true
+	}
+	return false
 }
 
 var manifests = map[string]Manifest{}
@@ -67,6 +93,14 @@ func Register(m Manifest) {
 		// 默认值写在注册口而不是每个 manifest：13 个渠道里多数只产消息，
 		// 让「纯消息渠道」零声明，事件渠道才需要显式登记。
 		m.Events = []string{model.EventTypeMessageReceived}
+	}
+	if m.OutboundFormat == "" {
+		// 纯触达渠道（sms/custom 之外）默认按纯文本：宁可少剥(format=plain 会剥 Markdown)，
+		// 也不能把 HTML 标签原样投进不认 HTML 的输入框。
+		m.OutboundFormat = OutboundFormatPlain
+	}
+	if m.MaxTextLen < 0 {
+		m.MaxTextLen = 0
 	}
 	m.Inbound = dedupSorted(m.Inbound)
 	m.Events = dedupSorted(m.Events)
@@ -143,6 +177,30 @@ func SupportsOutbound(channel, msgType string) bool {
 	return ok && contains(m.Outbound, msgType)
 }
 
+// SupportsRichCards 该渠道是否有真正的卡片载体（未知渠道恒 false）。
+//
+// 这是「发得出去吗」的唯一事实源：出站渲染与卡片降级都从这里取，
+// 不再各自维护渠道白名单（白名单多一处就多一处漂移）。
+func SupportsRichCards(channel string) bool {
+	return Has(channel, FeatureRichCard)
+}
+
+// OutboundFormatOf 该渠道出站正文的目标格式；未知渠道返回空串（调用方必须报错）。
+func OutboundFormatOf(channel string) string {
+	if m, ok := manifests[channel]; ok {
+		return m.OutboundFormat
+	}
+	return ""
+}
+
+// MaxTextLenOf 该渠道单条正文上限；未知渠道或未设上限返回 0。
+func MaxTextLenOf(channel string) int {
+	if m, ok := manifests[channel]; ok {
+		return m.MaxTextLen
+	}
+	return 0
+}
+
 // Has 该渠道是否具备某交互特征（未知渠道恒 false：不认识的渠道不许宣称能力）。
 func Has(channel string, f Feature) bool {
 	m, ok := manifests[channel]
@@ -172,7 +230,7 @@ func Markdown() string {
 	b.WriteString("# 渠道消息级能力表\n\n")
 	b.WriteString("> 本文件由 `internal/channelcaps` 生成（channelcaps.Markdown），测试钉死与注册表一致，**请勿手改**。\n")
 	b.WriteString("> 口径：只登记代码已落地的收发路径；未登记 = 未实现/未验证，出站降级与 AI 能力提示词一律按「不支持」处理。\n\n")
-	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 平台事件 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 平台事件 | 出站格式 | 文本上限 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, m := range All() {
 		features := make([]string, 0, len(m.Features))
 		for _, f := range m.Features {
@@ -181,9 +239,13 @@ func Markdown() string {
 		if len(features) == 0 {
 			features = []string{"—"}
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		maxLen := "—"
+		if m.MaxTextLen > 0 {
+			maxLen = fmt.Sprintf("%d", m.MaxTextLen)
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			m.Channel, m.Label, m.Via, codeList(m.Inbound), codeList(m.Outbound),
-			codeList(m.Events),
+			codeList(m.Events), "`"+m.OutboundFormat+"`", maxLen,
 			strings.Join(features, " "), strings.ReplaceAll(m.Note, "|", "\\|"))
 	}
 	return b.String()

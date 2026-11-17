@@ -796,7 +796,7 @@ flowchart TB
 
 ## Phase 4 渠道渲染层（P1）
 
-- [ ] **T401 能力表补渲染字段**（P1｜依赖 —｜S｜🟡）
+- [x] **T401 能力表补渲染字段**（P1｜依赖 —｜S｜🟡）
   - **规格**：把「该渠道要什么格式、能吞多长」变成声明式数据，消灭散落的 `if channel == ...`。
   - **上下文**：现状渲染规则散在三处——`channel_card_delivery.go`（`outboundSupportsRichCards` L16 / `cardTextDelivery` L29，**在制品未提交**）、`bridge_outbound_markdown.go`（L58/L93）、`webhook_outbound.go`（`htmlEscape*` L1432/1446）。
   - **架构**：`channelcaps` 纯声明包；不引入 service 依赖。
@@ -817,7 +817,7 @@ flowchart TB
     ```
   - **验收**：`TestManifestRenderFieldsNonEmpty` + `TestManifestRenderFormatHasEvidence`（每条 manifest 的 `OutboundFormat` 必须附代码锚点字符串，空锚点即红）；文档 diff 仅新增两列。
 
-- [ ] **T402 `RenderForChannel`**（P1｜依赖 T401｜M｜🟡）
+- [x] **T402 `RenderForChannel`**（P1｜依赖 T401｜M｜🟡）
   - **规格**：一次调用完成「格式转换 + 富卡能力判定 + 超长打点」；未知渠道返回错误而非静默透传。**不切块**（二次审核修正：QQ 客户端已有 `splitQQMessage` + 可注入 `QQMessageMaxLenEffective()`，`channelbot/qq/qq.go:38-66,195`；渲染层再切会造成双重切分，且违反 FR006 行为冻结）。
   - **上下文**：`MaxTextLen` 只用于判定是否打点 `outbound_text_overflow{channel}`；卡片降级文本能力来自 `cardTextDelivery`；格式取值必须附 sender 代码取证锚点。
   - **架构**：Service 层纯函数（可单测）；不读写 DB。
@@ -844,7 +844,7 @@ flowchart TB
     ```
   - **验收**：`TestRender_PlainStripsMarkdown`、`TestRender_CardFoldedWhenUnsupported`、`TestRender_OverflowCountsWithoutSplitting`（断言输出与输入等长、未产生 Chunks）、`TestRender_UnknownChannelErrors`。
 
-- [ ] **T403 旧函数薄包装**（P1｜依赖 T402｜S｜🟡）
+- [x] **T403 旧函数薄包装**（P1｜依赖 T402｜S｜🟡）
   - **规格**：保留旧签名避免大面积改动，内部改调渲染层；`channel_card_delivery.go` 文件本身不动（在制品）。
   - **上下文**：调用点分布在 `webhook_outbound.go` 与测试中。
   - **架构**：Service 层适配器。
@@ -864,7 +864,7 @@ flowchart TB
     ```
   - **验收**：`go test ./internal/service/ -run 'Markdown|CardDelivery'` 全绿。
 
-- [ ] **T404 sender 统一走渲染**（P1｜依赖 T402/T403/T101｜M｜🟡）
+- [x] **T404 sender 统一走渲染**（P1｜依赖 T402/T403/T101｜M｜🟡）
   - **规格**：渲染只在 `sendOutbound` 做一次，sender 内不再清洗/转义；各 sender 删除内联转换。
   - **上下文**：T109 已把桥接清洗上移；本任务收掉 telegram `htmlEscape*` 等残留。
   - **架构**：横切段统一；sender 只做协议载荷。
