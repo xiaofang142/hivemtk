@@ -108,6 +108,10 @@ func BuildQiniuUploadToken(ctx context.Context, objectKey string, maxSizeBytes i
 	policy := map[string]any{
 		"scope":      cfg.Bucket + ":" + objectKey,
 		"deadline":   now.Add(ttl).Unix(),
+		// insertOnly（2026-11-15 审计 L9）：scope=bucket:key 默认语义是「插入或覆盖」。
+		// key 为服务端生成的不可预知 UUID，覆盖风险可忽略，但仍堵死语义面。
+		// （2026-11-18 变基并入 service 版时从 chat_public 内联版恢复。）
+		"insertOnly": 1,
 		"fsizeLimit": maxSizeBytes,
 		"returnBody": `{"key":"$(key)","hash":"$(etag)","fsize":$(fsize),"fname":"$(fname)"}`,
 	}
