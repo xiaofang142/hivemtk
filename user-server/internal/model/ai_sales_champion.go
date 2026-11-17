@@ -70,8 +70,12 @@ type MessageHub struct {
 	// 失败原因，成功时清空——留着它才能回答"点过撤回但没成，为什么"。
 	RecalledAt  *time.Time     `json:"recalled_at,omitempty"`
 	RecallError string         `gorm:"type:varchar(200);not null;default:''" json:"recall_error,omitempty"`
-	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	// UpdatedAt（specs/024 T202 收口补）：生产库 message_hub 早有此列（平台编辑覆盖
+	// UpdateContentByChannelMsgID 会写它），但模型一直缺字段——AutoMigrate 新装库缺列，
+	// 编辑事件第一次覆盖就 42703。补字段让模型与生产/迁移 schema 对齐。
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at,omitempty"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (MessageHub) TableName() string { return "message_hub" }

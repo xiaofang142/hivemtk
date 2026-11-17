@@ -2774,5 +2774,7 @@
   "03:00": "03:00",
   "稍后处理": "Snoozed",
   "待首响": "Awaiting first reply",
-  "语义筛选": "Semantic filter"
+  "语义筛选": "Semantic filter",
+  "traceObservationSkipped": "Skipped",
+  "traceObservationResultExit": "AI result exit"
 }

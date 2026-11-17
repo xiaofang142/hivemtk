@@ -63,7 +63,21 @@
 - 复核后回归：金样全量冻结 ×2、feishu/wecom/wechat api_err 单独 `-run`、
   大回归集（registry/parity/metrics/claim/dingtalk/bridge）、`-race` 子集——全绿。
 
-## 七、遗留与去向
+## 七、三任务收口批（2026-11-18 第二轮）：验收逐条核对 + 全功能测试 + 三审
+
+- **任务一（45 任务验收逐条核对）**：提取 tasks.md 全部 48 条验收判据，`-F` 精确核对点名测试——
+  发现 **34 条缺失**（B1 逐渠道 18 + B2 事件/交互 16；B3/B4/B5 点名测试全部在位），全部按验收原文
+  补齐：`outbound_sender_acceptance_test.go`（18）+ `inbox_event_acceptance_test.go`（16）。
+- **任务二（全功能测试）**：后端 12 包全绿（service 仅剩并行会话 3 条外来失败，见 §五）；
+  前端 vitest **97 文件/952 用例全绿** + eslint exit 0；`npm run build` 绿（T606 验收）；
+  五门禁脚本绿（enum 2 条既有 warning 无新增）。
+- **任务三（对抗复核）**：见 `review3.md`——其中 **R1 为 B2 产码真缺陷**：
+  `model.MessageHub` 缺 `updated_at` 字段，AutoMigrate 新装库编辑覆盖必 42703（生产列已存在，
+  模型补字段 = 部署无 schema 变更）。另修：验收夹具 EventType 根因、svc/建库时序断链、
+  `traceObservation*` i18n 缺键（L 轮遗留）。
+- `-race` 子集（金样/注册表/新验收）绿。
+
+## 八、遗留与去向
 
 - 025 平台接入（wecomcs/OneBot/Slack/wecombot/custom）：B1+B2 前置已就绪，按 025 spec 排期。
 - `webhttp/ima` 的粗细能力矩阵归位与 wecom_integration 死条件清理：归 025 首切片前的杂项。
