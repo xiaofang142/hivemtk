@@ -198,10 +198,18 @@ echo "[$(date)] Backup size: $(du -sh "$BACKUP_DIR" | cut -f1)"
     从未配置过七牛，本地亦无凭证可迁移）。凭证注入后 cron **自动启用上传**，零脚本改动；
     在此之前每次运行都会打印显式 WARN（RPO=本地，不冒充绿）。给部署方的两个选项：
     ① 注册七牛并填 `.env` 四键（推荐，分钟级）；② 指定第二台常开机器走 scp 拉取式异地。
-- 脚本适配记录（2026-11-17）：新增 docker dump 形态（宿主机无 pg_dump 时自动回退，容器内
-  端口钉 8202 与宿主机映射解耦）；产物校验改用 PGDMP 魔数（免宿主机 pg_restore 依赖）；
-  sha256 兼容 macOS `shasum -a 256`。双形态均在本机实测（host 113MB / docker 112MB，
-  魔数与 sha256 齐全），产线实测见上。
+- **产线恢复演练 PASS（2026-11-17）**：`verify_restore.sh` 部署到
+  `mtk-prod:~/user-server/scripts/ops/` 后对首跑 dump 实测——custom 格式 pg_restore 分支，
+  419 表一致、Top-1 大表（geo_keywords 1,227,759 行）一致、零错误、47s，scratch 已丢弃。
+  产线备份从"能生成"闭环到"验证可恢复"。
+- 脚本适配记录（2026-11-17 二次审核后定稿）：
+  · dump 形态**docker 优先**（容器内客户端与恢复端同版本族；host 新版 pg_dump 产的
+    archive v1.15 会被容器旧版 pg_restore 拒——`unsupported version (1.15)` 实测），
+    host pg_dump 仅作无 docker 兜底并打版本匹配警示；
+  · `verify_restore.sh` 改为**格式感知**（PGDMP 魔数 → pg_restore 分支；否则 psql）——
+    此前只认 plain SQL，与 backup_offsite.sh 的 custom 产物互不能消费（二次审核抓出）；
+  · 容器内端口钉 8202 与宿主机映射解耦；sha256 兼容 macOS `shasum -a 256`。
+  双形态本机实测（host 113MB / docker 112MB）+ 产线实测（107MB）全过。
 
 > 仓库根 Makefile 另有 `db-backup` / `db-restore` 两个目标。~~此前注记称其"没带 -p 8202、
 > 现测不可用"~~ ⇒ **2026-11-17 已实测闭环（含恢复演练）**：`make db-backup` 实跑产出

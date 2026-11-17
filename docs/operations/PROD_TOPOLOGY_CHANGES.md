@@ -23,6 +23,9 @@
   `/www/wwwroot/hivemtk/scripts/ops/backup_offsite.sh`（COMPOSE_DIR 指向
   /www/wwwroot/hivemtk/user-server），日志 `/var/log/hivemtk-backup.log`，本地保留 7 天。
 - 首跑实测：docker 形态 dump 107MB、PGDMP 魔数校验过、rc=0（见 DR_RECOVERY.md §1.5）。
+- **恢复演练 PASS（同日）**：verify_restore.sh 已部署 `user-server/scripts/ops/`，
+  对首跑 dump 实测 419 表一致 / geo_keywords 1,227,759 行一致 / 零错误 47s——
+  产线备份已闭环到"验证可恢复"，不再是"只生成未验证"。
 - 剩余：对象存储 `QINIU_*` 未配置（生产/本地均空）⇒ 异地副本上传待部署方注入凭证后
   自动启用；当前 RPO=本机磁盘，每次运行有显式 WARN 不冒充绿。
 

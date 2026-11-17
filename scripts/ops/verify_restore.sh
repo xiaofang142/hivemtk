@@ -43,11 +43,12 @@ trap cleanup EXIT INT TERM
 
 # ── 选文件 ────────────────────────────────────────────────────────────────
 if [ -z "$FILE_ARG" ]; then
-  FILE="$(find . -maxdepth 1 -name "backup_*.sql" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)"
+  # .dump（custom，backup_offsite.sh 产物）与 .sql（make db-backup 产物）都认，取最新
+  FILE="$(find . -maxdepth 1 \( -name "backup_*.sql" -o -name "user_db.dump" \) -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)"
   if [ -z "$FILE" ]; then
-    echo "❌ 未指定 FILE，且仓库根目录没有 backup_*.sql。用法："
-    echo "   make verify-restore FILE=backup_20260101_120000.sql"
-    echo "   （或先 make db-backup 生成一份）"
+    echo "❌ 未指定 FILE，且仓库根目录没有 backup_*.sql / user_db.dump。用法："
+    echo "   make verify-restore FILE=backup_20260101_120000.sql   # plain SQL"
+    echo "   make verify-restore FILE=user_db.dump                 # custom（pg_restore）"
     exit 1
   fi
   echo "ℹ️  未指定 FILE，自动选最新备份：$FILE"
@@ -65,12 +66,25 @@ T0=$(date +%s)
 # ── ① 恢复（SQL 任何错误即失败）─────────────────────────────────────────
 dc psql -U "$PSQL_USER" -p "$PGPORT" -d postgres -c "DROP DATABASE IF EXISTS \"$SCRATCH_DB\"" >/dev/null
 dc psql -U "$PSQL_USER" -p "$PGPORT" -d postgres -c "CREATE DATABASE \"$SCRATCH_DB\"" >/dev/null
-if ! dc psql -U "$PSQL_USER" -p "$PGPORT" -v ON_ERROR_STOP=1 -d "$SCRATCH_DB" < "$FILE" > /tmp/verify_restore_psql.log 2>&1; then
-  echo "❌ 体检③失败：恢复过程中出现 SQL 错误（tail 如下）"
-  tail -5 /tmp/verify_restore_psql.log
-  exit 1
+# 2026-11-17 二次审核补：backup_offsite.sh 产 custom 格式（-Fc，PGDMP 魔数），此前本脚本
+# 只认 plain SQL（无条件 psql <）⇒ 两件交付物互相不能消费、产线 dump 无法自验。
+# 按魔数分派：PGDMP → 容器内 pg_restore（stdin 经 exec -T 管道，custom 格式支持）；否则 psql。
+if [ "$(head -c 5 "$FILE")" = "PGDMP" ]; then
+  echo "ℹ️  custom 格式（pg_restore 分支）"
+  if ! dc pg_restore -U "$PSQL_USER" -p "$PGPORT" -d "$SCRATCH_DB" --no-owner -x \
+        < "$FILE" > /tmp/verify_restore_psql.log 2>&1; then
+    echo "❌ 体检③失败：pg_restore 过程出错（tail 如下）"
+    tail -5 /tmp/verify_restore_psql.log
+    exit 1
+  fi
+else
+  if ! dc psql -U "$PSQL_USER" -p "$PGPORT" -v ON_ERROR_STOP=1 -d "$SCRATCH_DB" < "$FILE" > /tmp/verify_restore_psql.log 2>&1; then
+    echo "❌ 体检③失败：恢复过程中出现 SQL 错误（tail 如下）"
+    tail -5 /tmp/verify_restore_psql.log
+    exit 1
+  fi
 fi
-echo "✅ 体检③ 恢复过程零 SQL 错误"
+echo "✅ 体检③ 恢复过程零错误"
 
 # ── ② 表数比对 ──────────────────────────────────────────────────────────
 TABLES_SQL="SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"

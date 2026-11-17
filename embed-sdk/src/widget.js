@@ -130,6 +130,10 @@ class MarketingChatWidget {
           this.consentGate.destroy()
           if (this.opened) {
             if (this.panel) this.panel.show()
+            // onOpen 语义对齐：历史行为里 open() 在窗变可见时必发 onOpen；
+            // 同意闸首次开窗的"可见"发生在同意之后（2026-11-17 二次审核补——
+            // 否则宿主页监听方在闸开启的部署上永远收不到 onOpen）
+            this._fireEvent('onOpen')
             this._fireEvent('onPrivacyConsent', { accepted: true })
           }
         },

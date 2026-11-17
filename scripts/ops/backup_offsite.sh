@@ -47,18 +47,11 @@ mkdir -p "$BACKUP_DIR"
 #            容器内 POSTGRES_PASSWORD 已由 compose 注入，免宿主机客户端依赖）
 DUMP_FILE="${BACKUP_DIR}/user_db.dump"
 COMPOSE_DIR="${COMPOSE_DIR:-$(pwd)}"
-if command -v pg_dump >/dev/null 2>&1; then
-  log "形态=host：pg_dump ${DB_NAME} → ${DUMP_FILE}"
-  if ! PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -Fc \
-        -f "$DUMP_FILE" "$DB_NAME"; then
-    err "pg_dump 失败（宿主机直连 127.0.0.1:${DB_PORT}）"
-    exit 1
-  fi
-else
-  if ! command -v docker >/dev/null 2>&1; then
-    err "宿主机既无 pg_dump 也无 docker，无法 dump"
-    exit 2
-  fi
+# 形态优先级（2026-11-17 二次审核反转）：**docker 优先**——恢复端是容器内 pg_restore，
+# host 新版 pg_dump 产的 archive（如 v1.15）容器旧版 pg_restore 会拒（"unsupported
+# version (1.15)"实测）；容器内客户端与恢复端同版本族，从根上消灭版本倾斜。
+# host pg_dump 仅作无 docker 环境的兜底（此时恢复端也应是同版本宿主客户端）。
+if command -v docker >/dev/null 2>&1 && docker compose -f "$COMPOSE_DIR/docker-compose.yml" ps -q mtk-postgres 2>/dev/null | grep -q .; then
   log "形态=docker：compose exec mtk-postgres pg_dump ${DB_NAME} → ${DUMP_FILE}"
   # 容器内 PG 端口被 compose 钉死为 8202（docker-compose.yml command -c port=8202），
   # 与宿主机映射端口 USER_POSTGRES_HOST_PORT 无关——这里必须用容器内常量
@@ -67,6 +60,16 @@ else
     err "docker 形态 pg_dump 失败（COMPOSE_DIR=${COMPOSE_DIR}）"
     exit 1
   fi
+elif command -v pg_dump >/dev/null 2>&1; then
+  log "形态=host：pg_dump ${DB_NAME} → ${DUMP_FILE}（⚠️ 无 docker 兜底形态，archive 版本须与恢复端匹配）"
+  if ! PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -Fc \
+        -f "$DUMP_FILE" "$DB_NAME"; then
+    err "pg_dump 失败（宿主机直连 127.0.0.1:${DB_PORT}）"
+    exit 1
+  fi
+else
+  err "宿主机既无可用的 mtk-postgres 容器也无 pg_dump，无法 dump"
+  exit 2
 fi
 
 # 校验产物：非空 + custom 格式魔数 PGDMP（免宿主机 pg_restore 依赖；docker 形态宿主机无客户端）

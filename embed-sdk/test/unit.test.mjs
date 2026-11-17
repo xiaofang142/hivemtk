@@ -358,10 +358,11 @@ console.log('\n== 9. 访客隐私同意闸 (specs/023) ==')
   // 9.3 required=true + 未同意：open() 只弹同意层，不建 iframe（= 不建会话不发请求）
   sandbox.localStorage.__clear()
   let consentEvents = []
+  let openEvents = 0
   const w4 = new cls({
     apiBaseURL: 'http://localhost:8204',
     privacyNotice: { required: true, version: 'v9' },
-    events: { onPrivacyConsent: (p) => consentEvents.push(p) }
+    events: { onPrivacyConsent: (p) => consentEvents.push(p), onOpen: () => openEvents++ }
   })
   w4.init()
   assert(w4.consentGate !== null, 'required=true 创建同意闸')
@@ -379,6 +380,9 @@ console.log('\n== 9. 访客隐私同意闸 (specs/023) ==')
   assert(w4.panel.iframe !== null && w4.panel.shown === true, '同意后聊天 iframe 才创建')
   eq(consentRoot(), null, '同意后同意层移除')
   assert(consentEvents.length === 1 && consentEvents[0].accepted === true, 'onPrivacyConsent accepted=true 且恰好一次')
+  eq(openEvents, 1, '同意后 onOpen 恰好触发一次（与无闸路径语义对齐）')
+  w4.close(); w4.open()
+  eq(openEvents, 2, '重开路径 onOpen 照常再发（闸已放行）')
 
   // 9.5 同版本不再询问
   w4.close()
@@ -412,7 +416,7 @@ console.log('\n== 9. 访客隐私同意闸 (specs/023) ==')
   sandbox.localStorage.__clear()
   const w6 = new cls({ apiBaseURL: 'http://localhost:8204', privacyNotice: { required: true } })
   w6.init()
-  assert(w6.consentGate !== null, '布尔简写等价形状（data-privacy-required 与对象配置同一条消毒路径）')
+  assert(w6.consentGate !== null, '对象配置形状（data-privacy-required 解析产物同走 normalizePrivacyNotice 单一路径）')
   w6.destroy()
 }
 
