@@ -10,6 +10,10 @@
 本 spec 把两轮调研里**判定为「必须补的接缝」**的条目转成可施工任务；已在 `2f658e7b` 交付的
 两项（`internal/channelcaps` 能力表、会话生命周期三列）作为本 spec 的既成前提，不重复施工。
 
+**范围（2026-11-17 决策）**：二次审核后按「接缝 / 平台」拆分——本 spec 只交付接缝（B1–B6），
+平台接入（wecomcs / OneBot v11 / Slack / wecombot / custom）见 `specs/025-im-platforms/`，
+以本 spec 的 B1（出站注册表）+ B2（事件类型）为交接面。
+
 ## 一、判断依据：为什么是这五处，而不是把对方照搬过来
 
 调研得出的结论是：LangBot / Chatwoot 的渠道数能持续扩张，靠的是**接缝**而不是平台代码本身。
@@ -174,31 +178,42 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 每个渠道的 `OutboundFormat/MaxTextLen` 必须附「代码取证锚点」（该 sender 里处理换行/转义/HTML 的那几行），
 不得凭印象填 `markdown`——否则等于给能力表再造一个漂移源。
 
-### D5 身份：唯一键补 `account_id`（含去重迁移）
+### D5 身份：双层唯一键（身份锚 + 业务键），已定方案 B
 
 - **机制先对齐现实（二次审核修正）**：`tenancyidx.Normalize` 会把租户表上的唯一索引**原位重建**为
   `(tenant_id, 原列…)`，并保留 `WHERE` 谓词（`internal/pkg/tenancyidx/tenancyidx.go:1-26,212,253`），
   所以今天 `customer_channels` 的实际唯一键是 **`(tenant_id, one_id, channel)`**，不是 `(one_id, channel)`。
-  迁移 065 的目标形态因此写成 `(tenant_id, one_id, channel, account_id)`，索引**沿用原名** `idx_oneid_channel`
-  （原位重建、名字稳定，避免 AutoMigrate 按名判存在时又建一套）。
+- **决策（2026-11-17 确认，方案 B）**：一条唯一键无法同时表达两种「唯一」，所以建**两条**：
+  | 键 | 列 | 语义 | 名称 |
+  |---|---|---|---|
+  | 身份锚 | `(tenant_id, channel, account_id, channel_user_id)` | 「这个平台身份属于谁」——同一账号下的同一平台用户只能有一条绑定 | `idx_channel_identity` |
+  | 业务键 | `(tenant_id, one_id, channel, account_id)` | 「这个客户在这个账号下有哪些绑定」——同一客户在同一账号下不重复 | `idx_oneid_channel`（沿用原名） |
+  - 身份锚对齐 Chatwoot 的 `(inbox_id, source_id)`：先按身份找绑定，找到就**沿用它的 OneID**，不再让新 OneID 覆盖
+    （今天 `UpsertCustomerChannel` 只按 `(one_id, channel)` 定位，同一 `channel_user_id` 先后落到两个 OneID 就会写出两行、
+    指向两个客户）。
+  - 业务键保留「一客户一账号一行」的既有假设，前端/统计的 `(one_id, channel)` 查询不动；把 `account_id` 补进键，
+    解决「同一个人对同渠道两个账号互相覆盖」。
+  - `channel_user_id = ''` 的历史行不参与身份锚：索引带 `WHERE channel_user_id <> ''`（部分索引，
+    `tenancyidx.Normalize` 会保留谓词），否则所有空值行会撞同一条唯一键。
+- **写入顺序（Chatwoot 同款）**：先查身份锚 → 命中则复用其 `one_id`（并刷新 `last_seen_at`）→ 未命中再按业务键查 →
+  都没有才插入。`ON CONFLICT` 只作为并发兜底（两个并发插入同一身份，后到者被唯一键拒绝后退回查一次）。
 - **三处必须同改，少一处就报错或无效**：
-  1. model tag：`AccountID` 加入 `uniqueIndex:idx_oneid_channel`（`model/customer_channel.go:25-27`）；
-  2. `ON CONFLICT` 目标：`repository/channel_overview.go:158-169` 写死 `tenant_id/one_id/channel`，
-     必须加 `account_id`，否则写入直接报 `no unique or exclusion constraint matching the ON CONFLICT specification`；
-  3. 迁移 065 用**换名法**：`CREATE UNIQUE INDEX CONCURRENTLY idx_oneid_channel_v2 (tenant_id, one_id, channel, account_id)`
-     → `DROP INDEX CONCURRENTLY idx_oneid_channel`（全新库无此索引，先判存在）→ `ALTER INDEX ... RENAME TO idx_oneid_channel`。
+  1. model tag：`AccountID` 加入 `idx_oneid_channel`；新增 `uniqueIndex:idx_channel_identity`（含 `where`）；
+  2. `repository/channel_overview.go:158-169` 的 `ON CONFLICT` 目标列加 `account_id`，并改为「先查后写」两段式，
+     否则写入直接报 `no unique or exclusion constraint matching the ON CONFLICT specification`；
+  3. 迁移 065 用**换名法**：先各自去重（按 `last_seen_at DESC` 保留最新、其余置 `deleted_at`），
+     再 `CREATE UNIQUE INDEX CONCURRENTLY ..._v2` → `DROP INDEX CONCURRENTLY` → `ALTER INDEX ... RENAME TO` 原名。
      不用「DROP 后交 AutoMigrate 重建」：AutoMigrate 建索引是**非并发**的，大表会锁写；
      换名法同时保证索引名稳定（AutoMigrate 按名判存在）且显式带 `tenant_id`（`Normalize` 复查幂等）。
-- 去重顺序：先按 `last_seen_at DESC` 保留最新、其余置 `deleted_at`，再换键。**软删行仍占唯一键**，
-  所以 `ON CONFLICT` 的 `DoUpdates` 必须带 `deleted_at = NULL`（复活被删绑定），否则更新会写进一条看不见的行。
+- **两条索引都带 `WHERE deleted_at IS NULL`**（身份锚另加 `channel_user_id <> ''`）：软删行不再占键，
+  「删了再绑同一身份」不会永久失败；写入改为「unscoped 查身份锚 → 命中则复活并沿用旧 OneID → 否则按业务键 →
+  都没有才插入」，`ON CONFLICT` 只作并发兜底。身份锚冲突但 OneID 不同时**不覆盖、不复活**，只记 `operation_log`
+  供人工合并——避免一次自动合并把两个客户的对话历史连到一起。
 - `account_id` 空值统一存 `''`（不用 NULL，避免唯一索引失效）。
 - 不加 `MessageHub.origin` 列：出站回写 `platform_msg_id` + 入站同 msg_id 幂等已覆盖回声场景，
   再加一列是重复状态源（Chatwoot 的 `source_id.present?` 判定在我们这里是 `msg_id` 唯一索引）。
-- ⚖️ **待决策（二次审核提出）**：上面的键只解决「同渠道多账号互相覆盖」，没解决「同一个平台账号被识别成两个 OneID」——
-  `UpsertCustomerChannel` 只按 `(one_id, channel)` 定位，同一 `channel_user_id` 若先后落到两个 OneID 会写出两行、
-  指向两个客户（Chatwoot 的锚点是 `(inbox_id, source_id)`，即账号维度而非合成身份维度）。
-  候选方案 B：再加一条唯一键 `(tenant_id, channel, account_id, channel_user_id)` 作身份锚，`(tenant_id, one_id, channel, account_id)` 降为业务键。
-  **未拍板前按方案 A（单键）施工，方案 B 的成本与数据修复脚本已记录在本条。**
+- 存量数据风险：历史行 `account_id` 可能为空且 `channel_user_id` 可能重复（bridge 渠道早期版本）——迁移去重会**软删**重复行，
+  必须在 065 里输出被软删行数，并在 `delivery.md` 留执行记录；软删可回滚（`deleted_at = NULL`）。
 
 ### D6 生命周期读侧收口
 
@@ -208,24 +223,39 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 - 新增只读接口：`GET /api/inbox-conversations?filter=awaiting_first_reply`（`waiting_since IS NOT NULL AND first_reply_at IS NULL`，按 `waiting_since ASC`）。
 - 新增指标：首响时长 p50/p95（按渠道/租户/时间窗），只读聚合、不改消息链路。
 
-### D7 平台接入顺序与「不做」
+### D7 平台接入：已拆分为独立 spec `025-im-platforms`
 
-顺序（按「我们已有账号/协议确定性」排，不是按平台热度）：
-1. **企业微信客服 wecomcs**——与 `wecom` 共用 corp_id，但**不是同一张表**：`WeComAccount`
-   （`model/wecom.go:8`）只有 `CorpSecret/AgentID/AgentSecret`，客服需要 `corp_secret + kf_token + kf_aes_key + open_kfid`。
-   本 spec 新建 `wecom_cs_accounts` 表并登记进 `webhookAccountTableByChannel`（租户反查的权威源），
-   不复用 `wecom_accounts`——否则 `ResolveTenantByChannelAccount` 会在两张表之间猜。回调验签可复用
-   `verifyWeCom(token, aesKey, body, query)`，这是本平台「最短路径」的真实含义。
-2. **OneBot v11**——覆盖 QQ 私域最大缺口（我们只有 QQ 官方机器人），HTTP + 反向 WS 两种接入。
-3. **Slack**——Events API 验签 + `chat.postMessage`，验证「国外平台 + 线程」形态。
-4. **企业微信智能机器人 wecombot**——回调 + 模板卡片事件，最后做（事件类型最多）。
+二次审核判定「62 任务 / 30–34 人日混在一个 spec 里」不可交付（review.md R1/R13），已按决策拆分：
 
-明确不做（Deviations，已在文档登记，不在本 spec 范围）：
-- Discord / LINE / KOOK / Matrix：本 spec 只交付接缝，平台排 `025+`。
+- **024（本 spec）** 只交付**接缝**：出站注册表、事件类型、路由、渲染、身份双层键、生命周期读侧、交互回调上下文、门禁。
+  完工判据不含任何平台上线。
+- **025** 交付平台：企业微信客服 wecomcs → OneBot v11 → Slack → 企业微信智能机器人 → 通用 custom 入口，
+  按批次独立发布；平台任务的 FR 与逐任务规格见 `specs/025-im-platforms/{spec.md,tasks.md}`。
+- 平台顺序的依据（`WeComAccount` 无 `kf_*` 字段、`qq_accounts` 不能承载 OneBot `self_id` 等）随 FR 一并迁到 025，
+  本 spec 不再复述，避免两处漂移。
+
+明确不做（Deviations，仍由本 spec 记录，025 沿用）：
+- Discord / LINE / KOOK / Matrix：接缝就绪后按需求排期，不在 024/025。
 - `wechatpad`（iPad 协议）/ `openclaw_weixin`：合规与稳定性风险，不做。
 - Chatwoot 式 polymorphic `Inbox` 实体重构：成本高、收益需证据，登记「需证据触发」（见 §四）。
 - Redis 外置未读计数、消息模板全量体系：同上，需压测/运营证据触发。
 - 消息翻译、富文本编辑器、CSAT 问卷：不做。
+
+### D8 交互回调：建 `channel_interactions`，本期就支持真答复
+
+二次审核 R7 指出「空 ack + 审计」不是真支持：平台答复回调需要 `callback_id` + 响应码，而 `MessageEvent` 不带上下文。
+用户决策（2026-11-17）：**本期建表，支持真实答复**，不降级。
+
+- 新表 `channel_interactions`：唯一键 `(tenant_id, channel, interaction_id)`，承载「我们发出的卡片 ↔ 客户点击 ↔ 答复状态」
+  （pending / answered / expired），字段与迁移号见 tasks T208（迁移 `068_channel_interactions.sql`）。
+- 入站：`EventType == interaction.callback` 一律**不落 `message_hub`、不计未读、不触发 AI**，改为
+  写交互行（幂等）+ 审计（`operation_log`，平台重投不产生重复审计）+ 路由留痕，然后回 ack。
+- 答复能力放在协议层：`channelbot/core` 增 `InteractionAnswerer` 接口，Telegram 先实现 `answerCallbackQuery`；
+  未实现该接口的渠道退化为「空 ack + 审计」，并在 `channelcaps` 标注 `FeatureInteraction`，
+  **不允许**在 Service 层写 `switch channel` 判断谁支持。
+- 出站：发可交互卡片时登记 `platform_msg_id` + 动作集合，让点击能定位到卡片；到期由 worker 置 `expired`
+  （沿用 `retention_cleanup_cron.go` 的 Ticker + `utils.SafeGo` 形态）。
+- 边界：不做多步表单状态机、不做卡片内容回改（edit card）——那是后续能力；本期只保证「点击有答复、事后可追」。
 
 ## 三、要求
 
@@ -259,6 +289,14 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
   `event_type/event/type/msg_type` 一并 coalesce，语义混杂（多数渠道它等于消息类型）。
   事件类型只能由各渠道解析器显式赋值到 `MessageEvent.EventType`。
 
+- FR016 `model.ChannelInteraction` + 仓储（`Create` 幂等 / `MarkAnswered` / `MarkExpired`）+ 迁移 068，
+  模型登记 `allModels()`。
+- FR017 `HandleIngressMessage` 对 `interaction.callback` 分流：不落消息表、不计未读、不触发 AI；
+  写交互行（幂等）+ 审计 + `RouteRuleID` 留痕。
+- FR018 协议层 `InteractionAnswerer` 接口 + Telegram `answerCallbackQuery` 实现；未实现渠道退化为空 ack + 审计，
+  能力在 `channelcaps` 标 `FeatureInteraction`。
+- FR019 出站发卡片登记交互上下文（`platform_msg_id` + 动作集合）与到期清理 worker（`expires_at`）。
+
 ### FR-3 路由
 
 - FR020 `model.ChannelRouteRule` + 仓储 + 迁移 066。
@@ -277,9 +315,12 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 
 ### FR-5 身份
 
-- FR040 迁移 065（去重 + 换唯一键），幂等可重跑。
-- FR041 `UpsertByChannelAccount` 写入路径把 `account_id` 纳入键；并发 upsert 用 `ON CONFLICT`。
-- FR042 测试：同一 one_id 在两账号下两条记录并存；同账号重复 upsert 不新增行。
+- FR040 迁移 065：建**两条**唯一键（身份锚 `idx_channel_identity` + 业务键 `idx_oneid_channel`），
+  各自先去重再换名，幂等可重跑，输出被软删行数。
+- FR041 `UpsertCustomerChannel` 改为「先查身份锚 → 再查业务键 → 才插入」；身份锚命中时沿用既有 OneID，
+  不覆盖；并发冲突用 `ON CONFLICT` 兜底并重查一次。
+- FR042 测试：同一 one_id 在两账号下两条记录并存；同账号重复 upsert 不新增行；同一 `channel_user_id`
+  落到新 OneID 时被身份锚拦下（旧 OneID 不变 + 记 `operation_log`）；软删行被复活。
 
 ### FR-6 生命周期读侧
 
@@ -288,52 +329,14 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 - FR052 `filter=awaiting_first_reply` 查询（索引已存在：`waiting_since`）。
 - FR053 首响时长聚合接口 + 单测（含无首响样本不计入）。
 
-### FR-7 平台接入（每个平台同一套 8 触点）
+### FR-7 平台接入（已迁至 `025-im-platforms`）
 
-每个平台必须交付：`channelbot/<x>` 纯协议客户端（含验签）→ `webhook_channel_<x>.go`（解析 + 事件类型）
-→ `webhook.go` 的 capable/dispatch/verify 三处登记 → `outbound_sender_<x>.go` → `channelcaps` manifest
-→ 账号表/配置 → 路由 → 测试（fixture 回放）。
+FR060（wecomcs）/ FR061（OneBot v11）/ FR062（Slack）/ FR063（wecombot）/ FR064（能力声明一致性）/
+FR070（custom 入站）/ FR071（custom 出站）连同「隐性必做项」表、触点矩阵与逐任务规格，全部见
+`specs/025-im-platforms/`。本 spec 只保留一条跨平台约束：
 
-**平台接入的「隐性必做项」（逐行复核补出，漏一项就红或静默降级）**：
-
-| 必做项 | 位置 | 漏掉的后果 |
-|---|---|---|
-| 账号表 + `webhookAccountTableByChannel` 条目 | `webhook.go:393` | 租户反查退到 `integration_accounts` 按平台名找，多租户共用同名平台即歧义 → fail-closed 404，回调全丢 |
-| `platform_type_enum` 增枚举值 | `migrations/047_pg_enums.sql` | `scripts/check-enum-consistency.sh` 红（静态文本对照）；离线 SQL 部署库写 `message_hub.platform` 直接报 invalid input |
-| 模型登记 `allModels()` | `internal/pkg/db/migrate.go` | 新库不建表；`check_model_migration.py` 红 |
-| 渠道常量 + `model.Channel*` | `model/message_event.go` | 收件箱前端/统计的渠道词表缺值 |
-| `channelcaps` manifest | `internal/channelcaps/manifests.go` | `TestEveryChannelConstantHasManifest` 红 |
-| 验签失败 4xx 不落库的非对称测试 | 渠道测试文件 | 安全面回退无门禁 |
-| 拒绝提示表同步 | `webhookInboundRejectHints` + `TestWebhookInbound_RejectHintsStayConsistentWithCapability` | 自相矛盾（已接入却仍写「不支持」）→ 门禁红 |
-| 口令存储与出口脱敏 | 新账号表 + controller 脱敏 helper | 平台凭据（`kf_aes_key`/`signing_secret`/`access_token`/`hmac_secret`）明文落库且随列表接口原样返回 → 只读 DB 账号即可伪造回调。现网先例：`model/wecom.go:13-17` 明文列 + `controller/wecom_secret_mask.go` 出口脱敏；加密先例：`internal/secrets/aesgcm.go` |
-| 长连接/游标生命周期 | 新平台各自的 worker | wecomcs 的 `sync_msg` 游标（`cursor`/`next_cursor`）、OneBot 反向 WS 连接，都属长生命周期组件，必须挂 app start/stop 并过 `check-naked-goroutine.sh`；只写「拉取」不写落点＝永远拉同一个游标 |
-
-- FR060 wecomcs：`kf/sync_msg` 游标拉取 + `kf/send_msg`，`msg_signature` 验签，`event_type` 映射
-  （`enter_session`/`msg_send_fail`/`session_status_change` → 审计表 + 旁路总线，见 D2「事件出口」）。
-  账号走新表 `wecom_cs_accounts`（`corp_id/kf_secret/kf_token/kf_aes_key/open_kfid`
-  + **`sync_cursor varchar(512)` + `cursor_updated_at`**）；拉取 worker 沿用 T602 的 cron 先例，
-  单账号串行、失败退避、重启从列里续拉；`kf` 消息自带 `msgid`，直接复用 msg_id 幂等。
-- FR061 OneBot v11：HTTP 上报 `POST /api/webhook/onebot/{account_id}` + 反向 WS；事件映射
-  `message/notice/request/meta_event`；`send_private_msg`/`send_group_msg`；`echo` 关联请求响应。
-  注意与已有 `qq`（官方机器人）区分：`qq_accounts` 不能承载 OneBot 的 `self_id/access_token`，需新表。
-  反向 WS 是**长连接服务端**（我们 accept，OneBot 实现方连入），必须写清：升级路由宿主（gin `Upgrade`
-  或独立 `http.Server`，二选一并固定）、`Authorization: Bearer <token>` 鉴权、
-  `self_id → account_id` 连接注册表（同 `self_id` 重连顶掉旧连接）、心跳与断线清理、挂 app start/stop
-  并通过 `check-naked-goroutine.sh`；HTTP 上报另需 token/签名校验，失败 4xx 且不落库。
-- FR062 Slack：Events API `v0` 签名 + `url_verification` challenge；`app_mention`/`message.im`；
-  `chat.postMessage` + `thread_ts` 线程回复；`event_id` 作幂等键（Slack 重投同一 event_id）。
-- FR063 wecombot：回调解密（AESKey）+ `template_card_event` + 主动推送 webhook。
-- FR064 每个平台 `channelcaps` 事件/消息能力必须与实际实现一致（测试钉死）。
-
-### FR-8 通用入口
-
-- FR070 `POST /api/webhook/custom/{account_id}`：JSON 契约（`event_id/channel_msg_id/conversation_id/
-  sender{id,name}/msg_type/content/media_url/timestamp/is_group/group_id`）+ `X-Hive-Signature`
-  （HMAC-SHA256 + 5 分钟时间窗）+ msg_id 幂等。替代今天的 `ChannelCustom` 拒绝提示（`webhook.go:358-372`）。
-  同时要改三处：`webhookInboundRejectHints` 删掉 custom 条目、`webhookAccountTableByChannel` 加
-  `custom_channel_accounts`（否则租户反查走到歧义拒绝）、
-  `controller/webhook_batchc_d03_http_test.go:75` 的断言（今天要求 custom 回「无入站适配器」）。
-- FR071 出站：账号配置 `callback_url`，签名回调，重试沿用 `enqueueSendRetry`。
+- FR064 任何新增平台在 `channelcaps` 声明的事件/消息能力必须与实际实现一致，由 `TestCapabilityDocFreshness`
+  与 025 每平台的一致性测试钉死；本 spec 交付的 `Manifest.Events` 字段（FR014）是该声明的载体。
 
 ## 四、需证据触发（不进本 spec 的施工清单，登记备查）
 
@@ -346,14 +349,14 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 
 ## 五、验收总纲
 
-1. 每阶段独立可交付、可回滚；任一阶段失败不阻塞后续（除 FR-1 是 FR-7 的前置）。
+1. 每阶段独立可交付、可回滚；任一阶段失败不阻塞后续（除 FR-1（出站注册表）与 FR-2（事件类型）是 `025-im-platforms` 的前置）。
 2. 每条 FR 至少一个可执行判据（测试名或命令），写在 `tasks.md` 对应任务的「验收」字段。
 3. 全量门禁：`go build ./... && go vet ./... && go test ./internal/service/ ./internal/channelbot/... ./internal/channelcaps/ ./internal/channelgw/...`；
-   **并发面另跑 `go test -race ./internal/service/ ./internal/channelbot/...`**（注册表 / snooze worker / OneBot WS 连接表）；
+   **并发面另跑 `go test -race ./internal/service/ ./internal/channelbot/...`**（注册表 / snooze worker / 交互清理 worker）；
    `python3 scripts/check-layer-boundary.py`、`python3 scripts/check_model_migration.py`、
    `bash scripts/check-enum-consistency.sh`（新增渠道必跑，见 §七 门禁矩阵）。
-4. 新平台验收必须包含：验签失败 4xx 且不落库、同 msg_id 二次投递不重复、私聊与群聊各一条真实回放、
-   渠道错误返回 `*ChannelError`。
+4. 平台验收口径见 `025-im-platforms` §五（验签失败 4xx 且不落库、同 msg_id 二次投递不重复、私聊与群聊各一条回放、
+   `*ChannelError` 分类正确）；本 spec 只要求接缝自身的门禁（FR005/FR006、T1201–T1205）。
 5. 现有行为零回归：`TestCardDelivery`、bridge outbox 全量测试、telegram/whatsapp 入站测试全绿。
 6. 可观测：按 `(channel, ChannelError.Category)` 计数打点（`outbound_send_failed_total`）+ 路由命中
    （`route_rule_hit` 日志已有，需计数）+ 超长（`outbound_text_overflow`），各配一条单测；
@@ -377,7 +380,9 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 > 二次审核（换镜头找漏洞，不重复本节断言核对）见同目录 `review.md`（R1–R17）。
 > 其中已直接改进本文档与 `tasks.md`／`plan.md` 的项：R2 索引机制、R3 事件出口、R4 渲染不切块、
 > R5 sender 结果不变量、R6 双注册表、R8 游标落库、R9 WS 宿主与鉴权、R12 片段自相矛盾、
-> R13 工期、R14 `-race`、R15 可观测；**R1 范围拆分、R2 身份键形状、R7 交互回调降级**仍是 ⚖️ 待决策。
+> R13 工期、R14 `-race`、R15 可观测。
+> **三项 ⚖️ 已于 2026-11-17 决策**：R1 → 拆 024（接缝）/ 025（平台）；R2 → 双层键方案 B（D5）；
+> R7 → 建 `channel_interactions` 支持真答复（D8），不再降级为空 ack。
 
 ### 7.1 断言修正（文档原话 → 代码事实 → 处置）
 
@@ -395,10 +400,10 @@ QQ 客户端已有 `splitQQMessage` + 可注入的 `QQMessageMaxLenEffective()`�
 | C10 | 撤回直接复用 `MarkRecalled` | `MarkRecalled(id, at)` 的 WHERE 含 `direction='outbound'`（`message_hub_recall.go:29`），语义是「撤我发出的消息」 | 入站撤回需专用方法；`RecallError` 复用为原因列 |
 | C11 | 各渠道已能解析 edited/deleted | `grep -i 'recall|edited'` 在 `webhook_channel_*.go` 只命中 Telegram edited（`webhook_channel_telegram.go:268`）；飞书 `Event.Message == nil` 即 `return nil,nil`（`webhook_channel_feishu.go:196`） | D2 明确「本轮交中枢能力，逐渠道接线在平台任务」 |
 | C12 | 新渠道只需登记 8 触点 | 还漏 4 项硬约束：`webhookAccountTableByChannel`（租户反查权威源，漏→多租户歧义 404）、`047_pg_enums.sql` 的 `platform_type_enum`（`check-enum-consistency.sh` 静态对照）、`internal/pkg/db/migrate.go` 的 `allModels()`、`webhookInboundRejectHints` 与一致性测试 | §三 FR-7 增「隐性必做项」表 |
-| C13 | wecomcs 复用 `wecom_accounts` | `model/wecom.go:8` 的 `WeComAccount` 无 `kf_token/kf_aes_key/open_kfid`；且 `ResolveTenantByChannelAccount` 按渠道表反查，两渠道共用一张表会猜 | 新建 `wecom_cs_accounts`，验签复用 `verifyWeCom` |
+| C13 | wecomcs 复用 `wecom_accounts`（FR060 现属 025） | `model/wecom.go:8` 的 `WeComAccount` 无 `kf_token/kf_aes_key/open_kfid`；且 `ResolveTenantByChannelAccount` 按渠道表反查，两渠道共用一张表会猜 | 新建 `wecom_cs_accounts`，验签复用 `verifyWeCom` |
 | C14 | parity 测试要新建 | `TestBridgeOutboxParityWithWebhookOutbound` 已存在（registry ↔ 出站分支双向钉住，见 `default` 分支注释 CH-37b刀3） | FR005 改为「扩写既有测试」 |
 | C15 | `IngressResult` 可直接加 `RouteRuleID` | 现状字段仅 `Accepted/HumanLocked/QueuedForAI/SessionID/Reason`（`inbox_ingress.go:129`） | D3 注明需加字段，不是「记入」即可 |
-| C16 | custom 只需删拒绝提示 | `controller/webhook_batchc_d03_http_test.go:75` 断言 `/api/webhook/custom/1` 返回「无入站适配器」，`webhookInboundRejectHints` 有 custom 行，`webhookInboundCapable` 与 `Verify` 均无 custom 分支，且**无 `custom_accounts` 表/模型** | FR070 列出四处必改 + 新建账号表并登记 `allModels()` |
+| C16 | custom 只需删拒绝提示（FR070 现属 025） | `controller/webhook_batchc_d03_http_test.go:75` 断言 `/api/webhook/custom/1` 返回「无入站适配器」，`webhookInboundRejectHints` 有 custom 行，`webhookInboundCapable` 与 `Verify` 均无 custom 分支，且**无 `custom_accounts` 表/模型** | FR070 列出四处必改 + 新建账号表并登记 `allModels()` |
 | C17 | 迁移号 065 只用于身份键 | 现目录到 `064`；`063_pg_enums_channel_values.sql` 已开「渠道扩容要补 ENUM」的先例 | 编号分配：065 身份键、066 路由规则、067 生命周期读侧、068+ 各平台账号表 |
 | C18 | snooze 到期扫描要自建 | 无通用调度器，但存在 `*_cron.go` 形态（`retention_cleanup_cron.go`、`message_trace_cleanup_cron.go`：Ticker + `utils.SafeGo` + 成对启停） | T602 明确新建 `inbox_snooze_cron.go`，且必须过 `check-naked-goroutine.sh` |
 | C19 | 会话状态非 pg enum | 状态是 `varchar`，`CASE` 映射与 `closed` 过滤都在 `repository/message_hub_inbox_conversation_query.go` | 加 `snoozed` 不必改 047，但必须同步查询映射 |
