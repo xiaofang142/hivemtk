@@ -11,9 +11,10 @@
 ## Phase 1 出站接缝（P0，平台接入的前置）
 
 - [ ] **T101 出站注册表与接口**（P0｜依赖 —｜S｜🟡）
-  - 现状：`webhook_outbound.go:607` `sendOutbound` 单函数 663 行，`switch channel` 8 个分支。
-  - 改动：新建 `internal/service/outbound_registry.go`——`OutboundRequest{Channel, AccountID, Payload, Content, Cards, Hub}`、`OutboundResult{Sent, PlatformMsgID}`、`channelSender{Channel() WebhookChannel; Send(ctx, *OutboundRequest) (*OutboundResult, error)}`、`RegisterChannelSender`（空 Channel / 重复注册 panic）、`ChannelSenderOf`、`RegisteredSenders()`、`ErrOutboundChannelUnsupported`。
-  - 验收：`go test ./internal/service/ -run TestOutboundRegistry` 绿（重复注册 panic / 未知渠道取不到 / 注册后取回同一实例 / 注册表按 channel 排序稳定）。
+  - 现状：`webhook_outbound.go:607` `sendOutbound` 单函数 663 行，`switch channel` **7 个 case + 1 个 default（bridge 族）**，共 8 条出站路径。
+  - 改动：新建 `internal/service/outbound_registry.go`——`OutboundRequest{Channel, AccountID, Payload, Content, Cards, Hub, Fail, FailUntracked}`、`OutboundResult{Sent, PlatformMsgID}`、`channelSender{Channel() WebhookChannel; Send(ctx, *OutboundRequest) *OutboundResult}`（**不返回 error**，失败只走 `Fail` 回调：`sendErr` 必须单一真值来源，且飞书「正文失败仍发卡片」的顺序不能被打乱）、`RegisterChannelSender`（空 Channel / 重复注册 panic）、`ChannelSenderOf`、`RegisteredSenders()`、`ErrOutboundChannelUnsupported`。
+  - 注册表必须是**进程级单例**：QQ sender 依赖 `s.qqIntegration` 的惰性单例（`msg_seq` 计数与 token 缓存必须跨次出站存活，每次新建会让 seq 恒为 1 被平台丢弃）。
+  - 验收：`go test ./internal/service/ -run TestOutboundRegistry` 绿（重复注册 panic / 未知渠道取不到 / 注册后取回同一实例 / 注册表按 channel 排序稳定 / `Fail` 回调被调用时 `sendErr` 被置位）。
   - 风险：无行为变更（纯新增文件）。
 
 - [ ] **T102 wecom sender 搬迁**（P0｜依赖 T101｜S｜🟡）
@@ -37,14 +38,14 @@
   - 验收：`TestQQSender_PassiveWindowMsgSeq` 绿（第 6 条降级为主动消息或失败，与原实现一致）。
 
 - [ ] **T106 whatsapp sender 搬迁**（P0｜依赖 T101｜M｜🟡）
-  - 现状：`webhook_outbound.go:818`（`waIntegration.ensureReposFromDB` + Cloud API payload）。
-  - 改动：`outbound_sender_whatsapp.go`。
-  - 验收：`TestWhatsappSender_PayloadShape` 绿（`messaging_product`/`to`/`type` 字段不变）。
+  - 现状：`webhook_outbound.go:818`——不只是 Cloud API payload：先 `waIntegration.ensureReposFromDB`，再用 `messageHubRepo.GetLastInboundByConversation` 判「最后入站是否超 24h」；超窗时取参数中心 `channelbot.whatsapp_fallback_template`（语言 `..._lang`），有模板则 `SendTemplateMessage` 并 `return`，无模板则 `CategoryWindowExpired` 失败。
+  - 改动：`outbound_sender_whatsapp.go`；sender 需持 `svc`（取 repo 与参数），窗口判定与模板降级逐行保留。
+  - 验收：`TestWhatsappSender_PayloadShape`（`messaging_product`/`to`/`type` 不变）+ `TestWhatsappSender_WindowExpired`（>24h 无模板 → `*ChannelError{CategoryWindowExpired, Retryable:false}`）、`TestWhatsappSender_WindowExpiredWithTemplate`（走 `SendTemplateMessage`）。
 
 - [ ] **T107 dingtalk sender 搬迁**（P0｜依赖 T101｜M｜🟡）
-  - 现状：`webhook_outbound.go:870` + `loadDingtalkWebhookHostAllowed`（L1304）URL 白名单。
-  - 改动：`outbound_sender_dingtalk.go`；白名单校验留在 sender 内（不得下沉，属该渠道安全边界）。
-  - 验收：`TestDingtalkSender_RejectsNonAllowlistedHost` 绿（非白名单 host 返回 `*ChannelError`，不发请求）。
+  - 现状：`webhook_outbound.go:870`——不经过 integration，直接 `http.DefaultClient` POST `hubMsg.Extra["session_webhook"]`；前置校验顺序为「缺 webhook → `CategoryWindowExpired`」「`session_webhook_expired_at`（秒/毫秒都兼容）已过期 → `CategoryWindowExpired`」「`url.Parse` + `loadDingtalkWebhookHostAllowed`（L1304，仅 `*.dingtalk.com`）→ `CategoryBadRequest`」，响应按 `errcode` 判定。
+  - 改动：`outbound_sender_dingtalk.go`；白名单校验留在 sender 内（属该渠道安全边界，不得下沉为通用逻辑）。
+  - 验收：`TestDingtalkSender_RejectsNonAllowlistedHost`（非白名单 host → `*ChannelError`，**不发请求**）、`TestDingtalkSender_ExpiredWebhook`、`TestDingtalkSender_ErrcodeNonZero`。
 
 - [ ] **T108 wechat sender 搬迁**（P0｜依赖 T101｜S｜🟡）
   - 现状：`webhook_outbound.go:951`（`wechatIntegration.SendCustomMessage`）。
@@ -52,17 +53,19 @@
   - 验收：`TestWechatSender_CustomerServiceMessage` 绿。
 
 - [ ] **T109 bridge-outbox sender 搬迁**（P0｜依赖 T101｜M｜🟡）
-  - 现状：`webhook_outbound.go:967` 起 default 分支（`bridgeOutboxCapable` 校验、`stripMarkdownForBridgeChannel`/`StripMarkdownForDM`、`model.MessageHub` pending 行、`duplicateOccupied` → `:dup` 失败行、`persisted.Status=="failed"` → `undeliverable_reason`、nil hubMsg 报错）。
-  - 改动：`outbound_sender_bridge.go`；三分支语义（sent / retryable / non-retryable）必须逐条对应。
-  - 验收：`go test ./internal/service/ -run 'BridgeOutbox|Outbound'` 全绿；新增 `TestBridgeSender_DuplicateOccupied`、`TestBridgeSender_UndeliverableReason`。
+  - 现状：`webhook_outbound.go:967` 起 default 分支约 300 行——`bridgeOutboxCapable` 校验、Markdown 清洗、`model.MessageHub` pending 行（含租户继承、tracing carrier、`cards_fallback_count`、`isBridgeChannelUndeliverableLocal` 判 failed）、`CreateMessageHubIdempotent`（第二次带 `:conv` 后缀重试）、`duplicateOccupied` → `:dup` 失败行、`inboxConvRepo.UpsertFromMessage`、`GlobalSSEPublisher` 唤醒、以及 `persisted.ID==0 / Status=="failed" / default` 三段 sent 口径。
+  - 改动：`outbound_sender_bridge.go`；**Markdown 清洗不在本任务搬**——它要上移到 `sendOutbound` 横切段（见 T110），因为 defer 里的 `enqueueSendRetry(..., content, ...)` 捕获的是同一个 `content` 变量，搬进 sender 会让重试投未清洗文本。`cardsFallbackCount` 由 `OutboundRequest` 传入。
+  - 验收：`go test ./internal/service/ -run 'BridgeOutbox|Outbound'` 全绿；新增 `TestBridgeSender_DuplicateOccupied`、`TestBridgeSender_UndeliverableReason`、`TestBridgeSender_RetryCarriesStrippedContent`。
 
 - [ ] **T110 `sendOutbound` 收口 ≤150 行**（P0｜依赖 T102–T109｜M｜🟡）
-  - 改动：`sendOutbound` 只保留：静默时段延迟入队 → `ClaimReply` 去重 → `context.WithTimeout(utils.MediumTimeout)` → 渲染（T402 前先保持原样）→ `ChannelSenderOf` 分发 → `markSendFailed` 错误映射 → `defer`（重试入队 / `ReleaseAIProcessingFlag` / `RecheckUnrepliedAndTrigger`）。未知渠道返回 `ErrOutboundChannelUnsupported`（替换 today 的 bridge drift 打印）。
-  - 验收：`wc -l` 该函数 ≤150；`grep -c 'switch channel'` = 0；`go build ./...` 绿。
+  - 改动：`sendOutbound` 只保留横切逻辑：静默时段延迟入队 → `ClaimReply` 去重 → `context.WithTimeout(utils.MediumTimeout)` → **富卡降级成文本 + `cardsFallbackCount`**（今天在 switch 之前，跨渠道，留在横切段）→ **bridge 族 Markdown 清洗**（`bridgeOutboxCapable(channel) && stripMarkdownForBridgeChannel(...)`；上移后 defer 里的重试入队仍拿到清洗后的 `content`，与今天等价）→ `ChannelSenderOf` 分发 → `defer`（重试入队 / `ReleaseReply`（`!sent` 时释放 ClaimReply）/ `ReleaseAIProcessingFlag` / `SafeGo(RecheckUnrepliedAndTrigger)`）。未知渠道返回 `ErrOutboundChannelUnsupported`。
+  - 注意两个 defer 都不能丢：`claimReply` 的释放只在 `!sent` 时发生，`ReleaseAIProcessingFlag`/补触发只在 `hubMsg.ConversationID != ""` 且非重放时发生（`isDelayedReplay`）。
+  - 验收：`awk` 统计该函数 ≤150 行；`grep -c 'switch channel'` = 0；`go build ./...` 绿；`TestSendOutbound_Bridge_MarkdownAlignedWithManualPath` 仍绿（该测试已存在，钉住 R5 清洗口径）。
 
 - [ ] **T111 渠道覆盖门禁测试**（P0｜依赖 T110｜S｜🟡）
-  - 改动：`outbound_registry_parity_test.go`——`webhookInboundCapable` 支持的 7 个渠道 + `channelgw.Default.Names()` 全部能查到 sender；遗漏即失败并打印缺失渠道名。
-  - 验收：故意删一个 sender 注册 → 测试红且信息含渠道名；恢复 → 绿。
+  - 现状：`TestBridgeOutboxParityWithWebhookOutbound` **已存在**（registry `OutboundPath=bridge_outbox` ↔ 出站分支双向钉住，见 `webhook_outbound.go` default 分支注释 CH-37b刀3）。不要新建重复门禁。
+  - 改动：扩写该测试为「注册表 sender ↔ `webhookInboundCapable` 7 渠道 ↔ `channelgw.Default.Names()`」三向一致；新文件 `outbound_registry_parity_test.go` 只放新增断言。
+  - 验收：故意删一个 sender 注册 → 两个方向都红且信息含渠道名；恢复 → 绿。
 
 - [ ] **T112 行为冻结对照测试**（P0｜依赖 T110｜M｜🟡）
   - 改动：表驱动 `(channel, payload, cards, hubMsg)` → 通过 fake integrations 记录 `(method, args)` 序列，与搬迁前快照比对（快照在 T102 前用旧实现生成）。
@@ -73,13 +76,15 @@
 ## Phase 2 事件类型体系（P0）
 
 - [ ] **T201 `EventType` 常量与字段**（P0｜依赖 —｜S｜🟡）
-  - 现状：`model/message_event.go:1-93` 无 `EventType`；`ParsedPayload.EventType`（`webhook.go:1006`）实为 msg_type。
-  - 改动：新增 10 个常量（见 spec D2）；`MessageEvent.EventType string`；`NormalizeEvent`（`inbox_ingress.go:480`）空值归一 `message.received`。
-  - 验收：`TestNormalizeEvent_DefaultsToReceived`、`TestNormalizeEvent_PreservesExplicitType`。
+  - 现状：`model/message_event.go`（93 行）无 `EventType`；`ParsedPayload.EventType`（`webhook.go:1006`）把 `event_type/event/type/msg_type` 一并 coalesce，语义混杂，**不能当事件类型来源**。
+  - 改动：新增 10 个常量（见 spec D2）；`MessageEvent.EventType string`；`NormalizeEvent`（`inbox_ingress.go:480`）空值归一 `message.received`（该函数是 `channelbot.ToMessageEvent` 与各 `webhook_channel_*.go` 两条构建路径的唯一收口点）。
+  - 验收：`TestNormalizeEvent_DefaultsToReceived`、`TestNormalizeEvent_PreservesExplicitType`、`TestInboundMessage_ToMessageEvent` 仍绿（channelbot/core 既有测试）。
 
 - [ ] **T202 消息编辑/撤回仓储能力**（P0｜依赖 T201｜M｜🟡）
-  - 改动：`repository/message_hub_*` 增 `UpdateContentByChannelMsgID(tenantID, channel, accountID, msgID, content)` 与 `MarkRecalled(tenantID, channel, msgID, at, reason)`（复用已有 `RecalledAt/RecallError`），均按 `(platform, msg_id)` 定位并返回是否命中。
-  - 验收：`TestMessageHub_UpdateContentByChannelMsgID`、`TestMessageHub_MarkRecalled`（含未命中返回 false）。
+  - 现状：`MessageHub` 已有 `RecalledAt *time.Time` + `RecallError string`（`model/ai_sales_champion.go:71-72`）；已有 `MarkRecalled(id, at)`（`message_hub_recall.go:25`，**WHERE 带 `direction='outbound'`**，语义是「撤我发出的消息」）、`MarkRecallFailed(id, reason)`、`GetByIDForRecall`。编辑方向的窄方法不存在。
+  - 改动：新增 `UpdateContentByChannelMsgID(ctx, channel, accountID, msgID, content)`；入站撤回新增 `MarkInboundRecalledByChannelMsgID(ctx, channel, accountID, msgID, at, reason)`（不能复用 `MarkRecalled`：它的方向条件会拒绝客户消息），`RecallError` 复用为原因列、`Extra.recall_source="platform"`。均按 `(platform, msg_id)` 定位。
+  - 验收：`TestMessageHub_UpdateContentByChannelMsgID`、`TestMessageHub_MarkInboundRecalled_RejectsOutboundRow`（方向互斥）、`TestMessageHub_MarkInboundRecalled_NotFound`。
+  - 说明：现有出站撤回链路（管理器按钮）不受影响 —— 不改 `MarkRecalled` 的条件，只加新入口。
 
 - [ ] **T203 入站按事件类型分流**（P0｜依赖 T201/T202｜M｜🟡）
   - 现状：`HandleIngressMessage`（`inbox_ingress.go:546`）无类型分支，一切当消息处理。
@@ -110,7 +115,8 @@
 
 - [ ] **T301 规则模型 + 迁移 066**（P0｜依赖 T201｜M｜🟡）
   - 改动：`model.ChannelRouteRule{TenantID, ID, Channel, AccountID, EventType, Match string(JSON), Target, TargetRef, Priority, Enabled, Note}`，表 `channel_route_rules`，索引 `(tenant_id, channel, enabled, priority)`；迁移 `066_channel_route_rules.sql`（幂等 `CREATE TABLE IF NOT EXISTS`）。
-  - 验收：`python3 scripts/check_model_migration.py` 绿；迁移在空库与有库各跑一次无错。
+  - 必做（否则 `check_model_migration.py` 直接红）：模型需登记进 `internal/pkg/db/migrate.go` 的 `allModels()`；`AccountID` 用 `string` 且空值语义 = 全账号。
+  - 验收：`python3 scripts/check_model_migration.py` 绿；迁移在空库与有库各跑一次无错；`TestChannelRouteRule_TableName` 与 `channel_route_rules` 一致。
 
 - [ ] **T302 仓储**（P0｜依赖 T301｜S｜🟡）
   - 改动：`repository/channel_route_rule.go`——`ListByTenant`、`ListEnabled(channel, accountID)`、`Upsert`、`Delete`（全部接收 tenantID 作第一参，fail-closed）。
@@ -125,8 +131,9 @@
   - 验收：`TestIngress_DiscardRuleStopsPipeline`、`TestIngress_RouteRuleIDRecorded`、`TestIngress_NoRuleKeepsLegacyBehavior`（默认放行，AI 触发行为与今天一致）。
 
 - [ ] **T305 规则管理 API**（P1｜依赖 T302｜M｜🟡）
-  - 改动：`controller` + `router`：`GET /api/channel-route-rules`、`PUT /api/channel-route-rules/:id`、`POST`、`DELETE`；tenant 从上下文取，禁止跨租户；变更写审计。
-  - 验收：`go test ./internal/controller/ -run TestChannelRouteRuleAPI`（含跨租户 404）。
+  - 改动：新增 `internal/router/channel_route_rule.go`（`setupChannelRouteRuleRoutes`，在 `router.go` 的 `auth` 组中注册）+ `controller/channel_route_rule.go`：`GET /api/channel-route-rules`、`POST`、`PUT /:id`、`DELETE /:id`；tenant 从上下文取，禁止跨租户；变更写审计。
+  - 必做：`route_policy_gate_test.go` 要求每条新路由要么有 `middleware.RequirePermission("channel_routes.write")`/`read`，要么进匿名白名单并写理由；`cross_tenant_scan_test.go` 需能识别租户绑定。
+  - 验收：`go test ./internal/controller/ -run TestChannelRouteRuleAPI`（含跨租户 404）；`go test ./internal/router/ -run 'RoutePolicy|CrossTenant'` 绿。
 
 ---
 
@@ -166,19 +173,21 @@
 ## Phase 6 生命周期读侧（P1）
 
 - [ ] **T601 `snoozed` 状态 + 迁移 067**（P1｜依赖 —｜M｜🟡）
-  - 改动：`model` 增 `InboxStatusSnoozed`、`SnoozedUntil *time.Time`、`ReopenCount int`；`067_inbox_conversation_snooze.sql`（幂等加列 + `(tenant_id, snoozed_until)` 索引）。
-  - 验收：迁移幂等；`TestInboxConversation_SnoozeSetsUntil`。
+  - 现状：状态是 `varchar` 字符串（`unread/open/assigned/closed`），无 pg enum，无需改 047；会话查询的 `CASE` 映射在 `repository/message_hub_inbox_conversation_query.go`（`closed` 过滤亦在此），加状态要同步这里。
+  - 改动：`model` 增 `InboxStatusSnoozed`、`SnoozedUntil *time.Time`、`ReopenCount int`；`067_inbox_conversation_snooze.sql`（幂等加列 + `(tenant_id, snoozed_until)` 索引）。AutoMigrate 只加列不改索引，索引必须写进 SQL。
+  - 验收：迁移幂等（跑两次无错）；`TestInboxConversation_SnoozeSetsUntil`；`TestInboxQuery_SnoozedNotInUnreadCount`。
 
 - [ ] **T602 到期重置 worker**（P1｜依赖 T601｜S｜🟡）
-  - 改动：复用现有延迟/定时机制，扫 `status='snoozed' AND snoozed_until <= now()` → `open`，并发安全（`UPDATE ... WHERE status='snoozed'` 条件更新）。
-  - 验收：`TestSnoozeExpiry_ReopensOnce`（并发两次只重置一次）。
+  - 改动：新建 `service/inbox_snooze_cron.go`，沿用现有 cron 形态（`retention_cleanup_cron.go` / `message_trace_cleanup_cron.go`：`time.Ticker` + `utils.SafeGo` + 启动/停止成对）；条件更新 `UPDATE ... SET status='open', snoozed_until=NULL WHERE status='snoozed' AND snoozed_until<=now()`。
+  - 验收：`TestSnoozeExpiry_ReopensOnce`（并发两次只重置一次）；`check-naked-goroutine.sh` 绿（goroutine 必须走 SafeGo）。
 
 - [ ] **T603 重开计数**（P1｜依赖 T601｜S｜🟡）
   - 改动：`message_hub_inbox_conversation.go:332-336` 重开分支 `reopen_count = reopen_count + 1`。
   - 验收：`TestInboxConversation_ReopenIncrementsCount`。
 
 - [ ] **T604 待首响查询 + API**（P1｜依赖 T601｜M｜🟡）
-  - 改动：查询层 `filter=awaiting_first_reply`（`waiting_since IS NOT NULL AND first_reply_at IS NULL`，`ORDER BY waiting_since ASC`）；controller 参数透传。
+  - 现状：查询层文件是 `repository/message_hub_inbox_conversation_query.go`（`closed` 等 filter 的 `CASE` 映射在此）。
+  - 改动：增 `filter=awaiting_first_reply`（`waiting_since IS NOT NULL AND first_reply_at IS NULL`，`ORDER BY waiting_since ASC`）；controller 参数透传。
   - 验收：`TestInboxQuery_AwaitingFirstReply`（含已首响/已关闭样本不计入）、API 层 `TestInboxAPI_FilterAwaitingFirstReply`。
 
 - [ ] **T605 首响时长指标**（P2｜依赖 T604｜M｜🟡）
@@ -202,8 +211,10 @@
   - 验收：fixture 回放（文本/图片/事件）+ `TestWecomcs_DuplicateCallbackIdempotent`（同 `msgid` 二次投递不重复入库）。
 
 - [ ] **T703 三处登记 + 账号表**（P0｜依赖 T702｜M｜🟡）
-  - 改动：`webhook.go` 的 `webhookInboundCapable`（L349）、`webhookInboundRejectHints`（移出）、`dispatchToChannel`（L1130）、`Verify`（L663）、`webhookAccountTableByChannel`（→ `wecomcs_accounts`）；`model.WecomcsAccount`（corpid/secret/open_kfid/token/aes_key/ai_agent_enabled）。
-  - 验收：`TestWebhookCapability_WecomcsAccepted`、`TestWebhookDispatch_Wecomcs`、租户解析失败 4xx 且不落库。
+  - 现状：`model/wecom.go` 的 `WeComAccount` 只有 CorpID/CorpSecret/AgentID/AgentSecret/AccessToken，**没有 `kf_token`/`kf_aes_key`/`open_kfid`**，只能新建表。
+  - 改动：新增 `model.WeComCSAccount`（表 `wecom_cs_accounts`，迁移 `068_wecom_cs_accounts.sql`：tenant_id/corpid/secret/open_kfid/token/aes_key/ai_agent_enabled/status）+ 登记 `allModels()`；`webhook.go` 五处：`webhookInboundCapable`(L349)、`webhookInboundRejectHints`(移出该渠道)、`dispatchToChannel`(L1130)、`Verify`(L663)、`webhookAccountTableByChannel`(L393 → `wecom_cs_accounts`)。
+  - 必做：新渠道常量要同步 `migrations/047_pg_enums.sql`（否则 `check-enum-consistency.sh` 红）＋ `migrations/063` 式的 `ALTER TYPE ... ADD VALUE IF NOT EXISTS` 增量脚本（离线 SQL 部署会拒绝未知枚举值）。
+  - 验收：`TestWebhookCapability_WecomcsAccepted`、`TestWebhookDispatch_Wecomcs`、租户解析失败 4xx 且不落库、`bash scripts/check-enum-consistency.sh` 绿。
 
 - [ ] **T704 出站 sender**（P0｜依赖 T701/T703｜M｜🟡）
   - 改动：`outbound_sender_wecomcs.go`——`SendMsg`（text/image/link/miniprogram），被动窗口超时自动转主动（`48h` 限制处理为可判定错误）。
@@ -225,7 +236,8 @@
 ## Phase 8 OneBot v11（P0）
 
 - [ ] **T801 `channelbot/onebot` 客户端**（P0｜依赖 T101｜L｜🟡）
-  - 改动：`channelbot/onebot/onebot.go`——HTTP 模式 `SendPrivateMsg/SendGroupMsg`（带 `echo` 关联与超时）、事件解析（`post_type`: message/notice/request/meta_event）、`VerifyToken`（`Authorization: Bearer` 或 `access_token`）。
+  - 改动：`channelbot/onebot/onebot.go`——HTTP 模式 `SendPrivateMsg/SendGroupMsg`（带 `echo` 关联与超时）、事件解析（`post_type`: message/notice/request/meta_event）、`VerifyToken`（`Authorization: Bearer` 或 `access_token`）。纯协议层，只用 `core.BaseClient`。
+  - 必做：OneBot 需要独立账号表 `onebot_accounts`（迁移 `069_onebot_accounts.sql`：self_id/access_token/http_url/ws_enabled/ai_agent_enabled）——`qq_accounts` 是 QQ 官方机器人（app_id/app_secret），字段语义不同不能复用；同样要过 `047` 枚举 + `allModels()` + `check-enum-consistency.sh`。
   - 验收：httptest 回放四种 `post_type`；`echo` 响应匹配到请求；token 缺失/错误返回可判定错误。
 
 - [ ] **T802 反向 WS 接入**（P0｜依赖 T801｜L｜🟡）
@@ -253,8 +265,8 @@
 ## Phase 9 Slack（P1）
 
 - [ ] **T901 `channelbot/slack` 客户端**（P1｜依赖 T101｜M｜🟡）
-  - 改动：`channelbot/slack/slack.go`——Events API 签名校验（`v0=` + `v0:{ts}:{body}` HMAC-SHA256 + 5 分钟时间窗）、`PostMessage(channel, text, threadTS)`、`OpenConversation`。
-  - 验收：`TestSlack_VerifySignature`（含过期时间戳拒绝）、`TestSlack_PostMessageThread`。
+  - 改动：`channelbot/slack/slack.go`——Events API 签名校验（`v0=` + `v0:{ts}:{body}` HMAC-SHA256 + 5 分钟时间窗）、`PostMessage(channel, text, threadTS)`、`OpenConversation`；账号表 `slack_accounts`（迁移 `071_slack_accounts.sql`：tenant_id/team_id/bot_token/signing_secret/app_id/ai_agent_enabled/status）+ `allModels()` + `047` 枚举 + `webhookAccountTableByChannel` 行。
+  - 验收：`TestSlack_VerifySignature`（含过期时间戳拒绝）、`TestSlack_PostMessageThread`、`bash scripts/check-enum-consistency.sh` 绿。
 
 - [ ] **T902 入站 handler + 登记**（P1｜依赖 T901｜M｜🟡）
   - 改动：`webhook_channel_slack.go`——`url_verification` challenge 短路（在验签后）、`app_mention`/`message.im` → 消息、`message_changed`/`message_deleted` → 事件类型；过滤 `bot_id`/`subtype`。
@@ -272,7 +284,7 @@
 ## Phase 10 企业微信智能机器人 wecombot（P2）
 
 - [ ] **T1001 回调解密客户端**（P2｜依赖 T101｜M｜🟡）
-  - 改动：`channelbot/wecombot/wecombot.go`——AES-CBC 解密（`EncodingAESKey` 43 位 → 32 字节）、签名校验、`PushMessage(webhook_url)`。
+  - 改动：`channelbot/wecombot/wecombot.go`——AES-CBC 解密（`EncodingAESKey` 43 位 → 32 字节）、签名校验、`PushMessage(webhook_url)`；账号表 `wecombot_accounts`（迁移 `072_wecombot_accounts.sql`：tenant_id/token/aes_key/webhook_url/ai_agent_enabled/status）+ `allModels()` + `047` 枚举。
   - 验收：官方样例密文解密用例（固定向量）+ 签名错误用例。
 
 - [ ] **T1002 入站 + sender + 能力表**（P2｜依赖 T1001｜L｜🟡）
@@ -284,7 +296,8 @@
 ## Phase 11 通用入口 custom（P1）
 
 - [ ] **T1101 入站契约 + 验签**（P1｜依赖 T203｜M｜🟡）
-  - 改动：`POST /api/webhook/custom/{account_id}`——JSON `{event_id, channel_msg_id, conversation_id, sender:{id,name}, msg_type, content, media_url, timestamp, is_group, group_id}`；`X-Hive-Signature: t=..,v1=..`（HMAC-SHA256，5 分钟窗）；`model.CustomAccount{secret, callback_url, ai_agent_enabled}`。
+  - 现状：`ChannelCustom` 常量已存在（`webhook_channel_telegram.go:82`），但无账号表、无验签、无入站适配器。
+  - 改动：`POST /api/webhook/custom/{account_id}`——JSON `{event_id, channel_msg_id, conversation_id, sender:{id,name}, msg_type, content, media_url, timestamp, is_group, group_id}`；`X-Hive-Signature: t=..,v1=..`（HMAC-SHA256，5 分钟窗，复用 `core.SecureEqual`）；新建 `model.CustomAccount`（表 `custom_accounts`，迁移 `070_custom_accounts.sql`：tenant_id/secret/callback_url/ai_agent_enabled/status）+ `allModels()` 登记 + `webhookAccountTableByChannel` 增行。
   - 验收：`TestCustomInbound_SignatureRejects`（错签/过期 → 401 且不落库）、`TestCustomInbound_Idempotent`、`TestCustomInbound_ContractValidation`（缺字段 400）。
 
 - [ ] **T1102 出站回调 sender**（P1｜依赖 T1101｜M｜🟡）
@@ -292,16 +305,18 @@
   - 验收：`TestCustomSender_SignsCallback`、`TestCustomSender_RetryOn5xx`。
 
 - [ ] **T1103 移除拒绝提示 + 文档**（P1｜依赖 T1102｜S｜🟡）
-  - 改动：`webhook.go:358-372` 的 custom 拒绝提示删除；`docs/channel-onboarding.md` 写自定义渠道契约（含 curl 示例）。
-  - 验收：`grep -c '不触发 AI' webhook.go` = 0；`TestWebhookCapability_CustomAccepted` 绿。
+  - 现状：启用 custom 会打破三处现存断言——`webhook.go:358-372` 拒绝提示、`webhookInboundCapable`(L349) 无该分支、`Verify`(L663) 无该分支；另有 `internal/controller/webhook_batchc_d03_http_test.go:75` 断言 `/api/webhook/custom/1` 返回「无入站适配器」。
+  - 改动：上述四处一并更新（提示删除、能力表加分支、Verify 加验签分支、测试断言改为成功路径或 401）。
+  - 验收：`grep -c '不触发 AI' internal/service/webhook.go` = 0；`TestWebhookCapability_CustomAccepted` 绿；`go test ./internal/controller/ -run BatchC` 绿。
 
 ---
 
 ## Phase 12 门禁与文档收口
 
 - [ ] **T1201 接入触点自动化校验**（P1｜依赖 Phase 7–11｜M｜🟡）
-  - 改动：`scripts/check-channel-onboarding.py`——对 `channelcaps.All()` 每个渠道校验 8 触点文件/符号存在（client、webhook handler、登记、sender、manifest、账号模型），缺失即失败并打印清单。
-  - 验收：删任一触点 → 失败并列出；全量 → 通过。
+  - 改动：`scripts/check-channel-onboarding.py`——对 `channelcaps.All()` 每个渠道校验触点存在（`model.Channel` 常量、`channelcaps` manifest、`webhookAccountTableByChannel` 行、`webhookInboundCapable` 分支、sender 注册、client 包），缺失即失败并打印清单；`webhookAccountTableByChannel` 表名读源码符号而非硬编码字符串。
+  - 必做：脚本自身要被 CI 调用（沿用现有 `check-*.sh` 的接入方式），否则等于没有。
+  - 验收：删任一触点 → 失败并列出具体渠道+缺失项；全量 → 通过。
 
 - [ ] **T1202 `capregistry` ↔ `channelcaps` 一致性测试**（P1｜依赖 T1201｜S｜🟡）
   - 改动：`internal/capregistry` 测试：`capregistry` 声明的平台必须在 `channelcaps` 有 manifest，反之允许（channelcaps 更细）。
@@ -315,10 +330,13 @@
   - 验收命令：
     ```
     cd user-server && go build ./... && go vet ./... \
-      && go test ./internal/service/ ./internal/channelbot/... ./internal/channelcaps/ ./internal/channelgw/... \
-      && cd .. && python3 scripts/check-layer-boundary.py && python3 scripts/check_model_migration.py
+      && go test ./internal/service/ ./internal/channelbot/... ./internal/channelcaps/ ./internal/channelgw/... ./internal/router/ ./internal/capregistry/ \
+      && cd .. && python3 scripts/check-layer-boundary.py \
+      && python3 scripts/check_model_migration.py \
+      && bash scripts/check-enum-consistency.sh \
+      && bash scripts/check-naked-goroutine.sh
     ```
-  - 验收：全绿；`delivery.md` 记录命令与结果。
+  - 验收：全绿；`delivery.md` 记录命令与结果（含 `check-enum-consistency.sh` 的 2 条既有 warning，新增渠道后不得新增 warning）。
 
 ---
 

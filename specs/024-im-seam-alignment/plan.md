@@ -27,6 +27,18 @@
 
 合计约 21–26 个工作日（不含真实账号等待）。
 
+**每个平台批次的隐性必做项**（漏一项会被门禁或线上拒绝，逐行复核后补入）：
+
+| 必做项 | 文件/命令 | 漏掉的后果 |
+|---|---|---|
+| 渠道常量进 pg enum | `migrations/047_pg_enums.sql` + `063_*` 式 `ADD VALUE IF NOT EXISTS` | 离线 SQL 部署拒绝未知 `message_hub.platform`；`check-enum-consistency.sh` 红 |
+| 账号模型登记 | `internal/pkg/db/migrate.go` `allModels()` | `check_model_migration.py` 红；AutoMigrate 不建表 |
+| 租户解析登记 | `webhookAccountTableByChannel`（`webhook.go:393`） | 回调 404 fail-closed，消息永远进不来 |
+| 能力/提示一致 | `webhookInboundCapable` + `webhookInboundRejectHints` | `TestWebhookInbound_RejectHintsStayConsistentWithCapability` 红 |
+| 验签分支 | `Verify`（`webhook.go:663`） | 伪造回调可入库 |
+| 能力表 | `channelcaps` manifest + `capregistry` | 能力文档漂移测试红 |
+| 拒绝路径不落库 | 每平台一条 4xx 用例 | 占位行污染收件箱 |
+
 ## 3. 并行边界
 
 允许并行（无共享文件）：
@@ -41,6 +53,10 @@
 - `webhook_outbound.go`（T110/T404）：只在 B1/B4 内改，平台批次只新增 sender 文件，不碰主函数。
 - `channelcaps/manifests.go`（T705/T805/T903 都要加）：按批次串行。
 - `model/ai_sales_champion.go` / `model/customer_channel.go`：迁移批次内独占。
+- `migrations/047_pg_enums.sql`（每个新平台都要加枚举值）：按批次串行，且必须同时提 `063` 式增量脚本。
+- `internal/pkg/db/migrate.go`（`allModels()`，每个新账号模型都要登记）：按批次串行。
+- 路由门禁表：`route_policy_gate_test.go` 的白名单与 `cross_tenant_scan_test.go` 的清单（T305 起新增路由均涉及）。
+- `internal/service/channel_card_delivery.go`：**在制品，未提交**；本 spec 全程不改该文件，只改调用侧（T403 若需要改内部实现，先由作者提交）。
 
 ## 4. 回滚点
 
@@ -49,7 +65,7 @@
 | B1 | 单 sender commit | `git revert <sha>` | 无 |
 | B2 | 事件类型 commit | revert 后 `EventType` 字段保留（空值即旧行为） | 无（新事件不入库） |
 | B3 | 规则表 migration | revert 代码 + 保留表（空表无副作用） | 无 |
-| B4-T501 | 065 迁移 | 065 提供 `--down` 注释段（手工重建旧索引） | 软删行可恢复（`deleted_at → NULL`） |
+| B4-T501 | 065 迁移 | 迁移器只有 up，无 `--down`；回滚 = 新建 065_rollback 脚本 `DROP INDEX CONCURRENTLY` 新键 + `CREATE UNIQUE INDEX CONCURRENTLY` 旧键（AutoMigrate 不会自动改/删索引） | 软删行可恢复（`deleted_at → NULL`） |
 | B5 | 067 迁移 | 新增列可空，revert 代码后列闲置 | 无 |
 | B6+ | 平台包 | 移除 `channelcaps` manifest + `dispatchToChannel` case 即下线，账号数据保留 | 无 |
 
