@@ -160,7 +160,12 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 			AppSecretVer int             `json:"app_secret_ver"`
 		} `json:"header,omitempty"`
 		Event *struct {
-			Sender *struct {
+			// 平台事件（非消息）的顶层字段：撤回/成员变更事件的 event.message 为空，
+			// 但 message_id / chat_id 直接挂在 event 下（specs/024 T205）。
+			MessageID string `json:"message_id"`
+			ChatID    string `json:"chat_id"`
+			ChatIDAlt string `json:"open_chat_id"`
+			Sender    *struct {
 				SenderID *struct {
 					UnionID string `json:"union_id"`
 					UserID  string `json:"user_id"`
@@ -185,6 +190,14 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 
 	if fsPayload.Challenge != "" && (fsPayload.Type == "url_verification" || fsPayload.Header == nil) {
 
+		return nil, nil
+	}
+	// 平台事件分流（specs/024 T205）：撤回/成员变更没有 event.message，
+	// 修复前一律 `return nil,nil` —— 客户撤回了什么、谁进了群，服务端完全不知道。
+	if fsPayload.Event != nil && fsPayload.Event.Message == nil {
+		if evType := feishuPlatformEventType(fsPayload.Header); evType != "" {
+			s.handleFeishuPlatformEvent(ctx, accountID, evType, fsPayload.Event.MessageID, firstNonEmpty(fsPayload.Event.ChatID, fsPayload.Event.ChatIDAlt), fsPayload.Header)
+		}
 		return nil, nil
 	}
 	if fsPayload.Event == nil || fsPayload.Event.Message == nil {
@@ -452,4 +465,70 @@ func (s *WebhookService) persistFeishuMediaAsync(ctx context.Context, accountID,
 		EnrichHubMediaURLByMsgID(gctx, s.messageHubRepo, "feishu", accountID, messageID, publicURL)
 		logger.Ctx(gctx).Info().Str("file_key", fileKey).Str("url", publicURL).Msg("[Feishu] 媒体已转存")
 	})
+}
+
+// feishuPlatformEventType 把飞书事件类型映射为中台事件类型（specs/024 T205）。
+//
+// 只映射「语义明确」的几类；其余返回空串表示「不认识的平台事件」——
+// 不静默当作消息，也不硬塞成 message.received。
+func feishuPlatformEventType(h *struct {
+	EventType    string          `json:"event_type"`
+	AppID        string          `json:"app_id"`
+	TenantKey    string          `json:"tenant_key"`
+	EventID      string          `json:"event_id"`
+	Token        string          `json:"token"`
+	CreateTime   feishuTimestamp `json:"create_time"`
+	AppSecretVer int             `json:"app_secret_ver"`
+}) string {
+	if h == nil {
+		return ""
+	}
+	switch h.EventType {
+	case "im.message.recalled_v1":
+		return model.EventTypeMessageDeleted
+	case "im.chat.member.user.added_v1", "im.chat.member.bot.added_v1":
+		return model.EventTypeGroupMemberJoined
+	case "im.chat.member.user.deleted_v1", "im.chat.member.bot.deleted_v1":
+		return model.EventTypeGroupMemberLeft
+	}
+	return ""
+}
+
+// handleFeishuPlatformEvent 把平台事件交给中台分流（编辑/撤回走仓储，其余只审计）。
+//
+// 不进 message_hub：撤回的是一条已有消息（按 message_id 定位原行），
+// 成员变更不是消息，都不该在会话里多出一行。
+func (s *WebhookService) handleFeishuPlatformEvent(ctx context.Context, accountID, eventType, messageID, chatID string, h *struct {
+	EventType    string          `json:"event_type"`
+	AppID        string          `json:"app_id"`
+	TenantKey    string          `json:"tenant_key"`
+	EventID      string          `json:"event_id"`
+	Token        string          `json:"token"`
+	CreateTime   feishuTimestamp `json:"create_time"`
+	AppSecretVer int             `json:"app_secret_ver"`
+}) {
+	if eventType == "" || messageID == "" {
+		return
+	}
+	event := &model.MessageEvent{
+		EventID:        messageID,
+		EventType:      eventType,
+		Channel:        model.ChannelFeishu,
+		ConversationID: chatID,
+		Timestamp:      time.Now(),
+		Extra: map[string]any{
+			"account_id":     accountID,
+			"channel_msg_id": messageID,
+		},
+	}
+	if h != nil {
+		event.Extra["tenant_key"] = h.TenantKey
+		if h.EventID != "" {
+			event.Extra["platform_event_id"] = h.EventID
+		}
+	}
+	if err := s.ingressHandler(ctx).HandleIngressMessage(ctx, event); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("account_id", accountID).
+			Str("event_type", eventType).Str("message_id", messageID).Msg("[Feishu] 平台事件处理失败")
+	}
 }

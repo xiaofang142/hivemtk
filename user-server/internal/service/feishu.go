@@ -171,10 +171,17 @@ func (s *FeishuIntegrationService) IngestMessage(ctx context.Context, req *Feish
 // 卡片 JSON 2.0 需在卡内声明 "schema":"2.0"，≤30KB。
 // conversationID 语义与 SendMessage 一致：非空时出站记录落同一会话。
 func (s *FeishuIntegrationService) SendInteractiveCard(ctx context.Context, accountID uint, openID, cardJSON, receiveIDType, conversationID string) error {
+	_, err := s.SendInteractiveCardWithReceipt(ctx, accountID, openID, cardJSON, receiveIDType, conversationID)
+	return err
+}
+
+// SendInteractiveCardWithReceipt 同 SendInteractiveCard，成功时返回平台回执 id
+// （飞书 message_id；specs/024 T211 用它登记卡片交互上下文）。
+func (s *FeishuIntegrationService) SendInteractiveCardWithReceipt(ctx context.Context, accountID uint, openID, cardJSON, receiveIDType, conversationID string) (string, error) {
 	if strings.TrimSpace(cardJSON) == "" {
-		return errors.New("feishu card content empty")
+		return "", errors.New("feishu card content empty")
 	}
-	return s.sendMessageTyped(ctx, accountID, openID, "interactive", cardJSON, receiveIDType, conversationID)
+	return s.sendMessageTypedEx(ctx, accountID, openID, "interactive", cardJSON, receiveIDType, conversationID)
 }
 
 // SendMessage 发送飞书文本消息。
@@ -734,24 +741,38 @@ func (s *TelegramIntegrationService) pushTelegramSendFailureTrace(ctx context.Co
 }
 
 func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uint, chatID int64, card *model.RichCard) error {
+	_, err := s.SendCardInteractive(ctx, accountID, chatID, card, "")
+	return err
+}
+
+// SendCardInteractive 发送富卡并返回平台回执 id（message_id）。
+//
+// interactionID 非空时，带 Action 的按钮写成 callback_data=interactionID（specs/024 T211）：
+// 客户点击后平台把该 id 回传，中台据 channel_interactions 反查「哪张卡、哪个动作」。
+// 按钮本身不逐颗分配 id —— 一张卡一行，动作集合在 Payload.actions 里，
+// 这样 callback_data 只有 19 字节，稳在 Telegram 64 字节上限内。
+//
+// SendCard 保持原签名（错误丢弃回执 id），老调用方零改动。
+func (s *TelegramIntegrationService) SendCardInteractive(ctx context.Context, accountID uint, chatID int64, card *model.RichCard, interactionID string) (string, error) {
 	if s.tg == nil {
-		return errors.New("db nil")
+		return "", errors.New("db nil")
 	}
 	if card == nil {
-		return errors.New("card 为空")
+		return "", errors.New("card 为空")
 	}
 	acc, err := s.tg.GetAccount(ctx, accountID)
 	if err != nil {
-		return fmt.Errorf("get tg account: %w", err)
+		return "", fmt.Errorf("get tg account: %w", err)
 	}
 	cli := telegram.NewTelegramClient(acc.BotToken, core.WithHTTPClient(httpclient.Client))
 	text := buildTelegramCardText(card)
-	kb := buildTelegramCardKeyboard(card)
-	if _, err := cli.SendMessage(ctx, chatID, text, telegram.SendMessageOptions{
+	kb := buildTelegramCardKeyboard(card, interactionID)
+	tgMsgID, err := cli.SendMessage(ctx, chatID, text, telegram.SendMessageOptions{
 		ParseMode:                 "HTML",
 		DisableMarkdownConversion: true,
 		InlineKeyboard:            kb,
-	}); err != nil {
+	})
+	if err != nil {
 		now := time.Now()
 		acc.LastErrorAt = &now
 		acc.LastErrorMsg = err.Error()
@@ -759,13 +780,19 @@ func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uin
 			// 持久化失败只影响下次重启前的自愈，记日志留痕
 			logger.Warnf("[tg] 新 token 持久化失败 account=%d: %v", acc.ID, uErr)
 		}
-		return fmt.Errorf("send tg card: %w", err)
+		return "", fmt.Errorf("send tg card: %w", err)
 	}
 	chatIDStr := fmt.Sprintf("%d", chatID)
+	// 回执键用真实 message_id（此前是 tg-card-out-<nano> 假号，无法与平台 join）；
+	// 平台没给 id（异常回包）才退回时间戳假号，保证 message_hub 主键非空。
+	receiptID := strconv.FormatInt(tgMsgID, 10)
+	if tgMsgID == 0 {
+		receiptID = fmt.Sprintf("tg-card-out-%d", time.Now().UnixNano())
+	}
 	hubMsg, _ := s.hub.Push(ctx, &PushMessageRequest{
 		Platform:       "telegram",
 		AccountID:      fmt.Sprintf("%d", accountID),
-		MsgID:          fmt.Sprintf("tg-card-out-%d", time.Now().UnixNano()),
+		MsgID:          receiptID,
 		Direction:      "outbound",
 		Status:         model.BridgeAckStatusDelivered,
 		MsgType:        "card",
@@ -782,7 +809,7 @@ func (s *TelegramIntegrationService) SendCard(ctx context.Context, accountID uin
 			logger.Warnf("[feishu] upsert outbound to inbox failed: %v", err)
 		}
 	}
-	return nil
+	return receiptID, nil
 }
 
 func buildTelegramCardText(card *model.RichCard) string {
@@ -810,7 +837,7 @@ func buildTelegramCardText(card *model.RichCard) string {
 	return b.String()
 }
 
-func buildTelegramCardKeyboard(card *model.RichCard) [][]telegram.InlineButton {
+func buildTelegramCardKeyboard(card *model.RichCard, interactionID string) [][]telegram.InlineButton {
 	if len(card.Buttons) == 0 {
 		return nil
 	}
@@ -819,7 +846,13 @@ func buildTelegramCardKeyboard(card *model.RichCard) [][]telegram.InlineButton {
 		if btn.Text == "" {
 			continue
 		}
-		rows = append(rows, []telegram.InlineButton{{Text: btn.Text, URL: btn.URL}})
+		ib := telegram.InlineButton{Text: btn.Text, URL: btn.URL}
+		// 有 Action 无 URL 的按钮本来是裸按钮（Telegram 会拒收无 url/callback 的内联按钮）；
+		// 有了交互上下文后统一写成 callback_data，客户点击才有回执可回。
+		if interactionID != "" && btn.URL == "" && btn.Action != "" {
+			ib.CallbackData = interactionID
+		}
+		rows = append(rows, []telegram.InlineButton{ib})
 	}
 	if len(rows) == 0 {
 		return nil

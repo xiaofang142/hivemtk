@@ -16,6 +16,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"hivemtk-user/internal/model"
 )
 
 // Feature 渠道的交互特征（非消息类型维度的能力）。
@@ -32,6 +34,9 @@ const (
 	FeatureStream Feature = "stream"
 	// FeatureRecall 支持撤回已发送消息。
 	FeatureRecall Feature = "recall"
+	// FeatureInteraction 支持可交互卡片回执（点击后能回 ack，不让客户端转圈）。
+	// 只有真正实现了 channelbot/core.InteractionAnswerer 的渠道才有此位（specs/024 T210）。
+	FeatureInteraction Feature = "interaction"
 )
 
 // Manifest 一个渠道的能力manifest。Inbound/Outbound 用 model.MsgType* 词表。
@@ -41,6 +46,9 @@ type Manifest struct {
 	Via      string // webhook / bridge / widget / api
 	Inbound  []string
 	Outbound []string
+	// Events 该渠道解析器能产出的平台事件类型（specs/024 T206）。
+	// 取值必须来自 model.EventType*；nil = 只有 message.received（纯消息渠道）。
+	Events   []string
 	Features []Feature
 	Note     string
 }
@@ -55,7 +63,13 @@ func Register(m Manifest) {
 	if _, ok := manifests[m.Channel]; ok {
 		panic(fmt.Sprintf("channelcaps: %s 重复登记", m.Channel))
 	}
+	if len(m.Events) == 0 {
+		// 默认值写在注册口而不是每个 manifest：13 个渠道里多数只产消息，
+		// 让「纯消息渠道」零声明，事件渠道才需要显式登记。
+		m.Events = []string{model.EventTypeMessageReceived}
+	}
 	m.Inbound = dedupSorted(m.Inbound)
+	m.Events = dedupSorted(m.Events)
 	m.Outbound = dedupSorted(m.Outbound)
 	m.Features = dedupFeatures(m.Features)
 	manifests[m.Channel] = m
@@ -158,7 +172,7 @@ func Markdown() string {
 	b.WriteString("# 渠道消息级能力表\n\n")
 	b.WriteString("> 本文件由 `internal/channelcaps` 生成（channelcaps.Markdown），测试钉死与注册表一致，**请勿手改**。\n")
 	b.WriteString("> 口径：只登记代码已落地的收发路径；未登记 = 未实现/未验证，出站降级与 AI 能力提示词一律按「不支持」处理。\n\n")
-	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|\n")
+	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 平台事件 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|---|\n")
 	for _, m := range All() {
 		features := make([]string, 0, len(m.Features))
 		for _, f := range m.Features {
@@ -167,8 +181,9 @@ func Markdown() string {
 		if len(features) == 0 {
 			features = []string{"—"}
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s |\n",
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			m.Channel, m.Label, m.Via, codeList(m.Inbound), codeList(m.Outbound),
+			codeList(m.Events),
 			strings.Join(features, " "), strings.ReplaceAll(m.Note, "|", "\\|"))
 	}
 	return b.String()

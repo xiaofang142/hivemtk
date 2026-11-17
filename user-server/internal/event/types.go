@@ -20,6 +20,17 @@ const (
 	TopicAssetDegradeWarning = "asset.degrade.warning"
 
 	TopicRagCorpusUpdated = "rag.corpus.updated"
+
+	// ── 消息生命周期（specs/024 T204）────────────────────────────────────
+	//
+	// 这些都**不是**「收到一条新消息」，所以不能复用 TopicCustomerMessageReceived：
+	// 那个 topic 的订阅者会当成新消息去触发 AI/未读，语义错位。
+	// 订阅方缺位时不阻塞入站（Bus 是 best-effort，队列满即丢）。
+	TopicCustomerMessageEdited       = "customer.message.edited"
+	TopicCustomerMessageDeleted      = "customer.message.deleted"
+	TopicCustomerMessageReaction     = "customer.message.reaction"
+	TopicCustomerGroupMemberChanged  = "customer.group.member.changed"
+	TopicCustomerInteractionCallback = "customer.interaction.callback"
 )
 
 // OperationLogPayload 操作日志事件载荷
@@ -164,4 +175,25 @@ type RagCorpusUpdatedPayload struct {
 	NewQualityLabel string    `json:"new_quality_label,omitempty"`
 	TraceID         string    `json:"trace_id"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// MessageLifecycleEvent 消息生命周期事件载荷（specs/024 T204）。
+//
+// 覆盖 edited / deleted / reaction / group.member.* / bot.* / interaction.callback。
+// 与 CustomerMessagePayload 的区别：这里**没有 Content 的「新消息」语义**，
+// 订阅方只应做审计、统计、缓存失效，不得当作新消息触发 AI 回复。
+//
+// TenantID 用 uint 而不是 audit 表的 string：StampTenantFromCtx 用反射按字段类型盖章，
+// 类型不一致会盖不上（订阅者拿到 0 在 on 模式下会 fail-closed 空转）。
+type MessageLifecycleEvent struct {
+	TenantID   uint           `json:"tenant_id,omitempty"`
+	EventID    string         `json:"event_id"`
+	Channel    string         `json:"channel"`
+	AccountID  string         `json:"account_id,omitempty"`
+	MsgID      string         `json:"msg_id,omitempty"`
+	EventType  string         `json:"event_type"`
+	SenderID   string         `json:"sender_id,omitempty"`
+	SessionID  string         `json:"session_id,omitempty"`
+	OccurredAt time.Time      `json:"occurred_at"`
+	Extra      map[string]any `json:"extra,omitempty"`
 }

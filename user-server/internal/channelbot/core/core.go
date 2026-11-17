@@ -198,6 +198,13 @@ type InboundMessage struct {
 	GroupID        string
 	GroupName      string
 	Timestamp      int64
+	// EventType 事件类型（specs/024 T205）；空串由中台归一为 message.received。
+	// 渠道把「不是一条新消息」的平台事件（编辑/撤回/入群/按钮回调）填成对应类型，
+	// 中台据此分流：不落 message_hub、不计未读、不触发 AI。
+	EventType string
+	// Extra 渠道特有字段（inbound 语义）：interaction_id / action / platform_msg_id 等。
+	// 只由渠道填，中台读取；与业务无关的字段不要塞进来。
+	Extra map[string]any
 }
 
 // IngressHandler 渠道入站消息中台接口。
@@ -208,6 +215,15 @@ type InboundMessage struct {
 // 由中台统一完成：标准化 → 人工锁判定 → AI 串行锁 → 落库 message_hub → 触发 AgentRuntime。
 type IngressHandler interface {
 	HandleIngressMessage(ctx context.Context, event *model.MessageEvent) error
+}
+
+// InteractionAnswerer 可交互卡片的即时答复能力（specs/024 T210）。
+//
+// 平台差异只在这里：Telegram 是 answerCallbackQuery，企微/飞书是回执事件。
+// Service 层按接口断言调用，不认识具体渠道类型；未实现该接口的渠道退化为
+// 「空 ack + 审计」——点击仍被记录，只是客户看不到平台级 toast。
+type InteractionAnswerer interface {
+	AnswerInteraction(ctx context.Context, interactionID, text string, showAlert bool) error
 }
 
 // ToMessageEvent 把归一化入站消息转换为消息中台的 MessageEvent。
@@ -225,11 +241,16 @@ func (m InboundMessage) ToMessageEvent(accountID string) *model.MessageEvent {
 		Content:        m.Content,
 		IsGroup:        m.IsGroup,
 		GroupID:        m.GroupID,
+		EventType:      m.EventType,
 		Extra: map[string]any{
 			"account_id":     accountID,
 			"channel_msg_id": m.MessageID,
 			"group_name":     m.GroupName,
 		},
+	}
+	// 渠道特有字段后写：同名字段以渠道为准（例如 TG 的 interaction_id）。
+	for k, v := range m.Extra {
+		event.Extra[k] = v
 	}
 	if m.Timestamp != 0 {
 		event.Timestamp = time.Unix(m.Timestamp, 0)

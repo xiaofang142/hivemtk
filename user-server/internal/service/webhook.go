@@ -76,6 +76,9 @@ type WebhookService struct {
 	unifiedMsgRepo repository.UnifiedMessageRepository
 	delayedRepo    *repository.DelayedOutboundRepository
 
+	// cardInteractionRepo 卡片交互上下文（specs/024 T211）：发送成功登记 pending 行。
+	cardInteractionRepo *repository.ChannelInteractionRepository
+
 	clueRepo repository.ClueRepository
 
 	ingressSvc *InboxIngressService
@@ -156,25 +159,26 @@ func NewWebhookService() *WebhookService {
 		unifiedMsgRepo = repository.NewUnifiedMessageRepository()
 	}
 	s := &WebhookService{
-		eventRepo:         eventRepo,
-		accountRepo:       accountRepo,
-		wecomRepo:         wecomRepo,
-		integration:       NewWeComIntegrationService(),
-		feishuIntegration: NewFeishuIntegrationService(feishuRepo, feishuMsgRepo),
-		tgIntegration:     NewTelegramIntegrationService(telegramRepo),
-		waIntegration:     NewWhatsAppCloudIntegrationService(waRepo),
-		qqIntegration:     NewQQIntegrationService(),
-		wechatIntegration: NewWechatService(),
-		telegramRepo:      telegramRepo,
-		qqRepo:            qqRepo,
-		tgGate:            NewTelegramGateService(),
-		feishuRepo:        feishuRepo,
-		waRepo:            waRepo,
-		messageHubRepo:    messageHubRepo,
-		inboxConvRepo:     inboxConvRepo,
-		unifiedMsgRepo:    unifiedMsgRepo,
-		delayedRepo:       repository.NewDelayedOutboundRepositoryDefault(),
-		ingressSvc:        NewInboxIngressService(),
+		eventRepo:           eventRepo,
+		accountRepo:         accountRepo,
+		wecomRepo:           wecomRepo,
+		integration:         NewWeComIntegrationService(),
+		feishuIntegration:   NewFeishuIntegrationService(feishuRepo, feishuMsgRepo),
+		tgIntegration:       NewTelegramIntegrationService(telegramRepo),
+		waIntegration:       NewWhatsAppCloudIntegrationService(waRepo),
+		qqIntegration:       NewQQIntegrationService(),
+		wechatIntegration:   NewWechatService(),
+		telegramRepo:        telegramRepo,
+		qqRepo:              qqRepo,
+		tgGate:              NewTelegramGateService(),
+		feishuRepo:          feishuRepo,
+		waRepo:              waRepo,
+		messageHubRepo:      messageHubRepo,
+		inboxConvRepo:       inboxConvRepo,
+		unifiedMsgRepo:      unifiedMsgRepo,
+		delayedRepo:         repository.NewDelayedOutboundRepositoryDefault(),
+		cardInteractionRepo: repository.NewChannelInteractionRepositoryDefault(),
+		ingressSvc:          NewInboxIngressService(),
 		integrations: webhookIntegrations{
 			feishu: func() *FeishuIntegrationService { return NewFeishuIntegrationService(feishuRepo, feishuMsgRepo) },
 			tg:     func() *TelegramIntegrationService { return NewTelegramIntegrationService(telegramRepo) },

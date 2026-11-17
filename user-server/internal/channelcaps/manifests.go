@@ -13,7 +13,13 @@ func init() {
 		Via:      "webhook",
 		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeLink, model.MsgTypeLocation, model.MsgTypeCard},
 		Outbound: []string{model.MsgTypeText, model.MsgTypeCard},
-		Features: []Feature{FeatureRichCard, FeatureGroup, FeatureMention},
+		Events: []string{
+			model.EventTypeMessageReceived, model.EventTypeMessageEdited,
+			model.EventTypeGroupMemberJoined, model.EventTypeGroupMemberLeft,
+			model.EventTypeInteractionCallback,
+		},
+		// FeatureInteraction：callback_query 能 answerCallbackQuery（T210 已落地）。
+		Features: []Feature{FeatureRichCard, FeatureGroup, FeatureMention, FeatureInteraction},
 		Note:     "群聊 @ 提及走 TelegramReplyMeta；卡片为真载体（outboundSupportsRichCards）",
 	})
 	Register(Manifest{
@@ -31,6 +37,11 @@ func init() {
 		Via:      "webhook",
 		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeLink, model.MsgTypeCard, model.MsgTypeLocation},
 		Outbound: []string{model.MsgTypeText, model.MsgTypeCard},
+		// 撤回与成员变更事件走 dispatchFeishu 的平台事件分支（specs/024 T205）。
+		Events: []string{
+			model.EventTypeMessageReceived, model.EventTypeMessageDeleted,
+			model.EventTypeGroupMemberJoined, model.EventTypeGroupMemberLeft,
+		},
 		Features: []Feature{FeatureRichCard, FeatureGroup, FeatureMention},
 		Note:     "卡片转 interactive JSON；媒体文件异步回填 media_url",
 	})
@@ -66,6 +77,8 @@ func init() {
 		Via:      "webhook",
 		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeLink, model.MsgTypeCard},
 		Outbound: []string{model.MsgTypeText},
+		// 机器人入群/退群（GROUP_ADD_ROBOT / GROUP_DEL_ROBOT）决定群还能不能收消息。
+		Events:   []string{model.EventTypeMessageReceived, model.EventTypeBotInvited, model.EventTypeBotRemoved},
 		Features: []Feature{FeatureGroup, FeatureMention},
 		Note:     "bot.q.qq.com；Ed25519 验签，被动回复带 channel_msg_id",
 	})

@@ -18,6 +18,7 @@ import (
 
 	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -603,6 +604,23 @@ func (c *Client) callMethod(ctx context.Context, method string, payload map[stri
 }
 
 // ApproveChatJoinRequest 批准入群申请（方案 A）
+// AnswerInteraction 回 ack 一次按钮点击（answerCallbackQuery）。
+//
+// 为什么必须有这一步：Telegram 客户端点完按钮会一直转圈，官方要求 15s 内答复，
+// 否则用户看到「加载失败」而我们的服务端其实已经处理完了——两种状态互相矛盾。
+// text 为空表示静默 ack（不弹提示）；showAlert=true 时以弹窗形式展示。
+func (c *Client) AnswerInteraction(ctx context.Context, interactionID, text string, showAlert bool) error {
+	if interactionID == "" {
+		return nil
+	}
+	payload := map[string]any{"callback_query_id": interactionID}
+	if text != "" {
+		payload["text"] = text
+		payload["show_alert"] = showAlert
+	}
+	return c.callMethod(ctx, "answerCallbackQuery", payload)
+}
+
 func (c *Client) ApproveChatJoinRequest(ctx context.Context, chatID, userID int64) error {
 	return c.callMethod(ctx, "approveChatJoinRequest", map[string]any{"chat_id": chatID, "user_id": userID})
 }
@@ -889,7 +907,9 @@ type TGCallbackQuery struct {
 
 // TGCallbackMessage 回调所属消息（精简）
 type TGCallbackMessage struct {
-	Chat TGChat `json:"chat"`
+	// MessageID 被点击的那条卡片消息 id（用于把点击映射回卡片）。
+	MessageID int64  `json:"message_id"`
+	Chat      TGChat `json:"chat"`
 }
 
 // TGMessage 消息
@@ -1112,17 +1132,29 @@ func (u *Update) ToInbound(accountID string) *core.InboundMessage {
 				chatType := cb.Message.Chat.Type
 				isGroup = chatType == "group" || chatType == "supergroup"
 			}
+			interactionID := "tg_cb_" + accountID + "_" + cb.ID
+			platformMsgID := ""
+			if cb.Message != nil && cb.Message.MessageID != 0 {
+				platformMsgID = strconv.FormatInt(cb.Message.MessageID, 10)
+			}
 			return &core.InboundMessage{
 				Platform:       "telegram",
 				AccountID:      accountID,
-				MessageID:      "tg_cb_" + accountID + "_" + cb.ID,
+				MessageID:      interactionID,
 				ConversationID: chatID,
 				SenderID:       strconv.FormatInt(cb.From.ID, 10),
 				SenderName:     cb.From.FirstName,
-				Content:        "/callback " + cb.Data,
-				MsgType:        "text",
-				IsGroup:        isGroup,
-				GroupID:        chatID,
+				// 回调不是一条消息：Content 保留按钮 data 供审计，EventType 决定它不走消息链路。
+				Content:   cb.Data,
+				MsgType:   "text",
+				IsGroup:   isGroup,
+				GroupID:   chatID,
+				EventType: model.EventTypeInteractionCallback,
+				Extra: map[string]any{
+					"interaction_id":  interactionID,
+					"action":          cb.Data,
+					"platform_msg_id": platformMsgID,
+				},
 			}
 		}
 		return nil

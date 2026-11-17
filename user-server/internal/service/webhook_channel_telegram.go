@@ -186,6 +186,9 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 				}
 			}
 			s.upsertInboxFromHub(ctx, hub, fromName)
+			// 入群事件同时登记为平台事件（specs/024 T205）：审计/总线需要「谁什么时候进群」，
+			// 与上面那条 event 行不冲突（事件不分流到消息表，只写审计 + 投事件总线）。
+			s.recordTelegramMemberEvent(ctx, accountID, model.EventTypeGroupMemberJoined, hub, fromName)
 
 			// 门控群（方案 B 禁言中）：验证提示已由 HandleNewMembers 发出，
 			// 不再叠加 AI 欢迎语，避免污染验证引导 / 诱导禁言用户误以为可发言
@@ -229,7 +232,15 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			}
 		}
 		s.upsertInboxFromHub(ctx, hub, fromName)
+		s.recordTelegramMemberEvent(ctx, accountID, model.EventTypeGroupMemberLeft, hub, fromName)
 		return hub, nil, nil
+	}
+
+	// 按钮回调（specs/024 T207/T210）：不是一条新消息——登记交互（幂等）→ 回 ack → 标已答复。
+	// 不能落 message_hub：否则客户点一次按钮，会话里就多一条「/callback xxx」幽灵消息并计入未读。
+	if tgPayload.CallbackQuery != nil && tgPayload.CallbackQuery.From != nil {
+		s.handleTelegramCallback(ctx, accountID, tgPayload)
+		return nil, nil, nil
 	}
 
 	type tgMsg struct {
@@ -302,23 +313,6 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			tm.chatType = "private"
 		}
 		picked = tm
-	} else if tgPayload.CallbackQuery != nil && tgPayload.CallbackQuery.From != nil {
-		chatID := int64(0)
-		chatType := "private"
-		if tgPayload.CallbackQuery.Message != nil {
-			chatID = tgPayload.CallbackQuery.Message.Chat.ID
-			chatType = tgPayload.CallbackQuery.Message.Chat.Type
-		}
-		picked = &tgMsg{
-			msgID:     0,
-			chatID:    chatID,
-			chatType:  chatType,
-			fromID:    tgPayload.CallbackQuery.From.ID,
-			fromName:  tgPayload.CallbackQuery.From.FirstName,
-			fromIsBot: tgPayload.CallbackQuery.From.IsBot,
-			text:      "/callback " + tgPayload.CallbackQuery.Data,
-			msgType:   model.MsgTypeText,
-		}
 	}
 	if picked == nil {
 		return nil, nil, nil
@@ -679,4 +673,78 @@ func (s *WebhookService) getTelegramWebhookSecret(ctx context.Context, accountID
 		return ""
 	}
 	return acc.WebhookSecret
+}
+
+// handleTelegramCallback 处理按钮回调（specs/024 T207/T210）。
+//
+// 顺序不可换：先登记（审计/交互行）再 ack。反过来的话 ack 成功后登记失败，
+// 平台不会再重投（已答复），这次点击就彻底查无实据。
+// ack 失败只记日志：平台侧会显示加载失败，但交互行仍是 pending，可人工重试或等过期清理。
+func (s *WebhookService) handleTelegramCallback(ctx context.Context, accountID string, u *telegram.Update) {
+	if u == nil || u.CallbackQuery == nil || u.CallbackQuery.From == nil {
+		return
+	}
+	cb := u.CallbackQuery
+	inbound := u.ToInbound(accountID)
+	if inbound == nil {
+		return
+	}
+	event := inbound.ToMessageEvent(accountID)
+	if id := u.HubMsgID(accountID); id != "" {
+		event.EventID = id
+	}
+	if err := s.ingressHandler(ctx).HandleIngressMessage(ctx, event); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("account_id", accountID).
+			Str("callback_id", cb.ID).Msg("[TG] 按钮回调登记失败")
+		return
+	}
+	interactionID, _ := event.Extra["interaction_id"].(string)
+	if interactionID == "" {
+		interactionID = "tg_cb_" + accountID + "_" + cb.ID
+	}
+
+	accID, _ := strconv.ParseUint(accountID, 10, 64)
+	if accID == 0 || s.tgGate == nil {
+		return
+	}
+	cli, err := s.tgGate.client(ctx, uint(accID))
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("account_id", accountID).Msg("[TG] 取 bot client 失败，无法 ack")
+		return
+	}
+	if err := cli.AnswerInteraction(ctx, cb.ID, "", false); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("callback_id", cb.ID).Msg("[TG] answerCallbackQuery 失败")
+		return
+	}
+	if s.ingressSvc != nil {
+		s.ingressSvc.MarkInteractionAnswered(ctx, model.ChannelTelegram, interactionID)
+	}
+}
+
+// recordTelegramMemberEvent 把入群/退群登记为平台事件（审计 + 事件总线）。
+//
+// 保留既有 event 行的原因：入群欢迎语、门控禁言、线索挖掘都挂在那条 hub 行上，
+// 改成「只审计」会静默砍掉产品行为。这里做的是**追加**证据，不是替换路径。
+func (s *WebhookService) recordTelegramMemberEvent(ctx context.Context, accountID, eventType string, hub *model.MessageHub, senderName string) {
+	if hub == nil {
+		return
+	}
+	event := &model.MessageEvent{
+		EventID:        hub.MsgID,
+		EventType:      eventType,
+		Channel:        model.ChannelTelegram,
+		SenderID:       hub.SenderID,
+		SenderName:     senderName,
+		ConversationID: hub.ConversationID,
+		Timestamp:      hub.SentAt,
+		Extra: map[string]any{
+			"account_id":     accountID,
+			"channel_msg_id": hub.MsgID,
+			"group_id":       hub.GroupID,
+		},
+	}
+	if err := s.ingressHandler(ctx).HandleIngressMessage(ctx, event); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("account_id", accountID).
+			Str("event_type", eventType).Msg("[TG] 成员事件登记失败")
+	}
 }

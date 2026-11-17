@@ -11,16 +11,16 @@ import "time"
 //
 // 幂等：唯一键 (tenant_id, channel, channel_msg_id, event_type) —— 平台重投同一事件不产生第二行。
 type ChannelEventAudit struct {
-	TenantID     string    `gorm:"column:tenant_id;type:varchar(64);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:1" json:"tenant_id"`
-	Channel      string    `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_channel_event_audit,priority:2" json:"channel"`
-	ChannelMsgID string    `gorm:"column:channel_msg_id;type:varchar(128);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:3" json:"channel_msg_id"`
-	EventType    string    `gorm:"column:event_type;type:varchar(64);not null;uniqueIndex:idx_channel_event_audit,priority:4" json:"event_type"`
-	ID           uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	AccountID    string    `gorm:"column:account_id;type:varchar(64);not null;default:'';index" json:"account_id"`
-	SenderID     string    `gorm:"column:sender_id;type:varchar(128);not null;default:''" json:"sender_id"`
-	SenderName   string    `gorm:"column:sender_name;type:varchar(128);not null;default:''" json:"sender_name"`
-	ConversationID string  `gorm:"column:conversation_id;type:varchar(128);not null;default:'';index" json:"conversation_id"`
-	RouteRuleID  uint      `gorm:"column:route_rule_id;not null;default:0" json:"route_rule_id"`
+	TenantID       string `gorm:"column:tenant_id;type:varchar(64);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:1" json:"tenant_id"`
+	Channel        string `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_channel_event_audit,priority:2" json:"channel"`
+	ChannelMsgID   string `gorm:"column:channel_msg_id;type:varchar(128);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:3" json:"channel_msg_id"`
+	EventType      string `gorm:"column:event_type;type:varchar(64);not null;uniqueIndex:idx_channel_event_audit,priority:4" json:"event_type"`
+	ID             uint   `gorm:"primaryKey;autoIncrement" json:"id"`
+	AccountID      string `gorm:"column:account_id;type:varchar(64);not null;default:'';index" json:"account_id"`
+	SenderID       string `gorm:"column:sender_id;type:varchar(128);not null;default:''" json:"sender_id"`
+	SenderName     string `gorm:"column:sender_name;type:varchar(128);not null;default:''" json:"sender_name"`
+	ConversationID string `gorm:"column:conversation_id;type:varchar(128);not null;default:'';index" json:"conversation_id"`
+	RouteRuleID    uint   `gorm:"column:route_rule_id;not null;default:0" json:"route_rule_id"`
 	// Payload 保留平台原始事件的关键字段（动作、成员、按钮值等），排查时不依赖外部日志。
 	Payload   JSONMap   `gorm:"column:payload;type:jsonb" json:"payload,omitempty"`
 	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime;index" json:"created_at"`

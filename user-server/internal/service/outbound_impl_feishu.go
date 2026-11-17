@@ -43,11 +43,16 @@ func (s *WebhookService) outboundFeishu(ctx context.Context, channel WebhookChan
 			logger.Ctx(ctx).Warn().Err(merr).Str("channel", "feishu").Msg("feishu card marshal failed, skip")
 			continue
 		}
-		if cerr := s.feishuIntegration.SendInteractiveCard(ctx, uint(accID), target, cardJSON, idType, outConv); cerr != nil {
+		interactionID := planCardInteraction(card)
+		platformMsgID, cerr := s.feishuIntegration.SendInteractiveCardWithReceipt(ctx, uint(accID), target, cardJSON, idType, outConv)
+		if cerr != nil {
 			logger.Ctx(ctx).Error().Err(cerr).Str("channel", "feishu").Str("open_id", target).Msg("outbound feishu card failed")
-		} else {
-			sent = true
+			continue
 		}
+		sent = true
+		// 飞书卡片按钮的回调事件（card.action.trigger）尚未接线（025 平台批）；
+		// 这里先登记，保证回执 id / 动作集合可查，到期由 T211 worker 收口。
+		s.registerCardInteraction(ctx, ChannelFeishu, accountID, platformMsgID, interactionID, card, hubMsg)
 	}
 	return
 }

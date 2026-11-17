@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"hivemtk-user/internal/event"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
@@ -52,6 +53,7 @@ func (s *InboxIngressService) handlePlatformEvent(ctx context.Context, event *mo
 	}
 
 	s.recordChannelEventAudit(ctx, event, accountID, result.RouteRuleID)
+	publishPlatformEvent(ctx, event, accountID)
 	return result, nil
 }
 
@@ -98,6 +100,23 @@ func (s *InboxIngressService) recordInteractionCallback(ctx context.Context, eve
 	return "interaction.callback"
 }
 
+// MarkInteractionAnswered 在 ack 成功后把交互行置为 answered（specs/024 T210）。
+//
+// 失败/未命中都返回 false 且不报错：MarkAnswered 本身是幂等条件更新
+// （WHERE status='pending'），重复 ack 命中 0 行是正常现象，不是错误。
+func (s *InboxIngressService) MarkInteractionAnswered(ctx context.Context, channel, interactionID string) bool {
+	if s == nil || s.interactionRepo == nil || interactionID == "" {
+		return false
+	}
+	ok, err := s.interactionRepo.MarkAnswered(ctx, channel, interactionID, time.Now())
+	if err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Str("channel", channel).
+			Str("interaction_id", interactionID).Msg("[Inbox] 交互答复状态回写失败")
+		return false
+	}
+	return ok
+}
+
 // recordChannelEventAudit 幂等写一条平台事件审计；失败只记日志——
 // 审计写不进去不能让平台回调整体失败（否则平台会无限重投）。
 func (s *InboxIngressService) recordChannelEventAudit(ctx context.Context, event *model.MessageEvent, accountID string, routeRuleID uint) {
@@ -131,6 +150,45 @@ func (s *InboxIngressService) recordChannelEventAudit(ctx context.Context, event
 			Str("event_type", event.EventType).Str("channel_msg_id", event.EventID).
 			Msg("[Inbox] 平台事件审计写入失败")
 	}
+}
+
+// publishPlatformEvent 把平台事件投到事件总线（specs/024 T204）。
+//
+// best-effort：Bus 队列满即丢，这里不重试、不阻塞入站——丢了还有 channel_event_audits
+// 这一行证据，而阻塞入站会让平台回调超时重投，反而放大问题。
+func publishPlatformEvent(ctx context.Context, ev *model.MessageEvent, accountID string) {
+	if ev == nil {
+		return
+	}
+	var topic string
+	switch ev.EventType {
+	case model.EventTypeMessageEdited:
+		topic = event.TopicCustomerMessageEdited
+	case model.EventTypeMessageDeleted:
+		topic = event.TopicCustomerMessageDeleted
+	case model.EventTypeMessageReaction:
+		topic = event.TopicCustomerMessageReaction
+	case model.EventTypeInteractionCallback:
+		topic = event.TopicCustomerInteractionCallback
+	default:
+		topic = event.TopicCustomerGroupMemberChanged // group.member_* / bot.*
+	}
+	occurredAt := ev.Timestamp
+	if occurredAt.IsZero() {
+		occurredAt = time.Now()
+	}
+	payload := event.MessageLifecycleEvent{
+		EventID:    ev.EventID,
+		Channel:    ev.Channel,
+		AccountID:  accountID,
+		MsgID:      ev.EventID,
+		EventType:  ev.EventType,
+		SenderID:   ev.SenderID,
+		SessionID:  ev.SessionID,
+		OccurredAt: occurredAt,
+		Extra:      ev.Extra,
+	}
+	event.PublishCtx(ctx, topic, payload)
 }
 
 func extraString(event *model.MessageEvent, key string) string {

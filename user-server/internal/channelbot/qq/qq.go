@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/channelbot/core"
+	"hivemtk-user/internal/model"
 )
 
 const (
@@ -643,6 +644,33 @@ func (e *Event) HubMsgID() string {
 func (e *Event) ToInbound(accountID string) *core.InboundMessage {
 	in := e.inbound()
 	if in == nil {
+		// 机器人入群/退群（specs/024 T205）：官方事件没有消息体，但它决定「这个群还能不能收到消息」，
+		// 静默丢弃会让群配置永远停在「已接入」。只填事件类型，不带正文。
+		switch e.T {
+		case "GROUP_ADD_ROBOT", "GROUP_DEL_ROBOT":
+			var d struct {
+				GroupOpenID    string `json:"group_openid"`
+				OpMemberOpenID string `json:"op_member_openid"`
+			}
+			_ = json.Unmarshal(e.D, &d)
+			eventType := model.EventTypeBotInvited
+			if e.T == "GROUP_DEL_ROBOT" {
+				eventType = model.EventTypeBotRemoved
+			}
+			return &core.InboundMessage{
+				Platform:       "qq",
+				AccountID:      accountID,
+				MessageID:      e.HubMsgID(),
+				ConversationID: d.GroupOpenID,
+				SenderID:       d.OpMemberOpenID,
+				Content:        "",
+				MsgType:        model.MsgTypeText,
+				IsGroup:        true,
+				GroupID:        d.GroupOpenID,
+				EventType:      eventType,
+				Extra:          map[string]any{"group_openid": d.GroupOpenID, "op_member_openid": d.OpMemberOpenID},
+			}
+		}
 		return nil
 	}
 	// 官方 d.id 缺失时留空串而不是 "qq_"：后者是个恒定值，会把所有无 id 的消息

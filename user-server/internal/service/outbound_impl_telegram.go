@@ -49,11 +49,16 @@ func (s *WebhookService) outboundTelegram(ctx context.Context, channel WebhookCh
 	}
 
 	for _, card := range cards {
-		if err := s.tgIntegration.SendCard(ctx, uint(accID), chatID, &card); err != nil {
+		// 交互 id 必须在发送前生成（要写进 callback_data），发送成功后再登记上下文；
+		// 发送失败不登记，避免留下永远等不到点击的 pending 行。
+		interactionID := planCardInteraction(card)
+		platformMsgID, err := s.tgIntegration.SendCardInteractive(ctx, uint(accID), chatID, &card, interactionID)
+		if err != nil {
 			logger.Ctx(ctx).Error().Err(err).Str("channel", "telegram").Int64("chat_id", chatID).Msg("outbound card failed")
-		} else {
-			sent = true
+			continue
 		}
+		sent = true
+		s.registerCardInteraction(ctx, ChannelTelegram, accountID, platformMsgID, interactionID, card, hubMsg)
 	}
 	return
 }

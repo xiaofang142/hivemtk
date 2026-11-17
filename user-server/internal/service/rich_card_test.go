@@ -54,7 +54,7 @@ func TestBuildTelegramCardKeyboard(t *testing.T) {
 			{Text: "详情", URL: "https://x.com/d"},
 		},
 	}
-	kb := buildTelegramCardKeyboard(card)
+	kb := buildTelegramCardKeyboard(card, "")
 	if len(kb) != 2 {
 		t.Fatalf("expected 2 keyboard rows, got %d", len(kb))
 	}
@@ -64,7 +64,7 @@ func TestBuildTelegramCardKeyboard(t *testing.T) {
 }
 
 func TestBuildTelegramCardKeyboard_Empty(t *testing.T) {
-	if kb := buildTelegramCardKeyboard(&model.RichCard{Title: "x"}); kb != nil {
+	if kb := buildTelegramCardKeyboard(&model.RichCard{Title: "x"}, ""); kb != nil {
 		t.Fatalf("expected nil keyboard when no buttons, got %+v", kb)
 	}
 }

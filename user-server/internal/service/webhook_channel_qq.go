@@ -93,6 +93,11 @@ func (s *WebhookService) dispatchQQ(ctx context.Context, accountID string, p *Pa
 	if inbound == nil {
 		return nil, nil
 	}
+	// 机器人入群/退群不是消息（specs/024 T205）：中台已按事件类型分流（只审计/总线），
+	// 这里不能再返回 hub —— 返回了会被 handleJob 当成一条客户消息去触发 AI。
+	if inbound.EventType != "" && inbound.EventType != model.EventTypeMessageReceived {
+		return nil, nil
+	}
 
 	// 同步构造 hub 记录供 sendOutbound / AI 触发使用（Ingress 内部已落库，此处为内存视图）。
 	// MsgID/Extra 与 Ingress 落库口径对齐：MsgID=HubMsgID()（媒体回填按它找行），
