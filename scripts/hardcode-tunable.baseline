@@ -441,3 +441,9 @@ ChainMaxSteps
 #   「参数中心改了、列宽没改」的半态成为可能，与列宽这一硬约束的语义相反。
 #   截断副作用（签名参数破坏→链接失效可观测）见 TruncateMediaURL 注释。
 MaxMediaURLLen
+
+# ── B2（2026-11-18 清单整理收口轮）：观测数据协议版本 ──────────────────────────
+# TimingVersion（tracing/observation.go）——观测事件「形状版本」协议号：消费端按版本
+# 解读字段布局，单边升版＝对端解读错位，与 B1-a 同族（协议形状，非运维旋钮）。
+# 要调必须与全部消费方（落库 schema/巡检 SQL/看板）同步发版。
+TimingVersion
