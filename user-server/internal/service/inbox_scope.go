@@ -131,6 +131,22 @@ func (s *InboxService) MuteScoped(ctx context.Context, conversationID uint, mute
 	return s.Mute(ctx, conversationID, muted)
 }
 
+// SnoozeScoped 带归属校验的「稍后处理」
+func (s *InboxService) SnoozeScoped(ctx context.Context, conversationID uint, until time.Time, sc InboxScope) (bool, error) {
+	if _, err := s.ensureVisible(ctx, conversationID, sc); err != nil {
+		return false, err
+	}
+	return s.Snooze(ctx, conversationID, until)
+}
+
+// UnsnoozeScoped 带归属校验的取消「稍后处理」
+func (s *InboxService) UnsnoozeScoped(ctx context.Context, conversationID uint, sc InboxScope) (bool, error) {
+	if _, err := s.ensureVisible(ctx, conversationID, sc); err != nil {
+		return false, err
+	}
+	return s.Unsnooze(ctx, conversationID)
+}
+
 // AddTagScoped 带归属校验的加标签
 func (s *InboxService) AddTagScoped(ctx context.Context, conversationID uint, tag string, sc InboxScope) error {
 	if _, err := s.ensureVisible(ctx, conversationID, sc); err != nil {

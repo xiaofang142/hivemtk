@@ -487,16 +487,34 @@ type InboxConversation struct {
 	//                  事实，列表排序与超时提醒不必再按消息表反推。
 	//   FirstReplyAt   首响时间，只写一次（首条非客户消息）。
 	//   LastActivityAt 最近一条任意方向消息的时间，不受 unread 清零影响。
-	WaitingSince   *time.Time     `gorm:"index" json:"waiting_since"`
-	FirstReplyAt   *time.Time     `json:"first_reply_at"`
-	LastActivityAt *time.Time     `gorm:"index" json:"last_activity_at"`
-	ClosedAt       *time.Time     `json:"closed_at"`
-	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt      time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	WaitingSince   *time.Time `gorm:"index" json:"waiting_since"`
+	FirstReplyAt   *time.Time `json:"first_reply_at"`
+	LastActivityAt *time.Time `gorm:"index" json:"last_activity_at"`
+	ClosedAt       *time.Time `json:"closed_at"`
+	// SnoozedUntil 「稍后处理」到期时间（specs/024 T601）：status=snoozed 时生效，
+	// 到期由 worker 改回 open。它不改 unread/open/assigned/closed 的既有语义。
+	SnoozedUntil *time.Time `gorm:"index" json:"snoozed_until,omitempty"`
+	// ReopenCount 「已关闭 → 因新入站重开」的累计次数（specs/024 T603）：
+	// 用来识别反复回来的客户，而不是只看到最后一次状态。
+	ReopenCount int            `gorm:"not null;default:0" json:"reopen_count"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (InboxConversation) TableName() string { return "inbox_conversations" }
+
+// 收件箱会话状态。
+//
+// snoozed 与 closed 的区别：closed 是「这件事结束了」，snoozed 是「我稍后再看」——
+// 后者到期会自动回到 open，且不计入 unread 统计（客户并没有新消息）。
+const (
+	InboxStatusUnread   = "unread"
+	InboxStatusOpen     = "open"
+	InboxStatusAssigned = "assigned"
+	InboxStatusClosed   = "closed"
+	InboxStatusSnoozed  = "snoozed"
+)
 
 // InboxAssignment 统一收件箱分配历史
 type InboxAssignment struct {

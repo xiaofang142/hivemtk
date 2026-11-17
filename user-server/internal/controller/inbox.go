@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"time"
 )
 
 // InboxController 统一收件箱控制器
@@ -58,6 +59,7 @@ func (c *InboxController) List(ctx *gin.Context) {
 		Status:     ctx.Query("status"),
 		AssignedTo: ctx.Query("assigned_to"),
 		OrderBy:    ctx.Query("order_by"),
+		Filter:     ctx.Query("filter"),
 	}
 	if v := ctx.Query("assigned_sop"); v != "" {
 		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
@@ -661,4 +663,92 @@ func (c *InboxIngressController) ReconcileOutboundUnknown(ctx *gin.Context) {
 		"target":   req.Target,
 		"operator": operator,
 	}, "对账完成")
+}
+
+// @Summary 稍后处理
+// @Tags      inbox
+// @Router    /api/inbox/conversations/{id}/snooze [post]
+// Snooze 把会话置为 snoozed，到期自动回到 open（specs/024 T601/T602）。
+//
+// 参数 until 传 RFC3339 时间；不传则默认 4 小时后。
+func (c *InboxController) Snooze(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的ID")
+		return
+	}
+	var req struct {
+		Until string `json:"until"`
+	}
+	_ = ctx.ShouldBindJSON(&req)
+	until := time.Now().Add(4 * time.Hour)
+	if req.Until != "" {
+		t, perr := time.Parse(time.RFC3339, req.Until)
+		if perr != nil {
+			response.Error(ctx, http.StatusBadRequest, "until 必须是 RFC3339 时间")
+			return
+		}
+		if !t.After(time.Now()) {
+			response.Error(ctx, http.StatusBadRequest, "until 必须晚于当前时间")
+			return
+		}
+		until = t
+	}
+	if _, err := c.svc.SnoozeScoped(ctx.Request.Context(), uint(id), until, inboxScopeFromCtx(ctx)); err != nil {
+		writeScopedError(ctx, err)
+		return
+	}
+	response.Success(ctx, gin.H{"id": id, "snoozed_until": until.UTC().Format(time.RFC3339)}, "已稍后处理")
+}
+
+// @Summary 取消稍后处理
+// @Tags      inbox
+// @Router    /api/inbox/conversations/{id}/unsnooze [post]
+// Unsnooze 手动取消「稍后处理」，直接回到 open。
+func (c *InboxController) Unsnooze(ctx *gin.Context) {
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 32)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的ID")
+		return
+	}
+	if _, err := c.svc.UnsnoozeScoped(ctx.Request.Context(), uint(id), inboxScopeFromCtx(ctx)); err != nil {
+		writeScopedError(ctx, err)
+		return
+	}
+	response.Success(ctx, gin.H{"id": id}, "已取消稍后处理")
+}
+
+// @Summary 首响时长指标
+// @Tags      inbox
+// @Router    /api/inbox/metrics/first-reply [get]
+// FirstReplyMetrics 首响时长 p50/p95（specs/024 T605）。
+//
+// 只读聚合：样本 = 有等待起点且有首响的会话；未回复的会话不计入分母。
+func (c *InboxController) FirstReplyMetrics(ctx *gin.Context) {
+	parse := func(key string) (time.Time, bool) {
+		v := ctx.Query(key)
+		if v == "" {
+			return time.Time{}, true
+		}
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			response.Error(ctx, http.StatusBadRequest, key+" 必须是 RFC3339 时间")
+			return time.Time{}, false
+		}
+		return t, true
+	}
+	from, ok := parse("from")
+	if !ok {
+		return
+	}
+	to, ok := parse("to")
+	if !ok {
+		return
+	}
+	m, err := c.svc.FirstReplyMetrics(ctx.Request.Context(), ctx.Query("platform"), from, to)
+	if err != nil {
+		writeScopedError(ctx, err)
+		return
+	}
+	response.Success(ctx, m, "获取成功")
 }

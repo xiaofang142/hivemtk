@@ -52,6 +52,12 @@ func (r *InboxConversationRepository) ListByQuery(ctx context.Context, q InboxCo
 	if q.Keyword != "" {
 		tx = tx.Where("last_message_preview LIKE ?", "%"+q.Keyword+"%")
 	}
+	// 「待首响」筛选（specs/024 T604）：客户在等、我们还没回。
+	// snoozed 排除在外——那是「我稍后再看」，不是「客户在等」；把它算进 SLA 会让数字虚高。
+	if q.Filter == "awaiting_first_reply" {
+		tx = tx.Where("waiting_since IS NOT NULL AND first_reply_at IS NULL AND closed_at IS NULL").
+			Where("status <> ?", model.InboxStatusSnoozed)
+	}
 
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
@@ -70,6 +76,11 @@ func (r *InboxConversationRepository) ListByQuery(ctx context.Context, q InboxCo
 		orderBy = "last_message_at ASC"
 	case "latest_desc":
 		orderBy = "last_message_at DESC"
+	}
+	// 待首响默认按等待时长升序：等最久的最该先被看到。
+	// 只有调用方没显式指定排序时才生效，避免覆盖前端用户的排序选择。
+	if q.Filter == "awaiting_first_reply" && q.OrderBy == "" {
+		orderBy = "waiting_since ASC"
 	}
 
 	var list []*model.InboxConversation

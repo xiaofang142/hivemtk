@@ -187,6 +187,8 @@ type InboxQuery struct {
 	Page        int
 	PageSize    int
 	OrderBy     string
+	// Filter 语义筛选（specs/024 T604）：awaiting_first_reply = 客户在等、我们还没回。
+	Filter string
 }
 
 type InboxAssignRequest struct {
@@ -361,6 +363,7 @@ func (s *InboxService) List(ctx context.Context, q InboxQuery) ([]*model.InboxCo
 		Page:        q.Page,
 		PageSize:    q.PageSize,
 		OrderBy:     q.OrderBy,
+		Filter:      q.Filter,
 	})
 }
 
@@ -1088,4 +1091,28 @@ func hubBelongsToConversation(msg *model.MessageHub, conv *model.InboxConversati
 		return true
 	}
 	return msg.SenderID == conv.CustomerID || msg.ReceiverID == conv.CustomerID
+}
+
+// Snooze 把会话置为「稍后处理」，到期由 worker 自动回到 open（specs/024 T601/T602）。
+func (s *InboxService) Snooze(ctx context.Context, conversationID uint, until time.Time) (bool, error) {
+	if s.inboxRepo == nil {
+		return false, nil
+	}
+	return s.inboxRepo.SnoozeInboxConversation(ctx, conversationID, until)
+}
+
+// Unsnooze 手动取消稍后处理。
+func (s *InboxService) Unsnooze(ctx context.Context, conversationID uint) (bool, error) {
+	if s.inboxRepo == nil {
+		return false, nil
+	}
+	return s.inboxRepo.UnsnoozeInboxConversation(ctx, conversationID)
+}
+
+// FirstReplyMetrics 首响时长 p50/p95（specs/024 T605）。
+func (s *InboxService) FirstReplyMetrics(ctx context.Context, platform string, from, to time.Time) (*repository.FirstReplyMetrics, error) {
+	if s.inboxRepo == nil {
+		return &repository.FirstReplyMetrics{}, nil
+	}
+	return s.inboxRepo.FirstReplyMetrics(ctx, platform, from, to)
 }

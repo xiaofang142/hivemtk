@@ -123,6 +123,22 @@
               :label="$t('已关闭')"
               value="closed"
             />
+            <el-option
+              :label="$t('稍后处理')"
+              value="snoozed"
+            />
+          </el-select>
+          <el-select
+            v-model="searchForm.filter"
+            :placeholder="$t('语义筛选')"
+            clearable
+            style="width: 130px"
+            @change="handleSearch"
+          >
+            <el-option
+              :label="$t('待首响')"
+              value="awaiting_first_reply"
+            />
           </el-select>
           <el-select
             v-model="searchForm.pinned"
@@ -215,6 +231,15 @@
               >
                 {{ statusLabel(conv.status) }}
               </el-tag>
+              <!-- 「待首响」等待徽标（specs/024 T606）：只对客户在等、尚未首响的会话展示。 -->
+              <el-tag
+                v-if="waitingBadge(conv)"
+                size="small"
+                type="danger"
+                effect="plain"
+              >
+                {{ waitingBadge(conv) }}
+              </el-tag>
               <el-tag
                 v-if="conv.assigned_to"
                 size="small"
@@ -224,15 +249,15 @@
                 {{ $t('坐席') }}: {{ conv.assigned_to }}
               </el-tag>
               <el-tag
-                v-for="t in (conv.tags || []).slice(0, 3)"
-                :key="t"
+                v-for="tag in (conv.tags || []).slice(0, 3)"
+                :key="tag"
                 size="small"
                 type="warning"
                 effect="plain"
                 closable
-                @close.stop="handleRemoveTag(conv, t)"
+                @close.stop="handleRemoveTag(conv, tag)"
               >
-                {{ t }}
+                {{ tag }}
               </el-tag>
               <el-icon
                 v-if="conv.starred"
@@ -629,15 +654,15 @@
         class="tag-list"
       >
         <el-tag
-          v-for="t in (currentConv.tags || [])"
-          :key="t"
+          v-for="tag in (currentConv.tags || [])"
+          :key="tag"
           closable
           type="warning"
           effect="plain"
           style="margin: 0 8px 8px 0"
-          @close="handleRemoveTag(currentConv, t)"
+          @close="handleRemoveTag(currentConv, tag)"
         >
-          {{ t }}
+          {{ tag }}
         </el-tag>
         <span
           v-if="!(currentConv.tags || []).length"
@@ -731,7 +756,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Search, RefreshRight, Refresh, DataAnalysis, Top, Star, StarFilled, Mute,
@@ -756,6 +781,7 @@ const stats = ref(null)
 const searchForm = reactive({
   platform: '',
   status: '',
+  filter: '',
   pinned: '',
   keyword: ''
 })
@@ -789,7 +815,7 @@ const sendAgentReply = async () => {
     }
     replyDraft.value = ''
     ElMessage.success(t('回复已发送'))
-  } catch (e) {
+  } catch {
     // request.js 已统一弹错，这里不再重复提示
   } finally {
     replySending.value = false
@@ -811,7 +837,8 @@ const STATUS_MAP = {
   unread: { label: '未读', type: 'danger' },
   open: { label: '待处理', type: 'warning' },
   assigned: { label: '已分配', type: 'primary' },
-  closed: { label: '已关闭', type: 'success' }
+  closed: { label: '已关闭', type: 'success' },
+  snoozed: { label: '稍后处理', type: 'info' }
 }
 // 非字典值（历史脏数据）归一到未读/待处理显示，避免出现原始英文状态
 const statusLabel = (v) => {
@@ -895,6 +922,25 @@ const formatTime = (v) => {
   return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`
 }
 
+// 等待时长（specs/024 T606）：分钟/小时/天三档足够，列表里不需要秒级精度。
+const formatDuration = (v) => {
+  const ms = Date.now() - new Date(v).getTime()
+  if (!isFinite(ms) || ms < 0) return '0m'
+  const mins = Math.floor(ms / 60000)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h${mins % 60}m`
+  return `${Math.floor(hours / 24)}d`
+}
+
+// 待首响徽标：客户在等（waiting_since 有值）、我们还没回（first_reply_at 为空），
+// 且会话不在 closed/snoozed——snoozed 是「我稍后再看」，不是「客户在等」。
+const waitingBadge = (conv) => {
+  if (!conv || !conv.waiting_since || conv.first_reply_at) return ''
+  if (conv.status === 'closed' || conv.status === 'snoozed') return ''
+  return `${t('等待')} ${formatDuration(conv.waiting_since)}`
+}
+
 // ---- 数据加载 ----
 const fetchConversations = async () => {
   loading.value = true
@@ -905,6 +951,7 @@ const fetchConversations = async () => {
     }
     if (searchForm.platform) params.platform = searchForm.platform
     if (searchForm.status) params.status = searchForm.status
+    if (searchForm.filter) params.filter = searchForm.filter
     if (searchForm.keyword) params.keyword = searchForm.keyword
     if (searchForm.pinned !== '' && searchForm.pinned !== null && searchForm.pinned !== undefined) {
       params.pinned = searchForm.pinned

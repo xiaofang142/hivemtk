@@ -345,6 +345,8 @@ var dataScopeScopedElsewhere = map[string]string{
 	"POST /api/inbox/conversations/:id/pin":             "service.InboxService.PinScoped",
 	"POST /api/inbox/conversations/:id/read":            "service.InboxService.MarkReadScoped",
 	"POST /api/inbox/conversations/:id/star":            "service.InboxService.StarScoped",
+	"POST /api/inbox/conversations/:id/snooze":          "service.InboxService.SnoozeScoped",
+	"POST /api/inbox/conversations/:id/unsnooze":        "service.InboxService.UnsnoozeScoped",
 	"POST /api/inbox/conversations/:id/tags":            "service.InboxService.AddTagScoped",
 	"DELETE /api/inbox/conversations/:id/tags/:tag":     "service.InboxService.RemoveTagScoped",
 	// 这条的参数**就是**归属（查的是"某个坐席手上几会话"），登记表那一格放不下这种形状，
@@ -354,7 +356,7 @@ var dataScopeScopedElsewhere = map[string]string{
 
 // dataScopeElsewhereCap 名册的上界（只减不增的棘轮）：
 // 覆盖率涨了就把对应条目删掉并把这里改小；把它调大等于承认新泄露，需要单独评审。
-const dataScopeElsewhereCap = 24 // 2026-11-04 22→24：新增 reply 两口：新增 POST /customer-sessions/:id/reply（BUG-1 人工回复口，已带 GetSessionByIDScoped 执行点），客服域总口 38→39 且全数覆盖
+const dataScopeElsewhereCap = 26 // 2026-11-17 24→26：新增 snooze/unsnooze 两口（specs/024 T601，均带 *Scoped 执行点），客服域总口 42 且全数覆盖
 
 // TestDataSetGate_CustomerDomainIsAllAccountedFor 客服域按行寻址的口，逐条要么登记进守卫、
 // 要么在名册里有明确执行点，二者必居其一。

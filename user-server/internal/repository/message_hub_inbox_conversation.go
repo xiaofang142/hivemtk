@@ -114,6 +114,10 @@ type InboxConversationQuery struct {
 	Page        int
 	PageSize    int
 	OrderBy     string
+	// Filter 语义筛选（specs/024 T604），与 Status 正交：
+	//   ""                     不过滤
+	//   "awaiting_first_reply" 客户在等、我们还没回（waiting_since 有值、first_reply_at 为空、未关闭）
+	Filter string
 }
 
 // SetDB 注入 db（用于测试）
@@ -332,6 +336,9 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 		if conv.Status == "closed" {
 			updates["status"] = "unread"
 			updates["closed_at"] = nil
+			// 重开计数（specs/024 T603）：反复回来的客户需要被看见，
+			// 只记最后状态会把「第三次回来」和「第一次来」当成一回事。
+			updates["reopen_count"] = gorm.Expr("reopen_count + 1")
 		} else if conv.Status == "assigned" && conv.AssignedTo == "" {
 			updates["status"] = "unread"
 		}

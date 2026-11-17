@@ -955,7 +955,7 @@ flowchart TB
 
 ## Phase 6 生命周期读侧（P1）
 
-- [ ] **T601 `snoozed` 状态 + 迁移 067**（P1｜依赖 —｜M｜🟡）
+- [x] **T601 `snoozed` 状态 + 迁移 067**（P1｜依赖 —｜M｜🟡）
   - **规格**：补齐「稍后处理」状态与到期字段；不改现有 `unread/open/assigned/closed` 语义。
   - **上下文**：状态是 `varchar`（非 pg enum，无需改 047），但查询层 `CASE` 映射与 `closed` 过滤在 `repository/message_hub_inbox_conversation_query.go`，必须同步。
   - **架构**：Model + 迁移 + 查询层。
@@ -982,7 +982,7 @@ flowchart TB
     ```
   - **验收**：迁移幂等（跑两次无错）；`TestInboxConversation_SnoozeSetsUntil`；`TestInboxQuery_SnoozedNotInUnreadCount`。
 
-- [ ] **T602 到期重置 worker**（P1｜依赖 T601｜S｜🟡）
+- [x] **T602 到期重置 worker**（P1｜依赖 T601｜S｜🟡）
   - **规格**：定时把到期 `snoozed` 会话改回 `open`，并发安全（条件更新），可启停。
   - **上下文**：无通用调度器，但存在 `*_cron.go` 形态（`retention_cleanup_cron.go`、`message_trace_cleanup_cron.go`：Ticker + `utils.SafeGo` + 成对启停）；`check-naked-goroutine.sh` 强制 SafeGo。
   - **架构**：Service 层后台任务。
@@ -1001,7 +1001,7 @@ flowchart TB
     ```
   - **验收**：`TestSnoozeExpiry_ReopensOnce`（并发两次只重置一次）；`check-naked-goroutine.sh` 绿。
 
-- [ ] **T603 重开计数**（P1｜依赖 T601｜S｜🟡）
+- [x] **T603 重开计数**（P1｜依赖 T601｜S｜🟡）
   - **规格**：每次「已关闭 → 因新入站重开」计数 +1，用于识别反复回来的客户。
   - **上下文**：`repository/message_hub_inbox_conversation.go` 已有重开分支（closed→unread，L332-336）。
   - **架构**：Repository。
@@ -1019,7 +1019,7 @@ flowchart TB
     ```
   - **验收**：`TestInboxConversation_ReopenIncrementsCount`。
 
-- [ ] **T604 待首响查询 + API**（P1｜依赖 T601｜M｜🟡）
+- [x] **T604 待首响查询 + API**（P1｜依赖 T601｜M｜🟡）
   - **规格**：提供「客户在等、我们还没回」的筛选，按等待时长升序；已首响或已关闭不计入。
   - **上下文**：`waiting_since` / `first_reply_at` 已在 `2f658e7b` 写入（`UpsertFromMessage` 方向收口）；查询层缺 filter。
   - **架构**：Repository 查询 + Controller 透传。
@@ -1038,7 +1038,7 @@ flowchart TB
     ```
   - **验收**：`TestInboxQuery_AwaitingFirstReply`（已首响/已关闭样本不计入）、`TestInboxAPI_FilterAwaitingFirstReply`。
 
-- [ ] **T605 首响时长指标**（P2｜依赖 T604｜M｜🟡）
+- [x] **T605 首响时长指标**（P2｜依赖 T604｜M｜🟡）
   - **规格**：只读聚合首响时长（p50/p95），按渠道/租户/时间窗；无首响样本排除。
   - **上下文**：Chatwoot 用 `first_reply_created_at` 与 `waiting_since` 计算并广播，本项目只做读侧聚合，不上实时看板。
   - **架构**：Repository 聚合查询 + Controller。

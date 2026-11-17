@@ -2773,5 +2773,8 @@
   "缺少会话 ID": "Falta el ID de sesión",
   "获取邮件代理失败": "Error al cargar la información del agente de correo",
   "02:00": "02:00",
-  "03:00": "03:00"
+  "03:00": "03:00",
+  "稍后处理": "Pospuesto",
+  "待首响": "Esperando primera respuesta",
+  "语义筛选": "Filtro semántico"
 }
