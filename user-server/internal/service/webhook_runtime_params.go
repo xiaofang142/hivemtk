@@ -107,20 +107,22 @@ func webhookRecoveryEnabledRaw(ctx context.Context) bool {
 	return GlobalConfigParam().GetBool(ctx, ParamGroupWebhook, WebhookRecoveryEnabledParam, true)
 }
 
+// 兜底值与 config_param_seeds.go 的 webhook.* 种子 DefaultValue 一致（参数中心缺行时
+// 行为与装了种子一致），包装层的非正数回落常量（webhook_recovery.go）保持不变作第二道防线。
 func webhookRecoveryIntervalRaw(ctx context.Context) int {
-	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryIntervalParam, 0)
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryIntervalParam, 30)
 }
 
 func webhookRecoveryCooldownRaw(ctx context.Context) int {
-	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryCooldownParam, 0)
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryCooldownParam, 60)
 }
 
 func webhookRecoveryBatchRaw(ctx context.Context) int {
-	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryBatchParam, 0)
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookRecoveryBatchParam, 100)
 }
 
 func webhookAITimeoutRaw(ctx context.Context) int {
-	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookAITimeoutParam, 0)
+	return GlobalConfigParam().GetInt(ctx, ParamGroupWebhook, WebhookAITimeoutParam, 180)
 }
 
 // webhookRecoveryInterval 恢复扫描间隔。非正数回落常量默认 30s。

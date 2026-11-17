@@ -142,6 +142,83 @@ func (ctrl *ChatPublicController) OpenSession(c *gin.Context) {
 	response.Success(c, result, "会话已打开")
 }
 
+// @Summary      铸造访客 WebSocket 一次性 ticket
+// @Tags      chat-public
+// @Router    /api/chat/public/ws-ticket [post]
+// WsTicket 访客 WS 连接用：visitor_token（X-Chat-Visitor-Token 头或 visitor_token 参数）
+// 校验通过后铸造 60s 单次消费 ticket，连接 /api/ws/visitor 时 URL 只带 ticket，
+// visitor_token 不再进 URL query（access log 留痕面，2026-11-15 审计 L7）。
+// ticket 绑定 (channel_id, visitor_id, session_id) 三元组，转用到他人会话即拒。
+//
+// @Accept      json
+// @Produce     json
+// @Param       body  body  service.VisitorWsTicketRequest  true  "channel_id/visitor_id/session_id（与 WS 连接参数一致）"
+// @Success     200   {object} response.Response "ticket + expires_in"
+// @Failure     400   {object} response.Response "参数错误"
+// @Failure     403   {object} response.Response "visitor_token 无效或已过期"
+// @Router      /api/chat/public/ws-ticket [post]
+func (ctrl *ChatPublicController) WsTicket(c *gin.Context) {
+	var req service.VisitorWsTicketRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, http.StatusBadRequest, "请求参数错误：channel_id/visitor_id/session_id 必填", err.Error())
+		return
+	}
+	channelID := strings.TrimSpace(req.ChannelID)
+	if channelID == "" {
+		channelID = resolveChannelID(c, nil)
+	}
+	visitorID := strings.TrimSpace(req.VisitorID)
+	if visitorID == "" {
+		visitorID = c.GetHeader("X-Chat-Visitor-Id")
+	}
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		response.Error(c, http.StatusBadRequest, "session_id 必填")
+		return
+	}
+	if channelID == "" || visitorID == "" {
+		response.Error(c, http.StatusBadRequest, "channel_id/visitor_id 必填")
+		return
+	}
+
+	token := strings.TrimSpace(req.VisitorToken)
+	if token == "" {
+		token = visitorTokenFromRequest(c)
+	}
+	if token == "" {
+		response.Error(c, http.StatusForbidden, "缺少 visitor_token，请先调用 OpenSession 获取")
+		return
+	}
+	if err := service.ValidateVisitorToken(token, channelID, visitorID, sessionID); err != nil {
+		response.Error(c, http.StatusForbidden, "visitor_token 无效或已过期")
+		return
+	}
+
+	ticket := utils.MintWSTicket(utils.WsTicketClaims{
+		Visitor:   true,
+		ChannelID: channelID,
+		VisitorID: visitorID,
+		SessionID: sessionID,
+	})
+	if ticket == "" {
+		response.Error(c, http.StatusInternalServerError, "ticket 铸造失败，请稍后重试")
+		return
+	}
+	response.Success(c, gin.H{
+		"ticket":     ticket,
+		"expires_in": 60,
+	}, "ok")
+}
+
+// @Summary      获取历史消息
+// @Tags      chat-public
+// @Router    /api/chat/public/sessions/{session_id}/messages [get]
+// GetMessages 获取历史消息
+// GET /api/chat/public/sessions/:session_id/messages
+//
+// 安全：需要有效的 visitor_token，防止 IDOR 越权读取他人会话历史
+
+
 // @Summary      获取历史消息
 // @Tags      chat-public
 // @Router    /api/chat/public/sessions/{session_id}/messages [get]

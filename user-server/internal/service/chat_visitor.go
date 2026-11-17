@@ -908,9 +908,12 @@ func validateVisitorMediaURL(mediaURL string) error {
 	}
 
 	allowed := map[string]bool{}
-	cfg := config.GetAppConfig()
-	if d := strings.TrimSpace(cfg.Storage.Qiniu.Domain); d != "" {
-		allowed[strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://"), "/"))] = true
+	// 域白名单唯一数据源改为租户级 obs_config 默认行（2026-11-17 SaaS 配置面改造 B1：
+	// config.yaml storage.qiniu 节与 QINIU_* env 已退役，此处的 cfg.Storage 引用随之失效）。
+	if oc, err := repository.NewObsUploadConfigRepository().GetDefaultForUpload(context.Background()); err == nil && oc != nil {
+		if d := strings.TrimSpace(oc.Domain); d != "" {
+			allowed[strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(d, "https://"), "http://"), "/"))] = true
+		}
 	}
 	for _, extra := range strings.Split(strings.TrimSpace(os.Getenv("CHAT_MEDIA_URL_EXTRA_HOSTS")), ",") {
 		if e := strings.ToLower(strings.TrimSpace(extra)); e != "" {
