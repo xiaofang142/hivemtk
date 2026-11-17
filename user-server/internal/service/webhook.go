@@ -92,6 +92,11 @@ type WebhookService struct {
 	rlMu      sync.Mutex
 	rlBuckets map[string]*tokenBucket
 
+	// outbound senders（specs/024 D1）：每渠道一个 sender，惰性构造并缓存。
+	// 桥接族共用 bridgeOutboxSender 实例（按渠道键各存一份，无状态）。
+	sendersMu sync.Mutex
+	senders   map[WebhookChannel]channelSender
+
 	workerCount int
 	queue       chan *webhookJob
 	wg          sync.WaitGroup

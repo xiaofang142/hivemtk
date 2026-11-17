@@ -571,18 +571,32 @@ func TestBF6_ChannelVocabularyCoversEveryOutboundChannel(t *testing.T) {
 		}
 	}
 
-	cases := bf6OutboundSwitchChannels(t)
-	// B5（CH-37b刀3）：桥接九族已从 case 清单改为 default 里的 registry 能力查询驱动
-	// （bridgeOutboxCapable），case 面收窄为 7 个 webhook 直发渠道（wecom/feishu/
-	// telegram/qq/whatsapp/dingtalk/wechat）。下限从 8 降到 7 与之同步；解析口径失效
-	// （tag 不是 channel / 代码结构重排）仍以 0 或骤减判红。
-	if len(cases) < 7 {
-		t.Fatalf("只取到 %d 个出站 case，switch 解析口径已失效", len(cases))
+	// specs/024 D1：出站分支已从 sendOutbound 的 switch 拆为 sender 注册表，
+	// 本锁随之改为「注册表口径」：每个渠道常量要么有 sender，要么落在 bridge_outbox 能力集合里，
+	// 否则出站会掉进 drift 失败分支（等价于旧断言「case 了未登记常量」）。
+	senders := RegisteredSenderChannels()
+	if len(senders) < 7 {
+		t.Fatalf("只登记了 %d 个出站 sender，注册表口径已失效", len(senders))
 	}
-	for name := range cases {
-		if _, ok := consts[name]; !ok {
-			t.Errorf("sendOutbound case 了未登记为 WebhookChannel 常量的 %s", name)
+	values := map[string]bool{}
+	for _, v := range consts {
+		values[v] = true
+	}
+	for _, ch := range senders {
+		if !values[string(ch)] {
+			t.Errorf("注册了未声明为 WebhookChannel 常量的 sender 渠道 %q", ch)
 		}
+	}
+	// 唯一允许「无 sender 且不在 bridge 集合」的常量：custom（通用入口尚未接线，见 specs/025）。
+	// 新常量若也落进这里，说明接入只做了一半。
+	permitted := map[string]bool{"custom": true}
+	svc := &WebhookService{}
+	for name, value := range consts {
+		ch := WebhookChannel(value)
+		if _, ok := svc.outboundSenderFor(ch); ok || bridgeOutboxCapable(ch) || permitted[value] {
+			continue
+		}
+		t.Errorf("%s(%q) 既无 sender 也不在 bridge_outbox 能力集合：出站必然落 drift 失败", name, value)
 	}
 }
 

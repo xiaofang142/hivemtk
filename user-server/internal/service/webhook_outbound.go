@@ -1,21 +1,14 @@
 package service
 
 import (
-	"bytes"
-
 	"context"
 
 	"encoding/json"
 
 	"fmt"
 
-	"io"
-
-	"net/http"
-
 	"net/url"
 
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -35,8 +28,6 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
-	"hivemtk-user/internal/pkg/tracing"
-	"hivemtk-user/internal/repository"
 
 	"hivemtk-user/internal/channelbot/telegram"
 )
@@ -79,8 +70,43 @@ func aiReplyQuietHoursEnd(ctx context.Context) int {
 	return v
 }
 
+// WhatsApp 回退模板（B7，2026-11-17）：WHATSAPP_FALLBACK_TEMPLATE(_LANG) 环境变量退役，
+// 入参数中心 channelbot 组（24h 客服窗口外的降级模板名与语言）。
+func whatsappFallbackTemplate(ctx context.Context) string {
+	return GlobalConfigParam().GetString(ctx, "channelbot", "whatsapp_fallback_template", "")
+}
+
+func whatsappFallbackTemplateLang(ctx context.Context) string {
+	return GlobalConfigParam().GetString(ctx, "channelbot", "whatsapp_fallback_template_lang", "")
+}
+
+// AIAQuietHoursDisabledParam 是「AI 回复勿扰总开关」的参数键（agent_llm 组）。
+// SaaS 配置面改造（B8，2026-11-17）：DISABLE_AI_QUIET_HOURS 环境变量退役。
+const AIAQuietHoursDisabledParam = "ai_quiet_hours_disabled"
+
+func aiQuietHoursDisabled(ctx context.Context) bool {
+	return GlobalConfigParam().GetBool(ctx, "agent_llm", AIAQuietHoursDisabledParam, false)
+}
+
+// DisableAIQuietHoursForTest 测试装配口，替代已退役的 DISABLE_AI_QUIET_HOURS 环境变量
+// （仓内 9 处测试曾用它把勿扰窗顶掉）。与 SetGlobalForTest 同一先例：helper 放产码
+// 文件（不 import testing），跨包测试才能装。返回复位函数，调用方 `defer` 它。
+func DisableAIQuietHoursForTest(disabled bool) func() {
+	svc := &ConfigParamService{
+		cache:  make(map[string]paramEntry, 4),
+		loaded: make(map[string]bool, 4),
+		nowFn:  time.Now,
+	}
+	svc.cache["agent_llm."+AIAQuietHoursDisabledParam] = paramEntry{
+		value:     strconv.FormatBool(disabled),
+		expiresAt: time.Now().Add(time.Hour),
+	}
+	SetGlobalForTest(svc)
+	return func() { SetGlobalForTest(nil) }
+}
+
 func isAIReplyQuietHours(t time.Time) bool {
-	if os.Getenv("DISABLE_AI_QUIET_HOURS") != "" {
+	if aiQuietHoursDisabled(context.Background()) {
 		return false
 	}
 	// 判定在异步排水/重投链上被调用，无请求 ctx 可用，走 context.Background()。
@@ -446,6 +472,9 @@ func (s *WebhookService) recoverStuckDelayedOutbound(ctx context.Context, now ti
 }
 
 func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *DelayedOutboundReply) {
+	if s == nil || s.delayedRepo == nil || ctx == nil || ctx.Err() != nil || rec == nil {
+		return
+	}
 	// 租户收口（2026-11-14 4610 同源修复）：延迟重放 worker 的调度 ctx 是平台级
 	// （无租户/SystemScope），而重放落库与后续认领都打在租户表上。归属判定以
 	// **账号反查为权威**（bridge_accounts 行归属，与 DeliverBridgeOutboundMedia
@@ -465,6 +494,12 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 			return
 		}
 	}
+	current, err := s.delayedRepo.ConfirmReplayLease(ctx, rec, time.Now())
+	if err != nil || current == nil {
+		logger.Ctx(ctx).Warn().Uint("id", rec.ID).Msg("[H-3] 延迟重放租约或身份未确认，未发起投递")
+		return
+	}
+	rec = current
 	channel := WebhookChannel(rec.Platform)
 	now := time.Now()
 	isRetry := rec.Kind == model.DelayedKindSendRetry
@@ -473,17 +508,16 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 		s.abandonReplay(ctx, rec, fmt.Sprintf("重投次数用尽（%d 次）", rec.Attempts))
 		return
 	}
-	if isRetry && s.messageHubRepo != nil && rec.ConversationID != "" {
-		// 旧内容不补投：等待期间坐席或新一轮 AI 回复已经出手，再投这条过期回复等于双份答案。
-		unreplied, _, err := s.messageHubRepo.HasUnrepliedCustomerMessage(ctx, rec.ConversationID, InboxReplyWindow)
-		if err == nil && !unreplied {
-			if ferr := s.delayedRepo.FinishReplay(ctx, rec.ID, rec.ClaimToken, model.DelayedStatusSuperseded, time.Now(), ""); ferr != nil {
-				logger.Ctx(ctx).Warn().Err(ferr).Uint("id", rec.ID).Msg("[H-3] 重放改判 superseded 回写失败")
-			}
-			logger.Ctx(ctx).Info().Uint("id", rec.ID).Str("conv_id", rec.ConversationID).
-				Msg("[H-3] 会话已被回复，队列中的旧出站不再补投（superseded）")
-			return
+	_, answered, permissionErr := newDelayedReplayPermission(s.delayedRepo, s.ingressSvc).confirm(ctx, rec)
+	if permissionErr != nil {
+		logger.Ctx(ctx).Warn().Uint("id", rec.ID).Msg("[H-3] 延迟回复会话或人工权限未确认，未发起投递")
+		return
+	}
+	if answered {
+		if ferr := s.delayedRepo.FinishReplay(ctx, rec.ID, rec.ClaimToken, model.DelayedStatusSuperseded, time.Now(), ""); ferr != nil {
+			logger.Ctx(ctx).Warn().Uint("id", rec.ID).Msg("[H-3] 旧答案作废回写未完成")
 		}
+		return
 	}
 
 	hubMsg := &model.MessageHub{
@@ -505,12 +539,22 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 	sent, sendErr := s.sendOutbound(DelayedReplayToContext(ctx), channel, rec.AccountID, p, rec.Content, hubMsg, cards)
 
 	switch {
-	case sent, !isRetry:
-		// 投递成功按 sent 收口；quiet hours 首发维持一次性语义（这条回复是按
-		// "次日首发"设计的，失败已由 sendOutbound 落失败轨迹，再叠重试等于改掉窗口定义）。
+	case sent:
+		// 只有确实交给下游才按 sent 收口；这仍不代表平台已收件。
 		// 回写带 claim_token 栅栏：租约过期被重认领后，旧 worker 的回写 0 行拒绝。
 		if err := s.delayedRepo.MarkSent(ctx, rec.ID, rec.ClaimToken, time.Now()); err != nil {
 			logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 延迟回复状态回写失败")
+		}
+	case !isRetry:
+		// 免打扰首发仍只尝试一次。失败不能伪报成功，也不补触发新的回答或自动重投。
+		if sendErr == nil {
+			if err := s.delayedRepo.MarkSendingUnknown(ctx, rec.ID, rec.ClaimToken, "首发未取得成功交接事实"); err != nil {
+				logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 首发未知结果回写失败")
+			}
+			return
+		}
+		if err := s.delayedRepo.FinishReplay(ctx, rec.ID, rec.ClaimToken, model.DelayedStatusFailed, now, sendErr.Error()); err != nil {
+			logger.Ctx(ctx).Warn().Err(err).Uint("id", rec.ID).Msg("[H-3] 首发失败结果回写失败")
 		}
 	default:
 		ce := AsChannelError(sendErr)
@@ -609,606 +653,53 @@ func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChanne
 			s.ingressSvc.RecheckUnrepliedAndTrigger(context.WithoutCancel(ctx), hubMsg.ConversationID, "")
 		})
 	}()
-	// 分支表里只有飞书与 TG 真把富卡下发（各自一个 `for _, card := range cards`）；
-	// 其余渠道的 outbound 载荷没有卡片载体，这批卡走到这里就是整批丢掉，而文本回复照标 sent。
-	// 没有痕迹的话，管理端与运维看到的都是一次成功出站 ⇒ 丢弃必须出声，且**只在这一处**出声：
-	// 各渠道分支里再打一条就成了同一事件两行日志，告警侧按行数计数会翻倍。
-	// 桥接五族额外把计数写进出站行（那一族的观测面就是那一行，见下面 bridge 分支）。
-	if n := len(cards); n > 0 && channel != ChannelFeishu && channel != ChannelTelegram {
-		drop := logger.Ctx(ctx).Warn().
+	// 无富卡载体时保留必要事实为一条文字；失败不能谎报已展示。
+	cardsFallbackCount := 0
+	if len(cards) > 0 && !outboundSupportsRichCards(channel) {
+		text, err := cardTextDelivery(content, cards)
+		if err != nil {
+			markSendFailed(preSendFailure(channel, CategoryBadRequest, err.Error()))
+			return
+		}
+		content = text
+		cardsFallbackCount = len(cards)
+		fallback := logger.Ctx(ctx).Info().
 			Str("module", "outbound").
 			Str("channel", string(channel)).
 			Str("account_id", accountID).
-			Int("cards_dropped", n)
+			Int("cards_fallback_count", cardsFallbackCount)
 		if hubMsg != nil {
-			drop = drop.Str("conversation_id", hubMsg.ConversationID)
+			fallback = fallback.Str("conversation_id", hubMsg.ConversationID)
 		}
-		drop.Msg("outbound channel has no card transport, rich cards dropped")
+		fallback.Msg("outbound rich cards rendered as complete text")
 	}
-	switch channel {
-	case ChannelWeCom:
+	// R5（CH-37b刀3 批准的行为变更）：bridge 族的 Markdown 清洗必须在分派前完成——
+	// defer 里的 enqueueSendRetry 捕获的是同一个 content 变量，清洗放这里，重试才与搬迁前
+	// 一致地投递清洗后文本（specs/024 逐行复核 C4）。
+	if bridgeOutboxCapable(channel) && stripMarkdownForBridgeChannel(string(channel), model.MsgTypeText) {
+		content = StripMarkdownForDM(content)
+	}
 
-		if s.integration == nil {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest, "企微出站客户端未接线（integration 为 nil），本进程无法投递"))
-			return
-		}
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil || accID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("企微出站账号 id 非法(account_id=%q)，无法定位发送账号", accountID)))
-			return
-		}
-		if _, err := s.integration.SendMessage(ctx, &WeComSendRequest{
-			AccountID:      uint(accID),
-			ExternalUserID: p.Sender,
-			MsgType:        "text",
-			Content:        content,
-			IsAIReply:      true,
-			AIAgent:        "sales_engine",
-		}); err != nil {
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-	case ChannelFeishu:
-		if s.feishuIntegration == nil {
-			s.feishuIntegration = s.integrations.feishu()
-		}
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil || accID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("飞书出站账号 id 非法(account_id=%q)，无法定位发送账号", accountID)))
-			return
-		}
-
-		target := p.Sender
-		idType := "open_id"
-		if hubMsg != nil && hubMsg.IsGroup && hubMsg.GroupID != "" {
-			target = hubMsg.GroupID
-			idType = "open_chat_id"
-		}
-		outConv := ""
-		if hubMsg != nil {
-			outConv = hubMsg.ConversationID
-		}
-		if err := s.feishuIntegration.SendMessage(ctx, uint(accID), target, content, idType, outConv); err != nil {
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-		// 富卡片随行下发（card.show 等工具产出），映射为飞书 interactive 卡片
-		for _, card := range cards {
-			cardJSON, merr := feishuCardToInteractiveJSON(&card)
-			if merr != nil {
-				logger.Ctx(ctx).Warn().Err(merr).Str("channel", "feishu").Msg("feishu card marshal failed, skip")
-				continue
-			}
-			if cerr := s.feishuIntegration.SendInteractiveCard(ctx, uint(accID), target, cardJSON, idType, outConv); cerr != nil {
-				logger.Ctx(ctx).Error().Err(cerr).Str("channel", "feishu").Str("open_id", target).Msg("outbound feishu card failed")
-			} else {
-				sent = true
-			}
-		}
-	case ChannelTelegram:
-		if s.tgIntegration == nil {
-			s.tgIntegration = s.integrations.tg()
-		}
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil || accID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("TG 出站账号 id 非法(account_id=%q)，无法定位 bot", accountID)))
-			return
-		}
-
-		var chatID int64
-		if hubMsg != nil && hubMsg.ConversationID != "" {
-			chatID, _ = strconv.ParseInt(hubMsg.ConversationID, 10, 64)
-		}
-		if chatID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("TG 会话键无法解析为 chat_id(conversation_id=%q)", convIDOrEmpty(hubMsg))))
-			return
-		}
-
-		// 群聊增强：@mention 原发言人 + reply-to 消息
-		// 私聊保持原样
-		sendContent := content
-		sendOpts := telegram.SendMessageOptions{DisableWebPreview: true}
-		if hubMsg != nil && hubMsg.IsGroup {
-			if meta := extractTelegramReplyMetaFromCtx(ctx); meta != nil && meta.TriggerReason != "start" {
-				sendContent, sendOpts = buildTelegramGroupReply(content, meta)
-			}
-		}
-
-		if err := s.tgIntegration.SendMessageEx(ctx, uint(accID), chatID, sendContent, sendOpts); err != nil {
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-
-		for _, card := range cards {
-			if err := s.tgIntegration.SendCard(ctx, uint(accID), chatID, &card); err != nil {
-				logger.Ctx(ctx).Error().Err(err).Str("channel", "telegram").Int64("chat_id", chatID).Msg("outbound card failed")
-			} else {
-				sent = true
-			}
-		}
-	case ChannelQQ:
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil || accID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("QQ 出站账号 id 非法(account_id=%q)，无法定位机器人", accountID)))
-			return
-		}
-		convID := ""
-		if hubMsg != nil && hubMsg.ConversationID != "" {
-			convID = hubMsg.ConversationID
-		}
-		if convID == "" {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest, "QQ 出站缺少会话 id，无被动回复目标"))
-			return
-		}
-		// 被动回复关联原消息 ID（QQ 平台 5 分钟窗口 5 条被动回复额度）。
-		// 惰性单例：msg_seq 计数与 access_token 缓存必须在多次出站间保持，
-		// 每次新建实例会导致 seq 恒为 1（平台按重复丢弃）+ token 重复获取。
-		if s.qqIntegration == nil {
-			s.qqIntegration = s.integrations.qq()
-		}
-		if err := s.qqIntegration.SendMessage(ctx, uint(accID), convID, QQOutboundMsgID(hubMsg), content); err != nil {
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-	case ChannelWhatsapp:
-		if s.waIntegration == nil {
-			s.waIntegration = s.integrations.wa()
-		}
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil || accID == 0 {
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("WhatsApp 出站账号 id 非法(account_id=%q)，无法定位 WABA", accountID)))
-			return
-		}
-
-		s.ensureReposFromDB(ctx)
-		if s.messageHubRepo != nil && hubMsg != nil && hubMsg.ConversationID != "" {
-			if last, qerr := s.messageHubRepo.GetLastInboundByConversation(ctx, hubMsg.ConversationID); qerr == nil && last != nil && !last.SentAt.IsZero() {
-				if time.Since(last.SentAt) > 24*time.Hour {
-					// 超 24h 客服窗口：自由文本会被 Meta 拒收，降级走预审批模板兜底
-					// （模板名可用环境变量按账号/全局配置；未配置模板时维持原失败语义）。
-					tplName := os.Getenv("WHATSAPP_FALLBACK_TEMPLATE")
-					if tplName == "" {
-						logger.Ctx(ctx).Warn().
-							Str("channel", "whatsapp").Str("account_id", accountID).
-							Str("to", p.Sender).
-							Time("last_inbound_at", last.SentAt).
-							Msg("[WhatsApp] 超出 24h 客服窗口且未配置 WHATSAPP_FALLBACK_TEMPLATE，AI 文本回复不可送达，标记失败")
-						markSendFailed(preSendFailure(channel, CategoryWindowExpired,
-							fmt.Sprintf("WhatsApp 24h 客服窗口已关闭(最后入站 %s)且未配置 WHATSAPP_FALLBACK_TEMPLATE，自由文本不可送达",
-								last.SentAt.Format("2006-01-02 15:04:05"))))
-						return
-					}
-					logger.Ctx(ctx).Info().
-						Str("channel", "whatsapp").Str("account_id", accountID).
-						Str("to", p.Sender).
-						Str("template", tplName).
-						Msg("[WhatsApp] 超出 24h 客服窗口，AI 回复降级为模板消息发送")
-					if terr := s.waIntegration.SendTemplateMessage(ctx, uint(accID), p.Sender, content, &WhatsAppTemplatePayload{
-						TemplateName: tplName,
-						Language:     os.Getenv("WHATSAPP_FALLBACK_TEMPLATE_LANG"),
-					}); terr != nil {
-						markSendFailed(terr)
-					} else {
-						sent = true
-					}
-					return
-				}
-			}
-		}
-
-		if err := s.waIntegration.SendMessage(ctx, uint(accID), p.Sender, content); err != nil {
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-	case ChannelDingTalk:
-
-		webhookURL := ""
-		var expiredAt int64
-		if hubMsg != nil && hubMsg.Extra != nil {
-			if v, ok := hubMsg.Extra["session_webhook"].(string); ok {
-				webhookURL = v
-			}
-			switch t := hubMsg.Extra["session_webhook_expired_at"].(type) {
-			case int64:
-				expiredAt = t
-			case float64:
-				expiredAt = int64(t)
-			}
-		}
-		if webhookURL == "" {
-			logger.Ctx(ctx).Error().Str("channel", "dingtalk").Str("account_id", accountID).
-				Str("conv_id", convIDOrEmpty(hubMsg)).
-				Msg("[DingTalk] 缺少 sessionWebhook（回调未携带或非机器人消息），AI 回复无法送达")
-			markSendFailed(preSendFailure(channel, CategoryWindowExpired,
-				"钉钉回调未携带 sessionWebhook（非机器人消息或平台未下发），无可用的回复地址"))
-			return
-		}
-
-		if expiredAt > 1_000_000_000_000 {
-			expiredAt /= 1000
-		}
-		if expiredAt > 0 && time.Now().Unix() > expiredAt {
-			logger.Ctx(ctx).Warn().Str("channel", "dingtalk").Str("account_id", accountID).
-				Int64("expired_at", expiredAt).
-				Msg("[DingTalk] sessionWebhook 已过期，AI 回复无法送达（用户重新发言可恢复）")
-			markSendFailed(preSendFailure(channel, CategoryWindowExpired,
-				fmt.Sprintf("钉钉 sessionWebhook 已过期(expired_at=%d)，被动回复窗口已关闭", expiredAt)))
-			return
-		}
-
-		u, perr := url.Parse(webhookURL)
-		if perr != nil || !loadDingtalkWebhookHostAllowed()(u) {
-			logger.Ctx(ctx).Error().Str("channel", "dingtalk").Str("account_id", accountID).
-				Msg("[DingTalk] sessionWebhook 域名非法（仅允许 *.dingtalk.com），拒绝发送")
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				"钉钉 sessionWebhook 域名不在允许清单(*.dingtalk.com)内，拒绝向外部地址投递"))
-			return
-		}
-		payload := map[string]any{
-			"msgtype": "text",
-			"text":    map[string]string{"content": content},
-		}
-		body, _ := json.Marshal(payload)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(body))
-		if err != nil {
-			logger.Ctx(ctx).Error().Err(err).Str("channel", "dingtalk").Msg("build dingtalk reply request failed")
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("钉钉回复请求构造失败: %v", err)))
-			return
-		}
-		req.Header.Set("Content-Type", "application/json; charset=utf-8")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			logger.Ctx(ctx).Error().Err(err).Str("channel", "dingtalk").Msg("dingtalk reply send failed")
-			markSendFailed(err)
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		respBody, _ := io.ReadAll(resp.Body)
-		var dtResult struct {
-			Errcode int    `json:"errcode"`
-			Errmsg  string `json:"errmsg"`
-		}
-		if err := json.Unmarshal(respBody, &dtResult); err != nil || dtResult.Errcode != 0 {
-			logger.Ctx(ctx).Error().Int("http_status", resp.StatusCode).Int("errcode", dtResult.Errcode).
-				Str("errmsg", dtResult.Errmsg).
-				Msg("[DingTalk] AI 回复出站被平台拒绝")
-			if err != nil {
-				markSendFailed(fmt.Errorf("dingtalk sessionWebhook 响应不可解析(status=%d): %w", resp.StatusCode, err))
-			} else {
-				markSendFailed(fmt.Errorf("dingtalk sessionWebhook errcode=%d errmsg=%s", dtResult.Errcode, dtResult.Errmsg))
-			}
-			return
-		}
-		sent = true
-	case ChannelWechat:
-
-		if s.wechatIntegration == nil {
-			s.wechatIntegration = s.integrations.wechat()
-		}
-		accID, err := strconv.ParseUint(accountID, 10, 64)
-		if err != nil {
-			accID = 0
-		}
-		if _, err := s.wechatIntegration.SendCustomMessage(ctx, uint(accID), p.Sender, "text", content); err != nil {
-			logger.Ctx(ctx).Error().Err(err).Str("channel", "wechat").Str("account_id", accountID).
-				Str("open_id", p.Sender).Msg("[Wechat] AI 回复出站失败")
-			markSendFailed(err)
-		} else {
-			sent = true
-		}
-	default:
-		// 桥接族（B5 单一 sender 能力位，CH-37b刀3 批准决议）：分支不再枚举渠道常量——
-		// 可出站判定查询 registry OutboundPath=bridge_outbox 能力投影（channelgw/registry.go
-		// init 经 SetBridgeOutboxChannels 装配）。新渠道只登记 registry 即自动获得本路径，
-		// 第二份渠道清单就此消灭；恒等由 TestBridgeOutboxParityWithWebhookOutbound 双向钉住
-		// （registry 有能力但出站不认 = 红；出站认但 registry 无能力 = 红）。
-		// 不在集合内的渠道（webhook 直发渠道各自有 case；未知渠道落这里）保持原
-		// 不支持分支不变：宁可明确拒绝，也不静默收下。
-		if !bridgeOutboxCapable(channel) {
-			logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
-			markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
-			return
-		}
-		// R5（CH-37b刀3 批准的行为变更）：AI 桥接出站与人工/触达路径同一清洗口径——
-		// 网页私信输入框是纯文本，LLM 回复自带的 Markdown 语法符号会原样暴露给客户。
-		// 与 bridge_outbound.go DeliverBridgeOutbound 入队前完全同源（同一判定
-		// stripMarkdownForBridgeChannel + 同一函数 StripMarkdownForDM）。对纯文本幂等
-		// （九渠道既有行为零变化）；对含 Markdown 文本自此与人工路径一致——这是 R5
-		// 裁决批准的有意变化，前后对照见 TestSendOutbound_Bridge_MarkdownAlignedWithManualPath。
-		if stripMarkdownForBridgeChannel(string(channel), model.MsgTypeText) {
-			content = StripMarkdownForDM(content)
-		}
-
-		if hubMsg != nil {
-			outMsg := &model.MessageHub{
-				MsgID:          ContentHashMsgID(string(channel), hubMsg.ConversationID, content),
-				Platform:       string(channel),
-				AccountID:      accountID,
-				Direction:      "outbound",
-				Status:         "pending",
-				MsgType:        "text",
-				SenderID:       accountID,
-				ReceiverID:     hubMsg.SenderID,
-				Content:        content,
-				ConversationID: hubMsg.ConversationID,
-				IsGroup:        hubMsg.IsGroup,
-				GroupID:        hubMsg.GroupID,
-				IsAIReply:      true,
-				AIAgent:        "sales_engine",
-				IsRead:         true,
-				SentAt:         time.Now(),
-			}
-			outMsg.TraceID = tracing.LinkOutboundTraceID(ctx, hubMsg.ConversationID)
-			// AI 回复的租户归属 = 触发它的入站行（2026-11-14 生产事故根修，douyin 4610）：
-			// 重试/补触发等异步路径的 ctx 可能丢租户（detached/后台 ctx），此前 outMsg
-			// 不带 TenantID → 隔离 callback 不填列 → gorm default:1 落进 tenant 1，
-			// 成为认领/管理台双盲孤儿（AI 侧却记 ai_replied=true 三重静默）。
-			// 入站行才是归属权威：继承它的租户；ctx 租户仅作兜底。**只填行列、不重建
-			// ctx**——OnlyTenant 的 detachedCtx 会剥掉全部 value（HandleResult/tracing
-			// 载体），下游 result 注入与轨迹链都会断；两者皆缺则由
-			// CreateMessageHubIdempotent 的 fail-closed 门显式拒绝（不静默写孤儿）。
-			if outMsg.TenantID == 0 {
-				if hubMsg.TenantID != 0 {
-					outMsg.TenantID = hubMsg.TenantID
-				} else if tid, tok := tenant.FromContext(ctx); tok && tid != 0 {
-					outMsg.TenantID = tid
-				}
-			}
-
-			outMsg.DedupHash = ContentHashWithSender(string(channel), accountID, content)
-
-			outMsg.Extra = model.JSONMap{
-				"dm_target":    "conv",
-				"scenario":     "auto_reply",
-				"triggered_by": "ai_dispatch",
-			}
-			if agentID := extractAgentIDFromCtx(ctx); agentID != "" {
-				outMsg.Extra["agent_id"] = agentID
-			}
-			if result := HandleResultFromContext(ctx); result != nil {
-				// 降级轮（模型空输出 → emptyReplyFallback）没有模型答案：摘掉继承来的
-				// 意图置信度并写 degraded 标记——应答质量指标据此把降级轮与正常 AI
-				// 回答分开计数（CS-02 口径修复；handler_type/scenario/放行语义不变）。
-				if result.Confidence > 0 && !result.Degraded {
-					outMsg.Extra["confidence"] = result.Confidence
-				}
-				if result.IntentType != "" {
-					outMsg.Extra["intent"] = result.IntentType
-				}
-				if result.HandlerType != "" {
-					outMsg.Extra["handler_type"] = string(result.HandlerType)
-				}
-				if result.Degraded {
-					outMsg.Extra["degraded"] = "model_empty_reply"
-				}
-			}
-			// 桥接族的出库载体只有文本列（content + msg_type=text），富卡到这里没有可挂的下游
-			// 通道，整批丢掉是既有行为；但"丢了"必须留痕。出声由函数入口那道统一门负责
-			// （本族同样会走到），这里只补管理端读的那一行 —— 计数落库，界面上才分得清
-			// "这单本来没卡"和"这单把卡丢了"。
-			if n := len(cards); n > 0 {
-				outMsg.Extra["cards_dropped"] = n
-			}
-			if undeliverable, reason := isBridgeChannelUndeliverableLocal(accountID, outMsg.ConversationID); undeliverable {
-				outMsg.Status = "failed"
-				if outMsg.Extra == nil {
-					outMsg.Extra = model.JSONMap{}
-				}
-				outMsg.Extra["undeliverable_reason"] = reason
-				outMsg.Extra["scenario"] = "undeliverable"
-				logger.Ctx(ctx).Warn().
-					Str("module", "bridge").
-					Str("channel", string(channel)).
-					Str("account_id", accountID).
-					Str("conversation_id", outMsg.ConversationID).
-					Str("reason", reason).
-					Msg("bridge outbound target undeliverable; marked failed instead of pending")
-			}
-
-			persisted := outMsg
-			// duplicateOccupied：Create 无错但 ID 未回填 = ON CONFLICT DO NOTHING 命中
-			//（同键占位：同会话同文案已 delivered/pending 在途）——与真 DB 错误严格区分，
-			// 两者在 id=0 分支走不同处置（占位=转人工旁路不可重试；真错误=可重试进队列）。
-			duplicateOccupied := false
-			if _, err := s.delayedRepo.CreateMessageHubIdempotent(ctx, outMsg); err != nil {
-				retryMsg := &model.MessageHub{
-					MsgID:          outMsg.MsgID + ":" + hubMsg.ConversationID,
-					// 租户必须显式随行（2026-11-14 生产事故修复）：此前的重试行靠 gorm
-					// default:1 兜底落进 tenant 1，成为认领/管理台双盲的孤儿——即使
-					// CreateMessageHubIdempotent 已加 fail-closed，这里也要带上正确租户。
-					TenantID:       outMsg.TenantID,
-					Platform:       outMsg.Platform,
-					AccountID:      outMsg.AccountID,
-					Direction:      "outbound",
-					Status:         outMsg.Status,
-					MsgType:        outMsg.MsgType,
-					SenderID:       outMsg.SenderID,
-					ReceiverID:     outMsg.ReceiverID,
-					Content:        outMsg.Content,
-					ConversationID: outMsg.ConversationID,
-					IsGroup:        outMsg.IsGroup,
-					GroupID:        outMsg.GroupID,
-					IsAIReply:      outMsg.IsAIReply,
-					AIAgent:        outMsg.AIAgent,
-					IsRead:         outMsg.IsRead,
-					SentAt:         outMsg.SentAt,
-					TraceID:        outMsg.TraceID,
-					DedupHash:      outMsg.DedupHash,
-				}
-				if _, err2 := s.delayedRepo.CreateMessageHubIdempotent(ctx, retryMsg); err2 != nil {
-					logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge").Str("channel", string(channel)).Msg("failed to persist bridge outbound reply to message_hub")
-				} else {
-					persisted = retryMsg
-				}
-			} else if persisted.ID == 0 {
-				duplicateOccupied = true
-			}
-			if s.inboxConvRepo != nil && persisted.ID != 0 {
-
-				if err := s.inboxConvRepo.UpsertFromMessage(ctx, repository.UpsertFromMessageInput{
-					Platform:           persisted.Platform,
-					AccountID:          persisted.AccountID,
-					CustomerID:         persisted.ReceiverID,
-					ConversationID:     persisted.ConversationID,
-					LastMessageID:      persisted.ID,
-					LastMessagePreview: persisted.Content,
-					LastMessageAt:      persisted.SentAt,
-					LastMessageFrom:    "ai",
-				}); err != nil {
-					logger.Ctx(ctx).Warn().Err(err).Str("module", "bridge").Msg("failed to upsert inbox_conversations for outbound")
-				}
-			}
-
-			if GlobalSSEPublisher != nil && persisted != nil && persisted.ID != 0 &&
-				(persisted.Status == "pending" || persisted.Status == "inflight") {
-				logger.Ctx(ctx).Debug().
-					Int("hub_id", int(persisted.ID)).
-					Str("channel", string(channel)).
-					Str("account_id", accountID).
-					Str("conv_id", persisted.ConversationID).
-					Msg("[SSE] webhook_outbound calling GlobalSSEPublisher")
-				// 派生带租户的 ctx（认领要 UPDATE message_hub，on 模式下无租户即被守卫拒绝），
-				// 口径同 bridge_outbound.go 的同名调用点。
-				pubCtx := tenant.BackgroundWithTenant(ctx)
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							logger.Ctx(ctx).Error().Any("error", r).Msg("[SSE] GlobalSSEPublisher panic recovered in webhook_outbound")
-						}
-					}()
-					GlobalSSEPublisher(
-						pubCtx,
-						string(channel), accountID,
-						uint64(persisted.ID),
-						persisted.ConversationID,
-						persisted.MsgType,
-						persisted.ReceiverID,
-						persisted.Content,
-						persisted.MediaURL,
-						persisted.IsAIReply,
-						persisted.SentAt,
-					)
-				}()
-			}
-
-			enqueueAbnormal := ""
-			enqueueStatus := tracing.StatusOk
-			if persisted.Status == "failed" {
-				enqueueStatus = tracing.StatusAbnormal
-				enqueueAbnormal = "目标不可达（占位账号/未知账号），标记 failed 而非 pending，避免污染下行出库队列"
-			}
-
-			ctx = tracing.WithCarrier(ctx, &tracing.Carrier{
-				TraceID:        persisted.TraceID,
-				ConversationID: persisted.ConversationID,
-				AccountID:      persisted.AccountID,
-				Channel:        persisted.Platform,
-			})
-
-			outSpan := tracing.Start(ctx, tracing.NodeOutboundEnqueue).
-				Input(map[string]any{
-					"channel":     string(channel),
-					"account_id":  accountID,
-					"conv_id":     persisted.ConversationID,
-					"content_len": len(persisted.Content),
-					"is_ai_reply": persisted.IsAIReply,
-				}).
-				Expected("AI 回复落库 message_hub(status=pending)，进入下行出库队列").
-				MsgID(persisted.MsgID)
-			outSpan.Output(map[string]any{
-				"msg_id": persisted.MsgID,
-				"status": persisted.Status,
-				"id":     persisted.ID,
-			})
-			var outSpanErr error
-			if enqueueStatus == tracing.StatusAbnormal {
-				outSpanErr = fmt.Errorf("%s", enqueueAbnormal)
-			}
-			outSpan.End(nil, outSpanErr)
-
-			// sent 的口径（D-02）：= 这条回复确实交接给了桥接出库队列
-			// （message_hub 落库成功且状态可被扩展领取），**不等于**客户已收到
-			// ——真达由扩展 ack 走 UpdateDeliveryStatus 收口。
-			// 未落库 / 被标 failed / 无入站上下文都不能算成功，否则重放 worker
-			// 会把这条 MarkSent 掉，回复静默丢失。
-			switch {
-			case persisted.ID == 0 && duplicateOccupied:
-				// 同键占位（同会话同文案已 delivered/pending 在途）——AI 对重复问题
-				// 确定性输出同一话术时的必然分支（2026-11-14 生产终局实证：19:10/19:12/
-				// 19:14 三次重试全部 id=0，客户「给我一份功能清单」两次追问石沉大海）。
-				// 处置三件事：①落一条 failed 占位行（坐席在收件箱看得到「客户问过且
-				// 未解决」）；②markSendFailed 置不可重试（同一占位行不会消失，重试
-				// 只制造噪音——19:10 批三次重试全部 id=0 即实证）；③Error 级出声。
-				dupRow := &model.MessageHub{
-					TenantID:       persisted.TenantID,
-					MsgID:          persisted.MsgID + ":dup",
-					Platform:       string(channel),
-					AccountID:      accountID,
-					Direction:      "outbound",
-					Status:         "failed",
-					MsgType:        "text",
-					SenderID:       accountID,
-					ReceiverID:     hubMsg.ReceiverID,
-					Content:        content,
-					ConversationID: persisted.ConversationID,
-					IsAIReply:      true,
-					AIAgent:        "sales_engine",
-					IsRead:         false,
-					SentAt:         time.Now(),
-					TraceID:        persisted.TraceID,
-					Extra:          model.JSONMap{"duplicate_of": persisted.MsgID, "duplicate_reason": "same reply already delivered/pending"},
-				}
-				if _, derr := s.delayedRepo.CreateMessageHubIdempotent(ctx, dupRow); derr != nil {
-					logger.Ctx(ctx).Warn().Err(derr).Str("module", "bridge").
-						Str("conv_id", persisted.ConversationID).Msg("[Bridge] 重复话术占位行落库失败（坐席可见性降级）")
-				}
-				logger.Ctx(ctx).Error().
-					Str("module", "bridge").
-					Str("channel", string(channel)).
-					Str("conv_id", persisted.ConversationID).
-					Str("msg_id", persisted.MsgID).
-					Msg("[Bridge] AI 重复话术已投递过（同会话同文案占位）——本条转 failed 占位行，需人工跟进客户追问")
-				markSendFailed(&ChannelError{
-					Category:  CategoryBadRequest,
-					Retryable: false,
-					Raw:       "duplicate reply already delivered/pending (same conv+content); needs human follow-up",
-				})
-			case persisted.ID == 0:
-				// 真 DB 错误（非占位冲突）：保持可重试——回复既没出库也没人再投就永久丢了
-				//（webhook_batchc_bridge_sent_test 契约），占位冲突走上面的 duplicateOccupied 分支。
-				markSendFailed(&ChannelError{
-					Category:  CategoryUnknown,
-					Retryable: true,
-					Raw:       "桥接出站未写入 message_hub(channel=" + string(channel) + " conv=" + persisted.ConversationID + ")",
-				})
-			case persisted.Status == "failed":
-				reason, _ := persisted.Extra["undeliverable_reason"].(string)
-				// 桥接族的失败轨迹就是它自己那一行（status=failed + scenario=undeliverable +
-				// 原因），这里只补结构化错误与日志；再走一次轨迹落库会变成同一会话两行出站。
-				markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
-					"桥接目标不可达: "+reason))
-			default:
-				sent = true
-			}
-		} else {
-			logger.Ctx(ctx).Error().Str("channel", string(channel)).Str("account_id", accountID).
-				Msg("[Bridge] 缺少入站消息上下文（无 conversation 目标），AI 回复未出库")
-			markSendFailed(preSendFailure(channel, CategoryBadRequest,
-				fmt.Sprintf("%s 桥接出站缺少入站上下文，无 conversation 目标，未出库", channel)))
-		}
+	sender, ok := s.outboundSenderFor(channel)
+	if !ok {
+		logger.Ctx(ctx).Warn().Str("channel", string(channel)).Str("account_id", accountID).Msg("unsupported outbound channel, skipped")
+		markSendFailedLogged(preSendFailure(channel, CategoryBadRequest,
+			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
+		return
+	}
+	res := sender.Send(ctx, &OutboundRequest{
+		Channel:            channel,
+		AccountID:          accountID,
+		Payload:            p,
+		Content:            content,
+		Cards:              cards,
+		Hub:                hubMsg,
+		CardsFallbackCount: cardsFallbackCount,
+		Fail:               markSendFailed,
+		FailUntracked:      markSendFailedLogged,
+	})
+	if res != nil {
+		sent = res.Sent
 	}
 	return
 }
