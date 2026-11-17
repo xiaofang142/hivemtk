@@ -462,27 +462,36 @@ type InboxConversation struct {
 	CustomerName string `gorm:"type:varchar(200)" json:"customer_name"`
 	// SenderAvatar 客户头像（M-2，2026-11-11）：随 last message upsert 按「新值优先、空值保旧」
 	// 刷新（与 CustomerName 同款 firstNonEmpty 语义）；列名沿用消息侧 sender_avatar。
-	SenderAvatar       string         `gorm:"type:varchar(500)" json:"sender_avatar"`
-	ConversationID     string         `gorm:"type:varchar(100);index" json:"conversation_id"`
-	Status             string         `gorm:"type:varchar(20);default:'unread';index" json:"status"`
-	AssignedTo         string         `gorm:"type:varchar(64);index" json:"assigned_to"`
-	AssignedToSOP      uint           `gorm:"index" json:"assigned_to_sop"`
-	AssignedAt         *time.Time     `json:"assigned_at"`
-	UnreadCount        int            `gorm:"default:0" json:"unread_count"`
-	TotalCount         int            `gorm:"default:0" json:"total_count"`
-	LastMessageID      uint           `json:"last_message_id"`
-	LastMessagePreview string         `gorm:"type:varchar(500)" json:"last_message_preview"`
-	LastMessageAt      *time.Time     `gorm:"index" json:"last_message_at"`
-	LastMessageFrom    string         `gorm:"type:varchar(20)" json:"last_message_from"`
-	Pinned             bool           `gorm:"default:false;index" json:"pinned"`
-	Starred            bool           `gorm:"default:false" json:"starred"`
-	Muted              bool           `gorm:"default:false" json:"muted"`
-	Tags               JSONArray      `gorm:"type:text" json:"tags"`
-	Extra              JSONMap        `gorm:"type:text" json:"extra"`
-	ClosedAt           *time.Time     `json:"closed_at"`
-	CreatedAt          time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt          time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt          gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	SenderAvatar       string     `gorm:"type:varchar(500)" json:"sender_avatar"`
+	ConversationID     string     `gorm:"type:varchar(100);index" json:"conversation_id"`
+	Status             string     `gorm:"type:varchar(20);default:'unread';index" json:"status"`
+	AssignedTo         string     `gorm:"type:varchar(64);index" json:"assigned_to"`
+	AssignedToSOP      uint       `gorm:"index" json:"assigned_to_sop"`
+	AssignedAt         *time.Time `json:"assigned_at"`
+	UnreadCount        int        `gorm:"default:0" json:"unread_count"`
+	TotalCount         int        `gorm:"default:0" json:"total_count"`
+	LastMessageID      uint       `json:"last_message_id"`
+	LastMessagePreview string     `gorm:"type:varchar(500)" json:"last_message_preview"`
+	LastMessageAt      *time.Time `gorm:"index" json:"last_message_at"`
+	LastMessageFrom    string     `gorm:"type:varchar(20)" json:"last_message_from"`
+	Pinned             bool       `gorm:"default:false;index" json:"pinned"`
+	Starred            bool       `gorm:"default:false" json:"starred"`
+	Muted              bool       `gorm:"default:false" json:"muted"`
+	Tags               JSONArray  `gorm:"type:text" json:"tags"`
+	Extra              JSONMap    `gorm:"type:text" json:"extra"`
+	// 会话生命周期（借鉴 Chatwoot 的 message 回调口径，2026-11-17）：
+	//   WaitingSince   客户来了还没人回的等待起点：客户消息落库时若为空则写入，
+	//                  任何非客户消息（人工/AI）落库时清空。它就是「等待首响」的
+	//                  事实，列表排序与超时提醒不必再按消息表反推。
+	//   FirstReplyAt   首响时间，只写一次（首条非客户消息）。
+	//   LastActivityAt 最近一条任意方向消息的时间，不受 unread 清零影响。
+	WaitingSince   *time.Time     `gorm:"index" json:"waiting_since"`
+	FirstReplyAt   *time.Time     `json:"first_reply_at"`
+	LastActivityAt *time.Time     `gorm:"index" json:"last_activity_at"`
+	ClosedAt       *time.Time     `json:"closed_at"`
+	CreatedAt      time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
 func (InboxConversation) TableName() string { return "inbox_conversations" }

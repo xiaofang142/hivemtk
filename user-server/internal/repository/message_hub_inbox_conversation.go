@@ -198,7 +198,10 @@ func (r *InboxConversationRepository) UpdateLastMessage(ctx context.Context, id 
 		Updates(map[string]any{
 			"last_message_preview": lastMessage,
 			"last_message_at":      lastMessageAt,
-			"unread_count":         gorm.Expr("unread_count + ?", unreadInc),
+			// 任意方向消息都算一次活动；这里不区分方向（调用方只给 unreadInc），
+			// waiting_since/first_reply_at 由 UpsertFromMessageTx 按方向收口。
+			"last_activity_at": lastMessageAt,
+			"unread_count":     gorm.Expr("unread_count + ?", unreadInc),
 		}).Error
 }
 
@@ -287,12 +290,19 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 			LastMessagePreview: in.LastMessagePreview,
 			LastMessageAt:      &in.LastMessageAt,
 			LastMessageFrom:    in.LastMessageFrom,
+			LastActivityAt:     &in.LastMessageAt,
 		}
 		if in.LastMessageFrom == "customer" {
 			conv.UnreadCount = 1
+			// 首条就是客户消息：等待首响从现在开始。
+			waitingSince := in.LastMessageAt
+			conv.WaitingSince = &waitingSince
 		} else {
 
 			conv.Status = "open"
+			// 会话由我方消息开场的场景（主动触达/补录）：首响即本条。
+			firstReplyAt := in.LastMessageAt
+			conv.FirstReplyAt = &firstReplyAt
 		}
 		return tx.Create(&conv).Error
 	}
@@ -305,6 +315,7 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 		"last_message_preview": in.LastMessagePreview,
 		"last_message_at":      in.LastMessageAt,
 		"last_message_from":    in.LastMessageFrom,
+		"last_activity_at":     in.LastMessageAt,
 		"total_count":          conv.TotalCount + 1,
 		"customer_name":        firstNonEmpty(in.CustomerName, conv.CustomerName),
 		// 客户头像「新值优先、空值保旧」：与 customer_name 同语义，出站/空头像行不清掉已有值。
@@ -313,6 +324,11 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 	}
 	if in.LastMessageFrom == "customer" {
 		updates["unread_count"] = conv.UnreadCount + 1
+		// 等待首响只覆盖「从无到有」：已在等待中再来的消息不刷新起点，
+		// 否则客户连发会把等待时长清零（SLA 判定要看最早那条）。
+		if conv.WaitingSince == nil {
+			updates["waiting_since"] = in.LastMessageAt
+		}
 		if conv.Status == "closed" {
 			updates["status"] = "unread"
 			updates["closed_at"] = nil
@@ -322,6 +338,11 @@ func (r *InboxConversationRepository) UpsertFromMessageTx(ctx context.Context, t
 	} else {
 
 		updates["unread_count"] = 0
+		// 我方消息（人工或 AI）落库即「已响应」：等待标记收口，首响只写一次。
+		updates["waiting_since"] = nil
+		if conv.FirstReplyAt == nil {
+			updates["first_reply_at"] = in.LastMessageAt
+		}
 		if conv.Status == "unread" {
 			updates["status"] = "open"
 		}
