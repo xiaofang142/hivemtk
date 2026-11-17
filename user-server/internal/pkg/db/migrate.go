@@ -214,6 +214,8 @@ func allModels() []any {
 		&model.MigrationCheckpoint{},
 		&contentmodel.BatchOperationHistory{},
 		&model.MessageHub{},
+		// 平台事件审计（specs/024 D2/R3）：编辑/撤回/入群/机器人/交互回调的证据行。
+		&model.ChannelEventAudit{},
 		&model.InboxConversation{},
 		&model.InboxAssignment{},
 		&model.MessageTrace{},
@@ -492,6 +494,7 @@ func allModels() []any {
 		// ApplyAction（坐席认领/释放/完成/撤销、会话结束时的系统撤销）。
 		// 与 ApprovalRequest 同一条理由：登记晚一卡，第一批流量就会往不存在的表里写。
 		&model.HumanTask{},
+		&model.BridgeLeadTask{},
 		&model.IntegrationTemplate{},
 		&model.IntentExample{},
 		// T-P9-02 知识库发布制三张表。kb_releases 是**读路径的依赖**（召回侧的

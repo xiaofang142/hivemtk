@@ -132,16 +132,21 @@ type InboxIngressResult struct {
 	QueuedForAI bool   `json:"queued_for_ai"`
 	SessionID   string `json:"session_id"`
 	Reason      string `json:"reason,omitempty"`
+	// RouteRuleID 命中的路由规则（specs/024 D3）；0 表示未命中、走默认行为。
+	RouteRuleID uint `json:"route_rule_id,omitempty"`
+	// InteractionID 交互回调命中的平台交互 id（specs/024 D8）。
+	InteractionID string `json:"interaction_id,omitempty"`
 }
 
 type InboxIngressService struct {
-	hubRepo       *repository.MessageHubRepository
-	feedbackRepo  *repository.FeedbackRecordRepository
-	cache         cache.Cache
-	triggerCh     chan string
-	aiTrigger     AITrigger
-	inboxSvc      *InboxService
-	leadMiningSvc *Service
+	hubRepo             *repository.MessageHubRepository
+	feedbackRepo        *repository.FeedbackRecordRepository
+	cache               cache.Cache
+	triggerCh           chan string
+	aiTrigger           AITrigger
+	inboxSvc            *InboxService
+	leadMiningSvc       *Service
+	bridgeLeadProcessor BridgeLeadProcessor
 
 	// bridgeFollow 新用户（非关注好友）事件登记与自动关注策略（M-6）。
 	// 为 nil 时（未装配/单测）识别信号不打扰任何既有路径，行为与接入前一致。
@@ -150,6 +155,10 @@ type InboxIngressService struct {
 	// pendingOutbound 延迟出站队列探针：查「该会话是否还有一条排队待投的回复」。
 	// 为 nil 时（未接库/单测）视为无排队，行为与接入前一致。
 	pendingOutbound *repository.DelayedOutboundRepository
+
+	// auditRepo 平台事件审计出口（specs/024 D2/R3）：编辑/撤回/入群/机器人事件不落消息表，
+	// 但必须有证据落库——总线是 best-effort（队列满即丢），不能当证据。
+	auditRepo *repository.ChannelEventAuditRepository
 
 	// contentDedupTTL 是入口那把「渠道+发送者+内容」窗口键的存活时间，零值取 InboxContentDedupTTL。
 	// 做成字段而非常量，只为了让"窗口真的有界"这一句能被断言：常量下那条腿要睡满 5 分钟。
@@ -179,13 +188,16 @@ func NewInboxIngressService() *InboxIngressService {
 	var hubRepo *repository.MessageHubRepository
 	var feedbackRepo *repository.FeedbackRecordRepository
 	var pendingOutbound *repository.DelayedOutboundRepository
+	var auditRepo *repository.ChannelEventAuditRepository
 	if repository.DBReady() {
 		hubRepo = repository.NewMessageHubRepository()
+		auditRepo = repository.NewChannelEventAuditRepositoryDefault()
 		feedbackRepo = repository.NewFeedbackRecordRepositoryDefault()
 		pendingOutbound = repository.NewDelayedOutboundRepositoryDefault()
 	}
 	return &InboxIngressService{
 		hubRepo:         hubRepo,
+		auditRepo:       auditRepo,
 		feedbackRepo:    feedbackRepo,
 		pendingOutbound: pendingOutbound,
 		cache:           cache.GetGlobalCache(),
@@ -203,6 +215,20 @@ func (s *InboxIngressService) SetInboxService(svc *InboxService) {
 
 func (s *InboxIngressService) SetLeadMining(svc *Service) {
 	s.leadMiningSvc = svc
+}
+
+// SetBridgeLeadProcessor 仅装配后台执行依赖，不在入站请求里调用。
+func (s *InboxIngressService) SetBridgeLeadProcessor(process BridgeLeadProcessor) {
+	if s != nil {
+		s.bridgeLeadProcessor = process
+	}
+}
+
+func (s *InboxIngressService) BridgeLeadProcessor() BridgeLeadProcessor {
+	if s == nil {
+		return nil
+	}
+	return s.bridgeLeadProcessor
 }
 
 // SetBridgeFollowService 注入新用户（非关注好友）登记与自动关注策略（M-6）。
@@ -504,6 +530,13 @@ func (s *InboxIngressService) NormalizeEvent(ctx context.Context, event *model.M
 	if event.MsgType == "" {
 		event.MsgType = model.MsgTypeText
 	}
+	// 事件类型归一（specs/024 D2）：这里是唯一收口点——channelbot 客户端与各渠道解析器
+	// 两条构建路径都会经过此函数，默认值加在这里，存量调用零改动。
+	// 未知类型不在这里改写：交给 dispatch 的 default 分支按 message.received 处理，
+	// 避免把渠道新事件静默吞掉（审计里仍能看到原始类型）。
+	if event.EventType == "" {
+		event.EventType = model.EventTypeMessageReceived
+	}
 	if event.Timestamp.IsZero() {
 		event.Timestamp = time.Now()
 	}
@@ -536,6 +569,13 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		return result, err
 	}
 	result.SessionID = event.SessionID
+
+	// 事件类型分流（specs/024 D2/T203）：非 message.received 的平台事件不进消息链路——
+	// 它们没有「一条新消息」的语义，进落库/去重/触发 AI 会制造幽灵回复与未读数。
+	// 未知类型仍按 message.received 处理（渠道新事件不能被静默吞掉）。
+	if event.EventType != model.EventTypeMessageReceived && model.IsKnownEventType(event.EventType) {
+		return s.handlePlatformEvent(ctx, event, result)
+	}
 
 	isSystemMsg := event.SenderType == "system"
 
@@ -620,7 +660,7 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 		return result, nil
 	}
 
-	if err := s.persistMessage(ctx, event); err != nil {
+	if err := s.persistMessageWithLeadEligibility(ctx, event, true); err != nil {
 		// §8.3-9(c)：入口那把内容窗口键是「先占后写」的，写失败就得把坑退回去 ——
 		// 否则扩展按重投队列原样再发一次时，会被自己留下的键判成 duplicate，只剩留痕不回 AI。
 		s.releaseInboundDedup(ctx, decision)
@@ -1123,7 +1163,7 @@ func (s *InboxIngressService) handleIngressSingleForBatch(ctx context.Context, e
 		return result, nil
 	}
 
-	if err := s.persistMessage(ctx, event); err != nil {
+	if err := s.persistMessageWithLeadEligibility(ctx, event, true); err != nil {
 		// 与单条路径同一条补偿（§8.3-9(c)）：批次里失败的那一条如果不退坑，
 		// 同一会话后面每一条同内容重投都会被它毒掉。
 		s.releaseInboundDedup(ctx, decision)

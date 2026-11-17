@@ -42,6 +42,37 @@ const (
 	SenderTypeCustomer = "customer"
 )
 
+// 事件类型（specs/024 D2，取 LangBot 12 类事件中与收件箱语义兼容的子集）。
+//
+// 约定：
+//   - 空串等价 message.received（存量渠道零改动，NormalizeEvent 收口归一）；
+//   - 只有 message.received 触发 AI 回复；其余类型只做「改内容 / 标撤回 / 审计 / 回 ack」；
+//   - 成员与机器人事件不落 message_hub，只写审计 + 事件总线（总线可丢，审计是证据）。
+const (
+	EventTypeMessageReceived     = "message.received"
+	EventTypeMessageEdited       = "message.edited"
+	EventTypeMessageDeleted      = "message.deleted"
+	EventTypeMessageReaction     = "message.reaction"
+	EventTypeGroupMemberJoined   = "group.member_joined"
+	EventTypeGroupMemberLeft     = "group.member_left"
+	EventTypeGroupMemberBanned   = "group.member_banned"
+	EventTypeBotInvited          = "bot.invited_to_group"
+	EventTypeBotRemoved          = "bot.removed_from_group"
+	EventTypeInteractionCallback = "interaction.callback"
+)
+
+// IsKnownEventType 判定是否为本轮登记的事件类型（未知类型按 message.received 处理，保持兼容）。
+func IsKnownEventType(t string) bool {
+	switch t {
+	case EventTypeMessageReceived, EventTypeMessageEdited, EventTypeMessageDeleted,
+		EventTypeMessageReaction, EventTypeGroupMemberJoined, EventTypeGroupMemberLeft,
+		EventTypeGroupMemberBanned, EventTypeBotInvited, EventTypeBotRemoved,
+		EventTypeInteractionCallback:
+		return true
+	}
+	return false
+}
+
 // MessageEvent 渠道接入消息中台统一消息标准
 //
 // 设计要点：
@@ -50,8 +81,10 @@ const (
 //  3. 不映射到数据库表，仅作为运行时事件结构在内存与 Redis 中流转
 //  4. 与 model.MessageHub（持久化消息）通过 Normalize 转换：MessageEvent -> MessageHub
 type MessageEvent struct {
-	EventID    string `json:"event_id"`
-	SessionID  string `json:"session_id"`
+	EventID   string `json:"event_id"`
+	SessionID string `json:"session_id"`
+	// EventType 事件类型（specs/024 D2）；空串在 NormalizeEvent 归一为 message.received。
+	EventType  string `json:"event_type,omitempty"`
 	Channel    string `json:"channel"`
 	SenderID   string `json:"sender_id"`
 	SenderName string `json:"sender_name,omitempty"`
