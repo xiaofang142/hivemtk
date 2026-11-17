@@ -886,7 +886,7 @@ flowchart TB
 
 ## Phase 5 身份键（P1）
 
-- [ ] **T501 双层唯一键迁移 065（身份锚 + 业务键）**（P1｜依赖 —｜L｜🟡）
+- [x] **T501 双层唯一键迁移 065（身份锚 + 业务键）**（P1｜依赖 —｜L｜🟡）
   - **规格**：给 `customer_channels` 建**两条**唯一键（决策方案 B，2026-11-17 确认）：
     | 键 | 列 | 名称 |
     |---|---|---|
@@ -926,7 +926,7 @@ flowchart TB
     ```
   - **验收**：含重复数据的库连跑两次无错；两轮去重后各自 `GROUP BY` 组数 = 活行数；`pg_indexes` 断言两条索引的列序与 `WHERE` 谓词；`check_model_migration.py` 绿。
 
-- [ ] **T502 模型与写入路径（两段式 upsert）**（P1｜依赖 T501｜M｜🟡）
+- [x] **T502 模型与写入路径（两段式 upsert）**（P1｜依赖 T501｜M｜🟡）
   - **规格**：gorm tag 与 T501 一致；`UpsertCustomerChannel` 改为：① unscoped（含软删）按身份锚查 → 命中则**沿用其 one_id**（新 one_id 不覆盖，只记 `operation_log`）、刷新 `last_seen_at`、若已软删则复活；② 未命中按业务键查 → 命中则更新（同样不覆盖 one_id 冲突）；③ 都没有才插入；④ 并发插入冲突 → 重查一次。`ON CONFLICT` 只作兜底，目标键为业务键 + `WHERE deleted_at IS NULL`。
   - **上下文**：`repository/channel_overview.go:158-169` 写死 `ON CONFLICT (tenant_id, one_id, channel)`，不改直接报 `no unique or exclusion constraint matching the ON CONFLICT specification`；调用点 `service/channel_overview.go:268`。今天同一 `channel_user_id` 若先后落到两个 OneID 会写出两行、指向两个客户（Chatwoot 的做法是先按 `(inbox_id, source_id)` 找绑定）。
   - **架构**：Model + Repository；Service 只调方法，不拼 SQL。

@@ -19,11 +19,17 @@ type CustomerChannel struct {
 	// 手机号型 OneID = "phone:" + sha256 hex(64) = 70 字符，
 	// 若此处收窄为 varchar(64)，合并客户时 ReassignOneID 写回 one_id 会报
 	// `value too long for type character varying(64)`，整个合并事务回滚。
-	OneID         string         `gorm:"type:varchar(128);index;uniqueIndex:idx_oneid_channel" json:"one_id"`
-	Channel       string         `gorm:"type:varchar(32);uniqueIndex:idx_oneid_channel" json:"channel"`
-	ChannelUserID string         `gorm:"type:varchar(128);index" json:"channel_user_id"`
+	// 两条唯一键（specs/024 T501/T502，迁移 065）：
+	//   业务键 idx_oneid_channel   (tenant_id, one_id, channel, account_id)  WHERE deleted_at IS NULL
+	//   身份锚 idx_channel_identity (tenant_id, channel, account_id, channel_user_id)
+	//                                                   WHERE deleted_at IS NULL AND channel_user_id <> ''
+	// tenant_id 由 tenancyidx.Normalize 启动时复合化补到列首（tag 里不写，避免两处定义漂移）。
+	// 谓词写在 tag 里：软删行不再占键，否则「删了再插同一身份」永远撞唯一键。
+	OneID         string         `gorm:"type:varchar(128);index;uniqueIndex:idx_oneid_channel,priority:2,where:deleted_at IS NULL" json:"one_id"`
+	Channel       string         `gorm:"type:varchar(32);uniqueIndex:idx_oneid_channel,priority:3,where:deleted_at IS NULL" json:"channel"`
+	ChannelUserID string         `gorm:"type:varchar(128);index;not null;default:'';uniqueIndex:idx_channel_identity,priority:4,where:deleted_at IS NULL AND channel_user_id <> ''" json:"channel_user_id"`
 	ChannelName   string         `gorm:"type:varchar(128)" json:"channel_name"`
-	AccountID     string         `gorm:"type:varchar(64);index" json:"account_id"`
+	AccountID     string         `gorm:"type:varchar(64);index;not null;default:'';uniqueIndex:idx_oneid_channel,priority:4,where:deleted_at IS NULL;uniqueIndex:idx_channel_identity,priority:3,where:deleted_at IS NULL AND channel_user_id <> ''" json:"account_id"`
 	GroupID       string         `gorm:"type:varchar(64)" json:"group_id,omitempty"`
 	IsGroup       bool           `gorm:"default:false" json:"is_group"`
 	IsPrimary     bool           `gorm:"default:false" json:"is_primary"`
