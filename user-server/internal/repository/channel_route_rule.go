@@ -27,8 +27,8 @@ func NewChannelRouteRuleRepositoryDefault() *ChannelRouteRuleRepository {
 }
 
 // ListByTenant 某租户全部规则（管理端列表用），按优先级升序。
-func (r *ChannelRouteRuleRepository) ListByTenant(ctx context.Context, tenantID string) ([]model.ChannelRouteRule, error) {
-	if r == nil || r.db == nil || tenantID == "" {
+func (r *ChannelRouteRuleRepository) ListByTenant(ctx context.Context, tenantID uint) ([]model.ChannelRouteRule, error) {
+	if r == nil || r.db == nil || tenantID == 0 {
 		return nil, nil
 	}
 	var rows []model.ChannelRouteRule
@@ -43,8 +43,8 @@ func (r *ChannelRouteRuleRepository) ListByTenant(ctx context.Context, tenantID 
 }
 
 // ListEnabled 引擎用：某租户下「渠道/账号匹配（空串表示不限）」的启用规则，按优先级升序。
-func (r *ChannelRouteRuleRepository) ListEnabled(ctx context.Context, tenantID, channel, accountID string) ([]model.ChannelRouteRule, error) {
-	if r == nil || r.db == nil || tenantID == "" {
+func (r *ChannelRouteRuleRepository) ListEnabled(ctx context.Context, tenantID uint, channel, accountID string) ([]model.ChannelRouteRule, error) {
+	if r == nil || r.db == nil || tenantID == 0 {
 		return nil, nil
 	}
 	q := r.db.WithContext(ctx).
@@ -66,8 +66,8 @@ func (r *ChannelRouteRuleRepository) ListEnabled(ctx context.Context, tenantID, 
 
 // Upsert 新增或更新（ID 为 0 时新增）。租户字段强制取入参，忽略调用方填的值：
 // 规则归属只能由「当前请求租户」决定，不能由请求体声明。
-func (r *ChannelRouteRuleRepository) Upsert(ctx context.Context, tenantID string, rule *model.ChannelRouteRule) error {
-	if r == nil || r.db == nil || rule == nil || tenantID == "" {
+func (r *ChannelRouteRuleRepository) Upsert(ctx context.Context, tenantID uint, rule *model.ChannelRouteRule) error {
+	if r == nil || r.db == nil || rule == nil || tenantID == 0 {
 		return nil
 	}
 	rule.TenantID = tenantID
@@ -98,8 +98,8 @@ func (r *ChannelRouteRuleRepository) Upsert(ctx context.Context, tenantID string
 }
 
 // Delete 删除本租户的一条规则；返回是否真的删掉（false → 调用方回 404）。
-func (r *ChannelRouteRuleRepository) Delete(ctx context.Context, tenantID string, id uint) (bool, error) {
-	if r == nil || r.db == nil || tenantID == "" || id == 0 {
+func (r *ChannelRouteRuleRepository) Delete(ctx context.Context, tenantID uint, id uint) (bool, error) {
+	if r == nil || r.db == nil || tenantID == 0 || id == 0 {
 		return false, nil
 	}
 	res := r.db.WithContext(ctx).

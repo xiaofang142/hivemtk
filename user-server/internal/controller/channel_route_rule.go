@@ -25,22 +25,19 @@ func NewChannelRouteRuleController(svc *service.ChannelRouteRuleService) *Channe
 	return &ChannelRouteRuleController{svc: svc}
 }
 
-func (ctrl *ChannelRouteRuleController) tenantOf(ctx *gin.Context) string {
+func (ctrl *ChannelRouteRuleController) tenantOf(ctx *gin.Context) uint {
 	raw, ok := ctx.Get(middleware.TenantContextKey)
 	if !ok {
-		return ""
+		return 0
 	}
 	id, _ := raw.(uint)
-	if id == 0 {
-		return ""
-	}
-	return strconv.FormatUint(uint64(id), 10)
+	return id
 }
 
 // List GET /api/channel-route-rules
 func (ctrl *ChannelRouteRuleController) List(ctx *gin.Context) {
 	tenant := ctrl.tenantOf(ctx)
-	if tenant == "" {
+	if tenant == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "缺少租户归属，请重新登录")
 		return
 	}
@@ -55,7 +52,7 @@ func (ctrl *ChannelRouteRuleController) List(ctx *gin.Context) {
 // Create POST /api/channel-route-rules
 func (ctrl *ChannelRouteRuleController) Create(ctx *gin.Context) {
 	tenant := ctrl.tenantOf(ctx)
-	if tenant == "" {
+	if tenant == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "缺少租户归属，请重新登录")
 		return
 	}
@@ -74,7 +71,7 @@ func (ctrl *ChannelRouteRuleController) Create(ctx *gin.Context) {
 // Update PUT /api/channel-route-rules/:id
 func (ctrl *ChannelRouteRuleController) Update(ctx *gin.Context) {
 	tenant := ctrl.tenantOf(ctx)
-	if tenant == "" {
+	if tenant == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "缺少租户归属，请重新登录")
 		return
 	}
@@ -99,7 +96,7 @@ func (ctrl *ChannelRouteRuleController) Update(ctx *gin.Context) {
 // Delete DELETE /api/channel-route-rules/:id
 func (ctrl *ChannelRouteRuleController) Delete(ctx *gin.Context) {
 	tenant := ctrl.tenantOf(ctx)
-	if tenant == "" {
+	if tenant == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "缺少租户归属，请重新登录")
 		return
 	}

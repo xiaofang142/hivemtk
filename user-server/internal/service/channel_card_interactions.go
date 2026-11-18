@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"strconv"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -96,9 +95,8 @@ func (s *WebhookService) registerCardInteraction(ctx context.Context, channel We
 	}
 	if hubMsg != nil {
 		row.ConversationID = hubMsg.ConversationID
-		// MessageHub 的租户键是 uint，交互表是 string（平台事件带字符串租户键）；
-		// 这里只做十进制转写，不做业务映射。
-		row.TenantID = strconv.FormatUint(uint64(hubMsg.TenantID), 10)
+		// 两张表的租户键同为 uint（bigint 列），直接赋值，不做字符串转写。
+		row.TenantID = hubMsg.TenantID
 	}
 	expires := time.Now().Add(cardInteractionTTL(ctx))
 	row.ExpiresAt = &expires

@@ -24,6 +24,13 @@ export const SUPPORTED_HOSTS = [
   'weibo.com',
   // CH-16 首切片：拼多多商家后台（chat-merchant 聊天页所在域，登录墙后）。
   'pinduoduo.com',
+  // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：入口域在案，适配器
+  // fail-closed（match 恒 false）——注入后仅 idle，不采集不发送。
+  'work.taobao.com',
+  'im.jinritemai.com',
+  'im.kwaixiaodian.com',
+  'seller.shopee',
+  'seller.walmart.com',
 ];
 
 // isSupportedHost：运行时域名校验。manifest.matches 是入口校验，
@@ -56,6 +63,12 @@ function pickContentScriptFile(url) {
     if (/(^|\.)weibo\.com$/.test(host)) return 'content-weibo.js';
     // CH-16 首切片：拼多多商家后台（mms.pinduoduo.com/chat-merchant）。
     if (/(^|\.)pinduoduo\.com$/.test(host)) return 'content-pdd.js';
+    // 2026-11-18 电商店铺五渠道骨架。
+    if (/(^|\.)work\.taobao\.com$/.test(host)) return 'content-taobao.js';
+    if (/(^|\.)im\.jinritemai\.com$/.test(host)) return 'content-douyin_shop.js';
+    if (/(^|\.)im\.kwaixiaodian\.com$/.test(host)) return 'content-kuaishou_shop.js';
+    if (/(^|\.)seller\.shopee\.[a-z.]+$/.test(host)) return 'content-shopee.js';
+    if (/(^|\.)seller\.walmart\.com$/.test(host)) return 'content-walmart_us.js';
     return null;
   } catch (_) {
     return null;

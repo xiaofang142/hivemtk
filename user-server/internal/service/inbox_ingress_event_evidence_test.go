@@ -42,7 +42,7 @@ func TestIMEventEvidence_TenantComesOnlyFromContext(t *testing.T) {
 			if err := database.WithContext(ctx).Find(&audits).Error; err != nil {
 				t.Fatal(err)
 			}
-			if len(audits) != 1 || audits[0].TenantID != "18" {
+			if len(audits) != 1 || audits[0].TenantID != 18 {
 				t.Fatalf("权威租户18必须有唯一证据，实际%+v", audits)
 			}
 			if kind == model.EventTypeInteractionCallback {
@@ -50,7 +50,7 @@ func TestIMEventEvidence_TenantComesOnlyFromContext(t *testing.T) {
 				if err := database.WithContext(ctx).Find(&interactions).Error; err != nil {
 					t.Fatal(err)
 				}
-				if len(interactions) != 1 || interactions[0].TenantID != "18" {
+				if len(interactions) != 1 || interactions[0].TenantID != 18 {
 					t.Fatalf("交互租户不正确：%+v", interactions)
 				}
 			}

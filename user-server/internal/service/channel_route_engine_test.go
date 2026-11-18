@@ -15,7 +15,7 @@ type fakeRouteSource struct {
 	lastAccountID string
 }
 
-func (f *fakeRouteSource) ListEnabled(_ context.Context, tenantID, channel, accountID string) ([]model.ChannelRouteRule, error) {
+func (f *fakeRouteSource) ListEnabled(_ context.Context, tenantID uint, channel, accountID string) ([]model.ChannelRouteRule, error) {
 	f.lastChannel, f.lastAccountID = channel, accountID
 	if f.err != nil {
 		return nil, f.err
@@ -29,7 +29,7 @@ func routeEvent(typ string, extra map[string]any) *model.MessageEvent {
 		Channel:   model.ChannelTelegram,
 		EventType: typ,
 		SenderID:  "u-1",
-		Extra:     map[string]any{"tenant_id": "t1", "account_id": "acc-1"},
+		Extra:     map[string]any{"tenant_id": "1", "account_id": "acc-1"},
 	}
 	for k, v := range extra {
 		e.Extra[k] = v

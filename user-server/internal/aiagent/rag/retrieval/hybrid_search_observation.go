@@ -108,12 +108,15 @@ func (h *HybridSearcher) observeSearch(ctx context.Context, query, productID str
 	h.observationCounts.inFlight.Add(1)
 	utils.SafeGo(observedCtx, "retrieval.observe", func(parent context.Context) {
 		defer func() {
-			<-h.observationSlots
-			h.observationCounts.inFlight.Add(^uint64(0))
+			// 先记失败、后减并发：反过来的话，外部一旦观察到 InFlight==0 就可能
+			// 认为「这一轮已经结算完」，而 Failed 还没 +1（统计看到全零）。
+			// 观测计数的顺序本身就是契约，不是实现细节。
 			if recover() != nil {
 				h.observationCounts.failed.Add(1)
 				logger.Ctx(parent).Warn().Msg("retrieval observation write panicked; coverage reduced")
 			}
+			<-h.observationSlots
+			h.observationCounts.inFlight.Add(^uint64(0))
 		}()
 		writeCtx, cancel := context.WithTimeout(parent, 2*time.Second)
 		defer cancel()

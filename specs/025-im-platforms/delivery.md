@@ -80,11 +80,20 @@
 | Slack 验签 | 固定 `v0:ts:body` HMAC 向量（含 +6min 过期） | `TestVerifySignatureWindow`、`TestSlackFullChain` |
 | wecombot 解密 | 自造 43 位 AESKey 往返加密 + 签名向量 | `TestEncryptDecryptRoundTrip`、`TestWeCombBotFullChain` |
 | custom 契约 | 自签 `t=...,v1=...`（错签/过期/篡改三负例） | `TestVerifyCustomSignature`、`TestCustomFullChain` |
+| wecomcs 出站回复（T707） | httptest 假平台收 `send_msg`，断言 touser/open_kfid/text.content | `TestWeComCSAcceptanceSim` |
+| OneBot 出站回复（T806） | 反向 WS 回环 + 假 HTTP API：群聊/私聊/断线回落/重连再走 WS 四腿 | `TestOneBotAcceptanceSim` |
+| Slack 出站回复（T904） | `SetSlackAPIBaseForTest` 指向 httptest，断言 channel/thread_ts/text/Bearer | `TestSlackAcceptanceSim` |
 
 全链路用例均在真实测试库上跑生产路由（`NewWebhookController(svc).RegisterRoutes`），
 断言落到 `message_hub` / `webhook_events` / `channel_event_audits`，非纯函数打桩。
 
+出站腿（`internal/service/im_platforms_acceptance_sim_test.go`）走的是 AI 回复的真实入口
+`sendOutbound`（含 `RenderForChannel`、回复认领、失败分类），不是绕过编排直接调 sender；
+Slack 之所以要 `SetSlackAPIBaseForTest`，是因为 `channelbot/core.BaseClient` 自建
+`http.Transport`，测试替换 `http.DefaultClient.Transport` 拦不到它。
+
 ## 五、遗留
 
-- T707 / T806 / T904：🔵 真实账号验收（企微客服真号、NapCat+QQ 号、真实 Slack 工作区），
-  需要凭据与外部环境，本轮不勾；模拟信号已覆盖同一批判据。
+- T707 / T806 / T904：已在 2026-11-18 用**模拟信号验收**勾选（见 §四出站三行），
+  但真实侧仍待补：企微客服真号与客户侧收件确认、NapCat 实机与 QQ 风控、Slack app 安装与
+  workspace @bot 回帖。模拟信号覆盖的是同一批判据（收件人/线程/断线重连/回落），不伪造平台事实。

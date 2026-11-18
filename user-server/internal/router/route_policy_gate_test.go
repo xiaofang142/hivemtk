@@ -139,6 +139,8 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /api/webhook/wechat/:account_id":                 "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
 	"GET /api/webhook/wecom/:account_id":                  "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
 	"GET /api/webhook/whatsapp/:account_id":               "渠道/邮件/短信回调：签名或一次性 token 自证身份（订单回调另有 VerifyWebhookKey 复核）",
+	"GET /api/webhook/wecomcs/:account_id":                "企微客服 URL 校验握手：按 account_id 取账号并用该账号回调 token 验 msg_signature，不匹配 401",
+	"GET /ws/onebot/:account_id":                          "OneBot 反向 WS 握手：按 account_id 取账号并校验 access_token（Bearer/query），不匹配不升级",
 	"GET /api/ws/visitor":                                 "访客 WebSocket：握手内校验 visitor_token",
 	"POST /api/chat/public/ws-ticket":                     "访客 WS 换票口：匿名但 handler 内强制校验 visitor_token（缺 token 403），签发一次性 ticket（与 /api/ws/visitor 同型）",
 	"GET /assets/*filepath":                               "前端静态产物与分享页：只有模板与图片，无商户数据",

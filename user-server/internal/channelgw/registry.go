@@ -181,6 +181,14 @@ func init() {
 		// .buyer-item/.cs-item/#replyTextarea/.reply-footer .send-btn 等，2026-11-06
 		// 评估报告 §5.1 复读），本方真机未校准——一律 Experimental，能力如实降级。
 		{Name: model.ChannelPDD, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "拼多多", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		// 2026-11-18 电商店铺网页桥五渠道骨架（CH-15/18/19/28/35）：服务端全链注册 +
+		// 桥侧 fail-closed 适配器（无真机校准选择器=拒启/拒发），一律 Experimental。
+		// 入站只走浏览器桥 POST /api/bridge/ingest，出站走 bridge_outbox 能力位。
+		{Name: model.ChannelTaobao, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "淘宝/天猫(千牛)", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		{Name: model.ChannelDouyinShop, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "抖店飞鸽", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		{Name: model.ChannelKuaishouShop, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "快手小店(快语)", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		{Name: model.ChannelShopee, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "Shopee", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
+		{Name: model.ChannelWalmartUS, Transports: []Transport{TransportHTTP, TransportWebSocket}, Label: "Walmart", Experimental: true, OutboundPath: OutboundPathBridgeOutbox},
 	} {
 		Default.Register(spec)
 	}

@@ -4,6 +4,57 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-19 · TG 配置迁移线上：hivemtk 社群上 SaaS 租户 18（四川同咨）（任务七）
+
+- **迁移内容（用户令「只迁移 hivemtk 那个社群」）**：本机 user_db `telegram_accounts` id=5
+  （bot @hivemtk_bot）+ `telegram_group_gates` id=3「HiveMtk 开源智能客服社群」
+  （chat -1003625877154，mode=mute_unlock，verify_ttl 10min，欢迎/验证文案原样）→
+  线上租户 18（tz3rmdj 四川同咨科技）。线上表原为空（0 账号/0 门禁）。
+- **落库**：线上 `telegram_accounts` 新行 id=2（bot_token 经 ssh 管道直传不落终端、
+  webhook_secret=服务端 md5 随机 32 位、webhook_enabled=true、ai_agent_enabled=true）；
+  `telegram_group_gates` 新行 id=3（配置照抄）。**成员表不迁**：本机该群唯一成员行是
+  join_status=kicked + verify_token 已过期的历史残留，无迁移价值——新成员由门禁自动发新令牌。
+- **setWebhook 闭环**：线上容器直连 api.telegram.org 不可达（大陆网络），本机经代理
+  （HTTP_PROXY 127.0.0.1:7898）调用；**workapi 域名被 Telegram 侧解析失败持续 400**
+  （DoH 双 NS 均正常解析 101.35.252.112——Telegram 自家 resolver 负缓存/抖动），改
+  **work.xapptool.cn 域名变体立即成功**（nginx 两 vhost /api/ 同转发 8204，等价）。
+  getWebhookInfo 实证：url=work 变体、ip=101.35.252.112（Telegram 已成功连上）、
+  last_err=None、pending=0。DB 两处（线上 id=2 + 本机 id=5 标记态）均同步为 work 变体 URL。
+- **验签闸负例**：POST 无 secret → 401 `verify error: missing X-Telegram-Bot-Api-Secret-Token`
+  （路由通、fail-closed 生效）。
+- **回滚**：线上 `DELETE FROM telegram_group_gates WHERE id=3; DELETE FROM telegram_accounts WHERE id=2;`
+  + Telegram deleteWebhook（token=本地 id=5 行）。
+- **换机注意**：TG webhook 依赖 work.xapptool.cn vhost 的 /api/ 反代到 user-server；若换域名
+  需同步 setWebhook+DB webhook_url 两处。
+
+## 2026-11-19 · 全量发版：链 A API + 链 B 扩展 1.3.8 + 链 C 上链 + SPA/embed-sdk 同步（任务六）
+
+- **链 A**：`deploy/deploy-api.sh` 成功，线上=9df54ef08（30 个 user-server 提交，含 024/025
+  收口批+电商店铺五渠道服务端注册+bridge-safe-quality 整改批+迁移 077）；二进制 sha256=
+  0ffa3942f0799094…；回滚点=镜像 `mtk-user-server:rollback-20261119-001938` +
+  `/www/wwwroot/hivemtk/user-server/user-server.bak-20261119-001938`；容器内+公网双健康
+  检查过、默认口令探针 GREEN。发布预检首次被 2 条测试基建连接失败拦停（slot 库并发超时，
+  非代码回归——全量 go test ./... 复跑 0 失败后放行重试）。
+- **链 B**：蜂桥扩展 1.3.8（电商店铺五渠道 fail-closed 骨架）——package.json/manifest.json/
+  release.mjs CHANGELOGS 三处同 bump；`publish --reload` 构建+产物校验+rsync 加载目录
+  （/Users/xiaofang/Documents/tool/hivebridge-1.0.2）+ego 重载回验版本=1.3.8 全过。
+  **ego-browser.mjs reload 步骤三次勘误落地**（扩展长名前缀匹配 / 快照解析改 shadow-DOM
+  逐元素定位 extensions-item #name→#dev-reload-button / 旧缩进回溯算法被 Chrome 新快照
+  结构淘汰）——本机 Chrome 实测 `#dev-reload-button` 为真实按钮 id（非 #devMode-…）。
+- **链 C**：`upload-platform-asset.mjs` 上链成功（资产 ast-general-1ea9d67e7430d18b0a，
+  approved，批量上架 200）；用户端页面回验因 ego 无 work.xapptool.cn 登录态未完成（登录后
+  补验，不阻塞——上传/上架接口侧证据齐）。
+- **SPA 管理端**（无自动链，任务六用户令含全前端）：本地 `npm run build` → 备份
+  `user-web.snapshot-20261119-*.tgz` → rsync dist → `/www/wwwroot/hivemtk/user-web/`
+  （.user.ini 宝塔不可删属预期）；公网 work.xapptool.cn 实测 index 引用
+  `assets/index-BZcPcTu3.js` 与本地 dist 一致。
+- **embed-sdk**：vite build 已自愈（§3.14 的 rolldown 解析 bug 不再复现，全量产物
+  esm+iife 正常）→ 备份 `user-server.embed-sdk-dist.snapshot-20261119-*.tgz` → rsync →
+  `/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`；公网
+  `https://work.xapptool.cn/embed/marketing-chat-widget.iife.js` 200（新 bundle）。
+- **换机注意**：user-web/embed-sdk-dist 是宿主 nginx 直伺服（非容器卷），迁移=整目录
+  rsync；扩展加载目录路径硬约束不变（路径变=ID 变=storage 丢）。
+
 ## 2026-11-17 · 审计轮生产侧落地（TRUSTED_PROXIES + 备份 cron + 泄漏密钥闭环核查）
 
 **变更一：user-server `.env` 追加 `TRUSTED_PROXIES=127.0.0.1,::1`**（2026-11-16 审计 P2-2）

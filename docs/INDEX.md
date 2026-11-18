@@ -36,7 +36,7 @@
 |------|------|
 | [COMPETITOR_ANALYSIS_202610.md](competitor/COMPETITOR_ANALYSIS_202610.md) | 功能模块级竞品对比论证（渠道/工具/RAG/调度/业务流程/CDP/评测 vs Chatwoot·Dify·FastGPT，2026-10 基线） |
 | [COMPETITOR_FEATURE_CHECKLIST_202610.md](competitor/COMPETITOR_FEATURE_CHECKLIST_202610.md) | 逐条对照清单：竞品模块实现 ↔ 我方模块实现（A渠道~H安全 8 组 60+ 条，独有/等价/缺口三档汇总） |
-| [COMPETITOR_GAP_TASKLIST_202610.md](competitor/COMPETITOR_GAP_TASKLIST_202610.md) | 竞品缺口改进任务清单 v3：二次论证后 P0×3（评测接线扩集 / 置信度三套阈值对齐 / 解析失败入库 bug）+ P1×4 + P2 排除论证 |
+| [未完成任务清单（外层 docs/）](../../docs/未完成任务清单.md) | 竞品缺口任务清单已并入唯一任务跟踪入口（2026-11-18 删 COMPETITOR_GAP_TASKLIST_202610.md，原文查 git 历史） |
 | [operations/README.md](operations/README.md) | 运维层导航（部署初始化 / 运行保障 / 功能专题 / 反代模板） |
 | [RELEASE_PREPARATION.md](RELEASE_PREPARATION.md) | 发布准备：用户端/平台端配置、数据初始化、安装部署逻辑核查 + 上服务器清单 |
 | [operations/MERCHANT_DEPLOYMENT.md](operations/MERCHANT_DEPLOYMENT.md) | 商户部署手册 |
@@ -147,7 +147,6 @@
 |---|---|
 | [competitor/COMPETITOR_ANALYSIS_202610.md](competitor/COMPETITOR_ANALYSIS_202610.md) | 模块级竞品对比 |
 | [competitor/COMPETITOR_FEATURE_CHECKLIST_202610.md](competitor/COMPETITOR_FEATURE_CHECKLIST_202610.md) | 逐条能力对照清单 |
-| [competitor/COMPETITOR_GAP_TASKLIST_202610.md](competitor/COMPETITOR_GAP_TASKLIST_202610.md) | 竞品缺口任务清单 |
 | [competitor/COMPETITOR_DEEP_DIVE_20261024.md](competitor/COMPETITOR_DEEP_DIVE_20261024.md) | 实现原理级对照 |
 | [research/OURSTACK_IMPL_PRINCIPLES_20261024.md](research/OURSTACK_IMPL_PRINCIPLES_20261024.md) | 我方实现原则（原理层） |
 

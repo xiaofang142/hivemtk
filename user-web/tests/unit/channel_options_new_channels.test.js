@@ -3,6 +3,8 @@ import {
   CHANNEL_OPTIONS,
   CHANNEL_LABEL_MAP,
   PLATFORM_GROUP_MEMBERS,
+  PLATFORM_GROUP_MEMBERS_REVERSE,
+  CHANNEL_LEGACY_WEB_TO_CANONICAL,
   getChannelLabel,
 } from '../../src/constants/channel.js';
 
@@ -18,6 +20,35 @@ describe('渠道表：2026-11 新增渠道与公众号别名', () => {
       expect(opt.group).toBe('social');
       expect(opt.label).toBeTruthy();
     }
+  });
+
+  // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：进表+实验标注+别名归一。
+  it('电商店铺五渠道进渠道表，social 分组，别名归一', () => {
+    const expects = {
+      taobao: { label: '淘宝/天猫', aliases: ['taobao_web', 'tmall', 'qianniu'] },
+      douyin_shop: { label: '抖店飞鸽', aliases: ['jinritemai', 'feige', 'douyin_shop_web'] },
+      kuaishou_shop: { label: '快手小店', aliases: ['kwaixiaodian', 'kuaishou_shop_web'] },
+      shopee: { label: 'Shopee', aliases: ['shopee_web', 'shopee_seller'] },
+      walmart_us: { label: 'Walmart', aliases: ['walmart', 'walmart_web'] },
+    };
+    for (const [ch, e] of Object.entries(expects)) {
+      expect(values).toContain(ch);
+      const opt = CHANNEL_OPTIONS.find((o) => o.value === ch);
+      expect(opt.group).toBe('social');
+      expect(opt.label).toBe(e.label);
+      expect(opt.description).toContain('实验');
+      expect(opt.description).toContain('未经真机校准');
+      for (const a of e.aliases) {
+        expect(getChannelLabel(a), `${a} 应归一为 ${e.label}`).toBe(e.label);
+        expect(PLATFORM_GROUP_MEMBERS_REVERSE[a]).toBe(ch);
+      }
+    }
+    expect(PLATFORM_GROUP_MEMBERS.taobao).toContain('qianniu');
+    expect(PLATFORM_GROUP_MEMBERS.douyin_shop).toContain('jinritemai');
+    expect(PLATFORM_GROUP_MEMBERS.walmart_us).toContain('walmart');
+    expect(CHANNEL_LEGACY_WEB_TO_CANONICAL['taobao_web']).toBe('taobao');
+    expect(CHANNEL_LEGACY_WEB_TO_CANONICAL['kwaixiaodian']).toBe('kuaishou_shop');
+    expect(CHANNEL_LEGACY_WEB_TO_CANONICAL['walmart']).toBe('walmart_us');
   });
 
   // CH-16 首切片（2026-11-09）：拼多多商家聊天进前端渠道表，分组 social。

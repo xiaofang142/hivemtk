@@ -32,4 +32,31 @@
 - 新schema、API和UI尚未发布；不能将 ACK、任务完成或 `ai_replied` 解释为平台已收/已读。
 - 本报告不替代 T011/T012，任务未全部勾选，不宣称 Converged。
 
+## 2026-11-18 T011/T012 收口
+
+**T011（ego 真实页面逐元素验证）→ 记录阻塞，不伪造。**
+
+- 本机自有浏览器 Space（Space30）已不存在；按项目规则不得新建独立 profile、不得要求重新登录、
+  也不得用「遍历元素 + 循环点击」的批量脚本替代逐元素人工点验（AGENTS.md 规则 -1）。
+- 因此 `TraceMonitor` 最新页面的客户端实测分段（打字/点击/锁等待）仍为 `unknown`，
+  本规格 FR-007 的「真实页面复验」一项继续为 partial，不写成通过。
+- 解除条件：用户在 ego lite 里恢复该 Space（或指定可复用登录态的页面地址），
+  再按逐元素流程补测：打开 TraceMonitor → 逐个展开单条 trace → 核对每段是「实测 0」还是「未知」。
+
+**T012（回读 spec 逐 FR 核对）→ 已完成。**
+
+逐条回读 `spec.md` 的 7 项功能要求、3 个用户故事、4 项成功标准，与实现和测试对账结果即上方
+「要求核对」表；本轮补充的实跑证据：
+
+```text
+go test -p 1 -count=1 ./internal/repository/   → ok 212.003s（含 trace 聚合与五入口租户边界）
+go test -p 1 -count=1 ./internal/monitor/      → ok 40.960s（TraceMonitor 查询与覆盖数）
+```
+
+FR-005 的「缺测不入均值/p95、返回覆盖数量」与 FR-001 的「旧记录不反推时间」由上述两包覆盖；
+FR-003（计时只观察、不改发送锁/重试/ACK）由 `./internal/service/` 回归覆盖（见 021 报告同一批实跑）。
+
+**结论不变：仍为 partial。** 剩余未覆盖项就是本规格自己写下的三条——真实页面客户端分段、
+新 schema/API/UI 未发布、管理端 lint 834 告警超预算。任务已按实情勾选，不宣称 Converged。
+
 关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)

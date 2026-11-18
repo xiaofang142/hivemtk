@@ -102,6 +102,13 @@ export const PLATFORM_ENTRY_URLS = {
   weibo: 'https://weibo.com/chat',
   // CH-16 首切片（2026-11-09）：拼多多商家聊天页（登录墙后）。
   pdd: 'https://mms.pinduoduo.com/chat-merchant/index.html',
+  // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：入口域 P 级证据在案，
+  // 页面 DOM 未校准——URL 仅供诊断/跳转提示，适配器 fail-closed。
+  taobao: 'https://work.taobao.com/',
+  douyin_shop: 'https://im.jinritemai.com/pc_seller_v2/main/workspace',
+  kuaishou_shop: 'https://im.kwaixiaodian.com/',
+  shopee: 'https://seller.shopee.com.my/webchat/login',
+  walmart_us: 'https://seller.walmart.com/',
 };
 
 // =============================================================
@@ -249,6 +256,12 @@ export const CHANNEL_DISPLAY = Object.freeze({
   weibo: '微博',
   // CH-16 首切片（2026-11-09）：拼多多商家网页聊天，与后端 registry.Label 一致。
   pdd: '拼多多',
+  // 2026-11-18 电商店铺五渠道，与后端 registry.Label 一致。
+  taobao: '淘宝/天猫(千牛)',
+  douyin_shop: '抖店飞鸽',
+  kuaishou_shop: '快手小店(快语)',
+  shopee: 'Shopee',
+  walmart_us: 'Walmart',
 });
 
 // B8（2026-09-19）实验渠道清单——与 user-server internal/channelgw/registry.go 的
@@ -259,7 +272,9 @@ export const CHANNEL_DISPLAY = Object.freeze({
 // 2026-11-09 新增 pdd（CH-16 首切片）：选择器为 X 级历史源码实证（ChatGPT-On-CS
 // v1.4.5 静态源，2026-11-06 评估报告 §5.1），本方真机未校准，同样标实验。
 // 与 user-server registry_parity_test.go TestExperimentalFlagsParityWithBridgeExtension 双向钉住。
-export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true, jd: true, bilibili: true, weibo: true, pdd: true });
+// 2026-11-18 新增电商店铺五渠道（CH-15/18/19/28/35）：服务端已注册+适配器 fail-closed
+// 骨架，选择器零真机校准（入口域 P 级证据在案、DOM 未知），同样标实验。
+export const EXPERIMENTAL_CHANNELS = Object.freeze({ kuaishou: true, jd: true, bilibili: true, weibo: true, pdd: true, taobao: true, douyin_shop: true, kuaishou_shop: true, shopee: true, walmart_us: true });
 
 export function isExperimentalChannel(channel) {
   return !!EXPERIMENTAL_CHANNELS[channel];
@@ -274,7 +289,7 @@ export function isExperimentalChannel(channel) {
 // 2026-08-05 渠道编码统一：CHANNELS 值改为平台全名（去掉 _web 后缀），与后端
 // model.ChannelXHS/Douyin/Kuaishou/Xianyu/TikTok 一一对应。
 export const PROTOCOL = Object.freeze({
-  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou', JD: 'jd', BILIBILI: 'bilibili', WEIBO: 'weibo', PDD: 'pdd' },
+  CHANNELS: { DOUYIN: 'douyin', XHS: 'xiaohongshu', TIKTOK: 'tiktok', XIANYU: 'xianyu', KUAISHOU: 'kuaishou', JD: 'jd', BILIBILI: 'bilibili', WEIBO: 'weibo', PDD: 'pdd', TAOBAO: 'taobao', DOUYIN_SHOP: 'douyin_shop', KUAISHOU_SHOP: 'kuaishou_shop', SHOPEE: 'shopee', WALMART_US: 'walmart_us' },
   FRAME: {
     REGISTER: 'register',
     INBOUND: 'inbound_message',

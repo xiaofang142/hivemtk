@@ -7,7 +7,7 @@
 
 CREATE TABLE IF NOT EXISTS channel_interactions (
     id              BIGSERIAL PRIMARY KEY,
-    tenant_id       VARCHAR(64)  NOT NULL DEFAULT '',
+    tenant_id       BIGINT       NOT NULL DEFAULT 1,
     channel         VARCHAR(32)  NOT NULL,
     account_id      VARCHAR(64)  NOT NULL DEFAULT '',
     interaction_id  VARCHAR(128) NOT NULL,

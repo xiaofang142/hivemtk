@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/onebot"
 	"hivemtk-user/internal/channelbot/slack"
 	"hivemtk-user/internal/channelbot/wecombot"
@@ -54,6 +55,10 @@ func (s *WebhookService) outboundSlack(ctx context.Context, req *OutboundRequest
 		return false
 	}
 	c := slack.NewClient(acc.BotToken)
+	if s.slackAPIBase != "" {
+		// 测试钩子：把 Web API 指向 httptest 假平台（生产恒为空）。
+		c = slack.NewClient(acc.BotToken, core.WithBaseURL(s.slackAPIBase))
+	}
 	if _, err := c.PostMessage(ctx, channel, req.Content, threadTS); err != nil {
 		req.Fail(err)
 		return false
@@ -285,3 +290,9 @@ func (s *WebhookService) outboundCustom(ctx context.Context, req *OutboundReques
 	req.Fail(preSendFailure(req.Channel, cat, fmt.Sprintf("custom 回调返回 HTTP %d", resp.StatusCode)))
 	return false
 }
+
+// SetSlackAPIBaseForTest 把 Slack Web API 基址指向假平台（仅测试用）。
+//
+// 为什么需要钩子：channelbot/core.BaseClient 自建 http.Transport，测试里替换
+// http.DefaultClient.Transport 拦不到它；不注入就只能真打 api.slack.com。
+func (s *WebhookService) SetSlackAPIBaseForTest(base string) { s.slackAPIBase = base }

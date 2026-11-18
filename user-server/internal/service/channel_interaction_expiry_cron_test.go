@@ -46,7 +46,7 @@ func TestCardSend_RegistersInteractionContext(t *testing.T) {
 	if row.PlatformMsgID != "tg-msg-77" || row.AccountID != "acct-card" || row.Channel != string(ChannelTelegram) {
 		t.Fatalf("定位字段丢失：%+v", row)
 	}
-	if row.TenantID != "3" || row.ConversationID != "chat-1" {
+	if row.TenantID != 3 || row.ConversationID != "chat-1" {
 		t.Fatalf("租户/会话未带入：%+v", row)
 	}
 	if row.ExpiresAt == nil {

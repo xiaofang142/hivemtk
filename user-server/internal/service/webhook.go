@@ -84,6 +84,10 @@ type WebhookService struct {
 	// onebotWS 反向 WS 连接表（account_id → conn）；nil = 未启用反向 WS。
 	onebotWS *OneBotWSManager
 
+	// slackAPIBase 覆盖 Slack Web API 基址。生产为空（走 api.slack.com）；
+	// 仅测试用 SetSlackAPIBaseForTest 指向 httptest 假平台。
+	slackAPIBase string
+
 	messageHubRepo *repository.MessageHubRepository
 	inboxConvRepo  *repository.InboxConversationRepository
 	unifiedMsgRepo repository.UnifiedMessageRepository
@@ -398,8 +402,14 @@ var webhookInboundRejectHints = map[WebhookChannel]string{
 	ChannelPersonalWX:  "个人微信无公开服务端回调，入站走桌面伴生 POST /api/bridge/ingest（伴生为外部工程）",
 	// CH-16 首切片（2026-11-09，二次审核补齐）：pdd 无公开私信回调，只走浏览器桥。
 	WebhookChannel(model.ChannelPDD): "拼多多无公开私信回调，入站只走浏览器桥 POST /api/bridge/ingest",
-	ChannelWechat:                    "微信公众号入站走专用回调 POST /api/webhook/wechat/{account_id}（自行验签），通用路由不处理",
-	ChannelDingTalk:                  "钉钉入站走专用回调 POST /api/webhook/dingtalk/{account_id}（机器人/事件订阅报文），通用路由不处理",
+	// 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：同 pdd 口径，入站只走浏览器桥。
+	WebhookChannel(model.ChannelTaobao):       "淘宝/天猫无公开服务端回调，入站只走浏览器桥 POST /api/bridge/ingest（千牛网页接待中心）",
+	WebhookChannel(model.ChannelDouyinShop):   "抖店飞鸽无公开服务端回调，入站只走浏览器桥 POST /api/bridge/ingest（im.jinritemai.com）",
+	WebhookChannel(model.ChannelKuaishouShop): "快手小店无公开服务端回调，入站只走浏览器桥 POST /api/bridge/ingest（im.kwaixiaodian.com 快语）",
+	WebhookChannel(model.ChannelShopee):       "Shopee Chat API 未获工单批准前，入站只走浏览器桥 POST /api/bridge/ingest（Seller Centre Webchat）",
+	WebhookChannel(model.ChannelWalmartUS):    "Walmart 无公开消息回调，入站只走浏览器桥 POST /api/bridge/ingest（Seller Center Inbox）",
+	ChannelWechat:                             "微信公众号入站走专用回调 POST /api/webhook/wechat/{account_id}（自行验签），通用路由不处理",
+	ChannelDingTalk:                           "钉钉入站走专用回调 POST /api/webhook/dingtalk/{account_id}（机器人/事件订阅报文），通用路由不处理",
 }
 
 func webhookInboundRejectReason(channel WebhookChannel) string {

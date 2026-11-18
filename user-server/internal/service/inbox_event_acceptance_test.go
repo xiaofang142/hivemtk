@@ -484,7 +484,7 @@ func TestInteractionCallback_AcksAndDoesNotReply(t *testing.T) {
 func TestChannelInteraction_CreateIdempotent(t *testing.T) {
 	eventAcceptDB(t)
 	repo := repository.NewChannelInteractionRepositoryDefault()
-	row := &model.ChannelInteraction{TenantID: "1", Channel: "douyin", AccountID: "acc-i",
+	row := &model.ChannelInteraction{TenantID: 1, Channel: "douyin", AccountID: "acc-i",
 		InteractionID: "int-idem", ConversationID: "c-i", Action: "click", Payload: model.JSONMap{}}
 	created1, err := repo.CreateIdempotent(context.Background(), row)
 	if err != nil || !created1 {
@@ -509,7 +509,7 @@ func TestChannelInteraction_CreateIdempotent(t *testing.T) {
 func TestChannelInteraction_MarkAnsweredOnlyOnce(t *testing.T) {
 	eventAcceptDB(t)
 	repo := repository.NewChannelInteractionRepositoryDefault()
-	row := &model.ChannelInteraction{TenantID: "1", Channel: "telegram", AccountID: "acc-i",
+	row := &model.ChannelInteraction{TenantID: 1, Channel: "telegram", AccountID: "acc-i",
 		InteractionID: "int-once", ConversationID: "c-i", Payload: model.JSONMap{}}
 	if _, err := repo.CreateIdempotent(context.Background(), row); err != nil {
 		t.Fatalf("登记失败: %v", err)
@@ -526,7 +526,7 @@ func TestChannelInteraction_ExpiredNotAnswerable(t *testing.T) {
 	eventAcceptDB(t)
 	repo := repository.NewChannelInteractionRepositoryDefault()
 	past := time.Now().Add(-time.Minute)
-	row := &model.ChannelInteraction{TenantID: "1", Channel: "feishu", AccountID: "acc-i",
+	row := &model.ChannelInteraction{TenantID: 1, Channel: "feishu", AccountID: "acc-i",
 		InteractionID: "int-exp", ConversationID: "c-i", Payload: model.JSONMap{}, ExpiresAt: &past}
 	if _, err := repo.CreateIdempotent(context.Background(), row); err != nil {
 		t.Fatalf("登记失败: %v", err)

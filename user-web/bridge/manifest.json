@@ -7,7 +7,7 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "version": "1.3.7",
+  "version": "1.3.8",
   "description": "将抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博 网页私信实时桥接到 HiveMTK AI 智能体（user-server），支持多账号、消息历史回填与拟人限速风控。快手/京东/B站/微博为实验渠道（选择器未经真机校准）。",
   "permissions": [
     "alarms",
@@ -147,6 +147,63 @@
       ],
       "js": [
         "content-pdd.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://work.taobao.com/*"
+      ],
+      "js": [
+        "content-taobao.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://im.jinritemai.com/*"
+      ],
+      "js": [
+        "content-douyin_shop.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://im.kwaixiaodian.com/*"
+      ],
+      "js": [
+        "content-kuaishou_shop.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://seller.shopee.com.my/*",
+        "https://seller.shopee.co.id/*",
+        "https://seller.shopee.ph/*",
+        "https://seller.shopee.sg/*",
+        "https://seller.shopee.co.th/*",
+        "https://seller.shopee.com.br/*",
+        "https://seller.shopee.vn/*",
+        "https://shopee.tw/*"
+      ],
+      "js": [
+        "content-shopee.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://seller.walmart.com/*"
+      ],
+      "js": [
+        "content-walmart_us.js"
       ],
       "run_at": "document_idle",
       "all_frames": false

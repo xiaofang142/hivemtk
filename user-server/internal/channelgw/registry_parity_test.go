@@ -181,16 +181,21 @@ func TestBridgeOutboxParityWithWebhookOutbound(t *testing.T) {
 	// 2026-11-09，Experimental）。集合变化属于注册表事件，必须显式改这里
 	// （与 TestExperimentalFlagsParityWithBridgeExtension 钉扩展集合同一方式）。
 	wantOutbox := map[string]bool{
-		"douyin":      true,
-		"xiaohongshu": true,
-		"kuaishou":    true,
-		"xianyu":      true,
-		"tiktok":      true,
-		"jd":          true,
-		"bilibili":    true,
-		"weibo":       true,
-		"personal_wx": true,
-		"pdd":         true,
+		"douyin":        true,
+		"xiaohongshu":   true,
+		"kuaishou":      true,
+		"xianyu":        true,
+		"tiktok":        true,
+		"jd":            true,
+		"bilibili":      true,
+		"weibo":         true,
+		"personal_wx":   true,
+		"pdd":           true,
+		"taobao":        true,
+		"douyin_shop":   true,
+		"kuaishou_shop": true,
+		"shopee":        true,
+		"walmart_us":    true,
 	}
 
 	gotOutbox := Default.OutboundChannels(OutboundPathBridgeOutbox)
@@ -255,6 +260,7 @@ func assertNoBridgeChannelCaseList(t *testing.T) {
 	bridgeConsts := []string{
 		"ChannelDouyin", "ChannelXiaohongshu", "ChannelTiktok", "ChannelXianyu", "ChannelKuaishou",
 		"ChannelJD", "ChannelBilibili", "ChannelWeibo", "ChannelPersonalWX",
+		"ChannelTaobao", "ChannelDouyinShop", "ChannelKuaishouShop", "ChannelShopee", "ChannelWalmartUS",
 	}
 	for i, line := range strings.Split(string(raw), "\n") {
 		trimmed := strings.TrimSpace(line)

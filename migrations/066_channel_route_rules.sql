@@ -12,7 +12,7 @@
 
 CREATE TABLE IF NOT EXISTS channel_route_rules (
     id          BIGSERIAL PRIMARY KEY,
-    tenant_id   VARCHAR(64)  NOT NULL DEFAULT '',
+    tenant_id   BIGINT       NOT NULL DEFAULT 1,
     channel     VARCHAR(32)  NOT NULL DEFAULT '',
     account_id  VARCHAR(64)  NOT NULL DEFAULT '',
     event_type  VARCHAR(64)  NOT NULL DEFAULT '',

@@ -119,11 +119,20 @@ func (s *InboxIngressService) recordInteractionCallback(ctx context.Context, eve
 
 // tenantEventKey 平台事件租户键：ctx 绑定的租户是唯一权威（ModeOn fail-closed 口径）；
 // Extra["tenant_id"] 是不可信的平台自报值，只在无租户上下文（off 模式）时兜底。
-func tenantEventKey(ctx context.Context, event *model.MessageEvent) string {
+//
+// 返回 uint 与渠道事件三张业务表（channel_event_audits / channel_interactions /
+// channel_route_rules）的 bigint 列口径一致——租户 id 本身是 uint，早先按字符串
+// 落库导致同库两种形态，迁移链的列形态校验直接红。
+func tenantEventKey(ctx context.Context, event *model.MessageEvent) uint {
 	if tid, ok := tenant.FromContext(ctx); ok && tid != 0 {
-		return strconv.FormatUint(uint64(tid), 10)
+		return tid
 	}
-	return extraString(event, "tenant_id")
+	if raw := extraString(event, "tenant_id"); raw != "" {
+		if v, err := strconv.ParseUint(raw, 10, 64); err == nil {
+			return uint(v)
+		}
+	}
+	return 0
 }
 
 // buildChannelEventAuditRow 平台事件审计行的单一构造点（recordChannelEventAudit 与

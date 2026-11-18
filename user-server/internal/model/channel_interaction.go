@@ -12,8 +12,8 @@ import "time"
 //
 // 幂等键 (tenant_id, channel, interaction_id)：平台重投同一回调不建第二行。
 type ChannelInteraction struct {
-	TenantID       string  `gorm:"column:tenant_id;type:varchar(64);not null;default:'';uniqueIndex:idx_interaction_identity,priority:1" json:"tenant_id"`
-	Channel        string  `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_interaction_identity,priority:2" json:"channel"`
+	TenantID uint   `gorm:"column:tenant_id;not null;default:1;uniqueIndex:idx_interaction_identity,priority:1" json:"tenant_id"`
+	Channel  string `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_interaction_identity,priority:2" json:"channel"`
 	// AccountID 入幂等键（specs/024 三审 T209 契约）：交互不能跨账号去重。
 	AccountID      string  `gorm:"column:account_id;type:varchar(64);not null;default:'';uniqueIndex:idx_interaction_identity,priority:3" json:"account_id"`
 	InteractionID  string  `gorm:"column:interaction_id;type:varchar(128);not null;uniqueIndex:idx_interaction_identity,priority:4" json:"interaction_id"`

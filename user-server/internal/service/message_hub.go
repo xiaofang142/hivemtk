@@ -72,10 +72,10 @@ var messageHubPlatforms = map[string]bool{
 	"custom":   true,
 	// 025 平台批：四个新直发渠道的入站都写 hub（custom 见上，已接真适配器）。
 	// 缺词 ⇒ 这些渠道的投递失败轨迹永远落不了库，/platforms 枚举也看不到。
-	"wecomcs":   true,
-	"onebot":    true,
-	"slack":     true,
-	"wecombot":  true,
+	"wecomcs":  true,
+	"onebot":   true,
+	"slack":    true,
+	"wecombot": true,
 	// web_embed（2026-11-04 BUG-3）：本系统内部网页客服渠道，有真实入站
 	// （chat_public visitor 链路走 customer_sessions 而非 hub，但出站中转与
 	// 平台枚举都该认识它）——缺词等于 /api/message-hub/platforms 枚举看不到
@@ -83,6 +83,12 @@ var messageHubPlatforms = map[string]bool{
 	"web_embed": true,
 	// CH-16 首切片（2026-11-09）：拼多多商家网页聊天（canonical=pdd），桥接渠道。
 	"pdd": true,
+	// 2026-11-18 电商店铺五渠道（CH-15/18/19/28/35）入站能进、出站轨迹能落库。
+	"taobao":        true,
+	"douyin_shop":   true,
+	"kuaishou_shop": true,
+	"shopee":        true,
+	"walmart_us":    true,
 }
 
 var messageHubMsgTypes = map[string]bool{

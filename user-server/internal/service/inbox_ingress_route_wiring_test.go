@@ -14,7 +14,10 @@ func TestIngress_DiscardRuleStopsPipeline(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.ChannelRouteRule{}, &model.ChannelEventAudit{})
 	ctx := context.Background()
 
-	const tenant = "t-route-discard"
+	const (
+		tenantKey = "7001"
+		tenant    = uint(7001)
+	)
 	repo := repository.NewChannelRouteRuleRepository(db)
 	rule := &model.ChannelRouteRule{
 		Channel:   model.ChannelTelegram,
@@ -39,7 +42,7 @@ func TestIngress_DiscardRuleStopsPipeline(t *testing.T) {
 		ConversationID: "chat-route-1",
 		MsgType:        model.MsgTypeText,
 		Content:        "这条应被规则丢弃",
-		Extra:          map[string]any{"tenant_id": tenant, "account_id": "acc-route"},
+		Extra:          map[string]any{"tenant_id": tenantKey, "account_id": "acc-route"},
 	}
 	res, err := svc.HandleIngressMessage(ctx, evt)
 	if err != nil {
@@ -77,7 +80,10 @@ func TestIngress_RouteRuleIDRecorded(t *testing.T) {
 	db := testutil.NewTestDBOrSkip(t, &model.MessageHub{}, &model.ChannelRouteRule{}, &model.ChannelEventAudit{})
 	ctx := context.Background()
 
-	const tenant = "t-route-agent"
+	const (
+		tenantKey = "7002"
+		tenant    = uint(7002)
+	)
 	repo := repository.NewChannelRouteRuleRepository(db)
 	rule := &model.ChannelRouteRule{
 		Channel:   model.ChannelTelegram,
@@ -98,7 +104,7 @@ func TestIngress_RouteRuleIDRecorded(t *testing.T) {
 		ConversationID: "chat-route-2",
 		MsgType:        model.MsgTypeText,
 		Content:        "正常消息",
-		Extra:          map[string]any{"tenant_id": tenant, "account_id": "acc-agent"},
+		Extra:          map[string]any{"tenant_id": tenantKey, "account_id": "acc-agent"},
 	}
 	res, err := svc.HandleIngressMessage(ctx, evt)
 	if err != nil {
@@ -123,7 +129,7 @@ func TestIngress_NoRuleKeepsLegacyBehavior(t *testing.T) {
 		ConversationID: "chat-route-3",
 		MsgType:        model.MsgTypeText,
 		Content:        "无规则租户",
-		Extra:          map[string]any{"tenant_id": "t-no-rule", "account_id": "acc-none"},
+		Extra:          map[string]any{"tenant_id": "7999", "account_id": "acc-none"},
 	}
 	res, err := svc.HandleIngressMessage(context.Background(), evt)
 	if err != nil {
@@ -145,27 +151,27 @@ func TestChannelRouteRule_TenantIsolation(t *testing.T) {
 
 	a := &model.ChannelRouteRule{Channel: "telegram", Target: model.ChannelRouteTargetDiscard, Enabled: true}
 	b := &model.ChannelRouteRule{Channel: "feishu", Target: model.ChannelRouteTargetAgent, Enabled: true}
-	if err := repo.Upsert(ctx, "t-a", a); err != nil {
+	if err := repo.Upsert(ctx, 11, a); err != nil {
 		t.Fatalf("A 规则: %v", err)
 	}
-	if err := repo.Upsert(ctx, "t-b", b); err != nil {
+	if err := repo.Upsert(ctx, 12, b); err != nil {
 		t.Fatalf("B 规则: %v", err)
 	}
 
-	got, err := repo.ListByTenant(ctx, "t-a")
+	got, err := repo.ListByTenant(ctx, 11)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	for _, r := range got {
-		if r.TenantID != "t-a" {
+		if r.TenantID != 11 {
 			t.Fatalf("A 租户列表出现越界行：%+v", r)
 		}
 	}
 	// 跨租户改/删必须命中 0 行
-	if err := repo.Upsert(ctx, "t-b", &model.ChannelRouteRule{ID: a.ID, Channel: "hacked"}); err == nil {
+	if err := repo.Upsert(ctx, 12, &model.ChannelRouteRule{ID: a.ID, Channel: "hacked"}); err == nil {
 		t.Fatal("B 租户不应能改 A 租户的规则")
 	}
-	ok, err := repo.Delete(ctx, "t-b", a.ID)
+	ok, err := repo.Delete(ctx, 12, a.ID)
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
