@@ -119,6 +119,16 @@
           "kind": "string"
         },
         {
+          "json": "client_machine",
+          "kind": "any",
+          "omitempty": true
+        },
+        {
+          "json": "deploy_mode",
+          "kind": "string",
+          "omitempty": true
+        },
+        {
           "json": "device_fingerprint",
           "kind": "string"
         },
@@ -344,6 +354,11 @@
         {
           "json": "contact_phone",
           "kind": "string"
+        },
+        {
+          "json": "deploy_mode",
+          "kind": "string",
+          "omitempty": true
         },
         {
           "json": "device_info",
