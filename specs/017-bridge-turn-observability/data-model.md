@@ -1,0 +1,7 @@
+# 数据契约
+
+MessageTrace新增：turn_id varchar64默认空；answer_attempt/delivery_attempt整数默认0（未提供）；timing_version整数默认0（旧记录）；duration_measured bool默认false；started_at/completed_at timestamptz可空。CreatedAt继续为写入时间。无历史UPDATE、无删列。
+
+新记录TimingVersion=1，Span用time.Now的单调分量算DurationMs；可空墙钟仅定位事件。NodeSpan仅显式measured或有效起止才实测。新turn包含租户+渠道+账号+会话+权威入站身份，缺任一为空。
+
+Carrier复制传递turn/answerAttempt/deliveryAttempt；出站extra保存关联，以供独立poll/ack请求读取。旧trace_id保持兼容不宣称轮次唯一。接口保留旧duration数字字段但通过duration_measured/nullable统计字段明确unknown。
