@@ -19,6 +19,24 @@
 - **换机注意**：五渠道全链现已在生产可用（注册表/词表/caps/capregistry/双枚举/渲染全齐），
   待真机校准后开闸（fail-closed 语义不变）。
 
+## 2026-11-19 · 自立项巡检批：出站租约回收三步巡检上线（链 A ×4 次迭代 2788fb6c2）
+
+- **背景**：生产静默故障巡检抓出三类故障——SSE 模式租约回收无人触发（inflight 挂 43 分钟/
+  自 10-22 挂起）、duplicate 去重拒绝占位行误标 failed 灌 DLQ（48h 16 条噪音 vs 真实
+  delivered 仅 4）、38 条陈旧 pending 无老化。
+- **落地**：ReclaimOutboundSweep 全局纯回收三步 + OutboundReclaimTask 60s cron；
+  duplicate/expired 终态口径；OBS-1 pdd 触达三处收口。
+- **部署迭代如实登记（四次链 A）**：①0a2be2037 巡检批——上线后积压纹丝不动；②4af8da183
+  根因=**init() 自装配先于 main 的 db.InitDB，repo 拿 nil 句柄静默空转**（channel_interaction
+  先例同病，自上线从未真正工作过）→ 改 StartXxxAfterDBInit(main 挂点)；③e37a9ae9c 根因=
+  **多租户 fail-closed 拦无租户 ctx 的全表 UPDATE**（隔离层正确行为）→ RunOnce 补
+  tenant.WithSystemScope（先例 telegram polling 同款）；④2788fb6c2 每轮必打日志（零命中
+  轮留痕=ticker 存活可观测）。**线上终态实证**：`[OutboundReclaim] 回收巡检` 每分钟一条、
+  三轮连续（活性实锤）；首轮 reclaimed=7 aged=9；陈旧积压 17 条（谓词外）经等语义 SQL
+  兜底收口 expired，非终态 pending36/inflight7 → 24/2（剩余为活跃期行）。
+- **换机注意**：两 cron 依赖 main.go 的 AfterDBInit 挂点（init 装配=空转，勿回退）；
+  全表回收靠 SystemScope 过隔离层，业务路径 fail-closed 不变。
+
 ## 2026-11-19 · 二次审核批：扩展 1.3.9 + 五渠道全链缺口补齐（链 B/C 重发）
 
 - **审核产出（九任务二次审核+全链路审核）**：首轮注册批漏登记 14 处面表——
