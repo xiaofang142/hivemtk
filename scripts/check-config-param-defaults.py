@@ -418,9 +418,48 @@ def b3_field_on_line(lines, funcs, line_no) -> str:
     return f"{ctor}.{field}" if ctor else ""
 
 
+def proven_positive_wrapper(lines, funcs, raw_name):
+    """只认完整包装体，不以附近任意 return 猜有效默认值。"""
+    targets = set()
+    seconds_wrappers = set()
+    target = r'(?:[A-Za-z_]\w*|\d[\d_]*(?:\s*\*\s*time\.(?:Second|Minute|Hour))?)'
+    for index, (start, name) in enumerate(funcs):
+        if name == raw_name:
+            continue
+        end = funcs[index + 1][0] if index + 1 < len(funcs) else len(lines)
+        segment = '\n'.join(re.sub(r'//.*$', '', line) for line in lines[start:end]).strip()
+        opening = segment.find('{')
+        if opening < 0 or not segment.endswith('}'):
+            continue
+        body = segment[opening + 1:-1].strip()
+        helper = re.fullmatch(
+            rf'return\s+positive(?:Int|Duration)Or\(\s*{re.escape(raw_name)}\(\s*ctx\s*\)\s*,\s*({target})\s*\)\s*',
+            body)
+        if helper:
+            targets.add(helper.group(1).strip())
+            continue
+        guarded = re.fullmatch(
+            rf'if\s+(\w+)\s*:=\s*{re.escape(raw_name)}\(\s*ctx\s*\)\s*;\s*\1\s*>\s*0\s*\{{\s*'
+            rf'return\s+(\1|time\.Duration\(\1\)\s*\*\s*time\.Second)\s*\}}\s*return\s+({target})\s*',
+            body)
+        if guarded:
+            targets.add(guarded.group(3).strip())
+            seconds_wrappers.add(guarded.group(2) != guarded.group(1))
+    if len(targets) > 1:
+        return ('conflict', ', '.join(sorted(targets)), 'B2-positive')
+    if targets:
+        form = 'B2-positive-seconds' if seconds_wrappers == {True} else 'B2-positive'
+        return ('expression', targets.pop(), form)
+    return None
+
+
 def resolve_sentinel(lines, funcs, text, line_no):
     """兜底实参是 0 时往后找真正的回落目标，返回 ('const'|'field', 名字, 形态)。"""
     fn, fstart = enclosing_func(funcs, line_no)
+    if fn:
+        proven = proven_positive_wrapper(lines, funcs, fn)
+        if proven:
+            return proven
     for j in range(line_no, min(line_no + SENTINEL_LOOKAHEAD_LINES, len(lines))):
         if j > line_no and FUNC_HEAD.match(lines[j]):
             break
@@ -507,6 +546,15 @@ def fallback_sites(files, seed_pairs, ident_str, consts, ambiguous, ctors):
     def resolve_target(coord, target, value, rel, form):
         """把 'const'/'field' 目标折成实际值；解不出按**键**记原因（不是按文件行，
         否则调用方拿 (group,key) 查不到这条，读数会显示"没有兜底点"而非"解不出"）。"""
+        if target == "conflict":
+            reasons.setdefault(coord, f"{form} @ {rel} 包装默认值冲突（不猜）：{value}")
+            return None
+        if target == "expression":
+            kind, val, _ = resolve_fallback_arg(value, consts, ambiguous, [], [], 0)
+            if kind is None:
+                reasons.setdefault(coord, f"{form} @ {rel} {val}")
+                return None
+            return kind, val, rel, form
         if target == "field":
             ctor, field = value.split(".", 1)
             if (ctor, field) not in ctors:
@@ -556,6 +604,10 @@ def fallback_sites(files, seed_pairs, ident_str, consts, ambiguous, ctors):
                     continue
                 got = resolve_target(coord, hit[0], hit[1], rel, hit[2])
                 if got:
+                    # 只有完整包装体已证明 GetInt 值乘 time.Second，才能把
+                    # duration 默认折回该整数读口的秒数。普通 duration 不猜量纲。
+                    if m.group(0).startswith('GetInt(') and hit[2] == 'B2-positive-seconds' and got[0] == 'dur':
+                        got = ('num', got[1], got[2], got[3])
                     add_site(sites, coord, got)
                 else:
                     reasons.setdefault(coord, f"{rel} 兜底位是哨兵 0，之后解不出回落常量")

@@ -203,7 +203,7 @@ Router → Controller → Service → Repository → Model
 `bizerr.CodeSuccess` 同为 `0`；`utils.ErrorCodeSuccess` 是字符串 `"SUCCESS"`，只出现在 ErrorCode 通道，不用于成功响应体。
 
 - 新增业务码**只在** `internal/domain/errors/codes.go` 登记；本文件不重抄码值清单（此前这里抄过一份
-  代码里并不存在的 `10000-19999` 段，照它写的第一条分支就 panic —— 见 `.specify/bugs/business-error-code-panic/`）。
+  代码里并不存在的 `10000-19999` 段，照它写的第一条分支就 panic —— 见 `.specify/bugs/business-error-code-panic/`（档案已移出当前工作区，见 git 历史）。
 - 未在 `errorCodeRegistry` 登记的 `utils.ErrorCode`：状态码兜底成 500、空文案兜底成「未知错误」，
   但响应体 `code` 仍回显那个没登记的字符串 ⇒ 加码必须同步登记，否则线上只是 500、不报错。
 - 渠道官方错误码（如 `internal/service/channel_error.go` 里的 `100001/10004`）属**上游平台码表**，
@@ -252,4 +252,4 @@ Router → Controller → Service → Repository → Model
   - Bug 三命令体：`.specify/extensions/bug/commands/speckit.bug.{assess,fix,test}.md`
   - 项目宪法：`.specify/memory/constitution.md`（已立宪 v1.0.3）
   - 模板：`.specify/templates/{spec,plan,tasks,checklist,constitution}.md`；脚本：`.specify/scripts/bash/`
-  - 已归档样例：`.specify/bugs/business-error-code-panic/`（三阶段跑通一轮的产物）
+  - 已归档样例：`.specify/bugs/business-error-code-panic/`（三阶段跑通一轮的产物；档案已移出当前工作区，见 git 历史）

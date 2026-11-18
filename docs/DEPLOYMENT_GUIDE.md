@@ -221,12 +221,11 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 
 | 变量 | 默认 | 何时需要设 |
 |------|------|-----------|
-| `PUBLIC_BASE_URL` | 空 | **部署 Telegram/飞书/钉钉等被动回调渠道时必填**。格式 `https://域名`（不带路径、不带尾斜杠），系统会用它注册 Webhook；留空则这些渠道自动降级 polling 模式（仅单实例可用） |
+| `PUBLIC_BASE_URL` | 空 | **部署 Telegram/飞书/钉钉等被动回调渠道时**部署级兜底。优先级（B18 翻转）：参数中心 `urls.public_base_url`（按租户）> 本 env > config.yaml 遗留字段。格式 `https://域名`（不带路径、不带尾斜杠）；全空则这些渠道自动降级 polling 模式（仅单实例可用） |
 | `PLATFORM_API_HOST` | `http://127.0.0.1:8205` | 平台端不在本机时改为其实际地址。注意实际读取的是 `PLATFORM_API_HOST` 不是 `PLATFORM_API_URL` |
 | `SERVER_HOST` | `0.0.0.0` | **要把 user-server 网口收回本机时设 `127.0.0.1`**（存量实例不换超管口令时的加固路线，见 §6.2 末「换掉已经装好的那台」段）。改了要重启进程才生效；同机不同端口的数据层不受影响。设了它，`user-web/bridge`、真机浏览器扩展等**从另一台机器**打 8204 的用法会全部连不上（这正是"收回"的含义），单人本机部署才设 |
 | `CORS_ALLOW_ORIGINS_USER` | 见 .env-example | 前端域名与 API 不同源时，把前端 Origin 加入白名单 |
-| `DEEPL_API_KEY` | 空 | 启用低资源语言（ar/th/vi/hi/tr）DeepL 翻译降级时 |
-| `QINIU_ACCESS_KEY` / `QINIU_SECRET_KEY` | 空 | 使用七牛云对象存储时 |
+| ~~`QINIU_*`~~ | 已退役 | 2026-11-17 SaaS 配置面改造：七牛凭据唯一来源是租户级 `obs_config` 表（管理端「系统设置 → 对象存储」页），env 配了不生效 |
 | `LLM_*` / `EMBEDDING_*` / `RERANK_*` | 见 .env-example | 控制推理栈下载哪个模型、监听哪个端口 |
 | `MAX_JSON_BODY_MB` | `8` | 全局 JSON/表单请求体上限（MB），超限直接 413。只兜"没另设上界的内部口"，比各端点自己的封顶更宽时不参与；迁移期要灌大 payload 时**显式设 0 关闭**（负数同义），别改成改代码 |
 | `SEED_PASSWORD` | `Seed@123456` | seed 写进 `system_users` 的 admin 与演示坐席统一口令，优先级 `SEED_PASSWORD` > `ADMIN_PASSWORD` > 该默认值（`cmd/seed/seed_users.go:32`）。**只有跑 `scripts/bootstrap.sh` 或 `go run ./cmd/seed` 才会写入它**——`make install` / `make dev` 不 seed（docker-compose 里的 `admin` 是数据库用户，不是后台账号）。这个默认值随开源仓库公开（文档与 FAQ 种子数据里都写着），**装到别人连得上的机器上就必须显式设**；bootstrap 用默认值启动时会打 warn（本文件下方那条"换掉已经装好的那台"注记解释了为什么**存量实例重跑无效**），直接 `go run ./cmd/seed` 则不会。取值走 `SEED_PASSWORD="…"` 注入，勿改成代码常量 |
@@ -341,7 +340,7 @@ curl http://127.0.0.1:8208/v1/models    # Embedding 服务模型清单
 
 - `inference.*`：本地推理栈回落默认值，必须与代码 `DefaultInferenceConfig()` 一致（有测试断言），**一般不改**；
 - 运行时 LLM 参数（temperature/max_tokens/提供商切换）走后台「LLM 路由」页面写库，重启后从 `llm_providers` 表加载；
-- `i18n.fallback.enabled`：DeepL 降级总开关，默认关闭，开启还需 `DEEPL_API_KEY`；
+- ~~`i18n.fallback.enabled`~~：该配置节已退役（2026-11-17 SaaS 配置面改造，原 DeepL 降级桥为零消费点死配置）；
 - `logging.output: both`：日志同时写 stdout 和 `logs/user-server.log`，生产保持默认即可。
 
 ## 七、对外发布模式
@@ -652,14 +651,17 @@ inference:
 
 ## 外挂解析与图片知识库（P1-1，默认关闭）
 
-两条能力都**默认关闭**且默认零外网请求：不设 `PARSER_SIDECAR_URL` / `IMAGE_DESCRIBE_URL`
-时，结构化文档走内置 `ExtractText`、图片导入直接 markFailed（与 G13 口径一致）。
-两条都是「显式 opt-in 才生效」的本地/私域服务，**不引入任何云 API 依赖**。
+两条能力都**默认关闭**且默认零外网请求：参数中心 `etl.parser_sidecar_url` /
+`etl.image_describe_url` 未配时，结构化文档走内置 `ExtractText`、图片导入直接
+markFailed（与 G13 口径一致）。两条都是「显式 opt-in 才生效」的本地/私域服务，
+**不引入任何云 API 依赖**。2026-11-17 SaaS 配置面改造：`PARSER_SIDECAR_URL` /
+`IMAGE_DESCRIBE_URL` / `IMAGE_DESCRIBE_MODEL` 环境变量退役，改在**参数中心 etl 组**
+配置（管理端「参数中心」页搜索 `etl.`）。
 
-### 外挂解析服务契约（`PARSER_SIDECAR_URL`）
+### 外挂解析服务契约（参数中心 `etl.parser_sidecar_url`）
 
 ```
-POST {PARSER_SIDECAR_URL}          # 例 http://127.0.0.1:8211/parse
+POST {etl.parser_sidecar_url}      # 例 http://127.0.0.1:8211/parse
 Content-Type: multipart/form-data
   file=@<原始文档>                  # 不是 base64、不是路径，整份文件体
 → 200 text/plain                    # 响应体即提取后的纯文本（markdown 表格保留 |-行）
@@ -696,11 +698,11 @@ services:
     restart: unless-stopped
 ```
 
-```bash
-# .env（显式开启；不写即全关）
-PARSER_SIDECAR_URL=http://127.0.0.1:8211/parse
-IMAGE_DESCRIBE_URL=http://127.0.0.1:8212/v1/chat/completions
-IMAGE_DESCRIBE_MODEL=qwen2.5-vl-7b
+```text
+# 参数中心（管理端 → 参数中心 → 文档解析/ETL 组；显式开启，不配即全关）
+etl.parser_sidecar_url   = http://127.0.0.1:8211/parse
+etl.image_describe_url   = http://127.0.0.1:8212/v1/chat/completions
+etl.image_describe_model = qwen2.5-vl-7b
 ```
 
 ### 隐私口径与验收
@@ -723,6 +725,6 @@ IMAGE_DESCRIBE_MODEL=qwen2.5-vl-7b
 ---
 
 *最后更新：2026-10-09 · 基于 ports.go / Makefile / docker-compose.yml / .env-example / config.yaml 源码核对（同日补录 §6.2 三装配期旗 `FF_LTC_ORDER_DRAFT_DB` / `FF_LTC_HANDOFF_SLA_JOB` / `FF_LTC_SALES_TRIGGER`，并转义表内反引号中的 `|` 防拆列）。2026-10 增补 §十二 部署向导（scripts/deploy-wizard.py，C1）与 §十三 推理降级档（inference.tier，C2）。*
-| `PARSER_SIDECAR_URL` | 空 | P1-1 可插拔文档解析的外挂解析服务 URL（`internal/etl/parser_seam.go`）。**默认空＝纯内置解析，零外网请求**；配置后仅结构化文档（pdf/docx/html）走外挂（multipart 上传 `file` 字段，200 响应体即提取文本），纯文本类仍直通内置。外挂失败**不回退**内置（扫描件内置必然也失败，回退只会掩盖故障），显式 markFailed。适配上 RAGFlow/MinerU 需一层薄 CGI 适配该契约 |
+| ~~`PARSER_SIDECAR_URL`~~ | 已退役 | 2026-11-17 SaaS 配置面改造：改参数中心 `etl.parser_sidecar_url`。语义同前：默认空＝纯内置解析，零外网请求；外挂失败不回退内置 |
 | `IMAGE_DESCRIBE_URL` | 空 | P1-1 图片知识库的本地 VL 推理服务（OpenAI chat completions 兼容，如 llama-server 挂 mmproj 模型，`internal/etl/image_describe.go`）。**默认空＝图片导入 markFailed**（报不支持格式）；配置后图片经 base64 内联发给本地服务，拿回文本描述走既有文本管线入库——图片可被文本 query 命中，且与「Embedding/Rerank 强制本地」同构（描述全程不出域） |
-| `IMAGE_DESCRIBE_MODEL` | `vl` | 视觉服务侧模型名（payload `model` 字段），服务侧路由用 |
+| ~~`IMAGE_DESCRIBE_MODEL`~~ | 已退役 | 2026-11-17 SaaS 配置面改造：改参数中心 `etl.image_describe_model`（默认 `vl`） |

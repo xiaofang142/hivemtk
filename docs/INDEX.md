@@ -20,7 +20,8 @@
 
 | 文档 | 读者 |
 |------|------|
-| [handbook/README.md](handbook/README.md) | 四册入口索引 |
+| [handbook/README.md](handbook/README.md) | 五册入口索引 |
+| [handbook/QUICKSTART-FOR-HUMANS.md](handbook/QUICKSTART-FOR-HUMANS.md) | 快速上手与使用手册（交接级）：五大件 · 功能架构与数据流 · 逐模块四要素详解（作用/问题/配置/使用）· 从零到第一条 AI 自动回复 · 分渠道接入 · Bridge/Widget 详解 · 角色权限 · 排障速查（人读，新接手首选） |
 | [handbook/FEATURES-FOR-HUMANS.md](handbook/FEATURES-FOR-HUMANS.md) | 功能全集 · 渠道能力 · AI 引擎 · 已知限制（人读） |
 | [handbook/OPERATIONS-FOR-HUMANS.md](handbook/OPERATIONS-FOR-HUMANS.md) | 部署 · 配置 · 日常运营 · 备份恢复（人读） |
 | [handbook/FEATURES-FOR-AI.md](handbook/FEATURES-FOR-AI.md) | 路由表 · 模块地图 · 文件位置 · 数据结构（AI 读） |
@@ -115,9 +116,14 @@
 | [../specs/015-egolite-runtime-supervision/](../specs/015-egolite-runtime-supervision/) | 015 ego-lite 运行时监督：域白名单三层（静扫/守卫/事件审计）+ 官方升级指令 + macOS 安装器（已交付，2026-10-28） |
 | [../specs/016-egolite-scheduling-and-selfupdate/](../specs/016-egolite-scheduling-and-selfupdate/) | 016 ego-lite 调度闭环：流程 cron 触发 + egolite_run AI 工具 + runner 自更新（已交付，2026-10-28） |
 | [../specs/024-im-seam-alignment/](../specs/024-im-seam-alignment/) | 024 IM 接入接缝对齐：出站注册表 + 事件类型 + 路由 + 渲染 + 身份双层键 + 生命周期读侧 + 门禁收口（B1–B6 已交付，2026-11-18） |
-| [../specs/025-im-platforms/](../specs/025-im-platforms/) | 025 新平台接入：wecomcs / OneBot / Slack / wecombot / custom（待开工，依赖 024 的 B1+B2——已就绪） |
-| [../.specify/002-modular-subscription/](../.specify/002-modular-subscription/) | 002 模块订阅一期（模块闸、订单状态机、MarkPaid 唯一入账口、LLM 双轨计费） |
-| [../.specify/003-saas-billing-v2/](../.specify/003-saas-billing-v2/) | 003 SaaS 计费二期：订阅 + 易支付 + 初始化赠送 + 官网云端入口（`plan.md` 含 ADR-M8/M9 与「审查修订」） |
+| [../specs/025-im-platforms/](../specs/025-im-platforms/) | 025 新平台接入：wecomcs / OneBot / Slack / wecombot / custom（已交付，2026-11-18；真实账号项 T707/T806/T904 用模拟信号验收，见 delivery.md） |
+| 历史路径 `../.specify/002-modular-subscription/`（当前工作区不包含） | 002 模块订阅一期（模块闸、订单状态机、MarkPaid 唯一入账口、LLM 双轨计费） |
+| 历史路径 `../.specify/003-saas-billing-v2/`（当前工作区不包含） | 003 SaaS 计费二期：订阅 + 易支付 + 初始化赠送 + 官网云端入口（原 `plan.md` 含 ADR-M8/M9 与「审查修订」） |
+
+> `.specify/*` 归档说明（2026-11-18）：`002-modular-subscription`、`003-saas-billing-v2`、
+> `004-inapp-notification`、`005-geo-site-audit-v2`、`006-geo-autopilot`、`integrations/`、
+> `workflows/` 与旧 bug 目录已整体移出当前工作区（内容保留在 git 历史；施工源以 `specs/` 为准）。
+> 代码注释与文档中仍可见 `.specify/...` 路径，一律是**历史出处标注**，不代表现存文件，勿据此查找。
 
 > 覆盖关系：003 **显式覆盖** 002 的两处口径——「本阶段不接任何真实支付通道」→ 接入易支付；「收费模块按年订阅、全量线年度合计 999 元/年」→「23 模块 0 元 + 浏览器自动化 ¥99 买断 + 软件订阅 149 元/月」。002 的架构资产全部沿用。
 

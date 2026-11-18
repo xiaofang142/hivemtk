@@ -234,8 +234,8 @@
 | 部署文档漏 `PLATFORM_ENABLED` 那一轴（**已修**） | `docs/architecture/部署方案_用户端.md` §十一 + 新增 §十一.1 |
 | 2×2 矩阵的**行为契约补齐**（形态③首次成文） | 本文 §2 |
 | 2×2 矩阵的**行为契约变成可执行断言**（形态③④不再只是文档） | `user-server/internal/app/deployment_matrix_contract_test.go` |
-| **跨租户越权**（**已修**，对抗性跑出来的） | `internal/middleware/platform_operator.go` + `internal/router/router.go` + `internal/service/tenant.go`；见 `.specify/bugs/cross-tenant-admin-privilege-escalation/` |
-| **守卫过度收紧**（**已修**，二次审核打出来的） | admin 档按数据域拆两档：`internal/router/router.go` + `system_routes.go` + `module_routes.go`；门禁 `internal/router/platform_operator_scope_test.go`；见 `.specify/bugs/platform-operator-guard-over-tightened/` |
+| **跨租户越权**（**已修**，对抗性跑出来的） | `internal/middleware/platform_operator.go` + `internal/router/router.go` + `internal/service/tenant.go`；见 `.specify/bugs/cross-tenant-admin-privilege-escalation/`（档案已移出当前工作区，见 git 历史） |
+| **守卫过度收紧**（**已修**，二次审核打出来的） | admin 档按数据域拆两档：`internal/router/router.go` + `system_routes.go` + `module_routes.go`；门禁 `internal/router/platform_operator_scope_test.go`；见 `.specify/bugs/platform-operator-guard-over-tightened/`（档案已移出当前工作区，见 git 历史） |
 
 ### 待批准（本文第 6 节）
 
@@ -282,7 +282,7 @@
 `off` 模式恒真（离线单机零回归）；判定不出首租户 ⇒ **拒绝**（权限边界上"查不到"不等于"放行"）。
 另加**死锁保护**：首租户不允许被停用（否则平台运营方把自己锁在门外且无人能救），但允许重新启用。
 
-完整评估与三件套：`.specify/bugs/cross-tenant-admin-privilege-escalation/`。
+完整评估与三件套：`.specify/bugs/cross-tenant-admin-privilege-escalation/`（档案已移出当前工作区，见 git 历史）。
 
 ### 9.2 线上平台的实测口径
 
@@ -339,7 +339,7 @@
 **为什么这类回归常规测试抓不到**：守卫本身是对的、编译照过、既有单测照绿；
 只有**拿真实租户令牌打活体端点**才看得见。
 
-完整评估：`.specify/bugs/platform-operator-guard-over-tightened/`。
+完整评估：`.specify/bugs/platform-operator-guard-over-tightened/`（档案已移出当前工作区，见 git 历史）。
 
 
 ---

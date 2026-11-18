@@ -31,6 +31,8 @@ platform_api:
 #   - 必须是 https（Telegram / 飞书强制 https；本系统会自动把 http+端口 升级为 https）
 #   - 不带尾部斜杠
 # 留空 → 自动降级到 polling 模式（无需公网域名，但禁止水平扩展，仅适合开发 / 单实例）
+# 2026-11-17 SaaS 配置面改造（B18）优先级已翻转：参数中心 urls.public_base_url（按租户）
+# > 环境变量 PUBLIC_BASE_URL > 本字段。本节降为第三顺位遗留兜底，新部署不需要配置它。
 external:
   public_base_url: "${PUBLIC_BASE_URL:}"
 
@@ -144,30 +146,15 @@ inference:
     fallback_to_cloud_llm: false
 
 # ============================================================
-# 对象存储配置（密钥通过环境变量注入，不落配置文件）
+# 对象存储配置（2026-11-17 SaaS 配置面改造 B1 退役）
 # ============================================================
-# 七牛云 AK/SK 由 QINIU_ACCESS_KEY / QINIU_SECRET_KEY 环境变量提供
-# （走下方 ${VAR} 占位插值；留空时 /api/chat/public/upload-token 返回 503「对象存储未配置」）。
-storage:
-  type: qiniu
-  qiniu:
-    access_key: "${QINIU_ACCESS_KEY:}"
-    secret_key: "${QINIU_SECRET_KEY:}"
-    bucket: "${QINIU_BUCKET:}"
-    domain: "${QINIU_DOMAIN:}"
+# 七牛云凭据的唯一来源是租户级 obs_config 表（管理端「系统设置 → 对象存储」页，
+# AK/SK 加密列）。/api/chat/public/upload-token 从该表默认行取凭据签发直传 token，
+# fail-closed：无默认行/非七牛/缺 AK/SK 一律 503。QINIU_* 环境变量已退役，配了也不生效。
 
-# 多语言方案配置（v1.2 出海多语言 P1-2）
-# 低资源语言（ar/th/vi/hi/tr）LLM 输出质量不稳定，启用后走 DeepL 翻译降级路径：
-#   中文 RAG 生成 → DeepL 翻译 → Glossary 后处理校准
-# 默认关闭：enabled=false 时不影响主流程，走标准跨语言 LLM 生成路径。
-# 启用条件：enabled=true 且 DEEPL_API_KEY 环境变量已配置。
-i18n:
-  fallback:
-    enabled: false                          # 总开关，默认关闭
-    low_resource_langs: ["ar", "th", "vi", "hi", "tr"]  # 低资源语言列表
-    translator: deepl                       # 翻译引擎（当前仅支持 deepl）
-    deepl:
-      # DeepL API key 通过环境变量注入（合规基线 §7.2 敏感数据脱敏）
-      # 未设置时 FallbackBridge 自动禁用；Free 版需同步改 base_url 为 https://api-free.deepl.com/v2
-      api_key: "${DEEPL_API_KEY}"
-      base_url: "https://api.deepl.com/v2"
+# ============================================================
+# 多语言 i18n 节（2026-11-17 SaaS 配置面改造 B2 退役）
+# ============================================================
+# 原 i18n.embedding/cache/fallback（DeepL 降级桥）整节为零消费点的死配置：
+# cfg.I18n 全仓无读取点、FallbackBridge 从未接线。结构体与环境变量 DEEPL_API_KEY
+# 一并退役。未来若启用低资源语言翻译降级，应经参数中心/租户配置驱动，不回配置文件。
