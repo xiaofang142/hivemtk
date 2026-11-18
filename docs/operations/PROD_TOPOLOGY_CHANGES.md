@@ -4,6 +4,39 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-19 · 链 A 终发：二次审核批+platform-link 并行批（7d4ee5d58）
+
+- **发布内容**：审核修复批（channelcaps/capregistry/v3.98.0 枚举迁移/对齐总闸/渲染实证）
+  + 并行会话 platform-link 批（部署形态上报/心跳机器快照，rebase 对齐 upstream 2b5786229）
+  + wire 契约双侧重生成（租户清单追平 client_machine/deploy_mode；平台侧由并行会话
+  8875f36 收口，本地重复修复已弃）。check-wire-contract.py ✅ 无漂移。
+- **线上实证**：health 200；`[migration] 同步迁移完成`；channel_type_enum 实查已含
+  taobao/shopee/walmart_us（五值落地）；二进制 sha256=ece9dccacfdedeee…；
+  回滚点=镜像 rollback-20261119-014627 + 二进制 .bak-20261119-014627。
+- **发布预检两次拦截如实登记**：①wire 契约 3 处漂移（并行批租户侧先发、平台侧未跟——
+  跨仓契约时序问题，非本轮审核批引入；平台侧由并行会话 8875f36 收口）；②重跑时一次
+  未提交清单文件拦截（部署门正确工作）。
+- **换机注意**：五渠道全链现已在生产可用（注册表/词表/caps/capregistry/双枚举/渲染全齐），
+  待真机校准后开闸（fail-closed 语义不变）。
+
+## 2026-11-19 · 二次审核批：扩展 1.3.9 + 五渠道全链缺口补齐（链 B/C 重发）
+
+- **审核产出（九任务二次审核+全链路审核）**：首轮注册批漏登记 14 处面表——
+  ①channelcaps manifests 五渠道（缺=RenderForChannel 报「出站不支持该渠道」，AI 回复静默失败）；
+  ②capregistry DMReceive/DMSend 十条目；③channel_type_enum 五值（v3.98.0 Go 迁移）；
+  ④platform_type_enum 五值（migrations/078 SQL + 047 静态清单，离线部署库 message_hub 拒写风险）；
+  ⑤ChannelType 常量五枚；⑥NormalizeChannelType 别名映射；⑦capability_runtime bridge 分组两处；
+  ⑧ai_tagger channel 词表；⑨extractSessionSkills social_media 分组；⑩markdownDMChannels 白名单；
+  ⑪lead_miner 提示表；⑫http-relay.js 别名表；⑬popup/health.js 渠道排序；⑭manifest/popup 描述文案。
+  **防复发**：新增三道闸——registry_parity_test 闸 5（channelcaps/capregistry 面）、
+  channel_vocabulary_alignment_test（五消费面词表总闸）、shop_channels_render_test（出站渲染实证）。
+- **链 B 重发**：1.3.9（描述文案+别名表+health 排序；runtime 语义不变）——三处同 bump、
+  publish --reload 自动化全过、快照回验 1.3.9。
+- **测试修复**：release-browser-api.test.js 9 用例随实现重写（旧用例测已删除的快照解析行为），
+  按新 shadow-DOM 契约重写 6 用例（含新恢复的同名歧义守卫 ambiguous-name）。
+- 换机注意：新增 migrations/078（离线 SQL 路径幂等）+ v3.98.0（AutoMigrate 路径）——
+  两枚举（platform_type_enum/channel_type_enum）同值域，缺一即拒写。
+
 ## 2026-11-19 · TG 配置迁移线上：hivemtk 社群上 SaaS 租户 18（四川同咨）（任务七）
 
 - **迁移内容（用户令「只迁移 hivemtk 那个社群」）**：本机 user_db `telegram_accounts` id=5

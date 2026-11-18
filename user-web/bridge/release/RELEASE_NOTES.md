@@ -1,9 +1,12 @@
-# HiveBridge 蜂桥 v1.3.8 发布包
+# HiveBridge 蜂桥 v1.3.9 发布包
 
-- 产物：`release/hivebridge-1.3.8.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
-- 构建时间：2026-11-18T16:22:47.626Z
+- 产物：`release/hivebridge-1.3.9.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
+- 构建时间：2026-11-18T17:24:57.855Z
 
-## 本版变更（v1.3.8）
+## 本版变更（v1.3.9）
+- 二次审核批：五渠道全链补齐（channelcaps/capregistry/ENUM v3.98+078/ChannelType/channelTypeOf/词表/技能/MD 白名单/别名表）+ popup 描述含店铺骨架渠道
+
+## 历史变更（v1.3.8）
 - 电商店铺五渠道骨架（CH-15/18/19/28/35）：taobao/douyin_shop/kuaishou_shop/shopee/walmart_us 服务端全链注册（Experimental），适配器 fail-closed（选择器零证据拒启拒发），真机校准后开闸；Shopee 八区路由
 
 ## 历史变更（v1.3.7）

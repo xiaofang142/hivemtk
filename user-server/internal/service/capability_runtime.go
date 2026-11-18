@@ -39,7 +39,8 @@ func runtimeImplemented(e capregistry.Entry) bool {
 	case capregistry.CapDMReceive, capregistry.CapDMSend:
 		switch e.Platform {
 		case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu",
-			"jd", "bilibili", "weibo", "personal_wx", "pdd":
+			"jd", "bilibili", "weibo", "personal_wx", "pdd",
+			"taobao", "douyin_shop", "kuaishou_shop", "shopee", "walmart_us":
 			return e.Via == "bridge" // bridge 收发链路（inbox_ingress / outbox）
 		case "wecom", "telegram", "wechat",
 			// 025 平台批：wecomcs/onebot/slack/wecombot/custom 的入站与出站
@@ -105,7 +106,8 @@ func (s *CapabilityRuntimeService) platformConfigured(ctx context.Context, platf
 	case "email":
 		n, err = s.repo.CountEmail(ctx)
 	case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu",
-		"jd", "bilibili", "weibo", "personal_wx", "pdd":
+		"jd", "bilibili", "weibo", "personal_wx", "pdd",
+		"taobao", "douyin_shop", "kuaishou_shop", "shopee", "walmart_us":
 		n, err = s.repo.CountBridge(ctx, platform)
 	case "ima", "webhttp":
 		// kb.sync：对应类型的启用连接器存在即视为已配置

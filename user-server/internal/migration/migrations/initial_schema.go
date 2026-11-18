@@ -337,4 +337,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewAssetBundleGateBackfillMigration(db))
 	// v3.97.0：日志知识库ID兼容字符串，阶段时间可空；历史缺测不回填为实测。
 	register(NewKnowledgeSearchObservationMigration(db))
+	// v3.98.0（电商店铺五渠道枚举扩容，二次审核）：channel_type_enum 补
+	// taobao/douyin_shop/kuaishou_shop/shopee/walmart_us——v3.92.0 同类漂移再演的收口。
+	register(NewShopChannelTypeEnumMigration(db))
 }

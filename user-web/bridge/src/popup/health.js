@@ -131,8 +131,8 @@ export function renderHealthPanel(data) {
   if (channels.length === 0) {
     return '<div class="health-empty" style="color:#6b7280;font-size:12px;padding:8px;">暂无健康度数据（content script 未启动或未上报）</div>';
   }
-  // 按渠道名排序（抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博/拼多多）
-  const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou', 'jd', 'bilibili', 'weibo', 'pdd'];
+  // 按渠道名排序（抖音/小红书/TikTok/闲鱼/快手/京东/B站/微博/拼多多 + 五个店铺骨架渠道）
+  const order = ['douyin', 'xiaohongshu', 'tiktok', 'xianyu', 'kuaishou', 'jd', 'bilibili', 'weibo', 'pdd', 'taobao', 'douyin_shop', 'kuaishou_shop', 'shopee', 'walmart_us'];
   const sorted = channels.sort((a, b) => {
     const ai = order.indexOf(a); const bi = order.indexOf(b);
     if (ai === -1 && bi === -1) return a.localeCompare(b);

@@ -236,6 +236,13 @@ func init() {
 	Register(bridge(model.ChannelWeibo, "微博私信", "Experimental"))
 	Register(bridge(model.ChannelPersonalWX, "个人微信（桌面伴生）", "伴生为外部工程，服务端协议已就绪"))
 	Register(bridge(model.ChannelPDD, "拼多多商家", "Experimental，选择器待真机"))
+	// 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35，二次审核补齐）：桥接链路同源，
+	// fail-closed（SEL 零证据拒启）。缺此登记 RenderForChannel 直接报「出站不支持该渠道」。
+	Register(bridge(model.ChannelTaobao, "千牛网页接待中心", "Experimental，选择器待真机"))
+	Register(bridge(model.ChannelDouyinShop, "抖店飞鸽客服", "Experimental，选择器待真机"))
+	Register(bridge(model.ChannelKuaishouShop, "快手小店快语客服", "Experimental，选择器待真机"))
+	Register(bridge(model.ChannelShopee, "Shopee Seller Centre Webchat", "Experimental，选择器待真机"))
+	Register(bridge(model.ChannelWalmartUS, "Walmart Seller Center Inbox", "Experimental，选择器待真机"))
 
 	// ── 通用触达 / 自定义 ────────────────────────────────────────────────
 	Register(Manifest{

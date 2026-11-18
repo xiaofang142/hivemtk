@@ -563,6 +563,18 @@ func NormalizeChannelType(ch string) string {
 	// CH-16 首切片（2026-11-09）：拼多多商家网页渠道，别名与 bridge.NormalizeBridgeChannel 同源。
 	case "pdd", "pdd_web", "pinduoduo":
 		return string(model.ChannelTypePDD)
+	// 2026-11-18 电商店铺五渠道（CH-15/18/19/28/35，二次审核补齐）：
+	// 别名与 bridge.NormalizeBridgeChannel 同源；缺此映射则渠道绑定/AI 标签落库漂移。
+	case "taobao", "taobao_web", "tmall", "qianniu":
+		return string(model.ChannelTypeTaobao)
+	case "douyin_shop", "douyin_shop_web", "jinritemai", "feige":
+		return string(model.ChannelTypeDouyinShop)
+	case "kuaishou_shop", "kuaishou_shop_web", "kwaixiaodian", "kuaishouxiao":
+		return string(model.ChannelTypeKuaishouShop)
+	case "shopee", "shopee_web", "shopee_seller":
+		return string(model.ChannelTypeShopee)
+	case "walmart_us", "walmart", "walmart_web":
+		return string(model.ChannelTypeWalmartUS)
 	case "web_embed", "webembed":
 		return string(model.ChannelTypeWebEmbed)
 	default:

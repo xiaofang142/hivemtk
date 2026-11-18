@@ -51,6 +51,13 @@ var markdownDMChannels = map[string]bool{
 	"personal_wx": true,
 	// CH-16 首切片（2026-11-09）：拼多多输入框是 id=replyTextarea 的纯 textarea。
 	"pdd": true,
+	// 2026-11-18 电商店铺五渠道（CH-15/18/19/28/35，二次审核补齐）：店铺客服输入框
+	// 同为纯文本；fail-closed 骨架期不发送，校准开闸后此白名单即生效。
+	"taobao":        true,
+	"douyin_shop":   true,
+	"kuaishou_shop": true,
+	"shopee":        true,
+	"walmart_us":    true,
 }
 
 // StripMarkdownForDM 把 Markdown 语法标记剥成纯文本，供网页私信输入框直发。

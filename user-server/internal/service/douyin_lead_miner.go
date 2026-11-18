@@ -216,6 +216,10 @@ var unsupportedLeadMiningChannels = map[string]string{
 	"pdd":      "拼多多线索挖掘需要 Chrome 扩展 + Bridge 协议",
 	"jd":       "京东线索挖掘需要 Chrome 扩展 + Bridge 协议",
 	"bilibili": "B站线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"douyin_shop":   "抖店飞鸽线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"kuaishou_shop": "快手小店线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"shopee":        "Shopee 线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"walmart_us":    "Walmart 线索挖掘需要 Chrome 扩展 + Bridge 协议",
 }
 
 // RegisterLeadMiningChannel 注册一个 Bridge 协议的线索挖掘渠道（供外部模块扩展）
