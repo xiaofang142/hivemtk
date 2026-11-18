@@ -4,6 +4,29 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-19 · TG 配置迁移线上：hivemtk 社群上 SaaS 租户 18（四川同咨）（任务七）
+
+- **迁移内容（用户令「只迁移 hivemtk 那个社群」）**：本机 user_db `telegram_accounts` id=5
+  （bot @hivemtk_bot）+ `telegram_group_gates` id=3「HiveMtk 开源智能客服社群」
+  （chat -1003625877154，mode=mute_unlock，verify_ttl 10min，欢迎/验证文案原样）→
+  线上租户 18（tz3rmdj 四川同咨科技）。线上表原为空（0 账号/0 门禁）。
+- **落库**：线上 `telegram_accounts` 新行 id=2（bot_token 经 ssh 管道直传不落终端、
+  webhook_secret=服务端 md5 随机 32 位、webhook_enabled=true、ai_agent_enabled=true）；
+  `telegram_group_gates` 新行 id=3（配置照抄）。**成员表不迁**：本机该群唯一成员行是
+  join_status=kicked + verify_token 已过期的历史残留，无迁移价值——新成员由门禁自动发新令牌。
+- **setWebhook 闭环**：线上容器直连 api.telegram.org 不可达（大陆网络），本机经代理
+  （HTTP_PROXY 127.0.0.1:7898）调用；**workapi 域名被 Telegram 侧解析失败持续 400**
+  （DoH 双 NS 均正常解析 101.35.252.112——Telegram 自家 resolver 负缓存/抖动），改
+  **work.xapptool.cn 域名变体立即成功**（nginx 两 vhost /api/ 同转发 8204，等价）。
+  getWebhookInfo 实证：url=work 变体、ip=101.35.252.112（Telegram 已成功连上）、
+  last_err=None、pending=0。DB 两处（线上 id=2 + 本机 id=5 标记态）均同步为 work 变体 URL。
+- **验签闸负例**：POST 无 secret → 401 `verify error: missing X-Telegram-Bot-Api-Secret-Token`
+  （路由通、fail-closed 生效）。
+- **回滚**：线上 `DELETE FROM telegram_group_gates WHERE id=3; DELETE FROM telegram_accounts WHERE id=2;`
+  + Telegram deleteWebhook（token=本地 id=5 行）。
+- **换机注意**：TG webhook 依赖 work.xapptool.cn vhost 的 /api/ 反代到 user-server；若换域名
+  需同步 setWebhook+DB webhook_url 两处。
+
 ## 2026-11-19 · 全量发版：链 A API + 链 B 扩展 1.3.8 + 链 C 上链 + SPA/embed-sdk 同步（任务六）
 
 - **链 A**：`deploy/deploy-api.sh` 成功，线上=9df54ef08（30 个 user-server 提交，含 024/025
