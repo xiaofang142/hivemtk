@@ -43,7 +43,11 @@ SHARED_CLIENT_PACKAGES = {"core"}                     # channelbot 共享内核
 # manifest 已登记但不走 service WebhookChannel 常量族的渠道（各自路径自证）：
 #   web=embed-sdk 站内控件、email=SMTP 触达、sms=阿里云触达、custom=字面量接入、
 #   pdd=channelgw registry 名字串（model.ChannelPDD，桥接族不逐渠道立 service 常量）。
-NOT_WEBHOOK_CHANNEL_OK = {"web", "email", "sms", "custom", "pdd"}
+#   taobao/douyin_shop/kuaishou_shop/shopee/walmart_us=电商店铺五渠道（2026-11-18 注册批，
+#   与 pdd 同族：model.Channel* 常量 + channelgw registry + bridge_outbox 能力位，
+#   桥接族不逐渠道立 service 常量；入站只走 POST /api/bridge/ingest）。
+NOT_WEBHOOK_CHANNEL_OK = {"web", "email", "sms", "custom", "pdd",
+                          "taobao", "douyin_shop", "kuaishou_shop", "shopee", "walmart_us"}
 
 
 def read(path):

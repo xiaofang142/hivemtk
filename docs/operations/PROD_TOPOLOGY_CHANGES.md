@@ -19,6 +19,19 @@
 - **换机注意**：五渠道全链现已在生产可用（注册表/词表/caps/capregistry/双枚举/渲染全齐），
   待真机校准后开闸（fail-closed 语义不变）。
 
+## 2026-11-19 · 自立项巡检批二次审核（对抗复核闭环）+ 生产数据口径修正
+
+- **对抗复核结论**：SSE 重推缺口**证伪**——owed 补拉（批11 §3.7-2）与游标无关、按欠交付
+  集合取行（FetchOutboundUndelivered 含 pending），扩展重连即重拉；sweep 的
+  「超时 inflight→pending」正是补上 claimForPush 可认领的那一环，闭环成立
+  （MV3 SW 高频断连保证补拉频率；7 天老化兜底理论极端窗口）。
+- **生产数据口径修正**：9 条历史 duplicate_of 占位行（旧口径 failed 灌 DLQ）一次性
+  迁 duplicate 终态——DLQ 137→128（剩余为真实投递失败）。
+- **触点门补豁免**：五渠道与 pdd 同族（bridge-only，无 service WebhookChannel 常量）
+  加入 NOT_WEBHOOK_CHANNEL_OK 并给注释出处——manifest 25→30，rc=0。
+- **全量回归复跑绿**：build/vet+七包（repository 26s/channelgw/channelcaps/capregistry/
+  migrations/service 240s）+race 子集+四静态门。
+
 ## 2026-11-19 · 自立项巡检批：出站租约回收三步巡检上线（链 A ×4 次迭代 2788fb6c2）
 
 - **背景**：生产静默故障巡检抓出三类故障——SSE 模式租约回收无人触发（inflight 挂 43 分钟/
