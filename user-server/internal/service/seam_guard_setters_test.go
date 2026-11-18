@@ -107,12 +107,6 @@ func resetPollingWorkerIDForTest(id string) func() {
 	}
 }
 
-func storeAIReplyQuietHoursFn(fn func(time.Time) bool) {
-	aiReplyQuietHoursMu.Lock()
-	defer aiReplyQuietHoursMu.Unlock()
-	aiReplyQuietHoursFn = fn
-}
-
 func storeDingtalkWebhookHostAllowed(fn func(*url.URL) bool) {
 	dingtalkHostMu.Lock()
 	defer dingtalkHostMu.Unlock()
@@ -124,3 +118,10 @@ func storeWechatAPIBase(base string) {
 	defer wechatSeamMu.Unlock()
 	wechatAPIBase = base
 }
+
+// DisableAIQuietHoursForTest 不住这里：它是**导出**的跨包测试缝（channelgw /
+// controller 的测试以 service.DisableAIQuietHoursForTest 调用），住 _test.go 会让
+// 外部包测试编译期就看不见。2026-11-19 二次审核收口：写侧 accessor
+// storeAIReplyQuietHoursFn 随它的产码调用链迁回 webhook_outbound.go（本家文件），
+// 注册表 setter 列同步改回本家形态；直摸全局 ×4 的门禁红也一并闭掉。
+

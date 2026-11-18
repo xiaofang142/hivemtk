@@ -110,8 +110,8 @@ func publicInitStatus(s *install.Status) gin.H {
 // CompanyName 可退化为「负责人所属组织」：个人自用也要能装，
 // 但不允许**完全为空** —— 一个查不到人的经营主体在监管问询时毫无价值。
 type InitAdminRequest struct {
-	Username     string `json:"username" binding:"required,min=3,max=20"`
-	Password     string `json:"password" binding:"required,min=8"`
+	Username string `json:"username" binding:"required,min=3,max=20"`
+	Password string `json:"password" binding:"required,min=8"`
 	// 任务五A：本地部署初始化是邮箱唯一收集入口（此前 omitempty 选填），
 	// 改为必填且格式校验——离线部署无法像 SaaS 一样事后补录联系方式。
 	Email        string `json:"email" binding:"required,email"`

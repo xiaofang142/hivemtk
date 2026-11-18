@@ -3,7 +3,7 @@
 > 由 `scripts/gen_env_reference.go` 扫描 internal/ cmd/（非 _test.go）与 config.yaml 生成。
 > 再生成：`go run ./scripts/gen_env_reference.go`；CI 校验：`go run ./scripts/gen_env_reference.go -check`。
 > 测试基建专用键（POSTGRES_TEST_* / TESTDB_* / TEST_ADMIN_* / CI 等）不属部署配置面，未收录。
-> <!-- envref-fingerprint: 136 keys -->
+> <!-- envref-fingerprint: 137 keys -->
 
 | 键 | 说明 | 读取点 |
 |---|---|---|
@@ -11,13 +11,13 @@
 | `ADMIN_EMAIL` |  | `internal/config/admin.go:91` |
 | `ADMIN_REAL_NAME` |  | `internal/config/admin.go:94` |
 | `ADMIN_USERNAME` |  | `internal/config/admin.go:88` |
-| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:861` |
+| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:873` |
 | `AI_DEBOUNCE_SECONDS` |  | `internal/service/ai_debounce.go:28` |
 | `ALLOWED_WS_ORIGINS` |  | `internal/config/ws_origin.go:47` |
-| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 危险：允许 Telegram webhook 免签（dev 双护栏） | `internal/channelbot/telegram/telegram.go:550<br>internal/service/webhook.go:683` |
-| `ALLOW_INSECURE_WEBHOOK` | 危险：允许 webhook 免 HTTPS（dev） | `internal/service/webhook.go:663<br>internal/service/webhook.go:683` |
+| `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 危险：允许 Telegram webhook 免签（dev 双护栏） | `internal/channelbot/telegram/telegram.go:550<br>internal/service/webhook.go:693` |
+| `ALLOW_INSECURE_WEBHOOK` | 危险：允许 webhook 免 HTTPS（dev） | `internal/service/webhook.go:673<br>internal/service/webhook.go:693` |
 | `ALLOW_SELF_RESTART` | 允许进程自重启（离线升级面） | `internal/controller/system_ops.go:59` |
-| `APP_ENV` |  | `internal/pkg/db/db.go:64<br>internal/service/webhook.go:682` |
+| `APP_ENV` |  | `internal/pkg/db/db.go:64<br>internal/service/webhook.go:692` |
 | `AUTH_COOKIE_SECURE` |  | `internal/middleware/authcookie.go:37` |
 | `AUTO_LOGIN_ENABLED` |  | `internal/config/admin.go:98` |
 | `BACKUP_BASE_DIR` |  | `internal/storage/backup_source.go:25` |
@@ -75,7 +75,7 @@
 | `GEO_SEED_DSN` |  | `cmd/seedkw/main.go:14` |
 | `GEO_SITE_BASE_URL` |  | `internal/config/website.go:31` |
 | `GEO_SITE_ROOT` |  | `internal/geo/service/geo_site.go:21` |
-| `GIN_MODE` |  | `cmd/api/main.go:467<br>internal/config/init.go:56<br>internal/pkg/db/db.go:64<br>…共 4 处` |
+| `GIN_MODE` |  | `cmd/api/main.go:479<br>internal/config/init.go:56<br>internal/pkg/db/db.go:64<br>…共 4 处` |
 | `HIVEMTK_SECRETS_DIR` |  | `cmd/api/main.go:344` |
 | `HIVE_MTK_HOST_TOKEN` |  | `cmd/nm-host/main.go:105` |
 | `HIVE_MTK_WS_URL` |  | `cmd/nm-host/main.go:94` |
@@ -95,20 +95,21 @@
 | `MOCK_AI_DELAY_MS` |  | `cmd/bridge-mock/main.go:141` |
 | `MOCK_AI_REPLY` |  | `cmd/bridge-mock/main.go:149` |
 | `MOCK_PORT` |  | `cmd/bridge-mock/main.go:136` |
-| `MODE` |  | `internal/service/webhook.go:682` |
+| `MODE` |  | `internal/service/webhook.go:692` |
 | `ONEID_SALT` | OneID 身份归并盐 | `internal/identity/normalize.go:25` |
 | `ORDER_WEBHOOK_NONCE_STRICT` |  | `internal/middleware/webhook_signature.go:181` |
 | `PERF_PASSWORD` |  | `cmd/perf/main.go:32` |
 | `PERF_USERNAME` |  | `cmd/perf/main.go:31` |
 | `PGSERVICE` |  | `internal/pkg/testutil/testdb_config.go:29` |
 | `PGSERVICEFILE` |  | `internal/pkg/testutil/testdb_config.go:29` |
-| `PLATFORM_API_HOST` |  | `internal/config/platform.go:259` |
-| `PLATFORM_API_URL` |  | `config.yaml:18<br>internal/config/platform.go:261<br>internal/platform/llm_proxy_client.go:119` |
+| `PLATFORM_API_HOST` |  | `internal/config/platform.go:291` |
+| `PLATFORM_API_URL` |  | `config.yaml:18<br>internal/config/platform.go:293<br>internal/platform/llm_proxy_client.go:119` |
 | `PLATFORM_CLOUD_URL` |  | `internal/config/platform.go:89` |
-| `PLATFORM_CONFIG_PATH` |  | `internal/config/platform.go:234<br>internal/config/platform.go:238` |
+| `PLATFORM_CONFIG_PATH` |  | `internal/config/platform.go:266<br>internal/config/platform.go:270` |
 | `PLATFORM_ENABLED` |  | `cmd/api/main.go:427<br>cmd/api/main.go:433<br>internal/config/platform.go:121` |
+| `PLATFORM_HEARTBEAT_ENABLED` |  | `cmd/api/main.go:449<br>cmd/api/main.go:452<br>internal/config/platform.go:155` |
 | `PLATFORM_MERCHANT_KEY` |  | `internal/platform/asset_market_client.go:36<br>internal/platform/llm_proxy_client.go:128` |
-| `PORT` |  | `cmd/api/main.go:836<br>internal/config/ports.go:85` |
+| `PORT` |  | `cmd/api/main.go:848<br>internal/config/ports.go:85` |
 | `POSTGRES_PASSWORD` |  | `cmd/seed/main.go:212<br>cmd/websitekb/main.go:43<br>internal/config/server.go:580<br>…共 6 处` |
 | `PUBLIC_BASE_URL` |  | `cmd/api/main.go:158<br>config.yaml:37<br>internal/config/server.go:436<br>…共 5 处` |
 | `QWEN_API_KEY` |  | `cmd/geo-run/main.go:75` |
@@ -120,7 +121,7 @@
 | `REQUIRE_PRIVATE_NETWORK` |  | `cmd/api/main.go:158<br>internal/security/network_exposure_guard.go:31` |
 | `RESTORE_TMP_DIR` |  | `internal/storage/backup_source.go:29` |
 | `SERVER_API_BASE` |  | `internal/config/server.go:493` |
-| `SERVER_HOST` |  | `cmd/api/main.go:836` |
+| `SERVER_HOST` |  | `cmd/api/main.go:848` |
 | `SHOW_DEFAULT_CREDENTIALS` |  | `internal/config/admin.go:109` |
 | `SITE_TENANT_CODE` |  | `internal/controller/auth_register.go:64` |
 | `SMS_ALLOW_NIGHT_SEND` |  | `internal/service/sms/sms.go:295` |

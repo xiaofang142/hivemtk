@@ -374,8 +374,17 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					&ParsedPayload{EventID: "evt-golden-tg-" + tc.Sample, Sender: "555001", Content: "在吗"},
 					"golden telegram 回复正文", hub, tgCards)
 			case "qq":
+				// 生产口径：QQ 入站把官方消息 id 写进 hub.Extra["channel_msg_id"]
+				//（channelbot/qq qq.go 入站覆盖），出站 QQOutboundMsgID 从这里取被动
+				// 回复关联的原消息 id。夹具必须同款——只设 MsgID 时出站拿到空 msg_id
+				// 会走主动消息分支（seq 随机），golden 永远对不上（2026-11-19 收口：
+				// ed8eeb76 引入 Extra 口径时本夹具没跟上，golden 一直红）。
 				// msgID 每样例唯一：msg_seq 按 msg_id 独立从 1 起，样例间不递增。
-				hub := &model.MessageHub{Platform: "qq", ConversationID: "cs-golden-qq", MsgID: "qq-in-golden-" + tc.Sample, SenderID: "cust-golden-qq"}
+				hub := &model.MessageHub{
+					Platform: "qq", ConversationID: "cs-golden-qq", SenderID: "cust-golden-qq",
+					MsgID: "qq-in-golden-" + tc.Sample,
+					Extra: model.JSONMap{"channel_msg_id": "qq-in-golden-" + tc.Sample},
+				}
 				if tc.Sample == "missing_conv" {
 					hub = nil
 				}

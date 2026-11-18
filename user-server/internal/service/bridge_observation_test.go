@@ -129,7 +129,13 @@ func TestBridgeObservation_AckMeasuresActualUpdate(t *testing.T) {
 	if err := database.Where("node = ? AND msg_id = ?", tracing.NodeDeliveredAck, hub.MsgID).First(&node).Error; err != nil {
 		t.Fatal(err)
 	}
-	if !node.DurationMeasured || node.StartedAt == nil || node.StartedAt.Before(started) || node.TurnID != turnID || node.DeliveryAttempt != 2 {
+	// 断言意图：StartedAt 必须是本次 ACK 操作的起点（早于它的只有调用前的时刻）。
+	// 注意粒度陷阱：message_trace.started_at 是 PG timestamptz（微秒精度），
+	// 而测试侧 started 是本地纳秒时钟——同微秒内启动时，回读值被截断到微秒后
+	// 会比 started 早最多 999ns，纳秒级 Before() 必假红（2026-11-19 收口：本用例
+	// 在 454514.0µs vs 454514.4µs 上稳定复现）。故按微秒粒度比较，意图不变。
+	if !node.DurationMeasured || node.StartedAt == nil ||
+		node.StartedAt.UnixMicro() < started.UnixMicro() || node.TurnID != turnID || node.DeliveryAttempt != 2 {
 		t.Fatal("ACK必须包含实际更新操作计时及出站作用域/尝试")
 	}
 }

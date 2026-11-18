@@ -89,26 +89,30 @@ func aiQuietHoursDisabled(ctx context.Context) bool {
 
 // DisableAIQuietHoursForTest 测试装配口，替代已退役的 DISABLE_AI_QUIET_HOURS 环境变量
 // （仓内 9 处测试曾用它把勿扰窗顶掉）。与 SetGlobalForTest 同一先例：helper 放产码
-// 文件（不 import testing），跨包测试才能装。返回复位函数，调用方 `defer` 它。
+// 文件（不 import testing），跨包测试才能装——channelgw / controller 的测试都以
+// `service.DisableAIQuietHoursForTest` 调它，故不能像只被本包测试调用的那 14 扇
+// setter 一样搬进 _test.go（搬进去外部包的测试编译期就看不见了）。它是**导出**符号，
+// golangci `unused`（run.tests:false）只报未导出死代码，留在产码文件不会红。
 //
 // 实现走 aiReplyQuietHoursFn 替换缝而非全局配置桩：配置桩按「无租户前缀」塞缓存键，
 // 而测试（channelgw CS-06 等）跑在 tenant.ModeOn + 租户 ctx 下，getString 查的是
 // `tenant:<id>:agent_llm.…`，桩键必然 miss——勿扰窗照样激活，测试在 23:00–07:00
 // 窗口内必红（2026-11-17 024 B1 收口实测）。判定缝是全租户无关的单点，替换它
 // 对两种租户形态都成立。
+//
+// 体内一律经 storeAIReplyQuietHoursFn / loadAIReplyQuietHoursFn——本函数不得直摸
+// 全局（check-seam-guard.py 判据 3：accessor 之外 0 处直引）。2026-11-19 二次审核收口：
+// 此前直摸 4 处，是并行会话"把函数搬进 _test.go"未遂方案的根因（方向对、落点错——
+// 正解是写侧 accessor 随调用链进产码，见 storeAIReplyQuietHoursFn 注释）。
 func DisableAIQuietHoursForTest(disabled bool) func() {
-	aiReplyQuietHoursMu.Lock()
-	orig := aiReplyQuietHoursFn
+	orig := loadAIReplyQuietHoursFn()
 	if disabled {
-		aiReplyQuietHoursFn = func(time.Time) bool { return false }
+		storeAIReplyQuietHoursFn(func(time.Time) bool { return false })
 	} else {
-		aiReplyQuietHoursFn = isAIReplyQuietHours
+		storeAIReplyQuietHoursFn(isAIReplyQuietHours)
 	}
-	aiReplyQuietHoursMu.Unlock()
 	return func() {
-		aiReplyQuietHoursMu.Lock()
-		aiReplyQuietHoursFn = orig
-		aiReplyQuietHoursMu.Unlock()
+		storeAIReplyQuietHoursFn(orig)
 	}
 }
 
@@ -139,6 +143,17 @@ func loadAIReplyQuietHoursFn() func(time.Time) bool {
 	aiReplyQuietHoursMu.RLock()
 	defer aiReplyQuietHoursMu.RUnlock()
 	return aiReplyQuietHoursFn
+}
+
+// storeAIReplyQuietHoursFn 写侧 accessor。按本仓 seam 边界规则（见
+// scripts/check-seam-guard.py 文件头口径边界）"写侧同时被产码调用才留在本家文件"——
+// DisableAIQuietHoursForTest（导出测试缝，产码文件）是它的产码调用方，故它随迁至此，
+// 不再住 seam_guard_setters_test.go（注册表 setter 列已同步改回本家形态）。
+// 竞态不变量不变：同一全局的每一次读写都被 aiReplyQuietHoursMu synchronize。
+func storeAIReplyQuietHoursFn(fn func(time.Time) bool) {
+	aiReplyQuietHoursMu.Lock()
+	defer aiReplyQuietHoursMu.Unlock()
+	aiReplyQuietHoursFn = fn
 }
 
 type delayedReplayCtxKey struct{}

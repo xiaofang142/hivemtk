@@ -235,6 +235,7 @@
         "path": "/v2/users/cs-golden-qq/messages",
         "body": {
           "content": "golden QQ 回复正文",
+          "msg_id": "qq-in-golden-ok_text",
           "msg_seq": 1,
           "msg_type": 0
         }
@@ -267,6 +268,7 @@
         "path": "/v2/users/cs-golden-qq/messages",
         "body": {
           "content": "golden QQ 回复正文",
+          "msg_id": "qq-in-golden-api_err",
           "msg_seq": 1,
           "msg_type": 0
         }

@@ -12,7 +12,7 @@
 # 每一个都能被某条真实异步链读到，而测试会改写它 ⇒ 第二跳竞态。
 # pollingLockRepo 与 pollingLockRepoOnce 是同一条链的两块内存，一起上锁、一起登记。
 IntentEnabled	internal/service/intent_recognition.go	intentEnabledMu	loadIntentEnabled	storeIntentEnabled
-aiReplyQuietHoursFn	internal/service/webhook_outbound.go	aiReplyQuietHoursMu	loadAIReplyQuietHoursFn	internal/service/seam_guard_setters_test.go:storeAIReplyQuietHoursFn
+aiReplyQuietHoursFn	internal/service/webhook_outbound.go	aiReplyQuietHoursMu	loadAIReplyQuietHoursFn	storeAIReplyQuietHoursFn
 approvalNowFn	internal/service/approval/approval_request.go	approvalSeamMu	loadApprovalNowFn	internal/service/approval/testsupport.go:StoreNowFnForTest
 approvalResumeTokFn	internal/service/approval/approval_request.go	approvalSeamMu	loadApprovalResumeTokFn	internal/service/approval/testsupport.go:StoreResumeTokFnForTest
 bridgeChannelOnlineProbe	internal/service/bridge_offline_replay.go	bridgeProbeMu	loadBridgeChannelOnlineProbe	storeBridgeChannelOnlineProbe
