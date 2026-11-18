@@ -46,37 +46,12 @@ const RESULT = ${JSON.stringify(resultPath)};
 const NAME = ${JSON.stringify(name)};
 const EXPECTED = ${JSON.stringify(expectVersion)};
 const write = (value) => fs.writeFileSync(RESULT, JSON.stringify(value), { flag: 'wx' });
-const textOf = (snapshot) => typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
-const refs = (text, role, label) => text.split('\n').flatMap(line => {
-  if (!line.includes(role + ' ' + JSON.stringify(label))) return [];
-  const match = /\[ref=(\d+)[,\]]/.exec(line);
-  return match ? [match[1]] : [];
-});
-const targetCard = (text) => {
-  const lines = text.split('\n');
-  const names = lines.map((line, index) => ({ line, index })).filter(({ line }) =>
-    line.trim().replace(/^- /, '') === 'text ' + JSON.stringify(NAME)
-    || line.trim().replace(/^- /, '') === 'heading ' + JSON.stringify(NAME));
-  if (names.length !== 1) return null;
-  const anchor = names[0].index;
-  let depth = lines[anchor].search(/\S/);
-  for (let start = anchor - 1; start >= 0; start--) {
-    if (!lines[start].trim()) continue;
-    const indent = lines[start].search(/\S/);
-    if (indent >= depth) continue;
-    depth = indent;
-    if (!/^(?:- )?(?:article|container)(?: |$)/.test(lines[start].trim())) continue;
-    let end = start + 1;
-    while (end < lines.length && (!lines[end].trim() || lines[end].search(/\S/) > indent)) end++;
-    const card = lines.slice(start, end).join('\n');
-    if (refs(card, 'button', '重新加载').length !== 1) continue;
-    const versions = [...card.matchAll(/(?:text|StaticText) "(\d+\.\d+\.\d+)"/g)].map(match => match[1]);
-    const ids = [...card.matchAll(/text "ID[：:]\s*([a-p]{32})"/g)].map(match => match[1]);
-    if (ids.length !== 1) return null;
-    return { card, id: ids[0], version: versions.length === 1 ? versions[0] : null };
-  }
-  return null;
-};
+
+// 2026-11-19 三次勘误后的定稿方案：不再解析 extensions 页快照文本（搜索框双命中、
+// name 行在工具栏横幅与卡片重复出现、缩进回溯切空卡——三个脆弱点都踩过）。
+// 改为 shadow-DOM 逐元素显式定位：extensions-item-list → 唯一 #name===NAME 的
+// extensions-item → 其 #devMode-reload-button（同一元素的确定性子按钮），
+// click 后回读 id/version 并由快照复核版本。仍是「明确指定一个元素并点」的规则-1 口径。
 (async () => {
   let spaceId;
   try {
@@ -84,42 +59,68 @@ const targetCard = (text) => {
     spaceId = task.spaceId;
     const page = task.page('p1');
     await page.goto('chrome://extensions/');
-    let text = textOf(await page.snapshot({ scope: 'full_page' }));
-    const boxes = refs(text, 'searchbox', '搜索扩展程序');
-    if (boxes.length !== 1) return write({ ok: false, step: 'searchbox', spaceId });
-    await page.fill('ref=' + boxes[0], NAME);
     await page.waitForFunction((name) => {
       const manager = document.querySelector('extensions-manager');
       const list = manager?.shadowRoot?.querySelector('extensions-item-list');
       const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
         .filter(item => item.getClientRects().length > 0);
-      return items.length === 1 && items[0].shadowRoot?.querySelector('#name')?.textContent?.trim() === name;
-    }, NAME, { timeout: 15000 });
-    text = textOf(await page.snapshot({ scope: 'full_page' }));
-    const buttons = refs(text, 'button', '重新加载');
-    if (buttons.length !== 1) return write({ ok: false, step: 'reload-button', count: buttons.length, spaceId });
-    const before = targetCard(text);
-    if (!before || refs(before.card, 'button', '重新加载')[0] !== buttons[0]) {
-      return write({ ok: false, step: 'target-card', spaceId });
+      return items.length >= 1 && items.some(item => item.shadowRoot?.querySelector('#name')?.textContent?.trim() === name);
+    }, NAME, { timeout: 20000 });
+
+    const clicked = await page.evaluate((name) => {
+      const manager = document.querySelector('extensions-manager');
+      const list = manager?.shadowRoot?.querySelector('extensions-item-list');
+      const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+        .filter(item => item.getClientRects().length > 0);
+      const target = items.find(item => item.shadowRoot?.querySelector('#name')?.textContent?.trim() === name);
+      if (!target) return { ok: false, reason: 'item-not-found' };
+      const btn = target.shadowRoot?.querySelector('#dev-reload-button');
+      if (!btn) return { ok: false, reason: 'reload-button-missing' };
+      const ver = target.shadowRoot?.querySelector('#extension-version')?.textContent?.trim()
+        || target.shadowRoot?.querySelector('#version')?.textContent?.trim() || null;
+      btn.click();
+      return { ok: true, id: target.id || null, versionBefore: ver };
+    }, NAME);
+    if (!clicked?.ok) {
+      return write({ ok: false, step: 'target-card', reason: clicked?.reason || 'unknown', spaceId });
     }
-    await page.click('ref=' + buttons[0], { label: '重新加载目标蜂桥扩展' });
     try {
-      await page.waitForSelector('text=' + JSON.stringify(EXPECTED), { state: 'visible', timeout: 15000 });
+      await page.waitForFunction((expected) => {
+        const manager = document.querySelector('extensions-manager');
+        const list = manager?.shadowRoot?.querySelector('extensions-item-list');
+        const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+          .filter(item => item.getClientRects().length > 0);
+        return items.some(item => (item.shadowRoot?.querySelector('#extension-version')?.textContent?.trim()
+          || item.shadowRoot?.querySelector('#version')?.textContent?.trim()) === expected);
+      }, EXPECTED, { timeout: 20000 });
     } catch { /* 最终快照仍须证明目标卡片的版本。 */ }
-    text = textOf(await page.snapshot({ scope: 'full_page' }));
-    const after = targetCard(text);
-    if (after && after.id !== before.id) {
+    const after = await page.evaluate((name) => {
+      const manager = document.querySelector('extensions-manager');
+      const list = manager?.shadowRoot?.querySelector('extensions-item-list');
+      const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+        .filter(item => item.getClientRects().length > 0);
+      const target = items.find(item => item.shadowRoot?.querySelector('#name')?.textContent?.trim() === name);
+      if (!target) return null;
+      return {
+        id: target.id || null,
+        version: target.shadowRoot?.querySelector('#extension-version')?.textContent?.trim()
+          || target.shadowRoot?.querySelector('#version')?.textContent?.trim() || null,
+      };
+    }, NAME);
+    if (!after) return write({ ok: false, step: 'target-card', reason: 'after-not-found', spaceId });
+    if (clicked.id && after.id && clicked.id !== after.id) {
       return write({ ok: false, step: 'identity-mismatch', spaceId });
     }
-    if (!after || after.version !== EXPECTED) {
-      return write({ ok: false, step: 'version-mismatch', version: after?.version || null, spaceId });
+    if (after.version !== EXPECTED) {
+      return write({ ok: false, step: 'version-mismatch', version: after.version, spaceId });
     }
-    write({ ok: true, version: after.version, extensionId: after.id, card: after.card, spaceId });
+    write({ ok: true, version: after.version, extensionId: after.id, spaceId });
   } catch (error) {
     write({ ok: false, step: 'exception', error: String(error?.message || error), spaceId });
   }
 })();
 `;
+
   try {
     execFileSync('ego-browser', ['nodejs', '-e', script], { stdio: 'inherit', timeout: 180000 });
   } catch (error) {
