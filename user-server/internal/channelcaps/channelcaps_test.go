@@ -40,6 +40,7 @@ func TestEveryChannelConstantHasManifest(t *testing.T) {
 		model.ChannelTikTok, model.ChannelJD, model.ChannelBilibili, model.ChannelWeibo,
 		model.ChannelPersonalWX, model.ChannelPDD, model.ChannelEmail, model.ChannelFeishu,
 		model.ChannelDingTalk, model.ChannelQQ,
+		model.ChannelWeComCS, model.ChannelOneBot, model.ChannelSlack, model.ChannelWeCombBot,
 	} {
 		if !Known(channel) {
 			t.Errorf("渠道 %s 缺少 manifest（internal/channelcaps/manifests.go）", channel)

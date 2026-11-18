@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 
+	"hivemtk-user/internal/channelbot/onebot"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -82,11 +84,15 @@ func (c *WebhookController) RegisterRoutes(r *gin.Engine) {
 		wh.GET("/stats", middleware.JWTAuthMiddleware(), middleware.TenantMiddleware(), middleware.AdminAuthMiddleware(), c.Stats)
 		wh.GET("/health", c.Health)
 		wh.GET("/wecom/:account_id", c.WeComVerify)
+		wh.GET("/wecomcs/:account_id", c.WeComCSVerify)
 		wh.GET("/feishu/:account_id", c.FeishuVerify)
 		wh.GET("/whatsapp/:account_id", c.WhatsAppVerify)
 		wh.GET("/dingtalk/:account_id", c.DingTalkVerify)
 		wh.POST("/dingtalk/:account_id", c.DingTalkReceive)
 	}
+	// OneBot 反向 WS 是协议端到服务端的长连接，路径按协议独立在根上
+	// （/ws/onebot/:account_id），不套 webhook 租户中间件：鉴权靠 access_token。
+	r.GET("/ws/onebot/:account_id", c.OneBotWS)
 }
 
 // bindCallbackTenant 渠道回调的租户绑定（specs/001-saas-multi-tenant T022）。
@@ -152,6 +158,19 @@ func (c *WebhookController) Receive(ctx *gin.Context) {
 	if channel == service.ChannelQQ {
 		if handled, payload := c.svc.HandleQQCallbackChallenge(reqCtx, accountID, body); handled {
 			response.Envelope(ctx, http.StatusOK, payload)
+			return
+		}
+	}
+
+	// Slack Events API url_verification：先验签再回 challenge，不走入队流程。
+	if channel == service.ChannelSlack {
+		challenge, handled, verr := c.svc.HandleSlackURLVerification(reqCtx, accountID, body, extractHeaders(ctx))
+		if handled {
+			if verr != nil {
+				ctx.String(http.StatusUnauthorized, "slack url_verification failed: "+verr.Error())
+				return
+			}
+			response.Envelope(ctx, http.StatusOK, gin.H{"challenge": challenge})
 			return
 		}
 	}
@@ -290,6 +309,63 @@ func (c *WebhookController) WeComVerify(ctx *gin.Context) {
 		return
 	}
 	ctx.String(http.StatusOK, plain)
+}
+
+// WeComCSVerify 企业微信客服回调 URL 验证（GET 挑战）。
+// 路由: GET /api/webhook/wecomcs/{account_id}?msg_signature=...&timestamp=...&nonce=...&echostr=...
+func (c *WebhookController) WeComCSVerify(ctx *gin.Context) {
+	accountID := ctx.Param("account_id")
+	query := map[string]string{
+		"msg_signature": ctx.Query("msg_signature"),
+		"timestamp":     ctx.Query("timestamp"),
+		"nonce":         ctx.Query("nonce"),
+		"echostr":       ctx.Query("echostr"),
+	}
+	if query["msg_signature"] == "" || query["timestamp"] == "" || query["nonce"] == "" || query["echostr"] == "" {
+		ctx.String(http.StatusBadRequest, "missing signature params")
+		return
+	}
+	echo, err := c.svc.HandleWeComCSVerify(ctx.Request.Context(), accountID, query)
+	if err != nil {
+		ctx.String(http.StatusUnauthorized, err.Error())
+		return
+	}
+	ctx.String(http.StatusOK, echo)
+}
+
+// OneBotWS OneBot v11 反向 WebSocket 入口。
+// 路由: GET /ws/onebot/{account_id}（Authorization: Bearer <access_token>）
+//
+// 鉴权必须先于 Upgrade：token 不对直接 401，不建立连接、不登记。
+func (c *WebhookController) OneBotWS(ctx *gin.Context) {
+	if c.svc == nil {
+		ctx.String(http.StatusServiceUnavailable, "webhook service unavailable")
+		return
+	}
+	accountID := ctx.Param("account_id")
+	acc := c.svc.OneBotAccountForWS(ctx.Request.Context(), accountID)
+	if acc == nil || acc.AccessToken == "" {
+		ctx.String(http.StatusUnauthorized, "unknown account or access_token missing")
+		return
+	}
+	if !onebot.VerifyToken(acc.AccessToken, ctx.GetHeader("Authorization"), ctx.Query("access_token")) {
+		ctx.String(http.StatusUnauthorized, "invalid access token")
+		return
+	}
+	up := websocket.Upgrader{
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+		// 协议端是服务器到服务器的连接，没有浏览器 Origin；跨域校验不适用。
+		CheckOrigin: func(*http.Request) bool { return true },
+	}
+	conn, err := up.Upgrade(ctx.Writer, ctx.Request, nil)
+	if err != nil {
+		logger.Warnf("[OneBotWS] upgrade failed account=%s: %v", accountID, err)
+		return
+	}
+	mgr := c.svc.OneBotWSManager()
+	wsc := mgr.Register(acc.ID, acc.SelfID, conn)
+	mgr.RunReadLoop(acc.ID, wsc)
 }
 
 // FeishuVerify 飞书 URL 验证（GET 挑战）
@@ -491,6 +567,9 @@ func extractHeaders(ctx *gin.Context) map[string]string {
 		"X-Signature-Ed25519", "X-Signature-Timestamp",
 		// 钉钉企业内部机器人明文回调验签头（官方就叫 timestamp / sign）
 		"Timestamp", "Sign",
+		// 025 平台批：Slack v0 签名、OneBot Bearer token、custom X-Hive-Signature。
+		"X-Slack-Signature", "X-Slack-Request-Timestamp",
+		"Authorization", "X-Hive-Signature",
 	} {
 		if v := ctx.GetHeader(k); v != "" {
 			headers[k] = v

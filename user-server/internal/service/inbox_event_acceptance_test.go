@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"hivemtk-user/internal/channelbot/onebot"
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelcaps"
@@ -350,13 +351,61 @@ func TestChannelParsers_EventTypeMatrix(t *testing.T) {
 			t.Errorf("feishu %s → %q，期望 %q", in, got, want)
 		}
 	}
+	// onebot：notice 四类事件 → 事件类型（specs/025 T801/T803 具名腿）
+	// group_recall=撤回、group_increase/decrease=成员增减、message=普通消息；
+	// request/meta_event 只进总线，不产生消息行。
+	onebotCases := []struct{ notice, want string }{
+		{"group_recall", model.EventTypeMessageDeleted},
+		{"group_increase", model.EventTypeGroupMemberJoined},
+		{"group_decrease", model.EventTypeGroupMemberLeft},
+	}
+	for _, c := range onebotCases {
+		raw := []byte(`{"time":1700000000,"self_id":1,"post_type":"notice","notice_type":"` + c.notice + `","group_id":7,"user_id":8,"message_id":9}`)
+		e, err := onebot.ParseEvent(raw)
+		if err != nil {
+			t.Fatalf("onebot %s 解析失败: %v", c.notice, err)
+		}
+		in := e.ToInbound("42")
+		if in == nil {
+			t.Fatalf("onebot %s 不应被丢弃", c.notice)
+		}
+		if in.EventType != c.want {
+			t.Errorf("onebot %s → %q，期望 %q", c.notice, in.EventType, c.want)
+		}
+		if in.MessageID == "" {
+			t.Errorf("onebot %s 缺幂等键（事件重投会重复入账）", c.notice)
+		}
+	}
+	// slack：subtype 决定事件类型（message_deleted / message_changed / 普通 message）
+	slackCases := []struct {
+		body string
+		want string
+	}{
+		{`{"type":"event_callback","event_id":"Ev-m1","event":{"type":"message","subtype":"message_deleted","channel":"C1","ts":"1.1","deleted_ts":"1.0"}}`, model.EventTypeMessageDeleted},
+		{`{"type":"event_callback","event_id":"Ev-m2","event":{"type":"message","subtype":"message_changed","channel":"C1","ts":"1.2","message":{"text":"edit"}}}`, model.EventTypeMessageEdited},
+		{`{"type":"event_callback","event_id":"Ev-m3","event":{"type":"message","user":"U1","text":"hi","channel":"C1","ts":"1.3","channel_type":"im"}}`, model.EventTypeMessageReceived},
+	}
+	for _, c := range slackCases {
+		p, err := parseSlackPayload([]byte(c.body))
+		if err != nil {
+			t.Fatalf("slack 解析失败: %v", err)
+		}
+		if p.EventType != c.want {
+			t.Errorf("slack %s → %q，期望 %q", c.body, p.EventType, c.want)
+		}
+		if p.EventID == "" {
+			t.Errorf("slack %s 缺幂等键", c.body)
+		}
+	}
+
 	// 全表兜底（received-only 渠道）：wecom/wechat/dingtalk/whatsapp/web/email/sms/custom
 	// 的解析器只产 message.received（或纯触达无入站），manifest.Events 与解析器一致性
 	// 由 channelcaps_events_test 钉死；这里逐渠道断言「非消息事件词表为空 ⇒ 不可能产
 	// 平台事件行」，与上方三腿共同构成全表覆盖。
 	for _, m := range channelcaps.All() {
-		if m.Channel == "telegram" || m.Channel == "feishu" || m.Channel == "qq" {
-			continue // 三条具名腿已各自断言
+		switch m.Channel {
+		case "telegram", "feishu", "qq", "onebot", "slack":
+			continue // 具名腿已各自断言
 		}
 		if len(m.Events) > 1 {
 			t.Errorf("渠道 %s 声明了多事件 %v 但没有对应解析器腿，矩阵须补具名 fixture", m.Channel, m.Events)

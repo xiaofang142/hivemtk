@@ -587,13 +587,12 @@ func TestBF6_ChannelVocabularyCoversEveryOutboundChannel(t *testing.T) {
 			t.Errorf("注册了未声明为 WebhookChannel 常量的 sender 渠道 %q", ch)
 		}
 	}
-	// 唯一允许「无 sender 且不在 bridge 集合」的常量：custom（通用入口尚未接线，见 specs/025）。
-	// 新常量若也落进这里，说明接入只做了一半。
-	permitted := map[string]bool{"custom": true}
+	// specs/025 平台批后所有渠道常量都已有 sender 或在 bridge 集合内，豁免集清空；
+	// 再出现「两不沾」的常量即接线只做了一半。
 	svc := &WebhookService{}
 	for name, value := range consts {
 		ch := WebhookChannel(value)
-		if _, ok := svc.outboundSenderFor(ch); ok || bridgeOutboxCapable(ch) || permitted[value] {
+		if _, ok := svc.outboundSenderFor(ch); ok || bridgeOutboxCapable(ch) {
 			continue
 		}
 		t.Errorf("%s(%q) 既无 sender 也不在 bridge_outbox 能力集合：出站必然落 drift 失败", name, value)

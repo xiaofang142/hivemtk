@@ -21,6 +21,7 @@ func allDeclaredWebhookChannels() []WebhookChannel {
 		ChannelJD, ChannelBilibili, ChannelWeibo, ChannelPersonalWX,
 		ChannelWechat, ChannelWeCom, ChannelDingTalk, ChannelWhatsapp, ChannelTelegram,
 		ChannelFeishu, ChannelCustom, ChannelQQ,
+		ChannelWeComCS, ChannelOneBot, ChannelSlack, ChannelWeCombBot,
 	}
 }
 

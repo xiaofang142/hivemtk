@@ -125,6 +125,75 @@ func init() {
 		AttachmentEvidence: "官方机器人媒体以 URL 下发，无统一字节上限；服务端落单值 media_url",
 	})
 
+	// ── 025 平台批：企业微信客服 / OneBot / Slack / 企微群机器人 ─────────
+	Register(Manifest{
+		Channel:  model.ChannelWeComCS,
+		Label:    "企业微信客服",
+		Via:      "webhook",
+		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeFile, model.MsgTypeLink, model.MsgTypeLocation, model.MsgTypeCard},
+		Outbound: []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeLink, model.MsgTypeCard},
+		// 回调只负责通知「有新消息」，真正的消息由 sync_msg 增量拉取；非消息事件写 channel_event_audits，不进事件总线。
+		Events:         []string{model.EventTypeMessageReceived},
+		Features:       []Feature{FeatureMention},
+		Note:           "回调验签后按 cursor 增量拉取；send_msg 受 48 小时会话窗口约束（95021/95026/95019）",
+		OutboundFormat: OutboundFormatPlain,
+		MaxTextLen:     2048,
+		FormatEvidence: "channelbot/wecomcs SendMsg(msgtype=text)：企微 text.content ≤2048 字节",
+		MaxAttachments: 1, MaxAttachmentBytes: 10 * 1024 * 1024,
+		AttachmentEvidence: "微信客服 send_msg image 走临时素材 media_id，图片 ≤10MB；一条消息一个 media_id",
+	})
+	Register(Manifest{
+		Channel:  model.ChannelOneBot,
+		Label:    "OneBot v11",
+		Via:      "webhook",
+		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeFile},
+		Outbound: []string{model.MsgTypeText},
+		Events: []string{
+			model.EventTypeMessageReceived, model.EventTypeMessageDeleted,
+			model.EventTypeGroupMemberJoined, model.EventTypeGroupMemberLeft,
+		},
+		Features:       []Feature{FeatureGroup, FeatureMention},
+		Note:           "HTTP 上报 + 反向 WS 双通道；出站优先 WS 回落 HTTP；request 事件只入总线不自动同意",
+		OutboundFormat: OutboundFormatPlain,
+		MaxTextLen:     2000,
+		FormatEvidence: "channelbot/onebot SplitText 默认 2000 字优先换行切块（CQ 码另计）",
+		MaxAttachments: 1, MaxAttachmentBytes: 0,
+		AttachmentEvidence: "媒体段只透传 URL，服务端不下载，无统一字节上限；单条消息落单值 media_url",
+	})
+	Register(Manifest{
+		Channel:  model.ChannelSlack,
+		Label:    "Slack",
+		Via:      "webhook",
+		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeLink},
+		Outbound: []string{model.MsgTypeText},
+		Events: []string{
+			model.EventTypeMessageReceived, model.EventTypeMessageEdited, model.EventTypeMessageDeleted,
+		},
+		Features:       []Feature{FeatureGroup, FeatureMention},
+		Note:           "Events API 签名 + 5 分钟时间窗；忽略 bot_id/subtype=bot_message；回复沿用 thread_ts",
+		OutboundFormat: OutboundFormatPlain,
+		MaxTextLen:     40000,
+		FormatEvidence: "Slack chat.postMessage text 上限 40000 字符；本仓按纯文本投递，不依赖 mrkdwn 语法",
+		MaxAttachments: 1, MaxAttachmentBytes: 0,
+		AttachmentEvidence: "入站文件只透传 Slack 私有 URL，不下载；出站只投文本（原生文件上传不在 sender 范围）",
+	})
+	Register(Manifest{
+		Channel:  model.ChannelWeCombBot,
+		Label:    "企业微信群机器人",
+		Via:      "webhook",
+		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeLink, model.MsgTypeCard},
+		Outbound: []string{model.MsgTypeText},
+		// enter_chat / template_card_event / feedback 只落事件审计，不映射业务事件。
+		Events:         []string{model.EventTypeMessageReceived},
+		Features:       []Feature{FeatureGroup, FeatureMention},
+		Note:           "回调 AES-CBC 解密 + 签名校验；出站走群机器人 webhook（markdown）",
+		OutboundFormat: OutboundFormatMarkdown,
+		MaxTextLen:     4096,
+		FormatEvidence: "企微群机器人 markdown.content ≤4096 字节，原生支持 Markdown",
+		MaxAttachments: 1, MaxAttachmentBytes: 0,
+		AttachmentEvidence: "markdown 载荷不携带附件；入站图片只透传 URL，服务端不下载",
+	})
+
 	// ── 网页控件（站内）──────────────────────────────────────────────────
 	Register(Manifest{
 		Channel:            model.ChannelWeb,
@@ -199,13 +268,13 @@ func init() {
 		Channel:            "custom",
 		Label:              "自定义 webhook",
 		Via:                "webhook",
-		Inbound:            []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile},
-		Outbound:           []string{model.MsgTypeText},
-		Note:               "自有系统对接，载荷按 WebhookService 约定",
+		Inbound:            []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeAudio, model.MsgTypeVideo, model.MsgTypeLink, model.MsgTypeCard},
+		Outbound:           []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeFile},
+		Note:               "自有系统对接：固定 JSON 契约 + X-Hive-Signature（t=unix,v1=HMAC-SHA256）",
 		OutboundFormat:     OutboundFormatPlain,
-		FormatEvidence:     "自有系统对接，载荷按 WebhookService 约定（纯文本）",
-		MaxAttachments:     0,
+		FormatEvidence:     "custom 出站 POST callback_url 固定 JSON，content 为纯文本",
+		MaxAttachments:     1,
 		MaxAttachmentBytes: 0,
-		AttachmentEvidence: "载荷由自有系统约定，服务端不校验附件",
+		AttachmentEvidence: "契约仅一个 media_url 字段，URL 由自有系统托管，服务端不校验字节数",
 	})
 }

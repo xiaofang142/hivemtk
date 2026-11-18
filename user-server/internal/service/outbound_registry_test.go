@@ -72,11 +72,12 @@ func TestOutboundRegistry(t *testing.T) {
 	})
 
 	t.Run("direct_vocabulary_frozen", func(t *testing.T) {
-		// 直发渠道词表冻结（specs/024 B1）：7 个 webhook 直发渠道。
+		// 直发渠道词表冻结（specs/024 B1 + specs/025 平台批）：12 个直发渠道。
 		// 新增渠道必须在对应批次里有意识扩表（tests+T1201 触点矩阵），
 		// 不允许悄悄注册进来；bridge 族不在此表（走能力位回退，由 parity 测试钉住）。
-		want := []WebhookChannel{ChannelDingTalk, ChannelFeishu, ChannelQQ,
-			ChannelTelegram, ChannelWechat, ChannelWeCom, ChannelWhatsapp}
+		want := []WebhookChannel{ChannelCustom, ChannelDingTalk, ChannelFeishu, ChannelOneBot,
+			ChannelQQ, ChannelSlack, ChannelTelegram, ChannelWechat, ChannelWeCom,
+			ChannelWeCombBot, ChannelWeComCS, ChannelWhatsapp}
 		got := RegisteredSenderChannels()
 		if len(got) != len(want) {
 			t.Fatalf("直发 sender 渠道数漂移：want %v got %v（多出的渠道必须在 T111/词表/触点矩阵同步扩表）", want, got)
@@ -118,10 +119,13 @@ func TestOutboundRegistry(t *testing.T) {
 // sender「既没发成功也没调 Fail」返回时，sendOutbound 必须兜成
 // unknown + 可重试的失败——否则重试不入队、审计不落行，回复静默丢失。
 func TestSenderOutcomeMustBeExplicit(t *testing.T) {
-	registerCustomSenderForTest(func(*WebhookService) channelSender { return &stubOutcomeSender{} })
 	releaseReplyClaimForTest(t, "evt-r5-explicit")
 
-	svc := &WebhookService{}
+	// 直接注入实例缓存：生产已登记 custom sender，注册表无注销口，
+	// 这里用缓存覆盖走同一 R5 判定路径，且不依赖登记时序。
+	svc := &WebhookService{senders: map[WebhookChannel]channelSender{
+		ChannelCustom: &stubOutcomeSender{},
+	}}
 	p := &ParsedPayload{EventID: "evt-r5-explicit", Sender: "cust-r5", Content: "在吗"}
 	sent, sendErr := svc.sendOutbound(context.Background(), ChannelCustom, "acct-r5", p, "你好", nil, nil)
 	if sent {

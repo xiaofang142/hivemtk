@@ -43,6 +43,18 @@ func init() {
 	Register(Entry{Platform: "feishu", Cap: CapWebhook, Via: "webhook", Note: ""})
 	Register(Entry{Platform: "whatsapp", Cap: CapWebhook, Via: "webhook", Note: ""})
 
+	// 025 平台批（2026-11-18）：企业微信客服 / OneBot v11 / Slack / 企微群机器人 / 自定义 webhook
+	Register(Entry{Platform: "wecomcs", Cap: CapWebhook, Via: "webhook", Note: "回调验签 + sync_msg 游标增量拉取"})
+	Register(Entry{Platform: "wecomcs", Cap: CapDMSend, Via: "api", Note: "send_msg；48 小时会话窗口外拒发（window_expired）"})
+	Register(Entry{Platform: "onebot", Cap: CapWebhook, Via: "webhook", Note: "HTTP 上报 + 反向 WS；Bearer token 校验"})
+	Register(Entry{Platform: "onebot", Cap: CapDMSend, Via: "ws", Note: "出站优先反向 WS，未连接时回落 HTTP /send_private_msg|/send_group_msg"})
+	Register(Entry{Platform: "slack", Cap: CapWebhook, Via: "webhook", Note: "Events API v0 签名 + 5 分钟时间窗"})
+	Register(Entry{Platform: "slack", Cap: CapDMSend, Via: "api", Note: "chat.postMessage，回复沿用 thread_ts"})
+	Register(Entry{Platform: "wecombot", Cap: CapWebhook, Via: "webhook", Note: "AES-CBC 解密 + 签名校验"})
+	Register(Entry{Platform: "wecombot", Cap: CapDMSend, Via: "webhook", Note: "群机器人 webhook，markdown 载荷"})
+	Register(Entry{Platform: "custom", Cap: CapWebhook, Via: "webhook", Note: "固定 JSON 契约 + X-Hive-Signature"})
+	Register(Entry{Platform: "custom", Cap: CapDMSend, Via: "webhook", Note: "POST callback_url 同款签名；4xx 不重试、5xx/超时可重试"})
+
 	// 触达
 	Register(Entry{Platform: "sms", Cap: CapSMS, Via: "aliyun-sms", Note: "需后台配置 AccessKey/签名/模板"})
 	Register(Entry{Platform: "email", Cap: CapEmail, Via: "smtp", Note: "需后台配置 SMTP 授权码"})

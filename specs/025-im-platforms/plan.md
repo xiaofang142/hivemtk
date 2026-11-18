@@ -93,3 +93,22 @@ M-2/M-3 与平台批共享 `internal/channelcaps/manifests.go` 与渲染文件�
   sms/email/kb.sync 能力」，并要求 ima/webhttp 作为 kb.sync 样本存在；能力表头注明
   ima/webhttp 是知识库连接器、无 IM 消息路径。
 需证据触发类吸收项（typing／流式四细节／邮件归属／聚合窗口不立项）不进本表，已补登 024 spec §四。
+
+**平台批交付状态（2026-11-18）**：T701–T706、T801–T805、T901–T903、T1001–T1002、T1101–T1103 已全部落地
+（19 项勾选），T707/T806/T904 三项 🔵 真实账号验收保留未勾——本轮无真实账号，已用 httptest 回放 +
+固定签名向量完成模拟信号验收，待有账号后按 tasks.md 验收清单补跑。
+
+- 客户端：`channelbot/wecomcs`（token 缓存 + sync_msg 游标 + send_msg + 回调验签）、
+  `channelbot/onebot`（四类 post_type + CQ 转义/切块 + HTTP 调用）、
+  `channelbot/slack`（v0 签名 + 5 分钟窗 + postMessage/conversations.open）、
+  `channelbot/wecombot`（43 位 AESKey → AES-256-CBC + 签名 + markdown 推送）。
+- 入站：通用 webhook 五渠道全部接线（Verify/ParsePayload/dispatch + 账号表 + 租户反查）；
+  Slack `url_verification`、wecomcs GET 验证在入队前短路；wecomcs 回调触发增量拉取，
+  游标每页落 `wecom_cs_accounts.sync_cursor`，另有 60s 兜底 ticker。
+- OneBot 反向 WS：`GET /ws/onebot/:account_id`，Bearer token 先鉴权后升级；同 self_id 重连顶旧连接，
+  读超时 90s 自动注销；出站优先 WS、失败/未连接回落 HTTP。
+- 出站：五个 sender 全部登记 `RegisterChannelSender`；wecomcs 窗口错误映射 `CategoryWindowExpired`，
+  custom 4xx 不可重试 / 5xx+网络可重试。
+- custom 入站由「枚举占位」转为真适配器：`webhookInboundRejectHints` 的 custom 条目与旧断言已删除。
+- 测试：`channelbot/{wecomcs,onebot,slack,wecombot}` 回放测试 + service 纯函数/签名/拉取测试
+  （不依赖 POSTGRES_TEST_PASSWORD）；DB 全链路用例沿用既有门禁按环境跳过。

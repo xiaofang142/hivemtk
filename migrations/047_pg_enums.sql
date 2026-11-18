@@ -72,9 +72,10 @@ BEGIN
       'telegram', 'qq', 'wecom', 'feishu', 'whatsapp', 'dingtalk',
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
       'web', 'web_embed', 'system',
-      'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo'
+      'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo',
+      'wecomcs', 'onebot', 'slack', 'wecombot'
     );
-    RAISE NOTICE 'Created enum platform_type_enum (19 values)';
+    RAISE NOTICE 'Created enum platform_type_enum (23 values)';
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'intent_major_enum') THEN

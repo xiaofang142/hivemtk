@@ -138,6 +138,31 @@ func (r *ChannelOverviewRepository) CountWechat(ctx context.Context) (int64, err
 	return r.countRows(ctx, "wechat_accounts")
 }
 
+// CountWeComCS 统计企业微信客服账号总数（025 平台批）
+func (r *ChannelOverviewRepository) CountWeComCS(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "wecom_cs_accounts")
+}
+
+// CountOneBot 统计 OneBot 账号总数（025 平台批）
+func (r *ChannelOverviewRepository) CountOneBot(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "onebot_accounts")
+}
+
+// CountSlack 统计 Slack 账号总数（025 平台批）
+func (r *ChannelOverviewRepository) CountSlack(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "slack_accounts")
+}
+
+// CountWeCombBot 统计企微智能机器人账号总数（025 平台批）
+func (r *ChannelOverviewRepository) CountWeCombBot(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "wecombot_accounts")
+}
+
+// CountCustom 统计自定义 webhook 账号总数（025 平台批）
+func (r *ChannelOverviewRepository) CountCustom(ctx context.Context) (int64, error) {
+	return r.countRows(ctx, "custom_accounts")
+}
+
 // CountWechatActive 统计启用中的微信公众号账号数
 func (r *ChannelOverviewRepository) CountWechatActive(ctx context.Context) (int64, error) {
 	return r.countWhere(ctx, "wechat_accounts", "status = ?", "active")

@@ -33,7 +33,7 @@ flowchart LR
 
 ## Phase 1 企业微信客服 wecomcs（P0，首个新平台：验证接缝可用）
 
-- [ ] **T701 `channelbot/wecomcs` 协议客户端**（P0｜依赖 T101｜L｜🟡）
+- [x] **T701 `channelbot/wecomcs` 协议客户端**（P0｜依赖 T101｜L｜🟡）
   - **规格**：纯协议层：取 token（带缓存）、增量拉消息、发消息、验签。不依赖 service/repository。
   - **上下文**：现有 `channelbot/{telegram,whatsapp,qq}` 都是「构造 + `core.BaseClient` + 错误分类」的形态；`core.SecureEqual` 提供常量时间比较。
   - **架构**：`internal/channelbot/wecomcs`，仅依赖 `channelbot/core`；错误统一 `*wecomcs.Error`（含 retcode/errmsg）。
@@ -60,7 +60,7 @@ flowchart LR
     ```
   - **验收**：`channelbot/wecomcs/wecomcs_test.go` 用 `httptest` 回放：token 二次调用只请求一次、`SyncMsg` 游标原样透传、验签失败返回 false、`retcode != 0` 返回可判定错误。
 
-- [ ] **T702 入站 handler**（P0｜依赖 T701｜L｜🟡）
+- [x] **T702 入站 handler**（P0｜依赖 T701｜L｜🟡）
   - **规格**：回调验签解密 → 拉增量 → 转 `MessageEvent` → 交 `Ingress`；非消息事件**写审计表**（`sync_cursor` 之外的 `event_type` 一律落审计，幂等键 `(tenant_id, channel, channel_msg_id)`），总线只做旁路通知；同 `msgid` 二次投递不重复入库。游标**必须落库续拉**：回包 `next_cursor` 写入 `wecom_cs_accounts.sync_cursor`，拉取 worker 重启后从这里继续。
   - **上下文**：仿 `service/webhook_channel_qq.go`（153 行，Op13 challenge 短路 + `ToInbound` + `Ingress` 模板）；`model/wecom.go:8` 的 `WeComAccount` 没有 `kf_*` 字段，故游标列落在新表 `wecom_cs_accounts`。
   - **架构**：`service/webhook_channel_wecomcs.go`（`dispatch<X>` + `Verify<X>`）+ `wecomcs_puller.go`（Ticker + `utils.SafeGo` + 成对 start/stop，过 `check-naked-goroutine.sh`）；单账号串行拉取、失败退避。
@@ -86,7 +86,7 @@ flowchart LR
     ```
   - **验收**：fixture 回放（文本/图片/事件）；`TestWecomcs_DuplicateCallbackIdempotent`、`TestWecomcs_CursorPersistedAndResumed`（重启后从库里续拉）、`TestWecomcs_EventWrittenToAudit`（总线无订阅者也不丢）。
 
-- [ ] **T703 五处登记 + 账号表**（P0｜依赖 T702｜M｜🟡）
+- [x] **T703 五处登记 + 账号表**（P0｜依赖 T702｜M｜🟡）
   - **规格**：让 webhook 通用链路认得这个渠道：能力判定、拒绝提示、分发、验签、租户解析表；账号表独立（不复用企微应用表）。
   - **上下文**：`webhook.go`：`webhookInboundCapable`(L349)、`webhookInboundRejectHints`(L358-372)、`Verify`(L663)、`dispatchToChannel`(L1130)、`webhookAccountTableByChannel`(L393)；`model/wecom.go:8` 的 `WeComAccount` 无 `kf_token/kf_aes_key/open_kfid`。
   - **架构**：Service 登记 + Model + 迁移 071（2026-11-18 终审再勘误：070 已被 024 三审 070_channel_evidence_identity 占用，见 plan §七 M-1）。
@@ -113,7 +113,7 @@ flowchart LR
     ```
   - **验收**：`TestWebhookCapability_WecomcsAccepted`、`TestWebhookDispatch_Wecomcs`、租户解析失败 4xx 且不落库、`bash scripts/check-enum-consistency.sh` 绿（含 047 + 063 式增量）。
 
-- [ ] **T704 出站 sender**（P0｜依赖 T701/T703｜M｜🟡）
+- [x] **T704 出站 sender**（P0｜依赖 T701/T703｜M｜🟡）
   - **规格**：支持 text/image/link/miniprogram；被动窗口过期返回可判定错误，不静默重试。
   - **上下文**：企微客服被动回复有 48h 限制（超出需主动消息额度），与本项目 `ChannelError` 体系对齐。
   - **架构**：`service/outbound_sender_wecomcs.go`，注册进 T101 注册表。
@@ -139,7 +139,7 @@ flowchart LR
     ```
   - **验收**：`TestWecomcsSender_PassiveVsActive`、`TestWecomcsSender_OutOfWindowReturnsChannelError`。
 
-- [ ] **T705 能力表登记**（P0｜依赖 T704｜S｜🟡）
+- [x] **T705 能力表登记**（P0｜依赖 T704｜S｜🟡）
   - **规格**：新渠道在四处声明齐全：`WebhookChannel` 常量、`model.Channel` 常量、`channelcaps` manifest、`capregistry` 条目。
   - **上下文**：`ChannelType*` 常量与 `047` 枚举由 `check-enum-consistency.sh` 对齐；`channelcaps` 文档由测试生成。
   - **架构**：Model + 声明包。
@@ -160,7 +160,7 @@ flowchart LR
     ```
   - **验收**：`TestEveryChannelConstantHasManifest` 绿；能力表新行 `via=webhook`。
 
-- [ ] **T706 全链路测试**（P0｜依赖 T701–T705｜M｜🟡）
+- [x] **T706 全链路测试**（P0｜依赖 T701–T705｜M｜🟡）
   - **规格**：端到端钉住五条不变量：验签失败不落库、同 msgid 幂等、单聊/群聊各一条、未授权租户 403/404、出站窗口错误分类。
   - **上下文**：参照 `internal/controller/webhook_batchc_d03_http_test.go` 的 HTTP 层测试形态。
   - **架构**：测试覆盖 Controller → Service → Repository（真实 PG，DB-gated）。
@@ -211,7 +211,7 @@ flowchart LR
 
 ## Phase 2 OneBot v11（P0，QQ 私域最大缺口）
 
-- [ ] **T801 `channelbot/onebot` 客户端**（P0｜依赖 T101｜L｜🟡）
+- [x] **T801 `channelbot/onebot` 客户端**（P0｜依赖 T101｜L｜🟡）
   - **规格**：支持 HTTP 上报/调用 + token 校验，覆盖四类 `post_type`；只做协议，不含业务。
   - **上下文**：`qq` 包是 QQ 官方机器人（`bot.q.qq.com`，app access token + Ed25519），与 OneBot（NapCat/Lagrange）字段语义完全不同，不能复用；需独立账号表。
   - **架构**：`internal/channelbot/onebot`，仅依赖 `core.BaseClient`。
@@ -242,7 +242,7 @@ flowchart LR
     ```
   - **验收**：`httptest` 回放四种 `post_type`；`echo` 匹配到请求；token 缺失/错误返回可判定错误；`TestOnebot_ParseEventMatrix`。
 
-- [ ] **T802 反向 WS 接入**（P0｜依赖 T801｜L｜🟡）
+- [x] **T802 反向 WS 接入**（P0｜依赖 T801｜L｜🟡）
   - **规格**：提供 `/ws/onebot/:account_id` 让 NapCat 反连；维护连接表；发送优先走 WS，无连接回落 HTTP。升级时校验 `Authorization: Bearer <access_token>`（同账号表内 token），失败 401 且不登记；连接空闲超时与 ping/pong 保活；同一 `self_id` 重连**顶掉旧连接**（旧连接关闭 + 新连接接管）；连接表挂在 app start/stop 生命周期（过 `check-naked-goroutine.sh`），并发访问走 `RWMutex` 并跑 `-race`。
   - **上下文**：`internal/channelgw` 已有 WS 升级与 ping/pong 机制，可复用其帧与连接管理形态；`self_id` 用于把「谁连上来的」映射到 `account_id`（多账号并存时避免互相顶替），从 `meta_event.lifecycle` 首帧读取并校验与配置一致。
   - **架构**：Router 入口 + Service 连接管理；不跨层访问 repository。
@@ -266,7 +266,7 @@ flowchart LR
     ```
   - **验收**：`TestOnebotWS_ConnectSendReceive`、`TestOnebotWS_ReconnectReplacesConn`、`TestOnebotWS_RejectsBadToken`（401 且未登记）、`TestOnebotWS_HeartbeatTimeoutDrops`；`go test -race` 跑连接表用例。
 
-- [ ] **T803 入站 handler + 登记**（P0｜依赖 T801/T802｜L｜🟡）
+- [x] **T803 入站 handler + 登记**（P0｜依赖 T801/T802｜L｜🟡）
   - **规格**：message 入站；notice 映射撤回与成员变动；request 只发事件不自动同意。
   - **上下文**：`service/webhook_channel_qq.go` 是渠道模板（`ToInbound` + `Ingress` + 媒体异步持久化）。
   - **架构**：`service/webhook_channel_onebot.go` + 五处登记（能力/提示/分发/验签/账号表）+ `model.OneBotAccount`（迁移 072，与 FR065 对齐）。
@@ -290,7 +290,7 @@ flowchart LR
     ```
   - **验收**：`TestOnebot_InboundPrivateAndGroup`、`TestOnebot_RecallMapsToMessageDeleted`、`TestOnebot_RequestDoesNotCreateMessage`。
 
-- [ ] **T804 出站 sender**（P0｜依赖 T803｜M｜🟡）
+- [x] **T804 出站 sender**（P0｜依赖 T803｜M｜🟡）
   - **规格**：私聊/群聊选择正确；CQ 码转义防注入；长文切块复用渲染层。
   - **上下文**：OneBot 消息支持 CQ 码，正文里出现 `[CQ:` 会被解析为控制指令，必须转义。
   - **架构**：`service/outbound_sender_onebot.go`，注册进 T101。
@@ -309,7 +309,7 @@ flowchart LR
     ```
   - **验收**：`TestOnebotSender_EscapesCQCode`、`TestOnebotSender_GroupVsPrivate`、`TestOnebotSender_SplitsLongText`。
 
-- [ ] **T805 能力表 + 文档**（P0｜依赖 T804｜S｜🟡）
+- [x] **T805 能力表 + 文档**（P0｜依赖 T804｜S｜🟡）
   - **规格**：manifest 声明事件与特征；文档写清 NapCat 接入步骤（反连地址、token、账号配置）。
   - **上下文**：`docs/channel-capabilities.md` 由 `channelcaps.Markdown()` 生成；接入步骤写 `docs/channel-onboarding.md`。
   - **架构**：声明包 + 文档。
@@ -356,7 +356,7 @@ flowchart LR
 
 ## Phase 3 Slack（P1，国外平台 + 线程形态）
 
-- [ ] **T901 `channelbot/slack` 客户端 + 账号表**（P1｜依赖 T101｜M｜🟡）
+- [x] **T901 `channelbot/slack` 客户端 + 账号表**（P1｜依赖 T101｜M｜🟡）
   - **规格**：Events API 验签、`chat.postMessage`（含 thread）、`conversations.open`；账号表独立。
   - **上下文**：Slack 签名是 `v0={HMAC_SHA256(signing_secret, "v0:{ts}:{body}")}`，且有 5 分钟时间窗；LangBot 亦有 slack-omni 适配器可对照。
   - **架构**：`internal/channelbot/slack` + `model.SlackAccount`（迁移 073）+ 五处登记。
@@ -377,7 +377,7 @@ flowchart LR
     ```
   - **验收**：`TestSlack_VerifySignature`（含过期时间戳拒绝）、`TestSlack_PostMessageThread`、`check-enum-consistency.sh` 绿。
 
-- [ ] **T902 入站 handler + 登记**（P1｜依赖 T901｜M｜🟡）
+- [x] **T902 入站 handler + 登记**（P1｜依赖 T901｜M｜🟡）
   - **规格**：`url_verification` 验签后短路；`app_mention`/`message.im` 入站；编辑/删除映射事件类型；过滤机器人自身消息。
   - **上下文**：Slack 事件带 `event_id`，可用于幂等；`bot_id`/`subtype=bot_message` 必须忽略，否则会自问自答。
   - **架构**：`service/webhook_channel_slack.go` + 五处登记。
@@ -398,7 +398,7 @@ flowchart LR
     ```
   - **验收**：`TestSlack_ChallengeShortCircuit`、`TestSlack_IgnoresBotMessages`、`TestSlack_ThreadReplyConversationKey`。
 
-- [ ] **T903 出站 sender + 能力表**（P1｜依赖 T902｜M｜🟡）
+- [x] **T903 出站 sender + 能力表**（P1｜依赖 T902｜M｜🟡）
   - **规格**：回复进同一 thread；manifest 声明事件（含编辑/删除/表情回应/成员变动）。
   - **上下文**：thread 键用 `channel + thread_ts`，否则会话会被拆成多条。
   - **架构**：`outbound_sender_slack.go` + manifest + capregistry。
@@ -439,7 +439,7 @@ flowchart LR
 
 ## Phase 4 企业微信智能机器人 wecombot（P2，事件类型最多）
 
-- [ ] **T1001 回调解密客户端 + 账号表**（P2｜依赖 T101｜M｜🟡）
+- [x] **T1001 回调解密客户端 + 账号表**（P2｜依赖 T101｜M｜🟡）
   - **规格**：AES-CBC 解密（`EncodingAESKey` 43 位 → 32 字节）、签名校验、webhook 推送；账号表独立。
   - **上下文**：与 wecom 应用消息不同，智能机器人走独立回调协议；复用 `wecom` 的签名思路但密钥来源不同。
   - **架构**：`internal/channelbot/wecombot` + `model.WeCombBotAccount`（迁移 074）。
@@ -458,7 +458,7 @@ flowchart LR
     ```
   - **验收**：官方样例密文固定向量解密通过；签名错误用例；`check-enum-consistency.sh` 绿。
 
-- [ ] **T1002 入站 + sender + 能力表**（P2｜依赖 T1001｜L｜🟡）
+- [x] **T1002 入站 + sender + 能力表**（P2｜依赖 T1001｜L｜🟡）
   - **规格**：`message`/`enter_chat`/`template_card_event`/`feedback` 四类；出站 markdown 消息体。
   - **上下文**：智能机器人支持 markdown 富文本，能力表需声明 `rich_card` 之外的消息格式。
   - **架构**：`webhook_channel_wecombot.go` + `outbound_sender_wecombot.go`。
@@ -482,7 +482,7 @@ flowchart LR
 
 ## Phase 5 通用入口 custom（P1，不写 SDK 的第三方）
 
-- [ ] **T1101 入站契约 + 验签 + 账号表**（P1｜依赖 T203｜M｜🟡）
+- [x] **T1101 入站契约 + 验签 + 账号表**（P1｜依赖 T203｜M｜🟡）
   - **规格**：给自建/长尾平台一个稳定入口：固定 JSON 契约 + HMAC 签名 + 独立账号表。
   - **上下文**：`ChannelCustom` 常量已存在（`webhook_channel_telegram.go:82`），但无账号表、无验签、无入站适配器，且 `webhookInboundRejectHints` 明确写着「custom 无入站适配器」。
   - **架构**：Service handler + Model（迁移 075）+ 五处登记。
@@ -515,7 +515,7 @@ flowchart LR
     ```
   - **验收**：`TestCustomInbound_SignatureRejects`、`TestCustomInbound_Idempotent`、`TestCustomInbound_ContractValidation`。
 
-- [ ] **T1102 出站回调 sender**（P1｜依赖 T1101｜M｜🟡）
+- [x] **T1102 出站回调 sender**（P1｜依赖 T1101｜M｜🟡）
   - **规格**：向账号 `callback_url` POST 回复，同款签名；5xx/超时走既有重试。
   - **上下文**：重试由 `enqueueSendRetry`（`webhook_outbound.go:315`）统一负责，sender 只需返回可重试错误。
   - **架构**：`outbound_sender_custom.go`，注册进 T101。
@@ -534,7 +534,7 @@ flowchart LR
     ```
   - **验收**：`TestCustomSender_SignsCallback`、`TestCustomSender_RetryOn5xx`。
 
-- [ ] **T1103 移除拒绝提示 + 四处更新**（P1｜依赖 T1102｜S｜🟡）
+- [x] **T1103 移除拒绝提示 + 四处更新**（P1｜依赖 T1102｜S｜🟡）
   - **规格**：自定义渠道变为可用，清掉所有「不可用」断言。
   - **上下文**：四处：`webhookInboundRejectHints`（custom 行）、`webhookInboundCapable`（无分支）、`Verify`（无分支）、`controller/webhook_batchc_d03_http_test.go:75`（断言返回「无入站适配器」）。
   - **架构**：Service + Controller 测试。

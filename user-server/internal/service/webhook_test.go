@@ -384,8 +384,6 @@ func TestWebhookService_Receive_UnsupportedChannelRejected(t *testing.T) {
 		// 两家有专用回调入口，通用路由收到即配置错误
 		{ChannelWechat, "/api/webhook/wechat/"},
 		{ChannelDingTalk, "/api/webhook/dingtalk/"},
-		// custom 只是枚举占位，无适配器
-		{ChannelCustom, "无入站适配器"},
 	}
 	for i, tc := range cases {
 		body := []byte(fmt.Sprintf(`{"event_id":"gw-%d","content":"hi"}`, i))

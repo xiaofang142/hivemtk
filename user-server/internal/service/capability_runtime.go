@@ -41,14 +41,18 @@ func runtimeImplemented(e capregistry.Entry) bool {
 		case "douyin", "xiaohongshu", "kuaishou", "tiktok", "xianyu",
 			"jd", "bilibili", "weibo", "personal_wx", "pdd":
 			return e.Via == "bridge" // bridge 收发链路（inbox_ingress / outbox）
-		case "wecom", "telegram", "wechat":
-			return e.Via == "api" || e.Via == "webhook"
+		case "wecom", "telegram", "wechat",
+			// 025 平台批：wecomcs/onebot/slack/wecombot/custom 的入站与出站
+			// 都由通用 webhook 路由 + 出站 sender 承载（onebot 另有反向 WS）。
+			"wecomcs", "onebot", "slack", "wecombot", "custom":
+			return e.Via == "api" || e.Via == "webhook" || e.Via == "ws"
 		default:
 			return false
 		}
 	case capregistry.CapWebhook:
 		switch e.Platform {
-		case "wecom", "telegram", "feishu", "whatsapp", "wechat":
+		case "wecom", "telegram", "feishu", "whatsapp", "wechat",
+			"wecomcs", "onebot", "slack", "wecombot", "custom":
 			return e.Via == "webhook"
 		default:
 			return false
@@ -78,6 +82,16 @@ func (s *CapabilityRuntimeService) platformConfigured(ctx context.Context, platf
 	switch platform {
 	case "telegram":
 		n, err = s.repo.CountTelegram(ctx)
+	case "wecomcs":
+		n, err = s.repo.CountWeComCS(ctx)
+	case "onebot":
+		n, err = s.repo.CountOneBot(ctx)
+	case "slack":
+		n, err = s.repo.CountSlack(ctx)
+	case "wecombot":
+		n, err = s.repo.CountWeCombBot(ctx)
+	case "custom":
+		n, err = s.repo.CountCustom(ctx)
 	case "wecom":
 		n, err = s.repo.CountWeCom(ctx)
 	case "wechat", "weixin":

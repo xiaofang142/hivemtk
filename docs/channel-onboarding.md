@@ -58,3 +58,57 @@ curl -sS -X POST "http://127.0.0.1:8080/api/webhook/telegram/<account_id>" \
 python3 scripts/check_im_touchpoints.py          # 六触点矩阵
 cd user-server && go test ./internal/service -run 'TestOutboundRegistry|Parity|TestOutboundBehaviorFreezeGolden' -count=1
 ```
+
+## 五、025 平台批接入要点（已在仓库落地）
+
+### OneBot v11（NapCat / Lagrange）
+
+1. 协议端启用 **HTTP 服务端** 与 **反向 WebSocket**：
+   - HTTP 上报地址：`http://<user-server>/api/webhook/onebot/<account_id>`
+   - 反向 WS：`ws://<user-server>/ws/onebot/<account_id>`，`Authorization: Bearer <access_token>`
+2. 账号表 `onebot_accounts` 填 `self_id`（QQ 号）、`http_base_url`、`access_token`。
+3. 出站优先走反向 WS；连接断开时自动回落 `http_base_url` 的 `/send_private_msg`、`/send_group_msg`。
+4. CQ 码控制字符在发送前转义（`&` `[` `]`），长文按 2000 字优先换行切块。
+5. 验收：反向 WS 带坏 token 必须 401 且不登记连接；同 `self_id` 重连顶掉旧连接；
+   撤回 notice 映射 `message.deleted`，成员增减映射 `group.member_joined/left`，request 只入总线不自动同意。
+
+### Slack（Events API）
+
+1. Slack App 配置 Request URL：`https://<domain>/api/webhook/slack/<account_id>`。
+2. 订阅 `app_mention`、`message.im`、`message.channels`（按需）。
+3. 账号表 `slack_accounts` 填 `signing_secret`、`bot_token`（`xoxb-`）。
+4. 验签：`X-Slack-Signature` 的 `v0=HMAC_SHA256(secret, "v0:"+ts+":"+body)`，5 分钟时间窗。
+5. `url_verification` 在入队前短路回 challenge；`bot_id`/`subtype=bot_message` 一律忽略。
+6. 出站 `chat.postMessage` 回复沿用原消息 `thread_ts`。
+
+### 企业微信客服（wecomcs）
+
+1. 回调 URL：`https://<domain>/api/webhook/wecomcs/<account_id>`（POST 通知 + GET 验证）。
+2. 账号表 `wecom_cs_accounts` 填 `corp_id`、`secret`、`open_kfid`、回调 `token`/`aes_key`。
+3. 回调仅作「有新消息」通知；消息由 worker 按 `sync_msg` 的 `cursor` 增量拉取，
+   游标每页落 `sync_cursor`，进程重启不丢消息。
+4. 出站 `send_msg` 只支持 48 小时会话窗口内；窗口过期（95021/95026/95019）返回
+   `window_expired` 不可重试错误，需改用模板/主动触达。
+
+### 企业微信智能机器人（wecombot）
+
+1. 回调 URL：`https://<domain>/api/webhook/wecombot/<account_id>`。
+2. 账号表 `wecombot_accounts` 填回调 `token`、`encoding_aes_key`（43 位）与群机器人 `webhook_url`。
+3. 回调体 AES-CBC 解密（16 随机 + 4 字节 msg_len + msg + receiveid），签名
+   `sha1(sort(token,timestamp,nonce,encrypt))`；`enter_chat`/`template_card_event`/`feedback`
+   只留事件审计，不进消息链路。
+4. 出站走群机器人 webhook 的 `markdown` 载荷（单条 ≤4096 字节）。
+
+### 自定义 webhook（custom）
+
+固定入站 JSON 契约：
+
+```json
+{"event_id":"e1","channel_msg_id":"cm1","conversation_id":"c1",
+ "sender":{"id":"u1","name":"张三"},"msg_type":"text","content":"hi",
+ "media_url":"","timestamp":1700000000,"is_group":false,"group_id":""}
+```
+
+- 签名头：`X-Hive-Signature: t=<unix>,v1=<hex hmac_sha256(secret, t+"."+body)>`，5 分钟时间窗。
+- 出站 POST `callback_url`，同款签名；4xx 判 `bad_request` 不重试，5xx/网络错误判 `network` 可重试。
+- 旧的自有系统报文（顶层 `event_id`/`content`/`sender`）仍按通用别名解析，升级不断流。

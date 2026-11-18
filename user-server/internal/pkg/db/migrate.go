@@ -148,6 +148,12 @@ func allModels() []any {
 		&model.BridgeFollowEvent{},
 		&model.TelegramAccount{},
 		&model.QQAccount{},
+		// specs/025 新平台账号表（独立表：平台专属验签/游标字段不混进 integration_accounts）。
+		&model.WeComCSAccount{},
+		&model.OneBotAccount{},
+		&model.SlackAccount{},
+		&model.WeCombBotAccount{},
+		&model.CustomAccount{},
 		&model.TelegramGroupGate{},
 		&model.TelegramGroupMember{},
 		&model.CronJobLease{},

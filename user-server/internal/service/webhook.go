@@ -71,6 +71,19 @@ type WebhookService struct {
 	feishuRepo *repository.FeishuAccountRepository
 	waRepo     *repository.WhatsAppCloudAccountRepository
 
+	// 025 平台批账号仓储：每个平台一张表（见 model/im_platforms.go）。
+	wecomCSRepo  *repository.WeComCSAccountRepository
+	onebotRepo   *repository.OneBotAccountRepository
+	slackRepo    *repository.SlackAccountRepository
+	wecombotRepo *repository.WeCombBotAccountRepository
+	customRepo   *repository.CustomAccountRepository
+
+	// wecomcs 客服增量拉取器（token 缓存 + 游标续拉），惰性构造。
+	wecomcs *wecomCSService
+
+	// onebotWS 反向 WS 连接表（account_id → conn）；nil = 未启用反向 WS。
+	onebotWS *OneBotWSManager
+
 	messageHubRepo *repository.MessageHubRepository
 	inboxConvRepo  *repository.InboxConversationRepository
 	unifiedMsgRepo repository.UnifiedMessageRepository
@@ -173,6 +186,11 @@ func NewWebhookService() *WebhookService {
 		tgGate:              NewTelegramGateService(),
 		feishuRepo:          feishuRepo,
 		waRepo:              waRepo,
+		wecomCSRepo:         repository.NewWeComCSAccountRepository(),
+		onebotRepo:          repository.NewOneBotAccountRepository(),
+		slackRepo:           repository.NewSlackAccountRepository(),
+		wecombotRepo:        repository.NewWeCombBotAccountRepository(),
+		customRepo:          repository.NewCustomAccountRepository(),
 		messageHubRepo:      messageHubRepo,
 		inboxConvRepo:       inboxConvRepo,
 		unifiedMsgRepo:      unifiedMsgRepo,
@@ -197,6 +215,7 @@ func NewWebhookService() *WebhookService {
 	}
 	s.startWorkers(context.Background())
 	s.startRLJanitor(context.Background())
+	s.startWeComCSSweeper(context.Background())
 
 	s.startRecoveryScanner()
 	// 免打扰（23:00-07:00）到期回复的投递循环必须在服务装配时就起来：原先唯一启动点
@@ -358,7 +377,8 @@ var ErrWebhookInboundNotWired = errors.New("webhook inbound channel not wired")
 func webhookInboundCapable(channel WebhookChannel) bool {
 	switch channel {
 	case ChannelWeCom, ChannelWhatsapp, ChannelTelegram, ChannelQQ,
-		ChannelFeishu, ChannelDouyin, ChannelTiktok:
+		ChannelFeishu, ChannelDouyin, ChannelTiktok,
+		ChannelWeComCS, ChannelOneBot, ChannelSlack, ChannelWeCombBot, ChannelCustom:
 		return true
 	default:
 		return false
@@ -380,7 +400,6 @@ var webhookInboundRejectHints = map[WebhookChannel]string{
 	WebhookChannel(model.ChannelPDD): "拼多多无公开私信回调，入站只走浏览器桥 POST /api/bridge/ingest",
 	ChannelWechat:                    "微信公众号入站走专用回调 POST /api/webhook/wechat/{account_id}（自行验签），通用路由不处理",
 	ChannelDingTalk:                  "钉钉入站走专用回调 POST /api/webhook/dingtalk/{account_id}（机器人/事件订阅报文），通用路由不处理",
-	ChannelCustom:                    "custom 无入站适配器：消息落库后既不进收件箱也不会触发 AI，通用路由不受理",
 }
 
 func webhookInboundRejectReason(channel WebhookChannel) string {
@@ -400,13 +419,18 @@ func webhookInboundRejectReason(channel WebhookChannel) string {
 //
 // 这张表同时是租户反查的**权威源**：主键全库唯一，按它自证不存在歧义。
 var webhookAccountTableByChannel = map[WebhookChannel]string{
-	ChannelWeCom:    "wecom_accounts",
-	ChannelWechat:   "wechat_accounts",
-	ChannelFeishu:   "feishu_accounts",
-	ChannelTelegram: "telegram_accounts",
-	ChannelWhatsapp: "whatsapp_cloud_accounts",
-	ChannelDingTalk: "dingtalk_app_accounts",
-	ChannelQQ:       "qq_accounts",
+	ChannelWeCom:     "wecom_accounts",
+	ChannelWechat:    "wechat_accounts",
+	ChannelFeishu:    "feishu_accounts",
+	ChannelTelegram:  "telegram_accounts",
+	ChannelWhatsapp:  "whatsapp_cloud_accounts",
+	ChannelDingTalk:  "dingtalk_app_accounts",
+	ChannelQQ:        "qq_accounts",
+	ChannelWeComCS:   "wecom_cs_accounts",
+	ChannelOneBot:    "onebot_accounts",
+	ChannelSlack:     "slack_accounts",
+	ChannelWeCombBot: "wecombot_accounts",
+	ChannelCustom:    "custom_accounts",
 }
 
 // ResolveTenantByChannelAccount 渠道回调的租户解析链（specs/001-saas-multi-tenant T022）。
@@ -753,6 +777,76 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 			return false, errors.New("missing X-Signature-Ed25519/X-Signature-Timestamp header")
 		}
 		return qq.VerifySignature(secret, sig, ts, body), nil
+	case ChannelSlack:
+		acc := s.slackAccount(ctx, accountID)
+		secret := ""
+		if acc != nil {
+			secret = acc.SigningSecret
+		}
+		if secret == "" {
+			if insecureWebhookAllowed() {
+				logInsecureWebhookBypass("slack", accountID, errors.New("SigningSecret 未配置"))
+				return true, nil
+			}
+			return false, errors.New("slack signing_secret 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
+		}
+		return VerifySlack(secret, body, headers), nil
+	case ChannelOneBot:
+		acc := s.oneBotAccount(ctx, accountID)
+		token := ""
+		if acc != nil {
+			token = acc.AccessToken
+		}
+		if token == "" {
+			if insecureWebhookAllowed() {
+				logInsecureWebhookBypass("onebot", accountID, errors.New("AccessToken 未配置"))
+				return true, nil
+			}
+			return false, errors.New("onebot access_token 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
+		}
+		return VerifyOneBot(token, headers, query), nil
+	case ChannelWeComCS:
+		acc := s.wecomCSAccount(ctx, accountID)
+		token := ""
+		if acc != nil {
+			token = acc.Token
+		}
+		if token == "" {
+			if insecureWebhookAllowed() {
+				logInsecureWebhookBypass("wecomcs", accountID, errors.New("Token 未配置"))
+				return true, nil
+			}
+			return false, errors.New("wecomcs token 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
+		}
+		return VerifyWeComCS(token, body, query), nil
+	case ChannelWeCombBot:
+		acc := s.wecombotAccount(ctx, accountID)
+		token := ""
+		if acc != nil {
+			token = acc.Token
+		}
+		if token == "" {
+			if insecureWebhookAllowed() {
+				logInsecureWebhookBypass("wecombot", accountID, errors.New("Token 未配置"))
+				return true, nil
+			}
+			return false, errors.New("wecombot token 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
+		}
+		return VerifyWeCombBot(token, body, query), nil
+	case ChannelCustom:
+		acc := s.customAccount(ctx, accountID)
+		secret := ""
+		if acc != nil {
+			secret = acc.Secret
+		}
+		if secret == "" {
+			if insecureWebhookAllowed() {
+				logInsecureWebhookBypass("custom", accountID, errors.New("Secret 未配置"))
+				return true, nil
+			}
+			return false, errors.New("custom secret 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
+		}
+		return VerifyCustom(secret, body, headers, time.Now()), nil
 	case ChannelFeishu:
 
 		secret, _ := s.getAccountSecret(ctx, string(channel), accountID)
@@ -1006,6 +1100,21 @@ type ParsedPayload struct {
 }
 
 func (s *WebhookService) ParsePayload(ctx context.Context, channel WebhookChannel, body []byte) (*ParsedPayload, error) {
+	switch channel {
+	case ChannelSlack:
+		return parseSlackPayload(body)
+	case ChannelOneBot:
+		return parseOneBotPayload(body)
+	case ChannelCustom:
+		// 固定契约优先；旧的自有系统报文（event_id/content/sender 顶层键）
+		// 仍走通用别名解析，避免升级后存量对接方全部解析失败。
+		if p, err := parseCustomPayload(body); err == nil {
+			return p, nil
+		}
+	case ChannelWeCombBot:
+		// 回调体是密文，通用字段只能从外层信封取；真正解析在 dispatch 解密后。
+		return &ParsedPayload{Extra: map[string]any{}}, nil
+	}
 	raw, err := webhookEnvelopeMap(channel, body)
 	if err != nil {
 		return nil, err
@@ -1023,11 +1132,11 @@ func (s *WebhookService) ParsePayload(ctx context.Context, channel WebhookChanne
 // 企微额外认官方 <xml> 外壳（审计 N-08）：此前这里 json.Unmarshal 失败会让 Receive
 // 直接返回 "parse error"，加密回调在**验签之前**就 400，整个渠道的 XML 形态进不来。
 func webhookEnvelopeMap(channel WebhookChannel, body []byte) (map[string]any, error) {
-	if channel == ChannelWeCom {
+	if channel == ChannelWeCom || channel == ChannelWeComCS {
 		if m := wecomEnvelopeMap(body); m != nil {
 			return m, nil
 		}
-		return nil, fmt.Errorf("wecom body is neither JSON nor <xml> envelope")
+		return nil, fmt.Errorf("%s body is neither JSON nor <xml> envelope", channel)
 	}
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err != nil {
@@ -1154,6 +1263,21 @@ func (s *WebhookService) dispatchToChannel(ctx context.Context, channel WebhookC
 		return hub, nil, err
 	case ChannelDouyin, ChannelTiktok:
 		return s.dispatchDouyin(ctx, channel, accountID, p, raw)
+	case ChannelSlack:
+		hub, err := s.dispatchSlack(ctx, accountID, p, raw)
+		return hub, nil, err
+	case ChannelOneBot:
+		hub, err := s.dispatchOneBot(ctx, accountID, p, raw)
+		return hub, nil, err
+	case ChannelWeCombBot:
+		hub, err := s.dispatchWeCombBot(ctx, accountID, p, raw)
+		return hub, nil, err
+	case ChannelCustom:
+		hub, err := s.dispatchCustom(ctx, accountID, p, raw)
+		return hub, nil, err
+	case ChannelWeComCS:
+		hub, err := s.dispatchWeComCS(ctx, accountID, p, raw)
+		return hub, nil, err
 	default:
 		// 原先这里是静默 return nil, nil, nil：事件已被 Receive 收下并回 200，
 		// 却没有任何适配器处理它（审计 D-03）。能力表漏配必须报出来，不能靠人翻日志。

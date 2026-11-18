@@ -24,6 +24,7 @@ var declaredWebhookChannels = []WebhookChannel{
 	ChannelDouyin, ChannelKuaishou, ChannelXiaohongshu, ChannelXianyu, ChannelTiktok,
 	ChannelWechat, ChannelWeCom, ChannelDingTalk, ChannelWhatsapp, ChannelTelegram,
 	ChannelFeishu, ChannelQQ, ChannelCustom,
+	ChannelWeComCS, ChannelOneBot, ChannelSlack, ChannelWeCombBot,
 }
 
 // init 夹具自检：入站管线用例（webhook_test.go / webhook_service_e2e_test.go）都挂在

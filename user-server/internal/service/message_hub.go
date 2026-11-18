@@ -64,11 +64,18 @@ var messageHubPlatforms = map[string]bool{
 	//     出站失败轨迹改走校验路径后，缺词等于"钉钉/公众号的投递失败永远落不了库"。
 	//   - custom 无入站适配器（webhookInboundCapable 判 false），但 POST /api/chat/ingress
 	//     的 channel 是自由文本（NormalizeEvent 只拒空串）⇒ 该值同样写得到库里。
+	//     注：025 平台批后 custom 已有真入站适配器，本条保留作为自由文本兜底的说明。
 	// 本表由 TestBF6_ChannelVocabularyCoversEveryOutboundChannel 锁成"渠道常量全集的镜像"：
 	// 少一个词，将来接进来的渠道就会在"轨迹落库"这一步静默失败。
 	"dingtalk": true,
 	"wechat":   true,
 	"custom":   true,
+	// 025 平台批：四个新直发渠道的入站都写 hub（custom 见上，已接真适配器）。
+	// 缺词 ⇒ 这些渠道的投递失败轨迹永远落不了库，/platforms 枚举也看不到。
+	"wecomcs":   true,
+	"onebot":    true,
+	"slack":     true,
+	"wecombot":  true,
 	// web_embed（2026-11-04 BUG-3）：本系统内部网页客服渠道，有真实入站
 	// （chat_public visitor 链路走 customer_sessions 而非 hub，但出站中转与
 	// 平台枚举都该认识它）——缺词等于 /api/message-hub/platforms 枚举看不到

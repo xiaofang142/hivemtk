@@ -72,7 +72,6 @@ func TestWebhookRoute_NoAdapterChannelsGet400WithGuidance(t *testing.T) {
 		{"/api/webhook/kuaishou/1", "/api/bridge/ingest"},
 		{"/api/webhook/xiaohongshu/1", "/api/bridge/ingest"},
 		{"/api/webhook/xianyu/1", "/api/bridge/ingest"},
-		{"/api/webhook/custom/1", "无入站适配器"},
 	}
 	for _, tc := range cases {
 		rec := postWebhook(t, g, tc.path, []byte(`{"event_id":"d03-http","content":"客户消息"}`))
@@ -100,7 +99,8 @@ func TestWebhookRoute_NoAdapterChannelsGet400WithGuidance(t *testing.T) {
 func TestWebhookRoute_AdaptedChannelsNotCaughtByGate(t *testing.T) {
 	g, _, _ := newWebhookRouteEnv(t)
 
-	for _, ch := range []string{"wecom", "whatsapp", "telegram", "qq", "feishu", "douyin", "tiktok"} {
+	for _, ch := range []string{"wecom", "whatsapp", "telegram", "qq", "feishu", "douyin", "tiktok",
+		"wecomcs", "onebot", "slack", "wecombot", "custom"} {
 		rec := postWebhook(t, g, "/api/webhook/"+ch+"/1", []byte(`{"event_id":"d03-ok"}`))
 		if strings.Contains(rec.Body.String(), gateRejectMarker) {
 			t.Errorf("渠道 %s 有入站适配器，却被能力闸当成不支持：%d %s", ch, rec.Code, rec.Body.String())
