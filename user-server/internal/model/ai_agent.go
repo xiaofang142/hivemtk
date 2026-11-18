@@ -116,7 +116,14 @@ const (
 	ChannelTypeWeibo       ChannelType = "weibo"
 	ChannelTypePersonalWX  ChannelType = "personal_wx"
 	// CH-16 首切片（2026-11-09）：拼多多商家网页渠道，与 model.ChannelPDD 同名。
-	ChannelTypePDD      ChannelType = "pdd"
+	ChannelTypePDD ChannelType = "pdd"
+	// 2026-11-18 电商店铺五渠道（CH-15/18/19/28/35，二次审核补齐）：与
+	// model.Channel* 同名；ENUM 值由 v3.98.0 迁移补入 channel_type_enum。
+	ChannelTypeTaobao       ChannelType = "taobao"
+	ChannelTypeDouyinShop   ChannelType = "douyin_shop"
+	ChannelTypeKuaishouShop ChannelType = "kuaishou_shop"
+	ChannelTypeShopee       ChannelType = "shopee"
+	ChannelTypeWalmartUS    ChannelType = "walmart_us"
 	ChannelTypeWeb      ChannelType = "web"
 	ChannelTypeWebEmbed ChannelType = "web_embed"
 	// 2026-11 specs/025 新平台（与 model.Channel* 同名）。

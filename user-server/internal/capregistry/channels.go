@@ -31,6 +31,19 @@ func init() {
 	Register(Entry{Platform: "pdd", Cap: CapDMReceive, Via: "bridge", Note: "拼多多商家网页（mms.pinduoduo.com/chat-merchant）；Experimental，选择器待真机"})
 	Register(Entry{Platform: "pdd", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
 
+	// 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35，二次审核补齐）：桥接收发链路
+	// 与既有网页渠道同源；fail-closed（SEL 零证据拒启拒发），真机校准后开闸。
+	Register(Entry{Platform: "taobao", Cap: CapDMReceive, Via: "bridge", Note: "千牛网页接待中心（work.taobao.com）；Experimental，选择器待真机"})
+	Register(Entry{Platform: "taobao", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "douyin_shop", Cap: CapDMReceive, Via: "bridge", Note: "抖店飞鸽客服（im.jinritemai.com）；Experimental，选择器待真机"})
+	Register(Entry{Platform: "douyin_shop", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "kuaishou_shop", Cap: CapDMReceive, Via: "bridge", Note: "快手小店快语客服（im.kwaixiaodian.com）；Experimental，选择器待真机"})
+	Register(Entry{Platform: "kuaishou_shop", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "shopee", Cap: CapDMReceive, Via: "bridge", Note: "Shopee Seller Centre Webchat；Experimental，选择器待真机"})
+	Register(Entry{Platform: "shopee", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "walmart_us", Cap: CapDMReceive, Via: "bridge", Note: "Walmart Seller Center Inbox；Experimental，选择器待真机"})
+	Register(Entry{Platform: "walmart_us", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+
 	// 官方 API/webhook 渠道
 	Register(Entry{Platform: "wechat", Cap: CapWebhook, Via: "webhook", Note: "公众号回调验签（/api/webhook/wechat/:account_id）"})
 	Register(Entry{Platform: "wechat", Cap: CapDMSend, Via: "api", Note: "客服消息；触达侧渠道码 weixin 同源"})

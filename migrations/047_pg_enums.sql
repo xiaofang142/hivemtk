@@ -42,6 +42,9 @@
 --
 --   值域修正（2026-11-14 架构审计轮，check-enum-consistency.sh 红灯驱动）：
 --   - platform_type_enum 补 'bilibili'/'jd'/'pdd'/'personal_wx'/'weibo'
+--   值域修正（2026-11-19 二次审核批）：platform_type_enum 再补
+--   'taobao'/'douyin_shop'/'kuaishou_shop'/'shopee'/'walmart_us'
+--   （电商店铺五渠道 ChannelType 常量注册，离线 SQL 部署库 message_hub.platform 拒写风险同 063）
 --     （v3.92.0 渠道注册表扩容只补了 channel_type_enum，本枚举漏跟——
 --      离线 SQL 部署库中这五个渠道的 message_hub 行会被 PG 拒写）
 --   - source_type_enum 补 'manual'（kb_crawler.go QACandidateSourceTypeManual）
@@ -73,7 +76,8 @@ BEGIN
       'douyin', 'xiaohongshu', 'kuaishou', 'xianyu', 'tiktok',
       'web', 'web_embed', 'system',
       'bilibili', 'jd', 'pdd', 'personal_wx', 'weibo',
-      'wecomcs', 'onebot', 'slack', 'wecombot'
+      'wecomcs', 'onebot', 'slack', 'wecombot',
+      'taobao', 'douyin_shop', 'kuaishou_shop', 'shopee', 'walmart_us'
     );
     RAISE NOTICE 'Created enum platform_type_enum (23 values)';
   END IF;

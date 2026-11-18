@@ -72,7 +72,12 @@ const write = (value) => fs.writeFileSync(RESULT, JSON.stringify(value), { flag:
       const list = manager?.shadowRoot?.querySelector('extensions-item-list');
       const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
         .filter(item => item.getClientRects().length > 0);
-      const target = items.find(item => item.shadowRoot?.querySelector('#name')?.textContent?.trim() === name);
+      const matches = items.filter(item => item.shadowRoot?.querySelector('#name')?.textContent?.trim() === name);
+      // 歧义守卫（2026-11-19 二次审核恢复）：同名 item 不唯一时绝不点击——
+      // 搜索过滤未生效/两个同名扩展时，点错卡片=重载错误目标。
+      if (matches.length === 0) return { ok: false, reason: 'item-not-found' };
+      if (matches.length > 1) return { ok: false, reason: 'ambiguous-name' };
+      const target = matches[0];
       if (!target) return { ok: false, reason: 'item-not-found' };
       const btn = target.shadowRoot?.querySelector('#dev-reload-button');
       if (!btn) return { ok: false, reason: 'reload-button-missing' };

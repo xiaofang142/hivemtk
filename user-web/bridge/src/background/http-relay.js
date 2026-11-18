@@ -25,6 +25,13 @@ const CHANNEL_ALIASES = new Map([
   ['jingdong', 'jd'], ['jd_chat', 'jd'], ['bili', 'bilibili'], ['bilibili_web', 'bilibili'],
   ['b站', 'bilibili'], ['wb', 'weibo'], ['weibo_web', 'weibo'],
   ['pinduoduo', 'pdd'], ['pdd_web', 'pdd'],
+  // 2026-11-18 电商店铺五渠道（CH-15/18/19/28/35，二次审核补齐）：与
+  // bridge.NormalizeBridgeChannel / 前端 CHANNEL_LEGACY_WEB_TO_CANONICAL 同源。
+  ['taobao_web', 'taobao'], ['tmall', 'taobao'], ['qianniu', 'taobao'],
+  ['jinritemai', 'douyin_shop'], ['feige', 'douyin_shop'], ['douyin_shop_web', 'douyin_shop'],
+  ['kwaixiaodian', 'kuaishou_shop'], ['kuaishou_shop_web', 'kuaishou_shop'],
+  ['shopee_web', 'shopee'], ['shopee_seller', 'shopee'],
+  ['walmart', 'walmart_us'], ['walmart_web', 'walmart_us'],
 ]);
 const normalizeChannel = (channel) => CHANNEL_ALIASES.get(channel) || channel;
 const documentKey = (sender) => JSON.stringify([sender.tab.id, sender.frameId, sender.documentId || sender.url]);

@@ -42,7 +42,8 @@ func NewAITagger() *AITagger {
 			// channel 词表与 channelgw/registry.go 渠道注册表对齐（2026-11-12 收口）：
 			// 桥接渠道（kuaishou/jd/bilibili/weibo/personal_wx/pdd）此前缺失，
 			// AI 谈单在这些渠道的对话无法落 channel 标签。
-			"channel": {"wechat", "douyin", "kuaishou", "xiaohongshu", "xianyu", "tiktok", "jd", "bilibili", "weibo", "personal_wx", "pdd", "offline"},
+			"channel": {"wechat", "douyin", "kuaishou", "xiaohongshu", "xianyu", "tiktok", "jd", "bilibili", "weibo", "personal_wx", "pdd", "offline",
+				"taobao", "douyin_shop", "kuaishou_shop", "shopee", "walmart_us"},
 		},
 	}
 }

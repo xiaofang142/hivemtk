@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"hivemtk-user/internal/capregistry"
+	"hivemtk-user/internal/channelcaps"
 	"hivemtk-user/internal/service"
 )
 
@@ -293,4 +295,33 @@ func assertNoBridgeChannelCaseList(t *testing.T) {
 			t.Errorf("webhook_outbound.go:%d 不应再直接做桥接能力查询（B1 注册表化：查询收口在 outbound_registry.go）", i+1)
 		}
 	}
+}
+
+// TestEveryRegisteredChannelInChannelCapsAndCapregistry 闸 5（2026-11-19 二次审核新增，
+// v3.92.0/v3.98.0 两次 ENUM 漂移与 channelcaps 缺口的防复发门）：
+// Default 注册表的每个渠道必须三面齐全——
+//  ① channelcaps.Known（缺 = RenderForChannel 直接报「出站不支持该渠道」，AI 回复静默失败；
+//  ② capregistry 有 DMReceive 条目（缺 = 能力运行视图/矩阵文档看不到该渠道）；
+//  ③ channel_type_enum 含该值（缺 = channel_agent_bindings 落库被 PG 拒写，v3.92.0/v3.98.0
+//     两次补枚举均由此触发）。
+//
+// 三面任一缺口的症状都是「注册了但链路某一段静默断」，且既有门禁（入站词表/parity/race）
+// 全部拦不住——本闸把注册表事实与三张面表锁死，新增渠道漏登记即红。
+func TestEveryRegisteredChannelInChannelCapsAndCapregistry(t *testing.T) {
+	capDM := map[string]bool{}
+	for _, e := range capregistry.All() {
+		if e.Cap == capregistry.CapDMReceive {
+			capDM[e.Platform] = true
+		}
+	}
+	for _, name := range Default.Names() {
+		if !channelcaps.Known(name) {
+			t.Errorf("渠道 %s 未在 channelcaps 登记 manifest——出站渲染会拒绝它的 AI 回复（出站不支持该渠道）", name)
+		}
+		if !capDM[name] {
+			t.Errorf("渠道 %s 未在 capregistry 登记 DMReceive 条目——能力运行视图缺渠道", name)
+		}
+	}
+	// ③ 枚举面（channel_type_enum 含每个注册渠道值）是 DB 事实，由 v3.92.0/v3.98.0
+	// 迁移及其测试承载；本闸与迁移测试共同构成「注册表↔面表」全链锁。
 }
