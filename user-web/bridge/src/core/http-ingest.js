@@ -1,4 +1,4 @@
-import { DEFAULT_USER_SERVER, BRIDGE_PROTOCOL_V2, TENANT_CODE } from './constants.js';
+import { DEFAULT_USER_SERVER as _DEFAULT_USER_SERVER, BRIDGE_PROTOCOL_V2, TENANT_CODE } from './constants.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('http', 'bridge');
@@ -144,7 +144,50 @@ function _logRequest(label, serverUrl, params, body, extra) {
 // ingest 全灭；popup/SW 是扩展页，host_permissions 豁免 CORS）。
 // 页面上下文（非 chrome-extension: 协议）一律经 background SW 中转；
 // 扩展页自身（popup/SW）直连不变。
+function requestAbortError() {
+  return new DOMException('HTTP 请求已取消或超时', 'AbortError');
+}
+
+function retryDelay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(requestAbortError()); return; }
+    let timer;
+    let remaining = ms;
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => { cleanup(); reject(requestAbortError()); };
+    // 浏览器timer是有符号32位；长限流等待分段，绝不溢出成即时重试。
+    const schedule = () => {
+      const segment = Math.min(remaining, 2147483647);
+      timer = setTimeout(() => {
+        remaining -= segment;
+        if (remaining > 0) schedule();
+        else { cleanup(); resolve(); }
+      }, segment);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    schedule();
+  });
+}
+
+function retryAfterMilliseconds(value) {
+  if (typeof value !== 'string') return 0;
+  const raw = value.trim();
+  if (/^\d+$/.test(raw)) {
+    const seconds = Number(raw);
+    return Number.isSafeInteger(seconds) && seconds <= Number.MAX_SAFE_INTEGER / 1000 ? seconds * 1000 : Number.MAX_SAFE_INTEGER;
+  }
+  // 仅HTTP日期，不把“4seconds”等畸形数字解析为秒数或本地日期。
+  if (!/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(raw)) return 0;
+  const date = Date.parse(raw);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 0;
+}
+
 async function bridgeFetch(url, options) {
+  const signal = options?.signal;
+  if (signal?.aborted) throw requestAbortError();
   const inExtension =
     typeof location === 'undefined' ||
     (location.protocol || '').startsWith('chrome-extension');
@@ -155,25 +198,46 @@ async function bridgeFetch(url, options) {
   // CORS，直连必然 Failed to fetch；更糟的是 relay 那次 fetch 已在服务端
   // 认领下行行，直连回退 = 对同一行重复认领（幽灵认领 pa+1 → 30s 惰性回收
   // → 再认领 → exhaustOutbound 误判 failed）。2026-11-13 生产实证。
-  const res = await Promise.race([
-    chrome.runtime.sendMessage({
-      type: 'bridgeFetch',
-      url,
-      options: {
-        method: options && options.method,
-        headers: options && options.headers,
-        body: options && options.body,
-      },
-    }),
-    new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error('bridgeFetch: SW 30s 超时')),
-        30000
-      )
-    ),
-  ]);
+  const requestId = crypto.randomUUID();
+  let timer;
+  let onAbort;
+  const res = await new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      fn(value);
+    };
+    onAbort = () => {
+      if (settled) return;
+      // AbortSignal 不能跨 MV3 消息序列化；按 ID 取消 SW fetch，不等待取消回执。
+      try {
+        Promise.resolve(chrome.runtime.sendMessage({ type: 'bridgeFetchCancel', requestId }))
+          .catch(() => {});
+      } catch (_) { /* SW 已关闭时，本地取消仍必须完成。 */ }
+      finish(reject, requestAbortError());
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    timer = setTimeout(onAbort, HTTP_INGEST_DEFAULTS.requestTimeoutMs);
+    try {
+      Promise.resolve(chrome.runtime.sendMessage({
+        type: 'bridgeFetch', requestId, url,
+        options: {
+          method: options && options.method,
+          headers: options && options.headers,
+          body: options && options.body,
+        },
+      })).then(r => finish(resolve, r), e => finish(reject, e));
+    } catch (e) { finish(reject, e); }
+    if (signal?.aborted) onAbort();
+  }).finally(() => {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+  });
   if (!res || res.__err)
-    throw new Error((res && res.__err) || 'bridgeFetch: no response');
+    throw res?.errorName === 'AbortError'
+      ? requestAbortError()
+      : new Error((res && res.__err) || 'bridgeFetch: no response');
   // 透传状态与响应体；调用方只读 status/text/json/headers.get，够用。
   // headers 兼容两种形状：background 发 Object.fromEntries() 的普通对象，
   // 老版本发 entries 数组——普通对象不可迭代，直接 new Map(obj) 会抛
@@ -183,7 +247,7 @@ async function bridgeFetch(url, options) {
     ok: res.status >= 200 && res.status < 300,
     status: res.status,
     statusText: res.statusText || '',
-    headers: new Map(
+    headers: new Headers(
       Array.isArray(res.headers)
         ? res.headers
         : Object.entries(res.headers || {})
@@ -198,6 +262,7 @@ async function fetchWithRetry(url, options, retryOpts = {}) {
   const retryBaseMs = retryOpts.retryBaseMs ?? HTTP_INGEST_DEFAULTS.retryBaseMs;
   let lastErr = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (options?.signal?.aborted) throw requestAbortError();
     try {
       const res = await bridgeFetch(url, options);
       if (!res.ok) {
@@ -214,8 +279,7 @@ async function fetchWithRetry(url, options, retryOpts = {}) {
         if (res.status === 429) {
           const ra = res.headers.get('Retry-After');
           if (ra) {
-            const secs = parseInt(ra, 10);
-            if (!Number.isNaN(secs)) err.retryAfterMs = secs * 1000;
+            err.retryAfterMs = retryAfterMilliseconds(ra);
           }
         }
         if (!retryable) err.nonRetryable = true;
@@ -223,7 +287,9 @@ async function fetchWithRetry(url, options, retryOpts = {}) {
       }
       return res;
     } catch (e) {
+      if (options?.signal?.aborted) throw requestAbortError();
       lastErr = e;
+      if (e?.name === 'AbortError') break;
       if (e && e.nonRetryable) break;
       if (attempt >= maxRetries) break;
       // 退避：优先用服务端 Retry-After（429 场景），否则指数退避 + 抖动
@@ -232,7 +298,7 @@ async function fetchWithRetry(url, options, retryOpts = {}) {
         delay = Math.max(delay, e.retryAfterMs);
       }
       log.warn(`fetch 失败，${delay}ms 后重试 #${attempt + 1}/${maxRetries}`, { error: String(e && e.message || e) });
-      await new Promise((r) => setTimeout(r, delay));
+      await retryDelay(delay, options?.signal);
     }
   }
   throw lastErr || new Error('fetch failed');
@@ -410,4 +476,3 @@ export {
   ackOutbox,
   bridgeFetch,
 };
-

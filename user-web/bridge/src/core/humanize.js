@@ -5,7 +5,7 @@ import { createLogger } from './logger.js';
 // 滑动窗口_density 自适应与 DOM 键入节奏是 bridge 特有能力，留在本地。
 import { gaussian, sleep, DELAY_PROFILES } from '../../../../packages/browser-core/index.js';
 
-const log = createLogger('humanize', 'bridge');
+const _log = createLogger('humanize', 'bridge');
 
 // 滑动窗口记录器（P3-B）：按 (channel, account, action) 跟踪"过去 windowMs 内的次数"
 class SlidingWindowCounter {
@@ -185,5 +185,4 @@ export const _internal = {
 };
 
 export { humanDelay, humanType, humanMousePath, humanScroll, sendWindow, clickWindow };
-
 

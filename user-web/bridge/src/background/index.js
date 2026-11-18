@@ -8,6 +8,7 @@ import {
   subtractSelectorHealthItems,
 } from '../core/selector-health.js';
 import './sse-client.js';
+import { cancelHttpRelay, relayHttpRequest } from './http-relay.js';
 
 const log = createLogger('bg', 'bg');
 
@@ -70,17 +71,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // content script 在页面源下直连服务端受 CORS/CSP 限制（生产实证
     // TypeError: Failed to fetch），统一经 SW 中转：SW 是扩展页，
     // host_permissions 豁免 CORS。响应只回状态/头/正文，调用方只读这些。
-    fetch(msg.url, msg.options || {})
-      .then(async (r) => {
-        const body = await r.text();
-        sendResponse({
-          status: r.status,
-          statusText: r.statusText,
-          headers: Object.fromEntries(r.headers.entries()),
-          body,
-        });
-      })
-      .catch((e) => sendResponse({ __err: String((e && e.message) || e) }));
+    relayHttpRequest(msg, _sender).then(sendResponse);
+    return true;
+  }
+  if (msg && msg.type === 'bridgeFetchCancel') {
+    sendResponse({ ok: true, cancelled: cancelHttpRelay(msg.requestId, _sender) });
     return true;
   }
   if (msg && msg.type === 'getStatus') {
@@ -334,7 +329,7 @@ async function flushSelectorHealthPending() {
     snapshot = await new Promise((resolve) => {
       chrome.storage.local.get(KEY_SELECTOR_HEALTH, (res) => resolve(res[KEY_SELECTOR_HEALTH] || {}));
     });
-  } catch (e) {
+  } catch  {
     return { ok: false, reason: 'storage_unavailable' };
   }
   const channels = Object.keys(snapshot);
@@ -396,4 +391,3 @@ if (scriptingAvailable()) {
 }
 
 log.info('background 已就绪（HTTP-only 模式，0 WS）');
-

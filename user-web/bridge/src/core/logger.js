@@ -36,7 +36,7 @@ function sanitizeArgs(args) {
           }
         }
         return out;
-      } catch (e) {
+      } catch  {
         return '[unserializable]';
       }
     }
@@ -73,4 +73,3 @@ export function createLogger(tag, channel) {
     error: (...a) => console.error(prefix, style, ...sanitizeArgs(a)),
   };
 }
-

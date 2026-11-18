@@ -4,7 +4,7 @@ import { mergeSelectors, customConversationListSelectors } from '../core/selecto
 import { SelectorEngine } from '../core/selector-engine.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized, enhancedClick,
-  simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage,
+  simulateRealClick as _simulateRealClick, createLogger, findAnyMessageInput, looksLikeMessagePage,
   sanitizePeerName, assertConvOrAbort, absoluteMediaUrl, avatarImgUrl, extractVoiceSrc,
 } from '../core/dom.js';
 import { humanDelay } from '../core/humanize.js';
@@ -153,14 +153,14 @@ function getAccountId() {
   });
   for (const c of candidates) {
     if (c && c.trim()) {
-      try { localStorage.setItem(`hivebridge:account:${CHANNELS.XIANYU}`, c.trim()); } catch (e) {  }
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.XIANYU}`, c.trim()); } catch  {  }
       return c.trim();
     }
   }
   try {
     const ls = localStorage.getItem(`hivebridge:account:${CHANNELS.XIANYU}`);
     if (ls) return ls;
-  } catch (e) {  }
+  } catch  {  }
   return '';
 }
 
@@ -788,4 +788,3 @@ export function buildXianyuAdapter() {
     rateLimiter: undefined,
   });
 }
-

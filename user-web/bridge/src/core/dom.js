@@ -32,7 +32,7 @@ export function simulateRealClick(element) {
   const rect = element.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
-  const opts = (type) => ({
+  const opts = (_type) => ({
     view: window,
     bubbles: true,
     cancelable: true,
@@ -105,7 +105,7 @@ export function fillContentEditable(el, text, { clearBefore = false } = {}) {
   if (clearBefore) clearEditable(el);
   try {
     document.execCommand('insertText', false, text);
-  } catch (e) {
+  } catch  {
   }
   if ((el.innerText || el.value || '').toString().trim() !== text.trim()) {
     if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
@@ -158,7 +158,7 @@ export async function fillContentEditableHumanized(el, text, { clearBefore = fal
     let ok;
     try {
       ok = document.execCommand('insertText', false, burst.text);
-    } catch (e) {
+    } catch  {
       ok = false;
     }
     if (!ok) appendEditable(el, burst.text);
@@ -190,7 +190,7 @@ export function humanType(el, text, { interval = 20 } = {}) {
       if (i >= text.length) return resolve();
       try {
         document.execCommand('insertText', false, text[i]);
-      } catch (e) {
+      } catch  {
         el.innerText = (el.innerText || '') + text[i];
       }
       i += 1;
@@ -223,7 +223,7 @@ export function simulateTyping(el, text, { interval = 25 } = {}) {
       } else {
         try {
           document.execCommand('insertText', false, text[i]);
-        } catch (e) {
+        } catch  {
           el.innerText = acc;
         }
       }
@@ -404,11 +404,11 @@ export function sanitizePeerName(text) {
     s = s.replace(/\s+(刚刚|\d+分钟前|\d+小时前|\d+天前)$/i, '');
     s = s.replace(/\s+(昨天|前天|今天)(\s+\d{1,2}:\d{2})?$/i, '');
     s = s.replace(/\s+\d{1,2}:\d{2}$/, '');
-    s = s.replace(/\s+\d{4}[/年\-]\d{1,2}[/月\-]\d{1,2}日?$/, '');
+    s = s.replace(/\s+\d{4}[/年-]\d{1,2}[/月-]\d{1,2}日?$/, '');
     s = s.replace(/\s+\d{1,2}月\d{1,2}日$/, '');
     // 平台会话列表在同年消息上显示 MM/DD（如 "四川执业药师 10/23"）：
     // 不剥掉它，conversation_id 每天都会变，下行消息永远找不到目标会话。
-    s = s.replace(/\s+\d{1,2}[/\-]\d{1,2}$/, '');
+    s = s.replace(/\s+\d{1,2}[/-]\d{1,2}$/, '');
     s = s.replace(/\s+(交易成功|有新交易评价|已发货|待发货|待付款|等待买家付款|交易关闭|退款成功|退款中|已退款|已读|未读)$/i, '');
     s = s.replace(/\s+\[\d+\]$/, '');
     s = s.replace(/\s+$/, '');
@@ -425,9 +425,9 @@ function isVolatileToken(s) {
   if (/^\d{1,2}:\d{2}$/.test(s)) return true;
   if (/^(刚刚|\d+分钟前|\d+小时前|\d+天前)$/i.test(s)) return true;
   if (/^(昨天|前天|今天)(\s+\d{1,2}:\d{2})?$/i.test(s)) return true;
-  if (/^\d{4}[/年\-]\d{1,2}[/月\-]\d{1,2}日?$/.test(s)) return true;
+  if (/^\d{4}[/年-]\d{1,2}[/月-]\d{1,2}日?$/.test(s)) return true;
   if (/^\d{1,2}月\d{1,2}日$/.test(s)) return true;
-  if (/^\d{1,2}[/\-]\d{1,2}$/.test(s)) return true;
+  if (/^\d{1,2}[/-]\d{1,2}$/.test(s)) return true;
   if (/^(交易成功|有新交易评价|已发货|待发货|待付款|等待买家付款|交易关闭|退款成功|退款中|已退款|已读|未读)$/i.test(s)) return true;
   return false;
 }
@@ -625,4 +625,3 @@ export function looksLikeMessagePage() {
     return false;
   }
 }
-

@@ -17,7 +17,10 @@
 //      因此"首次加载新目录"无法全自动，只能人工一次；日常版本更新走本模块
 //      （目录已登记在 Chrome，rsync 覆盖 + 重新加载即可）。
 import { execFileSync } from 'node:child_process';
-import { existsSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, rmSync, readFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 /**
  * 在 Chrome 里重新加载指定扩展，并读回快照中的版本号。
@@ -29,74 +32,116 @@ import { existsSync, rmSync, readFileSync } from 'node:fs';
  * @param {boolean} [o.dryRun]
  * @returns {{ok: boolean, version?: string|null, card?: string, step?: string, error?: string}}
  */
-export function reloadExtension({ name, expectVersion, resultPath = '/tmp/hivebridge-reload-result.json', dryRun = false }) {
-  if (existsSync(resultPath)) rmSync(resultPath);
-  // 注意：这个脚本跑在 ego-browser 的 Node 运行时里，顶层可用 await。
-  const script = `
-const fs = require('node:fs');
+export function reloadExtension({ name, expectVersion, resultPath, dryRun = false }) {
+  if (!name || !/^\d+\.\d+\.\d+$/.test(expectVersion || '')) {
+    return { ok: false, step: 'arguments', error: '扩展名称和期望版本必须明确' };
+  }
+  if (dryRun) return { ok: true, dryRun: true };
+  resultPath ||= join(mkdtempSync(join(tmpdir(), 'hivebridge-reload-')), 'result.json');
+  if (existsSync(resultPath)) return { ok: false, step: 'result-exists' };
+  const spaceName = `hivebridge-reload-${randomUUID()}`;
+  const script = String.raw`
+const fs = await import('node:fs');
 const RESULT = ${JSON.stringify(resultPath)};
 const NAME = ${JSON.stringify(name)};
-const write = (o) => fs.writeFileSync(RESULT, JSON.stringify(o));
+const EXPECTED = ${JSON.stringify(expectVersion)};
+const write = (value) => fs.writeFileSync(RESULT, JSON.stringify(value), { flag: 'wx' });
+const textOf = (snapshot) => typeof snapshot === 'string' ? snapshot : JSON.stringify(snapshot);
+const refs = (text, role, label) => text.split('\n').flatMap(line => {
+  if (!line.includes(role + ' ' + JSON.stringify(label))) return [];
+  const match = /\[ref=(\d+)[,\]]/.exec(line);
+  return match ? [match[1]] : [];
+});
+const targetCard = (text) => {
+  const lines = text.split('\n');
+  const names = lines.map((line, index) => ({ line, index })).filter(({ line }) =>
+    line.trim().replace(/^- /, '') === 'text ' + JSON.stringify(NAME)
+    || line.trim().replace(/^- /, '') === 'heading ' + JSON.stringify(NAME));
+  if (names.length !== 1) return null;
+  const anchor = names[0].index;
+  let depth = lines[anchor].search(/\S/);
+  for (let start = anchor - 1; start >= 0; start--) {
+    if (!lines[start].trim()) continue;
+    const indent = lines[start].search(/\S/);
+    if (indent >= depth) continue;
+    depth = indent;
+    if (!/^(?:- )?(?:article|container)(?: |$)/.test(lines[start].trim())) continue;
+    let end = start + 1;
+    while (end < lines.length && (!lines[end].trim() || lines[end].search(/\S/) > indent)) end++;
+    const card = lines.slice(start, end).join('\n');
+    if (refs(card, 'button', '重新加载').length !== 1) continue;
+    const versions = [...card.matchAll(/(?:text|StaticText) "(\d+\.\d+\.\d+)"/g)].map(match => match[1]);
+    const ids = [...card.matchAll(/text "ID[：:]\s*([a-p]{32})"/g)].map(match => match[1]);
+    if (ids.length !== 1) return null;
+    return { card, id: ids[0], version: versions.length === 1 ? versions[0] : null };
+  }
+  return null;
+};
 (async () => {
+  let spaceId;
   try {
-    const ts = await taskSpace('hivebridge-publish');
-    const p = await ts.page('p1');
-    await p.goto('chrome://extensions/');
-    await p.waitForTimeout(1500);
-    let snap = await p.snapshot({ scope: 'full_page' });
-    let text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const boxRef = (text.match(/searchbox "搜索扩展程序" \\[ref=(\\d+)[,\\]]/) || [])[1];
-    if (!boxRef) return write({ ok: false, step: 'searchbox' });
-    await p.fill(boxRef, NAME);
-    await p.waitForTimeout(700);
-    snap = await p.snapshot({ scope: 'full_page' });
-    text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const refs = [...text.matchAll(/button "重新加载" \\[ref=(\\d+)[,\\]]/g)].map((m) => m[1]);
-    if (refs.length !== 1) return write({ ok: false, step: 'reload-button', count: refs.length });
-    await p.click(refs[0]);
-    await p.waitForTimeout(1800);
-    snap = await p.snapshot({ scope: 'full_page' });
-    text = typeof snap === 'string' ? snap : JSON.stringify(snap);
-    const ver = (text.match(/\\b(\\d+\\.\\d+\\.\\d+)\\b/) || [])[1];
-    const card = text.split('\\n').filter((l) => new RegExp(NAME.split(/[\\s—]/)[0]).test(l)).slice(0, 2).join(' | ');
-    // MV3 重载后 content script 需页面重新加载才重新注入（2026-11-14 三次生产实证：
-    // 重载后渠道页签失效=巡检/认领静默停摆，补回复挂起 30 分钟无人认领）。发布链
-    // 收尾自动重开四个桥接渠道页并 keep 常驻——发布即恢复，不再依赖人工补开。
-    let pagesRestored = 0;
-    const CHANNEL_URLS = [
-      'https://weibo.com/chat',
-      'https://www.douyin.com/chat',
-      'https://message.bilibili.com/',
-      'https://www.xiaohongshu.com/chat',
-    ];
-    for (const u of CHANNEL_URLS) {
-      try {
-        const cp = await ts.newPage();
-        await cp.goto(u, { timeout: 45000 });
-        await cp.waitForTimeout(2500);
-        pagesRestored++;
-      } catch (_) { /* 单渠道失败不阻塞发布链，监控心跳项会兜底报警 */ }
+    const task = await taskSpace(${JSON.stringify(spaceName)});
+    spaceId = task.spaceId;
+    const page = task.page('p1');
+    await page.goto('chrome://extensions/');
+    let text = textOf(await page.snapshot({ scope: 'full_page' }));
+    const boxes = refs(text, 'searchbox', '搜索扩展程序');
+    if (boxes.length !== 1) return write({ ok: false, step: 'searchbox', spaceId });
+    await page.fill('ref=' + boxes[0], NAME);
+    await page.waitForFunction((name) => {
+      const manager = document.querySelector('extensions-manager');
+      const list = manager?.shadowRoot?.querySelector('extensions-item-list');
+      const items = [...(list?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+        .filter(item => item.getClientRects().length > 0);
+      return items.length === 1 && items[0].shadowRoot?.querySelector('#name')?.textContent?.trim() === name;
+    }, NAME, { timeout: 15000 });
+    text = textOf(await page.snapshot({ scope: 'full_page' }));
+    const buttons = refs(text, 'button', '重新加载');
+    if (buttons.length !== 1) return write({ ok: false, step: 'reload-button', count: buttons.length, spaceId });
+    const before = targetCard(text);
+    if (!before || refs(before.card, 'button', '重新加载')[0] !== buttons[0]) {
+      return write({ ok: false, step: 'target-card', spaceId });
     }
-    write({ ok: true, version: ver || null, card, pagesRestored });
-    await ts.finish({ keep: 'all' });
-  } catch (e) {
-    write({ ok: false, step: 'exception', error: String((e && e.message) || e) });
+    await page.click('ref=' + buttons[0], { label: '重新加载目标蜂桥扩展' });
+    try {
+      await page.waitForSelector('text=' + JSON.stringify(EXPECTED), { state: 'visible', timeout: 15000 });
+    } catch { /* 最终快照仍须证明目标卡片的版本。 */ }
+    text = textOf(await page.snapshot({ scope: 'full_page' }));
+    const after = targetCard(text);
+    if (after && after.id !== before.id) {
+      return write({ ok: false, step: 'identity-mismatch', spaceId });
+    }
+    if (!after || after.version !== EXPECTED) {
+      return write({ ok: false, step: 'version-mismatch', version: after?.version || null, spaceId });
+    }
+    write({ ok: true, version: after.version, extensionId: after.id, card: after.card, spaceId });
+  } catch (error) {
+    write({ ok: false, step: 'exception', error: String(error?.message || error), spaceId });
   }
 })();
 `;
-  if (dryRun) return { ok: true, dryRun: true };
   try {
     execFileSync('ego-browser', ['nodejs', '-e', script], { stdio: 'inherit', timeout: 180000 });
-  } catch (e) {
-    return { ok: false, step: 'ego-browser', error: e.message };
+  } catch (error) {
+    return { ok: false, step: 'ego-browser', error: error.message };
   }
   if (!existsSync(resultPath)) return { ok: false, step: 'no-result' };
-  const r = JSON.parse(readFileSync(resultPath, 'utf8'));
-  if (!r.ok) return r;
-  if (expectVersion && r.version && r.version !== expectVersion) {
-    return { ok: false, step: 'version-mismatch', version: r.version };
+  let result;
+  try { result = JSON.parse(readFileSync(resultPath, 'utf8')); }
+  catch { return { ok: false, step: 'invalid-result' }; }
+  if (!result.ok) return result;
+  if (result.version !== expectVersion || !Number.isInteger(result.spaceId)) {
+    return { ok: false, step: 'version-mismatch', version: result.version };
   }
-  return r;
+  // 成功证据回传后再执行独立的最后一次清理，不再操作页面。
+  try {
+    execFileSync('ego-browser', ['nodejs', '-e',
+      `const task = await taskSpace(${result.spaceId}); await task.finish({ keep: [] });`],
+    { stdio: 'inherit', timeout: 30000 });
+  } catch {
+    return { ...result, ok: false, step: 'cleanup' };
+  }
+  return result;
 }
 
 /**

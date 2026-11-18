@@ -147,12 +147,12 @@ export async function hydrateSelectors() {
 }
 
 // 兼容旧调用：抽取器动作（已无 extractor，返回 null）
-export function getExtractorActions(channel, domain) {
+export function getExtractorActions(_channel, _domain) {
   return null;
 }
 
 // 兼容旧调用：清空缓存（现在只清自定义选择器缓存）
-export function clearExtractorResultCache(channel, domain) {
+export function clearExtractorResultCache(channel, __domain) {
   _invalidateCustom(channel);
 }
 
@@ -165,4 +165,3 @@ export function _resetMemoryCache() {
 }
 
 export const _internal = { SELECTOR_FIELDS };
-

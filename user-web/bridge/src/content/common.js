@@ -1,4 +1,3 @@
-import { wasSentRecently } from '../core/downlink.js';
 import { DEFAULT_USER_SERVER, isExperimentalChannel } from '../core/constants.js';
 import { createLogger } from '../core/logger.js';
 import { hydrateSelectors, SELECTOR_UPDATE_MSG } from '../core/selector-ai.js';
@@ -183,7 +182,7 @@ export function scanDomSnapshot() {
   const threadRoot = document.querySelector(
     '#message-list-scrollable, .im-chat-window, [class*="xhs-im-chat-window"], [class*="chat-window"], [class*="ChatWindow"], [class*="chat-content"], [class*="ChatContent"], [class*="im-chat"], [class*="ImChat"], [class*="chat-main"], [class*="ChatMain"], [class*="message-list-reverse"]'
   );
-  let threadTree = [];
+  const threadTree = [];
   if (threadRoot) {
     const walk = (el, depth) => {
       if (!el || depth > 4 || threadTree.length >= 12) return;
@@ -365,13 +364,13 @@ export function startBridge(channel, buildAdapter) {
     };
     if (msg.type === 'ping') {
       // ping 始终应答（探活用），让 popup 能区分"未注入" vs "未匹配页"
-      let m = safeMatch();
+      const m = safeMatch();
       const isObj = m && typeof m === 'object' && !Array.isArray(m);
       sendResponse({ pong: true, channel, matched: m === true, matchError: isObj ? m.error : null, matchMode: adapter.matchMode() });
       return false;
     }
     if (msg.type === 'selfcheck') {
-      let m = safeMatch();
+      const m = safeMatch();
       const isObj = m && typeof m === 'object' && !Array.isArray(m);
       if (m !== true) {
         sendResponse({
@@ -456,7 +455,7 @@ export function startBridge(channel, buildAdapter) {
   const SYNC_THROTTLE_MS = 3000;      
 
   const activateBridge = () => {
-    let closed = false;       
+    let _closed = false;
 
 
     // 通过 postIngest 批量上报消息（纯桥接：不设 expect_reply，后端根据 sender_type 判断）。
@@ -475,15 +474,7 @@ export function startBridge(channel, buildAdapter) {
     const uplink = new Uplink({ channel, getConfig });
     const submitIngest = (message) => {
       if (!message) return;
-      // 上行回声源头过滤（2026-11-14）：10 分钟内自己发过的内容不再上行——巡检采集
-      // 到自家刚发出的气泡（DOM 变形/方向误判）是自回声假入站的根源。变形漏网由
-      // 服务端分级阈值兜底（inbox_ingress_ingest 近5分钟宽松闸）。
-      if (message.content && wasSentRecently(message.content)) {
-        log.info('上行跳过：内容为 10 分钟内本账号已发送（自回声源头过滤）', {
-          conv: message.conversation_id, len: message.content.length,
-        });
-        return;
-      }
+      // 客户可以独立回复相同文本，不能仅凭“刚发送过”丢弃。自回显由消息身份及后端边界判定。
       if (!message.account_id) message.account_id = resolveAccountId();
       uplink.enqueue(message);
     };
@@ -545,7 +536,7 @@ export function startBridge(channel, buildAdapter) {
     // 监听器随激活次数累积（每层闭包持有旧 pollingLoop/adapter 引用=内存泄漏）。
     // 修复：cleanup 执行时自我摘除；deactivate（sync 的 unmatch 分支）即回收监听。
     const cleanup = () => {
-      closed = true;
+      _closed = true;
       try { pollingLoop.stop(); } catch (_) {  }
       try { adapter.stop(); } catch (_) {  }
       window.removeEventListener('beforeunload', cleanup);
@@ -611,4 +602,3 @@ export function startBridge(channel, buildAdapter) {
   window.addEventListener('beforeunload', stopPoll, { once: true });
   window.addEventListener('pagehide', stopPoll, { once: true });
 }
-

@@ -2,7 +2,7 @@ import { createLogger } from '../core/logger.js';
 import { CHANNEL_DISPLAY } from '../core/constants.js';
 import { configStore, normalizeAccounts } from '../core/config-store.js';
 
-const log = createLogger('accounts', 'popup');
+const _log = createLogger('accounts', 'popup');
 const STORAGE_KEY = 'bridgeConfig';
 
 function channelDisplayName(channel) {
@@ -139,4 +139,3 @@ if (typeof window !== 'undefined') {
     normalizeAccounts,
   };
 }
-

@@ -146,25 +146,29 @@ export function injectContentScript(tabId, url, opts, cb) {
     cb({ ok: true, file, dedup: true });
     return;
   }
-  try {
-    chrome.scripting.executeScript(
-      {
-        target: { tabId, allFrames: !!opts.allFrames },
-        files: [file],
-      },
-      () => {
-        const err = lastError();
-        if (err) {
-          cb({ ok: false, reason: 'execute_failed', error: err, file });
-          return;
+  const steps = file === 'content-douyin.js'
+    ? [{ files: ['content-douyin-identity.js'], world: 'MAIN' }, { files: [file] }]
+    : [{ files: [file] }];
+  const execute = (index) => {
+    try {
+      chrome.scripting.executeScript(
+        { target: { tabId, allFrames: !!opts.allFrames }, ...steps[index] },
+        () => {
+          const err = lastError();
+          if (err) {
+            cb({ ok: false, reason: 'execute_failed', error: err, file });
+            return;
+          }
+          if (index + 1 < steps.length) { execute(index + 1); return; }
+          _markRecent(tabId, file);
+          cb({ ok: true, file });
         }
-        _markRecent(tabId, file);
-        cb({ ok: true, file });
-      }
-    );
-  } catch (e) {
-    cb({ ok: false, reason: 'execute_threw', error: String(e), file });
-  }
+      );
+    } catch (e) {
+      cb({ ok: false, reason: 'execute_threw', error: String(e), file });
+    }
+  };
+  execute(0);
 }
 
 // 给 background 的 webNavigation.onCommitted 用的注入
@@ -182,4 +186,3 @@ export function autoInjectOnCommit(details) {
 }
 
 export { pickContentScriptFile };
-

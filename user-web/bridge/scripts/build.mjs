@@ -1,6 +1,6 @@
 // 用 esbuild 把每个入口独立打包为自包含 IIFE（MV3 content/background 多入口场景最稳）。
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync } from 'fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync as _rmSync, cpSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,6 +17,7 @@ mkdirSync(dist, { recursive: true });
 
 const entries = {
   background: 'src/background/index.js',
+  'content-douyin-identity': 'src/content/douyin-identity.js',
   'content-douyin': 'src/content/douyin.js',
   'content-xhs': 'src/content/xhs.js',
   'content-tiktok': 'src/content/tiktok.js',

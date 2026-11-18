@@ -132,7 +132,7 @@ function getAccountId() {
   try {
     const ls = localStorage.getItem(`hivebridge:account:${CHANNELS.TIKTOK}`);
     if (ls) return ls;
-  } catch (e) {  }
+  } catch  {  }
 
   // 2) 从消息气泡头像提取自己（排除对方）
   const peerUsername = (() => {
@@ -152,7 +152,7 @@ function getAccountId() {
   });
   for (const u of allUsernames) {
     if (peerUsername && u === peerUsername) continue;
-    try { localStorage.setItem(`hivebridge:account:${CHANNELS.TIKTOK}`, u); } catch (e) {  }
+    try { localStorage.setItem(`hivebridge:account:${CHANNELS.TIKTOK}`, u); } catch  {  }
     return u;
   }
 
@@ -164,7 +164,7 @@ function getAccountId() {
   });
   for (const c of sidebarCandidates) {
     if (c && c.trim()) {
-      try { localStorage.setItem(`hivebridge:account:${CHANNELS.TIKTOK}`, c.trim()); } catch (e) {  }
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.TIKTOK}`, c.trim()); } catch  {  }
       return c.trim();
     }
   }
@@ -742,4 +742,3 @@ export function buildTiktokAdapter() {
     rateLimiter: undefined,
   });
 }
-

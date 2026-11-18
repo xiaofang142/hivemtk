@@ -1,5 +1,5 @@
 
-const log = (() => {
+const _log = (() => {
   try {
     const { createLogger } = require('./logger.js');
     return createLogger('selector', 'bridge');
@@ -198,4 +198,3 @@ export const SelectorEngine = {
   expandMultiBubbleItems,
   isOversizedBubble,
 };
-

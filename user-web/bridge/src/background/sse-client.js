@@ -9,6 +9,8 @@
 import { createLogger } from '../core/logger.js';
 import { DEFAULT_USER_SERVER } from '../core/constants.js';
 import { connectSSE, isConnected, stopSSE } from '../core/sse-fetch-client.js';
+// 出站唤醒：后台收到 outbox 投递信号后立即拉取（025 出站唤醒切片）。
+import './outbox-wake.js';
 
 const log = createLogger('sse', 'bg');
 
@@ -285,9 +287,9 @@ if (chrome && chrome.runtime && chrome.runtime.onStartup) {
       chrome.storage.local.get(['bridgeConfig'], (res) => {
         const cfg = res && res.bridgeConfig ? res.bridgeConfig : {};
         const accounts = cfg.accounts || {};
-        for (const [channel, acctMap] of Object.entries(accounts)) {
+        for (const [_channel, acctMap] of Object.entries(accounts)) {
           if (!acctMap || typeof acctMap !== 'object') continue;
-          for (const [accountId, acctCfg] of Object.entries(acctMap)) {
+          for (const [_accountId, acctCfg] of Object.entries(acctMap)) {
             if (acctCfg && acctCfg.enabled === false) continue;
           }
         }

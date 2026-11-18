@@ -65,6 +65,19 @@ describe('jd adapter（实验渠道）', () => {
     expect(parsed.sender_type).toBe(SENDER.CUSTOMER);
   });
 
+  it('系统公告保持 system 身份，不因缺少常量跌入客户分支', () => {
+    const a = buildJdAdapter();
+    const item = document.createElement('div');
+    item.className = 'message-item system-notice';
+    item.textContent = '买家已关注店铺';
+    const parsed = a.parseMessageItem(item);
+    expect(parsed.sender_type).toBe(SENDER.SYSTEM);
+    expect(parsed.msg_type).toBe('system');
+    expect(parsed.text).toBe('买家已关注店铺');
+    item.className = 'message-item';
+    expect(a.parseMessageItem(item).sender_type).toBe(SENDER.CUSTOMER);
+  });
+
   it('sendText 写入输入框并点击发送', async () => {
     const a = buildJdAdapter();
     const input = document.querySelector('.chat-input');

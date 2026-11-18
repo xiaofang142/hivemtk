@@ -8,7 +8,7 @@ import {
 } from '../core/constants.js';
 import {
   saveSelectors,
-  getCustomSelectors,
+  getCustomSelectors as _getCustomSelectors,
   SELECTOR_FIELDS,
   SELECTOR_CONFIG_KEY,
 } from '../core/selector-ai.js';
@@ -1383,4 +1383,3 @@ if (typeof window !== 'undefined') {
     errors: { explainError, formatErrorBanner },
   };
 }
-

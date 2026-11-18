@@ -24,7 +24,7 @@ const log = createLogger('sse-fetch', 'bridge');
 // 全局状态
 const connections = new Map(); // key = "channel:account_id" -> { abortController, reader }
 const lastEventIDs = new Map(); // key = "channel:account_id" -> last event ID
-let listeners = new Map(); // key = "channel" -> Set of callbacks
+const _listeners = new Map(); // key = "channel" -> Set of callbacks
 
 // ---- 解析 SSE 流 ----
 
@@ -268,7 +268,7 @@ export async function connectSSE(channel, accountId, opts = {}) {
           try {
             const data = JSON.parse(event.data);
             onMessage?.(data);
-          } catch (err) {
+          } catch  {
             // 可能是心跳或系统消息
             if (event.data && event.data !== '') {
               log.debug(`SSE 非 JSON 事件: ${event.event}`, event.data?.substring?.(0, 100));
@@ -357,7 +357,7 @@ export function stopSSE(channel, accountId) {
  * 关闭所有连接
  */
 export function closeAll() {
-  for (const [key, conn] of connections) {
+  for (const [_key, conn] of connections) {
     try {
       conn.abortController.abort();
     } catch (_) {}

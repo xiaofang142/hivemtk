@@ -116,14 +116,14 @@ function getAccountId() {
   });
   for (const c of candidates) {
     if (c && c.trim()) {
-      try { localStorage.setItem(`hivebridge:account:${CHANNELS.XHS}`, c.trim()); } catch (e) {  }
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.XHS}`, c.trim()); } catch  {  }
       return c.trim();
     }
   }
   try {
     const ls = localStorage.getItem(`hivebridge:account:${CHANNELS.XHS}`);
     if (ls) return ls;
-  } catch (e) {  }
+  } catch  {  }
   // 2026-08-17 治本：DOM 兜底失败时返回空串（不返回 xiaohongshu-unknown 占位值）。
   // types.js buildMessage 在 account_id 为空时 delete 该字段，后端层0 改用
   // (platform+sender_name+content) 三元组命中 outbound，避免占位值污染入库链路。
@@ -593,7 +593,7 @@ const hooks = {
       .filter((el) => !SelectorEngine.isOversizedBubble(el))
       .filter((el) => !isListNoise(el));
   },
-  parseMessageItem(item, ctx) {
+  parseMessageItem(item, _ctx) {
     if (isListNoise(item)) return null;
     // 先判定消息类型（卡片/图片/语音/视频/撤回/系统）
     const { msgType, mediaUrl, text } = extractMessageContent(item);
@@ -624,8 +624,11 @@ const hooks = {
       return applyFollowSignal(sysParsed, followSignalFromSystemText(CHANNELS.XHS, sysText));
     }
 
-    // 自/他判定已移交后端（统一 customer 占位，回环防护由后端承担）。
-    const sender_type = FRONTEND_DEFAULT_SENDER_TYPE;
+    // 仅真实me/other标记可判方向，旧泛left/right不猜；后端回环防护保持。
+    const self = item.matches('.chat-item__bubble--me') || !!item.querySelector('.chat-item__bubble--me');
+    const other = item.matches('.chat-item__bubble--other') || !!item.querySelector('.chat-item__bubble--other');
+    const direction = self === other ? 'unknown' : (self ? 'self' : 'customer');
+    const sender_type = direction === 'self' ? SENDER.SELF : FRONTEND_DEFAULT_SENDER_TYPE;
     // 群聊识别
     const groupInfo = detectGroup(item);
     // 发件人/对方昵称（需求③，修复 1v1 私信发件人为空/字符串 hash）：
@@ -664,8 +667,9 @@ const hooks = {
       group_name: groupInfo.groupName,
       sender_name: senderName,
       sender_avatar: senderAvatar,
-      sender_id: getConversationId() || '',
+      sender_id: (sender_type === SENDER.SELF ? getAccountId() : getConversationId()) || '',
       conversation_id: getConversationId() || '',
+      extra: { direction_source: direction === 'unknown' ? 'unknown' : 'xhs-bubble-class', direction_observed: direction },
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -772,4 +776,3 @@ export function buildXhsAdapter() {
     rateLimiter: undefined,
   });
 }
-

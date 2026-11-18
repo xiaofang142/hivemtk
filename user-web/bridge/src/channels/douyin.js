@@ -6,6 +6,7 @@ import { makeSendMediaHook } from '../core/media-inject.js';
 import { SelectorEngine } from '../core/selector-engine.js';
 import { mergeSelectors, customConversationListSelectors } from '../core/selector-ai.js';
 import { FRONTEND_DEFAULT_SENDER_TYPE } from '../core/fallback.js';
+import { readDouyinPeerIdentity, readDouyinDirection, requestDouyinIdentityRefresh, requestDouyinMessageRefresh, isDouyinMessageStale } from './douyin-identity.js';
 // M-6 新用户（非关注好友）识别：系统文案命中打标（随消息 extra 上报，不改 system 归类）
 import { applyFollowSignal, followSignalFromSystemText } from '../core/follow-signal.js';
 // M-6 followUser 渠道 hook 工厂（真机未校准，fixture 口径；默认开关关）
@@ -33,8 +34,8 @@ function mergedSelectors() {
 export const SEL = {
   CHAT_LIST: '#island_b69f5, [data-e2e="conversation-list"]',
   MSG_LIST: '[class*="messageList" i], [data-e2e="chat-msg-list"], [class*="chat-content" i]',
-  MSG_ITEM: 'div[data-e2e="msg-item-content"], [class*="chatMessageItemSelf" i], [class*="chatMessageItemOther" i], [class*="messageMessageItem" i], [class*="chatMessageItem" i], [class*="msg-content" i]',
-  TEXT: '[data-e2e="msg-item-content"], [class*="msg-content" i]',
+  MSG_ITEM: '.MessageItemTextcontainer, div[data-e2e="msg-item-content"], [class*="chatMessageItemSelf" i], [class*="chatMessageItemOther" i], [class*="messageMessageItem" i], [class*="chatMessageItem" i], [class*="msg-content" i]',
+  TEXT: '.MessageItemTextcontainer p, [data-e2e="msg-item-content"], [class*="msg-content" i]',
   INPUT: 'div.messageEditorinputArea.editor-kit-container, div[contenteditable="true"][role="textbox"]',
   SEND: '[class*="e2e-send-msg-btn" i], button[aria-label*="发送"]',
   MSG_TYPE: '[data-msg-type], [data-message-type]',
@@ -85,7 +86,7 @@ function getRealSendButton() {
       }
     } catch (_) {  }
   }
-  let btn = qs('[class*="e2e-send-msg-btn"]');
+  const btn = qs('[class*="e2e-send-msg-btn"]');
   if (btn) {
     if (btn.tagName === 'SVG') {
       return btn.closest('button, [role="button"], div, span') || btn;
@@ -171,14 +172,14 @@ function getAccountId() {
   }
   for (const c of candidates) {
     if (c && c.trim()) {
-      try { localStorage.setItem(`hivebridge:account:${CHANNELS.DOUYIN}`, c.trim()); } catch (e) {  }
+      try { localStorage.setItem(`hivebridge:account:${CHANNELS.DOUYIN}`, c.trim()); } catch  {  }
       return c.trim();
     }
   }
   try {
     const ls = localStorage.getItem(`hivebridge:account:${CHANNELS.DOUYIN}`);
     if (ls) return ls;
-  } catch (e) {  }
+  } catch  {  }
   // 2026-08-17 治本：DOM 兜底失败时返回空串（不返回 douyin-unknown 占位值）。
   // types.js buildMessage 在 account_id 为空时 delete 该字段，后端层0 改用
   // (platform+sender_name+content) 三元组命中 outbound，避免占位值污染入库链路。
@@ -358,7 +359,7 @@ function isSystemMessage(item) {
   if (isTimeText(text) || isSystemText(text)) return true;
   if (text && text.length < 60) {
     const hasAvatar = !!item.querySelector('[class*="avatar" i]');
-    const hasBubble = !!item.querySelector('[class*="bubble" i], [class*="Bubble" i], [class*="msg-content" i]');
+    const hasBubble = item.matches('.MessageItemTextcontainer') || !!item.querySelector('[class*="bubble" i], [class*="Bubble" i], [class*="msg-content" i], .MessageItemTextcontainer');
     if (!hasAvatar && !hasBubble) return true;
   }
   return false;
@@ -393,7 +394,7 @@ function getPeerName() {
     '#island_b69f5 [class*="curConversation"], [data-e2e="conversation-list"] [class*="curConversation"], [class*="conversation-list"] [class*="curConversation"], [class*="ConversationList"] [class*="curConversation"], [aria-selected="true"], [class*="curConversation"]'
   ).find((el) => el.offsetParent !== null);
   if (active) {
-    const nameEl = active.querySelector(
+    const nameEl = active.querySelector('.conversationConversationItemtitle') || active.querySelector(
       '[class*="title" i], [class*="Title" i], [class*="name" i], [class*="nickname" i], [class*="Nickname" i]'
     );
     // sanitizePeerName 剥离会话项里的时间戳/状态徽章等易变后缀
@@ -463,6 +464,7 @@ function detectGroup(item) {
 
 // 当前会话 id：活动会话（深度自检显示活动项含 curConversation class）
 function getConversationId() {
+  requestDouyinIdentityRefresh();
   // 群聊 URL 优先取 group/conversation_id
   const fromUrl = (location.href.match(/[?&](group|conversation)_id=([^&]+)/) || [])[2];
   if (fromUrl) return fromUrl;
@@ -486,14 +488,8 @@ function getConversationId() {
   // 兼容 /user/<数字id> 与 /user/MS4w...（token 形式）；命中后切换会话会重新回填历史
   const m = link?.getAttribute('href')?.match(/\/user\/([^/?#]+)/);
   if (m && m[1]) return m[1];
-  if (active) {
-    const nameEl = active.querySelector(
-      '[class*="title" i], [class*="Title" i], [class*="name" i], [class*="nickname" i], [class*="Nickname" i]'
-    );
-    const raw = nameEl ? cleanText(nameEl) : cleanText(active);
-    const name = sanitizePeerName(raw);
-    if (name && name !== 'self') return 'conv:' + name.slice(0, 80);
-  }
+  const peer = readDouyinPeerIdentity(active);
+  if (peer) return peer;
   return null;
 }
 
@@ -545,7 +541,8 @@ function isDouyinMessagePage() {
 // el 为可点击打开该会话的列表项 DOM。遍历器逐个点击 el → 打开线程 → 回填历史。
 // 仅计入可见且有稳定 id 的会话项（虚拟列表回收节点会被 offsetParent 过滤）。
 function getConversationList() {
-  const container = qs(SEL.CHAT_LIST);
+  requestDouyinIdentityRefresh();
+  const _container = qs(SEL.CHAT_LIST);
   // 用户自定义「会话列表项」选择器优先（人工识别 HTML 填写即生效）；无则用默认特征。
   const customSels = customConversationListSelectors(CHANNELS.DOUYIN);
   let items = [];
@@ -567,7 +564,7 @@ function getConversationList() {
   for (const item of items) {
     if (!item || !item.offsetParent) continue; 
     // 会话 id：优先 data-conversation-id（ConversationShortID，与后端 webhook 格式一致）；
-    // 其次会话项内 /user/<id> 链接；最后用昵称文本派生（兜底）。
+    // 其次用户链接或受限MAIN读器的稳定peer；昵称只能展示，不能派生身份。
     let id = item.getAttribute('data-conversation-id') || item.getAttribute('data-sec_uid') || item.getAttribute('data-id') || null;
     if (!id) {
       const link = item.querySelector('a[href*="/user/"]');
@@ -578,14 +575,12 @@ function getConversationList() {
     }
     // 昵称：会话项内的昵称/名称元素（sanitizePeerName 剥离时间戳/状态后缀，
     // 否则同会话不同时刻的 name 不同 → id 不同 → 重复枚举/下行错配）
-    const nameEl = item.querySelector(
+    const nameEl = item.querySelector('.conversationConversationItemtitle') || item.querySelector(
       '[class*="name" i], [class*="nickname" i], [class*="Nickname" i], [class*="title" i], [class*="Title" i]'
     );
     const name = sanitizePeerName(nameEl ? cleanText(nameEl) : '');
-    if (!id) {
-      if (name && name !== 'self') id = 'conv:' + name.slice(0, 80);
-      else continue; 
-    }
+    if (!id) id = readDouyinPeerIdentity(item);
+    if (!id) continue;
     if (ids.has(id)) continue;
     ids.add(id);
     // 巡检用：是否标记为有未读新消息（红点/未读 badge）。用于 patrol 优先巡检有新消息的会话。
@@ -682,6 +677,9 @@ const hooks = {
   },
   parseMessageItem(item) {
     if (isListNoise(item)) return null;
+    requestDouyinMessageRefresh(item);
+    const conversationId = getConversationId();
+    if (isDouyinMessageStale(item, conversationId)) return null;
     if (isSystemMessage(item)) {
       const sysText = cleanText(item);
       // M-6：关注关系系统文案（互相关注/已添加好友/关注了你…）命中时打
@@ -706,8 +704,9 @@ const hooks = {
     // 先判定消息类型（问题 3：非文字消息）。
     const { msgType, mediaUrl, text } = extractMessageContent(item);
     if (!text && msgType === 'text') return null; 
-    // 自/他判定已移交后端（统一 customer 占位，回环防护由后端承担）。
-    const sender_type = FRONTEND_DEFAULT_SENDER_TYPE;
+    const direction = readDouyinDirection(item, conversationId);
+    // 未知保留客户占位而不是吞消息；明确方向也不替代后端回环防护。
+    const sender_type = direction === 'self' ? SENDER.SELF : FRONTEND_DEFAULT_SENDER_TYPE;
     // 群聊识别（问题 2）：检测群特征（群标题 / @全员 / 多人昵称前缀）
     const groupInfo = detectGroup(item);
     // 发件人/对方昵称（需求③，修复 1v1 私信发件人为空/字符串 hash）：
@@ -743,6 +742,7 @@ const hooks = {
       group_name: groupInfo.groupName,
       sender_name: senderName,
       sender_avatar: senderAvatar,
+      extra: { direction_source: direction === 'unknown' ? 'unknown' : 'douyin-main-dom', direction_observed: direction },
       timestamp: Date.now(),
       raw: item.outerHTML?.slice(0, 500),
     };
@@ -814,4 +814,3 @@ export function buildDouyinAdapter() {
     rateLimiter: undefined, 
   });
 }
-

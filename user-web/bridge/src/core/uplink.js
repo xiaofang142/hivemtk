@@ -10,7 +10,7 @@ const log = createLogger('uplink');
 // msg_type+media_url，与服务端 ContentHashMsgIDTyped 同构）——旧口径对「[图片]」
 // 占位符 content 只算 content 维度，兜底生成的 event_id/content_hash 会让同会话
 // 两张不同图共享身份。文本消息逐字节不变。
-export function computeMsgID({ channel, accountId, conversationId, content, msgType, mediaUrl }) {
+export function computeMsgID({ channel, accountId: _accountId, conversationId, content, msgType, mediaUrl }) {
   if (isMediaMsgType(msgType)) {
     return typedContentHash(channel, conversationId, msgType, mediaUrl || '', content || '');
   }
@@ -285,4 +285,3 @@ export class Uplink {
     await Promise.all(keys.map((k) => this._flush(k)));
   }
 }
-

@@ -11,6 +11,8 @@
 import { createLogger } from './logger.js';
 import { BRIDGE_THREE_CHANNEL, DEFAULT_USER_SERVER } from './constants.js';
 import { pollDownlink, initDownlink, startSSEDelivery } from './downlink.js';
+import { applyTenantCode, bridgeFetch, buildAuthHeaders } from './http-ingest.js';
+import { subscribeOutboxWake } from './outbox-wake.js';
 
 const log = createLogger('bridge', 'bg');
 
@@ -62,31 +64,24 @@ function parseFollowUserCapabilities(data) {
  * 请求失败时返回保守的 fallback（sse_enabled: false；未读优先清单 = 空 = 开关关；
  * follow_user_enabled = false = 关注动作永不执行）。
  *
- * @param {object} [cfg] 可选配置 { serverUrl, token }
+ * @param {object} [cfg] 可选配置 { serverUrl, token, tenantCode }
  * @returns {Promise<{sse_enabled: boolean, poll_interval_ms: number, patrol_unread_first_channels: string[], follow_user_enabled: boolean, follow_user_channels: string[]}>}
  */
 export async function getServerCapabilities(cfg) {
   const baseUrl = (cfg && cfg.serverUrl) || DEFAULT_USER_SERVER.baseUrl;
-  const url = `${baseUrl}/api/bridge/capabilities`;
+  const url = applyTenantCode(`${baseUrl}/api/bridge/capabilities`, cfg && cfg.tenantCode);
   const timeoutMs = 5000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const headers = { 'Content-Type': 'application/json' };
-    if (cfg && cfg.token && cfg.token.trim()) {
-      // /api/bridge/capabilities 也在 BridgeIngressGuard 之后：只发 Bearer 会 401，
-      // 然后这里按"服务端不支持 SSE"降级 → 用户永远拿不到长连接下行。
-      const t = cfg.token.trim();
-      headers['X-Bridge-Token'] = t;
-      headers['Authorization'] = `Bearer ${t}`;
-    }
-    const resp = await fetch(url, {
+    // 页面源直连会被 CORS 拦截；与 ingest/outbox 一样走后台中转，
+    // 扩展页面则由 bridgeFetch 保留直连，认证头也使用统一构造器。
+    const resp = await bridgeFetch(url, {
       method: 'GET',
-      headers,
+      headers: buildAuthHeaders(cfg && cfg.token),
       signal: controller.signal,
     });
-    clearTimeout(timer);
 
     if (!resp.ok) {
       log.warn(`capabilities 响应非 OK: ${resp.status}`);
@@ -116,6 +111,8 @@ export async function getServerCapabilities(cfg) {
       follow_user_enabled: false,
       follow_user_channels: [],
     };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -136,6 +133,8 @@ export class PollingLoop {
     this._pageContext = pageContext === true;
     this._sseCleanups = new Map(); // channel -> cleanup function
     this._sseActive = false;
+    this._wakeCleanup = null;
+    this._wakePending = null;
   }
 
   // M-6：follow_user 动作行执行器（adapter.followUser 统一开关/风控/冷却）。
@@ -190,6 +189,16 @@ export class PollingLoop {
       BRIDGE_THREE_CHANNEL.outboxPollIntervalMs
     );
     log.info(`下发轮询已启动：每 ${BRIDGE_THREE_CHANNEL.outboxPollIntervalMs}ms`);
+    if (this._pageContext) {
+      this._wakeCleanup = subscribeOutboxWake({
+        channels: this.channels, getConfig: this.getConfig, getMeta: this.getMeta,
+        onReady: (reason) => {
+          if (!this._running) return;
+          if (this._downlinkInFlight) this._wakePending = reason;
+          else void this._downlinkSafe(reason);
+        },
+      });
+    }
   }
 
   async _startSSEMode(cfg) {
@@ -243,6 +252,9 @@ export class PollingLoop {
 
   stop() {
     this._running = false;
+    this._wakeCleanup?.();
+    this._wakeCleanup = null;
+    this._wakePending = null;
     if (this._visibilityHandler && typeof document !== 'undefined' && document.removeEventListener) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);
       this._visibilityHandler = null;
@@ -267,15 +279,19 @@ export class PollingLoop {
     log.info('下发调度已停止');
   }
 
-  async _downlinkSafe() {
+  async _downlinkSafe(wakeReason) {
     if (!this._running || this._downlinkInFlight) return;
     this._downlinkInFlight = true;
     try {
+      if (wakeReason && (!(await wakeReason.isCurrent()) || !this._running)) return;
       await this._downlink();
     } catch (e) {
       log.error('下发轮询失败', e);
     } finally {
       this._downlinkInFlight = false;
+      const pending = this._wakePending;
+      this._wakePending = null;
+      if (pending && this._running) void this._downlinkSafe(pending);
     }
   }
 

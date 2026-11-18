@@ -1,5 +1,5 @@
 import { BaseAdapter } from '../core/channel-adapter.js';
-import { CHANNELS, mediaPlaceholder } from '../core/types.js';
+import { CHANNELS, SENDER, mediaPlaceholder } from '../core/types.js';
 import {
   qs, qsa, cleanText, setValue, fillContentEditableHumanized,
   createLogger, findAnyMessageInput, looksLikeMessagePage, sanitizePeerName,

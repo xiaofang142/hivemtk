@@ -22,7 +22,7 @@ export async function getCachedAccount(channel) {
         resolve(null);
       });
     });
-  } catch (e) {
+  } catch  {
     return null;
   }
 }
@@ -35,7 +35,7 @@ export function setCachedAccount(channel, accountId) {
       m[channel] = accountId;
       chrome.storage.local.set({ [ACCOUNT_CACHE_KEY]: m });
     });
-  } catch (e) {
+  } catch  {
   }
 }
 
@@ -56,4 +56,3 @@ export async function resolveAccountIdWithFallback(channel, primaryCandidates) {
 // 前端不再计算 self/other。非 system/recall 消息一律填 customer 占位，后端会强制覆盖；
 // 仅 system/recall 需前端识别（消息类型，否则后端误触发 AI）。
 export const FRONTEND_DEFAULT_SENDER_TYPE = 'customer';
-

@@ -25,10 +25,10 @@
 // user-server 地址配置）——移除重装会丢 storage，可能导致历史消息重复发送。
 //
 // 回滚：每次安装前把旧目录整份复制到 <loadDir>/../hivebridge-rollback-<版本>-<时间戳>/
-// （默认保留最近 5 份），需要回滚时 rsync 回去再点一次重新加载即可。
+// （默认保留全部副本，不自动删除历史证据），需要回滚时 rsync 回去再点一次重新加载即可。
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, cpSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, cpSync, mkdirSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -172,7 +172,7 @@ if (failed.length) fail(`产物校验未通过（${failed.length} 项），终�
 
 // ---------------------------------------------------------------------------
 // 4) 安装：备份旧目录 -> rsync --delete -> 复核版本
-//    备份保留最近 5 份，更老的自动清掉（回滚副本是排障用的，不是归档）。
+//    全部备份保留；历史清理必须另经用户明确批准，不属于安装的隐含副作用。
 // ---------------------------------------------------------------------------
 log(`\n==> [3/4] 安装到 Chrome 加载目录`);
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
@@ -181,7 +181,17 @@ if (opt.dryRun) {
   log(`    （dry-run）将备份 ${loadDir} -> ${backupDir}`);
   log(`    （dry-run）将 rsync -a --delete ${dist}/ -> ${loadDir}/`);
 } else {
-  cpSync(loadDir, backupDir, { recursive: true });
+  // 独占创建，不将本次内容合并进同名历史备份；失败发生在安装前。
+  try {
+    mkdirSync(backupDir);
+    for (const entry of readdirSync(loadDir)) {
+      cpSync(resolve(loadDir, entry), resolve(backupDir, entry), {
+        recursive: true, force: false, errorOnExist: true,
+      });
+    }
+  } catch (e) {
+    fail(`不能创建独立备份，未开始安装：${e.message}`);
+  }
   log(`    已备份旧版 -> ${backupDir}`);
   execFileSync('rsync', ['-a', '--delete', `${dist}/`, `${loadDir}/`], { stdio: 'inherit' });
   const nowVersion = JSON.parse(readFileSync(installedManifestPath, 'utf8')).version;
@@ -190,15 +200,6 @@ if (opt.dryRun) {
   }
   log(`    已同步，目录内版本 v${nowVersion}`);
 
-  // 清理过老的回滚副本（保留最近 5 份）
-  const siblings = readdirSync(dirname(loadDir))
-    .filter((n) => /^hivebridge-rollback-v/.test(n))
-    .map((n) => ({ n, t: statSync(resolve(dirname(loadDir), n)).mtimeMs }))
-    .sort((a, b) => b.t - a.t);
-  for (const old of siblings.slice(5)) {
-    rmSync(resolve(dirname(loadDir), old.n), { recursive: true, force: true });
-    log(`    清理过老回滚副本 ${old.n}`);
-  }
 }
 
 // ---------------------------------------------------------------------------

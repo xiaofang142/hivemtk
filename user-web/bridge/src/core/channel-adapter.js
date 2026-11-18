@@ -1,7 +1,7 @@
 import { createLogger } from './logger.js';
 import { RateLimiter, globalSendWaitMs, stampGlobalSendAt } from './rate-limiter.js';
 import { makeUnifiedMessage, SENDER, DIRECTION, HISTORY_CONTEXT_WINDOW, PATROL_DEFAULTS, contentHash, typedContentHash, mediaPlaceholder, isMediaMsgType } from './types.js';
-import { mergeSelectors } from './selector-ai.js';
+import { mergeSelectors as _mergeSelectors } from './selector-ai.js';
 import { createSelectorHealthTracker } from './selector-health.js';
 import { simulateRealClick } from './dom.js';
 import { humanSendTimeoutMs, BRIDGE_THREE_CHANNEL, RESCAN_DEFAULTS, FOLLOW_ACTION_DEFAULTS } from './constants.js';
@@ -777,7 +777,7 @@ export class BaseAdapter {
     let processed = 0;
     for (const node of nodes) {
       if (processed >= MAX_PER_FLUSH) break;
-      let items = [];
+      const items = [];
       for (const sel of itemSelectors) {
         try {
           if (node.matches && node.matches(sel)) items.push(node);
@@ -1260,8 +1260,8 @@ export class BaseAdapter {
     throttleMs = PATROL_DEFAULTS.throttleMs,
     waitActiveMs = PATROL_DEFAULTS.waitActiveMs,
     maxPerRound = PATROL_DEFAULTS.maxPerRound,
-    scrollLoadMs = PATROL_DEFAULTS.scrollLoadMs,
-    maxPasses = PATROL_DEFAULTS.maxPasses,
+    scrollLoadMs: _scrollLoadMs = PATROL_DEFAULTS.scrollLoadMs,
+    maxPasses: _maxPasses = PATROL_DEFAULTS.maxPasses,
     visitAllWhenNoUnread = false,
     scanOnly = false,
     switchMinMs = PATROL_DEFAULTS.switchMinMs,
@@ -1674,6 +1674,7 @@ export class BaseAdapter {
       group_id: parsed.group_id || '',
       group_name: parsed.group_name || '',
       receiver_id: direction === DIRECTION.OUTBOUND ? cid : (parsed.receiver_id || ''),
+      extra: mergeParsedExtra(parsed),
     };
   }
 
@@ -1949,4 +1950,3 @@ export class BaseAdapter {
       : { ok, sendVerified, rateLimited: false, notFound: false };
   }
 }
-

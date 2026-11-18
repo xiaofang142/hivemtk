@@ -493,7 +493,7 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
           } else {
             log.warn('pollDownlink: 未提供 sendOutbound，跳过下发', channel);
           }
-        } catch (e) {
+        } catch  {
           result = null;
         }
         log.info(`[下行诊断] send结果 ${msg.msg_id} ${JSON.stringify({ ok: !!(result && result.ok), nf: !!(result && result.notFound), rl: !!(result && result.rateLimited) })}`);
@@ -533,14 +533,14 @@ export async function pollDownlink(channel, accountId, getConfig, options = {}) 
               }
               if (r2 && r2.notFound) return { notFound: true };
               if (r2 && !r2.rateLimited) return {};
-            } catch (e) {  }
+            } catch  {  }
           }
           return { rateLimited: true };
         }
         return {};
       });
       log.info(`[下行诊断] outcome ${JSON.stringify(outcome)}`);
-      if (outcome.sent || outcome.skipped) { recordSent(msg); if (msg.content) recordSentText(msg.content); continue; }
+      if (outcome.sent || outcome.skipped) { recordSent(msg); continue; }
       if (outcome.notFound) {
         log.debug(`下行目标会话不存在: ${convId}`, { msg_id: msg.msg_id });
         if (!pageIsHidden()) {
@@ -683,7 +683,7 @@ function rateRetryBaseMs() {
 //   - status='not_found' / 'not_in_scope' 视为"不可能再 ack 成功"，也不应入 pendingAck
 //   - 响应无 items 字段（老版本）按"全量成功"处理（保持兼容）
 //   - 响应 ok 但部分 msg_id 没有对应 item（极少见）→ 入 pendingAck 下轮重试
-export function processAckDetailedResult(ackRes, ackIds, channel = '', label = 'ack') {
+export function processAckDetailedResult(ackRes, ackIds, _channel = '', _label = 'ack') {
   const result = { acked: 0, duplicate: 0, not_found: 0, not_in_scope: 0, retriable: 0 };
   if (!ackRes || ackRes.status !== 'ok') {
     result.retriable = Array.isArray(ackIds) ? ackIds.length : 0;
@@ -760,39 +760,6 @@ async function reAckSentDuplicates(cred, entries, label) {
   log.info(`${label} 已补确认`, {
     channel: cred.channel, total: ids.length, settled, retried: ids.length - settled,
   });
-}
-
-// —— 近期发送文本表（2026-11-14 上行回声源头过滤）——
-// 巡检采集自家刚发出的气泡（DOM 变形/方向误判）是自回声假入站的根源。扩展自己
-// 知道「刚发过什么」：发送成功时记录归一化文本（10 分钟 TTL），采集侧命中即跳过
-// 上行。简单规则：10 分钟内自己发过的话，不可能同时是客户说的新消息。
-const RECENT_SENT_TTL_MS = 10 * 60 * 1000;
-const recentSentTexts = new Map();
-
-function normSentText(s) {
-  return String(s || '').replace(/\s+/g, '').trim();
-}
-
-export function recordSentText(content) {
-  const k = normSentText(content);
-  if (!k) return;
-  recentSentTexts.set(k, Date.now());
-  if (recentSentTexts.size > 500) {
-    const oldest = [...recentSentTexts.entries()].sort((a, b) => a[1] - b[1])[0];
-    if (oldest) recentSentTexts.delete(oldest[0]);
-  }
-}
-
-export function wasSentRecently(content, windowMs = RECENT_SENT_TTL_MS) {
-  const k = normSentText(content);
-  if (!k) return false;
-  const ts = recentSentTexts.get(k);
-  if (ts === undefined) return false;
-  if (Date.now() - ts > windowMs) {
-    recentSentTexts.delete(k);
-    return false;
-  }
-  return true;
 }
 
 // pageIsHidden：后台标签页可能不渲染会话 DOM，openConversation 的精确匹配会假失败。
@@ -1030,7 +997,7 @@ export async function unregisterFromServiceWorker(channel, accountId) {
 
 // ---- 监听 Service Worker 发来的 SSE 消息 ----
 
-let _sseListeners = new Map(); // channel -> Set of listeners
+const _sseListeners = new Map(); // channel -> Set of listeners
 
 export function listenSSEOutbound(channel, onMessage, onError) {
   if (!_sseListeners.has(channel)) {
@@ -1454,4 +1421,3 @@ export async function startSSEDelivery(channel, accountId, handlers) {
     log.info(`SSE 下行已停止: ${channel}:${accountId}`);
   };
 }
-

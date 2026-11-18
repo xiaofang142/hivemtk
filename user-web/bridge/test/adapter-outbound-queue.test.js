@@ -21,7 +21,7 @@ beforeEach(() => {
 });
 
 function makeConvAdapter() {
-  let current = 'a1';
+  const current = 'a1';
   const hooks = {
     match: () => true,
     getAccountId: () => 'acc-q',

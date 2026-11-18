@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { BaseAdapter } from '../src/core/channel-adapter.js';
 import { SENDER } from '../src/core/types.js';
 import { getConversationId, getConversationList, buildDouyinAdapter } from '../src/channels/douyin.js';
@@ -26,7 +26,7 @@ describe('douyin /chat 页活动会话无链接/无 data 属性时 getConversati
     vi.unstubAllGlobals();
   });
 
-  it('活动项仅含 curConversation class + data-e2e（无 /user/ 链接、无 data-id）→ 用昵称文本派生稳定 id', () => {
+  it('活动项只有昵称时不派生身份；MAIN稳定peer存在才解析会话', () => {
     stubLocation('/chat');
     const wrapper = document.createElement('div');
     wrapper.className = 'conversationConversationListwrapper';
@@ -44,7 +44,9 @@ describe('douyin /chat 页活动会话无链接/无 data 属性时 getConversati
     document.body.appendChild(wrapper);
 
     const id = getConversationId();
-    expect(id).toBe('conv:张三'); 
+    expect(id).toBeNull();
+    active.setAttribute('data-hivebridge-peer-id', 'MS4wLjABAAAA_fixture_customer_123456789');
+    expect(getConversationId()).toBe('MS4wLjABAAAA_fixture_customer_123456789');
   });
 
   it('活动项无链接/无 data 且无昵称时仍返回 null（保持安全：不凭空造会话）', () => {
@@ -62,7 +64,7 @@ describe('douyin /chat 页活动会话无链接/无 data 属性时 getConversati
     expect(getConversationId()).toBeNull();
   });
 
-  it('getConversationList 对无链接/无 data 的会话项用昵称派生 id，不再跳过', () => {
+  it('无稳定证据的昵称不枚举；稳定peer存在时保留昵称展示', () => {
     stubLocation('/chat');
     const wrapper = document.createElement('div');
     wrapper.className = 'conversationConversationListwrapper';
@@ -76,9 +78,11 @@ describe('douyin /chat 页活动会话无链接/无 data 属性时 getConversati
     wrapper.appendChild(item);
     document.body.appendChild(wrapper);
 
+    expect(getConversationList()).toEqual([]);
+    item.setAttribute('data-hivebridge-peer-id', 'MS4wLjABAAAA_fixture_customer_123456789');
     const list = getConversationList();
     expect(list.length).toBe(1);
-    expect(list[0].id).toBe('conv:李四');
+    expect(list[0].id).toBe('MS4wLjABAAAA_fixture_customer_123456789');
     expect(list[0].name).toBe('李四');
   });
 
@@ -185,16 +189,18 @@ describe('douyin /chat 快照 DOM 端到端消息捕获', () => {  function make
     return el;
   }
 
+  let runningAdapter;
+  afterEach(() => { runningAdapter?.stop(); runningAdapter = null; });
   beforeEach(() => {
     document.body.innerHTML = '';
     vi.unstubAllGlobals();
   });
 
-  it('复现深检快照结构：无链接/无 data 活动会话 → 客户消息被捕获并上行', () => {
+  it('旧气泡结构配稳定MAIN身份 → 历史和实时客户消息仍被捕获', () => {
     stubLocation('/chat');
     document.body.innerHTML = `
       <div class="conversationConversationListwrapper">
-        <div class="conversationConversationItemwrapper conversationConversationItemcurConversation" data-e2e="conversation-item">
+        <div class="conversationConversationItemwrapper conversationConversationItemcurConversation" data-e2e="conversation-item" data-hivebridge-peer-id="MS4wLjABAAAA_fixture_customer_123456789">
           <div class="conversationConversationItemtitleWrapper"><div class="conversationConversationItemtitle">张三</div></div>
         </div>
       </div>
@@ -206,6 +212,7 @@ describe('douyin /chat 快照 DOM 端到端消息捕获', () => {  function make
       <svg class="messageMsgInputpublishBtn e2e-send-msg-btn"></svg>`;
 
     const adapter = buildDouyinAdapter();
+    runningAdapter = adapter;
     document.querySelectorAll('div[data-e2e="conversation-item"], div[data-e2e="msg-item-content"], .messageEditorinputArea').forEach((el) => makeVisible(el));
 
     const inbound = [];
@@ -237,7 +244,7 @@ describe('douyin /chat 快照 DOM 端到端消息捕获', () => {  function make
     document.querySelector('[data-e2e="chat-msg-list"]').appendChild(msgEl);
     adapter._scanIncremental();
     expect(inbound.some((m) => m.content === '实时新消息')).toBe(true);
-    expect(inbound[inbound.length - 1].conversation_id).toBe('conv:张三');
+    expect(inbound[inbound.length - 1].conversation_id).toBe('MS4wLjABAAAA_fixture_customer_123456789');
   });
 });
 
@@ -336,4 +343,3 @@ describe('xhs /chat 快照 DOM 端到端消息捕获', () => {
     expect(convId || frame.history).toBeTruthy();
   });
 });
-

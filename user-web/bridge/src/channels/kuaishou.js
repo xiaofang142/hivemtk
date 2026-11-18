@@ -210,7 +210,7 @@ function getPeerAvatar() {
 // 群聊识别
 function detectGroup(item) {
   let isGroup = false;
-  let groupId = '';
+  const groupId = '';
   let groupName = '';
   let senderName = '';
   const headerText = getPeerName() || '';

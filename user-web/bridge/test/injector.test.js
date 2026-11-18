@@ -182,8 +182,13 @@ describe('injectContentScript / 主流程', () => {
     });
     expect(r.ok).toBe(true);
     expect(r.file).toBe('content-douyin.js');
-    expect(executeScriptMock).toHaveBeenCalledTimes(1);
-    const [arg] = executeScriptMock.mock.calls[0];
+    expect(executeScriptMock).toHaveBeenCalledTimes(2);
+    expect(executeScriptMock.mock.calls[0][0]).toEqual({
+      target: { tabId: 42, allFrames: false },
+      files: ['content-douyin-identity.js'],
+      world: 'MAIN',
+    });
+    const [arg] = executeScriptMock.mock.calls[1];
     expect(arg).toEqual({
       target: { tabId: 42, allFrames: false },
       files: ['content-douyin.js'],
@@ -242,7 +247,7 @@ describe('injectContentScript / 主流程', () => {
     expect(r1.dedup).toBeUndefined();
     expect(r2.ok).toBe(true);
     expect(r2.dedup).toBe(true);
-    expect(executeScriptMock).toHaveBeenCalledTimes(1);
+    expect(executeScriptMock).toHaveBeenCalledTimes(2);
   });
 
   it('不同 tabId 各自独立（不被 dedup）', async () => {
@@ -257,7 +262,7 @@ describe('injectContentScript / 主流程', () => {
     expect(r2.ok).toBe(true);
     expect(r1.dedup).toBeUndefined();
     expect(r2.dedup).toBeUndefined();
-    expect(executeScriptMock).toHaveBeenCalledTimes(2);
+    expect(executeScriptMock).toHaveBeenCalledTimes(4);
   });
 
   it('opts 缺省时 allFrames=false', async () => {
@@ -274,7 +279,27 @@ describe('injectContentScript / 主流程', () => {
     await new Promise((resolve) => {
       injectContentScript(1, 'https://www.douyin.com/', resolve);
     });
+    expect(executeScriptMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('MAIN失败不能注入业务或记去重；随后可完整重试', async () => {
+    mockLastError('reader denied');
+    const failed = await new Promise((resolve) => injectContentScript(15, 'https://www.douyin.com/chat', resolve));
+    expect(failed.ok).toBe(false);
     expect(executeScriptMock).toHaveBeenCalledTimes(1);
+    globalThis.chrome.runtime.lastError = null;
+    executeScriptMock.mockClear(); mockSuccess();
+    const retried = await new Promise((resolve) => injectContentScript(15, 'https://www.douyin.com/chat', resolve));
+    expect(retried.ok).toBe(true);
+    expect(retried.dedup).toBeUndefined();
+    expect(executeScriptMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('其他渠道仍为单次隔离世界业务注入', async () => {
+    mockSuccess();
+    const result = await new Promise((resolve) => injectContentScript(16, 'https://www.xiaohongshu.com/chat', resolve));
+    expect(result.ok).toBe(true);
+    expect(executeScriptMock).toHaveBeenCalledTimes(1);
+    expect(executeScriptMock.mock.calls[0][0].world).toBeUndefined();
   });
 });
-

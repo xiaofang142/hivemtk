@@ -112,7 +112,7 @@ describe('downlink / ack 失败不丢消息（P0-9 先缓存后 ack 重试）', 
     const c = cfg();
     await pollDownlink('douyin', 'acc1', c, { sendOutbound: adapter.sendOutbound });
     // P0-9：sendOutbound 成功 = 用户已收到 → 写 cache 防止下轮重发
-    let stored = await chrome.storage.local.get(['bridge_sent_douyin']);
+    const stored = await chrome.storage.local.get(['bridge_sent_douyin']);
     expect(sentKeys(stored['bridge_sent_douyin'])).toContain('m-ackfail|c1');
     expect(adapter.sendOutbound).toHaveBeenCalledTimes(1);
 
@@ -283,4 +283,3 @@ describe('downlink / 多会话不串行（2026-08-07 核心修复）', () => {
     expect(adapter.sendOutbound).toHaveBeenCalledWith('给B的回复', 'convB', expect.any(Object));
   });
 });
-
