@@ -133,6 +133,9 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 	auth.POST("/followups/:id/cancel", followupCtrl.Cancel)
 	wvCtrl := controller.NewWebVitalsController()
 	auth.POST("/monitor/web-vitals", wvCtrl.Report)
+	// 任务三：商户电脑设备信标（SaaS 形态下心跳 client_machine 的数据源，登录态口）
+	cdCtrl := controller.NewClientDeviceController()
+	auth.POST("/client-device/report", cdCtrl.Report)
 	mfSyncCtrl := controller.NewMarketingFlowSyncController()
 
 	auth.GET("/marketing-flows", marketingFlowCtrl.GetFlowList)

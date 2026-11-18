@@ -112,7 +112,7 @@
 
           <!-- 开户登记（监管必需项）。
                003 T012 起必填集收敛为：公司/负责人/电话/**地址**；
-               邮箱与信用代码降为选填（地址顶替邮箱的必填位）。 -->
+               任务五A 起邮箱升回必填（本地部署唯一联系方式收集入口）。 -->
           <el-divider content-position="left">
             {{ $t('setup.regTitle') }}
           </el-divider>
@@ -158,7 +158,7 @@
               size="large"
             />
           </el-form-item>
-          <!-- 邮箱/信用代码：003 T012 起降为选填 -->
+          <!-- 邮箱：任务五A 起升为必填（本地部署唯一联系方式收集入口）；信用代码仍选填 -->
           <el-form-item
             :label="$t('setup.email')"
             prop="email"
@@ -271,7 +271,8 @@ const adminForm = reactive({
   username: '',
   password: '',
   confirmPassword: '',
-  // 开户登记：公司/负责人/电话/地址四项必填（003 T012），邮箱/信用代码选填
+  // 开户登记：公司/负责人/电话/地址四项必填（003 T012）；
+  // 任务五A：邮箱升为必填（本地部署唯一联系方式收集入口），信用代码仍选填
   company_name: '',
   real_name: '',
   contact_phone: '',
@@ -318,28 +319,28 @@ const adminRules = {
       trigger: 'blur'
     }
   ],
-  // 邮箱 003 T012 起降为选填：仅在填写时校验格式（type email 对空串会误报）
+  // 任务五A：本地部署初始化是邮箱唯一收集入口，由选填（003 T012 口径）收紧为
+  // 必填 + 统一格式正则（与后端 emailRegex 同源）。
   email: [
+    { required: true, message: t('setup.errEmailRequired'), trigger: 'blur' },
     {
-      validator: (rule, value, callback) => {
-        if (!value) return callback()
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-          return callback(new Error(t('setup.errEmailInvalid')))
-        }
-        callback()
-      },
+      pattern: /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/,
+      message: t('setup.errEmailInvalid'),
       trigger: 'blur'
     }
   ],
   company_name: [
-    { required: true, message: t('setup.errCompanyRequired'), trigger: 'blur' }
+    { required: true, message: t('setup.errCompanyRequired'), trigger: 'blur' },
+    { min: 2, max: 100, message: t('setup.errCompanyLen'), trigger: 'blur' }
   ],
   real_name: [
-    { required: true, message: t('setup.errOwnerRequired'), trigger: 'blur' }
+    { required: true, message: t('setup.errOwnerRequired'), trigger: 'blur' },
+    { min: 2, max: 32, message: t('setup.errOwnerLen'), trigger: 'blur' }
   ],
+  // 任务五A：手机号收紧为中国大陆手机号（兼容 +86 前缀），与后端 tenantPhonePattern 同源
   contact_phone: [
     { required: true, message: t('setup.errPhoneRequired'), trigger: 'blur' },
-    { pattern: /^[0-9+\-() ]{6,32}$/, message: t('setup.errPhoneFormat'), trigger: 'blur' }
+    { pattern: /^(?:\+?86)?1[3-9]\d{9}$/, message: t('setup.errPhoneFormat'), trigger: 'blur' }
   ],
   // 地址：003 T012 起为开户登记必填项
   address: [
@@ -373,7 +374,7 @@ const handleCreateAdmin = async () => {
       // 键名写成 legal_person 会让每次提交都被 gin 参数校验打回 400「无效的请求参数」。
       real_name: adminForm.real_name,
       contact_phone: adminForm.contact_phone,
-      // 003 T012：地址必填，邮箱/信用代码选填（空串后端按选填放行）
+      // 任务五A：地址必填，邮箱升为必填（后端 binding:"required,email"），信用代码选填
       address: adminForm.address,
       email: adminForm.email,
       license_no: adminForm.license_no,

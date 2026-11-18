@@ -1,0 +1,7 @@
+SEAM-GUARD：aiReplyQuietHoursFn 在 accessor 之外被直接引用 4 处（读写只走 loadAIReplyQuietHoursFn()／storeAIReplyQuietHoursFn()）：
+    user-server/internal/service/webhook_outbound.go:101
+    user-server/internal/service/webhook_outbound.go:103
+    user-server/internal/service/webhook_outbound.go:105
+    user-server/internal/service/webhook_outbound.go:110
+项目根 C:\documents\www\hivemtk\hivemtk（扫描根 C:\documents\www\hivemtk\hivemtk\user-server）
+rc=1

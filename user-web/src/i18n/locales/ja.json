@@ -1688,7 +1688,7 @@
     "regAddress": "連絡先住所",
     "regAddressHint": "住所（必須、規制当局からの照会用）",
     "errAddressRequired": "連絡先住所を入力してください",
-    "regEmailOptionalHint": "任意；システム通知の受信用",
+    "regEmailOptionalHint": "システム通知の受信用",
     "email": "メール",
     "regLicenseCode": "信用コード",
     "regLicenseHint": "統一社会信用コード（任意、後から入力可）",
@@ -1710,7 +1710,7 @@
     "errCompanyRequired": "会社/組織名を入力してください",
     "errOwnerRequired": "責任者名を入力してください",
     "errPhoneRequired": "電話番号を入力してください",
-    "errPhoneFormat": "電話番号の形式が正しくありません",
+    "errPhoneFormat": "携帯電話番号の形式が正しくありません（中国本土の番号、+86 対応）",
     "errAgreeRequired": "先に規制に関するご案内をご確認ください",
     "errAlreadyInit": "システムは初期化済みです。直接ログインしてください",
     "onboarding": {
@@ -2341,7 +2341,10 @@
           }
         }
       }
-    }
+    },
+    "errEmailRequired": "メールアドレスを入力してください",
+    "errCompanyLen": "2〜100文字で入力してください",
+    "errOwnerLen": "2〜32文字で入力してください"
   },
   "geoVerificationPage": {
     "title": "Verification Setup",

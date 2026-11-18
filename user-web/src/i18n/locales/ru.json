@@ -1688,7 +1688,7 @@
     "regAddress": "Адрес",
     "regAddressHint": "Адрес (обязательно, для связи регулятора)",
     "errAddressRequired": "Введите контактный адрес",
-    "regEmailOptionalHint": "Необязательно; для системных уведомлений",
+    "regEmailOptionalHint": "Для получения системных уведомлений",
     "email": "Эл. почта",
     "regLicenseCode": "Код доверия",
     "regLicenseHint": "Единый код социального доверия (необязательно, можно дополнить позже)",
@@ -1710,7 +1710,7 @@
     "errCompanyRequired": "Введите название компании/организации",
     "errOwnerRequired": "Введите имя ответственного",
     "errPhoneRequired": "Введите номер телефона",
-    "errPhoneFormat": "Неверный формат телефона",
+    "errPhoneFormat": "Неверный формат мобильного номера (Китай, префикс +86)",
     "errAgreeRequired": "Сначала подтвердите уведомление о требованиях",
     "errAlreadyInit": "Система уже инициализирована; войдите напрямую",
     "onboarding": {
@@ -2341,7 +2341,10 @@
           }
         }
       }
-    }
+    },
+    "errEmailRequired": "Укажите адрес электронной почты",
+    "errCompanyLen": "Длина: от 2 до 100 символов",
+    "errOwnerLen": "Длина: от 2 до 32 символов"
   },
   "geoVerificationPage": {
     "title": "Verification Setup",

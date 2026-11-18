@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/system/install"
@@ -70,6 +71,15 @@ func StartHeartbeat(ctx context.Context) {
 	})
 }
 
+// deployModeString 当前部署形态的平台口径字符串：saas（多租户）| offline（离线单机）。
+// 与平台端 tenant_registrations.reg_mode 的枚举保持同字面值，平台侧不必做二次映射。
+func deployModeString() string {
+	if tenant.IsMultiTenant() {
+		return "saas"
+	}
+	return "offline"
+}
+
 func sendHeartbeat() {
 	// 走 GetStatus 而不是裸 Load：Load 在文件坏着时返回错误，直接 return 就会
 	// 于是这台实例从此一帧心跳都不发且不留日志；GetStatus 会先把坏文件自愈再拿身份。
@@ -110,7 +120,19 @@ func sendHeartbeat() {
 		HostInfo:          hostInfo,
 		Metrics:           metrics,
 		DeviceFingerprint: deviceFP,
+		DeployMode:        deployModeString(),
 		Timestamp:         time.Now(),
+	}
+	// 任务三：SaaS 形态下心跳要能回答"商户此刻用的是哪台电脑"——
+	// 把最近一帧浏览器设备信标（含平台侧采集的出口 IP）随帧带上。
+	// 本地部署形态下 user-server 机即部署机（host_info 已是商户机器信息），
+	// 不附带 client_machine，避免两套口径打架。
+	if tenant.IsMultiTenant() {
+		if snap := FreshClientDeviceSnapshot(); snap != nil {
+			if cm, err := json.Marshal(snap); err == nil {
+				req.ClientMachine = cm
+			}
+		}
 	}
 	if err := ReportHeartbeatDefault(req); err != nil {
 		logger.Warnf("心跳上报失败（已忽略）: %v", err)

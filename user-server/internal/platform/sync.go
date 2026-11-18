@@ -91,6 +91,7 @@ func InitSync() error {
 			Name:         "HiveMTK 本地商户",
 			ContactEmail: key + "@local",
 			DeviceInfo:   runtime.GOOS + " " + runtime.GOARCH,
+			DeployMode:   deployModeString(),
 		}); err != nil {
 			logger.Warn("[独立部署模式] 商户注册到平台失败（可忽略，需平台侧 MERCHANT_API_SECRET 与本端一致）: " + err.Error())
 		} else {

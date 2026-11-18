@@ -282,18 +282,31 @@ const rules = {
   ],
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' }
+    {
+      // 任务五A：统一邮箱正则（与 InitSetup/Profile 及后端 emailRegex 同源）
+      pattern: /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/,
+      message: '邮箱格式不正确',
+      trigger: 'blur'
+    }
   ]
 }
 
 // 开户登记的必填口径与后端一致（后端是最终把关，前端只是为了少一次往返）。
 // 003 T012：地址升必填，邮箱/执照号选填（邮箱在第 1 步仍作登录凭据必填）。
+// 任务五A：手机号收紧为中国大陆手机号（兼容 +86 前缀，与后端 tenantPhonePattern 同源）；
+// 名称补齐长度校验（对齐后端 2-32 / 2-100 口径）。
 const regRules = {
-  company_name: [{ required: true, message: '请输入公司名称', trigger: 'blur' }],
-  real_name: [{ required: true, message: '请输入负责人/法人姓名', trigger: 'blur' }],
+  company_name: [
+    { required: true, message: '请输入公司名称', trigger: 'blur' },
+    { min: 2, max: 100, message: '名称长度需为 2-100 个字符', trigger: 'blur' }
+  ],
+  real_name: [
+    { required: true, message: '请输入负责人/法人姓名', trigger: 'blur' },
+    { min: 2, max: 32, message: '姓名长度需为 2-32 个字符', trigger: 'blur' }
+  ],
   phone: [
-    { required: true, message: '请输入联系电话', trigger: 'blur' },
-    { pattern: /^[0-9+\-() ]{6,32}$/, message: '电话格式不正确', trigger: 'blur' }
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^(?:\+?86)?1[3-9]\d{9}$/, message: '手机号格式不正确（中国大陆手机号，兼容 +86）', trigger: 'blur' }
   ],
   address: [{ required: true, message: '请输入通信地址', trigger: 'blur' }]
 }

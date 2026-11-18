@@ -307,10 +307,12 @@ func validateRegisterReq(req RegisterTenantRequest) error {
 			return bizerr.New(bizerr.CodeTenantParamInvalid, "用户名只能包含字母、数字、下划线、点与短横线")
 		}
 	}
-	// 003 T012：邮箱降选填（登录仍有 username 通道；系统邮箱唯一索引为部分
+	// 003 T012：邮箱选填（登录仍有 username 通道；系统邮箱唯一索引为部分
 	// 索引，已排除空值，见 tenant_global_email_unique_migration）。
+	// 任务五A：选填保持，但格式收紧为 emailRegex（与 init-admin/register 同源口径），
+	// 替换原先"含 @ 且 ≤100"的极宽松检查。
 	if email != "" {
-		if !strings.Contains(email, "@") || len(email) > 100 {
+		if !emailRegex.MatchString(email) || len(email) > 100 {
 			return bizerr.New(bizerr.CodeTenantParamInvalid, "邮箱格式不正确")
 		}
 	}
@@ -447,11 +449,13 @@ func validateRegulatoryFields(req RegisterTenantRequest) error {
 	return nil
 }
 
-// tenantPhonePattern 宽松电话校验：只挡明显不可能的输入。
+// tenantPhonePattern 手机号校验（任务五A 收紧口径：必填且正确格式）。
 //
-// 不做号码归属地判断：那是运营商的事，平台不该替用户判定，
-// 而过严的正则会把境外号码、虚拟号、分机号一并拒掉。
-var tenantPhonePattern = regexp.MustCompile(`^[0-9+\-() ]{6,32}$`)
+// 历史口径是"宽松 6-32 位（兼容座机/境外/分机）"，但产品侧明确要求注册表单
+// 手机号必填且**正确格式**——宽松正则会把 "123456" 这类明显非法输入放过。
+// 现统一为中国大陆手机号（兼容 +86/86 前缀）。平台端
+// tenant_registration_service.phonePattern 与本正则必须同步修改（同源口径）。
+var tenantPhonePattern = regexp.MustCompile(`^(?:\+?86)?1[3-9]\d{9}$`)
 
 // SubmitRegistrationToPlatform 把开户登记上报平台。
 //

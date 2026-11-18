@@ -1,0 +1,3 @@
+基线字节：`a1e737bb`｜未入库字节 7 处｜就地注码 ⇒ 未入库字节也在本轮读数里
+电池日志目录 C:\documents\www\hivemtk\hivemtk\docs\superpowers\specs\ledger\logs\R28\20261118-075858；注册表 19 行 ⇒ 独立锁格 17
+rc=2 ENV-BROKEN 控制组不干净（rc=2、竞争 0 条，见 C:\documents\www\hivemtk\hivemtk\docs\superpowers\specs\ledger\logs\R28\20261118-075858\00-control-legs.log）⇒ 不带病开刀

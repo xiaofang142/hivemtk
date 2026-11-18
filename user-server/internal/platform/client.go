@@ -460,6 +460,9 @@ type RegisterMerchantReq struct {
 	ContactEmail string `json:"contact_email"`
 	ContactPhone string `json:"contact_phone"`
 	DeviceInfo   string `json:"device_info"`
+	// DeployMode 部署形态声明：saas（TENANT_MODE=on 多租户）| offline（离线单机自部署）。
+	// 平台侧据此在商户管理页区分两类用户；空值表示老版本用户端，平台按未知处理。
+	DeployMode string `json:"deploy_mode,omitempty"`
 }
 
 // ReportInstallReq 安装信息上报请求（开源版：一个安装信息 = 一个商户）
@@ -540,7 +543,14 @@ type ReportHeartbeatReq struct {
 	Metrics           json.RawMessage `json:"metrics"`
 	DeviceFingerprint string          `json:"device_fingerprint"`
 	ClientIP          string          `json:"client_ip"`
-	Timestamp         time.Time       `json:"timestamp"`
+	// DeployMode 部署形态声明：saas | offline（同 RegisterMerchantReq.DeployMode 口径）。
+	// 心跳是周期通道，用它持续刷新平台侧的形态认知，部署形态变更（off→on）后
+	// 最多一个心跳周期内平台即可感知。
+	DeployMode string `json:"deploy_mode,omitempty"`
+	// ClientMachine 商户正在使用的电脑设备快照（仅 SaaS 形态附带，见 client_machine.go）。
+	// 本地部署形态下 user-server 机即部署机，host_info 已是商户机器信息，不再附带。
+	ClientMachine json.RawMessage `json:"client_machine,omitempty"`
+	Timestamp     time.Time       `json:"timestamp"`
 }
 
 // ReportHeartbeat 上报心跳到平台（公开统计接口，不要求签名/JWT）

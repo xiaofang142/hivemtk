@@ -373,9 +373,17 @@ const formRules = computed(() => ({
     { required: true, message: t('systemUser.usernamePlaceholder'), trigger: 'blur' },
     { min: 3, max: 50, message: t('systemUser.usernameLengthError'), trigger: 'blur' }
   ],
-  name: [{ required: true, message: t('systemUser.namePlaceholder'), trigger: 'blur' }],
+  name: [
+    { required: true, message: t('systemUser.namePlaceholder'), trigger: 'blur' },
+    { min: 2, max: 32, message: '姓名长度需为 2-32 个字符', trigger: 'blur' }
+  ],
   email: [
     { required: true, type: 'email', message: t('systemUser.validEmail'), trigger: 'blur' }
+  ],
+  // 任务五A：手机号必填且格式校验（与 Profile/注册页及后端 tenantPhonePattern 同源口径）
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    { pattern: /^(?:\+?86)?1[3-9]\d{9}$/, message: '手机号格式不正确（中国大陆手机号，兼容 +86）', trigger: 'blur' }
   ],
   role: [{ required: true, message: t('systemUser.rolePlaceholder'), trigger: 'change' }],
   password: [

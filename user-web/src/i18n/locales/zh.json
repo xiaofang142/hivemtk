@@ -1688,7 +1688,7 @@
     "regAddress": "联系地址",
     "regAddressHint": "经营/联系地址（必填，用于监管问询联系）",
     "errAddressRequired": "请输入联系地址",
-    "regEmailOptionalHint": "选填；用于接收系统通知",
+    "regEmailOptionalHint": "用于接收系统通知",
     "email": "邮箱",
     "regLicenseCode": "信用代码",
     "regLicenseHint": "统一社会信用代码（选填，可日后补录）",
@@ -1710,7 +1710,7 @@
     "errCompanyRequired": "请输入公司/组织名称",
     "errOwnerRequired": "请输入负责人姓名",
     "errPhoneRequired": "请输入手机号",
-    "errPhoneFormat": "电话格式不正确",
+    "errPhoneFormat": "手机号格式不正确（中国大陆手机号，兼容 +86）",
     "errAgreeRequired": "请先确认监管责任告知",
     "errAlreadyInit": "系统已初始化，请直接登录",
     "onboarding": {
@@ -2341,7 +2341,10 @@
           }
         }
       }
-    }
+    },
+    "errEmailRequired": "请输入邮箱地址",
+    "errCompanyLen": "名称长度需为 2-100 个字符",
+    "errOwnerLen": "姓名长度需为 2-32 个字符"
   },
   "geoVerificationPage": {
     "title": "验证配置",

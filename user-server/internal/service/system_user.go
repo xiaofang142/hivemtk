@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
@@ -34,6 +35,9 @@ type CreateUserRequest struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 	Email    string `json:"email"`
+	// Phone 任务五A：管理员创建用户表单已收集手机号，此前结构体无此字段、
+	// 表单值被静默丢弃——补上并在服务层做格式校验。
+	Phone    string `json:"phone"`
 	RealName string `json:"real_name"`
 	Role     string `json:"role" binding:"required,oneof=admin user staff customer_service"`
 	Status   int    `json:"status"`
@@ -182,9 +186,13 @@ func (s *SystemUserService) CreateUser(ctx context.Context, req *CreateUserReque
 		Username: req.Username,
 		Password: req.Password,
 		Email:    req.Email,
+		Phone:    strings.TrimSpace(req.Phone),
 		RealName: req.RealName,
 		Role:     req.Role,
 		Status:   req.Status,
+	}
+	if user.Phone != "" && !tenantPhonePattern.MatchString(user.Phone) {
+		return nil, errors.New("手机号格式不正确（需中国大陆手机号，兼容 +86 前缀）")
 	}
 	if user.Status == 0 {
 		user.Status = 1
@@ -209,14 +217,38 @@ func (s *SystemUserService) UpdateUser(ctx context.Context, id uint, req *Update
 		return nil, errors.New("更新用户失败")
 	}
 
+	// 任务五A：资料更新落"提供即校验"——邮箱格式/唯一、手机号格式、姓名长度。
+	// 必填（三个字段都非空）由前端表单强制（Profile.vue 与管理员用户编辑弹窗
+	// 均已 required）；服务层保留部分更新语义（空=不改），历史调用方与测试依赖它。
 	if req.Email != "" {
+		if err := validateEmail(req.Email); err != nil {
+			return nil, errors.New("邮箱格式不正确")
+		}
+		if req.Email != user.Email {
+			exists, err := s.repo.EmailExists(ctx, req.Email, id)
+			if err != nil {
+				logger.Error(err, "检查邮箱唯一性失败")
+				return nil, errors.New("更新用户失败")
+			}
+			if exists {
+				return nil, errors.New("邮箱已被使用")
+			}
+		}
 		user.Email = req.Email
 	}
-	if req.Phone != nil {
-		user.Phone = *req.Phone
+	if req.Phone != nil && *req.Phone != "" && !tenantPhonePattern.MatchString(strings.TrimSpace(*req.Phone)) {
+		return nil, errors.New("手机号格式不正确（需中国大陆手机号，兼容 +86 前缀）")
 	}
 	if req.RealName != "" {
-		user.RealName = req.RealName
+		if l := len([]rune(strings.TrimSpace(req.RealName))); l < 2 || l > 32 {
+			return nil, errors.New("姓名长度需为 2-32 个字符")
+		}
+	}
+	if req.Phone != nil {
+		user.Phone = strings.TrimSpace(*req.Phone)
+	}
+	if req.RealName != "" {
+		user.RealName = strings.TrimSpace(req.RealName)
 	}
 	privilegeChanged := false
 	if req.Role != "" && req.Role != user.Role {

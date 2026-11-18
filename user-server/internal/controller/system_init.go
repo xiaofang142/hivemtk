@@ -112,7 +112,9 @@ func publicInitStatus(s *install.Status) gin.H {
 type InitAdminRequest struct {
 	Username     string `json:"username" binding:"required,min=3,max=20"`
 	Password     string `json:"password" binding:"required,min=8"`
-	Email        string `json:"email" binding:"omitempty,email"`
+	// 任务五A：本地部署初始化是邮箱唯一收集入口（此前 omitempty 选填），
+	// 改为必填且格式校验——离线部署无法像 SaaS 一样事后补录联系方式。
+	Email        string `json:"email" binding:"required,email"`
 	RealName     string `json:"real_name" binding:"required,min=2,max=32"`
 	ContactPhone string `json:"contact_phone" binding:"required"`
 	// CompanyName 组织/公司名称；为空时回落为「负责人所属组织」，仍不允许两者皆空

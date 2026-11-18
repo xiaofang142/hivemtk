@@ -350,28 +350,31 @@ const roleTagType = computed(() => {
   return 'info'
 })
 
+// 任务五A：手机号/邮箱/名称必填且格式校验（本地部署资料入口，后端"提供即校验"兜底）。
+// 手机号统一为中国大陆手机号（兼容 +86 前缀），与注册/初始化及后端 tenantPhonePattern
+// 同源——旧口径三处不一致（此处 11 位、注册处宽松 6-32）曾导致座机号注册的账号
+// 在本页无法保存原号码，现统一后该冲突消除。
 const rules = {
-  real_name: [{ max: 32, message: i18n.global.t('长度不能超过 32 字符'), trigger: 'blur' }],
-  email: [{
-    validator: (_rule, value, cb) => {
-      if (!value) return cb()
-      if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) {
-        return cb(new Error('邮箱格式不正确'))
-      }
-      cb()
-    },
-    trigger: 'blur'
-  }],
-  phone: [{
-    validator: (_rule, value, cb) => {
-      if (!value) return cb()
-      if (!/^1[3-9]\d{9}$/.test(value)) {
-        return cb(new Error('手机号格式不正确'))
-      }
-      cb()
-    },
-    trigger: 'blur'
-  }]
+  real_name: [
+    { required: true, message: '请输入姓名', trigger: 'blur' },
+    { min: 2, max: 32, message: '姓名长度需为 2-32 个字符', trigger: 'blur' }
+  ],
+  email: [
+    { required: true, message: '请输入邮箱', trigger: 'blur' },
+    {
+      pattern: /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$/,
+      message: '邮箱格式不正确',
+      trigger: 'blur'
+    }
+  ],
+  phone: [
+    { required: true, message: '请输入手机号', trigger: 'blur' },
+    {
+      pattern: /^(?:\+?86)?1[3-9]\d{9}$/,
+      message: '手机号格式不正确（中国大陆手机号，兼容 +86）',
+      trigger: 'blur'
+    }
+  ]
 }
 
 const pwdRules = {

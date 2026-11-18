@@ -1688,7 +1688,7 @@
     "regAddress": "العنوان",
     "regAddressHint": "عنوان النشاط/التواصل (مطلوب للاستفسارات التنظيمية)",
     "errAddressRequired": "يرجى إدخال عنوان التواصل",
-    "regEmailOptionalHint": "اختياري؛ لإشعارات النظام",
+    "regEmailOptionalHint": "لتلقي إشعارات النظام",
     "email": "البريد الإلكتروني",
     "regLicenseCode": "رمز الائتمان",
     "regLicenseHint": "رمز الائتمان الاجتماعي الموحد (اختياري، يمكن إدخاله لاحقًا)",
@@ -1710,7 +1710,7 @@
     "errCompanyRequired": "يرجى إدخال اسم الشركة/المنظمة",
     "errOwnerRequired": "يرجى إدخال اسم المسؤول",
     "errPhoneRequired": "يرجى إدخال رقم الهاتف",
-    "errPhoneFormat": "تنسيق الهاتف غير صحيح",
+    "errPhoneFormat": "رقم الهاتف المحمول غير صالح (الصين، مع دعم +86)",
     "errAgreeRequired": "يرجى تأكيد الإشعار التنظيمي أولًا",
     "errAlreadyInit": "تمت تهيئة النظام بالفعل؛ يرجى تسجيل الدخول مباشرة",
     "onboarding": {
@@ -2341,7 +2341,10 @@
           }
         }
       }
-    }
+    },
+    "errEmailRequired": "البريد الإلكتروني مطلوب",
+    "errCompanyLen": "يجب أن يكون بين 2 و100 حرفًا",
+    "errOwnerLen": "يجب أن يكون بين 2 و32 حرفًا"
   },
   "geoVerificationPage": {
     "title": "Verification Setup",

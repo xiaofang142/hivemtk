@@ -1,0 +1,7 @@
+SEAM-GUARD：aiReplyQuietHoursFn 在 accessor 之外被直接引用 4 处（读写只走 loadAIReplyQuietHoursFn()／storeAIReplyQuietHoursFn()）：
+    user-server/internal/service/seam_guard_setters_test.go:133
+    user-server/internal/service/seam_guard_setters_test.go:135
+    user-server/internal/service/seam_guard_setters_test.go:137
+    user-server/internal/service/seam_guard_setters_test.go:142
+项目根 C:\documents\www\hivemtk\hivemtk（扫描根 C:\documents\www\hivemtk\hivemtk\user-server）
+rc=1

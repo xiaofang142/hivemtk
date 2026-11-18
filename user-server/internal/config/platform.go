@@ -144,6 +144,38 @@ func ResolvePlatformEnabled(env string) (bool, bool) {
 	}
 }
 
+// PlatformHeartbeatEnabled 心跳上报细粒度开关（任务四解耦）。仅在
+// PLATFORM_ENABLED=true 时有意义：false 时关闭周期心跳协程，但商户注册、
+// 资产市场、模块下发、LLM 计费代理照常——用户可以在"使用资产包订阅"的
+// 同时不上报心跳（心跳在平台侧是纯统计口，不参与任何业务闸，关掉零业务影响）。
+//
+// 默认开启：心跳是运营侧装机/在线观测的唯一来源，"意外关闭"比"意外开启"
+// 危害大（开启只是统计面多几帧，关闭是平台侧从此看不到这台部署）。
+func PlatformHeartbeatEnabled() bool {
+	enabled, _ := ResolvePlatformHeartbeatEnabled(os.Getenv("PLATFORM_HEARTBEAT_ENABLED"))
+	return enabled
+}
+
+// ResolvePlatformHeartbeatEnabled 解析 PLATFORM_HEARTBEAT_ENABLED 环境变量值。
+// 与 ResolvePlatformEnabled 同一套字面值，但默认方向相反：
+//   - 空串/未设置 → true+true（默认开启）
+//   - true/1/on/yes → true+true
+//   - false/0/off/no → false+true
+//   - 其他值 → true+**false**（拼错：保守保持开启，让调用方在日志里说清）
+func ResolvePlatformHeartbeatEnabled(env string) (bool, bool) {
+	v := strings.ToLower(strings.TrimSpace(env))
+	switch v {
+	case "":
+		return true, true
+	case "true", "1", "on", "yes":
+		return true, true
+	case "false", "0", "off", "no":
+		return false, true
+	default:
+		return true, false
+	}
+}
+
 // platformHostProvider 是 platform.api_host 参数中心的取值口。
 //
 // 做成 provider 而不是在这里调 config_param service：config 不能反向依赖 service

@@ -4,6 +4,7 @@ import { ensureBootstrap } from '@/utils/bootstrapState'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { ElMessage } from 'element-plus'
+import { reportClientDeviceOnce } from '@/utils/clientDevice'
 
 const routeModules = import.meta.glob('./modules/*.js');
 
@@ -390,4 +391,11 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 })
+// 任务三：商户电脑设备信标（SaaS 形态下心跳 client_machine 的数据源）。
+// 挂在 afterEach：守卫链已跑完（restoreSession 已探测过 Cookie 会话），
+// 登录态判断最准；幂等由 reportClientDeviceOnce 内部的会话标记保证。
+router.afterEach(() => {
+  reportClientDeviceOnce()
+})
+
 export default router

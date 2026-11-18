@@ -1,0 +1,3 @@
+基线字节：`a1e737bb`｜未入库字节 5 处｜就地注码 ⇒ 未入库字节也在本轮读数里
+电池日志目录 C:\documents\www\hivemtk\hivemtk\docs\superpowers\specs\ledger\logs\R28\20261118-075340；注册表 19 行 ⇒ 独立锁格 17
+rc=2 ENV-BROKEN 变异前门就红（见 C:\documents\www\hivemtk\hivemtk\docs\superpowers\specs\ledger\logs\R28\20261118-075340\00-control-gate.log）

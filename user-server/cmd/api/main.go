@@ -442,7 +442,19 @@ func main() {
 		if err := platform.InitSync(); err != nil {
 			logger.Errorf("平台同步初始化失败：%v", err)
 		}
-		platform.StartHeartbeat(context.Background())
+		// 任务四解耦：心跳是可独立关闭的细粒度开关（PLATFORM_HEARTBEAT_ENABLED，
+		// 默认开）。关掉后商户注册/资产市场/模块下发照常——心跳在平台侧是纯统计口，
+		// 不参与任何业务闸，"用资产包不必上报心跳"由此成立。
+		// 与 PLATFORM_ENABLED 同款双口径日志：拼错时保守保持开启，但必须说出来。
+		if enabled, known := config.ResolvePlatformHeartbeatEnabled(os.Getenv("PLATFORM_HEARTBEAT_ENABLED")); enabled {
+			if !known {
+				logger.Warnf("[启动] PLATFORM_HEARTBEAT_ENABLED=%q 不是已知值（true/false/1/0/on/off/yes/no），已按开启处理",
+					os.Getenv("PLATFORM_HEARTBEAT_ENABLED"))
+			}
+			platform.StartHeartbeat(context.Background())
+		} else {
+			logger.Info("[启动] 平台心跳上报已关闭（PLATFORM_HEARTBEAT_ENABLED=false）：商户注册、资产市场、模块下发不受影响")
+		}
 		// 必须在 LoadPlatform 之后：拉平台 provider 要读 config.PlatformCfg。
 		// 放在 LoadPlatform 之前会得到「平台配置未初始化」，平台 provider 永远拉不到。
 		if n, err := service.SyncPlatformProviders(context.Background()); err != nil {

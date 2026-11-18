@@ -1688,7 +1688,7 @@
     "regAddress": "Endereço",
     "regAddressHint": "Endereço comercial/de contato (obrigatório para consultas regulatórias)",
     "errAddressRequired": "Informe o endereço de contato",
-    "regEmailOptionalHint": "Opcional; para notificações do sistema",
+    "regEmailOptionalHint": "Para receber notificações do sistema",
     "email": "E-mail",
     "regLicenseCode": "Código de Crédito",
     "regLicenseHint": "Código de crédito social unificado (opcional, pode ser preenchido depois)",
@@ -1710,7 +1710,7 @@
     "errCompanyRequired": "Digite o nome da empresa/organização",
     "errOwnerRequired": "Digite o nome do responsável",
     "errPhoneRequired": "Digite o número de telefone",
-    "errPhoneFormat": "Formato de telefone inválido",
+    "errPhoneFormat": "Número de celular inválido (China continental, prefixo +86 aceito)",
     "errAgreeRequired": "Confirme primeiro o aviso regulatório",
     "errAlreadyInit": "Sistema já inicializado; faça login diretamente",
     "onboarding": {
@@ -2341,7 +2341,10 @@
           }
         }
       }
-    }
+    },
+    "errEmailRequired": "O e-mail é obrigatório",
+    "errCompanyLen": "Deve ter entre 2 e 100 caracteres",
+    "errOwnerLen": "Deve ter entre 2 e 32 caracteres"
   },
   "geoVerificationPage": {
     "title": "Verification Setup",
