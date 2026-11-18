@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"hivemtk-user/internal/pkg/tenant"
@@ -214,7 +215,7 @@ func scopeQueryForTenant(db *gorm.DB) {
 			tenantGuardFail(db, ref.table, "query")
 			return
 		}
-		stmt.AddClause(clauseWhereTenant(ref, id))
+		stmt.AddClause(clauseWhereTenant(stmt, ref, id))
 	}
 	if err := scopeTenantJoins(stmt, bound, id); err != nil {
 		_ = db.AddError(err)
@@ -382,25 +383,46 @@ func fillOneMapForTenant(db *gorm.DB, m reflect.Value, table string, id uint, bo
 		tenantGuardFail(db, table, "create：map 为 nil")
 		return false
 	}
+	stringTenant := IsStringTenantTable(table)
 	key := reflect.ValueOf("tenant_id").Convert(m.Type().Key())
 	existing := m.MapIndex(key)
 	if existing.IsValid() && !isNilableNil(existing) {
 		value := existing.Interface()
 		if bound {
-			if n, ok := asUint(value); !ok || (n != 0 && n != id) {
+			if sv, isStr := value.(string); isStr && stringTenant {
+				if n, err := strconv.ParseUint(sv, 10, 64); err == nil && n != 0 && n != uint64(id) {
+					_ = db.AddError(fmt.Errorf("[tenant] 写入 tenant_id=%q 与上下文租户 %d 不一致，拒绝跨租户写", sv, id))
+					return false
+				}
+			} else if n, ok := asUint(value); !ok || (n != 0 && n != id) {
 				_ = db.AddError(fmt.Errorf("[tenant] 写入 tenant_id=%v 与上下文租户 %d 不一致，拒绝跨租户写", value, id))
 				return false
 			}
-		} else if n, ok := asUint(value); !ok || n == 0 {
-			tenantGuardFail(db, table, "create：无租户上下文且 tenant_id 不是有效自证值")
-			return false
+		} else {
+			valid := false
+			if sv, isStr := value.(string); isStr && stringTenant {
+				if n, err := strconv.ParseUint(sv, 10, 64); err == nil && n != 0 {
+					valid = true
+				}
+			} else if n, ok := asUint(value); ok && n != 0 {
+				valid = true
+			}
+			if !valid {
+				tenantGuardFail(db, table, "create：无租户上下文且 tenant_id 不是有效自证值")
+				return false
+			}
 		}
 	} else if !bound {
 		tenantGuardFail(db, table, "create：无租户上下文且 map 未携带 tenant_id")
 		return false
 	}
 	elemType := m.Type().Elem()
-	tenantVal := reflect.ValueOf(id)
+	var tenantVal reflect.Value
+	if stringTenant {
+		tenantVal = reflect.ValueOf(strconv.FormatUint(uint64(id), 10))
+	} else {
+		tenantVal = reflect.ValueOf(id)
+	}
 	if !tenantVal.Type().AssignableTo(elemType) {
 		if !tenantVal.Type().ConvertibleTo(elemType) {
 			tenantGuardFail(db, table, "create：map 值类型无法承载 tenant_id")
@@ -438,12 +460,23 @@ func fillOneForTenant(db *gorm.DB, field *schema.Field, v reflect.Value, id uint
 			_ = db.AddError(fmt.Errorf("[tenant] 写入 tenant_id=%d 与上下文租户 %d 不一致，拒绝跨租户写", fvUint, id))
 			return false
 		}
+		if fvStr, isStr := fv.(string); isStr && fvStr != "" {
+			if n, err := strconv.ParseUint(fvStr, 10, 64); err == nil && n != 0 && n != uint64(id) {
+				_ = db.AddError(fmt.Errorf("[tenant] 写入 tenant_id=%q 与上下文租户 %d 不一致，拒绝跨租户写", fvStr, id))
+				return false
+			}
+		}
 	}
 	if !v.CanAddr() {
 		// 不可寻址就填不进去：宁可 fail-closed 报错，也不能静默落列默认值 1
 		// （那会把行写到默认租户 = 串租户）。单行 Create 的 Dest 恒可寻址。
 		tenantGuardFail(db, table, "create：目标行不可寻址，无法填充 tenant_id")
 		return false
+	}
+	if field.FieldType.Kind() == reflect.String {
+		// 字符串租户键（specs/024 B2 证据链表）：填字符串形态，pgx 才能编码进 varchar 列
+		_ = field.Set(db.Statement.Context, v, strconv.FormatUint(uint64(id), 10))
+		return true
 	}
 	_ = field.Set(db.Statement.Context, v, id)
 	return true
@@ -484,7 +517,7 @@ func scopeLikeForTenant(db *gorm.DB, op string) {
 			return
 		}
 	}
-	stmt.AddClause(clauseWhereTenant(ref, id))
+	stmt.AddClause(clauseWhereTenant(stmt, ref, id))
 }
 
 // guardRawForTenant Row/Raw 前置：预构建 SQL 守卫
@@ -530,13 +563,32 @@ func ensureRegistryForTenant(db *gorm.DB, op string) bool {
 
 // clauseWhereTenant 构造 `tenant_id = ?` WHERE 子句；
 // 有别名时限定别名，避免 JOIN 场景下 tenant_id 列歧义。
-func clauseWhereTenant(ref tableRef, id uint) clause.Where {
+// tenantBindValueFor 把上下文租户转换为目标表 tenant_id 的绑定表示。
+//
+// specs/024 B2 起，证据链表（channel_event_audits / channel_interactions）的租户键
+// **刻意**用字符串（审计域语义，与 operation_logs 的 uint 分离，见
+// recordRouteDiscard 头注释）。隔离 callback 恒绑 uint 会让 pgx 以 text OID 收到
+// uint 值 → "cannot find encode plan"（MODE=on 读/写路径全断，2026-11-18 实测）。
+// 绑定表示按「登记表列类型 + 模型字段类型」双保险判定：字符串租户表绑字符串形态。
+func tenantBindValueFor(stmt *gorm.Statement, table string, id uint) any {
+	if IsStringTenantTable(table) {
+		return strconv.FormatUint(uint64(id), 10)
+	}
+	if stmt != nil && stmt.Schema != nil {
+		if f := stmt.Schema.FieldsByDBName["tenant_id"]; f != nil && f.FieldType.Kind() == reflect.String {
+			return strconv.FormatUint(uint64(id), 10)
+		}
+	}
+	return id
+}
+
+func clauseWhereTenant(stmt *gorm.Statement, ref tableRef, id uint) clause.Where {
 	col := clause.Column{Name: "tenant_id"}
 	if q := ref.qualifier(); q != "" {
 		col.Table = q
 	}
 	return clause.Where{Exprs: []clause.Expression{
-		clause.Eq{Column: col, Value: id},
+		clause.Eq{Column: col, Value: tenantBindValueFor(stmt, ref.table, id)},
 	}}
 }
 
@@ -587,8 +639,13 @@ func scopeTenantJoins(stmt *gorm.Statement, bound bool, id uint) error {
 			// 租户 id 是 ctx 里的 uint（不是外部输入），直接内联成整数字面量：
 			// 免去"往 join 串中间插占位符 ⇒ 破坏 ? 与 args 的位置对应"这个坑
 			// （GORM 的 NamedExpr 按位置绑定 Vars，插中间就得同步挪 args，计错一位就静默绑错值）。
-			j.Name = insertJoinOnCondition(j.Name,
-				fmt.Sprintf(` AND %s.%s = %d`, quoteIdent(q), quoteIdent("tenant_id"), id))
+			// 字符串租户表的内联形态必须带引号（varchar = integer 直接报 operator 不存在，
+			// geo_* 事故同族）。id 是 ctx 里的 uint，%d 内联无注入面。
+			joinCond := fmt.Sprintf(` AND %s.%s = %d`, quoteIdent(q), quoteIdent("tenant_id"), id)
+			if IsStringTenantTable(ref.table) {
+				joinCond = fmt.Sprintf(` AND %s.%s = '%d'`, quoteIdent(q), quoteIdent("tenant_id"), id)
+			}
+			j.Name = insertJoinOnCondition(j.Name, joinCond)
 		}
 	}
 	return nil

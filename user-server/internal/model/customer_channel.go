@@ -25,11 +25,14 @@ type CustomerChannel struct {
 	//                                                   WHERE deleted_at IS NULL AND channel_user_id <> ''
 	// tenant_id 由 tenancyidx.Normalize 启动时复合化补到列首（tag 里不写，避免两处定义漂移）。
 	// 谓词写在 tag 里：软删行不再占键，否则「删了再插同一身份」永远撞唯一键。
-	OneID         string         `gorm:"type:varchar(128);index;uniqueIndex:idx_oneid_channel,priority:2,where:deleted_at IS NULL" json:"one_id"`
-	Channel       string         `gorm:"type:varchar(32);uniqueIndex:idx_oneid_channel,priority:3,where:deleted_at IS NULL" json:"channel"`
+	// tag 口径必须与迁移 065 逐列一致（2026-11-18 对抗复核：tag 曾漏 idx_channel_identity
+	// 的 channel 列、业务键名未带 v2 —— AutoMigrate 新装库的身份锚形状错，065 的
+	// IF NOT EXISTS 会静默跳过修复）。tenant_id 由 tenancyidx.Normalize 复合化补到列首。
+	OneID         string         `gorm:"type:varchar(128);index;uniqueIndex:idx_oneid_channel_v2,priority:2,where:deleted_at IS NULL" json:"one_id"`
+	Channel       string         `gorm:"type:varchar(32);uniqueIndex:idx_oneid_channel_v2,priority:3,where:deleted_at IS NULL;uniqueIndex:idx_channel_identity,priority:2,where:deleted_at IS NULL AND channel_user_id <> ''" json:"channel"`
 	ChannelUserID string         `gorm:"type:varchar(128);index;not null;default:'';uniqueIndex:idx_channel_identity,priority:4,where:deleted_at IS NULL AND channel_user_id <> ''" json:"channel_user_id"`
 	ChannelName   string         `gorm:"type:varchar(128)" json:"channel_name"`
-	AccountID     string         `gorm:"type:varchar(64);index;not null;default:'';uniqueIndex:idx_oneid_channel,priority:4,where:deleted_at IS NULL;uniqueIndex:idx_channel_identity,priority:3,where:deleted_at IS NULL AND channel_user_id <> ''" json:"account_id"`
+	AccountID     string         `gorm:"type:varchar(64);index;not null;default:'';uniqueIndex:idx_oneid_channel_v2,priority:4,where:deleted_at IS NULL;uniqueIndex:idx_channel_identity,priority:3,where:deleted_at IS NULL AND channel_user_id <> ''" json:"account_id"`
 	GroupID       string         `gorm:"type:varchar(64)" json:"group_id,omitempty"`
 	IsGroup       bool           `gorm:"default:false" json:"is_group"`
 	IsPrimary     bool           `gorm:"default:false" json:"is_primary"`

@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/channelbot/telegram"
+	"hivemtk-user/internal/channelcaps"
 	"hivemtk-user/internal/event"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
@@ -347,6 +348,18 @@ func TestChannelParsers_EventTypeMatrix(t *testing.T) {
 	for in, want := range feishuCases {
 		if got := feishuPlatformEventType(mkFeishuHeader(in)); got != want {
 			t.Errorf("feishu %s → %q，期望 %q", in, got, want)
+		}
+	}
+	// 全表兜底（received-only 渠道）：wecom/wechat/dingtalk/whatsapp/web/email/sms/custom
+	// 的解析器只产 message.received（或纯触达无入站），manifest.Events 与解析器一致性
+	// 由 channelcaps_events_test 钉死；这里逐渠道断言「非消息事件词表为空 ⇒ 不可能产
+	// 平台事件行」，与上方三腿共同构成全表覆盖。
+	for _, m := range channelcaps.All() {
+		if m.Channel == "telegram" || m.Channel == "feishu" || m.Channel == "qq" {
+			continue // 三条具名腿已各自断言
+		}
+		if len(m.Events) > 1 {
+			t.Errorf("渠道 %s 声明了多事件 %v 但没有对应解析器腿，矩阵须补具名 fixture", m.Channel, m.Events)
 		}
 	}
 	// telegram：按钮回调 → interaction.callback

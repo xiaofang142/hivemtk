@@ -14,9 +14,10 @@ import "time"
 type ChannelInteraction struct {
 	TenantID       string  `gorm:"column:tenant_id;type:varchar(64);not null;default:'';uniqueIndex:idx_interaction_identity,priority:1" json:"tenant_id"`
 	Channel        string  `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_interaction_identity,priority:2" json:"channel"`
-	InteractionID  string  `gorm:"column:interaction_id;type:varchar(128);not null;uniqueIndex:idx_interaction_identity,priority:3" json:"interaction_id"`
+	// AccountID 入幂等键（specs/024 三审 T209 契约）：交互不能跨账号去重。
+	AccountID      string  `gorm:"column:account_id;type:varchar(64);not null;default:'';uniqueIndex:idx_interaction_identity,priority:3" json:"account_id"`
+	InteractionID  string  `gorm:"column:interaction_id;type:varchar(128);not null;uniqueIndex:idx_interaction_identity,priority:4" json:"interaction_id"`
 	ID             uint    `gorm:"primaryKey;autoIncrement" json:"id"`
-	AccountID      string  `gorm:"column:account_id;type:varchar(64);not null;default:'';index" json:"account_id"`
 	ConversationID string  `gorm:"column:conversation_id;type:varchar(128);not null;default:'';index" json:"conversation_id"`
 	PlatformMsgID  string  `gorm:"column:platform_msg_id;type:varchar(128);not null;default:'';index" json:"platform_msg_id"`
 	SenderID       string  `gorm:"column:sender_id;type:varchar(128);not null;default:''" json:"sender_id"`
