@@ -67,8 +67,9 @@ export const reportClientDeviceOnce = () => {
       keepalive: true,
     })
       .then((res) => {
-        // 只有服务端真正收下（recorded=true，即 SaaS 形态）才标记本会话已报，
-        // 离线形态（recorded=false）不标记——切到 SaaS 形态后下一会话仍可上报。
+        // HTTP 200 即标记本会话已报（离线形态服务端返回 recorded=false 但也是
+        // 200——不标记会导致每次路由跳转重发一帧信标；形态切换需重启服务端，
+        // 届时新开标签页/下次会话自然重新上报）。
         if (res.ok) sessionStorage.setItem(SENT_FLAG, '1')
       })
       .catch(() => {})
