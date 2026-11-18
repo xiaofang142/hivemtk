@@ -218,7 +218,6 @@ func (ctrl *ChatPublicController) WsTicket(c *gin.Context) {
 //
 // 安全：需要有效的 visitor_token，防止 IDOR 越权读取他人会话历史
 
-
 // @Summary      获取历史消息
 // @Tags      chat-public
 // @Router    /api/chat/public/sessions/{session_id}/messages [get]

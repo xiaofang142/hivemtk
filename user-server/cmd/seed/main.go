@@ -119,10 +119,10 @@ var allSeeders = []Seeder{
 
 func main() {
 	var (
-		cleanOnly  = flag.Bool("clean", false, "仅清空所有种子数据，不写入")
-		moduleFlag = flag.String("module", "", "仅执行指定模块（逗号分隔，如 customers,sessions）")
-		listFlag   = flag.Bool("list", false, "列出所有可用模块后退出")
-		allowProd  = flag.Bool("allow-prod", false, "对已初始化（install.lock.Initialized=true）的库强制放行种子写入（2026-11-15 审计 L5 守卫的逃生门）")
+		cleanOnly       = flag.Bool("clean", false, "仅清空所有种子数据，不写入")
+		moduleFlag      = flag.String("module", "", "仅执行指定模块（逗号分隔，如 customers,sessions）")
+		listFlag        = flag.Bool("list", false, "列出所有可用模块后退出")
+		allowProd       = flag.Bool("allow-prod", false, "对已初始化（install.lock.Initialized=true）的库强制放行种子写入（2026-11-15 审计 L5 守卫的逃生门）")
 		allowPublicSeed = flag.Bool("allow-public-seed-password", false, "显式接受随开源仓库公开的演示口令（仅限本机 e2e/演示，不可对外）（2026-11-17 审计 P1-3 守卫的逃生门）")
 	)
 	flag.Parse()
@@ -140,7 +140,7 @@ func main() {
 	// bootstrap.sh 已改为未设置时自动生成随机值，这里把直接手跑 seed 的残余路径也堵死；
 	// 确要演示口令（仅限本机 e2e/演示）显式加 --allow-public-seed-password。
 	if seedPassword == seedPasswordDefault && !*allowPublicSeed {
-		log.Fatalf("[SECURITY] SEED_PASSWORD/ADMIN_PASSWORD 未设置：种子将写入随开源仓库公开的演示口令，已拒绝。"+
+		log.Fatalf("[SECURITY] SEED_PASSWORD/ADMIN_PASSWORD 未设置：种子将写入随开源仓库公开的演示口令，已拒绝。" +
 			"请设 SEED_PASSWORD=<强口令> 后重跑；确要演示口令（仅限本机，不可对外）加 --allow-public-seed-password。")
 	}
 

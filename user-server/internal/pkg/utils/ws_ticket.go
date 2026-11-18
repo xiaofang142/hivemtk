@@ -56,6 +56,8 @@ var (
 	wsTicketMu    sync.Mutex
 	wsTicketStore = map[string]wsTicketEntry{}
 	wsTicketOnce  sync.Once
+	// wsTicketJanitorInterval 过期回收巡检周期（var 仅为测试可调速，生产勿改）。
+	wsTicketJanitorInterval = 30 * time.Second
 )
 
 // MintWSTicket 铸造一次性 WS ticket（随机 32 字节 hex，60s 有效）。
@@ -66,6 +68,10 @@ func MintWSTicket(claims WsTicketClaims) string {
 		logger.Errorf("[SECURITY] MintWSTicket rand.Read failed: %v", err)
 		return ""
 	}
+	// 首铸即拉起过期回收巡检（2026-11-18 审计补接线）：票据只在消费路径随手删，
+	// 「铸了没连」的废弃票全靠 janitor 回收——不接线的话商店只涨不清，涨满
+	// wsTicketStoreCap 后铸造永久 fail-closed，全部 WS 连接失联到重启为止。
+	startWsTicketJanitor()
 	ticket := hex.EncodeToString(raw)
 	wsTicketMu.Lock()
 	// 2026-11-18 七审收口：内存商店上限（上限=10 万条 ≈ 满额 60s 窗口内的极端
@@ -103,16 +109,22 @@ func ConsumeWSTicket(ticket string) (WsTicketClaims, bool) {
 
 func wsTicketJanitor() {
 	for {
-		time.Sleep(30 * time.Second)
-		now := time.Now()
-		wsTicketMu.Lock()
-		for k, e := range wsTicketStore {
-			if now.After(e.expiresAt) {
-				delete(wsTicketStore, k)
-			}
-		}
-		wsTicketMu.Unlock()
+		time.Sleep(wsTicketJanitorInterval)
+		sweepExpiredWSTickets()
 	}
+}
+
+// sweepExpiredWSTickets 清掉过期末消费的废弃票（消费路径已随手删，漏网的只有
+// 铸了没连的废弃票；独立成函数供回归测试直接驱动，不必等巡检周期）。
+func sweepExpiredWSTickets() {
+	now := time.Now()
+	wsTicketMu.Lock()
+	for k, e := range wsTicketStore {
+		if now.After(e.expiresAt) {
+			delete(wsTicketStore, k)
+		}
+	}
+	wsTicketMu.Unlock()
 }
 
 func startWsTicketJanitor() {

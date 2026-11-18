@@ -4,14 +4,12 @@ import (
 	"errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/service"
-	domainsvc "hivemtk-user/internal/service"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
+	domainsvc "hivemtk-user/internal/service"
 	"io"
 	"net/http"
 	"strconv"
-
-	"gorm.io/gorm"
 
 	"github.com/gin-gonic/gin"
 )
@@ -192,7 +190,7 @@ func (c *ChurnPredictionController) MarkWarningHandled(ctx *gin.Context) {
 	// 自己名下（或未分配池）客户的预警；行不存在与既有口径一致回 404。
 	warning, err := c.churnService.GetWarningByID(ctx.Request.Context(), uint(id))
 	if err != nil {
-		if errhttp.IsNotFoundError(err) || errors.Is(err, gorm.ErrRecordNotFound) {
+		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, "预警不存在（id="+idStr+"）")
 			return
 		}
@@ -266,7 +264,7 @@ func (c *ChurnPredictionController) InterveneUser(ctx *gin.Context) {
 		// 行级归属校验（2026-11-15 审计 M-5）：按预警 ID 寻址先取行拿 user_id 再判可见性。
 		warning, werr := c.churnService.GetWarningByID(ctx.Request.Context(), warningID)
 		if werr != nil {
-			if errhttp.IsNotFoundError(werr) || errors.Is(werr, gorm.ErrRecordNotFound) {
+			if errhttp.IsNotFoundError(werr) {
 				response.NotFound(ctx, "预警不存在（id="+strconv.FormatUint(uint64(warningID), 10)+"）")
 				return
 			}

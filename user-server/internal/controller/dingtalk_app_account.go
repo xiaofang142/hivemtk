@@ -57,10 +57,10 @@ type dingTalkAppAccountRequest struct {
 }
 
 type dingTalkAppAccountVO struct {
-	ID              uint       `json:"id"`
-	AccountName     string     `json:"account_name"`
-	AppKey          string     `json:"app_key"`
-	AgentID         string     `json:"agent_id"`
+	ID          uint   `json:"id"`
+	AccountName string `json:"account_name"`
+	AppKey      string `json:"app_key"`
+	AgentID     string `json:"agent_id"`
 	// Token 出参只回掩码（2026-11-17 审计 P3-1）：回调验签密钥明文出网后可伪造
 	// /api/webhook/dingtalk/:account_id 注入收件箱/AI 链；更新口带掩码守卫，
 	// 编辑表单不回填（与 AppSecret/AESKey 同口径）。

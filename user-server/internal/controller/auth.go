@@ -308,7 +308,7 @@ func (c *AuthController) WsTicket(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{
-		"ticket":    ticket,
+		"ticket":     ticket,
 		"expires_in": 60,
 	}, "ok")
 }

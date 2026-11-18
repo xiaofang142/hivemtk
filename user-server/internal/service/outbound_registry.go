@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 
@@ -122,17 +121,4 @@ func (s *WebhookService) ensureSendersLocked() {
 	if s.senders == nil {
 		s.senders = make(map[WebhookChannel]channelSender)
 	}
-}
-
-// outboundRegistrySummary 供日志/排查：已登记渠道清单，空实现时提示。
-func outboundRegistrySummary() string {
-	channels := RegisteredSenderChannels()
-	if len(channels) == 0 {
-		return "none"
-	}
-	names := make([]string, 0, len(channels))
-	for _, ch := range channels {
-		names = append(names, string(ch))
-	}
-	return fmt.Sprintf("%v + bridge{outbox}", names)
 }

@@ -372,6 +372,15 @@ dev-down:
 # 于是 `make lint` 从来没真正分析过任何东西，却仍然"退出 0"（第二十五轮实测）。
 GOLANGCI_LINT_VERSION := v2.10.0
 
+# golangci-lint 是编译好的二进制，内嵌自己构建版的 go/types；它读 stdlib 源码/导出
+# 数据的 GOROOT 却来自 PATH 上的 go（go env GOROOT 不触发工具链切换）。系统 Go 一旦
+# 比 v2.10.0 的构建版（go1.26.10）新（本机已装 go1.27.0），导出数据版本对不上，
+# typechecking 全量报错但 lint 仍打印 "0 issues." 退出 0——与 v2.1.6 同型的**假绿**
+# （2026-11-18 审计轮实测：假绿期间入库 8 处 gofmt + 6 处 unused，真实分析后现形）。
+# 治法=按 go.mod 的 toolchain 行把 GOTOOLCHAIN 钉到与二进制一致的版本，单一事实源；
+# 命令行 --timeout 覆盖 .golangci.yml 的 5m（大仓全量 typechecking 慢，负载下 5m/10m 实测都不够）。
+GOLANGCI_TOOLCHAIN := $(shell awk '$$1=="toolchain"{print $$2; exit}' user-server/go.mod)
+
 lint-install:
 	@which golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
@@ -397,7 +406,7 @@ lint-version-check:
 
 # 架构护栏：分层依赖方向 + depguard 规则（提交前必跑）
 lint: lint-install lint-version-check
-	cd user-server && golangci-lint run ./...
+	cd user-server && GOTOOLCHAIN=$(GOLANGCI_TOOLCHAIN) golangci-lint run ./... --timeout 20m
 
 # 配置文件自身的校验门：写歪时唯一会出声的地方，所以它不能摘。
 # 为什么单独成一步并自带重试：v2.10.0 的 `golangci-lint config verify` 要先 HTTPS

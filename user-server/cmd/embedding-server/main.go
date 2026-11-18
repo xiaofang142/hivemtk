@@ -284,10 +284,3 @@ func envInt(key string, def int) int {
 	}
 	return def
 }
-
-func envStr(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}

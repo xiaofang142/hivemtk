@@ -24,8 +24,8 @@ import (
 	"time"
 
 	"bytes"
-	_type "hivemtk-user/internal/pkg/utils/type"
 	"hivemtk-user/internal/pkg/urlguard"
+	_type "hivemtk-user/internal/pkg/utils/type"
 	"io"
 	"net/http"
 	"net/smtp"

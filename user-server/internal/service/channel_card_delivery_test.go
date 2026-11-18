@@ -32,7 +32,7 @@ func TestCardDelivery_TextPreservesFactsAndReplayIsIdempotent(t *testing.T) {
 		Fields:  map[string]string{"B费用": "以正式报价为准", "A内存": "32GB"},
 		Buttons: []model.CardButton{{Text: "详情", URL: "https://docs.example.com/product"}, {Text: "支付", Action: "pay"}},
 	}}
-	text, err := cardTextDelivery("内存需求还取决于模型大小。", cards)
+	text, err := foldCardsToText("内存需求还取决于模型大小。", cards)
 	if err != nil {
 		t.Fatalf("可读卡片不能丢弃：%v", err)
 	}
@@ -44,10 +44,10 @@ func TestCardDelivery_TextPreservesFactsAndReplayIsIdempotent(t *testing.T) {
 	if strings.Index(text, "A内存") > strings.Index(text, "B费用") {
 		t.Fatal("字段次序必须确定，不能随 map 遍历波动导致重复身份")
 	}
-	if again, err := cardTextDelivery(text, cards); err != nil || again != text {
+	if again, err := foldCardsToText(text, cards); err != nil || again != text {
 		t.Fatalf("重放不能重复附加卡片信息：err=%v", err)
 	}
-	if _, err := cardTextDelivery("已经展示", []model.RichCard{{}}); err == nil {
+	if _, err := foldCardsToText("已经展示", []model.RichCard{{}}); err == nil {
 		t.Fatal("不可表达的空卡片必须明确失败而不是发送空内容")
 	}
 }
