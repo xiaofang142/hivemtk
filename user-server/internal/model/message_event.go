@@ -24,6 +24,12 @@ const (
 	ChannelFeishu   = "feishu"
 	ChannelDingTalk = "dingtalk"
 	ChannelQQ       = "qq"
+	// 2026-11 specs/025：新平台接入（企微客服 / OneBot v11 / Slack / 企微智能机器人）。
+	ChannelWeComCS   = "wecomcs"
+	ChannelOneBot    = "onebot"
+	ChannelSlack     = "slack"
+	ChannelWeCombBot = "wecombot"
+	ChannelCustom    = "custom"
 )
 
 // 消息类型

@@ -48,7 +48,14 @@ func TestSaveFinalScreenshotReturnsPublicURLNotStoragePath(t *testing.T) {
 	}
 
 	// 另一侧：URL 去掉 /files/ 前缀必须正好命中本次落盘的那份字节。
-	rel := strings.TrimPrefix(url, "/files/")
+	//
+	// 公开 URL 现在带访问签名（`?s=…`，见 storage/local.go 的 on 模式）：签名是
+	// 取文件的凭据，不是磁盘路径的一部分，定位文件前必须先摘掉查询串。
+	urlPath := url
+	if i := strings.IndexByte(urlPath, '?'); i >= 0 {
+		urlPath = urlPath[:i]
+	}
+	rel := strings.TrimPrefix(urlPath, "/files/")
 	full := filepath.Join(base, filepath.FromSlash(rel))
 	got, err := os.ReadFile(full)
 	if err != nil {

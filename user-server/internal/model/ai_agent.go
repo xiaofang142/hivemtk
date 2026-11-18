@@ -119,6 +119,11 @@ const (
 	ChannelTypePDD      ChannelType = "pdd"
 	ChannelTypeWeb      ChannelType = "web"
 	ChannelTypeWebEmbed ChannelType = "web_embed"
+	// 2026-11 specs/025 新平台（与 model.Channel* 同名）。
+	ChannelTypeWeComCS   ChannelType = "wecomcs"
+	ChannelTypeOneBot    ChannelType = "onebot"
+	ChannelTypeSlack     ChannelType = "slack"
+	ChannelTypeWeCombBot ChannelType = "wecombot"
 )
 
 // ChannelAgentBinding 渠道账号 ↔ 智能体绑定

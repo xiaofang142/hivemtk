@@ -594,9 +594,17 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 	// validateWebhookURL 的解析期校验保留作快速失败，但它挡不住 DNS rebinding——
 	// 校验与建连之间目标域名可重解析到内网 IP；拨号期 Control 回调对 rebinding、
 	// 重定向、CGNAT/云元数据段全部生效。
+	//
+	// 开发期豁免（MARKETING_WEBHOOK_ALLOW_INSECURE）必须同时覆盖这两层：豁免只在
+	// validateWebhookURL 里生效的话，本地联调把 webhook 指向 127.0.0.1 仍会在拨号期
+	// 被拒 —— 策略一致、实现两处，漏一处就是「配置放行但永远调不通」。
+	var transport http.RoundTripper = urlguard.GuardedTransport()
+	if insecureWebhookBypassAllowed() {
+		transport = http.DefaultTransport
+	}
 	client := &http.Client{
 		Timeout:   30 * time.Second,
-		Transport: urlguard.GuardedTransport(),
+		Transport: transport,
 	}
 	resp, err := client.Do(req)
 	if err != nil {

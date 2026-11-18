@@ -608,7 +608,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 全部打成 403 的。分档判据是**端点操作的数据落在哪张表**，不是"挂在哪个组"。
 		//
 		// 详见 middleware.PlatformOperatorMiddleware 与
-		// .specify/bugs/cross-tenant-admin-privilege-escalation/。
+		// .specify/bugs/cross-tenant-admin-privilege-escalation/（档案已移出当前工作区，见 git 历史）。
 		tenantAdmin := auth.Group("")
 		tenantAdmin.Use(middleware.AdminAuthMiddleware())
 

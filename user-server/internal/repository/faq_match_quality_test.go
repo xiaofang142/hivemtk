@@ -131,7 +131,7 @@ func TestFAQMatch_NoWrongAnswer(t *testing.T) {
 		{"怎么联系你们", "怎么联系 HiveMTK 官方？"},
 		{"能怎么帮我的业务", "能怎么帮我的业务？举个例子"},
 		{"你们产品有什么功能", "HiveMTK 的 AI 智能体能做什么？"},
-		// 上一轮修复留下的问法（.specify/bugs/website-chat-false-handoff）—— 保留判据不丢
+		// 上一轮修复留下的问法（原案见 .specify/bugs/website-chat-false-handoff，档案已移出当前工作区）—— 保留判据不丢
 		{"HiveMTK 是什么？", "HiveMTK 是什么？"},
 		{"这个平台是做什么的", "HiveMTK 是什么？"},
 		{"平台能接入哪些渠道", "HiveMTK 支持哪些渠道接入？"},
