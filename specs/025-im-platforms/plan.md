@@ -77,4 +77,19 @@
 | M-5 | `wecom_integration.go` `if false ||` 死条件清理 | 024 review2 §C 留观项 | grep 无死条件 |
 
 M-2/M-3 与平台批共享 `internal/channelcaps/manifests.go` 与渲染文件，按 §三 串行纪律执行。
+
+**状态（2026-11-18）**：M-2/M-3/M-4 已完成（M-1/M-5 随 024 交付完成）。
+
+- M-2：`Manifest` 新增 `MaxAttachments`/`MaxAttachmentBytes`/`AttachmentEvidence` + `AttachmentLimitOf`；
+  21 条 manifest 逐条登记（桥接渠道经 `bridge()` 闭包共享），`AttachmentEvidence` 全部非空；
+  防漂移测试 `TestEveryManifestDeclaresAttachmentLimit`（负值/空证据红，入站媒体渠道的 0 上限必须解释）
+  + `TestAttachmentLimitOf`；能力表增「附件数/附件上限/附件取证」三列并由 `TestCapabilityDocFreshness` 钉死。
+  校验落点仍是渠道客户端（inbox_ingress / channelbot），本次只声明不拦截。
+- M-3：`RenderForChannel` 在格式转换前调 `normalizeOutboundText`：代码围栏外清硬换行行尾反斜杠
+  （奇数个才清，`C:\\tmp` 这类成对反斜杠不动）、还原 `\---`/`\***`/`\___` 转义分隔线、
+  去尾随空行；围栏内逐字保留。单测 `TestRender_NormalizesCommonMarkHardBreaks` /
+  `TestRender_RestoresEscapedThematicBreak` / `TestRender_KeepsCodeFenceVerbatim` / `TestRender_TrimsTrailingBlankLines`。
+- M-4：`TestNonMessagePlatformsCarryOnlyConnectorCaps` 钉住「不在 channelcaps 的平台只能有
+  sms/email/kb.sync 能力」，并要求 ima/webhttp 作为 kb.sync 样本存在；能力表头注明
+  ima/webhttp 是知识库连接器、无 IM 消息路径。
 需证据触发类吸收项（typing／流式四细节／邮件归属／聚合窗口不立项）不进本表，已补登 024 spec §四。

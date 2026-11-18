@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -58,8 +59,13 @@ func RenderForChannel(channel, msgType, content string, cards []model.RichCard) 
 	}
 
 	// 2. 格式转换：只对正文类消息做（卡片/图片等形态的 content 是说明文字，不剥语法）。
-	if format == channelcaps.OutboundFormatPlain && (msgType == "" || msgType == model.MsgTypeText) {
-		out.Text = StripMarkdownForDM(out.Text)
+	if msgType == "" || msgType == model.MsgTypeText {
+		// CommonMark 记账记号（硬换行反斜杠、转义分隔线）在任何载体上都是噪音，
+		// 先统一清掉，再按目标格式剥语法——顺序反了会把刚还原的 --- 又当成列表标记处理。
+		out.Text = normalizeOutboundText(out.Text)
+		if format == channelcaps.OutboundFormatPlain {
+			out.Text = StripMarkdownForDM(out.Text)
+		}
 	}
 
 	// 3. 溢出计数（不切分）。
@@ -138,4 +144,57 @@ func foldCardsToText(content string, cards []model.RichCard) (string, error) {
 		text += block
 	}
 	return text, nil
+}
+
+// mdEscapedThematicBreak 行首被反斜杠转义的主题分隔线（\--- / \*** / \___）。
+var mdEscapedThematicBreak = regexp.MustCompile(`^([ \t]*)\\(-{3,}|\*{3,}|_{3,})([ \t]*)$`)
+
+// normalizeOutboundText 清掉「CommonMark 硬换行 / 转义分隔线」在消息载体上的残留（specs/025 M-3）。
+//
+// 模型按 CommonMark 写作时会留下两类只在 Markdown 渲染器里有意义的记号：
+//   - 行尾反斜杠（硬换行）：纯文本载体（网页私信输入框、短信…）会原样显示 "\"；
+//   - 用作分隔线的 \--- / \*** / \___：反斜杠同样会被客户看见。
+//
+// 代码围栏内的内容逐字保留：那里可能是要复制的命令/代码，改一个字符就是错。
+// 尾随空行也不留（DM 气泡会把它们渲染成多余空白）。
+func normalizeOutboundText(content string) string {
+	if content == "" || !strings.ContainsAny(content, "\\\n\r") {
+		return content
+	}
+	s := strings.ReplaceAll(content, "\r\n", "\n")
+	lines := strings.Split(s, "\n")
+	inFence := false
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		line = unescapeThematicBreak(line)
+		lines[i] = trimHardBreakBackslash(line)
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+// trimHardBreakBackslash 去掉行尾作为硬换行标记的反斜杠。
+// 连续反斜杠为奇数才说明最后一个是标记（偶数时是成对的字面反斜杠）。
+func trimHardBreakBackslash(line string) string {
+	if !strings.HasSuffix(line, "\\") {
+		return line
+	}
+	n := len(line) - len(strings.TrimRight(line, "\\"))
+	if n%2 == 0 {
+		return line
+	}
+	return line[:len(line)-1]
+}
+
+func unescapeThematicBreak(line string) string {
+	if !strings.Contains(line, "\\") {
+		return line
+	}
+	return mdEscapedThematicBreak.ReplaceAllString(line, "$1$2$3")
 }

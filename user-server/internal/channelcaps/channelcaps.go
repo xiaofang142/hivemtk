@@ -60,7 +60,16 @@ type Manifest struct {
 	// FormatEvidence 格式取值的证据锚（代码位置或协议事实），空 = 未验证。
 	// 没有证据的格式声明等于猜的，出站行为一变就没人知道该改哪。
 	FormatEvidence string
-	Note           string
+	// MaxAttachments 单条消息可携带的附件数上限；0 = 未设上限或该渠道无附件通道
+	// （区别写在 AttachmentEvidence）。与 MaxTextLen 同口径：只声明与校验提示，不截断。
+	MaxAttachments int
+	// MaxAttachmentBytes 单个附件的字节上限；0 = 未设上限。
+	// 多类型上限不一致时按**最严**的一类登记（宁严不宽，宽了会把超限附件放进渠道再失败）。
+	MaxAttachmentBytes int64
+	// AttachmentEvidence 附件上限的证据锚（落点代码或平台协议事实），空 = 未验证。
+	// 附件校验落点在渠道客户端（inbox_ingress / channelbot），不在渲染层（specs/025 M-2）。
+	AttachmentEvidence string
+	Note               string
 }
 
 // 出站正文格式词表。
@@ -101,6 +110,12 @@ func Register(m Manifest) {
 	}
 	if m.MaxTextLen < 0 {
 		m.MaxTextLen = 0
+	}
+	if m.MaxAttachments < 0 {
+		m.MaxAttachments = 0
+	}
+	if m.MaxAttachmentBytes < 0 {
+		m.MaxAttachmentBytes = 0
 	}
 	m.Inbound = dedupSorted(m.Inbound)
 	m.Events = dedupSorted(m.Events)
@@ -193,6 +208,20 @@ func OutboundFormatOf(channel string) string {
 	return ""
 }
 
+// AttachmentLimit 渠道的附件上限。零值 = 未设上限（或该渠道无附件通道，见 Manifest.AttachmentEvidence）。
+type AttachmentLimit struct {
+	MaxCount int
+	MaxBytes int64
+}
+
+// AttachmentLimitOf 该渠道的附件上限；未知渠道返回零值。
+func AttachmentLimitOf(channel string) AttachmentLimit {
+	if m, ok := manifests[channel]; ok {
+		return AttachmentLimit{MaxCount: m.MaxAttachments, MaxBytes: m.MaxAttachmentBytes}
+	}
+	return AttachmentLimit{}
+}
+
 // MaxTextLenOf 该渠道单条正文上限；未知渠道或未设上限返回 0。
 func MaxTextLenOf(channel string) int {
 	if m, ok := manifests[channel]; ok {
@@ -229,8 +258,10 @@ func Markdown() string {
 	var b strings.Builder
 	b.WriteString("# 渠道消息级能力表\n\n")
 	b.WriteString("> 本文件由 `internal/channelcaps` 生成（channelcaps.Markdown），测试钉死与注册表一致，**请勿手改**。\n")
-	b.WriteString("> 口径：只登记代码已落地的收发路径；未登记 = 未实现/未验证，出站降级与 AI 能力提示词一律按「不支持」处理。\n\n")
-	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 平台事件 | 出站格式 | 文本上限 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|---|---|---|\n")
+	b.WriteString("> 口径：只登记代码已落地的收发路径；未登记 = 未实现/未验证，出站降级与 AI 能力提示词一律按「不支持」处理。\n")
+	b.WriteString("> 附件上限只做声明与校验提示，不截断；落点在渠道客户端（inbox_ingress / channelbot），不在出站渲染层。0 = 未设上限或无附件通道，依据见「附件取证」。\n")
+	b.WriteString("> 粗粒度能力（能否接入/能否发）见 `internal/capregistry`；`ima`/`webhttp` 是知识库连接器（capregistry 只登记 `kb.sync`），没有 IM 消息路径，故不在本表；`sms`/`email` 虽非 IM，但按触达载荷登记。\n\n")
+	b.WriteString("| 渠道 | 名称 | 接入 | 入站消息 | 出站消息 | 平台事件 | 出站格式 | 文本上限 | 附件数 | 附件上限 | 附件取证 | 交互特征 | 说明 |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, m := range All() {
 		features := make([]string, 0, len(m.Features))
 		for _, f := range m.Features {
@@ -243,12 +274,34 @@ func Markdown() string {
 		if m.MaxTextLen > 0 {
 			maxLen = fmt.Sprintf("%d", m.MaxTextLen)
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
+		maxAttachments := "—"
+		if m.MaxAttachments > 0 {
+			maxAttachments = fmt.Sprintf("%d", m.MaxAttachments)
+		}
+		maxAttachmentBytes := "—"
+		if m.MaxAttachmentBytes > 0 {
+			maxAttachmentBytes = humanBytes(m.MaxAttachmentBytes)
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n",
 			m.Channel, m.Label, m.Via, codeList(m.Inbound), codeList(m.Outbound),
 			codeList(m.Events), "`"+m.OutboundFormat+"`", maxLen,
+			maxAttachments, maxAttachmentBytes, strings.ReplaceAll(m.AttachmentEvidence, "|", "\\|"),
 			strings.Join(features, " "), strings.ReplaceAll(m.Note, "|", "\\|"))
 	}
 	return b.String()
+}
+
+func humanBytes(n int64) string {
+	switch {
+	case n >= 1024*1024*1024 && n%(1024*1024*1024) == 0:
+		return fmt.Sprintf("%dGB", n/(1024*1024*1024))
+	case n >= 1024*1024 && n%(1024*1024) == 0:
+		return fmt.Sprintf("%dMB", n/(1024*1024))
+	case n >= 1024 && n%1024 == 0:
+		return fmt.Sprintf("%dKB", n/1024)
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 func codeList(list []string) string {

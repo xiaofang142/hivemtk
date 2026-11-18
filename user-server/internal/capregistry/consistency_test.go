@@ -36,3 +36,25 @@ func TestEveryCapregistryPlatformExistsInChannelcaps(t *testing.T) {
 	}
 	t.Logf("已校验 %d/%d 条粗粒度登记的 IM 能力平台全部存在于 channelcaps", checked, len(entries))
 }
+
+// specs/025 M-4：粗细两套矩阵的分工——不在 channelcaps 里的平台只能是「非消息」能力
+// （短信/邮件触达、知识库同步），且必须真的存在，避免这条分工断言变成空转。
+func TestNonMessagePlatformsCarryOnlyConnectorCaps(t *testing.T) {
+	nonMessage := map[string]bool{}
+	for _, e := range All() {
+		if channelcaps.Known(e.Platform) {
+			continue
+		}
+		switch e.Cap {
+		case CapSMS, CapEmail, CapKBSync:
+			nonMessage[e.Platform] = true
+		default:
+			t.Errorf("平台 %q 不在 channelcaps 且有消息类能力 %s：要么补 manifest，要么撤掉该能力登记", e.Platform, e.Cap)
+		}
+	}
+	for _, platform := range []string{"ima", "webhttp"} {
+		if !nonMessage[platform] {
+			t.Errorf("知识库连接器 %q 未登记为 kb.sync：非消息平台分工断言失去样本", platform)
+		}
+	}
+}

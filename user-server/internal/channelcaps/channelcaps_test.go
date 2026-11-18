@@ -113,3 +113,42 @@ func TestAllSortedAndStable(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryManifestDeclaresAttachmentLimit 附件上限必须逐条有声明与证据锚（specs/025 M-2）：
+// 空证据 = 猜的，校验落点在渠道客户端时没人知道该按哪个数拒收。
+func TestEveryManifestDeclaresAttachmentLimit(t *testing.T) {
+	for _, m := range All() {
+		if m.MaxAttachments < 0 {
+			t.Errorf("%s: MaxAttachments 不能为负（%d）", m.Channel, m.MaxAttachments)
+		}
+		if m.MaxAttachmentBytes < 0 {
+			t.Errorf("%s: MaxAttachmentBytes 不能为负（%d）", m.Channel, m.MaxAttachmentBytes)
+		}
+		if strings.TrimSpace(m.AttachmentEvidence) == "" {
+			t.Errorf("%s: 缺少 AttachmentEvidence（0 上限也必须写明「无附件通道」或「未校验」的依据）", m.Channel)
+		}
+		if mediaInbound(m.Inbound) && m.MaxAttachments == 0 && !strings.Contains(m.AttachmentEvidence, "无") && !strings.Contains(m.AttachmentEvidence, "未校验") && !strings.Contains(m.AttachmentEvidence, "不校验") {
+			t.Errorf("%s: 入站支持媒体但附件数为 0，证据未说明原因：%q", m.Channel, m.AttachmentEvidence)
+		}
+	}
+}
+
+func mediaInbound(types []string) bool {
+	for _, mt := range types {
+		switch mt {
+		case model.MsgTypeImage, model.MsgTypeFile, model.MsgTypeAudio, model.MsgTypeVideo:
+			return true
+		}
+	}
+	return false
+}
+
+func TestAttachmentLimitOf(t *testing.T) {
+	got := AttachmentLimitOf(model.ChannelTelegram)
+	if got.MaxCount != 10 || got.MaxBytes != 20*1024*1024 {
+		t.Fatalf("telegram 附件上限读数错误：%+v", got)
+	}
+	if got := AttachmentLimitOf("not_a_channel"); got != (AttachmentLimit{}) {
+		t.Fatalf("未知渠道应返回零值，实际 %+v", got)
+	}
+}

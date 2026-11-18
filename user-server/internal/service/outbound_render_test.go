@@ -103,3 +103,59 @@ func TestRender_BridgeFamilyAllMarkdownStripped(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_NormalizesCommonMarkHardBreaks 行尾硬换行反斜杠不能漏进纯文本输入框。
+func TestRender_NormalizesCommonMarkHardBreaks(t *testing.T) {
+	in := "第一行\\\n第二行"
+	out, err := RenderForChannel("douyin", model.MsgTypeText, in, nil)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(out.Text, "\\") {
+		t.Fatalf("硬换行反斜杠必须清掉，实际 %q", out.Text)
+	}
+	if out.Text != "第一行\n第二行" {
+		t.Fatalf("换行结构应保留：%q", out.Text)
+	}
+	// 成对反斜杠是字面内容（Windows 路径），不能当成标记删半个。
+	if out2, _ := RenderForChannel("web", model.MsgTypeText, `C:\\tmp`, nil); out2.Text != `C:\\tmp` {
+		t.Fatalf("成对反斜杠应原样保留，实际 %q", out2.Text)
+	}
+}
+
+// TestRender_RestoresEscapedThematicBreak 模型为防止误渲染写的 \--- 在消息载体上应还原为 ---。
+func TestRender_RestoresEscapedThematicBreak(t *testing.T) {
+	out, err := RenderForChannel("web", model.MsgTypeText, "上文\n\\---\n下文", nil)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if out.Text != "上文\n---\n下文" {
+		t.Fatalf("转义分隔线应还原，实际 %q", out.Text)
+	}
+}
+
+// TestRender_KeepsCodeFenceVerbatim 代码围栏内的反斜杠是内容，逐字保留；围栏外照常清理。
+func TestRender_KeepsCodeFenceVerbatim(t *testing.T) {
+	in := "```bash\necho a \\\n\\---\n```\n结束\\"
+	out, err := RenderForChannel("web", model.MsgTypeText, in, nil)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(out.Text, "echo a \\\n\\---\n") {
+		t.Fatalf("代码围栏内容被改写：%q", out.Text)
+	}
+	if !strings.HasSuffix(out.Text, "结束") {
+		t.Fatalf("围栏外硬换行反斜杠应清掉，实际 %q", out.Text)
+	}
+}
+
+// TestRender_TrimsTrailingBlankLines 尾随空行不进入气泡。
+func TestRender_TrimsTrailingBlankLines(t *testing.T) {
+	out, err := RenderForChannel("web", model.MsgTypeText, "正文\n\n\n", nil)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if out.Text != "正文" {
+		t.Fatalf("尾随空行应清掉，实际 %q", out.Text)
+	}
+}
