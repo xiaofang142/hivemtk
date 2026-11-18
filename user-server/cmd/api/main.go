@@ -175,6 +175,11 @@ func main() {
 	db.AutoMigrate()
 	markPhase("db_migrate")
 
+	// DB 就绪后的周期任务装配（2026-11-19 勘误：init() 自装配先于本行，repo 拿 nil
+	// 句柄静默空转——出站回收巡检与卡片交互到期清理两任务由此处启动，幂等 Once）。
+	service.StartOutboundReclaimAfterDBInit()
+	service.StartChannelInteractionExpiryAfterDBInit()
+
 	// W-6 工具审计落库：退出前排空异步队列（见 internal/app/tool_audit_wiring.go）。
 	//
 	// 为什么登记在这里而不是紧跟装配点（router.Setup 在更下面）：defer 是 LIFO，

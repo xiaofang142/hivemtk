@@ -92,11 +92,20 @@ func (t *OutboundReclaimTask) Stop() {
 	t.wg.Wait()
 }
 
-var outboundReclaimTask *OutboundReclaimTask
+var (
+	outboundReclaimTask *OutboundReclaimTask
+	outboundReclaimOnce sync.Once
+)
 
-func init() {
-	outboundReclaimTask = NewOutboundReclaimTask(repository.NewMessageHubRepository())
-	outboundReclaimTask.Start(context.Background())
+// StartOutboundReclaimAfterDBInit DB 就绪后的装配点（cmd/api main.go 在 db.AutoMigrate
+// 之后调用）。**不能学先例在 init() 里装配**：Go init 先于 main 的 db.InitDB，repo 拿到
+// nil 句柄 → sweep 永远空转（2026-11-19 线上实证：巡检批上线后陈旧积压纹丝不动）。
+// 幂等：Once 保证多次调用只启动一份。
+func StartOutboundReclaimAfterDBInit() {
+	outboundReclaimOnce.Do(func() {
+		outboundReclaimTask = NewOutboundReclaimTask(repository.NewMessageHubRepository())
+		outboundReclaimTask.Start(context.Background())
+	})
 }
 
 // OutboundReclaimForTest 暴露当前全局任务（仅测试用）。

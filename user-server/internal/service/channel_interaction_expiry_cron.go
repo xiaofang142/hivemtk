@@ -108,12 +108,21 @@ func (t *ChannelInteractionExpiryTask) Stop(ctx context.Context) {
 	}
 }
 
-var channelInteractionExpiryCron *ChannelInteractionExpiryTask
+var (
+	channelInteractionExpiryCron *ChannelInteractionExpiryTask
+	channelInteractionExpiryOnce sync.Once
+)
 
-func init() {
-	repo := repository.NewChannelInteractionRepositoryDefault()
-	channelInteractionExpiryCron = NewChannelInteractionExpiryTask(repo)
-	channelInteractionExpiryCron.Start(context.Background())
+// StartChannelInteractionExpiryAfterDBInit DB 就绪后的装配点（cmd/api main.go 调用）。
+// 2026-11-19 勘误：原 init() 自装配先于 main 的 db.InitDB，repo 拿 nil 句柄 → 该清理
+// 任务自上线以来从未真正工作过（RunOnce nil 保护静默返回 0）。与
+// StartOutboundReclaimAfterDBInit 同批改为 DB 就绪后装配；幂等 Once。
+func StartChannelInteractionExpiryAfterDBInit() {
+	channelInteractionExpiryOnce.Do(func() {
+		repo := repository.NewChannelInteractionRepositoryDefault()
+		channelInteractionExpiryCron = NewChannelInteractionExpiryTask(repo)
+		channelInteractionExpiryCron.Start(context.Background())
+	})
 }
 
 // ChannelInteractionExpiryForTest 暴露当前全局任务（仅测试用）。
