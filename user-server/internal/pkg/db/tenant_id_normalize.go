@@ -44,6 +44,15 @@ func normalizeTenantIDColumns(db *gorm.DB) {
 	// 用 []string 而不是结构体：GORM 把 table_name 列映射到 TableName 字段
 	// （不是 Table），字段名对不上时 Scan **静默给零值** —— 实测表现为
 	// "候选为空、循环不执行、日志一条没有"，功能没跑而程序看起来一切正常。
+	// tenantIDStringModelTables —— tenant_id **刻意**用字符串租户键的证据链表
+	//（specs/024 B2：channel_event_audits / channel_interactions。租户键语义 =
+	// 审计证据域，与 operation_logs 的 uint 分离；隔离 callback 已按登记表列类型
+	// 绑定字符串形态，见 tenancyidx tenantBindValueFor）。这些表是「人工决定保留」
+	// 的豁免口径——归一化把它们转成 bigint 会砸掉整个设计，且模型字段仍是 string。
+	var tenantIDStringModelTables = map[string]bool{
+		"channel_event_audits": true,
+		"channel_interactions": true,
+	}
 	var tables []string
 	if err := db.Raw(`SELECT table_name FROM information_schema.columns
 		WHERE table_schema = current_schema() AND column_name = 'tenant_id'
@@ -58,6 +67,10 @@ func normalizeTenantIDColumns(db *gorm.DB) {
 	logger.Warnf("[migrate] 发现 %d 张表的 tenant_id 类型漂移（varchar 应为 bigint），开始归一化", len(tables))
 
 	for _, table := range tables {
+		if tenantIDStringModelTables[table] {
+			logger.Infof("[migrate] %s.tenant_id 为字符串租户键（specs/024 B2 设计），跳过归一化", table)
+			continue
+		}
 		if !tenantTableIdentRe.MatchString(table) {
 			logger.Warnf("[migrate] 表名 %q 不符合标识符规范，跳过归一化（需人工处理）", table)
 			continue

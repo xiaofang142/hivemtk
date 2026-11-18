@@ -77,7 +77,19 @@
   `traceObservation*` i18n 缺键（L 轮遗留）。
 - `-race` 子集（金样/注册表/新验收）绿。
 
-## 八、遗留与去向
+## 八、第二轮「一次性完成所有未完成」批（2026-11-18）
+
+- **D1（阻断级）**：MODE=on 下 varchar 租户表全断 —— 隔离 callback 类型感知绑定
+  （tenancyidx 登记表内省列类型 + 豁免归一化清单），外来 3 条全绿（首次），service 全量绿。
+- **D2（T209 契约升级）**：证据链 ctx 租户权威 + 幂等键入 account_id（迁移 070）+
+  交互/审计同事务（RecordCallbackWithAudit）+ 证据故障明确拒绝（err 透传）。
+- **D3（T501）**：模型 tag 与迁移 065 对齐（身份锚漏列/键名漂移）+ 迁移跑两次与
+  pg_indexes 形状断言测试（channel_evidence_migration_test.go）。
+- **D4/D5/D6**：`if false ||` 死条件清理；T205 矩阵扩全表；T606 组件级点验 3 例 +
+  build/eslint 绿（浏览器点验环境受阻记录于 review3.md D6）。
+- 全文见 `review3.md` 四审追加段。
+
+## 九、遗留与去向
 
 - 025 平台接入（wecomcs/OneBot/Slack/wecombot/custom）：B1+B2 前置已就绪，按 025 spec 排期。
 - `webhttp/ima` 的粗细能力矩阵归位与 wecom_integration 死条件清理：归 025 首切片前的杂项。

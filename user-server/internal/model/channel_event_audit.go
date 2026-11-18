@@ -13,10 +13,12 @@ import "time"
 type ChannelEventAudit struct {
 	TenantID       string `gorm:"column:tenant_id;type:varchar(64);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:1" json:"tenant_id"`
 	Channel        string `gorm:"column:channel;type:varchar(32);not null;uniqueIndex:idx_channel_event_audit,priority:2" json:"channel"`
-	ChannelMsgID   string `gorm:"column:channel_msg_id;type:varchar(128);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:3" json:"channel_msg_id"`
-	EventType      string `gorm:"column:event_type;type:varchar(64);not null;uniqueIndex:idx_channel_event_audit,priority:4" json:"event_type"`
+	// AccountID 入幂等键（specs/024 三审 T209 契约）：同一 msg_id 在不同账号下是
+	// 两份独立证据，跨账号去重会丢证据（2026-11-18 对抗复核 R2）。
+	AccountID      string `gorm:"column:account_id;type:varchar(64);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:3" json:"account_id"`
+	ChannelMsgID   string `gorm:"column:channel_msg_id;type:varchar(128);not null;default:'';uniqueIndex:idx_channel_event_audit,priority:4" json:"channel_msg_id"`
+	EventType      string `gorm:"column:event_type;type:varchar(64);not null;uniqueIndex:idx_channel_event_audit,priority:5" json:"event_type"`
 	ID             uint   `gorm:"primaryKey;autoIncrement" json:"id"`
-	AccountID      string `gorm:"column:account_id;type:varchar(64);not null;default:'';index" json:"account_id"`
 	SenderID       string `gorm:"column:sender_id;type:varchar(128);not null;default:''" json:"sender_id"`
 	SenderName     string `gorm:"column:sender_name;type:varchar(128);not null;default:''" json:"sender_name"`
 	ConversationID string `gorm:"column:conversation_id;type:varchar(128);not null;default:'';index" json:"conversation_id"`

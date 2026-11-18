@@ -132,8 +132,8 @@ func (s *WeComIntegrationService) SendMessage(ctx context.Context, req *WeComSen
 	if s.repo == nil {
 		return nil, fmt.Errorf("db is nil")
 	}
-	if false || req.AccountID == 0 || req.ExternalUserID == "" {
-		return nil, fmt.Errorf(" account_id, external_user_id are required")
+	if req.AccountID == 0 || req.ExternalUserID == "" {
+		return nil, fmt.Errorf("account_id, external_user_id are required")
 	}
 	if req.MsgType == "" {
 		req.MsgType = "text"

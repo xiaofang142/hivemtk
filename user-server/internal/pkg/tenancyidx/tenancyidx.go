@@ -268,6 +268,10 @@ func compositeIndexDef(def, table, name string) (string, error) {
 var (
 	registryMu sync.RWMutex
 	registry   map[string]bool
+	// stringTenantTable tenant_id 列为字符类型的租户表（specs/024 B2 证据链表：
+	// channel_event_audits / channel_interactions 刻意用字符串租户键）。
+	// 隔离 callback 据此绑定字符串形态的租户值（见 tenant_callback.go tenantBindValueFor）。
+	stringTenantTable map[string]bool
 )
 
 // InitTenantRegistry 装配期调用（AutoMigrate 尾部 / 测试夹具）：
@@ -279,7 +283,7 @@ func InitTenantRegistry(gdb *gorm.DB) error {
 		return fmt.Errorf("db is nil")
 	}
 	rows, err := gdb.WithContext(tenant.WithSystemScope(dbContext(gdb))).Raw(`
-		SELECT c.table_name
+		SELECT c.table_name, c.data_type
 		FROM information_schema.columns c
 		JOIN information_schema.tables t
 		  ON t.table_schema = c.table_schema AND t.table_name = c.table_name
@@ -293,20 +297,39 @@ func InitTenantRegistry(gdb *gorm.DB) error {
 	defer func() { _ = rows.Close() }()
 
 	reg := make(map[string]bool)
+	strReg := make(map[string]bool)
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var name, dataType string
+		if err := rows.Scan(&name, &dataType); err != nil {
 			return fmt.Errorf("扫描租户表名失败: %w", err)
 		}
 		reg[name] = true
+		if dataType == "character varying" || dataType == "text" {
+			strReg[name] = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("遍历租户表名失败: %w", err)
 	}
 	registryMu.Lock()
 	registry = reg
+	stringTenantTable = strReg
 	registryMu.Unlock()
 	return nil
+}
+
+// IsStringTenantTable 表的 tenant_id 列是否为字符类型（绑定字符串形态的判定源）。
+// 登记表未初始化按 uint 口径（off 行为不变）。
+func IsStringTenantTable(table string) bool {
+	if table == "" {
+		return false
+	}
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+	if stringTenantTable == nil {
+		return false
+	}
+	return stringTenantTable[table]
 }
 
 func dbContext(db *gorm.DB) context.Context {
