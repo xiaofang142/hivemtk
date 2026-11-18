@@ -19,6 +19,20 @@
 - **换机注意**：五渠道全链现已在生产可用（注册表/词表/caps/capregistry/双枚举/渲染全齐），
   待真机校准后开闸（fail-closed 语义不变）。
 
+## 2026-11-19 · 平台端发布：platform-server + platform-web（用户令「发布线上」补齐面）
+
+- **盘点**：user-server API 已是最新（2788fb6c2 后零 user-server 提交，链 A 无待发）；
+  **真正的待发布面=平台端**——平台容器还是 11-13 老版，并行批 8875f36/3ecf11e 的
+  platform_link 平台侧功能（deploy_mode/client_machine 契约新键的接收落库、商户形态列、
+  租户形态筛选）从未上线——租户侧心跳已在发这些键，旧二进制静默忽略=功能不生效。
+- **发布**：外层 deploy/deploy.sh（平台侧发布入口）——`check` 六公网 URL 全过 →
+  `platform-server`（交叉编译+容器化+迁移幂等跳过 6/新应用 0；新镜像
+  7287a06f4615…，容器重启 07:35，liveness/readiness 双健康过）→ `platform-web`
+  （vite 构建新 hash 资产 + 公网检查过）。
+- **终验**：六面公网全 200（workapi/work/manageapi/manage/developer/embed widget）。
+- **注意**：platform-server 发布链与 user-server 链 A 互相独立（外层 deploy.sh vs 内层
+  deploy-api.sh）；platform 库迁移幂等可重跑；换机时两套发布入口都要装。
+
 ## 2026-11-19 · 自立项巡检批二次审核（对抗复核闭环）+ 生产数据口径修正
 
 - **对抗复核结论**：SSE 重推缺口**证伪**——owed 补拉（批11 §3.7-2）与游标无关、按欠交付
