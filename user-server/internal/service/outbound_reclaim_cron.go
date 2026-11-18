@@ -81,9 +81,9 @@ func (t *OutboundReclaimTask) run(ctx context.Context) {
 				logger.Errorf("[OutboundReclaim] 回收巡检失败（下轮重试）: %v", err)
 				continue
 			}
-			if r+e+a > 0 {
-				logger.Infof("[OutboundReclaim] 回收巡检完成: reclaimed=%d exhausted=%d aged=%d", r, e, a)
-			}
+			// 每轮必打（2026-11-19 巡检批）：零命中轮也要留痕——ticker 存活性与
+			// 「第二轮起零命中」的可观测性靠它，静默会让巡检死活无从判定。
+			logger.Infof("[OutboundReclaim] 回收巡检: reclaimed=%d exhausted=%d aged=%d", r, e, a)
 		}
 	}
 }
