@@ -191,6 +191,14 @@ var messageHubSettableStatuses = map[string]bool{
 	"failed":      true,
 	"send_failed": true,
 	"sent":        true,
+	// duplicate（2026-11-19 口径修正，自立项巡检轮）：AI 同会话同文案去重拒绝的占位行。
+	// 「同回复已 delivered/pending」= 买家已经收到过这句话，不是投递失败——
+	// 旧口径标 failed 把它们灌进 DLQ（生产实证 48h 内 16 条噪音），坐席误判投递故障。
+	// 占位行带 extra.duplicate_of，投递谓词永不重发（CH-37b 契约），终态只是诚实的账。
+	"duplicate": true,
+	// expired（2026-11-19 出站老化）：ReclaimOutboundSweep 把陈年 pending/inflight
+	// （会话早已离开、回复永远送不出去）升级的终态，push_error=outbound_stale_expired。
+	"expired": true,
 }
 
 // 消息中台常量

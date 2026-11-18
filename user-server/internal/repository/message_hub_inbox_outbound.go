@@ -81,6 +81,82 @@ func (r *MessageHubRepository) exhaustOutbound(ctx context.Context, channel, acc
 		}).Error
 }
 
+// pushStaleExpiredError 陈旧老化写在 push_error 上的原因标记（ReclaimOutboundSweep c 步）。
+const pushStaleExpiredError = "outbound_stale_expired"
+
+// ReclaimOutboundSweep 全局出站回收巡检（2026-11-19 SSE 租约缺口修复，自立项巡检轮）。
+//
+// 为什么需要它：超时回收原本只活在 ClaimPendingOutbound（拉取路径）里——桥接扩展切
+// SSE 下发后不再调 GET /api/bridge/outbox，认领超时的行没有任何调用点会回收，
+// 永久 inflight（生产实证：租户 18 xiaohongshu 4 行 inflight 43 分钟无人回收、
+// douyin 7 行自 10-22 挂起；38 条 pending 最早 10-22 至今无人触达）。
+// 认领必须有租约回收，无论下行走哪条通道——本方法做三步**纯回收**（不返回行、
+// 不认领、不改 push_attempts 预算），供后台巡检周期调用，与下行通道形态解耦：
+//
+//	a. 到界行升级终态：push_attempts 耗尽且此刻仍欠交付 → failed + outbound_push_exhausted
+//	  （语义与 exhaustOutbound 同，去 (channel,account) 限定做全表）；
+//	b. 超时 inflight → pending：claimed_at 过 claimTimeout 的行交还给队列，等下一次下发；
+//	c. 陈旧非终态老化：created_at 早于 staleAfter 的 pending/inflight → expired +
+//	  outbound_stale_expired（会话早已离开，回复永远送不出去；挂着只污染待办集合
+//	  与积压观测。send_failed 是扩展端明确拒绝的终态、unknown 是结果不明终态，
+//	  两者都不动）。
+//
+// 全程带 outboundDeliveryPredicate("")：duplicate 占位行（extra.duplicate_of）与
+// 审计行（delivery_kind=audit）永不回收/重发/翻态（CH-37b R2/R6 契约）。
+// 幂等：三步都是条件 UPDATE，重复执行零命中。
+func (r *MessageHubRepository) ReclaimOutboundSweep(ctx context.Context, claimTimeout, staleAfter time.Duration) (reclaimed, exhausted, aged int64, err error) {
+	if r == nil || r.db == nil || claimTimeout <= 0 {
+		return 0, 0, 0, nil
+	}
+	now := time.Now()
+	claimCutoff := now.Add(-claimTimeout)
+
+	// a. 到界行升级终态（全表；unclaimed 的 pending 也在界内——预算耗尽就是耗尽）
+	res := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = 'outbound' AND push_attempts >= ? "+
+			"AND (status = 'pending' OR (status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?))",
+			MaxOutboundPushAttempts, claimCutoff).
+		Where(outboundDeliveryPredicate("")).
+		Updates(map[string]any{
+			"status":     "failed",
+			"push_error": pushExhaustedError,
+			"claimed_at": nil,
+		})
+	if res.Error != nil {
+		return 0, 0, 0, res.Error
+	}
+	exhausted = res.RowsAffected
+
+	// b. 超时 inflight → pending（全表）
+	res = r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("direction = 'outbound' AND status = 'inflight' AND claimed_at IS NOT NULL AND claimed_at < ?", claimCutoff).
+		Where(outboundDeliveryPredicate("")).
+		Updates(map[string]any{"status": "pending", "claimed_at": nil})
+	if res.Error != nil {
+		return 0, exhausted, 0, res.Error
+	}
+	reclaimed = res.RowsAffected
+
+	// c. 陈旧非终态老化（全表；staleAfter<=0 视为关闭老化）
+	if staleAfter > 0 {
+		staleCutoff := now.Add(-staleAfter)
+		res = r.db.WithContext(ctx).Model(&model.MessageHub{}).
+			Where("direction = 'outbound' AND status IN ('pending', 'inflight') AND created_at < ?", staleCutoff).
+			Where(outboundDeliveryPredicate("")).
+			Where("push_attempts < ?", MaxOutboundPushAttempts).
+			Updates(map[string]any{
+				"status":     "expired",
+				"push_error": pushStaleExpiredError,
+				"claimed_at": nil,
+			})
+		if res.Error != nil {
+			return reclaimed, exhausted, 0, res.Error
+		}
+		aged = res.RowsAffected
+	}
+	return reclaimed, exhausted, aged, nil
+}
+
 // pushExhaustedError 写在行上的失败原因。刻意不带界数字：行上的 push_attempts 就是那个数。
 const pushExhaustedError = "outbound_push_exhausted"
 

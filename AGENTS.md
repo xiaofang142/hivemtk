@@ -105,9 +105,9 @@ bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到�
 | 代码区 | 标准文档 | 机器门（CI/本地） | 发布口径 |
 |---|---|---|---|
 | `user-server/`（Go 后端） | `BACKEND-CODING-STANDARDS.md` | layer-boundary / api-contract / enum-consistency / env-example-gate / seam-guard / user-server-ci / `make audit` | 链 A `deploy/deploy-api.sh` |
-| `user-web/src/`（管理端 SPA） | `FRONTEND-CODING-STANDARDS.md` §1 | eslint 门（基线 63/门 80）+ vitest + api-contract | **无自动链**（nginx 伺服 user-web-dist，见 skill `hivemtk-release` §7） |
+| `user-web/src/`（管理端 SPA） | `FRONTEND-CODING-STANDARDS.md` §1 | eslint 门（基线 63/门 80）+ vitest + api-contract | **链 D 已成文（2026-11-19 实测）**：build → tar 备份 → rsync dist → `mtk-prod:/www/wwwroot/hivemtk/user-web/`，nginx 宿主机直伺服，公网验 index 资产 hash（见 RELEASE-PIPELINE §链 D） |
 | `user-web/bridge/`（Chrome MV3 扩展） | `FRONTEND-CODING-STANDARDS.md` §2 | vitest（基线 90+ files）+ ci-bridge | 链 B `npm run publish -- --reload` + 链 C 上链 |
-| `embed-sdk/`（客服 Widget，ADR-011） | `FRONTEND-CODING-STANDARDS.md` §3 | ci-embed-sdk（unit+boundary 62 用例，2026-11-14 补） | **未成文**（dist 本地产出不入库，上线方式待立项补台账） |
+| `embed-sdk/`（客服 Widget，ADR-011） | `FRONTEND-CODING-STANDARDS.md` §3 | ci-embed-sdk（unit+boundary 62 用例，2026-11-14 补） | **链 D 已成文（2026-11-19 实测）**：build → rsync dist → `mtk-prod:/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`，nginx `/embed/` 伺服，公网验 `/embed/marketing-chat-widget.iife.js` 200（RELEASE-PIPELINE §链 D） |
 | `packages/`（共享 JS：browser-core/http-core） | —（被 user-web `src/utils/request.js` 消费，随其 vitest 门 + ci-embed-sdk 触发） | 同左 | 随消费方 |
 | `website/`（官网/术语/工具脚本） | `website/TERMINOLOGY.md`（命名权威） | markdownlint + docs-link-check + `check_i18n.mjs` | — |
 | `migrations/`+`user-server/internal/model/` | — | enum-consistency（SQL↔Go 枚举） | 随链 A |

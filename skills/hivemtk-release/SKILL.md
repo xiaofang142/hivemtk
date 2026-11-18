@@ -151,9 +151,10 @@ isolated Space 的不可见窗口，System Events 拿不到按钮坐标）；Tar
 
 ## 7. 常见误触发与边界
 
-- 只改前端 `user-web/src/**`（管理端页面）⇒ **不属于本 skill**，不走这三条链，正常 commit+push 即可。
-  线上 SPA 由 nginx 伺服服务器上 `state/user-web-dist` 目录（PROD_TOPOLOGY 台账 volumes 注释，2026-11-14 核实）；
-  **目前没有自动同步链，同步方式未成文**——改 SPA 后向用户确认同步方式，不要自行 rsync 线上。
+- 只改前端 `user-web/src/**`（管理端页面）或 `embed-sdk/**` ⇒ **不走链 A/B/C**，走 **链 D 手工同步**
+  （2026-11-19 实测成文：备份 + rsync + 公网 hash 验证，SOP 见 `docs/operations/RELEASE-PIPELINE.md` §链 D；
+  SPA 伺服目录实为 `/www/wwwroot/hivemtk/user-web/`——旧台账 `state/user-web-dist` 注释过时，以链 D 为准；
+  embed-sdk 伺服于 `/www/wwwroot/hivemtk/user-server/embed-sdk-dist/`，公网路径 `/embed/`）。
 - 问「线上现在是什么版本」⇒ 不要猜，读 `PROD_TOPOLOGY_CHANGES.md` 台账。
 - `go test` 报 `test password is missing` ⇒ 环境问题，不是回归，不要当作发布阻塞。
 - **定位目录一律用 §0 的向上查找**，不要用 `git rev-parse --show-toplevel` 猜层级（本仓嵌套仓库，会指错）。

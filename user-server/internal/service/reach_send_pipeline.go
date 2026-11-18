@@ -285,10 +285,12 @@ var defaultThirdPartyRateLimitByChannel = map[string]RateLimitSpec{
 	"bilibili":    {QPS: 20, Burst: 40},
 	"weibo":       {QPS: 20, Burst: 40},
 	"personal_wx": {QPS: 10, Burst: 20},
-	"dingtalk":    {QPS: 30, Burst: 60},
-	"telegram":    {QPS: 30, Burst: 60},
-	"whatsapp":    {QPS: 30, Burst: 60},
-	"feishu":      {QPS: 30, Burst: 60},
+	// 2026-11-19 OBS-1 收口：pdd 桥接限速与 personal_wx 同档（网页私信保守值）。
+	"pdd":      {QPS: 10, Burst: 20},
+	"dingtalk": {QPS: 30, Burst: 60},
+	"telegram": {QPS: 30, Burst: 60},
+	"whatsapp": {QPS: 30, Burst: 60},
+	"feishu":   {QPS: 30, Burst: 60},
 }
 
 func DefaultThirdPartyRateLimitSpec(channel string) RateLimitSpec {

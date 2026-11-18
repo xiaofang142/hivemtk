@@ -96,7 +96,7 @@ func (r *ProactiveReachRepository) FindActiveAccountID(ctx context.Context, chan
 		}
 		return fmt.Sprintf("%d", acc.ID), nil
 	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu",
-		"jd", "bilibili", "weibo", "personal_wx":
+		"jd", "bilibili", "weibo", "personal_wx", "pdd":
 		// 在线判定与渠道总览共用 bridgeOnlineSQLPredicate，保证面板报可达与消息真发得出去不分叉。
 		var acc struct {
 			AccountID string

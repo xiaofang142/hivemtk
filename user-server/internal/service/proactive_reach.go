@@ -538,7 +538,12 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 	case "feishu":
 		return s.sendFeishu(ctx, req, recipient, accountID)
 	case "douyin", "tiktok", "kuaishou", "xiaohongshu", "xianyu",
-		"jd", "bilibili", "weibo", "personal_wx":
+		"jd", "bilibili", "weibo", "personal_wx", "pdd":
+		// 2026-11-19 OBS-1 收口（原登记 proactive_reach.go:540 镜像缺口）：pdd 已是
+		// 注册桥接渠道（registry/词表/caps 全齐），主动触达走同一 sendBridge 链路；
+		// 16d 卡片与真机校准未过前，投递语义由扩展适配器如实拒绝（不静默假成功）。
+		// 店铺五渠道（taobao/douyin_shop/kuaishou_shop/shopee/walmart_us）fail-closed
+		// 骨架期维持 unsupported——校准开闸批再一并接入。
 		return s.sendBridge(ctx, channel, req, recipient, accountID)
 	case "dingtalk":
 		return s.sendDingTalk(ctx, req, recipient)

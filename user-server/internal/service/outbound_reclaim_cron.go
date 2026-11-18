@@ -1,0 +1,103 @@
+package service
+
+// outbound_reclaim_cron.go 出站回收巡检（2026-11-19 SSE 租约缺口修复，自立项巡检轮）。
+//
+// 形态与 channel_interaction_expiry_cron / retention_cleanup_cron 对齐：
+// Ticker + utils.SafeGo + 成对 Start/Stop，过 check-naked-goroutine.sh。
+// 为什么需要它：超时回收原本只活在拉取路径（ClaimPendingOutbound）里，桥接扩展切
+// SSE 下发后不再调 GET /api/bridge/outbox——认领超时的行没有任何调用点回收，
+// 生产实证出现过 inflight 挂 43 分钟（xiaohongshu）与自 10-22 挂起的存量行（douyin）。
+// 认领必须有租约回收，无论下行走哪条通道：本任务周期跑 ReclaimOutboundSweep
+// （到界升级终态 / 超时 inflight → pending / 陈旧非终态 → expired 三步纯回收）。
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
+)
+
+type OutboundReclaimTask struct {
+	repo         *repository.MessageHubRepository
+	interval     time.Duration
+	claimTimeout time.Duration
+	staleAfter   time.Duration
+	stopCh       chan struct{}
+	stopOnce     sync.Once
+	wg           sync.WaitGroup
+	nowFn        func() time.Time
+}
+
+// OutboundStaleAfterDefault 陈旧非终态老化阈值：超过该年龄仍 pending/inflight 的出站行
+// 视为「会话已离开、回复永远送不出去」，巡检期升级 expired 终态（outbound_stale_expired）。
+// 七天口径：桥端会话列表的可见窗口（页面/登录态存续）远短于此，能送达的早就送达了。
+const OutboundStaleAfterDefault = 7 * 24 * time.Hour
+
+func NewOutboundReclaimTask(repo *repository.MessageHubRepository) *OutboundReclaimTask {
+	return &OutboundReclaimTask{
+		repo:         repo,
+		interval:     time.Minute,
+		claimTimeout: InboxOutboundClaimTimeout,
+		staleAfter:   OutboundStaleAfterDefault,
+		stopCh:       make(chan struct{}),
+		nowFn:        time.Now,
+	}
+}
+
+// RunOnce 跑一轮三步回收，返回 (超时回收数, 到界升级数, 陈旧老化数)。
+func (t *OutboundReclaimTask) RunOnce(ctx context.Context) (reclaimed, exhausted, aged int64, err error) {
+	if t == nil || t.repo == nil {
+		return 0, 0, 0, nil
+	}
+	return t.repo.ReclaimOutboundSweep(ctx, t.claimTimeout, t.staleAfter)
+}
+
+func (t *OutboundReclaimTask) Start(ctx context.Context) {
+	if t == nil || t.repo == nil {
+		return
+	}
+	t.wg.Add(1)
+	utils.SafeGo(ctx, "outbound_reclaim_cron.run", t.run)
+}
+
+func (t *OutboundReclaimTask) run(ctx context.Context) {
+	defer t.wg.Done()
+	ticker := time.NewTicker(t.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-t.stopCh:
+			return
+		case <-ticker.C:
+			r, e, a, err := t.RunOnce(ctx)
+			if err != nil {
+				logger.Errorf("[OutboundReclaim] 回收巡检失败（下轮重试）: %v", err)
+				continue
+			}
+			if r+e+a > 0 {
+				logger.Infof("[OutboundReclaim] 回收巡检完成: reclaimed=%d exhausted=%d aged=%d", r, e, a)
+			}
+		}
+	}
+}
+
+func (t *OutboundReclaimTask) Stop() {
+	if t == nil {
+		return
+	}
+	t.stopOnce.Do(func() { close(t.stopCh) })
+	t.wg.Wait()
+}
+
+var outboundReclaimTask *OutboundReclaimTask
+
+func init() {
+	outboundReclaimTask = NewOutboundReclaimTask(repository.NewMessageHubRepository())
+	outboundReclaimTask.Start(context.Background())
+}
+
+// OutboundReclaimForTest 暴露当前全局任务（仅测试用）。
+func OutboundReclaimForTest() *OutboundReclaimTask { return outboundReclaimTask }

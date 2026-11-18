@@ -254,7 +254,9 @@ func (s *WebhookService) outboundBridge(ctx context.Context, channel WebhookChan
 				Platform:       string(channel),
 				AccountID:      accountID,
 				Direction:      "outbound",
-				Status:         "failed",
+				// 2026-11-19 口径修正：同会话同文案已 delivered/pending = 买家已收到过，
+				// 占位行不再标 failed（旧口径灌进 DLQ 制造投递故障假象），落 duplicate 终态。
+				Status:         "duplicate",
 				MsgType:        "text",
 				SenderID:       accountID,
 				ReceiverID:     hubMsg.ReceiverID,

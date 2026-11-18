@@ -308,3 +308,32 @@ MV3 短路 → `1.2.0` 六渠道统一接待 → `1.2.1` 手工 bump manifest（
 > ast-general-4990ec7278b9fcd06e，租户端页面显示「版本 1.3.0 / 431.4 KB / 下载安装包」，
 > GET /api/bridge/extension/package 回 200 且 download_url 正确）。
 - [ ] 双远端已同步（`gitee-upstream` + `upstream`）
+
+## 链 D：SPA 管理端 + embed-sdk 同步（nginx 宿主机伺服，2026-11-19 实测成文）
+
+> 背景：这两面此前「发布口径未成文」（AGENTS.md 矩阵两格），2026-11-19 全量发版轮实测打通并登记
+> PROD_TOPOLOGY 台账（见当日两条目）。无自动脚本——手工三步，与链 A/B 互不替代。
+
+**user-web SPA（管理端）**：
+
+```bash
+cd "$APP/user-web" && npm run build          # 产物 dist/（含 sw.js prebuild，勿覆盖他人产物）
+STAMP=$(date +%Y%m%d-%H%M%S)
+ssh mtk-prod "cd /www/wwwroot/hivemtk && tar czf user-web.snapshot-$STAMP.tgz user-web"
+rsync -a --delete user-web/dist/ mtk-prod:/www/wwwroot/hivemtk/user-web/
+# .user.ini 报 Operation not permitted = 宝塔不可删保护文件，无害忽略
+# 验证：curl -s https://work.xapptool.cn/ | grep -oE 'assets/index-[^"]+\.js' 与本地 dist/index.html 一致
+```
+
+**embed-sdk（访客 Widget）**：
+
+```bash
+cd "$APP/embed-sdk" && npm run build         # 产物 dist/（esm+iife；2026-11-14 的 rolldown bug 已自愈）
+STAMP=$(date +%Y%m%d-%H%M%S)
+ssh mtk-prod "cd /www/wwwroot/hivemtk && tar czf user-server.embed-sdk-dist.snapshot-$STAMP.tgz user-server/embed-sdk-dist"
+rsync -a --delete embed-sdk/dist/ mtk-prod:/www/wwwroot/hivemtk/user-server/embed-sdk-dist/
+# 验证：curl -s -o /dev/null -w '%{http_code}' https://work.xapptool.cn/embed/marketing-chat-widget.iife.js → 200
+```
+
+**换机注意**：两目录是宿主 nginx 直伺服（非容器卷），迁移=整目录 rsync；
+备份快照（.snapshot-*.tgz）按日期堆积，定期清理保留最近 5 份。
