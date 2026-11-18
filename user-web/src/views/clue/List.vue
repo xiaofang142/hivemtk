@@ -573,7 +573,7 @@ const deleteClue = async (clue) => {
     await clueApi.delete(clue.id)
     ElMessage.success(i18n.global.t('线索已删除'))
     fetchCluelist()
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('删除失败'))
   }
 }
@@ -661,7 +661,7 @@ const formatTime = (val) => {
     if (Number.isNaN(d.getTime())) return val
     const pad = (n) => String(n).padStart(2, '0')
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-  } catch (e) {
+  } catch  {
     return val
   }
 };

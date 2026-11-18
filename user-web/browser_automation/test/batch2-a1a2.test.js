@@ -3,7 +3,7 @@
 //  A1 resolve_ref 原语 + comment_prep 的 @eN input_selector 解析（自愈回路重下发通道）。
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dispatch } from '../src/core/primitives.js';
-import { assembleSnapshot, getRefSelector } from '../src/core/accessibility.js';
+import { assembleSnapshot, getRefSelector as _getRefSelector } from '../src/core/accessibility.js';
 import { strictExecuteScript } from './inject-sandbox.js';
 
 const fakeChrome = {

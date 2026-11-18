@@ -17,7 +17,7 @@ function dbCount(sql) {
     const out = execSync(`PGPASSWORD=${PW} psql -h 127.0.0.1 -p 8232 -U admin -d user_db -t -A -c "${sql}"`, { encoding: 'utf8' })
     const v = out.trim()
     return v === '' ? 0 : Number(v)
-  } catch (e) {
+  } catch  {
     return -1
   }
 }

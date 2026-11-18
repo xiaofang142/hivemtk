@@ -32,7 +32,7 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -137,4 +137,4 @@ const goHome = () => {
     background-position: 1000px 1000px;
   }
 }
-</style>  
+</style>

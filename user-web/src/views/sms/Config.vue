@@ -193,7 +193,7 @@ const getSmsConfig = async () => {
   try {
     const response = await smsApi.getConfig()
     smsConfig.value = response || smsConfig.value
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取短信配置失败'))
   } finally {
     loading.value = false
@@ -205,7 +205,7 @@ const handleSave = async () => {
   try {
     await smsApi.saveConfig(smsConfig.value)
     ElMessage.success(i18n.global.t('配置保存成功'))
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('保存配置失败'))
   } finally {
     loading.value = false

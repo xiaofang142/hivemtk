@@ -87,7 +87,7 @@ const selectedPlatforms = ref(['indexnow', 'baidu'])
 async function loadQuota() {
   try {
     quota.value = (await geoApi.getPushQuota()) || {}
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 async function push() {
   const urls = urlsText.value.split('\n').map(s => s.trim()).filter(Boolean)
@@ -104,7 +104,7 @@ async function push() {
     ElMessage.success('推送成功')
     urlsText.value = ''
     loadQuota()
-  } catch (e) { ElMessage.error('推送失败') }
+  } catch  { ElMessage.error('推送失败') }
 }
 onMounted(loadQuota)
 </script>

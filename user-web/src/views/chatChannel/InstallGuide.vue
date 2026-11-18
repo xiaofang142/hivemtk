@@ -277,7 +277,7 @@ import { listChannels, getChannel, updateChannel } from '@/api/chatChannel'
 import { http } from '@/utils/request'
 import { copyToClipboard } from '@/utils/clipboard'
 
-const router = useRouter()
+const _router = useRouter()
 void Back; void Refresh; void CopyDocument; void ChatDotRound
 void Close; void Connection; void CircleCheck; void CircleClose
 

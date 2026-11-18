@@ -627,7 +627,7 @@ const loadTags = async () => {
     const res = await TagSegmentationApi.getTags()
     const data = res
     tags.value = Array.isArray(data) ? data : (data?.items || data?.list || [])
-  } catch (e) {
+  } catch {
     tags.value = []
   } finally {
     loading.tags = false
@@ -640,7 +640,7 @@ const loadRules = async () => {
     const res = await TagSegmentationApi.getTagRules()
     const data = res
     tagRuleList.value = Array.isArray(data) ? data : (data?.items || data?.list || [])
-  } catch (e) {
+  } catch {
     tagRuleList.value = []
   } finally {
     loading.rules = false
@@ -653,7 +653,7 @@ const loadStrategy = async () => {
     const res = await TagSegmentationApi.getLayerStrategy()
     const data = res
     strategyList.value = Array.isArray(data) ? data : (data?.items || data?.list || [])
-  } catch (e) {
+  } catch {
     strategyList.value = []
   } finally {
     loading.strategy = false
@@ -666,7 +666,7 @@ const loadStats = async () => {
     const res= await TagSegmentationApi.getTagStats()
     const d = res || {}
     stats.value = { topUsed: Array.isArray(d.topUsed) ? d.topUsed : (Array.isArray(d) ? d : []) }
-  } catch (e) {
+  } catch {
     stats.value = {}
   } finally {
     loading.stats = false
@@ -750,7 +750,7 @@ const submitTag = async () => {
       ElMessage.success(tagForm.value.id ? '更新成功' : '新增成功')
       tagDialogVisible.value = false
       loadTags()
-    } catch (e) {
+    } catch {
       ElMessage.error(i18n.global.t('保存失败'))
     }
   })
@@ -793,7 +793,7 @@ const submitRule = async () => {
       ElMessage.success(ruleForm.value.id ? '更新成功' : '新增成功')
       ruleDialogVisible.value = false
       loadRules()
-    } catch (e) {
+    } catch {
       ElMessage.error(i18n.global.t('保存失败'))
     }
   })
@@ -818,7 +818,7 @@ const saveStrategy = async () => {
     }));
     await TagSegmentationApi.saveLayerStrategy(payload)
     ElMessage.success(i18n.global.t('策略已保存'))
-  } catch (e) {
+  } catch {
     ElMessage.error(i18n.global.t('保存失败'))
   }
 }

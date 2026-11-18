@@ -29,7 +29,7 @@ vi.mock('element-plus', () => ({
   }),
 }))
 
-const store = {}
+const _store = {}
 globalThis.localStorage = {
   setItem: vi.fn(), getItem: vi.fn(() => null), removeItem: vi.fn(), clear: vi.fn(),
 }

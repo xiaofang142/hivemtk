@@ -1,7 +1,8 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 二次诊断：对「启用但点击超时」的按钮用 force 点击，判断功能是否真的可用
 // （能开对话框/无报错 => 仅 Playwright 可操作性被遮罩拦截，人工可点，非 bug；
 //   force 后仍报错/对话框异常 => 真 bug）。
-import { test, expect } from '@playwright/test'
+import { test, expect as _expect } from '@playwright/test'
 
 test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
 
@@ -51,6 +52,6 @@ test('[DIAG2] force 点击判定功能可用性', async ({ page }) => {
       forceErr = e.message.split('\n')[0]
     }
     const newErrs = errs.slice(beforeErr)
-    console.log(`[DIAG2] ${route} :: "${label}" => openedDialog=${opened} forceErr=${forceErr || 'none'} newErrors=${newErrs.length ? newErrs.join(' | ') : 'none'}`)
+    _print(`[DIAG2] ${route} :: "${label}" => openedDialog=${opened} forceErr=${forceErr || 'none'} newErrors=${newErrs.length ? newErrs.join(' | ') : 'none'}`)
   }
 })

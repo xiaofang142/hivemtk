@@ -460,7 +460,7 @@ const loadStaffs = async () => {
     if (list.length > 0 && !currentStaff.value) {
       selectStaff(list[0])
     }
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载员工列表失败'))
     staffs.value = []
   } finally {
@@ -499,7 +499,7 @@ const loadCompareReport = async () => {
   try {
     const res = await getPersonaReport(compareStaffId.value)
     compareReport.value = res
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('对比员工画像加载失败'))
     compareReport.value = null
   }

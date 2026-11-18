@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { print: _print } = require('./lib/stdout.cjs');
 /**
  * i18n Coverage CI 检查
  * USR-I18N-04 / OPT-FE-09
@@ -118,37 +119,37 @@ function checkCoverage() {
   const report = { total: ref.keys.length, languages: results, threshold: opts.threshold };
   if (opts.json) {
     fs.writeFileSync(opts.json, JSON.stringify(report, null, 2));
-    console.log(`📄 报告写入: ${opts.json}`);
+    _print(`📄 报告写入: ${opts.json}`);
   }
 
   // 控制台输出
-  console.log('\n=== i18n Coverage 报告 ===');
-  console.log(`参考语言: ${REFERENCE}，总 key 数: ${ref.keys.length}`);
-  console.log(`阈值: ${(opts.threshold * 100).toFixed(1)}%\n`);
+  _print('\n=== i18n Coverage 报告 ===');
+  _print(`参考语言: ${REFERENCE}，总 key 数: ${ref.keys.length}`);
+  _print(`阈值: ${(opts.threshold * 100).toFixed(1)}%\n`);
   let exitCode = 0;
   for (const code of LOCALES) {
     const r = results[code];
     const pct = (r.coverage * 100).toFixed(2);
     const flag = r.coverage >= opts.threshold ? '✅' : '❌';
-    console.log(`${flag} ${code}: ${pct}%  (缺失 ${r.missing.length}, 空值 ${r.empty.length})`);
+    _print(`${flag} ${code}: ${pct}%  (缺失 ${r.missing.length}, 空值 ${r.empty.length})`);
     if (r.fileMissing) {
-      console.log(`   文件不存在: ${code}.json`);
+      _print(`   文件不存在: ${code}.json`);
       exitCode = 1;
     } else if (r.coverage < opts.threshold) {
       exitCode = 1;
       if (r.missing.length > 0 && r.missing.length <= 10) {
-        console.log(`   缺失: ${r.missing.slice(0, 10).join(', ')}`);
+        _print(`   缺失: ${r.missing.slice(0, 10).join(', ')}`);
       } else if (r.missing.length > 10) {
-        console.log(`   缺失前 10: ${r.missing.slice(0, 10).join(', ')} ...（共 ${r.missing.length}）`);
+        _print(`   缺失前 10: ${r.missing.slice(0, 10).join(', ')} ...（共 ${r.missing.length}）`);
       }
       if (r.empty.length > 0 && r.empty.length <= 10) {
-        console.log(`   空值: ${r.empty.slice(0, 10).join(', ')}`);
+        _print(`   空值: ${r.empty.slice(0, 10).join(', ')}`);
       }
     }
   }
-  console.log('');
+  _print('');
   if (exitCode === 0) {
-    console.log(`✅ 所有语言覆盖率 ≥ ${(opts.threshold * 100).toFixed(0)}%`);
+    _print(`✅ 所有语言覆盖率 ≥ ${(opts.threshold * 100).toFixed(0)}%`);
   } else {
     console.error(`❌ 存在不达标语言，请补齐翻译后重试`);
   }

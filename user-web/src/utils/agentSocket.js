@@ -1,4 +1,4 @@
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtNum, rtDur } from '@/utils/runtimeConfig'
 import { getApiConfig as getConfig } from './configManager'
 import { useUserStore } from '@/stores/user'
 
@@ -28,6 +28,7 @@ export default class AgentSocket {
     this.maxReconnectAttempts = options.maxReconnectAttempts || rtNum('frontend_ws', 'agent_max_reconnect_attempts', MAX_RECONNECT_ATTEMPTS_DEFAULT)
     this.reconnectDelay = options.reconnectDelay || rtDur('frontend_ws', 'agent_initial_reconnect_delay_ms', INITIAL_RECONNECT_DELAY_MS)
     this.pingInterval = null
+    this.reconnectTimer = null
 
     this.onNewSession = options.onNewSession || (() => {})
     this.onNewMessage = options.onNewMessage || (() => {})
@@ -111,11 +112,12 @@ export default class AgentSocket {
     const s = String(this.agentId)
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
     const nodeId = `n${(h % 100).toString().padStart(2, '0')}`;
-    try { sessionStorage.setItem('agentSocket:stickyNodeId', nodeId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    try { sessionStorage.setItem('agentSocket:stickyNodeId', nodeId) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     return nodeId
   }
 
   async connect() {
+    if (!this.shouldReconnect) return
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
     let ws
     try {
@@ -130,6 +132,7 @@ export default class AgentSocket {
     this.seenSeqs.clear();
 
     ws.onopen = () => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       this.connected = true
       this.reconnectAttempts = 0
       this.reconnectDelay = rtDur('frontend_ws', 'agent_initial_reconnect_delay_ms', INITIAL_RECONNECT_DELAY_MS)
@@ -139,21 +142,24 @@ export default class AgentSocket {
     }
 
     ws.onmessage = (event) => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       let msg
       try {
         msg = JSON.parse(event.data)
-      } catch (e) {
-        console.warn('[AgentSocket] 无法解析消息:', event.data)
+      } catch {
+        console.warn('[AgentSocket] 无法解析消息')
         return
       }
       this.handleMessage(msg)
     }
 
     ws.onerror = (event) => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       this.onError(event)
     }
 
     ws.onclose = (event) => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       this.connected = false
       this.stopPing()
       this._flushAcks(true);
@@ -220,9 +226,10 @@ export default class AgentSocket {
       return
     }
     const seqs = Array.from(this.pendingAcks).sort((a, b) => a - b)
-    this.pendingAcks.clear()
     try {
       this.ws.send(JSON.stringify({ type: 'ack', seq: seqs }))
+      // 只移除已成功交给本地传输的快照；抛错时保留，发送期间的新项也不丢。
+      seqs.forEach(seq => this.pendingAcks.delete(seq))
     } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
@@ -230,7 +237,7 @@ export default class AgentSocket {
     this.stopPing()
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        try { this.ws.send(JSON.stringify({ event: 'ping' })) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+        try { this.ws.send(JSON.stringify({ event: 'ping' })) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       }
     }, rtDur('frontend_ws', 'agent_ping_interval_ms', PING_INTERVAL_MS))
   }
@@ -243,11 +250,13 @@ export default class AgentSocket {
   }
 
   scheduleReconnect() {
+    if (!this.shouldReconnect || this.reconnectTimer) return
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return
     this.reconnectAttempts++
     const baseDelay = Math.min(this.reconnectDelay * Math.min(this.reconnectAttempts, 5), rtDur('frontend_ws', 'max_reconnect_delay_ms', MAX_RECONNECT_DELAY_MS));
     const delay = Math.floor(baseDelay * (0.5 + Math.random() * 0.5))
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       if (this.shouldReconnect) this.connect()
     }, delay)
   }
@@ -258,13 +267,18 @@ export default class AgentSocket {
 
   close() {
     this.shouldReconnect = false
+    this.connected = false
     this.stopPing()
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     if (this.ackFlushTimer) {
       clearTimeout(this.ackFlushTimer)
       this.ackFlushTimer = null
     }
     if (this.ws) {
-      try { this.ws.close() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+      try { this.ws.close() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
       this.ws = null
     }
   }

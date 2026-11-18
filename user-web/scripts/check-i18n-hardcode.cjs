@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { print: _print } = require('./lib/stdout.cjs');
 /**
  * 视图硬编码中文统计棘轮（OPT-FE-06，2026-10-24）
  *
@@ -68,7 +69,7 @@ if (fs.existsSync(BASELINE)) baseline = JSON.parse(fs.readFileSync(BASELINE, 'ut
 const report = { total, files: Object.keys(perFile).length, per_file: perFile, baseline_total: baseline.total };
 if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify(report, null, 2));
 
-console.log(`[i18n-hardcode] 视图硬编码中文：${total} 行 / ${report.files} 文件（基线 ${baseline.total}）`);
+_print(`[i18n-hardcode] 视图硬编码中文：${total} 行 / ${report.files} 文件（基线 ${baseline.total}）`);
 if (total > baseline.total) {
   console.error(`[i18n-hardcode] ❌ 超出基线（${total} > ${baseline.total}）：新增硬编码中文须走 $t()；确需上调基线请改 scripts/i18n-hardcode-baseline.json（显式棘轮动作）`);
   process.exit(1);
@@ -77,4 +78,4 @@ if (total < baseline.total) {
   console.error(`[i18n-hardcode] ⚠️ 基线收窄（${total} < ${baseline.total}）：已替换的页面请把 baseline 下调到 ${total}——棘轮不许高于现实`);
   process.exit(1);
 }
-console.log('[i18n-hardcode] ✅ 与基线一致');
+_print('[i18n-hardcode] ✅ 与基线一致');

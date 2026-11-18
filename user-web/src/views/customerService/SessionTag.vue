@@ -222,7 +222,7 @@ const load = async () => {
     const res = await getSessionTags()
     const data = res || []
     tags.value = Array.isArray(data) ? data : data.list || []
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载标签失败'))
     tags.value = []
   } finally {

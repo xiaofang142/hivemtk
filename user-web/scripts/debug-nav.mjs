@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -12,19 +13,19 @@ async function main() {
 
   page.on('console', msg => {
     if (msg.type() === 'error' || msg.type() === 'warning') {
-      console.log(`[console.${msg.type()}] ${msg.text().substring(0, 200)}`);
+      _print(`[console.${msg.type()}] ${msg.text().substring(0, 200)}`);
     }
   });
 
   page.on('response', resp => {
     const status = resp.status();
     if (status >= 400) {
-      console.log(`[api.error] ${status} ${resp.url().substring(0, 150)}`);
+      _print(`[api.error] ${status} ${resp.url().substring(0, 150)}`);
     }
   });
 
   // 登录
-  console.log('--- 登录 ---');
+  _print('--- 登录 ---');
   await page.goto(BASE_URL + '/#/login', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(2000);
 
@@ -38,31 +39,31 @@ async function main() {
   }
   await page.waitForTimeout(5000);
 
-  console.log('URL after login:', page.url());
+  _print('URL after login:', page.url());
 
   // 检查 localStorage
   const token = await page.evaluate(() => localStorage.getItem('token'));
   const userInfo = await page.evaluate(() => localStorage.getItem('user_info'));
-  console.log('token:', token ? 'exists' : 'missing');
-  console.log('user_info:', userInfo ? 'exists' : 'missing');
+  _print('token:', token ? 'exists' : 'missing');
+  _print('user_info:', userInfo ? 'exists' : 'missing');
 
   // 检查当前页面内容
   const bodyText1 = await page.evaluate(() => document.body?.innerText?.substring(0, 500) || '');
-  console.log('Body text (first 500 chars):', bodyText1.substring(0, 200));
+  _print('Body text (first 500 chars):', bodyText1.substring(0, 200));
 
   // 导航到 /ops-overview
-  console.log('\n--- 导航到 /ops-overview ---');
+  _print('\n--- 导航到 /ops-overview ---');
   await page.goto(BASE_URL + '/#/ops-overview', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(3000);
 
-  console.log('URL after nav:', page.url());
+  _print('URL after nav:', page.url());
 
   const bodyText2 = await page.evaluate(() => document.body?.innerText?.substring(0, 1000) || '');
-  console.log('Body text after nav:', bodyText2.substring(0, 500));
+  _print('Body text after nav:', bodyText2.substring(0, 500));
 
   // 检查是否有 404
   const is404 = bodyText2.includes('页面不存在') || bodyText2.includes('404') || bodyText2.includes('NotFound');
-  console.log('Is 404:', is404);
+  _print('Is 404:', is404);
 
   // 检查路由
   const routeInfo = await page.evaluate(() => {
@@ -73,7 +74,7 @@ async function main() {
     const current = router.currentRoute.value;
     return { path: current.path, matched: current.matched.length, name: current.name };
   });
-  console.log('Current route:', JSON.stringify(routeInfo));
+  _print('Current route:', JSON.stringify(routeInfo));
 
   // 检查页面 HTML 结构
   const html = await page.evaluate(() => {
@@ -81,7 +82,7 @@ async function main() {
     if (!app) return 'no #app';
     return app.innerHTML.substring(0, 500);
   });
-  console.log('App HTML:', html.substring(0, 300));
+  _print('App HTML:', html.substring(0, 300));
 
   await browser.close();
 }

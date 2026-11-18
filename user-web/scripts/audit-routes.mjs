@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 /**
  * user-web 全路由批量审计脚本
  * 检测：白屏、404、控制台错误、API失败
@@ -120,7 +121,7 @@ const results = [];
 let browser;
 
 async function main() {
-  console.log(`=== user-web 路由审计开始: ${routes.length} 条路由 ===\n`);
+  _print(`=== user-web 路由审计开始: ${routes.length} 条路由 ===\n`);
 
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -187,7 +188,7 @@ async function main() {
 
     results.push(result);
     const icon = result.status === 'ok' ? '✓' : result.status === 'blank' ? '⚠' : '✗';
-    console.log(`${icon} [${i + 1}/${routes.length}] ${route} => ${result.status}${result.errors.length ? ' (' + result.errors.length + ' errors)' : ''}`);
+    _print(`${icon} [${i + 1}/${routes.length}] ${route} => ${result.status}${result.errors.length ? ' (' + result.errors.length + ' errors)' : ''}`);
   }
 
   await browser.close();
@@ -201,18 +202,18 @@ async function main() {
   const withErrors = results.filter(r => r.errors.length > 0).length;
   const withApiErrors = results.filter(r => r.apiErrors.length > 0).length;
 
-  console.log(`\n=== 审计完成 ===`);
-  console.log(`正常: ${ok} | 异常: ${fail} | 控制台错误: ${withErrors} | API错误: ${withApiErrors}`);
-  console.log(`报告: ${reportPath}`);
+  _print(`\n=== 审计完成 ===`);
+  _print(`正常: ${ok} | 异常: ${fail} | 控制台错误: ${withErrors} | API错误: ${withApiErrors}`);
+  _print(`报告: ${reportPath}`);
 
   // 输出问题路由
   const issues = results.filter(r => r.status !== 'ok' || r.errors.length > 0 || r.apiErrors.length > 0);
   if (issues.length > 0) {
-    console.log(`\n=== 问题路由 (${issues.length}) ===`);
+    _print(`\n=== 问题路由 (${issues.length}) ===`);
     for (const r of issues) {
-      console.log(`  ${r.route}: ${r.status}, ${r.errors.length} console errors, ${r.apiErrors.length} API errors`);
-      if (r.errors.length > 0) console.log(`    console: ${r.errors[0]}`);
-      if (r.apiErrors.length > 0) console.log(`    api: ${r.apiErrors[0]}`);
+      _print(`  ${r.route}: ${r.status}, ${r.errors.length} console errors, ${r.apiErrors.length} API errors`);
+      if (r.errors.length > 0) _print(`    console: ${r.errors[0]}`);
+      if (r.apiErrors.length > 0) _print(`    api: ${r.apiErrors[0]}`);
     }
   }
 }

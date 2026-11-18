@@ -105,8 +105,9 @@
               </div>
               <div
                 class="bubble-content"
-                v-html="formatContent(msg.content)"
-              />
+              >
+                {{ formatContent(msg.content) }}
+              </div>
               <!-- T2 引用溯源：AI 消息气泡下方的参考来源行 -->
               <CitationList
                 v-if="isAI(msg) && msg.citations?.length"
@@ -183,7 +184,6 @@
 import i18n from '@/i18n'
 
 import { ref, watch, nextTick, onMounted } from 'vue'
-import DOMPurify from 'dompurify';
 import RichCard from './RichCard.vue'
 import CitationList from './citation/CitationList.vue'
 
@@ -266,13 +266,7 @@ const formatTime = (t) => {
 
 const formatContent = (text) => {
   if (!text) return ''
-  const escaped = String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-  const html = escaped.replace(/\n/g, '<br>')
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+  return String(text)
 };
 
 // ---- 002-multi-type-messages：媒体渲染辅助 ----

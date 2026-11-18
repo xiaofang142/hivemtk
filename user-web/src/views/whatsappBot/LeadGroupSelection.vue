@@ -201,10 +201,10 @@
 import i18n from '@/i18n'
 
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import * as clueApi from '@/api/clue'
 import { useRouter } from 'vue-router'
-import { LEAD_STATUS_OPTIONS_SIMPLE, getLeadStatusLabel, getLeadStatusTagType } from '@/constants/leadStatus'
+import { LEAD_STATUS_OPTIONS_SIMPLE, getLeadStatusLabel as _getLeadStatusLabel, getLeadStatusTagType as _getLeadStatusTagType } from '@/constants/leadStatus'
 
 const router = useRouter()
 const loading = ref(false)
@@ -244,7 +244,7 @@ const fetchLeads = async () => {
       status: 'new'
     }));
     pagination.total = response?.total || response?.length || 0
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取线索列表失败'))
   } finally {
     loading.value = false

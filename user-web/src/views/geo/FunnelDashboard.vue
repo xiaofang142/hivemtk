@@ -124,7 +124,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive as _reactive, computed, onMounted } from 'vue'
 import { geoApi } from '@/api/geo'
 
 const stats = ref(null)

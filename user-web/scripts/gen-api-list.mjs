@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { print as _print } from './lib/stdout.cjs';
 // 生成 api-list.md：AST（acorn）扫描 src/api/*.js 中所有 http.<method> 调用
 // 用途：API 全量回归索引（每个端点一行，测试后回填状态列）
 import fs from 'node:fs'
@@ -222,4 +223,4 @@ for (const [f, list] of byFile) {
 }
 
 fs.writeFileSync(outFile, L.join('\n'))
-console.log(`files=${files.length} endpoints=${rows.length} -> ${outFile}`)
+_print(`files=${files.length} endpoints=${rows.length} -> ${outFile}`)

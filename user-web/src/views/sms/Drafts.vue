@@ -233,7 +233,7 @@ const getDraftList = async () => {
     const response = await smsApi.getDraftList(params)
     draftList.value = response.list || [];
     total.value = response.total || 0
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取草稿列表失败'))
   } finally {
     loading.value = false
@@ -264,7 +264,7 @@ const handleEdit = async (row) => {
     editingId.value = data.id
     dialogTitle.value = '编辑草稿'
     dialogVisible.value = true
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取草稿详情失败'))
   }
 };
@@ -320,7 +320,7 @@ const handleConfirmSend = async () => {
     await smsApi.sendDraft(currentDraft.value.id, { phone: sendForm.phone })
     ElMessage.success(i18n.global.t('短信发送成功'))
     sendDialogVisible.value = false
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('短信发送失败'))
   } finally {
     sending.value = false

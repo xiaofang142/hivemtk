@@ -130,7 +130,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { http } from '@/utils/request'
 
@@ -188,11 +188,11 @@ function exportToReach() {
   window.open('/#/reachPipeline/list', '_blank');
 }
 
-function viewDetail(row) {
+function viewDetail(_row) {
   window.open('/#/customer360/list', '_blank');
 }
 
-function reachSegment(row) {
+function reachSegment(__row) {
   window.open('/#/reachPipeline/list', '_blank');
 }
 

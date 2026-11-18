@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 全页面 UI 审计（模拟用户逐页访问）：
 //   1) 页面是否有数据   2) 页面渲染是否正确   3) API 请求参数/响应是否正确
 // 以管理员身份登录后，按 START/END 切片遍历路由，逐页采集：
@@ -40,7 +41,7 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
       let body = await resp.text()
       body = body.replace(/script-src 'self'/g, "script-src 'self' 'unsafe-eval'")
       return route.fulfill({ response: resp, body })
-    } catch (e) {
+    } catch  {
       return route.continue()
     }
   })
@@ -71,9 +72,9 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
           else if (d && Array.isArray(d.items)) rec.dataLen = d.items.length
           else if (d && typeof d === 'object') rec.dataKeys = Object.keys(d).length
         }
-      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+      } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       current.api.push(rec)
-    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   page.on('console', (m) => {
     if (m.type() === 'error') {
@@ -102,7 +103,7 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
   await page.click('button.el-button--primary')
   await page.waitForTimeout(3000)
   const loggedIn = !/\/login|\/setup/.test(page.url()) && !!(await page.evaluate(() => localStorage.getItem('token')))
-  console.log(`[login] url=${page.url()} loggedIn=${loggedIn}`)
+  _print(`[login] url=${page.url()} loggedIn=${loggedIn}`)
 
   // 清空报告（仅当从头开始）
   if (START === 0) fs.writeFileSync(REPORT_FILE, '')
@@ -168,7 +169,7 @@ test('[UI-AUDIT] 逐页数据/渲染/API 审计', async ({ page }) => {
     }
     fs.appendFileSync(REPORT_FILE, JSON.stringify(rec) + '\n')
     const flag = rec.pageerror.length ? 'PAGEERR' : badApi.length ? 'BADAPI' : !hasData ? 'NODATA' : 'ok'
-    console.log(`[${flag}] ${p}  render=${rec.render.ok} rows=${dom.rows} api=${current.api.length} bad=${badApi.length}`)
+    _print(`[${flag}] ${p}  render=${rec.render.ok} rows=${dom.rows} api=${current.api.length} bad=${badApi.length}`)
   }
 
   expect(loggedIn).toBe(true)

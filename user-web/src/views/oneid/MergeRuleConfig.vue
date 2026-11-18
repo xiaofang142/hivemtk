@@ -358,7 +358,7 @@ async function deleteRule(row) {
 async function runPreview() {
   try {
     preview.value = await http.post('/api/oneid/merge-rules/preview', rules.value)
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 onMounted(async () => {

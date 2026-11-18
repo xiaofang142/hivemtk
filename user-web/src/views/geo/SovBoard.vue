@@ -208,7 +208,7 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getSOV, getSOVTrend, listCompetitors } from '@/api/geoProbe.js'
 import ProbeModeBanner from './ProbeModeBanner.vue'
@@ -349,7 +349,7 @@ const load = async () => {
 
     await nextTick()
     renderBarChart()
-  } catch (e) {
+  } catch  {
     sovData.value = []
   } finally {
     loading.value = false

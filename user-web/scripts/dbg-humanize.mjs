@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -16,5 +17,5 @@ await page.waitForTimeout(5000);
 await page.goto('http://localhost:8211/#/humanize/panel', { waitUntil: 'networkidle', timeout: 15000 });
 await page.waitForTimeout(3000);
 const t = await page.evaluate(() => document.body?.innerText || '');
-console.log('CONTENT:', t.substring(0, 600));
+_print('CONTENT:', t.substring(0, 600));
 await b.close();

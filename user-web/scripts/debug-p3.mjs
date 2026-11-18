@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -21,16 +22,16 @@ errs.length = 0;
 await page.goto(BASE_URL + '/#/' + 'setup', { waitUntil: 'networkidle', timeout: 15000 });
 await page.waitForTimeout(2500);
 const t1 = await page.evaluate(() => document.body?.innerText || '');
-console.log('=== /setup ===');
-console.log(t1.substring(0, 800));
-console.log('URL:', page.url());
+_print('=== /setup ===');
+_print(t1.substring(0, 800));
+_print('URL:', page.url());
 
 errs.length = 0;
 await page.goto(BASE_URL + '/#/' + 'reachPipeline/editor', { waitUntil: 'networkidle', timeout: 15000 });
 await page.waitForTimeout(3000);
 const t2 = await page.evaluate(() => document.body?.innerText || '');
-console.log('\n=== /reachPipeline/editor ===');
-console.log(t2.substring(0, 800));
-console.log('\n=== console errors ===');
-console.log(errs.join('\n---\n').substring(0, 3000));
+_print('\n=== /reachPipeline/editor ===');
+_print(t2.substring(0, 800));
+_print('\n=== console errors ===');
+_print(errs.join('\n---\n').substring(0, 3000));
 await browser.close();

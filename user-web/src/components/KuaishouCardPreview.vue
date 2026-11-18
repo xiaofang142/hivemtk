@@ -81,11 +81,11 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import '@/i18n'
 
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { Picture, Connection, Link, CircleCheckFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import 'element-plus'
 
 const props = defineProps({
   cardData: {
@@ -94,14 +94,14 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['view', 'like', 'share']);
+defineEmits(['view', 'like', 'share']);
 
 const isPreviewMode = ref(false);
 
-const handleModeChange = (value) => {
+const handleModeChange = () => {
 };
 
-watch(() => props.cardData, (newVal) => {
+watch(() => props.cardData, () => {
 }, { deep: true });
 </script>
 

@@ -113,7 +113,7 @@ async function loadLlms() {
   try {
     const res = await geoApi.getLlmsTxtPreview(previewDomain.value)
     llmsContent.value = res?.content || ''
-  } catch (e) {
+  } catch  {
     llmsContent.value = '（后端暂未部署 llms.txt 生成逻辑）'
   }
 }
@@ -122,7 +122,7 @@ async function loadRobots() {
   try {
     const res = await geoApi.getRobotsTxtPreview()
     robotsContent.value = res?.content || ''
-  } catch (e) {
+  } catch  {
     robotsContent.value = '（后端暂未部署 robots.txt 生成逻辑）'
   }
 }

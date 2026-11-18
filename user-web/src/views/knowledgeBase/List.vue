@@ -434,7 +434,7 @@ import { listByKB } from '@/api/agentKBBinding'
 import { isUserReportedError } from '@/utils/errorReporting'
 import KBDrawer from './KBDrawer.vue'
 
-const router = useRouter()
+const _router = useRouter()
 const route = useRoute()
 
 const currentType = ref('rag');
@@ -654,7 +654,7 @@ const loadList = async (type) => {
       enabled: enriched.filter((x) => x.enabled === true).length
     };
     totalAgentBindings.value = enriched.reduce((s, x) => s + (x.agent_count || 0), 0)
-  } catch (e) {
+  } catch  {
     if (isStale()) return
     list.value = []
     total.value = 0

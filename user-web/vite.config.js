@@ -1,3 +1,4 @@
+import { print as _print } from './scripts/lib/stdout.cjs';
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import Components from 'unplugin-vue-components/vite'
@@ -6,7 +7,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { resolve, basename } from 'path'
 import { writeFileSync, mkdirSync } from 'fs'
+import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
 import { generateJSON } from '@intlify/bundle-utils'
+
+const configDirectory = fileURLToPath(new URL('.', import.meta.url))
 
 // ============================================================================
 // PWA 彻底防旧页/404 方案
@@ -29,8 +34,7 @@ import { generateJSON } from '@intlify/bundle-utils'
 // 每次构建生成唯一 buildId (git commit hash + 时间戳)
 function generateBuildId() {
   try {
-    const { execSync } = require('child_process')
-    const gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+    const gitHash = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: configDirectory, encoding: 'utf-8' }).trim()
     return `${gitHash}-${Date.now()}`
   } catch {
     return `build-${Date.now()}`
@@ -56,7 +60,7 @@ const versionJsonPlugin = {
       }, null, 2),
       'utf-8'
     )
-    console.log(`\n[version.json] buildId = ${BUILD_ID}\n`)
+    _print(`\n[version.json] buildId = ${BUILD_ID}\n`)
   },
 }
 
@@ -288,7 +292,7 @@ export default defineConfig({
     // 模块级 currentRenderingInstance 不共享，renderSlot 读 null 报 "reading 'ce'"
     dedupe: ['vue'],
     alias: {
-      '@': resolve(__dirname, 'src'),
+      '@': resolve(configDirectory, 'src'),
     },
   },
   css: {
@@ -296,7 +300,7 @@ export default defineConfig({
       scss: {
         // 全局自动注入变量 —— 所有 <style lang="scss"> 块可直接用 $primary-color 等
         // 使用 @ 别名路径，确保无论文件在哪都能正确解析
-        additionalData: '@import "@/styles/variables.scss";',
+        additionalData: '@use "@/styles/variables.scss" as *;',
       }
     },
     // 添加CSS配置以处理深度选择器警告
@@ -312,6 +316,8 @@ export default defineConfig({
         // Vite 8 使用 Rolldown 打包，manualChunks 必须为函数形式（对象形式报 "Expected Function"）。
         // 分桶语义与原对象式保持一致：vue / elementPlus / echarts / utils。
         manualChunks(id) {
+          const locale = id.replace(/\\/g, '/').match(/\/src\/i18n\/locales\/(ar|de|en|es|fr|ja|pt|ru|zh)\.json$/)
+          if (locale) return `locale-${locale[1]}`
           if (!id.includes('node_modules')) return
           if (id.includes('element-plus') || id.includes('@element-plus')) return 'elementPlus'
           if (id.includes('echarts') || id.includes('zrender')) return 'echarts'

@@ -489,7 +489,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive as _reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, Aim } from '@element-plus/icons-vue'
@@ -525,7 +525,7 @@ const loadKBMap = async () => {
       map[it.id] = { name: it.name, kb_code: it.kb_code }
     })
     kbMap.value = map
-  } catch (e) {
+  } catch  {
     kbMap.value = {};
   }
 };
@@ -678,7 +678,7 @@ const onToggle = async (row, v) => {
   }
 };
 
-const stripToPayload = (row) => ({
+const _stripToPayload = (row) => ({
   question: row.question,
   answer: row.answer,
   keywords: row.keywords || [],

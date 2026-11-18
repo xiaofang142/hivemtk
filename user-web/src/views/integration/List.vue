@@ -515,7 +515,7 @@ const refreshData = async () => {
       platforms: new Set(accounts.map(a => a.platform).filter(Boolean)).size,
       total: accounts.length
     }
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取集成列表失败'))
   } finally {
     loading.value = false

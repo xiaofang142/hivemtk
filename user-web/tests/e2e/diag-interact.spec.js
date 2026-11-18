@@ -1,5 +1,6 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 诊断脚本：针对全页面点击扫描中超时的交互按钮，精确判定是「设计性禁用/链接」还是「真 bug」。
-import { test, expect } from '@playwright/test'
+import { test, expect as _expect } from '@playwright/test'
 
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const ADMIN_USER = 'admin'
@@ -59,6 +60,6 @@ test('[DIAG] 诊断交互超时按钮真实状态', async ({ page }) => {
         clickErr = e.message.split('\n')[0]
       }
     }
-    console.log(`[DIAG] ${route} :: "${label}" => ${JSON.stringify(info)}${clickErr ? ' CLICK_ERR=' + clickErr : ''}`)
+    _print(`[DIAG] ${route} :: "${label}" => ${JSON.stringify(info)}${clickErr ? ' CLICK_ERR=' + clickErr : ''}`)
   }
 })

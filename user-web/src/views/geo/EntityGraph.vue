@@ -251,7 +251,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { copyToClipboard } from '@/utils/clipboard'
-import { listEntities, getEntityRelations, extractEntities } from '@/api/geoEntity.js'
+import { listEntities, getEntityRelations, extractEntities as _extractEntities } from '@/api/geoEntity.js'
 import { geoApi } from '@/api/geo.js'
 
 const entities = ref([])

@@ -1,3 +1,5 @@
+import { messages } from './catalog'
+
 export const SUPPORTED_LOCALES = [
   { code: 'zh', label: '简体中文', el: 'zh-cn', rtl: false },
   { code: 'en', label: 'English', el: 'en', rtl: false },
@@ -67,9 +69,9 @@ export async function loadLocaleMessages(locale) {
   if (loadedLocales.has(locale)) return null
   if (!isSupported(locale)) return null
   try {
-    const mod = await import(`./locales/${locale}.json`)
+    const catalog = messages[locale]
     loadedLocales.add(locale)
-    return mod.default || mod
+    return catalog
   } catch (err) {
     console.error(`[i18n] 加载语言包失败: ${locale}`, err)
     return null

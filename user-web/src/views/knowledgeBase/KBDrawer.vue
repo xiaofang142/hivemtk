@@ -304,7 +304,7 @@ import {
   Refresh,
   Edit
 } from '@element-plus/icons-vue'
-import { getKB, getKBStats } from '@/api/knowledgeBase'
+import { getKB as _getKB, getKBStats } from '@/api/knowledgeBase'
 import { listByKB } from '@/api/agentKBBinding'
 
 const props = defineProps({
@@ -375,7 +375,7 @@ const loadAgentBindings = async () => {
     const list = Array.isArray(res) ? res : res?.list || res?.items || []
     agentBindings.value = list
     stats.value.agent_count = list.length
-  } catch (e) {
+  } catch  {
     agentBindings.value = []
   } finally {
     loadingAgents.value = false

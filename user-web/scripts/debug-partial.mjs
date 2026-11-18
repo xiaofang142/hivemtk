@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -30,54 +31,54 @@ async function main() {
   await page.waitForTimeout(5000);
 
   for (const p of pages) {
-    console.log(`\n=== ${p.name} (${p.route}) ===`);
+    _print(`\n=== ${p.name} (${p.route}) ===`);
     await page.goto(BASE_URL + '/#/' + p.route.replace(/^\//, ''), { waitUntil: 'networkidle', timeout: 15000 });
     await page.waitForTimeout(3000);
 
     const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 800) || '');
-    console.log('Body text:', bodyText.substring(0, 400));
+    _print('Body text:', bodyText.substring(0, 400));
 
     const tables = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-table, table');
       return els.length;
     });
-    console.log('Tables found:', tables);
+    _print('Tables found:', tables);
 
     const pagination = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-pagination, [class*="pagination"]');
       return els.length;
     });
-    console.log('Pagination found:', pagination);
+    _print('Pagination found:', pagination);
 
     const forms = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-form, form');
       return els.length;
     });
-    console.log('Forms found:', forms);
+    _print('Forms found:', forms);
 
     const buttons = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-button, button');
       return els.length;
     });
-    console.log('Buttons found:', buttons);
+    _print('Buttons found:', buttons);
 
     const inputs = await page.evaluate(() => {
       const els = document.querySelectorAll('input, .el-input');
       return els.length;
     });
-    console.log('Inputs found:', inputs);
+    _print('Inputs found:', inputs);
 
     const cards = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-card, .dashboard-card, .stat-card, [class*="card"]');
       return els.length;
     });
-    console.log('Cards found:', cards);
+    _print('Cards found:', cards);
 
     const emptyText = await page.evaluate(() => {
       const els = document.querySelectorAll('.el-table__empty-text, .empty-text, [class*="empty"]');
       return Array.from(els).map(e => e.textContent).join(', ');
     });
-    console.log('Empty text:', emptyText || 'none');
+    _print('Empty text:', emptyText || 'none');
   }
 
   await browser.close();

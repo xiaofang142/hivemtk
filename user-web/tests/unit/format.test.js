@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { formatNumber, formatCurrency, formatPercent, formatDate, formatRelativeTime, formatList, formatCompactNumber, formatFileSize, getLocale } from '@/utils/format.js'
+import { formatNumber, formatCurrency, formatPercent, formatDate, formatRelativeTime as _formatRelativeTime, formatList as _formatList, formatCompactNumber as _formatCompactNumber, formatFileSize, getLocale } from '@/utils/format.js'
 
 describe('formatNumber', () => {
   it('格式化整数', () => {

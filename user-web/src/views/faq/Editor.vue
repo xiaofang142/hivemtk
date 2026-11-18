@@ -303,7 +303,7 @@ const loadAgentOptions = async () => {
     if (!isEdit.value && !form.agent_id && list.length) {
       form.agent_id = list[0].id
     }
-  } catch (e) {
+  } catch  {
     agentOptions.value = []
   }
 }

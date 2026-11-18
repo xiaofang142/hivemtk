@@ -26,6 +26,8 @@
 // =============================================================================
 
 'use strict';
+const { print: _print } = require('./lib/stdout.cjs');
+
 
 const fs = require('fs');
 const path = require('path');
@@ -112,15 +114,15 @@ function loadLocaleKeys(file) {
 
 // ---- 主流程 ----
 function main() {
-  console.log('============================================================');
-  console.log('  i18n 翻译完整性提取 (OPT-FE-EXT-1)');
-  console.log('  基准 locale:', FLAGS.base);
-  console.log('  阈值:', FLAGS.threshold, FLAGS.strict ? '(strict)' : '');
-  console.log('============================================================\n');
+  _print('============================================================');
+  _print('  i18n 翻译完整性提取 (OPT-FE-EXT-1)');
+  _print('  基准 locale:', FLAGS.base);
+  _print('  阈值:', FLAGS.threshold, FLAGS.strict ? '(strict)' : '');
+  _print('============================================================\n');
 
   // 1) 扫描 .vue
   const vueFiles = walk(SRC_DIR);
-  console.log(`[1/3] 扫描 ${vueFiles.length} 个 .vue 文件 ...`);
+  _print(`[1/3] 扫描 ${vueFiles.length} 个 .vue 文件 ...`);
   const usedKeys = new Set();
   for (const f of vueFiles) {
     const ks = extractKeysFromVue(f);
@@ -133,10 +135,10 @@ function main() {
       usedKeys.add(k);
     }
   }
-  console.log(`      共提取到 ${usedKeys.size} 个被调用的 key\n`);
+  _print(`      共提取到 ${usedKeys.size} 个被调用的 key\n`);
 
   // 2) 加载 locales
-  console.log('[2/3] 加载 locale 文件 ...');
+  _print('[2/3] 加载 locale 文件 ...');
   const locales = {};
   const localeFiles = fs.existsSync(LOCALES_DIR)
     ? fs.readdirSync(LOCALES_DIR).filter((f) => f.endsWith('.json'))
@@ -146,12 +148,12 @@ function main() {
     const ks = loadLocaleKeys(path.join(LOCALES_DIR, f));
     if (ks && !ks.error) {
       locales[code] = ks;
-      console.log(`      ${code}.json: ${ks.size} keys`);
+      _print(`      ${code}.json: ${ks.size} keys`);
     } else if (ks && ks.error) {
-      console.log(`      ${code}.json: ❌ 解析失败: ${ks.error}`);
+      _print(`      ${code}.json: ❌ 解析失败: ${ks.error}`);
     }
   }
-  console.log();
+  _print();
 
   if (!locales[FLAGS.base]) {
     console.error(`❌ 基准 locale ${FLAGS.base}.json 不存在或解析失败`);
@@ -159,7 +161,7 @@ function main() {
   }
 
   // 3) 对比
-  console.log('[3/3] 对比结果:\n');
+  _print('[3/3] 对比结果:\n');
   const report = {
     base: FLAGS.base,
     usedCount: usedKeys.size,
@@ -179,27 +181,27 @@ function main() {
     report.unusedInCodeTotal = (report.unusedInCodeTotal || 0) + unused.length;
 
     if (missing.length === 0) {
-      console.log(`  ✅ ${code}.json: 全部对齐 (${ks.size} keys)`);
+      _print(`  ✅ ${code}.json: 全部对齐 (${ks.size} keys)`);
     } else {
-      console.log(`  ⚠️  ${code}.json: 缺 ${missing.length} keys`);
-      missing.slice(0, 5).forEach((k) => console.log(`       - ${k}`));
-      if (missing.length > 5) console.log(`       ... 还有 ${missing.length - 5} 个`);
+      _print(`  ⚠️  ${code}.json: 缺 ${missing.length} keys`);
+      missing.slice(0, 5).forEach((k) => _print(`       - ${k}`));
+      if (missing.length > 5) _print(`       ... 还有 ${missing.length - 5} 个`);
     }
   }
 
   const totalMissing = Object.values(report.missingInLocale).reduce((s, a) => s + a.length, 0);
-  console.log();
-  console.log('------------------------------------------------------------');
-  console.log(`  基准:           ${FLAGS.base}.json (${locales[FLAGS.base].size} keys)`);
-  console.log(`  代码中使用的:   ${usedKeys.size} keys`);
-  console.log(`  总缺失(非基准): ${totalMissing} keys`);
-  console.log(`  未使用(unused): ${report.unusedInCodeTotal || 0} keys (warn-only)`);
-  console.log('------------------------------------------------------------');
+  _print();
+  _print('------------------------------------------------------------');
+  _print(`  基准:           ${FLAGS.base}.json (${locales[FLAGS.base].size} keys)`);
+  _print(`  代码中使用的:   ${usedKeys.size} keys`);
+  _print(`  总缺失(非基准): ${totalMissing} keys`);
+  _print(`  未使用(unused): ${report.unusedInCodeTotal || 0} keys (warn-only)`);
+  _print('------------------------------------------------------------');
 
   // 写出 JSON 报告
   if (FLAGS.json) {
     fs.writeFileSync(FLAGS.json, JSON.stringify(report, null, 2), 'utf8');
-    console.log(`\n  📄 JSON 报告已写入: ${FLAGS.json}`);
+    _print(`\n  📄 JSON 报告已写入: ${FLAGS.json}`);
   }
 
   if (FLAGS.strict && totalMissing > 0) {
@@ -211,7 +213,7 @@ function main() {
     process.exit(1);
   }
 
-  console.log('\n✅ i18n 提取检查通过');
+  _print('\n✅ i18n 提取检查通过');
   process.exit(0);
 }
 

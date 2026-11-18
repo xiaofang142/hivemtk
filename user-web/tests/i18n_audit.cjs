@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { print: _print } = require('../scripts/lib/stdout.cjs');
 /**
  * 触达运营 i18n 静态完整性审计
  * - 扫描触达运营相关视图目录中所有 $t('key') / t('key') / i18n.global.t('key') 用法
@@ -61,20 +62,20 @@ for (const f of files) {
 }
 
 let problems = 0
-console.log(`扫描文件: ${files.length} | 使用 key 数: ${used.size}`)
+_print(`扫描文件: ${files.length} | 使用 key 数: ${used.size}`)
 if (missingZh.size) {
   problems += missingZh.size
-  console.log('\n[缺失于 zh.json]')
-  for (const [k, fs2] of missingZh) console.log(`  - ${k}  <- ${[...new Set(fs2)].join(', ')}`)
+  _print('\n[缺失于 zh.json]')
+  for (const [k, fs2] of missingZh) _print(`  - ${k}  <- ${[...new Set(fs2)].join(', ')}`)
 }
 if (missingEn.size) {
   problems += missingEn.size
-  console.log('\n[缺失于 en.json]')
-  for (const [k, fs2] of missingEn) console.log(`  - ${k}  <- ${[...new Set(fs2)].join(', ')}`)
+  _print('\n[缺失于 en.json]')
+  for (const [k, fs2] of missingEn) _print(`  - ${k}  <- ${[...new Set(fs2)].join(', ')}`)
 }
 if (!problems) {
-  console.log('\n✅ i18n 完整：所有触达视图使用的 key 在 zh.json 与 en.json 均存在')
+  _print('\n✅ i18n 完整：所有触达视图使用的 key 在 zh.json 与 en.json 均存在')
 } else {
-  console.log(`\n⚠️ 共 ${problems} 个 locale 缺口（需补全）`)
+  _print(`\n⚠️ 共 ${problems} 个 locale 缺口（需补全）`)
 }
 process.exit(0)

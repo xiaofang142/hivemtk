@@ -1,4 +1,4 @@
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtStr as _rtStr, rtNum, rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 const STORAGE_KEY_USER = 'journey:userId';
 const STORAGE_KEY_SESSION = 'journey:sessionId'
 const STORAGE_KEY_HISTORY = 'journey:history'
@@ -44,7 +44,7 @@ function getOrCreateUserId() {
       localStorage.setItem(STORAGE_KEY_USER, id)
     }
     return id
-  } catch (_) {
+  } catch {
     return `v_${Date.now()}`
   }
 }
@@ -57,7 +57,7 @@ function getOrCreateSessionId() {
       sessionStorage.setItem(STORAGE_KEY_SESSION, id)
     }
     return id
-  } catch (_) {
+  } catch {
     return `s_${Date.now()}`
   }
 }
@@ -66,7 +66,7 @@ function loadHistory() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_HISTORY)
     return raw ? JSON.parse(raw) : []
-  } catch (_) {
+  } catch {
     return []
   }
 }
@@ -74,14 +74,14 @@ function loadHistory() {
 function saveHistory(events) {
   try {
     localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(events.slice(-rtNum('frontend_ws', 'journey_history_max', MAX_HISTORY))))
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 function loadQueue() {
   try {
     const raw = localStorage.getItem(QUEUE_KEY)
     return raw ? JSON.parse(raw) : []
-  } catch (_) {
+  } catch {
     return []
   }
 }
@@ -89,7 +89,7 @@ function loadQueue() {
 function saveQueue(queue) {
   try {
     localStorage.setItem(QUEUE_KEY, JSON.stringify(queue.slice(-rtNum('frontend_ws', 'journey_queue_max', MAX_QUEUE))))
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 async function flush() {
@@ -99,7 +99,7 @@ async function flush() {
     const { http } = await import('@/utils/request')
     await http.post('/api/customer-events/batch', { events: queue }, { _silent: true })
     saveQueue([])
-  } catch (e) {
+  } catch {
     console.warn('[journey] 事件上报失败，保留队列');
   }
 }
@@ -132,7 +132,7 @@ const journey = {
       localStorage.setItem(STORAGE_KEY_USER, userId)
       this.userId = userId
       this.track('identify', { ...attributes, user_id: userId })
-    } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   },
 
   track(eventName, properties = {}) {

@@ -329,7 +329,7 @@ import { rtNum } from '@/utils/runtimeConfig'
 import { isUserReportedError } from '@/utils/errorReporting'
 
 const activeTab = ref('upload')
-const uploading = ref(false)
+const _uploading = ref(false)
 const importing = ref(false)
 
 const productList = ref([])
@@ -363,7 +363,7 @@ const loadProducts = async () => {
   }
 }
 
-const handleTabChange = (tab) => {
+const handleTabChange = (_tab) => {
   preview.value = []
   lastResult.value = null
 }

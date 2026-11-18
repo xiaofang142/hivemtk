@@ -873,7 +873,7 @@ const formatTime = (t) => {
     const d = new Date(t)
     if (isNaN(d.getTime())) return String(t)
     return d.toLocaleString('zh-CN', { hour12: false })
-  } catch (e) {
+  } catch {
     return String(t)
   }
 }
@@ -1039,7 +1039,7 @@ const handleViewDetail = async (row) => {
   try {
     const res = await messageHubApi.getMessageById(row.id)
     currentMessage.value = res || row
-  } catch (e) {
+  } catch {
     currentMessage.value = row
   } finally {
     detailLoading.value = false
@@ -1052,7 +1052,7 @@ const handleMarkRead = async (row) => {
     ElMessage.success(i18n.global.t('已标记为已读'))
     row.is_read = true
     await loadStats()
-  } catch (e) {
+  } catch {
     ElMessage.error(i18n.global.t('标记失败'))
   }
 }
@@ -1065,7 +1065,7 @@ const handleBatchMarkRead = async () => {
     ElMessage.success(`已标记 ${ids.length} 条消息为已读`)
     selectedRows.value.forEach(r => { r.is_read = true })
     await loadStats()
-  } catch (e) {
+  } catch {
     ElMessage.error(i18n.global.t('批量标记失败'))
   }
 }
@@ -1084,7 +1084,7 @@ const handleRecall = async (row) => {
       i18n.global.t('messageHubPage.recall.confirmTitle'),
       { type: 'warning', confirmButtonText: i18n.global.t('messageHubPage.recall.action'), cancelButtonText: '取消' }
     )
-  } catch (e) {
+  } catch {
     return
   }
   recallingId.value = row.id
@@ -1140,7 +1140,7 @@ const submitPush = async () => {
   if (!pushFormRef.value) return
   try {
     await pushFormRef.value.validate()
-  } catch (e) {
+  } catch {
     return
   }
   pushing.value = true

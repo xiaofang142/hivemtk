@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -19,5 +20,5 @@ await page.waitForTimeout(5000);
 errs.length = 0;
 await page.goto(BASE + '/#/reachPipeline/editor', { waitUntil: 'networkidle', timeout: 15000 });
 await page.waitForTimeout(3000);
-console.log('console errors:', errs.length === 0 ? 'NONE' : errs.join('\n---\n'));
+_print('console errors:', errs.length === 0 ? 'NONE' : errs.join('\n---\n'));
 await b.close();

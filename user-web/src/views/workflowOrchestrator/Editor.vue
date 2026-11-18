@@ -261,7 +261,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch as _watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Lightning, Operation, Share, ForkSpoon, VideoPlay } from '@element-plus/icons-vue'
@@ -352,7 +352,7 @@ const onPointerDown = (idx, ev) => {
   const canvasTop = canvasRect ? canvasRect.top : 0
   dragging.offsetX = ev.clientX - canvasLeft - (node.x || 0);
   dragging.offsetY = ev.clientY - canvasTop - (node.y || 0)
-  try { ev.target.setPointerCapture?.(ev.pointerId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { ev.target.setPointerCapture?.(ev.pointerId) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 
 const onPointerMove = (ev) => {
@@ -379,12 +379,12 @@ const onPointerMove = (ev) => {
 
 const onPointerUp = (ev) => {
   if (dragging.active) {
-    try { ev.target?.releasePointerCapture?.(dragging.pointerId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    try { ev.target?.releasePointerCapture?.(dragging.pointerId) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     dragging.active = false
     dragging.idx = -1
   }
   if (linking.active) {
-    try { ev.target?.releasePointerCapture?.(linking.pointerId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    try { ev.target?.releasePointerCapture?.(linking.pointerId) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     const targetIdx = linking.hoverTargetIdx;
     if (targetIdx >= 0 && targetIdx !== linking.sourceIdx) {
       const sourceId = linking.sourceId
@@ -425,7 +425,7 @@ const onLinkStart = (idx, ev) => {
   const canvasRect = canvasBodyRef.value?.getBoundingClientRect()
   linking.curX = ev.clientX - (canvasRect?.left || 0)
   linking.curY = ev.clientY - (canvasRect?.top || 0)
-  try { ev.target.setPointerCapture?.(ev.pointerId) } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { ev.target.setPointerCapture?.(ev.pointerId) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 
 const onNodeEnter = (idx) => {
@@ -468,7 +468,7 @@ const editEdgeLabel = async (idx) => {
       inputValidator: () => true
     })
     edge.label = (value || '').trim()
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 let idCounter = 1;
@@ -505,7 +505,7 @@ const clearAll = async () => {
     definition.nodes = []
     definition.edges = []
     selectedNodeIdx.value = -1
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const autoLayout = () => {
@@ -589,7 +589,7 @@ const loadDefinition = () => {
     let configText
     try {
       configText = Object.keys(cfg).length ? JSON.stringify(cfg) : (n.config_text || '')
-    } catch (_) {
+    } catch {
       // 序列化失败时回退到原始 config_text
       configText = n.config_text || ''
     }
@@ -688,7 +688,7 @@ const saveAsNew = async () => {
     return
   }
   try {
-    const result = await workflowOrchestratorApi.createVersion({
+    const _result = await workflowOrchestratorApi.createVersion({
       workflow_id: workflowId.value,
       name: `${workflowId.value}_v${versions.value.length + 1}`,
       description: currentVersion.value?.description || '',
@@ -708,7 +708,7 @@ const publishCurrent = async () => {
     await workflowOrchestratorApi.publishVersion(currentVersion.value.id)
     ElMessage.success('发布成功')
     loadVersions()
-  } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 onMounted(loadVersions)

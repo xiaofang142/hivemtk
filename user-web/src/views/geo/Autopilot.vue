@@ -208,7 +208,7 @@ const running = computed(() => !!run.value && run.value.status === 'running')
 const isTerminal = computed(() => !!run.value && ['success', 'partial', 'failed'].includes(run.value.status))
 const steps = computed(() => {
   if (!run.value || !run.value.steps) return []
-  try { return JSON.parse(run.value.steps) } catch (e) { return [] }
+  try { return JSON.parse(run.value.steps) } catch  { return [] }
 })
 let pollTimer = null
 
@@ -239,7 +239,7 @@ function startPolling() {
       const res = await geoAutopilotApi.getRun(run.value.id)
       run.value = res.data || res
       if (isTerminal.value) stopPolling()
-    } catch (e) { /* 轮询失败不打断，下一轮重试 */ }
+    } catch  { /* 轮询失败不打断，下一轮重试 */ }
   }, 2000)
 }
 
@@ -252,7 +252,7 @@ async function loadHistory() {
     const res = await geoAutopilotApi.listRuns({ page: 1, limit: 10 })
     const data = res.data || res
     history.value = data.list || data || []
-  } catch (e) { /* 历史加载失败不打断 */ }
+  } catch  { /* 历史加载失败不打断 */ }
 }
 
 function viewRun(id) {

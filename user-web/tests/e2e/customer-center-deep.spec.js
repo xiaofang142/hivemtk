@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 客户中心 · 深层功能验证 spec
 // 登录用 UI（debug 验证过的选择器），locale 强制 zh-cn（文案确定可稳定匹配）。
 // 导航：用 location.hash 赋值（可靠触发 Vue Router hash 模式），并等待每页专属就绪选择器。
@@ -47,7 +48,7 @@ async function refreshToken() {
       const b = await resp.json().catch(() => ({}))
       const t = b?.data?.token || b?.token || ''
       if (t) { TOKEN = t; return t }
-    } catch (e) { /* retry */ }
+    } catch  { /* retry */ }
     await sleep(1000)
   }
   return ''
@@ -362,7 +363,7 @@ test.describe('客户中心深层功能验证', () => {
       // 找第一条「禁用」按钮（即对启用中渠道），点它执行禁用；无则跳过写往返
       const disableBtn = p.locator('.el-main .el-table__row button:has-text("禁用")').first()
       if ((await disableBtn.count()) === 0) {
-        console.log('[chatChannel] 当前无启用中渠道，跳过禁用/启用写往返')
+        _print('[chatChannel] 当前无启用中渠道，跳过禁用/启用写往返')
         return
       }
 
@@ -394,7 +395,7 @@ test.describe('客户中心深层功能验证', () => {
       // UI 终态：该行「禁用」按钮可见 ⇒ 状态已恢复为 active。中间禁用 API 对账已通过 status=disabled，
       // 综合证明 禁用/启用写往返真实生效，DB 终态还原为 active。
       await expect(rowAfterEnable.locator('button:has-text("禁用")')).toBeVisible({ timeout: 15000 })
-      console.log('[chatChannel] 禁用↔启用写往返通过，channel=' + channelName + ' 已还原为启用')
+      _print('[chatChannel] 禁用↔启用写往返通过，channel=' + channelName + ' 已还原为启用')
     })
   })
 

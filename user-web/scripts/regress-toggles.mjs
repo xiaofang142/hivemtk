@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -29,9 +30,9 @@ for(const route of routes){
     if(await sw.isVisible()){await sw.click();clicked=true;break;}
   }
   await page.waitForTimeout(1500);
-  console.log(route, clicked?'switch-clicked':'no-switch', 'api:'+apiErrs.length, apiErrs.slice(0,2).join('|'), 'console:'+conErrs.filter(e=>!e.includes('Failed to load resource')&&!e.includes('favicon')).length);
+  _print(route, clicked?'switch-clicked':'no-switch', 'api:'+apiErrs.length, apiErrs.slice(0,2).join('|'), 'console:'+conErrs.filter(e=>!e.includes('Failed to load resource')&&!e.includes('favicon')).length);
   // 再点回来
   if(clicked){const sws=await page.$$('.el-switch');if(sws[0])await sws[0].click().catch(()=>{});await page.waitForTimeout(800);}
 }
 await b.close();
-console.log('DONE');
+_print('DONE');

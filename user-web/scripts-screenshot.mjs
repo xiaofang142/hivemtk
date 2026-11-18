@@ -1,3 +1,4 @@
+import { print as _print } from './scripts/lib/stdout.cjs';
 import { chromium } from 'playwright';
 import { mkdirSync } from 'fs';
 
@@ -18,7 +19,7 @@ await page.getByRole('textbox', { name: '用户名' }).fill('admin');
 await page.getByRole('textbox', { name: '密码' }).fill(ADMIN_PASSWORD);
 await page.locator('button', { hasText: '登录' }).first().click();
 await page.waitForTimeout(6000);
-console.log('after login url:', page.url());
+_print('after login url:', page.url());
 
 const shots = [
   ['http://localhost:8211/#/login',              'screenshot-login.png',           3000],
@@ -34,7 +35,7 @@ for (const [url, file, ms] of shots) {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(ms);
   await page.screenshot({ path: `${OUT}/${file}` });
-  console.log('saved', file, page.url());
+  _print('saved', file, page.url());
 }
 
 await browser.close();

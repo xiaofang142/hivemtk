@@ -308,7 +308,7 @@
 </template>
 
 <script setup>
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtStr as _rtStr, rtNum, rtDur as _rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 import i18n from '@/i18n'
 
 import { ref, reactive, onMounted } from 'vue'
@@ -480,7 +480,7 @@ const handleUploadSubmit = async () => {
     ElMessage.success(i18n.global.t('上传成功'))
     uploadDialogVisible.value = false
     loadMaterialList()
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('上传失败'))
   }
 }
@@ -568,7 +568,7 @@ const handleSaveCategory = async () => {
     
     showCategoryForm.value = false
     loadCategories()
-  } catch (error) {
+  } catch  {
     ElMessage.error(categoryForm.id ? '更新失败' : '创建失败')
   }
 }

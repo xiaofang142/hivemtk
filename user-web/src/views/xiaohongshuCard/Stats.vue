@@ -236,7 +236,7 @@ import i18n from '@/i18n'
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getXiaohongshuCardOverallStats } from '@/api/xiaohongshuCard'
 
@@ -361,12 +361,12 @@ const formatNumber = (num) => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 };
 
-const formatPercent = (num) => {
+const _formatPercent = (num) => {
   if (!num) return 0
   return (num * 100).toFixed(2)
 }
 
-const formatDate = (date) => {
+const _formatDate = (date) => {
   if (!date) return ''
   return new Date(date).toLocaleDateString()
 }

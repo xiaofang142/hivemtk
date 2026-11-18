@@ -20,6 +20,22 @@ vi.mock('@/router', () => ({
   default: { push: (...args) => routerPush(...args) }
 }))
 
+// JWT 只存 Pinia 内存态（localStorage 不再存令牌）。测试里没有 pinia，
+// 用一个 hoisted 的可变对象当 store：请求拦截器读 token，401 收口调 logout。
+const store = vi.hoisted(() => ({
+  token: '',
+  isLoggedIn: false,
+  setToken(t) { this.token = t || ''; this.isLoggedIn = !!t },
+  logout() { this.token = ''; this.isLoggedIn = false }
+}))
+
+vi.mock('@/stores/user', () => ({ useUserStore: () => store }))
+
+function signIn(token) {
+  store.token = token
+  store.isLoggedIn = true
+}
+
 import requestModule from '@/utils/request'
 
 const ENVELOPE_401 = { code: 'UNAUTHORIZED', message: 'token expired' }
@@ -70,6 +86,8 @@ async function hit(path = '/api/whatever') {
 describe('request 拦截器：401 只在"打的是当前这把令牌"时终结会话', () => {
   beforeEach(async () => {
     localStorage.clear()
+    store.token = ''
+    store.isLoggedIn = false
     window.location.hash = '#/customerService/csat'
     document.body.innerHTML = ''
     routerPush.mockReset()
@@ -77,36 +95,36 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
     always401()
   })
 
-  it('令牌过期：清掉 token/refreshToken、跳一次登录页、错误照旧抛给调用方', async () => {
-    localStorage.setItem('token', 'jwt-old')
-    localStorage.setItem('refreshToken', 'rt-old')
+  it('令牌过期：清掉内存令牌、跳一次登录页、错误照旧抛给调用方', async () => {
+    signIn('jwt-old')
 
     const out = await hit()
 
     expect(out.rejected).toBe(true)
-    expect(localStorage.getItem('token')).toBe(null)
-    expect(localStorage.getItem('refreshToken')).toBe(null)
+    expect(store.token).toBe('')
+    expect(store.isLoggedIn).toBe(false)
     expect(routerPush).toHaveBeenCalledTimes(1)
     expect(routerPush).toHaveBeenCalledWith('/login')
   })
 
   it('迟到的 401 判据要看发出去的那把令牌：换令牌发生在响应回来之前', async () => {
-    localStorage.setItem('token', 'jwt-A')
+    signIn('jwt-A')
     let sent = ''
     always401((config) => {
       const h = config.headers
       sent = typeof h.get === 'function' ? String(h.get('Authorization') || '') : String(h.Authorization || '')
-      localStorage.setItem('token', 'jwt-B')
+      store.token = 'jwt-B'
     })
     await hit()
 
     expect(sent).toBe('Bearer jwt-A')
-    expect(localStorage.getItem('token')).toBe('jwt-B')
+    expect(store.token).toBe('jwt-B')
     expect(routerPush).not.toHaveBeenCalled()
   })
 
   it('本来就没登录时打到 401（登录页口令错、访客端点自己回 401）：不弹"登录已过期"、不跳转', async () => {
-    localStorage.removeItem('token')
+    store.token = ''
+    store.isLoggedIn = false
 
     const out = await hit('/api/auth/login')
 
@@ -117,21 +135,21 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
   })
 
   it('并发 401：会话只终结一次', async () => {
-    localStorage.setItem('token', 'jwt-shared')
-    // 数的是"令牌被抹了几次"，不是"跳了几次登录页"：redirectTo 里那一次 import('@/router')
+    signIn('jwt-shared')
+    // 数的是"会话被终结了几次"，不是"跳了几次登录页"：redirectTo 里那一次 import('@/router')
     // 是真异步，三条并发 401 各自排队，跳转计数会受 promise 落地的先后影响（实测坏代码下也只显示 1 次）——
     // 拿它当判据等于把这条腿交给时序，而不是交给判据。
-    const removeSpy = vi.spyOn(Storage.prototype, 'removeItem')
+    const logoutSpy = vi.spyOn(store, 'logout')
     await Promise.all([hit('/api/a'), hit('/api/b'), hit('/api/c')])
 
-    const tokenClears = removeSpy.mock.calls.filter((c) => c[0] === 'token').length
-    removeSpy.mockRestore()
-    expect(localStorage.getItem('token')).toBe(null)
-    expect(tokenClears).toBe(1)
+    const clears = logoutSpy.mock.calls.length
+    logoutSpy.mockRestore()
+    expect(store.token).toBe('')
+    expect(clears).toBe(1)
   })
 
   it('401 仍然把错误交给调用方（status/bizCode 供分流用，不能变成静默 resolve）', async () => {
-    localStorage.setItem('token', 'jwt-old')
+    signIn('jwt-old')
     const out = await hit()
     expect(out.rejected).toBe(true)
     expect(out.status).toBe(401)
@@ -139,14 +157,14 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
   })
 
   it('会话真的终结时，"登录已过期"响一条', async () => {
-    localStorage.setItem('token', 'jwt-old')
+    signIn('jwt-old')
     await hit()
     const toasts = Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())
     expect(toasts.length).toBe(1)
   })
 
-  it('夹具自证：请求确实带着 localStorage 里那把令牌出去', async () => {
-    localStorage.setItem('token', 'jwt-check-header')
+  it('夹具自证：请求确实带着内存 store 里那把令牌出去', async () => {
+    signIn('jwt-check-header')
     let seen = ''
     always401((config) => {
       const h = config.headers
@@ -163,21 +181,19 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
   // 修法两层：请求拦截器不给 /api/auth/login、/api/auth/register 带头部；
   // 响应侧再兜一层——登录端点的 401 一律不终结会话。
   it('登录端点带旧令牌 401（已登录用户打错口令）：不清会话、不跳转、不弹过期提示', async () => {
-    localStorage.setItem('token', 'jwt-valid')
-    localStorage.setItem('refreshToken', 'rt-valid')
+    signIn('jwt-valid')
 
     const out = await hit('/api/auth/login')
 
     expect(out.rejected).toBe(true)
     expect(out.status).toBe(401)
-    expect(localStorage.getItem('token')).toBe('jwt-valid')
-    expect(localStorage.getItem('refreshToken')).toBe('rt-valid')
+    expect(store.token).toBe('jwt-valid')
     expect(routerPush).not.toHaveBeenCalled()
     expect(Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())).toEqual([])
   })
 
   it('请求拦截器不给登录/注册/MFA 校验端点带 Authorization（旧令牌不该跟着凭据一起出去）', async () => {
-    localStorage.setItem('token', 'jwt-valid')
+    signIn('jwt-valid')
     let seenLogin = 'unset'
     let seenRegister = 'unset'
     let seenMfaVerify = 'unset'
@@ -195,22 +211,20 @@ describe('request 拦截器：401 只在"打的是当前这把令牌"时终结�
     expect(seenRegister).toBe('')
     expect(seenMfaVerify).toBe('')
     // 其余业务请求照旧带头部（这条腿不能被修坏）
-    expect(localStorage.getItem('token')).toBe('jwt-valid')
+    expect(store.token).toBe('jwt-valid')
   })
 
   // 第五步对抗性检查补缺：/auth/mfa/verify 与 login/register 同属 public 组免登录端点
   // （admin_routes.go：temp token 校验 MFA 码，401=码错），已登录用户走 MFA 登录流程
   // 输错码时同样会双 toast+连坐清会话，必须一并裸调。
   it('MFA 校验端点带旧令牌 401（已登录用户输错 MFA 码）：不清会话、不跳转、不弹过期提示', async () => {
-    localStorage.setItem('token', 'jwt-valid')
-    localStorage.setItem('refreshToken', 'rt-valid')
+    signIn('jwt-valid')
 
     const out = await hit('/api/auth/mfa/verify')
 
     expect(out.rejected).toBe(true)
     expect(out.status).toBe(401)
-    expect(localStorage.getItem('token')).toBe('jwt-valid')
-    expect(localStorage.getItem('refreshToken')).toBe('rt-valid')
+    expect(store.token).toBe('jwt-valid')
     expect(routerPush).not.toHaveBeenCalled()
     expect(Array.from(document.querySelectorAll('.el-message')).map((n) => n.textContent.trim())).toEqual([])
   })

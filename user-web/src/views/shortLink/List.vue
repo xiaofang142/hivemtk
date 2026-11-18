@@ -459,7 +459,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshRight, DataAnalysis, Share } from '@element-plus/icons-vue'
 import { shortLinkApi } from '@/api/shortLink'
 import PageState from '@/components/PageState.vue'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { copyToClipboard as writeClipboard } from '@/utils/clipboard.js'
 import { fmtTime } from '@/utils/time'
@@ -618,7 +618,7 @@ const handleDelete = (row) => {
     }
   ).then(async () => {
     try {
-      const res = await shortLinkApi.delete(row.id)
+      const _res = await shortLinkApi.delete(row.id)
       ElMessage.success(i18n.global.t('删除成功'));
       fetchShortLinkList()
     } catch (error) {
@@ -651,11 +651,11 @@ const handleSubmit = async () => {
     if (valid) {
       submitting.value = true
       try {
-        let res
+        let __res
         if (isEdit.value) {
-          res = await shortLinkApi.update(form)
+          __res = await shortLinkApi.update(form)
         } else {
-          res = await shortLinkApi.create(form)
+          __res = await shortLinkApi.create(form)
         }
 
         ElMessage.success(isEdit.value ? '更新成功' : '创建成功');

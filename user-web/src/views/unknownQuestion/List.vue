@@ -380,7 +380,7 @@
 // 未知问题运营页（T1）：问题列表 / 聚类簇 两个视图 + 详情抽屉 + 采纳弹窗。
 // 风格对齐 views/faq/List.vue（el-card shadow=never + el-table + 抽屉编辑）。
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import { unknownQuestionApi } from '@/api/unknownQuestion'
 
 const tab = ref('questions')

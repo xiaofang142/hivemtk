@@ -413,7 +413,7 @@ const loadCategories = async () => {
         { code: 'other', name: '其他异议' }
       ];
     }
-  } catch (e) {
+  } catch  {
     categories.value = [
       { code: 'price', name: '价格异议' },
       { code: 'need', name: '需求异议' },

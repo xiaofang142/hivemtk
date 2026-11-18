@@ -292,7 +292,7 @@ const loadCategories = async () => {
   try {
     const res = await getScriptCategories()
     categories.value = toList(res)
-  } catch (e) {
+  } catch  {
     categories.value = []
   }
 }
@@ -354,7 +354,7 @@ const submitForm = async () => {
       ElMessage.success(i18n.global.t('保存成功'))
       dialogVisible.value = false
       refreshData()
-    } catch (error) {
+    } catch  {
       ElMessage.error(i18n.global.t('保存失败'))
     }
   })

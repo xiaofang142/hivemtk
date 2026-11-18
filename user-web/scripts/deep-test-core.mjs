@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -98,7 +99,7 @@ const coreTests = [
 ];
 
 async function main() {
-  console.log(`=== user-web 核心页面深度测试: ${coreTests.length} 个页面 ===\n`);
+  _print(`=== user-web 核心页面深度测试: ${coreTests.length} 个页面 ===\n`);
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -168,12 +169,12 @@ async function main() {
 
     results.push(result);
     const icon = result.status === 'ok' ? '✓' : result.status === 'partial' ? '⚠' : '✗';
-    console.log(`${icon} [${i + 1}/${coreTests.length}] ${test.name} (${test.route}) => ${result.status}`);
+    _print(`${icon} [${i + 1}/${coreTests.length}] ${test.name} (${test.route}) => ${result.status}`);
     for (const c of result.checks) {
-      console.log(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
+      _print(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
     }
     if (result.errors.length > 0) {
-      console.log(`   ! 控制台错误: ${result.errors[0]}`);
+      _print(`   ! 控制台错误: ${result.errors[0]}`);
     }
   }
 
@@ -186,9 +187,9 @@ async function main() {
   const partial = results.filter(r => r.status === 'partial').length;
   const fail = results.filter(r => r.status === 'fail' || r.status === 'error' || r.status === 'timeout').length;
 
-  console.log(`\n=== 深度测试完成 ===`);
-  console.log(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
-  console.log(`报告: ${reportPath}`);
+  _print(`\n=== 深度测试完成 ===`);
+  _print(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
+  _print(`报告: ${reportPath}`);
 }
 
 main().catch(e => {

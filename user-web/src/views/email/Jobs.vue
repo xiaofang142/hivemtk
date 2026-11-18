@@ -113,7 +113,7 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-// 变量由 vite additionalData 全局注入(@import)，此处不得再 @use（dart-sass 要求 @use 先于一切规则）
+// 变量由 vite additionalData 全局注入(@use ... as *)，此处不重复导入。
 
 .dashboard {
   .page-header {

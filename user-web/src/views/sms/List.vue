@@ -198,7 +198,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import smsApi from '@/api/sms'
 import { isUserReportedError } from '@/utils/errorReporting'
-import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
+import { getOrderStatusLabel as _getOrderStatusLabel, getOrderStatusTagType as _getOrderStatusTagType } from '@/constants/orderStatus';
 
 // 未发送/失败的短信 sendTime 是 Go 零值（0001-01-01T08:05:43+08:05），直接渲染
 // 会显示公元 1 年。零值与非时间一律显示 '-'。

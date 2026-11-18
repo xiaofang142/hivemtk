@@ -63,7 +63,7 @@ async function exportOnly() {
     } else {
       ElMessage.success(`已导出 ${exported} 篇`)
     }
-  } catch (e) { ElMessage.error('导出失败') }
+  } catch  { ElMessage.error('导出失败') }
 }
 async function deployOnly() {
   try {

@@ -146,22 +146,24 @@
       title="预览"
       width="640px"
     >
-      <div
+      <iframe
         class="preview-frame"
-        v-html="safePreviewHTML"
+        :srcdoc="compiledHTML"
+        sandbox=""
+        referrerpolicy="no-referrer"
+        title="预览"
       />
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref } from 'vue';
+import { ElMessage } from 'element-plus'
 import {
   Document, Picture, EditPen, PriceTag, Share, ChatLineRound, Loading
 } from '@element-plus/icons-vue'
 import mjml2html from 'mjml-browser'
-import DOMPurify from 'dompurify'
 import { http } from '@/utils/request'
 
 const BLOCK_TYPES = [
@@ -185,10 +187,11 @@ const previewVisible = ref(false)
 const compiledHTML = ref('')
 const saving = ref(false)
 
-// P3-6 纵深防御：preview 弹窗的 v-html 消费 compileToHTML（mjml2html）的原始输出，
-// 统一过一遍 DOMPurify 再进 innerHTML（用法同 ChatMessages.vue 的 formatContent）。
-// 存稿/发信仍用 compiledHTML 原文，只有渲染入口走净化。
-const safePreviewHTML = computed(() => DOMPurify.sanitize(compiledHTML.value, { USE_PROFILES: { html: true } }))
+// P3-6 纵深防御：preview 走 <iframe :srcdoc="compiledHTML" sandbox="">。
+// 隔离边界是 sandbox=""（禁脚本/禁同源/禁表单/禁导航）+ referrerpolicy=no-referrer，
+// 不是 DOMPurify：邮件 HTML 依赖自身 <style> 与完整文档结构，净化会把样式和
+// <html>/<head> 拆掉导致预览失真；srcdoc 也不会在父文档上下文里解析。
+
 
 const builtinVars = [
   { key: '{{customer.name}}' },
@@ -336,5 +339,5 @@ function compileToHTML() {
 .canvas-block:hover { border-color: #6366F1; }
 .block-actions { position: absolute; right: 8px; top: 8px; }
 .empty { text-align: center; color: #94A3B8; padding: 60px 0; }
-.preview-frame { border: 1px solid #E2E8F0; padding: 16px; max-height: 600px; overflow: auto; }
+.preview-frame { width: 100%; height: 600px; border: 1px solid #E2E8F0; background: #fff; }
 </style>

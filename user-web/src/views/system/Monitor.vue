@@ -160,7 +160,7 @@ const load = async () => {
   try {
     const res = await StatsApi.getSystemInfo()
     metrics.value = res || metrics.value
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取系统监控数据失败'))
   }
 }

@@ -928,7 +928,7 @@ async function savePlatformHost() {
       '确认修改平台端地址',
       { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' }
     )
-  } catch (e) {
+  } catch  {
     return
   }
   platformHostSaving.value = true
@@ -1396,7 +1396,7 @@ async function confirmEdit() {
         '高危参数二次确认',
         { confirmButtonText: '我确认，继续保存', cancelButtonText: '再想想', type: 'error' }
       )
-    } catch (e) {
+    } catch  {
       return
     }
   }
@@ -1491,7 +1491,7 @@ async function loadAuditLogs() {
   try {
     const res = await configParamsApi.auditLogs(80)
     auditList.value = Array.isArray(res) ? res : (res && Array.isArray(res.list) ? res.list : [])
-  } catch (e) {
+  } catch  {
     auditList.value = []
     ElMessage.error('加载审计日志失败')
   } finally {

@@ -759,7 +759,7 @@ const submitForm = () => {
         await updateAccount(accountForm.id, payload)
         ElMessage.success(i18n.global.t('更新成功'))
       } else {
-        const res = await createAccount(payload)
+        const _res = await createAccount(payload)
         ElMessage.success(i18n.global.t('创建成功！正在后台自动配置 Bot...'))
         // 创建成功后立刻刷新列表，展示后端自动填充的字段
         fetchAccounts()
@@ -866,7 +866,7 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-// 变量由 vite additionalData 全局注入(@import)，此处不得再 @use（dart-sass 要求 @use 先于一切规则）
+// 变量由 vite additionalData 全局注入(@use ... as *)，此处不重复导入。
 
 .tg-bot-management {
 

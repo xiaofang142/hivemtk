@@ -696,7 +696,7 @@ const viewUserDetail = async (row) => {
     if (typeof data.risk_factors === 'string' && data.risk_factors) {
       try {
         data.risk_factors = JSON.parse(data.risk_factors)
-      } catch (e) {
+      } catch  {
         data.risk_factors = []
       }
     }

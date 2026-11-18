@@ -259,7 +259,7 @@ const load = async () => {
     replies.value = Array.isArray(rRes) ? rRes : (rRes?.list || [])
     const cData = Array.isArray(cRes) ? cRes : (cRes?.list || [])
     categories.value = cData
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载快捷回复失败'))
     replies.value = []
   } finally {

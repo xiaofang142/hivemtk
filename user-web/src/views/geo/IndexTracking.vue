@@ -488,7 +488,7 @@ async function load() {
   try {
     const res = await geoApi.getIndexFunnel()
     trackings.value = res?.trackings || []
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 async function verifyAll() {
@@ -496,7 +496,7 @@ async function verifyAll() {
     await geoApi.verifyAllIndex()
     ElMessage.success('已触发全量验证')
     load()
-  } catch (e) { ElMessage.error('失败') }
+  } catch  { ElMessage.error('失败') }
 }
 
 function onTabChange (name) {

@@ -545,7 +545,7 @@ async function loadStats() {
       transferCount: data.transfer_count || 0,
       autoReplyCount: data.auto_reply_count || 0
     }
-  } catch (e) {
+  } catch  {
     stats.value = { totalSignals: 0, avgConfidence: '0.000', transferCount: 0, autoReplyCount: 0 };
   }
 }

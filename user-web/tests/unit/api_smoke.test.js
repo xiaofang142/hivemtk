@@ -42,6 +42,9 @@ vi.mock('@/utils/request', () => ({
   getPublicRequestInstance: () => mocks.axios
 }))
 vi.mock('axios', () => ({ default: mocks.axios, __esModule: true }))
+// 部分 api 模块在调用时读取内存里的 agent token（JWT 不落 localStorage）；
+// smoke 只验证「导出函数可调用且发出请求」，用空 token 桩即可，不需要真 pinia。
+vi.mock('@/stores/user', () => ({ useUserStore: () => ({ token: '' }) }))
 
 // API_FILES 不再手写：2026-11-10 全模块审计实测手写清单与磁盘漂移 63 个模块
 //（全部被 smoke 跳过，覆盖缺口静默长大）。改从目录直读——新增/删除 api 模块

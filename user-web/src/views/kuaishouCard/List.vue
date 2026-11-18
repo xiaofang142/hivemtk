@@ -536,7 +536,7 @@ const handleDelete = async (row) => {
         type: 'warning'
       }
     )
-    const res = await kuaishouCardApi.deleteKuaishouCard(row.id)
+    const _res = await kuaishouCardApi.deleteKuaishouCard(row.id)
     ElMessage.success(i18n.global.t('删除成功'));
     loadData()
   } catch (error) {
@@ -548,7 +548,7 @@ const handleDelete = async (row) => {
 const handleStatusChange = async (row) => {
   try {
     // 后端 KuaishouCardUpdateRequest.Title 为 required，漏传会 400
-    const res = await kuaishouCardApi.updateKuaishouCard({
+    const __res = await kuaishouCardApi.updateKuaishouCard({
       id: row.id,
       title: row.title,
       description: row.description || '',
@@ -574,14 +574,14 @@ const handleSubmit = async () => {
   const valid = await formRef.value.validate().then(() => true).catch(() => false)
   if (!valid) return
   try {
-    let res
+    let ___res
     if (currentCardId.value) {
-      res = await kuaishouCardApi.updateKuaishouCard({
+      ___res = await kuaishouCardApi.updateKuaishouCard({
         ...formData,
         id: currentCardId.value
       })
     } else {
-      res = await kuaishouCardApi.createKuaishouCard(formData)
+      ___res = await kuaishouCardApi.createKuaishouCard(formData)
     }
     ElMessage.success(currentCardId.value ? '更新成功' : '创建成功');
     dialogVisible.value = false
@@ -593,7 +593,7 @@ const handleSubmit = async () => {
 
 
 
-const handleImageUrlChange = () => {
+const _handleImageUrlChange = () => {
   if (formRef.value && formData.image_url) {
     formRef.value.validateField('image_url')
   }

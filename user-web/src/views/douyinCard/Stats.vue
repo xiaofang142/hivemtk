@@ -197,7 +197,7 @@ import i18n from '@/i18n'
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getDouyinCardOverallStats } from '@/api/douyinCard'
 
@@ -307,7 +307,7 @@ const formatNumber = (num) => {
   return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 };
 
-const formatPercent = (active, total) => {
+const _formatPercent = (active, total) => {
   if (!total || total === 0) return '0%'
   return Math.round((active / total) * 100) + '%'
 }

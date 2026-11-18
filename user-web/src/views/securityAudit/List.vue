@@ -428,7 +428,7 @@ const formatTime = (val) => {
     const d = new Date(val)
     if (isNaN(d.getTime())) return val
     return d.toLocaleString('zh-CN', { hour12: false })
-  } catch (e) {
+  } catch  {
     return val
   }
 }
@@ -444,7 +444,7 @@ const loadData = async () => {
     const list = data.list || data || []
     audits.value = list
     pagination.total = data.total || list.length || 0
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载审计列表失败'))
     audits.value = []
   } finally {
@@ -477,7 +477,7 @@ const viewDetail = async (row) => {
       detailRecord.value = data
       detailItems.value = data.items || data.checks || data.findings || data.results || []
     }
-  } catch (e) {
+  } catch  {
     ElMessage.warning(i18n.global.t('未获取到详细检查项'));
   } finally {
     detailLoading.value = false

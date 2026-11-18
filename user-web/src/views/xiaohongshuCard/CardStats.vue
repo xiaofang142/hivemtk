@@ -285,7 +285,7 @@ import { safeInit } from '@/utils/echarts'
 import { getXiaohongshuCard, getXiaohongshuCardStats } from '@/api/xiaohongshuCard'
 
 const route = useRoute();
-const router = useRouter()
+const _router = useRouter()
 
 const loading = ref(false);
 const cardLoadFailed = ref(false)
@@ -474,16 +474,16 @@ const formatDate = (date) => {
 // 不要走 toLocaleDateString（那会跟着浏览器语言变成 9/30/2026）。
 const formatDay = (value) => (value ? String(value).slice(0, 10) : '')
 
-const formatTime = (time) => {
+const _formatTime = (time) => {
   if (!time) return ''
   return new Date(time).toLocaleString()
 }
 
-const getActionType = (type) => {
+const _getActionType = (_type) => {
   return 'view'
 }
 
-const getActionText = (type) => {
+const _getActionText = (__type) => {
   return '浏览'
 }
 

@@ -60,13 +60,13 @@ async function load() {
     ])
     llmsPreview.value = l?.content || ''
     robotsPreview.value = r?.content || ''
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 async function genSitemap() {
   try {
     const r = await geoApi.getSitemapPreview()
     sitemapPreview.value = r?.content || ''
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 onMounted(load)
 </script>

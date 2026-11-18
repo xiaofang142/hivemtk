@@ -364,7 +364,7 @@ const stopStream = () => {
   if (stream) {
     try {
       stream.abort()
-    } catch (_) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
     stream = null
   }
   streaming.value = false
@@ -402,7 +402,7 @@ const startStream = () => {
       streaming.value = false
       streamFailed.value = true
     })
-  } catch (_) {
+  } catch  {
     streaming.value = false
     streamFailed.value = true
   }

@@ -364,7 +364,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import smsApi from '@/api/sms'
 import { isUserReportedError } from '@/utils/errorReporting'
-import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
+import { getOrderStatusLabel as _getOrderStatusLabel, getOrderStatusTagType as _getOrderStatusTagType } from '@/constants/orderStatus';
 import DOMPurify from 'dompurify'
 import { toList } from '@/utils/list'
 import { fmtTime } from '@/utils/time'
@@ -443,7 +443,7 @@ const getDraftOptions = async () => {
   try {
     const response = await smsApi.getDraftList({ page: 1, limit: 100 })
     draftOptions.value = response.list || [];
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('获取草稿列表失败'))
   }
 };
@@ -458,7 +458,7 @@ const getJobList = async () => {
     const response = await smsApi.getJobList(params)
     jobList.value = response.list || [];
     total.value = response.total || 0
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('获取任务列表失败'))
   } finally {
     loading.value = false
@@ -615,11 +615,11 @@ const handleView = async (row) => {
       const recordsRes = await smsApi.getJobRecords(row.id, { page: 1, page_size: 50 })
       const recordsData = toList(recordsRes)
       jobDetails.value = Array.isArray(recordsData) ? recordsData : []
-    } catch (e) {
+    } catch {
       jobDetails.value = []
     }
     detailVisible.value = true
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('获取任务详情失败'))
   }
 };
@@ -629,7 +629,7 @@ const handlePause = async (row) => {
     await smsApi.pauseJob(row.id)
     ElMessage.success(i18n.global.t('任务暂停成功'))
     getJobList()
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('任务暂停失败'))
   }
 };
@@ -639,7 +639,7 @@ const handleResume = async (row) => {
     await smsApi.resumeJob(row.id)
     ElMessage.success(i18n.global.t('任务继续成功'))
     getJobList()
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('任务继续失败'))
   }
 };

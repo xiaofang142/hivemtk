@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 智能体域 15 页 Playwright 深度测试
 // =============================================
 // 覆盖智能体 / LLM 路由 / 知识库 / 调优 全域 15 个页面
@@ -32,12 +33,12 @@ async function refreshToken() {
           const j = await r.json()
           if (j && j.data && j.data.token) {
             TOKEN = j.data.token
-            console.log(`[auth] login ok with pw len=${pw.length}`)
+            _print(`[auth] login ok with pw len=${pw.length}`)
             await ctx.dispose()
             return TOKEN
           }
         }
-      } catch (e) { /* retry */ }
+      } catch  { /* retry */ }
     }
     await ctx.dispose()
     await sleep(1500)
@@ -62,7 +63,7 @@ async function uiLogin(page) {
     try {
       localStorage.setItem('app_locale', 'zh')
       localStorage.setItem('locale', 'zh-cn')
-    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   await page.goto(`${BASE}/#/login`, { timeout: 30000, waitUntil: 'domcontentloaded' })
   await page.waitForSelector('.login-box input', { timeout: 20000 })
@@ -154,7 +155,7 @@ test.describe('F-P0-35 智能体域 15 页', () => {
         try {
           localStorage.setItem('app_locale', 'zh')
           localStorage.setItem('locale', 'zh-cn')
-        } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+        } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       })
       await page.goto(`${BASE}/#/login`, { timeout: 30000, waitUntil: 'domcontentloaded' })
       try {
@@ -168,7 +169,7 @@ test.describe('F-P0-35 智能体域 15 页', () => {
         token = await page.evaluate(() => localStorage.getItem('token') || '') || token
         if (token) TOKEN = token
       } catch (e) {
-        console.log('[auth] UI login failed:', e.message)
+        _print('[auth] UI login failed:', e.message)
       }
     }
     if (!token) throw new Error('无法获取 token（API + UI 均失败）')
@@ -178,11 +179,11 @@ test.describe('F-P0-35 智能体域 15 页', () => {
       try {
         localStorage.setItem('app_locale', 'zh')
         localStorage.setItem('locale', 'zh-cn')
-      } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+      } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     })
     await page.goto(BASE, { timeout: 30000, waitUntil: 'domcontentloaded' })
     await ensureAuthed(page)
-    await page.evaluate(() => { try { localStorage.setItem('app_locale', 'zh'); localStorage.setItem('locale', 'zh-cn') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ } })
+    await page.evaluate(() => { try { localStorage.setItem('app_locale', 'zh'); localStorage.setItem('locale', 'zh-cn') } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ } })
   })
 
   for (const p of pages) {
@@ -376,7 +377,7 @@ test.describe('F-P0-35 智能体域 15 页', () => {
       } finally {
         net.dump()
         fs.writeFileSync(path.join(RESULT_DIR, `page-${p.idx}.json`), JSON.stringify(result, null, 2))
-        console.log(`[page ${p.idx}] ${p.title}: ${result.status} | render=${result.checks?.rendered} | apis=${result.checks?.apiOkRatio || 'n/a'} | interact=${result.checks?.interaction?.name}`)
+        _print(`[page ${p.idx}] ${p.title}: ${result.status} | render=${result.checks?.rendered} | apis=${result.checks?.apiOkRatio || 'n/a'} | interact=${result.checks?.interaction?.name}`)
       }
     })
   }

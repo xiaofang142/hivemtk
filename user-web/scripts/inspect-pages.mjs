@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const BASE_URL = 'http://localhost:8211';
@@ -11,12 +12,12 @@ async function main() {
 
   for (const route of routes) {
     const url = BASE_URL + '/#/' + route;
-    console.log(`\n=== ${route} ===`);
+    _print(`\n=== ${route} ===`);
     await page.goto(url, { waitUntil: 'networkidle', timeout: 15000 }).catch(() => null);
     await page.waitForTimeout(2000);
 
     const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 800) || '');
-    console.log('Body text:', bodyText);
+    _print('Body text:', bodyText);
 
     const tables = await page.evaluate(() => {
       const els = document.querySelectorAll('table, [class*="table"], [class*="list"], .el-table');
@@ -27,7 +28,7 @@ async function main() {
         text: e.innerText?.substring(0, 100)
       }));
     });
-    console.log('Tables/Lists:', JSON.stringify(tables, null, 2));
+    _print('Tables/Lists:', JSON.stringify(tables, null, 2));
 
     const allClasses = await page.evaluate(() => {
       const els = document.querySelectorAll('[class]');
@@ -41,7 +42,7 @@ async function main() {
       });
       return Array.from(classes).slice(0, 20);
     });
-    console.log('Relevant classes:', allClasses);
+    _print('Relevant classes:', allClasses);
   }
 
   await browser.close();

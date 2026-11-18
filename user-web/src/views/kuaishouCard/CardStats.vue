@@ -206,7 +206,7 @@ import { fmtTime } from '@/utils/time'
 const route = useRoute();
 const router = useRouter()
 
-const loading = ref(false);
+const _loading = ref(false);
 // formatYmd 把日期控件给的 Date 转成接口约定的 YYYY-MM-DD（本地时区，避免 toISOString 偏移到前一天）。
 const formatYmd = (d) => {
   if (!d) return ''

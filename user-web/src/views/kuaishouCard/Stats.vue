@@ -217,7 +217,7 @@ import i18n from '@/i18n'
 
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { ElMessage } from 'element-plus'
 import { getKuaishouCardOverallStats } from '@/api/kuaishouCard'

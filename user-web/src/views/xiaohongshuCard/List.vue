@@ -572,7 +572,7 @@ const handleDelete = (row) => {
   })
     .then(async () => {
       try {
-    const res = await deleteXiaohongshuCard(row.id)
+    const _res = await deleteXiaohongshuCard(row.id)
     ElMessage.success(i18n.global.t('删除成功'));
     getList()
   } catch (error) {
@@ -592,11 +592,11 @@ const handleSubmit = () => {
   formRef.value.validate(async (valid) => {
     if (valid) {
       try {
-        let res
+        let __res
         if (form.id) {
-          res = await updateXiaohongshuCard(form);
+          __res = await updateXiaohongshuCard(form);
         } else {
-          res = await createXiaohongshuCard(form);
+          __res = await createXiaohongshuCard(form);
         }
         
         ElMessage.success(form.id ? '更新成功' : '创建成功');

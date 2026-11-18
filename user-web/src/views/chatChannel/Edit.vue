@@ -177,7 +177,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getChannel, updateChannel } from '@/api/chatChannel'
 import { listEnabledAgents } from '@/api/aiAgent'
-import { listBindings, createBinding, updateBinding, deleteBinding } from '@/api/channelAgentBinding'
+import { listBindings, createBinding, updateBinding as _updateBinding, deleteBinding } from '@/api/channelAgentBinding'
 import { TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 
 const route = useRoute()

@@ -328,7 +328,7 @@ const formatInt = (n) => {
   return num.toLocaleString('zh-CN')
 }
 
-const priorityType = (p) => {
+const _priorityType = (p) => {
   const map = { 高: 'danger', 中: 'warning', 低: 'success' }
   return map[p] || 'success'
 }

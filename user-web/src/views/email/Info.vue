@@ -107,11 +107,11 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { ref, computed } from 'vue'
-import { Search, InfoFilled } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { Search as _Search, InfoFilled } from '@element-plus/icons-vue'
+import { ElMessage as _ElMessage } from 'element-plus'
 
 const searchText = ref('')
 

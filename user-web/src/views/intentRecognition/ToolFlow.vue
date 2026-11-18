@@ -847,7 +847,7 @@ async function save() {
     }
     dialogVisible.value = false;
     await loadList();
-  } catch (e) {
+  } catch  {
     // http 层已统一弹出后端 message（4000/4009 中文原因），此处不再重复提示
   } finally {
     saving.value = false;

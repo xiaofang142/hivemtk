@@ -336,7 +336,7 @@ const addInterceptors = () => {
       return config
     },
     (error) => {
-      console.error('请求错误:', error)
+      console.error('[request] 请求准备失败')
       return Promise.reject(error)
     }
   );
@@ -362,7 +362,7 @@ const addInterceptors = () => {
       }
       if (!isJsonResponse(response) && typeof body !== 'object') {
         if (import.meta.env?.DEV) {
-          console.error('[request] 收到非 JSON 响应，疑似网关/ 反向代理层 兜底到前端页面：', data)
+          console.error('[request] 收到非JSON响应，请检查网关路由')
         }
         const msg = t('http.unexpectedResponse')
         if (!silent) showToast(msg)
@@ -411,7 +411,7 @@ const addInterceptors = () => {
 
         if (!isJsonResponse(error.response) || typeof data !== 'object') {
           if (import.meta.env?.DEV) {
-            console.error('[request] 网关返回非 JSON 响应：', data)
+            console.error('[request] 网关返回非JSON错误响应')
           }
           const msg = t('http.unexpectedResponse')
           if (!silent) showToast(msg)
@@ -535,7 +535,7 @@ export const updateRequestConfig = async () => {
     addInterceptors()
     return { baseURL: apiBaseUrl }
   } catch (error) {
-    console.error('更新请求配置失败:', error)
+    console.error('[request] 更新请求配置失败')
     throw error
   }
 };

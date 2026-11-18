@@ -242,7 +242,7 @@ import { ref, reactive, onMounted } from 'vue'
 import api from '@/api/whatsapp'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
-import { getOrderStatusLabel, getOrderStatusTagType } from '@/constants/orderStatus';
+import { getOrderStatusLabel as _getOrderStatusLabel, getOrderStatusTagType as _getOrderStatusTagType } from '@/constants/orderStatus';
 
 const loading = ref(false)
 const creating = ref(false)
@@ -275,7 +275,7 @@ const loadDrafts = async () => {
   try {
     const res = await api.listDrafts()
     drafts.value = Array.isArray(res) ? res : (res?.list || [])
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载草稿列表失败'))
     drafts.value = []
   }
@@ -299,7 +299,7 @@ const load = async () => {
       jobs.value = []
       pagination.total = 0
     }
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载任务失败'))
     jobs.value = []
   } finally {
@@ -330,7 +330,7 @@ const viewJob = async (row) => {
   try {
     const res = await api.getJob(row.id)
     detail.value = res || row
-  } catch (e) {
+  } catch  {
     detail.value = row
   }
   showDetail.value = true

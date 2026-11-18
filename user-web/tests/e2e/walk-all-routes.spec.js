@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 商户端全路由深度遍历：以管理员身份登录后，逐一访问所有路由，
 // 记录每个路由的控制台报错 / 页面异常 / 5xx，输出报告。
 import { test, expect } from '@playwright/test'
@@ -46,12 +47,12 @@ test('[WALKALL] 遍历全部路由并采集错误', async ({ page }) => {
 
   // 汇总报告
   const routesWithErrors = Object.entries(errorsByRoute)
-  console.log('\n===== 有错误的路由数: ' + routesWithErrors.length + ' / ' + PATHS.length + ' =====')
+  _print('\n===== 有错误的路由数: ' + routesWithErrors.length + ' / ' + PATHS.length + ' =====')
   for (const [route, errs] of routesWithErrors) {
-    console.log('\n### ' + route)
-    console.log([...new Set(errs)].join('\n'))
+    _print('\n### ' + route)
+    _print([...new Set(errs)].join('\n'))
   }
-  console.log('\n===== 遍历完成 =====')
+  _print('\n===== 遍历完成 =====')
 
   // 断言：无页面级异常
   const pageErrors = Object.values(errorsByRoute).flat().filter((e) => e.startsWith('PAGEERROR'))

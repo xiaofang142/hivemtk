@@ -482,7 +482,7 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -492,7 +492,7 @@ import { wecomAccountApi } from '@/api/wecomAccount.js'
 import { copyToClipboard } from '@/utils/clipboard'
 import AgentBindingDialog from '@/components/AgentBindingDialog.vue'
 import WeComSendDialog from '@/components/WeComSendDialog.vue'
-import { getAccountStatusLabel, getAccountStatusTagType } from '@/constants/accountType';
+import { getAccountStatusLabel as _getAccountStatusLabel, getAccountStatusTagType as _getAccountStatusTagType } from '@/constants/accountType';
 
 const router = useRouter()
 

@@ -1,3 +1,4 @@
+const { print: _print } = require('./lib/stdout.cjs');
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -47,12 +48,12 @@ const all = routes.filter(r => (seen.has(r.path) ? false : (seen.add(r.path), tr
     page.off('console', onConsole); page.off('pageerror', onPageErr); page.off('response', onResp);
     try {
       row.toasts = await page.$$eval('.el-message', els => els.map(e => e.innerText.trim()).filter(Boolean));
-    } catch(e) { /* 采集失败：字段留空，页面继续审计 */ }
+    } catch { /* 采集失败：字段留空，页面继续审计 */ }
     try {
       row.text = await page.evaluate(() => document.body.innerText);
-    } catch(e) { /* 采集失败：字段留空，页面继续审计 */ }
+    } catch { /* 采集失败：字段留空，页面继续审计 */ }
   }
   await browser.close();
   fs.writeFileSync(OUT, JSON.stringify(report));
-  console.log('AUDIT_DONE', report.length, 'bytes', fs.statSync(OUT).size);
+  _print('AUDIT_DONE', report.length, 'bytes', fs.statSync(OUT).size);
 })();

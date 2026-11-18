@@ -1,10 +1,11 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import { readFileSync, writeFileSync } from 'fs';
 
 const BASE = 'http://localhost:8211';
 const routes = readFileSync('/tmp/routes.txt', 'utf8').trim().split('\n').filter(Boolean);
 
-console.log(`📋 共 ${routes.length} 个路由待扫描\n`);
+_print(`📋 共 ${routes.length} 个路由待扫描\n`);
 
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -27,14 +28,14 @@ page.on('pageerror', err => {
 });
 
 // 登录
-console.log('🔐 登录...');
+_print('🔐 登录...');
 await page.goto(BASE + '/#/login');
 await page.waitForTimeout(1500);
 await page.getByRole('textbox', { name: '用户名' }).fill('uit_admin');
 await page.getByRole('textbox', { name: '密码' }).fill('UiTest@2026');
 await page.getByRole('button', { name: '登录' }).click();
 await page.waitForTimeout(2500);
-console.log(`✅ 已登录, 当前: ${page.url()}\n`);
+_print(`✅ 已登录, 当前: ${page.url()}\n`);
 
 const results = { passed: [], failed: [], zeroBtn: [], consoleErr: [] };
 let btnTotal = 0, clickTotal = 0, clickFail = 0;
@@ -87,7 +88,7 @@ for (const route of routes) {
   
   if (info.has404) {
     results.failed.push({ route, reason: '404 Page' });
-    console.log(`  ❌ ${route} → 404`);
+    _print(`  ❌ ${route} → 404`);
   } else {
     results.passed.push({ 
       route, 
@@ -101,17 +102,17 @@ for (const route of routes) {
     if (currentErrors.length > 0) { flags.push(`err=${currentErrors.length}`); results.consoleErr.push({ route, errors: currentErrors.slice(0, 3) }); }
     
     const flagStr = flags.length ? ` [${flags.join(',')}]` : '';
-    console.log(`  ✅ ${route} (${info.buttons.length} btn)${flagStr}`);
+    _print(`  ✅ ${route} (${info.buttons.length} btn)${flagStr}`);
   }
 }
 
 // ======== 第二阶段：对有按钮的页面尝试点击 ========
-console.log(`\n========================================`);
-console.log(`第二阶段: 按钮交互测试`);
-console.log(`========================================\n`);
+_print(`\n========================================`);
+_print(`第二阶段: 按钮交互测试`);
+_print(`========================================\n`);
 
 const clickablePages = results.passed.filter(p => p.btnCount > 0 && p.btnCount < 30);
-console.log(`🎯 选 ${clickablePages.length} 个页面做按钮点击测试\n`);
+_print(`🎯 选 ${clickablePages.length} 个页面做按钮点击测试\n`);
 
 const clickResults = [];
 
@@ -144,7 +145,7 @@ for (const pageInfo of clickablePages.slice(0, 40)) {
       // 用 text 找按钮
       const btnEl = page.getByRole('button', { name: new RegExp(btn.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 15)) }).first();
       const beforeUrl = page.url();
-      const beforeModal = await page.evaluate(() => !!document.querySelector('.el-dialog[aria-hidden="false"], .el-message-box'));
+      const _beforeModal = await page.evaluate(() => !!document.querySelector('.el-dialog[aria-hidden="false"], .el-message-box'));
       
       await btnEl.click({ timeout: 2000, force: true }).catch(() => {
         // fallback: 用 index 点击
@@ -163,40 +164,40 @@ for (const pageInfo of clickablePages.slice(0, 40)) {
       
       const navigated = beforeUrl !== afterUrl;
       pageClickResult.clicks.push({ btn: btn.text, ok: true, navigated, modal: afterModal });
-      console.log(`    👆 "${btn.text}" → ${navigated ? '导航' : afterModal ? '弹窗' : '无变化'}`);
+      _print(`    👆 "${btn.text}" → ${navigated ? '导航' : afterModal ? '弹窗' : '无变化'}`);
       
     } catch (e) {
       clickFail++;
       pageClickResult.clicks.push({ btn: btn.text, ok: false, error: e.message.slice(0, 60) });
-      console.log(`    ❌ "${btn.text}" 点击失败: ${e.message.slice(0, 50)}`);
+      _print(`    ❌ "${btn.text}" 点击失败: ${e.message.slice(0, 50)}`);
     }
   }
   
   clickResults.push(pageClickResult);
-  console.log(`  📄 ${route}: ${toClick.length}/${buttons.length} 按钮点击`);
+  _print(`  📄 ${route}: ${toClick.length}/${buttons.length} 按钮点击`);
 }
 
 // ======== 汇总 ========
-console.log(`\n========================================`);
-console.log(`最终汇总`);
-console.log(`========================================`);
-console.log(`✅ 页面通过: ${results.passed.length}/${routes.length}`);
-console.log(`❌ 页面失败: ${results.failed.length}`);
-console.log(`📊 总按钮数: ${btnTotal}`);
-console.log(`👆 按钮点击: ${clickTotal} (${clickFail} 失败)`);
-console.log(`⚠️  有 console error: ${results.consoleErr.length}`);
-console.log(`📭 无按钮页面: ${results.zeroBtn.length}`);
+_print(`\n========================================`);
+_print(`最终汇总`);
+_print(`========================================`);
+_print(`✅ 页面通过: ${results.passed.length}/${routes.length}`);
+_print(`❌ 页面失败: ${results.failed.length}`);
+_print(`📊 总按钮数: ${btnTotal}`);
+_print(`👆 按钮点击: ${clickTotal} (${clickFail} 失败)`);
+_print(`⚠️  有 console error: ${results.consoleErr.length}`);
+_print(`📭 无按钮页面: ${results.zeroBtn.length}`);
 
 if (results.failed.length) {
-  console.log(`\n❌ 失败路由:`);
-  results.failed.forEach(f => console.log(`  ${f.route} → ${f.reason}`));
+  _print(`\n❌ 失败路由:`);
+  results.failed.forEach(f => _print(`  ${f.route} → ${f.reason}`));
 }
 if (results.consoleErr.length) {
-  console.log(`\n⚠️  Console error (前 10):`);
-  results.consoleErr.slice(0, 10).forEach(e => console.log(`  ${e.route}: ${e.errors[0]}`));
+  _print(`\n⚠️  Console error (前 10):`);
+  results.consoleErr.slice(0, 10).forEach(e => _print(`  ${e.route}: ${e.errors[0]}`));
 }
 
 writeFileSync('/tmp/full_scan_result.json', JSON.stringify({ results, clickResults }, null, 2));
-console.log(`\n💾 完整结果 → /tmp/full_scan_result.json`);
+_print(`\n💾 完整结果 → /tmp/full_scan_result.json`);
 
 await browser.close();

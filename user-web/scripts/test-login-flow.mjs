@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -19,7 +20,7 @@ async function main() {
   });
 
   // 登录
-  console.log('--- 登录 ---');
+  _print('--- 登录 ---');
   await page.goto(BASE_URL + '/#/login', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(1000);
 
@@ -29,12 +30,12 @@ async function main() {
   if (usernameInput && passwordInput) {
     await usernameInput.fill('admin');
     await passwordInput.fill(ADMIN_PASSWORD);
-    console.log('  已填写表单');
+    _print('  已填写表单');
 
     const loginBtn = await page.$('button[type="submit"], .el-button--primary');
     if (loginBtn) {
       await loginBtn.click();
-      console.log('  已点击登录');
+      _print('  已点击登录');
     }
   }
 
@@ -42,27 +43,27 @@ async function main() {
 
   // 检查当前URL和页面内容
   const currentUrl = page.url();
-  console.log(`\n登录后URL: ${currentUrl}`);
+  _print(`\n登录后URL: ${currentUrl}`);
 
   const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 1000) || '');
-  console.log(`页面内容: ${bodyText}`);
+  _print(`页面内容: ${bodyText}`);
 
   // 检查localStorage
   const token = await page.evaluate(() => {
     return localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('user') || '';
   });
-  console.log(`\nlocalStorage token: ${token?.substring(0, 50)}...`);
+  _print(`\nlocalStorage token: ${token?.substring(0, 50)}...`);
 
   // 尝试访问一个需要登录的页面
-  console.log('\n--- 访问 /ops-overview ---');
+  _print('\n--- 访问 /ops-overview ---');
   apiResponses.length = 0;
   await page.goto(BASE_URL + '/#/ops-overview', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(2000);
 
   const opsBodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 1000) || '');
-  console.log(`页面内容: ${opsBodyText}`);
-  console.log(`\nAPI响应 (${apiResponses.length}):`);
-  apiResponses.forEach(r => console.log(`  ${r}`));
+  _print(`页面内容: ${opsBodyText}`);
+  _print(`\nAPI响应 (${apiResponses.length}):`);
+  apiResponses.forEach(r => _print(`  ${r}`));
 
   await browser.close();
 }

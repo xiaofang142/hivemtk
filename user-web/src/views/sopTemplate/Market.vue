@@ -281,7 +281,7 @@
 
 <script setup>
 import { ref, markRaw, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import {
   Collection,
   Search,
@@ -293,7 +293,7 @@ import {
   Present,
   Sunny,
   UserFilled,
-  ChatLineRound
+  ChatLineRound as _ChatLineRound
 } from '@element-plus/icons-vue'
 import { sopTemplateApi } from '@/api/sopTemplate'
 import { listEnabledAgents } from '@/api/aiAgent'

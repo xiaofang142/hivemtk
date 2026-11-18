@@ -568,7 +568,7 @@
 import i18n from '@/i18n'
 import { isUserReportedError } from '@/utils/errorReporting'
 
-import { ref, reactive, onMounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, nextTick as _nextTick, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   getLiveCodes, 

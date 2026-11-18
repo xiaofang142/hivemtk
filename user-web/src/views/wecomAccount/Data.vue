@@ -336,7 +336,7 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { wecomAccountApi } from '@/api/wecomAccount'
 import WeComSendDialog from '@/components/WeComSendDialog.vue'

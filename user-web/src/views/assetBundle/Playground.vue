@@ -627,8 +627,8 @@ const handlePublish = async () => {
   }
 };
 
-const JSON_BLOCK_RE = /```(?:json|JSON)?\s*(\{[\s\S]*?\})\s*```\s*$/;
-const BARE_JSON_RE = /(\{"intent"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\s*$/
+const _JSON_BLOCK_RE = /```(?:json|JSON)?\s*(\{[\s\S]*?\})\s*```\s*$/;
+const _BARE_JSON_RE = /(\{"intent"\s*:[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\s*$/
 
 const extractIntent = (reply) => {
   const result = { valid: false, intent: '', capturedData: {}, rawJSON: '' }
@@ -648,7 +648,7 @@ const extractIntent = (reply) => {
     result.capturedData = parsed.captured_data || {}
     const cleaned = reply.slice(0, reply.indexOf(m[0])).replace(/\n+\s*$/, '');
     return { ...result, reply: cleaned }
-  } catch (e) {
+  } catch  {
     return { ...result, reply }
   }
 };

@@ -190,7 +190,7 @@ const loadScripts = async () => {
     const res = await getScriptTemplateList({ page: 1, pageSize: 100 });
     const list = res?.list || res?.data?.list || res || [];
     scripts.value = list.map((s) => ({ id: s.id, name: s.name || s.title }));
-  } catch (e) {
+  } catch  {
     scripts.value = [];
   }
 };
@@ -200,7 +200,7 @@ const loadVersions = async () => {
   try {
     const res = await scriptAbApi.listVersions(scriptId.value);
     versions.value = res?.list || res?.data?.list || [];
-  } catch (e) {
+  } catch  {
     versions.value = [];
   } finally {
     loadingVersions.value = false;
@@ -219,7 +219,7 @@ const loadStats = async () => {
         attribution_h: stats.value.config.attribution_h ?? 48,
       };
     }
-  } catch (e) {
+  } catch  {
     stats.value = {};
   } finally {
     loadingStats.value = false;
@@ -237,7 +237,7 @@ const activate = async (row) => {
     await scriptAbApi.activateVersion(scriptId.value, row.version);
     ElMessage.success('版本已激活');
     loadVersions();
-  } catch (e) {
+  } catch  {
     ElMessage.error('激活失败');
   }
 };
@@ -247,7 +247,7 @@ const saveConfig = async () => {
     await scriptAbApi.updateAbConfig(scriptId.value, abForm.value);
     ElMessage.success('配置已保存');
     loadStats();
-  } catch (e) {
+  } catch  {
     ElMessage.error('保存失败');
   }
 };

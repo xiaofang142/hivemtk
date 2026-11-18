@@ -7,7 +7,7 @@
 import { setup } from '@storybook/vue3';
 
 // 1) 全局 i18n 注入 — 让组件的 $t() 调用不报错
-setup((app) => {
+setup((_app) => {
   // 这里仅做骨架占位; 真实环境应 import i18n 实例
 });
 

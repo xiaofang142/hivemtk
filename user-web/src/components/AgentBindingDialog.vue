@@ -170,7 +170,7 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch as _watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { listBindings, createBinding, updateBinding, deleteBinding } from '@/api/channelAgentBinding.js'

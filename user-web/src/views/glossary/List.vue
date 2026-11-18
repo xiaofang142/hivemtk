@@ -604,6 +604,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, Delete } from '@element-plus/icons-vue'
 import {
   listGlossaries,
+  getGlossary,
   createGlossary,
   updateGlossary,
   deleteGlossary,
@@ -810,9 +811,8 @@ const openEditDialog = async (row) => {
 
 const getGlossarySafe = async (termId) => {
   try {
-    const { getGlossary } = await import('@/api/glossary.js')
     return await getGlossary(termId)
-  } catch (e) {
+  } catch  {
     return {}
   }
 }
@@ -821,7 +821,7 @@ const submitForm = async () => {
   if (!formRef.value) return
   try {
     await formRef.value.validate()
-  } catch (_) {
+  } catch  {
     return
   }
   const translations = {};

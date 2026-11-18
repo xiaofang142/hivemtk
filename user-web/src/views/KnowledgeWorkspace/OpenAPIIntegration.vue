@@ -491,7 +491,7 @@ import { knowledgeAPI } from '@/api/knowledge'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { getAuthTypeLabel } from '@/constants/authType';
 import { PASS_FAIL_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status'
-import { fmtTime } from '@/utils/time'
+import { fmtTime as _fmtTime } from '@/utils/time'
 import { isUserReportedError } from '@/utils/errorReporting'
 
 const HTTP_METHOD_TAG = { GET: '', POST: 'success', PUT: 'warning', DELETE: 'danger', PATCH: 'warning' };

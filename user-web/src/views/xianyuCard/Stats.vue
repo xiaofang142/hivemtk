@@ -185,7 +185,7 @@ import i18n from '@/i18n'
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getXianyuCardOverallStats } from '@/api/xianyuCard'
 

@@ -32,6 +32,7 @@ vi.mock('@/utils/echarts', () => ({
   echarts: {}
 }))
 
+import { ElMessageBox } from 'element-plus'
 import Dashboard from '@/views/messageHub/Dashboard.vue'
 import { getChannelLabel, getChannelTagType } from '@/constants/channel'
 
@@ -351,11 +352,15 @@ describe('死信队列：表格吃的是 list，按钮吃的是 total', () => {
 
   it('批量重试成功后按返回的 requeued 出声，并重新拉一次读数', async () => {
     const wrapper = await mountPage()
+    // 批量重试是破坏性动作，组件先弹 ElMessageBox 二次确认；这里替用户点「确定」。
+    const confirmSpy = vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
     http.post.mockResolvedValue({ requeued: 7 })
     findButton('批量重试').click()
     await settle(wrapper)
     expect(http.post).toHaveBeenCalledWith('/api/message-hub/dlq/batch-retry', {})
+    expect(confirmSpy).toHaveBeenCalled()
     expect(document.body.textContent).toContain('已重新入队 7 条')
+    confirmSpy.mockRestore()
     expect(http.get.mock.calls.filter((c) => c[0] === '/api/message-hub/stats').length).toBe(2)
     wrapper.unmount()
   })

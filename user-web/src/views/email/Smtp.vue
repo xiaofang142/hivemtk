@@ -159,7 +159,7 @@ import i18n from '@/i18n'
 
 import { ref, reactive, onMounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus } from '@element-plus/icons-vue';
+import { Plus as _Plus } from '@element-plus/icons-vue';
 
 import { emailApi } from '@/api/email';
 
@@ -220,7 +220,7 @@ const handleDelete = (id) => {
     type: 'warning'
   }).then( async () => {
       try {
-        const response = await emailApi.deleteEmailSmtp(id);
+        const _response = await emailApi.deleteEmailSmtp(id);
         ElMessage({
           type: 'success',
           message: i18n.global.t('删除成功'),

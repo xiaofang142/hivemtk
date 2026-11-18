@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 数据分析模块 7 页真实渲染巡检
 // 复用 audit-runner 登录逻辑, 导航到 7 个数据分析页, 收集 console/page/网络错误
 // 并断言页面确实渲染出数据区域(非白屏/非全空态报错)
@@ -73,12 +74,12 @@ async function main() {
     }
     all.push(errSummary)
     const ok = col.pageErrors.length === 0 && col.consoleErrors.length === 0
-    console.log(`${ok ? 'OK  ' : 'WARN'} ${mod.padEnd(16)} nodes=${cards} empty=${hasEmpty} netErr=${col.netErrors.length} console=${col.consoleErrors.length} page=${col.pageErrors.length}`)
+    _print(`${ok ? 'OK  ' : 'WARN'} ${mod.padEnd(16)} nodes=${cards} empty=${hasEmpty} netErr=${col.netErrors.length} console=${col.consoleErrors.length} page=${col.pageErrors.length}`)
   }
   fs.writeFileSync(path.resolve(OUT_DIR, 'data_analysis_render.json'), JSON.stringify(all, null, 2))
   await browser.close()
   const bad = all.filter((a) => a.pageErrors.length || a.consoleErrors.length)
-  console.log(`\n=== ${bad.length ? 'HAS ISSUES' : 'ALL PAGES RENDER CLEAN'} ===`)
+  _print(`\n=== ${bad.length ? 'HAS ISSUES' : 'ALL PAGES RENDER CLEAN'} ===`)
   process.exit(bad.length ? 1 : 0)
 }
 main().catch((e) => { console.error('FATAL', e); process.exit(2) })

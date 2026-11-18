@@ -28,7 +28,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '../..')
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
-const API_BASE = process.env.API_BASE_URL || 'http://localhost:8204'
+const _API_BASE = process.env.API_BASE_URL || 'http://localhost:8204'
 const OUT_DIR = path.resolve(__dirname, 'reports')
 fs.mkdirSync(OUT_DIR, { recursive: true })
 
@@ -272,7 +272,7 @@ async function auditPage(browser, pagePath) {
         await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 20000 })
         report.loaded = true
         report.loadNote = `networkidle 超时已降级按 domcontentloaded 判定：${idleErr.slice(0, 80)}`
-      } catch (e2) {
+      } catch  {
         report.loaded = false
         report.loadError = 'goto: ' + idleErr
       }
@@ -305,7 +305,7 @@ async function auditPage(browser, pagePath) {
   const waitLoadingGone = async (maxMs = 8000) => {
     const start = Date.now()
     while (Date.now() - start < maxMs) {
-      const n = await page.locator('.el-loading-mask:not([style*="display: none"]), .el-loading-mask:not(.is-fullscreen[style*="none"])').count().catch(() => 0)
+      const _n = await page.locator('.el-loading-mask:not([style*="display: none"]), .el-loading-mask:not(.is-fullscreen[style*="none"])').count().catch(() => 0)
       const visibleMask = await page.evaluate(() => {
         const ms = Array.from(document.querySelectorAll('.el-loading-mask'))
         return ms.some((m) => {

@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 用 esbuild 把每个入口独立打包为自包含 IIFE（对齐 bridge/scripts/build.mjs）。
 // 注意：不 rmSync 整个 dist/（避免把已 Load 的扩展搞坏），只原地覆盖产物。
 import { build } from 'esbuild';
@@ -53,4 +54,4 @@ writeFileSync(
   JSON.stringify({ version: manifest.version, builtAt: new Date().toISOString() }, null, 2),
 );
 
-console.log('[browser_automation] 构建完成 → dist/');
+_print('[browser_automation] 构建完成 → dist/');

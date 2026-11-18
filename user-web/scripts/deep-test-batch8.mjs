@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -39,7 +40,7 @@ const batch8 = [
 const is404 = (text) => text.includes('404 Page Does not Exist') || text.includes('页面不存在');
 
 async function main() {
-  console.log(`=== user-web 深度测试 第八批（${batch8.length} 条） ===\n`);
+  _print(`=== user-web 深度测试 第八批（${batch8.length} 条） ===\n`);
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -57,7 +58,7 @@ async function main() {
   });
 
   // 登录
-  console.log('--- 登录 ---');
+  _print('--- 登录 ---');
   await page.goto(BASE_URL + '/#/login', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(2000);
   const usernameInput = await page.$('input[type="text"], input[placeholder*="用户名"], input[placeholder*="username"], input[placeholder*="邮箱"], input[placeholder*="email"]');
@@ -71,9 +72,9 @@ async function main() {
   await page.waitForTimeout(5000);
   const bodyAfterLogin = await page.evaluate(() => document.body?.innerText || '');
   const isLoggedIn = !is404(bodyAfterLogin) && (bodyAfterLogin.includes('退出') || bodyAfterLogin.toLowerCase().includes('logout') || !bodyAfterLogin.includes('Log In'));
-  console.log(`  ${isLoggedIn ? '✓' : '✗'} 登录${isLoggedIn ? '成功' : '失败'}\n`);
+  _print(`  ${isLoggedIn ? '✓' : '✗'} 登录${isLoggedIn ? '成功' : '失败'}\n`);
   if (!isLoggedIn) {
-    console.log('登录失败，终止测试');
+    _print('登录失败，终止测试');
     await browser.close();
     process.exit(1);
   }
@@ -125,11 +126,11 @@ async function main() {
 
     results.push(result);
     const icon = result.status === 'ok' ? '✓' : result.status === 'partial' ? '⚠' : '✗';
-    console.log(`${icon} [${i + 1}/${batch8.length}] ${test.name} (${test.route}) => ${result.status}`);
+    _print(`${icon} [${i + 1}/${batch8.length}] ${test.name} (${test.route}) => ${result.status}`);
     for (const c of result.checks) {
-      console.log(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
+      _print(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
     }
-    if (result.errors.length > 0) console.log(`   ! 错误: ${result.errors[0]}`);
+    if (result.errors.length > 0) _print(`   ! 错误: ${result.errors[0]}`);
   }
 
   await browser.close();
@@ -141,9 +142,9 @@ async function main() {
   const partial = results.filter(r => r.status === 'partial').length;
   const fail = results.filter(r => ['fail', 'error', 'timeout'].includes(r.status)).length;
 
-  console.log(`\n=== 第八批深度测试完成 ===`);
-  console.log(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
-  console.log(`报告: ${reportPath}`);
+  _print(`\n=== 第八批深度测试完成 ===`);
+  _print(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
+  _print(`报告: ${reportPath}`);
 }
 
 main().catch(e => {

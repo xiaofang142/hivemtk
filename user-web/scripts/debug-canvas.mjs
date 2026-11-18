@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD;
@@ -31,5 +32,5 @@ const info = await page.evaluate(() => {
     vfHTML: vf ? vf.outerHTML.substring(0, 400) : null,
   };
 });
-console.log(JSON.stringify(info, null, 2));
+_print(JSON.stringify(info, null, 2));
 await b.close();

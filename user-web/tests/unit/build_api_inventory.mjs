@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 解析 src/api 下所有文件，抽取每个导出函数 / 对象方法的 HTTP method + url。
 // 支持：export function / export const = () => / export const X = { 方法 } / export default { 方法 }
 // 输出 tests/API_INVENTORY.json 与人类可读的 tests/API_CHECKLIST.md。
@@ -83,7 +84,7 @@ for (const file of files) {
 
 const out = path.resolve(__dirname, '../API_INVENTORY.json')
 fs.writeFileSync(out, JSON.stringify(inventory, null, 2))
-console.log(`解析完成：${files.length} 个文件，${inventory.length} 个接口`)
+_print(`解析完成：${files.length} 个文件，${inventory.length} 个接口`)
 
 const byFile = {}
 for (const it of inventory) (byFile[it.file] ||= []).push(it)
@@ -95,4 +96,4 @@ for (const f of Object.keys(byFile).sort()) {
   md += '\n'
 }
 fs.writeFileSync(path.resolve(__dirname, '../API_CHECKLIST.md'), md)
-console.log(`清单已写入 ${path.resolve(__dirname, '../API_CHECKLIST.md')}`)
+_print(`清单已写入 ${path.resolve(__dirname, '../API_CHECKLIST.md')}`)

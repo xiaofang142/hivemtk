@@ -537,7 +537,7 @@ import {
 import { toList } from '@/utils/list.js'
 import {
   SEGMENT_TYPE,
-  GROUP_STATUS,
+  GROUP_STATUS as _GROUP_STATUS,
   getStatusLabel as getStatusLabelFromArr,
   getStatusTagType as getStatusTagTypeFromArr,
 } from '@/constants/status';
@@ -656,7 +656,7 @@ const submitForm = async () => {
       }
       dialogVisible.value = false
       refreshData()
-    } catch (error) {
+    } catch  {
       ElMessage.error(i18n.global.t('操作失败'))
     }
   })

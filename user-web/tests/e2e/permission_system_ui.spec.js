@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 import { test, expect } from '@playwright/test'
 import path from 'path'
 import fs from 'fs'
@@ -53,7 +54,7 @@ async function adminLogin() {
         return { token: data.data.token, password: pwd }
       }
     } catch (e) {
-      console.log(`  密码 ${pwd} 失败: ${e.message}`)
+      _print(`  密码 ${pwd} 失败: ${e.message}`)
     }
   }
   return null
@@ -90,7 +91,7 @@ async function webLogin(page, username, password, token, userInfo) {
   const useToken = token || null
 
   // 先访问根 URL 注入 init script（必须在任何页面加载前）
-  await page.addInitScript(({ tok, locale, info, initFlag, name }) => {
+  await page.addInitScript(({ tok, locale, info, initFlag, name: _name }) => {
     try {
       localStorage.setItem('app_locale', locale)
       localStorage.setItem('system_initialized', initFlag)
@@ -103,7 +104,7 @@ async function webLogin(page, username, password, token, userInfo) {
       localStorage.setItem('hivemtk_onboarding_completed_module', 'true')
       localStorage.setItem('hivemtk_onboarding_completed_page', 'true')
       localStorage.setItem('hivemtk_onboarding_page_seen', JSON.stringify(['*']))
-    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   }, {
     tok: useToken,
     locale: 'zh',
@@ -123,13 +124,13 @@ async function webLogin(page, username, password, token, userInfo) {
   await page.goto(`${BASE}/#/login`)
   try {
     await page.waitForSelector('.login-box', { timeout: 10000 })
-  } catch (e) {
-    console.log('  登录页 .login-box 不可见')
+  } catch  {
+    _print('  登录页 .login-box 不可见')
   }
   await page.waitForTimeout(500)
   // 强制 zh locale（页面重定向/跳转后仍生效）
   await page.evaluate(() => {
-    try { localStorage.setItem('app_locale', 'zh') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    try { localStorage.setItem('app_locale', 'zh') } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   const userInput = page.locator('.login-box input').first()
   const pwdInput = page.locator('.login-box input[type="password"]')
@@ -138,12 +139,12 @@ async function webLogin(page, username, password, token, userInfo) {
   await page.locator('.login-box button.el-button--primary').click()
   try {
     await page.waitForURL((url) => !url.hash.includes('/login'), { timeout: 10000 })
-  } catch (e) {
+  } catch  {
     await page.waitForTimeout(2000)
   }
   // 登录后再设一次
   await page.evaluate(() => {
-    try { localStorage.setItem('app_locale', 'zh') } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    try { localStorage.setItem('app_locale', 'zh') } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   })
   await page.waitForTimeout(1500)
 }
@@ -172,7 +173,7 @@ async function clickTopMenu(page, text) {
 }
 
 // clickAsideSubMenu 点击侧边栏子菜单文本
-async function clickAsideSubMenu(page, text) {
+async function _clickAsideSubMenu(page, text) {
   const item = page.locator('.app-aside').locator(`text=${text}`).first()
   await item.waitFor({ state: 'attached', timeout: 10000 })
   await item.scrollIntoViewIfNeeded({ timeout: 8000 })
@@ -218,7 +219,7 @@ test.describe('权限系统 UI 多角色验证', () => {
       real_name: '系统超管',
       email: 'admin@hivemtk.demo'
     }
-    console.log(`✓ admin token 获取成功 (pwd=${adminPassword})`)
+    _print(`✓ admin token 获取成功 (pwd=${adminPassword})`)
 
     const cs = await createCustomerServiceUser(adminToken)
     if (cs) {
@@ -236,9 +237,9 @@ test.describe('权限系统 UI 多角色验证', () => {
           email: login.user?.email || `${csUsername}@test.com`
         }
       }
-      console.log(`✓ 测试客服账号创建成功: ${csUsername}`)
+      _print(`✓ 测试客服账号创建成功: ${csUsername}`)
     } else {
-      console.log(`⚠ 创建客服失败（/api/system/users 路由可能未注册）`)
+      _print(`⚠ 创建客服失败（/api/system/users 路由可能未注册）`)
     }
   })
 
@@ -264,7 +265,7 @@ test.describe('权限系统 UI 多角色验证', () => {
       return false
     })
 
-    console.log(`  "系统设置"菜单存在: ${exists}`)
+    _print(`  "系统设置"菜单存在: ${exists}`)
     expect(exists).toBeTruthy()
   })
 
@@ -280,7 +281,7 @@ test.describe('权限系统 UI 多角色验证', () => {
     // 侧边栏出现"团队"
     const teamMenu = page.locator('.app-aside').locator(`text=团队`).first()
     await expect(teamMenu).toBeVisible({ timeout: 10000 })
-    console.log('  ✓ 侧边栏"团队"菜单可见')
+    _print('  ✓ 侧边栏"团队"菜单可见')
   })
 
   // ----- 3. admin 团队菜单下能看到 3 个子项 -----
@@ -306,7 +307,7 @@ test.describe('权限系统 UI 多角色验证', () => {
     for (const item of expectedItems) {
       result[item] = asideText.includes(item)
     }
-    console.log('  子菜单验证:', JSON.stringify(result, null, 2))
+    _print('  子菜单验证:', JSON.stringify(result, null, 2))
 
     for (const item of expectedItems) {
       expect(result[item], `应包含 "${item}"`).toBeTruthy()
@@ -333,7 +334,7 @@ test.describe('权限系统 UI 多角色验证', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/admin-users-page.png`, fullPage: true })
 
     const hash = await page.evaluate(() => window.location.hash)
-    console.log(`  点击后 hash: ${hash}`)
+    _print(`  点击后 hash: ${hash}`)
     expect(hash).toContain('/system/users')
   })
 
@@ -357,7 +358,7 @@ test.describe('权限系统 UI 多角色验证', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/admin-roles-page.png`, fullPage: true })
 
     const hash = await page.evaluate(() => window.location.hash)
-    console.log(`  点击后 hash: ${hash}`)
+    _print(`  点击后 hash: ${hash}`)
     expect(hash).toContain('/system/roles')
   })
 
@@ -381,7 +382,7 @@ test.describe('权限系统 UI 多角色验证', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/admin-permissions-page.png`, fullPage: true })
 
     const hash = await page.evaluate(() => window.location.hash)
-    console.log(`  点击后 hash: ${hash}`)
+    _print(`  点击后 hash: ${hash}`)
     expect(hash).toContain('/system/permissions')
   })
 
@@ -398,12 +399,12 @@ test.describe('权限系统 UI 多角色验证', () => {
     // 权限边界在管理子项：团队/权限设置/站点配置三类 admin 专属节点不得出现。
     const systemMenu = page.locator('.top-menu .el-menu-item').filter({ hasText: '系统设置' })
     const systemCount = await systemMenu.count()
-    console.log(`  客服顶栏"系统设置"出现次数: ${systemCount}`)
+    _print(`  客服顶栏"系统设置"出现次数: ${systemCount}`)
     expect(systemCount).toBeLessThanOrEqual(1)
 
     for (const forbidden of ['团队', '权限设置', '站点配置']) {
       const cnt = await page.locator(`.app-aside`).locator(`text=${forbidden}`).count()
-      console.log(`  客服侧边栏"${forbidden}"出现次数: ${cnt}`)
+      _print(`  客服侧边栏"${forbidden}"出现次数: ${cnt}`)
       expect(cnt).toBe(0)
     }
   })
@@ -419,10 +420,10 @@ test.describe('权限系统 UI 多角色验证', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/cs-direct-users.png`, fullPage: true })
 
     const finalHash = await page.evaluate(() => window.location.hash)
-    console.log(`  客服访问 /system/users 后 hash: ${finalHash}`)
+    _print(`  客服访问 /system/users 后 hash: ${finalHash}`)
     // 解析路径（去掉 ?from=* 等 query），仅校验 pathname
     const pathOnly = finalHash.split('?')[0]
-    console.log(`  pathname: ${pathOnly}`)
+    _print(`  pathname: ${pathOnly}`)
     // 客服被重定向到非 /system/users 页面（403 → NotFound）
     expect(pathOnly.includes('/system/users')).toBe(false)
   })

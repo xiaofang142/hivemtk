@@ -264,7 +264,7 @@ import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import PageHeader from '@/components/PageHeader.vue'
 import { getSalesCockpit } from '@/api/cockpit'
 import LtcRatesApi from '@/api/ltcRates'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 
 const intentChart = ref(null)

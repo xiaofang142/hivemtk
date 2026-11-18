@@ -80,7 +80,13 @@
                 shadow="never"
                 class="preview-card"
               >
-                <div v-html="renderedContent" />
+                <iframe
+                  class="preview-document"
+                  :srcdoc="renderedContent"
+                  sandbox=""
+                  referrerpolicy="no-referrer"
+                  title="消息预览"
+                />
               </el-card>
             </el-form-item>
 
@@ -475,7 +481,7 @@ const loadTemplates = async () => {
     templateLoading.value = true
     const response = await bulkMessagingApi.getTemplates()
     templates.value = toList(response)
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('加载模板失败'))
   } finally {
     templateLoading.value = false
@@ -486,7 +492,7 @@ const loadAccounts = async () => {
   try {
     const response = await whatsappApi.getAccounts({ limit: 100 })
     accounts.value = response || [];
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('加载账号失败'))
   }
 }
@@ -505,7 +511,7 @@ const loadLeads = async () => {
       score: 80,
       status: 'new'
     }))
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('加载线索失败'))
   }
 }
@@ -518,7 +524,7 @@ const loadSendRecords = async () => {
       limit: recordPagination.pageSize
     })
     sendRecords.value = toList(response);
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('加载发送记录失败'))
   } finally {
     recordLoading.value = false
@@ -549,7 +555,7 @@ const handleSend = async () => {
     ElMessage.success(response.message || '消息已添加到发送队列')
     
     resetForm();
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('发送失败'))
   } finally {
     sending.value = false
@@ -580,7 +586,7 @@ const deleteTemplate = async (row) => {
     await bulkMessagingApi.deleteTemplate(row.id)
     ElMessage.success(i18n.global.t('模板删除成功'))
     loadTemplates()
-  } catch (error) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：用户取消删除或请求已由统一层处理 */ }
 }
 
 const saveTemplate = async () => {
@@ -598,7 +604,7 @@ const saveTemplate = async () => {
     showTemplateDialog.value = false
     resetTemplateForm()
     loadTemplates()
-  } catch (error) {
+  } catch {
     ElMessage.error(i18n.global.t('操作失败'))
   }
 }
@@ -685,6 +691,12 @@ const handleRecordCurrentChange = (val) => {
   background-color: #f5f5f5;
   padding: 15px;
   border-radius: 4px;
+}
+
+.preview-document {
+  width: 100%;
+  height: 240px;
+  border: 0;
 }
 
 .template-help {

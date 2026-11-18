@@ -43,7 +43,7 @@
 <script setup>
 import { computed } from 'vue'
 
-const props = defineProps({
+const _props = defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   icon: { type: [String, Object], default: '' },

@@ -308,7 +308,7 @@ const onSubmit = async () => {
   let valid
   try {
     valid = await formRef.value.validate()
-  } catch (e) {
+  } catch {
     valid = false
   }
   if (!valid) return

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const CONFIG_FILE_PATH = '/src/config/http.js';
+const _CONFIG_FILE_PATH = '/src/config/http.js';
 
 const DEFAULT_CONFIG_TEMPLATE = `// API配置文件
 // 此文件由系统自动生成，请勿手动修改
@@ -13,7 +13,7 @@ export const saveApiConfig = async (config) => {
   try {
     localStorage.setItem('apiConfig', JSON.stringify(config));
     
-    const configContent = DEFAULT_CONFIG_TEMPLATE
+    const _configContent = DEFAULT_CONFIG_TEMPLATE
       .replace('{{API_BASE_URL}}', config.baseUrl);
     
     return { success: true };
@@ -59,5 +59,4 @@ export const testApiConnection = async (config) => {
     }
   }
 };
-
 

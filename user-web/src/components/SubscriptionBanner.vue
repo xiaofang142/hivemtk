@@ -44,7 +44,7 @@
 // ============================================================
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Clock, WarningFilled, Bell } from '@element-plus/icons-vue'
+import { Clock as _Clock, WarningFilled, Bell } from '@element-plus/icons-vue'
 import { http } from '@/utils/request'
 import { subscriptionStatus } from '@/api/moduleMarket'
 

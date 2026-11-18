@@ -122,7 +122,7 @@ const attachCounter = (el) => {
 
 describe('注入沙箱自身必须咬得住（闸门的反向测试）', () => {
   const LEAKED = '模块作用域的常量';
-  function leakyInjected(el) { return LEAKED; }
+  function leakyInjected(_el) { return LEAKED; }
 
   it('引用模块自由变量的注入函数，在沙箱里必抛 ReferenceError', () => {
     // 这条不成立就说明沙箱是摆设：injClick 当初引用 actionabilityCheck 的死法

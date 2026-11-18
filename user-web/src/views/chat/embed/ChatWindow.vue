@@ -216,7 +216,7 @@ const sending = ref(false)
 const typing = ref(false)
 const agentOnline = ref(false)
 const agentCount = ref(0)
-const widgetTitle = ref(props.channelTitle)
+const _widgetTitle = ref(props.channelTitle)
 
 const offlineSessions = ref([]);
 const showOfflineList = ref(false)
@@ -245,14 +245,14 @@ const startTransferWaiting = () => {
 // 绝不用 '*' 兜底（P3-4/P3-22）。
 const resolveWidgetParentOrigin = () => {
   var refOrigin = ''
-  try { refOrigin = new URL(document.referrer).origin } catch { refOrigin = '' }
+  try { refOrigin = new URL(document.referrer).origin } catch { /* 无 referrer / 非法 URL：按空处理，调用方 fail-closed */ }
   var q = new URLSearchParams(window.location.search).get('mcwParent')
     || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
   if (q) {
     try {
       var qOrigin = new URL(q).origin
       if (refOrigin && qOrigin === refOrigin) return qOrigin
-    } catch (e) { /* fallthrough */ }
+    } catch { /* q 不是合法 URL：忽略协商参数，回退 referrer origin */ }
   }
   return refOrigin
 }
@@ -268,7 +268,7 @@ watch(offlineBannerCount, (c) => {
   } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });
 
-const humanHint = ref(false);
+const _humanHint = ref(false);
 
 const showRating = ref(false);
 const rating = ref(0)
@@ -413,7 +413,7 @@ const connectWebSocket = () => {
         })
       }
     },
-    onAgentJoined: (payload) => {
+    onAgentJoined: (_payload) => {
       agentOnline.value = true
       clearTransferTimer()
       messages.value.push({
@@ -422,7 +422,7 @@ const connectWebSocket = () => {
         created_at: new Date().toISOString()
       })
     },
-    onSessionClosed: (payload) => {
+    onSessionClosed: (__payload) => {
       messages.value.push({
         sender_type: 'system',
         content: i18n.global.t('会话已结束，感谢您的咨询'),
@@ -483,7 +483,7 @@ const onSend = async (payload) => {
     // 供触达静默窗口按访客当地时区判定）；取不到不传，零行为变更。
     try {
       body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined
-    } catch (e) { /* 老浏览器无 Intl 时区面，静默跳过 */ }
+    } catch { /* 老浏览器无 Intl 时区面，静默跳过 */ }
     if (attachment) {
       body.media_url = attachment.url
       body.media_type = attachment.mediaType
@@ -532,7 +532,7 @@ const onSend = async (payload) => {
   }
 }
 
-const onTransfer = () => {}
+const _onTransfer = () => {}
 
 const submitRating = async () => {
   if (rating.value === 0) return

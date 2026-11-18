@@ -1,3 +1,4 @@
+import { print as _print } from '../scripts/lib/stdout.cjs';
 import { test, expect, request } from '@playwright/test'
 
 test.skip(!process.env.E2E_ADMIN_PASSWORD, 'E2E_ADMIN_PASSWORD not set')
@@ -97,7 +98,7 @@ test.describe('系统设置模块 真实后端 E2E', () => {
         const url = req.url()
         if (isApiUrl(url) && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
           let body = ''
-          try { body = (req.postData() || '').slice(0, 240) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+          try { body = (req.postData() || '').slice(0, 240) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
           apiCalls.push(`SEND ${method} ${stripOrigin(url)}${body ? ' :: ' + body : ''}`)
           return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ code: 0, data: { id: 1 } }) })
         }
@@ -106,7 +107,7 @@ test.describe('系统设置模块 真实后端 E2E', () => {
 
       page.setDefaultTimeout(5000)
       await page.goto('#' + p.path, { waitUntil: 'domcontentloaded' })
-      try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+      try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       await page.waitForTimeout(800)
 
       const shotDir = 'test-results/system-settings-live'
@@ -141,7 +142,7 @@ test.describe('系统设置模块 真实后端 E2E', () => {
                 const ty = await inp.getAttribute('type').catch(() => '')
                 if (ty === 'file') continue
                 await inp.fill('自动测试_' + Date.now()).catch(() => {})
-              } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+              } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
             }
             const ok = dlg.getByRole('button', { name: /确定|确 定|保存|提交|新增|创建|确认|是/i }).first()
             await ok.click({ timeout: 2500 }).catch(() => {})
@@ -158,12 +159,12 @@ test.describe('系统设置模块 真实后端 E2E', () => {
       await page.screenshot({ path: `${shotDir}/${p.group}-${p.name}-after.png` }).catch(() => {})
 
       if (realErrors.length) {
-        console.log(`\n❌ [${p.group}] ${p.name} (${p.path}) 真实问题 ${realErrors.length} 条:`)
-        realErrors.forEach((e) => console.log('   - ' + e))
+        _print(`\n❌ [${p.group}] ${p.name} (${p.path}) 真实问题 ${realErrors.length} 条:`)
+        realErrors.forEach((e) => _print('   - ' + e))
       } else {
-        console.log(`\n✅ [${p.group}] ${p.name} (${p.path}) 通过 (点击 ${clicked} 按钮, 真实数据行 ${rowCount}, API ${apiCalls.length} 次, 备注 ${notes.length})`)
+        _print(`\n✅ [${p.group}] ${p.name} (${p.path}) 通过 (点击 ${clicked} 按钮, 真实数据行 ${rowCount}, API ${apiCalls.length} 次, 备注 ${notes.length})`)
       }
-      notes.forEach((n) => console.log('   · ' + n))
+      notes.forEach((n) => _print('   · ' + n))
       testInfo.attach('realErrors', { body: realErrors.join('\n'), contentType: 'text/plain' })
       testInfo.attach('apiCalls', { body: apiCalls.join('\n'), contentType: 'text/plain' })
       expect(realErrors, `页面 ${p.path} 发现 ${realErrors.length} 个真实问题`).toEqual([])

@@ -123,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, h } from 'vue';
+import { ref, reactive, computed, h as _h } from 'vue';
 import { ElMessage } from 'element-plus'
 import { http } from '@/utils/request'
 // RuleNode 此前只在模板里用、从未 import 也从未定义（git HEAD 同样如此），

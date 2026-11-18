@@ -278,7 +278,7 @@ async function exportLogs() {
     a.remove()
     URL.revokeObjectURL(url)
     ElMessage.success('导出已开始')
-  } catch (e) {
+  } catch  {
     // 失败提示由 request 拦截器统一弹出（401 跳登录 / 403 无权限 / 502 上游原因）
   }
 }

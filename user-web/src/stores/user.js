@@ -122,7 +122,7 @@ export const useUserStore = defineStore('user', () => {
           tenant_id: parsed.tenant_id || '',
           tenant_code: parsed.tenant_code || ''
         }
-      } catch (e) {
+      } catch {
         localStorage.removeItem('user_info')
       }
     }

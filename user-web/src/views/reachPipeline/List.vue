@@ -1378,7 +1378,7 @@ const formatJSON = (obj) => {
   if (obj === null || obj === undefined || obj === '') return '-'
   try {
     return JSON.stringify(obj, null, 2)
-  } catch (e) {
+  } catch  {
     return String(obj)
   }
 }
@@ -1388,7 +1388,7 @@ const loadStats = async () => {
   try {
     const res = await reachPipelineApi.getStats()
     stats.value = res || {}
-  } catch (e) {
+  } catch  {
     // 忽略：清理/存储/恢复类 best-effort 操作
   }
 }
@@ -1708,7 +1708,7 @@ const submitJob = async () => {
     let payload
     try {
       payload = JSON.parse(jobForm.payloadStr)
-    } catch (e) {
+    } catch  {
       ElMessage.error(t('reachPipeline.payloadInvalid'))
       return
     }

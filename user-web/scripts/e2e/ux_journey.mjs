@@ -1,3 +1,4 @@
+import { print as _print } from '../lib/stdout.cjs';
 /**
  * UX 旅程走查脚本（真实用户视角）
  * 用法: node scripts/ux_audit_journey.mjs [journey1|journey2|journey3|all]
@@ -65,7 +66,7 @@ async function step(c, name, fn) {
     entry.ok = false
     entry.notes.push('FAIL: ' + String(e).slice(0, 400))
   }
-  console.log(`[${entry.ok ? 'OK' : 'FAIL'}] ${name}${entry.notes.length ? ' | ' + entry.notes.join(' ; ') : ''}`)
+  _print(`[${entry.ok ? 'OK' : 'FAIL'}] ${name}${entry.notes.length ? ' | ' + entry.notes.join(' ; ') : ''}`)
 }
 
 async function login(page) {
@@ -205,7 +206,7 @@ async function journey2() {
   })
 
   // 对话测试（回到智能体列表，用测试弹窗）
-  await step(c, 'J2-智能体对话测试', async (note) => {
+  await step(c, 'J2-智能体对话测试', async (_note) => {
     await gotoMenu(page, '/aiAgent/list')
     await page.waitForTimeout(1500)
     const testBtn = page.locator('button:has-text("测试")').first()
@@ -253,7 +254,7 @@ async function journey3() {
     }
   })
 
-  await step(c, 'J3-SOP模板提交（若表单可填）', async (note) => {
+  await step(c, 'J3-SOP模板提交（若表单可填）', async (__note) => {
     const saveBtn = page.locator('button:has-text("保存"), button:has-text("提交"), button:has-text("创建")').last()
     if (await saveBtn.count()) {
       await saveBtn.click()
@@ -297,13 +298,13 @@ async function journey3() {
 
   const outPath = path.join(OUT_DIR, `ux_audit_${Date.now()}.json`)
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2))
-  console.log('\n=== 汇总 ===')
+  _print('\n=== 汇总 ===')
   for (const [j, c] of Object.entries(results)) {
     const fails = c.steps.filter((s) => !s.ok)
-    console.log(`${j}: ${c.steps.length - fails.length}/${c.steps.length} 步通过, console错误=${c.consoleErrors.length}, API失败=${c.apiFailures.length}, toasts=${JSON.stringify(c.toasts)}`)
-    if (fails.length) fails.forEach((f) => console.log('  FAIL:', f.name))
-    if (c.apiFailures.length) console.log('  API:', JSON.stringify(c.apiFailures))
-    if (c.consoleErrors.length) console.log('  CErr:', c.consoleErrors.slice(0, 5))
+    _print(`${j}: ${c.steps.length - fails.length}/${c.steps.length} 步通过, console错误=${c.consoleErrors.length}, API失败=${c.apiFailures.length}, toasts=${JSON.stringify(c.toasts)}`)
+    if (fails.length) fails.forEach((f) => _print('  FAIL:', f.name))
+    if (c.apiFailures.length) _print('  API:', JSON.stringify(c.apiFailures))
+    if (c.consoleErrors.length) _print('  CErr:', c.consoleErrors.slice(0, 5))
   }
-  console.log('结果已写入', outPath)
+  _print('结果已写入', outPath)
 })()

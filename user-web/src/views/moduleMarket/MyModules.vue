@@ -479,7 +479,7 @@ const cashierAmountCents = ref(0)
 const userStore = useUserStore()
 const tab = ref('owned')
 const keyword = ref('')
-const filter = reactive({})
+const _filter = reactive({})
 
 const owned = computed(() => list.value.filter(m => m.owned))
 const ownedCount = computed(() => owned.value.length)
@@ -544,7 +544,7 @@ async function loadLLM () {
   } catch { plans.value = [] }
 }
 
-function openPlans () {
+function _openPlans () {
   planVisible.value = true
   loadLLM()
 }

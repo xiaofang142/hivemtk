@@ -34,7 +34,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { resolveRouteIcon } from '@/utils/iconMap'
 
 const route = useRoute()
-const router = useRouter()
+const _router = useRouter()
 
 const resolveIcon = resolveRouteIcon;
 

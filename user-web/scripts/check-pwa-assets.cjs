@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { print: _print } = require('./lib/stdout.cjs');
 /**
  * check-pwa-assets.cjs —— PWA / 浏览器扩展图标资源校验
  *
@@ -125,17 +126,17 @@ for (const rel of EXTRA_PNGS) {
 }
 
 if (process.argv.includes('--json')) {
-  console.log(JSON.stringify({ checked, problems }, null, 2));
+  _print(JSON.stringify({ checked, problems }, null, 2));
 } else {
-  console.log('=== PWA / 扩展图标资源校验 ===\n');
+  _print('=== PWA / 扩展图标资源校验 ===\n');
   for (const c of checked) {
-    console.log(`  ✅ ${c.file}  声明=${c.declared || '-'} 实际=${c.actual} ${(c.bytes / 1024).toFixed(1)} KB`);
+    _print(`  ✅ ${c.file}  声明=${c.declared || '-'} 实际=${c.actual} ${(c.bytes / 1024).toFixed(1)} KB`);
   }
-  console.log('');
+  _print('');
   if (problems.length === 0) {
-    console.log(`✅ 全部通过（${checked.length} 个图标）`);
+    _print(`✅ 全部通过（${checked.length} 个图标）`);
   } else {
-    for (const p of problems) console.log(`  ${p.level === 'error' ? '❌' : '⚠️ '} ${p.file}: ${p.msg}`);
+    for (const p of problems) _print(`  ${p.level === 'error' ? '❌' : '⚠️ '} ${p.file}: ${p.msg}`);
   }
 }
 

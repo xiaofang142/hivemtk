@@ -254,7 +254,7 @@ const loadCurrentConfig = async () => {
       }))
     })
     currentConfig.value = config
-  } catch (error) {
+  } catch {
     form.reply_rules = [];
     currentConfig.value = null
   }

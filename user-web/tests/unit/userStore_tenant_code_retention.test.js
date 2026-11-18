@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi as _vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 // 回归用例：「登录后记录下来的租户代码」不能在打开个人中心后被抹掉。

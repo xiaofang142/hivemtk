@@ -334,7 +334,7 @@ const detailVisible = ref(false)
 const detailText = ref('')
 const form = ref({ name: '', asset_type: 'agent_persona', industry: '美妆', dataText: '' })
 
-const sourceLabel = (s) => getSourceLabel(s)
+const _sourceLabel = (s) => getSourceLabel(s)
 
 const fetchList = async () => {
   loading.value = true

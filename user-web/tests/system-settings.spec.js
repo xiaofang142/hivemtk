@@ -1,3 +1,4 @@
+import { print as _print } from '../scripts/lib/stdout.cjs';
 import { test, expect } from '@playwright/test'
 
 // 系统设置模块全部页面
@@ -108,7 +109,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
         if (isApiUrl(req.url())) {
           const m = req.method()
           let body = ''
-          try { body = (req.postData() || '').slice(0, 240) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+          try { body = (req.postData() || '').slice(0, 240) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
           apiCalls.push(`${m} ${stripOrigin(req.url())}${body ? ' :: ' + body : ''}`)
         }
       })
@@ -118,7 +119,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
       await page.goto('#' + p.path, { waitUntil: 'domcontentloaded' })
       try {
         await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 })
-      } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+      } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
       await page.waitForTimeout(600)
 
       const shotDir = 'test-results/system-settings'
@@ -152,7 +153,7 @@ test.describe('系统设置模块 E2E 覆盖', () => {
                 const ty = await inp.getAttribute('type').catch(() => '')
                 if (ty === 'file') continue
                 await inp.fill('自动测试_' + Date.now()).catch(() => {})
-              } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+              } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
             }
             const ok = dlg.getByRole('button', { name: /确定|确 定|保存|提交|新增|创建|确认|是/i }).first()
             await ok.click({ timeout: 2000 }).catch(() => {})
@@ -179,19 +180,19 @@ test.describe('系统设置模块 E2E 覆盖', () => {
             const ty = await inp.getAttribute('type').catch(() => '')
             if (ty === 'file') continue
             await inp.fill('测试输入_auto').catch(() => {})
-          } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+          } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         }
       }
 
       await page.screenshot({ path: `${shotDir}/${p.group}-${p.name}-after.png` }).catch(() => {})
 
       if (realErrors.length) {
-        console.log(`\n❌ [${p.group}] ${p.name} (${p.path}) 真实问题 ${realErrors.length} 条:`)
-        realErrors.forEach((e) => console.log('   - ' + e))
+        _print(`\n❌ [${p.group}] ${p.name} (${p.path}) 真实问题 ${realErrors.length} 条:`)
+        realErrors.forEach((e) => _print('   - ' + e))
       } else {
-        console.log(`\n✅ [${p.group}] ${p.name} (${p.path}) 通过 (点击 ${clicked} 按钮, API ${apiCalls.length} 次, 备注 ${notes.length})`)
+        _print(`\n✅ [${p.group}] ${p.name} (${p.path}) 通过 (点击 ${clicked} 按钮, API ${apiCalls.length} 次, 备注 ${notes.length})`)
       }
-      notes.forEach((n) => console.log('   · ' + n))
+      notes.forEach((n) => _print('   · ' + n))
       testInfo.attach('realErrors', { body: realErrors.join('\n'), contentType: 'text/plain' })
       testInfo.attach('notes', { body: notes.join('\n'), contentType: 'text/plain' })
       testInfo.attach('apiCalls', { body: apiCalls.join('\n'), contentType: 'text/plain' })

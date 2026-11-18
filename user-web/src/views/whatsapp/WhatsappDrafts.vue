@@ -211,7 +211,7 @@ const load = async () => {
       drafts.value = []
       pagination.total = 0
     }
-  } catch (err) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载草稿失败'))
     drafts.value = []
   } finally {

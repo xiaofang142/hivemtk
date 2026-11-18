@@ -456,7 +456,7 @@
 </template>
 
 <script setup>
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtStr as _rtStr, rtNum, rtDur as _rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 // 客户会话列表 · 容器组件:负责组装 composables 与子组件、生命周期编排。
 // 数据流/操作逻辑拆分至 ./composables/{useSessionFilters,useSessionList,useSessionActions}.js
 // 右栏客户 360° 与黑名单弹窗拆分至 ./components/{CustomerProfilePanel,BlacklistDialog}.vue

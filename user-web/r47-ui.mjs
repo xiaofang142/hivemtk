@@ -1,3 +1,4 @@
+import { print as _print } from './scripts/lib/stdout.cjs';
 import { chromium } from 'playwright'
 import { readFileSync } from 'fs'
 
@@ -12,7 +13,7 @@ routes.push('/backup/enhanced','/email/deliverability','/knowledge/rag-eval','/u
 const browser = await chromium.launch({ headless: true })
 const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
 
-let cur = ''
+let _cur = ''
 const curInteractions = []  // 本页交互记录
 page.on('pageerror', (e) => curInteractions.push('PAGEERROR: ' + String(e).slice(0, 90)))
 page.on('response', (r) => {
@@ -27,7 +28,7 @@ await page.waitForTimeout(3000)
 
 const problems = []
 let totalInteractions = 0
-let passPages = 0
+let _passPages = 0
 
 async function cleanupDialogs() {
   for (let i = 0; i < 3; i++) {
@@ -55,7 +56,7 @@ async function cleanupDialogs() {
 }
 
 for (const r of routes) {
-  cur = r
+  _cur = r
   curInteractions.length = 0
   let clicked = 0
   try {
@@ -104,20 +105,20 @@ for (const r of routes) {
       if (bad.length) problems.push({ route: r, interaction: 'tab:' + (await tb.textContent().catch(() => '') || '').trim(), bad: bad.slice(0, 2) })
     }
     totalInteractions += clicked
-    if (problems.length === 0 || problems[problems.length - 1].route !== r) passPages++
-    else if (!problems.some(p => p.route === r)) passPages++
+    if (problems.length === 0 || problems[problems.length - 1].route !== r) _passPages++
+    else if (!problems.some(p => p.route === r)) _passPages++
   } catch (e) {
     problems.push({ route: r, interaction: 'NAV', bad: [String(e).slice(0, 60)] })
   }
 }
 const failPages = [...new Set(problems.map(p => p.route))]
-console.log(`=== R47 UI 全交互: ${routes.length - failPages.length}/${routes.length} 页 PASS, 总点击 ${totalInteractions} 次 ===`)
+_print(`=== R47 UI 全交互: ${routes.length - failPages.length}/${routes.length} 页 PASS, 总点击 ${totalInteractions} 次 ===`)
 const seen = new Set()
 for (const p of problems) {
   const key = p.route + p.interaction
   if (seen.has(key)) continue
   seen.add(key)
-  console.log(`[${p.route}] 点击"${p.interaction}"`)
-  p.bad.forEach(b => console.log('   ', b))
+  _print(`[${p.route}] 点击"${p.interaction}"`)
+  p.bad.forEach(b => _print('   ', b))
 }
 await browser.close()

@@ -243,7 +243,7 @@
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import LlmReportApi from '@/api/llmReport'
-import { safeInit, safeDispose, echarts } from '@/utils/echarts'
+import { safeInit, safeDispose, echarts as _echarts } from '@/utils/echarts'
 
 const loading = ref(false)
 const now = new Date()

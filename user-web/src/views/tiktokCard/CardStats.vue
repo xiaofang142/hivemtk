@@ -228,7 +228,7 @@ const fetchCardInfo = async () => {
     const res = await getTikTokCard(cardId.value)
     cardInfo.value = res || {}
     cardLoadFailed.value = !res?.id
-  } catch (error) {
+  } catch  {
     // 拦截器已经按状态码弹过一次（404 → 「资源不存在」），这里再弹一条是两句同义 toast。
     cardInfo.value = {}
     cardLoadFailed.value = true
@@ -259,7 +259,7 @@ const fetchCardStats = async () => {
     nextTick(() => {
       updateCharts()
     });
-  } catch (error) {
+  } catch  {
     // 同上：统计读失败时拦截器已经出声，页面把「这一屏的 0 不是真值」常驻说出口。
     statsLoadFailed.value = true
   } finally {

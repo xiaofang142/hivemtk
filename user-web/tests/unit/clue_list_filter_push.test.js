@@ -111,7 +111,7 @@ describe('线索列表页把筛选下推到服务端', () => {
   })
 
   it('首屏：第 1 页、每页 10、不带任何筛选条件', async () => {
-    const wrapper = await mountList()
+    const _wrapper = await mountList()
     expect(pageQueries()).toHaveLength(1)
     expect(pageQueries()[0]).toEqual([1, 10, {}])
   })

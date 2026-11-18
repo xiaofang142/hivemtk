@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 单接口真实联调探针（最终版）：带 JWT 打真实后端(8204)，
 //  - 路径参数：优先用列表里的真实 id；无数据则用合成 id(0 / 零uuid)
 //  - 靠“响应是否含 code”区分【路由缺失(真bug)】vs【资源不存在(正常)】
@@ -115,10 +116,10 @@ function probe(item) {
   const slow = /(generat|completion|chat|stream|export|complet|summar)/i.test(item.url)
   const timeout = slow ? 90 : 30
   let body = item.method === 'GET' || item.method === 'DELETE' ? null : {}
-  let r, status, raw
+  let r, status, __raw
   for (let round = 0; round < 4; round++) {
     const res = req(item.method, resolved, body, timeout)
-    r = res.json; raw = res.raw
+    r = res.json; __raw = res.raw
     if (res.timedOut) { status = 0; break }
     status = res.hasCode ? (r.code === 'SUCCESS' ? 200 : statusFromCode(r.code)) : (r._raw ? 0 : 200)
     if (status !== 400) break
@@ -131,7 +132,7 @@ function probe(item) {
     resolved = item.url
     for (const p of params) resolved = resolved.replace(`\${${p}}`, ZERO_UUID)
     const res = req(item.method, resolved, body, timeout)
-    r = res.json; raw = res.raw
+    r = res.json; __raw = res.raw
     status = res.timedOut ? 0 : (res.hasCode ? (r.code === 'SUCCESS' ? 200 : statusFromCode(r.code)) : 0)
   }
   let after = isWrite ? psql(`SELECT count(*) FROM ${table}`) : null
@@ -160,4 +161,4 @@ else if (argv.includes('--file')) {
   const f = argv[argv.indexOf('--file') + 1]; const fi = argv.indexOf('--fn')
   targets = fi >= 0 ? inv.filter((x) => x.file === f && x.function === argv[fi + 1]) : inv.filter((x) => x.file === f)
 } else { console.error('用法: node api_probe.mjs --index N | --file X.js [--fn Y]'); process.exit(2) }
-for (const t of targets) { const rr = probe(t); record(rr); console.log(JSON.stringify(rr, null, 2)) }
+for (const t of targets) { const rr = probe(t); record(rr); _print(JSON.stringify(rr, null, 2)) }

@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
@@ -100,7 +101,7 @@ const coreTests = [
 ];
 
 async function main() {
-  console.log(`=== user-web 核心页面深度测试（已登录） ===\n`);
+  _print(`=== user-web 核心页面深度测试（已登录） ===\n`);
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -110,7 +111,7 @@ async function main() {
   const page = await context.newPage();
 
   // 登录
-  console.log('--- 登录 ---');
+  _print('--- 登录 ---');
   await page.goto(BASE_URL + '/#/login', { waitUntil: 'networkidle', timeout: 15000 });
   await page.waitForTimeout(2000);
 
@@ -130,22 +131,22 @@ async function main() {
   const currentUrl = page.url();
   const bodyText = await page.evaluate(() => document.body?.innerText || '');
   const isLoggedIn = !bodyText.includes('Log In') && !bodyText.includes('登录');
-  console.log(`  URL: ${currentUrl}`);
-  console.log(`  ${isLoggedIn ? '✓' : '✗'} 登录${isLoggedIn ? '成功' : '失败'}\n`);
+  _print(`  URL: ${currentUrl}`);
+  _print(`  ${isLoggedIn ? '✓' : '✗'} 登录${isLoggedIn ? '成功' : '失败'}\n`);
 
   if (!isLoggedIn) {
-    console.log('登录失败，终止测试');
+    _print('登录失败，终止测试');
     await browser.close();
     return;
   }
 
-  console.log(`--- 测试 ${coreTests.length} 个核心页面 ---\n`);
+  _print(`--- 测试 ${coreTests.length} 个核心页面 ---\n`);
 
   const results = [];
 
   for (let i = 0; i < coreTests.length; i++) {
     const test = coreTests[i];
-    const url = BASE_URL + HASH_PREFIX + test.route;
+    const _url = BASE_URL + HASH_PREFIX + test.route;
     const result = { name: test.name, route: test.route, status: 'unknown', checks: [], errors: [] };
 
     try {
@@ -187,12 +188,12 @@ async function main() {
 
     results.push(result);
     const icon = result.status === 'ok' ? '✓' : result.status === 'partial' ? '⚠' : '✗';
-    console.log(`${icon} [${i + 1}/${coreTests.length}] ${test.name} (${test.route}) => ${result.status}`);
+    _print(`${icon} [${i + 1}/${coreTests.length}] ${test.name} (${test.route}) => ${result.status}`);
     for (const c of result.checks) {
-      console.log(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
+      _print(`   ${c.passed ? '✓' : '✗'} ${c.desc}: ${c.detail}`);
     }
     if (result.errors.length > 0) {
-      console.log(`   ! 错误: ${result.errors[0]}`);
+      _print(`   ! 错误: ${result.errors[0]}`);
     }
   }
 
@@ -205,9 +206,9 @@ async function main() {
   const partial = results.filter(r => r.status === 'partial').length;
   const fail = results.filter(r => r.status === 'fail' || r.status === 'error' || r.status === 'timeout').length;
 
-  console.log(`\n=== 深度测试完成 ===`);
-  console.log(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
-  console.log(`报告: ${reportPath}`);
+  _print(`\n=== 深度测试完成 ===`);
+  _print(`通过: ${ok} | 部分通过: ${partial} | 失败: ${fail}`);
+  _print(`报告: ${reportPath}`);
 }
 
 main().catch(e => {

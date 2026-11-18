@@ -90,7 +90,7 @@ const resolveClueIds = async (data) => {
 }
 
 // 后端表单字段读的是 ctx.PostForm ⇒ 必须发 form-urlencoded，不能发 JSON。
-const postForm = (url, fields) => {
+const _postForm = (url, fields) => {
   const body = new URLSearchParams()
   Object.entries(fields).forEach(([k, v]) => {
     if (v !== undefined && v !== null) body.append(k, String(v))

@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 汇总 tests/e2e/audit 下各模块报告，分类列出异常：
 //  - realBugs: 非平台代理、非中止/非 HMR 的真实后端 4xx/5xx 与 JS 错误
 //  - environmental: /api/platform/* 代理到未运行的 platform-server（环境性，非代码 bug）
@@ -46,17 +47,17 @@ for (const mod of mods) {
 }
 
 const byMod = (arr) => arr.reduce((m, x) => ((m[x.mod] = (m[x.mod] || 0) + 1), m), {})
-console.log(`真实 bug 交互: ${realBugs.length}`, JSON.stringify(byMod(realBugs)))
-console.log(`环境性(platform代理, 平台端未运行): ${environmental.length}`, JSON.stringify(byMod(environmental)))
-console.log(`噪声(中止/HMR/CSP): ${noise.length}`)
+_print(`真实 bug 交互: ${realBugs.length}`, JSON.stringify(byMod(realBugs)))
+_print(`环境性(platform代理, 平台端未运行): ${environmental.length}`, JSON.stringify(byMod(environmental)))
+_print(`噪声(中止/HMR/CSP): ${noise.length}`)
 
 const show = (title, arr) => {
-  console.log('\n################ ' + title + ' ################')
+  _print('\n################ ' + title + ' ################')
   for (const r of arr) {
     const loc = `[${r.mod}] ${r.route}`
     const act = r.text ? `交互: ${r.text} (${r.type})` : ''
     const detail = r.pageerror ? `🔴 pageerror: ${r.pageerror}` : r.api ? `🟠 api ${r.api}: ${r.url}` : r.msg ? `🔴 ${r.msg}` : r.error ? `⚠ ${r.error}` : ''
-    console.log(`${loc} | ${act} | ${detail}`)
+    _print(`${loc} | ${act} | ${detail}`)
   }
 }
 show('真实 BUG', realBugs)

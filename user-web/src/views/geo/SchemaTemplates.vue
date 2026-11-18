@@ -260,7 +260,7 @@ function jsonPreview(v) {
   try {
     const s = typeof v === 'string' ? v : JSON.stringify(v)
     return s.length > 120 ? s.substring(0, 120) + '…' : s
-  } catch (e) { return '—' }
+  } catch  { return '—' }
 }
 
 async function load() {
@@ -270,7 +270,7 @@ async function load() {
     })
     list.value = res?.list || []
     total.value = res?.total || 0
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 function openDialog(row) {
@@ -294,7 +294,7 @@ async function save() {
     if (!String(form.value.page_type || '').trim()) { ElMessage.warning('请填写页面类型'); return }
     if (!String(form.value.schema_type || '').trim()) { ElMessage.warning('请填写 Schema 类型'); return }
     let tpl = form.value.template_json_text
-    try { tpl = JSON.parse(form.value.template_json_text) } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    try { tpl = JSON.parse(form.value.template_json_text) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const payload = {
       page_type: form.value.page_type,
       schema_type: form.value.schema_type,
@@ -320,7 +320,7 @@ async function remove(row) {
     await geoApi.deleteSchemaTemplate(row.id)
     ElMessage.success('已删除')
     load()
-  } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+  } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
 }
 
 onMounted(load)

@@ -1,3 +1,4 @@
+import { print as _print } from '../scripts/lib/stdout.cjs';
 import { test, expect, request } from '@playwright/test'
 import fs from 'fs'
 
@@ -87,7 +88,7 @@ async function fillForm(page) {
       } else {
         await inp.fill('自动测试_' + Date.now()).catch(() => {})
       }
-    } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
   }
 }
 
@@ -159,7 +160,7 @@ test.describe('资产包 UI 真实后端审计', () => {
       const u = req.url()
       if (isApiUrl(u) && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(m)) {
         let body = ''
-        try { body = (req.postData() || '').slice(0, 300) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+        try { body = (req.postData() || '').slice(0, 300) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         apiCalls.push(`SEND ${m} ${stripOrigin(u)}${body ? ' :: ' + body : ''}`)
       }
     })
@@ -181,7 +182,7 @@ test.describe('资产包 UI 真实后端审计', () => {
             realErrors.push(`API_ERR(code=${j.code}): ${stripOrigin(u)} :: ${m || short}`)
           }
         }
-      } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+      } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     })
 
     page.on('requestfailed', (r) => { if (isApiUrl(r.url())) realErrors.push('REQFAIL: ' + stripOrigin(r.url()) + ' ' + (r.failure()?.errorText || '')) })
@@ -190,7 +191,7 @@ test.describe('资产包 UI 真实后端审计', () => {
       for (let r = 0; r < p.rounds; r++) {
         page._auditPath = p.path
         await page.goto('#' + p.path, { waitUntil: 'domcontentloaded' })
-        try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch (_) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+        try { await page.waitForSelector('.app-main', { state: 'visible', timeout: 15000 }) } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
         await page.waitForTimeout(900)
         if (!(await page.locator('.app-main').first().isVisible().catch(() => false))) {
           realErrors.push(`WHITE_SCREEN: ${p.group}/${p.name} (${p.path})`)
@@ -218,12 +219,12 @@ test.describe('资产包 UI 真实后端审计', () => {
     ].join('\n')
     const outFile = 'test-results/asset_audit_' + Date.now() + '.txt'
     fs.writeFileSync(outFile, report)
-    console.log(report)
-    console.log('\n报告已写入: ' + outFile)
+    _print(report)
+    _print('\n报告已写入: ' + outFile)
 
     await testInfo.attach('realErrors', { body: realErrors.join('\n'), contentType: 'text/plain' })
-    if (realErrors.length) console.log('\n❌ 资产包审计发现 ' + realErrors.length + ' 个真实问题')
-    else console.log('\n✅ 资产包审计通过，无真实错误')
+    if (realErrors.length) _print('\n❌ 资产包审计发现 ' + realErrors.length + ' 个真实问题')
+    else _print('\n✅ 资产包审计通过，无真实错误')
     expect(realErrors, `资产包审计发现 ${realErrors.length} 个真实问题`).toEqual([])
   })
 })

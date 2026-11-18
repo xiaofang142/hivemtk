@@ -4,7 +4,7 @@
 //     防止"改了一份忘了另一份"的双源漂移。
 import { describe, it, expect } from 'vitest';
 import {
-  lognormal, gaussian, sleep,
+  lognormal, gaussian, sleep as _sleep,
   makeCdpTiming, DELAY_PROFILES, sampleDelay,
   bezierPoints, clickJitter, moveStartPoint, stepIntervalMs,
   planTypingBursts, shouldInterjectMouse,

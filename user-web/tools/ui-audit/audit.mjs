@@ -1,10 +1,11 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // user-web UI 审计工具
 // 用法: node audit.mjs <inventory|audit> <all|模块key|模块中文名> [baseURL]
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { MODULES, ALL_ROUTES } from './routes.mjs'
+import { MODULES as _MODULES, ALL_ROUTES } from './routes.mjs'
 
 const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD
 if (!ADMIN_PASSWORD) { console.error('E2E_ADMIN_PASSWORD 未设置，拒绝运行'); process.exit(1) }
@@ -187,7 +188,7 @@ async function runInventory(scopeRoutes) {
       disabled: e.disabled,
     }))
     out[key].routes[route] = { count: items.length, items }
-    console.log(`[inventory] ${module} ${route} -> ${items.length} 交互元素`)
+    _print(`[inventory] ${module} ${route} -> ${items.length} 交互元素`)
   }
   await browser.close()
   const jsonDir = path.join(__dirname, '..', '..', 'docs', 'ui-inventory')
@@ -210,7 +211,7 @@ async function runInventory(scopeRoutes) {
     }
     fs.writeFileSync(path.join(jsonDir, `${key}.md`), lines.join('\n'), 'utf-8')
   }
-  console.log('[inventory] 完成，已写出 docs/ui-inventory/')
+  _print('[inventory] 完成，已写出 docs/ui-inventory/')
 }
 
 async function runAudit(scopeRoutes) {
@@ -312,11 +313,11 @@ async function runAudit(scopeRoutes) {
     pageReport.errorCount = errCount
     fs.writeFileSync(path.join(modDir, sanitize(route) + '.json'), JSON.stringify(pageReport, null, 2, 'utf-8'))
     summary.push({ module, key, route, interactions: pageReport.items.length, errorCount: errCount })
-    console.log(`[audit] ${module} ${route} -> 交互 ${pageReport.items.length}, 异常 ${errCount}`)
+    _print(`[audit] ${module} ${route} -> 交互 ${pageReport.items.length}, 异常 ${errCount}`)
   }
   await browser.close()
   fs.writeFileSync(path.join(reportDir, 'summary.json'), JSON.stringify(summary, null, 2, 'utf-8'))
-  console.log('[audit] 完成，汇总 tests/e2e/audit/summary.json')
+  _print('[audit] 完成，汇总 tests/e2e/audit/summary.json')
 }
 
 function sanitize(route) {
@@ -332,6 +333,6 @@ function resolveRoutes() {
 }
 
 const routes = resolveRoutes()
-console.log(`模式=${MODE} scope=${SCOPE} 路由数=${routes.length}`)
+_print(`模式=${MODE} scope=${SCOPE} 路由数=${routes.length}`)
 if (MODE === 'inventory') await runInventory(routes)
 else await runAudit(routes)

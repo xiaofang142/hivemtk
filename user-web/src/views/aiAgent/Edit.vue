@@ -960,7 +960,7 @@ const loadAssetBundles = async () => {
   }
 }
 
-const loadFaqOptions = async () => {
+const _loadFaqOptions = async () => {
   try {
     const res = await faqApi.list({ page: 1, page_size: 200 })
     faqOptions.value = res?.list || []
@@ -969,7 +969,7 @@ const loadFaqOptions = async () => {
   }
 }
 
-const loadSopTemplateOptions = async () => {
+const _loadSopTemplateOptions = async () => {
   try {
     const res = await sopTemplateApi.list({ page: 1, page_size: 100 })
     sopTemplateOptions.value = res?.list || []

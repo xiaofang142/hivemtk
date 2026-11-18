@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 巡检结果汇总：把 reports/run-*/<page>.json 摊平成"按根因聚类"的清单。
 // 用法: node tests/audit/triage-run.mjs <runDirGlob> [--full]
 //   默认按"错误指纹"聚类（同一条信息跨页重复只列一次 + 命中页数），
@@ -64,15 +65,15 @@ for (const r of rows) {
   else badPages.push({ page: r.page, c: r.errors.console.length, p: r.errors.page.length, n5: net5.length, nf: netFail.length, n4, ce: interactionErr.length, vis: visualIssues.join('+'), els: r.elementCount })
 }
 
-console.log(`运行目录 ${dirs.length} 个 · 页面报告 ${rows.length} 份 · 干净 ${ok} · 有发现 ${badPages.length}`)
-console.log('\n## 按页面')
+_print(`运行目录 ${dirs.length} 个 · 页面报告 ${rows.length} 份 · 干净 ${ok} · 有发现 ${badPages.length}`)
+_print('\n## 按页面')
 for (const b of badPages.sort((a, z) => (z.c + z.p + z.n5 + z.nf + z.ce) - (a.c + a.p + a.n5 + a.nf + a.ce))) {
-  console.log(`  ${b.page.padEnd(38)} c=${b.c} p=${b.p} 5xx=${b.n5} fail=${b.nf} 4xx=${b.n4} clickErr=${b.ce} visual=${b.vis || '-'} els=${b.els}`)
+  _print(`  ${b.page.padEnd(38)} c=${b.c} p=${b.p} 5xx=${b.n5} fail=${b.nf} 4xx=${b.n4} clickErr=${b.ce} visual=${b.vis || '-'} els=${b.els}`)
 }
-console.log('\n## 按指纹聚类（kind · 命中页数 · 信息）')
+_print('\n## 按指纹聚类（kind · 命中页数 · 信息）')
 const list = [...clusters.values()].sort((a, z) => z.pages.length - a.pages.length || a.kind.localeCompare(z.kind))
 for (const c of list) {
-  console.log(`\n[${c.kind}] ×${c.pages.length} 页`)
-  console.log(`  ${c.text}`)
-  console.log(`  pages: ${c.pages.slice(0, full ? 999 : 12).join(', ')}${c.pages.length > 12 && !full ? ' …' : ''}`)
+  _print(`\n[${c.kind}] ×${c.pages.length} 页`)
+  _print(`  ${c.text}`)
+  _print(`  pages: ${c.pages.slice(0, full ? 999 : 12).join(', ')}${c.pages.length > 12 && !full ? ' …' : ''}`)
 }

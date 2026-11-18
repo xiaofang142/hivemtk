@@ -182,7 +182,7 @@
 import i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification as _ElNotification } from 'element-plus'
 import { emailApi } from '@/api/email'
 import SimpleEditor from '@/components/SimpleEditor/index.vue'
 
@@ -306,7 +306,7 @@ const handleDeleteDraft = (id) => {
     }
   ).then(async () => {
     try {
-      const response = await emailApi.deleteDraft(id)
+      const _response = await emailApi.deleteDraft(id)
       ElMessage.success(i18n.global.t('草稿删除成功'));
       fetchDrafts();
     } catch (error) {
@@ -328,11 +328,11 @@ const submitDraft = () => {
           attachments: dialogType.value === 'edit' ? (draftForm.attachments || []) : undefined
         };
 
-        let response
+        let __response
         if (!draftData.id) {
-          response = await emailApi.createDraft(draftData);
+          __response = await emailApi.createDraft(draftData);
         } else {
-          response = await emailApi.updateDraft(draftData.id, draftData);
+          __response = await emailApi.updateDraft(draftData.id, draftData);
         }
 
         ElMessage.success(dialogType.value === 'create' ? '草稿创建成功' : '草稿更新成功');
@@ -346,7 +346,7 @@ const submitDraft = () => {
   })
 };
 
-const handlePreview = (file) => {
+const _handlePreview = (file) => {
   if (file.url) {
     window.open(file.url, '_blank')
   } else {
@@ -354,11 +354,11 @@ const handlePreview = (file) => {
   }
 };
 
-const handleRemove = (file, fileList) => {
+const _handleRemove = (file, _fileList) => {
   draftForm.attachments = draftForm.attachments.filter(att => att.uid !== file.uid)
 };
 
-const beforeRemove = (file, fileList) => {
+const _beforeRemove = (file, __fileList) => {
   return ElMessageBox.confirm(`确定要移除 ${file.name}？`)
 };
 

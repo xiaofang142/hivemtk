@@ -55,7 +55,7 @@ describe('线索类型标签与后端一致', () => {
     expect(fe.length, '前端条数与后端不一致').toBe(be.length)
     const diff = be
       .map((b, i) => ({ be: b, fe: fe[i] }))
-      .filter((p, i) => !p.fe || p.fe.value !== p.be.value || p.fe.label !== p.be.label)
+      .filter((p, _i) => !p.fe || p.fe.value !== p.be.value || p.fe.label !== p.be.label)
     expect(diff, `错位项：${JSON.stringify(diff)}`).toEqual([])
   })
 

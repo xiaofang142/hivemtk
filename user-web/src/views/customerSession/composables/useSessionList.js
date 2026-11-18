@@ -22,7 +22,7 @@ import {
 import AgentSocket from '@/utils/agentSocket'
 import { formatTime, mapSession } from './useSessionFilters'
 
-export function useSessionList({ sessions, inputMsg, findSession, upsertSession }) {
+export function useSessionList({ sessions: _sessions, inputMsg, findSession, upsertSession }) {
   const currentSession = ref(null)
   const messages = ref([])
   const messagesRef = ref()

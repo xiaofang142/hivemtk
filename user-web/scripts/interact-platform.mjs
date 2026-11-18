@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import { execSync } from 'child_process';
 
@@ -61,7 +62,7 @@ async function interactRoute(page, route, apiErrs, conErrs) {
       if (closeBtn) { await closeBtn.click({ timeout: 1000 }).catch(()=>{}); await page.waitForTimeout(200); }
       // Esc 关闭弹层
       if (page.url().includes('/#/login')) {
-        console.log('    [!] 误登出，重新登录');
+        _print('    [!] 误登出，重新登录');
         await login(page);
         await page.goto(BASE + '#/' + route.replace(/^\//, ''), { waitUntil: 'domcontentloaded', timeout: 20000 });
         await page.waitForTimeout(1500);
@@ -101,7 +102,7 @@ async function interactRoute(page, route, apiErrs, conErrs) {
 
   const pageErrs = conErrs.filter(e => !/favicon|Download the Vue Devtools|Failed to load resource|登录失败/i.test(e));
   const status = (apiErrs.length === 0 && pageErrs.length === 0) ? 'ok' : (apiErrs.length <= 1 ? 'partial' : 'fail');
-  console.log(`  ${route.padEnd(45)} clicks=${clicks} switches=${switches.length} tabs=${tabs.length} api:${apiErrs.length}${apiErrs.length?' ['+apiErrs.slice(0,2).join('; ')+']':''} console:${pageErrs.length}${pageErrs.length?' ['+pageErrs[0].substring(0,80)+']':''} => ${status}`);
+  _print(`  ${route.padEnd(45)} clicks=${clicks} switches=${switches.length} tabs=${tabs.length} api:${apiErrs.length}${apiErrs.length?' ['+apiErrs.slice(0,2).join('; ')+']':''} console:${pageErrs.length}${pageErrs.length?' ['+pageErrs[0].substring(0,80)+']':''} => ${status}`);
   return status;
 }
 
@@ -116,8 +117,8 @@ async function launchAndLogin() {
   return { browser, ctx, page, apiErrs, conErrs };
 }
 
-let { browser, ctx, page, apiErrs, conErrs } = await launchAndLogin();
-console.log('=== platform-web 真人模拟交互测试 ===');
+let { browser, ctx: _ctx, page, apiErrs, conErrs } = await launchAndLogin();
+_print('=== platform-web 真人模拟交互测试 ===');
 
 const results = { ok: 0, partial: 0, fail: 0 };
 const skip = process.argv[2] ? process.argv[2].split(',').map(Number) : [];
@@ -127,8 +128,8 @@ for (let i = 0; i < routes.length; i++) {
   if (i > 0 && i % 6 === 0) {
     try { await Promise.race([browser.close(), new Promise((_, rj) => setTimeout(() => rj(new Error('close timeout')), 3000))]); } catch { /* 关不掉就走下面的重新登录 */ }
     await new Promise(r => setTimeout(r, 500));
-    ({ browser, ctx, page, apiErrs, conErrs } = await launchAndLogin());
-    console.log('  [browser restarted for memory/SSE cleanup]');
+    ({ browser, ctx: _ctx, page, apiErrs, conErrs } = await launchAndLogin());
+    _print('  [browser restarted for memory/SSE cleanup]');
   }
   const route = routes[i];
   let done = false;
@@ -139,21 +140,21 @@ for (let i = 0; i < routes.length; i++) {
       results[s] = (results[s] || 0) + 1;
       done = true;
     } catch (e) {
-      console.log(`  ${route.padEnd(45)} ${attempt === 0 ? 'CRASH' : 'FAIL'}: ${e.message.substring(0, 100)}`);
+      _print(`  ${route.padEnd(45)} ${attempt === 0 ? 'CRASH' : 'FAIL'}: ${e.message.substring(0, 100)}`);
       // 重启整个 browser（close 带超时防挂起）
       try { await Promise.race([browser.close(), new Promise((_, rj) => setTimeout(() => rj(new Error('close timeout')), 3000))]); } catch { /* 关不掉的残骸由下一行 pkill 收走 */ }
       try { execSync('pkill -9 -f "playwright_chromium" 2>/dev/null || true', { timeout: 1500, shell: '/bin/bash' }); } catch { /* 命令自带 || true，这里只兜 execSync 超时 */ }
       await new Promise(r => setTimeout(r, 500));
       try {
-        ({ browser, ctx, page, apiErrs, conErrs } = await launchAndLogin());
+        ({ browser, ctx: _ctx, page, apiErrs, conErrs } = await launchAndLogin());
       } catch (e2) {
-        console.log(`  ${route.padEnd(45)} relaunch failed: ${e2.message.substring(0, 80)}`);
+        _print(`  ${route.padEnd(45)} relaunch failed: ${e2.message.substring(0, 80)}`);
       }
     }
   }
   if (!done) results.fail++;
 }
 
-console.log(`\n=== 完成 ===`);
-console.log(`路由: ${results.ok} ok | ${results.partial} partial | ${results.fail} fail`);
+_print(`\n=== 完成 ===`);
+_print(`路由: ${results.ok} ok | ${results.partial} partial | ${results.fail} fail`);
 await browser.close();

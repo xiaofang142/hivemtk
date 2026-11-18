@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const { print: _print } = require('./lib/stdout.cjs');
 /**
  * 静态提取 user-web/src/api/*.js 的 API 清单 → user-web/api-list.md
  * 仅读取源码，不发任何请求。v3：先定位所有 http.<verb>( 调用点，再向前回溯最近方法名/签名。
@@ -146,7 +147,7 @@ rows.forEach(r => {
   }
 })
 fs.writeFileSync(outFile, out)
-console.log('rows:', rows.length, 'of files:', files.length, '· preserved rows:', reused, '· lost notes:', preserved.size - reused)
+_print('rows:', rows.length, 'of files:', files.length, '· preserved rows:', reused, '· lost notes:', preserved.size - reused)
 // 覆盖率报告（口径：http.* 与 publicPost/publicGet 都算调用点）
 const byFile = {}
 rows.forEach(r => byFile[r.file] = (byFile[r.file] || 0) + 1)
@@ -155,6 +156,6 @@ for (const f of files) {
   const t = fs.readFileSync(path.join(apiDir, f), 'utf8')
   const n = (t.match(/http\.(get|post|put|delete|patch)\s*\(/g) || []).length +
     (t.match(/(?:publicPost|publicGet)\s*\(/g) || []).length
-  if (n !== (byFile[f] || 0)) { console.log('COVERAGE-GAP', f, 'http_calls=' + n, 'rows=' + (byFile[f] || 0)); miss++ }
+  if (n !== (byFile[f] || 0)) { _print('COVERAGE-GAP', f, 'http_calls=' + n, 'rows=' + (byFile[f] || 0)); miss++ }
 }
-console.log('files with gaps:', miss)
+_print('files with gaps:', miss)

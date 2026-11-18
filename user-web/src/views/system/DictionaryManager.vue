@@ -704,7 +704,7 @@ async function submitTransitions() {
       '确认整体替换',
       { confirmButtonText: '替换', cancelButtonText: '取消', type: 'warning' }
     )
-  } catch (e) {
+  } catch  {
     return
   }
   savingTransitions.value = true

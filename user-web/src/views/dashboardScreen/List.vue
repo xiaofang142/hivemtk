@@ -159,11 +159,11 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { ref, markRaw, onMounted, onUnmounted } from 'vue'
-import { FullScreen, User, ShoppingCart, ChatLineRound, Document, Promotion, Bell, Money } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { FullScreen, User, ShoppingCart, ChatLineRound, Document, Promotion as _Promotion, Bell, Money as _Money } from '@element-plus/icons-vue'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getDashboardData, getRealtimeActivities } from '@/api/dashboardScreen.js'
 import { fmtTime } from '@/utils/time'

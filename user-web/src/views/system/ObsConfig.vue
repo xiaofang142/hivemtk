@@ -467,7 +467,7 @@ const loadConfigList = async () => {
   try {
     const response = await getObsConfigList()
     configList.value = (response && response.list) || []
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('获取配置列表失败'))
   } finally {
     loading.value = false
@@ -500,7 +500,7 @@ const handleSetDefault = async (row) => {
     await setDefaultObsConfig(row.id)
     ElMessage.success(i18n.global.t('设置默认配置成功'))
     loadConfigList()
-  } catch (error) {
+  } catch  {
     ElMessage.error(i18n.global.t('设置默认配置失败'))
   }
 }
@@ -529,7 +529,7 @@ const handleSubmit = () => {
       }
       dialogVisible.value = false
       loadConfigList()
-    } catch (error) {
+    } catch  {
       ElMessage.error(currentId.value ? '更新失败' : '创建失败')
     }
   })

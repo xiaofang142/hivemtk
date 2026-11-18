@@ -109,7 +109,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
         ElMessage.success(i18n.global.t('会话已创建'))
         reloadSessions()
       }
-    } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
   }
 
   const closeSession = async () => {
@@ -191,7 +191,7 @@ export function useSessionActions({ currentSession, currentHandler, inputMsg, my
         inputPlaceholder: '例如：恶意刷屏 / 辱骂客服 / 欺诈风险'
       });
       reason = promptRes?.value || ''
-    } catch (e) {
+    } catch  {
       return;
     }
     try {

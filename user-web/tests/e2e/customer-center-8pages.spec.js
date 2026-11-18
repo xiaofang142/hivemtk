@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 客户中心 8 页深度 Playwright 测试
 // 覆盖 8 个客户中心相关页面：客户360、OneID、客户旅程、用户分层 RFM、标签分层、线索列表、线索统计、用户分群
 // 模式: A) 真实渲染(专属选择器)  B) 关键 API 直连 200  C) 至少 1 个交互
@@ -43,7 +44,7 @@ async function refreshToken() {
       const b = await resp.json().catch(() => ({}))
       const t = b?.data?.token || b?.token || ''
       if (t) { TOKEN = t; return t }
-    } catch (e) { /* retry */ }
+    } catch  { /* retry */ }
     await sleep(1000)
   }
   return ''
@@ -111,8 +112,8 @@ async function apiCall(method, url, data) {
 }
 const apiGet = (url) => apiCall('GET', url)
 const apiPost = (url, data) => apiCall('POST', url, data)
-const apiPut = (url, data) => apiCall('PUT', url, data)
-const apiDelete = (url) => apiCall('DELETE', url)
+const _apiPut = (url, data) => apiCall('PUT', url, data)
+const _apiDelete = (url) => apiCall('DELETE', url)
 
 function toArr(b) {
   if (Array.isArray(b)) return b
@@ -133,7 +134,7 @@ const results = []
 
 function record(name, status, note) {
   results.push({ name, status, note: note || '' })
-  console.log(`[${status}] ${name}${note ? ' -- ' + note : ''}`)
+  _print(`[${status}] ${name}${note ? ' -- ' + note : ''}`)
 }
 
 test.describe('F-P0-34 客户中心 8 页深度测试', () => {
@@ -165,13 +166,13 @@ test.describe('F-P0-34 客户中心 8 页深度测试', () => {
   })
 
   test.afterAll(async () => {
-    console.log('\n========== 测试结果汇总 ==========')
+    _print('\n========== 测试结果汇总 ==========')
     const passed = results.filter((r) => r.status === 'PASS').length
     const failed = results.filter((r) => r.status === 'FAIL').length
     const skipped = results.filter((r) => r.status === 'SKIP').length
-    console.log(`通过: ${passed}  失败: ${failed}  跳过: ${skipped}  总计: ${results.length}`)
+    _print(`通过: ${passed}  失败: ${failed}  跳过: ${skipped}  总计: ${results.length}`)
     for (const r of results) {
-      console.log(`  [${r.status}] ${r.name}${r.note ? '  ::  ' + r.note : ''}`)
+      _print(`  [${r.status}] ${r.name}${r.note ? '  ::  ' + r.note : ''}`)
     }
   })
 

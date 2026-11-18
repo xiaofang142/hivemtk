@@ -549,7 +549,7 @@ const handleDelete = (row) => {
     type: 'warning'
   }).then(async () => {
     try {
-      const res = await deleteDouyinCard(row.id)
+      const _res = await deleteDouyinCard(row.id)
       ElMessage.success(i18n.global.t('删除成功'));
       getList()
     } catch (error) {
@@ -563,11 +563,11 @@ const handleSubmit = () => {
   formRef.value.validate(async (valid) => {
     if (valid) {
       try {
-        let res
+        let __res
         if (form.id) {
-          res = await updateDouyinCard(form);
+          __res = await updateDouyinCard(form);
         } else {
-          res = await createDouyinCard(form);
+          __res = await createDouyinCard(form);
         }
 
         ElMessage.success(form.id ? '更新成功' : '创建成功');

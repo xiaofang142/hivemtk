@@ -326,7 +326,7 @@ const formatDate = (d) => {
   if (!d) return ''
   try {
     return new Date(d).toLocaleString('zh-CN', { hour12: false })
-  } catch (e) {
+  } catch  {
     return d
   }
 }
@@ -358,7 +358,7 @@ const fetchEnabled = async () => {
     const list = data.list || []
     enabledList.value = list
     hotEnabledIds.value = new Set(list.map(b => b.id))
-  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 const handleEnable = async (row) => {

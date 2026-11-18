@@ -1,4 +1,4 @@
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtNum, rtDur } from '@/utils/runtimeConfig'
 import { useUserStore } from '@/stores/user'
 const STORAGE_KEY_PREFIX = 'chatSocket:lastSeq:';
 // 同 agentSocket：五个 WS 旋钮改由参数中心下发（frontend_ws 组），常量只作兜底。
@@ -72,6 +72,7 @@ export class ChatSocket {
   }
 
   async connect() {
+    if (!this.shouldReconnect) return
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return
     }
@@ -122,7 +123,7 @@ export class ChatSocket {
     try {
       this.ws = new WebSocket(url)
     } catch (err) {
-      console.error('[ChatSocket] 创建失败：', err)
+      console.error('[ChatSocket] 创建失败')
       this.onError(err)
       this.scheduleReconnect()
       return
@@ -130,7 +131,9 @@ export class ChatSocket {
 
     this.seenSeqs.clear();
 
+    const ws = this.ws
     this.ws.onopen = () => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       this.connected = true
       this.reconnectDelay = rtDur('frontend_ws', 'chat_initial_reconnect_delay_ms', INITIAL_RECONNECT_DELAY_MS)
       this.reconnectAttempts = 0;
@@ -141,20 +144,23 @@ export class ChatSocket {
     }
 
     this.ws.onmessage = (event) => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       try {
         const msg = JSON.parse(event.data)
         this.handleMessage(msg)
-      } catch (err) {
-        console.warn('[ChatSocket] 消息解析失败：', err)
+      } catch {
+        console.warn('[ChatSocket] 消息处理失败')
       }
     }
 
     this.ws.onerror = (err) => {
-      console.warn('[ChatSocket] 连接错误：', err)
+      if (!this.shouldReconnect || this.ws !== ws) return
+      console.warn('[ChatSocket] 连接错误')
       this.onError(err)
     }
 
     this.ws.onclose = (event) => {
+      if (!this.shouldReconnect || this.ws !== ws) return
       this.connected = false
       this.stopPing()
       this._flushAcks(true);
@@ -173,6 +179,7 @@ export class ChatSocket {
   }
 
   async _tryRefreshTokenAndReconnect(authFailed = false) {
+    if (!this.shouldReconnect) return
     // 1006（服务器重启/网络闪断）在访客侧最常见：浏览器无 close 帧，
     // 与"token 失效"无关。访客端没有 agent token，不能因缺少它而放弃重连
     // （否则聊天窗口永久冻结，访客以为客服不理人）；有 agent token 的坐席端
@@ -191,19 +198,22 @@ export class ChatSocket {
     try {
       // 与 axios 拦截器共用同一把单飞锁；1006 且令牌未到期时不会发请求。
       const { refreshAccessToken } = await import('@/utils/request')
+      if (!this.shouldReconnect) return
       const token = await refreshAccessToken({ force: authFailed })
+      if (!this.shouldReconnect) return
       if (token) {
         this.connect()
         return
       }
     } catch (err) {
+      if (!this.shouldReconnect) return
       // 明确 401 = 会话已失效，交给上层跳登录；网络类失败继续退避重连
       if (err?.response?.status === 401) {
-        console.warn('[ChatSocket] token 刷新失败，需重新登录', err)
+        console.warn('[ChatSocket] token 刷新失败，需重新登录')
         this.onError(new Error('auth_required'))
         return
       }
-      console.warn('[ChatSocket] token 刷新暂时失败，稍后重连', err)
+      console.warn('[ChatSocket] token 刷新暂时失败，稍后重连')
     }
     if (this.shouldReconnect) {
       this.scheduleReconnect()
@@ -258,7 +268,7 @@ export class ChatSocket {
         this.onError(payload)
         break
       default:
-        console.warn('[ChatSocket] 未知消息类型：', type)
+        console.warn('[ChatSocket] 未知消息类型')
     }
   }
 
@@ -285,8 +295,8 @@ export class ChatSocket {
         last_seq: this.lastSeq,
         frames: sorted
       }))
-    } catch (err) {
-      console.warn('[ChatSocket] flushBuffer 失败：', err)
+    } catch {
+      console.warn('[ChatSocket] 恢复消息发送失败')
     }
   }
 
@@ -314,10 +324,11 @@ export class ChatSocket {
       return
     }
     const seqs = Array.from(this.pendingAcks).sort((a, b) => a - b)
-    this.pendingAcks.clear()
     try {
       this.ws.send(JSON.stringify({ type: 'ack', seq: seqs }))
-    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
+      // 本地传输失败保留原批次；成功也只删除快照，不清除随后新增的回执。
+      seqs.forEach(seq => this.pendingAcks.delete(seq))
+    } catch { console.warn('[ChatSocket] ACK发送失败') }
   }
 
   ackDelivered(messageIds) {
@@ -325,14 +336,14 @@ export class ChatSocket {
     if (!messageIds || messageIds.length === 0) return
     try {
       this.ws.send(JSON.stringify({ type: 'delivered', payload: { ids: messageIds } }))
-    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
+    } catch { console.warn('[ChatSocket] 离线消息回执发送失败') }
   }
 
   resume() {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     try {
       this.ws.send(JSON.stringify({ type: 'resume', since_seq: this.lastSeq }))
-    } catch (err) { console.warn("[request] 后台调用失败(已忽略):", err) }
+    } catch { console.warn('[ChatSocket] 会话恢复发送失败') }
   }
 
   startPing() {
@@ -377,6 +388,7 @@ export class ChatSocket {
 
   close() {
     this.shouldReconnect = false
+    this.connected = false
     this.stopPing()
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)

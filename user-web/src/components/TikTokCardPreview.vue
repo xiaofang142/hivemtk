@@ -57,7 +57,7 @@ import i18n from '@/i18n'
 
 import { defineProps } from 'vue'
 
-const props = defineProps({
+const _props = defineProps({
   cardData: {
     type: Object,
     default: () => ({

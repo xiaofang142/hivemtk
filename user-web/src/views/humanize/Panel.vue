@@ -409,7 +409,7 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
@@ -490,7 +490,7 @@ async function loadStats() {
       lowQualityCount: data.low_quality_count || 0,
       baselineCount: baselines.value.length || 0
     }
-  } catch (e) {
+  } catch  {
     stats.value = { totalScored: 0, avgScore: '0.000', lowQualityCount: 0, baselineCount: 0 }
   }
 }

@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 客户中心 8 页 100% 覆盖回归测试（第三~五步：主 Agent 循环逐页模拟点击 + API/控制台/DB 校验）
 // 运行：E2E_BASE_URL=http://localhost:8211 E2E_API_URL=http://localhost:8204 npx playwright test tests/e2e/customer-center.spec.js
 import { test, expect } from '@playwright/test'
@@ -129,7 +130,7 @@ test.describe('客户中心 全页面 100% 覆盖', () => {
       if (hasContent === 0) {
         const url = page.url()
         const body = (await page.locator('body').innerText().catch(() => '')) || ''
-        console.log(`[DIAG] ${p.key} url=${url} body=${body.slice(0, 400)}`)
+        _print(`[DIAG] ${p.key} url=${url} body=${body.slice(0, 400)}`)
       }
       expect(hasContent, `${p.name} 页面无渲染内容`).toBeGreaterThan(0)
 
@@ -162,7 +163,7 @@ test.describe('客户中心 全页面 100% 覆盖', () => {
       expect(pageErrors, `${p.name} 发生页面 JS 异常: ${pageErrors.join(' | ')}`).toHaveLength(0)
       expect(ctx.consoleErrors, `${p.name} 控制台错误: ${ctx.consoleErrors.join(' | ')}`).toHaveLength(0)
       expect(ctx.failed, `${p.name} 存在失败请求(${ctx.failed}): ${ctx.failedList.join(' | ')}`).toBe(0)
-      console.log(`[CUSTOMER_CENTER_RESULT] ${p.key} PASS`)
+      _print(`[CUSTOMER_CENTER_RESULT] ${p.key} PASS`)
     })
   }
 })

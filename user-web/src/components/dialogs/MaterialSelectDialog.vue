@@ -98,10 +98,10 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
-import { defineProps, defineEmits, ref, computed,reactive } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { defineProps, defineEmits, ref, computed,reactive as _reactive } from 'vue'
+import { ElMessage as _ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()

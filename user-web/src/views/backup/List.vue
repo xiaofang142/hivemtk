@@ -900,7 +900,7 @@ const formatTime = (val) => {
     const d = new Date(val)
     if (isNaN(d.getTime())) return val
     return d.toLocaleString('zh-CN', { hour12: false })
-  } catch (e) {
+  } catch  {
     return val
   }
 }
@@ -915,7 +915,7 @@ const loadData = async () => {
     const data = res || {}
     backups.value = data.list || []
     pagination.total = data.total || 0
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载备份列表失败'))
     backups.value = []
   } finally {
@@ -933,7 +933,7 @@ const loadRestores = async () => {
     const data = res || {}
     restores.value = data.list || []
     restorePagination.total = data.total || 0
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载恢复记录失败'))
     restores.value = []
   } finally {

@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 全页面「模拟人工点击」交互扫描：以管理员身份登录后，遍历全部路由，
 // 对每个页面模拟点击安全交互按钮（新增/查询/刷新/导入/同步/查看/导出/设置等），
 // 实时采集 console / pageerror / 5xx，并在结尾输出问题明细。
@@ -84,7 +85,7 @@ test('[CLICK-ALL] 全页面模拟人工点击扫描', async ({ page }) => {
         })
         return out
       })
-    } catch (e) { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
+    } catch  { /* 忽略异常：失败时保持既有状态，不打断用户 */ }
     const safe = [...new Set(texts)].filter((t) => SAFE.test(t) && !DANGER.test(t)).slice(0, 6)
 
     for (const label of safe) {
@@ -108,19 +109,19 @@ test('[CLICK-ALL] 全页面模拟人工点击扫描', async ({ page }) => {
     }
     ctxAction = '(done)'
     if (visited % 20 === 0) {
-      console.log(`[progress] visited=${visited}/${PATHS.length} interacted=${interacted} issuesSoFar=${log.length}`)
+      _print(`[progress] visited=${visited}/${PATHS.length} interacted=${interacted} issuesSoFar=${log.length}`)
     }
   }
 
   const unique = [...new Set(log)]
-  console.log('\n===== CLICK-ALL 扫描完成 =====')
-  console.log(`总路由数: ${PATHS.length}  访问: ${visited}  模拟点击: ${interacted}`)
-  console.log(`采集到的问题条目数(去重): ${unique.length}  其中真实崩溃(pageerror/5xx): ${realBugs.length}`)
+  _print('\n===== CLICK-ALL 扫描完成 =====')
+  _print(`总路由数: ${PATHS.length}  访问: ${visited}  模拟点击: ${interacted}`)
+  _print(`采集到的问题条目数(去重): ${unique.length}  其中真实崩溃(pageerror/5xx): ${realBugs.length}`)
   if (unique.length) {
-    console.log('\n----- 问题明细(去重) -----')
-    console.log(unique.join('\n'))
+    _print('\n----- 问题明细(去重) -----')
+    _print(unique.join('\n'))
   }
-  console.log('\n===== 结束 =====')
+  _print('\n===== 结束 =====')
 
   expect(realBugs).toEqual([])
 })

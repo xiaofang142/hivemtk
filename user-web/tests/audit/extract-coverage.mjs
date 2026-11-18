@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // 全覆盖清单自动提取引擎
 // 输出三份资产 + 一份对账矩阵：
 //   1. routes.json            —— 全部前端页面路径（从 router/modules/*.js 自动提取，替代手工 route-paths.json）
@@ -9,7 +10,7 @@
 //        - match: 已对账
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync as _execFileSync } from 'node:child_process'
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const WEB = path.resolve(__dirname, '../../src')
@@ -94,12 +95,12 @@ function extractBackendApis() {
       let prefix
       // 找最后一个 "xxx := r.Group" 或 "xxx := auth.Group" 的位置，其 var 是否出现在本行调用对象前
       const lines = before.split('\n')
-      let lastGroupLine = -1
+      let _lastGroupLine = -1
       let lastGroupVar = ''
       let lastGroupPrefix = ''
       for (let i = lines.length - 1; i >= 0; i--) {
         const g = groups.find((g) => new RegExp(`\\b${g.var}\\b\\s*[:=]\\s*[a-z]+\\.Group\\(`).test(lines[i]))
-        if (g) { lastGroupLine = i; lastGroupVar = g.var; lastGroupPrefix = g.prefix; break }
+        if (g) { _lastGroupLine = i; lastGroupVar = g.var; lastGroupPrefix = g.prefix; break }
       }
       // 检查调用对象：形如 auth.GET( 或 platform.GET( 等
       const line = src.slice(0, m.index)
@@ -148,7 +149,7 @@ function reconcile(front, back) {
       return re.test(bp)
     })
     if (found) {
-      const [m, p] = found.split(' ')
+      const [_m, p] = found.split(' ')
       match.push({ ...f, backendPath: p })
     } else {
       frontendOnly.push(f)
@@ -185,16 +186,16 @@ const matrix = {
 }
 fs.writeFileSync(path.join(OUT, 'coverage-matrix.json'), JSON.stringify(matrix, null, 2))
 
-console.log('===== 全覆盖清单提取完成 =====')
-console.log(`页面路由: ${routes.length}`)
-console.log(`前端 API 调用: ${front.length}  (方法+URL 去重后)`)
-console.log(`后端路由端点: ${back.length}`)
-console.log(`前后端对账: 匹配 ${match.length} / 前端独有 ${frontendOnly.length} / 后端独有 ${backendOnly.length}`)
-console.log(`输出目录: ${OUT}`)
+_print('===== 全覆盖清单提取完成 =====')
+_print(`页面路由: ${routes.length}`)
+_print(`前端 API 调用: ${front.length}  (方法+URL 去重后)`)
+_print(`后端路由端点: ${back.length}`)
+_print(`前后端对账: 匹配 ${match.length} / 前端独有 ${frontendOnly.length} / 后端独有 ${backendOnly.length}`)
+_print(`输出目录: ${OUT}`)
 
 // 打印前端独有的（可能是真 bug）
 if (frontendOnly.length) {
-  console.log('\n----- 前端调用但后端未注册 (可能真 bug) -----')
-  for (const f of frontendOnly.slice(0, 60)) console.log(`  ${f.method} ${f.url}  (${f.file})`)
-  if (frontendOnly.length > 60) console.log(`  ... 其余 ${frontendOnly.length - 60} 条`)
+  _print('\n----- 前端调用但后端未注册 (可能真 bug) -----')
+  for (const f of frontendOnly.slice(0, 60)) _print(`  ${f.method} ${f.url}  (${f.file})`)
+  if (frontendOnly.length > 60) _print(`  ... 其余 ${frontendOnly.length - 60} 条`)
 }

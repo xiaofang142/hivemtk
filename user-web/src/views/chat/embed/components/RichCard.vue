@@ -58,7 +58,7 @@
 </template>
 
 <script setup>
-const props = defineProps({
+const _props = defineProps({
   card: { type: Object, required: true }
 })
 const emit = defineEmits(['action'])

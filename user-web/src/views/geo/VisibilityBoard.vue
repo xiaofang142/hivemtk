@@ -367,7 +367,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { VideoPlay } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { getEngineCompare, listProbeRuns, probeAllEngines } from '@/api/geoProbe.js'
 import { toList } from '@/utils/list'

@@ -588,7 +588,7 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Document, Files, Coin, Search, Refresh } from '@element-plus/icons-vue'

@@ -371,7 +371,7 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { DataAnalysis, Share, Search, RefreshRight } from '@element-plus/icons-vue'
 import { shortLinkApi } from '@/api/shortLink'
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import { copyToClipboard as writeClipboard } from '@/utils/clipboard.js'
 

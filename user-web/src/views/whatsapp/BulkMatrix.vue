@@ -216,7 +216,7 @@ async function load() {
   templates.value = tplRes?.data || []
 }
 
-const progressStats = computed(() => {
+const _progressStats = computed(() => {
   return { progress: progress.value, status: progressStatus.value }
 })
 
@@ -251,7 +251,7 @@ function statusType(status) {
 async function send() {
   if (!form.value.templateId) return ElMessage.warning('请选择模板')
   let variables;
-  try { variables = JSON.parse(form.value.variablesJson) } catch (e) {
+  try { variables = JSON.parse(form.value.variablesJson) } catch  {
     return ElMessage.error('变量 JSON 格式错误')
   }
   sending.value = true
@@ -282,7 +282,7 @@ async function pollProgress(jobId) {
         progressStatus.value = p.status === 'done' ? 'success' : 'exception'
         ElMessage[p.status === 'done' ? 'success' : 'error'](`任务${p.status === 'done' ? '完成' : '失败'}`)
       }
-    } catch (_) {
+    } catch  {
       clearInterval(timer)
     }
   }, 2000)

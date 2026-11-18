@@ -16,9 +16,25 @@
           <el-form-item label="Trace ID">
             <el-input
               v-model.trim="form.trace_id"
-              placeholder="单轮对话 trace_id"
+              placeholder="trace_id"
               clearable
               style="width: 260px"
+            />
+          </el-form-item>
+          <el-form-item label="Turn ID">
+            <el-input
+              v-model.trim="form.turn_id"
+              placeholder="turn_id"
+              clearable
+              style="width: 260px"
+            />
+          </el-form-item>
+          <el-form-item :label="t('账号')">
+            <el-input
+              v-model.trim="form.account_id"
+              placeholder="account_id"
+              clearable
+              style="width: 220px"
             />
           </el-form-item>
           <el-form-item label="会话 ID">
@@ -89,6 +105,12 @@
             type="info"
             effect="plain"
           >
+            Turn: {{ tree.turn_id || '—' }}
+          </el-tag>
+          <el-tag
+            type="info"
+            effect="plain"
+          >
             会话: {{ tree.conversation_id || '—' }}
           </el-tag>
           <el-tag
@@ -143,8 +165,8 @@
                 >
                   {{ statusText(item) }}
                 </el-tag>
-                <span class="span-dur">{{ item.duration_ms }} ms</span>
-                <span class="span-time">{{ fmtTime(item.created_at) }}</span>
+                <span class="span-dur">{{ spanDurationText(item) }}</span>
+                <span class="span-time">{{ fmtTime(operationTime(item)) }}</span>
               </div>
               <div
                 v-show="expanded[item.id]"
@@ -202,8 +224,8 @@
                 >
                   {{ statusText(item.turn) }}
                 </el-tag>
-                <span class="span-dur">{{ item.turn.duration_ms }} ms</span>
-                <span class="span-time">{{ fmtTime(item.turn.created_at) }}</span>
+                <span class="span-dur">{{ spanDurationText(item.turn) }}</span>
+                <span class="span-time">{{ fmtTime(operationTime(item.turn)) }}</span>
               </div>
               <div
                 v-show="expanded[item.turn.id]"
@@ -245,8 +267,8 @@
                 >
                   {{ statusText(item.tool) }}
                 </el-tag>
-                <span class="span-dur">{{ item.tool.duration_ms }} ms</span>
-                <span class="span-time">{{ fmtTime(item.tool.created_at) }}</span>
+                <span class="span-dur">{{ spanDurationText(item.tool) }}</span>
+                <span class="span-time">{{ fmtTime(operationTime(item.tool)) }}</span>
               </div>
               <div class="span-body">
                 <el-descriptions
@@ -340,18 +362,30 @@
           <el-table-column
             prop="total"
             label="样本数"
-            width="100"
-          />
+            width="140"
+          >
+            <template #default="{ row }">
+              {{ row.measured_count ?? '—' }} / {{ row.total }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="avg_duration_ms"
             label="平均耗时(ms)"
             width="130"
-          />
+          >
+            <template #default="{ row }">
+              {{ durationText(row.avg_duration_ms) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="p95_duration_ms"
             label="P95(ms)"
             width="120"
-          />
+          >
+            <template #default="{ row }">
+              {{ durationText(row.p95_duration_ms) }}
+            </template>
+          </el-table-column>
           <el-table-column
             label="异常率"
             width="120"
@@ -369,7 +403,7 @@
                 :type="row.abnormal_rate > 0.3 ? 'danger' : row.abnormal_rate > 0.05 ? 'warning' : 'success'"
                 size="small"
               >
-                {{ row.abnormal_rate > 0.3 ? '差' : row.abnormal_rate > 0.05 ? '中' : '良' }}
+                {{ !row.measured_count ? '—' : row.abnormal_rate > 0.3 ? '差' : row.abnormal_rate > 0.05 ? '中' : '良' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -397,17 +431,29 @@
             prop="p50_ms"
             label="P50(ms)"
             width="140"
-          />
+          >
+            <template #default="{ row }">
+              {{ durationText(row.p50_ms) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="p95_ms"
             label="P95(ms)"
             width="140"
-          />
+          >
+            <template #default="{ row }">
+              {{ durationText(row.p95_ms) }}
+            </template>
+          </el-table-column>
           <el-table-column
             prop="sample_size"
             label="样本数"
             width="120"
-          />
+          >
+            <template #default="{ row }">
+              {{ row.sample_size }} / {{ row.total_turns ?? '—' }}
+            </template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
 
@@ -431,7 +477,7 @@
           <el-form-item label="Trace ID">
             <el-input
               v-model.trim="lcForm.trace_id"
-              placeholder="单轮 trace_id"
+              placeholder="trace_id"
               clearable
               style="width: 260px"
             />
@@ -478,7 +524,11 @@
             prop="duration_ms"
             label="耗时(ms)"
             width="100"
-          />
+          >
+            <template #default="{ row }">
+              {{ spanDurationText(row) }}
+            </template>
+          </el-table-column>
           <el-table-column
             label="状态"
             width="100"
@@ -926,14 +976,18 @@
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useI18n } from 'vue-i18n'
 import { MonitorApi as monitorApi } from '@/api/monitor'
 import { fmtTime } from '@/utils/time'
+import { durationText, spanDurationText, operationTime, flattenTraceSpans, buildTraceQuery } from '@/utils/traceTiming'
+
+const { t } = useI18n()
 
 // 渠道筛选下拉：与 bridge 渠道注册表对齐（2026-11-12 补 bilibili——原清单有 weibo 缺 bilibili）
 const channels = ['douyin', 'xiaohongshu', 'wechat', 'telegram', 'whatsapp', 'instagram', 'facebook', 'line', 'kuaishou', 'weibo', 'bilibili']
 
 const activeTab = ref('trace')
-const form = reactive({ trace_id: '', conversation_id: '', msg_id: '', channel: '' })
+const form = reactive({ trace_id: '', turn_id: '', account_id: '', conversation_id: '', msg_id: '', channel: '' })
 const tree = ref(null)
 const treeError = ref('')
 const loadingTree = ref(false)
@@ -969,12 +1023,12 @@ const NODE_LABEL = {
   delivered_ack: '送达确认'
 }
 
-const nodeLabel = (n) => NODE_LABEL[n] || n || '—'
+const nodeLabel = (n) => n === 'ai_result' ? t('traceObservationResultExit') : NODE_LABEL[n] || n || '—'
 
 function fmt(v) {
   if (v === null || v === undefined || v === '') return '—'
   if (typeof v === 'string') return v
-  try { return JSON.stringify(v, null, 2) } catch (e) { return String(v) }
+  try { return JSON.stringify(v, null, 2) } catch { return String(v) }
 }
 
 function isAbnormal(sp) {
@@ -984,12 +1038,14 @@ function isAbnormal(sp) {
 function statusType(sp) {
   if (sp.abnormal || sp.status === 'abnormal' || sp.error) return 'danger'
   if (sp.status === 'failed') return 'warning'
+  if (sp.status === 'skipped') return 'info'
   return 'success'
 }
 
 function statusText(sp) {
   if (sp.abnormal || sp.status === 'abnormal' || sp.error) return '异常'
   if (sp.status === 'failed') return '失败'
+  if (sp.status === 'skipped') return t('traceObservationSkipped')
   return '正常'
 }
 
@@ -998,31 +1054,7 @@ function toggle(sp) {
   expanded[sp.id] = !expanded[sp.id]
 }
 
-const flattened = computed(() => {
-  const t = tree.value
-  if (!t || !t.spans) return []
-  const out = []
-  for (const sp of t.spans) {
-    if (sp.span_kind !== 'lifecycle') continue
-    out.push(sp)
-    if (sp.node === 'ai_dispatch') {
-      const turns = [...new Set(
-        t.spans.filter(s => s.span_kind === 'agent_turn' && s.parent_node === 'ai_dispatch')
-          .map(s => s.turn_index)
-      )].sort((a, b) => a - b)
-      for (const ti of turns) {
-        const turn = t.spans.find(s => s.span_kind === 'agent_turn' && s.parent_node === 'ai_dispatch' && s.turn_index === ti)
-        if (!turn) continue
-        out.push({ _turn: true, ti, turn })
-        const tools = t.spans
-          .filter(s => s.span_kind === 'tool_call' && s.parent_node === 'ai_dispatch' && s.turn_index === ti)
-          .sort((a, b) => (a.id || 0) - (b.id || 0))
-        for (const tool of tools) out.push({ _tool: true, tool })
-      }
-    }
-  }
-  return out
-});
+const flattened = computed(() => flattenTraceSpans(tree.value?.spans))
 
 const healthStats = computed(() => {
   const h = health.value
@@ -1043,6 +1075,8 @@ const healthStats = computed(() => {
 
 function resetForm() {
   form.trace_id = ''
+  form.turn_id = ''
+  form.account_id = ''
   form.conversation_id = ''
   form.msg_id = ''
   form.channel = ''
@@ -1051,11 +1085,7 @@ function resetForm() {
 }
 
 async function loadTree() {
-  const params = {}
-  if (form.trace_id) params.trace_id = form.trace_id
-  if (form.conversation_id) params.conversation_id = form.conversation_id
-  if (form.msg_id) params.msg_id = form.msg_id
-  if (form.channel) params.channel = form.channel
+  const params = buildTraceQuery(form)
   loadingTree.value = true
   treeError.value = ''
   try {
@@ -1095,36 +1125,38 @@ async function loadLifecycle() {
 function openTrace(row) {
   form.conversation_id = row.conversation_id || ''
   form.trace_id = row.trace_id || ''
+  form.turn_id = row.turn_id || ''
+  form.account_id = row.account_id || ''
   form.msg_id = ''
-  form.channel = ''
+  form.channel = row.channel || ''
   activeTab.value = 'trace'
   loadTree()
 }
 
 async function loadHealth() {
-  try { health.value = await monitorApi.health() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { health.value = await monitorApi.health() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadNodeHealth() {
   try {
     const res = await monitorApi.nodeHealth()
     nodeRows.value = res.nodes || []
     nodeWindow.value = res.window || ''
-  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadLatency() {
-  try { latencyRows.value = await monitorApi.latency() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { latencyRows.value = await monitorApi.latency() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadTraces() {
-  try { traceRows.value = await monitorApi.traces({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { traceRows.value = await monitorApi.traces({ limit: 50 }) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadAnomalies() {
-  try { anomaly.value = await monitorApi.anomalies() } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { anomaly.value = await monitorApi.anomalies() } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
 function parseJSON(v, fallback) {
   if (v === null || v === undefined || v === '') return fallback
   if (typeof v === 'object') return v
-  try { return JSON.parse(v) } catch (e) { return fallback }
+  try { return JSON.parse(v) } catch { return fallback }
 }
 function dimText(dims) {
   const d = parseJSON(dims, {})
@@ -1146,10 +1178,10 @@ function scoreType(s) {
   return 'warning'
 }
 async function loadEvalLogs() {
-  try { evalLogs.value = await monitorApi.evalLogs({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { evalLogs.value = await monitorApi.evalLogs({ limit: 50 }) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function loadWeights() {
-  try { weights.value = await monitorApi.knowledgeWeights({ limit: 50 }) } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  try { weights.value = await monitorApi.knowledgeWeights({ limit: 50 }) } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 async function refreshLearn() {
   await Promise.all([loadEvalLogs(), loadWeights()])

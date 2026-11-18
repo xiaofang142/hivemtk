@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 /**
  * user-web 真人模拟交互引擎
  * 对每条路由：发现可交互元素 → 逐个点击（tab/按钮/分页/开关/行操作/表单/搜索/下拉/排序/校验）
@@ -20,7 +21,7 @@ import fs from 'fs';
 import path from 'path';
 
 const BASE_URL = 'http://localhost:8211';
-const API_URL = 'http://localhost:8204';
+const _API_URL = 'http://localhost:8204';
 const BATCH = process.argv[2] || '1';
 const RUN_ID = `e2e-${Date.now()}`;
 const ROUTE_TIMEOUT_MS = 60000;   // 单路由硬超时（交互密集页62+按钮，需足够预算；只防挂死不限工作量）
@@ -191,7 +192,7 @@ async function login(page) {
 /**
  * 对单条路由执行深度交互
  */
-async function interactRoute(page, route, tracked) {
+async function interactRoute(page, route, _tracked) {
   const result = {
     route,
     status: 'unknown',
@@ -761,11 +762,11 @@ async function safeClose(browser) {
 }
 
 async function main() {
-  console.log(`=== 真人模拟交互测试 第${BATCH}批（${routes.length}条，共${ALL_ROUTES.length}条）===\n`);
+  _print(`=== 真人模拟交互测试 第${BATCH}批（${routes.length}条，共${ALL_ROUTES.length}条）===\n`);
   if (!fs.existsSync(SHOT_DIR)) fs.mkdirSync(SHOT_DIR, { recursive: true });
 
   let { browser, page } = await launchAndLogin();
-  console.log('--- 登录成功 ---\n');
+  _print('--- 登录成功 ---\n');
 
   const results = [];
   for (let i = 0; i < routes.length; i++) {
@@ -776,7 +777,7 @@ async function main() {
       await safeClose(browser);
       await new Promise(r => setTimeout(r, 500));
       ({ browser, page } = await launchAndLogin());
-      console.log(`  [browser restarted @${i} routes for SSE/memory cleanup]`);
+      _print(`  [browser restarted @${i} routes for SSE/memory cleanup]`);
     }
 
     process.stdout.write(`[${i + 1}/${routes.length}] ${route} ... `);
@@ -803,11 +804,11 @@ async function main() {
 
     results.push(r);
     const icon = r.status === 'ok' ? '✓' : r.status === 'partial' ? '⚠' : '✗';
-    console.log(`${icon} ${r.status} — ${r.interactions.length}次交互 | ${r.summary}`);
-    if (r.consoleErrors && r.consoleErrors.length > 0) console.log(`    控制台: ${r.consoleErrors[0].substring(0, 120)}`);
-    if (r.apiErrors && r.apiErrors.length > 0) console.log(`    API: ${r.apiErrors.slice(0, 2).join(' | ')}`);
-    if (r.writeApis && r.writeApis.length > 0) console.log(`    写API成功: ${r.writeApis.map(w => `${w.method} ${w.status} ${w.url.substring(0, 50)}`).join('; ')}`);
-    if (r.dbVerifications && r.dbVerifications.length > 0) console.log(`    DB: ${r.dbVerifications.map(d => d.result || d.error).join('; ')}`);
+    _print(`${icon} ${r.status} — ${r.interactions.length}次交互 | ${r.summary}`);
+    if (r.consoleErrors && r.consoleErrors.length > 0) _print(`    控制台: ${r.consoleErrors[0].substring(0, 120)}`);
+    if (r.apiErrors && r.apiErrors.length > 0) _print(`    API: ${r.apiErrors.slice(0, 2).join(' | ')}`);
+    if (r.writeApis && r.writeApis.length > 0) _print(`    写API成功: ${r.writeApis.map(w => `${w.method} ${w.status} ${w.url.substring(0, 50)}`).join('; ')}`);
+    if (r.dbVerifications && r.dbVerifications.length > 0) _print(`    DB: ${r.dbVerifications.map(d => d.result || d.error).join('; ')}`);
 
     // 失败路由截图
     if (r.status !== 'ok') {
@@ -832,10 +833,10 @@ async function main() {
   const validations = results.reduce((s, r) => s + (r.interactions || []).filter(i => i.type === 'validate:empty-submit' && i.validationPassed).length, 0);
   const writeApis = results.reduce((s, r) => s + (r.writeApis ? r.writeApis.length : 0), 0);
 
-  console.log(`\n=== 第${BATCH}批交互测试完成 ===`);
-  console.log(`路由: ${ok} ok | ${partial} partial | ${fail} fail`);
-  console.log(`总交互次数: ${totalInteractions} | 表单校验通过: ${validations} | 写API成功: ${writeApis}`);
-  console.log(`报告: ${reportPath}`);
+  _print(`\n=== 第${BATCH}批交互测试完成 ===`);
+  _print(`路由: ${ok} ok | ${partial} partial | ${fail} fail`);
+  _print(`总交互次数: ${totalInteractions} | 表单校验通过: ${validations} | 写API成功: ${writeApis}`);
+  _print(`报告: ${reportPath}`);
 }
 
 main().catch(e => { console.error('引擎异常:', e); process.exit(1); });

@@ -1235,7 +1235,7 @@ const viewSopDetail = async (row) => {
     const res = await sopApi.get(row.id)
     currentSop.value = res || row
     sopDetailVisible.value = true
-  } catch (e) {
+  } catch  {
     currentSop.value = row
     sopDetailVisible.value = true
   }

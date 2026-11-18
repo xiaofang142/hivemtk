@@ -1,3 +1,4 @@
+import { print as _print } from '../../scripts/lib/stdout.cjs';
 // run.mjs — 浏览器自动化模块「评论链」真浏览器端到端验证台。
 //
 // 与单测的区别（为什么还需要它）：
@@ -209,15 +210,15 @@ const main = async () => {
   await writeFile(join(REPORT_DIR, 'report.json'), JSON.stringify(report, null, 2));
 
   for (const s of report.scenarios) {
-    console.log(`\n■ ${s.name}  ${passOf(s) ? 'PASS' : 'FAIL'}`);
+    _print(`\n■ ${s.name}  ${passOf(s) ? 'PASS' : 'FAIL'}`);
     if (s.steps) for (const st of s.steps) {
-      console.log(`   ${st.ok ? '✓' : '✗'} ${st.name}  ${st.ms ?? '-'}ms  ${JSON.stringify(st.detail)}`);
+      _print(`   ${st.ok ? '✓' : '✗'} ${st.name}  ${st.ms ?? '-'}ms  ${JSON.stringify(st.detail)}`);
     }
-    if (s.send_result) console.log(`   ${s.blocked ? '✓' : '✗'} blocked=${s.blocked} ${JSON.stringify(s.send_result)}`);
-    if (s.verify_result) console.log(`   ${passOf(s) ? '✓' : '✗'} ${JSON.stringify(s.verify_result)}`);
-    if (s.note) console.log(`   · ${s.note}`);
+    if (s.send_result) _print(`   ${s.blocked ? '✓' : '✗'} blocked=${s.blocked} ${JSON.stringify(s.send_result)}`);
+    if (s.verify_result) _print(`   ${passOf(s) ? '✓' : '✗'} ${JSON.stringify(s.verify_result)}`);
+    if (s.note) _print(`   · ${s.note}`);
   }
-  console.log(`\n汇总: ${report.passed ? 'ALL PASS' : 'HAS FAIL'} → ${join(REPORT_DIR, 'report.json')}`);
+  _print(`\n汇总: ${report.passed ? 'ALL PASS' : 'HAS FAIL'} → ${join(REPORT_DIR, 'report.json')}`);
   process.exit(report.passed ? 0 : 1);
 };
 

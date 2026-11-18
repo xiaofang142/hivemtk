@@ -345,7 +345,7 @@ const varsList = computed(() => {
       desc: obj[k]?.desc || '',
       example: obj[k]?.example || ''
     }))
-  } catch (e) {
+  } catch  {
     return []
   }
 });

@@ -1,3 +1,4 @@
+import { print as _print } from './lib/stdout.cjs';
 import { chromium } from 'playwright';
 import { writeFileSync } from "fs";
 import { execSync } from "child_process";;
@@ -15,7 +16,7 @@ const routes = paths.split('\n')
   .map(p => p.trim())
   .filter(p => p && !p.includes(':') && !p.includes('*') && p.length > 2);
 
-console.log(`📋 提取到 ${routes.length} 个唯一路由`);
+_print(`📋 提取到 ${routes.length} 个唯一路由`);
 
 const browser = await chromium.launch({ headless: true });
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -26,14 +27,14 @@ page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.t
 page.on('pageerror', err => consoleErrors.push('PAGE: ' + err.message));
 
 // 登录
-console.log('\n🔐 登录...');
+_print('\n🔐 登录...');
 await page.goto(BASE + '/#/login');
 await page.waitForTimeout(1500);
 await page.getByRole('textbox', { name: '用户名' }).fill('uit_admin');
 await page.getByRole('textbox', { name: '密码' }).fill('UiTest@2026');
 await page.getByRole('button', { name: '登录' }).click();
 await page.waitForTimeout(2500);
-console.log(`✅ 当前: ${page.url()}`);
+_print(`✅ 当前: ${page.url()}`);
 
 const passed = [], failed = [];
 let totalButtons = 0;
@@ -75,42 +76,42 @@ for (const route of routes) {
     
     if (has404) {
       failed.push({ route, reason: '404', consoleErr: consoleErrors.slice(0, 3) });
-      console.log(`  ❌ ${route} → 404`);
+      _print(`  ❌ ${route} → 404`);
     } else {
       passed.push({ route, bodyLen, btnCount: uniqueBtns.length, consoleErrCount: consoleErrors.length });
-      console.log(`  ✅ ${route} (${uniqueBtns.length} 按钮, body=${bodyLen}${consoleErrors.length ? ', err=' + consoleErrors.length : ''})`);
+      _print(`  ✅ ${route} (${uniqueBtns.length} 按钮, body=${bodyLen}${consoleErrors.length ? ', err=' + consoleErrors.length : ''})`);
     }
   } catch (e) {
     failed.push({ route, reason: e.message.slice(0, 60) });
-    console.log(`  ❌ ${route} → ${e.message.slice(0, 60)}`);
+    _print(`  ❌ ${route} → ${e.message.slice(0, 60)}`);
   }
 }
 
-console.log(`\n========================================`);
-console.log(`扫描完成: ${passed.length}/${routes.length} 通过, ${failed.length} 失败`);
-console.log(`总按钮数: ${totalButtons}`);
-console.log(`========================================`);
+_print(`\n========================================`);
+_print(`扫描完成: ${passed.length}/${routes.length} 通过, ${failed.length} 失败`);
+_print(`总按钮数: ${totalButtons}`);
+_print(`========================================`);
 
 if (failed.length > 0) {
-  console.log('\n❌ 失败路由:');
-  failed.forEach(f => console.log(`  ${f.route} → ${f.reason}`));
+  _print('\n❌ 失败路由:');
+  failed.forEach(f => _print(`  ${f.route} → ${f.reason}`));
 }
 
 // 有 console error 的页面
 const withErr = passed.filter(p => p.consoleErrCount > 0);
 if (withErr.length > 0) {
-  console.log(`\n⚠️  有控制台错误的页面 (${withErr.length}):`);
-  withErr.forEach(p => console.log(`  ${p.route} → ${p.consoleErrCount} errors`));
+  _print(`\n⚠️  有控制台错误的页面 (${withErr.length}):`);
+  withErr.forEach(p => _print(`  ${p.route} → ${p.consoleErrCount} errors`));
 }
 
 // 按钮数为 0 的页面
 const noBtn = passed.filter(p => p.btnCount === 0 && p.bodyLen > 100);
 if (noBtn.length > 0) {
-  console.log(`\n📭 无按钮但有内容的页面 (${noBtn.length}):`);
-  noBtn.forEach(p => console.log(`  ${p.route}`));
+  _print(`\n📭 无按钮但有内容的页面 (${noBtn.length}):`);
+  noBtn.forEach(p => _print(`  ${p.route}`));
 }
 
 writeFileSync('/tmp/menu_scan.json', JSON.stringify({ passed, failed }, null, 2));
-console.log('\n💾 详情 → /tmp/menu_scan.json');
+_print('\n💾 详情 → /tmp/menu_scan.json');
 
 await browser.close();

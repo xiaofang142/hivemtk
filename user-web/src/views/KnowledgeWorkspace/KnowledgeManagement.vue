@@ -706,7 +706,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
-import { Upload, Refresh, UploadFilled, Search, Document, ChatDotRound, Plus, List } from '@element-plus/icons-vue'
+import { Upload, Refresh, UploadFilled, Search as _Search, Document as _Document, ChatDotRound as _ChatDotRound, Plus as _Plus, List as _List } from '@element-plus/icons-vue'
 import { knowledgeAPI } from '@/api/knowledge'
 import { http } from '@/utils/request'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
@@ -815,7 +815,7 @@ const goToToolManagement = () => {
   router.push('/aiAgent/tools')
 }
 
-const goToToolDetail = (tool) => {
+const goToToolDetail = (_tool) => {
   router.push('/aiAgent/tools')
 }
 

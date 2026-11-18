@@ -165,7 +165,7 @@ const loadSuggestions = async () => {
     const res = await getAISuggestions(sessionId.value)
     const data = res || []
     suggestions.value = Array.isArray(data) ? data : data.list || []
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载建议失败'))
     suggestions.value = []
   } finally {
@@ -178,7 +178,7 @@ const handleUse = async (row) => {
     await useAISuggestion(row.id)
     ElMessage.success(i18n.global.t('已采纳'))
     row.is_used = true
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('采纳失败'))
   }
 }

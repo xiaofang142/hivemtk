@@ -54,7 +54,7 @@ async function load() {
   }
 }
 
-async function onSave({ nodes, edges }) {
+async function onSave({ nodes, edges: _edges }) {
   // 无 id 时无可更新的 Pipeline（新建走 List 页 dialog），防 PUT 到 /undefined
   if (!pipelineId.value) {
     ElMessage.warning('请在 Pipeline 列表创建后再进入可视化编辑器编辑')

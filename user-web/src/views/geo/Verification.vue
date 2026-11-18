@@ -386,7 +386,7 @@ const loadArticles = async () => {
   try {
     const res = await geoApi.getArticleList({ page: 1, limit: 100 })
     articles.value = res?.list || res?.items || res || []
-  } catch (e) {
+  } catch  {
     articles.value = []
   }
 }

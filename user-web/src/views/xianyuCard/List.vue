@@ -457,11 +457,11 @@ const submitForm = async () => {
   formRef.value.validate(async (valid) => {
     if (valid) {
       try {
-        let res
+        let _res
         if (form.id) {
-          res = await updateXianyuCard(form);
+          _res = await updateXianyuCard(form);
         } else {
-          res = await createXianyuCard(form);
+          _res = await createXianyuCard(form);
         }
 
         ElMessage.success(form.id ? '更新成功' : '创建成功');
@@ -485,7 +485,7 @@ const handleDelete = (row) => {
       await deleteXianyuCard(row.id)
       ElMessage.success(i18n.global.t('删除成功'))
       fetchData()
-    } catch (error) {
+    } catch  {
       ElMessage.error(i18n.global.t('删除失败'))
     }
   }).catch(() => {})

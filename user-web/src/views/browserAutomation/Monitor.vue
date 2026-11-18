@@ -410,7 +410,7 @@
 </template>
 
 <script setup>
-import { rtStr, rtNum, rtDur, rtBool } from '@/utils/runtimeConfig'
+import { rtStr as _rtStr, rtNum, rtDur as _rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'

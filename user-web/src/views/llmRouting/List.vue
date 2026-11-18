@@ -1452,7 +1452,7 @@ const loadModels = async () => {
   try {
     const res = await LlmRoutingApi.getModelList()
     models.value = Array.isArray(res) ? res : (res?.list || res?.items || res?.data || [])
-  } catch (e) {
+  } catch {
     models.value = []
   } finally {
     loading.models = false
@@ -1464,20 +1464,20 @@ const loadRouting = async () => {
   try {
     const res = await LlmRoutingApi.getSceneRouting()
     sceneRouting.value = Array.isArray(res) ? res : (res?.list || res?.items || res?.data || [])
-  } catch (e) {
+  } catch {
     sceneRouting.value = []
   } finally {
     loading.routing = false
   }
 }
 
-const loadFallback = async () => {
+const _loadFallback = async () => {
   loading.fallback = true
   try {
     if (sceneRouting.value.length === 0) {
       await loadRouting()
     }
-  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
+  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ } finally {
     loading.fallback = false
   }
 }
@@ -1487,7 +1487,7 @@ const loadCost = async () => {
   try {
     const res = await LlmRoutingApi.getCostStats(costWindow.value)
     costStats.value = res || {}
-  } catch (e) {
+  } catch {
     costStats.value = {}
   } finally {
     loading.cost = false
@@ -1502,7 +1502,7 @@ const loadDaily = async () => {
   try {
     const res = await LlmRoutingApi.getDailyUsage(costWindow.value, dailyGroupBy.value)
     dailyUsage.value = Array.isArray(res) ? res : (res?.list || [])
-  } catch (e) {
+  } catch {
     dailyUsage.value = []
   } finally {
     loading.daily = false
@@ -1514,7 +1514,7 @@ const loadAudit = async () => {
   try {
     const res = await LlmRoutingApi.getAuditHistory(null, 50)
     auditList.value = Array.isArray(res) ? res : (res?.list || res?.items || res?.data || [])
-  } catch (e) {
+  } catch {
     auditList.value = []
   } finally {
     loading.audit = false
@@ -1549,7 +1549,7 @@ const loadModelType = async () => {
   try {
     const res = await LlmRoutingApi.getModelTypeStats(modelTypeWindow.value)
     modelTypeStats.value = res || { by_provider_type: [], self_sufficiency: 0, total_calls: 0 }
-  } catch (e) {
+  } catch {
     modelTypeStats.value = { by_provider_type: [], self_sufficiency: 0, total_calls: 0 }
   } finally {
     loading.modelType = false
@@ -1561,7 +1561,7 @@ const loadHealth = async () => {
   try {
     const res = await LlmRoutingApi.getHealth()
     llmHealth.value = res || { status: 'unknown', providers: [], healthy_providers: 0, total_providers: 0 }
-  } catch (e) {
+  } catch {
     llmHealth.value = { status: 'unknown', providers: [], healthy_providers: 0, total_providers: 0 }
   } finally {
     loading.health = false
@@ -1573,7 +1573,7 @@ const loadEgressAlerts = async () => {
   try {
     const res = await LlmRoutingApi.getEgressAlerts()
     egressAlerts.value = Array.isArray(res) ? res : (res?.list || res?.items || res?.data || [])
-  } catch (e) {
+  } catch {
     egressAlerts.value = []
   } finally {
     loading.egress = false

@@ -84,12 +84,12 @@ function onDragStart(event, template) {
   event.dataTransfer.effectAllowed = 'move'
 }
 
-function onDragOver(event) {
+function _onDragOver(event) {
   event.preventDefault()
   event.dataTransfer.dropEffect = 'move'
 }
 
-function onDrop(event) {
+function _onDrop(event) {
   const raw = event.dataTransfer.getData('application/vueflow')
   if (!raw) return
   const template = JSON.parse(raw)
@@ -103,7 +103,7 @@ function onDrop(event) {
 
 // 键盘 / 点击的等价入口：拖放之外的可达替代（a11y）。
 // 落点按行列自动排布，避免叠在原点点上。
-function addNodeFromPalette(template) {
+function _addNodeFromPalette(template) {
   const idx = nodes.value.length
   appendNode(template, {
     x: 80 + (idx % 5) * 220,

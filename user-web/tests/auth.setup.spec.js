@@ -54,7 +54,7 @@ test('authenticate admin and persist storage state', async ({ page }) => {
       await page.waitForURL((url) => !url.hash.includes('/login'), { timeout: 6000 })
       ok = true
       break
-    } catch (e) {
+    } catch  {
       await page.waitForTimeout(400)
     }
   }

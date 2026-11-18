@@ -89,7 +89,7 @@
 </template>
 
 <script>
-import * as echarts from 'echarts'
+import * as _echarts from 'echarts'
 import { safeInit } from '@/utils/echarts'
 import AIProductivityApi from '@/api/aiProductivity'
 

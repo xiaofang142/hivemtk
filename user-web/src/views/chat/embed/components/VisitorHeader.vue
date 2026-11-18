@@ -40,7 +40,7 @@
 </template>
 
 <script setup>
-import i18n from '@/i18n'
+import _i18n from '@/i18n'
 
 defineProps({
   title: { type: String, default: '在线客服' },

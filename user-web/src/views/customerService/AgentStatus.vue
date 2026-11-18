@@ -362,7 +362,7 @@ import {
 } from '@/api/customerService.js'
 import { getChannelLabel } from '@/constants/channel';
 import { isUserReportedError } from '@/utils/errorReporting';
-import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled';
+import { getEnabledLabel as _getEnabledLabel, getEnabledTagType as _getEnabledTagType } from '@/constants/enabled';
 import { AGENT_STATUS, SESSION_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
 
 const getAgentStatusLabel = (s) => getStatusLabel(s, AGENT_STATUS);
@@ -409,7 +409,7 @@ const loadAgents = async () => {
     const res = await listAllAgents()
     const data = res || []
     agents.value = Array.isArray(data) ? data : data.list || []
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载坐席失败'))
     agents.value = []
   } finally {
@@ -482,7 +482,7 @@ const submitStatus = async () => {
     ElMessage.success(i18n.global.t('状态已更新'))
     statusVisible.value = false
     await loadAgents()
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('更新失败'))
   }
 }
@@ -496,7 +496,7 @@ const loadSessions = async (row) => {
     const res = await getAgentSessions(row.agent_id)
     const data = res || []
     agentSessions.value = Array.isArray(data) ? data : data.list || []
-  } catch (e) {
+  } catch  {
     ElMessage.error(i18n.global.t('加载会话失败'))
     agentSessions.value = []
   } finally {

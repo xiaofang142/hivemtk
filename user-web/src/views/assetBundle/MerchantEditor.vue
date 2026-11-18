@@ -469,7 +469,7 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import { Monitor, VideoPause, Goods, Lock, ChatDotRound, Grid } from '@element-plus/icons-vue'
 import { merchantSave, merchantParse, enableBundle, disableBundle, listEnabledBundles, getBundleByAssetID, uploadCover } from '@/api/assetBundle'
 import { useUserStore } from '@/stores/user'
@@ -602,7 +602,7 @@ const handleCoverUpload = async ({ file }) => {
     const res = await uploadCover(file)
     form.cover_image = res.data?.url || res.url || res
     ElMessage.success('封面上传成功（保存后生效）')
-  } catch (e) { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 };
 
 const handleSave = async () => {
@@ -642,7 +642,7 @@ const handleSave = async () => {
         await enableBundle(data.id)
         hosting.value = true
         ElMessage.success('保存并热启用成功')
-      } catch (e) {
+      } catch  {
         ElMessage.warning('保存成功，但热启用失败，请手动启用')
       }
       if (!isEdit.value && data.asset_id) {
