@@ -89,7 +89,7 @@ flowchart LR
 - [ ] **T703 五处登记 + 账号表**（P0｜依赖 T702｜M｜🟡）
   - **规格**：让 webhook 通用链路认得这个渠道：能力判定、拒绝提示、分发、验签、租户解析表；账号表独立（不复用企微应用表）。
   - **上下文**：`webhook.go`：`webhookInboundCapable`(L349)、`webhookInboundRejectHints`(L358-372)、`Verify`(L663)、`dispatchToChannel`(L1130)、`webhookAccountTableByChannel`(L393)；`model/wecom.go:8` 的 `WeComAccount` 无 `kf_token/kf_aes_key/open_kfid`。
-  - **架构**：Service 登记 + Model + 迁移 070（2026-11-18 勘误：原 068 号段已让出，见 plan §七 M-1）。
+  - **架构**：Service 登记 + Model + 迁移 071（2026-11-18 终审再勘误：070 已被 024 三审 070_channel_evidence_identity 占用，见 plan §七 M-1）。
   - **数据结构**：
     ```go
     type WeComCSAccount struct {
@@ -99,7 +99,7 @@ flowchart LR
         Token, AESKey string
         AIAgentEnabled bool
         Status int
-    } // 表 wecom_cs_accounts（迁移 070_wecom_cs_accounts.sql）
+    } // 表 wecom_cs_accounts（迁移 071_wecom_cs_accounts.sql）
     ```
   - **数据流向**：回调 URL `account_id` → `ResolveTenantByChannelAccount`（查 `wecom_cs_accounts`）→ 失败 404 fail-closed。
   - **逻辑图**：
@@ -269,7 +269,7 @@ flowchart LR
 - [ ] **T803 入站 handler + 登记**（P0｜依赖 T801/T802｜L｜🟡）
   - **规格**：message 入站；notice 映射撤回与成员变动；request 只发事件不自动同意。
   - **上下文**：`service/webhook_channel_qq.go` 是渠道模板（`ToInbound` + `Ingress` + 媒体异步持久化）。
-  - **架构**：`service/webhook_channel_onebot.go` + 五处登记（能力/提示/分发/验签/账号表）+ `model.OneBotAccount`（迁移 071，与 FR065 对齐）。
+  - **架构**：`service/webhook_channel_onebot.go` + 五处登记（能力/提示/分发/验签/账号表）+ `model.OneBotAccount`（迁移 072，与 FR065 对齐）。
   - **数据结构**：
     ```go
     // post_type 映射
@@ -359,7 +359,7 @@ flowchart LR
 - [ ] **T901 `channelbot/slack` 客户端 + 账号表**（P1｜依赖 T101｜M｜🟡）
   - **规格**：Events API 验签、`chat.postMessage`（含 thread）、`conversations.open`；账号表独立。
   - **上下文**：Slack 签名是 `v0={HMAC_SHA256(signing_secret, "v0:{ts}:{body}")}`，且有 5 分钟时间窗；LangBot 亦有 slack-omni 适配器可对照。
-  - **架构**：`internal/channelbot/slack` + `model.SlackAccount`（迁移 072）+ 五处登记。
+  - **架构**：`internal/channelbot/slack` + `model.SlackAccount`（迁移 073）+ 五处登记。
   - **数据结构**：
     ```go
     type SlackAccount struct{ TenantID, TeamID, BotToken, SigningSecret, AppID string; AIAgentEnabled bool; Status int }
@@ -442,7 +442,7 @@ flowchart LR
 - [ ] **T1001 回调解密客户端 + 账号表**（P2｜依赖 T101｜M｜🟡）
   - **规格**：AES-CBC 解密（`EncodingAESKey` 43 位 → 32 字节）、签名校验、webhook 推送；账号表独立。
   - **上下文**：与 wecom 应用消息不同，智能机器人走独立回调协议；复用 `wecom` 的签名思路但密钥来源不同。
-  - **架构**：`internal/channelbot/wecombot` + `model.WeCombBotAccount`（迁移 073）。
+  - **架构**：`internal/channelbot/wecombot` + `model.WeCombBotAccount`（迁移 074）。
   - **数据结构**：
     ```go
     type WeCombBotAccount struct{ TenantID, Token, AESKey, WebhookURL string; AIAgentEnabled bool; Status int }
@@ -485,7 +485,7 @@ flowchart LR
 - [ ] **T1101 入站契约 + 验签 + 账号表**（P1｜依赖 T203｜M｜🟡）
   - **规格**：给自建/长尾平台一个稳定入口：固定 JSON 契约 + HMAC 签名 + 独立账号表。
   - **上下文**：`ChannelCustom` 常量已存在（`webhook_channel_telegram.go:82`），但无账号表、无验签、无入站适配器，且 `webhookInboundRejectHints` 明确写着「custom 无入站适配器」。
-  - **架构**：Service handler + Model（迁移 074）+ 五处登记。
+  - **架构**：Service handler + Model（迁移 075）+ 五处登记。
   - **数据结构**：
     ```json
     {

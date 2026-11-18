@@ -70,7 +70,7 @@
 
 | # | 项 | 内容 | 验收 |
 |---|---|---|---|
-| M-1 | 迁移号勘误 | 本 spec 三份文档账号表迁移号 069–073 → **070–074**（069 已被 024 `channel_interactions` 占用；本次勘误已同步 spec/plan/tasks，tasks.md 原有的 wecomcs=068、custom=070 错号一并修正） | 五张账号表号一一对应：wecomcs=070／onebot=071／slack=072／wecombot=073／custom=074，`grep -rn '迁移 06[89]' specs/025-im-platforms/` 仅剩勘误注记 |
+| M-1 | 迁移号勘误 | 本 spec 三份文档账号表迁移号 069–073 → 070–074 → **071–075**（2026-11-18 终审：024 三审新增 070_channel_evidence_identity 占用 070）（069 已被 024 `channel_interactions` 占用；本次勘误已同步 spec/plan/tasks，tasks.md 原有的 wecomcs=068、custom=070 错号一并修正） | 五张账号表号一一对应：wecomcs=071／onebot=072／slack=073／wecombot=074／custom=075，`grep -rn '迁移 06[89]' specs/025-im-platforms/` 仅剩勘误注记 |
 | M-2 | channelcaps 附件上限 | 对齐 Chatwoot P2-3：`Manifest` 增附件数量/大小上限字段，21 条 manifest 逐条附「代码取证锚点」，入站校验落点在渠道客户端（不在渲染层） | 字段 + 锚点 + 1 条防漂移一致性测试 |
 | M-3 | 细粒度内容归一 | 对齐 Chatwoot `WebhookContentNormalizer`：`RenderForChannel` 已收口主语义（plain 去 MD/卡片降级），补 CommonMark 硬换行反斜杠清理、代码块外分隔线转义 | 对齐细节行为的单测 |
 | M-4 | webhttp/ima 粗细能力矩阵归位 | 024 delivery §七遗留 | `TestCapabilityDocFreshness` 绿 |
