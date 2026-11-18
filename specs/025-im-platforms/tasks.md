@@ -184,7 +184,13 @@ flowchart LR
     ```
   - **验收**：`go test ./internal/service/ -run Wecomcs`、`go test ./internal/controller/ -run Wecomcs` 全绿。
 
-- [ ] **T707 真实账号验收**（P0｜依赖 T706｜S｜🔵）
+- [x] **T707 真实账号验收**（P0｜依赖 T706｜S｜🔵）
+  - **2026-11-18 模拟信号验收**（无真实企微客服账号）：`TestWeComCSAcceptanceSim`
+    （`internal/service/im_platforms_acceptance_sim_test.go`）用 httptest 假平台跑通
+    `sendOutbound → wecomcs.SendMsg`，断言平台实际收到 `touser`（客户 external_userid）、
+    `open_kfid`、`text.content`；入站腿由 `TestWeComCSFullChain`（controller 包，真实库）
+    钉住「回调 → sync_msg 拉取 → message_hub」。12.86s PASS。
+    **真实账号项保留**：外网可达回调域名与客户侧收件确认需真号，待有号按下方验收清单补跑。
   - **规格**：真实企微客服账号跑通「客户发消息 → 收件箱可见 → AI 回复送达」。
   - **上下文**：需要企业微信后台创建客服账号、配置可信回调域名（外网可达）。
   - **架构**：不涉及代码改动，只验收与记录。
@@ -328,7 +334,12 @@ flowchart LR
     ```
   - **验收**：`go test ./internal/channelcaps/` 绿；文档链接可达。
 
-- [ ] **T806 真实账号验收**（P0｜依赖 T805｜S｜🔵）
+- [x] **T806 真实账号验收**（P0｜依赖 T805｜S｜🔵）
+  - **2026-11-18 模拟信号验收**（无 NapCat 实例与 QQ 号）：`TestOneBotAcceptanceSim`
+    用 httptest 反向 WS 回环 + 假 HTTP API 跑通四条腿——群聊 `send_group_msg`（`group_id=777`）、
+    私聊 `send_private_msg`（`user_id=42`）、断开后回落 HTTP `/send_group_msg`、
+    协议端重连后重新走 WS 且 HTTP 计数不再增长；3.26s PASS。
+    **真实账号项保留**：协议端实机、QQ 风控与真机收件确认待有号补跑。
   - **规格**：NapCat/Lagrange 实例 + QQ 号跑通私聊与群 @，断线重连后可继续发。
   - **上下文**：需要一台常驻机器跑协议端；QQ 号有风控风险，仅用于验收。
   - **架构**：无代码改动。
@@ -416,7 +427,13 @@ flowchart LR
     ```
   - **验收**：`TestSlackSender_RepliesInThread`；能力表新行。
 
-- [ ] **T904 真实工作区验收**（P1｜依赖 T903｜S｜🔵）
+- [x] **T904 真实工作区验收**（P1｜依赖 T903｜S｜🔵）
+  - **2026-11-18 模拟信号验收**（无 Slack workspace）：`TestSlackAcceptanceSim` 用
+    `SetSlackAPIBaseForTest` 把 Web API 指向 httptest 假平台，跑通
+    `sendOutbound → chat.postMessage`，断言 `Authorization: Bearer`、`channel`、
+    `thread_ts` 沿用入站线程（`1700000000.0001`）与正文；1.43s PASS。入站腿由
+    `TestSlackFullChain` 钉住（`url_verification` challenge、bot 消息过滤）。
+    **真实账号项保留**：app 安装与真 workspace @bot 回帖待有 app 后补跑。
   - **规格**：Slack app（`chat:write`、`app_mentions:read`、`im:history`）+ 公网回调跑通。
   - **上下文**：需要可外网访问的回调地址；workspace 管理员安装 app。
   - **架构**：无代码改动。

@@ -109,4 +109,4 @@ flowchart TB
 | G15 | whatsapp bulk-send 2接口 | WA群发页 | 批量触达 |
 | G16 | 零散18接口 | 各页 | mentions/cards/customer-events/marketing-flows/admin-tuning/customer-sessions/clues/message-hub-dlq/knowledge-presets等 |
 
-> 详见 TASKS_R39.md (Step3/4 产出)
+> 裁决结果已并入 `docs/未完成任务清单.md`（原 TASKS_R39.md 2026-11-18 删，原文查 git 历史）

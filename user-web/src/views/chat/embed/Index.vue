@@ -65,7 +65,7 @@ const closed = ref(false)
 // 通知宿主）返回空串，调用方据此跳过 postMessage——绝不用 '*' 兜底（P3-4/P3-22）。
 const resolveWidgetParentOrigin = () => {
   var refOrigin = ''
-  try { refOrigin = new URL(document.referrer).origin } catch { refOrigin = '' }
+  try { refOrigin = new URL(document.referrer).origin } catch { /* referrer 无效：保持空串（refOrigin 初始值已是 ''，重复赋值属无效赋值） */ }
   var q = new URLSearchParams(window.location.search).get('mcwParent')
     || new URLSearchParams((window.location.hash.split('?')[1] || '')).get('mcwParent')
   if (q) {

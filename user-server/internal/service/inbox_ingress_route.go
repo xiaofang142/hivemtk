@@ -47,15 +47,15 @@ func (s *InboxIngressService) resolveRoute(ctx context.Context, event *model.Mes
 
 // recordRouteDiscard 把「被规则丢弃」写成一行平台事件审计。
 //
-// 为什么不写 operation_logs：那张表的 tenant_id 是 uint、语义是「后台人操作」，
-// 而这是系统决策、租户键是字符串；混用会让「谁丢了我的消息」这句话查不出来。
+// 为什么不写 operation_logs：那张表语义是「后台人操作」，而这是系统决策；
+// 租户键统一走 tenantEventKey（uint / bigint 列），与其余业务表同口径。
 func (s *InboxIngressService) recordRouteDiscard(ctx context.Context, event *model.MessageEvent, decision *RouteDecision) {
 	if s == nil || s.auditRepo == nil || event == nil || decision == nil {
 		return
 	}
 	accountID := extraString(event, "account_id")
 	row := &model.ChannelEventAudit{
-		TenantID:       extraString(event, "tenant_id"),
+		TenantID:       tenantEventKey(ctx, event),
 		Channel:        event.Channel,
 		AccountID:      accountID,
 		ChannelMsgID:   event.EventID,

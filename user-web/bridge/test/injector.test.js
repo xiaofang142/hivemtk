@@ -56,9 +56,26 @@ describe('pickContentScriptFile / URL 路由', () => {
   it('拼多多商家后台 → content-pdd.js（CH-16 首切片）', () => {
     expect(pickContentScriptFile('https://mms.pinduoduo.com/chat-merchant/index.html')).toBe('content-pdd.js');
     expect(pickContentScriptFile('https://pinduoduo.com/')).toBe('content-pdd.js');
+    expect(SUPPORTED_HOSTS).toContain('pinduoduo.com');
+  });
+
+  it('电商店铺五渠道骨架路由（CH-15/18/19/28/35，fail-closed）', () => {
+    expect(pickContentScriptFile('https://work.taobao.com/')).toBe('content-taobao.js');
+    expect(pickContentScriptFile('https://im.jinritemai.com/pc_seller_v2/main/workspace')).toBe('content-douyin_shop.js');
+    expect(pickContentScriptFile('https://im.kwaixiaodian.com/')).toBe('content-kuaishou_shop.js');
+    for (const h of ['seller.shopee.com.my', 'seller.shopee.co.id', 'seller.shopee.ph', 'seller.shopee.sg', 'seller.shopee.co.th', 'seller.shopee.com.br', 'seller.shopee.vn']) {
+      expect(pickContentScriptFile(`https://${h}/webchat/login`)).toBe('content-shopee.js');
+    }
+    expect(pickContentScriptFile('https://seller.walmart.com/')).toBe('content-walmart_us.js');
+    // 邻近域不误命中
+    expect(pickContentScriptFile('https://www.taobao.com/')).toBe(null);
+    expect(pickContentScriptFile('https://www.douyin.com/chat')).toBe('content-douyin.js');
+    expect(pickContentScriptFile('https://im.jinritemai.com.evil.io/')).toBe(null);
     // 邻近平台不误命中。
     expect(pickContentScriptFile('https://yangkeduo.com/')).toBe(null);
-    expect(SUPPORTED_HOSTS).toContain('pinduoduo.com');
+    for (const d of ['work.taobao.com', 'im.jinritemai.com', 'im.kwaixiaodian.com', 'seller.shopee', 'seller.walmart.com']) {
+      expect(SUPPORTED_HOSTS).toContain(d);
+    }
   });
 
   // 2026-11-12 B站注入面扩展：新私信中心 www.bilibili.com/message/ 与 #/whisper 等

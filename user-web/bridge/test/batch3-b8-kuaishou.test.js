@@ -43,9 +43,13 @@ describe('B8 实验渠道声明', () => {
     expect(isExperimentalChannel('weibo')).toBe(true);
     // CH-16 首切片（2026-11-09）：pdd 选择器为 X 级历史源码实证未真机校准，同标实验。
     expect(isExperimentalChannel('pdd')).toBe(true);
+    // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：fail-closed，选择器零证据。
+    for (const ch of ['taobao', 'douyin_shop', 'kuaishou_shop', 'shopee', 'walmart_us']) {
+      expect(isExperimentalChannel(ch)).toBe(true);
+    }
     expect(isExperimentalChannel('douyin')).toBe(false);
     expect(isExperimentalChannel(undefined)).toBe(false);
-    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou', 'jd', 'bilibili', 'weibo', 'pdd']);
+    expect(Object.keys(EXPERIMENTAL_CHANNELS)).toEqual(['kuaishou', 'jd', 'bilibili', 'weibo', 'pdd', 'taobao', 'douyin_shop', 'kuaishou_shop', 'shopee', 'walmart_us']);
   });
 
   it('content 启动路径引用实验告警（源码契约）', () => {

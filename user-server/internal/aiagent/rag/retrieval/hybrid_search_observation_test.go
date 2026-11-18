@@ -44,6 +44,12 @@ func (w *blockingObservationWriter) CreateObservation(ctx context.Context, row *
 	}
 }
 
+// observationWriteWait 等待异步观测落库的窗口。
+//
+// 必须不小于写入自身的预算（hybrid_search_observation.go 里的 2s 上下文超时）：
+// 用一个更短的窗口去断言，会把「正确但慢」的写入判成缺陷，测试本身就成了噪音。
+const observationWriteWait = 5 * time.Second
+
 func TestRetrievalObservation_BlockedTraceDoesNotBlockSearch(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.KnowledgeSearchLog{}, &model.MessageTrace{})
 	release := make(chan struct{})
@@ -221,7 +227,7 @@ func TestRetrievalObservation_FailedCallsHaveMeasuredDuration(t *testing.T) {
 		t.Fatal("失败仍应按原融合降级规则返回")
 	}
 	var logs []model.KnowledgeSearchLog
-	if !waitUntil(func() bool { return database.Find(&logs).Error == nil && len(logs) == 1 }, time.Second) {
+	if !waitUntil(func() bool { return database.Find(&logs).Error == nil && len(logs) == 1 }, observationWriteWait) {
 		t.Fatal("失败阶段也必须有观测")
 	}
 	row := logs[0]
@@ -298,7 +304,7 @@ func TestRetrievalObservation_UUIDAndMeasuredPhases(t *testing.T) {
 			var logs []model.KnowledgeSearchLog
 			if !waitUntil(func() bool {
 				return database.Find(&logs).Error == nil && len(logs) > 0
-			}, time.Second) {
+			}, observationWriteWait) {
 				t.Fatal("成功检索必须留下兼容字符串知识库ID的日志")
 			}
 			if len(logs) != 1 || logs[0].ProductID != tc.product || logs[0].Query != "" || logs[0].QueryHash == "" {

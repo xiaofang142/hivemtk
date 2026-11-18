@@ -85,6 +85,11 @@ func TestDefaultRegistry(t *testing.T) {
 		model.ChannelWeibo,
 		model.ChannelPersonalWX,
 		model.ChannelPDD,
+		model.ChannelTaobao,
+		model.ChannelDouyinShop,
+		model.ChannelKuaishouShop,
+		model.ChannelShopee,
+		model.ChannelWalmartUS,
 	}
 	for _, ch := range want {
 		if !Default.IsChannel(ch) {

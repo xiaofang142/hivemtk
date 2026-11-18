@@ -150,6 +150,63 @@
       ],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "https://work.taobao.com/*"
+      ],
+      "js": [
+        "content-taobao.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://im.jinritemai.com/*"
+      ],
+      "js": [
+        "content-douyin_shop.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://im.kwaixiaodian.com/*"
+      ],
+      "js": [
+        "content-kuaishou_shop.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://seller.shopee.com.my/*",
+        "https://seller.shopee.co.id/*",
+        "https://seller.shopee.ph/*",
+        "https://seller.shopee.sg/*",
+        "https://seller.shopee.co.th/*",
+        "https://seller.shopee.com.br/*",
+        "https://seller.shopee.vn/*",
+        "https://shopee.tw/*"
+      ],
+      "js": [
+        "content-shopee.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://seller.walmart.com/*"
+      ],
+      "js": [
+        "content-walmart_us.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
     }
   ]
 }

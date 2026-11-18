@@ -126,7 +126,7 @@ describe('PROTOCOL', () => {
     // 渠道名 = 平台全名（xiaohongshu/douyin/kuaishou/xianyu/tiktok/jd/bilibili/weibo/pdd），
     // 与后端 model.Channel*、SQL 数据、channel_agent_bindings 完全一致。
     // pdd = CH-16 首切片（2026-11-09）拼多多商家网页聊天。
-    const expected = new Set(['xiaohongshu', 'douyin', 'kuaishou', 'xianyu', 'tiktok', 'jd', 'bilibili', 'weibo', 'pdd']);
+    const expected = new Set(['xiaohongshu', 'douyin', 'kuaishou', 'xianyu', 'tiktok', 'jd', 'bilibili', 'weibo', 'pdd', 'taobao', 'douyin_shop', 'kuaishou_shop', 'shopee', 'walmart_us']);
     for (const v of Object.values(PROTOCOL.CHANNELS)) {
       expect(expected.has(v)).toBe(true);
     }

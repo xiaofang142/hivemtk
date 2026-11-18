@@ -94,6 +94,8 @@ var anonymousParamMechanisms = map[string]string{
 	"GET /api/webhook/wechat/:account_id":           "URL 校验握手（VerifyURL）：先解析账号归属租户，解析不到即拒",
 	"GET /api/webhook/wecom/:account_id":            "URL 校验握手（WeComVerify）：先解析账号归属租户，解析不到即拒",
 	"GET /api/webhook/whatsapp/:account_id":         "URL 校验握手（WhatsAppVerify）：先解析账号归属租户，解析不到即拒",
+	"GET /api/webhook/wecomcs/:account_id":          "URL 校验握手（WeComCSVerify）：按 account_id 取账号，用该账号回调 token 验 msg_signature，不匹配 401",
+	"GET /ws/onebot/:account_id":                    "反向 WS 握手（OneBotWS）：按 account_id 取账号并校验 access_token（Bearer/query），不匹配不升级、不登记连接",
 	"POST /api/integration/webhook/order/:platform": "订单回调：VerifyWebhookKey 复核 + 平台侧渠道账号定位租户",
 	// 模板/技能市场（F2 只读橱窗）：目录是平台级静态清单（TemplateMarketEntry 无
 	// tenant_id，数据源是代码内建目录），行由模板 ID 定位；响应只有名称/分类/简介/

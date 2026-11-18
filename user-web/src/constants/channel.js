@@ -31,6 +31,12 @@ export const CHANNEL_OPTIONS = Object.freeze([
   { value: 'bilibili',      label: 'B站',       tagType: 'info',        group: CHANNEL_GROUP.SOCIAL, icon: 'VideoCamera',     description: 'B站私信（实验）' },
   { value: 'weibo',         label: '微博',      tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ChatDotRound',    description: '微博聊天（实验）' },
   { value: 'pdd',           label: '拼多多',    tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: '拼多多商家聊天（实验，选择器未经真机校准）' },
+  // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35）：fail-closed，选择器未经真机校准。
+  { value: 'taobao',        label: '淘宝/天猫', tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: '千牛网页接待中心（实验骨架，选择器未经真机校准）' },
+  { value: 'douyin_shop',   label: '抖店飞鸽',  tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'Goods',           description: '抖店飞鸽客服（实验骨架，选择器未经真机校准）' },
+  { value: 'kuaishou_shop', label: '快手小店',  tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'Goods',           description: '快语客服工作台（实验骨架，选择器未经真机校准）' },
+  { value: 'shopee',        label: 'Shopee',    tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: 'Shopee Seller Centre Webchat（实验骨架，选择器未经真机校准）' },
+  { value: 'walmart_us',    label: 'Walmart',   tagType: 'warning',     group: CHANNEL_GROUP.SOCIAL, icon: 'ShoppingCart',    description: 'Walmart Seller Center Inbox（实验骨架，选择器未经真机校准）' },
   { value: 'sms',           label: '短信',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Cellphone',       description: '短信触达（模板/直发）' },
   { value: 'email',         label: '邮件',      tagType: 'info',    group: CHANNEL_GROUP.NOTIFY, icon: 'Message',         description: '邮件触达（支持附件）' },
   { value: 'card',          label: '卡片',      tagType: 'info',    group: CHANNEL_GROUP.CARD,   icon: 'Postcard',        description: '卡片消息（子渠道）' },
@@ -50,6 +56,12 @@ export const PLATFORM_GROUP_MEMBERS = Object.freeze({
   // CH-16 首切片（2026-11-09）：拼多多商家聊天，canonical=pdd，别名与后端
   // bridge.NormalizeBridgeChannel（pinduoduo/pdd_web→pdd）一致。
   pdd: ['pdd', 'pdd_web', 'pinduoduo'],
+  // 2026-11-18 电商店铺五渠道，别名与后端 bridge.NormalizeBridgeChannel 一致。
+  taobao: ['taobao', 'taobao_web', 'tmall', 'qianniu'],
+  douyin_shop: ['douyin_shop', 'douyin_shop_web', 'jinritemai', 'feige'],
+  kuaishou_shop: ['kuaishou_shop', 'kuaishou_shop_web', 'kwaixiaodian', 'kuaishouxiao'],
+  shopee: ['shopee', 'shopee_web', 'shopee_seller'],
+  walmart_us: ['walmart_us', 'walmart', 'walmart_web'],
   personal_wx: ['personal_wx', 'wx_personal', 'wechat_personal']
 });
 
@@ -89,6 +101,20 @@ export const CHANNEL_LEGACY_WEB_TO_CANONICAL = Object.freeze({
   // bridge.NormalizeBridgeChannel 的 pinduoduo/pdd_web 别名一致）。
   'pdd_web': 'pdd',
   'pinduoduo': 'pdd',
+  // 2026-11-18 电商店铺五渠道旧写法归一（与后端 bridge.NormalizeBridgeChannel 一致）。
+  'taobao_web': 'taobao',
+  'tmall': 'taobao',
+  'qianniu': 'taobao',
+  'douyin_shop_web': 'douyin_shop',
+  'jinritemai': 'douyin_shop',
+  'feige': 'douyin_shop',
+  'kuaishou_shop_web': 'kuaishou_shop',
+  'kwaixiaodian': 'kuaishou_shop',
+  'kuaishouxiao': 'kuaishou_shop',
+  'shopee_web': 'shopee',
+  'shopee_seller': 'shopee',
+  'walmart': 'walmart_us',
+  'walmart_web': 'walmart_us',
   'wx_personal': 'personal_wx',
   'wechat_personal': 'personal_wx'
 });

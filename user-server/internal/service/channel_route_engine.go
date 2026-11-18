@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"hivemtk-user/internal/model"
@@ -28,7 +29,7 @@ type RouteDecision struct {
 
 // RouteRuleSource 引擎的规则来源（Repository 适配；测试可注入内存实现）。
 type RouteRuleSource interface {
-	ListEnabled(ctx context.Context, tenantID, channel, accountID string) ([]model.ChannelRouteRule, error)
+	ListEnabled(ctx context.Context, tenantID uint, channel, accountID string) ([]model.ChannelRouteRule, error)
 }
 
 // ChannelRouteEngine 规则匹配引擎。
@@ -47,10 +48,12 @@ func (e *ChannelRouteEngine) Resolve(ctx context.Context, event *model.MessageEv
 	if e == nil || e.source == nil || event == nil {
 		return nil, nil
 	}
-	tenantID := extraString(event, "tenant_id")
+	// 租户键与业务表同口径（uint / bigint 列）：ctx 绑定租户优先，off 模式才看
+	// 平台自报的 Extra["tenant_id"]；解析不出 = 无租户上下文。
+	tenantID := tenantEventKey(ctx, event)
 	// 无租户上下文 = 读不到任何规则（fail-closed）：宁可放行回今天的行为，
 	// 也不能去猜一个租户再套它的规则。
-	if tenantID == "" {
+	if tenantID == 0 {
 		return nil, nil
 	}
 	accountID := extraString(event, "account_id")
@@ -79,7 +82,7 @@ func (e *ChannelRouteEngine) Resolve(ctx context.Context, event *model.MessageEv
 			continue
 		}
 		// specs/024 T1205：规则命中计数（T305 决策落点的旁路观测，不改决策）。
-		routeRuleHitTotal.WithLabel(tenantID, target).Inc()
+		routeRuleHitTotal.WithLabel(strconv.FormatUint(uint64(tenantID), 10), target).Inc()
 		return &RouteDecision{RuleID: rule.ID, Target: target, TargetRef: rule.TargetRef}, nil
 	}
 	return nil, nil

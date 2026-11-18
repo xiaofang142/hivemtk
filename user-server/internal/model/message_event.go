@@ -30,6 +30,15 @@ const (
 	ChannelSlack     = "slack"
 	ChannelWeCombBot = "wecombot"
 	ChannelCustom    = "custom"
+	// 2026-11-18 电商店铺网页桥五渠道（§3.9 D 包骨架，模拟信号验收；canonical 与
+	// docs/未完成任务清单.md §3.9 CH-15/18/19/28/35 一致）。选择器未经真机校准，
+	// 一律 Experimental：适配器 fail-closed（无校准选择器=拒启/拒发），真机校准后
+	// 才移出实验集。
+	ChannelTaobao       = "taobao"        // CH-15 千牛工作台网页接待中心（work.taobao.com）
+	ChannelDouyinShop   = "douyin_shop"   // CH-18 抖店飞鸽客服（im.jinritemai.com）
+	ChannelKuaishouShop = "kuaishou_shop" // CH-19 快手小店快语（im.kwaixiaodian.com）
+	ChannelShopee       = "shopee"        // CH-28 Shopee Seller Centre Webchat（seller.shopee.*）
+	ChannelWalmartUS    = "walmart_us"    // CH-35 Walmart Seller Center Inbox（seller.walmart.com）
 )
 
 // 消息类型

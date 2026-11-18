@@ -35,7 +35,7 @@ func NewChannelRouteRuleService(repo *repository.ChannelRouteRuleRepository) *Ch
 }
 
 // List 某租户全部规则（按优先级升序）。
-func (s *ChannelRouteRuleService) List(ctx context.Context, tenantID string) ([]model.ChannelRouteRule, error) {
+func (s *ChannelRouteRuleService) List(ctx context.Context, tenantID uint) ([]model.ChannelRouteRule, error) {
 	if s == nil || s.repo == nil {
 		return nil, nil
 	}
@@ -43,7 +43,7 @@ func (s *ChannelRouteRuleService) List(ctx context.Context, tenantID string) ([]
 }
 
 // Create 新建规则（ID 必须为 0，防止「POST 带 id」变成越权更新）。
-func (s *ChannelRouteRuleService) Create(ctx context.Context, tenantID string, rule *model.ChannelRouteRule) error {
+func (s *ChannelRouteRuleService) Create(ctx context.Context, tenantID uint, rule *model.ChannelRouteRule) error {
 	if rule == nil {
 		return fmt.Errorf("%w: 规则体为空", ErrChannelRouteRuleInvalid)
 	}
@@ -55,7 +55,7 @@ func (s *ChannelRouteRuleService) Create(ctx context.Context, tenantID string, r
 }
 
 // Update 更新规则（必须带 id；跨租户 → 404）。
-func (s *ChannelRouteRuleService) Update(ctx context.Context, tenantID string, rule *model.ChannelRouteRule) error {
+func (s *ChannelRouteRuleService) Update(ctx context.Context, tenantID uint, rule *model.ChannelRouteRule) error {
 	if rule == nil || rule.ID == 0 {
 		return fmt.Errorf("%w: 缺少规则 id", ErrChannelRouteRuleInvalid)
 	}
@@ -72,7 +72,7 @@ func (s *ChannelRouteRuleService) Update(ctx context.Context, tenantID string, r
 }
 
 // Delete 删除规则；未命中（不存在/非本租户）返回 ErrChannelRouteRuleNotFound。
-func (s *ChannelRouteRuleService) Delete(ctx context.Context, tenantID string, id uint) error {
+func (s *ChannelRouteRuleService) Delete(ctx context.Context, tenantID uint, id uint) error {
 	ok, err := s.repo.Delete(ctx, tenantID, id)
 	if err != nil {
 		return err

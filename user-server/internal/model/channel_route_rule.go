@@ -15,7 +15,7 @@ import "time"
 //   - Priority 升序，**首个命中即生效**（不叠加，避免规则组合爆炸）；
 //   - Target=discard 表示「这条事件不落库、不回复，但必须留审计」。
 type ChannelRouteRule struct {
-	TenantID  string `gorm:"column:tenant_id;type:varchar(64);not null;default:'';index:idx_channel_route_lookup,priority:1" json:"tenant_id"`
+	TenantID  uint   `gorm:"column:tenant_id;not null;default:1;index:idx_channel_route_lookup,priority:1" json:"tenant_id"`
 	ID        uint   `gorm:"primaryKey;autoIncrement" json:"id"`
 	Channel   string `gorm:"column:channel;type:varchar(32);not null;default:'';index:idx_channel_route_lookup,priority:2" json:"channel"`
 	AccountID string `gorm:"column:account_id;type:varchar(64);not null;default:'';index:idx_channel_route_lookup,priority:3" json:"account_id"`

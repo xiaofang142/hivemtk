@@ -237,6 +237,10 @@ var imIntlOwnedTables = []string{
 	"whatsapp_message_queues", "whatsapp_queue_statuses", "whatsapp_group_messages",
 	"whatsapp_message_templates", "whatsapp_cloud_accounts",
 	"community_groups", "community_members", "community_messages",
+	// specs/025 平台批：五个新渠道账号表同属 IM 渠道账号族
+	// （wecomcs 客服号、OneBot 协议端、Slack 工作区、企微智能机器人、通用 custom）。
+	"wecom_cs_accounts", "onebot_accounts", "slack_accounts",
+	"wecombot_accounts", "custom_accounts",
 }
 
 // analytics / experiment 模块独占

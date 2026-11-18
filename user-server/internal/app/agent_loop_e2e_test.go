@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
@@ -254,9 +257,31 @@ func TestT7_RagSearch_RealDB(t *testing.T) {
 	db := setupAgentLoopTestDB(t)
 	executor := setupAgentLoopExecutor(t, db)
 
+	// 本用例验的是 rag.search 的**真实检索链路**（向量查询 → 融合 → 工具出参），
+	// 不验远端 embedding 服务是否在线：注入一个 OpenAI 兼容的假 /v1/embeddings。
+	// 不注入时 DefaultConfig 会打 config.yaml 的 127.0.0.1:8208，离线环境下要等满
+	// MaxRetries=5 次、把 10s 的工具预算吃光，最终表现成 TOOL_TIMEOUT 而不是检索缺陷。
+	embSrv := newFakeEmbeddingServer(t)
+
+	cfg := config.GetAppConfig()
+	prevEmb := cfg.Inference.Embedding
+	cfg.Inference.Embedding.BaseURL = embSrv.URL + "/v1"
+	cfg.Inference.Embedding.Model = "text-embedding-3-small"
+	cfg.Inference.Embedding.Dimension = 1024
+	cfg.Inference.Embedding.Protocol = ""
+	cfg.Inference.Embedding.AllowFallback = false
+	config.SetAppConfig(&cfg)
+	t.Cleanup(func() {
+		restored := config.GetAppConfig()
+		restored.Inference.Embedding = prevEmb
+		config.SetAppConfig(&restored)
+	})
+
+	// 分段的 ProductID 必须与查询的 product_id 一致，否则向量/BM25 都会被产品过滤掉，
+	// 召回为 0 与检索实现无关。
 	chunk := &model.KnowledgeChunk{
 		DocumentID: 1,
-		ProductID:  "12345",
+		ProductID:  "kb-t7-001",
 		ChunkIndex: 0,
 		Content:    "T7 测试：退款流程为联系客服并提供客户ID",
 	}
@@ -563,4 +588,43 @@ func newTestBusinessToolDeps(db *gorm.DB) tooluse.BusinessToolDeps {
 		service.NewAfterSalePortAdapter(service.NewAfterSaleService(repository.NewAfterSaleRepositoryWithDB(db))),
 		db,
 	)
+}
+
+// newFakeEmbeddingServer 起一个 OpenAI 兼容的 /v1/embeddings 假服务。
+//
+// 为什么需要它：rag.search 的真实链路里，向量检索是第一步；离线环境没有 TEI
+// （127.0.0.1:8208）时，这一步会重试到底再回退，把工具 10s 预算吃光，测试就以
+// TOOL_TIMEOUT 收场——那是环境缺失，不是检索缺陷。这里用固定向量替代远端服务，
+// 让「向量 → 融合 → 工具出参」这段真实代码仍然被跑到。
+//
+// 向量必须非零：pgvector 的余弦距离对零向量无定义。
+func newFakeEmbeddingServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	vec := make([]float32, 1024)
+	vec[0] = 1
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/embeddings" {
+			http.NotFound(w, r)
+			return
+		}
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		data := make([]any, 0, len(req.Input))
+		for i := range req.Input {
+			data = append(data, map[string]any{"object": "embedding", "index": i, "embedding": vec})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"object": "list",
+			"model":  "text-embedding-3-small",
+			"data":   data,
+		})
+	}))
+	t.Cleanup(srv.Close)
+	return srv
 }

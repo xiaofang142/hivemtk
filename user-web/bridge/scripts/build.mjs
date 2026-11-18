@@ -27,6 +27,12 @@ const entries = {
   'content-bilibili': 'src/content/bilibili.js',
   'content-weibo': 'src/content/weibo.js',
   'content-pdd': 'src/content/pdd.js',
+  // 2026-11-18 电商店铺五渠道骨架（CH-15/18/19/28/35，fail-closed）。
+  'content-taobao': 'src/content/taobao.js',
+  'content-douyin_shop': 'src/content/douyin_shop.js',
+  'content-kuaishou_shop': 'src/content/kuaishou_shop.js',
+  'content-shopee': 'src/content/shopee.js',
+  'content-walmart_us': 'src/content/walmart_us.js',
   popup: 'src/popup/index.js',
 };
 
