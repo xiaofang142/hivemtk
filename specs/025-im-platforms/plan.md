@@ -8,11 +8,11 @@
 
 | 批次 | 平台 | 任务 | 人日 | 交付物 |
 |---|---|---|---|---|
-| P1 | 企业微信客服 wecomcs | T701–T707 | 6–7 | `channelbot/wecomcs`、入站/出站、`wecom_cs_accounts`（069）、游标续拉 worker |
-| P2 | OneBot v11 | T801–T806 | 6–7 | `channelbot/onebot`、HTTP 上报 + 反向 WS、`onebot_accounts`（070） |
-| P3 | Slack | T901–T904 | 4–5 | `channelbot/slack`、Events API、线程回复、`slack_accounts`（071） |
-| P4 | wecombot | T1001–T1002 | 3 | 回调解密 + 卡片事件 → `channel_interactions`、`wecombot_accounts`（072） |
-| P5 | 通用 custom | T1101–T1103 | 2–3 | 平台无关契约、`custom_channel_accounts`（073）、签名回调出站 |
+| P1 | 企业微信客服 wecomcs | T701–T707 | 6–7 | `channelbot/wecomcs`、入站/出站、`wecom_cs_accounts`（070）、游标续拉 worker |
+| P2 | OneBot v11 | T801–T806 | 6–7 | `channelbot/onebot`、HTTP 上报 + 反向 WS、`onebot_accounts`（071） |
+| P3 | Slack | T901–T904 | 4–5 | `channelbot/slack`、Events API、线程回复、`slack_accounts`（072） |
+| P4 | wecombot | T1001–T1002 | 3 | 回调解密 + 卡片事件 → `channel_interactions`、`wecombot_accounts`（073） |
+| P5 | 通用 custom | T1101–T1103 | 2–3 | 平台无关契约、`custom_channel_accounts`（074）、签名回调出站 |
 | 合计 | | 22 任务 | 21–25 | |
 
 估算依据：024 的 `sendOutbound` 单分支搬迁实测（T101–T112 共 4–5 人日 / 8 分支）→ 每平台「客户端 + 入站 + 出站 + 测试」
@@ -40,7 +40,8 @@
   `internal/service/webhook.go`（capable/dispatch/verify/账号表四处）、`internal/service/webhook_ai.go`、
   `internal/model/message_event.go`、`migrations/047_pg_enums.sql`、`internal/pkg/db/migrate.go`、
   `internal/channelcaps/manifests.go`、`internal/channelgw/registry.go`。
-- 迁移号按批次预分配（069–073），不得临时改号：并行时号段冲突比内容冲突更难解。
+- 迁移号按批次预分配（070–074；2026-11-18 勘误：原 069–073，069 已被 024 的 `channel_interactions` 占用，
+  见 §七 M-1），不得临时改号：并行时号段冲突比内容冲突更难解。
 
 ## 四、回滚
 
@@ -48,7 +49,7 @@
 |---|---|---|
 | 单个平台 | 关账号开关 + `webhookInboundCapable` 置 false（回调 fail-closed） | 无；已入站消息保留 |
 | 枚举增量（047/063 式） | 不回滚：`ALTER TYPE ... ADD VALUE` 不可逆，保留孤立值无害 | 无 |
-| 账号表（069–073） | 不回滚：表留着，代码不再引用 | 无 |
+| 账号表（070–074） | 不回滚：表留着，代码不再引用 | 无 |
 | 出站 sender | 注册表摘除 + `ErrOutboundChannelUnsupported` | 该平台回复失败可重试 |
 
 ## 五、验证分层
@@ -61,3 +62,19 @@
 
 外层 `docs/未完成任务清单.md` §3.21 的 IM-6/IM-7/IM-8/IM-9 行指向本 spec；本 spec 的进度以 `tasks.md`
 勾选状态为唯一真值，不再另建进度文档。
+
+## 七、首切片前杂项（2026-11-18 调研收口登记）
+
+来源：024 交付后的 LangBot/Chatwoot 吸收项三方核对（要吸收／已在计划／已实现）。小项随 P1
+切片前或批次间隙清掉，不单独立 spec：
+
+| # | 项 | 内容 | 验收 |
+|---|---|---|---|
+| M-1 | 迁移号勘误 | 本 spec 三份文档账号表迁移号 069–073 → **070–074**（069 已被 024 `channel_interactions` 占用；本次勘误已同步 spec/plan/tasks，tasks.md 原有的 wecomcs=068、custom=070 错号一并修正） | 五张账号表号一一对应：wecomcs=070／onebot=071／slack=072／wecombot=073／custom=074，`grep -rn '迁移 06[89]' specs/025-im-platforms/` 仅剩勘误注记 |
+| M-2 | channelcaps 附件上限 | 对齐 Chatwoot P2-3：`Manifest` 增附件数量/大小上限字段，21 条 manifest 逐条附「代码取证锚点」，入站校验落点在渠道客户端（不在渲染层） | 字段 + 锚点 + 1 条防漂移一致性测试 |
+| M-3 | 细粒度内容归一 | 对齐 Chatwoot `WebhookContentNormalizer`：`RenderForChannel` 已收口主语义（plain 去 MD/卡片降级），补 CommonMark 硬换行反斜杠清理、代码块外分隔线转义 | 对齐细节行为的单测 |
+| M-4 | webhttp/ima 粗细能力矩阵归位 | 024 delivery §七遗留 | `TestCapabilityDocFreshness` 绿 |
+| M-5 | `wecom_integration.go` `if false ||` 死条件清理 | 024 review2 §C 留观项 | grep 无死条件 |
+
+M-2/M-3 与平台批共享 `internal/channelcaps/manifests.go` 与渲染文件，按 §三 串行纪律执行。
+需证据触发类吸收项（typing／流式四细节／邮件归属／聚合窗口不立项）不进本表，已补登 024 spec §四。

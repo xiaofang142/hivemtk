@@ -61,7 +61,8 @@
 ### FR-7x 企业微信客服 wecomcs
 
 - FR060 新表 `wecom_cs_accounts`：`corp_id / kf_secret / kf_token / kf_aes_key / open_kfid`（`WeComAccount` 无这些列，
-  且不能复用——否则 `ResolveTenantByChannelAccount` 会在两张表间猜）。迁移 069。
+  且不能复用——否则 `ResolveTenantByChannelAccount` 会在两张表间猜）。迁移 070。
+  （2026-11-18 勘误：原写 069，069 已被 024 的 `channel_interactions` 占用，025 账号表号段整体顺移为 070–074，见 plan §七 M-1。）
 - FR061 回调验签复用 `verifyWeCom(token, aesKey, body, query)`；`sync_msg` 游标落库（`sync_cursor` + 拉取 worker），
   重启续拉；`kf/send_msg` 出一站式发送 sender。
 - FR062 事件映射：`enter_session` / `msg_send_fail` / `session_status_change` 等走事件类型 + 审计，
@@ -74,18 +75,18 @@
 - FR064 反向 WS 入口：独立 upgrade 路由、Bearer 鉴权（`access_token`）、同 `self_id` 顶掉旧连接、心跳与启停幂等；
   须过 `check-naked-goroutine.sh`。
 - FR065 出站：`send_private_msg` / `send_group_msg`，`echo` 关联请求响应；`qq_accounts` 不能承载 `self_id/access_token`，
-  新建 `onebot_accounts`。迁移 070。
+  新建 `onebot_accounts`。迁移 071。
 
 ### FR-9x Slack
 
 - FR066 Events API：`v0` 签名校验（`X-Slack-Signature` + 5 分钟时间窗）、`url_verification` challenge 短路。
 - FR067 消息映射 `app_mention` / `message.im`；`event_id` 作幂等键（Slack 会重投同一 event_id）。
-- FR068 出站 `chat.postMessage` + `thread_ts` 线程回复；sender 走 024 注册表。迁移 071。
+- FR068 出站 `chat.postMessage` + `thread_ts` 线程回复；sender 走 024 注册表。迁移 072。
 
 ### FR-10x 企业微信智能机器人 wecombot
 
 - FR069 回调解密（AESKey）+ `template_card_event` → `interaction.callback`（024 D8：写 `channel_interactions` + 真答复）。
-- FR070 主动推送 webhook；账号表 `wecombot_accounts`。迁移 072。
+- FR070 主动推送 webhook；账号表 `wecombot_accounts`。迁移 073。
 
 ### FR-11x 通用 custom 入口
 
@@ -94,7 +95,7 @@
   替代今天的 `ChannelCustom` 拒绝提示（`webhook.go:358-372`）。
 - FR072 同时要改三处：`webhookInboundRejectHints` 删 custom 条目、`webhookAccountTableByChannel` 加
   `custom_channel_accounts`（否则租户反查走到歧义拒绝）、`controller/webhook_batchc_d03_http_test.go:75` 的断言
-  （今天要求 custom 回「无入站适配器」）。迁移 073。
+  （今天要求 custom 回「无入站适配器」）。迁移 074。
 - FR073 出站：账号配置 `callback_url` + 签名回调，重试沿用 024 的 `enqueueSendRetry`。
 
 ## 五、验收
