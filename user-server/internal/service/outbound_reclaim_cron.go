@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -48,11 +49,14 @@ func NewOutboundReclaimTask(repo *repository.MessageHubRepository) *OutboundRecl
 }
 
 // RunOnce 跑一轮三步回收，返回 (超时回收数, 到界升级数, 陈旧老化数)。
+// 全表回收语义本就是跨租户的（租户绑死某一个会漏看别家的积压行）——
+// 用 SystemScope 过隔离层（先例：telegram polling 锁/lookup；隔离层对
+// system scope 直通放行，多租户 fail-closed 语义不变：业务路径仍必须带租户）。
 func (t *OutboundReclaimTask) RunOnce(ctx context.Context) (reclaimed, exhausted, aged int64, err error) {
 	if t == nil || t.repo == nil {
 		return 0, 0, 0, nil
 	}
-	return t.repo.ReclaimOutboundSweep(ctx, t.claimTimeout, t.staleAfter)
+	return t.repo.ReclaimOutboundSweep(tenant.WithSystemScope(ctx), t.claimTimeout, t.staleAfter)
 }
 
 func (t *OutboundReclaimTask) Start(ctx context.Context) {

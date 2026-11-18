@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -45,7 +46,10 @@ func (t *ChannelInteractionExpiryTask) RunOnce(ctx context.Context) (int64, erro
 	if t.nowFn != nil {
 		now = t.nowFn
 	}
-	return t.repo.MarkExpired(ctx, now())
+	// 全表到期清理跨租户语义，SystemScope 过隔离层（2026-11-19 勘误同源：
+	// 原 init 装配 ctx 裸 Background，MODE=on 下本就会被 fail-closed 拒绝——
+	// 双重原因叠加 = 该清理自上线从未生效）。
+	return t.repo.MarkExpired(tenant.WithSystemScope(ctx), now())
 }
 
 func (t *ChannelInteractionExpiryTask) Start(ctx context.Context) {
