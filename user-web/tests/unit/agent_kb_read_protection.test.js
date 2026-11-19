@@ -6,7 +6,7 @@ import { createI18n } from 'vue-i18n'
 import zh from '@/i18n/locales/zh.json'
 import { settle } from './settle-helper'
 
-const api = vi.hoisted(() => ({ createAgent: vi.fn(), updateAgent: vi.fn(), getAgent: vi.fn(), testAgent: vi.fn() }))
+const api = vi.hoisted(() => ({ createAgent: vi.fn(), updateAgent: vi.fn(), getAgent: vi.fn(), findAgentByCode: vi.fn(), testAgent: vi.fn() }))
 const bindings = vi.hoisted(() => ({ listByAgent: vi.fn(), replaceAgentKBs: vi.fn() }))
 const routing = vi.hoisted(() => ({ route: null, push: vi.fn() }))
 vi.mock('vue-router', () => ({ useRoute: () => routing.route, useRouter: () => ({ push: routing.push }) }))
@@ -44,10 +44,11 @@ async function reload() {
 beforeEach(() => {
   vi.resetAllMocks()
   api.getAgent.mockResolvedValue({ id: 7, agent_code: 'kb-test', name: '绑定验收', persona: '受控人设', agent_type: 'sales', agent_mode: 'passive', kb_ids: [999] })
-  api.updateAgent.mockResolvedValue({ id: 7 })
-  api.createAgent.mockResolvedValue({ id: 8 })
+  api.findAgentByCode.mockResolvedValue(null)
+  api.updateAgent.mockImplementation(async (id, data) => { api.getAgent.mockResolvedValue({ ...data, id: Number(id) }); return { id: Number(id) } })
+  api.createAgent.mockImplementation(async (data) => { api.getAgent.mockResolvedValue({ ...data, id: 8 }); return { id: 8 } })
   bindings.listByAgent.mockResolvedValue([{ kb_id: 11 }])
-  bindings.replaceAgentKBs.mockResolvedValue({})
+  bindings.replaceAgentKBs.mockImplementation(async (id, ids) => { bindings.listByAgent.mockResolvedValue(ids.map((kb_id) => ({ kb_id }))); return {} })
   vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
 })
 afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks(); document.body.replaceChildren() })

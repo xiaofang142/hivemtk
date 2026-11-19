@@ -1,0 +1,206 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { reactive } from 'vue'
+import ElementPlus, { ElMessage, ElMessageBox } from 'element-plus'
+import { createI18n } from 'vue-i18n'
+import zh from '@/i18n/locales/zh.json'
+import { settle } from './settle-helper'
+
+const api = vi.hoisted(() => ({ createAgent: vi.fn(), updateAgent: vi.fn(), getAgent: vi.fn(), findAgentByCode: vi.fn(), testAgent: vi.fn() }))
+const bindings = vi.hoisted(() => ({ listByAgent: vi.fn(), replaceAgentKBs: vi.fn() }))
+const routing = vi.hoisted(() => ({ route: null, push: vi.fn() }))
+vi.mock('vue-router', () => ({ useRoute: () => routing.route, useRouter: () => ({ push: routing.push }) }))
+vi.mock('@/api/aiAgent.js', () => api)
+vi.mock('@/api/ragProductConfig', () => ({ ragProductConfigAPI: { getRagProducts: async () => ({ list: [] }) } }))
+vi.mock('@/api/sopAgent.js', () => ({ sopApi: { list: async () => ({ list: [] }) } }))
+vi.mock('@/api/scriptTemplate.js', () => ({ getScriptTemplateList: async () => ({ list: [] }) }))
+vi.mock('@/api/faq', () => ({ faqApi: {} }))
+vi.mock('@/api/sopTemplate', () => ({ sopTemplateApi: {} }))
+vi.mock('@/api/knowledgeBase', () => ({ listByType: async (type) => ({ list: type === 'faq' ? [{ id: 11, name: '原知识库' }, { id: 22, name: '新知识库' }] : [] }) }))
+vi.mock('@/api/agentKBBinding', () => bindings)
+vi.mock('@/api/assetBundle', () => ({ listBundles: async () => ({ list: [] }) }))
+vi.mock('@/api/assetMarket', () => ({ listLocalAssets: async () => ({ list: [] }) }))
+vi.mock('@/i18n', () => ({ default: { global: { t: (key) => key } } }))
+import Edit from '@/views/aiAgent/Edit.vue'
+
+let wrapper, record, kbIds
+const form = () => wrapper.findComponent({ name: 'ElForm' }).props('model')
+const choose = (ids) => wrapper.findComponent({ name: 'ElTreeSelect' }).vm.$emit('update:modelValue', ids)
+const copy = (value) => JSON.parse(JSON.stringify(value))
+async function open(create = false) {
+  routing.route = reactive({ params: create ? {} : { id: '7' } })
+  if (create) { record = null; kbIds = [] }
+  wrapper = mount(Edit, { attachTo: document.body, global: { plugins: [ElementPlus, createI18n({ legacy: false, locale: 'zh', messages: { zh }, missingWarn: false, fallbackWarn: false })] } })
+  await settle(wrapper)
+  if (create) Object.assign(form(), { agent_code: 'save-test', name: '保存验收', persona: '受控人设' })
+}
+async function save() {
+  await wrapper.findAll('button').find((item) => /^(保存更新|创建智能体|重试保存)$/.test(item.text())).trigger('click')
+  await settle(wrapper)
+}
+beforeEach(() => {
+  vi.resetAllMocks()
+  record = { id: 7, agent_code: 'save-test', name: '保存验收', persona: '受控人设', agent_type: 'sales', agent_mode: 'passive' }
+  kbIds = ['11']
+  api.getAgent.mockImplementation(async () => copy(record))
+  api.findAgentByCode.mockImplementation(async () => copy(record))
+  api.createAgent.mockImplementation(async (data) => { record = { ...copy(data), id: 8 }; return copy(record) })
+  api.updateAgent.mockImplementation(async (id, data) => { record = { ...record, ...copy(data), id: Number(id) }; return copy(record) })
+  bindings.listByAgent.mockImplementation(async () => kbIds.map((kb_id) => ({ kb_id })))
+  bindings.replaceAgentKBs.mockImplementation(async (id, ids) => { kbIds = [...ids]; return {} })
+  vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm')
+  vi.spyOn(ElMessage, 'success')
+})
+afterEach(() => { wrapper?.unmount(); wrapper = null; vi.restoreAllMocks(); document.body.replaceChildren() })
+
+describe('智能体部分保存恢复', () => {
+  it.each([false, true])('创建=%s：绑定拒绝不报整体成功，重试复用主记录', async (create) => {
+    await open(create)
+    choose(['22'])
+    bindings.replaceAgentKBs.mockRejectedValueOnce(new Error('绑定拒绝'))
+    await save()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').text()).toContain('绑定')
+    expect(form().kb_ids).toEqual(['22'])
+    await save()
+    expect(create ? api.createAgent : api.updateAgent).toHaveBeenCalledTimes(1)
+    expect(kbIds).toEqual(['22'])
+    expect(ElMessage.success).toHaveBeenCalledTimes(1)
+    expect(routing.push).toHaveBeenCalledWith('/aiAgent/list')
+  })
+  it('创建回执丢失后通过精确身份回读，不能再次创建', async () => {
+    await open(true)
+    choose(['22'])
+    api.createAgent.mockImplementationOnce(async (data) => { record = { ...copy(data), id: 8 }; throw new Error('回执丢失') })
+    await save()
+    expect(routing.push).not.toHaveBeenCalled()
+    await save()
+    expect(api.createAgent).toHaveBeenCalledTimes(1)
+    expect(api.findAgentByCode).toHaveBeenCalledWith('save-test')
+    expect(kbIds).toEqual(['22'])
+    expect(routing.push).toHaveBeenCalledOnce()
+  })
+  it('绑定已提交但回执丢失时以回读确认，不重复替换', async () => {
+    await open()
+    choose(['22'])
+    bindings.replaceAgentKBs.mockImplementationOnce(async (id, ids) => { kbIds = [...ids]; throw new Error('绑定回执丢失') })
+    await save()
+    if (!routing.push.mock.calls.length) await save()
+    expect(bindings.replaceAgentKBs).toHaveBeenCalledTimes(1)
+    expect(kbIds).toEqual(['22'])
+    expect(routing.push).toHaveBeenCalledOnce()
+  })
+  it('回读主记录不一致时不写绑定、不报成功', async () => {
+    await open()
+    choose(['22'])
+    form().name = '必须持久化的新名称'
+    api.updateAgent.mockResolvedValueOnce({ id: 7 })
+    await save()
+    expect(bindings.replaceAgentKBs).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('绑定接口假成功但回读仍为旧集合时保持部分完成', async () => {
+    await open()
+    choose(['22'])
+    bindings.replaceAgentKBs.mockResolvedValueOnce({})
+    await save()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+    expect(wrapper.find('[role="alert"]').text()).toContain('绑定')
+  })
+  it('创建前发现已有编码时不覆盖、不创建、不写绑定', async () => {
+    await open(true)
+    api.findAgentByCode.mockResolvedValueOnce({ id: 99, agent_code: 'save-test', name: '已有记录' })
+    choose(['22'])
+    await save()
+    expect(api.createAgent).not.toHaveBeenCalled()
+    expect(api.updateAgent).not.toHaveBeenCalled()
+    expect(bindings.replaceAgentKBs).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('精确身份查询故障不能当成不存在继续创建', async () => {
+    await open(true)
+    api.findAgentByCode.mockRejectedValueOnce(new Error('查询不可用'))
+    await save()
+    expect(api.createAgent).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it.each([undefined, false, {}])('身份查询返回异常值 %s 时不能创建', async (response) => {
+    await open(true)
+    api.findAgentByCode.mockResolvedValueOnce(response)
+    await save()
+    expect(api.createAgent).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('回读了同配置但错误 ID 的记录时不写绑定、不报成功', async () => {
+    await open()
+    choose(['22'])
+    api.getAgent.mockImplementation(async () => ({ ...copy(record), id: 99 }))
+    await save()
+    expect(bindings.replaceAgentKBs).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('已创建但绑定待恢复时更换编码不得更新或创建其它记录', async () => {
+    await open(true)
+    choose(['22'])
+    bindings.replaceAgentKBs.mockRejectedValueOnce(new Error('绑定拒绝'))
+    await save()
+    form().agent_code = 'changed-code'
+    await save()
+    expect(api.createAgent).toHaveBeenCalledTimes(1)
+    expect(api.updateAgent).not.toHaveBeenCalled()
+    expect(bindings.replaceAgentKBs).toHaveBeenCalledTimes(1)
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('主记录回执丢失后重试回读，不能再次更新相同主配置', async () => {
+    await open()
+    choose(['22'])
+    api.updateAgent.mockImplementationOnce(async (id, data) => { record = { ...record, ...copy(data) }; throw new Error('主记录回执丢失') })
+    await save()
+    expect(routing.push).not.toHaveBeenCalled()
+    await save()
+    expect(api.updateAgent).toHaveBeenCalledTimes(1)
+    expect(kbIds).toEqual(['22'])
+    expect(routing.push).toHaveBeenCalledOnce()
+  })
+  it('主记录回读故障保持表单，恢复读取后重试不重复更新', async () => {
+    await open()
+    choose(['22'])
+    api.getAgent.mockRejectedValueOnce(new Error('回读不可用'))
+    await save()
+    expect(bindings.replaceAgentKBs).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+    await save()
+    expect(api.updateAgent).toHaveBeenCalledTimes(1)
+    expect(routing.push).toHaveBeenCalledOnce()
+  })
+  it.each(['route', 'unmount'])('保存等待中 %s 后停止后续写入和成功导航', async (leave) => {
+    await open()
+    choose(['22'])
+    let release
+    api.updateAgent.mockImplementationOnce((id, data) => new Promise((resolve) => { release = () => { record = { ...record, ...copy(data) }; resolve(copy(record)) } }))
+    await save()
+    expect(api.updateAgent).toHaveBeenCalledTimes(1)
+    if (leave === 'route') routing.route.params.id = '8'
+    else wrapper.unmount()
+    await settle(wrapper)
+    release()
+    await settle(wrapper)
+    expect(bindings.replaceAgentKBs).not.toHaveBeenCalled()
+    expect(ElMessage.success).not.toHaveBeenCalled()
+    expect(routing.push).not.toHaveBeenCalled()
+  })
+  it('保存等待中重复点击只提交一次主记录', async () => {
+    await open()
+    let release
+    api.updateAgent.mockImplementationOnce((id, data) => new Promise((resolve) => { release = () => { record = { ...record, ...copy(data) }; resolve(copy(record)) } }))
+    await save()
+    await save()
+    expect(api.updateAgent).toHaveBeenCalledTimes(1)
+    release()
+    await settle(wrapper)
+    expect(routing.push).toHaveBeenCalledOnce()
+  })
+})

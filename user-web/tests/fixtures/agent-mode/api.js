@@ -10,6 +10,7 @@ async function request(path, method = 'GET', data) {
 export const createAgent = data => request('/agents', 'POST', data)
 export const updateAgent = (id, data) => request(`/agents/${id}`, 'PUT', data)
 export const getAgent = id => request(`/agents/${id}`)
+export const findAgentByCode = code => request(`/agents/by-code?agent_code=${encodeURIComponent(code)}`)
 export const testAgent = async () => { throw new Error('此夹具不运行外部智能体') }
 const emptyList = async () => ({ list: [] })
 export const ragProductConfigAPI = { getRagProducts: emptyList }

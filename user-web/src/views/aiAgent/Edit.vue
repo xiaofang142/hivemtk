@@ -36,6 +36,14 @@
       </div>
     </el-card>
 
+    <el-alert
+      v-if="saveFailure"
+      :title="saveFailure"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+
     <el-form
       ref="formRef"
       v-loading="pageLoading"
@@ -630,7 +638,7 @@
           @click="onSave"
         >
           <el-icon><Check /></el-icon>
-          {{ isEdit ? '保存更新' : '创建智能体' }}
+          {{ saveFailure ? t('agentSaveRecovery.retry') : (isEdit ? '保存更新' : '创建智能体') }}
         </el-button>
       </div>
     </el-form>
@@ -810,7 +818,7 @@ import {
   InfoFilled, UserFilled, Collection, Connection, ChatLineSquare,
   Cpu, Open, Setting, Check, VideoPlay
 } from '@element-plus/icons-vue'
-import { createAgent, updateAgent, getAgent, testAgent } from '@/api/aiAgent.js'
+import { createAgent, updateAgent, getAgent, findAgentByCode, testAgent } from '@/api/aiAgent.js'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
 import { sopApi } from '@/api/sopAgent.js'
 import { getScriptTemplateList } from '@/api/scriptTemplate.js'
@@ -833,6 +841,9 @@ const { t } = useI18n()
 const formRef = ref();
 const pageLoading = ref(false)
 const saving = ref(false)
+const saveFailure = ref('')
+const saveProgress = ref(null)
+let saveVersion = 0
 const agentId = computed(() => route.params.id)
 const isEdit = computed(() => !!agentId.value)
 const kbBindingsStatus = ref(isEdit.value ? 'unknown' : 'ready')
@@ -840,6 +851,18 @@ const kbBindingsAgent = ref(String(agentId.value || ''))
 const kbBindingsSnapshot = ref([])
 let kbBindingsReadVersion = 0
 const normalizeKBIds = (ids) => [...new Set(ids.map(String))].sort()
+const readBindingIds = (res) => {
+  const list = Array.isArray(res) ? res : res?.list ?? res?.items
+  if (!Array.isArray(list) || list.some((it) => !/^[1-9]\d*$/.test(String(it?.kb_id ?? it?.id)))) {
+    throw new Error(t('agentKBBindingRead.invalid'))
+  }
+  return normalizeKBIds(list.map((it) => it.kb_id ?? it.id))
+}
+const validAgentId = (id) => /^[1-9]\d*$/.test(String(id)) && (typeof id !== 'number' || Number.isSafeInteger(id))
+const matchesAgentData = (record, data, id) => record && validAgentId(record.id) && (id === undefined || String(record.id) === String(id)) && Object.entries(data).every(([key, value]) => {
+  if (Array.isArray(value)) return JSON.stringify(normalizeKBIds(value)) === JSON.stringify(normalizeKBIds(record[key] || []))
+  return (record[key] ?? '') === value
+})
 const kbBindingsReady = computed(() => kbBindingsStatus.value === 'ready' && kbBindingsAgent.value === String(agentId.value || ''))
 
 const ragProductOptions = ref([]);
@@ -1054,11 +1077,7 @@ const loadAgentKBBindings = async () => {
   try {
     const res = await listAgentKBs(target)
     if (version !== kbBindingsReadVersion || target !== String(agentId.value || '')) return
-    const list = Array.isArray(res) ? res : res?.list ?? res?.items
-    if (!Array.isArray(list) || list.some((it) => !/^[1-9]\d*$/.test(String(it?.kb_id ?? it?.id)))) {
-      throw new Error(t('agentKBBindingRead.invalid'))
-    }
-    const ids = normalizeKBIds(list.map((it) => it.kb_id ?? it.id))
+    const ids = readBindingIds(res)
     form.kb_ids = ids
     kbBindingsSnapshot.value = ids.slice()
     kbBindingsAgent.value = target
@@ -1096,14 +1115,29 @@ const loadAgentDetail = async () => {
   }
 };
 
+const saveStageKeys = {
+  main: 'agentSaveRecovery.main',
+  identity: 'agentSaveRecovery.identity',
+  verification: 'agentSaveRecovery.verification',
+  bindings: 'agentSaveRecovery.bindings'
+}
+
 const onSave = async () => {
-  if (!formRef.value) return
+  if (!formRef.value || saving.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) {
       ElMessage.warning(i18n.global.t('请完善必填项后再提交'))
       return
     }
+    if (saving.value) return
     saving.value = true
+    const version = ++saveVersion
+    const creating = !isEdit.value
+    let stage = 'main'
+    let mainConfirmed = false
+    const assertCurrent = () => {
+      if (version !== saveVersion) throw Object.assign(new Error('cancelled'), { cancelled: true })
+    }
     try {
       const bindingIds = normalizeKBIds(form.kb_ids)
       const replaceBindings = kbBindingsChanged.value
@@ -1111,6 +1145,7 @@ const onSave = async () => {
       if (replaceBindings && isEdit.value && bindingIds.length === 0) {
         const confirmed = await ElMessageBox.confirm(t('agentKBBindingRead.clearBody'), t('agentKBBindingRead.clearTitle'), { type: 'warning' }).then(() => true, () => false)
         if (!confirmed) return
+        assertCurrent()
       }
       const data = {
         agent_code: form.agent_code,
@@ -1147,33 +1182,70 @@ const onSave = async () => {
         max_ai_consecutive: form.max_ai_consecutive,
         status: form.status
       }
-      if (isEdit.value) {
-        await updateAgent(targetAgentId, data)
-        if (replaceBindings) {
-          try {
-            await replaceAgentKBs(targetAgentId, bindingIds)
-          } catch (kbErr) {
-            console.warn('同步智能体知识库挂载失败：', kbErr?.message)
+      let progress = saveProgress.value
+      let id = creating ? progress?.id : targetAgentId
+      if (creating && progress && progress.data.agent_code !== data.agent_code) throw new Error(t('agentSaveRecovery.pendingCode'))
+      if (creating && !id) {
+        stage = 'identity'
+        const found = await findAgentByCode(data.agent_code)
+        assertCurrent()
+        if (found !== null) {
+          if (!progress || !matchesAgentData(found, progress.data)) throw new Error(t('agentSaveRecovery.conflict'))
+          id = found.id
+          progress.id = id
+        } else {
+          if (!progress) {
+            saveProgress.value = { id: null, data: JSON.parse(JSON.stringify(data)) }
+            progress = saveProgress.value
           }
+          stage = 'main'
+          const created = await createAgent(progress.data)
+          assertCurrent()
+          id = created?.id
+          if (!validAgentId(id)) throw new Error(t('agentSaveRecovery.unconfirmed'))
+          progress.id = id
         }
-        ElMessage.success(i18n.global.t('智能体更新成功'))
-      } else {
-        const created = await createAgent(data)
-        const newId = created?.id || created?.ID;
-        if (newId && replaceBindings && bindingIds.length) {
-          try {
-            await replaceAgentKBs(newId, bindingIds)
-          } catch (kbErr) {
-            console.warn('挂载智能体知识库失败：', kbErr?.message)
-          }
-        }
-        ElMessage.success(i18n.global.t('智能体创建成功'))
       }
+      if (!validAgentId(id)) throw new Error(t('agentSaveRecovery.unconfirmed'))
+      stage = 'main'
+      const previous = progress?.id && await getAgent(id)
+      assertCurrent()
+      if (!progress || !matchesAgentData(previous, data, id)) {
+        saveProgress.value = { id, data: JSON.parse(JSON.stringify(data)) }
+        await updateAgent(id, data)
+        assertCurrent()
+      }
+      stage = 'verification'
+      if (!matchesAgentData(await getAgent(id), data, id)) throw new Error(t('agentSaveRecovery.unconfirmed'))
+      assertCurrent()
+      mainConfirmed = true
+      if (replaceBindings) {
+        stage = 'bindings'
+        let actual = readBindingIds(await listAgentKBs(id))
+        assertCurrent()
+        if (JSON.stringify(actual) !== JSON.stringify(bindingIds)) {
+          let writeError
+          try { await replaceAgentKBs(id, bindingIds) } catch (error) { writeError = error }
+          assertCurrent()
+          actual = readBindingIds(await listAgentKBs(id))
+          assertCurrent()
+          if (JSON.stringify(actual) !== JSON.stringify(bindingIds)) throw writeError || new Error(t('agentSaveRecovery.unconfirmed'))
+        }
+      }
+      stage = 'verification'
+      if (!matchesAgentData(await getAgent(id), data, id)) throw new Error(t('agentSaveRecovery.unconfirmed'))
+      assertCurrent()
+      saveProgress.value = null
+      saveFailure.value = ''
+      ElMessage.success(i18n.global.t(creating ? '智能体创建成功' : '智能体更新成功'))
       goBack()
     } catch (e) {
-      if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || '未知错误'))
+      if (e.cancelled || version !== saveVersion) return
+      const partial = mainConfirmed ? t('agentSaveRecovery.partial', { id: saveProgress.value?.id }) : ''
+      saveFailure.value = partial + t('agentSaveRecovery.failed', { part: t(saveStageKeys[stage]), message: e.message || t('agentSaveRecovery.unconfirmed') })
+      if (!isUserReportedError(e)) ElMessage.error(saveFailure.value)
     } finally {
-      saving.value = false
+      if (version === saveVersion) saving.value = false
     }
   })
 };
@@ -1226,13 +1298,17 @@ onMounted(async () => {
   await loadKnowledgeBases()
 });
 watch(agentId, () => {
+  saveVersion++
+  saveProgress.value = null
+  saveFailure.value = ''
+  saving.value = false
   kbBindingsReadVersion++
   kbBindingsStatus.value = isEdit.value ? 'unknown' : 'ready'
   kbBindingsAgent.value = String(agentId.value || '')
   kbBindingsSnapshot.value = []
   form.kb_ids = []
 })
-onBeforeUnmount(() => { kbBindingsReadVersion++ })
+onBeforeUnmount(() => { kbBindingsReadVersion++; saveVersion++ })
 </script>
 
 <style scoped lang="scss">

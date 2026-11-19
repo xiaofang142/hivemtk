@@ -34,6 +34,7 @@ func (ctrl *AIAgentController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/ai-agents")
 	{
 		g.GET("", ctrl.List)
+		g.GET("/by-code", ctrl.FindByCode)
 		g.GET("/:id", ctrl.Get)
 		g.POST("", ctrl.Create)
 		g.PUT("/:id", ctrl.Update)
@@ -73,6 +74,22 @@ func (ctrl *AIAgentController) List(c *gin.Context) {
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
+}
+
+// FindByCode 精确恢复创建身份；不存在与读取失败保持不同响应。
+// @Summary 精确查询智能体编码
+// @Tags AI Agent
+// @Security BearerAuth
+// @Param agent_code query string true "智能体唯一编码"
+// @Success 200 {object} response.Response
+// @Router /api/ai-agents/by-code [get]
+func (ctrl *AIAgentController) FindByCode(c *gin.Context) {
+	agent, err := ctrl.svc.FindByCode(c.Request.Context(), c.Query("agent_code"))
+	if err != nil {
+		response.ErrorFromDB(c, err, "查询智能体编码失败")
+		return
+	}
+	response.Success(c, agent, "获取成功")
 }
 
 // ListEnabled godoc

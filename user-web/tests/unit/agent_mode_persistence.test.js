@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n'
 import zh from '@/i18n/locales/zh.json'
 import { settle } from './settle-helper'
 
-const api = vi.hoisted(() => ({ createAgent: vi.fn(), updateAgent: vi.fn(), getAgent: vi.fn(), testAgent: vi.fn() }))
+const api = vi.hoisted(() => ({ createAgent: vi.fn(), updateAgent: vi.fn(), getAgent: vi.fn(), findAgentByCode: vi.fn(), testAgent: vi.fn() }))
 const route = vi.hoisted(() => ({ params: {} }))
 const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRoute: () => route, useRouter: () => ({ push }) }))
@@ -43,8 +43,9 @@ async function save() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  api.createAgent.mockResolvedValue({ id: 7 })
-  api.updateAgent.mockResolvedValue({ id: 7 })
+  api.findAgentByCode.mockResolvedValue(null)
+  api.createAgent.mockImplementation(async (data) => { api.getAgent.mockResolvedValue({ ...data, id: 7 }); return { id: 7 } })
+  api.updateAgent.mockImplementation(async (id, data) => { api.getAgent.mockResolvedValue({ ...data, id: Number(id) }); return { id: Number(id) } })
   vi.spyOn(ElMessage, 'success').mockImplementation(() => {})
   vi.spyOn(ElMessage, 'error').mockImplementation(() => {})
 })

@@ -59,6 +59,18 @@ func NewAIAgentServiceWithRepo(repo *repository.AIAgentRepository) *AIAgentServi
 	}
 }
 
+// FindByCode 按可信租户和唯一编码读取创建结果；只有确实不存在才返回 nil。
+func (s *AIAgentService) FindByCode(ctx context.Context, code string) (*model.AIAgent, error) {
+	if strings.TrimSpace(code) == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "agent_code 不能为空")
+	}
+	agent, err := s.repo.GetByCode(ctx, code)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	return agent, err
+}
+
 // Create 创建智能体
 func (s *AIAgentService) Create(ctx context.Context, a *model.AIAgent) error {
 	if a.AgentCode == "" {

@@ -1,4 +1,16 @@
 {
+  "agentSaveRecovery": {
+    "retry": "Tentar salvar novamente",
+    "pendingCode": "A criação anterior não foi confirmada. Mantenha o código e tente recuperar novamente.",
+    "conflict": "Este código já existe ou sua configuração é diferente. O registro não foi sobrescrito.",
+    "unconfirmed": "Não foi possível confirmar o conteúdo salvo pela releitura. Tente novamente.",
+    "main": "Salvamento do registro principal",
+    "identity": "Confirmação da identidade de criação",
+    "verification": "Verificação do registro principal",
+    "bindings": "Sincronização dos vínculos das bases de conhecimento",
+    "partial": "O salvamento do registro principal foi confirmado (ID: {id}). ",
+    "failed": "{part} está incompleto: {message}. O formulário foi preservado. Tente salvar novamente."
+  },
   "agentKBBindingRead": {
     "failed": "Não foi possível carregar as associações às bases de conhecimento. Tente novamente; salvar outros dados preservará as associações existentes.",
     "pending": "As associações às bases de conhecimento ainda não foram confirmadas. Salvar outros dados preservará as associações existentes.",

@@ -1,4 +1,16 @@
 {
+  "agentSaveRecovery": {
+    "retry": "Retry save",
+    "pendingCode": "The previous creation is unconfirmed. Keep its code and retry recovery.",
+    "conflict": "This code already exists or its configuration differs from this creation. The record was not overwritten.",
+    "unconfirmed": "The saved content could not be confirmed by reading it back. Please retry.",
+    "main": "Saving the main record",
+    "identity": "Confirming the creation identity",
+    "verification": "Verifying the main record",
+    "bindings": "Synchronizing knowledge base bindings",
+    "partial": "The main record is confirmed saved (ID: {id}). ",
+    "failed": "{part} is incomplete: {message}. Your form is preserved. Retry the save."
+  },
   "agentKBBindingRead": {
     "failed": "Knowledge base bindings could not be loaded. Retry loading; saving other details will preserve existing bindings.",
     "pending": "Knowledge base bindings have not been confirmed. Saving other details will preserve existing bindings.",

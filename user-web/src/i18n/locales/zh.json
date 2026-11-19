@@ -1,4 +1,16 @@
 {
+  "agentSaveRecovery": {
+    "retry": "重试保存",
+    "pendingCode": "上次创建尚未确认，请保留原编码并重试恢复。",
+    "conflict": "此编码已有记录，或记录与本次创建配置不一致；未覆盖该记录。",
+    "unconfirmed": "回读未能确认本次保存内容，请重试。",
+    "main": "主记录保存",
+    "identity": "创建身份确认",
+    "verification": "主记录回读确认",
+    "bindings": "知识库绑定同步",
+    "partial": "主记录已确认保存（ID：{id}）。",
+    "failed": "{part}尚未完成：{message}。已保留表单，请点击重试保存。"
+  },
   "agentKBBindingRead": {
     "failed": "知识库绑定读取失败。可重试加载；保存其他信息不会更改现有绑定。",
     "pending": "尚未确认知识库绑定。保存其他信息不会更改现有绑定。",

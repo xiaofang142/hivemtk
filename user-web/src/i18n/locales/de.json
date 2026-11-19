@@ -1,4 +1,16 @@
 {
+  "agentSaveRecovery": {
+    "retry": "Speichern wiederholen",
+    "pendingCode": "Die vorherige Erstellung ist unbestätigt. Behalten Sie den Code bei und versuchen Sie die Wiederherstellung erneut.",
+    "conflict": "Dieser Code existiert bereits oder seine Konfiguration weicht ab. Der Datensatz wurde nicht überschrieben.",
+    "unconfirmed": "Der gespeicherte Inhalt konnte beim erneuten Lesen nicht bestätigt werden. Bitte erneut versuchen.",
+    "main": "Speichern des Hauptdatensatzes",
+    "identity": "Bestätigung der Erstellungsidentität",
+    "verification": "Prüfung des Hauptdatensatzes",
+    "bindings": "Synchronisierung der Wissensdatenbankzuordnungen",
+    "partial": "Der Hauptdatensatz wurde nachweislich gespeichert (ID: {id}). ",
+    "failed": "{part} ist unvollständig: {message}. Das Formular bleibt erhalten. Wiederholen Sie das Speichern."
+  },
   "agentKBBindingRead": {
     "failed": "Die Wissensdatenbank-Zuordnungen konnten nicht geladen werden. Erneut laden; beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",
     "pending": "Die Wissensdatenbank-Zuordnungen sind noch nicht bestätigt. Beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",

@@ -21,6 +21,7 @@ const server = await createServer({
         }
         if (req.method === 'POST' && path === '/allow-read') { readAllowed = true; return reply(200, { readAllowed }) }
         if (req.method === 'GET' && path === '/evidence') return reply(200, { agent, kbIds, events })
+        if (req.method === 'GET' && path === '/agents/by-code') return reply(200, agent.agent_code === url.searchParams.get('agent_code') ? agent : null)
         if (req.method === 'GET' && path === '/agents/1') return reply(200, agent)
         if (req.method === 'GET' && path === '/knowledge-bases') return reply(200, { list: url.searchParams.get('type') === 'faq' ? [{ id: 11, name: '原知识库' }, { id: 22, name: '新知识库' }] : [] })
         if (req.method === 'GET' && path === '/bindings/1') {

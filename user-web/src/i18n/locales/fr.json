@@ -1,4 +1,16 @@
 {
+  "agentSaveRecovery": {
+    "retry": "Réessayer l’enregistrement",
+    "pendingCode": "La création précédente n’est pas confirmée. Conservez son code et réessayez la récupération.",
+    "conflict": "Ce code existe déjà ou sa configuration diffère. L’enregistrement n’a pas été écrasé.",
+    "unconfirmed": "La relecture n’a pas permis de confirmer le contenu enregistré. Réessayez.",
+    "main": "Enregistrement de la fiche principale",
+    "identity": "Confirmation de l’identité de création",
+    "verification": "Vérification de la fiche principale",
+    "bindings": "Synchronisation des liens vers les bases de connaissances",
+    "partial": "L’enregistrement de la fiche principale est confirmé (ID : {id}). ",
+    "failed": "{part} reste incomplet : {message}. Le formulaire est conservé. Réessayez l’enregistrement."
+  },
   "agentKBBindingRead": {
     "failed": "Impossible de charger les associations aux bases de connaissances. Réessayez ; enregistrer les autres informations préservera les associations existantes.",
     "pending": "Les associations aux bases de connaissances ne sont pas encore confirmées. Enregistrer les autres informations préservera les associations existantes.",

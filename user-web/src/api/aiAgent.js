@@ -12,6 +12,10 @@ export function getAgent(id) {
   return http.get(`/api/ai-agents/${id}`)
 }
 
+export function findAgentByCode(code) {
+  return http.get('/api/ai-agents/by-code', { agent_code: code })
+}
+
 export function createAgent(data) {
   return http.post('/api/ai-agents', data)
 }

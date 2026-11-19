@@ -12,7 +12,7 @@ const server = await createServer({
     name: 'controlled-agent-mode',
     configureServer(vite) {
       vite.middlewares.use('/fixture', async (req, res) => {
-        const path = new URL(req.url, 'http://127.0.0.1').pathname
+        const url = new URL(req.url, 'http://127.0.0.1'), path = url.pathname
         const reply = (status, value) => {
           res.statusCode = status
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -20,6 +20,7 @@ const server = await createServer({
         }
         if (req.method === 'POST' && path === '/fail-next') { failNext = true; return reply(200, { armed: true }) }
         if (req.method === 'GET' && path === '/evidence') return reply(200, { agent, events })
+        if (req.method === 'GET' && path === '/agents/by-code') return reply(200, agent?.agent_code === url.searchParams.get('agent_code') ? agent : null)
         if (req.method === 'GET' && path === '/agents/1') return agent ? reply(200, agent) : reply(404, { error: '记录不存在' })
         if ((req.method === 'POST' && path === '/agents') || (req.method === 'PUT' && path === '/agents/1')) {
           let raw = ''
