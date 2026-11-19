@@ -166,7 +166,7 @@ func (e *ActionNodeExecutor) executeHTTPAction(ctx context.Context, wctx *Workfl
 	return &WorkflowNodeExecResult{
 		Status:      NodeStatusCompleted,
 		Output:      output,
-		NextNodeID:  "",
+		NextNodeID:  defaultNextWorkflowNodeID(wctx),
 		SideEffects: []string{sideEffectKey, "http_called:" + rawURL},
 	}
 }

@@ -113,7 +113,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		return &WorkflowNodeExecResult{
 			Status:      NodeStatusCompleted,
 			Output:      model.JSONMap{"message": message, "_action_type": "log"},
-			NextNodeID:  "",
+			NextNodeID:  defaultNextWorkflowNodeID(wctx),
 			SideEffects: []string{sideEffectKey},
 		}, nil
 
@@ -152,7 +152,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		return &WorkflowNodeExecResult{
 			Status:      NodeStatusCompleted,
 			Output:      model.JSONMap{"duration_ms": durationMs, "_action_type": "delay"},
-			NextNodeID:  "",
+			NextNodeID:  defaultNextWorkflowNodeID(wctx),
 			WaitUntil:   &waitUntil,
 			WaitEvent:   WaitEventTimer,
 			SideEffects: []string{sideEffectKey},
@@ -216,7 +216,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		return &WorkflowNodeExecResult{
 			Status:      NodeStatusCompleted,
 			Output:      model.JSONMap{"session_id": sessionID, "result": out, "_action_type": "browser_session"},
-			NextNodeID:  "",
+			NextNodeID:  defaultNextWorkflowNodeID(wctx),
 			SideEffects: []string{sideEffectKey},
 		}, nil
 
@@ -269,7 +269,7 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		return &WorkflowNodeExecResult{
 			Status:      NodeStatusCompleted,
 			Output:      model.JSONMap{"task_id": taskID, "user_id": userID, "_action_type": "browser_task"},
-			NextNodeID:  "",
+			NextNodeID:  defaultNextWorkflowNodeID(wctx),
 			SideEffects: []string{sideEffectKey},
 		}, nil
 

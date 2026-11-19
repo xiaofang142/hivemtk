@@ -280,3 +280,34 @@ func TestWorkflowDispatcher_UnknownNodeTypeFailsExecution(t *testing.T) {
 		t.Fatalf("失败原因应写明未知节点类型，得到 %q", got.Error)
 	}
 }
+
+func TestTriggerAndActionAdvanceAlongDefaultEdge(t *testing.T) {
+	def := workflowTestDefinition()
+	parsed, err := ParseWorkflowDefinition(def)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	wctx, _ := httpActionCtx(9200, model.JSONMap{})
+	wctx.Graph = parsed
+	wctx.NodeID = "n1"
+	wctx.NodeType = WorkflowNodeTypeTrigger
+
+	tr := &TriggerNodeExecutor{}
+	res, err := tr.Execute(context.Background(), wctx)
+	if err != nil || res.Status != NodeStatusCompleted {
+		t.Fatalf("trigger 执行失败: %v %s", err, res.Status)
+	}
+	if res.NextNodeID != "n2" {
+		t.Fatalf("trigger 必须沿默认边推进到 n2，得到 %q（线性链截断回归）", res.NextNodeID)
+	}
+
+	wctx.NodeID = "n2"
+	wctx.NodeType = WorkflowNodeTypeAction
+	wctx.NodeConfig = model.JSONMap{"action_type": "log", "message": "hi"}
+	act := &ActionNodeExecutor{}
+	res2, err := act.Execute(context.Background(), wctx)
+	if err != nil || res2.Status != NodeStatusCompleted {
+		t.Fatalf("action 执行失败: %v %s", err, res2.Status)
+	}
+	_ = res2 // n2 无出边，推进到空串收口
+}

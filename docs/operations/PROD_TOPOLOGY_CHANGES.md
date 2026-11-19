@@ -47,6 +47,21 @@
 - **发布前面盘点口径**：user-server 在 2788fb6c2 后曾无待发（用户「发布线上」轮
   盘点），本轮 TA 批提交后按铁律 1/2 全链重发。
 
+## 2026-11-20 · 二次审核批（TA 修复内容对抗复核）收口
+
+- **TA-06 生产回退风险修复**：CLIENT_DEVICE_TENANT_CODES=tz3rmdj 注入生产 .env
+  （备份 user-server.env.bak-20261120-clientdev）+ user-server 重启——
+  fail-closed 白名单此前会让生产信标全拒（client_machine 回退为无数据）；
+  env 注入 printenv 实证、health 200。信标路由在 auth 组（JWT ✓ 归属反查可用）。
+- **TA-10 部署补齐**：cec9155（multipart 总量防线/上传预检/Cookie Secure 动态判定）
+  晚于平台容器启动时间——platform-server 重发（deploy.sh，双健康过、迁移幂等）。
+- **TA-02 边界核验**：线上 user_db asset_bundles.messages=jsonb 列存在 ✓——
+  verify 补选兼容（jsonb 由 driver 反序列化，isinstance 分支覆盖）。
+- **TA-07 产物终验**：1.3.10 dist grep——body_preview 零存在、content_len 在
+  （content: 2 处为 SSE 业务数据通道非日志，TA-07 范围=常规日志）。
+- **边界披露**：外层清单现挂并行审计会话新一轮 FA-28~35 在制改动（未提交）——
+  不抢在制品，留其所有者收口。
+
 ## 2026-11-19 · 平台端白屏事故修复（用户报「平台端访问报错」）
 
 - **症状**：manage.xapptool.cn 白屏（#app 渲染为空注释节点）。ego CDP 注入抓实锤：

@@ -266,7 +266,7 @@ func (d *WorkflowDispatcher) executeNode(
 		nodeExec.Error = fmt.Sprintf("unknown node type %q: %v", node.Type, execErr)
 		_ = d.nodeExecRepo.Update(ctx, nodeExec)
 		d.failExecution(ctx, exec, nodeExec.Error)
-		return "", false, false
+		return "", false, true
 	}
 	result, err := executor.Execute(ctx, wctx)
 	durationMs := time.Since(start).Milliseconds()
@@ -279,7 +279,8 @@ func (d *WorkflowDispatcher) executeNode(
 		nodeExec.Status = model.WorkflowNodeFailed
 		nodeExec.Error = fmt.Sprintf("%v", err)
 		_ = d.nodeExecRepo.Update(ctx, nodeExec)
-		return "", false, d.handleNodeFailure(ctx, exec, node, result, err, attempt)
+		d.handleNodeFailure(ctx, exec, node, result, err, attempt)
+		return "", false, true
 	}
 
 	nodeExec.OutputData = result.Output
@@ -317,7 +318,8 @@ func (d *WorkflowDispatcher) executeNode(
 		}
 		return "", false, true
 	case NodeStatusFailed:
-		return "", false, d.handleNodeFailure(ctx, exec, node, result, fmt.Errorf("%s", result.ErrorMessage), attempt)
+		d.handleNodeFailure(ctx, exec, node, result, fmt.Errorf("%s", result.ErrorMessage), attempt)
+		return "", false, true
 	default:
 		logger.Ctx(ctx).Warn().Str("status", result.Status).Msg("unknown node status, treating as completed")
 		return result.NextNodeID, false, false
