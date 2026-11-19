@@ -137,19 +137,14 @@ func (p *defaultSendPipeline) settleQuota(ctx context.Context, req *ReachSendReq
 func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendRequest, resp *SendResponse) SendStepLog {
 	start := time.Now()
 	log := SendStepLog{Step: SendStepPermission, StartedAt: start}
-	if p.config.PermissionChecker == nil {
-		log.Skipped = true
-		log.Success = true
-		log.EndedAt = time.Now()
-		log.DurationMs = time.Since(start).Milliseconds()
-		return log
-	}
-	if err := p.config.PermissionChecker.CheckSendPermission(ctx, req); err != nil {
-		log.Success = false
-		log.Error = err.Error()
-		log.EndedAt = time.Now()
-		log.DurationMs = time.Since(start).Milliseconds()
-		return log
+	if p.config.PermissionChecker != nil {
+		if err := p.config.PermissionChecker.CheckSendPermission(ctx, req); err != nil {
+			log.Success = false
+			log.Error = err.Error()
+			log.EndedAt = time.Now()
+			log.DurationMs = time.Since(start).Milliseconds()
+			return log
+		}
 	}
 
 	// D04：主动外发的退订检查优先走故障显式通道——状态查不清就拒发
@@ -182,7 +177,7 @@ func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendR
 	}
 
 	// D04：同意闸（独立于 DNC 配置）。撤回即生效（含延迟队列重发前）；
-	// paused 按延后处理；missing 按模式放行留痕或拒发。
+	// paused 按延后处理；missing 按模式处理；查询故障始终拒发。
 	if oneID := permissionOneID(req); oneID != "" {
 		if terminated := p.checkSendConsent(ctx, req, resp, &log, oneID); terminated {
 			log.EndedAt = time.Now()
@@ -272,9 +267,24 @@ func (p *defaultSendPipeline) checkSendConsent(ctx context.Context, req *ReachSe
 		}
 		log.Output = []any{note}
 		return false
-	default: // granted
+	case ConsentStatusGranted:
 		log.Success = true
 		return false
+	default:
+		// unavailable 或未识别的判定都不能成为授权；只保留稳定原因码，避免泄露底层错误。
+		reason := ConsentReasonUnavailable
+		if dec.Status == ConsentStatusUnavailable {
+			switch dec.Reason {
+			case ConsentReasonEventUnavailable, ConsentReasonPreferenceUnavailable:
+				reason = dec.Reason
+			}
+		}
+		log.Success = false
+		log.Error = ErrSendConsentUnavailable.Error() + ": " + reason
+		log.Output = []any{map[string]any{
+			"status": ConsentStatusUnavailable, "reason": reason, "purpose": purpose, "retryable": true,
+		}}
+		return true
 	}
 }
 

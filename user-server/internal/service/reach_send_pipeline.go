@@ -69,6 +69,9 @@ var (
 	//（metadata 自述的 opt_in 只是 legacy_assertion，不能替代凭据）
 	ErrSendConsentRequired = errors.New("consent: no trusted consent record for this purpose")
 
+	// ErrSendConsentUnavailable 同意状态查询故障，恢复后可重新检查，所有模式均拒发。
+	ErrSendConsentUnavailable = errors.New("consent: state query unavailable (fail-closed)")
+
 	// ErrSendQuotaDenied D05：配额预占失败（超限/意图冲突），本次外发拒发
 	ErrSendQuotaDenied = errors.New("send quota: denied by reservation")
 

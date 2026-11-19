@@ -57,9 +57,22 @@ func (e *TriggerNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 	return &WorkflowNodeExecResult{
 		Status:      NodeStatusCompleted,
 		Output:      output,
-		NextNodeID:  "",
+		NextNodeID:  defaultNextWorkflowNodeID(wctx),
 		SideEffects: []string{WorkflowSideEffectKey(wctx, "triggered")},
 	}, nil
+}
+
+// defaultNextWorkflowNodeID 返回当前节点沿默认边（label=""）的下一节点 ID；
+// 无图/无边时返回空串（执行就地收口）。线性链的推进依赖它——
+// 否则 trigger/action 完成后执行立即结束，边定义形同虚设（FA-01/02 运行时一致性）。
+func defaultNextWorkflowNodeID(wctx *WorkflowExecContext) string {
+	if wctx == nil || wctx.Graph == nil {
+		return ""
+	}
+	if n := NextWorkflowNode(wctx.Graph, wctx.NodeID, ""); n != nil {
+		return n.ID
+	}
+	return ""
 }
 
 // ActionNodeExecutor 动作节点执行器

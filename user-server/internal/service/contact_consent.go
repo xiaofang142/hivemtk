@@ -19,22 +19,26 @@ import (
 
 // 同意判定状态与原因码（对外契约，进 step log 与审计）
 const (
-	ConsentStatusGranted = "granted"
-	ConsentStatusRevoked = "revoked"
-	ConsentStatusMissing = "missing"
-	ConsentStatusPaused  = "paused"
+	ConsentStatusGranted     = "granted"
+	ConsentStatusRevoked     = "revoked"
+	ConsentStatusMissing     = "missing"
+	ConsentStatusPaused      = "paused"
+	ConsentStatusUnavailable = "unavailable"
 
-	ConsentReasonRevoked         = "consent_revoked"
-	ConsentReasonMissing         = "consent_missing"
-	ConsentReasonPaused          = "consent_paused"
-	ConsentReasonLegacyAssertion = "consent_legacy_assertion"
+	ConsentReasonRevoked               = "consent_revoked"
+	ConsentReasonMissing               = "consent_missing"
+	ConsentReasonPaused                = "consent_paused"
+	ConsentReasonLegacyAssertion       = "consent_legacy_assertion"
+	ConsentReasonUnavailable           = "consent_unavailable"
+	ConsentReasonEventUnavailable      = "consent_event_unavailable"
+	ConsentReasonPreferenceUnavailable = "consent_preference_unavailable"
 )
 
 // ConsentDecision 一次同意判定的结果。
 type ConsentDecision struct {
-	// Status granted/revoked/missing/paused
+	// Status granted/revoked/missing/paused/unavailable
 	Status string
-	// Trusted 是否有真实事件凭据支撑（missing 时 false）
+	// Trusted 是否有真实事件凭据支撑（missing/unavailable 时 false）
 	Trusted bool
 	// PausedUntil paused 时的恢复时刻（nil=无限期）
 	PausedUntil *time.Time
@@ -48,7 +52,7 @@ type ConsentChecker interface {
 }
 
 // 同意执行模式（管线配置）：
-//   - ConsentModeRevocationOnly：仅显式撤回拒发（默认——存量无凭据不批量伪造，也不一刀切停发）
+//   - ConsentModeRevocationOnly：撤回、暂停与查询故障拒发，正常无历史凭据仍放行
 //   - ConsentModeEnforce：无可信凭据一律拒发（存量盘点完成后收紧用）
 const (
 	ConsentModeRevocationOnly = "revocation_only"
@@ -158,10 +162,12 @@ func (s *ContactConsentService) SetPreference(ctx context.Context, oneID, purpos
 }
 
 // CheckSendConsent 实现 ConsentChecker：事件账 + 偏好快照的当前状态。
-// DB 故障按 revoked 语义返回吗？不——DB 故障返回 missing+Trusted=false，
-// 由管线按配置模式决定放行（revocation_only）/拒发（enforce）；这里不谎报 revoked。
+// 查询故障返回独立 unavailable 状态，所有模式拒发，恢复后重新读取事实。
 func (s *ContactConsentService) CheckSendConsent(ctx context.Context, oneID, purpose, channel string) ConsentDecision {
-	if s.repo == nil || strings.TrimSpace(oneID) == "" {
+	if s == nil || s.repo == nil {
+		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonEventUnavailable}
+	}
+	if strings.TrimSpace(oneID) == "" {
 		return ConsentDecision{Status: ConsentStatusMissing, Reason: ConsentReasonMissing}
 	}
 	purpose = normalizeConsentPurpose(purpose)
@@ -169,9 +175,7 @@ func (s *ContactConsentService) CheckSendConsent(ctx context.Context, oneID, pur
 
 	ev, err := s.repo.LatestEvent(ctx, oneID, purpose, channel)
 	if err != nil {
-		// 查询失败：状态未知。明确返回 missing（非 revoked），原因码带上来源，
-		// 管线在 enforce 模式下会拒发（fail-closed），revocation_only 下放行留痕。
-		return ConsentDecision{Status: ConsentStatusMissing, Reason: ConsentReasonMissing}
+		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonEventUnavailable}
 	}
 	if ev == nil {
 		return ConsentDecision{Status: ConsentStatusMissing, Reason: ConsentReasonMissing}
@@ -182,7 +186,10 @@ func (s *ContactConsentService) CheckSendConsent(ctx context.Context, oneID, pur
 
 	// grant 之上叠加偏好：渠道行优先于全渠道行
 	pref, err := s.repo.GetPreference(ctx, oneID, purpose, channel)
-	if err == nil && pref != nil && pref.Paused {
+	if err != nil {
+		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonPreferenceUnavailable}
+	}
+	if pref != nil && pref.Paused {
 		if pref.PausedUntil != nil && !pref.PausedUntil.After(time.Now()) {
 			// 暂停已到期：视为未暂停
 			return ConsentDecision{Status: ConsentStatusGranted, Trusted: true}

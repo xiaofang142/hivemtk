@@ -35,8 +35,8 @@ func (r *ContactConsentRepository) AppendEvent(ctx context.Context, ev *model.Co
 // LatestEvent 取 (oneID, purpose) 在渠道范围（channel 精确行或全渠道行）内最新一条事实。
 // 排序 (occurred_at DESC, id DESC)：同一时刻后写入的事实赢。
 func (r *ContactConsentRepository) LatestEvent(ctx context.Context, oneID, purpose, channel string) (*model.ContactConsentEvent, error) {
-	if r.db == nil {
-		return nil, nil
+	if r == nil || r.db == nil {
+		return nil, errors.New("contact consent repository not initialized")
 	}
 	var ev model.ContactConsentEvent
 	q := r.db.WithContext(ctx).
@@ -89,8 +89,8 @@ func (r *ContactConsentRepository) UpsertPreference(ctx context.Context, pref *m
 
 // GetPreference 读偏好：渠道精确行优先，其次全渠道行；都无返回 nil。
 func (r *ContactConsentRepository) GetPreference(ctx context.Context, oneID, purpose, channel string) (*model.ContactPreference, error) {
-	if r.db == nil {
-		return nil, nil
+	if r == nil || r.db == nil {
+		return nil, errors.New("contact consent repository not initialized")
 	}
 	var exact model.ContactPreference
 	err := r.db.WithContext(ctx).
