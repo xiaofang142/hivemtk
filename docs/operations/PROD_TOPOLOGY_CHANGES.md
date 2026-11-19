@@ -4,6 +4,15 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-20 · FA-15 同意查询故障拒发及交付质量修复（链 A / D dae0e4b4a）
+
+- **行为与验证**：同意事实或暂停偏好读取失败返回独立 unavailable，permission 步骤拒发并保存稳定来源原因；正常无历史存量策略不变。28 个计数适配器的故障/恢复矩阵及同意相关竞态测试 119 项（含子例）通过，专用测试库全量 `make test-go`、build/vet、lint、architecture、最终 `make audit` 通过；SPA 98 个测试文件、956 项测试通过。这里的适配器验证使用受控模拟，不表示第三方真实送达。
+- **冻结源码**：提交 `dae0e4b4a7d90cc47dc56208fee92d981a4e96df` 已推双远端；4457 份 Go 文件及模块文件逐项摘要与完整测试时一致。链 A 使用 `--skip-tests` 避免重复全量测试，仍执行 vet、交叉编译、上传摘要、回滚备份及上线验收。
+- **链 A 实际结果**：2026-11-20 01:18:50 +08:00 完成；线上二进制 SHA-256 `dedfd517643328c35c4453ec892cffeae395427135b4d8b182e1aa38c4fc856e`；镜像 `sha256:26fc81b7ec68f7152db7ce5d6faf80d5750ab5bad75650f21690f61829f74e56`。独立回读确认容器 running、镜像及二进制摘要相同，容器内与公网健康检查通过；公开 seed 口令单次探针 HTTP 401，不表示已穷举其他凭据。
+- **链 A 回滚点**：镜像 `mtk-user-server:rollback-20261120-011706`；二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-011706`。独立 clone 最初缺少被忽略的部署状态，预检在上传前拒绝；核对线上仍为旧摘要后恢复原状态并按正常变更驱动部署，未使用 force。
+- **链 D 实际结果**：构建后备份 `/www/wwwroot/hivemtk/user-web.snapshot-fa15-20261119-171538.tgz`（文件名为 UTC 时间，对应北京时间 2026-11-20），只同步 SPA dist 并保留 `.user.ini`。公网 index 与 `/assets/index-BlqJmyDH.js` 均 HTTP 200，入口资产本地/公网 SHA-256 同为 `f7713747f5f05ba7019ce959e295292a2f6aae3efbbe75e4cb8b49ef1f231fbc`。
+- **配置与边界**：没有新增生产配置或迁移；配置样例补齐既有心跳开关、设备租户白名单。覆盖率因本轮无 profile 未复测；未改扩展、SDK 或平台，不以本次验收代替它们的独立发布。
+
 ## 2026-11-19 · 链 A 终发：二次审核批+platform-link 并行批（7d4ee5d58）
 
 - **发布内容**：审核修复批（channelcaps/capregistry/v3.98.0 枚举迁移/对齐总闸/渲染实证）
