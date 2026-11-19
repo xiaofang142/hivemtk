@@ -1,9 +1,12 @@
-# HiveBridge 蜂桥 v1.3.9 发布包
+# HiveBridge 蜂桥 v1.3.10 发布包
 
-- 产物：`release/hivebridge-1.3.9.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
-- 构建时间：2026-11-18T17:24:57.855Z
+- 产物：`release/hivebridge-1.3.10.zip`（解压后含 manifest.json，可直接「加载已解压的扩展程序」）
+- 构建时间：2026-11-19T15:43:41.728Z
 
-## 本版变更（v1.3.9）
+## 本版变更（v1.3.10）
+- 安全脱敏（TA-07）：HTTP ingest 常规日志不再输出请求体正文与逐条消息内容（改对账元数据 body_keys/size/content_len）——买家会话内容不进日志
+
+## 历史变更（v1.3.9）
 - 二次审核批：五渠道全链补齐（channelcaps/capregistry/ENUM v3.98+078/ChannelType/channelTypeOf/词表/技能/MD 白名单/别名表）+ popup 描述含店铺骨架渠道
 
 ## 历史变更（v1.3.8）

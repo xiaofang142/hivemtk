@@ -33,6 +33,20 @@
 - **注意**：platform-server 发布链与 user-server 链 A 互相独立（外层 deploy.sh vs 内层
   deploy-api.sh）；platform 库迁移幂等可重跑；换机时两套发布入口都要装。
 
+## 2026-11-19 · 九任务收口发布批：TA-07/08/11 修复上线（链 A bad3fc015 + 链 B 1.3.10 + 链 D）
+
+- **链 A**：bad3fc015（TA-11 工具链 1.26.11 构建 + TA-07 前置提交）——线上二进制
+  sha256=94924ea82a792c14…，回滚点 rollback-20261119-234131；预检一次 slot 库连接
+  flake 重跑过（基建 flake 非代码）。
+- **链 B**：扩展 **1.3.10**（TA-07 日志脱敏为唯一变更）——三处同 bump、publish
+  全自动过、ego 重载快照回验 1.3.10。
+- **链 C**：上传被挡（ego 无 manage 登录态，not-logged-in）——1.3.10 zip 已在
+  release/ 目录，登录后补传。
+- **链 D**：SPA 同步（TA-08 lint/i18n 修复随构建）——公网 index-DOhIrdUK.js 与
+  本地 dist 一致。
+- **发布前面盘点口径**：user-server 在 2788fb6c2 后曾无待发（用户「发布线上」轮
+  盘点），本轮 TA 批提交后按铁律 1/2 全链重发。
+
 ## 2026-11-19 · 平台端白屏事故修复（用户报「平台端访问报错」）
 
 - **症状**：manage.xapptool.cn 白屏（#app 渲染为空注释节点）。ego CDP 注入抓实锤：
