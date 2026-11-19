@@ -16,7 +16,7 @@ type delayedReplayPermission struct {
 }
 
 func newDelayedReplayPermission(repo *repository.DelayedOutboundRepository, ingress *InboxIngressService) delayedReplayPermission {
-	sessions, messages := repo.ReplayRepositories()
+	sessions, messages := repository.NewReplayRepositories(repo)
 	return delayedReplayPermission{sessions: sessions, messages: messages, ingress: ingress}
 }
 

@@ -180,7 +180,7 @@ func (s *BridgeOfflineReplayService) ReplayDelayedOutbound(ctx context.Context, 
 		logger.Warnf("[BridgeReplay] 查询 reach_delayed_outbound 失败: %v", err)
 		return 0, 0
 	}
-	delayed := s.repo.DelayedRepository()
+	delayed := repository.NewDelayedOutboundRepositoryForReplay(s.repo)
 	permission := newDelayedReplayPermission(delayed, GlobalInboxIngressService())
 	for _, m := range msgs {
 		if len(m.Cards) > 0 {

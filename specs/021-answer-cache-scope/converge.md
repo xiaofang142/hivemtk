@@ -21,4 +21,4 @@
 
 生产端未发布，知识更新/配置负载实测、命中率和速度收益未验证。调用方浅配置别名并发及资格接口异常并非全面覆盖；不合作依赖只能占最多4槽，不保证硬杀。T005保留线上限制与最终验收未完成。不将局部缓存成功扩张为所有客服答案可复用。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

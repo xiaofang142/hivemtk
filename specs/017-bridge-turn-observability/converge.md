@@ -59,4 +59,4 @@ FR-003（计时只观察、不改发送锁/重试/ACK）由 `./internal/service/
 **结论不变：仍为 partial。** 剩余未覆盖项就是本规格自己写下的三条——真实页面客户端分段、
 新 schema/API/UI 未发布、管理端 lint 834 告警超预算。任务已按实情勾选，不宣称 Converged。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

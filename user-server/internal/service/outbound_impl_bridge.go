@@ -249,11 +249,11 @@ func (s *WebhookService) outboundBridge(ctx context.Context, channel WebhookChan
 			// 未解决」）；②markSendFailed 置不可重试（同一占位行不会消失，重试
 			// 只制造噪音——19:10 批三次重试全部 id=0 即实证）；③Error 级出声。
 			dupRow := &model.MessageHub{
-				TenantID:       persisted.TenantID,
-				MsgID:          persisted.MsgID + ":dup",
-				Platform:       string(channel),
-				AccountID:      accountID,
-				Direction:      "outbound",
+				TenantID:  persisted.TenantID,
+				MsgID:     persisted.MsgID + ":dup",
+				Platform:  string(channel),
+				AccountID: accountID,
+				Direction: "outbound",
 				// 2026-11-19 口径修正：同会话同文案已 delivered/pending = 买家已收到过，
 				// 占位行不再标 failed（旧口径灌进 DLQ 制造投递故障假象），落 duplicate 终态。
 				Status:         "duplicate",

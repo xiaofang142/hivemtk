@@ -61,7 +61,8 @@ type cachedToken struct {
 }
 
 func NewClient(opts ...core.ClientOption) *Client {
-	return &Client{BaseClient: core.NewBaseClient(opts...), tokens: map[string]cachedToken{}}
+	options := append([]core.ClientOption{core.WithBaseURL(defaultAPIBase)}, opts...)
+	return &Client{BaseClient: core.NewBaseClient(options...), tokens: map[string]cachedToken{}}
 }
 
 type tokenResp struct {

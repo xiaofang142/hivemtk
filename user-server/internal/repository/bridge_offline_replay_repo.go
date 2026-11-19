@@ -69,8 +69,8 @@ func (r *BridgeOfflineReplayRepository) ListBridgeAccounts(ctx context.Context, 
 // 静默把字段留成零值，重放带着空 msg_type 出站且无人报警。
 type DelayedOutboundRow = model.DelayedOutboundReply
 
-// DelayedRepository 与离线扫描共享数据库，由调用方沿用统一租约与回写协议。
-func (r *BridgeOfflineReplayRepository) DelayedRepository() *DelayedOutboundRepository {
+// NewDelayedOutboundRepositoryForReplay 与离线扫描共享数据库，由调用方沿用统一租约与回写协议。
+func NewDelayedOutboundRepositoryForReplay(r *BridgeOfflineReplayRepository) *DelayedOutboundRepository {
 	if r == nil {
 		return NewDelayedOutboundRepository(nil)
 	}
@@ -108,22 +108,22 @@ func (r *BridgeOfflineReplayRepository) ListPendingDelayedOutbound(ctx context.C
 // 主链路 drain 的是同一张表的同一批到期 pending 行，两边都直接投递就是
 // 一次周期里把同一份内容发给客户两次；只有把这条 CAS 的 RowsAffected 当门票才互斥。
 func (r *BridgeOfflineReplayRepository) ClaimDelayedOutboundForReplay(ctx context.Context, id uint, platform, accountID string) (*model.DelayedOutboundReply, error) {
-	return r.DelayedRepository().ClaimForReplay(ctx, id, platform, accountID)
+	return NewDelayedOutboundRepositoryForReplay(r).ClaimForReplay(ctx, id, platform, accountID)
 }
 
 // MarkDelayedOutboundReplayFailed 重放失败：回到 pending 待下一轮，累计 attempts 并记错误
 func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayFailed(ctx context.Context, id uint, token string, nextAt time.Time, lastErr string) error {
-	return r.DelayedRepository().ScheduleRetry(ctx, id, token, nextAt, lastErr)
+	return NewDelayedOutboundRepositoryForReplay(r).ScheduleRetry(ctx, id, token, nextAt, lastErr)
 }
 
 // MarkDelayedOutboundReplayed 重放成功：收口到 sent
 func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundReplayed(ctx context.Context, id uint, token string) error {
-	return r.DelayedRepository().MarkSent(ctx, id, token, time.Now())
+	return NewDelayedOutboundRepositoryForReplay(r).MarkSent(ctx, id, token, time.Now())
 }
 
 // MarkDelayedOutboundAbandoned 重投次数用尽：收口到终态 failed，不再被回扫取到
 func (r *BridgeOfflineReplayRepository) MarkDelayedOutboundAbandoned(ctx context.Context, id uint, token, reason string) error {
-	return r.DelayedRepository().FinishReplay(ctx, id, token, model.DelayedStatusFailed, time.Now(), reason)
+	return NewDelayedOutboundRepositoryForReplay(r).FinishReplay(ctx, id, token, model.DelayedStatusFailed, time.Now(), reason)
 }
 
 // OrphanOutboundGroup 一个「桥接渠道账号 + 已无望送达的 message_hub 出站行数」分组。

@@ -2,7 +2,7 @@
 
 > specs/024-im-seam-alignment T1203 定稿。配套机器门：`python3 scripts/check_im_touchpoints.py`
 > （漏一处触点即红，CI 作业 `IM Touchpoints` 全量跑）。能力矩阵（机器生成，勿手改）见
-> [channel-capabilities.md](channel-capabilities.md)；本文是**手写**的「接一个新平台要改哪几处」。
+> [channel-capabilities.md](../user-server/docs/channel-capabilities.md)；本文是**手写**的「接一个新平台要改哪几处」。
 
 ## 一、六触点清单（漏一处即被 T1201 拦下）
 

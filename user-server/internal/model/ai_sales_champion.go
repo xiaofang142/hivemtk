@@ -68,8 +68,8 @@ type MessageHub struct {
 	//
 	// RecalledAt 非空 = 平台已确认撤回（终态，幂等判据）；RecallError 只记最近一次
 	// 失败原因，成功时清空——留着它才能回答"点过撤回但没成，为什么"。
-	RecalledAt  *time.Time     `json:"recalled_at,omitempty"`
-	RecallError string         `gorm:"type:varchar(200);not null;default:''" json:"recall_error,omitempty"`
+	RecalledAt  *time.Time `json:"recalled_at,omitempty"`
+	RecallError string     `gorm:"type:varchar(200);not null;default:''" json:"recall_error,omitempty"`
 	// UpdatedAt（specs/024 T202 收口补）：生产库 message_hub 早有此列（平台编辑覆盖
 	// UpdateContentByChannelMsgID 会写它），但模型一直缺字段——AutoMigrate 新装库缺列，
 	// 编辑事件第一次覆盖就 42703。补字段让模型与生产/迁移 schema 对齐。

@@ -52,6 +52,9 @@
 # AssetStoreSubmitLimit —— 资产市场 7 天提审限额（44be691d T5 批）。
 # 对齐 Chrome Web Store 新账号审核配额（10 件/7 天），属对外平台契约值而非调优旋钮：
 # 调大等于替贡献者向平台超限提交，必然被平台侧拒绝。豁免入库，留基线说明。
+# 2026-11-20 SignatureWindow：Slack 入站签名的固定时间容差，属于防重放信任边界。
+# 不开放参数中心热调，防止运维扩大可接受重放范围；调整须走协议安全变更与验签回归。
+SignatureWindow
 ABTestDuration
 AIAgentEnabled
 AIReplied

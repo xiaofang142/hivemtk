@@ -21,4 +21,4 @@
 
 新端点/后台包尚未部署，真实用户登录态通知与断线/休眠恢复对照未做；SW不保证常驻。浏览器Space30丢失，不新建绕过。sendMessage或第三方依赖不合作的等待尚非全面故障覆盖，但原轮询保留；T005最终真实验收未完成。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

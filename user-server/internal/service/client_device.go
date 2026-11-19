@@ -1,9 +1,9 @@
 package service
 
 import (
-	"os"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -27,12 +27,12 @@ func NewClientDeviceService() *ClientDeviceService { return &ClientDeviceService
 
 // ClientDeviceReport 一帧设备信标（controller 采集请求侧字段后组装）
 type ClientDeviceReport struct {
-	Platform string // 浏览器自报平台（navigator.platform / userAgentData.platform）
-	Screen   string // 屏幕分辨率，如 1920x1080
-	Timezone string // IANA 时区
-	Language string // 首选语言
-	UA       string // User-Agent（controller 从请求头取，浏览器不自报）
-	IP       string // 出口 IP（controller 经 ctx.ClientIP() 采集）
+	Platform   string // 浏览器自报平台（navigator.platform / userAgentData.platform）
+	Screen     string // 屏幕分辨率，如 1920x1080
+	Timezone   string // IANA 时区
+	Language   string // 首选语言
+	UA         string // User-Agent（controller 从请求头取，浏览器不自报）
+	IP         string // 出口 IP（controller 经 ctx.ClientIP() 采集）
 	TenantCode string `json:"tenant_code"`
 }
 

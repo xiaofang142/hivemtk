@@ -32,12 +32,12 @@ const (
 var workflowHTTPClient = &http.Client{Timeout: defaultHTTPActionTimeout}
 
 var allowedHTTPActionMethods = map[string]bool{
-	http.MethodGet:     true,
-	http.MethodPost:    true,
-	http.MethodPut:     true,
-	http.MethodPatch:   true,
-	http.MethodDelete:  true,
-	http.MethodHead:    true,
+	http.MethodGet:    true,
+	http.MethodPost:   true,
+	http.MethodPut:    true,
+	http.MethodPatch:  true,
+	http.MethodDelete: true,
+	http.MethodHead:   true,
 }
 
 // executeHTTPAction 执行 action_type=http 的真实出站请求。
