@@ -1,4 +1,11 @@
 {
+  "agentKBBindingRead": {
+    "failed": "No se pudieron cargar las vinculaciones de bases de conocimiento. Vuelva a cargar; guardar otros datos conservará las vinculaciones existentes.",
+    "pending": "Las vinculaciones de bases de conocimiento aún no se han confirmado. Guardar otros datos conservará las vinculaciones existentes.",
+    "invalid": "Respuesta de vinculaciones de bases de conocimiento no válida",
+    "clearTitle": "¿Eliminar las vinculaciones de bases de conocimiento?",
+    "clearBody": "Al guardar se eliminarán todas las vinculaciones de bases de conocimiento de este agente. ¿Continuar?"
+  },
   "toolListPagination": {
     "summary": "Gestiona el estado y las cuentas vinculadas de {total} herramientas de IA que coinciden con los filtros actuales",
     "filteredTotal": "Herramientas coincidentes",

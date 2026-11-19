@@ -1,4 +1,11 @@
 {
+  "agentKBBindingRead": {
+    "failed": "Impossible de charger les associations aux bases de connaissances. Réessayez ; enregistrer les autres informations préservera les associations existantes.",
+    "pending": "Les associations aux bases de connaissances ne sont pas encore confirmées. Enregistrer les autres informations préservera les associations existantes.",
+    "invalid": "Réponse des associations aux bases de connaissances invalide",
+    "clearTitle": "Supprimer les associations aux bases de connaissances ?",
+    "clearBody": "L’enregistrement supprimera toutes les associations aux bases de connaissances de cet agent. Continuer ?"
+  },
   "toolListPagination": {
     "summary": "Gérer le statut et les comptes associés de {total} outils IA correspondant aux filtres actuels",
     "filteredTotal": "Outils correspondants",

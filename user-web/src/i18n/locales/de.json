@@ -1,4 +1,11 @@
 {
+  "agentKBBindingRead": {
+    "failed": "Die Wissensdatenbank-Zuordnungen konnten nicht geladen werden. Erneut laden; beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",
+    "pending": "Die Wissensdatenbank-Zuordnungen sind noch nicht bestätigt. Beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",
+    "invalid": "Ungültige Antwort für Wissensdatenbank-Zuordnungen",
+    "clearTitle": "Wissensdatenbank-Zuordnungen löschen?",
+    "clearBody": "Beim Speichern werden alle Wissensdatenbank-Zuordnungen dieses Agenten entfernt. Fortfahren?"
+  },
   "toolListPagination": {
     "summary": "Status und Kontoverknüpfungen für {total} KI-Werkzeuge verwalten, die den aktuellen Filtern entsprechen",
     "filteredTotal": "Passende Werkzeuge",

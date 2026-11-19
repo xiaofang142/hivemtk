@@ -1,4 +1,11 @@
 {
+  "agentKBBindingRead": {
+    "failed": "Não foi possível carregar as associações às bases de conhecimento. Tente novamente; salvar outros dados preservará as associações existentes.",
+    "pending": "As associações às bases de conhecimento ainda não foram confirmadas. Salvar outros dados preservará as associações existentes.",
+    "invalid": "Resposta de associações às bases de conhecimento inválida",
+    "clearTitle": "Remover associações às bases de conhecimento?",
+    "clearBody": "Salvar removerá todas as associações às bases de conhecimento deste agente. Continuar?"
+  },
   "toolListPagination": {
     "summary": "Gerencie o estado e as contas vinculadas de {total} ferramentas de IA que correspondem aos filtros atuais",
     "filteredTotal": "Ferramentas correspondentes",

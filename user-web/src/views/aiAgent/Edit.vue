@@ -263,16 +263,25 @@
               type="primary"
               size="small"
               style="margin-left: auto"
-              :loading="loadingKB"
+              :loading="loadingKB || kbBindingsStatus === 'loading'"
+              :disabled="saving || kbBindingsChanged"
               @click="loadKnowledgeBases"
             >
               <el-icon><Refresh /></el-icon> 加载知识库
             </el-button>
           </div>
         </template>
+        <el-alert
+          v-if="!kbBindingsReady"
+          :title="t(kbBindingsStatus === 'error' ? 'agentKBBindingRead.failed' : 'agentKBBindingRead.pending')"
+          :type="kbBindingsStatus === 'error' ? 'warning' : 'info'"
+          :closable="false"
+          show-icon
+        />
         <el-form-item label="挂载知识库">
           <el-tree-select
             v-model="form.kb_ids"
+            :disabled="!kbBindingsReady || saving"
             :data="kbTree"
             :props="kbTreeProps"
             node-key="id"
@@ -793,9 +802,10 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   InfoFilled, UserFilled, Collection, Connection, ChatLineSquare,
   Cpu, Open, Setting, Check, VideoPlay
@@ -818,12 +828,19 @@ const targetLanguageOptions = TARGET_LANGUAGE_OPTIONS
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const formRef = ref();
 const pageLoading = ref(false)
 const saving = ref(false)
 const agentId = computed(() => route.params.id)
 const isEdit = computed(() => !!agentId.value)
+const kbBindingsStatus = ref(isEdit.value ? 'unknown' : 'ready')
+const kbBindingsAgent = ref(String(agentId.value || ''))
+const kbBindingsSnapshot = ref([])
+let kbBindingsReadVersion = 0
+const normalizeKBIds = (ids) => [...new Set(ids.map(String))].sort()
+const kbBindingsReady = computed(() => kbBindingsStatus.value === 'ready' && kbBindingsAgent.value === String(agentId.value || ''))
 
 const ragProductOptions = ref([]);
 const sopOptions = ref([])
@@ -991,7 +1008,7 @@ const buildKBTree = async () => {
     const faqList = extractList(faqRes)
     const sopList = extractList(sopRes)
     const buildChildren = (list) => list.map((it) => ({
-      id: it.id,
+      id: String(it.id),
       label: `[${it.kb_code || '#' + it.id}] ${it.name}`,
       isLeaf: true,
       kb_type: it.kb_type,
@@ -1025,20 +1042,29 @@ const buildKBTree = async () => {
 };
 
 const loadKnowledgeBases = async () => {
-  await buildKBTree()
-  if (isEdit.value && agentId.value) {
-    await loadAgentKBBindings()
-  }
+  if (saving.value || kbBindingsChanged.value) return
+  await Promise.all([buildKBTree(), isEdit.value ? loadAgentKBBindings() : Promise.resolve()])
 }
 
+const kbBindingsChanged = computed(() => kbBindingsReady.value && JSON.stringify(normalizeKBIds(form.kb_ids)) !== JSON.stringify(kbBindingsSnapshot.value))
 const loadAgentKBBindings = async () => {
+  const target = String(agentId.value || '')
+  const version = ++kbBindingsReadVersion
+  kbBindingsStatus.value = 'loading'
   try {
-    const res = await listAgentKBs(agentId.value)
-    const list = res?.list || res?.items || (Array.isArray(res) ? res : [])
-    form.kb_ids = list.map((it) => it.kb_id ?? it.id)
-  } catch (e) {
-    console.warn('加载智能体知识库绑定失败：', e?.message)
-    form.kb_ids = []
+    const res = await listAgentKBs(target)
+    if (version !== kbBindingsReadVersion || target !== String(agentId.value || '')) return
+    const list = Array.isArray(res) ? res : res?.list ?? res?.items
+    if (!Array.isArray(list) || list.some((it) => !/^[1-9]\d*$/.test(String(it?.kb_id ?? it?.id)))) {
+      throw new Error(t('agentKBBindingRead.invalid'))
+    }
+    const ids = normalizeKBIds(list.map((it) => it.kb_id ?? it.id))
+    form.kb_ids = ids
+    kbBindingsSnapshot.value = ids.slice()
+    kbBindingsAgent.value = target
+    kbBindingsStatus.value = 'ready'
+  } catch {
+    if (version === kbBindingsReadVersion && target === String(agentId.value || '')) kbBindingsStatus.value = 'error'
   }
 };
 
@@ -1054,7 +1080,8 @@ const loadAgentDetail = async () => {
       form.sop_template_ids = (res.sop_template_ids || []).map(String)
       form.sop_ids = (res.sop_ids || []).map(String)
       form.script_library_ids = (res.script_library_ids || []).map(String)
-      form.kb_ids = (res.kb_ids || []).map(String)
+      // 绑定以独立绑定接口为准；详情中的兼容字段不是已读快照。
+      form.kb_ids = []
       form.internal_language = res.internal_language || 'zh';
       form.target_language = res.target_language || ''
     }
@@ -1078,6 +1105,13 @@ const onSave = async () => {
     }
     saving.value = true
     try {
+      const bindingIds = normalizeKBIds(form.kb_ids)
+      const replaceBindings = kbBindingsChanged.value
+      const targetAgentId = agentId.value
+      if (replaceBindings && isEdit.value && bindingIds.length === 0) {
+        const confirmed = await ElMessageBox.confirm(t('agentKBBindingRead.clearBody'), t('agentKBBindingRead.clearTitle'), { type: 'warning' }).then(() => true, () => false)
+        if (!confirmed) return
+      }
       const data = {
         agent_code: form.agent_code,
         name: form.name,
@@ -1092,7 +1126,6 @@ const onSave = async () => {
         asset_bundle_id: form.asset_bundle_id || '',
         internal_language: form.internal_language || 'zh',
         target_language: form.target_language || '',
-        kb_ids: form.kb_ids || [],
         rag_product_ids: form.rag_product_ids || [],
         faq_entry_ids: form.faq_entry_ids || [],
         sop_template_ids: form.sop_template_ids || [],
@@ -1115,19 +1148,21 @@ const onSave = async () => {
         status: form.status
       }
       if (isEdit.value) {
-        await updateAgent(agentId.value, data)
-        try {
-          await replaceAgentKBs(agentId.value, form.kb_ids.map(String))
-        } catch (kbErr) {
-          console.warn('同步智能体知识库挂载失败：', kbErr?.message)
+        await updateAgent(targetAgentId, data)
+        if (replaceBindings) {
+          try {
+            await replaceAgentKBs(targetAgentId, bindingIds)
+          } catch (kbErr) {
+            console.warn('同步智能体知识库挂载失败：', kbErr?.message)
+          }
         }
         ElMessage.success(i18n.global.t('智能体更新成功'))
       } else {
         const created = await createAgent(data)
         const newId = created?.id || created?.ID;
-        if (newId && form.kb_ids?.length) {
+        if (newId && replaceBindings && bindingIds.length) {
           try {
-            await replaceAgentKBs(newId, form.kb_ids.map(String))
+            await replaceAgentKBs(newId, bindingIds)
           } catch (kbErr) {
             console.warn('挂载智能体知识库失败：', kbErr?.message)
           }
@@ -1188,10 +1223,16 @@ onMounted(async () => {
   if (isEdit.value) {
     await loadAgentDetail()
   }
-  buildKBTree().then(() => {
-    if (isEdit.value) loadAgentKBBindings()
-  });
+  await loadKnowledgeBases()
 });
+watch(agentId, () => {
+  kbBindingsReadVersion++
+  kbBindingsStatus.value = isEdit.value ? 'unknown' : 'ready'
+  kbBindingsAgent.value = String(agentId.value || '')
+  kbBindingsSnapshot.value = []
+  form.kb_ids = []
+})
+onBeforeUnmount(() => { kbBindingsReadVersion++ })
 </script>
 
 <style scoped lang="scss">

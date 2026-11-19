@@ -1,4 +1,11 @@
 {
+  "agentKBBindingRead": {
+    "failed": "知识库绑定读取失败。可重试加载；保存其他信息不会更改现有绑定。",
+    "pending": "尚未确认知识库绑定。保存其他信息不会更改现有绑定。",
+    "invalid": "知识库绑定响应格式无效",
+    "clearTitle": "确认清空知识库绑定",
+    "clearBody": "保存后将移除此智能体的全部知识库绑定，是否继续？"
+  },
   "toolListPagination": {
     "summary": "管理当前筛选下 {total} 个 AI 工具的启用状态和账号绑定",
     "filteredTotal": "筛选结果总数",
