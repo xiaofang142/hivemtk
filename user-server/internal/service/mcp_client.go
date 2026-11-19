@@ -83,12 +83,14 @@ func (s *MCPClientService) Create(ctx context.Context, in MCPImportInput) (*mode
 		row.Enabled = false
 	}
 	if row.Enabled {
-		n, err := mcp.DiscoverAndRegisterRowDefaultDB(ctx, row)
+		n, err := mcp.DiscoverAndRegisterRowDefaultDB(ctx, row, repository.NewToolRuntimeRepository())
 		if err != nil {
 			// 不当作失败：配置已存下，失败留痕在 last_status/last_error，运维可见。
 			logger.Ctx(ctx).Warn().Err(err).Str("name", in.Name).Msg("[mcp-client] 加入时发现失败（配置已保存）")
+			row.LastStatus, row.LastError, row.ToolCount = "error", "配置已保存，工具发现失败，请重试", 0
 			return row, 0, nil
 		}
+		row.LastStatus, row.LastError = "ok", ""
 		row.ToolCount = n
 	}
 	return row, row.ToolCount, nil
@@ -105,8 +107,7 @@ func (s *MCPClientService) List(ctx context.Context) ([]*model.MCPServer, error)
 
 // Delete 删除配置。
 //
-// 已注册的工具在重启后自然消失（启动发现只拉现存行）；进程内工具名保留到重启，
-// 与 custom_tools 的注销口径一致（tooluse.UnregisterProvider 注释：注销不等于删工具）。
+// 删除提交后，所有持久化工具实例的下一次准入都读取权威行并拒绝；已经准入的在途调用可完成。
 func (s *MCPClientService) Delete(ctx context.Context, id uint) error {
 	return s.repo.Delete(ctx, id)
 }
@@ -133,10 +134,12 @@ func (s *MCPClientService) SetEnabled(ctx context.Context, id uint, enabled bool
 	if !enabled {
 		return row, 0, nil
 	}
-	n, err := mcp.DiscoverAndRegisterRowDefaultDB(ctx, row)
+	n, err := mcp.DiscoverAndRegisterRowDefaultDB(ctx, row, repository.NewToolRuntimeRepository())
 	if err != nil {
+		row.LastStatus, row.LastError, row.ToolCount = "error", "配置已保存，工具发现失败，请重试", 0
 		return row, 0, nil
 	}
+	row.LastStatus, row.LastError = "ok", ""
 	row.ToolCount = n
 	return row, n, nil
 }

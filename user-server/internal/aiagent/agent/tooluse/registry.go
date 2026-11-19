@@ -44,6 +44,11 @@ func (r *ToolRegistry) Register(t Tool) error {
 	return r.register(t, false)
 }
 
+// Replace 原子登记当前工具代际，重发现不会暴露注销与重建之间的窗口。
+func (r *ToolRegistry) Replace(t Tool) error {
+	return r.register(t, true)
+}
+
 // register 在一个写锁内完成同名替换；删除重建也不会复用旧代际。
 func (r *ToolRegistry) register(t Tool, replace bool) error {
 	if t == nil {

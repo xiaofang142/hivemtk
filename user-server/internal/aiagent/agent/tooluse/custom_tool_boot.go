@@ -9,11 +9,13 @@ package tooluse
 // 在每次启动时重新对齐。
 
 import (
+	"context"
 	"fmt"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbencrypt"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/toolruntime"
 
 	"gorm.io/gorm"
 )
@@ -22,7 +24,7 @@ import (
 //
 // 容错口径：单行失败（schema 损坏/解密异常）只跳过该行并记日志，不影响其余行——
 // 一个坏工具集不该让整条工具链装配失败（那会把 Agent 的所有工具一起带走）。
-func LoadCustomToolProviders(gormDB *gorm.DB) []ToolProvider {
+func LoadCustomToolProviders(gormDB *gorm.DB, authority toolruntime.Authority) []ToolProvider {
 	if gormDB == nil {
 		return nil
 	}
@@ -33,7 +35,7 @@ func LoadCustomToolProviders(gormDB *gorm.DB) []ToolProvider {
 	}
 	out := make([]ToolProvider, 0, len(rows))
 	for i := range rows {
-		p, err := CustomToolRowToProvider(&rows[i])
+		p, err := CustomToolRowToProvider(&rows[i], authority)
 		if err != nil {
 			logger.Warnf("[custom-tool] 跳过工具集 %q(id=%d): %v", rows[i].Name, rows[i].ID, err)
 			continue
@@ -48,14 +50,14 @@ func LoadCustomToolProviders(gormDB *gorm.DB) []ToolProvider {
 
 // CustomToolRowToProvider 把一行 custom_tools 转成 Provider（导入与启动重建共用）。
 // AuthValueEnc 经 dbencrypt.Decrypt 还原（明文存量行原样返回，见 dbencrypt 头注释）。
-func CustomToolRowToProvider(row *model.CustomTool) (ToolProvider, error) {
+func CustomToolRowToProvider(row *model.CustomTool, authority toolruntime.Authority) (ToolProvider, error) {
 	if row == nil {
 		return nil, fmt.Errorf("row 为空")
 	}
 	if row.SchemaJSON == "" {
 		return nil, fmt.Errorf("schema_json 为空（历史行无法重建，请重新导入）")
 	}
-	return NewOpenAPIToolProvider(OpenAPIImportSpec{
+	provider, err := NewOpenAPIToolProvider(OpenAPIImportSpec{
 		Name:        row.Name,
 		Description: row.Description,
 		BaseURL:     row.BaseURL,
@@ -64,4 +66,23 @@ func CustomToolRowToProvider(row *model.CustomTool) (ToolProvider, error) {
 		AuthValue:   dbencrypt.Decrypt(row.AuthValueEnc),
 		TimeoutMS:   row.TimeoutMS,
 	})
+	if err != nil {
+		return nil, err
+	}
+	tools, err := provider.Provide(ProviderContext{})
+	if err != nil {
+		return nil, err
+	}
+	expected := *row
+	for _, tool := range tools {
+		if operation, ok := tool.(*openAPITool); ok {
+			operation.admit = func(ctx context.Context, name string) error {
+				if authority == nil {
+					return toolruntime.ErrUnavailable
+				}
+				return authority.CheckCustomTool(ctx, expected, name)
+			}
+		}
+	}
+	return provider, nil
 }

@@ -40,6 +40,9 @@ func TestMCPClient_CreateUnreachableSavesRowWithError(t *testing.T) {
 	if n != 0 {
 		t.Errorf("不可达 server 工具数 = %d want 0", n)
 	}
+	if row.LastStatus != "error" || row.LastError == "" {
+		t.Errorf("创建回执应明确发现失败而非即时可用: %+v", row)
+	}
 	rows, err := svc.List(context.Background())
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("列表 = %d err=%v want 1", len(rows), err)
@@ -47,6 +50,19 @@ func TestMCPClient_CreateUnreachableSavesRowWithError(t *testing.T) {
 	if rows[0].LastStatus != "error" || rows[0].LastError == "" {
 		// TEST-NET-1 不可达错误文关怀环境（timeout/unreachable/refused），只钉非空
 		t.Errorf("应记连接错误：status=%q err=%q", rows[0].LastStatus, rows[0].LastError)
+	}
+	// 旧的成功读数不能在本次启用发现失败后继续冒充就绪。
+	database := testutil.NewTestDB(t, &model.MCPServer{})
+	stale := model.MCPServer{Name: "stale-status", Endpoint: "http://192.0.2.1:1", TimeoutSeconds: 1, LastStatus: "ok"}
+	if err := database.Create(&stale).Error; err != nil {
+		t.Fatal(err)
+	}
+	resumed, count, err := NewMCPClientService().SetEnabled(context.Background(), stale.ID, true)
+	if err != nil || resumed == nil || count != 0 {
+		t.Fatalf("配置应保存并明确返回发现状态: row=%+v count=%d err=%v", resumed, count, err)
+	}
+	if resumed.LastStatus != "error" || resumed.LastError == "" {
+		t.Errorf("本次启用失败不能返回旧 ok 状态: %+v", resumed)
 	}
 }
 

@@ -172,11 +172,12 @@ func firstNonEmpty(a, b string) string {
 }
 
 // openAPITool 单个 OpenAPI 操作的 Tool 实现。Handler = HTTP 转发；
-// 治理由外层装饰器链负责（本结构只做纯转发，不含业务判断）。
+// 持久化实例在转发前校验权威来源，其余治理仍由外层装饰器链负责。
 type openAPITool struct {
 	op     openAPIOperation
 	spec   OpenAPIImportSpec
 	client *http.Client
+	admit  func(context.Context, string) error
 }
 
 func (t *openAPITool) Name() string           { return "openapi." + t.op.ToolName }
@@ -208,6 +209,11 @@ func (t *openAPITool) Parameters() ToolParameters {
 
 // Execute HTTP 转发。返回体截断到 64KB（LLM 上下文保护）。
 func (t *openAPITool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
+	if t.admit != nil {
+		if err := t.admit(ctx, t.Name()); err != nil {
+			return ErrorResult(t.Name(), err), err
+		}
+	}
 	target := strings.TrimRight(t.spec.BaseURL, "/") + t.op.Path
 	for _, p := range t.op.Params {
 		if p.In == "path" {

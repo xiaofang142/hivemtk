@@ -50,6 +50,7 @@ func InitGlobalToolExecutor() {
 	applyWhitelistSeed()
 	config := tooluse.ToolExecutorConfig{
 		DefaultTimeout:    30 * time.Second,
+		AdmissionChecker:  repository.NewToolRuntimeRepositoryWithDB(db.GetDB()),
 		PermissionChecker: GetGlobalPermissionChecker(),
 		RateLimiter:       tooluse.NewTokenBucketLimiter(20, 50),
 		RetryPolicy:       tooluse.NewExponentialBackoffPolicy(3, 200*time.Millisecond, 5*time.Second),

@@ -127,7 +127,8 @@ var errProviderDBRequired = &providerError{"provider requires DB in ProviderCont
 
 type permissionGuardedTool struct {
 	tooluse.Tool
-	checker tooluse.PermissionChecker
+	checker   tooluse.PermissionChecker
+	admission tooluse.ToolAdmissionChecker
 }
 
 func (g *permissionGuardedTool) Execute(ctx context.Context, args map[string]any) (tooluse.ToolResult, error) {
@@ -138,6 +139,11 @@ func (g *permissionGuardedTool) Execute(ctx context.Context, args map[string]any
 		}
 		if err := g.checker.Check(ctx, name, tooluse.GetToolContext(ctx)); err != nil {
 			return tooluse.ErrorResult(name, fmt.Errorf("%w: %v", tooluse.ErrPermissionDenied, err)), tooluse.ErrPermissionDenied
+		}
+	}
+	if g.admission != nil {
+		if err := g.admission.CheckToolAdmission(ctx, g.Tool.Name()); err != nil {
+			return tooluse.ErrorResult(g.Tool.Name(), err), err
 		}
 	}
 	return g.Tool.Execute(ctx, args)
@@ -153,18 +159,14 @@ func rewirePermissionDecorators(registry *tooluse.ToolRegistry) {
 	}
 	checker := GetGlobalPermissionChecker()
 	if checker == nil {
-		logger.Warn("[agent] ⚠️ 全局 PermissionChecker 未就绪，跳过 PermissionDecorator 接线")
-		return
+		logger.Warn("[agent] ⚠️ 全局 PermissionChecker 未就绪，仍接入权威工具准入")
 	}
 	wired := 0
 	for _, t := range registry.List() {
 		if _, ok := t.(*permissionGuardedTool); ok {
 			continue
 		}
-		if err := registry.Unregister(t.Name()); err != nil {
-			continue
-		}
-		if err := registry.Register(&permissionGuardedTool{Tool: t, checker: checker}); err != nil {
+		if err := registry.Replace(&permissionGuardedTool{Tool: t, checker: checker, admission: repository.NewToolRuntimeRepository()}); err != nil {
 			logger.Errorf("[agent] ❌ 工具 %s 权限装饰回注失败: %v", t.Name(), err)
 			continue
 		}
@@ -344,7 +346,7 @@ func loadTenantScopedToolProviders(ctx context.Context, gormDB *gorm.DB) {
 			n := 0
 			for i := range list {
 				rec := list[i]
-				p, err := tooluse.CustomToolRowToProvider(&rec)
+				p, err := tooluse.CustomToolRowToProvider(&rec, repository.NewToolRuntimeRepositoryWithDB(gormDB))
 				if err != nil {
 					logger.Warnf("[custom-tool] 跳过工具集 %q(id=%d,tenant=%d): %v", rec.Name, rec.ID, tid, err)
 					continue
@@ -383,7 +385,7 @@ func loadTenantScopedToolProviders(ctx context.Context, gormDB *gorm.DB) {
 		reg := tooluse.EnsureTenantRegistry(tid)
 		nSrv, nTool := 0, 0
 		for i := range list {
-			n, err := mcpclient.DiscoverAndRegisterRow(tctx, gormDB, &list[i], reg)
+			n, err := mcpclient.DiscoverAndRegisterRow(tctx, gormDB, &list[i], reg, repository.NewToolRuntimeRepositoryWithDB(gormDB))
 			if err != nil {
 				logger.Warnf("[mcp-client] server %q(tenant=%d) 发现失败（跳过该 server）: %v", list[i].Name, tid, err)
 				continue

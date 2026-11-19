@@ -10,7 +10,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -199,6 +198,7 @@ func (c *Client) CallTool(ctx context.Context, name string, args map[string]any)
 type mcpRemoteTool struct {
 	client *Client
 	def    MCPTool
+	admit  func(context.Context, string) error
 }
 
 func (t *mcpRemoteTool) Name() string {
@@ -248,6 +248,11 @@ func (t *mcpRemoteTool) Parameters() tooluse.ToolParameters {
 
 // Execute 转发 tools/call。
 func (t *mcpRemoteTool) Execute(ctx context.Context, args map[string]any) (tooluse.ToolResult, error) {
+	if t.admit != nil {
+		if err := t.admit(ctx, t.Name()); err != nil {
+			return tooluse.ErrorResult(t.Name(), err), err
+		}
+	}
 	text, isErr, err := t.client.CallTool(ctx, t.def.Name, args)
 	if err != nil {
 		return tooluse.ErrorResult(t.Name(), err), err
@@ -281,6 +286,10 @@ func truncateStr(s string, n int) string {
 // DiscoverAndRegister 连接 server、发现工具并注册到 registry。
 // server 不可达返回错误（调用方记日志，不影响其他工具注册）。
 func DiscoverAndRegister(ctx context.Context, cfg ClientConfig, registry *tooluse.ToolRegistry) (int, error) {
+	return discoverAndRegister(ctx, cfg, registry, nil)
+}
+
+func discoverAndRegister(ctx context.Context, cfg ClientConfig, registry *tooluse.ToolRegistry, admit func(context.Context, string) error) (int, error) {
 	if registry == nil {
 		return 0, fmt.Errorf("tool registry 为 nil")
 	}
@@ -294,14 +303,9 @@ func DiscoverAndRegister(ctx context.Context, cfg ClientConfig, registry *toolus
 		if def.Name == "" {
 			continue
 		}
-		t := &mcpRemoteTool{client: c, def: def}
-		if err := registry.Register(t); err != nil {
-			// 已注册且同名 = 该工具本来就在（重新启用/重复发现）——这是「可用」而不是失败。
-			// 早先把这里一律跳过，导致关→开一次之后 tool_count 掉成 0（API 冒烟抓到的真缺陷）。
-			if errors.Is(err, tooluse.ErrToolAlreadyExists) {
-				n++
-			}
-			continue
+		t := &mcpRemoteTool{client: c, def: def, admit: admit}
+		if err := registry.Replace(t); err != nil {
+			return n, err
 		}
 		n++
 	}

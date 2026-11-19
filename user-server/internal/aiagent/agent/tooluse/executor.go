@@ -55,9 +55,15 @@ func traceIDFromContext(ctx context.Context) string {
 	return trace.TraceIDFromContext(ctx)
 }
 
+// ToolAdmissionChecker 在每次真正执行（包括重试）前查询管理侧权威状态。
+type ToolAdmissionChecker interface {
+	CheckToolAdmission(ctx context.Context, name string) error
+}
+
 // ToolExecutorConfig 执行器全局配置
 type ToolExecutorConfig struct {
 	DefaultTimeout    time.Duration
+	AdmissionChecker  ToolAdmissionChecker
 	PermissionChecker PermissionChecker
 	RateLimiter       RateLimiter
 	RetryPolicy       RetryPolicy
@@ -319,6 +325,11 @@ func (e *ToolExecutor) getOrBuildHandler(tenantID uint, snapshot toolSnapshot) T
 
 func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 	raw := func(ctx context.Context, args map[string]any) (ToolResult, error) {
+		if e.config.AdmissionChecker != nil {
+			if err := e.config.AdmissionChecker.CheckToolAdmission(ctx, tool.Name()); err != nil {
+				return ErrorResult(tool.Name(), err), err
+			}
+		}
 		start := time.Now()
 		r, err := tool.Execute(ctx, args)
 		dur := time.Since(start)
