@@ -15,32 +15,52 @@ var ErrToolAlreadyExists = errors.New("tool already exists")
 
 // ToolRegistry 工具注册中心
 type ToolRegistry struct {
-	tools map[string]Tool
-	mu    sync.RWMutex
+	tools      map[string]Tool
+	versions   map[string]uint64
+	generation uint64
+	mu         sync.RWMutex
+}
+
+// toolSnapshot 将实例、来源与登记代际在同一读锁内绑定。
+// 工具登记后按只读对象使用；更新配置需要重新登记，不能并发原地修改。
+type toolSnapshot struct {
+	tool       Tool
+	registry   *ToolRegistry
+	name       string
+	generation uint64
 }
 
 // NewToolRegistry 创建新的工具注册中心
 func NewToolRegistry() *ToolRegistry {
 	return &ToolRegistry{
-		tools: make(map[string]Tool),
+		tools:    make(map[string]Tool),
+		versions: make(map[string]uint64),
 	}
 }
 
 // Register 注册工具
 // 同名工具重复注册返回 ErrToolAlreadyExists
 func (r *ToolRegistry) Register(t Tool) error {
+	return r.register(t, false)
+}
+
+// register 在一个写锁内完成同名替换；删除重建也不会复用旧代际。
+func (r *ToolRegistry) register(t Tool, replace bool) error {
 	if t == nil {
 		return errors.New("cannot register nil tool")
 	}
-	if t.Name() == "" {
+	name := t.Name()
+	if name == "" {
 		return errors.New("tool name cannot be empty")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, exists := r.tools[t.Name()]; exists {
-		return fmt.Errorf("%w: %s", ErrToolAlreadyExists, t.Name())
+	if _, exists := r.tools[name]; exists && !replace {
+		return fmt.Errorf("%w: %s", ErrToolAlreadyExists, name)
 	}
-	r.tools[t.Name()] = t
+	r.generation++
+	r.tools[name] = t
+	r.versions[name] = r.generation
 	return nil
 }
 
@@ -59,18 +79,27 @@ func (r *ToolRegistry) Unregister(name string) error {
 		return fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
 	delete(r.tools, name)
+	delete(r.versions, name)
 	return nil
 }
 
 // Get 按 name 获取工具
 func (r *ToolRegistry) Get(name string) (Tool, error) {
+	snapshot, err := r.getSnapshot(name)
+	return snapshot.tool, err
+}
+
+func (r *ToolRegistry) getSnapshot(name string) (toolSnapshot, error) {
+	if r == nil {
+		return toolSnapshot{}, fmt.Errorf("%w: %s", ErrToolNotFound, name)
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	t, exists := r.tools[name]
 	if !exists {
-		return nil, fmt.Errorf("%w: %s", ErrToolNotFound, name)
+		return toolSnapshot{}, fmt.Errorf("%w: %s", ErrToolNotFound, name)
 	}
-	return t, nil
+	return toolSnapshot{tool: t, registry: r, name: name, generation: r.versions[name]}, nil
 }
 
 // Has 判断工具是否存在
