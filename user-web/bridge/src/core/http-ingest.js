@@ -91,14 +91,15 @@ function describeIngestParams(url) {
   }
 }
 
-// 截断 body 用于日志预览（与 user-server 端 readBodyPreview 4KB 上限对齐）
+// body 日志元数据（TA-07 脱敏，2026-11-19）：旧实现输出 4KB 正文预览——买家会话
+// 内容进了常规控制台日志，违反「用户消息不进日志」红线（AGENTS.md §5）。
+// 改为只留对账元数据：顶层键名 + 字节数 + 是否截断；正文永不落日志。
+// （与 user-server 端 readBodyPreview 4KB 上限对齐的只是 size 口径。）
 function previewBody(body, maxBytes = 4096) {
-  if (body == null) return { preview: '', size: 0, truncated: false };
+  if (body == null) return { body_keys: [], size: 0, truncated: false };
   const s = typeof body === 'string' ? body : JSON.stringify(body);
-  if (s.length <= maxBytes) {
-    return { preview: s, size: s.length, truncated: false };
-  }
-  return { preview: s.slice(0, maxBytes) + `... [truncated, total=${s.length} bytes]`, size: s.length, truncated: true };
+  const keys = body && typeof body === 'object' ? Object.keys(body) : [];
+  return { body_keys: keys, size: s.length, truncated: s.length > maxBytes };
 }
 
 // _logRequest 统一打印 HTTP ingest 上行（完整 URL + 解析后的 origin/path/query 字段 + body 预览）。
@@ -118,17 +119,17 @@ function _logRequest(label, serverUrl, params, body, extra) {
     return null;
   }
   const bodyInfo = previewBody(body);
-  // 提取消息核心内容：用户最关心"上行了什么消息"，但 body_preview 被截断后看不到
+  // 消息对账元数据（TA-07 脱敏）：sender/event 尾巴/长度——正文（content）永不进日志。
   const msgs = Array.isArray(body && body.messages) ? body.messages : [];
   const messagesSummary = msgs.map((m) => ({
     sender: m.sender_type || '?',
-    content: (m.content || '').slice(0, 80),
+    content_len: (m.content || '').length,
     event_id: (m.event_id || '').slice(-12),
   }));
   const payload = {
     url,
     ...(parsed || {}),
-    body_preview: bodyInfo.preview,
+    body_keys: bodyInfo.body_keys,
     body_size: bodyInfo.size,
     body_truncated: bodyInfo.truncated,
     messages_count: msgs.length,

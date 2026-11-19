@@ -21,25 +21,25 @@ function collectDevicePayload() {
   try {
     platform = navigator.userAgentData?.platform || navigator.platform || ''
   } catch {
-    platform = ''
+    // 采集失败保持初始空串（TA-08：catch 内重复赋初值属无用赋值）
   }
   let screen = ''
   try {
     screen = `${window.screen.width}x${window.screen.height}`
   } catch {
-    screen = ''
+    // 采集失败保持初始空串
   }
   let timezone = ''
   try {
     timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
   } catch {
-    timezone = ''
+    // 采集失败保持初始空串
   }
   let language = ''
   try {
     language = navigator.language || ''
   } catch {
-    language = ''
+    // 采集失败保持初始空串
   }
   return { platform, screen, timezone, language }
 }

@@ -2777,5 +2777,8 @@
   "03:00": "03:00",
   "稍后处理": "Reporté",
   "待首响": "En attente de première réponse",
-  "语义筛选": "Filtre sémantique"
+  "语义筛选": "Filtre sémantique",
+  "traceObservationResultExit": "Sortie du résultat IA",
+  "traceObservationSkipped": "Ignoré",
+  "请选择触发条件": "Veuillez sélectionner une condition de déclenchement"
 }

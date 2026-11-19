@@ -2779,5 +2779,6 @@
   "待首响": "Awaiting first reply",
   "语义筛选": "Semantic filter",
   "traceObservationSkipped": "Skipped",
-  "traceObservationResultExit": "AI result exit"
+  "traceObservationResultExit": "AI result exit",
+  "请选择触发条件": "Please select a trigger condition"
 }

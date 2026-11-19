@@ -2,7 +2,7 @@ module hivemtk-user
 
 go 1.26.0
 
-toolchain go1.26.10
+toolchain go1.26.11
 
 require (
 	github.com/PuerkitoBio/goquery v1.13.0

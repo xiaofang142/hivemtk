@@ -2777,5 +2777,8 @@
   "03:00": "03:00",
   "稍后处理": "Später bearbeiten",
   "待首响": "Warten auf erste Antwort",
-  "语义筛选": "Semantischer Filter"
+  "语义筛选": "Semantischer Filter",
+  "traceObservationResultExit": "KI-Ergebnis-Ausgang",
+  "traceObservationSkipped": "Übersprungen",
+  "请选择触发条件": "Bitte Auslösebedingung wählen"
 }

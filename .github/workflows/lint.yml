@@ -316,7 +316,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.26.9'
+          go-version: '1.26.11'
 
       - name: 控制组——目标包能编译且控制组用例真 PASS（判据①：真名 + PASS 计数）
         run: |

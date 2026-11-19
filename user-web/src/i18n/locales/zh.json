@@ -2757,5 +2757,6 @@
   "待首响": "待首响",
   "语义筛选": "语义筛选",
   "traceObservationSkipped": "跳过",
-  "traceObservationResultExit": "AI 结果出口"
+  "traceObservationResultExit": "AI 结果出口",
+  "请选择触发条件": "请选择触发条件"
 }

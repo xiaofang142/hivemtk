@@ -152,39 +152,45 @@ describe('http-ingest / describeIngestParams', () => {
 });
 
 describe('http-ingest / previewBody', () => {
-  it('短字符串原样返回', () => {
-    const r = previewBody('hello', 4096);
-    expect(r.preview).toBe('hello');
-    expect(r.size).toBe(5);
+  // TA-07 脱敏（2026-11-19）：previewBody 只输出对账元数据（body_keys/size/truncated），
+  // 正文（含字符串 body 全文）永不进日志——旧「4KB 预览」用例随契约作废，
+  // 改为断言「正文零泄漏」：任何输入的返回值都不得包含原文字样。
+  it('字符串 body：只留 size/truncated，正文零泄漏', () => {
+    const r = previewBody('hello-secret-正文', 4096);
+    expect(r.size).toBe('hello-secret-正文'.length);
     expect(r.truncated).toBe(false);
+    expect(r.body_keys).toEqual([]);
+    expect(JSON.stringify(r)).not.toContain('hello-secret');
+    expect(JSON.stringify(r)).not.toContain('正文');
   });
 
-  it('超过 maxBytes 截断并标记 truncated', () => {
+  it('超过 maxBytes：truncated 标记 + 大小对账，正文零泄漏', () => {
     const big = 'x'.repeat(5000);
     const r = previewBody(big, 1024);
     expect(r.truncated).toBe(true);
     expect(r.size).toBe(5000);
-    expect(r.preview.startsWith('x'.repeat(1024))).toBe(true);
-    expect(r.preview).toContain('[truncated, total=5000 bytes]');
+    expect(JSON.stringify(r)).not.toContain('xxxxx');
   });
 
-  it('对象自动 JSON.stringify 后再截断', () => {
-    const obj = { a: 'x'.repeat(2000) };
+  it('对象 body：body_keys 留顶层键名（对账用），值零泄漏', () => {
+    const obj = { a: 'secret-value-甲', messages: [{ content: '买家消息正文乙' }] };
     const r = previewBody(obj, 512);
-    expect(r.truncated).toBe(true);
-    expect(r.size).toBeGreaterThan(2000);
+    expect(r.truncated).toBe(false); // 样本体积 < 512，未截断
+    expect(r.body_keys).toEqual(['a', 'messages']);
+    expect(JSON.stringify(r)).not.toContain('secret-value');
+    expect(JSON.stringify(r)).not.toContain('买家消息正文');
   });
 
-  it('null body 返回空预览', () => {
+  it('null body 返回空元数据', () => {
     const r = previewBody(null);
-    expect(r.preview).toBe('');
+    expect(r.body_keys).toEqual([]);
     expect(r.size).toBe(0);
     expect(r.truncated).toBe(false);
   });
 
-  it('undefined body 返回空预览', () => {
+  it('undefined body 返回空元数据', () => {
     const r = previewBody(undefined);
-    expect(r.preview).toBe('');
+    expect(r.body_keys).toEqual([]);
     expect(r.size).toBe(0);
   });
 });
