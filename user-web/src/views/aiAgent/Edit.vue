@@ -1084,6 +1084,7 @@ const onSave = async () => {
         description: form.description,
         avatar: form.avatar,
         agent_type: form.agent_type,
+        agent_mode: form.agent_mode,
         persona: form.persona,
         system_prompt: form.system_prompt,
         greeting: form.greeting,

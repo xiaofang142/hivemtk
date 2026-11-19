@@ -41,6 +41,14 @@ type AgentContextLoader interface {
 	LoadContext(ctx context.Context, agentID uint) (*dto.AgentContext, error)
 }
 
+type lifecycleContextLoader struct {
+	service *service.AIAgentService
+}
+
+func (l *lifecycleContextLoader) LoadContext(ctx context.Context, agentID uint) (*dto.AgentContext, error) {
+	return l.service.LoadContextForRun(ctx, agentID)
+}
+
 // AgentLifecycleRuntime 双模式运行时：一台智能体的一次运行该走哪条生命周期。
 //
 // 选择函数用的是 `lifecycle.Resolver` —— 它自写下起一直零调用方，本处就是来接它的
@@ -128,7 +136,7 @@ func InitAgentLifecycles(gormDB *gorm.DB, engine *service.SalesEngine) {
 		sopSvc = service.NewSOPService(llm.GetGlobalDispatcher())
 	}
 	rt := NewAgentLifecycleRuntime(
-		service.NewAIAgentServiceWithRepo(repository.NewAIAgentRepositoryWithDB(gormDB)),
+		&lifecycleContextLoader{service: service.NewAIAgentServiceWithRepo(repository.NewAIAgentRepositoryWithDB(gormDB))},
 		lifecycle.NewPassiveAgentLifecycle(engine),
 		lifecycle.NewActiveAgentLifecycle(sopSvc, repository.NewCustomerRepository()),
 	)

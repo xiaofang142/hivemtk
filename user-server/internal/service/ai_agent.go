@@ -73,6 +73,12 @@ func (s *AIAgentService) Create(ctx context.Context, a *model.AIAgent) error {
 	if a.AgentType == "" {
 		a.AgentType = string(model.AgentTypeSales)
 	}
+	if a.AgentMode == "" {
+		a.AgentMode = "passive"
+	}
+	if a.AgentMode != "active" && a.AgentMode != "passive" {
+		return bizerr.New(bizerr.CodeParamInvalid, "agent_mode must be active or passive")
+	}
 	if existing, _ := s.repo.GetByCode(ctx, a.AgentCode); existing != nil {
 		return fmt.Errorf("agent_code %s 已存在", a.AgentCode)
 	}
@@ -152,6 +158,9 @@ func (s *AIAgentService) Update(ctx context.Context, a *model.AIAgent) error {
 	if a.Persona == "" {
 		return errors.New("persona 不能为空")
 	}
+	if a.AgentMode != "active" && a.AgentMode != "passive" {
+		return bizerr.New(bizerr.CodeParamInvalid, "agent_mode must be active or passive")
+	}
 	a.Version = a.Version + 1
 	// 绑定校验只在绑定发生**变更**时执行（审计二轮）：前端编辑表单会原样回显
 	// asset_bundle_id，若绑定的包此后被归档/停用，无条件校验会让智能体编辑
@@ -209,17 +218,28 @@ func (s *AIAgentService) Delete(ctx context.Context, id uint) error {
 // LoadContext 加载智能体执行上下文（带缓存）
 // 返回 nil, nil 表示未找到（不视为错误，调用方回退默认配置）
 func (s *AIAgentService) LoadContext(ctx context.Context, agentID uint) (*AgentContext, error) {
+	return s.loadContext(ctx, agentID, true)
+}
+
+// LoadContextForRun 在生命周期准入时读取权威配置，避免另一服务实例的旧模式缓存。
+func (s *AIAgentService) LoadContextForRun(ctx context.Context, agentID uint) (*AgentContext, error) {
+	return s.loadContext(ctx, agentID, false)
+}
+
+func (s *AIAgentService) loadContext(ctx context.Context, agentID uint, useCache bool) (*AgentContext, error) {
 	if agentID == 0 {
 		return nil, nil
 	}
 	tenantID, _ := tenant.FromContext(ctx)
 	key := agentCacheKey{tenantID: tenantID, agentID: agentID}
-	s.cacheMu.RLock()
-	if entry, ok := s.cache[key]; ok && time.Now().Before(entry.expiresAt) {
+	if useCache {
+		s.cacheMu.RLock()
+		if entry, ok := s.cache[key]; ok && time.Now().Before(entry.expiresAt) {
+			s.cacheMu.RUnlock()
+			return entry.ctx, nil
+		}
 		s.cacheMu.RUnlock()
-		return entry.ctx, nil
 	}
-	s.cacheMu.RUnlock()
 
 	agent, err := s.repo.GetByID(ctx, agentID)
 	if err != nil {
@@ -264,12 +284,14 @@ func (s *AIAgentService) LoadContext(ctx context.Context, agentID uint) (*AgentC
 		AssetBundleID:        agent.AssetBundleID,
 	}
 
-	s.cacheMu.Lock()
-	s.cache[key] = &agentCacheEntry{
-		ctx:       agentCtx,
-		expiresAt: time.Now().Add(s.cacheTTL),
+	if useCache {
+		s.cacheMu.Lock()
+		s.cache[key] = &agentCacheEntry{
+			ctx:       agentCtx,
+			expiresAt: time.Now().Add(s.cacheTTL),
+		}
+		s.cacheMu.Unlock()
 	}
-	s.cacheMu.Unlock()
 
 	return agentCtx, nil
 }
