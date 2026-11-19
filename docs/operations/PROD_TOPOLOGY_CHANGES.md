@@ -33,6 +33,22 @@
 - **注意**：platform-server 发布链与 user-server 链 A 互相独立（外层 deploy.sh vs 内层
   deploy-api.sh）；platform 库迁移幂等可重跑；换机时两套发布入口都要装。
 
+## 2026-11-19 · 平台端白屏事故修复（用户报「平台端访问报错」）
+
+- **症状**：manage.xapptool.cn 白屏（#app 渲染为空注释节点）。ego CDP 注入抓实锤：
+  `TypeError: r.restoreSession is not a function`——router 守卫 beforeEach 调
+  `userStore.restoreSession()`，而 d71fd07（HttpOnly Cookie 双通道）重写 store 时
+  **return 漏导出该函数** → Vue 启动即崩。该缺陷在任何一次构建里都在，随本次
+  platform-web 发布被用户命中。
+- **修复**：store return 补导出 restoreSession + cookieSession（a05b479）→ 链 D 重发
+  platform-web → cache-bust 复验登录页完整渲染（errs=[]、截图实证）。
+- **根因加固（nginx 缓存策略）**：白屏直接诱因=旧 index 启发式缓存引用已被
+  rsync --delete 清掉的旧 chunk（404）→ manage vhost 加 SPA 缓存策略：
+  index.html 与 / 永不缓存（no-cache,must-revalidate 实测生效），assets 长缓存
+  （被宝塔全局静态规则压成 12h，可接受）。备份 manage.xapptool.cn.conf.bak-20261119。
+- **遗留如实登记**：router_auth_guard/login_form 3 用例红——P2-7 重写守卫时测试
+  基座未同步（修复前 stash 验证即红，非本次引入），属并行会话 P2-7 改造的收尾项。
+
 ## 2026-11-19 · 自立项巡检批二次审核（对抗复核闭环）+ 生产数据口径修正
 
 - **对抗复核结论**：SSE 重推缺口**证伪**——owed 补拉（批11 §3.7-2）与游标无关、按欠交付
