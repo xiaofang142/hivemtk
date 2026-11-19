@@ -160,11 +160,12 @@ type StageDecision struct {
 type InferenceOutcome string
 
 const (
-	InferenceSucceeded InferenceOutcome = "succeeded"
-	InferenceDegraded  InferenceOutcome = "degraded"
-	InferenceRejected  InferenceOutcome = "rejected"
-	InferenceFailed    InferenceOutcome = "failed"
-	InferenceHandoff   InferenceOutcome = "handoff"
+	InferenceSucceeded       InferenceOutcome = "succeeded"
+	InferenceDegraded        InferenceOutcome = "degraded"
+	InferenceRejected        InferenceOutcome = "rejected"
+	InferenceFailed          InferenceOutcome = "failed"
+	InferenceHandoff         InferenceOutcome = "handoff"
+	InferencePendingApproval InferenceOutcome = "pending_approval"
 )
 
 // InferenceContext 推理上下文

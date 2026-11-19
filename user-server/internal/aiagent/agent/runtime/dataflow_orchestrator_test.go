@@ -51,12 +51,13 @@ func TestDataFlow_HandoffTriggered(t *testing.T) {
 		},
 	}
 	orch := NewCoreDataFlowOrchestrator(NewInferenceCycle(), escalate)
-	result, err := orch.Process(context.Background(), CustomerMessagePayload{
+	orch.SetExecutionGate(executionGateFunc(func(context.Context, ExecutionRequest) (ExecutionAuthorization, error) { return ExecutionApproved, nil }))
+	result, err := orch.ProcessWithMode(context.Background(), CustomerMessagePayload{
 		ChannelType: "telegram",
 		CustomerID:  "d8_2",
 		SessionID:   "d8_session_2",
 		Content:     "你们是骗子，赶紧退款！",
-	}, &AgentContext{AgentCode: "default"})
+	}, &AgentContext{AgentCode: "default"}, ExecutionModeExecution)
 
 	if err != nil {
 		t.Fatalf("process error: %v", err)
@@ -140,22 +141,26 @@ func TestDataFlow_Trimmer(t *testing.T) {
 // TestDataFlow_Publisher 场景5: 发布器
 func TestDataFlow_Publisher(t *testing.T) {
 	pub := &capturePublisher{ch: make(chan string, 1)}
-	orch := NewCoreDataFlowOrchestrator(NewInferenceCycle(), nil)
+	orch, _, _ := executionFixture(t, 0)
 	orch.SetPublisher(pub)
 
-	_, err := orch.Process(context.Background(), CustomerMessagePayload{
+	_, err := orch.ProcessWithMode(context.Background(), CustomerMessagePayload{
 		ChannelType: "telegram",
 		CustomerID:  "d8_5",
 		SessionID:   "d8_session_5",
 		Content:     "你好",
-	}, &AgentContext{AgentCode: "default"})
+	}, &AgentContext{AgentCode: "default"}, ExecutionModeExecution)
 
 	if err != nil {
 		t.Fatalf("process error: %v", err)
 	}
 	select {
-	case <-pub.ch:
+	case reply := <-pub.ch:
+		if reply != "订单正在运输中" {
+			t.Fatalf("发布内容未经生成和复核：%q", reply)
+		}
 	case <-time.After(2 * time.Second):
+		t.Fatal("已批准执行没有发布复核后的正文")
 	}
 }
 

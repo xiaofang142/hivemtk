@@ -82,12 +82,13 @@ func GetInferenceOrchestrator() *agent_runtime.CoreDataFlowOrchestrator {
 }
 
 type inferenceRunRequest struct {
-	ChannelType string `json:"channel_type" binding:"required"`
-	CustomerID  string `json:"customer_id" binding:"required"`
-	SessionID   string `json:"session_id"`
-	Content     string `json:"content" binding:"required"`
-	MessageType string `json:"message_type"`
-	TraceID     string `json:"trace_id"`
+	Mode        agent_runtime.ExecutionMode `json:"mode" binding:"omitempty,oneof=planning execution"`
+	ChannelType string                      `json:"channel_type" binding:"required"`
+	CustomerID  string                      `json:"customer_id" binding:"required"`
+	SessionID   string                      `json:"session_id"`
+	Content     string                      `json:"content" binding:"required"`
+	MessageType string                      `json:"message_type"`
+	TraceID     string                      `json:"trace_id"`
 }
 
 // setupInferenceRoutes 注册推理闭环 API 路由
@@ -134,14 +135,22 @@ func handleInferenceRun(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
 	defer cancel()
 
-	result, err := orch.Process(ctx, payload, nil)
+	result, err := orch.ProcessWithMode(ctx, payload, nil, req.Mode)
 	if err != nil {
 		logger.Errorf("[inference_api] run failed: %v", err)
+		if result != nil && result.ErrorCode == "execution_not_configured" {
+			response.Error(c, 503, response.ErrInferenceExecutionUnavailable, inferenceResultData(result))
+			return
+		}
 		response.Error(c, 500, response.ErrInferenceFailed, inferenceResultData(result))
 		return
 	}
 	if result.Outcome == agent_runtime.InferenceRejected {
 		response.Error(c, 409, response.ErrInferenceRejected, inferenceResultData(result))
+		return
+	}
+	if result.Outcome == agent_runtime.InferencePendingApproval {
+		response.Accepted(c, inferenceResultData(result), response.MsgInferenceApprovalPending)
 		return
 	}
 
@@ -153,19 +162,25 @@ func inferenceResultData(result *agent_runtime.OrchestratorResult) gin.H {
 		return gin.H{"outcome": agent_runtime.InferenceFailed, "publishable": false}
 	}
 	return gin.H{
-		"session_id":       result.SessionID,
-		"final_reply":      result.FinalReply,
-		"handoff_to_human": result.HandoffToHuman,
-		"handoff_reason":   result.HandoffReason,
-		"tool_call_count":  result.ToolCallCount,
-		"crisis_level":     result.CrisisLevel,
-		"total_duration":   result.TotalDuration.String(),
-		"outcome":          result.Outcome,
-		"publishable":      result.Publishable,
-		"failed_stage":     result.FailedStage,
-		"error_code":       result.ErrorCode,
-		"stages":           result.Stages,
-		"degradations":     result.Degradations,
+		"mode":                    result.Mode,
+		"execution_status":        result.ExecutionStatus,
+		"executed":                result.Executed,
+		"plan":                    result.Plan,
+		"planned_tool_call_count": result.PlannedToolCallCount,
+		"tool_results":            result.ToolResults,
+		"session_id":              result.SessionID,
+		"final_reply":             result.FinalReply,
+		"handoff_to_human":        result.HandoffToHuman,
+		"handoff_reason":          result.HandoffReason,
+		"tool_call_count":         result.ToolCallCount,
+		"crisis_level":            result.CrisisLevel,
+		"total_duration":          result.TotalDuration.String(),
+		"outcome":                 result.Outcome,
+		"publishable":             result.Publishable,
+		"failed_stage":            result.FailedStage,
+		"error_code":              result.ErrorCode,
+		"stages":                  result.Stages,
+		"degradations":            result.Degradations,
 	}
 }
 

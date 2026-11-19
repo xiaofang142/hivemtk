@@ -50,11 +50,13 @@ func TestInferenceOutcomeHTTP(t *testing.T) {
 			var envelope struct {
 				Code json.RawMessage `json:"code"`
 				Data struct {
-					Outcome     string                        `json:"outcome"`
-					Publishable bool                          `json:"publishable"`
-					FailedStage string                        `json:"failed_stage"`
-					Stages      []agent_runtime.StageDecision `json:"stages"`
-					FinalReply  string                        `json:"final_reply"`
+					Outcome         string                        `json:"outcome"`
+					Publishable     bool                          `json:"publishable"`
+					FailedStage     string                        `json:"failed_stage"`
+					Stages          []agent_runtime.StageDecision `json:"stages"`
+					FinalReply      string                        `json:"final_reply"`
+					Mode            string                        `json:"mode"`
+					ExecutionStatus string                        `json:"execution_status"`
 				} `json:"data"`
 			}
 			if err := json.Unmarshal(writer.Body.Bytes(), &envelope); err != nil {
@@ -65,7 +67,7 @@ func TestInferenceOutcomeHTTP(t *testing.T) {
 			}
 			switch mode {
 			case "succeeded":
-				if writer.Code != 200 || string(envelope.Code) != "0" || envelope.Data.Outcome != mode || !envelope.Data.Publishable || envelope.Data.FinalReply != "已复核回复" {
+				if writer.Code != 200 || string(envelope.Code) != "0" || envelope.Data.Outcome != mode || envelope.Data.Publishable || envelope.Data.FinalReply != "" || envelope.Data.Mode != "planning" || envelope.Data.ExecutionStatus != "not_executed" {
 					t.Fatalf("成功响应异常：%d %s", writer.Code, writer.Body.String())
 				}
 			case "rejected":
