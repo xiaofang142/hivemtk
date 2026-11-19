@@ -36,7 +36,7 @@ var (
 // 依赖 service.InitMemorySystem 已完成）
 //
 // 装配内容：
-//   - 创建 InferenceCycle（含默认 4 阶段：感知/对齐/硬闸/规划）
+//   - 创建 InferenceCycle（含默认 5 阶段：感知/对齐/硬闸/规划/复核）
 //   - 注入 EpisodicMemoryProvider（包装 MemorySystem）
 //   - 注入 StageCheckpointStore（T-P1-01 阶段边界断点续跑，受 FF_LTC_CHECKPOINT 控制）
 //   - 创建 CoreDataFlowOrchestrator（暂不注入 AssetLoader/ToolRouter/Publisher，
@@ -137,11 +137,22 @@ func handleInferenceRun(c *gin.Context) {
 	result, err := orch.Process(ctx, payload, nil)
 	if err != nil {
 		logger.Errorf("[inference_api] run failed: %v", err)
-		response.Error(c, 500, err.Error())
+		response.Error(c, 500, response.ErrInferenceFailed, inferenceResultData(result))
+		return
+	}
+	if result.Outcome == agent_runtime.InferenceRejected {
+		response.Error(c, 409, response.ErrInferenceRejected, inferenceResultData(result))
 		return
 	}
 
-	response.Success(c, gin.H{
+	response.Success(c, inferenceResultData(result), "ok")
+}
+
+func inferenceResultData(result *agent_runtime.OrchestratorResult) gin.H {
+	if result == nil {
+		return gin.H{"outcome": agent_runtime.InferenceFailed, "publishable": false}
+	}
+	return gin.H{
 		"session_id":       result.SessionID,
 		"final_reply":      result.FinalReply,
 		"handoff_to_human": result.HandoffToHuman,
@@ -149,7 +160,13 @@ func handleInferenceRun(c *gin.Context) {
 		"tool_call_count":  result.ToolCallCount,
 		"crisis_level":     result.CrisisLevel,
 		"total_duration":   result.TotalDuration.String(),
-	}, "ok")
+		"outcome":          result.Outcome,
+		"publishable":      result.Publishable,
+		"failed_stage":     result.FailedStage,
+		"error_code":       result.ErrorCode,
+		"stages":           result.Stages,
+		"degradations":     result.Degradations,
+	}
 }
 
 func handleInferenceStats(c *gin.Context) {

@@ -25,7 +25,9 @@ const (
 	ErrUnauthorized     = "未授权访问"
 	ErrPermissionDenied = "权限不足"
 
-	ErrBusinessError = "业务处理失败"
+	ErrBusinessError     = "业务处理失败"
+	ErrInferenceFailed   = "推理执行失败，请根据阶段诊断重试"
+	ErrInferenceRejected = "推理结果未通过复核，未发布回复"
 )
 
 // 卡片管理相关错误消息

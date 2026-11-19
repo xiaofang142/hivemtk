@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // StreamEventType 流式事件类型
@@ -18,18 +16,22 @@ const (
 	StreamEventComplete   StreamEventType = "complete"
 	StreamEventStageStart StreamEventType = "stage_start"
 	StreamEventStageEnd   StreamEventType = "stage_end"
+	StreamEventOutcome    StreamEventType = "outcome"
 )
 
 // StreamEvent 流式事件
 type StreamEvent struct {
-	Type      StreamEventType `json:"type"`
-	ToolName  string          `json:"tool_name,omitempty"`
-	CallID    string          `json:"call_id,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	StageName string          `json:"stage_name,omitempty"`
-	Error     string          `json:"error,omitempty"`
-	Timestamp time.Time       `json:"timestamp"`
-	Duration  time.Duration   `json:"duration,omitempty"`
+	Type        StreamEventType  `json:"type"`
+	ToolName    string           `json:"tool_name,omitempty"`
+	CallID      string           `json:"call_id,omitempty"`
+	Content     string           `json:"content,omitempty"`
+	StageName   string           `json:"stage_name,omitempty"`
+	Error       string           `json:"error,omitempty"`
+	Timestamp   time.Time        `json:"timestamp"`
+	Duration    time.Duration    `json:"duration,omitempty"`
+	Outcome     InferenceOutcome `json:"outcome,omitempty"`
+	Publishable bool             `json:"publishable"`
+	FailedStage string           `json:"failed_stage,omitempty"`
 }
 
 // StreamHandler 流式处理器接口
@@ -103,6 +105,8 @@ func (h *BufferedStreamHandler) Clear() {
 type ChannelStreamHandler struct {
 	channel chan StreamEvent
 	done    chan struct{}
+	mu      sync.Mutex
+	closed  bool
 }
 
 // NewChannelStreamHandler 创建通道流式处理器
@@ -115,6 +119,11 @@ func NewChannelStreamHandler(bufferSize int) *ChannelStreamHandler {
 
 // OnEvent 处理流式事件
 func (h *ChannelStreamHandler) OnEvent(event StreamEvent) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
 	event.Timestamp = time.Now()
 	select {
 	case h.channel <- event:
@@ -135,6 +144,16 @@ func (h *ChannelStreamHandler) OnComplete() {
 	h.OnEvent(StreamEvent{
 		Type: StreamEventComplete,
 	})
+	h.closeStream()
+}
+
+func (h *ChannelStreamHandler) closeStream() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.closed = true
 	close(h.channel)
 	close(h.done)
 }
@@ -199,6 +218,20 @@ func (h *CompositeStreamHandler) OnComplete() {
 	}
 }
 
+func (h *CompositeStreamHandler) closeStream() {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for _, handler := range h.handlers {
+		closeInferenceStream(handler)
+	}
+}
+
+func closeInferenceStream(handler StreamHandler) {
+	if closer, ok := handler.(interface{ closeStream() }); ok {
+		closer.closeStream()
+	}
+}
+
 // RunOnceStream 执行一次完整推理闭环（支持流式输出）
 //
 // 参数：
@@ -209,140 +242,22 @@ func (h *CompositeStreamHandler) OnComplete() {
 //
 // 返回：
 //   - InferenceDecision: 最终决策
-//   - error: 仅在编排器本身失败时返回错误
+//   - error: 阶段技术故障、超时或无效结果；失败不发成功完成事件。
 func (c *InferenceCycle) RunOnceStream(ctx context.Context, payload CustomerMessagePayload, agentCtx *AgentContext, handler StreamHandler) (*InferenceDecision, error) {
-	if c.stopped {
-		return nil, ErrRuntimeStopped
+	decision, err := c.runOnce(ctx, payload, agentCtx, handler)
+	if handler == nil {
+		return decision, err
 	}
-
-	start := time.Now()
-
-	if agentCtx == nil {
-		agentCtx = &AgentContext{
-			AgentID:   0,
-			AgentCode: "default",
-			Name:      "默认智能体",
-			AgentType: "customer_service",
-			LoadedAt:  time.Now(),
-		}
+	if decision != nil {
+		handler.OnEvent(StreamEvent{Type: StreamEventOutcome, Outcome: decision.Outcome, Publishable: decision.Publishable, FailedStage: decision.FailedStage, Error: decision.ErrorCode})
 	}
-
-	tctx, cancel := context.WithTimeout(ctx, c.TotalTimeout)
-	defer cancel()
-
-	ic := &InferenceContext{
-		Payload:   payload,
-		AgentCtx:  agentCtx,
-		StartTime: start,
-		Stages:    []StageDecision{},
-		Decision: InferenceDecision{
-			ReplyType:  "text",
-			Confidence: 0,
-		},
-	}
-
-	c.mu.RLock()
-	provider := c.memoryProvider
-	c.mu.RUnlock()
-	if provider != nil {
-		mem, err := provider.LoadEpisodicMemory(tctx, payload.SessionID, payload.CustomerID)
-		if err != nil {
-			logger.Warnf("[inference_cycle] load episodic memory failed session=%s customer=%s err=%v",
-				payload.SessionID, payload.CustomerID, err)
-		} else if mem != "" {
-			ic.EpisodicMemory = mem
-		}
-	}
-
-	stages := []InferenceStage{
-		c.PerceptionStage,
-		c.AlignmentStage,
-		c.GatekeeperStage,
-		c.PlannerStage,
-	}
-
-	for _, stage := range stages {
-		if stage == nil {
-			continue
-		}
-
-		if handler != nil {
-			handler.OnEvent(StreamEvent{
-				Type:      StreamEventStageStart,
-				StageName: stage.Name(),
-			})
-		}
-
-		sctx, scancel := context.WithTimeout(tctx, c.StageTimeout)
-		stageStart := time.Now()
-		result := stage.Execute(sctx, ic)
-		stageDuration := time.Since(stageStart)
-		scancel()
-
-		if handler != nil {
-			handler.OnEvent(StreamEvent{
-				Type:      StreamEventStageEnd,
-				StageName: stage.Name(),
-				Duration:  stageDuration,
-			})
-		}
-
-		if result.Error != nil {
-			logger.Warnf("[inference_cycle] stage=%s error=%v", stage.Name(), result.Error)
-			if handler != nil {
-				handler.OnError(result.Error)
-			}
-		}
-
-		if result.EarlyReturn {
-			if result.Decision != nil {
-				ic.Decision = mergeDecision(ic.Decision, *result.Decision)
-			}
-			ic.Decision.TotalDuration = time.Since(start)
-			ic.Decision.Crisis = ic.Crisis
-			ic.Decision.Sentiment = ic.Sentiment
-			ic.Decision.Intent = ic.Intent
-			ic.Decision.Alignment = ic.Alignment
-			c.recordStats(ic.Decision)
-
-			if handler != nil {
-				handler.OnComplete()
-			}
-
-			logger.Infof("[inference_cycle] early return at stage=%s handoff=%v reason=%s duration=%s",
-				stage.Name(), ic.Decision.HandoffToHuman, ic.Decision.StopReason, ic.Decision.TotalDuration)
-			return &ic.Decision, nil
-		}
-	}
-
-	ic.Decision.TotalDuration = time.Since(start)
-	if ic.Plan != nil {
-		ic.Decision.ReplyType = "text"
-		ic.Decision.Confidence = ic.Plan.Confidence
-		if ic.Plan.SkipLLM {
-			ic.Decision.Reply = ic.Plan.ReplyHint
-			ic.Decision.ReplyType = "text"
-			ic.Decision.StopReason = "faq_skip_llm"
-		} else {
-			ic.Decision.StopReason = "plan_ready"
-		}
+	if err != nil {
+		handler.OnError(err)
+		closeInferenceStream(handler)
+	} else if decision != nil && decision.Outcome == InferenceRejected {
+		closeInferenceStream(handler)
 	} else {
-		ic.Decision.StopReason = "no_plan"
-	}
-	ic.Decision.Crisis = ic.Crisis
-	ic.Decision.Sentiment = ic.Sentiment
-	ic.Decision.Intent = ic.Intent
-	ic.Decision.Alignment = ic.Alignment
-
-	c.recordStats(ic.Decision)
-
-	if handler != nil {
 		handler.OnComplete()
 	}
-
-	logger.Infof("[inference_cycle] completed trace=%s stages=%d plan_type=%s confidence=%.2f duration=%s",
-		payload.TraceID, len(ic.Stages),
-		planTypeOf(ic.Plan), ic.Decision.Confidence, ic.Decision.TotalDuration)
-
-	return &ic.Decision, nil
+	return decision, err
 }

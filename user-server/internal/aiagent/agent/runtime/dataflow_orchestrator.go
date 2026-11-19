@@ -32,6 +32,7 @@ type DataFlowStats struct {
 	ToolCallCount    int64
 	DirectReplyCount int64
 	ErrorCount       int64
+	RejectedCount    int64
 	AvgTotalDuration time.Duration
 }
 
@@ -120,6 +121,11 @@ func (o *CoreDataFlowOrchestrator) SetPublisher(p ResponsePublisher) {
 
 // OrchestratorResult 编排结果
 type OrchestratorResult struct {
+	Outcome        InferenceOutcome `json:"outcome"`
+	Publishable    bool             `json:"publishable"`
+	FailedStage    string           `json:"failed_stage,omitempty"`
+	ErrorCode      string           `json:"error_code,omitempty"`
+	Degradations   []string         `json:"degradations,omitempty"`
 	SessionID      string
 	FinalReply     string
 	HandoffToHuman bool
@@ -158,6 +164,17 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	result := &OrchestratorResult{
 		SessionID: payload.SessionID,
 	}
+	defer func() {
+		result.TotalDuration = time.Since(start)
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		o.stats.TotalTasks++
+		if o.stats.AvgTotalDuration == 0 {
+			o.stats.AvgTotalDuration = result.TotalDuration
+		} else {
+			o.stats.AvgTotalDuration = (o.stats.AvgTotalDuration*9 + result.TotalDuration) / 10
+		}
+	}()
 
 	if result.SessionID == "" {
 		result.SessionID = payload.ChannelType + ":" + payload.CustomerID
@@ -173,11 +190,19 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	}
 
 	decision, err := o.cycle.RunOnce(ctx, payload, agentCtx)
+	if decision != nil {
+		result.Outcome, result.Publishable = decision.Outcome, decision.Publishable
+		result.FailedStage, result.ErrorCode = decision.FailedStage, decision.ErrorCode
+		result.Stages = append([]StageDecision{}, decision.Stages...)
+		result.Degradations = append([]string(nil), decision.Degradations...)
+	}
 	if err != nil {
+		result.Outcome = InferenceFailed
 		o.recordError()
 		return result, err
 	}
 	if decision == nil {
+		result.Outcome, result.ErrorCode = InferenceFailed, "inference_unavailable"
 		o.recordError()
 		return result, errors.New("inference decision is nil")
 	}
@@ -185,6 +210,12 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	result.HandoffReason = decision.HandoffReason
 	result.CrisisLevel = decision.Crisis.Level
 	result.TotalDuration = time.Since(start)
+	if decision.Outcome == InferenceRejected {
+		o.mu.Lock()
+		o.stats.RejectedCount++
+		o.mu.Unlock()
+		return result, nil
+	}
 
 	if decision.HandoffToHuman {
 		if o.escalate != nil {
@@ -204,13 +235,12 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	}
 	result.FinalReply = finalReply
 
-	if !decision.HandoffToHuman && finalReply != "" && o.publisher != nil {
+	if decision.Publishable && !decision.HandoffToHuman && finalReply != "" && o.publisher != nil {
 		if err := o.publisher.Publish(ctx, payload.ChannelType, payload.CustomerID, finalReply); err != nil {
 			logger.Warnf("[dataflow] publish failed session=%s err=%v", result.SessionID, err)
 		}
 	}
 
-	result.Stages = nil
 	if decision.Plan != nil {
 		result.ToolCallCount = len(decision.Plan.ToolCalls)
 		if result.ToolCallCount > 0 {
@@ -227,15 +257,6 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 			o.recordDirectReply()
 		}
 	}
-	o.mu.Lock()
-	if o.stats.AvgTotalDuration == 0 {
-		o.stats.AvgTotalDuration = result.TotalDuration
-	} else {
-		o.stats.AvgTotalDuration = (o.stats.AvgTotalDuration*9 + result.TotalDuration) / 10
-	}
-	o.stats.TotalTasks++
-	o.mu.Unlock()
-
 	logger.Infof("[dataflow] session=%s handoff=%v reply_len=%d duration=%s",
 		result.SessionID, result.HandoffToHuman, len(result.FinalReply), result.TotalDuration)
 	return result, nil
