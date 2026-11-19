@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "Gestiona el estado y las cuentas vinculadas de {total} herramientas de IA que coinciden con los filtros actuales",
+    "filteredTotal": "Herramientas coincidentes",
+    "pageEnabled": "Habilitadas en esta página",
+    "pageDisabled": "Deshabilitadas en esta página",
+    "empty": "Ninguna herramienta coincide con los filtros actuales",
+    "retry": "Error al cargar. Haz clic en Actualizar para reintentar",
+    "inconsistent": "La lista y el total no coinciden temporalmente. Actualiza la página",
+    "loadFailed": "No se pudieron cargar las herramientas: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

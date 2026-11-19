@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "Status und Kontoverknüpfungen für {total} KI-Werkzeuge verwalten, die den aktuellen Filtern entsprechen",
+    "filteredTotal": "Passende Werkzeuge",
+    "pageEnabled": "Auf dieser Seite aktiviert",
+    "pageDisabled": "Auf dieser Seite deaktiviert",
+    "empty": "Keine Werkzeuge entsprechen den aktuellen Filtern",
+    "retry": "Laden fehlgeschlagen. Zum Wiederholen auf Aktualisieren klicken",
+    "inconsistent": "Liste und Gesamtzahl stimmen vorübergehend nicht überein. Bitte aktualisieren",
+    "loadFailed": "Werkzeuge konnten nicht geladen werden: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

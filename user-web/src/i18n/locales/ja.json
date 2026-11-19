@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "現在の絞り込み条件に一致する {total} 件の AI ツールの有効状態とアカウント連携を管理",
+    "filteredTotal": "絞り込み結果の総数",
+    "pageEnabled": "このページで有効",
+    "pageDisabled": "このページで無効",
+    "empty": "現在の絞り込み条件に一致するツールはありません",
+    "retry": "読み込みに失敗しました。更新をクリックして再試行してください",
+    "inconsistent": "一覧と総数が一時的に一致していません。更新してください",
+    "loadFailed": "ツール一覧の読み込みに失敗しました：{message}"
+  },
   "common": {
     "save": "保存",
     "cancel": "キャンセル",

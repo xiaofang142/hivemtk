@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "Manage status and account bindings for {total} AI tools matching the current filters",
+    "filteredTotal": "Matching tools",
+    "pageEnabled": "Enabled on this page",
+    "pageDisabled": "Disabled on this page",
+    "empty": "No tools match the current filters",
+    "retry": "Loading failed. Click Refresh to retry",
+    "inconsistent": "The list and total are temporarily inconsistent. Please refresh",
+    "loadFailed": "Failed to load tools: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

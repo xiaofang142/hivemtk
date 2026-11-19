@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "管理当前筛选下 {total} 个 AI 工具的启用状态和账号绑定",
+    "filteredTotal": "筛选结果总数",
+    "pageEnabled": "本页已启用",
+    "pageDisabled": "本页已禁用",
+    "empty": "当前筛选下暂无工具",
+    "retry": "读取失败，请点击刷新重试",
+    "inconsistent": "列表与总数暂不一致，请刷新重试",
+    "loadFailed": "加载工具列表失败：{message}"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",

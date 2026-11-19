@@ -1,4 +1,14 @@
 {
+  "toolListPagination": {
+    "summary": "Gérer le statut et les comptes associés de {total} outils IA correspondant aux filtres actuels",
+    "filteredTotal": "Outils correspondants",
+    "pageEnabled": "Activés sur cette page",
+    "pageDisabled": "Désactivés sur cette page",
+    "empty": "Aucun outil ne correspond aux filtres actuels",
+    "retry": "Échec du chargement. Cliquez sur Actualiser pour réessayer",
+    "inconsistent": "La liste et le total ne correspondent temporairement pas. Veuillez actualiser",
+    "loadFailed": "Impossible de charger les outils : {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
