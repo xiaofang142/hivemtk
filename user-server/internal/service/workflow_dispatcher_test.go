@@ -73,12 +73,11 @@ func TestWorkflowExecutorRegistry_RegisterAndGet(t *testing.T) {
 	}
 }
 
-// 4. MustGet 未注册时兜底 noop
-func TestWorkflowExecutorRegistry_MustGet_NoopFallback(t *testing.T) {
+// 4. 未注册类型 Get 显式报错（FA-02：noop 兜底语义已删除，未知节点必须拒绝）
+func TestWorkflowExecutorRegistry_UnknownTypeReturnsError(t *testing.T) {
 	r := NewWorkflowNodeExecutorRegistry()
-	noop := r.MustGet(context.Background(), "unknown_type")
-	if _, ok := noop.(*WorkflowNoopExecutor); !ok {
-		t.Errorf("expect WorkflowNoopExecutor fallback, got %T", noop)
+	if _, err := r.Get(context.Background(), "unknown_type"); err == nil {
+		t.Errorf("未注册类型应返回错误，不应有任何 noop 兜底")
 	}
 }
 

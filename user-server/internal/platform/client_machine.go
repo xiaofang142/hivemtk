@@ -29,6 +29,10 @@ type ClientDeviceSnapshot struct {
 	Language string `json:"language,omitempty"`
 
 	CapturedAt time.Time `json:"captured_at"`
+	// TenantCode 信标来源租户（TA-06 归属口径）：快照只收「部署商户绑定租户」的
+	// 信标（服务端白名单过滤），随心跳透传给平台——client_machine JSON 自带
+	// 归属标识，平台侧可对账「这台电脑报给了哪个商户」。
+	TenantCode string `json:"tenant_code,omitempty"`
 }
 
 // clientDeviceTTL 设备快照的新鲜度：超过此时长的快照视为过期，

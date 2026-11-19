@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -29,6 +30,9 @@ const (
 var (
 	ErrNoPublishedVersion  = errors.New("no published version found")
 	ErrExecutionNotRunning = errors.New("execution is not in running state")
+	// ErrPublishedVersionImmutable 已发布/已归档版本的 definition 是执行绑定快照，
+	// 不可原位覆盖；改稿必须新建版本（FA-02）。
+	ErrPublishedVersionImmutable = errors.New("published version definition is immutable; create a new version instead")
 )
 
 // WorkflowOrchestratorService 工作流编排服务
@@ -37,6 +41,8 @@ type WorkflowOrchestratorService struct {
 	execRepo     *repository.WorkflowExecutionRepository
 	nodeExecRepo *repository.WorkflowNodeExecutionRepository
 	dispatcher   *WorkflowDispatcher
+	// nodeRegistry 用于创建/更新/发布三道闸的节点类型校验（装配点注入，FA-02）。
+	nodeRegistry *WorkflowNodeExecutorRegistry
 }
 
 // NewWorkflowOrchestratorService 创建工作流编排服务
@@ -60,6 +66,14 @@ func (s *WorkflowOrchestratorService) SetDispatcher(d *WorkflowDispatcher) {
 	s.dispatcher = d
 }
 
+// SetNodeRegistry 注入节点执行器注册表，供定义校验判断节点类型是否已注册（FA-02）。
+func (s *WorkflowOrchestratorService) SetNodeRegistry(r *WorkflowNodeExecutorRegistry) {
+	if s == nil {
+		return
+	}
+	s.nodeRegistry = r
+}
+
 // CreateVersion 创建工作流版本
 func (s *WorkflowOrchestratorService) CreateVersion(ctx context.Context, req *dto.WorkflowVersionCreateRequest) (*model.WorkflowVersion, error) {
 	if s == nil {
@@ -70,6 +84,10 @@ func (s *WorkflowOrchestratorService) CreateVersion(ctx context.Context, req *dt
 	}
 	if req.Definition == nil {
 		return nil, utils.ErrInvalidInput
+	}
+	// 创建闸：未知节点类型/未知动作/非法图在入口即拒绝，不放进草稿（FA-02）。
+	if err := ValidateWorkflowDefinition(req.Definition, s.nodeRegistry); err != nil {
+		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
 	}
 
 	count, err := s.versionRepo.CountByWorkflowID(ctx, req.WorkflowID)
@@ -143,6 +161,9 @@ func (s *WorkflowOrchestratorService) ListAll(ctx context.Context, workflowID, s
 }
 
 // UpdateVersion 更新工作流版本
+//
+// draft 版本允许改稿（definition 仍需过校验闸）；published/archived 版本的
+// definition 是执行绑定快照，拒绝原位覆盖（FA-02），仅元数据可更新。
 func (s *WorkflowOrchestratorService) UpdateVersion(ctx context.Context, id uint, req *dto.WorkflowVersionUpdateRequest) error {
 	if s == nil {
 		return utils.ErrServiceNotInit
@@ -155,6 +176,13 @@ func (s *WorkflowOrchestratorService) UpdateVersion(ctx context.Context, id uint
 		return err
 	}
 
+	if version.Status != model.WorkflowStatusDraft && !definitionEqual(version.Definition, req.Definition) {
+		return ErrPublishedVersionImmutable
+	}
+	if err := ValidateWorkflowDefinition(req.Definition, s.nodeRegistry); err != nil {
+		return fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
+	}
+
 	version.Name = req.Name
 	version.Description = req.Description
 	version.Definition = req.Definition
@@ -164,13 +192,45 @@ func (s *WorkflowOrchestratorService) UpdateVersion(ctx context.Context, id uint
 	return s.versionRepo.Save(ctx, version)
 }
 
+// definitionEqual 判断两份定义 JSON 是否内容一致（键序无关）。
+// 用于放行"已发布版本提交了与现网完全相同 definition"的幂等更新。
+func definitionEqual(a, b model.JSONMap) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	na, nerr := ParseWorkflowDefinition(a)
+	nb, berr := ParseWorkflowDefinition(b)
+	if nerr != nil || berr != nil {
+		// 解析失败时退回字节级比较，宁可拒绝不可误放。
+		aj, err1 := jsonMarshal(a)
+		bj, err2 := jsonMarshal(b)
+		return err1 == nil && err2 == nil && string(aj) == string(bj)
+	}
+	aj, err1 := jsonMarshal(na)
+	bj, err2 := jsonMarshal(nb)
+	return err1 == nil && err2 == nil && string(aj) == string(bj)
+}
+
+func jsonMarshal(v any) ([]byte, error) {
+	return json.Marshal(v)
+}
+
 // PublishVersion 发布工作流版本
+//
+// 发布闸：definition 未通过服务端校验的版本不允许进入 published 状态（FA-02）。
 func (s *WorkflowOrchestratorService) PublishVersion(ctx context.Context, id uint) error {
 	if s == nil {
 		return utils.ErrServiceNotInit
 	}
 	if id == 0 {
 		return utils.ErrInvalidInput
+	}
+	version, err := s.versionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := ValidateWorkflowDefinition(version.Definition, s.nodeRegistry); err != nil {
+		return fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
 	}
 	return s.versionRepo.UpdateStatus(ctx, id, model.WorkflowStatusPublished)
 }

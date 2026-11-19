@@ -16,6 +16,8 @@ import { useUserStore } from '@/stores/user'
 const REPORT_URL = '/api/client-device/report'
 const SENT_FLAG = 'hivemtk-client-device-reported'
 
+// TA-06 归属口径：信标带上报租户码——服务端按部署租户白名单过滤
+// （CLIENT_DEVICE_TENANT_CODES），快照随心跳透传归属，平台可对账。
 function collectDevicePayload() {
   let platform = ''
   try {
@@ -58,6 +60,8 @@ export const reportClientDeviceOnce = () => {
     const store = useUserStore()
     if (!store.token && !store.cookieSession) return
     const payload = collectDevicePayload()
+    // TA-06：信标带上报租户码（服务端白名单按它过滤归属）
+    payload.tenant_code = store.userInfo?.tenant_code || ''
     const headers = { 'Content-Type': 'application/json' }
     if (store.token) headers.Authorization = `Bearer ${store.token}`
     fetch(REPORT_URL, {

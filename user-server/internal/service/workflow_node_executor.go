@@ -78,16 +78,6 @@ func (r *WorkflowNodeExecutorRegistry) Get(ctx context.Context, nodeType string)
 	return e, nil
 }
 
-// MustGet 获取执行器，未注册时返回 WorkflowNoopExecutor 兜底
-func (r *WorkflowNodeExecutorRegistry) MustGet(ctx context.Context, nodeType string) WorkflowNodeExecutor {
-	e, err := r.Get(ctx, nodeType)
-	if err != nil {
-		logger.Warnf("workflow node executor not found, using noop: %s", nodeType)
-		return &WorkflowNoopExecutor{nodeType: nodeType}
-	}
-	return e
-}
-
 func (r *WorkflowNodeExecutorRegistry) AllRegistered(ctx context.Context) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -107,26 +97,6 @@ func (r *WorkflowNodeExecutorRegistry) AllExecutors(ctx context.Context) []Workf
 	}
 	return out
 }
-
-// WorkflowNoopExecutor 工作流空操作执行器（兜底）
-type WorkflowNoopExecutor struct {
-	nodeType string
-}
-
-func (n *WorkflowNoopExecutor) NodeType() string { return n.nodeType }
-
-func (n *WorkflowNoopExecutor) Execute(ctx context.Context, wctx *WorkflowExecContext) (*WorkflowNodeExecResult, error) {
-	logger.Ctx(ctx).Warn().
-		Str("node_type", n.nodeType).
-		Str("node_id", wctx.NodeID).
-		Msg("workflow noop executor: node type not registered, skipping")
-	return &WorkflowNodeExecResult{
-		Status: NodeStatusCompleted,
-		Output: model.JSONMap{},
-	}, nil
-}
-
-func (n *WorkflowNoopExecutor) IsAsync() bool { return false }
 
 // WorkflowDefinition 工作流编排图（用于解析 version.definition JSONB）
 type WorkflowDefinition struct {

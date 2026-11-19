@@ -37,7 +37,7 @@ func TestWO_CreateVersion_DuplicateWorkflowID(t *testing.T) {
 	v1, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: wfID,
 		Name:       "v1",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 v1 失败: %v", err)
@@ -52,7 +52,7 @@ func TestWO_CreateVersion_DuplicateWorkflowID(t *testing.T) {
 	v2, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: wfID,
 		Name:       "v2",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 v2 失败: %v", err)
@@ -64,7 +64,7 @@ func TestWO_CreateVersion_DuplicateWorkflowID(t *testing.T) {
 	v3, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: wfID,
 		Name:       "v3",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 v3 失败: %v", err)
@@ -94,7 +94,7 @@ func TestWO_GetLatestPublished_NoPublished(t *testing.T) {
 	_, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: wfID,
 		Name:       "draft only",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 draft 版本失败: %v", err)
@@ -121,7 +121,7 @@ func TestWO_Execute_NoPublishedVersion(t *testing.T) {
 	_, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: wfID,
 		Name:       "draft",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 draft 版本失败: %v", err)
@@ -281,7 +281,7 @@ func TestWO_ListAll_PaginationBoundary(t *testing.T) {
 		if _, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 			WorkflowID: wfID,
 			Name:       "p",
-			Definition: map[string]any{"nodes": []any{}},
+			Definition: workflowTestDefinition(),
 		}); err != nil {
 			t.Fatalf("创建版本 %d 失败: %v", i, err)
 		}
@@ -324,7 +324,7 @@ func TestWO_UpdateVersion_NotExist(t *testing.T) {
 
 	err := svc.UpdateVersion(ctx, 888888, &dto.WorkflowVersionUpdateRequest{
 		Name:       "not exist",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err == nil {
 		t.Fatal("更新不存在的版本期望返回 error，但成功")
@@ -342,7 +342,7 @@ func TestWO_ArchiveVersion_StatusTransition(t *testing.T) {
 	v, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: "wo-deep-transition",
 		Name:       "transition",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建版本失败: %v", err)

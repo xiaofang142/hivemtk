@@ -105,23 +105,8 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		}, nil
 
 	case "http":
-		url := ""
-		if wctx.NodeConfig != nil {
-			if v, ok := wctx.NodeConfig["url"].(string); ok {
-				url = v
-			}
-		}
-		if url == "" {
-			url = "http://placeholder"
-		}
-		logger.Ctx(ctx).Info().Str("workflow_action", "http").Str("url", url).Msg("ActionNodeExecutor: http (mock)")
-		AppendWorkflowSideEffect(wctx, sideEffectKey)
-		return &WorkflowNodeExecResult{
-			Status:      NodeStatusCompleted,
-			Output:      model.JSONMap{"url": url, "_action_type": "http", "_mock": true},
-			NextNodeID:  "",
-			SideEffects: []string{sideEffectKey, "http_called:" + url},
-		}, nil
+		// FA-01：真实受控出站请求（受控边界见 workflow_http_action.go）。
+		return e.executeHTTPAction(ctx, wctx, sideEffectKey), nil
 
 	case "delay":
 		durationMs := 0
@@ -276,9 +261,12 @@ func (e *ActionNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCont
 		}, nil
 
 	default:
-		logger.Ctx(ctx).Warn().Str("action_type", actionType).Msg("ActionNodeExecutor: unknown action_type, using noop")
-		noop := &WorkflowNoopExecutor{nodeType: WorkflowNodeTypeAction}
-		return noop.Execute(ctx, wctx)
+		// FA-02：未知动作类型拒绝执行（零副作用），不再 noop 冒充完成。
+		return &WorkflowNodeExecResult{
+			Status:       NodeStatusFailed,
+			ErrorMessage: fmt.Sprintf("unknown action_type %q (allowed: log/http/delay/browser_session/browser_task)", actionType),
+			Retryable:    false,
+		}, nil
 	}
 }
 

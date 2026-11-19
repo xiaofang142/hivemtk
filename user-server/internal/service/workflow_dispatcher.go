@@ -256,7 +256,18 @@ func (d *WorkflowDispatcher) executeNode(
 		Attempt:    attempt,
 	}
 
-	executor := d.registry.MustGet(ctx, node.Type)
+	executor, execErr := d.registry.Get(ctx, node.Type)
+	if execErr != nil {
+		// FA-02：未知节点类型不再 noop 冒充完成——节点记失败、执行整体失败。
+		// 配置错误重试无意义，不走 handleNodeFailure 的重试排程。
+		now2 := time.Now()
+		nodeExec.FinishedAt = &now2
+		nodeExec.Status = model.WorkflowNodeFailed
+		nodeExec.Error = fmt.Sprintf("unknown node type %q: %v", node.Type, execErr)
+		_ = d.nodeExecRepo.Update(ctx, nodeExec)
+		d.failExecution(ctx, exec, nodeExec.Error)
+		return "", false, false
+	}
 	result, err := executor.Execute(ctx, wctx)
 	durationMs := time.Since(start).Milliseconds()
 

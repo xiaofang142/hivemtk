@@ -26,6 +26,19 @@ func setupWorkflowServiceTestDB(t *testing.T) *gorm.DB {
 	return database
 }
 
+// workflowTestDefinition 满足服务端校验闸（FA-02）的最小合法定义：trigger→action(log)。
+func workflowTestDefinition() map[string]any {
+	return map[string]any{
+		"nodes": []any{
+			map[string]any{"id": "n1", "type": "trigger", "name": "start", "config": map[string]any{}},
+			map[string]any{"id": "n2", "type": "action", "name": "log step", "config": map[string]any{"action_type": "log", "message": "ok"}},
+		},
+		"edges": []any{
+			map[string]any{"source": "n1", "target": "n2", "label": ""},
+		},
+	}
+}
+
 func TestWorkflowOrchestratorService_CreateVersion(t *testing.T) {
 	database := setupWorkflowServiceTestDB(t)
 	if database == nil {
@@ -40,7 +53,7 @@ func TestWorkflowOrchestratorService_CreateVersion(t *testing.T) {
 	req := &dto.WorkflowVersionCreateRequest{
 		WorkflowID: "wf-svc-test",
 		Name:       "Service Test Version",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 		CreatedBy:  "svc-tester",
 	}
 
@@ -71,7 +84,7 @@ func TestWorkflowOrchestratorService_ListAll(t *testing.T) {
 		svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 			WorkflowID: "wf-listall",
 			Name:       "ListAll Test",
-			Definition: map[string]any{"nodes": []any{}},
+			Definition: workflowTestDefinition(),
 		})
 	}
 
@@ -217,7 +230,7 @@ func TestWorkflowOrchestratorService_DuplicateVersionCreation(t *testing.T) {
 	v1, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: "wf-dup-test",
 		Name:       "Version 1",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 v1 失败: %v", err)
@@ -229,7 +242,7 @@ func TestWorkflowOrchestratorService_DuplicateVersionCreation(t *testing.T) {
 	v2, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: "wf-dup-test",
 		Name:       "Version 2",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: workflowTestDefinition(),
 	})
 	if err != nil {
 		t.Fatalf("创建 v2 失败: %v", err)

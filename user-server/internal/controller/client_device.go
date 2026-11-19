@@ -35,24 +35,26 @@ func NewClientDeviceController() *ClientDeviceController {
 // @Router /api/client-device/report [post]
 func (c *ClientDeviceController) Report(ctx *gin.Context) {
 	var req struct {
-		Platform string `json:"platform"`
-		Screen   string `json:"screen"`
-		Timezone string `json:"timezone"`
-		Language string `json:"language"`
+		Platform   string `json:"platform"`
+		Screen     string `json:"screen"`
+		Timezone   string `json:"timezone"`
+		Language   string `json:"language"`
+		TenantCode string `json:"tenant_code"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误："+err.Error())
 		return
 	}
 	rep := &service.ClientDeviceReport{
-		Platform: req.Platform,
-		Screen:   req.Screen,
-		Timezone: req.Timezone,
-		Language: req.Language,
-		UA:       ctx.Request.UserAgent(),
-		IP:       ctx.ClientIP(),
+		Platform:   req.Platform,
+		Screen:     req.Screen,
+		Timezone:   req.Timezone,
+		Language:   req.Language,
+		TenantCode: req.TenantCode,
+		UA:         ctx.Request.UserAgent(),
+		IP:         ctx.ClientIP(),
 	}
-	recorded, err := c.svc.Report(rep)
+	recorded, err := c.svc.Report(ctx, rep)
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())
 		return

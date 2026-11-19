@@ -3,7 +3,7 @@
 > 由 `scripts/gen_env_reference.go` 扫描 internal/ cmd/（非 _test.go）与 config.yaml 生成。
 > 再生成：`go run ./scripts/gen_env_reference.go`；CI 校验：`go run ./scripts/gen_env_reference.go -check`。
 > 测试基建专用键（POSTGRES_TEST_* / TESTDB_* / TEST_ADMIN_* / CI 等）不属部署配置面，未收录。
-> <!-- envref-fingerprint: 137 keys -->
+> <!-- envref-fingerprint: 138 keys -->
 
 | 键 | 说明 | 读取点 |
 |---|---|---|
@@ -11,7 +11,7 @@
 | `ADMIN_EMAIL` |  | `internal/config/admin.go:91` |
 | `ADMIN_REAL_NAME` |  | `internal/config/admin.go:94` |
 | `ADMIN_USERNAME` |  | `internal/config/admin.go:88` |
-| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:873` |
+| `AGENT_RUNTIME_BUS_ENABLED` |  | `cmd/api/main.go:878` |
 | `AI_DEBOUNCE_SECONDS` |  | `internal/service/ai_debounce.go:28` |
 | `ALLOWED_WS_ORIGINS` |  | `internal/config/ws_origin.go:47` |
 | `ALLOW_INSECURE_TELEGRAM_WEBHOOK` | 危险：允许 Telegram webhook 免签（dev 双护栏） | `internal/channelbot/telegram/telegram.go:550<br>internal/service/webhook.go:693` |
@@ -31,6 +31,7 @@
 | `BRUTE_FORCE_DISABLED` | 危险：置 1/true 关闭登录爆破防护（仅诊断临时用） | `internal/middleware/brute_force.go:17<br>internal/middleware/brute_force.go:17` |
 | `CHANNEL_WS_ALLOWED_ORIGINS` |  | `internal/channelgw/ws.go:100` |
 | `CHAT_MEDIA_URL_EXTRA_HOSTS` |  | `internal/service/chat_visitor.go:920` |
+| `CLIENT_DEVICE_TENANT_CODES` | 设备信标归属白名单（SaaS 共享实例，逗号分隔租户码；空=拒收全部） | `internal/service/client_device.go:48` |
 | `CONFIG_PATH` |  | `internal/config/server.go:535` |
 | `CONTENT_GUARD_API_ENDPOINT` |  | `internal/app/content_guard_wiring.go:129` |
 | `CONTENT_GUARD_API_HOSTS` |  | `internal/app/content_guard_wiring.go:135` |
@@ -75,8 +76,8 @@
 | `GEO_SEED_DSN` |  | `cmd/seedkw/main.go:14` |
 | `GEO_SITE_BASE_URL` |  | `internal/config/website.go:31` |
 | `GEO_SITE_ROOT` |  | `internal/geo/service/geo_site.go:21` |
-| `GIN_MODE` |  | `cmd/api/main.go:479<br>internal/config/init.go:56<br>internal/pkg/db/db.go:64<br>…共 4 处` |
-| `HIVEMTK_SECRETS_DIR` |  | `cmd/api/main.go:344` |
+| `GIN_MODE` |  | `cmd/api/main.go:484<br>internal/config/init.go:56<br>internal/pkg/db/db.go:64<br>…共 4 处` |
+| `HIVEMTK_SECRETS_DIR` |  | `cmd/api/main.go:349` |
 | `HIVE_MTK_HOST_TOKEN` |  | `cmd/nm-host/main.go:105` |
 | `HIVE_MTK_WS_URL` |  | `cmd/nm-host/main.go:94` |
 | `HTTPS_PROXY` |  | `internal/config/server.go:347` |
@@ -106,10 +107,10 @@
 | `PLATFORM_API_URL` |  | `config.yaml:18<br>internal/config/platform.go:293<br>internal/platform/llm_proxy_client.go:119` |
 | `PLATFORM_CLOUD_URL` |  | `internal/config/platform.go:89` |
 | `PLATFORM_CONFIG_PATH` |  | `internal/config/platform.go:266<br>internal/config/platform.go:270` |
-| `PLATFORM_ENABLED` |  | `cmd/api/main.go:427<br>cmd/api/main.go:433<br>internal/config/platform.go:121` |
-| `PLATFORM_HEARTBEAT_ENABLED` |  | `cmd/api/main.go:449<br>cmd/api/main.go:452<br>internal/config/platform.go:155` |
+| `PLATFORM_ENABLED` |  | `cmd/api/main.go:432<br>cmd/api/main.go:438<br>internal/config/platform.go:121` |
+| `PLATFORM_HEARTBEAT_ENABLED` |  | `cmd/api/main.go:454<br>cmd/api/main.go:457<br>internal/config/platform.go:155` |
 | `PLATFORM_MERCHANT_KEY` |  | `internal/platform/asset_market_client.go:36<br>internal/platform/llm_proxy_client.go:128` |
-| `PORT` |  | `cmd/api/main.go:848<br>internal/config/ports.go:85` |
+| `PORT` |  | `cmd/api/main.go:853<br>internal/config/ports.go:85` |
 | `POSTGRES_PASSWORD` |  | `cmd/seed/main.go:212<br>cmd/websitekb/main.go:43<br>internal/config/server.go:580<br>…共 6 处` |
 | `PUBLIC_BASE_URL` |  | `cmd/api/main.go:158<br>config.yaml:37<br>internal/config/server.go:436<br>…共 5 处` |
 | `QWEN_API_KEY` |  | `cmd/geo-run/main.go:75` |
@@ -121,7 +122,7 @@
 | `REQUIRE_PRIVATE_NETWORK` |  | `cmd/api/main.go:158<br>internal/security/network_exposure_guard.go:31` |
 | `RESTORE_TMP_DIR` |  | `internal/storage/backup_source.go:29` |
 | `SERVER_API_BASE` |  | `internal/config/server.go:493` |
-| `SERVER_HOST` |  | `cmd/api/main.go:848` |
+| `SERVER_HOST` |  | `cmd/api/main.go:853` |
 | `SHOW_DEFAULT_CREDENTIALS` |  | `internal/config/admin.go:109` |
 | `SITE_TENANT_CODE` |  | `internal/controller/auth_register.go:64` |
 | `SMS_ALLOW_NIGHT_SEND` |  | `internal/service/sms/sms.go:295` |

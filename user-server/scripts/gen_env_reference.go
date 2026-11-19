@@ -216,6 +216,7 @@ var securityKeys = map[string]string{
 	"DEEPL_API_KEY":                    "DeepL 翻译密钥",
 	"CONTRIBUTOR_JWT_SECRET":           "贡献者门户独立 JWT 密钥（平台端）",
 	"PLATFORM_JWT_SECRET":              "平台管理端 JWT 密钥（平台端）",
+	"CLIENT_DEVICE_TENANT_CODES":       "设备信标归属白名单（SaaS 共享实例，逗号分隔租户码；空=拒收全部）",
 }
 
 func repoRoot() string {

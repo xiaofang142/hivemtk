@@ -1,10 +1,14 @@
 package service
 
 import (
+	"context"
 	"testing"
 
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/platform"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 // 任务三：设备信标服务口径测试。
@@ -15,9 +19,16 @@ func TestClientDeviceServiceReportsInSaaSMode(t *testing.T) {
 	prev := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(prev); platform.ResetClientDeviceSnapshotForTest() })
+	// TA-06：归属按登录租户反查 tenant_code（需库）——夹具建 tenant 84=t84xxxx
+	// + 白名单含该码（新契约默认 fail-closed）。
+	testutil.NewTestDB(t, &model.Tenant{})
+	if err := db.GetDB().Create(&model.Tenant{Code: "t84xxxx", Name: "TA-06 夹具", ID: 84}).Error; err != nil {
+		t.Fatalf("建租户夹具失败: %v", err)
+	}
+	t.Setenv("CLIENT_DEVICE_TENANT_CODES", "t84xxxx")
 
 	svc := NewClientDeviceService()
-	recorded, err := svc.Report(&ClientDeviceReport{
+	recorded, err := svc.Report(tenant.WithTenantID(context.Background(), 84), &ClientDeviceReport{
 		Platform: "Win32",
 		Screen:   "2560x1440",
 		Timezone: "Asia/Shanghai",
@@ -49,7 +60,7 @@ func TestClientDeviceServiceSkipsInOfflineMode(t *testing.T) {
 	t.Cleanup(func() { tenant.SetMode(prev); platform.ResetClientDeviceSnapshotForTest() })
 
 	svc := NewClientDeviceService()
-	recorded, err := svc.Report(&ClientDeviceReport{IP: "198.51.100.24", Platform: "MacIntel"})
+	recorded, err := svc.Report(tenant.WithTenantID(context.Background(), 84), &ClientDeviceReport{IP: "198.51.100.24", Platform: "MacIntel"})
 	if err != nil {
 		t.Fatalf("离线形态拒收是正常口径，不应报错：%v", err)
 	}
