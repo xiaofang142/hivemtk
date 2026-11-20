@@ -173,6 +173,8 @@
       width="640px"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
+      :show-close="false"
+      append-to-body
     >
       <el-alert
         type="warning"
@@ -240,7 +242,7 @@
 import i18n from '@/i18n'
 
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useListEditor } from '@/composables/useListEditor'
 import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
 import { createChannel } from '@/api/chatChannel'
@@ -249,7 +251,7 @@ import { createBinding } from '@/api/channelAgentBinding'
 import { copyToClipboard } from '@/utils/clipboard.js'
 import { TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 
-const router = useRouter()
+const { close: goBack, markChanged } = useListEditor('/chatChannel/list')
 const formRef = ref()
 const saving = ref(false)
 const credentialsVisible = ref(false)
@@ -340,6 +342,7 @@ const onSubmit = async () => {
         ElMessage.warning('渠道已创建，但默认智能体绑定失败：' + (bindErr?.message || '未知错误'));
       }
     }
+    markChanged()
     credentialsVisible.value = true
   } catch (err) {
     ElMessage.error('创建失败：' + (err?.message || err))
@@ -350,10 +353,8 @@ const onSubmit = async () => {
 
 const onDone = () => {
   credentialsVisible.value = false
-  router.push({ name: 'ChatChannelList' })
+  goBack()
 }
-
-const goBack = () => router.push({ name: 'ChatChannelList' })
 
 const copy = async (text) => {
   if (!text) return

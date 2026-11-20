@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 const route = vi.hoisted(() => ({ value: { params: { id: '77' } } }))
@@ -57,7 +58,7 @@ async function mountEditor() {
   // 整个组件在一段游离 DOM 上，querySelector 找不到「任务类型」那一项。
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const wrapper = mount(Editor, { global: { plugins: [ElementPlus] }, attachTo: host })
+  const wrapper = mount(Editor, { global: { plugins: [ElementPlus, createPinia()] }, attachTo: host })
   await settle(wrapper)
   return wrapper
 }

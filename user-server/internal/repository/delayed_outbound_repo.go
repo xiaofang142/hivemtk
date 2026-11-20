@@ -61,8 +61,8 @@ func NewDelayedOutboundRepositoryDefault() *DelayedOutboundRepository {
 	return NewDelayedOutboundRepository(GetDB())
 }
 
-// ReplayRepositories 保持回扫资格查询与任务仓储使用相同句柄，不向Service暴露数据库。
-func (r *DelayedOutboundRepository) ReplayRepositories() (*CustomerSessionRepository, *MessageHubRepository) {
+// NewReplayRepositories 保持回扫资格查询与任务仓储使用相同句柄，不向Service暴露数据库。
+func NewReplayRepositories(r *DelayedOutboundRepository) (*CustomerSessionRepository, *MessageHubRepository) {
 	if r == nil {
 		return nil, nil
 	}

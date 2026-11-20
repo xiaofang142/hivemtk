@@ -14,10 +14,7 @@
       v-for="item in menu.children"
       :key="item.path || item.key"
     >
-      <sub-menu-item
-        :menu="item"
-        :icon-components="props.iconComponents"
-      />
+      <sub-menu-item :menu="item" />
     </template>
   </el-sub-menu>
 
@@ -25,7 +22,6 @@
   <el-menu-item
     v-else
     :index="menu.path"
-    @click="handleMenuClick(menu)"
   >
     <el-icon><component :is="resolveRouteIcon(menu.icon || 'Document')" /></el-icon>
     <span>{{ t('menu.' + menu.key) }}</span>
@@ -33,28 +29,15 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
 import { resolveRouteIcon } from '@/utils/iconMap'
 
 import i18n from '@/i18n'
 const t = i18n.global.t
 
-const router = useRouter()
-
-const handleMenuClick = (menu) => {
-  if (menu.path) {
-    router.push(menu.path)
-  }
-}
-
-const props = defineProps({
+defineProps({
   menu: {
     type: Object,
     required: true
-  },
-  iconComponents: {
-    type: Object,
-    default: () => ({})
   }
 })
 </script>

@@ -26,4 +26,4 @@
 
 尚未发布新表/worker；生产故障重启与积压恢复未真实演练，矿工耗时移出HTTP后的响应收益未实测。处理依赖须遵守 context，不能承诺强杀不合作依赖；已运行副作用不因模块随后关闭而保证撤销。completed 仅表示工作流完成，不表示客户已收到触达。T009 保留未完成，不宣称 Converged。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

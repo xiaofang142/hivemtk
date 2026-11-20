@@ -664,7 +664,7 @@ func TestRestoreService_DecompressBackup(t *testing.T) {
 
 	os.Remove(testFile)
 
-	err = service.decompressBackup(ctx, zipFile)
+	err = service.decompressBackup(ctx, zipFile, filepath.Join(tmpDir, "decompressed"))
 	if err != nil {
 		t.Fatalf("decompressBackup failed: %v", err)
 	}

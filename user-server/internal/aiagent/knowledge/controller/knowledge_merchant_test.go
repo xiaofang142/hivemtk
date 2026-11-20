@@ -1,23 +1,25 @@
 package controller
 
 import (
-	"time"
-	"os"
-	"net"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	knowledgesvc "hivemtk-user/internal/aiagent/knowledge/service"
+	"hivemtk-user/internal/aiagent/llm"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/model"
 	db "hivemtk-user/internal/pkg/db"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/testutil/testmigrate"
@@ -66,6 +68,23 @@ func setupKMRouter(t *testing.T, ctrl *KnowledgeMerchantController) *gin.Engine 
 	ctrl.RegisterRoutes(group)
 	group.POST("/knowledge-merchant/external/import", ctrl.ExternalImport)
 	return router
+}
+
+func setupKMRouterWithOfflineEmbedding(t *testing.T, ctrl *KnowledgeMerchantController) (*gin.Engine, *gorm.DB) {
+	t.Helper()
+	router := setupKMRouter(t, ctrl)
+	database := db.GetDB()
+	chunkRepo := knowledgeRepo.NewKnowledgeChunkRepository(database)
+	kbService := knowledgesvc.NewKnowledgeServiceWithDeps(knowledgesvc.KnowledgeServiceDeps{
+		RagRepo:          knowledgeRepo.NewRagConfigRepository(database),
+		ChunkRepo:        chunkRepo,
+		EmbeddingService: llm.NewEmbeddingServiceWithConfig(&llm.EmbeddingConfig{Dimension: 1024, AllowFallback: true}),
+	})
+	ctrl.svc = knowledgesvc.NewKnowledgeMerchantServiceWithDeps(knowledgesvc.KnowledgeMerchantDeps{
+		KBService: kbService,
+		ChunkRepo: chunkRepo,
+	})
+	return router, database
 }
 
 func seedRagProducts(db *gorm.DB) {
@@ -583,8 +602,7 @@ func TestKM_Playground_ThresholdFilter(t *testing.T) {
 // TestKM_UpdateChunk_OK 测试更新分段成功
 func TestKM_UpdateChunk_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
-	r := setupKMRouter(t, ctrl)
-	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
+	r, db := setupKMRouterWithOfflineEmbedding(t, ctrl)
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
 	db.Create(doc)
@@ -644,8 +662,7 @@ func TestKM_DeleteChunk_OK(t *testing.T) {
 // TestKM_SplitChunk_OK 测试拆分分段
 func TestKM_SplitChunk_OK(t *testing.T) {
 	ctrl := NewKnowledgeMerchantController()
-	r := setupKMRouter(t, ctrl)
-	db := db.GetDB() // 当前全局测试句柄（_test.go 允许；与 setup 同库，避免 NewTestDB 二次建库清掉种子）
+	r, db := setupKMRouterWithOfflineEmbedding(t, ctrl)
 	pid := "kb-1"
 	doc := &model.KnowledgeDocument{ProductID: pid, Title: "Doc", SourceType: model.SourceTypeBatch, Status: 1}
 	db.Create(doc)

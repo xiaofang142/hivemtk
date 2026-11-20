@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -122,6 +123,9 @@ func (m *ReachQuotaManager) verifyToken(rows []quotaIntentRef, token string) err
 	if len(rows) == 0 {
 		return nil // 无 scope 行：无事可做（Reserve 时未设维度）
 	}
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].IntentID < rows[j].IntentID
+	})
 	if rows[0].Token != token {
 		return repository.ErrQuotaTokenMismatch
 	}
@@ -144,6 +148,34 @@ func (m *ReachQuotaManager) CommitIntent(ctx context.Context, intentID, token st
 	}
 	return nil
 }
+
+// SystemQuotaReleaser 系统侧释放接口（FA-08）：延迟队列的取消/撤回/耗尽失败路径
+// 释放仍处 reserved 的预占。无需调用方 token——token 校验防的是调用方之间互串；
+// repo 层 ReleaseIntent 本身拒绝 committed/unknown（已发生/结果未知的动作不能当
+// 未发生返额），所以系统路径误放不了不该放的额度。
+type SystemQuotaReleaser interface {
+	ReleaseReservedIntent(ctx context.Context, intentID string) error
+}
+
+// ReleaseReservedIntent 释放 intent 名下仍处 reserved 的预占（全部 scope 返额）。
+// committed/unknown 的预占跳过不动（分别=已发送、待人工核对）。
+func (m *ReachQuotaManager) ReleaseReservedIntent(ctx context.Context, intentID string) error {
+	rows, err := m.repo.ListByIntentPrefix(ctx, intentID+"#")
+	if err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if row.State != model.QuotaStateReserved {
+			continue
+		}
+		if err := m.repo.ReleaseIntent(ctx, row.IntentID, row.Token); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var _ SystemQuotaReleaser = (*ReachQuotaManager)(nil)
 
 // ReleaseIntent 确定未发送：全部 scope 释放并返额
 func (m *ReachQuotaManager) ReleaseIntent(ctx context.Context, intentID, token string) error {
@@ -192,6 +224,9 @@ func (m *ReachQuotaManager) intentReservations(ctx context.Context, intentID str
 	for _, row := range rows {
 		out = append(out, quotaIntentRef{IntentID: row.IntentID, Token: row.Token})
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].IntentID < out[j].IntentID
+	})
 	return out, nil
 }
 

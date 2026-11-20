@@ -1,18 +1,21 @@
+const loadList = () => import('@/views/chatChannel/List.vue')
+const listPath = '/chatChannel/list'
+
 export default [{
   path: '/chatChannel/list',
   name: 'ChatChannelList',
-  component: () => import('@/views/chatChannel/List.vue'),
+  component: loadList,
   meta: { title: '客服渠道', group: 'customer', icon: 'Connection', requiresAuth: true }
 }, {
   path: '/chatChannel/create',
   name: 'ChatChannelCreate',
-  component: () => import('@/views/chatChannel/Create.vue'),
-  meta: { title: '新建客服渠道', group: 'customer', icon: 'Plus', requiresAuth: true }
+  components: { default: () => import('@/views/chatChannel/Create.vue'), list: loadList },
+  meta: { title: '新建客服渠道', breadcrumbKey: '新建渠道', group: 'customer', icon: 'Plus', requiresAuth: true, listEditor: listPath }
 }, {
   path: '/chatChannel/edit/:id',
   name: 'ChatChannelEdit',
-  component: () => import('@/views/chatChannel/Edit.vue'),
-  meta: { title: '编辑客服渠道', group: 'customer', icon: 'Edit', requiresAuth: true }
+  components: { default: () => import('@/views/chatChannel/Edit.vue'), list: loadList },
+  meta: { title: '编辑客服渠道', group: 'customer', icon: 'Edit', requiresAuth: true, listEditor: listPath }
 }, {
   path: '/chatChannel/install-guide/:id?',
   name: 'ChatChannelInstallGuide',

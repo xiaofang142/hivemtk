@@ -22,4 +22,4 @@
 - 页面能伪造DOM证据，读器不是认证或授权；不得因此绕过后端tenant、自回显、人锁、风控。Proxy/页面方法篡改也不在无副作用保证内。
 - T006 的真实复验及 T007 最终验收保持未完成；无平台真实方向/重复回复对照或发布声明。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

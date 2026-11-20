@@ -151,6 +151,32 @@ func (c *OrderChangeController) Execute(ctx *gin.Context) {
 	response.Success(ctx, rec, "执行完成")
 }
 
+// Complete POST /api/order-change-requests/:id/complete（FA-09：执行结果回填）
+// dispatched→executed；实际改单结果说明必填——无回填证据不得显示实际改单成功。
+func (c *OrderChangeController) Complete(ctx *gin.Context) {
+	if !c.ready(ctx) {
+		return
+	}
+	id, err := strconv.ParseUint(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "无效的 id")
+		return
+	}
+	var req struct {
+		ResultNote string `json:"result_note" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "实际改单结果说明必填")
+		return
+	}
+	rec, err := c.svc.CompleteExecution(ctx.Request.Context(), uint(id), c.operator(ctx), req.ResultNote)
+	if err != nil {
+		replyCustomIntegrationError(ctx, err, "执行结果回填失败")
+		return
+	}
+	response.Success(ctx, rec, "执行结果已回填")
+}
+
 // Cancel POST /api/order-change-requests/:id/cancel
 func (c *OrderChangeController) Cancel(ctx *gin.Context) {
 	if !c.ready(ctx) {

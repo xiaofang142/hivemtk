@@ -43,7 +43,7 @@ type OneBotAccount struct {
 
 	ID uint `gorm:"primaryKey;autoIncrement" json:"id"`
 
-	OwnerUserID uint `gorm:"default:0;index" json:"owner_user_id"`
+	OwnerUserID uint   `gorm:"default:0;index" json:"owner_user_id"`
 	AccountName string `gorm:"type:varchar(100);not null" json:"account_name"`
 	// SelfID 为该协议端登录的 QQ 号（字符串存，避免前端数字精度丢失）。
 	SelfID string `gorm:"type:varchar(32);index" json:"self_id"`

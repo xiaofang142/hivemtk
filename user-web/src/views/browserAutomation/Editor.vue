@@ -14,9 +14,9 @@
       <el-button
         size="small"
         style="margin-top: 6px"
-        @click="router.push('/browser-automation/tasks')"
+        @click="goBack"
       >
-        返回任务列表
+        {{ $t(returnPath === '/browser-automation/tasks' ? '返回任务列表' : '返回') }}
       </el-button>
     </el-alert>
     <el-form
@@ -460,16 +460,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import i18n from '@/i18n'
+import { useListEditor } from '@/composables/useListEditor'
 import {
   getBrowserTask, createBrowserTask, updateBrowserTask, listBrowserTasks, listPlatforms,
   listBrowserCron, createBrowserCron, updateBrowserCron, setBrowserTaskDependency,
 } from '@/api/browserAutomation'
 
 const route = useRoute()
-const router = useRouter()
+const { returnPath, close: goBack, markChanged } = useListEditor('/browser-automation/tasks')
 const isEdit = computed(() => !!route.params.id)
 const saving = ref(false)
 const taskLoadError = ref('')
@@ -688,13 +689,15 @@ async function save() {
       const created = unpack(await createBrowserTask(payload))
       taskId = created?.id
     }
+    // 触发器或依赖失败时，主记录也已经提交，需要更新列表。
+    markChanged()
     // 任务已经存下来了；触发器这一步失败必须说清楚是哪一半没成，
     // 否则用户以为「定时配好了」，而它到点不会跑。
     try {
       await reconcileTrigger(taskId)
     } catch (e) {
       ElMessage.warning(`任务已保存，但定时配置没存上：${String(e?.message || e)}`)
-      router.push('/browser-automation/tasks')
+      goBack()
       return
     }
     // 依赖必须排在任务本体之后：那一扇门是「读整行—改两列—回写整行」，
@@ -703,11 +706,11 @@ async function save() {
       await reconcileDependency(taskId)
     } catch (e) {
       ElMessage.warning(`任务已保存，但依赖关系没存上：${String(e?.message || e)}`)
-      router.push('/browser-automation/tasks')
+      goBack()
       return
     }
     ElMessage.success('已保存')
-    router.push('/browser-automation/tasks')
+    goBack()
   } catch (e) {
     ElMessage.error(String(e?.message || e))
   } finally {

@@ -158,14 +158,17 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 		return
 	}
 
-	chunkModels, embeddings = filterValidEmbeddings(embService, embCfg, chunkModels, embeddings)
+	if err := persistValidatedChunkEmbeddings(embService, embCfg, chunkModels, embeddings, func(validChunks []model.KnowledgeChunk, validEmbeddings [][]float32) error {
+		chunkModels = validChunks
+		embeddings = validEmbeddings
+		return s.persistChunkEmbeddings(bgCtx, validChunks, validEmbeddings)
+	}); err != nil {
+		logger.Errorf("[knowledge] embedding validation or persistence failed doc=%d: %v", documentID, err)
+		s.markFailed(bgCtx, documentID, err.Error())
+		return
+	}
 	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusProcessing, 80, ""); err != nil {
 		logger.Errorf("[knowledge] 更新进度失败: %v", err)
-	}
-
-	if err := s.persistChunkEmbeddings(bgCtx, chunkModels, embeddings); err != nil {
-		s.markFailed(bgCtx, documentID, fmt.Sprintf("持久化向量失败: %v", err))
-		return
 	}
 
 	if contextualEnhanceEnabled() {

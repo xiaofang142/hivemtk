@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// channel_route_rule_service.go 路由规则管理（specs/024 T305）。
+// channel_route_rule.go 路由规则管理（specs/024 T305）。
 //
 // 校验集中在这里，Controller 只做绑定与状态码：
 // 规则写错最典型的形态是「目标词拼错」或「Match 不是合法 JSON」——两者在引擎侧

@@ -199,6 +199,13 @@
             {{ $t('导入资料') }}
           </el-button>
           <el-button
+            v-if="permissionStore.hasGrantedMenuPath('/knowledge/batch-import')"
+            :icon="UploadFilled"
+            @click="router.push('/knowledge/batch-import')"
+          >
+            {{ $t('menu.knowledgeBatchImport') }}
+          </el-button>
+          <el-button
             :icon="Refresh"
             @click="loadAll"
           >
@@ -703,6 +710,7 @@ import i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useListEditorRefresh } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
@@ -714,9 +722,11 @@ import { listTools } from '@/api/aiTool'
 import { EMBED_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
 import { getSourceLabel, getSourceTagType, filterSourcesByGroup } from '@/constants/source'
 import { rtNum } from '@/utils/runtimeConfig'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
 const route = useRoute()
+const permissionStore = usePermissionStore()
 
 const loading = ref(false)
 const importing = ref(false)
@@ -1036,6 +1046,7 @@ const startPolling = () => {
   }, 3000)
 };
 
+useListEditorRefresh('/knowledge/management', () => Promise.all([loadDocuments(), loadOverview()]))
 onMounted(async () => {
   await loadAll()
   await openFromQuery()

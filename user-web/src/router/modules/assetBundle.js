@@ -1,7 +1,11 @@
+const loadList = () => import('@/views/assetBundle/List.vue')
+const loadEditor = () => import('@/views/assetBundle/MerchantEditor.vue')
+const listPath = '/asset-bundle/list'
+
 export default [{
   path: '/asset-bundle/list',
   name: 'AssetBundleList',
-  component: () => import('@/views/assetBundle/List.vue'),
+  component: loadList,
   meta: { title: '资产包管理', group: 'aiAgent', icon: 'Files', requiresAuth: true }
 }, {
   path: '/asset-bundle/playground',
@@ -16,11 +20,11 @@ export default [{
 }, {
   path: '/asset-bundle/merchant-new',
   name: 'AssetBundleMerchantNew',
-  component: () => import('@/views/assetBundle/MerchantEditor.vue'),
-  meta: { title: '商户新建话术包', group: 'aiAgent', icon: 'MagicStick', requiresAuth: true }
+  components: { default: loadEditor, list: loadList },
+  meta: { title: '商户新建话术包', group: 'aiAgent', icon: 'MagicStick', requiresAuth: true, listEditor: listPath }
 }, {
   path: '/asset-bundle/merchant/:aid',
   name: 'AssetBundleMerchantEdit',
-  component: () => import('@/views/assetBundle/MerchantEditor.vue'),
-  meta: { title: '商户配置话术包', group: 'aiAgent', requiresAuth: true, hidden: true }
+  components: { default: loadEditor, list: loadList },
+  meta: { title: '商户配置话术包', breadcrumbKey: 'navigation.configureMerchantBundle', group: 'aiAgent', requiresAuth: true, hidden: true, listEditor: listPath }
 }];

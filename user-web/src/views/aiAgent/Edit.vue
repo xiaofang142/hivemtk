@@ -22,7 +22,7 @@
         </div>
         <div class="header-actions">
           <el-button @click="goBack">
-            {{ $t('返回列表') }}
+            {{ $t(returnPath === '/aiAgent/list' ? '返回列表' : '返回') }}
           </el-button>
           <el-button
             type="primary"
@@ -794,7 +794,7 @@
 import i18n from '@/i18n'
 
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   InfoFilled, UserFilled, Collection, Connection, ChatLineSquare,
@@ -812,12 +812,13 @@ import { listBundles } from '@/api/assetBundle'
 import { listLocalAssets } from '@/api/assetMarket'
 import { INTERNAL_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 import { isUserReportedError } from '@/utils/errorReporting'
+import { useListEditor } from '@/composables/useListEditor'
 
 const internalLanguageOptions = INTERNAL_LANGUAGE_OPTIONS
 const targetLanguageOptions = TARGET_LANGUAGE_OPTIONS
 
 const route = useRoute()
-const router = useRouter()
+const { returnPath, close: goBack, markChanged } = useListEditor('/aiAgent/list')
 
 const formRef = ref();
 const pageLoading = ref(false)
@@ -1133,6 +1134,7 @@ const onSave = async () => {
         }
         ElMessage.success(i18n.global.t('智能体创建成功'))
       }
+      markChanged()
       goBack()
     } catch (e) {
       if (!isUserReportedError(e)) ElMessage.error('保存失败：' + (e.message || '未知错误'))
@@ -1141,10 +1143,6 @@ const onSave = async () => {
     }
   })
 };
-
-const goBack = () => {
-  router.push('/aiAgent/list')
-}
 
 const openTestDialog = () => {
   if (isEdit.value && !form.id) {

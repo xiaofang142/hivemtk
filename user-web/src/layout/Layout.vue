@@ -25,7 +25,7 @@
         @select="handleTopMenuSelect"
       >
         <el-menu-item
-          v-for="menu in filteredTopMenus"
+          v-for="menu in permissionStore.navigationMenus"
           :key="menu.key"
           :index="menu.key"
         >
@@ -57,7 +57,7 @@
       </div>
 
       <div
-        v-if="userStore.isLoggedIn"
+        v-if="canShowGeoAlerts"
         class="notif-bell geo-alert-bell"
         role="button"
         tabindex="0"
@@ -144,7 +144,7 @@
 
     <el-container class="app-body">
       <el-aside
-        v-if="currentTopMenu && currentTopMenu.children"
+        v-if="currentTopMenu?.children?.length"
         :width="sidebarCollapsed ? '64px' : '240px'"
         class="app-aside"
         :class="{ 'is-collapsed': sidebarCollapsed }"
@@ -166,7 +166,8 @@
         </div>
         <el-scrollbar>
           <el-menu
-            :default-active="route.path"
+            ref="sidebarMenu"
+            :default-active="activeSubMenu"
             :unique-opened="false"
             :collapse="sidebarCollapsed"
             :collapse-transition="true"
@@ -177,10 +178,7 @@
               v-for="subMenu in currentTopMenu.children"
               :key="subMenu.key"
             >
-              <sub-menu-item
-                :menu="subMenu"
-                :icon-components="iconComponents"
-              />
+              <sub-menu-item :menu="subMenu" />
             </template>
           </el-menu>
         </el-scrollbar>
@@ -188,30 +186,39 @@
 
       
       <el-main class="app-main">
-        <div
+        <nav
           v-if="breadcrumb.length"
           class="breadcrumb-wrap"
+          :aria-label="t('navigation.breadcrumb')"
         >
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item
-              v-for="(b, i) in breadcrumb"
-              :key="i"
+          <ol class="breadcrumb-list">
+            <li
+              v-for="(crumb, index) in breadcrumb"
+              :key="crumb.key"
+              class="breadcrumb-item"
             >
-              {{ b }}
-            </el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-        <router-view v-slot="{ Component }">
-          <transition
-            name="fade"
-            mode="out-in"
-          >
-            <component
-              :is="Component"
-              :key="$route.fullPath"
-            />
-          </transition>
-        </router-view>
+              <span
+                v-if="index"
+                class="breadcrumb-separator"
+                aria-hidden="true"
+              >/</span>
+              <router-link
+                v-if="crumb.to"
+                :to="crumb.to"
+                class="breadcrumb-link"
+              >
+                {{ crumb.label }}
+              </router-link>
+              <span
+                v-else
+                :aria-current="index === breadcrumb.length - 1 ? 'page' : undefined"
+              >
+                {{ crumb.label }}
+              </span>
+            </li>
+          </ol>
+        </nav>
+        <list-editor-outlet />
       </el-main>
     </el-container>
   </el-container>
@@ -225,23 +232,18 @@ import SubMenuItem from '@/components/SubMenuItem.vue'
 import MessageNotification from '@/components/MessageNotification.vue'
 import SubscriptionBanner from '@/components/SubscriptionBanner.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import ListEditorOutlet from './ListEditorOutlet.vue'
 import i18n from '@/i18n'
 import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { usersApi } from '@/api/users'
 import { useOnboarding, resolveRoutePattern } from '@/composables/useOnboarding'
 import { Warning, Bell, Menu, SwitchButton, Fold, Expand, QuestionFilled, Refresh, Compass, Guide } from '@element-plus/icons-vue'
-import { routeIconMap, resolveRouteIcon } from '@/utils/iconMap'
+import { resolveRouteIcon } from '@/utils/iconMap'
+import { getMenuActionKey, getMenuLanding, getNavigationPath } from '@/utils/menuNavigation'
 void Bell; void Warning; void Menu; void SwitchButton; void Fold; void Expand; void Refresh; void Compass; void Guide
 
 const { startGlobalTour, startPageTour, getPageTourState, destroyPageTour, destroy: destroyTour, isTourActive, isPageSeen } = useOnboarding()
-
-// 传给 SubMenuItem 的仍是整张表（它内部走 resolveRouteIcon 逐个解析），
-// 顶层菜单这里也走同一个解析函数：2026-10-12 之前这里写的是
-// <component :is="iconComponents[menu.icon]" />，直接下标没有兜底，
-// 一个没在 iconMap 登记的图标名会得到 undefined，静默渲染成空白——
-// 菜单项还在、只是少了图标，比整条路由失效更难被发现。
-const iconComponents = routeIconMap
 
 const route = useRoute()
 const router = useRouter()
@@ -252,8 +254,6 @@ const userStore = useUserStore()
 const permissionStore = usePermissionStore()
 const t = i18n.global.t
 
-const activeTopMenu = ref('')
-const activeSubMenu = ref(route.path)
 const unreadCount = ref(0)
 let unreadTimer = null
 import { notificationApi } from '@/api/notification'
@@ -270,16 +270,28 @@ const loadUnreadCount = async () => {
   } catch { /* 静默失败：铃铛角标非关键路径 */ }
 }
 const geoAlertCount = ref(0)
-let geoAlertTimer = null
+const canShowGeoAlerts = computed(() => userStore.isLoggedIn && !hideChrome.value && permissionStore.hasGrantedMenuPath('/geo-tools/alerts'))
 import { getGeoAlertsUnreadCount } from '@/api/geoAlert'
-const loadGeoAlertCount = async () => {
-  if (!userStore.isLoggedIn) return
-  try {
-    const res = await getGeoAlertsUnreadCount()
-    const data = res?.data || res
-    geoAlertCount.value = Number(data?.count || 0)
-  } catch { /* 静默失败：铃铛角标非关键路径 */ }
-}
+watch(canShowGeoAlerts, (visible, _, onCleanup) => {
+  geoAlertCount.value = 0
+  if (!visible) return
+  let stale = false
+  const loadGeoAlertCount = async () => {
+    try {
+      const res = await getGeoAlertsUnreadCount()
+      const data = res?.data || res
+      if (!stale) geoAlertCount.value = Number(data?.count || 0)
+    } catch { /* 静默失败：铃铛角标非关键路径 */ }
+  }
+  loadGeoAlertCount()
+  const timer = setInterval(() => {
+    if (document.visibilityState === 'visible') loadGeoAlertCount()
+  }, 60000)
+  onCleanup(() => {
+    stale = true
+    clearInterval(timer)
+  })
+}, { immediate: true })
 const SIDEBAR_COLLAPSED_KEY = 'hivemtk_sidebar_collapsed'
 const readSidebarCollapsed = () => {
   try {
@@ -289,69 +301,43 @@ const readSidebarCollapsed = () => {
   }
 }
 const sidebarCollapsed = ref(readSidebarCollapsed())
+const sidebarMenu = ref(null)
 const persistSidebarCollapsed = () => {
   try {
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
   } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
 }
 
-// 菜单树改为后端驱动（RBAC）：GET /api/menus 返回按角色过滤后的树（超管全量）。
-// 结构与旧静态 topMenus 一致：{ key, title, icon, path?, children? }；标题渲染走 i18n t('menu.'+key)。
-const topMenus = computed(() => permissionStore.menus)
-
-// 后端已按角色过滤菜单树，前端不再做 roles 静态过滤
-const filteredTopMenus = computed(() => topMenus.value)
-
-const currentTopMenu = computed(() => {
-  return filteredTopMenus.value.find(menu => menu.key === activeTopMenu.value)
-})
+const navigationTrail = computed(() => permissionStore.getNavigationTrail(route))
+const currentTopMenu = computed(() => navigationTrail.value[0])
+const activeTopMenu = computed(() => currentTopMenu.value?.key || '')
+const activeSubMenu = computed(() => navigationTrail.value.at(-1)?.path || '')
 
 const breadcrumb = computed(() => {
-  const chain = []
-  const build = (items, trail) => {
-    for (const it of items) {
-      const next = [...trail, it.title]
-      if (it.path === route.path) { chain.push(...next); return true }
-      if (it.children && build(it.children, next)) return true
-    }
-    return false
+  const onChildPage = activeSubMenu.value && activeSubMenu.value !== getNavigationPath(route)
+  const crumbs = navigationTrail.value.map((node, index, trail) => ({
+    key: node.key,
+    label: t('menu.' + node.key),
+    to: onChildPage && index === trail.length - 1 ? node.path : undefined
+  }))
+  if (onChildPage) {
+    const actionKey = getMenuActionKey(route)
+    const labelKey = actionKey ? 'menu.' + actionKey : route.meta.breadcrumbKey || route.meta.title || '详情'
+    crumbs.push({ key: 'current-page', label: t(labelKey) })
   }
-  for (const top of filteredTopMenus.value) {
-    if (build([top], [])) break
-  }
-  return chain
-});
+  return crumbs
+})
 
-const hasActiveChild = (menu, path) => {
-  if (menu.path === path) return true
-  if (menu.children) {
-    for (const child of menu.children) {
-      if (hasActiveChild(child, path)) return true
-    }
-  }
-  return false
-}
-
-const findFirstChild = (menu) => {
-  if (menu.path) return menu
-  if (menu.children) {
-    for (const child of menu.children) {
-      const result = findFirstChild(child)
-      if (result) return result
-    }
-  }
-  return null
-}
-
-watch(() => route.path, (newPath) => {
-  activeSubMenu.value = newPath
-  for (const menu of filteredTopMenus.value) {
-    if (hasActiveChild(menu, newPath)) {
-      activeTopMenu.value = menu.key
-      break
-    }
-  }
-}, { immediate: true })
+watch([sidebarMenu, navigationTrail, sidebarCollapsed], async ([menu, trail, collapsed], _, onCleanup) => {
+  const groups = trail.slice(1, -1)
+  if (!menu || collapsed || groups.length === 0) return
+  let stale = false
+  onCleanup(() => { stale = true })
+  // Element Plus registers new submenus on mount, after this post-flush watcher can run.
+  await nextTick()
+  if (stale || menu !== sidebarMenu.value) return
+  for (const group of groups) menu.open(group.key || group.path)
+}, { flush: 'post' })
 
 // 页面导览自动触发（任务六）。
 //
@@ -431,12 +417,8 @@ onUnmounted(() => {
 })
 
 const handleTopMenuSelect = (key) => {
-  activeTopMenu.value = key
-  const menu = filteredTopMenus.value.find(item => item.key === key)
-  if (menu && menu.children) {
-    const firstChild = findFirstChild(menu)
-    if (firstChild) router.push(firstChild.path)
-  }
+  const path = getMenuLanding(permissionStore.navigationMenus.find(item => item.key === key))
+  if (path) router.push(path)
 }
 
 const handleSubMenuSelect = (path) => {
@@ -493,15 +475,11 @@ onMounted(async () => {
   }
   // RBAC：拉取当前用户可见菜单树（路由守卫通常已加载，此处幂等兜底）
   permissionStore.ensureMenus().catch(() => {})
-  loadGeoAlertCount()
-  geoAlertTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') loadGeoAlertCount()
-  }, 60000)
 
   loadUnreadCount()
   // 轮询**不按可见性跳过**。
   //
-  // 照抄 geoAlertCount 的 `document.visibilityState === 'visible'` 守卫是错的：
+  // 不能沿用 GEO 告警的 `document.visibilityState === 'visible'` 守卫：
   // 后台标签页里可见性为 hidden ⇒ 回调被跳过 ⇒ 用户切回前台时角标是旧的，
   // 要再等一个周期才更新 —— 而"切回来就看到新消息"恰恰是铃铛存在的意义。
   // 顺带一提：无头浏览器里 visibilityState 恒为 hidden，照抄会让这段代码
@@ -513,7 +491,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  if (geoAlertTimer) { clearInterval(geoAlertTimer); geoAlertTimer = null }
   if (unreadTimer) { clearInterval(unreadTimer); unreadTimer = null }
 })
 </script>
@@ -766,21 +743,32 @@ onUnmounted(() => {
 .breadcrumb-wrap {
   padding: $spacing-md 24px 0;
 }
-.breadcrumb-wrap :deep(.el-breadcrumb__inner) {
+.breadcrumb-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
   color: $text-secondary;
+  font-size: 14px;
   font-weight: 500;
 }
-.breadcrumb-wrap :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+.breadcrumb-separator {
+  margin-inline: 8px;
+}
+.breadcrumb-link {
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.breadcrumb-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.breadcrumb-item [aria-current='page'] {
   color: $text-primary;
   font-weight: 600;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.25s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
 </style>

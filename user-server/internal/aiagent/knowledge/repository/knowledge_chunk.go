@@ -67,6 +67,19 @@ func (r *KnowledgeChunkRepository) BatchCreate(ctx context.Context, chunks []mod
 	return nil
 }
 
+// ReplaceSplit atomically writes replacement chunks and removes the source chunk.
+// Creating first keeps the source available until every replacement is durable;
+// the transaction rolls back both writes if either operation fails.
+func (r *KnowledgeChunkRepository) ReplaceSplit(ctx context.Context, sourceID uint64, replacements []model.KnowledgeChunk) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		txRepo := NewKnowledgeChunkRepository(tx)
+		if err := txRepo.BatchCreate(ctx, replacements); err != nil {
+			return err
+		}
+		return txRepo.Delete(ctx, sourceID)
+	})
+}
+
 // guardDirectWrite 拦下"在已进发布制的库上就地改写/物理删除一条在服分段"。
 //
 // 只拦这两种，其余写通路不动，理由是按"会不会让未审批的正文当场可检"划的线：
@@ -150,15 +163,40 @@ func (r *KnowledgeChunkRepository) Update(ctx context.Context, chunk *model.Know
 	if err := r.guardDirectWrite(ctx, chunk.ProductID, chunk.ID); err != nil {
 		return err
 	}
-	updates := map[string]any{
+	updates := chunkUpdateFields(chunk)
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeChunk{}).
+		Where("id = ?", chunk.ID).Updates(updates))
+}
+
+func chunkUpdateFields(chunk *model.KnowledgeChunk) map[string]any {
+	return map[string]any{
 		"content":      chunk.Content,
 		"char_count":   chunk.CharCount,
 		"token_count":  chunk.TokenCount,
 		"content_hash": chunk.ContentHash,
 		"embedding_id": chunk.EmbeddingID,
+		// Content and its vector are one logical value. Remove the previous
+		// vector before re-embedding so retrieval cannot use stale semantics.
+		"embedding":    nil,
+		"embed_status": "pending",
 	}
-	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeChunk{}).
-		Where("id = ?", chunk.ID).Updates(updates))
+}
+
+// MarkEmbeddingFailed hides any vector not known to match the current text and
+// records that a retry/reindex is required. It is best-effort after the content
+// write has already succeeded.
+func (r *KnowledgeChunkRepository) MarkEmbeddingFailed(ctx context.Context, ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Table("knowledge_chunks").Where("id IN ?", ids).Updates(chunkEmbeddingFailedFields()).Error
+}
+
+func chunkEmbeddingFailedFields() map[string]any {
+	return map[string]any{
+		"embedding":    nil,
+		"embed_status": "failed",
+	}
 }
 
 // Delete 根据 ID 删除分段

@@ -1,27 +1,31 @@
+const loadList = () => import('@/views/aiAgent/List.vue')
+const loadEditor = () => import('@/views/aiAgent/Edit.vue')
+const listPath = '/aiAgent/list'
+
 export default [
   {
     path: '/aiAgent',
     name: 'AIAgent',
-    component: () => import('@/views/aiAgent/List.vue'),
-    meta: { title: '智能体', group: 'aiAgent', icon: 'Cpu' }
+    component: loadList,
+    meta: { title: '智能体', group: 'aiAgent', icon: 'Cpu', listEditorBase: listPath }
   },
   {
     path: '/aiAgent/list',
     name: 'AIAgentList',
-    component: () => import('@/views/aiAgent/List.vue'),
+    component: loadList,
     meta: { title: '智能体列表', group: 'aiAgent', icon: 'List' }
   },
   {
     path: '/aiAgent/create',
     name: 'AIAgentCreate',
-    component: () => import('@/views/aiAgent/Edit.vue'),
-    meta: { title: '创建智能体', group: 'aiAgent', icon: 'Plus' }
+    components: { default: loadEditor, list: loadList },
+    meta: { title: '创建智能体', group: 'aiAgent', icon: 'Plus', listEditor: listPath }
   },
   {
     path: '/aiAgent/edit/:id',
     name: 'AIAgentEdit',
-    component: () => import('@/views/aiAgent/Edit.vue'),
-    meta: { title: '编辑智能体', group: 'aiAgent', icon: 'Edit' }
+    components: { default: loadEditor, list: loadList },
+    meta: { title: '编辑智能体', breadcrumbKey: 'navigation.editAgent', group: 'aiAgent', icon: 'Edit', listEditor: listPath }
   },
   {
     path: '/aiAgent/integrations',

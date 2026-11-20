@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 const api = vi.hoisted(() => ({
@@ -34,7 +35,7 @@ const rows = (n) => Array.from({ length: n }, (_, i) => ({
 async function mountList() {
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const wrapper = mount(List, { global: { plugins: [ElementPlus] }, attachTo: host })
+  const wrapper = mount(List, { global: { plugins: [ElementPlus, createPinia()] }, attachTo: host })
   await settle(wrapper)
   return wrapper
 }

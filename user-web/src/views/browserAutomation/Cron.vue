@@ -12,7 +12,10 @@
         >
           新建触发器
         </el-button>
-        <el-button @click="$router.push('/browser-automation/tasks/create')">
+        <el-button
+          v-if="permissionStore.hasGrantedMenuPath('/browser-automation/tasks/create')"
+          @click="$router.push('/browser-automation/tasks/create')"
+        >
           新建 cron 任务
         </el-button>
       </el-space>
@@ -258,6 +261,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePermissionStore } from '@/stores/permission'
 import {
   listBrowserCron, createBrowserCron, updateBrowserCron,
   enableBrowserCron, disableBrowserCron, deleteBrowserCron,
@@ -267,6 +271,7 @@ import {
 const TIMEZONES = ['Asia/Shanghai', 'Asia/Tokyo', 'Europe/London', 'America/New_York', 'UTC']
 
 const list = ref([])
+const permissionStore = usePermissionStore()
 const tasks = ref([])
 const loading = ref(false)
 const dialog = ref({ visible: false, saving: false, id: null, task_id: null, cron_expr: '', time_zone: '', enabled: true })

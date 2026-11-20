@@ -252,15 +252,6 @@ async function ensureRouteLoaded(path) {
   }
 }
 
-// fallbackLandingPath 非管理员「默认落地页不可访问」时的回退落地路径。
-// menuPaths[0] 可用则用它；菜单树为空（新注册用户尚未被分配任何菜单）时
-// 回退 /profile —— 个人资料在 personalPaths 白名单里恒可达，保证不落 403。
-// 旧回退 /inbox/list 不是恒可达路径：零菜单用户登录后直接撞 403（2026-11-13
-// SaaS 注册实测实锤），守卫「避免登录后直接 403」的意图被自己的回退打破。
-export function fallbackLandingPath(menuPaths) {
-  return (Array.isArray(menuPaths) && menuPaths[0]) || '/profile'
-}
-
 router.beforeEach(async (to, from, next) => {
   // 登录态单一真相是内存令牌（Pinia store 的 token ref；JWT 不再持久化进
   // localStorage，旧值由 stores/user.js 的 initAuth 一次性迁入内存）。
@@ -353,7 +344,7 @@ router.beforeEach(async (to, from, next) => {
       if (!isPersonal && !permissionStore.canAccessPath(to.path)) {
         // 默认落地页不可访问时重定向到首个授权菜单，避免登录后直接 403
         if (to.path === '/messageHub/list') {
-          next({ path: fallbackLandingPath(permissionStore.menuPaths), replace: true })
+          next({ path: permissionStore.getMenuReturnPath(undefined, to.path), replace: true })
           return
         }
         ElMessage.error('无权访问（403）：请联系管理员分配菜单权限')

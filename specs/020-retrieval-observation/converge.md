@@ -51,4 +51,4 @@ go test -p 1 -count=1 ./internal/app/                     → ok 23.932s
 **结论仍为 partial**：以上是受控环境回归与缺陷修复，不构成生产收益证据；T005 要求的
 「未部署不声称生产收益」继续成立。
 
-关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [总验收](../../.specify/bugs/bridge-safe-quality-20261116-sol/acceptance.md)
+关联：[规格](spec.md) · [计划](plan.md) · [任务](tasks.md) · [历史最终验证（partial）](../../.specify/bugs/bridge-safe-quality-20261116-sol/final-validation-20261117.md)

@@ -12,6 +12,37 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
+// ErrChunkIndexingFailed means the edited/split text was persisted, but its
+// embedding could not be refreshed. Callers must not report the write as fully
+// successful; the underlying provider error is kept in logs only.
+var ErrChunkIndexingFailed = errors.New("分段正文已保存，但索引更新失败，请稍后重试")
+
+type chunkReindexFunc func(context.Context, string, []model.KnowledgeChunk) error
+type chunkFailureMarker func(context.Context, []uint64) error
+
+func reindexChunksAfterWrite(
+	ctx context.Context,
+	productID string,
+	chunks []model.KnowledgeChunk,
+	reindex chunkReindexFunc,
+	markFailed chunkFailureMarker,
+) error {
+	if err := reindex(ctx, productID, chunks); err != nil {
+		ids := make([]uint64, 0, len(chunks))
+		for _, chunk := range chunks {
+			if chunk.ID > 0 {
+				ids = append(ids, chunk.ID)
+			}
+		}
+		if markErr := markFailed(ctx, ids); markErr != nil {
+			logger.Errorf("[knowledge] 分段向量化失败后回写失败状态也失败: product=%s chunks=%v err=%v", productID, ids, markErr)
+		}
+		logger.Errorf("[knowledge] 分段内容已保存但重新向量化失败: product=%s chunks=%v err=%v", productID, ids, err)
+		return ErrChunkIndexingFailed
+	}
+	return nil
+}
+
 // GetDocumentChunks 列出文档分段（支持分页）。
 //
 // token 可选：携带外部系统 API Token 时校验文档归属是否与授权产品一致
@@ -77,10 +108,13 @@ func (s *KnowledgeMerchantService) UpdateChunk(ctx context.Context, req *UpdateC
 	if err := s.chunkRepo.Update(ctx, chunk); err != nil {
 		return err
 	}
-	if err := s.kbService.EmbedAndPersistChunks(ctx, chunk.ProductID, []model.KnowledgeChunk{*chunk}); err != nil {
-		logger.Errorf("[knowledge] 分段更新后重新向量化失败: %v", err)
-	}
-	return nil
+	return reindexChunksAfterWrite(
+		ctx,
+		chunk.ProductID,
+		[]model.KnowledgeChunk{*chunk},
+		s.kbService.EmbedAndPersistChunks,
+		s.chunkRepo.MarkEmbeddingFailed,
+	)
 }
 
 // DeleteChunk 删除分段
@@ -132,17 +166,11 @@ func (s *KnowledgeMerchantService) SplitChunk(ctx context.Context, req *SplitChu
 	if err != nil {
 		return err
 	}
-	if err := s.chunkRepo.Delete(ctx, chunk.ID); err != nil {
-		return err
-	}
 	docID := chunk.DocumentID
 	productID := chunk.ProductID
 	newChunks := make([]model.KnowledgeChunk, 0, len(req.Parts))
 	baseIndex := chunk.ChunkIndex
 	for i, part := range req.Parts {
-		if strings.TrimSpace(part) == "" {
-			continue
-		}
 		h := sha256.Sum256([]byte(part))
 		newChunks = append(newChunks, model.KnowledgeChunk{
 			DocumentID:  docID,
@@ -154,11 +182,14 @@ func (s *KnowledgeMerchantService) SplitChunk(ctx context.Context, req *SplitChu
 			TokenCount:  len(strings.Fields(part)),
 		})
 	}
-	if err := s.chunkRepo.BatchCreate(ctx, newChunks); err != nil {
+	if err := s.chunkRepo.ReplaceSplit(ctx, chunk.ID, newChunks); err != nil {
 		return err
 	}
-	if err := s.kbService.EmbedAndPersistChunks(ctx, productID, newChunks); err != nil {
-		logger.Errorf("[knowledge] 分段重切后重新向量化失败: %v", err)
-	}
-	return nil
+	return reindexChunksAfterWrite(
+		ctx,
+		productID,
+		newChunks,
+		s.kbService.EmbedAndPersistChunks,
+		s.chunkRepo.MarkEmbeddingFailed,
+	)
 }

@@ -1,15 +1,18 @@
+const loadList = () => import('@/views/KnowledgeWorkspace/KnowledgeManagement.vue')
+const listPath = '/knowledge/management'
+
 export default [
   {
     path: '/knowledge/management',
     name: 'KnowledgeManagement',
-    component: () => import('@/views/KnowledgeWorkspace/KnowledgeManagement.vue'),
+    component: loadList,
     meta: { title: '知识库管理', group: 'knowledge', icon: 'Files', requiresAuth: true }
   },
   {
     path: '/knowledge/batch-import',
     name: 'KnowledgeBatchImport',
-    component: () => import('@/views/KnowledgeWorkspace/BatchImport.vue'),
-    meta: { title: '批量导入', group: 'knowledge', icon: 'UploadFilled', requiresAuth: true }
+    components: { default: () => import('@/views/KnowledgeWorkspace/BatchImport.vue'), list: loadList },
+    meta: { title: '批量导入', group: 'knowledge', icon: 'UploadFilled', requiresAuth: true, listEditor: listPath }
   },
   {
     path: '/knowledge/playground',

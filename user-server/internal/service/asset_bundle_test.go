@@ -601,11 +601,12 @@ func TestWeave_HistoryOnlyUserOnlyAssistant(t *testing.T) {
 }
 
 type mockAssetBundleRepo struct {
-	mu      sync.Mutex
-	storage map[string]*model.AssetBundle
-	byID    map[int64]*model.AssetBundle
-	ratings map[string]int
-	nextID  int64
+	mu           sync.Mutex
+	storage      map[string]*model.AssetBundle
+	byID         map[int64]*model.AssetBundle
+	ratings      map[string]int
+	nextID       int64
+	updateRefErr error // FA-07：注入 UpdatePlatformRef 写失败
 }
 
 func newMockAssetBundleRepo() *mockAssetBundleRepo {
@@ -715,11 +716,18 @@ func (r *mockAssetBundleRepo) ExistsByAssetID(_ context.Context, assetID string)
 func (r *mockAssetBundleRepo) UpdatePlatformRef(_ context.Context, id int64, platformAssetID int64, status, note string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.updateRefErr != nil {
+		return r.updateRefErr
+	}
 	b, ok := r.byID[id]
 	if !ok {
 		return errors.New("not found")
 	}
 	b.PlatformAssetID = platformAssetID
+	// storage 与 byID 是两份拷贝（FindByAssetID 返回复制值），同步落，模拟真实 DB 行更新。
+	if sb, ok2 := r.storage[b.AssetID]; ok2 {
+		sb.PlatformAssetID = platformAssetID
+	}
 	b.PlatformStatus = status
 	b.PlatformReviewNote = note
 	return nil

@@ -226,8 +226,8 @@
       <template #header>
         <div class="card-header">
           <span>
-            <el-icon style="vertical-align: middle"><CircleCheck /></el-icon>
-            导入完成
+            <el-icon style="vertical-align: middle"><Upload /></el-icon>
+            {{ $t('批量导入已受理') }}
             <el-text
               type="info"
               size="small"
@@ -237,12 +237,18 @@
           <el-button
             link
             type="primary"
-            @click="lastResult = null"
+            @click="closeResult"
           >
             关闭
           </el-button>
         </div>
       </template>
+      <el-text
+        type="info"
+        size="small"
+      >
+        {{ $t('已受理文档仍在后台处理中,当前不代表索引已就绪') }}
+      </el-text>
       <el-row :gutter="16">
         <el-col :span="6">
           <el-statistic
@@ -252,7 +258,7 @@
         </el-col>
         <el-col :span="6">
           <el-statistic
-            title="成功"
+            :title="$t('已受理')"
             :value="lastResult.accepted"
             :value-style="{ color: '#10B981' }"
           />
@@ -266,8 +272,8 @@
         </el-col>
         <el-col :span="6">
           <el-statistic
-            title="成功率"
-            :value="successRate"
+            :title="$t('受理率')"
+            :value="acceptanceRate"
             suffix="%"
             :precision="1"
           />
@@ -292,9 +298,108 @@
           width="60"
         />
         <el-table-column
-          prop="value"
           label="错误信息"
-        />
+        >
+          <template #default="scope">
+            {{ scope.row }}
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-divider
+        v-if="indexDocuments.length"
+        content-position="left"
+      >
+        {{ $t('文档索引状态') }}
+      </el-divider>
+      <div
+        v-if="indexDocuments.length"
+        class="progress-toolbar"
+      >
+        <el-text
+          type="info"
+          size="small"
+        >
+          {{ $t('自动查询最多进行{count}轮,之后可手动刷新', { count: MAX_PROGRESS_POLLS }) }}
+        </el-text>
+        <el-button
+          size="small"
+          @click="refreshProgress"
+        >
+          {{ $t('刷新进度') }}
+        </el-button>
+      </div>
+      <el-table
+        v-if="indexDocuments.length"
+        :data="indexDocuments"
+        size="small"
+        border
+        row-key="id"
+      >
+        <el-table-column
+          :label="$t('文档标题')"
+          min-width="140"
+        >
+          <template #default="{ row }">
+            <span
+              :data-testid="`batch-document-${row.id}`"
+              :data-status="row.status"
+            >{{ row.title }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="$t('索引状态')"
+          width="130"
+        >
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.status, EMBED_STATUS)">
+              {{ $t(getStatusLabel(row.status, EMBED_STATUS)) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="$t('处理进度')"
+          width="180"
+        >
+          <template #default="{ row }">
+            <template v-if="row.status === 'processing'">
+              <el-progress
+                :percentage="progressPercent(row.progress)"
+                :stroke-width="8"
+              />
+              <span>{{ progressPercent(row.progress) }}%</span>
+            </template>
+            <span v-else-if="row.status === 'indexed'">100%</span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="$t('状态信息')"
+          min-width="180"
+        >
+          <template #default="{ row }">
+            {{ row.status === 'failed' ? $t('索引失败，可点击重试') : row.poll_error ? $t('状态查询失败，请点击刷新进度') : '—' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          :label="$t('操作')"
+          width="110"
+        >
+          <template #default="{ row }">
+            <el-button
+              v-if="row.status === 'failed'"
+              :data-testid="`retry-document-${row.id}`"
+              link
+              type="primary"
+              :loading="retryingDocumentID === row.id"
+              @click="retryDocument(row)"
+            >
+              {{ $t('重试') }}
+            </el-button>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <span>{{ $t('暂无数据') }}</span>
+        </template>
       </el-table>
     </el-card>
 
@@ -320,21 +425,37 @@ title,content,category,tags
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useListEditorChange } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Upload, View, CircleCheck, UploadFilled } from '@element-plus/icons-vue'
+import { Upload, View, UploadFilled } from '@element-plus/icons-vue'
 import { knowledgeMerchantAPI } from '@/api/knowledgeMerchant'
+import { knowledgeAPI } from '@/api/knowledge'
 import { ragProductConfigAPI } from '@/api/ragProductConfig'
+import { EMBED_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status'
 import { rtNum } from '@/utils/runtimeConfig'
 import { isUserReportedError } from '@/utils/errorReporting'
+import { parseBatchPreview } from './batchImportParser'
 
 const activeTab = ref('upload')
+const markChanged = useListEditorChange('/knowledge/management')
 const _uploading = ref(false)
 const importing = ref(false)
 
 const productList = ref([])
 const preview = ref([])
 const lastResult = ref(null)
+const indexDocuments = ref([])
+const retryingDocumentID = ref(null)
+
+const PROGRESS_POLL_INTERVAL_MS = 2000
+const MAX_PROGRESS_POLLS = 60
+const MAX_PROGRESS_CONCURRENCY = 4
+let progressPollTimer = null
+let progressPollCount = 0
+let progressPollInFlight = false
+let progressPollGeneration = 0
+let componentDisposed = false
 
 const uploadForm = reactive({
   product_id: '',
@@ -348,9 +469,9 @@ const pasteForm = reactive({
 })
 
 const canImport = computed(() => preview.value.length > 0 && !importing.value)
-const successRate = computed(() => {
+const acceptanceRate = computed(() => {
   if (!lastResult.value || !lastResult.value.total) return 0
-  return ((lastResult.value.accepted / lastResult.value.total) * 100).toFixed(1)
+  return (lastResult.value.accepted / lastResult.value.total) * 100
 })
 
 const loadProducts = async () => {
@@ -364,8 +485,116 @@ const loadProducts = async () => {
 }
 
 const handleTabChange = (_tab) => {
+  stopProgressPolling()
   preview.value = []
   lastResult.value = null
+  indexDocuments.value = []
+}
+
+const clearProgressPollTimer = () => {
+  if (progressPollTimer !== null) {
+    clearTimeout(progressPollTimer)
+    progressPollTimer = null
+  }
+}
+
+const stopProgressPolling = () => {
+  progressPollGeneration++
+  clearProgressPollTimer()
+}
+
+const closeResult = () => {
+  stopProgressPolling()
+  lastResult.value = null
+  indexDocuments.value = []
+}
+
+const isTerminalStatus = (status) => status === 'indexed' || status === 'failed'
+const progressPercent = (value) => Math.max(0, Math.min(100, Number(value) || 0))
+
+const pollDocumentProgress = async ({ resetLimit = false } = {}) => {
+  if (componentDisposed) return
+  const generation = progressPollGeneration
+  if (resetLimit) {
+    progressPollCount = 0
+    indexDocuments.value.forEach((row) => {
+      if (!isTerminalStatus(row.status)) row.poll_error = false
+    })
+  }
+  if (progressPollInFlight) return
+  clearProgressPollTimer()
+  const pending = indexDocuments.value.filter(row => !isTerminalStatus(row.status) && !row.poll_error)
+  if (pending.length === 0) return
+  if (progressPollCount >= MAX_PROGRESS_POLLS) return
+
+  progressPollCount++
+  progressPollInFlight = true
+  try {
+    for (let i = 0; i < pending.length; i += MAX_PROGRESS_CONCURRENCY) {
+      if (componentDisposed || generation !== progressPollGeneration) return
+      const batch = pending.slice(i, i + MAX_PROGRESS_CONCURRENCY)
+      await Promise.all(batch.map(async (row) => {
+        try {
+          const result = await knowledgeAPI.getDocumentProgress(row.id, { product_id: row.product_id })
+          if (componentDisposed || generation !== progressPollGeneration) return
+          const current = indexDocuments.value.find(item => item.id === row.id)
+          if (!current) return
+          current.title = result?.title || current.title
+          current.status = result?.embed_status || current.status
+          current.progress = result?.embed_progress ?? current.progress
+          current.poll_error = ''
+        } catch {
+          if (componentDisposed || generation !== progressPollGeneration) return
+          const current = indexDocuments.value.find(item => item.id === row.id)
+          if (current) current.poll_error = true
+        }
+      }))
+    }
+  } finally {
+    progressPollInFlight = false
+  }
+
+  if (componentDisposed) return
+  if (generation !== progressPollGeneration) {
+    void pollDocumentProgress()
+    return
+  }
+  if (indexDocuments.value.some(row => !isTerminalStatus(row.status) && !row.poll_error) && progressPollCount < MAX_PROGRESS_POLLS) {
+    progressPollTimer = setTimeout(() => {
+      progressPollTimer = null
+      void pollDocumentProgress()
+    }, PROGRESS_POLL_INTERVAL_MS)
+  }
+}
+
+const startProgressPolling = async (documentIDs, productID) => {
+  stopProgressPolling()
+  progressPollCount = 0
+  indexDocuments.value = (Array.isArray(documentIDs) ? documentIDs : [])
+    .map(id => Number(id))
+    .filter(id => Number.isSafeInteger(id) && id > 0)
+    .map(id => ({ id, title: `#${id}`, status: 'pending', progress: 0, poll_error: '', product_id: productID }))
+  if (indexDocuments.value.length) await pollDocumentProgress({ resetLimit: true })
+}
+
+const refreshProgress = async () => {
+  await pollDocumentProgress({ resetLimit: true })
+}
+
+const retryDocument = async (row) => {
+  if (retryingDocumentID.value === row.id || componentDisposed) return
+  retryingDocumentID.value = row.id
+  try {
+    await knowledgeAPI.reindexDocument(row.id, { product_id: row.product_id })
+    row.status = 'pending'
+    row.progress = 0
+    row.poll_error = ''
+    await pollDocumentProgress({ resetLimit: true })
+  } catch {
+    // HTTP interceptor already reports server errors; keep the failed state retryable.
+  } finally {
+    retryingDocumentID.value = null
+  }
 }
 
 // 上限与后端同源（knowledge.merchant_batch_max_file_size，单位字节）。
@@ -401,7 +630,7 @@ const loadPreview = () => {
   const reader = new FileReader()
   reader.onload = (e) => {
     const text = e.target.result
-    parseTextToPreview(text, uploadForm.format === 'auto' ? detectFormat(uploadForm.file.name) : uploadForm.format)
+    parseTextToPreview(text, uploadForm.format, uploadForm.file.name)
   }
   reader.readAsText(uploadForm.file)
 };
@@ -414,20 +643,9 @@ const loadPastePreview = () => {
   parseTextToPreview(pasteForm.jsonText, 'json')
 }
 
-const detectFormat = (filename) => {
-  const lower = filename.toLowerCase()
-  if (lower.endsWith('.json')) return 'json'
-  if (lower.endsWith('.csv')) return 'csv'
-  return 'json'
-}
-
-const parseTextToPreview = (text, format) => {
+const parseTextToPreview = (text, format, filename = '') => {
   try {
-    if (format === 'csv') {
-      preview.value = parseCSVClient(text)
-    } else {
-      preview.value = parseJSONClient(text)
-    }
+    preview.value = parseBatchPreview(text, filename, format)
     if (preview.value.length === 0) {
       ElMessage.warning(i18n.global.t('未解析到任何记录'))
     } else {
@@ -437,59 +655,6 @@ const parseTextToPreview = (text, format) => {
     preview.value = []
     ElMessage.error('解析失败: ' + e.message)
   }
-}
-
-const parseCSVClient = (text) => {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) throw new Error('CSV 必须至少包含表头和一行数据')
-  const headers = parseCSVLine(lines[0])
-  const idxContent = headers.findIndex(h => /content|内容|text|body/i.test(h))
-  if (idxContent < 0) throw new Error('CSV 缺少 content 列')
-  const idxTitle = headers.findIndex(h => /title|标题|name/i.test(h))
-  const idxCategory = headers.findIndex(h => /category|分类/i.test(h))
-  const idxTags = headers.findIndex(h => /tags|标签/i.test(h))
-  const out = []
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCSVLine(lines[i])
-    if (!cols[idxContent]) continue
-    out.push({
-      title: idxTitle >= 0 ? (cols[idxTitle] || '') : '',
-      content: cols[idxContent],
-      category: idxCategory >= 0 ? (cols[idxCategory] || '') : '',
-      tags: idxTags >= 0 ? (cols[idxTags] || '').split(',').map(s => s.trim()).filter(Boolean) : []
-    })
-  }
-  return out
-}
-
-const parseCSVLine = (line) => {
-  const out = []
-  let cur = ''
-  let inQuote = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (c === '"') {
-      if (inQuote && line[i + 1] === '"') { cur += '"'; i++ }
-      else inQuote = !inQuote
-    } else if (c === ',' && !inQuote) {
-      out.push(cur)
-      cur = ''
-    } else {
-      cur += c
-    }
-  }
-  out.push(cur)
-  return out
-}
-
-const parseJSONClient = (text) => {
-  const data = JSON.parse(text)
-  if (Array.isArray(data)) return data
-  if (data.items) return data.items
-  if (data.data) return data.data
-  if (data.list) return data.list
-  if (data.documents) return data.documents
-  throw new Error('JSON 结构不匹配,需为数组或包含 items/data/list/documents 字段')
 }
 
 const loadPasteTemplate = () => {
@@ -532,7 +697,13 @@ const handleBatchImport = async () => {
     }
     if (res) {
       lastResult.value = res
-      ElMessage.success(`导入完成:成功 ${res.accepted} / 失败 ${res.rejected}`)
+      lastResult.value.product_id = targetProduct
+      void startProgressPolling(res.document_ids, targetProduct)
+      if (Number(res.accepted) > 0) markChanged()
+      ElMessage.success(i18n.global.t('批次已提交：已受理 {accepted} 条，拒绝 {rejected} 条', {
+        accepted: res.accepted,
+        rejected: res.rejected
+      }))
       preview.value = [];
       if (activeTab.value === 'upload') uploadForm.file = null
       else pasteForm.jsonText = ''
@@ -550,6 +721,11 @@ const truncateText = (s, n) => s ? (s.length > n ? s.substring(0, n) + '...' : s
 onMounted(() => {
   loadProducts()
 })
+
+onBeforeUnmount(() => {
+  componentDisposed = true
+  stopProgressPolling()
+})
 </script>
 
 <style scoped lang="scss">
@@ -561,6 +737,13 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.progress-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0;
 }
 
 .content-prev {

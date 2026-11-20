@@ -2,6 +2,7 @@
   <div class="page">
     <div class="toolbar">
       <el-button
+        v-if="permissionStore.hasGrantedMenuPath('/browser-automation/tasks/create')"
         type="primary"
         icon="Plus"
         @click="$router.push('/browser-automation/tasks/create')"
@@ -152,8 +153,11 @@ import {
 } from '@/api/browserAutomation'
 import { classifyRunError, HOST_OFFLINE, TASK_BUSY, RUN_ERROR_TEXT } from './hostRunError'
 import HostInstallGuide from './HostInstallGuide.vue'
+import { usePermissionStore } from '@/stores/permission'
+import { useListEditorRefresh } from '@/composables/useListEditor'
 
 const router = useRouter()
+const permissionStore = usePermissionStore()
 
 const statusOptions = [
   { value: 'draft', label: '草稿' }, { value: 'ready', label: '就绪' },
@@ -255,6 +259,7 @@ async function onDelete(row) {
   load()
 }
 
+useListEditorRefresh('/browser-automation/tasks', load)
 onMounted(load)
 onBeforeUnmount(() => { if (pollTimer) clearInterval(pollTimer) })
 </script>

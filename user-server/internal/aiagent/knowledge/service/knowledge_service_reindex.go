@@ -59,8 +59,13 @@ func (s *KnowledgeService) Reindex(ctx context.Context, productID string, docID 
 		return err
 	}
 
-	chunks, embeddings = filterValidEmbeddings(embService, embCfg, chunks, embeddings)
-	if err := s.chunkRepo.UpdateEmbeddingsBatch(ctx, chunks, embeddings); err != nil {
+	if err := persistValidatedChunkEmbeddings(embService, embCfg, chunks, embeddings, func(validChunks []model.KnowledgeChunk, validEmbeddings [][]float32) error {
+		return s.chunkRepo.UpdateEmbeddingsBatch(ctx, validChunks, validEmbeddings)
+	}); err != nil {
+		logger.Errorf("[knowledge][Reindex] 向量结果校验或持久化失败 doc=%d: %v", doc.ID, err)
+		if statusErr := s.docRepo.UpdateStatus(ctx, doc.ID, model.EmbedStatusFailed, 0, err.Error()); statusErr != nil {
+			logger.Errorf("[knowledge][Reindex] 标记向量重建失败状态错误 doc=%d: %v", doc.ID, statusErr)
+		}
 		return err
 	}
 	now := time.Now()

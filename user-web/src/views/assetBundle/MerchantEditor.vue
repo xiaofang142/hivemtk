@@ -457,9 +457,9 @@
         </el-button>
         <el-button
           size="large"
-          @click="$router.push('/asset-bundle/list')"
+          @click="close"
         >
-          返回列表
+          {{ t(returnPath === '/asset-bundle/list' ? '返回列表' : '返回') }}
         </el-button>
       </div>
     </el-form>
@@ -473,11 +473,15 @@ import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import { Monitor, VideoPause, Goods, Lock, ChatDotRound, Grid } from '@element-plus/icons-vue'
 import { merchantSave, merchantParse, enableBundle, disableBundle, listEnabledBundles, getBundleByAssetID, uploadCover } from '@/api/assetBundle'
 import { useUserStore } from '@/stores/user'
+import { useListEditor } from '@/composables/useListEditor'
+import i18n from '@/i18n'
 
 const userStore = useUserStore()
 
 const route = useRoute()
 const router = useRouter()
+const t = i18n.global.t
+const { returnPath, isEmbedded, close, markChanged } = useListEditor('/asset-bundle/list')
 const formRef = ref(null)
 const loading = ref(false)
 const saving = ref(false)
@@ -614,6 +618,8 @@ const handleSave = async () => {
     ElMessage.warning('请填写资产包名称')
     return
   }
+  const embeddedSave = isEmbedded.value
+  const saveLocation = route.fullPath
   saving.value = true
   try {
     const payload = {
@@ -645,12 +651,14 @@ const handleSave = async () => {
       } catch  {
         ElMessage.warning('保存成功，但热启用失败，请手动启用')
       }
-      if (!isEdit.value && data.asset_id) {
+      if (!embeddedSave && route.fullPath === saveLocation && !isEdit.value && data.asset_id) {
         router.replace(`/asset-bundle/merchant/${data.asset_id}`)
       }
     } else {
       ElMessage.success('保存成功')
     }
+    markChanged()
+    if (embeddedSave) close()
   } catch (e) {
     ElMessage.error('保存失败: ' + (e?.message || e))
   } finally {
@@ -679,6 +687,7 @@ const handleToggleStatus = async (action) => {
       hosting.value = true
       ElMessage.success('已恢复托管')
     }
+    markChanged()
   } catch (e) {
     ElMessage.error('状态切换失败: ' + (e?.message || e))
   }

@@ -823,7 +823,7 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 		}
 		if token == "" {
 			if insecureWebhookAllowed() {
-				logInsecureWebhookBypass("wecomcs", accountID, errors.New("Token 未配置"))
+				logInsecureWebhookBypass("wecomcs", accountID, errors.New("token 未配置"))
 				return true, nil
 			}
 			return false, errors.New("wecomcs token 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
@@ -837,7 +837,7 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 		}
 		if token == "" {
 			if insecureWebhookAllowed() {
-				logInsecureWebhookBypass("wecombot", accountID, errors.New("Token 未配置"))
+				logInsecureWebhookBypass("wecombot", accountID, errors.New("token 未配置"))
 				return true, nil
 			}
 			return false, errors.New("wecombot token 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")
@@ -851,7 +851,7 @@ func (s *WebhookService) Verify(ctx context.Context, channel WebhookChannel, acc
 		}
 		if secret == "" {
 			if insecureWebhookAllowed() {
-				logInsecureWebhookBypass("custom", accountID, errors.New("Secret 未配置"))
+				logInsecureWebhookBypass("custom", accountID, errors.New("secret 未配置"))
 				return true, nil
 			}
 			return false, errors.New("custom secret 未配置；开发放行需显式 ALLOW_INSECURE_WEBHOOK=true")

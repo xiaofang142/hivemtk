@@ -45,6 +45,6 @@ export default [
     path: '/email/drag-editor',
     name: 'EmailDragEditor',
     component: () => import('@/views/email/DragEditor.vue'),
-    meta: { title: '拖拽编辑器', group: 'reach', icon: 'EditPen', requiresAuth: true }
+    meta: { title: '拖拽编辑器', breadcrumbKey: 'menu.emailDragEditor', group: 'reach', icon: 'EditPen', requiresAuth: true }
   }
 ]

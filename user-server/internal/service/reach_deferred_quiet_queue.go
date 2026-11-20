@@ -39,8 +39,57 @@ const quietDeferredMaxAttempts = 3
 
 // PersistentQuietHoursQueue 持久 quiet 延迟队列（实现 SendQuietHoursDeferer）。
 type PersistentQuietHoursQueue struct {
-	repo    *repository.ReachDeferredOutboundRepository
+	repo *repository.ReachDeferredOutboundRepository
+	// quota 系统侧配额释放（FA-08）：取消/耗尽失败时返还仍处 reserved 的预占。
+	quota   SystemQuotaReleaser
 	started atomic.Bool
+}
+
+// SetQuotaReleaser 注入系统侧释放器（装配点调用；nil=不参与配额结算）。
+func (q *PersistentQuietHoursQueue) SetQuotaReleaser(r SystemQuotaReleaser) {
+	q.quota = r
+}
+
+// deferredIntentID 从快照里还原配额意图键（管线预占时写入 metadata）。
+func deferredIntentID(rec *model.ReachDeferredOutbound) string {
+	if rec == nil || len(rec.RequestJSON) == 0 {
+		return ""
+	}
+	raw, err := json.Marshal(rec.RequestJSON)
+	if err != nil {
+		return ""
+	}
+	var snapshot struct {
+		Metadata map[string]any `json:"metadata"`
+	}
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		return ""
+	}
+	intent, _ := snapshot.Metadata["action_intent_id"].(string)
+	return intent
+}
+
+func releaseAfterDeferredFailure(markFailed func() error, release func()) error {
+	if err := markFailed(); err != nil {
+		return err
+	}
+	release()
+	return nil
+}
+
+// releaseReservedQuota 尽力释放仍处 reserved 的预占；失败只留日志不阻断业务路径
+// （取消动作本身已成功，返额失败走对账）。
+func (q *PersistentQuietHoursQueue) releaseReservedQuota(ctx context.Context, rec *model.ReachDeferredOutbound, scene string) {
+	if q.quota == nil {
+		return
+	}
+	intent := deferredIntentID(rec)
+	if intent == "" {
+		return
+	}
+	if err := q.quota.ReleaseReservedIntent(ctx, intent); err != nil {
+		logger.Warnf("[R-4] 延迟出站 %d %s 释放配额失败 intent=%s: %v", rec.ID, scene, intent, err)
+	}
 }
 
 // NewPersistentQuietHoursQueue 构造
@@ -150,7 +199,12 @@ func (q *PersistentQuietHoursQueue) replayOne(ctx context.Context, pipeline Send
 		}
 		if err != nil {
 			// 快照坏了重发无意义：落 failed 让人工看原因。
-			if ferr := q.repo.MarkFailed(ctx, rec.ID, rec.ClaimToken, "发送意图快照损坏: "+err.Error()); ferr != nil {
+			if ferr := releaseAfterDeferredFailure(
+				func() error {
+					return q.repo.MarkFailed(ctx, rec.ID, rec.ClaimToken, "发送意图快照损坏: "+err.Error())
+				},
+				func() { q.releaseReservedQuota(ctx, rec, "快照损坏") },
+			); ferr != nil {
 				logger.Errorf("[R-4] 延迟出站 %d 快照损坏且终态回写失败: %v", rec.ID, ferr)
 			}
 			return
@@ -178,7 +232,10 @@ func (q *PersistentQuietHoursQueue) replayOne(ctx context.Context, pipeline Send
 		}
 		attempts := rec.Attempts + 1
 		if attempts >= quietDeferredMaxAttempts {
-			if err := q.repo.MarkFailed(ctx, rec.ID, rec.ClaimToken, reason); err != nil {
+			if err := releaseAfterDeferredFailure(
+				func() error { return q.repo.MarkFailed(ctx, rec.ID, rec.ClaimToken, reason) },
+				func() { q.releaseReservedQuota(ctx, rec, "耗尽失败") },
+			); err != nil {
 				logger.Errorf("[R-4] 延迟出站 %d failed 回写失败: %v", rec.ID, err)
 			}
 			logger.Warnf("[R-4] 延迟出站 %d 重发 %d 次仍失败，判 failed: %s", rec.ID, attempts, reason)
@@ -222,9 +279,18 @@ func (q *PersistentQuietHoursQueue) ListDeferredOutbounds(ctx context.Context, c
 	return q.repo.ListPending(ctx, channel, status, page, pageSize)
 }
 
-// CancelDeferredOutbound 管理页取消（仅 pending）
+// CancelDeferredOutbound 管理页取消（仅 pending）。
+// FA-08：取消=确定不会发送，仍处 reserved 的预占必须返还额度。
 func (q *PersistentQuietHoursQueue) CancelDeferredOutbound(ctx context.Context, id uint) error {
-	return q.repo.CancelPending(ctx, id)
+	rec, err := q.repo.FindByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := q.repo.CancelPending(ctx, id); err != nil {
+		return err
+	}
+	q.releaseReservedQuota(ctx, &rec, "取消")
+	return nil
 }
 
 // errNilReachSendRequest 入队对象缺失

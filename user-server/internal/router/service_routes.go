@@ -309,6 +309,7 @@ func setupIntentRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	admin.POST("/order-change-requests", ocCtrl.Create)
 	admin.POST("/order-change-requests/:id/approve", ocCtrl.Approve)
 	admin.POST("/order-change-requests/:id/reject", ocCtrl.Reject)
+	admin.POST("/order-change-requests/:id/complete", ocCtrl.Complete)
 	admin.POST("/order-change-requests/:id/execute", ocCtrl.Execute)
 	admin.POST("/order-change-requests/:id/cancel", ocCtrl.Cancel)
 }

@@ -122,7 +122,7 @@ func TestRestoreService_RestoreDatabase_OldFormatBackupFailsClosed(t *testing.T)
 	}
 	defer os.RemoveAll(restoreTmp)
 
-	err := svc.restoreDatabase(ctx, &model.Backup{BackupName: "old-format"})
+	err := svc.restoreDatabase(ctx, &model.Backup{BackupName: "old-format"}, restoreTmp)
 	if err == nil {
 		t.Fatal("旧格式残缺备份应被 fail-closed 拒绝，实际却恢复成功")
 	}

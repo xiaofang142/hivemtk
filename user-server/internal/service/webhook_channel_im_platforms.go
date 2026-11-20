@@ -287,45 +287,6 @@ func parseOneBotPayload(body []byte) (*ParsedPayload, error) {
 	return p, nil
 }
 
-// parseWeCombBotPayload 智能机器人加密回调 → 通用 ParsedPayload。
-//
-// 入站回调是密文；调用方必须先解密。这里只负责把明文 JSON 映射成通用字段。
-func parseWeCombBotPlain(plain []byte) (*ParsedPayload, error) {
-	m, err := wecombot.ParseMessage(plain)
-	if err != nil {
-		return nil, err
-	}
-	// 事件报文（enter_chat / template_card_event / feedback）不是消息：
-	// 保留事件类型交给中台审计，不构造会话消息。
-	if m.MsgType == "event" {
-		et := ""
-		if m.Event != nil {
-			et = m.Event.EventType
-		}
-		return &ParsedPayload{
-			EventID:   "wecombot_event_" + m.MsgID,
-			EventType: et,
-			Extra:     map[string]any{"msgtype": m.MsgType, "eventtype": et, "chatid": m.ChatID},
-		}, nil
-	}
-	content := ""
-	if m.Text != nil {
-		content = m.Text.Content
-	} else if m.Markdown != nil {
-		content = m.Markdown.Content
-	}
-	return &ParsedPayload{
-		EventID:   "wecombot_" + m.MsgID,
-		EventType: model.EventTypeMessageReceived,
-		Sender:    m.From.UserID,
-		Content:   content,
-		ChatID:    m.ChatID,
-		Extra: map[string]any{
-			"msgtype": m.MsgType, "chatid": m.ChatID, "sender_name": m.From.Name,
-		},
-	}, nil
-}
-
 // customInbound 自定义渠道固定 JSON 契约。
 type customInbound struct {
 	EventID        string `json:"event_id"`

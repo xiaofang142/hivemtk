@@ -265,6 +265,7 @@ import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useListEditorRefresh } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, CopyDocument, ChatLineRound } from '@element-plus/icons-vue'
 import { listChannels, updateChannel, rotateAppKey, resetAppSecret } from '@/api/chatChannel'
@@ -404,6 +405,7 @@ const formatTime = (t) => {
   return new Date(t).toLocaleString('zh-CN')
 }
 
+useListEditorRefresh('/chatChannel/list', loadList)
 onMounted(loadList)
 </script>
 

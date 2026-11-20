@@ -1,3 +1,7 @@
+const loadList = () => import('@/views/browserAutomation/List.vue')
+const loadEditor = () => import('@/views/browserAutomation/Editor.vue')
+const listPath = '/browser-automation/tasks'
+
 export default [
   {
     path: '/browser-automation',
@@ -12,32 +16,32 @@ export default [
       {
         path: 'tasks',
         name: 'BrowserAutomationList',
-        component: () => import('@/views/browserAutomation/List.vue'),
+        component: loadList,
         meta: { title: '任务列表', requiresAuth: true }
       },
       {
         path: 'tasks/create',
         name: 'BrowserAutomationCreate',
-        component: () => import('@/views/browserAutomation/Editor.vue'),
-        meta: { title: '新建任务', requiresAuth: true }
+        components: { default: loadEditor, list: loadList },
+        meta: { title: '新建任务', requiresAuth: true, listEditor: listPath }
       },
       {
         path: 'tasks/:id/edit',
         name: 'BrowserAutomationEditor',
-        component: () => import('@/views/browserAutomation/Editor.vue'),
-        meta: { title: '编辑任务', requiresAuth: true }
+        components: { default: loadEditor, list: loadList },
+        meta: { title: '编辑任务', breadcrumbKey: 'navigation.editTask', requiresAuth: true, listEditor: listPath }
       },
       {
         path: 'tasks/:id',
         name: 'BrowserAutomationDetail',
         component: () => import('@/views/browserAutomation/Detail.vue'),
-        meta: { title: '任务详情', requiresAuth: true }
+        meta: { title: '任务详情', breadcrumbKey: 'reachPipeline.jobDetail', requiresAuth: true }
       },
       {
         path: 'sessions/:id',
         name: 'BrowserAutomationMonitor',
         component: () => import('@/views/browserAutomation/Monitor.vue'),
-        meta: { title: '执行监控', requiresAuth: true }
+        meta: { title: '执行监控', breadcrumbKey: 'menu.egoExecutions', requiresAuth: true }
       },
       {
         path: 'cron',

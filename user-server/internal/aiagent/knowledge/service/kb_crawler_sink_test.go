@@ -13,6 +13,8 @@ import (
 
 	kbcrawler "hivemtk-user/internal/aiagent/knowledge/kbcrawler"
 	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
+	"hivemtk-user/internal/aiagent/llm"
+	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
 
@@ -43,9 +45,11 @@ func setupCrawlerSinkTestDB(t *testing.T) (*CrawlerService, *gorm.DB) {
 		&kbDocumentChunkFixture{},
 	)
 	repo := knowledgeRepo.NewKBCrawlerRepository(db)
-	// kb 必须是真实服务：IngestCrawledPage/Publish 的后台 goroutine 调
-	// kb.ProcessDocumentByID（nil 接收者会在 defer 恢复路径二次 panic）。
+	// IngestCrawledPage synchronously processes the document; use an explicit
+	// hash fallback so this contract test remains independent of a local provider.
 	kb := NewKnowledgeBaseServiceWithDocs(knowledgeRepo.NewKBDocumentRepository(db))
+	embedding := llm.NewEmbeddingServiceWithConfig(&llm.EmbeddingConfig{Dimension: EmbeddingDim(), AllowFallback: true})
+	kb.vector = ragretrieval.NewVectorizer(EmbeddingDim(), embedding)
 	svc := NewCrawlerServiceWithRepos(repo, kb)
 	return svc, db
 }
@@ -115,8 +119,7 @@ func TestCrawlerSink_IngestNewDocument(t *testing.T) {
 	if err := db.First(&updated, docID).Error; err != nil {
 		t.Fatalf("读回: %v", err)
 	}
-	// 只断言内容回写：后台 goroutine（ProcessDocumentByID）会把状态推进到
-	// processing，与断言存在时序竞态，状态断言不在此锁。
+	// IngestCrawledPage verifies completed indexing before returning.
 	if updated.Content != "changed content" {
 		t.Fatalf("变更内容未回写: %+v", updated)
 	}

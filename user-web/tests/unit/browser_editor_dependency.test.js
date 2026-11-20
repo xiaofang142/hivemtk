@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus, { ElMessage } from 'element-plus'
+import { createPinia } from 'pinia'
 import { settle } from './settle-helper'
 
 const route = vi.hoisted(() => ({ value: { params: { id: '77' } } }))
@@ -56,7 +57,7 @@ const UP8 = { id: 8, name: '上游采集B', status: 'ready' }
 async function mountEditor() {
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const wrapper = mount(Editor, { global: { plugins: [ElementPlus] }, attachTo: host })
+  const wrapper = mount(Editor, { global: { plugins: [ElementPlus, createPinia()] }, attachTo: host })
   await settle(wrapper)
   return wrapper
 }

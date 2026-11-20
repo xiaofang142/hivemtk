@@ -25,6 +25,7 @@ import (
 	knowledgeModel "hivemtk-user/internal/aiagent/knowledge/model"
 	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/urlguard"
 
 	"gorm.io/gorm"
@@ -527,13 +528,13 @@ func (s *CrawlerService) crawlOne(ctx context.Context, src *model.KBCrawlerSourc
 	if err != nil {
 		return fmt.Errorf("入库失败 %s: %w", pageURL, err)
 	}
-	s.setHash(src.ID, pageURL, hash)
+	s.setHash(src.ID, pageURL, hash) // 仅终态成功才记 hash（FA-12：失败页重抓=重试入口）
 	if isNew {
 		counters.newPages++
 	} else {
 		counters.changed++
 	}
-	// QA 拆分（源级开关，默认开）
+	// QA 拆分（源级开关，默认开）：索引终态成功后才入队
 	if s.qa != nil && (src.QASplitEnabled == nil || *src.QASplitEnabled) {
 		s.qa.EnqueueDocument(docID, src.KBID)
 	}
@@ -562,18 +563,32 @@ func (s *CrawlerService) setHash(sourceID uint, pageURL, hash string) {
 }
 
 // IngestCrawledPage 爬得页面入库：落 kb_documents（file_type=".html"、content 直存、
-// title 存 URL 作变更检测约定键）→ ProcessDocumentByID 复用分段→向量化→索引全链路。
+// title 存 URL 作变更检测约定键）→ 同步跑分段→向量化→索引全链路并核对终态。
 // 变更页：旧 chunks 标 superseded 后重建。返回 (docID, isNew, err)。
+//
+// FA-12 修订（原缺陷：更新错误被 `_ =` 吞掉 + go ProcessDocumentByID(context.Background())
+// 丢租户——TENANT_MODE=on 下文档永久停 pending，而爬虫已记 hash/成功数，
+// 同页重抓被哈希跳过=永不重试）：
+//   ① 处理链带租户后台上下文（WithoutCancel 断请求取消链 + 显式恢复 src.TenantID）；
+//   ② Supersede/Update 回写错误视为入库失败向上返回；
+//   ③ 同步等待处理并核对文档终态，仅 indexed 才算成功（调用方据此才记 hash/计数），
+//     失败/未终态返回错误→同 hash 重抓可恢复。
 func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCrawlerSource, pageURL string, page *kbcrawler.Page) (uint, bool, error) {
 	existing, err := s.repo.FindHTMLDocByTitle(ctx, pageURL)
 	if err == nil {
-		// 变更重建：旧 chunks 标 superseded。原实现不检查这两步回写错误
-		// （best-effort）——错误路径逐字保留，显式忽略仓储返回的 error。
-		_ = s.repo.SupersedeActiveChunks(ctx, existing.ID)
-		_ = s.repo.UpdateDocumentFields(ctx, existing.ID, map[string]any{
+		if serr := s.repo.SupersedeActiveChunks(ctx, existing.ID); serr != nil {
+			return existing.ID, false, fmt.Errorf("旧分片失效失败 %s (doc=%d): %w", pageURL, existing.ID, serr)
+		}
+		if uerr := s.repo.UpdateDocumentFields(ctx, existing.ID, map[string]any{
 			"content": page.Content, "status": knowledgeModel.KBDocumentStatusPending, "error_msg": "",
-		})
-		go s.kb.ProcessDocumentByID(context.Background(), existing.ID)
+		}); uerr != nil {
+			return existing.ID, false, fmt.Errorf("正文更新回写失败 %s (doc=%d): %w", pageURL, existing.ID, uerr)
+		}
+		procCtx := tenant.WithTenantID(context.WithoutCancel(ctx), src.TenantID)
+		s.kb.ProcessDocumentByID(procCtx, existing.ID)
+		if terr := s.verifyDocumentTerminal(procCtx, existing.ID, pageURL); terr != nil {
+			return existing.ID, false, terr
+		}
 		return existing.ID, false, nil
 	}
 
@@ -588,8 +603,30 @@ func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCra
 	if err := s.repo.CreateDocument(ctx, doc); err != nil {
 		return 0, true, fmt.Errorf("保存爬取文档失败: %w", err)
 	}
-	go s.kb.ProcessDocumentByID(context.Background(), doc.ID)
+	procCtx := tenant.WithTenantID(context.WithoutCancel(ctx), src.TenantID)
+	s.kb.ProcessDocumentByID(procCtx, doc.ID)
+	if terr := s.verifyDocumentTerminal(procCtx, doc.ID, pageURL); terr != nil {
+		return doc.ID, true, terr
+	}
 	return doc.ID, true, nil
+}
+
+// verifyDocumentTerminal 处理链终态核对：仅 indexed 视为成功；
+// failed 带出错误信息，pending/processing=未达终态（卡住）一律失败——
+// 调用方不得在终态前记 hash（同页重抓=重试入口）。
+func (s *CrawlerService) verifyDocumentTerminal(ctx context.Context, docID uint, pageURL string) error {
+	doc, err := s.repo.GetDocumentByID(ctx, docID)
+	if err != nil {
+		return fmt.Errorf("处理终态核对读文档失败 %s (doc=%d): %w", pageURL, docID, err)
+	}
+	switch doc.Status {
+	case knowledgeModel.KBDocumentStatusIndexed:
+		return nil
+	case knowledgeModel.KBDocumentStatusFailed:
+		return fmt.Errorf("索引失败 %s (doc=%d): %s", pageURL, docID, doc.ErrorMsg)
+	default:
+		return fmt.Errorf("索引未达终态 %s (doc=%d): status=%s（分段/向量化卡住，重抓可恢复）", pageURL, docID, doc.Status)
+	}
 }
 
 // ContentHash 页面内容哈希：sha256(title + "\n" + content)

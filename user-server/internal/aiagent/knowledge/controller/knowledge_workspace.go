@@ -304,7 +304,12 @@ func (ctrl *KnowledgeWorkspaceController) GetDocumentProgress(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "无效的文档ID")
 		return
 	}
-	progress, err := ctrl.kbService.GetProgress(c.Request.Context(), id)
+	productID := strings.TrimSpace(c.Query("product_id"))
+	if productID == "" {
+		response.Error(c, http.StatusBadRequest, "产品ID不能为空")
+		return
+	}
+	progress, err := ctrl.kbService.GetProgress(c.Request.Context(), productID, id)
 	if err != nil {
 		response.Error(c, http.StatusNotFound, err.Error())
 		return

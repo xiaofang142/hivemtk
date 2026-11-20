@@ -62,8 +62,8 @@ describe('douyin.getConversationList 枚举会话列表', () => {
 
 describe('BaseAdapter.syncAllConversations 遍历回填', () => {
   function makeConvItem(id, name) {
-    const el = makeVisible(document.createElement('a'));
-    el.href = `/user/${id}`;
+    const el = makeVisible(document.createElement('button'));
+    el.dataset.conversationId = id;
     return { id, name, el };
   }
 
@@ -308,4 +308,3 @@ describe('openConversation / sendOutbound 目标会话切换（左侧找用户�
     expect(adapter.hooks.sendText).toHaveBeenCalledWith('在的', expect.objectContaining({ expectConv: 'a1', assertConv: expect.any(Function) }));
   });
 });
-

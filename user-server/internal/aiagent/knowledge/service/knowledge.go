@@ -89,6 +89,8 @@ type KnowledgeServiceDeps struct {
 	ParentRepo    *repository.KnowledgeChunkParentRepository
 	ImportLogRepo *repository.KnowledgeImportLogRepository
 	SearchLogRepo *repository.KnowledgeSearchLogRepository
+	// EmbeddingService optionally injects an explicit embedding client (for example, offline tests).
+	EmbeddingService *llm.EmbeddingService
 	// RagSearcher 缺省时按 ChunkRepo 构造（同连接）；显式传 nil 表示刻意不装配。
 	RagSearcher *RagSearcher
 }
@@ -112,6 +114,10 @@ func NewKnowledgeServiceWithDeps(deps KnowledgeServiceDeps) *KnowledgeService {
 }
 
 func newKnowledgeService(deps KnowledgeServiceDeps) *KnowledgeService {
+	embeddingService := deps.EmbeddingService
+	if embeddingService == nil {
+		embeddingService = llm.NewEmbeddingService()
+	}
 	return &KnowledgeService{
 		processor:     etl.NewDocumentProcessor(nil),
 		vectorizer:    ragretrieval.NewVectorizer(EmbeddingDim(), nil),
@@ -123,7 +129,7 @@ func newKnowledgeService(deps KnowledgeServiceDeps) *KnowledgeService {
 		importLogRepo: deps.ImportLogRepo,
 		searchLogRepo: deps.SearchLogRepo,
 		kbRepo:        anchorOrDefault(),
-		embeddingSvc:  llm.NewEmbeddingService(),
+		embeddingSvc:  embeddingService,
 		llmSvc:        llm.NewLLMService(),
 		ragSearcher:   NewRagSearcherWithRepo(deps.ChunkRepo),
 	}
@@ -229,8 +235,8 @@ func (s *KnowledgeService) Get(ctx context.Context, productID string, id int64) 
 }
 
 // GetProgress 获取处理进度
-func (s *KnowledgeService) GetProgress(ctx context.Context, documentID uint64) (map[string]any, error) {
-	doc, err := s.docRepo.GetByID(ctx, documentID)
+func (s *KnowledgeService) GetProgress(ctx context.Context, productID string, documentID uint64) (map[string]any, error) {
+	doc, err := s.docRepo.GetByProductAndID(ctx, productID, int64(documentID))
 	if err != nil {
 		return nil, err
 	}
@@ -360,6 +366,38 @@ func (s *KnowledgeService) persistChunkEmbeddingsWithSource(ctx context.Context,
 	return s.chunkRepo.UpdateEmbeddingsBatchWithSource(ctx, chunks, embeddings, source)
 }
 
+var ErrEmbeddingBatchIncomplete = errors.New("向量结果不完整或维度不匹配，请检查 embedding 配置后重试")
+
+func validateChunkEmbeddingBatch(
+	embService *llm.EmbeddingService,
+	embCfg *llm.EmbeddingConfig,
+	chunks []model.KnowledgeChunk,
+	embeddings [][]float32,
+) ([]model.KnowledgeChunk, [][]float32, error) {
+	if len(chunks) != len(embeddings) {
+		return nil, nil, ErrEmbeddingBatchIncomplete
+	}
+	validChunks, validEmbeddings := filterValidEmbeddings(embService, embCfg, chunks, embeddings)
+	if len(validChunks) != len(chunks) || len(validEmbeddings) != len(chunks) {
+		return nil, nil, ErrEmbeddingBatchIncomplete
+	}
+	return validChunks, validEmbeddings, nil
+}
+
+func persistValidatedChunkEmbeddings(
+	embService *llm.EmbeddingService,
+	embCfg *llm.EmbeddingConfig,
+	chunks []model.KnowledgeChunk,
+	embeddings [][]float32,
+	persist func([]model.KnowledgeChunk, [][]float32) error,
+) error {
+	validChunks, validEmbeddings, err := validateChunkEmbeddingBatch(embService, embCfg, chunks, embeddings)
+	if err != nil {
+		return err
+	}
+	return persist(validChunks, validEmbeddings)
+}
+
 // EmbedAndPersistChunks 向量化指定分片并写入 knowledge_chunks.embedding（per-product 配置优先）。
 // 供分段编辑（更新/重切）后重新向量化使用，确保向量与内容一致。
 func (s *KnowledgeService) EmbedAndPersistChunks(ctx context.Context, numericProductID string, chunks []model.KnowledgeChunk) error {
@@ -373,8 +411,9 @@ func (s *KnowledgeService) EmbedAndPersistChunks(ctx context.Context, numericPro
 		return fmt.Errorf("向量化失败: %w", err)
 	}
 
-	chunks, embeddings = filterValidEmbeddings(embService, embCfg, chunks, embeddings)
-	return s.persistChunkEmbeddingsWithSource(ctx, chunks, embeddings, source)
+	return persistValidatedChunkEmbeddings(embService, embCfg, chunks, embeddings, func(validChunks []model.KnowledgeChunk, validEmbeddings [][]float32) error {
+		return s.persistChunkEmbeddingsWithSource(ctx, validChunks, validEmbeddings, source)
+	})
 }
 
 // Search 检索知识库

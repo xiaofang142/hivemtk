@@ -173,7 +173,8 @@
 import i18n from '@/i18n'
 
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { useListEditor } from '@/composables/useListEditor'
 import { ElMessage } from 'element-plus'
 import { getChannel, updateChannel } from '@/api/chatChannel'
 import { listEnabledAgents } from '@/api/aiAgent'
@@ -181,7 +182,7 @@ import { listBindings, createBinding, updateBinding as _updateBinding, deleteBin
 import { TARGET_LANGUAGE_OPTIONS } from '@/constants/languages'
 
 const route = useRoute()
-const router = useRouter()
+const { close: goBack, markChanged } = useListEditor('/chatChannel/list')
 const formRef = ref()
 const loading = ref(false)
 const saving = ref(false)
@@ -313,7 +314,8 @@ const onSubmit = async () => {
       ElMessage.warning('渠道已更新，但默认智能体绑定同步失败：' + (bindErr?.message || '未知错误'))
     }
     ElMessage.success(i18n.global.t('已保存'))
-    router.push({ name: 'ChatChannelList' })
+    markChanged()
+    goBack()
   } catch (err) {
     ElMessage.error('保存失败：' + (err?.message || err))
   } finally {
@@ -321,7 +323,6 @@ const onSubmit = async () => {
   }
 }
 
-const goBack = () => router.push({ name: 'ChatChannelList' })
 
 onMounted(loadDetail)
 </script>

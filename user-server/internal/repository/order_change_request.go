@@ -30,6 +30,9 @@ func NewOrderChangeRequestRepositoryWithDB(db *gorm.DB) OrderChangeRequestReposi
 }
 
 // OrderChangeStatusPatch 状态迁移补丁（白名单字段，身份字段物理写不到）。
+// OrderChangeStatusPatch 状态迁移补丁（白名单字段，身份字段物理写不到）。
+// ExpectStatus 非空时启用 CAS（FA-09）：UPDATE 附加 `status = ExpectStatus` 条件，
+// 并发迁移只有旧状态持有者能赢，输家拿到 ErrOrderChangeStatusConflict。
 type OrderChangeStatusPatch struct {
 	Status       string
 	ApprovedBy   string
@@ -41,7 +44,13 @@ type OrderChangeStatusPatch struct {
 	RejectReason string
 	RejectedAt   *time.Time
 	CancelledAt  *time.Time
+	DispatchedBy string
+	DispatchedAt *time.Time
+	ExpectStatus string
 }
+
+// ErrOrderChangeStatusConflict CAS 落空：记录仍在但状态已被并发迁移。
+var ErrOrderChangeStatusConflict = errors.New("order_change_request: 状态已被并发迁移（CAS 落空）")
 
 func (p OrderChangeStatusPatch) toMap() map[string]any {
 	m := map[string]any{"status": p.Status}
@@ -71,6 +80,12 @@ func (p OrderChangeStatusPatch) toMap() map[string]any {
 	}
 	if p.CancelledAt != nil {
 		m["cancelled_at"] = p.CancelledAt
+	}
+	if p.DispatchedBy != "" {
+		m["dispatched_by"] = p.DispatchedBy
+	}
+	if p.DispatchedAt != nil {
+		m["dispatched_at"] = p.DispatchedAt
 	}
 	return m
 }
@@ -107,11 +122,22 @@ func (r *orderChangeRequestRepo) UpdateStatus(ctx context.Context, id uint, patc
 	if db == nil {
 		return errOrderChangeDBNotReady
 	}
+	if patch.ExpectStatus != "" {
+		db = db.Where("status = ?", patch.ExpectStatus)
+	}
 	res := db.Where("id = ?", id).Updates(patch.toMap())
 	if res.Error != nil {
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
+		if patch.ExpectStatus != "" {
+			// 区分「记录不存在」与「状态已被并发迁移」
+			var n int64
+			if e := r.db.WithContext(ctx).Model(&model.OrderChangeRequest{}).
+				Where("id = ?", id).Count(&n).Error; e == nil && n > 0 {
+				return ErrOrderChangeStatusConflict
+			}
+		}
 		return gorm.ErrRecordNotFound
 	}
 	return nil

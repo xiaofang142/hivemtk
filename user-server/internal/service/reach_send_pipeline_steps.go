@@ -105,7 +105,9 @@ func (p *defaultSendPipeline) Send(ctx context.Context, req *ReachSendRequest) *
 }
 
 // settleQuota D05 结算：按发送结局处置预占额。
-//   - Deferred（进延迟队列）：保持 reserved——队列重发带同一 intent，复用同一预占；
+//   - Deferred（进延迟队列）：保持 reserved（FA-08：尚未发送不得提前 commit——
+//     提前提交后撤回同意/确定失败都不能返额；真实发送由队列重发带同一 intent
+//     走 Success 路径恰好 commit 一次）；
 //   - Success：commit（幂等，重复回执不重复计数）；
 //   - 失败：按渠道错误分类——可重试（network/429/5xx）保持 reserved 等重试复用；
 //     不可重试（授权失效/参数错）= 确定未发送，release 返还额度。
@@ -116,7 +118,10 @@ func (p *defaultSendPipeline) settleQuota(ctx context.Context, req *ReachSendReq
 	}
 	var err error
 	switch {
-	case resp.Deferred || resp.Success:
+	case resp.Deferred:
+		// FA-08：入队≠发送。保持 reserved，返额通道留给取消/撤回/耗尽失败。
+		return
+	case resp.Success:
 		err = p.config.QuotaReserver.CommitIntent(ctx, intentID, token)
 	default:
 		ce := AsChannelError(errors.New(resp.Error))

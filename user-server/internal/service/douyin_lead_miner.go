@@ -211,11 +211,11 @@ var leadMiningChannels = map[string]bool{
 }
 
 var unsupportedLeadMiningChannels = map[string]string{
-	"weibo":    "微博线索挖掘需要 Chrome 扩展 + Bridge 协议 + 微博平台 API",
-	"taobao":   "淘宝线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"pdd":      "拼多多线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"jd":       "京东线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"bilibili": "B站线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"weibo":         "微博线索挖掘需要 Chrome 扩展 + Bridge 协议 + 微博平台 API",
+	"taobao":        "淘宝线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"pdd":           "拼多多线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"jd":            "京东线索挖掘需要 Chrome 扩展 + Bridge 协议",
+	"bilibili":      "B站线索挖掘需要 Chrome 扩展 + Bridge 协议",
 	"douyin_shop":   "抖店飞鸽线索挖掘需要 Chrome 扩展 + Bridge 协议",
 	"kuaishou_shop": "快手小店线索挖掘需要 Chrome 扩展 + Bridge 协议",
 	"shopee":        "Shopee 线索挖掘需要 Chrome 扩展 + Bridge 协议",

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"hivemtk-user/internal/pkg/db"
+
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
@@ -53,9 +55,14 @@ func (f *fakeOrderChangeRepo) UpdateStatus(ctx context.Context, id uint, patch r
 	defer f.mu.Unlock()
 	for _, r := range f.rows[f.tenantOf(ctx)] {
 		if r.ID == id {
+			// FA-09：CAS 语义与真实仓储一致——旧状态不符即并发落空
+			if patch.ExpectStatus != "" && r.Status != patch.ExpectStatus {
+				return repository.ErrOrderChangeStatusConflict
+			}
 			r.Status = patch.Status
 			r.ApprovedBy, r.ApprovedAt = patch.ApprovedBy, patch.ApprovedAt
 			r.ExecutorNote, r.ExecutedBy, r.ExecutedAt = patch.ExecutorNote, patch.ExecutedBy, patch.ExecutedAt
+			r.DispatchedBy, r.DispatchedAt = patch.DispatchedBy, patch.DispatchedAt
 			r.RejectedBy, r.RejectReason, r.RejectedAt = patch.RejectedBy, patch.RejectReason, patch.RejectedAt
 			r.CancelledAt = patch.CancelledAt
 			return nil
@@ -148,13 +155,27 @@ func TestOrderChangeStateMachine_Fake(t *testing.T) {
 	if _, err := svc.Reject(ctx, rec.ID, "op", "改主意"); err == nil {
 		t.Fatal("approved 后 reject 应被拒")
 	}
-	// buyer_initiated 通路可执行
+	// buyer_initiated 通路可执行（FA-09：Execute 只到 dispatched=派工完成）
 	rec2, err := svc.Execute(ctx, rec.ID, "op2")
 	if err != nil {
 		t.Fatalf("execute buyer_initiated: %v", err)
 	}
-	if rec2.Status != "executed" || rec2.ExecutorNote == "" {
-		t.Fatalf("执行形态不符: %+v", rec2)
+	if rec2.Status != "dispatched" || rec2.ExecutorNote == "" || rec2.DispatchedBy != "op2" {
+		t.Fatalf("派工形态不符: %+v", rec2)
+	}
+	// 派工态不得冒充实际改单成功：回填结果说明必填
+	if _, err := svc.CompleteExecution(ctx, rec.ID, "op2", ""); err == nil {
+		t.Fatal("空结果回填应被拒")
+	}
+	if _, err := svc.CompleteExecution(ctx, rec.ID, "op2", " \t\n "); err == nil {
+		t.Fatal("仅空白的结果回填应被拒")
+	}
+	rec3, err := svc.CompleteExecution(ctx, rec.ID, "op2", "客户已在平台自助改址，平台单号 DY-1-NEW")
+	if err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if rec3.Status != "executed" || rec3.ExecutedBy != "op2" {
+		t.Fatalf("回填后应为 executed: %+v", rec3)
 	}
 	// 终态不可逆
 	if _, err := svc.Cancel(ctx, rec.ID, "op3"); err == nil {
@@ -251,5 +272,102 @@ func TestOrderChange_PortAdapter_ToolFace(t *testing.T) {
 	}
 	if out["status"] != "pending" || out["capability"] == nil {
 		t.Fatalf("摘要形态不符: %v", out)
+	}
+}
+
+// FA-09 判据：隔离夹具并发批准/拒绝/取消只允许一个胜者（真实 PG 行级 CAS）。
+func TestOrderChange_ConcurrentTransitionsSingleWinner(t *testing.T) {
+	database := testutil.NewTestDBOrSkip(t, &model.OrderChangeRequest{}, &model.ExternalOrder{})
+	if database == nil {
+		return
+	}
+	db.SetTestDB(database) // ExternalOrderRepository 走全局 DB
+	repo := repository.NewOrderChangeRequestRepositoryWithDB(database)
+	orderRepo := repository.NewExternalOrderRepository()
+	svc := NewOrderChangeService(repo, orderRepo)
+	ctx := tenant.ContextWithDefault(context.Background())
+
+	// 外部订单镜像必须先落（Create 校验订单存在）
+	if err := database.Create(&model.ExternalOrder{TenantID: 1, Platform: "douyin", OrderID: "DY-CAS-1", UserName: "u", Status: "等待出库"}).Error; err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+	rec, err := svc.Create(ctx, OrderChangeCreateInput{
+		Platform: "douyin", OrderID: "DY-CAS-1", ChangeType: "address",
+		Payload: map[string]any{"address": "并发审批"}, Reason: "并发",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	type res struct {
+		name string
+		err  error
+	}
+	results := make([]res, 3)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	actions := []struct {
+		name string
+		fn   func() error
+	}{
+		{"approve", func() error { _, err := svc.Approve(ctx, rec.ID, "a1"); return err }},
+		{"reject", func() error { _, err := svc.Reject(ctx, rec.ID, "r1", "不批"); return err }},
+		{"cancel", func() error { _, err := svc.Cancel(ctx, rec.ID, "c1"); return err }},
+	}
+	for i, a := range actions {
+		wg.Add(1)
+		go func(idx int, act struct {
+			name string
+			fn   func() error
+		}) {
+			defer wg.Done()
+			<-start
+			results[idx] = res{act.name, act.fn()}
+		}(i, a)
+	}
+	close(start)
+	wg.Wait()
+
+	winners := 0
+	finalStatus := ""
+	for _, r := range results {
+		if r.err == nil {
+			winners++
+		}
+	}
+	got, _ := repo.GetByID(ctx, rec.ID)
+	finalStatus = got.Status
+	if winners != 1 {
+		t.Fatalf("并发三迁移必须恰好一个胜者，实际 %d（结果 %+v）", winners, results)
+	}
+	switch finalStatus {
+	case "approved", "rejected", "cancelled":
+	default:
+		t.Fatalf("终态必须恰为三迁移之一，得到 %s", finalStatus)
+	}
+	// 输家必须明确失败（前置检查冲突或 CAS 落空），不得互相覆盖成功
+	for _, r := range results {
+		if r.err != nil && r.err.Error() == "" {
+			t.Fatalf("输家错误不能为空")
+		}
+	}
+}
+
+// FA-09：重复 execute 不重复派工（dispatched 态拒绝再次 execute）。
+func TestOrderChange_RepeatExecuteAfterDispatchRefused(t *testing.T) {
+	svc := newOrderChangeSvcForTest()
+	ctx := tenant.ContextWithDefault(context.Background())
+	rec, _ := svc.Create(ctx, OrderChangeCreateInput{
+		Platform: "douyin", OrderID: "DY-DUP-1", ChangeType: "note",
+		Payload: map[string]any{"note": "备注"}, Reason: "重复派工",
+	})
+	if _, err := svc.Approve(ctx, rec.ID, "审批人"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Execute(ctx, rec.ID, "派工1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Execute(ctx, rec.ID, "派工2"); err == nil {
+		t.Fatal("dispatched 态再次 execute 应被拒（不重复派工）")
 	}
 }

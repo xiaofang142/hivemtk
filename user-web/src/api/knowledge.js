@@ -19,8 +19,8 @@ export const knowledgeAPI = {
   getDocument(id, params) {
     return http.get(`/api/knowledge/documents/${id}`, { params })
   },
-  getDocumentProgress(id) {
-    return http.get(`/api/knowledge/documents/${id}/progress`)
+  getDocumentProgress(id, params) {
+    return http.get(`/api/knowledge/documents/${id}/progress`, { params })
   },
   getDocumentChunks(id) {
     return http.get(`/api/knowledge/documents/${id}/chunks`)

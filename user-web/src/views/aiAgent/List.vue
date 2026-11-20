@@ -20,6 +20,7 @@
             {{ $t('刷新') }}
           </el-button>
           <el-button
+            v-if="permissionStore.hasGrantedMenuPath('/aiAgent/create')"
             type="primary"
             @click="goCreate"
           >
@@ -224,6 +225,7 @@
         >
           <template #default="{ row }">
             <el-button
+              v-if="canEdit(row)"
               link
               type="primary"
               size="small"
@@ -538,13 +540,16 @@ import i18n from '@/i18n'
 
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useListEditorRefresh } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, User, VideoPlay } from '@element-plus/icons-vue'
 import { listAgents, deleteAgent, toggleAgent, testAgent } from '@/api/aiAgent.js'
 import { listBindingsByAgent } from '@/api/channelAgentBinding.js'
 import { getLanguageLabel } from '@/constants/languages'
+import { usePermissionStore } from '@/stores/permission'
 
 const router = useRouter()
+const permissionStore = usePermissionStore()
 
 const currentAgentLabel = computed(() => {
   const agent = currentAgent.value
@@ -623,6 +628,8 @@ const onSearch = () => {
   loadList()
 }
 
+useListEditorRefresh('/aiAgent/list', loadList)
+
 const resetFilter = () => {
   filter.value = { type: '', status: '', keyword: '' }
   loadList()
@@ -632,9 +639,9 @@ const goCreate = () => {
   router.push('/aiAgent/create')
 };
 
-const goEdit = (row) => {
-  router.push(`/aiAgent/edit/${row.id}`)
-}
+const editPath = (row) => `/aiAgent/edit/${row.id}`
+const canEdit = (row) => permissionStore.hasGrantedMenuPath('/aiAgent/list') && permissionStore.canAccessPath(editPath(row))
+const goEdit = (row) => router.push(editPath(row))
 
 const onToggle = (row) => {
   const nextStatus = row.status === 1 ? 0 : 1

@@ -89,6 +89,11 @@ func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) toolu
 		if db != nil {
 			// D02：生产路径用持久延迟队列，重启不丢队
 			q := service.NewPersistentQuietHoursQueue(repository.NewReachDeferredOutboundRepository(db))
+			// FA-08：延迟队列的取消/耗尽失败路径需要能释放仍处 reserved 的预占
+			// （仅当装配的 QuotaReserver 支持系统侧释放时注入）
+			if rel, ok := cfg.QuotaReserver.(service.SystemQuotaReleaser); ok {
+				q.SetQuotaReleaser(rel)
+			}
 			cfg.QuietHoursDeferrer = q
 			sp = service.NewSendPipeline(cfg)
 			q.Start(context.Background(), sp)

@@ -223,6 +223,15 @@ func (r *ReachDeferredOutboundRepository) ResolveUnknown(ctx context.Context, id
 }
 
 // ListPending 管理页查询：按状态/渠道列延迟出站（租户隔离由 callback 注入）
+// FindByID 按主键取一条延迟出站记录（FA-08 取消路径需先读快照还原意图键）。
+func (r *ReachDeferredOutboundRepository) FindByID(ctx context.Context, id uint) (model.ReachDeferredOutbound, error) {
+	var rec model.ReachDeferredOutbound
+	if err := r.db.WithContext(ctx).First(&rec, id).Error; err != nil {
+		return rec, err
+	}
+	return rec, nil
+}
+
 func (r *ReachDeferredOutboundRepository) ListPending(ctx context.Context, channel, status string, page, pageSize int) ([]model.ReachDeferredOutbound, int64, error) {
 	if r.db == nil {
 		return nil, 0, nil

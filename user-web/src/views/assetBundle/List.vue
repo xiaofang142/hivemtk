@@ -70,6 +70,7 @@
             + 开发者新建
           </el-button>
           <el-button
+            v-if="permissionStore.hasGrantedMenuPath('/asset-bundle/merchant-new')"
             type="warning"
             @click="$router.push('/asset-bundle/merchant-new')"
           >
@@ -299,11 +300,14 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { usePermissionStore } from '@/stores/permission'
+import { useListEditorRefresh } from '@/composables/useListEditor'
 import {
   listBundles, listEnabledBundles, enableBundle, disableBundle,
   publishBundle, archiveBundle, deleteBundle
 } from '@/api/assetBundle'
 
+const permissionStore = usePermissionStore()
 const filter = reactive({
   keyword: '',
   status: '',
@@ -414,10 +418,12 @@ const handleDelete = async (row) => {
   }
 }
 
-onMounted(() => {
+const refreshBundles = () => {
   fetchList()
   fetchEnabled()
-})
+}
+useListEditorRefresh('/asset-bundle/list', refreshBundles)
+onMounted(refreshBundles)
 </script>
 
 <style scoped>

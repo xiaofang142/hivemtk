@@ -275,10 +275,11 @@ func stripTrailingJSONBlock(content string) (string, bool) {
 }
 
 type AssetBundleService struct {
-	repo        repository.AssetBundleRepository
-	version     repository.AssetBundleVersionLogRepository
-	hotPlug     hotPlugCache
-	localLoader LocalAssetLoader
+	repo           repository.AssetBundleRepository
+	version        repository.AssetBundleVersionLogRepository
+	hotPlug        hotPlugCache
+	localLoader    LocalAssetLoader
+	platformClient platformAssetClient
 }
 
 func NewAssetBundleService(repo repository.AssetBundleRepository, version repository.AssetBundleVersionLogRepository) *AssetBundleService {

@@ -163,6 +163,9 @@
         style="margin-bottom: 12px"
         :description="t('role.menuAssignHint', '勾选该角色可访问的菜单；超管始终拥有全部菜单，无需分配。')"
       />
+      <p class="menu-grouping-note">
+        {{ t('navigation.roleGroupingHint') }}
+      </p>
       <el-input
         v-model="menuFilterText"
         :placeholder="t('role.filterMenus', '搜索菜单')"
@@ -348,6 +351,13 @@ onMounted(loadRoles)
 </script>
 
 <style scoped>
+.menu-grouping-note {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .role-list-page {
   padding: 20px;
 }

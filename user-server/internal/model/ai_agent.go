@@ -124,8 +124,8 @@ const (
 	ChannelTypeKuaishouShop ChannelType = "kuaishou_shop"
 	ChannelTypeShopee       ChannelType = "shopee"
 	ChannelTypeWalmartUS    ChannelType = "walmart_us"
-	ChannelTypeWeb      ChannelType = "web"
-	ChannelTypeWebEmbed ChannelType = "web_embed"
+	ChannelTypeWeb          ChannelType = "web"
+	ChannelTypeWebEmbed     ChannelType = "web_embed"
 	// 2026-11 specs/025 新平台（与 model.Channel* 同名）。
 	ChannelTypeWeComCS   ChannelType = "wecomcs"
 	ChannelTypeOneBot    ChannelType = "onebot"

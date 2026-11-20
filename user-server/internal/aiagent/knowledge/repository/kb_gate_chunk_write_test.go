@@ -41,11 +41,16 @@ const (
 
 // kbRepoSetup 建 knowledge_chunks + kb_releases 并按需灌一行在服分段。
 //
-// kb_releases 走 AutoMigrate（列集由 model.KBRelease 自己给），knowledge_chunks 同理 ——
-// 本包不像 rag/retrieval 那样有手写 DDL，所以没有"测试表落后于模型"这条债。
+// kb_releases 走 AutoMigrate；knowledge_chunks 还需要 raw embedding/status columns,
+// which are intentionally not represented by the GORM model.
 func kbRepoSetup(t *testing.T, withReleaseRow bool) *gorm.DB {
 	t.Helper()
 	database := testutil.NewTestDB(t, &model.KnowledgeChunk{})
+	if err := database.Exec(`ALTER TABLE knowledge_chunks
+		ADD COLUMN IF NOT EXISTS embedding vector,
+		ADD COLUMN IF NOT EXISTS embed_status varchar(16) NOT NULL DEFAULT 'pending'`).Error; err != nil {
+		t.Fatalf("knowledge_chunks embedding 列を作成できません: %v", err)
+	}
 	if err := database.Exec(`DROP TABLE IF EXISTS kb_releases`).Error; err != nil {
 		t.Fatalf("清理 kb_releases 失败：%v", err)
 	}

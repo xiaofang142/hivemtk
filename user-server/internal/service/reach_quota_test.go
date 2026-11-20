@@ -255,8 +255,10 @@ func TestPipeline_QuotaSettlement(t *testing.T) {
 		},
 	}
 
-	// deferred 结算直测：进延迟队列 = 占额保留（队列重发带同 intent 复用）。
-	t.Run("deferred→committed（占额保留给队列重发）", func(t *testing.T) {
+	// deferred 结算直测（FA-08）：入队≠发送，保持 reserved——
+	// 真实发送由队列重发带同 intent 走 Success 恰好 commit 一次；
+	// 期间取消/撤回可释放返额。
+	t.Run("deferred→reserved（未发送不提前 commit）", func(t *testing.T) {
 		token, _, err := m.ReserveIntent(ctx, "pipe-def", "h", scopes)
 		if err != nil {
 			t.Fatalf("reserve: %v", err)
@@ -265,8 +267,16 @@ func TestPipeline_QuotaSettlement(t *testing.T) {
 		p := &defaultSendPipeline{config: SendPipelineConfig{QuotaReserver: m}}
 		p.settleQuota(ctx, newReq("pipe-def"), &SendResponse{Success: false, Deferred: true}, "pipe-def", token)
 		rec, _ := repo.GetReservation(ctx, "pipe-def#customer:pipe")
-		if rec == nil || rec.State != model.QuotaStateCommitted {
-			t.Fatalf("deferred 应按 commit 保留: %+v", rec)
+		if rec == nil || rec.State != model.QuotaStateReserved {
+			t.Fatalf("deferred 必须保持 reserved，得到 %+v", rec)
+		}
+		// reserved 期间可释放返额（取消/撤回路径）
+		if err := m.ReleaseReservedIntent(ctx, "pipe-def"); err != nil {
+			t.Fatalf("系统侧释放失败: %v", err)
+		}
+		rec2, _ := repo.GetReservation(ctx, "pipe-def#customer:pipe")
+		if rec2 == nil || rec2.State != model.QuotaStateReleased {
+			t.Fatalf("释放后应为 released，得到 %+v", rec2)
 		}
 	})
 	for _, oc := range outcomes {

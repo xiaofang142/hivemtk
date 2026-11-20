@@ -15,7 +15,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	bizerr "hivemtk-user/internal/domain/errors"
@@ -148,9 +150,9 @@ func (s *OrderChangeService) Approve(ctx context.Context, id uint, operator stri
 	}
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, repository.OrderChangeStatusPatch{
-		Status: "approved", ApprovedBy: operator, ApprovedAt: &now,
+		Status: "approved", ApprovedBy: operator, ApprovedAt: &now, ExpectStatus: "pending",
 	}); err != nil {
-		return nil, err
+		return nil, s.mapStatusErr(err)
 	}
 	return s.mustGet(ctx, id)
 }
@@ -169,9 +171,9 @@ func (s *OrderChangeService) Reject(ctx context.Context, id uint, operator, reas
 	}
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, repository.OrderChangeStatusPatch{
-		Status: "rejected", RejectedBy: operator, RejectReason: reason, RejectedAt: &now,
+		Status: "rejected", RejectedBy: operator, RejectReason: reason, RejectedAt: &now, ExpectStatus: "pending",
 	}); err != nil {
-		return nil, err
+		return nil, s.mapStatusErr(err)
 	}
 	return s.mustGet(ctx, id)
 }
@@ -190,9 +192,9 @@ func (s *OrderChangeService) Cancel(ctx context.Context, id uint, operator strin
 	}
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, repository.OrderChangeStatusPatch{
-		Status: "cancelled", CancelledAt: &now,
+		Status: "cancelled", CancelledAt: &now, ExpectStatus: "pending",
 	}); err != nil {
-		return nil, err
+		return nil, s.mapStatusErr(err)
 	}
 	return s.mustGet(ctx, id)
 }
@@ -212,9 +214,9 @@ func (s *OrderChangeService) Execute(ctx context.Context, id uint, operator stri
 	}
 	switch rec.Capability {
 	case CapabilityManual:
-		return s.finishExecute(ctx, rec.ID, operator, "已派人工坐席在平台后台处理（manual），完成后请回填执行结果。")
+		return s.dispatchExecute(ctx, rec.ID, operator, "已派人工坐席在平台后台处理（manual）。派工完成≠实际改单成功：坐席完成平台侧修改后必须调完成回填（CompleteExecution）写明实际结果，申请单才置 executed。")
 	case CapabilityBuyerInitiate:
-		return s.finishExecute(ctx, rec.ID, operator, "该平台为买家发起型变更（buyer_initiated）：本申请单转为引导工单——由坐席向客户发送平台自助修改引导（话术模板待配置），完成后回填执行结果；本执行动作本身未向客户发送任何消息。")
+		return s.dispatchExecute(ctx, rec.ID, operator, "该平台为买家发起型变更（buyer_initiated）：本申请单转为引导工单——由坐席向客户发送平台自助修改引导（话术模板待配置）。派工完成≠实际改单成功：客户完成平台侧修改并确认后必须调完成回填（CompleteExecution）写明实际结果。")
 	case CapabilityDirectAPI, CapabilityViaERP:
 		// 显式拒绝而非静默降级：真实凭证/连接器未接（🔵），不承诺未验证能力。
 		return nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("capability=%s: %v", rec.Capability, ErrCapabilityNotAvailable))
@@ -223,15 +225,49 @@ func (s *OrderChangeService) Execute(ctx context.Context, id uint, operator stri
 	}
 }
 
-func (s *OrderChangeService) finishExecute(ctx context.Context, id uint, operator, note string) (*model.OrderChangeRequest, error) {
+// dispatchExecute approved→dispatched：派工/引导完成留痕，实际执行结果待回填（FA-09）。
+func (s *OrderChangeService) dispatchExecute(ctx context.Context, id uint, operator, note string) (*model.OrderChangeRequest, error) {
 	now := time.Now()
 	if err := s.repo.UpdateStatus(ctx, id, repository.OrderChangeStatusPatch{
-		Status: "executed", ExecutedBy: operator, ExecutedAt: &now, ExecutorNote: note,
+		Status: "dispatched", DispatchedBy: operator, DispatchedAt: &now, ExecutorNote: note, ExpectStatus: "approved",
 	}); err != nil {
+		return nil, s.mapStatusErr(err)
+	}
+	logger.Infof("[order_change] 申请单 %d 已派工（%s / %s）", id, operator, note)
+	return s.mustGet(ctx, id)
+}
+
+// CompleteExecution dispatched→executed：实际改单结果回填（FA-09）。
+// 结果说明必填——没有回填证据不得显示"实际改单成功"。
+func (s *OrderChangeService) CompleteExecution(ctx context.Context, id uint, operator, resultNote string) (*model.OrderChangeRequest, error) {
+	resultNote = strings.TrimSpace(resultNote)
+	if operator == "" || resultNote == "" {
+		return nil, bizerr.New(bizerr.CodeParamInvalid, "完成回填操作者与实际结果说明必填（无回填证据不得置 executed）")
+	}
+	rec, err := s.mustGet(ctx, id)
+	if err != nil {
 		return nil, err
 	}
-	logger.Infof("[order_change] 申请单 %d 已执行（%s / %s）", id, operator, note)
+	if rec.Status != "dispatched" {
+		return nil, bizerr.New(bizerr.CodeConflict, fmt.Sprintf("仅 dispatched 可回填完成，当前 %s", rec.Status))
+	}
+	now := time.Now()
+	if err := s.repo.UpdateStatus(ctx, id, repository.OrderChangeStatusPatch{
+		Status: "executed", ExecutedBy: operator, ExecutedAt: &now,
+		ExecutorNote: "执行回填：" + resultNote, ExpectStatus: "dispatched",
+	}); err != nil {
+		return nil, s.mapStatusErr(err)
+	}
+	logger.Infof("[order_change] 申请单 %d 执行结果已回填（%s / %s）", id, operator, resultNote)
 	return s.mustGet(ctx, id)
+}
+
+// mapStatusErr CAS 落空与记录缺失统一映射为业务冲突（带当前状态）。
+func (s *OrderChangeService) mapStatusErr(err error) error {
+	if errors.Is(err, repository.ErrOrderChangeStatusConflict) {
+		return bizerr.New(bizerr.CodeConflict, "状态已被并发操作迁移，请刷新后重试")
+	}
+	return err
 }
 
 func (s *OrderChangeService) mustGet(ctx context.Context, id uint) (*model.OrderChangeRequest, error) {

@@ -236,6 +236,7 @@ func newQuotaToken() string {
 func (r *ReachQuotaRepository) ListByIntentPrefix(ctx context.Context, prefix string) ([]struct {
 	IntentID string
 	Token    string
+	State    string
 }, error) {
 	if r.db == nil {
 		return nil, nil
@@ -247,12 +248,14 @@ func (r *ReachQuotaRepository) ListByIntentPrefix(ctx context.Context, prefix st
 	out := make([]struct {
 		IntentID string
 		Token    string
+		State    string
 	}, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, struct {
 			IntentID string
 			Token    string
-		}{IntentID: row.IntentID, Token: row.Token})
+			State    string
+		}{IntentID: row.IntentID, Token: row.Token, State: row.State})
 	}
 	return out, nil
 }

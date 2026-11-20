@@ -62,10 +62,10 @@ func TestWorkflowOrchestratorController_CreateVersion(t *testing.T) {
 		Definition: map[string]any{
 			"nodes": []any{
 				map[string]any{"id": "n1", "type": "trigger", "name": "Start"},
-				map[string]any{"id": "n2", "type": "action", "name": "Send Email"},
+				map[string]any{"id": "n2", "type": "action", "name": "Log Message", "config": map[string]any{"action_type": "log"}},
 			},
 			"edges": []any{
-				map[string]any{"from": "n1", "to": "n2"},
+				map[string]any{"source": "n1", "target": "n2"},
 			},
 		},
 		CreatedBy: "test-user",
@@ -288,7 +288,7 @@ func TestWorkflowOrchestratorController_UpdateVersion(t *testing.T) {
 	req := dto.WorkflowVersionUpdateRequest{
 		Name:        "Updated Name",
 		Description: "Updated description",
-		Definition:  map[string]any{"nodes": []any{"updated"}},
+		Definition:  map[string]any{"nodes": []any{map[string]any{"id": "updated", "type": "trigger"}}},
 		Changelog:   "Updated",
 	}
 	body, _ := json.Marshal(req)
@@ -320,7 +320,7 @@ func TestWorkflowOrchestratorController_PublishVersion(t *testing.T) {
 		WorkflowID: "wf-publish-test",
 		Version:    1,
 		Name:       "Publish Test",
-		Definition: model.JSONMap{"nodes": []any{}},
+		Definition: model.JSONMap{"nodes": []any{map[string]any{"id": "n1", "type": "trigger"}}},
 		Status:     "draft",
 	}
 	database.Create(version)
@@ -704,7 +704,7 @@ func TestWorkflowOrchestratorController_CRUD_FullFlow(t *testing.T) {
 
 	updateReq := dto.WorkflowVersionUpdateRequest{
 		Name:       "Updated E2E",
-		Definition: map[string]any{"nodes": []any{"updated"}},
+		Definition: map[string]any{"nodes": []any{map[string]any{"id": "updated", "type": "trigger"}}},
 	}
 	updateBody, _ := json.Marshal(updateReq)
 	req, _ = http.NewRequest("PUT", fmt.Sprintf("/workflows/versions/%d", versionID), bytes.NewReader(updateBody))
@@ -760,7 +760,10 @@ func TestWorkflowOrchestratorController_ExecuteFlow(t *testing.T) {
 		Definition: map[string]any{
 			"nodes": []any{
 				map[string]any{"id": "n1", "type": "trigger", "name": "Webhook"},
-				map[string]any{"id": "n2", "type": "action", "name": "SendMessage"},
+				map[string]any{"id": "n2", "type": "action", "name": "Log Message", "config": map[string]any{"action_type": "log"}},
+			},
+			"edges": []any{
+				map[string]any{"source": "n1", "target": "n2"},
 			},
 		},
 	}
@@ -771,8 +774,17 @@ func TestWorkflowOrchestratorController_ExecuteFlow(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	var createResp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &createResp)
-	versionID := uint(createResp["data"].(map[string]any)["id"].(float64))
+	if w.Code != http.StatusOK {
+		t.Fatalf("创建失败: %d %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &createResp); err != nil {
+		t.Fatalf("解析创建响应失败: %v", err)
+	}
+	data, ok := createResp["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("创建响应缺少 data: %s", w.Body.String())
+	}
+	versionID := uint(data["id"].(float64))
 
 	req, _ = http.NewRequest("POST", fmt.Sprintf("/workflows/versions/%d/publish", versionID), nil)
 	w = httptest.NewRecorder()
@@ -820,4 +832,54 @@ func TestWorkflowOrchestratorController_ExecuteFlow(t *testing.T) {
 	}
 
 	t.Log("执行流程测试通过")
+}
+
+// 成功夹具使用合法图，非法图仍须在 API 边界拒绝且不入库。
+func TestWorkflowOrchestratorController_CreateVersion_InvalidDefinition(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		definition map[string]any
+	}{
+		{"empty", map[string]any{"nodes": []any{}}},
+		{"string-node", map[string]any{"nodes": []any{"updated"}}},
+		{"missing-action", map[string]any{"nodes": []any{
+			map[string]any{"id": "n1", "type": "trigger"},
+			map[string]any{"id": "n2", "type": "action"},
+		}}},
+		{"unknown-action", map[string]any{"nodes": []any{
+			map[string]any{"id": "n1", "type": "trigger"},
+			map[string]any{"id": "n2", "type": "action", "config": map[string]any{"action_type": "send-everything"}},
+		}}},
+		{"missing-edge-target", map[string]any{
+			"nodes": []any{map[string]any{"id": "n1", "type": "trigger"}},
+			"edges": []any{map[string]any{"source": "n1", "target": "missing"}},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			database := setupWorkflowTestDB(t)
+			ctrl := setupWorkflowOrchestratorController(database)
+			router := setupWorkflowGinEngine()
+			router.POST("/workflows/versions", ctrl.CreateVersion)
+			body, err := json.Marshal(dto.WorkflowVersionCreateRequest{
+				WorkflowID: "invalid-" + tc.name, Name: "非法图回归", Definition: tc.definition,
+			})
+			if err != nil {
+				t.Fatalf("序列化非法图测试请求失败: %v", err)
+			}
+			req := httptest.NewRequest("POST", "/workflows/versions", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("非法图应拒绝，实际 %d %s", w.Code, w.Body.String())
+			}
+			var count int64
+			if err := database.Model(&model.WorkflowVersion{}).Count(&count).Error; err != nil {
+				t.Fatalf("核对拒绝后无版本落库失败: %v", err)
+			}
+			if count != 0 {
+				t.Fatalf("非法图不应落库，实际 %d 条", count)
+			}
+		})
+	}
 }

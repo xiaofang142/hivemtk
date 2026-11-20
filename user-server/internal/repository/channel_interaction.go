@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"fmt"
 	"context"
+	"fmt"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -38,7 +38,7 @@ func (r *ChannelInteractionRepository) CreateIdempotent(ctx context.Context, row
 }
 
 // RecordCallbackWithAudit 交互登记 + 平台事件审计**同事务**落库
-//（specs/024 三审 T209 契约：交互及其审计必须同提交或同回滚，杜绝半证据）。
+// （specs/024 三审 T209 契约：交互及其审计必须同提交或同回滚，杜绝半证据）。
 // 返回 created=false 表示幂等命中（同键重投），err 非 nil 表示整链失败已回滚。
 func (r *ChannelInteractionRepository) RecordCallbackWithAudit(ctx context.Context, row *model.ChannelInteraction, auditRow *model.ChannelEventAudit) (bool, error) {
 	if r == nil || r.db == nil {

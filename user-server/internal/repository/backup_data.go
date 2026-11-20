@@ -78,13 +78,20 @@ func (r *backupDataRepo) DumpClues(ctx context.Context) (json.RawMessage, error)
 // 在导出窗口内有并发写入时整窗漏行）。user 表 id 列是 TEXT（model.User string 主键），
 // 与 clues 同为字典序游标，单查询即可。
 func (r *backupDataRepo) DumpUsers(ctx context.Context) (json.RawMessage, error) {
+	// FA-05：导出列与恢复列对齐——role/status/account_id/real_name 随备份走，
+	// 恢复出的用户不再一律回落 role=user/status=1 默认值（管理员权限与
+	// account_id 关联丢失）。
 	type userRow struct {
-		TenantID uint   `json:"tenant_id"`
-		ID       string `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
-		Phone    string `json:"phone"`
-		Password string `json:"password"`
+		TenantID  uint   `json:"tenant_id"`
+		ID        string `json:"id"`
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		Phone     string `json:"phone"`
+		Password  string `json:"password"`
+		RealName  string `json:"real_name"`
+		Role      string `json:"role"`
+		Status    int    `json:"status"`
+		AccountID string `json:"account_id"`
 	}
 	const batchSize = 1000
 	rows := make([]userRow, 0, batchSize)
@@ -145,11 +152,12 @@ func (r *backupDataRepo) DumpTable(ctx context.Context, table string) (json.RawM
 	}
 	const batchSize = 1000
 	var rows []map[string]any
-	var cursor int64
+	var cursor any
+	hasCursor := false
 	for {
 		var batch []map[string]any
 		q := r.db.WithContext(ctx).Table(table).Order("id ASC").Limit(batchSize)
-		if cursor > 0 {
+		if hasCursor {
 			q = q.Where("id > ?", cursor)
 		}
 		if err := q.Find(&batch).Error; err != nil {
@@ -162,16 +170,34 @@ func (r *backupDataRepo) DumpTable(ctx context.Context, table string) (json.RawM
 		if len(batch) < batchSize {
 			break
 		}
-		lastID, ok := batch[len(batch)-1]["id"].(int64)
+		lastID, ok := backupCursor(batch)
 		if !ok {
-			return nil, fmt.Errorf("表 %s 的 id 列不是整数主键，无法游标分批", table)
+			return nil, fmt.Errorf("表 %s 的 id 列缺失或为空，无法游标分批", table)
 		}
 		cursor = lastID
+		hasCursor = true
 	}
 	if rows == nil {
 		return []byte("[]"), nil
 	}
 	return json.Marshal(rows)
+}
+
+func backupCursor(rows []map[string]any) (any, bool) {
+	if len(rows) == 0 {
+		return nil, false
+	}
+	id, ok := rows[len(rows)-1]["id"]
+	if !ok || id == nil {
+		return nil, false
+	}
+	if value, ok := id.(string); ok && value == "" {
+		return nil, false
+	}
+	if value, ok := id.([]byte); ok && len(value) == 0 {
+		return nil, false
+	}
+	return id, true
 }
 
 func (r *backupDataRepo) ClueExists(ctx context.Context, tenantID uint, id string) (bool, error) {

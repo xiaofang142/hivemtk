@@ -49,7 +49,7 @@ func TestRestoreService_DecompressBackup_PathTraversalGuard(t *testing.T) {
 	for _, evil := range []string{"../escape.txt", "/abs/escape.txt", "sub/../../escape.txt", "./../escape.txt"} {
 		t.Chdir(t.TempDir())
 		zp := writeZip(t, evil)
-		if err := svc.decompressBackup(ctx, zp); err == nil {
+		if err := svc.decompressBackup(ctx, zp, t.TempDir()); err == nil {
 			t.Errorf("条目 %q 应被拒绝但通过了守卫", evil)
 		}
 		if _, err := os.Stat(filepath.Join("..", "escape.txt")); err == nil {
@@ -66,14 +66,16 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 	// 合法集：嵌套、带连续点的文件名、目录条目；旧守卫(Contains(".."))会误杀 b..c.txt，
 	// IsLocal 规范化守卫应放行。
 	zp := writeZip(t, "data.json", "b..c.txt", "d/", "d/nested.txt")
-	if err := svc.decompressBackup(ctx, zp); err != nil {
+	taskDir := filepath.Join(t.TempDir(), "restore_task_legit")
+	if err := svc.decompressBackup(ctx, zp, taskDir); err != nil {
 		t.Fatalf("合法 zip 解压失败: %v", err)
 	}
 
 	_, restoreTmp := storage.BackupSource()
+	_ = restoreTmp
 
 	for _, rel := range []string{"data.json", "b..c.txt", "d/nested.txt"} {
-		p := filepath.Join(restoreTmp, rel)
+		p := filepath.Join(taskDir, rel)
 		st, err := os.Stat(p)
 		if err != nil {
 			t.Fatalf("应解出 %s: %v", p, err)
@@ -86,16 +88,16 @@ func TestRestoreService_DecompressBackup_LegitNamesAndPerms(t *testing.T) {
 			}
 		}
 	}
-	// 目录条目须落在暂存根内（旧实现漏了前缀，会在 CWD 造出散目录）
-	if _, err := os.Stat(filepath.Join(restoreTmp, "d")); err != nil {
-		t.Errorf("目录条目未解到暂存根下: %v", err)
+	// 目录条目须落在任务工作目录内（旧实现漏了前缀，会在 CWD 造出散目录）
+	if _, err := os.Stat(filepath.Join(taskDir, "d")); err != nil {
+		t.Errorf("目录条目未解到任务工作目录下: %v", err)
 	}
 	if _, err := os.Stat("d"); !os.IsNotExist(err) {
 		t.Error("目录条目泄漏到暂存根之外")
 	}
 	if runtime.GOOS != "windows" {
-		if st, err := os.Stat(restoreTmp); err != nil || st.Mode().Perm()&0o077 != 0 {
-			t.Errorf("暂存根目录权限过宽: %v %o", err, st.Mode().Perm())
+		if st, err := os.Stat(taskDir); err != nil || st.Mode().Perm()&0o077 != 0 {
+			t.Errorf("任务工作目录权限过宽: %v %o", err, st.Mode().Perm())
 		}
 	}
 }

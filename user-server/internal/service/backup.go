@@ -504,21 +504,28 @@ func (s *RestoreService) executeRestore(ctx context.Context, record *model.Resto
 		logger.Errorf("[Restore] 状态落库失败 recordID=%d: %v", record.ID, e)
 	}
 
-	if err := s.decompressBackup(ctx, backup.FilePath); err != nil {
-		record.Status = "failed"
-		record.ErrorMessage = "解压备份失败：" + err.Error()
-		if e := s.restoreRepo.Update(ctx, record); e != nil {
-			logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
+	// FA-06：每个恢复任务使用私有工作目录（restore_tmp/restore_task_<id>_<纳秒>），
+	// 两次并发恢复不再共用 data.json 互相覆盖/互相删除；成功与失败都只清理自己的目录
+	// （defer 兜底），失败残留不再污染下一次恢复。
+	_, restoreTmp := storage.BackupSource()
+	workDir := filepath.Join(restoreTmp, fmt.Sprintf("restore_task_%d_%d", record.ID, time.Now().UnixNano()))
+	if err := os.MkdirAll(workDir, 0700); err != nil {
+		s.failRestoreRecord(ctx, record, "创建恢复工作目录失败："+err.Error())
+		return
+	}
+	defer func() {
+		if e := os.RemoveAll(workDir); e != nil {
+			logger.Warnf("[Restore] 清理任务工作目录失败 dir=%s: %v", workDir, e)
 		}
+	}()
+
+	if err := s.decompressBackup(ctx, backup.FilePath, workDir); err != nil {
+		s.failRestoreRecord(ctx, record, "解压备份失败："+err.Error())
 		return
 	}
 
-	if err := s.restoreDatabase(ctx, backup); err != nil {
-		record.Status = "failed"
-		record.ErrorMessage = "数据库恢复失败：" + err.Error()
-		if e := s.restoreRepo.Update(ctx, record); e != nil {
-			logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
-		}
+	if err := s.restoreDatabase(ctx, backup, workDir); err != nil {
+		s.failRestoreRecord(ctx, record, "数据库恢复失败："+err.Error())
 		return
 	}
 
@@ -528,8 +535,18 @@ func (s *RestoreService) executeRestore(ctx context.Context, record *model.Resto
 	}
 }
 
-func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string) error {
-	_, restoreTmp := storage.BackupSource()
+// failRestoreRecord 统一的失败落库出口。
+func (s *RestoreService) failRestoreRecord(ctx context.Context, record *model.RestoreRecord, msg string) {
+	record.Status = "failed"
+	record.ErrorMessage = msg
+	if e := s.restoreRepo.Update(ctx, record); e != nil {
+		logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
+	}
+}
+
+// decompressBackup 把备份 zip 解到 destDir（FA-06：目录由调用方按任务给定，
+// 不再共用全局 restore_tmp 根）。
+func (s *RestoreService) decompressBackup(ctx context.Context, backupFile, destDir string) error {
 	r, err := zip.OpenReader(backupFile)
 	if err != nil {
 		return err
@@ -549,7 +566,7 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 			_ = rc.Close()
 			return fmt.Errorf("非法的备份条目路径: %s", f.Name)
 		}
-		path := filepath.Join(restoreTmp, name)
+		path := filepath.Join(destDir, name)
 
 		if f.FileInfo().IsDir() {
 			_ = rc.Close()
@@ -584,9 +601,8 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile string
 	return nil
 }
 
-func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Backup) error {
-	_, restoreTmp := storage.BackupSource()
-	jsonFile := filepath.Join(restoreTmp, "data.json")
+func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Backup, workDir string) error {
+	jsonFile := filepath.Join(workDir, "data.json")
 	data, err := os.ReadFile(jsonFile)
 	if err != nil {
 		return err
@@ -625,93 +641,25 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 			strings.Join(missingKeys, ", "))
 	}
 
-	restoredClues := 0
-	for _, c := range backupData.Clues {
-		id, _ := c["id"].(string)
-		if id == "" {
-			continue
-		}
-		tenantID := backupRowTenantID(c)
-		exists, err := s.backupDataRepo.ClueExists(ctx, tenantID, id)
-		if err != nil {
-			logger.Error(err, "检查线索失败: "+id)
-			continue
-		}
-		if exists {
-			continue
-		}
-		row := map[string]any{
-			"tenant_id": tenantID,
-			"id":        id,
-			"source_id": c["source_id"],
-			"account":   c["account"],
-			"type":      c["type"],
-			"is_verify": c["is_verify"],
-			"name":      c["name"],
-			"city":      c["city"],
-			"address":   c["address"],
-			"desc":      c["desc"],
-		}
-		if err := s.backupDataRepo.RestoreClue(ctx, row); err != nil {
-			logger.Error(err, "恢复线索失败: "+id)
-			continue
-		}
-		restoredClues++
+	// FA-05：基础三表逐行失败不再被 continue 吞掉——收集失败明细，
+	// 任一行失败即任务失败并带可对账计数；已写入的行保持现状，
+	// 修复后重试时「已存在记录跳过」语义保证幂等续跑。
+	restoredClues, failedClues := s.restoreClues(ctx, backupData.Clues)
+	restoredUsers, failedUsers := s.restoreUsers(ctx, backupData.Users)
+	restoredLinks, failedLinks := s.restoreShortLinks(ctx, backupData.ShortLink)
+	var failedBase []string
+	if len(failedClues) > 0 {
+		failedBase = append(failedBase, fmt.Sprintf("线索失败 %d 条: %s", len(failedClues), summarizeIDs(failedClues)))
 	}
-
-	restoredUsers := 0
-	for _, u := range backupData.Users {
-		username, _ := u["username"].(string)
-		if username == "" {
-			continue
-		}
-		tenantID := backupRowTenantID(u)
-		exists, err := s.backupDataRepo.UserExistsByUsername(ctx, tenantID, username)
-		if err != nil {
-			continue
-		}
-		if exists {
-			continue
-		}
-
-		if err := s.backupDataRepo.RestoreUser(ctx, map[string]any{
-			"tenant_id": tenantID,
-			"id":        u["id"],
-			"username":  username,
-			"email":     u["email"],
-			"phone":     u["phone"],
-			"password":  u["password"],
-		}); err != nil {
-			logger.Error(err, "恢复用户失败: "+username)
-			continue
-		}
-		restoredUsers++
+	if len(failedUsers) > 0 {
+		failedBase = append(failedBase, fmt.Sprintf("用户失败 %d 条: %s", len(failedUsers), summarizeIDs(failedUsers)))
 	}
-
-	restoredLinks := 0
-	for _, l := range backupData.ShortLink {
-		code, _ := l["short_code"].(string)
-		if code == "" {
-			continue
-		}
-		tenantID := backupRowTenantID(l)
-		exists, err := s.backupDataRepo.ShortLinkExistsByCode(ctx, tenantID, code)
-		if err != nil {
-			logger.Error(err, "检查短链失败: "+code)
-			continue
-		}
-		if exists {
-			continue
-		}
-		if err := s.backupDataRepo.RestoreShortLink(ctx, map[string]any{
-			"tenant_id":    tenantID,
-			"short_code":   code,
-			"original_url": l["original_url"],
-		}); err != nil {
-			logger.Error(err, "恢复短链失败: "+code)
-			continue
-		}
-		restoredLinks++
+	if len(failedLinks) > 0 {
+		failedBase = append(failedBase, fmt.Sprintf("短链失败 %d 条: %s", len(failedLinks), summarizeIDs(failedLinks)))
+	}
+	if len(failedBase) > 0 {
+		return fmt.Errorf("基础数据恢复失败（%s）；已成功写入的行保持现状，修复后重试时已存在记录会跳过",
+			strings.Join(failedBase, "；"))
 	}
 
 	restoredExtraTables := 0
@@ -739,10 +687,127 @@ func (s *RestoreService) restoreDatabase(ctx context.Context, backup *model.Back
 	logger.Info(fmt.Sprintf("备份 %s 恢复完成: 线索 %d 条, 用户 %d 个, 短链 %d 条, 扩表 %d 组",
 		backup.BackupName, restoredClues, restoredUsers, restoredLinks, restoredExtraTables))
 
-	if e := os.RemoveAll(restoreTmp); e != nil {
-		logger.Warnf("[Restore] 清理临时目录失败: %v", e)
-	}
 	return nil
+}
+
+// restoreClues / restoreUsers / restoreShortLinks：返回（恢复数, 失败标识列表）。
+func (s *RestoreService) restoreClues(ctx context.Context, rows []map[string]any) (int, []string) {
+	restored, failed := 0, []string{}
+	for _, c := range rows {
+		id, _ := c["id"].(string)
+		if id == "" {
+			continue
+		}
+		tenantID := backupRowTenantID(c)
+		exists, err := s.backupDataRepo.ClueExists(ctx, tenantID, id)
+		if err != nil {
+			logger.Error(err, "检查线索失败: "+id)
+			failed = append(failed, id)
+			continue
+		}
+		if exists {
+			continue
+		}
+		row := map[string]any{
+			"tenant_id": tenantID,
+			"id":        id,
+			"source_id": c["source_id"],
+			"account":   c["account"],
+			"type":      c["type"],
+			"is_verify": c["is_verify"],
+			"name":      c["name"],
+			"city":      c["city"],
+			"address":   c["address"],
+			"desc":      c["desc"],
+		}
+		if err := s.backupDataRepo.RestoreClue(ctx, row); err != nil {
+			logger.Error(err, "恢复线索失败: "+id)
+			failed = append(failed, id)
+			continue
+		}
+		restored++
+	}
+	return restored, failed
+}
+
+func (s *RestoreService) restoreUsers(ctx context.Context, rows []map[string]any) (int, []string) {
+	restored, failed := 0, []string{}
+	for _, u := range rows {
+		username, _ := u["username"].(string)
+		if username == "" {
+			continue
+		}
+		tenantID := backupRowTenantID(u)
+		exists, err := s.backupDataRepo.UserExistsByUsername(ctx, tenantID, username)
+		if err != nil {
+			logger.Error(err, "检查用户失败: "+username)
+			failed = append(failed, username)
+			continue
+		}
+		if exists {
+			continue
+		}
+
+		// 角色/状态/关联字段随备份恢复（FA-05）：恢复出的用户不再一律回落
+		// role=user/status=1 默认值——管理员的权限与 account_id 关联必须还原。
+		if err := s.backupDataRepo.RestoreUser(ctx, map[string]any{
+			"tenant_id":  tenantID,
+			"id":         u["id"],
+			"username":   username,
+			"email":      u["email"],
+			"phone":      u["phone"],
+			"password":   u["password"],
+			"role":       u["role"],
+			"status":     u["status"],
+			"account_id": u["account_id"],
+			"real_name":  u["real_name"],
+		}); err != nil {
+			logger.Error(err, "恢复用户失败: "+username)
+			failed = append(failed, username)
+			continue
+		}
+		restored++
+	}
+	return restored, failed
+}
+
+func (s *RestoreService) restoreShortLinks(ctx context.Context, rows []map[string]any) (int, []string) {
+	restored, failed := 0, []string{}
+	for _, l := range rows {
+		code, _ := l["short_code"].(string)
+		if code == "" {
+			continue
+		}
+		tenantID := backupRowTenantID(l)
+		exists, err := s.backupDataRepo.ShortLinkExistsByCode(ctx, tenantID, code)
+		if err != nil {
+			logger.Error(err, "检查短链失败: "+code)
+			failed = append(failed, code)
+			continue
+		}
+		if exists {
+			continue
+		}
+		if err := s.backupDataRepo.RestoreShortLink(ctx, map[string]any{
+			"tenant_id":    tenantID,
+			"short_code":   code,
+			"original_url": l["original_url"],
+		}); err != nil {
+			logger.Error(err, "恢复短链失败: "+code)
+			failed = append(failed, code)
+			continue
+		}
+		restored++
+	}
+	return restored, failed
+}
+
+// summarizeIDs 失败明细截前 10 条，避免超长错误串落库。
+func summarizeIDs(ids []string) string {
+	if len(ids) > 10 {
+		return strings.Join(ids[:10], ", ") + fmt.Sprintf(" …等共 %d 条", len(ids))
+	}
+	return strings.Join(ids, ", ")
 }
 
 // backupRowTenantID 读取备份行归属租户；旧格式没有该字段，按默认租户归属
