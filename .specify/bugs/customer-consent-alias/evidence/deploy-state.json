@@ -1,0 +1,13 @@
+{
+  "deployed_sha": "3cb645598d8bcdee1e4e3760a1fc9b741b879eef",
+  "deployed_at": "2026-11-20T16:53:36+08:00",
+  "remote_binary_sha256": "5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42",
+  "image_id": "sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672",
+  "container_started_at": "2026-11-20T08:53:25.590032793Z",
+  "rollback_image_tag": "mtk-user-server:rollback-20261120-165136",
+  "rollback_binary": "/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-165136",
+  "default_credential_probe": "ok",
+  "commits": [
+    "3cb645598 fix: 保留客户合并后的同意事实"
+  ]
+}

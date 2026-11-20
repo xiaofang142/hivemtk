@@ -1,0 +1,80 @@
+[32m[  ok  ][0m HEAD 已被远端包含（gitee-upstream/master,upstream/master）
+[36m[deploy][0m 分支=master HEAD=3cb645598 上次发布基线=462d98cc5
+[36m[deploy][0m user-server 待发布提交 1 个：
+    3cb645598 fix: 保留客户合并后的同意事实
+[36m[deploy][0m 本地预检：go vet
+[36m[deploy][0m 交叉编译 CGO_ENABLED=0 GOOS=linux GOARCH=amd64
+[32m[  ok  ][0m 本地产物  72M sha256=5667c7c17b96e8e0…
+[36m[deploy][0m 读取线上现状
+[36m[deploy][0m 线上二进制 sha256=afcfe011776aaaa1… 运行镜像=744fbda23283de31a3c
+[36m[deploy][0m 上传二进制到 mtk-prod:/www/wwwroot/hivemtk/user-server/user-server.new
+[32m[  ok  ][0m 双端 sha256 一致
+[36m[deploy][0m 备份线上现状（rollback-20261120-165136）
+[32m[  ok  ][0m 镜像标签 mtk-user-server:rollback-20261120-165136 + 二进制 user-server.bak-20261120-165136
+[36m[deploy][0m 二进制就位并重建容器
+#0 building with "default" instance using docker driver
+
+#1 [user-server internal] load build definition from Dockerfile.user-server
+#1 transferring dockerfile: 1.38kB done
+#1 DONE 0.0s
+
+#2 [user-server internal] load metadata for docker.io/library/alpine:3.20
+#2 DONE 0.0s
+
+#3 [user-server internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [user-server 1/9] FROM docker.io/library/alpine:3.20
+#4 DONE 0.0s
+
+#5 [user-server internal] load build context
+#5 transferring context: 75.84MB 0.3s done
+#5 DONE 0.4s
+
+#6 [user-server 2/9] RUN apk add --no-cache ca-certificates tzdata
+#6 CACHED
+
+#7 [user-server 3/9] WORKDIR /app
+#7 CACHED
+
+#8 [user-server 4/9] RUN mkdir -p /app/logs /app/uploads /app/data
+#8 CACHED
+
+#9 [user-server 5/9] COPY user-server ./user-server
+#9 DONE 0.4s
+
+#10 [user-server 6/9] COPY config.yaml ./config.yaml
+#10 DONE 0.0s
+
+#11 [user-server 7/9] COPY config/platform.yaml ./config/platform.yaml
+#11 DONE 0.0s
+
+#12 [user-server 8/9] COPY embed-sdk-dist ./embed-sdk-dist
+#12 DONE 0.0s
+
+#13 [user-server 9/9] RUN chmod +x ./user-server
+#13 DONE 0.3s
+
+#14 [user-server] exporting to image
+#14 exporting layers
+#14 exporting layers 0.2s done
+#14 writing image sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672 done
+#14 naming to docker.io/library/mtk-user-server:latest done
+#14 DONE 0.2s
+[36m[deploy][0m 健康检查（最多 60s）
+[32m[  ok  ][0m 容器内健康检查通过
+[32m[  ok  ][0m 公网健康检查：{"code":0,"message":"ok","data":{"status":"ok"}}
+[32m[  ok  ][0m 默认口令探针：仓库公开口令已被拒绝（公网 https://workapi.xapptool.cn）
+mode: 单次探针（只试 seed 公开值；另有 0 项 e2e 候选未试，需 --full-ladder）
+probe-1: 口令长度=11 http=401
+RESULT: GREEN —— 1 次公开口令尝试全部 401，这套实例不认仓库公开的口令。
+
+[32m[  ok  ][0m ================ 发布完成 ================
+[36m[deploy][0m 代码：3cb645598（1 个 user-server 提交）
+[36m[deploy][0m 线上二进制 sha256=5667c7c17b96e8e0…
+[36m[deploy][0m 运行镜像=9e89036fa79065cf4c1 容器启动=2026-11-20T08:53:25.590032793Z
+[36m[deploy][0m 回滚点：镜像 mtk-user-server:rollback-20261120-165136 / 二进制 /www/wwwroot/hivemtk/user-server/user-server.bak-20261120-165136
+[36m[deploy][0m 台账：/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/deploy/.api-deploy-state.json
+
+[36m[deploy][0m 待办：把本次发布登记进 docs/operations/PROD_TOPOLOGY_CHANGES.md（版本/buildId/时间/回滚点）

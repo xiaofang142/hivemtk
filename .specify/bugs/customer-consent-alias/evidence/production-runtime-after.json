@@ -1,0 +1,35 @@
+{
+  "checked_at": "2026-11-20T16:55:03.230215+08:00",
+  "exit_code": 0,
+  "stdout": "5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42  /www/wwwroot/hivemtk/user-server/user-server\nsha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672 2026-11-20T08:53:25.590032793Z true\n{\"code\":0,\"message\":\"ok\",\"data\":{\"status\":\"ok\"}}",
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n",
+  "public_health": {
+    "status": 200,
+    "body": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "status": "ok"
+      }
+    }
+  },
+  "expected": {
+    "binary_sha256": "5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42",
+    "image_id": "sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672",
+    "started_at": "2026-11-20T08:53:25.590032793Z"
+  },
+  "actual": {
+    "binary_sha256": "5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42",
+    "image_id": "sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672",
+    "started_at": "2026-11-20T08:53:25.590032793Z",
+    "running": true,
+    "internal_health": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "status": "ok"
+      }
+    }
+  },
+  "matches_state": true
+}

@@ -4,6 +4,13 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-20 · FA-14 客户合并保留同意事实（链 A 3cb645598）
+
+- **行为与门禁**：客户合并在原事务内追加租户隔离的身份关联，保留事件与偏好的原始身份；时间线、偏好和发送闸口解析同一关联组，跨身份按撤回优先、活动暂停次之、授权最后裁决。真实专用 PostgreSQL 验证渠道/目的隔离、链式与幂等关联、并发、事务故障回滚、跨租户及缺失上下文拒绝、既有 HTTP 接口与延迟发送；控制发送器计数为零。冻结 4677 份源码文件及 3 份验收报告无漂移；lint、audit、vet、build、test-go 均退出 0，`make test-go` 159 条包级通过记录、零 FAIL。完整证据见 `.specify/bugs/customer-consent-alias/`。
+- **API 上线与迁移**：2026-11-20 16:53:36 +08:00；发布提交 `3cb645598d8bcdee1e4e3760a1fc9b741b879eef`。二进制 SHA-256 `5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42`，镜像 `sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672`，容器启动 `2026-11-20T08:53:25.590032793Z`。独立回读与台账匹配、容器 running；内网及公网健康 HTTP 200/code 0；公开 seed 单次口令探针 HTTP 401、RESULT GREEN。自动迁移建立 `contact_consent_identity_links`，主键 `(tenant_id,left_one_id,right_one_id)` 及索引 `(tenant_id,right_one_id)` 已核验；0 条链接、0 条非法链接。
+- **事实保全与回滚**：迁移前后既有 2 条同意事件和 1 条偏好的行数与摘要一致；未在生产执行客户合并或发送消息。回滚镜像 `mtk-user-server:rollback-20261120-165136`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-165136`。二进制回滚不删除新增关系表。
+- **范围与限制**：仅 API，无前端、扩展或 SDK 发布。控制器与发送行为由真实测试库和进程内受控发送器覆盖；未声称生产客户合并、第三方发送或历史无来源身份映射恢复。
+
 ## 2026-11-20 · FA-12/13 爬取持久恢复与全量重建（链 A/D 462d98cc5）
 
 - **行为与门禁**：批次租约、旧 worker 围栏、页面/QA 持久检查点及有界租户上下文；显式重建同步完成并持久累计尝试次数，冻结分页遍历全部文档，单项失败继续并返回首错。真实专用 PostgreSQL 覆盖故障/恢复、跨租户、取消、事务回滚及 API 成功前持久化；1001 条夹具恰好各尝试一次。发布提交 `462d98cc5b9cff606cf127f2eb515b51714e935a` 已推双远端；冻结 4673 份文件无漂移，lint、audit、vet、build、test-go 均退出 0，完整 Go 有 159 条包级通过记录、零包级 FAIL。前端 110 文件/1063 测试、lint 和生产构建通过。完整证据见 `.specify/bugs/kb-crawler-recovery/` 与 `.specify/bugs/full-knowledge-reindex/`。

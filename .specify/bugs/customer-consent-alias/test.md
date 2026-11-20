@@ -4,7 +4,7 @@
 - **Tested**: 2026-11-20
 - **Assessment**: [assessment.md](assessment.md)
 - **Fix**: [fix.md](fix.md)
-- **Result**: verified locally；定向回归与冻结完整门禁通过，生产发布尚未完成。
+- **Result**: verified and deployed；定向回归、冻结完整门禁及链 A 生产核验通过。
 
 ## Summary
 
@@ -30,7 +30,7 @@
 | 首轮冻结完整门禁 | lint、audit、vet、build、test-go | fail | 前四项退出 0；完整测试仅新增表无主检查失败，158 个包通过，源码无漂移 |
 | 模块归属补充 | 归属扫描与四包定向回归 | pass | [module-owner-red.log](evidence/module-owner-red.log) → [final2-focused.log](evidence/final2-focused.log)，登记到既有 `reach-auto`，未改基线 |
 | 最终冻结完整门禁 | lint、audit、vet、build、test-go | pass | 五项均退出 0；源码与报告哈希无漂移，见 [final3-gates.json](evidence/final3-gates.json) |
-| 链 A 与生产核验 | 迁移、二进制、健康、回滚点 | not-run | 完整门禁后执行 |
+| 链 A 与生产核验 | 迁移、二进制、健康、事实保全、回滚点 | pass | 生产提交 `3cb645598d8bcdee1e4e3760a1fc9b741b879eef`；核验资料见 `api-deploy.log`、`production-*-after.json` |
 
 定向命令在 `user-server/` 执行，使用专用 PostgreSQL `127.0.0.1:8217`：
 
@@ -51,4 +51,4 @@ go test ./internal/controller ./internal/service ./internal/repository -run 'Tes
 
 ## Recommendation
 
-保留 FA-14 清单项，直到链 A 生产核验完成。届时追加真实结果，不以定向测试代替上线证据。
+完整门禁及链 A 生产核验均通过，FA-14 验收条件已满足。生产核验只检查迁移结构和既有事实摘要，没有执行生产客户合并或外发；实际业务行为由隔离的真实 PostgreSQL 和受控适配器覆盖。保留后续报告、证据，不将未执行的生产业务操作描述为验收事实。

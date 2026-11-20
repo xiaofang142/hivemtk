@@ -3,7 +3,7 @@
 - **Slug**: customer-consent-alias（沿用上下文）
 - **Fixed**: 2026-11-20
 - **Assessment**: [assessment.md](assessment.md)
-- **Status**: applied；冻结完整门禁通过，生产发布待验。
+- **Status**: applied；冻结门禁和链 A 生产核验通过。
 
 ## Summary
 
@@ -49,4 +49,4 @@
 
 ## Delivery Boundary
 
-已通过完整门禁，待走既有链 A；发布后独立核对新表与索引、运行二进制、内外健康、原始同意事实摘要及回滚点。历史已删除且未保留身份来源的合并无法可靠回填，本次不生成推测关联。
+链 A 于 2026-11-20 16:53:36 +08:00 发布提交 `3cb645598d8bcdee1e4e3760a1fc9b741b879eef`。独立核对运行二进制 SHA-256 `5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42`、镜像 `sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672`、启动时间 `2026-11-20T08:53:25.590032793Z` 与部署台账一致且容器 running；内网及公网健康均 HTTP 200/code 0。迁移表主键及右端复合索引已存在，链接数 0、无非法链接。边界前 2 条原同意事件和 1 条偏好记录的数量及 SHA-256 与迁移后完全一致；本次未在生产合并客户或发送消息。回滚点为镜像 `mtk-user-server:rollback-20261120-165136` 和二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-165136`。历史已删除且未保留身份来源的合并无法可靠回填，本次不生成推测关联。

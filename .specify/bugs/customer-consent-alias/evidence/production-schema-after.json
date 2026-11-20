@@ -1,0 +1,29 @@
+{
+  "checked_at": "2026-11-20T16:54:22.675177+08:00",
+  "exit_code": 0,
+  "schema_stdout": "BEGIN\n{\"columns\" : [{\"column_name\":\"tenant_id\",\"data_type\":\"bigint\",\"is_nullable\":\"NO\",\"column_default\":null,\"ordinal_position\":1}, {\"column_name\":\"left_one_id\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":null,\"ordinal_position\":2}, {\"column_name\":\"right_one_id\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":null,\"ordinal_position\":3}, {\"column_name\":\"created_at\",\"data_type\":\"timestamp with time zone\",\"is_nullable\":\"YES\",\"column_default\":null,\"ordinal_position\":4}], \"indexes\" : [{\"indexname\":\"contact_consent_identity_links_pkey\",\"indexdef\":\"CREATE UNIQUE INDEX contact_consent_identity_links_pkey ON public.contact_consent_identity_links USING btree (tenant_id, left_one_id, right_one_id)\"}, {\"indexname\":\"idx_consent_link_right\",\"indexdef\":\"CREATE INDEX idx_consent_link_right ON public.contact_consent_identity_links USING btree (tenant_id, right_one_id)\"}], \"links\" : 0, \"invalid_links\" : 0, \"events_before_boundary\" : {\"count\" : 2, \"sha256\" : \"37ce3a277248cd43a1dccca095925a51f6f77f506038c4ea8d057b1685615ffc\"}, \"preferences_before_boundary\" : {\"count\" : 1, \"sha256\" : \"60688c6757760ad0a196785696e313d8bf5667c12d44219702236c6b116ec3bb\"}}\nROLLBACK\n",
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n",
+  "deployment_state": {
+    "deployed_sha": "3cb645598d8bcdee1e4e3760a1fc9b741b879eef",
+    "deployed_at": "2026-11-20T16:53:36+08:00",
+    "remote_binary_sha256": "5667c7c17b96e8e01a8876f1fd1c2a0abd469ef2efa6cadb70ebe08c8d686d42",
+    "image_id": "sha256:9e89036fa79065cf4c1228d0aebdbe4d7a7825ae121cfeda8423a2eb02ed6672",
+    "container_started_at": "2026-11-20T08:53:25.590032793Z",
+    "rollback_image_tag": "mtk-user-server:rollback-20261120-165136",
+    "rollback_binary": "/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-165136",
+    "default_credential_probe": "ok",
+    "commits": [
+      "3cb645598 fix: 保留客户合并后的同意事实"
+    ]
+  },
+  "public_health": {
+    "status": 200,
+    "body": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "status": "ok"
+      }
+    }
+  }
+}
