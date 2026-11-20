@@ -42,7 +42,7 @@ func TestInferenceOutcomeHTTP(t *testing.T) {
 			cycle.SetReviewerStage(mk("reviewer"))
 			globalInferenceOrchestrator = agent_runtime.NewCoreDataFlowOrchestrator(cycle, nil)
 			router := gin.New()
-			SetupInferenceRoutes(router.Group("/api"))
+			registerInferenceTestRoutes(router.Group("/api"))
 			request := httptest.NewRequest("POST", "/api/agent/inference/run", bytes.NewBufferString(`{"channel_type":"test","customer_id":"local","session_id":"local-run","content":"本地验收"}`))
 			request.Header.Set("Content-Type", "application/json")
 			writer := httptest.NewRecorder()

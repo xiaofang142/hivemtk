@@ -16,6 +16,7 @@ on:
       - 'user-web/**'
       - 'user-web/bridge/**'
       - 'embed-sdk/**'
+      - 'packages/**'
       - 'scripts/api-inventory.sh'
       - 'scripts/check-architecture.sh'
       # 架构门的 L4 宽口径基线：门读它，不进触发面 ⇒ "只动基线"的提交不重跑这道门。
@@ -102,6 +103,7 @@ on:
       - 'user-web/**'
       - 'user-web/bridge/**'
       - 'embed-sdk/**'
+      - 'packages/**'
       - 'scripts/api-inventory.sh'
       - 'scripts/check-architecture.sh'
       # 架构门的 L4 宽口径基线：门读它，不进触发面 ⇒ "只动基线"的提交不重跑这道门。

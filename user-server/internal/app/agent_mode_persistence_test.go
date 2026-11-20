@@ -42,7 +42,7 @@ func TestAgentModePersistence(t *testing.T) {
 	router.Use(func(c *gin.Context) { c.Request = c.Request.WithContext(ctx); c.Next() })
 	group := router.Group("/api")
 	controller.NewAIAgentControllerWithService(management).RegisterRoutes(group)
-	SetupAgentLifecycleRoutes(group)
+	registerLifecycleTestRoute(group)
 	request := func(t *testing.T, method, path string, data any, wantStatus int) map[string]any {
 		t.Helper()
 		body, err := json.Marshal(data)

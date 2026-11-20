@@ -900,15 +900,15 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupLTCRoutes(auth)
 
-		app.SetupToolPermissionRoutes(auth)
+		setupToolPermissionRoutes(auth)
 
 		setupAIToolConfigRoutes(auth, gormDB)
 
-		app.SetupInferenceRoutes(auth)
+		setupInferenceRoutes(auth)
 		controller.NewInferenceDeliveryController(app.GetInferenceDeliveryService()).RegisterRoutes(auth)
 
 		// 智能体双模式运行入口：按 agent_id 读出 agent_mode 再分派。
-		app.SetupAgentLifecycleRoutes(auth)
+		setupAgentLifecycleRoutes(auth)
 
 		aiAgentCtrl := controller.NewAIAgentControllerWithService(aiAgentSvcGlobal)
 		aiAgentCtrl.SetSalesEngine(engine)

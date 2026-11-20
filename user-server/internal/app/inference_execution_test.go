@@ -21,6 +21,13 @@ import (
 	"hivemtk-user/internal/service"
 )
 
+// 测试经过生产 Controller，app 只负责运行时装配。
+func registerInferenceTestRoutes(auth *gin.RouterGroup) {
+	c := controller.NewAgentInferenceController(GetInferenceOrchestrator, GetGlobalPermissionChecker)
+	auth.POST("/agent/inference/run", c.Run)
+	auth.GET("/agent/inference/stats", c.Stats)
+}
+
 type inferenceHTTPGate struct {
 	state agent_runtime.ExecutionAuthorization
 }
@@ -122,7 +129,7 @@ func TestInferenceExecutionHTTPContracts(t *testing.T) {
 			}
 			globalInferenceOrchestrator = orch
 			router := gin.New()
-			SetupInferenceRoutes(router.Group("/api"))
+			registerInferenceTestRoutes(router.Group("/api"))
 			body := map[string]string{"channel_type": "local", "customer_id": "local-customer", "content": "我的订单到哪了", "session_id": "local-session", "message_id": "local-message", "account_id": "local-account"}
 			if scenario != "default" {
 				mode := "execution"
@@ -223,7 +230,7 @@ func TestInferenceDeliveryHTTPReceiptRecoveryAndRestart(t *testing.T) {
 	orch.SetDeliveryGateway(newService())
 	globalInferenceOrchestrator = orch
 	router := gin.New()
-	SetupInferenceRoutes(router.Group("/api"))
+	registerInferenceTestRoutes(router.Group("/api"))
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r = r.WithContext(tenant.WithTenantID(r.Context(), 773))

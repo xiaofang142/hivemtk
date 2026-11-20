@@ -36,7 +36,7 @@ import re
 import sys
 import tempfile
 
-# 各层禁止 import 的前缀。`internal/xxx` 会匹配模块前缀 hivemtk-user/internal/xxx 及其子包。
+# internal/xxx 表示目标层，支持 internal/geo/xxx 等嵌套域，按完整路径部件匹配。
 FORBIDDEN = {
     "controller": ("internal/repository", "gorm.io/"),
     "service": ("internal/controller", "internal/router", "github.com/gin-gonic/gin"),
@@ -69,6 +69,15 @@ def layer_of(rel_parts):
     return rel_parts[hit[-1]] if hit else None
 
 
+def matches_forbidden(imp, token):
+    if token.startswith("internal/"):
+        parts = imp.split("/")
+        if "internal" not in parts:
+            return False
+        return layer_of(parts[parts.index("internal") + 1:]) == token.split("/")[1]
+    return imp == token.rstrip("/") or imp.startswith(token.rstrip("/") + "/")
+
+
 def scan(root):
     """返回违规列表 [(layer, token, relpath, import_path)] 与扫描文件数。"""
     violations, scanned = [], 0
@@ -90,7 +99,7 @@ def scan(root):
                 continue
             for imp in go_imports(src):
                 for tok in FORBIDDEN.get(layer, ()):
-                    if tok in imp:
+                    if matches_forbidden(imp, tok):
                         violations.append((layer, tok, rel.replace(os.sep, "/"), imp))
     return violations, scanned
 
@@ -165,7 +174,25 @@ SELFTEST_CASES = [
     ("helper/ignored.go",
      'package helper\n\nimport "hivemtk-user/internal/repository"\n', set()),  # 非五层目录不管
     ("service/skip_test.go",
-     'package service\n\nimport "github.com/gin-gonic/gin"\n', set()),  # 测试文件豁免
+      'package service\n\nimport "github.com/gin-gonic/gin"\n', set()),  # 测试文件豁免
+    ("geo/service/nested.go",
+     'package service\nimport transport "hivemtk-user/internal/geo/controller"\n',
+     {("service", "internal/controller")}),
+    ("geo/model/nested.go",
+     'package model\nimport _ "hivemtk-user/internal/geo/service"\n',
+     {("model", "internal/service")}),
+    ("content/repository/nested.go",
+     'package repository\nimport "hivemtk-user/internal/content/service/worker"\n',
+     {("repository", "internal/service")}),
+    ("geo/controller/nested.go",
+     'package controller\nimport "hivemtk-user/internal/geo/repository"\n',
+     {("controller", "internal/repository")}),
+    ("geo/service/clean.go",
+     'package service\nimport "hivemtk-user/internal/geo/repository"\n', set()),
+    ("geo/router/assembly.go",
+     'package router\nimport "hivemtk-user/internal/geo/repository"\n', set()),
+    ("service/name_prefix.go",
+     'package service\nimport "hivemtk-user/internal/controllerkit"\n', set()),
 ]
 
 
@@ -178,12 +205,15 @@ def selftest():
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write(src)
         got_all, scanned = scan(tmp)
-        got = {(l, t) for l, t, _r, _i in got_all}
-        want = set().union(*[e for _f, _s, e in SELFTEST_CASES])
-        if got != want:
-            failures.append(f"检测集不符：want={sorted(want)} got={sorted(got)}")
-        if scanned != 8:  # 10 夹具 = 8 个属层的非测试 .go + 1 非层目录 + 1 _test.go 豁免
-            failures.append(f"扫描数不符：want=8 got={scanned}")
+        for rel, _src, expected in SELFTEST_CASES:
+            got = {(l, t) for l, t, r, _i in got_all if r == rel}
+            if got != expected:
+                failures.append(f"{rel} 检测集不符：want={sorted(expected)} got={sorted(got)}")
+        expected_scanned = sum(not rel.endswith("_test.go") and
+                               layer_of(rel.split("/")[:-1]) is not None
+                               for rel, _src, _expected in SELFTEST_CASES)
+        if scanned != expected_scanned:
+            failures.append(f"扫描数不符：want={expected_scanned} got={scanned}")
         # 基线豁免与新增判定的牙齿：豁免一条后它必须从 fresh 里消失
         with tempfile.NamedTemporaryFile("w", suffix=".baseline", delete=False) as bf:
             bf.write("controller|controller/bad.go\n")  # 格式：规则|相对 root 的路径
