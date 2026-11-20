@@ -72,7 +72,8 @@ func (c *InferenceCycle) runOnce(ctx context.Context, payload CustomerMessagePay
 			continue
 		}
 		name = stage.Name()
-		if ckpt.skipped(name) {
+		// 安全门与最终复核按固定职责位置重检，不信任可替换阶段的自报名称。
+		if index != 2 && index != 4 && ckpt.skipped(name) {
 			continue
 		}
 		if err := tctx.Err(); err != nil {

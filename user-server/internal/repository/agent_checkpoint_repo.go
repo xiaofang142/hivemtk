@@ -4,7 +4,10 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
+
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -29,14 +32,18 @@ func NewAgentCheckpointRepository(db *gorm.DB) *AgentCheckpointRepository {
 
 // Save 阶段完成即落 checkpoint（upsert，幂等）
 func (r *AgentCheckpointRepository) Save(ctx context.Context, threadID, stage string, state json.RawMessage) error {
-	if r.db == nil {
-		return nil
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok || tenantID == 0 {
+		return errors.New("checkpoint_tenant_required")
+	}
+	if r == nil || r.db == nil {
+		return errors.New("checkpoint_store_unavailable")
 	}
 	if threadID == "" || stage == "" {
-		return nil
+		return errors.New("checkpoint_identity_unavailable")
 	}
 	now := time.Now()
-	return r.db.WithContext(ctx).Table("agent_checkpoints").
+	return r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).Table("agent_checkpoints").
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "tenant_id"}, {Name: "thread_id"}, {Name: "stage"}},
 			DoUpdates: clause.Assignments(map[string]any{
@@ -45,6 +52,7 @@ func (r *AgentCheckpointRepository) Save(ctx context.Context, threadID, stage st
 			}),
 		}).
 		Create(map[string]any{
+			"tenant_id":  tenantID,
 			"thread_id":  threadID,
 			"stage":      stage,
 			"state":      string(state),
@@ -60,8 +68,15 @@ func (r *AgentCheckpointRepository) Save(ctx context.Context, threadID, stage st
 // "最新"的权威定义是阶段序号最大（AgentStageNames 顺序），该顺序表在 service 层，
 // 故仓储只负责取全量、由 service 判定游标。
 func (r *AgentCheckpointRepository) LoadAllByThread(ctx context.Context, threadID string) ([]AgentCheckpoint, error) {
-	if r.db == nil || threadID == "" {
-		return nil, nil
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok || tenantID == 0 {
+		return nil, errors.New("checkpoint_tenant_required")
+	}
+	if r == nil || r.db == nil {
+		return nil, errors.New("checkpoint_store_unavailable")
+	}
+	if threadID == "" {
+		return nil, errors.New("checkpoint_identity_unavailable")
 	}
 	var rows []struct {
 		ThreadID  string          `gorm:"column:thread_id"`
@@ -69,8 +84,8 @@ func (r *AgentCheckpointRepository) LoadAllByThread(ctx context.Context, threadI
 		State     json.RawMessage `gorm:"column:state"`
 		UpdatedAt time.Time       `gorm:"column:updated_at"`
 	}
-	if err := r.db.WithContext(ctx).Table("agent_checkpoints").
-		Where("thread_id = ?", threadID).
+	if err := r.db.WithContext(tenant.OnlyTenant(ctx, tenantID)).Table("agent_checkpoints").
+		Where("tenant_id = ? AND thread_id = ?", tenantID, threadID).
 		Order("id ASC").
 		Scan(&rows).Error; err != nil {
 		return nil, err

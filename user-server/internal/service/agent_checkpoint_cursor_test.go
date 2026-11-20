@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"hivemtk-user/internal/repository"
@@ -91,13 +92,13 @@ func TestLatestByStageOrder_PicksFurthestStage(t *testing.T) {
 func TestLoadLatestCheckpoint_CursorNeverGoesBackwards(t *testing.T) {
 	db := testutil.NewTestDB(t)
 	if err := db.Exec(checkpointTableDDL).Error; err != nil {
-		t.Skipf("建表失败（环境限制）: %v", err)
+		t.Fatalf("建表失败: %v", err)
 	}
 	// 裸 CREATE TABLE 不经过 testutil 的 schema 登记；租户登记表/唯一索引
 	// 需要重新内省一次（共享 schema 缓存不会自动感知这条 DDL）。
 	testutil.RefreshTenancy(t, db)
 	repo := repository.NewAgentCheckpointRepository(db)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 773)
 
 	const thread = "thr-cursor-1"
 	state, _ := json.Marshal(map[string]any{"v": 1})
@@ -111,7 +112,7 @@ func TestLoadLatestCheckpoint_CursorNeverGoesBackwards(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 再加一刀：perception 被删除后重建 → 它的自增 id 也变成最大
-	if err := db.Exec("DELETE FROM agent_checkpoints WHERE thread_id = ? AND stage = 'perception'", thread).Error; err != nil {
+	if err := db.Exec("DELETE FROM agent_checkpoints WHERE tenant_id = ? AND thread_id = ? AND stage = 'perception'", 773, thread).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := repo.Save(ctx, thread, "perception", state); err != nil {
@@ -119,7 +120,7 @@ func TestLoadLatestCheckpoint_CursorNeverGoesBackwards(t *testing.T) {
 	}
 	var newest string
 	if err := db.Table("agent_checkpoints").Select("stage").
-		Where("thread_id = ?", thread).Order("id DESC").Limit(1).Scan(&newest).Error; err != nil {
+		Where("tenant_id = ? AND thread_id = ?", 773, thread).Order("id DESC").Limit(1).Scan(&newest).Error; err != nil {
 		t.Fatal(err)
 	}
 	if newest != "perception" {

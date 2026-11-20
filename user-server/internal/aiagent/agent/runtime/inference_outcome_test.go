@@ -102,17 +102,17 @@ func TestInferenceOutcomeCheckpointRetriesFailedStage(t *testing.T) {
 	var calls []string
 	cycle := outcomeCycle("reviewer", false, errors.New("review unavailable"), &calls)
 	cycle.SetCheckpointStore(store)
-	if _, err := cycle.RunOnce(context.Background(), testPayload(), nil); err == nil {
+	if _, err := cycle.RunOnce(checkpointTestContext(), checkpointPayload(), nil); err == nil {
 		t.Fatal("expected reviewer error")
 	}
-	if store.doneAt(CheckpointThreadID(testPayload()), "planner") {
+	if store.doneAt(checkpointThread(t, checkpointPayload()), "planner") {
 		t.Fatal("failed run marked completed")
 	}
 	calls = nil
 	recovered := outcomeCycle("", false, nil, &calls)
 	recovered.SetCheckpointStore(store)
-	decision, err := recovered.RunOnce(context.Background(), testPayload(), nil)
-	if err != nil || len(calls) != 1 || calls[0] != "reviewer" || decision == nil || decision.Reply != "reviewed reply" {
+	decision, err := recovered.RunOnce(checkpointTestContext(), checkpointPayload(), nil)
+	if err != nil || len(calls) != 2 || calls[0] != "gatekeeper" || calls[1] != "reviewer" || decision == nil || decision.Reply != "reviewed reply" {
 		t.Fatalf("bad recovery calls=%v decision=%+v err=%v", calls, decision, err)
 	}
 }

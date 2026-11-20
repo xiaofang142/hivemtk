@@ -22,7 +22,7 @@ func TestInferenceOutcomeStreamRejectionMatchesTrace(t *testing.T) {
 	cycle.SetCheckpointStore(store)
 	channel := NewChannelStreamHandler(32)
 	buffer := NewBufferedStreamHandler(nil)
-	decision, err := cycle.RunOnceStream(context.Background(), testPayload(), nil, NewCompositeStreamHandler(channel, buffer))
+	decision, err := cycle.RunOnceStream(checkpointTestContext(), checkpointPayload(), nil, NewCompositeStreamHandler(channel, buffer))
 	if err != nil || decision.Outcome != InferenceRejected || decision.Publishable {
 		t.Fatalf("拒绝终态错误：decision=%+v err=%v", decision, err)
 	}
@@ -49,7 +49,7 @@ func TestInferenceOutcomeStreamRejectionMatchesTrace(t *testing.T) {
 	if !stageEnd || !terminal {
 		t.Fatal("缺少复核阶段或拒绝终态事件")
 	}
-	_, blob, err := store.LoadResume(context.Background(), CheckpointThreadID(testPayload()))
+	_, blob, err := store.LoadResume(checkpointTestContext(), checkpointThread(t, checkpointPayload()))
 	var saved checkpointState
 	if err != nil || json.Unmarshal(blob, &saved) != nil || !saved.Done || saved.Snapshot.Decision.Outcome != InferenceRejected {
 		t.Fatalf("拒绝检查点与返回不一致：%s err=%v", blob, err)
@@ -84,15 +84,15 @@ func TestInferenceOutcomeFailureCheckpointAuditAndRecovery(t *testing.T) {
 				store := newFakeCheckpointStore(true)
 				cycle := outcomeCycle(stage, timeout, errors.New("故障信号"), &calls)
 				cycle.SetCheckpointStore(store)
-				decision, err := cycle.RunOnce(context.Background(), testPayload(), nil)
+				decision, err := cycle.RunOnce(checkpointTestContext(), checkpointPayload(), nil)
 				if err == nil {
 					t.Fatal("故障未返回错误")
 				}
-				if got := store.stageCount(CheckpointThreadID(testPayload())); got != index {
+				if got := store.stageCount(checkpointThread(t, checkpointPayload())); got != index {
 					t.Fatalf("失败推进游标：%d，期望 %d", got, index)
 				}
 				if index > 0 {
-					_, blob, loadErr := store.LoadResume(context.Background(), CheckpointThreadID(testPayload()))
+					_, blob, loadErr := store.LoadResume(checkpointTestContext(), checkpointThread(t, checkpointPayload()))
 					var saved checkpointState
 					if loadErr != nil || json.Unmarshal(blob, &saved) != nil || saved.Done || saved.LastAttempt == nil {
 						t.Fatalf("失败审计缺失：%s %v", blob, loadErr)
@@ -107,8 +107,12 @@ func TestInferenceOutcomeFailureCheckpointAuditAndRecovery(t *testing.T) {
 				calls = nil
 				recovered := outcomeCycle("", false, nil, &calls)
 				recovered.SetCheckpointStore(store)
-				reply, runErr := recovered.RunOnce(context.Background(), testPayload(), nil)
-				if runErr != nil || reply.Outcome != InferenceSucceeded || reply.Reply != "reviewed reply" || !reflect.DeepEqual(calls, testCheckpointOrder[index:]) {
+				reply, runErr := recovered.RunOnce(checkpointTestContext(), checkpointPayload(), nil)
+				want := append([]string(nil), testCheckpointOrder[index:]...)
+				if index > 2 {
+					want = append([]string{"gatekeeper"}, want...)
+				}
+				if runErr != nil || reply.Outcome != InferenceSucceeded || reply.Reply != "reviewed reply" || !reflect.DeepEqual(calls, want) {
 					t.Fatalf("恢复跳过失败阶段或重复成功阶段：%v %+v %v", calls, reply, runErr)
 				}
 			})
@@ -151,7 +155,7 @@ func TestInferenceOutcomeOptionalFailuresAreDegraded(t *testing.T) {
 			} else {
 				cycle.SetCheckpointStore(outcomeStoreFailure{newFakeCheckpointStore(true), kind == "checkpoint_load", kind == "checkpoint_save"})
 			}
-			decision, err := cycle.RunOnce(context.Background(), testPayload(), nil)
+			decision, err := cycle.RunOnce(checkpointTestContext(), checkpointPayload(), nil)
 			if err != nil || decision.Outcome != InferenceDegraded || !decision.Publishable || len(decision.Degradations) != 1 || cycle.GetStats().DegradedRuns != 1 || cycle.GetStats().SuccessRuns != 0 {
 				t.Fatalf("可选故障被吞或错误拒绝：%+v stats=%+v err=%v", decision, cycle.GetStats(), err)
 			}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 )
@@ -56,8 +57,12 @@ func TestInferenceOutcomePostgresCheckpointRecovery(t *testing.T) {
 		for _, timeout := range []bool{false, true} {
 			mode := map[bool]string{false: "error", true: "timeout"}[timeout]
 			t.Run(name+"/"+mode, func(t *testing.T) {
-				payload := agent_runtime.CustomerMessagePayload{ChannelType: "local", CustomerID: "checkpoint", SessionID: name + mode, Content: "本地检查点验收", MessageType: "text"}
-				thread := agent_runtime.CheckpointThreadID(payload)
+				payload := agent_runtime.CustomerMessagePayload{MessageID: name + mode, AccountID: "checkpoint-account", ChannelType: "local", CustomerID: "checkpoint", SessionID: name + mode, Content: "本地检查点验收", MessageType: "text"}
+				ctx := tenant.WithTenantID(context.Background(), 773)
+				thread, threadErr := agent_runtime.ScopedCheckpointThreadID(ctx, payload, &agent_runtime.AgentContext{AgentCode: "default", Name: "默认智能体", AgentType: "customer_service"})
+				if threadErr != nil {
+					t.Fatal(threadErr)
+				}
 				var calls []string
 				makeCycle := func(fault string) *agent_runtime.InferenceCycle {
 					mk := func(stage string) agent_runtime.InferenceStage {
@@ -69,16 +74,16 @@ func TestInferenceOutcomePostgresCheckpointRecovery(t *testing.T) {
 					cycle.StageTimeout = 20 * time.Millisecond
 					return cycle
 				}
-				decision, err := makeCycle(name).RunOnce(context.Background(), payload, nil)
+				decision, err := makeCycle(name).RunOnce(ctx, payload, nil)
 				if err == nil || decision == nil || decision.Outcome != agent_runtime.InferenceFailed || decision.FailedStage != name {
 					t.Fatalf("故障未传播：decision=%+v err=%v", decision, err)
 				}
-				rows, err := repo.LoadAllByThread(context.Background(), thread)
+				rows, err := repo.LoadAllByThread(ctx, thread)
 				if err != nil || len(rows) != index {
 					t.Fatalf("检查点越过失败阶段：rows=%d want=%d err=%v", len(rows), index, err)
 				}
 				if index > 0 {
-					resume, blob, err := store.LoadResume(context.Background(), thread)
+					resume, blob, err := store.LoadResume(ctx, thread)
 					var audit struct {
 						Done        bool                             `json:"done"`
 						LastAttempt *agent_runtime.InferenceDecision `json:"last_attempt"`
@@ -98,11 +103,15 @@ func TestInferenceOutcomePostgresCheckpointRecovery(t *testing.T) {
 					}
 				}
 				calls = nil
-				decision, err = makeCycle("").RunOnce(context.Background(), payload, nil)
-				if err != nil || decision.Outcome != agent_runtime.InferenceSucceeded || decision.Reply != "已复核回复" || !reflect.DeepEqual(calls, order[index:]) {
+				decision, err = makeCycle("").RunOnce(ctx, payload, nil)
+				want := append([]string(nil), order[index:]...)
+				if index > 2 {
+					want = append([]string{"gatekeeper"}, want...)
+				}
+				if err != nil || decision.Outcome != agent_runtime.InferenceSucceeded || decision.Reply != "已复核回复" || !reflect.DeepEqual(calls, want) {
 					t.Fatalf("恢复重放异常：calls=%v decision=%+v err=%v", calls, decision, err)
 				}
-				_, blob, err := store.LoadResume(context.Background(), thread)
+				_, blob, err := store.LoadResume(ctx, thread)
 				var completed struct {
 					Done     bool `json:"done"`
 					Snapshot struct {

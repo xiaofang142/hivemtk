@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 // testCheckpointOrder 与 service.AgentStageNames 同序（测试内不跨包引，避免 service↔runtime 环）
@@ -177,6 +179,23 @@ func testPayload() CustomerMessagePayload {
 	}
 }
 
+func checkpointTestContext() context.Context { return tenant.WithTenantID(context.Background(), 773) }
+
+func checkpointPayload() CustomerMessagePayload {
+	payload := testPayload()
+	payload.MessageID, payload.AccountID = "checkpoint-test-message", "checkpoint-test-account"
+	return payload
+}
+
+func checkpointThread(t *testing.T, payload CustomerMessagePayload) string {
+	t.Helper()
+	thread, err := ScopedCheckpointThreadID(checkpointTestContext(), payload, &AgentContext{AgentCode: "default", Name: "默认智能体", AgentType: "customer_service"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return thread
+}
+
 func runRecovering(fn func()) (panicked bool) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -190,12 +209,12 @@ func runRecovering(fn func()) (panicked bool) {
 // ①崩溃重启：已完成阶段不重跑，产出从快照回填
 func TestInferenceCycle_CheckpointResumesAfterCrash(t *testing.T) {
 	store := newFakeCheckpointStore(true)
-	payload := testPayload()
+	payload := checkpointPayload()
 
 	crashed := newCounts()
 	crashSeen := map[string]string{}
 	if !runRecovering(func() {
-		_, _ = newStageSet(store, crashed, crashSeen, "planner").cycle.RunOnce(context.Background(), payload, nil)
+		_, _ = newStageSet(store, crashed, crashSeen, "planner").cycle.RunOnce(checkpointTestContext(), payload, nil)
 	}) {
 		t.Fatal("planner 桩应触发 panic（否则本用例没有模拟到进程被杀）")
 	}
@@ -207,7 +226,7 @@ func TestInferenceCycle_CheckpointResumesAfterCrash(t *testing.T) {
 	if *crashed["reviewer"] != 0 {
 		t.Fatalf("崩溃点之后的阶段不应执行，reviewer=%d", *crashed["reviewer"])
 	}
-	thread := CheckpointThreadID(payload)
+	thread := checkpointThread(t, payload)
 	if store.stageCount(thread) != 3 {
 		t.Fatalf("崩溃前应落 3 个阶段边界点，got %d", store.stageCount(thread))
 	}
@@ -218,14 +237,17 @@ func TestInferenceCycle_CheckpointResumesAfterCrash(t *testing.T) {
 	// 重启后的新一轮：全新 cycle 实例 + 同一 store + 同一载荷
 	resumed := newCounts()
 	resumeSeen := map[string]string{}
-	decision, err := newStageSet(store, resumed, resumeSeen, "").cycle.RunOnce(context.Background(), payload, nil)
+	decision, err := newStageSet(store, resumed, resumeSeen, "").cycle.RunOnce(checkpointTestContext(), payload, nil)
 	if err != nil {
 		t.Fatalf("resume run failed: %v", err)
 	}
-	for _, done := range []string{"perception", "alignment", "gatekeeper"} {
+	for _, done := range []string{"perception", "alignment"} {
 		if *resumed[done] != 0 {
 			t.Errorf("已完成阶段 %s 被重复执行（%d 次）—— 违反阶段边界恢复", done, *resumed[done])
 		}
+	}
+	if *resumed["gatekeeper"] != 1 {
+		t.Fatal("恢复必须重检当前门禁")
 	}
 	if *resumed["planner"] != 1 || *resumed["reviewer"] != 1 {
 		t.Errorf("应从 planner 起续跑：planner=%d reviewer=%d", *resumed["planner"], *resumed["reviewer"])
@@ -245,17 +267,17 @@ func TestInferenceCycle_CheckpointResumesAfterCrash(t *testing.T) {
 // ②开关关闭：执行序列与未挂载一致，且零存储调用
 func TestInferenceCycle_CheckpointDisabledTouchesNoStore(t *testing.T) {
 	store := newFakeCheckpointStore(false)
-	payload := testPayload()
+	payload := checkpointPayload()
 
 	baseline := newCounts()
 	baseSeen := map[string]string{}
-	if _, err := newStageSet(nil, baseline, baseSeen, "").cycle.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := newStageSet(nil, baseline, baseSeen, "").cycle.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("baseline run failed: %v", err)
 	}
 
 	gated := newCounts()
 	gatedSeen := map[string]string{}
-	if _, err := newStageSet(store, gated, gatedSeen, "").cycle.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := newStageSet(store, gated, gatedSeen, "").cycle.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("gated run failed: %v", err)
 	}
 	if store.saves != 0 || store.loadCalls != 0 {
@@ -274,14 +296,14 @@ func TestInferenceCycle_CheckpointDisabledTouchesNoStore(t *testing.T) {
 // ③已完整结束的运行不续跑：同一载荷重试必须整体重跑
 func TestInferenceCycle_CompletedRunIsNotResumed(t *testing.T) {
 	store := newFakeCheckpointStore(true)
-	payload := testPayload()
+	payload := checkpointPayload()
 
 	first := newCounts()
-	if _, err := newStageSet(store, first, map[string]string{}, "").cycle.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := newStageSet(store, first, map[string]string{}, "").cycle.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("first run failed: %v", err)
 	}
 	second := newCounts()
-	if _, err := newStageSet(store, second, map[string]string{}, "").cycle.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := newStageSet(store, second, map[string]string{}, "").cycle.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("second run failed: %v", err)
 	}
 	for _, n := range testCheckpointOrder {
@@ -294,18 +316,18 @@ func TestInferenceCycle_CompletedRunIsNotResumed(t *testing.T) {
 // 同会话不同消息不得命中彼此的游标（内容寻址 thread 的意义所在）
 func TestInferenceCycle_DifferentMessageUsesFreshThread(t *testing.T) {
 	store := newFakeCheckpointStore(true)
-	payload := testPayload()
+	payload := checkpointPayload()
 
 	crashed := newCounts()
 	runRecovering(func() {
-		_, _ = newStageSet(store, crashed, map[string]string{}, "planner").cycle.RunOnce(context.Background(), payload, nil)
+		_, _ = newStageSet(store, crashed, map[string]string{}, "planner").cycle.RunOnce(checkpointTestContext(), payload, nil)
 	})
 
-	other := testPayload()
+	other := checkpointPayload()
 	other.Content = "换个问题：你们支持开发票吗"
 	other.TraceID = "trace-run-2"
 	fresh := newCounts()
-	if _, err := newStageSet(store, fresh, map[string]string{}, "").cycle.RunOnce(context.Background(), other, nil); err != nil {
+	if _, err := newStageSet(store, fresh, map[string]string{}, "").cycle.RunOnce(checkpointTestContext(), other, nil); err != nil {
 		t.Fatalf("fresh run failed: %v", err)
 	}
 	for _, n := range testCheckpointOrder {
@@ -313,10 +335,10 @@ func TestInferenceCycle_DifferentMessageUsesFreshThread(t *testing.T) {
 			t.Errorf("不同载荷应全新执行，%s got %d 次（0 = 被上一条消息的游标污染）", n, *fresh[n])
 		}
 	}
-	if CheckpointThreadID(payload) == CheckpointThreadID(other) {
+	if checkpointThread(t, payload) == checkpointThread(t, other) {
 		t.Error("不同内容应得到不同 thread")
 	}
-	if CheckpointThreadID(payload) != CheckpointThreadID(testPayload()) {
+	if checkpointThread(t, payload) != checkpointThread(t, checkpointPayload()) {
 		t.Error("同内容应得到同一 thread（重试才能续跑）；trace 不同也不应改变")
 	}
 }
@@ -324,7 +346,7 @@ func TestInferenceCycle_DifferentMessageUsesFreshThread(t *testing.T) {
 // 提前返回（门禁转人工）也算运行结束：留 done，后续重试不续跑到半程
 func TestInferenceCycle_EarlyReturnMarksDone(t *testing.T) {
 	store := newFakeCheckpointStore(true)
-	payload := testPayload()
+	payload := checkpointPayload()
 
 	counts := newCounts()
 	perception := &countingStage{name: "perception", hits: counts["perception"]}
@@ -336,10 +358,10 @@ func TestInferenceCycle_EarlyReturnMarksDone(t *testing.T) {
 	c := NewInferenceCycleWithStages(perception, early, gatekeeper, planner)
 	c.SetReviewerStage(reviewer)
 	c.SetCheckpointStore(store)
-	if _, err := c.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := c.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("early return run failed: %v", err)
 	}
-	thread := CheckpointThreadID(payload)
+	thread := checkpointThread(t, payload)
 	if !store.doneAt(thread, "perception") {
 		t.Fatal("在 perception 之后提前结束，应把 perception 标 done")
 	}
@@ -396,19 +418,19 @@ func TestCheckpointSnapshotExcludesVolatileFields(t *testing.T) {
 // 快照版本不符（老版本遗留行）时不得半程续跑
 func TestCheckpointSnapshotVersionMismatchFallsBackToFullRun(t *testing.T) {
 	store := newFakeCheckpointStore(true)
-	payload := testPayload()
-	thread := CheckpointThreadID(payload)
+	payload := checkpointPayload()
+	thread := checkpointThread(t, payload)
 
 	stale, err := json.Marshal(checkpointState{Version: 0, Fingerprint: "nope", Snapshot: &checkpointContext{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Save(context.Background(), thread, "gatekeeper", stale); err != nil {
+	if err := store.Save(checkpointTestContext(), thread, "gatekeeper", stale); err != nil {
 		t.Fatal(err)
 	}
 
 	counts := newCounts()
-	if _, err := newStageSet(store, counts, map[string]string{}, "").cycle.RunOnce(context.Background(), payload, nil); err != nil {
+	if _, err := newStageSet(store, counts, map[string]string{}, "").cycle.RunOnce(checkpointTestContext(), payload, nil); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 	for _, n := range testCheckpointOrder {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
@@ -30,7 +31,7 @@ func newCheckpointStoreForTest(t *testing.T) (*agentCheckpointStore, *gorm.DB, f
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		CONSTRAINT uk_agent_ckpt UNIQUE (tenant_id, thread_id, stage)
 	)`).Error; err != nil {
-		t.Skipf("建表失败（环境限制）: %v", err)
+		t.Fatalf("建表失败: %v", err)
 	}
 	return &agentCheckpointStore{repo: repository.NewAgentCheckpointRepository(db)}, db, func() {
 		db.Exec("DELETE FROM agent_checkpoints")
@@ -50,7 +51,7 @@ func checkpointTestState(t *testing.T, stage string) json.RawMessage {
 func TestAgentCheckpointStore_LoadResumeReturnsNextStage(t *testing.T) {
 	store, _, cleanup := newCheckpointStoreForTest(t)
 	defer cleanup()
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 773)
 	const thread = "thr-app-wiring-1"
 
 	for _, stage := range []string{"perception", "alignment", "gatekeeper"} {
@@ -125,6 +126,8 @@ func TestInitInferenceOrchestrator_MountsCheckpointStoreOnRealDB(t *testing.T) {
 	}
 
 	payload := agent_runtime.CustomerMessagePayload{
+		MessageID:   "checkpoint-app-message",
+		AccountID:   "checkpoint-app-account",
 		ChannelType: "xiaohongshu",
 		CustomerID:  "cust-app-e2e",
 		SessionID:   "sess-app-e2e",
@@ -132,15 +135,19 @@ func TestInitInferenceOrchestrator_MountsCheckpointStoreOnRealDB(t *testing.T) {
 		MessageType: "text",
 		TraceID:     "trace-app-e2e",
 	}
-	thread := agent_runtime.CheckpointThreadID(payload)
+	ctx := tenant.WithTenantID(context.Background(), 773)
+	thread, err := agent_runtime.ScopedCheckpointThreadID(ctx, payload, &agent_runtime.AgentContext{AgentCode: "default", AgentType: "customer_service"})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// 开关关闭：装配到位也不得写库（AC②：flag off 行为与今天完全一致）
 	t.Setenv("FF_LTC_CHECKPOINT", "")
-	if _, err := orch.Process(context.Background(), payload, nil); err != nil {
+	if _, err := orch.Process(ctx, payload, nil); err != nil {
 		t.Fatalf("process (flag off) failed: %v", err)
 	}
 	var off int64
-	if err := db.Table("agent_checkpoints").Where("thread_id = ?", thread).Count(&off).Error; err != nil {
+	if err := db.Table("agent_checkpoints").Where("tenant_id = ? AND thread_id = ?", 773, thread).Count(&off).Error; err != nil {
 		t.Fatal(err)
 	}
 	if off != 0 {
@@ -149,11 +156,11 @@ func TestInitInferenceOrchestrator_MountsCheckpointStoreOnRealDB(t *testing.T) {
 
 	// 开关打开：同一装配、同一条链路必须真实落点
 	t.Setenv("FF_LTC_CHECKPOINT", "1")
-	if _, err := orch.Process(context.Background(), payload, nil); err != nil {
+	if _, err := orch.Process(ctx, payload, nil); err != nil {
 		t.Fatalf("process (flag on) failed: %v", err)
 	}
 	var on int64
-	if err := db.Table("agent_checkpoints").Where("thread_id = ?", thread).Count(&on).Error; err != nil {
+	if err := db.Table("agent_checkpoints").Where("tenant_id = ? AND thread_id = ?", 773, thread).Count(&on).Error; err != nil {
 		t.Fatal(err)
 	}
 	if on == 0 {

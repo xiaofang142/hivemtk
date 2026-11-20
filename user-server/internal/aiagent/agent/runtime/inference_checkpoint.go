@@ -1,8 +1,8 @@
 // inference_checkpoint.go 推理闭环的阶段边界检查点挂载。
 //
 // 语义：每阶段成功返回后 upsert 一份 (thread, stage) 快照；同一逻辑运行被中断后
-// 重试时，从"已完成的最后一个阶段"的下一个阶段续跑，已完成阶段不再执行、其产出
-// 从快照回填。开关与持久化本身在 service/repository 层（agent_checkpoint.go），
+// 重试时复用同身份成功阶段的产出；当前安全门和最终复核每轮重新执行，其余阶段
+// 从最后成功边界续跑。开关与持久化本身在 service/repository 层（agent_checkpoint.go），
 // 本文件只定义运行时侧的端口与快照编解码，由 internal/app 装配注入。
 package agent_runtime
 
@@ -18,7 +18,7 @@ import (
 )
 
 // checkpointStateVersion 快照格式版本；不匹配的旧快照一律整体重跑。
-const checkpointStateVersion = 2
+const checkpointStateVersion = 3
 
 // StageCheckpointStore 阶段检查点存储端口。
 //
@@ -65,6 +65,7 @@ type checkpointContext struct {
 // 不用 sessionID 作 thread：同一会话的第二条消息会命中第一条的游标、直接跳过感知，
 // 把上一轮的阶段产出当成新消息的结果。内容寻址后，只有"同一条消息的重试"才续跑。
 // TraceID 不入摘要：重试方常带新的 trace，否则永远命不中。
+// Deprecated: 缺少可信租户和智能体配置；只保留源兼容，不可用于恢复存储。
 func CheckpointThreadID(p CustomerMessagePayload) string {
 	return "thr_" + payloadFingerprint(p)[:24]
 }
@@ -90,10 +91,15 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 	if store == nil || !store.Enabled() {
 		return nil
 	}
+	thread, err := ScopedCheckpointThreadID(ctx, payload, ic.AgentCtx)
+	if err != nil {
+		checkpointDegraded(ic, "checkpoint_identity_unavailable")
+		return nil
+	}
 	cc := &cycleCheckpoint{
 		store:       store,
-		thread:      CheckpointThreadID(payload),
-		fingerprint: payloadFingerprint(payload),
+		thread:      thread,
+		fingerprint: strings.TrimPrefix(thread, "thr_v3_"),
 		skip:        map[string]bool{},
 	}
 	resumeStage, blob, err := store.LoadResume(ctx, cc.thread)
@@ -158,7 +164,7 @@ func (cc *cycleCheckpoint) skipped(stage string) bool {
 
 // complete 阶段成功：落快照，供后续中断后续跑。失败只告警，不影响回复链路。
 func (cc *cycleCheckpoint) complete(ctx context.Context, stage string, ic *InferenceContext) {
-	if cc == nil {
+	if cc == nil || cc.skip[stage] {
 		return
 	}
 	if cc.save(ctx, stage, ic, false) {
