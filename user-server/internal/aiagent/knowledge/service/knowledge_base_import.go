@@ -197,6 +197,7 @@ func (s *KnowledgeBaseService) ProcessDocumentByID(ctx context.Context, document
 	doc, err := s.docs.GetByID(ctx, documentID)
 	if err != nil {
 		logger.Errorf("[KBImport] ProcessDocumentByID 读文档失败 doc=%d: %v", documentID, err)
+		s.markDocumentFailed(ctx, documentID, fmt.Sprintf("读取文档失败: %v", err))
 		return
 	}
 	s.processContent(ctx, doc, doc.Content)
@@ -209,8 +210,10 @@ func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KB
 	if err := s.docs.UpdateStatusFields(ctx, documentID, map[string]any{
 		"status": model.KBDocumentStatusProcessing, "error_msg": "",
 	}); err != nil {
-		// 状态没推进就继续跑没有任何意义：文档会一直停在 pending，重试也无从下手。
-		logger.Errorf("[KBImport] 标记文档处理中失败 doc=%d: %v", documentID, err)
+		errMsg := fmt.Sprintf("标记文档处理中失败: %v", err)
+		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
+		s.markDocumentFailed(ctx, documentID, errMsg)
+		return
 	}
 
 	ragDoc := rag_core.Document{
@@ -269,8 +272,10 @@ func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KB
 		"content":     content,
 		"error_msg":   "",
 	}); err != nil {
-		// 索引已建成但状态写失败：文档将滞留 processing，前端无法感知——必须落日志供运维介入
-		logger.Errorf("[KBImport] 标记文档已索引失败 doc=%d: %v", documentID, err)
+		errMsg := fmt.Sprintf("标记文档已索引失败: %v", err)
+		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
+		s.markDocumentFailed(ctx, documentID, errMsg)
+		return
 	}
 }
 
@@ -292,8 +297,10 @@ func (s *KnowledgeBaseService) processDocumentAsyncWithQA(ctx context.Context, d
 	if err := s.docs.UpdateStatusFields(bgCtx, documentID, map[string]any{
 		"status": model.KBDocumentStatusProcessing, "error_msg": "",
 	}); err != nil {
-		// 状态没推进就继续跑没有任何意义：文档会一直停在 pending，重试也无从下手。
-		logger.Errorf("[KBImport] 标记文档处理中失败 doc=%d: %v", documentID, err)
+		errMsg := fmt.Sprintf("标记文档处理中失败: %v", err)
+		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
+		s.markDocumentFailed(bgCtx, documentID, errMsg)
+		return
 	}
 
 	contentBytes, err := os.ReadFile(filePath)
@@ -372,8 +379,10 @@ func (s *KnowledgeBaseService) processDocumentAsyncWithQA(ctx context.Context, d
 		"content":     content,
 		"error_msg":   "",
 	}); err != nil {
-		// 索引已建成但状态写失败：文档将滞留 processing，前端无法感知——必须落日志供运维介入
-		logger.Errorf("[KBImport] 标记文档已索引失败 doc=%d: %v", documentID, err)
+		errMsg := fmt.Sprintf("标记文档已索引失败: %v", err)
+		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
+		s.markDocumentFailed(bgCtx, documentID, errMsg)
+		return
 	}
 
 	// QA 增强是**附加**动作：拆分失败不影响文档已入库这一事实（拆分有自己的候选表与人工审）。

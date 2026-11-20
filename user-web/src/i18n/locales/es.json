@@ -6,6 +6,46 @@
     "configureMerchantBundle": "Configurar paquete de guiones del comercio",
     "roleGroupingHint": "Este árbol sigue el catálogo de permisos. En la navegación, la automatización del navegador está en Configuración del sistema. Su ubicación no afecta los permisos."
   },
+  "bulkLeadHandoff": {
+    "template": "Plantilla del mensaje",
+    "account": "Cuenta de envío",
+    "changed": "Los datos de contacto han cambiado. Revise y confirme la lista de nuevo.",
+    "unavailable": "La selección ha caducado o un contacto no está disponible. Seleccione y revise los destinatarios de nuevo.",
+    "recipients": "Destinatarios seleccionados",
+    "confirmTitle": "Revisar destinatarios",
+    "confirmHint": "Revise estos contactos actuales. La tarea de envío solo se creará tras la confirmación.",
+    "cancel": "Cancelar envío",
+    "confirm": "Confirmar tarea de envío"
+  },
+  "agentSaveRecovery": {
+    "retry": "Reintentar guardado",
+    "pendingCode": "La creación anterior no está confirmada. Mantenga el código y reintente la recuperación.",
+    "conflict": "Este código ya existe o su configuración no coincide. El registro no se ha sobrescrito.",
+    "unconfirmed": "No se pudo confirmar el contenido guardado al volver a leerlo. Reinténtelo.",
+    "main": "Guardado del registro principal",
+    "identity": "Confirmación de la identidad de creación",
+    "verification": "Verificación del registro principal",
+    "bindings": "Sincronización de vínculos de bases de conocimiento",
+    "partial": "Se ha confirmado el guardado del registro principal (ID: {id}). ",
+    "failed": "{part} está incompleto: {message}. Se conserva el formulario. Reintente el guardado."
+  },
+  "agentKBBindingRead": {
+    "failed": "No se pudieron cargar las vinculaciones de bases de conocimiento. Vuelva a cargar; guardar otros datos conservará las vinculaciones existentes.",
+    "pending": "Las vinculaciones de bases de conocimiento aún no se han confirmado. Guardar otros datos conservará las vinculaciones existentes.",
+    "invalid": "Respuesta de vinculaciones de bases de conocimiento no válida",
+    "clearTitle": "¿Eliminar las vinculaciones de bases de conocimiento?",
+    "clearBody": "Al guardar se eliminarán todas las vinculaciones de bases de conocimiento de este agente. ¿Continuar?"
+  },
+  "toolListPagination": {
+    "summary": "Gestiona el estado y las cuentas vinculadas de {total} herramientas de IA que coinciden con los filtros actuales",
+    "filteredTotal": "Herramientas coincidentes",
+    "pageEnabled": "Habilitadas en esta página",
+    "pageDisabled": "Deshabilitadas en esta página",
+    "empty": "Ninguna herramienta coincide con los filtros actuales",
+    "retry": "Error al cargar. Haz clic en Actualizar para reintentar",
+    "inconsistent": "La lista y el total no coinciden temporalmente. Actualiza la página",
+    "loadFailed": "No se pudieron cargar las herramientas: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

@@ -6,6 +6,46 @@
     "configureMerchantBundle": "Configurer le pack de scripts marchand",
     "roleGroupingHint": "Cette arborescence suit le catalogue des autorisations. Dans la navigation, l’automatisation du navigateur se trouve dans les paramètres système. Son emplacement n’affecte pas les autorisations."
   },
+  "bulkLeadHandoff": {
+    "template": "Modèle de message",
+    "account": "Compte d’envoi",
+    "changed": "Les coordonnées ont été modifiées. Vérifiez et confirmez à nouveau la liste.",
+    "unavailable": "La sélection a expiré ou un contact est indisponible. Sélectionnez et vérifiez à nouveau les destinataires.",
+    "recipients": "Destinataires sélectionnés",
+    "confirmTitle": "Vérifier les destinataires",
+    "confirmHint": "Vérifiez ces contacts actuels. La tâche d’envoi sera créée uniquement après confirmation.",
+    "cancel": "Annuler l’envoi",
+    "confirm": "Confirmer la tâche d’envoi"
+  },
+  "agentSaveRecovery": {
+    "retry": "Réessayer l’enregistrement",
+    "pendingCode": "La création précédente n’est pas confirmée. Conservez son code et réessayez la récupération.",
+    "conflict": "Ce code existe déjà ou sa configuration diffère. L’enregistrement n’a pas été écrasé.",
+    "unconfirmed": "La relecture n’a pas permis de confirmer le contenu enregistré. Réessayez.",
+    "main": "Enregistrement de la fiche principale",
+    "identity": "Confirmation de l’identité de création",
+    "verification": "Vérification de la fiche principale",
+    "bindings": "Synchronisation des liens vers les bases de connaissances",
+    "partial": "L’enregistrement de la fiche principale est confirmé (ID : {id}). ",
+    "failed": "{part} reste incomplet : {message}. Le formulaire est conservé. Réessayez l’enregistrement."
+  },
+  "agentKBBindingRead": {
+    "failed": "Impossible de charger les associations aux bases de connaissances. Réessayez ; enregistrer les autres informations préservera les associations existantes.",
+    "pending": "Les associations aux bases de connaissances ne sont pas encore confirmées. Enregistrer les autres informations préservera les associations existantes.",
+    "invalid": "Réponse des associations aux bases de connaissances invalide",
+    "clearTitle": "Supprimer les associations aux bases de connaissances ?",
+    "clearBody": "L’enregistrement supprimera toutes les associations aux bases de connaissances de cet agent. Continuer ?"
+  },
+  "toolListPagination": {
+    "summary": "Gérer le statut et les comptes associés de {total} outils IA correspondant aux filtres actuels",
+    "filteredTotal": "Outils correspondants",
+    "pageEnabled": "Activés sur cette page",
+    "pageDisabled": "Désactivés sur cette page",
+    "empty": "Aucun outil ne correspond aux filtres actuels",
+    "retry": "Échec du chargement. Cliquez sur Actualiser pour réessayer",
+    "inconsistent": "La liste et le total ne correspondent temporairement pas. Veuillez actualiser",
+    "loadFailed": "Impossible de charger les outils : {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

@@ -48,7 +48,7 @@ func (s *CustomToolService) Import(ctx context.Context, in ImportInput) (int, *m
 	if strings.TrimSpace(in.Name) == "" {
 		return 0, nil, bizerr.New(bizerr.CodeParamInvalid, "name 不能为空")
 	}
-	provider, err := tooluse.NewOpenAPIToolProvider(tooluse.OpenAPIImportSpec{
+	_, err := tooluse.NewOpenAPIToolProvider(tooluse.OpenAPIImportSpec{
 		Name: in.Name, Description: in.Description, BaseURL: in.BaseURL,
 		SchemaJSON: in.SchemaJSON, AuthHeader: in.AuthHeader, AuthValue: in.AuthValue,
 		TimeoutMS: in.TimeoutMS,
@@ -83,18 +83,21 @@ func (s *CustomToolService) Import(ctx context.Context, in ImportInput) (int, *m
 		return 0, nil, errors.New("保存工具集失败")
 	}
 
-	// 即时注册：导入成功后本进程立刻可调。**重启后的恢复不靠这里**——
-	// 自注册切片是进程内的，重启即空；启动期由 tooluse.LoadCustomToolProviders
-	// 从 custom_tools 表重建（装配点见 app/tool_provider_wiring.go）。
-	tooluse.RegisterToolProvider(provider)
+	// 导入与启动恢复都从持久化来源构造，不能把租户工具写入全局自注册切片。
+	provider, err := tooluse.CustomToolRowToProvider(rec, repository.NewToolRuntimeRepository())
+	if err != nil {
+		return 0, rec, errors.New("工具集已保存，但运行实例构建失败")
+	}
 	// 登记到**当前租户的叠加层**（不是全局注册表）：多租户下工具是租户级资源，
 	// 进全局会让其他租户的 Agent 也能调到它（见 tooluse/tenant_registry.go）。
 	ownerTenant := tenant.WriteTenantID(ctx)
-	if tools, perr := provider.Provide(tooluse.ProviderContext{}); perr == nil {
-		for _, t := range tools {
-			if err := tooluse.RegisterTenantTool(ownerTenant, t); err != nil {
-				logger.Ctx(ctx).Warn().Err(err).Str("tool", t.Name()).Msg("[custom-tool] 工具登记失败")
-			}
+	tools, err := provider.Provide(tooluse.ProviderContext{})
+	if err != nil {
+		return 0, rec, errors.New("工具集已保存，但运行实例构建失败")
+	}
+	for _, t := range tools {
+		if err := tooluse.RegisterTenantTool(ownerTenant, t); err != nil {
+			return 0, rec, errors.New("工具集已保存，但运行登记失败")
 		}
 	}
 	n := countOps(in.SchemaJSON)
@@ -110,9 +113,7 @@ func (s *CustomToolService) List(ctx context.Context) ([]*model.CustomTool, erro
 	return s.repo.List(ctx)
 }
 
-// Delete 删除记录。已注册工具的卸载交给重启装配（tooluse.UnregisterProvider
-// 注释口径：注销 Provider 不删除已注册工具，同步清理由调用方处理；重启后
-// auto_register 列表已无此项，自然收敛）。
+// Delete 删除权威记录；所有副本的旧实例在下一次调用准入时拒绝，无需重启。
 func (s *CustomToolService) Delete(ctx context.Context, id uint) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

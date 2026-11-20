@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/aiagent/agent/lifecycle"
+	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 
@@ -191,7 +192,7 @@ func TestAgentLifecycleRoutesRegistered(t *testing.T) {
 	useAgentLifecycleRuntime(t, rt)
 
 	engine := gin.New()
-	SetupAgentLifecycleRoutes(engine.Group("/api"))
+	registerLifecycleTestRoute(engine.Group("/api"))
 
 	var found bool
 	for _, r := range engine.Routes() {
@@ -212,10 +213,20 @@ func useAgentLifecycleRuntime(t *testing.T, rt *AgentLifecycleRuntime) {
 	t.Cleanup(func() { SetAgentLifecycleRuntime(nil) })
 }
 
+// 测试通过控制器跨越 HTTP 接缝，app 生产代码不再依赖 Gin。
+func registerLifecycleTestRoute(auth *gin.RouterGroup) {
+	var run func(context.Context, uint, *lifecycle.LifecycleRequest) (*lifecycle.LifecycleResult, error)
+	if rt := GetAgentLifecycleRuntime(); rt != nil {
+		run = rt.Run
+	}
+	ctrl := controller.NewAgentLifecycleController(run)
+	auth.POST("/agent/lifecycle/run", ctrl.Run)
+}
+
 func postAgentLifecycleRun(t *testing.T, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	engine := gin.New()
-	SetupAgentLifecycleRoutes(engine.Group("/api"))
+	registerLifecycleTestRoute(engine.Group("/api"))
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/agent/lifecycle/run", strings.NewReader(body))

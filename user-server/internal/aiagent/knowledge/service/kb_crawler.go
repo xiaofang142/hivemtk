@@ -4,7 +4,7 @@
 //
 // 管道：来源配置 → 调度触发（manual/cron）→ 建批次 → robots 检查 → sitemap/链接
 // 发现 → 限速抓取 → goquery 正文抽取 → 内容哈希变更判定 → 入库（IngestCrawledPage，
-// 复用 KnowledgeBaseService 分段→向量化→索引链路）→ QA 拆分异步任务（kb_qa_split.go）。
+// 复用 KnowledgeBaseService 分段→向量化→索引链路）→ 等待 QA 候选持久化（kb_qa_split.go）。
 package service
 
 import (
@@ -333,9 +333,11 @@ func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
 	}
 
 	now := time.Now()
-	_ = s.repo.UpdateBatchFields(ctx, batch.ID, map[string]any{
+	if err := s.repo.UpdateBatchFields(ctx, batch.ID, map[string]any{
 		"status": model.KBCrawlBatchStatusRunning, "started_at": now,
-	})
+	}); err != nil {
+		return fmt.Errorf("保存批次运行状态失败: %w", err)
+	}
 
 	batchCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
@@ -378,13 +380,13 @@ func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
 	return s.repo.UpdateSourceFields(ctx, src.ID, srcUpdates)
 }
 
-// RetryBatch 重试 failed 批次：新建批次行（旧行保持 failed 不覆盖，只增事件流）。
+// RetryBatch 重试 failed/partially_failed 批次：新建批次行，保留旧批次结果。
 func (s *CrawlerService) RetryBatch(ctx context.Context, batchID uint64) (*model.KBCrawlBatch, error) {
 	old, err := s.repo.GetBatchByID(ctx, batchID)
 	if err != nil {
 		return nil, errors.New("批次不存在")
 	}
-	if old.Status != model.KBCrawlBatchStatusFailed {
+	if old.Status != model.KBCrawlBatchStatusFailed && old.Status != model.KBCrawlBatchStatusPartiallyFailed {
 		return nil, errors.New("仅失败批次可重试")
 	}
 	if old.RetryCount >= MaxRetryPerBatch {
@@ -526,7 +528,12 @@ func (s *CrawlerService) crawlOne(ctx context.Context, src *model.KBCrawlerSourc
 
 	docID, isNew, err := s.IngestCrawledPage(ctx, src, pageURL, page)
 	if err != nil {
+		s.clearHash(src.ID, pageURL)
 		return fmt.Errorf("入库失败 %s: %w", pageURL, err)
+	}
+	if err := s.processCrawledQA(ctx, src, docID); err != nil {
+		s.clearHash(src.ID, pageURL)
+		return fmt.Errorf("QA 拆分失败 %s: %w", pageURL, err)
 	}
 	s.setHash(src.ID, pageURL, hash) // 仅终态成功才记 hash（FA-12：失败页重抓=重试入口）
 	if isNew {
@@ -534,9 +541,40 @@ func (s *CrawlerService) crawlOne(ctx context.Context, src *model.KBCrawlerSourc
 	} else {
 		counters.changed++
 	}
-	// QA 拆分（源级开关，默认开）：索引终态成功后才入队
-	if s.qa != nil && (src.QASplitEnabled == nil || *src.QASplitEnabled) {
-		s.qa.EnqueueDocument(docID, src.KBID)
+	return nil
+}
+
+// processCrawledQA 复用 QA 的同步持久化契约：候选落 pending_review 或合法空结果才成功。
+// QA 运行中保留 processing，失败保留 failed；进程重建/同页重抓可重新执行完整链路。
+func (s *CrawlerService) processCrawledQA(ctx context.Context, src *model.KBCrawlerSource, docID uint) error {
+	if src.QASplitEnabled != nil && !*src.QASplitEnabled {
+		return nil
+	}
+	if s.qa == nil && src.QASplitEnabled == nil {
+		return nil
+	}
+	procCtx, cancel := context.WithTimeout(crawlerProcessingContext(ctx, src.TenantID), AsyncProcessingTimeout())
+	defer cancel()
+	if s.qa == nil {
+		err := errors.New("源已开启 QA 拆分但服务未装配")
+		s.kb.markDocumentFailed(procCtx, docID, err.Error())
+		return err
+	}
+	if err := s.repo.UpdateDocumentFields(procCtx, docID, map[string]any{
+		"status": knowledgeModel.KBDocumentStatusProcessing, "error_msg": "",
+	}); err != nil {
+		s.kb.markDocumentFailed(procCtx, docID, fmt.Sprintf("保存 QA 处理中状态失败: %v", err))
+		return err
+	}
+	if err := s.qa.ProcessDocument(procCtx, docID, src.KBID); err != nil {
+		s.kb.markDocumentFailed(procCtx, docID, fmt.Sprintf("QA 拆分失败: %v", err))
+		return err
+	}
+	if err := s.repo.UpdateDocumentFields(procCtx, docID, map[string]any{
+		"status": knowledgeModel.KBDocumentStatusIndexed, "error_msg": "",
+	}); err != nil {
+		s.kb.markDocumentFailed(procCtx, docID, fmt.Sprintf("保存 QA 完成状态失败: %v", err))
+		return err
 	}
 	return nil
 }
@@ -562,6 +600,12 @@ func (s *CrawlerService) setHash(sourceID uint, pageURL, hash string) {
 	s.hashes[key][pageURL] = hash
 }
 
+func (s *CrawlerService) clearHash(sourceID uint, pageURL string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.hashes[fmt.Sprint(sourceID)], pageURL)
+}
+
 // IngestCrawledPage 爬得页面入库：落 kb_documents（file_type=".html"、content 直存、
 // title 存 URL 作变更检测约定键）→ 同步跑分段→向量化→索引全链路并核对终态。
 // 变更页：旧 chunks 标 superseded 后重建。返回 (docID, isNew, err)。
@@ -569,11 +613,24 @@ func (s *CrawlerService) setHash(sourceID uint, pageURL, hash string) {
 // FA-12 修订（原缺陷：更新错误被 `_ =` 吞掉 + go ProcessDocumentByID(context.Background())
 // 丢租户——TENANT_MODE=on 下文档永久停 pending，而爬虫已记 hash/成功数，
 // 同页重抓被哈希跳过=永不重试）：
-//   ① 处理链带租户后台上下文（WithoutCancel 断请求取消链 + 显式恢复 src.TenantID）；
-//   ② Supersede/Update 回写错误视为入库失败向上返回；
-//   ③ 同步等待处理并核对文档终态，仅 indexed 才算成功（调用方据此才记 hash/计数），
-//     失败/未终态返回错误→同 hash 重抓可恢复。
+//
+//	① 处理链带租户后台上下文（WithoutCancel 断请求取消链 + 显式恢复 src.TenantID）；
+//	② Supersede/Update 回写错误视为入库失败向上返回；
+//	③ 同步等待处理并核对文档终态，仅 indexed 才算成功（调用方据此才记 hash/计数），
+//	  失败/未终态返回错误→同 hash 重抓可恢复。
 func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCrawlerSource, pageURL string, page *kbcrawler.Page) (uint, bool, error) {
+	tenantID := src.TenantID
+	if tenantID == 0 {
+		if tenant.IsMultiTenant() {
+			return 0, false, errors.New("爬取源缺少租户")
+		}
+		tenantID = tenant.WriteTenantID(ctx)
+	}
+	if requestTenant, ok := tenant.FromContext(ctx); ok && requestTenant != tenantID {
+		return 0, false, errors.New("爬取源租户与请求租户不匹配")
+	}
+	// 文档查询/写入也必须钉死源租户；不能继承上游系统扫描的隔离豁免。
+	ctx = tenant.OnlyTenant(ctx, tenantID)
 	existing, err := s.repo.FindHTMLDocByTitle(ctx, pageURL)
 	if err == nil {
 		if serr := s.repo.SupersedeActiveChunks(ctx, existing.ID); serr != nil {
@@ -584,16 +641,20 @@ func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCra
 		}); uerr != nil {
 			return existing.ID, false, fmt.Errorf("正文更新回写失败 %s (doc=%d): %w", pageURL, existing.ID, uerr)
 		}
-		procCtx := tenant.WithTenantID(context.WithoutCancel(ctx), src.TenantID)
+		procCtx, cancel := context.WithTimeout(crawlerProcessingContext(ctx, tenantID), AsyncProcessingTimeout())
+		defer cancel()
 		s.kb.ProcessDocumentByID(procCtx, existing.ID)
 		if terr := s.verifyDocumentTerminal(procCtx, existing.ID, pageURL); terr != nil {
 			return existing.ID, false, terr
 		}
 		return existing.ID, false, nil
 	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, false, fmt.Errorf("查询爬取文档失败: %w", err)
+	}
 
 	doc := &model.KBDocument{
-		TenantID: src.TenantID,
+		TenantID: tenantID,
 		Title:    pageURL,
 		Content:  page.Content,
 		FileType: ".html",
@@ -603,12 +664,22 @@ func (s *CrawlerService) IngestCrawledPage(ctx context.Context, src *model.KBCra
 	if err := s.repo.CreateDocument(ctx, doc); err != nil {
 		return 0, true, fmt.Errorf("保存爬取文档失败: %w", err)
 	}
-	procCtx := tenant.WithTenantID(context.WithoutCancel(ctx), src.TenantID)
+	procCtx, cancel := context.WithTimeout(crawlerProcessingContext(ctx, tenantID), AsyncProcessingTimeout())
+	defer cancel()
 	s.kb.ProcessDocumentByID(procCtx, doc.ID)
 	if terr := s.verifyDocumentTerminal(procCtx, doc.ID, pageURL); terr != nil {
 		return doc.ID, true, terr
 	}
 	return doc.ID, true, nil
+}
+
+// crawlerProcessingContext 为脱离请求生命周期的处理任务恢复源租户。
+// 爬虫成功/失败判定和后续文档读写必须共享这一上下文，不能退回无租户后台 ctx。
+func crawlerProcessingContext(ctx context.Context, tenantID uint) context.Context {
+	if tenantID == 0 && !tenant.IsMultiTenant() {
+		tenantID = tenant.WriteTenantID(ctx)
+	}
+	return tenant.OnlyTenant(context.WithoutCancel(ctx), tenantID)
 }
 
 // verifyDocumentTerminal 处理链终态核对：仅 indexed 视为成功；

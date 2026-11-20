@@ -55,9 +55,15 @@ func traceIDFromContext(ctx context.Context) string {
 	return trace.TraceIDFromContext(ctx)
 }
 
+// ToolAdmissionChecker 在每次真正执行（包括重试）前查询管理侧权威状态。
+type ToolAdmissionChecker interface {
+	CheckToolAdmission(ctx context.Context, name string) error
+}
+
 // ToolExecutorConfig 执行器全局配置
 type ToolExecutorConfig struct {
 	DefaultTimeout    time.Duration
+	AdmissionChecker  ToolAdmissionChecker
 	PermissionChecker PermissionChecker
 	RateLimiter       RateLimiter
 	RetryPolicy       RetryPolicy
@@ -99,7 +105,7 @@ type ToolOverride struct {
 }
 
 // ToolExecutor 工具执行引擎
-// 线程安全；缓存每个工具的装饰后 handler
+// 线程安全；按可信租户、注册表来源和登记代际缓存完整装饰链。
 type ToolExecutor struct {
 	registry      *ToolRegistry
 	config        ToolExecutorConfig
@@ -107,7 +113,18 @@ type ToolExecutor struct {
 
 	mu        sync.RWMutex
 	overrides map[string]ToolOverride
-	cache     map[string]ToolHandler
+	cache     map[toolHandlerKey]toolHandlerEntry
+}
+
+type toolHandlerKey struct {
+	tenantID uint
+	registry *ToolRegistry
+	name     string
+}
+
+type toolHandlerEntry struct {
+	generation uint64
+	handler    ToolHandler
 }
 
 // NewToolExecutor 创建工具执行器
@@ -119,7 +136,7 @@ func NewToolExecutor(registry *ToolRegistry, config ToolExecutorConfig) *ToolExe
 		registry:  registry,
 		config:    config,
 		overrides: make(map[string]ToolOverride),
-		cache:     make(map[string]ToolHandler),
+		cache:     make(map[toolHandlerKey]toolHandlerEntry),
 	}
 }
 
@@ -129,7 +146,7 @@ func (e *ToolExecutor) SetOverride(override ToolOverride) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.overrides[override.ToolName] = override
-	delete(e.cache, override.ToolName)
+	e.invalidateToolLocked(override.ToolName)
 }
 
 // GetOverride 获取工具级别覆盖
@@ -145,18 +162,26 @@ func (e *ToolExecutor) ClearOverride(toolName string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.overrides, toolName)
-	delete(e.cache, toolName)
+	e.invalidateToolLocked(toolName)
 }
 
 // ClearCache 清空所有 handler 缓存（用于配置变更后）
 func (e *ToolExecutor) ClearCache() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.cache = make(map[string]ToolHandler)
+	e.clearCacheLocked()
 }
 
 func (e *ToolExecutor) clearCacheLocked() {
-	e.cache = make(map[string]ToolHandler)
+	e.cache = make(map[toolHandlerKey]toolHandlerEntry)
+}
+
+func (e *ToolExecutor) invalidateToolLocked(name string) {
+	for key := range e.cache {
+		if key.name == name {
+			delete(e.cache, key)
+		}
+	}
 }
 
 // SetRetryPolicies 注入按工具名配置的重试策略
@@ -201,9 +226,9 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 	}
 	// 内置工具优先；未命中时回落到「当前请求租户」的叠加层（多租户下
 	// custom_tools / mcp_servers 的工具不放进全局注册表，见 tenant_registry.go）。
-	tool, err := e.registry.Get(req.ToolName)
+	snapshot, err := e.registry.getSnapshot(req.ToolName)
 	if err != nil {
-		tool, err = GetToolForTenant(ctx, req.ToolName)
+		snapshot, err = getToolSnapshotForTenant(ctx, req.ToolName)
 	}
 	if err != nil {
 		return ExecuteResult{
@@ -218,7 +243,7 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 			Err:        err,
 		}
 	}
-	handler := e.getOrBuildHandler(tool)
+	handler := e.getOrBuildHandler(ScopeFor(ctx), snapshot)
 	execCtx := WithToolName(ctx, req.ToolName)
 	if req.ToolCtx != nil {
 		execCtx = WithToolContext(execCtx, req.ToolCtx)
@@ -275,27 +300,36 @@ func (e *ToolExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 	return ExecuteResult{ToolResult: result, Err: err}
 }
 
-func (e *ToolExecutor) getOrBuildHandler(tool Tool) ToolHandler {
-	name := tool.Name()
+func (e *ToolExecutor) getOrBuildHandler(tenantID uint, snapshot toolSnapshot) ToolHandler {
+	key := toolHandlerKey{tenantID: tenantID, registry: snapshot.registry, name: snapshot.name}
 	e.mu.RLock()
-	if h, ok := e.cache[name]; ok {
+	if entry, ok := e.cache[key]; ok && entry.generation == snapshot.generation {
 		e.mu.RUnlock()
-		return h
+		return entry.handler
 	}
 	e.mu.RUnlock()
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if h, ok := e.cache[name]; ok {
-		return h
+	entry, exists := e.cache[key]
+	if exists && entry.generation == snapshot.generation {
+		return entry.handler
 	}
-	h := e.buildHandler(tool)
-	e.cache[name] = h
+	h := e.buildHandler(snapshot.tool)
+	// 旧在途快照仍可执行，但不能把已经缓存的新代际覆盖回旧代际。
+	if !exists || entry.generation < snapshot.generation {
+		e.cache[key] = toolHandlerEntry{generation: snapshot.generation, handler: h}
+	}
 	return h
 }
 
 func (e *ToolExecutor) buildHandler(tool Tool) ToolHandler {
 	raw := func(ctx context.Context, args map[string]any) (ToolResult, error) {
+		if e.config.AdmissionChecker != nil {
+			if err := e.config.AdmissionChecker.CheckToolAdmission(ctx, tool.Name()); err != nil {
+				return ErrorResult(tool.Name(), err), err
+			}
+		}
 		start := time.Now()
 		r, err := tool.Execute(ctx, args)
 		dur := time.Since(start)

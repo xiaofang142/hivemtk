@@ -1,0 +1,16 @@
+
+ RUN  v4.1.12 /Users/xiaofang/.local/share/opencode/worktree/e28297/nav04-lead-handoff-20261120/user-web
+
+
+ Test Files  3 passed (3)
+      Tests  19 passed (19)
+   Start at  10:18:20
+   Duration  5.82s (transform 3.07s, setup 0ms, import 5.13s, tests 3.08s, environment 2.13s)
+
+
+[version.json] buildId = 113696881-1795141100129
+
+[version.json] buildId = 113696881-1795141100129
+
+
+[version.json] buildId = 113696881-1795141100129

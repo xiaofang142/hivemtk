@@ -50,7 +50,7 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 门自检（牙齿验证，10 夹具）
+      - name: 门自检（含嵌套域、合法装配与别名控制）
         run: python3 scripts/check-layer-boundary.py --selftest
 
       - name: 全树扫描（新增跨层 import 即红，存量走基线）

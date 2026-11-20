@@ -23,6 +23,7 @@ import (
 func allModels() []any {
 	return []any{
 		&model.Tenant{},
+		&model.InferenceDelivery{},
 		&model.Order{},
 		&model.AfterSale{},
 		&model.User{},

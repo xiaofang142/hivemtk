@@ -20,6 +20,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/tooluse"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 )
 
 // echoTool 最小可调用工具：回显参数 + 名字。
@@ -78,7 +79,7 @@ func TestE2E_DiscoverRegisterExecuteAndIsolation(t *testing.T) {
 	upstream := newUpstreamMCPServer(t)
 	defer upstream.Close()
 
-	db := testutil.NewTestDB(t, &model.MCPServer{})
+	db := testutil.NewTestDB(t, &model.MCPServer{}, &model.AIToolConfig{})
 	live := model.MCPServer{Name: "fs", Endpoint: upstream.URL, TimeoutSeconds: 5}
 	if err := db.Create(&live).Error; err != nil {
 		t.Fatalf("种 live 行失败: %v", err)
@@ -90,7 +91,7 @@ func TestE2E_DiscoverRegisterExecuteAndIsolation(t *testing.T) {
 	}
 
 	reg := tooluse.NewToolRegistry()
-	servers, tools := LoadConfiguredServers(context.Background(), db, reg)
+	servers, tools := LoadConfiguredServers(context.Background(), db, reg, repository.NewToolRuntimeRepositoryWithDB(db))
 	if servers != 1 || tools != 1 {
 		t.Fatalf("接入 server=%d tools=%d want 1/1（不可达 server 必须被跳过而非拖垮整批）", servers, tools)
 	}

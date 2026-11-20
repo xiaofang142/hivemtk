@@ -8,7 +8,7 @@
         <div>
           <h2>AI 工具管理</h2>
           <p class="subtitle">
-            管理 {{ stats.total }} 个 AI 工具的启用状态和账号绑定
+            {{ t('toolListPagination.summary', { total: stats.total }) }}
           </p>
         </div>
         <div class="header-actions">
@@ -37,7 +37,7 @@
             {{ stats.total }}
           </div>
           <div class="stat-label">
-            工具总数
+            {{ t('toolListPagination.filteredTotal') }}
           </div>
         </el-card>
       </el-col>
@@ -50,7 +50,7 @@
             {{ stats.enabled }}
           </div>
           <div class="stat-label">
-            已启用
+            {{ t('toolListPagination.pageEnabled') }}
           </div>
         </el-card>
       </el-col>
@@ -63,7 +63,7 @@
             {{ stats.disabled }}
           </div>
           <div class="stat-label">
-            已禁用
+            {{ t('toolListPagination.pageDisabled') }}
           </div>
         </el-card>
       </el-col>
@@ -96,7 +96,7 @@
             v-model="filter.category"
             placeholder="全部分类"
             clearable
-            @change="loadTools"
+            @change="applyFilter"
           >
             <el-option
               label="触达工具"
@@ -125,7 +125,7 @@
             v-model="filter.enabled"
             placeholder="全部状态"
             clearable
-            @change="loadTools"
+            @change="applyFilter"
           >
             <el-option
               label="已启用"
@@ -140,7 +140,7 @@
         <el-form-item>
           <el-button
             type="primary"
-            @click="loadTools"
+            @click="applyFilter"
           >
             搜索
           </el-button>
@@ -153,9 +153,17 @@
 
     
     <el-card shadow="never">
+      <el-alert
+        v-if="loadError"
+        :title="loadError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
       <el-table
         v-loading="loading"
         :data="tools"
+        :empty-text="loadError ? t('toolListPagination.retry') : t('toolListPagination.empty')"
         stripe
         border
       >
@@ -255,6 +263,17 @@
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        class="tool-pagination"
+        :current-page="pagination.page"
+        :page-size="pagination.pageSize"
+        :page-sizes="[20, 50, 100]"
+        :total="stats.total"
+        :disabled="loading"
+        layout="total, sizes, prev, pager, next"
+        @current-change="changePage"
+        @size-change="changePageSize"
+      />
     </el-card>
 
     
@@ -378,12 +397,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Refresh, Star } from '@element-plus/icons-vue'
 import { listTools, updateToolStatus, bindToolAccount } from '@/api/aiTool.js'
 
+const { t } = useI18n()
 const loading = ref(false);
+const loadError = ref('')
+const pagination = reactive({ page: 1, pageSize: 20 })
+let requestVersion = 0
 const tools = ref([])
 const filter = reactive({
   category: '',
@@ -391,8 +415,8 @@ const filter = reactive({
 })
 const stats = reactive({
   total: 0,
-  enabled: 0,
-  disabled: 0,
+  enabled: computed(() => tools.value.filter(tool => tool.is_enabled).length),
+  disabled: computed(() => tools.value.filter(tool => !tool.is_enabled).length),
   categories: 5
 })
 
@@ -432,30 +456,63 @@ const needsAccount = (category) => {
 };
 
 const loadTools = async () => {
+  const version = ++requestVersion
+  const params = { page: pagination.page, page_size: pagination.pageSize }
+  if (filter.category) params.category = filter.category
+  if (typeof filter.enabled === 'boolean') params.enabled = filter.enabled
   loading.value = true
+  loadError.value = ''
+  tools.value = []
   try {
-    const params = {}
-    if (filter.category) params.category = filter.category
-    if (filter.enabled !== null) params.enabled = filter.enabled
-
-    const res = await listTools(params)
-    tools.value = res?.list || []
-
-    stats.total = tools.value.length;
-    stats.enabled = tools.value.filter(t => t.is_enabled).length
-    stats.disabled = tools.value.filter(t => !t.is_enabled).length
+    // 有界重查处理末页并发删除；同一请求始终使用同一份筛选快照。
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const res = await listTools({ ...params })
+      if (version !== requestVersion) return
+      if (!Array.isArray(res?.list) || !Number.isSafeInteger(res.total) || res.total < 0) {
+        throw new Error(t('toolListPagination.inconsistent'))
+      }
+      const lastPage = Math.max(1, Math.ceil(res.total / params.page_size))
+      if (params.page > lastPage) {
+        params.page = lastPage
+        continue
+      }
+      if (res.total > 0 && res.list.length === 0) continue
+      pagination.page = params.page
+      tools.value = res.list
+      stats.total = res.total
+      return
+    }
+    throw new Error(t('toolListPagination.inconsistent'))
   } catch (e) {
-    ElMessage.error('加载工具列表失败：' + e.message)
+    if (version !== requestVersion) return
+    pagination.page = 1
+    stats.total = 0
+    loadError.value = t('toolListPagination.loadFailed', { message: e.message })
   } finally {
-    loading.value = false
+    if (version === requestVersion) loading.value = false
   }
 };
+
+const applyFilter = () => {
+  pagination.page = 1
+  return loadTools()
+}
+const changePage = (page) => {
+  if (page === pagination.page) return
+  pagination.page = page
+  return loadTools()
+}
+const changePageSize = (size) => {
+  pagination.pageSize = size
+  return applyFilter()
+}
 
 const onToggleTool = async (tool) => {
   tool._toggling = true
   try {
     await updateToolStatus(tool.tool_name, tool.is_enabled)
     ElMessage.success(`${tool.is_enabled ? '启用' : '禁用'}成功`)
+    await loadTools()
   } catch (e) {
     tool.is_enabled = !tool.is_enabled
     ElMessage.error('操作失败：' + e.message)
@@ -467,7 +524,7 @@ const onToggleTool = async (tool) => {
 const resetFilter = () => {
   filter.category = ''
   filter.enabled = null
-  loadTools()
+  applyFilter()
 };
 
 const openDetail = (tool) => {
@@ -507,6 +564,7 @@ const onBind = async () => {
 onMounted(() => {
   loadTools()
 });
+onBeforeUnmount(() => { requestVersion++ })
 </script>
 
 <style scoped lang="scss">
@@ -561,6 +619,11 @@ onMounted(() => {
 
 .filter-card {
   margin-bottom: 16px;
+}
+
+.tool-pagination {
+  margin-top: 16px;
+  overflow-x: auto;
 }
 
 .tool-info {

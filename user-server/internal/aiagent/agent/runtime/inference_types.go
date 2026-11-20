@@ -147,13 +147,27 @@ type PlannedToolCall struct {
 
 // StageDecision 阶段决策记录（用于可观测与可调试）
 type StageDecision struct {
-	Stage    string        `json:"stage"`
-	Action   string        `json:"action"`
-	Reason   string        `json:"reason,omitempty"`
-	Duration time.Duration `json:"duration_ns"`
-	Success  bool          `json:"success"`
-	Error    string        `json:"error,omitempty"`
+	Stage    string           `json:"stage"`
+	Action   string           `json:"action"`
+	Reason   string           `json:"reason,omitempty"`
+	Duration time.Duration    `json:"duration_ns"`
+	Success  bool             `json:"success"`
+	Error    string           `json:"error,omitempty"`
+	Outcome  InferenceOutcome `json:"outcome,omitempty"`
 }
+
+// InferenceOutcome 区分决策完成、降级、业务拒绝、技术失败和转人工意向。
+type InferenceOutcome string
+
+const (
+	InferenceSucceeded       InferenceOutcome = "succeeded"
+	InferenceDegraded        InferenceOutcome = "degraded"
+	InferenceRejected        InferenceOutcome = "rejected"
+	InferenceFailed          InferenceOutcome = "failed"
+	InferenceHandoff         InferenceOutcome = "handoff"
+	InferencePendingApproval InferenceOutcome = "pending_approval"
+	InferenceDeliveryPending InferenceOutcome = "delivery_pending"
+)
 
 // InferenceContext 推理上下文
 //
@@ -182,19 +196,25 @@ type InferenceContext struct {
 
 // InferenceDecision 最终决策
 type InferenceDecision struct {
-	HandoffToHuman bool           `json:"handoff_to_human"`
-	HandoffReason  string         `json:"handoff_reason,omitempty"`
-	Plan           *ActionPlan    `json:"plan,omitempty"`
-	Reply          string         `json:"reply,omitempty"`
-	ReplyType      string         `json:"reply_type,omitempty"`
-	Confidence     float64        `json:"confidence"`
-	StopReason     string         `json:"stop_reason,omitempty"`
-	TotalDuration  time.Duration  `json:"total_duration_ns"`
-	Crisis         CrisisSignal   `json:"crisis,omitempty"`
-	Sentiment      SentimentScore `json:"sentiment,omitempty"`
-	Intent         IntentResult   `json:"intent,omitempty"`
-	Alignment      AlignmentScore `json:"alignment,omitempty"`
-	Review         *ReviewResult  `json:"review,omitempty"`
+	Outcome        InferenceOutcome `json:"outcome"`
+	Publishable    bool             `json:"publishable"`
+	FailedStage    string           `json:"failed_stage,omitempty"`
+	ErrorCode      string           `json:"error_code,omitempty"`
+	Stages         []StageDecision  `json:"stages"`
+	Degradations   []string         `json:"degradations,omitempty"`
+	HandoffToHuman bool             `json:"handoff_to_human"`
+	HandoffReason  string           `json:"handoff_reason,omitempty"`
+	Plan           *ActionPlan      `json:"plan,omitempty"`
+	Reply          string           `json:"reply,omitempty"`
+	ReplyType      string           `json:"reply_type,omitempty"`
+	Confidence     float64          `json:"confidence"`
+	StopReason     string           `json:"stop_reason,omitempty"`
+	TotalDuration  time.Duration    `json:"total_duration_ns"`
+	Crisis         CrisisSignal     `json:"crisis,omitempty"`
+	Sentiment      SentimentScore   `json:"sentiment,omitempty"`
+	Intent         IntentResult     `json:"intent,omitempty"`
+	Alignment      AlignmentScore   `json:"alignment,omitempty"`
+	Review         *ReviewResult    `json:"review,omitempty"`
 }
 
 // StageResult 阶段执行结果

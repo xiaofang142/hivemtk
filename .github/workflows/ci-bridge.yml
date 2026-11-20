@@ -1,9 +1,9 @@
 # CI for user-web/bridge（HiveBridge Chrome 扩展）
 # 平台：ubuntu-latest
-# 触发：push 到 main / PR 到 main / 手动 workflow_dispatch
-# 内容：npm ci → ESLint → vitest 全量测试 → 构建/打包校验 → 覆盖率上传 Codecov
+# 触发：master/main 的桥、浏览器自动化或共享包变更 / 手动 workflow_dispatch
+# 内容：桥 lint / 测试 / 构建 / 覆盖率；浏览器自动化测试与构建
 # 说明：user-server-ci.yml 中的 bridge-extension-test job 负责"Go 变更触发的 Bridge 测试"，
-#       本工作流负责"仅 Bridge 变更时"的独立快速 CI，二者 job 名不同，互不冲突。
+#       本工作流覆盖桥及共享包的实际消费者，二者 job 名不同，互不冲突。
 name: ci-bridge
 
 on:
@@ -11,11 +11,15 @@ on:
     branches: [master, main]
     paths:
       - 'user-web/bridge/**'
+      - 'user-web/browser_automation/**'
+      - 'packages/**'
       - '.github/workflows/ci-bridge.yml'
   pull_request:
     branches: [master, main]
     paths:
       - 'user-web/bridge/**'
+      - 'user-web/browser_automation/**'
+      - 'packages/**'
       - '.github/workflows/ci-bridge.yml'
   workflow_dispatch:
 
@@ -27,6 +31,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  browser-automation-ci:
+    name: Browser automation (test + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: user-web/browser_automation
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: user-web/browser_automation/package-lock.json
+      - run: npm ci
+      - run: npm test -- --run
+      - run: npm run build
+
   bridge-ci:
     name: Bridge CI (lint + test + build)
     runs-on: ubuntu-latest

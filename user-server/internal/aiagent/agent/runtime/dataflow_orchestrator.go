@@ -3,11 +3,11 @@ package agent_runtime
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/aiagent/agent/delivery"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -16,10 +16,14 @@ type CoreDataFlowOrchestrator struct {
 	cycle    *InferenceCycle
 	escalate EscalationTrigger
 
-	assetLoader AssetLoader
-	toolRouter  ToolRouterExecutor
-	trimmer     ResponseTrimmer
-	publisher   ResponsePublisher
+	assetLoader     AssetLoader
+	toolRouter      ToolRouterExecutor
+	trimmer         ResponseTrimmer
+	publisher       ResponsePublisher
+	executionGate   ExecutionGate
+	replyGenerator  ReplyGenerator
+	finalReviewer   Reviewer
+	deliveryGateway delivery.Gateway
 
 	mu    sync.RWMutex
 	stats DataFlowStats
@@ -32,6 +36,7 @@ type DataFlowStats struct {
 	ToolCallCount    int64
 	DirectReplyCount int64
 	ErrorCount       int64
+	RejectedCount    int64
 	AvgTotalDuration time.Duration
 }
 
@@ -84,9 +89,7 @@ func NewCoreDataFlowOrchestrator(cycle *InferenceCycle, escalate EscalationTrigg
 		cycle:       cycle,
 		escalate:    escalate,
 		assetLoader: noopAssetLoader{},
-		toolRouter:  noopToolRouter{},
 		trimmer:     defaultTrimmer{},
-		publisher:   noopPublisher{},
 	}
 }
 
@@ -120,31 +123,36 @@ func (o *CoreDataFlowOrchestrator) SetPublisher(p ResponsePublisher) {
 
 // OrchestratorResult 编排结果
 type OrchestratorResult struct {
-	SessionID      string
-	FinalReply     string
-	HandoffToHuman bool
-	HandoffReason  string
-	ToolCallCount  int
-	Stages         []StageDecision
-	TotalDuration  time.Duration
-	CrisisLevel    CrisisLevel
-	AssetContext   *AssetContext
+	Delivery             *delivery.Record      `json:"delivery,omitempty"`
+	Mode                 ExecutionMode         `json:"mode"`
+	ExecutionStatus      ExecutionStatus       `json:"execution_status"`
+	Executed             bool                  `json:"executed"`
+	Plan                 *ActionPlan           `json:"plan,omitempty"`
+	PlannedToolCallCount int                   `json:"planned_tool_call_count"`
+	ToolResults          []ToolExecutionResult `json:"tool_results,omitempty"`
+	Outcome              InferenceOutcome      `json:"outcome"`
+	Publishable          bool                  `json:"publishable"`
+	FailedStage          string                `json:"failed_stage,omitempty"`
+	ErrorCode            string                `json:"error_code,omitempty"`
+	Degradations         []string              `json:"degradations,omitempty"`
+	SessionID            string
+	FinalReply           string
+	HandoffToHuman       bool
+	HandoffReason        string
+	ToolCallCount        int
+	Stages               []StageDecision
+	TotalDuration        time.Duration
+	CrisisLevel          CrisisLevel
+	AssetContext         *AssetContext
 }
 
-// Process 处理一次端到端数据流
-//
-// 入参：
-//   - payload: 客户消息
-//   - agentCtx: 智能体上下文
-//
-// 流程：
-//
-//	A1-A2: 入站已由 InboxIngress 处理（调用方保证 sessionID 存在）
-//	A5:    加载资产上下文（L1/L2/Prompt）
-//	A6-A9: 运行推理闭环（感知→对齐→硬闸→规划）
-//	B4:    若转人工，触发 HumanEscalation
-//	A11:   裁剪 + 发布最终回复
+// Process 默认仅规划；外部执行必须显式选择 execution 并装配执行端口。
 func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload CustomerMessagePayload, agentCtx *AgentContext) (*OrchestratorResult, error) {
+	return o.ProcessWithMode(ctx, payload, agentCtx, ExecutionModePlanning)
+}
+
+// ProcessWithMode 区分规划完成与实际执行，规划不触发外部副作用。
+func (o *CoreDataFlowOrchestrator) ProcessWithMode(ctx context.Context, payload CustomerMessagePayload, agentCtx *AgentContext, mode ExecutionMode) (*OrchestratorResult, error) {
 	if agentCtx == nil {
 		agentCtx = &AgentContext{
 			AgentID:   0,
@@ -156,15 +164,38 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 
 	start := time.Now()
 	result := &OrchestratorResult{
-		SessionID: payload.SessionID,
+		SessionID:       payload.SessionID,
+		Mode:            mode,
+		ExecutionStatus: ExecutionNotExecuted,
 	}
+	defer func() {
+		result.TotalDuration = time.Since(start)
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		o.stats.TotalTasks++
+		if o.stats.AvgTotalDuration == 0 {
+			o.stats.AvgTotalDuration = result.TotalDuration
+		} else {
+			o.stats.AvgTotalDuration = (o.stats.AvgTotalDuration*9 + result.TotalDuration) / 10
+		}
+	}()
+	if mode == "" {
+		mode, result.Mode = ExecutionModePlanning, ExecutionModePlanning
+	}
+	if mode != ExecutionModePlanning && mode != ExecutionModeExecution {
+		return o.executionFailure(ctx, result, "invalid_execution_mode", nil)
+	}
+	o.mu.RLock()
+	assetLoader := o.assetLoader
+	ports := executionPorts{o.executionGate, o.toolRouter, o.replyGenerator, o.finalReviewer, o.trimmer, o.deliveryGateway}
+	o.mu.RUnlock()
 
 	if result.SessionID == "" {
 		result.SessionID = payload.ChannelType + ":" + payload.CustomerID
 	}
 
-	if o.assetLoader != nil {
-		assetCtx, err := o.assetLoader.LoadContext(ctx, payload, agentCtx)
+	if assetLoader != nil {
+		assetCtx, err := assetLoader.LoadContext(ctx, payload, agentCtx)
 		if err != nil {
 			logger.Warnf("[dataflow] asset load failed session=%s err=%v", result.SessionID, err)
 		} else {
@@ -173,11 +204,26 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	}
 
 	decision, err := o.cycle.RunOnce(ctx, payload, agentCtx)
+	if decision != nil {
+		result.Outcome, result.Publishable = decision.Outcome, decision.Publishable
+		result.FailedStage, result.ErrorCode = decision.FailedStage, decision.ErrorCode
+		result.Stages = append([]StageDecision{}, decision.Stages...)
+		result.Degradations = append([]string(nil), decision.Degradations...)
+		result.Plan = decision.Plan
+		if decision.Plan != nil {
+			result.PlannedToolCallCount = len(decision.Plan.ToolCalls)
+		}
+	}
+	result.Publishable = false
 	if err != nil {
+		result.Outcome = InferenceFailed
+		result.ExecutionStatus = ExecutionFailed
 		o.recordError()
 		return result, err
 	}
 	if decision == nil {
+		result.Outcome, result.ErrorCode = InferenceFailed, "inference_unavailable"
+		result.ExecutionStatus = ExecutionFailed
 		o.recordError()
 		return result, errors.New("inference decision is nil")
 	}
@@ -185,60 +231,18 @@ func (o *CoreDataFlowOrchestrator) Process(ctx context.Context, payload Customer
 	result.HandoffReason = decision.HandoffReason
 	result.CrisisLevel = decision.Crisis.Level
 	result.TotalDuration = time.Since(start)
-
-	if decision.HandoffToHuman {
-		if o.escalate != nil {
-			if err := o.escalate.Trigger(ctx, result.SessionID, decision.HandoffReason); err != nil {
-				logger.Warnf("[dataflow] escalate trigger failed session=%s err=%v", result.SessionID, err)
-			}
-		}
-		o.recordHandoff()
+	if decision.Outcome == InferenceRejected {
+		result.ExecutionStatus = ExecutionRejected
+		o.mu.Lock()
+		o.stats.RejectedCount++
+		o.mu.Unlock()
+		return result, nil
 	}
 
-	finalReply := decision.Reply
-	if finalReply == "" && decision.Plan != nil {
-		finalReply = decision.Plan.ReplyHint
+	if mode == ExecutionModePlanning {
+		return result, nil
 	}
-	if o.trimmer != nil {
-		finalReply = o.trimmer.Trim(finalReply)
-	}
-	result.FinalReply = finalReply
-
-	if !decision.HandoffToHuman && finalReply != "" && o.publisher != nil {
-		if err := o.publisher.Publish(ctx, payload.ChannelType, payload.CustomerID, finalReply); err != nil {
-			logger.Warnf("[dataflow] publish failed session=%s err=%v", result.SessionID, err)
-		}
-	}
-
-	result.Stages = nil
-	if decision.Plan != nil {
-		result.ToolCallCount = len(decision.Plan.ToolCalls)
-		if result.ToolCallCount > 0 {
-			if o.toolRouter == nil {
-				err := errors.New("tool router not configured: decision requests " +
-					toolCallsSummary(decision.Plan.ToolCalls) +
-					" but CoreDataFlowOrchestrator.toolRouter is nil")
-				logger.Warnf("[dataflow] %v (session=%s)", err, result.SessionID)
-				o.recordError()
-				return result, err
-			}
-			o.recordToolCall()
-		} else {
-			o.recordDirectReply()
-		}
-	}
-	o.mu.Lock()
-	if o.stats.AvgTotalDuration == 0 {
-		o.stats.AvgTotalDuration = result.TotalDuration
-	} else {
-		o.stats.AvgTotalDuration = (o.stats.AvgTotalDuration*9 + result.TotalDuration) / 10
-	}
-	o.stats.TotalTasks++
-	o.mu.Unlock()
-
-	logger.Infof("[dataflow] session=%s handoff=%v reply_len=%d duration=%s",
-		result.SessionID, result.HandoffToHuman, len(result.FinalReply), result.TotalDuration)
-	return result, nil
+	return o.executePlan(ctx, payload, agentCtx, decision, result, ports)
 }
 
 // GetStats 获取统计
@@ -281,18 +285,6 @@ func (noopAssetLoader) LoadContext(_ context.Context, _ CustomerMessagePayload, 
 		PromptText:  "",
 		SystemTools: []string{},
 	}, nil
-}
-
-type noopToolRouter struct{}
-
-func (noopToolRouter) Execute(_ context.Context, _ string, _ map[string]any) (ToolOutput, error) {
-	return ToolOutput{Success: false, Error: "tool router not configured"}, nil
-}
-
-type noopPublisher struct{}
-
-func (noopPublisher) Publish(_ context.Context, _, _, _ string) error {
-	return nil
 }
 
 type defaultTrimmer struct{}
@@ -361,19 +353,4 @@ func (a EscalationAdapter) Trigger(ctx context.Context, sessionID, reason string
 		return nil
 	}
 	return a.Fn(ctx, sessionID, reason)
-}
-
-func toolCallsSummary(calls []PlannedToolCall) string {
-	if len(calls) == 0 {
-		return "0 tool calls"
-	}
-	const maxShow = 5
-	names := make([]string, 0, len(calls))
-	for _, c := range calls {
-		if len(names) >= maxShow {
-			break
-		}
-		names = append(names, c.ToolName)
-	}
-	return strconv.Itoa(len(calls)) + " tool call(s): " + strings.Join(names, ", ")
 }

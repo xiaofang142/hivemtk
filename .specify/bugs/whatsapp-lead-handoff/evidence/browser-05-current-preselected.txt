@@ -1,0 +1,84 @@
+[p1 "NAV04 本地受控验收" | space "NAV04 lead handoff verification"(5): 1 managed, 0 untracked — p1* "NAV04 本地受控验收"]
+root
+  container
+    container
+      text "NAV04 本地受控验收：仅合成线索，不连接第三方"
+      paragraph
+        anchor [ref=51, loc=href:/#/whatsapp/lead-group-selection, url=http://127.0.0.1:18224/#/whatsapp/lead-group-selection]
+          text "重新选择线索"
+        text "·"
+        anchor [ref=52, loc=href:/#/whatsapp/group-messaging, url=http://127.0.0.1:18224/#/whatsapp/group-messaging]
+          text "直接打开群发页"
+    container
+      text "批量消息发送"
+      container
+        tablist
+          tab [ref=101]
+            text "发送消息"
+          tab [ref=102]
+            text "消息模板"
+          tab [ref=103]
+            text "发送记录"
+        tabpanel "发送消息"
+          form
+            container
+              container
+                container
+                  text "*"
+                  text "消息模板"
+                container [ref=104]
+                  comboboxgrouping [ref=105]
+                  text "请选择消息模板"
+                  svg_root
+              container
+                container
+                  text "*"
+                  text "发送账号"
+                container [ref=106]
+                  comboboxgrouping [ref=107]
+                  text "请选择WhatsApp账号"
+                  svg_root
+            group "目标线索"
+              container
+                text "*"
+                text "目标线索"
+              container
+                container
+                  paragraph
+                    container
+                      text "所有线索"
+                      text "0/1"
+                  container
+                    container [ref=108]
+                      svg_root
+                      textbox [ref=109]
+                        text "请输入线索姓名或电话"
+                    group "checkbox-group"
+                      text "合成联系人乙 (+15550001002)"
+                container
+                  button [ref=110]
+                    svg_root
+                    text "移除"
+                  button [ref=111]
+                    text "添加"
+                    svg_root
+                container
+                  paragraph
+                    container
+                      text "已选择"
+                      text "0/1"
+                  container
+                    container [ref=112]
+                      svg_root
+                      textbox [ref=113]
+                        text "请输入线索姓名或电话"
+                    group "checkbox-group"
+                      text "合成联系人甲 (+15550001001)"
+            group "待发送联系人"
+              text "待发送联系人"
+              unordered_list
+                list_item
+                  text "合成联系人甲 (+15550001001)"
+            group "消息预览"
+              text "消息预览"
+[more content below the viewport: scrollY=0, viewport 735 / page 1178 px; scroll or use snapshot({ scope: "full_page" })]

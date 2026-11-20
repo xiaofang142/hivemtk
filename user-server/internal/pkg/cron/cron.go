@@ -2,16 +2,17 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	georepo "hivemtk-user/internal/geo/repository"
 	geoservice "hivemtk-user/internal/geo/service"
 	opsservice "hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/tenant"
-	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 	"sync"
+	"time"
 
 	"github.com/robfig/cron/v3"
 
@@ -24,36 +25,77 @@ var (
 )
 
 type TaskManager struct {
-	cron *cron.Cron
-	mu   sync.Mutex
+	cron     *cron.Cron
+	mu       sync.Mutex
+	ctx      context.Context
+	cancel   context.CancelFunc
+	stopping context.Context
+}
+
+func newTaskManager() *TaskManager {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &TaskManager{
+		ctx: ctx, cancel: cancel,
+		cron: cron.New(cron.WithSeconds(), cron.WithChain(
+			cron.SkipIfStillRunning(cron.PrintfLogger(logger.StdLogger())),
+			// Recover 必须在 Skip 内侧，否则 panic 跳过令牌归还，任务会永久被跳过。
+			cron.Recover(cron.PrintfLogger(logger.StdLogger())),
+		)),
+	}
 }
 
 func GetTaskManager() *TaskManager {
 	once.Do(func() {
-		taskManager = &TaskManager{
-			cron: cron.New(
-				cron.WithSeconds(),
-				// panic 不击穿进程；上一轮未跑完的任务本轮跳过，防重叠执行
-				cron.WithChain(cron.Recover(cron.PrintfLogger(logger.StdLogger())), cron.SkipIfStillRunning(cron.PrintfLogger(logger.StdLogger()))),
-			),
-		}
+		taskManager = newTaskManager()
 		taskManager.cron.Start()
 	})
 	return taskManager
 }
 
-// goTask 在 cron 触发器内部再以 SafeGo 起异步执行：
-// SkipIfStillRunning 只对 Job 函数本身生效，Job 内立即返回的异步任务需自行收敛 recover。
+// goTask 在 cron 自己的 goroutine 内同步执行，恢复、防重入和 Stop 都覆盖真实任务体。
 func (tm *TaskManager) goTask(name string, fn func(ctx context.Context)) func() {
 	return func() {
-		utils.SafeGo(context.Background(), "cron."+name, fn)
+		ctx := tm.ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		if ctx.Err() == nil {
+			fn(ctx)
+		}
 	}
 }
 
 func (tm *TaskManager) AddTask(spec string, cmd func()) (cron.EntryID, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	return tm.cron.AddFunc(spec, cmd)
+	if tm.stopping != nil {
+		return 0, errors.New("cron task manager is stopped")
+	}
+	return tm.cron.AddFunc(spec, func() {
+		if tm.ctx.Err() == nil {
+			cmd()
+		}
+	})
+}
+
+// Stop 停止新 tick，取消任务上下文，最多等待十秒排空；可重复或并发调用。
+// 不配合上下文取消的任务无法强杀，超时必须由调用方记录。
+func (tm *TaskManager) Stop(ctx context.Context) error {
+	tm.mu.Lock()
+	if tm.stopping == nil {
+		tm.stopping = tm.cron.Stop()
+		tm.cancel()
+	}
+	stopping := tm.stopping
+	tm.mu.Unlock()
+	wait, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	select {
+	case <-stopping.Done():
+		return nil
+	case <-wait.Done():
+		return fmt.Errorf("cron shutdown did not drain: %w", wait.Err())
+	}
 }
 
 func (tm *TaskManager) RemoveTask(id cron.EntryID) {
@@ -147,7 +189,9 @@ func InitCron() {
 	geoservice.GetGeoJobManager().SetJobManagerLockRepo(georepo.NewGeoJobLockRepositoryWithDB(db.GetDB()))
 
 	_, err = mgr.AddTask("0 5 3 * * *", mgr.goTask("daily_backup", func(ctx context.Context) {
-		service.RunDailyBackup()
+		if err := service.NewScheduleBackupService().CreateDailyBackup(ctx); err != nil {
+			logger.Errorf("[Backup] 定时备份任务失败: %v", err)
+		}
 	}))
 	if err != nil {
 		logger.Info(fmt.Sprintf("添加每日自动备份定时任务失败 %s", err.Error()))

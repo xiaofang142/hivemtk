@@ -55,8 +55,7 @@ func RegisterTenantTool(tenantID uint, t Tool) error {
 		return fmt.Errorf("cannot register nil tool")
 	}
 	reg := EnsureTenantRegistry(tenantID)
-	_ = reg.Unregister(t.Name()) // 不存在时返回错误，忽略即可
-	return reg.Register(t)
+	return reg.register(t, true)
 }
 
 // ListTenantTools 列出某租户登记的工具。
@@ -119,13 +118,18 @@ func ListToolsForTenant(ctx context.Context) []Tool {
 
 // GetToolForTenant 先查内置，再查当前租户的叠加层。
 func GetToolForTenant(ctx context.Context, name string) (Tool, error) {
-	if t, err := GetGlobalRegistry().Get(name); err == nil {
-		return t, nil
+	snapshot, err := getToolSnapshotForTenant(ctx, name)
+	return snapshot.tool, err
+}
+
+func getToolSnapshotForTenant(ctx context.Context, name string) (toolSnapshot, error) {
+	if snapshot, err := GetGlobalRegistry().getSnapshot(name); err == nil {
+		return snapshot, nil
 	}
 	if tid := ScopeFor(ctx); tid > 0 {
-		return GetTenantTool(tid, name)
+		return TenantRegistry(tid).getSnapshot(name)
 	}
-	return nil, fmt.Errorf("%w: %s", ErrToolNotFound, name)
+	return toolSnapshot{}, fmt.Errorf("%w: %s", ErrToolNotFound, name)
 }
 
 // TenantToolStats 观测用：已装载的租户数与其工具总数。

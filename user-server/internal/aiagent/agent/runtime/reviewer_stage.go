@@ -46,7 +46,7 @@ func (r *DefaultReviewer) Execute(ctx context.Context, ic *InferenceContext) Sta
 			Success:  false,
 			Error:    err.Error(),
 		})
-		return ContinueResult()
+		return FailResult(err)
 	}
 
 	if result != nil {
@@ -74,7 +74,7 @@ func (r *DefaultReviewer) Review(_ context.Context, ic *InferenceContext) (*Revi
 	}
 
 	reply := ic.Decision.Reply
-	if reply == "" && ic.Plan != nil && ic.Plan.SkipLLM {
+	if reply == "" && ic.Plan != nil {
 		reply = ic.Plan.ReplyHint
 	}
 

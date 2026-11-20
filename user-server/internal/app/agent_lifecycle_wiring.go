@@ -4,18 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"hivemtk-user/internal/aiagent/agent/lifecycle"
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
-	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +24,7 @@ import (
 //
 // 于是"active/passive"在运行期是零分派、零入口的名义字段。本文件把这两截接上：
 // 上下文带模式（service 侧，见 `TestAIAgentService_LoadContextCarriesAgentMode`）＋
-// 这里的分派与 HTTP 入口（`POST /api/agent/lifecycle/run`）。
+// 这里的分派。HTTP 入口由 controller 处理、router 登记。
 //
 // 注意：本文件**不接管**既有渠道入站链路。渠道消息仍走 `SmartCSOrchestrator` →
 // `SalesEngine.HandleWithAgent`（AC③「Passive 行为零变化」靠的就是这一点：被动只是
@@ -39,6 +36,14 @@ import (
 // 所以分派前必须自己判空 —— 没有上下文就没有模式。
 type AgentContextLoader interface {
 	LoadContext(ctx context.Context, agentID uint) (*dto.AgentContext, error)
+}
+
+type lifecycleContextLoader struct {
+	service *service.AIAgentService
+}
+
+func (l *lifecycleContextLoader) LoadContext(ctx context.Context, agentID uint) (*dto.AgentContext, error) {
+	return l.service.LoadContextForRun(ctx, agentID)
 }
 
 // AgentLifecycleRuntime 双模式运行时：一台智能体的一次运行该走哪条生命周期。
@@ -128,7 +133,7 @@ func InitAgentLifecycles(gormDB *gorm.DB, engine *service.SalesEngine) {
 		sopSvc = service.NewSOPService(llm.GetGlobalDispatcher())
 	}
 	rt := NewAgentLifecycleRuntime(
-		service.NewAIAgentServiceWithRepo(repository.NewAIAgentRepositoryWithDB(gormDB)),
+		&lifecycleContextLoader{service: service.NewAIAgentServiceWithRepo(repository.NewAIAgentRepositoryWithDB(gormDB))},
 		lifecycle.NewPassiveAgentLifecycle(engine),
 		lifecycle.NewActiveAgentLifecycle(sopSvc, repository.NewCustomerRepository()),
 	)
@@ -146,63 +151,4 @@ func SetAgentLifecycleRuntime(rt *AgentLifecycleRuntime) {
 // GetAgentLifecycleRuntime 取全局运行时，未装配时为 nil。
 func GetAgentLifecycleRuntime() *AgentLifecycleRuntime {
 	return globalAgentLifecycleRuntime
-}
-
-// agentLifecycleRunRequest 触发一次生命周期运行。
-//
-// content 故意不要求：主动模式没有入站消息（它按客户开工），要求它就把 Active 挡在门外了。
-type agentLifecycleRunRequest struct {
-	AgentID    uint   `json:"agent_id" binding:"required"`
-	CustomerID string `json:"customer_id" binding:"required"`
-	Content    string `json:"content"`
-	SessionID  string `json:"session_id"`
-	Channel    string `json:"channel"`
-	OneID      string `json:"one_id"`
-	TraceID    string `json:"trace_id"`
-}
-
-// SetupAgentLifecycleRoutes 注册智能体双模式运行入口。
-//
-// 端点：
-//   - POST /api/agent/lifecycle/run  按 agent_id 读出 agent_mode 并分派一次运行
-//
-// 调用方：router.Setup() 的 auth 路由组（与 SetupInferenceRoutes 同一位置）。
-func SetupAgentLifecycleRoutes(auth *gin.RouterGroup) {
-	auth.POST("/agent/lifecycle/run", handleAgentLifecycleRun)
-}
-
-func handleAgentLifecycleRun(c *gin.Context) {
-	rt := GetAgentLifecycleRuntime()
-	if rt == nil {
-		response.Error(c, http.StatusServiceUnavailable, "agent lifecycle runtime not assembled（双模式运行时未装配）")
-		return
-	}
-	var body agentLifecycleRunRequest
-	if err := c.ShouldBindJSON(&body); err != nil {
-		response.Error(c, http.StatusBadRequest, "invalid request: "+err.Error())
-		return
-	}
-
-	res, err := rt.Run(c.Request.Context(), body.AgentID, &lifecycle.LifecycleRequest{
-		Channel:    body.Channel,
-		CustomerID: body.CustomerID,
-		Content:    body.Content,
-		SessionID:  body.SessionID,
-		OneID:      body.OneID,
-		TraceID:    body.TraceID,
-	})
-	if err != nil {
-		logger.Errorf("[agent-lifecycle] run failed agent=%d customer=%s: %v", body.AgentID, body.CustomerID, err)
-		response.Error(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	response.Success(c, gin.H{
-		"mode":         res.Mode,
-		"execution_id": res.ExecutionID,
-		"one_id":       res.OneID,
-		"reply":        res.ReplyContent,
-		"handoff":      res.Handoff,
-		"stop_reason":  res.StopReason,
-		"tools_called": res.ToolsCalled,
-	}, "ok")
 }

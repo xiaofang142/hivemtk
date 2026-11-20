@@ -15,6 +15,8 @@
 #   G6  seam 首参不是 context.Context     ⇒ SEAM 红
 #   G7  缺登记表                          ⇒ rc=2（区分"没扫"与"零命中"）
 #   G8  真仓库：门绿且注册点数 = 7
+#   G10 隐藏上层目录检出仍扫描违规          ⇒ SEAM 红
+#   G11 仓库内隐藏目录与依赖目录仍排除      ⇒ 绿
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -168,6 +170,28 @@ rc=$(run_gate); [ "$rc" = "2" ] || fail "缺登记表应 rc=2，实际 $rc"
 mv "$REG.hidden" "$REG"
 pass "缺登记表 ⇒ rc=2（未判定）"
 
+# ---------- G10：检出上层隐藏目录不能使扫描面归零 ----------
+PORT=10
+HIDDEN_FIX="$TMP/.workspace/fixture"
+mkdir -p "$(dirname "$HIDDEN_FIX")"
+cp -R "$FIX" "$HIDDEN_FIX"
+out=$(python3 "$GATE" --repo "$HIDDEN_FIX" 2>&1); rc=$?
+[ "$rc" = "0" ] || { echo "$out" >&2; fail "隐藏上层检出合法夹具应绿，实际 rc=$rc"; }
+printf '\nvar GlobalHiddenCheckoutBad func(x string)\n' >> "$HIDDEN_FIX/user-server/internal/service/seam.go"
+out=$(python3 "$GATE" --repo "$HIDDEN_FIX" 2>&1); rc=$?
+[ "$rc" = "1" ] || fail "隐藏上层检出仍应发现 seam 违规，实际 rc=$rc"
+grep -qE "SEAM .*GlobalHiddenCheckoutBad" <<<"$out" || fail "隐藏上层检出漏扫违规 seam"
+pass "隐藏上层检出仍扫描真实源文件并发现违规"
+
+# ---------- G11：只排除仓库内隐藏目录与依赖目录 ----------
+PORT=11
+for ignored in .generated vendor node_modules; do
+  mkdir -p "$FIX/user-server/internal/service/$ignored"
+  printf 'package service\nvar GlobalIgnoredBad func(x string)\n' > "$FIX/user-server/internal/service/$ignored/seam.go"
+done
+rc=$(run_gate); [ "$rc" = "0" ] || { gate_out >&2; fail "仓库内隐藏/依赖目录应排除，实际 rc=$rc"; }
+pass "仓库内隐藏目录、vendor 与 node_modules 仍排除"
+
 # ---------- G8：真仓库（门绿 + 注册点计数对账） ----------
 PORT=8
 out=$(python3 "$GATE" 2>&1); rc=$?
@@ -179,4 +203,4 @@ grep -q '	fanout	' "$REAL_REG" || fail "真登记表里没有 fanout 条目"
 grep -q '	tenant-free	' "$REAL_REG" || fail "真登记表里没有 tenant-free 条目（两种口径都要有样例）"
 pass "真仓库绿且注册点 $n 个（fanout / tenant-free 两类登记都在）"
 
-echo "PASS check-tenant-ctx-writes.test.sh（9 枚控制：NEW/补齐转绿/新增任务/锚点 STALE/BROKEN/条目 STALE/seam/缺表 rc=2/真仓对账）"
+echo "PASS check-tenant-ctx-writes.test.sh（11 枚控制：NEW/补齐转绿/新增任务/锚点 STALE/BROKEN/条目 STALE/seam/缺表 rc=2/隐藏上层/内部排除/真仓对账）"

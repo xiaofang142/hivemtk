@@ -1,8 +1,8 @@
 // inference_checkpoint.go 推理闭环的阶段边界检查点挂载。
 //
 // 语义：每阶段成功返回后 upsert 一份 (thread, stage) 快照；同一逻辑运行被中断后
-// 重试时，从"已完成的最后一个阶段"的下一个阶段续跑，已完成阶段不再执行、其产出
-// 从快照回填。开关与持久化本身在 service/repository 层（agent_checkpoint.go），
+// 重试时复用同身份成功阶段的产出；当前安全门和最终复核每轮重新执行，其余阶段
+// 从最后成功边界续跑。开关与持久化本身在 service/repository 层（agent_checkpoint.go），
 // 本文件只定义运行时侧的端口与快照编解码，由 internal/app 装配注入。
 package agent_runtime
 
@@ -12,12 +12,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // checkpointStateVersion 快照格式版本；不匹配的旧快照一律整体重跑。
-const checkpointStateVersion = 1
+const checkpointStateVersion = 3
 
 // StageCheckpointStore 阶段检查点存储端口。
 //
@@ -42,6 +43,7 @@ type checkpointState struct {
 	Fingerprint string             `json:"fingerprint"`
 	Done        bool               `json:"done,omitempty"`
 	Snapshot    *checkpointContext `json:"snapshot,omitempty"`
+	LastAttempt *InferenceDecision `json:"last_attempt,omitempty"`
 }
 
 // checkpointContext 阶段累计产出的可序列化子集。
@@ -63,6 +65,7 @@ type checkpointContext struct {
 // 不用 sessionID 作 thread：同一会话的第二条消息会命中第一条的游标、直接跳过感知，
 // 把上一轮的阶段产出当成新消息的结果。内容寻址后，只有"同一条消息的重试"才续跑。
 // TraceID 不入摘要：重试方常带新的 trace，否则永远命不中。
+// Deprecated: 缺少可信租户和智能体配置；只保留源兼容，不可用于恢复存储。
 func CheckpointThreadID(p CustomerMessagePayload) string {
 	return "thr_" + payloadFingerprint(p)[:24]
 }
@@ -75,11 +78,12 @@ func payloadFingerprint(p CustomerMessagePayload) string {
 
 // cycleCheckpoint RunOnce 一侧的挂载状态；nil = 未挂载（关或无 store）。
 type cycleCheckpoint struct {
-	store       StageCheckpointStore
-	thread      string
-	fingerprint string
-	skip        map[string]bool
-	last        string // 最后一个已落点的阶段名
+	store        StageCheckpointStore
+	thread       string
+	fingerprint  string
+	skip         map[string]bool
+	last         string          // 最后一个已落点的阶段名
+	lastSnapshot json.RawMessage // 冻结的成功产出，失败尝试不得写回恢复快照。
 }
 
 // newCycleCheckpoint 读游标并回填 ic；恢复不可行时退化为整体重跑（skip 为空）。
@@ -87,16 +91,22 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 	if store == nil || !store.Enabled() {
 		return nil
 	}
+	thread, err := ScopedCheckpointThreadID(ctx, payload, ic.AgentCtx)
+	if err != nil {
+		checkpointDegraded(ic, "checkpoint_identity_unavailable")
+		return nil
+	}
 	cc := &cycleCheckpoint{
 		store:       store,
-		thread:      CheckpointThreadID(payload),
-		fingerprint: payloadFingerprint(payload),
+		thread:      thread,
+		fingerprint: strings.TrimPrefix(thread, "thr_v3_"),
 		skip:        map[string]bool{},
 	}
 	resumeStage, blob, err := store.LoadResume(ctx, cc.thread)
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("thread", cc.thread).
 			Msg("[checkpoint] 读游标失败，本次整体重跑")
+		checkpointDegraded(ic, "checkpoint_load_failed")
 		return cc
 	}
 	if resumeStage == "" || len(blob) == 0 {
@@ -107,6 +117,7 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 	if err := json.Unmarshal(blob, &st); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("thread", cc.thread).
 			Msg("[checkpoint] 快照不可解析，本次整体重跑")
+		checkpointDegraded(ic, "checkpoint_invalid")
 		return cc
 	}
 	if st.Version != checkpointStateVersion || st.Fingerprint != cc.fingerprint {
@@ -119,8 +130,21 @@ func newCycleCheckpoint(ctx context.Context, store StageCheckpointStore, payload
 			Msg("[checkpoint] 该运行已完整结束，重试走整体重跑")
 		return cc
 	}
+	validResume := false
+	for _, name := range order {
+		if name == resumeStage {
+			validResume = true
+		}
+	}
+	if !validResume || st.Snapshot == nil {
+		checkpointDegraded(ic, "checkpoint_invalid")
+		return cc
+	}
 	if st.Snapshot != nil {
+		degradations := append([]string(nil), ic.Decision.Degradations...)
 		applySnapshot(ic, st.Snapshot)
+		ic.Decision.Degradations = append(ic.Decision.Degradations, degradations...)
+		cc.lastSnapshot, _ = json.Marshal(st.Snapshot)
 	}
 	for _, name := range order {
 		if name == resumeStage {
@@ -140,11 +164,13 @@ func (cc *cycleCheckpoint) skipped(stage string) bool {
 
 // complete 阶段成功：落快照，供后续中断后续跑。失败只告警，不影响回复链路。
 func (cc *cycleCheckpoint) complete(ctx context.Context, stage string, ic *InferenceContext) {
-	if cc == nil {
+	if cc == nil || cc.skip[stage] {
 		return
 	}
-	cc.last = stage
-	cc.save(ctx, stage, ic, false)
+	if cc.save(ctx, stage, ic, false) {
+		cc.last = stage
+		cc.lastSnapshot, _ = json.Marshal(snapshotOf(ic))
+	}
 }
 
 // finish 整轮结束（正常收尾或提前返回）：把最后一个阶段改写为 done 快照，
@@ -156,7 +182,7 @@ func (cc *cycleCheckpoint) finish(ctx context.Context, ic *InferenceContext) {
 	cc.save(ctx, cc.last, ic, true)
 }
 
-func (cc *cycleCheckpoint) save(ctx context.Context, stage string, ic *InferenceContext, done bool) {
+func (cc *cycleCheckpoint) save(ctx context.Context, stage string, ic *InferenceContext, done bool) bool {
 	blob, err := json.Marshal(checkpointState{
 		Version:     checkpointStateVersion,
 		Fingerprint: cc.fingerprint,
@@ -166,18 +192,57 @@ func (cc *cycleCheckpoint) save(ctx context.Context, stage string, ic *Inference
 	if err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("stage", stage).
 			Msg("[checkpoint] 快照序列化失败，跳过落点")
-		return
+		checkpointDegraded(ic, "checkpoint_save_failed")
+		return false
 	}
 	if err := cc.store.Save(ctx, cc.thread, stage, blob); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("thread", cc.thread).Str("stage", stage).
 			Msg("[checkpoint] 落点失败，跳过（最坏退化为整体重跑）")
+		checkpointDegraded(ic, "checkpoint_save_failed")
+		return false
 	}
+	return true
+}
+
+// failed 只附记失败尝试；恢复产出仍是最后成功阶段的冻结快照。
+// 首阶段失败无成功游标，诊断由返回体/流式事件/日志提供，不伪造已完成阶段。
+func (cc *cycleCheckpoint) failed(ctx context.Context, ic *InferenceContext) {
+	if cc == nil || cc.last == "" || len(cc.lastSnapshot) == 0 {
+		return
+	}
+	var snap checkpointContext
+	if err := json.Unmarshal(cc.lastSnapshot, &snap); err != nil {
+		checkpointDegraded(ic, "checkpoint_save_failed")
+		return
+	}
+	blob, err := json.Marshal(checkpointState{Version: checkpointStateVersion, Fingerprint: cc.fingerprint, Snapshot: &snap, LastAttempt: &ic.Decision})
+	if err != nil {
+		checkpointDegraded(ic, "checkpoint_save_failed")
+		return
+	}
+	// 调用方取消不应抹去失败审计；独立且有界的收尾仅用于写诊断。
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	if err := cc.store.Save(auditCtx, cc.thread, cc.last, blob); err != nil {
+		logger.Ctx(ctx).Warn().Err(err).Msg("[checkpoint] 失败尝试记录不可用")
+		checkpointDegraded(ic, "checkpoint_save_failed")
+	}
+}
+
+func checkpointDegraded(ic *InferenceContext, reason string) {
+	for _, existing := range ic.Decision.Degradations {
+		if existing == reason {
+			return
+		}
+	}
+	ic.Decision.Degradations = append(ic.Decision.Degradations, reason)
 }
 
 func snapshotOf(ic *InferenceContext) *checkpointContext {
 	if ic == nil {
 		return nil
 	}
+	decision := ic.Decision
 	snap := &checkpointContext{
 		Sentiment: ic.Sentiment,
 		Intent:    ic.Intent,
@@ -185,7 +250,7 @@ func snapshotOf(ic *InferenceContext) *checkpointContext {
 		Crisis:    ic.Crisis,
 		Plan:      ic.Plan,
 		Stages:    append([]StageDecision(nil), ic.Stages...),
-		Decision:  &ic.Decision,
+		Decision:  &decision,
 	}
 	return snap
 }

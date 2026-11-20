@@ -6,6 +6,46 @@
     "configureMerchantBundle": "Händler-Skriptpaket konfigurieren",
     "roleGroupingHint": "Diese Baumansicht folgt dem Berechtigungskatalog. In der Navigation finden Sie die Browserautomatisierung unter Systemeinstellungen. Ihre Position hat keinen Einfluss auf Berechtigungen."
   },
+  "bulkLeadHandoff": {
+    "template": "Nachrichtenvorlage",
+    "account": "Absenderkonto",
+    "changed": "Die Kontaktdaten wurden aktualisiert. Prüfen und bestätigen Sie die Liste erneut.",
+    "unavailable": "Die Auswahl ist abgelaufen oder ein Kontakt ist nicht verfügbar. Wählen und prüfen Sie die Empfänger erneut.",
+    "recipients": "Ausgewählte Empfänger",
+    "confirmTitle": "Empfänger prüfen",
+    "confirmHint": "Prüfen Sie die aktuellen Kontakte. Erst nach der Bestätigung wird ein Sendeauftrag erstellt.",
+    "cancel": "Senden abbrechen",
+    "confirm": "Sendeauftrag bestätigen"
+  },
+  "agentSaveRecovery": {
+    "retry": "Speichern wiederholen",
+    "pendingCode": "Die vorherige Erstellung ist unbestätigt. Behalten Sie den Code bei und versuchen Sie die Wiederherstellung erneut.",
+    "conflict": "Dieser Code existiert bereits oder seine Konfiguration weicht ab. Der Datensatz wurde nicht überschrieben.",
+    "unconfirmed": "Der gespeicherte Inhalt konnte beim erneuten Lesen nicht bestätigt werden. Bitte erneut versuchen.",
+    "main": "Speichern des Hauptdatensatzes",
+    "identity": "Bestätigung der Erstellungsidentität",
+    "verification": "Prüfung des Hauptdatensatzes",
+    "bindings": "Synchronisierung der Wissensdatenbankzuordnungen",
+    "partial": "Der Hauptdatensatz wurde nachweislich gespeichert (ID: {id}). ",
+    "failed": "{part} ist unvollständig: {message}. Das Formular bleibt erhalten. Wiederholen Sie das Speichern."
+  },
+  "agentKBBindingRead": {
+    "failed": "Die Wissensdatenbank-Zuordnungen konnten nicht geladen werden. Erneut laden; beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",
+    "pending": "Die Wissensdatenbank-Zuordnungen sind noch nicht bestätigt. Beim Speichern anderer Angaben bleiben bestehende Zuordnungen erhalten.",
+    "invalid": "Ungültige Antwort für Wissensdatenbank-Zuordnungen",
+    "clearTitle": "Wissensdatenbank-Zuordnungen löschen?",
+    "clearBody": "Beim Speichern werden alle Wissensdatenbank-Zuordnungen dieses Agenten entfernt. Fortfahren?"
+  },
+  "toolListPagination": {
+    "summary": "Status und Kontoverknüpfungen für {total} KI-Werkzeuge verwalten, die den aktuellen Filtern entsprechen",
+    "filteredTotal": "Passende Werkzeuge",
+    "pageEnabled": "Auf dieser Seite aktiviert",
+    "pageDisabled": "Auf dieser Seite deaktiviert",
+    "empty": "Keine Werkzeuge entsprechen den aktuellen Filtern",
+    "retry": "Laden fehlgeschlagen. Zum Wiederholen auf Aktualisieren klicken",
+    "inconsistent": "Liste und Gesamtzahl stimmen vorübergehend nicht überein. Bitte aktualisieren",
+    "loadFailed": "Werkzeuge konnten nicht geladen werden: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

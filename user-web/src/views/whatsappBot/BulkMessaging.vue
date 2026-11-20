@@ -75,6 +75,21 @@
               />
             </el-form-item>
 
+            <el-form-item
+              v-if="selectedRecipients.length"
+              :label="$t('bulkLeadHandoff.recipients')"
+              data-testid="bulk-recipients"
+            >
+              <ul>
+                <li
+                  v-for="recipient in selectedRecipients"
+                  :key="recipient.id"
+                >
+                  {{ recipient.name }} ({{ recipient.phone }})
+                </li>
+              </ul>
+            </el-form-item>
+
             <el-form-item label="消息预览">
               <el-card
                 shadow="never"
@@ -388,13 +403,59 @@
         </span>
       </template>
     </el-dialog>
+    <el-dialog
+      v-model="showSendConfirmation"
+      :title="$t('bulkLeadHandoff.confirmTitle')"
+      width="min(560px, 95vw)"
+      :close-on-click-modal="false"
+      :close-on-press-escape="!sending"
+      :show-close="!sending"
+      @closed="sendDraft = null"
+    >
+      <div
+        v-if="sendDraft"
+        data-testid="bulk-send-confirmation"
+      >
+        <p>{{ $t('bulkLeadHandoff.confirmHint') }}</p>
+        <p>{{ $t('bulkLeadHandoff.template') }}: {{ templates.find(template => template.id === sendDraft.form.templateId)?.name }}</p>
+        <p>{{ $t('bulkLeadHandoff.account') }}: {{ accounts.find(account => account.id === sendDraft.form.accountId)?.name }}</p>
+        <ul>
+          <li
+            v-for="recipient in sendDraft.recipients"
+            :key="recipient.id"
+          >
+            {{ recipient.name }} ({{ recipient.phone }})
+          </li>
+        </ul>
+      </div>
+      <template #footer>
+        <el-button
+          data-testid="bulk-cancel-send"
+          :disabled="sending"
+          @click="showSendConfirmation = false"
+        >
+          {{ $t('bulkLeadHandoff.cancel') }}
+        </el-button>
+        <el-button
+          type="primary"
+          data-testid="bulk-confirm-send"
+          :loading="sending"
+          @click="confirmSend"
+        >
+          {{ $t('bulkLeadHandoff.confirm') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, inject, watch } from 'vue'
+import { routeLocationKey } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { fetchBulkLeads, leadSelectionScope, takeLeadSelection } from '@/utils/bulkLeadSelection'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import DOMPurify from 'dompurify';
 import * as bulkMessagingApi from '@/api/bulkMessaging'
@@ -411,6 +472,13 @@ const showTemplateDialog = ref(false)
 const templateDialogTitle = ref('')
 const sendFormRef = ref()
 const templateFormRef = ref()
+const route = inject(routeLocationKey, null)
+const userStore = route ? useUserStore() : null
+const showSendConfirmation = ref(false)
+const sendDraft = ref(null)
+const preparingSend = ref(false)
+let loadGeneration = 0
+onBeforeUnmount(() => { loadGeneration++ })
 
 const sendForm = reactive({
   templateId: '',
@@ -466,14 +534,29 @@ const transferData = computed(() => {
 });
 
 const canSend = computed(() => {
-  return sendForm.templateId && sendForm.accountId && sendForm.leadIds.length > 0
+  return !preparingSend.value && !sending.value && sendForm.templateId && sendForm.accountId && sendForm.leadIds.length > 0
 })
+const selectedRecipients = computed(() => sendForm.leadIds.map(id => allLeads.value.find(lead => lead.id === String(id))).filter(Boolean))
 
 onMounted(() => {
   loadTemplates()
   loadAccounts()
-  loadLeads()
   loadSendRecords()
+})
+
+watch(() => route?.query.leadSelection, token => {
+  const ids = token ? takeLeadSelection(token, userStore?.userInfo) : []
+  resetForm()
+  if (token) {
+    if (!ids) ElMessage.warning(i18n.global.t('bulkLeadHandoff.unavailable'))
+  }
+  loadLeads(ids || [])
+}, { immediate: true })
+
+watch(() => leadSelectionScope(userStore?.userInfo), () => {
+  resetForm()
+  allLeads.value = []
+  loadLeads()
 })
 
 const loadTemplates = async () => {
@@ -497,21 +580,17 @@ const loadAccounts = async () => {
   }
 }
 
-const loadLeads = async () => {
+async function loadLeads(selectedIds = []) {
+  const generation = ++loadGeneration
+  const scope = leadSelectionScope(userStore?.userInfo)
   try {
-    const response = await clueApi.clueApi.list(1, 1000);
-    const clueData = response?.list || response || [];
-    allLeads.value = clueData.map(clue => ({
-      id: clue.ID,
-      name: clue.Name || clue.name || '未知',
-      phone: clue.Account || clue.account || '',
-      email: '',
-      company: clue.Address || clue.address || clue.City || clue.city || '',
-      source: 'clue',
-      score: 80,
-      status: 'new'
-    }))
+    const leads = await fetchBulkLeads(clueApi.clueApi.list, selectedIds)
+    if (generation !== loadGeneration || scope !== leadSelectionScope(userStore?.userInfo)) return
+    allLeads.value = leads
+    sendForm.leadIds = [...selectedIds]
   } catch {
+    if (generation !== loadGeneration) return
+    sendForm.leadIds = []
     ElMessage.error(i18n.global.t('加载线索失败'))
   }
 }
@@ -545,12 +624,48 @@ const onTemplateChange = (templateId) => {
 }
 
 const handleSend = async () => {
+  if (preparingSend.value || sending.value) return
+  preparingSend.value = true
   try {
     await sendFormRef.value.validate()
-    
+    const form = JSON.parse(JSON.stringify(sendForm))
+    const scope = leadSelectionScope(userStore?.userInfo)
+    const generation = loadGeneration
+    if (!scope) throw new Error('Missing user scope')
+    const live = await fetchBulkLeads(clueApi.clueApi.list, form.leadIds)
+    if (generation !== loadGeneration || JSON.stringify(form) !== JSON.stringify(sendForm) || scope !== leadSelectionScope(userStore?.userInfo)) return
+    allLeads.value = live
+    sendDraft.value = { form, scope, recipients: form.leadIds.map(id => live.find(lead => lead.id === id)) }
+    showSendConfirmation.value = true
+  } catch {
+    ElMessage.error(i18n.global.t('bulkLeadHandoff.unavailable'))
+  } finally {
+    preparingSend.value = false
+  }
+}
+
+const confirmSend = async () => {
+  const draft = sendDraft.value
+  if (sending.value || !showSendConfirmation.value || !draft) return
+  if (draft.scope !== leadSelectionScope(userStore?.userInfo) || JSON.stringify(draft.form) !== JSON.stringify(sendForm)) {
+    showSendConfirmation.value = false
+    ElMessage.warning(i18n.global.t('bulkLeadHandoff.unavailable'))
+    return
+  }
+  try {
     sending.value = true
-    
-    const response = await bulkMessagingApi.sendBulkMessage(sendForm)
+    const generation = loadGeneration
+    const live = await fetchBulkLeads(clueApi.clueApi.list, draft.form.leadIds)
+    if (generation !== loadGeneration || !showSendConfirmation.value || draft.scope !== leadSelectionScope(userStore?.userInfo)) return
+    const recipients = draft.form.leadIds.map(id => live.find(lead => lead.id === id))
+    allLeads.value = live
+    const identity = list => list.map(({ id, name, phone }) => [id, name, phone])
+    if (JSON.stringify(identity(recipients)) !== JSON.stringify(identity(draft.recipients))) {
+      sendDraft.value = { ...draft, recipients }
+      ElMessage.warning(i18n.global.t('bulkLeadHandoff.changed'))
+      return
+    }
+    const response = await bulkMessagingApi.sendBulkMessage(draft.form)
     
     ElMessage.success(response.message || '消息已添加到发送队列')
     
@@ -562,7 +677,10 @@ const handleSend = async () => {
   }
 }
 
-const resetForm = () => {
+function resetForm() {
+  loadGeneration++
+  showSendConfirmation.value = false
+  sendDraft.value = null
   sendForm.templateId = ''
   sendForm.accountId = ''
   sendForm.leadIds = []

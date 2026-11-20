@@ -1,0 +1,58 @@
+[
+  {
+    "file": "baseline-import.txt",
+    "bytes": 15034
+  },
+  {
+    "file": "baseline-overlay.json",
+    "bytes": 276
+  },
+  {
+    "file": "behavioral-red.log",
+    "bytes": 2147
+  },
+  {
+    "file": "final-adjacent-regression.log",
+    "bytes": 5940
+  },
+  {
+    "file": "final-architecture.log",
+    "bytes": 3175
+  },
+  {
+    "file": "final-build-vet.json",
+    "bytes": 219
+  },
+  {
+    "file": "final-build.log",
+    "bytes": 25
+  },
+  {
+    "file": "final-focused-race.log",
+    "bytes": 22858
+  },
+  {
+    "file": "final-gates.json",
+    "bytes": 546
+  },
+  {
+    "file": "final-gorm-only.log",
+    "bytes": 144
+  },
+  {
+    "file": "final-graph-refresh.log",
+    "bytes": 388
+  },
+  {
+    "file": "final-layer-boundary.log",
+    "bytes": 243
+  },
+  {
+    "file": "final-naked-goroutine.log",
+    "bytes": 5642
+  },
+  {
+    "file": "final-vet.log",
+    "bytes": 23
+  }
+]

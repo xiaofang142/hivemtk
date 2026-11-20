@@ -703,6 +703,11 @@ func main() {
 	logger.Info("[HubSummaryAggCron] message_hub 小时汇总已显式启动（替代 init 里的 nil DB 哑装配）")
 
 	cronpkg.InitCron()
+	defer func() {
+		if err := cronpkg.GetTaskManager().Stop(context.Background()); err != nil {
+			logger.Errorf("[cron] 定时任务关闭未完成: %v", err)
+		}
+	}()
 	logger.Info("[GEO InitCron] 定时任务已注册（SOV刷新/负面监控/信源同步/竞品爬虫，经 JobManager 统一管理）")
 
 	alertNotifiers := []service.AlertNotifier{service.NewLogAlertNotifier()}
@@ -737,6 +742,7 @@ func main() {
 	// 阶段边界断点续跑：必须在 router.Setup 之前装配，
 	// 否则 InitInferenceOrchestrator 构造推理闭环时拿不到 store。
 	app.InitAgentCheckpointStore(db.GetDB())
+	app.InitInferenceDeliveryService(db.GetDB())
 
 	// SLO 跟踪器（internal/pkg/sla）：启动期显式登记三条 SLI 并注册指标。
 	// 记录点分布在 service 层（编排器、人工待办），走 sla.Record 直达同一实例。

@@ -6,6 +6,46 @@
     "configureMerchantBundle": "Configure Merchant Script Bundle",
     "roleGroupingHint": "This tree follows the permissions catalog. In the navigation, find Browser Automation under System Settings. Its location does not affect permissions."
   },
+  "bulkLeadHandoff": {
+    "template": "Message template",
+    "account": "Sending account",
+    "changed": "Contact details changed. Review the updated list and confirm again.",
+    "unavailable": "The selection expired or a contact is unavailable. Select and review the recipients again.",
+    "recipients": "Selected recipients",
+    "confirmTitle": "Review recipients",
+    "confirmHint": "Review these current contacts. A sending job is created only after confirmation.",
+    "cancel": "Cancel sending",
+    "confirm": "Confirm sending job"
+  },
+  "agentSaveRecovery": {
+    "retry": "Retry save",
+    "pendingCode": "The previous creation is unconfirmed. Keep its code and retry recovery.",
+    "conflict": "This code already exists or its configuration differs from this creation. The record was not overwritten.",
+    "unconfirmed": "The saved content could not be confirmed by reading it back. Please retry.",
+    "main": "Saving the main record",
+    "identity": "Confirming the creation identity",
+    "verification": "Verifying the main record",
+    "bindings": "Synchronizing knowledge base bindings",
+    "partial": "The main record is confirmed saved (ID: {id}). ",
+    "failed": "{part} is incomplete: {message}. Your form is preserved. Retry the save."
+  },
+  "agentKBBindingRead": {
+    "failed": "Knowledge base bindings could not be loaded. Retry loading; saving other details will preserve existing bindings.",
+    "pending": "Knowledge base bindings have not been confirmed. Saving other details will preserve existing bindings.",
+    "invalid": "Invalid knowledge base binding response",
+    "clearTitle": "Clear knowledge base bindings?",
+    "clearBody": "Saving will remove all knowledge base bindings for this agent. Continue?"
+  },
+  "toolListPagination": {
+    "summary": "Manage status and account bindings for {total} AI tools matching the current filters",
+    "filteredTotal": "Matching tools",
+    "pageEnabled": "Enabled on this page",
+    "pageDisabled": "Disabled on this page",
+    "empty": "No tools match the current filters",
+    "retry": "Loading failed. Click Refresh to retry",
+    "inconsistent": "The list and total are temporarily inconsistent. Please refresh",
+    "loadFailed": "Failed to load tools: {message}"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -2101,17 +2141,17 @@
           }
         },
         "whatsappLeadGroupSelection": {
-          "summary": "This page is the upstream step of \"pick a batch of people for a WhatsApp broadcast\": filter the lead pool by status, source or tag, tick the ones you want and save them as a group that broadcast jobs can reference. A saved group remembers its filter conditions, so you can reuse it next time.",
+          "summary": "Select the leads for this round, then choose Next: bulk messaging to carry them to the sending page. The selection is valid for this navigation only; refreshing or reopening requires a new selection.",
           "step2": {
             "title": "Filtering and building a group",
-            "description": "The filter decides who you pick: status, source channel and tag can be combined, and existing customer segments can be selected directly. After ticking, name the group and save it — a broadcast job references the **group**, not the live filter, so changing the filter afterwards does not change the group. Picking too wide triggers WhatsApp's risk controls, so keep both the pace and the size in check."
+            "description": "Review the selected names and numbers before continuing. The sending page resolves the current contacts and preselects them. Unavailable leads require a new selection; navigation never sends a message."
           }
         },
         "whatsappGroupMessaging": {
-          "summary": "The bulk messaging page is where the send button actually is. The form on the left picks the template or content, the target group and shows the recipient count; the right pane previews exactly what the customer will see. Once it looks right, create the job.",
+          "summary": "Choose a template, sending account and contacts. Leads carried from the selection page are preselected with their current names and numbers. Reset clears this round's selection.",
           "step2": {
             "title": "The form and the preview",
-            "description": "Always look at the preview before sending: what the preview renders is what the customer receives (variables substituted, buttons clickable, line breaks correct). The target group decides who gets it, the template decides the shape (a template with buttons and plain text feel very different). Once sent it cannot be recalled, so test with a small group first and confirm the delivery rate before scaling up."
+            "description": "The message preview uses sample variables to show the template format. Review the current recipients after clicking Send; confirmation creates the job, while cancel sends nothing. Creating a job does not establish third-party delivery."
           }
         },
         "whatsappBulkMatrix": {

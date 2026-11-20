@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"hivemtk-user/internal/repository"
@@ -17,10 +18,10 @@ func TestD06_CheckpointSaveResume(t *testing.T) {
 	_ = db
 
 	if err := db.Exec(checkpointTableDDL).Error; err != nil {
-		t.Skipf("建表失败（环境限制）: %v", err)
+		t.Fatalf("建表失败: %v", err)
 	}
 	repo := repository.NewAgentCheckpointRepository(db)
-	ctx := context.Background()
+	ctx := tenant.WithTenantID(context.Background(), 773)
 
 	if stage := ResumeStage(nil); stage != "perception" {
 		t.Fatalf("无 checkpoint 应从 perception, got %s", stage)

@@ -1,0 +1,85 @@
+
+ RUN  v4.1.12 /Users/xiaofang/.local/share/opencode/worktree/e28297/nav04-lead-handoff-20261120/user-web
+
+ × tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 实际路由预选当前联系人并一次性消费，直接重访不复用旧选择 957ms
+   → 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+ × tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 重置清空收件人，不触发发送 322ms
+   → 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+ × tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 发送前展示真实名单，取消确认保持零 POST 175ms
+   → 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 实际路由预选当前联系人并一次性消费，直接重访不复用旧选择
+AssertionError: 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+
+- Expected:
+"lead-a"
+
++ Received:
+undefined
+
+ ❯ handoff tests/unit/bulk_lead_handoff.test.js:42:38
+     40|   const table = wrapper.findComponent(ElTable)
+     41|   const chosen = table.props('data')[0]
+     42|   expect(chosen.id, '必须保留当前后端小写 id').toBe('lead-a')
+       |                                      ^
+     43|   table.vm.$emit('selection-change', [chosen])
+     44|   await settle(wrapper)
+ ❯ tests/unit/bulk_lead_handoff.test.js:59:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 重置清空收件人，不触发发送
+AssertionError: 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+
+- Expected:
+"lead-a"
+
++ Received:
+undefined
+
+ ❯ handoff tests/unit/bulk_lead_handoff.test.js:42:38
+     40|   const table = wrapper.findComponent(ElTable)
+     41|   const chosen = table.props('data')[0]
+     42|   expect(chosen.id, '必须保留当前后端小写 id').toBe('lead-a')
+       |                                      ^
+     43|   table.vm.$emit('selection-change', [chosen])
+     44|   await settle(wrapper)
+ ❯ tests/unit/bulk_lead_handoff.test.js:76:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/unit/bulk_lead_handoff.test.js > NAV04 线索选择到群发页面 > 发送前展示真实名单，取消确认保持零 POST
+AssertionError: 必须保留当前后端小写 id: expected undefined to be 'lead-a' // Object.is equality
+
+- Expected:
+"lead-a"
+
++ Received:
+undefined
+
+ ❯ handoff tests/unit/bulk_lead_handoff.test.js:42:38
+     40|   const table = wrapper.findComponent(ElTable)
+     41|   const chosen = table.props('data')[0]
+     42|   expect(chosen.id, '必须保留当前后端小写 id').toBe('lead-a')
+       |                                      ^
+     43|   table.vm.$emit('selection-change', [chosen])
+     44|   await settle(wrapper)
+ ❯ tests/unit/bulk_lead_handoff.test.js:86:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  10:02:45
+   Duration  19.40s (transform 7.75s, setup 0ms, import 14.82s, tests 1.46s, environment 2.46s)
+
+
+[version.json] buildId = 113696881-1795140165631
+
+[version.json] buildId = 113696881-1795140165631
+
+
+[version.json] buildId = 113696881-1795140165631

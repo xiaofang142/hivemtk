@@ -1,0 +1,20 @@
+[
+  {
+    "check": "build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit": 0
+  },
+  {
+    "check": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit": 0
+  }
+]

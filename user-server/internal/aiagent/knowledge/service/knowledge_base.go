@@ -20,7 +20,7 @@ import (
 // DeleteDocument 的事务接缝（AV-03 钉住的合法 Transaction 实参回调）经
 // KBDocumentRepository.Transaction 仓储接缝保持原样，句柄解析收回仓储层。
 type KnowledgeBaseService struct {
-	docs      *knowledgeRepo.KBDocumentRepository
+	docs      kbDocumentStore
 	processor *etl.DocumentProcessor
 	indexer   ragretrieval.IndexManagerInterface
 	vector    *ragretrieval.Vectorizer
@@ -31,6 +31,16 @@ type KnowledgeBaseService struct {
 	qaEnqueue func(docID, kbID uint)
 }
 
+// kbDocumentStore 是知识库处理链所需的最小文档仓储接缝。
+// 生产实现为 KBDocumentRepository；独立测试可用受控替身验证状态与上下文契约。
+type kbDocumentStore interface {
+	Create(context.Context, *model.KBDocument) error
+	GetByID(context.Context, uint) (*model.KBDocument, error)
+	List(context.Context, int, int) ([]*model.KBDocument, int64, error)
+	UpdateStatusFields(context.Context, uint, map[string]any) error
+	Transaction(context.Context, func(tx *gorm.DB) error) error
+}
+
 // NewKnowledgeBaseService 创建知识库服务
 // 默认 EmbeddingDim 维(bge-m3,本地 TEI 真实 embedding)
 func NewKnowledgeBaseService() *KnowledgeBaseService {
@@ -39,10 +49,14 @@ func NewKnowledgeBaseService() *KnowledgeBaseService {
 
 // NewKnowledgeBaseServiceWithDocs 仓储注入构造（装配方自有句柄/测试注入）。
 func NewKnowledgeBaseServiceWithDocs(docs *knowledgeRepo.KBDocumentRepository) *KnowledgeBaseService {
-	return newKnowledgeBaseService(docs)
+	return newKnowledgeBaseServiceWithDocumentStore(docs)
 }
 
 func newKnowledgeBaseService(docs *knowledgeRepo.KBDocumentRepository) *KnowledgeBaseService {
+	return newKnowledgeBaseServiceWithDocumentStore(docs)
+}
+
+func newKnowledgeBaseServiceWithDocumentStore(docs kbDocumentStore) *KnowledgeBaseService {
 	return &KnowledgeBaseService{
 		docs:      docs,
 		processor: etl.NewDocumentProcessor(nil),

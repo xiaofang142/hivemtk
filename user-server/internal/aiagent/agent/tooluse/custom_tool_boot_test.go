@@ -67,7 +67,7 @@ func TestLoadCustomToolProviders_RestoresFromTable(t *testing.T) {
 		t.Fatal("密文里出现明文片段")
 	}
 
-	providers := LoadCustomToolProviders(db)
+	providers := LoadCustomToolProviders(db, nil)
 	if len(providers) != 1 {
 		t.Fatalf("重建 Provider 数 = %d want 1", len(providers))
 	}
@@ -131,7 +131,7 @@ func TestLoadCustomToolProviders_SkipsBrokenRowKeepsGood(t *testing.T) {
 		t.Fatalf("停用失败: %v", err)
 	}
 
-	providers := LoadCustomToolProviders(db)
+	providers := LoadCustomToolProviders(db, nil)
 	names := make([]string, 0, len(providers))
 	for _, p := range providers {
 		names = append(names, p.Name())

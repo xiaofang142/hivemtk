@@ -14,7 +14,9 @@ import (
 	"hivemtk-user/internal/model"
 	dbpkg "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/dbencrypt"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/toolruntime"
 
 	"gorm.io/gorm"
 )
@@ -40,19 +42,28 @@ func ServerConfigFromRow(row *model.MCPServer) ClientConfig {
 //
 // 2026-10-25：service 层不得取 DB 句柄（架构 L3），repository 包又不能反向依赖
 // tooluse（会与 business_tools 的 portcontract→repository 成环），而「发现并落库」
-// 本来就住在本包——所以默认句柄的解析也留在这里，调用方只传行。
-func DiscoverAndRegisterRowDefaultDB(ctx context.Context, row *model.MCPServer) (int, error) {
+// 本来就住在本包——所以默认句柄的解析也留在这里，准入实现由装配方显式注入。
+func DiscoverAndRegisterRowDefaultDB(ctx context.Context, row *model.MCPServer, authority toolruntime.Authority) (int, error) {
+	if row == nil {
+		return 0, toolruntime.ErrRevoked
+	}
 	// 登记到该 server 所属租户的叠加层（多租户隔离），而不是全局注册表。
-	return DiscoverAndRegisterRow(ctx, dbpkg.GetDB(), row, tooluse.EnsureTenantRegistry(row.TenantID))
+	return DiscoverAndRegisterRow(ctx, dbpkg.GetDB(), row, tooluse.EnsureTenantRegistry(row.TenantID), authority)
 }
 
 // DiscoverAndRegisterRow 发现一个已配置 server 并登记结果（tool_count/last_status）。
 // 返回注册成功的工具数；server 不可达只记错误、不阻断调用方。
-func DiscoverAndRegisterRow(ctx context.Context, db *gorm.DB, row *model.MCPServer, registry *tooluse.ToolRegistry) (int, error) {
-	if row == nil {
-		return 0, nil
+func DiscoverAndRegisterRow(ctx context.Context, db *gorm.DB, row *model.MCPServer, registry *tooluse.ToolRegistry, authority toolruntime.Authority) (int, error) {
+	if ctx == nil || row == nil || !row.Enabled || row.TenantID != tenant.WriteTenantID(ctx) || row.ID == 0 {
+		return 0, toolruntime.ErrRevoked
 	}
-	n, err := DiscoverAndRegister(ctx, ServerConfigFromRow(row), registry)
+	if authority == nil {
+		return 0, toolruntime.ErrUnavailable
+	}
+	expected := *row
+	n, err := discoverAndRegister(ctx, ServerConfigFromRow(row), registry, func(callCtx context.Context, name string) error {
+		return authority.CheckMCPServer(callCtx, expected, name)
+	})
 	now := time.Now()
 	updates := map[string]any{"last_synced_at": &now, "tool_count": n}
 	if err != nil {
@@ -72,7 +83,7 @@ func DiscoverAndRegisterRow(ctx context.Context, db *gorm.DB, row *model.MCPServ
 //
 // 隔离口径（AC「Server 不可达时熔断降级不影响其他工具」的装配侧）：
 // 单个 server 的发现失败只跳过它自己，其余 server 与内置工具照常装配。
-func LoadConfiguredServers(ctx context.Context, gormDB *gorm.DB, registry *tooluse.ToolRegistry) (servers int, tools int) {
+func LoadConfiguredServers(ctx context.Context, gormDB *gorm.DB, registry *tooluse.ToolRegistry, authority toolruntime.Authority) (servers int, tools int) {
 	if gormDB == nil || registry == nil {
 		return 0, 0
 	}
@@ -83,7 +94,7 @@ func LoadConfiguredServers(ctx context.Context, gormDB *gorm.DB, registry *toolu
 	}
 	for i := range rows {
 		row := &rows[i]
-		n, err := DiscoverAndRegisterRow(ctx, gormDB, row, registry)
+		n, err := DiscoverAndRegisterRow(ctx, gormDB, row, registry, authority)
 		if err != nil {
 			logger.Warnf("[mcp-client] server %q 发现失败（跳过该 server，其余工具不受影响）: %v", row.Name, err)
 			continue

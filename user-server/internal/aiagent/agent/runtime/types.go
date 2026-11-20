@@ -95,6 +95,7 @@ type AgentRuntime interface {
 //
 // 关联主题：event.TopicCustomerMessageReceived = "customer.message.received"
 type CustomerMessagePayload struct {
+	MessageID   string `json:"message_id"` // 渠道提供的稳定入站消息身份，不使用随机 TraceID 替代。
 	ChannelType string
 	AccountID   string
 	CustomerID  string

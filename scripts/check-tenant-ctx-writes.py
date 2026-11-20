@@ -89,7 +89,7 @@ def iter_go(dirpath: str):
     for p in sorted(root.rglob("*.go")):
         if p.name.endswith("_test.go"):
             continue
-        if any(part.startswith(".") or part in ("vendor", "node_modules") for part in p.parts):
+        if any(part.startswith(".") or part in ("vendor", "node_modules") for part in p.relative_to(REPO).parts):
             continue
         yield p.relative_to(REPO).as_posix(), p.read_text(encoding="utf-8", errors="replace")
 

@@ -55,3 +55,7 @@
 ## Evidence Supplement Before Unused Translation Cleanup
 
 第六次 audit 已通过配置与常量门，i18n 棘轮报告一个孤儿词条。用该门相同的五条消费路径计算，唯一键为 `长度不能超过 32 字符`；在前端源码、测试与后端查询该完整字面量仅命中九份语言包，无调用点。范围补入 `user-web/src/i18n/locales/{ar,de,en,es,fr,ja,pt,ru,zh}.json`，各删除这一个死词条；不新增虚假引用，不改棘轮基线，保留正在使用的其他长度校验文案。已读前端标准，补跑管理端 lint、测试与构建。
+
+## Evidence Supplement Before Hidden Checkout Scan Fix
+
+同一代码在原检出 audit 通过，而原生隔离检出在定时任务门报告所有登记项 STALE。`scripts/check-tenant-ctx-writes.py` 的 `iter_go` 对绝对路径 `p.parts` 过滤隐藏目录，检出上层的 `.local` 使所有 Go 文件被忽略；既导致真登记误报，也可能漏掉无登记任务或不带 ctx 的 seam。范围补入该脚本及既有 `scripts/check-tenant-ctx-writes.test.sh`：仅按仓库内相对路径过滤，增加隐藏上层检出仍扫描违规、仓库内隐藏/vendor/node_modules 仍忽略的回归，不删登记、不放宽归属判据。此变更不触及正在独立运行全量测试的 Go 源码。

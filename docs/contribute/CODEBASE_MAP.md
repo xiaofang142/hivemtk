@@ -1,6 +1,24 @@
-# HiveMtk 代码目录清单(2026-09-04,基于 master 86575d6)
+# HiveMtk 代码导航与历史目录清单
 
 > 本仓库为 **HiveMtk 用户端**(商户私有化部署部分)。平台端(`hivemtk-platform`)是独立仓库,不在本仓库内。
+
+## 当前维护导航（2026-11-20 复核）
+
+下方“一”至后续章节保留 2026-09-04、master `86575d6` 的目录快照；文件数量、页面数量和当时路径不作为当前契约。当前规则以根 `AGENTS.md`、`docs/standards/` 与实际构建入口为准，跨仓职责见外层仓 `docs/architecture/ARCHITECTURE_OVERVIEW.md`。
+
+| 维护事项 | 当前入口与职责 |
+|---|---|
+| 启动与装配 | `user-server/cmd/api/main.go` 启停资源；`internal/app/` 组装运行时；`internal/router/` 映射路由并允许 DI；`internal/controller/` 处理请求和响应 |
+| 五层与域目录 | 根 Controller / Service / Repository / Model 与 `internal/geo/`、`internal/content/` 等域目录并存；`scripts/check-layer-boundary.py` 按实际层名识别嵌套导入，结合 shell 门和 depguard 检查 |
+| 菜单与功能分组 | `user-server/internal/model/menu.go` 的 `SystemMenuTree`；`user-web/src/router/modules/` 和懒加载别名；业务对象与菜单组不要求目录一一对应 |
+| 共享 JavaScript | `packages/http-core/` 由管理端 request 与桥 SSE 消费；`packages/browser-core/` 由桥和浏览器自动化消费。共享包变更触发 SDK、管理端、桥及自动化消费测试 |
+| 两套扩展工程 | `user-web/bridge/` 为渠道桥；`user-web/browser_automation/` 为浏览器自动化，分别有依赖锁、测试与构建入口；两者不是重复目录 |
+| 数据演进 | 根 `migrations/` 为 SQL；`user-server/internal/migration/` 为 Go 注册式迁移，两者均须按实际入口核对，不能仅凭名称认为重复 |
+| 定时任务生命周期 | `internal/pkg/cron/` 的 TaskManager 管理调度、真实任务体防重入与关闭等待；其他调度器仍由各自启动处负责停止 |
+| 发布与部署 | `deploy/deploy-api.sh` 为 API 链 A；`docs/operations/RELEASE-PIPELINE.md` 说明扩展和静态资源发布，生产 SPA 由 nginx 托管 |
+| 相邻独立仓 | 外层工作区另有 `hivemtk-platform/` 控制平面与 `assetdpo/` 资产工厂，各自提交、测试与发布；不属于本仓 submodule |
+
+## 历史快照（2026-09-04，master 86575d6）
 
 ## 一、顶层结构
 

@@ -34,6 +34,7 @@ func (ctrl *AIAgentController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/ai-agents")
 	{
 		g.GET("", ctrl.List)
+		g.GET("/by-code", ctrl.FindByCode)
 		g.GET("/:id", ctrl.Get)
 		g.POST("", ctrl.Create)
 		g.PUT("/:id", ctrl.Update)
@@ -73,6 +74,22 @@ func (ctrl *AIAgentController) List(c *gin.Context) {
 		return
 	}
 	response.SuccessWithList(c, list, int64(len(list)))
+}
+
+// FindByCode 精确恢复创建身份；不存在与读取失败保持不同响应。
+// @Summary 精确查询智能体编码
+// @Tags AI Agent
+// @Security BearerAuth
+// @Param agent_code query string true "智能体唯一编码"
+// @Success 200 {object} response.Response
+// @Router /api/ai-agents/by-code [get]
+func (ctrl *AIAgentController) FindByCode(c *gin.Context) {
+	agent, err := ctrl.svc.FindByCode(c.Request.Context(), c.Query("agent_code"))
+	if err != nil {
+		response.ErrorFromDB(c, err, "查询智能体编码失败")
+		return
+	}
+	response.Success(c, agent, "获取成功")
 }
 
 // ListEnabled godoc
@@ -270,15 +287,25 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 		response.Error(c, http.StatusNotFound, "智能体不存在", err.Error())
 		return
 	}
-	raw, _ := c.GetRawData()
+	raw, err := c.GetRawData()
 	_ = c.Request.Body.Close()
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		return
+	}
 	var reqMap map[string]any
-	_ = json.Unmarshal(raw, &reqMap)
+	if err := json.Unmarshal(raw, &reqMap); err != nil || reqMap == nil {
+		response.Error(c, http.StatusBadRequest, "参数错误", "请求体必须是 JSON 对象")
+		return
+	}
 
 	hasKey := func(k string) bool { _, ok := reqMap[k]; return ok }
 
 	var req aiAgentCreateReq
-	_ = json.Unmarshal(raw, &req)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		response.Error(c, http.StatusBadRequest, "参数错误", err.Error())
+		return
+	}
 
 	if hasKey("agent_code") {
 		existing.AgentCode = req.AgentCode
@@ -289,7 +316,7 @@ func (ctrl *AIAgentController) Update(c *gin.Context) {
 	if hasKey("agent_type") && req.AgentType != "" {
 		existing.AgentType = req.AgentType
 	}
-	if hasKey("agent_mode") && req.AgentMode != "" {
+	if hasKey("agent_mode") {
 		existing.AgentMode = req.AgentMode
 	}
 	if hasKey("description") {

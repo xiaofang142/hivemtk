@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm/clause"
 
 	"hivemtk-user/internal/contentguard/model"
-	"hivemtk-user/internal/contentguard/service"
 )
 
 // ── 词库 ───────────────────────────────────────────────────────────────
@@ -37,7 +36,7 @@ func (r *GuardWordRepository) ListEnabled(ctx context.Context) ([]model.GuardWor
 }
 
 // List 分页查询。
-func (r *GuardWordRepository) List(ctx context.Context, q service.WordQuery) ([]model.GuardWord, int64, error) {
+func (r *GuardWordRepository) List(ctx context.Context, q model.WordQuery) ([]model.GuardWord, int64, error) {
 	tx := r.db.WithContext(ctx).Model(&model.GuardWord{})
 	if q.ListKind != "" {
 		tx = tx.Where("list_kind = ?", q.ListKind)
@@ -309,7 +308,7 @@ func (r *GuardRecordRepository) Get(ctx context.Context, id uint64) (*model.Guar
 }
 
 // List 分页查询。
-func (r *GuardRecordRepository) List(ctx context.Context, q service.RecordQuery) ([]model.GuardRecord, int64, error) {
+func (r *GuardRecordRepository) List(ctx context.Context, q model.RecordQuery) ([]model.GuardRecord, int64, error) {
 	tx := r.db.WithContext(ctx).Model(&model.GuardRecord{})
 	if q.SubjectType != "" {
 		tx = tx.Where("subject_type = ?", q.SubjectType)
@@ -423,7 +422,7 @@ func (r *GuardSanctionRepository) Update(ctx context.Context, s *model.GuardSanc
 }
 
 // List 分页查询处置。
-func (r *GuardSanctionRepository) List(ctx context.Context, q service.SanctionQuery) ([]model.GuardSanction, int64, error) {
+func (r *GuardSanctionRepository) List(ctx context.Context, q model.SanctionQuery) ([]model.GuardSanction, int64, error) {
 	tx := r.db.WithContext(ctx).Model(&model.GuardSanction{})
 	if q.SubjectType != "" {
 		tx = tx.Where("subject_type = ?", q.SubjectType)
@@ -465,12 +464,3 @@ func normalizePage(page, size int) (int, int) {
 	}
 	return page, size
 }
-
-// 编译期断言：五个仓储都实现服务层接口。
-var (
-	_ service.WordStore     = (*GuardWordRepository)(nil)
-	_ service.PolicyStore   = (*GuardPolicyRepository)(nil)
-	_ service.TaskStore     = (*GuardTaskRepository)(nil)
-	_ service.RecordStore   = (*GuardRecordRepository)(nil)
-	_ service.SanctionStore = (*GuardSanctionRepository)(nil)
-)
