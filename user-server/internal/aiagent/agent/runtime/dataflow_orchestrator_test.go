@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"hivemtk-user/internal/aiagent/agent/delivery"
 )
 
 // TestDataFlow_DirectReply 场景1: 寒暄直答
@@ -51,8 +53,12 @@ func TestDataFlow_HandoffTriggered(t *testing.T) {
 		},
 	}
 	orch := NewCoreDataFlowOrchestrator(NewInferenceCycle(), escalate)
+	orch.SetDeliveryGateway(newExecutionDeliveryFixture(func(ctx context.Context, i delivery.Intent) error {
+		return escalate.Trigger(ctx, i.SessionID, i.Content)
+	}))
 	orch.SetExecutionGate(executionGateFunc(func(context.Context, ExecutionRequest) (ExecutionAuthorization, error) { return ExecutionApproved, nil }))
-	result, err := orch.ProcessWithMode(context.Background(), CustomerMessagePayload{
+	result, err := orch.ProcessWithMode(executionTestContext(), CustomerMessagePayload{
+		MessageID: "handoff-test", AccountID: "test-account",
 		ChannelType: "telegram",
 		CustomerID:  "d8_2",
 		SessionID:   "d8_session_2",
@@ -142,9 +148,12 @@ func TestDataFlow_Trimmer(t *testing.T) {
 func TestDataFlow_Publisher(t *testing.T) {
 	pub := &capturePublisher{ch: make(chan string, 1)}
 	orch, _, _ := executionFixture(t, 0)
-	orch.SetPublisher(pub)
+	orch.SetDeliveryGateway(newExecutionDeliveryFixture(func(ctx context.Context, i delivery.Intent) error {
+		return pub.Publish(ctx, i.Channel, i.CustomerID, i.Content)
+	}))
 
-	_, err := orch.ProcessWithMode(context.Background(), CustomerMessagePayload{
+	_, err := orch.ProcessWithMode(executionTestContext(), CustomerMessagePayload{
+		MessageID: "publisher-test", AccountID: "test-account",
 		ChannelType: "telegram",
 		CustomerID:  "d8_5",
 		SessionID:   "d8_session_5",

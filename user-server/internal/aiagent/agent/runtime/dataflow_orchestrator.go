@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/aiagent/agent/delivery"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -15,13 +16,14 @@ type CoreDataFlowOrchestrator struct {
 	cycle    *InferenceCycle
 	escalate EscalationTrigger
 
-	assetLoader    AssetLoader
-	toolRouter     ToolRouterExecutor
-	trimmer        ResponseTrimmer
-	publisher      ResponsePublisher
-	executionGate  ExecutionGate
-	replyGenerator ReplyGenerator
-	finalReviewer  Reviewer
+	assetLoader     AssetLoader
+	toolRouter      ToolRouterExecutor
+	trimmer         ResponseTrimmer
+	publisher       ResponsePublisher
+	executionGate   ExecutionGate
+	replyGenerator  ReplyGenerator
+	finalReviewer   Reviewer
+	deliveryGateway delivery.Gateway
 
 	mu    sync.RWMutex
 	stats DataFlowStats
@@ -121,6 +123,7 @@ func (o *CoreDataFlowOrchestrator) SetPublisher(p ResponsePublisher) {
 
 // OrchestratorResult 编排结果
 type OrchestratorResult struct {
+	Delivery             *delivery.Record      `json:"delivery,omitempty"`
 	Mode                 ExecutionMode         `json:"mode"`
 	ExecutionStatus      ExecutionStatus       `json:"execution_status"`
 	Executed             bool                  `json:"executed"`
@@ -184,7 +187,7 @@ func (o *CoreDataFlowOrchestrator) ProcessWithMode(ctx context.Context, payload 
 	}
 	o.mu.RLock()
 	assetLoader := o.assetLoader
-	ports := executionPorts{o.executionGate, o.toolRouter, o.replyGenerator, o.finalReviewer, o.trimmer, o.publisher, o.escalate}
+	ports := executionPorts{o.executionGate, o.toolRouter, o.replyGenerator, o.finalReviewer, o.trimmer, o.deliveryGateway}
 	o.mu.RUnlock()
 
 	if result.SessionID == "" {

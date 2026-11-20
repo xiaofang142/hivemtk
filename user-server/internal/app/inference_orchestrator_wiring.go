@@ -70,7 +70,8 @@ func InitInferenceOrchestrator() {
 		}
 
 		globalInferenceOrchestrator = agent_runtime.NewCoreDataFlowOrchestrator(cycle, nil)
-		logger.Info("[inference] ✅ CoreDataFlowOrchestrator 已装配（4 阶段推理闭环：感知→对齐→门禁→规划）")
+		globalInferenceOrchestrator.SetDeliveryGateway(GetInferenceDeliveryService())
+		logger.Info("[inference] ✅ CoreDataFlowOrchestrator 已装配（五阶段推理及持久交付账本，默认仅规划）")
 	})
 }
 
@@ -82,6 +83,8 @@ func GetInferenceOrchestrator() *agent_runtime.CoreDataFlowOrchestrator {
 }
 
 type inferenceRunRequest struct {
+	MessageID   string                      `json:"message_id"`
+	AccountID   string                      `json:"account_id"`
 	Mode        agent_runtime.ExecutionMode `json:"mode" binding:"omitempty,oneof=planning execution"`
 	ChannelType string                      `json:"channel_type" binding:"required"`
 	CustomerID  string                      `json:"customer_id" binding:"required"`
@@ -117,6 +120,8 @@ func handleInferenceRun(c *gin.Context) {
 	}
 
 	payload := agent_runtime.CustomerMessagePayload{
+		MessageID:   req.MessageID,
+		AccountID:   req.AccountID,
 		ChannelType: req.ChannelType,
 		CustomerID:  req.CustomerID,
 		SessionID:   req.SessionID,
@@ -153,6 +158,10 @@ func handleInferenceRun(c *gin.Context) {
 		response.Accepted(c, inferenceResultData(result), response.MsgInferenceApprovalPending)
 		return
 	}
+	if result.Outcome == agent_runtime.InferenceDeliveryPending {
+		response.Accepted(c, inferenceResultData(result), response.MsgInferenceDeliveryPending)
+		return
+	}
 
 	response.Success(c, inferenceResultData(result), "ok")
 }
@@ -162,6 +171,7 @@ func inferenceResultData(result *agent_runtime.OrchestratorResult) gin.H {
 		return gin.H{"outcome": agent_runtime.InferenceFailed, "publishable": false}
 	}
 	return gin.H{
+		"delivery":                result.Delivery,
 		"mode":                    result.Mode,
 		"execution_status":        result.ExecutionStatus,
 		"executed":                result.Executed,

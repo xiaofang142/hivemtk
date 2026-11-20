@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"hivemtk-user/internal/aiagent/agent/delivery"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -24,6 +25,7 @@ const (
 	ExecutionFailed           ExecutionStatus = "failed"
 	ExecutionRejected         ExecutionStatus = "rejected"
 	ExecutionHandoffRequested ExecutionStatus = "handoff_requested"
+	ExecutionDeliveryPending  ExecutionStatus = "delivery_pending"
 )
 
 type ExecutionAuthorization string
@@ -67,8 +69,13 @@ type executionPorts struct {
 	generator ReplyGenerator
 	reviewer  Reviewer
 	trimmer   ResponseTrimmer
-	publisher ResponsePublisher
-	escalate  EscalationTrigger
+	delivery  delivery.Gateway
+}
+
+func (o *CoreDataFlowOrchestrator) SetDeliveryGateway(gateway delivery.Gateway) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.deliveryGateway = gateway
 }
 
 func (o *CoreDataFlowOrchestrator) SetExecutionGate(gate ExecutionGate) {
@@ -110,8 +117,15 @@ func (o *CoreDataFlowOrchestrator) executePlan(ctx context.Context, payload Cust
 	}
 	plan := decision.Plan
 	direct := plan != nil && plan.SkipLLM && len(plan.ToolCalls) == 0 && decision.Reply != ""
-	if ports.gate == nil || (decision.HandoffToHuman && ports.escalate == nil) || (!decision.HandoffToHuman && (ports.publisher == nil || ports.reviewer == nil || (!direct && ports.generator == nil) || (result.PlannedToolCallCount > 0 && ports.router == nil))) {
+	if ports.gate == nil || ports.delivery == nil || (!decision.HandoffToHuman && (ports.reviewer == nil || (!direct && ports.generator == nil) || (result.PlannedToolCallCount > 0 && ports.router == nil))) {
 		return o.executionFailure(ctx, result, "execution_not_configured", nil)
+	}
+	intent := delivery.Intent{MessageID: payload.MessageID, Channel: payload.ChannelType, AccountID: payload.AccountID, CustomerID: payload.CustomerID, SessionID: result.SessionID, AgentID: agentCtx.AgentID, AgentCode: agentCtx.AgentCode, AgentVersion: agentCtx.Version, Kind: "reply"}
+	if decision.HandoffToHuman {
+		intent.Kind = "handoff"
+	}
+	if _, err := delivery.Identity(ctx, intent); err != nil {
+		return o.executionFailure(ctx, result, err.Error(), err)
 	}
 	// 对全部拟执行调用先完成预检；后一个调用待批时，前一个也不得抢跑。
 	requests := []*PlannedToolCall{nil}
@@ -149,12 +163,8 @@ func (o *CoreDataFlowOrchestrator) executePlan(ctx context.Context, payload Cust
 	}
 	if decision.HandoffToHuman {
 		result.Executed = true
-		if err := ports.escalate.Trigger(ctx, result.SessionID, decision.HandoffReason); err != nil {
-			return o.executionFailure(ctx, result, "execution_handoff_failed", err)
-		}
-		result.ExecutionStatus = ExecutionHandoffRequested
-		o.recordHandoff()
-		return result, nil
+		intent.Content = decision.HandoffReason
+		return o.submitDelivery(ctx, result, ports.delivery, intent)
 	}
 	if plan != nil {
 		for _, call := range plan.ToolCalls {
@@ -227,14 +237,52 @@ func (o *CoreDataFlowOrchestrator) executePlan(ctx context.Context, payload Cust
 			reply = review.AdjustedReply
 			continue
 		}
-		if err := ports.publisher.Publish(ctx, payload.ChannelType, payload.CustomerID, reply); err != nil {
-			return o.executionFailure(ctx, result, "execution_publish_failed", err)
-		}
-		result.FinalReply, result.Publishable, result.ExecutionStatus = reply, true, ExecutionSucceeded
-		if result.ToolCallCount == 0 {
-			o.recordDirectReply()
-		}
-		return result, nil
+		intent.Content = reply
+		return o.submitDelivery(ctx, result, ports.delivery, intent)
 	}
 	return o.executionFailure(ctx, result, "final_review_invalid", nil)
+}
+
+// submitDelivery 将同步调用与可靠受理、外部确认分开；只凭 Publish/Trigger 的 nil 不生成确认。
+func (o *CoreDataFlowOrchestrator) submitDelivery(ctx context.Context, result *OrchestratorResult, gateway delivery.Gateway, intent delivery.Intent) (*OrchestratorResult, error) {
+	record, err := gateway.Submit(ctx, intent)
+	result.Delivery = record
+	if err != nil {
+		code := "delivery_store_failed"
+		if errors.Is(err, delivery.ErrConflict) {
+			code = delivery.ErrConflict.Error()
+		}
+		return o.executionFailure(ctx, result, code, err)
+	}
+	key, identityErr := delivery.Identity(ctx, intent)
+	if identityErr != nil || record == nil || record.Key != key || record.Kind != intent.Kind {
+		return o.executionFailure(ctx, result, "delivery_record_invalid", nil)
+	}
+	switch record.State {
+	case delivery.Confirmed:
+		if record.ConfirmedCount != 1 || record.AcceptedCount != 1 || record.ReceiptID == "" {
+			return o.executionFailure(ctx, result, "delivery_receipt_invalid", nil)
+		}
+		if intent.Kind == "handoff" {
+			result.ExecutionStatus = ExecutionHandoffRequested
+			if record.NewConfirmed {
+				o.recordHandoff()
+			}
+		} else {
+			result.FinalReply, result.Publishable, result.ExecutionStatus = intent.Content, true, ExecutionSucceeded
+			if record.NewConfirmed && result.ToolCallCount == 0 {
+				o.recordDirectReply()
+			}
+		}
+	case delivery.Rejected:
+		result.Outcome, result.ExecutionStatus, result.ErrorCode = InferenceRejected, ExecutionRejected, record.ErrorCode
+		o.mu.Lock()
+		o.stats.RejectedCount++
+		o.mu.Unlock()
+	case delivery.Intended, delivery.Blocked, delivery.Sending, delivery.Unknown, delivery.Accepted:
+		result.Outcome, result.ExecutionStatus = InferenceDeliveryPending, ExecutionDeliveryPending
+	default:
+		return o.executionFailure(ctx, result, "delivery_record_invalid", nil)
+	}
+	return result, nil
 }

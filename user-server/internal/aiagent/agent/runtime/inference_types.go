@@ -166,6 +166,7 @@ const (
 	InferenceFailed          InferenceOutcome = "failed"
 	InferenceHandoff         InferenceOutcome = "handoff"
 	InferencePendingApproval InferenceOutcome = "pending_approval"
+	InferenceDeliveryPending InferenceOutcome = "delivery_pending"
 )
 
 // InferenceContext 推理上下文

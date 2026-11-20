@@ -7,10 +7,18 @@ import (
 	"errors"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"hivemtk-user/internal/aiagent/agent/delivery"
 	agent_runtime "hivemtk-user/internal/aiagent/agent/runtime"
+	"hivemtk-user/internal/controller"
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
+	"hivemtk-user/internal/service"
 )
 
 type inferenceHTTPGate struct {
@@ -43,11 +51,49 @@ func (t *inferenceHTTPTool) Execute(context.Context, string, map[string]any) (ag
 	return agent_runtime.ToolOutput{Success: true, Data: "本地订单已发货"}, nil
 }
 
-type inferenceHTTPPublisher struct{ replies []string }
+type inferenceHTTPPublisher struct {
+	mu       sync.Mutex
+	replies  []string
+	receipts map[string]delivery.Receipt
+	lost     bool
+}
 
 func (p *inferenceHTTPPublisher) Publish(_ context.Context, _, _, reply string) error {
 	p.replies = append(p.replies, reply)
 	return nil
+}
+
+// 测试对端按稳定键返回明确确认；正式路径仍由真实 PostgreSQL 账本受理。
+func (p *inferenceHTTPPublisher) Send(_ context.Context, key string, intent delivery.Intent) (delivery.Receipt, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if receipt, ok := p.receipts[key]; ok {
+		return receipt, nil
+	}
+	if p.receipts == nil {
+		p.receipts = make(map[string]delivery.Receipt)
+	}
+	p.replies = append(p.replies, intent.Content)
+	receipt := delivery.Receipt{State: delivery.Confirmed, ID: "local:" + key}
+	p.receipts[key] = receipt
+	if p.lost {
+		return delivery.Receipt{}, errors.New("private lost delivery receipt")
+	}
+	return receipt, nil
+}
+func (p *inferenceHTTPPublisher) Lookup(_ context.Context, key string, _ delivery.Intent) (delivery.Receipt, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if receipt, ok := p.receipts[key]; ok {
+		return receipt, nil
+	}
+	return delivery.Receipt{State: delivery.Absent}, nil
+}
+
+type inferenceHTTPDeliveryPolicy struct{}
+
+func (inferenceHTTPDeliveryPolicy) AuthorizeDelivery(context.Context, delivery.Intent) (bool, error) {
+	return true, nil
 }
 
 // 真实默认推理链和原路由验证仅规划、显式执行、审批中及失败封套。
@@ -71,12 +117,13 @@ func TestInferenceExecutionHTTPContracts(t *testing.T) {
 				orch.SetToolRouter(tool)
 				orch.SetReplyGenerator(inferenceHTTPGenerator{fail: scenario == "generation_failed"})
 				orch.SetFinalReviewer(agent_runtime.NewDefaultReviewer())
-				orch.SetPublisher(publisher)
+				db := testutil.NewTestDB(t, &model.InferenceDelivery{})
+				orch.SetDeliveryGateway(service.NewInferenceDeliveryService(repository.NewInferenceDeliveryRepository(db), publisher, inferenceHTTPDeliveryPolicy{}))
 			}
 			globalInferenceOrchestrator = orch
 			router := gin.New()
 			SetupInferenceRoutes(router.Group("/api"))
-			body := map[string]string{"channel_type": "local", "customer_id": "local-customer", "content": "我的订单到哪了", "session_id": "local-session"}
+			body := map[string]string{"channel_type": "local", "customer_id": "local-customer", "content": "我的订单到哪了", "session_id": "local-session", "message_id": "local-message", "account_id": "local-account"}
 			if scenario != "default" {
 				mode := "execution"
 				if scenario == "planning" {
@@ -89,6 +136,7 @@ func TestInferenceExecutionHTTPContracts(t *testing.T) {
 			}
 			blob, _ := json.Marshal(body)
 			req := httptest.NewRequest("POST", "/api/agent/inference/run", bytes.NewReader(blob))
+			req = req.WithContext(tenant.WithTenantID(req.Context(), 773))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
@@ -155,5 +203,78 @@ func TestInferenceExecutionHTTPContracts(t *testing.T) {
 				t.Fatalf("未成功执行仍发布：%s", w.Body.String())
 			}
 		})
+	}
+}
+
+// 原推理路由到真实 PG 账本，再经查询/重试恢复丢失回执；模拟对端不代表生产第三方。
+func TestInferenceDeliveryHTTPReceiptRecoveryAndRestart(t *testing.T) {
+	previous := globalInferenceOrchestrator
+	t.Cleanup(func() { globalInferenceOrchestrator = previous })
+	db := testutil.NewTestDB(t, &model.InferenceDelivery{})
+	signal := &inferenceHTTPPublisher{lost: true}
+	newService := func() service.InferenceDeliveryService {
+		return service.NewInferenceDeliveryService(repository.NewInferenceDeliveryRepository(db), signal, inferenceHTTPDeliveryPolicy{})
+	}
+	orch := agent_runtime.NewCoreDataFlowOrchestrator(nil, nil)
+	orch.SetExecutionGate(inferenceHTTPGate{agent_runtime.ExecutionApproved})
+	orch.SetToolRouter(&inferenceHTTPTool{})
+	orch.SetReplyGenerator(inferenceHTTPGenerator{})
+	orch.SetFinalReviewer(agent_runtime.NewDefaultReviewer())
+	orch.SetDeliveryGateway(newService())
+	globalInferenceOrchestrator = orch
+	router := gin.New()
+	SetupInferenceRoutes(router.Group("/api"))
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r = r.WithContext(tenant.WithTenantID(r.Context(), 773))
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		return w
+	}
+	body := `{"mode":"execution","channel_type":"local","account_id":"local-account","customer_id":"local-customer","session_id":"local-session","message_id":"recover-message","content":"我的订单到哪了"}`
+	first := request("POST", "/api/agent/inference/run", body)
+	var response struct {
+		Data struct {
+			Delivery    *delivery.Record `json:"delivery"`
+			Final       string           `json:"final_reply"`
+			Publishable bool             `json:"publishable"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if first.Code != 202 || response.Data.Delivery == nil || response.Data.Delivery.State != delivery.Unknown || response.Data.Final != "" || response.Data.Publishable || len(signal.replies) != 1 {
+		t.Fatalf("丢回执被伪装确认：%d %s", first.Code, first.Body.String())
+	}
+	key := response.Data.Delivery.Key
+	// 新实例仅依赖真实持久记录与可查询外部回执，不保留原进程内状态。
+	restarted := newService()
+	controller.NewInferenceDeliveryController(restarted).RegisterRoutes(router.Group("/api"))
+	path := "/api/v1/agent/inference/deliveries/" + key
+	queried := request("GET", path, "")
+	var record struct {
+		Data delivery.Record `json:"data"`
+	}
+	if err := json.Unmarshal(queried.Body.Bytes(), &record); err != nil {
+		t.Fatal(err)
+	}
+	if queried.Code != 200 || record.Data.State != delivery.Unknown || record.Data.ConfirmedCount != 0 {
+		t.Fatalf("重启丢失未确认状态：%s", queried.Body.String())
+	}
+	retried := request("POST", path+"/retry", "")
+	if err := json.Unmarshal(retried.Body.Bytes(), &record); err != nil {
+		t.Fatal(err)
+	}
+	if retried.Code != 200 || record.Data.State != delivery.Confirmed || record.Data.AcceptedCount != 1 || record.Data.ConfirmedCount != 1 || record.Data.SendAttempts != 1 || len(signal.replies) != 1 {
+		t.Fatalf("恢复重复发或未确认：%d %s", retried.Code, retried.Body.String())
+	}
+	orch.SetDeliveryGateway(newService())
+	repeated := request("POST", "/api/agent/inference/run", body)
+	if err := json.Unmarshal(repeated.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if repeated.Code != 200 || response.Data.Delivery == nil || response.Data.Delivery.Key != key || !response.Data.Publishable || len(signal.replies) != 1 {
+		t.Fatalf("重复 HTTP 产生重复外发：%d %s", repeated.Code, repeated.Body.String())
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"hivemtk-user/internal/aiagent/agent/delivery"
 )
 
 type inferenceExecutionSpy struct{ calls int }
@@ -60,7 +62,9 @@ func executionFixture(t *testing.T, tools int) (*CoreDataFlowOrchestrator, *infe
 	}}
 	orch := NewCoreDataFlowOrchestrator(cycle, nil)
 	pub := &inferenceExecutionPublisher{}
-	orch.SetPublisher(pub)
+	orch.SetDeliveryGateway(newExecutionDeliveryFixture(func(ctx context.Context, i delivery.Intent) error {
+		return pub.Publish(ctx, i.Channel, i.CustomerID, i.Content)
+	}))
 	orch.SetExecutionGate(executionGateFunc(func(_ context.Context, r ExecutionRequest) (ExecutionAuthorization, error) {
 		if r.AgentContext == nil || r.Payload.CustomerID == "" || r.Plan == nil {
 			t.Fatal("授权缺失身份或计划")
@@ -105,7 +109,7 @@ func TestInferenceExecutionUsesActualResultsBeforePublish(t *testing.T) {
 	for _, tools := range []int{0, 1, 2} {
 		t.Run(fmt.Sprint(tools), func(t *testing.T) {
 			orch, pub, events := executionFixture(t, tools)
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 			if err != nil || result.Outcome != InferenceSucceeded || result.ExecutionStatus != ExecutionSucceeded || !result.Executed || !result.Publishable || result.ToolCallCount != tools || result.PlannedToolCallCount != tools || len(result.ToolResults) != tools || !reflect.DeepEqual(pub.replies, []string{"订单正在运输中"}) {
 				t.Fatalf("实际执行契约错误：%+v pub=%v err=%v", result, pub.replies, err)
 			}
@@ -139,7 +143,7 @@ func TestInferenceExecutionAuthorizationPreflightsAllTools(t *testing.T) {
 				}
 				return ExecutionApproved, nil
 			}))
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 			if err != nil || result.Executed || result.ToolCallCount != 0 || len(pub.replies) != 0 || len(*events) != 0 || checks != 2 || result.FinalReply != "" || result.Publishable {
 				t.Fatalf("审批前抢跑：%+v events=%v err=%v", result, *events, err)
 			}
@@ -155,7 +159,7 @@ func TestInferenceExecutionAuthorizationPreflightsAllTools(t *testing.T) {
 }
 
 func TestInferenceExecutionMissingPortsFailBeforeEffects(t *testing.T) {
-	for _, port := range []string{"gate", "router", "generator", "reviewer", "publisher"} {
+	for _, port := range []string{"gate", "router", "generator", "reviewer", "delivery"} {
 		t.Run(port, func(t *testing.T) {
 			orch, pub, events := executionFixture(t, 1)
 			switch port {
@@ -167,10 +171,10 @@ func TestInferenceExecutionMissingPortsFailBeforeEffects(t *testing.T) {
 				orch.SetReplyGenerator(nil)
 			case "reviewer":
 				orch.SetFinalReviewer(nil)
-			case "publisher":
-				orch.SetPublisher(nil)
+			case "delivery":
+				orch.SetDeliveryGateway(nil)
 			}
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 			if err == nil || result.ErrorCode != "execution_not_configured" || result.Executed || result.ToolCallCount != 0 || len(*events) != 0 || len(pub.replies) != 0 || result.Publishable || orch.GetStats().ErrorCount != 1 {
 				t.Fatalf("缺少端口仍有副作用：%+v events=%v err=%v", result, *events, err)
 			}
@@ -216,9 +220,9 @@ func TestInferenceExecutionErrorsStopPublication(t *testing.T) {
 					return &ReviewResult{Passed: true, AdjustedReply: fmt.Sprintf("反复变化%d", calls)}, nil
 				}})
 			case "publisher":
-				orch.SetPublisher(executionPublisherFunc(func(context.Context, string, string, string) error { return cause }))
+				orch.SetDeliveryGateway(newExecutionDeliveryFixture(func(context.Context, delivery.Intent) error { return cause }))
 			}
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 			if fault == "review_rejected" {
 				if err != nil || result.Outcome != InferenceRejected {
 					t.Fatalf("复核拒绝错误：%+v %v", result, err)
@@ -267,17 +271,18 @@ func TestInferenceExecutionHandoffRequiresExplicitApproval(t *testing.T) {
 				return StopResult(&ic.Decision)
 			}}
 			triggers := 0
-			var escalate EscalationTrigger
+			var gateway delivery.Gateway
 			if mode != "missing" {
-				escalate = EscalationAdapter{Fn: func(context.Context, string, string) error {
+				gateway = newExecutionDeliveryFixture(func(context.Context, delivery.Intent) error {
 					triggers++
 					if mode == "failed" {
 						return errors.New("private handoff failure")
 					}
 					return nil
-				}}
+				})
 			}
-			orch := NewCoreDataFlowOrchestrator(cycle, escalate)
+			orch := NewCoreDataFlowOrchestrator(cycle, nil)
+			orch.SetDeliveryGateway(gateway)
 			gateCalls := 0
 			orch.SetExecutionGate(executionGateFunc(func(_ context.Context, r ExecutionRequest) (ExecutionAuthorization, error) {
 				gateCalls++
@@ -296,7 +301,7 @@ func TestInferenceExecutionHandoffRequiresExplicitApproval(t *testing.T) {
 			if mode == "planning" {
 				executionMode = ExecutionModePlanning
 			}
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, executionMode)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, executionMode)
 			if result.ToolCallCount != 0 || result.Publishable || result.FinalReply != "" || !result.HandoffToHuman {
 				t.Fatalf("人工交接混用回复或工具：%+v", result)
 			}
@@ -336,7 +341,7 @@ func TestInferenceExecutionCancellationStopsNextEffect(t *testing.T) {
 	for _, at := range []string{"authorization", "tool", "generator", "review"} {
 		t.Run(at, func(t *testing.T) {
 			orch, pub, _ := executionFixture(t, 2)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(executionTestContext())
 			defer cancel()
 			switch at {
 			case "authorization":
@@ -360,7 +365,7 @@ func TestInferenceExecutionCancellationStopsNextEffect(t *testing.T) {
 					return &ReviewResult{Passed: true}, nil
 				}})
 			}
-			result, err := orch.ProcessWithMode(ctx, testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(ctx, executionPayload(), nil, ExecutionModeExecution)
 			if !errors.Is(err, context.Canceled) || result.Outcome != InferenceFailed || result.Publishable || len(pub.replies) != 0 {
 				t.Fatalf("取消后仍发布：%+v %v", result, err)
 			}
@@ -387,7 +392,7 @@ func TestInferenceExecutionReviewedAdjustmentAndDirectReply(t *testing.T) {
 				reviews = append(reviews, ic.Decision.Reply)
 				return &ReviewResult{Passed: true, AdjustedReply: "经复核的安全正文"}, nil
 			}})
-			result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 			if err != nil || result.FinalReply != "经复核的安全正文" || len(reviews) != 2 || reviews[1] != result.FinalReply || !reflect.DeepEqual(pub.replies, []string{result.FinalReply}) || orch.GetStats().DirectReplyCount != 1 {
 				t.Fatalf("复核修改稿未复核或直答错误：%+v reviews=%v %v", result, reviews, err)
 			}
@@ -449,7 +454,7 @@ func TestInferenceExecutionDeadlineStopsEffects(t *testing.T) {
 	for _, at := range []string{"authorization", "tool", "generator", "review"} {
 		t.Run(at, func(t *testing.T) {
 			orch, pub, _ := executionFixture(t, 2)
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(executionTestContext())
 			defer cancel()
 			// 从目标端口进入时才启动截止时间，避免机器负载把规划阶段误当作端口超时。
 			wait := func() error {
@@ -470,7 +475,7 @@ func TestInferenceExecutionDeadlineStopsEffects(t *testing.T) {
 			case "review":
 				orch.SetFinalReviewer(executionReviewFunc{review: func(context.Context, *InferenceContext) (*ReviewResult, error) { return nil, wait() }})
 			}
-			result, err := orch.ProcessWithMode(ctx, testPayload(), nil, ExecutionModeExecution)
+			result, err := orch.ProcessWithMode(ctx, executionPayload(), nil, ExecutionModeExecution)
 			wantCalls := map[string]int{"authorization": 0, "tool": 1, "generator": 2, "review": 2}[at]
 			if !errors.Is(err, context.DeadlineExceeded) || result.ExecutionStatus != ExecutionFailed || result.ToolCallCount != wantCalls || result.FinalReply != "" || result.Publishable || len(pub.replies) != 0 {
 				t.Fatalf("超时继续执行或遗漏计数：result=%+v err=%v", result, err)
@@ -491,7 +496,7 @@ func TestInferenceExecutionPartialToolsRetainActualCounts(t *testing.T) {
 		}
 		return ToolOutput{Success: true, Data: "第一个工具的真实结果"}, nil
 	}))
-	result, err := orch.ProcessWithMode(context.Background(), testPayload(), nil, ExecutionModeExecution)
+	result, err := orch.ProcessWithMode(executionTestContext(), executionPayload(), nil, ExecutionModeExecution)
 	if !errors.Is(err, cause) || result.ToolCallCount != 2 || len(result.ToolResults) != 2 || !result.ToolResults[0].Success || result.ToolResults[0].Data != "第一个工具的真实结果" || result.ToolResults[1].Success || result.ToolResults[1].Data != "" || orch.GetStats().ToolCallCount != 2 || result.Publishable || len(pub.replies) != 0 {
 		t.Fatalf("部分执行被计划数或成功回复替代：%+v err=%v", result, err)
 	}

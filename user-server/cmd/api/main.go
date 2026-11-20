@@ -737,6 +737,7 @@ func main() {
 	// 阶段边界断点续跑：必须在 router.Setup 之前装配，
 	// 否则 InitInferenceOrchestrator 构造推理闭环时拿不到 store。
 	app.InitAgentCheckpointStore(db.GetDB())
+	app.InitInferenceDeliveryService(db.GetDB())
 
 	// SLO 跟踪器（internal/pkg/sla）：启动期显式登记三条 SLI 并注册指标。
 	// 记录点分布在 service 层（编排器、人工待办），走 sla.Record 直达同一实例。

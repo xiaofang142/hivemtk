@@ -905,6 +905,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupAIToolConfigRoutes(auth, gormDB)
 
 		app.SetupInferenceRoutes(auth)
+		controller.NewInferenceDeliveryController(app.GetInferenceDeliveryService()).RegisterRoutes(auth)
 
 		// 智能体双模式运行入口：按 agent_id 读出 agent_mode 再分派。
 		app.SetupAgentLifecycleRoutes(auth)

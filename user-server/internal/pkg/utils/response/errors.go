@@ -30,6 +30,13 @@ const (
 	ErrInferenceRejected             = "推理结果未通过复核，未发布回复"
 	ErrInferenceExecutionUnavailable = "推理执行端口未配置，本次未执行"
 	MsgInferenceApprovalPending      = "执行等待审批，本次未调用工具或发布回复"
+	MsgInferenceDeliveryPending      = "交付意向已持久受理，外部确认尚未完成"
+	ErrInferenceDeliveryKey          = "交付幂等键格式不正确"
+	ErrInferenceDeliveryUnavailable  = "交付账本暂不可用，请稍后查询或重试"
+	ErrInferenceDeliveryTenant       = "交付查询或重试缺少有效租户身份"
+	ErrInferenceDeliveryNotFound     = "未找到当前租户的交付记录"
+	ErrInferenceDeliveryConflict     = "交付意向与原始记录冲突"
+	ErrInferenceDeliveryRejected     = "交付已被明确拒绝，未确认送达"
 )
 
 // 卡片管理相关错误消息
