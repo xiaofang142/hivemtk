@@ -1,0 +1,1 @@
+{"code":0,"message":"ok","data":{"diagnostics":{"total_traffic":200,"variant_count":2,"srm_chi2":0,"srm_df":1,"srm_p_value":1,"srm_passed":true,"min_sample_ok":true,"min_sample_need":100,"multi_expose_users":0,"multi_expose_ok":true}}}

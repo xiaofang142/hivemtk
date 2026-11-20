@@ -12,6 +12,8 @@ package service
 import (
 	"math"
 	"math/rand"
+
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 // VariantCounts 变体计数输入
@@ -398,9 +400,6 @@ func chiSquareSurvival(x float64, df int) float64 {
 	if df <= 0 || x < 0 {
 		return 1
 	}
-	d := float64(df)
-
-	t := math.Pow(x/d, 1.0/3.0) - (1 - 2.0/(9*d))
-	z := t / math.Sqrt(2.0/(9*d))
-	return twoTailP(z)
+	// SRM 取卡方上尾概率；双尾正态近似会让零偏差p值不为1。
+	return distuv.ChiSquared{K: float64(df)}.Survival(x)
 }

@@ -27,7 +27,7 @@ func TestFollowFlush_MarkDueByConversation(t *testing.T) {
 	r := &DelayedOutboundRepository{db: g}
 	ctx := context.Background()
 
-	future := time.Now().Add(2 * time.Hour)
+	future := time.Now().Add(2 * time.Hour).Truncate(time.Microsecond)
 	if err := g.Create(&model.DelayedOutboundReply{
 		TenantID: 18, Platform: "xiaohongshu", AccountID: "acc-f", ConversationID: "conv-f",
 		Kind: model.DelayedKindQuietHours, Status: "pending", SendAt: future,

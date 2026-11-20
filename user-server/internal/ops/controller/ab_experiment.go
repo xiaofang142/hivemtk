@@ -3,6 +3,7 @@ package controller
 import (
 	"hivemtk-user/internal/ops/service"
 	"hivemtk-user/internal/pkg/errhttp"
+	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"net/http"
@@ -71,9 +72,13 @@ func (c *ABExperimentController) GetExperiment(ctx *gin.Context) {
 
 // GetExperimentList 获取实验列表
 func (c *ABExperimentController) GetExperimentList(ctx *gin.Context) {
-
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	// 查询与响应共用归一后的分页，避免仓储钳制后仍回显原始非法值。
+	page, pageSize, err := utils.ParsePagination(ctx,
+		utils.WithDefaultSize(10), utils.WithMaxSize(200), utils.WithAllowOverMax(true))
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams)
+		return
+	}
 
 	experiments, total, err := c.abService.GetExperimentList(ctx.Request.Context(), page, pageSize)
 	if err != nil {
@@ -203,8 +208,12 @@ func (c *ABExperimentController) GetConversionEvents(ctx *gin.Context) {
 		return
 	}
 
-	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "10"))
+	page, pageSize, err := utils.ParsePagination(ctx,
+		utils.WithDefaultSize(10), utils.WithMaxSize(200), utils.WithAllowOverMax(true))
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams)
+		return
+	}
 
 	events, total, err := c.abService.GetConversionEvents(ctx.Request.Context(), uint(id), page, pageSize)
 	if errhttp.HandleDBError(ctx, err, "获取转化事件") {

@@ -130,7 +130,7 @@ func TestInboxConversation_UpdateLastMessage_AdvancesActivity(t *testing.T) {
 	db := setupHubFullTestDB(t)
 	r := NewInboxConversationRepositoryWithDB(db)
 	ctx := context.Background()
-	t0 := time.Now().Add(-time.Hour)
+	t0 := time.Now().Add(-time.Hour).Truncate(time.Microsecond)
 
 	conv := newConv("wechat", "acc_ul", "c_ul", "open", t0)
 	if err := db.Create(conv).Error; err != nil {

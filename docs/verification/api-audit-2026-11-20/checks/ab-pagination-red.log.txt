@@ -1,0 +1,11 @@
+2026-11-20T15:35:19+08:00 WRN [config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml C:\Users\xiaohp\AppData\Local\Temp\go-build2412791873\b001\config.yaml C:\Users\xiaohp\AppData\Local\Temp\go-build2412791873\config.yaml]，CWD=C:\documents\www\hivemtk\hivemtk\user-server\internal\ops\controller），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动 component=user-server
+--- FAIL: TestABExperimentController_GetExperimentList_NormalizedPagination (3.28s)
+    --- FAIL: TestABExperimentController_GetExperimentList_NormalizedPagination/负数回落 (0.00s)
+        ab_experiment_test.go:604: 期望 page=1/page_size=10/total=3/count=3，实际 page=-1/page_size=-2/total=3/count=3
+    --- FAIL: TestABExperimentController_GetExperimentList_NormalizedPagination/非数字回落 (0.00s)
+        ab_experiment_test.go:604: 期望 page=1/page_size=10/total=3/count=3，实际 page=0/page_size=0/total=3/count=3
+    --- FAIL: TestABExperimentController_GetExperimentList_NormalizedPagination/超限钳制 (0.01s)
+        ab_experiment_test.go:604: 期望 page=1/page_size=200/total=3/count=3，实际 page=1/page_size=201/total=3/count=3
+FAIL
+FAIL	hivemtk-user/internal/ops/controller	4.802s
+FAIL
