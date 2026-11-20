@@ -8,17 +8,12 @@ import (
 	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/etl"
-	chunkModel "hivemtk-user/internal/model"
 	"os"
-
-	"gorm.io/gorm"
 )
 
 // KnowledgeBaseService 知识库服务
 //
-// AV-04c 批次7 刀4：不再持有 *gorm.DB——文档读写全部经 docs 仓储，
-// DeleteDocument 的事务接缝（AV-03 钉住的合法 Transaction 实参回调）经
-// KBDocumentRepository.Transaction 仓储接缝保持原样，句柄解析收回仓储层。
+// 文档读写与级联删除事务均经 docs 仓储，服务只编排文件与索引清理。
 type KnowledgeBaseService struct {
 	docs      kbDocumentStore
 	processor *etl.DocumentProcessor
@@ -38,7 +33,7 @@ type kbDocumentStore interface {
 	GetByID(context.Context, uint) (*model.KBDocument, error)
 	List(context.Context, int, int) ([]*model.KBDocument, int64, error)
 	UpdateStatusFields(context.Context, uint, map[string]any) error
-	Transaction(context.Context, func(tx *gorm.DB) error) error
+	DeleteWithChunks(context.Context, uint) (*model.KBDocument, error)
 }
 
 // NewKnowledgeBaseService 创建知识库服务
@@ -83,20 +78,7 @@ func (s *KnowledgeBaseService) GetDocument(ctx context.Context, id uint) (*model
 }
 
 func (s *KnowledgeBaseService) DeleteDocument(ctx context.Context, id uint) error {
-	var doc model.KBDocument
-	// AV-03 钉住的合法事务接缝：Transaction 实参位置的回调原样保留（回调体逐字
-	// 未动），句柄解析经 KBDocumentRepository.Transaction 收回仓储层。
-	err := s.docs.Transaction(ctx, func(tx *gorm.DB) error {
-		if err := tx.WithContext(ctx).Where("id = ?", id).First(&doc).Error; err != nil {
-			return err
-		}
-
-		if err := tx.WithContext(ctx).Where("document_id = ?", id).
-			Delete(&chunkModel.KnowledgeChunk{}).Error; err != nil {
-			return fmt.Errorf("清理文档分段失败: %w", err)
-		}
-		return tx.WithContext(ctx).Where("id = ?", id).Delete(&model.KBDocument{}).Error
-	})
+	doc, err := s.docs.DeleteWithChunks(ctx, id)
 	if err != nil {
 		return err
 	}

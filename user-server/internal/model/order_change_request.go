@@ -43,7 +43,7 @@ type OrderChangeRequest struct {
 	ApprovedBy string     `gorm:"type:varchar(64)" json:"approved_by"`
 	ApprovedAt *time.Time `json:"approved_at,omitempty"`
 	// ExecutorNote 执行留痕：manual=坐席指派说明 / buyer_initiated=引导话术已发送 / 执行通道凭据引用
-	ExecutorNote string     `gorm:"type:text" json:"executor_note"`
+	ExecutorNote string `gorm:"type:text" json:"executor_note"`
 	// DispatchedBy/DispatchedAt 派工留痕（FA-09）：manual/buyer_initiated 的 Execute
 	// 只到 dispatched=派工完成，实际改单结果必须经 CompleteExecution 回填才置 executed。
 	DispatchedBy string     `gorm:"type:varchar(64)" json:"dispatched_by"`

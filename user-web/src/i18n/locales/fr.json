@@ -595,7 +595,6 @@
   "受理率": "Taux d’acceptation",
   "批次已提交：已受理 {accepted} 条，拒绝 {rejected} 条": "Lot envoyé : {accepted} acceptés, {rejected} refusés",
   "文档索引状态": "État d’indexation du document",
-  "自动查询最多持续{minutes}分钟": "La vérification automatique durera au maximum {minutes} minutes",
   "索引失败，可点击重试": "Échec de l’indexation ; vous pouvez réessayer",
   "状态查询失败，请点击刷新进度": "Impossible de charger le statut ; actualisez la progression pour réessayer",
   "自动查询最多进行{count}轮,之后可手动刷新": "Les vérifications automatiques durent au maximum {count} cycles ; actualisez pour continuer",

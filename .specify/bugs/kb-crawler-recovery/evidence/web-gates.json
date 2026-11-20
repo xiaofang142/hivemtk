@@ -1,0 +1,48 @@
+[
+  {
+    "name": "install",
+    "command": [
+      "npm",
+      "ci",
+      "--no-audit",
+      "--no-fund"
+    ],
+    "exit_code": 0,
+    "seconds": 53.55,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-web-install.log"
+  },
+  {
+    "name": "lint",
+    "command": [
+      "npm",
+      "run",
+      "lint:check"
+    ],
+    "exit_code": 0,
+    "seconds": 15.06,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-web-lint.log"
+  },
+  {
+    "name": "test",
+    "command": [
+      "npm",
+      "test",
+      "--",
+      "--maxWorkers=2"
+    ],
+    "exit_code": 0,
+    "seconds": 136.35,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-web-test.log"
+  },
+  {
+    "name": "build",
+    "command": [
+      "npm",
+      "run",
+      "build"
+    ],
+    "exit_code": 0,
+    "seconds": 10.86,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-web-build.log"
+  }
+]

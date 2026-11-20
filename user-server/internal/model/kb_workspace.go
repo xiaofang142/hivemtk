@@ -34,32 +34,33 @@ const (
 type KnowledgeDocument struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID            uint64      `gorm:"primaryKey;autoIncrement" json:"id"`
-	ProductID     string      `gorm:"index;not null;default:''" json:"product_id"`
-	SourceType    SourceType  `gorm:"size:16;default:'upload';index" json:"source_type"`
-	SourceRef     string      `gorm:"size:512" json:"source_ref"`
-	Title         string      `gorm:"size:256;not null" json:"title"`
-	FileName      string      `gorm:"size:256" json:"file_name"`
-	FilePath      string      `gorm:"size:512" json:"file_path"`
-	FileURL       string      `gorm:"size:512" json:"file_url"`
-	FileType      string      `gorm:"size:16" json:"file_type"`
-	FileSize      int64       `gorm:"default:0" json:"file_size"`
-	MimeType      string      `gorm:"size:64" json:"mime_type"`
-	ChunkCount    int         `gorm:"default:0" json:"chunk_count"`
-	TotalTokens   int         `gorm:"default:0" json:"total_tokens"`
-	EmbedStatus   EmbedStatus `gorm:"size:16;default:'pending';index" json:"embed_status"`
-	EmbedProgress int         `gorm:"default:0" json:"embed_progress"`
-	ErrorMsg      string      `gorm:"type:text" json:"error_msg"`
-	Tags          string      `gorm:"type:jsonb;default:'[]'" json:"tags"`
-	Category      string      `gorm:"size:64;index" json:"category"`
-	PublicVisible bool        `gorm:"default:false;index" json:"public_visible"`
-	HCStatus      string      `gorm:"size:20;default:'';index" json:"help_center_status"`
-	HCViews       int64       `gorm:"default:0" json:"help_center_views"`
-	Priority      int         `gorm:"default:0" json:"priority"`
-	Metadata      string      `gorm:"type:jsonb;default:'{}'" json:"metadata"`
-	ImportedBy    string      `gorm:"size:64" json:"imported_by"`
-	AgentID       *uint       `gorm:"index" json:"agent_id,omitempty"`
-	LastIndexAt   *time.Time  `json:"last_index_at"`
+	ID              uint64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	ProductID       string      `gorm:"index;not null;default:''" json:"product_id"`
+	SourceType      SourceType  `gorm:"size:16;default:'upload';index" json:"source_type"`
+	SourceRef       string      `gorm:"size:512" json:"source_ref"`
+	Title           string      `gorm:"size:256;not null" json:"title"`
+	FileName        string      `gorm:"size:256" json:"file_name"`
+	FilePath        string      `gorm:"size:512" json:"file_path"`
+	FileURL         string      `gorm:"size:512" json:"file_url"`
+	FileType        string      `gorm:"size:16" json:"file_type"`
+	FileSize        int64       `gorm:"default:0" json:"file_size"`
+	MimeType        string      `gorm:"size:64" json:"mime_type"`
+	ChunkCount      int         `gorm:"default:0" json:"chunk_count"`
+	TotalTokens     int         `gorm:"default:0" json:"total_tokens"`
+	EmbedStatus     EmbedStatus `gorm:"size:16;default:'pending';index" json:"embed_status"`
+	EmbedProgress   int         `gorm:"default:0" json:"embed_progress"`
+	ErrorMsg        string      `gorm:"type:text" json:"error_msg"`
+	ReindexAttempts int         `gorm:"not null;default:0" json:"reindex_attempts"`
+	Tags            string      `gorm:"type:jsonb;default:'[]'" json:"tags"`
+	Category        string      `gorm:"size:64;index" json:"category"`
+	PublicVisible   bool        `gorm:"default:false;index" json:"public_visible"`
+	HCStatus        string      `gorm:"size:20;default:'';index" json:"help_center_status"`
+	HCViews         int64       `gorm:"default:0" json:"help_center_views"`
+	Priority        int         `gorm:"default:0" json:"priority"`
+	Metadata        string      `gorm:"type:jsonb;default:'{}'" json:"metadata"`
+	ImportedBy      string      `gorm:"size:64" json:"imported_by"`
+	AgentID         *uint       `gorm:"index" json:"agent_id,omitempty"`
+	LastIndexAt     *time.Time  `json:"last_index_at"`
 	// SearchCount/HitCount 文档级检索计数：全仓无写入路径，恒 0（I31 核实）。
 	// 真统计需检索命中时回写文档级计数或从 KnowledgeChunk.HitCount 聚合，
 	// 属产品口径决策；当前前端详情/热门文档已诚实化为「未接入」占位。

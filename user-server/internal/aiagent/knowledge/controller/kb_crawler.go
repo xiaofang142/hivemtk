@@ -7,10 +7,11 @@ package controller
 import (
 	"context"
 	"strconv"
+	"time"
 
 	kbservice "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/pkg/errhttp"
-	"hivemtk-user/internal/pkg/utils"
+	"hivemtk-user/internal/pkg/utils/async"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 
@@ -179,12 +180,7 @@ func (ctrl *KBCrawlerController) SyncSource(c *gin.Context) {
 	}
 	// 手动同步异步执行（§4.2）：接口只负责建 pending 批次并立即返回，
 	// 实际爬取由后台 goroutine 执行（cron worker 同理）。
-	// utils.SafeGo 收口：爬取批次长任务 panic 不击穿进程
-	utils.SafeGo(context.Background(), "kbcrawler.runBatch", func(_ context.Context) {
-		if err := ctrl.svc.RunBatch(context.Background(), batch.ID); err != nil {
-			logger.Warnf("[kb_crawler] 手动同步批次 %d 执行失败: %v", batch.ID, err)
-		}
-	})
+	ctrl.runBatch(c.Request.Context(), batch.ID)
 	response.Success(c, gin.H{"batch_no": batch.BatchNo, "status": batch.Status}, "同步已排队")
 }
 
@@ -213,7 +209,16 @@ func (ctrl *KBCrawlerController) RetryBatch(c *gin.Context) {
 		response.Error(c, 400, err.Error())
 		return
 	}
+	ctrl.runBatch(c.Request.Context(), batch.ID)
 	response.Success(c, batch, "重试已排队")
+}
+
+func (ctrl *KBCrawlerController) runBatch(ctx context.Context, id uint64) {
+	async.RunWithTimeout(ctx, 31*time.Minute, func(workCtx context.Context) {
+		if err := ctrl.svc.RunBatch(workCtx, id); err != nil {
+			logger.Warnf("[kb_crawler] 批次 %d 执行失败: %v", id, err)
+		}
+	})
 }
 
 // ListQACandidates GET /kb/qa/candidates?source_type=&status=&page=&page_size=

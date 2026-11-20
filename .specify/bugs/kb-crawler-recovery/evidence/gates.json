@@ -1,0 +1,16 @@
+{
+  "make_audit": 0,
+  "make_lint": 0,
+  "make_vet": 0,
+  "go_build": 0,
+  "make_test_go": "pending",
+  "migration": 0,
+  "focused_recovery": 0,
+  "graphify": "unavailable: Python module missing",
+  "audit_skips": [
+    "cross-repository comparisons: checkout missing",
+    "coverage/go-cover.out missing",
+    "local 8204 instance absent"
+  ],
+  "initial_audit_failure": "stale crawler bare-go exemptions removed; full audit rerun exited 0"
+}

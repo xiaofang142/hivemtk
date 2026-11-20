@@ -1,0 +1,129 @@
+[90m2026-11-20T13:11:22+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerRecovery_RejectsFailedRunningWrite
+[90m2026-11-20T13:11:22+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_RejectsFailedRunningWrite (0.61s)
+=== RUN   TestCrawlerRecovery_PartiallyFailedBatchCanRetry
+[90m2026-11-20T13:11:22+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_PartiallyFailedBatchCanRetry (0.04s)
+=== RUN   TestCrawlerRecovery_VectorFailureRetriesSameHash
+[90m2026-11-20T13:11:22+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_VectorFailureRetriesSameHash (0.07s)
+=== RUN   TestCrawlerRecovery_EmbeddingRetainsBoundedTenantContext
+[90m2026-11-20T13:11:22+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_EmbeddingRetainsBoundedTenantContext (0.20s)
+=== RUN   TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA
+=== RUN   TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA/[{"question":"合成问题","answer":"合成答案","answer_anchor":"synthetic"}]
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA/[]
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA (0.22s)
+    --- PASS: TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA/[{"question":"合成问题","answer":"合成答案","answer_anchor":"synthetic"}] (0.11s)
+    --- PASS: TestCrawlerRecovery_RestartRebuildsIndexWithoutDuplicateQA/[] (0.11s)
+=== RUN   TestCrawlerRecovery_QAFailureAndCheckpointWriteAreRetryable
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_QAFailureAndCheckpointWriteAreRetryable (0.14s)
+=== RUN   TestCrawlerRecovery_TenantIsolationAndMissingContext
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_TenantIsolationAndMissingContext (0.11s)
+=== RUN   TestCrawlerRecovery_ClaimSerializesAndFencesExpiredWorker
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_ClaimSerializesAndFencesExpiredWorker (0.12s)
+=== RUN   TestCrawlerRecovery_ResumesPendingManualBatchAfterRestart
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_ResumesPendingManualBatchAfterRestart (0.16s)
+=== RUN   TestCrawlerRecovery_FailedChangeThenRevertDoesNotReuseOldHash
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_FailedChangeThenRevertDoesNotReuseOldHash (0.11s)
+=== RUN   TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete
+=== RUN   TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete/processing
+[90m2026-11-20T13:11:23+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete/indexed
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete (0.24s)
+    --- PASS: TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete/processing (0.10s)
+    --- PASS: TestCrawlerRecovery_DocumentStatusWriteFailuresDoNotComplete/indexed (0.13s)
+=== RUN   TestCrawlerRecovery_FinalizationFailureRollsBackSourceSummary
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_FinalizationFailureRollsBackSourceSummary (0.14s)
+=== RUN   TestCrawlerRecovery_LeaseCannotMutateAnotherSource
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_LeaseCannotMutateAnotherSource (0.05s)
+=== RUN   TestCrawlerRecovery_IndexFailureIsRetryable
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_IndexFailureIsRetryable (0.06s)
+=== RUN   TestCrawlerRecovery_CancellationFinalizesAsFailed
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecovery_CancellationFinalizesAsFailed (0.07s)
+=== RUN   TestCrawlerSink_CreateSource
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerSink_CreateSource (0.06s)
+=== RUN   TestCrawlerSink_IngestNewDocument
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerSink_IngestNewDocument (0.08s)
+=== RUN   TestCrawlerSink_IngestSupersedesChunks
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerSink_IngestSupersedesChunks (0.07s)
+=== RUN   TestCrawlerSink_BatchStateMachine
+[90m2026-11-20T13:11:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerSink_BatchStateMachine (0.08s)
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/service	3.164s
+[90m2026-11-20T13:11:30+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation
+=== RUN   TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation/retry=false
+=== RUN   TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation/retry=true
+[90m2026-11-20T13:11:30+08:00[0m [33mWRN[0m [1m[kb_crawler] 批次 1 执行失败: 合成运行状态写入失败，禁止后续网络[0m [36mcomponent=[0muser-server
+--- PASS: TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation (0.66s)
+    --- PASS: TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation/retry=false (0.58s)
+    --- PASS: TestCrawlerRecoveryController_AsyncKeepsTenantAfterRequestCancellation/retry=true (0.08s)
+[90m2026-11-20T13:11:30+08:00[0m [33mWRN[0m [1m[kb_crawler] 批次 2 执行失败: 合成运行状态写入失败，禁止后续网络[0m [36mcomponent=[0muser-server
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/controller	1.292s
+[90m2026-11-20T13:11:34+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerJobs_MigrationPreservesLegacyAndTenantUniqueness
+--- PASS: TestCrawlerJobs_MigrationPreservesLegacyAndTenantUniqueness (0.65s)
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/repository	1.147s
+testing: warning: no tests to run
+PASS
+ok  	hivemtk-user/internal/pkg/db	0.499s [no tests to run]
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestVectorizer_NewVectorizer
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b516/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b516/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b516/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestVectorizer_NewVectorizer (0.00s)
+=== RUN   TestVectorizer_EmbedText
+    vectorizer_test.go:34: 集成测试默认跳过：embedding 连接配置已迁移至参数中心 embedding.global_override
+--- SKIP: TestVectorizer_EmbedText (0.00s)
+=== RUN   TestVectorizer_EmbedText_Deterministic
+    vectorizer_test.go:95: 集成测试默认跳过：embedding 连接配置已迁移至参数中心 embedding.global_override
+--- SKIP: TestVectorizer_EmbedText_Deterministic (0.00s)
+=== RUN   TestVectorizer_EmbedText_DifferentTexts
+    vectorizer_test.go:110: 集成测试默认跳过：embedding 连接配置已迁移至参数中心 embedding.global_override
+--- SKIP: TestVectorizer_EmbedText_DifferentTexts (0.00s)
+=== RUN   TestVectorizer_EmbedBatch
+    vectorizer_test.go:124: 集成测试默认跳过：embedding 连接配置已迁移至参数中心 embedding.global_override
+--- SKIP: TestVectorizer_EmbedBatch (0.00s)
+=== RUN   TestVectorizer_GetDimension
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b516/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestVectorizer_GetDimension (0.00s)
+=== RUN   TestVectorizer_ValidateEmbedding
+[90m2026-11-20T13:11:55+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/b516/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build453775381/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestVectorizer_ValidateEmbedding/correct_dimension
+=== RUN   TestVectorizer_ValidateEmbedding/wrong_dimension
+=== RUN   TestVectorizer_ValidateEmbedding/empty_embedding
+=== RUN   TestVectorizer_ValidateEmbedding/contains_nan
+=== RUN   TestVectorizer_ValidateEmbedding/contains_inf
+=== RUN   TestVectorizer_ValidateEmbedding/contains_neg_inf
+--- PASS: TestVectorizer_ValidateEmbedding (0.01s)
+    --- PASS: TestVectorizer_ValidateEmbedding/correct_dimension (0.00s)
+    --- PASS: TestVectorizer_ValidateEmbedding/wrong_dimension (0.00s)
+    --- PASS: TestVectorizer_ValidateEmbedding/empty_embedding (0.00s)
+    --- PASS: TestVectorizer_ValidateEmbedding/contains_nan (0.00s)
+    --- PASS: TestVectorizer_ValidateEmbedding/contains_inf (0.00s)
+    --- PASS: TestVectorizer_ValidateEmbedding/contains_neg_inf (0.00s)
+PASS
+ok  	hivemtk-user/internal/aiagent/rag/retrieval	0.791s

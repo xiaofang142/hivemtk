@@ -14,8 +14,6 @@ import (
 	"hivemtk-user/internal/etl"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
-
-	"gorm.io/gorm"
 )
 
 type fa12DocumentStore struct {
@@ -66,8 +64,8 @@ func (f *fa12DocumentStore) UpdateStatusFields(ctx context.Context, _ uint, fiel
 	return nil
 }
 
-func (f *fa12DocumentStore) Transaction(context.Context, func(*gorm.DB) error) error {
-	return errors.New("transaction is not used by FA-12 test")
+func (f *fa12DocumentStore) DeleteWithChunks(context.Context, uint) (*knowledgeModel.KBDocument, error) {
+	return nil, errors.New("delete is not used by FA-12 import test")
 }
 
 func newFA12KnowledgeBaseService(store *fa12DocumentStore) *KnowledgeBaseService {
@@ -242,20 +240,5 @@ func TestProcessDocumentAsync_StateFailureStopsQA(t *testing.T) {
 				t.Fatalf("状态写失败应阻止QA并持久化failed，status=%s qaCalls=%d", store.doc.Status, qaCalls)
 			}
 		})
-	}
-}
-
-// 爬虫处理上下文必须脱离请求取消链，但保留源租户归属。
-func TestCrawlerProcessingContext_PreservesTenantAfterCancellation(t *testing.T) {
-	requestCtx, cancel := context.WithCancel(tenant.WithTenantID(context.Background(), 99))
-	cancel()
-
-	procCtx := crawlerProcessingContext(requestCtx, 42)
-	got, ok := tenant.FromContext(procCtx)
-	if !ok || got != 42 {
-		t.Fatalf("处理上下文应恢复源租户 42，got=%d ok=%v", got, ok)
-	}
-	if procCtx.Err() != nil {
-		t.Fatalf("处理上下文不应继承请求取消，err=%v", procCtx.Err())
 	}
 }

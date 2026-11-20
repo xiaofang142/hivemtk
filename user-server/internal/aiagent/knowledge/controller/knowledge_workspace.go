@@ -409,7 +409,7 @@ func (ctrl *KnowledgeWorkspaceController) ReindexDocument(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(c, nil, "重建任务已启动")
+	response.Success(c, nil, "索引重建完成")
 }
 
 // RebuildProductIndex 重建产品级索引
@@ -430,7 +430,7 @@ func (ctrl *KnowledgeWorkspaceController) RebuildProductIndex(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	response.Success(c, nil, "重建任务已启动")
+	response.Success(c, nil, "索引重建完成")
 }
 
 // GetProductOverview 获取产品级总览

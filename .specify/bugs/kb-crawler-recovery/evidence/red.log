@@ -1,0 +1,12 @@
+[90m2026-11-20T10:42:40+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerRecovery_RejectsFailedRunningWrite
+[90m2026-11-20T10:42:40+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2148240643/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2148240643/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+    kb_crawler_recovery_test.go:46: 运行状态落库失败必须返回原错误，got <nil>
+--- FAIL: TestCrawlerRecovery_RejectsFailedRunningWrite (0.34s)
+=== RUN   TestCrawlerRecovery_PartiallyFailedBatchCanRetry
+[90m2026-11-20T10:42:40+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2148240643/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2148240643/config.yaml]，CWD=/Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+    kb_crawler_recovery_test.go:62: 部分失败必须可进入持久化重试，retry=<nil> err=仅失败批次可重试
+--- FAIL: TestCrawlerRecovery_PartiallyFailedBatchCanRetry (0.02s)
+FAIL
+FAIL	hivemtk-user/internal/aiagent/knowledge/service	0.994s
+FAIL

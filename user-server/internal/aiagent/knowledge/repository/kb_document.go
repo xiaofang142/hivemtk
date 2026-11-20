@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	rootmodel "hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
@@ -26,11 +28,22 @@ func NewKBDocumentRepositoryDefault() *KBDocumentRepository {
 	return NewKBDocumentRepository(_db.GetDB())
 }
 
-// Transaction 事务接缝（仓储同形接缝）：回调拿到事务句柄执行原子读写。
-// AV-03 钉住的 service 层唯一合法 Transaction 回调（DeleteDocument 级联删除）
-// 经此接缝保持原样——回调体仍在 service（业务原子性语义），句柄解析收回仓储。
-func (r *KBDocumentRepository) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
-	return r.db.WithContext(ctx).Transaction(fn)
+// DeleteWithChunks 在同一租户事务内读取文档并级联删除分段，返回已删除文档供服务清理文件与索引。
+func (r *KBDocumentRepository) DeleteWithChunks(ctx context.Context, id uint) (*model.KBDocument, error) {
+	var doc model.KBDocument
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ?", id).First(&doc).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("document_id = ?", id).Delete(&rootmodel.KnowledgeChunk{}).Error; err != nil {
+			return fmt.Errorf("清理文档分段失败: %w", err)
+		}
+		return tx.Where("id = ?", id).Delete(&model.KBDocument{}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &doc, nil
 }
 
 // Create 创建文档
@@ -80,7 +93,20 @@ func (r *KBDocumentRepository) UpdateStatusFields(ctx context.Context, id uint, 
 		fields = map[string]any{}
 	}
 	fields["updated_at"] = time.Now()
-	return r.db.WithContext(ctx).Model(&model.KBDocument{}).
-		Where("id = ?", id).
-		Updates(fields).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, leased := ctx.Value(crawlLeaseKey{}).(CrawlLease); leased {
+			tenantID, err := crawlerTenant(ctx)
+			if err != nil {
+				return err
+			}
+			var page rootmodel.KBCrawlPage
+			if err := tx.Where("tenant_id = ? AND document_id = ?", tenantID, id).First(&page).Error; err != nil {
+				return err
+			}
+			if err := checkCrawlLease(tx, ctx, tenantID, page.SourceID); err != nil {
+				return err
+			}
+		}
+		return changedOne(tx.Model(&model.KBDocument{}).Where("id = ?", id).Updates(fields))
+	})
 }

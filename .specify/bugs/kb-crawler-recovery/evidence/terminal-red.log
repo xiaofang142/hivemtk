@@ -1,0 +1,9 @@
+[90m2026-11-20T13:52:23+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestFA12Crawler_IngestRejectsNonterminalDocument
+[90m2026-11-20T13:52:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3746025084/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3746025084/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T13:52:24+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3746025084/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3746025084/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+    kb_crawler_retry_test.go:295: nonterminal document must not complete the page: <nil>
+--- FAIL: TestFA12Crawler_IngestRejectsNonterminalDocument (0.52s)
+FAIL
+FAIL	hivemtk-user/internal/aiagent/knowledge/service	1.149s
+FAIL

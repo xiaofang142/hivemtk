@@ -509,7 +509,7 @@ func gormGuardScanFile(path string) (gormGuardStat, []gormGuardFinding, error) {
 // 失效（文件没了或已清零）一律红。逐条明细（规则/行号/原因）见 AV-04c 存量清单，
 // 与 check-architecture.sh 扩面后的全域读数同源。
 var gormGuardRatchet = map[string]gormGuardStat{
-	// ---- aiagent/knowledge 域（0 句柄 / 1 事务 / 0 GetDB）----
+	// ---- aiagent/knowledge 域（0 句柄 / 0 事务 / 0 GetDB）----
 	// AV-04c 批次7（2026-11-07）刀3：kb_crawler 句柄 2、kb_qa_split 句柄 2 清零除名
 	// —— 爬取源/批次/入库（kb_documents+kb_document_chunks）SQL 下沉
 	// knowledgeRepo.KBCrawlerRepository（含 Scan/Count 错误路径「错误按 0 计」语义
@@ -533,7 +533,8 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// KBDocumentRepository.Transaction 仓储接缝）；连带文件 knowledge_base_import
 	// （docs.GetByID）、knowledge_merchant 五 nil-guard（s.db==nil→dbReady() 探针）。
 	// 回归见 service/knowledge_tx_seam_test.go 与 service/rag_search_sink_test.go。
-	"user-server/internal/aiagent/knowledge/service/knowledge_base.go": {tx: 1}, // tx=1：AV-03 钉住的唯一真 Transaction 回调（DeleteDocument，仓储接缝保形）
+	// FA-12（2026-11-20）：DeleteDocument 级联事务整体下沉 DeleteWithChunks，
+	// 文档仓储接口不再暴露事务句柄；本域清零除名，新增即红。
 	// ---- browser_automation 域（0 句柄 / 0 GetDB）----
 	// AV-04c 批次3（2026-11-07）：feedback.go getdb 1 清零除名 —— notifyFailure 的
 	// system_users Raw 邮箱查询下沉 SystemUserRepository.GetEmailByID（显式

@@ -595,7 +595,6 @@
   "受理率": "Annahmequote",
   "批次已提交：已受理 {accepted} 条，拒绝 {rejected} 条": "Importstapel eingereicht: {accepted} angenommen, {rejected} abgelehnt",
   "文档索引状态": "Dokumentindexstatus",
-  "自动查询最多持续{minutes}分钟": "Automatische Abfrage läuft höchstens {minutes} Minuten",
   "索引失败，可点击重试": "Indexierung fehlgeschlagen; ein erneuter Versuch ist möglich",
   "状态查询失败，请点击刷新进度": "Status konnte nicht geladen werden; aktualisieren Sie den Fortschritt, um es erneut zu versuchen",
   "自动查询最多进行{count}轮,之后可手动刷新": "Automatische Prüfungen erfolgen höchstens {count} Runden; danach können Sie manuell aktualisieren",

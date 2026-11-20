@@ -77,8 +77,11 @@ type KnowledgeService struct {
 	searchLogRepo *repository.KnowledgeSearchLogRepository
 	kbRepo        kbAnchor
 	embeddingSvc  *llm.EmbeddingService
-	llmSvc        *llm.LLMService
-	ragSearcher   *RagSearcher
+	// reindexEmbed is a narrow seam for the synchronous reindex path. Normal
+	// imports continue to use the concrete service directly.
+	reindexEmbed func(context.Context, *llm.EmbeddingService, *llm.EmbeddingConfig, []string) ([][]float32, error)
+	llmSvc       *llm.LLMService
+	ragSearcher  *RagSearcher
 }
 
 // KnowledgeServiceDeps 仓储依赖集合（装配点/测试显式注入；替代 *gorm.DB 形参）。

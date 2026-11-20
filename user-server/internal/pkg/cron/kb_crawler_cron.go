@@ -10,6 +10,7 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -25,6 +26,10 @@ func KBSourceDueScanner(crawler *kbservice.CrawlerService) func(ctx context.Cont
 		gdb := db.GetDB()
 		if gdb == nil || crawler == nil {
 			return nil
+		}
+		var failures []error
+		if err := crawler.RecoverPending(ctx); err != nil {
+			failures = append(failures, err)
 		}
 		var sources []model.KBCrawlerSource
 		if err := gdb.WithContext(ctx).
@@ -47,19 +52,20 @@ func KBSourceDueScanner(crawler *kbservice.CrawlerService) func(ctx context.Cont
 			batch, err := crawler.CreateBatch(ctx, src.ID, model.KBCrawlTriggerCron)
 			if err != nil {
 				logger.Warnf("[KBCrawler] 源 %d 建批次失败: %v", src.ID, err)
+				failures = append(failures, err)
 				continue
 			}
 			created++
-			// 同步执行（批次内已限速；cron 周期 10min > 单批 30min 上限的极端情形由
-			// SkipIfStillRunning 防重叠）
+			// 同步执行，SkipIfStillRunning 与数据库租约共同防止任务重叠。
 			if err := crawler.RunBatch(ctx, batch.ID); err != nil {
 				logger.Warnf("[KBCrawler] 批次 %s 执行失败: %v", batch.BatchNo, err)
+				failures = append(failures, err)
 			}
 		}
 		if created > 0 {
 			logger.Infof("[KBCrawler] 本轮创建并执行 %d 个到期批次", created)
 		}
-		return nil
+		return errors.Join(failures...)
 	}
 }
 

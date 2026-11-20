@@ -122,7 +122,7 @@ var knowledgeOwnedTables = []string{
 	// 归 knowledge 模块：读写方只有 controller/service/repository 的 kb_item_binding 三件
 	"kb_item_bindings",
 	// T4 知识库冷启动三表：爬取源/爬取批次/QA 候选，随知识库模块开关
-	"kb_crawler_sources", "kb_crawl_batches", "qa_candidates",
+	"kb_crawler_sources", "kb_crawl_batches", "kb_crawl_pages", "qa_candidates",
 	// 父子分段的父块表（P1-1 项0，对标 Dify parent-child chunk）：检索命中小块后
 	// 回拼父块上下文，读写方只有 knowledge 分片/检索两处，随知识库模块开关。
 	"knowledge_chunk_parents",

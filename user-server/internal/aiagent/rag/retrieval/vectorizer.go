@@ -72,6 +72,11 @@ func (v *Vectorizer) EmbedText(text string) ([]float32, error) {
 }
 
 func (v *Vectorizer) EmbedBatch(texts []string) ([][]float32, error) {
+	return v.EmbedBatchContext(context.Background(), texts)
+}
+
+// EmbedBatchContext 保留调用方的租户值、截止时间和取消信号。
+func (v *Vectorizer) EmbedBatchContext(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return [][]float32{}, nil
 	}
@@ -80,7 +85,7 @@ func (v *Vectorizer) EmbedBatch(texts []string) ([][]float32, error) {
 			return nil, errors.New("text cannot be empty")
 		}
 	}
-	vectors, err := v.embedder.Embed(context.Background(), v.config, texts)
+	vectors, err := v.embedder.Embed(ctx, v.config, texts)
 	if err != nil {
 		return nil, fmt.Errorf("embedding 批量调用失败: %w", err)
 	}

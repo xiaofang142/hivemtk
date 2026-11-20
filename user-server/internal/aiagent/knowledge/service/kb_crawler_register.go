@@ -15,6 +15,7 @@ func init() {
 	db.RegisterExtraModels(
 		&internalmodel.KBCrawlerSource{},
 		&internalmodel.KBCrawlBatch{},
+		&internalmodel.KBCrawlPage{},
 		&internalmodel.QACandidate{},
 	)
 }

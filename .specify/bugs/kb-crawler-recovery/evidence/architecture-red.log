@@ -1,0 +1,45 @@
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestTxSeam_DeleteDocumentCascade
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestTxSeam_DeleteDocumentCascade (0.17s)
+=== RUN   TestTxSeam_DeleteDocumentNotFound
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestTxSeam_DeleteDocumentNotFound (0.01s)
+=== RUN   TestTxSeam_DeleteDocumentRemovesFile
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestTxSeam_DeleteDocumentRemovesFile (0.01s)
+=== RUN   TestTxSeam_DeleteDocumentRollback
+=== RUN   TestTxSeam_DeleteDocumentRollback/knowledge_chunks
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestTxSeam_DeleteDocumentRollback/kb_documents
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestTxSeam_DeleteDocumentRollback (0.03s)
+    --- PASS: TestTxSeam_DeleteDocumentRollback/knowledge_chunks (0.01s)
+    --- PASS: TestTxSeam_DeleteDocumentRollback/kb_documents (0.01s)
+=== RUN   TestTxSeam_DeleteDocumentTenantIsolation
+[90m2026-11-20T14:24:28+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b497/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/aiagent/knowledge/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+--- PASS: TestTxSeam_DeleteDocumentTenantIsolation (0.01s)
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/service	0.743s
+[90m2026-11-20T14:24:31+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b506/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T14:24:31+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+[90m2026-11-20T14:24:31+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/b506/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build3821010413/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestArchServiceNoNewGormDB
+    arch_gorm_guard_test.go:666: 全域 service 目录集：10 域 / 692 生产文件（排 *_test.go 与 testdata）
+    arch_gorm_guard_test.go:668:   域 user-server/internal/aiagent/knowledge/service          35 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/aiagent/rag/service                1 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/browser_automation/service         32 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/content/service                    9 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/contentguard/service               8 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/email/service                      6 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/geo/service                        61 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/ops/service                        12 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/pkg/shared/service                 1 个生产文件
+    arch_gorm_guard_test.go:668:   域 user-server/internal/service                            527 个生产文件
+    arch_gorm_guard_test.go:689: 扫描完成 692 个文件；快照登记 2 个；三档合计 句柄 0 / 事务 3 / GetDB 0
+    arch_gorm_guard_test.go:722: service 层 gorm 守卫棘轮被触发（1 条）：
+          超出: user-server/internal/aiagent/knowledge/service/knowledge_base.go 现值 句柄 0 / 事务 2 / GetDB 0 > 快照 0/1/0（棘轮只许降）
+--- FAIL: TestArchServiceNoNewGormDB (0.24s)
+FAIL
+FAIL	hivemtk-user/internal/service	1.050s
+FAIL

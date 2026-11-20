@@ -1,0 +1,22 @@
+
+> hivemtk-user-web@0.0.0 test
+> vitest run --maxWorkers=2
+
+
+ RUN  v4.1.12 /private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-web
+
+
+ Test Files  110 passed (110)
+      Tests  1063 passed (1063)
+   Start at  13:50:16
+   Duration  133.75s (transform 10.59s, setup 0ms, import 81.06s, tests 97.01s, environment 68.91s)
+
+
+[version.json] buildId = 2986a7c54-1795153816199
+
+
+[version.json] buildId = 2986a7c54-1795153816199
+
+
+[version.json] buildId = 2986a7c54-1795153816199
+

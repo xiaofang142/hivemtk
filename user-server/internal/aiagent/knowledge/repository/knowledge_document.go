@@ -120,6 +120,57 @@ type ListFilter struct {
 	PageSize    int
 }
 
+// ReindexCursor is the stable key used by a full knowledge reindex.
+// CreatedAt alone is not unique, so ID is the tie-breaker for both the
+// frozen boundary and subsequent pages.
+type ReindexCursor struct {
+	CreatedAt time.Time
+	ID        uint64
+	MaxID     uint64
+}
+
+// GetReindexBoundary returns the newest document key present when a reindex
+// starts. Documents inserted after this point are intentionally deferred to a
+// later run.
+func (r *KnowledgeDocumentRepository) GetReindexBoundary(ctx context.Context, productID string) (*ReindexCursor, error) {
+	var boundary ReindexCursor
+	err := r.db.WithContext(ctx).
+		Model(&model.KnowledgeDocument{}).
+		Select("created_at, id, MAX(id) OVER () AS max_id").
+		Where("product_id = ?", productID).
+		Order("created_at DESC, id DESC").
+		Limit(1).
+		Scan(&boundary).Error
+	if err != nil {
+		return nil, err
+	}
+	if boundary.ID == 0 {
+		return nil, nil
+	}
+	return &boundary, nil
+}
+
+// ListReindexPage lists one stable page inside a frozen boundary. The
+// repository owns the cursor predicates so callers cannot accidentally fall
+// back to offset pagination while documents are being updated concurrently.
+func (r *KnowledgeDocumentRepository) ListReindexPage(ctx context.Context, productID string, boundary ReindexCursor, after *ReindexCursor, limit int) ([]*model.KnowledgeDocument, error) {
+	if limit < 1 {
+		limit = 100
+	}
+	q := r.db.WithContext(ctx).
+		Where("product_id = ?", productID).
+		Where("id <= ?", boundary.MaxID).
+		Where("(created_at < ? OR (created_at = ? AND id <= ?))", boundary.CreatedAt, boundary.CreatedAt, boundary.ID)
+	if after != nil {
+		q = q.Where("(created_at < ? OR (created_at = ? AND id < ?))", after.CreatedAt, after.CreatedAt, after.ID)
+	}
+	var docs []*model.KnowledgeDocument
+	if err := q.Order("created_at DESC, id DESC").Limit(limit).Find(&docs).Error; err != nil {
+		return nil, err
+	}
+	return docs, nil
+}
+
 // List 列出文档
 func (r *KnowledgeDocumentRepository) List(ctx context.Context, filter ListFilter) ([]*model.KnowledgeDocument, int64, error) {
 	if filter.Page < 1 {
@@ -235,6 +286,32 @@ func (r *KnowledgeDocumentRepository) UpdateChunkStats(ctx context.Context, id u
 			"chunk_count":  chunkCount,
 			"total_tokens": totalTokens,
 			"updated_at":   time.Now(),
+		}))
+}
+
+// BeginReindex 原子累加尝试次数，失败后也可查询和重试。
+func (r *KnowledgeDocumentRepository) BeginReindex(ctx context.Context, id uint64) error {
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"reindex_attempts": gorm.Expr("reindex_attempts + 1"),
+			"updated_at":       time.Now(),
+		}))
+}
+
+// CompleteReindex 只写入重建结果，保留处理期间用户修改的文档元信息。
+func (r *KnowledgeDocumentRepository) CompleteReindex(ctx context.Context, id uint64, chunkCount, totalTokens int) error {
+	now := time.Now()
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"embed_status":   model.EmbedStatusIndexed,
+			"embed_progress": 100,
+			"error_msg":      "",
+			"chunk_count":    chunkCount,
+			"total_tokens":   totalTokens,
+			"last_index_at":  now,
+			"updated_at":     now,
 		}))
 }
 

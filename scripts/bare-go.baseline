@@ -25,7 +25,6 @@ user-server/cmd/ego-runner/main.go 9 # [A]
 user-server/cmd/ego-runner/telemetry.go 2 # [A]
 user-server/cmd/nm-host/main.go 2 # [A]
 user-server/internal/aiagent/agent/tooluse/db_audit_persister.go 1 # [C] go l.consume() 持久化 worker 循环
-user-server/internal/aiagent/knowledge/service/kb_crawler.go 2 # [B] ProcessDocumentByID 跨文件自带 recover
 user-server/internal/aiagent/knowledge/service/kb_qa_split.go 1 # [B] 同上
 user-server/internal/aiagent/llm/provider_failover.go 1 # [C] go f.healthCheckLoop(ctx) 启动循环
 user-server/internal/aiagent/llm/trace_sink.go 1 # [C] go s.flushLoop() 启动循环

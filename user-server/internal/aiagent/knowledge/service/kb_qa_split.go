@@ -113,12 +113,22 @@ type qaItem struct {
 // ProcessDocument 对一篇文档执行 QA 拆分：读 kb_documents.content → LLM → 落候选行。
 // taskID = qa_<docID>_<unixnano>（一篇文档一个任务，task_id 聚合判断完成度）。
 func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) error {
+	rows, err := s.GenerateCandidates(ctx, docID, kbID)
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	return s.qaRepo.CreateBatch(ctx, &rows)
+}
+
+// GenerateCandidates leaves persistence to the caller so a durable job can
+// commit its checkpoint and candidates together, including an empty result.
+func (s *QASplitService) GenerateCandidates(ctx context.Context, docID, kbID uint) ([]*internalmodel.QACandidate, error) {
 	doc, err := s.docs.GetDocumentByID(ctx, docID)
 	if err != nil {
-		return fmt.Errorf("读文档失败: %w", err)
+		return nil, fmt.Errorf("读文档失败: %w", err)
 	}
 	if doc.Content == "" {
-		return fmt.Errorf("文档 %d 无内容", docID)
+		return nil, fmt.Errorf("文档 %d 无内容", docID)
 	}
 	// 文档超长按 chunk 边界分批（简化：按 token 估算切片，每批 ≤ MaxQAPerBatch 由 prompt 限）
 	content := doc.Content
@@ -133,7 +143,7 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 		// 重试 1 次（温度降 0 由 client 实现层负责；此处仅重试）
 		out, err = s.llm.Complete(ctx, fmt.Sprintf(qaPromptTpl, content))
 		if err != nil {
-			return fmt.Errorf("LLM 调用失败（重试后）: %w", err)
+			return nil, fmt.Errorf("LLM 调用失败（重试后）: %w", err)
 		}
 	}
 
@@ -142,15 +152,15 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 		// 解析失败重试 1 次，再失败记 failed 不产生候选行（宁缺毋滥）
 		out, retryErr := s.llm.Complete(ctx, fmt.Sprintf(qaPromptTpl, content))
 		if retryErr != nil {
-			return fmt.Errorf("LLM 重试失败: %w", retryErr)
+			return nil, fmt.Errorf("LLM 重试失败: %w", retryErr)
 		}
 		items, err = parseQAOutput(out)
 		if err != nil {
-			return fmt.Errorf("LLM 输出解析失败（重试后）: %w", err)
+			return nil, fmt.Errorf("LLM 输出解析失败（重试后）: %w", err)
 		}
 	}
 	if len(items) == 0 {
-		return nil // 纯导航页：正常无产出
+		return nil, nil // 纯导航页：正常无产出
 	}
 
 	rows := make([]*internalmodel.QACandidate, 0, len(items))
@@ -175,10 +185,7 @@ func (s *QASplitService) ProcessDocument(ctx context.Context, docID, kbID uint) 
 			UpdatedAt:    now,
 		})
 	}
-	if len(rows) == 0 {
-		return nil
-	}
-	return s.qaRepo.CreateBatch(ctx, &rows)
+	return rows, nil
 }
 
 // parseQAOutput 解析 LLM 输出 JSON 数组（容忍前后多余文字）

@@ -1,0 +1,995 @@
+── env-example 覆盖闸（N-7：安全键必查+Getenv 读点棘轮）──
+check-env-example-coverage: OK（必查键 5 全在 example；Getenv 读点棘轮无新漂移）
+── 第三方清单对账闸（O-1：go.mod/lock 变更须同步刷新 THIRD_PARTY_LICENSES.md）──
+✅ --check: THIRD_PARTY_LICENSES.md 与依赖现实对账通过（无缺行/版本漂移）
+── 前后端 API 契约（UNMATCHED 必须为 0，且不得出现通配 key）──
+file-scope 幻影前缀重复捕获已剔除: 1982 条
+backend routes: 2002, unresolved: 15
+   UNRESOLVED: ('DELETE', '<UNRESOLVED:g>/:id/items')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/:id/items')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/attribution')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/listings/:id/status')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/listings/:id/versions')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/reports')
+   UNRESOLVED: ('GET', '<UNRESOLVED:g>/review-queue')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/:id/items')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings/:id/approve')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings/:id/reject')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings/:id/submit')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings/:id/suspend')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/listings/:id/transition')
+   UNRESOLVED: ('POST', '<UNRESOLVED:g>/reports/:id/handle')
+
+=== UNMATCHED (frontend -> no backend): 0 / 1184 ===
+
+=== SUSPECT (字面量路径只被 :参数 接住，非阻断): 0 ===
+
+=== BACKEND NOT CALLED BY FRONTEND (candidates): 668 ===
+DELETE  /api/agent-kb-bindings
+DELETE  /api/ai/history/:id
+DELETE  /api/ai/templates/:id
+DELETE  /api/backup/:id
+DELETE  /api/channel-route-rules/:id
+DELETE  /api/community/members/:id
+DELETE  /api/customer-service-agents/:id
+DELETE  /api/customer-sessions/:id/edit-lock
+DELETE  /api/customer-sessions/:id/snooze
+DELETE  /api/customer/:id/tags/:tag
+DELETE  /api/dashboard-templates/:id
+DELETE  /api/douyin-card/:id
+DELETE  /api/geo/dicts/:category/:key
+DELETE  /api/kb-templates/:id
+DELETE  /api/kuaishou-card/:id
+DELETE  /api/llm/kb-connectors/:id
+DELETE  /api/quick-reply/folders/:id
+DELETE  /api/rag/documents/:id
+DELETE  /api/sms/unsubscribe/:phone
+DELETE  /api/tools/permission/agents/:agent_id
+DELETE  /api/wechat/accounts/:id
+DELETE  /api/xianyu-card/:id
+DELETE  /api/xiaohongshu-card/:id
+GET     /api/ab-experiments/:id/results-with-reach
+GET     /api/account/:id
+GET     /api/account/list
+GET     /api/accounts/list
+GET     /api/admin/config
+GET     /api/agent-attribution/performance
+GET     /api/agent-kb-bindings/agent/:aid
+GET     /api/agent-kb-bindings/kb/:kid
+GET     /api/agent-statuses
+GET     /api/agent-statuses/:id
+GET     /api/agent-statuses/:id/sessions
+GET     /api/agent-statuses/available
+GET     /api/agent-statuses/list
+GET     /api/agent-statuses/online
+GET     /api/agent/co-pilot/config
+GET     /api/agent/inference/stats
+GET     /api/agent/settings
+GET     /api/agent/tool-integrations
+GET     /api/agent/tools/approval
+GET     /api/agent/tools/audit
+GET     /api/agent/tools/circuit
+GET     /api/agent/tools/cost
+GET     /api/agent/tools/get
+GET     /api/agent/tools/list
+GET     /api/agent/tools/providers
+GET     /api/agent/tools/reach-gate
+GET     /api/agent/tools/risk
+GET     /api/agent/tools/stats
+GET     /api/ai-content/:id
+GET     /api/ai-content/history
+GET     /api/ai-content/list
+GET     /api/ai-content/templates
+GET     /api/ai-content/templates/:id
+GET     /api/ai-suggestions
+GET     /api/ai/history
+GET     /api/ai/history/:id
+GET     /api/ai/template-types
+GET     /api/ai/templates
+GET     /api/ai/templates/:id
+GET     /api/alerts/histories
+GET     /api/alerts/rules
+GET     /api/alerts/rules/:id
+GET     /api/analytics/ai-productivity
+GET     /api/analytics/ai-productivity/trend
+GET     /api/analytics/funnel
+GET     /api/analytics/funnel/stage
+GET     /api/auth/anomaly/alerts
+GET     /api/auth/anomaly/login-events
+GET     /api/auth/login-events
+GET     /api/auth/mfa/status
+GET     /api/auth/password-policy
+GET     /api/auth/security-alerts
+GET     /api/backup/list
+GET     /api/backup/stats
+GET     /api/batch-operations
+GET     /api/batch-operations/list
+GET     /api/bill/:id
+GET     /api/bill/of-quote/:quote_id
+GET     /api/browser/host-ws
+GET     /api/card-stats/:platform/overall
+GET     /api/card-stats/:platform/stats/:id
+GET     /api/channel-route-rules
+GET     /api/channels/customer/:customer_id
+GET     /api/channels/overview
+GET     /api/chat/typing-predict/sse
+GET     /api/churn-prediction/list
+GET     /api/churn-prediction/risk-distribution
+GET     /api/churn-prediction/unhandled-warnings
+GET     /api/churn/high-risk-users
+GET     /api/churn/model-config
+GET     /api/churn/predictions
+GET     /api/churn/statistics
+GET     /api/churn/warnings
+GET     /api/clue-statistics/overview
+GET     /api/clue/list
+GET     /api/clue/score/:clue_id
+GET     /api/clue/score/list
+GET     /api/clue/statistics
+GET     /api/clues
+GET     /api/clues/import
+GET     /api/clues/type
+GET     /api/community/members/:id
+GET     /api/conversion-funnel
+GET     /api/conversion-funnel/list
+GET     /api/conversion-funnel/stage
+GET     /api/conversion-funnels/list
+GET     /api/custom-reports/:id/export
+GET     /api/customer-events
+GET     /api/customer-events/customer/:customer_id
+GET     /api/customer-events/stats
+GET     /api/customer-journey/dashboard
+GET     /api/customer-rfm/:customer_id
+GET     /api/customer-rfm/distribution
+GET     /api/customer-rfm/list
+GET     /api/customer-service-agents
+GET     /api/customer-service-agents/by-ai-agent/:ai_agent_id
+GET     /api/customer-service-agents/by-user/:user_id
+GET     /api/customer-service/agent-status-board
+GET     /api/customer-service/agents
+GET     /api/customer-service/ai-suggestions
+GET     /api/customer-service/capacity
+GET     /api/customer-service/queue
+GET     /api/customer-sessions/:id/ai-summary
+GET     /api/customer-sessions/:id/edit-lock
+GET     /api/customer-sessions/:id/internal-notes
+GET     /api/customer-sessions/list
+GET     /api/customer-sessions/pending
+GET     /api/customer-tags
+GET     /api/customer/360/:id
+GET     /api/customer/:id
+GET     /api/customer/:id/behaviors
+GET     /api/customer/:id/communications
+GET     /api/customer/list
+GET     /api/customer/session/:id/messages
+GET     /api/customer/session/list
+GET     /api/dashboard-screen
+GET     /api/dashboard-screen/list
+GET     /api/dashboard-screens
+GET     /api/dashboard-screens/:id
+GET     /api/dashboard-screens/:id/activities
+GET     /api/dashboard-screens/:id/data
+GET     /api/dashboard-screens/list
+GET     /api/dashboard-templates
+GET     /api/dashboard-templates/:id
+GET     /api/dashboard/clients
+GET     /api/dashboard/sse
+GET     /api/dashboard/stats
+GET     /api/dashboard/topics
+GET     /api/dialogue-eval/runs
+GET     /api/dialogue-eval/runs/:id
+GET     /api/dialogue-eval/sets
+GET     /api/dialogue-eval/sets/:id/export
+GET     /api/dialogue-eval/sets/template
+GET     /api/dialogue-memories
+GET     /api/dialogue-memories/:customer_id
+GET     /api/dialogue-memories/context
+GET     /api/dialogue-memories/list
+GET     /api/dialogue-memories/long
+GET     /api/dialogue-memories/short
+GET     /api/dialogue-memories/stats
+GET     /api/domain-pool/list
+GET     /api/douyin-card/:id
+GET     /api/douyin-card/list
+GET     /api/douyin-card/overall-stats
+GET     /api/douyin-card/stats/:id
+GET     /api/douyin-cards
+GET     /api/douyin-cards/:id
+GET     /api/douyin-cards/list
+GET     /api/egolite/assets/pull
+GET     /api/egolite/assets/trust.pem
+GET     /api/egolite/executions/:id/stream
+GET     /api/egolite/runner-ws
+GET     /api/email/list/:id
+GET     /api/email/lists
+GET     /api/email/lists/:id
+GET     /api/email/lists/list
+GET     /api/email/smtp/:id
+GET     /api/email/smtps
+GET     /api/email/smtps/:id
+GET     /api/email/smtps/list
+GET     /api/email/track/click/:token
+GET     /api/email/track/jobs/:id/events
+GET     /api/email/track/jobs/:id/metrics
+GET     /api/email/track/metrics
+GET     /api/email/track/open-metrics
+GET     /api/email/track/open/:token
+GET     /api/email/unsubscribe
+GET     /api/email/unsubscribe/export
+GET     /api/email/unsubscribe/list
+GET     /api/feishu/accounts/:id/refresh-token
+GET     /api/feishu/accounts/:id/test-send
+GET     /api/gdpr/export/:customer_id
+GET     /api/geo/dicts
+GET     /api/geo/jobs
+GET     /api/geo/jobs/runs
+GET     /api/geo/keyword-enhance/analyze
+GET     /api/geo/opportunities
+GET     /api/geo/pushers/:id
+GET     /api/geo/schema-templates/:id
+GET     /api/geo/seed-terms
+GET     /api/geo/sites/:id
+GET     /api/geo/visibility/trend
+GET     /api/i18n/stats/fallback
+GET     /api/inbox/metrics/first-reply
+GET     /api/inbox/outbound-unknown
+GET     /api/inbox/outbound-unknown/count
+GET     /api/intent-records
+GET     /api/intent-records/config
+GET     /api/intent-records/dict
+GET     /api/intent-records/list
+GET     /api/intent-records/stats
+GET     /api/kb-changes
+GET     /api/kb-changes/:id
+GET     /api/kb-changes/:id/audit
+GET     /api/kb-changes/taxonomy
+GET     /api/kb-releases
+GET     /api/kb-releases/:product
+GET     /api/kb-releases/:product/audit
+GET     /api/kb-releases/:product/stats
+GET     /api/kb-releases/gate
+GET     /api/kb-templates
+GET     /api/kb-templates/:id
+GET     /api/knowledge-merchant/external/credentials
+GET     /api/knowledge/connectors/:source
+GET     /api/knowledge/document-types
+GET     /api/knowledge/help-center/top
+GET     /api/knowledge/playground/presets
+GET     /api/kuaishou-card/:id
+GET     /api/kuaishou-card/list
+GET     /api/kuaishou-card/overall-stats
+GET     /api/kuaishou-card/stats/:id
+GET     /api/kuaishou-cards
+GET     /api/kuaishou-cards/:id
+GET     /api/kuaishou-cards/list
+GET     /api/lead-mining/status
+GET     /api/live-code/:id
+GET     /api/live-code/:id/qr-codes
+GET     /api/live-code/:id/qr-stats
+GET     /api/live-code/:id/stats
+GET     /api/live-code/list
+GET     /api/live-codes
+GET     /api/llm-routing/models
+GET     /api/llm-routing/rules
+GET     /api/llm-routings/policy
+GET     /api/llm/embedding-config
+GET     /api/llm/kb-connectors
+GET     /api/llm/llm-config
+GET     /api/llm/providers/policy
+GET     /api/llm/rerank-config
+GET     /api/llm/scenario-stats
+GET     /api/llm/strategies
+GET     /api/llm/wallet/txns
+GET     /api/manage/co-pilot/config
+GET     /api/manage/data-export/:customer_id
+GET     /api/manage/ltc/collection
+GET     /api/manage/rag-eval/runs
+GET     /api/manage/rag-eval/runs/:id
+GET     /api/manage/rules
+GET     /api/manage/session-chain/sla-config
+GET     /api/manage/slo
+GET     /api/manage/tenants
+GET     /api/manage/typing-predict
+GET     /api/market-templates
+GET     /api/market-templates/:id
+GET     /api/market-templates/list
+GET     /api/market-templates/my-downloads
+GET     /api/market-templates/official
+GET     /api/market-templates/search
+GET     /api/material-library
+GET     /api/material-library/categories
+GET     /api/material-library/list
+GET     /api/material-library/stats
+GET     /api/material/categories/:id
+GET     /api/mentions/mine
+GET     /api/messages
+GET     /api/messages/:id
+GET     /api/metrics/support
+GET     /api/migration/available
+GET     /api/migration/current-version
+GET     /api/migration/history
+GET     /api/migration/records
+GET     /api/migration/task/:id
+GET     /api/modules/uncovered-routes
+GET     /api/notifications
+GET     /api/notifications/list
+GET     /api/notifications/unread-count
+GET     /api/objection-templates
+GET     /api/objection-templates/list
+GET     /api/obs-configs
+GET     /api/obs-configs/:id
+GET     /api/obs-configs/default
+GET     /api/obs-configs/list
+GET     /api/oneid/conflicts
+GET     /api/oneid/identities
+GET     /api/opportunity/:id
+GET     /api/opportunity/:id/moves
+GET     /api/opportunity/rules
+GET     /api/order-change-requests
+GET     /api/order-change-requests/:id
+GET     /api/perf/:id
+GET     /api/perf/list
+GET     /api/prompts
+GET     /api/prompts/:id
+GET     /api/prompts/:id/versions
+GET     /api/prompts/ab-experiments
+GET     /api/quick-replies/list
+GET     /api/quick-reply/folders
+GET     /api/quote/:id
+GET     /api/quote/latest/:quoteID
+GET     /api/quote/version/:quoteID/:version
+GET     /api/rag-config/products/:id
+GET     /api/rag-eval/runs
+GET     /api/rag-eval/runs/:id
+GET     /api/rag-product-configs
+GET     /api/rag-product-configs/:id
+GET     /api/rag-product-configs/list
+GET     /api/rag-product-configs/stats
+GET     /api/rag/documents
+GET     /api/rag/documents/:id
+GET     /api/reach-pipelines
+GET     /api/reach-pipelines/:id
+GET     /api/reach-pipelines/list
+GET     /api/reach/proactive/customer/:customer_id/channels
+GET     /api/recovery-queue/distribution
+GET     /api/recovery-queue/list
+GET     /api/recovery-queue/ready
+GET     /api/sales-champions
+GET     /api/sales-champions/:id
+GET     /api/sales-champions/list
+GET     /api/saved-views
+GET     /api/script-templates
+GET     /api/script-templates/:id
+GET     /api/script-templates/categories
+GET     /api/script-templates/list
+GET     /api/script-templates/search
+GET     /api/security/overview
+GET     /api/security/rules
+GET     /api/session-tag/rules
+GET     /api/short-link/:id
+GET     /api/short-link/:id/stats
+GET     /api/short-link/all-stats
+GET     /api/short-link/list
+GET     /api/short-links
+GET     /api/short-links/:id
+GET     /api/short-links/list
+GET     /api/sms/configs
+GET     /api/sms/configs/list
+GET     /api/sms/delivery/carrier/:phone
+GET     /api/sms/delivery/metrics
+GET     /api/sms/delivery/portability
+GET     /api/sms/delivery/portability/:phone
+GET     /api/sms/drafts
+GET     /api/sms/drafts/list
+GET     /api/sms/jobs
+GET     /api/sms/jobs/list
+GET     /api/sms/records
+GET     /api/sms/records/list
+GET     /api/sms/unsubscribe/export
+GET     /api/sms/unsubscribe/list
+GET     /api/sop-agents
+GET     /api/sop-agents/:id
+GET     /api/sop-agents/list
+GET     /api/sop-agents/stats
+GET     /api/sop/:id/abtest/stats
+GET     /api/sso/config
+GET     /api/sso/login/:provider
+GET     /api/sso/providers
+GET     /api/stats/system
+GET     /api/swagger.json
+GET     /api/system-monitor/metrics
+GET     /api/system/backup
+GET     /api/system/configs
+GET     /api/system/configs/:key
+GET     /api/system/configs/list
+GET     /api/system/logs
+GET     /api/system/rate-quota
+GET     /api/tag-segmentation/list
+GET     /api/tag-segments
+GET     /api/telegram/accounts/:id/status
+GET     /api/templates
+GET     /api/templates/:id
+GET     /api/templates/my-downloads
+GET     /api/templates/official
+GET     /api/templates/search
+GET     /api/tenant/registration
+GET     /api/tiktok-cards
+GET     /api/tiktok-cards/:id
+GET     /api/tiktok-cards/list
+GET     /api/tools/permission/agents
+GET     /api/tools/permission/agents/:agent_id
+GET     /api/tools/permission/default
+GET     /api/tools/permission/global
+GET     /api/trace/:traceId
+GET     /api/traces/recent
+GET     /api/unified-messages
+GET     /api/unified-messages/:id
+GET     /api/unified-messages/list
+GET     /api/user-segment/rfm/rules
+GET     /api/user-segments/layers
+GET     /api/user-segments/list
+GET     /api/user-segments/rfm/list
+GET     /api/user/:id
+GET     /api/user/list
+GET     /api/v1/agent/inference/deliveries/:key
+GET     /api/v1/asset-market/my-purchases
+GET     /api/wechat/accounts
+GET     /api/wecom/accounts
+GET     /api/wecom/accounts/:id
+GET     /api/whatsapp/lead-groups
+GET     /api/whatsapp/login-status
+GET     /api/whatsapp/templates/:id
+GET     /api/xianyu-card/:id
+GET     /api/xianyu-card/list
+GET     /api/xianyu-card/overall-stats
+GET     /api/xianyu-card/stats/:id
+GET     /api/xianyu-cards
+GET     /api/xianyu-cards/:id
+GET     /api/xianyu-cards/list
+GET     /api/xiaohongshu-card/:id
+GET     /api/xiaohongshu-card/list
+GET     /api/xiaohongshu-card/overall-stats
+GET     /api/xiaohongshu-card/stats/:id
+GET     /api/xiaohongshu-cards
+GET     /api/xiaohongshu-cards/:id
+GET     /api/xiaohongshu-cards/list
+PATCH   /api/kb-releases/:product/governed
+PATCH   /api/knowledge/documents/:id/help-center-status
+PATCH   /api/manage/tenants/:id/status
+POST    /api/ab-experiments/reach-metrics
+POST    /api/agent-kb-bindings/batch
+POST    /api/agent-statuses/:id/offline
+POST    /api/agent-statuses/:id/online
+POST    /api/agent/co-pilot/evaluate
+POST    /api/agent/inference/run
+POST    /api/agent/lifecycle/run
+POST    /api/agent/tools/approval/whitelist
+POST    /api/agent/tools/circuit/reset
+POST    /api/agent/tools/execute
+POST    /api/ai-content/:id/favorite
+POST    /api/ai-content/:id/rate
+POST    /api/ai/generate
+POST    /api/ai/history
+POST    /api/ai/history/:id/favorite
+POST    /api/ai/history/:id/rate
+POST    /api/ai/history/:id/save
+POST    /api/ai/templates
+POST    /api/auth/anomaly/alerts/:id/ignore
+POST    /api/auth/anomaly/alerts/:id/resolve
+POST    /api/auth/mfa/backup-codes
+POST    /api/auth/mfa/confirm
+POST    /api/auth/mfa/disable
+POST    /api/auth/mfa/setup
+POST    /api/auth/security-alerts/:id/resolve
+POST    /api/backup/:id/restore
+POST    /api/backup/create
+POST    /api/bill
+POST    /api/browser-automation/profile/recover
+POST    /api/channel-route-rules
+POST    /api/chat/ingress
+POST    /api/chat/typing-predict/predict
+POST    /api/churn/model-config
+POST    /api/client-device/report
+POST    /api/clue/engagement
+POST    /api/clue/score
+POST    /api/clue/score-all
+POST    /api/clues/:id/merge
+POST    /api/clues/force-create
+POST    /api/clues/import/apply-suggestions
+POST    /api/community/members
+POST    /api/connector/ping
+POST    /api/customer
+POST    /api/customer-events/add-to-cart
+POST    /api/customer-events/click
+POST    /api/customer-events/login
+POST    /api/customer-events/pageview
+POST    /api/customer-events/purchase
+POST    /api/customer-events/signup
+POST    /api/customer-events/track
+POST    /api/customer-rfm/compute
+POST    /api/customer-rfm/compute-all
+POST    /api/customer-service-agents
+POST    /api/customer-service-agents/by-user/:user_id
+POST    /api/customer-sessions/:id/apply-tag-rule
+POST    /api/customer-sessions/:id/auto-assign
+POST    /api/customer-sessions/:id/edit-lock
+POST    /api/customer-sessions/:id/internal-notes
+POST    /api/customer-sessions/:id/rate
+POST    /api/customer-sessions/:id/reply
+POST    /api/customer-sessions/assign
+POST    /api/customer/:id/tags
+POST    /api/customer/session
+POST    /api/customer/session/:id/close
+POST    /api/customer/session/:id/transfer
+POST    /api/customer/session/messages
+POST    /api/dashboard-templates
+POST    /api/dashboard-templates/:id/clone
+POST    /api/dashboard-templates/:id/publish
+POST    /api/dashboard-templates/:id/rate
+POST    /api/dashboard-templates/publish-from-screen
+POST    /api/dialogue-eval/run
+POST    /api/dialogue-eval/sets/import
+POST    /api/dialogue-memories/facts
+POST    /api/dialogue-memories/intent-trail
+POST    /api/dialogue-memories/messages
+POST    /api/dialogue-memories/objections
+POST    /api/dialogue-memories/purchase-intent
+POST    /api/dialogue-memories/sop-history
+POST    /api/douyin-card
+POST    /api/egolite/admin/runner/upgrade
+POST    /api/egolite/flows
+POST    /api/egolite/runner/artifacts
+POST    /api/egolite/runner/telemetry
+POST    /api/egolite/runner/token/reset
+POST    /api/email/unsubscribe/confirm
+POST    /api/email/unsubscribe/resubscribe
+POST    /api/faqs/annotate
+POST    /api/feature-flags/evaluate
+POST    /api/feature-flags/evaluate-batch
+POST    /api/geo/jobs/:name/trigger
+POST    /api/geo/keyword-enhance/enhance
+POST    /api/geo/keyword-mining/pipeline
+POST    /api/geo/metrics/analyze
+POST    /api/geo/probe/run-sov
+POST    /api/geo/prompt/fanout
+POST    /api/geo/seed-terms/reseed
+POST    /api/geo/techconfig/audit
+POST    /api/geo/techconfig/llms-txt
+POST    /api/geo/techconfig/robots
+POST    /api/geo/techconfig/site-audit
+POST    /api/geo/techconfig/sitemap
+POST    /api/inbox/conversations/:id/snooze
+POST    /api/inbox/conversations/:id/unsnooze
+POST    /api/inbox/lock-human
+POST    /api/inbox/outbound-unknown/reconcile
+POST    /api/inbox/unlock-human/:session_id
+POST    /api/intent-records/recognize
+POST    /api/intent-records/recognize/batch
+POST    /api/kb-changes
+POST    /api/kb-changes/:id/withdraw
+POST    /api/kb-releases/:product/publish
+POST    /api/kb-releases/:product/restore
+POST    /api/kb-releases/:product/rollback
+POST    /api/kb-templates
+POST    /api/kb-templates/:id/apply
+POST    /api/kb-templates/:id/rate
+POST    /api/knowledge-bases/:id/bind
+POST    /api/knowledge-bases/:id/unbind
+POST    /api/knowledge-bases/:id/version
+POST    /api/knowledge/:id/import/crm
+POST    /api/knowledge/:id/import/dingtalk
+POST    /api/knowledge/:id/import/feishu
+POST    /api/knowledge/:id/import/notion
+POST    /api/knowledge/:id/import/url
+POST    /api/knowledge/help-center/retrieval-test
+POST    /api/knowledge/import/document
+POST    /api/kuaishou-card
+POST    /api/llm-routings/resolve
+POST    /api/llm/fallback
+POST    /api/llm/kb-connectors
+POST    /api/llm/kb-connectors/:id/sync
+POST    /api/llm/scene-routing
+POST    /api/llm/strategies
+POST    /api/manage/tenants/:id/retry-registration-sync
+POST    /api/market-templates
+POST    /api/market-templates/:id/download
+POST    /api/market-templates/:id/rate
+POST    /api/marketing-flows/:id/sync-ab-results
+POST    /api/material
+POST    /api/material-library
+POST    /api/material/upload
+POST    /api/mentions/:id/read
+POST    /api/migration/rollback
+POST    /api/migration/task
+POST    /api/monitor/web-vitals
+POST    /api/notifications/:id/read
+POST    /api/notifications/read-all
+POST    /api/objection-templates/classify
+POST    /api/objection-templates/handle
+POST    /api/objection-templates/usage
+POST    /api/opportunity/:id/cancel
+POST    /api/opportunity/:id/lost
+POST    /api/opportunity/:id/reopen
+POST    /api/opportunity/:id/stage
+POST    /api/order-change-requests
+POST    /api/order-change-requests/:id/approve
+POST    /api/order-change-requests/:id/cancel
+POST    /api/order-change-requests/:id/execute
+POST    /api/order-change-requests/:id/reject
+POST    /api/prompts
+POST    /api/quick-reply/folders
+POST    /api/quick-reply/folders/:id/reorder
+POST    /api/quote
+POST    /api/quote/:id/send
+POST    /api/quote/revise/:quoteID
+POST    /api/rag-config/query
+POST    /api/rag-eval/run
+POST    /api/rag/import
+POST    /api/reach/proactive/batch
+POST    /api/reach/proactive/customer/:customer_id
+POST    /api/reach/proactive/quick
+POST    /api/reach/proactive/send
+POST    /api/reach/proactive/validate
+POST    /api/recovery-queue/:id/attempt
+POST    /api/recovery-queue/:id/cancel
+POST    /api/recovery-queue/:id/recovered
+POST    /api/recovery-queue/enqueue
+POST    /api/script-templates/recommend
+POST    /api/scripts/sync-to-library
+POST    /api/session-tag/rules
+POST    /api/short-link/access
+POST    /api/smart-router/select
+POST    /api/sms/unsubscribe/manual-add
+POST    /api/system/backup
+POST    /api/system/create-default-admin
+POST    /api/system/restart
+POST    /api/system/restore
+POST    /api/templates
+POST    /api/templates/:id/download
+POST    /api/templates/:id/rate
+POST    /api/tools/permission/agents/:agent_id
+POST    /api/tools/permission/global
+POST    /api/v1/agent/inference/deliveries/:key/retry
+POST    /api/v1/asset-market/bind
+POST    /api/wechat/accounts
+POST    /api/wechat/send
+POST    /api/whatsapp/start-login
+POST    /api/xianyu-card
+POST    /api/xianyu/:id/click
+POST    /api/xianyu/:id/share
+POST    /api/xianyu/:id/view
+POST    /api/xiaohongshu-card
+PUT     /api/agent-statuses/:id/status
+PUT     /api/agent/co-pilot/config
+PUT     /api/agent/settings
+PUT     /api/agent/tool-integrations
+PUT     /api/ai/templates/:id
+PUT     /api/auth/password-policy
+PUT     /api/channel-route-rules/:id
+PUT     /api/community/members/:id
+PUT     /api/customer-service-agents/:id
+PUT     /api/customer-sessions/:id/status
+PUT     /api/customer-tags
+PUT     /api/customer/:id
+PUT     /api/customers/:id/custom-attributes
+PUT     /api/dashboard-templates/:id
+PUT     /api/douyin-card/:id
+PUT     /api/geo/dicts
+PUT     /api/geo/jobs/:name/schedule
+PUT     /api/kb-templates/:id
+PUT     /api/knowledge-bases/:id/canary
+PUT     /api/knowledge-merchant/external/credentials
+PUT     /api/kuaishou-card/:id
+PUT     /api/llm/embedding-config
+PUT     /api/llm/fallback
+PUT     /api/llm/kb-connectors/:id
+PUT     /api/llm/llm-config
+PUT     /api/llm/rerank-config
+PUT     /api/llm/strategies
+PUT     /api/opportunity/:id
+PUT     /api/sop/:id/abtest/config
+PUT     /api/sso/config
+PUT     /api/tools/permission/default
+PUT     /api/wechat/accounts/:id
+PUT     /api/xianyu-card/:id
+PUT     /api/xiaohongshu-card/:id
+
+✅ strict: UNMATCHED=0 且无通配 key（1184 个前端调用全部可解析并与后端匹配）
+── GORM-only 门禁（业务包禁 Exec/Raw，strict：违规即红）──
+[gorm-only] ✓ 业务包 0 处 .Exec( / .Raw(（migration DDL 与 *_test.go 已豁免）
+── 后台任务租户归属门（新增后台任务必须显式声明扇出/租户无关；纯静态）──
+OK tenant-ctx：后台任务注册点 10 个全部登记（fanout/tenant-free 各有据可查），seam 回调均带 ctx
+── 事件发布租户门（租户域事件只能经 event.PublishCtx 盖章）──
+OK event-publish-tenant：2367 个文件，未发现裸发布口（租户统一由 PublishCtx 盖章）
+── 服务面禁 stdout 直出门（fmt.Print 绕 zerolog=丢租户上下文/脱敏链；migration/cmd/_test 按口径排除）──
+check-stdout-print: 0 hit（扫描 2235 文件；migration/cmd/_test/注释按口径排除；模式 fmt.Print*/log.Print*/log.Fatal*/log.Panic*/os.Stdout|Stderr.Write）
+── 跨包端口单一源 ──
+============================================================
+Step 1: 提取 user-server ports.go 单一源
+============================================================
+  DefaultListenPort      = 8204
+  DefaultDBPortDev       = 8232
+  DefaultDBPortDocker    = 8202
+  DefaultRedisPort       = 8203
+  DefaultPlatformPort    = 8205
+  DefaultChromiumCDPPort = 8206
+  DefaultLLMPort         = 8207
+  DefaultEmbeddingPort   = 8208
+  DefaultRerankPort      = 8209
+
+
+============================================================
+Step 2: 提取 platform-server ports.go 单一源
+============================================================
+[0;33m⚠ 对端仓未 checkout：/Users/xiaofang/.local/share/opencode/worktree/e28297/hivemtk-platform/platform-server/internal/config/ports.go 不存在，Step 2/5 跨仓比对跳过[0m
+  DefaultServerPort    =
+  DefaultDBPortDev     =
+  DefaultRedisAddr     =
+  DefaultOllamaBaseURL =
+
+============================================================
+Step 3: 提取 bridge constants.js 单一源
+============================================================
+  DEFAULT_USER_SERVER.port = 8204
+
+============================================================
+Step 4: 验证 user-server <-> bridge 端口对齐
+============================================================
+[0;32m✓ user-server.DefaultListenPort == bridge.DEFAULT_USER_SERVER.port (8204)[0m
+
+============================================================
+Step 5: 验证 user-server <-> platform-server 端口对齐
+============================================================
+[0;33m⚠ Step 5 未执行：DefaultPlatformPort(8205) 未与对端核对（本机/工作区跑 make audit-ports 才会核）[0m
+
+============================================================
+Step 6: 审计 .yaml 配置文件 base_url 端口字面量
+============================================================
+[0;32m✓ user-server config: /Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/config.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;32m✓ user-server config/platform: /Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120/user-server/config/platform.yaml 无端口字面量违规（私域 127.0.0.1 字面量合法）[0m
+[0;33m⚠ platform-server config: /Users/xiaofang/.local/share/opencode/worktree/e28297/hivemtk-platform/platform-server/config.yaml 不存在，跳过[0m
+
+============================================================
+Step 7: 审计 vite.config.js 单一源约束注释
+============================================================
+[0;32m✓ fa12-crawler-recovery-20261120/user-web/vite.config.js 包含单一源约束注释[0m
+[0;33m⚠ hivemtk-platform/platform-web/vite.config.js 不存在，跳过（对端仓未 checkout 时属正常）[0m
+[0;33m⚠ hivemtk-platform/platform-contributor/vite.config.js 不存在，跳过（对端仓未 checkout 时属正常）[0m
+[0;32m✓ fa12-crawler-recovery-20261120/website/vite.config.js 包含单一源约束注释[0m
+[0;32m✓ fa12-crawler-recovery-20261120/website/dev-server.cjs 包含单一源约束注释[0m
+
+============================================================
+审计总结
+============================================================
+  Errors: [0;31m0[0m
+  Warns:  [0;33m5[0m
+
+[0;32m✓ 跨包审计通过：所有端口字面量与单一源一致[0m
+── 组件类型声明不得指向已删除的组件 ──
+✅ components.d.ts 无悬空声明（共 17 条本地组件声明全部命中文件）
+── 有写入路径的模型必须登记 AutoMigrate ──
+GORM 模型候选：402    已注册 AutoMigrate：432
+✅ 所有带 gorm tag / TableName 的模型均已注册 AutoMigrate
+── 文档相对链接在干净 checkout 里必须可解析 ──
+──── 扫描 487 个 md（CI 口径：只认 git 索引）────
+──── 断链 0 处 ────
+── workflow 引用完整性（with.file/steps.id/needs/artifact 配对）──
+══════ 工作流引用完整性（23 个文件）══════
+  ✓ 路径 / step id / needs / artifact 配对全部可解析
+── action 运行时（runs.using）：node16/node20 站点必须已迁或有对上账本的豁免 ──
+项目根: /Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120
+扫描工作流 23 份；uses 站点 98 处（可判定），跳过 1 处（可复用工作流/本地/容器）
+node20/node16 命中 1 处：未豁免 0，豁免内 1
+✅ 无未豁免的弃用运行时站点
+── 被作业实际执行的门，其脚本与判据文件必须在该工作流的 paths 触发面里 ──
+工作流 23 份 · 门站点 75 处 · make 站点 2 处（判据 Makefile） · 派生判据文件 24 份 · 输入面 md 引用 27 处（不要求进 paths）· paths-ignore 站点 0
+绿：每个被作业实际执行的门，其判据文件都在触发 paths 里（或该事件本就无过滤）
+── CI 的 PG 名额必须显式声明、被现测、且 ≥ 代码侧池上界之和（两边同源，改一边就红）──
+postgres 服务 4 处 · 显式名额声明 4 处 · 现测步骤 4 处 · 代码侧下限 232
+✅ 名额声明／现测／池上界三者同源，CI 侧不会再以 53300 的形态把红留给别人
+── 生产代码读取的 env 键必须在文档面/工具豁免/基线里可发现 ──
+生产代码读取键 190 · 已文档化 120 · 工具进程自动豁免 17 · 基线登记 53 · 红 0（未文档化 0 · 基线陈旧 0）
+（其中经 env helper 字面量枚举到 37 个键名）
+✅ 配置面可发现性门通过
+── 参数中心登记的每条动态参数要么真有人读、要么文案自己承认未接线（接线后不撤标注也红）──
+扫描面: Go 文件（非测试、非种子）2411 个 / Get* 行 334 行 / 种子条目 288 条 / 前端消费组 3 个（排除 2 键）/ 前端真实读取点 19 个 group.key
+读数: 有读取点且未挂标注=275  未接线且已声明=0  未接线但未声明=0  声明过期=0  已下架=13（其中接上了却没摘下架标记=0）
+✅ 参数中心读取点门通过：每条要么有人读，要么自己承认没接线，要么已下架并写清了下架理由；且没有孤儿读取点（读了种子没登记的键）
+── 种子默认值必须与代码兜底常量一致（读侧与校验侧共用同一口径）──
+扫描面: 种子条目 288 条 / Go 文件 2265 个 / 常量池 3641 个（同名歧义剔除 234）/ Default*Config 字段 177 个 / 定位到兜底点的键 250 个
+读数: 可比对 230  无法比对 29  前端下发 16  已下架 13  合计 288（应等于种子条目 288）
+  NO_CONST: agent_llm.provider_failover_policy  兜底位是空串 @ user-server/internal/app/agent_llm_params_wiring.go:70：默认值就是种子行本身
+  NO_CONST: agent_tool.circuit_backoff_multiplier  user-server/internal/app/tool_circuit_breaker_wiring.go:219 兜底常量 BackoffMultiplier 的右值静态解不出
+  NO_CONST: agent_tool.circuit_base_cooldown  user-server/internal/app/tool_circuit_breaker_wiring.go:207 兜底常量 BaseCooldown 的右值静态解不出
+  NO_CONST: agent_tool.circuit_failure_threshold  user-server/internal/app/tool_circuit_breaker_wiring.go:201 兜底常量 FailureThreshold 的右值静态解不出
+  NO_CONST: agent_tool.circuit_half_open_max_attempts  user-server/internal/app/tool_circuit_breaker_wiring.go:225 兜底常量 HalfOpenMaxAttempts 的右值静态解不出
+  NO_CONST: agent_tool.circuit_max_cooldown  user-server/internal/app/tool_circuit_breaker_wiring.go:213 兜底常量 MaxCooldown 的右值静态解不出
+  NO_CONST: alerting.email_recipients  兜底位是空串 @ user-server/cmd/api/main.go:718：默认值就是种子行本身
+  NO_CONST: alerting.webhook_url  兜底位是空串 @ user-server/cmd/api/main.go:725：默认值就是种子行本身
+  NO_CONST: bridge.follow_user_channels  user-server/internal/service/bridge_follow.go:59 兜底常量 FollowUserChannelsDefault 的右值静态解不出
+  NO_CONST: bridge.patrol_unread_first_channels  user-server/internal/service/config_param.go:220 兜底常量 PatrolUnreadFirstChannelsDefault 的右值静态解不出
+  NO_CONST: channelbot.qq_api_base_url  兜底位是空串 @ user-server/internal/service/qq_account.go:228：默认值就是种子行本身
+  NO_CONST: channelbot.whatsapp_fallback_template  兜底位是空串 @ user-server/internal/service/webhook_outbound.go:75：默认值就是种子行本身
+  NO_CONST: channelbot.whatsapp_fallback_template_lang  兜底位是空串 @ user-server/internal/service/webhook_outbound.go:79：默认值就是种子行本身
+  NO_CONST: embedding.global_override  兜底位是空串 @ user-server/internal/app/embedding_params_wiring.go:28：默认值就是种子行本身
+  NO_CONST: etl.image_describe_model  兜底位是空串 @ user-server/internal/app/saas_config_params_wiring.go:39：默认值就是种子行本身
+  NO_CONST: etl.image_describe_url  兜底位是空串 @ user-server/internal/app/saas_config_params_wiring.go:38：默认值就是种子行本身
+  NO_CONST: etl.parser_sidecar_url  兜底位是空串 @ user-server/internal/app/saas_config_params_wiring.go:32：默认值就是种子行本身
+  NO_CONST: geo.default_visibility_days  user-server/internal/geo/service/visibility.go:24 兜底常量 fallback 同名多值（歧义，不猜）
+  NO_CONST: llm.global_override  兜底位是空串 @ user-server/internal/app/llm_params_wiring.go:22：默认值就是种子行本身
+  NO_CONST: misc.upload_virus_scan_url  兜底位是空串 @ user-server/internal/controller/upload.go:136：默认值就是种子行本身
+  NO_CONST: permission.role_permissions_json  兜底位是空串 @ user-server/internal/service/permission_check.go:170：默认值就是种子行本身
+  NO_CONST: platform.api_host  兜底位是空串 @ user-server/internal/app/url_params_wiring.go:61：默认值就是种子行本身
+  NO_CONST: ratelimit.path_quotas  兜底位是空串 @ user-server/internal/middleware/rate_quota.go:58：默认值就是种子行本身
+  NO_CONST: reach.compliance_policy_json  兜底位是空串 @ user-server/internal/service/reach_compliance_policy.go:323：默认值就是种子行本身
+  NO_CONST: rerank.global_override  兜底位是空串 @ user-server/internal/app/rerank_params_wiring.go:22：默认值就是种子行本身
+  NO_CONST: urls.cloud_url  兜底位是空串 @ user-server/internal/app/url_params_wiring.go:46：默认值就是种子行本身
+  NO_CONST: urls.frontend_url  兜底位是空串 @ user-server/internal/service/password_reset.go:208：默认值就是种子行本身
+  NO_CONST: urls.geo_site_base_url  user-server/internal/app/url_params_wiring.go:51 兜底常量 DefaultWebsiteBaseURL 的右值静态解不出
+  NO_CONST: urls.public_base_url  兜底位是空串 @ user-server/internal/app/url_params_wiring.go:56：默认值就是种子行本身
+提示：可比对 230 高于登记的棘轮 199，跑 --refresh-baseline 抬上来（棘轮只挡下降，向上不判红）
+✅ 参数中心默认值门通过：230 条比对的种子默认值都与代码兜底一致，且全部过自己的 Min/Max
+── 新增的可调旋钮常量必须入库；已是 Get*() 兜底实参的算已接线 ──
+扫描面: Go 常量声明 367 个 / 基线 TUNABLE 357 个
+读数: 新增未入库=0  已作参数中心兜底=11  豁免（协议类/参数中心兜底前缀）=80
+  WIRED_FALLBACK: user-server/internal/bridge/handler_http.go: HTTPIngestMaxBodySize 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/bridge/handler_http.go: HTTPIngestMaxMessages 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/selector_health.go: SelectorHealthDegradedBelow 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/memory_system.go: L1WindowSize 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/config_param.go: BridgeDeliverRateLimitDefault 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/config_param.go: BridgeAIDebounceDefault 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/observability_dashboard.go: DashboardDefaultWindowHours 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/service/observability_dashboard.go: ChannelOnlineDegradedBelow 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/geo/service/capture.go: CaptureAskDailyLimit 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/geo/service/capture.go: CaptureLeadDailyLimit 已被 Get*() 当兜底值传入参数中心
+  WIRED_FALLBACK: user-server/internal/contentguard/service/engine.go: MaxScanRunes 已被 Get*() 当兜底值传入参数中心
+✅ 新增可调旋钮门通过：没有绕过参数中心的新旋钮常量
+── 参数 key/group 命名规范、组内唯一、runtime 白名单无幽灵组 ──
+扫描面: 种子条目 288 条 / group 44 个 / runtime 白名单组 3 个
+读数: 命名违规=0  重复词=0  重复条目=0  runtime 幽灵组=0
+✅ 键规范门通过：key/group 命名规范、组内唯一、runtime 白名单无幽灵组
+── i18n 真接入占比只许涨不许跌（含 () 形态），各语言包齐整 ──
+扫描面: t() 去重键 2053 个 / locales 9 种 / zh 词条 2351 条 / 后端 i18n 5 文件
+读数: 真 i18n 键=907（其中解析不到词条库的=0）  中文字面量直传=1146  词条库无人引用=0
+      resolved_ratio=44.18%  go_msgid=158
+      消费路径分解: t()直参命中词条=2033 / 后端菜单注册表=238 / 字面量整键=2086 / 键前缀展开=508
+✅ i18n 门通过：真 i18n 占比不低于基线，无新增中文直传与孤儿词条，各语言包齐整
+── 文本编码：非 UTF-8 字节 / U+FFFD 替身字符 / 双重编码签名（替身只放行 text-encoding.baseline 登记的刻意用法）──
+扫描面: git 列出 6731 个路径 / 文本 6712 个 / 二进制跳过 19 个 / 读不到跳过 0 个
+读数: NOT_UTF8=0 FFFD(超出基线)=0 MOJIBAKE=0 STALE=0 / 含替身字符的文件 1 个 / 基线登记 1 处
+OK 文本编码门：全树文本文件均为合法 UTF-8，替身字符次数与基线一致，无双重编码签名
+── 已清零的假性未完成资产（假回执/假状态/零装配点）不得长回来 ──
+── 说谎的形状不得长回来 ──
+ok      不存在: 包级注入口（全仓零调用方 ⇒ 编排器恒拿 nil 缓存）
+ok      不存在: 只写不读的答案缓存全局
+ok      不存在: 只写不读的 bridge 触达适配器全局
+ok      不存在: 装配点往没人读的格子里写
+ok      不存在: 注释自称调用方是 router.Setup() 的重复装配口
+ok      不存在: 只喂上面那个死装配口的注册包装
+ok      不存在: 触达流水线全局单例的 Init（Get 恒回 nil）
+ok      不存在: 触达流水线全局单例的 Get
+ok      不存在: 吃掉 kbID 参数返回全表的 FAQ 读法
+ok      不存在: 吃掉 kbID 参数返回全表的 SOP 读法
+ok      不存在: 吃掉 kbID 参数返回全表的文档读法
+ok      文件仍不存在: ProductionReachAdapter（零构造点）
+ok      文件仍不存在: KB DTO（含从未被读过的 MemberCount/DocCount）
+── 真接线的形状不得退回去 ──
+ok      在场: 未装配发送器时必须报错，而不是编一个假消息号
+ok      在场: 调度器的发送器装配点（没有 if sender != nil 那一档）
+ok      在场: 子流程节点必须拿到编排器，否则它把没跑的子流程记成已完成
+ok      在场: 语义答案缓存的装配点
+ok      在场: 缓存开关与参数中心条目的对应关系
+ok      在场: 冗余统计列的实测口径（别再写回“实际从内容表 COUNT”）
+
+读数: 通过 19 / 违规 0 / 检查对象缺失 0
+✅ 19 条判据全部成立
+── 用例不得在被调函数能交回 (nil, nil) 的返回值上未判空即解引用 ──
+产码交回 (nil, nil) 的函数键（类型.方法名，按包目录）＝165 · 测试确证站点＝65（2 个文件）· 存疑站点＝115
+最密：user-server/internal/service/inbox_test.go:63, user-server/internal/service/message_hub_test.go:2
+绿：确证站点 65 与基线一致，无新增
+── 协程体不得直读「测试会改写」的包级注入点（进协程前快照成本地值）──
+OK 异步体裸读全局门：项目根 /Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120，扫 194 个 package，站点 0（= 基线合计 0）
+── 裸 go 语句门（不带 recover 的 go 站点数棘轮：请求路径已清零，存量见 scripts/bare-go.baseline；自测 bash scripts/check-bare-go.test.sh）──
+扫描 user-server：裸 go 站点现算 81 处 / 基线 81 处 / 文件 55 个
+✅ 裸 go 门绿：站点数未升，基线无漂移
+── 第二跳：被异步链经默认实现读到的全局，读写必须各走自己的 accessor（注册表 seam-guard.registry）──
+OK seam 全局 accessor 门：项目根 /Users/xiaofang/.local/share/opencode/worktree/e28297/fa12-crawler-recovery-20261120，登记 19 个全局，扫 4499 个 .go 文件 ⇒ accessor 之外 0 处访问
+    注册表 scripts/seam-guard.registry；摘锁/绕门的牙齿证据见 scripts/mut_seam_guard_r28.py
+── 业务面裸 go func( 收口门（CC-01 刀2）：spawn 闭包体须自带 recover 或带 gospawn-ok 豁免标记；cmd/_test/测试基建/async 实现层按口径排除 ──
+check-naked-goroutine: 0 hit（扫描 2367 文件；cmd/_test/测试基建/async 实现层按口径排除；体内 recover 或 gospawn-ok 标记放行；等待型 helper/os.Exit/纯内存模拟为既有登记豁免）
+── 全仓 shell 文件：shellcheck error 级零容忍 ──
+shellcheck=0.11.0（/Users/xiaofang/.local/bin/shellcheck）
+scanned=203 checked=203 error=0
+✅ 203 个 shell 文件全部按 error 级检查过，0 条 finding
+── bash 3.2 + UTF-8：变量紧跟中文的展开形状闸 ──
+scanned=203 个 shell 文件，命中 1 处（基线 1 处）
+✅ 未发现新的「$VAR+中文」展开形状（基线内的残留属别的泳道热文件，见基线注释）
+── 全仓 shell 文件必须被 mac 出厂那版 bash（3.2）读通；解析器不是 3.x 时本门自报 SKIP，不冒充绿 ──
+解析器：/bin/bash（bash 3.2.57(1)-release）· 有牙档位=bash 3.x · 面=203 个 shell 文件
+✅ 203 个 shell 文件在 bash 3.2.57(1)-release 下全部读通（解析层，不含运行期判据）
+── 常驻变异电池的每份产物都必须写着「这轮读的是哪一笔字节」（轴一形状含 A5 归属／A6 口径对账，A7 名字轴拦「编译绿、跑到那行才 NameError」的悬空调用，轴二实测最近一轮；两份台账 D0–D4／O1–O5 各带上界与过期判据）──
+===== 字节身份行门：23 枚驱动（成员现取）／树外落点登记 18 枚（候选现数 41 枚）／名字轴现数 41 枚／23 族产物实测／磁盘 23 族归属对账，0 项不合格 =====
+── RouteSurface 电池锚点前置（12 格）：守卫源码搬家后锚点会静默失效，本档只验锚点不装架、不跑 go ⇒ 绿≠有牙（四刀真杀要会编 Go 的执行点，仍留本地）──
+锚点前置：12 格、每格锚点在 fa12-crawler-recovery-20261120 的工作树里各命中一次，判据字面量与用例名都在守卫源码里查得见
+注：这一档不装架、不跑 go test ⇒ 它绿不等于电池有牙。
+── 路由消费面取证器的口径自检（10 枚控制，含两条极性对：夹具锚点与模块说明符都不许算消费方）──
+  ✓ quoted：http.get('/api/customer/{id}/tags') ⇒ /api/customer/*/tags
+  ✓ bare：const u = "/api/livecode/42"; ⇒ /api/livecode/*
+  ✓ real numeric id：fetch("/api/order/10086/items?page=2") ⇒ /api/order/*/items
+  ✓ go template placeholder：url: '{{.Base}}/api/sop/state/{{.SID}}' ⇒ /api/sop/state/*
+  ✓ landing page：<img src="/api/track/open?campaign=abc"> ⇒ /api/track/open
+  ✓ 负向控制之一：无证据的串判入 none，不被读成有消费方
+  ✓ 负向控制之二：只有真的进了扫描面才算证据（文档面不参与）
+  ✓ 负向控制之三：三面都不吃 .json（`backend_routes.json` 这类路由转储不构成证据）
+  ✓ 负向控制之四：`mut_*` 锚点、取证器自身、探针结果表被排除，而冒烟输入清单与落地页模板照常算证据
+  ✓ 负向控制之五：`@/api/x`／`../x`／`~/x` 这类模块与文件系统路径不算消费方，而 `http.post('/api/material')` 照常算
+自检：10 枚控制，失败 0 枚
+── 菜单×路由×守卫三方对账器的口径自检（39 枚控制：两向错配各自开火且有极性对、BLOCK 拆两档的挂载区间正反两枪、UNROUTED 的调用点抽取覆盖面）──
+自检：
+  ✓ 菜单解析：父子链可见性算对（admin/manager 节点对客服不可见、无 Roles 节点对客服可见、纯 admin 节点对 staff 不可见）
+  ✓ 前端路由解析：相对子 path 拼成绝对 /ops/a（实得键 ['/ops/a', '/ops/c']）
+  ✓ 极性对之一：admin-only 菜单 + identity 接口 ⇒ 判 LEAK
+  ✓ 极性对之一之二：admin-only 菜单 + capability 接口 ⇒ 仍判 LEAK（这一档就是本脚本生成的表造出来的，把它请出名册＝下一轮把表自己抹掉）
+  ✓ 降级腿之一：同一形状被登录即执行的壳层代码调用 ⇒ LEAK 让位给 GLOBAL（收它就是把前端打挂）
+  ✓ 降级腿之二：同一形状被角色可见页面共用 ⇒ 判 SHARED 而不是 LEAK
+  ✓ 降级腿之三：形状只被菜单外的路由页调用 ⇒ 判 PENDING 待人工定角色
+  ✓ 极性对之二：admin-only 菜单 + super-admin 接口 ⇒ 不报（授权本来就一致）
+  ✓ 另一向：非超管可见菜单 + super-admin 接口 ⇒ 判 BLOCK（页面能开却满屏 403）
+  ✓ 注释剥离：只出现在 // 注释里的接口串不计为调用点
+  ✓ 注释剥离不误伤：scheme:// 开头的 URL 字面量原样保留（真调用点没被截掉）
+  ✓ 强制项腿：名单压过 SHARED 降级，归属取该形状的全部菜单消费点；档位留着 identity／没进表／路径写死 三极都出声
+  ✓ 强制项没有前端消费点时直接退件：进表等于把功能关死，不是加防线
+  ✓ 挂载档：`<script setup>` 顶层的接口串算挂载区间
+  ✓ 挂载档不认模板：同一条串只写在 `<template>` 里时不计为调用点（认了的话每条行内按钮都会被读成整页死，那道必须为 0 的闸就恒红）
+  ✓ 残余档：接口串只躺在 `function onDel(){}` 体内 ⇒ 不在挂载区间
+  ✓ 挂载档：onMounted(() => {…}) 实参区间内的接口串算挂载路径
+  ✓ 宿主方法名：对象方法简写／属性箭头函数／顶层 function 三种写法都认
+  ✓ 形状归一与名册同源：`${id}` 的模板串归成 /api/clues/delete/*，证据这条路径才量得到真仓库里的调用点
+  ✓ 跨文件判死：页面在 setup 顶层调用持有该形状的 api 方法 ⇒ 整页死
+  ✓ 跨文件反向：同一个方法只在 `function onDel(){}` 里被调 ⇒ 页内残余
+  ✓ 同文件字面量：写在 setup 顶层的接口串 ⇒ 整页死
+  ✓ 同文件字面量反向：同一条串裹在 `function onDel(){}` 里 ⇒ 页内残余（这条就是曾经那个「整段 script 都算」的读法漏掉的一极）
+  ✓ 基线与名册逐条对上时门放行（这条反向不写，判据可以是恒红）
+  ✓ 名册里冒出一条没进基线的 BLOCK ⇒ 红
+  ✓ 基线里那条已经不在名册了 ⇒ 红（陈旧条目会让下一批同类被误读成已评审）
+  ✓ 基线条目没写理由 ⇒ 红
+  ✓ 整页死 ⇒ 红，且这条不许靠写进基线过门
+  ✓ 基线行格式坏（列数不对）⇒ 出声而不是静默少一条
+  ✓ 调用点抽取覆盖面：直调、模板串、包装函数转发、拼接注释四种都各就各位
+  ✓ 失联的一枪被点名：live 表里没有 /api/never-registered
+  ✓ 包装函数转发的调用点也进名册（按接收者筛就会把这族整体漏掉）
+  ✓ 通配段不算失联：${id} 折成 * 后能接住 /api/things/*
+  ✓ 模块级 BASE 常量折进模板串：${BASE}/${id}/test 接得住而不塌成 /*/test
+  ✓ 注释里的路径不算调用点（剥注释那一步真有牙）
+  ✓ 带空白的文案不算调用点：'请先取 GET /api/ghost/hash' 读成失联就是假红
+  ✓ 行号落在调用那一行，读名册的人不用全文找
+  ✓ 全部形状都在 live 表里时名册为空（不写这条，判据可以是恒红）
+  ✓ api 目录读不到时调用点数为 0（交给 main 退 2，不在这里静默放行）
+自检：39 枚控制，失败 0 枚
+── vite 主版本守卫：7 个 pin 必须同主版本，锁文件不得落后一个 minor（OPT-FE-07）──
+── vite 主版本守卫 ──
+扫描面口径：仅主仓（同级 platform 仓不存在：/Users/xiaofang/.local/share/opencode/worktree/e28297/hivemtk-platform）
+扫描根：
+  fa12-crawler-recovery-20261120
+vite pin 台账（现行主版本应为 8）：
+  [ok ] fa12-crawler-recovery-20261120/embed-sdk/package.json:26 pin="^8.1.1" major=8 lock=8.3.0
+  [ok ] fa12-crawler-recovery-20261120/user-web/bridge/package.json:26 pin="^8.3.4" major=8 lock=8.3.4
+  [ok ] fa12-crawler-recovery-20261120/user-web/browser_automation/package.json:18 pin="^8.1.1" major=8 lock=8.3.0
+  [ok ] fa12-crawler-recovery-20261120/user-web/package.json:68 pin="^8.1.1" major=8 lock=8.3.5
+  [ok ] fa12-crawler-recovery-20261120/website/package.json:26 pin="^8.1.1" major=8 lock=8.3.5
+自证|扫描package.json=7 含vite的pin=5(来自5个文件) 声明主版本=8 观测主版本集合=8 lock分布=8.3.0 x2;8.3.4 x1;8.3.5 x2; 判定=GREEN
+── 依赖策略门（弃维护库引用面 / 声明形状 / 禁入名单；不重复 govulncheck 与 npm audit 的 CVE 面）──
+扫描面: go.mod 直接依赖 36 个 / 前端清单 6 份 / 前端直接依赖 64 个
+策略: 禁入 8 条 / 弃维护观察 3 条（基线登记即合约，到期必须做决定）
+  已评估但不纳入引用面收敛: github.com/lib/pq —— 官方进入维护模式（只修安全），推荐 pgx（本仓已用 jackc/pgx/v5）。但它在本仓是**类型依赖**（model 层字段用 pq.StringArray），收敛 = 改字段类型 + 迁移，属于「模型层类型替换」那张卡，不是把 import 搬一个文件就完事。此处显式声明不纳入，避免它被当成「本门已覆盖」
+✅ 依赖策略门通过：无禁入依赖、弃维护库均收敛到唯一 seam 且未到期、声明形状合规
+── SBOM 产物断言·工作流段（三份 SPDX 都被生成、都被上传；产物级断言在 sbom.yml 里跑，需要 syft）──
+工作流 .github/workflows/sbom.yml: syft 扫描站点 3 处 / 产物 3 份 / upload 步骤 1 个
+✅ 工作流段通过：三份产物都被生成、都被上传，格式/作用域/权限一致
+── 核心域分档覆盖率（每个核心包自己的底线，棘轮只许涨）──
+  SKIP(未判定)：没有 user-server/coverage/go-cover.out —— 先跑
+  go test ./internal/... -p 1 -short -coverprofile=user-server/coverage/go-cover.out -covermode=atomic
+  本门在 CI 的 Coverage (user-server) 作业里无条件执行，本地跳过不等于通过
+  SKIP(未判定)：127.0.0.1:8204 无响应——本机没起实例，探针这一维未跑（部署验收段无条件跑）
+✅ 静态审计通过

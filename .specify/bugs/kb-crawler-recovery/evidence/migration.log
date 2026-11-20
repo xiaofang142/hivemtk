@@ -1,0 +1,5 @@
+[90m2026-11-20T11:34:24+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+=== RUN   TestCrawlerJobs_MigrationPreservesLegacyAndTenantUniqueness
+--- PASS: TestCrawlerJobs_MigrationPreservesLegacyAndTenantUniqueness (0.44s)
+PASS
+ok  	hivemtk-user/internal/aiagent/knowledge/repository	0.920s

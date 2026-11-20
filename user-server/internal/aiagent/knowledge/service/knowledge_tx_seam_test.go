@@ -1,20 +1,21 @@
 // knowledge_tx_seam_test.go —— DeleteDocument 事务接缝保留与级联删除契约回归
 // （AV-04c 批次7 刀4）。
 //
-// knowledge_base.go 的 tx:74 Transaction 回调是 AV-03 钉住的 service 层唯一合法
-// 事务档接缝：句柄解析改经 KBDocumentRepository.Transaction（仓储同形接缝，
-// 回调体逐字未动）后，本文件锁契约：文档+分段同生共死（事务原子性）、
+// DeleteWithChunks 将级联删除事务封装在仓储层；本文件锁契约：
+// 文档+分段同生共死（事务原子性）、
 // NotFound 透传、FilePath 文件清理语义不变。
 package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	knowledgeRepo "hivemtk-user/internal/aiagent/knowledge/repository"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
@@ -88,5 +89,69 @@ func TestTxSeam_DeleteDocumentRemovesFile(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("落盘文件应被清理: err=%v", err)
+	}
+}
+
+func TestTxSeam_DeleteDocumentRollback(t *testing.T) {
+	for _, table := range []string{"knowledge_chunks", "kb_documents"} {
+		t.Run(table, func(t *testing.T) {
+			svc, db := setupTxSeamSvc(t)
+			path := filepath.Join(t.TempDir(), "keep.txt")
+			if err := os.WriteFile(path, []byte("keep on rollback"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			doc := &model.KBDocument{TenantID: 1, Title: "rollback", FilePath: path}
+			if err := db.Create(doc).Error; err != nil {
+				t.Fatal(err)
+			}
+			chunk := &model.KnowledgeChunk{DocumentID: uint64(doc.ID), Content: "keep chunk"}
+			if err := db.Create(chunk).Error; err != nil {
+				t.Fatal(err)
+			}
+			injected := errors.New("delete rollback probe")
+			if err := db.Callback().Delete().Before("gorm:delete").Register("fa12_delete_failure", func(tx *gorm.DB) {
+				if tx.Statement.Table == table {
+					tx.AddError(injected)
+				}
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := svc.DeleteDocument(context.Background(), doc.ID); !errors.Is(err, injected) {
+				t.Fatalf("expected original delete failure, got %v", err)
+			}
+			for _, row := range []any{&model.KBDocument{}, &model.KnowledgeChunk{}} {
+				var count int64
+				if err := db.Model(row).Count(&count).Error; err != nil || count != 1 {
+					t.Fatalf("rollback must preserve %T: count=%d err=%v", row, count, err)
+				}
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("rollback must preserve source file: %v", err)
+			}
+		})
+	}
+}
+
+func TestTxSeam_DeleteDocumentTenantIsolation(t *testing.T) {
+	svc, db := setupTxSeamSvc(t)
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+	a := tenant.WithTenantID(context.Background(), 41)
+	b := tenant.WithTenantID(context.Background(), 42)
+	doc := &model.KBDocument{Title: "tenant owned"}
+	if err := db.WithContext(a).Create(doc).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, ctx := range []context.Context{b, context.Background()} {
+		if err := svc.DeleteDocument(ctx, doc.ID); err == nil {
+			t.Fatal("foreign or missing tenant must not delete a document")
+		}
+	}
+	if _, err := svc.GetDocument(a, doc.ID); err != nil {
+		t.Fatalf("rejected delete must preserve document: %v", err)
+	}
+	if err := svc.DeleteDocument(a, doc.ID); err != nil {
+		t.Fatal(err)
 	}
 }

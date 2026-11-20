@@ -188,32 +188,41 @@ func (s *KnowledgeBaseService) IngestLocalFile(ctx context.Context, title, fileP
 // content 直接写 kb_documents.content，因此不能复用 processDocumentAsync 的
 // os.ReadFile 路径，但复用同一套 processor/vector/indexer 装配。
 func (s *KnowledgeBaseService) ProcessDocumentByID(ctx context.Context, documentID uint) {
+	if err := s.ProcessDocumentByIDSync(ctx, documentID); err != nil {
+		logger.Errorf("[KBImport] 处理文档失败 doc=%d: %v", documentID, err)
+	}
+}
+
+// ProcessDocumentByIDSync returns only after both the index and its status commit.
+func (s *KnowledgeBaseService) ProcessDocumentByIDSync(ctx context.Context, documentID uint) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.Errorf("[knowledge-base] ProcessDocumentByID panic doc=%d: %v", documentID, r)
-			s.markDocumentFailed(ctx, documentID, fmt.Sprintf("处理异常: %v", r))
+			err = s.failDocumentProcessing(ctx, documentID, fmt.Errorf("处理异常: %v", r))
 		}
 	}()
 	doc, err := s.docs.GetByID(ctx, documentID)
 	if err != nil {
-		logger.Errorf("[KBImport] ProcessDocumentByID 读文档失败 doc=%d: %v", documentID, err)
-		s.markDocumentFailed(ctx, documentID, fmt.Sprintf("读取文档失败: %v", err))
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("读文档失败: %w", err))
 	}
-	s.processContent(ctx, doc, doc.Content)
+	return s.processContent(ctx, doc, doc.Content)
+}
+
+func (s *KnowledgeBaseService) failDocumentProcessing(ctx context.Context, id uint, cause error) error {
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	return errors.Join(cause, s.docs.UpdateStatusFields(cleanup, id, map[string]any{
+		"status": model.KBDocumentStatusFailed, "error_msg": cause.Error(),
+	}))
 }
 
 // processContent content → 分片 → 向量化 → 入索引 → 状态推进
 // （与 processDocumentAsync 的读文件后半段共用同一套 processor/vector/indexer）。
-func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KBDocument, content string) {
+func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KBDocument, content string) error {
 	documentID := doc.ID
 	if err := s.docs.UpdateStatusFields(ctx, documentID, map[string]any{
 		"status": model.KBDocumentStatusProcessing, "error_msg": "",
 	}); err != nil {
-		errMsg := fmt.Sprintf("标记文档处理中失败: %v", err)
-		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
-		s.markDocumentFailed(ctx, documentID, errMsg)
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("标记文档处理中失败: %w", err))
 	}
 
 	ragDoc := rag_core.Document{
@@ -228,23 +237,26 @@ func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KB
 
 	chunks, err := s.processor.ProcessDocument(ctx, ragDoc)
 	if err != nil {
-		s.markDocumentFailed(ctx, documentID, fmt.Sprintf("分片失败: %v", err))
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("分片失败: %w", err))
 	}
 
 	if len(chunks) == 0 {
-		s.markDocumentFailed(ctx, documentID, "文档分片结果为空")
-		return
+		return s.failDocumentProcessing(ctx, documentID, errors.New("文档分片结果为空"))
 	}
 
 	texts := make([]string, len(chunks))
 	for i, c := range chunks {
 		texts[i] = c.Content
 	}
-	embeddings, err := s.vector.EmbedBatch(texts)
+	embeddings, err := s.vector.EmbedBatchContext(ctx, texts)
 	if err != nil {
-		s.markDocumentFailed(ctx, documentID, fmt.Sprintf("向量化失败: %v", err))
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("向量化失败: %w", err))
+	}
+	if err := ctx.Err(); err != nil {
+		return s.failDocumentProcessing(ctx, documentID, err)
+	}
+	if len(embeddings) != len(chunks) {
+		return s.failDocumentProcessing(ctx, documentID, errors.New("向量数量与分片不匹配"))
 	}
 
 	idxChunks := make([]ragretrieval.Chunk, len(chunks))
@@ -262,8 +274,7 @@ func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KB
 
 	kbIndexID := fmt.Sprintf("kb_%d", documentID)
 	if err := s.indexer.BuildIndex(ctx, kbIndexID, idxChunks); err != nil {
-		s.markDocumentFailed(ctx, documentID, fmt.Sprintf("构建索引失败: %v", err))
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("构建索引失败: %w", err))
 	}
 
 	if err := s.docs.UpdateStatusFields(ctx, documentID, map[string]any{
@@ -272,11 +283,9 @@ func (s *KnowledgeBaseService) processContent(ctx context.Context, doc *model.KB
 		"content":     content,
 		"error_msg":   "",
 	}); err != nil {
-		errMsg := fmt.Sprintf("标记文档已索引失败: %v", err)
-		logger.Errorf("[KBImport] %s doc=%d", errMsg, documentID)
-		s.markDocumentFailed(ctx, documentID, errMsg)
-		return
+		return s.failDocumentProcessing(ctx, documentID, fmt.Errorf("标记文档已索引失败: %w", err))
 	}
+	return nil
 }
 
 func (s *KnowledgeBaseService) processDocumentAsync(ctx context.Context, documentID uint, filePath string) {

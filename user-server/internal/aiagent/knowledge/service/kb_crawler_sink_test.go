@@ -41,17 +41,43 @@ func setupCrawlerSinkTestDB(t *testing.T) (*CrawlerService, *gorm.DB) {
 		&model.KnowledgeBase{},
 		&model.KBCrawlerSource{},
 		&model.KBCrawlBatch{},
+		&model.KBCrawlPage{},
+		&model.QACandidate{},
 		&model.KBDocument{},
 		&kbDocumentChunkFixture{},
 	)
 	repo := knowledgeRepo.NewKBCrawlerRepository(db)
-	// IngestCrawledPage synchronously processes the document; use an explicit
-	// hash fallback so this contract test remains independent of a local provider.
+	// 使用真实分片与索引，仅向量服务提供明确合成信号，测试不依赖外部模型。
 	kb := NewKnowledgeBaseServiceWithDocs(knowledgeRepo.NewKBDocumentRepository(db))
-	embedding := llm.NewEmbeddingServiceWithConfig(&llm.EmbeddingConfig{Dimension: EmbeddingDim(), AllowFallback: true})
-	kb.vector = ragretrieval.NewVectorizer(EmbeddingDim(), embedding)
+	kb.vector = ragretrieval.NewVectorizer(EmbeddingDim(), &crawlerTestEmbedding{})
 	svc := NewCrawlerServiceWithRepos(repo, kb)
 	return svc, db
+}
+
+type crawlerTestEmbedding struct {
+	fail  error
+	calls int
+}
+
+func (e *crawlerTestEmbedding) DefaultConfig() *llm.EmbeddingConfig { return &llm.EmbeddingConfig{} }
+func (e *crawlerTestEmbedding) Embed(_ context.Context, cfg *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
+	e.calls++
+	if e.fail != nil {
+		return nil, e.fail
+	}
+	result := make([][]float32, len(texts))
+	for i := range result {
+		result[i] = make([]float32, cfg.Dimension)
+		result[i][0] = 1
+	}
+	return result, nil
+}
+func (e *crawlerTestEmbedding) EmbedOne(ctx context.Context, cfg *llm.EmbeddingConfig, text string) ([]float32, error) {
+	rows, err := e.Embed(ctx, cfg, []string{text})
+	if err != nil {
+		return nil, err
+	}
+	return rows[0], nil
 }
 
 // 建源：归属校验 + 配额 + 默认值夹取，落库可查。
@@ -93,7 +119,8 @@ func TestCrawlerSink_IngestNewDocument(t *testing.T) {
 	svc, db := setupCrawlerSinkTestDB(t)
 	ctx := context.Background()
 
-	src := &model.KBCrawlerSource{StartURL: "https://example.com"}
+	qaDisabled := false
+	src := &model.KBCrawlerSource{StartURL: "https://example.com", QASplitEnabled: &qaDisabled}
 	if err := db.Create(src).Error; err != nil {
 		t.Fatalf("seed src: %v", err)
 	}
@@ -119,9 +146,8 @@ func TestCrawlerSink_IngestNewDocument(t *testing.T) {
 	if err := db.First(&updated, docID).Error; err != nil {
 		t.Fatalf("读回: %v", err)
 	}
-	// IngestCrawledPage verifies completed indexing before returning.
-	if updated.Content != "changed content" {
-		t.Fatalf("变更内容未回写: %+v", updated)
+	if updated.Content != "changed content" || updated.Status != model.KBDocumentStatusIndexed {
+		t.Fatalf("变更内容与同步索引终态不符: %+v", updated)
 	}
 }
 
@@ -130,7 +156,8 @@ func TestCrawlerSink_IngestSupersedesChunks(t *testing.T) {
 	svc, db := setupCrawlerSinkTestDB(t)
 	ctx := context.Background()
 
-	src := &model.KBCrawlerSource{StartURL: "https://example.com"}
+	qaDisabled := false
+	src := &model.KBCrawlerSource{StartURL: "https://example.com", QASplitEnabled: &qaDisabled}
 	if err := db.Create(src).Error; err != nil {
 		t.Fatalf("seed src: %v", err)
 	}

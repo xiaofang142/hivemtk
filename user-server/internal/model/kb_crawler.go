@@ -106,12 +106,14 @@ type KBCrawlBatch struct {
 	Status   string `gorm:"type:varchar(16);not null;default:'pending';index" json:"status"`
 	ErrorMsg string `gorm:"type:text" json:"error_msg"`
 
-	PagesFound     int `gorm:"not null;default:0" json:"pages_found"`
-	PagesNew       int `gorm:"not null;default:0" json:"pages_new"`
-	PagesChanged   int `gorm:"not null;default:0" json:"pages_changed"`
-	PagesUnchanged int `gorm:"not null;default:0" json:"pages_unchanged"`
-	PagesFailed    int `gorm:"not null;default:0" json:"pages_failed"`
-	RetryCount     int `gorm:"not null;default:0" json:"retry_count"`
+	PagesFound     int        `gorm:"not null;default:0" json:"pages_found"`
+	PagesNew       int        `gorm:"not null;default:0" json:"pages_new"`
+	PagesChanged   int        `gorm:"not null;default:0" json:"pages_changed"`
+	PagesUnchanged int        `gorm:"not null;default:0" json:"pages_unchanged"`
+	PagesFailed    int        `gorm:"not null;default:0" json:"pages_failed"`
+	RetryCount     int        `gorm:"not null;default:0" json:"retry_count"`
+	LeaseToken     string     `gorm:"type:varchar(64);not null;default:''" json:"-"`
+	LeaseUntil     *time.Time `gorm:"index" json:"-"`
 
 	StartedAt  *time.Time `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
@@ -120,6 +122,25 @@ type KBCrawlBatch struct {
 
 // TableName 表名
 func (KBCrawlBatch) TableName() string { return "kb_crawl_batches" }
+
+// KBCrawlPage binds a source URL to its document and durable completion checkpoint.
+type KBCrawlPage struct {
+	ID            uint64 `gorm:"primaryKey;autoIncrement"`
+	TenantID      uint   `gorm:"not null;uniqueIndex:uidx_crawl_page,priority:1"`
+	SourceID      uint   `gorm:"not null;uniqueIndex:uidx_crawl_page,priority:2"`
+	URLHash       string `gorm:"type:varchar(64);not null;uniqueIndex:uidx_crawl_page,priority:3"`
+	URL           string `gorm:"type:text;not null"`
+	KBID          uint   `gorm:"not null;index"`
+	DocumentID    uint   `gorm:"not null;index"`
+	ContentHash   string `gorm:"type:varchar(64);not null"`
+	CompletedHash string `gorm:"type:varchar(64);not null;default:''"`
+	QAHash        string `gorm:"type:varchar(64);not null;default:''"`
+	ErrorMsg      string `gorm:"type:text"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (KBCrawlPage) TableName() string { return "kb_crawl_pages" }
 
 // —— QA 候选对（与 T1 审核队列共用状态机）——
 
