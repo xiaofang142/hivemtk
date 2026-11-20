@@ -14,7 +14,7 @@ import (
 
 // 只在独立测试连接注入查询超时，验证真实仓储到发送闸的故障与恢复。
 func TestPipeline_ConsentQueryFailureAndRecovery(t *testing.T) {
-	database := testutil.NewTestDB(t, &model.ContactConsentEvent{}, &model.ContactPreference{})
+	database := testutil.NewTestDB(t, &model.ContactConsentEvent{}, &model.ContactPreference{}, &model.ContactConsentIdentityLink{})
 	svc := NewContactConsentService(repository.NewContactConsentRepository(database))
 	ctx := context.Background()
 	for _, oneID := range []string{"consent-fault-grant", "consent-fault-paused", "consent-fault-revoke"} {
@@ -44,6 +44,7 @@ func TestPipeline_ConsentQueryFailureAndRecovery(t *testing.T) {
 		channels = append(channels, channel)
 	}
 	for _, fault := range []struct{ table, reason string }{
+		{"contact_consent_identity_links", "consent_identity_unavailable"},
 		{"contact_consent_events", "consent_event_unavailable"},
 		{"contact_preferences", "consent_preference_unavailable"},
 	} {

@@ -1,0 +1,6 @@
+{
+  "checked_at": "2026-11-20T15:26:14.450717+08:00",
+  "exit_code": 0,
+  "schema": "BEGIN\n\n{\"events\" : 2, \"preferences\" : 1, \"customers\" : 62}\nROLLBACK\n",
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n"
+}

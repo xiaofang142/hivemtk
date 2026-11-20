@@ -1,0 +1,7 @@
+=== RUN   TestEveryModelTableHasModuleOwner
+    module_tables_test.go:78: 有 1 张表未归属任何模块（它们不会随模块开关而停用）：
+          contact_consent_identity_links
+--- FAIL: TestEveryModelTableHasModuleOwner (0.01s)
+FAIL
+FAIL	hivemtk-user/internal/model	0.441s
+FAIL

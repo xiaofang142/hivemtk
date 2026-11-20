@@ -1,0 +1,23 @@
+{
+  "checked_at": "2026-11-20T16:02:59.027343+08:00",
+  "exit_code": 0,
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n",
+  "recorded_deployed_sha": "462d98cc5b9cff606cf127f2eb515b51714e935a",
+  "runtime": {
+    "binary_sha256": "afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11",
+    "image_id": "sha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958",
+    "started_at": "2026-11-20T06:54:59.362105006Z",
+    "running": true,
+    "health": {
+      "status": 200,
+      "body": {
+        "code": 0,
+        "message": "ok",
+        "data": {
+          "status": "ok"
+        }
+      }
+    }
+  },
+  "matches_deployment_state": true
+}

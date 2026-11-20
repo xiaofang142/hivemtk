@@ -1,0 +1,42 @@
+[
+  {
+    "name": "lint",
+    "command": "make lint",
+    "exit_code": 0,
+    "seconds": 24.75,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa14-final-lint.log",
+    "source_drift": []
+  },
+  {
+    "name": "audit",
+    "command": "make audit",
+    "exit_code": 0,
+    "seconds": 82.16,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa14-final-audit.log",
+    "source_drift": []
+  },
+  {
+    "name": "vet",
+    "command": "make vet",
+    "exit_code": 0,
+    "seconds": 17.71,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa14-final-vet.log",
+    "source_drift": []
+  },
+  {
+    "name": "build",
+    "command": "go build ./...",
+    "exit_code": 0,
+    "seconds": 27.07,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa14-final-build.log",
+    "source_drift": []
+  },
+  {
+    "name": "test-go",
+    "command": "make test-go",
+    "exit_code": 2,
+    "seconds": 1340.3,
+    "log": "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa14-final-test-go.log",
+    "source_drift": []
+  }
+]

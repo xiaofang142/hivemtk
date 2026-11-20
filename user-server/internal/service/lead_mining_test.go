@@ -95,6 +95,14 @@ func (f *fakeCustRepo) WithTransaction(_ context.Context, fn func(ctx context.Co
 	return fn(context.Background())
 }
 
+// 线索测试替身不模拟客户合并事务；合并契约由真实 PostgreSQL 回归覆盖。
+func (f *fakeCustRepo) LockMergeCustomers(context.Context, string, string) (*model.Customer, *model.Customer, error) {
+	return nil, nil, lmErrNotFound
+}
+func (f *fakeCustRepo) LinkConsentIdentities(context.Context, string, string) error {
+	return lmErrNotFound
+}
+
 type fakeClueRepo struct {
 	mu         sync.Mutex
 	byID       map[string]*model.Clue

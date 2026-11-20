@@ -1,0 +1,13 @@
+[90m2026-11-20T15:15:45+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build4100848586/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build4100848586/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:15:45+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:15:45+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build4100848586/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build4100848586/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestContactConsentMerge_RejectsUnscopedAndMismatchedWrites
+    contact_consent_merge_contract_test.go:221: 
+        	Error Trace:	/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service/contact_consent_merge_contract_test.go:221
+        	Error:      	An error is expected but got nil.
+        	Test:       	TestContactConsentMerge_RejectsUnscopedAndMismatchedWrites
+        	Messages:   	缺少租户或显式跨租户写入必须拒绝
+--- FAIL: TestContactConsentMerge_RejectsUnscopedAndMismatchedWrites (0.26s)
+FAIL
+FAIL	hivemtk-user/internal/service	1.013s
+FAIL

@@ -25,6 +25,9 @@ func setupCustomerServiceTestDB(t *testing.T) *gorm.DB {
 		&model.Clue{},
 		&model.ScriptExposureLog{},
 		&model.OperationLog{},
+		&model.ContactConsentIdentityLink{},
+		&model.ContactConsentEvent{},
+		&model.ContactPreference{},
 	)
 	db.SetTestDB(database)
 	return database

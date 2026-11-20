@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-11-20T15:26:13.770008+08:00",
+  "exit_code": 0,
+  "runtime": "afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11  /www/wwwroot/hivemtk/user-server/user-server\nsha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958 2026-11-20T06:54:59.362105006Z true\n{\"code\":0,\"message\":\"ok\",\"data\":{\"status\":\"ok\"}}",
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n",
+  "deployment_state": {
+    "deployed_sha": "462d98cc5b9cff606cf127f2eb515b51714e935a",
+    "deployed_at": "2026-11-20T14:55:09+08:00",
+    "remote_binary_sha256": "afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11",
+    "image_id": "sha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958",
+    "container_started_at": "2026-11-20T06:54:59.362105006Z",
+    "rollback_image_tag": "mtk-user-server:rollback-20261120-145347",
+    "rollback_binary": "/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-145347",
+    "default_credential_probe": "ok",
+    "commits": [
+      "462d98cc5 fix: 完成知识库爬取恢复与全量重建闭环",
+      "2986a7c54 fix: 收口知识库爬虫租户与重试修复",
+      "a436a57b0 fix: 收口离线缺陷审计与跨层回归"
+    ]
+  }
+}

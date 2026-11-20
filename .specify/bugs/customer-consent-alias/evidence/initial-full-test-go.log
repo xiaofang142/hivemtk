@@ -1,0 +1,202 @@
+cd user-server && EMBEDDING_ALLOW_FALLBACK=true go test ./internal/pkg/testutil -count=1 -run '^TestTestDBAuthenticationPreflight$' && \
+	EMBEDDING_ALLOW_FALLBACK=true go test ./... -count=1 -p 1 -timeout 1800s
+ok  	hivemtk-user/internal/pkg/testutil	0.986s
+ok  	hivemtk-user/cmd/api	0.635s
+?   	hivemtk-user/cmd/bridge-mock	[no test files]
+ok  	hivemtk-user/cmd/ego-runner	0.818s
+ok  	hivemtk-user/cmd/embedding-server	1.158s
+?   	hivemtk-user/cmd/eval-trace	[no test files]
+?   	hivemtk-user/cmd/gen-module-bindings	[no test files]
+?   	hivemtk-user/cmd/gen-module-route-patterns	[no test files]
+?   	hivemtk-user/cmd/geo-run	[no test files]
+?   	hivemtk-user/cmd/importfaq	[no test files]
+?   	hivemtk-user/cmd/minttoken	[no test files]
+ok  	hivemtk-user/cmd/nm-host	0.610s
+?   	hivemtk-user/cmd/perf	[no test files]
+ok  	hivemtk-user/cmd/pwtool	0.304s
+?   	hivemtk-user/cmd/routeinspect	[no test files]
+ok  	hivemtk-user/cmd/seed	0.813s
+?   	hivemtk-user/cmd/seedkw	[no test files]
+?   	hivemtk-user/cmd/syncscripts	[no test files]
+?   	hivemtk-user/cmd/websitekb	[no test files]
+?   	hivemtk-user/docs	[no test files]
+ok  	hivemtk-user/internal/aiagent/agent/delivery	0.310s
+ok  	hivemtk-user/internal/aiagent/agent/lifecycle	0.342s
+ok  	hivemtk-user/internal/aiagent/agent/portcontract	0.312s
+ok  	hivemtk-user/internal/aiagent/agent/runtime	2.731s
+ok  	hivemtk-user/internal/aiagent/agent/tooluse	2.767s
+ok  	hivemtk-user/internal/aiagent/embedding	1.678s
+ok  	hivemtk-user/internal/aiagent/eval	0.693s
+ok  	hivemtk-user/internal/aiagent/knowledge/controller	40.547s
+ok  	hivemtk-user/internal/aiagent/knowledge/kbcrawler	1.354s
+?   	hivemtk-user/internal/aiagent/knowledge/kbsearch	[no test files]
+?   	hivemtk-user/internal/aiagent/knowledge/model	[no test files]
+ok  	hivemtk-user/internal/aiagent/knowledge/repository	13.359s
+ok  	hivemtk-user/internal/aiagent/knowledge/service	56.181s
+ok  	hivemtk-user/internal/aiagent/llm	10.148s
+ok  	hivemtk-user/internal/aiagent/llm/selfconsistency	0.433s
+ok  	hivemtk-user/internal/aiagent/mcp	0.723s
+ok  	hivemtk-user/internal/aiagent/rag/cache	0.595s
+ok  	hivemtk-user/internal/aiagent/rag/core	0.399s
+ok  	hivemtk-user/internal/aiagent/rag/customer_service	0.419s
+ok  	hivemtk-user/internal/aiagent/rag/eval	0.629s
+ok  	hivemtk-user/internal/aiagent/rag/incremental	0.743s
+ok  	hivemtk-user/internal/aiagent/rag/retrieval	5.732s
+ok  	hivemtk-user/internal/aiagent/rag/service	0.452s
+ok  	hivemtk-user/internal/aiagent/vector	0.398s
+ok  	hivemtk-user/internal/app	33.271s
+ok  	hivemtk-user/internal/approval	0.373s
+ok  	hivemtk-user/internal/bridge	7.297s
+ok  	hivemtk-user/internal/browser_automation/controller	1.399s
+ok  	hivemtk-user/internal/browser_automation/dto	0.421s
+?   	hivemtk-user/internal/browser_automation/model	[no test files]
+ok  	hivemtk-user/internal/browser_automation/platform	0.305s
+?   	hivemtk-user/internal/browser_automation/platform/douyin	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xianyu	[no test files]
+?   	hivemtk-user/internal/browser_automation/platform/xiaohongshu	[no test files]
+ok  	hivemtk-user/internal/browser_automation/repository	18.045s
+ok  	hivemtk-user/internal/browser_automation/service	202.829s
+ok  	hivemtk-user/internal/browsercore	0.300s
+ok  	hivemtk-user/internal/cache	11.892s
+ok  	hivemtk-user/internal/capregistry	0.316s
+ok  	hivemtk-user/internal/channelbot/core	0.325s
+ok  	hivemtk-user/internal/channelbot/onebot	0.344s
+ok  	hivemtk-user/internal/channelbot/qq	0.351s
+ok  	hivemtk-user/internal/channelbot/slack	0.343s
+ok  	hivemtk-user/internal/channelbot/telegram	4.172s
+ok  	hivemtk-user/internal/channelbot/wecombot	0.349s
+ok  	hivemtk-user/internal/channelbot/wecomcs	0.344s
+ok  	hivemtk-user/internal/channelbot/whatsapp	0.361s
+ok  	hivemtk-user/internal/channelcaps	0.315s
+ok  	hivemtk-user/internal/channelgw	10.223s
+ok  	hivemtk-user/internal/config	3.195s
+ok  	hivemtk-user/internal/connector	0.491s
+ok  	hivemtk-user/internal/content/controller	6.361s
+?   	hivemtk-user/internal/content/dto	[no test files]
+ok  	hivemtk-user/internal/content/model	0.319s
+ok  	hivemtk-user/internal/content/repository	4.535s
+ok  	hivemtk-user/internal/content/service	4.755s
+ok  	hivemtk-user/internal/contentguard/controller	0.537s
+ok  	hivemtk-user/internal/contentguard/matcher	0.326s
+?   	hivemtk-user/internal/contentguard/memory	[no test files]
+?   	hivemtk-user/internal/contentguard/model	[no test files]
+ok  	hivemtk-user/internal/contentguard/normalize	0.333s
+ok  	hivemtk-user/internal/contentguard/provider	0.437s
+ok  	hivemtk-user/internal/contentguard/repository	0.359s [no tests to run]
+ok  	hivemtk-user/internal/contentguard/service	0.353s
+ok  	hivemtk-user/internal/controller	85.002s
+ok  	hivemtk-user/internal/cron	0.561s
+ok  	hivemtk-user/internal/domain/asset	0.301s
+ok  	hivemtk-user/internal/domain/errors	0.315s
+ok  	hivemtk-user/internal/dto	0.321s
+ok  	hivemtk-user/internal/egolite	3.775s
+ok  	hivemtk-user/internal/email/service	14.412s
+ok  	hivemtk-user/internal/etl	0.678s
+ok  	hivemtk-user/internal/event	0.325s
+?   	hivemtk-user/internal/geo	[no test files]
+ok  	hivemtk-user/internal/geo/controller	7.273s
+?   	hivemtk-user/internal/geo/dto	[no test files]
+?   	hivemtk-user/internal/geo/model	[no test files]
+ok  	hivemtk-user/internal/geo/repository	3.137s
+ok  	hivemtk-user/internal/geo/service	15.423s
+?   	hivemtk-user/internal/health	[no test files]
+ok  	hivemtk-user/internal/hostagent	0.304s
+ok  	hivemtk-user/internal/identity	0.312s
+ok  	hivemtk-user/internal/integration	0.809s
+ok  	hivemtk-user/internal/integration/templates	0.315s
+ok  	hivemtk-user/internal/kbconnector	0.408s
+ok  	hivemtk-user/internal/middleware	3.391s
+ok  	hivemtk-user/internal/migration	0.802s
+ok  	hivemtk-user/internal/migration/migrations	19.215s
+--- FAIL: TestEveryModelTableHasModuleOwner (0.01s)
+    module_tables_test.go:78: 有 1 张表未归属任何模块（它们不会随模块开关而停用）：
+          contact_consent_identity_links
+FAIL
+FAIL	hivemtk-user/internal/model	1.246s
+ok  	hivemtk-user/internal/modulekit	0.299s
+ok  	hivemtk-user/internal/monitor	0.904s
+ok  	hivemtk-user/internal/ops/controller	2.059s
+ok  	hivemtk-user/internal/ops/model	0.314s
+ok  	hivemtk-user/internal/ops/repository	1.495s
+ok  	hivemtk-user/internal/ops/service	9.708s
+ok  	hivemtk-user/internal/pkg/contract	0.340s
+ok  	hivemtk-user/internal/pkg/cron	4.794s
+ok  	hivemtk-user/internal/pkg/crypto	0.308s
+ok  	hivemtk-user/internal/pkg/db	150.441s
+ok  	hivemtk-user/internal/pkg/dbencrypt	0.538s
+?   	hivemtk-user/internal/pkg/dbstate	[no test files]
+ok  	hivemtk-user/internal/pkg/errhttp	0.394s
+ok  	hivemtk-user/internal/pkg/featureflag	5.466s
+ok  	hivemtk-user/internal/pkg/httpclient	0.319s
+ok  	hivemtk-user/internal/pkg/i18n	0.311s
+ok  	hivemtk-user/internal/pkg/kbrelease	0.369s
+ok  	hivemtk-user/internal/pkg/mail	1.667s
+ok  	hivemtk-user/internal/pkg/metrics	1.038s
+ok  	hivemtk-user/internal/pkg/pagination	0.396s
+ok  	hivemtk-user/internal/pkg/pgvector	0.298s
+?   	hivemtk-user/internal/pkg/reach	[no test files]
+ok  	hivemtk-user/internal/pkg/security	0.309s
+?   	hivemtk-user/internal/pkg/securitytelemetry	[no test files]
+ok  	hivemtk-user/internal/pkg/shared/service	0.341s
+ok  	hivemtk-user/internal/pkg/sla	0.372s
+ok  	hivemtk-user/internal/pkg/sso	0.756s
+ok  	hivemtk-user/internal/pkg/tenancyidx	0.302s
+ok  	hivemtk-user/internal/pkg/tenant	0.611s
+ok  	hivemtk-user/internal/pkg/testutil	0.676s
+?   	hivemtk-user/internal/pkg/testutil/testmigrate	[no test files]
+ok  	hivemtk-user/internal/pkg/textutil	0.291s
+ok  	hivemtk-user/internal/pkg/tgbot	4.187s
+ok  	hivemtk-user/internal/pkg/timeutil	0.314s
+ok  	hivemtk-user/internal/pkg/trace	0.364s
+ok  	hivemtk-user/internal/pkg/traceparent	0.306s
+ok  	hivemtk-user/internal/pkg/tracing	2.540s
+ok  	hivemtk-user/internal/pkg/urlguard	0.346s
+ok  	hivemtk-user/internal/pkg/utils	1.894s
+ok  	hivemtk-user/internal/pkg/utils/async	0.748s
+ok  	hivemtk-user/internal/pkg/utils/bcrypt	1.700s
+ok  	hivemtk-user/internal/pkg/utils/bm25	0.309s
+ok  	hivemtk-user/internal/pkg/utils/fingerprint	0.328s
+ok  	hivemtk-user/internal/pkg/utils/logger	0.304s
+ok  	hivemtk-user/internal/pkg/utils/pagination	0.387s
+ok  	hivemtk-user/internal/pkg/utils/response	0.389s
+ok  	hivemtk-user/internal/pkg/utils/text	0.304s
+ok  	hivemtk-user/internal/pkg/utils/type	0.294s
+ok  	hivemtk-user/internal/pkg/utils/url	0.309s
+ok  	hivemtk-user/internal/pkg/wirecontract	0.436s
+ok  	hivemtk-user/internal/platform	0.990s
+ok  	hivemtk-user/internal/reach/card	0.392s
+ok  	hivemtk-user/internal/reach/card/template	0.447s
+ok  	hivemtk-user/internal/reporting	0.300s
+ok  	hivemtk-user/internal/repository	24.453s
+ok  	hivemtk-user/internal/router	11.096s
+ok  	hivemtk-user/internal/safeprompt	0.292s
+ok  	hivemtk-user/internal/secrets	0.299s
+ok  	hivemtk-user/internal/security	0.307s
+ok  	hivemtk-user/internal/service	264.532s
+ok  	hivemtk-user/internal/service/approval	2.873s
+ok  	hivemtk-user/internal/service/audience	0.714s
+ok  	hivemtk-user/internal/service/cards	2.590s
+ok  	hivemtk-user/internal/service/churn	0.575s
+ok  	hivemtk-user/internal/service/confidence	0.646s
+?   	hivemtk-user/internal/service/dnc	[no test files]
+ok  	hivemtk-user/internal/service/email	1.023s
+ok  	hivemtk-user/internal/service/feedback_loop	2.077s
+ok  	hivemtk-user/internal/service/humanize	0.352s
+ok  	hivemtk-user/internal/service/humanize/ai	0.315s
+ok  	hivemtk-user/internal/service/humanize/behavioral	0.291s
+ok  	hivemtk-user/internal/service/reflux	5.734s
+ok  	hivemtk-user/internal/service/sms	3.892s
+ok  	hivemtk-user/internal/service/sop	11.579s
+ok  	hivemtk-user/internal/service/trace_learning	0.811s
+ok  	hivemtk-user/internal/service/translation	0.413s
+ok  	hivemtk-user/internal/storage	0.339s
+?   	hivemtk-user/internal/storage/storagetest	[no test files]
+ok  	hivemtk-user/internal/system/install	0.362s
+?   	hivemtk-user/internal/toolruntime	[no test files]
+ok  	hivemtk-user/internal/websocket	5.544s
+?   	hivemtk-user/scripts	[no test files]
+ok  	hivemtk-user/test/e2e	1.357s
+ok  	hivemtk-user/test/integration	1.334s
+?   	hivemtk-user/tests/perf/perflib	[no test files]
+FAIL
+make: *** [test-go] Error 1

@@ -299,58 +299,25 @@ func (s *CustomerService) MergeCustomers(ctx context.Context, primaryID, seconda
 		return errors.New("不能合并同一个客户")
 	}
 
-	primary, err := s.repo.GetByID(ctx, primaryID)
-	if err != nil {
-		return err
-	}
-	if primary == nil {
-		return ErrCustomerNotFound
-	}
-
-	secondary, err := s.repo.GetByID(ctx, secondaryID)
-	if err != nil {
-		return err
-	}
-	if secondary == nil {
-		return errors.New("次要客户不存在")
-	}
-
-	if secondary.Phone != "" && primary.Phone == "" {
-		primary.Phone = secondary.Phone
-
-		primary.PhoneHash = PhoneHash(primary.Phone)
-	}
-	if secondary.Email != "" && primary.Email == "" {
-		primary.Email = secondary.Email
-	}
-	if secondary.WechatOpenID != "" && primary.WechatOpenID == "" {
-		primary.WechatOpenID = secondary.WechatOpenID
-	}
-	if secondary.DouyinOpenID != "" && primary.DouyinOpenID == "" {
-		primary.DouyinOpenID = secondary.DouyinOpenID
-	}
-	if secondary.XiaohongshuID != "" && primary.XiaohongshuID == "" {
-		primary.XiaohongshuID = secondary.XiaohongshuID
-	}
-
-	primaryTags := GetCustomerTags(primary)
-	secondaryTags := GetCustomerTags(secondary)
-	tagSet := make(map[string]bool)
-	for _, tag := range primaryTags {
-		tagSet[tag] = true
-	}
-	for _, tag := range secondaryTags {
-		tagSet[tag] = true
-	}
-	mergedTags := make([]string, 0, len(tagSet))
-	for tag := range tagSet {
-		mergedTags = append(mergedTags, tag)
-	}
-	if err := SetCustomerTags(primary, mergedTags); err != nil {
-		return err
-	}
-
-	err = s.repo.WithTransaction(ctx, func(txCtx context.Context) error {
+	var primary, secondary *model.Customer
+	err := s.repo.WithTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		primary, secondary, err = s.repo.LockMergeCustomers(txCtx, primaryID, secondaryID)
+		if err != nil {
+			return err
+		}
+		if primary == nil {
+			return ErrCustomerNotFound
+		}
+		if secondary == nil {
+			return errors.New("次要客户不存在")
+		}
+		if err := mergeCustomerFields(primary, secondary); err != nil {
+			return err
+		}
+		if err := s.repo.LinkConsentIdentities(txCtx, primary.UnifiedID, secondary.UnifiedID); err != nil {
+			return fmt.Errorf("关联客户同意身份失败: %w", err)
+		}
 
 		if err := s.repo.Update(txCtx, primary); err != nil {
 			return fmt.Errorf("更新主客户失败: %w", err)
@@ -399,6 +366,37 @@ func (s *CustomerService) MergeCustomers(ctx context.Context, primaryID, seconda
 
 	s.writeMergeAuditLog(ctx, primary, secondary)
 	return nil
+}
+
+func mergeCustomerFields(primary, secondary *model.Customer) error {
+	if secondary.Phone != "" && primary.Phone == "" {
+		primary.Phone = secondary.Phone
+		primary.PhoneHash = PhoneHash(primary.Phone)
+	}
+	if primary.UnifiedID == "" {
+		primary.UnifiedID = secondary.UnifiedID
+	}
+	if secondary.Email != "" && primary.Email == "" {
+		primary.Email = secondary.Email
+	}
+	if secondary.WechatOpenID != "" && primary.WechatOpenID == "" {
+		primary.WechatOpenID = secondary.WechatOpenID
+	}
+	if secondary.DouyinOpenID != "" && primary.DouyinOpenID == "" {
+		primary.DouyinOpenID = secondary.DouyinOpenID
+	}
+	if secondary.XiaohongshuID != "" && primary.XiaohongshuID == "" {
+		primary.XiaohongshuID = secondary.XiaohongshuID
+	}
+	tagSet := make(map[string]bool)
+	for _, tag := range append(GetCustomerTags(primary), GetCustomerTags(secondary)...) {
+		tagSet[tag] = true
+	}
+	mergedTags := make([]string, 0, len(tagSet))
+	for tag := range tagSet {
+		mergedTags = append(mergedTags, tag)
+	}
+	return SetCustomerTags(primary, mergedTags)
 }
 
 func (s *CustomerService) writeMergeAuditLog(ctx context.Context, primary, secondary *model.Customer) {

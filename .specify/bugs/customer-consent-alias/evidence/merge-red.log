@@ -1,0 +1,46 @@
+[90m2026-11-20T15:06:46+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build1138612083/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build1138612083/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:06:46+08:00[0m [33mWRN[0m [1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:06:46+08:00[0m [33mWRN[0m [1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build1138612083/b001/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build1138612083/config.yaml]，CWD=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-fa13-release-20261120/user-server/internal/service），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动[0m [36mcomponent=[0muser-server
+=== RUN   TestContactConsentMerge_RetainsFactsAndBlocksSend
+=== RUN   TestContactConsentMerge_RetainsFactsAndBlocksSend/secondary_revoke
+    contact_consent_merge_test.go:70: 身份 fa14-one-primary 判定=granted，期望revoked
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: [{TenantID:1 ID:1 OneID:fa14-one-primary Purpose:marketing ChannelScope: Decision:grant StatementVersion: Source:api Actor: EvidenceRef: OccurredAt:2026-11-20 15:06:47.041828 +0800 CST CreatedAt:2026-11-20 15:06:47.042056 +0800 CST}]，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: revoked必须零外发: success=true calls=1
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: [{TenantID:1 ID:2 OneID:fa14-one-secondary Purpose:marketing ChannelScope: Decision:revoke StatementVersion: Source:api Actor: EvidenceRef: OccurredAt:2026-11-20 14:06:47.043182 +0800 CST CreatedAt:2026-11-20 15:06:47.043361 +0800 CST}]，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[CONSENT] pipeline 拒发 customer=fa14-one-secondary channel=wecom purpose=marketing（已撤回同意，metadata 自述不构成授权）[0m [36mcomponent=[0muser-server
+=== RUN   TestContactConsentMerge_RetainsFactsAndBlocksSend/primary_revoke
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: [{TenantID:1 ID:2 OneID:fa14-one-primary Purpose:marketing ChannelScope: Decision:revoke StatementVersion: Source:api Actor: EvidenceRef: OccurredAt:2026-11-20 14:06:47.108065 +0800 CST CreatedAt:2026-11-20 15:06:47.108224 +0800 CST}]，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[CONSENT] pipeline 拒发 customer=fa14-one-primary channel=wecom purpose=marketing（已撤回同意，metadata 自述不构成授权）[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:70: 身份 fa14-one-secondary 判定=granted，期望revoked
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: [{TenantID:1 ID:1 OneID:fa14-one-secondary Purpose:marketing ChannelScope: Decision:grant StatementVersion: Source:api Actor: EvidenceRef: OccurredAt:2026-11-20 15:06:47.107057 +0800 CST CreatedAt:2026-11-20 15:06:47.107221 +0800 CST}]，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: revoked必须零外发: success=true calls=1
+=== RUN   TestContactConsentMerge_RetainsFactsAndBlocksSend/secondary_pause
+    contact_consent_merge_test.go:70: 身份 fa14-one-primary 判定=granted，期望paused
+    contact_consent_merge_test.go:78: 偏好必须保留原身份: []，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: paused必须零外发: success=true calls=1
+    contact_consent_merge_test.go:70: 身份 fa14-one-secondary 判定=missing，期望paused
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: []，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: paused必须零外发: success=true calls=1
+=== RUN   TestContactConsentMerge_RetainsFactsAndBlocksSend/primary_pause
+    contact_consent_merge_test.go:70: 身份 fa14-one-primary 判定=missing，期望paused
+    contact_consent_merge_test.go:74: 时间线必须保留全部原身份事件: []，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: paused必须零外发: success=true calls=1
+    contact_consent_merge_test.go:70: 身份 fa14-one-secondary 判定=granted，期望paused
+    contact_consent_merge_test.go:78: 偏好必须保留原身份: []，错误=<nil>
+[90m2026-11-20T15:06:47+08:00[0m [33mWRN[0m [1m[COMPLIANCE] 主动触达发送已触发：channel=wecom, recipient=。请严格遵守各渠道平台（微信/企业微信/抖音/快手/小红书/Telegram/WhatsApp(Meta)/短信/邮件 等）的开发者规范、服务条款及当地法律法规；仅可向已授权、已明确同意接收的联系人发送，严格控制发送频率，禁止发送垃圾营销、欺诈、骚扰或违法违规内容。因违规发送导致的账号封禁、平台处罚、行政处罚或法律后果由使用者自行承担。[0m [36mcomponent=[0muser-server
+    contact_consent_merge_test.go:85: paused必须零外发: success=true calls=1
+--- FAIL: TestContactConsentMerge_RetainsFactsAndBlocksSend (0.47s)
+    --- FAIL: TestContactConsentMerge_RetainsFactsAndBlocksSend/secondary_revoke (0.28s)
+    --- FAIL: TestContactConsentMerge_RetainsFactsAndBlocksSend/primary_revoke (0.06s)
+    --- FAIL: TestContactConsentMerge_RetainsFactsAndBlocksSend/secondary_pause (0.06s)
+    --- FAIL: TestContactConsentMerge_RetainsFactsAndBlocksSend/primary_pause (0.07s)
+FAIL
+FAIL	hivemtk-user/internal/service	1.675s
+FAIL

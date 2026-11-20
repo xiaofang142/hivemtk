@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-11-20T15:30:22.075923+08:00",
+  "exit_code": 0,
+  "read_only": true,
+  "facts": {
+    "events": {
+      "count": 2,
+      "max_id": 2,
+      "sha256": "37ce3a277248cd43a1dccca095925a51f6f77f506038c4ea8d057b1685615ffc"
+    },
+    "preferences": {
+      "count": 1,
+      "max_id": 1,
+      "sha256": "60688c6757760ad0a196785696e313d8bf5667c12d44219702236c6b116ec3bb"
+    }
+  }
+}

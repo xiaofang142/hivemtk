@@ -8,9 +8,11 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	_utils "hivemtk-user/internal/pkg/utils"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type txContextKey struct{}
@@ -51,6 +53,8 @@ type CustomerRepository interface {
 	ReassignDNCOneID(ctx context.Context, oldOneID, newOneID string) error
 
 	WithTransaction(ctx context.Context, fn func(ctx context.Context) error) error
+	LockMergeCustomers(ctx context.Context, primaryID, secondaryID string) (*model.Customer, *model.Customer, error)
+	LinkConsentIdentities(ctx context.Context, leftOneID, rightOneID string) error
 }
 
 // CustomerSearchFilter 客户搜索过滤条件（CustomerRepository.SearchByFilter 入参）
@@ -79,6 +83,54 @@ type customerRepository struct{}
 // NewCustomerRepository creates a new CustomerRepository instance
 func NewCustomerRepository() CustomerRepository {
 	return &customerRepository{}
+}
+
+// LockMergeCustomers 在合并事务内按稳定顺序锁定客户，避免并发合并使用陈旧身份。
+func (r *customerRepository) LockMergeCustomers(ctx context.Context, primaryID, secondaryID string) (*model.Customer, *model.Customer, error) {
+	tx, ok := ctx.Value(txContextKey{}).(*gorm.DB)
+	if !ok || tx == nil {
+		return nil, nil, errors.New("客户合并必须在事务内执行")
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return nil, nil, errors.New("客户合并缺少租户上下文")
+	}
+	var customers []*model.Customer
+	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("tenant_id = ? AND id IN ?", tenantID, []string{primaryID, secondaryID}).
+		Order("id ASC").Find(&customers).Error; err != nil {
+		return nil, nil, err
+	}
+	var primary, secondary *model.Customer
+	for _, customer := range customers {
+		if customer.ID == primaryID {
+			primary = customer
+		}
+		if customer.ID == secondaryID {
+			secondary = customer
+		}
+	}
+	return primary, secondary, nil
+}
+
+// LinkConsentIdentities 与客户合并共用事务，只追加身份关联，原事实保持不变。
+func (r *customerRepository) LinkConsentIdentities(ctx context.Context, leftOneID, rightOneID string) error {
+	tx, ok := ctx.Value(txContextKey{}).(*gorm.DB)
+	if !ok || tx == nil {
+		return errors.New("同意身份关联必须在客户合并事务内执行")
+	}
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return errors.New("同意身份关联缺少租户上下文")
+	}
+	if leftOneID == "" || rightOneID == "" || leftOneID == rightOneID {
+		return nil
+	}
+	if leftOneID > rightOneID {
+		leftOneID, rightOneID = rightOneID, leftOneID
+	}
+	link := model.ContactConsentIdentityLink{TenantID: tenantID, LeftOneID: leftOneID, RightOneID: rightOneID}
+	return tx.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&link).Error
 }
 
 func (r *customerRepository) Create(ctx context.Context, customer *model.Customer) error {

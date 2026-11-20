@@ -32,6 +32,7 @@ const (
 	ConsentReasonUnavailable           = "consent_unavailable"
 	ConsentReasonEventUnavailable      = "consent_event_unavailable"
 	ConsentReasonPreferenceUnavailable = "consent_preference_unavailable"
+	ConsentReasonIdentityUnavailable   = "consent_identity_unavailable"
 )
 
 // ConsentDecision 一次同意判定的结果。
@@ -173,30 +174,43 @@ func (s *ContactConsentService) CheckSendConsent(ctx context.Context, oneID, pur
 	purpose = normalizeConsentPurpose(purpose)
 	channel = strings.ToLower(strings.TrimSpace(channel))
 
-	ev, err := s.repo.LatestEvent(ctx, oneID, purpose, channel)
+	ids, err := s.repo.LinkedOneIDs(ctx, strings.TrimSpace(oneID))
 	if err != nil {
-		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonEventUnavailable}
+		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonIdentityUnavailable}
 	}
-	if ev == nil {
-		return ConsentDecision{Status: ConsentStatusMissing, Reason: ConsentReasonMissing}
-	}
-	if ev.Decision == model.ConsentDecisionRevoke {
-		return ConsentDecision{Status: ConsentStatusRevoked, Reason: ConsentReasonRevoked}
-	}
-
-	// grant 之上叠加偏好：渠道行优先于全渠道行
-	pref, err := s.repo.GetPreference(ctx, oneID, purpose, channel)
-	if err != nil {
-		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonPreferenceUnavailable}
-	}
-	if pref != nil && pref.Paused {
-		if pref.PausedUntil != nil && !pref.PausedUntil.After(time.Now()) {
-			// 暂停已到期：视为未暂停
-			return ConsentDecision{Status: ConsentStatusGranted, Trusted: true}
+	granted, paused := false, false
+	var pausedUntil *time.Time
+	now := time.Now()
+	for _, id := range ids {
+		ev, err := s.repo.LatestEvent(ctx, id, purpose, channel)
+		if err != nil {
+			return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonEventUnavailable}
 		}
-		return ConsentDecision{Status: ConsentStatusPaused, Trusted: true, PausedUntil: pref.PausedUntil, Reason: ConsentReasonPaused}
+		if ev != nil {
+			if ev.Decision == model.ConsentDecisionRevoke {
+				return ConsentDecision{Status: ConsentStatusRevoked, Reason: ConsentReasonRevoked}
+			}
+			granted = granted || ev.Decision == model.ConsentDecisionGrant
+		}
+		// 每个原身份内部保持精确渠道优先；跨身份的恢复不覆盖另一身份的暂停。
+		pref, err := s.repo.GetPreference(ctx, id, purpose, channel)
+		if err != nil {
+			return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonPreferenceUnavailable}
+		}
+		if pref != nil && pref.Paused && (pref.PausedUntil == nil || pref.PausedUntil.After(now)) {
+			if !paused || (pausedUntil != nil && (pref.PausedUntil == nil || pref.PausedUntil.After(*pausedUntil))) {
+				pausedUntil = pref.PausedUntil
+			}
+			paused = true
+		}
 	}
-	return ConsentDecision{Status: ConsentStatusGranted, Trusted: true}
+	if paused {
+		return ConsentDecision{Status: ConsentStatusPaused, Trusted: granted, PausedUntil: pausedUntil, Reason: ConsentReasonPaused}
+	}
+	if granted {
+		return ConsentDecision{Status: ConsentStatusGranted, Trusted: true}
+	}
+	return ConsentDecision{Status: ConsentStatusMissing, Reason: ConsentReasonMissing}
 }
 
 // Timeline 客户授权时间线（客户 360 / 管理页）
@@ -257,5 +271,5 @@ func normalizeConsentPurpose(p string) string {
 
 // 建表登记：同意事实账与偏好快照随启动期 AutoMigrate 建（RegisterExtraModels 机制同上）。
 func init() {
-	_db.RegisterExtraModels(&model.ContactConsentEvent{}, &model.ContactPreference{})
+	_db.RegisterExtraModels(&model.ContactConsentEvent{}, &model.ContactPreference{}, &model.ContactConsentIdentityLink{})
 }

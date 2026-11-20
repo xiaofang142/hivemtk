@@ -78,3 +78,14 @@ type ContactPreference struct {
 
 // TableName 指定表名
 func (ContactPreference) TableName() string { return "contact_preferences" }
+
+// ContactConsentIdentityLink 仅追加合并身份关联，不改写原授权或偏好的身份。
+// 两端按字典序保存；组合主键使同一租户的重复/反向关联幂等。
+type ContactConsentIdentityLink struct {
+	TenantID   uint      `gorm:"primaryKey;autoIncrement:false;not null;index:idx_consent_link_right,priority:1" json:"tenant_id"`
+	LeftOneID  string    `gorm:"type:varchar(128);primaryKey;not null" json:"left_one_id"`
+	RightOneID string    `gorm:"type:varchar(128);primaryKey;not null;index:idx_consent_link_right,priority:2" json:"right_one_id"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (ContactConsentIdentityLink) TableName() string { return "contact_consent_identity_links" }

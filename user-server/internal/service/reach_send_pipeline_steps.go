@@ -280,7 +280,7 @@ func (p *defaultSendPipeline) checkSendConsent(ctx context.Context, req *ReachSe
 		reason := ConsentReasonUnavailable
 		if dec.Status == ConsentStatusUnavailable {
 			switch dec.Reason {
-			case ConsentReasonEventUnavailable, ConsentReasonPreferenceUnavailable:
+			case ConsentReasonEventUnavailable, ConsentReasonPreferenceUnavailable, ConsentReasonIdentityUnavailable:
 				reason = dec.Reason
 			}
 		}

@@ -190,6 +190,7 @@ var reachAutoOwnedTables = []string{
 	// D02/D04/D05（2026-10-28）：延迟出站持久队列、同意事实账与偏好、配额预占账——
 	// 均属主动触达域，随 reach-auto 开关。
 	"reach_deferred_outbound", "contact_consent_events", "contact_preferences",
+	"contact_consent_identity_links",
 	"reach_quota_counters", "reach_quota_reservations",
 	"automation_rules", "rule_pending_executions", "optimization_suggestions",
 	// 工作流编排器（workflowOrchestrator 菜单节点同属本模块）

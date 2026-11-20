@@ -20,6 +20,7 @@ func setupConsentService(t *testing.T) (*ContactConsentService, *repository.Cont
 	database := testutil.NewTestDB(t,
 		&model.ContactConsentEvent{},
 		&model.ContactPreference{},
+		&model.ContactConsentIdentityLink{},
 	)
 	repo := repository.NewContactConsentRepository(database)
 	return NewContactConsentService(repo), repo
@@ -157,6 +158,7 @@ func TestPipeline_DeferredThenRevokedNeverSends(t *testing.T) {
 	database := testutil.NewTestDB(t,
 		&model.ContactConsentEvent{},
 		&model.ContactPreference{},
+		&model.ContactConsentIdentityLink{},
 		&model.ReachDeferredOutbound{},
 	)
 	repo := repository.NewContactConsentRepository(database)
