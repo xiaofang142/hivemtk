@@ -1,0 +1,177 @@
+{
+  "verified_at": "2026-11-20T14:57:36.709456+08:00",
+  "build": {
+    "buildId": "462d98cc5-1795157548680",
+    "buildTime": "2026-11-20T06:52:54.196Z",
+    "url": "./index.html"
+  },
+  "server_files_verified": 658,
+  "server_mismatches": [],
+  "user_ini_preserved": true,
+  "snapshot": "/www/wwwroot/hivemtk/user-web.snapshot-fa12-fa13-20261120-145644.tgz",
+  "snapshot_sha256": "ef5ad69cc49315c080751750c8fe3a166d1ce2bd83e558ca59f5fbe60c7bca56",
+  "public": [
+    {
+      "path": "assets/elementPlus-DRD9LmI8.css",
+      "status": 200,
+      "sha256": "9666f1689f01afd6bb8bf0e366b1e46f9d320e7adc426319526e50450ce9211b",
+      "matches": true
+    },
+    {
+      "path": "assets/elementPlus-Dx0Ffkoy.js",
+      "status": 200,
+      "sha256": "b42411cb57661345f4e9f5f17289285709fa62c5b81b450ab23584ce54e2d38c",
+      "matches": true
+    },
+    {
+      "path": "assets/i18n-tZMTSM4g.js",
+      "status": 200,
+      "sha256": "0646f63628489c47d075bf424e08b08ef435e17e47f13f5ce1e8668f0e6d6870",
+      "matches": true
+    },
+    {
+      "path": "assets/index-BywTfhRe.css",
+      "status": 200,
+      "sha256": "5b8ffa0d12c8f397166615cec79e0af58ebc3af71d5d62b6944d72dc907c8144",
+      "matches": true
+    },
+    {
+      "path": "assets/index-z0J07Jn_.js",
+      "status": 200,
+      "sha256": "e08bdb76d2132f31624bb4a9ca66b468e155707ccc48c3c6bfd6dcd78416fdbc",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-ar-C_eeOVWO.js",
+      "status": 200,
+      "sha256": "c98f96550f8a594878935a6478723cdbd3fa564c491a986bf8a193c48d9e91e3",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-de-D6Pvlp3x.js",
+      "status": 200,
+      "sha256": "507bc1cc23d1a2572a59b746cc3a236477ff5c986926df67928d1256a702d989",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-en-CbwQk1OM.js",
+      "status": 200,
+      "sha256": "ca3d8cb0877288e53180d57d7d1e3f3cadba93c439ab7ff1ea3634af98159d24",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-es-DAAX1kAv.js",
+      "status": 200,
+      "sha256": "76f8f7c0cdd6cb4af48eccc70fa4edb26c53126c8a548abd385348ad9c837f03",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-fr-_DtCfAjt.js",
+      "status": 200,
+      "sha256": "daeac97658458dc9f26c9de07da746cdd88cc50498f5834052aaacf89d033e1f",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-ja-B_tPrY4l.js",
+      "status": 200,
+      "sha256": "00d82f3cb3bdd257f97473efca3c965544b64a04afc351a40e4886da580d322f",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-pt-B2SFLj--.js",
+      "status": 200,
+      "sha256": "6b072cb156f06860aff92810a4e7348ef1be96137f19a1961b3e34e7706c6097",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-ru-BsDOOn-T.js",
+      "status": 200,
+      "sha256": "310a3465e4304032f9ec4dfb4036668f125e40f97418a9fc85f3479a16cbdbe1",
+      "matches": true
+    },
+    {
+      "path": "assets/locale-zh-D7SEhZ1H.js",
+      "status": 200,
+      "sha256": "a2a0d44bb3f9936d23d6b815963e77756d03b64a1d87efdfa2230e2f11e438bc",
+      "matches": true
+    },
+    {
+      "path": "assets/menu-YTSbLIJq.js",
+      "status": 200,
+      "sha256": "e01ab7016ca2fd35f7e6213fe70698d18c6919555c43dc62176a952cdd871043",
+      "matches": true
+    },
+    {
+      "path": "assets/preload-helper-BLdHbfdN.js",
+      "status": 200,
+      "sha256": "8aec9ff75ffa86a03d51268b63126abadb3754aa5a6b6c5bb16e4e2446a63dee",
+      "matches": true
+    },
+    {
+      "path": "assets/request-BofKnA8i.js",
+      "status": 200,
+      "sha256": "20af76b158db2d8965b319df24bcee8a96c807e9036e363c476d8d62954a4d35",
+      "matches": true
+    },
+    {
+      "path": "assets/rolldown-runtime-XKyaHtl9.js",
+      "status": 200,
+      "sha256": "548d1dbf321e7d2ae804fcc158b588706a7c52f8ca175de1490c6ccb4dbe55b7",
+      "matches": true
+    },
+    {
+      "path": "assets/user-CxU6l9Qm.js",
+      "status": 200,
+      "sha256": "9922cdcd88a13b94b8115bd49631ea56d844988989a88cbdada0b96e4debb0c4",
+      "matches": true
+    },
+    {
+      "path": "assets/utils-CDHBn9Nk.js",
+      "status": 200,
+      "sha256": "60db26373327ccf3b564fc85a849007de3745d23d955eba961bc8b2998101c4f",
+      "matches": true
+    },
+    {
+      "path": "assets/vue-KCVVRa_-.js",
+      "status": 200,
+      "sha256": "816cc9f1851ed7842265c8f797b24b0638fd4a366063bd2144fbae048a569ff6",
+      "matches": true
+    },
+    {
+      "path": "favicon.svg",
+      "status": 200,
+      "sha256": "9494d206856ba7a470ded704167feff34a7a76178a1067934d91047460186eef",
+      "matches": true
+    },
+    {
+      "path": "index.html",
+      "status": 200,
+      "sha256": "8ec0191228153d79a30882244baca3ebf0f92c810a7651e3493f3a19c99ba76f",
+      "matches": true
+    },
+    {
+      "path": "logo.png",
+      "status": 200,
+      "sha256": "34db56df8c25eab6e523e78e069bf7a8dd4380b10f29e636bf69d4336807e021",
+      "matches": true
+    },
+    {
+      "path": "manifest.webmanifest",
+      "status": 200,
+      "sha256": "256464de0889bba41451449b59148e39aa9a83eec887b795ad770a5566a04872",
+      "matches": true
+    },
+    {
+      "path": "sw.js",
+      "status": 200,
+      "sha256": "45117f0f5bb51a9600efffd4b4b3de7d8e813abd3ac8139fe4d9555f31807e5c",
+      "matches": true
+    },
+    {
+      "path": "version.json",
+      "status": 200,
+      "sha256": "a779e6b2fc4fe71aa387ce18e1ec83cc6fb4589f6c3b35157de044a7abde1b68",
+      "matches": true
+    }
+  ]
+}

@@ -4,6 +4,14 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-20 · FA-12/13 爬取持久恢复与全量重建（链 A/D 462d98cc5）
+
+- **行为与门禁**：批次租约、旧 worker 围栏、页面/QA 持久检查点及有界租户上下文；显式重建同步完成并持久累计尝试次数，冻结分页遍历全部文档，单项失败继续并返回首错。真实专用 PostgreSQL 覆盖故障/恢复、跨租户、取消、事务回滚及 API 成功前持久化；1001 条夹具恰好各尝试一次。发布提交 `462d98cc5b9cff606cf127f2eb515b51714e935a` 已推双远端；冻结 4673 份文件无漂移，lint、audit、vet、build、test-go 均退出 0，完整 Go 有 159 条包级通过记录、零包级 FAIL。前端 110 文件/1063 测试、lint 和生产构建通过。完整证据见 `.specify/bugs/kb-crawler-recovery/` 与 `.specify/bugs/full-knowledge-reindex/`。
+- **API 上线与迁移**：2026-11-20 14:55:09 +08:00；二进制 SHA-256 `afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11`，镜像 `sha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958`，容器启动 `2026-11-20T06:54:59.362105006Z`。14:55:45 独立回读匹配且 running，内外健康 code 0，公网 HTTP 200；公开 seed 单次口令探针 HTTP 401、RESULT GREEN。真实 PostgreSQL 核验批次租约列、页面唯一键 `(tenant_id,source_id,url_hash)` 和文档非空默认 0 的 `reindex_attempts` 已迁移。
+- **API 回滚点**：镜像 `mtk-user-server:rollback-20261120-145347`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-145347`；独立回读旧镜像 `sha256:102ea2ed31b0bb03ff97d9ef8d72c2d78086763c7d87d3eafd486768ba4829c4`、旧二进制 SHA-256 `37840e2e3a37fda88c0e96ae915308ec43fe6ead047acf1ae4450029309c8d8c` 均匹配发布前基线。二进制回滚保留新增表及列。
+- **SPA 交付**：清理九语种未使用的旧分钟提示键，未降低审计基线。buildId `462d98cc5-1795157548680`，14:57:36 独立核对 658 个产物与服务器摘要全部一致，27 个公网资源均 HTTP 200 且摘要一致。index SHA-256 `8ec0191228153d79a30882244baca3ebf0f92c810a7651e3493f3a19c99ba76f`；入口 `assets/index-z0J07Jn_.js` SHA-256 `e08bdb76d2132f31624bb4a9ca66b468e155707ccc48c3c6bfd6dcd78416fdbc`。增量同步保留旧 hash 资产和 `.user.ini`；完整快照 `/www/wwwroot/hivemtk/user-web.snapshot-fa12-fa13-20261120-145644.tgz`，SHA-256 `ef5ad69cc49315c080751750c8fe3a166d1ce2bd83e558ca59f5fbe60c7bca56`。
+- **验收边界**：生产仍有原来 14 条知识文档，重建次数非零记录、爬取批次和页面均为 0，未发起生产爬取或重建。网络/向量/模型边界为明确合成夹具，真实外部模型与第三方爬取未验收；普通异步导入保留原行为。audit 环境缺项及内部跳过不计通过；Graphify 缺模块未刷新。无扩展或 SDK 发布。
+
 ## 2026-11-20 · NAV-04 线索到 WhatsApp 群发收件人交接（链 D）
 
 - **行为与验证**：修复小写 id 映射，以绑定用户和租户的五分钟一次性内存标识交接，重读当前联系人预选并展示姓名和号码。发送前及确认时复核，号码改变须重新确认，取消、重置和刷新不发送。全量 SPA 104 文件/1031 测试、最终专项 19 项、eslint 和生产构建通过；ego-browser 逐元素核验甲预选、取消、重置、改选乙无串入及实际刷新无重放，合成接口发送事件为零。完整证据见 `.specify/bugs/whatsapp-lead-handoff/`。

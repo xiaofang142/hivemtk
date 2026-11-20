@@ -3,7 +3,7 @@
 - Assessment: [assessment.md](assessment.md)
 - Fix: [fix.md](fix.md)
 - Date: 2026-11-20
-- Verdict: 定向及最终完整门禁通过；待生产验收，暂不销项。
+- Verdict: 定向、最终完整门禁与生产迁移和发布核验完成；生产文档未触发重建。
 
 ## 修复前复现
 
@@ -39,4 +39,10 @@
 
 Graphify 刷新失败：`ModuleNotFoundError: No module named 'graphify'`。未将环境缺项记为通过。
 
-生产发布尚未执行。需记录链 A 的提交、二进制摘要、回滚点、双健康检查、默认口令拒绝及 `reindex_attempts` 迁移证据后再关闭清单。
+## 生产交付
+
+提交 `462d98cc5b9cff606cf127f2eb515b51714e935a` 已推双远端，于 2026-11-20 14:55:09 +08:00 经链 A 发布。实际二进制 SHA-256 `afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11`；镜像和启动时间见 [deploy-state.json](evidence/deploy-state.json)。同一冻结源码完整测试通过后使用 `--skip-tests`，其他发布门仍执行，见 [api-deploy.log](evidence/api-deploy.log)。
+
+14:55:45 +08:00 独立核验二进制、运行镜像和启动时间，内部健康 code 0、公网健康 HTTP 200 和 code 0；公开 seed 单次默认口令探针 HTTP 401、RESULT GREEN。真实生产 PostgreSQL 的 `knowledge_documents.reindex_attempts` 为 bigint、非空、默认 0；仍有 14 条文档，非零尝试记录为 0。该核验只读取结构和计数，没有运行生产重建，见 [production-after.json](evidence/production-after.json)。
+
+回滚镜像为 `mtk-user-server:rollback-20261120-145347`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-145347`；二者独立回读摘要均匹配发布前基线。生产证据齐全后，仅移除唯一外层清单中仍存在的 FA-13 精确任务行，保留其他在途修改。未把受控向量或本地 1001 条夹具写成外部模型或第三方生产验收。

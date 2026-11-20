@@ -3,7 +3,7 @@
 - Assessment: [assessment.md](assessment.md)
 - Fix: [fix.md](fix.md)
 - Date: 2026-11-20
-- Verdict: 最终完整门禁通过；待生产验收，暂不销项。
+- Verdict: 最终完整门禁、链 A/D 交付及生产迁移核验完成；外部爬取和真实模型效果不在已验证范围内。
 
 ## 原因复现
 
@@ -34,7 +34,15 @@
 
 ## 发布
 
-尚未发布；不得据定向测试提前销项。后续按链 A 完成二进制摘要、内外健康、默认口令拒绝、回滚点、检查点表与租约列验收后补充证据。
+提交 `462d98cc5b9cff606cf127f2eb515b51714e935a` 已推双远端，2026-11-20 14:55:09 +08:00 使用 `deploy-api.sh --skip-tests` 发布；此前同一冻结源码的完整测试已通过，发布器的 vet、摘要校验、健康和口令探针照常执行。见 [api-deploy.log](evidence/api-deploy.log) 与 [deploy-state.json](evidence/deploy-state.json)。
+
+14:55:45 +08:00 独立回读确认运行二进制 SHA-256 `afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11`、新镜像及启动时间均与状态文件一致，容器 running；内部健康 code 0，公网健康 HTTP 200、code 0。公开 seed 单次口令探针 HTTP 401、RESULT GREEN，不声称执行全部口令字典。见 [production-after.json](evidence/production-after.json)。
+
+真实生产 PostgreSQL 只读核验：`kb_crawl_batches.lease_token` 非空默认空串、`lease_until` 可空；`kb_crawl_pages` 已创建，唯一键为 `(tenant_id,source_id,url_hash)`，完成/QA 哈希非空默认空串。生产仍有原来 14 条知识文档，批次和页面记录均为 0，未发起生产爬取。回滚镜像 `mtk-user-server:rollback-20261120-145347` 与二进制 `user-server.bak-20261120-145347` 摘要均等于发布前基线。
+
+孤儿翻译清理随 SPA 链 D 发布：buildId `462d98cc5-1795157548680`。14:57:36 +08:00 核验 658 个本地产物与服务器摘要全部一致，27 个公网资源均 HTTP 200 且摘要一致；保留 `.user.ini` 和旧 hash 资产。完整快照 `/www/wwwroot/hivemtk/user-web.snapshot-fa12-fa13-20261120-145644.tgz`，SHA-256 `ef5ad69cc49315c080751750c8fe3a166d1ce2bd83e558ca59f5fbe60c7bca56`。见 [web-deploy-before.json](evidence/web-deploy-before.json) 与 [web-deploy-after.json](evidence/web-deploy-after.json)。
+
+唯一外层清单的 FA-12 行已由并行工作移除；本轮未恢复该行，也不把他人的清单修改记作本轮成果。生产发布及上述验收由本轮实际完成。
 
 ## 批次上下文补充回归
 

@@ -3,7 +3,7 @@
 - Assessment: [assessment.md](assessment.md)
 - Follow-up: [assessment-followup.md](assessment-followup.md)
 - Date: 2026-11-20
-- Status: 定向回归及最终完整门禁通过；生产验收尚待完成。
+- Status: 定向回归、最终完整门禁及生产迁移和发布核验完成。
 
 ## 最终行为
 
@@ -19,4 +19,6 @@
 
 见 [test.md](test.md)。1001 条真实 PostgreSQL 夹具均处理一次；并发场景 101 条原文档中 99 条 indexed、2 条 failed，2 条新增延后。验证同步 API 成功前向量与最终状态已经持久化，失败响应不伪报完成。
 
-最终完整门禁已在独立集成目录的冻结源码上执行，lint、audit、vet、build、test-go 全部退出 0，详见 [test.md](test.md)。Graphify 刷新已实跑，因本机缺少 Python `graphify` 模块失败，未计为通过。尚未发布，不提前移除唯一清单 FA-13。
+最终完整门禁已在独立集成目录的冻结源码上执行，lint、audit、vet、build、test-go 全部退出 0，详见 [test.md](test.md)。Graphify 刷新已实跑，因本机缺少 Python `graphify` 模块失败，未计为通过。
+
+提交 `462d98cc5b9cff606cf127f2eb515b51714e935a` 已推双远端并于 2026-11-20 14:55:09 +08:00 经链 A 发布。生产 `reindex_attempts` 列为非空、默认 0；运行二进制、双健康、默认口令拒绝和回滚点均有独立证据。生产原有 14 条文档未触发重建；1001 条完整覆盖等业务验收来自真实专用 PostgreSQL 和受控向量边界。

@@ -1,0 +1,10 @@
+{
+  "snapshot": "/www/wwwroot/hivemtk/user-web.snapshot-fa12-fa13-20261120-145644.tgz",
+  "stdout": "995bdfe4352776dc4d891791f7b8a0691861186a5dd1da6403f44ca526a7e950  /www/wwwroot/hivemtk/user-web/index.html\nf0d5eb4565cdbe8217417b4dddf52acdf1de3c75f356f9b4a2ec5002f67f52b7  /www/wwwroot/hivemtk/user-web/.user.ini\nef5ad69cc49315c080751750c8fe3a166d1ce2bd83e558ca59f5fbe60c7bca56  /www/wwwroot/hivemtk/user-web.snapshot-fa12-fa13-20261120-145644.tgz\n",
+  "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n",
+  "build": {
+    "buildId": "462d98cc5-1795157548680",
+    "buildTime": "2026-11-20T06:52:54.196Z",
+    "url": "./index.html"
+  }
+}

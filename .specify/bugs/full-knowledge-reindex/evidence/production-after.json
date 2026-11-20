@@ -1,0 +1,38 @@
+{
+  "schema": {
+    "exit_code": 0,
+    "stdout": "BEGIN\n{\"database\" : \"user_db\", \"columns\" : [{\"table_name\":\"kb_crawl_batches\",\"column_name\":\"lease_token\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":\"''::character varying\"}, {\"table_name\":\"kb_crawl_batches\",\"column_name\":\"lease_until\",\"data_type\":\"timestamp with time zone\",\"is_nullable\":\"YES\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"completed_hash\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":\"''::character varying\"}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"content_hash\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"document_id\",\"data_type\":\"bigint\",\"is_nullable\":\"NO\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"error_msg\",\"data_type\":\"text\",\"is_nullable\":\"YES\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"qa_hash\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":\"''::character varying\"}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"source_id\",\"data_type\":\"bigint\",\"is_nullable\":\"NO\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"tenant_id\",\"data_type\":\"bigint\",\"is_nullable\":\"NO\",\"column_default\":null}, {\"table_name\":\"kb_crawl_pages\",\"column_name\":\"url_hash\",\"data_type\":\"character varying\",\"is_nullable\":\"NO\",\"column_default\":null}, {\"table_name\":\"knowledge_documents\",\"column_name\":\"reindex_attempts\",\"data_type\":\"bigint\",\"is_nullable\":\"NO\",\"column_default\":\"0\"}], \"page_indexes\" : [{\"indexname\":\"idx_kb_crawl_pages_document_id\",\"indexdef\":\"CREATE INDEX idx_kb_crawl_pages_document_id ON public.kb_crawl_pages USING btree (document_id)\"}, {\"indexname\":\"idx_kb_crawl_pages_kb_id\",\"indexdef\":\"CREATE INDEX idx_kb_crawl_pages_kb_id ON public.kb_crawl_pages USING btree (kb_id)\"}, {\"indexname\":\"kb_crawl_pages_pkey\",\"indexdef\":\"CREATE UNIQUE INDEX kb_crawl_pages_pkey ON public.kb_crawl_pages USING btree (id)\"}, {\"indexname\":\"uidx_crawl_page\",\"indexdef\":\"CREATE UNIQUE INDEX uidx_crawl_page ON public.kb_crawl_pages USING btree (tenant_id, source_id, url_hash)\"}], \"documents\" : 14, \"documents_with_attempts\" : 0, \"crawl_batches\" : 0, \"crawl_pages\" : 0, \"zero_tenant_pages\" : 0}\nROLLBACK\n",
+    "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n"
+  },
+  "runtime": {
+    "exit_code": 0,
+    "stdout": "afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11  /www/wwwroot/hivemtk/user-server/user-server\n37840e2e3a37fda88c0e96ae915308ec43fe6ead047acf1ae4450029309c8d8c  /www/wwwroot/hivemtk/user-server/user-server.bak-20261120-145347\nsha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958 2026-11-20T06:54:59.362105006Z true\nsha256:102ea2ed31b0bb03ff97d9ef8d72c2d78086763c7d87d3eafd486768ba4829c4\n{\"code\":0,\"message\":\"ok\",\"data\":{\"status\":\"ok\"}}",
+    "stderr": "** WARNING: connection is not using a post-quantum key exchange algorithm.\n** This session may be vulnerable to \"store now, decrypt later\" attacks.\n** The server may need to be upgraded. See https://openssh.com/pq.html\n"
+  },
+  "public_health": {
+    "status": 200,
+    "body": {
+      "code": 0,
+      "message": "ok",
+      "data": {
+        "status": "ok"
+      }
+    }
+  },
+  "verified_at": "2026-11-20T14:55:45.406567+08:00",
+  "deploy_state": {
+    "deployed_sha": "462d98cc5b9cff606cf127f2eb515b51714e935a",
+    "deployed_at": "2026-11-20T14:55:09+08:00",
+    "remote_binary_sha256": "afcfe011776aaaa14f22f6c4408e70f8c87a3e625f4e8c5c557030da86611e11",
+    "image_id": "sha256:744fbda23283de31a3c15bfc3dbd4ed10d371182d8709b63ee7bc9cb71dee958",
+    "container_started_at": "2026-11-20T06:54:59.362105006Z",
+    "rollback_image_tag": "mtk-user-server:rollback-20261120-145347",
+    "rollback_binary": "/www/wwwroot/hivemtk/user-server/user-server.bak-20261120-145347",
+    "default_credential_probe": "ok",
+    "commits": [
+      "462d98cc5 fix: 完成知识库爬取恢复与全量重建闭环",
+      "2986a7c54 fix: 收口知识库爬虫租户与重试修复",
+      "a436a57b0 fix: 收口离线缺陷审计与跨层回归"
+    ]
+  }
+}
