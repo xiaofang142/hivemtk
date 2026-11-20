@@ -1,0 +1,67 @@
+{
+  "verified_at": "2026-11-20T10:25:26.851151+08:00",
+  "build": {
+    "buildId": "113696881-1795141388751",
+    "buildTime": "2026-11-20T02:23:13.506Z",
+    "url": "./index.html"
+  },
+  "backup": "/www/wwwroot/hivemtk/user-web.snapshot-nav04-20261120-1024.tgz",
+  "backup_sha256": "3e2300b37cd215859af019c39263b1be4c85145f6b14e660b794b850b4132eca",
+  "assets": [
+    {
+      "path": "index.html",
+      "status": 200,
+      "sha256": "995bdfe4352776dc4d891791f7b8a0691861186a5dd1da6403f44ca526a7e950",
+      "local_server_public_match": true
+    },
+    {
+      "path": "version.json",
+      "status": 200,
+      "sha256": "e6057164524ebbd6e04c299355a8e81064cb10a0ecf7132712ce89de59f6cd10",
+      "local_server_public_match": true
+    },
+    {
+      "path": "sw.js",
+      "status": 200,
+      "sha256": "2326ec0c26a8e69979d500d5a22706cf30e738ababfe341ff9be152de863f06c",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/index-D7QgqUv9.js",
+      "status": 200,
+      "sha256": "538559adec07e82ad7d35a9a6df8f542ed76238e0b885e4d0b11aacd22f1bc24",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/BulkMessaging-Cm72QJMO.js",
+      "status": 200,
+      "sha256": "658d4efc3399fe1896d8d6efab5a7df05b41d1ae77ae0451daec0b949b215ade",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/LeadGroupSelection-fKSEjMdf.js",
+      "status": 200,
+      "sha256": "9aa894f54a775f11d121ff795ac3f5424e363cb8b05e9a9b8a993677af0df321",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/bulkLeadSelection-Dju1l0lO.js",
+      "status": 200,
+      "sha256": "5c70efba225a9a5bf791764bfc8d45fbb3444c018e64437a561c2d85cd80e1c3",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/whatsapp-CEk6g6qz.js",
+      "status": 200,
+      "sha256": "b3da524d7a6d771f532f4e588df9af76593f46aa6603d8b7b6ec8648ffbd529a",
+      "local_server_public_match": true
+    },
+    {
+      "path": "assets/whatsapp--LkEj9_b.js",
+      "status": 200,
+      "sha256": "3854009f62159c77831df9d35a51a3110cf575a7491d20674d2b827b9581952a",
+      "local_server_public_match": true
+    }
+  ],
+  "real_external_messages_sent": 0
+}

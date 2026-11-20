@@ -1,4 +1,15 @@
 {
+  "bulkLeadHandoff": {
+    "template": "Plantilla del mensaje",
+    "account": "Cuenta de envío",
+    "changed": "Los datos de contacto han cambiado. Revise y confirme la lista de nuevo.",
+    "unavailable": "La selección ha caducado o un contacto no está disponible. Seleccione y revise los destinatarios de nuevo.",
+    "recipients": "Destinatarios seleccionados",
+    "confirmTitle": "Revisar destinatarios",
+    "confirmHint": "Revise estos contactos actuales. La tarea de envío solo se creará tras la confirmación.",
+    "cancel": "Cancelar envío",
+    "confirm": "Confirmar tarea de envío"
+  },
   "agentSaveRecovery": {
     "retry": "Reintentar guardado",
     "pendingCode": "La creación anterior no está confirmada. Mantenga el código y reintente la recuperación.",

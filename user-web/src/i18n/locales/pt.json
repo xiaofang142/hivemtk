@@ -1,4 +1,15 @@
 {
+  "bulkLeadHandoff": {
+    "template": "Modelo de mensagem",
+    "account": "Conta de envio",
+    "changed": "Os dados de contacto foram atualizados. Reveja e confirme a lista novamente.",
+    "unavailable": "A seleção expirou ou um contacto está indisponível. Selecione e reveja os destinatários novamente.",
+    "recipients": "Destinatários selecionados",
+    "confirmTitle": "Rever destinatários",
+    "confirmHint": "Reveja estes contactos atuais. A tarefa de envio só será criada após a confirmação.",
+    "cancel": "Cancelar envio",
+    "confirm": "Confirmar tarefa de envio"
+  },
   "agentSaveRecovery": {
     "retry": "Tentar salvar novamente",
     "pendingCode": "A criação anterior não foi confirmada. Mantenha o código e tente recuperar novamente.",

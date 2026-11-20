@@ -1,0 +1,16 @@
+{
+  "leads": [
+    {
+      "id": "nav04-a",
+      "name": "合成联系人甲",
+      "account": "+15550001001"
+    },
+    {
+      "id": "nav04-b",
+      "name": "合成联系人乙",
+      "account": "+15550001002"
+    }
+  ],
+  "events": [],
+  "realExternalSends": 0
+}

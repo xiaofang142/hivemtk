@@ -1,0 +1,171 @@
+[p1 "NAV04 本地受控验收" | space "NAV04 lead handoff verification"(5): 1 managed, 0 untracked — p1* "NAV04 本地受控验收"]
+root
+  container
+    container
+      text "NAV04 本地受控验收：仅合成线索，不连接第三方"
+      paragraph
+        anchor [ref=51, loc=href:/#/whatsapp/lead-group-selection, url=http://127.0.0.1:18224/#/whatsapp/lead-group-selection]
+          text "重新选择线索"
+        text "·"
+        anchor [ref=52, loc=href:/#/whatsapp/group-messaging, url=http://127.0.0.1:18224/#/whatsapp/group-messaging]
+          text "直接打开群发页"
+    container
+      container
+        text "从线索库选择群体"
+        container
+          form
+            container
+              text "状态"
+              container [ref=130]
+                comboboxgrouping [ref=131]
+                text "选择线索状态"
+                svg_root
+            container
+              text "来源"
+              container [ref=132]
+                textbox [ref=133, loc=css:input[placeholder="线索来源"]]
+                  text "线索来源"
+            group "最低评分"
+              text "最低评分"
+              container
+                slider "slider between 0 and 100" [ref=134, loc=role:slider[name="slider between 0 and 100"]]
+                container
+                  button "decrease number"
+                    svg_root
+                  button "increase number"
+                    svg_root
+                  container [ref=135]
+                    spinbutton [ref=136]
+                      text "0"
+            container
+              text "搜索"
+              container [ref=137]
+                textbox [ref=138, loc=css:input[placeholder="姓名或电话"]]
+                  text "姓名或电话"
+            container
+              button [ref=139]
+                text "筛选"
+              button [ref=140]
+                text "重置"
+          container
+            table
+              table_row
+                table_cell
+                  container "Select all rows"
+                    checkbox [ref=141]
+                table_cell
+                  text "姓名"
+                table_cell
+                  text "手机号"
+                table_cell
+                  text "邮箱"
+                table_cell
+                  text "公司"
+                table_cell
+                  text "来源"
+                table_cell
+                  text "质量评分"
+                table_cell
+                  text "状态"
+            table
+              container [ref=142]
+                table_row
+                  table_cell
+                    container "Select this row"
+                      checkbox [ref=143]
+                  table_cell
+                    text "合成联系人甲"
+                  table_cell
+                    text "+15550001001"
+                  table_cell
+                  table_cell
+                  table_cell
+                    text "clue"
+                  table_cell
+                    text "80分"
+                  table_cell
+                    text "新线索"
+                table_row
+                  table_cell
+                    container "Select this row"
+                      checkbox [ref=144]
+                  table_cell
+                    text "合成联系人乙"
+                  table_cell
+                    text "+15550001002"
+                  table_cell
+                  table_cell
+                  table_cell
+                    text "clue"
+                  table_cell
+                    text "80分"
+                  table_cell
+                    text "新线索"
+          container
+            text "Total 2"
+            container [ref=145]
+              comboboxgrouping [ref=146]
+              text "20/page"
+              svg_root
+            button "Go to previous page" [ref=147, loc=css:button[aria-label="Go to previous page"]]
+              svg_root
+            unordered_list
+              list_item "page 1" [ref=148]
+                text "1"
+            button "Go to next page" [ref=149, loc=css:button[aria-label="Go to next page"]]
+              svg_root
+            container
+              text "Go to"
+              container [ref=150]
+                spinbutton "Page" [ref=151, loc=css:input[aria-label="Page"]]
+                  text "1"
+      container
+        container
+          text "已选择 1 个联系人"
+          button [ref=152]
+            text "下一步：群发消息"
+        container
+          table
+            table_row
+              table_cell
+                text "姓名"
+              table_cell
+                text "手机号"
+              table_cell
+                text "邮箱"
+              table_cell
+                text "公司"
+              table_cell
+                text "质量评分"
+          table
+            container [ref=153]
+              table_row
+                table_cell
+                  text "合成联系人乙"
+                table_cell
+                  text "+15550001002"
+                table_cell
+                table_cell
+                table_cell
+                  text "80分"
+  container
+    image
+    image
+    text "官方采购助手"
+    text "·"
+    image
+  container
+    text "1688找货源"
+    image
+    iframe
+      root
+    text "❯"
+    svg_root
+    iframe
+      root
+    svg_root
+    iframe
+      root
+    image
+    iframe
+      root

@@ -1,4 +1,15 @@
 {
+  "bulkLeadHandoff": {
+    "template": "Nachrichtenvorlage",
+    "account": "Absenderkonto",
+    "changed": "Die Kontaktdaten wurden aktualisiert. Prüfen und bestätigen Sie die Liste erneut.",
+    "unavailable": "Die Auswahl ist abgelaufen oder ein Kontakt ist nicht verfügbar. Wählen und prüfen Sie die Empfänger erneut.",
+    "recipients": "Ausgewählte Empfänger",
+    "confirmTitle": "Empfänger prüfen",
+    "confirmHint": "Prüfen Sie die aktuellen Kontakte. Erst nach der Bestätigung wird ein Sendeauftrag erstellt.",
+    "cancel": "Senden abbrechen",
+    "confirm": "Sendeauftrag bestätigen"
+  },
   "agentSaveRecovery": {
     "retry": "Speichern wiederholen",
     "pendingCode": "Die vorherige Erstellung ist unbestätigt. Behalten Sie den Code bei und versuchen Sie die Wiederherstellung erneut.",

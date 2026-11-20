@@ -1,4 +1,15 @@
 {
+  "bulkLeadHandoff": {
+    "template": "メッセージテンプレート",
+    "account": "送信アカウント",
+    "changed": "連絡先情報が更新されました。一覧を再確認して承認してください。",
+    "unavailable": "選択が期限切れか、連絡先が利用できません。宛先を選び直して確認してください。",
+    "recipients": "選択した宛先",
+    "confirmTitle": "宛先の確認",
+    "confirmHint": "現在の連絡先を確認してください。承認後にのみ送信タスクが作成されます。",
+    "cancel": "送信をキャンセル",
+    "confirm": "送信タスクを承認"
+  },
   "agentSaveRecovery": {
     "retry": "保存を再試行",
     "pendingCode": "前回の作成が未確認です。コードを変更せず、復旧を再試行してください。",

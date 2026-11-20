@@ -204,9 +204,12 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox as _ElMessageBox } from 'element-plus'
 import * as clueApi from '@/api/clue'
 import { useRouter } from 'vue-router'
+import { useUserStore } from '@/stores/user'
+import { discardLeadSelection, stageLeadSelection } from '@/utils/bulkLeadSelection'
 import { LEAD_STATUS_OPTIONS_SIMPLE, getLeadStatusLabel as _getLeadStatusLabel, getLeadStatusTagType as _getLeadStatusTagType } from '@/constants/leadStatus'
 
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 const leads = ref([])
 const selectedLeads = ref([])
@@ -234,7 +237,7 @@ const fetchLeads = async () => {
     );
     const clueData = response?.list || response || [];
     leads.value = clueData.map(clue => ({
-      id: clue.ID,
+      id: clue.id ?? clue.ID,
       name: clue.Name || clue.name || '未知',
       phone: clue.Account || clue.account || '',
       email: '',
@@ -269,9 +272,19 @@ const handleSelectionChange = (selection) => {
   selectedLeads.value = selection
 }
 
-const proceedToMessaging = () => {
-  localStorage.setItem('selectedLeads', JSON.stringify(selectedLeads.value.map(lead => lead.id)));
-  router.push('/whatsapp/group-messaging');
+const proceedToMessaging = async () => {
+  const token = stageLeadSelection(selectedLeads.value.map(lead => lead.id), userStore.userInfo)
+  if (!token) {
+    ElMessage.warning(i18n.global.t('bulkLeadHandoff.unavailable'))
+    return
+  }
+  try {
+    const failure = await router.push({ path: '/whatsapp/group-messaging', query: { leadSelection: token } })
+    if (failure) discardLeadSelection(token)
+  } catch {
+    discardLeadSelection(token)
+    ElMessage.error(i18n.global.t('bulkLeadHandoff.unavailable'))
+  }
 }
 
 const getScoreType = (score) => {

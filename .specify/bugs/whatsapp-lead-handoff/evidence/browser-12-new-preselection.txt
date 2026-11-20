@@ -1,0 +1,119 @@
+[p1 "NAV04 本地受控验收" | space "NAV04 lead handoff verification"(5): 1 managed, 0 untracked — p1* "NAV04 本地受控验收"]
+root
+  container
+    container
+      text "NAV04 本地受控验收：仅合成线索，不连接第三方"
+      paragraph
+        anchor [ref=51, loc=href:/#/whatsapp/lead-group-selection, url=http://127.0.0.1:18224/#/whatsapp/lead-group-selection]
+          text "重新选择线索"
+        text "·"
+        anchor [ref=52, loc=href:/#/whatsapp/group-messaging, url=http://127.0.0.1:18224/#/whatsapp/group-messaging]
+          text "直接打开群发页"
+    container
+      text "批量消息发送"
+      container
+        tablist
+          tab [ref=154]
+            text "发送消息"
+          tab [ref=155]
+            text "消息模板"
+          tab [ref=156]
+            text "发送记录"
+        tabpanel "发送消息"
+          form
+            container
+              container
+                container
+                  text "*"
+                  text "消息模板"
+                container [ref=157]
+                  comboboxgrouping [ref=158]
+                  text "请选择消息模板"
+                  svg_root
+              container
+                container
+                  text "*"
+                  text "发送账号"
+                container [ref=159]
+                  comboboxgrouping [ref=160]
+                  text "请选择WhatsApp账号"
+                  svg_root
+            group "目标线索"
+              container
+                text "*"
+                text "目标线索"
+              container
+                container
+                  paragraph
+                    checkbox [ref=161]
+                    container
+                      text "所有线索"
+                      text "0/1"
+                  container
+                    container [ref=162]
+                      svg_root
+                      textbox [ref=163]
+                        text "请输入线索姓名或电话"
+                    group "checkbox-group"
+                      checkbox [ref=164]
+                      text "合成联系人甲 (+15550001001)"
+                container
+                  button [ref=165]
+                    svg_root
+                    text "移除"
+                  button [ref=166]
+                    text "添加"
+                    svg_root
+                container
+                  paragraph
+                    checkbox [ref=167]
+                    container
+                      text "已选择"
+                      text "0/1"
+                  container
+                    container [ref=168]
+                      svg_root
+                      textbox [ref=169]
+                        text "请输入线索姓名或电话"
+                    group "checkbox-group"
+                      checkbox [ref=170]
+                      text "合成联系人乙 (+15550001002)"
+            group "待发送联系人"
+              text "待发送联系人"
+              unordered_list
+                list_item
+                  text "合成联系人乙 (+15550001002)"
+            group "消息预览"
+              text "消息预览"
+              iframe [ref=171]
+                root
+            text "计划发送时间"
+            container [ref=172]
+              svg_root
+              comboboxgrouping [ref=173, loc=css:input[placeholder="选择发送时间，为空则立即发送"]]
+                text "选择发送时间，为空则立即发送"
+            button [ref=174]
+              text "立即发送"
+            button [ref=175]
+              text "重置"
+  container
+    image
+    image
+    text "官方采购助手"
+    text "·"
+    image
+  container
+    text "1688找货源"
+    image
+    iframe
+      root
+    text "❯"
+    svg_root
+    iframe [ref=75]
+      root
+    svg_root
+    iframe [ref=76]
+      root
+    image
+    iframe
+      root

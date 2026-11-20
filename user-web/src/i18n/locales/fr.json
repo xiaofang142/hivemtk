@@ -1,4 +1,15 @@
 {
+  "bulkLeadHandoff": {
+    "template": "Modèle de message",
+    "account": "Compte d’envoi",
+    "changed": "Les coordonnées ont été modifiées. Vérifiez et confirmez à nouveau la liste.",
+    "unavailable": "La sélection a expiré ou un contact est indisponible. Sélectionnez et vérifiez à nouveau les destinataires.",
+    "recipients": "Destinataires sélectionnés",
+    "confirmTitle": "Vérifier les destinataires",
+    "confirmHint": "Vérifiez ces contacts actuels. La tâche d’envoi sera créée uniquement après confirmation.",
+    "cancel": "Annuler l’envoi",
+    "confirm": "Confirmer la tâche d’envoi"
+  },
   "agentSaveRecovery": {
     "retry": "Réessayer l’enregistrement",
     "pendingCode": "La création précédente n’est pas confirmée. Conservez son code et réessayez la récupération.",
