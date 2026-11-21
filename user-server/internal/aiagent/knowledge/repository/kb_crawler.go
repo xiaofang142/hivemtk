@@ -109,6 +109,15 @@ func (r *KBCrawlerRepository) ListSources(ctx context.Context, kbID uint, status
 
 // —— 批次（SQL 逐字保留自 service/kb_crawler.go）——
 
+// HasPendingOrRunningBatch 查询当前租户该源是否已有待恢复或执行中的批次，不受恢复页大小限制。
+func (r *KBCrawlerRepository) HasPendingOrRunningBatch(ctx context.Context, sourceID uint) (bool, error) {
+	var batch model.KBCrawlBatch
+	result := r.db.WithContext(ctx).Select("id").
+		Where("source_id = ? AND status IN ?", sourceID, []string{model.KBCrawlBatchStatusPending, model.KBCrawlBatchStatusRunning}).
+		Limit(1).Find(&batch)
+	return result.RowsAffected > 0, result.Error
+}
+
 // GetBatchByID 按主键取批次。
 func (r *KBCrawlerRepository) GetBatchByID(ctx context.Context, id uint64) (*model.KBCrawlBatch, error) {
 	var batch model.KBCrawlBatch
@@ -137,6 +146,33 @@ func (r *KBCrawlerRepository) CreateBatch(ctx context.Context, batch *model.KBCr
 // UpdateBatchFields 回写批次运行字段（状态/计数/起止时间）。
 func (r *KBCrawlerRepository) UpdateBatchFields(ctx context.Context, id uint64, fields map[string]any) error {
 	return r.db.WithContext(ctx).Model(&model.KBCrawlBatch{}).Where("id = ?", id).Updates(fields).Error
+}
+
+// ListResumableBatches 只读持久队列；原子认领时仍须再次检查状态/失效时间。
+func (r *KBCrawlerRepository) ListResumableBatches(ctx context.Context, expiredBefore time.Time) ([]model.KBCrawlBatch, error) {
+	var batches []model.KBCrawlBatch
+	err := r.db.WithContext(ctx).Where("status = ? OR (status = ? AND COALESCE(started_at, created_at) < ?)",
+		model.KBCrawlBatchStatusPending, model.KBCrawlBatchStatusRunning, expiredBefore).
+		Order("id ASC").Limit(100).Find(&batches).Error
+	return batches, err
+}
+
+// ClaimBatch CAS：并发 worker 只有一方能认领 pending/已失效 running。
+// started_at 既是失效判据也是本次执行的完成令牌；不持有跨 HTTP/LLM 的事务锁。
+func (r *KBCrawlerRepository) ClaimBatchByStartedAt(ctx context.Context, id uint64, startedAt, expiredBefore time.Time) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&model.KBCrawlBatch{}).Where("id = ?", id).
+		Where("status = ? OR (status = ? AND COALESCE(started_at, created_at) < ?)",
+			model.KBCrawlBatchStatusPending, model.KBCrawlBatchStatusRunning, expiredBefore).
+		Updates(map[string]any{"status": model.KBCrawlBatchStatusRunning, "started_at": startedAt,
+			"finished_at": nil, "error_msg": ""})
+	return result.RowsAffected == 1, result.Error
+}
+
+// FinishClaimedBatch 旧 worker 的完成写不能覆盖已重新认领的批次。
+func (r *KBCrawlerRepository) FinishClaimedBatch(ctx context.Context, id uint64, startedAt time.Time, fields map[string]any) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&model.KBCrawlBatch{}).
+		Where("id = ? AND status = ? AND started_at = ?", id, model.KBCrawlBatchStatusRunning, startedAt).Updates(fields)
+	return result.RowsAffected == 1, result.Error
 }
 
 // CountFailedBatchesSince 统计近 7 天 failed 批次数（连续失败自动暂停判据）。
@@ -190,7 +226,14 @@ func (r *KBCrawlerRepository) SupersedeActiveChunks(ctx context.Context, documen
 // UpdateDocumentFields 回写文档内容/状态（变更重建分支）。
 // 原实现不检查 Updates 错误——错误路径逐字保留，由调用方显式忽略。
 func (r *KBCrawlerRepository) UpdateDocumentFields(ctx context.Context, id uint, fields map[string]any) error {
-	return r.db.WithContext(ctx).Model(&model.KBDocument{}).Where("id = ?", id).Updates(fields).Error
+	result := r.db.WithContext(ctx).Model(&model.KBDocument{}).Where("id = ?", id).Updates(fields)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // CreateDocument 落新爬取文档。

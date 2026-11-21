@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"testing"
 
@@ -11,10 +12,10 @@ import (
 func TestInboxIngress_DeliverOutbound_OutboxLifecycle(t *testing.T) {
 	// NewTestDB 自动 SetTestDB；无参构造经全局 GetDB 拿到本用例的库。
 	testutil.NewTestDB(t, &model.MessageHub{})
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 
 	const (
-		channel        = "douyin_web"
+		channel        = "douyin"
 		accountID      = "acc_manual_1"
 		conversationID = "conv_manual_1"
 		content        = "您好，这是人工回复"
@@ -34,7 +35,7 @@ func TestInboxIngress_DeliverOutbound_OutboxLifecycle(t *testing.T) {
 		IsAIReply:      false,
 		IsRead:         true,
 	}
-	if err := svc.DeliverOutbound(context.Background(), h); err != nil {
+	if err := svc.DeliverOutbound(localBridgeSubmitContext(t, context.Background(), channel, accountID, "text"), h); err != nil {
 		t.Fatalf("DeliverOutbound 失败: %v", err)
 	}
 

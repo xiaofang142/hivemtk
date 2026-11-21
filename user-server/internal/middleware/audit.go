@@ -224,6 +224,11 @@ func AuditMiddleware() gin.HandlerFunc {
 		}
 
 		path := c.Request.URL.Path
+		if IsMerchantCallbackPath(path) {
+			// Provider deliveries are not user actions. Their status is recorded by the callback access log.
+			c.Next()
+			return
+		}
 		for _, excludePath := range DefaultAuditConfig.ExcludePaths {
 			if path == excludePath {
 				c.Next()
@@ -236,17 +241,21 @@ func AuditMiddleware() gin.HandlerFunc {
 		// MA-03：请求体只取首 auditBodyPreviewCap 做审计预览（TeeReader 不截断
 		// handler 可读的完整 body）——BodyLimit 显式豁免 multipart，此前
 		// io.ReadAll 会把 50MB 知识库导入整份读进内存（audit+handler 双份）。
+		metadataOnly := merchantConnectionMetadataOnly(path)
 		var reqPreview *cappedBufferWriter
-		if c.Request.Body != nil {
+		if !metadataOnly && c.Request.Body != nil {
 			reqPreview = &cappedBufferWriter{cap: auditBodyPreviewCap}
 			c.Request.Body = io.NopCloser(io.TeeReader(c.Request.Body, reqPreview))
 		}
 
-		responseWriter := &auditResponseWriter{
-			ResponseWriter: c.Writer,
-			body:           &cappedBufferWriter{cap: auditRespBodyCap},
+		var responseWriter *auditResponseWriter
+		if !metadataOnly {
+			responseWriter = &auditResponseWriter{
+				ResponseWriter: c.Writer,
+				body:           &cappedBufferWriter{cap: auditRespBodyCap},
+			}
+			c.Writer = responseWriter
 		}
-		c.Writer = responseWriter
 
 		c.Next()
 
@@ -281,13 +290,15 @@ func AuditMiddleware() gin.HandlerFunc {
 			"path":   path,
 			// N-1：query 与 api_logger 同走共享 redactQueryValues（同一键表 + 同一掩码），
 			// 敏感键落 audit_logs 前脱敏，防审计侧与访问日志侧口径分化。
-			"query":       redactQueryValues(c.Request.URL.Query()),
 			"status_code": c.Writer.Status(),
 			"latency":     time.Since(startTime).Milliseconds(),
-			"request":     sanitizedRequest,
+		}
+		if !metadataOnly {
+			detail["query"] = redactQueryValues(c.Request.URL.Query())
+			detail["request"] = sanitizedRequest
 		}
 
-		if c.Writer.Status() >= 400 {
+		if !metadataOnly && c.Writer.Status() >= 400 {
 			var responseBody map[string]any
 			if err := json.Unmarshal(responseWriter.body.Bytes(), &responseBody); err == nil {
 				detail["error"] = responseBody

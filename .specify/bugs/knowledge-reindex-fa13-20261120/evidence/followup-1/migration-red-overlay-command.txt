@@ -1,0 +1,4 @@
+Command: FA12_PG_DSN='<authorized local synthetic socket DSN; omitted from evidence>' go test -overlay=<temporary overlay removing only the lease migration registration> ./internal/migration/migrations -run '^TestKnowledgeReindexLeaseMigration$' -count=1 -timeout=90s
+Working directory: user-server/
+Purpose: verify the new migration regression detects absence from RegisterMigrations; this is an isolated registration probe, not historical RED evidence for the original FA-13 implementation.
+Overlay files are outside the repository under the approved OpenCode temporary directory; no tracked source was altered for this probe.

@@ -1,0 +1,6 @@
+{
+  "baseline_file_count": 33855,
+  "outside_round_files_changed_since_baseline": [],
+  "baseline_files_missing": [],
+  "note": "Read-only comparison; concurrent-session files are never restored or overwritten."
+}

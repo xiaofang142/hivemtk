@@ -76,7 +76,8 @@ const up = uploadExtensionAsset({
   dryRun: opt.dryRun, publish: !opt.noPublish,
 });
 if (!up.ok) {
-  const detail = up.error || (up.upload ? JSON.stringify(up.upload).slice(0, 400) : '');
+  const failure = up.review || up.publish || up.upload;
+  const detail = up.error || (failure ? JSON.stringify(failure).slice(0, 400) : '');
   fail(`上传失败（step=${up.step}${detail ? `: ${detail}` : ''}）`);
 }
 log(`✅ 平台上传成功${opt.dryRun ? '（dry-run，未提交）' : ''}`);

@@ -27,6 +27,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/urlguard"
+	"hivemtk-user/internal/pkg/utils/logger"
 
 	"gorm.io/gorm"
 )
@@ -47,13 +48,14 @@ const (
 // AV-04c 批次7 刀3：不再持有 *gorm.DB（爬取源/批次/入库文档 SQL 下沉
 // knowledgeRepo.KBCrawlerRepository），构造收口为仓储注入/Default。
 type CrawlerService struct {
-	repo   *knowledgeRepo.KBCrawlerRepository
-	kb     *KnowledgeBaseService
-	http   *http.Client
-	extr   kbcrawler.Extractor
-	qa     *QASplitService // 可选：qa_split 开启时注入
-	mu     sync.Mutex
-	hashes map[string]map[string]string // source_id → url → contentHash
+	repo         *knowledgeRepo.KBCrawlerRepository
+	kb           *KnowledgeBaseService
+	http         *http.Client
+	extr         kbcrawler.Extractor
+	qa           *QASplitService // 可选：qa_split 开启时注入
+	mu           sync.Mutex
+	hashes       map[string]map[string]string // source_id → url → contentHash
+	batchTimeout time.Duration
 }
 
 // NewCrawlerService 构造（仓储 Default 构造自取全局句柄；与传 GetDB() 同连接同时刻）。
@@ -88,11 +90,12 @@ func NewCrawlerServiceWithRepos(repo *knowledgeRepo.KBCrawlerRepository, kb *Kno
 		},
 	}
 	return &CrawlerService{
-		repo:   repo,
-		kb:     kb,
-		http:   client,
-		extr:   kbcrawler.NewGoqueryExtractor(),
-		hashes: map[string]map[string]string{},
+		repo:         repo,
+		kb:           kb,
+		http:         client,
+		extr:         kbcrawler.NewGoqueryExtractor(),
+		batchTimeout: 30 * time.Minute,
+		hashes:       map[string]map[string]string{},
 	}
 }
 
@@ -325,7 +328,7 @@ func (s *CrawlerService) CreateBatch(ctx context.Context, sourceID uint, trigger
 func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
 	batch, err := s.repo.GetBatchByID(ctx, batchID)
 	if err != nil {
-		return errors.New("批次不存在")
+		return fmt.Errorf("批次不存在: %w", err)
 	}
 	expired := batch.Status == model.KBCrawlBatchStatusRunning && ((batch.LeaseUntil != nil && !batch.LeaseUntil.After(time.Now())) || (batch.LeaseUntil == nil && batch.StartedAt != nil && !batch.StartedAt.After(time.Now().Add(-35*time.Minute))))
 	if batch.Status != model.KBCrawlBatchStatusPending && !expired {
@@ -343,7 +346,7 @@ func (s *CrawlerService) RunBatch(ctx context.Context, batchID uint64) error {
 	}
 	ctx = knowledgeRepo.WithCrawlLease(ctx, knowledgeRepo.CrawlLease{BatchID: batch.ID, Token: token})
 
-	batchCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	batchCtx, cancel := context.WithTimeout(ctx, s.batchTimeout)
 	defer cancel()
 
 	counters, runErr := s.crawl(batchCtx, src, batch)
@@ -538,7 +541,7 @@ func (s *CrawlerService) discoverByLinks(ctx context.Context, rules *kbcrawler.R
 func (s *CrawlerService) crawlOne(ctx context.Context, src *model.KBCrawlerSource, pageURL string, counters *crawlCounters) error {
 	body, status, err := s.fetch(ctx, pageURL)
 	if err != nil || status != http.StatusOK {
-		return fmt.Errorf("抓取失败 %s: HTTP %d", pageURL, status)
+		return fmt.Errorf("抓取失败 %s: HTTP %d: %w", pageURL, status, err)
 	}
 	page, err := s.extr.Extract(body, pageURL)
 	if err != nil {
@@ -573,7 +576,7 @@ func (s *CrawlerService) crawlOne(ctx context.Context, src *model.KBCrawlerSourc
 }
 
 // prevHash 读上次内容哈希（内存快照；进程重启后首爬全量视为变更，走一次重建不丢数据）
-func (s *CrawlerService) prevHash(sourceID string, pageURL string) string {
+func (s *CrawlerService) prevHash(sourceID any, pageURL string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m := s.hashes[fmt.Sprint(sourceID)]
@@ -583,7 +586,7 @@ func (s *CrawlerService) prevHash(sourceID string, pageURL string) string {
 	return m[pageURL]
 }
 
-func (s *CrawlerService) setHash(sourceID string, pageURL, hash string) {
+func (s *CrawlerService) setHash(sourceID any, pageURL, hash string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := fmt.Sprint(sourceID)
@@ -663,4 +666,50 @@ func (s *CrawlerService) verifyDocumentTerminal(ctx context.Context, docID uint,
 func ContentHash(title, content string) string {
 	h := sha256.Sum256([]byte(title + "\n" + content))
 	return hex.EncodeToString(h[:])
+}
+
+type crawlerBatchContextKey struct{}
+
+// 只恢复爬虫所需的 trace/批次生命周期标记，不能继承 SystemScope。
+func crawlerTenantContext(ctx context.Context, tenantID uint) context.Context {
+	pinned := tenant.OnlyTenant(ctx, tenantID)
+	if trace := logger.TraceIDFromContext(ctx); trace != "" {
+		pinned = logger.WithTraceID(pinned, trace)
+	}
+	if inBatch, _ := ctx.Value(crawlerBatchContextKey{}).(bool); inBatch {
+		pinned = context.WithValue(pinned, crawlerBatchContextKey{}, true)
+	}
+	return pinned
+}
+
+// HasPendingOrRunningBatch 为 cron 建批前查询持久任务；不能把有界恢复页当作完整队列。
+func (s *CrawlerService) HasPendingOrRunningBatch(ctx context.Context, sourceID uint) (bool, error) {
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return false, errors.New("查询爬取批次缺少租户")
+	}
+	return s.repo.HasPendingOrRunningBatch(crawlerTenantContext(ctx, tenantID), sourceID)
+}
+
+// ResumeBatches 消费当前租户已持久化的 pending/过期 running，不依赖进程内队列。
+func (s *CrawlerService) ResumeBatches(ctx context.Context) (map[uint]bool, error) {
+	if tenant.WriteTenantID(ctx) == 0 {
+		return nil, errors.New("恢复爬取批次缺少租户")
+	}
+	ctx = crawlerTenantContext(ctx, tenant.WriteTenantID(ctx))
+	batches, err := s.repo.ListResumableBatches(ctx, time.Now().Add(-35*time.Minute))
+	if err != nil {
+		return nil, err
+	}
+	sources := make(map[uint]bool)
+	for _, batch := range batches {
+		if err := ctx.Err(); err != nil {
+			return sources, err
+		}
+		sources[batch.SourceID] = true
+		if err := s.RunBatch(ctx, batch.ID); err != nil {
+			logger.Warnf("[KBCrawler] 恢复批次 %d 执行失败: %v", batch.ID, err)
+		}
+	}
+	return sources, nil
 }

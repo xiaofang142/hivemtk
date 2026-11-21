@@ -337,7 +337,10 @@ func TestGormDB_NilAssignment(t *testing.T) {
 // TestBind_UsesRealKBType 绑定行上冗余的 KBType 必须取知识库真实类型：
 // 写死 faq 会让按类型过滤（ListByAgent(kbType)）漏掉 RAG/SOP 库。
 func TestBind_UsesRealKBType(t *testing.T) {
-	database := testutil.NewTestDB(t, &model.KnowledgeBase{}, &model.AgentKBBinding{})
+	database := testutil.NewTestDB(t, &model.KnowledgeBase{}, &model.AgentKBBinding{}, &model.AIAgent{})
+	if err := database.Create(&model.AIAgent{ID: 11, AgentCode: "binding-type-agent", Name: "绑定类型测试"}).Error; err != nil {
+		t.Fatalf("预置智能体失败: %v", err)
+	}
 	if database == nil {
 		t.Fatal("测试库不可达：绑定类型语义判不了（不 Skip）")
 	}

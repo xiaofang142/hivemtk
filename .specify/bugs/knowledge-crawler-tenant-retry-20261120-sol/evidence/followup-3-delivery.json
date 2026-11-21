@@ -1,0 +1,21 @@
+{
+  "head": "2986a7c54",
+  "sourceManifestVerified": true,
+  "finalDiffCheck": 0,
+  "reports": [
+    "assessment-followup-3.md",
+    "fix-followup-3.md",
+    "test-followup-3.md"
+  ],
+  "regressionTopLevelPass": 40,
+  "gates": {
+    "build": 0,
+    "vet": 0,
+    "layer": 0,
+    "architecture": 0,
+    "gorm": 0,
+    "goroutine": 1,
+    "diff": 0,
+    "graph": 1
+  }
+}

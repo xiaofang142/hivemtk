@@ -141,6 +141,7 @@
         </el-form-item>
       </el-form>
     </el-card>
+    <PilotContractPanel />
   </div>
 </template>
 
@@ -152,6 +153,7 @@ import { ElMessage } from 'element-plus'
 import { CopyDocument } from '@element-plus/icons-vue'
 import { SystemApi } from '@/api/system'
 import { TenantApi } from '@/api/tenant'
+import PilotContractPanel from './PilotContractPanel.vue'
 
 const configForm = ref({
   site_name: '',

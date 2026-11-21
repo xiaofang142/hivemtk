@@ -39,7 +39,10 @@ func TestDeliverBridgeOutbound_DirectToOutbox(t *testing.T) {
 		content        = "主动外联消息"
 	)
 
-	if err := DeliverBridgeOutbound(context.Background(),
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), channel, accountID, "text")
+	if err := DeliverBridgeOutbound(ctx,
 		channel, accountID, conversationID, "text", content, "evt_1"); err != nil {
 		t.Fatalf("DeliverBridgeOutbound 失败: %v", err)
 	}
@@ -125,20 +128,19 @@ func TestDeliverBridgeOutbound_RejectsUnsupportedChannel(t *testing.T) {
 }
 
 // TestDeliverBridgeOutbound_NotReady 验证：未装配（globalInboxIngressService == nil）时
-// 返回 errBridgeOutboundNotReady，便于装配时序问题排查。
+// 即使携带旧上下文证据，也先因缺持久授权来源而拒绝。
 func TestDeliverBridgeOutbound_NotReady(t *testing.T) {
 	prev := GlobalInboxIngressService()
 	defer SetGlobalInboxIngressService(prev)
 	SetGlobalInboxIngressService(nil)
 
-	err := DeliverBridgeOutbound(context.Background(),
-		"douyin", "acc_1", "conv_1", "text", "测试", "evt_1")
+	setupBridgeWhitelistForTest(t, "douyin")
+	ctx := localBridgeSubmitContext(t, context.Background(), "douyin", "acc_1", "text")
+	err := DeliverBridgeOutbound(ctx, "douyin", "acc_1", "conv_1", "text", "测试", "evt_1")
 	if err == nil {
 		t.Fatal("未装配应返回 error")
 	}
-	if err.Error() != "bridge outbound not ready: InboxIngressService not registered" {
-		t.Errorf("err = %q, want errBridgeOutboundNotReady", err.Error())
-	}
+	requireSubmitDenial(t, err, "capability_storage_unavailable")
 }
 
 // TestSetBridgeChannels_SingleSource B-5 白名单单源化回归：

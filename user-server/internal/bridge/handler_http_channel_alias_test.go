@@ -14,6 +14,8 @@
 package bridge
 
 import (
+	"hivemtk-user/internal/capregistry"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +23,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -43,6 +46,7 @@ func pollOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID string)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET",
 		"/api/bridge/outbox?channel="+channel+"&account_id="+accountID+"&limit=50", nil)
+	req = req.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(context.Background(), 1), NormalizeBridgeChannel(channel), accountID, "text", ""))
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
 	h.GetBridgeOutbox(c)
@@ -84,7 +88,7 @@ func ackOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID, body st
 }
 
 // ackLoopDB 建一条规范名入库的待下行，返回 handler 与句柄。
-func ackLoopDB(t *testing.T, msgID, accountID string) (*BridgeIngestHandler, *gorm.DB) {
+func ackLoopDB(t *testing.T, channel, msgID, accountID string) (*BridgeIngestHandler, *gorm.DB) {
 	t.Helper()
 	db := setupBridgeTestDB(t, &model.MessageHub{})
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
@@ -97,7 +101,7 @@ func ackLoopDB(t *testing.T, msgID, accountID string) (*BridgeIngestHandler, *go
 
 	// 落库形态与真实 ingest 入口一致：只可能是规范名，别名不会出现在这一列。
 	if err := db.Create(&model.MessageHub{
-		Platform:       model.ChannelXHS,
+		Platform:       channel,
 		AccountID:      accountID,
 		ConversationID: "conv_alias_ack",
 		MsgID:          msgID,
@@ -108,7 +112,7 @@ func ackLoopDB(t *testing.T, msgID, accountID string) (*BridgeIngestHandler, *go
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	svc := service.NewInboxIngressService()
+	svc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	h := NewBridgeIngestHandlerWithMock(nil, nil)
 	h.ingress = svc
 	return h, db
@@ -116,8 +120,8 @@ func ackLoopDB(t *testing.T, msgID, accountID string) (*BridgeIngestHandler, *go
 
 func TestAckBridgeOutbox_AliasChannel_ClosesOutboxLoop(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	const alias = "xhs" // NormalizeBridgeChannel 认的别名，规范名是 xiaohongshu
-	h, db := ackLoopDB(t, "mh:alias_ack_1", "acc_alias_ack")
+	const alias = "douyin_web" // 用已登记的候选格验证别名归一与 ACK 闭环。
+	h, db := ackLoopDB(t, model.ChannelDouyin, "mh:alias_ack_1", "acc_alias_ack")
 
 	first := pollOutbox(t, h, alias, "acc_alias_ack")
 	if first.status != http.StatusOK || len(first.messages) != 1 {
@@ -161,7 +165,7 @@ func TestAckBridgeOutbox_AliasChannel_ClosesOutboxLoop(t *testing.T) {
 // v2 items[] 是另一条分支（按 conversation_id 分组后各自 ack），同样得吃到归一。
 func TestAckBridgeOutbox_AliasChannel_V2ItemsAlsoNormalized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h, _ := ackLoopDB(t, "mh:alias_ack_2", "acc_alias_ack_v2")
+	h, _ := ackLoopDB(t, model.ChannelXHS, "mh:alias_ack_2", "acc_alias_ack_v2")
 
 	res := ackOutbox(t, h, "xiaohongshu_web", "acc_alias_ack_v2",
 		`{"v":2,"items":[{"msg_id":"mh:alias_ack_2","conversation_id":"conv_alias_ack","status":"delivered"}]}`)

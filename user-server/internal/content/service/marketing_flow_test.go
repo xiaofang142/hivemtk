@@ -405,6 +405,7 @@ func TestMarketingFlowService_TriggerFlow(t *testing.T) {
 
 	flowData, _ := json.Marshal(map[string]any{
 		"nodes": []map[string]any{
+			{"id": "start", "type": "trigger", "next_nodes": []string{"node1"}},
 			{
 				"id":     "node1",
 				"type":   "action",

@@ -16,6 +16,8 @@
       </el-button>
     </el-card>
 
+    <MerchantConnectionWizard />
+
     <el-row
       :gutter="20"
       class="stats-row"
@@ -395,6 +397,7 @@
 
 <script setup>
 import i18n from '@/i18n'
+import MerchantConnectionWizard from './MerchantConnectionWizard.vue'
 
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

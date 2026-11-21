@@ -33,6 +33,7 @@ func TestLLMProviderCRUD_EncryptedAtRestAndPersisted(t *testing.T) {
 	ensureLLMTestSecrets(t)
 	db := testutil.NewTestDB(t, &model.LLMProvider{}, &model.LLMRoutingRule{})
 	llm.AttachAuditDB(db)
+	t.Cleanup(func() { llm.AttachAuditDB(nil) }) // 复原：悬着的 auditDB 指向已关池，后续用例拿到 "database is closed"
 
 	d := llm.NewDispatcher(llm.NewLLMService())
 	svc := &LLMRoutingService{dispatcher: d}
@@ -110,6 +111,7 @@ func TestLLMProviderCRUD_ClearKeySentinel(t *testing.T) {
 	ensureLLMTestSecrets(t)
 	db := testutil.NewTestDB(t, &model.LLMProvider{}, &model.LLMRoutingRule{})
 	llm.AttachAuditDB(db)
+	t.Cleanup(func() { llm.AttachAuditDB(nil) }) // 复原：悬着的 auditDB 指向已关池，后续用例拿到 "database is closed"
 	d := llm.NewDispatcher(llm.NewLLMService())
 	svc := &LLMRoutingService{dispatcher: d}
 	ctx := context.Background()

@@ -28,10 +28,10 @@
             <strong>implemented</strong>：本二进制里存在该「平台 × 能力」的真实执行路径。能力注册表（capregistry）登记了能力，只代表它被声明，不代表这里为 true。
           </p>
           <p>
-            <strong>configured</strong>：该平台已配置可用账号/连接器。实现存在但未配置时，是 configured=false，而不是 implemented=false —— 两者的修复动作不同。
+            <strong>configured</strong>：{{ t('capabilityDiagnostics.configuredMeaning') }}
           </p>
           <p>
-            <strong>ready = implemented && configured</strong>；未就绪时 reason_code 给出机器可读原因（<code>no_runtime_path</code> / <code>not_configured_no_account</code>）。
+            <strong>ready</strong>：{{ t('capabilityDiagnostics.readyMeaning') }}
           </p>
         </div>
       </el-alert>
@@ -174,8 +174,8 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="已配置"
-          width="100"
+          :label="t('capabilityDiagnostics.configuredLabel')"
+          min-width="145"
           align="center"
         >
           <template #default="{ row }">
@@ -189,8 +189,8 @@
           </template>
         </el-table-column>
         <el-table-column
-          label="就绪"
-          width="90"
+          :label="t('capabilityDiagnostics.readyLabel')"
+          min-width="120"
           align="center"
         >
           <template #default="{ row }">
@@ -198,7 +198,7 @@
               :type="row.ready ? 'success' : 'warning'"
               size="small"
             >
-              {{ row.ready ? '就绪' : '未就绪' }}
+              {{ row.ready ? t('capabilityDiagnostics.ready') : t('capabilityDiagnostics.notReady') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -228,12 +228,22 @@
         </template>
       </el-table>
     </el-card>
+    <CapabilityAdminPanel
+      v-if="userStore.isAdmin"
+      :key="JSON.stringify([userStore.userInfo.tenant_id, userStore.userInfo.id])"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { capabilityDiagnosticsApi } from '@/api/capabilityDiagnostics'
+import { useUserStore } from '@/stores/user'
+import CapabilityAdminPanel from './CapabilityAdminPanel.vue'
+
+const { t } = useI18n()
+const userStore = useUserStore()
 
 const rows = ref([])
 const total = ref(0)
@@ -301,8 +311,9 @@ const resetFilters = () => {
 
 const reasonText = (code) => {
   const map = {
-    no_runtime_path: '无运行时执行路径',
-    not_configured_no_account: '未配置可用账号/连接器'
+    no_runtime_path: t('capabilityDiagnostics.noRuntimePath'),
+    not_configured_no_account: t('capabilityDiagnostics.noAccount'),
+    capability_mapping_missing: t('capabilityDiagnostics.shopMappingMissing')
   }
   return map[code] || code
 }
@@ -326,13 +337,6 @@ onMounted(load)
 .semantics-body p {
   margin: 4px 0;
   line-height: 1.6;
-}
-
-.semantics-body code {
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: #f5f7fa;
-  font-size: 12px;
 }
 
 .error-alert {

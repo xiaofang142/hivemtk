@@ -9,6 +9,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	kbcrawler "hivemtk-user/internal/aiagent/knowledge/kbcrawler"
@@ -212,6 +213,10 @@ func TestCrawlerSink_BatchStateMachine(t *testing.T) {
 	if err := svc.RunBatch(ctx, batch.ID); err == nil || err.Error() != "批次状态为 running，不可执行" {
 		t.Fatalf("running 批次应拒绝执行，got %v", err)
 	}
+	var unchanged model.KBCrawlBatch
+	if err := db.First(&unchanged, batch.ID).Error; err != nil || unchanged.Status != model.KBCrawlBatchStatusRunning || unchanged.StartedAt != nil || unchanged.FinishedAt != nil {
+		t.Fatalf("拒绝重复认领不能改写原批次: %+v err=%v", unchanged, err)
+	}
 
 	// 仅 failed 批次可重试。
 	if _, err := svc.RetryBatch(ctx, batch.ID); err == nil || err.Error() != "仅失败批次可重试" {
@@ -221,7 +226,7 @@ func TestCrawlerSink_BatchStateMachine(t *testing.T) {
 	if _, err := svc.RetryBatch(ctx, 99999); err == nil || err.Error() != "批次不存在" {
 		t.Fatalf("不存在批次应拒绝重试，got %v", err)
 	}
-	if err := svc.RunBatch(ctx, 99999); err == nil || err.Error() != "批次不存在" {
+	if err := svc.RunBatch(ctx, 99999); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Fatalf("不存在批次应拒绝执行，got %v", err)
 	}
 

@@ -238,17 +238,18 @@ func RateLimitMiddleware(config ...RateLimitConfig) gin.HandlerFunc {
 		}
 
 		clientKey := c.ClientIP()
-		if authVal, exists := c.Get("authenticated"); exists {
-			if isAuthenticated, ok := authVal.(bool); ok && isAuthenticated {
+		callback := IsMerchantCallbackPath(path)
+		if !callback {
+			if c.GetBool("authenticated") {
 				if apiKey := c.GetHeader("X-API-KEY"); apiKey != "" && isValidAppKeyFormat(apiKey) {
 					clientKey = "apikey:" + apiKey
 				}
 			}
+			// SaaS：已登录流量按租户分桶（off 模式下前缀恒为空串，键形不变）
+			clientKey = scopedRateLimitKey(c, clientKey)
 		}
-		// SaaS：已登录流量按租户分桶（off 模式下前缀恒为空串，键形不变）
-		clientKey = scopedRateLimitKey(c, clientKey)
 
-		if !globalRateLimiter.Allow(c.Request.Context(), clientKey) {
+		if !globalRateLimiter.allow(c.Request.Context(), clientKey, callback) {
 			c.JSON(429, gin.H{
 				"code":        429,
 				"msg":         "请求过于频繁，请稍后再试",
@@ -263,6 +264,10 @@ func RateLimitMiddleware(config ...RateLimitConfig) gin.HandlerFunc {
 }
 
 func (rl *RateLimiter) Allow(ctx context.Context, clientKey string) bool {
+	return rl.allow(ctx, clientKey, false)
+}
+
+func (rl *RateLimiter) allow(ctx context.Context, clientKey string, metadataOnly bool) bool {
 	if !cache.GlobalIsRedis() {
 		return rl.getLimiter(clientKey).Allow()
 	}
@@ -271,7 +276,9 @@ func (rl *RateLimiter) Allow(ctx context.Context, clientKey string) bool {
 	key := fmt.Sprintf("mtk:ratelimit:%s:%d", clientKey, minute)
 	cur, err := c.Incr(ctx, key, time.Minute)
 	if err != nil {
-		logger.Warnf("[ratelimit] 计数后端异常，放行 client=%s: %v", clientKey, err)
+		if !metadataOnly {
+			logger.Warnf("[ratelimit] 计数后端异常，放行 client=%s: %v", clientKey, err)
+		}
 		return true
 	}
 	return cur <= int64(rl.config.RPS*60)

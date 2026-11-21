@@ -23,8 +23,8 @@ func TestQuietReplay_OnlyConfirmedHandoffIsSent(t *testing.T) {
 		want       string
 	}{
 		{name: "已入出库队列", kind: model.DelayedKindQuietHours, account: "quiet-test-account", want: model.DelayedStatusSent},
-		{name: "确定不可达", kind: model.DelayedKindQuietHours, account: "xiaohongshu-unknown", want: model.DelayedStatusFailed},
-		{name: "旧空类别也不能伪报成功", account: "xiaohongshu-unknown", want: model.DelayedStatusFailed},
+		{name: "确定不可达", kind: model.DelayedKindQuietHours, account: "douyin-unknown", want: model.DelayedStatusFailed},
+		{name: "旧空类别也不能伪报成功", account: "douyin-unknown", want: model.DelayedStatusFailed},
 		{name: "重复认领没有投递事实", kind: model.DelayedKindQuietHours, account: "quiet-test-account", duplicate: true, want: model.DelayedStatusUnknown},
 		{name: "可重试写库错误也不增加首发重投", kind: model.DelayedKindQuietHours, account: "quiet-test-account", longConv: true, want: model.DelayedStatusFailed},
 		{name: "旧租约不能覆盖当前认领", kind: model.DelayedKindQuietHours, account: "quiet-test-account", staleToken: true, want: model.DelayedStatusSending},
@@ -38,12 +38,14 @@ func TestQuietReplay_OnlyConfirmedHandoffIsSent(t *testing.T) {
 			now := time.Now()
 			lease := now.Add(time.Minute)
 			rec := &DelayedOutboundReply{
-				ID: id, TenantID: tenant.DefaultTenantID, Platform: "xiaohongshu",
+				ID: id, TenantID: tenant.DefaultTenantID, Platform: "douyin",
 				AccountID: tc.account, ConversationID: fmt.Sprintf("quiet-conv-%d", id),
 				SenderID: fmt.Sprintf("quiet-customer-%d", id), Content: "合成夜间回复，不发送真实消息",
 				SendAt: now.Add(time.Hour), CreatedAt: now, Status: model.DelayedStatusSending,
 				Kind: tc.kind, ClaimToken: fmt.Sprintf("quiet-token-%d", id), ClaimedAt: &now, LeaseUntil: &lease,
 			}
+			useLegacyBridgeFixture(t)
+			ctx = localBridgeSubmitContext(t, ctx, rec.Platform, rec.AccountID, "text")
 			if tc.longConv {
 				rec.ConversationID = strings.Repeat("q", 119)
 			}

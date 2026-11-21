@@ -205,7 +205,7 @@ func (r *CustomerSessionRepository) GetByMerchantForAgent(ctx context.Context, s
 func (r *CustomerSessionRepository) customerListScope(ctx context.Context, agentID *uint) *gorm.DB {
 	query := r.db.WithContext(ctx).Model(&model.CustomerSession{})
 	if ctx == nil || tenant.IsSystemScope(ctx) || tenant.WriteTenantID(ctx) == 0 {
-		query.AddError(errors.New("customer list requires tenant identity"))
+		_ = query.AddError(errors.New("customer list requires tenant identity"))
 		return query
 	}
 	query = query.Where("tenant_id = ?", tenant.WriteTenantID(ctx)).Where("user_id <> ?", "")

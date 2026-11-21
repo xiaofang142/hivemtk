@@ -12,9 +12,9 @@
 package service
 
 import (
-	"hivemtk-user/internal/pkg/tenant"
 	"context"
 	"errors"
+	"hivemtk-user/internal/pkg/tenant"
 	"strings"
 	"testing"
 
@@ -52,6 +52,7 @@ func md05RAGWithKB() *fakeRAGSearcher {
 // md05DriveIngressAndAI 走真实消费者接缝：入站 → 释放认领 → runAIGeneration。
 func md05DriveIngressAndAI(t *testing.T, ws *WebhookService, evt, conv, cust, content string, ctx context.Context) {
 	t.Helper()
+	ctx = localBridgeSubmitContext(t, ctx, c01Channel, c01AccountA1, "text")
 	if _, err := NewInboxIngressService().HandleIngressMessage(ctx, c01DouyinSampleEvent(evt, conv, cust, c01AccountA1, content)); err != nil {
 		t.Fatalf("入站失败: %v", err)
 	}

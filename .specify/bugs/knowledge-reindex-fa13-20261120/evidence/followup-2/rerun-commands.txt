@@ -1,0 +1,26 @@
+Reproduction commands (not a transcript of prior invocations).
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+
+export FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable'
+
+go test -v ./internal/aiagent/knowledge/service -run '^(TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry|TestAsyncProcessingAndReindexShareAtomicOwnership|TestAsyncProcessingLeaseCoversConfiguredTimeout|TestReindexExpiredOwnerCannotOverwriteNewOwner|TestRebuildIndex_VisitsAllDocumentsAndPersistsMissingSourceFailure|TestReindexCursorWatermarkAndAtomicClaim|TestReindex_EmbeddingFailureIsQueryableAndRetryable|TestReindex_FinalStatusWriteFailurePersistsOrPropagates)$' -count=1 -timeout=180s
+
+go test -v ./internal/aiagent/knowledge/controller -run '^(TestRebuildProductIndex_ReturnsFailureWhenDocumentReindexFails|TestRebuildProductIndex_ReturnsSuccessAfterCompletion)$' -count=1 -timeout=120s
+
+go test -v ./internal/migration/migrations -run '^(TestKnowledgeReindexOwnerMigration|TestKnowledgeReindexLeaseMigration|TestKnowledgeReindexAttemptMigration)$' -count=1 -timeout=120s
+
+go test -race -v ./internal/aiagent/knowledge/service -run '^(TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry|TestAsyncProcessingAndReindexShareAtomicOwnership|TestAsyncProcessingLeaseCoversConfiguredTimeout|TestReindexExpiredOwnerCannotOverwriteNewOwner)$' -count=1 -timeout=180s
+
+go build ./...
+go vet ./...
+
+Working directory for static gates: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+
+python3 scripts/check-layer-boundary.py
+bash scripts/check-architecture.sh
+bash user-server/scripts/check-gorm-only.sh
+git diff --check
+
+Known non-green repository/environment checks (do not represent these as passing):
+bash user-server/scripts/check_naked_goroutine.sh
+python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"

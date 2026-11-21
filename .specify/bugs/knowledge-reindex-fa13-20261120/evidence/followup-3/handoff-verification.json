@@ -1,0 +1,220 @@
+{
+  "status": "DONE_WITH_CONCERNS",
+  "timestamp": "2026-11-20T20:57:07.366403+08:00",
+  "review": {
+    "spec_approved": "reported by user before this round",
+    "parent_independent_verification": "PENDING",
+    "same_quality_reviewer": "ses_e070e56c0ffeWDtZIiR9GCXkUB",
+    "quality_approval": "PENDING",
+    "fa13_closed": false
+  },
+  "checks": {
+    "red": {
+      "actual_exit": 1,
+      "expected_exit": 1,
+      "command_file": "red-command.txt",
+      "log_file": "red.log",
+      "log_sha256": "6ed7dbc97999a79bd0514b4477736eaa9c5a5f47a1841d79313877267383db16"
+    },
+    "red-recheck": {
+      "actual_exit": 1,
+      "expected_exit": 1,
+      "command_file": "red-recheck-command.txt",
+      "log_file": "red-recheck.log",
+      "log_sha256": "ac2d68ce67df4b00ea77f51ae0f34ae9e405f572b96b1a099f761d1a5b627a4a"
+    },
+    "metadata-green": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "metadata-green-command.txt",
+      "log_file": "metadata-green.log",
+      "log_sha256": "ebf12afacaa965147dfc1e98ed7fe98a16d2c826bcedc1e8d1f09a7ceef99a14"
+    },
+    "progress-green": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "progress-green-command.txt",
+      "log_file": "progress-green.log",
+      "log_sha256": "e2c1d526c329e853bffaa4eb095a793ac5fce448a6234fc8ef7d7f3c8714b3e6"
+    },
+    "service-race-2": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "service-race-2-command.txt",
+      "log_file": "service-race-2.log",
+      "log_sha256": "5054fd3a6a3015991b8ff9e122d5e9093463e9f2e7df20b1b6edcfbdeb109259"
+    },
+    "controller-race-2": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "controller-race-2-command.txt",
+      "log_file": "controller-race-2.log",
+      "log_sha256": "6ccc9288921f2dd8882d330ef095220c0a85dab12a684c330cab9c497440cbc0"
+    },
+    "migrations": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "migrations-command.txt",
+      "log_file": "migrations.log",
+      "log_sha256": "bb8bb023e310d0576e3ebeb15831cae73bb9d0e6e60facad216783d5981301de"
+    },
+    "build": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "build-command.txt",
+      "log_file": "build.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "vet": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "vet-command.txt",
+      "log_file": "vet.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "layer": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "layer-command.txt",
+      "log_file": "layer.log",
+      "log_sha256": "95d44e204142ed52d09a8f1121f34290bac95d57c3e76f235f43085ca7862b15"
+    },
+    "architecture": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "architecture-command.txt",
+      "log_file": "architecture.log",
+      "log_sha256": "02a334ed6527e367fdaae78d017a54470bfa202b76ab259aa3e705c2961a3bbc"
+    },
+    "gorm": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "gorm-command.txt",
+      "log_file": "gorm.log",
+      "log_sha256": "c8d6ebaf0016c932b46af3d12326a66a5d9064ac55761fdc09919721c04b3d7c"
+    },
+    "diff-check": {
+      "actual_exit": 0,
+      "expected_exit": 0,
+      "command_file": "diff-check-command.txt",
+      "log_file": "diff-check.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "naked-goroutine": {
+      "actual_exit": 1,
+      "expected_exit": 1,
+      "command_file": "naked-goroutine-command.txt",
+      "log_file": "naked-goroutine.log",
+      "log_sha256": "2671925c2a2f7933749d6d053669fccbda1cf4be3471bd9e1bfa62074c30c836"
+    },
+    "graphify": {
+      "actual_exit": 1,
+      "expected_exit": 1,
+      "command_file": "graphify-command.txt",
+      "log_file": "graphify.log",
+      "log_sha256": "270a0c944391122118f9a01f85324f73dae28535e6629cb389b2d01097f84e06"
+    }
+  },
+  "test_counts": {
+    "service-race-2": {
+      "passed_top_level_tests": [
+        "TestRebuildIndexUsesSnapshotVisibleMembership",
+        "TestReindexLeaseReclaimsExpiredProcessingExactlyOnce",
+        "TestReindexCancellationPersistsFailureAndAllowsRetry",
+        "TestAsyncProcessingAndReindexShareAtomicOwnership",
+        "TestAsyncProcessingLeaseCoversConfiguredTimeout",
+        "TestReindexExpiredOwnerCannotOverwriteNewOwner",
+        "TestDocumentMetadataUpdatePreservesActiveReindex",
+        "TestDocumentMetadataUpdateScopeAndMissingRows",
+        "TestPipelineProgressFailurePersistsAndRetries",
+        "TestPipelineProgressFailureCleanupErrorsAndOwnerFence",
+        "TestRebuildIndex_VisitsAllDocumentsAndPersistsMissingSourceFailure",
+        "TestReindexCursorWatermarkAndAtomicClaim",
+        "TestReindex_EmbeddingFailureIsQueryableAndRetryable",
+        "TestReindex_FinalStatusWriteFailurePersistsOrPropagates"
+      ],
+      "top_level_count": 14,
+      "no_skips_or_failures_or_race_reports": true
+    },
+    "controller-race-2": {
+      "passed_top_level_tests": [
+        "TestRebuildProductIndex_NonemptyWaitsForEmbeddingCompletion",
+        "TestRebuildProductIndex_ReturnsFailureWhenDocumentReindexFails",
+        "TestRebuildProductIndex_ReturnsSuccessAfterCompletion"
+      ],
+      "top_level_count": 3,
+      "no_skips_or_failures_or_race_reports": true
+    },
+    "migrations": {
+      "passed_top_level_tests": [
+        "TestKnowledgeReindexAttemptMigration",
+        "TestKnowledgeReindexLeaseMigration",
+        "TestKnowledgeReindexOwnerMigration"
+      ],
+      "top_level_count": 3,
+      "no_skips_or_failures_or_race_reports": true
+    },
+    "TestPipelineProgressFailurePersistsAndRetries": {
+      "passed_subtests": 16
+    },
+    "TestPipelineProgressFailureCleanupErrorsAndOwnerFence": {
+      "passed_subtests": 8
+    }
+  },
+  "format_check_exit": 0,
+  "handoff_diff_check_exit": 0,
+  "historical_red_source_preserved": true,
+  "final_test_matches_overlay_negative_control": true,
+  "original_production_snapshots_match_pre_edit_hashes": true,
+  "source_sha256": {
+    "user-server/internal/aiagent/knowledge/repository/knowledge_document.go": "5d98ef07196d4670083d173bee2d2777a1a820f6f2204e448d113b1a2ccbb6e7",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_pipeline.go": "f0fdf042fe28e3eaca22e7f96a1c6168096584a5724e1d6d00635f1065c2c448",
+    "user-server/internal/aiagent/knowledge/service/knowledge_reindex_quality_test.go": "bf6d757a2935646614ee0d90f82fc8c07e0fd710d43f65e9a3aa9073c29f1a0f",
+    "user-server/internal/aiagent/knowledge/controller/knowledge_workspace_reindex_completion_test.go": "3d49de81c2168456d67e71ef18c0899caf306a765601d4e206d7247853a9e8a0",
+    "user-server/internal/aiagent/knowledge/service/knowledge_reindex_followup_test.go": "8e15f1387ab0560738b6e75ef3faf71b395fd71542924549dbd62713095984ea",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_reindex_test.go": "9c15bef7e135198ef0bf8dc573a7d49006fea5a6dfc16bbf821ccbf50f14821c",
+    "user-server/internal/aiagent/knowledge/controller/knowledge_workspace_reindex_test.go": "b7644cace35075606a165a5b80915bef285760b02dfa26ea835b15453721dd39",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_reindex.go": "f54fb5a4cabc9f67fe97f65612908daccb0913509ab50b8ee162654425dfea59",
+    "user-server/internal/aiagent/knowledge/service/knowledge.go": "32c747f2c2fd3d0ff29d630d0cf6d8db576afd433e02e8ae91395e3f4ec57738",
+    "user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go": "999a8e785ab2bd622374d34650f1257d66f61989550ef148a497c052e5b59ec1",
+    "user-server/internal/aiagent/knowledge/repository/knowledge_chunk_parent.go": "526df68e487d59ab41029a5b76e902aa630659362244b3c2e303619d9a0b54cf",
+    "user-server/internal/model/kb_workspace.go": "414e61db99924e08551438fb15f6299472ffb3915398388a0bdc61a6ff799cc5",
+    "user-server/internal/aiagent/rag/retrieval/contextual_retrieval.go": "eb51e020e1d214093b8006b020f2a43fdcca5419487dcdc9f0d51a9dc0e767b4",
+    "user-server/internal/migration/migrations/knowledge_reindex_attempt_migration.go": "85e544a1723630f7b2150acb645874005185d3ec11ba2af966e5cf678409e8e9",
+    "user-server/internal/migration/migrations/knowledge_reindex_attempt_migration_test.go": "5cb36a1e3444fbc40fae3c89a0aef3ad08fdccbc850b65ea8122905fbb10a5e6",
+    "user-server/internal/migration/migrations/knowledge_reindex_lease_migration.go": "ffae05990b52be42bd24771187c2e60f131e4ce5952555b4e13def9d59ebadd7",
+    "user-server/internal/migration/migrations/knowledge_reindex_lease_migration_test.go": "0a35de6377802d5766197149e0fafaa1b59633b4d03c8069bbed79b1f4304036",
+    "user-server/internal/migration/migrations/knowledge_reindex_owner_migration.go": "1ede4a4358fd807a91f51e4d1aa8022a1250ecc43c7cf3ca3fd3d5528c727793",
+    "user-server/internal/migration/migrations/knowledge_reindex_owner_migration_test.go": "a1abb7a5834a20d7b52cfcf79504d202de47b2ba0aaf3928d12922e420025bb3"
+  },
+  "report_sha256": {
+    "assessment-followup-3.md": "b3fbc272037c8bff660de90c24a53e07736d5d2be17ef61100953735e79ec4ac",
+    "fix-followup-3.md": "2d07a85751ac287bce9972c3e6c7e8e643a909e2ad088ff1469751e75a359d53",
+    "test-followup-3.md": "2bd5291c98238cdf7df0145a5aaec2c32e7abfb133b45f0d834d4c1f33b04f4a"
+  },
+  "prior_regressions_unchanged": true,
+  "workspace_preservation": {
+    "baseline_files": 33855,
+    "outside_round_changed": [],
+    "missing": []
+  },
+  "limits": [
+    "repository-wide naked-goroutine gate exits 1",
+    "Graphify module missing; refresh exits 1",
+    "text-backed vector fixture; no real pgvector",
+    "no full affected-package test suite or live deployment",
+    "cancellation-before-transaction tests; no mid-SQL/network-outage or cleanup-deadline exhaustion test",
+    "prior contextual/external-index/cache-aggregate verification limits remain",
+    "initial implementation lacks historical RED; follow-up-1 later assertions remain GREEN-only"
+  ],
+  "actions_not_performed": [
+    "new subagents",
+    "staging",
+    "commit",
+    "push",
+    "deploy",
+    "outer queue edits",
+    "business DB connections",
+    "cluster stop/deletion"
+  ]
+}

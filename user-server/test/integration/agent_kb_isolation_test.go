@@ -36,11 +36,20 @@ func setupIsolationDB(t *testing.T) *gorm.DB {
 	db := testutil.NewTestDBOrSkip(t,
 		&model.KnowledgeBase{},
 		&model.AgentKBBinding{},
+		&model.AIAgent{},
 	)
-	for _, tbl := range []string{"agent_kb_bindings", "knowledge_bases"} {
+	for _, tbl := range []string{"agent_kb_bindings", "knowledge_bases", "ai_agents"} {
 		if err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", tbl)).Error; err != nil {
 			t.Fatalf("truncate %s: %v", tbl, err)
 		}
+	}
+	// 绑定写侧会校验智能体归属，预置这些场景显式使用的智能体。
+	var agents []model.AIAgent
+	for _, id := range []uint{1, 2, 3, 4, 5, 7, 11, 22, 50, 99, 100, 101, 200, 202, 300, 1001} {
+		agents = append(agents, model.AIAgent{ID: id, AgentCode: fmt.Sprintf("fixture-agent-%d", id), Name: "绑定测试"})
+	}
+	if err := db.Create(&agents).Error; err != nil {
+		t.Fatalf("预置智能体失败: %v", err)
 	}
 	return db
 }

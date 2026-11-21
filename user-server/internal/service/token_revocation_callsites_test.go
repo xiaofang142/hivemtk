@@ -88,6 +88,19 @@ func (f *fakeRevocationRepo) GetByID(_ context.Context, id uint) (*model.SystemU
 	return nil, gorm.ErrRecordNotFound
 }
 
+// SetEnabledGuarded FA-AUTH-01 起服务写口走原子守卫——假仓储按 SetEnabled 的
+// 同一语义应答（守卫在真仓储上才做超管复查；本替身的用例均为普通用户）。
+func (f *fakeRevocationRepo) SetEnabledGuarded(_ context.Context, id uint, enabled bool) error {
+	if u, ok := f.users[id]; ok {
+		u.Enabled = enabled
+		if f.setEnabledV != nil {
+			*f.setEnabledV = enabled
+		}
+		return nil
+	}
+	return gorm.ErrRecordNotFound
+}
+
 func (f *fakeRevocationRepo) Update(_ context.Context, user *model.SystemUser) error {
 	f.users[user.ID] = user
 	return nil

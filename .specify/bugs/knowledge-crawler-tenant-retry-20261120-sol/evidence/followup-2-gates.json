@@ -1,0 +1,104 @@
+[
+  {
+    "name": "build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server",
+    "exit": 0,
+    "log": "followup-2-build.log",
+    "output": ""
+  },
+  {
+    "name": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server",
+    "exit": 0,
+    "log": "followup-2-vet.log",
+    "output": ""
+  },
+  {
+    "name": "layer",
+    "command": [
+      "python3",
+      "scripts/check-layer-boundary.py"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk",
+    "exit": 0,
+    "log": "followup-2-layer.log",
+    "output": "扫描 1604 个非测试 .go（根：/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal）\n跨层违规：命中 0 处；基线豁免 0；新增 0\n✅ 无新增跨层 import\n"
+  },
+  {
+    "name": "architecture",
+    "command": [
+      "bash",
+      "scripts/check-architecture.sh"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk",
+    "exit": 0,
+    "log": "followup-2-architecture.log",
+    "output": "============================================================\n  五层架构合规检查\n  目标: user-server\n  规范: GO_FIVE_LAYER_ARCHITECTURE.md\n============================================================\n\n[1/10] Controller 反向依赖检查...\n\u001b[0;32m✅ [L3] controller 未直接引用 repository\u001b[0m\n\u001b[0;32m✅ [L3] controller 未直接调 db\u001b[0m\n\u001b[0;32m✅ [L3] controller 未直接引用 gorm\u001b[0m\n\u001b[0;32m✅ [L3] controller 使用 response.Success/Error 统一响应\u001b[0m\n\u001b[0;32m✅ [L2] router 无内联处理器\u001b[0m\n\u001b[0;32m✅ [L3] controller 错误文案未夹带 err.Error()\u001b[0m\n\n[2/10] Service 反向依赖检查...\n  [AV-03] 全域 service 目录集（与 arch_gorm_guard_test.go 同一发现规则）：\n    internal/aiagent/knowledge/service: 35\n    internal/aiagent/rag/service: 1\n    internal/browser_automation/service: 32\n    internal/content/service: 9\n    internal/contentguard/service: 8\n    internal/email/service: 6\n    internal/geo/service: 61\n    internal/ops/service: 12\n    internal/pkg/shared/service: 1\n    internal/service: 527\n    合计 10 域 / 目录树计 692 个，去重后实际扫描 692 个生产文件\n\u001b[0;32m✅ [L4] 692 个 service 生产文件全部可解析（gofmt -e 门）\u001b[0m\n\u001b[0;32m✅ [L4] service 未引用 controller/router\u001b[0m\n\u001b[0;32m✅ [L4] service 未直接调 db\u001b[0m\n\u001b[0;32m✅ [L4] service struct 未持有 *gorm.DB 字段\u001b[0m\n\u001b[0;32m✅ [L4] service 取 DB 句柄宽口径与基线一致（存量 0 处 / 0 个文件）\u001b[0m\n\u001b[0;32m✅ [L4] service 未含 SQL 字符串拼接\u001b[0m\n\n[3/10] Repository 反向依赖检查...\n\u001b[0;32m✅ [L5] repository 未引用 service\u001b[0m\n\u001b[0;32m✅ [L5] repository 未引用 dto\u001b[0m\n\n[4/10] Model 业务方法检查...\n\u001b[0;32m✅ [Model] 无业务方法(仅 GORM Hook/TableName)\u001b[0m\n\n[5/10] DTO 反向依赖检查...\n\u001b[0;32m✅ [DTO] dto 未引用 service/repository\u001b[0m\n\u001b[0;32m✅ [DTO] dto 未直接调 db\u001b[0m\n\u001b[0;32m✅ [DTO] 无业务方法(仅 Value/Scan)\u001b[0m\n\n[6/10] 文件命名规范检查...\n\u001b[0;32m✅ [命名] 无版本/扩展/日期后缀\u001b[0m\n\u001b[0;32m✅ [命名] 无通用名文件\u001b[0m\n\u001b[0;32m✅ [命名] controller/service/repository/dto 无冗余后缀\u001b[0m\n\u001b[0;32m✅ [命名] 无源文件误命名为 _test.go\u001b[0m\n\n[7/10] Service interface 规范检查...\n\u001b[1;33m⚠️  [Service] /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/service/webhook_wecomcs_puller.go 含小写 Service struct 但未定义 interface:\u001b[0m\n    规范:导出 interface + 小写 struct 实现\n    type wecomCSService struct {\n\n[8/10] Repository interface 规范检查...\n\u001b[0;32m✅ [Repository] 所有 repository.go 都遵循 interface+struct 模式\u001b[0m\n\n[9/10] 上下文透传检查(抽查)...\n\u001b[0;32m✅ [Repository] 所有导出方法都含 ctx context.Context\u001b[0m\n\n[10/10] Config 包位置检查...\n\u001b[0;32m✅ [Config] config 包位置合规（不在 internal/pkg/utils/ 下）\u001b[0m\n\u001b[0;32m✅ [Config] config 包未分裂\u001b[0m\n\n============================================================\n\u001b[0;32m✅ 架构检查通过(可能有 warning,需人工复核)\u001b[0m\n============================================================\n"
+  },
+  {
+    "name": "gorm",
+    "command": [
+      "bash",
+      "user-server/scripts/check-gorm-only.sh"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk",
+    "exit": 0,
+    "log": "followup-2-gorm.log",
+    "output": "[gorm-only] ✓ 业务包 0 处 .Exec( / .Raw(（migration DDL 与 *_test.go 已豁免）\n"
+  },
+  {
+    "name": "adjacent",
+    "command": [
+      "go",
+      "test",
+      "./internal/aiagent/knowledge/kbcrawler",
+      "./internal/aiagent/rag/retrieval",
+      "-run",
+      "^(TestVectorizer_(NewVectorizer|GetDimension|ValidateEmbedding)|TestCosineSimilarity|TestJaccardSimilarity|TestRobots.*|TestParseSitemap.*|TestHostLimiter.*|TestMatchInclude.*|TestExtract.*)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server",
+    "exit": 0,
+    "log": "followup-2-adjacent.log",
+    "output": "=== RUN   TestParseSitemap\n=== RUN   TestParseSitemap/urlset\n=== RUN   TestParseSitemap/空_loc_跳过\n=== RUN   TestParseSitemap/lastmod_保留\n--- PASS: TestParseSitemap (0.01s)\n    --- PASS: TestParseSitemap/urlset (0.01s)\n    --- PASS: TestParseSitemap/空_loc_跳过 (0.00s)\n    --- PASS: TestParseSitemap/lastmod_保留 (0.00s)\n=== RUN   TestParseSitemap_IndexExpandsOneLevel\n--- PASS: TestParseSitemap_IndexExpandsOneLevel (0.00s)\n=== RUN   TestParseSitemap_CycleGuard\n--- PASS: TestParseSitemap_CycleGuard (0.00s)\n=== RUN   TestParseSitemap_LastmodPrefilter\n--- PASS: TestParseSitemap_LastmodPrefilter (0.00s)\n=== RUN   TestExtractLinks\n--- PASS: TestExtractLinks (0.00s)\n=== RUN   TestHostLimiter\n--- PASS: TestHostLimiter (1.05s)\nPASS\nok  \thivemtk-user/internal/aiagent/knowledge/kbcrawler\t1.477s\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n=== RUN   TestExtractKeyIntents\n--- PASS: TestExtractKeyIntents (0.00s)\n=== RUN   TestExtractJSONFromStr\n--- PASS: TestExtractJSONFromStr (0.00s)\n=== RUN   TestExtractJSONArray_Plain\n--- PASS: TestExtractJSONArray_Plain (0.00s)\n=== RUN   TestExtractJSONArray_MarkdownWrapped\n--- PASS: TestExtractJSONArray_MarkdownWrapped (0.00s)\n=== RUN   TestExtractJSONArray_NoArray\n--- PASS: TestExtractJSONArray_NoArray (0.00s)\n=== RUN   TestExtractJSONArray_ArrayWithPrefix\n--- PASS: TestExtractJSONArray_ArrayWithPrefix (0.00s)\n=== RUN   TestExtractJSONArray_UnclosedArray\n--- PASS: TestExtractJSONArray_UnclosedArray (0.00s)\n=== RUN   TestVectorizer_NewVectorizer\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/b214/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/config.yaml]，CWD=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/b214/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/config.yaml]，CWD=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/b214/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/config.yaml]，CWD=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n--- PASS: TestVectorizer_NewVectorizer (0.00s)\n=== RUN   TestVectorizer_GetDimension\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/b214/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/config.yaml]，CWD=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n--- PASS: TestVectorizer_GetDimension (0.00s)\n=== RUN   TestVectorizer_ValidateEmbedding\n\u001b[90m2026-11-20T13:10:58+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[config] 搜索链内未找到 config.yaml（尝试过 [config.yaml ../config.yaml user-server/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/b214/config.yaml /var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/go-build2878966426/config.yaml]，CWD=/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/rag/retrieval），已回落内置默认配置——若这不是预期，请用 CONFIG_PATH 指向配置文件或从正确目录启动\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n=== RUN   TestVectorizer_ValidateEmbedding/correct_dimension\n=== RUN   TestVectorizer_ValidateEmbedding/wrong_dimension\n=== RUN   TestVectorizer_ValidateEmbedding/empty_embedding\n=== RUN   TestVectorizer_ValidateEmbedding/contains_nan\n=== RUN   TestVectorizer_ValidateEmbedding/contains_inf\n=== RUN   TestVectorizer_ValidateEmbedding/contains_neg_inf\n--- PASS: TestVectorizer_ValidateEmbedding (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/correct_dimension (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/wrong_dimension (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/empty_embedding (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/contains_nan (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/contains_inf (0.00s)\n    --- PASS: TestVectorizer_ValidateEmbedding/contains_neg_inf (0.00s)\n=== RUN   TestCosineSimilarity\n=== RUN   TestCosineSimilarity/empty_vectors\n=== RUN   TestCosineSimilarity/different_lengths\n=== RUN   TestCosineSimilarity/identical_unit_vectors\n=== RUN   TestCosineSimilarity/orthogonal_vectors\n=== RUN   TestCosineSimilarity/opposite_vectors\n=== RUN   TestCosineSimilarity/normalized_vectors\n--- PASS: TestCosineSimilarity (0.00s)\n    --- PASS: TestCosineSimilarity/empty_vectors (0.00s)\n    --- PASS: TestCosineSimilarity/different_lengths (0.00s)\n    --- PASS: TestCosineSimilarity/identical_unit_vectors (0.00s)\n    --- PASS: TestCosineSimilarity/orthogonal_vectors (0.00s)\n    --- PASS: TestCosineSimilarity/opposite_vectors (0.00s)\n    --- PASS: TestCosineSimilarity/normalized_vectors (0.00s)\n=== RUN   TestJaccardSimilarity\n=== RUN   TestJaccardSimilarity/empty_texts\n=== RUN   TestJaccardSimilarity/identical_texts\n=== RUN   TestJaccardSimilarity/completely_different\n=== RUN   TestJaccardSimilarity/partial_overlap\n=== RUN   TestJaccardSimilarity/case_insensitive\n=== RUN   TestJaccardSimilarity/with_punctuation\n=== RUN   TestJaccardSimilarity/one_empty\n--- PASS: TestJaccardSimilarity (0.00s)\n    --- PASS: TestJaccardSimilarity/empty_texts (0.00s)\n    --- PASS: TestJaccardSimilarity/identical_texts (0.00s)\n    --- PASS: TestJaccardSimilarity/completely_different (0.00s)\n    --- PASS: TestJaccardSimilarity/partial_overlap (0.00s)\n    --- PASS: TestJaccardSimilarity/case_insensitive (0.00s)\n    --- PASS: TestJaccardSimilarity/with_punctuation (0.00s)\n    --- PASS: TestJaccardSimilarity/one_empty (0.00s)\nPASS\nok  \thivemtk-user/internal/aiagent/rag/retrieval\t0.511s\n"
+  },
+  {
+    "name": "service-adjacent",
+    "command": [
+      "go",
+      "test",
+      "./internal/aiagent/knowledge/service",
+      "-run",
+      "^Test(ParseQAOutput|EstimateTokens|ConfigGettersFallBackWithoutReader|ConfigGettersReadInjectedKeys|SetConfigReaderNilIsIdempotent|KnowledgeChunkFromMerchant_.*|DedupeMerchantChunks|Converters_KeepParentStitchedContent|MaxUploadFileSizeSeam|MerchantKnowledgeMaxLenSeam|SplitMarkdownRespectsMaxLen|MerchantBatchMaxFileSizeSeam|ParseBatchFileEnforcesMaxFileSize|ParseBatchFileTxtAutoDetect)$",
+      "-count=1",
+      "-v"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server",
+    "exit": 0,
+    "log": "followup-2-service-adjacent.log",
+    "output": "\u001b[90m2026-11-20T13:11:03+08:00\u001b[0m \u001b[33mWRN\u001b[0m \u001b[1m[SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试）\u001b[0m \u001b[36mcomponent=\u001b[0muser-server\n=== RUN   TestConfigGettersFallBackWithoutReader\n--- PASS: TestConfigGettersFallBackWithoutReader (0.00s)\n=== RUN   TestConfigGettersReadInjectedKeys\n--- PASS: TestConfigGettersReadInjectedKeys (0.00s)\n=== RUN   TestSetConfigReaderNilIsIdempotent\n--- PASS: TestSetConfigReaderNilIsIdempotent (0.00s)\n=== RUN   TestParseQAOutput\n=== RUN   TestParseQAOutput/合法JSON数组\n=== RUN   TestParseQAOutput/带前后多余文字\n=== RUN   TestParseQAOutput/空数组（纯导航页）\n=== RUN   TestParseQAOutput/截断（缺右括号）\n=== RUN   TestParseQAOutput/纯文字无数组\n=== RUN   TestParseQAOutput/数组里是对象以外的元素\n--- PASS: TestParseQAOutput (0.00s)\n    --- PASS: TestParseQAOutput/合法JSON数组 (0.00s)\n    --- PASS: TestParseQAOutput/带前后多余文字 (0.00s)\n    --- PASS: TestParseQAOutput/空数组（纯导航页） (0.00s)\n    --- PASS: TestParseQAOutput/截断（缺右括号） (0.00s)\n    --- PASS: TestParseQAOutput/纯文字无数组 (0.00s)\n    --- PASS: TestParseQAOutput/数组里是对象以外的元素 (0.00s)\n=== RUN   TestEstimateTokens\n--- PASS: TestEstimateTokens (0.00s)\n=== RUN   TestMaxUploadFileSizeSeam\n=== RUN   TestMaxUploadFileSizeSeam/未注入时返回兜底值_50MB\n=== RUN   TestMaxUploadFileSizeSeam/注入后生效\n=== RUN   TestMaxUploadFileSizeSeam/注入非法值回落兜底（0_会让_io.LimitReader_完全不读）\n=== RUN   TestMaxUploadFileSizeSeam/setter_传_nil_是空操作而非复位\n--- PASS: TestMaxUploadFileSizeSeam (0.00s)\n    --- PASS: TestMaxUploadFileSizeSeam/未注入时返回兜底值_50MB (0.00s)\n    --- PASS: TestMaxUploadFileSizeSeam/注入后生效 (0.00s)\n    --- PASS: TestMaxUploadFileSizeSeam/注入非法值回落兜底（0_会让_io.LimitReader_完全不读） (0.00s)\n    --- PASS: TestMaxUploadFileSizeSeam/setter_传_nil_是空操作而非复位 (0.00s)\n=== RUN   TestMerchantKnowledgeMaxLenSeam\n=== RUN   TestMerchantKnowledgeMaxLenSeam/未注入时返回兜底值_2000\n=== RUN   TestMerchantKnowledgeMaxLenSeam/注入后生效\n=== RUN   TestMerchantKnowledgeMaxLenSeam/注入非法值回落兜底\n--- PASS: TestMerchantKnowledgeMaxLenSeam (0.00s)\n    --- PASS: TestMerchantKnowledgeMaxLenSeam/未注入时返回兜底值_2000 (0.00s)\n    --- PASS: TestMerchantKnowledgeMaxLenSeam/注入后生效 (0.00s)\n    --- PASS: TestMerchantKnowledgeMaxLenSeam/注入非法值回落兜底 (0.00s)\n=== RUN   TestSplitMarkdownRespectsMaxLen\n--- PASS: TestSplitMarkdownRespectsMaxLen (0.00s)\n=== RUN   TestMerchantBatchMaxFileSizeSeam\n=== RUN   TestMerchantBatchMaxFileSizeSeam/未注入时返回兜底值_20MB\n=== RUN   TestMerchantBatchMaxFileSizeSeam/注入后生效\n=== RUN   TestMerchantBatchMaxFileSizeSeam/注入非法值回落兜底（0_等于把这个口全堵死，而它接线前是全开）\n=== RUN   TestMerchantBatchMaxFileSizeSeam/setter_传_nil_是空操作而非复位\n=== RUN   TestMerchantBatchMaxFileSizeSeam/与_max_upload_file_size_是两条独立的上限\n--- PASS: TestMerchantBatchMaxFileSizeSeam (0.00s)\n    --- PASS: TestMerchantBatchMaxFileSizeSeam/未注入时返回兜底值_20MB (0.00s)\n    --- PASS: TestMerchantBatchMaxFileSizeSeam/注入后生效 (0.00s)\n    --- PASS: TestMerchantBatchMaxFileSizeSeam/注入非法值回落兜底（0_等于把这个口全堵死，而它接线前是全开） (0.00s)\n    --- PASS: TestMerchantBatchMaxFileSizeSeam/setter_传_nil_是空操作而非复位 (0.00s)\n    --- PASS: TestMerchantBatchMaxFileSizeSeam/与_max_upload_file_size_是两条独立的上限 (0.00s)\n=== RUN   TestParseBatchFileEnforcesMaxFileSize\n=== RUN   TestParseBatchFileEnforcesMaxFileSize/上限以下照常解析（正控制）\n=== RUN   TestParseBatchFileEnforcesMaxFileSize/超过上限被拒\n=== RUN   TestParseBatchFileEnforcesMaxFileSize/兜底值也拦得住（没注入时按_20MB_判）\n--- PASS: TestParseBatchFileEnforcesMaxFileSize (0.00s)\n    --- PASS: TestParseBatchFileEnforcesMaxFileSize/上限以下照常解析（正控制） (0.00s)\n    --- PASS: TestParseBatchFileEnforcesMaxFileSize/超过上限被拒 (0.00s)\n    --- PASS: TestParseBatchFileEnforcesMaxFileSize/兜底值也拦得住（没注入时按_20MB_判） (0.00s)\n=== RUN   TestParseBatchFileTxtAutoDetect\n=== RUN   TestParseBatchFileTxtAutoDetect/auto_+_.txt_解析为单文档\n=== RUN   TestParseBatchFileTxtAutoDetect/显式_format=text_同样生效\n=== RUN   TestParseBatchFileTxtAutoDetect/空_.txt_报可操作错误且不回显内容\n--- PASS: TestParseBatchFileTxtAutoDetect (0.00s)\n    --- PASS: TestParseBatchFileTxtAutoDetect/auto_+_.txt_解析为单文档 (0.00s)\n    --- PASS: TestParseBatchFileTxtAutoDetect/显式_format=text_同样生效 (0.00s)\n    --- PASS: TestParseBatchFileTxtAutoDetect/空_.txt_报可操作错误且不回显内容 (0.00s)\n=== RUN   TestKnowledgeChunkFromMerchant_KeepsHitFields\n--- PASS: TestKnowledgeChunkFromMerchant_KeepsHitFields (0.00s)\n=== RUN   TestKnowledgeChunkFromMerchant_DefaultWeight\n--- PASS: TestKnowledgeChunkFromMerchant_DefaultWeight (0.00s)\n=== RUN   TestDedupeMerchantChunks\n--- PASS: TestDedupeMerchantChunks (0.00s)\n=== RUN   TestConverters_KeepParentStitchedContent\n--- PASS: TestConverters_KeepParentStitchedContent (0.00s)\nPASS\nok  \thivemtk-user/internal/aiagent/knowledge/service\t0.573s\n"
+  },
+  {
+    "name": "graph",
+    "command": [
+      "python3",
+      "-c",
+      "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"
+    ],
+    "cwd": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk",
+    "exit": 1,
+    "log": "followup-2-graph.log",
+    "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nModuleNotFoundError: No module named 'graphify'\n"
+  }
+]

@@ -28,7 +28,6 @@ import (
 	_type "hivemtk-user/internal/pkg/utils/type"
 	"io"
 	"net/http"
-	"net/smtp"
 
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -353,6 +352,11 @@ func (s *MarketingFlowService) sendActionCreateTask(ctx context.Context, config 
 }
 
 func (s *MarketingFlowService) sendActionSendSms(ctx context.Context, config map[string]any, userID string, data map[string]any) (map[string]any, error) {
+	// FA-20：发送前先复核流程状态（撤回/暂停对在途执行也生效），再交给注册的发送器
+	// ——注册实现（internal/service）里还有统一判定链（DNC→审批→合规）。
+	if err := s.ensureFlowActiveAtSend(ctx); err != nil {
+		return nil, err
+	}
 	if smsSenderFunc == nil {
 		return nil, errors.New("短信发送器未注册，请确认 internal/service 包已调用 SetSmsSender")
 	}
@@ -640,72 +644,28 @@ func (s *MarketingFlowService) sendActionWebhook(ctx context.Context, config map
 }
 
 func (s *MarketingFlowService) sendActionSendEmail(ctx context.Context, config map[string]any, userID string, data map[string]any) (map[string]any, error) {
-
-	smtpHost, _ := config["smtp_host"].(string)
-	smtpUser, _ := config["smtp_user"].(string)
-	smtpPass, _ := config["smtp_pass"].(string)
-
-	if smtpHost == "" {
-		return nil, errors.New("SMTP 主机未配置，请在动作配置或环境变量中设置 smtp_host")
+	// FA-20：邮件动作与短信同一条链——先复核流程状态，再交给注册的发送器
+	// （internal/service 的注册实现先过统一判定链才拨号）。本层不再直接接触 SMTP：
+	// 未注册发送器 = fail-closed，不允许任何绕过闸口的直发通道。
+	if err := s.ensureFlowActiveAtSend(ctx); err != nil {
+		return nil, err
 	}
-	if smtpUser == "" || smtpPass == "" {
-		return nil, errors.New("SMTP 用户名或密码未配置")
+	if emailSenderFunc == nil {
+		return nil, errors.New("邮件发送器未注册：营销流程邮件必须经过统一发送闸口，禁止直连 SMTP")
 	}
 
-	var smtpPort int
-	switch v := config["smtp_port"].(type) {
-	case int:
-		smtpPort = v
-	case float64:
-		smtpPort = int(v)
-	default:
-		smtpPort = 587
-	}
-
-	to, ok := config["to"].(string)
-	if !ok || to == "" {
-		return nil, errors.New("收件人邮箱未指定")
-	}
-
-	subject, _ := config["subject"].(string)
-	if subject == "" {
-		subject = "营销邮件"
-	}
-
-	body, _ := config["body"].(string)
-	if body == "" {
-		return nil, errors.New("邮件正文未指定")
-	}
-
-	from, _ := config["from"].(string)
-	if from == "" {
-		from = smtpUser
-	}
-
-	mime := "MIME-version: 1.0\r\n"
-	contentType := "Content-Type: text/html; charset=\"UTF-8\"\r\n"
-	if isHTML, ok := config["is_html"].(bool); ok && !isHTML {
-		contentType = "Content-Type: text/plain; charset=\"UTF-8\"\r\n"
-	}
-
-	mailHeader := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n%s%s\r\n",
-		strings.NewReplacer("\r", "", "\n", "").Replace(from),
-		strings.NewReplacer("\r", "", "\n", "").Replace(to),
-		strings.NewReplacer("\r", "", "\n", "").Replace(subject),
-		mime, contentType)
-	message := mailHeader + body
-
-	addr := fmt.Sprintf("%s:%d", smtpHost, smtpPort)
-	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
-
-	err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message))
+	cfg, err := buildMarketingFlowEmailConfig(config)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := emailSenderFunc(ctx, cfg); err != nil {
 		return nil, fmt.Errorf("发送邮件失败：%w", err)
 	}
 
 	return map[string]any{
 		"sent": true,
-		"to":   to,
+		"to":   cfg.To,
 	}, nil
 }
 

@@ -1,0 +1,2 @@
+Command: FA12_PG_DSN='<authorized local synthetic socket DSN>' go test -v ./internal/aiagent/knowledge/service -run '^(TestAsyncProcessingAndReindexShareAtomicOwnership|TestAsyncProcessingLeaseCoversConfiguredTimeout|TestReindexExpiredOwnerCannotOverwriteNewOwner)$' -count=1 -timeout=120s
+Working directory: hivemtk/user-server

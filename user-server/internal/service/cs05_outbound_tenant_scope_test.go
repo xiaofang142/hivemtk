@@ -17,6 +17,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const cs05Platform = "cs05_scope"
+const cs05Platform = "douyin"
 
 func cs05SeedOutbound(t *testing.T, db *gorm.DB, msgID, conv, status string, tenantID uint) uint {
 	t.Helper()
@@ -57,13 +58,13 @@ func TestCS05_OutboundClaimAndAck_TenantScope(t *testing.T) {
 		tenant.SetMode(tenant.ModeOff)
 	})
 	db := testutil.NewTestDB(t, &model.MessageHub{})
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	const (
 		tenantA = uint(801)
 		tenantB = uint(802)
 	)
-	ctxA := tenant.WithTenantID(context.Background(), tenantA)
-	ctxB := tenant.WithTenantID(context.Background(), tenantB)
+	ctxA := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), tenantA), cs05Platform, "acc-shared", "text")
+	ctxB := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), tenantB), cs05Platform, "acc-shared", "text")
 
 	// —— ① 认领租户作用域：A/B 各一条 pending，同 platform/account ——
 	cs05SeedOutbound(t, db, "cs05-claim-a", "conv-a", "pending", tenantA)

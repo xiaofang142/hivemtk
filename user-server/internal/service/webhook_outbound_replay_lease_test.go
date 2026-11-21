@@ -28,7 +28,7 @@ func TestReplayLease_InvalidExecutionCannotCreateOutbound(t *testing.T) {
 		{name: "已终态", changeStored: func(r *DelayedOutboundReply) { r.Status = model.DelayedStatusSent }},
 		{name: "跨租户副本", changeCopy: func(r *DelayedOutboundReply) { r.TenantID = 19 }},
 		{name: "错误账号", changeCopy: func(r *DelayedOutboundReply) { r.AccountID = "other-account" }},
-		{name: "错误渠道", changeCopy: func(r *DelayedOutboundReply) { r.Platform = "douyin" }},
+		{name: "错误渠道", changeCopy: func(r *DelayedOutboundReply) { r.Platform = "xiaohongshu" }},
 		{name: "错误会话", changeCopy: func(r *DelayedOutboundReply) { r.ConversationID = "other-conversation" }},
 		{name: "错误发送者", changeCopy: func(r *DelayedOutboundReply) { r.SenderID = "other-customer" }},
 		{name: "陈旧载荷", changeCopy: func(r *DelayedOutboundReply) { r.Content = "陈旧副本，不应发送" }},
@@ -42,7 +42,7 @@ func TestReplayLease_InvalidExecutionCannotCreateOutbound(t *testing.T) {
 			until := now.Add(time.Minute)
 			id := uint(700_000_000 + time.Now().UnixNano()%90_000_000)
 			stored := DelayedOutboundReply{ID: id, TenantID: tenant.DefaultTenantID,
-				Platform: "xiaohongshu", AccountID: "lease-test-account", ConversationID: fmt.Sprintf("lease-conv-%d", id),
+				Platform: "douyin", AccountID: "lease-test-account", ConversationID: fmt.Sprintf("lease-conv-%d", id),
 				SenderID: fmt.Sprintf("lease-customer-%d", id), Content: "数据库当前合成答复", Kind: model.DelayedKindQuietHours,
 				Status: model.DelayedStatusSending, SendAt: now.Add(time.Hour), CreatedAt: now,
 				ClaimToken: fmt.Sprintf("lease-token-%d", id), ClaimedAt: &now, LeaseUntil: &until}
@@ -53,6 +53,8 @@ func TestReplayLease_InvalidExecutionCannotCreateOutbound(t *testing.T) {
 				t.Fatal(err)
 			}
 			seedReplayAISession(t, database, ctx, &stored)
+			useLegacyBridgeFixture(t)
+			ctx = localBridgeSubmitContext(t, ctx, stored.Platform, stored.AccountID, "text")
 			snapshot := stored
 			if tc.changeCopy != nil {
 				tc.changeCopy(&snapshot)

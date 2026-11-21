@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/capregistry"
+	"hivemtk-user/internal/repository"
 )
 
 // ---------- 方言插件接口 ----------
@@ -59,16 +61,34 @@ type ConnectorAuth struct {
 
 // EndpointConfig 端点 preset（方法/路径/参数映射/能力标签）。
 type EndpointConfig struct {
-	Name         string            `json:"name"`
-	Method       string            `json:"method"`
-	Path         string            `json:"path"`
-	Capabilities []string          `json:"capabilities"` // 能力标签（query_express/...）
-	ParamMap     map[string]string `json:"param_map"`    // 调用参数→平台参数名（缺省同名）
+	Name         string   `json:"name"`
+	Method       string   `json:"method"`
+	Path         string   `json:"path"`
+	Capabilities []string `json:"capabilities"` // 能力标签（query_express/...）
+	// ReadOnly explicitly declares a query performed with a non-safe HTTP method (e.g. POST).
+	// It is honored only when every capability is query_*; the default is fail-closed.
+	ReadOnly bool              `json:"read_only,omitempty"`
+	ParamMap map[string]string `json:"param_map"` // 调用参数→平台参数名（缺省同名）
 	// Headers preset 声明的静态出站头（§3.12 刀2 收编 CourierClient 时补：鉴权之外
 	// 的固定头如 X-Api-Secret 归 preset 数据而非调用方代码）。generic 方言消费；
 	// 同名时**不覆盖**鉴权头（鉴权优先），form/签名类方言按各自语义可忽略。
 	Headers map[string]string `json:"headers,omitempty"`
+	// Cell identifies the exact shop/action capability cell required by this endpoint.
+	// High-risk endpoints without this metadata are not exposed by BridgeProvider.
+	Cell *CapabilityCellRef `json:"capability_cell,omitempty"`
 }
+
+// CapabilityCellRef is endpoint metadata only; tenant/shop identity comes from the
+// authenticated execution context and arguments, never from preset-global data.
+type CapabilityCellRef struct {
+	Product      string `json:"product"`
+	Region       string `json:"region"`
+	Action       string `json:"action"`
+	Carrier      string `json:"carrier"`
+	ShopArgument string `json:"shop_argument,omitempty"`
+}
+
+var ErrCapabilityCellDenied = errors.New("connector write denied by capability cell")
 
 // ---------- 注册表 ----------
 
@@ -114,6 +134,7 @@ type Executor struct {
 	// baseURLValidator 出站基址 SSRF 校验（默认=tooluse.ValidateOpenAPIBaseURL 严格口径；
 	// 测试经 NewExecutorWithValidator 注入放行 seam——生产构造永不放宽）。
 	baseURLValidator func(string) error
+	writeAuthorizer  func(context.Context, *CapabilityCellRef, map[string]any) error
 }
 
 func NewExecutor() *Executor {
@@ -165,7 +186,28 @@ func (e *Executor) Call(ctx context.Context, cfg ConnectorConfig, ep EndpointCon
 	if d == nil {
 		return nil, fmt.Errorf("方言 %q 未注册（可用: %v）", cfg.Provider, List())
 	}
-	req, err := d.BuildRequest(ctx, cfg, ep, args)
+	if !endpointReadOnly(ep) {
+		check := e.writeAuthorizer
+		if check == nil {
+			check = authorizePersistentConnectorWrite
+		}
+		if err := check(ctx, ep.Cell, args); err != nil {
+			return nil, err
+		}
+	}
+	callArgs := args
+	if ep.Cell != nil {
+		callArgs = make(map[string]any, len(args))
+		for key, value := range args {
+			callArgs[key] = value
+		}
+		shopArgument := ep.Cell.ShopArgument
+		if shopArgument == "" {
+			shopArgument = "shop_id"
+		}
+		delete(callArgs, shopArgument)
+	}
+	req, err := d.BuildRequest(ctx, cfg, ep, callArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +224,53 @@ func (e *Executor) Call(ctx context.Context, cfg ConnectorConfig, ep EndpointCon
 		return nil, fmt.Errorf("connector %s status %d: %s", cfg.Provider, resp.StatusCode, truncateForError(body))
 	}
 	return d.NormalizeResponse(body, resp.StatusCode)
+}
+
+func endpointReadOnly(ep EndpointConfig) bool {
+	if len(ep.Capabilities) == 0 {
+		return false
+	}
+	for _, capability := range ep.Capabilities {
+		if !strings.HasPrefix(capability, "query_") || strings.TrimSpace(strings.TrimPrefix(capability, "query_")) == "" {
+			return false
+		}
+	}
+	method := strings.ToUpper(strings.TrimSpace(ep.Method))
+	if method == "" {
+		method = http.MethodGet
+	}
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return method == http.MethodPost && ep.ReadOnly
+	}
+}
+
+func authorizePersistentConnectorWrite(ctx context.Context, ref *CapabilityCellRef, args map[string]any) error {
+	if !validCapabilityCellRef(ref) || ref.Carrier != capregistry.ModeAPIAdapter {
+		return fmt.Errorf("%w: capability cell metadata missing", ErrCapabilityCellDenied)
+	}
+	shopArgument := ref.ShopArgument
+	if shopArgument == "" {
+		shopArgument = "shop_id"
+	}
+	shop, _ := args[shopArgument].(string)
+	orderID, _ := args["order_id"].(string)
+	if strings.TrimSpace(shop) == "" || strings.TrimSpace(orderID) == "" {
+		return fmt.Errorf("%w: execution resource binding missing", ErrCapabilityCellDenied)
+	}
+	source := capregistry.CapabilitySource{Kind: capregistry.SubmissionSourceAfterSale, Product: ref.Product, ResourceID: orderID}
+	resolver := capregistry.PersistentCapabilityResolver{Reader: repository.DefaultCapabilityEvidenceRepository()}
+	if err := resolver.Authorize(ctx, source, ref.Action, ref.Carrier, shop, ref.Region, time.Now().UTC()); err != nil {
+		return fmt.Errorf("%w: %w", ErrCapabilityCellDenied, err)
+	}
+	return fmt.Errorf("%w: execution_target_unbound", ErrCapabilityCellDenied)
+}
+
+func validCapabilityCellRef(ref *CapabilityCellRef) bool {
+	return ref != nil && strings.TrimSpace(ref.Product) != "" && strings.TrimSpace(ref.Region) != "" &&
+		strings.TrimSpace(ref.Action) != "" && strings.TrimSpace(ref.Carrier) != ""
 }
 
 func truncateForError(b []byte) string {

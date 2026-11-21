@@ -34,6 +34,10 @@ const traceHeader = "X-Trace-Id"
 //   - 异步发布根 span 事件到 TraceBus（防止慢订阅污染 P99）。
 func TraceMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if IsMerchantCallbackPath(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
 		traceID := extractTraceID(c)
 		spanID := llm.GenerateSpanIDStatic()
 

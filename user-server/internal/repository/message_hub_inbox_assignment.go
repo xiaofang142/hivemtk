@@ -9,6 +9,7 @@ import (
 	_db "hivemtk-user/internal/pkg/db"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ListOnlineAgentIDs 返回当前在线坐席的 agent_id 列表（经 CAST 为字符串形式）。
@@ -64,8 +65,12 @@ func (r *InboxConversationRepository) AssignTx(ctx context.Context, in AssignTxI
 	out := &AssignTxOutput{}
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var conv model.InboxConversation
-		if err := tx.First(&conv, in.ConversationID).Error; err != nil {
-			return errors.New("conversation not found")
+		// 锁内读取前态，避免并发改派从同一旧归属生成两条断裂历史。
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conv, in.ConversationID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("conversation not found")
+			}
+			return err
 		}
 		out.OldAssignedTo = conv.AssignedTo
 

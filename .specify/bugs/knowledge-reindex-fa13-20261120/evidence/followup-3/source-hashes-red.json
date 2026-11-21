@@ -1,0 +1,6 @@
+{
+  "internal/aiagent/knowledge/repository/knowledge_document.go": "6330c35ebeda6f26e0f64a20c4ae5a0c14c2977fd5c706ef92ab6b178e1528e5",
+  "internal/aiagent/knowledge/service/knowledge_service_pipeline.go": "6c842fa9419771824ae0271f8bf0183fad67f8ccccf9b3d19f8972c2390199a6",
+  "internal/aiagent/knowledge/service/knowledge_service_reindex.go": "f54fb5a4cabc9f67fe97f65612908daccb0913509ab50b8ee162654425dfea59",
+  "internal/aiagent/knowledge/service/knowledge_reindex_quality_test.go": "38329aea4ff32d8deaf1f13ef66d5b83e9c371847c0bed1f5612fe309ccc5bc5"
+}

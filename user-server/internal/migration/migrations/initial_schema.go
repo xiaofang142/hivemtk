@@ -340,4 +340,20 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// v3.98.0（电商店铺五渠道枚举扩容，二次审核）：channel_type_enum 补
 	// taobao/douyin_shop/kuaishou_shop/shopee/walmart_us——v3.92.0 同类漂移再演的收口。
 	register(NewShopChannelTypeEnumMigration(db))
+	// v3.99.0：knowledge_documents 持久化重建尝试计数，支持排障与显式重试审计。
+	register(NewKnowledgeReindexAttemptMigration(db))
+	// v3.100.0：knowledge_documents processing 状态增加可过期重建租约，支持中断后恢复。
+	register(NewKnowledgeReindexLeaseMigration(db))
+	// v3.101.0：异步索引与 Reindex 共用 owner claim，token 用于隔离过期 owner 的写入。
+	register(NewKnowledgeReindexOwnerMigration(db))
+	// v3.102.0：商家 OAuth 尝试和已验证的店铺凭证绑定。
+	register(NewMerchantConnectionMigration(db))
+	// v3.103.0：商家凭证续期领取和本地吊销状态。
+	register(NewMerchantConnectionLifecycleMigration(db))
+	// v3.104.0：可信商家订阅、同意代次和持久回调收件箱。
+	register(NewMerchantCallbackMigration(db))
+	// v3.105.0：回调事件顺序水位与可恢复分页补偿游标。
+	register(NewMerchantCallbackInboxMigration(db))
+	// v3.106.0：精确动作能力证据与来源店铺映射。
+	register(NewCapabilityEvidenceMigration(db))
 }

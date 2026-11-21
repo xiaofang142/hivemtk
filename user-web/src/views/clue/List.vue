@@ -705,7 +705,7 @@ const submitEdit = async () => {
       address: form.address,
       desc: form.desc
     })
-    ElMessage.success(i18n.global.t('线索已更新'))
+    ElMessage.success(i18n.global.t('clue.updated'))
     editVisible.value = false
     fetchCluelist()
   } catch (e) {
@@ -730,7 +730,7 @@ const submitAssign = async () => {
   assignSaving.value = true
   try {
     await clueApi.update(form.id, { owner_account: form.owner_account })
-    ElMessage.success(i18n.global.t('已分配跟进人') + '：' + form.owner_account)
+    ElMessage.success(i18n.global.t('clue.assigned') + '：' + form.owner_account)
     assignVisible.value = false
     fetchCluelist()
   } catch (e) {

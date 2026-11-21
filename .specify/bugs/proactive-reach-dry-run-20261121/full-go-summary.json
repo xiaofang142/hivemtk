@@ -1,0 +1,15 @@
+{
+  "command": "make test-go-fast",
+  "exit_code": 2,
+  "passed_package_results": 152,
+  "failed_package_results": [
+    "FAIL\thivemtk-user/internal/bridge\t7.406s",
+    "FAIL\thivemtk-user/internal/capregistry\t0.329s",
+    "FAIL\thivemtk-user/internal/channelgw\t37.563s",
+    "FAIL\thivemtk-user/internal/migration/migrations\t16.074s",
+    "FAIL\thivemtk-user/internal/repository\t24.408s",
+    "FAIL\thivemtk-user/internal/router\t12.135s",
+    "FAIL\thivemtk-user/internal/service\t287.408s"
+  ],
+  "top_level_failed_tests": 85
+}

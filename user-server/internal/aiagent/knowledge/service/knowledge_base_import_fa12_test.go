@@ -23,6 +23,9 @@ type fa12DocumentStore struct {
 	statusUpdates   []model.KBDocumentStatus
 	statusErrorMsgs []string
 	getErr          error
+	deleteErr       error
+	deleteCtx       context.Context
+	deleteID        uint
 }
 
 func (f *fa12DocumentStore) Create(context.Context, *knowledgeModel.KBDocument) error {
@@ -64,8 +67,30 @@ func (f *fa12DocumentStore) UpdateStatusFields(ctx context.Context, _ uint, fiel
 	return nil
 }
 
-func (f *fa12DocumentStore) DeleteWithChunks(context.Context, uint) (*knowledgeModel.KBDocument, error) {
-	return nil, errors.New("delete is not used by FA-12 import test")
+func (f *fa12DocumentStore) DeleteWithChunks(ctx context.Context, id uint) (*knowledgeModel.KBDocument, error) {
+	f.deleteCtx, f.deleteID = ctx, id
+	return f.doc, f.deleteErr
+}
+
+// 仓储删除失败时保留文件，并将同一个租户上下文和文档 ID 交给原子删除口。
+func TestDeleteDocument_StoreFailurePreservesFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "retained.txt")
+	if err := os.WriteFile(path, []byte("retained"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := errors.New("受控原子删除失败")
+	store := &fa12DocumentStore{doc: &knowledgeModel.KBDocument{ID: 12, FilePath: path}, deleteErr: want}
+	svc := newFA12KnowledgeBaseService(store)
+	ctx := tenant.WithTenantID(context.Background(), 42)
+	if err := svc.DeleteDocument(ctx, 12); !errors.Is(err, want) {
+		t.Fatalf("应保留仓储删除错误，实际: %v", err)
+	}
+	if store.deleteCtx != ctx || store.deleteID != 12 {
+		t.Fatalf("删除接缝丢失上下文或ID: ctx=%v id=%d", store.deleteCtx, store.deleteID)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("删除失败不能清理文件: %v", err)
+	}
 }
 
 func newFA12KnowledgeBaseService(store *fa12DocumentStore) *KnowledgeBaseService {
@@ -240,5 +265,20 @@ func TestProcessDocumentAsync_StateFailureStopsQA(t *testing.T) {
 				t.Fatalf("状态写失败应阻止QA并持久化failed，status=%s qaCalls=%d", store.doc.Status, qaCalls)
 			}
 		})
+	}
+}
+
+// 爬虫处理上下文必须脱离请求取消链，但保留源租户归属。
+func TestCrawlerProcessingContext_PreservesTenantAfterCancellation(t *testing.T) {
+	requestCtx, cancel := context.WithCancel(tenant.WithTenantID(context.Background(), 99))
+	cancel()
+
+	procCtx := crawlerProcessingContext(requestCtx, 42)
+	got, ok := tenant.FromContext(procCtx)
+	if !ok || got != 42 {
+		t.Fatalf("处理上下文应恢复源租户 42，got=%d ok=%v", got, ok)
+	}
+	if procCtx.Err() != nil {
+		t.Fatalf("处理上下文不应继承请求取消，err=%v", procCtx.Err())
 	}
 }

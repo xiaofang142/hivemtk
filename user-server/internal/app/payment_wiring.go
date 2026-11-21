@@ -58,10 +58,12 @@ func InitPaymentRuntime(db *gorm.DB) bool {
 	// 生产这里非 nil；测试里单独调 InitPaymentRuntime 时可能是 nil —— 钩子把 nil 判据
 	// 留到触发那一刻，支付成功不受影响）；旅程权威态走全局缓存后端，实例就地建。
 	journey := service.NewCustomerJourneyService()
+	// FA-27：回款钩子的跟进接同一持久仓储（follow_up_reminders），与 HTTP 今日跟进、
+	// AI 工具共享权威存储——回款触发的复购跟进不再只活在本进程实例里。
 	svc.SetCollectionCompletedHook(service.WireCollectionToRepurchase(
 		service.GlobalOpportunityService(),
 		journey,
-		service.NewFollowUpService(journey),
+		service.NewFollowUpServiceWithStore(journey, repository.NewFollowUpReminderRepositoryWithDB(db)),
 	))
 
 	// T-P8-02 回款金额进 feedback_loop：Transited 的每次结算触发（含 partial）。

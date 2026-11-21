@@ -10,6 +10,7 @@ package channelgw
 //   - 契约④：真非法值（"sent" 等非三值）仍按协议错误拒翻转 + FrameAckUnknownStatusCount 打点
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ func TestWS_AckFrame_Unknown_RealFlip_E2E(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.MessageHub{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
-	ingress := service.NewInboxIngressService()
+	ingress := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	srv := newTestServer(t, NewPipeline(ingress))
 	conn := dialWS(t, srv)
 	_ = conn.WriteJSON(registerFrame(model.ChannelDouyin, "acc-unk-e2e"))

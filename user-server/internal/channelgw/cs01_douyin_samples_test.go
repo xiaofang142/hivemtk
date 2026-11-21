@@ -15,6 +15,7 @@
 package channelgw
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"sync"
 	"testing"
@@ -22,6 +23,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -97,7 +99,7 @@ func cg01Pipeline(t *testing.T) (IngressPipeline, *cg01CountingTrigger, *service
 	database := testutil.NewTestDB(t, &model.MessageHub{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
-	ingress := service.NewInboxIngressService()
+	ingress := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	tr := &cg01CountingTrigger{}
 	ingress.SetAITrigger(tr)
 	// 桥接渠道白名单按注册表同源装配（生产由 app 装配层执行；样本只认 douyin）。
@@ -156,7 +158,7 @@ func TestIngressCS01_PipelineDouyinSampleA_BatchPerEventContract(t *testing.T) {
 // ack 翻 delivered → 重复 ack 归 duplicate（审计可对账、重复送达=0）。
 func TestPersistBridgeCS01_SampleA_OutboundClaimAckReconciliation(t *testing.T) {
 	p, _, ingress := cg01Pipeline(t)
-	ctx := context.Background()
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), tenant.DefaultTenantID), cg01Channel, cg01AccountA1)
 
 	// 获准路径外发：bridge 出库唯一入口（人工/AI 回复同库同口径）。
 	if err := service.DeliverBridgeOutbound(ctx, cg01Channel, cg01AccountA1, cg01ConvA, "text", cg01Reply, "cs01-evt-a-0009"); err != nil {

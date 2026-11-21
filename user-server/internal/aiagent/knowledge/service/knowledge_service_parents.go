@@ -35,6 +35,7 @@ var (
 func (s *KnowledgeService) createChunkParents(
 	ctx context.Context,
 	documentID uint64,
+	owner string,
 	productID string,
 	n int,
 	contentAt func(i int) (content string, tokens int),
@@ -92,7 +93,7 @@ func (s *KnowledgeService) createChunkParents(
 	if len(parents) == 0 {
 		return ids, nil
 	}
-	if err := s.parentRepo.BatchCreate(ctx, parents); err != nil {
+	if err := s.parentRepo.BatchCreateForOwner(ctx, documentID, owner, parents); err != nil {
 		return nil, err
 	}
 	for i := 0; i < n; i++ {

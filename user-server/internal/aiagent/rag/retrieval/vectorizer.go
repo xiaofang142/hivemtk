@@ -75,7 +75,7 @@ func (v *Vectorizer) EmbedBatch(texts []string) ([][]float32, error) {
 	return v.EmbedBatchContext(context.Background(), texts)
 }
 
-// EmbedBatchContext 保留调用方的租户值、截止时间和取消信号。
+// EmbedBatchContext 保留批次/导入任务的租户、trace、取消与截止时间。
 func (v *Vectorizer) EmbedBatchContext(ctx context.Context, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return [][]float32{}, nil

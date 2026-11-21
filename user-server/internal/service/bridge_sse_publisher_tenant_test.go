@@ -18,6 +18,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ import (
 func TestSSEScopedPublisher_ReceivesTenantBoundContext(t *testing.T) {
 	setupBridgeWhitelistForTest(t, "douyin")
 	testutil.NewTestDB(t, &model.MessageHub{})
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	SetGlobalInboxIngressService(svc)
 	t.Cleanup(func() { SetGlobalInboxIngressService(nil) })
 
@@ -54,7 +55,7 @@ func TestSSEScopedPublisher_ReceivesTenantBoundContext(t *testing.T) {
 	t.Cleanup(func() { SetGlobalSSEPublisher(prev) })
 
 	// 带租户的 ctx（与真实调用方一致：请求 ctx 已由 bindBridgeTenant 绑定）。
-	ctx := tenant.WithTenantID(context.Background(), tenantID)
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), tenantID), "douyin", "acc_sse_1", "text")
 	if err := DeliverBridgeOutbound(ctx, "douyin", "acc_sse_1", "conv_sse_1", "text", "SSE 租户上下文测试", "evt_sse_1"); err != nil {
 		t.Fatalf("DeliverBridgeOutbound 失败: %v", err)
 	}

@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"errors"
+
 	"context"
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
@@ -18,6 +20,9 @@ type EmailSendRepository interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status int) error
 	ClaimDueForUpdate(ctx context.Context, now time.Time, limit int) ([]*model.EmailSend, error)
+	// ClaimByIDForDelivery FA-EMAIL-01：按 ID 原子认领（即时 goroutine 与排水 worker
+	// 共享同一认领原语，杜绝双投）。认领失败（行已非 pending）返回 (nil,false,nil)。
+	ClaimByIDForDelivery(ctx context.Context, id string) (*model.EmailSend, bool, error)
 	ExpireStalePending(ctx context.Context, cutoff time.Time) (int64, error)
 	ReclaimStaleSending(ctx context.Context, olderThan time.Time) (int64, error)
 }
@@ -96,6 +101,42 @@ func (r *emailSendRepo) ClaimDueForUpdate(ctx context.Context, now time.Time, li
 		return nil, err
 	}
 	return picked, nil
+}
+
+// ClaimByIDForDelivery 按 ID 原子认领一封 pending 邮件（FA-EMAIL-01）。
+//
+// 即时发送的 goroutine 与后台排水 worker 必须共享同一认领原语：此前即时路径
+// 落库 pending 后直投、不认领，同一行同时可被 worker 按"pending 且到期"认领
+// ——两边都投，收件人收两封。本方法与 ClaimDueForUpdate 同一事务/锁/写回语义，
+// 认领失败（行已非 pending = 已被另一方认领）返回 (nil, false)。
+func (r *emailSendRepo) ClaimByIDForDelivery(ctx context.Context, id string) (*model.EmailSend, bool, error) {
+	if r.db == nil {
+		return nil, false, nil
+	}
+	var picked *model.EmailSend
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var row model.EmailSend
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+			Where("id = ? AND status = ?", id, model.EmailStatusPending).
+			First(&row).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil // 已被另一方认领/终结：不算错误
+			}
+			return err
+		}
+		if err := tx.Model(&model.EmailSend{}).
+			Where("id = ? AND status = ?", id, model.EmailStatusPending).
+			Update("status", model.EmailStatusSending).Error; err != nil {
+			return err
+		}
+		row.Status = model.EmailStatusSending
+		picked = &row
+		return nil
+	})
+	if err != nil || picked == nil {
+		return nil, false, err
+	}
+	return picked, true, nil
 }
 
 // ExpireStalePending 把排期时刻早于 cutoff 却仍 pending 的行判为 expired，返回影响行数。

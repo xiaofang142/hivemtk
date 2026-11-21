@@ -2,6 +2,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"testing"
 	"time"
@@ -103,12 +104,12 @@ func TestOfflineReplay_RunOnce_SkipsChannelsWithoutLiveSubscriber(t *testing.T) 
 func TestOfflineReplay_RunOnce_ReplaysWhenSubscriberLive(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.DelayedOutboundReply{}, &model.MessageHub{}, &model.BridgeAccount{})
 	setupBridgeWhitelistForTest(t, "douyin")
-	ingress := NewInboxIngressService()
+	ingress := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	prev := GlobalInboxIngressService()
 	SetGlobalInboxIngressService(ingress)
 	t.Cleanup(func() { SetGlobalInboxIngressService(prev) })
 	svc := NewBridgeOfflineReplayService().WithDB(db)
-	ctx := context.Background()
+	ctx := localBridgeSubmitContext(t, context.Background(), "douyin", "acc-live", "text")
 
 	seedSvcBridgeAccount(t, db, "douyin", "acc-dark", "online", nil)
 	seedSvcBridgeAccount(t, db, "douyin", "acc-live", "online", nil)

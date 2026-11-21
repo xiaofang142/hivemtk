@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"time"
 
 	"hivemtk-user/internal/dto"
@@ -246,13 +247,31 @@ func (s *WorkflowOrchestratorService) ArchiveVersion(ctx context.Context, id uin
 	return s.versionRepo.UpdateStatus(ctx, id, model.WorkflowStatusArchived)
 }
 
+// ErrVersionReferenced FA-36：版本被执行引用（在途或历史），不可硬删。
+var ErrVersionReferenced = errors.New("workflow version: 已被执行引用，不可删除（在途与历史执行依赖其不可变定义）")
+
 // DeleteVersion 删除工作流版本
+//
+// FA-36：删除前检查执行引用——workflow_executions 只存 workflow_id+version
+// （无外键，dispatcher 每次启动/重试都按这两个值重载定义），被引用版本的
+// 硬删会让恢复无法加载定义、历史失去可重放定义。有引用一律拒绝（可诊断）。
 func (s *WorkflowOrchestratorService) DeleteVersion(ctx context.Context, id uint) error {
 	if s == nil {
 		return utils.ErrServiceNotInit
 	}
 	if id == 0 {
 		return utils.ErrInvalidInput
+	}
+	version, err := s.versionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	n, err := s.execRepo.CountByWorkflowVersion(ctx, version.WorkflowID, version.Version)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("%w：当前 %d 条执行（含在途/历史）引用 version %d", ErrVersionReferenced, n, version.Version)
 	}
 	return s.versionRepo.DeleteByID(ctx, id)
 }
@@ -301,10 +320,45 @@ func (s *WorkflowOrchestratorService) Execute(ctx context.Context, req *dto.Work
 		if traceID == "" {
 			traceID = fmt.Sprintf("wf-%d-%d", exec.ID, time.Now().UnixNano())
 		}
-		s.dispatcher.Run(ctx, exec.ID, traceID)
+		// FA-WF-06：受理与后台执行生命周期分离——执行已落库（受理完成），
+		// 后续 Run 的读写不能随 HTTP 请求结束被取消（客户端断开 ⇒ 首次读库
+		// 即 canceled，执行永久停在无节点的 running）。WithoutCancel 保留
+		// 租户/追踪取值、只摘掉取消信号；traceID 已在上方显式提取。
+		runCtx := context.WithoutCancel(ctx)
+		s.dispatcher.Run(runCtx, exec.ID, traceID)
 	}
 
 	return exec, nil
+}
+
+// RecoverStuckExecutions FA-WF-06：恢复扫描——把超过阈值的卡死 running 执行
+// 用 FA-WF-04 的栅栏写标为明确 failed（可查询、可重试的终态），不盲目重跑
+// （无 per-node 副作用幂等前，重跑等于重复副作用）。返回标记条数。
+func (s *WorkflowOrchestratorService) RecoverStuckExecutions(ctx context.Context, threshold time.Time, limit int) (int64, error) {
+	if s == nil {
+		return 0, utils.ErrServiceNotInit
+	}
+	stuck, err := s.execRepo.FindStuck(ctx, threshold, limit)
+	if err != nil {
+		return 0, err
+	}
+	var marked int64
+	for i := range stuck {
+		applied, err := s.execRepo.UpdateStatusFenced(ctx, stuck[i].ID, map[string]any{
+			"status":      model.WorkflowExecFailed,
+			"error":       "recovery: 执行中断（疑似受理后崩溃/请求取消），由恢复扫描标记为失败；重试请重新触发",
+			"finished_at": time.Now(),
+		}, []string{model.WorkflowExecRunning})
+		if err != nil {
+			logger.Ctx(ctx).Error().Uint("execution_id", stuck[i].ID).Err(err).Msg("stuck execution recovery write failed")
+			continue
+		}
+		if applied {
+			marked++
+			logger.Ctx(ctx).Warn().Uint("execution_id", stuck[i].ID).Msg("stuck running execution marked failed by recovery sweep")
+		}
+	}
+	return marked, nil
 }
 
 // GetExecution 获取执行详情
@@ -359,22 +413,26 @@ func (s *WorkflowOrchestratorService) StopExecution(ctx context.Context, execID 
 	if execID == 0 {
 		return utils.ErrInvalidInput
 	}
-	exec, err := s.execRepo.GetByID(ctx, execID)
-	if err != nil {
+	if _, err := s.execRepo.GetByID(ctx, execID); err != nil {
+		// 行不存在透传仓储错误；存在性校验先行，CAS 里 0 行=非 running。
 		return err
 	}
 
-	if exec.Status != model.WorkflowExecRunning {
+	// FA-WF-04：停止用 CAS（running → terminated）原子迁移——先读后整行写的窗口里
+	// 执行可能已终态，旧实现会把 completed/failed 覆写成 terminated。
+	// 0 行受影响 = 行不存在或已非 running，两者都按既有哨兵回报。
+	applied, err := s.execRepo.UpdateStatusFenced(ctx, execID, map[string]any{
+		"status":      model.WorkflowExecTerminated,
+		"finished_at": time.Now(),
+		"error":       "manual stopped",
+	}, []string{model.WorkflowExecRunning})
+	if err != nil {
+		return err
+	}
+	if !applied {
 		return ErrExecutionNotRunning
 	}
-
-	now := time.Now()
-	exec.Status = model.WorkflowExecTerminated
-	exec.FinishedAt = &now
-	exec.Error = "manual stopped"
-	exec.UpdatedAt = now
-
-	return s.execRepo.Update(ctx, exec)
+	return nil
 }
 
 // FindStuckExecutions 查找卡死的执行

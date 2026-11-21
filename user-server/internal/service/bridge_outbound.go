@@ -101,9 +101,6 @@ func DeliverBridgeOutboundWithReceipt(ctx context.Context, channel, accountID, c
 //   - 文本消息（msgType 空/text 或 mediaURL 空）与旧口径逐字节一致；
 //   - mediaURL 统一 TruncateMediaURL（F2 列宽收口）。
 func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, conversationID, msgType, content, mediaURL, eventID string) (hubID uint64, msgID string, err error) {
-	if globalInboxIngressService == nil {
-		return 0, "", errBridgeOutboundNotReady
-	}
 	if channel == "" || accountID == "" || conversationID == "" {
 		return 0, "", fmt.Errorf("bridge outbound: channel/account_id/conversation_id required")
 	}
@@ -137,6 +134,12 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 			"channel = ? AND account_id = ?", channel, accountID); rerr == nil && resolved != 0 {
 			ctx = tenant.OnlyTenant(ctx, resolved)
 		}
+	}
+	if err := authorizeBridgeOutboundSubmit(ctx, channel, accountID, msgType); err != nil {
+		return 0, "", err
+	}
+	if globalInboxIngressService == nil {
+		return 0, "", errBridgeOutboundNotReady
 	}
 	mediaURL = model.TruncateMediaURL(strings.TrimSpace(mediaURL))
 	if msgType == "" || strings.EqualFold(strings.TrimSpace(msgType), "text") {
@@ -190,7 +193,7 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
-					logger.Errorf("[SSE] GlobalSSEPublisher panic recovered: %v", r)
+					logger.Errorf("[SSE] panic recovered while publishing bridge outbound: %v", r)
 				}
 			}()
 			pub(

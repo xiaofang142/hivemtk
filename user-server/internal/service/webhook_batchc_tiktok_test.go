@@ -5,8 +5,9 @@ package service
 // 时也会走错链路。这里要求：解析逻辑可以共用，**平台标记与幂等键必须按渠道分开**。
 
 import (
-	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/pkg/tenant"
 	"strings"
 	"testing"
 
@@ -167,12 +168,11 @@ func TestDispatchDouyin_LeadRowKeepsPlatform(t *testing.T) {
 	}
 }
 
-// TestTriggerBridgeDMOutreach_EnqueuesUnderOwnChannel 商机票的私信必须进自己渠道的出站队列：
-// 原先写死 douyin，TikTok/小红书的私信会被塞进抖音队列（且抖音侧根本无该账号）。
+// EC-01：无精确格/映射不得入任何队列；已登记抖音格仅在本地可信夹具下检查渠道隔离。
 func TestTriggerBridgeDMOutreach_EnqueuesUnderOwnChannel(t *testing.T) {
 	setupBridgeWhitelistForTest(t, string(ChannelDouyin), string(ChannelTiktok))
 	db := testutil.NewTestDB(t, &model.MessageHub{})
-	ingress := NewInboxIngressService()
+	ingress := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	SetGlobalInboxIngressService(ingress)
 	t.Cleanup(func() { SetGlobalInboxIngressService(nil) })
 
@@ -187,11 +187,8 @@ func TestTriggerBridgeDMOutreach_EnqueuesUnderOwnChannel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list tiktok pending: %v", err)
 	}
-	if len(ttPending) != 1 {
-		t.Fatalf("tiktok 私信应入自己的队列，实际 %d 条", len(ttPending))
-	}
-	if ttPending[0].ConversationID != "tt_dm_u_dm_1" {
-		t.Errorf("tiktok 私信会话键应为 tt_dm_*，got %q", ttPending[0].ConversationID)
+	if len(ttPending) != 0 {
+		t.Fatalf("tiktok 无精确授权不得入队，实际 %d 条", len(ttPending))
 	}
 
 	dyPending, err := ingress.ListPendingOutbound(ctx, string(ChannelDouyin), "acc_tt_dm")
@@ -206,25 +203,12 @@ func TestTriggerBridgeDMOutreach_EnqueuesUnderOwnChannel(t *testing.T) {
 	if err := db.Where("conversation_id = ?", "tt_dm_u_dm_1").Order("id asc").Find(&rows).Error; err != nil {
 		t.Fatalf("读私信行: %v", err)
 	}
-	// 入队行 + 归因回写只许有一行：插第二行会让 outbox 重发、会话流出现重复气泡。
-	if len(rows) != 1 {
-		t.Fatalf("私信在 message_hub 只应有一行，实际 %d 行：%+v", len(rows), rows)
-	}
-	event := rows[0]
-	if event.Platform != "tiktok" {
-		t.Errorf("私信行 Platform 必须是 tiktok，got %q", event.Platform)
-	}
-	if event.Status != "pending" {
-		t.Errorf("私信行必须保持 pending 等待桥接领取，got %q", event.Status)
-	}
-	if !event.IsAIReply || event.AIAgent != "lead_outreach" {
-		t.Errorf("归因信息必须回写到同一行，got isAIReply=%v agent=%q", event.IsAIReply, event.AIAgent)
-	}
-	if got := event.Extra["scenario"]; got != "group_to_dm" {
-		t.Errorf("Extra.scenario 应为 group_to_dm，got %+v", event.Extra)
+	if len(rows) != 0 {
+		t.Fatalf("能力拒绝不得产生私信或归因占位行，实际 %d 行：%+v", len(rows), rows)
 	}
 
-	// 抖音侧行为必须与改造前一致：短名仍是 dy、渠道仍是 douyin。
+	// 仅本地精确夹具验证已登记渠道，不为未登记渠道造格或放开生产。
+	ctx = localBridgeSubmitContext(t, ctx, "douyin", "acc_dy_dm", "text")
 	DouyinLeadAdapter{}.TriggerOutreach(ctx, svc, "acc_dy_dm", "u_dm_2", "g_dy", "抖音群", 80, "多少钱")
 	dyOwn, err := ingress.ListPendingOutbound(ctx, string(ChannelDouyin), "acc_dy_dm")
 	if err != nil {

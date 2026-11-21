@@ -248,7 +248,14 @@ func InitOrderDraftRuntime(db *gorm.DB) *OrderDraftRuntime {
 	}
 	journey := service.NewCustomerJourneyService()
 	svc.SetJourney(context.Background(), journey)
-	followup := service.NewFollowUpService(journey)
+	// FA-27：跟进提醒接持久仓储——草稿链创建的售后回访与回款钩子、AI 工具共享
+	// 同一权威存储（follow_up_reminders 表），今日跟进读侧立即可见，重启不丢。
+	var followup *service.FollowUpService
+	if db != nil {
+		followup = service.NewFollowUpServiceWithStore(journey, repository.NewFollowUpReminderRepositoryWithDB(db))
+	} else {
+		followup = service.NewFollowUpService(journey)
+	}
 	svc.SetFollowUp(context.Background(), followup)
 	rt.journey, rt.followup = journey, followup
 

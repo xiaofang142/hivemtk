@@ -11,8 +11,10 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
 	dbpkg "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -119,7 +121,7 @@ func isolateBridgeOutbox(t *testing.T, db *gorm.DB) *service.InboxIngressService
 	t.Cleanup(func() { dbpkg.SetTestDB(nil) })
 	mem := cache.NewMemoryCache()
 	t.Cleanup(mem.Close)
-	svc := service.NewInboxIngressService()
+	svc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	service.SetGlobalInboxIngressService(svc)
 	t.Cleanup(func() { service.SetGlobalInboxIngressService(nil) })
 	return svc
@@ -140,6 +142,27 @@ func indexOfCardChannel(channel string) int {
 	return -1
 }
 
+// 仅为已登记的抖音文本格提供本地合成证据，不装配生产授权源。
+func localReachCardSubmitContext(t *testing.T, ctx context.Context, account string) context.Context {
+	t.Helper()
+	definition, ok := capregistry.FindCellDefinition("douyin", "CN", "message.text.send", capregistry.ModeBridge)
+	if !ok {
+		t.Fatal("本地正例要求已登记的抖音文本格")
+	}
+	expires := time.Now().Add(time.Hour)
+	key := capregistry.CellKey{TenantID: tenant.DefaultTenantID, ShopID: "local-card-fixture-shop", Product: "douyin", Region: "CN", Action: "message.text.send", Carrier: capregistry.ModeBridge}
+	binding := capregistry.SubmissionBinding{Source: capregistry.SubmissionSourceBridge, Platform: key.Product, ResourceID: account, Key: key}
+	evidence := capregistry.CellEvidence{
+		TenantID: key.TenantID, ShopID: key.ShopID, Product: key.Product, Region: key.Region, Action: key.Action, Carrier: key.Carrier,
+		ConnectionState: capregistry.ConnectionReady, Scopes: definition.RequiredScopes,
+		Version: definition.ContractVersion, DocumentationVersion: definition.DocumentationVersion,
+		ExpiresAt: &expires, StatePreflightPassed: true,
+		Evidence: []capregistry.EvidenceRecord{{Kind: capregistry.EvidenceDocumentation}, {Kind: capregistry.EvidenceImplementation}, {Kind: capregistry.EvidenceRuntime}},
+	}
+	return capregistry.WithCellEvidence(capregistry.WithSubmissionBinding(tenant.WithTenantID(ctx, key.TenantID), binding), evidence)
+}
+
+// 短链格式在本地精确授权下验证；其他渠道缺店铺授权时必须零出站。
 func TestSendCard_DeliversCardShortLinkToBridgeOutbox(t *testing.T) {
 	t.Setenv("PUBLIC_BASE_URL", "https://cards.example.test")
 	db := newReachCardDB(t)
@@ -151,39 +174,55 @@ func TestSendCard_DeliversCardShortLinkToBridgeOutbox(t *testing.T) {
 	}
 
 	a := NewIntegrationReachAdapterFromDB(db)
-	ctx := context.Background()
 	for _, channel := range reachCardChannels {
-		cardID := strconv.Itoa(int(cardIDFor(channel)))
-		msgID, err := a.SendCard(ctx, channel, "acc-1", "conv-1", cardID)
-		if err != nil {
-			t.Fatalf("SendCard(%s) 报错: %v", channel, err)
-		}
-		if want := "bridge:" + channel + ":acc-1:conv-1"; msgID != want {
-			t.Errorf("SendCard(%s) msgID = %q, want %q", channel, msgID, want)
-		}
+		t.Run(channel, func(t *testing.T) {
+			ctx := tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
+			if channel == "douyin" {
+				ctx = localReachCardSubmitContext(t, ctx, "acc-1")
+			}
+			cardID := strconv.Itoa(int(cardIDFor(channel)))
+			msgID, err := a.SendCard(ctx, channel, "acc-1", "conv-1", cardID)
+			if channel != "douyin" {
+				var denied *capregistry.SubmissionDeniedError
+				if !errors.As(err, &denied) || denied.ReasonCode != "capability_mapping_missing" {
+					t.Fatalf("缺店铺授权应明确拒绝，实际 %v", err)
+				}
+				pending, readErr := svc.ListPendingOutbound(ctx, channel, "acc-1")
+				if readErr != nil || len(pending) != 0 || msgID != "" {
+					t.Fatalf("拒绝后须零入队且无回执，pending=%d msgID=%q err=%v", len(pending), msgID, readErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("SendCard(%s) 报错: %v", channel, err)
+			}
+			if want := "bridge:" + channel + ":acc-1:conv-1"; msgID != want {
+				t.Errorf("SendCard(%s) msgID = %q, want %q", channel, msgID, want)
+			}
 
-		pending, err := svc.ListPendingOutbound(ctx, channel, "acc-1")
-		if err != nil {
-			t.Fatalf("读回 %s 出站队列失败: %v", channel, err)
-		}
-		if len(pending) != 1 {
-			t.Fatalf("%s 出站队列 = %d 条, want 1", channel, len(pending))
-		}
-		row := pending[0]
-		wantURL := "https://cards.example.test/s/" + codeFor(channel)
-		if !strings.Contains(row.Content, wantURL) {
-			t.Errorf("%s 出站内容没带绝对短链 %q，实际 %q", channel, wantURL, row.Content)
-		}
-		if !strings.Contains(row.Content, "标题"+channel) {
-			t.Errorf("%s 出站内容没带卡片标题，实际 %q", channel, row.Content)
-		}
-		// 桥接客户端只认文本（现网 12 处出站全是 "text"）：写 "card" 等于替客户端决定怎么渲染。
-		if row.MsgType != "text" {
-			t.Errorf("%s 出站 msg_type = %q, want text", channel, row.MsgType)
-		}
-		if row.ReceiverID != "conv-1" {
-			t.Errorf("%s 出站收件人 = %q, want conv-1", channel, row.ReceiverID)
-		}
+			pending, err := svc.ListPendingOutbound(ctx, channel, "acc-1")
+			if err != nil {
+				t.Fatalf("读回 %s 出站队列失败: %v", channel, err)
+			}
+			if len(pending) != 1 {
+				t.Fatalf("%s 出站队列 = %d 条, want 1", channel, len(pending))
+			}
+			row := pending[0]
+			wantURL := "https://cards.example.test/s/" + codeFor(channel)
+			if !strings.Contains(row.Content, wantURL) {
+				t.Errorf("%s 出站内容没带绝对短链 %q，实际 %q", channel, wantURL, row.Content)
+			}
+			if !strings.Contains(row.Content, "标题"+channel) {
+				t.Errorf("%s 出站内容没带卡片标题，实际 %q", channel, row.Content)
+			}
+			// 桥接客户端只认文本（现网 12 处出站全是 "text"）：写 "card" 等于替客户端决定怎么渲染。
+			if row.MsgType != "text" {
+				t.Errorf("%s 出站 msg_type = %q, want text", channel, row.MsgType)
+			}
+			if row.ReceiverID != "conv-1" {
+				t.Errorf("%s 出站收件人 = %q, want conv-1", channel, row.ReceiverID)
+			}
+		})
 	}
 }
 
@@ -197,28 +236,21 @@ func TestSendCard_ChannelAliasReadsSameCardTable(t *testing.T) {
 	createReachCard(t, db, "xiaohongshu", cardIDFor("xiaohongshu"), "小红书卡片", linkIDFor("xiaohongshu"), true)
 
 	a := NewIntegrationReachAdapterFromDB(db)
+	ctx := tenant.WithTenantID(context.Background(), tenant.DefaultTenantID)
 	for _, alias := range []string{"xiaohongshu", "xiaohongshu_web", "xhs"} {
-		if _, err := a.SendCard(context.Background(), alias, "acc-alias", "conv-"+alias,
-			strconv.Itoa(int(cardIDFor("xiaohongshu")))); err != nil {
-			t.Fatalf("SendCard(%s) 报错: %v", alias, err)
+		if _, err := a.SendCard(ctx, alias, "acc-alias", "conv-"+alias, "9999"); !errors.Is(err, gorm.ErrRecordNotFound) {
+			t.Fatalf("别名 %s 应读取同一张卡片表并报告缺行，实际 %v", alias, err)
+		}
+		_, err := a.SendCard(ctx, alias, "acc-alias", "conv-"+alias, strconv.Itoa(int(cardIDFor("xiaohongshu"))))
+		var denied *capregistry.SubmissionDeniedError
+		if !errors.As(err, &denied) || denied.ReasonCode != "capability_mapping_missing" {
+			t.Fatalf("别名 %s 读到卡片后仍须因缺店铺授权拒绝，实际 %v", alias, err)
 		}
 	}
-	// 三个名字必须落到同一张 xiaohongshu_cards 表、同一个 platform 标签上；
-	// 归一失败的话，别名那两条会带着 xiaohongshu_web / xhs 的 platform 落库（或干脆报错）。
-	pending, err := svc.ListPendingOutbound(context.Background(), "xiaohongshu", "acc-alias")
-	if err != nil {
-		t.Fatalf("读回别名渠道出站失败: %v", err)
-	}
-	if len(pending) != 3 {
-		t.Fatalf("三个别名共写出 %d 条出站, want 3", len(pending))
-	}
-	wantURL := "https://cards.example.test/s/" + codeFor("xiaohongshu")
-	for _, row := range pending {
-		if row.Platform != "xiaohongshu" {
-			t.Errorf("出站 platform = %q, want xiaohongshu（别名没归一）", row.Platform)
-		}
-		if !strings.Contains(row.Content, wantURL) {
-			t.Errorf("出站内容没带短链 %q，实际 %q", wantURL, row.Content)
+	for _, channel := range []string{"xiaohongshu", "xiaohongshu_web", "xhs"} {
+		pending, err := svc.ListPendingOutbound(ctx, channel, "acc-alias")
+		if err != nil || len(pending) != 0 {
+			t.Fatalf("别名拒绝后须零出站，channel=%s pending=%d err=%v", channel, len(pending), err)
 		}
 	}
 }

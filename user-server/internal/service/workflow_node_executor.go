@@ -225,6 +225,26 @@ func AppendWorkflowSideEffect(ctx *WorkflowExecContext, effect string) {
 	ctx.Execution.Context["_side_effects"] = existing
 }
 
+// RemoveWorkflowSideEffect FA-WF-03：从 ctx.Execution.Context 移除一个副作用
+// 标记（子流程创建失败时清占位，防止重放把孤儿标记当成"已执行"）。
+func RemoveWorkflowSideEffect(ctx *WorkflowExecContext, effect string) {
+	if ctx == nil || ctx.Execution == nil || ctx.Execution.Context == nil {
+		return
+	}
+	existing := extractWorkflowSideEffects(ctx.Execution.Context)
+	kept := existing[:0]
+	for _, e := range existing {
+		if e != effect {
+			kept = append(kept, e)
+		}
+	}
+	if len(kept) == 0 {
+		delete(ctx.Execution.Context, "_side_effects")
+		return
+	}
+	ctx.Execution.Context["_side_effects"] = kept
+}
+
 // RegisterWorkflowNodeExecutors 注册 4 种工作流节点执行器。
 //
 // orch 是子流程节点的执行入口：SubflowNodeExecutor 靠它递归跑子工作流，

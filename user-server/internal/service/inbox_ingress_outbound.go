@@ -33,6 +33,11 @@ func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.Mess
 	if h == nil {
 		return errors.New("nil hub message")
 	}
+	if h.Direction == "" || h.Direction == "outbound" {
+		if err := s.authorizeNewOutboundRow(ctx, h); err != nil {
+			return err
+		}
+	}
 	if h.Direction == "" {
 		h.Direction = "outbound"
 	}
@@ -47,10 +52,7 @@ func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.Mess
 	if h.TraceID == "" {
 		h.TraceID = tracing.LinkOutboundTraceID(ctx, h.ConversationID)
 	}
-	// 租户收口在 DeliverBridgeOutboundMedia 入口统一做（反查 bridge_accounts 归属，
-	// 2026-11-14 生产事故修复）；repo 层 CreateMessageHubIdempotent 另有 fail-closed
-	// 兜底（AI 出站幂等写路径）。本函数不再重复设门——历史上在此拦会把
-	// 无租户 worker 的**全部**既有调用转红，打击面过宽；孤儿治理收口在上述两层。
+	// 原始出站调用也必须过相同精确格；入站分支保留既有持久化语义。
 	if err := s.hubRepo.Create(ctx, h); err != nil {
 		return err
 	}
@@ -160,8 +162,11 @@ func deliverClaimThrottled(recentClaims int64, limit int) bool {
 // 前端限速（rate-limiter 三层拟人节奏）失效/被篡改/AI 批量误生成时的最后防线。
 // 计数查询失败按放行处理（fail-open）：兜底限速不应把正常下发卡死在自己的故障上。
 func (s *InboxIngressService) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int) ([]*model.MessageHub, error) {
-	if s.hubRepo == nil {
+	if s.hubRepo == nil || limit <= 0 {
 		return nil, nil
+	}
+	if err := outboundDeliveryScope(ctx); err != nil {
+		return nil, err
 	}
 	rateLimit := BridgeDeliverRateLimitPerMin(ctx)
 	if rateLimit > 0 {
@@ -174,15 +179,15 @@ func (s *InboxIngressService) ClaimPendingOutbound(ctx context.Context, channel,
 			return []*model.MessageHub{}, nil
 		}
 	}
-	rows, err := s.hubRepo.ClaimPendingOutbound(ctx, channel, accountID, limit, InboxOutboundClaimTimeout)
-	if err != nil {
+	rows, err := NewOutboundDeliveryService(s.hubRepo, s.bridgeCapabilityAuthorizer()).ClaimPendingOutbound(ctx, channel, accountID, InboxOutboundClaimTimeout, limit)
+	if err != nil && len(rows) == 0 {
 		return nil, err
 	}
 	out := make([]*model.MessageHub, 0, len(rows))
 	for i := range rows {
 		out = append(out, &rows[i])
 	}
-	return out, nil
+	return out, err
 }
 
 // AckOutboundDelivered 将扩展确认已下发的出站消息标记为 delivered（通道B·状态上报）。

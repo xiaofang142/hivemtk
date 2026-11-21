@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"hivemtk-user/internal/aiagent/agent/portcontract"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -46,6 +47,12 @@ func (s *AfterSaleService) Create(ctx context.Context, req *portcontract.AfterSa
 	if req.Type == "" {
 		req.Type = portcontract.AfterSaleRefund
 	}
+	client := s.resolveClient(ctx)
+	if client != nil && client.Configured() {
+		if err := authorizeAfterSaleSubmit(ctx, req); err != nil {
+			return nil, err
+		}
+	}
 	as := &model.AfterSale{
 		Platform:      req.Platform,
 		OrderID:       req.OrderID,
@@ -59,8 +66,11 @@ func (s *AfterSaleService) Create(ctx context.Context, req *portcontract.AfterSa
 	if err := s.repo.Create(ctx, as); err != nil {
 		return nil, err
 	}
-	if client := s.resolveClient(ctx); client != nil && client.Configured() {
+	if client != nil && client.Configured() {
 		if res, err := client.Create(ctx, req); err != nil {
+			if capregistry.IsSubmissionDenied(err) {
+				return nil, err
+			}
 			// 本地已落库，回写失败不能回滚，但必须留痕，否则电商侧静默少单。
 			logger.Errorf("[售后] 回写电商失败（本地已落库，状态待刷新）：%v", err)
 		} else if res != nil && res.ExternalID != "" {

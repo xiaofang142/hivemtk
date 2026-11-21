@@ -525,11 +525,13 @@ func TestSendOutbound_BF6_BridgeUndeliverableKeepsSingleOutboundRow(t *testing.T
 	const eventID = "evt-bf6-bridge-undel"
 	const conv = "bf6-bridge-undel"
 	releaseReplyClaimForTest(t, eventID)
-	hub := seedInboundHub(t, db, "xiaohongshu", "xiaohongshu-unknown", conv, eventID)
+	hub := seedInboundHub(t, db, "douyin", "douyin-unknown", conv, eventID)
 	bf6Preconditions(t, svc, hub)
 
 	p := &ParsedPayload{EventID: eventID, Sender: conv, Content: "在吗", ChatID: conv}
-	sent, sendErr := svc.sendOutbound(context.Background(), ChannelXiaohongshu, "xiaohongshu-unknown", p,
+	useLegacyBridgeFixture(t)
+	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	sent, sendErr := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p,
 		"不可达账号的回复", hub, nil)
 	ce := bf6ChannelErr(t, conv, sent, sendErr)
 	if ce.Category != CategoryBadRequest {

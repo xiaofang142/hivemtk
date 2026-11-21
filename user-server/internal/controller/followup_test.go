@@ -194,7 +194,7 @@ func TestFollowUpController_Lifecycle(t *testing.T) {
 func TestFollowUpController_CancelThenComplete(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := service.NewFollowUpService(nil)
-	r, err := svc.Schedule(context.Background(), "c2", "u2", service.ReminderCustom,
+	r, err := svc.Schedule(context.Background(), "c2", "u1", service.ReminderCustom,
 		time.Hour, nil)
 	if err != nil {
 		t.Fatalf("排程失败: %v", err)

@@ -37,6 +37,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -96,6 +97,11 @@ func bridgePresetsWithExecutor(presets []ConnectorPreset, exec *Executor) ([]too
 				rep.Skipped = append(rep.Skipped, BridgeSkipReason{Preset: p.Name, Endpoint: ep.Name, Reason: reason})
 				continue
 			}
+			if risk == tooluse.RiskHighWrite && !registeredCapabilityCellRef(ep.Cell) {
+				rep.Skipped = append(rep.Skipped, BridgeSkipReason{Preset: p.Name, Endpoint: ep.Name,
+					Reason: "写端点缺少已登记店铺动作能力格，fail-closed 不桥接"})
+				continue
+			}
 			t := &dialectTool{
 				base: tooluse.BaseTool{
 					NameVal:        bridgeToolName(presetName, endpointName),
@@ -126,6 +132,14 @@ func bridgePresetsWithExecutor(presets []ConnectorPreset, exec *Executor) ([]too
 	return rep.Tools, rep.Skipped, rep.PresetErr
 }
 
+func registeredCapabilityCellRef(ref *CapabilityCellRef) bool {
+	if !validCapabilityCellRef(ref) {
+		return false
+	}
+	_, ok := capregistry.FindCellDefinition(ref.Product, ref.Region, ref.Action, ref.Carrier)
+	return ok
+}
+
 // bridgeToolName C1-1：connector.<preset>.<endpoint>（点分惯例，沿 order.lookup/
 // logistics.track 同款）。
 func bridgeToolName(preset, endpoint string) string {
@@ -138,12 +152,10 @@ func endpointRiskLevel(ep EndpointConfig) (tooluse.ToolRiskLevel, string) {
 	if len(ep.Capabilities) == 0 {
 		return "", "能力标签缺失（Capabilities 为空），fail-closed 不桥接"
 	}
-	for _, c := range ep.Capabilities {
-		if !strings.HasPrefix(c, "query_") {
-			return tooluse.RiskHighWrite, ""
-		}
+	if endpointReadOnly(ep) {
+		return tooluse.RiskReadonly, ""
 	}
-	return tooluse.RiskReadonly, ""
+	return tooluse.RiskHighWrite, ""
 }
 
 func bridgeToolDescription(presetName string, ep EndpointConfig) string {
@@ -155,6 +167,7 @@ func bridgeToolDescription(presetName string, ep EndpointConfig) string {
 // bridgeToolParams C1-2：ParamMap 键（缺省同名）→ properties（string）。
 func bridgeToolParams(ep EndpointConfig) tooluse.ToolParameters {
 	props := map[string]tooluse.ToolParam{}
+	var required []string
 	// ParamMap 键序不定，排序保证 schema 冻结断言稳定。
 	keys := make([]string, 0, len(ep.ParamMap))
 	for k := range ep.ParamMap {
@@ -164,7 +177,15 @@ func bridgeToolParams(ep EndpointConfig) tooluse.ToolParameters {
 	for _, k := range keys {
 		props[k] = tooluse.ToolParam{Type: "string", Description: "映射到平台参数 " + ep.ParamMap[k]}
 	}
-	return tooluse.ToolParameters{Type: "object", Properties: props}
+	if validCapabilityCellRef(ep.Cell) {
+		shopArgument := ep.Cell.ShopArgument
+		if shopArgument == "" {
+			shopArgument = "shop_id"
+		}
+		props[shopArgument] = tooluse.ToolParam{Type: "string", Description: "目标店铺标识，仅用于匹配店铺动作权限，不作为平台参数"}
+		required = append(required, shopArgument)
+	}
+	return tooluse.ToolParameters{Type: "object", Properties: props, Required: required}
 }
 
 // sanitizeConnectorName C1-1：小写字母/数字/下划线，其余折叠 `_`，两侧 trim

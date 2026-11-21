@@ -261,7 +261,8 @@ func (m *pathQuotaLimiterManager) stop() { //nolint:unused //// 仅被 *_test.go
 // rateLimitTenantPrefix）；无令牌请求按 IP 分桶，语义显式登记在 A5 判据里。
 func PathQuotaMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		path := c.Request.URL.Path
+		callback := IsMerchantCallbackPath(c.Request.URL.Path)
+		path := merchantSafeLogPath(c.Request.URL.Path)
 		cfg, ok := resolvePathQuotas(c.Request.Context())[path]
 		if !ok {
 			c.Next()
@@ -275,15 +276,18 @@ func PathQuotaMiddleware() gin.HandlerFunc {
 		if cache.GlobalIsRedis() {
 			minute := time.Now().Truncate(time.Minute).Unix()
 			key := fmt.Sprintf("mtk:ratelimit:path:%s:%d", path, minute)
-			if _, err := cache.GetGlobalCache().Incr(c.Request.Context(), key, time.Minute); err != nil {
+			if _, err := cache.GetGlobalCache().Incr(c.Request.Context(), key, time.Minute); err != nil && !callback {
 				logger.Debugf("[ratelimit] 路径用量计数失败 path=%s: %v", path, err)
 			}
 		}
-		clientKey := scopedRateLimitKey(c, c.ClientIP())
+		clientKey := c.ClientIP()
+		if !callback {
+			clientKey = scopedRateLimitKey(c, clientKey)
+		}
 		if !getPathQuotaManager().allow(clientKey, path, cfg) {
 			// path/clientKey 为请求级稳定值；SafeGo 防 recordQuotaTrigger panic 击穿进程
 			utils.SafeGo(context.Background(), "ratelimit.quota_trigger", func(_ context.Context) {
-				recordQuotaTrigger(path, clientKey)
+				recordQuotaTrigger(path, clientKey, callback)
 			})
 			c.JSON(429, gin.H{
 				"code":        429,
@@ -299,7 +303,7 @@ func PathQuotaMiddleware() gin.HandlerFunc {
 	}
 }
 
-func recordQuotaTrigger(path, clientKey string) {
+func recordQuotaTrigger(path, clientKey string, metadataOnly bool) {
 	if !cache.GlobalIsRedis() {
 		return
 	}
@@ -308,7 +312,7 @@ func recordQuotaTrigger(path, clientKey string) {
 	key := "mtk:ratelimit:triggered:" + path
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	if _, err := c.Incr(ctx, key, 24*time.Hour); err != nil {
+	if _, err := c.Incr(ctx, key, 24*time.Hour); err != nil && !metadataOnly {
 		logger.Debugf("[ratelimit] 记录触发事件失败 path=%s client=%s: %v", path, clientKey, err)
 	}
 }

@@ -1,0 +1,7 @@
+Working directory: user-server/: `go build ./... && go vet ./...`
+Working directory: repository root: `python3 scripts/check-layer-boundary.py`
+Working directory: repository root: `bash scripts/check-architecture.sh`
+Working directory: repository root: `bash user-server/scripts/check-gorm-only.sh`
+Working directory: repository root: `bash user-server/scripts/check_naked_goroutine.sh`
+Working directory: repository root: `git diff --check`
+Graphify: `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"`

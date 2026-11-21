@@ -1,0 +1,132 @@
+package service
+
+import (
+	"context"
+	"time"
+
+	"hivemtk-user/internal/aiagent/agent/portcontract"
+	"hivemtk-user/internal/capregistry"
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
+)
+
+// BridgeCapabilityAuthorizer is an explicitly composed, local authorization strategy.
+// When omitted, production uses the persistent evidence reader.
+type BridgeCapabilityAuthorizer func(context.Context, string, string, string, time.Time) error
+
+func (s *InboxIngressService) bridgeCapabilityAuthorizer() BridgeCapabilityAuthorizer {
+	if s != nil {
+		return s.outboundAuthorizer
+	}
+	return nil
+}
+
+func defaultCapabilityResolver() capregistry.PersistentCapabilityResolver {
+	return capregistry.PersistentCapabilityResolver{Reader: repository.DefaultCapabilityEvidenceRepository()}
+}
+
+func authorizePersistentBridge(ctx context.Context, resolver capregistry.PersistentCapabilityResolver, channel, accountID, msgType string) error {
+	source, action, ok := capregistry.CapabilityBridgeTarget(channel, accountID, msgType)
+	if !ok {
+		return &capregistry.SubmissionDeniedError{ReasonCode: "unknown_capability"}
+	}
+	return resolver.Authorize(ctx, source, action, capregistry.ModeBridge, "", "", time.Now().UTC())
+}
+
+// authorizeBridgeOutboundSubmit is shared by the public outbox producer and the AI
+// webhook sender boundary. Both paths use the same exact-cell policy and diagnostics.
+func authorizeBridgeOutboundSubmit(ctx context.Context, channel, accountID, msgType string) error {
+	return authorizeBridgeForIngress(ctx, GlobalInboxIngressService(), channel, accountID, msgType)
+}
+
+func authorizeBridgeForIngress(ctx context.Context, ingress *InboxIngressService, channel, accountID, msgType string) error {
+	check := ingress.bridgeCapabilityAuthorizer()
+	var err error
+	if check != nil {
+		err = check(ctx, channel, accountID, msgType, time.Now().UTC())
+	} else {
+		err = authorizePersistentBridge(ctx, defaultCapabilityResolver(), channel, accountID, msgType)
+	}
+	logCapabilityDenial(ctx, "bridge", channel, err)
+	return err
+}
+
+// 回复持久化继承入站行租户，必须与本次精确授权使用同一租户。
+func authorizeBridgeReplySubmit(ctx context.Context, channel WebhookChannel, accountID string, hub *model.MessageHub) error {
+	if hub != nil && hub.TenantID != 0 {
+		if tenantID, ok := tenant.FromContext(ctx); ok && tenantID != hub.TenantID {
+			err := &capregistry.SubmissionDeniedError{ReasonCode: "tenant_binding_mismatch"}
+			logCapabilityDenial(ctx, "bridge", string(channel), err)
+			return bridgeCapabilityFailure(channel, err)
+		}
+	}
+	if err := authorizeBridgeOutboundSubmit(ctx, string(channel), accountID, "text"); err != nil {
+		return bridgeCapabilityFailure(channel, err)
+	}
+	return nil
+}
+
+func authorizeAfterSaleSubmit(ctx context.Context, req *portcontract.AfterSaleRequest) error {
+	if req == nil || req.Platform == "" {
+		err := &capregistry.SubmissionDeniedError{ReasonCode: "capability_mapping_missing"}
+		logCapabilityDenial(ctx, "aftersale", "", err)
+		return err
+	}
+	var action string
+	switch req.Type {
+	case portcontract.AfterSaleRefund:
+		action = "refund.write"
+	case "return", "exchange":
+		action = "aftersale.write"
+	default:
+		err := &capregistry.SubmissionDeniedError{ReasonCode: "unknown_capability"}
+		logCapabilityDenial(ctx, "aftersale", req.Platform, err)
+		return err
+	}
+	source := capregistry.CapabilitySource{Kind: capregistry.SubmissionSourceAfterSale, Product: req.Platform, ResourceID: req.OrderID}
+	err := defaultCapabilityResolver().Authorize(ctx, source, action, capregistry.ModeAPIAdapter, "", "", time.Now().UTC())
+	if err == nil {
+		// The legacy HTTP client uses a global URL and key, with no connection revision binding.
+		err = &capregistry.SubmissionDeniedError{ReasonCode: "execution_target_unbound"}
+	}
+	logCapabilityDenial(ctx, "aftersale", req.Platform, err)
+	return err
+}
+
+func logCapabilityDenial(ctx context.Context, source, platform string, err error) {
+	if err == nil {
+		return
+	}
+	reason := "capability_not_production_ready"
+	if denied, ok := err.(interface{ CapabilityReasonCode() string }); ok && denied.CapabilityReasonCode() != "" {
+		reason = denied.CapabilityReasonCode()
+	}
+	logger.Ctx(ctx).Warn().
+		Str("module", "capability_submit").
+		Str("source", source).
+		Str("platform", platform).
+		Str("reason_code", reason).
+		Msg("external submit denied before side effect")
+}
+
+// Preserve both the machine-readable decision and the channel's non-retryable contract.
+type capabilityChannelError struct {
+	channelError *ChannelError
+}
+
+func (e *capabilityChannelError) Error() string                { return e.channelError.Error() }
+func (e *capabilityChannelError) Unwrap() error                { return e.channelError }
+func (e *capabilityChannelError) CapabilityReasonCode() string { return e.channelError.Code }
+
+func bridgeCapabilityFailure(channel WebhookChannel, err error) error {
+	reason := "capability_not_production_ready"
+	if denied, ok := err.(interface{ CapabilityReasonCode() string }); ok && denied.CapabilityReasonCode() != "" {
+		reason = denied.CapabilityReasonCode()
+	}
+	return &capabilityChannelError{channelError: &ChannelError{
+		Channel: string(channel), Category: CategoryBadRequest, Retryable: false,
+		Code: reason, Raw: "capability_submit_denied: " + reason,
+	}}
+}

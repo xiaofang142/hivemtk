@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 )
@@ -32,20 +33,21 @@ func TestDelayedReplayPermission_BothPathsRespectHumanAndNewReply(t *testing.T) 
 		for _, scenario := range []string{"合法AI会话", "人工锁", "人工会话", "较新已答", "会话缺失"} {
 			t.Run(path+"/"+scenario, func(t *testing.T) {
 				svc, _ := newBridgeSentTestService(t)
-				setupBridgeWhitelistForTest(t, "xiaohongshu")
+				setupBridgeWhitelistForTest(t, "douyin")
 				ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 				defer svc.Stop(ctx)
 				database := svc.eventRepo.GetDB()
 				now := time.Now()
 				until := now.Add(time.Minute)
 				rec := &model.DelayedOutboundReply{
-					TenantID: tenant.DefaultTenantID, Platform: "xiaohongshu",
+					TenantID: tenant.DefaultTenantID, Platform: "douyin",
 					AccountID: fmt.Sprintf("permission-account-%d", now.UnixNano()), ConversationID: "permission-conversation",
 					SenderID: "permission-customer", Content: "合成待投答案",
 					Kind: model.DelayedKindQuietHours, Status: model.DelayedStatusSending,
 					SendAt: now.Add(-time.Minute), CreatedAt: now.Add(-time.Hour),
 					ClaimToken: "permission-token", ClaimedAt: &now, LeaseUntil: &until,
 				}
+				ctx = localBridgeSubmitContext(t, ctx, rec.Platform, rec.AccountID, "text")
 				if path == "离线回扫" {
 					rec.Status, rec.ClaimToken, rec.ClaimedAt, rec.LeaseUntil = model.DelayedStatusPending, "", nil, nil
 				}
@@ -78,9 +80,11 @@ func TestDelayedReplayPermission_BothPathsRespectHumanAndNewReply(t *testing.T) 
 				}
 				releaseReplyClaimForTest(t, fmt.Sprintf("delayed-%d", rec.ID))
 				if path == "主重放" {
+					useLegacyBridgeFixture(t)
 					svc.replayDelayedOutbound(ctx, rec)
 				} else {
 					previous := GlobalInboxIngressService()
+					svc.ingressSvc.outboundAuthorizer = capregistry.AuthorizeBridgeSubmission
 					SetGlobalInboxIngressService(svc.ingressSvc)
 					t.Cleanup(func() { SetGlobalInboxIngressService(previous) })
 					NewBridgeOfflineReplayService().WithDB(database).ReplayDelayedOutbound(ctx, rec.Platform, rec.AccountID, 10)

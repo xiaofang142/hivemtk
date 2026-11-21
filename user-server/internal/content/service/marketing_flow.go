@@ -13,7 +13,6 @@ import (
 	cdprepo "hivemtk-user/internal/repository"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -140,7 +139,13 @@ func (s *MarketingFlowService) UpdateFlow(ctx context.Context, id uint, userID u
 		flow.TriggerConfig = string(triggerConfig)
 	}
 	if req.FlowData != nil {
-		flowData, _ := json.Marshal(req.FlowData)
+		flowData, err := json.Marshal(req.FlowData)
+		if err != nil {
+			return nil, fmt.Errorf("%w: 流程定义序列化失败", utils.ErrInvalidInput)
+		}
+		if err := s.validateFlowDefinition(string(flowData)); err != nil {
+			return nil, err
+		}
 		flow.FlowData = string(flowData)
 	}
 
@@ -209,31 +214,8 @@ func (s *MarketingFlowService) StopFlow(ctx context.Context, id uint, userID uin
 }
 
 func (s *MarketingFlowService) validateFlowDefinition(flowData string) error {
-	if flowData == "" {
-		return fmt.Errorf("%w: 流程定义为空", utils.ErrInvalidInput)
-	}
-
-	var def model.FlowDefinition
-	if err := json.Unmarshal([]byte(flowData), &def); err != nil {
-		return fmt.Errorf("%w: 流程定义 JSON 解析失败", utils.ErrInvalidInput)
-	}
-
-	if len(def.Nodes) == 0 {
-		return fmt.Errorf("%w: 流程至少需要一个节点", utils.ErrInvalidInput)
-	}
-
-	hasTrigger := false
-	for _, node := range def.Nodes {
-		if node.Type == "trigger" {
-			hasTrigger = true
-			break
-		}
-	}
-	if !hasTrigger {
-		return fmt.Errorf("%w: 流程必须有触发器节点", utils.ErrInvalidInput)
-	}
-
-	return nil
+	_, err := parseMarketingFlowGraph(flowData)
+	return err
 }
 
 // GetExecutionList 某流程的执行记录列表。
@@ -258,8 +240,15 @@ func (s *MarketingFlowService) GetExecutionStats(ctx context.Context, flowID uin
 
 func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.MarketingFlow, triggerID, userID string, data map[string]any) (*model.FlowExecution, error) {
 
-	if flow.Status != model.FlowStatusActive {
+	if flow == nil || flow.Status != model.FlowStatusActive {
 		return nil, fmt.Errorf("%w: 流程未激活", utils.ErrInvalidInput)
+	}
+	if err := s.validateFlowDefinition(flow.FlowData); err != nil {
+		return nil, err
+	}
+	snapshot, err := cloneMarketingFlowData(data)
+	if err != nil {
+		return nil, err
 	}
 
 	execution := &model.FlowExecution{
@@ -278,12 +267,18 @@ func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.Mark
 	// 异步体必须脱离请求 ctx（delay 节点最长等 300s，不能随响应返回被取消），
 	// 但不能脱离租户：全仓异步写库都走 BackgroundWithTenant，这里漏掉就等于
 	// 每次落状态都被隔离闸拒绝，流程永远停在 running。
-	go s.executeFlow(tenant.BackgroundWithTenant(ctx), execution, flow, data)
+	workerExecution, workerFlow := *execution, *flow
+	utils.SafeGo(tenant.BackgroundWithTenant(ctx), "marketing-flow", func(ctx context.Context) {
+		s.executeFlow(ctx, &workerExecution, &workerFlow, snapshot)
+	})
 
 	return execution, nil
 }
 
 func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model.FlowExecution, flow *model.MarketingFlow, data map[string]any) {
+	// FA-20：把执行中的流程挂上 ctx，发送型动作在发送时点据此复核流程状态——
+	// 流程在执行中途被暂停/停用时，后续发送动作零外发（不能只在触发入口拦一次）。
+	ctx = WithMarketingFlowRef(ctx, flow)
 	persist := func() {
 		if err := s.executionRepo.Update(ctx, execution); err != nil {
 			logger.Errorf("[MarketingFlow] 执行状态落库失败 executionID=%d status=%s: %v", execution.ID, execution.Status, err)
@@ -298,70 +293,23 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 		}
 	}()
 
-	var flowDef model.FlowDefinition
-	if err := json.Unmarshal([]byte(flow.FlowData), &flowDef); err != nil {
+	graph, err := parseMarketingFlowGraph(flow.FlowData)
+	if err != nil {
 		execution.Status = "failed"
-		execution.ErrorMessage = fmt.Sprintf("流程定义解析失败：%v", err)
+		execution.ErrorMessage = err.Error()
 		persist()
 		return
 	}
-
-	levels := topologicalLevels(flowDef.Nodes)
-	if len(levels) == 0 {
+	executionData, err := graph.run(ctx, data, func(ctx context.Context, node model.FlowNode, snapshot map[string]any) (map[string]any, error) {
+		return s.executeNode(ctx, node, execution.UserID, snapshot)
+	}, func(nodeID string) {
+		execution.CurrentNode = nodeID
+	})
+	if err != nil {
 		execution.Status = "failed"
-		execution.ErrorMessage = "流程无有效节点"
+		execution.ErrorMessage = err.Error()
 		persist()
 		return
-	}
-
-	executionData := data
-	var execMu sync.Mutex
-
-	for levelIdx, level := range levels {
-		var wg sync.WaitGroup
-		levelErrs := []error{}
-		var levelMu sync.Mutex
-
-		for i := range level {
-			node := level[i]
-			wg.Add(1)
-			go func(n *model.FlowNode) {
-				defer wg.Done()
-				defer func() {
-					if r := recover(); r != nil {
-						levelMu.Lock()
-						levelErrs = append(levelErrs, fmt.Errorf("node %s panic: %v\n%s", n.ID, r, debug.Stack()))
-						levelMu.Unlock()
-					}
-				}()
-
-				execution.CurrentNode = n.ID
-				result, err := s.executeNode(ctx, *n, execution.UserID, executionData)
-				if err != nil {
-					levelMu.Lock()
-					levelErrs = append(levelErrs, fmt.Errorf("节点 %s 执行失败：%w", n.Name, err))
-					levelMu.Unlock()
-					return
-				}
-
-				if result != nil {
-					execMu.Lock()
-					for k, v := range result {
-						executionData[k] = v
-					}
-					execMu.Unlock()
-				}
-			}(node)
-		}
-		wg.Wait()
-
-		if len(levelErrs) > 0 {
-			execution.Status = "failed"
-			execution.ErrorMessage = levelErrs[0].Error()
-			persist()
-			return
-		}
-		_ = levelIdx
 	}
 
 	execution.Status = "completed"
@@ -369,75 +317,6 @@ func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model
 	executionDataBytes, _ := json.Marshal(executionData)
 	execution.ExecutionData = string(executionDataBytes)
 	persist()
-}
-
-func topologicalLevels(nodes []model.FlowNode) [][]*model.FlowNode {
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	nodeMap := make(map[string]*model.FlowNode, len(nodes))
-	inDegree := make(map[string]int, len(nodes))
-	for i := range nodes {
-		n := &nodes[i]
-		nodeMap[n.ID] = n
-		inDegree[n.ID] = 0
-	}
-
-	for i := range nodes {
-		n := &nodes[i]
-		for _, next := range n.NextNodes {
-			if _, ok := inDegree[next]; ok {
-				inDegree[next]++
-			}
-		}
-	}
-
-	var levels [][]*model.FlowNode
-	currentLevel := []*model.FlowNode{}
-	for id, deg := range inDegree {
-		if deg == 0 {
-			currentLevel = append(currentLevel, nodeMap[id])
-		}
-	}
-
-	if len(currentLevel) == 0 {
-		for i := range nodes {
-			currentLevel = append(currentLevel, &nodes[i])
-		}
-		return [][]*model.FlowNode{currentLevel}
-	}
-
-	visited := make(map[string]bool)
-	for len(currentLevel) > 0 {
-		levels = append(levels, currentLevel)
-		nextLevel := []*model.FlowNode{}
-		for _, n := range currentLevel {
-			visited[n.ID] = true
-			for _, next := range n.NextNodes {
-				if _, ok := inDegree[next]; !ok {
-					continue
-				}
-				inDegree[next]--
-				if inDegree[next] == 0 {
-					nextLevel = append(nextLevel, nodeMap[next])
-				}
-			}
-		}
-		currentLevel = nextLevel
-	}
-
-	unvisited := []*model.FlowNode{}
-	for id := range nodeMap {
-		if !visited[id] {
-			unvisited = append(unvisited, nodeMap[id])
-		}
-	}
-	if len(unvisited) > 0 {
-		levels = append(levels, unvisited)
-	}
-
-	return levels
 }
 
 func (s *MarketingFlowService) executeNode(ctx context.Context, node model.FlowNode, userID string, data map[string]any) (map[string]any, error) {

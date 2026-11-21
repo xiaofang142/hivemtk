@@ -1,0 +1,10 @@
+[
+  {
+    "check": "bare-go-current",
+    "exit_code": 0
+  },
+  {
+    "check": "goroutines-current",
+    "exit_code": 0
+  }
+]

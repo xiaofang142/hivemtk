@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -105,7 +107,7 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 		customer  = "e2e-cust-001"
 	)
 
-	ingressSvc := service.NewInboxIngressService()
+	ingressSvc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	handler := NewBridgeIngestHandler(ingressSvc)
 
 	aiTrigger := newFakeAIOutboundTrigger(db, nil)
@@ -227,6 +229,7 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest("GET", fmt.Sprintf("/api/bridge/outbox?channel=%s&account_id=%s&limit=10", channel, accountID), nil)
 	req2.Header.Set("X-Bridge-Token", "test-token")
+	req2 = req2.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(req2.Context(), 1), channel, accountID, "text", ""))
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = req2
 

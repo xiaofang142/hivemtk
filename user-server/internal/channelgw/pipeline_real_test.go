@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -76,7 +77,7 @@ func TestPipeline_ClaimAndAck_RealService(t *testing.T) {
 	p, _ := newRealPipeline(t)
 	ctx := context.Background()
 
-	hubs, err := p.ClaimOutbound(ctx, model.ChannelDouyin, "acc-3", 10)
+	hubs, err := p.ClaimOutbound(tenant.WithTenantID(ctx, 1), model.ChannelDouyin, "acc-3", 10)
 	if err != nil {
 		t.Fatalf("ClaimOutbound 不应失败: %v", err)
 	}

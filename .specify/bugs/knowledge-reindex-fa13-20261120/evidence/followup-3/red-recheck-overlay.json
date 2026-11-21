@@ -1,0 +1,6 @@
+{
+  "Replace": {
+    "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/knowledge/repository/knowledge_document.go": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.specify/bugs/knowledge-reindex-fa13-20261120/evidence/followup-3/knowledge_document.go.before.txt",
+    "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server/internal/aiagent/knowledge/service/knowledge_service_pipeline.go": "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.specify/bugs/knowledge-reindex-fa13-20261120/evidence/followup-3/knowledge_service_pipeline.go.before.txt"
+  }
+}

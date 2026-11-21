@@ -16,6 +16,7 @@ package channelgw
 // 真实持久化/租约仍用 PG；不拿 fake 证明行锁。
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
 	"reflect"
@@ -24,6 +25,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -119,7 +121,7 @@ const contractAccountID = "acc-contract"
 
 func runIngressPipelineContract(t *testing.T, p IngressPipeline, h contractHooks) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 1), model.ChannelDouyin, contractAccountID)
 
 	// ① 空批次：非 nil 结果 + 空 per_event + triggered_ai=false。
 	res, err := p.IngestBatch(ctx, nil)
@@ -221,7 +223,7 @@ func TestIngressPipeline_Contract_RealAdapter(t *testing.T) {
 	database := testutil.NewTestDB(t, &model.MessageHub{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
-	ingress := service.NewInboxIngressService()
+	ingress := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	p := NewPipeline(ingress)
 
 	const conv = "conv-contract-real"
@@ -261,7 +263,7 @@ func TestIngressPipeline_Contract_RealAdapter(t *testing.T) {
 			t.Helper()
 			// 真实侧错误路径用已取消 ctx 走认领（DB 往返 ctx 敏感）；批入站路径
 			// 的 ctx 沿出属 service 既有语义，本契约不拿它当错误注入点。
-			cctx, cancel := context.WithCancel(context.Background())
+			cctx, cancel := context.WithCancel(tenant.WithTenantID(context.Background(), 1))
 			cancel()
 			rows, err := p.ClaimOutbound(cctx, model.ChannelDouyin, contractAccountID, 10)
 			if rows == nil {

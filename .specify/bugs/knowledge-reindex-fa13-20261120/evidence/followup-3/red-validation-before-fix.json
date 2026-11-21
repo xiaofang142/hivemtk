@@ -1,0 +1,17 @@
+{
+  "production_and_test_hashes_unchanged_before_fix": true,
+  "red_exit": 1,
+  "top_level_failures": [
+    "TestDocumentMetadataUpdatePreservesActiveReindex",
+    "TestDocumentMetadataUpdateScopeAndMissingRows",
+    "TestPipelineProgressFailurePersistsAndRetries",
+    "TestPipelineProgressFailureCleanupErrorsAndOwnerFence"
+  ],
+  "retry_matrix_failed_cases": 16,
+  "cleanup_matrix_failed_cases": 8,
+  "failure_causes": [
+    "stale metadata restored pending/0 and cleared token/lease/stats; original worker lost claim",
+    "all progress exits skipped cleanup and immediate retry stayed busy",
+    "persistent faults lacked cleanup error; replacement owner had no attempted fenced cleanup"
+  ]
+}

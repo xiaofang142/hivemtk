@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"strconv"
 	"sync"
@@ -43,15 +44,16 @@ func TestInboxIngress_ClaimPendingOutbound_ConcurrentNoDuplicate(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_conc_1"
 		total     = 100
 		workers   = 16
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	for i := 0; i < total; i++ {
 		seedPendingOutbound(t, db, channel, accountID, "conv_c", "concurrent outbound "+string(rune('A'+i%26))+strconv.Itoa(i))
 	}
@@ -125,15 +127,16 @@ func TestInboxIngress_ClaimPendingOutbound_RespectsLimit(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_limit_1"
 		total     = 10
 		batch     = 3
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	for i := 0; i < total; i++ {
 		seedPendingOutbound(t, db, channel, accountID, "conv_l", "limit outbound "+strconv.Itoa(i))
 	}
@@ -315,15 +318,16 @@ func TestInboxIngress_ClaimPendingOutbound_InflightThenAck(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_inf_1"
 		conv      = "conv_inf"
 		content   = "inflight 内容"
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	h := seedPendingOutbound(t, db, channel, accountID, conv, content)
 
 	claimed, err := svc.ClaimPendingOutbound(ctx, channel, accountID, 10)
@@ -346,15 +350,16 @@ func TestInboxIngress_ClaimPendingOutbound_AckReclaimRace(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_race_1"
 		conv      = "conv_race"
 		content   = "reclaim 竞态内容"
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	h := seedPendingOutbound(t, db, channel, accountID, conv, content)
 
 	first, err := svc.ClaimPendingOutbound(ctx, channel, accountID, 10)

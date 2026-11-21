@@ -21,6 +21,9 @@
 *.css text eol=lf
 *.vue text eol=lf
 
+# 补丁证据中的上下文前缀是 diff 语法，保留原始空白
+*.diff whitespace=-blank-at-eol,-space-before-tab
+
 # 二进制文件禁止换行转换，避免损坏
 *.png binary
 *.jpg binary

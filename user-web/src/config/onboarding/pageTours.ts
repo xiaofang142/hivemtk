@@ -54,6 +54,26 @@ export interface PageTour {
  */
 export function createPageTours(t: (key: string) => string): Record<string, PageTour> {
   return {
+    '/integration/list': {
+      route: '/integration/list',
+      pageKey: 'merchantConnection',
+      steps: [
+        { element: '.merchant-connection-panel', title: t('setup.onboarding.page.merchantConnection.title'), description: t('setup.onboarding.page.merchantConnection.summary'), side: 'top' },
+        { element: '.merchant-connection-target', title: t('setup.onboarding.page.merchantConnection.target'), description: t('setup.onboarding.page.merchantConnection.targetSummary'), side: 'top' },
+        { element: '.merchant-connection-status', title: t('setup.onboarding.page.merchantConnection.status'), description: t('setup.onboarding.page.merchantConnection.statusSummary'), side: 'top' },
+        { element: '.merchant-connection-actions', title: t('setup.onboarding.page.merchantConnection.actions'), description: t('setup.onboarding.page.merchantConnection.actionsSummary'), side: 'top' }
+      ]
+    },
+    '/system/config': {
+      route: '/system/config',
+      pageKey: 'pilotContract',
+      steps: [
+        { element: '.pilot-contract-panel', title: t('setup.onboarding.page.pilotContract.title'), description: t('setup.onboarding.page.pilotContract.summary'), side: 'top' },
+        { element: '.pilot-contract-identity', title: t('setup.onboarding.page.pilotContract.identity'), description: t('setup.onboarding.page.pilotContract.identitySummary'), side: 'top' },
+        { element: '.pilot-contract-blockers', title: t('setup.onboarding.page.pilotContract.blockers'), description: t('setup.onboarding.page.pilotContract.blockersSummary'), side: 'top' },
+        { element: '.pilot-contract-editor', title: t('setup.onboarding.page.pilotContract.draft'), description: t('setup.onboarding.page.pilotContract.draftSummary'), side: 'top' }
+      ]
+    },
     '/messageHub/list': {
       route: '/messageHub/list',
       pageKey: 'messageHubList',

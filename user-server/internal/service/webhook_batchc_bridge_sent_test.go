@@ -102,6 +102,8 @@ func TestSendOutbound_Bridge_PersistFailureIsNotSent(t *testing.T) {
 	// delayed_outbound_reply.conversation_id 是 varchar(128)，重试记录写得下。
 	longConv := "conv-d02-overflow-" + strings.Repeat("x", 110)
 	hub := bridgeInboundHub("douyin", "acct-d02-overflow", longConv, "cust-d02-overflow")
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, "evt-d02-overflow")
 	p := &ParsedPayload{EventID: "evt-d02-overflow", Sender: hub.SenderID, Content: "在吗", ChatID: hub.ConversationID}
 
@@ -131,6 +133,8 @@ func TestSendOutbound_Bridge_QueuedIsSent(t *testing.T) {
 
 	db := svc.eventRepo.GetDB()
 	hub := bridgeInboundHub("douyin", "acct-d02-ok", "conv-d02-ok", "cust-d02-ok")
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}

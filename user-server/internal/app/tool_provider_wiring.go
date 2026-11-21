@@ -107,8 +107,13 @@ func (p *BusinessToolProvider) Provide(ctx tooluse.ProviderContext) ([]tooluse.T
 	afterSalePort := service.NewAfterSalePortAdapter(
 		service.NewAfterSaleService(repository.NewAfterSaleRepositoryWithDB(ctx.DB)),
 	)
+	// FA-27：AI 工具的跟进 Port 接同一持久仓储（follow_up_reminders）——AI 创建的
+	// 待办今日跟进读侧立即可见，重启/多副本不丢。ctx.DB 与其他两条链同一句柄。
 	deps := tooluse.NewBusinessToolDepsWithPorts(
-		service.NewFollowUpPortAdapter(service.NewFollowUpService(service.NewCustomerJourneyService())),
+		service.NewFollowUpPortAdapter(service.NewFollowUpServiceWithStore(
+			service.NewCustomerJourneyService(),
+			repository.NewFollowUpReminderRepositoryWithDB(ctx.DB),
+		)),
 		orderPort,
 		afterSalePort,
 		ctx.DB,

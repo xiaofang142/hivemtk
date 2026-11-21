@@ -2,33 +2,45 @@
 //
 // 静态事实源在 capregistry（平台×能力登记，测试钉死文档）；本服务把它与运行时
 // 状态组合：implemented（本二进制有真实执行路径）× configured（已配置账号/连接器）
-// × ready，并给非 ready 一个机器可读 reason_code。前端/工具据此区分
-// "平台原生不支持"、"实现了但没配账号"、"可用"三类，而不是同一个报错。
+// × ready，并给非 ready 一个机器可读 reason_code。桥接发送的账号配置与
+// 店铺动作授权分别判定，平台汇总无法替代精确店铺查询。
 package service
 
 import (
 	"context"
+	"errors"
+	"strings"
+	"time"
 
 	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
 
-// 非.ready 的机器可读原因码
+var ErrCapabilityTenantContextMissing = errors.New("capability resolution requires tenant context")
+
+// 未就绪时的机器可读原因码。
 const (
-	reasonNoRuntimePath          = "no_runtime_path"
-	reasonNotConfiguredNoAccount = "not_configured_no_account"
+	reasonNoRuntimePath            = "no_runtime_path"
+	reasonNotConfiguredNoAccount   = "not_configured_no_account"
+	reasonCapabilityMappingMissing = "capability_mapping_missing"
 )
 
 // CapabilityRuntimeService 能力运行视图
 type CapabilityRuntimeService struct {
 	repo   *repository.ChannelOverviewRepository
 	kbRepo *repository.ExternalKBConnectorRepo
+	cells  capregistry.CapabilityEvidenceReader
 }
 
 // NewCapabilityRuntimeService 构造
-func NewCapabilityRuntimeService(repo *repository.ChannelOverviewRepository, kbRepo *repository.ExternalKBConnectorRepo) *CapabilityRuntimeService {
-	return &CapabilityRuntimeService{repo: repo, kbRepo: kbRepo}
+func NewCapabilityRuntimeService(repo *repository.ChannelOverviewRepository, kbRepo *repository.ExternalKBConnectorRepo, cells ...capregistry.CapabilityEvidenceReader) *CapabilityRuntimeService {
+	svc := &CapabilityRuntimeService{repo: repo, kbRepo: kbRepo}
+	if len(cells) == 1 {
+		svc.cells = cells[0]
+	}
+	return svc
 }
 
 // runtimeImplemented 运行时执行路径判定：返回该平台×能力在本二进制里是否有
@@ -151,9 +163,14 @@ func (s *CapabilityRuntimeService) Describe(ctx context.Context) dto.CapabilityR
 		}
 		if view.Implemented {
 			view.Configured = s.platformConfigured(ctx, e.Platform)
-			view.Ready = view.Configured
-			if !view.Configured {
+			switch {
+			case !view.Configured:
 				view.ReasonCode = reasonNotConfiguredNoAccount
+			case e.Cap == capregistry.CapDMSend && e.Via == capregistry.ModeBridge:
+				// 平台行没有店铺和动作格身份，单店上下文证据也不能覆盖该平台的全部发送。
+				view.ReasonCode = reasonCapabilityMappingMissing
+			default:
+				view.Ready = true
 			}
 		} else {
 			view.ReasonCode = reasonNoRuntimePath
@@ -164,4 +181,25 @@ func (s *CapabilityRuntimeService) Describe(ctx context.Context) dto.CapabilityR
 		out.Capabilities = append(out.Capabilities, view)
 	}
 	return out
+}
+
+// ResolveCell resolves one exact shop/action tuple in tenant scope. It uses only
+// trusted server-side evidence. Without it, the response is explicitly blocked.
+func (s *CapabilityRuntimeService) ResolveCell(ctx context.Context, shopID, product, region, action, carrier string) (capregistry.CellResolution, error) {
+	return s.resolveCellAt(ctx, shopID, product, region, action, carrier, time.Now().UTC())
+}
+
+func (s *CapabilityRuntimeService) resolveCellAt(ctx context.Context, shopID, product, region, action, carrier string, now time.Time) (capregistry.CellResolution, error) {
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok || tenant.IsSystemScope(ctx) {
+		return capregistry.CellResolution{}, ErrCapabilityTenantContextMissing
+	}
+	key := capregistry.CellKey{
+		TenantID: tenantID, ShopID: strings.TrimSpace(shopID), Product: strings.TrimSpace(product),
+		Region: strings.TrimSpace(region), Action: strings.TrimSpace(action), Carrier: strings.TrimSpace(carrier),
+	}
+	if s.cells != nil {
+		return (capregistry.PersistentCapabilityResolver{Reader: s.cells}).Resolve(ctx, key, now), nil
+	}
+	return capregistry.ResolveCell(key, nil, now), nil
 }

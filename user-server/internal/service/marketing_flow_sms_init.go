@@ -7,7 +7,6 @@ import (
 	smssvc "hivemtk-user/internal/service/sms"
 	"sync"
 
-	contentsvc "hivemtk-user/internal/content/service"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
@@ -19,9 +18,9 @@ var (
 	smsSvcInitErr  error
 )
 
-func init() {
-	contentsvc.SetSmsSender(lazySendSms)
-}
+// 注册职责已随 FA-20 移到 marketing_flow_reach_gate.go：营销流程短信发送器
+// 现在注册的是「闸门版」（DNC → W-1 审批 → E1 合规 → lazySendSms），
+// 本文件只保留真实短信通道（lazySendSms）与其依赖装配。
 
 func initSmsService() (smssvc.SmsService, error) {
 	smsSvcOnce.Do(func() {

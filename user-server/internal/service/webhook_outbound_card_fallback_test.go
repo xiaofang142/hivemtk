@@ -16,8 +16,8 @@ func TestSendOutbound_CardlessPayloadPreservesCardFacts(t *testing.T) {
 		content string
 	}{
 		{name: "抖音完整文字替代", channel: ChannelDouyin, content: "这里是推荐方案。"},
-		{name: "小红书纯卡片也有可见文字", channel: ChannelXiaohongshu},
-		{name: "小红书不承诺点击不可见卡片", channel: ChannelXiaohongshu, content: "我已经为你展示了卡片，请点击卡片查看详情。"},
+		{name: "抖音纯卡片也有可见文字", channel: ChannelDouyin},
+		{name: "抖音不承诺点击不可见卡片", channel: ChannelDouyin, content: "我已经为你展示了卡片，请点击卡片查看详情。"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			svc, baseCtx := newBridgeSentTestService(t)
@@ -25,6 +25,8 @@ func TestSendOutbound_CardlessPayloadPreservesCardFacts(t *testing.T) {
 			ctx := tenant.WithTenantID(baseCtx, c01TenantA)
 			hub := bridgeInboundHub(string(tc.channel), "card-fallback-account", "card-fallback-conversation", "card-fallback-customer")
 			hub.TenantID = c01TenantA
+			useLegacyBridgeFixture(t)
+			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 			eventID := fmt.Sprintf("card-fallback-%d", index)
 			releaseReplyClaimForTest(t, eventID)
 			cards := []model.RichCard{{

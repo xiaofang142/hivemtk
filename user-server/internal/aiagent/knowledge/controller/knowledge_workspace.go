@@ -403,13 +403,13 @@ func (ctrl *KnowledgeWorkspaceController) ReindexDocument(c *gin.Context) {
 	productID := ctrl.resolveProductID(c.Query("product_id"))
 	if err := ctrl.kbService.Reindex(c.Request.Context(), productID, uint64(id)); err != nil {
 		if isNotFoundError(err) {
-			response.Error(c, http.StatusNotFound, err.Error())
+			response.Error(c, http.StatusNotFound, "文档不存在")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.Error(c, http.StatusInternalServerError, "重建索引失败，请检查文档状态后重试")
 		return
 	}
-	response.Success(c, nil, "索引重建完成")
+	response.Success(c, nil, "重建完成")
 }
 
 // RebuildProductIndex 重建产品级索引
@@ -424,13 +424,13 @@ func (ctrl *KnowledgeWorkspaceController) RebuildProductIndex(c *gin.Context) {
 	productID := productIDStr
 	if err := ctrl.kbService.RebuildIndex(c.Request.Context(), productID); err != nil {
 		if isNotFoundError(err) {
-			response.Error(c, http.StatusNotFound, err.Error())
+			response.Error(c, http.StatusNotFound, "产品不存在")
 			return
 		}
-		response.Error(c, http.StatusInternalServerError, err.Error())
+		response.Error(c, http.StatusInternalServerError, "重建索引失败，请检查文档状态后重试")
 		return
 	}
-	response.Success(c, nil, "索引重建完成")
+	response.Success(c, nil, "重建完成")
 }
 
 // GetProductOverview 获取产品级总览

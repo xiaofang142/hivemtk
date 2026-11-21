@@ -1,0 +1,1 @@
+FA12_PG_DSN='<authorized synthetic PostgreSQL DSN>' go test -v ./internal/aiagent/knowledge/service -run '^(TestAsyncProcessingAndReindexShareAtomicOwnership|TestAsyncProcessingLeaseCoversConfiguredTimeout|TestReindexExpiredOwnerCannotOverwriteNewOwner)$' -count=1 -timeout=60s

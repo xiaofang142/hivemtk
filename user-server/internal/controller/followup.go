@@ -192,7 +192,15 @@ func (c *FollowUpController) Complete(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "result 只能是 contacted / interested / quoted / converted / rejected / lost / no_response")
 		return
 	}
-	err := c.svc.CompleteWithResult(ctx.Request.Context(), id, service.FollowUpResult(result), body.Note)
+	// FA-26：写口带操作者授权——普通用户只能完成自己的待办，管理员豁免；
+	// 越权在服务层拒绝（403），跨租户 ID 一律"不存在"（404）。
+	operatorID, ok := contextOperatorID(ctx)
+	if !ok {
+		response.Error(ctx, http.StatusUnauthorized, "未登录或无权访问")
+		return
+	}
+	isAdmin := ctx.GetString("role") == "admin" || ctx.GetString("role") == "super_admin"
+	err := c.svc.CompleteWithResultFor(ctx.Request.Context(), id, operatorID, isAdmin, service.FollowUpResult(result), body.Note)
 	if err != nil {
 		writeErr(ctx, err, "完成跟进")
 		return
@@ -214,7 +222,14 @@ func (c *FollowUpController) Cancel(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "id 必须是数字跟进 ID")
 		return
 	}
-	if err := c.svc.Cancel(ctx.Request.Context(), id); err != nil {
+	// FA-26：取消与完成同权（操作者=负责人或管理员）。
+	operatorID, ok := contextOperatorID(ctx)
+	if !ok {
+		response.Error(ctx, http.StatusUnauthorized, "未登录或无权访问")
+		return
+	}
+	isAdmin := ctx.GetString("role") == "admin" || ctx.GetString("role") == "super_admin"
+	if err := c.svc.CancelFor(ctx.Request.Context(), id, operatorID, isAdmin); err != nil {
 		writeErr(ctx, err, "取消跟进")
 		return
 	}

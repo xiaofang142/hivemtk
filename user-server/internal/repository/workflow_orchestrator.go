@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	_db "hivemtk-user/internal/pkg/db"
 	"time"
@@ -217,6 +218,32 @@ func (r *WorkflowExecutionRepository) Update(ctx context.Context, e *model.Workf
 	return _db.SaveWholeRow(r.db.WithContext(ctx), e)
 }
 
+// ErrExecutionStatusFenced FA-WF-04：终态写被状态栅栏拦下（目标行已处于
+// 不允许迁移的旧状态，如已确认停止的执行不被完成/失败写覆盖）。
+var ErrExecutionStatusFenced = errors.New("workflow execution: 状态栅栏拦截（旧状态不允许本次迁移）")
+
+// UpdateStatusFenced FA-WF-04：终态迁移带旧状态条件（原子栅栏）。
+//   - fromStatuses 非空 = 仅当行 status ∈ fromStatuses 才写（停止的 CAS 口径）；
+//   - fromStatuses 为空 = 仅要求行**不是** terminated（完成/失败写不得覆盖已确认停止）。
+//
+// 返回 applied=false 表示被栅栏拦下（0 行受影响），不是错误。
+func (r *WorkflowExecutionRepository) UpdateStatusFenced(ctx context.Context, id uint, fields map[string]any, fromStatuses []string) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("workflow execution repository not initialized")
+	}
+	q := r.db.WithContext(ctx).Model(&model.WorkflowExecution{}).Where("id = ?", id)
+	if len(fromStatuses) > 0 {
+		q = q.Where("status IN ?", fromStatuses)
+	} else {
+		q = q.Where("status <> ?", model.WorkflowExecTerminated)
+	}
+	res := q.Updates(fields)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
 // UpdateFields 按字段更新
 func (r *WorkflowExecutionRepository) UpdateFields(ctx context.Context, id uint, fields map[string]any) error {
 	if r == nil || r.db == nil {
@@ -271,6 +298,40 @@ func (r *WorkflowExecutionRepository) FindStuck(ctx context.Context, threshold t
 		Limit(limit).
 		Find(&list).Error
 	return list, err
+}
+
+// CountByWorkflowVersion 统计引用该 (workflow_id, version) 的执行实例数
+// （FA-36：版本删除的引用保护——执行只存 workflow_id+version，无外键，
+// dispatcher 每次启动/重试都按这两个值重载定义；历史执行也依赖可重放定义）。
+func (r *WorkflowExecutionRepository) CountByWorkflowVersion(ctx context.Context, workflowID string, version int) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("workflow execution repository not initialized")
+	}
+	var n int64
+	if err := r.db.WithContext(ctx).Model(&model.WorkflowExecution{}).
+		Where("workflow_id = ? AND version = ?", workflowID, version).
+		Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+// CountSubflowChildren FA-WF-03：按父执行/父节点/子工作流统计真实子执行数。
+// 子执行的 TriggerPayload 落库后带 _parent_exec_id/_parent_node_id 链接标记，
+// 重放对账据此判定"占位标记"背后是否真有子执行（孤儿标记=创建失败的残留）。
+func (r *WorkflowExecutionRepository) CountSubflowChildren(ctx context.Context, parentExecID uint, parentNodeID, subWorkflowID string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("workflow execution repository not initialized")
+	}
+	var n int64
+	if err := r.db.WithContext(ctx).Model(&model.WorkflowExecution{}).
+		Where("workflow_id = ?", subWorkflowID).
+		Where("trigger_payload->>'_parent_exec_id' = ?", strconv.FormatUint(uint64(parentExecID), 10)).
+		Where("trigger_payload->>'_parent_node_id' = ?", parentNodeID).
+		Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // WorkflowNodeExecutionRepository 节点执行明细仓储

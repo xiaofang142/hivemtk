@@ -1,3 +1,5 @@
+# 本地代码图谱缓存
+/graphify-out/
 
 __pycache__/
 !**/dist/.gitkeep

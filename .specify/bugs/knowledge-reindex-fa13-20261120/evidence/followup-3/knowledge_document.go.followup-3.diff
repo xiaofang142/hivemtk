@@ -1,0 +1,20 @@
+--- knowledge_document.go (before follow-up 3)
++++ user-server/internal/aiagent/knowledge/repository/knowledge_document.go
+@@ -344,10 +344,15 @@
+ 	return docs, err
+ }
+ 
+-// Update 更新文档
++// Update 只更新管理端可编辑的元信息，避免旧对象覆盖索引任务状态与 owner。
+ func (r *KnowledgeDocumentRepository) Update(ctx context.Context, doc *model.KnowledgeDocument) error {
+ 	doc.UpdatedAt = time.Now()
+-	return _db.SaveWholeRow(r.db.WithContext(ctx), doc)
++	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
++		Where("id = ?", doc.ID).
++		Updates(map[string]any{
++			"title": doc.Title, "category": doc.Category, "tags": doc.Tags,
++			"priority": doc.Priority, "updated_at": doc.UpdatedAt,
++		}))
+ }
+ 
+ // UpdateStatus 更新文档状态

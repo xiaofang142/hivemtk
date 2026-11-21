@@ -162,6 +162,10 @@ func newClientIPGuard(entries []string, warn func(peer, forwardedFor string)) *c
 
 func (g *clientIPGuard) handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if IsMerchantCallbackPath(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
 		xff := c.GetHeader("X-Forwarded-For")
 		if xff == "" && c.GetHeader("X-Real-IP") == "" {
 			c.Next()
