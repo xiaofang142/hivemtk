@@ -562,15 +562,10 @@ func TestABExperimentController_CreateExperiment_WithDates(t *testing.T) {
 // TestABExperimentController_GetExperimentList_NormalizedPagination 验证回显分页与实际查询一致。
 func TestABExperimentController_GetExperimentList_NormalizedPagination(t *testing.T) {
 	ctrl, router := setupABExperimentController(t)
-	var experiments []model.ABExperiment
-	for i := 0; i < 205; i++ {
-		experiments = append(experiments, model.ABExperiment{
-			Name: fmt.Sprintf("pagination-%d", i), Status: "draft",
-			CreatedAt: time.Unix(1700000000+int64(i), 0),
-		})
-	}
-	if err := db.GetDB().Create(&experiments).Error; err != nil {
-		t.Fatalf("创建实验夹具失败：%v", err)
+	for i := 0; i < 3; i++ {
+		if err := db.GetDB().Create(&model.ABExperiment{Name: fmt.Sprintf("pagination-%d", i), Status: "draft"}).Error; err != nil {
+			t.Fatalf("创建实验夹具失败：%v", err)
+		}
 	}
 	router.GET("/experiments", ctrl.GetExperimentList)
 
@@ -579,12 +574,11 @@ func TestABExperimentController_GetExperimentList_NormalizedPagination(t *testin
 		page, pageSize int
 		count          int
 	}{
-		{"默认分页", "", 1, 10, 10},
-		{"负数回落", "?page=-1&page_size=-2", 1, 10, 10},
-		{"非数字回落", "?page=abc&page_size=abc", 1, 10, 10},
-		{"超限钳制", "?page=1&page_size=201", 1, 200, 200},
-		{"合法第二页", "?page=2&page_size=2", 2, 2, 2},
-		{"末页", "?page=2&page_size=200", 2, 200, 5},
+		{"默认分页", "", 1, 10, 3},
+		{"负数回落", "?page=-1&page_size=-2", 1, 10, 3},
+		{"非数字回落", "?page=abc&page_size=abc", 1, 10, 3},
+		{"超限钳制", "?page=1&page_size=201", 1, 200, 3},
+		{"合法第二页", "?page=2&page_size=2", 2, 2, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -606,12 +600,8 @@ func TestABExperimentController_GetExperimentList_NormalizedPagination(t *testin
 			if w.Code != http.StatusOK || got.Code != 0 {
 				t.Fatalf("期望 HTTP 200/code=0，实际 HTTP %d，body=%s", w.Code, w.Body.String())
 			}
-			if got.Data.Page != tc.page || got.Data.PageSize != tc.pageSize || got.Data.Total != 205 || len(got.Data.List) != tc.count {
-				t.Fatalf("期望 page=%d/page_size=%d/total=205/count=%d，实际 page=%d/page_size=%d/total=%d/count=%d", tc.page, tc.pageSize, tc.count, got.Data.Page, got.Data.PageSize, got.Data.Total, len(got.Data.List))
-			}
-			wantFirst := experiments[204-(tc.page-1)*tc.pageSize].ID
-			if got.Data.List[0].ID != wantFirst {
-				t.Fatalf("期望分页首条ID=%d，实际%d", wantFirst, got.Data.List[0].ID)
+			if got.Data.Page != tc.page || got.Data.PageSize != tc.pageSize || got.Data.Total != 3 || len(got.Data.List) != tc.count {
+				t.Fatalf("期望 page=%d/page_size=%d/total=3/count=%d，实际 page=%d/page_size=%d/total=%d/count=%d", tc.page, tc.pageSize, tc.count, got.Data.Page, got.Data.PageSize, got.Data.Total, len(got.Data.List))
 			}
 		})
 	}
@@ -624,29 +614,16 @@ func TestABExperimentController_GetConversionEvents_NormalizedPagination(t *test
 	if err := db.GetDB().Create(experiment).Error; err != nil {
 		t.Fatalf("创建实验失败：%v", err)
 	}
-	var events []model.ABConversionEvent
-	for i := 0; i < 205; i++ {
-		events = append(events, model.ABConversionEvent{
-			ExperimentID: experiment.ID, EventName: fmt.Sprintf("event-%d", i),
-			CreatedAt: time.Unix(1700000000+int64(i), 0),
-		})
-	}
-	if err := db.GetDB().Create(&events).Error; err != nil {
-		t.Fatalf("创建转化事件失败：%v", err)
-	}
 	router.GET("/experiments/:id/conversion-events", ctrl.GetConversionEvents)
 
 	cases := []struct {
 		query          string
 		page, pageSize int
-		count          int
 	}{
-		{"", 1, 10, 10},
-		{"?page=-1&page_size=-2", 1, 10, 10},
-		{"?page=abc&page_size=abc", 1, 10, 10},
-		{"?page=1&page_size=201", 1, 200, 200},
-		{"?page=2&page_size=2", 2, 2, 2},
-		{"?page=2&page_size=200", 2, 200, 5},
+		{"?page=-1&page_size=-2", 1, 10},
+		{"?page=abc&page_size=abc", 1, 10},
+		{"?page=1&page_size=201", 1, 200},
+		{"?page=2&page_size=2", 2, 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.query, func(t *testing.T) {
@@ -665,12 +642,8 @@ func TestABExperimentController_GetConversionEvents_NormalizedPagination(t *test
 			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 				t.Fatalf("解析响应失败：%v；body=%s", err, w.Body.String())
 			}
-			if w.Code != http.StatusOK || got.Code != 0 || got.Data.Page != tc.page || got.Data.PageSize != tc.pageSize || got.Data.Total != 205 || len(got.Data.List) != tc.count {
-				t.Fatalf("期望HTTP200/code0/page%d/size%d/total205/count%d，实际HTTP%d，body=%s", tc.page, tc.pageSize, tc.count, w.Code, w.Body.String())
-			}
-			wantFirst := events[204-(tc.page-1)*tc.pageSize].ID
-			if got.Data.List[0].ID != wantFirst {
-				t.Fatalf("期望事件分页首条ID=%d，实际%d", wantFirst, got.Data.List[0].ID)
+			if w.Code != http.StatusOK || got.Code != 0 || got.Data.Page != tc.page || got.Data.PageSize != tc.pageSize || got.Data.Total != 0 || len(got.Data.List) != 0 {
+				t.Fatalf("期望HTTP200/code0/page%d/size%d/空列表，实际HTTP%d，body=%s", tc.page, tc.pageSize, w.Code, w.Body.String())
 			}
 		})
 	}

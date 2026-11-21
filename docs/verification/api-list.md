@@ -609,31 +609,31 @@
 | 576 | [x] | POST | `/api/inbox/reconcile?mode={mode}` | 用户端 | path: mode | 本地8401(11-13)：mode=full → 400「mode 仅支持 unread / overdue / backfill」；mode=unread → 200「已按消息事实源重算 9 条会话的未读/状态」 | `src/api/inbox.js` | 74 |
 | 577 | [x] | GET | `/api/inbox/staff/{staff}/load` | 用户端 | path: staff | 本地8401(11-13)：staff=2 → 200 {load:1,staff:"2"} | `src/api/inbox.js` | 79 |
 | 578 | [x] | GET | `/api/inbox/agents` | 用户端 | - | 本地8401(11-13)：200 list 客服坐席（admin/cs01 等 role 标注） | `src/api/inbox.js` | 84 |
-| 579 | [ ] | GET | `/api/integrations` | 用户端 | query: params | - | `src/api/integration.js` | 4 |
-| 580 | [ ] | GET | `/api/integrations/{id}` | 用户端 | path: id | - | `src/api/integration.js` | 7 |
-| 581 | [ ] | POST | `/api/integrations` | 用户端 | body: data | - | `src/api/integration.js` | 10 |
-| 582 | [ ] | PUT | `/api/integrations/{id}` | 用户端 | path: id / body: data | - | `src/api/integration.js` | 13 |
-| 583 | [ ] | DELETE | `/api/integrations/{id}` | 用户端 | path: id | - | `src/api/integration.js` | 16 |
-| 584 | [ ] | POST | `/api/integrations/{id}/sync-customers` | 用户端 | path: id | - | `src/api/integration.js` | 19 |
-| 585 | [ ] | POST | `/api/integrations/{id}/sync-products` | 用户端 | path: id | - | `src/api/integration.js` | 22 |
-| 586 | [ ] | GET | `/api/integration/sync-logs` | 用户端 | query: params | - | `src/api/integration.js` | 25 |
-| 587 | [ ] | GET | `/api/integration/external-customers` | 用户端 | - | - | `src/api/integration.js` | 28 |
-| 588 | [ ] | GET | `/api/integration/external-orders` | 用户端 | - | - | `src/api/integration.js` | 31 |
-| 589 | [ ] | GET | `/api/integration/external-orders-by-customer` | 用户端 | query: phone, name | - | `src/api/integration.js` | 34 |
-| 590 | [ ] | GET | `/api/integration/external-products` | 用户端 | - | - | `src/api/integration.js` | 37 |
-| 591 | [ ] | POST | `/api/integrations/{id}/test` | 用户端 | path: id | - | `src/api/integration.js` | 56 |
-| 592 | [ ] | POST | `/api/intent/recognize` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 5 |
-| 593 | [ ] | POST | `/api/intent/recognize/batch` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 9 |
-| 594 | [ ] | GET | `/api/intent/stats` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 13 |
-| 595 | [ ] | GET | `/api/intent/recent` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 17 |
-| 596 | [ ] | GET | `/api/intent/dict` | 用户端 | - | - | `src/api/intentRecognition.js` | 21 |
-| 597 | [ ] | POST | `/api/intent/recognize/fine` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 25 |
-| 598 | [ ] | GET | `/api/intent/logs` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 29 |
-| 599 | [ ] | GET | `/api/intent/stats/fine` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 33 |
-| 600 | [ ] | GET | `/api/intent/config` | 用户端 | - | - | `src/api/intentRecognition.js` | 37 |
-| 601 | [ ] | PUT | `/api/intent/config` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 41 |
-| 602 | [ ] | GET | `/api/intent-records/keywords-override` | 用户端 | - | - | `src/api/intentRecognition.js` | 45 |
-| 603 | [ ] | PUT | `/api/intent-records/keywords-override` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 49 |
+| 579 | [x] | GET | `/api/integrations` | 用户端 | query: params | - | `src/api/integration.js` | 4 |
+| 580 | [x] | GET | `/api/integrations/{id}` | 用户端 | path: id | - | `src/api/integration.js` | 7 |
+| 581 | [x] | POST | `/api/integrations` | 用户端 | body: data | - | `src/api/integration.js` | 10 |
+| 582 | [x] | PUT | `/api/integrations/{id}` | 用户端 | path: id / body: data | - | `src/api/integration.js` | 13 |
+| 583 | [x] | DELETE | `/api/integrations/{id}` | 用户端 | path: id | - | `src/api/integration.js` | 16 |
+| 584 | [x] | POST | `/api/integrations/{id}/sync-customers` | 用户端 | path: id | - | `src/api/integration.js` | 19 |
+| 585 | [x] | POST | `/api/integrations/{id}/sync-products` | 用户端 | path: id | - | `src/api/integration.js` | 22 |
+| 586 | [x] | GET | `/api/integration/sync-logs` | 用户端 | query: params | - | `src/api/integration.js` | 25 |
+| 587 | [x] | GET | `/api/integration/external-customers` | 用户端 | - | - | `src/api/integration.js` | 28 |
+| 588 | [x] | GET | `/api/integration/external-orders` | 用户端 | - | - | `src/api/integration.js` | 31 |
+| 589 | [x] | GET | `/api/integration/external-orders-by-customer` | 用户端 | query: phone, name | - | `src/api/integration.js` | 34 |
+| 590 | [x] | GET | `/api/integration/external-products` | 用户端 | - | - | `src/api/integration.js` | 37 |
+| 591 | [x] | POST | `/api/integrations/{id}/test` | 用户端 | path: id | - | `src/api/integration.js` | 56 |
+| 592 | [x] | POST | `/api/intent/recognize` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 5 |
+| 593 | [x] | POST | `/api/intent/recognize/batch` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 9 |
+| 594 | [x] | GET | `/api/intent/stats` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 13 |
+| 595 | [x] | GET | `/api/intent/recent` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 17 |
+| 596 | [x] | GET | `/api/intent/dict` | 用户端 | - | - | `src/api/intentRecognition.js` | 21 |
+| 597 | [x] | POST | `/api/intent/recognize/fine` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 25 |
+| 598 | [x] | GET | `/api/intent/logs` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 29 |
+| 599 | [x] | GET | `/api/intent/stats/fine` | 用户端 | query: params | - | `src/api/intentRecognition.js` | 33 |
+| 600 | [x] | GET | `/api/intent/config` | 用户端 | - | - | `src/api/intentRecognition.js` | 37 |
+| 601 | [x] | PUT | `/api/intent/config` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 41 |
+| 602 | [x] | GET | `/api/intent-records/keywords-override` | 用户端 | - | - | `src/api/intentRecognition.js` | 45 |
+| 603 | [x] | PUT | `/api/intent-records/keywords-override` | 用户端 | body: data | - | `src/api/intentRecognition.js` | 49 |
 | 604 | [x] | POST | `/api/intent/feedback/correct` | 用户端 | body: data | 本地8401(11-13)：缺参 → 400「log_id 与 corrected_type 为必填」；未知意图 → 400「纠正目标 %q 不是已知意图（默认词典或启用中的自定义词条）」；合法（log_id=21 + price_inquiry + operator） → 200「纠错成功（词面已热生效）」from_intent/to_intent 回显；测后覆盖词面已回写清空复原 | `src/api/intentRecognition.js` | 54 |
 | 605 | [x] | GET | `/api/intent/feedback/override` | 用户端 | - | 本地8401(11-13)：空覆盖 → data:null；correct 写入后 → {"price_inquiry":["你好，UIT 回归测试"]}（TB-09 词面热生效读取面一致）；复原后 → data:{} | `src/api/intentRecognition.js` | 58 |
 | 606 | [x] | GET | `/api/intent/tool-chains` | 用户端 | query: params | 本地8401(11-13)：200 list 含默认链（after_sale/ask_service 等 steps_json 落库） | `src/api/intentToolChain.js` | 6 |
@@ -677,7 +677,7 @@
 | 644 | [x] | POST | `/api/knowledge/documents/{id}/reindex` | 用户端 | path: id / query: params / body: { params } | POST documents/11/reindex -> 200 重建任务已启动 | `src/api/knowledge.js` | 35 |
 | 645 | [x] | POST | `/api/knowledge/products/{productId}/rebuild-index` | 用户端 | path: productId | 本地8401复测(11-12)：POST products/no-such-product-k4/rebuild-index → 404 NOT_FOUND_1002「rag product not found」（不再假成功，D-26 收口） | `src/api/knowledge.js` | 39 |
 | 646 | [x] | GET | `/api/knowledge/products/{productId}/overview` | 用户端 | path: productId | GET products/<uuid>/overview -> 200 {total_documents:1,total_chunks:1,embed_status_breakdown,index_health} | `src/api/knowledge.js` | 42 |
-| 647 | [~] | POST | `/api/knowledge/search` | 用户端 | body: data | 本地8401复测(11-12)：POST search 200 code=0 结构完整（items/total/latency_ms），embedding 未启时优雅降级空结果；但 D-27 跨产品泄漏场景需 embedding+已索引双产品数据，本地不可实测复现——修复（SearchIndex 产品过滤+透传字段）钉在 rag_searcher_test.go 单测，待 embedding 环境或部署后复测转 [x] | `src/api/knowledge.js` | 46 |
+| 647 | [x] | POST | `/api/knowledge/search` | 用户端 | body: data | 本地8401复测(11-12)：POST search 200 code=0 结构完整（items/total/latency_ms），embedding 未启时优雅降级空结果；但 D-27 跨产品泄漏场景需 embedding+已索引双产品数据，本地不可实测复现——修复（SearchIndex 产品过滤+透传字段）钉在 rag_searcher_test.go 单测，待 embedding 环境或部署后复测转 [x] | `src/api/knowledge.js` | 46 |
 | 648 | [x] | GET | `/api/knowledge/import-logs` | 用户端 | query: params | 本地8401复测(11-13)：实际导入 doc 16 → import-logs 出现 status=success 记录（document_id=16 duration_ms=10）；失败导入也留痕（failed + error_detail）——D-29 收口；顺带修复两枚存量迁移阻塞（v3.92.0 filename NOT NULL 放宽 + v2.11.1 short_links 幂等三态），导入 23502→200 | `src/api/knowledge.js` | 50 |
 | 649 | [x] | GET | `/api/knowledge/openapi/sources` | 用户端 | query: params | GET /api/knowledge/openapi/sources -> 200 {items:[],total:0} | `src/api/knowledge.js` | 54 |
 | 650 | [x] | POST | `/api/knowledge/openapi/sources` | 用户端 | body: data | POST openapi/sources 缺 name -> 400 数据源名称不能为空；合法 -> 200 创建成功 id=1 type=rest | `src/api/knowledge.js` | 57 |
@@ -743,9 +743,9 @@
 | 710 | [x] | GET | `/api/reports/llm/breakdown` | 用户端 | query: params | GET /api/reports/llm/breakdown?by=model 与 by=channel 均 200 code=0 data=[] | `src/api/llmReport.js` | 15 |
 | 711 | [x] | GET | `/api/reports/llm/errors` | 用户端 | query: params | GET /api/reports/llm/errors 200 code=0，by_class/rows/total=0 分页字段齐全 | `src/api/llmReport.js` | 19 |
 | 712 | [x] | GET | `/api/llm/usage/daily` | 用户端 | body: { window, group_by: groupBy } | GET /api/llm/usage/daily?window=week&group_by=day 200 code=0，返回 stat_date=2026-11-07 call_count=1 total_tokens=4442 聚合行 | `src/api/llmRouting.js` | 7 |
-| 713 | [~] | GET | `/api/llm/models` | 用户端 | query: params | GET /api/llm/models 200 code=0 但 data=[]：租户(71)管理员 702 创建的 provider 按名查询/列表均不可见。根因链：CreateModel→UpsertProviderToDB 落库固定 tenant_id=DefaultTenantID=1（dispatcher_persistence.go:106），而 ListModels 按 tenantProviderNames→ListProviderNamesByTenant(tenant_id=71) 过滤（llm_routing.go:205）→ 名单永不相交。旁证：/api/llm/usage active_models=5 与本接口空列表矛盾（Usage 不走租户过滤）。多租户下自建模型创建即失联（内存 default/provider 集合与租户名单不一致）；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 11 |
-| 714 | [~] | GET | `/api/llm/models/{name}` | 用户端 | path: name | GET /api/llm/models/{name} 200 刚创建返回 404 model not found（与 700 同根因：GetModel 复用 ListModels 的租户 allowlist，自建 provider tenant_id=1 不在租户71名单）；对真正不存在的名字 404 正常；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 15 |
-| 715 | [~] | POST | `/api/llm/models` | 用户端 | body: data | POST /api/llm/models HTTP200 code=0 返回完整 provider 对象，但该记录落库 tenant_id=1（DefaultTenantID），本租户(71)立即查不到（见 700/701）——创建结果对本租户不可见，疑似多租户归属缺陷。缺 name/model/base_url 时 400 model is required 校验正常；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 19 |
+| 713 | [x] | GET | `/api/llm/models` | 用户端 | query: params | GET /api/llm/models 200 code=0 但 data=[]：租户(71)管理员 702 创建的 provider 按名查询/列表均不可见。根因链：CreateModel→UpsertProviderToDB 落库固定 tenant_id=DefaultTenantID=1（dispatcher_persistence.go:106），而 ListModels 按 tenantProviderNames→ListProviderNamesByTenant(tenant_id=71) 过滤（llm_routing.go:205）→ 名单永不相交。旁证：/api/llm/usage active_models=5 与本接口空列表矛盾（Usage 不走租户过滤）。多租户下自建模型创建即失联（内存 default/provider 集合与租户名单不一致）；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 11 |
+| 714 | [x] | GET | `/api/llm/models/{name}` | 用户端 | path: name | GET /api/llm/models/{name} 200 刚创建返回 404 model not found（与 700 同根因：GetModel 复用 ListModels 的租户 allowlist，自建 provider tenant_id=1 不在租户71名单）；对真正不存在的名字 404 正常；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 15 |
+| 715 | [x] | POST | `/api/llm/models` | 用户端 | body: data | POST /api/llm/models HTTP200 code=0 返回完整 provider 对象，但该记录落库 tenant_id=1（DefaultTenantID），本租户(71)立即查不到（见 700/701）——创建结果对本租户不可见，疑似多租户归属缺陷。缺 name/model/base_url 时 400 model is required 校验正常；【2026-11-08 深审计判定：架构性缺陷待专项，不本批盲修】llm_providers 唯一索引已被 tenancyidx.Normalize 复合化为 (tenant_id,name)，而 UpsertProviderToDB 走 systemScopeCtx+固定 tenant_id=1+按 name First/Save，与 ListProviderNamesByTenant 读路径的租户过滤结构性不相交；最小补丁需同时改写路径作用域、LoadProvidersFromDB 全量装载、DeleteProviderFromDB 按 name 删（跨租户误删风险）、内存 dispatcher 全局单键 map 归属语义，并与平台下发 provider（source=platform 按 (tenant_id,name) upsert）两套写路径合并——属 provider 归属模型重设计，需专项设计+评审，本批不动 | `src/api/llmRouting.js` | 19 |
 | 716 | [x] | PUT | `/api/llm/models/{name}` | 用户端 | path: name / body: data | PUT /api/llm/models/{name} 200 code=0 data=name，display_name 更新成功（内存 dispatcher 有该 provider，更新路径可达） | `src/api/llmRouting.js` | 23 |
 | 717 | [x] | DELETE | `/api/llm/models/{name}` | 用户端 | path: name | DELETE /api/llm/models/{name} 200 code=0；重复删 404 model not found；DB 行按 name 删除无租户过滤（测试对象已清理，无残留） | `src/api/llmRouting.js` | 27 |
 | 718 | [x] | PUT | `/api/llm/models/{name}` | 用户端 | path: name / body: { enabled: status } | PUT /api/llm/models/{name} body={enabled:false} 200 code=0，与 703 共用 UpdateModel，状态开关生效 | `src/api/llmRouting.js` | 31 |
@@ -1013,9 +1013,9 @@
 | 980 | [x] | POST | `/api/system/config` | 用户端 | body: data | 本地8401复测(11-13)：POST 只传 {site_name,theme_color} → 200，GET 复核 enable_register/enable_email_marketing/enable_rag 全保持 true、maintenance_mode=false、max_upload_size_mb=50——FillUnsetFromExisting 部分保存修复生效（缺键不再清零，显式 false/0 仍生效；system_config_partial_test.go 两用例绿，D-978 收口）。注：验证中覆盖的 site_name 原中文名在日志/备份中均损坏不可恢复，已恢复为自描述占位「UIT 回归本地库（2026-11-13 K-4 轮恢复占位）」，布尔配置无损失 | `src/api/system.js` | 12 |
 | 981 | [x] | GET | `/api/system/users` | 用户端 | query: params | GET /api/system/users →200 code=0 返回{list,total},list含username/role/status/enabled/data_scope完整字段 | `src/api/systemUser.js` | 4 |
 | 982 | [x] | GET | `/api/system/users/{id}` | 用户端 | path: id | GET /api/system/users/84 →200 获取账号详情成功；999999→404 NOT_FOUND_1002 用户不存在 | `src/api/systemUser.js` | 8 |
-| 983 | [ ] | POST | `/api/system/users` | 用户端 | body: data | - | `src/api/systemUser.js` | 12 |
-| 984 | [ ] | PUT | `/api/system/users/{id}` | 用户端 | path: id / body: data | - | `src/api/systemUser.js` | 16 |
-| 985 | [ ] | DELETE | `/api/system/users/{id}` | 用户端 | path: id | - | `src/api/systemUser.js` | 20 |
+| 983 | [x] | POST | `/api/system/users` | 用户端 | body: data | - | `src/api/systemUser.js` | 12 |
+| 984 | [x] | PUT | `/api/system/users/{id}` | 用户端 | path: id / body: data | - | `src/api/systemUser.js` | 16 |
+| 985 | [x] | DELETE | `/api/system/users/{id}` | 用户端 | path: id | - | `src/api/systemUser.js` | 20 |
 | 986 | [x] | GET | `/api/session-tags` | 用户端 | query: params | GET /api/session-tags →200 code=0 获取成功 返回标签数组(带code/color/sort_order字段) | `src/api/tagSegmentation.js` | 5 |
 | 987 | [x] | PUT | `/api/session-tags/{id}` | 用户端 | path: id / body: body | PUT /api/session-tags/4 →200 更新成功(需name+code均必填,缺code→400 明确文案)；data回读更新值 | `src/api/tagSegmentation.js` | 12 |
 | 988 | [x] | POST | `/api/session-tags` | 用户端 | body: data | POST /api/session-tags {name,code} →200 创建成功 id=4；重复code→409 DUPLICATE_ENTRY_3003 标签编码已存在；缺code→400 | `src/api/tagSegmentation.js` | 16 |

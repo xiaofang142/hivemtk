@@ -15,8 +15,7 @@
 - 修复后 `go test ./internal/ops/controller -count=1`：PASS，18.635s；日志 `.planning/ab-pagination-green.log`。
 - `go vet ./internal/ops/controller/...`：exit 0。
 - `go build -o bin/api-audit-pagination.exe ./cmd/api`：exit 0。
-- 双模式 HTTP 回归已完成：负值回落 page=1/page_size=10，201 钳制为200；SaaS 两租户各只返回本租户记录，未认证401。证据见本轮清单001-*.json。
-- 二次审核补强为205条夹具，实际断言默认10条、上限200条、第二页与末页首条ID，回归PASS（7.969s）。
+- 两个 HTTP 服务已切换新构建；实时双模式回归尚在进行，不在本报告声称完成。
 
 ## Deviations from Assessment
 

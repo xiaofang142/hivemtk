@@ -14,7 +14,7 @@
 - 修复前纯函数测试RED：5个已知概率全部失败，且单调性失败；日志 `.planning/ab-srm-red.log`。
 - 修复后 `go test ./internal/ops/service ./internal/ops/controller -count=1`：PASS，71.544s/36.346s；日志 `.planning/ab-srm-green.log`。
 - API build与两个修改包的go vet均exit0。
-- 双模式HTTP回归已完成：chi2=0、df=1均返回srm_p_value=1、srm_passed=true。证据013-off-diagnostics-fixed.json和013-on-diagnostics-fixed.json；跨租户读取404。
+- 新构建双模式HTTP回归进行中。
 
 ## Deviations
 
