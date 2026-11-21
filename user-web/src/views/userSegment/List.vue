@@ -689,7 +689,7 @@ const viewUsers = async (row) => {
 }
 
 const viewUserDetail = (user) => {
-  router.push({ path: '/customer360', query: { id: user.id, name: user.name } });
+  router.push({ path: '/customer360/list', query: { id: user.id, name: user.name } });
 }
 
 onMounted(() => {

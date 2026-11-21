@@ -30,9 +30,8 @@ export const useRuntimeConfigStore = defineStore('runtimeConfig', () => {
 
     loading.value = runtimeConfig()
       .then((res) => {
-        const data = res?.data || {}
-        // 后端可能返回 null/非对象（极端情况），统一归一成 {}，
-        // 否则 values.value[key] 会在读取侧抛 TypeError。
+        const data = res && typeof res === 'object' ? res : {}
+        // 后端可能返回 null/非对象（极端情况），统一归一成 {}，否则 values.value[key] 会在读取侧抛 TypeError。
         values.value = data && typeof data === 'object' ? data : {}
         loaded.value = true
         failed.value = false

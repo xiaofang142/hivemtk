@@ -93,13 +93,33 @@ const parseCSV = (text) => {
 }
 
 const parseJSON = (text) => {
-  const data = JSON.parse(text)
-  if (Array.isArray(data)) return data
-  if (data.items) return data.items
-  if (data.data) return data.data
-  if (data.list) return data.list
-  if (data.documents) return data.documents
-  throw new Error('JSON 结构不匹配,需为数组或包含 items/data/list/documents 字段')
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch (e) {
+    throw new Error(`JSON 语法错误：${e.message}`, { cause: e })
+  }
+  if (data === null || typeof data !== 'object') {
+    throw new Error('JSON 结构不匹配,需为数组或包含 items/data/list/documents 数组字段')
+  }
+  const rows = Array.isArray(data) ? data : data.items || data.data || data.list || data.documents
+  if (!Array.isArray(rows)) {
+    throw new Error('JSON 结构不匹配,需为数组或包含 items/data/list/documents 数组字段')
+  }
+  // 行级校验与模板渲染契约对齐（UWA-16）：tags 必须是文本数组、content/title/category
+  // 必须是文本，否则 tags.join / truncateText 会在渲染阶段抛错把整页打崩。
+  // 空白 content 仍保留原样，交给服务端按既有口径计为 rejected。
+  return rows.map((row, index) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error(`第 ${index + 1} 行必须是对象`)
+    if (typeof row.content !== 'string') throw new Error(`第 ${index + 1} 行 content 必须是文本`)
+    if (row.tags !== undefined && (!Array.isArray(row.tags) || row.tags.some(tag => typeof tag !== 'string'))) {
+      throw new Error(`第 ${index + 1} 行 tags 必须是文本数组`)
+    }
+    for (const key of ['title', 'category']) {
+      if (row[key] !== undefined && typeof row[key] !== 'string') throw new Error(`第 ${index + 1} 行 ${key} 必须是文本`)
+    }
+    return row
+  })
 }
 
 export const parseBatchPreview = (text, filename, format = 'auto') => {

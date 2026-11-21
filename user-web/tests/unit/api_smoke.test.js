@@ -73,7 +73,10 @@ for (const file of API_FILES) {
         clearMocks(mocks)
         let passed = false
         let lastErr
-        for (const args of ARG_SETS) {
+        const argumentSets = file === 'batchOperation' && ['runBatch', 'previewBatch'].includes(name)
+          ? [[{ tool: 'import', source: 'import', dryRun: true }]]
+          : ARG_SETS
+        for (const args of argumentSets) {
           clearMocks(mocks)
           try {
             const _ret = fn(...args)

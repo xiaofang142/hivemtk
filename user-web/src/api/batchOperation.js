@@ -63,30 +63,34 @@ const toIdList = (ids) => {
 // 逐字段透传给 GET /api/clues/list —— 该端点的 query 参数与这批字段同名。
 const resolveClueIds = async (data) => {
   const source = data?.source || 'all'
-  if (source === 'import') return []
-
+  if (!['all', 'filter'].includes(source)) throw new Error('请选择全部或有效的筛选条件')
   const params = { page: 1, limit: CLUE_IDS_LIMIT }
-  if (source === 'filter' && data?.filter) {
+  if (source === 'filter') {
     let filter
-    try {
-      filter = JSON.parse(data.filter)
-    } catch {
+    try { filter = JSON.parse(data?.filter || '') } catch {
       throw new Error('筛选条件不是合法 JSON，无法解析要操作的记录')
     }
-    if (filter && typeof filter === 'object' && !Array.isArray(filter)) {
-      Object.entries(filter).forEach(([k, v]) => {
-        if (v !== '' && v !== null && v !== undefined) params[k] = v
-      })
+    if (!filter || typeof filter !== 'object' || Array.isArray(filter)) throw new Error('筛选条件必须是非空 JSON 对象')
+    const allowed = new Set(['keyword', 'type', 'is_verify', 'start', 'end'])
+    for (const [key, value] of Object.entries(filter)) {
+      if (!allowed.has(key)) throw new Error(`不支持的筛选字段：${key}`)
+      if (typeof value !== 'string' && typeof value !== 'number') throw new Error(`筛选字段 ${key} 必须是文本或数字`)
+      if (String(value).trim() === '') continue
+      if (key !== 'keyword' && (!Number.isSafeInteger(Number(value)) || Number(value) < 0)) throw new Error(`筛选字段 ${key} 必须是非负整数`)
+      if (key === 'is_verify' && ![0, 1].includes(Number(value))) throw new Error('is_verify 只能是 0 或 1')
+      params[key] = key === 'keyword' ? String(value).trim() : Number(value)
     }
+    if (Object.keys(params).length === 2) throw new Error('请至少填写一个有效筛选条件')
+    if (params.start !== undefined && params.end !== undefined && params.start > params.end) throw new Error('开始时间不能晚于结束时间')
   }
-
   const res = await http.get('/api/clues/list', params)
-  const list = Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : []
-  const total = Number(res?.total ?? list.length)
-  if (total > CLUE_IDS_LIMIT) {
-    throw new Error(`匹配到 ${total} 条记录，超过单次上限 ${CLUE_IDS_LIMIT} 条，请收窄筛选条件`)
-  }
-  return toIdList(list.map((it) => it?.id))
+  if (!Array.isArray(res?.list) || !Number.isSafeInteger(Number(res?.total))) throw new Error('线索列表响应不完整，请重试')
+  const total = Number(res.total)
+  if (total > CLUE_IDS_LIMIT) throw new Error(`匹配到 ${total} 条记录，超过单次上限 ${CLUE_IDS_LIMIT} 条，请收窄筛选条件`)
+  const ids = [...new Set(toIdList(res.list.map(it => it?.id)))]
+  if (total < 0 || ids.length !== total) throw new Error('匹配记录未完整返回，请重试或收窄筛选条件')
+  if (!ids.length) throw new Error('没有匹配的记录')
+  return ids
 }
 
 // 后端表单字段读的是 ctx.PostForm ⇒ 必须发 form-urlencoded，不能发 JSON。
@@ -184,16 +188,20 @@ export function getBatchTools() {
 //   delete —— 删除 ids 指定的那批
 //   update —— 改 ids 指定的那批，fields 来自 form.params
 export async function runBatch(data) {
-  // tool 缺省时回落 import：这是本页最老的一条默认路径（改造前 runBatch 就是
-  // 直接 batchImportFile），也是四个工具里唯一不依赖既有记录 id 的那个。
-  // 页面调用时一定会带 tool（卡片名就是 tool 名），所以这个回落只影响
-  // 「没有工具名」这种说不清的调用。
-  const tool = data?.tool || 'import'
+  const tool = data?.tool
+  if (!['import', 'export', 'delete', 'update'].includes(tool)) throw new Error('不支持的批量操作类型')
+  if (data?.dryRun) return previewBatch(data)
+  if (tool === 'import') {
+    if (data?.source !== 'import' || !data?.file) throw new Error('请选择要导入的文件')
+    return batchImportFile(data.file, data.type || 'clue')
+  }
   const ids = await resolveClueIds(data)
+  if (data?.expectedIds) {
+    const expected = new Set(toIdList(data.expectedIds))
+    if (ids.length !== expected.size || ids.some(id => !expected.has(id))) throw new Error('匹配记录已变化，请重新预览后再执行')
+  }
 
   switch (tool) {
-    case 'import':
-      return batchImportFile(data?.file, data?.type || 'clue')
     case 'export':
       return batchExport({ type: data?.type || 'clue', format: data?.format || 'csv', ids })
     case 'delete':
@@ -201,18 +209,12 @@ export async function runBatch(data) {
     case 'update': {
       let fields = {}
       if (data?.params) {
-        try {
-          fields = JSON.parse(data.params)
-        } catch {
-          throw new Error('执行参数不是合法 JSON')
-        }
+        try { fields = JSON.parse(data.params) } catch { throw new Error('执行参数不是合法 JSON') }
       }
       return batchUpdate({ ids, fields })
     }
     default:
-      // 认不出的工具名：交给 import 这条最保守的出口（发出去让后端回原话），
-      // 而不是本地抛一个自造的错 —— 后端的回话才是事实。
-      return batchImportFile(data?.file, data?.type || 'clue')
+      throw new Error('不支持的批量操作类型')
   }
 }
 
@@ -231,10 +233,12 @@ export function getBatchDetail(id) {
 // ids 非空（与写端点同一条硬闸，预览与执行不许出现两套口径）。
 export async function previewBatch(data) {
   const tool = data?.tool
-  const ids = await resolveClueIds(data)
-  return http.post('/api/batch/preview', {
+  if (!['import', 'export', 'delete', 'update'].includes(tool)) throw new Error('不支持的批量操作类型')
+  const ids = tool === 'import' ? [] : await resolveClueIds(data)
+  const res = await http.post('/api/batch/preview', {
     operation_type: tool,
     data_type: 'clue',
     ids
   })
+  return { ...res, selected_ids: ids }
 }

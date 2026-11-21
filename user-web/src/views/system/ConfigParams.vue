@@ -900,8 +900,8 @@ async function probePlatformHost() {
   platformHostProbe.value = null
   try {
     const res = await configParamsApi.testPlatformConnectivity(platformHostDraft.value.trim())
-    const data = res && res.data ? res.data : null
-    platformHostProbe.value = data || { status: 'not_configured', message: res && res.message ? res.message : '无响应' }
+    const data = res && typeof res === 'object' ? res : null
+    platformHostProbe.value = data || { status: 'not_configured', message: '无响应' }
   } catch (e) {
     if (isForbiddenError(e)) {
       platformHostForbidden.value = true

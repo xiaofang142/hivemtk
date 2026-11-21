@@ -10,7 +10,7 @@ import { http } from '@/utils/request'
 // 不传 groups 时后端返回白名单全部，省得这里 hardcode 一份清单（那份清单会和后端
 // 的 runtimePublicGroups 漂移，然后前端悄悄少读一组）。
 export function runtimeConfig(groups) {
-  return http.get('/api/config/runtime', { params: groups ? { groups } : {} })
+  return http.get('/api/config/runtime', { params: groups ? { groups } : {} }, { timeout: 5000, _silent: true })
 }
 
 // 业务字典（后端 dictionaries 表，阶段四）。

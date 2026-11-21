@@ -31,6 +31,9 @@ export const usePermissionStore = defineStore('permission', () => {
   const allAccess = ref(false)     // 超管全量
   const menusLoaded = ref(false)
   const menusLoading = ref(false)
+  // fail-closed（2026-11-20 交互审计 UWA-07）：菜单加载失败时 canAccessPath
+  // 必须拒绝放行——权限未知时不等于"有权"，路由守卫据此拦截非管理员受保护路径。
+  const menusLoadError = ref(false)
   let menusLoadPromise = null
   let menusLoadGeneration = 0
 
@@ -59,32 +62,41 @@ export const usePermissionStore = defineStore('permission', () => {
     return '/profile'
   }
 
-  // ensureMenus 拉取当前用户菜单树（登录后调用；已加载则跳过）
+  // ensureMenus 拉取当前用户菜单树（登录后调用；已加载则跳过）。
+  // 并发调用共享同一个 Promise（单飞）；resetMenus 推进代次，
+  // 迟到响应不得把旧账号的菜单/全量权限写回新身份。
   const ensureMenus = async (force = false) => {
     if (!userStore.isLoggedIn) {
       menus.value = []
       allAccess.value = false
       menusLoaded.value = false
+      menusLoadError.value = false
       return
     }
     if (menusLoaded.value && !force) return
     if (menusLoadPromise) return menusLoadPromise
     menusLoading.value = true
+    menusLoadError.value = false
     const loadGeneration = menusLoadGeneration
     let loadPromise
     loadPromise = (async () => {
       try {
         const res = await getUserMenus()
-        if (loadGeneration !== menusLoadGeneration) return
+        if (loadGeneration !== menusLoadGeneration || !userStore.isLoggedIn) return
         menus.value = res?.tree || []
         allAccess.value = !!res?.all
         menusLoaded.value = true
+        menusLoadError.value = false
       } catch (e) {
         if (loadGeneration !== menusLoadGeneration) return
         console.error('[permission] 拉取菜单权限失败', e)
         menus.value = []
         allAccess.value = false
         menusLoaded.value = false
+        menusLoadError.value = true
+        // 抛给路由守卫：由它区分 401 竞态并给出"菜单权限加载失败"的落地页，
+        // 不能静默吞掉让权限未知态放行。
+        throw e
       } finally {
         if (menusLoadPromise === loadPromise) {
           menusLoading.value = false
@@ -104,13 +116,15 @@ export const usePermissionStore = defineStore('permission', () => {
     allAccess.value = false
     menusLoaded.value = false
     menusLoading.value = false
+    menusLoadError.value = false
   }
 
   // canAccessPath 路由守卫：路径是否在授权菜单内（超管放行）
   // 精确匹配或前缀匹配（带页目录下的深链，如 /browser-automation/tasks/create）
   const canAccessPath = (path) => {
     if (allAccess.value || role.value === 'admin') return true
-    if (!menusLoaded.value) return true // 未加载（如公开页）不拦截，由调用方先 ensureMenus
+    if (menusLoadError.value) return false
+    if (!menusLoaded.value) return false
     if (!path) return true
     for (const p of menuPaths.value) {
       if (path === p || path.startsWith(p + '/')) return true
@@ -166,6 +180,7 @@ export const usePermissionStore = defineStore('permission', () => {
     allAccess,
     menusLoaded,
     menusLoading,
+    menusLoadError,
     menuPaths,
     navigationMenus,
     navigationPaths,

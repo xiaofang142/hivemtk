@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+const runtime = vi.hoisted(() => vi.fn())
+vi.mock('@/api/runtimeConfig', () => ({ runtimeConfig: runtime }))
 import { setActivePinia, createPinia } from 'pinia'
 import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 
@@ -11,6 +13,14 @@ import { useRuntimeConfigStore } from '@/stores/runtimeConfig'
 describe('useRuntimeConfig', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  it('真实 API 直接返回的扁平配置能被读取且并发只请求一次', async () => {
+    runtime.mockResolvedValue({ 'frontend_ui.material_max_size_mb': '25' })
+    const s = useRuntimeConfigStore()
+    await Promise.all([s.ensureLoaded(), s.ensureLoaded()])
+    expect(s.num('frontend_ui', 'material_max_size_mb', 10)).toBe(25)
+    expect(runtime).toHaveBeenCalledTimes(1)
   })
 
   it('未拉取时所有读取口回落 fallback', () => {

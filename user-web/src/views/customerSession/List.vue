@@ -460,7 +460,7 @@ import { rtStr as _rtStr, rtNum, rtDur as _rtDur, rtBool as _rtBool } from '@/ut
 // 客户会话列表 · 容器组件:负责组装 composables 与子组件、生命周期编排。
 // 数据流/操作逻辑拆分至 ./composables/{useSessionFilters,useSessionList,useSessionActions}.js
 // 右栏客户 360° 与黑名单弹窗拆分至 ./components/{CustomerProfilePanel,BlacklistDialog}.vue
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { MagicStick, User, ChatLineSquare, Warning } from '@element-plus/icons-vue'
@@ -610,12 +610,6 @@ onMounted(async () => {
   } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 });
 
-watch(currentSession, (newVal, oldVal) => {
-  if (newVal && newVal.id !== oldVal?.id) {
-    loadAiSuggestions()
-    loadCustomerProfile()
-  }
-});
 </script>
 
 <style scoped lang="scss">

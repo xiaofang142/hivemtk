@@ -73,7 +73,7 @@
               prefix-icon="Lock"
               size="large"
               show-password
-              @keyup.enter="handleLogin"
+              @keyup.enter.stop.prevent="handleLogin"
             />
           </el-form-item>
 
@@ -226,7 +226,9 @@ const finishLogin = async (token, user, resp) => {
   }, token)
   // RBAC：切换账号时重置旧菜单缓存，避免上一个身份的菜单/路径继续生效（数据与权限隔离）
   permissionStore.resetMenus()
-  await permissionStore.ensureMenus(true)
+  // 菜单故障由路由守卫处理，不把已完成的凭据校验报成登录失败。
+  await permissionStore.ensureMenus(true).catch(() => {})
+  if (!userStore.isLoggedIn) return
   localStorage.setItem('system_initialized', 'true')
   ElMessage.success(t('core.login.success'))
   // 登录后回跳：?redirect= 只接受站内绝对路径（防开放重定向）。
@@ -248,6 +250,7 @@ const backToLogin = () => {
 
 // handleMfaVerify MFA 第二步：POST /api/auth/mfa/verify（公开端点，temp_token 换终令牌）
 const handleMfaVerify = async () => {
+  if (loading.value) return
   const code = String(mfaCode.value || '').trim()
   if (!/^\d{6}$/.test(code)) {
     ElMessage.warning('请输入 6 位数字验证码')
@@ -281,18 +284,20 @@ const handleMfaVerify = async () => {
 }
 
 const handleLogin = async () => {
-  if (!loginFormRef.value) return
+  if (loading.value || !loginFormRef.value) return
+  loading.value = true
 
   // 校验不通过时 validate() 是 reject 一个字段集合，不是 Error：
   // 它和"口令错/服务端挂了"必须分开。此前一起落进下面的 catch，空表单点登录会同时
   // 打出一条 console.error 和一个"登录失败"红条——行内已经写了"请输入用户名"，
   // 再弹一次失败是把用户的漏填报成了系统故障。
   const passed = await loginFormRef.value.validate().catch(() => false)
-  if (!passed) return
+  if (!passed) {
+    loading.value = false
+    return
+  }
 
   try {
-    loading.value = true
-
     // 空租户代码不发给后端：后端把「缺省」视为单租户默认，'' 与未传等价，但省掉字段更干净
     const payload = { ...loginForm }
     if (!payload.tenant_code) delete payload.tenant_code

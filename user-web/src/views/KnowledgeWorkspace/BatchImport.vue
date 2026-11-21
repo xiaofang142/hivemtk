@@ -72,6 +72,7 @@
                     :auto-upload="false"
                     :limit="1"
                     :on-change="handleFileChange"
+                    :on-remove="handleFileRemove"
                     :on-exceed="handleExceed"
                     accept=".csv,.json,.txt"
                     drag
@@ -425,7 +426,7 @@ title,content,category,tags
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useListEditorChange } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload, View, UploadFilled } from '@element-plus/icons-vue'
@@ -467,6 +468,16 @@ const pasteForm = reactive({
   product_id: '',
   jsonText: ''
 })
+
+const uploadRef = ref(null)
+let previewVersion = 0
+const invalidatePreview = () => {
+  previewVersion += 1
+  preview.value = []
+}
+// 预览只是内容解析结果，与目标产品无关（UWA-16）：切换产品不作废已解析记录；
+// 真正让解析失效的只有页签、文件、格式和 JSON 文本本身。
+watch(() => [activeTab.value, uploadForm.file, uploadForm.format, pasteForm.jsonText], invalidatePreview, { flush: 'sync' })
 
 const canImport = computed(() => preview.value.length > 0 && !importing.value)
 const acceptanceRate = computed(() => {
@@ -607,15 +618,24 @@ const retryDocument = async (row) => {
 // （整篇 PDF/Word 走解析入库），本条是结构化行数据的批量导入，两者的现行上限本来就不等
 // （50 vs 20）。强行并成一条，要么把批量导入静默放宽 2.5 倍，要么把文档上传收紧到 20MB，
 // 两种都是行为变更；各配一条才是各自说各自的数。
-const maxUploadMB = computed(() => Math.round(rtNum('knowledge', 'merchant_batch_max_file_size', 20971520) / 1024 / 1024))
+const maxUploadBytes = computed(() => rtNum('knowledge', 'merchant_batch_max_file_size', 20971520))
+const maxUploadMB = computed(() => Number((maxUploadBytes.value / 1024 / 1024).toFixed(2)))
 
 const handleFileChange = (file) => {
-  if (file.size > maxUploadMB.value * 1024 * 1024) {
+  if (file.size > maxUploadBytes.value) {
     ElMessage.error(i18n.global.t('文件大小不能超过{size}MB', { size: maxUploadMB.value }))
-    return false
+    uploadForm.file = null
+    invalidatePreview()
+    uploadRef.value?.clearFiles()
+    return
   }
   uploadForm.file = file.raw
-  return true
+  preview.value = []
+}
+
+const handleFileRemove = () => {
+  uploadForm.file = null
+  preview.value = []
 }
 
 const handleExceed = () => {
@@ -627,12 +647,21 @@ const loadPreview = () => {
     ElMessage.warning(i18n.global.t('请先选择文件'))
     return
   }
+  const file = uploadForm.file
+  const version = ++previewVersion
   const reader = new FileReader()
   reader.onload = (e) => {
-    const text = e.target.result
-    parseTextToPreview(text, uploadForm.format, uploadForm.file.name)
+    // 过时防护（UWA-16）：文件被替换/移除后，迟到的读取结果不得覆盖当前预览
+    if (version !== previewVersion || file !== uploadForm.file) return
+    parseTextToPreview(e.target.result, uploadForm.format, uploadForm.file.name)
   }
-  reader.readAsText(uploadForm.file)
+  reader.onerror = () => {
+    if (version === previewVersion) {
+      preview.value = []
+      ElMessage.error('读取文件失败')
+    }
+  }
+  reader.readAsText(file)
 };
 
 const loadPastePreview = () => {
@@ -665,7 +694,8 @@ const loadPasteTemplate = () => {
 }
 
 const handleBatchImport = async () => {
-  if (!preview.value.length) return
+  if (importing.value || !preview.value.length) return
+  const version = previewVersion
   // 后端要求 product_id 必填：在这里先拦，别让用户看完确认框才吃到「product_id 不能为空」
   const targetProduct = activeTab.value === 'upload' ? uploadForm.product_id : pasteForm.product_id
   if (!targetProduct) {
@@ -680,6 +710,7 @@ const handleBatchImport = async () => {
     )
   } catch { return }
 
+  if (importing.value || version !== previewVersion || !preview.value.length) return
   importing.value = true
   try {
     let res
@@ -705,8 +736,10 @@ const handleBatchImport = async () => {
         rejected: res.rejected
       }))
       preview.value = [];
-      if (activeTab.value === 'upload') uploadForm.file = null
-      else pasteForm.jsonText = ''
+      if (activeTab.value === 'upload') {
+        uploadForm.file = null
+        uploadRef.value?.clearFiles()
+      } else pasteForm.jsonText = ''
     }
   } catch (e) {
     // 拦截器已经弹过服务端文案，这里不再重复（同一条错误弹两次）

@@ -104,6 +104,9 @@ func (c *Customer360Controller) GetCustomerList(ctx *gin.Context) {
 	}
 
 	filters := make(map[string]string)
+	if keyword := strings.TrimSpace(ctx.Query("keyword")); keyword != "" {
+		filters["keyword"] = keyword
+	}
 	if platform := ctx.Query("platform"); platform != "" {
 		filters["platform"] = platform
 	}

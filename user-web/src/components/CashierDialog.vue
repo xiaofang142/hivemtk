@@ -103,7 +103,7 @@
 // 轮询纪律：3s × 40 次封顶后转手动刷新（防无限轮询）——
 // 轮询停止条件（paid/exhausted/close）由组件单测钉住。
 // ============================================================
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { Loading, CircleCheckFilled } from '@element-plus/icons-vue'
 import { orderPayStatus } from '@/api/moduleMarket'
 
@@ -137,31 +137,42 @@ const pollCount = ref(0)
 const paid = ref(false)
 const exhausted = ref(false)
 let timer = null
+let pollGeneration = 0
+let pollInFlight = false
 
 function stopPolling () {
+  pollGeneration += 1
   if (timer) {
-    clearInterval(timer)
+    clearTimeout(timer)
     timer = null
   }
+  pollInFlight = false
   polling.value = false
 }
 
-async function tick () {
-  if (!props.orderNo) return
+async function tick (generation = pollGeneration, orderNo = props.orderNo) {
+  if (!orderNo || generation !== pollGeneration || !polling.value || pollInFlight) return
+  pollInFlight = true
   pollCount.value += 1
   try {
-    const res = await orderPayStatus(props.orderNo, { _silent: true })
+    const res = await orderPayStatus(orderNo, { _silent: true })
+    if (generation !== pollGeneration || orderNo !== props.orderNo || !polling.value) return
     if (res && (res.paid || res.status === 'paid' || res.status === 'fulfilled')) {
       paid.value = true
       stopPolling()
       emit('paid', res)
       return
     }
-  } catch { /* 轮询失败不弹 toast：静默通道，下一轮再试 */ }
+  } catch { /* 轮询失败不弹 toast：静默通道，下一轮再试 */ } finally {
+    if (generation === pollGeneration) pollInFlight = false
+  }
+  if (generation !== pollGeneration || orderNo !== props.orderNo || !polling.value) return
   if (pollCount.value >= maxPolls) {
     exhausted.value = true
     stopPolling()
+    return
   }
+  timer = setTimeout(() => tick(generation, orderNo), pollIntervalMs)
 }
 
 function startPolling () {
@@ -170,8 +181,9 @@ function startPolling () {
   exhausted.value = false
   if (!(props.payment && props.payment.pay_url)) return
   polling.value = true
-  tick() // 立即查一次（用户可能已经付完才回到页面）
-  timer = setInterval(tick, pollIntervalMs)
+  const generation = pollGeneration
+  const orderNo = props.orderNo
+  tick(generation, orderNo) // 立即查一次（用户可能已经付完才回到页面）
 }
 
 function restartPolling () {
@@ -214,14 +226,16 @@ function onClosed () {
 }
 
 // 打开时若有 payment 自动开始轮询（用户可能在新标签页已付完）
-watch(() => props.modelValue, (v) => {
+watch(() => [props.modelValue, props.orderNo], ([v]) => {
   if (v) {
     paid.value = false
     startPolling()
   } else {
     stopPolling()
   }
-})
+}, { immediate: true })
+
+onUnmounted(() => stopPolling())
 </script>
 
 <style scoped>

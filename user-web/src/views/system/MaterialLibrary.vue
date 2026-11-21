@@ -176,6 +176,9 @@
       v-model="uploadDialogVisible"
       title="上传素材"
       width="600px"
+      :show-close="!uploading"
+      :close-on-click-modal="!uploading"
+      :close-on-press-escape="!uploading"
       @close="handleUploadClose"
     >
       <el-form
@@ -202,11 +205,12 @@
         <el-form-item label="上传文件">
           <el-upload
             ref="uploadRef"
+            v-model:file-list="fileList"
             drag
             action="#"
             :auto-upload="false"
             :multiple="true"
-            :file-list="fileList"
+            :disabled="uploading"
             :on-change="handleFileChange"
             :before-upload="beforeUpload"
             accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
@@ -227,11 +231,15 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="uploadDialogVisible = false">
+        <el-button
+          :disabled="uploading"
+          @click="uploadDialogVisible = false"
+        >
           取消
         </el-button>
         <el-button
           type="primary"
+          :loading="uploading"
           @click="handleUploadSubmit"
         >
           开始上传
@@ -352,6 +360,14 @@ const categoryForm = reactive({
 })
 
 const fileList = ref([])
+const uploading = ref(false)
+
+const validateMaterialFile = (file) => {
+  if (!file || !file.raw) return '文件内容为空'
+  const maxSizeMB = rtNum('frontend_ui', 'material_max_size_mb', 10)
+  if (file.raw.size > maxSizeMB * 1024 * 1024) return i18n.global.t('文件大小不能超过{size}MB', { size: maxSizeMB })
+  return ''
+}
 
 const pagination = reactive({
   current: 1,
@@ -458,30 +474,40 @@ const beforeUpload = (file) => {
 }
 
 const handleUploadSubmit = async () => {
+  if (uploading.value) return
   if (!uploadForm.categoryId) {
     ElMessage.error(i18n.global.t('请选择分类'))
     return
   }
-  
   if (fileList.value.length === 0) {
     ElMessage.error(i18n.global.t('请选择文件'))
     return
   }
-
+  const invalid = fileList.value.map(validateMaterialFile).find(Boolean)
+  if (invalid) {
+    ElMessage.error(invalid)
+    return
+  }
+  const files = [...fileList.value]
+  const categoryId = uploadForm.categoryId
+  uploading.value = true
+  const succeeded = []
   try {
-    for (const file of fileList.value) {
+    for (const file of files) {
       const formData = new FormData()
       formData.append('file', file.raw)
-      formData.append('category_id', uploadForm.categoryId)
-      
+      formData.append('category_id', categoryId)
       await uploadMaterial(formData)
+      succeeded.push(file)
     }
-    
     ElMessage.success(i18n.global.t('上传成功'))
+    await loadMaterialList()
     uploadDialogVisible.value = false
-    loadMaterialList()
-  } catch  {
-    ElMessage.error(i18n.global.t('上传失败'))
+  } catch {
+    fileList.value = fileList.value.filter((file) => !succeeded.includes(file))
+    ElMessage.error(succeeded.length ? `已上传 ${succeeded.length} 个文件，其余上传失败` : i18n.global.t('上传失败'))
+  } finally {
+    uploading.value = false
   }
 }
 

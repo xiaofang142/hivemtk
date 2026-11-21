@@ -39,6 +39,7 @@
           clearable
           filterable
           style="width: 240px"
+          @change="loadList"
         >
           <el-option
             v-for="i in vocab.intents || []"
@@ -53,7 +54,7 @@
         >
           新增调用流
         </el-button>
-        <el-button @click="ciDialogVisible = true">
+        <el-button @click="openCustomIntents">
           自定义意图
         </el-button>
         <el-button @click="loadList">
@@ -661,7 +662,7 @@ function stepsPreview(row) {
 
 async function loadVocab() {
   const res = await getIntentToolChainVocab();
-  vocab.value = res?.data || { intents: [], intent_families: {}, template_vars: [], tools: [] };
+  vocab.value = res || { intents: [], intent_families: {}, template_vars: [], tools: [] };
 }
 
 async function loadList() {
@@ -670,7 +671,7 @@ async function loadList() {
     const params = {};
     if (filterIntent.value) params.intent_code = filterIntent.value;
     const res = await listIntentToolChains(params);
-    rows.value = res?.data?.list || [];
+    rows.value = Array.isArray(res?.list) ? res.list : [];
   } finally {
     loading.value = false;
   }
@@ -906,9 +907,14 @@ function parseKeywords(json) {
   }
 }
 
+async function openCustomIntents() {
+  ciDialogVisible.value = true;
+  await ciLoad();
+}
+
 async function ciLoad() {
   const res = await listCustomIntents({ page: 1, page_size: 100 });
-  ciRows.value = res?.data?.list || [];
+  ciRows.value = Array.isArray(res?.list) ? res.list : [];
 }
 
 function ciOpenCreate() {
@@ -993,8 +999,7 @@ async function ciRemove(row) {
 }
 
 onMounted(async () => {
-  await loadVocab();
-  await loadList();
+  await Promise.allSettled([loadVocab(), loadList()]);
 });
 </script>
 

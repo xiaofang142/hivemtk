@@ -267,6 +267,26 @@
     </div>
 
     
+    <el-alert
+      v-if="statsError"
+      :title="statsError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+    <el-alert
+      v-if="listError"
+      :title="listError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
+    <el-button
+      v-if="listError"
+      @click="fetchMessageList"
+    >
+      {{ $t('重试') }}
+    </el-button>
     <el-table
       v-loading="loading"
       :data="messageList"
@@ -668,134 +688,149 @@
       top="5vh"
     >
       <div v-loading="detailLoading">
-        <el-descriptions
-          :column="2"
-          border
+        <el-alert
+          v-if="detailError"
+          :title="detailError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <el-button
+          v-if="detailError"
+          @click="handleViewDetail({ id: detailId })"
         >
-          <el-descriptions-item label="ID">
-            {{ currentMessage.id }}
-          </el-descriptions-item>
-          <el-descriptions-item label="消息 ID">
-            {{ currentMessage.msg_id }}
-          </el-descriptions-item>
-          <el-descriptions-item label="平台">
-            {{ platformLabel(currentMessage.platform) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="账号">
-            {{ currentMessage.account_id }}
-          </el-descriptions-item>
-          <el-descriptions-item label="方向">
-            {{ currentMessage.direction === 'inbound' ? '接收' : '发送' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="类型">
-            {{ currentMessage.msg_type }}
-          </el-descriptions-item>
-          <el-descriptions-item label="发送方">
-            <!-- M-2 客户头像链路：详情抽屉展示发送者头像，空头像降级为默认人像图标 -->
-            <div class="sender-cell">
-              <el-avatar
-                :size="24"
-                :src="currentMessage.sender_avatar || ''"
-                class="sender-avatar"
+          {{ $t('重试') }}
+        </el-button>
+        <div v-if="currentMessage.id">
+          <el-descriptions
+            :column="2"
+            border
+          >
+            <el-descriptions-item label="ID">
+              {{ currentMessage.id }}
+            </el-descriptions-item>
+            <el-descriptions-item label="消息 ID">
+              {{ currentMessage.msg_id }}
+            </el-descriptions-item>
+            <el-descriptions-item label="平台">
+              {{ platformLabel(currentMessage.platform) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="账号">
+              {{ currentMessage.account_id }}
+            </el-descriptions-item>
+            <el-descriptions-item label="方向">
+              {{ currentMessage.direction === 'inbound' ? '接收' : '发送' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="类型">
+              {{ currentMessage.msg_type }}
+            </el-descriptions-item>
+            <el-descriptions-item label="发送方">
+              <!-- M-2 客户头像链路：详情抽屉展示发送者头像，空头像降级为默认人像图标 -->
+              <div class="sender-cell">
+                <el-avatar
+                  :size="24"
+                  :src="currentMessage.sender_avatar || ''"
+                  class="sender-avatar"
+                >
+                  <el-icon><User /></el-icon>
+                </el-avatar>
+                <span>{{ currentMessage.sender_name || currentMessage.sender_id || '-' }}</span>
+              </div>
+            </el-descriptions-item>
+            <el-descriptions-item label="接收方">
+              {{ currentMessage.receiver_name || currentMessage.receiver_id || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="会话 ID">
+              {{ currentMessage.conversation_id || '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="群消息">
+              <el-tag
+                v-if="currentMessage.is_group"
+                type="info"
+                size="small"
               >
-                <el-icon><User /></el-icon>
-              </el-avatar>
-              <span>{{ currentMessage.sender_name || currentMessage.sender_id || '-' }}</span>
+                是
+              </el-tag>
+              <span v-else>否</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="AI 回复">
+              <el-tag
+                v-if="currentMessage.is_ai_reply"
+                type="danger"
+                size="small"
+              >
+                {{ currentMessage.ai_agent || 'AI' }}
+              </el-tag>
+              <span v-else>否</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="已读">
+              <el-tag
+                :type="currentMessage.is_read ? 'info' : 'danger'"
+                size="small"
+              >
+                {{ currentMessage.is_read ? '已读' : '未读' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="发送时间">
+              {{ formatTime(currentMessage.sent_at) }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="$t('messageHubPage.recall.statusLabel')">
+              <el-tag
+                v-if="currentMessage.recalled_at"
+                type="info"
+                size="small"
+                effect="plain"
+              >
+                {{ $t('messageHubPage.recall.recalledAt', { time: formatTime(currentMessage.recalled_at) }) }}
+              </el-tag>
+              <el-tag
+                v-else-if="currentMessage.recall_error"
+                type="warning"
+                size="small"
+                :title="currentMessage.recall_error"
+              >
+                {{ $t('messageHubPage.recall.lastFailed') }}
+              </el-tag>
+              <span v-else>{{ $t('messageHubPage.recall.notRecalled') }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="读取时间">
+              {{ formatTime(currentMessage.read_at) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="入库时间">
+              {{ formatTime(currentMessage.created_at) }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <div class="detail-content-block">
+            <div class="detail-content-label">
+              消息内容
             </div>
-          </el-descriptions-item>
-          <el-descriptions-item label="接收方">
-            {{ currentMessage.receiver_name || currentMessage.receiver_id || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="会话 ID">
-            {{ currentMessage.conversation_id || '-' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="群消息">
-            <el-tag
-              v-if="currentMessage.is_group"
-              type="info"
-              size="small"
-            >
-              是
-            </el-tag>
-            <span v-else>否</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="AI 回复">
-            <el-tag
-              v-if="currentMessage.is_ai_reply"
-              type="danger"
-              size="small"
-            >
-              {{ currentMessage.ai_agent || 'AI' }}
-            </el-tag>
-            <span v-else>否</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="已读">
-            <el-tag
-              :type="currentMessage.is_read ? 'info' : 'danger'"
-              size="small"
-            >
-              {{ currentMessage.is_read ? '已读' : '未读' }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="发送时间">
-            {{ formatTime(currentMessage.sent_at) }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="$t('messageHubPage.recall.statusLabel')">
-            <el-tag
-              v-if="currentMessage.recalled_at"
-              type="info"
-              size="small"
-              effect="plain"
-            >
-              {{ $t('messageHubPage.recall.recalledAt', { time: formatTime(currentMessage.recalled_at) }) }}
-            </el-tag>
-            <el-tag
-              v-else-if="currentMessage.recall_error"
-              type="warning"
-              size="small"
-              :title="currentMessage.recall_error"
-            >
-              {{ $t('messageHubPage.recall.lastFailed') }}
-            </el-tag>
-            <span v-else>{{ $t('messageHubPage.recall.notRecalled') }}</span>
-          </el-descriptions-item>
-          <el-descriptions-item label="读取时间">
-            {{ formatTime(currentMessage.read_at) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="入库时间">
-            {{ formatTime(currentMessage.created_at) }}
-          </el-descriptions-item>
-        </el-descriptions>
-        <div class="detail-content-block">
-          <div class="detail-content-label">
-            消息内容
+            <div class="detail-content-body">
+              {{ currentMessage.content || '(空)' }}
+            </div>
           </div>
-          <div class="detail-content-body">
-            {{ currentMessage.content || '(空)' }}
+          <div
+            v-if="currentMessage.media_url"
+            class="detail-content-block"
+          >
+            <div class="detail-content-label">
+              媒体 URL
+            </div>
+            <div class="detail-content-body">
+              <a
+                :href="currentMessage.media_url"
+                target="_blank"
+              >{{ currentMessage.media_url }}</a>
+            </div>
           </div>
-        </div>
-        <div
-          v-if="currentMessage.media_url"
-          class="detail-content-block"
-        >
-          <div class="detail-content-label">
-            媒体 URL
+          <div
+            v-if="currentMessage.extra && Object.keys(currentMessage.extra).length"
+            class="detail-content-block"
+          >
+            <div class="detail-content-label">
+              扩展字段
+            </div>
+            <pre class="detail-content-json">{{ JSON.stringify(currentMessage.extra, null, 2) }}</pre>
           </div>
-          <div class="detail-content-body">
-            <a
-              :href="currentMessage.media_url"
-              target="_blank"
-            >{{ currentMessage.media_url }}</a>
-          </div>
-        </div>
-        <div
-          v-if="currentMessage.extra && Object.keys(currentMessage.extra).length"
-          class="detail-content-block"
-        >
-          <div class="detail-content-label">
-            扩展字段
-          </div>
-          <pre class="detail-content-json">{{ JSON.stringify(currentMessage.extra, null, 2) }}</pre>
         </div>
       </div>
     </el-dialog>
@@ -805,7 +840,7 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshRight, DataAnalysis, User } from '@element-plus/icons-vue'
 import { messageHubApi } from '@/api/messageHub'
@@ -819,6 +854,14 @@ const loading = ref(false)
 const statsLoading = ref(false)
 const pushing = ref(false)
 const detailLoading = ref(false)
+const listError = ref('')
+const detailError = ref('')
+const statsError = ref('')
+let listVersion = 0
+let detailVersion = 0
+let statsVersion = 0
+let detailId = null
+let disposed = false
 const messageList = ref([])
 const selectedRows = ref([])
 const stats = ref({})
@@ -945,6 +988,10 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  disposed = true
+  listVersion += 1
+  detailVersion += 1
+  statsVersion += 1
   if (realtimeTimer) { clearTimeout(realtimeTimer); realtimeTimer = null }
   if (agentSocketInst) { agentSocketInst.close(); agentSocketInst = null }
 })
@@ -964,15 +1011,17 @@ const loadPlatforms = async () => {
 }
 
 const loadStats = async () => {
+  const version = ++statsVersion
   statsLoading.value = true
+  statsError.value = ''
   try {
     const res = await messageHubApi.getStats({})
+    if (disposed || version !== statsVersion) return
     stats.value = res || {}
   } catch (e) {
-    console.error('加载统计失败', e)
-    ElMessage.error('统计加载失败')
+    if (!disposed && version === statsVersion) statsError.value = e?.message || i18n.global.t('加载失败')
   } finally {
-    statsLoading.value = false
+    if (!disposed && version === statsVersion) statsLoading.value = false
   }
 }
 
@@ -994,16 +1043,23 @@ const buildParams = () => {
 }
 
 const fetchMessageList = async () => {
+  const version = ++listVersion
   loading.value = true
+  listError.value = ''
+  selectedRows.value = []
   try {
     const res = await messageHubApi.getMessages(buildParams())
-    messageList.value = res.list || res.data || []
-    pagination.total = res.total || 0
+    if (disposed || version !== listVersion) return
+    if (!Array.isArray(res?.list) || !Number.isSafeInteger(res.total) || res.total < 0) throw new Error(i18n.global.t('加载失败'))
+    messageList.value = res.list
+    pagination.total = res.total
   } catch (e) {
-    console.error('加载消息列表失败', e)
-    ElMessage.error('消息列表加载失败')
+    if (disposed || version !== listVersion) return
+    messageList.value = []
+    pagination.total = 0
+    listError.value = e?.message || i18n.global.t('加载失败')
   } finally {
-    loading.value = false
+    if (!disposed && version === listVersion) loading.value = false
   }
 }
 
@@ -1034,24 +1090,31 @@ const handleSelectionChange = (rows) => {
 }
 
 const handleViewDetail = async (row) => {
+  const version = ++detailVersion
+  detailId = row.id
   detailDialogVisible.value = true
   detailLoading.value = true
+  detailError.value = ''
+  currentMessage.value = {}
   try {
     const res = await messageHubApi.getMessageById(row.id)
-    currentMessage.value = res || row
-  } catch {
-    currentMessage.value = row
+    if (disposed || version !== detailVersion || !detailDialogVisible.value) return
+    if (!res || String(res.id) !== String(row.id)) throw new Error(i18n.global.t('加载失败'))
+    currentMessage.value = res
+  } catch (error) {
+    if (!disposed && version === detailVersion && detailDialogVisible.value) detailError.value = error?.message || i18n.global.t('加载失败')
   } finally {
-    detailLoading.value = false
+    if (!disposed && version === detailVersion) detailLoading.value = false
   }
 }
+watch(detailDialogVisible, visible => { if (!visible) detailVersion += 1 })
 
 const handleMarkRead = async (row) => {
   try {
     await messageHubApi.markRead([row.id])
     ElMessage.success(i18n.global.t('已标记为已读'))
     row.is_read = true
-    await loadStats()
+    await Promise.all([fetchMessageList(), loadStats()])
   } catch {
     ElMessage.error(i18n.global.t('标记失败'))
   }
@@ -1059,12 +1122,13 @@ const handleMarkRead = async (row) => {
 
 const handleBatchMarkRead = async () => {
   if (!selectedRows.value.length) return
-  const ids = selectedRows.value.map(r => r.id)
+  const rows = [...selectedRows.value]
+  const ids = rows.map(r => r.id)
   try {
     await messageHubApi.markRead(ids)
     ElMessage.success(`已标记 ${ids.length} 条消息为已读`)
-    selectedRows.value.forEach(r => { r.is_read = true })
-    await loadStats()
+    rows.forEach(r => { r.is_read = true })
+    await Promise.all([fetchMessageList(), loadStats()])
   } catch {
     ElMessage.error(i18n.global.t('批量标记失败'))
   }
@@ -1137,13 +1201,14 @@ const openPushDialog = () => {
 }
 
 const submitPush = async () => {
-  if (!pushFormRef.value) return
+  if (pushing.value || !pushFormRef.value) return
+  pushing.value = true
   try {
     await pushFormRef.value.validate()
   } catch {
+    pushing.value = false
     return
   }
-  pushing.value = true
   try {
     const payload = { ...pushForm }
     if (!payload.msg_id) {

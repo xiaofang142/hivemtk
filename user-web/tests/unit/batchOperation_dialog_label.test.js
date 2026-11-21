@@ -66,6 +66,23 @@ afterEach(() => {
 })
 
 describe('批量操作弹窗：工具名展示用 label 而非裸 name', () => {
+  it('选择文件不会写入接口，默认执行只打开预览', async () => {
+    const wrapper = await mountPage()
+    await wrapper.findAll('.tool-card')[0].trigger('click')
+    await settleBody()
+    wrapper.vm.selectImportFile({ raw: new File(['name,account\n审计,123'], 'audit.csv') })
+    expect(api.batchImportFile).not.toHaveBeenCalled()
+    expect(api.runBatch).not.toHaveBeenCalled()
+    api.previewBatch.mockResolvedValue({ selected_count: 0, preview: true })
+    const dialog = document.querySelector('.el-dialog')
+    const executeButton = Array.from(dialog.querySelectorAll('button')).find(button => button.textContent.trim() === '执行')
+    executeButton.click()
+    await settleBody()
+    expect(api.previewBatch).toHaveBeenCalledTimes(1)
+    expect(api.runBatch).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain('预计成功')
+  })
+
   it('点「批量导入」卡片，弹窗标题与操作类型只读框都显示「批量导入」而不是 import', async () => {
     const wrapper = await mountPage()
 

@@ -3,11 +3,13 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/service"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"hivemtk-user/internal/pkg/testutil"
@@ -18,6 +20,58 @@ import (
 
 	"hivemtk-user/internal/repository"
 )
+
+// TestCustomerListControllerIntegration HTTP 契约：keyword 生效且 total 是唯一客户匹配数。
+func TestCustomerListControllerIntegration(t *testing.T) {
+	database := setupCustomer360TestDB(t)
+	router := setupCustomer360Router(t, database)
+	for i := 0; i < 25; i++ {
+		if err := database.Create(&model.CustomerSession{SessionID: fmt.Sprintf("repeat-%d", i), UserID: "a", UserName: "重复客户"}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := database.Create(&model.CustomerSession{SessionID: "target", UserID: "z", UserName: "唯一目标", UserPhone: "13900001111", UserEmail: "Target@Example.test"}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		keyword    string
+		page, size int
+		total      int64
+		id         string
+	}{
+		{"", 1, 1, 2, "a"}, {"", 2, 1, 2, "z"}, {" 唯一目标 ", 1, 20, 1, "z"},
+		{"1390000", 1, 20, 1, "z"}, {"target@example.TEST", 1, 20, 1, "z"},
+		{"不存在", 1, 20, 0, ""}, {"唯一目标", 2, 20, 1, ""},
+	} {
+		t.Run(fmt.Sprintf("%s-%d", tc.keyword, tc.page), func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/customer/list?page=%d&page_size=%d&keyword=%s", tc.page, tc.size, url.QueryEscape(tc.keyword)), nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, request)
+			var body struct {
+				Code int `json:"code"`
+				Data struct {
+					List     map[string]*service.Customer360DTO `json:"list"`
+					Total    int64                              `json:"total"`
+					Page     int                                `json:"page"`
+					PageSize int                                `json:"page_size"`
+				} `json:"data"`
+			}
+			if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != 200 || body.Code != 0 || body.Data.Total != tc.total || body.Data.Page != tc.page || body.Data.PageSize != tc.size {
+				t.Fatalf("分页信封不符：HTTP=%d body=%s", w.Code, w.Body.String())
+			}
+			if tc.id == "" {
+				if len(body.Data.List) != 0 {
+					t.Fatalf("应无匹配：%s", w.Body.String())
+				}
+			} else if len(body.Data.List) != 1 || body.Data.List[tc.id] == nil {
+				t.Fatalf("应仅命中客户%s：%s", tc.id, w.Body.String())
+			}
+		})
+	}
+}
 
 func setupCustomer360TestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,

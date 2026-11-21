@@ -85,9 +85,9 @@ beforeEach(() => {
   for (const fn of [api.list, api.create, api.update, api.remove, api.vocab, api.ciList, api.ciCreate, api.ciUpdate, api.ciRemove]) {
     fn.mockReset()
   }
-  api.ciList.mockResolvedValue({ data: { list: [], total: 0 } })
-  api.vocab.mockResolvedValue({ data: VOCAB })
-  api.list.mockResolvedValue({ data: { list: [ROW], total: 1 } })
+  api.ciList.mockResolvedValue({ list: [], total: 0 })
+  api.vocab.mockResolvedValue(VOCAB)
+  api.list.mockResolvedValue({ list: [ROW], total: 1 })
   api.create.mockResolvedValue({ code: 0 })
   api.update.mockResolvedValue({ code: 0 })
   api.remove.mockResolvedValue({ code: 0 })

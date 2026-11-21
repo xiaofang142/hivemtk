@@ -12,7 +12,7 @@
         />
         <el-table
           v-loading="loading"
-          :data="pagedCustomers"
+          :data="customers"
           highlight-current-row
           style="margin-top: 15px"
           empty-text="暂无客户"
@@ -41,12 +41,12 @@
           </el-table-column>
         </el-table>
         <el-pagination
-          v-if="customers.length > pageSize"
+          v-if="total > pageSize"
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="customers.length"
+          :total="total"
           layout="prev, pager, next, total"
-          small
+          size="small"
           class="pagination"
         />
       </el-card>
@@ -336,7 +336,7 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCustomerList, getCustomerDetail, addCustomerTag, removeCustomerTag, getCustomerEvents, getCustomerMessages } from '@/api/customer360.js'
 import { createSession, sendMessage } from '@/api/customerSession.js'
@@ -348,7 +348,9 @@ import {
   getCustomerStatusTagType as getCustomerStatusTagTypeFromConst,
 } from '@/constants/customerTag';
 import { getEnabledLabel, getEnabledTagType } from '@/constants/enabled';
+import { useRoute } from 'vue-router'
 import { fmtTime } from '@/utils/time'
+const route = useRoute()
 
 const getCustomerStatusLabel = (s) => getCustomerStatusLabelFromConst(s) || getEnabledLabel(s);
 const getCustomerStatusTagType = (s) => getCustomerStatusTagTypeFromConst(s) || getEnabledTagType(s)
@@ -356,15 +358,7 @@ const getCustomerStatusTagType = (s) => getCustomerStatusTagTypeFromConst(s) || 
 const loading = ref(false)
 const searchKeyword = ref('')
 const customers = ref([])
-const filteredCustomers = computed(() => {
-  const k = (searchKeyword.value || '').trim().toLowerCase()
-  if (!k) return customers.value
-  return customers.value.filter(c =>
-    (c.name || '').toLowerCase().includes(k) ||
-    (c.phone || '').includes(k) ||
-    (c.email || '').toLowerCase().includes(k)
-  )
-});
+const total = ref(0)
 const current = ref(null)
 const activeTab = ref('basic')
 const behaviors = ref([])
@@ -375,17 +369,23 @@ const contactVisible = ref(false)
 const contactForm = ref({ content: '' })
 const currentPage = ref(1)
 const selectingId = ref(null)
+const orderRequestVersion = ref(0)
 const pageSize = ref(20)
 
-const pagedCustomers = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  return filteredCustomers.value.slice(start, start + pageSize.value)
-})
+let listRequestVersion = 0
 
 const loadCustomers = async () => {
+  const requestVersion = ++listRequestVersion
   loading.value = true
+  customers.value = []
+  total.value = 0
   try {
-    const res = await getCustomerList({ keyword: searchKeyword.value })
+    const res = await getCustomerList({
+      page: currentPage.value,
+      page_size: pageSize.value,
+      keyword: searchKeyword.value.trim()
+    })
+    if (requestVersion !== listRequestVersion) return
     const map = res?.list
     customers.value = map && typeof map === 'object' && !Array.isArray(map)
       ? Object.entries(map).map(([uid, c]) => {
@@ -399,10 +399,22 @@ const loadCustomers = async () => {
           }
         })
       : toList(res);
+    total.value = Number(res?.total) || 0
+  } catch {
+    if (requestVersion !== listRequestVersion) return
+    customers.value = []
+    total.value = 0
   } finally {
-    loading.value = false
+    if (requestVersion === listRequestVersion) loading.value = false
   }
 }
+
+watch(searchKeyword, () => {
+  if (currentPage.value !== 1) currentPage.value = 1
+  else loadCustomers()
+}, { flush: 'sync' })
+watch(currentPage, loadCustomers, { flush: 'sync' })
+onBeforeUnmount(() => { listRequestVersion += 1 })
 
 const toCustomerModel = (raw, fallbackId) => {
   const b = raw?.basic_info || {}
@@ -423,6 +435,12 @@ const toCustomerModel = (raw, fallbackId) => {
 const selectCustomer = async (row) => {
   // 竞态守卫：快速连点客户行时，先点客户的慢响应不得覆盖后点客户的面板
   selectingId.value = row.id
+  orderRequestVersion.value += 1
+  orders.value = []
+  ordersLoading.value = false
+  current.value = null
+  behaviors.value = []
+  communications.value = []
   try {
     // 详情接口只返回 basic + tags（message_history 恒为空数组），
     // 行为轨迹要事件流水、沟通记录要消息流水，必须各自单独拉。
@@ -434,6 +452,14 @@ const selectCustomer = async (row) => {
     if (selectingId.value !== row.id) return
     const detail = eventsRes.status === 'fulfilled' ? eventsRes.value : null
     const msgs = messagesRes.status === 'fulfilled' ? messagesRes.value : null
+    if (raw.status !== 'fulfilled' || !raw.value) {
+      current.value = null
+      behaviors.value = []
+      communications.value = []
+      orders.value = []
+      ElMessage.error('加载客户详情失败，请稍后重试')
+      return
+    }
     current.value = toCustomerModel(raw.value, row.id)
     // 行为轨迹：customer_events 事件流水（event_type / event_source / event_data）
     const events = toList(detail?.events)
@@ -451,23 +477,25 @@ const selectCustomer = async (row) => {
       direction: m.sender_type === 'user' ? 'in' : 'out',
       content: m.content
     }))
-    loadOrders(current.value.phone, current.value.name);
+    const requestVersion = ++orderRequestVersion.value
+    loadOrders(current.value.phone, current.value.name, requestVersion);
   } catch (e) {
     console.error('加载客户详情失败:', e)
   }
 }
 
-const loadOrders = async (phone, name) => {
+const loadOrders = async (phone, name, requestVersion = ++orderRequestVersion.value) => {
   orders.value = []
   if (!phone && !name) return
   ordersLoading.value = true
   try {
     const res = await getExternalOrdersByCustomer(phone, name)
+    if (requestVersion !== orderRequestVersion.value) return
     orders.value = toList(res?.list)
   } catch {
-    orders.value = []
+    if (requestVersion === orderRequestVersion.value) orders.value = []
   } finally {
-    ordersLoading.value = false
+    if (requestVersion === orderRequestVersion.value) ordersLoading.value = false
   }
 };
 
@@ -522,7 +550,11 @@ const removeTag = async (tag) => {
   ElMessage.success(i18n.global.t('标签已删除'))
 }
 
-onMounted(() => loadCustomers())
+onMounted(async () => {
+  await loadCustomers()
+  const id = route.query?.id
+  if (typeof id === 'string' && id) await selectCustomer({ id })
+})
 </script>
 
 <style scoped lang="scss">

@@ -124,13 +124,24 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
     agentSocketInst.connect()
   }
 
+  let profileRequestVersion = 0
+  let suggestionsRequestVersion = 0
+  let messageRequestVersion = 0
+
   const selectSession = async (session) => {
     currentSession.value = session
+    messages.value = []
+    aiSuggestions.value = []
+    sessionTags.value = []
+    profileStats.value = { messageCount: 0, sessionCount: 0, aiReplyCount: 0 }
+    profileTags.value = []
     const sid = session.id
+    const messageVersion = ++messageRequestVersion
+    const sidebar = Promise.allSettled([loadSessionTags(), loadAiSuggestions(), loadCustomerProfileHook()])
     try {
       const res = await getSessionMessages(session.id)
       // 竞态守卫：快速连点会话时，先点会话的慢响应不得覆盖当前会话的消息区
-      if (currentSession.value?.id !== sid) return
+      if (currentSession.value?.id !== sid || messageVersion !== messageRequestVersion) return
       const list = Array.isArray(res) ? res : (res?.list || [])
       messages.value = list.map((m) => ({
         id: m.id,
@@ -140,11 +151,11 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
         content: m.content,
         createdAt: formatTime(m.created_at)
       }))
-      await Promise.all([loadSessionTags(), loadAiSuggestions(), loadCustomerProfileHook()]);
+      await sidebar
       await nextTick()
       scrollToBottom()
     } catch (e) {
-      if (currentSession.value?.id !== sid) return
+      if (currentSession.value?.id !== sid || messageVersion !== messageRequestVersion) return
       console.error('加载会话消息失败:', e)
       ElMessage.error(i18n.global.t('加载会话消息失败'))
     }
@@ -157,15 +168,18 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
       return
     }
     const content = inputMsg.value.trim()
+    const sid = currentSession.value.id
+    const version = messageRequestVersion
     inputMsg.value = ''
     try {
       await sendMsg({
-        sessionId: currentSession.value.id,
+        sessionId: sid,
         content,
         sender_type: 'agent',
         sender_name: '客服',
         sender_id: String(myAgentId.value || '')
       })
+      if (currentSession.value?.id !== sid || version !== messageRequestVersion) return
       messages.value.push({
         id: Date.now(),
         direction: 'out',
@@ -177,7 +191,7 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
       await nextTick()
       scrollToBottom()
     } catch (e) {
-      inputMsg.value = content;
+      if (currentSession.value?.id === sid && version === messageRequestVersion && !inputMsg.value) inputMsg.value = content;
       if (!isUserReportedError(e)) ElMessage.error('发送失败：' + (e?.message || ''))
     }
   }
@@ -193,6 +207,7 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
       const res = await getSessionTags()
       const data = res || [];
       allTags.value = Array.isArray(data) ? data : data.list || []
+      loadSessionTags()
     } catch {
       allTags.value = []
     }
@@ -212,39 +227,42 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
     }
     // DB 里 tags 存的是 JSON 字符串数组（["17"]），JSON.parse 后是 string，
     // 而 allTags.id 是 number——两边统一 String 化比对，否则刷新后标签会"丢"。
-    const idSet = new Set(ids.map((x) => String(x)))
+    const idSet = new Set((Array.isArray(ids) ? ids : []).map((x) => String(x)))
     sessionTags.value = (allTags.value || []).filter((t) => idSet.has(String(t.id)))
   };
 
+  let tagsSaving = false
+  const saveSessionTags = async (nextTags) => {
+    if (!currentSession.value || tagsSaving) return
+    tagsSaving = true
+    const session = currentSession.value
+    try {
+      const tagService = await import('@/api/customerService.js')
+      const ids = nextTags.map(tag => String(tag.id))
+      await tagService.tagSession(session.id, { tags: ids })
+      session.tags = ids
+      if (currentSession.value === session) {
+        sessionTags.value = nextTags
+        tagToAdd.value = null
+      }
+      ElMessage.success(i18n.global.t('保存成功'))
+    } catch (error) {
+      if (!isUserReportedError(error)) ElMessage.error(error?.message || i18n.global.t('保存失败'))
+    } finally {
+      tagsSaving = false
+    }
+  }
   const addSessionTag = async (tagId) => {
     if (!tagId || !currentSession.value) return
-    const exists = sessionTags.value.find((t) => t.id === tagId)
-    if (exists) {
+    if (sessionTags.value.some(tag => String(tag.id) === String(tagId))) {
       ElMessage.warning(i18n.global.t('标签已存在'))
       return
     }
-    const tag = allTags.value.find((t) => t.id === tagId)
-    if (tag) {
-      sessionTags.value.push(tag)
-      await persistSessionTags()
-      ElMessage.success(i18n.global.t('标签已添加'))
-    }
-    tagToAdd.value = null
+    const tag = allTags.value.find(item => String(item.id) === String(tagId))
+    if (tag) await saveSessionTags([...sessionTags.value, tag])
   }
-
   const removeSessionTag = async (tag) => {
-    sessionTags.value = sessionTags.value.filter((t) => t.id !== tag.id)
-    await persistSessionTags()
-  }
-
-  const persistSessionTags = async () => {
-    const tagService = await import('@/api/customerService.js');
-    // 后端 TagSession 的 Tags 是 []string + binding:required——传 number[] 会
-    // 400「tags 必须是非空字符串数组」。统一 String 化再发（DB 也按字符串存）。
-    const ids = sessionTags.value.map((t) => String(t.id))
-    try {
-      await tagService.tagSession(currentSession.value.id, { tags: ids })
-    } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+    await saveSessionTags(sessionTags.value.filter(item => String(item.id) !== String(tag.id)))
   }
 
   const loadQuickReplies = async () => {
@@ -287,12 +305,15 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
       aiSuggestions.value = []
       return
     }
+    const sid = currentSession.value.id
+    const version = ++suggestionsRequestVersion
     try {
-      const res = await getAISuggestions(currentSession.value.sessionId || currentSession.value.id)
+      const res = await getAISuggestions(currentSession.value.sessionId || sid)
+      if (currentSession.value?.id !== sid || version !== suggestionsRequestVersion) return
       const data = res || [];
       aiSuggestions.value = Array.isArray(data) ? data : data.list || []
     } catch {
-      aiSuggestions.value = []
+      if (currentSession.value?.id === sid && version === suggestionsRequestVersion) aiSuggestions.value = []
     }
   };
 
@@ -313,16 +334,24 @@ export function useSessionList({ sessions: _sessions, inputMsg, findSession, ups
   const loadCustomerProfile = async () => {
     if (!currentSession.value) return
     const uid = currentSession.value.customerId || currentSession.value.sessionId
+    const sid = currentSession.value.id
+    const version = ++profileRequestVersion
     try {
       const [statsRes, tagsRes] = await Promise.all([
         getCustomerStats(uid).catch(() => null),
         getCustomerTags(uid).catch(() => null)
       ])
-      profileStats.value = statsRes || profileStats.value
-      const tagsData = Array.isArray(tagsRes) ? tagsRes : (tagsRes?.list || [])
-      profileTags.value = tagsData
+      if (currentSession.value?.id !== sid || version !== profileRequestVersion) return
+      const stats = statsRes?.session_stats || statsRes || {}
+      profileStats.value = {
+        messageCount: Number(stats.total_messages ?? stats.messageCount ?? 0),
+        sessionCount: Number(stats.total_sessions ?? stats.sessionCount ?? 0),
+        aiReplyCount: Number(stats.ai_replies ?? stats.aiReplyCount ?? 0)
+      }
+      const tagsData = Array.isArray(tagsRes) ? tagsRes : (tagsRes?.tags || tagsRes?.list || [])
+      profileTags.value = Array.isArray(tagsData) ? tagsData : []
     } catch (e) {
-      console.warn('[profile] load failed:', e)
+      if (currentSession.value?.id === sid && version === profileRequestVersion) console.warn('[profile] load failed:', e)
     }
   };
 

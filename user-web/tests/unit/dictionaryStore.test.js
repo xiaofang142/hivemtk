@@ -27,11 +27,9 @@ describe('dictionary store', () => {
 
   it('后端有这一批时以 DB 为准', async () => {
     dictionaryGet.mockResolvedValue({
-      data: {
-        parent: 'approval_status',
-        items: [{ code: 'pending', name: '待审批(DB)', enabled: true }],
-        transitions: [{ from_code: 'pending', to_code: 'approved' }],
-      },
+      parent: 'approval_status',
+      items: [{ code: 'pending', name: '待审批(DB)', enabled: true }],
+      transitions: [{ from_code: 'pending', to_code: 'approved' }],
     })
     const s = useDictionaryStore()
     const items = await s.items('approval_status', LOCAL)
@@ -64,16 +62,14 @@ describe('dictionary store', () => {
     await s.items('approval_status', LOCAL)
     expect(s.failed).toContain('approval_status')
 
-    dictionaryGet.mockResolvedValueOnce({
-      data: { items: [{ code: 'pending', name: 'DB 版' }], transitions: [] },
-    })
+    dictionaryGet.mockResolvedValue({ items: [{ code: 'pending', name: 'DB 版' }], transitions: [] })
     const again = await s.items('approval_status', LOCAL)
     expect(again[0].name).toBe('DB 版')
     expect(s.failed).not.toContain('approval_status')
   })
 
   it('同一个 parent 只拉一次（Promise 去重）', async () => {
-    dictionaryGet.mockResolvedValue({ data: { items: [{ code: 'a', name: 'A' }], transitions: [] } })
+    dictionaryGet.mockResolvedValue({ items: [{ code: 'a', name: 'A' }], transitions: [] })
     const s = useDictionaryStore()
     await Promise.all([
       s.items('approval_status', LOCAL),
@@ -84,14 +80,14 @@ describe('dictionary store', () => {
   })
 
   it('label 译不出时回落原值（比显示空白好）', async () => {
-    dictionaryGet.mockResolvedValue({ data: { items: LOCAL, transitions: [] } })
+    dictionaryGet.mockResolvedValue({ items: LOCAL, transitions: [] })
     const s = useDictionaryStore()
     expect(await s.label('approval_status', 'pending')).toBe('待审批')
     expect(await s.label('approval_status', 'weird_code')).toBe('weird_code')
   })
 
   it('后端返回非数组时不当成有数据', async () => {
-    dictionaryGet.mockResolvedValue({ data: { items: null, transitions: 'oops' } })
+    dictionaryGet.mockResolvedValue({ items: null, transitions: 'oops' })
     const s = useDictionaryStore()
     const entry = await s.load('approval_status', LOCAL)
     expect(entry.items).toEqual([])
@@ -99,7 +95,7 @@ describe('dictionary store', () => {
   })
 
   it('reset 清空全部缓存', async () => {
-    dictionaryGet.mockResolvedValue({ data: { items: LOCAL, transitions: [] } })
+    dictionaryGet.mockResolvedValue({ items: LOCAL, transitions: [] })
     const s = useDictionaryStore()
     await s.items('approval_status', LOCAL)
     s.reset()

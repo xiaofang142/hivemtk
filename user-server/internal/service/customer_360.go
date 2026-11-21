@@ -953,23 +953,75 @@ func (s *Customer360Service) GetCustomerOrders(ctx context.Context, customerID s
 }
 
 func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize int, filters map[string]string, scope SessionScope) (map[string]*Customer360DTO, int64, error) {
-	// 行级隔离（2026-11-15 审计 H-1）：列表是 :id 旁路的前置枚举源。非超管按
-	// 会话域既定口径收敛到自己名下 + 未分配池（GetByMerchantForAgent 的谓词即
-	// (agent_id = 0 OR agent_id = ?)），与 customer-sessions 列表同口径。
-	var (
-		sessions []*model.CustomerSession
-		total    int64
-		err      error
-	)
-	if sessionScopeRestricted(scope) {
-		sessions, total, err = s.sessionRepo.GetByMerchantForAgent(ctx, "", page, pageSize, scope.UserID)
-	} else {
-		sessions, total, err = s.sessionRepo.GetByMerchant(ctx, "", page, pageSize)
+	if page < 1 {
+		page = 1
 	}
-	if err != nil {
-		return nil, 0, err
+	if pageSize < 1 {
+		pageSize = 20
+	} else if pageSize > 100 {
+		pageSize = 100
+	}
+	var agentID *uint
+	if sessionScopeRestricted(scope) {
+		agentID = &scope.UserID
+	}
+	keyword := strings.TrimSpace(filters["keyword"])
+	if filters["platform"] == "" && filters["activity_level"] == "" && filters["purchase_power"] == "" {
+		sessions, total, err := s.sessionRepo.ListCustomerPage(ctx, page, pageSize, keyword, agentID)
+		if err != nil {
+			return nil, 0, err
+		}
+		return s.assembleCustomerList(ctx, sessions), total, nil
 	}
 
+	// 画像字段依赖完整聚合；分批扫描候选，先匹配再计数/分页，不能只过滤当前页。
+	matched := make(map[string]*Customer360DTO)
+	const batchSize = 100
+	for candidatePage := 1; ; candidatePage++ {
+		sessions, total, err := s.sessionRepo.ListCustomerPage(ctx, candidatePage, batchSize, keyword, agentID)
+		if err != nil {
+			return nil, 0, err
+		}
+		for userID, dto := range s.assembleCustomerList(ctx, sessions) {
+			if matchesCustomerFilters(dto, filters) {
+				matched[userID] = dto
+			}
+		}
+		if int64(candidatePage)*batchSize >= total || len(sessions) == 0 {
+			break
+		}
+	}
+	result, total := paginateCustomerResults(matched, page, pageSize)
+	return result, total, nil
+}
+
+// paginateCustomerResults 与仓储一致按 user_id 排序，total 始终是匹配客户总数。
+func paginateCustomerResults(customers map[string]*Customer360DTO, page, pageSize int) (map[string]*Customer360DTO, int64) {
+	ids := make([]string, 0, len(customers))
+	for id := range customers {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	result := make(map[string]*Customer360DTO)
+	total := int64(len(ids))
+	if total == 0 || int64(page-1) > (total-1)/int64(pageSize) {
+		return result, total
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if end > len(ids) {
+		end = len(ids)
+	}
+	for _, id := range ids[start:end] {
+		result[id] = customers[id]
+	}
+	return result, total
+}
+
+func (s *Customer360Service) assembleCustomerList(ctx context.Context, sessions []*model.CustomerSession) map[string]*Customer360DTO {
+	if len(sessions) == 0 {
+		return make(map[string]*Customer360DTO)
+	}
 	userSessionsMap := make(map[string][]*model.CustomerSession)
 	for _, session := range sessions {
 		userSessionsMap[session.UserID] = append(userSessionsMap[session.UserID], session)
@@ -1019,20 +1071,9 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 		if dto == nil {
 			continue
 		}
-		if !matchesCustomerFilters(dto, filters) {
-			continue
-		}
 		result[userID] = dto
 	}
-
-	// 带筛选时 total 只能是「本页命中数」：platform / activity_level /
-	// purchase_power 三个维度都是 assemble 之后才算出来的画像字段，SQL 层
-	// 无法分页，硬报会话总数会让前端分页算出永远点不完的页码。
-	if len(filters) > 0 {
-		total = int64(len(result))
-	}
-
-	return result, total, nil
+	return result
 }
 
 // matchesCustomerFilters 在 DTO 层做 platform / activity_level / purchase_power 过滤。

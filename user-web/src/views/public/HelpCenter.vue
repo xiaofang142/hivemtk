@@ -45,12 +45,40 @@
         >
           {{ c.category }} <span class="cnt">{{ c.count }}</span>
         </div>
+        <el-alert
+          v-if="categoryError"
+          :title="categoryError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <el-button
+          v-if="categoryError"
+          @click="loadCategories"
+        >
+          {{ $t('重试') }}
+        </el-button>
       </aside>
 
-      <main class="hc-articles">
+      <main
+        v-loading="loading"
+        class="hc-articles"
+      >
+        <el-alert
+          v-if="loadError"
+          :title="loadError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
+        <el-button
+          v-if="loadError"
+          @click="retryLoad"
+        >
+          {{ $t('重试') }}
+        </el-button>
         <div
           v-if="!detail"
-          v-loading="loading"
           class="article-list"
         >
           <div
@@ -77,7 +105,7 @@
             </div>
           </div>
           <el-empty
-            v-if="!loading && articles.length === 0"
+            v-if="!loading && !loadError && articles.length === 0"
             description="暂无公开文章"
           />
         </div>
@@ -88,7 +116,7 @@
         >
           <el-button
             text
-            @click="detail = null"
+            @click="backToList"
           >
             <el-icon><ArrowLeft /></el-icon> 返回列表
           </el-button>
@@ -106,7 +134,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import i18n from '@/i18n'
 import { Search, ArrowLeft } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -118,6 +147,13 @@ const detail = ref(null)
 const activeCat = ref('')
 const keyword = ref('')
 const loading = ref(false)
+const categoryError = ref('')
+const loadError = ref('')
+let categoryVersion = 0
+let contentVersion = 0
+let activeArticleId = null
+let searchTimer = null
+let disposed = false
 
 // 帮助中心是公开页（未登录也能进），但它的数据是**租户级**的
 // （knowledge_documents 是租户表，后端按 tenant_id 过滤）。
@@ -134,43 +170,101 @@ const withTenant = (url) => {
 
 const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 10) : '')
 
+const fetchPublic = async (url) => {
+  const response = await fetch(withTenant(url))
+  let envelope
+  try { envelope = await response.json() } catch {
+    throw new Error(i18n.global.t('加载失败'))
+  }
+  if (!response.ok || envelope?.code !== 0) throw new Error(envelope?.message || i18n.global.t('加载失败'))
+  return envelope.data
+}
+const readList = (data) => {
+  if (!Array.isArray(data?.list)) throw new Error(i18n.global.t('加载失败'))
+  return data.list
+}
 const loadCategories = async () => {
-  const res = await fetch(withTenant('/api/public/help-center/categories')).then((r) => r.json()).catch(() => null)
-  categories.value = res?.data?.list || []
+  const version = ++categoryVersion
+  categoryError.value = ''
+  try {
+    const list = readList(await fetchPublic('/api/public/help-center/categories'))
+    if (!disposed && version === categoryVersion) categories.value = list
+  } catch (error) {
+    if (disposed || version !== categoryVersion) return
+    categories.value = []
+    categoryError.value = error?.message || i18n.global.t('加载失败')
+  }
 }
 
 const loadArticles = async () => {
+  clearTimeout(searchTimer)
+  const version = ++contentVersion
+  activeArticleId = null
+  detail.value = null
+  articles.value = []
+  loadError.value = ''
   loading.value = true
   try {
     const qs = new URLSearchParams()
     if (activeCat.value) qs.set('category', activeCat.value)
-    if (keyword.value) qs.set('q', keyword.value)
-    const res = await fetch(withTenant(`/api/public/help-center/articles?${qs}`)).then((r) => r.json()).catch(() => null)
-    articles.value = res?.data?.list || []
+    if (keyword.value.trim()) qs.set('q', keyword.value.trim())
+    const list = readList(await fetchPublic(`/api/public/help-center/articles?${qs}`))
+    if (!disposed && version === contentVersion) articles.value = list
+  } catch (error) {
+    if (!disposed && version === contentVersion) loadError.value = error?.message || i18n.global.t('加载失败')
   } finally {
-    loading.value = false
+    if (!disposed && version === contentVersion) loading.value = false
   }
 }
 
-let searchTimer = null
 const onSearch = () => {
   clearTimeout(searchTimer)
+  contentVersion += 1
+  activeArticleId = null
+  detail.value = null
+  articles.value = []
+  loadError.value = ''
+  loading.value = true
   searchTimer = setTimeout(loadArticles, 350)
 }
-
-const setCat = (c) => { activeCat.value = c; detail.value = null; loadArticles() }
-
+const setCat = (category) => {
+  activeCat.value = category
+  return loadArticles()
+}
+const backToList = () => {
+  clearTimeout(searchTimer)
+  contentVersion += 1
+  activeArticleId = null
+  detail.value = null
+  loadError.value = ''
+  loading.value = false
+}
 const openArticle = async (id) => {
+  clearTimeout(searchTimer)
+  const version = ++contentVersion
+  activeArticleId = id
+  detail.value = null
   loading.value = true
+  loadError.value = ''
   try {
-    const res = await fetch(withTenant(`/api/public/help-center/articles/${id}`)).then((r) => r.json()).catch(() => null)
-    detail.value = res?.data || null
+    const article = await fetchPublic(`/api/public/help-center/articles/${encodeURIComponent(id)}`)
+    if (!article || typeof article !== 'object' || Array.isArray(article) || String(article.id) !== String(id)) throw new Error(i18n.global.t('加载失败'))
+    if (!disposed && version === contentVersion) detail.value = article
+  } catch (error) {
+    if (!disposed && version === contentVersion) loadError.value = error?.message || i18n.global.t('加载失败')
   } finally {
-    loading.value = false
+    if (!disposed && version === contentVersion) loading.value = false
   }
 }
-
+const retryLoad = () => activeArticleId === null ? loadArticles() : openArticle(activeArticleId)
+watch(tenantCode, () => { loadCategories(); loadArticles() })
 onMounted(() => { loadCategories(); loadArticles() })
+onUnmounted(() => {
+  disposed = true
+  categoryVersion += 1
+  contentVersion += 1
+  clearTimeout(searchTimer)
+})
 </script>
 
 <style scoped>

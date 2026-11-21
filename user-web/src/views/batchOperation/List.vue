@@ -156,7 +156,7 @@
             v-model="form.filter"
             type="textarea"
             :rows="3"
-            placeholder="{&quot;status&quot;: &quot;active&quot;, &quot;created_at&quot;: &quot;>2024-01-01&quot;}"
+            placeholder="{&quot;keyword&quot;: &quot;客户&quot;, &quot;is_verify&quot;: 0}"
           />
         </el-form-item>
         <el-form-item
@@ -165,7 +165,8 @@
         >
           <el-upload
             :show-file-list="false"
-            :http-request="uploadRequest"
+            :auto-upload="false"
+            :on-change="selectImportFile"
             accept=".csv"
           >
             <el-button>选择文件</el-button>
@@ -175,12 +176,15 @@
             class="form-tip"
           >已选：{{ form.file.name }}</span>
         </el-form-item>
-        <el-form-item label="执行参数">
+        <el-form-item
+          v-if="currentTool?.name === 'update'"
+          label="执行参数"
+        >
           <el-input
             v-model="form.params"
             type="textarea"
             :rows="4"
-            placeholder="{&quot;action&quot;: &quot;send_message&quot;, &quot;template&quot;: &quot;welcome&quot;}"
+            placeholder="{&quot;city&quot;: &quot;北京&quot;, &quot;is_verify&quot;: 1}"
           />
         </el-form-item>
         <el-form-item label="是否预览">
@@ -197,7 +201,7 @@
         </el-button>
         <el-button
           type="primary"
-          @click="execute"
+          @click="execute()"
         >
           执行
         </el-button>
@@ -223,7 +227,10 @@
                 :value="previewSummary.total"
               />
             </el-col>
-            <el-col :span="8">
+            <el-col
+              v-if="previewSummary.success !== null"
+              :span="8"
+            >
               <el-statistic
                 title="预计成功"
                 :value="previewSummary.success"
@@ -235,7 +242,10 @@
                 </template>
               </el-statistic>
             </el-col>
-            <el-col :span="8">
+            <el-col
+              v-if="previewSummary.failed !== null"
+              :span="8"
+            >
               <el-statistic
                 title="预计失败"
                 :value="previewSummary.failed"
@@ -320,7 +330,8 @@
         </el-button>
         <el-button
           type="primary"
-          @click="execute"
+          :disabled="previewLoading || !previewedForm || executing"
+          @click="execute(true)"
         >
           确认执行
         </el-button>
@@ -439,13 +450,13 @@
 <script setup>
 import i18n from '@/i18n'
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, markRaw } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 // 图标必须显式导入：模板里 <component :is="'Upload'" /> 是动态字符串,
 // unplugin-vue-components 的 ElementPlusResolver 只认字面标签,解析不到就渲染成空
 // （2026-11-16 UI 全量回归实测四张工具卡图标全空）。
 import { Upload, Download, Delete, Edit as EditIcon, Check, Close } from '@element-plus/icons-vue'
-import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, getBatchDetail, batchImportFile } from '@/api/batchOperation.js'
+import { getBatchTools, runBatch, getBatchHistories, cancelBatch, previewBatch, getBatchDetail } from '@/api/batchOperation.js'
 import { toList } from '@/utils/list.js'
 import { isUserReportedError } from '@/utils/errorReporting'
 import { PASS_FAIL_STATUS, getStatusLabel, getStatusTagType } from '@/constants/status';
@@ -460,6 +471,7 @@ const histories = ref([])
 const dialogVisible = ref(false)
 const currentTool = ref(null)
 const form = ref({ source: 'all', filter: '', params: '', dryRun: true, file: null })
+const executing = ref(false)
 
 const detailDialogVisible = ref(false)
 const detailLoading = ref(false)
@@ -468,16 +480,18 @@ const taskDetail = ref(null)
 const previewVisible = ref(false);
 const previewLoading = ref(false)
 const previewData = ref([])
+const previewedForm = ref(null)
+const previewedIds = ref(null)
 const previewSummary = ref({ total: 0, success: 0, failed: 0, errors: [] })
 
 const getStatusType = (s) => ({ running: 'warning', success: 'success', failed: 'danger', partial: 'warning' }[s])
 const getStatusText = (s) => ({ running: '执行中', success: '完成', failed: '失败', partial: '部分成功' }[s] || s)
 
 const TOOL_PRESENTATION = {
-  import: { icon: Upload, color: '#4F46E5' },
-  export: { icon: Download, color: '#10B981' },
-  delete: { icon: Delete, color: '#EF4444' },
-  update: { icon: EditIcon, color: '#F59E0B' }
+  import: { icon: markRaw(Upload), color: '#4F46E5' },
+  export: { icon: markRaw(Download), color: '#10B981' },
+  delete: { icon: markRaw(Delete), color: '#EF4444' },
+  update: { icon: markRaw(EditIcon), color: '#F59E0B' }
 }
 
 const loadTools = async () => {
@@ -513,45 +527,33 @@ const loadHistories = async () => {
 
 const openTool = (tool) => {
   currentTool.value = tool
-  form.value = { source: 'all', filter: '', params: '', dryRun: true, file: null }
+  form.value = { source: tool.name === 'import' ? 'import' : 'all', filter: '', params: '', dryRun: true, file: null }
   dialogVisible.value = true
 }
 
-// uploadRequest：走 api 层的上传（http-request 自定义），而不是 el-upload 的
-// action= 直连。
-//
-// action= 直连是 el-upload 发的裸 XHR：**不带 Authorization 头** ⇒ 后端回
-// 401「未提供认证令牌」，而且失败信息不会进全局错误处理，页面上看不出原因。
-// 走 api 层则由 axios 拦截器统一带上令牌、统一处理业务码。
-const uploadRequest = async (options) => {
-  try {
-    const res = await batchImportFile(options.file, 'clue')
-    form.value.file = options.file
-    ElMessage.success(i18n.global.t('batchOperation.importDone'))
-    loadHistories()
-    if (options.onSuccess) options.onSuccess(res)
-  } catch (err) {
-    ElMessage.error(i18n.global.t('batchOperation.importFailed') + '：' + (err?.message || err))
-    if (options.onError) options.onError(err)
-  }
+const selectImportFile = (uploadFile) => {
+  form.value.file = uploadFile?.raw || null
+  if (form.value.file) ElMessage.info('文件已选择，点击执行后才会提交')
 }
 
 const preview = async () => {
+  if (previewLoading.value || executing.value) return
+  previewedForm.value = null
+  previewedIds.value = null
+  const snapshot = { tool: currentTool.value.name, ...form.value }
   previewLoading.value = true
   previewVisible.value = true
   previewData.value = []
   previewSummary.value = { total: 0, success: 0, failed: 0, errors: [] }
-
   try {
-    const res = await previewBatch({ tool: currentTool.value.name, ...form.value, dryRun: true })
-    const data = res;
-
-    // 后端 Preview 的响应是 { operation_type, data_type, selected_count, preview }
-    previewData.value = data.items || data.records || [];
+    const data = await previewBatch({ ...snapshot, dryRun: true })
+    previewedForm.value = snapshot
+    previewedIds.value = data.selected_ids || null
+    previewData.value = Array.isArray(data.items) ? data.items : (Array.isArray(data.records) ? data.records : [])
     previewSummary.value = {
       total: data.selected_count ?? data.total ?? data.totalCount ?? previewData.value.length,
-      success: data.successCount || data.success || 0,
-      failed: data.failedCount || data.failed || 0,
+      success: data.successCount ?? data.success ?? null,
+      failed: data.failedCount ?? data.failed ?? null,
       errors: data.errors || []
     }
   } catch (error) {
@@ -571,16 +573,22 @@ const saveBlob = (blob, filename) => {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  // 立刻 revoke 会让部分浏览器取消下载，延后一拍释放
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-const execute = async () => {
-  const loading = ElMessage({ message: i18n.global.t('batchOperation.running'), type: 'info', duration: 0 })
+const execute = async (confirmed = false) => {
+  if (executing.value) return
+  if (confirmed !== true && form.value.dryRun) {
+    await preview()
+    return
+  }
+  const payload = confirmed === true ? previewedForm.value : { tool: currentTool.value.name, ...form.value }
+  if (!payload || (confirmed === true && payload.tool !== 'import' && !previewedIds.value?.length)) return
+  executing.value = true
+  const message = ElMessage({ message: i18n.global.t('batchOperation.running'), type: 'info', duration: 0 })
   try {
-    const result = await runBatch({ tool: currentTool.value.name, ...form.value })
-    loading.close()
-    if (currentTool.value.name === 'export' && result instanceof Blob) {
+    const result = await runBatch({ ...payload, dryRun: false, ...(confirmed === true && previewedIds.value ? { expectedIds: previewedIds.value } : {}) })
+    if (payload.tool === 'export' && result instanceof Blob) {
       const stamp = new Date().toISOString().slice(0, 10)
       saveBlob(result, `batch-export-${stamp}.csv`)
       ElMessage.success('导出文件已开始下载')
@@ -589,14 +597,12 @@ const execute = async () => {
     }
     dialogVisible.value = false
     previewVisible.value = false
-    loadHistories()
+    await loadHistories()
   } catch (error) {
-    loading.close()
-    // 这里必须把后端/契约层的原话透出来：批量操作的失败原因（ids 超限、
-    // 筛选条件不是合法 JSON、没选文件……）全在 message 里，换成一句
-    // 「执行失败」等于把唯一有用的信息吃掉。
-    // 前缀仍走 i18n（词条「执行失败」在 9 个语言包里都有），别又写死中文。
     if (!isUserReportedError(error)) ElMessage.error(i18n.global.t('batchOperation.executeFailed') + '：' + (error?.message || error))
+  } finally {
+    message.close()
+    executing.value = false
   }
 }
 

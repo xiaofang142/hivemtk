@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"hivemtk-user/internal/model"
 	dbUtil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	_type "hivemtk-user/internal/pkg/utils/type"
 	"hivemtk-user/internal/repository"
 	"testing"
@@ -13,6 +15,78 @@ import (
 
 	"gorm.io/gorm"
 )
+
+// TestCustomerListFilteredPagination 纯单测：匹配后稳定分页，空页不丢总数。
+func TestCustomerListFilteredPagination(t *testing.T) {
+	matched := map[string]*Customer360DTO{}
+	for _, id := range []string{"z", "a", "m"} {
+		dto := &Customer360DTO{BasicInfo: &CustomerBasicInfo{SourcePlatform: "web"}, UserProfile: &UserProfile{ActivityLevel: "active", PurchasePower: "low"}}
+		if matchesCustomerFilters(dto, map[string]string{"platform": "WEB", "activity_level": "ACTIVE", "purchase_power": "LOW"}) {
+			matched[id] = dto
+		}
+	}
+	if len(matched) != 3 || matchesCustomerFilters(matched["a"], map[string]string{"activity_level": "silent"}) {
+		t.Fatal("画像匹配必须保留原先各维度交集语义")
+	}
+	for _, tc := range []struct {
+		page int
+		want string
+	}{{1, "a"}, {2, "m"}, {3, "z"}, {4, ""}} {
+		rows, total := paginateCustomerResults(matched, tc.page, 1)
+		if total != 3 {
+			t.Fatalf("第%d页total=%d，期望3", tc.page, total)
+		}
+		if tc.want == "" {
+			if len(rows) != 0 {
+				t.Fatalf("越界页不应有客户：%v", rows)
+			}
+		} else if len(rows) != 1 || rows[tc.want] != matched[tc.want] {
+			t.Fatalf("第%d页应为%s，实际%v", tc.page, tc.want, rows)
+		}
+	}
+}
+
+// TestCustomerListServiceIntegration 按客户聚合完整会话，画像筛选总数不能降为本页数量。
+func TestCustomerListServiceIntegration(t *testing.T) {
+	database := setupCustomer360TestDB(t)
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+	svc := setupCustomer360Service(t, database)
+	ctx := tenant.WithTenantID(context.Background(), 71)
+	base := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	for _, user := range []string{"a", "b", "c"} {
+		for i := 0; i < 25; i++ {
+			name := "普通客户"
+			if i == 24 {
+				name = "独有搜索目标"
+			}
+			if err := database.WithContext(ctx).Create(&model.CustomerSession{UserID: user, SessionID: fmt.Sprintf("%s-%d", user, i), UserName: name, AgentID: 9, Platform: model.PlatformDouyin, CreatedAt: base.Add(time.Duration(i) * time.Minute)}).Error; err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	scope := SessionScope{Role: "staff", UserID: 9}
+	for _, filters := range []map[string]string{{"keyword": "独有搜索目标"}, {"platform": "douyin", "activity_level": "active", "purchase_power": "low"}} {
+		for page := 1; page <= 4; page++ {
+			rows, total, err := svc.GetCustomerList(ctx, page, 1, filters, scope)
+			if err != nil || total != 3 {
+				t.Fatalf("筛选%v第%d页total应为3，实际%d/%v", filters, page, total, err)
+			}
+			if page == 4 {
+				if len(rows) != 0 {
+					t.Fatalf("越界页应为空：%v", rows)
+				}
+				continue
+			}
+			id := string(rune('a' + page - 1))
+			dto := rows[id]
+			if len(rows) != 1 || dto == nil || dto.SessionStats.TotalSessions != 25 || len(dto.SessionHistory) != 25 {
+				t.Fatalf("第%d页应仅客户%s且聚合25会话，实际%v", page, id, rows)
+			}
+		}
+	}
+}
 
 func setupCustomer360TestDB(t *testing.T) *gorm.DB {
 	return testutil.NewTestDB(t,

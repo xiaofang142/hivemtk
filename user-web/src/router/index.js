@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/user'
 import { usePermissionStore } from '@/stores/permission'
 import { ElMessage } from 'element-plus'
 import { reportClientDeviceOnce } from '@/utils/clientDevice'
+import { rtEnsureLoaded } from '@/utils/runtimeConfig'
 
 const routeModules = import.meta.glob('./modules/*.js');
 
@@ -324,6 +325,11 @@ router.beforeEach(async (to, from, next) => {
       next('/login')
       return
     }
+    await rtEnsureLoaded()
+    if (!userStore.isLoggedIn || (hadTokenAtGuardStart && !userStoreEarly.token)) {
+      next('/login')
+      return
+    }
     if (to.meta?.requiresAdmin && userStore.role !== 'admin') {
       ElMessage.error('无权访问（403）：仅管理员可使用该功能')
       next({ name: 'NotFound', query: { status: '403', from: to.fullPath }, replace: true })
@@ -331,7 +337,19 @@ router.beforeEach(async (to, from, next) => {
     }
     // RBAC 菜单权限：登录后拉取后端菜单树（缓存），非超管校验路径授权
     const permissionStore = usePermissionStore()
-    await permissionStore.ensureMenus()
+    try {
+      await permissionStore.ensureMenus()
+    } catch {
+      if (hadTokenAtGuardStart && !userStoreEarly.token) {
+        next('/login')
+        return
+      }
+      if (userStore.role !== 'admin' && !['/profile', '/notifications'].includes(to.path)) {
+        ElMessage.error('菜单权限加载失败，请稍后重试')
+        next({ name: 'NotFound', query: { status: '403', from: to.fullPath, reason: 'menus-unavailable' }, replace: true })
+        return
+      }
+    }
     // 第二道 401 竞态闸：ensureMenus 的请求正是不带 _silent 的业务请求，
     // 过期 token 的 401 清会话就发生在上面的 await 期间——必须复查后再做决策。
     if (hadTokenAtGuardStart && !userStoreEarly.token) {

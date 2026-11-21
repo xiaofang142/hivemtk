@@ -2,15 +2,163 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"hivemtk-user/internal/pkg/testutil"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+// TestCustomerListQueryContract 无需连接 PG，锁定真实 PG 方言的分页与内外层权限谓词。
+func TestCustomerListQueryContract(t *testing.T) {
+	database, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=127.0.0.1 port=8217 user=contract dbname=contract sslmode=disable"}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewCustomerSessionRepositoryWithDB(database)
+	ctx := tenant.WithTenantID(context.Background(), 71)
+	agentID := uint(9)
+	keyword := `  A%_\' OR 1=1  `
+	pattern := `%A\%\_\\' OR 1=1%`
+
+	var total int64
+	count := repo.customerListCandidates(ctx, keyword, &agentID).Distinct("user_id").Count(&total)
+	if count.Error != nil {
+		t.Fatal(count.Error)
+	}
+	if !strings.Contains(count.Statement.SQL.String(), `COUNT(DISTINCT("user_id"))`) {
+		t.Fatalf("必须计数唯一客户，实际 SQL=%s", count.Statement.SQL.String())
+	}
+	wantCountVars := []any{uint(71), "", uint(9), pattern, pattern, pattern}
+	if !reflect.DeepEqual(count.Statement.Vars, wantCountVars) {
+		t.Fatalf("字面搜索参数错误：实际 %#v，期望 %#v", count.Statement.Vars, wantCountVars)
+	}
+
+	customers := repo.customerListCandidates(ctx, keyword, &agentID).Select("user_id").Distinct().Order("user_id ASC").Offset(20).Limit(20)
+	var rows []*model.CustomerSession
+	query := repo.customerListScope(ctx, &agentID).Where("user_id IN (?)", customers).Order("user_id ASC, created_at ASC, id ASC").Find(&rows)
+	sql := query.Statement.SQL.String()
+	for _, fragment := range []string{`SELECT DISTINCT "user_id"`, `ORDER BY user_id ASC LIMIT`, `OFFSET`, `ORDER BY user_id ASC, created_at ASC, id ASC`} {
+		if !strings.Contains(sql, fragment) {
+			t.Fatalf("分页 SQL 缺少 %q：%s", fragment, sql)
+		}
+	}
+	for _, fragment := range []string{"tenant_id =", "agent_id = 0 OR agent_id =", "deleted_at"} {
+		if strings.Count(sql, fragment) != 2 {
+			t.Fatalf("内外层必须都含 %q：%s", fragment, sql)
+		}
+	}
+	if strings.Contains(sql, "OR 1=1") || strings.Count(sql, "ILIKE") != 3 {
+		t.Fatalf("搜索必须参数化且匹配三个字段：%s", sql)
+	}
+	wantVars := append([]any{uint(71), "", uint(9)}, wantCountVars...)
+	wantVars = append(wantVars, 20, 20)
+	if !reflect.DeepEqual(query.Statement.Vars, wantVars) {
+		t.Fatalf("内外层租户、坐席或分页参数错误：实际 %#v，期望 %#v", query.Statement.Vars, wantVars)
+	}
+	admin := repo.customerListScope(ctx, nil).Find(&rows)
+	if strings.Contains(admin.Statement.SQL.String(), "agent_id") || !reflect.DeepEqual(admin.Statement.Vars, []any{uint(71), ""}) {
+		t.Fatalf("管理员仍需限租户但不限坐席：%s %#v", admin.Statement.SQL.String(), admin.Statement.Vars)
+	}
+}
+
+// TestCustomerListMissingTenant 无租户必须在执行数据库操作前拒绝，不能退为全局查询。
+func TestCustomerListMissingTenant(t *testing.T) {
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+	// 真实 DryRun 句柄避免连接，缺上下文分支不能到 SQL 执行。
+	database, err := gorm.Open(postgres.New(postgres.Config{DSN: "host=127.0.0.1 port=8217 user=contract dbname=contract sslmode=disable"}), &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewCustomerSessionRepositoryWithDB(database)
+	for _, ctx := range []context.Context{nil, context.Background(), tenant.WithSystemScope(context.Background())} {
+		if _, _, err := repo.ListCustomerPage(ctx, 1, 20, "", nil); err == nil || !strings.Contains(err.Error(), "requires tenant identity") {
+			t.Fatalf("缺租户/系统作用域必须拒绝，实际 %v", err)
+		}
+	}
+}
+
+// TestCustomerListPageIntegration 覆盖重复会话、完整客户页、搜索及租户/坐席联合隔离。
+func TestCustomerListPageIntegration(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.CustomerSession{})
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(previous) })
+	ctx := tenant.WithTenantID(context.Background(), 71)
+	ctxB := tenant.WithTenantID(context.Background(), 72)
+	base := time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+	seed := func(ctx context.Context, user string, n int, agentID uint, name string) {
+		t.Helper()
+		for i := 0; i < n; i++ {
+			row := &model.CustomerSession{SessionID: fmt.Sprintf("%s-%d-%d", user, agentID, i), UserID: user, UserName: name, UserPhone: "13800138000", UserEmail: "Target@Example.test", AgentID: agentID, CreatedAt: base.Add(time.Duration(i) * time.Minute)}
+			if err := database.WithContext(ctx).Create(row).Error; err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	seed(ctx, "a-repeat", 25, 9, "重复客户")
+	for i := 0; i < 20; i++ {
+		seed(ctx, fmt.Sprintf("b-%02d", i), 1, 0, fmt.Sprintf("客户%02d", i))
+	}
+	seed(ctx, "z-target", 2, 9, `独有%_\客户`)
+	seed(ctx, "z-target", 1, 88, "隐藏历史")
+	seed(ctx, "hidden", 1, 88, "隐藏客户")
+	seed(ctxB, "z-target", 1, 9, "其他租户")
+	repo := NewCustomerSessionRepositoryWithDB(database)
+	agentID := uint(9)
+	first, total, err := repo.ListCustomerPage(ctx, 1, 20, "", &agentID)
+	if err != nil || total != 22 || len(first) != 44 {
+		t.Fatalf("第一页必须20客户/44会话且total=22，实际 rows=%d total=%d err=%v", len(first), total, err)
+	}
+	seen := map[string]bool{}
+	for _, row := range first {
+		seen[row.UserID] = true
+	}
+	if len(seen) != 20 {
+		t.Fatalf("第一页客户数实际 %d，期望20", len(seen))
+	}
+	second, total, err := repo.ListCustomerPage(ctx, 2, 20, "", &agentID)
+	if err != nil || total != 22 || len(second) != 3 {
+		t.Fatalf("第二页必须2客户/3会话且total=22，实际 rows=%d total=%d err=%v", len(second), total, err)
+	}
+	for _, row := range second {
+		if seen[row.UserID] || row.TenantID != 71 || (row.AgentID != 0 && row.AgentID != 9) {
+			t.Fatalf("跨页重复或越权会话：%+v", row)
+		}
+	}
+	for _, keyword := range []string{`%_\`, " TARGET@example.TEST ", "13800138", "隐藏历史", "其他租户", "不存在"} {
+		rows, total, err := repo.ListCustomerPage(ctx, 1, 20, keyword, &agentID)
+		wantTotal, wantRows := int64(1), 2
+		if keyword == "13800138" {
+			wantTotal, wantRows = 22, 44
+		} else if keyword == " TARGET@example.TEST " {
+			wantTotal, wantRows = 22, 44
+		} else if keyword == "隐藏历史" || keyword == "其他租户" || keyword == "不存在" {
+			wantTotal, wantRows = 0, 0
+		}
+		if err != nil || total != wantTotal || len(rows) != wantRows {
+			t.Fatalf("搜索 %q：rows=%d total=%d err=%v，期望%d/%d", keyword, len(rows), total, err, wantRows, wantTotal)
+		}
+	}
+	empty, total, err := repo.ListCustomerPage(ctx, 3, 20, "", &agentID)
+	if err != nil || len(empty) != 0 || total != 22 {
+		t.Fatalf("越界页必须空且保留total=22，实际%d/%d/%v", len(empty), total, err)
+	}
+	admin, total, err := repo.ListCustomerPage(ctx, 1, 100, "", nil)
+	if err != nil || total != 23 || len(admin) != 49 {
+		t.Fatalf("管理员只能看到租户71全部23客户/49会话，实际%d/%d/%v", len(admin), total, err)
+	}
+}
 
 func setupCustomerSessionTestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,

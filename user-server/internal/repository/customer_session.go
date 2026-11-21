@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -196,6 +198,54 @@ func (r *CustomerSessionRepository) GetByMerchantForAgent(ctx context.Context, s
 	offset := (page - 1) * pageSize
 
 	err := query.Order("priority DESC, last_message_at DESC").Offset(offset).Limit(pageSize).Find(&sessions).Error
+	return sessions, total, err
+}
+
+// customerListScope 计数、候选客户和回查会话共用同一租户及坐席范围。
+func (r *CustomerSessionRepository) customerListScope(ctx context.Context, agentID *uint) *gorm.DB {
+	query := r.db.WithContext(ctx).Model(&model.CustomerSession{})
+	if ctx == nil || tenant.IsSystemScope(ctx) || tenant.WriteTenantID(ctx) == 0 {
+		query.AddError(errors.New("customer list requires tenant identity"))
+		return query
+	}
+	query = query.Where("tenant_id = ?", tenant.WriteTenantID(ctx)).Where("user_id <> ?", "")
+	if agentID != nil {
+		query = query.Where("(agent_id = 0 OR agent_id = ?)", *agentID)
+	}
+	return query
+}
+
+func (r *CustomerSessionRepository) customerListCandidates(ctx context.Context, keyword string, agentID *uint) *gorm.DB {
+	query := r.customerListScope(ctx, agentID)
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		// 搜索框是字面子串；转义反斜杠本身，避免 %/_ 或尾部反斜杠扩大匹配。
+		pattern := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(keyword) + "%"
+		query = query.Where(`(user_name ILIKE ? ESCAPE '\' OR user_phone ILIKE ? ESCAPE '\' OR user_email ILIKE ? ESCAPE '\')`, pattern, pattern, pattern)
+	}
+	return query
+}
+
+// ListCustomerPage 先按唯一 user_id 分页，再取这些客户的全部可见会话。
+// keyword 仅筛选客户集合，不能截断客户统计所需的其他可见会话。
+func (r *CustomerSessionRepository) ListCustomerPage(ctx context.Context, page, pageSize int, keyword string, agentID *uint) ([]*model.CustomerSession, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	var total int64
+	if err := r.customerListCandidates(ctx, keyword, agentID).Distinct("user_id").Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 || int64(page-1) > (total-1)/int64(pageSize) {
+		return []*model.CustomerSession{}, total, nil
+	}
+	customers := r.customerListCandidates(ctx, keyword, agentID).
+		Select("user_id").Distinct().Order("user_id ASC").Offset((page - 1) * pageSize).Limit(pageSize)
+	var sessions []*model.CustomerSession
+	err := r.customerListScope(ctx, agentID).Where("user_id IN (?)", customers).
+		Order("user_id ASC, created_at ASC, id ASC").Find(&sessions).Error
 	return sessions, total, err
 }
 

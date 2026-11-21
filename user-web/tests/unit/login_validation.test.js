@@ -130,6 +130,28 @@ describe('Login.vue：漏填≠登录失败，真失败仍要出声', () => {
     expect(successToasts()).toEqual([t('core.login.success')])
   })
 
+  it('提交请求未完成时再次点击不会重复登录', async () => {
+    let resolveLogin
+    apiLogin.mockReturnValueOnce(new Promise((resolve) => { resolveLogin = resolve }))
+    const wrapper = mountLogin(() => Promise.resolve(true))
+    await fill(wrapper)
+    const button = wrapper.findAll('.el-button').find((b) => b.text() === t('core.login.submit'))
+    await button.trigger('click')
+    await button.trigger('click')
+    expect(apiLogin).toHaveBeenCalledTimes(1)
+    resolveLogin({ token: 'jwt-locked', user: { id: 1, role: 'admin' } })
+    await settleBody()
+  })
+
+  it('密码框回车只触发一次提交', async () => {
+    apiLogin.mockResolvedValue({ token: 'jwt-enter', user: { id: 1, role: 'admin' } })
+    const wrapper = mountLogin(() => Promise.resolve(true))
+    await fill(wrapper)
+    await wrapper.find(`input[placeholder="${t('core.login.password')}"]`).trigger('keyup.enter')
+    await settleBody()
+    expect(apiLogin).toHaveBeenCalledTimes(1)
+  })
+
   it('服务端报错：红条还在，文案用后端给的 message', async () => {
     apiLogin.mockRejectedValue(new Error('用户名或密码错误'))
     const wrapper = mountLogin(() => Promise.resolve(true))

@@ -23,7 +23,7 @@ export const useDictionaryStore = defineStore('dictionary', () => {
 
     pending.value[parent] = dictionary(parent)
       .then((res) => {
-        const data = res?.data || {}
+        const data = res && typeof res === 'object' ? res : {}
         const entry = {
           items: Array.isArray(data.items) ? data.items : [],
           transitions: Array.isArray(data.transitions) ? data.transitions : [],

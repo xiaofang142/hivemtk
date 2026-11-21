@@ -60,7 +60,9 @@ export const getCustomerDetail = async (id) => {
     getCustomerBasicById(id),
     getCustomerTags(id)
   ]);
-  const basic = settled[0].status === 'fulfilled' ? settled[0].value : null
+  if (settled[0].status === 'rejected') throw settled[0].reason
+  const basic = settled[0].value
+  if (!basic || typeof basic !== 'object') throw new Error('客户基础资料响应不完整')
   const tags = settled[1].status === 'fulfilled' ? settled[1].value : []
   return {
     ...(basic && typeof basic === 'object' ? basic : {}),
