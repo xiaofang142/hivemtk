@@ -10,6 +10,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"hivemtk-user/internal/model"
@@ -20,11 +21,27 @@ import (
 
 func akbTxSetupDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db := testutil.NewTestDB(t, &model.AgentKBBinding{}, &model.KnowledgeBase{})
+	db := testutil.NewTestDB(t, &model.AIAgent{}, &model.KnowledgeBase{}, &model.AgentKBBinding{})
 	if db == nil {
 		t.Fatal("测试库不可达：事务原子性判不了（不 Skip，跳过等于没锁）")
 	}
 	return db
+}
+
+// akbTxSeedAgent 预置智能体行：写事务入口的 resolveAgentExists 闸要求被绑定的
+// 智能体真实存在（含租户归属），所以每个写路径用例都要先 seed 自己的 agent。
+func akbTxSeedAgent(t *testing.T, db *gorm.DB, agentID uint) *model.AIAgent {
+	t.Helper()
+	agent := &model.AIAgent{
+		ID:        agentID,
+		AgentCode: fmt.Sprintf("AKB-TX-%d", agentID),
+		Name:      fmt.Sprintf("绑定事务智能体 %d", agentID),
+		Persona:   "测试夹具",
+	}
+	if err := db.Create(agent).Error; err != nil {
+		t.Fatalf("预置智能体 %d 失败: %v", agentID, err)
+	}
+	return agent
 }
 
 func akbTxSeedKB(t *testing.T, db *gorm.DB, code, kbType string) *model.KnowledgeBase {
@@ -56,6 +73,7 @@ func TestAgentKBBindingRepository_ReplaceRollsBackOnMissingKB(t *testing.T) {
 	db := akbTxSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
 	ctx := context.Background()
+	akbTxSeedAgent(t, db, 7)
 
 	kb := akbTxSeedKB(t, db, "KB-TX-1", model.KnowledgeBaseTypeFAQ)
 	old := &model.AgentKBBinding{
@@ -82,6 +100,7 @@ func TestAgentKBBindingRepository_ReplaceEmptyClears(t *testing.T) {
 	db := akbTxSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
 	ctx := context.Background()
+	akbTxSeedAgent(t, db, 8)
 
 	kb := akbTxSeedKB(t, db, "KB-TX-2", model.KnowledgeBaseTypeRAG)
 	if err := repo.Create(ctx, &model.AgentKBBinding{
@@ -105,6 +124,7 @@ func TestAgentKBBindingRepository_BindOverwriteReplacesAndReusesRealKBType(t *te
 	db := akbTxSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
 	ctx := context.Background()
+	akbTxSeedAgent(t, db, 9)
 
 	kb := akbTxSeedKB(t, db, "KB-TX-3", model.KnowledgeBaseTypeSOP)
 	if err := repo.BindOverwrite(ctx, 9, kb.ID, 3); err != nil {
@@ -131,6 +151,7 @@ func TestAgentKBBindingRepository_BindOverwriteReplacesAndReusesRealKBType(t *te
 func TestAgentKBBindingRepository_BindOverwriteMissingKBWritesNothing(t *testing.T) {
 	db := akbTxSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
+	akbTxSeedAgent(t, db, 10)
 
 	if err := repo.BindOverwrite(context.Background(), 10, 999999, 0); !errors.Is(err, ErrKnowledgeBaseNotFound) {
 		t.Fatalf("引用不存在知识库应返回 ErrKnowledgeBaseNotFound，实际: %v", err)
@@ -146,6 +167,7 @@ func TestAgentKBBindingRepository_BatchBindOverwriteIsAllOrNothing(t *testing.T)
 	db := akbTxSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
 	ctx := context.Background()
+	akbTxSeedAgent(t, db, 11)
 
 	kb := akbTxSeedKB(t, db, "KB-TX-4", model.KnowledgeBaseTypeFAQ)
 	targets := []BindingTarget{

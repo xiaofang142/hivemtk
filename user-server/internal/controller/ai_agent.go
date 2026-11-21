@@ -424,7 +424,15 @@ func (ctrl *AIAgentController) Delete(c *gin.Context) {
 		return
 	}
 	if err := ctrl.svc.Delete(c.Request.Context(), uint(id)); err != nil {
-		response.Error(c, http.StatusBadRequest, "删除失败", err.Error())
+		// 与 Get 同族口径：查无此条（含跨租户不可见）回 404，不再压成 400，
+		// 也不把 gorm 错误原文（"record not found"）带进响应 data。
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(c, "智能体不存在")
+			return
+		}
+		// 业务拒绝（"智能体被 N 个渠道账号绑定…"）是 service 层有意的用户可见文案，
+		// 原样透出；其余错误经 response.Error 兜底剥离内部细节。
+		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	response.Success(c, nil, "删除成功")

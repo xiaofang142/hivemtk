@@ -148,6 +148,42 @@ type BindingTarget struct {
 	Priority int
 }
 
+// ErrAgentNotFound 绑定时引用的智能体不存在（含跨租户不可见，隔离闸吞行后同样查无）。
+//
+// 与 ErrKnowledgeBaseNotFound 同款哨兵：调用方要"智能体 %d 不存在"的用户可见文案，
+// 而不是把 gorm.ErrRecordNotFound 透出去。
+var ErrAgentNotFound = errors.New("智能体不存在")
+
+// AgentNotFoundError 带上 agent_id 的"智能体不存在"。
+type AgentNotFoundError struct {
+	ID uint
+}
+
+func (e *AgentNotFoundError) Error() string {
+	return fmt.Sprintf("智能体 %d 不存在", e.ID)
+}
+
+func (e *AgentNotFoundError) Is(target error) bool {
+	return target == ErrAgentNotFound
+}
+
+// resolveAgentExists 与 resolveKBType 同层同风格：写事务开头校验智能体对当前租户可见。
+//
+// 为什么必须有：写路径此前只校验 KB，跨租户会话可对任意 agent_id 播种本租户绑定行
+// （Replace 还会先 DeleteByAgent——租户过滤保住别人数据，但幽灵行照落），违反
+// 多租户 fail-closed（缺归属校验不得放行写）。软删（DeletedAt）与租户隔离 callback
+// 与 KB 校验同口径生效。
+func resolveAgentExists(ctx context.Context, tx *gorm.DB, agentID uint) error {
+	var agent model.AIAgent
+	if err := tx.WithContext(ctx).First(&agent, agentID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &AgentNotFoundError{ID: agentID}
+		}
+		return err
+	}
+	return nil
+}
+
 // resolveKBType 读知识库并返回其类型；不存在返回 ErrKnowledgeBaseNotFound。
 func resolveKBType(ctx context.Context, kbs *KnowledgeBaseRepository, kbID uint) (string, error) {
 	kb, err := kbs.GetByID(ctx, kbID)
@@ -180,6 +216,9 @@ func (r *AgentKBBindingRepository) BindOverwrite(ctx context.Context, agentID, k
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := NewAgentKBBindingRepository(tx)
+		if err := resolveAgentExists(ctx, tx, agentID); err != nil {
+			return err
+		}
 		kbType, err := resolveKBType(ctx, NewKnowledgeBaseRepository(tx), kbID)
 		if err != nil {
 			return err
@@ -204,6 +243,9 @@ func (r *AgentKBBindingRepository) ReplaceByAgent(ctx context.Context, agentID u
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := NewAgentKBBindingRepository(tx)
 		txKB := NewKnowledgeBaseRepository(tx)
+		if err := resolveAgentExists(ctx, tx, agentID); err != nil {
+			return err
+		}
 		if err := txRepo.DeleteByAgent(ctx, agentID); err != nil {
 			return fmt.Errorf("清除旧绑定失败: %w", err)
 		}
@@ -234,7 +276,14 @@ func (r *AgentKBBindingRepository) BatchBindOverwrite(ctx context.Context, targe
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		txRepo := NewAgentKBBindingRepository(tx)
 		txKB := NewKnowledgeBaseRepository(tx)
+		checked := make(map[uint]struct{}, len(targets))
 		for _, t := range targets {
+			if _, done := checked[t.AgentID]; !done {
+				if err := resolveAgentExists(ctx, tx, t.AgentID); err != nil {
+					return fmt.Errorf("items[agent=%d]: %w", t.AgentID, err)
+				}
+				checked[t.AgentID] = struct{}{}
+			}
 			kbType, err := resolveKBType(ctx, txKB, t.KBID)
 			if err != nil {
 				return fmt.Errorf("items[agent=%d]: %w", t.AgentID, err)

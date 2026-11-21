@@ -1,0 +1,1 @@
+{"code":0,"message":"success","data":{"generated_at":"2026-11-21T18:51:39.9994085+08:00","inbound_rate_per_min":0,"outbound_rate_per_min":0,"pending_count":0,"oldest_pending_min":0,"delivered_count":0,"failed_count":0,"sync_gap_count":0,"stuck_reachable":0,"stuck_unreachable":0,"total_traces":2,"abnormal_count":2,"trace_published":0,"trace_dropped":0}}

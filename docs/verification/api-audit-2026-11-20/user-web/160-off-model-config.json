@@ -1,0 +1,1 @@
+{"code":0,"message":"获取成功","data":{"tenant_id":0,"id":0,"inactive_days_weight":0.3,"purchase_freq_weight":0.3,"order_value_weight":0.2,"engagement_weight":0.2,"inactive_threshold":30,"purchase_threshold":60,"high_risk_score":70,"critical_risk_score":85,"last_calculated_at":null,"created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z"}}

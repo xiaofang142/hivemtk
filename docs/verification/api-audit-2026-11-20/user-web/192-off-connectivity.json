@@ -1,0 +1,1 @@
+{"code":0,"data":{"address":"http://127.0.0.1:8205","source":"request","reachable":false,"platform_enabled":false,"status":"not_configured","message":"平台集成未启用（PLATFORM_ENABLED 未开启）：平台侧功能全部不可用，此时探测地址没有意义。请先开启平台集成并配置平台地址。","latency_ms":0},"message":"平台集成未启用（PLATFORM_ENABLED 未开启）：平台侧功能全部不可用，此时探测地址没有意义。请先开启平台集成并配置平台地址。"}

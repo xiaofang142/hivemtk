@@ -106,6 +106,11 @@ func (s *BatchOperationService) ImportFromCSV(ctx context.Context, importType Im
 		return result, nil
 	}
 
+	// Excel 导出的中文 CSV 几乎必带 UTF-8 BOM（EF BB BF）；csv.Reader 把它算进
+	// 第一列表头（"\ufeff姓名"），TrimSpace 不认 U+FEFF，于是所有列名匹配全灭、
+	// 整批报「缺少必要列」。在公共入口剥一次，clue/user 两条导入路径同享。
+	rows[0][0] = strings.TrimPrefix(rows[0][0], "\ufeff")
+
 	header := rows[0]
 	dataRows := rows[1:]
 	result.Total = len(dataRows)

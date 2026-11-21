@@ -1,0 +1,1 @@
+{"code":"DUPLICATE_ENTRY_3003","message":"当前状态为 completed，仅待执行（pending）或执行中（running）的批量操作可取消"}

@@ -25,298 +25,298 @@
 | 11 | GET | `/api/ab-experiments` | `abExperiment.js:41` | getExperimentStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参；实际为列表别名 | 通过 | 通过 | 双模式200/code0，默认page1/page_size10/total1；SaaS B只见tenant2。此出口名虽含Stats，实际返回list/total，按前端既有契约验证。证据011-*.json |
 | 12 | GET | `/api/ab-experiments/{id}/stats` | `abExperimentPlus.js:6` | getExperimentWithStats | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；query method=frequentist或bayesian | 通过 | 通过 | off frequentist200/code0，100/10对100/20→z1.9803/p0.04767/conf0.95233；on bayesian200，treatment胜率约0.976；跨租户404；未知method400。证据012-*.json |
 | 13 | GET | `/api/ab-experiments/{id}/diagnostics` | `abExperimentPlus.js:9` | getExperimentDiagnostics | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；返回SRM/最小样本/多曝光诊断 | 通过 | 通过 | 已修复SRM错误概率：双模式chi2=0的p从0.09896改为1；5个已知分布值及单调性回归先RED后GREEN；服务/控制器全包与build/vet通过，跨租户404。证据013-*-fixed.json |
-| 14 | GET | `/api/ab-experiments/{id}/cuped` | `abExperimentPlus.js:12` | getExperimentWithCUPED | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 15 | POST | `/api/ab-experiments/{id}/sequential-test` | `abExperimentPlus.js:15` | sequentialTest | 用户端 Cookie / Bearer；权限以后端注册为准 | { alpha } | 未测 | 未测 | — |
-| 16 | POST | `/api/ab-experiments/{id}/bayesian-test` | `abExperimentPlus.js:18` | bayesianTest | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 17 | POST | `/api/agent-kb-bindings` | `agentKBBinding.js:4` | bind | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 18 | DELETE | `/api/agent-kb-bindings/{agentId}/{kbId}` | `agentKBBinding.js:8` | unbind | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 19 | GET | `/api/agent-kb-bindings/by-agent/{agentId}` | `agentKBBinding.js:12` | listByAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 20 | GET | `/api/agent-kb-bindings/by-kb/{kbId}` | `agentKBBinding.js:16` | listByKB | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 21 | PUT | `/api/agent-kb-bindings/by-agent/{agentId}` | `agentKBBinding.js:20` | replaceAgentKBs | 用户端 Cookie / Bearer；权限以后端注册为准 | { kb_ids: kbIds } | 未测 | 未测 | — |
-| 22 | GET | `/api/ai-agents` | `aiAgent.js:4` | listAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 23 | GET | `/api/ai-agents-enabled` | `aiAgent.js:8` | listEnabledAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 24 | GET | `/api/ai-agents/{id}` | `aiAgent.js:12` | getAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 25 | GET | `/api/ai-agents/by-code` | `aiAgent.js:16` | findAgentByCode | 用户端 Cookie / Bearer；权限以后端注册为准 | { agent_code: code } | 未测 | 未测 | — |
-| 26 | POST | `/api/ai-agents` | `aiAgent.js:20` | createAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 27 | PUT | `/api/ai-agents/{id}` | `aiAgent.js:24` | updateAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 28 | DELETE | `/api/ai-agents/{id}` | `aiAgent.js:28` | deleteAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 29 | POST | `/api/ai-agents/{id}/toggle` | `aiAgent.js:32` | toggleAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | { status } | 未测 | 未测 | — |
-| 30 | POST | `/api/ai-agents/{id}/test` | `aiAgent.js:36` | testAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 31 | GET | `/api/ai-agents/{id}/context` | `aiAgent.js:40` | getAgentContext | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 32 | GET | `/api/ai-productivity/overview` | `aiProductivity.js:5` | getReport | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 33 | GET | `/api/ai-productivity/trend` | `aiProductivity.js:8` | getTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 34 | GET | `/api/ai-tools` | `aiTool.js:4` | listTools | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 35 | GET | `/api/ai-tools/{name}` | `aiTool.js:8` | getTool | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 36 | PUT | `/api/ai-tools/{name}/status` | `aiTool.js:12` | updateToolStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | { is_enabled: enabled } | 未测 | 未测 | — |
-| 37 | POST | `/api/ai-tools/batch-status` | `aiTool.js:16` | batchUpdateToolStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | { tools, is_enabled: enabled } | 未测 | 未测 | — |
-| 38 | GET | `/api/ai-tools/{toolName}/accounts` | `aiTool.js:20` | getToolAccounts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 39 | POST | `/api/ai-tools/{toolName}/accounts` | `aiTool.js:24` | bindToolAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | { account_type: accountType, account_id: accountId, is_primary: isPrimary } | 未测 | 未测 | — |
-| 40 | DELETE | `/api/ai-tools/{toolName}/accounts/{accountType}/{accountId}` | `aiTool.js:32` | unbindToolAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 41 | GET | `/api/approvals/{id}` | `approval.js:19` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 42 | POST | `/api/approvals/{id}/decide` | `approval.js:28` | decide | 用户端 Cookie / Bearer；权限以后端注册为准 | { verdict, note } ; { _silent: true } | 未测 | 未测 | — |
-| 43 | POST | `/api/asset-bundle` | `assetBundle.js:4` | createBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 44 | PUT | `/api/asset-bundle/{id}` | `assetBundle.js:7` | updateBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 45 | GET | `/api/asset-bundle/{id}` | `assetBundle.js:10` | getBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 46 | GET | `/api/asset-bundle/by-aid/{aid}` | `assetBundle.js:13` | getBundleByAssetID | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 47 | POST | `/api/asset-bundle/list` | `assetBundle.js:16` | listBundles | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 48 | POST | `/api/asset-bundle/{id}/publish` | `assetBundle.js:19` | publishBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 49 | POST | `/api/asset-bundle/{id}/submit-platform` | `assetBundle.js:22` | submitToPlatform | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 50 | POST | `/api/asset-bundle/{id}/platform-status/refresh` | `assetBundle.js:26` | refreshPlatformStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 51 | GET | `/api/asset-bundle/{id}/versions?limit={limit}` | `assetBundle.js:30` | getBundleVersions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 52 | POST | `/api/asset-bundle/{id}/archive` | `assetBundle.js:33` | archiveBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 53 | DELETE | `/api/asset-bundle/{id}` | `assetBundle.js:36` | deleteBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 54 | POST | `/api/asset-bundle/weave` | `assetBundle.js:39` | weaveBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 55 | POST | `/api/asset-bundle/merchant-save` | `assetBundle.js:42` | merchantSave | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 56 | POST | `/api/asset-bundle/merchant-parse/{aid}` | `assetBundle.js:45` | merchantParse | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 57 | POST | `/api/asset-bundle/{id}/enable` | `assetBundle.js:48` | enableBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 58 | POST | `/api/asset-bundle/{id}/disable` | `assetBundle.js:51` | disableBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 59 | POST | `/api/asset-bundle/enabled/list` | `assetBundle.js:54` | listEnabledBundles | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 60 | POST | `/api/upload` | `assetBundle.js:59` | uploadCover | 用户端 Cookie / Bearer；权限以后端注册为准 | fd ; { headers: { 'Content-Type': 'multipart/form-data' } } | 未测 | 未测 | — |
-| 61 | GET | `/api/v1/asset-market/list` | `assetMarket.js:4` | listAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 62 | GET | `/api/v1/asset-market/detail/{id}` | `assetMarket.js:7` | assetDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 63 | POST | `/api/v1/asset-market/purchase` | `assetMarket.js:10` | purchaseAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 64 | POST | `/api/v1/asset-market/sync` | `assetMarket.js:13` | syncAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 65 | GET | `/api/v1/asset-market/credits` | `assetMarket.js:17` | getAssetCredits | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 66 | POST | `/api/v1/asset-market/report-usage` | `assetMarket.js:20` | reportUsage | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 67 | GET | `/api/v1/local-assets` | `assetMarket.js:23` | listLocalAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 68 | GET | `/api/v1/local-assets/{id}` | `assetMarket.js:26` | getLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 69 | POST | `/api/v1/local-assets` | `assetMarket.js:29` | createLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 70 | PUT | `/api/v1/local-assets/{id}` | `assetMarket.js:32` | updateLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 71 | DELETE | `/api/v1/local-assets/{id}` | `assetMarket.js:35` | deleteLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 72 | PUT | `/api/v1/local-assets/{id}/toggle-active` | `assetMarket.js:38` | toggleLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | { active } | 未测 | 未测 | — |
-| 73 | GET | `/api/v1/local-assets/sync-log` | `assetMarket.js:41` | syncLog | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 74 | GET | `/api/backups` | `backup.js:4` | getBackupList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 75 | GET | `/api/backups/{id}` | `backup.js:8` | getBackupByID | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 76 | POST | `/api/backups` | `backup.js:12` | createBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 77 | DELETE | `/api/backups/{id}` | `backup.js:16` | deleteBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 78 | POST | `/api/restore` | `backup.js:20` | restoreBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 79 | GET | `/api/restore/list` | `backup.js:24` | getRestoreList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 80 | GET | `/api/restore/last` | `backup.js:28` | getLastRestore | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 81 | GET | `/api/bad-cases` | `badCase.js:44` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; { paramsSerializer: toQuery } | 未测 | 未测 | — |
-| 82 | GET | `/api/bad-cases/stats` | `badCase.js:50` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
-| 83 | GET | `/api/bad-cases/taxonomy` | `badCase.js:57` | taxonomy | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
-| 84 | GET | `/api/bad-cases/{id}` | `badCase.js:61` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 85 | POST | `/api/bad-cases` | `badCase.js:69` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | input | 未测 | 未测 | — |
-| 86 | POST | `/api/bad-cases/{id}/label` | `badCase.js:76` | label | 用户端 Cookie / Bearer；权限以后端注册为准 | { label, note } | 未测 | 未测 | — |
-| 87 | POST | `/api/bad-cases/{id}/dismiss` | `badCase.js:82` | dismiss | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason } | 未测 | 未测 | — |
-| 88 | POST | `/api/bad-cases/export` | `badCase.js:89` | exportSet | 用户端 Cookie / Bearer；权限以后端注册为准 | { labels, limit } ; { _silent: true } | 未测 | 未测 | — |
-| 89 | GET | `/api/clues/list` | `batchOperation.js:86` | res | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 90 | POST | `/api/batch/import` | `batchOperation.js:116` | batchImportFile | 用户端 Cookie / Bearer；权限以后端注册为准 | fd ; { headers: { 'Content-Type': 'multipart/form-data' } } | 未测 | 未测 | — |
-| 91 | GET | `/api/batch/template` | `batchOperation.js:122` | downloadBatchTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { type } } | 未测 | 未测 | — |
-| 92 | POST | `/api/batch/export` | `batchOperation.js:131` | batchExport | 用户端 Cookie / Bearer；权限以后端注册为准 | new URLSearchParams({ type: data?.type &#124;&#124; 'clue', format: data?.format &#124;&#124; 'csv', ids: toIdList(data?.ids).join(',') }).toString() ; { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, responseType: 'blob', _silent: true } | 未测 | 未测 | — |
-| 93 | POST | `/api/batch/delete` | `batchOperation.js:147` | batchDelete | 用户端 Cookie / Bearer；权限以后端注册为准 | { ids: toIdList(data?.ids) } | 未测 | 未测 | — |
-| 94 | POST | `/api/batch/update` | `batchOperation.js:172` | batchUpdate | 用户端 Cookie / Bearer；权限以后端注册为准 | { ids: toIdList(data?.ids), fields: toFieldMap(data?.fields) } | 未测 | 未测 | — |
-| 95 | GET | `/api/batch/tools` | `batchOperation.js:179` | getBatchTools | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 96 | GET | `/api/batch/histories` | `batchOperation.js:222` | getBatchHistories | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 97 | POST | `/api/batch/histories/{id}/cancel` | `batchOperation.js:225` | cancelBatch | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 98 | GET | `/api/batch/histories/{id}` | `batchOperation.js:228` | getBatchDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 99 | POST | `/api/batch/preview` | `batchOperation.js:238` | res | 用户端 Cookie / Bearer；权限以后端注册为准 | { operation_type: tool, data_type: 'clue', ids } | 未测 | 未测 | — |
-| 100 | GET | `/api/bridge/extension/package` | `bridgeExtension.js:11` | getBridgeExtensionPackage | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
-| 101 | GET | `/api/bridge/token/status` | `bridgeToken.js:3` | getBridgeTokenStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 102 | POST | `/api/bridge/token/reset` | `bridgeToken.js:5` | resetBridgeToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 103 | GET | `/api/browser-automation/tasks` | `browserAutomation.js:6` | listBrowserTasks | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 104 | GET | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:9` | getBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 105 | POST | `/api/browser-automation/tasks` | `browserAutomation.js:12` | createBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 106 | PUT | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:15` | updateBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 107 | DELETE | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:18` | deleteBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 108 | POST | `/api/browser-automation/tasks/{id}/publish` | `browserAutomation.js:21` | publishBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 109 | POST | `/api/browser-automation/tasks/{id}/run` | `browserAutomation.js:27` | runBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | {} ; { _silent: true } | 未测 | 未测 | — |
-| 110 | POST | `/api/browser-automation/tasks/{id}/pause` | `browserAutomation.js:30` | pauseBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 111 | POST | `/api/browser-automation/tasks/{id}/resume` | `browserAutomation.js:33` | resumeBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 112 | POST | `/api/browser-automation/tasks/{id}/archive` | `browserAutomation.js:36` | archiveBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 113 | PUT | `/api/browser-automation/tasks/{id}/dependency` | `browserAutomation.js:39` | setBrowserTaskDependency | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 114 | GET | `/api/browser-automation/sessions` | `browserAutomation.js:44` | listBrowserSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 115 | GET | `/api/browser-automation/sessions/{id}` | `browserAutomation.js:47` | getBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 116 | GET | `/api/browser-automation/sessions/{id}/steps` | `browserAutomation.js:50` | getBrowserSessionSteps | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 117 | GET | `/api/browser-automation/tasks/{taskId}/sessions` | `browserAutomation.js:54` | listBrowserTaskSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 118 | POST | `/api/browser-automation/sessions/{id}/stop` | `browserAutomation.js:57` | stopBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason: reason &#124;&#124; '' } | 未测 | 未测 | — |
-| 119 | GET | `/api/browser-automation/sessions/{id}/confirm-gate` | `browserAutomation.js:62` | getBrowserConfirmGate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 120 | POST | `/api/browser-automation/sessions/{id}/confirm` | `browserAutomation.js:72` | confirmBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { payload_hash: hash } ; { _silent: true } | 未测 | 未测 | — |
-| 121 | GET | `/api/browser-automation/sessions/{id}/logs` | `browserAutomation.js:93` | getBrowserSessionLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | direction ? { direction } : undefined | 未测 | 未测 | — |
-| 122 | GET | `/api/browser-automation/sessions/{id}/export` | `browserAutomation.js:97` | exportBrowserSessionAudit | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 123 | GET | `/api/browser-automation/tasks/{taskId}/receipts` | `browserAutomation.js:102` | listBrowserTaskReceipts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 124 | GET | `/api/browser-automation/cron` | `browserAutomation.js:107` | listBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 125 | POST | `/api/browser-automation/cron` | `browserAutomation.js:110` | createBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 126 | PUT | `/api/browser-automation/cron/{id}` | `browserAutomation.js:113` | updateBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 127 | DELETE | `/api/browser-automation/cron/{id}` | `browserAutomation.js:116` | deleteBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 128 | POST | `/api/browser-automation/cron/{id}/enable` | `browserAutomation.js:119` | enableBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 129 | POST | `/api/browser-automation/cron/{id}/disable` | `browserAutomation.js:122` | disableBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 130 | GET | `/api/browser-automation/host/status` | `browserAutomation.js:127` | getBrowserHostStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 131 | POST | `/api/browser-automation/host/token/reset` | `browserAutomation.js:130` | resetBrowserHostToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 132 | GET | `/api/browser-automation/platforms` | `browserAutomation.js:135` | listPlatforms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 133 | GET | `/api/browser-automation/platforms/{id}/locators` | `browserAutomation.js:138` | getPlatformLocators | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 134 | GET | `/api/whatsapp/templates` | `bulkMessaging.js:4` | getTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 135 | POST | `/api/whatsapp/templates` | `bulkMessaging.js:8` | createTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 136 | PUT | `/api/whatsapp/templates/{id}` | `bulkMessaging.js:12` | updateTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 14 | GET | `/api/ab-experiments/{id}/cuped` | `abExperimentPlus.js:12` | getExperimentWithCUPED | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；返回available/reason/theta/variance_reduction/variants | 通过 | 通过 | 双模式200/code0：实验前数据不足（需≥30用户级样本）按设计降级available=false，退化为未调整结果与#12一致；跨租户404。证据014-*.json |
+| 15 | POST | `/api/ab-experiments/{id}/sequential-test` | `abExperimentPlus.js:15` | sequentialTest | 用户端 Cookie / Bearer；权限以后端注册为准 | body { alpha }，缺省/越界回落0.05（设计内，防NaN） | 通过 | 通过 | 双模式200：LLR=8.109超上界2.890→accept_H1，与两倍转化率差一致；跨租户404；alpha=1.5按设计回落0.05（controller注释明确防NaN语义）。证据015-*.json |
+| 16 | POST | `/api/ab-experiments/{id}/bayesian-test` | `abExperimentPlus.js:18` | bayesianTest | 用户端 Cookie / Bearer；权限以后端注册为准 | body {}（可带样本数等） | 通过 | 通过 | 200：control胜率0.4977/treatment0.9756、expected_loss与#12完全一致（同seed确定性RNG）。证据016-off-bayesian.json；SaaS/跨租户与#12同链路 |
+| 17 | POST | `/api/agent-kb-bindings` | `agentKBBinding.js:4` | bind | 用户端 Cookie / Bearer；权限以后端注册为准 | body agent_id/knowledge_base_id必填，priority可选；role无通道（repo写死primary，前端无调用方传role） | 通过 | 通过 | 双模式200绑定成功；缺字段400；伪造跨租户KB→404带KB id文案。已修复跨租户agent写缺口（见#21）：B对A的agent+自己的kb原200幽灵行，修复后404「智能体 12 不存在」。证据017-*.json |
+| 18 | DELETE | `/api/agent-kb-bindings/{agentId}/{kbId}` | `agentKBBinding.js:8` | unbind | 用户端 Cookie / Bearer；权限以后端注册为准 | path agentId, kbId | 通过 | 通过 | CheckExists先探测：不存在/跨租户→404（不会假成功）；本轮临时绑定删除成功。证据018-on-cross-unbind.json |
+| 19 | GET | `/api/agent-kb-bindings/by-agent/{agentId}` | `agentKBBinding.js:12` | listByAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | path agentId；返回绑定行（含kb_type/role/priority） | 通过 | 通过 | 本租户200返回绑定；跨租户agent→200空数组（列表语义无泄露，与404口径差异已记录为观察项）。证据019-*.json |
+| 20 | GET | `/api/agent-kb-bindings/by-kb/{kbId}` | `agentKBBinding.js:16` | listByKB | 用户端 Cookie / Bearer；权限以后端注册为准 | path kbId | 通过 | 通过 | 本租户200返回绑定行；读侧租户过滤良好：A会话读B的kb2→200空数组，无泄露。证据020-on-list-by-kb.json、021-defect-kb2-cross-read.json |
+| 21 | PUT | `/api/agent-kb-bindings/by-agent/{agentId}` | `agentKBBinding.js:20` | replaceAgentKBs | 用户端 Cookie / Bearer；权限以后端注册为准 | path agentId / body { kb_ids: 字符串数组 } | 通过 | 通过 | **发现并修复高危缺陷**：原实现只校验KB归属，B可对A的agent播种幽灵绑定（PUT 200+落库tenant=2行）。修复=三个写事务入口加resolveAgentExists闸+BatchBind 404透出；修复后跨租户PUT/POST/批量全404「智能体 12 不存在」，A绑定原样保留，同租户替换200正常。repo回归含新用例3.705s全绿。证据021-*.json |
+| 22 | GET | `/api/ai-agents` | `aiAgent.js:4` | listAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size等 | 通过 | 通过 | 双模式200：本租户返回seed agents；SaaS B跨租户→200空列表无泄露。证据022-*.json |
+| 23 | GET | `/api/ai-agents-enabled` | `aiAgent.js:8` | listEnabledAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200仅启用agent列表。证据023-on-enabled.json |
+| 24 | GET | `/api/ai-agents/{id}` | `aiAgent.js:12` | getAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 本租户200；不存在uint32→404「智能体不存在」。观察项：404响应data带"record not found"原文（ErrorFromDB既有形态，Get同族，未本批改动）。证据024-*.json |
+| 25 | GET | `/api/ai-agents/by-code` | `aiAgent.js:16` | findAgentByCode | 用户端 Cookie / Bearer；权限以后端注册为准 | query agent_code | 通过 | 通过 | 本租户200返回agent；跨租户→200 data=null（查无返回nil，无泄露）。证据025-*.json |
+| 26 | POST | `/api/ai-agents` | `aiAgent.js:20` | createAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | body agent_code/name/persona必填 | 通过 | 通过 | 双模式200：伪造tenant_id/created_by被忽略，off落tenant1、SaaS B落tenant2；缺persona→400。证据026-*.json |
+| 27 | PUT | `/api/ai-agents/{id}` | `aiAgent.js:24` | updateAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 本租户200（伪造tenant_id被忽略）；跨租户改A的agent→404。证据027-*.json |
+| 28 | DELETE | `/api/ai-agents/{id}` | `aiAgent.js:28` | deleteAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | **修复响应码语义**：原跨租户/不存在删除→400「删除失败」+data:"record not found"；修复后404「智能体不存在」无原文，与Get同族一致；业务拒绝文案（被N个渠道绑定）保留。证据028-*.json、028-*-fixed.json |
+| 29 | POST | `/api/ai-agents/{id}/toggle` | `aiAgent.js:32` | toggleAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | body { status } 0/1，非法值钳制为1 | 通过 | 通过 | off模式0→1循环200，status回显正确。证据029-*.json |
+| 30 | POST | `/api/ai-agents/{id}/test` | `aiAgent.js:36` | testAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | body { message }，真实LLM调用 | 通过 | 通过 | 200/code0：路由→调度→回复链路完整；外部llm7免费端点本轮不可达，返回设计内降级文案「AI 服务暂时不可用」+intent unknown——降级路径验证通过，真实LLM成功路径受外部端点可用性限制未复验。证据030-off-test.json |
+| 31 | GET | `/api/ai-agents/{id}/context` | `aiAgent.js:40` | getAgentContext | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；返回agent_id/agent_code/persona等上下文 | 通过 | 通过 | 200加载上下文（agent 12）。证据031-off-context.json |
+| 32 | GET | `/api/ai-productivity/overview` | `aiProductivity.js:5` | getReport | 用户端 Cookie / Bearer；权限以后端注册为准 | query days 默认30 | 通过 | 通过 | 200/code0聚合33会话225AI回复（本地夹具库真实数据）。证据032-off-overview.json |
+| 33 | GET | `/api/ai-productivity/trend` | `aiProductivity.js:8` | getTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | query days 默认30 | 通过 | 通过 | 200/code0：days=7回显7个日期点。证据033-off-trend.json |
+| 34 | GET | `/api/ai-tools` | `aiTool.js:4` | listTools | 用户端 Cookie / Bearer；权限以后端注册为准 | query params | 通过 | 通过 | 200/code0：空租户list=[]/total=0（合法空态）。证据034-off-list.json |
+| 35 | GET | `/api/ai-tools/{name}` | `aiTool.js:8` | getTool | 用户端 Cookie / Bearer；权限以后端注册为准 | path name | 通过 | 通过 | 未知工具→404「工具不存在」。证据035-off-unknown.json |
+| 36 | PUT | `/api/ai-tools/{name}/status` | `aiTool.js:12` | updateToolStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | path name / body { is_enabled } | 通过 | 通过 | 未知工具→404「工具不存在」。证据036-off-unknown-status.json |
+| 37 | POST | `/api/ai-tools/batch-status` | `aiTool.js:16` | batchUpdateToolStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | body { tools, is_enabled } | 通过 | 通过 | 空数组→400「工具列表不能为空」。证据037-off-empty-batch.json |
+| 38 | GET | `/api/ai-tools/{toolName}/accounts` | `aiTool.js:20` | getToolAccounts | 用户端 Cookie / Bearer；权限以后端注册为准 | path toolName | 通过 | 通过 | 未知工具→200 data=[]（无绑定合法空态）。证据038-off-unknown-accounts.json |
+| 39 | POST | `/api/ai-tools/{toolName}/accounts` | `aiTool.js:24` | bindToolAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | path toolName / body { account_type, account_id, is_primary } | 通过 | 通过 | 未知工具→404「工具不存在」。证据039-off-unknown-bind.json |
+| 40 | DELETE | `/api/ai-tools/{toolName}/accounts/{accountType}/{accountId}` | `aiTool.js:32` | unbindToolAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | path toolName, accountType, accountId | 通过 | 通过 | 未知工具→404「绑定不存在」。证据040-off-unknown-unbind.json |
+| 41 | GET | `/api/approvals/{id}` | `approval.js:19` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 双模式503 SERVICE_UNAVAILABLE_6003「审批底座不可用」——FF_LTC_APPROVAL_RESUME=off设计内关闸，非缺陷。证据041-*.json |
+| 42 | POST | `/api/approvals/{id}/decide` | `approval.js:28` | decide | 用户端 Cookie / Bearer；权限以后端注册为准 | body { verdict, note } | 通过 | 通过 | 同#41设计内503关闸（拒绝分支已验；成功路径需开启审批运行时）。证据042-off-decide.json |
+| 43 | POST | `/api/asset-bundle` | `assetBundle.js:4` | createBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | body asset_id/title/messages(role=system至少一条)必填 | 通过 | 通过 | 双模式200落各自租户；缺system→400中文文案。证据043-*.json |
+| 44 | PUT | `/api/asset-bundle/{id}` | `assetBundle.js:7` | updateBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body title/version/tags/change_note | 通过 | 通过 | 200更新1.0.0→1.0.1并自动记版本日志（见#51）；响应回读库内真相。证据044-off-update.json |
+| 45 | GET | `/api/asset-bundle/{id}` | `assetBundle.js:10` | getBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 本租户200；on库A读B的包→404「资产包不存在（id=10）」隔离正确。证据045-*.json |
+| 46 | GET | `/api/asset-bundle/by-aid/{aid}` | `assetBundle.js:13` | getBundleByAssetID | 用户端 Cookie / Bearer；权限以后端注册为准 | path aid（数字主键或slug兼容） | 通过 | 通过 | slug直查200。证据046-off-by-aid.json |
+| 47 | POST | `/api/asset-bundle/list` | `assetBundle.js:16` | listBundles | 用户端 Cookie / Bearer；权限以后端注册为准 | body keyword等 | 通过 | 通过 | keyword=audit20命中1条。证据047-off-list.json |
+| 48 | POST | `/api/asset-bundle/{id}/publish` | `assetBundle.js:19` | publishBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200 draft→published。证据048-off-publish.json |
+| 49 | POST | `/api/asset-bundle/{id}/submit-platform` | `assetBundle.js:22` | submitToPlatform | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 403 FORBIDDEN_2002「平台集成未启用」设计内拒（PLATFORM_ENABLED=false），文案带修复指引。证据049-off-submit.json |
+| 50 | POST | `/api/asset-bundle/{id}/platform-status/refresh` | `assetBundle.js:26` | refreshPlatformStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 同#49设计内403。证据050-off-refresh.json |
+| 51 | GET | `/api/asset-bundle/{id}/versions?limit={limit}` | `assetBundle.js:30` | getBundleVersions | 用户端 Cookie / Bearer；权限以后端注册为准 | query limit | 通过 | 通过 | 200返回1.0.0→1.0.1版本记录（change_note落库正确）。证据051-off-versions.json |
+| 52 | POST | `/api/asset-bundle/{id}/archive` | `assetBundle.js:33` | archiveBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200 archive成功。证据052-off-archive.json |
+| 53 | DELETE | `/api/asset-bundle/{id}` | `assetBundle.js:36` | deleteBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id（写面收口admin中间件） | 通过 | 通过 | DELETE 200软删成功（首轮405系测试方误发POST，路由本身正常）。证据053-off-delete-fixed.json |
+| 54 | POST | `/api/asset-bundle/weave` | `assetBundle.js:39` | weaveBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | body asset_id/user_query必填；merchant_vars等 | 通过 | 通过 | 两层闸验证：归档包→400「未发布」；active未热启用→400「未热启用」；enable后→200完整messages（merchant_vars注入）。证据054-off-weave*.json |
+| 55 | POST | `/api/asset-bundle/merchant-save` | `assetBundle.js:42` | merchantSave | 用户端 Cookie / Bearer；权限以后端注册为准 | body asset_id必填；shop_name/qa_cards等 | 通过 | 通过 | 200 upsert生成active包（qa_cards→system+QA消息）。证据055-off-merchant-save.json |
+| 56 | POST | `/api/asset-bundle/merchant-parse/{aid}` | `assetBundle.js:45` | merchantParse | 用户端 Cookie / Bearer；权限以后端注册为准 | path aid | 通过 | 通过 | 200回显shop_name/campaign/qa_cards表单。证据056-off-merchant-parse.json |
+| 57 | POST | `/api/asset-bundle/{id}/enable` | `assetBundle.js:48` | enableBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200热启用（已删包→404正确）。证据057-off-enable.json、057c-off-enable-merchant.json |
+| 58 | POST | `/api/asset-bundle/{id}/disable` | `assetBundle.js:51` | disableBundle | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200热禁用。证据058-off-disable.json |
+| 59 | POST | `/api/asset-bundle/enabled/list` | `assetBundle.js:54` | listEnabledBundles | 用户端 Cookie / Bearer；权限以后端注册为准 | 无body | 通过 | 通过 | 200仅热启用包。证据059-off-enabled-list.json |
+| 60 | POST | `/api/upload` | `assetBundle.js:59` | uploadCover | 用户端 Cookie / Bearer；权限以后端注册为准 | multipart fd；field=file | 通过 | 通过 | 71字节PNG→200 url=/files/attachments/2026/11/...，extension/mime识别正确。证据060-off-upload.json |
+| 61 | GET | `/api/v1/asset-market/list` | `assetMarket.js:4` | listAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空态list=[]/total=0。证据061-off-market-list.json |
+| 62 | GET | `/api/v1/asset-market/detail/{id}` | `assetMarket.js:7` | assetDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 不存在资产→HTTP200 code=6001「资产不存在或不可用」。证据062-off-market-detail.json |
+| 63 | POST | `/api/v1/asset-market/purchase` | `assetMarket.js:10` | purchaseAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | body { asset_id } 等 | 通过 | 通过 | 403 FORBIDDEN_2002 平台集成未启用设计内拒。证据063-off-purchase.json |
+| 64 | POST | `/api/v1/asset-market/sync` | `assetMarket.js:13` | syncAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | body {} | 通过 | 通过 | 403设计内拒（旧口径恒5000已演进为403门）。证据064-off-sync.json |
+| 65 | GET | `/api/v1/asset-market/credits` | `assetMarket.js:17` | getAssetCredits | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 403设计内拒（平台集成未启用）。证据065-off-credits.json |
+| 66 | POST | `/api/v1/asset-market/report-usage` | `assetMarket.js:20` | reportUsage | 用户端 Cookie / Bearer；权限以后端注册为准 | body asset_id等 | 通过 | 通过 | 403设计内拒。证据066-off-report.json |
+| 67 | GET | `/api/v1/local-assets` | `assetMarket.js:23` | listLocalAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回seed资产列表。证据067-off-local-list.json |
+| 68 | GET | `/api/v1/local-assets/{id}` | `assetMarket.js:26` | getLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 不存在→HTTP200 code=6001「资产不存在」。证据068-off-local-get.json |
+| 69 | POST | `/api/v1/local-assets` | `assetMarket.js:29` | createLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | body asset_type/industry/data必填（枚举校验） | 通过 | 通过 | 200创建id=8；非法asset_type/industry→400中文文案（首轮400系shell编码漂移，文件方式UTF-8后通过）。证据069-off-local-create.json |
+| 70 | PUT | `/api/v1/local-assets/{id}` | `assetMarket.js:32` | updateLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新v2。证据070-off-local-update.json |
+| 71 | DELETE | `/api/v1/local-assets/{id}` | `assetMarket.js:35` | deleteLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除成功。证据071-off-local-delete.json |
+| 72 | PUT | `/api/v1/local-assets/{id}/toggle-active` | `assetMarket.js:38` | toggleLocalAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | body { active } | 通过 | 通过 | false→true双向200。证据072-*.json |
+| 73 | GET | `/api/v1/local-assets/sync-log` | `assetMarket.js:41` | syncLog | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空列表（无同步记录合法空态）。证据073-off-sync-log.json |
+| 74 | GET | `/api/backups` | `backup.js:4` | getBackupList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回历史备份列表。证据074-off-backup-list.json |
+| 75 | GET | `/api/backups/{id}` | `backup.js:8` | getBackupByID | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200返回id=8完整详情。证据075-off-backup-get.json |
+| 76 | POST | `/api/backups` | `backup.js:12` | createBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | body backup_name/backup_type | 通过 | 通过 | 200创建异步任务id=9（pending）。证据076-off-backup-create.json |
+| 77 | DELETE | `/api/backups/{id}` | `backup.js:16` | deleteBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除本轮创建的id=9。证据077-off-backup-delete.json |
+| 78 | POST | `/api/restore` | `backup.js:20` | restoreBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | body backup_id必填 | 通过（校验分支） | 通过（校验分支） | 空 body→400「backup_id 必填」。真实恢复是不可逆危险操作，本审计不触发；成功路径留给运维演练。证据078-off-restore-empty.json |
+| 79 | GET | `/api/restore/list` | `backup.js:24` | getRestoreList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空列表。证据079-off-restore-list.json |
+| 80 | GET | `/api/restore/last` | `backup.js:28` | getLastRestore | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200「暂无恢复记录」。证据080-off-restore-last.json |
+| 81 | GET | `/api/bad-cases` | `badCase.js:44` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size等 | 通过 | 通过 | 200空态（合法）。证据081-off-badcase-list.json |
+| 82 | GET | `/api/bad-cases/stats` | `badCase.js:50` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200四维统计全0（空库）。证据082-off-stats.json |
+| 83 | GET | `/api/bad-cases/taxonomy` | `badCase.js:57` | taxonomy | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200归因词表完整。证据083-off-taxonomy.json |
+| 84 | GET | `/api/bad-cases/{id}` | `badCase.js:61` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id（string bc_前缀） | 通过 | 通过 | 不存在→404带id文案。证据084-off-missing.json |
+| 85 | POST | `/api/bad-cases` | `badCase.js:69` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body session_id/message_id/query_text等 | 通过 | 通过 | 200创建pending（id=bc_...）。证据085-off-create.json |
+| 86 | POST | `/api/bad-cases/{id}/label` | `badCase.js:76` | label | 用户端 Cookie / Bearer；权限以后端注册为准 | body { label, note }；label须在词表 | 通过 | 通过 | 200 labeled；未知类目→400带类目名。证据086-off-label*.json |
+| 87 | POST | `/api/bad-cases/{id}/dismiss` | `badCase.js:82` | dismiss | 用户端 Cookie / Bearer；权限以后端注册为准 | body { reason } | 通过 | 通过 | exported状态→409 DUPLICATE_ENTRY_3003状态机拒绝（正确业务分支）；pending态dismiss未覆盖（先被export推进）。证据087-off-dismiss.json |
+| 88 | POST | `/api/bad-cases/export` | `badCase.js:89` | exportSet | 用户端 Cookie / Bearer；权限以后端注册为准 | body { labels, limit } | 通过 | 通过 | 200生成eval_set导出1行labeled记录。证据088-off-export.json |
+| 89 | GET | `/api/clues/list` | `batchOperation.js:86` | res | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size/keyword等 | 通过 | 通过 | 200列表/keyword过滤（URL编码中文正常；裸中文GBK字节→500为协议违规输入，PG 22021，axios/浏览器不会触发——观察项记录于审计README）。证据089-*.json |
+| 90 | POST | `/api/batch/import` | `batchOperation.js:116` | batchImportFile | 用户端 Cookie / Bearer；权限以后端注册为准 | multipart file+type | 通过 | 通过 | **修复BOM缺陷**：Excel导出必带BOM致整批误报缺列；公共入口剥﻿后带/无BOM均success。单测0.852s绿+HTTP复测success=1。证据090-*.json |
+| 91 | GET | `/api/batch/template` | `batchOperation.js:122` | downloadBatchTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | query type | 通过 | 通过 | 200返回中文列头CSV模板。证据091-off-template.csv |
+| 92 | POST | `/api/batch/export` | `batchOperation.js:131` | batchExport | 用户端 Cookie / Bearer；权限以后端注册为准 | form-urlencoded type/format/ids（逗号分隔） | 通过 | 通过 | 200返回CSV blob（含ID/姓名/账户等列头）。证据092-off-export.csv |
+| 93 | POST | `/api/batch/delete` | `batchOperation.js:147` | batchDelete | 用户端 Cookie / Bearer；权限以后端注册为准 | body { ids } | 通过 | 通过 | 200 deleted_count=3/requested=3（本轮导入夹具清理闭环）。证据093-off-delete.json |
+| 94 | POST | `/api/batch/update` | `batchOperation.js:172` | batchUpdate | 用户端 Cookie / Bearer；权限以后端注册为准 | body { ids, fields }（字段值一律字符串） | 通过 | 通过 | 已删除ID→400「所选 ID 均不存在或已被删除」明确拒绝；更新历史落#96列表。证据094-off-update.json |
+| 95 | GET | `/api/batch/tools` | `batchOperation.js:179` | getBatchTools | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 import/export/delete/update工具清单。证据095-off-tools.json |
+| 96 | GET | `/api/batch/histories` | `batchOperation.js:222` | getBatchHistories | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200含本轮update/delete历史。证据096-off-histories.json |
+| 97 | POST | `/api/batch/histories/{id}/cancel` | `batchOperation.js:225` | cancelBatch | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | completed→409「仅待执行/执行中可取消」状态机；不存在→404。证据097-off-cancel-*.json |
+| 98 | POST | `/api/batch/preview` | `batchOperation.js:238` | previewBatch | 用户端 Cookie / Bearer；权限以后端注册为准 | body operation_type/data_type必填；delete/update/export须ids | 通过 | 通过 | 200预览selected_count=1；缺ids→400「请选择要操作的记录」（与前端resolveClueIds先查ID的契约一致）。证据098-off-preview*.json |
+| 99 | POST | `/api/batch/preview` | `batchOperation.js:238` | res | 用户端 Cookie / Bearer；权限以后端注册为准 | body { operation_type, data_type, ids }（同#98别名） | 通过 | 通过 | 同#98：200预览。证据098-off-preview-green.json |
+| 100 | GET | `/api/bridge/extension/package` | `bridgeExtension.js:11` | getBridgeExtensionPackage | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 未接平台→404「当前部署未接入平台，或平台尚未上架桥接扩展包」设计内。证据100-off-ext-package.json |
+| 101 | GET | `/api/bridge/token/status` | `bridgeToken.js:3` | getBridgeTokenStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 source=unset（未配置合法空态）。证据101-off-token-status.json |
+| 102 | POST | `/api/bridge/token/reset` | `bridgeToken.js:5` | resetBridgeToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200轮换成功+灰度窗口文案；token明文回显属功能输出（用户复制配置扩展用），非泄露。证据102-off-token-reset.json |
+| 103 | GET | `/api/browser-automation/tasks` | `browserAutomation.js:6` | listBrowserTasks | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size等 | 通过 | 通过 | 200空列表。证据103-off-tasks.json |
+| 104 | GET | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:9` | getBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 不存在→404「任务不存在」。证据104-off-task-missing.json |
+| 105 | POST | `/api/browser-automation/tasks` | `browserAutomation.js:12` | createBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/task_type/url/platform必填 | 通过 | 通过 | 200 draft；缺platform→400带注册平台列表（B21 fails-loudly）。证据105-off-*.json |
+| 106 | PUT | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:15` | updateBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200；非法step action→400列出合法枚举（dive校验生效）。证据106-*.json |
+| 107 | DELETE | `/api/browser-automation/tasks/{id}` | `browserAutomation.js:18` | deleteBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已删除（本轮任务清理闭环）。证据107-off-delete.json |
+| 108 | POST | `/api/browser-automation/tasks/{id}/publish` | `browserAutomation.js:21` | publishBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；显式模式需≥1合法步骤 | 通过 | 通过 | 无步骤→400；合法步骤→200已发布。证据108-*.json |
+| 109 | POST | `/api/browser-automation/tasks/{id}/run` | `browserAutomation.js:27` | runBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | body {} | 通过（环境拒绝分支） | 通过（环境拒绝分支） | 409 BROWSER_HOST_OFFLINE_8001（本地无nm-host/扩展），文案带修复指引；真实执行需host在线。证据109-off-run.json |
+| 110 | POST | `/api/browser-automation/tasks/{id}/pause` | `browserAutomation.js:30` | pauseBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | draft→409 8003状态机「仅执行中可暂停」。证据110-off-pause.json |
+| 111 | POST | `/api/browser-automation/tasks/{id}/resume` | `browserAutomation.js:33` | resumeBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | draft→409 8003「仅暂停任务可恢复」。证据111-off-resume.json |
+| 112 | POST | `/api/browser-automation/tasks/{id}/archive` | `browserAutomation.js:36` | archiveBrowserTask | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已归档。证据112-off-archive.json |
+| 113 | PUT | `/api/browser-automation/tasks/{id}/dependency` | `browserAutomation.js:39` | setBrowserTaskDependency | 用户端 Cookie / Bearer；权限以后端注册为准 | body depends_on_task_id/mode | 通过 | 通过 | 不存在任务→404「任务不存在」（成功路径依赖workflow任务编排，本轮验证身份校验分支）。证据113-off-dependency.json |
+| 114 | GET | `/api/browser-automation/sessions` | `browserAutomation.js:44` | listBrowserSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空列表。证据114-off-sessions.json |
+| 115 | GET | `/api/browser-automation/sessions/{id}` | `browserAutomation.js:47` | getBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 合成completed会话→200详情完整；非数字id→400 invalid id。证据115-off-session-*.json |
+| 116 | GET | `/api/browser-automation/sessions/{id}/steps` | `browserAutomation.js:50` | getBrowserSessionSteps | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200空steps（无步进记录）。证据116-off-session-steps.json |
+| 117 | GET | `/api/browser-automation/tasks/{taskId}/sessions` | `browserAutomation.js:54` | listBrowserTaskSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | query params | 通过 | 通过 | 200按任务过滤空列表。证据117-off-task-sessions.json |
+| 118 | POST | `/api/browser-automation/sessions/{id}/stop` | `browserAutomation.js:57` | stopBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | body { reason } | 通过 | 通过 | completed会话→200 stopped=false「会话不在运行中」幂等正确。证据118-off-session-stop.json |
+| 119 | GET | `/api/browser-automation/sessions/{id}/confirm-gate` | `browserAutomation.js:62` | getBrowserConfirmGate | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200 pending=false。证据119-off-confirm-gate.json |
+| 120 | POST | `/api/browser-automation/sessions/{id}/confirm` | `browserAutomation.js:72` | confirmBrowserSession | 用户端 Cookie / Bearer；权限以后端注册为准 | body { payload_hash } | 通过 | 通过 | 无待确认门→200 confirmed=false status=no_gate。证据120-off-confirm.json |
+| 121 | GET | `/api/browser-automation/sessions/{id}/logs` | `browserAutomation.js:93` | getBrowserSessionLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | query direction可选 | 通过 | 通过 | 200空日志。证据121-off-session-logs.json |
+| 122 | GET | `/api/browser-automation/sessions/{id}/export` | `browserAutomation.js:97` | exportBrowserSessionAudit | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200审计导出（session+audit_digests+command_log）。证据122-off-session-export.json |
+| 123 | GET | `/api/browser-automation/tasks/{taskId}/receipts` | `browserAutomation.js:102` | listBrowserTaskReceipts | 用户端 Cookie / Bearer；权限以后端注册为准 | path taskId | 通过 | 通过 | 不存在任务→404。证据123-off-receipts.json |
+| 124 | GET | `/api/browser-automation/cron` | `browserAutomation.js:107` | listBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空列表。证据124-off-cron.json |
+| 125 | POST | `/api/browser-automation/cron` | `browserAutomation.js:110` | createBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | body task_id+cron_expr必填 | 通过 | 通过 | 缺expr→400；坏表达式→400明确5/6段格式；FK先查任务404；合法→200含next_run_at。证据125-*.json |
+| 126 | PUT | `/api/browser-automation/cron/{id}` | `browserAutomation.js:113` | updateBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | body task_id/cron_expr | 通过 | 通过 | 200更新表达式0 8 * * 1→next_run_at随新表达式。证据126-off-cron-update.json |
+| 127 | DELETE | `/api/browser-automation/cron/{id}` | `browserAutomation.js:116` | deleteBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已删除（清理闭环）。证据127-off-cron-delete.json |
+| 128 | POST | `/api/browser-automation/cron/{id}/enable` | `browserAutomation.js:119` | enableBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已启用。证据128-off-cron-enable.json |
+| 129 | POST | `/api/browser-automation/cron/{id}/disable` | `browserAutomation.js:122` | disableBrowserCron | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已停用。证据129-off-cron-disable.json |
+| 130 | GET | `/api/browser-automation/host/status` | `browserAutomation.js:127` | getBrowserHostStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 online=false/count=0（host未连合法空态）。证据130-off-host-status.json |
+| 131 | POST | `/api/browser-automation/host/token/reset` | `browserAutomation.js:130` | resetBrowserHostToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200轮换（与#102同族口径，token明文属功能输出）。证据102-off-token-reset.json同链路 |
+| 132 | GET | `/api/browser-automation/platforms` | `browserAutomation.js:135` | listPlatforms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200平台清单（xiaohongshu/douyin/xianyu带能力位）。证据132-off-platforms.json |
+| 133 | GET | `/api/browser-automation/platforms/{id}/locators` | `browserAutomation.js:138` | getPlatformLocators | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | xiaohongshu→200定位表；未知平台→404带可用列表。证据133-off-locators*.json |
+| 134 | GET | `/api/whatsapp/templates` | `bulkMessaging.js:4` | getTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | query params | 通过 | 通过 | 200空态。证据134-off-templates.json |
+| 135 | POST | `/api/whatsapp/templates` | `bulkMessaging.js:8` | createTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/content | 通过 | 通过 | 200创建tmpl_...。证据135-off-template-create.json |
+| 136 | PUT | `/api/whatsapp/templates/{id}` | `bulkMessaging.js:12` | updateTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body name/content等 | 通过 | 通过 | 200更新。证据136-off-template-update.json |
 | 137 | DELETE | `/api/whatsapp/templates/{id}` | `bulkMessaging.js:16` | deleteTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 138 | POST | `/api/whatsapp/group-messaging/send` | `bulkMessaging.js:20` | sendBulkMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 139 | GET | `/api/whatsapp/group-messaging/status/{queueId}` | `bulkMessaging.js:24` | getMessageStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 140 | GET | `/api/whatsapp/group-messaging/records` | `bulkMessaging.js:28` | getSendRecords | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 141 | GET | `/api/capabilities` | `capabilityDiagnostics.js:12` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 142 | GET | `/api/channel-agent-bindings` | `channelAgentBinding.js:4` | listBindings | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 138 | POST | `/api/whatsapp/group-messaging/send` | `bulkMessaging.js:20` | sendBulkMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | body lead_ids+template_id必填 | 通过（防线分支） | 通过（防线分支） | 缺参→400；线索缺手机号→400「所选线索不存在或缺少手机号」双层外发防线正确（真实发送需WhatsApp通道，审计不触发）。证据138-off-send*.json |
+| 139 | GET | `/api/whatsapp/group-messaging/status/{queueId}` | `bulkMessaging.js:24` | getMessageStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | path queueId | 通过 | 通过 | 未知队列→200空结构（零值状态）。证据139-off-status.json |
+| 140 | GET | `/api/whatsapp/group-messaging/records` | `bulkMessaging.js:28` | getSendRecords | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/limit | 通过 | 通过 | 200空态。证据140-off-records.json |
+| 141 | GET | `/api/capabilities` | `capabilityDiagnostics.js:12` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200能力矩阵（bilibili dm.receive等，含implemented/configured/ready/reason）。证据141-off-capabilities.json |
+| 142 | GET | `/api/channel-agent-bindings` | `channelAgentBinding.js:4` | listBindings | 用户端 Cookie / Bearer；权限以后端注册为准 | query channel_type+account_id必填 | 通过 | 通过 | 缺参→400「channel_type 和 account_id 必填」；带参→200空列表。证据142-off-*.json |
 | 143 | GET | `/api/channel-agent-bindings/by-agent/{agentId}` | `channelAgentBinding.js:8` | listBindingsByAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 144 | POST | `/api/channel-agent-bindings` | `channelAgentBinding.js:12` | createBinding | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 145 | PUT | `/api/channel-agent-bindings/{id}` | `channelAgentBinding.js:16` | updateBinding | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 146 | DELETE | `/api/channel-agent-bindings/{id}` | `channelAgentBinding.js:20` | deleteBinding | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 147 | GET | `/api/chat-channels` | `chatChannel.js:4` | listChannels | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 148 | GET | `/api/chat-channels/{channelId}` | `chatChannel.js:8` | getChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 147 | GET | `/api/chat-channels` | `chatChannel.js:4` | listChannels | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回seed渠道。证据147-off-channels.json |
+| 148 | GET | `/api/chat-channels/{channelId}` | `chatChannel.js:8` | getChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | path channelId（主键id） | 通过 | 通过 | 200返回id=3渠道详情。证据148-off-channel-get.json |
 | 149 | POST | `/api/chat-channels` | `chatChannel.js:12` | createChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 150 | PUT | `/api/chat-channels/{channelId}` | `chatChannel.js:16` | updateChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 151 | DELETE | `/api/chat-channels/{channelId}` | `chatChannel.js:20` | deleteChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 152 | POST | `/api/chat-channels/{channelId}/rotate-key` | `chatChannel.js:24` | rotateAppKey | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 153 | POST | `/api/chat-channels/{channelId}/reset-secret` | `chatChannel.js:28` | resetAppSecret | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 154 | GET | `/api/churn/prediction` | `churnPrediction.js:4` | getChurnPrediction | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 155 | GET | `/api/churn-prediction` | `churnPrediction.js:7` | getChurnPredictions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 156 | GET | `/api/churn-prediction/users` | `churnPrediction.js:10` | getHighRiskUsers | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 157 | GET | `/api/churn-prediction/warnings` | `churnPrediction.js:13` | getChurnWarnings | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 158 | GET | `/api/churn/unhandled-warnings` | `churnPrediction.js:16` | getUnhandledWarnings | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 159 | POST | `/api/churn/warnings/{id}/handle` | `churnPrediction.js:19` | markWarningHandled | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 160 | GET | `/api/churn-prediction/model-config` | `churnPrediction.js:22` | getChurnModelConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 154 | GET | `/api/churn/prediction` | `churnPrediction.js:4` | getChurnPrediction | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id必填、days | 通过 | 通过 | 缺user_id→400；存在性未校验（不存在用户返回零值模型churn_risk=low——宽松契约观察项，无泄露）。证据154-off-churn*.json |
+| 155 | GET | `/api/churn-prediction` | `churnPrediction.js:7` | getChurnPredictions | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回seed预测（churn_score 63.13 medium等）。证据155-off-predictions.json |
+| 156 | GET | `/api/churn-prediction/users` | `churnPrediction.js:10` | getHighRiskUsers | 用户端 Cookie / Bearer；权限以后端注册为准 | query threshold等 | 通过 | 通过 | 200（threshold=70无高危→空数组）。证据156-off-high-risk.json |
+| 157 | GET | `/api/churn-prediction/warnings` | `churnPrediction.js:13` | getChurnWarnings | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回seed预警。证据157-off-warnings.json |
+| 158 | GET | `/api/churn/unhandled-warnings` | `churnPrediction.js:16` | getUnhandledWarnings | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200返回未处理预警。证据158-off-unhandled.json |
+| 159 | POST | `/api/churn/warnings/{id}/handle` | `churnPrediction.js:19` | markWarningHandled | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body处理人/备注 | 通过 | 通过 | 不存在→404带id。证据159-off-handle.json |
+| 160 | GET | `/api/churn-prediction/model-config` | `churnPrediction.js:22` | getChurnModelConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200模型权重配置（未配置时零值默认）。证据160-off-model-config.json |
 | 161 | POST | `/api/churn-prediction/model-config` | `churnPrediction.js:25` | saveChurnModelConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 162 | GET | `/api/churn-prediction/statistics` | `churnPrediction.js:28` | getChurnStatistics | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 163 | GET | `/api/churn/risk-distribution` | `churnPrediction.js:31` | getRiskDistribution | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 164 | POST | `/api/churn/warnings/intervene` | `churnPrediction.js:38` | interveneUser | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 162 | GET | `/api/churn-prediction/statistics` | `churnPrediction.js:28` | getChurnStatistics | 用户端 Cookie / Bearer；权限以后端注册为准 | query start_date/end_date必填 | 通过 | 通过 | 缺日期→400明确文案；带日期→200统计。证据162-off-statistics*.json |
+| 163 | GET | `/api/churn/risk-distribution` | `churnPrediction.js:31` | getRiskDistribution | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200四档分布（low38/medium12）。证据163-off-risk-dist.json |
+| 164 | POST | `/api/churn/warnings/intervene` | `churnPrediction.js:38` | interveneUser | 用户端 Cookie / Bearer；权限以后端注册为准 | body intervention_type必填 | 通过 | 通过 | 缺类型→400明确文案。证据164-off-intervene.json |
 | 165 | POST | `/api/user-segment/rfm/calculate` | `churnPrediction.js:50` | calculateRFM | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 166 | DELETE | `/api/clues/delete/{id}` | `clue.js:5` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 166 | DELETE | `/api/clues/delete/{id}` | `clue.js:5` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 不存在→404带id。证据166-off-clue-delete.json |
 | 167 | GET | `/api/clues/list?{q}` | `clue.js:12` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 168 | GET | `/api/clues/statistics` | `clue.js:15` | statistics | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 168 | GET | `/api/clues/statistics` | `clue.js:15` | statistics | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200分类型统计。证据168-off-clue-stats.json |
 | 169 | POST | `/api/clues/import` | `clue.js:18` | import | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 170 | GET | `/api/system/stats` | `cockpit.js:4` | getSystemStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 171 | GET | `/api/monitor/health` | `cockpit.js:8` | getOpsStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 172 | GET | `/api/monitor/node-health` | `cockpit.js:12` | getModuleStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 173 | GET | `/api/monitor/anomalies` | `cockpit.js:16` | getRecentOperations | 用户端 Cookie / Bearer；权限以后端注册为准 | { limit } | 未测 | 未测 | — |
-| 174 | GET | `/api/ai/sales-cockpit` | `cockpit.js:24` | getSalesCockpit | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 175 | GET | `/api/community/groups` | `community.js:5` | getGroups | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 176 | POST | `/api/community/groups` | `community.js:9` | createGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 177 | GET | `/api/community/groups/{id}` | `community.js:13` | getGroupById | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 178 | PUT | `/api/community/groups/{id}` | `community.js:17` | updateGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 179 | DELETE | `/api/community/groups/{id}` | `community.js:21` | deleteGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 180 | GET | `/api/community/members` | `community.js:25` | getMembers | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
+| 170 | GET | `/api/system/stats` | `cockpit.js:4` | getSystemStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 CPU/内存/磁盘/运行时长。证据170-off-system-stats.json |
+| 171 | GET | `/api/monitor/health` | `cockpit.js:8` | getOpsStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200收发速率/积压。证据171-off-monitor-health.json |
+| 172 | GET | `/api/monitor/node-health` | `cockpit.js:12` | getModuleStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200节点健康矩阵。证据172-off-node-health.json |
+| 173 | GET | `/api/monitor/anomalies` | `cockpit.js:16` | getRecentOperations | 用户端 Cookie / Bearer；权限以后端注册为准 | query limit | 通过 | 通过 | 200异常汇总。证据173-off-anomalies.json |
+| 174 | GET | `/api/ai/sales-cockpit` | `cockpit.js:24` | getSalesCockpit | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200渠道健康/销售面板。证据174-off-sales-cockpit.json |
+| 175 | GET | `/api/community/groups` | `community.js:5` | getGroups | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空态。证据175-off-groups.json |
+| 176 | POST | `/api/community/groups` | `community.js:9` | createGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/platform | 通过 | 通过 | 200创建。证据176-off-group-create.json |
+| 177 | GET | `/api/community/groups/{id}` | `community.js:13` | getGroupById | 用户端 Cookie / Bearer；权限以后端注册为准 | path id（uuid） | 通过 | 通过 | 200详情。证据177-off-group-get.json |
+| 178 | PUT | `/api/community/groups/{id}` | `community.js:17` | updateGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body name/description | 通过 | 通过 | 200更新。证据178-off-group-update.json |
+| 179 | DELETE | `/api/community/groups/{id}` | `community.js:21` | deleteGroup | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据179-off-group-delete.json |
+| 180 | GET | `/api/community/members` | `community.js:25` | getMembers | 用户端 Cookie / Bearer；权限以后端注册为准 | query group_id等 | 通过 | 通过 | 200空成员。证据180-off-members.json |
 | 181 | GET | `/api/community/messages` | `community.js:29` | getMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 182 | GET | `/api/community/stats` | `community.js:33` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
+| 182 | GET | `/api/community/stats` | `community.js:33` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query可选 | 通过 | 通过 | 200统计（删除前total_groups=1）。证据182-off-stats.json |
 | 183 | POST | `/api/community/import` | `community.js:37` | importData | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 184 | POST | `/api/community/export` | `community.js:41` | exportData | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 185 | GET | `/api/manage/config-params` | `configParams.js:8` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { group, include_deprecated: includeDeprecated ? 1 : 0 } } | 未测 | 未测 | — |
-| 186 | GET | `/api/manage/config-params/groups` | `configParams.js:17` | listGroups | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 187 | GET | `/api/manage/config-params/audit-logs` | `configParams.js:21` | auditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { limit } } | 未测 | 未测 | — |
-| 188 | PUT | `/api/manage/config-params/{group}/{key}` | `configParams.js:25` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | { value } | 未测 | 未测 | — |
-| 189 | POST | `/api/manage/config-params/{group}/{key}/reset` | `configParams.js:29` | reset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 185 | GET | `/api/manage/config-params` | `configParams.js:8` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query group/include_deprecated | 通过 | 通过 | 200参数清单（288项种子）。证据185-off-config-list.json |
+| 186 | GET | `/api/manage/config-params/groups` | `configParams.js:17` | listGroups | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200分组的组清单。证据186-off-config-groups.json |
+| 187 | GET | `/api/manage/config-params/audit-logs` | `configParams.js:21` | auditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | query limit | 通过 | 通过 | 200含embedding等历史变更。证据187-off-audit-logs.json |
+| 188 | PUT | `/api/manage/config-params/{group}/{key}` | `configParams.js:25` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | body { value } | 通过 | 通过 | 闭环：改agent_loop_drift_factor→1.35读回生效；审计落#187。证据188-*.json |
+| 189 | POST | `/api/manage/config-params/{group}/{key}/reset` | `configParams.js:29` | reset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无body | 通过 | 通过 | 闭环：reset→默认2.5读回恢复。证据189-*.json |
 | 190 | POST | `/api/manage/config-params/{group}/reset` | `configParams.js:33` | bulkReset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 191 | PUT | `/api/manage/platform-host` | `configParams.js:47` | setPlatformHost | 用户端 Cookie / Bearer；权限以后端注册为准 | { address } ; { _silent: true } | 未测 | 未测 | — |
-| 192 | POST | `/api/manage/platform-host/connectivity` | `configParams.js:56` | testPlatformConnectivity | 用户端 Cookie / Bearer；权限以后端注册为准 | { address: address &#124;&#124; '' } ; { _silent: true } | 未测 | 未测 | — |
-| 193 | GET | `/api/contacts/{customerId}/consents` | `contactConsent.js:12` | getTimeline | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 194 | POST | `/api/contacts/{customerId}/consents` | `contactConsent.js:16` | record | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 195 | GET | `/api/contacts/{customerId}/preferences` | `contactConsent.js:20` | getPreferences | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 196 | PUT | `/api/contacts/{customerId}/preferences` | `contactConsent.js:24` | setPreference | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 197 | GET | `/api/conversion-funnels` | `conversionFunnel.js:5` | getFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 198 | GET | `/api/conversion-funnels/stage` | `conversionFunnel.js:8` | getStageDetails | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { stage, ...params } } | 未测 | 未测 | — |
+| 192 | POST | `/api/manage/platform-host/connectivity` | `configParams.js:56` | testPlatformConnectivity | 用户端 Cookie / Bearer；权限以后端注册为准 | body { address } | 通过 | 通过 | PLATFORM_ENABLED=false→200 reachable=false带「先开平台集成」说明（设计内短路）。证据192-off-connectivity.json |
+| 193 | GET | `/api/contacts/{customerId}/consents` | `contactConsent.js:12` | getTimeline | 用户端 Cookie / Bearer；权限以后端注册为准 | path customerId；query可选 | 通过 | 通过 | 200空时间线。证据193-off-consent-timeline.json |
+| 194 | POST | `/api/contacts/{customerId}/consents` | `contactConsent.js:16` | record | 用户端 Cookie / Bearer；权限以后端注册为准 | body channel/decision/purpose/source（枚举校验） | 通过 | 通过 | 逐级枚举校验（decision/purpose/source各自400带合法值）；合法→200 recorded。证据194-off-consent-record*.json |
+| 195 | GET | `/api/contacts/{customerId}/preferences` | `contactConsent.js:20` | getPreferences | 用户端 Cookie / Bearer；权限以后端注册为准 | path customerId | 通过 | 通过 | 200空列表。证据195-off-preferences.json |
+| 196 | PUT | `/api/contacts/{customerId}/preferences` | `contactConsent.js:24` | setPreference | 用户端 Cookie / Bearer；权限以后端注册为准 | body purpose必填(marketing/support/transactional) | 通过 | 通过 | 缺purpose→400；合法→200 updated。证据196-*.json |
+| 197 | GET | `/api/conversion-funnels` | `conversionFunnel.js:5` | getFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | query days等 | 通过 | 通过 | 200漏斗5阶段。证据197-off-funnel.json |
+| 198 | GET | `/api/conversion-funnels/stage` | `conversionFunnel.js:8` | getStageDetails | 用户端 Cookie / Bearer；权限以后端注册为准 | query stage+days | 通过 | 通过 | 200 stage=lead详情。证据198-off-stage.json |
 | 199 | POST | `/api/customer-sessions/{sessionId}/csat` | `csat.js:4` | submitCSAT | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 200 | GET | `/api/csat/stats` | `csat.js:7` | getCSATStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 201 | GET | `/api/csat/trend` | `csat.js:10` | getCSATTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 200 | GET | `/api/csat/stats` | `csat.js:7` | getCSATStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200空态统计。证据200-off-csat-stats.json |
+| 201 | GET | `/api/csat/trend` | `csat.js:10` | getCSATTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200空趋势。证据201-off-csat-trend.json |
 | 202 | GET | `/api/csat/negative` | `csat.js:13` | getNegativeCSAT | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 203 | POST | `/api/customer-sessions/{sessionId}/csat/trigger` | `csat.js:16` | triggerCSATSurvey | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 204 | GET | `/api/csat/template` | `csat.js:18` | getCSATTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 204 | GET | `/api/csat/template` | `csat.js:18` | getCSATTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200默认模板。证据204-off-csat-template.json |
 | 205 | PUT | `/api/csat/template` | `csat.js:19` | saveCSATTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 206 | GET | `/api/custom-tools` | `customIntegration.js:6` | listCustomTools | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 207 | POST | `/api/custom-tools/import` | `customIntegration.js:10` | importCustomTool | 用户端 Cookie / Bearer；权限以后端注册为准 | payload | 未测 | 未测 | — |
-| 208 | DELETE | `/api/custom-tools/{id}` | `customIntegration.js:14` | deleteCustomTool | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 209 | GET | `/api/mcp-servers` | `customIntegration.js:18` | listMcpServers | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 210 | POST | `/api/mcp-servers` | `customIntegration.js:22` | createMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | payload | 未测 | 未测 | — |
-| 211 | DELETE | `/api/mcp-servers/{id}` | `customIntegration.js:26` | deleteMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 212 | PUT | `/api/mcp-servers/{id}/enabled` | `customIntegration.js:30` | setMcpServerEnabled | 用户端 Cookie / Bearer；权限以后端注册为准 | { enabled } | 未测 | 未测 | — |
-| 213 | GET | `/api/mcp-servers/{id}/test` | `customIntegration.js:34` | testMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 214 | GET | `/api/custom-reports` | `customReport.js:4` | getReportList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 206 | GET | `/api/custom-tools` | `customIntegration.js:6` | listCustomTools | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空态；导入后含记录。证据206-*.json |
+| 207 | POST | `/api/custom-tools/import` | `customIntegration.js:10` | importCustomTool | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/base_url/schema_json(string)必填 | 通过 | 通过 | 缺字段逐级400；合法OpenAPI→200导入1工具。证据207-off-tool-import.json |
+| 208 | DELETE | `/api/custom-tools/{id}` | `customIntegration.js:14` | deleteCustomTool | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200 deleted=1（清理闭环）。证据208-off-tool-delete.json |
+| 209 | GET | `/api/mcp-servers` | `customIntegration.js:18` | listMcpServers | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空态→创建后含id=1。证据209-*.json |
+| 210 | POST | `/api/mcp-servers` | `customIntegration.js:22` | createMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/endpoint必填 | 通过 | 通过 | **SSRF防护真实生效**：127.0.0.1→400拒绝内网；公网→200保存。证据210-off-mcp-create.json |
+| 211 | DELETE | `/api/mcp-servers/{id}` | `customIntegration.js:26` | deleteMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200已删除。证据211-off-mcp-delete.json |
+| 212 | PUT | `/api/mcp-servers/{id}/enabled` | `customIntegration.js:30` | setMcpServerEnabled | 用户端 Cookie / Bearer；权限以后端注册为准 | body { enabled } | 通过 | 通过 | 200 enabled=false回显。证据212-off-mcp-enabled.json |
+| 213 | GET | `/api/mcp-servers/{id}/test` | `customIntegration.js:34` | testMcpServer | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 已删除MCP→错误分支（创建→test→删除链路见#210-211）；实测127.0.0.1被SSRF门拒绝，测试路由同域。证据210-off-mcp-create.json |
+| 214 | GET | `/api/custom-reports` | `customReport.js:4` | getReportList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空态。证据214-off-reports.json |
 | 215 | GET | `/api/custom-reports/{id}` | `customReport.js:7` | getReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 216 | POST | `/api/custom-reports` | `customReport.js:10` | createReport | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 217 | PUT | `/api/custom-reports/{id}` | `customReport.js:13` | updateReport | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 218 | DELETE | `/api/custom-reports/{id}` | `customReport.js:16` | deleteReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 219 | GET | `/api/custom-reports/templates` | `customReport.js:19` | getPublicTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 219 | GET | `/api/custom-reports/templates` | `customReport.js:19` | getPublicTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空模板。证据219-off-templates.json |
 | 220 | POST | `/api/custom-reports/templates/{id}/use` | `customReport.js:22` | useReportTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 221 | GET | `/api/custom-reports/{id}/data` | `customReport.js:25` | queryReportData | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 222 | GET | `/api/custom-reports/{id}/data?format=export` | `customReport.js:41` | exportCustomReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 223 | GET | `/api/custom-reports/{id}/data?format=run` | `customReport.js:44` | runCustomReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 224 | GET | `/api/customer-360/basic?user_id={id}` | `customer360.js:4` | getCustomerBasic | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { signal } | 未测 | 未测 | — |
-| 225 | GET | `/api/customer-360/events` | `customer360.js:7` | getCustomerEvents | 用户端 Cookie / Bearer；权限以后端注册为准 | { user_id: id, ...params } ; { signal } | 未测 | 未测 | — |
-| 226 | GET | `/api/customer-360/sessions` | `customer360.js:10` | getCustomerSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | { user_id: id, ...params } ; { signal } | 未测 | 未测 | — |
-| 227 | GET | `/api/customer-360/tags?user_id={id}` | `customer360.js:13` | getCustomerTags | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { signal } | 未测 | 未测 | — |
-| 228 | GET | `/api/customer-360/messages` | `customer360.js:23` | getCustomerMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | { user_id: id, ...params } ; { signal } | 未测 | 未测 | — |
-| 229 | GET | `/api/customer-360/orders` | `customer360.js:27` | getCustomerOrders | 用户端 Cookie / Bearer；权限以后端注册为准 | { user_id: id, ...params } ; { signal } | 未测 | 未测 | — |
-| 230 | GET | `/api/customer-360/list` | `customer360.js:53` | getCustomerList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 231 | GET | `/api/customer-360/basic?user_id={id}` | `customer360.js:56` | getCustomerBasicById | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 232 | GET | `/api/customer-360/tags?user_id={id}` | `customer360.js:76` | r | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 233 | PUT | `/api/customer-360/tags?user_id={id}` | `customer360.js:85` | addCustomerTag | 用户端 Cookie / Bearer；权限以后端注册为准 | { tags } | 未测 | 未测 | — |
-| 234 | PUT | `/api/customer-360/tags?user_id={id}` | `customer360.js:90` | removeCustomerTag | 用户端 Cookie / Bearer；权限以后端注册为准 | { tags } | 未测 | 未测 | — |
-| 235 | POST | `/api/events/track` | `customerEvent.js:4` | trackEvent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 236 | POST | `/api/events/pageview` | `customerEvent.js:7` | trackPageView | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 237 | POST | `/api/events/click` | `customerEvent.js:10` | trackClick | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 238 | POST | `/api/events/purchase` | `customerEvent.js:13` | trackPurchase | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 239 | POST | `/api/events/signup` | `customerEvent.js:16` | trackSignup | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 240 | POST | `/api/events/login` | `customerEvent.js:19` | trackLogin | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 241 | POST | `/api/events/add-to-cart` | `customerEvent.js:22` | trackAddToCart | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 242 | GET | `/api/events/customer/{customerId}` | `customerEvent.js:25` | getCustomerEventHistory | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 243 | GET | `/api/events/stats` | `customerEvent.js:28` | getEventStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 244 | DELETE | `/api/events/customer/{id}` | `customerEvent.js:40` | deleteEvent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 245 | GET | `/api/customer-events/list` | `customerEvent.js:44` | getGlobalEvents | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 246 | GET | `/api/customer-journey/overview` | `customerJourney.js:4` | getJourneyOverview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 247 | GET | `/api/customer-journey/overview?customer_id={customerId}` | `customerJourney.js:8` | getJourneyState | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 248 | GET | `/api/customer-journey/stages` | `customerJourney.js:12` | listJourneyStages | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 249 | GET | `/api/customer-journey/by-stage?stage={stage}` | `customerJourney.js:16` | listByStage | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 250 | POST | `/api/customer-journey/transition` | `customerJourney.js:20` | transitionJourney | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 251 | POST | `/api/customer-journey/touch` | `customerJourney.js:24` | touchCustomer | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 252 | POST | `/api/agents` | `customerService.js:4` | createAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 253 | GET | `/api/agents/{id}` | `customerService.js:7` | getAgentStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 254 | GET | `/api/agents/online` | `customerService.js:10` | getOnlineAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 255 | GET | `/api/agents/all` | `customerService.js:13` | listAllAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 256 | PUT | `/api/agents/{id}/status` | `customerService.js:16` | updateAgentStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 257 | POST | `/api/agents/{id}/online` | `customerService.js:19` | goOnline | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 258 | POST | `/api/agents/{id}/offline` | `customerService.js:22` | goOffline | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 259 | GET | `/api/agents/{id}/sessions` | `customerService.js:25` | getAgentSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 260 | GET | `/api/agents/me` | `customerService.js:28` | getMyAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 261 | GET | `/api/quick-replies` | `customerService.js:32` | getQuickReplies | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 262 | GET | `/api/quick-replies/categories` | `customerService.js:35` | getQuickReplyCategories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 263 | POST | `/api/quick-replies` | `customerService.js:38` | createQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 264 | PUT | `/api/quick-replies/{id}` | `customerService.js:41` | updateQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 265 | DELETE | `/api/quick-replies/{id}` | `customerService.js:44` | deleteQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 266 | GET | `/api/session-tags` | `customerService.js:48` | getSessionTags | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 267 | POST | `/api/session-tags` | `customerService.js:51` | createSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 268 | PUT | `/api/session-tags/{id}` | `customerService.js:54` | updateSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 269 | DELETE | `/api/session-tags/{id}` | `customerService.js:57` | deleteSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 224 | GET | `/api/customer-360/basic?user_id={id}` | `customer360.js:4` | getCustomerBasic | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id | 通过 | 通过 | 200客户1号基础信息。证据224-off-c360-basic.json |
+| 225 | GET | `/api/customer-360/events` | `customer360.js:7` | getCustomerEvents | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id+page | 通过 | 通过 | 200事件列表。证据225-off-c360-events.json |
+| 226 | GET | `/api/customer-360/sessions` | `customer360.js:10` | getCustomerSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id+page | 通过 | 通过 | 200会话历史（seed-sess-0001 douyin closed）。证据226-off-c360-sessions.json |
+| 227 | GET | `/api/customer-360/tags?user_id={id}` | `customer360.js:13` | getCustomerTags | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id | 通过 | 通过 | 200空标签。证据227-off-c360-tags.json |
+| 228 | GET | `/api/customer-360/messages` | `customer360.js:23` | getCustomerMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id+page | 通过 | 通过 | 200消息历史。证据228-off-c360-messages.json |
+| 229 | GET | `/api/customer-360/orders` | `customer360.js:27` | getCustomerOrders | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id+page | 通过 | 通过 | 200空订单。证据229-off-c360-orders.json |
+| 230 | GET | `/api/customer-360/list` | `customer360.js:53` | getCustomerList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200客户映射列表。证据230-off-c360-list.json |
+| 231 | GET | `/api/customer-360/basic?user_id={id}` | `customer360.js:56` | getCustomerBasicById | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id（同#224别名行） | 通过 | 通过 | 同#224同handler链。证据224-off-c360-basic.json |
+| 232 | GET | `/api/customer-360/tags?user_id={id}` | `customer360.js:76` | r | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id（同#227别名行） | 通过 | 通过 | 同#227。证据227-off-c360-tags.json |
+| 233 | PUT | `/api/customer-360/tags?user_id={id}` | `customer360.js:85` | addCustomerTag | 用户端 Cookie / Bearer；权限以后端注册为准 | body { tags }——PUT为整体替换语义（ReplaceUserTags） | 通过 | 通过 | 200加标签读回生效。证据233-off-tag-add.json |
+| 234 | PUT | `/api/customer-360/tags?user_id={id}` | `customer360.js:90` | removeCustomerTag | 用户端 Cookie / Bearer；权限以后端注册为准 | 同上：替换为移除后集合；tags=[]清空 | 通过 | 通过 | 200替换空数组→读回[]（前端发替换集合实现增/删）。证据234-*.json |
+| 235 | POST | `/api/events/track` | `customerEvent.js:4` | trackEvent | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/event_type/properties | 通过 | 通过 | 200追踪成功。证据235-off-track.json |
+| 236 | POST | `/api/events/pageview` | `customerEvent.js:7` | trackPageView | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id+url必填,title可选 | 通过 | 通过 | 缺字段→400带字段名；合法→200。证据236-off-pageview.json |
+| 237 | POST | `/api/events/click` | `customerEvent.js:10` | trackClick | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id+element必填,target可选 | 通过 | 通过 | 200。证据237-off-click.json |
+| 238 | POST | `/api/events/purchase` | `customerEvent.js:13` | trackPurchase | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/amount(非零)/items | 通过 | 通过 | 200。证据238-off-purchase.json |
+| 239 | POST | `/api/events/signup` | `customerEvent.js:16` | trackSignup | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/email等 | 通过 | 通过 | 200。证据239-off-signup.json |
+| 240 | POST | `/api/events/login` | `customerEvent.js:19` | trackLogin | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id | 通过 | 通过 | 200。证据240-off-login.json |
+| 241 | POST | `/api/events/add-to-cart` | `customerEvent.js:22` | trackAddToCart | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/product_id/price(非零)/quantity | 通过 | 通过 | 缺price→400；合法→200。证据241-off-cart.json |
+| 242 | GET | `/api/events/customer/{customerId}` | `customerEvent.js:25` | getCustomerEventHistory | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200事件历史。证据242-off-event-history.json |
+| 243 | GET | `/api/events/stats` | `customerEvent.js:28` | getEventStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200统计407事件。证据243-off-event-stats.json |
+| 244 | DELETE | `/api/events/customer/{id}` | `customerEvent.js:40` | deleteEvent | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200（deleted_count=0——按事件行ID删除语义，本轮fixture为history视图ID）。证据244-off-event-delete.json |
+| 245 | GET | `/api/customer-journey/overview` | `customerJourney.js:4` | overview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200十阶段漏斗。证据245-off-journey.json |
+| 246 | GET | `/api/customer-journey/overview` | `customerJourney.js:4` | getJourneyOverview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参（同#245别名行） | 通过 | 通过 | 同#245。证据245-off-journey.json |
+| 247 | GET | `/api/customer-journey/overview?customer_id={customerId}` | `customerJourney.js:8` | getJourneyState | 用户端 Cookie / Bearer；权限以后端注册为准 | query customer_id | 通过 | 通过 | 200当前stage=stranger。证据247-off-journey-state.json |
+| 248 | GET | `/api/customer-journey/stages` | `customerJourney.js:12` | listJourneyStages | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200阶段定义。证据248-off-stages.json |
+| 249 | GET | `/api/customer-journey/by-stage?stage={stage}` | `customerJourney.js:16` | listByStage | 用户端 Cookie / Bearer；权限以后端注册为准 | query stage | 通过 | 通过 | 200 count=0。证据249-off-by-stage.json |
+| 250 | POST | `/api/customer-journey/transition` | `customerJourney.js:20` | transitionJourney | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/to_stage必填,source/reason可选 | 通过 | 通过 | 200迁移成功（from contact→to lead）。证据250-off-transition.json |
+| 251 | POST | `/api/customer-journey/touch` | `customerJourney.js:24` | touchCustomer | 用户端 Cookie / Bearer；权限以后端注册为准 | body customer_id/channel | 通过 | 通过 | 200互动已记录。证据251-off-touch.json |
+| 252 | POST | `/api/agents` | `customerService.js:4` | createAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | body agent_id(正整数)/agent_name必填,max_sessions(1~50) | 通过 | 通过 | 200创建id=6 agent_id=20（测后SQL清理）。证据252-off-agent-create.json |
+| 253 | GET | `/api/agents/{id}` | `customerService.js:7` | getAgentStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | path id——**agent_id业务键**（非主键；前端myAgentId=me.agent_id契约一致） | 通过 | 通过 | agent_id=20→200；主键6→404。观察项：404文案为裸id。证据253-off-agent-get-20.json |
+| 254 | GET | `/api/agents/online` | `customerService.js:10` | getOnlineAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空在线列表。证据254-off-agents-online.json |
+| 255 | GET | `/api/agents/all` | `customerService.js:13` | listAllAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200座席列表。证据255-off-agents-all.json |
+| 256 | PUT | `/api/agents/{id}/status` | `customerService.js:16` | updateAgentStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | path agent_id；body { status } | 通过 | 通过 | 200更新成功。证据256-off-agent-status-20.json |
+| 257 | POST | `/api/agents/{id}/online` | `customerService.js:19` | goOnline | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200上线成功（测后SQL还原offline）。证据257-off-go-online.json |
+| 258 | POST | `/api/agents/{id}/offline` | `customerService.js:22` | goOffline | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 400「还有 4 个未完成的会话」业务保护正确。证据258-off-go-offline.json |
+| 259 | GET | `/api/agents/{id}/sessions` | `customerService.js:25` | getAgentSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | path agent_id | 通过 | 通过 | 200空会话。证据259-off-agent-sessions.json |
+| 260 | GET | `/api/agents/me` | `customerService.js:28` | getMyAgent | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200当前座席。证据260-off-agents-me.json |
+| 261 | GET | `/api/quick-replies` | `customerService.js:32` | getQuickReplies | 用户端 Cookie / Bearer；权限以后端注册为准 | query page等 | 通过 | 通过 | 200快捷回复列表。证据261-off-quick-replies.json |
+| 262 | GET | `/api/quick-replies/categories` | `customerService.js:35` | getQuickReplyCategories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200六类目。证据262-off-qr-categories.json |
+| 263 | POST | `/api/quick-replies` | `customerService.js:38` | createQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | body category/title/content/channel | 通过 | 通过 | 200创建id=19。证据263-off-qr-create.json |
+| 264 | PUT | `/api/quick-replies/{id}` | `customerService.js:41` | updateQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据264-off-qr-update.json |
+| 265 | DELETE | `/api/quick-replies/{id}` | `customerService.js:44` | deleteQuickReply | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据265-off-qr-delete.json |
+| 266 | GET | `/api/session-tags` | `customerService.js:48` | getSessionTags | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空态。证据266-off-session-tags.json |
+| 267 | POST | `/api/session-tags` | `customerService.js:51` | createSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | body name+code必填 | 通过 | 通过 | 缺code→400；合法→200。证据267-off-stag-create.json |
+| 268 | PUT | `/api/session-tags/{id}` | `customerService.js:54` | updateSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据268-off-stag-update.json |
+| 269 | DELETE | `/api/session-tags/{id}` | `customerService.js:57` | deleteSessionTag | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除。证据269-off-stag-delete.json |
 | 270 | GET | `/api/ai-suggestions/{sessionId}` | `customerService.js:61` | getAISuggestions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 271 | POST | `/api/ai-suggestions/{id}/use` | `customerService.js:64` | useAISuggestion | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 272 | POST | `/api/customer-sessions/{sessionId}/tags` | `customerService.js:68` | tagSession | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 273 | GET | `/api/customer-sessions` | `customerSession.js:4` | getSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 274 | GET | `/api/customer-sessions/{id}/messages` | `customerSession.js:7` | getSessionMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 275 | POST | `/api/customer-sessions/{data.sessionId}/messages` | `customerSession.js:10` | sendMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | { content: data.content, sender_type: data.sender_type &#124;&#124; 'agent', sender_name: data.sender_name &#124;&#124; '客服', sender_id: String(data.sender_id &#124;&#124; '') } | 未测 | 未测 | — |
-| 276 | POST | `/api/customer-sessions` | `customerSession.js:18` | createSession | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 277 | POST | `/api/customer-sessions/{id}/close` | `customerSession.js:21` | closeSession | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 278 | POST | `/api/customer-sessions/{id}/transfer` | `customerSession.js:24` | transferSession | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 273 | GET | `/api/customer-sessions` | `customerSession.js:4` | getSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size等 | 通过 | 通过 | 200返回seed会话。证据273-off-sessions.json |
+| 274 | GET | `/api/customer-sessions/{id}/messages` | `customerSession.js:7` | getSessionMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | path id+query page | 通过 | 通过 | 200历史消息；发送后含新消息。证据274-*.json |
+| 275 | POST | `/api/customer-sessions/{data.sessionId}/messages` | `customerSession.js:10` | sendMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | body content/sender_type/sender_name/sender_id | 通过 | 通过 | closed会话→400「会话状态 closed 不允许发送消息」（正确状态机）；活跃会话→200落库id=675。证据275-off-send.json、274b |
+| 276 | POST | `/api/customer-sessions` | `customerSession.js:18` | createSession | 用户端 Cookie / Bearer；权限以后端注册为准 | body platform/account_id/user_id等 | 通过 | 通过 | 200创建sess_...（pending）。证据276-off-session-create.json |
+| 277 | POST | `/api/customer-sessions/{id}/close` | `customerSession.js:21` | closeSession | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200关闭成功。证据277-off-close.json |
+| 278 | POST | `/api/customer-sessions/{id}/transfer` | `customerSession.js:24` | transferSession | 用户端 Cookie / Bearer；权限以后端注册为准 | body new_agent_id必填（目标坐席用户主键） | 通过 | 通过 | 缺new_agent_id→400明确文案；成功路径需活跃座席（本轮已closed，拒绝分支已验）。证据278-off-transfer.json |
 | 279 | POST | `/api/customer-sessions/{id}/takeover` | `customerSession.js:28` | takeoverSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason } | 未测 | 未测 | — |
 | 280 | POST | `/api/customer-sessions/{id}/release` | `customerSession.js:32` | releaseSession | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 281 | POST | `/api/customer-sessions/{id}/switch-handler` | `customerSession.js:36` | switchSessionHandler | 用户端 Cookie / Bearer；权限以后端注册为准 | { handler_type: handlerType, reason } | 未测 | 未测 | — |
-| 282 | POST | `/api/customer-sessions/{id}/blacklist` | `customerSession.js:40` | blacklistSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason, ttl_hours: ttlHours } | 未测 | 未测 | — |
-| 283 | POST | `/api/customer-sessions/blacklist/remove` | `customerSession.js:44` | unblacklistUser | 用户端 Cookie / Bearer；权限以后端注册为准 | { user_id: userId, platform } | 未测 | 未测 | — |
-| 284 | GET | `/api/customer-sessions/blacklist/check` | `customerSession.js:48` | checkBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { user_id: userId, platform } } | 未测 | 未测 | — |
-| 285 | GET | `/api/customer-sessions/blacklist` | `customerSession.js:52` | listBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 286 | GET | `/api/customer-360?user_id={id}` | `customerSession.js:56` | getCustomer360 | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 281 | POST | `/api/customer-sessions/{id}/switch-handler` | `customerSession.js:36` | switchSessionHandler | 用户端 Cookie / Bearer；权限以后端注册为准 | body handler_type/reason | 通过 | 通过 | closed会话→400「当前会话未由坐席持有」状态机正确。证据281-off-switch.json |
+| 282 | POST | `/api/customer-sessions/{id}/blacklist` | `customerSession.js:40` | blacklistSession | 用户端 Cookie / Bearer；权限以后端注册为准 | body reason/ttl_hours | 通过 | 通过 | 200拉黑成功（closed会话的user）。证据282-off-blacklist.json |
+| 283 | POST | `/api/customer-sessions/blacklist/remove` | `customerSession.js:44` | unblacklistUser | 用户端 Cookie / Bearer；权限以后端注册为准 | body user_id/platform | 通过 | 通过 | 200解除（清理闭环）。证据283-off-unblacklist.json |
+| 284 | GET | `/api/customer-sessions/blacklist/check` | `customerSession.js:48` | checkBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id/platform（GET方法） | 通过 | 通过 | 200 blacklisted=false。证据284-off-blacklist-check.json |
+| 285 | GET | `/api/customer-sessions/blacklist` | `customerSession.js:52` | listBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | query page等 | 通过 | 通过 | 200黑名单列表。证据285-off-blacklist-list.json |
+| 286 | GET | `/api/customer-360?user_id={id}` | `customerSession.js:56` | getCustomer360 | 用户端 Cookie / Bearer；权限以后端注册为准 | query user_id | 通过 | 通过 | 200聚合视图。证据286-off-c360.json |
 | 287 | GET | `/api/customer-360/basic?user_id={id}` | `customerSession.js:59` | getCustomerBasic | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 288 | GET | `/api/customer-360/stats?user_id={id}` | `customerSession.js:62` | getCustomerStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 289 | GET | `/api/customer-360/sessions?user_id={id}` | `customerSession.js:65` | getCustomerSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 290 | GET | `/api/customer-360/tags?user_id={id}` | `customerSession.js:68` | getCustomerTags | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 291 | GET | `/api/dashboards` | `dashboardScreen.js:4` | getScreenList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 291 | GET | `/api/dashboards` | `dashboardScreen.js:4` | getScreenList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200空态。证据291-off-screens.json |
 | 292 | GET | `/api/dashboards/{id}` | `dashboardScreen.js:7` | getScreenByID | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 293 | POST | `/api/dashboards` | `dashboardScreen.js:10` | createScreen | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 294 | PUT | `/api/dashboards/{id}` | `dashboardScreen.js:13` | updateScreen | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 295 | DELETE | `/api/dashboards/{id}` | `dashboardScreen.js:16` | deleteScreen | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 296 | GET | `/api/dashboards/public/{code}` | `dashboardScreen.js:19` | publicViewScreen | 公开 | 无附加入参 | 未测 | 未测 | — |
-| 297 | GET | `/api/dashboards/data` | `dashboardScreen.js:23` | getDashboardData | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 298 | GET | `/api/dashboards/activities` | `dashboardScreen.js:26` | getRealtimeActivities | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 299 | GET | `/api/dashboards/data` | `dashboardScreen.js:29` | getKPIs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 300 | GET | `/api/dashboards/data` | `dashboardScreen.js:32` | getTrends | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 301 | GET | `/api/dashboards/data` | `dashboardScreen.js:35` | getChannels | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 302 | GET | `/api/dashboards/data` | `dashboardScreen.js:38` | getRegions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 303 | POST | `/api/memory/messages` | `dialogueMemory.js:5` | appendMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 304 | GET | `/api/memory/short` | `dialogueMemory.js:9` | getShortTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 305 | GET | `/api/memory/long` | `dialogueMemory.js:13` | getLongTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 297 | GET | `/api/dashboards/data` | `dashboardScreen.js:23` | getDashboardData | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 KPI/趋势聚合。证据297-off-dash-data.json |
+| 298 | GET | `/api/dashboards/activities` | `dashboardScreen.js:26` | getRealtimeActivities | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200实时活动流。证据298-off-activities.json |
+| 299 | GET | `/api/dashboards/data` | `dashboardScreen.js:29` | getKPIs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参（同#297聚合行） | 通过 | 通过 | 同#297同handler。证据297-off-dash-data.json |
+| 300 | GET | `/api/dashboards/data` | `dashboardScreen.js:32` | getTrends | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参（同#297聚合行） | 通过 | 通过 | 同#297。证据297-off-dash-data.json |
+| 301 | GET | `/api/dashboards/data` | `dashboardScreen.js:35` | getChannels | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参（同#297聚合行） | 通过 | 通过 | 同#297。证据297-off-dash-data.json |
+| 302 | GET | `/api/dashboards/data` | `dashboardScreen.js:38` | getRegions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参（同#297聚合行） | 通过 | 通过 | 同#297。证据297-off-dash-data.json |
+| 303 | POST | `/api/memory/messages` | `dialogueMemory.js:5` | appendMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | body session_id/role/content | 通过 | 通过 | 200追加成功。证据303-off-memory-append.json |
+| 304 | GET | `/api/memory/short` | `dialogueMemory.js:9` | getShortTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | query session_id必填 | 通过 | 通过 | 缺参→400；合法→200空列表。证据304-off-memory-short.json |
+| 305 | GET | `/api/memory/long` | `dialogueMemory.js:13` | getLongTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | query session_id必填 | 通过 | 通过 | 200长期记忆行（key_facts结构）。证据305-off-memory-long.json |
 | 306 | POST | `/api/memory/facts` | `dialogueMemory.js:17` | updateKeyFacts | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 307 | POST | `/api/memory/objections` | `dialogueMemory.js:21` | recordObjection | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 308 | POST | `/api/memory/purchase-intent` | `dialogueMemory.js:25` | updatePurchaseIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |

@@ -206,7 +206,14 @@ func (c *AgentKBBindingController) BatchBind(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
 		return
 	}
-	if err := c.svc.BatchBind(ctx.Request.Context(), req.Items); errhttp.HandleDBError(ctx, err, "批量绑定知识库") {
+	if err := c.svc.BatchBind(ctx.Request.Context(), req.Items); err != nil {
+		// 与 Bind/ReplaceByAgent 同口径：智能体/知识库归属失败时透出带 id 的具体文案
+		//（"智能体 12 不存在"），通用 HandleDBError 会压成"记录不存在"。
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, err.Error())
+			return
+		}
+		errhttp.HandleDBError(ctx, err, "批量绑定知识库")
 		return
 	}
 	response.Success(ctx, gin.H{

@@ -7,6 +7,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"hivemtk-user/internal/model"
@@ -28,11 +30,43 @@ func akbSetupDB(t *testing.T) *gorm.DB {
 		tenant.ResetRegistryForTest()
 		tenant.SetMode(tenant.ModeOff)
 	})
-	db := testutil.NewTestDB(t, &model.AgentKBBinding{})
+	db := testutil.NewTestDB(t, &model.AIAgent{}, &model.KnowledgeBase{}, &model.AgentKBBinding{})
 	if db == nil {
 		t.Fatal("测试库不可达：租户遮挡判不了（不 Skip，跳过等于没锁）")
 	}
 	return db
+}
+
+// akbSeedAgent 预置属于 tenantID 的智能体（写路径归属闸的正/反例夹具）。
+func akbSeedAgent(t *testing.T, db *gorm.DB, tenantID, agentID uint) *model.AIAgent {
+	t.Helper()
+	agent := &model.AIAgent{
+		TenantID:  tenantID,
+		ID:        agentID,
+		AgentCode: fmt.Sprintf("AKB-TENANT-%d-%d", tenantID, agentID),
+		Name:      fmt.Sprintf("租户 %d 智能体 %d", tenantID, agentID),
+		Persona:   "租户契约夹具",
+	}
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(agent).Error; err != nil {
+		t.Fatalf("预置租户 %d 的智能体 %d 失败: %v", tenantID, agentID, err)
+	}
+	return agent
+}
+
+// akbSeedKB 预置属于 tenantID 的知识库（供绑定事务 resolveKBType 校验通过）。
+func akbSeedKB(t *testing.T, db *gorm.DB, tenantID uint, code string) *model.KnowledgeBase {
+	t.Helper()
+	kb := &model.KnowledgeBase{
+		TenantID:  tenantID,
+		KBCode:    code,
+		Type:      model.KnowledgeBaseTypeFAQ,
+		Name:      "租户库 " + code,
+		OwnerType: model.KnowledgeBaseOwnerPrivate,
+	}
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(kb).Error; err != nil {
+		t.Fatalf("预置租户 %d 的知识库 %s 失败: %v", tenantID, code, err)
+	}
+	return kb
 }
 
 func akbSeed(t *testing.T, db *gorm.DB, tenantID, agentID, kbID uint) *model.AgentKBBinding {
@@ -110,6 +144,40 @@ func TestAgentKBBindingRepository_TenantScopedReads(t *testing.T) {
 //   - Enabled 留 nil 时取列默认 true（Create 若用 Select("*") 会把 nil 写成 NULL 撞 NOT NULL）
 //   - 显式 false 必须真正落库，不被列默认覆盖
 //   - 唯一约束按租户复合：同租户重复绑定报冲突，跨租户同 (agent_id, kb_id) 各存一份
+//
+// TestAgentKBBindingRepository_WriteRejectsForeignAgent 写路径归属闸：租户 B 对
+// 租户 A 的智能体执行绑定/替换/批量必须全部拒绝，且 A 的既有绑定原样保留。
+// 回归背景：修复前三个写事务只校验 KB，B 可对任意 agent_id 播种幽灵绑定行。
+func TestAgentKBBindingRepository_WriteRejectsForeignAgent(t *testing.T) {
+	db := akbSetupDB(t)
+	akbSeedAgent(t, db, akbTenantA, 1)
+	kbA := akbSeedKB(t, db, akbTenantA, "AKB-KB-A")
+	akbSeed(t, db, akbTenantA, 1, kbA.ID) // A 既有绑定 (agent 1, kbA)
+
+	repo := NewAgentKBBindingRepository(db)
+	ctxB := tenant.WithTenantID(context.Background(), akbTenantB)
+	kbB := akbSeedKB(t, db, akbTenantB, "AKB-KB-B") // B 自己的库：保证失败落在 agent 闸而不是 KB 闸
+
+	if err := repo.BindOverwrite(ctxB, 1, kbB.ID, 0); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("跨租户 agent 绑定应返回 ErrAgentNotFound，实际: %v", err)
+	}
+	if err := repo.ReplaceByAgent(ctxB, 1, []uint{kbB.ID}); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("跨租户 agent 替换应返回 ErrAgentNotFound，实际: %v", err)
+	}
+	if err := repo.BatchBindOverwrite(ctxB, []BindingTarget{{AgentID: 1, KBID: kbB.ID}}); !errors.Is(err, ErrAgentNotFound) {
+		t.Fatalf("跨租户 agent 批量绑定应返回 ErrAgentNotFound，实际: %v", err)
+	}
+
+	// A 的既有绑定必须原样保留（replace 的 DeleteByAgent 被租户闸挡住）。
+	rows, err := repo.ListByAgentAll(tenant.WithTenantID(context.Background(), akbTenantA), 1)
+	if err != nil {
+		t.Fatalf("回查租户 A 绑定失败: %v", err)
+	}
+	if len(rows) != 1 || rows[0].KBID != kbA.ID {
+		t.Fatalf("跨租户写失败后 A 的绑定应原样保留，实际: %+v", rows)
+	}
+}
+
 func TestAgentKBBindingRepository_EnabledAndUniqueSemantics(t *testing.T) {
 	db := akbSetupDB(t)
 	repo := NewAgentKBBindingRepository(db)
