@@ -51,3 +51,14 @@ type ImportClueRequest struct {
 	IntentScore    int64  `json:"intent_score"`
 	IsOpportunity  int64  `json:"is_opportunity"`
 }
+
+// UpdateClueRequest 单条线索编辑/改派请求。
+// 指针语义：nil = 不改；显式串 = 更新（空串 = 清空该字段，如清除跟进人）。
+// account/type 不在白名单内：二者参与来源去重与渠道语义，禁止单条改写。
+type UpdateClueRequest struct {
+	Name         *string `json:"name"`
+	City         *string `json:"city"`
+	Address      *string `json:"address"`
+	Desc         *string `json:"desc"`
+	OwnerAccount *string `json:"owner_account"`
+}

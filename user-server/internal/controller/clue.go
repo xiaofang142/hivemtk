@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -189,4 +190,38 @@ func (c *ClueController) GetClueTypes(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, types, "获取线索类型成功")
+}
+
+// UpdateClue 编辑线索 / 改派跟进人
+// @Summary      编辑线索
+// @Description  按白名单字段更新单条线索（name/city/address/desc/owner_account）
+// @Tags         Clue
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id    path  string                true  "线索 ID"
+// @Param        body  body  dto.UpdateClueRequest  true  "更新字段（指针语义：null=不改）"
+// @Success      200  {object}  response.Response  "线索已更新"
+// @Failure      400  {object}  response.Response  "请求参数错误 / 没有需要更新的字段"
+// @Failure      404  {object}  response.Response  "线索不存在"
+// @Router       /api/clues/{id} [put]
+func (c *ClueController) UpdateClue(ctx *gin.Context) {
+	var req dto.UpdateClueRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：字段值必须是文本")
+		return
+	}
+	if err := c.svc.UpdateClue(ctx.Request.Context(), ctx.Param("id"), &req); err != nil {
+		if errors.Is(err, service.ErrClueNoFields) {
+			response.Error(ctx, http.StatusBadRequest, err.Error())
+			return
+		}
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "线索不存在（id="+ctx.Param("id")+"）")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "更新线索失败")
+		return
+	}
+	response.Success(ctx, nil, "线索已更新")
 }

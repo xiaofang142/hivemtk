@@ -2841,5 +2841,16 @@
   "语义筛选": "Filtro semântico",
   "traceObservationResultExit": "Saída do resultado de IA",
   "traceObservationSkipped": "Ignorado",
-  "请选择触发条件": "Selecione uma condição de gatilho"
+  "请选择触发条件": "Selecione uma condição de gatilho",
+  "编辑线索": "Editar lead",
+  "分配线索": "Atribuir lead",
+  "跟进人账号": "Conta do responsável",
+  "确认分配": "Confirmar atribuição",
+  "请填写线索名称": "Informe o nome do lead",
+  "请填写跟进人账号": "Informe a conta do responsável",
+  "线索已更新": "Lead atualizado",
+  "已分配跟进人": "Responsável atribuído",
+  "分配失败": "Falha ao atribuir",
+  "城市": "Cidade",
+  "地址": "Endereço"
 }

@@ -279,3 +279,75 @@ func TestClueController_NewClueController(t *testing.T) {
 		t.Error("Expected controller instance, got nil")
 	}
 }
+
+// TestClueController_UpdateClue_Success 编辑线索成功：白名单字段落库并返回 200
+func TestClueController_UpdateClue_Success(t *testing.T) {
+	database := setupClueTestDB(t)
+	ctrl := newTestClueController()
+	router := gin.New()
+
+	clue := &model.Clue{SourceID: "src-u1", Account: "acc-u1", Name: "旧名", City: "北京", Type: 1}
+	database.Create(clue)
+	router.PUT("/clues/:id", ctrl.UpdateClue)
+
+	body, _ := json.Marshal(map[string]any{"name": "新名", "owner_account": "agent-1"})
+	req, _ := http.NewRequest("PUT", "/clues/"+clue.ID, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("期望 200，实际 %d，body: %s", w.Code, w.Body.String())
+	}
+	var updated model.Clue
+	database.First(&updated, "id = ?", clue.ID)
+	if updated.Name != "新名" || updated.OwnerAccount != "agent-1" {
+		t.Fatalf("期望 name=新名 owner=agent-1，实际 name=%s owner=%s", updated.Name, updated.OwnerAccount)
+	}
+}
+
+// TestClueController_UpdateClue_NotFound 线索不存在时返回 404
+func TestClueController_UpdateClue_NotFound(t *testing.T) {
+	setupClueTestDB(t)
+	ctrl := newTestClueController()
+	router := gin.New()
+	router.PUT("/clues/:id", ctrl.UpdateClue)
+
+	body, _ := json.Marshal(map[string]any{"name": "任意"})
+	req, _ := http.NewRequest("PUT", "/clues/no-such-id", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("期望 404，实际 %d，body: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "不存在") {
+		t.Fatalf("期望文案包含「不存在」，body: %s", w.Body.String())
+	}
+}
+
+// TestClueController_UpdateClue_NoFields 空对象请求返回 400（没有需要更新的字段）
+func TestClueController_UpdateClue_NoFields(t *testing.T) {
+	database := setupClueTestDB(t)
+	ctrl := newTestClueController()
+	router := gin.New()
+
+	clue := &model.Clue{SourceID: "src-u2", Account: "acc-u2", Name: "原名", Type: 1}
+	database.Create(clue)
+	router.PUT("/clues/:id", ctrl.UpdateClue)
+
+	req, _ := http.NewRequest("PUT", "/clues/"+clue.ID, bytes.NewReader([]byte("{}")))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("期望 400，实际 %d，body: %s", w.Code, w.Body.String())
+	}
+	var updated model.Clue
+	database.First(&updated, "id = ?", clue.ID)
+	if updated.Name != "原名" {
+		t.Fatalf("空请求不得改写数据，实际 name=%s", updated.Name)
+	}
+}

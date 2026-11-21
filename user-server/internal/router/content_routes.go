@@ -56,6 +56,7 @@ func setupClueRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	{
 		clueAdmin.DELETE("/clues/delete/:id", clueCtrl.DeleteClue)
 		clueAdmin.POST("/clues/import", clueCtrl.ImportClues)
+		clueAdmin.PUT("/clues/:id", clueCtrl.UpdateClue)
 	}
 
 	clueScoreCtrl := controller.NewClueScoreController(clueScoreSvc)

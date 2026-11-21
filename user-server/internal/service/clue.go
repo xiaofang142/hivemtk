@@ -216,3 +216,45 @@ func IsValidClueType(t int64) bool {
 func (s *ClueService) GetClueTypes(ctx context.Context) ([]ClueType, error) {
 	return defaultClueTypes, nil
 }
+
+// ErrClueNoFields 编辑请求没有携带任何可更新字段。
+var ErrClueNoFields = errors.New("没有需要更新的字段")
+
+// UpdateClue 单条线索编辑 / 改派跟进人。
+//
+// 字段白名单（dto.UpdateClueRequest）：account/type 参与来源去重与渠道语义，
+// 不允许通过单条编辑改写（改写会让「同来源同账号」去重与渠道报表错位）。
+// 指针语义：nil = 不改；串 = 写入（TrimSpace 后落库，空串 = 清空字段）。
+// 先取一次实体把「不存在」翻译成 ErrRecordNotFound（上层映射 404），
+// 再走仓库 UpdateByID（0 行同样按不存在上报）。
+func (s *ClueService) UpdateClue(ctx context.Context, id string, req *dto.UpdateClueRequest) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("线索 ID 不能为空")
+	}
+	if req == nil {
+		return ErrClueNoFields
+	}
+	updates := make(map[string]any, 5)
+	if req.Name != nil {
+		updates["name"] = strings.TrimSpace(*req.Name)
+	}
+	if req.City != nil {
+		updates["city"] = strings.TrimSpace(*req.City)
+	}
+	if req.Address != nil {
+		updates["address"] = strings.TrimSpace(*req.Address)
+	}
+	if req.Desc != nil {
+		updates["desc"] = strings.TrimSpace(*req.Desc)
+	}
+	if req.OwnerAccount != nil {
+		updates["owner_account"] = strings.TrimSpace(*req.OwnerAccount)
+	}
+	if len(updates) == 0 {
+		return ErrClueNoFields
+	}
+	if _, err := s.repo.GetByID(ctx, id); err != nil {
+		return err
+	}
+	return s.repo.UpdateByID(ctx, id, updates)
+}

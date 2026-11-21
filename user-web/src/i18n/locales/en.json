@@ -2841,5 +2841,16 @@
   "语义筛选": "Semantic filter",
   "traceObservationSkipped": "Skipped",
   "traceObservationResultExit": "AI result exit",
-  "请选择触发条件": "Please select a trigger condition"
+  "请选择触发条件": "Please select a trigger condition",
+  "编辑线索": "Edit Clue",
+  "分配线索": "Assign Clue",
+  "跟进人账号": "Owner account",
+  "确认分配": "Confirm Assignment",
+  "请填写线索名称": "Please enter the clue name",
+  "请填写跟进人账号": "Please enter the owner account",
+  "线索已更新": "Clue updated",
+  "已分配跟进人": "Owner assigned",
+  "分配失败": "Assignment failed",
+  "城市": "City",
+  "地址": "Address"
 }

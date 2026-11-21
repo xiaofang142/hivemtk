@@ -198,3 +198,20 @@ describe('工具列表服务端分页', () => {
     expect(wrapper.find('[role="alert"]').exists()).toBe(true)
   })
 })
+
+describe('工具列表统计卡（UWA-24）', () => {
+  const statValues = () => [...wrapper.findAll('.stat-value').map((n) => n.text().trim())]
+
+  it('空列表：分类数按真实数据计算为 0，不再显示写死的「工具分类 5」', async () => {
+    await open(0)
+    const values = statValues()
+    expect(values).toEqual(['0', '0', '0', '0'])
+    expect(wrapper.text()).not.toContain('工具分类 5')
+  })
+
+  it('有数据：分类数等于本页工具的去重分类数', async () => {
+    await open(21)
+    // 21 条按 i%2 分为 business/customer 两类；首页 20 条同样两类
+    expect(statValues()).toEqual(['21', '20', '0', '2'])
+  })
+})

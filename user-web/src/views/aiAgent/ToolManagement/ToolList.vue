@@ -417,7 +417,9 @@ const stats = reactive({
   total: 0,
   enabled: computed(() => tools.value.filter(tool => tool.is_enabled).length),
   disabled: computed(() => tools.value.filter(tool => !tool.is_enabled).length),
-  categories: 5
+  // 分类数按当前页工具的真实分类去重计算（UWA-24）：此前写死 5，空列表时
+  // 仍显示「工具分类 5」，与「筛选结果总数 0」自相矛盾。
+  categories: computed(() => new Set(tools.value.map(tool => tool.category).filter(Boolean)).size)
 })
 
 const detailVisible = ref(false);

@@ -2841,5 +2841,16 @@
   "语义筛选": "Semantischer Filter",
   "traceObservationResultExit": "KI-Ergebnis-Ausgang",
   "traceObservationSkipped": "Übersprungen",
-  "请选择触发条件": "Bitte Auslösebedingung wählen"
+  "请选择触发条件": "Bitte Auslösebedingung wählen",
+  "编辑线索": "Lead bearbeiten",
+  "分配线索": "Lead zuweisen",
+  "跟进人账号": "Konto des Bearbeiters",
+  "确认分配": "Zuweisung bestätigen",
+  "请填写线索名称": "Bitte den Lead-Namen eingeben",
+  "请填写跟进人账号": "Bitte das Konto des Bearbeiters eingeben",
+  "线索已更新": "Lead aktualisiert",
+  "已分配跟进人": "Bearbeiter zugewiesen",
+  "分配失败": "Zuweisung fehlgeschlagen",
+  "城市": "Stadt",
+  "地址": "Adresse"
 }

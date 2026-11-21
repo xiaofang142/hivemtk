@@ -2841,5 +2841,16 @@
   "语义筛选": "Filtro semántico",
   "traceObservationResultExit": "Salida del resultado de IA",
   "traceObservationSkipped": "Omitido",
-  "请选择触发条件": "Seleccione una condición de activación"
+  "请选择触发条件": "Seleccione una condición de activación",
+  "编辑线索": "Editar lead",
+  "分配线索": "Asignar lead",
+  "跟进人账号": "Cuenta del responsable",
+  "确认分配": "Confirmar asignación",
+  "请填写线索名称": "Ingrese el nombre del lead",
+  "请填写跟进人账号": "Ingrese la cuenta del responsable",
+  "线索已更新": "Lead actualizado",
+  "已分配跟进人": "Responsable asignado",
+  "分配失败": "Error al asignar",
+  "城市": "Ciudad",
+  "地址": "Dirección"
 }

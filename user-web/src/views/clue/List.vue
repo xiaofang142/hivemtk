@@ -450,11 +450,99 @@
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
+
+    <el-dialog
+      v-model="editVisible"
+      :title="$t('编辑线索')"
+      width="520px"
+      :close-on-click-modal="!editSaving"
+    >
+      <el-form
+        :model="editForm"
+        label-width="90px"
+      >
+        <el-form-item
+          :label="$t('名称')"
+          required
+        >
+          <el-input v-model="editForm.name" />
+        </el-form-item>
+        <el-form-item :label="$t('城市')">
+          <el-input v-model="editForm.city" />
+        </el-form-item>
+        <el-form-item :label="$t('地址')">
+          <el-input v-model="editForm.address" />
+        </el-form-item>
+        <el-form-item :label="$t('描述')">
+          <el-input
+            v-model="editForm.desc"
+            type="textarea"
+            :rows="3"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button
+          :disabled="editSaving"
+          @click="editVisible = false"
+        >
+          {{ $t('取消') }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="editSaving"
+          @click="submitEdit"
+        >
+          {{ $t('保存') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="assignVisible"
+      :title="$t('分配线索')"
+      width="480px"
+      :close-on-click-modal="!assignSaving"
+    >
+      <el-form
+        :model="assignForm"
+        label-width="110px"
+      >
+        <el-form-item :label="$t('线索')">
+          <span>{{ assignForm.name || assignForm.id }}</span>
+        </el-form-item>
+        <el-form-item
+          :label="$t('跟进人账号')"
+          required
+        >
+          <el-input
+            v-model="assignForm.owner_account"
+            :placeholder="$t('跟进人账号')"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button
+          :disabled="assignSaving"
+          @click="assignVisible = false"
+        >
+          {{ $t('取消') }}
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="assignSaving"
+          @click="submitAssign"
+        >
+          {{ $t('确认分配') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import i18n from '@/i18n'
+import { isUserReportedError } from '@/utils/errorReporting'
 
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -582,11 +670,74 @@ const viewClue = (row) => {
   current.value = row
   detailVisible.value = true
 }
-const assignClue = (row) => {
-  ElMessage.info(i18n.global.t('已触发分配：') + (row.name || row.id))
-}
+// UWA-23：分配/编辑此前只弹 toast（「已触发分配」），没有任何指派或编辑界面。
+// 现在接入真实 PUT /api/clues/:id：编辑改文本字段，分配改跟进人账号。
+const editVisible = ref(false)
+const editSaving = ref(false)
+const editForm = ref({ id: '', name: '', city: '', address: '', desc: '' })
+const assignVisible = ref(false)
+const assignSaving = ref(false)
+const assignForm = ref({ id: '', name: '', owner_account: '' })
+
 const editClue = (row) => {
-  ElMessage.info(i18n.global.t('编辑线索：') + (row.name || row.id))
+  editForm.value = {
+    id: row.id,
+    name: row.name || '',
+    city: row.city || '',
+    address: row.address || '',
+    desc: row.desc || ''
+  }
+  editVisible.value = true
+}
+
+const submitEdit = async () => {
+  const form = editForm.value
+  if (!String(form.name || '').trim()) {
+    ElMessage.warning(i18n.global.t('请填写线索名称'))
+    return
+  }
+  if (editSaving.value) return
+  editSaving.value = true
+  try {
+    await clueApi.update(form.id, {
+      name: form.name,
+      city: form.city,
+      address: form.address,
+      desc: form.desc
+    })
+    ElMessage.success(i18n.global.t('线索已更新'))
+    editVisible.value = false
+    fetchCluelist()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('更新失败') + '：' + (e?.message || ''))
+  } finally {
+    editSaving.value = false
+  }
+}
+
+const assignClue = (row) => {
+  assignForm.value = { id: row.id, name: row.name || '', owner_account: row.owner_account || '' }
+  assignVisible.value = true
+}
+
+const submitAssign = async () => {
+  const form = assignForm.value
+  if (!String(form.owner_account || '').trim()) {
+    ElMessage.warning(i18n.global.t('请填写跟进人账号'))
+    return
+  }
+  if (assignSaving.value) return
+  assignSaving.value = true
+  try {
+    await clueApi.update(form.id, { owner_account: form.owner_account })
+    ElMessage.success(i18n.global.t('已分配跟进人') + '：' + form.owner_account)
+    assignVisible.value = false
+    fetchCluelist()
+  } catch (e) {
+    if (!isUserReportedError(e)) ElMessage.error(i18n.global.t('分配失败') + '：' + (e?.message || ''))
+  } finally {
+    assignSaving.value = false
+  }
 }
 
 const detailVisible = ref(false);

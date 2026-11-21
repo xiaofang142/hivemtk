@@ -17,4 +17,8 @@ export const clueApi = {
   import: (data) => {
     return http.post(`/api/clues/import`,data)
   },
+  // 单条编辑/改派（UWA-23）：PUT /api/clues/:id，指针语义 null=不改
+  update: (id, data) => {
+    return http.put(`/api/clues/${id}`, data)
+  },
 }
