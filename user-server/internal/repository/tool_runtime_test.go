@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -11,6 +12,37 @@ import (
 
 	"gorm.io/gorm"
 )
+
+// 创建后内存时间精度高于PostgreSQL，合法来源仍应通过，真实代际变化仍拒绝。
+func TestToolRuntime_CreatedAtDatabasePrecision(t *testing.T) {
+	database := testutil.NewTestDB(t, &model.CustomTool{}, &model.MCPServer{}, &model.AIToolConfig{})
+	ctx := tenant.WithTenantID(context.Background(), 1)
+	repo := NewToolRuntimeRepositoryWithDB(database)
+	created := time.Unix(1700000000, 123456789).UTC()
+	custom := model.CustomTool{TenantID: 1, Name: "precision-custom", IsActive: true, BaseURL: "https://example.com", SchemaJSON: "{}", CreatedAt: created}
+	mcp := model.MCPServer{TenantID: 1, Name: "precision-mcp", Enabled: true, Endpoint: "https://example.com", CreatedAt: created}
+	if err := database.WithContext(ctx).Create(&custom).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := database.WithContext(ctx).Create(&mcp).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repo.CheckCustomTool(ctx, custom, "precision.custom"); err != nil {
+		t.Fatalf("数据库微秒精度不应撤销合法自定义工具：%v", err)
+	}
+	if err := repo.CheckMCPServer(ctx, mcp, "precision.mcp"); err != nil {
+		t.Fatalf("数据库微秒精度不应撤销合法MCP：%v", err)
+	}
+	custom.CreatedAt = custom.CreatedAt.Add(time.Microsecond)
+	mcp.CreatedAt = mcp.CreatedAt.Add(time.Microsecond)
+	if err := repo.CheckCustomTool(ctx, custom, "precision.custom"); !errors.Is(err, ErrToolRuntimeChanged) {
+		t.Fatalf("真实自定义来源时间变化必须拒绝，实际%v", err)
+	}
+	if err := repo.CheckMCPServer(ctx, mcp, "precision.mcp"); !errors.Is(err, ErrToolRuntimeChanged) {
+		t.Fatalf("真实MCP来源时间变化必须拒绝，实际%v", err)
+	}
+}
 
 func TestToolRuntime_AdmissionFailureBoundaries(t *testing.T) {
 	ctx := tenant.WithTenantID(context.Background(), 1)

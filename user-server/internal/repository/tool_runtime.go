@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
@@ -51,6 +52,7 @@ func (r *ToolRuntimeRepository) CheckToolAdmission(ctx context.Context, name str
 }
 
 // CheckCustomTool 验证来源身份及捕获的执行配置，防止同名重建复活旧实例。
+// 创建时间按PostgreSQL微秒精度比较，避免刚创建的内存纳秒值被误判为来源变更。
 func (r *ToolRuntimeRepository) CheckCustomTool(ctx context.Context, expected model.CustomTool, name string) error {
 	if err := r.CheckToolAdmission(ctx, name); err != nil {
 		return err
@@ -69,7 +71,7 @@ func (r *ToolRuntimeRepository) CheckCustomTool(ctx context.Context, expected mo
 	if !row.IsActive {
 		return ErrToolRuntimeRevoked
 	}
-	if row.Name != expected.Name || !row.CreatedAt.Equal(expected.CreatedAt) || row.BaseURL != expected.BaseURL || row.SchemaJSON != expected.SchemaJSON || row.AuthHeader != expected.AuthHeader || row.AuthValueEnc != expected.AuthValueEnc || row.TimeoutMS != expected.TimeoutMS {
+	if row.Name != expected.Name || !row.CreatedAt.Truncate(time.Microsecond).Equal(expected.CreatedAt.Truncate(time.Microsecond)) || row.BaseURL != expected.BaseURL || row.SchemaJSON != expected.SchemaJSON || row.AuthHeader != expected.AuthHeader || row.AuthValueEnc != expected.AuthValueEnc || row.TimeoutMS != expected.TimeoutMS {
 		return ErrToolRuntimeChanged
 	}
 	return nil
@@ -94,7 +96,7 @@ func (r *ToolRuntimeRepository) CheckMCPServer(ctx context.Context, expected mod
 	if !row.Enabled {
 		return ErrToolRuntimeRevoked
 	}
-	if row.Name != expected.Name || !row.CreatedAt.Equal(expected.CreatedAt) || row.Endpoint != expected.Endpoint || row.APIKeyEnc != expected.APIKeyEnc || row.TimeoutSeconds != expected.TimeoutSeconds || row.FailLimit != expected.FailLimit || row.CooldownSeconds != expected.CooldownSeconds {
+	if row.Name != expected.Name || !row.CreatedAt.Truncate(time.Microsecond).Equal(expected.CreatedAt.Truncate(time.Microsecond)) || row.Endpoint != expected.Endpoint || row.APIKeyEnc != expected.APIKeyEnc || row.TimeoutSeconds != expected.TimeoutSeconds || row.FailLimit != expected.FailLimit || row.CooldownSeconds != expected.CooldownSeconds {
 		return ErrToolRuntimeChanged
 	}
 	return nil

@@ -52,6 +52,38 @@ func TestBayesianTest_Deterministic(t *testing.T) {
 	}
 }
 
+// 卡方检验使用上尾概率，零偏差必须为1，已知临界值必须与分布一致。
+func TestChiSquareSurvival_KnownProbabilities(t *testing.T) {
+	cases := []struct {
+		name string
+		x    float64
+		df   int
+		want float64
+	}{
+		{"零偏差", 0, 1, 1},
+		{"单自由度单位偏差", 1, 1, 0.31731050786291415},
+		{"百分之五临界值", 3.841458820694124, 1, 0.05},
+		{"双自由度", 2, 2, math.Exp(-1)},
+		{"千分之一临界值", 13.815510557964274, 2, 0.001},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := chiSquareSurvival(tc.x, tc.df)
+			if math.IsNaN(got) || math.Abs(got-tc.want) > 1e-10 {
+				t.Fatalf("期望p=%.12g，实际%.12g（chi2=%g,df=%d）", tc.want, got, tc.x, tc.df)
+			}
+		})
+	}
+	previous := 1.0
+	for _, x := range []float64{0, 0.1, 1, 2, 4, 10, 20} {
+		got := chiSquareSurvival(x, 1)
+		if got > previous || got < 0 || got > 1 {
+			t.Fatalf("上尾概率应随chi2递减且位于[0,1]，chi2=%g，前值%g，实际%g", x, previous, got)
+		}
+		previous = got
+	}
+}
+
 // SRM：50/50 期望但 90/10 流量 → 告警
 func TestDiagnostics_SRM(t *testing.T) {
 	ok := Diagnostics([]VariantCounts{
