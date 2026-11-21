@@ -1,0 +1,1 @@
+{"code":0,"message":"识别成功","data":{"intent_type":"unknown","intent_name":"未知","confidence":0.3,"confidence_level":"low","intent_subtype":"","entities":null,"sentiment":"neutral","method":"rule","cost_tokens":0,"latency_ms":0}}

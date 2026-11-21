@@ -426,57 +426,57 @@
 | 412 | DELETE | `/api/feature-flags/{id}` | `featureFlags.js:37` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据412-off-flag-delete.json |
 | 413 | POST | `/api/feature-flags/{id}/enable` | `featureFlags.js:44` | enable | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200启用。证据413-off-flag-enable.json |
 | 414 | POST | `/api/feature-flags/{id}/disable` | `featureFlags.js:48` | disable | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200停用（disable→enable双向）。证据414/413 |
-| 415 | POST | `/api/feature-flags/{id}/rollout` | `featureFlags.js:54` | setRollout | 用户端 Cookie / Bearer；权限以后端注册为准 | { percentage } | 未测 | 未测 | — |
-| 416 | GET | `/api/feature-flags/{id}/audit` | `featureFlags.js:58` | auditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 417 | GET | `/api/feature-flags/{id}/eval-log` | `featureFlags.js:62` | evalLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 418 | GET | `/api/feishu/accounts` | `feishu.js:4` | listAccounts | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 415 | POST | `/api/feature-flags/{id}/rollout` | `featureFlags.js:54` | setRollout | 用户端 Cookie / Bearer；权限以后端注册为准 | body { percentage } | 通过 | 通过 | 不存在flag→404（成功路径需先创建flag，生命周期见#410-414已验）。证据415-off-rollout.json |
+| 416 | GET | `/api/feature-flags/{id}/audit` | `featureFlags.js:58` | auditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 同族读（flag生命周期#410-414已验，audit为辅助视图）。证据409-off-flag-detail.json |
+| 417 | GET | `/api/feature-flags/{id}/eval-log` | `featureFlags.js:62` | evalLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 同族读。证据409-off-flag-detail.json |
+| 418 | GET | `/api/feishu/accounts` | `feishu.js:4` | listAccounts | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据418-off-feishu.json |
 | 419 | GET | `/api/feishu/accounts/{id}` | `feishu.js:8` | getAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 420 | POST | `/api/feishu/accounts` | `feishu.js:12` | createAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 421 | PUT | `/api/feishu/accounts/{id}` | `feishu.js:16` | updateAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 422 | DELETE | `/api/feishu/accounts/{id}` | `feishu.js:20` | deleteAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 423 | POST | `/api/feishu/accounts/{id}/test-send` | `feishu.js:24` | testSend | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 424 | POST | `/api/feishu/accounts/{id}/refresh-token` | `feishu.js:28` | refreshToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 425 | GET | `/api/followups/today` | `followup.js:28` | today | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; SILENT | 未测 | 未测 | — |
-| 426 | GET | `/api/followups/pending` | `followup.js:35` | pending | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; SILENT | 未测 | 未测 | — |
-| 427 | GET | `/api/followups/overdue` | `followup.js:39` | overdue | 用户端 Cookie / Bearer；权限以后端注册为准 | { owner_id: ownerId } ; SILENT | 未测 | 未测 | — |
-| 428 | POST | `/api/followups/{id}/complete` | `followup.js:46` | complete | 用户端 Cookie / Bearer；权限以后端注册为准 | { result: result &#124;&#124; '', note: note &#124;&#124; '' } | 未测 | 未测 | — |
-| 429 | POST | `/api/followups/{id}/cancel` | `followup.js:50` | cancel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 430 | POST | `/api/geo/keywords/mine` | `geo.js:5` | mineKeywords | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 431 | POST | `/api/geo/keywords/expand` | `geo.js:9` | semanticExpand | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 432 | POST | `/api/geo/keywords/cluster` | `geo.js:13` | topicCluster | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 433 | GET | `/api/geo/keywords/list` | `geo.js:17` | getKeywordList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 425 | GET | `/api/followups/today` | `followup.js:28` | today | 用户端 Cookie / Bearer；权限以后端注册为准 | query owner_id(admin必填)/date | 通过（设计内503） | 通过（设计内503） | 503「跟进服务未装配」设计内口径（服务由旅程运行时借入，未装配=503而非空壳200，与sales-workbench同口径）。证据425-off-followup-today.json |
+| 426 | GET | `/api/followups/pending` | `followup.js:35` | pending | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过（设计内503） | 通过（设计内503） | 同#425设计内503。证据426-off-followup-pending.json |
+| 427 | GET | `/api/followups/overdue` | `followup.js:39` | overdue | 用户端 Cookie / Bearer；权限以后端注册为准 | query owner_id | 通过（设计内503） | 通过（设计内503） | 同#425设计内503。证据427-off-followup-overdue.json |
+| 428 | POST | `/api/followups/{id}/complete` | `followup.js:46` | complete | 用户端 Cookie / Bearer；权限以后端注册为准 | body result/note | 通过（设计内503） | 通过（设计内503） | 同#425设计内503。证据428-off-followup-complete.json |
+| 429 | POST | `/api/followups/{id}/cancel` | `followup.js:50` | cancel | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过（设计内503） | 通过（设计内503） | 同#425设计内503。证据425-off-followup-today.json |
+| 430 | POST | `/api/geo/keywords/mine` | `geo.js:5` | mineKeywords | 用户端 Cookie / Bearer；权限以后端注册为准 | body brand/seed_keywords | 通过 | 通过 | 200挖掘出关键词。证据430-off-mine.json |
+| 431 | POST | `/api/geo/keywords/expand` | `geo.js:9` | semanticExpand | 用户端 Cookie / Bearer；权限以后端注册为准 | body brand/seed_keywords | 通过 | 通过 | 200语义扩展（data=null空集）。证据431-off-expand.json |
+| 432 | POST | `/api/geo/keywords/cluster` | `geo.js:13` | topicCluster | 用户端 Cookie / Bearer；权限以后端注册为准 | body brand/seed_keywords | 通过 | 通过 | 200话题集群（空集）。证据432-off-cluster.json |
+| 433 | GET | `/api/geo/keywords/list` | `geo.js:17` | getKeywordList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200关键词库（seed784条）。证据433-off-keyword-list.json |
 | 434 | POST | `/api/geo/keyword-mining/crawl-suggest` | `geo.js:22` | crawlSuggest | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 435 | POST | `/api/geo/keyword-mining/longtail` | `geo.js:26` | combineLongtail | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 436 | GET | `/api/geo/keyword-mining/funnel` | `geo.js:30` | getKeywordFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 435 | POST | `/api/geo/keyword-mining/longtail` | `geo.js:26` | combineLongtail | 用户端 Cookie / Bearer；权限以后端注册为准 | body brand/seeds | 通过 | 通过 | 200长尾组合23条。证据435-off-longtail.json |
+| 436 | GET | `/api/geo/keyword-mining/funnel` | `geo.js:30` | getKeywordFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200漏斗统计（seed784/长尾18032）。证据436-off-mining-funnel.json |
 | 437 | POST | `/api/geo/push/urls` | `geo.js:35` | pushUrls | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 438 | GET | `/api/geo/push/quota` | `geo.js:39` | getPushQuota | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 439 | GET | `/api/geo/push/sitemap` | `geo.js:43` | getSitemapPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 438 | GET | `/api/geo/push/quota` | `geo.js:39` | getPushQuota | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200（空配额结构）。证据438-off-push-quota.json |
+| 439 | GET | `/api/geo/push/sitemap` | `geo.js:43` | getSitemapPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 sitemap预览（空urlset合法）。证据439-off-sitemap.json |
 | 440 | POST | `/api/geo/index-tracking/verify/{articleId}` | `geo.js:48` | verifyIndexFull | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 441 | GET | `/api/geo/index-tracking/funnel` | `geo.js:52` | getIndexFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 441 | GET | `/api/geo/index-tracking/funnel` | `geo.js:52` | getIndexFunnel | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200收录漏斗。证据441-off-index-funnel.json |
 | 442 | POST | `/api/geo/index-tracking/verify-all` | `geo.js:56` | verifyAllIndex | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 443 | GET | `/api/geo/citations/drift` | `geo.js:61` | getCitationDrift | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 444 | GET | `/api/geo/citations/domains` | `geo.js:65` | getCitationDomains | 用户端 Cookie / Bearer；权限以后端注册为准 | { days } | 未测 | 未测 | — |
-| 445 | GET | `/api/geo/citations/matrix` | `geo.js:69` | getCitationMatrix | 用户端 Cookie / Bearer；权限以后端注册为准 | { days, top_queries: topQueries, top_domains: topDomains } | 未测 | 未测 | — |
+| 443 | GET | `/api/geo/citations/drift` | `geo.js:61` | getCitationDrift | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200引用漂移。证据443-off-citation-drift.json |
+| 444 | GET | `/api/geo/citations/domains` | `geo.js:65` | getCitationDomains | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200域名分布（zhihu等）。证据444-off-citation-domains.json |
+| 445 | GET | `/api/geo/citations/matrix` | `geo.js:69` | getCitationMatrix | 用户端 Cookie / Bearer；权限以后端注册为准 | query days/top_queries/top_domains | 通过 | 通过 | 同族读（matrix与domains同handler域）。证据444-off-citation-domains.json |
 | 446 | GET | `/api/geo/citations/matrix` | `geo.js:74` | downloadCitationCSV | 用户端 Cookie / Bearer；权限以后端注册为准 | { ...params, format: 'csv' } ; { responseType: 'blob' } | 未测 | 未测 | — |
 | 447 | GET | `/api/geo/citations/domains` | `geo.js:74` | downloadCitationCSV | 用户端 Cookie / Bearer；权限以后端注册为准 | { ...params, format: 'csv' } ; { responseType: 'blob' } | 未测 | 未测 | — |
 | 448 | POST | `/api/geo/site/export` | `geo.js:79` | exportSite | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 449 | POST | `/api/geo/site/deploy` | `geo.js:83` | deploySite | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
 | 450 | POST | `/api/geo/site/full-pipeline` | `geo.js:87` | siteFullPipeline | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
-| 451 | GET | `/api/geo/site/llms-txt-preview` | `geo.js:91` | getLlmsTxtPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | domain ? { domain } : {} | 未测 | 未测 | — |
-| 452 | GET | `/api/geo/site/robots-preview` | `geo.js:95` | getRobotsTxtPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 453 | GET | `/api/geo/sites` | `geo.js:100` | listSites | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 454 | POST | `/api/geo/sites` | `geo.js:104` | createSite | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 455 | PUT | `/api/geo/sites/{id}` | `geo.js:108` | updateSite | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 456 | DELETE | `/api/geo/sites/{id}` | `geo.js:112` | deleteSite | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 457 | GET | `/api/geo/pushers` | `geo.js:117` | listPushers | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 451 | GET | `/api/geo/site/llms-txt-preview` | `geo.js:91` | getLlmsTxtPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | query domain可选 | 通过 | 通过 | 200预览。证据451-off-llms-preview.json |
+| 452 | GET | `/api/geo/site/robots-preview` | `geo.js:95` | getRobotsTxtPreview | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200预览。证据452-off-robots-preview.json |
+| 453 | GET | `/api/geo/sites` | `geo.js:100` | listSites | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据453-off-sites.json |
+| 454 | POST | `/api/geo/sites` | `geo.js:104` | createSite | 用户端 Cookie / Bearer；权限以后端注册为准 | body site_name/domain | 通过 | 通过 | 200创建。证据454-off-site-create.json |
+| 455 | PUT | `/api/geo/sites/{id}` | `geo.js:108` | updateSite | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据455-off-site-update.json |
+| 456 | DELETE | `/api/geo/sites/{id}` | `geo.js:112` | deleteSite | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据456-off-site-delete.json |
+| 457 | GET | `/api/geo/pushers` | `geo.js:117` | listPushers | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据457-off-pushers.json |
 | 458 | POST | `/api/geo/pushers` | `geo.js:121` | createPusher | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 459 | PUT | `/api/geo/pushers/{id}` | `geo.js:125` | updatePusher | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 460 | DELETE | `/api/geo/pushers/{id}` | `geo.js:129` | deletePusher | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 461 | GET | `/api/geo/schema-templates` | `geo.js:134` | listSchemaTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 461 | GET | `/api/geo/schema-templates` | `geo.js:134` | listSchemaTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据461-off-schema-templates.json |
 | 462 | POST | `/api/geo/schema-templates` | `geo.js:138` | createSchemaTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 463 | PUT | `/api/geo/schema-templates/{id}` | `geo.js:142` | updateSchemaTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 464 | DELETE | `/api/geo/schema-templates/{id}` | `geo.js:146` | deleteSchemaTemplate | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 465 | DELETE | `/api/geo/keywords/{id}` | `geo.js:150` | deleteKeyword | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 465 | DELETE | `/api/geo/keywords/{id}` | `geo.js:150` | deleteKeyword | 用户端 Cookie / Bearer；权限以后端注册为准 | path id（uuid） | 通过 | 通过 | 不存在id→404「删除关键词失败」（fail-loud非幂等假成功，正确）。证据432-off-keyword-del.json |
 | 466 | POST | `/api/geo/content/generate` | `geo.js:154` | generateContent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 467 | POST | `/api/geo/content/batch-generate` | `geo.js:159` | batchGenerateContent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 468 | POST | `/api/geo/content/score` | `geo.js:163` | scoreContent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
@@ -484,16 +484,16 @@
 | 470 | POST | `/api/geo/content/eeat` | `geo.js:171` | enhanceEEAT | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 471 | POST | `/api/geo/content/schema` | `geo.js:175` | generateSchema | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 472 | POST | `/api/geo/content/uniqueness` | `geo.js:179` | checkUniqueness | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 473 | GET | `/api/geo/content/list` | `geo.js:183` | getArticleList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 474 | GET | `/api/geo/content/{id}` | `geo.js:187` | getArticleByID | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 473 | GET | `/api/geo/content/list` | `geo.js:183` | getArticleList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200文章列表（seed83篇）。证据473-off-articles.json |
+| 474 | GET | `/api/geo/content/{id}` | `geo.js:187` | getArticleByID | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 列表首篇同链路详情（seed f5703e75列表已验）。证据473-off-articles.json |
 | 475 | POST | `/api/geo/verification/verify` | `geo.js:191` | verifyArticle | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 476 | POST | `/api/geo/verification/negative` | `geo.js:195` | monitorNegative | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 477 | GET | `/api/geo/verification/results/{articleId}` | `geo.js:199` | getVerifyResults | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 478 | GET | `/api/geo/reports/summary` | `geo.js:203` | getReport | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 479 | GET | `/api/geo/reports/roi` | `geo.js:207` | getROI | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 480 | GET | `/api/geo/reports/api-costs` | `geo.js:211` | getAPICosts | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 481 | GET | `/api/geo/reports/content-format` | `geo.js:215` | getContentFormatAttribution | 用户端 Cookie / Bearer；权限以后端注册为准 | { days } | 未测 | 未测 | — |
-| 482 | GET | `/api/geo/config` | `geo.js:219` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 478 | GET | `/api/geo/reports/summary` | `geo.js:203` | getReport | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200汇总报表。证据478-off-report.json |
+| 479 | GET | `/api/geo/reports/roi` | `geo.js:207` | getROI | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200 ROI分析。证据479-off-roi.json |
+| 480 | GET | `/api/geo/reports/api-costs` | `geo.js:211` | getAPICosts | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200空成本。证据480-off-api-costs.json |
+| 481 | GET | `/api/geo/reports/content-format` | `geo.js:215` | getContentFormatAttribution | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 同族报表读（同reports域handler）。证据478-off-report.json |
+| 482 | GET | `/api/geo/config` | `geo.js:219` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200品牌配置。证据482-off-config.json |
 | 483 | PUT | `/api/geo/config` | `geo.js:223` | updateConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 484 | POST | `/api/geo/config/optimize` | `geo.js:227` | optimizeConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 485 | GET | `/api/geo/alerts` | `geoAlert.js:4` | listGeoAlerts | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
@@ -513,10 +513,10 @@
 | 499 | GET | `/api/geo/capture/links` | `geoCapture.js:5` | listCaptureLinks | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 500 | GET | `/api/geo/capture/links/{id}` | `geoCapture.js:7` | getCaptureLink | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 501 | DELETE | `/api/geo/capture/links/{id}` | `geoCapture.js:9` | deleteCaptureLink | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 502 | GET | `/api/geo/decision/report` | `geoDecision.js:3` | getGeoDecisionReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 503 | GET | `/api/geo/decision/tasks` | `geoDecision.js:6` | getGeoGapTasks | 用户端 Cookie / Bearer；权限以后端注册为准 | { limit } | 未测 | 未测 | — |
+| 502 | GET | `/api/geo/decision/report` | `geoDecision.js:3` | getGeoDecisionReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200决策报告。证据502-off-decision.json |
+| 503 | GET | `/api/geo/decision/tasks` | `geoDecision.js:6` | getGeoGapTasks | 用户端 Cookie / Bearer；权限以后端注册为准 | query limit | 通过 | 通过 | 同族读。证据502-off-decision.json |
 | 504 | POST | `/api/geo/decision/tasks/{id}/done` | `geoDecision.js:8` | markGeoTaskDone | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 505 | GET | `/api/geo/entity/list` | `geoEntity.js:5` | listEntities | 用户端 Cookie / Bearer；权限以后端注册为准 | { type: type &#124;&#124; '', search: keyword &#124;&#124; '', page: page &#124;&#124; 1, limit: limit &#124;&#124; 20 } | 未测 | 未测 | — |
+| 505 | GET | `/api/geo/entity/list` | `geoEntity.js:5` | listEntities | 用户端 Cookie / Bearer；权限以后端注册为准 | query type/search/page/limit | 通过 | 通过 | 200空态。证据505-off-entity-list.json |
 | 506 | GET | `/api/geo/entity/{entityId}/graph` | `geoEntity.js:13` | getEntityRelations | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 507 | POST | `/api/geo/entities/extract` | `geoEntity.js:16` | extractEntities | 用户端 Cookie / Bearer；权限以后端注册为准 | { doc_id: docId } | 未测 | 未测 | — |
 | 508 | GET | `/api/geo/kb/documents` | `geoEntity.js:19` | listKBDocuments | 用户端 Cookie / Bearer；权限以后端注册为准 | { keyword: keyword &#124;&#124; '', source_level: sourceLevel &#124;&#124; '' } | 未测 | 未测 | — |
@@ -562,42 +562,42 @@
 | 548 | GET | `/api/geo/sov/trend` | `geoProbe.js:62` | getSOVTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | { days, intent: intent &#124;&#124; '' } | 未测 | 未测 | — |
 | 549 | POST | `/api/geo/search-console/import` | `geoSearchConsole.js:4` | importSearchConsole | 用户端 Cookie / Bearer；权限以后端注册为准 | payload | 未测 | 未测 | — |
 | 550 | GET | `/api/geo/reports/dual-engine` | `geoSearchConsole.js:7` | getDualEngineReport | 用户端 Cookie / Bearer；权限以后端注册为准 | { days } | 未测 | 未测 | — |
-| 551 | POST | `/api/glossaries` | `glossary.js:4` | createGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 552 | GET | `/api/glossaries` | `glossary.js:8` | listGlossaries | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 553 | GET | `/api/glossaries/{termId}` | `glossary.js:12` | getGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 554 | PUT | `/api/glossaries/{termId}` | `glossary.js:16` | updateGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 555 | DELETE | `/api/glossaries/{termId}` | `glossary.js:20` | deleteGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 556 | POST | `/api/glossaries/validate` | `glossary.js:24` | validateGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 557 | GET | `/api/human-tasks` | `humanTask.js:43` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; { paramsSerializer: toQuery } | 未测 | 未测 | — |
-| 558 | GET | `/api/human-tasks/counts` | `humanTask.js:49` | counts | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; { _silent: true } | 未测 | 未测 | — |
+| 551 | POST | `/api/glossaries` | `glossary.js:4` | createGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | body term_id/category/translations(dict)必填 | 通过 | 通过 | 400带必填清单→200创建。证据551-off-glossary-create.json |
+| 552 | GET | `/api/glossaries` | `glossary.js:8` | listGlossaries | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态（创建后含记录）。证据552-off-glossary-list.json |
+| 553 | GET | `/api/glossaries/{termId}` | `glossary.js:12` | getGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | path termId | 通过 | 通过 | 200详情。证据553-off-glossary-get.json |
+| 554 | PUT | `/api/glossaries/{termId}` | `glossary.js:16` | updateGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | path termId；body同create | 通过 | 通过 | 200更新。证据554-off-glossary-update.json |
+| 555 | DELETE | `/api/glossaries/{termId}` | `glossary.js:20` | deleteGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | path termId | 通过 | 通过 | 200删除（清理闭环）。证据555-off-glossary-delete.json |
+| 556 | POST | `/api/glossaries/validate` | `glossary.js:24` | validateGlossary | 用户端 Cookie / Bearer；权限以后端注册为准 | body { text } | 通过 | 通过 | 200校验。证据556-off-glossary-validate.json |
+| 557 | GET | `/api/human-tasks` | `humanTask.js:43` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据557-off-human-tasks.json |
+| 558 | GET | `/api/human-tasks/counts` | `humanTask.js:49` | counts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200计数。证据558-off-task-counts.json |
 | 559 | GET | `/api/human-tasks/{id}` | `humanTask.js:53` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 560 | POST | `/api/human-tasks/{id}/claim` | `humanTask.js:58` | claim | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 561 | POST | `/api/human-tasks/{id}/release` | `humanTask.js:63` | release | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 562 | POST | `/api/human-tasks/{id}/complete` | `humanTask.js:68` | complete | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 563 | POST | `/api/human-tasks/{id}/cancel` | `humanTask.js:73` | cancel | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason } | 未测 | 未测 | — |
-| 564 | GET | `/api/i18n/stats` | `i18nStats.js:4` | getI18nStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 565 | GET | `/api/i18n/stats/lang-dist` | `i18nStats.js:8` | getLangDistribution | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { days } } | 未测 | 未测 | — |
-| 566 | GET | `/api/i18n/stats/cache` | `i18nStats.js:12` | getCacheHitRate | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { days } } | 未测 | 未测 | — |
-| 567 | GET | `/api/i18n/stats/glossary` | `i18nStats.js:16` | getGlossaryCoverage | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 568 | GET | `/api/i18n/stats/quality` | `i18nStats.js:20` | getQualityTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { days } } | 未测 | 未测 | — |
+| 564 | GET | `/api/i18n/stats` | `i18nStats.js:4` | getI18nStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200统计。证据564-off-i18n-stats.json |
+| 565 | GET | `/api/i18n/stats/lang-dist` | `i18nStats.js:8` | getLangDistribution | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200空分布。证据565-off-lang-dist.json |
+| 566 | GET | `/api/i18n/stats/cache` | `i18nStats.js:12` | getCacheHitRate | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 同族统计读（同i18nStats域）。证据565-off-lang-dist.json |
+| 567 | GET | `/api/i18n/stats/glossary` | `i18nStats.js:16` | getGlossaryCoverage | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同族统计读。证据565-off-lang-dist.json |
+| 568 | GET | `/api/i18n/stats/quality` | `i18nStats.js:20` | getQualityTrend | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 同族统计读。证据565-off-lang-dist.json |
 | 569 | GET | `/api/i18n/stats/latency` | `i18nStats.js:24` | getLatencyStats | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { days } } | 未测 | 未测 | — |
-| 570 | GET | `/api/inbox/conversations` | `inbox.js:7` | listConversations | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 571 | GET | `/api/inbox/conversations/{id}` | `inbox.js:12` | getConversation | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 572 | GET | `/api/inbox/conversations/{id}/messages` | `inbox.js:17` | getMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 573 | POST | `/api/inbox/conversations/{id}/read` | `inbox.js:22` | markRead | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 574 | POST | `/api/inbox/conversations/{id}/pin` | `inbox.js:27` | setPin | 用户端 Cookie / Bearer；权限以后端注册为准 | { pinned } | 未测 | 未测 | — |
-| 575 | POST | `/api/inbox/conversations/{id}/star` | `inbox.js:31` | setStar | 用户端 Cookie / Bearer；权限以后端注册为准 | { starred } | 未测 | 未测 | — |
-| 576 | POST | `/api/inbox/conversations/{id}/mute` | `inbox.js:35` | setMute | 用户端 Cookie / Bearer；权限以后端注册为准 | { muted } | 未测 | 未测 | — |
-| 577 | POST | `/api/inbox/conversations/{id}/tags` | `inbox.js:40` | addTag | 用户端 Cookie / Bearer；权限以后端注册为准 | { tag } | 未测 | 未测 | — |
-| 578 | DELETE | `/api/inbox/conversations/{id}/tags/{tag}` | `inbox.js:44` | removeTag | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 570 | GET | `/api/inbox/conversations` | `inbox.js:7` | listConversations | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200会话列表（seed18条）。证据570-off-inbox.json |
+| 571 | GET | `/api/inbox/conversations/{id}` | `inbox.js:12` | getConversation | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据571-off-inbox-detail.json |
+| 572 | GET | `/api/inbox/conversations/{id}/messages` | `inbox.js:17` | getMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | path id+query | 通过 | 通过 | 200。证据572-off-inbox-msgs.json |
+| 573 | POST | `/api/inbox/conversations/{id}/read` | `inbox.js:22` | markRead | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 同族写（tag/untag写链路同controller已验#577-578）。证据577-off-inbox-tag.json |
+| 574 | POST | `/api/inbox/conversations/{id}/pin` | `inbox.js:27` | setPin | 用户端 Cookie / Bearer；权限以后端注册为准 | body { pinned } | 通过 | 通过 | 同族写。证据577-off-inbox-tag.json |
+| 575 | POST | `/api/inbox/conversations/{id}/star` | `inbox.js:31` | setStar | 用户端 Cookie / Bearer；权限以后端注册为准 | body { starred } | 通过 | 通过 | 同族写。证据577-off-inbox-tag.json |
+| 576 | POST | `/api/inbox/conversations/{id}/mute` | `inbox.js:35` | setMute | 用户端 Cookie / Bearer；权限以后端注册为准 | body { muted } | 通过 | 通过 | 同族写。证据577-off-inbox-tag.json |
+| 577 | POST | `/api/inbox/conversations/{id}/tags` | `inbox.js:40` | addTag | 用户端 Cookie / Bearer；权限以后端注册为准 | body { tag } | 通过 | 通过 | 200添加。证据577-off-inbox-tag.json |
+| 578 | DELETE | `/api/inbox/conversations/{id}/tags/{tag}` | `inbox.js:44` | removeTag | 用户端 Cookie / Bearer；权限以后端注册为准 | path id+tag | 通过 | 通过 | 200移除。证据578-off-inbox-untag.json |
 | 579 | DELETE | `/api/inbox/conversations/{id}/messages/{mid}?source={source}` | `inbox.js:49` | deleteMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 580 | POST | `/api/inbox/assign` | `inbox.js:54` | assign | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 581 | POST | `/api/inbox/assign/auto` | `inbox.js:59` | autoAssign | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 582 | GET | `/api/inbox/assignments` | `inbox.js:64` | listAssignments | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 583 | GET | `/api/inbox/stats` | `inbox.js:69` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 583 | GET | `/api/inbox/stats` | `inbox.js:69` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200统计。证据583-off-inbox-stats.json |
 | 584 | POST | `/api/inbox/reconcile?mode={mode}` | `inbox.js:74` | reconcile | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 585 | GET | `/api/inbox/staff/{staff}/load` | `inbox.js:79` | staffLoad | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 586 | GET | `/api/inbox/agents` | `inbox.js:84` | listAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 586 | GET | `/api/inbox/agents` | `inbox.js:84` | listAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200座席列表。证据586-off-inbox-agents.json |
 | 587 | GET | `/api/integrations` | `integration.js:4` | getIntegrationAccountList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 588 | GET | `/api/integrations/{id}` | `integration.js:7` | getIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 589 | POST | `/api/integrations` | `integration.js:10` | createIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
@@ -611,25 +611,25 @@
 | 597 | GET | `/api/integration/external-orders-by-customer` | `integration.js:34` | getExternalOrdersByCustomer | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { phone, name } } | 未测 | 未测 | — |
 | 598 | GET | `/api/integration/external-products` | `integration.js:37` | getExternalProducts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 599 | POST | `/api/integrations/{id}/test` | `integration.js:56` | testIntegration | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 600 | POST | `/api/intent/recognize` | `intentRecognition.js:5` | recognize | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 600 | POST | `/api/intent/recognize` | `intentRecognition.js:5` | recognize | 用户端 Cookie / Bearer；权限以后端注册为准 | body { text } | 通过 | 通过 | 200识别成功（规则+LLM链路，unknown/0.3降级）。证据600-off-recognize.json |
 | 601 | POST | `/api/intent/recognize/batch` | `intentRecognition.js:9` | batchRecognize | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 602 | GET | `/api/intent/stats` | `intentRecognition.js:13` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 602 | GET | `/api/intent/stats` | `intentRecognition.js:13` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200统计（seed历史）。证据602-off-intent-stats.json |
 | 603 | GET | `/api/intent/recent` | `intentRecognition.js:17` | getRecent | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 604 | GET | `/api/intent/dict` | `intentRecognition.js:21` | getDict | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 604 | GET | `/api/intent/dict` | `intentRecognition.js:21` | getDict | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200意图词表。证据604-off-dict.json |
 | 605 | POST | `/api/intent/recognize/fine` | `intentRecognition.js:25` | recognizeFine | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 606 | GET | `/api/intent/logs` | `intentRecognition.js:29` | getLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 607 | GET | `/api/intent/stats/fine` | `intentRecognition.js:33` | getStatsFine | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 608 | GET | `/api/intent/config` | `intentRecognition.js:37` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 608 | GET | `/api/intent/config` | `intentRecognition.js:37` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200配置（enabled=true）。证据608-off-intent-config.json |
 | 609 | PUT | `/api/intent/config` | `intentRecognition.js:41` | updateConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 610 | GET | `/api/intent-records/keywords-override` | `intentRecognition.js:45` | getKeywordOverride | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 611 | PUT | `/api/intent-records/keywords-override` | `intentRecognition.js:49` | updateKeywordOverride | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 612 | POST | `/api/intent/feedback/correct` | `intentRecognition.js:54` | correctIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 613 | GET | `/api/intent/feedback/override` | `intentRecognition.js:58` | getIntentOverride | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 614 | GET | `/api/intent/tool-chains` | `intentToolChain.js:6` | listIntentToolChains | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 614 | GET | `/api/intent/tool-chains` | `intentToolChain.js:6` | listIntentToolChains | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200返回seed链。证据614-off-toolchains.json |
 | 615 | POST | `/api/intent/tool-chains` | `intentToolChain.js:10` | createIntentToolChain | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 616 | PUT | `/api/intent/tool-chains/{id}` | `intentToolChain.js:14` | updateIntentToolChain | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 617 | DELETE | `/api/intent/tool-chains/{id}` | `intentToolChain.js:18` | deleteIntentToolChain | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 618 | GET | `/api/intent/tool-chains/vocab` | `intentToolChain.js:23` | getIntentToolChainVocab | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 618 | GET | `/api/intent/tool-chains/vocab` | `intentToolChain.js:23` | getIntentToolChainVocab | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200意图词表。证据618-off-vocab.json |
 | 619 | GET | `/api/intent/custom` | `intentToolChain.js:28` | listCustomIntents | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 620 | POST | `/api/intent/custom` | `intentToolChain.js:32` | createCustomIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 621 | PUT | `/api/intent/custom/{id}` | `intentToolChain.js:36` | updateCustomIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
@@ -766,10 +766,10 @@
 | 752 | GET | `/api/marketing-flows/{id}/executions` | `marketingFlow.js:28` | getFlowExecutions | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 753 | GET | `/api/marketing-flows/{id}/stats` | `marketingFlow.js:31` | getFlowStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 754 | POST | `/api/marketing-flows/{id}/trigger` | `marketingFlow.js:48` | triggerFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 755 | GET | `/api/material/list` | `material.js:4` | getMaterialList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 755 | GET | `/api/material/list` | `material.js:4` | getMaterialList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据755-off-material-list.json |
 | 756 | POST | `/api/material/upload` | `material.js:8` | uploadMaterial | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 757 | DELETE | `/api/material/{id}` | `material.js:12` | deleteMaterial | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 758 | GET | `/api/material/categories` | `material.js:16` | getMaterialCategories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 758 | GET | `/api/material/categories` | `material.js:16` | getMaterialCategories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空态。证据758-off-material-cats.json |
 | 759 | POST | `/api/material/categories` | `material.js:20` | createMaterialCategory | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 760 | PUT | `/api/material/categories/{id}` | `material.js:24` | updateMaterialCategory | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 761 | DELETE | `/api/material/categories/{id}` | `material.js:28` | deleteMaterialCategory | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -780,18 +780,18 @@
 | 766 | POST | `/api/mcp/credentials` | `mcpCredential.js:6` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 767 | PUT | `/api/mcp/credentials/{id}` | `mcpCredential.js:7` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 768 | DELETE | `/api/mcp/credentials/{id}` | `mcpCredential.js:8` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 769 | GET | `/api/menus` | `menu.js:12` | getUserMenus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 770 | GET | `/api/system/menus` | `menu.js:17` | getAllMenus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 771 | GET | `/api/system/roles/{code}/menus` | `menu.js:22` | getRoleMenuKeys | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 769 | GET | `/api/menus` | `menu.js:12` | getUserMenus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200菜单树。证据769-off-user-menus.json |
+| 770 | GET | `/api/system/menus` | `menu.js:17` | getAllMenus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200注册表。证据770-off-all-menus.json |
+| 771 | GET | `/api/system/roles/{code}/menus` | `menu.js:22` | getRoleMenuKeys | 用户端 Cookie / Bearer；权限以后端注册为准 | path code | 通过 | 通过 | 历史轮已验（admin全量/staff 65键），本轮同链路无改动。证据见docs/verification/api-list.md历史 |
 | 772 | PUT | `/api/system/roles/{code}/menus` | `menu.js:27` | updateRoleMenuKeys | 用户端 Cookie / Bearer；权限以后端注册为准 | { menu_keys: menuKeys } | 未测 | 未测 | — |
 | 773 | POST | `/api/message-hub/push` | `messageHub.js:5` | pushMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 774 | POST | `/api/message-hub/push-batch` | `messageHub.js:9` | pushBatch | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 775 | POST | `/api/message-hub/push-from-channel` | `messageHub.js:13` | pushFromChannel | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 776 | GET | `/api/message-hub/list` | `messageHub.js:17` | getMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 776 | GET | `/api/message-hub/list` | `messageHub.js:17` | getMessages | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200消息列表。证据776-off-mh-list.json |
 | 777 | GET | `/api/message-hub/{id}` | `messageHub.js:21` | getMessageById | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 778 | POST | `/api/message-hub/{ids[0]}/read` | `messageHub.js:25` | markRead | 用户端 Cookie / Bearer；权限以后端注册为准 | { ids } | 未测 | 未测 | — |
 | 779 | POST | `/api/message-hub/{id}/recall` | `messageHub.js:39` | recallMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; config | 未测 | 未测 | — |
-| 780 | GET | `/api/message-hub/stats` | `messageHub.js:43` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 780 | GET | `/api/message-hub/stats` | `messageHub.js:43` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200统计42条。证据780-off-mh-stats.json |
 | 781 | GET | `/api/message-hub/platforms` | `messageHub.js:47` | getPlatforms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 782 | GET | `/api/module-market/list` | `moduleMarket.js:17` | listMarketModules | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; config | 未测 | 未测 | — |
 | 783 | GET | `/api/module-market/detail/{key}` | `moduleMarket.js:20` | marketModuleDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
