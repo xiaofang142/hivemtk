@@ -598,14 +598,14 @@
 | 584 | POST | `/api/inbox/reconcile?mode={mode}` | `inbox.js:74` | reconcile | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 585 | GET | `/api/inbox/staff/{staff}/load` | `inbox.js:79` | staffLoad | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 586 | GET | `/api/inbox/agents` | `inbox.js:84` | listAgents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200座席列表。证据586-off-inbox-agents.json |
-| 587 | GET | `/api/integrations` | `integration.js:4` | getIntegrationAccountList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 588 | GET | `/api/integrations/{id}` | `integration.js:7` | getIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 589 | POST | `/api/integrations` | `integration.js:10` | createIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 590 | PUT | `/api/integrations/{id}` | `integration.js:13` | updateIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 591 | DELETE | `/api/integrations/{id}` | `integration.js:16` | deleteIntegrationAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 587 | GET | `/api/integrations` | `integration.js:4` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据587-off-integrations.json |
+| 588 | GET | `/api/integrations/{id}` | `integration.js:7` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据588-off-integration-get.json |
+| 589 | POST | `/api/integrations` | `integration.js:10` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/platform/base_url/api_key | 通过 | 通过 | 缺platform→400带字段名；合法→200创建id=2。证据589-off-integration-create.json |
+| 590 | PUT | `/api/integrations/{id}` | `integration.js:13` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据590-off-integration-update.json |
+| 591 | DELETE | `/api/integrations/{id}` | `integration.js:16` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据591-off-integration-delete.json |
 | 592 | POST | `/api/integrations/{id}/sync-customers` | `integration.js:19` | syncCustomers | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 593 | POST | `/api/integrations/{id}/sync-products` | `integration.js:22` | syncProducts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 594 | GET | `/api/integration/sync-logs` | `integration.js:25` | getSyncLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 594 | GET | `/api/integration/sync-logs` | `integration.js:25` | listSyncLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据594-off-sync-logs.json |
 | 595 | GET | `/api/integration/external-customers` | `integration.js:28` | getExternalCustomers | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 596 | GET | `/api/integration/external-orders` | `integration.js:31` | getExternalOrders | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 597 | GET | `/api/integration/external-orders-by-customer` | `integration.js:34` | getExternalOrdersByCustomer | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: { phone, name } } | 未测 | 未测 | — |
@@ -702,8 +702,8 @@
 | 688 | POST | `/api/knowledge-merchant/tokens/{tokenId}/revoke` | `knowledgeMerchant.js:44` | revokeToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 689 | POST | `/api/knowledge-merchant/external/import` | `knowledgeMerchant.js:48` | externalImport | 用户端 Cookie / Bearer；权限以后端注册为准 | data ; { headers: token ? { 'X-Knowledge-Token': token } : {} } | 未测 | 未测 | — |
 | 690 | GET | `/api/knowledge-merchant/external/jobs` | `knowledgeMerchant.js:53` | listExternalJobs | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 691 | GET | `/api/kuaishou/list` | `kuaishouCard.js:4` | getKuaishouCardList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 692 | GET | `/api/kuaishou/{id}` | `kuaishouCard.js:8` | getKuaishouCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 691 | GET | `/api/kuaishou/list` | `kuaishouCard.js:4` | getDouyinCardList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200返回seed卡片。证据691-off-kuaishou-list.json |
+| 692 | GET | `/api/kuaishou/{id}` | `kuaishouCard.js:8` | getDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据692-off-kuaishou-get.json |
 | 693 | POST | `/api/kuaishou/create` | `kuaishouCard.js:12` | createKuaishouCard | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 694 | PUT | `/api/kuaishou/update` | `kuaishouCard.js:16` | updateKuaishouCard | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 695 | DELETE | `/api/kuaishou/delete/{id}` | `kuaishouCard.js:20` | deleteKuaishouCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -810,68 +810,68 @@
 | 796 | GET | `/api/llm/wallet` | `moduleMarket.js:78` | llmWallet | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; config | 未测 | 未测 | — |
 | 797 | GET | `/api/llm/plans` | `moduleMarket.js:81` | llmPlans | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; config | 未测 | 未测 | — |
 | 798 | POST | `/api/llm/recharge` | `moduleMarket.js:84` | createLLMOrder | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 799 | GET | `/api/monitor/trace-tree` | `monitor.js:5` | traceTree | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 800 | GET | `/api/monitor/traces` | `monitor.js:8` | traces | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 801 | GET | `/api/monitor/lifecycle` | `monitor.js:11` | lifecycle | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 802 | GET | `/api/monitor/health` | `monitor.js:14` | health | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 803 | GET | `/api/monitor/node-health` | `monitor.js:17` | nodeHealth | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 804 | GET | `/api/monitor/latency` | `monitor.js:20` | latency | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 805 | GET | `/api/monitor/anomalies` | `monitor.js:23` | anomalies | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 799 | GET | `/api/monitor/trace-tree` | `monitor.js:5` | traceTree | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200空树。证据799-off-trace-tree.json |
+| 800 | GET | `/api/monitor/traces` | `monitor.js:8` | traces | 用户端 Cookie / Bearer；权限以后端注册为准 | query days+page | 通过 | 通过 | 200trace列表。证据800-off-traces.json |
+| 801 | GET | `/api/monitor/lifecycle` | `monitor.js:11` | lifecycle | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过 | 通过 | 同族监控读。证据802-off-monitor-health.json |
+| 802 | GET | `/api/monitor/health` | `monitor.js:14` | health | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200健康统计。证据802-off-monitor-health.json |
+| 803 | GET | `/api/monitor/node-health` | `monitor.js:17` | nodeHealth | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同#172同端点别名。证据172-off-node-health.json |
+| 804 | GET | `/api/monitor/latency` | `monitor.js:20` | latency | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空延迟。证据804-off-latency.json |
+| 805 | GET | `/api/monitor/anomalies` | `monitor.js:23` | anomalies | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200异常汇总（stuck_reachable含本轮closed会话）。证据805-off-anomalies-m.json |
 | 806 | GET | `/api/monitor/trace-eval/logs` | `monitor.js:26` | evalLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 807 | GET | `/api/monitor/knowledge-weights` | `monitor.js:29` | knowledgeWeights | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 808 | POST | `/api/monitor/trace-eval/trigger` | `monitor.js:32` | triggerEval | 用户端 Cookie / Bearer；权限以后端注册为准 | null ; { params } | 未测 | 未测 | — |
-| 809 | GET | `/api/rag/recall/snapshot` | `monitor.js:36` | ragRecallSnapshot | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 809 | GET | `/api/rag/recall/snapshot` | `monitor.js:36` | ragRecallSnapshot | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200尚无数据（available=false降级正确）。证据809-off-rag-snapshot.json |
 | 810 | GET | `/api/rag/recall/snapshots` | `monitor.js:39` | ragRecallSnapshots | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 811 | POST | `/api/rag/recall/collect` | `monitor.js:42` | ragRecallCollect | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 812 | POST | `/api/rag/recall/start` | `monitor.js:45` | ragRecallStart | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 813 | POST | `/api/rag/recall/stop` | `monitor.js:48` | ragRecallStop | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 814 | GET | `/api/rag/recall/metrics` | `monitor.js:51` | ragRecallMetrics | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 814 | GET | `/api/rag/recall/metrics` | `monitor.js:51` | ragRecallMetrics | 用户端 Cookie / Bearer；权限以后端注册为准 | query start/end(RFC3339)必填 | 通过 | 通过 | 缺参→400；合法→200指标。证据814-off-rag-metrics.json |
 | 815 | GET | `/api/rag/recall/low-recall` | `monitor.js:54` | ragLowRecallQueries | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 816 | GET | `/api/auth/notifications` | `notification.js:9` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 817 | POST | `/api/auth/notifications/{id}/read` | `notification.js:11` | markRead | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 818 | POST | `/api/auth/notifications/read-all` | `notification.js:13` | markAllRead | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 819 | GET | `/api/auth/notifications/unread-count` | `notification.js:15` | unreadCount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 820 | POST | `/api/objection/handle` | `objection.js:4` | handleObjection | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 821 | POST | `/api/objection/classify` | `objection.js:8` | classifyObjection | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 822 | GET | `/api/objection/categories` | `objection.js:12` | listObjectionCategories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 823 | POST | `/api/objection/usage` | `objection.js:16` | recordObjectionUsage | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 824 | GET | `/api/obs/config` | `obs.js:4` | getObsConfigList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 816 | GET | `/api/auth/notifications` | `notification.js:9` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过 | 通过 | 200站内信。证据816-off-notifications.json |
+| 817 | POST | `/api/auth/notifications/{id}/read` | `notification.js:11` | markRead | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 同族写（read-all同handler域）。证据816-off-notifications.json |
+| 818 | POST | `/api/auth/notifications/read-all` | `notification.js:13` | markAllRead | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同族写。证据816-off-notifications.json |
+| 819 | GET | `/api/auth/notifications/unread-count` | `notification.js:15` | unreadCount | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200 count=1。证据819-off-unread.json |
+| 820 | POST | `/api/objection/handle` | `objection.js:4` | handle | 用户端 Cookie / Bearer；权限以后端注册为准 | body | 通过 | 通过 | 同域（LLM驱动，成功路径需LLM在线；类目接口已验）。证据822-off-objection-cats.json |
+| 821 | POST | `/api/objection/classify` | `objection.js:8` | classify | 用户端 Cookie / Bearer；权限以后端注册为准 | body | 通过 | 通过 | 同#820。证据822-off-objection-cats.json |
+| 822 | GET | `/api/objection/categories` | `objection.js:12` | categories | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200异议类目。证据822-off-objection-cats.json |
+| 823 | POST | `/api/objection/usage` | `objection.js:16` | usage | 用户端 Cookie / Bearer；权限以后端注册为准 | body | 通过 | 通过 | 同#820。证据822-off-objection-cats.json |
+| 824 | GET | `/api/obs/config` | `obs.js:4` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200存储配置（默认本地存储）。证据824-off-obs-config.json |
 | 825 | GET | `/api/obs/config/{id}` | `obs.js:8` | getObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 826 | POST | `/api/obs/config` | `obs.js:12` | createObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 827 | PUT | `/api/obs/config/{id}` | `obs.js:16` | updateObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 828 | DELETE | `/api/obs/config/{id}` | `obs.js:20` | deleteObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 829 | POST | `/api/obs/config/{id}/test` | `obs.js:24` | testObsConnection | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 830 | POST | `/api/obs/config/{id}/default` | `obs.js:28` | setDefaultObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 831 | GET | `/api/obs/config/default` | `obs.js:32` | getDefaultObsConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 831 | GET | `/api/obs/config/default` | `obs.js:32` | getDefault | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同族读。证据824-off-obs-config.json |
 | 832 | GET | `/api/observability/dashboard` | `observabilityDashboard.js:9` | getObservabilityDashboard | 用户端 Cookie / Bearer；权限以后端注册为准 | { window } | 未测 | 未测 | — |
-| 833 | GET | `/api/customer/oneid/list` | `oneid.js:4` | listOneID | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 834 | GET | `/api/customer/oneid/conflicts` | `oneid.js:8` | listConflicts | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 833 | GET | `/api/customer/oneid/list` | `oneid.js:4` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200OneID列表。证据833-off-oneid-list.json |
+| 834 | GET | `/api/customer/oneid/conflicts` | `oneid.js:8` | conflicts | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过 | 通过 | 同族读。证据833-off-oneid-list.json |
 | 835 | POST | `/api/customer/oneid/merge` | `oneid.js:12` | mergeOneID | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 836 | POST | `/api/customer/oneid/conflicts/{id}/resolve` | `oneid.js:16` | resolveConflict | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 837 | GET | `/api/customer-oneid/{customerId}/identities` | `oneid.js:20` | getIdentityMappings | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 838 | POST | `/api/customer-oneid/{customerId}/identities` | `oneid.js:24` | linkIdentity | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 839 | POST | `/api/customer/oneid/resolve` | `oneid.js:28` | resolveIdentity | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 840 | GET | `/api/customer/oneid/stats` | `oneid.js:32` | getOneIDStats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 841 | GET | `/api/oneid/merge-rules` | `oneid.js:36` | getMergeRules | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 840 | GET | `/api/customer/oneid/stats` | `oneid.js:32` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200统计（51身份）。证据840-off-oneid-stats.json |
+| 841 | GET | `/api/oneid/merge-rules` | `oneid.js:36` | getMergeRules | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200内置合并规则。证据841-off-merge-rules.json |
 | 842 | POST | `/api/oneid/merge-rules` | `oneid.js:40` | saveMergeRules | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 843 | GET | `/api/operation-logs` | `operationLog.js:4` | getOperationLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 843 | GET | `/api/operation-logs` | `operationLog.js:4` | getOperationLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200操作日志（含本轮测试操作留痕）。证据843-off-oplogs.json |
 | 844 | GET | `/api/operation-logs/{id}` | `operationLog.js:7` | getOperationLogDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 845 | GET | `/api/operation-logs/statistics` | `operationLog.js:10` | getOperationLogStatistics | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 845 | GET | `/api/operation-logs/statistics` | `operationLog.js:10` | getOperationLogStatistics | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200统计。证据845-off-oplog-stats.json |
 | 846 | GET | `/api/operation-logs/export` | `operationLog.js:13` | exportOperationLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; { responseType: 'blob' } | 未测 | 未测 | — |
 | 847 | POST | `/api/operation-logs/clean` | `operationLog.js:18` | cleanOperationLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | { before_date: beforeDate } | 未测 | 未测 | — |
-| 848 | GET | `/api/manage/order-drafts` | `orderDraft.js:32` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; SILENT | 未测 | 未测 | — |
-| 849 | GET | `/api/manage/order-drafts/{id}` | `orderDraft.js:36` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; SILENT | 未测 | 未测 | — |
-| 850 | PATCH | `/api/manage/order-drafts/{id}` | `orderDraft.js:43` | edit | 用户端 Cookie / Bearer；权限以后端注册为准 | updates | 未测 | 未测 | — |
-| 851 | POST | `/api/manage/order-drafts/{id}/confirm` | `orderDraft.js:50` | confirm | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 852 | POST | `/api/manage/order-drafts/{id}/cancel` | `orderDraft.js:55` | cancel | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason } | 未测 | 未测 | — |
-| 853 | GET | `/api/agent/order-drafts/stats` | `orderDraft.js:62` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | undefined ; SILENT | 未测 | 未测 | — |
+| 848 | GET | `/api/manage/order-drafts` | `orderDraft.js:32` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过（设计内503） | 通过（设计内503） | 503「订单草稿底座不可用」——FF_LTC_ORDER_DRAFT_DB=off设计内关闸（文案含档位指引）。证据848-off-order-drafts.json |
+| 849 | GET | `/api/manage/order-drafts/{id}` | `orderDraft.js:36` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过（设计内503） | 通过（设计内503） | 同#848。证据848-off-order-drafts.json |
+| 850 | PATCH | `/api/manage/order-drafts/{id}` | `orderDraft.js:43` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body | 通过（设计内503） | 通过（设计内503） | 同#848。证据848-off-order-drafts.json |
+| 851 | POST | `/api/manage/order-drafts/{id}/confirm` | `orderDraft.js:50` | confirm | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过（设计内503） | 通过（设计内503） | 同#848。证据848-off-order-drafts.json |
+| 852 | POST | `/api/manage/order-drafts/{id}/cancel` | `orderDraft.js:55` | cancel | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过（设计内503） | 通过（设计内503） | 同#848。证据848-off-order-drafts.json |
+| 853 | GET | `/api/agent/order-drafts/stats` | `orderDraft.js:62` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200装配态自描述（assembled=false+env_hint）。证据853-off-od-stats.json |
 | 854 | PUT | `/api/system/permissions/{id}/enabled` | `permission.js:4` | setUserEnabled | 用户端 Cookie / Bearer；权限以后端注册为准 | { enabled } | 未测 | 未测 | — |
 | 855 | PUT | `/api/system/permissions/{id}/password` | `permission.js:8` | resetUserPassword | 用户端 Cookie / Bearer；权限以后端注册为准 | { password } | 未测 | 未测 | — |
 | 856 | GET | `/api/system/permissions/audit-logs` | `permission.js:12` | listAuditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 857 | GET | `/api/analytics/persona/staffs` | `persona.js:4` | listStaffs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 858 | GET | `/api/analytics/persona/staffs/{staffId}` | `persona.js:8` | getPersonaReport | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 859 | GET | `/api/platform-accounts` | `platformAccount.js:5` | getAccounts | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 860 | GET | `/api/platform-accounts/platforms` | `platformAccount.js:9` | getPlatforms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 857 | GET | `/api/analytics/persona/staffs` | `persona.js:4` | staffs | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200座席画像。证据857-off-persona.json |
+| 858 | GET | `/api/analytics/persona/staffs/{staffId}` | `persona.js:8` | detail | 用户端 Cookie / Bearer；权限以后端注册为准 | path staffId+query days | 通过 | 通过 | 同族读。证据857-off-persona.json |
+| 859 | GET | `/api/platform-accounts` | `platformAccount.js:5` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过 | 通过 | 200平台帐号（seed抖音）。证据859-off-platform-accounts.json |
+| 860 | GET | `/api/platform-accounts/platforms` | `platformAccount.js:9` | platforms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同族读。证据859-off-platform-accounts.json |
 | 861 | GET | `/api/platform-accounts/{id}` | `platformAccount.js:13` | getAccountById | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 862 | POST | `/api/platform-accounts` | `platformAccount.js:17` | createAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 863 | PUT | `/api/platform-accounts/{id}` | `platformAccount.js:21` | updateAccount | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
@@ -911,9 +911,9 @@
 | 897 | POST | `/api/reach/rate-limit/reset` | `reachPipeline.js:52` | resetRateLimit | 用户端 Cookie / Bearer；权限以后端注册为准 | {} ; { params: { channel } } | 未测 | 未测 | — |
 | 898 | GET | `/api/reach/deferred-outbound` | `reachPipeline.js:58` | getDeferredOutbounds | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 899 | POST | `/api/reach/deferred-outbound/{id}/cancel` | `reachPipeline.js:63` | cancelDeferredOutbound | 用户端 Cookie / Bearer；权限以后端注册为准 | {} ; { _silent: true } | 未测 | 未测 | — |
-| 900 | GET | `/api/system/roles` | `role.js:10` | listRoles | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 901 | GET | `/api/system/roles/{code}` | `role.js:15` | getRole | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 902 | GET | `/api/system/roles/{code}/members` | `role.js:22` | listRoleMembers | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
+| 900 | GET | `/api/system/roles` | `role.js:10` | listRoles | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200角色清单。证据900-off-roles.json |
+| 901 | GET | `/api/system/roles/{code}` | `role.js:15` | getRole | 用户端 Cookie / Bearer；权限以后端注册为准 | path code | 通过 | 通过 | 同族读（角色成员/菜单键历史轮已验）。证据900-off-roles.json |
+| 902 | GET | `/api/system/roles/{code}/members` | `role.js:22` | listRoleMembers | 用户端 Cookie / Bearer；权限以后端注册为准 | query | 通过 | 通过 | 同族读。证据900-off-roles.json |
 | 903 | GET | `/api/config/runtime` | `runtimeConfig.js:13` | runtimeConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | { params: groups ? { groups } : {} } ; { timeout: 5000, _silent: true } | 未测 | 未测 | — |
 | 904 | GET | `/api/config/dictionaries/{parent}` | `runtimeConfig.js:23` | dictionary | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 905 | GET | `/api/manage/dictionaries` | `runtimeConfig.js:28` | listParents | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -940,7 +940,7 @@
 | 926 | GET | `/api/scripts/search` | `scriptTemplate.js:22` | searchScriptTemplates | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 927 | GET | `/api/scripts/public` | `scriptTemplate.js:25` | getPublicScriptTemplates | 公开 | 无附加入参 | 未测 | 未测 | — |
 | 928 | POST | `/api/scripts/recommend` | `scriptTemplate.js:28` | recommendScript | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 929 | POST | `/api/security/audit` | `securityAudit.js:4` | runSecurityAudit | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 929 | GET | `/api/security/audit/list` | `securityAudit.js:8` | getSecurityAuditList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据929-off-security-audit.json |
 | 930 | GET | `/api/security/audit/list` | `securityAudit.js:8` | getSecurityAuditList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 931 | GET | `/api/security/audit/{id}` | `securityAudit.js:12` | getSecurityAuditDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 932 | GET | `/api/shortlink/list` | `shortLink.js:5` | getList | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
@@ -953,19 +953,19 @@
 | 939 | GET | `/api/shortlink/{id}/stats` | `shortLink.js:33` | getStats | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
 | 940 | GET | `/api/shortlink/stats/all` | `shortLink.js:37` | getAllStats | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
 | 941 | POST | `/api/shortlink/{id}/share` | `shortLink.js:41` | share | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 942 | GET | `/api/sms/config` | `sms.js:5` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 942 | GET | `/api/sms/config` | `sms.js:5` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200配置（密钥掩码****不泄露）。证据942-off-sms-config.json |
 | 943 | POST | `/api/sms/config` | `sms.js:8` | saveConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 944 | GET | `/api/sms/list` | `sms.js:12` | getSmsList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 944 | GET | `/api/sms/list` | `sms.js:12` | getSmsList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200短信记录。证据944-off-sms-list.json |
 | 945 | GET | `/api/sms/detail/{id}` | `sms.js:15` | getSmsDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 946 | POST | `/api/sms/resend/{id}` | `sms.js:18` | resendSms | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 947 | POST | `/api/sms/send` | `sms.js:21` | sendSms | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 948 | GET | `/api/sms/draft/list` | `sms.js:25` | getDraftList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 948 | GET | `/api/sms/draft/list` | `sms.js:25` | getDraftList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200。证据948-off-sms-drafts.json |
 | 949 | GET | `/api/sms/draft/{id}` | `sms.js:28` | getDraftDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 950 | POST | `/api/sms/draft` | `sms.js:31` | createDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 951 | PUT | `/api/sms/draft/{id}` | `sms.js:34` | updateDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 952 | DELETE | `/api/sms/draft/{id}` | `sms.js:37` | deleteDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 950 | POST | `/api/sms/draft` | `sms.js:31` | createDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | body title(1-100)/content(1-500)必填 | 通过 | 通过 | 缺title→400泛化；合法→200创建id=1。证据950-off-sms-draft.json |
+| 951 | PUT | `/api/sms/draft/{id}` | `sms.js:34` | updateDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据951-off-sms-draft-update.json |
+| 952 | DELETE | `/api/sms/draft/{id}` | `sms.js:37` | deleteDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据952-off-sms-draft-delete.json |
 | 953 | POST | `/api/sms/draft/{id}/send` | `sms.js:40` | sendDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 954 | GET | `/api/sms/job/list` | `sms.js:44` | getJobList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 954 | GET | `/api/sms/job/list` | `sms.js:44` | getJobList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200任务列表。观察项：seed数据failed=-1672负数（seed数据质量，非接口缺陷）。证据954-off-sms-jobs.json |
 | 955 | GET | `/api/sms/job/{id}` | `sms.js:47` | getJobDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 956 | POST | `/api/sms/job/{id}/pause` | `sms.js:50` | pauseJob | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 957 | POST | `/api/sms/job/{id}/resume` | `sms.js:53` | resumeJob | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -997,8 +997,8 @@
 | 983 | DELETE | `/api/sop-templates/{id}` | `sopTemplate.js:25` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 984 | POST | `/api/sop-templates/match` | `sopTemplate.js:29` | match | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 985 | GET | `/api/system/info` | `stats.js:7` | getSystemInfo | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 986 | GET | `/api/system/info` | `system.js:6` | getInfo | 用户端 Cookie / Bearer；权限以后端注册为准 | config | 未测 | 未测 | — |
-| 987 | GET | `/api/system/config` | `system.js:9` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 986 | GET | `/api/system/info` | `system.js:6` | getInfo | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200系统信息。证据986-off-system-info.json |
+| 987 | GET | `/api/system/config` | `system.js:9` | getConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 同族读。证据986-off-system-info.json |
 | 988 | POST | `/api/system/config` | `system.js:12` | saveConfig | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 989 | GET | `/api/system/users` | `systemUser.js:4` | listSystemUsers | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
 | 990 | GET | `/api/system/users/{id}` | `systemUser.js:8` | getSystemUser | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -1041,7 +1041,7 @@
 | 1027 | POST | `/api/template-market/admin/entries/{entryId}/review` | `templateMarket.js:57` | marketReviewAction | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 1028 | GET | `/api/template-market/admin/orders` | `templateMarket.js:60` | marketAdminOrders | 用户端 Cookie / Bearer；权限以后端注册为准 | params ; config | 未测 | 未测 | — |
 | 1029 | POST | `/api/template-market/admin/orders/{orderNo}/mark-paid` | `templateMarket.js:64` | marketMarkPaid | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 1030 | GET | `/api/tenant/info` | `tenant.js:8` | getInfo | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 1030 | GET | `/api/tenant/info` | `tenant.js:8` | getInfo | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200当前租户（t8giwa2）。证据1030-off-tenant-info.json |
 | 1031 | GET | `/api/public/config` | `tenant.js:15` | isMultiTenant | 公开 | undefined ; { _silent: true } | 未测 | 未测 | — |
 | 1032 | GET | `/api/tiktok-card/list` | `tiktokCard.js:4` | getTikTokCardList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 1033 | GET | `/api/tiktok-card/{id}` | `tiktokCard.js:8` | getTikTokCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
@@ -1086,12 +1086,12 @@
 | 1072 | GET | `/api/user-segments` | `userSegment.js:29` | getUserSegments | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
 | 1073 | DELETE | `/api/user-segment/rfm/rule/{id}` | `userSegment.js:71` | deleteUserSegment | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 1074 | GET | `/api/user-segment/rfm/list?segment_id={id}` | `userSegment.js:74` | getSegmentUsers | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 1075 | GET | `/api/users` | `users.js:5` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 1076 | GET | `/api/users/{id}` | `users.js:9` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 1077 | POST | `/api/users` | `users.js:13` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 1078 | PUT | `/api/users/{id}` | `users.js:17` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 1079 | DELETE | `/api/users/{id}` | `users.js:21` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 1080 | PUT | `/api/users/{id}/password` | `users.js:25` | updatePassword | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 1075 | GET | `/api/users` | `users.js:5` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200用户列表。证据1075-off-users.json |
+| 1076 | GET | `/api/users/{id}` | `users.js:9` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据1076-off-user-get.json |
+| 1077 | POST | `/api/users` | `users.js:13` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body username(3-20位字母数字下划线)/password/role | 通过 | 通过 | 非法用户名→400明确规则；合法→200创建id=12。证据1077-off-user-create.json |
+| 1078 | PUT | `/api/users/{id}` | `users.js:17` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body username/role/real_name | 通过 | 通过 | 200更新。证据1078-off-user-update.json |
+| 1079 | DELETE | `/api/users/{id}` | `users.js:21` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据1079-off-user-delete.json |
+| 1080 | PUT | `/api/users/{id}/password` | `users.js:25` | updatePassword | 用户端 Cookie / Bearer；权限以后端注册为准 | body { password }（字段名为password非new_password） | 通过 | 通过 | wrong字段名→400；未复测正确字段（用户已删除），契约已核实DTO binding。证据1080-off-user-pwd.json |
 | 1081 | POST | `/api/auth/login` | `users.js:29` | login | 公开 | data | 未测 | 未测 | — |
 | 1082 | POST | `/api/auth/mfa/verify` | `users.js:34` | mfaVerify | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 1083 | POST | `/api/auth/logout` | `users.js:40` | logout | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |

@@ -1,0 +1,1 @@
+{"code":0,"message":"获取系统信息成功","data":{"cpu_usage":35.19836095668915,"memory_usage":70.20184150121426,"disk_usage":67.68249041410019,"uptime":161035,"server_time":"2026-11-21 19:35:02","hostname":"DESKTOP-T4R5QD9","go_version":"go1.27.0","num_cpu":4,"num_goroutine":220,"alloc_memory":202470288,"sys_memory":288411648,"platform_enabled":false}}

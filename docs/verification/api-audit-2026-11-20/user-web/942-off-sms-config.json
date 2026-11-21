@@ -1,0 +1,1 @@
+{"code":0,"message":"success","data":{"defaultProvider":"aliyun","rateLimit":100,"dailyLimit":10000,"retryTimes":3,"aliyun":{"accessKeyId":"****","accessKeySecret":"****","signName":""},"tencent":{"secretId":"","secretKey":"","appId":"","signName":""},"huawei":{"appKey":"","appSecret":"","sender":"","signature":""}}}
