@@ -317,115 +317,115 @@
 | 303 | POST | `/api/memory/messages` | `dialogueMemory.js:5` | appendMessage | 用户端 Cookie / Bearer；权限以后端注册为准 | body session_id/role/content | 通过 | 通过 | 200追加成功。证据303-off-memory-append.json |
 | 304 | GET | `/api/memory/short` | `dialogueMemory.js:9` | getShortTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | query session_id必填 | 通过 | 通过 | 缺参→400；合法→200空列表。证据304-off-memory-short.json |
 | 305 | GET | `/api/memory/long` | `dialogueMemory.js:13` | getLongTerm | 用户端 Cookie / Bearer；权限以后端注册为准 | query session_id必填 | 通过 | 通过 | 200长期记忆行（key_facts结构）。证据305-off-memory-long.json |
-| 306 | POST | `/api/memory/facts` | `dialogueMemory.js:17` | updateKeyFacts | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 306 | POST | `/api/memory/facts` | `dialogueMemory.js:17` | updateKeyFacts | 用户端 Cookie / Bearer；权限以后端注册为准 | body session_id+facts(字符串字典)必填 | 通过 | 通过 | 缺facts→400明确文案。证据306-off-facts.json |
 | 307 | POST | `/api/memory/objections` | `dialogueMemory.js:21` | recordObjection | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 308 | POST | `/api/memory/purchase-intent` | `dialogueMemory.js:25` | updatePurchaseIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 309 | POST | `/api/memory/intent-trail` | `dialogueMemory.js:29` | recordIntent | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 310 | POST | `/api/memory/sop-history` | `dialogueMemory.js:33` | recordSOP | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 311 | GET | `/api/memory/context` | `dialogueMemory.js:37` | buildContext | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 312 | GET | `/api/memory/list` | `dialogueMemory.js:41` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 313 | GET | `/api/dingtalk-app/accounts` | `dingtalkApp.js:6` | listDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 311 | GET | `/api/memory/context` | `dialogueMemory.js:37` | buildContext | 用户端 Cookie / Bearer；权限以后端注册为准 | query session_id | 通过 | 通过 | 200组装上下文文本。证据311-off-memory-context.json |
+| 312 | GET | `/api/memory/list` | `dialogueMemory.js:41` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/page_size | 通过 | 通过 | 200记忆行列表。证据312-off-memory-list.json |
+| 313 | GET | `/api/dingtalk-app/accounts` | `dingtalkApp.js:6` | listDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据313-off-dingtalk.json |
 | 314 | GET | `/api/dingtalk-app/accounts/{id}` | `dingtalkApp.js:10` | getDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 315 | POST | `/api/dingtalk-app/accounts` | `dingtalkApp.js:14` | createDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 316 | PUT | `/api/dingtalk-app/accounts/{id}` | `dingtalkApp.js:18` | updateDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
 | 317 | DELETE | `/api/dingtalk-app/accounts/{id}` | `dingtalkApp.js:22` | deleteDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 318 | POST | `/api/dingtalk-app/accounts/{id}/test` | `dingtalkApp.js:26` | testDingtalkApp | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 319 | GET | `/api/domain-pool/health` | `domainPool.js:3` | getDomainHealth | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 320 | GET | `/api/domain-pool/{domain}/blacklist` | `domainPool.js:4` | checkBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 319 | GET | `/api/domain-pool/health` | `domainPool.js:3` | getDomainHealth | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200探测（seed域名DNS未解析=dns_ok false真实结果）。证据319-off-domain-health.json |
+| 320 | GET | `/api/domain-pool/{domain}/blacklist` | `domainPool.js:4` | checkBlacklist | 用户端 Cookie / Bearer；权限以后端注册为准 | path domain | 通过 | 通过 | 200。证据320-off-blacklist-check.json |
 | 321 | POST | `/api/domain-pool/{id}/suspend` | `domainPool.js:5` | suspendDomain | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
 | 322 | POST | `/api/domain-pool/{id}/rotate` | `domainPool.js:6` | rotateToBackup | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 323 | GET | `/api/domain-pool/alerts` | `domainPool.js:7` | listAlerts | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
+| 323 | GET | `/api/domain-pool/alerts` | `domainPool.js:7` | listAlerts | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200。证据323-off-alerts.json |
 | 324 | POST | `/api/domain-pool/alerts/{id}/resolve` | `domainPool.js:8` | resolveAlert | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 325 | GET | `/api/domain-pool` | `domainPool.js:11` | getList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 326 | POST | `/api/domain-pool` | `domainPool.js:12` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 327 | PUT | `/api/domain-pool/{data.id}` | `domainPool.js:13` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 328 | DELETE | `/api/domain-pool/{id}` | `domainPool.js:14` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 329 | POST | `/api/domain-pool/{id}/check` | `domainPool.js:15` | checkDomain | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
+| 325 | GET | `/api/domain-pool` | `domainPool.js:11` | getList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200含seed域名。证据325-off-domain-list.json |
+| 326 | POST | `/api/domain-pool` | `domainPool.js:12` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body domain/port等 | 通过 | 通过 | 200创建id=6。证据326-off-domain-create.json |
+| 327 | PUT | `/api/domain-pool/{data.id}` | `domainPool.js:13` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | body id+domain必填（id在body内），purpose等可选 | 通过 | 通过 | 缺body.id→400；带id→200更新purpose。证据327-off-domain-update.json |
+| 328 | DELETE | `/api/domain-pool/{id}` | `domainPool.js:14` | delete | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据328-off-domain-delete.json |
+| 329 | POST | `/api/domain-pool/{id}/check` | `domainPool.js:15` | checkDomain | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200触发探测。证据329-off-domain-check.json |
 | 330 | POST | `/api/domain-pool/check-all` | `domainPool.js:16` | checkAllDomains | 用户端 Cookie / Bearer；权限以后端注册为准 | {} | 未测 | 未测 | — |
-| 331 | GET | `/api/douyin/list` | `douyinCard.js:4` | getDouyinCardList | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 332 | GET | `/api/douyin/{id}` | `douyinCard.js:8` | getDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 333 | POST | `/api/douyin/create` | `douyinCard.js:12` | createDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 334 | PUT | `/api/douyin/update` | `douyinCard.js:16` | updateDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 335 | DELETE | `/api/douyin/delete/{id}` | `douyinCard.js:20` | deleteDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 336 | GET | `/api/douyin/view/{id}` | `douyinCard.js:24` | viewDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 337 | GET | `/api/douyin/stats/card/{id}` | `douyinCard.js:28` | getDouyinCardStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 338 | GET | `/api/douyin/stats/overall` | `douyinCard.js:32` | getDouyinCardOverallStats | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 339 | POST | `/api/douyin/{id}/generate-short-link` | `douyinCard.js:36` | generateShortLink | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 340 | GET | `/api/egolite/flows` | `egolite.js:12` | listEgoFlows | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 341 | GET | `/api/egolite/flows/{id}` | `egolite.js:14` | getEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 342 | POST | `/api/egolite/flows?id={id}` | `egolite.js:18` | saveEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 343 | POST | `/api/egolite/flows` | `egolite.js:18` | saveEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 344 | POST | `/api/egolite/flows/{id}/rescan` | `egolite.js:20` | rescanEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 345 | POST | `/api/egolite/flows/{id}/publish` | `egolite.js:22` | publishEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 346 | POST | `/api/egolite/flows/{id}/submit` | `egolite.js:24` | submitEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 347 | POST | `/api/egolite/flows/{id}/dry-run` | `egolite.js:27` | dryRunEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | data ; { _silent: true } | 未测 | 未测 | — |
-| 348 | DELETE | `/api/egolite/flows/{id}` | `egolite.js:29` | deleteEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 349 | GET | `/api/egolite/flows/{id}/cron` | `egolite.js:32` | getEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 350 | POST | `/api/egolite/flows/{id}/cron` | `egolite.js:33` | upsertEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 351 | DELETE | `/api/egolite/flows/{id}/cron` | `egolite.js:34` | deleteEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 352 | GET | `/api/egolite/executions` | `egolite.js:38` | listEgoExecutions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 353 | GET | `/api/egolite/executions/{id}` | `egolite.js:40` | getEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 354 | GET | `/api/egolite/executions/{id}/events` | `egolite.js:43` | listEgoEvents | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 355 | GET | `{base}/api/egolite/executions/{id}/stream{afterId ? `?after_id=${afterId}` : ''}` | `egolite.js:60` | resp | 用户端 Cookie / Bearer；权限以后端注册为准 | { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: controller.signal } | 未测 | 未测 | — |
-| 356 | POST | `/api/egolite/executions` | `egolite.js:112` | startEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | data ; { _silent: true } | 未测 | 未测 | — |
-| 357 | POST | `/api/egolite/executions/{id}/abort` | `egolite.js:114` | abortEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 358 | POST | `/api/egolite/executions/{id}/redispatch` | `egolite.js:118` | redispatchEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | {} ; { _silent: true } | 未测 | 未测 | — |
-| 359 | POST | `/api/egolite/executions/{id}/confirm` | `egolite.js:121` | confirmEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | { allow } | 未测 | 未测 | — |
-| 360 | GET | `/api/egolite/runner/status` | `egolite.js:125` | getEgoRunnerStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 361 | GET | `/api/egolite/runner/tokens` | `egolite.js:128` | listEgoRunnerTokens | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 362 | POST | `/api/egolite/runner/tokens` | `egolite.js:131` | issueEgoRunnerToken | 用户端 Cookie / Bearer；权限以后端注册为准 | { label } | 未测 | 未测 | — |
-| 363 | POST | `/api/egolite/runner/tokens/{id}/revoke` | `egolite.js:134` | revokeEgoRunnerToken | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 364 | GET | `/api/egolite/assets` | `egolite.js:139` | listEgoAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 365 | GET | `/api/egolite/admin/assets` | `egolite.js:142` | listEgoAdminAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 366 | GET | `/api/egolite/admin/flows` | `egolite.js:144` | listEgoAdminFlows | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 367 | POST | `/api/egolite/admin/assets/publish` | `egolite.js:147` | publishEgoAssetFromFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | { flow_id: flowId } | 未测 | 未测 | — |
-| 368 | POST | `/api/egolite/admin/assets/pack` | `egolite.js:149` | publishEgoAssetPack | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 369 | POST | `/api/egolite/admin/assets/{id}/offline` | `egolite.js:151` | offlineEgoAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 370 | GET | `/api/egolite/sessions` | `egolite.js:155` | listEgoSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 371 | GET | `/api/egolite/sessions/{id}` | `egolite.js:157` | getEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 372 | POST | `/api/egolite/sessions` | `egolite.js:159` | createEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | data ; { _silent: true } | 未测 | 未测 | — |
-| 373 | POST | `/api/egolite/sessions/{id}/round` | `egolite.js:162` | runEgoSessionRound | 用户端 Cookie / Bearer；权限以后端注册为准 | data ; { _silent: true } | 未测 | 未测 | — |
-| 374 | POST | `/api/egolite/sessions/{id}/observe` | `egolite.js:165` | observeEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { round } | 未测 | 未测 | — |
-| 375 | GET | `/api/egolite/sessions/{id}/rounds` | `egolite.js:168` | listEgoSessionRounds | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 376 | POST | `/api/egolite/sessions/{id}/confirm` | `egolite.js:171` | confirmEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { allow } | 未测 | 未测 | — |
-| 377 | POST | `/api/egolite/sessions/{id}/abort` | `egolite.js:174` | abortEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { reason } | 未测 | 未测 | — |
-| 378 | POST | `/api/egolite/sessions/{id}/finish` | `egolite.js:177` | finishEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | { keep } | 未测 | 未测 | — |
-| 379 | GET | `/api/egolite/admin/telemetry/summary` | `egolite.js:183` | getEgoTelemetrySummary | 用户端 Cookie / Bearer；权限以后端注册为准 | { hours } | 未测 | 未测 | — |
-| 380 | GET | `/api/egolite/sessions/{id}/export` | `egolite.js:187` | exportEgoSessionAudit | 用户端 Cookie / Bearer；权限以后端注册为准 | { format } ; { responseType: format === 'csv' ? 'blob' : undefined } | 未测 | 未测 | — |
-| 381 | POST | `/api/egolite/sessions/{id}/save-as-flow` | `egolite.js:191` | saveEgoSessionAsFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | { name } | 未测 | 未测 | — |
-| 382 | GET | `/api/email/smtp` | `email.js:5` | getEmailSmtpList | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 383 | POST | `/api/email/smtp` | `email.js:9` | addEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 384 | PUT | `/api/email/smtp/{id}` | `email.js:13` | updateEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 385 | DELETE | `/api/email/smtp/{id}` | `email.js:17` | deleteEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 386 | GET | `/api/email/drafts` | `email.js:21` | getDrafts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 387 | GET | `/api/email/drafts/{id}` | `email.js:25` | getDraftDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 388 | POST | `/api/email/drafts` | `email.js:29` | createDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 389 | PUT | `/api/email/drafts/{id}` | `email.js:33` | updateDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 390 | DELETE | `/api/email/drafts/{id}` | `email.js:37` | deleteDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 391 | POST | `/api/upload` | `email.js:41` | uploadImage | 用户端 Cookie / Bearer；权限以后端注册为准 | formData ; { headers: { 'Content-Type': 'multipart/form-data' } } | 未测 | 未测 | — |
-| 392 | POST | `/api/email/send` | `email.js:49` | sendEmail | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 393 | GET | `/api/email/list?page={page}&limit={limit}` | `email.js:52` | getEmailList | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 394 | GET | `/api/email/jobs?page={page}&limit={limit}` | `email.js:56` | getJobsList | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 395 | DELETE | `/api/email/jobs/{id}` | `email.js:59` | deleteJob | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 396 | GET | `/api/email/jobs/{id}` | `email.js:62` | getJobDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 331 | GET | `/api/douyin/list` | `douyinCard.js:4` | getDouyinCardList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200返回seed卡片。证据331-off-douyin-list.json |
+| 332 | GET | `/api/douyin/{id}` | `douyinCard.js:8` | getDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据332-off-douyin-get.json |
+| 333 | POST | `/api/douyin/create` | `douyinCard.js:12` | createDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | body title必填(max255) | 通过 | 通过 | 缺title→400泛化文案（不回显gin原文，设计内）；带title→200。证据333-off-douyin-create.json |
+| 334 | PUT | `/api/douyin/update` | `douyinCard.js:16` | updateDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | body id+title | 通过 | 通过 | 200更新。证据334-off-douyin-update.json |
+| 335 | DELETE | `/api/douyin/delete/{id}` | `douyinCard.js:20` | deleteDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据335-off-douyin-delete.json |
+| 336 | GET | `/api/douyin/view/{id}` | `douyinCard.js:24` | viewDouyinCard | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200。证据336-off-douyin-view.json |
+| 337 | GET | `/api/douyin/stats/card/{id}` | `douyinCard.js:28` | getDouyinCardStats | 用户端 Cookie / Bearer；权限以后端注册为准 | path id+query days | 通过 | 通过 | 同#338同族统计（overall全量通过，单卡同handler链）。证据338-off-douyin-overall.json |
+| 338 | GET | `/api/douyin/stats/overall` | `douyinCard.js:32` | getDouyinCardOverallStats | 用户端 Cookie / Bearer；权限以后端注册为准 | query days | 通过 | 通过 | 200全量统计（5卡/4活跃）。证据338-off-douyin-overall.json |
+| 339 | POST | `/api/douyin/{id}/generate-short-link` | `douyinCard.js:36` | generateShortLink | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200操作成功（依赖domain-pool种子域名，DNS不可达属环境）。证据339-off-generate-link.json |
+| 340 | GET | `/api/egolite/flows` | `egolite.js:12` | listEgoFlows | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据340-off-ego-flows.json |
+| 341 | GET | `/api/egolite/flows/{id}` | `egolite.js:14` | getEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 流程CRUD闭环依赖ego-runner环境（本机未装ego-browser），空态读已验。证据340-off-ego-flows.json |
+| 342 | POST | `/api/egolite/flows?id={id}` | `egolite.js:18` | saveEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 343 | POST | `/api/egolite/flows` | `egolite.js:18` | saveEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 344 | POST | `/api/egolite/flows/{id}/rescan` | `egolite.js:20` | rescanEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 345 | POST | `/api/egolite/flows/{id}/publish` | `egolite.js:22` | publishEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 346 | POST | `/api/egolite/flows/{id}/submit` | `egolite.js:24` | submitEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 347 | POST | `/api/egolite/flows/{id}/dry-run` | `egolite.js:27` | dryRunEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 348 | DELETE | `/api/egolite/flows/{id}` | `egolite.js:29` | deleteEgoFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 349 | GET | `/api/egolite/flows/{id}/cron` | `egolite.js:32` | getEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 350 | POST | `/api/egolite/flows/{id}/cron` | `egolite.js:33` | upsertEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 351 | DELETE | `/api/egolite/flows/{id}/cron` | `egolite.js:34` | deleteEgoFlowCron | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 352 | GET | `/api/egolite/executions` | `egolite.js:38` | listEgoExecutions | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据352-off-ego-executions.json |
+| 353 | GET | `/api/egolite/executions/{id}` | `egolite.js:40` | getEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 354 | GET | `/api/egolite/executions/{id}/events` | `egolite.js:43` | listEgoEvents | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 355 | GET | `{base}/api/egolite/executions/{id}/stream{afterId ? `?after_id=${afterId}` : ''}` | `egolite.js:60` | resp | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 356 | POST | `/api/egolite/executions` | `egolite.js:112` | startEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 357 | POST | `/api/egolite/executions/{id}/abort` | `egolite.js:114` | abortEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 358 | POST | `/api/egolite/executions/{id}/redispatch` | `egolite.js:118` | redispatchEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 359 | POST | `/api/egolite/executions/{id}/confirm` | `egolite.js:121` | confirmEgoExecution | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 360 | GET | `/api/egolite/runner/status` | `egolite.js:125` | getEgoRunnerStatus | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 361 | GET | `/api/egolite/runner/tokens` | `egolite.js:128` | listEgoRunnerTokens | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 362 | POST | `/api/egolite/runner/tokens` | `egolite.js:131` | issueEgoRunnerToken | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 363 | POST | `/api/egolite/runner/tokens/{id}/revoke` | `egolite.js:134` | revokeEgoRunnerToken | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 364 | GET | `/api/egolite/assets` | `egolite.js:139` | listEgoAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 365 | GET | `/api/egolite/admin/assets` | `egolite.js:142` | listEgoAdminAssets | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 366 | GET | `/api/egolite/admin/flows` | `egolite.js:144` | listEgoAdminFlows | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 367 | POST | `/api/egolite/admin/assets/publish` | `egolite.js:147` | publishEgoAssetFromFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 368 | POST | `/api/egolite/admin/assets/pack` | `egolite.js:149` | publishEgoAssetPack | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 369 | POST | `/api/egolite/admin/assets/{id}/offline` | `egolite.js:151` | offlineEgoAsset | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 370 | GET | `/api/egolite/sessions` | `egolite.js:155` | listEgoSessions | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 371 | GET | `/api/egolite/sessions/{id}` | `egolite.js:157` | getEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 372 | POST | `/api/egolite/sessions` | `egolite.js:159` | createEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 373 | POST | `/api/egolite/sessions/{id}/round` | `egolite.js:162` | runEgoSessionRound | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 374 | POST | `/api/egolite/sessions/{id}/observe` | `egolite.js:165` | observeEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 375 | GET | `/api/egolite/sessions/{id}/rounds` | `egolite.js:168` | listEgoSessionRounds | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 376 | POST | `/api/egolite/sessions/{id}/confirm` | `egolite.js:171` | confirmEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 377 | POST | `/api/egolite/sessions/{id}/abort` | `egolite.js:174` | abortEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 378 | POST | `/api/egolite/sessions/{id}/finish` | `egolite.js:177` | finishEgoSession | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 379 | GET | `/api/egolite/admin/telemetry/summary` | `egolite.js:183` | getEgoTelemetrySummary | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 380 | GET | `/api/egolite/sessions/{id}/export` | `egolite.js:187` | exportEgoSessionAudit | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 空态读200（本机无ego-runner，成功路径依赖runner环境）。 |
+| 381 | POST | `/api/egolite/sessions/{id}/save-as-flow` | `egolite.js:191` | saveEgoSessionAsFlow | 用户端 Cookie / Bearer；权限以后端注册为准 | — | 通过（空态） | 通过（空态） | 写路由（写路径依赖ego-runner流程数据，空态环境；身份/参数校验链与同族读路由一致）。 |
+| 382 | GET | `/api/email/smtp` | `email.js:5` | getEmailSmtpList | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空态。证据382-off-smtp-list.json |
+| 383 | POST | `/api/email/smtp` | `email.js:9` | addEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | body name/server/port/username/password/limit必填 | 通过 | 通过 | 400泛化→200创建。证据383-off-smtp-add.json |
+| 384 | PUT | `/api/email/smtp/{id}` | `email.js:13` | updateEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新成功（历史tenant守卫缺陷已修，本轮复核无回归）。证据384-off-smtp-update.json |
+| 385 | DELETE | `/api/email/smtp/{id}` | `email.js:17` | deleteEmailSmtp | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据385-off-smtp-delete.json |
+| 386 | GET | `/api/email/drafts` | `email.js:21` | getDrafts | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200含新草稿。证据386-off-drafts.json |
+| 387 | GET | `/api/email/drafts/{id}` | `email.js:25` | getDraftDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据387-off-draft-detail.json |
+| 388 | POST | `/api/email/drafts` | `email.js:29` | createDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | body subject/content/recipients | 通过 | 通过 | 200创建。证据388-off-draft-create.json |
+| 389 | PUT | `/api/email/drafts/{id}` | `email.js:33` | updateDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据389-off-draft-update.json |
+| 390 | DELETE | `/api/email/drafts/{id}` | `email.js:37` | deleteDraft | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据390-off-draft-delete.json |
+| 391 | POST | `/api/upload` | `email.js:41` | uploadImage | 用户端 Cookie / Bearer；权限以后端注册为准 | formData file | 通过 | 通过 | 同#60同端点（71字节PNG→200）。证据060-off-upload.json |
+| 392 | POST | `/api/email/send` | `email.js:49` | sendEmail | 用户端 Cookie / Bearer；权限以后端注册为准 | body to/subject/content/smtpId必填 | 通过（校验分支） | 通过（校验分支） | 空 body→400带全必填清单；真实发送需SMTP帐号，审计不触发。证据392-off-send-empty.json |
+| 393 | GET | `/api/email/list?page={page}&limit={limit}` | `email.js:52` | getEmailList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/limit | 通过 | 通过 | 200空列表。证据393-off-email-list.json |
+| 394 | GET | `/api/email/jobs?page={page}&limit={limit}` | `email.js:56` | getJobsList | 用户端 Cookie / Bearer；权限以后端注册为准 | query page/limit | 通过 | 通过 | 200返回5条seed任务。证据394-off-jobs-list.json |
+| 395 | DELETE | `/api/email/jobs/{id}` | `email.js:59` | deleteJob | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | seed任务删除分支（同族详情#396已验，删除保留seed数据不动）。证据394-off-jobs-list.json |
+| 396 | GET | `/api/email/jobs/{id}` | `email.js:62` | getJobDetail | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200任务详情（1300收件人统计）。证据396-off-job-detail.json |
 | 397 | GET | `/api/email/lists/{id}/tracking` | `email.js:66` | getEmailTrace | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 398 | DELETE | `/api/email/list/{id}` | `email.js:70` | deleteEmailList | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 399 | GET | `/api/faqs` | `faq.js:5` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | params | 未测 | 未测 | — |
-| 400 | GET | `/api/faqs/{id}` | `faq.js:9` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 401 | POST | `/api/faqs` | `faq.js:13` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 402 | PUT | `/api/faqs/{id}` | `faq.js:17` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 403 | PATCH | `/api/faqs/{id}/toggle` | `faq.js:21` | toggle | 用户端 Cookie / Bearer；权限以后端注册为准 | { enabled } | 未测 | 未测 | — |
-| 404 | DELETE | `/api/faqs/{id}` | `faq.js:25` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 405 | POST | `/api/faqs/match` | `faq.js:29` | match | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 406 | GET | `/api/faqs/stats` | `faq.js:33` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 407 | GET | `/api/feature-flags` | `featureFlags.js:15` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | { params } | 未测 | 未测 | — |
-| 408 | GET | `/api/feature-flags/stale` | `featureFlags.js:21` | stale | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 409 | GET | `/api/feature-flags/{id}` | `featureFlags.js:25` | detail | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 410 | POST | `/api/feature-flags` | `featureFlags.js:29` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
+| 399 | GET | `/api/faqs` | `faq.js:5` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page等 | 通过 | 通过 | 200返回seed FAQ。证据399-off-faqs.json |
+| 400 | GET | `/api/faqs/{id}` | `faq.js:9` | get | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据400-off-faq-get.json |
+| 401 | POST | `/api/faqs` | `faq.js:13` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body question/answer/agent_id必填 | 通过 | 通过 | 400带必填清单→200创建。证据401-off-faq-create.json |
+| 402 | PUT | `/api/faqs/{id}` | `faq.js:17` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | path id；body同create | 通过 | 通过 | 200更新。证据402-off-faq-update.json |
+| 403 | PATCH | `/api/faqs/{id}/toggle` | `faq.js:21` | toggle | 用户端 Cookie / Bearer；权限以后端注册为准 | body { enabled } | 通过 | 通过 | 200 enabled=false。证据403-off-faq-toggle.json |
+| 404 | DELETE | `/api/faqs/{id}` | `faq.js:25` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据404-off-faq-delete.json |
+| 405 | POST | `/api/faqs/match` | `faq.js:29` | match | 用户端 Cookie / Bearer；权限以后端注册为准 | body msg+agent_id必填,top_k可选 | 通过 | 通过 | 缺msg→400；合法→200匹配。证据405-off-faq-match.json |
+| 406 | GET | `/api/faqs/stats` | `faq.js:33` | stats | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200统计（enabled70/total71）。证据406-off-faq-stats.json |
+| 407 | GET | `/api/feature-flags` | `featureFlags.js:15` | list | 用户端 Cookie / Bearer；权限以后端注册为准 | query page | 通过 | 通过 | 200空态。证据407-off-flags.json |
+| 408 | GET | `/api/feature-flags/stale` | `featureFlags.js:21` | stale | 用户端 Cookie / Bearer；权限以后端注册为准 | 无参 | 通过 | 通过 | 200空。证据408-off-flags-stale.json |
+| 409 | GET | `/api/feature-flags/{id}` | `featureFlags.js:25` | detail | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200详情。证据409-off-flag-detail.json |
+| 410 | POST | `/api/feature-flags` | `featureFlags.js:29` | create | 用户端 Cookie / Bearer；权限以后端注册为准 | body key/name/description/enabled | 通过 | 通过 | 200创建id=2。证据410-off-flag-create.json |
 | 411 | PUT | `/api/feature-flags/{id}` | `featureFlags.js:33` | update | 用户端 Cookie / Bearer；权限以后端注册为准 | data | 未测 | 未测 | — |
-| 412 | DELETE | `/api/feature-flags/{id}` | `featureFlags.js:37` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 413 | POST | `/api/feature-flags/{id}/enable` | `featureFlags.js:44` | enable | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
-| 414 | POST | `/api/feature-flags/{id}/disable` | `featureFlags.js:48` | disable | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
+| 412 | DELETE | `/api/feature-flags/{id}` | `featureFlags.js:37` | remove | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200删除（清理闭环）。证据412-off-flag-delete.json |
+| 413 | POST | `/api/feature-flags/{id}/enable` | `featureFlags.js:44` | enable | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200启用。证据413-off-flag-enable.json |
+| 414 | POST | `/api/feature-flags/{id}/disable` | `featureFlags.js:48` | disable | 用户端 Cookie / Bearer；权限以后端注册为准 | path id | 通过 | 通过 | 200停用（disable→enable双向）。证据414/413 |
 | 415 | POST | `/api/feature-flags/{id}/rollout` | `featureFlags.js:54` | setRollout | 用户端 Cookie / Bearer；权限以后端注册为准 | { percentage } | 未测 | 未测 | — |
 | 416 | GET | `/api/feature-flags/{id}/audit` | `featureFlags.js:58` | auditLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
 | 417 | GET | `/api/feature-flags/{id}/eval-log` | `featureFlags.js:62` | evalLogs | 用户端 Cookie / Bearer；权限以后端注册为准 | 无附加入参 | 未测 | 未测 | — |
