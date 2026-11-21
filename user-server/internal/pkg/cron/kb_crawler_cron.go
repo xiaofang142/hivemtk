@@ -2,7 +2,7 @@
 //
 // 每 10 分钟扫一次 kb_crawler_sources 中 status=active AND auto_resync=true
 // 且到期的源（last_crawl_at + interval_hours <= now()，从未爬过的视为到期），
-// 建 pending 批次并由 worker 消费。
+// 先恢复持久 pending/失效 running，再为到期源创建批次。
 //
 // 租户扇出：cron 交来的 ctx 不含租户（on 模式未绑定即被隔离守卫拒绝），
 // 走 tenant.Fanout 逐租户注入——对齐 cron.go 既有 bridge_offline_replay 等任务口径。
@@ -10,36 +10,44 @@ package cron
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	kbservice "hivemtk-user/internal/aiagent/knowledge/service"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 // KBSourceDueScanner 到期源的批次创建 + 执行（scanFn 可注入供测试直接调用）
 func KBSourceDueScanner(crawler *kbservice.CrawlerService) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
-		gdb := db.GetDB()
-		if gdb == nil || crawler == nil {
+		if crawler == nil {
 			return nil
 		}
-		var failures []error
-		if err := crawler.RecoverPending(ctx); err != nil {
-			failures = append(failures, err)
+		tenantID := tenant.WriteTenantID(ctx)
+		if tenantID == 0 {
+			return fmt.Errorf("爬取源扫描缺少租户")
 		}
-		var sources []model.KBCrawlerSource
-		if err := gdb.WithContext(ctx).
-			Where("status = ? AND deleted_at IS NULL", model.KBCrawlerSourceStatusActive).
-			Find(&sources).Error; err != nil {
+		trace := logger.TraceIDFromContext(ctx)
+		ctx = tenant.OnlyTenant(ctx, tenantID)
+		if trace != "" {
+			ctx = logger.WithTraceID(ctx, trace)
+		}
+		recovered, err := crawler.ResumeBatches(ctx)
+		if err != nil {
+			return fmt.Errorf("恢复持久爬取批次失败: %w", err)
+		}
+		sources, err := crawler.ListSources(ctx, 0, model.KBCrawlerSourceStatusActive)
+		if err != nil {
 			return fmt.Errorf("扫爬取源失败: %w", err)
 		}
 		now := time.Now()
 		created := 0
 		for _, src := range sources {
+			if recovered[src.ID] {
+				continue
+			}
 			if src.AutoResync != nil && !*src.AutoResync {
 				continue
 			}
@@ -49,23 +57,29 @@ func KBSourceDueScanner(crawler *kbservice.CrawlerService) func(ctx context.Cont
 			if src.LastCrawlAt != nil && src.LastCrawlAt.Add(time.Duration(src.IntervalHours)*time.Hour).After(now) {
 				continue // 未到期
 			}
+			hasOpenBatch, err := crawler.HasPendingOrRunningBatch(ctx, src.ID)
+			if err != nil {
+				return fmt.Errorf("查询源 %d 的未完成批次失败: %w", src.ID, err)
+			}
+			if hasOpenBatch {
+				continue // 持久恢复页以外的批次留待后续扫描，不重复建单
+			}
 			batch, err := crawler.CreateBatch(ctx, src.ID, model.KBCrawlTriggerCron)
 			if err != nil {
 				logger.Warnf("[KBCrawler] 源 %d 建批次失败: %v", src.ID, err)
-				failures = append(failures, err)
 				continue
 			}
 			created++
-			// 同步执行，SkipIfStillRunning 与数据库租约共同防止任务重叠。
+			// 同步执行；原子认领防止同一批次被跨进程重复消费，
+			// SkipIfStillRunning 另行避免本进程定时扫描重叠。
 			if err := crawler.RunBatch(ctx, batch.ID); err != nil {
 				logger.Warnf("[KBCrawler] 批次 %s 执行失败: %v", batch.BatchNo, err)
-				failures = append(failures, err)
 			}
 		}
 		if created > 0 {
 			logger.Infof("[KBCrawler] 本轮创建并执行 %d 个到期批次", created)
 		}
-		return errors.Join(failures...)
+		return nil
 	}
 }
 

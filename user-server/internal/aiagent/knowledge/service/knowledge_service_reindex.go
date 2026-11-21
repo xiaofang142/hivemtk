@@ -2,239 +2,135 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
-	"hivemtk-user/internal/aiagent/knowledge/repository"
-	"hivemtk-user/internal/aiagent/llm"
-	rag_core "hivemtk-user/internal/aiagent/rag/core"
-	"hivemtk-user/internal/etl"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-const reindexPageSize = 100
+const (
+	reindexExecutionTimeout    = 10 * time.Minute
+	reindexFailureWriteTimeout = 5 * time.Second
+)
 
-// Reindex 重建指定文档的向量索引。该入口同步完成所有步骤，并将失败
-// 留在文档状态中，供调用方和运维查询。
+// Reindex 重建指定文档的向量索引。复用已落库的分片内容重新向量化，不重新分块。
 func (s *KnowledgeService) Reindex(ctx context.Context, productID string, docID uint64) error {
-	doc, err := s.docRepo.GetByProductAndID(ctx, productID, int64(docID))
+	workCtx, cancel := context.WithTimeout(ctx, reindexExecutionTimeout)
+	defer cancel()
+	doc, err := s.docRepo.GetByProductAndID(workCtx, productID, int64(docID))
 	if err != nil {
 		return err
 	}
-	if err := s.docRepo.BeginReindex(ctx, doc.ID); err != nil {
-		return s.reindexFailure(ctx, doc.ID, fmt.Errorf("重建失败：记录尝试次数失败: %w", err))
-	}
-	chunks, err := s.chunkRepo.GetByDocumentID(ctx, doc.ID)
+	owner, claimed, err := s.docRepo.ClaimForReindexWithLease(workCtx, productID, doc.ID, reindexExecutionTimeout+knowledgeOwnerLeaseMargin)
 	if err != nil {
-		return s.reindexFailure(ctx, doc.ID, fmt.Errorf("重建失败：读取分段失败: %w", err))
+		return fmt.Errorf("文档 %d 认领重建失败: %w", doc.ID, err)
+	}
+	if !claimed {
+		return fmt.Errorf("文档 %d 正由其他任务处理，无法重复认领", doc.ID)
+	}
+	chunks, err := s.chunkRepo.GetByDocumentID(workCtx, doc.ID)
+	if err != nil {
+		return s.markReindexFailed(workCtx, doc.ID, owner, err)
 	}
 	logger.Infof("[knowledge][Reindex] called doc=%d chunks=%d", doc.ID, len(chunks))
-
 	if len(chunks) == 0 {
-		chunks, err = s.buildReindexChunks(ctx, doc)
-		if err != nil {
-			return s.reindexFailure(ctx, doc.ID, err)
-		}
-	}
-	if err := s.reindexChunks(ctx, doc, chunks); err != nil {
-		return s.reindexFailure(ctx, doc.ID, err)
-	}
-	s.touchKBForContentChange(ctx, "document_reindex")
-	return nil
-}
 
-// buildReindexChunks synchronously reconstructs chunks for a document whose
-// source exists but whose chunk rows are missing. It intentionally does not
-// call processDocumentAsync, so the successful API response cannot race the
-// actual work.
-func (s *KnowledgeService) buildReindexChunks(ctx context.Context, doc *model.KnowledgeDocument) ([]model.KnowledgeChunk, error) {
-	if strings.TrimSpace(doc.FilePath) == "" {
-		return nil, errors.New("重建失败：0 分片且源文件路径为空")
-	}
-	b, err := os.ReadFile(doc.FilePath)
-	if err != nil {
-		return nil, fmt.Errorf("重建失败：读取文件失败: %w", err)
-	}
-	content := string(b)
-	if etl.IsImageExt(doc.FileName) {
-		content, err = etl.DescribeImage(ctx, doc.FileName, b)
-		if err != nil {
-			return nil, fmt.Errorf("重建失败：图片处理失败: %w", err)
-		}
-	} else {
-		extracted, parseErr := etl.ParseDocument(ctx, doc.FileName, b)
-		if parseErr != nil {
-			if !etl.IsPlainTextExt(doc.FileName) {
-				return nil, fmt.Errorf("重建失败：文本提取失败（可能为扫描件或损坏文档）: %w", parseErr)
+		content := ""
+		logger.Infof("[knowledge][Reindex] zero-chunk re-pipeline doc=%d file=%s", doc.ID, doc.FilePath)
+		if doc.FilePath != "" {
+			if b, rerr := os.ReadFile(doc.FilePath); rerr == nil {
+				content = string(b)
 			}
-			extracted = content
 		}
-		content = extracted
-	}
-	if strings.TrimSpace(content) == "" {
-		return nil, errors.New("重建失败：文档内容为空（可能为扫描件或空文件）")
-	}
-
-	meta := map[string]any{}
-	if doc.Metadata != "" {
-		if err := json.Unmarshal([]byte(doc.Metadata), &meta); err != nil {
-			return nil, fmt.Errorf("重建失败：文档元数据无效: %w", err)
+		if strings.TrimSpace(content) == "" {
+			return s.markReindexFailed(workCtx, doc.ID, owner, errors.New("重建失败：0 分片且源内容不可读（源文件路径为空、文件缺失或文档内容为空）"))
 		}
-	}
-	ragDoc := rag_core.Document{
-		ID:      fmt.Sprintf("kb_doc_%d", doc.ID),
-		Content: content,
-		Metadata: map[string]any{
-			"document_id": doc.ID,
-			"product_id":  doc.ProductID,
-			"title":       doc.Title,
-			"source":      string(doc.SourceType),
-		},
-		CreatedAt: doc.CreatedAt,
-	}
-	for k, v := range meta {
-		ragDoc.Metadata[k] = v
-	}
-	chunks, err := s.processor.ProcessDocument(ctx, ragDoc)
-	if err != nil {
-		return nil, fmt.Errorf("重建失败：分片失败: %w", err)
-	}
-	if len(chunks) == 0 {
-		return nil, errors.New("重建失败：分片结果为空")
-	}
-
-	parentIDs, err := s.createChunkParents(ctx, doc.ID, doc.ProductID, len(chunks), func(i int) (string, int) {
-		return chunks[i].Content, chunks[i].TokenCount
-	})
-	if err != nil {
-		return nil, fmt.Errorf("重建失败：写入父块失败: %w", err)
-	}
-
-	chunkModels := make([]model.KnowledgeChunk, 0, len(chunks))
-	for i, chunk := range chunks {
-		hash := sha256.Sum256([]byte(chunk.Content))
-		chunkMeta := map[string]any{
-			"document_id": float64(doc.ID),
-			"product_id":  doc.ProductID,
-			"title":       doc.Title,
-			"source":      string(doc.SourceType),
-			"chunk_index": float64(i),
+		meta := map[string]any{}
+		if doc.Metadata != "" {
+			_ = json.Unmarshal([]byte(doc.Metadata), &meta)
 		}
-		for k, v := range meta {
-			chunkMeta[k] = v
+		if err := s.processDocumentOwned(workCtx, doc.ID, doc.ProductID, owner, doc.FilePath,
+			doc.FileName, content, doc.MimeType, doc.Title, doc.SourceType, meta); err != nil {
+			return fmt.Errorf("文档 %d 重建失败: %w", doc.ID, err)
 		}
-		metaBytes, _ := json.Marshal(chunkMeta)
-		chunkModels = append(chunkModels, model.KnowledgeChunk{
-			ParentChunkID: parentIDs[i],
-			DocumentID:    doc.ID,
-			ProductID:     doc.ProductID,
-			ChunkIndex:    i,
-			Content:       chunk.Content,
-			ContentHash:   hex.EncodeToString(hash[:]),
-			TokenCount:    chunk.TokenCount,
-			CharCount:     len(chunk.Content),
-			Metadata:      string(metaBytes),
-		})
-	}
-	if err := s.chunkRepo.BatchCreate(ctx, chunkModels); err != nil {
-		return nil, fmt.Errorf("重建失败：写入分段失败: %w", err)
-	}
-	return chunkModels, nil
-}
-
-func (s *KnowledgeService) reindexChunks(ctx context.Context, doc *model.KnowledgeDocument, chunks []model.KnowledgeChunk) error {
-	if len(chunks) == 0 {
-		return errors.New("重建失败：没有可向量化的分段")
-	}
-	texts := make([]string, len(chunks))
-	for i, chunk := range chunks {
-		texts[i] = chunk.Content
-	}
-
-	embService, embCfg := s.resolveEmbeddingConfig(ctx, doc.ProductID)
-	if embCfg == nil {
-		embCfg = embService.DefaultConfig()
-	}
-	var embeddings [][]float32
-	source := llm.EmbedSourceTEI
-	var err error
-	if s.reindexEmbed != nil {
-		embeddings, err = s.reindexEmbed(ctx, embService, embCfg, texts)
-	} else {
-		embeddings, source, err = embService.EmbedWithSource(ctx, embCfg, texts)
-	}
-	if err != nil {
-		return fmt.Errorf("重建失败：向量化失败: %w", err)
-	}
-	filteredChunks, filteredEmbeddings := filterValidEmbeddings(embService, embCfg, chunks, embeddings)
-	if len(filteredChunks) != len(chunks) || len(filteredEmbeddings) != len(chunks) {
-		return fmt.Errorf("重建失败：向量维度校验失败，期望 %d 条，得到 %d 条", len(chunks), len(filteredChunks))
-	}
-	if err := s.persistChunkEmbeddingsWithSource(ctx, filteredChunks, filteredEmbeddings, source); err != nil {
-		return fmt.Errorf("重建失败：持久化向量失败: %w", err)
-	}
-
-	totalTokens := 0
-	for _, chunk := range filteredChunks {
-		totalTokens += chunk.TokenCount
-	}
-	if err := s.docRepo.CompleteReindex(ctx, doc.ID, len(filteredChunks), totalTokens); err != nil {
-		return fmt.Errorf("重建失败：写入最终文档状态失败: %w", err)
-	}
-	return nil
-}
-
-func (s *KnowledgeService) reindexFailure(ctx context.Context, docID uint64, cause error) error {
-	if cause == nil {
 		return nil
 	}
-	statusErr := s.docRepo.UpdateStatus(ctx, docID, model.EmbedStatusFailed, 0, cause.Error())
-	if statusErr != nil {
-		logger.Errorf("[knowledge][Reindex] 标记失败状态错误 doc=%d: %v", docID, statusErr)
-		return errors.Join(cause, fmt.Errorf("写入失败状态: %w", statusErr))
+	texts := make([]string, len(chunks))
+	for i, c := range chunks {
+		texts[i] = c.Content
+	}
+	embService, embCfg := s.resolveEmbeddingConfig(workCtx, productID)
+	var embeddings [][]float32
+	if s.reindexEmbed != nil {
+		if embCfg == nil {
+			embCfg = embService.DefaultConfig()
+		}
+		embeddings, err = s.reindexEmbed(workCtx, embService, embCfg, texts)
+	} else {
+		embeddings, err = embService.Embed(workCtx, embCfg, texts)
+	}
+	if err != nil {
+		return s.markReindexFailed(workCtx, doc.ID, owner, err)
+	}
+
+	if err := persistValidatedChunkEmbeddings(embService, embCfg, chunks, embeddings, func(validChunks []model.KnowledgeChunk, validEmbeddings [][]float32) error {
+		return s.chunkRepo.UpdateEmbeddingsBatchWithSourceForOwner(workCtx, doc.ID, owner, validChunks, validEmbeddings, "tei")
+	}); err != nil {
+		logger.Errorf("[knowledge][Reindex] 向量结果校验或持久化失败 doc=%d: %v", doc.ID, err)
+		return s.markReindexFailed(workCtx, doc.ID, owner, err)
+	}
+	totalTokens := 0
+	for _, chunk := range chunks {
+		totalTokens += chunk.TokenCount
+	}
+	if err := s.docRepo.UpdateChunkStatsForOwner(workCtx, doc.ID, owner, len(chunks), totalTokens); err != nil {
+		return s.markReindexFailed(workCtx, doc.ID, owner, err)
+	}
+	if err := s.docRepo.UpdateStatusForOwner(workCtx, doc.ID, owner, model.EmbedStatusIndexed, 100, ""); err != nil {
+		return s.markReindexFailed(workCtx, doc.ID, owner, fmt.Errorf("更新文档索引状态失败: %w", err))
+	}
+	return nil
+}
+
+func (s *KnowledgeService) markReindexFailed(ctx context.Context, documentID uint64, owner string, cause error) error {
+	cleanupCtx, cancel := reindexFailureContext(ctx)
+	defer cancel()
+	if err := s.docRepo.UpdateStatusForOwner(cleanupCtx, documentID, owner, model.EmbedStatusFailed, 0, cause.Error()); err != nil {
+		logger.Errorf("[knowledge][Reindex] 标记重建失败状态错误 doc=%d: %v", documentID, err)
+		return errors.Join(cause, fmt.Errorf("持久化失败状态失败: %w", err))
 	}
 	return cause
 }
 
+func reindexFailureContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), reindexFailureWriteTimeout)
+}
+
 // RebuildIndex 重建某产品下全部文档的向量索引。
 func (s *KnowledgeService) RebuildIndex(ctx context.Context, productID string) error {
+	// D-26：产品不存在时必须显式报错，不能静默成功——否则前端会误以为索引已重建。
+	// GetRagProductByID 返回 "rag product not found"，controller 的 isNotFoundError 会映射为 404。
 	if _, err := s.ragRepo.GetRagProductByID(ctx, productID); err != nil {
 		return err
 	}
-	boundary, err := s.docRepo.GetReindexBoundary(ctx, productID)
-	if err != nil || boundary == nil {
-		return err
+	const pageSize = 500
+	documentIDs, err := s.docRepo.ListProductDocumentIDsSnapshot(ctx, productID, pageSize)
+	if err != nil {
+		return fmt.Errorf("读取产品文档快照失败: %w", err)
 	}
-
-	var firstErr error
-	var after *repository.ReindexCursor
-	for {
-		docs, pageErr := s.docRepo.ListReindexPage(ctx, productID, *boundary, after, reindexPageSize)
-		if pageErr != nil {
-			if firstErr == nil {
-				firstErr = pageErr
-			}
-			break
-		}
-		if len(docs) == 0 {
-			break
-		}
-		for _, doc := range docs {
-			if reindexErr := s.Reindex(ctx, productID, doc.ID); reindexErr != nil && firstErr == nil {
-				firstErr = reindexErr
-			}
-		}
-		last := docs[len(docs)-1]
-		after = &repository.ReindexCursor{CreatedAt: last.CreatedAt, ID: last.ID}
-		if len(docs) < reindexPageSize {
-			break
+	var rebuildErrors []error
+	for _, docID := range documentIDs {
+		if err := s.Reindex(ctx, productID, docID); err != nil {
+			rebuildErrors = append(rebuildErrors, fmt.Errorf("文档 %d: %w", docID, err))
 		}
 	}
-	return firstErr
+	return errors.Join(rebuildErrors...)
 }

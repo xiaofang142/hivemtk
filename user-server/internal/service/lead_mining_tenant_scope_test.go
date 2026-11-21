@@ -69,8 +69,8 @@ func TestLeadMiningProcess_BindsTenantFromMessage(t *testing.T) {
 	}
 }
 
-// TestLeadMiningProcess_NoTenantKeepsFailClosed 消息行没有 tenant_id 时不得回落默认租户：
-// 保持无绑定，由隔离守卫继续 fail-closed（宁可不跑，也不把线索写进别的租户）。
+// TestLeadMiningProcess_NoTenantKeepsFailClosed 消息行没有 tenant_id 时必须在配置读取前拒绝，
+// 不把缺失归属交给仓储或隔离守卫兜底，也不得回落默认租户。
 func TestLeadMiningProcess_NoTenantKeepsFailClosed(t *testing.T) {
 	prev := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
@@ -91,8 +91,8 @@ func TestLeadMiningProcess_NoTenantKeepsFailClosed(t *testing.T) {
 
 	svc.process(context.Background(), hub)
 
-	if cfgRepo.calls == 0 {
-		t.Fatal("配置仓储未被调用")
+	if cfgRepo.calls != 0 {
+		t.Fatalf("缺少 tenant_id 的消息必须在配置读取前拒绝，实际调用 %d 次", cfgRepo.calls)
 	}
 	if cfgRepo.seenBound {
 		t.Fatalf("无 tenant_id 的消息不得被绑到任何租户，实际绑到 %d", cfgRepo.seenTenant)

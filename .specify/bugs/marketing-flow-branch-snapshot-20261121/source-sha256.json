@@ -1,0 +1,6 @@
+{
+  "user-server/internal/content/service/marketing_flow.go": "6439c9e0863e82c634acec0f16583dc64c2e5b02f14b765f19c62dc075f1a932",
+  "user-server/internal/content/service/marketing_flow_graph.go": "6ef89822c39464add882e51e13ec9fda39fdc768c115ff43218ec79c36f886d4",
+  "user-server/internal/content/service/marketing_flow_graph_test.go": "7285aac874fb2610450d5d1760193e3f1a8f7edc6d19d947e77c3308f8dd3f8e",
+  "user-server/internal/content/service/marketing_flow_test.go": "9f10e871fae30bf4484a1cb44d3331a5b9fc08520b3e3bc4d951ea9c052f0a75"
+}

@@ -27,7 +27,7 @@ func SetContextualEnhanceProvider(fn func() bool) {
 
 func contextualEnhanceEnabled() bool { return contextualEnhanceProvider() }
 
-func (s *KnowledgeService) enhanceDocumentContextual(ctx context.Context, documentID uint64) {
+func (s *KnowledgeService) enhanceDocumentContextual(ctx context.Context, documentID uint64, ownerToken string) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf("[R-3] contextual enhance panic doc=%d: %v\n%s", documentID, r, debug.Stack())
@@ -38,7 +38,7 @@ func (s *KnowledgeService) enhanceDocumentContextual(ctx context.Context, docume
 	}
 	chatClient := ragretrieval.NewDispatcherChatAdapter(llm.NewDispatcher(s.llmSvc)).
 		WithScenario(llm.ScenarioLongSummary)
-	enhancer := kbsearch.NewContextualEnhancerFromRepo(s.chunkRepo, chatClient, s.embeddingSvc, nil)
+	enhancer := kbsearch.NewContextualEnhancerFromRepo(s.chunkRepo, chatClient, s.embeddingSvc, nil).WithDocumentOwner(ownerToken)
 	if err := enhancer.EnhanceDocument(ctx, documentID); err != nil {
 		logger.Warnf("[R-3] contextual enhance failed doc=%d (non-blocking): %v", documentID, err)
 		return

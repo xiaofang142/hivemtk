@@ -147,6 +147,7 @@ type InboxIngressService struct {
 	inboxSvc            *InboxService
 	leadMiningSvc       *Service
 	bridgeLeadProcessor BridgeLeadProcessor
+	outboundAuthorizer  BridgeCapabilityAuthorizer
 
 	// bridgeFollow 新用户（非关注好友）事件登记与自动关注策略（M-6）。
 	// 为 nil 时（未装配/单测）识别信号不打扰任何既有路径，行为与接入前一致。
@@ -187,7 +188,7 @@ func (s *InboxIngressService) SetPendingOutboundProbe(repo *repository.DelayedOu
 	s.pendingOutbound = repo
 }
 
-func NewInboxIngressService() *InboxIngressService {
+func NewInboxIngressService(authorizers ...BridgeCapabilityAuthorizer) *InboxIngressService {
 	// 与原 WithDB 语义一致：全局无 DB 时 repo 留 nil，落库路径 no-op（单测密封验证依赖此行为）。
 	// AV-04c 批次6：句柄判断收回 repository.DBReady() 探针，仓储走包内捕获全局句柄
 	// 的 Default/无参构造——连接与原「取一次句柄传三个构造」完全一致。
@@ -205,15 +206,20 @@ func NewInboxIngressService() *InboxIngressService {
 		feedbackRepo = repository.NewFeedbackRecordRepositoryDefault()
 		pendingOutbound = repository.NewDelayedOutboundRepositoryDefault()
 	}
+	var authorizer BridgeCapabilityAuthorizer
+	if len(authorizers) == 1 {
+		authorizer = authorizers[0]
+	}
 	return &InboxIngressService{
-		hubRepo:         hubRepo,
-		auditRepo:       auditRepo,
-		interactionRepo: interactionRepo,
-		routeEngine:     routeEngine,
-		feedbackRepo:    feedbackRepo,
-		pendingOutbound: pendingOutbound,
-		cache:           cache.GetGlobalCache(),
-		triggerCh:       make(chan string, 1024),
+		outboundAuthorizer: authorizer,
+		hubRepo:            hubRepo,
+		auditRepo:          auditRepo,
+		interactionRepo:    interactionRepo,
+		routeEngine:        routeEngine,
+		feedbackRepo:       feedbackRepo,
+		pendingOutbound:    pendingOutbound,
+		cache:              cache.GetGlobalCache(),
+		triggerCh:          make(chan string, 1024),
 	}
 }
 

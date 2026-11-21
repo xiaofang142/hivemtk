@@ -675,7 +675,15 @@ func (s *SystemUserService) UpdateByAdmin(ctx context.Context, actorID, targetID
 		target.Enabled = next == 1
 	}
 
-	if err := s.repo.Update(ctx, target); err != nil {
+	// FA-AUTH-01：保存走 UpdateGuarded——本次变更若移除启用超管（降级角色/禁用状态），
+	// 在咨询锁+事务内按库内现值原子复查，杜绝并发下清空启用超管。
+	if err := s.repo.UpdateGuarded(ctx, targetID, func(current *model.SystemUser) error {
+		*current = *target
+		return nil
+	}); err != nil {
+		if errors.Is(err, repository.ErrLastAdmin) {
+			return nil, fmt.Errorf("系统至少需要保留一个启用状态的超管账号: %w", ErrInvalidInput)
+		}
 		logger.Error(err, "UpdateByAdmin 保存失败")
 		return nil, err
 	}

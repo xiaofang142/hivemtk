@@ -35,6 +35,8 @@ import (
 //	由隔离 callback 自动限域）⇒ 租户档；
 //	backups / restore_records 是**全局表**，进程级操作没有租户概念 ⇒ 平台运营方档。
 func setupSystemRoutes(tenantAdmin, systemAdmin *gin.RouterGroup, gormDB *gorm.DB) {
+	setupPilotContractRoutes(tenantAdmin, gormDB)
+	setupMerchantConnectionRoutes(tenantAdmin, gormDB)
 	systemConfigCtrl := controller.NewSystemConfigController()
 	tenantAdmin.GET("/system/config", systemConfigCtrl.GetConfig)
 	tenantAdmin.POST("/system/config", systemConfigCtrl.SaveConfig)

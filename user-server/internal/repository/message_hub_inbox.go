@@ -12,6 +12,8 @@ import (
 
 type MessageHubRepository struct {
 	db *gorm.DB
+	// A locked delivery page must roll back on any failed maintenance write.
+	deliveryPage bool
 }
 
 func NewMessageHubRepository() *MessageHubRepository {

@@ -147,6 +147,11 @@ func allModels() []any {
 		// (tenant_id, dedup_key)——首触幂等键在租户内唯一。此前未登记建表 ⇒ 首触登记全部
 		// 报 relation does not exist（只留日志不影响消息链路），运营观测落空。
 		&model.BridgeFollowEvent{},
+		// FollowUpReminder（表 follow_up_reminders，FA-26/27 2026-11-21）：跟进提醒持久化。
+		// 此前提醒只活在进程内 map，且 HTTP/回款/AI 工具三条链各自一份实例——AI/回款创建的
+		// 提醒今日跟进看不到，重启即丢。登记后由 AutoMigrate 建表；(tenant_id, owner_id, status)
+		// 复合索引服务读侧（今日跟进/逾期/日历）与租户隔离。
+		&model.FollowUpReminder{},
 		&model.TelegramAccount{},
 		&model.QQAccount{},
 		// specs/025 新平台账号表（独立表：平台专属验签/游标字段不混进 integration_accounts）。
@@ -195,6 +200,9 @@ func allModels() []any {
 		// module_tables.go 里同时登记的 "customer_rfms" 是复数写法（遗留）。
 		&model.CustomerRFM{},
 		&model.IntegrationAccount{},
+		&model.MerchantConnection{},
+		&model.MerchantCallbackSubscription{},
+		&model.MerchantCallbackEvent{},
 		&model.SyncLog{},
 		&model.ExternalCustomer{},
 		&model.ExternalOrder{},

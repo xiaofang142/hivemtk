@@ -52,7 +52,7 @@ func senderReadCalls(calls *[]goldenCall, mu *sync.Mutex) []goldenCall {
 // ── T102 wecom ──────────────────────────────────────────────────────────
 
 func TestWecomSender_DelegatesToIntegration(t *testing.T) {
-	t.Setenv("WECOM_ALLOW_OUTBOUND", "1")    // IS_TEST_MODE=1 时企微出站被哨兵跳过
+	t.Setenv("WECOM_ALLOW_OUTBOUND", "1")   // IS_TEST_MODE=1 时企微出站被哨兵跳过
 	t.Setenv("WECOM_DISABLE_OUTBOUND", "0") // 金样要钉真实委托形状
 	senderTestDB(t)
 	database := senderTestDB(t)
@@ -710,7 +710,7 @@ func TestBridgeSender_DuplicateOccupied(t *testing.T) {
 	}
 	content := "golden 桥接重复正文"
 	dup := &model.MessageHub{
-		MsgID: ContentHashMsgID("douyin", conv, content),
+		MsgID:    ContentHashMsgID("douyin", conv, content),
 		Platform: "douyin", AccountID: "acct-sa-br", Direction: "outbound",
 		Status: "delivered", MsgType: "text", SenderID: "acct-sa-br",
 		ReceiverID: hub.SenderID, Content: content,
@@ -721,6 +721,8 @@ func TestBridgeSender_DuplicateOccupied(t *testing.T) {
 	}
 
 	bridgeCtx := tenant.WithTenantID(context.Background(), 1) // 占位/审计行需要租户（fail-closed）
+	useLegacyBridgeFixture(t)
+	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", "acct-sa-br", "text")
 	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-sa-br",
 		&ParsedPayload{EventID: "evt-sa-br-dup", Sender: hub.SenderID, Content: "在吗", ChatID: conv},
 		content, hub, nil)
@@ -743,17 +745,19 @@ func TestBridgeSender_DuplicateOccupied(t *testing.T) {
 
 func TestBridgeSender_UndeliverableReason(t *testing.T) {
 	database := senderTestDB(t) // 必须先于 svc：仓储构造时捕获全局句柄
-	setupBridgeWhitelistForTest(t, "xiaohongshu")
+	setupBridgeWhitelistForTest(t, "douyin")
 	releaseReplyClaimForTest(t, "evt-sa-br-undel")
 	svc := bridgeAcceptSvc(t)
 
 	conv := "cs-sa-br-undel"
-	hub := bridgeInboundHub("xiaohongshu", "xiaohongshu-unknown", conv, "cust-sa-br-undel")
+	hub := bridgeInboundHub("douyin", "douyin-unknown", conv, "cust-sa-br-undel")
 	if err := database.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
 	bridgeCtx := tenant.WithTenantID(context.Background(), 1)
-	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelXiaohongshu, hub.AccountID,
+	useLegacyBridgeFixture(t)
+	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", hub.AccountID, "text")
+	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, hub.AccountID,
 		&ParsedPayload{EventID: "evt-sa-br-undel", Sender: hub.SenderID, Content: "在吗", ChatID: conv},
 		"不可达正文", hub, nil)
 	if sent {
@@ -764,7 +768,7 @@ func TestBridgeSender_UndeliverableReason(t *testing.T) {
 		t.Fatalf("占位账号失败不可重试，got %+v", sendErr)
 	}
 	var row model.MessageHub
-	if err := database.Where("platform = ? AND conversation_id = ? AND direction = ?", "xiaohongshu", conv, "outbound").
+	if err := database.Where("platform = ? AND conversation_id = ? AND direction = ?", "douyin", conv, "outbound").
 		Order("id desc").First(&row).Error; err != nil {
 		t.Fatalf("应落出站行: %v", err)
 	}
@@ -789,6 +793,8 @@ func TestBridgeSender_RetryCarriesStrippedContent(t *testing.T) {
 	longConv := "cs-sa-br-strip-" + strings.Repeat("x", 110)
 	hub := bridgeInboundHub("douyin", "acct-sa-br", longConv, "cust-sa-br-strip")
 	bridgeCtx := tenant.WithTenantID(context.Background(), 1)
+	useLegacyBridgeFixture(t)
+	bridgeCtx = localBridgeSubmitContext(t, bridgeCtx, "douyin", hub.AccountID, "text")
 	sent, sendErr := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-sa-br",
 		&ParsedPayload{EventID: "evt-sa-br-strip", Sender: hub.SenderID, Content: "在吗", ChatID: longConv},
 		md, hub, nil)

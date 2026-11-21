@@ -64,6 +64,7 @@ func b3Rows() []model.MessageHub {
 
 // TestOutboxDBFetcher_LastEventIDCursor 增量回放：只返回 id > 游标的 outbound
 func TestOutboxDBFetcher_LastEventIDCursor(t *testing.T) {
+	withBus(t).SetOutboundClaimer(&fakeClaimer{}) // 游标单测显式提供认领替身。
 	q := &fakeOutboxQuerier{rows: b3Rows()}
 	f := &outboxDBFetcher{}
 	f.SetQuerier(q)
@@ -96,6 +97,7 @@ func TestOutboxDBFetcher_LastEventIDCursor(t *testing.T) {
 // 非法游标 → B8（2026-09-19）改 fail-closed：querier 根本不被调用（哨兵值不动）、
 // 返回 0 行、游标原样回传——旧「退化为全量」会重放已投递消息致重复转发。
 func TestOutboxDBFetcher_CursorSemantics(t *testing.T) {
+	withBus(t).SetOutboundClaimer(&fakeClaimer{})
 	q := &fakeOutboxQuerier{rows: b3Rows()}
 	f := &outboxDBFetcher{}
 	f.SetQuerier(q)
@@ -140,9 +142,11 @@ func startB3SSEServer(q *fakeOutboxQuerier) *httptest.Server {
 // TestHandleOutboxSSE_LastEventIDHeaderReplay 断线重连：携带 Last-Event-ID 头
 // 只回放缺失的 outbound（避免全量 reload）。
 func TestHandleOutboxSSE_LastEventIDHeaderReplay(t *testing.T) {
+	bus := withBus(t)
 	q := &fakeOutboxQuerier{rows: b3Rows()}
 	srv := startB3SSEServer(q)
 	defer srv.Close()
+	bus.SetOutboundClaimer(&fakeClaimer{})
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=acc_b3", nil)
 	req.Header.Set("Last-Event-ID", "1")

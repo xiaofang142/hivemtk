@@ -1,0 +1,4 @@
+Command: FA12_PG_DSN='<authorized local synthetic socket DSN; omitted from evidence>' go test ./internal/aiagent/knowledge/service -run 'TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry' -count=1
+Working directory: user-server/
+Expected: non-zero due to documented snapshot membership, expired lease, and canceled cleanup assertions against the pre-fix product code.
+No testutil.NewTestDB, business database, pgvector extension, or live service used.

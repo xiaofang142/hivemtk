@@ -1,0 +1,55 @@
+Commands below were actually invoked; each has a complete log and exit record beside it.
+RED/recheck commands are expected to exit 1. Known naked-goroutine and Graphify checks also exit 1.
+Do not interpret this as independent parent verification or reviewer approval.
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -v ./internal/aiagent/knowledge/service -run '^(TestDocumentMetadataUpdatePreservesActiveReindex|TestDocumentMetadataUpdateScopeAndMissingRows|TestPipelineProgressFailurePersistsAndRetries|TestPipelineProgressFailureCleanupErrorsAndOwnerFence)$' -count=1 -timeout=120s
+Recorded exit: 1
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -overlay /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.specify/bugs/knowledge-reindex-fa13-20261120/evidence/followup-3/red-recheck-overlay.json -race -v ./internal/aiagent/knowledge/service -run '^(TestDocumentMetadataUpdatePreservesActiveReindex|TestDocumentMetadataUpdateScopeAndMissingRows|TestPipelineProgressFailurePersistsAndRetries|TestPipelineProgressFailureCleanupErrorsAndOwnerFence)$' -count=1 -timeout=120s
+Recorded exit: 1
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -race -v ./internal/aiagent/knowledge/service -run '^(TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry|TestAsyncProcessingAndReindexShareAtomicOwnership|TestAsyncProcessingLeaseCoversConfiguredTimeout|TestReindexExpiredOwnerCannotOverwriteNewOwner|TestRebuildIndex_VisitsAllDocumentsAndPersistsMissingSourceFailure|TestReindexCursorWatermarkAndAtomicClaim|TestReindex_EmbeddingFailureIsQueryableAndRetryable|TestReindex_FinalStatusWriteFailurePersistsOrPropagates|TestDocumentMetadataUpdatePreservesActiveReindex|TestDocumentMetadataUpdateScopeAndMissingRows|TestPipelineProgressFailurePersistsAndRetries|TestPipelineProgressFailureCleanupErrorsAndOwnerFence)$' -count=1 -timeout=180s
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -race -v ./internal/aiagent/knowledge/controller -run '^TestRebuildProductIndex_(NonemptyWaitsForEmbeddingCompletion|ReturnsFailureWhenDocumentReindexFails|ReturnsSuccessAfterCompletion)$' -count=1 -timeout=90s
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -v ./internal/migration/migrations -run '^(TestKnowledgeReindexOwnerMigration|TestKnowledgeReindexLeaseMigration|TestKnowledgeReindexAttemptMigration)$' -count=1 -timeout=120s
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+go build ./...
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+go vet ./...
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+python3 scripts/check-layer-boundary.py
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+bash scripts/check-architecture.sh
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+bash user-server/scripts/check-gorm-only.sh
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+git diff --check
+Recorded exit: 0
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+bash user-server/scripts/check_naked_goroutine.sh
+Recorded exit: 1
+
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+python3 -c 'from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('"'"'.'"'"'))'
+Recorded exit: 1

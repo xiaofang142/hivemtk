@@ -183,8 +183,9 @@ func (c *CustomReportController) GetPublicTemplates(ctx *gin.Context) {
 // UseTemplate 使用模板
 func (c *CustomReportController) UseTemplate(ctx *gin.Context) {
 
-	userID, exists := ctx.Get("user_id")
-	if !exists {
+	// FA-24：复制入口与读取同权（公开/本人/管理员），授权判定随 isAdmin 下传服务层。
+	userID, isAdmin := extractUserContext(ctx)
+	if userID == 0 {
 		response.Error(ctx, http.StatusUnauthorized, "未找到用户信息")
 		return
 	}
@@ -196,7 +197,7 @@ func (c *CustomReportController) UseTemplate(ctx *gin.Context) {
 		return
 	}
 
-	report, err := c.reportService.UseTemplate(ctx.Request.Context(), uint(id), userID.(uint))
+	report, err := c.reportService.UseTemplate(ctx.Request.Context(), uint(id), userID, isAdmin)
 	if err != nil {
 		replyReportError(ctx, err, "使用报表模板")
 		return

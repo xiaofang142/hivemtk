@@ -168,6 +168,25 @@ func isLocalURL(url string) bool {
 }
 
 // ListModels 列出所有 provider（含本地）
+// ErrLLMProviderForbidden FA-LLM-01：provider 不属于当前租户（管理写口/测试口的
+// 租户归属判定拒绝）。controller 用 errors.Is 映射 403。
+var ErrLLMProviderForbidden = errors.New("无权操作该模型配置")
+
+// ensureProviderManageable FA-LLM-01：管理写口（改/删/测）的租户归属判定。
+// 列表早已按租户过滤（tenantProviderNames），但写/测口此前按名字直取共享注册表
+// ——其他租户管理员可用名字改到/删到/拿密钥测到别的租户（或平台）的 provider。
+// 多租户模式下写/测口与列表同一白名单口径；单租户模式沿用既有全局管理语义。
+func (s *LLMRoutingService) ensureProviderManageable(ctx context.Context, identifier string) error {
+	allowed, needFilter := s.tenantProviderNames(ctx)
+	if !needFilter {
+		return nil
+	}
+	if !allowed[identifier] {
+		return fmt.Errorf("%w: provider %q 不属于当前租户", ErrLLMProviderForbidden, identifier)
+	}
+	return nil
+}
+
 // tenantProviderNames 多租户下返回当前租户的 provider 名集合。
 // 进程内 dispatcher 是全平台共享的（含其他租户的自带 Key 行），列表接口
 // 不能把它们原样吐给当前租户；按 ctx 租户经注入的仓储反查归属后再过滤。
@@ -359,6 +378,9 @@ func (s *LLMRoutingService) UpdateModel(ctx context.Context, identifier string, 
 	if old == nil {
 		return fmt.Errorf("provider %q not found", identifier)
 	}
+	if err := s.ensureProviderManageable(ctx, identifier); err != nil {
+		return err
+	}
 	apiKey := old.APIKey
 	switch {
 	case info.APIKey == APIKeyClearSentinel:
@@ -419,6 +441,9 @@ func (s *LLMRoutingService) DeleteModel(ctx context.Context, identifier string) 
 	}
 	if s.dispatcher.GetProvider(identifier) == nil {
 		return fmt.Errorf("provider %q not found", identifier)
+	}
+	if err := s.ensureProviderManageable(ctx, identifier); err != nil {
+		return err
 	}
 	if !s.dispatcher.RemoveProvider(identifier) {
 		return fmt.Errorf("provider %q remove failed", identifier)
@@ -568,6 +593,9 @@ func (s *LLMRoutingService) TestModel(ctx context.Context, req TestModelRequest)
 	provider := s.dispatcher.GetProvider(req.Provider)
 	if provider == nil {
 		return nil, fmt.Errorf("provider %q not found", req.Provider)
+	}
+	if err := s.ensureProviderManageable(ctx, req.Provider); err != nil {
+		return nil, err
 	}
 	if req.Prompt == "" {
 		req.Prompt = "你好，请用一句话自我介绍。"

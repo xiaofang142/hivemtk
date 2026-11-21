@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -16,38 +17,61 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	"hivemtk-user/internal/aiagent/knowledge/repository"
 	rag_core "hivemtk-user/internal/aiagent/rag/core"
 	ragretrieval "hivemtk-user/internal/aiagent/rag/retrieval"
 	"hivemtk-user/internal/etl"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
+const knowledgeOwnerLeaseMargin = time.Minute
+
 func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentID uint64, productID string, filePath, fileName, content, mimeType, title string, source model.SourceType, docMeta map[string]any) {
+	if err := s.processDocument(bgCtx, documentID, productID, filePath, fileName, content, mimeType, title, source, docMeta); err != nil {
+		logger.Errorf("[knowledge] process document failed doc=%d: %v", documentID, err)
+	}
+}
+
+func (s *KnowledgeService) processDocument(bgCtx context.Context, documentID uint64, productID string, filePath, fileName, content, mimeType, title string, source model.SourceType, docMeta map[string]any) (processErr error) {
+	lease := AsyncProcessingTimeout()
+	if deadline, ok := bgCtx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining > lease {
+			lease = remaining
+		}
+	}
+	owner, claimed, err := s.docRepo.ClaimForProcessing(bgCtx, productID, documentID, lease+knowledgeOwnerLeaseMargin)
+	if err != nil {
+		return fmt.Errorf("认领文档处理权失败: %w", err)
+	}
+	if !claimed {
+		return fmt.Errorf("文档 %d 正由其他任务处理，异步 worker 不再执行", documentID)
+	}
+	return s.processDocumentOwned(bgCtx, documentID, productID, owner, filePath, fileName, content, mimeType, title, source, docMeta)
+}
+
+func (s *KnowledgeService) processDocumentOwned(bgCtx context.Context, documentID uint64, productID string, owner string, filePath, fileName, content, mimeType, title string, source model.SourceType, docMeta map[string]any) (processErr error) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.Errorf("[knowledge] processDocumentAsync panic doc=%d: %v\n%s", documentID, r, debug.Stack())
-			s.markFailed(bgCtx, documentID, fmt.Sprintf("处理异常: %v", r))
+			processErr = s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("处理异常: %v", r))
 		}
 	}()
 
-	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusProcessing, 10, ""); err != nil {
-		logger.Errorf("[knowledge] 标记处理中失败: %v", err)
-		return
+	if err := s.docRepo.UpdateStatusForOwner(bgCtx, documentID, owner, model.EmbedStatusProcessing, 10, ""); err != nil {
+		return s.markReindexFailed(bgCtx, documentID, owner, fmt.Errorf("更新处理进度 10 失败: %w", err))
 	}
 
 	if content == "" && filePath != "" {
 		bytes, err := os.ReadFile(filePath)
 		if err != nil {
-			s.markFailed(bgCtx, documentID, fmt.Sprintf("读取文件失败: %v", err))
-			return
+			return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("读取文件失败: %v", err))
 		}
 		// P1-1 图片知识库：图片走本地 VL 描述→文本索引（服务未配置时报不支持格式）
 		if etl.IsImageExt(fileName) {
 			desc, derr := etl.DescribeImage(bgCtx, fileName, bytes)
 			if derr != nil {
 				logger.Warnf("[knowledge] 图片描述失败 doc=%d: %v", documentID, derr)
-				s.markFailed(bgCtx, documentID, fmt.Sprintf("图片处理失败: %v", derr))
-				return
+				return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("图片处理失败: %v", derr))
 			}
 			content = desc
 		} else {
@@ -58,8 +82,7 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 				// 才允许退化为原始字节，避免把二进制垃圾当内容分块向量化污染检索库。
 				if !etl.IsPlainTextExt(fileName) {
 					logger.Warnf("[knowledge] 文本提取失败 doc=%d: %v，标记失败", documentID, extErr)
-					s.markFailed(bgCtx, documentID, fmt.Sprintf("文本提取失败（可能为扫描件或损坏文档）: %v", extErr))
-					return
+					return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("文本提取失败（可能为扫描件或损坏文档）: %v", extErr))
 				}
 				logger.Warnf("[knowledge] 纯文本提取异常 doc=%d: %v，退化为原始内容", documentID, extErr)
 				extracted = string(bytes)
@@ -68,8 +91,7 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 		}
 	}
 	if strings.TrimSpace(content) == "" {
-		s.markFailed(bgCtx, documentID, "文档内容为空（可能为扫描件或空文件）")
-		return
+		return s.markFailed(bgCtx, documentID, owner, "文档内容为空（可能为扫描件或空文件）")
 	}
 
 	ragDoc := rag_core.Document{
@@ -85,15 +107,13 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 	}
 	chunks, err := s.processor.ProcessDocument(bgCtx, ragDoc)
 	if err != nil {
-		s.markFailed(bgCtx, documentID, fmt.Sprintf("分片失败: %v", err))
-		return
+		return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("分片失败: %v", err))
 	}
 	if len(chunks) == 0 {
-		s.markFailed(bgCtx, documentID, "分片结果为空")
-		return
+		return s.markFailed(bgCtx, documentID, owner, "分片结果为空")
 	}
-	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusProcessing, 30, ""); err != nil {
-		logger.Errorf("[knowledge] 更新进度失败: %v", err)
+	if err := s.docRepo.UpdateStatusForOwner(bgCtx, documentID, owner, model.EmbedStatusProcessing, 30, ""); err != nil {
+		return s.markReindexFailed(bgCtx, documentID, owner, fmt.Errorf("更新处理进度 30 失败: %w", err))
 	}
 
 	baseMeta := map[string]any{
@@ -108,12 +128,11 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 	// 父子分段（P1-1 前置小刀）：先把本轮的父块落库，再让子块引用它们。
 	// 失败按「分块阶段失败」处理——父块缺一半而子块全量入库，会让部分命中回拼不到上下文，
 	// 这种半套状态比整篇失败更难排查，且重切一次即可恢复。
-	parentIDs, err := s.createChunkParents(bgCtx, documentID, productID, len(chunks), func(i int) (string, int) {
+	parentIDs, err := s.createChunkParents(bgCtx, documentID, owner, productID, len(chunks), func(i int) (string, int) {
 		return chunks[i].Content, chunks[i].TokenCount
 	})
 	if err != nil {
-		s.markFailed(bgCtx, documentID, fmt.Sprintf("写入父块失败: %v", err))
-		return
+		return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("写入父块失败: %v", err))
 	}
 
 	chunkModels := make([]model.KnowledgeChunk, 0, len(chunks))
@@ -139,12 +158,11 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 		})
 		totalTokens += c.TokenCount
 	}
-	if err := s.chunkRepo.BatchCreate(bgCtx, chunkModels); err != nil {
-		s.markFailed(bgCtx, documentID, fmt.Sprintf("写入分段失败: %v", err))
-		return
+	if err := s.chunkRepo.BatchCreateForOwner(bgCtx, documentID, owner, chunkModels); err != nil {
+		return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("写入分段失败: %v", err))
 	}
-	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusProcessing, 60, ""); err != nil {
-		logger.Errorf("[knowledge] 更新进度失败: %v", err)
+	if err := s.docRepo.UpdateStatusForOwner(bgCtx, documentID, owner, model.EmbedStatusProcessing, 60, ""); err != nil {
+		return s.markReindexFailed(bgCtx, documentID, owner, fmt.Errorf("更新处理进度 60 失败: %w", err))
 	}
 
 	texts := make([]string, len(chunks))
@@ -152,30 +170,45 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 		texts[i] = c.Content
 	}
 	embService, embCfg := s.resolveEmbeddingConfig(bgCtx, productID)
-	embeddings, err := embService.Embed(bgCtx, embCfg, texts)
+	var embeddings [][]float32
+	if s.reindexEmbed != nil {
+		if embCfg == nil {
+			embCfg = embService.DefaultConfig()
+		}
+		embeddings, err = s.reindexEmbed(bgCtx, embService, embCfg, texts)
+	} else {
+		embeddings, err = embService.Embed(bgCtx, embCfg, texts)
+	}
 	if err != nil {
-		s.markFailed(bgCtx, documentID, fmt.Sprintf("向量化失败: %v", err))
-		return
+		return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("向量化失败: %v", err))
 	}
 
 	if err := persistValidatedChunkEmbeddings(embService, embCfg, chunkModels, embeddings, func(validChunks []model.KnowledgeChunk, validEmbeddings [][]float32) error {
 		chunkModels = validChunks
 		embeddings = validEmbeddings
-		return s.persistChunkEmbeddings(bgCtx, validChunks, validEmbeddings)
+		return s.chunkRepo.UpdateEmbeddingsBatchWithSourceForOwner(bgCtx, documentID, owner, validChunks, validEmbeddings, "tei")
 	}); err != nil {
 		logger.Errorf("[knowledge] embedding validation or persistence failed doc=%d: %v", documentID, err)
-		s.markFailed(bgCtx, documentID, err.Error())
-		return
+		return s.markFailed(bgCtx, documentID, owner, err.Error())
 	}
-	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusProcessing, 80, ""); err != nil {
-		logger.Errorf("[knowledge] 更新进度失败: %v", err)
+	if err := s.docRepo.UpdateStatusForOwner(bgCtx, documentID, owner, model.EmbedStatusProcessing, 80, ""); err != nil {
+		return s.markReindexFailed(bgCtx, documentID, owner, fmt.Errorf("更新处理进度 80 失败: %w", err))
 	}
 
 	if contextualEnhanceEnabled() {
-		s.enhanceDocumentContextual(bgCtx, documentID)
+		if err := s.docRepo.EnsureOwner(bgCtx, documentID, owner); err != nil {
+			return err
+		}
+		s.enhanceDocumentContextual(bgCtx, documentID, owner)
+		if err := s.docRepo.EnsureOwner(bgCtx, documentID, owner); err != nil {
+			return err
+		}
 	}
 
 	if s.indexer != nil {
+		if err := s.docRepo.EnsureOwner(bgCtx, documentID, owner); err != nil {
+			return err
+		}
 		idxChunks := make([]ragretrieval.Chunk, len(chunks))
 		for i, c := range chunks {
 			idxChunks[i] = ragretrieval.Chunk{
@@ -192,11 +225,14 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 		_ = s.indexer.BuildIndex(bgCtx, fmt.Sprintf("product_%s", productID), idxChunks)
 	}
 
-	if err := s.docRepo.UpdateChunkStats(bgCtx, documentID, len(chunks), totalTokens); err != nil {
+	if err := s.docRepo.UpdateChunkStatsForOwner(bgCtx, documentID, owner, len(chunks), totalTokens); err != nil {
 		logger.Errorf("[knowledge] 更新分段统计失败: %v", err)
+		if errors.Is(err, repository.ErrKnowledgeDocumentClaimLost) {
+			return err
+		}
 	}
-	if err := s.docRepo.UpdateStatus(bgCtx, documentID, model.EmbedStatusIndexed, 100, ""); err != nil {
-		logger.Errorf("[knowledge] 更新已索引状态失败: %v", err)
+	if err := s.docRepo.UpdateStatusForOwner(bgCtx, documentID, owner, model.EmbedStatusIndexed, 100, ""); err != nil {
+		return s.markFailed(bgCtx, documentID, owner, fmt.Sprintf("更新已索引状态失败: %v", err))
 	}
 	// 分块与向量此刻才真正落库（导入受理时内容还没进来，那时抬列会留下
 	// "touch 之后、写入之前"的缓存盲窗）。在 Indexed 处抬 KB 行 updated_at，
@@ -216,10 +252,15 @@ func (s *KnowledgeService) processDocumentAsync(bgCtx context.Context, documentI
 	if productUUID != "" {
 		_ = s.ragRepo.UpdateRagProductStats(bgCtx, productUUID, int(docCount), chunkCount, &now)
 	}
+	return nil
 }
 
-func (s *KnowledgeService) markFailed(ctx context.Context, documentID uint64, errMsg string) {
-	if err := s.docRepo.UpdateStatus(ctx, documentID, model.EmbedStatusFailed, 0, errMsg); err != nil {
+func (s *KnowledgeService) markFailed(ctx context.Context, documentID uint64, owner string, errMsg string) error {
+	cleanupCtx, cancel := reindexFailureContext(ctx)
+	defer cancel()
+	if err := s.docRepo.UpdateStatusForOwner(cleanupCtx, documentID, owner, model.EmbedStatusFailed, 0, errMsg); err != nil {
 		logger.Errorf("[knowledge] 标记失败状态错误: %v", err)
+		return fmt.Errorf("%s; 持久化失败状态失败: %w", errMsg, err)
 	}
+	return fmt.Errorf("%s", errMsg)
 }

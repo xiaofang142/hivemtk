@@ -1,0 +1,116 @@
+{
+  "recorded_at": "2026-11-20T20:27:06.890617+08:00",
+  "status": "DONE_WITH_CONCERNS",
+  "review_status": "parent independent rerun and original spec reviewer re-review pending",
+  "evidence_validation": {
+    "service-final": {
+      "exit": 0,
+      "top_level_pass_count": 10,
+      "tests": [
+        "TestRebuildIndexUsesSnapshotVisibleMembership",
+        "TestReindexLeaseReclaimsExpiredProcessingExactlyOnce",
+        "TestReindexCancellationPersistsFailureAndAllowsRetry",
+        "TestAsyncProcessingAndReindexShareAtomicOwnership",
+        "TestAsyncProcessingLeaseCoversConfiguredTimeout",
+        "TestReindexExpiredOwnerCannotOverwriteNewOwner",
+        "TestRebuildIndex_VisitsAllDocumentsAndPersistsMissingSourceFailure",
+        "TestReindexCursorWatermarkAndAtomicClaim",
+        "TestReindex_EmbeddingFailureIsQueryableAndRetryable",
+        "TestReindex_FinalStatusWriteFailurePersistsOrPropagates"
+      ],
+      "log_sha256": "f66a6f3b5b93b4de7a5a2533f6d95b5f5b578033430579cf464910aeaae42033"
+    },
+    "controller-regressions": {
+      "exit": 0,
+      "top_level_pass_count": 2,
+      "tests": [
+        "TestRebuildProductIndex_ReturnsFailureWhenDocumentReindexFails",
+        "TestRebuildProductIndex_ReturnsSuccessAfterCompletion"
+      ],
+      "log_sha256": "fb45a06c6b3dc6a11431040eb1bccc5aa03957d40aafdd69a80259d99e24c7c8"
+    },
+    "migration-regressions": {
+      "exit": 0,
+      "top_level_pass_count": 3,
+      "tests": [
+        "TestKnowledgeReindexAttemptMigration",
+        "TestKnowledgeReindexLeaseMigration",
+        "TestKnowledgeReindexOwnerMigration"
+      ],
+      "log_sha256": "0dc04f4cd2941dacfa2e3deee38eb45814eb0050c5efa03bf8f0bdf3ac35684d"
+    },
+    "service-race": {
+      "exit": 0,
+      "top_level_pass_count": 6,
+      "tests": [
+        "TestRebuildIndexUsesSnapshotVisibleMembership",
+        "TestReindexLeaseReclaimsExpiredProcessingExactlyOnce",
+        "TestReindexCancellationPersistsFailureAndAllowsRetry",
+        "TestAsyncProcessingAndReindexShareAtomicOwnership",
+        "TestAsyncProcessingLeaseCoversConfiguredTimeout",
+        "TestReindexExpiredOwnerCannotOverwriteNewOwner"
+      ],
+      "log_sha256": "947a4f9c8a4858fa2650e7d770c24acb6d65564de25a93a960d0778a247397ca"
+    }
+  },
+  "red_test_sources_unchanged": {
+    "internal/aiagent/knowledge/service/knowledge_reindex_followup_test.go": true,
+    "internal/aiagent/knowledge/service/knowledge_service_reindex_test.go": true
+  },
+  "source_sha256": {
+    "user-server/internal/aiagent/knowledge/repository/knowledge_document.go": "6330c35ebeda6f26e0f64a20c4ae5a0c14c2977fd5c706ef92ab6b178e1528e5",
+    "user-server/internal/aiagent/knowledge/repository/knowledge_chunk.go": "999a8e785ab2bd622374d34650f1257d66f61989550ef148a497c052e5b59ec1",
+    "user-server/internal/aiagent/knowledge/repository/knowledge_chunk_parent.go": "526df68e487d59ab41029a5b76e902aa630659362244b3c2e303619d9a0b54cf",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_pipeline.go": "6c842fa9419771824ae0271f8bf0183fad67f8ccccf9b3d19f8972c2390199a6",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_reindex.go": "f54fb5a4cabc9f67fe97f65612908daccb0913509ab50b8ee162654425dfea59",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_parents.go": "c58862371d413006b457ece5e4e285d7d44d80e717f4fdc2fd373a72473df54c",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_contextual.go": "d859ede5df521e069d08ccc408cc4f748072cd76c4aed8bb9ab67686cbd12170",
+    "user-server/internal/aiagent/rag/retrieval/contextual_retrieval.go": "eb51e020e1d214093b8006b020f2a43fdcca5419487dcdc9f0d51a9dc0e767b4",
+    "user-server/internal/model/kb_workspace.go": "414e61db99924e08551438fb15f6299472ffb3915398388a0bdc61a6ff799cc5",
+    "user-server/internal/migration/migrations/initial_schema.go": "f6cd648b6767553837fce7e2707e4465b5d171e2f5ee86f57fe6af7cf65365bf",
+    "user-server/internal/migration/migrations/knowledge_reindex_owner_migration.go": "1ede4a4358fd807a91f51e4d1aa8022a1250ecc43c7cf3ca3fd3d5528c727793",
+    "user-server/internal/migration/migrations/knowledge_reindex_owner_migration_test.go": "a1abb7a5834a20d7b52cfcf79504d202de47b2ba0aaf3928d12922e420025bb3",
+    "user-server/internal/aiagent/knowledge/service/knowledge_reindex_followup_test.go": "8e15f1387ab0560738b6e75ef3faf71b395fd71542924549dbd62713095984ea",
+    "user-server/internal/aiagent/knowledge/service/knowledge_service_reindex_test.go": "9c15bef7e135198ef0bf8dc573a7d49006fea5a6dfc16bbf821ccbf50f14821c",
+    "user-server/internal/aiagent/knowledge/controller/knowledge_workspace_reindex_test.go": "b7644cace35075606a165a5b80915bef285760b02dfa26ea835b15453721dd39"
+  },
+  "gofmt": {
+    "exit": 0,
+    "unformatted_files": []
+  },
+  "diff_check": {
+    "exit": 0,
+    "output": ""
+  },
+  "gate_exits": {
+    "architecture": 0,
+    "build-vet-final": 0,
+    "build-vet": 0,
+    "controller-regressions": 0,
+    "diff-check": 0,
+    "gorm": 0,
+    "graphify": 1,
+    "green-focused-1": 1,
+    "green-focused-2": 0,
+    "layer": 0,
+    "migration-regressions": 0,
+    "naked-goroutine": 1,
+    "owner-migration-green": 0,
+    "owner-migration-red-2": 1,
+    "owner-migration-red": 1,
+    "red-confirmed": 1,
+    "red-final-2": 1,
+    "red-final": 1,
+    "service-final": 0,
+    "service-race": 0,
+    "service-regressions-2": 0,
+    "service-regressions": 1
+  },
+  "concerns": [
+    "Contextual enhancement write fencing lacks behavioral coverage; initial tenantless reads fail closed in fixture.",
+    "External indexer has only a pre-call owner check; no atomic external fencing guarantee.",
+    "Post-terminal cache invalidation and aggregate product statistics are outside the owner transaction.",
+    "Repository naked-goroutine gate fails on existing call sites; Graphify Python module unavailable."
+  ],
+  "scope": "No staging, commit, push, deploy, business DB, queue update, or subagents."
+}

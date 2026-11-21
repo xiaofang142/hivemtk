@@ -6,6 +6,7 @@ package bridge
 // legacy delivered 行为零变化（回归钉）。
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -37,7 +39,7 @@ func newUnknownAckHandler(t *testing.T) (*gorm.DB, *BridgeIngestHandler) {
 		},
 		func(ctx context.Context, ev *model.MessageEvent, direction string) error { return nil },
 	)
-	h.ingress = service.NewInboxIngressService()
+	h.ingress = service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	return database, h
 }
 
@@ -64,7 +66,7 @@ func seedAckPendingRow(t *testing.T, h *BridgeIngestHandler, msgID string) {
 		Direction:      "outbound",
 		Status:         "pending",
 	}
-	if err := h.ingress.DeliverOutbound(context.Background(), hub); err != nil {
+	if err := h.ingress.DeliverOutbound(localBridgeDeliveryContext(t, tenant.WithTenantID(context.Background(), 1), unk4Platform, unk4Account, "text", ""), hub); err != nil {
 		t.Fatalf("seed 失败: %v", err)
 	}
 }

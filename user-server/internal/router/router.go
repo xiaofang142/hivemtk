@@ -106,6 +106,10 @@ func parseCORSOrigins(s string) []string {
 }
 
 func corsMiddleware(c *gin.Context) {
+	if middleware.IsMerchantCallbackPath(c.Request.URL.Path) {
+		c.Next()
+		return
+	}
 	origin := c.GetHeader("Origin")
 	allow := false
 	if origin != "" {
@@ -191,8 +195,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	r.HandleMethodNotAllowed = true
 	r.NoMethod(staticCtl.MethodNotAllowed)
 
+	r.Use(middleware.MerchantCallbackAccessLog())
 	r.Use(corsMiddleware)
-	r.Use(gin.Recovery())
+	r.Use(middleware.Recovery())
 	// G-4：HTTP 请求级指标接线（MetricsMiddleware 早有实现但零接线=有实现无暴露；
 	// 随 /metrics 端点一同闭环。放在 Recovery 之后，panic 恢复后的 500 也入指标）。
 	r.Use(middleware.MetricsMiddleware())
@@ -275,6 +280,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	r.Use(middleware.APIInteractionLogger())
 
 	r.Use(middleware.AuditMiddleware())
+	r.Use(middleware.MerchantConnectionRecovery())
 
 	liveCodeController := controller.NewLiveCodeController(service.NewLiveCodeService())
 
@@ -396,6 +402,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// 电商订单回调：外部平台没有会话凭证，只能走公开组 + HMAC 验签。
 		// 与 auth 组里那条旧路径并存，旧路径已标 deprecation。
 		setupOrderWebhookRoutes(public)
+		setupMerchantCallbackRoutes(public, gormDB)
 
 		// 租户自助开户（T030）：公开档唯一可写端点，off 模式由 Service 判 4104
 		setupTenantRoutes(public, nil, nil)
@@ -810,7 +817,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 
 		setupReachDeferredRoutes(auth, gormDB)
 
-		setupCapabilityRuntimeRoutes(auth, gormDB)
+		setupCapabilityRuntimeRoutes(auth, tenantAdmin, gormDB)
 
 		setupContactConsentRoutes(auth, gormDB)
 

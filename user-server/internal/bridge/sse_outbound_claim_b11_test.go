@@ -25,7 +25,7 @@ type fakeClaimer struct {
 	timeouts []time.Duration
 }
 
-func (c *fakeClaimer) ClaimOutboundForPush(_ context.Context, id uint64, timeout time.Duration) (bool, error) {
+func (c *fakeClaimer) ClaimOutboundForPush(_ context.Context, id uint64, _, _, _ string, timeout time.Duration) (bool, error) {
 	c.calls = append(c.calls, id)
 	c.timeouts = append(c.timeouts, timeout)
 	if c.fail {
@@ -191,16 +191,16 @@ func TestClaimGateKeysOnBuilderEventName(t *testing.T) {
 	}
 }
 
-func TestClaimGateAllowsThroughWithoutClaimer(t *testing.T) {
+func TestClaimGateDeniesWithoutClaimer(t *testing.T) {
 	bus := withBus(t)
-	// 未注入认领器（装配缺件/mock 环境）：退回旧行为放行，不因为缺件把消息全吞掉
+	// 装配缺件不能绕过当前授权裁决，行仍保留等待正确装配。
 	ch, cancel := bus.Subscribe("douyin", "acc_b11")
 	defer cancel()
 	bus.Publish(b11Event(5, "conv_x"))
 	select {
 	case <-ch:
+		t.Error("消费服务缺件时不应发布出站")
 	default:
-		t.Error("认领器缺件时事件被吞：缺件应当只降级、不致丢消息")
 	}
 }
 
@@ -311,9 +311,8 @@ func TestBacklogFetchIgnoresCursorWhenOwedQuerierPresent(t *testing.T) {
 	}
 }
 
-func TestBacklogFetchLegacyPathWhenOwedMissing(t *testing.T) {
-	// 装配缺件（注入方只实现了游标查询）：必须退回旧语义而不是查空即认为没事，
-	// 同时 SetOutboxQuerier 已 Error 留痕。这条断的是「缺件时不静默变瞎」。
+func TestBacklogFetchLegacyPathDeniesWhenClaimerMissing(t *testing.T) {
+	// 只实现游标查询但缺消费裁决时暂停，恢复正确装配前不能发布或推进游标。
 	bus := withBus(t)
 
 	h := NewBridgeIngestHandler(nil)
@@ -324,12 +323,12 @@ func TestBacklogFetchLegacyPathWhenOwedMissing(t *testing.T) {
 	if bus.claimer != nil {
 		t.Error("注入方不实现认领口时总线必须清空认领器（残留旧认领器会把行压进 inflight 却没人投递）")
 	}
-	events, _, err := h.outboxFetcher.FetchOutboxSince(context.Background(), "douyin", "acc_b3", "1")
+	events, cursor, err := h.outboxFetcher.FetchOutboxSince(context.Background(), "douyin", "acc_b3", "1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 {
-		t.Errorf("缺件兜底应走游标路径给出 2 条: %v", eventIDs(events))
+	if len(events) != 0 || cursor != "1" {
+		t.Errorf("缺消费服务不得发布或推进游标，events=%v cursor=%q", eventIDs(events), cursor)
 	}
 }
 
@@ -338,7 +337,7 @@ type fullFakeRepo struct {
 	fakeOwedQuerier
 }
 
-func (f *fullFakeRepo) ClaimOutboundForPush(_ context.Context, id uint64, _ time.Duration) (bool, error) {
+func (f *fullFakeRepo) ClaimOutboundForPush(_ context.Context, id uint64, _, _, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 
@@ -365,13 +364,11 @@ func TestSetOutboxQuerierWiresBusClaimer(t *testing.T) {
 }
 
 func TestRealRepoSatisfiesOutboundPorts(t *testing.T) {
-	// 生产装配锁：router 注给 bridge 的就是 repository.MessageHubRepository。
-	// 它一旦少实现任何一个口，SSE 会静默退回「不认领 + 按游标补拉」的旧行为——
-	// 那正是本批要收口的两条面重新打开，且没有任何红灯会亮。
+	// 原生仓储只提供数据访问，生产装配后由 service 承担当前授权与认领。
 	var (
 		_ OutboxQuerier       = (*repository.MessageHubRepository)(nil)
 		_ OutboxOwedQuerier   = (*repository.MessageHubRepository)(nil)
-		_ OutboundPushClaimer = (*repository.MessageHubRepository)(nil)
+		_ OutboundPushClaimer = (*service.OutboundDeliveryService)(nil)
 	)
 }
 

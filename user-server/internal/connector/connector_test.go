@@ -106,7 +106,7 @@ func TestConnector_NormalizeThreeShapes(t *testing.T) {
 		srv, _ := tb06bServer(t, func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte(tc.body))
 		})
-		ep := EndpointConfig{Name: fmt.Sprintf("ep%d", i), Method: "GET", Path: "/"}
+		ep := EndpointConfig{Name: fmt.Sprintf("ep%d", i), Method: "GET", Path: "/", Capabilities: []string{"query_fixture"}}
 		out, err := ex.Call(context.Background(), tb06bCfg(srv.URL, "generic"), ep, nil)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
@@ -134,7 +134,7 @@ func TestConnector_Kuaidi100SignVector(t *testing.T) {
 		Provider: "kuaidi100",
 		Auth:     ConnectorAuth{Type: "api_key", Key: "SECRETKEY", Header: "CUSTOMER100"},
 	}
-	ep := EndpointConfig{Name: "query_express", Method: "POST", Path: "/poll/query.do"}
+	ep := EndpointConfig{Name: "query_express", Method: "POST", Path: "/poll/query.do", Capabilities: []string{"query_express"}, ReadOnly: true}
 	ex := NewExecutorWithValidator(func(string) error { return nil })
 	out, err := ex.Call(context.Background(), cfg, ep, map[string]any{"carrier": "SF", "tracking_no": "SF123"})
 	if err != nil {
@@ -183,7 +183,7 @@ func TestConnector_ErrorSurfaces(t *testing.T) {
 	srv, _ := tb06bServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
 	})
-	_, err := ex.Call(context.Background(), tb06bCfg(srv.URL, "generic"), EndpointConfig{Name: "x", Method: "GET", Path: "/"}, nil)
+	_, err := ex.Call(context.Background(), tb06bCfg(srv.URL, "generic"), EndpointConfig{Name: "x", Method: "GET", Path: "/", Capabilities: []string{"query_fixture"}}, nil)
 	if err == nil || !strings.Contains(err.Error(), "status 502") {
 		t.Fatalf("平台非 200 应原样进 error, got %v", err)
 	}
@@ -192,7 +192,7 @@ func TestConnector_ErrorSurfaces(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":400,"message":"参数错误"}`))
 	})
 	cfg := ConnectorConfig{BaseURL: srv2.URL, Provider: "kuaidi100", Auth: ConnectorAuth{Type: "api_key", Key: "k", Header: "c"}}
-	_, err = ex.Call(context.Background(), cfg, EndpointConfig{Name: "x", Method: "POST", Path: "/"}, nil)
+	_, err = ex.Call(context.Background(), cfg, EndpointConfig{Name: "x", Method: "POST", Path: "/", Capabilities: []string{"query_express"}, ReadOnly: true}, nil)
 	if err == nil || !strings.Contains(err.Error(), "kuaidi100 status=400") {
 		t.Fatalf("kuaidi100 业务失败应进 error, got %v", err)
 	}
@@ -253,7 +253,8 @@ func TestConnector_GraspDialect_FormAndSign(t *testing.T) {
 		Provider: "grasp_hmac",
 		Auth:     ConnectorAuth{Type: "hmac", Key: "SERVERKEY", Header: "SERVERNO"},
 	}
-	ep := EndpointConfig{Name: "saleorder_save", Method: "POST", Path: "/api/saleorder/save"}
+	// 此用例仅验证只读查询的签名/归一化，不授予 ERP 写权限。
+	ep := EndpointConfig{Name: "saleorder_query", Method: "POST", Path: "/api/saleorder/query", Capabilities: []string{"query_order"}, ReadOnly: true}
 	ex := NewExecutorWithValidator(func(string) error { return nil })
 	out, err := ex.Call(context.Background(), cfg, ep, map[string]any{"custCode": "C1"})
 	if err != nil {
@@ -263,7 +264,7 @@ func TestConnector_GraspDialect_FormAndSign(t *testing.T) {
 		t.Fatalf("server_no/sign_method 形态不符: %s/%s", gotServerNo, gotMethod)
 	}
 	// 签名拼接口径（V 级证据 preset 形态）：MD5(server_no+server_key+path) 大写
-	expect := strings.ToUpper(md5Sum("SERVERNO" + "SERVERKEY" + "/api/saleorder/save"))
+	expect := strings.ToUpper(md5Sum("SERVERNO" + "SERVERKEY" + "/api/saleorder/query"))
 	if gotSign != expect {
 		t.Fatalf("签名不符: got %s want %s", gotSign, expect)
 	}

@@ -36,11 +36,20 @@ func setupE2EDB(t *testing.T) *gorm.DB {
 	db := testutil.NewTestDBOrSkip(t,
 		&model.KnowledgeBase{},
 		&model.AgentKBBinding{},
+		&model.AIAgent{},
 	)
-	for _, tbl := range []string{"agent_kb_bindings", "knowledge_bases"} {
+	for _, tbl := range []string{"agent_kb_bindings", "knowledge_bases", "ai_agents"} {
 		if err := db.Exec(fmt.Sprintf("TRUNCATE TABLE %s RESTART IDENTITY CASCADE", tbl)).Error; err != nil {
 			t.Fatalf("truncate %s: %v", tbl, err)
 		}
+	}
+	// 绑定写侧会校验智能体归属，预置这些场景显式使用的智能体。
+	var agents []model.AIAgent
+	for _, id := range []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 99, 1001, 1002, 1003, 2001, 3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010, 3011, 3012, 3013, 3014, 3015, 3016, 3017, 3018, 3019, 3020, 7777, 8888} {
+		agents = append(agents, model.AIAgent{ID: id, AgentCode: fmt.Sprintf("fixture-agent-%d", id), Name: "绑定测试"})
+	}
+	if err := db.Create(&agents).Error; err != nil {
+		t.Fatalf("预置智能体失败: %v", err)
 	}
 	return db
 }

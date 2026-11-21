@@ -244,14 +244,16 @@ func (s *KnowledgeService) GetProgress(ctx context.Context, productID string, do
 		return nil, err
 	}
 	return map[string]any{
-		"id":             doc.ID,
-		"title":          doc.Title,
-		"embed_status":   doc.EmbedStatus,
-		"embed_progress": doc.EmbedProgress,
-		"chunk_count":    doc.ChunkCount,
-		"total_tokens":   doc.TotalTokens,
-		"error_msg":      doc.ErrorMsg,
-		"last_index_at":  doc.LastIndexAt,
+		"id":                  doc.ID,
+		"title":               doc.Title,
+		"embed_status":        doc.EmbedStatus,
+		"embed_progress":      doc.EmbedProgress,
+		"chunk_count":         doc.ChunkCount,
+		"total_tokens":        doc.TotalTokens,
+		"error_msg":           doc.ErrorMsg,
+		"reindex_retry_count": doc.ReindexRetryCount,
+		"reindex_attempts":    doc.ReindexAttempts,
+		"last_index_at":       doc.LastIndexAt,
 	}, nil
 }
 
@@ -359,10 +361,6 @@ func (s *KnowledgeService) resolveEmbeddingConfig(ctx context.Context, numericPr
 		return llm.NewEmbeddingServiceWithConfig(cfg), cfg
 	}
 	return s.embeddingSvc, nil
-}
-
-func (s *KnowledgeService) persistChunkEmbeddings(ctx context.Context, chunks []model.KnowledgeChunk, embeddings [][]float32) error {
-	return s.persistChunkEmbeddingsWithSource(ctx, chunks, embeddings, llm.EmbedSourceTEI)
 }
 
 func (s *KnowledgeService) persistChunkEmbeddingsWithSource(ctx context.Context, chunks []model.KnowledgeChunk, embeddings [][]float32, source string) error {

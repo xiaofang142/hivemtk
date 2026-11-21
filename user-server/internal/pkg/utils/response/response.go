@@ -656,3 +656,10 @@ func BindQuery(c *gin.Context, obj any) bool {
 func Envelope(c *gin.Context, httpCode int, payload any) {
 	c.JSON(httpCode, payload)
 }
+
+// Protocol writes an exact protocol response for trusted upstream contracts that do not use
+// HiveMTK's JSON envelope (for example, a verified provider callback acknowledgment).
+// Callers must use static, validated status/content-type/body values from trusted config.
+func Protocol(c *gin.Context, httpCode int, contentType string, body []byte) {
+	c.Data(httpCode, contentType, body)
+}

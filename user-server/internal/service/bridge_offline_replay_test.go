@@ -2,6 +2,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"errors"
 	"hivemtk-user/internal/pkg/tenant"
@@ -18,8 +19,8 @@ import (
 func setupOfflineReplaySvc(t *testing.T) (*BridgeOfflineReplayService, *gorm.DB) {
 	t.Helper()
 	db := testutil.NewTestDB(t, &model.DelayedOutboundReply{}, &model.MessageHub{})
-	setupBridgeWhitelistForTest(t, "tg")
-	ingress := NewInboxIngressService()
+	setupBridgeWhitelistForTest(t, "tg", "douyin")
+	ingress := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	prev := GlobalInboxIngressService()
 	SetGlobalInboxIngressService(ingress)
 	t.Cleanup(func() { SetGlobalInboxIngressService(prev) })
@@ -70,14 +71,14 @@ func hubOutbound(t *testing.T, db *gorm.DB, convID string) []model.MessageHub {
 // TestOfflineReplayService_DeliversAndCloses 一次回扫：文本入站管道、行收口 sent，重跑不双发。
 func TestOfflineReplayService_DeliversAndCloses(t *testing.T) {
 	svc, db := setupOfflineReplaySvc(t)
-	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
+	ctx := localBridgeSubmitContext(t, tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID), "douyin", "acc_ok", "text")
 
 	id := seedDelayed(t, db, &model.DelayedOutboundReply{
-		Platform: "tg", AccountID: "acc_ok", ConversationID: "conv_ok",
+		Platform: "douyin", AccountID: "acc_ok", ConversationID: "conv_ok",
 		Content: "免打扰窗口开放后的 AI 回复", Kind: model.DelayedKindQuietHours,
 	})
 
-	replayed, failed := svc.ReplayDelayedOutbound(ctx, "tg", "acc_ok", 50)
+	replayed, failed := svc.ReplayDelayedOutbound(ctx, "douyin", "acc_ok", 50)
 	if replayed != 1 || failed != 0 {
 		t.Fatalf("首轮应重放 1 条, got replayed=%d failed=%d", replayed, failed)
 	}
@@ -100,7 +101,7 @@ func TestOfflineReplayService_DeliversAndCloses(t *testing.T) {
 	}
 
 	// 幂等：行已收口，下一轮回扫不该再投一次
-	replayed2, _ := svc.ReplayDelayedOutbound(ctx, "tg", "acc_ok", 50)
+	replayed2, _ := svc.ReplayDelayedOutbound(ctx, "douyin", "acc_ok", 50)
 	if replayed2 != 0 {
 		t.Errorf("重跑不应再次投递, got %d", replayed2)
 	}
@@ -166,15 +167,17 @@ func TestOfflineReplayService_UndeliverableTargetIsTerminal(t *testing.T) {
 // TestOfflineReplayService_ConvergesAfterRetries 投递持续失败必须收敛，不能每 5 分钟重投到永远。
 func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 	svc, db := setupOfflineReplaySvc(t)
-	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
+	ctx := localBridgeSubmitContext(t, tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID), "douyin", "acc-retry-valid", "text")
 
 	// 合法目标的持久化依赖故障属于可重试错误；占位目标另测一次性终态。
 	id := seedDelayed(t, db, &model.DelayedOutboundReply{
-		Platform: "tg", AccountID: "acc-retry-valid", ConversationID: "conv_persist_fail",
+		Platform: "douyin", AccountID: "acc-retry-valid", ConversationID: "conv_persist_fail",
 		Content: "投不出去的历史回复", Kind: model.DelayedKindSendRetry,
 	})
+	var createAttempts int
 	if err := db.Callback().Create().Before("gorm:create").Register("offline_retry_test_failure", func(tx *gorm.DB) {
 		if tx.Statement.Table == "message_hub" {
+			createAttempts++
 			tx.AddError(errors.New("合成持久化依赖故障"))
 		}
 	}); err != nil {
@@ -187,7 +190,7 @@ func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 			Update("send_at", time.Now().Add(-time.Second)).Error; err != nil {
 			t.Fatal(err)
 		}
-		if _, failed := svc.ReplayDelayedOutbound(ctx, "tg", "acc-retry-valid", 50); failed != 1 {
+		if _, failed := svc.ReplayDelayedOutbound(ctx, "douyin", "acc-retry-valid", 50); failed != 1 {
 			t.Fatalf("第 %d 轮应有 1 条失败, got %d", round, failed)
 		}
 		got := readDelayed(t, db, id)
@@ -196,6 +199,9 @@ func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 		}
 		if got.Attempts != round {
 			t.Fatalf("第 %d 轮 attempts=%d（每轮只能 +1）", round, got.Attempts)
+		}
+		if createAttempts != round {
+			t.Fatalf("第 %d 轮必须真的触发写库故障，实际写入尝试 %d", round, createAttempts)
 		}
 		if got.LastError == "" {
 			t.Fatalf("第 %d 轮失败原因未落库", round)
@@ -207,7 +213,7 @@ func TestOfflineReplayService_ConvergesAfterRetries(t *testing.T) {
 		Update("send_at", time.Now().Add(-time.Second)).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, failed := svc.ReplayDelayedOutbound(ctx, "tg", "acc-retry-valid", 50); failed != 0 {
+	if _, failed := svc.ReplayDelayedOutbound(ctx, "douyin", "acc-retry-valid", 50); failed != 0 {
 		t.Errorf("用尽后不应再计失败, got %d", failed)
 	}
 	got := readDelayed(t, db, id)
@@ -236,22 +242,22 @@ func seedSvcBridgeAccount(t *testing.T, db *gorm.DB, channel, accountID, status 
 // 于是 RunOnce 恒在检测这一步拿到空集合 ⇒ 到期 pending 行一条都不投，且只在日志里留一行 Warn。
 func TestOfflineReplayService_RunOnce_ActuallyReplays(t *testing.T) {
 	db := testutil.NewTestDB(t, &model.DelayedOutboundReply{}, &model.MessageHub{}, &model.BridgeAccount{})
-	setupBridgeWhitelistForTest(t, "tg")
-	ingress := NewInboxIngressService()
+	setupBridgeWhitelistForTest(t, "douyin")
+	ingress := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	prev := GlobalInboxIngressService()
 	SetGlobalInboxIngressService(ingress)
 	t.Cleanup(func() { SetGlobalInboxIngressService(prev) })
 	svc := NewBridgeOfflineReplayService().WithDB(db)
-	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
+	ctx := localBridgeSubmitContext(t, tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID), "douyin", "acc_run", "text")
 	// 本用例只钉检测腿（R14）：补投门显式全放行，免得探针默认值变化把它变成门的用例。
 	useOnlineProbe(t, func(context.Context, string, string) bool { return true })
 
 	now := time.Now()
 	stale := now.Add(-time.Hour)
-	seedSvcBridgeAccount(t, db, "tg", "acc_run", "online", &now)
-	seedSvcBridgeAccount(t, db, "tg", "acc_backlog", "offline", &stale)
+	seedSvcBridgeAccount(t, db, "douyin", "acc_run", "online", &now)
+	seedSvcBridgeAccount(t, db, "douyin", "acc_backlog", "offline", &stale)
 	id := seedDelayed(t, db, &model.DelayedOutboundReply{
-		Platform: "tg", AccountID: "acc_run", ConversationID: "conv_run",
+		Platform: "douyin", AccountID: "acc_run", ConversationID: "conv_run",
 		Content: "回扫整腿应投递的历史回复", Kind: model.DelayedKindQuietHours,
 	})
 

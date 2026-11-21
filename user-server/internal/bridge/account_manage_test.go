@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
@@ -99,10 +100,9 @@ func TestSendManualMessage_RepoNotReady(t *testing.T) {
 	}
 }
 
-// TestSendManualMessage_DeliversIntoAccountTenant 端到端：SystemScope+错误租户的调用方
-// ctx 不得把出站行写进默认租户——OnlyTenant 后 message_hub 行必须带账号租户章。
-func TestSendManualMessage_DeliversIntoAccountTenant(t *testing.T) {
-	db := setupBridgeTestDB(t, &model.BridgeAccount{}, &model.MessageHub{})
+// 账号归属只证明租户隔离，不能替代店铺精确授权；未知 shop mapping 须零出站。
+func TestSendManualMessage_AccountOwnershipDoesNotAuthorizeShop(t *testing.T) {
+	db := setupBridgeTestDB(t, &model.BridgeAccount{}, &model.MessageHub{}, &model.CapabilitySourceBinding{})
 	modeOn(t)
 
 	repo := NewBridgeAccountRepository(db)
@@ -124,8 +124,10 @@ func TestSendManualMessage_DeliversIntoAccountTenant(t *testing.T) {
 
 	// 调用方带 SystemScope 且绑了另一个租户：两者都必须被 OnlyTenant 剥掉。
 	callerCtx := tenant.WithSystemScope(tenant.WithTenantID(context.Background(), 999))
-	if err := SendManualMessage(callerCtx, 9, "douyin_web", "acc-svc", "conv-svc", "人工回复"); err != nil {
-		t.Fatalf("代发失败: %v", err)
+	err := SendManualMessage(callerCtx, 9, "douyin_web", "acc-svc", "conv-svc", "人工回复")
+	var denied *capregistry.SubmissionDeniedError
+	if !errors.As(err, &denied) || denied.ReasonCode != "capability_mapping_missing" {
+		t.Fatalf("账号归属不得授予店铺发送权限，应拒绝 capability_mapping_missing，实际 %v", err)
 	}
 
 	var rows []model.MessageHub
@@ -134,14 +136,8 @@ func TestSendManualMessage_DeliversIntoAccountTenant(t *testing.T) {
 		Find(&rows).Error; err != nil {
 		t.Fatalf("回读出站行失败: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("应有 1 条出站行，实际 %d", len(rows))
-	}
-	if rows[0].TenantID != 777 {
-		t.Errorf("出站行租户=%d want 777（OnlyTenant 未生效，行落到了默认租户）", rows[0].TenantID)
-	}
-	if rows[0].Direction != "outbound" || rows[0].Content != "人工回复" {
-		t.Errorf("出站行内容不符: direction=%q content=%q", rows[0].Direction, rows[0].Content)
+	if len(rows) != 0 {
+		t.Fatalf("缺少店铺授权不得在任何租户生成出站行，实际 %d", len(rows))
 	}
 }
 

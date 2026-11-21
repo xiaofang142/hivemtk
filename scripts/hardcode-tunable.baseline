@@ -55,6 +55,13 @@
 # 2026-11-20 SignatureWindow：Slack 入站签名的固定时间容差，属于防重放信任边界。
 # 不开放参数中心热调，防止运维扩大可接受重放范围；调整须走协议安全变更与验签回归。
 SignatureWindow
+# OutboundDeliveryPageSize —— 每个事务最多锁定 64 条候选记录，属于固定并发护栏。
+# 变更锁上限须经过分页与并发回归，不开放参数中心热调。
+OutboundDeliveryPageSize
+# 2026-11-21 EC-02 MerchantCallbackBodyLimit is a fixed pre-verification resource boundary,
+# not an operator knob: widening it independently of provider contract and verifier budget
+# increases untrusted memory/CPU exposure. Change it only with protocol and resource review.
+MerchantCallbackBodyLimit
 ABTestDuration
 AIAgentEnabled
 AIReplied

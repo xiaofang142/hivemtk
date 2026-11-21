@@ -1,0 +1,47 @@
+[p1 "AI营销套件" | space "EC-01 真实试点资源只读核验"(3): 1 managed, 0 untracked — p1* "AI营销套件"]
+root
+  container
+    container
+      text "营销管理系统"
+      heading
+        text "一个智能体"
+        text "全域"
+        text "获客 · 转化 · 复购"
+      paragraph
+        text "私有化部署的营销智能体中台：多渠道统一接入、本地 RAG 知识库、智能体客服与销售协同，让增长在一条闭环里自动跑起来。"
+      unordered_list
+        list_item
+          svg_root
+          text "私有化部署，客户数据 100% 归你"
+        list_item
+          svg_root
+          text "企微 / 飞书 / 抖音 / 网页等全渠道接入"
+        list_item
+          svg_root
+          text "基于私有知识库的本地 RAG 检索"
+        list_item
+          svg_root
+          text "7×24 智能体在线承接，夜间不丢单"
+      text "© 2026 营销智能体套件 · HiveMtk"
+    container
+      container
+        heading
+          text "欢迎登录系统"
+        paragraph
+          text "营销管理系统"
+      form
+        container [ref=1]
+          textbox [ref=2, loc=css:input[placeholder="用户名"]]
+            text "用户名"
+        container [ref=3]
+          textbox [ref=4, loc=css:input[placeholder="租户代码（如：t42xk，可不填）"]]
+            text "租户代码（如：t42xk，可不填）"
+        container [ref=5]
+          textbox [ref=6, loc=css:input[placeholder="密码"]]
+            text "密码"
+        button [ref=7]
+          text "登录"
+        button [ref=8]
+          text "没有账号？注册商户账号"
+      paragraph
+        text "HiveMtk 是完全开源的本地私有化客服底座工具。您本地部署任何大语言模型、构建知识库及进行对话时，须自行遵守所在国家、地区及相关社交平台（如..."

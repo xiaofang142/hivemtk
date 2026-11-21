@@ -1,0 +1,2 @@
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+gofmt -l user-server/internal/aiagent/knowledge/repository/knowledge_document.go user-server/internal/aiagent/knowledge/service/knowledge_service_pipeline.go user-server/internal/aiagent/knowledge/service/knowledge_reindex_quality_test.go user-server/internal/aiagent/knowledge/controller/knowledge_workspace_reindex_completion_test.go

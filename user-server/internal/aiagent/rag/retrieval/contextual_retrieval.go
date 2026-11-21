@@ -2,13 +2,16 @@ package ragretrieval
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -19,6 +22,13 @@ type ContextualRetrievalEnhancer struct {
 	embedding   llm.EmbeddingServiceInterface
 	batchSize   int
 	maxCtxToken int
+	ownerToken  string
+}
+
+// WithDocumentOwner fences contextual chunk writes to the active indexing claim.
+func (e *ContextualRetrievalEnhancer) WithDocumentOwner(ownerToken string) *ContextualRetrievalEnhancer {
+	e.ownerToken = ownerToken
+	return e
 }
 
 type ContextualEnhancerConfig struct {
@@ -147,30 +157,46 @@ func (e *ContextualRetrievalEnhancer) EnhanceDocument(ctx context.Context, docum
 			}
 			if e.embedding != nil && i < len(vectors) {
 				vecLiteral := vecToPGString(vectors[i])
-				if err := e.db.Table("knowledge_chunks").
-					Where("id = ?", u.id).
-					Updates(map[string]any{
-						"contextual_context": u.ctx,
-						"embedding":          gorm.Expr("?::vector", vecLiteral),
-						"embedding_id":       fmt.Sprintf("ctx-%d", u.id),
-						"embed_status":       "indexed",
-						"updated_at":         time.Now(),
-					}).Error; err != nil {
+				if err := e.updateDocumentChunk(ctx, documentID, u.id, map[string]any{
+					"contextual_context": u.ctx,
+					"embedding":          gorm.Expr("?::vector", vecLiteral),
+					"embedding_id":       fmt.Sprintf("ctx-%d", u.id),
+					"embed_status":       "indexed",
+					"updated_at":         time.Now(),
+				}); err != nil {
 					logger.Errorf("contextual_retrieval: update knowledge_chunks (with embedding) failed, chunk_id=%d: %v", u.id, err)
 				}
 			} else {
-				if err := e.db.Table("knowledge_chunks").
-					Where("id = ?", u.id).
-					Updates(map[string]any{
-						"contextual_context": u.ctx,
-						"updated_at":         time.Now(),
-					}).Error; err != nil {
+				if err := e.updateDocumentChunk(ctx, documentID, u.id, map[string]any{
+					"contextual_context": u.ctx,
+					"updated_at":         time.Now(),
+				}); err != nil {
 					logger.Errorf("contextual_retrieval: update knowledge_chunks (no embedding) failed, chunk_id=%d: %v", u.id, err)
 				}
 			}
 		}
 	}
 	return nil
+}
+
+func (e *ContextualRetrievalEnhancer) updateDocumentChunk(ctx context.Context, documentID, chunkID uint64, updates map[string]any) error {
+	if e.ownerToken == "" {
+		return e.db.WithContext(ctx).Table("knowledge_chunks").
+			Where("id = ? AND document_id = ?", chunkID, documentID).Updates(updates).Error
+	}
+	return e.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var doc model.KnowledgeDocument
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND reindex_owner_token = ? AND embed_status = ? AND reindex_lease_until > ?", documentID, e.ownerToken, model.EmbedStatusProcessing, time.Now()).
+			First(&doc).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errors.New("contextual indexing owner lost")
+		}
+		if err != nil {
+			return err
+		}
+		return tx.Table("knowledge_chunks").Where("id = ? AND document_id = ?", chunkID, documentID).Updates(updates).Error
+	})
 }
 
 func (e *ContextualRetrievalEnhancer) generateContext(ctx context.Context, docSummary string, chunkIdx, totalChunks int, chunkContent string) (string, error) {

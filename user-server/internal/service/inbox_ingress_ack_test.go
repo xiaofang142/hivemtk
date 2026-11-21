@@ -1,6 +1,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"hivemtk-user/internal/pkg/tenant"
 	"testing"
@@ -17,16 +18,18 @@ func TestInboxIngress_ClaimPendingOutbound_NoDuplicateForward(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_claim_1"
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	for i, c := range []string{" outbound A", "outbound B"} {
 		conv := "conv_claim_1"
 		h := &model.MessageHub{
+			TenantID:       501,
 			MsgID:          ContentHashMsgID(channel, conv, c),
 			Platform:       channel,
 			AccountID:      accountID,
@@ -97,16 +100,18 @@ func TestInboxIngress_ClaimPendingOutbound_StaleReset(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	ctx := tenant.WithTenantID(context.Background(), uint(501))
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_stale_1"
 		conv      = "conv_stale_1"
 		content   = "stale outbound"
 	)
+	ctx = localBridgeSubmitContext(t, ctx, channel, accountID, "text")
 	h := &model.MessageHub{
+		TenantID:       501,
 		MsgID:          ContentHashMsgID(channel, conv, content),
 		Platform:       channel,
 		AccountID:      accountID,

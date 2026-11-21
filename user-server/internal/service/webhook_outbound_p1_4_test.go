@@ -18,7 +18,7 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 	defer svc.Stop(context.Background())
 
 	const (
-		platform = "xiaohongshu"
+		platform = "douyin"
 		account  = "acct-p14-real"
 		conv     = "conv-p14-1"
 	)
@@ -53,8 +53,9 @@ func TestSendOutbound_BridgeChannel_ExtraMetadata_P1_4(t *testing.T) {
 		IntentType: "inquiry",
 	}
 	ctx := AgentIDToContext(HandleResultToContext(context.Background(), result), "sales-prod-v1")
-
-	svc.sendOutbound(ctx, ChannelXiaohongshu, account, p, result.Reply, hub, nil)
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, platform, account, "text")
+	svc.sendOutbound(ctx, ChannelDouyin, account, p, result.Reply, hub, nil)
 
 	var out model.MessageHub
 	err := db.Where("direction = ? AND conversation_id = ?", "outbound", conv).
@@ -100,13 +101,13 @@ func TestSendOutbound_PlaceholderAccount_Undeliverable_P1_4(t *testing.T) {
 	defer svc.Stop(context.Background())
 
 	const (
-		platform = "xiaohongshu"
+		platform = "douyin"
 		conv     = "conv-p14-undel"
 	)
 	hub := &model.MessageHub{
 		MsgID:          "mh:in-p14-undel",
 		Platform:       platform,
-		AccountID:      "xiaohongshu-unknown",
+		AccountID:      "douyin-unknown",
 		Direction:      "inbound",
 		MsgType:        "text",
 		SenderID:       "sender-undel",
@@ -126,7 +127,9 @@ func TestSendOutbound_PlaceholderAccount_Undeliverable_P1_4(t *testing.T) {
 		Reply:       "AI 回复（但账号不可达）",
 	}
 	ctx := HandleResultToContext(context.Background(), result)
-	svc.sendOutbound(ctx, ChannelXiaohongshu, "xiaohongshu-unknown", p, result.Reply, hub, nil)
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, platform, hub.AccountID, "text")
+	svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, result.Reply, hub, nil)
 
 	var out model.MessageHub
 	err := db.Where("direction = ? AND conversation_id = ?", "outbound", conv).
@@ -176,7 +179,10 @@ func TestSendOutbound_NoCtxResult_StillFillsStableFields_P1_4(t *testing.T) {
 	}
 	p := &ParsedPayload{EventID: "evt-p14-noctx", Sender: "sender-1", Content: "原始消息", ChatID: conv}
 
-	svc.sendOutbound(context.Background(), ChannelDouyin, account, p, "AI 回复（无 ctx）", hub, nil)
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), platform, account, "text")
+	svc.sendOutbound(ctx, ChannelDouyin, account, p, "AI 回复（无 HandleResult）", hub, nil)
 
 	var out model.MessageHub
 	err := db.Where("direction = ? AND conversation_id = ?", "outbound", conv).
@@ -322,7 +328,7 @@ func TestSendOutbound_QuietHoursDefersToQueue(t *testing.T) {
 	defer func() { storeAIReplyQuietHoursFn(orig) }()
 
 	const (
-		platform = "xiaohongshu"
+		platform = "douyin"
 		account  = "acct-h3-e2e"
 		conv     = "conv-h3-e2e"
 	)
@@ -335,7 +341,10 @@ func TestSendOutbound_QuietHoursDefersToQueue(t *testing.T) {
 	}
 	p := &ParsedPayload{EventID: "evt-h3-e2e", Sender: "sender-h3", Content: "原始消息", ChatID: conv}
 
-	svc.sendOutbound(context.Background(), ChannelXiaohongshu, account, p, "夜间回复", hub, nil)
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), platform, account, "text")
+	svc.sendOutbound(ctx, ChannelDouyin, account, p, "夜间回复", hub, nil)
 
 	var cnt int64
 	db.Model(&DelayedOutboundReply{}).Count(&cnt)

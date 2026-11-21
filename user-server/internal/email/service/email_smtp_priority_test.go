@@ -53,6 +53,12 @@ func TestResolveSmtpFromDB_EmptyTableReturnsNil(t *testing.T) {
 func TestResolveSmtpFromDB_SkipsIncomplete(t *testing.T) {
 	setupEmailSendServiceTestDB(t)
 	repo := repository.NewEmailSmtpRepository()
+	// FA-EMAIL-03 起解密失败=行不可用，测试种子必须放可解密的密文。
+	t.Setenv("FIELD_ENCRYPTION_KEY", "test-field-encryption-key-0123456789abcdef")
+	enc, encErr := crypto.Encrypt("pw")
+	if encErr != nil {
+		t.Fatalf("加密失败: %v", encErr)
+	}
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "bad", Server: "", Username: "", Password: "x", Limit: 10,
 	}); err != nil {
@@ -60,7 +66,7 @@ func TestResolveSmtpFromDB_SkipsIncomplete(t *testing.T) {
 	}
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "good", Server: "smtp.good.example", Username: "good@example.com",
-		Password: "pw", Limit: 10,
+		Password: enc, Limit: 10,
 	}); err != nil {
 		t.Fatalf("建好行失败: %v", err)
 	}
@@ -112,18 +118,27 @@ func TestResolveSmtpFromDB_NamedBackupChannelFirst(t *testing.T) {
 
 // TestResolveSmtpFromDB_163BeatsQQ 同时有 env:163 与 env:qq 行时按 env 链同序选 163。
 func TestResolveSmtpFromDB_163BeatsQQ(t *testing.T) {
+	t.Setenv("FIELD_ENCRYPTION_KEY", "test-field-encryption-key-0123456789abcdef")
 	setupEmailSendServiceTestDB(t)
 	repo := repository.NewEmailSmtpRepository()
+	encQQ, encErr := crypto.Encrypt("qqpw")
+	if encErr != nil {
+		t.Fatalf("加密失败: %v", encErr)
+	}
+	enc163, encErr2 := crypto.Encrypt("163pw")
+	if encErr2 != nil {
+		t.Fatalf("加密失败: %v", encErr2)
+	}
 	// qq 先插入（物理顺序在前），163 后插入：选取顺序不应跟着插入顺序走。
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "env:qq", Server: "smtp.qq.com", Port: 465,
-		Username: "backup@qq.com", Password: "qqpw", Limit: 100,
+		Username: "backup@qq.com", Password: encQQ, Limit: 100,
 	}); err != nil {
 		t.Fatalf("建 env:qq 行失败: %v", err)
 	}
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "env:163", Server: "smtp.163.com", Port: 465,
-		Username: "backup163@163.com", Password: "163pw", Limit: 100,
+		Username: "backup163@163.com", Password: enc163, Limit: 100,
 	}); err != nil {
 		t.Fatalf("建 env:163 行失败: %v", err)
 	}
@@ -138,8 +153,13 @@ func TestResolveSmtpFromDB_163BeatsQQ(t *testing.T) {
 // TestResolveSmtpFromDB_NamedRowIncompleteFallsThrough env:163 行缺 Username 时
 // 跳过它，继续找 qq 命名行——单条坏数据不应把备用通道整条打死。
 func TestResolveSmtpFromDB_NamedRowIncompleteFallsThrough(t *testing.T) {
+	t.Setenv("FIELD_ENCRYPTION_KEY", "test-field-encryption-key-0123456789abcdef")
 	setupEmailSendServiceTestDB(t)
 	repo := repository.NewEmailSmtpRepository()
+	encQQ, encErr := crypto.Encrypt("qqpw")
+	if encErr != nil {
+		t.Fatalf("加密失败: %v", encErr)
+	}
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "env:163", Server: "smtp.163.com", Port: 465,
 		Username: "", Password: "pw", Limit: 100,
@@ -148,7 +168,7 @@ func TestResolveSmtpFromDB_NamedRowIncompleteFallsThrough(t *testing.T) {
 	}
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "env:qq", Server: "smtp.qq.com", Port: 465,
-		Username: "backup@qq.com", Password: "qqpw", Limit: 100,
+		Username: "backup@qq.com", Password: encQQ, Limit: 100,
 	}); err != nil {
 		t.Fatalf("建 env:qq 行失败: %v", err)
 	}

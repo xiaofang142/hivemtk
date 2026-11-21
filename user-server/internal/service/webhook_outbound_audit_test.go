@@ -18,6 +18,8 @@ func TestSendOutbound_Bridge_DuplicateAuditRemainsNonDeliverable(t *testing.T) {
 	hub := bridgeInboundHub("douyin", "audit-account", "audit-conversation", "audit-customer")
 	hub.TenantID = 18
 	content := "这是一条已经送达的回复"
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	originalID := ContentHashMsgID("douyin", hub.ConversationID, content)
 	original := &model.MessageHub{
 		TenantID: 18, Platform: "douyin", AccountID: hub.AccountID,
@@ -58,6 +60,8 @@ func TestSendOutbound_Bridge_AuditSafetyKeepsRealDBFailureRetry(t *testing.T) {
 	hub := bridgeInboundHub("douyin", "audit-db-account", conv, "audit-db-customer")
 	hub.TenantID = 18
 	eventID := "evt-audit-real-db-error"
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	p := &ParsedPayload{EventID: eventID, Sender: hub.SenderID, Content: "合法客户问题", ChatID: conv}
 	sent, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "正确但暂时未能入库的回复", hub, nil)

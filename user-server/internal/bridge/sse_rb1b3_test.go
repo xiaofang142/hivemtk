@@ -37,6 +37,7 @@ func TestBuildOutboundSSEEvent_DataContract(t *testing.T) {
 
 // DB 补拉路径与总线构造必须逐键一致——同包共享 BuildOutboundSSEEvent 的机械证明。
 func TestOutboxDBFetcherDataParityWithBus(t *testing.T) {
+	withBus(t).SetOutboundClaimer(&fakeClaimer{})
 	q := &fakeOutboxQuerier{rows: []model.MessageHub{{
 		ID: 7, MsgID: "mh:aaaabbbb", Platform: "douyin", AccountID: "a1",
 		ConversationID: "c1", Content: "hi", MsgType: "text", ReceiverID: "r1",

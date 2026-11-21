@@ -418,6 +418,9 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		if s.checkDoNotContact(ctx, "", "sms", req.Phone) {
 			return nil, fmt.Errorf("%w: phone %s has opted out globally, send skipped", ErrDoNotContact, req.Phone)
 		}
+		if req.DryRun {
+			return proactiveReachPreview("sms", req.Phone, "", "explicit phone"), nil
+		}
 		if err := s.enforceOutboundGates(ctx, ReachSubject{
 			Key:   reachApprovalKey(req.OneID, req.CustomerID, "sms", req.Phone),
 			OneID: req.OneID, CustomerID: req.CustomerID,
@@ -433,6 +436,9 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		normalized := NormalizeEmail(req.Email)
 		if s.checkDoNotContact(ctx, "", "email", "email:"+normalized) {
 			return nil, fmt.Errorf("%w: email %s has opted out globally, send skipped", ErrDoNotContact, req.Email)
+		}
+		if req.DryRun {
+			return proactiveReachPreview("email", req.Email, "", "explicit email"), nil
 		}
 		if err := s.enforceOutboundGates(ctx, ReachSubject{
 			Key:   reachApprovalKey(req.OneID, req.CustomerID, "email", normalized),
@@ -480,25 +486,13 @@ func (s *ProactiveReachService) ReachByCustomer(ctx context.Context, req *Proact
 		available = preferred
 	}
 
-	if req.DryRun {
-		channel, recipient, accountID, err := s.pickChannelDryRun(available, ident)
-		if err != nil {
-			return nil, err
-		}
-		return &ProactiveReachResponse{
-			MessageID:   "dry_run",
-			Channel:     channel,
-			RecipientID: recipient,
-			AccountID:   accountID,
-			Status:      "dry_run",
-			SentAt:      time.Now(),
-			Strategy:    fmt.Sprintf("available=[%s], picked=%s", strings.Join(available, ","), channel),
-		}, nil
-	}
-
 	channel, recipient, accountID, err := s.pickChannel(ctx, available, ident)
 	if err != nil {
 		return nil, err
+	}
+	if req.DryRun {
+		return proactiveReachPreview(channel, recipient, accountID,
+			fmt.Sprintf("available=[%s], picked=%s", strings.Join(available, ","), channel)), nil
 	}
 
 	// 闸门问在选路之后、写冷却键之前：
@@ -635,18 +629,17 @@ func (s *ProactiveReachService) loadCustomerIdentity(ctx context.Context, c *mod
 	return NewCustomerIdentity(c, CustomerChannelBindings(rows)), nil
 }
 
-func (s *ProactiveReachService) pickChannelDryRun(candidates []string, ident *CustomerIdentity) (channel, recipient, accountID string, err error) {
-	for _, ch := range candidates {
-		recipient = ident.Identity(ch)
-		if recipient == "" {
-			continue
-		}
-		if ch == "sms" || ch == "email" || ch == "dingtalk" {
-			return ch, recipient, "", nil
-		}
-		return ch, recipient, "dry_run_account", nil
+// proactiveReachPreview 仅描述选路结果，不表示外发已获审批或已经发送。
+func proactiveReachPreview(channel, recipient, accountID, strategy string) *ProactiveReachResponse {
+	return &ProactiveReachResponse{
+		MessageID:   "dry_run",
+		Channel:     channel,
+		RecipientID: recipient,
+		AccountID:   accountID,
+		Status:      "dry_run",
+		SentAt:      time.Now(),
+		Strategy:    strategy,
 	}
-	return "", "", "", fmt.Errorf("%w for customer %s", ErrNoChannelIdentity, ident.cust.UnifiedID)
 }
 
 func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []string, ident *CustomerIdentity) (channel, recipient, accountID string, err error) {

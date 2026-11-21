@@ -1,11 +1,22 @@
 package capregistry
 
+// M01 §7.3.5 的商户流程声明，独立于渠道运行诊断。版本标识本地职责契约。
+var merchantWorkflowCells = []CellDefinition{
+	{Product: "jd_pop", Region: "CN", Action: "aftersale.write", Carrier: ModeOfficialUI, ExecutionMode: ModeOfficialUI,
+		ContractVersion: "m01-workflow-v1", DocumentationVersion: "m01-7.3.5", StateLimits: []string{"approved_scope_required", "native_action_available"}},
+	{Product: "vipshop", Region: "CN", Action: "refund.observe", Carrier: ModePlatformManaged, ExecutionMode: ModePlatformManaged,
+		ContractVersion: "m01-workflow-v1", DocumentationVersion: "m01-7.3.5", StateLimits: []string{"native_case_required"}},
+}
+
 // channels.go 渠道能力登记（单一事实源）。
 // 新增渠道/能力：在此登记一行 + 对应实现，矩阵文档由测试重新生成。
 func init() {
 	// 网页私聊渠道（蜂桥扩展桥接）
 	Register(Entry{Platform: "douyin", Cap: CapDMReceive, Via: "bridge", Note: "蜂桥扩展巡检上报；自声/去重由服务端 inbox_ingress 兜底"})
-	Register(Entry{Platform: "douyin", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发，扩展回写输入框发送（会话漂移守卫拒误发）"})
+	Register(Entry{Platform: "douyin", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发，扩展回写输入框发送（会话漂移守卫拒误发）", Cells: []CellDefinition{
+		{Product: "douyin", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+		{Product: "douyin", Region: "CN", Action: "message.image.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.image.send"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+	}})
 	Register(Entry{Platform: "douyin", Cap: CapLeadMine, Via: "unified-miner", Note: "关键词打分 + LLM 复核（lead.llm_refine_enabled）"})
 	Register(Entry{Platform: "xiaohongshu", Cap: CapDMReceive, Via: "bridge", Note: "同抖音桥接链路"})
 	Register(Entry{Platform: "xiaohongshu", Cap: CapDMSend, Via: "bridge", Note: "同抖音桥接链路"})
@@ -36,7 +47,13 @@ func init() {
 	Register(Entry{Platform: "taobao", Cap: CapDMReceive, Via: "bridge", Note: "千牛网页接待中心（work.taobao.com）；Experimental，选择器待真机"})
 	Register(Entry{Platform: "taobao", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
 	Register(Entry{Platform: "douyin_shop", Cap: CapDMReceive, Via: "bridge", Note: "抖店飞鸽客服（im.jinritemai.com）；Experimental，选择器待真机"})
-	Register(Entry{Platform: "douyin_shop", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
+	Register(Entry{Platform: "douyin_shop", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental", Cells: []CellDefinition{
+		{Product: "douyin_shop", Region: "CN", Action: "message.text.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.text.send"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+		{Product: "douyin_shop", Region: "CN", Action: "message.image.send", Carrier: "bridge", ExecutionMode: ModeBridge, ContractVersion: "bridge-v1", RequiredScopes: []string{"message.image.send"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+		{Product: "douyin_shop", Region: "CN", Action: "order.address.change", Carrier: "api_adapter", ExecutionMode: ModeAPIAdapter, ContractVersion: "api-v1", RequiredScopes: []string{"order.address.change"}, StateLimits: []string{"platform_preflight_required"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+		{Product: "douyin_shop", Region: "CN", Action: "aftersale.write", Carrier: "api_adapter", ExecutionMode: ModeAPIAdapter, ContractVersion: "api-v1", RequiredScopes: []string{"aftersale.write"}, StateLimits: []string{"platform_preflight_required"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+		{Product: "douyin_shop", Region: "CN", Action: "refund.write", Carrier: "api_adapter", ExecutionMode: ModeAPIAdapter, ContractVersion: "api-v1", RequiredScopes: []string{"refund.write"}, StateLimits: []string{"platform_preflight_required"}, DocumentationVersion: "design-cell-v1", Experimental: true},
+	}})
 	Register(Entry{Platform: "kuaishou_shop", Cap: CapDMReceive, Via: "bridge", Note: "快手小店快语客服（im.kwaixiaodian.com）；Experimental，选择器待真机"})
 	Register(Entry{Platform: "kuaishou_shop", Cap: CapDMSend, Via: "bridge", Note: "outbox 下发；Experimental"})
 	Register(Entry{Platform: "shopee", Cap: CapDMReceive, Via: "bridge", Note: "Shopee Seller Centre Webchat；Experimental，选择器待真机"})

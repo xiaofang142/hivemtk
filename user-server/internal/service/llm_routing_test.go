@@ -14,6 +14,9 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/aiagent/llm"
+	llmmodel "hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/tenant"
 )
 
@@ -71,6 +74,19 @@ func newRoutingTestDispatcher(t *testing.T) *llm.Dispatcher {
 }
 
 // setMultiTenantForTest 打开多租户模式并在测试结束时还原（沿包内既有模式）。
+// setupLLMRoutingTestDB 绑定 LLM provider/路由两表的测试库（写口落库需要）。
+func setupLLMRoutingTestDB(t *testing.T) {
+	t.Helper()
+	// 模型清单刻意与 llm_provider_crud 用例不同：testutil 按"模型集指纹"复用
+	// 测试库实例，同指纹会拿到前一批用例 cleanup 关闭的句柄。
+	database := testutil.NewTestDB(t, &llmmodel.LLMProvider{}, &llmmodel.LLMRoutingRule{}, &llmmodel.SystemUser{})
+	db.SetTestDB(database)
+	// providerDB() 先查 auditDB 再查 dbstate：把两者都钉到本用例的新库，
+	// 免受前序用例遗留句柄影响（对齐 crud 用例的复原纪律）。
+	llm.AttachAuditDB(database)
+	t.Cleanup(func() { llm.AttachAuditDB(nil) })
+}
+
 func setMultiTenantForTest(t *testing.T) {
 	t.Helper()
 	tenant.SetMode(tenant.ModeOn)
@@ -275,5 +291,52 @@ func TestLLMRouting_ListModels_SingleTenantNilLookupUnchanged(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("单租户模式名单应完整（含新增 provider）: %v", namesOfModels(got))
+	}
+}
+
+// ── FA-LLM-01：管理写口/测试口的租户归属判定 ─────────────────────────────
+
+// 多租户下，A 租户管理员用 B 租户 provider 的名字改/删/测必须被拒（零注册表变化）；
+// 本租户名单内的名字照常可改。单租户模式沿用既有全局语义。
+func TestLLMRouting_ManageEntriesTenantOwned(t *testing.T) {
+	setupLLMRoutingTestDB(t) // UpdateModel 尾部落库走 providerDB()，需可用的测试库
+	setMultiTenantForTest(t)
+	d := newRoutingTestDispatcher(t)
+
+	lookupA := &fakeProviderLookup{names: []string{"av04a-a1", "av04a-z2"}}
+	svcA := NewLLMRoutingService(d, lookupA)
+	ctxA := tenant.WithTenantID(context.Background(), 901)
+
+	// B 名字的写口：拒绝且零注册表变化。
+	if err := svcA.UpdateModel(ctxA, "av04a-b1", LLMProviderInfo{DisplayName: "hijack"}); !errors.Is(err, ErrLLMProviderForbidden) {
+		t.Fatalf("改他人 provider 必须拒绝，实际 %v", err)
+	}
+	if err := svcA.DeleteModel(ctxA, "av04a-b1"); !errors.Is(err, ErrLLMProviderForbidden) {
+		t.Fatalf("删他人 provider 必须拒绝，实际 %v", err)
+	}
+	if _, err := svcA.TestModel(ctxA, TestModelRequest{Provider: "av04a-b1", Prompt: "hi"}); !errors.Is(err, ErrLLMProviderForbidden) {
+		t.Fatalf("拿他人密钥测试必须拒绝，实际 %v", err)
+	}
+	if d.GetProvider("av04a-b1") == nil {
+		t.Fatal("被拒的写口不得产生注册表变化（provider 仍在）")
+	}
+
+	// 本租户名单内的名字：照常可改（enabled 开关口径，零值=保留）。
+	if err := svcA.UpdateModel(ctxA, "av04a-a1", LLMProviderInfo{Enabled: false}); err != nil {
+		t.Fatalf("本租户 provider 更新应成功：%v", err)
+	}
+	if p := d.GetProvider("av04a-a1"); p == nil || p.Enabled {
+		t.Errorf("本租户 provider 应已停用，实际 %+v", p)
+	}
+}
+
+// 单租户模式：写口沿用既有全局管理语义（needFilter=false 短路）。
+func TestLLMRouting_ManageEntriesSingleTenantUnchanged(t *testing.T) {
+	setupLLMRoutingTestDB(t)
+	d := newRoutingTestDispatcher(t)
+	svc := NewLLMRoutingService(d, &fakeProviderLookup{names: []string{"unrelated"}})
+
+	if err := svc.UpdateModel(context.Background(), "av04a-b1", LLMProviderInfo{Enabled: false}); err != nil {
+		t.Fatalf("单租户模式写口不得被租户判定拦截：%v", err)
 	}
 }

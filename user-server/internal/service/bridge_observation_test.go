@@ -70,6 +70,8 @@ func TestBridgeObservation_EnqueueStartsBeforePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventID := "observation-enqueue"
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	sent, err := ws.sendOutbound(ctx, ChannelDouyin, hub.AccountID,
 		&ParsedPayload{EventID: eventID, ChatID: hub.ConversationID, Sender: hub.SenderID}, "合成完整答案", hub, nil)
@@ -183,6 +185,8 @@ func TestBridgeObservation_RegenerationHasOwnAttempt(t *testing.T) {
 		Channel: hub.Platform, AccountID: hub.AccountID, ConversationID: hub.ConversationID,
 	})
 	eventID := "observation-rerun"
+	useLegacyBridgeFixture(t)
+	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	ws.deliverAIResult(ctx, webhookReplyRequest{channel: ChannelDouyin, accountID: hub.AccountID, hub: hub,
 		payload:  &ParsedPayload{EventID: eventID, ChatID: hub.ConversationID, Sender: hub.SenderID},

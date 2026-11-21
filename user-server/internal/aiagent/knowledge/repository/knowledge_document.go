@@ -2,7 +2,11 @@ package repository
 
 import (
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"hivemtk-user/internal/aiagent/knowledge/model"
 	_db "hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/timeutil"
@@ -10,7 +14,12 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+const knowledgeReindexLeaseDuration = 15 * time.Minute
+
+var ErrKnowledgeDocumentClaimLost = errors.New("knowledge document processing claim lost")
 
 // KnowledgeDocumentRepository 知识库文档仓储(产品维度)
 //
@@ -214,6 +223,138 @@ func (r *KnowledgeDocumentRepository) List(ctx context.Context, filter ListFilte
 	return docs, total, nil
 }
 
+// ListProductDocumentIDsSnapshot freezes the product work set in one read-only
+// PostgreSQL REPEATABLE READ transaction. Rows committed after its first SELECT
+// are excluded regardless of their sequence IDs. The transaction is closed
+// before callers begin per-document work.
+func (r *KnowledgeDocumentRepository) ListProductDocumentIDsSnapshot(ctx context.Context, productID string, limit int) ([]uint64, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	ids := make([]uint64, 0)
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var afterID uint64
+		for {
+			page := make([]uint64, 0, limit)
+			if err := tx.Model(&model.KnowledgeDocument{}).
+				Where("product_id = ? AND id > ?", productID, afterID).
+				Order("id ASC").Limit(limit).Pluck("id", &page).Error; err != nil {
+				return err
+			}
+			if len(page) == 0 {
+				return nil
+			}
+			ids = append(ids, page...)
+			afterID = page[len(page)-1]
+		}
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// ClaimForReindex atomically claims a document and increments its durable owner generation.
+// A fresh processing lease is protected; an absent or expired lease is recoverable.
+func (r *KnowledgeDocumentRepository) ClaimForReindex(ctx context.Context, productID string, id uint64) (bool, error) {
+	_, claimed, err := r.ClaimForReindexWithLease(ctx, productID, id, knowledgeReindexLeaseDuration)
+	return claimed, err
+}
+
+func newKnowledgeOwnerToken() (string, error) {
+	var bytes [24]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes[:]), nil
+}
+
+// ClaimForProcessing acquires the shared async/Reindex owner without changing the Reindex retry count.
+func (r *KnowledgeDocumentRepository) ClaimForProcessing(ctx context.Context, productID string, id uint64, lease time.Duration) (string, bool, error) {
+	return r.claim(ctx, productID, id, lease, false)
+}
+
+func (r *KnowledgeDocumentRepository) ClaimForReindexWithLease(ctx context.Context, productID string, id uint64, lease time.Duration) (string, bool, error) {
+	return r.claim(ctx, productID, id, lease, true)
+}
+
+func (r *KnowledgeDocumentRepository) claim(ctx context.Context, productID string, id uint64, lease time.Duration, incrementRetryCount bool) (string, bool, error) {
+	if lease <= 0 {
+		lease = knowledgeReindexLeaseDuration
+	}
+	owner, err := newKnowledgeOwnerToken()
+	if err != nil {
+		return "", false, fmt.Errorf("生成索引 owner token 失败: %w", err)
+	}
+	claimed := false
+	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var doc model.KnowledgeDocument
+		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND product_id = ?", id, productID).First(&doc).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		now := time.Now()
+		if doc.EmbedStatus == model.EmbedStatusProcessing && doc.ReindexLeaseUntil != nil && doc.ReindexLeaseUntil.After(now) {
+			return nil
+		}
+		updates := map[string]any{
+			"embed_status": model.EmbedStatusProcessing, "embed_progress": 0,
+			"error_msg": "", "reindex_owner_token": owner,
+			"reindex_lease_until": now.Add(lease), "updated_at": now,
+		}
+		if incrementRetryCount {
+			updates["reindex_retry_count"] = gorm.Expr("reindex_retry_count + 1")
+			updates["reindex_attempts"] = gorm.Expr("reindex_attempts + 1")
+		}
+		result := tx.Model(&model.KnowledgeDocument{}).
+			Where("id = ? AND product_id = ?", id, productID).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		claimed = result.RowsAffected == 1
+		return nil
+	})
+	if err != nil {
+		return "", false, err
+	}
+	if !claimed {
+		return "", false, nil
+	}
+	return owner, true, nil
+}
+
+// EnsureOwner rejects missing, superseded, terminal, or expired processing claims.
+func (r *KnowledgeDocumentRepository) EnsureOwner(ctx context.Context, id uint64, owner string) error {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ? AND reindex_owner_token = ? AND embed_status = ? AND reindex_lease_until > ?", id, owner, model.EmbedStatusProcessing, time.Now()).
+		Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrKnowledgeDocumentClaimLost
+	}
+	return nil
+}
+
+// lockCurrentOwner serializes short owner-sensitive writes against a reclaim.
+func lockCurrentOwner(ctx context.Context, tx *gorm.DB, id uint64, owner string) error {
+	var doc model.KnowledgeDocument
+	err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND reindex_owner_token = ? AND embed_status = ? AND reindex_lease_until > ?", id, owner, model.EmbedStatusProcessing, time.Now()).
+		First(&doc).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrKnowledgeDocumentClaimLost
+	}
+	return err
+}
+
 // ListByAgent 列出某智能体的知识库文档 (强 1:1, 不含共享)
 //
 // 严格隔离: 仅 agent_id = ? 严格匹配, 不含共享 (agent_id IS NULL)
@@ -255,27 +396,59 @@ func (r *KnowledgeDocumentRepository) MatchByAgent(ctx context.Context, agentID 
 	return docs, err
 }
 
-// Update 更新文档
+// Update 只更新管理端可编辑的元信息，避免旧对象覆盖索引任务状态与 owner。
 func (r *KnowledgeDocumentRepository) Update(ctx context.Context, doc *model.KnowledgeDocument) error {
 	doc.UpdatedAt = time.Now()
-	return _db.SaveWholeRow(r.db.WithContext(ctx), doc)
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ?", doc.ID).
+		Updates(map[string]any{
+			"title": doc.Title, "category": doc.Category, "tags": doc.Tags,
+			"priority": doc.Priority, "updated_at": doc.UpdatedAt,
+		}))
 }
 
 // UpdateStatus 更新文档状态
 func (r *KnowledgeDocumentRepository) UpdateStatus(ctx context.Context, id uint64, status model.EmbedStatus, progress int, errMsg string) error {
+	now := time.Now()
 	updates := map[string]any{
 		"embed_status":   status,
 		"embed_progress": progress,
 		"error_msg":      errMsg,
-		"updated_at":     time.Now(),
+		"updated_at":     now,
+	}
+	if status != model.EmbedStatusProcessing {
+		updates["reindex_lease_until"] = nil
 	}
 	if status == model.EmbedStatusIndexed {
-		now := time.Now()
 		updates["last_index_at"] = now
 	}
 	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
 		Where("id = ?", id).
 		Updates(updates))
+}
+
+// UpdateStatusForOwner updates progress or terminal state only for the live generation.
+func (r *KnowledgeDocumentRepository) UpdateStatusForOwner(ctx context.Context, id uint64, owner string, status model.EmbedStatus, progress int, errMsg string) error {
+	now := time.Now()
+	updates := map[string]any{
+		"embed_status": status, "embed_progress": progress, "error_msg": errMsg, "updated_at": now,
+	}
+	if status != model.EmbedStatusProcessing {
+		updates["reindex_lease_until"] = nil
+	}
+	if status == model.EmbedStatusIndexed {
+		updates["last_index_at"] = now
+	}
+	result := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ? AND reindex_owner_token = ? AND embed_status = ? AND reindex_lease_until > ?", id, owner, model.EmbedStatusProcessing, now).
+		Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrKnowledgeDocumentClaimLost
+	}
+	return nil
 }
 
 // UpdateChunkStats 更新分段统计
@@ -289,30 +462,18 @@ func (r *KnowledgeDocumentRepository) UpdateChunkStats(ctx context.Context, id u
 		}))
 }
 
-// BeginReindex 原子累加尝试次数，失败后也可查询和重试。
-func (r *KnowledgeDocumentRepository) BeginReindex(ctx context.Context, id uint64) error {
-	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"reindex_attempts": gorm.Expr("reindex_attempts + 1"),
-			"updated_at":       time.Now(),
-		}))
-}
-
-// CompleteReindex 只写入重建结果，保留处理期间用户修改的文档元信息。
-func (r *KnowledgeDocumentRepository) CompleteReindex(ctx context.Context, id uint64, chunkCount, totalTokens int) error {
+func (r *KnowledgeDocumentRepository) UpdateChunkStatsForOwner(ctx context.Context, id uint64, owner string, chunkCount, totalTokens int) error {
 	now := time.Now()
-	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
-		Where("id = ?", id).
-		Updates(map[string]any{
-			"embed_status":   model.EmbedStatusIndexed,
-			"embed_progress": 100,
-			"error_msg":      "",
-			"chunk_count":    chunkCount,
-			"total_tokens":   totalTokens,
-			"last_index_at":  now,
-			"updated_at":     now,
-		}))
+	result := r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ? AND reindex_owner_token = ? AND embed_status = ? AND reindex_lease_until > ?", id, owner, model.EmbedStatusProcessing, now).
+		Updates(map[string]any{"chunk_count": chunkCount, "total_tokens": totalTokens, "updated_at": now})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrKnowledgeDocumentClaimLost
+	}
+	return nil
 }
 
 // Delete 删除文档（命中 0 行即不存在：已删/别租户，不能回“删除成功”）
@@ -426,4 +587,29 @@ func (r *KnowledgeDocumentRepository) TopHitDocuments(ctx context.Context, produ
 		return nil, err
 	}
 	return results, nil
+}
+
+func (r *KnowledgeDocumentRepository) BeginReindex(ctx context.Context, id uint64) error {
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"reindex_attempts": gorm.Expr("reindex_attempts + 1"),
+			"updated_at":       time.Now(),
+		}))
+}
+
+// CompleteReindex 只写入重建结果，保留处理期间用户修改的文档元信息。
+func (r *KnowledgeDocumentRepository) CompleteReindex(ctx context.Context, id uint64, chunkCount, totalTokens int) error {
+	now := time.Now()
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.KnowledgeDocument{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"embed_status":   model.EmbedStatusIndexed,
+			"embed_progress": 100,
+			"error_msg":      "",
+			"chunk_count":    chunkCount,
+			"total_tokens":   totalTokens,
+			"last_index_at":  now,
+			"updated_at":     now,
+		}))
 }

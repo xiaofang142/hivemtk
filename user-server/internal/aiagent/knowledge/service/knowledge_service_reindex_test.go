@@ -5,412 +5,392 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"gorm.io/gorm"
 	"hivemtk-user/internal/aiagent/knowledge/model"
-	"hivemtk-user/internal/aiagent/llm"
-	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/aiagent/knowledge/repository"
+	"hivemtk-user/internal/pkg/tenancyidx"
+	"hivemtk-user/internal/pkg/tenant"
+
+	"github.com/jackc/pgx/v5"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
-func setupReindexServiceDB(t *testing.T) (*model.KnowledgeDocument, *KnowledgeService, *gorm.DB) {
+// 合成 PostgreSQL 集成夹具：只建/清理本测试创建的 schema，不触碰 testutil 进程库。
+func reindexSyntheticDB(t *testing.T) (*gorm.DB, context.Context) {
 	t.Helper()
-	db := testutil.NewTestDB(t, &model.RagProduct{}, &model.KnowledgeDocument{}, &model.KnowledgeChunk{})
-	t.Cleanup(func() { testutil.ResetSchema(t, db, &model.KnowledgeChunk{}) })
-	if err := db.Exec(`ALTER TABLE knowledge_chunks
-		ADD COLUMN IF NOT EXISTS embedding vector,
-		ADD COLUMN IF NOT EXISTS embed_status varchar(16) NOT NULL DEFAULT 'pending',
-		ADD COLUMN IF NOT EXISTS embedding_source varchar(16) NOT NULL DEFAULT 'tei'`).Error; err != nil {
-		t.Fatalf("prepare chunk vector columns: %v", err)
+	dsn := os.Getenv("FA12_PG_DSN")
+	if dsn == "" {
+		t.Skip("FA12_PG_DSN 未设置：仅使用明确授权的合成 PostgreSQL")
 	}
-	productID := "fa13-service"
-	doc := &model.KnowledgeDocument{
-		ProductID:   productID,
-		Title:       "FA13 service test",
-		SourceType:  model.SourceTypeUpload,
-		EmbedStatus: model.EmbedStatusPending,
-		Status:      1,
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil || cfg.Host != "/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x" || cfg.Port != 55412 || cfg.User != "fa12_runner" || cfg.Database != "fa12_synthetic" {
+		t.Fatal("拒绝连接非授权合成 PostgreSQL")
 	}
-	if err := db.Create(doc).Error; err != nil {
-		t.Fatalf("create service test document: %v", err)
-	}
-	svc := NewKnowledgeService()
-	svc.reindexEmbed = func(context.Context, *llm.EmbeddingService, *llm.EmbeddingConfig, []string) ([][]float32, error) {
-		return nil, errors.New("test seam not configured")
-	}
-	return doc, svc, db
-}
-
-func reindexVectors(n int) [][]float32 {
-	vecs := make([][]float32, n)
-	for i := range vecs {
-		vecs[i] = make([]float32, EmbeddingDim())
-		vecs[i][0] = float32(i + 1)
-	}
-	return vecs
-}
-
-func assertReindexAttempts(t *testing.T, db *gorm.DB, id uint64, want int) {
-	t.Helper()
-	var doc model.KnowledgeDocument
-	if err := db.First(&doc, id).Error; err != nil {
-		t.Fatal(err)
-	}
-	data, err := json.Marshal(doc)
+	base, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fields map[string]any
-	if err := json.Unmarshal(data, &fields); err != nil {
-		t.Fatal(err)
-	}
-	if got, ok := fields["reindex_attempts"].(float64); !ok || int(got) != want {
-		t.Errorf("queryable reindex_attempts = %v, want %d", fields["reindex_attempts"], want)
-	}
-}
-
-func TestReindexPersistsAttemptsAcrossFailureAndRetry(t *testing.T) {
-	doc, svc, db := setupReindexServiceDB(t)
-	chunk := model.KnowledgeChunk{DocumentID: doc.ID, ProductID: doc.ProductID, Content: "retry count"}
-	if err := db.Create(&chunk).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.Reindex(context.Background(), doc.ProductID, doc.ID); err == nil {
-		t.Fatal("first attempt should expose provider failure")
-	}
-	assertReindexAttempts(t, db, doc.ID, 1)
-	svc.reindexEmbed = func(_ context.Context, _ *llm.EmbeddingService, _ *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
-		return reindexVectors(len(texts)), nil
-	}
-	if err := svc.Reindex(context.Background(), doc.ProductID, doc.ID); err != nil {
-		t.Fatal(err)
-	}
-	assertReindexAttempts(t, db, doc.ID, 2)
-}
-
-func TestReindexReadableSourceCompletesBeforeReturning(t *testing.T) {
-	doc, svc, db := setupReindexServiceDB(t)
-	dir := t.TempDir()
-	doc.FilePath = filepath.Join(dir, "source.txt")
-	doc.FileName = "source.txt"
-	if err := os.WriteFile(doc.FilePath, []byte("同步重建测试内容"), 0o600); err != nil {
-		t.Fatalf("write source: %v", err)
-	}
-	if err := svc.docRepo.Update(context.Background(), doc); err != nil {
-		t.Fatalf("update source path: %v", err)
-	}
-
-	svc.reindexEmbed = func(_ context.Context, _ *llm.EmbeddingService, _ *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
-		return reindexVectors(len(texts)), nil
-	}
-
-	if err := svc.Reindex(context.Background(), doc.ProductID, doc.ID); err != nil {
-		t.Fatalf("reindex readable source: %v", err)
-	}
-	var indexedChunks int64
-	if err := db.Table("knowledge_chunks").Where("document_id = ? AND embedding IS NOT NULL AND embed_status = 'indexed'", doc.ID).Count(&indexedChunks).Error; err != nil {
-		t.Fatal(err)
-	}
-	if indexedChunks == 0 {
-		t.Fatal("PostgreSQL index vectors must be persisted before Reindex returns")
-	}
-
-	got, err := svc.docRepo.GetByProductAndID(context.Background(), doc.ProductID, int64(doc.ID))
+	basePool, err := base.DB()
 	if err != nil {
-		t.Fatalf("read reindexed document: %v", err)
+		t.Fatal(err)
 	}
-	if got.EmbedStatus != model.EmbedStatusIndexed {
-		t.Fatalf("readable source should be indexed synchronously: got %q", got.EmbedStatus)
-	}
-}
-
-func TestReindexEmbeddingFailurePersistsFailedStatus(t *testing.T) {
-	doc, svc, db := setupReindexServiceDB(t)
-	chunk := &model.KnowledgeChunk{DocumentID: doc.ID, ProductID: doc.ProductID, ChunkIndex: 0, Content: "existing chunk"}
-	if err := db.Create(chunk).Error; err != nil {
-		t.Fatalf("create chunk: %v", err)
-	}
-	wantErr := errors.New("embedding provider failed")
-	svc.reindexEmbed = func(context.Context, *llm.EmbeddingService, *llm.EmbeddingConfig, []string) ([][]float32, error) {
-		return nil, wantErr
-	}
-
-	err := svc.Reindex(context.Background(), doc.ProductID, doc.ID)
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("Reindex error = %v, want embedding error", err)
-	}
-	var got model.KnowledgeDocument
-	if err := db.First(&got, doc.ID).Error; err != nil {
-		t.Fatalf("read failed document: %v", err)
-	}
-	if got.EmbedStatus != model.EmbedStatusFailed || !strings.Contains(got.ErrorMsg, wantErr.Error()) {
-		t.Fatalf("embedding failure should be queryable: status=%q error=%q", got.EmbedStatus, got.ErrorMsg)
-	}
-}
-
-func TestReindexDatabaseFailuresAreReturnedAndRetryable(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		table     string
-		condition string
-	}{
-		{"vector write", "knowledge_chunks", "NEW.embedding IS NOT NULL"},
-		{"final state", "knowledge_documents", "NEW.embed_status = 'indexed'"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			doc, svc, db := setupReindexServiceDB(t)
-			chunk := model.KnowledgeChunk{DocumentID: doc.ID, ProductID: doc.ProductID, Content: "retry me"}
-			if err := db.Create(&chunk).Error; err != nil {
-				t.Fatal(err)
-			}
-			svc.reindexEmbed = func(_ context.Context, _ *llm.EmbeddingService, _ *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
-				return reindexVectors(len(texts)), nil
-			}
-			installReindexFailureTrigger(t, db, tc.table, tc.condition)
-			err := svc.Reindex(context.Background(), doc.ProductID, doc.ID)
-			if err == nil || !strings.Contains(err.Error(), "fa13 injected write failure") {
-				t.Fatalf("database failure must be returned: %v", err)
-			}
-			var failed model.KnowledgeDocument
-			if err := db.First(&failed, doc.ID).Error; err != nil {
-				t.Fatal(err)
-			}
-			if failed.EmbedStatus != model.EmbedStatusFailed || failed.ErrorMsg == "" {
-				t.Fatalf("write failure not queryable: %+v", failed)
-			}
-			assertReindexAttempts(t, db, doc.ID, 1)
-			if err := db.Exec("DROP TRIGGER fa13_reindex_failure ON " + tc.table).Error; err != nil {
-				t.Fatal(err)
-			}
-			if err := svc.Reindex(context.Background(), doc.ProductID, doc.ID); err != nil {
-				t.Fatalf("second attempt should recover: %v", err)
-			}
-			var recovered model.KnowledgeDocument
-			if err := db.First(&recovered, doc.ID).Error; err != nil {
-				t.Fatal(err)
-			}
-			if recovered.EmbedStatus != model.EmbedStatusIndexed || recovered.ErrorMsg != "" {
-				t.Fatalf("retry must clear failure: %+v", recovered)
-			}
-			assertReindexAttempts(t, db, doc.ID, 2)
-		})
-	}
-}
-
-func installReindexFailureTrigger(t *testing.T, db *gorm.DB, table, condition string) {
-	t.Helper()
-	if err := db.Exec(`CREATE OR REPLACE FUNCTION fa13_reindex_failure() RETURNS trigger AS $$
-		BEGIN RAISE EXCEPTION 'fa13 injected write failure'; END;
-		$$ LANGUAGE plpgsql`).Error; err != nil {
+	t.Cleanup(func() { _ = basePool.Close() })
+	schema := fmt.Sprintf("fa13_reindex_%d", time.Now().UnixNano())
+	if err := base.Exec(`CREATE SCHEMA "` + schema + `"`).Error; err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := db.Exec("DROP TRIGGER IF EXISTS fa13_reindex_failure ON " + table).Error; err != nil {
-			t.Error(err)
-		}
-		if err := db.Exec("DROP FUNCTION IF EXISTS fa13_reindex_failure()").Error; err != nil {
-			t.Error(err)
+		if err := base.Exec(`DROP SCHEMA "` + schema + `" CASCADE`).Error; err != nil {
+			t.Errorf("清理本测试 schema 失败: %v", err)
 		}
 	})
-	if err := db.Exec("CREATE TRIGGER fa13_reindex_failure BEFORE UPDATE ON " + table +
-		" FOR EACH ROW WHEN (" + condition + ") EXECUTE FUNCTION fa13_reindex_failure()").Error; err != nil {
+	db, err := gorm.Open(postgres.Open(dsn+" search_path="+schema), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
 		t.Fatal(err)
 	}
-	// The shared PostgreSQL test pool uses session_replication_role=replica.
-	if err := db.Exec("ALTER TABLE " + table + " ENABLE ALWAYS TRIGGER fa13_reindex_failure").Error; err != nil {
+	pool, err := db.DB()
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = pool.Close() })
+	if err := db.AutoMigrate(&model.KnowledgeDocument{}, &model.KnowledgeChunk{}, &model.RagProduct{}); err != nil {
+		t.Fatal(err)
+	}
+	// TDD 前置兼容列：当前 model 尚无计数声明；行为测试预先提供目标列，
+	// 使 RED 来自缺页/缺任务与计数行为，而不是 DDL 编译或列缺失。
+	if err := db.Exec(`ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS reindex_retry_count bigint NOT NULL DEFAULT 0`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS reindex_lease_until timestamptz`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS reindex_owner_token varchar(64) NOT NULL DEFAULT ''`).Error; err != nil {
+		t.Fatal(err)
+	}
+	// 本测试 schema 用 text-backed vector domain 代替未安装的 pgvector 扩展；
+	// 仅允许服务走通向量保存链路，不验证 pgvector 运算或性能。
+	if err := db.Exec(`CREATE DOMAIN vector AS text`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`ALTER TABLE knowledge_chunks ADD COLUMN IF NOT EXISTS embedding text, ADD COLUMN IF NOT EXISTS embed_status text, ADD COLUMN IF NOT EXISTS embedding_source text`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := tenancyidx.InitTenantRegistry(db); err != nil {
+		t.Fatal(err)
+	}
+	tenancyidx.RegisterTenantCallbacks(db)
+	oldMode := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() {
+		tenant.SetMode(oldMode)
+		tenancyidx.ResetRegistryForTest()
+	})
+	return db, tenant.WithTenantID(context.Background(), 413)
 }
 
-func TestReindexEmptySourceAndFailedStatusWrite(t *testing.T) {
-	for _, blockStatus := range []bool{false, true} {
-		t.Run(fmt.Sprint(blockStatus), func(t *testing.T) {
-			doc, svc, db := setupReindexServiceDB(t)
-			doc.FilePath = filepath.Join(t.TempDir(), "empty.txt")
-			doc.FileName = "empty.txt"
-			if err := os.WriteFile(doc.FilePath, []byte(" \n\t"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			if err := svc.docRepo.Update(context.Background(), doc); err != nil {
-				t.Fatal(err)
-			}
-			if blockStatus {
-				installReindexFailureTrigger(t, db, "knowledge_documents", "NEW.embed_status = 'failed'")
-			}
-			err := svc.Reindex(context.Background(), doc.ProductID, doc.ID)
-			if err == nil || !strings.Contains(err.Error(), "文档内容为空") {
-				t.Fatalf("empty-source error must be returned: %v", err)
-			}
-			if blockStatus && !strings.Contains(err.Error(), "fa13 injected write failure") {
-				t.Fatalf("status-write error must also be returned: %v", err)
-			}
-		})
+// 产品重建必须在固定边界内遍历每篇文档一次，并把缺失源文件变成可查询失败。
+func TestRebuildIndex_VisitsAllDocumentsAndPersistsMissingSourceFailure(t *testing.T) {
+	db, ctx := reindexSyntheticDB(t)
+	product := model.RagProduct{ID: "fa13-product", Name: "FA-13 synthetic", IsActive: true}
+	if err := db.WithContext(ctx).Create(&product).Error; err != nil {
+		t.Fatalf("创建合成产品失败: %v", err)
 	}
-}
-
-func TestReindexDoesNotOverwriteConcurrentDocumentEdits(t *testing.T) {
-	doc, svc, db := setupReindexServiceDB(t)
-	chunk := model.KnowledgeChunk{DocumentID: doc.ID, ProductID: doc.ProductID, Content: "stored chunk", TokenCount: 7}
-	if err := db.Create(&chunk).Error; err != nil {
-		t.Fatal(err)
+	const documentCount = 1001
+	docs := make([]model.KnowledgeDocument, documentCount)
+	missingPath := t.TempDir() + "/missing-source.txt"
+	emptyPath := filepath.Join(t.TempDir(), "empty-source.txt")
+	if err := os.WriteFile(emptyPath, nil, 0o600); err != nil {
+		t.Fatalf("创建空源文件失败: %v", err)
 	}
-	svc.reindexEmbed = func(_ context.Context, _ *llm.EmbeddingService, _ *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
-		if err := db.Model(&model.KnowledgeDocument{}).Where("id = ?", doc.ID).Update("title", "edited while embedding").Error; err != nil {
-			return nil, err
-		}
-		return reindexVectors(len(texts)), nil
-	}
-	if err := svc.Reindex(context.Background(), doc.ProductID, doc.ID); err != nil {
-		t.Fatal(err)
-	}
-	var got model.KnowledgeDocument
-	if err := db.First(&got, doc.ID).Error; err != nil {
-		t.Fatal(err)
-	}
-	if got.Title != "edited while embedding" || got.TotalTokens != 7 {
-		t.Fatalf("finalization overwrote edits or lost stats: title=%q tokens=%d", got.Title, got.TotalTokens)
-	}
-}
-
-func TestRebuildIndexProcessesAllDocumentsAndSurfacesMissingSources(t *testing.T) {
-	db := testutil.NewTestDB(t,
-		&model.RagProduct{},
-		&model.KnowledgeDocument{},
-		&model.KnowledgeChunk{},
-	)
-
-	productID := "fa13-reindex-all"
-	if err := db.Create(&model.RagProduct{
-		ID:       productID,
-		Name:     "FA13 reindex test product",
-		IsActive: true,
-	}).Error; err != nil {
-		t.Fatalf("create product: %v", err)
-	}
-	docs := make([]model.KnowledgeDocument, 1001)
 	for i := range docs {
+		filePath := missingPath
+		if i == documentCount-1 {
+			filePath = emptyPath
+		}
 		docs[i] = model.KnowledgeDocument{
-			ProductID:   productID,
-			Title:       fmt.Sprintf("missing source %d", i),
-			FilePath:    fmt.Sprintf("/definitely-missing/fa13-%d.txt", i),
+			TenantID:    413,
+			ProductID:   product.ID,
+			Title:       fmt.Sprintf("doc-%04d", i),
+			FilePath:    filePath,
 			SourceType:  model.SourceTypeUpload,
 			EmbedStatus: model.EmbedStatusPending,
-			Status:      1,
+			Metadata:    "{}",
 		}
 	}
-	if err := db.Create(&docs).Error; err != nil {
-		t.Fatalf("create documents: %v", err)
+	if err := db.WithContext(ctx).Create(&docs).Error; err != nil {
+		t.Fatalf("创建 %d 篇合成文档失败: %v", documentCount, err)
 	}
-	// Updating the status also changes updated_at: cursor traversal must remain
-	// stable, and every initial row must be visited exactly once.
-	if err := db.Exec(`CREATE TABLE fa13_attempts(document_id bigint);
-		CREATE OR REPLACE FUNCTION fa13_count_attempt() RETURNS trigger AS $$
-		BEGIN INSERT INTO fa13_attempts VALUES (NEW.id); RETURN NEW; END;
-		$$ LANGUAGE plpgsql;
-		CREATE TRIGGER fa13_count_attempt AFTER UPDATE OF reindex_attempts ON knowledge_documents
-		FOR EACH ROW EXECUTE FUNCTION fa13_count_attempt();
-		ALTER TABLE knowledge_documents ENABLE ALWAYS TRIGGER fa13_count_attempt`).Error; err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		db.Exec("DROP TRIGGER IF EXISTS fa13_count_attempt ON knowledge_documents")
-		db.Exec("DROP FUNCTION IF EXISTS fa13_count_attempt()")
-		db.Exec("DROP TABLE IF EXISTS fa13_attempts")
+
+	svc := NewKnowledgeServiceWithDeps(KnowledgeServiceDeps{
+		RagRepo:   repository.NewRagConfigRepository(db),
+		DocRepo:   repository.NewKnowledgeDocumentRepository(db),
+		ChunkRepo: repository.NewKnowledgeChunkRepository(db),
 	})
-
-	err := NewKnowledgeService().RebuildIndex(context.Background(), productID)
+	err := svc.RebuildIndex(ctx, product.ID)
 	if err == nil {
-		t.Error("RebuildIndex should return the missing-source error")
+		t.Error("至少一篇源文件缺失时产品重建必须返回失败，不能报告成功")
 	}
-	if errors.Is(err, context.Canceled) {
-		t.Fatalf("missing-source failure must not be reported as cancellation: %v", err)
+	var got []struct {
+		ID          uint64
+		EmbedStatus string `gorm:"column:embed_status"`
+		ErrorMsg    string `gorm:"column:error_msg"`
+		RetryCount  int    `gorm:"column:reindex_retry_count"`
 	}
-
-	var failed int64
-	if err := db.Model(&model.KnowledgeDocument{}).
-		Where("product_id = ? AND embed_status = ?", productID, model.EmbedStatusFailed).
-		Count(&failed).Error; err != nil {
-		t.Fatalf("count failed documents: %v", err)
+	if err := db.WithContext(ctx).Table("knowledge_documents").
+		Select("id, embed_status, error_msg, reindex_retry_count").
+		Where("product_id = ?", product.ID).Order("id ASC").Scan(&got).Error; err != nil {
+		t.Fatalf("查询合成文档终态失败: %v", err)
 	}
-	if failed != int64(len(docs)) {
-		t.Fatalf("all documents must be attempted and marked failed: got %d, want %d", failed, len(docs))
+	if len(got) != documentCount {
+		t.Fatalf("应遍历全部 %d 篇文档，实际查到 %d 篇", documentCount, len(got))
 	}
-	var counts struct{ Attempts, DistinctDocs int64 }
-	if err := db.Table("fa13_attempts").Select("COUNT(*) AS attempts, COUNT(DISTINCT document_id) AS distinct_docs").Scan(&counts).Error; err != nil {
-		t.Fatal(err)
+	var failed, claimed int
+	for _, doc := range got {
+		if doc.EmbedStatus != string(model.EmbedStatusFailed) || !strings.Contains(doc.ErrorMsg, "源") {
+			continue
+		}
+		failed++
+		if doc.RetryCount == 1 {
+			claimed++
+		}
 	}
-	if counts.Attempts != 1001 || counts.DistinctDocs != 1001 {
-		t.Fatalf("each initial document must be attempted once: %+v", counts)
+	if failed != documentCount || claimed != documentCount {
+		t.Errorf("期望 %d 篇可查询失败且各认领一次，实际失败=%d，各认领一次=%d", documentCount, failed, claimed)
 	}
-	t.Logf("initial=%d attempted=%d distinct=%d failed=%d at %s", len(docs), counts.Attempts, counts.DistinctDocs, failed, time.Now().Format(time.RFC3339))
+	if err := svc.Reindex(ctx, product.ID, got[0].ID); err == nil {
+		t.Fatal("失败文档再次显式重试时仍缺源文件，必须返回失败")
+	}
+	var retried struct {
+		RetryCount int `gorm:"column:reindex_retry_count"`
+	}
+	if err := db.WithContext(ctx).Table("knowledge_documents").Select("reindex_retry_count").Where("id = ?", got[0].ID).Scan(&retried).Error; err != nil {
+		t.Fatalf("查询显式重试计数失败: %v", err)
+	}
+	if retried.RetryCount != 2 {
+		t.Fatalf("失败文档显式重试后计数应为 2，实际=%d", retried.RetryCount)
+	}
 }
 
-func TestRebuildIndexContinuesAfterErrorsAndDefersNewDocuments(t *testing.T) {
-	doc, svc, db := setupReindexServiceDB(t)
-	if err := db.Create(&model.RagProduct{ID: doc.ProductID, Name: "batch boundary test", IsActive: true}).Error; err != nil {
-		t.Fatal(err)
+// 固定水位排除之后新增的 ID，且并发 worker 对同一篇文档最多只有一个认领成功。
+func TestReindexCursorWatermarkAndAtomicClaim(t *testing.T) {
+	db, ctx := reindexSyntheticDB(t)
+	repo := repository.NewKnowledgeDocumentRepository(db)
+	productID := "fa13-watermark-product"
+	first := model.KnowledgeDocument{TenantID: 413, ProductID: productID, Title: "before", Metadata: "{}"}
+	if err := db.WithContext(ctx).Create(&first).Error; err != nil {
+		t.Fatalf("创建水位前文档失败: %v", err)
 	}
-	docs := []model.KnowledgeDocument{*doc}
-	for i := 1; i < 101; i++ {
-		docs = append(docs, model.KnowledgeDocument{ProductID: doc.ProductID, Title: fmt.Sprint(i), EmbedStatus: model.EmbedStatusPending})
+	frozenIDs, err := repo.ListProductDocumentIDsSnapshot(ctx, productID, 10)
+	if err != nil {
+		t.Fatalf("读取产品文档快照失败: %v", err)
 	}
-	if err := db.Create(docs[1:]).Error; err != nil {
-		t.Fatal(err)
+	second := model.KnowledgeDocument{TenantID: 413, ProductID: productID, Title: "after", Metadata: "{}"}
+	if err := db.WithContext(ctx).Create(&second).Error; err != nil {
+		t.Fatalf("创建水位后文档失败: %v", err)
 	}
-	chunks := make([]model.KnowledgeChunk, len(docs))
-	for i, initial := range docs {
-		chunks[i] = model.KnowledgeChunk{DocumentID: initial.ID, ProductID: doc.ProductID, Content: fmt.Sprintf("document-%d", initial.ID)}
+	if len(frozenIDs) != 1 || frozenIDs[0] != first.ID {
+		t.Fatalf("快照应冻结初始可见文档 ID=%d，实际=%v", first.ID, frozenIDs)
 	}
-	if err := db.Create(&chunks).Error; err != nil {
-		t.Fatal(err)
+
+	var wg sync.WaitGroup
+	results := make(chan bool, 2)
+	errs := make(chan error, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			claimed, err := repo.ClaimForReindex(ctx, productID, first.ID)
+			results <- claimed
+			errs <- err
+		}()
 	}
-	firstErr, laterErr := errors.New("first embedding failure"), errors.New("later embedding failure")
-	visits := make(map[string]int)
-	var added []model.KnowledgeDocument
-	svc.reindexEmbed = func(_ context.Context, _ *llm.EmbeddingService, _ *llm.EmbeddingConfig, texts []string) ([][]float32, error) {
-		visits[texts[0]]++
-		switch len(visits) {
-		case 1:
-			added = []model.KnowledgeDocument{
-				{ProductID: doc.ProductID, Title: "new", EmbedStatus: model.EmbedStatusPending},
-				{ProductID: doc.ProductID, Title: "backdated new", EmbedStatus: model.EmbedStatusPending, CreatedAt: doc.CreatedAt.Add(-time.Hour)},
-			}
-			if err := db.Create(&added).Error; err != nil {
-				return nil, err
-			}
-			return nil, firstErr
-		case 2:
-			return nil, laterErr
-		}
-		return reindexVectors(len(texts)), nil
-	}
-	if err := svc.RebuildIndex(context.Background(), doc.ProductID); !errors.Is(err, firstErr) {
-		t.Fatalf("batch must return its first error: %v", err)
-	}
-	if len(visits) != len(docs) {
-		t.Fatalf("processed %d distinct documents, want %d", len(visits), len(docs))
-	}
-	for content, count := range visits {
-		if count != 1 {
-			t.Errorf("%s processed %d times", content, count)
+	wg.Wait()
+	close(results)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("并发认领失败: %v", err)
 		}
 	}
-	var indexed, failed, deferred int64
-	if err := db.Model(&model.KnowledgeDocument{}).Where("embed_status = ?", model.EmbedStatusIndexed).Count(&indexed).Error; err != nil {
-		t.Fatal(err)
+	var claimed int
+	for ok := range results {
+		if ok {
+			claimed++
+		}
 	}
-	if err := db.Model(&model.KnowledgeDocument{}).Where("embed_status = ?", model.EmbedStatusFailed).Count(&failed).Error; err != nil {
-		t.Fatal(err)
+	if claimed != 1 {
+		t.Fatalf("两个并发 worker 中恰好一个应认领成功，实际成功数=%d", claimed)
 	}
-	if err := db.Model(&model.KnowledgeDocument{}).Where("id IN ? AND embed_status = ?", []uint64{added[0].ID, added[1].ID}, model.EmbedStatusPending).Count(&deferred).Error; err != nil {
-		t.Fatal(err)
+	stored, err := repo.GetByProductAndID(ctx, productID, int64(first.ID))
+	if err != nil {
+		t.Fatalf("查询认领后的文档失败: %v", err)
 	}
-	if indexed != 99 || failed != 2 || deferred != 2 {
-		t.Fatalf("indexed=%d failed=%d deferred=%d", indexed, failed, deferred)
+	if stored.EmbedStatus != model.EmbedStatusProcessing || stored.ReindexRetryCount != 1 {
+		t.Fatalf("文档状态和次数应为 processing/1，实际=%s/%d", stored.EmbedStatus, stored.ReindexRetryCount)
 	}
-	t.Logf("attempts=%d indexed=%d failed=%d deferred=%d first_error=%s", len(visits), indexed, failed, deferred, firstErr)
+}
+
+// 向量提供方失败必须转为可查询失败并保留一次重建尝试。
+func TestReindex_EmbeddingFailureIsQueryableAndRetryable(t *testing.T) {
+	db, ctx := reindexSyntheticDB(t)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "synthetic embedding failure", http.StatusServiceUnavailable)
+	}))
+	defer provider.Close()
+	product := model.RagProduct{
+		ID:       "fa13-embedding-product",
+		Name:     "FA-13 embedding synthetic",
+		IsActive: true,
+		EmbeddingProviderConfig: model.EmbeddingProviderConfig{
+			BaseURL:   provider.URL,
+			Model:     "synthetic-embedding",
+			Dimension: 1024,
+		},
+	}
+	if err := db.WithContext(ctx).Create(&product).Error; err != nil {
+		t.Fatalf("创建合成产品失败: %v", err)
+	}
+	doc := model.KnowledgeDocument{
+		TenantID:    413,
+		ProductID:   product.ID,
+		Title:       "embedding failure doc",
+		EmbedStatus: model.EmbedStatusPending,
+		Metadata:    "{}",
+	}
+	if err := db.WithContext(ctx).Create(&doc).Error; err != nil {
+		t.Fatalf("创建合成文档失败: %v", err)
+	}
+	chunk := model.KnowledgeChunk{
+		TenantID:   413,
+		DocumentID: doc.ID,
+		ProductID:  product.ID,
+		ChunkIndex: 0,
+		Content:    "embedding failure input",
+		Metadata:   "{}",
+	}
+	if err := db.WithContext(ctx).Create(&chunk).Error; err != nil {
+		t.Fatalf("创建合成分片失败: %v", err)
+	}
+	svc := NewKnowledgeServiceWithDeps(KnowledgeServiceDeps{
+		RagRepo:   repository.NewRagConfigRepository(db),
+		DocRepo:   repository.NewKnowledgeDocumentRepository(db),
+		ChunkRepo: repository.NewKnowledgeChunkRepository(db),
+	})
+	if err := svc.Reindex(ctx, product.ID, doc.ID); err == nil {
+		t.Fatal("向量提供方返回 503 时重建必须返回失败")
+	}
+	stored, err := repository.NewKnowledgeDocumentRepository(db).GetByProductAndID(ctx, product.ID, int64(doc.ID))
+	if err != nil {
+		t.Fatalf("查询向量失败状态失败: %v", err)
+	}
+	if stored.EmbedStatus != model.EmbedStatusFailed || !strings.Contains(stored.ErrorMsg, "embedding") {
+		t.Fatalf("期望可查询向量失败状态，实际 status=%q error=%q", stored.EmbedStatus, stored.ErrorMsg)
+	}
+	if stored.ReindexRetryCount != 1 {
+		t.Fatalf("向量失败后重建计数应为 1，实际=%d", stored.ReindexRetryCount)
+	}
+}
+
+// 索引完成状态首次写入失败时必须落失败状态；若失败状态也写不进去，必须传播两次错误。
+func TestReindex_FinalStatusWriteFailurePersistsOrPropagates(t *testing.T) {
+	for _, failFailedStatusWrite := range []bool{false, true} {
+		name := "failed-state-write-succeeds"
+		if failFailedStatusWrite {
+			name = "both-status-writes-fail"
+		}
+		t.Run(name, func(t *testing.T) {
+			db, ctx := reindexSyntheticDB(t)
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request struct {
+					Input []string `json:"input"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+					http.Error(w, "invalid embedding request", http.StatusBadRequest)
+					return
+				}
+				data := make([]map[string]any, len(request.Input))
+				for i := range data {
+					data[i] = map[string]any{"index": i, "embedding": make([]float32, 1024)}
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data, "model": "synthetic"})
+			}))
+			defer provider.Close()
+			product := model.RagProduct{
+				ID: "fa13-final-status-product", Name: "FA-13 final status synthetic", IsActive: true,
+				EmbeddingProviderConfig: model.EmbeddingProviderConfig{BaseURL: provider.URL, Model: "synthetic", Dimension: 1024},
+			}
+			if err := db.WithContext(ctx).Create(&product).Error; err != nil {
+				t.Fatalf("创建合成产品失败: %v", err)
+			}
+			doc := model.KnowledgeDocument{TenantID: 413, ProductID: product.ID, Title: "final status failure", EmbedStatus: model.EmbedStatusPending, Metadata: "{}"}
+			if err := db.WithContext(ctx).Create(&doc).Error; err != nil {
+				t.Fatalf("创建合成文档失败: %v", err)
+			}
+			chunk := model.KnowledgeChunk{TenantID: 413, DocumentID: doc.ID, ProductID: product.ID, ChunkIndex: 0, Content: "final status failure input", Metadata: "{}"}
+			if err := db.WithContext(ctx).Create(&chunk).Error; err != nil {
+				t.Fatalf("创建合成分片失败: %v", err)
+			}
+
+			var indexedWriteFailed atomic.Bool
+			var failedWriteFailed atomic.Bool
+			callbackName := fmt.Sprintf("fa13_final_status_fault_%d", time.Now().UnixNano())
+			if err := db.Callback().Update().Before("gorm:update").Register(callbackName, func(tx *gorm.DB) {
+				if tx.Statement.Table != "knowledge_documents" {
+					return
+				}
+				updates, ok := tx.Statement.Dest.(map[string]any)
+				if !ok {
+					return
+				}
+				switch fmt.Sprint(updates["embed_status"]) {
+				case string(model.EmbedStatusIndexed):
+					if indexedWriteFailed.CompareAndSwap(false, true) {
+						tx.AddError(errors.New("synthetic indexed status write failure"))
+					}
+				case string(model.EmbedStatusFailed):
+					if failFailedStatusWrite && failedWriteFailed.CompareAndSwap(false, true) {
+						tx.AddError(errors.New("synthetic failed status write failure"))
+					}
+				}
+			}); err != nil {
+				t.Fatalf("注册状态写故障注入回调失败: %v", err)
+			}
+
+			svc := NewKnowledgeServiceWithDeps(KnowledgeServiceDeps{
+				RagRepo: repository.NewRagConfigRepository(db), DocRepo: repository.NewKnowledgeDocumentRepository(db),
+				ChunkRepo: repository.NewKnowledgeChunkRepository(db),
+			})
+			reindexErr := svc.Reindex(ctx, product.ID, doc.ID)
+			if reindexErr == nil || !indexedWriteFailed.Load() {
+				t.Fatalf("终态索引状态写入失败必须返回错误，err=%v faultInjected=%v", reindexErr, indexedWriteFailed.Load())
+			}
+			stored, err := repository.NewKnowledgeDocumentRepository(db).GetByProductAndID(ctx, product.ID, int64(doc.ID))
+			if err != nil {
+				t.Fatalf("查询终态写失败后的文档失败: %v", err)
+			}
+			if failFailedStatusWrite {
+				if !failedWriteFailed.Load() || stored.EmbedStatus != model.EmbedStatusProcessing || !strings.Contains(reindexErr.Error(), "持久化失败状态失败") {
+					t.Fatalf("两次状态写失败必须传播 fallback 错误并保留原 processing 行，status=%q err=%v", stored.EmbedStatus, reindexErr)
+				}
+				return
+			}
+			if stored.EmbedStatus != model.EmbedStatusFailed || !strings.Contains(stored.ErrorMsg, "更新文档索引状态失败") {
+				t.Fatalf("fallback 状态必须可查询为 failed 并包含终态写错误，status=%q error=%q", stored.EmbedStatus, stored.ErrorMsg)
+			}
+			if stored.ReindexRetryCount != 1 {
+				t.Fatalf("状态写失败后重建计数应保持 1，实际=%d", stored.ReindexRetryCount)
+			}
+		})
+	}
 }

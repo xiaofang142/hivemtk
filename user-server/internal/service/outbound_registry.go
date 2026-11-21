@@ -86,6 +86,14 @@ func outboundSenderFactoryOf(ch WebhookChannel) (OutboundSenderFactory, bool) {
 	return f, ok
 }
 
+// 桥接集合仍由同一注册表查询驱动；提交裁决须在勿扰/重试队列前执行。
+func authorizeOutboundSubmission(ctx context.Context, ch WebhookChannel, accountID string, hub *model.MessageHub) error {
+	if bridgeOutboxCapable(ch) {
+		return authorizeBridgeReplySubmit(ctx, ch, accountID, hub)
+	}
+	return nil
+}
+
 // outboundSenderFor 取某渠道的 sender 实例（每 service 一份，惰性构造）。
 //
 // 桥接族（channelgw registry OutboundPath=bridge_outbox）不逐个登记渠道常量，

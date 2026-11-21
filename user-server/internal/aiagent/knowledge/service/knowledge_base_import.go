@@ -357,7 +357,7 @@ func (s *KnowledgeBaseService) processDocumentAsyncWithQA(ctx context.Context, d
 	for i, c := range chunks {
 		texts[i] = c.Content
 	}
-	embeddings, err := s.vector.EmbedBatch(texts)
+	embeddings, err := s.vector.EmbedBatchContext(ctx, texts)
 	if err != nil {
 		s.markDocumentFailed(bgCtx, documentID, fmt.Sprintf("向量化失败: %v", err))
 		return

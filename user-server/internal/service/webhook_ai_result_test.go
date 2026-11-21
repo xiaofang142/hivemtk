@@ -46,6 +46,7 @@ func TestWebhookAIResult_MissingLockScopeMustNotSend(t *testing.T) {
 			}
 			hub := bridgeInboundHub("douyin", "missing-scope-account", "missing-scope-conversation", "missing-scope-customer")
 			hub.TenantID = c01TenantA
+			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 			eventID := "missing-lock-scope-" + missing
 			releaseReplyClaimForTest(t, eventID)
 			ws.deliverAIResult(ctx, webhookReplyRequest{channel: ChannelDouyin, accountID: hub.AccountID, hub: hub,
@@ -89,6 +90,8 @@ func TestWebhookAIResult_PresendLockMustBeConfirmed(t *testing.T) {
 			ws.ingressSvc.cache = tc.lockCache
 			hub := bridgeInboundHub("douyin", "presend-account", "presend-conversation", "presend-customer")
 			hub.TenantID = c01TenantA
+			useLegacyBridgeFixture(t)
+			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 			eventID := fmt.Sprintf("presend-confirm-%d", index)
 			releaseReplyClaimForTest(t, eventID)
 			ws.deliverAIResult(ctx, webhookReplyRequest{
@@ -143,6 +146,8 @@ func TestWebhookAIResult_SafeExitBoundaries(t *testing.T) {
 			account, conv, eventID := "result-boundary-account", "result-boundary-conversation", fmt.Sprintf("result-boundary-%d", index)
 			hub := bridgeInboundHub("douyin", account, conv, "result-boundary-customer")
 			hub.TenantID = c01TenantA
+			useLegacyBridgeFixture(t)
+			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
 			if tc.duplicate {
 				if err := database.Create(&model.MessageHub{
 					TenantID: c01TenantA, Platform: "douyin", AccountID: account, ConversationID: conv,
@@ -219,6 +224,7 @@ func TestWebhookAIResult_RecreatedAnswerUsesSafeExit(t *testing.T) {
 			eventID := "result-exit-event"
 			// 每个子用例重建专用测试库；账号区分以免共享确认缓存影响其他用例。
 			accountID := []string{"result-exit-handoff", "result-exit-no-reply", "result-exit-lock", "result-exit-normal"}[index]
+			ctx = localBridgeSubmitContext(t, ctx, "douyin", accountID, "text")
 			hub := c01InboundHub(eventID, conv, sender, accountID, question)
 			hub.TenantID = fixtureTenant
 			p := &ParsedPayload{EventID: eventID, Sender: sender, Content: question, ChatID: conv}

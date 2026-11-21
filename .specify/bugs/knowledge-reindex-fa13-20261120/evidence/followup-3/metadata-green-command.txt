@@ -1,0 +1,2 @@
+Working directory: /Users/xiaofang/Documents/www/go/hivemtk/hivemtk/user-server
+FA12_PG_DSN='host=/private/var/folders/xw/pd_rr_z54w38gq41yfm8h7sm0000gn/T/opencode/fa12-pg-u0tmyd4x port=55412 user=fa12_runner dbname=fa12_synthetic sslmode=disable' go test -v ./internal/aiagent/knowledge/service -run '^TestDocumentMetadataUpdate(PreservesActiveReindex|ScopeAndMissingRows)$' -count=1 -timeout=60s

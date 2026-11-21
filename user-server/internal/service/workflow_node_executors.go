@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -463,10 +465,14 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 	if subWorkflowID == "" {
 		return &WorkflowNodeExecResult{Status: NodeStatusFailed, Output: model.JSONMap{"error": "sub_workflow_id required"}}, nil
 	}
+	// FA-WF-05：深度元数据用稳定数值解码——TriggerPayload 经 JSONMap 落库往返后
+	// 数值变 float64，此前的 int 断言失败即按 0 继续，深度上限可被"重启"绕过。
+	// 非法/负值一律夹回 0（来源不可信，宁可少信）。
 	depth := 0
-	if wctx.Execution != nil {
-		if d, ok := wctx.Execution.TriggerPayload["_subflow_depth"].(int); ok {
-			depth = d
+	if wctx.Execution != nil && wctx.Execution.TriggerPayload != nil {
+		depth = workflowJSONInt(wctx.Execution.TriggerPayload["_subflow_depth"])
+		if depth < 0 {
+			depth = 0
 		}
 	}
 	if depth >= MaxSubflowDepth() {
@@ -474,11 +480,28 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 	}
 	sideEffectKey := WorkflowSideEffectKey(wctx, "subflow:"+subWorkflowID)
 	if HasWorkflowSideEffect(wctx, sideEffectKey) {
-		return &WorkflowNodeExecResult{
-			Status:      NodeStatusCompleted,
-			Output:      model.JSONMap{"_already_executed": true, "sub_workflow_id": subWorkflowID},
-			SideEffects: []string{sideEffectKey},
-		}, nil
+		// FA-WF-03：重放对账——占位标记 ≠ 真实子执行（创建失败/标记后崩溃会留
+		// 孤儿标记，旧实现把孤儿标记当成"已执行"伪装 completed）。按父子链接
+		// 统计真实子执行：有则幂等返回；零则清掉孤儿标记继续创建。
+		if e.orchestrator != nil && e.orchestrator.execRepo != nil {
+			n, cerr := e.orchestrator.execRepo.CountSubflowChildren(ctx, wctx.Execution.ID, wctx.NodeID, subWorkflowID)
+			if cerr == nil && n == 0 {
+				RemoveWorkflowSideEffect(wctx, sideEffectKey)
+			} else {
+				return &WorkflowNodeExecResult{
+					Status:      NodeStatusCompleted,
+					Output:      model.JSONMap{"_already_executed": true, "sub_workflow_id": subWorkflowID},
+					SideEffects: []string{sideEffectKey},
+				}, nil
+			}
+		} else {
+			// 无对账依赖（未装配仓储）：维持幂等返回口径，不冒充可对账。
+			return &WorkflowNodeExecResult{
+				Status:      NodeStatusCompleted,
+				Output:      model.JSONMap{"_already_executed": true, "sub_workflow_id": subWorkflowID},
+				SideEffects: []string{sideEffectKey},
+			}, nil
+		}
 	}
 	AppendWorkflowSideEffect(wctx, sideEffectKey)
 	if e.orchestrator != nil {
@@ -487,8 +510,16 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 			payload = wctx.Execution.TriggerPayload
 		}
 		payload["_subflow_depth"] = depth + 1
+		// FA-WF-03：父子链接——子执行 TriggerPayload 落库带父执行/父节点标记，
+		// 重放对账与"约定数量的子执行"断言都靠它。
+		if wctx.Execution != nil {
+			payload["_parent_exec_id"] = strconv.FormatUint(uint64(wctx.Execution.ID), 10)
+			payload["_parent_node_id"] = wctx.NodeID
+		}
 		exec, err := e.orchestrator.Execute(ctx, &dto.WorkflowExecuteRequest{WorkflowID: subWorkflowID, TriggerPayload: payload})
 		if err != nil {
+			// 创建失败不留占位标记：否则重放会把它当"已执行"伪装完成。
+			RemoveWorkflowSideEffect(wctx, sideEffectKey)
 			return &WorkflowNodeExecResult{Status: NodeStatusFailed, Output: model.JSONMap{"error": err.Error(), "sub_workflow_id": subWorkflowID}}, nil
 		}
 		return &WorkflowNodeExecResult{
@@ -507,3 +538,20 @@ func (e *SubflowNodeExecutor) Execute(ctx context.Context, wctx *WorkflowExecCon
 
 // ProbeMaxSubflowDepth 导出当前生效的子流程最大深度（仅供装配层测试断言读取口）。
 func ProbeMaxSubflowDepth() int { return MaxSubflowDepth() }
+
+// workflowJSONInt 稳定数值解码：int/int64/float64/json.Number 之外一律 0。
+func workflowJSONInt(v any) int {
+	switch d := v.(type) {
+	case int:
+		return d
+	case int64:
+		return int(d)
+	case float64:
+		return int(d)
+	case json.Number:
+		if n, err := d.Int64(); err == nil {
+			return int(n)
+		}
+	}
+	return 0
+}

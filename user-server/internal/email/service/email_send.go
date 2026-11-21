@@ -112,15 +112,17 @@ func (s *EmailSendService) deliveryFn() func(context.Context, *model.EmailSend) 
 	return s.sendActualEmail
 }
 
-func (s *EmailSendService) isUnsubscribed(ctx context.Context, email string) bool {
+// isUnsubscribed 查询退订名单（FA-EMAIL-02：查询故障独立于"未退订"——
+// 读取失败返回错误由调用方拒发/延期，绝不当作"未退订"继续投递）。
+func (s *EmailSendService) isUnsubscribed(ctx context.Context, email string) (bool, error) {
 	if s.unsubRepo == nil {
 		s.unsubRepo = repository.NewEmailUnsubscribeRepository(nil)
 	}
 	exists, err := s.unsubRepo.ExistsByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
 	if err != nil {
-		return false
+		return false, fmt.Errorf("退订名单查询失败：%w", err)
 	}
-	return exists
+	return exists, nil
 }
 
 func NewEmailSendService() *EmailSendService {
@@ -182,7 +184,14 @@ func (s *EmailSendService) SendEmail(ctx context.Context, req dto.SendEmailReque
 
 	if req.ImmediateSend {
 
-		if s.isUnsubscribed(ctx, req.To) {
+		// FA-EMAIL-02：退读故障不得当作"未退订"继续投递——返回错误让本次调用失败，
+		// 行保持 pending 由耐久投递侧在认领时重查退订（库恢复后自然续投）。
+		unsub, uerr := s.isUnsubscribed(ctx, req.To)
+		if uerr != nil {
+			logger.Errorf("退订名单查询失败 [%s]（拒发待续投）: %v", emailSend.ID, uerr)
+			return emailSend, uerr
+		}
+		if unsub {
 			if u, perr := uuid.Parse(emailSend.ID); perr == nil {
 				_ = s.repo.UpdateStatus(ctx, u, EmailStatusFailed)
 			}
@@ -198,22 +207,18 @@ func (s *EmailSendService) SendEmail(ctx context.Context, req dto.SendEmailReque
 				}
 			}()
 			sendCtx := context.WithoutCancel(ctx)
-			err := s.deliveryFn()(sendCtx, emailSend)
-			emailUUID, parseErr := uuid.Parse(emailSend.ID)
-			if parseErr != nil {
-				logger.Errorf("邮件 ID 解析失败：%v", parseErr)
+			// FA-EMAIL-01：即时投递前先原子认领（与排水 worker 同一原语）——
+			// 行仍 pending 才归本 goroutine 投；已被 worker 认领则让位，恰好一次投递。
+			claimed, ok, cerr := s.repo.ClaimByIDForDelivery(sendCtx, emailSend.ID)
+			if cerr != nil {
+				logger.Errorf("即时邮件认领失败 [%s] ⇒ 行保持 pending 由排水侧接管: %v", emailSend.ID, cerr)
 				return
 			}
-			if err != nil {
-				logger.Errorf("邮件发送失败 [%s]: %v", emailSend.ID, err)
-				if e := s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusFailed); e != nil {
-					logger.Warnf("邮件状态落库失败(发送失败) [%s]: %v", emailSend.ID, e)
-				}
-			} else {
-				if e := s.repo.UpdateStatus(sendCtx, emailUUID, EmailStatusSent); e != nil {
-					logger.Warnf("邮件状态落库失败(发送成功) [%s]: %v", emailSend.ID, e)
-				}
+			if !ok {
+				logger.Infof("即时邮件 [%s] 已被排水侧认领，本协程让位（防双投）", emailSend.ID)
+				return
 			}
+			s.deliverClaimed(sendCtx, claimed, s.deliveryFn())
 		}()
 	}
 
@@ -288,7 +293,14 @@ func (s *EmailSendService) deliverClaimed(ctx context.Context, email *model.Emai
 		return
 	}
 	// 排期这条腿过去没有退订检查：即时发送的合规判据挡不住"排到明早 9 点"这条路。
-	if s.isUnsubscribed(ctx, email.To) {
+	// FA-EMAIL-02：排期腿同样拒把查询故障当"未退订"——失败时本轮跳过、行保持
+	// pending，由下一轮认领重查（可恢复延期），故障原因随日志留痕。
+	unsub, uerr := s.isUnsubscribed(ctx, email.To)
+	if uerr != nil {
+		logger.Errorf("退订名单查询失败 [%s]（本轮跳过待续投）: %v", email.ID, uerr)
+		return
+	}
+	if unsub {
 		if err := s.repo.UpdateStatus(ctx, emailUUID, EmailStatusFailed); err != nil {
 			logger.Warnf("邮件状态落库失败(收件人已退订) [%s]: %v", email.ID, err)
 		}
@@ -315,6 +327,13 @@ func (s *EmailSendService) sendActualEmail(ctx context.Context, email *model.Ema
 	if email.SmtpID != "" {
 		cfg, err := s.smtpRepo.GetByID(ctx, email.SmtpID)
 		if err == nil && cfg != nil && cfg.Server != "" && cfg.Username != "" {
+			// FA-EMAIL-03：显式选择必须统一解密——密文直投拨号器等于用错密码；
+			// 解密失败=凭据不可用，显式选择不允许悄悄换账号，直接报错收口。
+			plain, derr := smtpPassword(cfg)
+			if derr != nil {
+				return fmt.Errorf("邮件发送失败：显式 SMTP 账号（SmtpID=%s）密码解密失败：%w", email.SmtpID, derr)
+			}
+			cfg.Password = plain
 			smtpConfig = cfg
 		} else if err != nil {
 			logger.Warnf("邮件 SMTP 配置读取失败（SmtpID=%s），尝试环境变量兜底: %v", email.SmtpID, err)
@@ -344,6 +363,22 @@ func (s *EmailSendService) sendActualEmail(ctx context.Context, email *model.Ema
 	d := gomail.NewDialer(smtpConfig.Server, smtpConfig.Port, smtpConfig.Username, smtpConfig.Password)
 
 	return d.DialAndSend(m)
+}
+
+// smtpPassword 统一 SMTP 凭据解析（FA-EMAIL-03）：所有选路复用同一解密口，
+// 拒绝空密钥与解密失败——调用方拿到的要么是可用明文，要么是明确错误。
+func smtpPassword(cfg *model.EmailSmtp) (string, error) {
+	if cfg == nil || cfg.Password == "" {
+		return "", fmt.Errorf("SMTP 账号密码为空")
+	}
+	plain, err := crypto.Decrypt(cfg.Password)
+	if err != nil {
+		return "", err
+	}
+	if plain == "" {
+		return "", fmt.Errorf("SMTP 账号密码解密结果为空")
+	}
+	return plain, nil
 }
 
 // resolveSmtpFromDB 从 email_smtp 表挑默认发信通道（R2 路径 A 接线 + F3 备用通道 DB 化）。
@@ -394,9 +429,14 @@ func smtpRowReady(cfg *model.EmailSmtp, wantName string) *model.EmailSmtp {
 	if wantName != "" && cfg.Name != wantName {
 		return nil
 	}
-	if dec, derr := crypto.Decrypt(cfg.Password); derr == nil && dec != "" {
-		cfg.Password = dec
+	// FA-EMAIL-03：解密失败=凭据不可用，拒绝该行（不再把密文当密码塞进拨号器）；
+	// 默认通道的候选选取语义下换下一行是既定行为，显式选择路径由调用方 fail-closed。
+	dec, derr := crypto.Decrypt(cfg.Password)
+	if derr != nil || dec == "" {
+		logger.Warnf("SMTP 账号（id=%s name=%s）密码解密失败，跳过该候选: %v", cfg.ID, cfg.Name, derr)
+		return nil
 	}
+	cfg.Password = dec
 	return cfg
 }
 

@@ -14,6 +14,7 @@ package service
 // 对无租户 ctx fail-closed）。
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -28,14 +29,14 @@ import (
 	"gorm.io/gorm"
 )
 
-const unkPlatform = "b37b_unk"
+const unkPlatform = "douyin"
 
 func newUnknownFixture(t *testing.T) (*gorm.DB, *InboxIngressService) {
 	t.Helper()
 	// NewTestDB 对每个用例 TRUNCATE 清空（无需手工 DELETE；on 模式下 raw Exec 也会被
 	// 租户 raw 守卫拒绝，本来就走不通）。
 	database := testutil.NewTestDB(t, &model.MessageHub{})
-	return database, NewInboxIngressService()
+	return database, NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 }
 
 // unkScopeCtx 预置/直读用的 system scope：租户 off 模式直通，on 模式绕过隔离 callback
@@ -160,7 +161,7 @@ func TestAckUnknown_InvalidTerminalStillRejected(t *testing.T) {
 // 重发/回收路径不可见——含 30s 认领租约过期场景与到界 exhaust 场景。
 func TestUnknownRow_InvisibleToAllResendPaths(t *testing.T) {
 	db, svc := newUnknownFixture(t)
-	ctx := context.Background()
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 1), unkPlatform, "acc1", "text")
 
 	// --- 3a 认领：pending 行可领，unknown 行不可领 ---
 	seedUnkRow(t, db, "unk-claim-p", "conv-1", "pending", 1)

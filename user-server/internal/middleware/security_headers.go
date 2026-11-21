@@ -20,7 +20,11 @@ func SecurityHeaders() gin.HandlerFunc {
 				"img-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; "+
 				"base-uri 'self'; form-action 'self'")
 		c.Header("X-Content-Type-Options", "nosniff")
-		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		if merchantConnectionMetadataOnly(c.Request.URL.Path) {
+			merchantPrivateResponseHeaders(c)
+		} else {
+			c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		}
 		c.Next()
 	}
 }

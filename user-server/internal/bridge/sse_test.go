@@ -10,13 +10,14 @@ import (
 
 func TestSSEBus_SubscribeAndPublish(t *testing.T) {
 	bus := NewSSEBus()
+	bus.SetOutboundClaimer(&fakeClaimer{}) // 仅测试总线分发；真实消费裁决见实库矩阵。
 	ch, cancel := bus.Subscribe("douyin", "acc-1")
 	defer cancel()
 
 	event := SSEEvent{
 		ID: "1", Event: "new_outbound",
 		ConversationID: "conv-1",
-		Data:           map[string]any{"platform": "douyin", "account_id": "acc-1", "content": "hello"},
+		Data:           map[string]any{"hub_id": uint64(1), "platform": "douyin", "account_id": "acc-1", "content": "hello"},
 	}
 
 	bus.Publish(event)
@@ -36,13 +37,14 @@ func TestSSEBus_SubscribeAndPublish(t *testing.T) {
 
 func TestSSEBus_ConversationLevelSubscription(t *testing.T) {
 	bus := NewSSEBus()
+	bus.SetOutboundClaimer(&fakeClaimer{})
 	ch, cancel := bus.SubscribeByConversation("conv-1")
 	defer cancel()
 
 	event := SSEEvent{
 		ID: "2", Event: "new_outbound",
 		ConversationID: "conv-1",
-		Data:           map[string]any{"platform": "douyin", "account_id": "acc-1"},
+		Data:           map[string]any{"hub_id": uint64(2), "platform": "douyin", "account_id": "acc-1"},
 	}
 
 	bus.Publish(event)
@@ -59,6 +61,7 @@ func TestSSEBus_ConversationLevelSubscription(t *testing.T) {
 
 func TestSSEBus_MultiSubscriber(t *testing.T) {
 	bus := NewSSEBus()
+	bus.SetOutboundClaimer(&fakeClaimer{})
 	ch1, cancel1 := bus.Subscribe("douyin", "acc-1")
 	ch2, cancel2 := bus.Subscribe("douyin", "acc-1")
 	defer cancel1()
@@ -66,7 +69,7 @@ func TestSSEBus_MultiSubscriber(t *testing.T) {
 
 	event := SSEEvent{
 		ID: "3", Event: "new_outbound",
-		Data: map[string]any{"platform": "douyin", "account_id": "acc-1"},
+		Data: map[string]any{"hub_id": uint64(3), "platform": "douyin", "account_id": "acc-1"},
 	}
 
 	bus.Publish(event)
@@ -105,6 +108,7 @@ func TestSSEBus_CancelRemovesSubscriber(t *testing.T) {
 
 func TestSSEBus_BufferFull_DropNonBlocking(t *testing.T) {
 	bus := NewSSEBus()
+	bus.SetOutboundClaimer(&fakeClaimer{})
 	bus.buffer = 2
 
 	ch, cancel := bus.Subscribe("douyin", "acc-1")
@@ -113,7 +117,7 @@ func TestSSEBus_BufferFull_DropNonBlocking(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		bus.Publish(SSEEvent{
 			ID: string(rune('a' + i)), Event: "new_outbound",
-			Data: map[string]any{"platform": "douyin", "account_id": "acc-1"},
+			Data: map[string]any{"hub_id": uint64(i + 1), "platform": "douyin", "account_id": "acc-1"},
 		})
 	}
 
@@ -126,7 +130,7 @@ func TestSSEBus_BufferFull_DropNonBlocking(t *testing.T) {
 		}()
 		bus.Publish(SSEEvent{
 			ID: "overflow", Event: "new_outbound",
-			Data: map[string]any{"platform": "douyin", "account_id": "acc-1"},
+			Data: map[string]any{"hub_id": uint64(3), "platform": "douyin", "account_id": "acc-1"},
 		})
 	}()
 	_ = dropped
@@ -537,6 +541,7 @@ func TestSSEBus_MultiAccountIsolation(t *testing.T) {
 }
 
 func mockSSEPublisher(bus *SSEBus) func(channel, accountID string, hubID uint64, convID, msgType, receiverID, content string, isAIReply bool, createdAt time.Time) {
+	bus.SetOutboundClaimer(&fakeClaimer{}) // 路由单测显式装配认领替身，不能依赖生产缺件放行。
 	return func(channel, accountID string, hubID uint64, convID, msgType, receiverID, content string, isAIReply bool, createdAt time.Time) {
 		bus.Publish(SSEEvent{
 			ID:             itoa(int(hubID)),
@@ -692,6 +697,7 @@ func TestSSEEventDeliveryAllPaths(t *testing.T) {
 // TestSSEBus_ConversationLevelRouting 验证会话级路由（conversation_id 精准投递）
 func TestSSEBus_ConversationLevelRouting(t *testing.T) {
 	bus := NewSSEBus()
+	bus.SetOutboundClaimer(&fakeClaimer{})
 
 	convCh, convCancel := bus.SubscribeByConversation("conv_target")
 	defer convCancel()
@@ -703,6 +709,7 @@ func TestSSEBus_ConversationLevelRouting(t *testing.T) {
 		ID: "3001", Event: "new_outbound",
 		ConversationID: "conv_target",
 		Data: map[string]any{
+			"hub_id":     uint64(3001),
 			"platform":   "douyin",
 			"account_id": "acc_conv",
 			"content":    "精准投递测试",

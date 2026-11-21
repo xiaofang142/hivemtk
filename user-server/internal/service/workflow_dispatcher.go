@@ -179,7 +179,8 @@ func (d *WorkflowDispatcher) runExecution(ctx context.Context, executionID uint,
 			return
 		}
 
-		attempt := readAttempt(exec)
+		// FA-WF-01：预算以节点为键——前一个节点耗掉的预算不再压给后一个节点。
+		attempt := readAttemptFor(exec, currentNode)
 		nextNodeID, completed, retryScheduled := d.executeNode(ctx, exec, def, currentNode, attempt)
 		if retryScheduled {
 			return
@@ -285,10 +286,22 @@ func (d *WorkflowDispatcher) executeNode(
 
 	nodeExec.OutputData = result.Output
 	nodeExec.Status = d.mapNodeStatus(result.Status)
+	// FA-WF-01：节点成功（含 skipped/completed 终态）⇒ 该节点预算收束清零，
+	// 并清理历史全局键残留，避免旧 _wf_attempt 干扰新键口径。
+	if result.Status != "running" {
+		clearAttemptFor(exec, node.ID)
+	}
 	if result.ErrorMessage != "" {
 		nodeExec.Error = result.ErrorMessage
 	}
-	_ = d.nodeExecRepo.Update(ctx, nodeExec)
+	// FA-WF-02：节点证据（结果/状态/耗时）写失败 = 持久化未确认——节点的外部
+	// 副作用可能已发生，此时继续按成功推进会让"完成"建立在丢失的证据上。
+	// 处置：执行标为明确 failed（带可诊断原因），恢复语义由 FA-WF-06 恢复扫描
+	// 与副作用幂等（FA-WF-03）承载；不盲目重放。
+	if err := d.nodeExecRepo.Update(ctx, nodeExec); err != nil {
+		d.failExecution(ctx, exec, fmt.Sprintf("node %s evidence write failed (persistence unconfirmed): %v", node.ID, err))
+		return "", false, true
+	}
 
 	for k, v := range result.Output {
 		if exec.Context == nil {
@@ -299,11 +312,16 @@ func (d *WorkflowDispatcher) executeNode(
 	for _, effect := range result.SideEffects {
 		AppendWorkflowSideEffect(wctx, effect)
 	}
-	_ = d.execRepo.UpdateFields(ctx, exec.ID, map[string]any{
+	// FA-WF-02：上下文/进度写失败同样不得报成功（CurrentNode 断点丢失 = 恢复
+	// 协议失效，下一步推进建立在不可恢复的假断点上）。
+	if err := d.execRepo.UpdateFields(ctx, exec.ID, map[string]any{
 		"context":         exec.Context,
 		"current_node_id": node.ID,
 		"updated_at":      time.Now(),
-	})
+	}); err != nil {
+		d.failExecution(ctx, exec, fmt.Sprintf("node %s context write failed (persistence unconfirmed): %v", node.ID, err))
+		return "", false, true
+	}
 
 	switch result.Status {
 	case NodeStatusCompleted, NodeStatusSkipped:
@@ -356,6 +374,17 @@ func (d *WorkflowDispatcher) handleNodeFailure(
 		errMsg = result.ErrorMessage
 	}
 
+	// FA-WF-01：执行器显式判定不可重试（Retryable=false 的 failed 结果）⇒ 不排重试，
+	// 直接终态 failed——HTTP 确定拒绝、取消或配置错误重复执行等于重复副作用。
+	if result != nil && result.Status == NodeStatusFailed && !result.Retryable {
+		logger.Ctx(ctx).Warn().
+			Str("node_id", node.ID).
+			Str("error", errMsg).
+			Msg("node failed with Retryable=false, marking execution as failed (no retry)")
+		d.failExecution(ctx, exec, fmt.Sprintf("node %s failed (not retryable): %s", node.ID, errMsg))
+		return false
+	}
+
 	if attempt < d.retryPolicy.MaxAttempts {
 		backoff := d.retryPolicy.Backoff(attempt + 1)
 		logger.Ctx(ctx).Warn().
@@ -366,7 +395,7 @@ func (d *WorkflowDispatcher) handleNodeFailure(
 			Err(err).
 			Msg("node failed, scheduling retry")
 
-		writeAttempt(exec, attempt+1)
+		writeAttemptFor(exec, node.ID, attempt+1)
 		_ = d.execRepo.UpdateFields(ctx, exec.ID, map[string]any{
 			"context": exec.Context,
 			"error":   errMsg,
@@ -399,28 +428,67 @@ func (d *WorkflowDispatcher) handleNodeFailure(
 
 func (d *WorkflowDispatcher) completeExecution(ctx context.Context, exec *model.WorkflowExecution) {
 	now := time.Now()
+	// FA-WF-04：完成写带栅栏——已确认停止（terminated）的执行不得被在途节点
+	// 的完成写复活/改写；内存对象照常更新供日志与后续逻辑使用。
 	exec.Status = model.WorkflowExecCompleted
 	exec.FinishedAt = &now
 	exec.CurrentNodeID = ""
-	_ = d.execRepo.Update(ctx, exec)
+	applied, err := d.execRepo.UpdateStatusFenced(ctx, exec.ID, map[string]any{
+		"status":          model.WorkflowExecCompleted,
+		"finished_at":     now,
+		"current_node_id": "",
+	}, nil)
+	if err != nil {
+		logger.Ctx(ctx).Error().Uint("execution_id", exec.ID).Err(err).Msg("execution completed write failed")
+	}
+	if !applied {
+		logger.Ctx(ctx).Warn().Uint("execution_id", exec.ID).
+			Msg("execution was confirmed terminated; completion write fenced (stop reason preserved)")
+		return
+	}
 	logger.Ctx(ctx).Info().Uint("execution_id", exec.ID).Msg("execution completed successfully")
 }
 
 func (d *WorkflowDispatcher) failExecution(ctx context.Context, exec *model.WorkflowExecution, errMsg string) {
 	now := time.Now()
+	// FA-WF-04：失败写与完成写同一栅栏——已确认停止不被失败写覆盖。
 	exec.Status = model.WorkflowExecFailed
 	exec.FinishedAt = &now
 	exec.Error = errMsg
-	_ = d.execRepo.Update(ctx, exec)
+	applied, err := d.execRepo.UpdateStatusFenced(ctx, exec.ID, map[string]any{
+		"status":      model.WorkflowExecFailed,
+		"finished_at": now,
+		"error":       errMsg,
+	}, nil)
+	if err != nil {
+		logger.Ctx(ctx).Error().Uint("execution_id", exec.ID).Err(err).Msg("execution failed write failed")
+	}
+	if !applied {
+		logger.Ctx(ctx).Warn().Uint("execution_id", exec.ID).
+			Msg("execution was confirmed terminated; failure write fenced (stop reason preserved)")
+		return
+	}
 	logger.Ctx(ctx).Error().Uint("execution_id", exec.ID).Str("error", errMsg).Msg("execution marked as failed")
 }
 
 func (d *WorkflowDispatcher) terminateExecution(ctx context.Context, exec *model.WorkflowExecution) {
 	now := time.Now()
+	// FA-WF-04：dispatcher 停机终止同样 CAS（仅 running 可被终止）。
 	exec.Status = model.WorkflowExecTerminated
 	exec.FinishedAt = &now
 	exec.Error = "dispatcher stopped"
-	_ = d.execRepo.Update(ctx, exec)
+	applied, err := d.execRepo.UpdateStatusFenced(ctx, exec.ID, map[string]any{
+		"status":      model.WorkflowExecTerminated,
+		"finished_at": now,
+		"error":       "dispatcher stopped",
+	}, []string{model.WorkflowExecRunning})
+	if err != nil {
+		logger.Ctx(ctx).Error().Uint("execution_id", exec.ID).Err(err).Msg("execution terminate write failed")
+	}
+	if !applied {
+		logger.Ctx(ctx).Info().Uint("execution_id", exec.ID).Msg("execution already terminal; dispatcher stop write fenced")
+		return
+	}
 	logger.Ctx(ctx).Info().Uint("execution_id", exec.ID).Msg("execution terminated by dispatcher stop")
 }
 
@@ -433,10 +501,21 @@ func safeStatus(e *model.WorkflowExecution) string {
 	return e.Status
 }
 
-func readAttempt(exec *model.WorkflowExecution) int {
+// nodeAttemptKey FA-WF-01：预算按节点键控（节点成功即清零，重试只累计本节点）。
+func nodeAttemptKey(nodeID string) string { return "_wf_attempt_" + nodeID }
+
+func readAttemptFor(exec *model.WorkflowExecution, node *WorkflowDefNode) int {
 	if exec == nil || exec.Context == nil {
 		return 0
 	}
+	key := nodeAttemptKey(node.ID)
+	if v, ok := exec.Context[key].(float64); ok {
+		return int(v)
+	}
+	if v, ok := exec.Context[key].(int); ok {
+		return v
+	}
+	// 历史全局键兼容读：旧执行的在途预算不丢（写路径已全部改节点键）。
 	if v, ok := exec.Context["_wf_attempt"].(float64); ok {
 		return int(v)
 	}
@@ -446,14 +525,25 @@ func readAttempt(exec *model.WorkflowExecution) int {
 	return 0
 }
 
-func writeAttempt(exec *model.WorkflowExecution, attempt int) {
+func writeAttemptFor(exec *model.WorkflowExecution, nodeID string, attempt int) {
 	if exec == nil {
 		return
 	}
 	if exec.Context == nil {
 		exec.Context = model.JSONMap{}
 	}
-	exec.Context["_wf_attempt"] = attempt
+	exec.Context[nodeAttemptKey(nodeID)] = attempt
+	// 旧全局键退役：防止后续节点误读前一节点的残留预算。
+	delete(exec.Context, "_wf_attempt")
+}
+
+// clearAttemptFor 节点终态（完成/跳过）时收束该节点预算。
+func clearAttemptFor(exec *model.WorkflowExecution, nodeID string) {
+	if exec == nil || exec.Context == nil {
+		return
+	}
+	delete(exec.Context, nodeAttemptKey(nodeID))
+	delete(exec.Context, "_wf_attempt")
 }
 
 // DefaultMaxWorkflowSteps 单个工作流可执行的最大节点数的代码兜底

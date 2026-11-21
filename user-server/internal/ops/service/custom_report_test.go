@@ -348,7 +348,8 @@ func TestCustomReportService_UseTemplate_Success(t *testing.T) {
 	}
 	template, _ := service.CreateReport(ctx, 1, createReq)
 
-	_, err := service.UseTemplate(ctx, template.ID, 123)
+	// FA-24：模板为本人公开模板，false=非管理员即可复制（读取授权沿用）。
+	_, err := service.UseTemplate(ctx, template.ID, 123, false)
 	if err != nil {
 		t.Fatalf("UseTemplate failed: %v", err)
 	}

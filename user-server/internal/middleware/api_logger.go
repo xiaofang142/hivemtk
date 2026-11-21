@@ -60,6 +60,13 @@ var apiLogSensitiveKeys = map[string]struct{}{
 func APIInteractionLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
+		if IsMerchantCallbackPath(path) {
+			c.Next()
+			if !c.GetBool(merchantCallbackAccessLogged) {
+				logMerchantCallbackStatus(c)
+			}
+			return
+		}
 		if !strings.HasPrefix(path, "/api") {
 			c.Next()
 			return
@@ -71,14 +78,18 @@ func APIInteractionLogger() gin.HandlerFunc {
 			}
 		}
 
+		metadataOnly := merchantConnectionMetadataOnly(path)
 		var reqCap *cappedBufferWriter
-		if c.Request.Body != nil {
+		if !metadataOnly && c.Request.Body != nil {
 			reqCap = &cappedBufferWriter{cap: apiLogReqBodyCap}
 			c.Request.Body = io.NopCloser(io.TeeReader(c.Request.Body, reqCap))
 		}
 
-		w := &apiLogResponseWriter{ResponseWriter: c.Writer, cap: apiLogRespBodyCap}
-		c.Writer = w
+		var w *apiLogResponseWriter
+		if !metadataOnly {
+			w = &apiLogResponseWriter{ResponseWriter: c.Writer, cap: apiLogRespBodyCap}
+			c.Writer = w
+		}
 
 		start := time.Now()
 		c.Next()
@@ -92,7 +103,6 @@ func APIInteractionLogger() gin.HandlerFunc {
 		status := c.Writer.Status()
 		// MA-02：仅 ≥400 记响应体（键级 redact + 内容级脱敏），2xx 不记——
 		// 成功面无排障价值却全量携带客户 PII。
-		respBodyLog := apiLogResponseSnapshot(status, w.snapshot())
 
 		log := logger.Ctx(c.Request.Context())
 		var ev *zerolog.Event
@@ -109,14 +119,16 @@ func APIInteractionLogger() gin.HandlerFunc {
 			Str("path", path).
 			Int("status", status).
 			Int64("latency_ms", latencyMs).
-			Str("client_ip", c.ClientIP()).
-			Str("request_body", reqBodyLog).
-			Str("response_body", respBodyLog)
-		if rawQuery := c.Request.URL.RawQuery; rawQuery != "" {
-			ev = ev.Str("query", redactQuery(c.Request.URL.Query()))
-		}
-		if len(c.Errors) > 0 {
-			ev = ev.Str("gin_errors", c.Errors.String())
+			Str("client_ip", c.ClientIP())
+		if !metadataOnly {
+			ev = ev.Str("request_body", reqBodyLog).
+				Str("response_body", apiLogResponseSnapshot(status, w.snapshot()))
+			if c.Request.URL.RawQuery != "" {
+				ev = ev.Str("query", redactQuery(c.Request.URL.Query()))
+			}
+			if len(c.Errors) > 0 {
+				ev = ev.Str("gin_errors", c.Errors.String())
+			}
 		}
 		ev.Msg("api_interaction")
 	}

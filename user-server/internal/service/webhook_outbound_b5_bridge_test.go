@@ -24,7 +24,9 @@ import (
 	"testing"
 	"time"
 
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
@@ -126,10 +128,12 @@ func TestSendOutbound_Bridge_UnknownChannelRejected(t *testing.T) {
 }
 
 // TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels 九渠道逐一回归：
+// EC-01：未登记精确格的渠道须拒绝；已有格仅在本地精确夹具下验证原 sender 契约。
 //   - Sender 契约：桥接出站行 SenderID ≡ accountID（B5）；
 //   - 纯文本内容零变化（StripMarkdownForDM 对纯文本幂等，R5 只对含 Markdown 文本有意变化）；
 //   - 出站行形态不变（pending/text/AI 回复/会话号/收件人）。
 func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) {
+	useLegacyBridgeFixture(t)
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
@@ -161,7 +165,22 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 		releaseReplyClaimForTest(t, eventID)
 		p := &ParsedPayload{EventID: eventID, Sender: sender, Content: "有推荐吗", ChatID: conv}
 
-		if _, err := svc.sendOutbound(context.Background(), WebhookChannel(ch), account, p, content, hub, nil); err != nil {
+		ctx := tenant.WithTenantID(context.Background(), hub.TenantID)
+		if _, known := capregistry.FindCellDefinition(ch, "CN", "message.text.send", capregistry.ModeBridge); !known {
+			ctx = capregistry.WithSubmissionBinding(ctx, capregistry.SubmissionBinding{
+				Source: capregistry.SubmissionSourceBridge, Platform: ch, ResourceID: account,
+				Key: capregistry.CellKey{TenantID: hub.TenantID, ShopID: "local-fixture-shop", Product: ch, Region: "CN", Action: "message.text.send", Carrier: capregistry.ModeBridge},
+			})
+			sent, err := svc.sendOutbound(ctx, WebhookChannel(ch), account, p, content, hub, nil)
+			requireSubmitDenial(t, err, "unknown_capability")
+			var n int64
+			if countErr := db.Model(&model.MessageHub{}).Where("direction = ? AND conversation_id = ?", "outbound", conv).Count(&n).Error; countErr != nil || sent || n != 0 {
+				t.Fatalf("[%s] 未登记格必须零入队，sent=%v rows=%d err=%v", ch, sent, n, countErr)
+			}
+			continue
+		}
+		ctx = localBridgeSubmitContext(t, ctx, ch, account, "text")
+		if _, err := svc.sendOutbound(ctx, WebhookChannel(ch), account, p, content, hub, nil); err != nil {
 			t.Fatalf("[%s] 正常出库不应报错: %v", ch, err)
 		}
 
@@ -237,7 +256,9 @@ func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 	// 首发（实时路径）
 	releaseReplyClaimForTest(t, "evt-b5-replay-first")
 	first := &ParsedPayload{EventID: "evt-b5-replay-first", Sender: sender, Content: "在吗", ChatID: conv}
-	if sent, err := svc.sendOutbound(context.Background(), channel, account, first, "首发回复", hub, nil); err != nil || !sent {
+	useLegacyBridgeFixture(t)
+	ctx := localBridgeSubmitContext(t, context.Background(), string(channel), account, "text")
+	if sent, err := svc.sendOutbound(ctx, channel, account, first, "首发回复", hub, nil); err != nil || !sent {
 		t.Fatalf("首发应成功: sent=%v err=%v", sent, err)
 	}
 
@@ -246,7 +267,7 @@ func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 	// ON CONFLICT DO NOTHING）不产生新行，属既有去重语义，与本契约无关。
 	releaseReplyClaimForTest(t, "evt-b5-replay-second")
 	second := &ParsedPayload{EventID: "evt-b5-replay-second", Sender: sender, Content: "在吗", ChatID: conv}
-	replayCtx := DelayedReplayToContext(context.Background())
+	replayCtx := DelayedReplayToContext(ctx)
 	if sent, err := svc.sendOutbound(replayCtx, channel, account, second, "重放回复", hub, nil); err != nil || !sent {
 		t.Fatalf("重放应成功: sent=%v err=%v", sent, err)
 	}
@@ -314,7 +335,9 @@ func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
 	}
 	releaseReplyClaimForTest(t, "evt-b5-md-ai")
 	p := &ParsedPayload{EventID: "evt-b5-md-ai", Sender: hub.SenderID, Content: "有什么优惠", ChatID: convAI}
-	if sent, err := svc.sendOutbound(context.Background(), ChannelDouyin, account, p, md, hub, nil); err != nil || !sent {
+	useLegacyBridgeFixture(t)
+	ctx := localBridgeSubmitContext(t, context.Background(), "douyin", account, "text")
+	if sent, err := svc.sendOutbound(ctx, ChannelDouyin, account, p, md, hub, nil); err != nil || !sent {
 		t.Fatalf("AI 路径出库应成功: sent=%v err=%v", sent, err)
 	}
 	var rowAI model.MessageHub
@@ -325,7 +348,7 @@ func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
 
 	// 人工/触达路径：DeliverBridgeOutbound（同一内容）
 	const convManual = "conv-b5-md-manual"
-	if err := DeliverBridgeOutbound(context.Background(), "douyin", account, convManual, "text", md, "evt-b5-md-manual"); err != nil {
+	if err := DeliverBridgeOutbound(ctx, "douyin", account, convManual, "text", md, "evt-b5-md-manual"); err != nil {
 		t.Fatalf("人工路径入队失败: %v", err)
 	}
 	var rowManual model.MessageHub
@@ -368,7 +391,10 @@ func TestDeliverBridgeOutbound_SenderIDEqualsAccountID(t *testing.T) {
 		content   = "主动触达消息"
 	)
 
-	hubID, msgID, err := DeliverBridgeOutboundWithReceipt(context.Background(),
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), channel, accountID, "text")
+	hubID, msgID, err := DeliverBridgeOutboundWithReceipt(ctx,
 		channel, accountID, convID, "text", content, "evt_b5_manual_1")
 	if err != nil {
 		t.Fatalf("DeliverBridgeOutboundWithReceipt 失败: %v", err)
@@ -395,7 +421,7 @@ func TestDeliverBridgeOutbound_SenderIDEqualsAccountID(t *testing.T) {
 	}
 
 	// 同一会话再次出站（重发）：sender 不换。
-	hubID2, _, err := DeliverBridgeOutboundWithReceipt(context.Background(),
+	hubID2, _, err := DeliverBridgeOutboundWithReceipt(ctx,
 		channel, accountID, convID, "text", "补充一条", "evt_b5_manual_2")
 	if err != nil {
 		t.Fatalf("重发失败: %v", err)

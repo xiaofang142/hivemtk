@@ -1,0 +1,23 @@
+{
+  "exit": 1,
+  "expected_top_level_failures": [
+    "TestDocumentMetadataUpdatePreservesActiveReindex",
+    "TestDocumentMetadataUpdateScopeAndMissingRows",
+    "TestPipelineProgressFailurePersistsAndRetries",
+    "TestPipelineProgressFailureCleanupErrorsAndOwnerFence"
+  ],
+  "all_expected_failures": true,
+  "retry_matrix_failed_cases": 16,
+  "cleanup_matrix_failed_cases": 8,
+  "working_sources_unchanged": true,
+  "source_hashes": {
+    "internal/aiagent/knowledge/repository/knowledge_document.go": "5d98ef07196d4670083d173bee2d2777a1a820f6f2204e448d113b1a2ccbb6e7",
+    "internal/aiagent/knowledge/service/knowledge_service_pipeline.go": "f0fdf042fe28e3eaca22e7f96a1c6168096584a5724e1d6d00635f1065c2c448",
+    "internal/aiagent/knowledge/service/knowledge_reindex_quality_test.go": "bf6d757a2935646614ee0d90f82fc8c07e0fd710d43f65e9a3aa9073c29f1a0f"
+  },
+  "overlay_source_hashes": {
+    "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.specify/bugs/knowledge-reindex-fa13-20261120/evidence/followup-3/knowledge_document.go.before.txt": "6330c35ebeda6f26e0f64a20c4ae5a0c14c2977fd5c706ef92ab6b178e1528e5",
+    "/Users/xiaofang/Documents/www/go/hivemtk/hivemtk/.specify/bugs/knowledge-reindex-fa13-20261120/evidence/followup-3/knowledge_service_pipeline.go.before.txt": "6c842fa9419771824ae0271f8bf0183fad67f8ccccf9b3d19f8972c2390199a6"
+  },
+  "note": "Supplemental RED after fixture timing correction; overlay compiles captured pre-fix production, without reverting working sources. Original pre-edit RED remains in red.log."
+}

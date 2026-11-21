@@ -1,0 +1,21 @@
+{
+  "source_drift": [],
+  "focused": {
+    "pass_entries_including_parents": 51,
+    "fail_entries": 0,
+    "package_results": [
+      "ok  \thivemtk-user/internal/service\t1.839s",
+      "ok  \thivemtk-user/internal/controller\t1.358s"
+    ]
+  },
+  "race": {
+    "pass_entries_including_parents": 25,
+    "fail_entries": 0,
+    "package_results": [
+      "ok  \thivemtk-user/internal/service\t3.121s",
+      "ok  \thivemtk-user/internal/controller\t2.802s"
+    ]
+  },
+  "diff_check": 0,
+  "format_check": ""
+}

@@ -1,0 +1,3 @@
+Command: FA12_PG_DSN='<authorized local synthetic socket DSN; omitted from evidence>' go test -v ./internal/aiagent/knowledge/service ./internal/migration/migrations -run '^(TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry|TestKnowledgeReindexLeaseMigration|TestReindexCursorWatermarkAndAtomicClaim|TestReindex_EmbeddingFailureIsQueryableAndRetryable|TestReindex_FinalStatusWriteFailurePersistsOrPropagates)$' -count=1 -timeout=90s
+Working directory: user-server/
+Output: final-focused.log; exit code: final-focused.exit

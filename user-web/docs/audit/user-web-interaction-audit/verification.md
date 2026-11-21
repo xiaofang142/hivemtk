@@ -6,12 +6,12 @@
 
 | 检查 | 实际结果 | 输出 |
 |---|---|---|
-| `npm run lint:check` | 退出 0，无错误/警告 | [lint.log](logs/lint.log) |
-| `npm run build` | 退出 0，`built in 2m 26s` | [build.log](logs/build.log) |
+| `npm run lint:check` | 退出 0，无错误/警告 | `logs/lint.log`（历史日志未入库，当前工作区无副本） |
+| `npm run build` | 退出 0，`built in 2m 26s` | `logs/build.log`（历史日志未入库，当前工作区无副本） |
 | `git diff --check` | 退出 0 | 本会话执行记录 |
-| 批量/会话修正专项 | 3 files / 20 tests passed | [targeted.log](logs/targeted.log) |
-| `npm test -- --maxWorkers=2` | 退出 1：108 files passed / 1 failed；1054 tests passed / 1 failed | [full-workers2.log](logs/full-workers2.log) |
-| 唯一失败文件独立复跑：`npm test -- tests/unit/agent_mode_persistence.test.js --maxWorkers=1` | 退出 0，6 tests passed；原超时场景耗时 7253ms | [agent-isolated.log](logs/agent-isolated.log) |
+| 批量/会话修正专项 | 3 files / 20 tests passed | `logs/targeted.log`（历史日志未入库，当前工作区无副本） |
+| `npm test -- --maxWorkers=2` | 退出 1：108 files passed / 1 failed；1054 tests passed / 1 failed | `logs/full-workers2.log`（历史日志未入库，当前工作区无副本） |
+| 唯一失败文件独立复跑：`npm test -- tests/unit/agent_mode_persistence.test.js --maxWorkers=1` | 退出 0，6 tests passed；原超时场景耗时 7253ms | `logs/agent-isolated.log`（历史日志未入库，当前工作区无副本） |
 
 全量失败原文：`Test timed out in 15000ms`，场景是“创建传递 active，并可重载回显”。未放宽测试超时、未跳过用例、未改其业务断言。先前同时运行构建与全量测试的一轮出现多项超时，已主动停止；减少 worker 后仅剩该项。独立复跑通过支持负载因素判断，但**不把原全量命令改记为通过**。
 
@@ -37,8 +37,8 @@
 
 ## 继续任务的增量结果
 
-- 最新前端构建退出0，`built in 25.38s`：[continued-final-build.log](logs/continued-final-build.log)。最终lint退出0：[message-state-lint.log](logs/message-state-lint.log)。
-- 帮助中心/SEO联合专项10项通过：[seo-help-tests.log](logs/seo-help-tests.log)，各自真实/受控浏览器证据见README；消息请求状态专项5项通过：[message-state-tests.log](logs/message-state-tests.log)，既有unknown3项通过。
+- 最新前端构建退出0，`built in 25.38s`：`logs/continued-final-build.log`（历史日志未入库，当前工作区无副本）。最终lint退出0：`logs/message-state-lint.log`（历史日志未入库，当前工作区无副本）。
+- 帮助中心/SEO联合专项10项通过：`logs/seo-help-tests.log`（历史日志未入库，当前工作区无副本），各自真实/受控浏览器证据见README；消息请求状态专项5项通过：`logs/message-state-tests.log`（历史日志未入库，当前工作区无副本），既有unknown3项通过。
 - 客户360服务端唯一客户分页/关键词修复：前端10项、8217真实PG仓储/服务/控制器7个HTTP子用例、三个修改包build/vet通过。8401未装载新代码，新运行端到端仍未验，详见仓库 `.specify/bugs/customer360-server-pagination/test.md`。
 - 真实环境续跑期间API8401/PG8202/Redis8203恢复，已启动前端8212代理并用现有审计账号真实登录。消息中台41条统计和两页各20行与API一致；看板窗口0/DLQ0与接口一致，经历代理连接拒绝后自动恢复。见[live-pages.md](live-pages.md)。
 - 后续全量在Go重编译竞争时出现其他模块超时，按资源协调停止，未获得新的全量汇总；不改超时、不追全量绿灯。最新改动以以上专项/build/lint验证为准。

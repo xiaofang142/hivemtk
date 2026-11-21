@@ -209,24 +209,24 @@ func (f *outboxDBFetcher) SetOwedQuerier(q OutboxOwedQuerier) {
 
 // SetOutboxQuerier 注入 OutboxQuerier（由 router 在装配完成后调用一次）。
 //
-// 同一个 repository 实例同时实现三个口：游标查询、未交付查询、推送前认领。后两个靠可选断言取，
-// 断不到就是装配缺件——这里必须喊出来（Warn/Error 各一条），否则 SSE 会静默退回
-// 「不认领 + 按游标补拉」的旧行为，本批收口的两条面（双投、静默丢）重新打开。
+// 原生 repository 先包装为 service，统一执行当前授权与认领；可选查询口只影响查询方式，
+// 不得绕开消费裁决。未装配认领服务时，总线和补拉均保持阻塞并记录原因。
 func (h *BridgeIngestHandler) SetOutboxQuerier(q OutboxQuerier) {
+	// 原生仓储必须经过 service 的消费裁决，不能直接装作总线认领器。
+	if store, ok := q.(service.OutboundDeliveryRepository); ok {
+		q = service.NewOutboundDeliveryService(store)
+	}
+	owed, hasOwed := q.(OutboxOwedQuerier)
 	if h.outboxFetcher != nil {
 		h.outboxFetcher.SetQuerier(q)
-		if oq, ok := q.(OutboxOwedQuerier); ok {
-			h.outboxFetcher.SetOwedQuerier(oq)
-		} else {
+		h.outboxFetcher.SetOwedQuerier(owed)
+		if !hasOwed {
 			logger.GetLogger().Error().
-				Msg("[SSE] 注入的 outbox 查询器未实现 FetchOutboundUndelivered，补拉退回游标旧语义（发送失败的出站行不会再投）")
+				Msg("[SSE] outbox 查询器缺未交付查询口，使用兼容游标查询，关闭即时出站推送")
 		}
 	}
-	if cq, ok := q.(OutboundPushClaimer); ok {
-		GlobalSSEBus.SetOutboundClaimer(cq)
-	} else {
-		GlobalSSEBus.SetOutboundClaimer(nil)
-	}
+	claimer, _ := q.(OutboundPushClaimer)
+	GlobalSSEBus.setOutboundClaimer(claimer, !hasOwed)
 }
 
 // FetchOutboxSince 取「此刻该发给这条连接」的出站事件。
@@ -235,17 +235,16 @@ func (h *BridgeIngestHandler) SetOutboxQuerier(q OutboxQuerier) {
 //   - owed（生产主路径，批11 §3.7-2）：按状态取仍欠交付的行，**与游标无关**。
 //     每条先过 GlobalSSEBus.claimForPush 认领门，抢不到就不发（同一行只可能有一条路径发出去）。
 //     交付完成的行靠 ack 离开集合，所以这条查询天然收敛、也不会重放历史。
-//   - 游标（旧语义，仅缺件兜底）：id > 游标，含已投递行。
+//   - 游标（兼容查询口）：id > 游标，仍须逐行经过同一消费裁决和认领门。
 //
-// 无论哪条，newLastID 都继续推进——它是写给客户端的 id: 帧与 Last-Event-ID 协议字段，
-// 不再是服务端的读取闸门。
+// newLastID 只推进至本次实际获准交付的事件；拒绝不能让兼容游标跳过历史待发事实。
 func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, accountID, lastEventID string) ([]SSEEvent, string, error) {
 	if f.querier == nil {
 		return nil, "", nil
 	}
 	if f.owed != nil {
 		rows, err := f.owed.FetchOutboundUndelivered(ctx, channel, accountID, service.InboxOutboundClaimTimeout, sseBacklogLimit)
-		if err != nil {
+		if err != nil && len(rows) == 0 {
 			return nil, "", err
 		}
 		events := make([]SSEEvent, 0, len(rows))
@@ -260,10 +259,10 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 		}
 		// 游标只作协议记账（id: 帧 / Last-Event-ID），不再是读取闸门
 		newLastID := lastEventID
-		if len(rows) > 0 {
-			newLastID = strconv.FormatUint(uint64(rows[len(rows)-1].ID), 10)
+		if len(events) > 0 {
+			newLastID = events[len(events)-1].ID
 		}
-		return events, newLastID, nil
+		return events, newLastID, err
 	}
 
 	var sinceID uint64
@@ -284,20 +283,27 @@ func (f *outboxDBFetcher) FetchOutboxSince(ctx context.Context, channel, account
 	}
 
 	rows, err := f.querier.FetchOutboundSince(ctx, channel, accountID, sinceID, sseBacklogLimit)
-	if err != nil {
+	if err != nil && len(rows) == 0 {
 		return nil, "", err
 	}
 	events := make([]SSEEvent, 0, len(rows))
 	for _, row := range rows {
-		// R-B1：Data 统一经 BuildOutboundSSEEvent 构造（与总线路径逐键一致）
-		events = append(events, buildOutboundEvent(row))
+		// 旧游标查询也必须经过当前消费裁决与认领，缺装配不能直接放行。
+		ev := buildOutboundEvent(row)
+		claimed, blocked := GlobalSSEBus.tryClaimForPush(ctx, ev, false)
+		if blocked {
+			break
+		}
+		if claimed {
+			events = append(events, ev)
+		}
 	}
 
 	newLastID := lastEventID
-	if len(rows) > 0 {
-		newLastID = strconv.FormatUint(uint64(rows[len(rows)-1].ID), 10)
+	if len(events) > 0 {
+		newLastID = events[len(events)-1].ID
 	}
-	return events, newLastID, nil
+	return events, newLastID, err
 }
 
 // sseBacklogLimit 单次补拉上限（两条语义共用同一个数，避免兜底路径比主路径更宽）。
@@ -871,9 +877,18 @@ func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 	hubs, err := h.ingress.ClaimPendingOutbound(ctx, channel, accountID, limit)
 	claimCompleted := time.Now()
 	if err != nil {
-		logger.Ctx(ctx).Error().Err(err).Str("module", "bridge").Str("channel", channel).Msg("[Bridge] ListPendingOutbound failed")
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "query outbox failed"})
-		return
+		var denied interface{ CapabilityReasonCode() string }
+		switch {
+		case len(hubs) > 0:
+			logger.Ctx(ctx).Warn().Err(err).Int("claimed_count", len(hubs)).Msg("[Bridge] later outbox page failed, returning committed claims")
+		case errors.As(err, &denied):
+			c.JSON(http.StatusForbidden, gin.H{"status": "blocked", "reason_code": denied.CapabilityReasonCode(), "message": "outbound delivery blocked"})
+			return
+		default:
+			logger.Ctx(ctx).Error().Err(err).Str("module", "bridge").Str("channel", channel).Msg("[Bridge] ListPendingOutbound failed")
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "query outbox failed"})
+			return
+		}
 	}
 	tracing.RecordDownlinkClaimBatch(ctx, channel, accountID, hubs, &claimStarted, &claimCompleted)
 	logger.Ctx(ctx).Info().

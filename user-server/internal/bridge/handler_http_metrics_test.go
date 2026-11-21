@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/metrics"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -139,7 +141,7 @@ func TestOutboxMetrics_Success(t *testing.T) {
 	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
 		t.Fatalf("清理失败: %v", err)
 	}
-	svc := service.NewInboxIngressService()
+	svc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	h := NewBridgeIngestHandlerWithMock(nil, nil)
 	h.ingress = svc
 
@@ -169,6 +171,7 @@ func TestOutboxMetrics_Success(t *testing.T) {
 	beforeFetched := metricCounterValue(t, "bridge_outbox_fetched_total", channel, accountID)
 
 	req := httptest.NewRequest("GET", "/api/bridge/outbox?channel="+channel+"&account_id="+accountID, nil)
+	req = req.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(req.Context(), 1), channel, accountID, "text", ""))
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req

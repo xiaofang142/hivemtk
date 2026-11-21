@@ -33,12 +33,12 @@ type goldenCall struct {
 }
 
 type goldenCase struct {
-	Channel      string      `json:"channel"`
-	Sample       string      `json:"sample"`
-	Calls        []goldenCall `json:"calls"`
-	Sent         bool        `json:"sent"`
-	FailCategory string      `json:"fail_category,omitempty"`
-	FailRetryable *bool      `json:"fail_retryable,omitempty"`
+	Channel       string       `json:"channel"`
+	Sample        string       `json:"sample"`
+	Calls         []goldenCall `json:"calls"`
+	Sent          bool         `json:"sent"`
+	FailCategory  string       `json:"fail_category,omitempty"`
+	FailRetryable *bool        `json:"fail_retryable,omitempty"`
 }
 
 // goldenRouter 按域名劫持平台 HTTP：请求改写到按域名注册的假服务器。
@@ -274,7 +274,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					"/app/getAppAccessToken": func(*http.Request) (int, string) {
 						return 200, `{"code":0,"message":"ok","access_token":"qq-token-golden","expires_in":7200}`
 					},
-					"/v2/users/cs-golden-qq/messages": send,
+					"/v2/users/cs-golden-qq/messages":  send,
 					"/v2/groups/cs-golden-qq/messages": send,
 				})
 			case "wechat":
@@ -304,7 +304,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 						Updates(map[string]any{"access_token": "", "token_expires": time.Time{}}).Error; err != nil {
 						t.Fatalf("清 wecom token 缓存失败: %v", err)
 					}
-					t.Setenv("WECOM_ALLOW_OUTBOUND", "1")    // IS_TEST_MODE=1 时企微出站被哨兵跳过
+					t.Setenv("WECOM_ALLOW_OUTBOUND", "1")   // IS_TEST_MODE=1 时企微出站被哨兵跳过
 					t.Setenv("WECOM_DISABLE_OUTBOUND", "0") // main_test.go 默认置 1，金样要钉真实 HTTP 形状
 					fake(t, "qyapi.weixin.qq.com", calls, map[string]func(*http.Request) (int, string){
 						"/cgi-bin/gettoken": func(*http.Request) (int, string) {
@@ -352,7 +352,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 				if tc.Sample == "ok_card" {
 					cards = []model.RichCard{{
 						Title: "报价单", Description: "golden 卡片正文",
-						Fields: map[string]string{"总额": "¥12,000"},
+						Fields:  map[string]string{"总额": "¥12,000"},
 						Buttons: []model.CardButton{{Text: "查看详情", URL: "https://example.com/golden"}},
 					}}
 				}
@@ -432,7 +432,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 				if tc.Sample == "duplicate_occupied" {
 					// 预置同键出站行（同会话同文案已 delivered）→ CreateMessageHubIdempotent 占位冲突。
 					dup := &model.MessageHub{
-						MsgID: ContentHashMsgID("douyin", hub.ConversationID, content),
+						MsgID:    ContentHashMsgID("douyin", hub.ConversationID, content),
 						Platform: "douyin", AccountID: accountID, Direction: "outbound",
 						Status: "delivered", MsgType: "text", SenderID: accountID,
 						ReceiverID: hub.SenderID, Content: content,
@@ -443,7 +443,9 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					}
 				}
 				releaseReplyClaimForTest(t, "evt-golden-bridge-"+tc.Sample)
-				sent, sendErr = svc.sendOutbound(ctx, ChannelDouyin, accountID,
+				useLegacyBridgeFixture(t)
+				bridgeCtx := localBridgeSubmitContext(t, ctx, "douyin", accountID, "text")
+				sent, sendErr = svc.sendOutbound(bridgeCtx, ChannelDouyin, accountID,
 					&ParsedPayload{EventID: "evt-golden-bridge-" + tc.Sample, Sender: hub.SenderID, Content: "在吗", ChatID: hub.ConversationID},
 					content, hub, nil)
 			default:

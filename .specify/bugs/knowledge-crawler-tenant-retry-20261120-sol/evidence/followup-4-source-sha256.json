@@ -1,0 +1,14 @@
+{
+  "user-server/internal/aiagent/knowledge/controller/kb_crawler.go": "df4b6364722686f8d6bb4ead65c320d348e71921edbdc466b58e9bf6bd7414a5",
+  "user-server/internal/aiagent/knowledge/repository/kb_crawler.go": "84dc7206931f16abce0cba7ab8a86f49d77902ae04c5fa4e9cddd397f68b32b6",
+  "user-server/internal/aiagent/knowledge/repository/kb_document.go": "ec9e9c0cf870b0b50ec632abfe67d725a8759662a942a215dd8949a055b51b66",
+  "user-server/internal/aiagent/knowledge/service/kb_crawler.go": "eb73ef5cc35ba61fc28b894c6bdd5906c46676896bfe015b55286c71b5b7b28b",
+  "user-server/internal/aiagent/knowledge/service/kb_crawler_retry_test.go": "eb08222de29ceddf7aae7dfac4390e22c8d3a46ecbff1a3a625fd4b4eb48e955",
+  "user-server/internal/aiagent/knowledge/service/kb_crawler_followup_test.go": "387aff4002f32d852268f61b026354dbab3d361200f3228d556f30526d0fd9ce",
+  "user-server/internal/aiagent/knowledge/service/knowledge_base.go": "a8e1148841593b809f522845ea1a9036fa01a36b3830f9027646fa48dc7c6a85",
+  "user-server/internal/aiagent/knowledge/service/knowledge_base_import.go": "1b8f0d80dad0ec6d69be9d25214fc8e44723fa50c7969c1b28f60e55cb6578d0",
+  "user-server/internal/aiagent/knowledge/service/knowledge_base_import_fa12_test.go": "c15d7388cbd1cfa29aaa64f94be3bda6bcd11c1b5f6f7945b459326c62f745ec",
+  "user-server/internal/aiagent/rag/retrieval/vectorizer.go": "4d26d51267b31b8c6e718ed83e6000e6920b7e22942751209fb2bb71bbac5938",
+  "user-server/internal/pkg/cron/kb_crawler_cron.go": "c119535a989411fea6fdba2bc3ac82418ebf59774b080d03220ffdc649c9a4a8",
+  "user-server/internal/pkg/cron/kb_crawler_recovery_test.go": "95f1d56acda6c2d1552bf3b41cde4720a1d6c6cca03b92d13dde8e425a69ce2a"
+}

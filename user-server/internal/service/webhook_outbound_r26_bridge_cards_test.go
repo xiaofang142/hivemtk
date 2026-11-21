@@ -59,7 +59,10 @@ func TestSendOutbound_Bridge_CardsFallbackRecordedOnRow(t *testing.T) {
 	releaseReplyClaimForTest(t, "evt-r26-drop")
 	p := &ParsedPayload{EventID: "evt-r26-drop", Sender: hub.SenderID, Content: "有推荐吗", ChatID: hub.ConversationID}
 
-	if _, err := svc.sendOutbound(context.Background(), ChannelDouyin, hub.AccountID, p, "给你推荐两款", hub, bridgeCardsForTest(2)); err != nil {
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	if _, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "给你推荐两款", hub, bridgeCardsForTest(2)); err != nil {
 		t.Fatalf("正常出库不应报错: %v", err)
 	}
 
@@ -97,14 +100,17 @@ func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
-	hub := bridgeCardsTestHub("kuaishou", "acct-r26-none", "conv-r26-none", "cust-r26-none")
+	hub := bridgeCardsTestHub("douyin", "acct-r26-none", "conv-r26-none", "cust-r26-none")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
 	releaseReplyClaimForTest(t, "evt-r26-none")
 	p := &ParsedPayload{EventID: "evt-r26-none", Sender: hub.SenderID, Content: "有推荐吗", ChatID: hub.ConversationID}
 
-	if _, err := svc.sendOutbound(context.Background(), ChannelKuaishou, hub.AccountID, p, "稍等", hub, nil); err != nil {
+	useLegacyBridgeFixture(t)
+
+	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	if _, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "稍等", hub, nil); err != nil {
 		t.Fatalf("正常出库不应报错: %v", err)
 	}
 
@@ -134,12 +140,14 @@ func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
-	hub := bridgeCardsTestHub("xiaohongshu", "acct-r26-warn", "conv-r26-warn", "cust-r26-warn")
+	hub := bridgeCardsTestHub("douyin", "acct-r26-warn", "conv-r26-warn", "cust-r26-warn")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
 	releaseReplyClaimForTest(t, "evt-r26-warn")
 	p := &ParsedPayload{EventID: "evt-r26-warn", Sender: hub.SenderID, Content: "有推荐吗", ChatID: hub.ConversationID}
+	useLegacyBridgeFixture(t)
+	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
 
 	oldOut := os.Stdout
 	r, w, err := os.Pipe()
@@ -163,7 +171,7 @@ func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
 		<-drainDone
 	})
 
-	if _, sendErr := svc.sendOutbound(context.Background(), ChannelXiaohongshu, hub.AccountID, p, "看下这款", hub, bridgeCardsForTest(3)); sendErr != nil {
+	if _, sendErr := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "看下这款", hub, bridgeCardsForTest(3)); sendErr != nil {
 		os.Stdout = oldOut
 		_ = w.Close()
 		t.Fatalf("正常出库不应报错: %v", sendErr)
@@ -181,7 +189,7 @@ func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
 	}
 	line := lines[0]
 	for _, want := range []string{
-		`"channel":"xiaohongshu"`,
+		`"channel":"douyin"`,
 		`"cards_fallback_count":3`,
 		`"conversation_id":"conv-r26-warn"`,
 		`"account_id":"acct-r26-warn"`,

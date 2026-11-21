@@ -36,6 +36,18 @@ func (r *KnowledgeChunkParentRepository) BatchCreate(ctx context.Context, parent
 	return r.db.WithContext(ctx).CreateInBatches(&parents, 100).Error
 }
 
+func (r *KnowledgeChunkParentRepository) BatchCreateForOwner(ctx context.Context, documentID uint64, owner string, parents []model.KnowledgeChunkParent) error {
+	if len(parents) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockCurrentOwner(ctx, tx, documentID, owner); err != nil {
+			return err
+		}
+		return NewKnowledgeChunkParentRepository(tx).BatchCreate(ctx, parents)
+	})
+}
+
 // DeleteByDocumentID 随文档删除/重切清理父块（与子块同一生命周期）。
 func (r *KnowledgeChunkParentRepository) DeleteByDocumentID(ctx context.Context, documentID uint64) error {
 	return r.db.WithContext(ctx).

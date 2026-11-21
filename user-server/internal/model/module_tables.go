@@ -42,6 +42,11 @@ var coreOwnedTables = []string{
 	"obs_config", "platform_accounts", "platform_account_configs",
 	"integration_accounts", "integration_templates", "webhook_events",
 	"webhook_subscriptions", "bridge_accounts", "api_logs",
+	// 商户授权与可信事件收件箱属于跨模块连接基座，停用业务模块后仍需修复和核验。
+	"merchant_connections", "merchant_callback_subscriptions", "merchant_callback_events",
+	"merchant_callback_compensation_cursors", "merchant_callback_resource_watermarks",
+	// 授权裁决跨业务模块，来源绑定与动作证据随基座保留。
+	"capability_source_bindings", "capability_evidences",
 	// bridge_metrics：追加式运维指标时间序列（(metric_name, labels, ts) 维度、无
 	// tenant_id、租户豁免表）——看板维度是系统健康而不是任何业务面，挂到业务模块
 	// 下会让"关模块 ⇒ 表停写"说假话。与 bridge_selector_health 同口径归 core。
@@ -258,7 +263,7 @@ var experimentOwnedTables = []string{
 // sales-crm 模块独占
 var salesCRMOwnedTables = []string{
 	"opportunities", "quotes", "quote_line_items", "order_drafts",
-	"bills", "payments", "after_sales", "sales_events", "external_orders",
+	"bills", "payments", "after_sales", "sales_events", "external_orders", "follow_up_reminders",
 	"external_products",
 }
 

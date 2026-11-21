@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -114,6 +115,10 @@ func (c *LLMRoutingController) UpdateModel(ctx *gin.Context) {
 		return
 	}
 	if err := c.routingService.UpdateModel(ctx.Request.Context(), name, info); err != nil {
+		if errors.Is(err, service.ErrLLMProviderForbidden) {
+			response.Envelope(ctx, http.StatusForbidden, gin.H{"code": 403, "message": err.Error()})
+			return
+		}
 		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
@@ -139,6 +144,10 @@ func (c *LLMRoutingController) DeleteModel(ctx *gin.Context) {
 		return
 	}
 	if err := c.routingService.DeleteModel(ctx.Request.Context(), resolved); err != nil {
+		if errors.Is(err, service.ErrLLMProviderForbidden) {
+			response.Envelope(ctx, http.StatusForbidden, gin.H{"code": 403, "message": err.Error()})
+			return
+		}
 		response.Envelope(ctx, http.StatusBadRequest, gin.H{"code": 400, "message": err.Error()})
 		return
 	}
@@ -176,6 +185,10 @@ func (c *LLMRoutingController) TestModel(ctx *gin.Context) {
 		if llm.IsBalanceInsufficient(err) {
 			response.ErrorWithBusinessCode(ctx, bizerr.CodeLLMBalanceInsufficient,
 				"平台模型余额不足，请购买 LLM 套餐后重试", gin.H{})
+			return
+		}
+		if errors.Is(err, service.ErrLLMProviderForbidden) {
+			response.ErrorWithBusinessCode(ctx, bizerr.CodeForbidden, "无权操作该模型配置", gin.H{})
 			return
 		}
 		logger.Ctx(ctx.Request.Context()).Error().Err(err).Msg("llm routing request failed")

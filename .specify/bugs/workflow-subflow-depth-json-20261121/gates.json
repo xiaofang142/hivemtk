@@ -1,0 +1,42 @@
+[
+  {
+    "check": "build",
+    "exit_code": 0,
+    "seconds": 12.085
+  },
+  {
+    "check": "vet",
+    "exit_code": 0,
+    "seconds": 10.323
+  },
+  {
+    "check": "lint",
+    "exit_code": 0,
+    "seconds": 1.74
+  },
+  {
+    "check": "layer-boundary",
+    "exit_code": 0,
+    "seconds": 0.273
+  },
+  {
+    "check": "architecture",
+    "exit_code": 0,
+    "seconds": 17.776
+  },
+  {
+    "check": "goroutines",
+    "exit_code": 0,
+    "seconds": 1.523
+  },
+  {
+    "check": "bare-go",
+    "exit_code": 0,
+    "seconds": 2.266
+  },
+  {
+    "check": "gorm-only",
+    "exit_code": 0,
+    "seconds": 0.561
+  }
+]

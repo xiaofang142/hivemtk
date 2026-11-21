@@ -212,8 +212,21 @@ func (s *CustomReportService) GetPublicTemplates(ctx context.Context) ([]*model.
 	return s.reportRepo.GetPublicTemplates(ctx)
 }
 
-// UseTemplate 使用模板
-func (s *CustomReportService) UseTemplate(ctx context.Context, templateID uint, createdBy uint) (*model.CustomReport, error) {
+// UseTemplate 使用模板复制成自己的报表。
+//
+// FA-24：复制入口沿用读取授权（公开 / 本人 / 管理员，与 GetReport 同一口径），
+// 不再按 ID 直取任意同租户报表——否则普通用户可以把自己看不到的私有报表
+// 复制到自己名下再读配置。判定在服务层做，仓储的按 ID 复制不承担授权。
+func (s *CustomReportService) UseTemplate(ctx context.Context, templateID uint, createdBy uint, isAdmin bool) (*model.CustomReport, error) {
+	template, err := s.reportRepo.GetByID(ctx, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("%w（模板 id=%d）", ErrReportNotFound, templateID)
+	}
+	if !template.IsPublic && !isAdmin && template.CreatedBy != createdBy {
+		// 与 GetReport 同文案：存在性只对有权读取的人可见。
+		return nil, fmt.Errorf("%w：该报表属于他人（id=%d）", ErrReportForbidden, templateID)
+	}
+
 	report, err := s.reportRepo.UseTemplate(ctx, templateID, createdBy)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

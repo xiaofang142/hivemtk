@@ -13,7 +13,7 @@ import (
 
 // KnowledgeBaseService 知识库服务
 //
-// 文档读写与级联删除事务均经 docs 仓储，服务只编排文件与索引清理。
+// 文档读写与文档/分片原子删除均经 docs 仓储，service 只编排外部资源清理。
 type KnowledgeBaseService struct {
 	docs      kbDocumentStore
 	processor *etl.DocumentProcessor

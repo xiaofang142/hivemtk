@@ -175,9 +175,8 @@ func main() {
 	db.AutoMigrate()
 	markPhase("db_migrate")
 
-	// DB 就绪后的周期任务装配（2026-11-19 勘误：init() 自装配先于本行，repo 拿 nil
-	// 句柄静默空转——出站回收巡检与卡片交互到期清理两任务由此处启动，幂等 Once）。
-	service.StartOutboundReclaimAfterDBInit()
+	// 卡片交互到期任务在 DB 就绪后装配。出站回收需要可信的租户及证据加载源。
+	service.ReportOutboundReclaimDisabled()
 	service.StartChannelInteractionExpiryAfterDBInit()
 
 	// W-6 工具审计落库：退出前排空异步队列（见 internal/app/tool_audit_wiring.go）。
@@ -487,7 +486,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(middleware.Recovery())
 
 	// A13：可信反代名单 env TRUSTED_PROXIES 可覆盖（默认值仍为原私网名单，行为零变更），
 	// 并挂上"带了 X-Forwarded-For 但对端不在名单里"的观测中间件 —— 反代一旦落在公网地址上，
@@ -841,6 +840,12 @@ func main() {
 	if collectionJob := app.InitCollectionRuntime(db.GetDB()); collectionJob != nil {
 		defer collectionJob.Stop(context.Background())
 	}
+
+	// FA-20 营销流程外发闸门：send_sms/send_email 动作从此与 AI 工具、主动触达、
+	// 批量管线走同一发送前判定链（DNC → W-1 审批 → E1 合规）。装配落在 internal/app
+	// （见 marketing_flow_gate_wiring.go）。顺序约束同上两行：必须在 router.Setup 之后
+	// （W-1 checker 就绪后）；未装配时注册的发送器 fail-closed，营销流程外发动作全部拒发。
+	app.AttachMarketingFlowReachGate(db.GetDB())
 	markPhase("workers")
 
 	// Telegram polling 的分布式锁在关停时必须交回：polling 协程随进程消失后，

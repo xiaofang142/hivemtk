@@ -26,6 +26,7 @@
 package service
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
 	"io"
@@ -233,6 +234,7 @@ func c01SetupAI(t *testing.T, rag *fakeRAGSearcher, intent interface {
 	// 客户身份格：注入真实身份服务（douyin open_id → customer 档案）。
 	orch.SetIdentityService(NewCustomerIdentityService())
 
+	useLegacyBridgeFixture(t)
 	ws := NewWebhookService()
 	t.Cleanup(func() { ws.Stop(context.Background()) })
 	ws.SetSmartOrchestrator(context.Background(), orch)
@@ -272,7 +274,7 @@ func c01OutboundRows(t *testing.T, db *gorm.DB, conv string) []*model.MessageHub
 func TestSmartCS01_SampleA_KnowledgeHit_AIReplyApprovedOutbound(t *testing.T) {
 	rag := newC01RAGHit() // 可计数检索 fake：1 条命中块（含已发布 FAQ 标记）
 	ws, _, db := c01SetupAI(t, rag, fakeIntentRecognizer{})
-	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), c01TenantA), c01Channel, c01AccountA1, "text")
 
 	// 步骤1：入站落库（生产入口；channelgw pipeline 的委托体 HandleIngressBatch 的单条路径）。
 	ingress := NewInboxIngressService()
@@ -374,7 +376,7 @@ func TestSmartCS01_SampleA_KnowledgeHit_AIReplyApprovedOutbound(t *testing.T) {
 func TestSmartCS01_SampleB_LowConfidence_TransferToHuman_NoAIOutbound(t *testing.T) {
 	rag := &fakeRAGSearcher{} // 无命中：0 块
 	ws, _, db := c01SetupAI(t, rag, c01LowConfIntent{})
-	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), c01TenantA), c01Channel, c01AccountA1, "text")
 
 	const (
 		evt  = "cs01-evt-a-0002"
@@ -480,7 +482,8 @@ func TestSmartCS01_ModelEmptyReply_FallbackNotMasqueradingAsKnowledgeHit(t *test
 	t.Cleanup(func() { ws.Stop(context.Background()) })
 	ws.SetSmartOrchestrator(context.Background(), orch)
 
-	ctx := tenant.WithTenantID(context.Background(), c01TenantA)
+	useLegacyBridgeFixture(t)
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), c01TenantA), c01Channel, c01AccountA1, "text")
 	const (
 		evt  = "cs01-evt-a-0003"
 		conv = "cs01-conv-a1-003"
@@ -653,7 +656,7 @@ func TestIngressCS01_CrossTenantNegative_TenantBIsolatedNoOutbound(t *testing.T)
 
 	setupBridgeWhitelistForTest(t, c01Channel)
 	database := testutil.NewTestDB(t, &model.MessageHub{})
-	svc := NewInboxIngressService()
+	svc := NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	SetGlobalInboxIngressService(svc)
 	t.Cleanup(func() { SetGlobalInboxIngressService(nil) })
 
@@ -694,6 +697,7 @@ func TestIngressCS01_CrossTenantNegative_TenantBIsolatedNoOutbound(t *testing.T)
 	}
 
 	// ③ 获准路径外发（A 租户），B 的桥来认领：一条都看不见 ⇒ B 0 外发。
+	ctxA = localBridgeSubmitContext(t, ctxA, c01Channel, c01AccountA1, "text")
 	if err := DeliverBridgeOutbound(ctxA, c01Channel, c01AccountA1, c01ConvA, c01MsgType, c01FAQAnswer, "cs01-evt-a-0009"); err != nil {
 		t.Fatalf("A 租户获准外发失败: %v", err)
 	}

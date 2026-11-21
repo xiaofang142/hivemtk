@@ -2,10 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
 	"time"
+
+	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
+	"hivemtk-user/internal/repository"
 )
 
 // ReminderType 提醒类型
@@ -32,7 +38,9 @@ const (
 
 // Reminder 跟进提醒
 type Reminder struct {
-	ID          string           `json:"id"`
+	ID string `json:"id"`
+	// TenantID 租户隔离键（FA-26）：所有读写按 ctx 租户过滤，跨租户隐藏存在性。
+	TenantID    uint             `json:"tenant_id"`
 	CustomerID  string           `json:"customer_id"`
 	OneID       string           `json:"one_id"`
 	OwnerID     string           `json:"owner_id"`
@@ -55,13 +63,26 @@ type FollowUpService struct {
 	reminders map[string]*Reminder
 	journey   *CustomerJourneyService
 	stats     *SalesEventStatsService
+	// store 持久仓储（FA-27）：nil = 内存 map（仅测试/装配缺席降级）；
+	// 生产三条链（HTTP 今日跟进/回款钩子/AI 工具）必须注入同一权威存储。
+	store repository.FollowUpReminderStore
 }
 
-// NewFollowUpService 创建跟进服务
+// NewFollowUpService 创建跟进服务（内存存储：仅供单测与显式降级使用）。
 func NewFollowUpService(journey *CustomerJourneyService) *FollowUpService {
 	return &FollowUpService{
 		reminders: make(map[string]*Reminder),
 		journey:   journey,
+	}
+}
+
+// NewFollowUpServiceWithStore 创建持久化跟进服务（FA-27 生产装配口）。
+// 三条生产链传同一 repository.FollowUpReminderRepository（同一 DB 句柄）即共享权威存储。
+func NewFollowUpServiceWithStore(journey *CustomerJourneyService, store repository.FollowUpReminderStore) *FollowUpService {
+	return &FollowUpService{
+		reminders: make(map[string]*Reminder),
+		journey:   journey,
+		store:     store,
 	}
 }
 
@@ -97,6 +118,16 @@ func (s *FollowUpService) Schedule(ctx context.Context, customerID, ownerID stri
 	}
 	if r.Priority == 0 {
 		r.Priority = PriorityNormal
+	}
+	// FA-26：行归属取 ctx 租户（缺省档落 default:1，与全仓 default:1 口径一致）。
+	if id, ok := tenant.FromContext(ctx); ok && id > 0 {
+		r.TenantID = id
+	}
+	if s.store != nil {
+		if err := s.store.Create(ctx, reminderToRow(r)); err != nil {
+			return nil, fmt.Errorf("提醒持久化失败：%w", err)
+		}
+		return r, nil
 	}
 	s.mu.Lock()
 	s.reminders[r.ID] = r
@@ -158,6 +189,55 @@ var FollowUpResultInfo = map[FollowUpResult]struct {
 	FollowUpResultNoResponse: {StageSleeping, -1, false},
 }
 
+// fetchReminder 取提醒（FA-26：行在当前 ctx 租户范围内才可见；store 路径由仓储
+// scoped 查询保证，map 路径在此显式比对租户）。
+func (s *FollowUpService) fetchReminder(ctx context.Context, reminderID string) (*Reminder, error) {
+	if s.store != nil {
+		row, err := s.store.GetByID(ctx, reminderID)
+		if err != nil {
+			// 与 map 路径同一文案：跨租户/不存在都叫"不存在"，不泄露存在性差异。
+			return nil, fmt.Errorf("提醒 %s 不存在", reminderID)
+		}
+		return rowToReminder(row), nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	r, ok := s.reminders[reminderID]
+	if !ok {
+		return nil, fmt.Errorf("提醒 %s 不存在", reminderID)
+	}
+	if id, ok := tenant.FromContext(ctx); ok && id > 0 && r.TenantID != id {
+		// 跨租户隐藏存在性：与"不存在"同一个错误，不泄露他人待办。
+		return nil, fmt.Errorf("提醒 %s 不存在", reminderID)
+	}
+	return r, nil
+}
+
+// persistReminder 把对 r 的变更落回权威存储（store 或内存 map）。
+func (s *FollowUpService) persistReminder(ctx context.Context, r *Reminder) error {
+	if s.store != nil {
+		return s.store.Update(ctx, reminderToRow(r))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reminders[r.ID] = r
+	return nil
+}
+
+// authorizeReminderOperator FA-26：普通用户只能操作自己的待办，管理员豁免。
+func authorizeReminderOperator(r *Reminder, operatorID string, isAdmin bool) error {
+	if isAdmin {
+		return nil
+	}
+	if operatorID == "" || r.OwnerID != operatorID {
+		return fmt.Errorf("%w：跟进提醒 %s 属于他人", ErrFollowUpForbidden, r.ID)
+	}
+	return nil
+}
+
+// ErrFollowUpForbidden 无权操作他人跟进提醒（HTTP 层映射 403）。
+var ErrFollowUpForbidden = errors.New("无权操作该提醒")
+
 // CompleteWithResult 标记跟进完成（带结果，自动推进旅程 + 仪表盘实时更新）
 // 商业产品级业务流：销售点"完成跟进"+ 选择结果 → 4 件事自动发生
 //  1. 跟进状态更新为 done
@@ -165,28 +245,51 @@ var FollowUpResultInfo = map[FollowUpResult]struct {
 //  3. 销售事件流实时记录这次跟进（用于销售排行、漏斗、跟进率）
 //  4. 客户档案更新（最后跟进时间、跟进次数）
 //
-// 返回更新后的跟进详情
+// 返回更新后的跟进详情。
+//
+// 本签名是系统内部链（AI 工具/回款钩子/单测）用的口：调用方以系统权威代行，
+// 租户仍按 ctx 过滤；HTTP 写口一律走 CompleteWithResultFor 带操作者授权。
 func (s *FollowUpService) CompleteWithResult(ctx context.Context, reminderID string, result FollowUpResult, note string) error {
-	s.mu.Lock()
-	r, ok := s.reminders[reminderID]
-	if !ok {
-		s.mu.Unlock()
-		return fmt.Errorf("提醒 %s 不存在", reminderID)
+	return s.completeWithResult(ctx, reminderID, "", false, result, note)
+}
+
+// CompleteWithResultFor HTTP 写口：带操作者身份的完成跟进（FA-26 授权矩阵）。
+// 操作者身份缺失即拒绝：授权入口不提供"空操作者 = 系统权威"的旁路。
+func (s *FollowUpService) CompleteWithResultFor(ctx context.Context, reminderID, operatorID string, isAdmin bool, result FollowUpResult, note string) error {
+	if operatorID == "" && !isAdmin {
+		return ErrFollowUpForbidden
+	}
+	return s.completeWithResult(ctx, reminderID, operatorID, isAdmin, result, note)
+}
+
+// withOperator=true 才做操作者校验：Complete/Cancel 系统内部链（AI 工具/回款钩子）
+// 以系统权威代行，租户仍按 ctx 过滤；HTTP 写口（*For）恒带身份。
+func (s *FollowUpService) completeWithResult(ctx context.Context, reminderID, operatorID string, isAdmin bool, result FollowUpResult, note string) (err error) {
+	withOperator := operatorID != "" || isAdmin
+	r, err := s.fetchReminder(ctx, reminderID)
+	if err != nil {
+		return err
+	}
+	if withOperator {
+		if err := authorizeReminderOperator(r, operatorID, isAdmin); err != nil {
+			return err
+		}
 	}
 	// 状态守卫（A11）：done/canceled 不允许再完成 —— 该函数锁外会推进旅程并
 	// 记销售事件，重复调用一次就多记一笔排行/漏斗数据；错误串带"已处理"供
 	// HTTP 层映射 409。
 	if r.Status != "pending" {
-		s.mu.Unlock()
 		return fmt.Errorf("提醒 %s 已处理", reminderID)
 	}
 	now := time.Now()
 	r.CompletedAt = &now
 	r.Status = "done"
 	r.Description = r.Description + "\n[完成结果] " + string(result) + " | " + note
+	if err := s.persistReminder(ctx, r); err != nil {
+		return fmt.Errorf("提醒完成状态持久化失败：%w", err)
+	}
 	customerID := r.CustomerID
 	ownerID := r.OwnerID
-	s.mu.Unlock()
 
 	if s.journey != nil {
 		s.journey.Touch(ctx, customerID, "followup")
@@ -212,13 +315,29 @@ func (s *FollowUpService) CompleteWithResult(ctx context.Context, reminderID str
 	return nil
 }
 
-// Cancel 取消跟进
+// Cancel 取消跟进（系统内部链口，租户按 ctx 过滤；HTTP 写口走 CancelFor）。
 func (s *FollowUpService) Cancel(ctx context.Context, reminderID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	r, ok := s.reminders[reminderID]
-	if !ok {
-		return fmt.Errorf("提醒 %s 不存在", reminderID)
+	return s.cancel(ctx, reminderID, "", false)
+}
+
+// CancelFor HTTP 写口：带操作者身份的取消跟进（FA-26 授权矩阵）。
+func (s *FollowUpService) CancelFor(ctx context.Context, reminderID, operatorID string, isAdmin bool) error {
+	if operatorID == "" && !isAdmin {
+		return ErrFollowUpForbidden
+	}
+	return s.cancel(ctx, reminderID, operatorID, isAdmin)
+}
+
+func (s *FollowUpService) cancel(ctx context.Context, reminderID, operatorID string, isAdmin bool) error {
+	withOperator := operatorID != "" || isAdmin
+	r, err := s.fetchReminder(ctx, reminderID)
+	if err != nil {
+		return err
+	}
+	if withOperator {
+		if err := authorizeReminderOperator(r, operatorID, isAdmin); err != nil {
+			return err
+		}
 	}
 	// 状态守卫（A11）：终态（done/canceled）不可再改写，否则已完成的跟进会被
 	// 回改成 canceled、完成记录悬空。
@@ -226,16 +345,33 @@ func (s *FollowUpService) Cancel(ctx context.Context, reminderID string) error {
 		return fmt.Errorf("提醒 %s 已处理", reminderID)
 	}
 	r.Status = "canceled"
-	return nil
+	return s.persistReminder(ctx, r)
 }
 
-// ListPending 列出待办（按截止时间排序）
+// ListPending 列出待办（按截止时间排序；FA-26：按 ctx 租户过滤 + 负责人过滤）
 func (s *FollowUpService) ListPending(ctx context.Context, ownerID string, limit int) []*Reminder {
+	if s.store != nil {
+		rows, err := s.store.ListPending(ctx, ownerID, limit)
+		if err != nil {
+			// 读侧故障不得伪装成"零待办"静默吞掉：记日志后仍返回空，但留痕可查。
+			logger.Errorf("[followup] ListPending 读取失败 owner=%q: %v", ownerID, err)
+			return []*Reminder{}
+		}
+		out := make([]*Reminder, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, rowToReminder(row))
+		}
+		return out
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	tenantID, hasTenant := tenant.FromContext(ctx)
 	pending := make([]*Reminder, 0)
 	for _, r := range s.reminders {
 		if r.Status != "pending" {
+			continue
+		}
+		if hasTenant && r.TenantID != tenantID {
 			continue
 		}
 		if ownerID != "" && r.OwnerID != ownerID {
@@ -255,14 +391,30 @@ func (s *FollowUpService) ListPending(ctx context.Context, ownerID string, limit
 	return pending
 }
 
-// ListOverdue 列出已逾期
+// ListOverdue 列出已逾期（FA-26：按 ctx 租户过滤）
 func (s *FollowUpService) ListOverdue(ctx context.Context, ownerID string) []*Reminder {
+	if s.store != nil {
+		rows, err := s.store.ListOverdue(ctx, ownerID, time.Now())
+		if err != nil {
+			logger.Errorf("[followup] ListOverdue 读取失败 owner=%q: %v", ownerID, err)
+			return []*Reminder{}
+		}
+		out := make([]*Reminder, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, rowToReminder(row))
+		}
+		return out
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	tenantID, hasTenant := tenant.FromContext(ctx)
 	now := time.Now()
 	overdue := make([]*Reminder, 0)
 	for _, r := range s.reminders {
 		if r.Status != "pending" {
+			continue
+		}
+		if hasTenant && r.TenantID != tenantID {
 			continue
 		}
 		if ownerID != "" && r.OwnerID != ownerID {
@@ -279,13 +431,29 @@ func (s *FollowUpService) ListOverdue(ctx context.Context, ownerID string) []*Re
 // 商业逻辑：返回指定日期范围内（默认当天 0 点到 24 点）的所有待办
 // 需处理 DueAt 恰好等于 dayEnd 的边界情况，且对 ownerID 过滤过于严格
 func (s *FollowUpService) GetDailyCalendar(ctx context.Context, ownerID string, date time.Time) []*Reminder {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	dayStart := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 	dayEnd := dayStart.Add(24 * time.Hour)
+	if s.store != nil {
+		rows, err := s.store.ListRange(ctx, ownerID, dayStart, dayEnd)
+		if err != nil {
+			logger.Errorf("[followup] GetDailyCalendar 读取失败 owner=%q: %v", ownerID, err)
+			return []*Reminder{}
+		}
+		out := make([]*Reminder, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, rowToReminder(row))
+		}
+		return out
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	tenantID, hasTenant := tenant.FromContext(ctx)
 	cal := make([]*Reminder, 0)
 	for _, r := range s.reminders {
 		if r.Status != "pending" {
+			continue
+		}
+		if hasTenant && r.TenantID != tenantID {
 			continue
 		}
 		if ownerID != "" && r.OwnerID != ownerID {
@@ -301,30 +469,72 @@ func (s *FollowUpService) GetDailyCalendar(ctx context.Context, ownerID string, 
 	return cal
 }
 
-// GetWeeklyCalendar 获取每周日历（按天分组）
+// GetWeeklyCalendar 获取每周日历（按天分组；FA-26：按 ctx 租户过滤）
 func (s *FollowUpService) GetWeeklyCalendar(ctx context.Context, ownerID string, startOfWeek time.Time) map[string][]*Reminder {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	weekStart := time.Date(startOfWeek.Year(), startOfWeek.Month(), startOfWeek.Day(), 0, 0, 0, 0, startOfWeek.Location())
 	result := make(map[string][]*Reminder)
-	for i := 0; i < 7; i++ {
-		dayStart := weekStart.AddDate(0, 0, i)
-		dayEnd := dayStart.Add(24 * time.Hour)
-		key := dayStart.Format("2006-01-02")
-		result[key] = []*Reminder{}
+	var all []*Reminder
+	if s.store != nil {
+		weekEnd := weekStart.AddDate(0, 0, 7)
+		rows, err := s.store.ListRange(ctx, ownerID, weekStart, weekEnd)
+		if err != nil {
+			logger.Errorf("[followup] GetWeeklyCalendar 读取失败 owner=%q: %v", ownerID, err)
+			rows = nil
+		}
+		all = make([]*Reminder, 0, len(rows))
+		for _, row := range rows {
+			all = append(all, rowToReminder(row))
+		}
+	} else {
+		s.mu.RLock()
+		tenantID, hasTenant := tenant.FromContext(ctx)
 		for _, r := range s.reminders {
 			if r.Status != "pending" {
+				continue
+			}
+			if hasTenant && r.TenantID != tenantID {
 				continue
 			}
 			if ownerID != "" && r.OwnerID != ownerID {
 				continue
 			}
+			all = append(all, r)
+		}
+		s.mu.RUnlock()
+	}
+	for i := 0; i < 7; i++ {
+		dayStart := weekStart.AddDate(0, 0, i)
+		dayEnd := dayStart.Add(24 * time.Hour)
+		key := dayStart.Format("2006-01-02")
+		result[key] = []*Reminder{}
+		for _, r := range all {
 			if !r.DueAt.Before(dayStart) && r.DueAt.Before(dayEnd) {
 				result[key] = append(result[key], r)
 			}
 		}
 	}
 	return result
+}
+
+// reminderToRow / rowToReminder 服务域对象与持久行的互转（字段一一对应）。
+func reminderToRow(r *Reminder) *model.FollowUpReminder {
+	return &model.FollowUpReminder{
+		TenantID: r.TenantID, ID: r.ID, CustomerID: r.CustomerID, OneID: r.OneID,
+		OwnerID: r.OwnerID, Type: string(r.Type), Priority: int(r.Priority),
+		Title: r.Title, Description: r.Description, DueAt: r.DueAt,
+		CreatedAt: r.CreatedAt, CompletedAt: r.CompletedAt, Status: r.Status,
+		SOPName: r.SOPName, AutoHandle: r.AutoHandle, Channel: r.Channel,
+	}
+}
+
+func rowToReminder(row *model.FollowUpReminder) *Reminder {
+	return &Reminder{
+		TenantID: row.TenantID, ID: row.ID, CustomerID: row.CustomerID, OneID: row.OneID,
+		OwnerID: row.OwnerID, Type: ReminderType(row.Type), Priority: ReminderPriority(row.Priority),
+		Title: row.Title, Description: row.Description, DueAt: row.DueAt,
+		CreatedAt: row.CreatedAt, CompletedAt: row.CompletedAt, Status: row.Status,
+		SOPName: row.SOPName, AutoHandle: row.AutoHandle, Channel: row.Channel,
+	}
 }
 
 // AutoScheduleByJourney 根据旅程阶段自动安排跟进

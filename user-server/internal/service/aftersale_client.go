@@ -25,10 +25,11 @@ type AfterSaleExternalClient interface {
 
 // HTTPAfterSaleClient 标准售后回写 HTTP 客户端，实现 AfterSaleExternalClient
 type HTTPAfterSaleClient struct {
-	baseURL string
-	key     string
-	secret  string
-	http    *http.Client
+	baseURL    string
+	key        string
+	secret     string
+	http       *http.Client
+	authorizer func(context.Context, *portcontract.AfterSaleRequest) error
 }
 
 // NewAfterSaleExternalClientFromConfig 按数据库中的售后集成配置构造。baseURL 为空表示未配置回写接口。
@@ -48,6 +49,13 @@ func (c *HTTPAfterSaleClient) Configured() bool { return c.baseURL != "" }
 func (c *HTTPAfterSaleClient) Create(ctx context.Context, req *portcontract.AfterSaleRequest) (*AfterSaleExternalResult, error) {
 	if !c.Configured() {
 		return nil, nil
+	}
+	check := c.authorizer
+	if check == nil {
+		check = authorizeAfterSaleSubmit
+	}
+	if err := check(ctx, req); err != nil {
+		return nil, err
 	}
 	body, err := json.Marshal(req)
 	if err != nil {

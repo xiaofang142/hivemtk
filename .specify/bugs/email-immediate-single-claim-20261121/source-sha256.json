@@ -1,0 +1,3 @@
+4ec51a415254f50025794544e85a2dc127fc86d2f8de2692399735cc84f0fbb5  internal/email/service/email_send.go
+442ab93897e3807aca7d978bade43fbc33e6f0d06ece6ee04df05ec6ed01a7e5  internal/email/service/email_immediate_claim_test.go
+f85aaf2a7ecd100c6aa9b7109e1b2cb4057da6a20fdb879029513250c5968c86  internal/repository/email_send.go

@@ -148,7 +148,9 @@ func TestSendOutbound_RetryableFailureEntersRetryLane(t *testing.T) {
 		t.Fatalf("seed inbound 2: %v", err)
 	}
 	p2 := &ParsedPayload{EventID: "evt-retry-ok", Sender: "cust-retry-ok", Content: "在吗", ChatID: "conv-retry-ok"}
-	sent2, sendErr2 := svc.sendOutbound(context.Background(), ChannelDouyin, "acct-retry-ok", p2, "AI 回复（成功）", hub2, nil)
+	useLegacyBridgeFixture(t)
+	bridgeCtx := localBridgeSubmitContext(t, context.Background(), "douyin", "acct-retry-ok", "text")
+	sent2, sendErr2 := svc.sendOutbound(bridgeCtx, ChannelDouyin, "acct-retry-ok", p2, "AI 回复（成功）", hub2, nil)
 	if !sent2 || sendErr2 != nil {
 		t.Fatalf("桥接渠道应判成功且无错误，got sent=%v err=%v", sent2, sendErr2)
 	}

@@ -43,22 +43,30 @@ type LLMJudge interface {
 	Judge(ctx context.Context, cfg *model.LeadMiningConfig, history []llm.ChatMessage) (*LeadJudgement, error)
 }
 
+type leadMiningConfigCacheEntry struct {
+	config            *model.LeadMiningConfig
+	loadedAt          time.Time
+	serviceGeneration uint64
+	tenantGeneration  uint64
+}
+
 // Service 线索发掘服务（非侵入异步）
 type Service struct {
-	queue          chan *model.MessageHub
-	workers        int
-	judge          LLMJudge
-	historyFetcher func(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage
-	custRepo       repository.CustomerRepository
-	clueRepo       repository.ClueRepository
-	cfgRepo        repository.LeadMiningConfigRepository
-	hubRepo        *repository.MessageHubRepository
-	mu             sync.Mutex
-	lastJudge      map[string]time.Time
-	cfgCache       *model.LeadMiningConfig
-	cfgLoadedAt    time.Time
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
+	queue              chan *model.MessageHub
+	workers            int
+	judge              LLMJudge
+	historyFetcher     func(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage
+	custRepo           repository.CustomerRepository
+	clueRepo           repository.ClueRepository
+	cfgRepo            repository.LeadMiningConfigRepository
+	hubRepo            *repository.MessageHubRepository
+	mu                 sync.Mutex
+	lastJudge          map[string]time.Time
+	cfgCache           map[uint]leadMiningConfigCacheEntry
+	cfgGeneration      map[uint]uint64
+	cfgCacheGeneration uint64
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
 }
 
 var singleton *Service
@@ -68,15 +76,17 @@ var singleton *Service
 func NewLeadMiningService(clueRepo repository.ClueRepository) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Service{
-		queue:     make(chan *model.MessageHub, leadMiningQueueSize),
-		workers:   leadMiningWorkers,
-		judge:     &dispatcherJudge{},
-		custRepo:  repository.NewCustomerRepository(),
-		clueRepo:  clueRepo,
-		cfgRepo:   repository.NewLeadMiningConfigRepository(),
-		hubRepo:   repository.NewMessageHubRepository(),
-		lastJudge: make(map[string]time.Time),
-		cancel:    cancel,
+		queue:         make(chan *model.MessageHub, leadMiningQueueSize),
+		workers:       leadMiningWorkers,
+		judge:         &dispatcherJudge{},
+		custRepo:      repository.NewCustomerRepository(),
+		clueRepo:      clueRepo,
+		cfgRepo:       repository.NewLeadMiningConfigRepository(),
+		hubRepo:       repository.NewMessageHubRepository(),
+		lastJudge:     make(map[string]time.Time),
+		cfgCache:      make(map[uint]leadMiningConfigCacheEntry),
+		cfgGeneration: make(map[uint]uint64),
+		cancel:        cancel,
 	}
 	singleton = s
 	for i := 0; i < s.workers; i++ {
@@ -93,8 +103,34 @@ func ReloadConfigCache() {
 		return
 	}
 	singleton.mu.Lock()
-	singleton.cfgCache = nil
+	singleton.invalidateConfigCacheLocked(nil)
 	singleton.mu.Unlock()
+}
+
+// ReloadConfigCacheForTenant 热更新指定租户的配置缓存。
+func ReloadConfigCacheForTenant(tenantID uint) {
+	if singleton == nil || tenantID == 0 {
+		return
+	}
+	singleton.mu.Lock()
+	singleton.invalidateConfigCacheLocked(&tenantID)
+	singleton.mu.Unlock()
+}
+
+func (s *Service) invalidateConfigCacheLocked(tenantID *uint) {
+	if s.cfgCache == nil {
+		s.cfgCache = make(map[uint]leadMiningConfigCacheEntry)
+	}
+	if tenantID == nil {
+		s.cfgCacheGeneration++
+		s.cfgCache = make(map[uint]leadMiningConfigCacheEntry)
+		return
+	}
+	if s.cfgGeneration == nil {
+		s.cfgGeneration = make(map[uint]uint64)
+	}
+	delete(s.cfgCache, *tenantID)
+	s.cfgGeneration[*tenantID]++
 }
 
 // GetLeadMiningConfig 读取线索发掘全局配置（controller 层入口，避免 controller 直连 repository/model）
@@ -116,14 +152,15 @@ func GetStatus() map[string]any {
 		return map[string]any{"running": false, "message": "service not initialized"}
 	}
 	s.mu.Lock()
-	count := len(s.lastJudge)
+	recent := len(s.lastJudge)
+	configLoaded := len(s.cfgCache) > 0
 	s.mu.Unlock()
 	return map[string]any{
 		"running":          true,
 		"workers":          s.workers,
 		"queue_depth":      len(s.queue),
-		"recent_processed": count,
-		"cfg_loaded":       s.cfgLoadedAt.IsZero(),
+		"recent_processed": recent,
+		"cfg_loaded":       configLoaded,
 	}
 }
 
@@ -131,7 +168,11 @@ func SaveLeadMiningConfig(ctx context.Context, in *dto.LeadMiningConfig) error {
 	if err := repository.NewLeadMiningConfigRepository().Save(ctx, leadMiningConfigFromDTO(in)); err != nil {
 		return err
 	}
-	ReloadConfigCache()
+	if tenantID, ok := tenant.FromContext(ctx); ok {
+		ReloadConfigCacheForTenant(tenantID)
+	} else {
+		ReloadConfigCache()
+	}
 	return nil
 }
 
@@ -206,14 +247,14 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	if hub == nil || hub.Direction != "inbound" {
 		return
 	}
-	// 租户归属：worker 起的 ctx 来自 context.Background()（无租户），而
-	// lead_mining_configs / message_hub / clues 都是租户表 —— on 模式下未绑定租户
-	// 即被隔离守卫 fail-closed 拒绝（"[lead-mining] 读取配置失败: [tenant] 表
-	// lead_mining_configs 需要租户上下文但 ctx 未绑定"），整条线索发掘链路静默不跑。
-	// 行自带 tenant_id（MessageHub 是租户表，落库时由隔离 callback 填好），按行自证绑定：
-	// OnlyTenant 钉死归属、不回落默认租户（TenantID=0 时保持原 ctx，交给隔离守卫继续 fail-closed）。
+	if hub.TenantID == 0 && tenant.IsMultiTenant() {
+		logger.Warnf("[lead-mining] 拒绝无租户归属的消息 msgID=%s", hub.MsgID)
+		return
+	}
 	if hub.TenantID != 0 {
 		ctx = tenant.OnlyTenant(ctx, hub.TenantID)
+	} else {
+		ctx = tenant.OnlyTenant(ctx, tenant.DefaultTenantID)
 	}
 	content := strings.TrimSpace(hub.Content)
 	if content == "" {
@@ -229,10 +270,8 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	}
 
 	account := fmt.Sprintf("%s:%s", hub.Platform, hub.SenderID)
-	debounceKey := account
-	if hub.IsGroup && hub.ConversationID != "" {
-		debounceKey = fmt.Sprintf("%s:%s:%s", hub.Platform, hub.ConversationID, hub.SenderID)
-	}
+	tenantID, _ := tenant.FromContext(ctx)
+	debounceKey := leadMiningDebounceKey(tenantID, hub.Platform, hub.ConversationID, hub.SenderID, hub.IsGroup)
 	s.mu.Lock()
 	if last, ok := s.lastJudge[debounceKey]; ok && time.Since(last) < leadMiningDebounce {
 		s.mu.Unlock()
@@ -258,13 +297,42 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	s.persistLead(ctx, cfg, hub, account, jd)
 }
 
-func (s *Service) loadConfig(ctx context.Context) *model.LeadMiningConfig {
-	s.mu.Lock()
-	if s.cfgCache != nil && time.Since(s.cfgLoadedAt) < leadMiningConfigTTL {
-		c := s.cfgCache
-		s.mu.Unlock()
-		return c
+func leadMiningDebounceKey(tenantID uint, platform, conversationID, senderID string, isGroup bool) string {
+	key := fmt.Sprintf("%s:%s", platform, senderID)
+	if isGroup && conversationID != "" {
+		key = fmt.Sprintf("%s:%s:%s", platform, conversationID, senderID)
 	}
+	if tenantID == tenant.DefaultTenantID {
+		return key
+	}
+	return fmt.Sprintf("%d:%s", tenantID, key)
+}
+
+func (s *Service) loadConfig(ctx context.Context) *model.LeadMiningConfig {
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok {
+		if tenant.IsMultiTenant() || tenant.IsSystemScope(ctx) {
+			return nil
+		}
+		tenantID = tenant.DefaultTenantID
+		ctx = tenant.OnlyTenant(ctx, tenantID)
+	}
+
+	now := time.Now()
+	s.mu.Lock()
+	if s.cfgCache == nil {
+		s.cfgCache = make(map[uint]leadMiningConfigCacheEntry)
+	}
+	if s.cfgGeneration == nil {
+		s.cfgGeneration = make(map[uint]uint64)
+	}
+	if cached, found := s.cfgCache[tenantID]; found && cached.serviceGeneration == s.cfgCacheGeneration && cached.tenantGeneration == s.cfgGeneration[tenantID] && now.Sub(cached.loadedAt) < leadMiningConfigTTL {
+		cfg := cloneLeadMiningConfig(cached.config)
+		s.mu.Unlock()
+		return cfg
+	}
+	generation := s.cfgCacheGeneration
+	tenantGeneration := s.cfgGeneration[tenantID]
 	s.mu.Unlock()
 
 	cfg, err := s.cfgRepo.GetSingleton(ctx)
@@ -272,11 +340,33 @@ func (s *Service) loadConfig(ctx context.Context) *model.LeadMiningConfig {
 		logger.Warnf("[lead-mining] 读取配置失败: %v", err)
 		return nil
 	}
+	if cfg == nil {
+		return nil
+	}
+
+	cachedConfig := cloneLeadMiningConfig(cfg)
 	s.mu.Lock()
-	s.cfgCache = cfg
-	s.cfgLoadedAt = time.Now()
+	if generation == s.cfgCacheGeneration && tenantGeneration == s.cfgGeneration[tenantID] {
+		s.cfgCache[tenantID] = leadMiningConfigCacheEntry{
+			config:            cachedConfig,
+			loadedAt:          time.Now(),
+			serviceGeneration: generation,
+			tenantGeneration:  tenantGeneration,
+		}
+	}
 	s.mu.Unlock()
-	return cfg
+	return cloneLeadMiningConfig(cachedConfig)
+}
+
+func cloneLeadMiningConfig(cfg *model.LeadMiningConfig) *model.LeadMiningConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	cloned.Keywords = append(model.JSONStrings(nil), cfg.Keywords...)
+	cloned.Tags = append(model.JSONStrings(nil), cfg.Tags...)
+	cloned.Channels = append(model.JSONStrings(nil), cfg.Channels...)
+	return &cloned
 }
 
 func (s *Service) fetchHistory(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage {

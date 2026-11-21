@@ -2,6 +2,7 @@
 package bridge
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -303,6 +305,10 @@ func TestGetBridgeOutbox_RefreshesOnlineSignal(t *testing.T) {
 	setupBridgeTestDB(t, &model.MessageHub{})
 	h := NewBridgeIngestHandler(service.NewInboxIngressService())
 	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 1))
+		c.Next()
+	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -339,8 +345,12 @@ func TestGetBridgeOutbox_AliasChannelClaimsCanonicalOutbound(t *testing.T) {
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	h := NewBridgeIngestHandler(service.NewInboxIngressService())
+	h := NewBridgeIngestHandler(service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission))
 	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(c.Request.Context(), 1), "douyin", "acc-aliasclaim", "text", ""))
+		c.Next()
+	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
@@ -370,6 +380,10 @@ func TestGetBridgeOutbox_KeepsServingWhenRepoMissing(t *testing.T) {
 	setupBridgeTestDB(t, &model.MessageHub{})
 	h := NewBridgeIngestHandler(service.NewInboxIngressService())
 	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 1))
+		c.Next()
+	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)

@@ -48,16 +48,12 @@ func (s *AuthorizationService) SetEnabled(ctx context.Context, actorID, targetID
 		}
 		return err
 	}
-	if !enabled && target.Role == model.SystemUserRoleAdmin {
-		enabledCount, err := s.userRepo.CountEnabledAdmins(ctx)
-		if err != nil {
-			return err
-		}
-		if enabledCount <= 1 {
+	// FA-AUTH-01：守卫与写入收进同一事务（repository.SetEnabledGuarded）——
+	// 先数后写的窗口内另一超管可被并发禁用，两边都放行会清空启用超管。
+	if err := s.userRepo.SetEnabledGuarded(ctx, targetID, enabled); err != nil {
+		if errors.Is(err, repository.ErrLastAdmin) {
 			return fmt.Errorf("系统至少需要保留一个启用的超管账号: %w", ErrInvalidInput)
 		}
-	}
-	if err := s.userRepo.SetEnabled(ctx, targetID, enabled); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return fmt.Errorf("用户不存在: %w", ErrInvalidInput)
 		}

@@ -45,6 +45,13 @@ type SystemUserRepository interface {
 	CountAdmins(ctx context.Context) (int64, error)
 	DeleteSafe(ctx context.Context, id uint) error
 	SetEnabled(ctx context.Context, id uint, enabled bool) error
+	// SetEnabledGuarded FA-AUTH-01：启用/禁用 + "最后一个启用超管"原子守卫
+	//（事务 + 租户级咨询锁内复查，杜绝两名超管并发互相禁用的计数竞态）。
+	SetEnabledGuarded(ctx context.Context, id uint, enabled bool) error
+	// UpdateGuarded FA-AUTH-01：整行更新 + 原子守卫——锁内读现值，回调只改字段
+	//（不接触事务句柄，分层棘轮口径），repo 前后对比判定本次是否会移除一个
+	// 启用超管（降级角色或禁用），是则在锁内复查他人数量。
+	UpdateGuarded(ctx context.Context, id uint, mutate func(current *model.SystemUser) error) error
 	CountEnabledAdmins(ctx context.Context) (int64, error)
 	UpdatePassword(ctx context.Context, id uint, hashedPassword string) error
 
@@ -338,23 +345,30 @@ func (r *systemUserRepo) CountAdmins(ctx context.Context) (int64, error) {
 }
 
 func (r *systemUserRepo) DeleteSafe(ctx context.Context, id uint) error {
-	var target model.SystemUser
-	if err := r.db.WithContext(ctx).First(&target, id).Error; err != nil {
-		return fmt.Errorf("query target user: %w", err)
-	}
-	if target.Role == "admin" {
-		count, err := r.CountAdmins(ctx)
-		if err != nil {
-			return fmt.Errorf("count admins: %w", err)
+	// FA-AUTH-01：守卫与删除收进同一事务 + 咨询锁——先数后删的窗口内另一超管
+	// 可被并发删除，两边都放行会清空超管。
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := r.lockLastAdminGuardTx(ctx, tx); err != nil {
+			return err
 		}
-		if count <= 1 {
-			return ErrLastAdmin
+		var target model.SystemUser
+		if err := tx.First(&target, id).Error; err != nil {
+			return fmt.Errorf("query target user: %w", err)
 		}
-	}
-	if err := r.db.WithContext(ctx).Delete(&model.SystemUser{}, id).Error; err != nil {
-		return fmt.Errorf("delete user: %w", err)
-	}
-	return nil
+		if target.Role == "admin" {
+			n, err := r.countOtherEnabledAdminsTx(tx, id)
+			if err != nil {
+				return fmt.Errorf("count admins: %w", err)
+			}
+			if n < 1 {
+				return ErrLastAdmin
+			}
+		}
+		if err := tx.Delete(&model.SystemUser{}, id).Error; err != nil {
+			return fmt.Errorf("delete user: %w", err)
+		}
+		return nil
+	})
 }
 
 func (r *systemUserRepo) SetEnabled(ctx context.Context, id uint, enabled bool) error {
@@ -366,6 +380,116 @@ func (r *systemUserRepo) SetEnabled(ctx context.Context, id uint, enabled bool) 
 		return fmt.Errorf("update enabled: %w", err)
 	}
 	return nil
+}
+
+// lastAdminAdvisoryLockKey "最后一个启用超管"守卫的咨询锁键。
+// 不变量是全局的（CountEnabledAdmins 口径：系统至少一个启用超管，不按租户切分），
+// 故锁键为全局常量——所有移除启用超管的变更在同一把锁上串行化。
+const lastAdminAdvisoryLockKey = int64(0x6c61737441646d6e) // "lastAdmn"
+
+// lockLastAdminGuardTx 事务内获取守卫咨询锁（xact 级：事务提交/回滚自动释放）。
+func (r *systemUserRepo) lockLastAdminGuardTx(ctx context.Context, tx *gorm.DB) error {
+	// GORM-only 门禁：咨询锁用 Select+Scan 形态。阻塞版 pg_advisory_xact_lock
+	// 返回 void（驱动层为 NULL，Scan 会报 unsupported data type），改用返回
+	// boolean 的 pg_try_advisory_xact_lock + 有界自旋实现阻塞语义——守卫事务
+	// 都很短，争用窗口极小；自旋耗尽返回显式错误而非永久挂起。
+	acquired := false
+	for i := 0; i < 100; i++ {
+		// 形态说明：Select 直排函数在 gorm 该链路下取不到返回值（NULL），
+		// 用恒一行子查询做 FROM，让布尔结果成为可扫描列（纯 GORM API，过 gorm-only 门）。
+		var got bool
+		if err := tx.Table("(VALUES (1)) AS _lock_probe(value)").
+			Select("pg_try_advisory_xact_lock(?) AS locked", lastAdminAdvisoryLockKey).
+			Scan(&got).Error; err != nil {
+			return fmt.Errorf("acquire last-admin guard lock: %w", err)
+		}
+		if got {
+			acquired = true
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("acquire last-admin guard lock: %w", ctx.Err())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if !acquired {
+		return fmt.Errorf("acquire last-admin guard lock: guard busy after bounded retry")
+	}
+	return nil
+}
+
+// countOtherEnabledAdminsTx 事务内统计目标之外仍启用的超管数量。
+func (r *systemUserRepo) countOtherEnabledAdminsTx(tx *gorm.DB, targetID uint) (int64, error) {
+	var n int64
+	if err := tx.Model(&model.SystemUser{}).
+		Where("role = ? AND enabled = ? AND id <> ?", model.SystemUserRoleAdmin, true, targetID).
+		Count(&n).Error; err != nil {
+		return 0, fmt.Errorf("count other enabled admins: %w", err)
+	}
+	return n, nil
+}
+
+// SetEnabledGuarded 启用/禁用 + 原子守卫（FA-AUTH-01）。
+// 先计数后写窗口内另一管理员可被并发禁用 ⇒ 两边都放行、系统零启用超管；
+// 这里在咨询锁 + 事务内"读目标 → 判定 → 写"三步合一，判定读到的就是提交时的状态。
+func (r *systemUserRepo) SetEnabledGuarded(ctx context.Context, id uint, enabled bool) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := r.lockLastAdminGuardTx(ctx, tx); err != nil {
+			return err
+		}
+		var target model.SystemUser
+		if err := tx.First(&target, id).Error; err != nil {
+			return err
+		}
+		if !enabled && target.Role == model.SystemUserRoleAdmin {
+			n, err := r.countOtherEnabledAdminsTx(tx, id)
+			if err != nil {
+				return err
+			}
+			if n < 1 {
+				return ErrLastAdmin
+			}
+		}
+		res := tx.Model(&model.SystemUser{}).
+			Where("id = ?", id).
+			Update("enabled", enabled)
+		if err := db.EnsureAffected(res); err != nil {
+			return fmt.Errorf("update enabled: %w", err)
+		}
+		return nil
+	})
+}
+
+// UpdateGuarded 整行更新 + 原子守卫（FA-AUTH-01）：mutate 里对 target 做字段修改，
+// 回调返回后按 current(库内现值) vs target(变更后) 对比，本次若移除启用超管
+// （降级角色或禁用）则在锁内复查他人数量不足即拒绝。current 在锁内读，竞态闭环。
+func (r *systemUserRepo) UpdateGuarded(ctx context.Context, id uint, mutate func(current *model.SystemUser) error) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := r.lockLastAdminGuardTx(ctx, tx); err != nil {
+			return err
+		}
+		var before model.SystemUser
+		if err := tx.First(&before, id).Error; err != nil {
+			return err
+		}
+		mutated := before // mutate 只改字段；before 留作库内现值的对比基准
+		if err := mutate(&mutated); err != nil {
+			return err
+		}
+		removesAdmin := before.Role == model.SystemUserRoleAdmin &&
+			(mutated.Role != model.SystemUserRoleAdmin || (before.Enabled && !mutated.Enabled))
+		if removesAdmin {
+			n, err := r.countOtherEnabledAdminsTx(tx, id)
+			if err != nil {
+				return err
+			}
+			if n < 1 {
+				return ErrLastAdmin
+			}
+		}
+		return tx.Save(&mutated).Error
+	})
 }
 
 func (r *systemUserRepo) CountEnabledAdmins(ctx context.Context) (int64, error) {

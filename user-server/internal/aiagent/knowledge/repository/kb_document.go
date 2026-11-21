@@ -3,13 +3,15 @@ package repository
 import (
 	"context"
 	"fmt"
-	rootmodel "hivemtk-user/internal/model"
-	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
 	"hivemtk-user/internal/aiagent/knowledge/model"
+	chunkModel "hivemtk-user/internal/model"
+	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // KBDocumentRepository 知识库文档仓储(工作区维度,对应 KBDocument 表)
@@ -28,17 +30,37 @@ func NewKBDocumentRepositoryDefault() *KBDocumentRepository {
 	return NewKBDocumentRepository(_db.GetDB())
 }
 
-// DeleteWithChunks 在同一租户事务内读取文档并级联删除分段，返回已删除文档供服务清理文件与索引。
+// Transaction 保留现有仓储调用方的事务接缝。
+// 文档与分片的原子删除由 DeleteWithChunks 封装，service 无需事务句柄。
+func (r *KBDocumentRepository) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return r.db.WithContext(ctx).Transaction(fn)
+}
+
+// DeleteWithChunks 原子删除当前租户的文档及分段，提交后返回文档供调用方清理文件和索引。
 func (r *KBDocumentRepository) DeleteWithChunks(ctx context.Context, id uint) (*model.KBDocument, error) {
+	tenantID := tenant.WriteTenantID(ctx)
+	if tenantID == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+
 	var doc model.KBDocument
-	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ?", id).First(&doc).Error; err != nil {
+	err := r.db.WithContext(tenant.WithTenantID(ctx, tenantID)).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND tenant_id = ?", id, tenantID).First(&doc).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("document_id = ?", id).Delete(&rootmodel.KnowledgeChunk{}).Error; err != nil {
+		if err := tx.Where("document_id = ? AND tenant_id = ?", id, tenantID).
+			Delete(&chunkModel.KnowledgeChunk{}).Error; err != nil {
 			return fmt.Errorf("清理文档分段失败: %w", err)
 		}
-		return tx.Where("id = ?", id).Delete(&model.KBDocument{}).Error
+		deleted := tx.Where("id = ? AND tenant_id = ?", id, tenantID).Delete(&model.KBDocument{})
+		if deleted.Error != nil {
+			return deleted.Error
+		}
+		if deleted.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -99,7 +121,7 @@ func (r *KBDocumentRepository) UpdateStatusFields(ctx context.Context, id uint, 
 			if err != nil {
 				return err
 			}
-			var page rootmodel.KBCrawlPage
+			var page chunkModel.KBCrawlPage
 			if err := tx.Where("tenant_id = ? AND document_id = ?", tenantID, id).First(&page).Error; err != nil {
 				return err
 			}

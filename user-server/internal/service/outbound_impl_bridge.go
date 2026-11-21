@@ -27,6 +27,10 @@ func (s *WebhookService) outboundBridge(ctx context.Context, channel WebhookChan
 			fmt.Sprintf("出站不支持该渠道(%s)：webhookInboundCapable 与 sendOutbound 分支表已漂移", channel)))
 		return
 	}
+	if err := authorizeBridgeReplySubmit(ctx, channel, accountID, hubMsg); err != nil {
+		failUntracked(err)
+		return
+	}
 	// Markdown 清洗已在 sendOutbound 的 RenderForChannel 里完成（specs/024 T404）：
 	// sender 只负责投递，不再做格式变换。重复清洗会掩盖渲染层的漏配——
 	// 渲染层少剥一次，这里也不会补上，问题会直接在客户侧暴露。

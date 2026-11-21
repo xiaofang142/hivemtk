@@ -619,6 +619,10 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
+	if err := authorizeOutboundSubmission(ctx, channel, accountID, hubMsg); err != nil {
+		recordOutboundSendFailed(channel, err)
+		return false, err
+	}
 
 	if !isDelayedReplay(ctx) && loadAIReplyQuietHoursFn()(time.Now()) {
 		if s.enqueueDelayedOutbound(ctx, channel, accountID, p, content, hubMsg, cards) {

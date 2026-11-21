@@ -67,6 +67,19 @@ func (r *KnowledgeChunkRepository) BatchCreate(ctx context.Context, chunks []mod
 	return nil
 }
 
+// BatchCreateForOwner writes pipeline chunks while holding a short document-owner fence.
+func (r *KnowledgeChunkRepository) BatchCreateForOwner(ctx context.Context, documentID uint64, owner string, chunks []model.KnowledgeChunk) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockCurrentOwner(ctx, tx, documentID, owner); err != nil {
+			return err
+		}
+		return NewKnowledgeChunkRepository(tx).BatchCreate(ctx, chunks)
+	})
+}
+
 // ReplaceSplit atomically writes replacement chunks and removes the source chunk.
 // Creating first keeps the source available until every replacement is durable;
 // the transaction rolls back both writes if either operation fails.
@@ -328,6 +341,22 @@ func (r *KnowledgeChunkRepository) UpdateEmbeddingsBatchWithSource(ctx context.C
 			}
 		}
 		return nil
+	})
+}
+
+// UpdateEmbeddingsBatchWithSourceForOwner persists vectors only while the owner generation is current.
+func (r *KnowledgeChunkRepository) UpdateEmbeddingsBatchWithSourceForOwner(ctx context.Context, documentID uint64, owner string, chunks []model.KnowledgeChunk, embeddings [][]float32, source string) error {
+	if len(chunks) != len(embeddings) {
+		return errors.New("chunks 与 embeddings 长度不一致")
+	}
+	if len(chunks) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := lockCurrentOwner(ctx, tx, documentID, owner); err != nil {
+			return err
+		}
+		return NewKnowledgeChunkRepository(tx).UpdateEmbeddingsBatchWithSource(ctx, chunks, embeddings, source)
 	})
 }
 

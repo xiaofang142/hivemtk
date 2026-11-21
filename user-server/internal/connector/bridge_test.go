@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/tooluse"
+	"hivemtk-user/internal/capregistry"
+	"hivemtk-user/internal/pkg/tenant"
 )
 
 // ---------- 夹具：记录型装饰器端口 ----------
@@ -92,6 +94,7 @@ func TestBridge_FictionalPresetBecomesTools(t *testing.T) {
 				Method:       "POST",
 				Path:         "/api/v1/orders/modify",
 				Capabilities: []string{"modify_order"},
+				Cell:         localWriteCellRef(),
 			},
 		},
 	}
@@ -167,14 +170,16 @@ func TestBridge_ExecutesThroughFullDecoratorChain(t *testing.T) {
 	defer upstream.Close()
 
 	// 桥接（测试接缝 Executor 放行环回上游）→ 注册进注册中心 → executor 建链。
-	tools, _, _ := BridgePresetsWithExecutor(NewExecutorWithValidator(func(string) error { return nil }),
+	fixtureExecutor := NewExecutorWithValidator(func(string) error { return nil })
+	fixtureExecutor.writeAuthorizer = authorizeCapabilityCell
+	tools, _, _ := BridgePresetsWithExecutor(fixtureExecutor,
 		ConnectorPreset{
 			Name:   "chain_fakemart",
 			Config: ConnectorConfig{BaseURL: upstream.URL, Provider: "generic", Auth: ConnectorAuth{Type: "bearer", Key: "k"}},
 			Endpoints: []EndpointConfig{
 				{Name: "query_order", Method: "GET", Path: "/api/v1/orders", Capabilities: []string{"query_order"},
 					ParamMap: map[string]string{"order_id": "platform_order_id"}},
-				{Name: "modify_order", Method: "POST", Path: "/api/v1/orders/modify", Capabilities: []string{"modify_order"}},
+				{Name: "modify_order", Method: "POST", Path: "/api/v1/orders/modify", Capabilities: []string{"modify_order"}, Cell: localWriteCellRef()},
 			},
 		})
 	reg := tooluse.NewToolRegistry()
@@ -226,9 +231,11 @@ func TestBridge_ExecutesThroughFullDecoratorChain(t *testing.T) {
 	}
 
 	// —— 高危工具：WithApproval 在位（审批面）+ 风控门观察到 high_write 判定 ——
-	res2 := exec.Execute(context.Background(), tooluse.ExecuteRequest{
+	key := capregistry.CellKey{TenantID: 7, ShopID: "shop-a", Product: "douyin_shop", Region: "CN", Action: "order.address.change", Carrier: "api_adapter"}
+	ctx := capregistry.WithCellEvidence(tenant.WithTenantID(context.Background(), 7), readyConnectorCellEvidence(key, time.Now()))
+	res2 := exec.Execute(ctx, tooluse.ExecuteRequest{
 		ToolName: "connector.chain_fakemart.modify_order",
-		Args:     map[string]any{"note": "客户要求改地址"},
+		Args:     map[string]any{"note": "客户要求改地址", "shop_id": "shop-a"},
 		ToolCtx:  &tooluse.ToolContext{CallerID: "caller-1", AgentID: "agent-1"},
 	})
 	if res2.Err != nil || !res2.Success {

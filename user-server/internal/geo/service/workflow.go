@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -409,9 +410,13 @@ func (s *WorkflowService) Run(ctx context.Context, id string) (*dto.RunWorkflowR
 				}
 			}
 		}
-		prevResults := map[string]string{}
+		// FA-31：上游结果契约冻结为 map[string]*dto.StepResult（带步骤名/类型/状态/结果），
+		// 与真实注册的决策执行器（decision_executors.go upstreamJSON）同一类型——
+		// 此前这里压平成 map[string]string，执行器按 StepType 查上游必然查不到。
+		// 传前做一层 map 结构浅拷贝：执行器改写键集不影响引擎自己的结果表。
+		prevResults := make(map[string]*dto.StepResult, len(stepResults))
 		for name, r := range stepResults {
-			prevResults[name] = r.Result
+			prevResults[name] = r
 		}
 		stepWithResults["_step_results"] = prevResults
 
@@ -615,10 +620,17 @@ func (s *WorkflowService) registerBuiltinExecutors() {
 	}
 	s.executors["action"] = func(ctx context.Context, step map[string]interface{}) (string, error) {
 
-		if prev, ok := step["_step_results"].(map[string]string); ok {
-			for _, v := range prev {
-				if v != "" {
-					return v, nil
+		// FA-31：读侧与新契约（map[string]*dto.StepResult）对齐；按步骤名排序取
+		// 首个非空结果，消除 map 随机序带来的不确定性。
+		if prev, ok := step["_step_results"].(map[string]*dto.StepResult); ok {
+			names := make([]string, 0, len(prev))
+			for name := range prev {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			for _, name := range names {
+				if r := prev[name]; r != nil && r.Result != "" {
+					return r.Result, nil
 				}
 			}
 		}
@@ -653,10 +665,16 @@ func extractStepContent(step map[string]interface{}) string {
 	if c, ok := step["article"].(string); ok && c != "" {
 		return c
 	}
-	if pr, ok := step["_step_results"].(map[string]string); ok {
-		for _, result := range pr {
-			if result != "" {
-				return result
+	// FA-31：与新契约（map[string]*dto.StepResult）对齐；按步骤名排序取首个非空结果。
+	if pr, ok := step["_step_results"].(map[string]*dto.StepResult); ok {
+		names := make([]string, 0, len(pr))
+		for name := range pr {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if r := pr[name]; r != nil && r.Result != "" {
+				return r.Result
 			}
 		}
 	}

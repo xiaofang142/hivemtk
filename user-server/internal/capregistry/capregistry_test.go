@@ -3,9 +3,29 @@ package capregistry
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+// 文档须准确列明本轮真实边界、未知桥接格与生产阻塞，不能宣称所有渠道已治理。
+func TestMatrixMarkdown_StatesSubmitCoverageAndProductionBlocks(t *testing.T) {
+	markdown := MatrixMarkdown()
+	for _, text := range []string{
+		"DeliverBridgeOutboundMedia", "sendOutbound", "outboundBridge", "HTTPAfterSaleClient.Create",
+		"capability_mapping_missing", "unknown_capability", "不开放生产发送", "非桥接直发",
+		"account_id", "历史已入队", "ClaimPendingOutbound", "ClaimOutboundForPush", "RunOnce",
+		"delivery_binding_mismatch", "tenant_scope_invalid", "状态、租约、重试预算",
+		"每页最多锁定 64 行", "outbound_reclaim_evidence_source_missing", "较高 ID 已发送后恢复旧行",
+	} {
+		if !strings.Contains(markdown, text) {
+			t.Errorf("能力文档缺少边界或阻塞说明 %q", text)
+		}
+	}
+	if strings.Contains(markdown, "历史已入队记录的全量迁移/暂停") {
+		t.Error("历史待发消费暂停属于 01-C，不能声明为排除范围")
+	}
+}
 
 // 矩阵文档 = 注册表渲染，漂移即红（借鉴 catbus capabilities 文档新鲜度测试）。
 // 更新方式：UPDATE_GOLDEN=1 跑测试后 diff 入库 docs/capabilities.md。
@@ -46,7 +66,7 @@ func TestAllSortedStable(t *testing.T) {
 		t.Fatal("注册表为空")
 	}
 	for i := range a {
-		if a[i] != b[i] {
+		if !reflect.DeepEqual(a[i], b[i]) {
 			t.Fatal("All() 顺序不稳定")
 		}
 	}

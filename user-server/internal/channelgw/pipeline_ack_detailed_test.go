@@ -14,6 +14,7 @@ package channelgw
 // 再走一次 ClaimOutbound 触发惰性回收+重领（与 inbox_ingress_ack_test.go 的 StaleReset 同款）。
 
 import (
+	"hivemtk-user/internal/capregistry"
 	"context"
 	"sync"
 	"testing"
@@ -21,6 +22,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/service"
 )
@@ -30,7 +32,7 @@ func newAckFencePipeline(t *testing.T) (IngressPipeline, *service.InboxIngressSe
 	database := testutil.NewTestDB(t, &model.MessageHub{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
-	ingress := service.NewInboxIngressService()
+	ingress := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	return NewPipeline(ingress), ingress
 }
 
@@ -50,7 +52,7 @@ func seedOutbound(t *testing.T, ingress *service.InboxIngressService, channel, a
 		ConversationID: conv,
 		IsRead:         true,
 	}
-	if err := ingress.DeliverOutbound(context.Background(), h); err != nil {
+	if err := ingress.DeliverOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 1), channel, accountID), h); err != nil {
 		t.Fatalf("DeliverOutbound 失败: %v", err)
 	}
 	return h.MsgID
@@ -85,7 +87,7 @@ func TestPipeline_AckOutboundDetailed_DelegationClassification(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_detailed_1"
 		conv      = "conv_detailed_1"
 	)
@@ -96,7 +98,7 @@ func TestPipeline_AckOutboundDetailed_DelegationClassification(t *testing.T) {
 	// not_found：任何库行都没有的 msg_id。
 	const idGhost = "detail-msg-not-exist"
 
-	hubs, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	hubs, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil {
 		t.Fatalf("ClaimOutbound 不应失败: %v", err)
 	}
@@ -152,13 +154,13 @@ func TestPipeline_AckOutboundDetailed_FailedPath(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_detailed_failed"
 		conv      = "conv_detailed_failed"
 	)
 	idF := seedOutbound(t, ingress, channel, accountID, conv, "detailed failed")
 
-	if _, err := p.ClaimOutbound(ctx, channel, accountID, 10); err != nil {
+	if _, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10); err != nil {
 		t.Fatalf("ClaimOutbound 不应失败: %v", err)
 	}
 
@@ -181,13 +183,13 @@ func TestPipeline_ClaimOutbound_ExposesClaimLeaseFields(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_lease_1"
 		conv      = "conv_lease_1"
 	)
 	idL := seedOutbound(t, ingress, channel, accountID, conv, "lease row")
 
-	hubs, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	hubs, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil {
 		t.Fatalf("ClaimOutbound 不应失败: %v", err)
 	}
@@ -206,7 +208,7 @@ func TestPipeline_ClaimOutbound_ExposesClaimLeaseFields(t *testing.T) {
 	if err := ingressRawShiftClaimedAt(t, channel, idL); err != nil {
 		t.Fatalf("拨动 claimed_at 失败: %v", err)
 	}
-	again, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	again, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(again) != 1 {
 		t.Fatalf("回收重领应取回 1 条, err=%v len=%d", err, len(again))
 	}
@@ -238,13 +240,13 @@ func TestPipeline_AckOutboundDetailed_Fence_MatchingClaimFlips(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_fence_ok"
 		conv      = "conv_fence_ok"
 	)
 	idM := seedOutbound(t, ingress, channel, accountID, conv, "fence match")
 
-	hubs, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	hubs, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(hubs) != 1 {
 		t.Fatalf("认领失败: err=%v len=%d", err, len(hubs))
 	}
@@ -270,13 +272,13 @@ func TestPipeline_AckOutboundDetailed_Fence_StaleClaimedAtNotFlipped(t *testing.
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_fence_stale"
 		conv      = "conv_fence_stale"
 	)
 	idS := seedOutbound(t, ingress, channel, accountID, conv, "fence stale")
 
-	first, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	first, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(first) != 1 {
 		t.Fatalf("首次认领失败: err=%v len=%d", err, len(first))
 	}
@@ -286,7 +288,7 @@ func TestPipeline_AckOutboundDetailed_Fence_StaleClaimedAtNotFlipped(t *testing.
 	if err := ingressRawShiftClaimedAt(t, channel, idS); err != nil {
 		t.Fatalf("拨动 claimed_at 失败: %v", err)
 	}
-	reclaimed, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	reclaimed, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(reclaimed) != 1 {
 		t.Fatalf("回收重领失败: err=%v len=%d", err, len(reclaimed))
 	}
@@ -337,7 +339,7 @@ func TestPipeline_AckOutboundDetailed_Fence_AbsentLegacyBehavior(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_fence_none"
 		conv      = "conv_fence_none"
 	)
@@ -364,14 +366,14 @@ func TestPipeline_AckOutbound_LegacyZeroBehaviorChange(t *testing.T) {
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_legacy_ack"
 		conv      = "conv_legacy_ack"
 	)
 	idPending := seedOutbound(t, ingress, channel, accountID, conv, "legacy pending")
 	idInflight := seedOutbound(t, ingress, channel, accountID, conv, "legacy inflight")
 
-	hubs, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	hubs, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(hubs) != 2 {
 		t.Fatalf("认领失败: err=%v len=%d", err, len(hubs))
 	}
@@ -406,13 +408,13 @@ func TestPipeline_AckOutboundDetailed_Fence_ConcurrentAckersSingleWinner(t *test
 	ctx := context.Background()
 
 	const (
-		channel   = "douyin_web"
+		channel   = "douyin"
 		accountID = "acc_fence_race"
 		conv      = "conv_fence_race"
 	)
 	idR := seedOutbound(t, ingress, channel, accountID, conv, "fence race")
 
-	hubs, err := p.ClaimOutbound(ctx, channel, accountID, 10)
+	hubs, err := p.ClaimOutbound(localBridgeSubmitContext(t, tenant.WithTenantID(ctx, 1), channel, accountID), channel, accountID, 10)
 	if err != nil || len(hubs) != 1 {
 		t.Fatalf("认领失败: err=%v len=%d", err, len(hubs))
 	}

@@ -1,0 +1,5 @@
+Command: FA12_PG_DSN='<authorized local synthetic socket DSN; omitted from evidence>' go test ./internal/aiagent/knowledge/service -run 'TestRebuildIndexUsesSnapshotVisibleMembership|TestReindexLeaseReclaimsExpiredProcessingExactlyOnce|TestReindexCancellationPersistsFailureAndAllowsRetry' -count=1 -timeout=60s
+Working directory: user-server/
+Observed exit code: 1
+Expected behavior failures: work-set membership included the transactionally reserved lower ID committed after MAX was read; no future lease was written and expired processing had zero successful claims; canceled request paths left documents processing and attempted cleanup with canceled context.
+The earlier unbounded fixture run timed out because its HTTP handler was not released; that log remains separately recorded as red.log and is not counted as valid RED evidence.

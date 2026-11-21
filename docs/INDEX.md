@@ -54,6 +54,7 @@
 | 文档 | 描述 |
 |------|------|
 | [architecture/README.md](architecture/README.md) | 架构层导航（总览 / 深度解析 / 多租户与部署形态 / 模块专题 / ADR） |
+| [integration/PILOT-CONTRACT.md](integration/PILOT-CONTRACT.md) | EC-00 试点启动基线、身份映射、PilotContract v1、00-A/B/C 模拟门与验证边界 |
 | [architecture/TENANT_MODE_REVIEW.md](architecture/TENANT_MODE_REVIEW.md) | 多租户文档口径与授权策略复核（009 · C4） |
 | [architecture/部署方案_用户端.md](architecture/部署方案_用户端.md) | 用户端部署架构 |
 | [architecture/HOST_INFERENCE_PLAN.md](architecture/HOST_INFERENCE_PLAN.md) | llama.cpp 推理方案 |
