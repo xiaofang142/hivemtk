@@ -45,7 +45,8 @@ func newReachSendPipelineWithDB(adapter tooluse.ReachAdapter, db *gorm.DB) toolu
 		// D04：可信同意闸（撤回即生效；存量无凭据按 legacy_assertion 留痕，不批量伪造）
 		// 与故障拒发的退订检查（DNC 状态查不清 ⇒ fail-closed）。
 		cfg.ConsentChecker = service.NewContactConsentService(repository.NewContactConsentRepository(db))
-		cfg.ConsentMode = service.ConsentModeRevocationOnly
+		cfg.ConsentMode = service.ConsentModeEnforce
+		cfg.RequireScopedConsent = true
 		cfg.DoNotContactStrict = service.NewDoNotContactService(repository.NewCustomerDoNotContactRepository(db))
 		// J-12（选项③）：客户档案时区（custom_attributes.timezone）查档器——
 		// 只服务静默窗口/次日释放；查不到/坏值由 service 层回退 cstZone，零行为变更。

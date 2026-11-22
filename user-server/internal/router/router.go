@@ -633,6 +633,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupModuleRoutes(nil, auth, tenantAdmin, systemAdmin)
 
 		setupSystemUserRoutes(auth)
+		setupCommerceRoutes(auth, gormDB)
 
 		// plainAuth 只挂只读的 Runtime；五个全量/写端点走租户 admin 档
 		// （config-params 写的是本租户的覆盖行 tenant_config_params，见 config_param.go

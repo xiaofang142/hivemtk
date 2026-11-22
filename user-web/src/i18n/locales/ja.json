@@ -38,7 +38,15 @@
     "revoke": "ローカル認可を取り消す",
     "stepsLabel": "店舗接続の手順",
     "helpButton": "操作ガイドを表示",
-    "states": { "unknown": "未確認", "unconfigured": "未設定", "connecting": "認可完了待ち", "ready": "接続準備完了（業務操作はブロック中）", "reauth": "再認可が必要", "refreshing": "認証情報更新中", "revoked": "ローカルで取り消し済み" },
+    "states": {
+      "unknown": "未確認",
+      "unconfigured": "未設定",
+      "connecting": "認可完了待ち",
+      "ready": "接続準備完了（業務操作はブロック中）",
+      "reauth": "再認可が必要",
+      "refreshing": "認証情報更新中",
+      "revoked": "ローカルで取り消し済み"
+    },
     "errors": {
       "statusFailed": "接続状態を確認できません。対象を確認するか連携担当者に連絡し、再度確認してください。",
       "startFailed": "安全な認可ページを準備できません。状態を再確認し、古い試行は再送信しないでください。",
@@ -126,13 +134,23 @@
     "roleGroupingHint": "下のツリーは権限カタログの分類に従います。ナビゲーションではブラウザー自動化はシステム設定にあります。表示位置は権限に影響しません。"
   },
   "pilotContract": {
-    "title": "試行契約と起動基準", "boundary": "模擬試行の下書きのみを検証・保存します。実際のプラットフォーム、加盟店の承認、注文の事後条件は未検証で、本番実行は引き続きブロックされています。",
-    "identity": "既存のインストール識別子", "tenant": "現在のテナント", "configured": "下書き保存済み", "unconfigured": "未設定",
+    "title": "試行契約と起動基準",
+    "boundary": "模擬試行の下書きのみを検証・保存します。実際のプラットフォーム、加盟店の承認、注文の事後条件は未検証で、本番実行は引き続きブロックされています。",
+    "identity": "既存のインストール識別子",
+    "tenant": "現在のテナント",
+    "configured": "下書き保存済み",
+    "unconfigured": "未設定",
     "empty": "店舗の所有者と承認参照、読み書き範囲、資金上限、承認者、監視時間、ロールバック担当者、単一注文、および FA/AR/CH の完了コミットとテスト証跡を設定してください。",
-    "blockers": "ローカル検証の阻害要因", "draft": "PilotContract JSON 下書き", "hint": "fake/simulated のみ使用してください。認証情報や顧客データは入力しないでください。開発時間とプラットフォーム承認待ち時間は別々に記録してください。",
-    "validate": "ローカル検証", "save": "下書きを保存", "retry": "再読み込み", "loadFailed": "読み込みに失敗しました。設定状態を確認できません。",
+    "blockers": "ローカル検証の阻害要因",
+    "draft": "PilotContract JSON 下書き",
+    "hint": "fake/simulated のみ使用してください。認証情報や顧客データは入力しないでください。開発時間とプラットフォーム承認待ち時間は別々に記録してください。",
+    "validate": "ローカル検証",
+    "save": "下書きを保存",
+    "retry": "再読み込み",
+    "loadFailed": "読み込みに失敗しました。設定状態を確認できません。",
     "submitFailed": "保存または検証に失敗しました。JSON、識別情報、リビジョンを確認してください。リビジョン競合時は再読み込みして下書きを統合してください。",
-    "saved": "下書きを保存しました。本番実行は引き続きブロックされています。", "validated": "保存せずにローカル契約を確認しました。本番実行は引き続きブロックされています。"
+    "saved": "下書きを保存しました。本番実行は引き続きブロックされています。",
+    "validated": "保存せずにローカル契約を確認しました。本番実行は引き続きブロックされています。"
   },
   "bulkLeadHandoff": {
     "template": "メッセージテンプレート",
@@ -1930,8 +1948,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "店舗の認可接続", "summary": "対象店舗の状態を確認し、検証済みの受け渡しで接続します。未検証の実運用契約はブロックされます。", "target": "接続対象の確認", "targetSummary": "登録済みのプロバイダー識別子と店舗 ID を入力し、状態を確認します。対象変更で試行は消去されます。", "status": "接続と操作権限", "statusSummary": "接続準備完了でも操作は許可されません。各操作には EC-01 の確認が必要です。", "actions": "更新とローカル取り消し", "actionsSummary": "更新は現在の認証情報バージョンを使用し、失敗時は状態を再取得します。ローカル取り消しは遠隔での取り消しを確認せず、ログインセッションを保持します。" },
-        "pilotContract": { "title": "試行契約", "summary": "インストールとテナントの識別情報を確認し、模擬試行の下書きと阻害要因を確認します。保存しても本番実行は許可されません。", "identity": "識別情報", "identitySummary": "インストール識別情報は読み取り専用で、現在のテナントと照合されます。", "blockers": "阻害要因", "blockersSummary": "模擬検証前に不足している条件を確認します。", "draft": "契約の下書き", "draftSummary": "模擬データのみを使用し、認証情報や顧客データを含めないでください。" },
+        "merchantConnection": {
+          "title": "店舗の認可接続",
+          "summary": "対象店舗の状態を確認し、検証済みの受け渡しで接続します。未検証の実運用契約はブロックされます。",
+          "target": "接続対象の確認",
+          "targetSummary": "登録済みのプロバイダー識別子と店舗 ID を入力し、状態を確認します。対象変更で試行は消去されます。",
+          "status": "接続と操作権限",
+          "statusSummary": "接続準備完了でも操作は許可されません。各操作には EC-01 の確認が必要です。",
+          "actions": "更新とローカル取り消し",
+          "actionsSummary": "更新は現在の認証情報バージョンを使用し、失敗時は状態を再取得します。ローカル取り消しは遠隔での取り消しを確認せず、ログインセッションを保持します。"
+        },
+        "pilotContract": {
+          "title": "試行契約",
+          "summary": "インストールとテナントの識別情報を確認し、模擬試行の下書きと阻害要因を確認します。保存しても本番実行は許可されません。",
+          "identity": "識別情報",
+          "identitySummary": "インストール識別情報は読み取り専用で、現在のテナントと照合されます。",
+          "blockers": "阻害要因",
+          "blockersSummary": "模擬検証前に不足している条件を確認します。",
+          "draft": "契約の下書き",
+          "draftSummary": "模擬データのみを使用し、認証情報や顧客データを含めないでください。"
+        },
         "common": {
           "overview": "このページの目的",
           "action": "操作の要はここ"
@@ -2526,6 +2562,13 @@
           "step2": {
             "description": "種別ごとに対応が異なります。ネガティブヒットはコンテンツで訂正し、規約警告は表現を変え、プッシュ失敗は配额と URL を見ます。確認しないアラートは積み上がり、「未確認アラート数」という指標そのものも歪めます。対応したら必ず確認してください。確認ボタンの記録が、後から対応率を測る唯一の依据です。"
           }
+        },
+        "commerceOperations": {
+          "title": "Commerce operations",
+          "target": "Use the shop bound to an authorized connection",
+          "draft": "Save intent without executing",
+          "ledger": "Operation ledger",
+          "evidence": "Attestation does not become provider or payment verification. Original failures remain."
         }
       }
     },
@@ -2976,5 +3019,100 @@
   "请填写跟进人账号": "担当者アカウントを入力してください",
   "分配失败": "割り当てに失敗しました",
   "城市": "都市",
-  "地址": "住所"
+  "地址": "住所",
+  "commerce": {
+    "title": "Commerce operations",
+    "boundary": "Submission, acceptance, attestation, money movement and delivery remain separate facts. Simulation does not authorize live release.",
+    "profile": "Business profile",
+    "chooseProfile": "Choose product and region",
+    "shop": "Shop identifier",
+    "shopHint": "Use the shop bound to an authorized connection",
+    "order": "Mirror order ID",
+    "refresh": "Refresh operations",
+    "role": "Required role",
+    "providerMissing": "No verified provider is configured; native writes remain closed.",
+    "newOperation": "Create a business intent",
+    "action": "Action",
+    "chooseAction": "Choose a profile action",
+    "sourceVersion": "Authoritative order version",
+    "sourceVersionHint": "Use a fresh authoritative read; do not guess",
+    "intent": "Business intent key",
+    "intentHint": "Preserve this key when retrying the same intent",
+    "revision": "Explicit revision",
+    "required": "Required fields",
+    "parameterHint": "Follow the contract; money is an integer in minor units",
+    "obligations": "Confirm costs and subsequent obligations",
+    "createDraft": "Save intent without executing",
+    "operations": "Operation ledger",
+    "operationId": "Operation ID",
+    "state": "Business state",
+    "mode": "Execution mode",
+    "evidenceLevel": "Verification level",
+    "funds": "Funds state",
+    "details": "Operation and postconditions",
+    "selectOperation": "Select an operation and check approval scope and evidence.",
+    "empty": "Choose an authorized shop and refresh, or save an intent.",
+    "unknownHint": "Outcome unknown: retain the operation and reservations. Observe or verify manually; do not resubmit or change write route.",
+    "evidenceReference": "Manual evidence reference",
+    "evidenceHint": "Use a controlled reference without secrets or personal data",
+    "nativeState": "Provider state",
+    "outcome": "Attested outcome",
+    "appendEvidence": "Append manual attestation",
+    "manualHint": "Attestation does not become provider or payment verification. Original failures remain.",
+    "confirmTransition": "Check shop, action, digest, costs, obligations and approval scope. The backend rechecks permission and versions.",
+    "loadError": "Read failed or access denied. Check shop authorization and connection.",
+    "createError": "Save failed. Check required fields, integer amounts, versions and permissions.",
+    "actionError": "Completion is unconfirmed. Refresh and inspect the latest state and rejection reason.",
+    "fields": {
+      "recipient": "Recipient",
+      "phone": "Phone",
+      "address": "Address",
+      "province": "Province or state",
+      "city": "City",
+      "district": "District",
+      "amount_minor": "Amount (integer minor units)",
+      "currency": "Currency",
+      "quantity": "Quantity",
+      "line_id": "Order line",
+      "case_ref": "Case reference",
+      "reason": "Reason",
+      "sku": "Target SKU",
+      "logistics_ref": "Logistics reference",
+      "warehouse_ref": "Warehouse reference",
+      "payment_path": "Payment path"
+    },
+    "transitions": {
+      "preflight": "Preflight",
+      "approve": "Approve",
+      "submit": "Submit",
+      "observe": "Observe",
+      "cancel": "Cancel before dispatch",
+      "claim": "Claim workbench task"
+    },
+    "detail": {
+      "id": "Operation ID",
+      "state": "Business state",
+      "native_state": "Provider state",
+      "mode": "Execution mode",
+      "write_owner": "Write owner",
+      "approver_id": "Approver",
+      "owner_id": "Owner",
+      "evidence_level": "Verification level",
+      "evidence_ref": "Evidence reference",
+      "external_ref": "External reference",
+      "funds_state": "Funds state",
+      "manual_state": "Manual handoff",
+      "amount_minor": "Amount (minor units)",
+      "currency": "Currency",
+      "actual_attempts": "Actual attempts",
+      "unknown_since": "Unknown since",
+      "due_at": "Next observation",
+      "expires_at": "Preflight expiry",
+      "failure_reason": "Failure reason",
+      "result_summary": "Result summary",
+      "live_status": "Live validation",
+      "version": "Operation version",
+      "preflight_hash": "Preflight digest"
+    }
+  }
 }

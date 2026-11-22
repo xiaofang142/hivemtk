@@ -50,6 +50,11 @@ type ImportClueRequest struct {
 	IsVerify       int64  `json:"is_verify"`
 	IntentScore    int64  `json:"intent_score"`
 	IsOpportunity  int64  `json:"is_opportunity"`
+	// SourceEvent 固定来源/活动/UTM/告知文本版本；SourceEvidenceRef 是已保存许可证据引用。
+	// MarketingConsent 只是提交选项，无 SourceEvidenceRef 不得进入营销受众。
+	SourceEvent       string `json:"source_event"`
+	SourceEvidenceRef string `json:"source_evidence_ref"`
+	MarketingConsent  bool   `json:"marketing_consent"`
 }
 
 // UpdateClueRequest 单条线索编辑/改派请求。

@@ -80,6 +80,13 @@ type FlowExecution struct {
 	StartedAt     time.Time  `json:"started_at"`
 	CompletedAt   *time.Time `json:"completed_at"`
 	ErrorMessage  string     `gorm:"type:text" json:"error_message"`
+	FlowVersion   int        `gorm:"not null;default:0" json:"flow_version"`
+	GraphSnapshot string     `gorm:"type:text" json:"-"`
+	InputSnapshot string     `gorm:"type:text" json:"-"`
+	TriggerKey    *string    `gorm:"size:64;uniqueIndex:ux_flow_execution_trigger" json:"-"`
+	DueAt         *time.Time `gorm:"index" json:"due_at,omitempty"`
+	LeaseToken    string     `gorm:"size:64" json:"-"`
+	LeaseUntil    *time.Time `json:"-"`
 }
 
 // TableName 指定表名

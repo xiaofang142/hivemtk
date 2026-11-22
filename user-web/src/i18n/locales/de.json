@@ -38,7 +38,15 @@
     "revoke": "Lokale Autorisierung widerrufen",
     "stepsLabel": "Schritte zur Shop-Verbindung",
     "helpButton": "Bedienungsanleitung anzeigen",
-    "states": { "unknown": "Nicht geprüft", "unconfigured": "Nicht konfiguriert", "connecting": "Autorisierung ausstehend", "ready": "Verbindung bereit (Aktionen bleiben gesperrt)", "reauth": "Erneute Autorisierung erforderlich", "refreshing": "Zugangsdaten werden erneuert", "revoked": "Lokal widerrufen" },
+    "states": {
+      "unknown": "Nicht geprüft",
+      "unconfigured": "Nicht konfiguriert",
+      "connecting": "Autorisierung ausstehend",
+      "ready": "Verbindung bereit (Aktionen bleiben gesperrt)",
+      "reauth": "Erneute Autorisierung erforderlich",
+      "refreshing": "Zugangsdaten werden erneuert",
+      "revoked": "Lokal widerrufen"
+    },
     "errors": {
       "statusFailed": "Der Verbindungsstatus konnte nicht bestätigt werden. Ziel prüfen oder Integrationsverantwortliche kontaktieren und erneut prüfen.",
       "startFailed": "Keine sichere Autorisierungsseite vorbereitet. Status erneut prüfen; keinen alten Versuch erneut senden.",
@@ -126,13 +134,23 @@
     "roleGroupingHint": "Diese Baumansicht folgt dem Berechtigungskatalog. In der Navigation finden Sie die Browserautomatisierung unter Systemeinstellungen. Ihre Position hat keinen Einfluss auf Berechtigungen."
   },
   "pilotContract": {
-    "title": "Pilot-Basis und Vertrag", "boundary": "Nur simulierte Entwürfe werden geprüft und gespeichert. Plattform, Händlerautorisierung und Auftragsbedingungen sind nicht live validiert; Produktion bleibt gesperrt.",
-    "identity": "Bestehende Installations-ID", "tenant": "Aktueller Mandant", "configured": "Entwurf gespeichert", "unconfigured": "Nicht konfiguriert",
+    "title": "Pilot-Basis und Vertrag",
+    "boundary": "Nur simulierte Entwürfe werden geprüft und gespeichert. Plattform, Händlerautorisierung und Auftragsbedingungen sind nicht live validiert; Produktion bleibt gesperrt.",
+    "identity": "Bestehende Installations-ID",
+    "tenant": "Aktueller Mandant",
+    "configured": "Entwurf gespeichert",
+    "unconfigured": "Nicht konfiguriert",
     "empty": "Shop-Zuordnung und Autorisierungsreferenz, Lese-/Schreibumfang, Ausgabenlimit, Testautorisierende, Beobachtungsfenster, Rollback-Verantwortliche, Einzelauftrag sowie FA/AR/CH-Abschluss-Commits und Tests erfassen.",
-    "blockers": "Lokale Prüfsperren", "draft": "PilotContract-JSON-Entwurf", "hint": "Nur fake/simulated verwenden. Keine Zugangsdaten oder Kundendaten eingeben. Engineering-Minuten und Plattform-Genehmigungswartezeit getrennt erfassen.",
-    "validate": "Lokal prüfen", "save": "Entwurf speichern", "retry": "Erneut laden", "loadFailed": "Lesen fehlgeschlagen; Konfigurationsstatus unbekannt.",
+    "blockers": "Lokale Prüfsperren",
+    "draft": "PilotContract-JSON-Entwurf",
+    "hint": "Nur fake/simulated verwenden. Keine Zugangsdaten oder Kundendaten eingeben. Engineering-Minuten und Plattform-Genehmigungswartezeit getrennt erfassen.",
+    "validate": "Lokal prüfen",
+    "save": "Entwurf speichern",
+    "retry": "Erneut laden",
+    "loadFailed": "Lesen fehlgeschlagen; Konfigurationsstatus unbekannt.",
     "submitFailed": "Speichern oder Prüfung fehlgeschlagen. JSON, Identität und Revision prüfen. Bei Revisionskonflikt neu laden und Entwurf zusammenführen.",
-    "saved": "Entwurf gespeichert; Produktion bleibt gesperrt.", "validated": "Lokaler Vertrag ohne Speichern geprüft; Produktion bleibt gesperrt."
+    "saved": "Entwurf gespeichert; Produktion bleibt gesperrt.",
+    "validated": "Lokaler Vertrag ohne Speichern geprüft; Produktion bleibt gesperrt."
   },
   "bulkLeadHandoff": {
     "template": "Nachrichtenvorlage",
@@ -1930,8 +1948,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "Shop-Autorisierung", "summary": "Zielshop prüfen und über ein geprüftes Übergabeverfahren verbinden. Ungeprüfte Live-Verträge bleiben gesperrt.", "target": "Verbindungsziel bestätigen", "targetSummary": "Registrierte Anbieterkennung und Shop-ID eingeben und den Status prüfen. Ein Zielwechsel löscht den Versuch.", "status": "Verbindung und Aktionsrechte", "statusSummary": "Eine bereite Verbindung erlaubt noch keine Aktionen. EC-01 prüft weiterhin jede Aktion einzeln.", "actions": "Erneuern und lokal widerrufen", "actionsSummary": "Die Erneuerung nutzt die aktuelle Zugangsdatenversion und lädt bei Fehlern den Status neu. Ein lokaler Widerruf bestätigt keinen Widerruf beim Anbieter und erhält Ihre Anmeldung." },
-        "pilotContract": { "title": "Pilotvertrag", "summary": "Installation und Mandant prüfen, einen simulierten Entwurf bearbeiten und Blockaden ansehen. Speichern erlaubt keine Produktionsausführung.", "identity": "Identitätszuordnung", "identitySummary": "Die Installations-ID ist schreibgeschützt und wird mit dem aktuellen Mandanten geprüft.", "blockers": "Blockaden", "blockersSummary": "Fehlende Bedingungen vor der simulierten Validierung prüfen.", "draft": "Vertragsentwurf", "draftSummary": "Nur Simulationsdaten verwenden; keine Zugangsdaten oder Kundendaten eingeben." },
+        "merchantConnection": {
+          "title": "Shop-Autorisierung",
+          "summary": "Zielshop prüfen und über ein geprüftes Übergabeverfahren verbinden. Ungeprüfte Live-Verträge bleiben gesperrt.",
+          "target": "Verbindungsziel bestätigen",
+          "targetSummary": "Registrierte Anbieterkennung und Shop-ID eingeben und den Status prüfen. Ein Zielwechsel löscht den Versuch.",
+          "status": "Verbindung und Aktionsrechte",
+          "statusSummary": "Eine bereite Verbindung erlaubt noch keine Aktionen. EC-01 prüft weiterhin jede Aktion einzeln.",
+          "actions": "Erneuern und lokal widerrufen",
+          "actionsSummary": "Die Erneuerung nutzt die aktuelle Zugangsdatenversion und lädt bei Fehlern den Status neu. Ein lokaler Widerruf bestätigt keinen Widerruf beim Anbieter und erhält Ihre Anmeldung."
+        },
+        "pilotContract": {
+          "title": "Pilotvertrag",
+          "summary": "Installation und Mandant prüfen, einen simulierten Entwurf bearbeiten und Blockaden ansehen. Speichern erlaubt keine Produktionsausführung.",
+          "identity": "Identitätszuordnung",
+          "identitySummary": "Die Installations-ID ist schreibgeschützt und wird mit dem aktuellen Mandanten geprüft.",
+          "blockers": "Blockaden",
+          "blockersSummary": "Fehlende Bedingungen vor der simulierten Validierung prüfen.",
+          "draft": "Vertragsentwurf",
+          "draftSummary": "Nur Simulationsdaten verwenden; keine Zugangsdaten oder Kundendaten eingeben."
+        },
         "common": {
           "overview": "Wofür diese Seite da ist",
           "action": "Wo die wichtigen Aktionen sind"
@@ -2526,6 +2562,13 @@
           "step2": {
             "description": "Jeder Typ wird anders behandelt: Ein Negativtreffer verlangt eine Korrektur im Inhalt, ein Konformitätshinweis eine andere Formulierung, ein fehlgeschlagener Push eine Prüfung von Kontingent und URL. Alarme, die nie bestätigt werden, stapeln sich und verfälschen zugleich die Kennzahl „unbestätigte Alarme“ selbst. Bestätigen Sie sie, wenn Sie fertig sind – diese Bestätigung ist der einzige Nachweis Ihrer Bearbeitungsquote, wenn Sie später nachsehen."
           }
+        },
+        "commerceOperations": {
+          "title": "Commerce operations",
+          "target": "Use the shop bound to an authorized connection",
+          "draft": "Save intent without executing",
+          "ledger": "Operation ledger",
+          "evidence": "Attestation does not become provider or payment verification. Original failures remain."
         }
       }
     },
@@ -2976,5 +3019,100 @@
   "请填写跟进人账号": "Bitte das Konto des Bearbeiters eingeben",
   "分配失败": "Zuweisung fehlgeschlagen",
   "城市": "Stadt",
-  "地址": "Adresse"
+  "地址": "Adresse",
+  "commerce": {
+    "title": "Commerce operations",
+    "boundary": "Submission, acceptance, attestation, money movement and delivery remain separate facts. Simulation does not authorize live release.",
+    "profile": "Business profile",
+    "chooseProfile": "Choose product and region",
+    "shop": "Shop identifier",
+    "shopHint": "Use the shop bound to an authorized connection",
+    "order": "Mirror order ID",
+    "refresh": "Refresh operations",
+    "role": "Required role",
+    "providerMissing": "No verified provider is configured; native writes remain closed.",
+    "newOperation": "Create a business intent",
+    "action": "Action",
+    "chooseAction": "Choose a profile action",
+    "sourceVersion": "Authoritative order version",
+    "sourceVersionHint": "Use a fresh authoritative read; do not guess",
+    "intent": "Business intent key",
+    "intentHint": "Preserve this key when retrying the same intent",
+    "revision": "Explicit revision",
+    "required": "Required fields",
+    "parameterHint": "Follow the contract; money is an integer in minor units",
+    "obligations": "Confirm costs and subsequent obligations",
+    "createDraft": "Save intent without executing",
+    "operations": "Operation ledger",
+    "operationId": "Operation ID",
+    "state": "Business state",
+    "mode": "Execution mode",
+    "evidenceLevel": "Verification level",
+    "funds": "Funds state",
+    "details": "Operation and postconditions",
+    "selectOperation": "Select an operation and check approval scope and evidence.",
+    "empty": "Choose an authorized shop and refresh, or save an intent.",
+    "unknownHint": "Outcome unknown: retain the operation and reservations. Observe or verify manually; do not resubmit or change write route.",
+    "evidenceReference": "Manual evidence reference",
+    "evidenceHint": "Use a controlled reference without secrets or personal data",
+    "nativeState": "Provider state",
+    "outcome": "Attested outcome",
+    "appendEvidence": "Append manual attestation",
+    "manualHint": "Attestation does not become provider or payment verification. Original failures remain.",
+    "confirmTransition": "Check shop, action, digest, costs, obligations and approval scope. The backend rechecks permission and versions.",
+    "loadError": "Read failed or access denied. Check shop authorization and connection.",
+    "createError": "Save failed. Check required fields, integer amounts, versions and permissions.",
+    "actionError": "Completion is unconfirmed. Refresh and inspect the latest state and rejection reason.",
+    "fields": {
+      "recipient": "Recipient",
+      "phone": "Phone",
+      "address": "Address",
+      "province": "Province or state",
+      "city": "City",
+      "district": "District",
+      "amount_minor": "Amount (integer minor units)",
+      "currency": "Currency",
+      "quantity": "Quantity",
+      "line_id": "Order line",
+      "case_ref": "Case reference",
+      "reason": "Reason",
+      "sku": "Target SKU",
+      "logistics_ref": "Logistics reference",
+      "warehouse_ref": "Warehouse reference",
+      "payment_path": "Payment path"
+    },
+    "transitions": {
+      "preflight": "Preflight",
+      "approve": "Approve",
+      "submit": "Submit",
+      "observe": "Observe",
+      "cancel": "Cancel before dispatch",
+      "claim": "Claim workbench task"
+    },
+    "detail": {
+      "id": "Operation ID",
+      "state": "Business state",
+      "native_state": "Provider state",
+      "mode": "Execution mode",
+      "write_owner": "Write owner",
+      "approver_id": "Approver",
+      "owner_id": "Owner",
+      "evidence_level": "Verification level",
+      "evidence_ref": "Evidence reference",
+      "external_ref": "External reference",
+      "funds_state": "Funds state",
+      "manual_state": "Manual handoff",
+      "amount_minor": "Amount (minor units)",
+      "currency": "Currency",
+      "actual_attempts": "Actual attempts",
+      "unknown_since": "Unknown since",
+      "due_at": "Next observation",
+      "expires_at": "Preflight expiry",
+      "failure_reason": "Failure reason",
+      "result_summary": "Result summary",
+      "live_status": "Live validation",
+      "version": "Operation version",
+      "preflight_hash": "Preflight digest"
+    }
+  }
 }

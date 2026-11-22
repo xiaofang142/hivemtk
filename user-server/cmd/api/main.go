@@ -846,7 +846,13 @@ func main() {
 	// （见 marketing_flow_gate_wiring.go）。顺序约束同上两行：必须在 router.Setup 之后
 	// （W-1 checker 就绪后）；未装配时注册的发送器 fail-closed，营销流程外发动作全部拒发。
 	app.AttachMarketingFlowReachGate(db.GetDB())
-	markPhase("workers")
+	if marketingExecution := app.InitMarketingExecutionRuntime(db.GetDB()); marketingExecution != nil {
+		defer marketingExecution.Stop(context.Background())
+	}
+		if commerceExecution := app.InitCommerceExecutionRuntime(db.GetDB()); commerceExecution != nil {
+			defer commerceExecution.Stop(context.Background())
+		}
+		markPhase("workers")
 
 	// Telegram polling 的分布式锁在关停时必须交回：polling 协程随进程消失后，
 	// DB 里的 polling_owner 仍写着这个已死进程，60s 心跳陈旧窗口内启动的新实例会判定

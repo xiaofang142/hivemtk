@@ -105,13 +105,15 @@ type ReachSendRequest struct {
 	CardID      string
 	Fallback    *FallbackConfig
 	Metadata    map[string]string
+	DryRun      bool
 }
 
 type FallbackConfig struct {
-	Enabled       bool
-	BackupChannel string
-	BackupAccount string
-	MaxAttempts   int
+	Enabled           bool
+	BackupChannel     string
+	BackupAccount     string
+	BackupRecipientID string
+	MaxAttempts       int
 }
 
 type SendResponse struct {
@@ -129,7 +131,12 @@ type SendResponse struct {
 	// Deferred R-4：命中 quiet hours 进入延迟队列时为 true（非失败语义）
 	Deferred bool `json:"deferred,omitempty"`
 	// DeferredAt R-4：计划首发时间
-	DeferredAt time.Time `json:"deferred_at,omitempty"`
+	DeferredAt     time.Time `json:"deferred_at,omitempty"`
+	DryRun         bool      `json:"dry_run,omitempty"`
+	DeliveryState  string    `json:"delivery_state,omitempty"`
+	ActualAttempts int       `json:"actual_attempts"`
+	OutcomeUnknown bool      `json:"outcome_unknown,omitempty"`
+	sendError      error
 }
 
 type SendStepLog struct {
@@ -239,7 +246,8 @@ type SendPipelineConfig struct {
 	CustomerTimeZoneLookup CustomerTimeZoneLookup
 
 	// ConsentChecker D04：可信同意判定（nil = 跳过该闸，零行为变更）。
-	ConsentChecker ConsentChecker
+	ConsentChecker       ConsentChecker
+	RequireScopedConsent bool
 	// ConsentMode D04：revocation_only（默认，仅显式撤回拒发）/
 	// enforce（无可信凭据一律拒发，存量盘点完成后收紧用）。
 	ConsentMode string

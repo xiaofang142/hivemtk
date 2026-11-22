@@ -32,6 +32,8 @@ type Clue struct {
 	CreateTime int64          `gorm:"autoCreateTime" json:"create_time"`
 	UpdatedAt  int64          `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt  gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+	// SourceEvidence 固定来源事件和许可证据引用；公开账号或自述 opt-in 不是营销许可。
+	SourceEvidence string `gorm:"type:text" json:"source_evidence"`
 }
 
 func (m *Clue) TableName() string {

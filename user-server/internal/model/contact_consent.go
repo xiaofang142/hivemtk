@@ -47,7 +47,11 @@ type ContactConsentEvent struct {
 	// Actor 操作者（登录上下文的 user_id；自助为 customer self）
 	Actor string `gorm:"type:varchar(64)" json:"actor"`
 	// EvidenceRef 证据引用（工单号/自助 token 流水号等）
-	EvidenceRef string `gorm:"type:varchar(128)" json:"evidence_ref"`
+	EvidenceRef string     `gorm:"type:varchar(128)" json:"evidence_ref"`
+	Brand       string     `gorm:"size:100;index" json:"brand"`
+	LegalBasis  string     `gorm:"size:32" json:"legal_basis"`
+	SourceRef   string     `gorm:"size:160" json:"source_ref"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 	// OccurredAt 事实发生时刻（可回填历史；查询按它定最新）
 	OccurredAt time.Time `gorm:"index;not null" json:"occurred_at"`
 	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`

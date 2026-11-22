@@ -356,4 +356,8 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewMerchantCallbackInboxMigration(db))
 	// v3.106.0：精确动作能力证据与来源店铺映射。
 	register(NewCapabilityEvidenceMigration(db))
+	// v3.107.0：交易操作/审批/attempt/outbox 与订单资源守卫。
+	register(NewCommerceExecutionMigration(db))
+	// v3.108.0：营销图版本、绝对等待与节点派发事实。
+	register(NewReachExecutionMigration(db))
 }

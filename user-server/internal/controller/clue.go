@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -177,6 +178,27 @@ func (c *ClueController) ImportClues(ctx *gin.Context) {
 		"success_count": successCount,
 		"skip_count":    skipCount,
 	}, "导入线索成功")
+}
+
+// RegisterClue 固定来源事件；无许可证据的 marketing_consent 不得进入营销受众。
+func (c *ClueController) RegisterClue(ctx *gin.Context) {
+	var req dto.ImportClueRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name/account/type 必填，营销许可须 source_event 和 source_evidence_ref")
+		return
+	}
+	clueType, err := strconv.ParseInt(req.Type, 10, 64)
+	if err != nil || !service.IsValidClueType(clueType) {
+		response.Error(ctx, http.StatusBadRequest, "type 不是合法线索类型")
+		return
+	}
+	clue := model.Clue{SourceID: req.SourceID, Account: req.Account, Type: clueType, IsVerify: req.IsVerify, Name: req.Name, City: req.City, Address: req.Address, Desc: req.Desc, IntentScore: req.IntentScore, IsOpportunity: req.IsOpportunity, OneID: req.OneID, ConversationID: req.ConversationID, OwnerAccount: req.OwnerAccount, SourceEvidence: req.SourceEvent}
+	got, err := c.svc.RegisterClue(ctx.Request.Context(), clue, req.SourceEvent, req.SourceEvidenceRef, req.MarketingConsent)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, got, "已记录来源证据")
 }
 
 // @Summary 获取线索类型列表

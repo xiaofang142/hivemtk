@@ -96,8 +96,6 @@ var anonymousAllowedRoutes = map[string]string{
 	"PATCH /api/v1/integrations/merchant-callbacks/*delivery":   "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
 	"HEAD /api/v1/integrations/merchant-callbacks":              "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
 	"HEAD /api/v1/integrations/merchant-callbacks/*delivery":    "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
-	"OPTIONS /api/v1/integrations/merchant-callbacks":           "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
-	"OPTIONS /api/v1/integrations/merchant-callbacks/*delivery": "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
 	"DELETE /api/v1/integrations/merchant-callbacks":            "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
 	"DELETE /api/v1/integrations/merchant-callbacks/*delivery":  "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",
 	"CONNECT /api/v1/integrations/merchant-callbacks":           "提供方回调命名空间：POST 经已登记验证器验签、授权绑定和持久化；未配置返回503，其余方法返回405，禁止跳转及缓存",

@@ -71,15 +71,17 @@ func (s *AfterSaleService) Create(ctx context.Context, req *portcontract.AfterSa
 			if capregistry.IsSubmissionDenied(err) {
 				return nil, err
 			}
-			// 本地已落库，回写失败不能回滚，但必须留痕，否则电商侧静默少单。
-			logger.Errorf("[售后] 回写电商失败（本地已落库，状态待刷新）：%v", err)
+			// Local case remains durable, but callers must see the failed external operation.
+			logger.Warnf("[售后] 外部提交结果待核 case_id=%d", as.ID)
+			return afterSaleToView(as), fmt.Errorf("aftersale external submission outcome unknown")
 		} else if res != nil && res.ExternalID != "" {
 			as.ExternalID = res.ExternalID
 			if res.Status != "" {
 				as.Status = res.Status
 			}
 			if err := s.repo.Update(ctx, as); err != nil {
-				logger.Errorf("[售后] 更新回写结果失败 id=%d: %v", as.ID, err)
+				logger.Warnf("[售后] 回写结果保存失败 case_id=%d", as.ID)
+				return afterSaleToView(as), fmt.Errorf("aftersale external result persistence failed")
 			}
 		}
 	}

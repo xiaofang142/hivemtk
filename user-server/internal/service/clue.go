@@ -33,6 +33,22 @@ func NewClueServiceDefault(scoreSvc *ClueScoreService) *ClueService {
 	return NewClueService(repository.NewClueRepositoryDefault(), scoreSvc)
 }
 
+// RegisterClue 固定来源事件；营销许可必须同时有来源事件和证据引用。
+func (s *ClueService) RegisterClue(ctx context.Context, clue model.Clue, sourceEvent, sourceEvidenceRef string, marketingConsent bool) (*model.Clue, error) {
+	if marketingConsent && (sourceEvent == "" || sourceEvidenceRef == "") {
+		return nil, errors.New("营销许可必须固定来源事件和许可证据引用")
+	}
+	if clue.SourceEvidence == "" {
+		clue.SourceEvidence = sourceEvent
+	}
+	if marketingConsent {
+		clue.SourceEvidence += "|marketing=" + sourceEvidenceRef
+	} else if sourceEvidenceRef != "" {
+		clue.SourceEvidence += "|service_only=" + sourceEvidenceRef
+	}
+	return s.Register(ctx, clue)
+}
+
 // Register 建线索。(type, account) 去重是业务判据，放在这里：
 // 仓储只负责写入，不再在 SQL 层偷偷加一条查询。
 //

@@ -99,6 +99,7 @@ const moduleNames = [
   "leadMining",
   "browserAutomation",
   "orderDraft",
+  "commerce",
   "salesWorkbench",
   'followups',
   "unknownQuestion",

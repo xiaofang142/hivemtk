@@ -69,6 +69,38 @@ type MerchantCallbackService interface {
 	Ingest(ctx context.Context, provider string, body []byte, headers http.Header) MerchantCallbackResult
 }
 
+// MerchantCallbackConsumer 隔离后台补偿契约，避免入站调用方依赖消费能力。
+type MerchantCallbackConsumer interface {
+	ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error)
+	AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error
+}
+
+func NewMerchantCallbackConsumer(repo repository.MerchantCallbackRepository) MerchantCallbackConsumer {
+	return &merchantCallbackService{repo: repo}
+}
+
+func (s *merchantCallbackService) ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error) {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || tenant.IsSystemScope(ctx) || subscriptionID == 0 {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.ReadCompensationPage(tenant.OnlyTenant(ctx, id), subscriptionID, limit)
+}
+
+func (s *merchantCallbackService) AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || tenant.IsSystemScope(ctx) || page.TenantID != id || page.SubscriptionID == 0 {
+		return repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.AcknowledgeCompensationPage(tenant.OnlyTenant(ctx, id), page, appliedEventIDs)
+}
+
 type merchantCallbackService struct {
 	repo        repository.MerchantCallbackRepository
 	connections repository.MerchantConnectionRepository

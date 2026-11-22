@@ -121,7 +121,8 @@ func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInpu
 		Source:           source,
 		Actor:            in.Actor,
 		EvidenceRef:      in.EvidenceRef,
-		OccurredAt:       occurredAt,
+		Brand:            strings.TrimSpace(in.Brand), LegalBasis: strings.TrimSpace(in.LegalBasis), SourceRef: strings.TrimSpace(in.SourceRef), ExpiresAt: in.ExpiresAt,
+		OccurredAt: occurredAt,
 	}
 	return s.repo.AppendEvent(ctx, ev)
 }
@@ -136,6 +137,10 @@ type ConsentRecordInput struct {
 	Source           string
 	Actor            string
 	EvidenceRef      string
+	Brand            string
+	LegalBasis       string
+	SourceRef        string
+	ExpiresAt        *time.Time
 	OccurredAt       time.Time
 }
 

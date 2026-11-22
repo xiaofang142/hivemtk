@@ -24,12 +24,16 @@ func NewContactConsentController(svc *service.ContactConsentService) *ContactCon
 }
 
 type consentRecordRequest struct {
-	Decision         string `json:"decision" binding:"required"` // grant / revoke
-	Purpose          string `json:"purpose"`
-	ChannelScope     string `json:"channel_scope"`
-	StatementVersion string `json:"statement_version"`
-	Source           string `json:"source"`
-	EvidenceRef      string `json:"evidence_ref"`
+	Decision         string     `json:"decision" binding:"required"` // grant / revoke
+	Purpose          string     `json:"purpose"`
+	ChannelScope     string     `json:"channel_scope"`
+	StatementVersion string     `json:"statement_version"`
+	Source           string     `json:"source"`
+	EvidenceRef      string     `json:"evidence_ref"`
+	Brand            string     `json:"brand"`
+	LegalBasis       string     `json:"legal_basis"`
+	SourceRef        string     `json:"source_ref"`
+	ExpiresAt        *time.Time `json:"expires_at"`
 }
 
 // Timeline GET /api/contacts/:customer_id/consents — 授权时间线
@@ -60,7 +64,8 @@ func (ctrl *ContactConsentController) Record(ctx *gin.Context) {
 		Source:           req.Source,
 		Actor:            actor,
 		EvidenceRef:      req.EvidenceRef,
-		OccurredAt:       time.Now(),
+		Brand:            req.Brand, LegalBasis: req.LegalBasis, SourceRef: req.SourceRef, ExpiresAt: req.ExpiresAt,
+		OccurredAt: time.Now(),
 	})
 	if err != nil {
 		response.Error(ctx, http.StatusBadRequest, err.Error())

@@ -84,9 +84,14 @@ func (c *HTTPAfterSaleClient) Create(ctx context.Context, req *portcontract.Afte
 	var out struct {
 		ExternalID string `json:"external_id"`
 		Status     string `json:"status"`
+		Code       *int   `json:"code"`
+		Success    *bool  `json:"success"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
+	}
+	if (out.Code != nil && *out.Code != 0) || (out.Success != nil && !*out.Success) || out.ExternalID == "" {
+		return nil, fmt.Errorf("aftersale provider rejected or missing external reference")
 	}
 	return &AfterSaleExternalResult{ExternalID: out.ExternalID, Status: out.Status}, nil
 }

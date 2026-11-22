@@ -15,6 +15,13 @@ import (
 )
 
 func (p *defaultSendPipeline) Send(ctx context.Context, req *ReachSendRequest) *SendResponse {
+	if req == nil {
+		return &SendResponse{Error: ErrSendPermissionDenied.Error(), DeliveryState: "rejected"}
+	}
+	// 测试模式在接触生产适配器、费用和配额之前终结。
+	if req.DryRun || req.Metadata["dry_run"] == "true" {
+		return &SendResponse{Success: true, DryRun: true, DeliveryState: "simulated", Channel: req.Channel, PrimaryChannel: req.Channel}
+	}
 	LogComplianceReminder(ctx, req.Channel, req.RecipientID)
 
 	start := time.Now()
@@ -121,10 +128,14 @@ func (p *defaultSendPipeline) settleQuota(ctx context.Context, req *ReachSendReq
 	case resp.Deferred:
 		// FA-08：入队≠发送。保持 reserved，返额通道留给取消/撤回/耗尽失败。
 		return
+	case resp.OutcomeUnknown:
+		err = p.config.QuotaReserver.MarkUnknownIntent(ctx, intentID, token)
 	case resp.Success:
 		err = p.config.QuotaReserver.CommitIntent(ctx, intentID, token)
+	case resp.ActualAttempts == 0:
+		err = p.config.QuotaReserver.ReleaseIntent(ctx, intentID, token)
 	default:
-		ce := AsChannelError(errors.New(resp.Error))
+		ce := AsChannelError(resp.sendError)
 		if ce != nil && ce.Retryable {
 			return // 保持 reserved：重试复用同一预占
 		}
@@ -154,7 +165,7 @@ func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendR
 
 	// D04：主动外发的退订检查优先走故障显式通道——状态查不清就拒发
 	//（fail-closed），留原因码；未配 strict 时退回旧 fail-open。
-	if oneID := permissionOneID(req); oneID != "" && p.config.DoNotContact != nil {
+	if oneID := permissionOneID(req); oneID != "" && (p.config.DoNotContact != nil || p.config.DoNotContactStrict != nil) {
 		blocked := false
 		if p.config.DoNotContactStrict != nil {
 			b, err := p.config.DoNotContactStrict.IsBlockedStrict(ctx, oneID, req.Channel)
@@ -181,6 +192,10 @@ func (p *defaultSendPipeline) runPermission(ctx context.Context, req *ReachSendR
 		}
 	}
 
+	if p.config.RequireScopedConsent && permissionOneID(req) == "" {
+		log.Error = ErrSendConsentRequired.Error()
+		return log
+	}
 	// D04：同意闸（独立于 DNC 配置）。撤回即生效（含延迟队列重发前）；
 	// paused 按延后处理；missing 按模式处理；查询故障始终拒发。
 	if oneID := permissionOneID(req); oneID != "" {
@@ -223,10 +238,24 @@ func permissionOneID(req *ReachSendRequest) string {
 func (p *defaultSendPipeline) checkSendConsent(ctx context.Context, req *ReachSendRequest, resp *SendResponse, log *SendStepLog, oneID string) bool {
 	checker := p.config.ConsentChecker
 	if checker == nil {
+		if p.config.RequireScopedConsent {
+			log.Error = ErrSendConsentUnavailable.Error()
+			return true
+		}
 		return false
 	}
 	purpose := ReachSendPurpose(req)
-	dec := checker.CheckSendConsent(ctx, oneID, purpose, req.Channel)
+	var dec ConsentDecision
+	if p.config.RequireScopedConsent {
+		scoped, ok := checker.(ScopedConsentChecker)
+		if !ok {
+			log.Error = ErrSendConsentUnavailable.Error()
+			return true
+		}
+		dec = scoped.CheckScopedSendConsent(ctx, oneID, purpose, req.Channel, req.Metadata["brand"])
+	} else {
+		dec = checker.CheckSendConsent(ctx, oneID, purpose, req.Channel)
+	}
 	switch dec.Status {
 	case ConsentStatusRevoked:
 		// 撤回即生效：metadata 自述 consent=true 也压不过真实撤回事实。
@@ -257,7 +286,7 @@ func (p *defaultSendPipeline) checkSendConsent(ctx context.Context, req *ReachSe
 		log.Output = []any{map[string]any{"reason": ConsentReasonPaused}}
 		return true
 	case ConsentStatusMissing:
-		if p.config.ConsentMode == ConsentModeEnforce {
+		if p.config.ConsentMode == ConsentModeEnforce || p.config.RequireScopedConsent {
 			log.Success = false
 			log.Error = ErrSendConsentRequired.Error()
 			log.Output = []any{map[string]any{"reason": ConsentReasonMissing, "purpose": purpose}}
@@ -458,8 +487,23 @@ func (p *defaultSendPipeline) runRetry(ctx context.Context, req *ReachSendReques
 
 	var lastErr error
 	for attempt := 0; attempt <= policy.MaxRetries; attempt++ {
-		msgID, err := p.executeSendWithFallback(ctx, req)
+		if ctx.Err() != nil {
+			lastErr = ctx.Err()
+			break
+		}
+		if attempt > 0 {
+			if err := p.recheckDispatch(ctx, req); err != nil {
+				lastErr = err
+				break
+			}
+		}
+		resp.RetryCount = attempt
+		msgID, err := p.sendWithFallback(ctx, req, resp)
+		if err == nil && msgID == "" {
+			err = errors.New("provider returned no message reference")
+		}
 		if err == nil {
+			resp.DeliveryState = "adapter_accepted"
 			resp.RetryCount = attempt
 			resp.MessageID = msgID
 			log.Success = true
@@ -482,6 +526,9 @@ func (p *defaultSendPipeline) runRetry(ctx context.Context, req *ReachSendReques
 		}
 		if attempt < policy.MaxRetries {
 			wait := p.computeBackoff(ctx, policy, attempt)
+			if ce := AsChannelError(err); ce != nil && ce.RetryAfter > wait {
+				wait = ce.RetryAfter
+			}
 			select {
 			case <-time.After(wait):
 			case <-ctx.Done():
@@ -493,56 +540,109 @@ func (p *defaultSendPipeline) runRetry(ctx context.Context, req *ReachSendReques
 			}
 		}
 	}
-	resp.RetryCount = policy.MaxRetries
+	resp.sendError = lastErr
+	resp.OutcomeUnknown = resp.ActualAttempts > 0 && !sendDefinitelyRejected(lastErr)
+	if resp.OutcomeUnknown {
+		resp.DeliveryState = "outcome_unknown"
+	} else {
+		resp.DeliveryState = "rejected"
+	}
 	log.Success = false
-	log.Error = fmt.Sprintf("重试 %d 次后仍失败: %v", policy.MaxRetries, lastErr)
+	log.Error = fmt.Sprintf("重试 %d 次后仍失败: %v", resp.RetryCount, lastErr)
 	log.EndedAt = time.Now()
 	log.DurationMs = time.Since(start).Milliseconds()
 	return log
 }
 
+// sendDefinitelyRejected 只接受结构化、明确未受理证据，不根据网络错误文案推断安全重发。
+func sendDefinitelyRejected(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrSendChannelNotConfig) || errors.Is(err, ErrSendPermissionDenied) || errors.Is(err, ErrSendConsentRevoked) || errors.Is(err, ErrSendConsentRequired) || errors.Is(err, ErrSendConsentUnavailable) || errors.Is(err, ErrSendDoNotContact) || errors.Is(err, ErrSendDoNotContactUnavailable) || errors.Is(err, ErrSendComplianceDenied) || errors.Is(err, ErrSendRateLimited) {
+		return true
+	}
+	var ce *ChannelError
+	if !errors.As(err, &ce) {
+		return false
+	}
+	switch ce.Category {
+	case CategoryRateLimited, CategoryAuth, CategoryBadRequest, CategoryQuotaExhausted, CategoryWindowExpired:
+		return true
+	}
+	return false
+}
+
+func (p *defaultSendPipeline) recheckDispatch(ctx context.Context, req *ReachSendRequest) error {
+	check := &SendResponse{}
+	permission := p.runPermission(ctx, req, check)
+	if check.Deferred {
+		return ErrSendQuietHoursDeferred
+	}
+	if !permission.Success {
+		return fmt.Errorf("%w: %s", ErrSendPermissionDenied, permission.Error)
+	}
+	policy := p.runCompliancePolicy(ctx, req, check)
+	if !policy.Success && !policy.Skipped {
+		return ErrSendComplianceDenied
+	}
+	return ctx.Err()
+}
+
 func (p *defaultSendPipeline) executeSendWithFallback(ctx context.Context, req *ReachSendRequest) (string, error) {
+	return p.sendWithFallback(ctx, req, &SendResponse{})
+}
+
+func (p *defaultSendPipeline) sendWithFallback(ctx context.Context, req *ReachSendRequest, resp *SendResponse) (string, error) {
 	if p.config.Adapter == nil {
 		return "", ErrSendChannelNotConfig
 	}
+	resp.ActualAttempts++
 	msgID, err := p.config.Adapter.Send(ctx, req)
 	if err == nil {
 		return msgID, nil
 	}
-	if req.Fallback == nil || !req.Fallback.Enabled || req.Fallback.BackupChannel == "" {
+	if !sendDefinitelyRejected(err) || req.Fallback == nil || !req.Fallback.Enabled || req.Fallback.BackupChannel == "" || req.Fallback.BackupRecipientID == "" {
 		return "", err
 	}
-	if req.Fallback.MaxAttempts <= 0 {
-		req.Fallback.MaxAttempts = 1
+	backupAdapter := p.config.FallbackAdapters[req.Fallback.BackupChannel]
+	if backupAdapter == nil {
+		return "", err
 	}
-	for i := 0; i < req.Fallback.MaxAttempts; i++ {
-		backupAdapter, ok := p.config.FallbackAdapters[req.Fallback.BackupChannel]
-		if !ok {
-			continue
-		}
-		backupReq := *req
-		backupReq.Channel = req.Fallback.BackupChannel
-		backupReq.AccountID = req.Fallback.BackupAccount
-		backupReq.Fallback = nil
-		msgID, err2 := backupAdapter.Send(ctx, &backupReq)
-		if err2 == nil {
-			return msgID, nil
-		}
-		err = err2
+	backupReq := *req
+	backupReq.Channel = req.Fallback.BackupChannel
+	backupReq.AccountID = req.Fallback.BackupAccount
+	backupReq.RecipientID = req.Fallback.BackupRecipientID
+	backupReq.Fallback = nil
+	if err := p.recheckDispatch(ctx, &backupReq); err != nil {
+		return "", err
 	}
-	return "", err
+	rate := p.runRateLimit(ctx, &backupReq, &SendResponse{})
+	if !rate.Success && !rate.Skipped {
+		return "", ErrSendRateLimited
+	}
+	resp.ActualAttempts++
+	msgID, err = backupAdapter.Send(ctx, &backupReq)
+	if err == nil {
+		resp.FallbackUsed = true
+		resp.Channel, resp.AccountID = backupReq.Channel, backupReq.AccountID
+	}
+	return msgID, err
 }
 
 func (p *defaultSendPipeline) isRetryable(ctx context.Context, err error, retryableErrors []string) bool {
-	if err == nil {
+	if ctx.Err() != nil || !sendDefinitelyRejected(err) {
+		return false
+	}
+	var ce *ChannelError
+	if !errors.As(err, &ce) || !ce.Retryable {
 		return false
 	}
 	if len(retryableErrors) == 0 {
 		return true
 	}
-	errStr := err.Error()
 	for _, re := range retryableErrors {
-		if strings.Contains(errStr, re) {
+		if strings.Contains(err.Error(), re) {
 			return true
 		}
 	}

@@ -16,7 +16,7 @@ import (
 func setupMarketingFlowTestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,
 		&model.MarketingFlow{},
-		&model.FlowExecution{},
+		&model.FlowExecution{}, &model.FlowNodeAttempt{},
 	)
 	db.SetTestDB(database)
 	return database

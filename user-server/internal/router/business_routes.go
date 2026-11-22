@@ -151,6 +151,7 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 		admin.POST("/:id/pause", marketingFlowCtrl.PauseFlow)
 		admin.POST("/:id/stop", marketingFlowCtrl.StopFlow)
 		admin.POST("/:id/trigger", marketingFlowCtrl.Trigger)
+		admin.POST("/:id/resume-due", marketingFlowCtrl.ResumeDue)
 		admin.POST("/:id/sync-ab-results", mfSyncCtrl.SyncABResults)
 	}
 }
