@@ -8,8 +8,16 @@ import (
 	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
-	"hivemtk-user/internal/repository"
 )
+
+// AfterSaleRepositoryOps 售后单持久化边界。定义为接口，使"远端回写状态持久化失败"可被合成测试注入，
+// 用于守住 EC-13「写失败不能吞为完成」不变量。
+type AfterSaleRepositoryOps interface {
+	Create(ctx context.Context, as *model.AfterSale) error
+	Update(ctx context.Context, as *model.AfterSale) error
+	ListByOrder(ctx context.Context, platform, orderID string) ([]model.AfterSale, error)
+	ListByCustomer(ctx context.Context, phone string) ([]model.AfterSale, error)
+}
 
 // AfterSaleService 售后服务（客服侧发起售后 → 回写电商）。
 //
@@ -17,18 +25,18 @@ import (
 // 由电商执行落地；本服务只负责本地落库 + 状态跟踪。订单本身的创建/支付/履约
 // 由外部电商负责，客服绝不触碰。
 type AfterSaleService struct {
-	repo   *repository.AfterSaleRepository
+	repo   AfterSaleRepositoryOps
 	client AfterSaleExternalClient
 }
 
 // NewAfterSaleService 构造（无回写客户端，走 best-effort 本地落库）。
 // 仓储由装配层注入：服务不再直取全局 db 句柄。
-func NewAfterSaleService(repo *repository.AfterSaleRepository) *AfterSaleService {
+func NewAfterSaleService(repo AfterSaleRepositoryOps) *AfterSaleService {
 	return NewAfterSaleServiceWithClient(repo, nil)
 }
 
 // NewAfterSaleServiceWithClient 构造（注入回写电商客户端）
-func NewAfterSaleServiceWithClient(repo *repository.AfterSaleRepository, client AfterSaleExternalClient) *AfterSaleService {
+func NewAfterSaleServiceWithClient(repo AfterSaleRepositoryOps, client AfterSaleExternalClient) *AfterSaleService {
 	return &AfterSaleService{repo: repo, client: client}
 }
 
@@ -74,13 +82,7 @@ func (s *AfterSaleService) Create(ctx context.Context, req *portcontract.AfterSa
 			// 本地已落库，回写失败不能回滚，但必须留痕，否则电商侧静默少单。
 			logger.Errorf("[售后] 回写电商失败（本地已落库，状态待刷新）：%v", err)
 		} else if res != nil && res.ExternalID != "" {
-			as.ExternalID = res.ExternalID
-			if res.Status != "" {
-				as.Status = res.Status
-			}
-			if err := s.repo.Update(ctx, as); err != nil {
-				logger.Errorf("[售后] 更新回写结果失败 id=%d: %v", as.ID, err)
-			}
+			s.applyRemoteWriteBack(ctx, as, res)
 		}
 	}
 	return afterSaleToView(as), nil
@@ -95,6 +97,20 @@ func (s *AfterSaleService) resolveClient(ctx context.Context) AfterSaleExternalC
 		return nil
 	}
 	return NewAfterSaleExternalClientFromConfig(cfg.AfterSale)
+}
+
+// applyRemoteWriteBack 持久化远端回写状态；持久化失败时回退本地状态，守住 EC-13「写失败不能吞为完成」。
+// 提取为独立方法使该不变量可被合成测试直接覆盖，不依赖 authorizeAfterSaleSubmit 硬闸门（legacy client 路径不可达）。
+func (s *AfterSaleService) applyRemoteWriteBack(ctx context.Context, as *model.AfterSale, res *AfterSaleExternalResult) {
+	localStatus := as.Status
+	as.ExternalID = res.ExternalID
+	if res.Status != "" {
+		as.Status = res.Status
+	}
+	if err := s.repo.Update(ctx, as); err != nil {
+		logger.Errorf("[售后] 更新回写结果失败 id=%d，回退本地状态 %s→%s：%v", as.ID, as.Status, localStatus, err)
+		as.Status = localStatus // 外部单号已留痕，但远端状态未落库，不对外宣称资金成功
+	}
 }
 
 // Query 查询售后单（按 平台+订单号 或 客户手机）
