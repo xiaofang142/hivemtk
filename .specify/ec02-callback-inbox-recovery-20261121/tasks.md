@@ -12,17 +12,17 @@
 
 **Purpose**: Confirm migration and package touch points without changing unrelated configuration.
 
-- [ ] T001 Confirm current highest merchant migration and module table ownership for callback-related tables; record evidence in `.specify/ec02-callback-inbox-recovery-20261121/verification.md`.
-- [ ] T002 Confirm production callback verifier registration remains empty in `user-server/internal/router/merchant_callback_routes.go`; do not register a provider.
+- [x] T001 Confirm current highest merchant migration and module table ownership for callback-related tables; record evidence in `.specify/ec02-callback-inbox-recovery-20261121/verification.md`.
+- [x] T002 Confirm production callback verifier registration remains empty in `user-server/internal/router/merchant_callback_routes.go`; do not register a provider.
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
 **Purpose**: Define durable inbox event, resource-head, and compensation-cursor storage.
 
-- [ ] T003 Add event disposition, supersession link, and verified connection/credential revision fields to `user-server/internal/model/merchant_callback.go`.
-- [ ] T004 Add tenant-scoped resource watermark and compensation cursor models in `user-server/internal/model/merchant_callback.go` with composite indexes and table names.
-- [ ] T005 Add v3.105.0 idempotent migration in `user-server/internal/migration/migrations/v3_105_0_merchant_callback_inbox.go` and register it in `user-server/internal/migration/migrations/initial_schema.go`; preserve v3.104.0 and callback rows.
-- [ ] T006 Add migration upgrade/idempotency/backfill/tenant-unique tests in `user-server/internal/migration/migrations/v3_105_0_merchant_callback_inbox_test.go`.
+- [x] T003 Add event disposition, supersession link, and verified connection/credential revision fields to `user-server/internal/model/merchant_callback.go`.
+- [x] T004 Add tenant-scoped resource watermark and compensation cursor models in `user-server/internal/model/merchant_callback.go` with composite indexes and table names.
+- [x] T005 Add v3.105.0 idempotent migration in `user-server/internal/migration/migrations/v3_105_0_merchant_callback_inbox.go` and register it in `user-server/internal/migration/migrations/initial_schema.go`; preserve v3.104.0 and callback rows.
+- [x] T006 Add migration upgrade/idempotency/backfill/tenant-unique tests in `user-server/internal/migration/migrations/v3_105_0_merchant_callback_inbox_test.go`.
 
 ## Phase 3: User Story 1 - Preserve verified callback events safely (Priority: P1)
 
@@ -32,14 +32,14 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [US1] Add PostgreSQL cases with prefix `TestMerchantCallbackInbox_` to `user-server/internal/repository/merchant_callback_test.go` for newer-then-older resource events, equal signed timestamps, independent tenant/subscription/resource identities, and unchanged original conflict rows.
-- [ ] T008 [US1] Add service coverage with prefix `TestMerchantCallbackInbox_` to `user-server/internal/service/merchant_callback_test.go` for capturing connection and credential revisions in a verified event while preserving verifier-before-lookup behavior.
+- [x] T007 [US1] Add PostgreSQL cases with prefix `TestMerchantCallbackInbox_` to `user-server/internal/repository/merchant_callback_test.go` for newer-then-older resource events, equal signed timestamps, independent tenant/subscription/resource identities, and unchanged original conflict rows.
+- [x] T008 [US1] Add service coverage with prefix `TestMerchantCallbackInbox_` to `user-server/internal/service/merchant_callback_test.go` for capturing connection and credential revisions in a verified event while preserving verifier-before-lookup behavior.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Extend `MerchantCallbackRepository.Record` in `user-server/internal/repository/merchant_callback.go` to persist verified connection/credential revisions and atomically update the resource watermark/dispositions under existing connection-then-subscription locks.
-- [ ] T010 [US1] Extend `MerchantCallbackService.Ingest` in `user-server/internal/service/merchant_callback.go` to pass only the verified connection snapshot revisions into the durable event envelope.
-- [ ] T011 [US1] Verify conflict detection in `user-server/internal/repository/merchant_callback.go` includes stable signed event identity and never overwrites the original inbox row.
+- [x] T009 [US1] Extend `MerchantCallbackRepository.Record` in `user-server/internal/repository/merchant_callback.go` to persist verified connection/credential revisions and atomically update the resource watermark/dispositions under existing connection-then-subscription locks.
+- [x] T010 [US1] Extend `MerchantCallbackService.Ingest` in `user-server/internal/service/merchant_callback.go` to pass only the verified connection snapshot revisions into the durable event envelope.
+- [x] T011 [US1] Verify conflict detection in `user-server/internal/repository/merchant_callback.go` includes stable signed event identity and never overwrites the original inbox row.
 
 **Checkpoint**: Stale events remain auditable but do not remain current or eligible; ingestion remains fail-closed and provider-free.
 
@@ -51,14 +51,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T012 [US2] Add PostgreSQL `TestMerchantCallbackInbox_` cases to `user-server/internal/repository/merchant_callback_test.go` for page/high-water persistence, repository restart/repeat read, exact-page acknowledgment, partial/forged/stale ACK rejection, post-high-water event discovery, connection revision invalidation, and cross-tenant/system-scope rejection.
-- [ ] T013 [US2] Add service-boundary `TestMerchantCallbackInbox_` cases to `user-server/internal/service/merchant_callback_test.go` proving page read/ack delegates only through repository contracts and propagates fail-closed errors.
+- [x] T012 [US2] Add PostgreSQL `TestMerchantCallbackInbox_` cases to `user-server/internal/repository/merchant_callback_test.go` for page/high-water persistence, repository restart/repeat read, exact-page acknowledgment, partial/forged/stale ACK rejection, post-high-water event discovery, connection revision invalidation, and cross-tenant/system-scope rejection.
+- [x] T013 [US2] Add service-boundary `TestMerchantCallbackInbox_` cases to `user-server/internal/service/merchant_callback_test.go` proving page read/ack delegates only through repository contracts and propagates fail-closed errors.
 
 ### Implementation for User Story 2
 
-- [ ] T014 [US2] Add bounded keyset `ReadCompensationPage` and exact-page `AcknowledgeCompensationPage` repository methods in `user-server/internal/repository/merchant_callback.go`, using tenant scope and connection→subscription→cursor lock ordering.
-- [ ] T015 [US2] Add internal page/result types and thin service methods in `user-server/internal/service/merchant_callback.go`; expose no HTTP route, credential, raw body, worker scheduler, or provider client.
-- [ ] T016 [US2] Ensure sweep capture and page advancement are durable in `user-server/internal/repository/merchant_callback.go`; restart repeats the stored page and new IDs above the snapshot are available in a subsequent sweep.
+- [x] T014 [US2] Add bounded keyset `ReadCompensationPage` and exact-page `AcknowledgeCompensationPage` repository methods in `user-server/internal/repository/merchant_callback.go`, using tenant scope and connection→subscription→cursor lock ordering.
+- [x] T015 [US2] Add internal page/result types and thin service methods in `user-server/internal/service/merchant_callback.go`; expose no HTTP route, credential, raw body, worker scheduler, or provider client.
+- [x] T016 [US2] Ensure sweep capture and page advancement are durable in `user-server/internal/repository/merchant_callback.go`; restart repeats the stored page and new IDs above the snapshot are available in a subsequent sweep.
 
 **Checkpoint**: A restarted reader cannot silently skip accepted events, cursor progress requires exact ACK, and all authorization/revision fences remain current.
 
@@ -70,20 +70,20 @@
 
 ### Tests for User Story 3
 
-- [ ] T017 [US3] Add PostgreSQL `TestMerchantCallbackInbox_` cases to `user-server/internal/repository/merchant_callback_test.go` for stale page after newer insert, event ID tie-break, only-current-head acknowledgment, and no cursor movement after invalid current-head ACK.
+- [x] T017 [US3] Add PostgreSQL `TestMerchantCallbackInbox_` cases to `user-server/internal/repository/merchant_callback_test.go` for stale page after newer insert, event ID tie-break, only-current-head acknowledgment, and no cursor movement after invalid current-head ACK.
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Make page projection and ACK validation in `user-server/internal/repository/merchant_callback.go` require the event to match the persisted resource watermark before marking it applied; keep superseded rows as audit history.
-- [ ] T019 [US3] Confirm `user-server/internal/router/merchant_callback_routes.go` remains wired with an empty verifier map and that no business-state or external platform mutation is introduced.
+- [x] T018 [US3] Make page projection and ACK validation in `user-server/internal/repository/merchant_callback.go` require the event to match the persisted resource watermark before marking it applied; keep superseded rows as audit history.
+- [x] T019 [US3] Confirm `user-server/internal/router/merchant_callback_routes.go` remains wired with an empty verifier map and that no business-state or external platform mutation is introduced.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
 **Purpose**: Verify the specified subset, preserve unrelated working changes, and record all evidence.
 
-- [ ] T020 Run `gofmt` on only changed Go files and targeted callback repository/service/migration tests with test DB vars from the inner `.env`; write exact output to `.specify/ec02-callback-inbox-recovery-20261121/verification.md` without exposing secrets.
-- [ ] T021 Run `go build ./...`, `go vet ./...`, `python3 scripts/check-layer-boundary.py`, `bash scripts/check-architecture.sh`, `bash user-server/scripts/check_naked_goroutine.sh`, and `bash user-server/scripts/check-gorm-only.sh` as required; record real pass/fail/skip evidence in `verification.md`.
-- [ ] T022 Record live provider signature/order/pagination validation as `pending_live_validation` in `.specify/ec02-callback-inbox-recovery-20261121/verification.md`; do not claim live acceptance.
+- [x] T020 Run `gofmt` on only changed Go files and targeted callback repository/service/migration tests with test DB vars from the inner `.env`; write exact output to `.specify/ec02-callback-inbox-recovery-20261121/verification.md` without exposing secrets.
+- [x] T021 Run `go build ./...`, `go vet ./...`, `python3 scripts/check-layer-boundary.py`, `bash scripts/check-architecture.sh`, `bash user-server/scripts/check_naked_goroutine.sh`, and `bash user-server/scripts/check-gorm-only.sh` as required; record real pass/fail/skip evidence in `verification.md`.
+- [x] T022 Record live provider signature/order/pagination validation as `pending_live_validation` in `.specify/ec02-callback-inbox-recovery-20261121/verification.md`; do not claim live acceptance.
 
 ## Dependencies & Execution Order
 

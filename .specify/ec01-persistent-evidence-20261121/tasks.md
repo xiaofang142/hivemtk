@@ -12,6 +12,8 @@ The checks above cover the local slice only. The dedicated PostgreSQL tests exer
 
 ## Controlled collection continuation
 
-- [ ] T008 Add a tenant-scoped transaction writer with connection-version/lifecycle recheck and atomic binding/evidence persistence; reject source relocation and stale observations.
-- [ ] T009 Add a constructor-injected server-side collection service; validate exact identity and versions, bound observation time, and keep unconfigured production denied.
-- [ ] T010 Test collection failures, revoked/rotated connections, cross-tenant writes, source conflicts and transactional rollback; run regression/build/vet/lint/static gates and converge.
+- [x] T008 Add a tenant-scoped transaction writer with connection-version/lifecycle recheck and atomic binding/evidence persistence; reject source relocation and stale observations.
+- [x] T009 Add a constructor-injected server-side collection service; validate exact identity and versions, bound observation time, and keep unconfigured production denied.
+- [x] T010 Test collection failures, revoked/rotated connections, cross-tenant writes, source conflicts and transactional rollback; run regression/build/vet/lint/static gates and converge.
+- [x] T011 Add an independently sourced local proof verifier with current contract and exact identity checks; test forged, simulated, expired and mismatched sources through the real resolver.
+- [x] T012 Bind connector write requests to the exact execution connection revision and reauthorize before transport; reject unsafe destinations and redirects with zero-outflow tests.

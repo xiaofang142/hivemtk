@@ -510,3 +510,109 @@ func TestMerchantCallback_AuthenticCommitAndRestart(t *testing.T) {
 		require.WithinDuration(t, f.event.SignedAt, rows[0].SignedAt, time.Microsecond)
 	}
 }
+
+// T008：已验证事件必须捕获当前连接与凭证修订，且验证先于任何租户/订阅查找。
+func TestMerchantCallbackInbox_CapturesRevisionsBeforeLookup(t *testing.T) {
+	f := newMerchantCallbackFixture(t)
+	var conn model.MerchantConnection
+	require.NoError(t, f.db.First(&conn).Error)
+	v := f.verifier(func(ctx context.Context, in MerchantCallbackInput) (VerifiedMerchantEvent, error) {
+		// 验证阶段必须发生在租户上下文建立之前（verifier-before-lookup）。
+		_, ok := tenant.FromContext(ctx)
+		require.False(t, ok)
+		require.Equal(t, merchantFixtureBytes, string(in.Body))
+		return f.event, nil
+	})
+	svc := f.service(repository.NewMerchantCallbackRepository(f.db), v)
+	out := svc.Ingest(tenant.WithTenantID(t.Context(), 999), f.bind.Provider, []byte(merchantFixtureBytes), merchantFixtureHeaders())
+	require.Equal(t, 200, out.Ack.Status)
+	var stored model.MerchantCallbackEvent
+	require.NoError(t, f.db.WithContext(tenant.WithSystemScope(t.Context())).First(&stored, out.EventID).Error)
+	require.Equal(t, conn.Version, stored.ConnectionVersion)
+	require.Equal(t, conn.CredentialVersion, stored.CredentialVersion)
+}
+
+// spy 仅包裹 repository 契约，用于证明 service 薄方法只经 repo 委托、不夹带其它副作用。
+type merchantCallbackInboxRepoSpy struct {
+	repository.MerchantCallbackRepository
+	reads, acks      int
+	readErr, ackErr  error
+	lastSubscription uint
+	lastLimit        int
+	lastPageIDs      []uint
+}
+
+func (s *merchantCallbackInboxRepoSpy) ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error) {
+	s.reads++
+	s.lastSubscription, s.lastLimit = subscriptionID, limit
+	if s.readErr != nil {
+		return repository.MerchantCallbackCompensationPage{}, s.readErr
+	}
+	return s.MerchantCallbackRepository.ReadCompensationPage(ctx, subscriptionID, limit)
+}
+
+func (s *merchantCallbackInboxRepoSpy) AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error {
+	s.acks++
+	s.lastPageIDs = append([]uint(nil), appliedEventIDs...)
+	if s.ackErr != nil {
+		return s.ackErr
+	}
+	return s.MerchantCallbackRepository.AcknowledgeCompensationPage(ctx, page, appliedEventIDs)
+}
+
+// T013：service 页读/确认只经 repository 契约委托；边界 fail-closed 在委托前拦下，repo 错误原样传播。
+func TestMerchantCallbackInbox_ServiceBoundaryDelegation(t *testing.T) {
+	f := newMerchantCallbackFixture(t)
+	real := repository.NewMerchantCallbackRepository(f.db)
+	spy := &merchantCallbackInboxRepoSpy{MerchantCallbackRepository: real}
+	svc := f.service(spy, f.verifier(func(context.Context, MerchantCallbackInput) (VerifiedMerchantEvent, error) { return f.event, nil }))
+
+	// 先落一个真实事件，使页读产生可确认的 fence，确认才能成功。
+	ingestCtx := tenant.WithTenantID(t.Context(), f.bind.TenantID)
+	require.Equal(t, 200, svc.Ingest(ingestCtx, f.bind.Provider, []byte(merchantFixtureBytes), merchantFixtureHeaders()).Ack.Status)
+
+	// 有效租户上下文：委托一次并把参数原样传给 repo。
+	page, err := svc.ReadCompensationPage(ingestCtx, f.bind.ID, 7)
+	require.NoError(t, err)
+	require.Equal(t, 1, spy.reads)
+	require.Equal(t, f.bind.ID, spy.lastSubscription)
+	require.Equal(t, 7, spy.lastLimit)
+	require.Equal(t, f.bind.TenantID, page.TenantID)
+
+	require.NotEmpty(t, page.EventIDs())
+	// 确认同样只委托一次，并透传 appliedEventIDs。
+	require.NoError(t, svc.AcknowledgeCompensationPage(ingestCtx, page, page.EventIDs()))
+	require.Equal(t, 1, spy.acks)
+	require.Equal(t, page.EventIDs(), spy.lastPageIDs)
+}
+
+func TestMerchantCallbackInbox_ServiceBoundaryFailClosed(t *testing.T) {
+	f := newMerchantCallbackFixture(t)
+	spy := &merchantCallbackInboxRepoSpy{MerchantCallbackRepository: repository.NewMerchantCallbackRepository(f.db)}
+	svc := f.service(spy, f.verifier(func(context.Context, MerchantCallbackInput) (VerifiedMerchantEvent, error) { return f.event, nil }))
+
+	// 无租户 / 系统 scope / 订阅为 0 都在委托前 fail-closed，repo 零调用。
+	for _, ctx := range []context.Context{t.Context(), tenant.WithSystemScope(t.Context())} {
+		_, err := svc.ReadCompensationPage(ctx, f.bind.ID, 50)
+		require.ErrorIs(t, err, repository.ErrMerchantCallbackBinding)
+		require.ErrorIs(t, svc.AcknowledgeCompensationPage(ctx, repository.MerchantCallbackCompensationPage{}, nil), repository.ErrMerchantCallbackBinding)
+	}
+	_, err := svc.ReadCompensationPage(tenant.WithTenantID(t.Context(), f.bind.TenantID), 0, 50)
+	require.ErrorIs(t, err, repository.ErrMerchantCallbackBinding)
+	require.Equal(t, 0, spy.reads)
+	require.Equal(t, 0, spy.acks)
+
+	// repo 错误原样传播（不吞错、不改判成功）。
+	wantErr := errors.New("injected repo failure")
+	spy.readErr, spy.ackErr = wantErr, wantErr
+	ctx := tenant.WithTenantID(t.Context(), f.bind.TenantID)
+	_, err = svc.ReadCompensationPage(ctx, f.bind.ID, 50)
+	require.ErrorIs(t, err, wantErr)
+	require.ErrorIs(t, svc.AcknowledgeCompensationPage(ctx, repository.MerchantCallbackCompensationPage{}, nil), wantErr)
+
+	// repo 未注入时 fail-closed，不 panic、不委托。
+	nilSvc := NewMerchantCallbackService(nil, repository.NewMerchantConnectionRepository(f.db), nil)
+	_, err = nilSvc.ReadCompensationPage(ctx, f.bind.ID, 50)
+	require.ErrorIs(t, err, repository.ErrMerchantCallbackStorage)
+	require.ErrorIs(t, nilSvc.AcknowledgeCompensationPage(ctx, repository.MerchantCallbackCompensationPage{}, nil), repository.ErrMerchantCallbackStorage)
+}

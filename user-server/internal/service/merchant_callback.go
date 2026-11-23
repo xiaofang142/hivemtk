@@ -67,6 +67,11 @@ type MerchantCallbackResult struct {
 
 type MerchantCallbackService interface {
 	Ingest(ctx context.Context, provider string, body []byte, headers http.Header) MerchantCallbackResult
+	// ReadCompensationPage / AcknowledgeCompensationPage 是 EC-02 面向未来 EC-03 consumer 的
+	// 内部薄方法：只经 repository 契约委托，不暴露 HTTP 路由、凭证、原始报文或 provider 客户端。
+	// 分页 fence、租户/系统 scope 与连接版本校验由 repository 统一 fail-closed 执行。
+	ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error)
+	AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error
 }
 
 type merchantCallbackService struct {
@@ -150,6 +155,31 @@ func (s *merchantCallbackService) Ingest(ctx context.Context, provider string, b
 		return MerchantCallbackResult{Ack: contract.Retry, TrustedAck: true}
 	}
 	return MerchantCallbackResult{Ack: contract.Success, EventID: id, Duplicate: duplicate, TrustedAck: true}
+}
+
+// ReadCompensationPage 只做边界守卫与委托：租户上下文必须存在且非系统 scope，
+// 其余（订阅/连接/同意/凭证/fence/分页钳制）由 repository 统一 fail-closed 校验。
+func (s *merchantCallbackService) ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error) {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || id == 0 || tenant.IsSystemScope(ctx) || subscriptionID == 0 {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.ReadCompensationPage(ctx, subscriptionID, limit)
+}
+
+// AcknowledgeCompensationPage 同样只做边界守卫与委托，精确页面 fence 与集合校验在 repository 内完成。
+func (s *merchantCallbackService) AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || id == 0 || tenant.IsSystemScope(ctx) {
+		return repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.AcknowledgeCompensationPage(ctx, page, appliedEventIDs)
 }
 
 func merchantCallbackEventValid(provider string, e VerifiedMerchantEvent) bool {
