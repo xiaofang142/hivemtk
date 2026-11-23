@@ -3,10 +3,9 @@ package repository
 import (
 	"context"
 	"hivemtk-user/internal/model"
-	_type "hivemtk-user/internal/pkg/utils/type"
-
 	_db "hivemtk-user/internal/pkg/db"
-
+	"hivemtk-user/internal/pkg/tenant"
+	_type "hivemtk-user/internal/pkg/utils/type"
 	"time"
 
 	"gorm.io/gorm"
@@ -36,13 +35,23 @@ func NewOrderRepositoryWithDB(db *gorm.DB) OrderRepository {
 	return &orderRepo{db: db}
 }
 
+// scopeQuery 返回带租户边界的查询。EC-07「跨租户/买家越权读单拒绝」：
+// 带租户 ctx 且非系统 scope 时只查该租户；无租户/系统 scope 回落默认租户 1，
+// 兼容历史用 context.Background() 与默认 TenantID=1 的调用与数据。
+func (r *orderRepo) scopeQuery(ctx context.Context) *gorm.DB {
+	if id, ok := tenant.FromContext(ctx); ok && !tenant.IsSystemScope(ctx) && id > 0 {
+		return r.db.WithContext(ctx).Where("tenant_id = ?", id)
+	}
+	return r.db.WithContext(ctx).Where("tenant_id = ?", uint(1))
+}
+
 func (r *orderRepo) Create(ctx context.Context, order *model.Order) error {
 	return r.db.WithContext(ctx).Create(order).Error
 }
 
 func (r *orderRepo) GetByStringID(ctx context.Context, id string) (*model.Order, error) {
 	var order model.Order
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&order).Error
+	err := r.scopeQuery(ctx).Where("id = ?", id).First(&order).Error
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +71,7 @@ func (r *orderRepo) GetOrderList(ctx context.Context, page int, limit int) ([]*m
 	}
 	var orders []*model.Order
 	var total int64
-	q := r.db.WithContext(ctx).Model(&model.Order{})
+	q := r.scopeQuery(ctx).Model(&model.Order{})
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -93,13 +102,13 @@ func (r *orderRepo) GetRecentOrderList(ctx context.Context) ([]*model.Order, err
 
 	var start_time = time.Now().Add(-time.Minute * 5).Unix()
 	var end_time = time.Now().Unix()
-	err := r.db.WithContext(ctx).Where("status = ? and create_time > ? and create_time < ?", _type.OrderStatusPending, start_time, end_time).Order("create_time desc").Find(&orders).Error
+	err := r.scopeQuery(ctx).Where("status = ? and create_time > ? and create_time < ?", _type.OrderStatusPending, start_time, end_time).Order("create_time desc").Find(&orders).Error
 	return orders, err
 }
 
 func (r *orderRepo) GetByTgID(ctx context.Context, tgID int64) ([]*model.Order, error) {
 	var orders []*model.Order
-	err := r.db.WithContext(ctx).Where("tg_id = ?", tgID).Order("create_time desc").Find(&orders).Error
+	err := r.scopeQuery(ctx).Where("tg_id = ?", tgID).Order("create_time desc").Find(&orders).Error
 	return orders, err
 }
 
