@@ -88,7 +88,9 @@ def main():
     changed = False
     if args.status is not None:
         old = cells[2].strip()
-        cells[2] = f" {args.status.strip()} " if args.status.strip() else "  "
+        # 清单状态列统一为 [x]/[~]/[!]/[ ] 方括号形态（与 gen_router_list.py 输出一致）
+        s = args.status.strip()
+        cells[2] = f" [{s}] " if s else " [ ] "
         if old != cells[2].strip():
             changed = True
     if args.note:

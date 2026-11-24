@@ -25,11 +25,27 @@ COMMENT_RE = re.compile(r"^\s*//.*$", re.M)
 
 # 一个路由对象：{ path: '...', name: '...', component: () => import('@/views/X.vue'), meta: {...} }
 ROUTE_RE = re.compile(
-    r"\{\s*path:\s*'([^']*)'\s*,\s*name:\s*'([^']*)'\s*,\s*"
-    r"component:\s*\(\)\s*=>\s*import\('([^']*)'\)"
-    r"(?:\s*,\s*meta:\s*\{([^}]*)\})?",
+    r"\{\s*path:\s*'(?P<path>[^']*)'\s*,\s*name:\s*'(?P<name>[^']*)'\s*,\s*"
+    r"components?:\s*"
+    r"(?:\(\)\s*=>\s*import\('(?P<imp>[^']*)'\)|(?P<ident>[A-Za-z_$][\w$]*)|(?P<obj>\{[^{}]*\}))"
+    r"(?:\s*,\s*meta:\s*\{(?P<meta>[^}]*)\})?",
     re.S,
 )
+
+
+def _comp_desc(m):
+    """统一取组件描述：inline import / loader 变量 / 具名 components 对象。
+
+    旧正则只认 `component: () => import(...)`，把 `component: loadList`、
+    `components: { default, list }` 这两种写法整条漏掉——导致清单里缺路由。
+    """
+    if m.group("imp"):
+        return m.group("imp").replace("@/", "")
+    if m.group("ident"):
+        return "(loader:" + m.group("ident") + ")"
+    if m.group("obj"):
+        return "(named-components)"
+    return "-"
 # 重定向路由：{ path: '...', name: '...', redirect: '...', meta: {...} }
 # 与页面路由一样可能跨行，且 name/meta 顺序不固定。
 REDIRECT_RE = re.compile(
@@ -90,7 +106,10 @@ def parse_routes(src):
         for cm in ROUTE_RE.finditer(block):
             child_rel.add(cm.group(1))
     for m in ROUTE_RE.finditer(clean):
-        path, name, comp, meta = m.groups()
+        path = m.group("path")
+        name = m.group("name")
+        comp = _comp_desc(m)
+        meta = m.group("meta")
         # 相对子路径不是独立路由：真实路径由父路由拼出（下面 children 那轮处理）
         if path in child_rel:
             continue
@@ -104,7 +123,7 @@ def parse_routes(src):
         seen.add(path)
         out.append(
             OrderedDict(
-                path=path, name=name, comp=comp.replace("@/", ""),
+                path=path, name=name, comp=comp,
                 title=title, auth=auth, kind="页面",
             )
         )
@@ -163,7 +182,10 @@ def parse_routes(src):
             i += 1
         block = clean[start : i - 1]
         for cm in ROUTE_RE.finditer(block):
-            cpath, cname, ccomp, cmeta = cm.groups()
+            cpath = cm.group("path")
+            cname = cm.group("name")
+            ccomp = _comp_desc(cm)
+            cmeta = cm.group("meta")
             title = ""
             auth = ""
             if cmeta:
@@ -177,7 +199,7 @@ def parse_routes(src):
             seen.add(full)
             out.append(
                 OrderedDict(
-                    path=full, name=cname, comp=ccomp.replace("@/", ""),
+                    path=full, name=cname, comp=ccomp,
                     title=title, auth=auth, kind="页面",
                 )
             )
