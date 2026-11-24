@@ -200,7 +200,7 @@ echo "══════ B. 字面量赋值模式扫描 ══════"
 # 先粗筛候选行，再对"等号/冒号右侧的值"本身做精判：
 #   长度>=16、同时含字母与数字、不是变量展开、不含占位符关键词。
 # 字符类刻意不含 "." 与 "$"，从而不匹配 Go 的 cfg.APIKey = x.Y.APIKey 字段传递，
-# 也不匹配 PGPASSWORD="$POSTGRES_PASSWORD" 这类已改为环境注入的写法。
+# 也不匹配以 env 方式注入 PGPASSWORD 的写法（参见 build 脚本里的 env "PGPASSWORD=$DB_PASS"）。
 #
 # 关键词这一族从 `PG?PASSWORD|PASSWD` 改成了 `PASSW[A-Z]*|PASSPHRASE`（2026-10-23 反向探针实测）：
 # `PG?PASSWORD` 读作 "P + 可选 G + PASSWORD"，要匹配的其实是 `PPASSWORD`/`PGPASSWORD`，
