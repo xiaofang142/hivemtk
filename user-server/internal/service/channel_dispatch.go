@@ -93,7 +93,7 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 
 	// 3) round-robin among active accounts
 	status := 1
-	accs, err := listChannelAccounts(ctx, s.accRepo, repository.ChannelAccountListOptions{TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status, Limit: 500})
+	accs, err := s.accRepo.List(ctx, repository.ChannelAccountListOptions{TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status, Limit: 500})
 	if err != nil {
 		return nil, err
 	}

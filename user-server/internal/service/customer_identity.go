@@ -8,6 +8,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -249,6 +250,15 @@ func (s *CustomerIdentityService) MergeByIdentity(ctx context.Context, identifie
 		return nil, err
 	}
 
+	// D16：群客户（grp: 前缀）禁止与个人客户/其它群档自动合并——
+	// 群是会话实体不是自然人，合并会把不同群/个人揉进一个档案，破坏客户360口径。
+	for _, matched := range matchedCustomers {
+		if matched != nil && isGroupUnifiedID(matched.UnifiedID) {
+			canAutoMerge = false
+			break
+		}
+	}
+
 	if canAutoMerge && rules.Strategy.ConflictBehavior != "skip" {
 		needReview := rules.Strategy.ConflictBehavior == "queue_review"
 		primaryIdentity := customerIdentityMap(primary)
@@ -432,6 +442,10 @@ func identityMaxAttempts() int {
 		return DefaultIdentityMaxAttempts
 	}
 	return n
+}
+
+func isGroupUnifiedID(unifiedID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(unifiedID), "grp:")
 }
 
 // ProbeIdentityMaxAttempts 供装配层测试读取生效值，避免为了断言而导出正式读取口。

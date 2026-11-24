@@ -30,6 +30,9 @@ func (f *channelMasterFakeChannelRepo) GetByID(_ context.Context, _, _ uint) (*m
 func (f *channelMasterFakeChannelRepo) GetByCode(_ context.Context, _ string) (*model.Channel, error) {
 	return nil, nil
 }
+func (f *channelMasterFakeChannelRepo) GetByTenantAndCode(_ context.Context, _ uint, _ string) (*model.Channel, error) {
+	return nil, nil
+}
 func (f *channelMasterFakeChannelRepo) List(_ context.Context, _ repository.ChannelListOptions) ([]model.Channel, error) {
 	return nil, nil
 }
