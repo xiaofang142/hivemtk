@@ -20,6 +20,7 @@
 """
 
 import argparse
+import ipaddress
 import json
 import os
 import random
@@ -33,23 +34,80 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+_PROGRESS_ROOT = os.path.realpath(HERE)
+
+# 压测目标 host 白名单：本脚本默认打本机服务；指向其它受控目标时显式追加。
+# 白名单之外的 host（含任意公网域名与内网 IP）一律拒绝，避免 urlopen 变成 SSRF 出口。
+_DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "::1")
+_ALLOWED_HOSTS_ENV = "SIM_BASE_URL_ALLOWED_HOSTS"
+
+
+def _allowed_target_hosts():
+    extra = os.environ.get(_ALLOWED_HOSTS_ENV, "")
+    return set(_DEFAULT_ALLOWED_HOSTS) | {
+        h.strip().lower().rstrip(".") for h in extra.split(",") if h.strip()
+    }
+
+
+def _host_in_allowlist(hostname, allowed):
+    """精确匹配 host；同时兼容同一 IP 的不同字面写法（如 ::1 的展开形式）。"""
+    hostname = hostname.lower().rstrip(".")
+    if hostname in allowed:
+        return True
+    try:
+        addr = ipaddress.ip_address(hostname)
+    except ValueError:
+        return False
+    for candidate in allowed:
+        try:
+            if addr == ipaddress.ip_address(candidate):
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _safe_progress_path(name):
-    """把进度文件名约束在脚本目录内，拒绝 .. 与绝对路径（防止路径穿越）。"""
+    """把进度文件名约束在脚本目录内：realpath 解析后必须仍位于 HERE 内。
+
+    拒绝绝对路径、.. 段与符号链接逃逸（用户输入的 --seq-progress 不得越出根目录）。
+    """
     if not name or os.path.isabs(name) or ".." in name.split("/") or ".." in name.split("\\"):
         raise ValueError("seq-progress 必须是脚本目录下的文件名，禁止路径穿越")
-    path = os.path.abspath(os.path.join(HERE, name))
-    if os.path.dirname(path) != HERE:
+    path = os.path.realpath(os.path.join(_PROGRESS_ROOT, name))
+    if path == _PROGRESS_ROOT or os.path.commonpath([_PROGRESS_ROOT, path]) != _PROGRESS_ROOT:
         raise ValueError("seq-progress 越出脚本目录")
     return path
 
 
+def _write_progress(path, value):
+    """写入断点前再校验一次 realpath 边界，杜绝写文件侧的路径穿越。"""
+    if os.path.commonpath([_PROGRESS_ROOT, os.path.realpath(path)]) != _PROGRESS_ROOT:
+        raise ValueError("seq-progress 越出脚本目录")
+    with open(path, "w", encoding="utf-8") as pf:
+        pf.write(str(value))
+
+
 def _check_target_url(url):
-    """E2E/压测目标必须是绝对 http(s) URL（禁 userinfo/fragment）；配置面防护。"""
+    """压测目标必须是绝对 http(s) URL（禁 userinfo/fragment），且 host 命中白名单。
+
+    默认只放行本机回环地址；非回环的私网/保留/链路本地地址即便被显式加入
+    SIM_BASE_URL_ALLOWED_HOSTS 也拒绝，防止请求被导向云元数据或内网服务（SSRF）。
+    """
     parts = urllib.parse.urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.netloc or parts.username or parts.password or parts.fragment:
         raise ValueError(f"非法目标 URL: {url!r}")
+    hostname = parts.hostname
+    if not hostname or not _host_in_allowlist(hostname, _allowed_target_hosts()):
+        raise ValueError(f"目标 host 不在白名单: {hostname!r}（可用 {_ALLOWED_HOSTS_ENV} 追加）")
+    try:
+        addr = ipaddress.ip_address(hostname.lower().rstrip("."))
+    except ValueError:
+        # 域名只能靠精确白名单放行，不做 DNS 解析（避免 DNS rebinding 绕过）。
+        return url
+    if not addr.is_loopback and (addr.is_private or addr.is_link_local or addr.is_reserved
+                                or addr.is_multicast or addr.is_unspecified):
+        raise ValueError(f"禁止请求内网/保留地址: {hostname!r}")
     return url
 INTERACTIONS_FILE = os.path.join(HERE, "interactions.jsonl")
 
@@ -315,6 +373,9 @@ def main():
     parser.add_argument("--log-file", default="simulate.log", help="守护模式日志文件路径，默认 simulate.log（追加）")
     args = parser.parse_args()
 
+    # 用户输入的 --base-url 是唯一的网络出口；先过白名单校验再落任何请求。
+    _check_target_url(args.base_url)
+
     if args.seed is not None:
         random.seed(args.seed)
 
@@ -390,8 +451,7 @@ def main():
         if start >= len(questions):
             # 已跑完一轮，重置从头再覆盖（保留全量覆盖能力）
             start = 0
-            with open(prog_path, "w", encoding="utf-8") as pf:
-                pf.write("0")
+            _write_progress(prog_path, "0")
         # 本批范围：[start, end)
         end = len(questions)
         if args.count and args.count > 0:
@@ -430,8 +490,7 @@ def main():
         new_start = start + len(run_slice)
         if new_start >= len(questions):
             new_start = 0  # 全量覆盖完成，下一轮从头
-        with open(_safe_progress_path(args.seq_progress), "w", encoding="utf-8") as pf:
-            pf.write(str(new_start))
+        _write_progress(_safe_progress_path(args.seq_progress), new_start)
     # 单次模式补充完整汇总
     print("\n" + "=" * 64)
     print("汇总报告")

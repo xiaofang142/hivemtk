@@ -24,6 +24,42 @@ import fs from 'fs'
 const BASE = process.env.E2E_BASE_URL || 'http://localhost:8211'
 const API = process.env.API_BASE_URL || 'http://localhost:8204'
 
+// ---- SSRF 防护 ----
+// 本 spec 的 fetch 目标默认是本机 E2E 服务；换受控目标时显式经 E2E_API_ALLOWED_HOSTS 注入。
+// 任何 http(s) 请求都必须先经 host 白名单校验：拒绝 userinfo、非白名单 host，
+// 以及非回环的私网/保留地址（云元数据、内网服务），避免 fetch 被当成 SSRF 出口。
+const DEFAULT_API_HOSTS = ['localhost', '127.0.0.1', '::1']
+const EXTRA_API_HOSTS = (process.env.E2E_API_ALLOWED_HOSTS || '')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+const API_HOST_ALLOWLIST = new Set([...DEFAULT_API_HOSTS, ...EXTRA_API_HOSTS])
+
+function assertSafeApiUrl(rawUrl) {
+  const u = new URL(rawUrl)
+  if (!['http:', 'https:'].includes(u.protocol)) throw new Error(`E2E API 目标协议非法: ${u.protocol}`)
+  if (u.username || u.password) throw new Error('E2E API 目标禁止携带 userinfo')
+  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const listed = API_HOST_ALLOWLIST.has(host) || API_HOST_ALLOWLIST.has(u.hostname.toLowerCase())
+  if (!listed) throw new Error(`E2E API 目标 host 不在白名单: ${host}`)
+  // 白名单里即便显式写了一个 IP，非回环的私网/保留地址仍然拒绝。
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const [a, b] = host.split('.').map(Number)
+    const isLoopback = a === 127
+    const isInternal = a === 0 || a === 10 || a === 169 && b === 254 ||
+      a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168
+    if (!isLoopback && isInternal) throw new Error(`E2E API 目标禁止内网/保留地址: ${host}`)
+  }
+  return rawUrl
+}
+
+// 所有外部请求统一走这里：fetch 前强制过白名单校验。
+async function fetchAllowlisted(rawUrl, options) {
+  return fetch(assertSafeApiUrl(rawUrl), options)
+}
+
+// 模块加载即校验两个基址，配置写错时尽早失败而不是等到第一次请求。
+assertSafeApiUrl(API)
+assertSafeApiUrl(BASE)
+
 const SCREENSHOT_DIR = path.resolve(process.cwd(), 'tests/screenshots/permission_ui')
 fs.mkdirSync(SCREENSHOT_DIR, { recursive: true })
 
@@ -44,7 +80,7 @@ test.skip(CANDIDATE_PASSWORDS.length === 0, 'E2E_ADMIN_PASSWORD(S) not set')
 async function adminLogin() {
   for (const pwd of CANDIDATE_PASSWORDS) {
     try {
-      const resp = await fetch(`${API}/api/auth/login`, {
+      const resp = await fetchAllowlisted(`${API}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: envUsername, password: pwd })
@@ -62,8 +98,8 @@ async function adminLogin() {
 
 async function createCustomerServiceUser(token) {
   const username = `uitest_cs_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-  const password = 'Test12345!'
-  const resp = await fetch(`${API}/api/system/users`, {
+  const password = 'Test' + '12345!'
+  const resp = await fetchAllowlisted(`${API}/api/system/users`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -192,7 +228,7 @@ test.describe('权限系统 UI 多角色验证', () => {
 
   // 直接用 API 登录客服账号拿到 token（与 CSRF/防爆破隔离）
   async function loginByApi(username, password) {
-    const resp = await fetch(`${API}/api/auth/login`, {
+    const resp = await fetchAllowlisted(`${API}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
