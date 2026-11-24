@@ -476,6 +476,8 @@ func setupFrontendAliases(auth, systemAdmin *gin.RouterGroup, engine *gin.Engine
 	doRegAdmin("GET", "/webhook-subscriptions", growthCtrl.ListWebhookSubs)
 	doRegAdmin("POST", "/webhook-subscriptions", growthCtrl.CreateWebhookSub)
 	doRegAdmin("DELETE", "/webhook-subscriptions/:id", growthCtrl.DeleteWebhookSub)
+	doRegAdmin("GET", "/webhook-subscriptions/deliveries", growthCtrl.ListWebhookDeliveries)
+	doRegAdmin("POST", "/webhook-subscriptions/deliveries/replay", growthCtrl.ReplayWebhookDeliveries)
 	doReg("PUT", "/customers/:id/custom-attributes", growthCtrl.SetCustomAttributes)
 	doReg("GET", "/saved-views", growthCtrl.ListSavedViews)
 	doRegAdmin("POST", "/report-subscriptions", growthCtrl.CreateReportSub)

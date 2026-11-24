@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -82,6 +83,37 @@ func (c *GrowthController) DeleteWebhookSub(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, gin.H{"deleted": true}, "已删除")
+}
+
+// ListWebhookDeliveries GET /api/webhook-subscriptions/deliveries
+func (c *GrowthController) ListWebhookDeliveries(ctx *gin.Context) {
+	status := strings.TrimSpace(ctx.Query("status"))
+	limit := 50
+	if v := strings.TrimSpace(ctx.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	list, err := c.webhook.ListWebhookDeliveries(ctx.Request.Context(), status, limit)
+	if HandleServiceError(ctx, err) {
+		return
+	}
+	response.Success(ctx, gin.H{"list": list, "total": len(list)}, "ok")
+}
+
+// ReplayWebhookDeliveries POST /api/webhook-subscriptions/deliveries/replay
+func (c *GrowthController) ReplayWebhookDeliveries(ctx *gin.Context) {
+	limit := 50
+	if v := strings.TrimSpace(ctx.Query("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	n, err := c.webhook.ReplayDeadWebhookDeliveries(ctx.Request.Context(), limit)
+	if HandleServiceError(ctx, err) {
+		return
+	}
+	response.Success(ctx, gin.H{"replayed": n}, "ok")
 }
 
 // @Summary      自定义属性已更新

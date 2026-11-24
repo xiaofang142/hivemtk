@@ -115,41 +115,46 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 		if wait > 0 {
 			time.Sleep(wait)
 		}
+		status, _, code, err := deliverWebhookOnce(sub, event, body)
 		attempts = i + 1
-		reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
-		if err != nil {
-			cancel()
-			lastErr = err
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Hivemtk-Event", event)
-		mac := hmac.New(sha256.New, []byte(sub.Secret))
-		mac.Write(body)
-		req.Header.Set("X-Hivemtk-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
-		resp, err := webhookOutClient.Do(req)
-		cancel()
-		if err != nil {
-			lastErr = err
-			slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "attempt", attempts, "err", err)
-			continue
-		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-		_ = resp.Body.Close()
-		lastStatus = resp.StatusCode
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		lastStatus = code
+		lastErr = err
+		if status == "success" {
 			recordWebhookDelivery(sub, event, body, "success", attempts, lastStatus, nil)
 			return
 		}
-		lastErr = fmt.Errorf("status %d", resp.StatusCode)
-		slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "event", event, "attempt", attempts, "status", resp.StatusCode)
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+		if code >= 400 && code < 500 && code != 429 {
 			break
 		}
 	}
 	slog.Error("[WebhookOut] 死信", "url", sub.URL, "event", event, "status", lastStatus, "err", lastErr)
 	recordWebhookDelivery(sub, event, body, "dead_letter", attempts, lastStatus, lastErr)
+}
+
+func deliverWebhookOnce(sub model.WebhookSubscription, event string, body []byte) (status string, attempts int, responseCode int, err error) {
+	reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
+	defer cancel()
+	req, reqErr := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
+	if reqErr != nil {
+		return "dead_letter", 1, 0, reqErr
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Hivemtk-Event", event)
+	mac := hmac.New(sha256.New, []byte(sub.Secret))
+	mac.Write(body)
+	req.Header.Set("X-Hivemtk-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	resp, doErr := webhookOutClient.Do(req)
+	if doErr != nil {
+		slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "attempt", 1, "err", doErr)
+		return "dead_letter", 1, 0, doErr
+	}
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+	_ = resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return "success", 1, resp.StatusCode, nil
+	}
+	slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "event", event, "attempt", 1, "status", resp.StatusCode)
+	return "dead_letter", 1, resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode)
 }
 
 func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []byte, status string, attempts, responseCode int, err error) {
@@ -176,6 +181,24 @@ func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []b
 	_ = db.Create(rec).Error
 }
 
+func updateWebhookDelivery(id uint, status string, attempts, responseCode int, err error) {
+	db := dbstate.Get()
+	if db == nil || id == 0 {
+		return
+	}
+	updates := map[string]any{"status": status, "attempts": attempts, "response_code": responseCode}
+	if err != nil {
+		updates["last_error"] = err.Error()
+	} else {
+		updates["last_error"] = ""
+	}
+	if status == "success" {
+		now := time.Now()
+		updates["delivered_at"] = &now
+	}
+	_ = db.Model(&model.WebhookDelivery{}).Where("id = ?", id).Updates(updates).Error
+}
+
 // ReplayDeadWebhookDeliveries 重投死信（Route 3）：最多 attempts<8 且 status=dead_letter 的记录。
 func (s *WebhookSubService) ReplayDeadWebhookDeliveries(ctx context.Context, limit int) (int, error) {
 	if limit <= 0 || limit > 200 {
@@ -197,10 +220,31 @@ func (s *WebhookSubService) ReplayDeadWebhookDeliveries(ctx context.Context, lim
 		if err := db.WithContext(ctx).Where("id = ? AND enabled = ?", row.SubscriptionID, true).First(&sub).Error; err != nil {
 			continue
 		}
-		deliverWebhookWithRetry(sub, row.Event, []byte(row.Payload))
+		status, attempts, code, derr := deliverWebhookOnce(sub, row.Event, []byte(row.Payload))
+		updateWebhookDelivery(row.ID, status, row.Attempts+attempts, code, derr)
 		replayed++
 	}
 	return replayed, nil
+}
+
+// ListWebhookDeliveries 列表（管理端观测 hook 投递/死信）。
+func (s *WebhookSubService) ListWebhookDeliveries(ctx context.Context, status string, limit int) ([]model.WebhookDelivery, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	db := dbstate.Get()
+	if db == nil {
+		return []model.WebhookDelivery{}, nil
+	}
+	q := db.WithContext(ctx).Model(&model.WebhookDelivery{}).Order("id DESC").Limit(limit)
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	var rows []model.WebhookDelivery
+	if err := q.Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）
