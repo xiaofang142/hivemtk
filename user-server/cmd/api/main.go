@@ -849,10 +849,13 @@ func main() {
 	if marketingExecution := app.InitMarketingExecutionRuntime(db.GetDB()); marketingExecution != nil {
 		defer marketingExecution.Stop(context.Background())
 	}
-		if commerceExecution := app.InitCommerceExecutionRuntime(db.GetDB()); commerceExecution != nil {
-			defer commerceExecution.Stop(context.Background())
-		}
-		markPhase("workers")
+	if commerceExecution := app.InitCommerceExecutionRuntime(db.GetDB()); commerceExecution != nil {
+		defer commerceExecution.Stop(context.Background())
+	}
+	if webhookDelivery := app.InitWebhookDeliveryRuntime(db.GetDB()); webhookDelivery != nil {
+		defer webhookDelivery.Stop(context.Background())
+	}
+	markPhase("workers")
 
 	// Telegram polling 的分布式锁在关停时必须交回：polling 协程随进程消失后，
 	// DB 里的 polling_owner 仍写着这个已死进程，60s 心跳陈旧窗口内启动的新实例会判定

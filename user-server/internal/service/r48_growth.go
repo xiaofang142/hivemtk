@@ -112,11 +112,17 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 	var lastStatus int
 	attempts := 0
 	for i, wait := range backoffs {
-		if wait > 0 { time.Sleep(wait) }
+		if wait > 0 {
+			time.Sleep(wait)
+		}
 		attempts = i + 1
 		reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
-		if err != nil { cancel(); lastErr = err; continue }
+		if err != nil {
+			cancel()
+			lastErr = err
+			continue
+		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-Hivemtk-Event", event)
 		mac := hmac.New(sha256.New, []byte(sub.Secret))
@@ -168,6 +174,33 @@ func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []b
 		rec.DeliveredAt = &now
 	}
 	_ = db.Create(rec).Error
+}
+
+// ReplayDeadWebhookDeliveries 重投死信（Route 3）：最多 attempts<8 且 status=dead_letter 的记录。
+func (s *WebhookSubService) ReplayDeadWebhookDeliveries(ctx context.Context, limit int) (int, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	db := dbstate.Get()
+	if db == nil {
+		return 0, nil
+	}
+	var rows []model.WebhookDelivery
+	if err := db.WithContext(ctx).Where("status = ? AND attempts < ?", "dead_letter", 8).
+		Order("updated_at ASC").Limit(limit).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	replayed := 0
+	for i := range rows {
+		row := rows[i]
+		var sub model.WebhookSubscription
+		if err := db.WithContext(ctx).Where("id = ? AND enabled = ?", row.SubscriptionID, true).First(&sub).Error; err != nil {
+			continue
+		}
+		deliverWebhookWithRetry(sub, row.Event, []byte(row.Payload))
+		replayed++
+	}
+	return replayed, nil
 }
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）
