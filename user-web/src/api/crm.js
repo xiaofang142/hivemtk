@@ -32,7 +32,10 @@ export const crmApi = {
     return http.post(`${base}/import`, data)
   },
   exportRows(params = {}) {
-    return http.get(`${base}/export`, params)
+    // CSV 导出返回 text/csv 文件流；若不声明 responseType，通用拦截器会把
+    // 非 JSON 响应当作网关异常 reject 并弹错误 toast（实际后端 200 正常）。
+    const config = params.format === 'csv' ? { responseType: 'blob' } : {}
+    return http.get(`${base}/export`, params, config)
   },
   view360(id) {
     return http.get(`${base}/360/${id}`)

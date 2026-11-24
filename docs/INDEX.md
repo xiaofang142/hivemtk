@@ -135,7 +135,7 @@
 | 文档 | 用途 |
 |---|---|
 | [verification/ui-audit-playbook.md](verification/ui-audit-playbook.md) | 通用逐页点验流程（环境/判定/常见坑/go test 快测库） |
-| [verification/ui-audit-round-a-20261125.md](verification/ui-audit-round-a-20261125.md) | 280 条全量逐页重测实战补充：测试账号、ego-browser 两阶段法脚本模板、台账脚本、版本过滤回归要点、go test 4 个失败根因与修复、测试数据副作用与清理结果 |
+| [verification/ui-audit-round-a-20261125.md](verification/ui-audit-round-a-20261125.md) | 280 条全量逐页重测 + 22 条新增页重点二次回归实战补充：测试账号、ego-browser 两阶段法脚本模板、台账脚本、版本过滤回归要点、go test 4 个失败根因与修复、CSV 导出缺陷修复、测试数据副作用与清理结果 |
 
 ---
 

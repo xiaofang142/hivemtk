@@ -120,3 +120,18 @@ cd user-server && set -a && source ../.env && set +a && PLATFORM_ENABLED=true \
 
 - 通知 1266/1269 来源不同会话，非本轮明确产物，未动。
 - bad case 无 DELETE 端点，只能 dismiss（撤销标记）；通知无删除端点，只能 MarkRead。彻底物理删除需直连 DB（高风险，未做）。
+
+## 9. B 轮新增页面重点二次回归（11-25，22 条）
+
+范围客观界定：`git archive 72b885773`（11-11）的 router 目录与当前目录做 path diff，得出 11-10 J 轮以来新增的 22 条路由（不靠记忆）。每条单独一次 ego 导航观察 → 我明确指定元素点击 → obs 留证 → mark.py 追加「11-25 B轮新增页重点回归」证据。写操作（新建/编辑/删除/发布/重置/外部调用）一律不点，只点查询/刷新/筛选/详情弹窗/新增表单开合/取消/前端 tab。
+
+22 条：/aiInsightDraft/list、/businessAccountAuth/list、/channels/{accounts,manage,identify-codes}、/commerce/operations、/crm/{list,dedupe,profile360/:id?,import-export,contacts,suppliers,service-providers,companies}、/crossAccountSearch/list、/customerImportJob/list、/leads/{rules,notify-routes,evidence,archive,scoped-list,mining-agents}。
+
+重点结果：
+- channels 系列：opensource 下填「抖音」查询仍 0 行、`/api/channels` 返回 list=[]，版本过滤持续生效；识别码页「重置」会作废旧码影响扩展端，属高风险写操作未点。
+- CRM 系列：客户列表 138 条查询/重置正常；profile360 真 UUID 加载正常；实体补缺页（联系人/供应商/服务商）空态新增按钮 disabled 设计内；公司主数据编辑弹窗完整开合正常。
+- leads 系列：三粒度规则、通知路由新增表单完整开合；证据回放/归档空表单前端校验零 API；scoped-list 客户/消息 tab 切换正常；mining-agents 新增表单开合正常。
+
+### B 轮发现并修复的真实缺陷
+
+**/crm/import-export 导出 CSV 误报网关异常**：后端 `GET /api/manage/crm/export?format=csv` 返回 200 + `text/csv`（正常文件流），但 `crmApi.exportRows` 未声明 responseType，通用 axios 拦截器把非 JSON 响应判为「收到非JSON响应，请检查网关路由」，弹错误 toast + console error。修复：`user-web/src/api/crm.js` 对 `format=csv` 声明 `{ responseType: 'blob' }`；`user-web/src/views/crm/ImportExport.vue` 下载逻辑兼容 Blob 与字符串两种形态。回归：导出 CSV/JSON 均 0 console error / 0 非2xx，JSON 显示「导出 138 条」，`go build ./internal/service ./cmd/api` 通过。

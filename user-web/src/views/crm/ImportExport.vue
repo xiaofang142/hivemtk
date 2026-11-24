@@ -188,7 +188,9 @@ async function doExport(format) {
         industry: exportFilters.industry || undefined,
         format: 'csv',
       })
-      const blob = new Blob([typeof res === 'string' ? res : String(res?.data || '')], { type: 'text/csv;charset=utf-8' })
+      const blob = (typeof Blob !== 'undefined' && res instanceof Blob)
+        ? res
+        : new Blob([typeof res === 'string' ? res : String(res?.data || '')], { type: 'text/csv;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
