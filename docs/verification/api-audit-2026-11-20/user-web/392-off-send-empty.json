@@ -1,1 +1,0 @@
-{"code":"INVALID_PARAM_1001","message":"请求参数错误：to、subject、content、smtpId 均为必填（draftId / attachments / sendTime / immediateSend 可选）"}

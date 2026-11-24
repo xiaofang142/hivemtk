@@ -453,6 +453,46 @@ func (t *OrderLookupTool) resolveIdentityFromContext(ctx context.Context) (strin
 	return customer.Phone, customer.Name
 }
 
+// orderBelongsToIdentity best-effort ownership check between a mirrored order and resolved customer identity.
+// If both sides have no comparable identity info, we fail closed (reject) to avoid cross-buyer leaks.
+func orderBelongsToIdentity(v *portcontract.OrderView, resolvedPhone, resolvedName string) bool {
+	if v == nil {
+		return false
+	}
+	rp := digitsOnly(strings.TrimSpace(resolvedPhone))
+	op := digitsOnly(strings.TrimSpace(v.UserPhone))
+	if rp != "" && op != "" {
+		if rp == op {
+			return true
+		}
+		// Allow suffix match for country code differences if one is reasonably long.
+		if len(rp) >= 8 && len(op) >= 8 && (strings.HasSuffix(rp, op) || strings.HasSuffix(op, rp)) {
+			return true
+		}
+	}
+	rn := strings.ToLower(strings.TrimSpace(resolvedName))
+	on := strings.ToLower(strings.TrimSpace(v.UserName))
+	if rn != "" && on != "" && rn == on {
+		return true
+	}
+	// If we have resolved identity but order has neither comparable field, reject (conservative).
+	if (rp != "" || rn != "") && op == "" && on == "" {
+		return false
+	}
+	// If neither side comparable, reject.
+	return false
+}
+
+func digitsOnly(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // Execute 执行订单查询
 func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (ToolResult, error) {
 	orderPort := t.deps.orderPort()
@@ -464,8 +504,10 @@ func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (Too
 	phone := getArgString(args, "phone")
 	// TB-13 服务端身份解析：LLM 未提供任何身份键时，按 ToolContext.CustomerID
 	// 经 CustomerStore 服务端解析（手机号不进 prompt，由执行层供给）。
+	resolvedFromCtx := false
 	if orderID == "" && phone == "" && getArgString(args, "name") == "" {
 		if resolvedPhone, resolvedName := t.resolveIdentityFromContext(ctx); resolvedPhone != "" || resolvedName != "" {
+			resolvedFromCtx = true
 			phone = resolvedPhone
 			if phone == "" {
 				phone = resolvedName
@@ -481,9 +523,23 @@ func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (Too
 			return ErrorResult(t.Name(), err), err
 		}
 		if view == nil {
-			return SuccessResult(t.Name(), map[string]any{"found": false, "message": "未找到该订单"}), nil
+			return SuccessResult(t.Name(), map[string]any{"found": false, "message": "未找到该订单（镜像）"}), nil
 		}
-		return SuccessResult(t.Name(), map[string]any{"found": true, "order": view}), nil
+		// Buyer binding: if we can resolve the current customer identity from context, ensure the order belongs to them.
+		if rp, rn := t.resolveIdentityFromContext(ctx); rp != "" || rn != "" {
+			if !orderBelongsToIdentity(view, rp, rn) {
+				// Do not leak details of another customer's order.
+				return SuccessResult(t.Name(), map[string]any{
+					"found":   false,
+					"message": "订单不属于当前已绑定客户，拒绝展示（buyer ownership check）",
+				}), nil
+			}
+		}
+		return SuccessResult(t.Name(), map[string]any{
+			"found": true,
+			"order": view,
+			"note":  "数据来自外部订单镜像（external_order_mirror），非实时平台查询；请以 MirrorUpdatedAt 判断新鲜度。",
+		}), nil
 	}
 
 	if phone == "" && name == "" {
@@ -500,10 +556,19 @@ func (t *OrderLookupTool) Execute(ctx context.Context, args map[string]any) (Too
 	if len(views) > limit {
 		views = views[:limit]
 	}
-	return SuccessResult(t.Name(), map[string]any{
+	resp := map[string]any{
 		"count":  len(views),
 		"orders": views,
-	}), nil
+		"note":   "数据来自外部订单镜像（external_order_mirror），非实时平台查询；请以各订单 MirrorUpdatedAt 判断新鲜度。",
+	}
+	if len(views) > 1 {
+		resp["clarification_required"] = true
+		resp["message"] = "命中多笔订单（镜像）。为避免误操作，请让用户明确指定 platform+order_id 后再继续。"
+	}
+	if resolvedFromCtx {
+		resp["identity_source"] = "tool_context_customer_resolved"
+	}
+	return SuccessResult(t.Name(), resp), nil
 }
 
 // AfterSaleCreateTool 创建售后工具

@@ -1,5 +1,9 @@
 // order_change_request.go TB-05：改单申请单 HTTP 面（管理端，AdminAuth 闸）。
 // 五层归属：Handler（参数绑定+调 Service+统一响应出口），不含业务判断。
+// EC-20 (docs/未来任务清单.md §7.1.8, M20): related to commerce operation approval/exception
+// workbench and evidence UX; no dedicated admin UI for order-change-requests exists yet.
+// Evidence labels (“平台核验/API核验” vs “人工证明/人工回填”) are documented in service comments
+// (e.g. order_change_request service) but not surfaced in a unified workbench UI.
 package controller
 
 import (

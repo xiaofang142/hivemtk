@@ -1,1 +1,0 @@
-{"code":"INVALID_PARAM_1001","message":"参数不合法：steps[0].action 取值需为 open_tab / click / type / click_near / post_comment / snapshot / markdown / screenshot / wait / wait_for_selector / scroll / extract / assert / query / close_tab 之一","data":{"field":"steps[0].action"}}

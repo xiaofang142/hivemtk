@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/channelbot/core"
 	"hivemtk-user/internal/channelbot/wecomcs"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
@@ -37,6 +38,31 @@ type wecomCSService struct {
 
 	// newClient 便于测试注入 httptest 基址（生产为 wecomcs.NewClient()）。
 	newClient func() *wecomcs.Client
+
+	// FA-CHANNEL-01 可注入接缝：入站耐久接收与游标持久化分开，
+	// 默认走真实 svc；测试注入可控失败以验证「游标只越过已耐久接收的整页」。
+	ingressFn    func(ctx context.Context, in *core.InboundMessage) (*model.MessageHub, error)
+	saveCursorFn func(ctx context.Context, id uint, cursor string) error
+}
+
+// ingress 单条消息的耐久入站；测试可注入失败。
+func (w *wecomCSService) ingress(ctx context.Context, in *core.InboundMessage) (*model.MessageHub, error) {
+	if w.ingressFn != nil {
+		return w.ingressFn(ctx, in)
+	}
+	return w.svc.ingressPlatformInbound(ctx, in)
+}
+
+// saveCursor 游标持久化；测试可注入失败。
+func (w *wecomCSService) saveCursor(ctx context.Context, id uint, cursor string) error {
+	if w.saveCursorFn != nil {
+		return w.saveCursorFn(ctx, id, cursor)
+	}
+	if w.svc == nil || w.svc.wecomCSRepo == nil {
+		// repo 未装配（如纯映射测试）时跳过落库，保持历史行为。
+		return nil
+	}
+	return w.svc.wecomCSRepo.UpdateSyncCursor(ctx, id, cursor)
 }
 
 func (s *WebhookService) ensureWeComCS() *wecomCSService {
@@ -144,6 +170,10 @@ func (w *wecomCSService) pullAccount(ctx context.Context, acc *model.WeComCSAcco
 		if err != nil {
 			return err
 		}
+		// FA-CHANNEL-01：整页消息全部耐久入站后才允许推进游标。
+		// 任一入站失败都必须停在当前页，让下一轮从旧游标重拉（入站幂等去重），
+		// 不得推进游标掩盖失败——否则未入链的消息会被永久跳过。
+		pageFailed := false
 		for i := range resp.MsgList {
 			msg := resp.MsgList[i]
 			in := msg.ToInbound(accountID)
@@ -151,21 +181,25 @@ func (w *wecomCSService) pullAccount(ctx context.Context, acc *model.WeComCSAcco
 				// origin 4/5（系统/客服自己）不是客户消息：不落库，避免自问自答。
 				continue
 			}
-			if _, err := w.svc.ingressPlatformInbound(ctx, in); err != nil {
+			if _, err := w.ingress(ctx, in); err != nil {
 				logger.Warnf("[WeComCS] ingress msg=%s failed: %v", msg.MsgID, err)
+				pageFailed = true
 			}
+		}
+		if pageFailed {
+			return fmt.Errorf("[WeComCS] account=%d page=%d 有消息入站失败，游标停在 %s", acc.ID, page, cursor)
 		}
 		next := resp.NextCursor
 		if next == "" || next == cursor {
 			break
 		}
-		cursor = next
-		// 每页落地一次游标：崩溃最多重拉一页，不会全量重来。
-		if w.svc.wecomCSRepo != nil {
-			if err := w.svc.wecomCSRepo.UpdateSyncCursor(ctx, acc.ID, cursor); err != nil {
-				logger.Warnf("[WeComCS] update cursor account=%d failed: %v", acc.ID, err)
-			}
+		// FA-CHANNEL-01：游标必须先持久化成功才能推进内存值；写失败返回错误，
+		// 内存游标保持旧值，下一轮仍从旧游标重拉，不漏消息。
+		if err := w.saveCursor(ctx, acc.ID, next); err != nil {
+			logger.Warnf("[WeComCS] update cursor account=%d failed: %v", acc.ID, err)
+			return fmt.Errorf("[WeComCS] 游标持久化失败 account=%d: %w", acc.ID, err)
 		}
+		cursor = next
 		acc.SyncCursor = cursor
 		if resp.HasMore == 0 {
 			break

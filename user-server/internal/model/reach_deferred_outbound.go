@@ -39,6 +39,10 @@ type ReachDeferredOutbound struct {
 	ClaimedAt  *time.Time `json:"claimed_at"`
 	LeaseUntil *time.Time `gorm:"index" json:"lease_until"`
 
+	// FA-REACH-03：取消与配额返还的持久对账状态。取消时同事务置 pending，
+	// 返额成功后置 released；返额失败保留 pending 供重试/对账，绝不假成功。
+	QuotaReleaseStatus string `gorm:"type:varchar(20);default:'';index" json:"quota_release_status"`
+
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
@@ -57,4 +61,11 @@ const (
 	DeferredReachStatusCancelled = "cancelled"
 	// DeferredReachStatusUnknown 外部发送结果未知待人工核对（worker 投递中崩溃、租约过期）
 	DeferredReachStatusUnknown = "unknown"
+)
+
+// 取消返额的持久状态（FA-REACH-03）：空=无预占/旧数据，pending=待返额，released=已返额。
+const (
+	DeferredQuotaReleaseNone    = ""
+	DeferredQuotaReleasePending = "pending"
+	DeferredQuotaReleaseDone    = "released"
 )

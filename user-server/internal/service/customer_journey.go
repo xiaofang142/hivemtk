@@ -246,7 +246,17 @@ type JourneyState struct {
 	TotalTouches int               `json:"total_touches"`
 	AutoTags     []string          `json:"auto_tags"`
 	Metadata     map[string]string `json:"metadata"`
+	// Version 乐观锁版本号（FA-JOURNEY-01）：每次持久写 +1，跨实例 CAS 比对，防阶段历史/触达计数被覆盖。
+	Version int `json:"version"`
 }
+
+// ErrJourneyCacheReadFault 缓存读故障哨兵（FA-JOURNEY-01）：注入假缓存返回此错误时，
+// 读路径必须当作故障返回而非「无历史」，避免覆盖已有阶段历史。
+var ErrJourneyCacheReadFault = fmt.Errorf("journey cache read fault")
+
+// ErrJourneyVersionConflict 版本冲突哨兵（FA-JOURNEY-01）：跨实例并发更新同一客户时，
+// 期望版本与权威缓存版本不一致，拒绝覆盖以保全已确认状态与历史。
+var ErrJourneyVersionConflict = fmt.Errorf("journey version conflict")
 
 // CustomerJourneyService 客户旅程服务
 //
@@ -294,20 +304,21 @@ func (s *CustomerJourneyService) SetCache(c cache.Cache) {
 	s.mu.Unlock()
 }
 
-func (s *CustomerJourneyService) persistState(ctx context.Context, state *JourneyState) {
-	if state == nil || state.CustomerID == "" {
-		return
-	}
-	if s.cache == nil {
-		return
+// persistState 持久写权威状态（FA-JOURNEY-01）：SetJSON 失败必须返回 error，
+// 调用方据此中止 L1 更新与下游事件发布，避免"写失败却报迁移成功"。
+// indexStageMember 为派生阶段索引，失败仅告警（判据不要求等同业务状态失败）。
+func (s *CustomerJourneyService) persistState(ctx context.Context, state *JourneyState) error {
+	if state == nil || state.CustomerID == "" || s.cache == nil {
+		return nil
 	}
 	ttl := journeyStateTTL(state.CurrentStage)
 	if err := s.cache.SetJSON(ctx, journeyStateKey(state.CustomerID), state, ttl); err != nil {
 		logger.Warnf("journey.persistState(%s) stage=%s error: %v",
 			state.CustomerID, state.CurrentStage, err)
-		return
+		return err
 	}
 	s.indexStageMember(ctx, state.CurrentStage, state.CustomerID, ttl)
+	return nil
 }
 
 // indexStageMember 把「这个客户在这个阶段」登记进阶段索引（判据见 ListByStage 函数头）。
@@ -383,19 +394,49 @@ func (s *CustomerJourneyService) putL1(scope, customerID string, state *JourneyS
 }
 
 func (s *CustomerJourneyService) loadAuthoritative(ctx context.Context, customerID string) (*JourneyState, bool) {
+	state, found, _ := s.loadAuthoritativeE(ctx, customerID)
+	return state, found
+}
+
+// loadAuthoritativeE FA-JOURNEY-01：区分「读故障」与「真未找到」。
+// getLiveL1 命中直接返回；否则直接读权威缓存，ErrJourneyCacheReadFault 视为故障上抛，
+// 其它错误（含未命中）视为未找到。返回 (state, found, err)。
+func (s *CustomerJourneyService) loadAuthoritativeE(ctx context.Context, customerID string) (*JourneyState, bool, error) {
 	scope := journeyScope(ctx)
 	if st, ok := s.getLiveL1(scope, customerID); ok {
-		return st, true
+		return st, true, nil
 	}
 	if s.cache != nil {
-		if loaded, ok := s.journeyLoadState(ctx, scope, customerID); ok {
-			stored := loaded
-			s.putL1(scope, customerID, &stored)
-			out := loaded
-			return &out, true
+		var loaded JourneyState
+		if err := s.cache.GetJSON(ctx, journeyStateKey(customerID), &loaded); err != nil {
+			if err == ErrJourneyCacheReadFault {
+				return nil, false, err
+			}
+			return nil, false, nil
 		}
+		stored := loaded
+		s.putL1(scope, customerID, &stored)
+		out := loaded
+		return &out, true, nil
 	}
-	return nil, false
+	return nil, false, nil
+}
+
+// persistStateCAS FA-JOURNEY-01：按版本乐观锁持久化——写入前重读权威版本，
+// 与期望版本不等则拒绝覆盖（跨实例并发保护）。成功返回 nil，冲突返回 ErrJourneyVersionConflict。
+func (s *CustomerJourneyService) persistStateCAS(ctx context.Context, state *JourneyState, expectedVersion int) error {
+	if state == nil || state.CustomerID == "" || s.cache == nil {
+		return s.persistState(ctx, state)
+	}
+	var current JourneyState
+	if err := s.cache.GetJSON(ctx, journeyStateKey(state.CustomerID), &current); err == nil {
+		if current.Version != expectedVersion {
+			return ErrJourneyVersionConflict
+		}
+	} else if err != ErrJourneyCacheReadFault {
+		// 未命中（新客户）允许首次写入
+	}
+	return s.persistState(ctx, state)
 }
 
 // GetState 获取客户旅程状态（L1 读缓存 → L2 Redis 权威 → 默认陌生客户）
@@ -418,7 +459,12 @@ func (s *CustomerJourneyService) GetState(ctx context.Context, customerID string
 // Touch 记录互动（不改变阶段）
 func (s *CustomerJourneyService) Touch(ctx context.Context, customerID, source string) {
 
-	base, found := s.loadAuthoritative(ctx, customerID)
+	base, found, err := s.loadAuthoritativeE(ctx, customerID)
+	if err != nil {
+		// FA-JOURNEY-01：读故障不当空历史初始化，放弃本次 Touch。
+		logger.Warnf("journey.Touch(%s) 读故障，放弃: %v", customerID, err)
+		return
+	}
 	if !found {
 		now := time.Now()
 		base = &JourneyState{
@@ -434,8 +480,14 @@ func (s *CustomerJourneyService) Touch(ctx context.Context, customerID, source s
 	state.CustomerID = customerID
 	state.LastTouchAt = time.Now()
 	state.TotalTouches++
+	expectedVersion := state.Version
+	state.Version++
+	// FA-JOURNEY-01：先持久成功再提交 L1，失败不提交（不留未落库的 L1 假状态）。
+	if e := s.persistStateCAS(ctx, &state, expectedVersion); e != nil {
+		logger.Warnf("journey.Touch(%s) 持久化失败，放弃 L1 提交: %v", customerID, e)
+		return
+	}
 	s.putL1(journeyScope(ctx), customerID, &state)
-	s.persistState(ctx, &state)
 }
 
 // Transition 迁移阶段
@@ -444,7 +496,11 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 		return nil, fmt.Errorf("无效的阶段: %s", toStage)
 	}
 
-	base, found := s.loadAuthoritative(ctx, customerID)
+	base, found, err := s.loadAuthoritativeE(ctx, customerID)
+	if err != nil {
+		// FA-JOURNEY-01：读故障不初始化为默认态（否则丢历史），直接返回错误。
+		return nil, err
+	}
 	if !found {
 		now := time.Now()
 		base = &JourneyState{
@@ -460,6 +516,12 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 	state.CustomerID = customerID
 	fromStage := state.CurrentStage
 	if fromStage == toStage {
+		// FA-JOURNEY-01：同阶段也要先持久化再提交 L1（虽不发事件）。
+		expectedVersion := state.Version
+		state.Version++
+		if e := s.persistStateCAS(ctx, &state, expectedVersion); e != nil {
+			return nil, e
+		}
 		s.putL1(journeyScope(ctx), customerID, &state)
 		return nil, nil
 	}
@@ -477,8 +539,14 @@ func (s *CustomerJourneyService) Transition(ctx context.Context, customerID stri
 	state.StageSince = time.Now()
 	state.StageHistory = append(state.StageHistory, *event)
 	s.applyStageSideEffects(ctx, &state, toStage)
+	// FA-JOURNEY-01：先持久化成功（带版本 CAS），再提交 L1、再发布下游事件。
+	// 失败时不 putL1、不发布——不产生可被运行时命中的虚假阶段事件。
+	expectedVersion := state.Version
+	state.Version++
+	if e := s.persistStateCAS(ctx, &state, expectedVersion); e != nil {
+		return nil, e
+	}
 	s.putL1(journeyScope(ctx), customerID, &state)
-	s.persistState(ctx, &state)
 	for _, sub := range s.subscribers {
 		// sub 为 go 1.22+ 逐轮 range 变量，直接捕获与原传参等价；
 		// SafeGo：订阅者回调 panic 不能击穿进程（journey 事件在消息链上触发）。

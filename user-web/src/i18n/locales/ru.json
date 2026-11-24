@@ -38,7 +38,15 @@
     "revoke": "Отозвать локальную авторизацию",
     "stepsLabel": "Шаги подключения магазина",
     "helpButton": "Показать руководство",
-    "states": { "unknown": "Не проверено", "unconfigured": "Не настроено", "connecting": "Ожидание авторизации", "ready": "Подключение готово (действия заблокированы)", "reauth": "Нужна повторная авторизация", "refreshing": "Обновление учётных данных", "revoked": "Отозвано локально" },
+    "states": {
+      "unknown": "Не проверено",
+      "unconfigured": "Не настроено",
+      "connecting": "Ожидание авторизации",
+      "ready": "Подключение готово (действия заблокированы)",
+      "reauth": "Нужна повторная авторизация",
+      "refreshing": "Обновление учётных данных",
+      "revoked": "Отозвано локально"
+    },
     "errors": {
       "statusFailed": "Не удалось подтвердить статус. Проверьте цель или обратитесь к ответственному за интеграцию перед новым запросом.",
       "startFailed": "Не удалось подготовить безопасную страницу авторизации. Проверьте статус; не отправляйте старую попытку повторно.",
@@ -126,13 +134,23 @@
     "roleGroupingHint": "Это дерево соответствует каталогу разрешений. В меню автоматизация браузера находится в системных настройках. Её расположение не влияет на разрешения."
   },
   "pilotContract": {
-    "title": "Пилотный контракт и базовая настройка", "boundary": "Проверяются и сохраняются только имитационные черновики. Платформа, авторизация продавца и постусловия заказа не проверены в рабочей среде; выполнение заблокировано.",
-    "identity": "Текущий идентификатор установки", "tenant": "Текущий арендатор", "configured": "Черновик сохранён", "unconfigured": "Не настроено",
+    "title": "Пилотный контракт и базовая настройка",
+    "boundary": "Проверяются и сохраняются только имитационные черновики. Платформа, авторизация продавца и постусловия заказа не проверены в рабочей среде; выполнение заблокировано.",
+    "identity": "Текущий идентификатор установки",
+    "tenant": "Текущий арендатор",
+    "configured": "Черновик сохранён",
+    "unconfigured": "Не настроено",
     "empty": "Укажите принадлежность магазина и ссылку на авторизацию, области чтения/записи, лимит средств, автора тестового разрешения, окно наблюдения, ответственного за откат, один заказ и коммиты закрытия и тесты FA/AR/CH.",
-    "blockers": "Блокировки локальной проверки", "draft": "Черновик PilotContract JSON", "hint": "Используйте только fake/simulated. Не указывайте учётные данные и сведения о клиентах. Отдельно фиксируйте инженерные минуты и ожидание одобрения платформы.",
-    "validate": "Проверить локально", "save": "Сохранить черновик", "retry": "Загрузить снова", "loadFailed": "Не удалось прочитать; состояние конфигурации неизвестно.",
+    "blockers": "Блокировки локальной проверки",
+    "draft": "Черновик PilotContract JSON",
+    "hint": "Используйте только fake/simulated. Не указывайте учётные данные и сведения о клиентах. Отдельно фиксируйте инженерные минуты и ожидание одобрения платформы.",
+    "validate": "Проверить локально",
+    "save": "Сохранить черновик",
+    "retry": "Загрузить снова",
+    "loadFailed": "Не удалось прочитать; состояние конфигурации неизвестно.",
     "submitFailed": "Не удалось сохранить или проверить. Проверьте JSON, идентификатор и ревизию. При конфликте загрузите данные заново и объедините черновик.",
-    "saved": "Черновик сохранён; выполнение в рабочей среде заблокировано.", "validated": "Локальный контракт проверен без сохранения; выполнение в рабочей среде заблокировано."
+    "saved": "Черновик сохранён; выполнение в рабочей среде заблокировано.",
+    "validated": "Локальный контракт проверен без сохранения; выполнение в рабочей среде заблокировано."
   },
   "bulkLeadHandoff": {
     "template": "Шаблон сообщения",
@@ -530,7 +548,11 @@
     "geoAuditCenter": "Центр аудита",
     "geoDualEngine": "Мониторинг двух движков",
     "geoCapture": "Захват",
-    "geoCaptureLinks": "Ссылки захвата"
+    "geoCaptureLinks": "Ссылки захвата",
+    "businessAccountAuth": "Business Account Auth",
+    "customerImportJob": "Customer Import Jobs",
+    "aiInsightDraft": "AI Insight Drafts",
+    "crossAccountSearch": "Cross-Account Search"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1930,8 +1952,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "Авторизация магазина", "summary": "Проверьте статус магазина и подключите его через проверенную передачу. Непроверенные рабочие контракты остаются заблокированными.", "target": "Подтвердите цель", "targetSummary": "Введите зарегистрированный идентификатор провайдера и ID магазина и проверьте статус. Смена цели удаляет попытку.", "status": "Подключение и права", "statusSummary": "Готовое подключение не разрешает действия. EC-01 по-прежнему проверяет каждое действие отдельно.", "actions": "Обновление и локальный отзыв", "actionsSummary": "Обновление использует текущую версию и запрашивает статус при ошибке. Локальный отзыв не подтверждает отзыв у провайдера и сохраняет сеанс входа." },
-        "pilotContract": { "title": "Пилотный контракт", "summary": "Проверьте установку и арендатора, заполните имитационный черновик и изучите блокировки. Сохранение не разрешает выполнение в рабочей среде.", "identity": "Сопоставление идентификаторов", "identitySummary": "Идентификатор установки доступен только для чтения и сверяется с текущим арендатором.", "blockers": "Блокировки", "blockersSummary": "Проверьте условия, не выполненные до имитационной проверки.", "draft": "Черновик контракта", "draftSummary": "Используйте только имитационные данные, не указывайте учетные данные и данные клиентов." },
+        "merchantConnection": {
+          "title": "Авторизация магазина",
+          "summary": "Проверьте статус магазина и подключите его через проверенную передачу. Непроверенные рабочие контракты остаются заблокированными.",
+          "target": "Подтвердите цель",
+          "targetSummary": "Введите зарегистрированный идентификатор провайдера и ID магазина и проверьте статус. Смена цели удаляет попытку.",
+          "status": "Подключение и права",
+          "statusSummary": "Готовое подключение не разрешает действия. EC-01 по-прежнему проверяет каждое действие отдельно.",
+          "actions": "Обновление и локальный отзыв",
+          "actionsSummary": "Обновление использует текущую версию и запрашивает статус при ошибке. Локальный отзыв не подтверждает отзыв у провайдера и сохраняет сеанс входа."
+        },
+        "pilotContract": {
+          "title": "Пилотный контракт",
+          "summary": "Проверьте установку и арендатора, заполните имитационный черновик и изучите блокировки. Сохранение не разрешает выполнение в рабочей среде.",
+          "identity": "Сопоставление идентификаторов",
+          "identitySummary": "Идентификатор установки доступен только для чтения и сверяется с текущим арендатором.",
+          "blockers": "Блокировки",
+          "blockersSummary": "Проверьте условия, не выполненные до имитационной проверки.",
+          "draft": "Черновик контракта",
+          "draftSummary": "Используйте только имитационные данные, не указывайте учетные данные и данные клиентов."
+        },
         "common": {
           "overview": "Зачем нужна эта страница",
           "action": "Где находятся ключевые действия"
@@ -2526,6 +2566,13 @@
           "step2": {
             "description": "Каждый тип обрабатывается по-своему: негативное срабатывание требует правки контента, предупреждение о соответствии — другой формулировки, сбой push — проверки квоты и ссылки. Тревоги, которые никогда не подтверждают, копятся и заодно искажают саму метрику «неподтверждённых тревог». Подтверждайте их после обработки: это подтверждение — единственный след вашего процента разбора, когда вы вернётесь к этому позже."
           }
+        },
+        "commerceOperations": {
+          "title": "Commerce operations",
+          "target": "Use the shop bound to an authorized connection",
+          "draft": "Save intent without executing",
+          "ledger": "Operation ledger",
+          "evidence": "Attestation does not become provider or payment verification. Original failures remain."
         }
       }
     },
@@ -2976,5 +3023,100 @@
   "请填写跟进人账号": "Укажите аккаунт ответственного",
   "分配失败": "Не удалось назначить",
   "城市": "Город",
-  "地址": "Адрес"
+  "地址": "Адрес",
+  "commerce": {
+    "title": "Commerce operations",
+    "boundary": "Submission, acceptance, attestation, money movement and delivery remain separate facts. Simulation does not authorize live release.",
+    "profile": "Business profile",
+    "chooseProfile": "Choose product and region",
+    "shop": "Shop identifier",
+    "shopHint": "Use the shop bound to an authorized connection",
+    "order": "Mirror order ID",
+    "refresh": "Refresh operations",
+    "role": "Required role",
+    "providerMissing": "No verified provider is configured; native writes remain closed.",
+    "newOperation": "Create a business intent",
+    "action": "Action",
+    "chooseAction": "Choose a profile action",
+    "sourceVersion": "Authoritative order version",
+    "sourceVersionHint": "Use a fresh authoritative read; do not guess",
+    "intent": "Business intent key",
+    "intentHint": "Preserve this key when retrying the same intent",
+    "revision": "Explicit revision",
+    "required": "Required fields",
+    "parameterHint": "Follow the contract; money is an integer in minor units",
+    "obligations": "Confirm costs and subsequent obligations",
+    "createDraft": "Save intent without executing",
+    "operations": "Operation ledger",
+    "operationId": "Operation ID",
+    "state": "Business state",
+    "mode": "Execution mode",
+    "evidenceLevel": "Verification level",
+    "funds": "Funds state",
+    "details": "Operation and postconditions",
+    "selectOperation": "Select an operation and check approval scope and evidence.",
+    "empty": "Choose an authorized shop and refresh, or save an intent.",
+    "unknownHint": "Outcome unknown: retain the operation and reservations. Observe or verify manually; do not resubmit or change write route.",
+    "evidenceReference": "Manual evidence reference",
+    "evidenceHint": "Use a controlled reference without secrets or personal data",
+    "nativeState": "Provider state",
+    "outcome": "Attested outcome",
+    "appendEvidence": "Append manual attestation",
+    "manualHint": "Attestation does not become provider or payment verification. Original failures remain.",
+    "confirmTransition": "Check shop, action, digest, costs, obligations and approval scope. The backend rechecks permission and versions.",
+    "loadError": "Read failed or access denied. Check shop authorization and connection.",
+    "createError": "Save failed. Check required fields, integer amounts, versions and permissions.",
+    "actionError": "Completion is unconfirmed. Refresh and inspect the latest state and rejection reason.",
+    "fields": {
+      "recipient": "Recipient",
+      "phone": "Phone",
+      "address": "Address",
+      "province": "Province or state",
+      "city": "City",
+      "district": "District",
+      "amount_minor": "Amount (integer minor units)",
+      "currency": "Currency",
+      "quantity": "Quantity",
+      "line_id": "Order line",
+      "case_ref": "Case reference",
+      "reason": "Reason",
+      "sku": "Target SKU",
+      "logistics_ref": "Logistics reference",
+      "warehouse_ref": "Warehouse reference",
+      "payment_path": "Payment path"
+    },
+    "transitions": {
+      "preflight": "Preflight",
+      "approve": "Approve",
+      "submit": "Submit",
+      "observe": "Observe",
+      "cancel": "Cancel before dispatch",
+      "claim": "Claim workbench task"
+    },
+    "detail": {
+      "id": "Operation ID",
+      "state": "Business state",
+      "native_state": "Provider state",
+      "mode": "Execution mode",
+      "write_owner": "Write owner",
+      "approver_id": "Approver",
+      "owner_id": "Owner",
+      "evidence_level": "Verification level",
+      "evidence_ref": "Evidence reference",
+      "external_ref": "External reference",
+      "funds_state": "Funds state",
+      "manual_state": "Manual handoff",
+      "amount_minor": "Amount (minor units)",
+      "currency": "Currency",
+      "actual_attempts": "Actual attempts",
+      "unknown_since": "Unknown since",
+      "due_at": "Next observation",
+      "expires_at": "Preflight expiry",
+      "failure_reason": "Failure reason",
+      "result_summary": "Result summary",
+      "live_status": "Live validation",
+      "version": "Operation version",
+      "preflight_hash": "Preflight digest"
+    }
+  }
 }

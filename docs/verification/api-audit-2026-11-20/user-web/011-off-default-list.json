@@ -1,1 +1,0 @@
-{"code":0,"message":"获取成功","data":{"list":[{"tenant_id":1,"id":1,"name":"audit20-standalone","description":"","status":"completed","source_type":"page","source_id":"audit20-off","traffic_split":50,"start_date":null,"end_date":null,"created_by":0,"created_at":"2026-11-20T15:53:17.850615+08:00","updated_at":"2026-11-20T17:22:43.85842+08:00"}],"page":1,"page_size":10,"total":1}}

@@ -238,6 +238,9 @@ func (r *ExternalCustomerRepository) Delete(ctx context.Context, id uint) error 
 	return r.db.WithContext(ctx).Delete(&model.ExternalCustomer{}, id).Error
 }
 
+// ExternalOrderRepository reads/writes external_orders mirror (EC-07).
+// Tenant isolation relies on GORM tenant callbacks/scope from ctx; callers must not pass a tenant-less ctx
+// in multi-tenant request paths. Buyer ownership is not enforced here (enforce at service/tool layer).
 type ExternalOrderRepository struct {
 	db *gorm.DB
 }

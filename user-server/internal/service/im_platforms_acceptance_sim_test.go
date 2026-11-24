@@ -165,17 +165,45 @@ func TestOneBotAcceptanceSim(t *testing.T) {
 	}))
 	defer wsSrv.Close()
 
-	// readFrame 在协议端侧读一帧出站调用；超时即失败，并带上 HTTP 回落诊断
+	// clientPump 在协议端侧读动作帧、回 echo 成功回执（OneBot v11 要求服务端
+	// 等平台回执才认为发送成功），同时把帧放进 channel 供断言。
+	// FA-CHANNEL-02：服务端 Send 必须拿到 echo 关联响应，否则会超时并回落 HTTP。
+	clientPump := func(c *websocket.Conn) <-chan map[string]any {
+		frames := make(chan map[string]any, 8)
+		go func() {
+			defer close(frames)
+			for {
+				var msg map[string]any
+				if err := c.ReadJSON(&msg); err != nil {
+					return
+				}
+				frames <- msg
+				if echo, ok := msg["echo"].(string); ok {
+					_ = c.WriteJSON(map[string]any{
+						"status": "ok", "retcode": 0,
+						"data": map[string]any{"message_id": 1}, "echo": echo,
+					})
+				}
+			}
+		}()
+		return frames
+	}
+
+	// readFrame 从协议端 pump 取一帧出站调用；超时即失败，并带上 HTTP 回落诊断
 	// （帧没到但 httpCalls 有记录 ⇒ 服务端悄悄回落了 HTTP，是另一种缺陷）。
-	readFrame := func(c *websocket.Conn, what string) map[string]any {
+	readFrame := func(frames <-chan map[string]any, what string) map[string]any {
 		t.Helper()
-		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
-		var msg map[string]any
-		if err := c.ReadJSON(&msg); err != nil {
+		select {
+		case msg, ok := <-frames:
+			if !ok {
+				t.Fatalf("%s: 协议端连接已关闭", what)
+			}
+			return msg
+		case <-time.After(5 * time.Second):
 			calls := snapshotCalls(&httpCallsMu, &httpCalls)
-			t.Fatalf("%s: 5s 内未收到反向 WS 帧（httpCalls=%v）: %v", what, calls, err)
+			t.Fatalf("%s: 5s 内未收到反向 WS 帧（httpCalls=%v）", what, calls)
+			return nil
 		}
-		return msg
 	}
 	waitConnected := func(want bool) {
 		t.Helper()
@@ -196,6 +224,9 @@ func TestOneBotAcceptanceSim(t *testing.T) {
 	defer client.Close()
 	waitConnected(true)
 	wsConn := <-registered
+	// FA-CHANNEL-02：服务端读循环负责把平台 echo 回执投递给等待中的 Send。
+	go svc.OneBotWSManager().RunReadLoop(acc.ID, wsConn)
+	frames := clientPump(client)
 
 	// 群聊：group_id 来自 hub，动作必须是 send_group_msg。
 	releaseReplyClaimForTest(t, "evt-ob-group")
@@ -204,7 +235,7 @@ func TestOneBotAcceptanceSim(t *testing.T) {
 	if ok, err := svc.sendOutbound(context.Background(), ChannelOneBot, fmt.Sprint(acc.ID), pGroup, "群答复", hubGroup, nil); !ok || err != nil {
 		t.Fatalf("群聊 sendOutbound = %v, %v", ok, err)
 	}
-	got := readFrame(client, "群聊")
+	got := readFrame(frames, "群聊")
 	if got["action"] != "send_group_msg" {
 		t.Fatalf("群聊 action = %v", got["action"])
 	}
@@ -218,7 +249,7 @@ func TestOneBotAcceptanceSim(t *testing.T) {
 	if ok, err := svc.sendOutbound(context.Background(), ChannelOneBot, fmt.Sprint(acc.ID), pPrivate, "私聊答复", hubPrivate, nil); !ok || err != nil {
 		t.Fatalf("私聊 sendOutbound = %v, %v", ok, err)
 	}
-	got = readFrame(client, "私聊")
+	got = readFrame(frames, "私聊")
 	if got["action"] != "send_private_msg" {
 		t.Fatalf("私聊 action = %v", got["action"])
 	}
@@ -247,15 +278,17 @@ func TestOneBotAcceptanceSim(t *testing.T) {
 		t.Fatalf("协议端重连: %v", err)
 	}
 	defer client2.Close()
-	<-registered
+	wsConn2 := <-registered
 	waitConnected(true)
+	go svc.OneBotWSManager().RunReadLoop(acc.ID, wsConn2)
+	frames2 := clientPump(client2)
 
 	releaseReplyClaimForTest(t, "evt-ob-reconnect")
 	pRe, hubRe := replyFor(model.ChannelOneBot, "evt-ob-reconnect", "42", "42")
 	if ok, err := svc.sendOutbound(context.Background(), ChannelOneBot, fmt.Sprint(acc.ID), pRe, "重连后答复", hubRe, nil); !ok || err != nil {
 		t.Fatalf("重连后 sendOutbound = %v, %v", ok, err)
 	}
-	got = readFrame(client2, "重连后")
+	got = readFrame(frames2, "重连后")
 	if got["action"] != "send_private_msg" {
 		t.Fatalf("重连后 action = %v", got["action"])
 	}

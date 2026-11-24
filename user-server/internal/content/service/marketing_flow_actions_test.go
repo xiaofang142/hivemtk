@@ -19,7 +19,7 @@ import (
 func setupMarketingFlowServiceTestDBWithCDP(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,
 		&model.MarketingFlow{},
-		&model.FlowExecution{},
+		&model.FlowExecution{}, &model.FlowNodeAttempt{},
 		&reachmodel.UserTag{},
 		&reachmodel.CustomerSession{},
 		&reachmodel.AgentStatus{},

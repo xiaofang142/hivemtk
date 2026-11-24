@@ -421,3 +421,6 @@ user-web/src/router/router-list.md
 
 # 链 A 部署台账（本机状态，不入库）
 deploy/.api-deploy-state.json
+
+# Sagex Android app (independent git repo, managed separately)
+/sagex/

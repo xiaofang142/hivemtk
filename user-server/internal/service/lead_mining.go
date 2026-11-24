@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -29,13 +31,15 @@ const (
 
 // LeadJudgement LLM 结构化判定结果
 type LeadJudgement struct {
-	IsLead          bool     `json:"is_lead"`
-	IntentScore     int      `json:"intent_score"`
-	MatchedKeywords []string `json:"matched_keywords"`
-	MatchedTags     []string `json:"matched_tags"`
-	Summary         string   `json:"summary"`
-	Confidence      float64  `json:"confidence"`
-	Reason          string   `json:"reason"`
+	IsLead             bool     `json:"is_lead"`
+	IntentScore        int      `json:"intent_score"`
+	MatchedKeywords    []string `json:"matched_keywords"`
+	MatchedTags        []string `json:"matched_tags"`
+	Summary            string   `json:"summary"`
+	Confidence         float64  `json:"confidence"`
+	Reason             string   `json:"reason"`
+	LeadRole           string   `json:"lead_role"`           // demand/supply/resource/broker/unknown
+	FollowupSuggestion string   `json:"followup_suggestion"` // 给维护人的跟进建议
 }
 
 // LLMJudge 判定接口（便于测试注入 fake）
@@ -62,6 +66,7 @@ type Service struct {
 	hubRepo            *repository.MessageHubRepository
 	mu                 sync.Mutex
 	lastJudge          map[string]time.Time
+	persistLocks       sync.Map
 	cfgCache           map[uint]leadMiningConfigCacheEntry
 	cfgGeneration      map[uint]uint64
 	cfgCacheGeneration uint64
@@ -176,6 +181,11 @@ func SaveLeadMiningConfig(ctx context.Context, in *dto.LeadMiningConfig) error {
 	return nil
 }
 
+// ListLeadMiningJudgements 返回判定记录列表（最小只读 API，LM-PR5）。
+func ListLeadMiningJudgements(ctx context.Context, page, limit int, platform, accountID, leadRole string, matched *bool) ([]model.LeadMiningJudgement, int64, error) {
+	return repository.NewLeadMiningJudgementRepository().List(ctx, page, limit, platform, accountID, leadRole, matched)
+}
+
 func leadMiningConfigToDTO(m *model.LeadMiningConfig) *dto.LeadMiningConfig {
 	return &dto.LeadMiningConfig{
 		ID:             m.ID,
@@ -270,14 +280,20 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	}
 
 	account := fmt.Sprintf("%s:%s", hub.Platform, hub.SenderID)
-	tenantID, _ := tenant.FromContext(ctx)
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok {
+		if tenant.IsMultiTenant() {
+			logger.Warnf("[lead-mining] 拒绝无租户归属的消息 msgID=%s", hub.MsgID)
+			return
+		}
+		tenantID = tenant.DefaultTenantID
+	}
 	debounceKey := leadMiningDebounceKey(tenantID, hub.Platform, hub.ConversationID, hub.SenderID, hub.IsGroup)
 	s.mu.Lock()
 	if last, ok := s.lastJudge[debounceKey]; ok && time.Since(last) < leadMiningDebounce {
 		s.mu.Unlock()
 		return
 	}
-	s.lastJudge[debounceKey] = time.Now()
 	s.mu.Unlock()
 
 	history := s.fetchHistory(ctx, hub)
@@ -290,6 +306,11 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		logger.Warnf("[lead-mining] 判定失败 account=%s: %v", account, err)
 		return
 	}
+	// 仅在判定成功后占用防抖窗口，避免失败消息阻塞后续判定（D-03）。
+	s.mu.Lock()
+	s.lastJudge[debounceKey] = time.Now()
+	s.mu.Unlock()
+	s.recordLeadMiningJudgement(ctx, hub, jd)
 	if !jd.IsLead || jd.IntentScore < cfg.MinIntentScore {
 		return
 	}
@@ -377,11 +398,23 @@ func (s *Service) fetchHistory(ctx context.Context, hub *model.MessageHub) []llm
 }
 
 func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage {
-	hubs, err := s.hubRepo.ListRecentInboundBySender(ctx, hub.Platform, hub.SenderID, leadMiningHistorySize)
+	var (
+		hubs []model.MessageHub
+		err  error
+	)
+	// LM-PR1: 单聊结合两人历史（同 conversation 双向）；群聊结合群内大家发言。
+	if hub.IsGroup && hub.GroupID != "" {
+		hubs, err = s.hubRepo.ListRecentByGroup(ctx, hub.Platform, hub.GroupID, leadMiningHistorySize)
+	} else if hub.ConversationID != "" {
+		hubs, err = s.hubRepo.ListRecentByConversation(ctx, hub.ConversationID, leadMiningHistorySize)
+	} else {
+		hubs, err = s.hubRepo.ListRecentInboundBySender(ctx, hub.Platform, hub.SenderID, leadMiningHistorySize)
+	}
 	if err != nil {
 		logger.Warnf("[lead-mining] 读取会话历史失败: %v", err)
 		return nil
 	}
+	// DESC -> ASC
 	for i, j := 0, len(hubs)-1; i < j; i, j = i+1, j-1 {
 		hubs[i], hubs[j] = hubs[j], hubs[i]
 	}
@@ -391,12 +424,41 @@ func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []l
 		if c == "" {
 			continue
 		}
-		msgs = append(msgs, llm.ChatMessage{Role: "user", Content: c})
+		role := "user"
+		speaker := strings.TrimSpace(h.SenderName)
+		if speaker == "" {
+			speaker = strings.TrimSpace(h.SenderID)
+		}
+		if h.Direction == "outbound" {
+			role = "assistant"
+		}
+		// 群聊保留说话人，避免多成员上下文丢失。
+		if hub.IsGroup {
+			if speaker != "" {
+				c = fmt.Sprintf("[%s] %s", speaker, c)
+			}
+			role = "user"
+		}
+		msgs = append(msgs, llm.ChatMessage{Role: role, Content: c})
 	}
 	return msgs
 }
 
 func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, hub *model.MessageHub, account string, jd *LeadJudgement) {
+	tenantID, ok := tenant.FromContext(ctx)
+	if !ok {
+		if tenant.IsMultiTenant() {
+			logger.Warnf("[lead-mining] 拒绝无租户归属的线索写入 account=%s", account)
+			return
+		}
+		tenantID = tenant.DefaultTenantID
+	}
+	lockKey := fmt.Sprintf("%d:%d:%s", tenantID, ClueTypeLeadMining, account)
+	if v, _ := s.persistLocks.LoadOrStore(lockKey, &sync.Mutex{}); v != nil {
+		mu := v.(*sync.Mutex)
+		mu.Lock()
+		defer mu.Unlock()
+	}
 	customer, err := s.resolveCustomer(ctx, hub.Platform, hub.SenderID, hub.SenderName)
 	if err != nil || customer == nil {
 		logger.Warnf("[lead-mining] 解析客户失败 account=%s: %v", account, err)
@@ -412,44 +474,90 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 
 	clueType := ClueTypeLeadMining
 
+	nowJudged := time.Now().Unix()
+	evidenceJSON, _ := json.Marshal([]map[string]any{{
+		"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
+		"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason,
+	}})
+	leadRole := normalizeLeadRole(jd.LeadRole)
+	conversationType := "private"
+	if hub.IsGroup {
+		conversationType = "group"
+	}
 	clue := &model.Clue{
-		Type:           clueType,
-		Account:        account,
-		Name:           displayName(customer, hub),
-		Desc:           jd.Summary,
-		IntentScore:    int64(jd.IntentScore),
-		IsOpportunity:  boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
-		ConversationID: hub.ConversationID,
-		OneID:          customer.UnifiedID,
-		SourceID:       "lead_mining",
-		MessageID:      fmt.Sprintf("%d", hub.ID),
-		OwnerAccount:   hub.AccountID,
-		IsGroup:        hub.IsGroup,
-		GroupID:        hub.GroupID,
+		Type:               clueType,
+		Account:            account,
+		Name:               displayName(customer, hub),
+		Desc:               jd.Summary,
+		IntentScore:        int64(jd.IntentScore),
+		IsOpportunity:      boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
+		ConversationID:     hub.ConversationID,
+		OneID:              customer.UnifiedID,
+		SourceID:           "lead_mining",
+		MessageID:          fmt.Sprintf("%d", hub.ID),
+		OwnerAccount:       hub.AccountID,
+		IsGroup:            hub.IsGroup,
+		GroupID:            hub.GroupID,
+		LeadRole:           leadRole,
+		Status:             "new",
+		EvidenceJSON:       string(evidenceJSON),
+		Summary:            jd.Summary,
+		FollowupSuggestion: jd.FollowupSuggestion,
+		LastJudgedAt:       &nowJudged,
+		SourceChannel:      hub.Platform,
+		SourceAccountID:    hub.AccountID,
+		ConversationType:   conversationType,
 	}
 
 	existing, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account)
 	if gerr == nil && existing != nil {
-		_ = s.clueRepo.UpdateByID(ctx, existing.ID, map[string]any{
-			"intent_score":    int64(jd.IntentScore),
-			"desc":            jd.Summary,
-			"is_opportunity":  boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
-			"conversation_id": hub.ConversationID,
-			"message_id":      fmt.Sprintf("%d", hub.ID),
-			"is_group":        hub.IsGroup,
-			"group_id":        hub.GroupID,
-		})
+		nowJudged := time.Now().Unix()
+		evidenceJSON, _ := json.Marshal([]map[string]any{{
+			"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
+			"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason,
+		}})
+		if err := s.clueRepo.UpdateByID(ctx, existing.ID, map[string]any{
+			"intent_score":        int64(jd.IntentScore),
+			"desc":                jd.Summary,
+			"is_opportunity":      boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
+			"conversation_id":     hub.ConversationID,
+			"message_id":          fmt.Sprintf("%d", hub.ID),
+			"is_group":            hub.IsGroup,
+			"group_id":            hub.GroupID,
+			"lead_role":           normalizeLeadRole(jd.LeadRole),
+			"evidence_json":       string(evidenceJSON),
+			"summary":             jd.Summary,
+			"followup_suggestion": jd.FollowupSuggestion,
+			"last_judged_at":      nowJudged,
+			"source_channel":      hub.Platform,
+			"source_account_id":   hub.AccountID,
+			"conversation_type":   map[bool]string{true: "group", false: "private"}[hub.IsGroup],
+		}); err != nil {
+			logger.Warnf("[lead-mining] 更新线索失败 account=%s: %v", account, err)
+		}
 		// 更新分支到此为止没有 clueRepo.Create，线索号是查出来的那一条 ——
 		// 本分支的 return 早于新建那一支，是这条接缝最容易只接一半的地方（判据见用例）。
 		s.tryConvertToOpportunity(ctx, existing.ID, customer, jd)
 		return
 	}
 	if err := s.clueRepo.Create(ctx, clue); err != nil {
+		// TOCTOU 兜底：并发插入冲突时回查已有记录并转为更新（D-01）。
+		if existing2, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account); gerr == nil && existing2 != nil {
+			nowJudged2 := time.Now().Unix()
+			if uerr := s.clueRepo.UpdateByID(ctx, existing2.ID, map[string]any{
+				"intent_score":        int64(jd.IntentScore),
+				"desc":                jd.Summary,
+				"last_judged_at":      nowJudged2,
+			}); uerr != nil {
+				logger.Warnf("[lead-mining] TOCTOU 兜底更新线索失败 account=%s: %v", account, uerr)
+			}
+			s.tryConvertToOpportunity(ctx, existing2.ID, customer, jd)
+			return
+		}
 		logger.Warnf("[lead-mining] 写入线索失败 account=%s: %v", account, err)
-		// 线索没落库就不转：商机行的 clue_id 是一个没有下家的引用，
-		// 而本表不建外键，这条断链谁都不会发现。
 		return
 	}
+	s.notifyLeadDiscovery(ctx, clue, jd)
 	s.tryConvertToOpportunity(ctx, clue.ID, customer, jd)
 }
 
@@ -488,29 +596,107 @@ func (s *Service) tryConvertToOpportunity(ctx context.Context, clueID string, cu
 	}
 }
 
+func (s *Service) notifyLeadDiscovery(ctx context.Context, clue *model.Clue, jd *LeadJudgement) {
+	if clue == nil || jd == nil {
+		return
+	}
+	roleLabel := map[string]string{"demand": "需求方", "supply": "供货方", "resource": "资源方", "broker": "中介", "unknown": "待识别"}[clue.LeadRole]
+	if roleLabel == "" {
+		roleLabel = "待识别"
+	}
+	title := fmt.Sprintf("发现新线索：%s", clue.Name)
+	content := fmt.Sprintf("渠道=%s 角色=%s 意向=%d 摘要=%s", clue.SourceChannel, roleLabel, clue.IntentScore, clue.Summary)
+	if clue.FollowupSuggestion != "" {
+		content += "\n建议：" + clue.FollowupSuggestion
+	}
+	_ = NotifyBusiness(ctx, &model.Notification{
+		UserID:  0,
+		Type:    model.NotificationTypeInfo,
+		Title:   title,
+		Content: content,
+		Link:    "/lead-mining",
+		Source:  model.NotificationSourceLocal,
+		Level:   model.NotificationLevelInfo,
+	})
+}
+
 func (s *Service) resolveCustomer(ctx context.Context, platform, senderID, name string) (*model.Customer, error) {
 	if platform == "" || senderID == "" {
 		return nil, fmt.Errorf("无客户身份标识")
 	}
-	key := "lm:" + platform + ":" + senderID
-	if c, gerr := s.custRepo.GetByUnifiedID(ctx, key); gerr == nil && c != nil {
-
-		if c.Name == "" || c.Name == key {
-			if name != "" {
-				c.Name = name
-				_ = s.custRepo.Update(ctx, c)
-			}
+	// LM-PR3: 优先复用已有 Customer 身份，避免 lm:platform:sender 平行主身份长期膨胀。
+	legacyKey := "lm:" + platform + ":" + senderID
+	if c, gerr := s.custRepo.GetByUnifiedID(ctx, legacyKey); gerr == nil && c != nil {
+		if name != "" && (c.Name == "" || c.Name == legacyKey) {
+			c.Name = name
+			_ = s.custRepo.Update(ctx, c)
 		}
 		return c, nil
 	}
-	c := &model.Customer{UnifiedID: key, Name: name}
-	if cerr := s.custRepo.Create(ctx, c); cerr != nil {
-		if c2, g2 := s.custRepo.GetByUnifiedID(ctx, key); g2 == nil && c2 != nil {
+	candidate := &model.Customer{Name: name}
+	applyLeadMiningIdentity(candidate, platform, senderID)
+	unifiedID := model.GenerateCustomerUnifiedID(candidate)
+	if unifiedID == "" {
+		unifiedID = legacyKey
+	}
+	if c, gerr := s.custRepo.GetByUnifiedID(ctx, unifiedID); gerr == nil && c != nil {
+		if name != "" && c.Name == "" {
+			c.Name = name
+			_ = s.custRepo.Update(ctx, c)
+		}
+		return c, nil
+	}
+	candidate.UnifiedID = unifiedID
+	candidate.SourceChannel = platform
+	candidate.SourceAccountID = senderID
+	if cerr := s.custRepo.Create(ctx, candidate); cerr != nil {
+		if c2, g2 := s.custRepo.GetByUnifiedID(ctx, unifiedID); g2 == nil && c2 != nil {
 			return c2, nil
+		}
+		if unifiedID != legacyKey {
+			if c2, g2 := s.custRepo.GetByUnifiedID(ctx, legacyKey); g2 == nil && c2 != nil {
+				return c2, nil
+			}
 		}
 		return nil, cerr
 	}
-	return c, nil
+	return candidate, nil
+}
+
+func applyLeadMiningIdentity(c *model.Customer, platform, senderID string) {
+	p := strings.ToLower(strings.TrimSpace(platform))
+	id := strings.TrimSpace(senderID)
+	if c == nil || id == "" {
+		return
+	}
+	switch p {
+	case "wechat", "weixin", "individual_wechat":
+		c.WechatOpenID = id
+	case "wecom", "qywx", "wework":
+		c.WeComExternalID = id
+	case "feishu", "lark":
+		c.FeishuOpenID = id
+	case "douyin":
+		c.DouyinOpenID = id
+	case "tiktok":
+		c.TikTokOpenID = id
+	case "kuaishou":
+		c.KuaishouOpenID = id
+	case "xiaohongshu", "xhs":
+		c.XiaohongshuID = id
+	case "xianyu":
+		c.XianyuID = id
+	case "telegram":
+		if n, err := strconv.ParseInt(id, 10, 64); err == nil {
+			c.TelegramChatID = n
+		}
+	case "whatsapp":
+		c.WhatsAppPhone = id
+	case "email":
+		c.Email = id
+	default:
+		// qq/sms/web/dingtalk 等暂无专用字段，回退 legacy lm: key
+	}
 }
 
 func (s *Service) tagCustomer(ctx context.Context, customer *model.Customer, newTags []string) error {
@@ -617,7 +803,95 @@ func buildSystemPrompt(cfg *model.LeadMiningConfig) string {
 	b.WriteString("\n请综合全部对话，输出严格 JSON：\n")
 	b.WriteString("{\n  \"is_lead\": bool,\n  \"intent_score\": 0-100 的整数（>=70 强意向，40-69 中等，<40 弱）,\n")
 	b.WriteString("  \"matched_keywords\": [命中的关键词],\n  \"matched_tags\": [建议追加的标签],\n")
-	b.WriteString("  \"summary\": \"一句话线索摘要（含客户诉求/场景/预算等要点）\",\n  \"confidence\": 0-1 的置信度,\n  \"reason\": \"判定理由\"\n}\n")
+	b.WriteString("  \"lead_role\": \"demand|supply|resource|broker|unknown\",\n")
+	b.WriteString("  \"summary\": \"一句话线索摘要（含客户诉求/场景/预算等要点）\",\n  \"followup_suggestion\": \"给维护人的下一步跟进建议\",\n")
+	b.WriteString("  \"confidence\": 0-1 的置信度,\n  \"reason\": \"判定理由\"\n}\n")
 	b.WriteString("只输出 JSON，不要额外解释。")
 	return b.String()
+}
+
+func normalizeLeadRole(role string) string {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "demand", "buyer", "需求方":
+		return "demand"
+	case "supply", "supplier", "seller", "供货方":
+		return "supply"
+	case "resource", "partner", "上下游", "资源方":
+		return "resource"
+	case "broker", "middleman", "中介":
+		return "broker"
+	default:
+		return "unknown"
+	}
+}
+
+func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.MessageHub, jd *LeadJudgement) {
+	if hub == nil || jd == nil {
+		return
+	}
+	judgementRepo := repository.NewLeadMiningJudgementRepository()
+	if judgementRepo == nil {
+		return
+	}
+	tid, ok := tenant.FromContext(ctx)
+	if !ok {
+		if tenant.IsMultiTenant() {
+			return
+		}
+		tid = tenant.DefaultTenantID
+	}
+	if tid == 0 {
+		tid = tenant.DefaultTenantID
+	}
+	resultJSON, _ := json.Marshal(jd)
+	ctxJSON, _ := json.Marshal(map[string]any{
+		"conversation_id": hub.ConversationID, "is_group": hub.IsGroup, "group_id": hub.GroupID,
+		"platform": hub.Platform, "account_id": hub.AccountID, "sender_id": hub.SenderID,
+	})
+	rec := &model.LeadMiningJudgement{
+		TenantID:       tid,
+		JudgementID:    fmt.Sprintf("lmj_%d", time.Now().UnixNano()),
+		MessageID:      hub.MsgID,
+		ConversationID: hub.ConversationID,
+		Platform:       hub.Platform,
+		AccountID:      hub.AccountID,
+		IsGroup:        hub.IsGroup,
+		GroupID:        hub.GroupID,
+		SenderID:       hub.SenderID,
+		ContentHash:    fmt.Sprintf("%d", hub.ID),
+		ContextJSON:    string(ctxJSON),
+		ResultJSON:     string(resultJSON),
+		Matched:        jd.IsLead,
+		LeadRole:       normalizeLeadRole(jd.LeadRole),
+		IntentScore:    jd.IntentScore,
+		Reason:         jd.Reason,
+	}
+	if err := judgementRepo.Create(ctx, rec); err != nil {
+		logger.Warnf("[lead-mining] 记录判定失败 msg=%s: %v", hub.MsgID, err)
+	}
+}
+
+// GetLeadMiningJudgementDetail 返回判定记录回放详情（LM-PR6）。
+func GetLeadMiningJudgementDetail(ctx context.Context, judgementID string) (*model.LeadMiningJudgement, error) {
+	if strings.TrimSpace(judgementID) == "" {
+		return nil, fmt.Errorf("judgement_id 不能为空")
+	}
+	return repository.NewLeadMiningJudgementRepository().GetByID(ctx, judgementID)
+}
+
+// SubmitLeadMiningJudgementFeedback 标记判定误报/有效（LM-PR6）。
+func SubmitLeadMiningJudgementFeedback(ctx context.Context, judgementID, status, reason, by string) error {
+	if strings.TrimSpace(judgementID) == "" {
+		return fmt.Errorf("judgement_id 不能为空")
+	}
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status != "false_positive" && status != "valid" && status != "none" {
+		return fmt.Errorf("feedback_status 仅支持 none/false_positive/valid")
+	}
+	return repository.NewLeadMiningJudgementRepository().UpdateFeedback(ctx, judgementID, status, strings.TrimSpace(reason), strings.TrimSpace(by))
+}
+
+// GetLeadMiningQualityStats 返回线索发掘质量看板统计（LM-PR6）。
+func GetLeadMiningQualityStats(ctx context.Context, days int) (map[string]any, error) {
+	return repository.NewLeadMiningJudgementRepository().GetQualityStats(ctx, days)
 }

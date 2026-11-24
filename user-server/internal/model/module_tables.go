@@ -265,6 +265,8 @@ var salesCRMOwnedTables = []string{
 	"opportunities", "quotes", "quote_line_items", "order_drafts",
 	"bills", "payments", "after_sales", "sales_events", "external_orders", "follow_up_reminders",
 	"external_products",
+	"commerce_operations", "commerce_approvals", "commerce_attempts", "commerce_resources",
+	"commerce_outbox", "commerce_policies", "commerce_members", "commerce_evidences",
 }
 
 // geo 模块独占

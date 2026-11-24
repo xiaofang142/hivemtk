@@ -97,7 +97,7 @@ func (r *WorkflowVersionRepository) ListVersions(ctx context.Context, workflowID
 }
 
 // ListAll 列出所有工作流版本，支持按 workflow_id 和 status 过滤，带分页
-func (r *WorkflowVersionRepository) ListAll(ctx context.Context, workflowID, status string, page, pageSize int) ([]model.WorkflowVersion, int64, error) {
+func (r *WorkflowVersionRepository) ListAll(ctx context.Context, workflowID, status, keyword string, page, pageSize int) ([]model.WorkflowVersion, int64, error) {
 	if r == nil || r.db == nil {
 		return nil, 0, errors.New("workflow version repository not initialized")
 	}
@@ -113,6 +113,12 @@ func (r *WorkflowVersionRepository) ListAll(ctx context.Context, workflowID, sta
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
+	}
+	// FA-WF-12：关键字走后端 LIKE 过滤（name/workflow_id），Count 与 Find 共用同一 q，
+	// 使 total 与分页结果基于同一跨页过滤条件，避免只过滤当前页。
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("(name LIKE ? OR workflow_id LIKE ?)", like, like)
 	}
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
@@ -159,6 +165,77 @@ func (r *WorkflowVersionRepository) UpdateStatus(ctx context.Context, id uint, s
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// UpdateDraft FA-WF-07：草稿改稿的乐观锁 CAS——只有 id/status=draft/revision 仍等于读入值
+// 时整行写回才生效，并把 revision +1。发布者把 draft→published 后，旧草稿的写回因 status
+// 不再匹配而落空（rows=0）；两并发更新读同一 revision 时仅一个 CAS 成功，另一个 rows=0。
+// 调用方据此报可诊断的版本冲突，不覆盖已发布定义/状态。用整数 revision 而非时间戳做 CAS，
+// 避免时间精度导致误判。
+func (r *WorkflowVersionRepository) UpdateDraft(ctx context.Context, w *model.WorkflowVersion, expectedRevision int) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("workflow version repository not initialized")
+	}
+	if w == nil {
+		return 0, errors.New("workflow version: nil 不是保存对象")
+	}
+	res := r.db.WithContext(ctx).Model(&model.WorkflowVersion{}).
+		Where("id = ? AND status = ? AND revision = ?", w.ID, model.WorkflowStatusDraft, expectedRevision).
+		Updates(map[string]any{
+			"name":        w.Name,
+			"description": w.Description,
+			"definition":  w.Definition,
+			"changelog":   w.Changelog,
+			"revision":    expectedRevision + 1,
+			"updated_at":  time.Now(),
+		})
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// UpdateMetadataCAS 对已发布/归档版本的"同定义元数据"更新做乐观锁 CAS：
+// WHERE id + revision（不带 status 条件）。与 UpdateDraft 的区别是后者强制 status=draft，
+// 用于拦住"读到 draft→别人发布→旧草稿整行覆盖"；而这里调用方已确认 definition 未变、
+// 状态是读到的当前值（published/archived），仅改 name/description/changelog，属合法操作。
+// revision 仍作 CAS，保证两并发元数据更新只有一个成功。
+func (r *WorkflowVersionRepository) UpdateMetadataCAS(ctx context.Context, w *model.WorkflowVersion, expectedRevision int) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("workflow version repository not initialized")
+	}
+	if w == nil {
+		return 0, errors.New("workflow version: nil 不是保存对象")
+	}
+	res := r.db.WithContext(ctx).Model(&model.WorkflowVersion{}).
+		Where("id = ? AND revision = ?", w.ID, expectedRevision).
+		Updates(map[string]any{
+			"name":        w.Name,
+			"description": w.Description,
+			"definition":  w.Definition,
+			"changelog":   w.Changelog,
+			"revision":    expectedRevision + 1,
+			"updated_at":  time.Now(),
+		})
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
+}
+
+// TransitionStatus FA-WF-07：状态机 CAS——只有当前状态仍是 from 时才推进到 to，
+// 返回受影响行数。rows=0 表示被并发转换（或状态不符），调用方据此报版本冲突。
+func (r *WorkflowVersionRepository) TransitionStatus(ctx context.Context, id uint, from, to string) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("workflow version repository not initialized")
+	}
+	res := r.db.WithContext(ctx).Model(&model.WorkflowVersion{}).
+		Where("id = ? AND status = ?", id, from).
+		Update("status", to)
+	if res.Error != nil {
+		return 0, res.Error
+	}
+	return res.RowsAffected, nil
 }
 
 // CountByWorkflowID 统计指定 workflow_id 的版本数（用于自增 version）

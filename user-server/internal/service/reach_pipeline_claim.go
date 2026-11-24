@@ -33,13 +33,28 @@ func (s *ReachPipelineService) ExecuteJob(ctx context.Context, id uint) (*model.
 }
 
 func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.ReachJob, autoRetry bool) (*model.ReachJob, error) {
+	// FA-REACH-02 恢复守卫：结果未知的发送凭据（崩溃窗口/未对账）绝不从头
+	// 重跑发送。直接落 failed 并给出可诊断错误，交人工对账。accepted 凭据
+	// 由 dispatchOutbound 复用 message_id；failed/无凭据可安全继续。
+	if cred := getReachSendCredential(job); cred != nil &&
+		(cred.State == reachSendStateSending || cred.State == reachSendStateUnknown) {
+		now := time.Now()
+		job.State = JobStateFailed
+		job.ErrorMessage = "发送结果未知（凭据 state=" + cred.State + "），未自动重发，需对账"
+		job.CompletedAt = &now
+		if e := s.saveJob(ctx, job); e != nil {
+			logger.Errorf("[reach_pipeline] 未知发送凭据落库失败 jobID=%d: %v", job.ID, e)
+		}
+		return job, ErrReachSendUnknown
+	}
+
 	pipe, err := s.GetPipeline(ctx, job.PipelineID)
 	if err != nil {
 		now := time.Now()
 		job.State = JobStateFailed
 		job.ErrorMessage = err.Error()
 		job.CompletedAt = &now
-		if e := s.repo.SaveJob(ctx, job); e != nil {
+		if e := s.saveJob(ctx, job); e != nil {
 			logger.Errorf("[reach_pipeline] 失败状态落库失败 jobID=%d: %v", job.ID, e)
 		}
 		return job, err
@@ -69,7 +84,7 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 	now := time.Now()
 	job.State = JobStateRunning
 	job.StartedAt = &now
-	if e := s.repo.SaveJob(ctx, job); e != nil {
+	if e := s.saveJob(ctx, job); e != nil {
 		logger.Errorf("[reach_pipeline] 运行状态落库失败 jobID=%d: %v", job.ID, e)
 	}
 
@@ -116,7 +131,7 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 				job.ErrorMessage = res.Error
 				job.NextRunAt = &backoff
 				job.StepResults = toJSONArray(mustJSON(results))
-				if e := s.repo.SaveJob(ctx, job); e != nil {
+				if e := s.saveJob(ctx, job); e != nil {
 					logger.Errorf("[reach_pipeline] 限流状态落库失败 jobID=%d: %v", job.ID, e)
 				}
 				s.appendStepResult(ctx, job, res)
@@ -161,7 +176,7 @@ func (s *ReachPipelineService) executeJobCore(ctx context.Context, job *model.Re
 			s.fireAlert(ctx, job, JobStateFailed, job.ErrorMessage)
 		}
 	}
-	if err := s.repo.SaveJob(ctx, job); err != nil {
+	if err := s.saveJob(ctx, job); err != nil {
 		return nil, err
 	}
 	return job, nil
@@ -249,7 +264,7 @@ func (s *ReachPipelineService) appendStepResult(ctx context.Context, job *model.
 	results = append(results, res)
 	data, _ := json.Marshal(results)
 	job.StepResults = toJSONArray(data)
-	if e := s.repo.SaveJob(ctx, job); e != nil {
+	if e := s.saveJob(ctx, job); e != nil {
 		logger.Errorf("[reach_pipeline] StepResults 追加落库失败 jobID=%d: %v", job.ID, e)
 	}
 }

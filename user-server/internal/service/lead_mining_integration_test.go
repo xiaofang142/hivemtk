@@ -37,6 +37,7 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 		&model.MessageHub{},
 		&model.Customer{},
 		&model.Clue{},
+		&model.LeadMiningJudgement{},
 	)
 	db.SetTestDB(database)
 
@@ -117,13 +118,16 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 	if clue.IsOpportunity != 1 {
 		t.Fatalf("高意向(>=70)应标记商机，实际 %d", clue.IsOpportunity)
 	}
-	if clue.OneID != "lm:"+account {
-		t.Fatalf("线索 OneID 应关联客户稳定键，实际 %s", clue.OneID)
+	if clue.OneID == "" {
+		t.Fatalf("线索 OneID 不应为空")
 	}
 
 	var cust model.Customer
-	if err := database.Where("unified_id = ?", "lm:"+account).First(&cust).Error; err != nil {
+	if err := database.Where("unified_id = ?", clue.OneID).First(&cust).Error; err != nil {
 		t.Fatalf("未创建客户: %v", err)
+	}
+	if cust.UnifiedID != clue.OneID {
+		t.Fatalf("线索与客户 OneID 不一致: clue=%s cust=%s", clue.OneID, cust.UnifiedID)
 	}
 	var tags []string
 	_ = json.Unmarshal([]byte(cust.Tags), &tags)
@@ -147,6 +151,7 @@ func TestLeadMining_Integration_NotLead(t *testing.T) {
 		&model.MessageHub{},
 		&model.Customer{},
 		&model.Clue{},
+		&model.LeadMiningJudgement{},
 	)
 	db.SetTestDB(database)
 
@@ -188,6 +193,7 @@ func TestLeadMining_Integration_AsyncEnqueue(t *testing.T) {
 		&model.MessageHub{},
 		&model.Customer{},
 		&model.Clue{},
+		&model.LeadMiningJudgement{},
 	)
 	db.SetTestDB(database)
 
@@ -251,6 +257,7 @@ func TestLeadMining_Integration_Debounce(t *testing.T) {
 		&model.MessageHub{},
 		&model.Customer{},
 		&model.Clue{},
+		&model.LeadMiningJudgement{},
 	)
 	db.SetTestDB(database)
 
@@ -311,11 +318,11 @@ func cleanupLeadMiningData(t *testing.T, database *gorm.DB, senders ...string) {
 		for _, s := range senders {
 			account := "telegram:" + s
 			database.Where("type = ? AND account = ?", ClueTypeLeadMining, account).Delete(&model.Clue{})
-			database.Where("unified_id = ?", "lm:"+account).Delete(&model.Customer{})
+			database.Where("source_account_id = ?", s).Delete(&model.Customer{})
 			database.Where("sender_id = ?", s).Delete(&model.MessageHub{})
 			accountD := "douyin:" + s
 			database.Where("type = ? AND account = ?", ClueTypeLeadMining, accountD).Delete(&model.Clue{})
-			database.Where("unified_id = ?", "lm:"+accountD).Delete(&model.Customer{})
+			database.Where("source_account_id = ?", s).Delete(&model.Customer{})
 		}
 		database.Delete(&model.LeadMiningConfig{})
 	})

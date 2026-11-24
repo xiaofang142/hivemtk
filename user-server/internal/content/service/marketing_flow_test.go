@@ -22,7 +22,7 @@ import (
 func setupMarketingFlowServiceTestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,
 		&model.MarketingFlow{},
-		&model.FlowExecution{},
+		&model.FlowExecution{}, &model.FlowNodeAttempt{},
 		&cdpmodel.UserTag{},
 	)
 	db.SetTestDB(database)
@@ -425,7 +425,7 @@ func TestMarketingFlowService_TriggerFlow(t *testing.T) {
 	}
 	db.GetDB().Create(flow)
 
-	execution, err := service.TriggerFlow(context.Background(), flow, "trigger_123", "user_123", nil)
+	execution, err := service.TriggerFlow(tenant.WithTenantID(t.Context(), flow.TenantID), flow, "trigger_123", "user_123", nil)
 	if err != nil {
 		t.Fatalf("TriggerFlow failed: %v", err)
 	}
@@ -459,7 +459,7 @@ func TestMarketingFlowService_TriggerFlow_InactiveFlow(t *testing.T) {
 	}
 	db.GetDB().Create(flow)
 
-	_, err := service.TriggerFlow(context.Background(), flow, "trigger_123", "user_123", nil)
+	_, err := service.TriggerFlow(tenant.WithTenantID(t.Context(), flow.TenantID), flow, "trigger_123", "user_123", nil)
 	if err == nil {
 		t.Error("Expected error for inactive flow")
 	}

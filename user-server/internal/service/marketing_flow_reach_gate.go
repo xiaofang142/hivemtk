@@ -39,6 +39,28 @@ var (
 	marketingFlowEmailTransport = marketingFlowSMTPTransport
 )
 
+// EC-29 边界（Amazon 邮件/规定动作与原生责任，禁止营销封装）：
+// 本文件注册的 gatedMarketingFlowSms / gatedMarketingFlowEmail 仅服务于**营销流程**的
+// 短信/邮件出口，必须经过 DNC → 审批 → 合规判定链。Amazon 买家消息不属于营销出口：
+//   - Amazon 无渠道登记（capregistry 中无 "amazon" 条目），不得把 Amazon 买家邮件/规定动作
+//     路由到本发送器或 marketing_flow 的邮件/短信通道；
+//   - Amazon 规定动作必须保留平台证据（action 名、订单/消息 ID、平台受理回执），原生责任
+//     （原生自动回复/人工/本系统）不得转换为营销模板或套用频控/优惠权益；
+//   - FBA 由 Amazon 处理退货与资金，系统只观察与解释，不创建 refund/return 写入。
+//
+// 因此任何 Amazon 相关出口都不得调用本文件的发送器，也不得复用其营销模板/频控。
+//
+// EC-30 边界（平台原生营销配置 vs 现有营销链路，消息派发复用 23-A，不复制营销管线）：
+//   - 本文件的 gatedMarketingFlowSms / gatedMarketingFlowEmail 仅服务于 HiveMtk 营销流程出口，
+//     是 23-A 统一判定链的一部分；平台原生营销配置（含 Amazon 原生自动回复/规定动作等）
+//     不得直接调用本发送器或 marketing_flow 的邮件/短信通道，也不得绕过 DNC → 审批 → 合规
+//     判定链；
+//   - HiveMtk 营销链路不得封装/转译平台原生营销配置为营销模板、频控、优惠权益或主动获客
+//     流程；平台原生营销需要消息触达时，只能经 23-A 统一发送入口并保留平台证据；
+//   - 平台原生营销与 HiveMtk 营销链路之间只允许「观察/解释/人工接续」，不得互相覆盖或把
+//     对方的状态当作自身执行结果/验收证据。
+//
+// 本注释仅作代码内事实锚点，不构成功能完成证据。
 func init() {
 	// 与改造前的 marketing_flow_sms_init.go init() 同一注册时机；邮件发送器为 FA-20 新增。
 	contentsvc.SetSmsSender(gatedMarketingFlowSms)

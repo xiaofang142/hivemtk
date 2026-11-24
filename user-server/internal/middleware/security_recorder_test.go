@@ -144,19 +144,20 @@ func TestSecurityRecorder_AsyncFlushRacesWithRecording(t *testing.T) {
 			}
 		}(i)
 	}
-	// 刷盘腿：反复走异步触发形态（flushing 标志 + 锁外 Merge 的同款并发窗口）
+	// 刷盘腿：与生产路径一样持锁换出快照，锁外 Merge 不读取记录腿的活载荷。
+	var flushWG sync.WaitGroup
 	for round := 0; round < 50; round++ {
 		securityFailureMu.Lock()
 		if !securityFailureFlushing && securityFailureDeltasCount() > 0 {
 			securityFailureFlushing = true
 			deltas := securityFailureDeltas
+			securityFailureDeltas = model.NewSecurityAccessFailurePayload()
+			securityFailureLastFlsh = time.Now()
+			flushWG.Add(1)
 			securityFailureMu.Unlock()
 			go func() {
-				defer func() {
-					// 与生产腿走同一扇门（endSecurityFlush），否则这条 -race 腿钉住的
-					// 是"测试自己写全局"，而不是线上那条收尾路径。
-					endSecurityFlush()
-				}()
+				defer flushWG.Done()
+				defer endSecurityFlush()
 				_ = flushSecurityAccessFailures(deltas)
 			}()
 		} else {
@@ -166,6 +167,7 @@ func TestSecurityRecorder_AsyncFlushRacesWithRecording(t *testing.T) {
 	}
 	close(stop)
 	wg.Wait()
+	flushWG.Wait()
 	if err := FlushSecurityAccessFailures(); err != nil {
 		t.Fatalf("收口刷盘不该失败: %v", err)
 	}

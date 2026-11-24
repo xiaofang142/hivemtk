@@ -172,6 +172,17 @@ func allModels() []any {
 		&model.WhatsAppQueueStatus{},
 		&model.SystemMetrics{},
 		&model.Customer{},
+		// CRM P0: 公司主数据与客户-公司关系（053建表+079 SaaS演进；D-02 双写过渡）
+		&model.Company{},
+		&model.CustomerCompanyRelation{},
+		// CRM PR-4/PR-5/PR-6/PR-7：跟进记录、业务账号授权、导入任务、AI洞察草稿
+		&model.FollowupRecord{},
+		&model.BusinessAccountAuthorization{},
+		&model.CustomerImportJob{},
+		&model.AIInsightDraft{},
+		// LM-PR1/LM-PR4：线索发掘判定记录、通知路由
+		&model.LeadMiningJudgement{},
+		&model.LeadMiningNotifyRoute{},
 		&model.CustomerTag{},
 		&model.CustomerTagAssignment{},
 		&model.CustomerDoNotContact{},
@@ -200,6 +211,10 @@ func allModels() []any {
 		// module_tables.go 里同时登记的 "customer_rfms" 是复数写法（遗留）。
 		&model.CustomerRFM{},
 		&model.IntegrationAccount{},
+		&model.SageXInstallation{},
+		&model.SageXEventReceipt{},
+		&model.SageXActivationCode{},
+		&model.SageXHeartbeat{},
 		&model.MerchantConnection{},
 		&model.MerchantCallbackSubscription{},
 		&model.MerchantCallbackEvent{},
@@ -252,6 +267,7 @@ func allModels() []any {
 		&model.SOPExecution{},
 		&model.SOPExecEvent{},
 		&model.SOPTimer{},
+		&model.SOPDispatchClaim{},
 		&model.SOPOutbox{},
 		&model.SalesIntentScore{},
 		&model.MemoryItem{},

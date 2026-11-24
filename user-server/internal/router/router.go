@@ -633,6 +633,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupModuleRoutes(nil, auth, tenantAdmin, systemAdmin)
 
 		setupSystemUserRoutes(auth)
+		setupCommerceRoutes(auth, gormDB)
 
 		// plainAuth 只挂只读的 Runtime；五个全量/写端点走租户 admin 档
 		// （config-params 写的是本租户的覆盖行 tenant_config_params，见 config_param.go
@@ -741,6 +742,16 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		bridgeWS.GET("/bridge/outbox/wake", controller.NewBridgeOutboxWakeController(service.GlobalBridgeOutboxWake).Stream)
 
 		bridgeWS.GET("/bridge/capabilities", controller.NewBridgeCapabilitiesController().GetCapabilities)
+
+		sagexUploadSvc := service.NewSageXUploadService(
+			repository.NewSageXInstallationRepository(),
+			repository.NewSageXEventReceiptRepository(),
+			bridgeIngressSvc,
+		)
+		sagexCtrl := controller.NewSageXUploadController(sagexUploadSvc)
+		sagexGroup := r.Group("/api")
+		sagexGroup.Use(middleware.InitGuard())
+		sagexGroup.POST("/integrations/sagex/upload", sagexCtrl.Upload)
 
 		// MCP 工具调用入口单独一条门：它挂在桥接组里时，BRIDGE_INGEST_AUTH=off 这条
 		// 「内网扩展可不带凭证上报」的逃生阀会把**服务端工具调用**一起放开，

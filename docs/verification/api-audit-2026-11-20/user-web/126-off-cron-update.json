@@ -1,1 +1,0 @@
-{"code":0,"message":"ok","data":{"tenant_id":1,"id":3,"task_id":5,"cron_expr":"0 8 * * 1","time_zone":"","enabled":true,"next_run_at":"2026-11-23T08:00:00+08:00","created_at":"2026-11-21T18:47:56.136553+08:00","updated_at":"2026-11-21T18:47:56.1947877+08:00"}}

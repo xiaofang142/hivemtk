@@ -1,1 +1,0 @@
-{"code":0,"message":"获取成功","data":{"tenant_id":0,"id":0,"user_id":"audit20-none","churn_score":0,"churn_risk":"low","risk_factors":"[]","last_activity_at":null,"last_purchase_at":null,"days_since_active":0,"purchase_freq":0,"average_order_value":0,"predicted_at":"0001-01-01T00:00:00Z","created_at":"0001-01-01T00:00:00Z","updated_at":"0001-01-01T00:00:00Z"}}

@@ -61,9 +61,11 @@ func (r *DashboardScreenRepository) GetAll(ctx context.Context, page, pageSize i
 	return screens, total, err
 }
 
-// GetPublicByCodeCtx 匿名公开访问：code 由分享链接携带，先系统作用域反查
+// GetPublicByCodeWithTenantCtx 匿名公开访问：code 由分享链接携带，先系统作用域反查
 // 唯一租户，再钉死在该租户内读取并自增浏览量。同码多租户时拒猜（返回未找到）。
-func (r *DashboardScreenRepository) GetPublicByCodeCtx(ctx context.Context, code string) (*model.DashboardScreen, error) {
+// 返回 code 反查出的 tenantID，供调用方在同一授权链读取该大屏的 widgets（FA-SCREEN-01）。
+// 租户只由 code 反查得出，不接受客户端指定，杜绝跨租户绕过。
+func (r *DashboardScreenRepository) GetPublicByCodeWithTenantCtx(ctx context.Context, code string) (*model.DashboardScreen, uint, error) {
 	var ids []uint
 	if err := r.db.WithContext(tenant.WithSystemScope(ctx)).
 		Model(&model.DashboardScreen{}).
@@ -71,24 +73,30 @@ func (r *DashboardScreenRepository) GetPublicByCodeCtx(ctx context.Context, code
 		Where("code = ? AND is_public = ?", code, true).
 		Limit(2).
 		Pluck("tenant_id", &ids).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if len(ids) != 1 || ids[0] == 0 {
-		return nil, gorm.ErrRecordNotFound
+		return nil, 0, gorm.ErrRecordNotFound
 	}
 	tctx := tenant.OnlyTenant(ctx, ids[0])
 	var screen model.DashboardScreen
 	if err := r.db.WithContext(tctx).
 		Where("code = ? AND is_public = ?", code, true).
 		First(&screen).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if err := r.db.WithContext(tctx).Model(&model.DashboardScreen{}).
 		Where("id = ?", screen.ID).
 		Update("view_count", gorm.Expr("view_count + 1")).Error; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return &screen, nil
+	return &screen, ids[0], nil
+}
+
+// GetPublicByCodeCtx 兼容原调用方：丢弃解析出的 tenantID。
+func (r *DashboardScreenRepository) GetPublicByCodeCtx(ctx context.Context, code string) (*model.DashboardScreen, error) {
+	screen, _, err := r.GetPublicByCodeWithTenantCtx(ctx, code)
+	return screen, err
 }
 
 // Update 整行回写大屏。走 db.SaveWholeRow：裸 Save 命中 0 行会回退成

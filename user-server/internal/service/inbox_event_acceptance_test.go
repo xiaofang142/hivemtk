@@ -11,6 +11,7 @@ import (
 	"hivemtk-user/internal/channelbot/onebot"
 	"hivemtk-user/internal/channelbot/qq"
 	"hivemtk-user/internal/channelbot/telegram"
+	"hivemtk-user/internal/channelbot/wecombot"
 	"hivemtk-user/internal/channelcaps"
 	"hivemtk-user/internal/event"
 	"hivemtk-user/internal/model"
@@ -404,7 +405,7 @@ func TestChannelParsers_EventTypeMatrix(t *testing.T) {
 	// 平台事件行」，与上方三腿共同构成全表覆盖。
 	for _, m := range channelcaps.All() {
 		switch m.Channel {
-		case "telegram", "feishu", "qq", "onebot", "slack":
+		case "telegram", "feishu", "qq", "onebot", "slack", "wecombot":
 			continue // 具名腿已各自断言
 		}
 		if len(m.Events) > 1 {
@@ -430,6 +431,24 @@ func TestChannelParsers_EventTypeMatrix(t *testing.T) {
 	}
 	if in.EventType != model.EventTypeInteractionCallback {
 		t.Errorf("telegram callback → %q，期望 interaction.callback", in.EventType)
+	}
+	// wecombot：template_card_event + event_key → interaction.callback（FA-CHANNEL-05）；
+	// 无 event_key / 其它事件必须返回空串，由调用方明确拒绝。
+	card, err := wecombot.ParseMessage([]byte(`{"msgid":"mx-1","chatid":"c","from":{"userid":"u"},` +
+		`"msgtype":"event","event":{"eventtype":"template_card_event",` +
+		`"template_card_event":{"event_key":"approve:42","task_id":"t"}}}`))
+	if err != nil {
+		t.Fatalf("wecombot card parse: %v", err)
+	}
+	if got := wecombotCardEventType(card); got != model.EventTypeInteractionCallback {
+		t.Errorf("wecombot card → %q，期望 interaction.callback", got)
+	}
+	bad, err := wecombot.ParseMessage([]byte(`{"msgtype":"event","event":{"eventtype":"enter_chat"}}`))
+	if err != nil {
+		t.Fatalf("wecombot enter_chat parse: %v", err)
+	}
+	if got := wecombotCardEventType(bad); got != "" {
+		t.Errorf("wecombot enter_chat → %q，期望空串（明确拒绝）", got)
 	}
 }
 

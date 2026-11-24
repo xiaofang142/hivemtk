@@ -428,6 +428,9 @@ func geoCaptureLeadPort(clues mainrepo.ClueRepository, chains georepo.GeoQueryCh
 				}
 			}
 		}
+		// EC-25：公开采集线索只带来源归因（SourceID=承接链/落地页）与服务意向；
+		// 默认不写入 marketing 许可，StatementVersion/consent 事实需由后续授权流程补齐，
+		// 否则该线索不得进入营销受众或营销群发。
 		clue := &model.Clue{
 			Account:  contact,
 			Name:     contact,

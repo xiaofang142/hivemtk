@@ -105,13 +105,15 @@ type ReachSendRequest struct {
 	CardID      string
 	Fallback    *FallbackConfig
 	Metadata    map[string]string
+	DryRun      bool
 }
 
 type FallbackConfig struct {
-	Enabled       bool
-	BackupChannel string
-	BackupAccount string
-	MaxAttempts   int
+	Enabled           bool
+	BackupChannel     string
+	BackupAccount     string
+	BackupRecipientID string
+	MaxAttempts       int
 }
 
 type SendResponse struct {
@@ -126,10 +128,17 @@ type SendResponse struct {
 	Error          string        `json:"error,omitempty"`
 	DurationMs     int64         `json:"duration_ms"`
 	SentAt         time.Time     `json:"sent_at"`
+	// Err 承载原始裁决错误（用于 errors.Is 判定哨兵），不参与 JSON 序列化。
+	Err error `json:"-"`
 	// Deferred R-4：命中 quiet hours 进入延迟队列时为 true（非失败语义）
 	Deferred bool `json:"deferred,omitempty"`
 	// DeferredAt R-4：计划首发时间
-	DeferredAt time.Time `json:"deferred_at,omitempty"`
+	DeferredAt     time.Time `json:"deferred_at,omitempty"`
+	DryRun         bool      `json:"dry_run,omitempty"`
+	DeliveryState  string    `json:"delivery_state,omitempty"`
+	ActualAttempts int       `json:"actual_attempts"`
+	OutcomeUnknown bool      `json:"outcome_unknown,omitempty"`
+	sendError      error
 }
 
 type SendStepLog struct {
@@ -239,7 +248,8 @@ type SendPipelineConfig struct {
 	CustomerTimeZoneLookup CustomerTimeZoneLookup
 
 	// ConsentChecker D04：可信同意判定（nil = 跳过该闸，零行为变更）。
-	ConsentChecker ConsentChecker
+	ConsentChecker       ConsentChecker
+	RequireScopedConsent bool
 	// ConsentMode D04：revocation_only（默认，仅显式撤回拒发）/
 	// enforce（无可信凭据一律拒发，存量盘点完成后收紧用）。
 	ConsentMode string
@@ -251,6 +261,12 @@ type SendPipelineConfig struct {
 	// QuotaScopesFn D05：本次请求的预占维度（nil 或返回空 = 不设额）。
 	// 仅当请求带 action_intent_id 时才会被调用——无幂等键不做预占。
 	QuotaScopesFn func(ctx context.Context, req *ReachSendRequest) []QuotaScopeDef
+
+	// MandatoryGate FA-REACH-01：所有外发入口共享的**强制闸口**，在配置化步骤
+	// 之外恒跑一次。批量触达等入口用它接统一审批/联系偏好判定：即便调用方把
+	// Steps 只配成 ["send"]，这道闸也不会被裁掉。返回非 nil 即拒发，零外发。
+	// nil = 不额外判定（既有装配/测试零行为变更）。
+	MandatoryGate func(ctx context.Context, req *ReachSendRequest) error
 }
 
 func DefaultSendPipelineConfig(adapter ChannelAdapter) SendPipelineConfig {

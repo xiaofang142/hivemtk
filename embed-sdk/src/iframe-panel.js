@@ -121,7 +121,7 @@ export class IframePanel {
     var extraQ = ''
     if (this.welcome) extraQ += '&welcome=' + encodeURIComponent(this.welcome)
     if (this.lang) extraQ += '&lang=' + encodeURIComponent(this.lang)
-    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}?mcwParent=${encodeURIComponent(window.location.origin)}${extraQ}#/chat/embed/${encodeURIComponent(channelRef)}`
+    iframe.src = `${this.apiBaseURL}/chat/embed/${encodeURIComponent(channelRef)}#/chat/embed/${encodeURIComponent(channelRef)}?mcwParent=${encodeURIComponent(window.location.origin)}${extraQ}`
     iframe.allow = 'clipboard-write'
     if (this.cspNonce) {
       iframe.setAttribute('nonce', this.cspNonce)

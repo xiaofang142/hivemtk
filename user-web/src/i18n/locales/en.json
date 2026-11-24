@@ -38,7 +38,15 @@
     "revoke": "Revoke local authorization",
     "stepsLabel": "Shop connection steps",
     "helpButton": "Show operation guide",
-    "states": { "unknown": "Not checked", "unconfigured": "Unconfigured", "connecting": "Authorization pending", "ready": "Connection ready (actions remain blocked)", "reauth": "Reauthorization required", "refreshing": "Credential refresh pending", "revoked": "Locally revoked" },
+    "states": {
+      "unknown": "Not checked",
+      "unconfigured": "Unconfigured",
+      "connecting": "Authorization pending",
+      "ready": "Connection ready (actions remain blocked)",
+      "reauth": "Reauthorization required",
+      "refreshing": "Credential refresh pending",
+      "revoked": "Locally revoked"
+    },
     "errors": {
       "statusFailed": "Connection status could not be confirmed. Check the target or contact the integration owner before checking again.",
       "startFailed": "A secure authorization page could not be prepared. Check status again; do not resubmit an old attempt.",
@@ -121,12 +129,21 @@
   "pilotContract": {
     "title": "Pilot baseline and contract",
     "boundary": "Validate and save simulated drafts only. Platform, merchant authorization and order postconditions await live validation. Production remains blocked.",
-    "identity": "Existing installation", "tenant": "Current tenant", "configured": "Draft saved", "unconfigured": "Not configured",
+    "identity": "Existing installation",
+    "tenant": "Current tenant",
+    "configured": "Draft saved",
+    "unconfigured": "Not configured",
     "empty": "Configure shop ownership and authorization references, scopes, funds cap, authorizer, observation window, rollback owner, one order, and FA/AR/CH closure commits and tests.",
-    "blockers": "Local validation blockers", "draft": "PilotContract JSON draft", "hint": "Use fake/simulated only. Exclude credentials and customer data. Record engineering minutes separately from platform approval waiting.",
-    "validate": "Validate locally", "save": "Save draft", "retry": "Read again",
-    "loadFailed": "Read failed; configuration state is unknown.", "submitFailed": "Save or validation failed. Check JSON, identity and revision. Reload and merge your draft after a revision conflict.",
-    "saved": "Draft saved; production remains blocked.", "validated": "Local contract checked without saving; production remains blocked."
+    "blockers": "Local validation blockers",
+    "draft": "PilotContract JSON draft",
+    "hint": "Use fake/simulated only. Exclude credentials and customer data. Record engineering minutes separately from platform approval waiting.",
+    "validate": "Validate locally",
+    "save": "Save draft",
+    "retry": "Read again",
+    "loadFailed": "Read failed; configuration state is unknown.",
+    "submitFailed": "Save or validation failed. Check JSON, identity and revision. Reload and merge your draft after a revision conflict.",
+    "saved": "Draft saved; production remains blocked.",
+    "validated": "Local contract checked without saving; production remains blocked."
   },
   "navigation": {
     "breadcrumb": "Breadcrumb",
@@ -531,7 +548,11 @@
     "geoAuditCenter": "Audit Center",
     "geoDualEngine": "Dual-Engine Monitor",
     "geoCapture": "Capture",
-    "geoCaptureLinks": "Capture Links"
+    "geoCaptureLinks": "Capture Links",
+    "businessAccountAuth": "Business Account Auth",
+    "customerImportJob": "Customer Import Jobs",
+    "aiInsightDraft": "AI Insight Drafts",
+    "crossAccountSearch": "Cross-Account Search"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1931,8 +1952,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "Shop authorization connection", "summary": "Check the target shop, then connect using a verified handoff. Unverified live contracts stay blocked.", "target": "Confirm connection target", "targetSummary": "Enter the registered provider identifier and shop ID, then check status. Changing targets clears this attempt.", "status": "Connection and action permissions", "statusSummary": "A ready connection does not authorize actions. EC-01 still checks each action separately.", "actions": "Refresh and local revoke", "actionsSummary": "Refresh uses the current credential version and reloads status on failure. Local revoke cannot confirm remote revocation and preserves your login session." },
-        "pilotContract": { "title": "Pilot contract", "summary": "Check installation and tenant identity, edit a simulated draft and review blockers. Saving never enables production execution.", "identity": "Identity mapping", "identitySummary": "The installation identity is read-only and checked with the current tenant.", "blockers": "Blockers", "blockersSummary": "Review conditions missing before simulated validation.", "draft": "Contract draft", "draftSummary": "Use simulated data only; exclude credentials and customer data." },
+        "merchantConnection": {
+          "title": "Shop authorization connection",
+          "summary": "Check the target shop, then connect using a verified handoff. Unverified live contracts stay blocked.",
+          "target": "Confirm connection target",
+          "targetSummary": "Enter the registered provider identifier and shop ID, then check status. Changing targets clears this attempt.",
+          "status": "Connection and action permissions",
+          "statusSummary": "A ready connection does not authorize actions. EC-01 still checks each action separately.",
+          "actions": "Refresh and local revoke",
+          "actionsSummary": "Refresh uses the current credential version and reloads status on failure. Local revoke cannot confirm remote revocation and preserves your login session."
+        },
+        "pilotContract": {
+          "title": "Pilot contract",
+          "summary": "Check installation and tenant identity, edit a simulated draft and review blockers. Saving never enables production execution.",
+          "identity": "Identity mapping",
+          "identitySummary": "The installation identity is read-only and checked with the current tenant.",
+          "blockers": "Blockers",
+          "blockersSummary": "Review conditions missing before simulated validation.",
+          "draft": "Contract draft",
+          "draftSummary": "Use simulated data only; exclude credentials and customer data."
+        },
         "common": {
           "overview": "What this page is for",
           "action": "Where the key actions are"
@@ -2527,6 +2566,13 @@
           "step2": {
             "description": "Each type is handled differently: a negative hit needs a content correction, a compliance notice needs the wording changed, a push failure needs the quota and URL checked. Alerts that are never confirmed keep piling up and also corrupt the \"unconfirmed alerts\" metric itself. Confirm them when you are done — that confirmation is the only record of your handling rate when you review later."
           }
+        },
+        "commerceOperations": {
+          "title": "Commerce operations",
+          "target": "Use the shop bound to an authorized connection",
+          "draft": "Save intent without executing",
+          "ledger": "Operation ledger",
+          "evidence": "Attestation does not become provider or payment verification. Original failures remain."
         }
       }
     },
@@ -2977,5 +3023,100 @@
   "请填写跟进人账号": "Please enter the owner account",
   "分配失败": "Assignment failed",
   "城市": "City",
-  "地址": "Address"
+  "地址": "Address",
+  "commerce": {
+    "title": "Commerce operations",
+    "boundary": "Submission, acceptance, attestation, money movement and delivery remain separate facts. Simulation does not authorize live release.",
+    "profile": "Business profile",
+    "chooseProfile": "Choose product and region",
+    "shop": "Shop identifier",
+    "shopHint": "Use the shop bound to an authorized connection",
+    "order": "Mirror order ID",
+    "refresh": "Refresh operations",
+    "role": "Required role",
+    "providerMissing": "No verified provider is configured; native writes remain closed.",
+    "newOperation": "Create a business intent",
+    "action": "Action",
+    "chooseAction": "Choose a profile action",
+    "sourceVersion": "Authoritative order version",
+    "sourceVersionHint": "Use a fresh authoritative read; do not guess",
+    "intent": "Business intent key",
+    "intentHint": "Preserve this key when retrying the same intent",
+    "revision": "Explicit revision",
+    "required": "Required fields",
+    "parameterHint": "Follow the contract; money is an integer in minor units",
+    "obligations": "Confirm costs and subsequent obligations",
+    "createDraft": "Save intent without executing",
+    "operations": "Operation ledger",
+    "operationId": "Operation ID",
+    "state": "Business state",
+    "mode": "Execution mode",
+    "evidenceLevel": "Verification level",
+    "funds": "Funds state",
+    "details": "Operation and postconditions",
+    "selectOperation": "Select an operation and check approval scope and evidence.",
+    "empty": "Choose an authorized shop and refresh, or save an intent.",
+    "unknownHint": "Outcome unknown: retain the operation and reservations. Observe or verify manually; do not resubmit or change write route.",
+    "evidenceReference": "Manual evidence reference",
+    "evidenceHint": "Use a controlled reference without secrets or personal data",
+    "nativeState": "Provider state",
+    "outcome": "Attested outcome",
+    "appendEvidence": "Append manual attestation",
+    "manualHint": "Attestation does not become provider or payment verification. Original failures remain.",
+    "confirmTransition": "Check shop, action, digest, costs, obligations and approval scope. The backend rechecks permission and versions.",
+    "loadError": "Read failed or access denied. Check shop authorization and connection.",
+    "createError": "Save failed. Check required fields, integer amounts, versions and permissions.",
+    "actionError": "Completion is unconfirmed. Refresh and inspect the latest state and rejection reason.",
+    "fields": {
+      "recipient": "Recipient",
+      "phone": "Phone",
+      "address": "Address",
+      "province": "Province or state",
+      "city": "City",
+      "district": "District",
+      "amount_minor": "Amount (integer minor units)",
+      "currency": "Currency",
+      "quantity": "Quantity",
+      "line_id": "Order line",
+      "case_ref": "Case reference",
+      "reason": "Reason",
+      "sku": "Target SKU",
+      "logistics_ref": "Logistics reference",
+      "warehouse_ref": "Warehouse reference",
+      "payment_path": "Payment path"
+    },
+    "transitions": {
+      "preflight": "Preflight",
+      "approve": "Approve",
+      "submit": "Submit",
+      "observe": "Observe",
+      "cancel": "Cancel before dispatch",
+      "claim": "Claim workbench task"
+    },
+    "detail": {
+      "id": "Operation ID",
+      "state": "Business state",
+      "native_state": "Provider state",
+      "mode": "Execution mode",
+      "write_owner": "Write owner",
+      "approver_id": "Approver",
+      "owner_id": "Owner",
+      "evidence_level": "Verification level",
+      "evidence_ref": "Evidence reference",
+      "external_ref": "External reference",
+      "funds_state": "Funds state",
+      "manual_state": "Manual handoff",
+      "amount_minor": "Amount (minor units)",
+      "currency": "Currency",
+      "actual_attempts": "Actual attempts",
+      "unknown_since": "Unknown since",
+      "due_at": "Next observation",
+      "expires_at": "Preflight expiry",
+      "failure_reason": "Failure reason",
+      "result_summary": "Result summary",
+      "live_status": "Live validation",
+      "version": "Operation version",
+      "preflight_hash": "Preflight digest"
+    }
+  }
 }

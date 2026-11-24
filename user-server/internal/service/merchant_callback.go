@@ -74,6 +74,38 @@ type MerchantCallbackService interface {
 	AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error
 }
 
+// MerchantCallbackConsumer 隔离后台补偿契约，避免入站调用方依赖消费能力。
+type MerchantCallbackConsumer interface {
+	ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error)
+	AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error
+}
+
+func NewMerchantCallbackConsumer(repo repository.MerchantCallbackRepository) MerchantCallbackConsumer {
+	return &merchantCallbackService{repo: repo}
+}
+
+func (s *merchantCallbackService) ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error) {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || tenant.IsSystemScope(ctx) || subscriptionID == 0 {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.ReadCompensationPage(tenant.OnlyTenant(ctx, id), subscriptionID, limit)
+}
+
+func (s *merchantCallbackService) AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || tenant.IsSystemScope(ctx) || page.TenantID != id || page.SubscriptionID == 0 {
+		return repository.ErrMerchantCallbackBinding
+	}
+	if s.repo == nil {
+		return repository.ErrMerchantCallbackStorage
+	}
+	return s.repo.AcknowledgeCompensationPage(tenant.OnlyTenant(ctx, id), page, appliedEventIDs)
+}
+
 type merchantCallbackService struct {
 	repo        repository.MerchantCallbackRepository
 	connections repository.MerchantConnectionRepository
@@ -155,31 +187,6 @@ func (s *merchantCallbackService) Ingest(ctx context.Context, provider string, b
 		return MerchantCallbackResult{Ack: contract.Retry, TrustedAck: true}
 	}
 	return MerchantCallbackResult{Ack: contract.Success, EventID: id, Duplicate: duplicate, TrustedAck: true}
-}
-
-// ReadCompensationPage 只做边界守卫与委托：租户上下文必须存在且非系统 scope，
-// 其余（订阅/连接/同意/凭证/fence/分页钳制）由 repository 统一 fail-closed 校验。
-func (s *merchantCallbackService) ReadCompensationPage(ctx context.Context, subscriptionID uint, limit int) (repository.MerchantCallbackCompensationPage, error) {
-	id, ok := tenant.FromContext(ctx)
-	if !ok || id == 0 || tenant.IsSystemScope(ctx) || subscriptionID == 0 {
-		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackBinding
-	}
-	if s.repo == nil {
-		return repository.MerchantCallbackCompensationPage{}, repository.ErrMerchantCallbackStorage
-	}
-	return s.repo.ReadCompensationPage(ctx, subscriptionID, limit)
-}
-
-// AcknowledgeCompensationPage 同样只做边界守卫与委托，精确页面 fence 与集合校验在 repository 内完成。
-func (s *merchantCallbackService) AcknowledgeCompensationPage(ctx context.Context, page repository.MerchantCallbackCompensationPage, appliedEventIDs []uint) error {
-	id, ok := tenant.FromContext(ctx)
-	if !ok || id == 0 || tenant.IsSystemScope(ctx) {
-		return repository.ErrMerchantCallbackBinding
-	}
-	if s.repo == nil {
-		return repository.ErrMerchantCallbackStorage
-	}
-	return s.repo.AcknowledgeCompensationPage(ctx, page, appliedEventIDs)
 }
 
 func merchantCallbackEventValid(provider string, e VerifiedMerchantEvent) bool {

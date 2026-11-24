@@ -54,6 +54,16 @@ export interface PageTour {
  */
 export function createPageTours(t: (key: string) => string): Record<string, PageTour> {
   return {
+    '/commerce/operations': {
+      route: '/commerce/operations',
+      pageKey: 'commerceOperations',
+      steps: [
+        { element: '.commerce-target', title: t('setup.onboarding.page.commerceOperations.title'), description: t('setup.onboarding.page.commerceOperations.target'), side: 'top' },
+        { element: '.commerce-create', title: t('setup.onboarding.page.commerceOperations.title'), description: t('setup.onboarding.page.commerceOperations.draft'), side: 'top' },
+        { element: '.commerce-list', title: t('setup.onboarding.page.commerceOperations.title'), description: t('setup.onboarding.page.commerceOperations.ledger'), side: 'top' },
+        { element: '.commerce-detail', title: t('setup.onboarding.page.commerceOperations.title'), description: t('setup.onboarding.page.commerceOperations.evidence'), side: 'top' }
+      ]
+    },
     '/integration/list': {
       route: '/integration/list',
       pageKey: 'merchantConnection',

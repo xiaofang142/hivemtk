@@ -1,1 +1,0 @@
-{"code":0,"message":"ok","data":{"method":"sequential","result":{"llr":8.109302162163287,"upper_bound":2.8903717578961645,"lower_bound":-2.251291798606495,"verdict":"accept_H1","traffic":200,"alpha":0.05,"beta":0.1}}}

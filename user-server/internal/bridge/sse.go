@@ -33,6 +33,7 @@ import (
 	"sync"
 	"time"
 
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/service"
 
@@ -176,6 +177,34 @@ type OutboundPushClaimer interface {
 	ClaimOutboundForPush(ctx context.Context, id uint64, channel, accountID, msgType string, claimTimeout time.Duration) (bool, error)
 }
 
+// sseTenantScope 总线键的租户命名空间。
+//
+// off 模式全实例只有一个隐式租户,必须与旧键行为等价(否则单机部署会复现
+// "连着却判离线");on 模式缺租户落进独立命名空间 0,绝不与任何真实租户共享。
+func sseTenantScope(ctx context.Context) uint {
+	// FA-SSE-01 二次审核修复：off 模式必须先于 ctx 租户判断。off 模式全实例只有一个
+	// 隐式租户，旧键行为无条件用 DefaultTenantID；若先读 ctx 租户，带租户的发布方（如
+	// 本地许可持有者）会写出 501|... 键，而无 ctx 的订阅方仍监听 1|...，导致合法发布
+	// 收不到事件（回归：TestOutboundDelivery_SSEStoredTypeAndEvidenceRechecked）。
+	if !tenant.IsMultiTenant() {
+		return tenant.DefaultTenantID
+	}
+	if id, ok := tenant.FromContext(ctx); ok && id != 0 {
+		return id
+	}
+	return 0
+}
+
+// sseSubscriptionKey 渠道账号订阅键必须携带租户：同账号不同租户绝不能共享总线队列。
+func sseSubscriptionKey(tenantID uint, channel, accountID string) string {
+	return strconv.FormatUint(uint64(tenantID), 10) + "|" + channel + ":" + accountID
+}
+
+// sseConversationKey 会话级订阅键同样按租户命名空间隔离。
+func sseConversationKey(tenantID uint, conversationID string) string {
+	return strconv.FormatUint(uint64(tenantID), 10) + "|conv:" + conversationID
+}
+
 // SSEBus 事件通知总线：message_hub 写入后立即通知 SSE 连接
 //
 // 设计要点：
@@ -207,8 +236,13 @@ func NewSSEBus() *SSEBus {
 // Subscribe 订阅指定 channel:account_id 的事件
 // 返回接收通道和取消函数
 func (b *SSEBus) Subscribe(channel, accountID string) (chan SSEEvent, func()) {
+	return b.SubscribeCtx(context.Background(), channel, accountID)
+}
+
+// SubscribeCtx 用调用方上下文中的可信租户建立订阅；缺租户不会落到全局共享键。
+func (b *SSEBus) SubscribeCtx(ctx context.Context, channel, accountID string) (chan SSEEvent, func()) {
 	ch := make(chan SSEEvent, b.buffer)
-	key := channel + ":" + accountID
+	key := sseSubscriptionKey(sseTenantScope(ctx), channel, accountID)
 	b.mu.Lock()
 	b.subs[key] = append(b.subs[key], ch)
 	b.mu.Unlock()
@@ -230,9 +264,15 @@ func (b *SSEBus) Subscribe(channel, accountID string) (chan SSEEvent, func()) {
 
 // SubscribeByConversation 订阅指定 conversation_id 的事件（用于会话级精准推送）
 func (b *SSEBus) SubscribeByConversation(conversationID string) (chan SSEEvent, func()) {
+	return b.SubscribeByConversationCtx(context.Background(), conversationID)
+}
+
+// SubscribeByConversationCtx 会话级订阅也携带可信租户，防止同名会话跨租户串投。
+func (b *SSEBus) SubscribeByConversationCtx(ctx context.Context, conversationID string) (chan SSEEvent, func()) {
 	ch := make(chan SSEEvent, b.buffer)
+	key := sseConversationKey(sseTenantScope(ctx), conversationID)
 	b.mu.Lock()
-	b.subs[conversationID] = append(b.subs[conversationID], ch)
+	b.subs[key] = append(b.subs[key], ch)
 	b.mu.Unlock()
 
 	cancel := func() {
@@ -288,16 +328,17 @@ func (b *SSEBus) setOutboundClaimer(c OutboundPushClaimer, cursorOnly bool) {
 // 只有「有人在线」时才值得为推送认领——否则认领回来没人收，行要压到可见性超时才回到待办，
 // 白白给一条本来可以由轮询立刻取走的消息加一轮超时延迟。
 // 两个维度都要看：Publish 对 conv 级与账号级订阅都投递，只查一边会把纯会话级订阅者饿死。
-func (b *SSEBus) hasSubscribersFor(ev SSEEvent) bool {
+func (b *SSEBus) hasSubscribersFor(ctx context.Context, ev SSEEvent) bool {
+	tenantID := sseTenantScope(ctx)
 	key := ""
 	if platform, ok := ev.Data["platform"].(string); ok {
 		if accountID, ok2 := ev.Data["account_id"].(string); ok2 {
-			key = platform + ":" + accountID
+			key = sseSubscriptionKey(tenantID, platform, accountID)
 		}
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	if ev.ConversationID != "" && len(b.subs[ev.ConversationID]) > 0 {
+	if ev.ConversationID != "" && len(b.subs[sseConversationKey(tenantID, ev.ConversationID)]) > 0 {
 		return true
 	}
 	return key != "" && len(b.subs[key]) > 0
@@ -311,7 +352,27 @@ func (b *SSEBus) HasSubscribers(channel, accountID string) bool {
 	if channel == "" || accountID == "" {
 		return false
 	}
-	key := channel + ":" + accountID
+	// 无租户上下文不是默认租户；不得借共享键读取他人订阅态。
+	id := sseTenantScope(context.Background())
+	if id == 0 {
+		return false
+	}
+	key := sseSubscriptionKey(id, channel, accountID)
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return len(b.subs[key]) > 0
+}
+
+// HasSubscribersCtx 用可信上下文判定在线，缺租户恒为离线。
+func (b *SSEBus) HasSubscribersCtx(ctx context.Context, channel, accountID string) bool {
+	if channel == "" || accountID == "" {
+		return false
+	}
+	id := sseTenantScope(ctx)
+	if id == 0 {
+		return false
+	}
+	key := sseSubscriptionKey(id, channel, accountID)
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return len(b.subs[key]) > 0
@@ -334,7 +395,7 @@ func BridgeChannelOnline(ctx context.Context, channel, accountID string) bool {
 	if ch == "" || accountID == "" {
 		return false
 	}
-	if GlobalSSEBus.HasSubscribers(ch, accountID) {
+	if GlobalSSEBus.HasSubscribersCtx(ctx, ch, accountID) {
 		return true
 	}
 	if GlobalBridgeAccountRepo == nil {
@@ -398,7 +459,7 @@ func (b *SSEBus) tryClaimForPush(ctx context.Context, ev SSEEvent, needSubscribe
 		logger.Ctx(ctx).Warn().Uint64("hub_id", hubID).Str("reason_code", "delivery_binding_mismatch").Msg("[SSE] 事件消息类型不一致，暂停出站")
 		return false, true
 	}
-	if needSubscriber && !b.hasSubscribersFor(ev) {
+	if needSubscriber && !b.hasSubscribersFor(ctx, ev) {
 		logger.Ctx(ctx).Debug().
 			Uint64("hub_id", hubID).Str("channel", channel).Str("account_id", accountID).
 			Msg("[SSE] 无在线订阅者，不认领（留给轮询/下次补拉）")
@@ -447,8 +508,9 @@ func (b *SSEBus) PublishCtx(ctx context.Context, event SSEEvent) {
 	hasConvSubs := false
 	hasBroadSubs := false
 
+	tenantID := sseTenantScope(ctx)
 	if event.ConversationID != "" {
-		if chs, ok := b.subs[event.ConversationID]; ok {
+		if chs, ok := b.subs[sseConversationKey(tenantID, event.ConversationID)]; ok {
 			hasConvSubs = true
 			for _, ch := range chs {
 				select {
@@ -462,7 +524,9 @@ func (b *SSEBus) PublishCtx(ctx context.Context, event SSEEvent) {
 
 	if platform, ok1 := event.Data["platform"].(string); ok1 {
 		if accountID, ok2 := event.Data["account_id"].(string); ok2 {
-			broadKey := platform + ":" + accountID
+			// 广播键必须与订阅键同源(sseSubscriptionKey):订阅侧带租户、发布侧不带时,
+			// 账号级广播永远匹配不到订阅者,表现为"连着却收不到"。
+			broadKey := sseSubscriptionKey(tenantID, platform, accountID)
 			if chs, ok := b.subs[broadKey]; ok {
 				hasBroadSubs = true
 				for _, ch := range chs {
@@ -543,7 +607,7 @@ func markBridgeAccountOffline(ctx context.Context, channel, accountID string) {
 	if GlobalBridgeAccountRepo == nil || channel == "" || accountID == "" {
 		return
 	}
-	if GlobalSSEBus.HasSubscribers(channel, accountID) {
+	if GlobalSSEBus.HasSubscribersCtx(ctx, channel, accountID) {
 		return
 	}
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), bridgeAccountStateWriteTimeout)
@@ -653,11 +717,11 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 		flusher.Flush()
 	}
 
-	busCh, busCancel := GlobalSSEBus.Subscribe(channel, accountID)
+	busCh, busCancel := GlobalSSEBus.SubscribeCtx(ctx, channel, accountID)
 	logger.Ctx(ctx).Info().
 		Str("channel", channel).
 		Str("account_id", accountID).
-		Str("bus_key", channel+":"+accountID).
+		Str("bus_key", sseSubscriptionKey(sseTenantScope(ctx), channel, accountID)).
 		Msg("[SSE] subscribed to SSEBus")
 	// defer 顺序即语义：LIFO 下后注册的先执行 —— 必须先摘掉本流订阅，再判
 	// 「该账号最后一条流是否退出了」。反序注册时判离线会看见自己那条还挂着的订阅，

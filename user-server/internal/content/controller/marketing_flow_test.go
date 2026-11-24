@@ -22,7 +22,7 @@ import (
 func setupMarketingFlowTestDB(t *testing.T) *gorm.DB {
 	return testutil.NewTestDB(t,
 		&contentmodel.MarketingFlow{},
-		&contentmodel.FlowExecution{},
+		&contentmodel.FlowExecution{}, &contentmodel.FlowNodeAttempt{},
 		&cdpmodel.UserTag{},
 	)
 }

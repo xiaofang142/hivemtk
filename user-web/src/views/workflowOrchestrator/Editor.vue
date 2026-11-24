@@ -266,6 +266,9 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Lightning, Operation, Share, ForkSpoon, VideoPlay } from '@element-plus/icons-vue'
 import { workflowOrchestratorApi } from '@/api/workflowOrchestrator.js'
+// FA-WF-09：普通保存与另存共用同一确定性序列化函数（config_text → config）
+import { buildPayloadDefinition } from '../../utils/workflowDefinition.js'
+import { isConfirmCancel, actionErrorMessage } from '../../utils/workflowAction.js'
 
 const route = useRoute()
 const workflowId = computed(() => route.params.workflow_id || '')
@@ -642,32 +645,13 @@ const save = async () => {
     ElMessage.error(err)
     return
   }
-  const payloadNodes = definition.nodes.map((n) => {
-    let config = {}
-    if (n.config_text) {
-      try {
-        config = JSON.parse(n.config_text)
-      } catch (e) {
-        ElMessage.error(`节点 ${n.id} 的配置不是合法 JSON: ${e.message}`)
-        throw e
-      }
-    }
-    return {
-      id: n.id,
-      type: n.type,
-      name: n.label || n.name || n.id,
-      label: n.label || '',
-      x: n.x || 0,
-      y: n.y || 0,
-      config
-    }
-  });
-  const payloadEdges = definition.edges.map((e) => ({
-    source: e.source || e.from || '',
-    target: e.target || e.to || '',
-    label: e.label || ''
-  }))
-  const payloadDefinition = { nodes: payloadNodes, edges: payloadEdges }
+  let payloadDefinition
+  try {
+    payloadDefinition = buildPayloadDefinition(definition)
+  } catch (e) {
+    ElMessage.error(e?.message || '配置序列化失败')
+    return
+  }
   try {
     await workflowOrchestratorApi.updateVersion(currentVersion.value.id, {
       name: currentVersion.value.name,
@@ -687,12 +671,20 @@ const saveAsNew = async () => {
     ElMessage.error(err)
     return
   }
+  // FA-WF-09：另存同样经确定性序列化，确保 config_text → config，失败不显示成功
+  let payloadDefinition
+  try {
+    payloadDefinition = buildPayloadDefinition(definition)
+  } catch (e) {
+    ElMessage.error(e?.message || '配置序列化失败')
+    return
+  }
   try {
     const _result = await workflowOrchestratorApi.createVersion({
       workflow_id: workflowId.value,
       name: `${workflowId.value}_v${versions.value.length + 1}`,
       description: currentVersion.value?.description || '',
-      definition
+      definition: payloadDefinition
     })
     ElMessage.success('新版本创建成功')
     loadVersions()
@@ -708,7 +700,12 @@ const publishCurrent = async () => {
     await workflowOrchestratorApi.publishVersion(currentVersion.value.id)
     ElMessage.success('发布成功')
     loadVersions()
-  } catch { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch (e) {
+    // FA-WF-11：用户取消安静返回；API/网络失败显式报错并回读版本列表。
+    if (isConfirmCancel(e)) return
+    ElMessage.error(actionErrorMessage('发布', e))
+    loadVersions()
+  }
 }
 
 onMounted(loadVersions)

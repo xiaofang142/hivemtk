@@ -2170,7 +2170,7 @@ paths:
       - Bill
   /api/bridge/token/reset:
     post:
-      description: 旧 token 转入灰度位（PREV），生成并返回新 token 明文（仅此一次）
+      description: 旧 token 转入灰度位（PREV），生成并返回新 token 明文
       responses:
         "200":
           description: OK
@@ -2183,7 +2183,7 @@ paths:
       - Bridge
   /api/bridge/token/status:
     get:
-      description: 返回主/灰度 token 是否已配置（不回显明文）
+      description: 返回主/灰度 token 是否已配置，并回显当前明文（便于管理员再次复制）
       responses:
         "200":
           description: OK

@@ -35,7 +35,7 @@
           <el-input
             v-model="newToken"
             readonly
-            placeholder="点击「生成新凭证」后此处显示一次明文"
+            placeholder="点击「生成新凭证」后此处显示明文"
           >
             <template #append>
               <el-button
@@ -55,7 +55,7 @@
           >
             生成新凭证(轮换)
           </el-button>
-          <span class="ml-3 text-xs text-gray-400">轮换后旧凭据进入灰度窗口仍可用；此明文仅显示一次</span>
+          <span class="ml-3 text-xs text-gray-400">轮换后旧凭据进入灰度窗口仍可用；凭证会保留显示，可随时复制到新渠道</span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -74,7 +74,9 @@ const resetting = ref(false)
 
 const loadStatus = async () => {
   try {
-    status.value = (await getBridgeTokenStatus()) || {}
+    const s = (await getBridgeTokenStatus()) || {}
+    status.value = s
+    newToken.value = s.token || ''
   } catch (e) { console.warn("[request] 后台调用失败(已忽略):", e) }
 }
 

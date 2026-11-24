@@ -143,6 +143,16 @@
       </el-col>
     </el-row>
 
+    <el-card class="chart-card" shadow="never">
+      <template #header><span>线索角色分布（需求方/供货方/上下游）</span></template>
+      <div class="role-grid">
+        <div v-for="r in roleDisplay" :key="r.key" class="role-item">
+          <div class="role-label">{{ r.label }}</div>
+          <div class="role-value" :style="{ color: r.color }">{{ r.total }}</div>
+        </div>
+      </div>
+    </el-card>
+
     
     <el-row :gutter="16">
       <el-col
@@ -303,17 +313,31 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, DataLine, CircleCheck, Warning, Plus } from '@element-plus/icons-vue'
 import { safeInit } from '@/utils/echarts'
 import { clueApi } from '@/api/clue'
+import { getLeadMiningClueStats } from '@/api/leadMining'
 import { getClueTypeLabel } from '@/constants/cardPlatform';
 
 const dateRange = ref([])
 const loading = ref(false)
 const summary = ref({ total: 0, verified: 0, unverified: 0, verifyRate: 0, thisMonth: 0 })
 const typeStats = ref([])
+const roleStats = ref([])
+const roleTotal = ref(0)
+const roleMeta = [
+  { key: 'demand', label: '需求方', color: '#EF4444' },
+  { key: 'supply', label: '供货方', color: '#10B981' },
+  { key: 'resource', label: '资源方/上下游', color: '#F59E0B' },
+  { key: 'broker', label: '中介', color: '#6366F1' },
+  { key: 'unknown', label: '未知', color: '#909399' }
+]
+const roleDisplay = computed(() => {
+  const map = new Map((roleStats.value || []).map(r => [String(r.lead_role || 'unknown'), Number(r.total || 0)]))
+  return roleMeta.map(m => ({ ...m, total: map.get(m.key) || 0 }))
+})
 const sourceStats = ref([])
 const trendData = ref([])
 const trendType = ref('line')
@@ -399,7 +423,10 @@ const fetchAll = async () => {
   loading.value = true
   try {
     const hasRange = Array.isArray(dateRange.value) && dateRange.value.length === 2 && dateRange.value[0] && dateRange.value[1]
-    const statsRes = hasRange ? await fetchRangeStats(dateRange.value) : await clueApi.statistics()
+    const [statsRes, lmStatsRes] = await Promise.all([
+      hasRange ? fetchRangeStats(dateRange.value) : clueApi.statistics(),
+      getLeadMiningClueStats().catch(() => null)
+    ])
     const statsList = Array.isArray(statsRes) ? statsRes : (statsRes?.list || [])
     typeStats.value = statsList.map((it) => ({
       type: it.type,
@@ -407,6 +434,9 @@ const fetchAll = async () => {
       verify_total: it.verify_total || 0,
       today: it.today || 0
     }))
+    const lm = lmStatsRes?.data?.data ?? lmStatsRes?.data ?? lmStatsRes
+    roleStats.value = Array.isArray(lm?.by_lead_role) ? lm.by_lead_role : []
+    roleTotal.value = Number(lm?.total || 0)
 
     // 「本月新增」「每日趋势」「来源分布」都需要按天的真实数据；
     // 无日期区间时才拉（有区间时趋势/本月口径与区间无关，保持空态语义更诚实）。
@@ -674,5 +704,9 @@ onBeforeUnmount(() => {
       height: 320px;
     }
   }
+  .role-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .role-item { padding: 12px; border: 1px solid #ebeef5; border-radius: 8px; background: #fafafa; }
+  .role-label { font-size: 13px; color: #909399; }
+  .role-value { font-size: 24px; font-weight: 600; margin-top: 6px; }
 }
 </style>

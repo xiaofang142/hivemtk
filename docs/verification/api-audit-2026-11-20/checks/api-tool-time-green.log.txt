@@ -1,4 +1,0 @@
-ok  	hivemtk-user/internal/repository	31.348s
-ok  	hivemtk-user/internal/aiagent/mcp	0.768s
-ok  	hivemtk-user/internal/app	8.866s
-ok  	hivemtk-user/internal/approval	0.312s

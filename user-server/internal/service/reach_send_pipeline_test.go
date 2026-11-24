@@ -167,7 +167,14 @@ func TestSendPipeline_RateLimited(t *testing.T) {
 }
 
 func TestSendPipeline_RetryWithFlakyAdapter(t *testing.T) {
-	adapter := NewFlakyAdapter(2)
+	attempts := 0
+	adapter := NewFuncChannelAdapter(func(ctx context.Context, req *ReachSendRequest) (string, error) {
+		attempts++
+		if attempts <= 2 {
+			return "", &ChannelError{Category: CategoryRateLimited, Retryable: true, StatusCode: 429, Raw: "fixture rejected"}
+		}
+		return "msg-after-rejection", nil
+	})
 	cfg := DefaultSendPipelineConfig(adapter)
 	cfg.RetryPolicy = SendRetryPolicy{
 		MaxRetries:    3,
@@ -201,7 +208,7 @@ func TestSendPipeline_RetryWithFlakyAdapter(t *testing.T) {
 }
 
 func TestSendPipeline_RetryExhaustedAllFail(t *testing.T) {
-	adapter := NewAlwaysFailAdapter(errors.New("network error"))
+	adapter := NewAlwaysFailAdapter(&ChannelError{Category: CategoryRateLimited, Retryable: true, StatusCode: 429, Raw: "fixture rejected"})
 	cfg := DefaultSendPipelineConfig(adapter)
 	cfg.RetryPolicy = SendRetryPolicy{
 		MaxRetries:    2,
@@ -230,7 +237,7 @@ func TestSendPipeline_RetryExhaustedAllFail(t *testing.T) {
 }
 
 func TestSendPipeline_FallbackToBackupChannel(t *testing.T) {
-	primaryAdapter := NewAlwaysFailAdapter(errors.New("primary down"))
+	primaryAdapter := NewAlwaysFailAdapter(&ChannelError{Category: CategoryBadRequest, StatusCode: 400, Raw: "fixture rejected"})
 	backupAdapter := newSuccessAdapter("backup-msg")
 	cfg := DefaultSendPipelineConfig(primaryAdapter)
 	cfg.FallbackAdapters = map[string]ChannelAdapter{
@@ -243,10 +250,11 @@ func TestSendPipeline_FallbackToBackupChannel(t *testing.T) {
 		RecipientID: "13800138000",
 		Content:     "Hello",
 		Fallback: &FallbackConfig{
-			Enabled:       true,
-			BackupChannel: "email",
-			BackupAccount: "backup-acc-1",
-			MaxAttempts:   1,
+			Enabled:           true,
+			BackupChannel:     "email",
+			BackupAccount:     "backup-acc-1",
+			BackupRecipientID: "fixture@example.invalid",
+			MaxAttempts:       1,
 		},
 	}
 	resp := pipeline.Send(context.Background(), req)
@@ -787,30 +795,29 @@ func TestComputeBackoff_Fixed(t *testing.T) {
 	}
 }
 
-func TestIsRetryable_DefaultAllRetryable(t *testing.T) {
+func TestIsRetryable_DefaultRejectsUncertainOutcome(t *testing.T) {
 	p := &defaultSendPipeline{}
-	if !p.isRetryable(context.Background(), errors.New("any error"), nil) {
-		t.Error("默认所有错误应该可重试")
-	}
-	if !p.isRetryable(context.Background(), errors.New("network error"), []string{}) {
-		t.Error("空 RetryableErrors 应该所有错误可重试")
+	for _, err := range []error{errors.New("any error"), errors.New("network error"), context.DeadlineExceeded} {
+		if p.isRetryable(context.Background(), err, nil) {
+			t.Error("未知或网络结果不能安全重试")
+		}
 	}
 }
 
 func TestIsRetryable_SpecificErrors(t *testing.T) {
 	p := &defaultSendPipeline{}
-	retryable := []string{"timeout", "connection reset"}
-	if !p.isRetryable(context.Background(), errors.New("request timeout"), retryable) {
-		t.Error("'timeout' 应该匹配")
+	confirmed := &ChannelError{Category: CategoryRateLimited, Retryable: true, StatusCode: 429, Raw: "fixture rejected"}
+	if !p.isRetryable(context.Background(), confirmed, []string{"fixture rejected"}) {
+		t.Error("明确未受理且策略允许应可重试")
 	}
-	if !p.isRetryable(context.Background(), errors.New("connection reset by peer"), retryable) {
-		t.Error("'connection reset' 应该匹配")
+	if p.isRetryable(context.Background(), confirmed, []string{"other"}) {
+		t.Error("不匹配策略不得重试")
 	}
-	if p.isRetryable(context.Background(), errors.New("invalid argument"), retryable) {
-		t.Error("'invalid argument' 不应该匹配")
+	if p.isRetryable(context.Background(), errors.New("request timeout"), []string{"timeout"}) {
+		t.Error("字符串匹配不能提升未知结果为安全重试")
 	}
-	if p.isRetryable(context.Background(), nil, retryable) {
-		t.Error("nil 错误不应该可重试")
+	if p.isRetryable(context.Background(), nil, nil) {
+		t.Error("nil 错误不应重试")
 	}
 }
 
@@ -994,8 +1001,8 @@ func TestSendPipeline_RetryStopsOnContextCancel(t *testing.T) {
 	if resp.Success {
 		t.Fatal("已取消上下文，期望发送失败")
 	}
-	if sendCalls != 1 {
-		t.Errorf("ctx 取消后仍重发 %d 次，期望 1 次（首次失败后即刻停止）", sendCalls)
+	if sendCalls != 0 {
+		t.Errorf("ctx 已取消不得触达提供方，实际 %d 次", sendCalls)
 	}
 }
 

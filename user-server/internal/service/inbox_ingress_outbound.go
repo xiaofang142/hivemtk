@@ -30,6 +30,8 @@ func (s *InboxIngressService) MarkOutboundDelivered(ctx context.Context, hub *mo
 }
 
 func (s *InboxIngressService) DeliverOutbound(ctx context.Context, h *model.MessageHub) error {
+	// EC-05 note: this enqueues an outbox row (local evidence) regardless of human-takeover lock on the session.
+	// “人工接管停旧任务” is not enforced here; if required, gate enqueue/cancel by session lock + conversation mapping.
 	if h == nil {
 		return errors.New("nil hub message")
 	}
@@ -161,6 +163,9 @@ func deliverClaimThrottled(recentClaims int64, limit int) bool {
 // 超限本轮返回空列表——不报错、不动 pending 行、不落失败态，下个窗口自动恢复；
 // 前端限速（rate-limiter 三层拟人节奏）失效/被篡改/AI 批量误生成时的最后防线。
 // 计数查询失败按放行处理（fail-open）：兜底限速不应把正常下发卡死在自己的故障上。
+// EC-05（人工接管停旧任务）说明：当前未按会话/人工接管锁过滤队列；若产品要求“人工接管后停止旧的
+// AI 排队发送任务”，需在此或上游增加会话维度的停发/取消策略（例如将相关 pending 标记为已取消/不再认领），
+// 并与会话锁（IsSessionLockedForHuman）及 conversation 映射对齐（本次未实现，避免误伤）。
 func (s *InboxIngressService) ClaimPendingOutbound(ctx context.Context, channel, accountID string, limit int) ([]*model.MessageHub, error) {
 	if s.hubRepo == nil || limit <= 0 {
 		return nil, nil

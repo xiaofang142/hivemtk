@@ -431,9 +431,19 @@ const onRefreshPlatformStatus = async () => {
     const resp = await refreshPlatformStatus(bundle.id)
     const data = resp?.data || resp
     if (data) {
-      bundle.platform_status = data.platform_status || ''
-      bundle.platform_review_note = data.platform_review_note || ''
-      ElMessage.success('已刷新平台审核状态')
+      // FA-ASSET-SUBMIT-01：synced=false = 平台实态已拿到但本地落库失败。
+      // 分别展示平台实态与本地投影，提示重试对账，不报「已刷新」成功。
+      if (data.synced === false) {
+        bundle.platform_status = data.local_status || bundle.platform_status
+        bundle.platform_review_note = data.platform_review_note || ''
+        ElMessage.warning(
+          `平台实态：${data.platform_status || '未知'}${data.platform_review_note ? '（' + data.platform_review_note + '）' : ''}；本地仍为：${data.local_status || '未知'}，请重试对账`,
+        )
+      } else {
+        bundle.platform_status = data.platform_status || ''
+        bundle.platform_review_note = data.platform_review_note || ''
+        ElMessage.success('已刷新平台审核状态')
+      }
     }
   } catch {
     // 失败原因 request.js 已统一提示
@@ -614,9 +624,20 @@ const handlePublish = async () => {
       return
     }
     try {
-      await submitToPlatform(bundle.id)
-      bundle.platform_status = 'pending'
-      ElMessage.success('本地已发布，并已提交平台审核上架')
+      const submitResp = await submitToPlatform(bundle.id)
+      const submitData = submitResp?.data || submitResp
+      // FA-ASSET-SUBMIT-01：平台动作已生效但本地投影写失败时后端回 202 synced=false，
+      // 此时不能无条件把状态置成 pending 并显示成功。
+      if (submitData && submitData.synced === false) {
+        bundle.platform_status = submitData.platform_status || bundle.platform_status
+        bundle.platform_review_note = submitData.platform_review_note || ''
+        ElMessage.warning(
+          `本地已发布；平台操作已生效，但本地状态同步失败（平台实态：${submitData.platform_status || '未知'}），请刷新状态对账`,
+        )
+      } else {
+        bundle.platform_status = 'pending'
+        ElMessage.success('本地已发布，并已提交平台审核上架')
+      }
     } catch (e) {
       ElMessage.warning('本地已发布；提交平台审核失败：' + (e?.message || e))
     }

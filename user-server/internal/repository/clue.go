@@ -21,6 +21,7 @@ type ClueRepository interface {
 	GetClueList(ctx context.Context, page int, limit int) ([]*model.Clue, int64, error)
 	Delete(ctx context.Context, id string) error
 	GetClueStatistics(ctx context.Context) ([]map[string]any, error)
+	GetLeadMiningStats(ctx context.Context) (map[string]any, error)
 	GetClueAllList(ctx context.Context, clueType int64) ([]*model.Clue, int64, error)
 	GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, error)
 	ExistsByTypeAndAccount(ctx context.Context, clueType int64, account string) (bool, error)
@@ -189,7 +190,8 @@ func (r *clueRepo) GetClueList(ctx context.Context, page int, limit int) ([]*mod
 	if err != nil {
 		return nil, 0, err
 	}
-	err = db.Order("create_time DESC").Offset((page - 1) * limit).Limit(limit).Find(&cluelists).Error
+	// id 作为二级排序键：create_time 相同（同秒批量创建）时防止翻页边界重复/漏行。
+	err = db.Order("create_time DESC, id ASC").Offset((page - 1) * limit).Limit(limit).Find(&cluelists).Error
 	if err != nil {
 		return nil, 0, err
 	}
@@ -218,6 +220,41 @@ func (r *clueRepo) GetClueStatistics(ctx context.Context) ([]map[string]any, err
 		Order("type").
 		Scan(&statistics).Error
 	return statistics, err
+}
+
+func (r *clueRepo) GetLeadMiningStats(ctx context.Context) (map[string]any, error) {
+	db := r.db.WithContext(ctx).Model(&model.Clue{}).Where("deleted_at IS NULL")
+	var byRole []map[string]any
+	if err := db.Session(&gorm.Session{}).Select("COALESCE(NULLIF(lead_role,''),'unknown') AS lead_role, COUNT(*) AS total").
+		Group("COALESCE(NULLIF(lead_role,''),'unknown')").Scan(&byRole).Error; err != nil {
+		return nil, err
+	}
+	var byStatus []map[string]any
+	if err := db.Session(&gorm.Session{}).Select("COALESCE(NULLIF(status,''),'new') AS status, COUNT(*) AS total").
+		Group("COALESCE(NULLIF(status,''),'new')").Scan(&byStatus).Error; err != nil {
+		return nil, err
+	}
+	var byChannel []map[string]any
+	if err := db.Session(&gorm.Session{}).Select("COALESCE(NULLIF(source_channel,''),'unknown') AS source_channel, COUNT(*) AS total").
+		Group("COALESCE(NULLIF(source_channel,''),'unknown')").Order("total DESC").Limit(20).Scan(&byChannel).Error; err != nil {
+		return nil, err
+	}
+	var byConversation []map[string]any
+	if err := db.Session(&gorm.Session{}).Select("CASE WHEN is_group THEN 'group' ELSE 'private' END AS conversation_type, COUNT(*) AS total").
+		Group("CASE WHEN is_group THEN 'group' ELSE 'private' END").Scan(&byConversation).Error; err != nil {
+		return nil, err
+	}
+	var total int64
+	if err := db.Session(&gorm.Session{}).Count(&total).Error; err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"total":           total,
+		"by_lead_role":    byRole,
+		"by_status":       byStatus,
+		"by_channel":      byChannel,
+		"by_conversation": byConversation,
+	}, nil
 }
 
 func (r *clueRepo) GetClueAllList(ctx context.Context, clueType int64) ([]*model.Clue, int64, error) {

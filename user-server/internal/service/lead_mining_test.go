@@ -179,6 +179,9 @@ func (f *fakeClueRepo) Delete(context.Context, string) error { return nil }
 func (f *fakeClueRepo) GetClueStatistics(context.Context) ([]map[string]any, error) {
 	return nil, nil
 }
+func (f *fakeClueRepo) GetLeadMiningStats(context.Context) (map[string]any, error) {
+	return map[string]any{"total": 0, "by_lead_role": []map[string]any{}, "by_status": []map[string]any{}, "by_channel": []map[string]any{}, "by_conversation": []map[string]any{}}, nil
+}
 func (f *fakeClueRepo) GetClueAllList(context.Context, int64) ([]*model.Clue, int64, error) {
 	return nil, 0, nil
 }

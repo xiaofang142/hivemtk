@@ -18,6 +18,8 @@ type WorkflowVersion struct {
 	Definition  JSONMap   `gorm:"type:jsonb;not null" json:"definition"`
 	Status      string    `gorm:"type:varchar(16);not null;default:'draft';index:idx_workflow_versions_status" json:"status"`
 	Changelog   string    `gorm:"type:text" json:"changelog"`
+	// Revision FA-WF-07：乐观锁版本号，草稿每次改稿 +1，供 CAS 串行化并发更新/发布。
+	Revision    int       `gorm:"not null;default:0" json:"revision"`
 	CreatedBy   string    `gorm:"type:varchar(64)" json:"created_by"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`

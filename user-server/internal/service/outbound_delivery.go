@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"hivemtk-user/internal/capregistry"
@@ -29,12 +30,31 @@ type OutboundDeliveryService struct {
 	authorizer BridgeCapabilityAuthorizer
 }
 
+// NewOutboundDeliveryService constructs the outbound delivery service.
+// Env/switch behavior (local/simulated only):
+//   - CAPABILITY_PROOF_FAKE=1: sets a FakeCapabilityProofVerifier (also enabled when GIN_MODE=="debug").
+//   - CAPABILITY_PROOF_FAKE_PROVENANCE: provenance allowlist for the fake verifier (default "fake-verifier").
+//   - Production must not set these; prefer explicit SetProofVerifier wiring only in controlled tests/dev.
 func NewOutboundDeliveryService(repo OutboundDeliveryRepository, authorizers ...BridgeCapabilityAuthorizer) *OutboundDeliveryService {
 	svc := &OutboundDeliveryService{repo: repo}
 	if len(authorizers) == 1 {
 		svc.authorizer = authorizers[0]
 	}
+	// Opt-in fake verifier for dev/test only.
+	if os.Getenv("CAPABILITY_PROOF_FAKE") == "1" || os.Getenv("GIN_MODE") == "debug" {
+		prov := os.Getenv("CAPABILITY_PROOF_FAKE_PROVENANCE")
+		svc.verifier = capregistry.NewFakeCapabilityProofVerifier(prov)
+	}
 	return svc
+}
+
+// SetProofVerifier sets an optional proof verifier for persistent capability checks (e.g. simulated/local verifier for dev/test).
+// It is intended for opt-in wiring only; production should not set a fake verifier.
+func (s *OutboundDeliveryService) SetProofVerifier(v capregistry.CapabilityProofVerifier) {
+	if s == nil {
+		return
+	}
+	s.verifier = v
 }
 
 func outboundDeliveryScope(ctx context.Context) error {

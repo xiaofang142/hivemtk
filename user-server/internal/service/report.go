@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -73,11 +74,20 @@ type DailyAggWindow struct {
 // 当日兜底明细。本服务只做编排、指标换算与日志——不握 DB 句柄（五层架构 §3.2）。
 type ReportService struct {
 	repo *repository.LLMUsageReportRepository
+	// nowFn 时钟接缝：默认 time.Now；测试注入冻结时钟验证跨午夜/业务时区重算。
+	nowFn func() time.Time
 }
 
 // NewReportService 构造（仓储由装配点注入，见 internal/router/report_routes.go）
 func NewReportService(repo *repository.LLMUsageReportRepository) *ReportService {
-	return &ReportService{repo: repo}
+	return &ReportService{repo: repo, nowFn: time.Now}
+}
+
+func (s *ReportService) now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn()
+	}
+	return time.Now()
 }
 
 // advisoryLockKey 聚合任务互斥锁键（本仓多实例防并发）
@@ -88,29 +98,58 @@ const advisoryLockKey = 830083
 //
 // 加锁、释放与 upsert 口径都在仓储的 AggregateWindowLocked 里（锁载体与判读见
 // internal/pkg/db/advisory_lock.go）；这里只判读"本轮有没有拿到锁"并记一条聚合结果日志。
-func (s *ReportService) AggregateDaily(ctx context.Context, from, to time.Time) error {
-	locked, rows, err := s.repo.AggregateWindowLocked(ctx, advisoryLockKey, from, to)
+func (s *ReportService) AggregateDaily(ctx context.Context, from, to time.Time, resetStatDate string) error {
+	locked, rows, err := s.repo.AggregateWindowLocked(ctx, advisoryLockKey, from, to, resetStatDate)
 	if err != nil {
 		return err
 	}
 	if !locked {
-		return nil // 其他实例正在聚合，本轮跳过（下轮增量会覆盖）
+		return nil // 其他实例正在聚合，本轮跳过（下轮重算会覆盖）
 	}
-	logger.Infof("[Report] aggregated %d buckets into llm_usage_daily (%s ~ %s)", rows,
-		from.Format("2006-01-02 15:04"), to.Format("2006-01-02 15:04"))
+	logger.Infof("[Report] aggregated %d buckets into llm_usage_daily (%s ~ %s, reset=%q)", rows,
+		from.Format("2006-01-02 15:04"), to.Format("2006-01-02 15:04"), resetStatDate)
 	return nil
 }
 
-// AggregateRecent 增量聚合最近 10 分钟（覆盖乱序写入），供定时任务调用
-func (s *ReportService) AggregateRecent(ctx context.Context) error {
-	now := time.Now()
-	return s.AggregateDaily(ctx, now.Add(-10*time.Minute), now)
+// recalcBusinessDay 重算单个业务日（CST 自然日）：在同一把 advisory lock 内先删空该
+// 业务日的日桶，再用整天权威明细重建。这样任意重跑后，该日总数/成本恒等于明细，
+// 且删除/迟到数据也有一致规则（不再被 10 分钟窗口覆盖成尾部值）。
+func (s *ReportService) recalcBusinessDay(ctx context.Context, day time.Time) error {
+	dayStart := timeutil.StartOfBusinessDay(day)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+	statDate := timeutil.BusinessDate(dayStart)
+	return s.AggregateDaily(ctx, dayStart, dayEnd, statDate)
 }
 
-// RunDailyRecalc 日终重算前一天（00:10 调度调用）
+// RecalcAffectedDays 重算 [from, to) 触达的每一个业务日。
+//
+// FA-REPORT-01：增量不能再只聚合 10 分钟窗口（那会用窗口值覆盖整天计数）——
+// 而是找出窗口覆盖的所有业务日（含跨午夜两侧），逐日按完整自然日重算。
+// 窗口重叠、乱序、迟到数据都因此收敛到权威明细。
+func (s *ReportService) RecalcAffectedDays(ctx context.Context, from, to time.Time) error {
+	if to.Before(from) {
+		from, to = to, from
+	}
+	for day := timeutil.StartOfBusinessDay(from); day.Before(to); day = day.AddDate(0, 0, 1) {
+		if err := s.recalcBusinessDay(ctx, day); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AggregateRecent 增量触发：重算最近 10 分钟窗口触达的业务日（覆盖乱序/迟到写入）。
+// 供每 5 分钟的定时任务调用——重算的是"完整受影响日"，不是 10 分钟窗口本身。
+func (s *ReportService) AggregateRecent(ctx context.Context) error {
+	now := s.now()
+	return s.RecalcAffectedDays(ctx, now.Add(-10*time.Minute), now)
+}
+
+// RunDailyRecalc 日终重算前一天（00:10 调度调用），按 CST 业务时区自然日取整，
+// 不再用 Truncate(24h)（那是 UTC 零点，会把业务日前 8 小时算错到相邻日）。
 func (s *ReportService) RunDailyRecalc(ctx context.Context) error {
-	dayStart := time.Now().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-	return s.AggregateDaily(ctx, dayStart, dayStart.Add(24*time.Hour))
+	yesterday := timeutil.StartOfBusinessDay(s.now()).AddDate(0, 0, -1)
+	return s.recalcBusinessDay(ctx, yesterday)
 }
 
 // ============================================================

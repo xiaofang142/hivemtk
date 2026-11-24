@@ -269,3 +269,45 @@ func (r *ReachDeferredOutboundRepository) CancelPending(ctx context.Context, id 
 		Where("id = ? AND status = ?", id, model.DeferredReachStatusPending).
 		Update("status", model.DeferredReachStatusCancelled))
 }
+
+// CancelWithQuotaRefund FA-REACH-03：取消与「待返额」意图在同一条 UPDATE 内原子提交。
+// 仅 pending→cancelled，并把 quota_release_status 置 pending；返额成功后由
+// MarkQuotaReleased 置 released。返回受影响行数供调用方判定 CAS 是否命中。
+func (r *ReachDeferredOutboundRepository) CancelWithQuotaRefund(ctx context.Context, id uint) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, ErrReachDeferredUnavailable
+	}
+	res := r.db.WithContext(ctx).Model(&model.ReachDeferredOutbound{}).
+		Where("id = ? AND status = ?", id, model.DeferredReachStatusPending).
+		Updates(map[string]any{
+			"status":               model.DeferredReachStatusCancelled,
+			"quota_release_status": model.DeferredQuotaReleasePending,
+		})
+	return res.RowsAffected, res.Error
+}
+
+// MarkQuotaReleased FA-REACH-03：返额成功后把取消行标记为已返额（幂等）。
+func (r *ReachDeferredOutboundRepository) MarkQuotaReleased(ctx context.Context, id uint) error {
+	if r == nil || r.db == nil {
+		return ErrReachDeferredUnavailable
+	}
+	return r.db.WithContext(ctx).Model(&model.ReachDeferredOutbound{}).
+		Where("id = ? AND status = ? AND quota_release_status = ?", id,
+			model.DeferredReachStatusCancelled, model.DeferredQuotaReleasePending).
+		Update("quota_release_status", model.DeferredQuotaReleaseDone).Error
+}
+
+// ListCancelledPendingRefunds FA-REACH-03：列出已取消但返额未完成的行（对账入口）。
+func (r *ReachDeferredOutboundRepository) ListCancelledPendingRefunds(ctx context.Context, limit int) ([]model.ReachDeferredOutbound, error) {
+	if r == nil || r.db == nil {
+		return nil, ErrReachDeferredUnavailable
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	var rows []model.ReachDeferredOutbound
+	err := r.db.WithContext(ctx).Model(&model.ReachDeferredOutbound{}).
+		Where("status = ? AND quota_release_status = ?", model.DeferredReachStatusCancelled, model.DeferredQuotaReleasePending).
+		Order("id ASC").Limit(limit).Find(&rows).Error
+	return rows, err
+}

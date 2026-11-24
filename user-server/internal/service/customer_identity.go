@@ -233,20 +233,55 @@ func (s *CustomerIdentityService) MergeByIdentity(ctx context.Context, identifie
 		return customer, s.repo.Update(ctx, customer)
 	}
 
-	primary := matchedCustomers[0]
+	// FA-43：规则按租户持久化并版本化，正式合并必须消费同一份规则版本：
+	// 总闸（AutoMergeEnabled）、执行窗口、主客户策略、命中判定与冲突策略都读它。
+	ruleSvc := NewOneIDMergeRuleService()
+	rules, err := ruleSvc.GetRules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("读取 OneID 合并规则失败: %w", err)
+	}
+	canAutoMerge, err := ruleSvc.CanAutoMerge(ctx, time.Now())
+	if err != nil {
+		return nil, err
+	}
+	primary, err := ruleSvc.ChoosePrimary(ctx, matchedCustomers)
+	if err != nil {
+		return nil, err
+	}
 
-	if err := s.repo.WithTransaction(ctx, func(txCtx context.Context) error {
-		for i := 1; i < len(matchedCustomers); i++ {
-			secondary := matchedCustomers[i]
-			if secondary.ID != primary.ID {
+	if canAutoMerge && rules.Strategy.ConflictBehavior != "skip" {
+		needReview := rules.Strategy.ConflictBehavior == "queue_review"
+		primaryIdentity := customerIdentityMap(primary)
+		if err := s.repo.WithTransaction(ctx, func(txCtx context.Context) error {
+			// primary 可能不在下标 0（ChoosePrimary 按 latest_active 等策略挑选），
+			// 故遍历全部候选、仅凭 ID 跳过主档本身，避免主档落在非 0 位时漏合并。
+			for i := 0; i < len(matchedCustomers); i++ {
+				secondary := matchedCustomers[i]
+				if secondary.ID == primary.ID {
+					continue
+				}
+				matched, ruleName, action, _, err := ruleSvc.ApplyRulesWithAction(txCtx, primaryIdentity, customerIdentityMap(secondary))
+				if err != nil {
+					return err
+				}
+				// 两客户由同一次 FindByIdentityAll 查询返回，已是"同一身份"的权威凭据。
+				// 规则是策略/冲突抑制层，不是额外的正向匹配门槛：
+				//   - 命中 review 动作 → 走审核，跳过自动合并（预览与正式共用同一判定）；
+				//   - 未命中任何规则（e.g. 一个只有 phone、一个只有 email 的多标识输入）
+				//     仍属同一身份查询结果，照常合并，不能被规则缺口静默跳过。
+				if needReview || (matched && action == "review") {
+					logger.Infof("[OneID] 冲突需审核，跳过自动合并 rule=%s action=%s primary=%s secondary=%s version=%d",
+						ruleName, action, primary.ID, secondary.ID, rules.Version)
+					continue
+				}
 				if err := s.customerSvc.MergeCustomers(txCtx, primary.ID, secondary.ID); err != nil {
 					return err
 				}
 			}
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("merge customers tx: %w", err)
 		}
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("merge customers tx: %w", err)
 	}
 
 	updatedPrimary, err := s.repo.GetByID(ctx, primary.ID)

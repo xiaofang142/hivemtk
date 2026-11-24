@@ -9,6 +9,14 @@ import (
 
 // AbExposure AB 曝光/转化记录（表 ab_exposures）。
 // service 层禁止直接持有 gorm.DB，持久化统一收敛到 repository。
+//
+// EC-28 / M28（营销实验/控制组/归因与证据，不污染控制组）不变量：
+//   - 本表是「实验曝光/转化证据」，不是营销受众名单；control 变体仅用于对照统计，
+//     绝不能据此向 control 变体追加营销派发（控制组不新增营销派发）；
+//   - 身份合并前的曝光记录按 BR04 保留并标「污染」，合并后不静默抹除历史曝光；
+//   - 实时撤回/撤权必须覆盖冻结快照：已落库的曝光证据不可被后续重跑改写；
+//   - 重复触发/换渠道只能追加新曝光行，不能突破压力上限或把 control 组计入 treatment；
+//   - 归因/漏斗仅消费真实回执与已付订单净额，曝光/点击不冒充因果增长（EC-31）。
 type AbExposure struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 

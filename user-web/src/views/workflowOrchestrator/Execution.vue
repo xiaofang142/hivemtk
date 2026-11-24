@@ -171,6 +171,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { VideoPause, Refresh, WarningFilled } from '@element-plus/icons-vue'
 import { workflowOrchestratorApi } from '@/api/workflowOrchestrator.js'
+import { isConfirmCancel, actionErrorMessage } from '../../utils/workflowAction.js'
 
 const route = useRoute()
 const executionId = computed(() => Number(route.params.id) || 0)
@@ -236,7 +237,12 @@ const handleStop = async () => {
     await workflowOrchestratorApi.stopExecution(executionId.value)
     ElMessage.success('已停止')
     loadData()
-  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch (e) {
+    // FA-WF-10：用户取消安静返回；API/网络失败必须显式报错并回读状态，不再静默吞掉。
+    if (isConfirmCancel(e)) return
+    ElMessage.error(actionErrorMessage('停止', e))
+    loadData()
+  }
 };
 
 const statusType = (s) => ({ running: 'primary', completed: 'success', failed: 'danger', terminated: 'warning', pending: 'info' }[s] || 'info');

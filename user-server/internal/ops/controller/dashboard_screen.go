@@ -172,7 +172,9 @@ func (c *DashboardScreenController) PublicViewScreen(ctx *gin.Context) {
 	code := ctx.Param("code")
 
 	requestCtx := ctx.Request.Context()
-	screen, err := c.screenService.GetPublicScreenCtx(requestCtx, code)
+	// FA-SCREEN-01：screen 与 widgets 必须在同一授权链（由 code 反查出的租户）内读取，
+	// 否则公开链接在多租户模式下 widgets 读取被拒，原实现吞错返回空组件伪装成功。
+	screen, widgets, err := c.screenService.GetPublicScreenWithWidgetsCtx(requestCtx, code)
 	if err != nil {
 		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, fmt.Sprintf("大屏不存在或未公开（code=%s）", code))
@@ -181,8 +183,6 @@ func (c *DashboardScreenController) PublicViewScreen(ctx *gin.Context) {
 		response.Error(ctx, http.StatusInternalServerError, "获取公开大屏失败")
 		return
 	}
-
-	widgets, _ := c.screenService.GetScreenWidgetsCtx(requestCtx, screen.ID)
 
 	response.Success(ctx, gin.H{
 		"screen":  screen,

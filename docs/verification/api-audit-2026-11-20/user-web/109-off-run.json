@@ -1,1 +1,0 @@
-{"code":"BROWSER_HOST_OFFLINE_8001","message":"browser host 未连接：请确认本机 Chrome 已加载扩展并已运行 cmd/nm-host/install.sh；服务刚重启过时无需重装，Host 会自动重连（最多约 1 分钟），稍后重试即可"}

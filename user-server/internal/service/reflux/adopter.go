@@ -47,6 +47,9 @@ type RefluxService struct {
 	// FAQCreate 复用 FAQService.Create 的函数钩子（装配层注入，避免包依赖环）。
 	// 签名：create(ctx, req) → faq_id
 	FAQCreate func(ctx context.Context, req FAQCreateReq) (uint, error)
+	// FAQDelete FA-REFLUX-01：FAQ 创建成功但状态写失败时的补偿删除钩子（可选注入）。
+	// 防止采纳失败留下"已启用但无问题引用"的孤稿 FAQ 被运行时命中。
+	FAQDelete func(ctx context.Context, faqID uint) error
 }
 
 // FAQCreateReq 写回 FAQ 的参数（字段映射见设计文档 §6.1）
@@ -70,6 +73,18 @@ func NewRefluxService(repo *repository.RefluxRepository) *RefluxService {
 // SetFAQCreate 装配层注入 FAQService.Create 钩子
 func (s *RefluxService) SetFAQCreate(fn func(ctx context.Context, req FAQCreateReq) (uint, error)) {
 	s.FAQCreate = fn
+}
+
+// SetFAQDelete FA-REFLUX-01 装配层注入 FAQ 补偿删除钩子
+func (s *RefluxService) SetFAQDelete(fn func(ctx context.Context, faqID uint) error) {
+	s.FAQDelete = fn
+}
+
+// compensateFAQ FA-REFLUX-01：FAQ 已创建但后续状态写失败时回滚，避免留下可被命中的孤稿。
+func (s *RefluxService) compensateFAQ(ctx context.Context, faqID uint) {
+	if s.FAQDelete != nil {
+		_ = s.FAQDelete(ctx, faqID)
+	}
 }
 
 // allowedTransitions 状态机白名单
@@ -97,17 +112,34 @@ func (s *RefluxService) ReviewQuestion(ctx context.Context, id int64, req *Adopt
 		}
 		return map[string]any{"id": id, "status": model.UQStatusIgnored}, nil
 	case ActionMerge:
+		// FA-REFLUX-01：merge 必须作用于待审问题，且目标存在、非自引用、同租户。
+		if uq.Status != model.UQStatusPendingReview {
+			return nil, ErrIllegalTransition
+		}
 		if req.MergedTargetID == 0 {
 			return nil, fmt.Errorf("merged_target_id 必填")
 		}
-		if err := s.repo.UpdateQuestion(ctx, id, map[string]any{
+		if req.MergedTargetID == int64(uq.ID) {
+			return nil, fmt.Errorf("不能自合并")
+		}
+		target, err := s.repo.FindQuestion(ctx, req.MergedTargetID)
+		if err != nil {
+			return nil, ErrNotFound
+		}
+		if target.TenantID != uq.TenantID {
+			return nil, fmt.Errorf("合并目标跨租户")
+		}
+		// CAS：仅当状态仍是读入时的 pending_review 才提交，防止双审核/重复合并覆盖终态。
+		if err := s.repo.UpdateQuestionCAS(ctx, id, uq.Status, map[string]any{
 			"status": model.UQStatusMerged, "merged_target_id": req.MergedTargetID,
 			"reviewed_by": operatorID, "reviewed_at": time.Now(),
 		}); err != nil {
+			return nil, ErrIllegalTransition
+		}
+		if err := s.log(ctx, "question", id, ActionMerge, uq.Status, model.UQStatusMerged, operatorID,
+			fmt.Sprintf("merged_target_id=%d", req.MergedTargetID)); err != nil {
 			return nil, err
 		}
-		s.log(ctx, "question", id, ActionMerge, uq.Status, model.UQStatusMerged, operatorID,
-			fmt.Sprintf("merged_target_id=%d", req.MergedTargetID))
 		return map[string]any{"id": id, "status": model.UQStatusMerged}, nil
 	case ActionAdopt:
 		return s.adoptSingle(ctx, uq, req, operatorID)
@@ -130,14 +162,18 @@ func (s *RefluxService) adoptSingle(ctx context.Context, uq *model.UnknownQuesti
 	if err != nil {
 		return nil, err
 	}
-	if err := s.repo.UpdateQuestion(ctx, int64(uq.ID), map[string]any{
+	// FA-REFLUX-01：CAS 保证双审核只有一个成功；状态写失败时补偿删除已建 FAQ，不留孤稿。
+	if err := s.repo.UpdateQuestionCAS(ctx, int64(uq.ID), uq.Status, map[string]any{
 		"status": model.UQStatusAdopted, "adopted_faq_id": faqID,
 		"reviewed_by": operatorID, "reviewed_at": time.Now(),
 	}); err != nil {
+		s.compensateFAQ(ctx, faqID)
+		return nil, ErrIllegalTransition
+	}
+	if err := s.log(ctx, "question", uq.ID, ActionAdopt, uq.Status, model.UQStatusAdopted, operatorID,
+		fmt.Sprintf("faq_id=%d", faqID)); err != nil {
 		return nil, err
 	}
-	s.log(ctx, "question", uq.ID, ActionAdopt, uq.Status, model.UQStatusAdopted, operatorID,
-		fmt.Sprintf("faq_id=%d", faqID))
 	return map[string]any{"id": uq.ID, "faq_id": faqID, "status": model.UQStatusAdopted}, nil
 }
 
@@ -149,12 +185,10 @@ func (s *RefluxService) ReviewCluster(ctx context.Context, clusterID int64, req 
 	}
 	switch req.Action {
 	case ActionIgnore:
-		if err := s.repo.UpdateCluster(ctx, clusterID, map[string]any{
-			"status": model.UQStatusIgnored, "reviewed_by": operatorID, "reviewed_at": time.Now(),
-		}); err != nil {
+		// FA-REFLUX-01：簇忽略也走 CAS（cluster.Status 作 from），双审核只一个生效。
+		if err := s.transition(ctx, "cluster", clusterID, cluster.Status, model.UQStatusIgnored, ActionIgnore, operatorID, ""); err != nil {
 			return nil, err
 		}
-		s.log(ctx, "cluster", clusterID, ActionIgnore, cluster.Status, model.UQStatusIgnored, operatorID, "")
 		return map[string]any{"cluster_id": clusterID, "status": model.UQStatusIgnored}, nil
 	case ActionAdopt:
 		if cluster.Status != model.UQStatusPendingReview {
@@ -169,10 +203,14 @@ func (s *RefluxService) ReviewCluster(ctx context.Context, clusterID int64, req 
 		}
 		adoptedCount, err := s.repo.AdoptClusterMembers(ctx, clusterID, faqID, operatorID)
 		if err != nil {
+			// FA-REFLUX-01：FAQ 已建但簇采纳失败——补偿删除 FAQ，不留可被命中的孤稿。
+			s.compensateFAQ(ctx, faqID)
 			return nil, err
 		}
-		s.log(ctx, "cluster", clusterID, ActionAdopt, cluster.Status, model.UQStatusAdopted, operatorID,
-			fmt.Sprintf("faq_id=%d adopted_count=%d total_frequency=%d", faqID, adoptedCount, cluster.TotalFrequency))
+		if err := s.log(ctx, "cluster", clusterID, ActionAdopt, cluster.Status, model.UQStatusAdopted, operatorID,
+			fmt.Sprintf("faq_id=%d adopted_count=%d total_frequency=%d", faqID, adoptedCount, cluster.TotalFrequency)); err != nil {
+			return nil, err
+		}
 		return map[string]any{"cluster_id": clusterID, "faq_id": faqID, "adopted_count": adoptedCount}, nil
 	default:
 		return nil, ErrIllegalTransition
@@ -218,12 +256,13 @@ func (s *RefluxService) transition(ctx context.Context, targetType string, id in
 	if err != nil {
 		return err
 	}
-	s.log(ctx, targetType, id, action, from, to, operatorID, detail)
-	return nil
+	return s.log(ctx, targetType, id, action, from, to, operatorID, detail)
 }
 
-func (s *RefluxService) log(ctx context.Context, targetType string, targetID int64, action ReviewAction, from, to, operatorID, detail string) {
-	_ = s.repo.InsertReviewLog(ctx, &model.UnknownQuestionReviewLog{
+// log 落审核流水。FA-REFLUX-01：审核证据须与决定一致，流水写失败必须透出，
+// 不再静默吞错（否则状态已变但无审计凭据，无法对账）。
+func (s *RefluxService) log(ctx context.Context, targetType string, targetID int64, action ReviewAction, from, to, operatorID, detail string) error {
+	return s.repo.InsertReviewLog(ctx, &model.UnknownQuestionReviewLog{
 		TargetType: targetType, TargetID: targetID, Action: string(action),
 		FromStatus: from, ToStatus: to, OperatorID: operatorID, Detail: detail,
 	})

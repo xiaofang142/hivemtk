@@ -1,1 +1,0 @@
-{"code":0,"message":"ok","data":{"at":"2026-11-21T19:28:41.5421207+08:00","total_open":0,"by_kind":[{"kind":"conversation_handoff","open":0,"overdue":0,"sla_column":"sla_first_response_at"},{"kind":"approval","open":0,"overdue":0,"sla_column":"sla_decide_at"},{"kind":"collection_escalation","open":0,"overdue":0,"sla_column":"sla_escalate_at"}],"unknown_kind_open":0}}

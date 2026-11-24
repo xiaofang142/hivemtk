@@ -126,6 +126,15 @@ type AudienceSelection struct {
 	Reasons []string
 }
 
+// EC-26 (M26, not implemented / not live-closed): 本文件仅提供按条件实时取名单（读交），
+// 无受众快照版本/排除原因持久化、无稳定控制组分配与版本记录、无身份合并前曝光按 BR04 保留并标污染、
+// 无活动互斥/跨渠道压力上限/预算预占。Audience.Build 所需的「受众快照 + 排除原因 + 控制组」
+// 仍缺；发送时仍须按 M22 重查许可，快照不可冻结许可。详见 docs/未来任务清单.md §7.1.8 / M26。
+//
+// EC-28 交叉引用（M28 旅程/实验编排）：圈选结果仅是候选受众；控制组/holdout 必须在
+//   发送前被排除且不新增营销派发；旅程分支/实验分支的重复触发仍受频控/压力上限约束。
+// 详见 docs/未来任务清单.md §7.1.8 / M26 / M28。
+//
 // AudienceSelector 按条件实时取名单。只读，不写任何表。
 type AudienceSelector struct {
 	rfm   repository.CustomerRFMRepository

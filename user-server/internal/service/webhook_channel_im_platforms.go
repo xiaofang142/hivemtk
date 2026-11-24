@@ -35,6 +35,10 @@ const (
 	ChannelWeCombBot WebhookChannel = "wecombot"
 )
 
+// ErrWeCombBotUnsupportedCardAction 企微机器人回调里未映射业务动作的事件
+// （enter_chat / feedback / 无 event_key）。明确拒绝，绝不静默当业务完成。
+var ErrWeCombBotUnsupportedCardAction = errors.New("wecombot: 不支持的卡片事件（未映射业务动作）")
+
 // ── 验签 ──────────────────────────────────────────────────────────────
 
 // VerifySlack Events API v0 签名：v0=HMAC_SHA256(signingSecret, "v0:"+ts+":"+body)，
@@ -539,9 +543,39 @@ func (s *WebhookService) dispatchWeCombBot(ctx context.Context, accountID string
 		return nil, err
 	}
 	if m.MsgType == "event" {
-		// 事件只留审计证据（不进消息链路）。
-		logger.Infof("[WeCombBot] event account=%s eventtype=%s msgid=%s", accountID, wecombotEventType(m), m.MsgID)
-		return nil, nil
+		// FA-CHANNEL-05：卡片点击必须进入业务消费者（specs/025 FR069 → interaction.callback），
+		// 不再只留日志。template_card_event 且带 event_key 的才映射为交互动作；
+		// 其余（enter_chat / feedback / 无 event_key）明确标为不支持，不伪造业务完成。
+		card := m.Event
+		if wecombotCardEventType(m) == "" {
+			logger.Warnf("[WeCombBot] unsupported event account=%s eventtype=%s msgid=%s"+
+				"（未映射业务动作，不产生交互/消息/AI 副作用）", accountID, wecombotEventType(m), m.MsgID)
+			return nil, ErrWeCombBotUnsupportedCardAction
+		}
+		key := card.TemplateCardEvent.EventKey
+		// 确定性幂等键：同一卡片同一点击重投只登记一次；不同 event_key 视为不同动作。
+		interactionID := fmt.Sprintf("wecombot_cb_%s_%s_%s", accountID, m.MsgID, key)
+		in := &core.InboundMessage{
+			Platform:       model.ChannelWeCombBot,
+			AccountID:      accountID,
+			MessageID:      interactionID,
+			ConversationID: m.ChatID,
+			SenderID:       m.From.UserID,
+			SenderName:     firstNonEmpty(m.From.Name, m.From.UserID),
+			Content:        key,
+			MsgType:        model.MsgTypeText,
+			EventType:      model.EventTypeInteractionCallback,
+			IsGroup:        true,
+			GroupID:        m.ChatID,
+			Timestamp:      m.CreateTime,
+			Extra: map[string]any{
+				"interaction_id":  interactionID,
+				"action":          key,
+				"platform_msg_id": m.MsgID,
+				"task_id":         card.TemplateCardEvent.TaskID,
+			},
+		}
+		return s.ingressPlatformInbound(ctx, in)
 	}
 	content := ""
 	if m.Text != nil {
@@ -570,6 +604,16 @@ func wecombotEventType(m *wecombot.Message) string {
 		return ""
 	}
 	return m.Event.EventType
+}
+
+// wecombotCardEventType 卡片动作 → 平台事件类型映射（specs/025 FR069）。
+// 仅 template_card_event + 非空 event_key 映射为 interaction.callback；
+// 其余事件返回空串，由调用方明确拒绝，绝不静默当业务完成。
+func wecombotCardEventType(m *wecombot.Message) string {
+	if m == nil || m.MsgType != "event" || m.Event == nil || m.Event.EventType != "template_card_event" || m.Event.TemplateCardEvent.EventKey == "" {
+		return ""
+	}
+	return model.EventTypeInteractionCallback
 }
 
 // dispatchCustom 自定义渠道入站。

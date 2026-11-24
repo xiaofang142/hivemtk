@@ -19,6 +19,12 @@ import (
 //   - v1 执行通路只开放 manual / buyer_initiated 两条安全路径；
 //     direct_api / via_erp 显式不可用（真实凭证与连接器未接，不承诺未验证能力）；
 //   - 订单必须存在于只读镜像（external_orders）才能创建申请单（不编造订单）。
+//
+// TODO(EC-10/M10, not implemented): 迁移到统一“业务操作账本(Operation)”后应具备：
+//   - 稳定业务幂等键（logical key：同 key+同参返回原操作、同 key+异参冲突），与 ChangeNo 区分；
+//   - 关联到操作修订/attempt/租约、外部请求ID、供应商幂等键、写路由、脱敏参数指纹、状态转换审计；
+//   - 资金/数量预占与订单资源守卫（RV02/RV03）由账本/守卫表承载，避免仅靠应用层散落逻辑；
+//   - 跨进程/重试的事务性 outbox 派发（与 bridge/SOP outbox 语义区分，面向商务执行副作用）。
 type OrderChangeRequest struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 

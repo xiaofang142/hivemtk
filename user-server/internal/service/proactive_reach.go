@@ -380,7 +380,16 @@ func (r *customerRepo) GetByUnifiedID(ctx context.Context, oneID string) (*model
 	return r.repo.GetCustomerByUnifiedID(ctx, oneID)
 }
 
-// ReachByCustomer 按客户主键或 OneID 智能选择渠道发送
+// EC-30 边界（平台原生营销配置 vs 现有营销链路，消息派发复用 23-A，不复制营销管线）：
+//   - 本函数是 23-A 统一发送入口（责任/暂停/窗口/DryRun/费用/恢复）之一；平台原生营销配置
+//     （含 Amazon 原生自动回复/规定动作等）如需消息触达，必须复用本入口或等价的 23-A 闸门，
+//     不得直接操作 HiveMtk 消息派发或新增第二条营销管线；
+//   - 本入口不封装平台原生营销：平台原生营销的配置/状态只能作为观察/解释/人工接续输入，
+//     不得被转译为营销模板、频控、优惠权益或主动获客流程，也不得作为 HiveMtk 营销执行结果。
+//
+// 本注释仅作代码内事实锚点，不构成功能完成证据。
+//
+// # ReachByCustomer 按客户主键或 OneID 智能选择渠道发送
 //
 // 选渠道策略（不猜测）：
 //  1. 显式指定 Phone/Email → 直发该渠道

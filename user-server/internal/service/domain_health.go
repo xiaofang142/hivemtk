@@ -15,7 +15,7 @@ import (
 )
 
 // DomainHealthService 域名健康度服务
-// G 域 ：定时探测（DNS / HTTP HEAD / 平台黑名单）+ 健康度评分 + 自动切换
+// G 域 ：定时探测（DNS / HTTP GET / 平台黑名单）+ 健康度评分 + 自动切换
 //
 // 设计要点：
 //   - 探测与评分完全同步执行（不引入后台 goroutine），由调用方触发；
@@ -62,13 +62,21 @@ const (
 	HealthCheckTimeout         = 5 * time.Second
 )
 
+type domainHealthLogRepository interface {
+	Create(ctx context.Context, log *model.DomainHealthLog) error
+	ListByDomain(ctx context.Context, domainID int, limit int) ([]*model.DomainHealthLog, error)
+}
+
+type domainBlacklistRepository interface {
+	IsBlacklisted(ctx context.Context, domain string) (bool, *model.DomainBlacklist, error)
+}
+
 type domainHealthService struct {
-	repo        repository.DomainPoolRepository
-	logRepo     *repository.DomainHealthLogRepository
-	blacklistR  *repository.DomainBlacklistRepository
-	httpClient  *http.Client
-	probeTarget string
-	mu          sync.Mutex
+	repo       repository.DomainPoolRepository
+	logRepo    domainHealthLogRepository
+	blacklistR domainBlacklistRepository
+	httpClient *http.Client
+	mu         sync.Mutex
 }
 
 // NewDomainHealthService 创建域名健康度服务
@@ -76,11 +84,10 @@ func NewDomainHealthService(db interface{}, repo repository.DomainPoolRepository
 	_ = db
 	blRepo := repository.NewDomainBlacklistRepository(nil)
 	return &domainHealthService{
-		repo:        repo,
-		logRepo:     repository.NewDomainHealthLogRepository(nil),
-		blacklistR:  blRepo,
-		httpClient:  &http.Client{Timeout: domainHealthCheckTimeout(context.Background())},
-		probeTarget: "/",
+		repo:       repo,
+		logRepo:    repository.NewDomainHealthLogRepository(nil),
+		blacklistR: blRepo,
+		httpClient: &http.Client{Timeout: domainHealthCheckTimeout(context.Background())},
 	}
 }
 
@@ -93,11 +100,10 @@ func NewDomainHealthServiceWithDeps(repo repository.DomainPoolRepository, logRep
 		blRepo = repository.NewDomainBlacklistRepository(nil)
 	}
 	return &domainHealthService{
-		repo:        repo,
-		logRepo:     logRepo,
-		blacklistR:  blRepo,
-		httpClient:  &http.Client{Timeout: domainHealthCheckTimeout(context.Background())},
-		probeTarget: "/",
+		repo:       repo,
+		logRepo:    logRepo,
+		blacklistR: blRepo,
+		httpClient: &http.Client{Timeout: domainHealthCheckTimeout(context.Background())},
 	}
 }
 
@@ -109,50 +115,49 @@ func (s *domainHealthService) CheckOne(ctx context.Context, domainID int) (*Heal
 	if dp == nil {
 		return nil, errors.New("域名不存在")
 	}
-	return s.checkAndPersist(ctx, dp), nil
+	return s.checkAndPersist(ctx, dp)
 }
 
 func (s *domainHealthService) CheckAll(ctx context.Context) ([]*HealthCheckResult, error) {
-	rows, _, err := s.repo.List(ctx, 1, 1000, "", 0)
-	if err != nil {
-		return nil, err
+	var rows []*model.DomainPool
+	for page := 1; ; page++ {
+		batch, total, err := s.repo.List(ctx, page, 200, "", 0)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, batch...)
+		if len(rows) >= int(total) || len(batch) == 0 {
+			break
+		}
 	}
 	results := make([]*HealthCheckResult, 0, len(rows))
+	var checkErrors []error
 	for _, dp := range rows {
-		results = append(results, s.checkAndPersist(ctx, dp))
+		result, err := s.checkAndPersist(ctx, dp)
+		if err != nil {
+			checkErrors = append(checkErrors, fmt.Errorf("check domain id=%d: %w", dp.ID, err))
+			continue
+		}
+		results = append(results, result)
 	}
-	return results, nil
+	return results, errors.Join(checkErrors...)
 }
 
-func (s *domainHealthService) checkAndPersist(ctx context.Context, dp *model.DomainPool) *HealthCheckResult {
+func (s *domainHealthService) checkAndPersist(ctx context.Context, dp *model.DomainPool) (*HealthCheckResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	probe, err := s.ProbeOnce(ctx, dp.Domain)
+	probe := s.probeDomain(ctx, dp.Domain, dp.Port)
+	blacklisted, blEntry, err := s.blacklistR.IsBlacklisted(ctx, dp.Domain)
 	if err != nil {
-		logger.Errorf("探测域名失败 domain=%s: %v", dp.Domain, err)
+		return nil, fmt.Errorf("check domain blacklist: %w", err)
 	}
-
-	port := dp.Port
-	if port == 0 {
-		if probe.HTTPOk && probe.HTTPStatus > 0 {
-			port = 80
-		} else {
-			port = 443
-		}
-	}
-
-	blacklisted, blEntry, blErr := s.blacklistR.IsBlacklisted(ctx, dp.Domain)
-	if blErr != nil {
-		logger.Errorf("查询黑名单失败 domain=%s: %v", dp.Domain, blErr)
-	}
-	blSrc := ""
+	blacklistSource := ""
 	if blEntry != nil {
-		blSrc = blEntry.Source + ":" + blEntry.Platform
+		blacklistSource = blEntry.Source + ":" + blEntry.Platform
 	}
 
 	score, failures := calcHealthScore(dp.HealthScore, dp.ConsecutiveFailures, probe, blacklisted)
-
 	action := "none"
 	newStatus := dp.Status
 	if !probe.DNSOK || !probe.HTTPOk || blacklisted || score == 0 {
@@ -172,16 +177,15 @@ func (s *domainHealthService) checkAndPersist(ctx context.Context, dp *model.Dom
 	}
 	if err := s.repo.UpdateHealth(ctx, dp.ID, score, failures, probe.DNSOK, probe.DNSError,
 		probe.HTTPStatus, probe.HTTPLatency, blacklisted, blacklistAt, blacklistNote); err != nil {
-		logger.Errorf("更新域名健康度失败 id=%d: %v", dp.ID, err)
+		return nil, fmt.Errorf("update domain health: %w", err)
 	}
 	if err := s.repo.UpdateStatus(ctx, dp.ID, newStatus); err != nil {
-		logger.Errorf("更新域名状态失败 id=%d: %v", dp.ID, err)
+		return nil, fmt.Errorf("update domain status: %w", err)
 	}
-
 	logRow := &model.DomainHealthLog{
 		DomainID:     dp.ID,
 		Domain:       dp.Domain,
-		CheckedAt:    time.Now(),
+		CheckedAt:    probe.CheckedAt,
 		DNSOK:        probe.DNSOK,
 		DNSError:     probe.DNSError,
 		HTTPOk:       probe.HTTPOk,
@@ -189,28 +193,48 @@ func (s *domainHealthService) checkAndPersist(ctx context.Context, dp *model.Dom
 		HTTPLatency:  probe.HTTPLatency,
 		HTTPErrorMsg: probe.HTTPErrorMsg,
 		OnBlacklist:  blacklisted,
-		BlacklistSrc: blSrc,
+		BlacklistSrc: blacklistSource,
 		HealthScore:  score,
 		ActionTaken:  action,
 	}
 	if err := s.logRepo.Create(ctx, logRow); err != nil {
-		logger.Errorf("写入健康度日志失败 id=%d: %v", dp.ID, err)
+		return nil, fmt.Errorf("write domain health log: %w", err)
 	}
-
-	if dp.AutoSwitchEnabled {
-		if dp.IsActive && (score < domainHealthScoreSwitchThreshold(ctx) || failures >= domainHealthConsecutiveFailureLimit(ctx)) {
-			if _, err := s.SwitchToBest(ctx, fmt.Sprintf("健康度自动切换: score=%d failures=%d", score, failures)); err != nil {
-				logger.Errorf("自动切换失败: %v", err)
-			} else {
-				action = "switch_over"
-			}
+	if dp.AutoSwitchEnabled && dp.IsActive && (score < domainHealthScoreSwitchThreshold(ctx) || failures >= domainHealthConsecutiveFailureLimit(ctx)) {
+		if _, err := s.SwitchToBest(ctx, fmt.Sprintf("健康度自动切换: score=%d failures=%d", score, failures)); err != nil {
+			logger.Errorf("自动切换失败: %v", err)
+		} else {
+			action = "switch_over"
 		}
 	}
-
 	probe.ActionTaken = action
 	probe.HealthScore = score
 	probe.DomainID = dp.ID
-	probe.Port = port
+	return probe, nil
+}
+
+func (s *domainHealthService) probeDomain(ctx context.Context, domain string, port int) *HealthCheckResult {
+	httpProbe := probeDomainHTTP(ctx, s.httpClient, domain, port)
+	probe := &HealthCheckResult{
+		Domain:       domain,
+		Port:         port,
+		CheckedAt:    httpProbe.CheckedAt,
+		HTTPOk:       httpProbe.HTTPOk,
+		HTTPStatus:   httpProbe.HTTPStatus,
+		HTTPLatency:  int(httpProbe.HTTPLatency / time.Millisecond),
+		HTTPErrorMsg: httpProbe.HTTPErrorMsg,
+	}
+	if probe.Port <= 0 {
+		probe.Port = 80
+	}
+	ips, err := net.LookupHost(domain)
+	if err != nil {
+		probe.DNSError = err.Error()
+	} else if len(ips) > 0 {
+		probe.DNSOK = true
+	} else {
+		probe.DNSError = "no such host"
+	}
 	return probe
 }
 
@@ -245,56 +269,52 @@ func calcHealthScore(prevScore, prevFailures int, probe *HealthCheckResult, blac
 }
 
 func (s *domainHealthService) ProbeOnce(ctx context.Context, domain string) (*HealthCheckResult, error) {
-	res := &HealthCheckResult{
-		Domain:    domain,
-		CheckedAt: time.Now(),
-	}
-
+	res := &HealthCheckResult{Domain: domain, CheckedAt: time.Now()}
 	ips, dnsErr := net.LookupHost(domain)
 	if dnsErr != nil || len(ips) == 0 {
-		res.DNSError = dnsErr.Error()
-		if res.DNSError == "" {
+		if dnsErr != nil {
+			res.DNSError = dnsErr.Error()
+		} else {
 			res.DNSError = "no such host"
 		}
 	} else {
 		res.DNSOK = true
 	}
-
-	urls := []string{
-		"http://" + domain + s.probeTarget,
-		"https://" + domain + s.probeTarget,
-	}
-	for _, u := range urls {
-		ok, status, latency, errMsg := s.doHTTPHead(ctx, u)
+	for _, target := range []struct {
+		url  string
+		port int
+	}{
+		{url: "http://" + net.JoinHostPort(domain, "80") + "/", port: 80},
+		{url: "https://" + net.JoinHostPort(domain, "443") + "/", port: 443},
+	} {
+		ok, status, latency, errMsg := s.doHTTPHead(ctx, target.url)
 		if ok {
 			res.HTTPOk = true
 			res.HTTPStatus = status
 			res.HTTPLatency = int(latency / time.Millisecond)
+			res.Port = target.port
 			break
 		}
 		res.HTTPErrorMsg = errMsg
 	}
-
-	score, _ := calcHealthScore(100, 0, res, false)
-	res.HealthScore = score
+	res.HealthScore, _ = calcHealthScore(100, 0, res, false)
 	return res, nil
 }
 
-func (s *domainHealthService) doHTTPHead(ctx context.Context, url string) (bool, int, time.Duration, string) {
+func (s *domainHealthService) doHTTPHead(ctx context.Context, target string) (bool, int, time.Duration, string) {
 	start := time.Now()
-	req, err := http.NewRequest(http.MethodHead, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, target, nil)
 	if err != nil {
 		return false, 0, time.Since(start), err.Error()
 	}
 	req.Header.Set("User-Agent", "mtk-domain-health/1.0")
-
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return false, 0, time.Since(start), err.Error()
 	}
 	defer func() { _ = resp.Body.Close() }()
 	latency := time.Since(start)
-	if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < 400 {
 		return true, resp.StatusCode, latency, ""
 	}
 	return false, resp.StatusCode, latency, "HTTP " + strconv.Itoa(resp.StatusCode)

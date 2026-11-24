@@ -183,8 +183,10 @@ func init() {
 		Via:      "webhook",
 		Inbound:  []string{model.MsgTypeText, model.MsgTypeImage, model.MsgTypeLink, model.MsgTypeCard},
 		Outbound: []string{model.MsgTypeText},
-		// enter_chat / template_card_event / feedback 只落事件审计，不映射业务事件。
-		Events:         []string{model.EventTypeMessageReceived},
+		// FA-CHANNEL-05：template_card_event（带 event_key）→ interaction.callback，
+		// 进 channel_interactions + 审计，不落 message_hub / 不计未读 / 不触发 AI。
+		// enter_chat / feedback / 无 event_key 明确拒绝，不映射业务动作。
+		Events:         []string{model.EventTypeMessageReceived, model.EventTypeInteractionCallback},
 		Features:       []Feature{FeatureGroup, FeatureMention},
 		Note:           "回调 AES-CBC 解密 + 签名校验；出站走群机器人 webhook（markdown）",
 		OutboundFormat: OutboundFormatMarkdown,

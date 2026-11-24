@@ -310,6 +310,68 @@ const (
 	ExportTypeUser ExportType = "user"
 )
 
+// exportPageSize 全量导出的单页大小。用户仓储会把 limit 夹到 200（传更大值
+// 也只返回 200，用 500 判断「最后一页」会提前终止而漏掉第 201 条），故取
+// 两仓储都能容纳的 200。逐页遍历到 total，而非「第一页一把梭」。
+const exportPageSize = 200
+
+// normalizeExportIDs 去空白/去重，空串剔除。选中导出直接按这些 ID 查库，
+// 不再「取第一页后在内存里按 ID 过滤」。
+func normalizeExportIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
+}
+
+// collectClues 收集待导出的线索：选中导出按租户直查指定 ID（含第一页之外的
+// 选中项）；全量导出逐页遍历到总数，不截断。查询失败立刻返回错误，不静默产出
+// 半截文件。
+func (s *BatchOperationService) collectClues(ctx context.Context, ids []string) ([]*cdpmodel.Clue, error) {
+	if len(ids) > 0 {
+		return s.clueRepo.GetByIDs(ctx, normalizeExportIDs(ids))
+	}
+	all := make([]*cdpmodel.Clue, 0)
+	for page := 1; ; page++ {
+		rows, total, err := s.clueRepo.GetClueList(ctx, page, exportPageSize)
+		if err != nil {
+			return nil, fmt.Errorf("查询线索失败: %w", err)
+		}
+		all = append(all, rows...)
+		if len(all) >= int(total) || len(rows) < exportPageSize {
+			break
+		}
+	}
+	return all, nil
+}
+
+// collectUsers 收集待导出的用户。与线索同理：选中按 ID 直查，全量逐页遍历
+// （用户仓储 limit 夹到 200，故 201 夹具必须翻到第 2 页）。
+func (s *BatchOperationService) collectUsers(ctx context.Context, ids []string) ([]*cdpmodel.User, error) {
+	if len(ids) > 0 {
+		return s.userRepo.GetByIDs(ctx, normalizeExportIDs(ids))
+	}
+	all := make([]*cdpmodel.User, 0)
+	for page := 1; ; page++ {
+		rows, total, err := s.userRepo.GetUserList(ctx, page, exportPageSize)
+		if err != nil {
+			return nil, fmt.Errorf("查询用户失败: %w", err)
+		}
+		all = append(all, rows...)
+		if len(all) >= int(total) || len(rows) < exportPageSize {
+			break
+		}
+	}
+	return all, nil
+}
+
 // GenerateCSV 生成 CSV 数据
 func (s *BatchOperationService) GenerateCSV(ctx context.Context, exportType ExportType, ids []string) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
@@ -328,22 +390,14 @@ func (s *BatchOperationService) GenerateCSV(ctx context.Context, exportType Expo
 // GenerateJSONL 生成 JSONL 格式（每行一个 JSON 对象）
 func (s *BatchOperationService) GenerateJSONL(ctx context.Context, exportType ExportType, ids []string) (*bytes.Buffer, error) {
 	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
 	switch exportType {
 	case ExportTypeClue:
-		clues, _, err := s.clueRepo.GetClueList(ctx, 1, 10000)
+		clues, err := s.collectClues(ctx, ids)
 		if err != nil {
-			return nil, fmt.Errorf("查询线索失败: %w", err)
+			return nil, err
 		}
-		idSet := make(map[string]bool)
-		for _, id := range ids {
-			idSet[strings.TrimSpace(id)] = true
-		}
-		hasFilter := len(ids) > 0
-		enc := json.NewEncoder(&buf)
 		for _, clue := range clues {
-			if hasFilter && !idSet[clue.ID] {
-				continue
-			}
 			_ = enc.Encode(map[string]any{
 				"id": clue.ID, "name": clue.Name, "account": clue.Account,
 				"type": clue.Type, "city": clue.City, "address": clue.Address,
@@ -353,20 +407,11 @@ func (s *BatchOperationService) GenerateJSONL(ctx context.Context, exportType Ex
 			})
 		}
 	case ExportTypeUser:
-		users, _, err := s.userRepo.GetUserList(ctx, 1, 10000)
+		users, err := s.collectUsers(ctx, ids)
 		if err != nil {
-			return nil, fmt.Errorf("查询用户失败: %w", err)
+			return nil, err
 		}
-		idSet := make(map[string]bool)
-		for _, id := range ids {
-			idSet[strings.TrimSpace(id)] = true
-		}
-		hasFilter := len(ids) > 0
-		enc := json.NewEncoder(&buf)
 		for _, u := range users {
-			if hasFilter && !idSet[u.ID] {
-				continue
-			}
 			_ = enc.Encode(map[string]any{
 				"id": u.ID, "username": u.Username, "email": u.Email,
 				"phone": u.Phone, "real_name": u.RealName, "status": int64(u.Status),
@@ -387,19 +432,11 @@ func (s *BatchOperationService) GenerateMarkdown(ctx context.Context, exportType
 	switch exportType {
 	case ExportTypeClue:
 		headers = []string{"ID", "姓名", "账户", "类型", "城市", "来源", "是否验证", "创建时间"}
-		clues, _, err := s.clueRepo.GetClueList(ctx, 1, 10000)
+		clues, err := s.collectClues(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
-		idSet := make(map[string]bool)
-		for _, id := range ids {
-			idSet[strings.TrimSpace(id)] = true
-		}
-		hasFilter := len(ids) > 0
 		for _, clue := range clues {
-			if hasFilter && !idSet[clue.ID] {
-				continue
-			}
 			rows = append(rows, []string{
 				clue.ID, clue.Name, clue.Account, strconv.FormatInt(clue.Type, 10),
 				clue.City, clue.SourceID, strconv.FormatInt(clue.IsVerify, 10),
@@ -408,19 +445,11 @@ func (s *BatchOperationService) GenerateMarkdown(ctx context.Context, exportType
 		}
 	case ExportTypeUser:
 		headers = []string{"ID", "用户名", "邮箱", "手机号", "真实姓名", "状态", "创建时间"}
-		users, _, err := s.userRepo.GetUserList(ctx, 1, 10000)
+		users, err := s.collectUsers(ctx, ids)
 		if err != nil {
 			return nil, err
 		}
-		idSet := make(map[string]bool)
-		for _, id := range ids {
-			idSet[strings.TrimSpace(id)] = true
-		}
-		hasFilter := len(ids) > 0
 		for _, u := range users {
-			if hasFilter && !idSet[u.ID] {
-				continue
-			}
 			rows = append(rows, []string{u.ID, u.Username, u.Email, u.Phone, u.RealName, strconv.FormatInt(int64(u.Status), 10), time.Unix(u.CreateTime, 0).Format("2006-01-02 15:04:05")})
 		}
 	default:
@@ -441,21 +470,12 @@ func (s *BatchOperationService) exportClues(ctx context.Context, writer *csv.Wri
 		return nil, err
 	}
 
-	clues, _, err := s.clueRepo.GetClueList(ctx, 1, 10000)
+	clues, err := s.collectClues(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("查询线索失败: %w", err)
-	}
-
-	idSet := make(map[string]bool)
-	hasFilter := len(ids) > 0
-	for _, id := range ids {
-		idSet[strings.TrimSpace(id)] = true
+		return nil, err
 	}
 
 	for _, clue := range clues {
-		if hasFilter && !idSet[clue.ID] {
-			continue
-		}
 		row := []string{
 			clue.ID,
 			clue.Name,
@@ -486,21 +506,12 @@ func (s *BatchOperationService) exportUsers(ctx context.Context, writer *csv.Wri
 		return nil, err
 	}
 
-	users, _, err := s.userRepo.GetUserList(ctx, 1, 10000)
+	users, err := s.collectUsers(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("查询用户失败: %w", err)
-	}
-
-	idSet := make(map[string]bool)
-	hasFilter := len(ids) > 0
-	for _, id := range ids {
-		idSet[strings.TrimSpace(id)] = true
+		return nil, err
 	}
 
 	for _, u := range users {
-		if hasFilter && !idSet[u.ID] {
-			continue
-		}
 		row := []string{
 			u.ID,
 			u.Username,

@@ -71,6 +71,10 @@ var SystemMenuTree = []SystemMenuNode{
 			// D04：同意事实账（grant/revoke 追加）与触达偏好（暂停/时区）的管理面。
 			// 与 customer360 同组：两者回答的是同一个问题——"这个客户现在能不能联系"。
 			{Key: "customerConsents", Title: "客户同意与偏好", Icon: "DocumentChecked", Path: "/customer360/consents"},
+			{Key: "businessAccountAuth", Title: "业务账号授权", Icon: "Lock", Path: "/businessAccountAuth/list", Roles: []string{"admin"}},
+			{Key: "customerImportJob", Title: "客户导入任务", Icon: "UploadFilled", Path: "/customerImportJob/list", Roles: []string{"admin"}},
+			{Key: "aiInsightDraft", Title: "AI洞察草稿", Icon: "MagicStick", Path: "/aiInsightDraft/list", Roles: []string{"admin"}},
+			{Key: "crossAccountSearch", Title: "跨账号客户检索", Icon: "Search", Path: "/crossAccountSearch/list", Roles: []string{"admin"}},
 			{Key: "customerEvent", Title: "客户事件", Icon: "Bell", Path: "/customerEvent/list"},
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "viewer"}},

@@ -114,6 +114,9 @@ func (o *CustomerOrchestrator) OnCustomerCreated(ctx context.Context, customer *
 }
 
 // OnCustomerEvent 客户事件后联动：
+//
+// EC-24 不变量（服务事件先行，营销后置）：本函数仅在服务事实事件已落库后联动旅程/标签，
+//   不得触发营销外发；营销链路必须独立晚于服务链路，且失败不得回写服务状态。
 //  1. JourneyService.Touch 记录互动（不改变阶段）
 //  2. JourneyService.Transition 根据事件类型自动迁移阶段（purchase → won）
 //  3. TagService.AutoTag 重新评估标签

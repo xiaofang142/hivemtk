@@ -42,8 +42,10 @@ const (
 // 这不是形式主义——列名写错、表名写错、model 没进 AutoMigrate 这三种缺陷，
 // 都只有在真建出这张表后才量得出来。
 var dataScopeGateModels = map[string]any{
-	"customer_sessions": &model.CustomerSession{},
-	"customers":         &model.Customer{},
+	"customer_sessions":         &model.CustomerSession{},
+	"customers":                 &model.Customer{},
+	"companies":                 &model.Company{},
+	"followup_records":          &model.FollowupRecord{},
 }
 
 // TestDataSetGate_RegistrationsAreLiveAndGuarded 一、二两条腿合一：

@@ -282,6 +282,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { workflowOrchestratorApi } from '@/api/workflowOrchestrator.js'
+import { isConfirmCancel, actionErrorMessage } from '../../utils/workflowAction.js'
 
 const router = useRouter()
 const loading = ref(false)
@@ -297,12 +298,9 @@ const pagination = reactive({
 })
 
 const filteredFlows = computed(() => {
-  let list = flows.value;
-  if (filterKeyword.value) {
-    const kw = filterKeyword.value.toLowerCase()
-    list = list.filter(f => (f.workflow_id || '').toLowerCase().includes(kw) || (f.name || '').toLowerCase().includes(kw))
-  }
-  return list
+  // FA-WF-12：关键字过滤已下沉到后端（loadData 传 keyword），
+  // 这里不再只过滤当前页已加载的 flows，直接用后端分页结果，避免当前页为空误导全库无匹配。
+  return flows.value;
 })
 
 const dialogVisible = ref(false);
@@ -396,7 +394,11 @@ const handlePublish = async (row) => {
     await workflowOrchestratorApi.publishVersion(row.id)
     ElMessage.success('发布成功')
     loadData()
-  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch (e) {
+    if (isConfirmCancel(e)) return
+    ElMessage.error(actionErrorMessage('发布', e))
+    loadData()
+  }
 }
 
 const handleArchive = async (row) => {
@@ -405,7 +407,11 @@ const handleArchive = async (row) => {
     await workflowOrchestratorApi.archiveVersion(row.id)
     ElMessage.success('已归档')
     loadData()
-  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch (e) {
+    if (isConfirmCancel(e)) return
+    ElMessage.error(actionErrorMessage('归档', e))
+    loadData()
+  }
 }
 
 const handleDelete = async (row) => {
@@ -414,7 +420,11 @@ const handleDelete = async (row) => {
     await workflowOrchestratorApi.deleteVersion(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch  { /* 忽略：清理/存储/恢复类 best-effort 操作 */ }
+  } catch (e) {
+    if (isConfirmCancel(e)) return
+    ElMessage.error(actionErrorMessage('删除', e))
+    loadData()
+  }
 }
 
 const loadData = async () => {
@@ -423,6 +433,7 @@ const loadData = async () => {
     const params = {
       workflow_id: '',
       status: filterStatus.value || '',
+      keyword: filterKeyword.value || '',
       page: pagination.page,
       page_size: pagination.pageSize
     };

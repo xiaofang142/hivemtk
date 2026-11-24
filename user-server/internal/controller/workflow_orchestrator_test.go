@@ -834,13 +834,14 @@ func TestWorkflowOrchestratorController_ExecuteFlow(t *testing.T) {
 	t.Log("执行流程测试通过")
 }
 
-// 成功夹具使用合法图，非法图仍须在 API 边界拒绝且不入库。
+// FA-WF-08 二次审核修复：空草稿（nodes=[]）现在是合法草稿，创建闸放过、发布闸才严格校验。
+// 故从"非法图"表移除 empty case，另加 TestCreateVersion_AllowsEmptyDraft 验证空草稿可创建。
+// 其余畸形图（string-node/missing-action 等）仍须在 API 边界拒绝且不入库。
 func TestWorkflowOrchestratorController_CreateVersion_InvalidDefinition(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		definition map[string]any
 	}{
-		{"empty", map[string]any{"nodes": []any{}}},
 		{"string-node", map[string]any{"nodes": []any{"updated"}}},
 		{"missing-action", map[string]any{"nodes": []any{
 			map[string]any{"id": "n1", "type": "trigger"},
@@ -881,5 +882,33 @@ func TestWorkflowOrchestratorController_CreateVersion_InvalidDefinition(t *testi
 				t.Fatalf("非法图不应落库，实际 %d 条", count)
 			}
 		})
+	}
+}
+
+// FA-WF-08 判据：服务端允许"仅空节点"的草稿创建，完整性校验后移到发布闸。
+func TestWorkflowOrchestratorController_CreateVersion_AllowsEmptyDraft(t *testing.T) {
+	database := setupWorkflowTestDB(t)
+	ctrl := setupWorkflowOrchestratorController(database)
+	router := setupWorkflowGinEngine()
+	router.POST("/workflows/versions", ctrl.CreateVersion)
+	body, err := json.Marshal(dto.WorkflowVersionCreateRequest{
+		WorkflowID: "empty-draft-ok", Name: "空草稿", Definition: map[string]any{"nodes": []any{}},
+	})
+	if err != nil {
+		t.Fatalf("序列化请求失败: %v", err)
+	}
+	req := httptest.NewRequest("POST", "/workflows/versions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("空草稿应允许创建，实际 %d %s", w.Code, w.Body.String())
+	}
+	var count int64
+	if err := database.Model(&model.WorkflowVersion{}).Where("workflow_id = ?", "empty-draft-ok").Count(&count).Error; err != nil {
+		t.Fatalf("核对空草稿落库失败: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("空草稿应落库 1 条，实际 %d", count)
 	}
 }

@@ -38,7 +38,15 @@
     "revoke": "撤销本地授权",
     "stepsLabel": "店铺连接步骤",
     "helpButton": "查看操作引导",
-    "states": { "unknown": "尚未查询", "unconfigured": "未配置", "connecting": "授权待完成", "ready": "连接就绪（业务动作仍阻断）", "reauth": "需要重新授权", "refreshing": "凭证刷新中", "revoked": "已本地撤销" },
+    "states": {
+      "unknown": "尚未查询",
+      "unconfigured": "未配置",
+      "connecting": "授权待完成",
+      "ready": "连接就绪（业务动作仍阻断）",
+      "reauth": "需要重新授权",
+      "refreshing": "凭证刷新中",
+      "revoked": "已本地撤销"
+    },
     "errors": {
       "statusFailed": "无法确认连接状态。请检查目标或联系集成负责人后重新查询。",
       "startFailed": "未能准备安全授权页。请重新查询状态；不要重复提交旧尝试。",
@@ -121,12 +129,21 @@
   "pilotContract": {
     "title": "试点启动基线与契约",
     "boundary": "仅校验和保存模拟试点草稿。真实平台、商户授权、订单后置条件尚未验证，生产执行仍阻塞。",
-    "identity": "现有安装身份", "tenant": "当前租户", "configured": "已保存草稿", "unconfigured": "未配置",
+    "identity": "现有安装身份",
+    "tenant": "当前租户",
+    "configured": "已保存草稿",
+    "unconfigured": "未配置",
     "empty": "未配置：填写店铺归属与授权引用、读写范围、资金上限、授权人、观察窗、回退人、单笔订单及 FA/AR/CH 关闭提交和测试证据。",
-    "blockers": "本地校验阻塞原因", "draft": "PilotContract JSON 草稿", "hint": "只填 fake/simulated；不要填写凭证、客户地址或隐私。工程分钟与平台审批等待分别记录。",
-    "validate": "本地校验", "save": "保存草稿", "retry": "重新读取",
-    "loadFailed": "读取失败，无法判定配置状态。", "submitFailed": "保存或校验失败，请检查 JSON、身份与修订；修订冲突时重读后合并草稿。",
-    "saved": "草稿已保存；生产仍阻塞。", "validated": "仅完成本地契约校验，未保存；生产仍阻塞。"
+    "blockers": "本地校验阻塞原因",
+    "draft": "PilotContract JSON 草稿",
+    "hint": "只填 fake/simulated；不要填写凭证、客户地址或隐私。工程分钟与平台审批等待分别记录。",
+    "validate": "本地校验",
+    "save": "保存草稿",
+    "retry": "重新读取",
+    "loadFailed": "读取失败，无法判定配置状态。",
+    "submitFailed": "保存或校验失败，请检查 JSON、身份与修订；修订冲突时重读后合并草稿。",
+    "saved": "草稿已保存；生产仍阻塞。",
+    "validated": "仅完成本地契约校验，未保存；生产仍阻塞。"
   },
   "navigation": {
     "breadcrumb": "当前位置",
@@ -531,7 +548,11 @@
     "geoAuditCenter": "审计中心",
     "geoDualEngine": "双端监测",
     "geoCapture": "承接",
-    "geoCaptureLinks": "承接链接"
+    "geoCaptureLinks": "承接链接",
+    "businessAccountAuth": "业务账号授权",
+    "customerImportJob": "客户导入任务",
+    "aiInsightDraft": "AI洞察草稿",
+    "crossAccountSearch": "跨账号客户检索"
   },
   "保存": "保存",
   "提交": "提交",
@@ -1931,8 +1952,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "店铺授权连接", "summary": "查询目标店铺状态，再按已核实的回传流程连接。真实契约未验证时保持阻断。", "target": "确认连接目标", "targetSummary": "填写已登记的提供方标识与店铺 ID 并查询状态。切换目标会清除本次授权。", "status": "连接与动作权限", "statusSummary": "连接就绪不代表动作获准，仍须通过 EC-01 的逐动作校验。", "actions": "刷新与本地撤销", "actionsSummary": "刷新只使用当前凭证代次，失败后重读状态。本地撤销不确认远端撤销，且保留登录会话。" },
-        "pilotContract": { "title": "试点契约", "summary": "核对现有安装与租户身份，填写模拟试点草稿并查看阻塞原因；保存不会开放生产执行权限。", "identity": "身份映射", "identitySummary": "安装身份只读展示，并与当前租户共同核验。", "blockers": "阻塞原因", "blockersSummary": "查看试点进入模拟验证前缺少的条件。", "draft": "契约草稿", "draftSummary": "仅填写模拟数据，不包含凭证或客户隐私。" },
+        "merchantConnection": {
+          "title": "店铺授权连接",
+          "summary": "查询目标店铺状态，再按已核实的回传流程连接。真实契约未验证时保持阻断。",
+          "target": "确认连接目标",
+          "targetSummary": "填写已登记的提供方标识与店铺 ID 并查询状态。切换目标会清除本次授权。",
+          "status": "连接与动作权限",
+          "statusSummary": "连接就绪不代表动作获准，仍须通过 EC-01 的逐动作校验。",
+          "actions": "刷新与本地撤销",
+          "actionsSummary": "刷新只使用当前凭证代次，失败后重读状态。本地撤销不确认远端撤销，且保留登录会话。"
+        },
+        "pilotContract": {
+          "title": "试点契约",
+          "summary": "核对现有安装与租户身份，填写模拟试点草稿并查看阻塞原因；保存不会开放生产执行权限。",
+          "identity": "身份映射",
+          "identitySummary": "安装身份只读展示，并与当前租户共同核验。",
+          "blockers": "阻塞原因",
+          "blockersSummary": "查看试点进入模拟验证前缺少的条件。",
+          "draft": "契约草稿",
+          "draftSummary": "仅填写模拟数据，不包含凭证或客户隐私。"
+        },
         "common": {
           "overview": "这一页是做什么的",
           "action": "关键操作在哪"
@@ -2527,6 +2566,13 @@
           "step2": {
             "description": "每类告警的处理方式不同：负面命中要发内容纠正，违规提示要改表述，推送失败先看配额和链接。告警不确认就会一直挂着，也会污染「未确认告警数」这个指标本身。处理完要确认，不要只是看一眼——告警的「已确认」是复盘时判断处理率的唯一依据。"
           }
+        },
+        "commerceOperations": {
+          "title": "电商操作工作台",
+          "target": "使用已授权连接绑定的店铺标识",
+          "draft": "保存意图（不直接执行）",
+          "ledger": "操作账本",
+          "evidence": "人工证明不自动升级为平台或支付核验，原始失败记录保留。"
         }
       }
     },
@@ -2955,5 +3001,100 @@
   "请填写跟进人账号": "请填写跟进人账号",
   "分配失败": "分配失败",
   "城市": "城市",
-  "地址": "地址"
+  "地址": "地址",
+  "commerce": {
+    "title": "电商操作工作台",
+    "boundary": "业务提交、平台受理、人工证明、资金成功和消息送达分别记录；模拟验证不代表真实店铺放行。",
+    "profile": "平台业务配置",
+    "chooseProfile": "选择独立产品和地区",
+    "shop": "店铺标识",
+    "shopHint": "使用已授权连接绑定的店铺标识",
+    "order": "镜像订单 ID",
+    "refresh": "刷新操作",
+    "role": "要求角色",
+    "providerMissing": "未配置可验证提供方，原生写入保持关闭。",
+    "newOperation": "创建业务意图",
+    "action": "业务动作",
+    "chooseAction": "按当前配置选择动作",
+    "sourceVersion": "权威订单版本",
+    "sourceVersionHint": "从最新权威订单读取，不填写推测值",
+    "intent": "业务意图键",
+    "intentHint": "同一意图重试保持此键不变",
+    "revision": "显式修订",
+    "required": "所需字段",
+    "parameterHint": "按平台契约填写，金额为最小货币单位整数",
+    "obligations": "确认费用与后续义务",
+    "createDraft": "保存意图（不直接执行）",
+    "operations": "操作账本",
+    "operationId": "操作 ID",
+    "state": "业务状态",
+    "mode": "执行方式",
+    "evidenceLevel": "核验等级",
+    "funds": "资金状态",
+    "details": "操作详情与后置条件",
+    "selectOperation": "先选择操作，核对审批范围和证据。",
+    "empty": "选择平台和授权店铺刷新，或先保存业务意图。",
+    "unknownHint": "结果未知：保留原操作和资源占用，只回查或人工核验，不盲重试或换 ERP 补写。",
+    "evidenceReference": "人工证据引用",
+    "evidenceHint": "填写受控凭证引用，不输入密钥和个人原文",
+    "nativeState": "平台原始状态",
+    "outcome": "人工登记结论",
+    "appendEvidence": "追加人工证明",
+    "manualHint": "人工证明不自动升级为平台或支付核验，原始失败记录保留。",
+    "confirmTransition": "请核对店铺、动作、预检摘要、费用义务和当前批准范围；后端将重新校验权限和版本。",
+    "loadError": "读取失败或无权访问，请检查店铺授权和连接。",
+    "createError": "保存失败，请检查必填字段、整数金额、版本和权限。",
+    "actionError": "完成状态未确认，请刷新核对最新状态和拒绝原因。",
+    "fields": {
+      "recipient": "收件人",
+      "phone": "收件电话",
+      "address": "详细地址",
+      "province": "省／州",
+      "city": "城市",
+      "district": "区县",
+      "amount_minor": "金额（最小单位整数）",
+      "currency": "币种",
+      "quantity": "数量",
+      "line_id": "订单行",
+      "case_ref": "案件引用",
+      "reason": "原因",
+      "sku": "目标 SKU",
+      "logistics_ref": "物流引用",
+      "warehouse_ref": "仓库引用",
+      "payment_path": "资金路径"
+    },
+    "transitions": {
+      "preflight": "重新预检",
+      "approve": "逐单批准",
+      "submit": "提交执行",
+      "observe": "回查核验",
+      "cancel": "取消未出站操作",
+      "claim": "认领工作台任务"
+    },
+    "detail": {
+      "id": "操作 ID",
+      "state": "业务状态",
+      "native_state": "平台原始状态",
+      "mode": "执行方式",
+      "write_owner": "唯一写入责任源",
+      "approver_id": "批准人",
+      "owner_id": "责任人",
+      "evidence_level": "核验等级",
+      "evidence_ref": "证据引用",
+      "external_ref": "外部引用",
+      "funds_state": "资金状态",
+      "manual_state": "人工接续",
+      "amount_minor": "金额（最小单位）",
+      "currency": "币种",
+      "actual_attempts": "真实尝试次数",
+      "unknown_since": "未知起始",
+      "due_at": "下次核验",
+      "expires_at": "预检到期",
+      "failure_reason": "失败或拒绝原因",
+      "result_summary": "结果摘要",
+      "live_status": "真实验证状态",
+      "version": "操作版本",
+      "preflight_hash": "预检摘要"
+    }
+  }
 }

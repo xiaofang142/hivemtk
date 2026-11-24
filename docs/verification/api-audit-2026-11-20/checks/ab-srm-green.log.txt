@@ -1,2 +1,0 @@
-ok  	hivemtk-user/internal/ops/service	71.544s
-ok  	hivemtk-user/internal/ops/controller	36.346s

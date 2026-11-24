@@ -159,6 +159,51 @@ var dataScopeRoutes = map[string]DataScopeRow{
 	// internal/router/data_scope_gate_test.go 单向核对：那条腿把客服域每一条按行寻址的口
 	// 分成三类——守卫已登记、名册 dataScopeScopedElsewhere 里写了执行点、两者皆无（红）。
 	// 新增这类口时不要动这里来消红，要么登记一行，要么把它的执行点写进那份名册。
+
+	// Company 主数据（S-01/P-02）：公司是租户级 CRM 实体，按 owner_user_id 归属；
+	// 未分配 owner（0）按未分配池放行，便于导入/迁移阶段。tenant 隔离由 service/controller 叠加。
+	"GET /api/companies/:id": {
+		Table: "companies", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_user_id", AllowUnowned: true,
+		Note: "公司详情，含客户关联与来源",
+	},
+	"PUT /api/companies/:id": {
+		Table: "companies", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_user_id", AllowUnowned: true,
+		Note: "修改公司主数据",
+	},
+	"DELETE /api/companies/:id": {
+		Table: "companies", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_user_id", AllowUnowned: true,
+		Note: "删除公司（软删）",
+	},
+	"GET /api/companies/:id/relations": {
+		Table: "companies", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_user_id", AllowUnowned: true,
+		Note: "公司关联的客户关系列表",
+	},
+	// 客户-公司关系写入：:id 为 customer 主键，复用 customers 归属判定。
+	"GET /api/customers/:id/company-relations": {
+		Table: "customers", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_agent_id", AllowUnowned: true,
+		Note: "客户关联的公司关系列表",
+	},
+	"POST /api/customers/:id/company-relations": {
+		Table: "customers", IDColumn: "id", Param: "id",
+		OwnerColumn: "owner_agent_id", AllowUnowned: true,
+		Note: "为客户新增/更新公司关系（会双写 customers.company_id）",
+	},
+	// PR-4：跟进记录，按 owner_id 归属。
+	"GET /api/followup-records/:id": {
+		Table: "followup_records", IDColumn: "record_id", Param: "id",
+		OwnerColumn: "owner_id", AllowUnowned: true,
+		Note: "跟进记录详情",
+	},
+	"PUT /api/followup-records/:id": {
+		Table: "followup_records", IDColumn: "record_id", Param: "id",
+		OwnerColumn: "owner_id", AllowUnowned: true,
+		Note: "更新跟进记录",
+	},
 }
 
 // DataScopeFor 查一条路由的行级隔离登记。

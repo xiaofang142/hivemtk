@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+// EC-26 (M26, not implemented / not live-closed): 时区静默按 IANA 时区计算（本文件已支持），
+// 未知时区当前回退 cstZone；EC-26 要求未知时区使用配置的保守策略（不猜所在地），
+// 夏令时由 IANA 处理。需把回退策略接参数中心并显式配置。详见 docs/未来任务清单.md §7.1.8 / M26。
+//
 // CustomerTimeZoneLookup 按 customerID 取客户档案的 **custom_attributes 原始
 // jsonb 串**（timezone 键由本域统一解析——装配点不重复实现解析规则）。
 // 返回 ok=false = 查无此人/查库失败，走回退。nil = 不查档案（此时只剩

@@ -13,6 +13,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/reporting"
@@ -385,6 +386,12 @@ func (s *RagEvalGapService) Diff(ctx context.Context, baselineID uint) (map[stri
 // CohortGapService 留存/路径分析
 type CohortGapService struct {
 	repo *repository.CohortGapRepo
+
+	// FA-COHORT-01：可注入的时间/计数 seam，用于冻结业务时区周起点并注入查询故障。
+	// nil 时使用真实 repo / time.Now（零行为变更）。
+	nowFn           func() time.Time
+	countCustomers  func(ctx context.Context, start, end time.Time) (int64, error)
+	countRetained   func(ctx context.Context, cohortStart, cohortEnd, weekStart, weekEnd time.Time) (int64, error)
 }
 
 // NewCohortGapService 构造（五层边界 §3.2：只持仓储；repo 为 nil 时查询类方法返回错误）
@@ -397,17 +404,52 @@ func NewCohortGapServiceFromGlobal() *CohortGapService {
 	return NewCohortGapService(repository.NewCohortGapRepo())
 }
 
+func (s *CohortGapService) now() time.Time {
+	if s.nowFn != nil {
+		return s.nowFn()
+	}
+	return time.Now()
+}
+
+func (s *CohortGapService) doCountCustomers(ctx context.Context, start, end time.Time) (int64, error) {
+	if s.countCustomers != nil {
+		return s.countCustomers(ctx, start, end)
+	}
+	return s.repo.CountCustomersBetween(ctx, start, end)
+}
+
+func (s *CohortGapService) doCountRetained(ctx context.Context, cohortStart, cohortEnd, weekStart, weekEnd time.Time) (int64, error) {
+	if s.countRetained != nil {
+		return s.countRetained(ctx, cohortStart, cohortEnd, weekStart, weekEnd)
+	}
+	return s.repo.CountRetainedEvents(ctx, cohortStart, cohortEnd, weekStart, weekEnd)
+}
+
+// startOfBusinessWeek 归零到业务时区（CST）自然周零点（周日为周起点）。
+// 冻结时钟下跨周/午夜都落在确定的周界，不再保留当前时分秒。
+func startOfBusinessWeek(t time.Time) time.Time {
+	d := timeutil.StartOfBusinessDay(t)
+	return d.AddDate(0, 0, -int(d.Weekday()))
+}
+
 // CohortResult 周留存矩阵
 type CohortResult struct {
 	Periods []string          `json:"periods"`
 	Cohorts []CohortBucketRow `json:"cohorts"`
+
+	// FA-COHORT-01：整体可见故障状态与明细错误（不可用/部分结果，绝不伪装真实 0%）。
+	Status string   `json:"status,omitempty"` // ok / partial / unavailable
+	Errors []string `json:"errors,omitempty"`
 }
 
 // CohortBucketRow 单分群行
 type CohortBucketRow struct {
-	Label     string    `json:"label"`
-	Size      int64     `json:"size"`
-	Retention []float64 `json:"retention"`
+	Label string `json:"label"`
+	Size  int64  `json:"size"`
+	// Retention 用指针表达"不可得"：nil=未成熟/查询失败/无样本，前端不得显示为 0%。
+	Retention []*float64 `json:"retention"`
+	// RetentionStates 每格状态：ok / immature / error / no_cohort / size_error。
+	RetentionStates []string `json:"retention_states,omitempty"`
 }
 
 // Cohort 按客户注册周分群，后续周有行为事件（customer_events）即留存
@@ -418,14 +460,16 @@ func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult
 	if weeks <= 0 || weeks > 12 {
 		weeks = 8
 	}
-	now := time.Now()
-	thisWeekStart := now.AddDate(0, 0, -int(now.Weekday()))
+	now := s.now()
+	thisWeekStart := startOfBusinessWeek(now)
 	type cohort struct {
-		label    string
-		start    time.Time
-		end      time.Time
-		size     int64
-		retained []int64
+		label      string
+		start      time.Time
+		end        time.Time
+		size       int64
+		sizeErr    error
+		retained   []int64
+		states     []string // per-cell 状态，与 retained 平行
 	}
 	cohorts := make([]cohort, 0, weeks)
 	periods := []string{}
@@ -439,32 +483,68 @@ func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult
 		periods = append(periods, fmt.Sprintf("W+%d", weeks-1-i))
 	}
 
+	errs := []string{}
+	sizeQueryFailed := 0
+	cellQueryFailed := 0
 	for ci := range cohorts {
 		c := &cohorts[ci]
-		if n, err := s.repo.CountCustomersBetween(ctx, c.start, c.end); err == nil {
+		var sizeErr error
+		if n, err := s.doCountCustomers(ctx, c.start, c.end); err == nil {
 			c.size = n
+		} else {
+			sizeErr = err
+			sizeQueryFailed++
+			errs = append(errs, fmt.Sprintf("cohort %s size query: %v", c.label, err))
 		}
+		c.sizeErr = sizeErr
 		c.retained = make([]int64, weeks)
+		c.states = make([]string, weeks)
 		for wi := 0; wi < weeks; wi++ {
-			wstart := c.end.AddDate(0, 0, 7*wi)
+			// W+0 = cohort 同周（cstart），W+1 = 次周；不再用 c.end 导致整体错位一周。
+			wstart := c.start.AddDate(0, 0, 7*wi)
 			wend := wstart.AddDate(0, 0, 7)
 			if wstart.After(now) {
-				break
+				c.states[wi] = "immature" // 未成熟区间：保留列为 nil，不显示 0%
+				continue
 			}
-			var n int64
-			if cnt, err := s.repo.CountRetainedEvents(ctx, c.start, c.end, wstart, wend); err == nil {
-				n = cnt
+			if sizeErr != nil {
+				c.states[wi] = "size_error" // 分母未知，绝不填 0
+				continue
 			}
-			c.retained[wi] = n
+			if cnt, err := s.doCountRetained(ctx, c.start, c.end, wstart, wend); err == nil {
+				c.retained[wi] = cnt
+				c.states[wi] = "ok"
+			} else {
+				cellQueryFailed++
+				errs = append(errs, fmt.Sprintf("cohort %s W+%d query: %v", c.label, wi, err))
+				c.states[wi] = "error"
+			}
 		}
 	}
-	out := &CohortResult{Periods: periods}
+
+	status := "ok"
+	if len(errs) > 0 {
+		status = "partial"
+		if sizeQueryFailed > 0 && sizeQueryFailed == len(cohorts) {
+			status = "unavailable" // 所有分母都查不到 → 整张图不可用
+		}
+	}
+	out := &CohortResult{Periods: periods, Status: status, Errors: errs}
 	for _, c := range cohorts {
-		row := CohortBucketRow{Label: c.label, Size: c.size}
-		row.Retention = make([]float64, weeks)
+		row := CohortBucketRow{Label: c.label, Size: c.size, RetentionStates: c.states}
+		row.Retention = make([]*float64, weeks)
 		for wi := 0; wi < weeks; wi++ {
-			if c.size > 0 && wi < len(c.retained) {
-				row.Retention[wi] = float64(c.retained[wi]) * 100 / float64(c.size)
+			switch c.states[wi] {
+			case "ok":
+				if c.size > 0 {
+					v := float64(c.retained[wi]) * 100 / float64(c.size)
+					row.Retention[wi] = &v
+				} else {
+					row.Retention[wi] = nil // 无样本，分母为 0，不可得
+					row.RetentionStates[wi] = "no_cohort"
+				}
+			default:
+				row.Retention[wi] = nil // immature / error / size_error → 不可得，不显示 0%
 			}
 		}
 		out.Cohorts = append(out.Cohorts, row)

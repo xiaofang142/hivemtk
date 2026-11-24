@@ -28,6 +28,11 @@ func setupAuditTestDB(t *testing.T) {
 		&model.CSATSurvey{},
 		&model.Clue{},
 		&model.ScriptExposureLog{},
+		// FA-43：MergeByIdentity 现在经规则服务消费 SystemConfigKV，且 MergeCustomers
+		// 事务会清理/改写同意身份关联与订单归属；补这些表避免 relation does not exist。
+		&model.SystemConfigKV{},
+		&model.ContactConsentIdentityLink{},
+		&model.Order{},
 	)
 	db.SetTestDB(database)
 }

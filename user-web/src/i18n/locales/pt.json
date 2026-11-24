@@ -38,7 +38,15 @@
     "revoke": "Revogar autorização local",
     "stepsLabel": "Etapas de conexão da loja",
     "helpButton": "Mostrar guia de uso",
-    "states": { "unknown": "Não consultado", "unconfigured": "Não configurado", "connecting": "Autorização pendente", "ready": "Conexão pronta (ações bloqueadas)", "reauth": "Nova autorização necessária", "refreshing": "Renovação pendente", "revoked": "Revogada localmente" },
+    "states": {
+      "unknown": "Não consultado",
+      "unconfigured": "Não configurado",
+      "connecting": "Autorização pendente",
+      "ready": "Conexão pronta (ações bloqueadas)",
+      "reauth": "Nova autorização necessária",
+      "refreshing": "Renovação pendente",
+      "revoked": "Revogada localmente"
+    },
     "errors": {
       "statusFailed": "Não foi possível confirmar o status. Verifique o destino ou contate o responsável antes de consultar novamente.",
       "startFailed": "Não foi possível preparar uma página de autorização segura. Consulte o status; não reenvie uma tentativa antiga.",
@@ -126,13 +134,23 @@
     "roleGroupingHint": "Esta árvore segue o catálogo de permissões. No menu, a automação do navegador fica em Configurações do sistema. Sua localização não afeta as permissões."
   },
   "pilotContract": {
-    "title": "Contrato e base do piloto", "boundary": "Somente rascunhos simulados são validados e salvos. Plataforma, autorização do comerciante e pós-condições do pedido ainda não foram validadas ao vivo; a produção continua bloqueada.",
-    "identity": "Identidade de instalação existente", "tenant": "Locatário atual", "configured": "Rascunho salvo", "unconfigured": "Não configurado",
+    "title": "Contrato e base do piloto",
+    "boundary": "Somente rascunhos simulados são validados e salvos. Plataforma, autorização do comerciante e pós-condições do pedido ainda não foram validadas ao vivo; a produção continua bloqueada.",
+    "identity": "Identidade de instalação existente",
+    "tenant": "Locatário atual",
+    "configured": "Rascunho salvo",
+    "unconfigured": "Não configurado",
     "empty": "Informe propriedade e referência de autorização da loja, escopos de leitura/gravação, limite de fundos, autorizador do teste, janela de observação, responsável pelo rollback, um pedido e commits de fechamento e testes FA/AR/CH.",
-    "blockers": "Bloqueios da validação local", "draft": "Rascunho JSON PilotContract", "hint": "Use apenas fake/simulated. Não informe credenciais nem dados de clientes. Registre separadamente minutos de engenharia e espera pela aprovação da plataforma.",
-    "validate": "Validar localmente", "save": "Salvar rascunho", "retry": "Ler novamente", "loadFailed": "Falha na leitura; estado da configuração desconhecido.",
+    "blockers": "Bloqueios da validação local",
+    "draft": "Rascunho JSON PilotContract",
+    "hint": "Use apenas fake/simulated. Não informe credenciais nem dados de clientes. Registre separadamente minutos de engenharia e espera pela aprovação da plataforma.",
+    "validate": "Validar localmente",
+    "save": "Salvar rascunho",
+    "retry": "Ler novamente",
+    "loadFailed": "Falha na leitura; estado da configuração desconhecido.",
     "submitFailed": "Falha ao salvar ou validar. Confira JSON, identidade e revisão. Em caso de conflito, releia e mescle o rascunho.",
-    "saved": "Rascunho salvo; a produção continua bloqueada.", "validated": "Contrato local validado sem salvar; a produção continua bloqueada."
+    "saved": "Rascunho salvo; a produção continua bloqueada.",
+    "validated": "Contrato local validado sem salvar; a produção continua bloqueada."
   },
   "bulkLeadHandoff": {
     "template": "Modelo de mensagem",
@@ -530,7 +548,11 @@
     "geoAuditCenter": "Centro de auditoria",
     "geoDualEngine": "Monitorização de motor duplo",
     "geoCapture": "Captação",
-    "geoCaptureLinks": "Links de captação"
+    "geoCaptureLinks": "Links de captação",
+    "businessAccountAuth": "Business Account Auth",
+    "customerImportJob": "Customer Import Jobs",
+    "aiInsightDraft": "AI Insight Drafts",
+    "crossAccountSearch": "Cross-Account Search"
   },
   "保存": "Save",
   "提交": "Submit",
@@ -1930,8 +1952,26 @@
         }
       },
       "page": {
-        "merchantConnection": { "title": "Autorização da loja", "summary": "Consulte o status da loja e conecte usando uma transferência verificada. Contratos reais não verificados permanecem bloqueados.", "target": "Confirmar o destino", "targetSummary": "Informe o identificador de provedor registrado e o ID da loja e consulte o status. Alterar o destino apaga a tentativa.", "status": "Conexão e permissões", "statusSummary": "Uma conexão pronta não autoriza ações. O EC-01 ainda verifica cada ação separadamente.", "actions": "Renovar e revogar localmente", "actionsSummary": "A renovação usa a versão atual e consulta o status em caso de falha. A revogação local não confirma a do provedor e preserva sua sessão." },
-        "pilotContract": { "title": "Contrato piloto", "summary": "Verifique a instalação e o locatário, edite um rascunho simulado e confira os bloqueios. Salvar não permite execução em produção.", "identity": "Mapeamento de identidade", "identitySummary": "A identidade da instalação é somente leitura e verificada com o locatário atual.", "blockers": "Bloqueios", "blockersSummary": "Confira as condições pendentes antes da validação simulada.", "draft": "Rascunho do contrato", "draftSummary": "Use apenas dados simulados; não inclua credenciais nem dados de clientes." },
+        "merchantConnection": {
+          "title": "Autorização da loja",
+          "summary": "Consulte o status da loja e conecte usando uma transferência verificada. Contratos reais não verificados permanecem bloqueados.",
+          "target": "Confirmar o destino",
+          "targetSummary": "Informe o identificador de provedor registrado e o ID da loja e consulte o status. Alterar o destino apaga a tentativa.",
+          "status": "Conexão e permissões",
+          "statusSummary": "Uma conexão pronta não autoriza ações. O EC-01 ainda verifica cada ação separadamente.",
+          "actions": "Renovar e revogar localmente",
+          "actionsSummary": "A renovação usa a versão atual e consulta o status em caso de falha. A revogação local não confirma a do provedor e preserva sua sessão."
+        },
+        "pilotContract": {
+          "title": "Contrato piloto",
+          "summary": "Verifique a instalação e o locatário, edite um rascunho simulado e confira os bloqueios. Salvar não permite execução em produção.",
+          "identity": "Mapeamento de identidade",
+          "identitySummary": "A identidade da instalação é somente leitura e verificada com o locatário atual.",
+          "blockers": "Bloqueios",
+          "blockersSummary": "Confira as condições pendentes antes da validação simulada.",
+          "draft": "Rascunho do contrato",
+          "draftSummary": "Use apenas dados simulados; não inclua credenciais nem dados de clientes."
+        },
         "common": {
           "overview": "Para que serve esta página",
           "action": "Onde estão as acções principais"
@@ -2526,6 +2566,13 @@
           "step2": {
             "description": "Cada tipo trata-se de forma diferente: uma ocorrência negativa pede correcção de conteúdo, um aviso de conformidade pede mudar a formulação, uma falha de push pede verificar cota e ligação. Os alertas que nunca são confirmados acumulam-se e falseiam ao mesmo tempo a própria métrica de «alertas por confirmar». Confirme-os quando os tratar: essa confirmação é o único registo da sua taxa de tratamento quando voltar a este mais tarde."
           }
+        },
+        "commerceOperations": {
+          "title": "Commerce operations",
+          "target": "Use the shop bound to an authorized connection",
+          "draft": "Save intent without executing",
+          "ledger": "Operation ledger",
+          "evidence": "Attestation does not become provider or payment verification. Original failures remain."
         }
       }
     },
@@ -2976,5 +3023,100 @@
   "请填写跟进人账号": "Informe a conta do responsável",
   "分配失败": "Falha ao atribuir",
   "城市": "Cidade",
-  "地址": "Endereço"
+  "地址": "Endereço",
+  "commerce": {
+    "title": "Commerce operations",
+    "boundary": "Submission, acceptance, attestation, money movement and delivery remain separate facts. Simulation does not authorize live release.",
+    "profile": "Business profile",
+    "chooseProfile": "Choose product and region",
+    "shop": "Shop identifier",
+    "shopHint": "Use the shop bound to an authorized connection",
+    "order": "Mirror order ID",
+    "refresh": "Refresh operations",
+    "role": "Required role",
+    "providerMissing": "No verified provider is configured; native writes remain closed.",
+    "newOperation": "Create a business intent",
+    "action": "Action",
+    "chooseAction": "Choose a profile action",
+    "sourceVersion": "Authoritative order version",
+    "sourceVersionHint": "Use a fresh authoritative read; do not guess",
+    "intent": "Business intent key",
+    "intentHint": "Preserve this key when retrying the same intent",
+    "revision": "Explicit revision",
+    "required": "Required fields",
+    "parameterHint": "Follow the contract; money is an integer in minor units",
+    "obligations": "Confirm costs and subsequent obligations",
+    "createDraft": "Save intent without executing",
+    "operations": "Operation ledger",
+    "operationId": "Operation ID",
+    "state": "Business state",
+    "mode": "Execution mode",
+    "evidenceLevel": "Verification level",
+    "funds": "Funds state",
+    "details": "Operation and postconditions",
+    "selectOperation": "Select an operation and check approval scope and evidence.",
+    "empty": "Choose an authorized shop and refresh, or save an intent.",
+    "unknownHint": "Outcome unknown: retain the operation and reservations. Observe or verify manually; do not resubmit or change write route.",
+    "evidenceReference": "Manual evidence reference",
+    "evidenceHint": "Use a controlled reference without secrets or personal data",
+    "nativeState": "Provider state",
+    "outcome": "Attested outcome",
+    "appendEvidence": "Append manual attestation",
+    "manualHint": "Attestation does not become provider or payment verification. Original failures remain.",
+    "confirmTransition": "Check shop, action, digest, costs, obligations and approval scope. The backend rechecks permission and versions.",
+    "loadError": "Read failed or access denied. Check shop authorization and connection.",
+    "createError": "Save failed. Check required fields, integer amounts, versions and permissions.",
+    "actionError": "Completion is unconfirmed. Refresh and inspect the latest state and rejection reason.",
+    "fields": {
+      "recipient": "Recipient",
+      "phone": "Phone",
+      "address": "Address",
+      "province": "Province or state",
+      "city": "City",
+      "district": "District",
+      "amount_minor": "Amount (integer minor units)",
+      "currency": "Currency",
+      "quantity": "Quantity",
+      "line_id": "Order line",
+      "case_ref": "Case reference",
+      "reason": "Reason",
+      "sku": "Target SKU",
+      "logistics_ref": "Logistics reference",
+      "warehouse_ref": "Warehouse reference",
+      "payment_path": "Payment path"
+    },
+    "transitions": {
+      "preflight": "Preflight",
+      "approve": "Approve",
+      "submit": "Submit",
+      "observe": "Observe",
+      "cancel": "Cancel before dispatch",
+      "claim": "Claim workbench task"
+    },
+    "detail": {
+      "id": "Operation ID",
+      "state": "Business state",
+      "native_state": "Provider state",
+      "mode": "Execution mode",
+      "write_owner": "Write owner",
+      "approver_id": "Approver",
+      "owner_id": "Owner",
+      "evidence_level": "Verification level",
+      "evidence_ref": "Evidence reference",
+      "external_ref": "External reference",
+      "funds_state": "Funds state",
+      "manual_state": "Manual handoff",
+      "amount_minor": "Amount (minor units)",
+      "currency": "Currency",
+      "actual_attempts": "Actual attempts",
+      "unknown_since": "Unknown since",
+      "due_at": "Next observation",
+      "expires_at": "Preflight expiry",
+      "failure_reason": "Failure reason",
+      "result_summary": "Result summary",
+      "live_status": "Live validation",
+      "version": "Operation version",
+      "preflight_hash": "Preflight digest"
+    }
+  }
 }

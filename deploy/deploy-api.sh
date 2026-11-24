@@ -134,18 +134,32 @@ log "本地预检：go vet"
 
 if [ "${SKIP_TESTS}" = "0" ]; then
   log "本地预检：go test（DB 门禁类失败单独列出，不算阻断）"
-  # 注意：go test 失败时管道必须不触发 set -e（失败分类在下一步做）
-  ( cd "${SERVER_DIR}" && go test ./internal/... ./cmd/... 2>&1 || true ) | tee /tmp/gotest-deploy.log | tail -3
-  FAIL_CASES="$(grep -cE '^--- FAIL' /tmp/gotest-deploy.log || true)"
-  DB_GATED="$(grep -c 'test password is missing' /tmp/gotest-deploy.log || true)"
-  if [ "${FAIL_CASES}" != "0" ] && [ "${DB_GATED}" = "0" ]; then
-    die "go test 有 ${FAIL_CASES} 个非 DB 门禁失败，不发布"
-  fi
-  if [ "${FAIL_CASES}" = "0" ]; then
-    ok "go test 全绿"
-  else
-    log "go test：${FAIL_CASES} 个失败全部为 DB 门禁（缺 POSTGRES_TEST_PASSWORD，环境问题非代码问题）"
-  fi
+  # FA-RELEASE-01：每次运行私有日志（并发预检不串证据），退出码用 PIPESTATUS 保留。
+  TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/gotest-deploy.XXXXXX")"
+  # shellcheck disable=SC2064
+  trap 'rm -f "${TEST_LOG}"' RETURN
+  set +e
+  ( cd "${SERVER_DIR}" && go test ./internal/... ./cmd/... 2>&1 ) | tee "${TEST_LOG}" | tail -3
+  TEST_RC="${PIPESTATUS[0]}"
+  set -e
+
+  # shellcheck source=test_gate.sh
+  source "${SCRIPT_DIR}/test_gate.sh"
+  GATE_VERDICT="$(gate_verdict "${TEST_LOG}" "${TEST_RC}")"
+  case "${GATE_VERDICT}" in
+    GREEN)
+      ok "go test 全绿（rc=${TEST_RC}）"
+      ;;
+    UNVERIFIED)
+      warn "go test 仅 DB 环境门禁失败（rc=${TEST_RC}，缺 POSTGRES_TEST_PASSWORD）——标未验，实际代码测试结果未知，不据此宣称通过"
+      ;;
+    BLOCK|*)
+      DB_GATED="$(grep -c 'test password is missing' "${TEST_LOG}" || true)"
+      die "go test 发布门阻断（rc=${TEST_RC}，判定=${GATE_VERDICT}，DB 门禁行=${DB_GATED}）——存在业务失败/混合故障/编译或进程异常/零用例，不发布（证据：${TEST_LOG}）"
+      ;;
+  esac
+  rm -f "${TEST_LOG}"
+  trap - RETURN
 fi
 
 log "交叉编译 CGO_ENABLED=0 GOOS=linux GOARCH=amd64"

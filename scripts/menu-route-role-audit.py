@@ -428,6 +428,7 @@ def walk_route_objects(text):
             compm = ROUTER_COMP_RE.search(own)
             rel = unquote(pm.group(1)) if pm else ""
             comp = unquote(compm.group(1)) if compm else ""
+
             full = join_route_path(parent_path, rel)
             if rel and comp:
                 results.append((rel, resolve_component(root_marker, comp), parent_path))

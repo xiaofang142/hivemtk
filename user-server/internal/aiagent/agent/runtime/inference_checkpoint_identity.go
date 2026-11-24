@@ -14,6 +14,8 @@ import (
 
 // ScopedCheckpointThreadID 将恢复地址绑定可信租户、消息、账号及本轮完整智能体配置。
 // 时间、trace 和配置加载时间不改变语义；不可序列化的配置不允许复用快照。
+// 注意（EC-08 对齐口径）：当前指纹不包含“意图修订”（intent revision）；若后续需要意图修订变更即失效旧恢复，
+// 必须在此显式纳入并补齐回归测试，避免沿用不再匹配的阶段产出。
 func ScopedCheckpointThreadID(ctx context.Context, payload CustomerMessagePayload, agent *AgentContext) (string, error) {
 	tenantID, ok := tenant.FromContext(ctx)
 	if !ok || tenantID == 0 || agent == nil || agent.Version < 0 {

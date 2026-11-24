@@ -86,7 +86,106 @@ func safeAuditBaseURL(raw string) (string, error) {
 
 var aiBotTokens = []string{"gptbot", "oai-searchbot", "claudebot", "claude-searchbot", "perplexitybot", "google-extended", "bytespider"}
 
-// checkRobotsAllowsAIBots 真实抓取 robots.txt，确认主流 AI 爬虫未被 Disallow 全站
+// liveRobotsGroup 是 robots.txt 中一组连续 User-agent 共享的 Allow/Disallow 规则。
+type liveRobotsGroup struct {
+	agents    []string
+	allows    []string
+	disallows []string
+}
+
+// parseRobots 把 robots.txt 解析成规则组：连续的 User-agent 行归属同一组，
+// 规则行（Allow/Disallow）把当前待定的 agent 列表固化为一组；注释与空行忽略。
+func parseLiveRobots(body string) []liveRobotsGroup {
+	var groups []liveRobotsGroup
+	var agents []string
+	ensureGroup := func() *liveRobotsGroup {
+		if len(agents) > 0 {
+			groups = append(groups, liveRobotsGroup{agents: agents})
+			agents = nil
+		}
+		if len(groups) == 0 {
+			groups = append(groups, liveRobotsGroup{})
+		}
+		return &groups[len(groups)-1]
+	}
+	for _, raw := range strings.Split(body, "\n") {
+		line := strings.TrimSpace(raw)
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		if line == "" {
+			continue
+		}
+		colon := strings.IndexByte(line, ':')
+		if colon < 0 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(line[:colon]))
+		val := strings.TrimSpace(line[colon+1:])
+		switch key {
+		case "user-agent":
+			agents = append(agents, strings.ToLower(val))
+		case "allow", "disallow":
+			g := ensureGroup()
+			if key == "allow" {
+				g.allows = append(g.allows, val)
+			} else if val != "" {
+				// 空 Disallow 等于放行，不作为阻断规则。
+				g.disallows = append(g.disallows, val)
+			}
+		}
+	}
+	if len(agents) > 0 {
+		groups = append(groups, liveRobotsGroup{agents: agents})
+	}
+	return groups
+}
+
+// liveRobotsPathAllowed 按 robots 路径优先级判定：最长匹配胜出，等长时 Allow 优先。
+// 无任何规则命中时按 robots 规范默认放行。
+func liveRobotsPathAllowed(g liveRobotsGroup, path string) (bool, string) {
+	bestLen := -1
+	allowed := true
+	rule := "no matching rule (default allow)"
+	for _, d := range g.disallows {
+		if d != "" && strings.HasPrefix(path, d) && len(d) >= bestLen {
+			bestLen, allowed, rule = len(d), false, "Disallow: "+d
+		}
+	}
+	for _, a := range g.allows {
+		if a != "" && strings.HasPrefix(path, a) && len(a) >= bestLen {
+			bestLen, allowed, rule = len(a), true, "Allow: "+a
+		}
+	}
+	return allowed, rule
+}
+
+// liveRobotsBotVerdict 逐 bot 判定：特定 User-agent 组优先于通配组；都没有则默认放行。
+func liveRobotsBotVerdict(groups []liveRobotsGroup, token string) (bool, string) {
+	var specific, wildcard *liveRobotsGroup
+	for i := range groups {
+		g := &groups[i]
+		for _, a := range g.agents {
+			if strings.Contains(a, token) && specific == nil {
+				specific = g
+			}
+			if a == "*" && wildcard == nil {
+				wildcard = g
+			}
+		}
+	}
+	g := specific
+	if g == nil {
+		g = wildcard
+	}
+	if g == nil {
+		return true, "no matching group (default allow)"
+	}
+	return liveRobotsPathAllowed(*g, "/")
+}
+
+// checkRobotsAllowsAIBots 真实抓取 robots.txt，按规则组判定主流 AI 爬虫是否被放行。
+// 不再把“出现 bot 名称”当成放行：必须在解析出的规则中逐 bot 得出可执行证据。
 func checkRobotsAllowsAIBots(ctx context.Context, client *http.Client, base string) (bool, string) {
 	body, code, err := fetchAuditFile(ctx, client, base+"/robots.txt")
 	if err != nil {
@@ -98,18 +197,24 @@ func checkRobotsAllowsAIBots(ctx context.Context, client *http.Client, base stri
 	if code >= 400 {
 		return false, fmt.Sprintf("robots.txt 返回 %d", code)
 	}
-	lb := strings.ToLower(body)
-	blockedAll := strings.Contains(lb, "user-agent: *") && strings.Contains(lb, "disallow: /")
+	groups := parseLiveRobots(body)
+	if len(groups) == 0 {
+		return true, "robots.txt 无规则组，主流 AI 爬虫默认可达"
+	}
 	allowed := 0
-	for _, t := range aiBotTokens {
-		if strings.Contains(lb, t) {
+	evidence := make([]string, 0, len(aiBotTokens))
+	for _, token := range aiBotTokens {
+		ok, rule := liveRobotsBotVerdict(groups, token)
+		if ok {
 			allowed++
 		}
+		evidence = append(evidence, fmt.Sprintf("%s=%t(%s)", token, ok, rule))
 	}
-	if blockedAll && allowed == 0 {
-		return false, "robots.txt 全站 Disallow 且未显式放行 AI 爬虫"
+	detail := "逐 bot: " + strings.Join(evidence, "; ")
+	if allowed == 0 {
+		return false, "robots.txt 规则组判定全部主流 AI 爬虫被禁止；" + detail
 	}
-	return true, fmt.Sprintf("robots.txt 可达，命中 %d/7 主流 AI 爬虫 token", allowed)
+	return true, fmt.Sprintf("robots.txt 规则组判定 AI 爬虫可达 %d/%d；%s", allowed, len(aiBotTokens), detail)
 }
 
 // checkLLMsTxtPresent 真实检查 /llms.txt 存在且非空

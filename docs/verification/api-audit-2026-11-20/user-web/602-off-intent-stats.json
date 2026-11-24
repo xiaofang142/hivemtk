@@ -1,1 +1,0 @@
-{"code":0,"message":"查询成功","data":{"by_intent":{"objection_price":1,"price_inquiry":3,"unknown":1},"by_level":{"":1,"high":3,"low":1},"by_method":{"llm":4,"rule":1},"distribution":[{"count":3,"type":"price_inquiry"},{"count":1,"type":"objection_price"},{"count":1,"type":"unknown"}],"period_days":7,"total":5}}

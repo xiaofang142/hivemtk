@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// decodeStrictOneID 用 DisallowUnknownFields 解析请求体：页面或调用方提交后端不支持的
+// 字段时明确 400，避免静默忽略后前端把「不支持的能力」显示为已保存（FA-44 契约）。
+func decodeStrictOneID(r *http.Request, dst any) error {
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	return nil
+}
 
 // CustomerOneIDController 客户 360 OneID 控制器
 // 负责多渠道身份合并、冲突解决与身份映射查询
@@ -322,8 +334,8 @@ func (c *CustomerOneIDController) GetMergeRules(ctx *gin.Context) {
 // @Router       /api/oneid/merge-rules [post]
 func (c *CustomerOneIDController) SaveMergeRules(ctx *gin.Context) {
 	var set service.MergeRuleSet
-	if err := ctx.ShouldBindJSON(&set); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
+	if err := decodeStrictOneID(ctx.Request, &set); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项", err.Error())
 		return
 	}
 	mergeRuleSvc := service.NewOneIDMergeRuleService()
@@ -366,8 +378,8 @@ func (c *CustomerOneIDController) DeleteMergeRule(ctx *gin.Context) {
 // @Router       /api/oneid/merge-rules/preview [post]
 func (c *CustomerOneIDController) PreviewMergeRules(ctx *gin.Context) {
 	var rules []service.MergePreviewRule
-	if err := ctx.ShouldBindJSON(&rules); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项")
+	if err := decodeStrictOneID(ctx.Request, &rules); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：请检查字段类型与必填项", err.Error())
 		return
 	}
 	mergeRuleSvc := service.NewOneIDMergeRuleService()

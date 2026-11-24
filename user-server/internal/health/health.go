@@ -16,6 +16,7 @@ import (
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/app"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/response"
 )
@@ -138,6 +139,13 @@ func probeEmbeddingHTTP(u *url.URL) (string, string) {
 }
 
 // Check 全维度健康检查：应用、数据库、Redis、推理栈 四层状态。
+func tenantModeString() string {
+	if tenant.IsMultiTenant() {
+		return "on"
+	}
+	return "off"
+}
+
 func (h *Handler) Check(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
@@ -184,10 +192,11 @@ func (h *Handler) Check(c *gin.Context) {
 	}
 
 	data := gin.H{
-		"status":    "ok",
-		"timestamp": time.Now().Unix(),
-		"service":   "user-server",
-		"checks":    checks,
+		"status":      "ok",
+		"timestamp":   time.Now().Unix(),
+		"service":     "user-server",
+		"tenant_mode": tenantModeString(),
+		"checks":      checks,
 	}
 	if !overallOK {
 		data["status"] = "degraded"

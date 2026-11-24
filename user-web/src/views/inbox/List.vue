@@ -225,6 +225,12 @@
               >
                 {{ getChannelLabel(conv.platform) || conv.platform }}
               </el-tag>
+              <el-tag size="small" :type="isGroupConv(conv) ? 'warning' : 'info'" effect="plain">
+                {{ isGroupConv(conv) ? '群聊' : '单聊' }}
+              </el-tag>
+              <el-tag v-if="conv.account_id" size="small" type="info" effect="plain">
+                {{ conv.account_id }}
+              </el-tag>
               <el-tag
                 size="small"
                 :type="statusTagType(conv.status)"
@@ -307,11 +313,17 @@
                 <el-icon><User /></el-icon>
               </el-avatar>
               <span class="thread-name">{{ currentConv.customer_name || currentConv.customer_id || '-' }}</span>
+              <el-tag size="small" :type="isGroupConv(currentConv) ? 'warning' : 'info'">
+                {{ isGroupConv(currentConv) ? '群聊会话' : '单聊会话' }}
+              </el-tag>
               <el-tag
                 size="small"
                 :type="getChannelTagType(currentConv.platform) || 'info'"
               >
                 {{ getChannelLabel(currentConv.platform) || currentConv.platform }}
+              </el-tag>
+              <el-tag v-if="currentConv.account_id" size="small" type="info" effect="plain">
+                账号 {{ currentConv.account_id }}
               </el-tag>
               <el-tag
                 size="small"
@@ -413,7 +425,12 @@
           ref="threadBodyRef"
           v-loading="threadLoading"
           class="thread-body"
+          :class="{ 'group-chat': isGroupConv(currentConv) }"
         >
+          <div class="chat-mode-banner" :class="isGroupConv(currentConv) ? 'group' : 'single'">
+            <span>{{ isGroupConv(currentConv) ? '群聊模式：显示多成员消息' : '单聊模式：一对一聊天' }}</span>
+            <span v-if="currentConv.account_id" class="banner-account">渠道账号：{{ getChannelLabel(currentConv.platform) || currentConv.platform }} / {{ currentConv.account_id }}</span>
+          </div>
           <div
             v-for="msg in threadMessages"
             :key="`${msg.source}-${msg.id}`"
@@ -913,6 +930,8 @@ const mediaFileName = (url) => {
 
 // outbound: hub 表 direction 字段在 GetMessages 输出中没有直接暴露，
 // 通过 is_ai_reply 或 sender 与账号无关的客服侧推断；这里以 sender_id 等于会话账号 id 视为坐席侧
+const isGroupConv = (conv) => !!(conv?.is_group || conv?.conversation_type === 'group' || conv?.extra?.is_group || conv?.group_id)
+
 const isOutbound = (msg) => {
   if (msg.is_ai_reply) return true
   if (msg.sender_type === 'staff' || msg.sender_type === 'ai' || msg.sender_type === 'system') return true
@@ -1394,6 +1413,11 @@ onUnmounted(stopPolling)
   overflow-y: auto;
   padding: 8px 4px;
 }
+.thread-body.group-chat { background: #fafcff; }
+.chat-mode-banner { display:flex; justify-content:space-between; gap:8px; padding:8px 10px; margin-bottom:10px; border-radius:6px; font-size:12px; }
+.chat-mode-banner.single { background:#f4f6f8; color:#606266; }
+.chat-mode-banner.group { background:#fff7e6; color:#b26a00; }
+.banner-account { color:#909399; }
 .msg-row {
   display: flex;
   align-items: flex-start;

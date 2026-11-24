@@ -3,20 +3,28 @@ package portcontract
 import "context"
 
 // OrderView 订单只读视图（工具层投影，避免工具直接依赖 service/model 具体实现）。
-// 客服系统里的订单是「外部电商同步进来的只读镜像」，OrderView 只暴露答单/看板所需字段。
+// 客服系统里的订单是「外部电商同步进来的只读镜像」。EC-07 要求调用方区分镜像时间与实时结果：
+// 本视图字段均来自 mirror（external_orders），不代表平台实时权威；请结合 MirrorUpdatedAt 判断新鲜度。
 type OrderView struct {
-	Platform     string `json:"platform"`
-	OrderID      string `json:"order_id"`
-	OrderNo      string `json:"order_no"`
-	UserName     string `json:"user_name"`
-	UserPhone    string `json:"user_phone"`
-	TotalAmount  int64  `json:"total_amount"`
-	PayAmount    int64  `json:"pay_amount"`
-	Status       string `json:"status"`
-	PayTime      string `json:"pay_time"`
-	ShipTime     string `json:"ship_time"`
-	CompleteTime string `json:"complete_time"`
-	Items        string `json:"items"`
+	Platform      string `json:"platform"`
+	OrderID       string `json:"order_id"`
+	OrderNo       string `json:"order_no"`
+	UserName      string `json:"user_name"`
+	UserPhone     string `json:"user_phone"`
+	TotalAmount   int64  `json:"total_amount"`
+	PayAmount     int64  `json:"pay_amount"`
+	DiscountAmount int64 `json:"discount_amount,omitempty"`
+	Status        string `json:"status"`
+	PayTime       string `json:"pay_time"`
+	ShipTime      string `json:"ship_time"`
+	CompleteTime  string `json:"complete_time"`
+	Items         string `json:"items"`
+	// ShippingAddr 为镜像中的收货地址文本（可能含 PII，按需脱敏展示由上层负责）。
+	ShippingAddr string `json:"shipping_addr,omitempty"`
+	// MirrorUpdatedAt 镜像最后更新时间（RFC3339），用于区分“镜像时点”与“实时平台状态”。
+	MirrorUpdatedAt string `json:"mirror_updated_at,omitempty"`
+	// DataSource 固定为 external_order_mirror，提示本数据非实时平台查询结果。
+	DataSource string `json:"data_source"`
 }
 
 // OrderPort 订单查询端口（客服只读镜像，绝不创建/履约电商订单）。

@@ -8,6 +8,14 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
+// EC-26 (M26, not implemented / not live-closed): 本文件提供任务行上的活动触达条数预算，
+// 但 EC-26 要求的受众快照/排除规则/跨渠道频控/时区静默/活动互斥/控制组/预算尚未闭环：
+//  - 控制组不新增营销派发；身份合并前曝光按 BR04 保留并标污染；实时撤回覆盖冻结快照；
+//    重复触发/换渠不能突破压力上限。这些在营销触达域（reach pipeline）仍缺。
+// EC-28 交叉引用（M28 旅程/实验编排）：旅程分支/实验分支执行仍须遵守活动触达预算；
+//   控制组不新增营销派发，holdout 不得计入活动触达条数。
+// 详见 docs/未来任务清单.md §7.1.8 / M26 / M28。
+//
 // campaign_budget.go — 触达 P0 Chunk 4：活动级预算（单次触达成本核算）。
 //
 // 「活动」在本仓没有独立实体：触达活动就是任务本体（cron/loop/retry 的所有 session 都累计

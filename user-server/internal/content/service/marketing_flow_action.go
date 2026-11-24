@@ -465,6 +465,16 @@ func (s *MarketingFlowService) sendActionUpdateLead(ctx context.Context, config 
 	}, nil
 }
 
+// sendActionCreateOrder 由营销流程触发创建一笔销售/订单记录（草稿态）。
+//
+// EC-31 / M31 边界（事实写入与营销链路解耦）：
+//   - 本函数创建的订单仅是营销链路产出的「销售草稿/待支付单」，不是已付款事实；
+//     任何收入、净额归因、漏斗转化都必须以真实支付/退款事件为准，不得把此处创建的
+//     pending 订单当作已成交；
+//   - 营销链路不得直接写入支付成功、退款成功等资金事实；资金事实必须由订单/支付/
+//     退款链路独立写入并回查，营销仅消费已确认的事实做归因；
+//   - 退款扣减必须按真实退款事件只扣一次，重复回调/并发撤回不得重复扣减；
+//   - 无回执/未知状态一律保留 unknown，不得把点击/打开/草稿冒充因果增长。
 func (s *MarketingFlowService) sendActionCreateOrder(ctx context.Context, config map[string]any, userID string, data map[string]any) (map[string]any, error) {
 	if s.orderRepo == nil {
 		return nil, errors.New("订单仓库未初始化")

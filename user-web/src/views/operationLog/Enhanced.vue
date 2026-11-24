@@ -251,7 +251,7 @@ async function rollback(row) {
     throw e
   }
   await http.post(`/api/operation-logs/${row.id}/rollback`, {})
-  ElMessage.success('已回滚')
+  ElMessage.success('审计快照已标记回滚（不含业务数据恢复）')
   await load()
 }
 

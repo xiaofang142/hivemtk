@@ -42,6 +42,7 @@ func OperatorFromContext(ctx context.Context) Operator {
 type CustomerService struct {
 	repo      repository.CustomerRepository
 	auditRepo repository.OperationLogRepository
+	scopeSvc  *BusinessScopeService
 }
 
 // NewCustomerService 创建客户服务实例
@@ -49,6 +50,7 @@ func NewCustomerService() *CustomerService {
 	return &CustomerService{
 		repo:      repository.NewCustomerRepository(),
 		auditRepo: repository.NewOperationLogRepository(),
+		scopeSvc:  NewBusinessScopeService(),
 	}
 }
 
@@ -191,8 +193,8 @@ func (s *CustomerService) GetCustomerProfile(ctx context.Context, customerID str
 	}, nil
 }
 
-// List 获取客户列表（带分页）
-func (s *CustomerService) List(ctx context.Context, page, limit int) ([]*model.Customer, int64, error) {
+// List 获取客户列表（带分页）。可选 actorUserID 用于 PR-5 业务账号授权 scope 过滤。
+func (s *CustomerService) List(ctx context.Context, page, limit int, actorUserID ...uint) ([]*model.Customer, int64, error) {
 	if page <= 0 {
 		page = DefaultPage
 	}
@@ -203,17 +205,61 @@ func (s *CustomerService) List(ctx context.Context, page, limit int) ([]*model.C
 		limit = MaxLimit
 	}
 
+	var uid uint
+	if len(actorUserID) > 0 {
+		uid = actorUserID[0]
+	}
+	if uid > 0 && s.scopeSvc != nil {
+		scope, err := s.scopeSvc.Resolve(ctx, uid)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !scope.AllAccounts {
+			ids, _ := scope.AllowedSourceAccountIDs()
+			type scopedLister interface {
+				ListBySourceScope(ctx context.Context, page, limit int, keyword string, allowedIDs []string, allAccounts bool) ([]*model.Customer, int64, error)
+			}
+			sr, ok := s.repo.(scopedLister)
+			if !ok {
+				return []*model.Customer{}, 0, nil
+			}
+			return sr.ListBySourceScope(ctx, page, limit, "", ids, false)
+		}
+	}
+
 	return s.repo.List(ctx, page, limit, "")
 }
 
 // ListKeyset 获取客户列表（keyset 分页）。
 // cursor 为空表示首页；返回 nextCursor 为空表示已到末页。
-func (s *CustomerService) ListKeyset(ctx context.Context, cursor string, limit int) ([]*model.Customer, int64, string, error) {
+func (s *CustomerService) ListKeyset(ctx context.Context, cursor string, limit int, actorUserID ...uint) ([]*model.Customer, int64, string, error) {
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
 	if limit > MaxLimit {
 		limit = MaxLimit
+	}
+
+	var uid uint
+	if len(actorUserID) > 0 {
+		uid = actorUserID[0]
+	}
+	if uid > 0 && s.scopeSvc != nil {
+		scope, err := s.scopeSvc.Resolve(ctx, uid)
+		if err != nil {
+			return nil, 0, "", err
+		}
+		if !scope.AllAccounts {
+			ids, _ := scope.AllowedSourceAccountIDs()
+			type scopedLister interface {
+				ListKeysetBySourceScope(ctx context.Context, cursor string, limit int, keyword string, allowedIDs []string, allAccounts bool) ([]*model.Customer, int64, string, error)
+			}
+			sr, ok := s.repo.(scopedLister)
+			if !ok {
+				return []*model.Customer{}, 0, "", nil
+			}
+			return sr.ListKeysetBySourceScope(ctx, cursor, limit, "", ids, false)
+		}
 	}
 
 	return s.repo.ListKeyset(ctx, cursor, limit, "")
@@ -294,6 +340,16 @@ func (s *CustomerService) RemoveTags(ctx context.Context, customerID string, tag
 	return s.repo.Update(ctx, customer)
 }
 
+// MergeCustomers 合并两个客户档案（EC-22 客户合并继承）。
+//
+// 合并只做"身份关联"与字段补全，绝不扩大许可：
+//   - contact_consent_events / contact_preferences 原事实行保持不变（只追加
+//     contact_consent_identity_links 连通边），撤回/暂停历史原样保留；
+//   - 合并后 CheckSendConsent 通过 LinkedOneIDs 遍历连通组，按最严格结果判定，
+//     任一原身份的 revoke/pause 都阻断发送；
+//   - 事务内任一步失败整体回滚，避免只关联不迁移或半合并。
+// 合法必要服务（support/transactional）与营销（marketing）目的按 purpose 独立评估，
+// 营销撤回不会自动删除事务通知事实，也不会借"服务"夹带促销。
 func (s *CustomerService) MergeCustomers(ctx context.Context, primaryID, secondaryID string) error {
 	if primaryID == secondaryID {
 		return errors.New("不能合并同一个客户")

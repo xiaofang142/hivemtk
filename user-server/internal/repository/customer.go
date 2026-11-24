@@ -256,6 +256,45 @@ func (r *customerRepository) List(ctx context.Context, page, limit int, keyword 
 	return customers, total, nil
 }
 
+// ListBySourceScope filters customers by authorized business-account source IDs.
+// When allAccounts is false and allowedIDs is empty, it returns an empty result
+// (fail-closed). This is a concrete helper used by PR-5 scope wiring; it is not
+// part of the CustomerRepository interface to keep the change backward compatible.
+func (r *customerRepository) ListBySourceScope(ctx context.Context, page, limit int, keyword string, allowedIDs []string, allAccounts bool) ([]*model.Customer, int64, error) {
+	if !allAccounts && len(allowedIDs) == 0 {
+		return []*model.Customer{}, 0, nil
+	}
+	var customers []*model.Customer
+	var total int64
+
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 200 {
+		limit = 20
+	}
+
+	offset := (page - 1) * limit
+	q := dbFromCtx(ctx).Model(&model.Customer{})
+	if !allAccounts {
+		q = q.Where("source_account_id IN ?", allowedIDs)
+	}
+
+	kw := strings.TrimSpace(keyword)
+	if kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("phone LIKE ? OR email LIKE ? OR unified_id LIKE ?", like, like, like)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := q.Offset(offset).Limit(limit).Order("created_at DESC").Find(&customers).Error; err != nil {
+		return nil, 0, err
+	}
+	return customers, total, nil
+}
+
 // ListKeyset 使用 keyset（cursor）分页读取客户列表。
 //
 // 排序统一为 created_at DESC, id DESC（复合游标）。customer.id 为 uuid 字符串，
@@ -270,6 +309,56 @@ func (r *customerRepository) ListKeyset(ctx context.Context, cursor string, limi
 	}
 
 	q := dbFromCtx(ctx).Model(&model.Customer{})
+
+	kw := strings.TrimSpace(keyword)
+	if kw != "" {
+		like := "%" + kw + "%"
+		q = q.Where("phone LIKE ? OR email LIKE ? OR unified_id LIKE ?", like, like, like)
+	}
+
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	if cursor != "" {
+		ts, id, ok := _utils.DecodeStringIDCursor(cursor)
+		if !ok {
+			return nil, 0, "", fmt.Errorf("invalid cursor: %s", cursor)
+		}
+		q = q.Where("(created_at, id) < (?, ?)", ts, id)
+	}
+
+	if err := q.Order("created_at DESC, id DESC").Limit(limit + 1).Find(&customers).Error; err != nil {
+		return nil, 0, "", err
+	}
+
+	nextCursor := ""
+	if len(customers) > limit {
+		last := customers[limit-1]
+		customers = customers[:limit]
+		nextCursor = _utils.EncodeStringIDCursor(last.CreatedAt, last.ID)
+	}
+
+	return customers, total, nextCursor, nil
+}
+
+// ListKeysetBySourceScope is the scope-aware variant of ListKeyset.
+// When allAccounts is false and allowedIDs is empty, it returns an empty result (fail-closed).
+func (r *customerRepository) ListKeysetBySourceScope(ctx context.Context, cursor string, limit int, keyword string, allowedIDs []string, allAccounts bool) ([]*model.Customer, int64, string, error) {
+	if !allAccounts && len(allowedIDs) == 0 {
+		return []*model.Customer{}, 0, "", nil
+	}
+	var customers []*model.Customer
+	var total int64
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	q := dbFromCtx(ctx).Model(&model.Customer{})
+	if !allAccounts {
+		q = q.Where("source_account_id IN ?", allowedIDs)
+	}
 
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {

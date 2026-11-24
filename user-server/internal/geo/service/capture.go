@@ -435,6 +435,9 @@ func (s *CaptureService) SubmitLead(ctx context.Context, code, contact, contactT
 	if utf8.RuneCountInString(intent) > 500 {
 		intent = string([]rune(intent)[:500])
 	}
+	// EC-25：公开落地页留资只采集服务意向与来源（SourceID=承接链接），
+	// 不收集营销同意；对应 clue 默认不具备 marketing 许可，不得直接进入营销受众。
+	// 若后续要允许营销触达，必须先通过 contact_consent 事实账写入 grant 并记录 StatementVersion。
 	clueID, err := s.lead.CaptureLead(ctx, contact, contactType, link.SourceID, intent)
 	if err != nil {
 		if relErr := s.links.ReleaseLead(ctx, link.ID, day); relErr != nil {

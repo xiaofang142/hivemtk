@@ -1,1 +1,0 @@
-{"code":0,"message":"获取成功","data":{"list":[{"description":"通过 CSV 文件批量导入数据","label":"批量导入","name":"import"},{"description":"导出数据为 CSV 文件","label":"批量导出","name":"export"},{"description":"批量删除选中的记录","label":"批量删除","name":"delete"},{"description":"批量更新选中记录的字段","label":"批量更新","name":"update"}],"total":4}}

@@ -150,6 +150,9 @@ func (c *InferenceCycle) runOnce(ctx context.Context, payload CustomerMessagePay
 		ic.Decision.StopReason = "no_plan"
 	}
 	ic.Decision.Outcome = InferenceSucceeded
+	// 注意：此处 Publishable 可能由 ReplyHint 派生，主要服务于纯 FAQ/直答等“无工具执行”分支。
+	// 含工具调用的计划必须走执行编排（execution/orchestrator）路径，由实际 ToolExecutionResult 驱动回复与发布；
+	// 不得把“已规划调用工具”等同于“已执行并取得证据”从而生成完成话术（见 EC-08 / inference_execution 注释）。
 	ic.Decision.Publishable = ic.Decision.Reply != "" || (ic.Plan != nil && ic.Plan.ReplyHint != "")
 	return c.finishRun(tctx, ic, ckpt), nil
 }

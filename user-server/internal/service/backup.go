@@ -435,6 +435,9 @@ type RestoreService struct {
 	restoreRepo    *repository.RestoreRecordRepository
 	backupRepo     *repository.BackupRepository
 	backupDataRepo repository.BackupDataRepository
+	// updateRecordFn FA-BACKUP-01：状态落库的可注入 seam，默认调 restoreRepo.Update。
+	// restoreRepo 是具体指针无法 mock，测试注入返回错误的 fn 验证「状态写失败不与实际数据脱节」。
+	updateRecordFn func(ctx context.Context, record *model.RestoreRecord) error
 }
 
 // NewRestoreServiceWithRepos 创建恢复服务实例（仓储由装配层注入）
@@ -443,11 +446,27 @@ func NewRestoreServiceWithRepos(
 	backupRepo *repository.BackupRepository,
 	backupDataRepo repository.BackupDataRepository,
 ) *RestoreService {
-	return &RestoreService{
+	svc := &RestoreService{
 		restoreRepo:    restoreRepo,
 		backupRepo:     backupRepo,
 		backupDataRepo: backupDataRepo,
 	}
+	svc.updateRecordFn = func(ctx context.Context, record *model.RestoreRecord) error {
+		return svc.restoreRepo.Update(ctx, record)
+	}
+	return svc
+}
+
+// persistRecord 统一走状态落库 seam；直接构造 RestoreService（未过构造器）的
+// 调用方 updateRecordFn 为 nil，此时回落到 restoreRepo.Update，保持既有行为。
+func (s *RestoreService) persistRecord(ctx context.Context, record *model.RestoreRecord) error {
+	if s.updateRecordFn != nil {
+		return s.updateRecordFn(ctx, record)
+	}
+	if s.restoreRepo != nil {
+		return s.restoreRepo.Update(ctx, record)
+	}
+	return errors.New("restore record repository not initialized")
 }
 
 // NewRestoreService 兼容旧装配点：绑定全局 DB 的仓储。
@@ -499,9 +518,12 @@ func (s *RestoreService) RestoreBackup(ctx context.Context, createdBy uint, req 
 }
 
 func (s *RestoreService) executeRestore(ctx context.Context, record *model.RestoreRecord, backup *model.Backup) {
+	// FA-BACKUP-01：running 是不可逆阶段（解压/写回）之前的栅栏。落库失败必须中止，
+	// 否则数据已写入但任务记录仍是 pending/running，API/运维无法对账也不能安全重试。
 	record.Status = "running"
-	if e := s.restoreRepo.Update(ctx, record); e != nil {
-		logger.Errorf("[Restore] 状态落库失败 recordID=%d: %v", record.ID, e)
+	if e := s.persistRecord(ctx, record); e != nil {
+		logger.Errorf("[Restore] running 状态落库失败，中止恢复 recordID=%d: %v", record.ID, e)
+		return
 	}
 
 	// FA-06：每个恢复任务使用私有工作目录（restore_tmp/restore_task_<id>_<纳秒>），
@@ -529,9 +551,18 @@ func (s *RestoreService) executeRestore(ctx context.Context, record *model.Resto
 		return
 	}
 
+	// FA-BACKUP-01：数据已全部写回，completed 落库失败不能静默。先尝试正常落库；
+	// 失败则显式标记 unknown + 可诊断 ErrorMessage 再尝试一次持久化，让查询方识别
+	// "数据已写但状态待对账"，不再出现"数据已恢复但记录永远停在 running"的脱节。
 	record.Status = "completed"
-	if e := s.restoreRepo.Update(ctx, record); e != nil {
-		logger.Errorf("[Restore] 完成状态落库失败 recordID=%d: %v", record.ID, e)
+	if e := s.persistRecord(ctx, record); e != nil {
+		record.Status = "unknown"
+		record.ErrorMessage = "数据已恢复但完成状态落库失败，需对账：" + e.Error()
+		if e2 := s.persistRecord(ctx, record); e2 != nil {
+			logger.Errorf("[Restore] completed/unknown 状态均落库失败 recordID=%d: %v / %v", record.ID, e, e2)
+		} else {
+			logger.Warnf("[Restore] completed 落库失败，已标记 unknown 供对账 recordID=%d: %v", record.ID, e)
+		}
 	}
 }
 
@@ -539,10 +570,19 @@ func (s *RestoreService) executeRestore(ctx context.Context, record *model.Resto
 func (s *RestoreService) failRestoreRecord(ctx context.Context, record *model.RestoreRecord, msg string) {
 	record.Status = "failed"
 	record.ErrorMessage = msg
-	if e := s.restoreRepo.Update(ctx, record); e != nil {
-		logger.Errorf("[Restore] 失败状态落库失败 recordID=%d: %v", record.ID, e)
+	if e := s.persistRecord(ctx, record); e != nil {
+		// FA-BACKUP-01：失败状态也写不进去时保持内存态 failed + ErrorMessage 可查，并记录告警
+		logger.Errorf("[Restore] 失败状态落库失败 recordID=%d status=failed msg=%s: %v", record.ID, msg, e)
 	}
 }
+
+// FA-BACKUP-02：解压资源边界——条目数、单文件声明/实际大小、累计展开量上限，
+// 防止压缩炸弹把私有恢复目录写爆。超限前 return error，defer RemoveAll 清理目录。
+const (
+	restoreMaxZipEntries    = 10000
+	restoreMaxEntryBytes    = 100 << 20 // 单文件 100MB
+	restoreMaxTotalBytes    = 500 << 20 // 累计展开 500MB
+)
 
 // decompressBackup 把备份 zip 解到 destDir（FA-06：目录由调用方按任务给定，
 // 不再共用全局 restore_tmp 根）。
@@ -553,7 +593,17 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile, destD
 	}
 	defer func() { _ = r.Close() }()
 
+	// FA-BACKUP-02：条目数上限（重复条目也计入，先挡总量）
+	if len(r.File) > restoreMaxZipEntries {
+		return fmt.Errorf("备份条目数超限: %d > %d", len(r.File), restoreMaxZipEntries)
+	}
+
+	var totalExpanded int64
 	for _, f := range r.File {
+		// FA-BACKUP-02：声明大小必须先校验（压缩炸弹常在 UncompressedSize64 暴露）
+		if f.UncompressedSize64 > restoreMaxEntryBytes {
+			return fmt.Errorf("备份条目声明大小超限: %s (%d > %d)", f.Name, f.UncompressedSize64, restoreMaxEntryBytes)
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
@@ -588,7 +638,18 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile, destD
 		}
 
 		// 循环体内禁止 defer（大备份数千条目会堆积数千 FD 触发 EMFILE），逐文件显式关闭
-		_, copyErr := io.Copy(outFile, rc)
+		// FA-BACKUP-02：用 LimitedReader 同时挡"单文件实际大小"和"累计展开量"；
+		// 多读 1 字节用于检测超限（读到上限+1 即判超限）。
+		remaining := int64(restoreMaxTotalBytes) - totalExpanded
+		perFileLimit := int64(restoreMaxEntryBytes) + 1
+		limit := remaining
+		if perFileLimit < limit {
+			limit = perFileLimit
+		}
+		if limit < 0 {
+			limit = 0
+		}
+		written, copyErr := io.Copy(outFile, io.LimitReader(rc, limit))
 		closeErr := outFile.Close()
 		_ = rc.Close()
 		if copyErr != nil {
@@ -596,6 +657,14 @@ func (s *RestoreService) decompressBackup(ctx context.Context, backupFile, destD
 		}
 		if closeErr != nil {
 			return closeErr
+		}
+		// FA-BACKUP-02：声明与实际不一致（被 LimitReader 截断或压缩流撒谎）即拒绝
+		if uint64(written) != f.UncompressedSize64 {
+			return fmt.Errorf("备份条目实际大小与声明不符: %s (actual=%d declared=%d)", f.Name, written, f.UncompressedSize64)
+		}
+		totalExpanded += written
+		if totalExpanded > restoreMaxTotalBytes {
+			return fmt.Errorf("备份累计展开量超限: %d > %d", totalExpanded, restoreMaxTotalBytes)
 		}
 	}
 	return nil

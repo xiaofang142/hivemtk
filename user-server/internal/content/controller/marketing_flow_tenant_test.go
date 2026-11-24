@@ -42,7 +42,7 @@ const (
 
 func mflDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	database := testutil.NewTestDB(t, &contentmodel.MarketingFlow{}, &contentmodel.FlowExecution{})
+	database := testutil.NewTestDB(t, &contentmodel.MarketingFlow{}, &contentmodel.FlowExecution{}, &contentmodel.FlowNodeAttempt{})
 	if database == nil {
 		t.Fatal("测试库不可达（不 Skip，跳过等于没锁）")
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/middleware"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -59,6 +60,14 @@ type fixedMerchantCallbackService struct {
 
 func (s fixedMerchantCallbackService) Ingest(_ context.Context, _ string, _ []byte, _ http.Header) service.MerchantCallbackResult {
 	return s.result
+}
+
+func (s fixedMerchantCallbackService) AcknowledgeCompensationPage(_ context.Context, _ repository.MerchantCallbackCompensationPage, _ []uint) error {
+	return nil
+}
+
+func (s fixedMerchantCallbackService) ReadCompensationPage(_ context.Context, _ uint, _ int) (repository.MerchantCallbackCompensationPage, error) {
+	return repository.MerchantCallbackCompensationPage{}, nil
 }
 
 func TestMerchantCallbackRoutes_TrustedEmptyAckIsExact(t *testing.T) {

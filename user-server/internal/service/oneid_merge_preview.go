@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -16,19 +17,31 @@ import (
 // {id, name, type, fields:[], threshold, priority, action, enabled}
 // 后端仅消费与合并判定相关的字段（fields/op/threshold/enabled）。
 type MergePreviewRule struct {
-	Name      string   `json:"name"`
-	Field     string   `json:"field"`
-	Fields    []string `json:"fields"`
-	Op        string   `json:"op"`
-	Threshold int      `json:"threshold"`
-	Enabled   bool     `json:"enabled"`
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	Type        string     `json:"type,omitempty"`
+	Fields      []string   `json:"fields"`
+	Field       string     `json:"field"`
+	Op          string     `json:"op"`
+	Value       string     `json:"value"`
+	Threshold   int        `json:"threshold"`
+	Priority    int        `json:"priority"`
+	Action      string     `json:"action,omitempty"`
+	Enabled     bool       `json:"enabled"`
+	BuiltIn     bool       `json:"built_in"`
+	Description string     `json:"description"`
+	Example     string     `json:"example"`
+	UpdatedAt   time.Time  `json:"updated_at,omitempty"`
 }
 
-// MergePreviewSample 一条候选合并对样例
+// MergePreviewSample 一条候选合并对样例。Rule/Action 让预览能说明
+// "按哪条规则、以何种动作（自动/审核）命中"，与正式执行口径一致。
 type MergePreviewSample struct {
-	From  string `json:"from"`
-	To    string `json:"to"`
-	Score int    `json:"score"`
+	From   string `json:"from"`
+	To     string `json:"to"`
+	Score  int    `json:"score"`
+	Rule   string `json:"rule,omitempty"`
+	Action string `json:"action,omitempty"`
 }
 
 // MergePreview 预览结果
@@ -100,8 +113,13 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 		}
 	}
 
-	pairScore := make(map[string]int)
-	addPair := func(a, b *model.Customer, score int) {
+	type previewPair struct {
+		Score  int
+		Rule   string
+		Action string
+	}
+	pairScore := make(map[string]previewPair)
+	addPair := func(a, b *model.Customer, score int, rule, action string) {
 		if a.ID == b.ID || a.ID == "" || b.ID == "" {
 			return
 		}
@@ -110,8 +128,8 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 			x, y = y, x
 		}
 		key := x + "|" + y
-		if score > pairScore[key] {
-			pairScore[key] = score
+		if score > pairScore[key].Score {
+			pairScore[key] = previewPair{Score: score, Rule: rule, Action: action}
 		}
 	}
 
@@ -119,41 +137,60 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 		if !r.Enabled {
 			continue
 		}
+		// FA-44：预览与正式合并共用 evaluateRule（多字段/阈值口径一致），
+		// 单字段构造一条 MergeRule，逐字段判定后取最高分。
 		fields := r.Fields
 		if len(fields) == 0 && r.Field != "" {
 			fields = []string{r.Field}
-		}
-		score := r.Threshold
-		if score <= 0 {
-			score = 100
 		}
 		op := r.Op
 		if op == "" {
 			op = "eq"
 		}
+		action := ruleAction(MergeRule{Action: r.Action})
+		// 预览展示分沿用既有契约「命中即展示该规则的阈值」（缺省 100），
+		// 而命中判定本身仍走 evaluateRule 的多字段/阈值口径，与正式合并一致。
+		displayScore := r.Threshold
+		if displayScore <= 0 {
+			displayScore = 100
+		}
 		for _, f := range fields {
-			groups := make(map[string][]*model.Customer)
-			for _, c := range customers {
-				v := identityFieldValue(c, f)
-				if v == "" {
-					continue
-				}
-				key := v
-				if op == "prefix" {
-					if len(v) < 7 {
+			mr := MergeRule{Fields: []string{f}, Field: f, Op: op, Threshold: r.Threshold, Action: r.Action}
+			// eq/prefix 可按值分组加速；like 逐对比较。两路最终判定都走 evaluateRule。
+			if op != "like" {
+				groups := make(map[string][]*model.Customer)
+				for _, c := range customers {
+					v := customerIdentityMap(c)[f]
+					if v == "" {
 						continue
 					}
-					key = v[:7]
+					key := v
+					if op == "prefix" {
+						if len(v) < 7 {
+							continue
+						}
+						key = v[:7]
+					}
+					groups[key] = append(groups[key], c)
 				}
-				groups[key] = append(groups[key], c)
+				for _, owners := range groups {
+					if len(owners) < 2 {
+						continue
+					}
+					for i := 0; i < len(owners); i++ {
+						for j := i + 1; j < len(owners); j++ {
+							if hit, _ := evaluateRule(customerIdentityMap(owners[i]), customerIdentityMap(owners[j]), mr); hit {
+								addPair(owners[i], owners[j], displayScore, r.Name, action)
+							}
+						}
+					}
+				}
+				continue
 			}
-			for _, owners := range groups {
-				if len(owners) < 2 {
-					continue
-				}
-				for i := 0; i < len(owners); i++ {
-					for j := i + 1; j < len(owners); j++ {
-						addPair(owners[i], owners[j], score)
+			for i := 0; i < len(customers); i++ {
+				for j := i + 1; j < len(customers); j++ {
+					if hit, _ := evaluateRule(customerIdentityMap(customers[i]), customerIdentityMap(customers[j]), mr); hit {
+						addPair(customers[i], customers[j], displayScore, r.Name, action)
 					}
 				}
 			}
@@ -173,7 +210,8 @@ func (s *OneIDMergeRuleService) PreviewMergeRules(ctx context.Context, rules []M
 			break
 		}
 		parts := strings.SplitN(k, "|", 2)
-		samples = append(samples, MergePreviewSample{From: parts[0], To: parts[1], Score: pairScore[k]})
+		p := pairScore[k]
+		samples = append(samples, MergePreviewSample{From: parts[0], To: parts[1], Score: p.Score, Rule: p.Rule, Action: p.Action})
 	}
 	return &MergePreview{CandidateCount: len(pairScore), Samples: samples}, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
@@ -33,6 +34,22 @@ func NewClueServiceDefault(scoreSvc *ClueScoreService) *ClueService {
 	return NewClueService(repository.NewClueRepositoryDefault(), scoreSvc)
 }
 
+// RegisterClue 固定来源事件；营销许可必须同时有来源事件和证据引用。
+func (s *ClueService) RegisterClue(ctx context.Context, clue model.Clue, sourceEvent, sourceEvidenceRef string, marketingConsent bool) (*model.Clue, error) {
+	if marketingConsent && (sourceEvent == "" || sourceEvidenceRef == "") {
+		return nil, errors.New("营销许可必须固定来源事件和许可证据引用")
+	}
+	if clue.SourceEvidence == "" {
+		clue.SourceEvidence = sourceEvent
+	}
+	if marketingConsent {
+		clue.SourceEvidence += "|marketing=" + sourceEvidenceRef
+	} else if sourceEvidenceRef != "" {
+		clue.SourceEvidence += "|service_only=" + sourceEvidenceRef
+	}
+	return s.Register(ctx, clue)
+}
+
 // Register 建线索。(type, account) 去重是业务判据，放在这里：
 // 仓储只负责写入，不再在 SQL 层偷偷加一条查询。
 //
@@ -58,11 +75,18 @@ func (s *ClueService) Register(ctx context.Context, clue model.Clue) (*model.Clu
 // 页面上的「线索类型/关键字/验证状态」必须走这里 —— 前端自己过滤只能过滤已加载的那一页。
 func (s *ClueService) ListWithQuery(ctx context.Context, req dto.GetClueRequest) ([]*model.Clue, int64, error) {
 	q := repository.ClueQuery{
-		Keyword:   req.Keyword,
-		Type:      req.Type,
-		IsVerify:  req.IsVerify,
-		StartUnix: req.Start,
-		EndUnix:   req.End,
+		Keyword:          req.Keyword,
+		Type:             req.Type,
+		IsVerify:         req.IsVerify,
+		StartUnix:        req.Start,
+		EndUnix:          req.End,
+		LeadRole:         req.LeadRole,
+		Status:           req.Status,
+		SourceChannel:    req.SourceChannel,
+		SourceAccountID:  req.SourceAccountID,
+		IsGroup:          req.IsGroup,
+		OwnerAccount:     req.OwnerAccount,
+		ConversationType: req.ConversationType,
 	}
 	return s.repo.ListWithQuery(ctx, q, req.Page, req.PageSize)
 }
@@ -73,6 +97,10 @@ func (s *ClueService) DeleteClue(ctx context.Context, id string) error {
 
 func (s *ClueService) GetClueStatistics(ctx context.Context) ([]map[string]any, error) {
 	return s.repo.GetClueStatistics(ctx)
+}
+
+func (s *ClueService) GetLeadMiningStats(ctx context.Context) (map[string]any, error) {
+	return s.repo.GetLeadMiningStats(ctx)
 }
 
 func (s *ClueService) GetClueAllList(ctx context.Context, clueType int64) ([]*model.Clue, int64, error) {
@@ -255,6 +283,34 @@ func (s *ClueService) UpdateClue(ctx context.Context, id string, req *dto.Update
 	}
 	if _, err := s.repo.GetByID(ctx, id); err != nil {
 		return err
+	}
+	return s.repo.UpdateByID(ctx, id, updates)
+}
+
+// SubmitFeedback 标记线索误报/有效（LM-PR6）。
+func (s *ClueService) SubmitFeedback(ctx context.Context, id, status, reason, by string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("线索 ID 不能为空")
+	}
+	status = strings.TrimSpace(strings.ToLower(status))
+	if status != "false_positive" && status != "valid" && status != "none" {
+		return errors.New("feedback_status 仅支持 none/false_positive/valid")
+	}
+	if _, err := s.repo.GetByID(ctx, id); err != nil {
+		return err
+	}
+	now := time.Now().Unix()
+	updates := map[string]any{
+		"feedback_status": status,
+		"feedback_reason": strings.TrimSpace(reason),
+		"feedback_by":     strings.TrimSpace(by),
+		"feedback_at":     now,
+	}
+	if status == "false_positive" {
+		updates["status"] = "false_positive"
+	}
+	if status == "valid" {
+		updates["status"] = "valid_lead"
 	}
 	return s.repo.UpdateByID(ctx, id, updates)
 }

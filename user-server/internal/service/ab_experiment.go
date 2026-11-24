@@ -21,6 +21,15 @@ const (
 	AbVariantTreatment = "treatment"
 )
 
+// EC-28 / M28（营销实验/控制组/归因与证据，不污染控制组）不变量：
+//   - Assign 仅做稳定分桶，control 变体仅作对照统计；曝光落库不得触发营销外发，
+//     也不得把 control 曝光计作 treatment 转化；
+//   - 曝光记录按租户隔离写入，身份合并前的曝光按 BR04 保留并标污染，合并后不重写；
+//   - 实时撤回/撤权覆盖冻结快照：已落库曝光不可被后续重跑改写；重复触发/换渠
+//     只追加新曝光，不能突破压力上限；
+//   - Summaries/MarkConversion 只消费真实回执，曝光/点击不冒充因果增长（EC-31）。
+
+
 // AbExposureBuffer 曝光异步落库缓冲容量
 const AbExposureBuffer = 1024
 

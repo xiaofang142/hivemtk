@@ -21,6 +21,7 @@ type OrderRepository interface {
 	GetByTgID(ctx context.Context, tgID int64) ([]*model.Order, error)
 	Update(ctx context.Context, order *model.Order) error
 	ListByAccountIDs(ctx context.Context, accountIDs []string) ([]*model.Order, error)
+	CountByUnifiedID(ctx context.Context, unifiedID string) int64
 }
 
 type orderRepo struct {
@@ -144,4 +145,20 @@ func (r *orderRepo) ListByAccountIDs(ctx context.Context, accountIDs []string) (
 		return nil, err
 	}
 	return orders, nil
+}
+
+// CountByUnifiedID 统计某 OneID 下关联的订单数（跨 tenant_sessions join）。
+func (r *orderRepo) CountByUnifiedID(ctx context.Context, unifiedID string) int64 {
+	if unifiedID == "" {
+		return 0
+	}
+	var n int64
+	err := r.db.WithContext(ctx).Table("order AS o").
+		Joins("JOIN customer_sessions AS cs ON o.account_id = cs.account_id").
+		Where("cs.one_id = ? AND o.deleted_at IS NULL", unifiedID).
+		Count(&n).Error
+	if err != nil {
+		return 0
+	}
+	return n
 }

@@ -116,6 +116,18 @@ func (c *Customer360Controller) GetCustomerList(ctx *gin.Context) {
 	if purchasePower := ctx.Query("purchase_power"); purchasePower != "" {
 		filters["purchase_power"] = purchasePower
 	}
+	if sourceChannel := strings.TrimSpace(ctx.Query("source_channel")); sourceChannel != "" {
+		filters["source_channel"] = sourceChannel
+	}
+	if sourceAccountID := strings.TrimSpace(ctx.Query("source_account_id")); sourceAccountID != "" {
+		filters["source_account_id"] = sourceAccountID
+	}
+	if companyID := strings.TrimSpace(ctx.Query("company_id")); companyID != "" {
+		filters["company_id"] = companyID
+	}
+	if industry := strings.TrimSpace(ctx.Query("industry")); industry != "" {
+		filters["industry"] = industry
+	}
 
 	result, total, err := c.customer360Service.GetCustomerList(ctx.Request.Context(), page, pageSize, filters, customerScopeFromCtx(ctx))
 	if err != nil {

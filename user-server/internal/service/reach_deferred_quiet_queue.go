@@ -8,6 +8,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -279,18 +281,104 @@ func (q *PersistentQuietHoursQueue) ListDeferredOutbounds(ctx context.Context, c
 	return q.repo.ListPending(ctx, channel, status, page, pageSize)
 }
 
+// ErrDeferredQuotaRefundPending FA-REACH-03：取消已提交但返额尚未完成，
+// 调用方须视为「未完全成功」，可重试或由对账入口重驱；绝不返回假成功。
+var ErrDeferredQuotaRefundPending = errors.New("延迟触达已取消，但配额返还未完成，待重试/对账")
+
 // CancelDeferredOutbound 管理页取消（仅 pending）。
 // FA-08：取消=确定不会发送，仍处 reserved 的预占必须返还额度。
+// FA-REACH-03：取消与「待返额」意图同事务原子提交；返额成功才标记 released，
+// 失败保留 pending 并返回明确错误（记录可由重试/对账重驱），不再有假成功。
 func (q *PersistentQuietHoursQueue) CancelDeferredOutbound(ctx context.Context, id uint) error {
 	rec, err := q.repo.FindByID(ctx, id)
 	if err != nil {
 		return err
 	}
-	if err := q.repo.CancelPending(ctx, id); err != nil {
+	intent := deferredIntentID(&rec)
+
+	// 无配额释放器 / 无预占意图（含旧数据）：沿用原 CAS 取消，兼容既有语义。
+	if q.quota == nil || intent == "" {
+		return q.repo.CancelPending(ctx, id)
+	}
+
+	// 已取消行：released→幂等成功；仍 pending→重驱返额（重试/进程重启路径）。
+	if rec.Status == model.DeferredReachStatusCancelled {
+		if rec.QuotaReleaseStatus == model.DeferredQuotaReleaseDone {
+			return nil
+		}
+		return q.refundCancelled(ctx, &rec, intent)
+	}
+
+	// pending 行：CAS 取消 + 置待返额意图（同一条 UPDATE）。CAS 未命中说明
+	// 并发下状态已变，重读后按最新状态判定，不误报成功。
+	rows, err := q.repo.CancelWithQuotaRefund(ctx, id)
+	if err != nil {
 		return err
 	}
-	q.releaseReservedQuota(ctx, &rec, "取消")
+	if rows == 0 {
+		fresh, ferr := q.repo.FindByID(ctx, id)
+		if ferr != nil {
+			return ferr
+		}
+		if fresh.Status == model.DeferredReachStatusCancelled {
+			if fresh.QuotaReleaseStatus == model.DeferredQuotaReleaseDone {
+				return nil
+			}
+			return q.refundCancelled(ctx, &fresh, deferredIntentID(&fresh))
+		}
+		return fmt.Errorf("延迟出站 %d 已非 pending，无法取消（status=%s）", id, fresh.Status)
+	}
+	rec.Status = model.DeferredReachStatusCancelled
+	rec.QuotaReleaseStatus = model.DeferredQuotaReleasePending
+	return q.refundCancelled(ctx, &rec, intent)
+}
+
+// refundCancelled 对已取消且待返额的行重驱返额。
+// ReleaseReservedIntent 按 reservation 状态逐 scope 幂等（released 跳过），故部分释放
+// 后重试安全：失败的 scope 重驱、已释放的不再返。返额成功才标记 released。
+func (q *PersistentQuietHoursQueue) refundCancelled(ctx context.Context, rec *model.ReachDeferredOutbound, intent string) error {
+	if err := q.quota.ReleaseReservedIntent(ctx, intent); err != nil {
+		logger.Warnf("[R-4] 延迟出站 %d 取消后返额失败 intent=%s（保留待对账）: %v", rec.ID, intent, err)
+		return fmt.Errorf("%w: 延迟出站 %d intent=%s: %v", ErrDeferredQuotaRefundPending, rec.ID, intent, err)
+	}
+	if err := q.repo.MarkQuotaReleased(ctx, rec.ID); err != nil {
+		// 返额已真实发生，仅状态标记失败：重试时 ReleaseIntent 幂等不会重复返额。
+		logger.Warnf("[R-4] 延迟出站 %d 返额成功但状态标记失败 intent=%s: %v", rec.ID, intent, err)
+		return fmt.Errorf("%w: 延迟出站 %d 返额完成但状态标记失败: %v", ErrDeferredQuotaRefundPending, rec.ID, err)
+	}
 	return nil
+}
+
+// ReconcileCancelledQuotaRefunds 对账入口：重驱所有「已取消但返额未完成」的延迟出站。
+// 返回成功数、仍失败数与首个错误，供后台任务/管理页据此告警或继续重试。
+func (q *PersistentQuietHoursQueue) ReconcileCancelledQuotaRefunds(ctx context.Context, limit int) (ok, failed int, firstErr error) {
+	if q.quota == nil {
+		return 0, 0, nil
+	}
+	rows, err := q.repo.ListCancelledPendingRefunds(ctx, limit)
+	if err != nil {
+		return 0, 0, err
+	}
+	for i := range rows {
+		intent := deferredIntentID(&rows[i])
+		if intent == "" {
+			// 无意图的旧数据不参与返额，直接结清避免卡在对账队列。
+			if e := q.repo.MarkQuotaReleased(ctx, rows[i].ID); e != nil && firstErr == nil {
+				firstErr = e
+			}
+			ok++
+			continue
+		}
+		if e := q.refundCancelled(ctx, &rows[i], intent); e != nil {
+			failed++
+			if firstErr == nil {
+				firstErr = e
+			}
+		} else {
+			ok++
+		}
+	}
+	return ok, failed, firstErr
 }
 
 // errNilReachSendRequest 入队对象缺失

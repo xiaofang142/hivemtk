@@ -189,7 +189,28 @@ func (r *LLMUsageReportRepository) AggregateWindow(ctx context.Context, from, to
 	return len(rows), nil
 }
 
+// DeleteDailyByStatDate 删除指定业务日（stat_date='YYYY-MM-DD'）的全部日聚合行。
+//
+// FA-REPORT-01：配合"按完整受影响日期重算"——重算前先清空该业务日的权威日桶，
+// 再由 AggregateWindow 用整天明细重建，从而保证：
+//   - 同日多窗口/增量重跑后，日总数/成本恒等于 llm_routing_logs 权威明细（不再被
+//     10 分钟窗口覆盖成尾部值）；
+//   - 删除或迟到的明细在下一次重算后与日表一致（删掉的行不再残留旧桶）。
+//
+// 跨租户删除：后台扫描任务以 system scope 运行，覆盖所有租户。
+// 调用方必须在 advisory lock 内调用本方法（见 AggregateWindowLocked 的 resetStatDate），
+// 否则多实例并发重算会在"删空"与"重建"之间互相踩踏。
+func (r *LLMUsageReportRepository) DeleteDailyByStatDate(ctx context.Context, statDate string) error {
+	if r == nil || r.db == nil {
+		return fmt.Errorf("llm usage report repository: db handle is nil")
+	}
+	return r.db.WithContext(ctx).Where("stat_date = ?", statDate).Delete(&model.LLMUsageDaily{}).Error
+}
+
 // AggregateWindowLocked 在会话级 advisory lock 保护下跑一次窗口聚合。
+//
+// resetStatDate 非空时，在拿锁后、聚合前先删空该业务日的日桶（FA-REPORT-01 重算），
+// 使"删空→重建"在同一把锁内完成，避免多实例并发踩踏。
 //
 // 返回 locked=false 表示锁被别的实例持有（本轮跳过，不是错误）。
 //
@@ -202,7 +223,7 @@ func (r *LLMUsageReportRepository) AggregateWindow(ctx context.Context, from, to
 //
 // 锁的释放不依赖调用方 ctx（其可能已随请求结束被取消）：用短超时 Background，
 // 保证锁一定被还回去。
-func (r *LLMUsageReportRepository) AggregateWindowLocked(ctx context.Context, key int64, from, to time.Time) (locked bool, buckets int, err error) {
+func (r *LLMUsageReportRepository) AggregateWindowLocked(ctx context.Context, key int64, from, to time.Time, resetStatDate string) (locked bool, buckets int, err error) {
 	if r == nil || r.db == nil {
 		return false, 0, fmt.Errorf("llm usage report repository: db handle is nil")
 	}
@@ -223,6 +244,12 @@ func (r *LLMUsageReportRepository) AggregateWindowLocked(ctx context.Context, ke
 			}
 		}
 	}()
+	// FA-REPORT-01：先删空该业务日的旧桶再按整天权威明细重建（同一把锁内）。
+	if resetStatDate != "" {
+		if err = r.DeleteDailyByStatDate(ctx, resetStatDate); err != nil {
+			return true, 0, fmt.Errorf("reset daily buckets for %s: %w", resetStatDate, err)
+		}
+	}
 	buckets, err = r.AggregateWindow(ctx, from, to)
 	return true, buckets, err
 }

@@ -84,6 +84,12 @@ func validateEventFields(dto *EventDTO) error {
 }
 
 // Track 追踪通用事件
+//
+// EC-24 不变量（服务事件先行，营销后置）：
+//   - 本函数只记录「已发生的」服务/业务事实事件，绝不反向驱动订单、售后、资金等副作用；
+//   - 营销流程/触达只能消费本层落库后的标准字段（customer_id/event_type/event_source/event_data），
+//     不得自行构造服务事实或抢先于服务链路执行；营销失败不得回写/重做服务状态；
+//   - 事件数据仅使用标准字段，审计链路按 occurred_at + customer_id + event_type 可回溯。
 func (s *EventTracker) Track(ctx context.Context, dto *EventDTO) error {
 	if dto == nil || strings.TrimSpace(dto.CustomerID) == "" {
 		return ErrInvalidDTO

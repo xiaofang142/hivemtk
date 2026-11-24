@@ -13,15 +13,20 @@ import (
 // ClueQuery 线索查询条件。
 // Type / IsVerify 用指针，nil 表示不参与过滤（区别于值为 0）。
 type ClueQuery struct {
-	Keyword       string
-	Type          *int64
-	IsVerify      *int64
-	OwnerAccount  string
-	IsOpportunity *int64
-	IsGroup       *bool
-	GroupID       string
-	StartUnix     int64
-	EndUnix       int64
+	Keyword          string
+	Type             *int64
+	IsVerify         *int64
+	OwnerAccount     string
+	IsOpportunity    *int64
+	IsGroup          *bool
+	GroupID          string
+	StartUnix        int64
+	EndUnix          int64
+	LeadRole         string
+	Status           string
+	SourceChannel    string
+	SourceAccountID  string
+	ConversationType string
 }
 
 func applyClueQuery(db *gorm.DB, q ClueQuery) *gorm.DB {
@@ -58,6 +63,21 @@ func applyClueQuery(db *gorm.DB, q ClueQuery) *gorm.DB {
 	}
 	if q.GroupID != "" {
 		tx = tx.Where("group_id = ?", q.GroupID)
+	}
+	if q.LeadRole != "" {
+		tx = tx.Where("lead_role = ?", q.LeadRole)
+	}
+	if q.Status != "" {
+		tx = tx.Where("status = ?", q.Status)
+	}
+	if q.SourceChannel != "" {
+		tx = tx.Where("source_channel = ?", q.SourceChannel)
+	}
+	if q.SourceAccountID != "" {
+		tx = tx.Where("source_account_id = ?", q.SourceAccountID)
+	}
+	if q.ConversationType != "" {
+		tx = tx.Where("conversation_type = ?", q.ConversationType)
 	}
 	if q.StartUnix > 0 {
 		tx = tx.Where("create_time >= ?", q.StartUnix)

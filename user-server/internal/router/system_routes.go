@@ -185,6 +185,14 @@ func setupI18nRoutes(auth *gin.RouterGroup, db *gorm.DB) {
 	glossaryCtrl := controller.NewGlossaryController(glossarySvc)
 	glossaryCtrl.RegisterRoutes(auth)
 
+	companyCtrl := controller.NewCompanyController(service.NewCompanyServiceDefault())
+	companyCtrl.RegisterRoutes(auth)
+	// CRM PR-5/6/7/8 最小可用 API
+	controller.NewBusinessAccountAuthController().RegisterRoutes(auth)
+	controller.NewCustomerImportJobController().RegisterRoutes(auth)
+	controller.NewAIInsightDraftController().RegisterRoutes(auth)
+	controller.NewCrossAccountSearchController().RegisterRoutes(auth)
+
 	statsRepo := repository.NewI18nStatsRepositoryWithDB(db)
 	statsSvc := translation.NewI18nStatsService(statsRepo)
 	statsCtrl := controller.NewI18nStatsController(statsSvc)

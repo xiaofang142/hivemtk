@@ -355,3 +355,37 @@ func (r *MessageHubRepository) GetLastByConversation(ctx context.Context, conver
 	}
 	return &msg, nil
 }
+
+// ListRecentByConversation 获取同一会话最近消息（双向）。LM-PR1：单聊需结合两人历史。
+func (r *MessageHubRepository) ListRecentByConversation(ctx context.Context, conversationID string, limit int) ([]model.MessageHub, error) {
+	if r == nil || r.db == nil || conversationID == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var hubs []model.MessageHub
+	err := r.db.WithContext(ctx).
+		Where("conversation_id = ?", conversationID).
+		Order("sent_at DESC").
+		Limit(limit).
+		Find(&hubs).Error
+	return hubs, err
+}
+
+// ListRecentByGroup 获取群聊最近消息（多成员）。LM-PR1：群聊需结合群内大家发言。
+func (r *MessageHubRepository) ListRecentByGroup(ctx context.Context, platform, groupID string, limit int) ([]model.MessageHub, error) {
+	if r == nil || r.db == nil || groupID == "" {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var hubs []model.MessageHub
+	q := r.db.WithContext(ctx).Where("group_id = ? AND is_group = ?", groupID, true)
+	if platform != "" {
+		q = q.Where("platform = ?", platform)
+	}
+	err := q.Order("sent_at DESC").Limit(limit).Find(&hubs).Error
+	return hubs, err
+}

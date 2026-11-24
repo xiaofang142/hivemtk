@@ -462,6 +462,92 @@ func (c *FenxiangxiaoClient) GetAccessToken(ctx context.Context) (string, error)
 	return result.AccessToken, nil
 }
 
+// fxLead 纷享销客线索的规范化结构（FA-CRM-01：分页辅助与落库解耦）。
+type fxLead struct {
+	ID        string
+	Name      string
+	Phone     string
+	Email     string
+	Company   string
+	Position  string
+	OwnerID   string
+	OwnerName string
+	Status    string
+	Source    string
+	Tags      []string
+}
+
+// fxFetchAllLeads 按 total_count 完整翻页读取纷享销客线索（FA-CRM-01）。
+// do 由调用方注入（client.httpClient.Do），便于假 HTTP 夹具覆盖翻页/失败/HTTP500。
+// 每页先校验 HTTP 状态码（非 2xx 直接失败，避免错误 JSON 被解析成空成功），
+// 再校验业务 errcode；循环直到收齐 total_count 或遇到空页，避免无界请求。
+func fxFetchAllLeads(do func(*http.Request) (*http.Response, error), token string) ([]fxLead, error) {
+	const apiURL = "https://api.fxiaoke.com/crm/lead/v2/list"
+	const pageSize = 100
+	all := make([]fxLead, 0)
+	for page := 1; ; page++ {
+		reqBody, _ := json.Marshal(map[string]any{"page": page, "pagesize": pageSize})
+		req, err := http.NewRequest("POST", apiURL, bytes.NewReader(reqBody))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := do(req)
+		if err != nil {
+			return nil, err
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return nil, fmt.Errorf("纷享销客 HTTP %d: %s", resp.StatusCode, string(body))
+		}
+		var result struct {
+			Response struct {
+				Data []struct {
+					ID        string   `json:"id"`
+					Name      string   `json:"name"`
+					Phone     string   `json:"mobile"`
+					Email     string   `json:"email"`
+					Company   string   `json:"company_name"`
+					Position  string   `json:"position"`
+					OwnerID   string   `json:"owner_id"`
+					OwnerName string   `json:"owner_name"`
+					Status    string   `json:"status"`
+					Source    string   `json:"source"`
+					Tags      []string `json:"tags"`
+				} `json:"data"`
+				TotalCount int `json:"total_count"`
+			} `json:"response"`
+			Errcode int    `json:"errcode"`
+			Errmsg  string `json:"errmsg"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+		if result.Errcode != 0 {
+			return nil, errors.New(result.Errmsg)
+		}
+		if len(result.Response.Data) == 0 {
+			break
+		}
+		for _, c := range result.Response.Data {
+			all = append(all, fxLead{
+				ID: c.ID, Name: c.Name, Phone: c.Phone, Email: c.Email,
+				Company: c.Company, Position: c.Position, OwnerID: c.OwnerID,
+				OwnerName: c.OwnerName, Status: c.Status, Source: c.Source, Tags: c.Tags,
+			})
+		}
+		if len(all) >= result.Response.TotalCount {
+			break
+		}
+	}
+	return all, nil
+}
+
 func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, account *model.IntegrationAccount) (int, error) {
 	client := NewFenxiangxiaoClient(account, s.accountRepo)
 	token, err := client.GetAccessToken(ctx)
@@ -479,70 +565,18 @@ func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, acco
 		return 0, err
 	}
 
-	apiURL := "https://api.fxiaoke.com/crm/lead/v2/list"
-	reqBody := map[string]any{
-		"page":     1,
-		"pagesize": 100,
-	}
-	bodyBytes, _ := json.Marshal(reqBody)
-
-	req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(bodyBytes))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := client.httpClient.Do(req)
+	// FA-CRM-01：完整翻页读取全部线索；do 用 client 的 httpClient（可通过 Transport 注入假 HTTP）。
+	leads, err := fxFetchAllLeads(client.httpClient.Do, token)
 	if err != nil {
 		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
 			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
 		}
 		return 0, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
-			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
-		}
-		return 0, err
-	}
-
-	var result struct {
-		Response struct {
-			Data []struct {
-				ID        string   `json:"id"`
-				Name      string   `json:"name"`
-				Phone     string   `json:"mobile"`
-				Email     string   `json:"email"`
-				Company   string   `json:"company_name"`
-				Position  string   `json:"position"`
-				OwnerID   string   `json:"owner_id"`
-				OwnerName string   `json:"owner_name"`
-				Status    string   `json:"status"`
-				Source    string   `json:"source"`
-				Tags      []string `json:"tags"`
-			} `json:"data"`
-			TotalCount int `json:"total_count"`
-		} `json:"response"`
-		Errcode int    `json:"errcode"`
-		Errmsg  string `json:"errmsg"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, err.Error()); e != nil {
-			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
-		}
-		return 0, err
-	}
-
-	if result.Errcode != 0 {
-		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 2, 0, result.Errmsg); e != nil {
-			logger.Warnf("[Integration] 同步失败状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
-		}
-		return 0, errors.New(result.Errmsg)
 	}
 
 	count := 0
-	for _, c := range result.Response.Data {
+	failed := make([]string, 0)
+	for _, c := range leads {
 		tagsJSON, _ := json.Marshal(c.Tags)
 		customer := &model.ExternalCustomer{
 			Platform:   account.Platform,
@@ -564,15 +598,26 @@ func (s *IntegrationService) syncFenxiangxiaoCustomers(ctx context.Context, acco
 			customer.ID = existing.ID
 			if e := s.customerRepo.Update(ctx, customer); e != nil {
 				logger.Errorf("[Integration] 客户落库失败 extID=%s: %v", c.ID, e)
+				failed = append(failed, c.ID+":"+e.Error())
 				continue
 			}
 		} else if e := s.customerRepo.Create(ctx, customer); e != nil {
 			logger.Errorf("[Integration] 客户创建失败 extID=%s: %v", c.ID, e)
+			failed = append(failed, c.ID+":"+e.Error())
 			continue
 		}
 		count++
 	}
 
+	// FA-CRM-01：只有完整提交（无逐条失败）才推进同步水位并标全成功；
+	// 部分失败标 status=3（部分成功）并把每条失败 extID+err 落到 detail，供对账重试。
+	if len(failed) > 0 {
+		detail := strings.Join(failed, ";")
+		if e := s.syncLogRepo.UpdateStatus(ctx, syncLog.ID, 3, count, detail); e != nil {
+			logger.Warnf("[Integration] 部分成功状态落库失败 syncLogID=%d: %v", syncLog.ID, e)
+		}
+		return count, fmt.Errorf("同步部分失败：%d 条落库失败：%s", len(failed), detail)
+	}
 	if e := s.accountRepo.UpdateSyncTime(ctx, account.ID); e != nil {
 		logger.Warnf("[Integration] 更新同步时间失败 accountID=%d: %v", account.ID, e)
 	}

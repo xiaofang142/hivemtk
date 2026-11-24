@@ -88,7 +88,7 @@ func TestWorkflowOrchestratorService_ListAll(t *testing.T) {
 		})
 	}
 
-	list, total, err := svc.ListAll(ctx, "", "", 1, 10)
+	list, total, err := svc.ListAll(ctx, "", "", "", 1, 10)
 	if err != nil {
 		t.Fatalf("ListAll 失败: %v", err)
 	}

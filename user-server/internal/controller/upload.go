@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 	"hivemtk-user/internal/storage"
@@ -136,6 +137,12 @@ func UploadFile(ctx *gin.Context) {
 	if virusURL := service.GlobalConfigParam().GetString(ctx, "misc", "upload_virus_scan_url", ""); virusURL != "" {
 		config.VirusScanURL = virusURL
 		config.EnableVirusScan = true
+	}
+
+	// 多租户 on 模式下病毒扫描必须开启，否则拒绝上传（D-04）。
+	if tenant.IsMultiTenant() && !config.EnableVirusScan {
+		response.Error(ctx, http.StatusServiceUnavailable, "多租户模式下未配置病毒扫描，拒绝上传")
+		return
 	}
 
 	if err := ctx.Request.ParseMultipartForm(config.MaxSize); err != nil {

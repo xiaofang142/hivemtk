@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/dto"
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/errhttp"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
@@ -65,17 +67,40 @@ func (c *ClueController) GetClueList(ctx *gin.Context) {
 	}
 	for _, clue := range clues {
 		resp.List = append(resp.List, &dto.ClueListResponse{
-			ID:           clue.ID,
-			SourceID:     clue.SourceID,
-			Account:      clue.Account,
-			IsVerify:     clue.IsVerify,
-			Name:         clue.Name,
-			City:         clue.City,
-			Address:      clue.Address,
-			Type:         clue.Type,
-			OwnerAccount: clue.OwnerAccount,
-			CreateTime:   clue.CreateTime,
-			UpdatedAt:    clue.UpdatedAt,
+			ID:                 clue.ID,
+			SourceID:           clue.SourceID,
+			Account:            clue.Account,
+			IsVerify:           clue.IsVerify,
+			Name:               clue.Name,
+			City:               clue.City,
+			Address:            clue.Address,
+			Desc:               clue.Desc,
+			Type:               clue.Type,
+			OwnerAccount:       clue.OwnerAccount,
+			CreateTime:         clue.CreateTime,
+			UpdatedAt:          clue.UpdatedAt,
+			IntentScore:        clue.IntentScore,
+			IsOpportunity:      clue.IsOpportunity,
+			MessageID:          clue.MessageID,
+			ConversationID:     clue.ConversationID,
+			OneID:              clue.OneID,
+			IsGroup:            clue.IsGroup,
+			GroupID:            clue.GroupID,
+			GroupName:          clue.GroupName,
+			Level:              clue.Level,
+			LeadRole:           clue.LeadRole,
+			Status:             clue.Status,
+			EvidenceJSON:       clue.EvidenceJSON,
+			Summary:            clue.Summary,
+			FollowupSuggestion: clue.FollowupSuggestion,
+			LastJudgedAt:       clue.LastJudgedAt,
+			SourceChannel:      clue.SourceChannel,
+			SourceAccountID:    clue.SourceAccountID,
+			ConversationType:   clue.ConversationType,
+			FeedbackStatus:     clue.FeedbackStatus,
+			FeedbackReason:     clue.FeedbackReason,
+			FeedbackBy:         clue.FeedbackBy,
+			FeedbackAt:         clue.FeedbackAt,
 		})
 	}
 
@@ -179,6 +204,27 @@ func (c *ClueController) ImportClues(ctx *gin.Context) {
 	}, "导入线索成功")
 }
 
+// RegisterClue 固定来源事件；无许可证据的 marketing_consent 不得进入营销受众。
+func (c *ClueController) RegisterClue(ctx *gin.Context) {
+	var req dto.ImportClueRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：name/account/type 必填，营销许可须 source_event 和 source_evidence_ref")
+		return
+	}
+	clueType, err := strconv.ParseInt(req.Type, 10, 64)
+	if err != nil || !service.IsValidClueType(clueType) {
+		response.Error(ctx, http.StatusBadRequest, "type 不是合法线索类型")
+		return
+	}
+	clue := model.Clue{SourceID: req.SourceID, Account: req.Account, Type: clueType, IsVerify: req.IsVerify, Name: req.Name, City: req.City, Address: req.Address, Desc: req.Desc, IntentScore: req.IntentScore, IsOpportunity: req.IsOpportunity, OneID: req.OneID, ConversationID: req.ConversationID, OwnerAccount: req.OwnerAccount, SourceEvidence: req.SourceEvent}
+	got, err := c.svc.RegisterClue(ctx.Request.Context(), clue, req.SourceEvent, req.SourceEvidenceRef, req.MarketingConsent)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, got, "已记录来源证据")
+}
+
 // @Summary 获取线索类型列表
 // @Tags      clue
 // @Router    /api/clues/type [get]
@@ -224,4 +270,34 @@ func (c *ClueController) UpdateClue(ctx *gin.Context) {
 		return
 	}
 	response.Success(ctx, nil, "线索已更新")
+}
+
+// SubmitFeedback 标记线索误报/有效（LM-PR6）。
+func (c *ClueController) SubmitFeedback(ctx *gin.Context) {
+	var req struct {
+		FeedbackStatus string `json:"feedback_status"`
+		FeedbackReason string `json:"feedback_reason"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	by := ""
+	if v, ok := ctx.Get("user_id"); ok {
+		by = strings.TrimSpace(fmt.Sprint(v))
+	}
+	if by == "" {
+		if v, ok := ctx.Get("username"); ok {
+			by = strings.TrimSpace(fmt.Sprint(v))
+		}
+	}
+	if err := c.svc.SubmitFeedback(ctx.Request.Context(), ctx.Param("id"), req.FeedbackStatus, req.FeedbackReason, by); err != nil {
+		if errhttp.IsNotFoundError(err) {
+			response.NotFound(ctx, "线索不存在（id="+ctx.Param("id")+"）")
+			return
+		}
+		response.Error(ctx, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"id": ctx.Param("id"), "feedback_status": req.FeedbackStatus}, "ok")
 }

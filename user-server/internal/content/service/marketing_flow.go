@@ -238,6 +238,10 @@ func (s *MarketingFlowService) GetExecutionStats(ctx context.Context, flowID uin
 	return s.executionRepo.GetStats(ctx, flowID)
 }
 
+// EC-24 不变量（服务事件先行，营销后置）：营销流程只能消费「已持久化的服务事实」作为触发输入；
+//   - 调用方必须先完成订单/售后/资金等服务链路并落库，再以标准字段（customer_id/event_type/...）
+//     触发本流程；营销不得先于服务、不得重做/回写服务状态；触发失败不得反向影响服务链路；
+//   - data 仅接受标准字段，额外/私有字段不得进入营销事件链；审计按 flow_id/execution_id 可回溯。
 func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.MarketingFlow, triggerID, userID string, data map[string]any) (*model.FlowExecution, error) {
 
 	if flow == nil || flow.Status != model.FlowStatusActive {
@@ -251,26 +255,30 @@ func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.Mark
 		return nil, err
 	}
 
-	execution := &model.FlowExecution{
-		FlowID:        flow.ID,
-		TriggerID:     triggerID,
-		UserID:        userID,
-		Status:        "running",
-		ExecutionData: "",
-		StartedAt:     time.Now(),
-	}
-
-	if err := s.executionRepo.Create(ctx, execution); err != nil {
+	key, err := flowTriggerKey(ctx, flow, triggerID, userID)
+	if err != nil {
 		return nil, err
 	}
-
-	// 异步体必须脱离请求 ctx（delay 节点最长等 300s，不能随响应返回被取消），
-	// 但不能脱离租户：全仓异步写库都走 BackgroundWithTenant，这里漏掉就等于
-	// 每次落状态都被隔离闸拒绝，流程永远停在 running。
-	workerExecution, workerFlow := *execution, *flow
-	utils.SafeGo(tenant.BackgroundWithTenant(ctx), "marketing-flow", func(ctx context.Context) {
-		s.executeFlow(ctx, &workerExecution, &workerFlow, snapshot)
-	})
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	execution := &model.FlowExecution{
+		FlowID: flow.ID, TriggerID: triggerID, UserID: userID, Status: "running", StartedAt: time.Now(),
+		FlowVersion: flow.Version, GraphSnapshot: flow.FlowData, InputSnapshot: string(encoded), TriggerKey: &key,
+	}
+	created, err := s.executionRepo.CreateDurable(ctx, execution)
+	if err != nil {
+		return nil, err
+	}
+	if created {
+		workerExecution := *execution
+		utils.SafeGo(tenant.BackgroundWithTenant(ctx), "marketing-flow", func(workerCtx context.Context) {
+			if err := s.executeDurableFlow(workerCtx, &workerExecution); err != nil {
+				logger.Errorf("[MarketingFlow] durable execution %d requires recovery", workerExecution.ID)
+			}
+		})
+	}
 
 	return execution, nil
 }

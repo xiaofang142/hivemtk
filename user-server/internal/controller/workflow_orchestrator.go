@@ -92,12 +92,13 @@ func (c *WorkflowOrchestratorController) ListVersions(ctx *gin.Context) {
 
 	if workflowID == "" {
 		status := ctx.Query("status")
+		keyword := ctx.Query("keyword")
 		page, pageSize, err := pagination.Parse(ctx)
 		if err != nil {
 			response.Error(ctx, http.StatusBadRequest, err.Error())
 			return
 		}
-		list, total, err := c.svc.ListAll(ctx.Request.Context(), workflowID, status, page, pageSize)
+		list, total, err := c.svc.ListAll(ctx.Request.Context(), workflowID, status, keyword, page, pageSize)
 		if err != nil {
 			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return

@@ -1,6 +1,0 @@
-2026-11-20T20:30:15+08:00 WRN [SECURITY][WARN] USER_JWT_SECRET/JWT_SECRET 未配置，go test 进程使用固定测试密钥（仅用于单元测试） component=user-server
---- FAIL: TestToolRuntime_CreatedAtDatabasePrecision (1.23s)
-    tool_runtime_test.go:32: 数据库微秒精度不应撤销合法自定义工具：tool admission: source configuration changed; rediscovery required
-FAIL
-FAIL	hivemtk-user/internal/repository	1.570s
-FAIL

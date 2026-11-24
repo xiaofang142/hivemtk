@@ -1,1 +1,0 @@
-{"code":0,"message":"ok","data":{"tenant_id":1,"id":1,"task_id":1,"user_id":1,"chrome_tab_id":0,"url":"https://example.com/audit20","status":"completed","started_at":"2026-11-21T18:46:33.947439+08:00","duration_ms":0,"total_steps":3,"success_steps":2,"failed_steps":1,"confirm_pending":false,"created_at":"0001-01-01T00:00:00Z"}}

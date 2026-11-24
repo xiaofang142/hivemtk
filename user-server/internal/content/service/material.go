@@ -39,6 +39,10 @@ type ObsService interface {
 	UploadFile(ctx context.Context, file multipart.File, header *multipart.FileHeader, folder string) (string, string, error)
 }
 
+// EC-27 缺口说明：素材库当前仅做扩展名白名单与哈希去重，尚未实现审核状态、
+// 有效期/过期停发、渠道政策匹配与证据链；素材被引用到营销发送前必须经 EC-27
+// 的 Content.Render/Approve 链路（不可变内容版本 + 审核人 + 平台模板 ID/状态）。
+// 本接口保持现有行为，不在此处扩展。
 type MaterialService interface {
 	GetCategoryList(ctx context.Context, licenseID string, parentID string, materialType string, page int, limit int) (*contentdto.GetMaterialCategoryListResponse, error)
 	GetCategoryTree(ctx context.Context, licenseID string, materialType string) ([]*contentdto.MaterialCategoryResponse, error)

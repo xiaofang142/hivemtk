@@ -1,11 +1,16 @@
 package controller
 
 import (
+	"errors"
+	"strconv"
+	"strings"
+
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type LeadMiningController struct{}
@@ -60,4 +65,110 @@ func isEmptyLeadMiningConfig(cfg *dto.LeadMiningConfig) bool {
 	return !cfg.Enabled && len(cfg.Keywords) == 0 && len(cfg.Tags) == 0 &&
 		cfg.Requirement == "" && len(cfg.Channels) == 0 &&
 		cfg.MinIntentScore == 0 && cfg.Model == ""
+}
+
+// GetJudgements 返回线索发掘判定记录（最小只读，LM-PR5）。
+func (c *LeadMiningController) GetJudgements(ctx *gin.Context) {
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "20"))
+	platform := ctx.Query("platform")
+	accountID := ctx.Query("account_id")
+	leadRole := ctx.Query("lead_role")
+	var matched *bool
+	if v := ctx.Query("matched"); v != "" {
+		b := v == "1" || v == "true"
+		matched = &b
+	}
+	items, total, err := service.ListLeadMiningJudgements(ctx.Request.Context(), page, limit, platform, accountID, leadRole, matched)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "获取判定记录失败")
+		return
+	}
+	response.Success(ctx, gin.H{"list": items, "total": total, "page": page, "limit": limit}, "ok")
+}
+
+// GetClueStats 返回线索发掘统计（角色/状态/渠道/会话类型，LM-PR5）。
+func (c *LeadMiningController) GetClueStats(ctx *gin.Context) {
+	stats, err := service.NewClueServiceDefault(nil).GetLeadMiningStats(ctx.Request.Context())
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "获取线索统计失败")
+		return
+	}
+	response.Success(ctx, stats, "ok")
+}
+
+// GetJudgementDetail 返回判定记录回放详情（LM-PR6）。
+func (c *LeadMiningController) GetJudgementDetail(ctx *gin.Context) {
+	judgementID := strings.TrimSpace(ctx.Param("judgement_id"))
+	rec, err := service.GetLeadMiningJudgementDetail(ctx.Request.Context(), judgementID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(ctx, 404, "判定记录不存在")
+			return
+		}
+		response.ErrorFromDB(ctx, err, "获取判定详情失败")
+		return
+	}
+	response.Success(ctx, rec, "ok")
+}
+
+// SubmitJudgementFeedback 标记判定误报/有效（LM-PR6）。
+func (c *LeadMiningController) SubmitJudgementFeedback(ctx *gin.Context) {
+	judgementID := strings.TrimSpace(ctx.Param("judgement_id"))
+	var req struct {
+		FeedbackStatus string `json:"feedback_status"`
+		FeedbackReason string `json:"feedback_reason"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, 400, "请求参数错误")
+		return
+	}
+	by := ""
+	if v, ok := ctx.Get("user_id"); ok {
+		by = strings.TrimSpace(strings.ReplaceAll(strings.TrimSpace(toString(v)), " ", ""))
+	}
+	if by == "" {
+		if v, ok := ctx.Get("username"); ok {
+			by = toString(v)
+		}
+	}
+	if err := service.SubmitLeadMiningJudgementFeedback(ctx.Request.Context(), judgementID, req.FeedbackStatus, req.FeedbackReason, by); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.Error(ctx, 404, "判定记录不存在")
+			return
+		}
+		response.Error(ctx, 400, err.Error())
+		return
+	}
+	response.Success(ctx, gin.H{"judgement_id": judgementID, "feedback_status": req.FeedbackStatus}, "ok")
+}
+
+// GetQualityStats 返回线索发掘质量看板（LM-PR6）。
+func (c *LeadMiningController) GetQualityStats(ctx *gin.Context) {
+	days, _ := strconv.Atoi(ctx.DefaultQuery("days", "7"))
+	stats, err := service.GetLeadMiningQualityStats(ctx.Request.Context(), days)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "获取质量看板失败")
+		return
+	}
+	response.Success(ctx, stats, "ok")
+}
+
+func toString(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case uint:
+		return strconv.FormatUint(uint64(t), 10)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case uint64:
+		return strconv.FormatUint(t, 10)
+	case float64:
+		return strconv.FormatInt(int64(t), 10)
+	default:
+		return ""
+	}
 }

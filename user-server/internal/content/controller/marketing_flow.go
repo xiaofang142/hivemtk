@@ -292,3 +292,22 @@ func flowIDParam(ctx *gin.Context) (uint, bool) {
 	}
 	return uint(id), true
 }
+
+// ResumeDue 200表示已检查到期运行，不代表任何客户已收到消息；权限或版本失效返回错误。
+func (c *MarketingFlowController) ResumeDue(ctx *gin.Context) {
+	id, ok := flowIDParam(ctx)
+	if !ok {
+		return
+	}
+	uid, authenticated, admin := flowCaller(ctx)
+	if !authenticated {
+		response.Error(ctx, http.StatusUnauthorized, response.ErrUnauthorized)
+		return
+	}
+	count, err := c.flowService.ResumeDue(ctx.Request.Context(), id, uid, admin)
+	if err != nil {
+		response.Error(ctx, http.StatusConflict, "当前流程不可恢复，请核对权限、连接和运行状态")
+		return
+	}
+	response.Success(ctx, gin.H{"checked": count}, "到期运行已核对")
+}

@@ -3,6 +3,7 @@ package sop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ type SOPDispatchSender interface {
 type SOPOutboxDispatcher struct {
 	timerRepo      *repository.SOPTimerRepository
 	eventRepo      *repository.SOPExecEventRepository
+	claimRepo      *repository.SOPDispatchClaimRepository
 	execDispatcher SOPDispatchSender
 	tickInterval   time.Duration
 	batchSize      int
@@ -40,6 +42,8 @@ type SOPOutboxDispatcher struct {
 	wg             sync.WaitGroup
 	runMu          sync.Mutex
 	running        bool
+	dispatchLease  time.Duration
+	maxDispatchAttempts int
 }
 
 const (
@@ -48,6 +52,11 @@ const (
 	sopTimerStatusDeadLetter = "dead_letter"
 
 	sopTimerMaxClaims = 5
+
+	// FA-45：认领租约与最大重派次数。失败立即释放租约，下一轮即可恢复；
+	// 超过上限把 claim 标 failed 并把 timer 转 dead_letter。
+	sopDispatchLease        = 30 * time.Second
+	sopMaxDispatchAttempts  = 5
 )
 
 // NewSOPOutboxDispatcher 创建 Outbox 调度器
@@ -57,10 +66,13 @@ func NewSOPOutboxDispatcher(execDispatcher SOPDispatchSender) *SOPOutboxDispatch
 	return &SOPOutboxDispatcher{
 		timerRepo:      repository.NewSOPTimerRepositoryDefault(),
 		eventRepo:      repository.NewSOPExecEventRepositoryDefault(),
+		claimRepo:      repository.NewSOPDispatchClaimRepositoryDefault(),
 		execDispatcher: execDispatcher,
 		tickInterval:   5 * time.Second,
 		batchSize:      100,
 		stopCh:         make(chan struct{}),
+		dispatchLease:  sopDispatchLease,
+		maxDispatchAttempts: sopMaxDispatchAttempts,
 	}
 }
 
@@ -161,47 +173,40 @@ func (o *SOPOutboxDispatcher) processDueTimersForTenant(ctx context.Context) {
 	}
 
 	firedCount := 0
-	for _, t := range timers {
+	for i := range timers {
+		t := &timers[i]
 		// 租户上下文（specs/001-saas-multi-tenant T027 行自证）：timer 行自带
 		// tenant_id（写入时 callback 已填），派发与下游执行按行租户恢复上下文。
 		// Fanout 已注入的 ctx 与行租户必然一致，这里再取一次是双保险：
 		// 即便行值与扇出租户对不上，也只会落成"0 行受影响→跳过"，绝不跨租户写。
 		// off 模式行值恒为默认租户，等价现状。
-		rowTenant := timerRowTenant(&t)
+		rowTenant := timerRowTenant(t)
 		taskCtx := tenant.WithTenantID(ctx, rowTenant)
 
-		rowsAffected, err := o.timerRepo.MarkFired(taskCtx, t.ID, now)
-		if err != nil {
-			logger.Ctx(taskCtx).Error().Err(err).
-				Uint("timer_id", t.ID).
-				Msg("[outbox] mark timer fired failed")
-
-			o.bumpTimerClaimOrDeadLetter(taskCtx, &t, now)
-			continue
-		}
-		if rowsAffected == 0 {
-			continue
-		}
-
-		traceID := fmt.Sprintf("timer-%d", t.ID)
-		o.execDispatcher.DispatchOrLog(&dispatchTask{
+		task := &dispatchTask{
 			ExecutionID: t.ExecutionID,
 			NodeID:      t.NodeID,
 			Attempt:     0,
-			TraceID:     traceID,
+			TraceID:     fmt.Sprintf("timer-%d", t.ID),
 			TimerFired:  true,
 			WaitEvent:   t.WaitEvent,
 			WaitPayload: t.Payload,
 			TenantID:    rowTenant,
-		})
-		firedCount++
-
-		logger.Ctx(ctx).Info().
-			Uint("timer_id", t.ID).
-			Uint("execution_id", t.ExecutionID).
-			Str("node_id", t.NodeID).
-			Str("wait_event", t.WaitEvent).
-			Msg("[outbox] timer fired, dispatched task")
+		}
+		if ok, err := o.claimAndFireTimer(taskCtx, t, task, now); err != nil {
+			logger.Ctx(taskCtx).Error().Err(err).
+				Uint("timer_id", t.ID).
+				Msg("[outbox] claim/dispatch timer failed; claim kept pending for recovery")
+			continue
+		} else if ok {
+			firedCount++
+			logger.Ctx(taskCtx).Info().
+				Uint("timer_id", t.ID).
+				Uint("execution_id", t.ExecutionID).
+				Str("node_id", t.NodeID).
+				Str("wait_event", t.WaitEvent).
+				Msg("[outbox] timer fired and task confirmed enqueued")
+		}
 	}
 
 	if firedCount > 0 {
@@ -210,6 +215,175 @@ func (o *SOPOutboxDispatcher) processDueTimersForTenant(ctx context.Context) {
 			Int("scanned_count", len(timers)).
 			Msg("[outbox] processed due timers")
 	}
+}
+
+// claimAction 认领结果：proceed=持有租约可派发，skip=已有有效持有者/已确认，
+// legacy=未装配 claimRepo（老路径，保持既有语义）。
+type claimAction int
+
+const (
+	claimProceed claimAction = iota
+	claimSkip
+	claimLegacy
+)
+
+// dispatchReliable 优先走带 error 的 Dispatch（能感知队列满/停机）；
+// 老 sender 只实现 DispatchOrLog 时回退并视为成功（保持既有 mock 测试绿）。
+func (o *SOPOutboxDispatcher) dispatchReliable(ctx context.Context, task *dispatchTask) error {
+	if o.execDispatcher == nil {
+		return errors.New("no exec dispatcher")
+	}
+	if reliable, ok := o.execDispatcher.(interface {
+		Dispatch(context.Context, *dispatchTask) error
+	}); ok {
+		return reliable.Dispatch(ctx, task)
+	}
+	o.execDispatcher.DispatchOrLog(task)
+	return nil
+}
+
+// acquireClaimForTimer 抢占/复用认领凭据。confirmed 表示"已可靠投递，崩溃在
+// confirm 之后、改 timer 状态之前"，调用方只补状态不重派；pending 且租约有效
+// 表示他实例持有，跳过；租约过期则 CAS 续租重派。
+func (o *SOPOutboxDispatcher) acquireClaimForTimer(ctx context.Context, t *model.SOPTimer, kind string, now time.Time) (*model.SOPDispatchClaim, claimAction, error) {
+	if o.claimRepo == nil || !o.claimRepo.Available() {
+		return nil, claimLegacy, nil
+	}
+	lease := o.dispatchLease
+	if lease <= 0 {
+		lease = sopDispatchLease
+	}
+	maxAttempts := o.maxDispatchAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = sopMaxDispatchAttempts
+	}
+
+	c := &model.SOPDispatchClaim{
+		TimerID:     t.ID,
+		ExecutionID: t.ExecutionID,
+		NodeID:      t.NodeID,
+		Kind:        kind,
+		Status:      model.SOPDispatchClaimPending,
+		LeaseUntil:  now.Add(lease),
+		Attempts:    0,
+		WaitEvent:   t.WaitEvent,
+		WaitPayload: t.Payload,
+		TenantID:    timerRowTenant(t),
+	}
+	acquired, err := o.claimRepo.Acquire(ctx, c)
+	if err != nil {
+		return nil, claimSkip, err
+	}
+	if acquired {
+		return c, claimProceed, nil
+	}
+
+	existing, err := o.claimRepo.GetByTimerID(ctx, t.ID)
+	if err != nil {
+		return nil, claimSkip, err
+	}
+	if existing == nil {
+		return nil, claimSkip, nil
+	}
+	switch {
+	case existing.Status == model.SOPDispatchClaimConfirmed || existing.Status == model.SOPDispatchClaimFailed:
+		return existing, claimSkip, nil
+	case existing.LeaseUntil.After(now):
+		return existing, claimSkip, nil
+	default:
+		rows, attempts, err := o.claimRepo.RenewExpired(ctx, existing.ID, now, lease, maxAttempts)
+		if err != nil {
+			return nil, claimSkip, err
+		}
+		if rows == 0 {
+			return existing, claimSkip, nil
+		}
+		if attempts >= maxAttempts {
+			o.bumpTimerClaimOrDeadLetter(ctx, t, now)
+			return existing, claimSkip, nil
+		}
+		existing.Attempts = attempts
+		existing.LeaseUntil = now.Add(lease)
+		return existing, claimProceed, nil
+	}
+}
+
+func (o *SOPOutboxDispatcher) legacyFireTimer(ctx context.Context, t *model.SOPTimer, task *dispatchTask, now time.Time) (bool, error) {
+	rows, err := o.timerRepo.MarkFired(ctx, t.ID, now)
+	if err != nil || rows == 0 {
+		return false, err
+	}
+	o.execDispatcher.DispatchOrLog(task)
+	return true, nil
+}
+
+// claimAndFireTimer 先认领再可靠投递，成功后 Confirm 并 MarkFired。
+// 投递失败立即释放租约、timer 保持 pending，下一轮恢复重派。
+func (o *SOPOutboxDispatcher) claimAndFireTimer(ctx context.Context, t *model.SOPTimer, task *dispatchTask, now time.Time) (bool, error) {
+	claim, action, err := o.acquireClaimForTimer(ctx, t, model.SOPDispatchKindWake, now)
+	if err != nil {
+		return false, err
+	}
+	if action == claimLegacy {
+		return o.legacyFireTimer(ctx, t, task, now)
+	}
+	if action == claimSkip {
+		// confirm 后崩溃：只补 timer 状态，不重派。
+		if claim != nil && claim.Status == model.SOPDispatchClaimConfirmed {
+			rows, err := o.timerRepo.MarkFired(ctx, t.ID, now)
+			return rows > 0, err
+		}
+		return false, nil
+	}
+	if err := o.dispatchReliable(ctx, task); err != nil {
+		_ = o.claimRepo.Release(ctx, claim.ID, now)
+		return false, err
+	}
+	rows, err := o.claimRepo.Confirm(ctx, claim.ID, now)
+	if err != nil || rows == 0 {
+		return false, err
+	}
+	rows, err = o.timerRepo.MarkFired(ctx, t.ID, now)
+	return rows > 0, err
+}
+
+// claimAndSkipTimer 同 claimAndFireTimer，但目标是 skipped 并写跳过事件。
+func (o *SOPOutboxDispatcher) claimAndSkipTimer(ctx context.Context, t *model.SOPTimer, task *dispatchTask, now time.Time) (bool, error) {
+	claim, action, err := o.acquireClaimForTimer(ctx, t, model.SOPDispatchKindSkip, now)
+	if err != nil {
+		return false, err
+	}
+	if action == claimLegacy {
+		rows, err := o.timerRepo.TransitionPendingStatus(ctx, t.ID, sopTimerStatusSkipped, now)
+		if err == nil && rows > 0 {
+			o.writeTimerSkippedEvent(ctx, t, now)
+			o.execDispatcher.DispatchOrLog(task)
+		}
+		return rows > 0, err
+	}
+	if action == claimSkip {
+		if claim != nil && claim.Status == model.SOPDispatchClaimConfirmed {
+			rows, err := o.timerRepo.TransitionPendingStatus(ctx, t.ID, sopTimerStatusSkipped, now)
+			if err == nil && rows > 0 {
+				o.writeTimerSkippedEvent(ctx, t, now)
+			}
+			return rows > 0, err
+		}
+		return false, nil
+	}
+	if err := o.dispatchReliable(ctx, task); err != nil {
+		_ = o.claimRepo.Release(ctx, claim.ID, now)
+		return false, err
+	}
+	rows, err := o.claimRepo.Confirm(ctx, claim.ID, now)
+	if err != nil || rows == 0 {
+		return false, err
+	}
+	rows, err = o.timerRepo.TransitionPendingStatus(ctx, t.ID, sopTimerStatusSkipped, now)
+	if err == nil && rows > 0 {
+		o.writeTimerSkippedEvent(ctx, t, now)
+	}
+	return rows > 0, err
 }
 
 func (o *SOPOutboxDispatcher) sweepPendingTimers(ctx context.Context, now time.Time) {
@@ -250,35 +424,32 @@ func (o *SOPOutboxDispatcher) sweepPendingTimers(ctx context.Context, now time.T
 	for i := range overdue {
 		t := &overdue[i]
 		maxWaitAt := timerMaxWaitAt(t)
-		rows, txErr := o.timerRepo.TransitionPendingStatus(ctx, t.ID, sopTimerStatusSkipped, now)
-		if txErr != nil {
-			logger.Ctx(ctx).Error().Err(txErr).
+		rowTenant := timerRowTenant(t)
+		taskCtx := tenant.WithTenantID(ctx, rowTenant)
+		task := &dispatchTask{
+			ExecutionID: t.ExecutionID,
+			NodeID:      t.NodeID,
+			Attempt:     0,
+			SkipWait:    true,
+			TraceID:     fmt.Sprintf("maxwait-%d", t.ID),
+			// 行自证（T027）：跳过等待同样是业务派发，worker 靠它恢复租户
+			// ctx；漏填在 on 模式下会让这次唤醒被 fail-closed 吞掉。
+			TenantID: rowTenant,
+		}
+		// FA-45：先认领并可靠投递，成功才转 skipped；投递失败不先改状态，
+		// 下一轮凭 pending claim 的过期租约恢复重派。
+		if ok, err := o.claimAndSkipTimer(taskCtx, t, task, now); err != nil {
+			logger.Ctx(taskCtx).Error().Err(err).
 				Uint("timer_id", t.ID).
-				Msg("[outbox] mark skipped failed")
+				Msg("[outbox] claim/dispatch skip-task failed; claim kept pending for recovery")
 			continue
-		}
-		if rows == 0 {
-			continue
-		}
-		o.writeTimerSkippedEvent(ctx, t, now)
-		logger.Ctx(ctx).Warn().
-			Uint("timer_id", t.ID).
-			Uint("execution_id", t.ExecutionID).
-			Str("node_id", t.NodeID).
-			Time("max_wait_at", maxWaitAt).
-			Msg("[outbox] timer exceeded max_wait, marked skipped and dispatching skip task")
-
-		if o.execDispatcher != nil {
-			o.execDispatcher.DispatchOrLog(&dispatchTask{
-				ExecutionID: t.ExecutionID,
-				NodeID:      t.NodeID,
-				Attempt:     0,
-				SkipWait:    true,
-				TraceID:     fmt.Sprintf("maxwait-%d", t.ID),
-				// 行自证（T027）：跳过等待同样是业务派发，worker 靠它恢复租户
-				// ctx；漏填在 on 模式下会让这次唤醒被 fail-closed 吞掉。
-				TenantID: timerRowTenant(t),
-			})
+		} else if ok {
+			logger.Ctx(taskCtx).Warn().
+				Uint("timer_id", t.ID).
+				Uint("execution_id", t.ExecutionID).
+				Str("node_id", t.NodeID).
+				Time("max_wait_at", maxWaitAt).
+				Msg("[outbox] timer exceeded max_wait, skipped and skip task confirmed enqueued")
 		}
 	}
 }

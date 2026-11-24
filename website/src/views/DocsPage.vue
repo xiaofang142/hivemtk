@@ -380,8 +380,9 @@ REDIS_HOST_PORT=8203
 PORT=8204
 USER_SERVER_PORT=8204
 
-# {{ $t('JWT / 安全密钥（务必修改为随机串）') }}
-JWT_SECRET=ChangeMe_To_32Char_Random_JWT_Secret_Key_For_Production
+# {{ $t('JWT / 安全密钥（务必修改为随机串，切勿使用示例默认值）') }}
+# {{ $t('生成方式：') }} openssl rand -hex 32
+JWT_SECRET=<请替换为随机 32 字节 hex，例如运行 openssl rand -hex 32>
 
 # {{ $t('平台端（可选本地组件，默认关闭；只有开启时才读取下面两项）') }}
 PLATFORM_ENABLED=false

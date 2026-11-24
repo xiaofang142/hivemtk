@@ -763,6 +763,18 @@ func (s *InboxIngressService) HandleIngressMessage(ctx context.Context, event *m
 }
 
 func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *model.MessageEvent) {
+	// SageX 通知上报默认不触发 AI 自动回复：通知来源是个人 QQ/微信，
+	// 群聊/私聊自动回复风险高，且个人微信出站没有可靠投递通道。
+	// 如需开启，应由显式配置/绑定控制，而不是默认放行。
+	if event.Extra != nil {
+		if _, ok := event.Extra["sagex"]; ok {
+			logger.Ctx(ctx).Info().
+				Str("channel", event.Channel).
+				Str("event_id", event.EventID).
+				Msg("[Inbox] SageX notification event: AI auto-reply disabled by default")
+			return
+		}
+	}
 	accountID := "default"
 	if event.Extra != nil {
 		if v, ok := event.Extra["account_id"].(string); ok && v != "" {

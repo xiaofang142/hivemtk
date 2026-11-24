@@ -11,8 +11,8 @@ import (
 
 // BridgeTokenController 桥接通道凭证管理（v3 BRIDGE_TOKEN_PROTOCOL 阶段一落地）
 //
-// GET  /api/bridge/token/status  —— 查询配置状态（不回显明文）
-// POST /api/bridge/token/reset   —— 轮换：旧值转 PREV，生成新值返回（仅此一次明文）
+// GET  /api/bridge/token/status  —— 查询配置状态，并回显当前明文（便于管理员再次复制）
+// POST /api/bridge/token/reset   —— 轮换：旧值转 PREV，生成新值返回明文
 //
 // 业务逻辑在 service.BridgeTokenService（controller 不直连 repository）。
 type BridgeTokenController struct {
@@ -25,7 +25,7 @@ func NewBridgeTokenController() *BridgeTokenController {
 
 // GetBridgeTokenStatus godoc
 // @Summary      桥接凭证状态
-// @Description  返回主/灰度 token 是否已配置（不回显明文）
+// @Description  返回主/灰度 token 是否已配置，并回显当前明文（便于管理员再次复制）
 // @Tags         Bridge
 // @Security     BearerAuth
 // @Success      200 {object} response.Response
@@ -36,7 +36,7 @@ func (c *BridgeTokenController) GetStatus(ctx *gin.Context) {
 
 // ResetBridgeToken godoc
 // @Summary      轮换桥接凭证
-// @Description  旧 token 转入灰度位（PREV），生成并返回新 token 明文（仅此一次）
+// @Description  旧 token 转入灰度位（PREV），生成并返回新 token 明文
 // @Tags         Bridge
 // @Security     BearerAuth
 // @Success      200 {object} response.Response

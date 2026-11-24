@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hivemtk-user/internal/ops/model"
 	opsrepo "hivemtk-user/internal/ops/repository"
+	"hivemtk-user/internal/pkg/tenant"
 	"time"
 )
 
@@ -199,6 +200,22 @@ func (s *DashboardScreenService) GetPublicScreenCtx(ctx context.Context, code st
 // GetScreenWidgetsCtx 公开访问路径的 widgets 读取
 func (s *DashboardScreenService) GetScreenWidgetsCtx(ctx context.Context, screenID uint) ([]*model.DashboardWidget, error) {
 	return s.widgetRepo.GetByScreenIDCtx(ctx, screenID)
+}
+
+// GetPublicScreenWithWidgetsCtx 匿名公开访问的聚合读取（FA-SCREEN-01）：
+// 先由 code 在服务端反查唯一租户并读取 screen，再用同一租户授权链读取 widgets。
+// 租户只由 code 得出（不接受客户端指定），widgets 读取错误直接透出，不伪装成空白成功。
+func (s *DashboardScreenService) GetPublicScreenWithWidgetsCtx(ctx context.Context, code string) (*model.DashboardScreen, []*model.DashboardWidget, error) {
+	screen, tenantID, err := s.screenRepo.GetPublicByCodeWithTenantCtx(ctx, code)
+	if err != nil {
+		return nil, nil, err
+	}
+	tctx := tenant.OnlyTenant(ctx, tenantID)
+	widgets, err := s.widgetRepo.GetByScreenIDCtx(tctx, screen.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return screen, widgets, nil
 }
 
 // DashboardAggregate 大屏聚合数据（与前端 dashboardScreen/List.vue 契约对齐）

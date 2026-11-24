@@ -35,7 +35,9 @@ func NewCustomerController() *CustomerController {
 // 未接线：客户列表的 HTTP 出口是 GET /api/customer/list（Customer360Controller），本方法无路由注册。
 func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 	if cursor, limit, useCursor := utils.ParseCursorParams(ctx, pagination.DefaultPageSize); useCursor {
-		customers, total, nextCursor, err := c.customerService.ListKeyset(ctx.Request.Context(), cursor, limit)
+		uid, _ := ctx.Get("user_id")
+		userID, _ := uid.(uint)
+		customers, total, nextCursor, err := c.customerService.ListKeyset(ctx.Request.Context(), cursor, limit, userID)
 		if err != nil {
 			response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 			return
@@ -55,7 +57,9 @@ func (c *CustomerController) ListCustomers(ctx *gin.Context) {
 		return
 	}
 
-	customers, total, err := c.customerService.List(ctx.Request.Context(), page, limit)
+	uid, _ := ctx.Get("user_id")
+	userID, _ := uid.(uint)
+	customers, total, err := c.customerService.List(ctx.Request.Context(), page, limit, userID)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "操作失败，请稍后重试")
 		return

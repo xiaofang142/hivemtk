@@ -137,6 +137,11 @@ func (c *AssetBundleController) PlatformStatusRefresh(ctx *gin.Context) {
 	}
 	bundle, err := c.svc.RefreshPlatformStatus(ctx.Request.Context(), bundleID)
 	if err != nil {
+		// FA-ASSET-SUBMIT-01：平台实态已获取但本地投影写失败——回 202 待对账，
+		// 分别带上平台实态与本地投影，绝不报「已刷新」成功。
+		if respondStalePlatformProjection(ctx, err, "平台状态已获取但本地同步失败，待对账，请重试") {
+			return
+		}
 		if errhttp.IsNotFoundError(err) {
 			response.NotFound(ctx, assetBundleNotFoundMsg(bundleID))
 			return
@@ -157,6 +162,10 @@ func (c *AssetBundleController) PlatformStatusRefresh(ctx *gin.Context) {
 // ErrPlatformNotConfigured。这条错误原先落到 ErrorFromDB 的兜底 500，把部署配置
 // 缺失报成了服务端故障；对调用方而言重试无用，状态码应当明确是"暂时不可用"。
 func respondSubmitPlatformError(ctx *gin.Context, err error) {
+	// FA-ASSET-SUBMIT-01：平台动作已生效但本地投影未同步——走 202 待对账分支。
+	if respondStalePlatformProjection(ctx, err, "平台操作已生效但本地状态同步失败，待对账，请刷新状态后重试") {
+		return
+	}
 	switch {
 	case errors.Is(err, platform.ErrPlatformNotConfigured):
 		response.Error(ctx, http.StatusServiceUnavailable,
@@ -167,6 +176,24 @@ func respondSubmitPlatformError(ctx *gin.Context, err error) {
 	default:
 		response.ErrorFromDB(ctx, err, "提交平台失败，请稍后重试")
 	}
+}
+
+// respondStalePlatformProjection 若 err 是「平台实态已获取但本地投影写失败」，
+// 返回 202 Accepted + 结构化的待对账数据，并告知调用方已处理（返回 true）。
+// 平台实态（platform_status）与本地投影（local_status）分别呈现，前端据此提示重试。
+func respondStalePlatformProjection(ctx *gin.Context, err error, message string) bool {
+	var stale *service.PlatformProjectionStaleError
+	if !errors.As(err, &stale) {
+		return false
+	}
+	response.Accepted(ctx, gin.H{
+		"synced":                false,
+		"platform_asset_id":     stale.PlatformAssetID,
+		"platform_status":       stale.PlatformStatus,
+		"platform_review_note":  stale.PlatformReviewNote,
+		"local_status":          stale.LocalStatus,
+	}, message)
+	return true
 }
 
 // assetBundleWriteError 统一资产包写操作的错误出口：

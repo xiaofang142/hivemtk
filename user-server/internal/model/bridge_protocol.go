@@ -10,8 +10,11 @@ const (
 	// 表示桥端已把消息提交到平台但拿不到确定结果（平台成功但 ack 丢失、超时后迟到完成、
 	// worker 崩溃回收竞争等）。因此 unknown 行**永不自动重发**：不进 ClaimPendingOutbound
 	// 的 pending 查询、不被 exhaust/回收逻辑改写、不被预算重试；出路只有一条——
-	// 人工/API 显式对账迁移到 delivered 或 failed（repository.ReconcileUnknownOutbound，
-	// push_error 留操作来源）。落库形态：status='unknown' + push_error='ack_unknown'。
+	// 人工/API 显式对账迁移到 delivered 或 failed (repository.ReconcileUnknownOutbound,
+	// push_error 留操作来源)。落库形态：status='unknown' + push_error='ack_unknown'。
+	// EC-05 (发送证据分级/未知处理): 当渠道或桥接无法提供可验证回执时应落为 unknown（“不提供回执的状态为未知”），
+	// 不得伪装为 delivered。证据分级可理解为: local(pending/入队) → bridge_claimed(inflight+claimed_at) →
+	// platform/report 终态 (delivered/failed/unknown); “买家可见/已读”若渠道不支持则不应断言 delivered，需 unknown 或待对账。
 	// 无 DDL：message_hub.status 是无约束 varchar(20)，'unknown' 7 字符直接可用。
 	BridgeAckStatusUnknown = "unknown"
 

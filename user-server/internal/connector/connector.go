@@ -135,6 +135,7 @@ type Executor struct {
 	// 测试经 NewExecutorWithValidator 注入放行 seam——生产构造永不放宽）。
 	baseURLValidator func(string) error
 	writeAuthorizer  func(context.Context, *CapabilityCellRef, map[string]any) error
+	execution        *capabilityExecution
 }
 
 func NewExecutor() *Executor {
@@ -186,7 +187,8 @@ func (e *Executor) Call(ctx context.Context, cfg ConnectorConfig, ep EndpointCon
 	if d == nil {
 		return nil, fmt.Errorf("方言 %q 未注册（可用: %v）", cfg.Provider, List())
 	}
-	if !endpointReadOnly(ep) {
+	boundWrite := !endpointReadOnly(ep) && e.execution != nil
+	if !endpointReadOnly(ep) && !boundWrite {
 		check := e.writeAuthorizer
 		if check == nil {
 			check = authorizePersistentConnectorWrite
@@ -207,11 +209,23 @@ func (e *Executor) Call(ctx context.Context, cfg ConnectorConfig, ep EndpointCon
 		}
 		delete(callArgs, shopArgument)
 	}
-	req, err := d.BuildRequest(ctx, cfg, ep, callArgs)
+	var req *http.Request
+	var err error
+	if boundWrite {
+		req, err = e.boundWriteRequest(ctx, cfg, ep, args)
+	} else {
+		req, err = d.BuildRequest(ctx, cfg, ep, callArgs)
+	}
 	if err != nil {
 		return nil, err
 	}
-	resp, err := e.http.Do(req.WithContext(ctx))
+	client := e.http
+	if boundWrite {
+		copy := *e.http
+		copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		client = &copy
+	}
+	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}

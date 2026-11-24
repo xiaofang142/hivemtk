@@ -23,12 +23,24 @@ var KnownWorkflowActionTypes = map[string]bool{
 }
 
 // ValidateWorkflowDefinition 校验定义 JSONMap。registry 非 nil 时同时校验节点类型已注册。
+// 发布/更新用：要求完整定义（≥1 节点 + trigger 入口）。
 func ValidateWorkflowDefinition(m model.JSONMap, registry *WorkflowNodeExecutorRegistry) error {
+	return validateWorkflowDefinition(m, registry, true)
+}
+
+// ValidateWorkflowDefinitionForDraft FA-WF-08：草稿创建用宽松校验——放过空节点/缺 trigger，
+// 但结构性约束（节点 ID 非空/唯一、已知节点类型/action_type、subflow 引用、边引用）仍恒校验，
+// 保证"空草稿可存、未知节点/非法图入口即拒"，严格完整性留给发布闸。
+func ValidateWorkflowDefinitionForDraft(m model.JSONMap, registry *WorkflowNodeExecutorRegistry) error {
+	return validateWorkflowDefinition(m, registry, false)
+}
+
+func validateWorkflowDefinition(m model.JSONMap, registry *WorkflowNodeExecutorRegistry, requireComplete bool) error {
 	def, err := ParseWorkflowDefinition(m)
 	if err != nil {
 		return fmt.Errorf("workflow definition invalid: %w", err)
 	}
-	if len(def.Nodes) == 0 {
+	if requireComplete && len(def.Nodes) == 0 {
 		return fmt.Errorf("workflow definition invalid: at least one node required")
 	}
 
@@ -69,7 +81,7 @@ func ValidateWorkflowDefinition(m model.JSONMap, registry *WorkflowNodeExecutorR
 			}
 		}
 	}
-	if !hasTrigger {
+	if requireComplete && !hasTrigger {
 		return fmt.Errorf("workflow definition invalid: no trigger entry node")
 	}
 

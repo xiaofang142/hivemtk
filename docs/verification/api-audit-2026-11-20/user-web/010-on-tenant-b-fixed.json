@@ -1,1 +1,0 @@
-{"code":0,"message":"获取成功","data":{"list":[{"tenant_id":2,"id":2,"experiment_id":2,"event_name":"audit20-event-b","event_type":"purchase","event_value":200,"user_id":"audit20-user-b","variant_id":0,"metadata":"{}","created_at":"2026-11-20T17:49:27.391953+08:00"}],"page":1,"page_size":200,"total":1}}

@@ -51,7 +51,9 @@ type SOPTimer struct {
 // TableName 指定表名
 func (SOPTimer) TableName() string { return "sop_timers" }
 
-// SOPOutbox SOP Outbox 事件（解耦执行与外部副作用）
+// SOPOutbox SOP Outbox 事件（解耦执行与外部副作用）。
+// EC-03 note: this table/model is present but not yet part of a unified command/event contract
+// across 消息/业务/触达; event versioning/schemaVersion is not modeled here.
 type SOPOutbox struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 

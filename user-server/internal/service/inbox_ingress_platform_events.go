@@ -84,6 +84,23 @@ func (s *InboxIngressService) recordInteractionCallback(ctx context.Context, eve
 	if s.interactionRepo == nil {
 		return "interaction.callback_no_repo", nil
 	}
+	// FA-CHANNEL-05：过期/越权的交互零业务副作用。出站时登记的交互行是权威，
+	// 已过期不再受理，操作者必须与登记时的 SenderID 一致；查询故障 fail-closed。
+	existing, err := s.interactionRepo.GetByInteractionID(ctx, event.Channel, interactionID)
+	if err != nil {
+		result.Accepted = false
+		return "interaction.callback_lookup_failed", err
+	}
+	if existing != nil {
+		if existing.Status == model.ChannelInteractionExpired {
+			result.Accepted = false
+			return "interaction.callback_expired", nil
+		}
+		if existing.SenderID != "" && event.SenderID != "" && existing.SenderID != event.SenderID {
+			result.Accepted = false
+			return "interaction.callback_unauthorized", nil
+		}
+	}
 	row := &model.ChannelInteraction{
 		TenantID:       tenantEventKey(ctx, event),
 		Channel:        event.Channel,

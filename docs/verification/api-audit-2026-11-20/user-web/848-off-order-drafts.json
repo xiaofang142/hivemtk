@@ -1,1 +1,0 @@
-{"code":"SERVICE_UNAVAILABLE_6003","message":"订单草稿底座不可用（本进程未装配草稿运行时，开关 FF_LTC_ORDER_DRAFT_DB 为 off 或值无法识别；档位只在装配期读一次，改完须重启）"}

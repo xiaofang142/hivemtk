@@ -1,1 +1,0 @@
-{"code":0,"message":"success","data":{"sync_gap":null,"stuck_reachable":[{"conversation_id":"sess_1795259187315887400_39f7dbec","channel":"kuaishou","age_min":27}],"stuck_unreachable":null,"unreachable":null,"node_abnormal":[{"channel":"","node":"agent_turn","abnormal_rate":1}]}}

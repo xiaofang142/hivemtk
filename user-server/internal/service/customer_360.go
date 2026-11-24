@@ -29,6 +29,7 @@ type Customer360Service struct {
 	unifiedMsgRepo repository.UnifiedMessageRepository
 	customerRepo   repository.CustomerRepository
 	eventRepo      repository.CustomerEventRepository
+	companyRepo    repository.CompanyRepository
 
 	tagRepo     repository.CustomerTagAssignmentRepository
 	insightRepo repository.CustomerProfileInsightRepository
@@ -38,7 +39,14 @@ type Customer360Service struct {
 
 // NewCustomer360Service 构造客户 360 服务。
 // db 用于线索仓储（本实体链路要求显式注入）；其余仓储仍走各自域既有的构造口。
-func NewCustomer360Service(clueRepo repository.ClueRepository) *Customer360Service {
+// companyRepo 可选，不传则内部创建默认 CompanyRepository。
+func NewCustomer360Service(clueRepo repository.ClueRepository, companyRepo ...repository.CompanyRepository) *Customer360Service {
+	var cr repository.CompanyRepository
+	if len(companyRepo) > 0 && companyRepo[0] != nil {
+		cr = companyRepo[0]
+	} else {
+		cr = repository.NewCompanyRepository()
+	}
 	return &Customer360Service{
 		sessionRepo:    repository.NewCustomerSessionRepository(),
 		messageRepo:    repository.NewSessionMessageRepository(),
@@ -47,6 +55,7 @@ func NewCustomer360Service(clueRepo repository.ClueRepository) *Customer360Servi
 		unifiedMsgRepo: repository.NewUnifiedMessageRepository(),
 		customerRepo:   repository.NewCustomerRepository(),
 		eventRepo:      repository.NewCustomerEventRepository(),
+		companyRepo:    cr,
 		tagRepo:        repository.NewCustomerTagAssignmentRepository(),
 		insightRepo:    repository.NewCustomerProfileInsightRepository(),
 		rfmRepo:        repository.NewCustomerRFMRepository(),
@@ -69,18 +78,38 @@ type Customer360DTO struct {
 
 	InteractionStats *InteractionStats `json:"interaction_stats"`
 
-	UserProfile *UserProfile `json:"user_profile"`
+	UserProfile      *UserProfile                      `json:"user_profile"`
+	CompanyRelations []*CustomerCompanyRelationDTO `json:"company_relations,omitempty"`
 }
 
 type CustomerBasicInfo struct {
-	UserID         string `json:"user_id"`
-	UserName       string `json:"user_name"`
-	UserAvatar     string `json:"user_avatar"`
-	UserPhone      string `json:"user_phone"`
-	UserEmail      string `json:"user_email"`
-	FirstSeenAt    string `json:"first_seen_at"`
-	LastSeenAt     string `json:"last_seen_at"`
-	SourcePlatform string `json:"source_platform"`
+	UserID               string `json:"user_id"`
+	UserName             string `json:"user_name"`
+	UserAvatar           string `json:"user_avatar"`
+	UserPhone            string `json:"user_phone"`
+	UserEmail            string `json:"user_email"`
+	FirstSeenAt          string `json:"first_seen_at"`
+	LastSeenAt           string `json:"last_seen_at"`
+	SourcePlatform       string `json:"source_platform"`
+	CompanyID            *int64 `json:"company_id,omitempty"`
+	SourceAccountID      string `json:"source_account_id,omitempty"`
+	SourceChannel        string `json:"source_channel,omitempty"`
+	SourceConversationID string `json:"source_conversation_id,omitempty"`
+	SourceMessageID      string `json:"source_message_id,omitempty"`
+	FirstTouchAt         string `json:"first_touch_at,omitempty"`
+	LastTouchAt          string `json:"last_touch_at,omitempty"`
+}
+
+type CustomerCompanyRelationDTO struct {
+	ID           int64  `json:"id"`
+	CustomerID   string `json:"customer_id"`
+	CompanyID    int64  `json:"company_id"`
+	CompanyName  string `json:"company_name,omitempty"`
+	Industry     string `json:"industry,omitempty"`
+	RelationType string `json:"relation_type"`
+	IsPrimary    bool   `json:"is_primary"`
+	Source       string `json:"source,omitempty"`
+	SourceRef    string `json:"source_ref,omitempty"`
 }
 
 type SessionStatistics struct {
@@ -217,7 +246,17 @@ func (s *Customer360Service) GetCustomer360(ctx context.Context, userID string, 
 
 	dto.InteractionStats = s.buildInteractionStats(ctx, userSessions)
 
-	dto.UserProfile = s.buildUserProfile(ctx, userSessions, dto.InteractionStats, dto.OrderInfo, s.resolveCustomerIDForSessions(ctx, userSessions))
+	cust := s.resolveCustomerForSessions(ctx, userSessions)
+	customerID := ""
+	if cust != nil {
+		customerID = cust.ID
+		s.applyCustomerSourceToBasicInfo(dto.BasicInfo, cust)
+		dto.CompanyRelations = s.buildCompanyRelations(ctx, cust.ID)
+	} else {
+		dto.CompanyRelations = []*CustomerCompanyRelationDTO{}
+	}
+
+	dto.UserProfile = s.buildUserProfile(ctx, userSessions, dto.InteractionStats, dto.OrderInfo, customerID)
 
 	return dto, nil
 }
@@ -316,6 +355,7 @@ func (s *Customer360Service) GetCustomer360ByCustomerID(ctx context.Context, cus
 	}
 
 	dto.BasicInfo = s.buildBasicInfoFromCustomer(cust, sessions)
+	dto.CompanyRelations = s.buildCompanyRelations(ctx, cust.ID)
 
 	identityKeys := make([]string, 0, 4)
 	accountIDs := make([]string, 0, len(sessions))
@@ -359,9 +399,21 @@ func (s *Customer360Service) GetCustomer360ByCustomerID(ctx context.Context, cus
 
 func (s *Customer360Service) buildBasicInfoFromCustomer(cust *model.Customer, sessions []*model.CustomerSession) *CustomerBasicInfo {
 	info := &CustomerBasicInfo{
-		UserID:    cust.ID,
-		UserPhone: cust.Phone,
-		UserEmail: cust.Email,
+		UserID:               cust.ID,
+		UserName:             cust.Name,
+		UserPhone:            cust.Phone,
+		UserEmail:            cust.Email,
+		CompanyID:            cust.CompanyID,
+		SourceAccountID:      cust.SourceAccountID,
+		SourceChannel:        cust.SourceChannel,
+		SourceConversationID: cust.SourceConversationID,
+		SourceMessageID:      cust.SourceMessageID,
+	}
+	if cust.FirstTouchAt != nil {
+		info.FirstTouchAt = cust.FirstTouchAt.Format("2006-01-02 15:04:05")
+	}
+	if cust.LastTouchAt != nil {
+		info.LastTouchAt = cust.LastTouchAt.Format("2006-01-02 15:04:05")
 	}
 	if cust.UnifiedID != "" {
 		info.SourcePlatform = cust.UnifiedID
@@ -379,7 +431,11 @@ func (s *Customer360Service) buildBasicInfoFromCustomer(cust *model.Customer, se
 		}
 		info.FirstSeenAt = firstSeenAt
 		info.LastSeenAt = lastSeenAt
-		info.SourcePlatform = string(sessions[0].Platform)
+		if info.SourceChannel == "" {
+			info.SourcePlatform = string(sessions[0].Platform)
+		} else {
+			info.SourcePlatform = info.SourceChannel
+		}
 		if info.UserName == "" {
 			info.UserName = sessions[0].UserName
 		}
@@ -389,8 +445,74 @@ func (s *Customer360Service) buildBasicInfoFromCustomer(cust *model.Customer, se
 		if info.UserEmail == "" {
 			info.UserEmail = sessions[0].UserEmail
 		}
+	} else if info.SourceChannel != "" {
+		info.SourcePlatform = info.SourceChannel
 	}
 	return info
+}
+
+func (s *Customer360Service) applyCustomerSourceToBasicInfo(info *CustomerBasicInfo, cust *model.Customer) {
+	if info == nil || cust == nil {
+		return
+	}
+	if info.CompanyID == nil && cust.CompanyID != nil {
+		info.CompanyID = cust.CompanyID
+	}
+	if info.SourceAccountID == "" {
+		info.SourceAccountID = cust.SourceAccountID
+	}
+	if info.SourceChannel == "" {
+		info.SourceChannel = cust.SourceChannel
+	}
+	if info.SourceConversationID == "" {
+		info.SourceConversationID = cust.SourceConversationID
+	}
+	if info.SourceMessageID == "" {
+		info.SourceMessageID = cust.SourceMessageID
+	}
+	if info.FirstTouchAt == "" && cust.FirstTouchAt != nil {
+		info.FirstTouchAt = cust.FirstTouchAt.Format("2006-01-02 15:04:05")
+	}
+	if info.LastTouchAt == "" && cust.LastTouchAt != nil {
+		info.LastTouchAt = cust.LastTouchAt.Format("2006-01-02 15:04:05")
+	}
+	if info.SourceChannel != "" {
+		info.SourcePlatform = info.SourceChannel
+	}
+}
+
+func (s *Customer360Service) buildCompanyRelations(ctx context.Context, customerID string) []*CustomerCompanyRelationDTO {
+	if s.companyRepo == nil || strings.TrimSpace(customerID) == "" {
+		return nil
+	}
+	rels, err := s.companyRepo.ListRelationsByCustomer(ctx, customerID)
+	if err != nil {
+		logger.Warnf("[customer-360] buildCompanyRelations: list relations failed (customer=%s): %v", customerID, err)
+		return nil
+	}
+	if len(rels) == 0 {
+		return []*CustomerCompanyRelationDTO{}
+	}
+	out := make([]*CustomerCompanyRelationDTO, 0, len(rels))
+	for _, rel := range rels {
+		item := &CustomerCompanyRelationDTO{
+			ID:           rel.ID,
+			CustomerID:   rel.CustomerID,
+			CompanyID:    rel.CompanyID,
+			RelationType: rel.RelationType,
+			IsPrimary:    rel.IsPrimary,
+			Source:       rel.Source,
+			SourceRef:    rel.SourceRef,
+		}
+		if company, err := s.companyRepo.GetByID(ctx, rel.CompanyID); err == nil && company != nil {
+			item.CompanyName = company.Name
+			item.Industry = company.Industry
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			logger.Warnf("[customer-360] buildCompanyRelations: get company failed (company=%d): %v", rel.CompanyID, err)
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 func (s *Customer360Service) buildBasicInfo(ctx context.Context, sessions []*model.CustomerSession) *CustomerBasicInfo {
@@ -642,6 +764,11 @@ func (s *Customer360Service) assembleOrderInfo(ctx context.Context, accountIDs [
 	}
 
 	var totalAmount float64
+	// EC-31 / M31：收入/净额事实必须与营销链路解耦。此处 TotalAmount 仍按现状汇总
+	// 所有订单（含 pending/草稿），仅用于客户 360 展示；任何「已成交收入/净交易额」
+	// 统计都必须仅累加 status 为 success/force_success 的已支付订单，并按真实退款事件
+	// 扣减，pending/timeout/closed/草稿订单不得计入收入。待后续按 EC-31 落地时拆分
+	// paidTotalAmount，此处保持兼容不改现有测试口径。
 	lastOrder := userOrders[0]
 	orderItems := make([]*OrderItem, 0, len(userOrders))
 
@@ -725,9 +852,9 @@ func (s *Customer360Service) buildInteractionStats(ctx context.Context, sessions
 	return stats
 }
 
-func (s *Customer360Service) resolveCustomerIDForSessions(ctx context.Context, sessions []*model.CustomerSession) string {
+func (s *Customer360Service) resolveCustomerForSessions(ctx context.Context, sessions []*model.CustomerSession) *model.Customer {
 	if s.customerRepo == nil || len(sessions) == 0 {
-		return ""
+		return nil
 	}
 	var phone, email string
 	for _, sess := range sessions {
@@ -737,17 +864,21 @@ func (s *Customer360Service) resolveCustomerIDForSessions(ctx context.Context, s
 		}
 	}
 	if phone == "" && email == "" {
-		return ""
+		return nil
 	}
 	cust, err := s.customerRepo.FindByIdentity(ctx, phone, email, "", "", "")
 	if err != nil {
-		logger.Warnf("[customer-360] resolveCustomerIDForSessions: FindByIdentity failed (phone=%s): %v", phone, err)
-		return ""
+		logger.Warnf("[customer-360] resolveCustomerForSessions: FindByIdentity failed (phone=%s): %v", phone, err)
+		return nil
 	}
-	if cust == nil {
-		return ""
+	return cust
+}
+
+func (s *Customer360Service) resolveCustomerIDForSessions(ctx context.Context, sessions []*model.CustomerSession) string {
+	if cust := s.resolveCustomerForSessions(ctx, sessions); cust != nil {
+		return cust.ID
 	}
-	return cust.ID
+	return ""
 }
 
 func (s *Customer360Service) buildUserProfile(ctx context.Context, sessions []*model.CustomerSession, interactionStats *InteractionStats, orderInfo *OrderInfo, customerID string) *UserProfile {
@@ -966,7 +1097,8 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 		agentID = &scope.UserID
 	}
 	keyword := strings.TrimSpace(filters["keyword"])
-	if filters["platform"] == "" && filters["activity_level"] == "" && filters["purchase_power"] == "" {
+	needsPostFilter := customerFiltersNeedPostFilter(filters)
+	if !needsPostFilter {
 		sessions, total, err := s.sessionRepo.ListCustomerPage(ctx, page, pageSize, keyword, agentID)
 		if err != nil {
 			return nil, 0, err
@@ -974,7 +1106,7 @@ func (s *Customer360Service) GetCustomerList(ctx context.Context, page, pageSize
 		return s.assembleCustomerList(ctx, sessions), total, nil
 	}
 
-	// 画像字段依赖完整聚合；分批扫描候选，先匹配再计数/分页，不能只过滤当前页。
+	// 画像/来源/公司字段依赖聚合；分批扫描候选，先匹配再计数/分页，不能只过滤当前页。
 	matched := make(map[string]*Customer360DTO)
 	const batchSize = 100
 	for candidatePage := 1; ; candidatePage++ {
@@ -1076,13 +1208,21 @@ func (s *Customer360Service) assembleCustomerList(ctx context.Context, sessions 
 	return result
 }
 
-// matchesCustomerFilters 在 DTO 层做 platform / activity_level / purchase_power 过滤。
-// 三个参数此前被控制器收集却从未使用（筛选框点了等于没点）。
+func customerFiltersNeedPostFilter(filters map[string]string) bool {
+	for _, k := range []string{"platform", "activity_level", "purchase_power", "source_channel", "source_account_id", "company_id", "industry"} {
+		if strings.TrimSpace(filters[k]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesCustomerFilters 在 DTO 层做 platform / activity_level / purchase_power / 来源 / 公司 / 行业 过滤。
 func matchesCustomerFilters(dto *Customer360DTO, filters map[string]string) bool {
 	if len(filters) == 0 {
 		return true
 	}
-	if want, ok := filters["platform"]; ok && want != "" {
+	if want := strings.TrimSpace(filters["platform"]); want != "" {
 		got := ""
 		if dto.BasicInfo != nil {
 			got = dto.BasicInfo.SourcePlatform
@@ -1091,7 +1231,7 @@ func matchesCustomerFilters(dto *Customer360DTO, filters map[string]string) bool
 			return false
 		}
 	}
-	if want, ok := filters["activity_level"]; ok && want != "" {
+	if want := strings.TrimSpace(filters["activity_level"]); want != "" {
 		got := ""
 		if dto.UserProfile != nil {
 			got = dto.UserProfile.ActivityLevel
@@ -1100,7 +1240,7 @@ func matchesCustomerFilters(dto *Customer360DTO, filters map[string]string) bool
 			return false
 		}
 	}
-	if want, ok := filters["purchase_power"]; ok && want != "" {
+	if want := strings.TrimSpace(filters["purchase_power"]); want != "" {
 		got := ""
 		if dto.UserProfile != nil {
 			got = dto.UserProfile.PurchasePower
@@ -1109,7 +1249,66 @@ func matchesCustomerFilters(dto *Customer360DTO, filters map[string]string) bool
 			return false
 		}
 	}
+	if want := strings.TrimSpace(filters["source_channel"]); want != "" {
+		got := ""
+		if dto.BasicInfo != nil {
+			if dto.BasicInfo.SourceChannel != "" {
+				got = dto.BasicInfo.SourceChannel
+			} else {
+				got = dto.BasicInfo.SourcePlatform
+			}
+		}
+		if !strings.EqualFold(got, want) {
+			return false
+		}
+	}
+	if want := strings.TrimSpace(filters["source_account_id"]); want != "" {
+		got := ""
+		if dto.BasicInfo != nil {
+			got = dto.BasicInfo.SourceAccountID
+		}
+		if !strings.EqualFold(got, want) {
+			return false
+		}
+	}
+	if want := strings.TrimSpace(filters["company_id"]); want != "" {
+		if !customerMatchesCompanyID(dto, want) {
+			return false
+		}
+	}
+	if want := strings.TrimSpace(filters["industry"]); want != "" {
+		if !customerMatchesIndustry(dto, want) {
+			return false
+		}
+	}
 	return true
+}
+
+func customerMatchesCompanyID(dto *Customer360DTO, want string) bool {
+	if dto == nil {
+		return false
+	}
+	if dto.BasicInfo != nil && dto.BasicInfo.CompanyID != nil && strconv.FormatInt(*dto.BasicInfo.CompanyID, 10) == want {
+		return true
+	}
+	for _, rel := range dto.CompanyRelations {
+		if rel != nil && strconv.FormatInt(rel.CompanyID, 10) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func customerMatchesIndustry(dto *Customer360DTO, want string) bool {
+	if dto == nil {
+		return false
+	}
+	for _, rel := range dto.CompanyRelations {
+		if rel != nil && strings.EqualFold(strings.TrimSpace(rel.Industry), want) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Customer360Service) indexCluesByAccount(ctx context.Context, accounts []string) map[string][]*model.Clue {
@@ -1158,7 +1357,16 @@ func (s *Customer360Service) assembleCustomer360DTO(
 	dto.OrderInfo = s.buildOrderInfoFromMap(userSessions, orderMap)
 	dto.InteractionStats = s.buildInteractionStats(ctx, userSessions)
 
-	dto.UserProfile = s.buildUserProfile(ctx, userSessions, dto.InteractionStats, dto.OrderInfo, "")
+	cust := s.resolveCustomerForSessions(ctx, userSessions)
+	customerID := ""
+	if cust != nil {
+		customerID = cust.ID
+		s.applyCustomerSourceToBasicInfo(dto.BasicInfo, cust)
+		dto.CompanyRelations = s.buildCompanyRelations(ctx, cust.ID)
+	} else {
+		dto.CompanyRelations = []*CustomerCompanyRelationDTO{}
+	}
+	dto.UserProfile = s.buildUserProfile(ctx, userSessions, dto.InteractionStats, dto.OrderInfo, customerID)
 	return dto
 }
 

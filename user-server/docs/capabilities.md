@@ -24,8 +24,8 @@
 | kuaishou_shop | `dm.send` | bridge | outbox 下发；Experimental |
 | onebot | `dm.send` | ws | 出站优先反向 WS，未连接时回落 HTTP /send_private_msg\|/send_group_msg |
 | onebot | `webhook` | webhook | HTTP 上报 + 反向 WS；Bearer token 校验 |
-| pdd | `dm.receive` | bridge | 拼多多商家网页（mms.pinduoduo.com/chat-merchant）；Experimental，选择器待真机 |
-| pdd | `dm.send` | bridge | outbox 下发；Experimental |
+| pdd | `dm.receive` | bridge | 拼多多商家网页（mms.pinduoduo.com/chat-merchant）；Experimental，选择器待真机；EC-16 commerce cells 未登记 |
+| pdd | `dm.send` | bridge | outbox 下发；Experimental；EC-16 commerce cells 未登记 |
 | personal_wx | `dm.receive` | bridge | 桌面伴生上报；伴生未交付（外部工程） |
 | personal_wx | `dm.send` | bridge | outbox 下发；伴生未交付（外部工程） |
 | shopee | `dm.receive` | bridge | Shopee Seller Centre Webchat；Experimental，选择器待真机 |
@@ -33,8 +33,8 @@
 | slack | `dm.send` | api | chat.postMessage，回复沿用 thread_ts |
 | slack | `webhook` | webhook | Events API v0 签名 + 5 分钟时间窗 |
 | sms | `sms` | aliyun-sms | 需后台配置 AccessKey/签名/模板 |
-| taobao | `dm.receive` | bridge | 千牛网页接待中心（work.taobao.com）；Experimental，选择器待真机 |
-| taobao | `dm.send` | bridge | outbox 下发；Experimental |
+| taobao | `dm.receive` | bridge | 千牛网页接待中心（work.taobao.com）；Experimental，选择器待真机；EC-16 commerce cells 未登记 |
+| taobao | `dm.send` | bridge | outbox 下发；Experimental；EC-16 commerce cells 未登记 |
 | telegram | `dm.send` | api |  |
 | telegram | `webhook` | webhook | PUBLIC_BASE_URL 配置时 webhook，否则 polling 单实例 |
 | tiktok | `dm.receive` | bridge | 海外链路 |
@@ -85,6 +85,13 @@
 - 当前没有持久化的权威店铺映射/授权证据加载源；`bridge_accounts` 只能证明租户账号归属，`account_id` 不能当 shop_id，售后全局 URL/key/secret 也不证明订单所属店铺。生产代码没有装载 SubmissionBinding 或 CellEvidence，因此这些提交边界当前不开放生产发送；合成证据仅用于本地测试，带 Simulated 的 D/I/R 一律不能生产放行，无用户 HTTP body 注入入口。每次提交重算撤权、到期、scope、版本、D/I/R 与状态预检，不缓存旧许可。
 - 非桥接直发 sender（wecom/telegram/whatsapp/qq/feishu/dingtalk/weixin，以及 slack/onebot/wecomcs/wecombot/custom）属于不同产品/载体，不会路由到上述 douyin/douyin_shop cells。本切片保留其现有账号/集成配置检查、钉钉 sessionWebhook 域名与到期检查、WhatsApp 会话窗口等渠道防护，不改造这些渠道，也不声称它们已接入 EC-01 动作台账。
 - 范围限制：本次包含 01-C 历史待发记录的消费时阻塞，不执行历史迁移、不构造生产授权。可信连接/授权加载源、连接续期及真实店铺接通仍是生产依赖。服务启动时停用自动出站回收，记录一次 outbound_reclaim_evidence_source_missing。改单 `direct_api`/`via_erp` 仍由 `OrderChangeService.Execute` 明确拒绝。本矩阵不代表“所有 Submit 已受保护”或 M01 生产验收已完成。
+
+## EC-01 受控采证与执行绑定
+
+- CapabilityCollectionService 只接受构造注入的服务端采集器，采证前后检查当前提供方契约，精确匹配来源、动作、scope、连接及凭证修订；连接快照隔离且不含密钥。未配置采集器拒绝，无用户 HTTP 证据上传入口。
+- CapabilityObservationRepository 事务锁定当前连接并重查撤权、版本、到期和授权/刷新状态，原子保存来源映射与动作证据；来源换店、已撤销映射和写入失败拒绝并回滚；并发同来源只允许一个归属。
+- LocalCapabilityProofVerifier 按产品与 provenance 精确读取独立认证的本地证明，检查当前提供方契约、身份、模拟标记及有效期；数据库引用本身不构成运行证明。队列锁内不访问外部平台，默认生产不注册证明源。
+- NewExecutorWithCapabilityBinding 为服务端适配器提供凭证绑定写请求接缝；先裁决、构造请求、校验目的同源与 SSRF、重核实际连接修订后出站，禁止跟随重定向。默认执行器未装配适配器时维持拒绝；本地 fake 测试不代表真实平台授权。
 
 ## EC-01 租户管理员只读摘要
 

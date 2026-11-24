@@ -87,11 +87,15 @@ func (c *InboxController) Reply(ctx *gin.Context) {
 			return
 		}
 	}
-	msg, err := sessionSvc.SendMessage(ctx.Request.Context(), &service.SendMessageRequest{
+	// FA-IM-01：按平台路由到统一出站发送器，分别返回受理/平台确认/送达/失败/无路由，
+	// 不再对所有平台一律回「回复成功」（外部渠道本地消息行不等于真实投递）。
+	outboundSvc := service.NewInboxReplyOutboundService()
+	delivery, msg, err := outboundSvc.Reply(ctx.Request.Context(), &service.InboxReplyRequest{
+		Platform:   session.Platform,
+		AccountID:  session.AccountID,
 		SessionID:  session.SessionID,
 		Content:    content,
-		SenderType: "agent",
-		SenderID:   strconv.FormatUint(uint64(agentID), 10),
+		AgentID:    agentID,
 		SenderName: ctx.GetString("username"),
 	})
 	if err != nil {
@@ -102,5 +106,24 @@ func (c *InboxController) Reply(ctx *gin.Context) {
 		"conversation_id": conv.ID,
 		"session_id":      session.ID,
 		"message":         msg,
-	}, "回复成功")
+		"delivery":        delivery,
+	}, replySuccessMessage(delivery.Status))
+}
+
+// replySuccessMessage 按真实投递状态给出诚实的结果文案，避免外部渠道未送达却显示"回复成功"。
+func replySuccessMessage(status string) string {
+	switch status {
+	case service.InboxReplyDelivered:
+		return "回复已送达"
+	case service.InboxReplyPlatformConfirmed:
+		return "平台已受理，等待送达回执"
+	case service.InboxReplyAccepted:
+		return "回复已受理"
+	case service.InboxReplyNoRoute:
+		return "回复已记录，但当前平台无出站发送器"
+	case service.InboxReplyFailed:
+		return "回复未送达"
+	default:
+		return "回复已提交"
+	}
 }

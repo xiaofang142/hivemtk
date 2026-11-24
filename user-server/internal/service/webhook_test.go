@@ -567,7 +567,10 @@ func TestWebhookService_DispatchToUnified_InsertsRow(t *testing.T) {
 	}
 }
 
-func TestWebhookService_HandleJob_MarksProcessed(t *testing.T) {
+func TestWebhookService_HandleJob_DispatchFailureStaysUnprocessed(t *testing.T) {
+	// FA-CHANNEL-03：旧实现把"分发失败"也标成已处理（body 里 sender 是字符串 ——
+	// custom 契约要求对象 —— 触发 dispatchCustom 解析失败），导致事件进入"已处理"但
+	// message_hub/AI 链没完成、恢复扫描不再重投。修复后这类事件必须保持未处理待重投。
 	db := setupWebhookTestDB(t)
 	s := NewWebhookService()
 	defer s.Stop(context.Background())
@@ -579,8 +582,8 @@ func TestWebhookService_HandleJob_MarksProcessed(t *testing.T) {
 
 	var got model.WebhookEvent
 	db.First(&got, evt.ID)
-	if !got.Processed {
-		t.Error("expected processed")
+	if got.Processed {
+		t.Error("dispatch 失败不得标处理成功，否则恢复扫描不再重投（FA-CHANNEL-03）")
 	}
 }
 

@@ -6,11 +6,14 @@ import (
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
+	"os"
+	"path/filepath"
 	"time"
 
 	"context"
 
 	"github.com/google/uuid"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 // 活码写口的业务错误哨兵。
@@ -49,6 +52,25 @@ type liveCodeService struct {
 	qrStatRepo   repository.LiveCodeQRRepository
 	clickLogRepo repository.LiveCodeClickLogRepository
 	domainRepo   repository.DomainPoolRepository
+	// FA-LIVECODE-01/02: 可注入的制品存储与时钟，便于本地临时目录/冻结时钟测试。
+	qrStore interface {
+		Save(name string, data []byte) (string, error)
+	}
+	nowFn func() time.Time
+}
+
+// localQRStore FA-LIVECODE-01: 默认把 QR PNG 写到本地目录，返回绝对路径。
+type localQRStore struct{ dir string }
+
+func (s localQRStore) Save(name string, data []byte) (string, error) {
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(s.dir, name)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // NewLiveCodeService 创建活码服务实例（句柄由 repository 自取全局库）
@@ -59,6 +81,8 @@ func NewLiveCodeService() LiveCodeService {
 		qrStatRepo:   repository.NewLiveCodeQRRepositoryDefault(),
 		clickLogRepo: repository.NewLiveCodeClickLogRepositoryDefault(),
 		domainRepo:   repository.NewDomainPoolRepositoryDefault(),
+		qrStore:      localQRStore{dir: filepath.Join(os.TempDir(), "uploads", "qrcodes")},
+		nowFn:        time.Now,
 	}
 }
 
@@ -208,18 +232,51 @@ func (s *liveCodeService) RotateLiveCodes(ctx context.Context) error {
 		return err
 	}
 
+	now := s.nowFn()
 	for _, liveCode := range liveCodes {
 		if liveCode.DailyClicks >= 200 {
 			continue
 		}
 
-		qrCode := &model.LiveCodeQR{
-			LiveCodeID: liveCode.ID,
-			Status:     1,
+		// FA-LIVECODE-02: 已有可用（未过期/未达限/启用）QR 时不再追加，避免无界堆积空 QR。
+		existing, qErr := s.qrCodeRepo.GetByLiveCodeID(ctx, liveCode.ID)
+		if qErr == nil {
+			hasUsable := false
+			for _, eq := range existing {
+				if s.qrUsable(ctx, eq, now) {
+					hasUsable = true
+					break
+				}
+			}
+			if hasUsable {
+				continue
+			}
 		}
 
-		err := s.qrCodeRepo.Create(ctx, qrCode)
-		if err != nil {
+		// FA-LIVECODE-01: 轮换也生成真实可解码 QR，不留空占位。
+		target := liveCodeFullEntryLink(liveCode)
+		if target == "" {
+			target = "livecode://" + liveCode.ID
+		}
+		png, encErr := qrcode.Encode(target, qrcode.Medium, 256)
+		if encErr != nil {
+			continue
+		}
+		path, saveErr := s.qrStore.Save(uuid.New().String()+".png", png)
+		if saveErr != nil {
+			continue
+		}
+		qrCode := &model.LiveCodeQR{
+			ID:         uuid.New().String(),
+			LiveCodeID: liveCode.ID,
+			QRType:     "entry",
+			QRContent:  target,
+			ImageURL:   path,
+			Status:     1,
+			ExpireDays: 7,
+			CreatedAt:  now,
+		}
+		if err := s.qrCodeRepo.Create(ctx, qrCode); err != nil {
 			continue
 		}
 	}
@@ -340,7 +397,7 @@ func (s *liveCodeService) GetStats(ctx context.Context, id string) (*dto.LiveCod
 }
 
 func (s *liveCodeService) GenerateQRCode(ctx context.Context, id string, req *dto.GenerateQRCodeRequest) (*dto.LiveCodeQRResponse, error) {
-	_, err := s.liveCodeRepo.GetByID(ctx, id)
+	liveCode, err := s.liveCodeRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("活码不存在")
 	}
@@ -350,14 +407,29 @@ func (s *liveCodeService) GenerateQRCode(ctx context.Context, id string, req *dt
 		req.ExpireDays = 30
 	}
 
-	imagePath := fmt.Sprintf("/uploads/qrcodes/%s.png", uuid.New().String())
+	// FA-LIVECODE-01: 按活码入口目标真实编码 PNG，先落存储成功再写库，失败不留可分享假路径。
+	target := liveCodeFullEntryLink(liveCode)
+	if target == "" {
+		target = "livecode://" + id
+	}
+	png, err := qrcode.Encode(target, qrcode.Medium, 256)
+	if err != nil {
+		return nil, err
+	}
+	imagePath, err := s.qrStore.Save(uuid.New().String()+".png", png)
+	if err != nil {
+		return nil, err
+	}
 
 	qrCode := &model.LiveCodeQR{
 		ID:         uuid.New().String(),
 		LiveCodeID: id,
+		QRType:     "entry",
+		QRContent:  target,
 		ImageURL:   imagePath,
 		Status:     req.Status,
 		ExpireDays: req.ExpireDays,
+		CreatedAt:  s.nowFn(),
 	}
 
 	err = s.qrCodeRepo.Create(ctx, qrCode)
@@ -420,10 +492,10 @@ func (s *liveCodeService) GetQRStats(ctx context.Context, qrID string) (*dto.Liv
 		ExpireDays:          qrCode.ExpireDays,
 		ViewCount:           viewCount,
 		ClickCount:          clickCount,
-		ExpireTime:          time.Now().AddDate(0, 0, qrCode.ExpireDays),
+		ExpireTime:          qrCode.CreatedAt.AddDate(0, 0, qrCode.ExpireDays),
 		Status:              qrCode.Status,
-		IsExpired:           false,
-		IsDailyLimitReached: false,
+		IsExpired:           !s.nowFn().Before(qrCode.CreatedAt.AddDate(0, 0, qrCode.ExpireDays)),
+		IsDailyLimitReached: s.qrDailyLimitReached(ctx, qrCode),
 		AccessStats:         accessStats,
 	}, nil
 }
@@ -440,10 +512,14 @@ func (s *liveCodeService) Share(ctx context.Context, id string, req *dto.ShareLi
 		return nil, err
 	}
 
+	// FA-LIVECODE-02: 仅选真实可用（启用/未过期/未达限）的 QR，按优先级取最高。
+	now := s.nowFn()
 	for _, qr := range qrCodes {
-		if qr.Status == 1 {
+		if !s.qrUsable(ctx, qr, now) {
+			continue
+		}
+		if availableQR == nil || qr.Priority > availableQR.Priority {
 			availableQR = qr
-			break
 		}
 	}
 
@@ -567,12 +643,33 @@ func (s *liveCodeService) qrModelToResponse(ctx context.Context, qrCode *model.L
 		ViewCount:           viewCount,
 		ClickCount:          clickCount,
 		Status:              qrCode.Status,
-		ExpireTime:          time.Now().AddDate(0, 0, qrCode.ExpireDays),
+		ExpireTime:          qrCode.CreatedAt.AddDate(0, 0, qrCode.ExpireDays),
 		CreatedAt:           qrCode.CreatedAt,
 		UpdatedAt:           qrCode.UpdatedAt,
-		IsExpired:           false,
-		IsDailyLimitReached: false,
+		IsExpired:           !s.nowFn().Before(qrCode.CreatedAt.AddDate(0, 0, qrCode.ExpireDays)),
+		IsDailyLimitReached: s.qrDailyLimitReached(ctx, qrCode),
 	}
+}
+
+// qrUsable FA-LIVECODE-02: 统一判定 QR 是否真实可用（启用 + 未过期 + 未达日限额）。
+// 到期以 CreatedAt + ExpireDays 计算，不再用 time.Now() 动态推未来。
+func (s *liveCodeService) qrUsable(ctx context.Context, qr *model.LiveCodeQR, now time.Time) bool {
+	if qr == nil || qr.Status != 1 {
+		return false
+	}
+	if !now.Before(qr.CreatedAt.AddDate(0, 0, qr.ExpireDays)) {
+		return false
+	}
+	return !s.qrDailyLimitReached(ctx, qr)
+}
+
+// qrDailyLimitReached FA-LIVECODE-02: 当日点击是否已达 QR 日限额。
+func (s *liveCodeService) qrDailyLimitReached(ctx context.Context, qr *model.LiveCodeQR) bool {
+	if qr == nil || qr.DailyLimit <= 0 {
+		return false
+	}
+	_, clicks, err := s.qrCodeRepo.SumStats(ctx, qr.ID)
+	return err == nil && int(clicks) >= qr.DailyLimit
 }
 
 func liveCodeFullShortLink(l *model.LiveCode) string {

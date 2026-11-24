@@ -12,7 +12,7 @@ import (
 
 // TestSOPTimer_SinkColumns_Persist AutoMigrate 注册确认：三列可持久化、可查询
 func TestSOPTimer_SinkColumns_Persist(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.SOPTimer{})
+	db := testutil.NewTestDB(t, &model.SOPTimer{}, &model.SOPDispatchClaim{})
 
 	// Truncate 不是装饰：PG 的 timestamp 只存到微秒，而 Linux 的 time.Now() 给纳秒
 	// （darwin 只给到微秒）。少了这一步，本用例在 mac 上恒绿、在 CI 上恒红
@@ -50,7 +50,7 @@ func TestSOPTimer_SinkColumns_Persist(t *testing.T) {
 
 // TestSOPDispatcher_SweepSkipsOverdueByColumn 列查询扫描 max_wait_at 过期 → skipped
 func TestSOPDispatcher_SweepSkipsOverdueByColumn(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.SOPExecution{}, &model.SOPExecEvent{}, &model.SOPTimer{})
+	db := testutil.NewTestDB(t, &model.SOPExecution{}, &model.SOPExecEvent{}, &model.SOPTimer{}, &model.SOPDispatchClaim{})
 	exec := &model.SOPExecution{SOPID: 1, CustomerID: "c1", Status: SOPStatusRunning, CurrentNode: "wait", StartedAt: time.Now()}
 	db.Create(exec)
 
@@ -86,7 +86,7 @@ func TestSOPDispatcher_SweepSkipsOverdueByColumn(t *testing.T) {
 
 // TestSOPDispatcher_SweepLegacyPayloadOnlyTimer 旧数据兼容：仅 payload 有 max_wait_at（列 NULL）仍能被跳过
 func TestSOPDispatcher_SweepLegacyPayloadOnlyTimer(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.SOPExecution{}, &model.SOPTimer{})
+	db := testutil.NewTestDB(t, &model.SOPExecution{}, &model.SOPTimer{}, &model.SOPDispatchClaim{})
 	exec := &model.SOPExecution{SOPID: 1, CustomerID: "c1", Status: SOPStatusRunning, StartedAt: time.Now()}
 	db.Create(exec)
 
@@ -114,7 +114,7 @@ func TestSOPDispatcher_SweepLegacyPayloadOnlyTimer(t *testing.T) {
 
 // TestSOPDispatcher_ClaimCountColumnDeadLetter claim_count 实体列 ≥5 → dead_letter
 func TestSOPDispatcher_ClaimCountColumnDeadLetter(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.SOPTimer{})
+	db := testutil.NewTestDB(t, &model.SOPTimer{}, &model.SOPDispatchClaim{})
 	timer := &model.SOPTimer{
 		ExecutionID: 9,
 		NodeID:      "wait",
@@ -140,7 +140,7 @@ func TestSOPDispatcher_ClaimCountColumnDeadLetter(t *testing.T) {
 
 // TestSOPDispatcher_BumpClaimWritesColumn 认领失败 → 实体列与 payload 双写递增
 func TestSOPDispatcher_BumpClaimWritesColumn(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.SOPTimer{})
+	db := testutil.NewTestDB(t, &model.SOPTimer{}, &model.SOPDispatchClaim{})
 	timer := &model.SOPTimer{
 		ExecutionID: 9,
 		NodeID:      "wait",

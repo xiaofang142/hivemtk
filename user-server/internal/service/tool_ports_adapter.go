@@ -192,20 +192,30 @@ func externalOrderToView(o *model.ExternalOrder) *portcontract.OrderView {
 	if o == nil {
 		return nil
 	}
-	return &portcontract.OrderView{
-		Platform:     o.Platform,
-		OrderID:      o.OrderID,
-		OrderNo:      o.OrderNo,
-		UserName:     o.UserName,
-		UserPhone:    o.UserPhone,
-		TotalAmount:  o.TotalAmount,
-		PayAmount:    o.PayAmount,
-		Status:       o.Status,
-		PayTime:      fmtTime(o.PayTime),
-		ShipTime:     fmtTime(o.ShipTime),
-		CompleteTime: fmtTime(o.CompleteTime),
-		Items:        o.Items,
+	v := &portcontract.OrderView{
+		Platform:       o.Platform,
+		OrderID:        o.OrderID,
+		OrderNo:        o.OrderNo,
+		UserName:       o.UserName,
+		UserPhone:      o.UserPhone,
+		TotalAmount:    o.TotalAmount,
+		PayAmount:      o.PayAmount,
+		DiscountAmount: o.DiscountAmount,
+		Status:         o.Status,
+		PayTime:        fmtTime(o.PayTime),
+		ShipTime:       fmtTime(o.ShipTime),
+		CompleteTime:   fmtTime(o.CompleteTime),
+		Items:          o.Items,
+		ShippingAddr:   strings.TrimSpace(o.ShippingAddr),
+		DataSource:     "external_order_mirror",
 	}
+	// Mirror freshness: prefer updated_at as last sync/mirror write time.
+	if !o.UpdatedAt.IsZero() {
+		v.MirrorUpdatedAt = o.UpdatedAt.UTC().Format(time.RFC3339)
+	} else if o.CreatedAt.Unix() > 0 {
+		v.MirrorUpdatedAt = o.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	return v
 }
 
 func fmtTime(t *time.Time) string {

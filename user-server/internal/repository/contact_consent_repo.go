@@ -199,3 +199,20 @@ func (r *ContactConsentRepository) ListPreferencesByOneID(ctx context.Context, o
 		Find(&rows).Error
 	return rows, err
 }
+
+// LatestScopedEvent 品牌级许可只在本品牌适用；历史空品牌不能扩大为任意品牌授权。
+func (r *ContactConsentRepository) LatestScopedEvent(ctx context.Context, oneID, purpose, channel, brand string) (*model.ContactConsentEvent, error) {
+	database, err := r.scopedDB(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var event model.ContactConsentEvent
+	err = database.Where("one_id = ? AND purpose = ? AND channel_scope IN ? AND (brand = ? OR (brand = '' AND decision = ?))", oneID, purpose, []string{channel, ""}, brand, model.ConsentDecisionRevoke).Order("occurred_at DESC, id DESC").Take(&event).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &event, nil
+}

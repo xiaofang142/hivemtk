@@ -100,7 +100,6 @@ func (c *HTTPAfterSaleClient) Create(ctx context.Context, req *portcontract.Afte
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
 	// Heuristic business error detection (best-effort; keep backward compatible).
 	if out.Success != nil && !*out.Success {
 		msg := out.Message

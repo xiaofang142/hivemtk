@@ -87,7 +87,9 @@ func (s *WorkflowOrchestratorService) CreateVersion(ctx context.Context, req *dt
 		return nil, utils.ErrInvalidInput
 	}
 	// 创建闸：未知节点类型/未知动作/非法图在入口即拒绝，不放进草稿（FA-02）。
-	if err := ValidateWorkflowDefinition(req.Definition, s.nodeRegistry); err != nil {
+	// FA-WF-08：草稿允许空定义/缺 trigger，但未知节点类型/未知动作/非法图入口即拒 FA-02；
+	// 严格完整性（≥1 节点 + trigger）留给发布闸 PublishVersion。
+	if err := ValidateWorkflowDefinitionForDraft(req.Definition, s.nodeRegistry); err != nil {
 		return nil, fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
 	}
 
@@ -154,11 +156,11 @@ func (s *WorkflowOrchestratorService) ListVersions(ctx context.Context, workflow
 }
 
 // ListAll 列出所有工作流版本（用于列表页，支持按 workflow_id 和 status 过滤）
-func (s *WorkflowOrchestratorService) ListAll(ctx context.Context, workflowID, status string, page, pageSize int) ([]model.WorkflowVersion, int64, error) {
+func (s *WorkflowOrchestratorService) ListAll(ctx context.Context, workflowID, status, keyword string, page, pageSize int) ([]model.WorkflowVersion, int64, error) {
 	if s == nil {
 		return nil, 0, utils.ErrServiceNotInit
 	}
-	return s.versionRepo.ListAll(ctx, workflowID, status, page, pageSize)
+	return s.versionRepo.ListAll(ctx, workflowID, status, keyword, page, pageSize)
 }
 
 // UpdateVersion 更新工作流版本
@@ -184,13 +186,30 @@ func (s *WorkflowOrchestratorService) UpdateVersion(ctx context.Context, id uint
 		return fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
 	}
 
+	// FA-WF-07：用 Revision 整数作乐观锁 CAS，避免"读 draft → 发布者置 published
+	// → 旧草稿整行 Save 覆盖新状态/定义"的交错。Revision 随每次改稿递增（仓储层 +1）。
+	// 时间戳精度不足（并发更新可能同秒同值），故改用单调 Revision。
+	expectedRevision := version.Revision
 	version.Name = req.Name
 	version.Description = req.Description
 	version.Definition = req.Definition
 	version.Changelog = req.Changelog
-	version.UpdatedAt = time.Now()
 
-	return s.versionRepo.Save(ctx, version)
+	// 草稿改稿用 status=draft CAS（拦住"读到 draft→别人发布→旧草稿覆盖"）；
+	// 已发布/归档版本只允许同定义元数据更新（definitionEqual 已在上面校验），用 revision CAS。
+	var rows int64
+	if version.Status == model.WorkflowStatusDraft {
+		rows, err = s.versionRepo.UpdateDraft(ctx, version, expectedRevision)
+	} else {
+		rows, err = s.versionRepo.UpdateMetadataCAS(ctx, version, expectedRevision)
+	}
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrVersionConflict
+	}
+	return nil
 }
 
 // definitionEqual 判断两份定义 JSON 是否内容一致（键序无关）。
@@ -233,7 +252,15 @@ func (s *WorkflowOrchestratorService) PublishVersion(ctx context.Context, id uin
 	if err := ValidateWorkflowDefinition(version.Definition, s.nodeRegistry); err != nil {
 		return fmt.Errorf("%w: %v", utils.ErrInvalidInput, err)
 	}
-	return s.versionRepo.UpdateStatus(ctx, id, model.WorkflowStatusPublished)
+	// FA-WF-07：仅从 draft→published  CAS 提交；若已被并发更新/发布，rows==0 返回冲突。
+	rows, err := s.versionRepo.TransitionStatus(ctx, id, model.WorkflowStatusDraft, model.WorkflowStatusPublished)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrVersionConflict
+	}
+	return nil
 }
 
 // ArchiveVersion 归档工作流版本
@@ -244,8 +271,30 @@ func (s *WorkflowOrchestratorService) ArchiveVersion(ctx context.Context, id uin
 	if id == 0 {
 		return utils.ErrInvalidInput
 	}
-	return s.versionRepo.UpdateStatus(ctx, id, model.WorkflowStatusArchived)
+	// FA-WF-07：先读当前状态作 CAS 的 from，避免整行覆盖与并发更新/发布交错。
+	version, err := s.versionRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	// 已归档版本再次归档：from=to=archived 会让状态 CAS 恒匹配，需显式拒绝，
+	// 否则重复归档静默成功（前端误以为状态变化）。
+	if version.Status == model.WorkflowStatusArchived {
+		return ErrVersionConflict
+	}
+	rows, err := s.versionRepo.TransitionStatus(ctx, id, version.Status, model.WorkflowStatusArchived)
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrVersionConflict
+	}
+	return nil
 }
+
+// ErrVersionConflict FA-WF-07：版本在读取后被并发修改（状态变更或另一次改稿），
+// 本次 CAS 提交未命中期望状态/时间戳。调用方应回读最新状态后重试，不能把旧草稿
+// 覆盖到已发布/已归档版本上。
+var ErrVersionConflict = errors.New("workflow version: 版本已被并发修改，请重试")
 
 // ErrVersionReferenced FA-36：版本被执行引用（在途或历史），不可硬删。
 var ErrVersionReferenced = errors.New("workflow version: 已被执行引用，不可删除（在途与历史执行依赖其不可变定义）")

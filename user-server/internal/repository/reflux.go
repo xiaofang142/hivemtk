@@ -49,6 +49,14 @@ func (r *RefluxRepository) UpdateQuestion(ctx context.Context, id int64, updates
 		Where("id = ?", id).Updates(updates).Error
 }
 
+// UpdateQuestionCAS FA-REFLUX-01：带旧状态条件的原子更新——仅当 current status==from
+// 才写 updates，命中零行（记录不存在或已被并发改走）→ErrRecordNotFound。
+// 供 adopt/merge/ignore 串行化并发审核，避免双审核各自覆盖终态。
+func (r *RefluxRepository) UpdateQuestionCAS(ctx context.Context, id int64, from string, updates map[string]any) error {
+	return _db.EnsureAffected(r.db.WithContext(ctx).Model(&model.UnknownQuestion{}).
+		Where("id = ? AND status = ?", id, from).Updates(updates))
+}
+
 // UpdateCluster 按 id 更新簇列。
 func (r *RefluxRepository) UpdateCluster(ctx context.Context, id int64, updates map[string]any) error {
 	return r.db.WithContext(ctx).Model(&model.UnknownQuestionCluster{}).

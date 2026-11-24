@@ -13,6 +13,9 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *model.User) error
 	GetByID(ctx context.Context, id string) (*model.User, error)
+	// GetByIDs 按主键批量取用户（选中导出直接查指定 ID，不靠「第一页+内存过滤」，
+	// 否则第一页之外的选中项会被静默漏掉）。租户谓词由租户 callback 从 ctx 注入。
+	GetByIDs(ctx context.Context, ids []string) ([]*model.User, error)
 	GetByUsername(ctx context.Context, username string) (*model.User, error)
 	GetUserList(ctx context.Context, page int, limit int) ([]*model.User, int64, error)
 	Delete(ctx context.Context, id string) error
@@ -46,6 +49,19 @@ func (r *userRepo) GetByID(ctx context.Context, id string) (*model.User, error) 
 	return &user, err
 }
 
+// GetByIDs 按主键批量取用户。空 ID 列表回空切片（不查库，避免 `id IN (NULL)`
+// 之类的意外全表）；租户隔离由 GORM 租户 callback 从 ctx 读 tenant_id 注入。
+func (r *userRepo) GetByIDs(ctx context.Context, ids []string) ([]*model.User, error) {
+	if len(ids) == 0 {
+		return []*model.User{}, nil
+	}
+	var users []*model.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func (r *userRepo) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	var user model.User
 	err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error
@@ -72,8 +88,9 @@ func (r *userRepo) GetUserList(ctx context.Context, page int, limit int) ([]*mod
 	if err := r.db.WithContext(ctx).Model(&model.User{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+	// id 作为二级排序键：create_time 相同（同秒批量创建）时防止翻页边界重复/漏行。
 	err := r.db.WithContext(ctx).Offset((page - 1) * limit).Limit(limit).
-		Order("create_time DESC").Find(&users).Error
+		Order("create_time DESC, id ASC").Find(&users).Error
 	return users, total, err
 }
 

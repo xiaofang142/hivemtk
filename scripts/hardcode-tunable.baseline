@@ -468,3 +468,13 @@ TimingVersion
 # 如业务需要变更，必须重新论证回声/客户同文边界并带回归整体发布。
 InboxOutboundEchoWindowShort
 >>>>>>> Stashed changes
+
+# ── SageX 上传协议安全上界（2026-11-23 审计 T-07）──────────────────────────────
+# 三者是 SageX 协议的容量/安全上界，不是运营可调旋钮：
+#   SageXMaxEvents        —— 单批最多事件数（防滥用/内存）
+#   SageXMaxRequestBytes   —— 请求体上限 1MB
+#   SageXMaxAckBytes       —— 回执上限 256KB
+# 写成参数中心旋钮等于允许把闸开到无限，故登记基线而非入库。
+SageXMaxEvents
+SageXMaxRequestBytes
+SageXMaxAckBytes

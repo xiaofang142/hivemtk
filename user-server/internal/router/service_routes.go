@@ -224,6 +224,14 @@ func setupMessageRoutes(auth *gin.RouterGroup, db *gorm.DB, ingressSvc *service.
 	inboxAdmin.GET("/inbox/outbound-unknown", inboxIngressCtrl.ListOutboundUnknown)
 	inboxAdmin.GET("/inbox/outbound-unknown/count", inboxIngressCtrl.CountOutboundUnknown)
 	inboxAdmin.POST("/inbox/outbound-unknown/reconcile", inboxIngressCtrl.ReconcileOutboundUnknown)
+
+	sagexSvc := service.NewSageXUploadService(
+		repository.NewSageXInstallationRepository(),
+		repository.NewSageXEventReceiptRepository(),
+		ingressSvc,
+	)
+	sagexCtrl := controller.NewSageXUploadController(sagexSvc)
+	sagexCtrl.RegisterAdminRoutes(inboxAdmin)
 }
 
 func setupPlatformAccountRoutes(auth *gin.RouterGroup) {

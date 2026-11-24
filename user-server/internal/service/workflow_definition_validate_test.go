@@ -129,18 +129,34 @@ func setupWorkflowValidateSvc(t *testing.T) (*WorkflowOrchestratorService, *gorm
 	return svc, db
 }
 
-func TestWO_CreateVersion_RejectsInvalidDefinition(t *testing.T) {
+func TestWO_CreateVersion_AllowsEmptyDraftRejectsMalformed(t *testing.T) {
+	// FA-WF-08：创建闸允许"空草稿"（仅 nodes=[]/无 trigger），完整性校验后移到发布闸；
+	// 但未知节点类型/未知动作/非法图仍必须在入口拒绝（FA-02 结构约束不变）。
 	svc, _ := setupWorkflowValidateSvc(t)
 	if svc == nil {
 		return
 	}
-	_, err := svc.CreateVersion(context.Background(), &dto.WorkflowVersionCreateRequest{
+	ctx := context.Background()
+
+	// 空定义草稿：允许创建（生命周期由发布闸把关）。
+	if _, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
+		WorkflowID: "wf-fa08-empty-draft",
+		Name:       "empty draft",
+		Definition: map[string]any{"nodes": []any{}, "edges": []any{}},
+	}); err != nil {
+		t.Fatalf("空定义草稿应允许创建: %v", err)
+	}
+
+	// 真·畸形定义（未知节点类型）：创建闸仍须拒绝。
+	_, err := svc.CreateVersion(ctx, &dto.WorkflowVersionCreateRequest{
 		WorkflowID: "wf-fa02-create",
 		Name:       "bad",
-		Definition: map[string]any{"nodes": []any{}},
+		Definition: map[string]any{"nodes": []any{
+			map[string]any{"id": "n1", "type": "ghost_node", "config": map[string]any{}},
+		}},
 	})
 	if err == nil {
-		t.Fatal("空定义创建必须被创建闸拒绝")
+		t.Fatal("未知节点类型的定义必须被创建闸拒绝")
 	}
 }
 

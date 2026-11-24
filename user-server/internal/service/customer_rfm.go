@@ -171,13 +171,7 @@ func (s *CustomerRFMService) ComputeForCustomer(ctx context.Context, customerID 
 	fs := rfmScoreFrequencyCfg(f, cfg)
 	ms := rfmScoreMonetaryCfg(m, cfg)
 
-	composite := int(float64(rs)*30 + float64(fs)*30 + float64(ms)*40)
-	if composite < 0 {
-		composite = 0
-	}
-	if composite > 100 {
-		composite = 100
-	}
+	composite := rfmCompositeScore(rs, fs, ms)
 
 	segment := determineSegment(rs, fs, ms, r, cfg.ChurnRecencyThreshold)
 	churnRisk, churnScore := calcChurnRisk(r, f, m, cfg)
@@ -215,8 +209,16 @@ func (s *CustomerRFMService) ComputeForCustomer(ctx context.Context, customerID 
 }
 
 func (s *CustomerRFMService) ComputeAll(ctx context.Context, limit int) (int, error) {
-	const pageSize = 500
-	cfg := DefaultRFMConfig()
+	const pageSize = 200
+	rule, err := s.GetRFMRule(ctx)
+	if err != nil && !utils.IsRecordNotFound(err) {
+		return 0, fmt.Errorf("读取激活 RFM 规则: %w", err)
+	}
+	if rule != nil {
+		snapshot := *rule
+		rule = &snapshot
+	}
+	cfg := RFMConfigFromRule(rule)
 	success := 0
 	for page := 1; ; page++ {
 		customers, total, err := s.customerRepo.List(ctx, page, pageSize, "")
@@ -259,13 +261,7 @@ func (s *CustomerRFMService) computeForCustomerLoaded(ctx context.Context, cust 
 	fs := rfmScoreFrequencyCfg(f, cfg)
 	ms := rfmScoreMonetaryCfg(m, cfg)
 
-	composite := int(float64(rs)*30 + float64(fs)*30 + float64(ms)*40)
-	if composite < 0 {
-		composite = 0
-	}
-	if composite > 100 {
-		composite = 100
-	}
+	composite := rfmCompositeScore(rs, fs, ms)
 
 	segment := determineSegment(rs, fs, ms, r, cfg.ChurnRecencyThreshold)
 	churnRisk, churnScore := calcChurnRisk(r, f, m, cfg)
@@ -321,9 +317,15 @@ func (s *CustomerRFMService) Distribution(ctx context.Context) (map[string]int64
 	return s.rfmRepo.CountBySegment(ctx)
 }
 
+// rfmCompositeScore 将每维1–5分映射为0–100分，权重保持30/30/40。
+func rfmCompositeScore(r, f, m int) int {
+	weighted := (r-1)*30 + (f-1)*30 + (m-1)*40
+	return min(100, max(0, (weighted+2)/4))
+}
+
 func (s *CustomerRFMService) computeRawMetricsForCustomer(ctx context.Context, cust *model.Customer) (recencyDays, frequency int, monetary int64, lastActive *time.Time, err error) {
+	recencyDays = 9999
 	if cust == nil || (cust.ID == "" && cust.Phone == "") {
-		recencyDays = 9999
 		return
 	}
 
@@ -375,7 +377,7 @@ func (s *CustomerRFMService) computeRawMetricsForCustomer(ctx context.Context, c
 		}
 	}
 	if lastActive != nil {
-		recencyDays = int(time.Since(*lastActive).Hours() / 24)
+		recencyDays = int(s.nowFunc().Sub(*lastActive).Hours() / 24)
 		if recencyDays < 0 {
 			recencyDays = 0
 		}

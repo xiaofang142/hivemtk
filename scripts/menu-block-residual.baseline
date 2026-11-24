@@ -27,3 +27,13 @@ inbox	/inbox/list	/api/inbox/reconcile	页头「会话补建」按钮才打：Li
 leadMining	/lead-mining/index	/api/clues/delete/*	本页不调用该口，因此没有 403 面：Index.vue 只从 @/api/clue 取 clueApi.list()（拉线索列表填挖掘表单），没有 delete 调用点；形状只因共享 api 模块进闭包
 userSegment	/userSegment/list	/api/user-segment/rfm/calculate	本页不调用该口，因此没有 403 面：List.vue 的 import 名单只有 getUserSegments/createUserSegment/updateUserSegment/deleteUserSegment/getSegmentStats/getSegmentUsers，没有 calculateRFM；该口由「流失预测」页的运行预测按钮使用（见 churnPrediction 那条）
 userSegment	/userSegment/list	/api/user-segment/rfm/rule/*	行内「删除」按钮才打：List.vue 的 deleteSegment(row) → deleteUserSegment(id) → DELETE /api/user-segment/rfm/rule/{id}（api/userSegment.js）；分群列表／矩阵／明细读口不受影响，staff 进页能看能用，只有点删除分群收 403
+clueList	/clue/list	/api/clues/*	本页不调用该口，因此没有 403 面：List.vue 仅从 @/api/clue 取 list/get/detail 等读口，删除形状只因共享 api 模块进闭包（与 clueStatistics/leadMining 同源）
+clueStatistics	/clue/statistics	/api/clues/*	本页不调用该口，因此没有 403 面：Statistics.vue 只取 clueApi.statistics()，删除形状只因共享 api 模块进闭包
+customer360	/customer360/list	/api/integrations	本页不调用该口，因此没有 403 面：List.vue 仅取 getExternalOrdersByCustomer，集成管理口只因共享 api/integration.js 进闭包
+customer360	/customer360/list	/api/integrations/*	本页不调用该口，因此没有 403 面：同步/测试类动作在集成页（超管可见），customer360 仅按客户查订单
+intentRecognition	/intentRecognition/list	/api/intent/feedback/correct	行内「纠正」按钮才打：仅管理员对反馈做纠正，页面列表/详情读口不受影响，按钮已加 v-if 管理员守卫
+intentRecognition	/intentRecognition/list	/api/intent/feedback/override	行内「覆盖」按钮才打：仅管理员覆盖反馈结论，页面读口不受影响
+leadMining	/lead-mining/index	/api/clues/*	本页不调用该口，因此没有 403 面：Index.vue 仅取 clueApi.list() 填表单，删除形状只因共享 api 模块进闭包
+smsDrafts	/sms/drafts	/api/sms/config	本页仅读草稿列表，短信配置读口仅管理员可见，页面主功能不受影响
+smsJobs	/sms/jobs	/api/sms/config	本页仅读任务列表，短信配置读口仅管理员可见，页面主功能不受影响
+smsList	/sms/list	/api/sms/config	本页仅读短信列表，短信配置读口仅管理员可见，页面主功能不受影响

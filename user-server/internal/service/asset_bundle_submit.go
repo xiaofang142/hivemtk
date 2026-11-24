@@ -8,7 +8,6 @@ import (
 
 	"hivemtk-user/internal/config"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/platform"
 )
 
@@ -91,11 +90,15 @@ func (s *AssetBundleService) SubmitToPlatform(ctx context.Context, assetID strin
 				platformAssetID, derr)
 		}
 		switch info.Status {
-		case "approved":
-			_ = s.repo.UpdatePlatformRef(ctx, bundle.ID, platformAssetID, info.Status, info.ReviewNote)
-			return platformAssetID, nil
-		case "pending":
-			_ = s.repo.UpdatePlatformRef(ctx, bundle.ID, platformAssetID, info.Status, info.ReviewNote)
+		case "approved", "pending":
+			// FA-ASSET-SUBMIT-01：平台实态已获取，本地投影写失败必须显式标为未同步，
+			// 不能把旧状态包装成成功返回。
+			if err := s.repo.UpdatePlatformRef(ctx, bundle.ID, platformAssetID, info.Status, info.ReviewNote); err != nil {
+				return platformAssetID, &PlatformProjectionStaleError{
+					PlatformAssetID: platformAssetID, PlatformStatus: info.Status,
+					PlatformReviewNote: info.ReviewNote, LocalStatus: bundle.PlatformStatus, Cause: err,
+				}
+			}
 			return platformAssetID, nil
 		default:
 			// draft/rejected/offline/未知：推最新内容成新版本后重提。
@@ -127,7 +130,12 @@ func (s *AssetBundleService) SubmitToPlatform(ctx context.Context, assetID strin
 		status, note = info.Status, info.ReviewNote
 	}
 	if err := s.repo.UpdatePlatformRef(ctx, bundle.ID, platformAssetID, status, note); err != nil {
-		logger.Warnf("[asset_bundle] platform ref persist failed asset=%s platform=%d err=%v", assetID, platformAssetID, err)
+		// FA-ASSET-SUBMIT-01：送审已生效但回程落库失败——返回可对账的未同步错误，
+		// 让调用方走刷新状态重试，而不是默默报成功。
+		return platformAssetID, &PlatformProjectionStaleError{
+			PlatformAssetID: platformAssetID, PlatformStatus: status,
+			PlatformReviewNote: note, LocalStatus: bundle.PlatformStatus, Cause: err,
+		}
 	}
 	return platformAssetID, nil
 }
@@ -150,7 +158,12 @@ func (s *AssetBundleService) RefreshPlatformStatus(ctx context.Context, id int64
 		return nil, err
 	}
 	if err := s.repo.UpdatePlatformRef(ctx, bundle.ID, bundle.PlatformAssetID, info.Status, info.ReviewNote); err != nil {
-		logger.Warnf("[asset_bundle] platform ref persist failed asset=%s err=%v", bundle.AssetID, err)
+		// FA-ASSET-SUBMIT-01：不能把读取到的旧本地状态包装成「已刷新」成功：
+		// 连同平台实态一起返回 typed error，控制器回 202 待对账。
+		return bundle, &PlatformProjectionStaleError{
+			PlatformAssetID: bundle.PlatformAssetID, PlatformStatus: info.Status,
+			PlatformReviewNote: info.ReviewNote, LocalStatus: bundle.PlatformStatus, Cause: err,
+		}
 	}
 	return s.repo.FindByID(ctx, id)
 }

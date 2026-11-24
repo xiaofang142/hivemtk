@@ -117,6 +117,11 @@ type WebhookService struct {
 	sendersMu sync.Mutex
 	senders   map[WebhookChannel]channelSender
 
+	// dispatchChannelFn FA-CHANNEL-03：可注入的分发函数（测试用）。nil 时用真实
+	// dispatchToChannel。生产恒 nil；注入假分发可在隔离库里验证"分发失败保持可恢复、
+	// 恢复后权威消息/会话/AI 派工各恰好一次"，不必连真实渠道。
+	dispatchChannelFn func(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, raw []byte, headers map[string]string) (*model.MessageHub, *tgDispatchExtra, error)
+
 	workerCount int
 	queue       chan *webhookJob
 	wg          sync.WaitGroup
@@ -1181,7 +1186,11 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 		}
 	}
 
-	hubMsg, tgExtra, dispatchErr := s.dispatchToChannel(ctx, channel, job.account, payload, job.raw, job.header)
+	dispatchFn := s.dispatchToChannel
+	if s.dispatchChannelFn != nil {
+		dispatchFn = s.dispatchChannelFn
+	}
+	hubMsg, tgExtra, dispatchErr := dispatchFn(ctx, channel, job.account, payload, job.raw, job.header)
 	if errors.Is(dispatchErr, ErrWebhookInboundNotWired) {
 		// 只有改造前入库的旧事件行会走到这里（Receive 已按能力表拒绝新请求）。
 		// 不能再往下写 unified_messages：那等于把一条没人能处理的消息记成"已收到"，
@@ -1190,13 +1199,30 @@ func (s *WebhookService) handleJob(ctx context.Context, job *webhookJob) {
 		return
 	}
 	if dispatchErr != nil {
-		logger.Errorf("[Webhook] dispatch %s failed event=%s: %v", channel, job.event.EventID, dispatchErr)
+		// FA-CHANNEL-03：权威入站（适配器/入站仓储）失败 = 可恢复状态。
+		// 绝不能走到末尾 markProcessed：那样事件进入"已处理"，message_hub/AI 链却没完成，
+		// 恢复扫描器不再重投，客户消息永久丢失。
+		//
+		// legacy unified_messages 只作"适配器报错、消息仍要留痕"的旁路（写失败仍重试），
+		// 它不能冒充"权威入站已确认"：留痕成功也保持 processed=false，交由恢复扫描重投。
+		// 重投时入站幂等（hub 按官方 msg_id 收敛、legacy 按唯一键去重），恢复后
+		// 权威 message_hub / 会话 / AI 派工各恰好一次，legacy 行不单作完成凭据。
+		logger.Errorf("[Webhook] dispatch %s failed event=%s, 保持未处理待恢复重投: %v", channel, job.event.EventID, dispatchErr)
+		um := s.ToUnifiedMessage(ctx, channel, job.account, payload)
+		if um.AccountID == "" {
+			um.AccountID = job.event.EventID
+		}
+		if err := s.dispatchToUnified(ctx, um); err != nil {
+			// 留痕本身失败不改变"可恢复"结论：事件仍未处理，恢复重投会再次尝试。
+			logger.Errorf("[Webhook] dispatch 失败后的 legacy 留痕也失败 event=%s: %v", job.event.EventID, err)
+		}
+		return
 	}
 
-	if hubMsg == nil && dispatchErr == nil {
-		// 有适配器的渠道这次没产出 hub 行 = 非消息类事件（授权/关注/撤回…），确认跳过。
-		// 判定改用能力表：原先写死 5 个渠道，抖系加了解析器却没进清单，
-		// 无 sender 的事件会继续往下走、落一条空内容的 unified_message（审计 D-03）。
+	if hubMsg == nil {
+		// 有适配器的渠道、且分发无错，这次仍没产出 hub 行 = 非消息类事件
+		// （授权/关注/撤回…），这是明确的"确认跳过"结果类型，与分发失败严格区分：
+		// 前者 markProcessed（无需重投），后者保持未处理（待恢复重投）。
 		logger.Infof("[Webhook] skip non-message event channel=%s event=%s", channel, job.event.EventID)
 		s.markProcessed(ctx, job.event)
 		return

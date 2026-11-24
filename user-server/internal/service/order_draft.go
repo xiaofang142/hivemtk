@@ -24,10 +24,13 @@ func roundMoney(v float64) float64 {
 type DraftStatus string
 
 const (
-	DraftStatusPending   DraftStatus = "pending"
-	DraftStatusConfirmed DraftStatus = "confirmed"
-	DraftStatusCancelled DraftStatus = "cancelled"
-	DraftStatusExpired   DraftStatus = "expired"
+	DraftStatusPending     DraftStatus = "pending"
+	DraftStatusConfirmed   DraftStatus = "confirmed"
+	DraftStatusCancelled   DraftStatus = "cancelled"
+	DraftStatusExpired     DraftStatus = "expired"
+	// DraftStatusOrderFailed FA-ORDER-01：草稿已确认但建单/关联失败，保留可恢复的待重试状态。
+	// 不再让"已确认、无订单、不可再确认"的草稿成为死状态。
+	DraftStatusOrderFailed DraftStatus = "order_failed"
 )
 
 // OrderDraft 订单草稿
@@ -58,6 +61,9 @@ type OrderDraft struct {
 	ConfirmedAt  *time.Time     `json:"confirmed_at,omitempty"`
 	CancelledAt  *time.Time     `json:"cancelled_at,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
+	// FA-ORDER-01：草稿级幂等建单凭据 + 失败原因。
+	IdempotencyKey   string `json:"idempotency_key,omitempty"`
+	OrderFailedReason string `json:"order_failed_reason,omitempty"`
 }
 
 // CreateDraftRequest 手动创建草稿请求
@@ -145,6 +151,10 @@ type OrderDraftService struct {
 	scriptConversionHook func(ctx context.Context, oneID, conversationID, outcome string)
 
 	defaultExpiry time.Duration
+
+	// createOrderFn FA-ORDER-01：建单 seam。nil 时回退 createOrderFromDraft。
+	// 测试注入假实现以覆盖创建失败/响应丢失/重启/双确认的幂等语义。
+	createOrderFn func(ctx context.Context, draft *OrderDraft) (*orderRecord, error)
 }
 
 // OrderDraftConfig 草稿服务配置
@@ -618,10 +628,33 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 		StageAdvanced: string(StageWon),
 	}
 
-	if s.orderService != nil {
-		order, err := s.createOrderFromDraft(ctx, draft)
+	// FA-ORDER-01：草稿级幂等建单凭据。首次确认即固化（取 draft.ID），全程不变；
+	// 重试/重启/双确认都靠它保证"同一草稿至多一单"。
+	if draft.IdempotencyKey == "" {
+		draft.IdempotencyKey = draft.ID
+	}
+
+	// 建单 seam：显式注入的 createOrderFn（测试用）优先；否则仅当真实 orderService
+	// 存在才走建单分支。orderService==nil 且未注入 seam 时保持原有"临时单号"口径，
+	// 不破坏既有无 orderService 的用例。
+	createFn := s.createOrderFn
+
+	var order *orderRecord
+	if s.orderService != nil || createFn != nil {
+		fn := createFn
+		if fn == nil {
+			fn = s.createOrderFromDraft
+		}
+		var err error
+		order, err = fn(ctx, draft)
 		if err != nil {
-			return result, fmt.Errorf("创建订单失败: %w", err)
+			// FA-ORDER-01：建单失败不再只 return，先把草稿持久化为可恢复的 order_failed，
+			// 记下幂等键与失败原因，供 ReconcileDraft 对账/重试，不留死状态。
+			draft.Status = DraftStatusOrderFailed
+			draft.OrderFailedReason = err.Error()
+			_ = s.store.put(ctx, draft)
+			return result, fmt.Errorf("创建订单失败（草稿已标记 %s，可用幂等键 %s 对账重试）: %w",
+				DraftStatusOrderFailed, draft.IdempotencyKey, err)
 		}
 		if order != nil {
 			orderID = order.ID
@@ -647,9 +680,16 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 	if orderID != "" {
 		draft.OrderID = orderID
 		if err := s.store.put(ctx, draft); err != nil {
-			// 订单已经建出来了，这里只能出声而不能回滚：草稿侧缺 order_id 关联是可修的，
-			// 把已成功建单的回答成"失败"会让销售再点一次，那才是真事故。
-			logger.Errorf("[order-draft] 订单 %s 已创建但草稿 %s 的关联未落库 ⇒ 需人工对齐：%v", orderID, draftID, err)
+			// FA-ORDER-01：订单已建但草稿关联落库失败——不再只记日志。
+			// 订单真实存在，标记 order_failed + 失败原因，可由 ReconcileDraft 按幂等键对账回填，
+			// 既不盲目重复建单（避免双单），也不把真实故障伪装成成功。
+			draft.Status = DraftStatusOrderFailed
+			draft.OrderFailedReason = "订单已创建但草稿关联失败，需对账: " + err.Error()
+			_ = s.store.put(ctx, draft)
+			logger.Errorf("[order-draft] 订单 %s 已创建但草稿 %s 的关联未落库 ⇒ 已标记 %s 待对账：%v",
+				orderID, draftID, DraftStatusOrderFailed, err)
+			return result, fmt.Errorf("订单 %s 已创建但草稿关联未落库（草稿已标记 %s，可按幂等键 %s 对账）: %w",
+				orderID, DraftStatusOrderFailed, draft.IdempotencyKey, err)
 		}
 	}
 
@@ -712,6 +752,55 @@ func (s *OrderDraftService) Confirm(ctx context.Context, draftID, confirmedBy st
 	}
 
 	return result, nil
+}
+
+// ReconcileDraft FA-ORDER-01：对账/重试入口。
+// 针对 order_failed 草稿按幂等键对账：若草稿已带 OrderID（建单成功仅关联失败），
+// 直接回填 confirmed 并清失败原因，不重复建单；否则走 createOrderFn（其幂等实现按
+// IdempotencyKey 去重，保证重启/双确认恰好一单），成功后关联草稿。
+func (s *OrderDraftService) ReconcileDraft(ctx context.Context, draftID string) (*DraftConfirmResult, error) {
+	draft, err := s.store.get(ctx, draftID)
+	if err != nil || draft == nil {
+		return nil, ErrOrderDraftNotFound
+	}
+	if draft.Status != DraftStatusOrderFailed {
+		return nil, fmt.Errorf("草稿 %s 不是 %s 状态（当前 %s），无需对账", draftID, DraftStatusOrderFailed, draft.Status)
+	}
+	if draft.IdempotencyKey == "" {
+		draft.IdempotencyKey = draft.ID
+	}
+
+	// 情形一：订单已建（关联失败），只回填关联，绝不重复建单。
+	if draft.OrderID != "" {
+		draft.Status = DraftStatusConfirmed
+		draft.OrderFailedReason = ""
+		draft.UpdatedAt = time.Now()
+		if putErr := s.store.put(ctx, draft); putErr != nil {
+			return nil, fmt.Errorf("对账回填订单关联失败: %w", putErr)
+		}
+		return &DraftConfirmResult{Draft: draft, OrderID: draft.OrderID}, nil
+	}
+
+	// 情形二：建单失败/响应丢失，按幂等键重试建单（createOrderFn 幂等去重 ⇒ 恰好一单）。
+	createFn := s.createOrderFn
+	if createFn == nil {
+		createFn = s.createOrderFromDraft
+	}
+	order, err := createFn(ctx, draft)
+	if err != nil {
+		return nil, fmt.Errorf("对账重建订单失败（草稿仍为 %s，可再次重试）: %w", DraftStatusOrderFailed, err)
+	}
+	if order == nil {
+		return nil, fmt.Errorf("对账重建订单返回空结果（草稿仍为 %s）", DraftStatusOrderFailed)
+	}
+	draft.OrderID = order.ID
+	draft.Status = DraftStatusConfirmed
+	draft.OrderFailedReason = ""
+	draft.UpdatedAt = time.Now()
+	if putErr := s.store.put(ctx, draft); putErr != nil {
+		return nil, fmt.Errorf("对账重建成功但草稿关联落库失败: %w", putErr)
+	}
+	return &DraftConfirmResult{Draft: draft, OrderID: order.ID}, nil
 }
 
 // Cancel 销售取消草稿

@@ -165,19 +165,14 @@ func (s *tiktokCardService) GenerateShortLink(ctx context.Context, cardID uint) 
 		return nil, fmt.Errorf("卡片不存在: %w", err)
 	}
 
-	shortCode := generateRandomCode(8)
-
-	// 跳转地址校验必须在删除旧短链之前（D-44）。
+	// 跳转地址校验必须在任何写操作之前（D-44）。
 	if card.RedirectURL == "" {
 		return nil, ErrCardRedirectURLRequired
 	}
+	// FA-CARD-01：先记住旧关联，任何失败路径都必须保持它继续可用。
+	oldShortLinkID := card.ShortLinkID
 
-	if card.ShortLinkID != 0 {
-		// 悬空 ID（旧短链已被删）不该挡住重建，先确认存在再删。
-		if _, err := s.shortLinkRepo.GetByID(ctx, card.ShortLinkID); err == nil {
-			_ = s.shortLinkRepo.Delete(ctx, card.ShortLinkID)
-		}
-	}
+	shortCode := generateRandomCode(8)
 	sl := &model.ShortLink{
 		ShortCode:   shortCode,
 		OriginalURL: card.RedirectURL,
@@ -188,13 +183,24 @@ func (s *tiktokCardService) GenerateShortLink(ctx context.Context, cardID uint) 
 	if sl.DomainID == 0 {
 		sl.DomainID = 1
 	}
+	// FA-CARD-01：先创建可用候选短链，创建失败前不触碰原关联。
 	if err := s.shortLinkRepo.Create(ctx, sl); err != nil {
 		return nil, fmt.Errorf("创建短链失败: %w", err)
 	}
-
+	// FA-CARD-01：再切换卡片关联；失败则回收刚建的候选短链，
+	// 原 ShortLinkID 保持不动，原链接继续可用。
 	card.ShortLinkID = sl.ID
 	if _, err := s.repo.Update(ctx, card); err != nil {
+		_ = s.shortLinkRepo.Delete(ctx, sl.ID)
+		card.ShortLinkID = oldShortLinkID
 		return nil, fmt.Errorf("更新卡片短链ID失败: %w", err)
+	}
+	// FA-CARD-01：仅在卡片关联成功后才回收旧短链；删除失败只忽略，
+	// 不影响本次成功（卡片只关联一个有效目标 sl.ID）。
+	if oldShortLinkID != 0 && oldShortLinkID != sl.ID {
+		if _, e := s.shortLinkRepo.GetByID(ctx, oldShortLinkID); e == nil {
+			_ = s.shortLinkRepo.Delete(ctx, oldShortLinkID)
+		}
 	}
 
 	return s.toResponse(ctx, card, shortCode), nil

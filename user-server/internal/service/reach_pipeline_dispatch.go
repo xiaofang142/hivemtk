@@ -41,9 +41,55 @@ func (s *ReachPipelineService) dispatchOutbound(ctx context.Context, job *model.
 		if cerr != nil || strings.TrimSpace(content) == "" {
 			content = fmt.Sprintf("[%s] 触达消息", job.Channel)
 		}
+
+		// FA-REACH-02 发送凭据协议：先看耐久凭据，杜绝恢复/双 worker 重复外发。
+		cred := getReachSendCredential(job)
+		if cred != nil {
+			switch cred.State {
+			case reachSendStateAccepted:
+				// 已受理：复用 message_id，不调用真实发送器。
+				applyAcceptedCredentialToLastSend(job, cred)
+				return cred.MessageID, nil
+			case reachSendStateSending, reachSendStateUnknown:
+				// 崩溃窗口/对账未完成：结果未知，绝不盲重发。
+				return "", ErrReachSendUnknown
+			}
+			// failed → 可安全重发（下方重新登记 sending 凭据）。
+		}
+
+		intentKey := reachSendIntentKey(job.TenantID, job.ID, job.Channel, job.AccountID, job.CustomerID, content)
+
+		// 发送前先耐久登记 sending 凭据；落库失败则不发送（无凭据不出网）。
+		sending := &reachSendCredential{
+			IntentKey: intentKey,
+			State:     reachSendStateSending,
+			Channel:   job.Channel,
+		}
+		setReachSendCredential(job, sending)
+		if err := s.saveJob(ctx, job); err != nil {
+			return "", fmt.Errorf("发送凭据登记失败（未发送）: %w", err)
+		}
+
 		mid, err := s.sender.SendReach(ctx, job.Channel, job.AccountID, job.CustomerID, content)
 		if err != nil {
+			// 明确失败：登记 failed 凭据（best-effort），下轮可安全重试。
+			sending.State = reachSendStateFailed
+			sending.Reason = err.Error()
+			setReachSendCredential(job, sending)
+			if e := s.saveJob(ctx, job); e != nil {
+				logger.Warnf("[reach_pipeline] 发送失败凭据落库失败 jobID=%d: %v", job.ID, e)
+			}
 			return "", err
+		}
+
+		// 发送成功：登记 accepted + message_id + delivery 并立即耐久落库。
+		// 若此落库失败，库内仍是 sending 凭据 → 恢复按"未知"处理，不重发。
+		sending.State = reachSendStateAccepted
+		sending.MessageID = mid
+		sending.Delivery = reachSendDeliveryFor(job.Channel)
+		setReachSendCredential(job, sending)
+		if err := s.saveJob(ctx, job); err != nil {
+			return "", fmt.Errorf("发送成功但凭据落库失败（不重发）: %w", err)
 		}
 		if job.Payload == nil {
 			job.Payload = model.JSONMap{}
@@ -51,6 +97,7 @@ func (s *ReachPipelineService) dispatchOutbound(ctx context.Context, job *model.
 		job.Payload["_last_send"] = map[string]any{
 			"message_id": mid,
 			"channel":    job.Channel,
+			"delivery":   sending.Delivery,
 			"sent_at":    time.Now().Format(time.RFC3339),
 		}
 		return mid, nil

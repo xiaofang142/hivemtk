@@ -178,6 +178,23 @@ type ReachPipelineService struct {
 	sender ReachSender
 
 	alertHook ReachAlertHook
+
+	// saveJobFn FA-REACH-02 发送凭据落库 seam；nil 时用 s.repo.SaveJob。
+	// 测试注入"发送成功后保存失败"以验证恢复不盲重发。
+	saveJobFn func(ctx context.Context, job *model.ReachJob) error
+}
+
+// saveJob 统一的任务落库入口（可被测试注入失败）。
+// FA-REACH-02：无 DB 的纯发送器用例（NewReachPipelineService(nil)）仓库不可用，
+// 此时凭据仅停留在内存 job.Payload，降级为 no-op 不阻断发送；生产路径仓库可用时正常落库。
+func (s *ReachPipelineService) saveJob(ctx context.Context, job *model.ReachJob) error {
+	if s.saveJobFn != nil {
+		return s.saveJobFn(ctx, job)
+	}
+	if s.repo == nil || !s.repo.Available() {
+		return nil
+	}
+	return s.repo.SaveJob(ctx, job)
 }
 
 func NewReachPipelineService(repo *repository.ReachPipelineRepository) *ReachPipelineService {

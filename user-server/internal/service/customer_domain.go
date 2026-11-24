@@ -379,11 +379,15 @@ func (s *TagRuleService) GetTagStats(ctx context.Context) (*TagStatsResult, erro
 // CustomerQueryService OneID 客户查询门面服务
 type CustomerQueryService struct {
 	custRepo repository.CustomerRepository
+	scopeSvc *BusinessScopeService
 }
 
 // NewCustomerQueryService 创建 OneID 客户查询门面服务
 func NewCustomerQueryService() *CustomerQueryService {
-	return &CustomerQueryService{custRepo: repository.NewCustomerRepository()}
+	return &CustomerQueryService{
+		custRepo: repository.NewCustomerRepository(),
+		scopeSvc: NewBusinessScopeService(),
+	}
 }
 
 // CustomerView 客户视图（脱离 model 的 DTO）
@@ -399,14 +403,27 @@ type CustomerView struct {
 	UpdatedAt     string `json:"updated_at"`
 }
 
-// GetCustomerByID 按 ID 获取客户视图
-func (s *CustomerQueryService) GetCustomerByID(ctx context.Context, id string) (*CustomerView, error) {
+// GetCustomerByID 按 ID 获取客户视图。可选 actorUserID 用于 PR-5 业务账号授权 scope 过滤。
+func (s *CustomerQueryService) GetCustomerByID(ctx context.Context, id string, actorUserID ...uint) (*CustomerView, error) {
 	customer, err := s.custRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if customer == nil || customer.ID == "" {
 		return nil, nil
+	}
+	var uid uint
+	if len(actorUserID) > 0 {
+		uid = actorUserID[0]
+	}
+	if uid > 0 && s.scopeSvc != nil {
+		scope, scopeErr := s.scopeSvc.Resolve(ctx, uid)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		if !scope.AllAccounts && !scope.Allows(customer.SourceChannel, customer.SourceAccountID) {
+			return nil, nil
+		}
 	}
 	return &CustomerView{
 		ID:            customer.ID,
@@ -421,8 +438,35 @@ func (s *CustomerQueryService) GetCustomerByID(ctx context.Context, id string) (
 	}, nil
 }
 
-// ListCustomers 列出 OneID 客户
-func (s *CustomerQueryService) ListCustomers(ctx context.Context, page, pageSize int, keyword string) ([]*CustomerView, int64) {
+// ListCustomers 列出 OneID 客户。可选 actorUserID 用于 PR-5 业务账号授权 scope 过滤；
+// 未传或为 0 时保持原行为（向后兼容已有调用方）。
+func (s *CustomerQueryService) ListCustomers(ctx context.Context, page, pageSize int, keyword string, actorUserID ...uint) ([]*CustomerView, int64) {
+	var uid uint
+	if len(actorUserID) > 0 {
+		uid = actorUserID[0]
+	}
+	if uid > 0 && s.scopeSvc != nil {
+		scope, err := s.scopeSvc.Resolve(ctx, uid)
+		if err != nil {
+			return []*CustomerView{}, 0
+		}
+		if !scope.AllAccounts {
+			ids, _ := scope.AllowedSourceAccountIDs()
+			type scopedLister interface {
+				ListBySourceScope(ctx context.Context, page, limit int, keyword string, allowedIDs []string, allAccounts bool) ([]*model.Customer, int64, error)
+			}
+			sr, ok := s.custRepo.(scopedLister)
+			if !ok {
+				return []*CustomerView{}, 0
+			}
+			list, total, listErr := sr.ListBySourceScope(ctx, page, pageSize, keyword, ids, false)
+			if listErr != nil {
+				return []*CustomerView{}, 0
+			}
+			return customerModelsToViews(list), total
+		}
+	}
+
 	list, total := ListOneIDCustomers(ctx, s.custRepo, page, pageSize, keyword)
 	out := make([]*CustomerView, 0, len(list))
 	for _, c := range list {
@@ -439,6 +483,28 @@ func (s *CustomerQueryService) ListCustomers(ctx context.Context, page, pageSize
 		})
 	}
 	return out, total
+}
+
+func customerModelsToViews(list []*model.Customer) []*CustomerView {
+	out := make([]*CustomerView, 0, len(list))
+	for _, c := range list {
+		if c == nil {
+			continue
+		}
+		oc := &CustomerView{
+			ID:            c.ID,
+			UnifiedID:     c.UnifiedID,
+			Phone:         c.Phone,
+			Email:         c.Email,
+			WechatOpenID:  c.WechatOpenID,
+			DouyinOpenID:  c.DouyinOpenID,
+			XiaohongshuID: c.XiaohongshuID,
+			CreatedAt:     c.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt:     c.UpdatedAt.Format("2006-01-02 15:04:05"),
+		}
+		out = append(out, oc)
+	}
+	return out
 }
 
 // ListConflicts 列出身份冲突

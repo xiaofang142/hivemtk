@@ -308,6 +308,13 @@
 </template>
 
 <script setup>
+// EC-20 (future, docs/未来任务清单.md §7.1.8 / M20): this page is the "待办中心/审批人裁决" UI
+// for human tasks (including approval.kind). It is NOT the full "操作审批/异常工作台" described
+// by EC-20 (no exception/reconciling/outcome_unknown queue, no commerce operation workbench,
+// no session order/aftersale sidebar, no explicit "人工证明 vs API/平台核验" evidence labels).
+// Permissions are enforced server-side (e.g. approvals decide may require admin); UI copy here
+// is mostly hardcoded Chinese and does not yet cover full i18n/permission-hint guidance per EC-20.
+// Keep changes minimal; do not claim EC-20 UI is implemented.
 import { rtStr as _rtStr, rtNum as _rtNum, rtDur, rtBool as _rtBool } from '@/utils/runtimeConfig'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

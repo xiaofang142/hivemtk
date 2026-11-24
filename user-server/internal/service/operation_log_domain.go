@@ -147,9 +147,10 @@ func (s *OperationLogService) Rollback(ctx context.Context, id uint, operator st
 	if log.OldValue == "" {
 		return nil, fmt.Errorf("该操作无可回滚的旧值快照")
 	}
-	if err := s.logRepo.UpdateNewValue(ctx, id, log.OldValue); err != nil {
-		return nil, err
-	}
+	// FA-AUDITLOG-01：本功能仅做审计快照标记，不执行业务数据补偿。
+	// 原实现在此处 UpdateNewValue(id, log.OldValue) 覆盖原 new_value——既没有恢复
+	// Resource 指向的业务行，又销毁了"原操作新值"的审计证据。改为保留原日志不动，
+	// 只追加一条不可改写的回滚审计记录（诚实快照语义，不宣称业务已回滚）。
 	rollbackLog := &model.OperationLog{
 		UserID:     log.UserID,
 		Username:   operator,
@@ -157,7 +158,7 @@ func (s *OperationLogService) Rollback(ctx context.Context, id uint, operator st
 		Module:     log.Module,
 		Resource:   log.Resource,
 		ResourceID: log.ResourceID,
-		Detail:     fmt.Sprintf("回滚日志 #%d（%s %s）", log.ID, log.Action, log.Resource),
+		Detail:     fmt.Sprintf("审计快照标记回滚 #%d（%s %s）—不含业务数据恢复", log.ID, log.Action, log.Resource),
 		OldValue:   log.NewValue,
 		NewValue:   log.OldValue,
 	}

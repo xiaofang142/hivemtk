@@ -66,6 +66,31 @@ func GlobalNotifier() BusinessNotifier {
 	return v.n
 }
 
+var leadMiningExternalDispatchHook atomic.Value // func(context.Context, *model.Notification)
+
+// RegisterLeadMiningExternalDispatchHook registers best-effort external dispatch
+// for lead-mining discovery notifications. The hook must be non-blocking.
+func RegisterLeadMiningExternalDispatchHook(fn func(context.Context, *model.Notification)) {
+	leadMiningExternalDispatchHook.Store(fn)
+}
+
+func dispatchLeadMiningExternalHook(ctx context.Context, n *model.Notification) {
+	if n == nil {
+		return
+	}
+	v := leadMiningExternalDispatchHook.Load()
+	fn, _ := v.(func(context.Context, *model.Notification))
+	if fn == nil {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Errorf("[business-notify] lead-mining external hook panic: %v", r)
+		}
+	}()
+	fn(ctx, n)
+}
+
 // NotifyBusiness 写一条业务通知：槽缺席或写失败都只出声、不回错 ——
 // 通知是业务动作成功之后的旁路，绝不因为铃铛没响就把已成功的动作读成失败。
 // 返回是否真写了。
@@ -84,6 +109,7 @@ func NotifyBusiness(ctx context.Context, n *model.Notification) bool {
 			n.Type, n.Link, n.Title, err)
 		return false
 	}
+	dispatchLeadMiningExternalHook(ctx, n)
 	return true
 }
 

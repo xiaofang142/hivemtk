@@ -2,14 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/utils"
-	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -148,40 +150,39 @@ func (s *domainPoolService) CheckDomain(ctx context.Context, id int) (bool, erro
 		return false, err
 	}
 
-	url := fmt.Sprintf("http://%s:%d", domainPool.Domain, domainPool.Port)
-
-	resp, err := domainCheckHTTPClient.Get(url)
-	if err != nil {
-		if e := s.domainPoolRepo.UpdateStatus(ctx, id, 2); e != nil {
-			logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", id, e)
-		}
-		if e := s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now()); e != nil {
-			logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", id, e)
-		}
-		return false, nil
+	probe := probeDomainHTTP(ctx, domainCheckHTTPClient, domainPool.Domain, domainPool.Port)
+	status := 2
+	if probe.HTTPOk {
+		status = 1
 	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if e := s.domainPoolRepo.UpdateStatus(ctx, id, 1); e != nil {
-		logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", id, e)
+	writeErr := errors.Join(
+		s.domainPoolRepo.UpdateStatus(ctx, id, status),
+		s.domainPoolRepo.UpdateLastCheck(ctx, id, probe.CheckedAt),
+	)
+	if writeErr != nil {
+		return false, fmt.Errorf("persist domain check: %w", writeErr)
 	}
-	if e := s.domainPoolRepo.UpdateLastCheck(ctx, id, time.Now()); e != nil {
-		logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", id, e)
-	}
-
-	return true, nil
+	return probe.HTTPOk, nil
 }
 
 func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPoolCheckResponse, error) {
-	domainPools, _, err := s.domainPoolRepo.List(ctx, 1, 1000, "", 0)
-	if err != nil {
-		return nil, err
+	var domainPools []*model.DomainPool
+	for page := 1; ; page++ {
+		rows, total, err := s.domainPoolRepo.List(ctx, page, 200, "", 0)
+		if err != nil {
+			return nil, err
+		}
+		domainPools = append(domainPools, rows...)
+		if len(domainPools) >= int(total) || len(rows) == 0 {
+			break
+		}
 	}
 	if len(domainPools) == 0 {
 		return nil, nil
 	}
 
 	results := make([]dto.DomainPoolCheckResponse, len(domainPools))
+	checkErrors := make([]error, len(domainPools))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, domainCheckConcurrency())
 	for i, dp := range domainPools {
@@ -193,30 +194,18 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			url := fmt.Sprintf("http://%s:%d", dp.Domain, dp.Port)
-
+			probe := probeDomainHTTP(ctx, domainCheckHTTPClient, dp.Domain, dp.Port)
 			status := 2
-			var msg string // 三个分支均赋值
-
-			resp, err := domainCheckHTTPClient.Get(url)
-			if err != nil {
-				msg = fmt.Sprintf("连接错误: %s", err.Error())
-			} else {
-				_, _ = io.Copy(io.Discard, resp.Body)
-				_ = resp.Body.Close()
-				if resp.StatusCode < 400 {
-					status = 1
-					msg = "可访问"
-				} else {
-					msg = fmt.Sprintf("HTTP %d", resp.StatusCode)
-				}
+			msg := probe.HTTPErrorMsg
+			if probe.HTTPOk {
+				status = 1
+				msg = "可访问"
 			}
-
-			if e := s.domainPoolRepo.UpdateStatus(ctx, dp.ID, status); e != nil {
-				logger.Warnf("[DomainPool] 状态落库失败 id=%d: %v", dp.ID, e)
-			}
-			if e := s.domainPoolRepo.UpdateLastCheck(ctx, dp.ID, time.Now()); e != nil {
-				logger.Warnf("[DomainPool] 检测时间落库失败 id=%d: %v", dp.ID, e)
+			if writeErr := errors.Join(
+				s.domainPoolRepo.UpdateStatus(ctx, dp.ID, status),
+				s.domainPoolRepo.UpdateLastCheck(ctx, dp.ID, probe.CheckedAt),
+			); writeErr != nil {
+				checkErrors[i] = fmt.Errorf("persist domain check id=%d: %w", dp.ID, writeErr)
 			}
 
 			results[i] = dto.DomainPoolCheckResponse{
@@ -227,7 +216,7 @@ func (s *domainPoolService) CheckAllDomains(ctx context.Context) ([]dto.DomainPo
 		})
 	}
 	wg.Wait()
-	return results, nil
+	return results, errors.Join(checkErrors...)
 }
 
 // defaultDomainCheckConcurrency 域名批量检测的默认并发，也是参数中心
@@ -258,6 +247,43 @@ func domainCheckConcurrency() int {
 // domainCheckHTTPClient 域名健康检查共享 HTTP 客户端：
 // 复用连接池避免每次检查新建 client（高频检查下耗尽临时端口）。
 var domainCheckHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
+type domainHTTPProbeResult struct {
+	HTTPOk       bool
+	HTTPStatus   int
+	HTTPLatency  time.Duration
+	CheckedAt    time.Time
+	HTTPErrorMsg string
+}
+
+func probeDomainHTTP(ctx context.Context, client *http.Client, domain string, port int) domainHTTPProbeResult {
+	if port <= 0 {
+		port = 80
+	}
+	result := domainHTTPProbeResult{CheckedAt: time.Now()}
+	start := time.Now()
+	address := net.JoinHostPort(domain, strconv.Itoa(port))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+address+"/", nil)
+	if err != nil {
+		result.HTTPErrorMsg = err.Error()
+		return result
+	}
+	req.Header.Set("User-Agent", "mtk-domain-health/1.0")
+	resp, err := client.Do(req)
+	result.HTTPLatency = time.Since(start)
+	if err != nil {
+		result.HTTPErrorMsg = "连接错误: " + err.Error()
+		return result
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.CopyN(io.Discard, resp.Body, 4096)
+	result.HTTPStatus = resp.StatusCode
+	result.HTTPOk = resp.StatusCode >= http.StatusOK && resp.StatusCode < 400
+	if !result.HTTPOk {
+		result.HTTPErrorMsg = "HTTP " + strconv.Itoa(resp.StatusCode)
+	}
+	return result
+}
 
 func (s *domainPoolService) AddBlacklist(ctx context.Context, domain, platform, reason, source string, ttlHours int) error {
 	var expiresAt *time.Time

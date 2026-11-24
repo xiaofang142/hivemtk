@@ -3,10 +3,19 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"hivemtk-user/internal/ops/model"
 	"hivemtk-user/internal/ops/repository"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"math"
+
+	"gorm.io/gorm"
+)
+
+// FA-AB-01：启动后冻结实验版本与分桶身份；已有历史事件/结果时编辑会破坏可追溯性。
+var (
+	ErrExperimentNotEditable    = errors.New("实验已启动，版本与分桶身份已冻结，不可编辑变体")
+	ErrExperimentHistoricalData = errors.New("实验已有转化事件或结果，编辑会破坏历史事件追溯，需先走数据迁移")
 )
 
 // ABExperimentService A/B 测试服务
@@ -49,7 +58,8 @@ type VariantConfig struct {
 	Config    map[string]any `json:"config"`
 }
 
-// CreateExperiment 创建实验
+// CreateExperiment 创建实验（FA-AB-01：主记录与变体在同一事务原子提交，
+// 中途失败不留半套配置）。
 func (s *ABExperimentService) CreateExperiment(ctx context.Context, req *CreateExperimentRequest) (*model.ABExperiment, error) {
 	experiment := &model.ABExperiment{
 		Name:         req.Name,
@@ -61,27 +71,33 @@ func (s *ABExperimentService) CreateExperiment(ctx context.Context, req *CreateE
 		CreatedBy:    req.CreatedBy,
 	}
 
-	if err := s.experimentRepo.Create(ctx, experiment); err != nil {
+	err := s.experimentRepo.WithTransaction(ctx, func(tx *gorm.DB) error {
+		expRepo := repository.NewABExperimentRepositoryWithDB(tx)
+		varRepo := repository.NewABVariantRepositoryWithDB(tx)
+		if err := expRepo.Create(ctx, experiment); err != nil {
+			return err
+		}
+		for i, v := range req.Variants {
+			configJSON, _ := json.Marshal(v.Config)
+			variant := &model.ABVariant{
+				ExperimentID: experiment.ID,
+				Name:         v.Name,
+				IsControl:    v.IsControl,
+				Weight:       v.Weight,
+				Config:       string(configJSON),
+			}
+			if i == 0 {
+				variant.IsControl = true
+			}
+			if err := varRepo.Create(ctx, variant); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	for i, v := range req.Variants {
-		configJSON, _ := json.Marshal(v.Config)
-		variant := &model.ABVariant{
-			ExperimentID: experiment.ID,
-			Name:         v.Name,
-			IsControl:    v.IsControl,
-			Weight:       v.Weight,
-			Config:       string(configJSON),
-		}
-		if i == 0 {
-			variant.IsControl = true
-		}
-		if err := s.variantRepo.Create(ctx, variant); err != nil {
-			return nil, err
-		}
-	}
-
 	return experiment, nil
 }
 
@@ -100,44 +116,81 @@ func (s *ABExperimentService) GetExperimentList(ctx context.Context, page, pageS
 	return s.experimentRepo.GetAll(ctx, page, pageSize)
 }
 
-// UpdateExperiment 更新实验
+// UpdateExperiment 更新实验（FA-AB-01）。
+// 仅草稿可编辑；事务内重读状态防止并发启动后仍被编辑；已有转化事件/结果时
+// 拒绝重建变体以保证历史事件可追溯；主记录更新与变体重建在同一事务原子提交。
 func (s *ABExperimentService) UpdateExperiment(ctx context.Context, id uint, req *CreateExperimentRequest) (*model.ABExperiment, error) {
-	experiment, err := s.experimentRepo.GetByID(ctx, id)
+	first, err := s.experimentRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	if first.Status != "draft" {
+		return nil, ErrExperimentNotEditable
+	}
 
-	experiment.Name = req.Name
-	experiment.Description = req.Description
-	experiment.SourceType = req.SourceType
-	experiment.SourceID = req.SourceID
-	experiment.TrafficSplit = req.TrafficSplit
+	var updated *model.ABExperiment
+	err = s.experimentRepo.WithTransaction(ctx, func(tx *gorm.DB) error {
+		expRepo := repository.NewABExperimentRepositoryWithDB(tx)
+		varRepo := repository.NewABVariantRepositoryWithDB(tx)
 
-	if err := s.experimentRepo.Update(ctx, experiment); err != nil {
+		// 事务内重读：并发 StartExperiment 后状态已非 draft 时必须放弃编辑。
+		cur, err := expRepo.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if cur.Status != "draft" {
+			return ErrExperimentNotEditable
+		}
+
+		// 已有事件/结果说明分桶身份已进入历史，删掉重建会让旧 ID 悬空。
+		var events, results int64
+		if err := tx.WithContext(ctx).Model(&model.ABConversionEvent{}).
+			Where("experiment_id = ?", id).Count(&events).Error; err != nil {
+			return err
+		}
+		if err := tx.WithContext(ctx).Model(&model.ABExperimentResult{}).
+			Where("experiment_id = ?", id).Count(&results).Error; err != nil {
+			return err
+		}
+		if events > 0 || results > 0 {
+			return ErrExperimentHistoricalData
+		}
+
+		// 草稿可编辑字段：基础信息 + 流量比例 + 变体配置。
+		cur.Name = req.Name
+		cur.Description = req.Description
+		cur.SourceType = req.SourceType
+		cur.SourceID = req.SourceID
+		cur.TrafficSplit = req.TrafficSplit
+		if err := expRepo.Update(ctx, cur); err != nil {
+			return err
+		}
+		if err := varRepo.DeleteByExperiment(ctx, id); err != nil {
+			return err
+		}
+		for i, v := range req.Variants {
+			configJSON, _ := json.Marshal(v.Config)
+			variant := &model.ABVariant{
+				ExperimentID: id,
+				Name:         v.Name,
+				IsControl:    v.IsControl,
+				Weight:       v.Weight,
+				Config:       string(configJSON),
+			}
+			if i == 0 {
+				variant.IsControl = true
+			}
+			if err := varRepo.Create(ctx, variant); err != nil {
+				return err
+			}
+		}
+		updated = cur
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	if err := s.variantRepo.DeleteByExperiment(ctx, id); err != nil {
-		return nil, err
-	}
-	for i, v := range req.Variants {
-		configJSON, _ := json.Marshal(v.Config)
-		variant := &model.ABVariant{
-			ExperimentID: id,
-			Name:         v.Name,
-			IsControl:    v.IsControl,
-			Weight:       v.Weight,
-			Config:       string(configJSON),
-		}
-		if i == 0 {
-			variant.IsControl = true
-		}
-		if err := s.variantRepo.Create(ctx, variant); err != nil {
-			return nil, err
-		}
-	}
-
-	return experiment, nil
+	return updated, nil
 }
 
 // DeleteExperiment 删除实验

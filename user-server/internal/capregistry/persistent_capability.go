@@ -29,10 +29,11 @@ type CapabilityProofVerifier interface {
 }
 
 type CapabilityProofQuery struct {
-	Key      CellKey
-	Source   CapabilitySource
-	Evidence model.CapabilityEvidence
-	At       time.Time
+	Key                CellKey
+	Source             CapabilitySource
+	Evidence           model.CapabilityEvidence
+	At                 time.Time
+	CredentialContract string
 }
 
 type CapabilityProofIdentity struct {
@@ -80,9 +81,28 @@ func (r PersistentCapabilityResolver) Resolve(ctx context.Context, key CellKey, 
 	return r.resolve(ctx, key, CapabilitySource{}, connection, now)
 }
 
-// Authorize matches a source mapping before considering the requested action. Shop and region
-// are optional assertions for an endpoint that already declares its target, never proof of it.
+// CapabilityExecutionIdentity records the connection revision actually used by a transport.
+type CapabilityExecutionIdentity struct {
+	ConnectionID                                         uint
+	ConnectionVersion, CredentialVersion, ConsentVersion int64
+	CredentialContract                                   string
+}
+
+// AuthorizeExecution compares the transport's actual credential revision with this same decision's connection.
+func (r PersistentCapabilityResolver) AuthorizeExecution(ctx context.Context, source CapabilitySource, key CellKey, execution CapabilityExecutionIdentity, now time.Time) error {
+	id, ok := tenant.FromContext(ctx)
+	if !ok || !validCellKey(key) || key.TenantID != id || key.Product != source.Product {
+		return submissionDenial("tenant_scope_invalid")
+	}
+	return r.authorize(ctx, source, key.Action, key.Carrier, key.ShopID, key.Region, &execution, now)
+}
+
+// Authorize matches a source mapping; shop and region are optional assertions, never ownership proof.
 func (r PersistentCapabilityResolver) Authorize(ctx context.Context, source CapabilitySource, action, carrier, shop, region string, now time.Time) error {
+	return r.authorize(ctx, source, action, carrier, shop, region, nil, now)
+}
+
+func (r PersistentCapabilityResolver) authorize(ctx context.Context, source CapabilitySource, action, carrier, shop, region string, execution *CapabilityExecutionIdentity, now time.Time) error {
 	id, ok := tenant.FromContext(ctx)
 	if !ok || tenant.IsSystemScope(ctx) {
 		return submissionDenial("tenant_scope_invalid")
@@ -124,6 +144,12 @@ func (r PersistentCapabilityResolver) Authorize(ctx context.Context, source Capa
 	}
 	if current.Revoked {
 		return submissionDenial("permission_revoked")
+	}
+	if execution != nil && (*execution != (CapabilityExecutionIdentity{
+		ConnectionID: connection.ID, ConnectionVersion: connection.Version, CredentialVersion: connection.CredentialVersion,
+		ConsentVersion: connection.ConsentVersion, CredentialContract: connection.CredentialContract,
+	}) || execution.ConnectionID == 0 || execution.CredentialContract == "") {
+		return submissionDenial("execution_target_unbound")
 	}
 	result := r.resolve(ctx, key, source, connection, now)
 	if !result.ProductionAllowed {
@@ -184,7 +210,7 @@ func (r PersistentCapabilityResolver) resolve(ctx context.Context, key CellKey, 
 		evidence.Evidence = append(evidence.Evidence, EvidenceRecord{Kind: EvidenceImplementation})
 	}
 	if r.Verifier != nil && !row.Simulated && row.Provenance != "" && row.RuntimeProofRef != "" && now.Before(*evidence.ExpiresAt) {
-		proof := r.Verifier.VerifyCapabilityProof(ctx, CapabilityProofQuery{Key: key, Source: source, Evidence: row, At: now})
+		proof := r.Verifier.VerifyCapabilityProof(ctx, CapabilityProofQuery{Key: key, Source: source, Evidence: row, At: now, CredentialContract: connection.CredentialContract})
 		expected := CapabilityProofIdentity{Key: key, Source: source, Provenance: row.Provenance, ProofRef: row.RuntimeProofRef,
 			CredentialContract: connection.CredentialContract, ConnectionID: row.ConnectionID, ConnectionVersion: row.ConnectionVersion,
 			CredentialVersion: row.CredentialVersion, ConsentVersion: row.ConsentVersion}

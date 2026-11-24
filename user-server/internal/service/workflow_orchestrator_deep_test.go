@@ -300,7 +300,7 @@ func TestWO_ListAll_PaginationBoundary(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		list, total, err := svc.ListAll(ctx, "", "", c.page, c.pageSize)
+		list, total, err := svc.ListAll(ctx, "", "", "", c.page, c.pageSize)
 		if err != nil {
 			t.Errorf("case=%s ListAll 失败: %v", c.name, err)
 			continue

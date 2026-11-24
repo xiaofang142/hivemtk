@@ -76,6 +76,17 @@ func (r *ABExperimentRepository) Update(ctx context.Context, experiment *model.A
 	return _db.SaveWholeRow(r.db.WithContext(ctx), experiment)
 }
 
+// WithTransaction 在单个事务内执行 fn，并把事务句柄交给回调，供服务层把
+// 实验主记录与变体的写入纳入同一原子提交（FA-AB-01：创建/更新不得留半套配置）。
+// 回调内应使用 NewABExperimentRepositoryWithDB / NewABVariantRepositoryWithDB
+// 基于传入的 tx 构造仓储，确保读改写都在同一事务。
+func (r *ABExperimentRepository) WithTransaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	if r == nil || r.db == nil {
+		return errors.New("ab experiment: 数据库未装配，无法开启事务")
+	}
+	return r.db.WithContext(ctx).Transaction(fn)
+}
+
 // Delete 删除实验
 func (r *ABExperimentRepository) Delete(ctx context.Context, id uint) error {
 	res := r.db.WithContext(ctx).Delete(&model.ABExperiment{}, id)

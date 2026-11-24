@@ -561,17 +561,7 @@ func uintToStr(n uint) string {
 	return fmtUint(n)
 }
 
-func fmtUint(n uint) string {
-	if n == 0 {
-		return "0"
-	}
-	var digits []byte
-	for n > 0 {
-		digits = append([]byte{byte('0' + n%10)}, digits...)
-		n /= 10
-	}
-	return string(digits)
-}
+
 
 func min(a, b int) int {
 	if a < b {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/portcontract"
@@ -23,8 +24,19 @@ func (s *InboxIngressService) bridgeCapabilityAuthorizer() BridgeCapabilityAutho
 	return nil
 }
 
+// defaultCapabilityResolver builds the production-ish persistent resolver.
+// Env/switch behavior (local/simulated only, never enable in production):
+//   - CAPABILITY_PROOF_FAKE=1: attach capregistry.NewFakeCapabilityProofVerifier (dev/test). Also enabled when GIN_MODE=="debug".
+//   - CAPABILITY_PROOF_FAKE_PROVENANCE: allowed provenance string for the fake verifier (defaults to "fake-verifier" if empty).
+//   - When unset/false in non-debug mode, Verifier is nil => no runtime proof verification => cells typically remain pending_live_validation per capregistry rules.
 func defaultCapabilityResolver() capregistry.PersistentCapabilityResolver {
-	return capregistry.PersistentCapabilityResolver{Reader: repository.DefaultCapabilityEvidenceRepository()}
+	resolver := capregistry.PersistentCapabilityResolver{Reader: repository.DefaultCapabilityEvidenceRepository()}
+	// Opt-in fake verifier for dev/test only.
+	if os.Getenv("CAPABILITY_PROOF_FAKE") == "1" || os.Getenv("GIN_MODE") == "debug" {
+		prov := os.Getenv("CAPABILITY_PROOF_FAKE_PROVENANCE")
+		resolver.Verifier = capregistry.NewFakeCapabilityProofVerifier(prov)
+	}
+	return resolver
 }
 
 func authorizePersistentBridge(ctx context.Context, resolver capregistry.PersistentCapabilityResolver, channel, accountID, msgType string) error {

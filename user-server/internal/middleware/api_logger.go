@@ -78,7 +78,8 @@ func APIInteractionLogger() gin.HandlerFunc {
 			}
 		}
 
-		metadataOnly := merchantConnectionMetadataOnly(path)
+		// SageX 通知上报的 body 含个人聊天正文：只记元数据（method/path/status/latency），不落 body。
+		metadataOnly := merchantConnectionMetadataOnly(path) || strings.HasPrefix(path, "/api/integrations/sagex/upload")
 		var reqCap *cappedBufferWriter
 		if !metadataOnly && c.Request.Body != nil {
 			reqCap = &cappedBufferWriter{cap: apiLogReqBodyCap}

@@ -330,5 +330,5 @@ func (c *OperationLogController) RollbackLog(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "回滚失败: "+err.Error())
 		return
 	}
-	response.Success(ctx, rollbackLog, "已回滚")
+	response.Success(ctx, rollbackLog, "审计快照已标记回滚（不含业务数据恢复）")
 }

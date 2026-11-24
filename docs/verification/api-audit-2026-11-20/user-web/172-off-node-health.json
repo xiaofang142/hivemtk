@@ -1,1 +1,0 @@
-{"code":0,"message":"success","data":{"nodes":[{"channel":"","node":"agent_turn","node_label":"Agent 一轮推理","total":1,"abnormal":1,"abnormal_rate":1,"avg_duration_ms":0,"p95_duration_ms":0,"measured_count":1,"measurement_coverage":1,"last_abnormal_at":"2026-11-21T18:25:25.898723+08:00"}],"window":"24h0m0s"}}

@@ -72,6 +72,11 @@ func NewContactConsentService(repo *repository.ContactConsentRepository) *Contac
 
 // ReachSendPurpose 从请求归一目的：metadata.purpose 显式给出（support/transactional）则用之，
 // 默认 marketing——本管线是主动触达管线，目的语义由调用方显式放宽，不靠猜测收紧。
+//
+// EC-23-A 约束（统一发送闸门，不赋予营销权）：本函数只做目的归一，**不**把
+// 未声明目的的请求自动降级为 support/transactional 以绕过营销同意；客服/事务发送
+// 必须由调用方显式写入 metadata.purpose=support|transactional。G1 阶段 marketing
+// 仍保持关闭，B 启用前任何营销外发都必须经 EC-22 许可与 EC-23-B 出口治理。
 func ReachSendPurpose(req *ReachSendRequest) string {
 	if req == nil {
 		return model.ConsentPurposeMarketing
@@ -86,6 +91,13 @@ func ReachSendPurpose(req *ReachSendRequest) string {
 }
 
 // Record 追加一条同意/撤回事实。
+//
+// EC-25：表单/Widget/活动线索接入时，服务咨询与可选营销同意必须分开；
+// 未明确勾选营销时不得调用本函数写入 marketing grant，公开采集线索默认无营销许可。
+//
+// EC-28 交叉引用（M28 旅程/实验编排）：实时撤回事实必须覆盖冻结快照——营销实验/旅程
+//   分支执行前须重查本同意事实；控制组/holdout 不得因 consent 缺失被静默当作已授权；
+//   撤回后未派发任务取消，已派发任务按 EC-31 回执/退订链路处理。
 func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInput) error {
 	if s.repo == nil {
 		return errors.New("contact consent service not initialized")
@@ -121,7 +133,8 @@ func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInpu
 		Source:           source,
 		Actor:            in.Actor,
 		EvidenceRef:      in.EvidenceRef,
-		OccurredAt:       occurredAt,
+		Brand:            strings.TrimSpace(in.Brand), LegalBasis: strings.TrimSpace(in.LegalBasis), SourceRef: strings.TrimSpace(in.SourceRef), ExpiresAt: in.ExpiresAt,
+		OccurredAt: occurredAt,
 	}
 	return s.repo.AppendEvent(ctx, ev)
 }
@@ -136,6 +149,10 @@ type ConsentRecordInput struct {
 	Source           string
 	Actor            string
 	EvidenceRef      string
+	Brand            string
+	LegalBasis       string
+	SourceRef        string
+	ExpiresAt        *time.Time
 	OccurredAt       time.Time
 }
 
@@ -164,6 +181,11 @@ func (s *ContactConsentService) SetPreference(ctx context.Context, oneID, purpos
 
 // CheckSendConsent 实现 ConsentChecker：事件账 + 偏好快照的当前状态。
 // 查询故障返回独立 unavailable 状态，所有模式拒发，恢复后重新读取事实。
+//
+// EC-22：发送前实时裁决。通过 LinkedOneIDs 遍历合并身份连通组，任一原身份的
+// revoke/pause 都会压过另一身份的 grant；合并只追加身份关联，从不复制/升级同意，
+// 因此合并后的身份集合按"最严格"判定，不会扩大许可。purpose/channel 仍按调用方
+// 指定的合法必要服务或营销目的独立评估，营销撤回不会删除事务通知事实。
 func (s *ContactConsentService) CheckSendConsent(ctx context.Context, oneID, purpose, channel string) ConsentDecision {
 	if s == nil || s.repo == nil {
 		return ConsentDecision{Status: ConsentStatusUnavailable, Reason: ConsentReasonEventUnavailable}

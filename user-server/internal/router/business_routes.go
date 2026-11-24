@@ -131,6 +131,8 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 	auth.GET("/followups/overdue", followupCtrl.GetOverdue)
 	auth.POST("/followups/:id/complete", followupCtrl.Complete)
 	auth.POST("/followups/:id/cancel", followupCtrl.Cancel)
+	// PR-4: 完整跟进记录（FollowUpReminder 保留提醒语义）
+	controller.NewFollowupRecordController().RegisterRoutes(auth)
 	wvCtrl := controller.NewWebVitalsController()
 	auth.POST("/monitor/web-vitals", wvCtrl.Report)
 	// 任务三：商户电脑设备信标（SaaS 形态下心跳 client_machine 的数据源，登录态口）
@@ -151,6 +153,7 @@ func setupMarketingFlowRoutes(auth *gin.RouterGroup) {
 		admin.POST("/:id/pause", marketingFlowCtrl.PauseFlow)
 		admin.POST("/:id/stop", marketingFlowCtrl.StopFlow)
 		admin.POST("/:id/trigger", marketingFlowCtrl.Trigger)
+		admin.POST("/:id/resume-due", marketingFlowCtrl.ResumeDue)
 		admin.POST("/:id/sync-ab-results", mfSyncCtrl.SyncABResults)
 	}
 }

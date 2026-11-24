@@ -11,6 +11,8 @@ import (
 
 	"hivemtk-user/internal/controller"
 	"hivemtk-user/internal/pkg/cron"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
@@ -29,11 +31,23 @@ func SetupReportRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	auth.GET("/reports/llm/errors", reportCtrl.GetErrors)
 
 	// 聚合任务（TaskManager 自带 SkipIfStillRunning + Recover；advisory lock 防多实例）
+	// FA-REPORT-01：后台定时扫描须以 system scope 运行（覆盖所有租户，不能在 on 模式
+	// 下被租户隔离挡住），且失败必须告警——不再静默丢弃退出码。
 	mgr := cron.GetTaskManager()
-	_, _ = mgr.AddTask("0 */5 * * * *", func() {
-		_ = reportSvc.AggregateRecent(context.Background())
-	})
-	_, _ = mgr.AddTask("0 10 0 * * *", func() {
-		_ = reportSvc.RunDailyRecalc(context.Background())
-	})
+	scanCtx := tenant.WithSystemScope(context.Background())
+	runAgg := func(name string, fn func(context.Context) error) {
+		if err := fn(scanCtx); err != nil {
+			logger.Errorf("[Report] %s failed: %v", name, err)
+		}
+	}
+	if _, err := mgr.AddTask("0 */5 * * * *", func() {
+		runAgg("AggregateRecent", reportSvc.AggregateRecent)
+	}); err != nil {
+		logger.Errorf("[Report] register AggregateRecent task failed: %v", err)
+	}
+	if _, err := mgr.AddTask("0 10 0 * * *", func() {
+		runAgg("RunDailyRecalc", reportSvc.RunDailyRecalc)
+	}); err != nil {
+		logger.Errorf("[Report] register RunDailyRecalc task failed: %v", err)
+	}
 }

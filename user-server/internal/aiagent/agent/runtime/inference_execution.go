@@ -59,6 +59,9 @@ type ToolExecutionResult struct {
 }
 
 // ReplyGenerator 接收实际工具结果；Plan.ReplyHint 只是规划上下文，不是最终正文。
+// 约束（EC-08）：禁止仅凭 Plan.ReplyHint 生成“已完成/已退款/已处理”等完成话术；
+// 完成话术必须建立在实际工具执行证据（ToolExecutionResult）与下游业务回执之上，
+// 无执行证据时不得产出完成性结论（应澄清/转人工/报未执行）。
 type ReplyGenerator interface {
 	GenerateReply(context.Context, CustomerMessagePayload, *AgentContext, *ActionPlan, []ToolExecutionResult) (string, error)
 }
