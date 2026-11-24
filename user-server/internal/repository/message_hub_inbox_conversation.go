@@ -127,6 +127,26 @@ func (r *InboxConversationRepository) SetDB(ctx context.Context, db *gorm.DB) {
 	}
 }
 
+// FindLatestByPlatformAndPeer 按租户+平台+会话/客户键查找最新会话（渠道分发粘性选号用）。
+// 只做数据过滤与 ORDER BY id DESC，不含账号状态等业务判断（留给 service）。
+func (r *InboxConversationRepository) FindLatestByPlatformAndPeer(ctx context.Context, tenantID uint, platform string, byConversationID, peer string) (*model.InboxConversation, error) {
+	if r == nil || r.db == nil {
+		return nil, nil
+	}
+	q := r.db.WithContext(ctx).Model(&model.InboxConversation{}).
+		Where("tenant_id = ? AND platform = ?", tenantID, platform)
+	if byConversationID != "" {
+		q = q.Where("conversation_id = ?", byConversationID)
+	} else {
+		q = q.Where("customer_id = ?", peer)
+	}
+	var conv model.InboxConversation
+	if err := q.Order("id DESC").First(&conv).Error; err != nil {
+		return nil, err
+	}
+	return &conv, nil
+}
+
 // FindByPlatformAccountCustomer 按平台/账号/客户查找会话
 func (r *InboxConversationRepository) FindByPlatformAccountCustomer(ctx context.Context, platform, accountID, customerID string) (*model.InboxConversation, error) {
 	var conv model.InboxConversation

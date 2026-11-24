@@ -24,6 +24,8 @@ type ChannelRepository interface {
 	Create(ctx context.Context, ch *model.Channel) error
 	GetByID(ctx context.Context, tenantID, id uint) (*model.Channel, error)
 	GetByCode(ctx context.Context, code string) (*model.Channel, error)
+	// GetByTenantAndCode 按租户+渠道 code 精确查找（渠道分发选号用；与跨租户的 GetByCode 区分）。
+	GetByTenantAndCode(ctx context.Context, tenantID uint, code string) (*model.Channel, error)
 	List(ctx context.Context, opts ChannelListOptions) ([]model.Channel, error)
 	Update(ctx context.Context, tenantID, id uint, updates map[string]any) error
 	Delete(ctx context.Context, tenantID, id uint) error
@@ -95,6 +97,24 @@ func (r *channelRepo) GetByCode(ctx context.Context, code string) (*model.Channe
 		return nil, err
 	}
 	// 版本类型控制：开源版下国内渠道视为不存在（fail-closed），避免旁路。
+	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return nil, nil
+	}
+	return &ch, nil
+}
+
+func (r *channelRepo) GetByTenantAndCode(ctx context.Context, tenantID uint, code string) (*model.Channel, error) {
+	if !r.Available() {
+		return nil, ErrChannelStoreUnavailable
+	}
+	var ch model.Channel
+	err := r.db.WithContext(ctx).First(&ch, "tenant_id = ? AND code = ?", tenantID, code).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 		return nil, nil
 	}

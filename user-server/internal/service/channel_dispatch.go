@@ -6,7 +6,6 @@ import (
 	"hash/fnv"
 	"sync/atomic"
 
-	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 
@@ -15,23 +14,29 @@ import (
 
 // ChannelDispatchService 账号自动均衡收发（路由2）。
 // 策略：会话粘性优先（已有会话绑定账号）-> 启用账号 round-robin。
+// 五层纪律：数据访问全部经 repository，本层不持有 *gorm.DB（db 形参仅用于构造仓储）。
 type ChannelDispatchService struct {
-	db      *gorm.DB
-	accRepo repository.ChannelAccountRepository
-	rr      atomic.Uint64
+	channelRepo repository.ChannelRepository
+	convRepo    *repository.InboxConversationRepository
+	accRepo     repository.ChannelAccountRepository
+	rr          atomic.Uint64
 }
 
 // NewChannelDispatchService 构造。
 func NewChannelDispatchService(db *gorm.DB) *ChannelDispatchService {
-	return &ChannelDispatchService{db: db, accRepo: repository.NewChannelAccountRepositoryWithDB(db)}
+	return &ChannelDispatchService{
+		channelRepo: repository.NewChannelRepositoryWithDB(db),
+		convRepo:    repository.NewInboxConversationRepositoryWithDB(db),
+		accRepo:     repository.NewChannelAccountRepositoryWithDB(db),
+	}
 }
 
 type DispatchPickInput struct {
-	TenantID       uint
-	Channel        string // platform code, e.g. wechat
-	ChannelID      uint
-	ConversationID string
-	CustomerID     string
+	TenantID           uint
+	Channel            string // platform code, e.g. wechat
+	ChannelID          uint
+	ConversationID     string
+	CustomerID         string
 	PreferredAccountID uint
 }
 
@@ -53,8 +58,7 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 		return nil, fmt.Errorf("tenant required")
 	}
 	if in.ChannelID == 0 && in.Channel != "" {
-		var ch model.Channel
-		if err := s.db.WithContext(ctx).Where("tenant_id = ? AND code = ?", in.TenantID, in.Channel).First(&ch).Error; err == nil {
+		if ch, err := s.channelRepo.GetByTenantAndCode(ctx, in.TenantID, in.Channel); err == nil && ch != nil {
 			in.ChannelID = ch.ID
 		}
 	}
@@ -64,14 +68,11 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 
 	// 1) 会话粘性：已有会话绑定账号
 	if in.ConversationID != "" || in.CustomerID != "" {
-		q := s.db.WithContext(ctx).Model(&model.InboxConversation{}).Where("tenant_id = ? AND platform = ?", in.TenantID, in.Channel)
+		peer := in.CustomerID
 		if in.ConversationID != "" {
-			q = q.Where("conversation_id = ?", in.ConversationID)
-		} else {
-			q = q.Where("customer_id = ?", in.CustomerID)
+			peer = in.ConversationID
 		}
-		var conv model.InboxConversation
-		if err := q.Order("id DESC").First(&conv).Error; err == nil && conv.AccountID != "" {
+		if conv, err := s.convRepo.FindLatestByPlatformAndPeer(ctx, in.TenantID, in.Channel, in.ConversationID, peer); err == nil && conv != nil && conv.AccountID != "" {
 			// account_id in inbox conversation is string
 			var aid uint
 			_, _ = fmt.Sscanf(conv.AccountID, "%d", &aid)
@@ -92,7 +93,7 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 
 	// 3) round-robin among active accounts
 	status := 1
-	accs, err := s.accRepo.List(ctx, repository.ChannelAccountListOptions{TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status, Limit: 500})
+	accs, err := listChannelAccounts(ctx, s.accRepo, repository.ChannelAccountListOptions{TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status, Limit: 500})
 	if err != nil {
 		return nil, err
 	}
