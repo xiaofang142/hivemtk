@@ -54,6 +54,24 @@ type WebhookSubscription struct {
 
 func (WebhookSubscription) TableName() string { return "webhook_subscriptions" }
 
+type WebhookDelivery struct {
+	TenantID       uint       `gorm:"not null;default:1;index:idx_whd_tenant_status,priority:1" json:"tenant_id"`
+	ID             uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	SubscriptionID uint       `gorm:"index;not null" json:"subscription_id"`
+	Event          string     `gorm:"type:varchar(80);not null;index" json:"event"`
+	Payload        string     `gorm:"type:text;not null" json:"payload"`
+	Status         string     `gorm:"type:varchar(20);not null;default:'pending';index:idx_whd_tenant_status,priority:2" json:"status"`
+	Attempts       int        `gorm:"not null;default:0" json:"attempts"`
+	LastError      string     `gorm:"type:text" json:"last_error,omitempty"`
+	ResponseCode   int        `gorm:"not null;default:0" json:"response_code"`
+	NextRetryAt    *time.Time `gorm:"index" json:"next_retry_at,omitempty"`
+	DeliveredAt    *time.Time `json:"delivered_at,omitempty"`
+	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+func (WebhookDelivery) TableName() string { return "webhook_deliveries" }
+
 type SavedView struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 

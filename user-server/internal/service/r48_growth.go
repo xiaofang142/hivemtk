@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/timeutil"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -109,8 +110,10 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 	backoffs := []time.Duration{0, 2 * time.Second, 5 * time.Second}
 	var lastErr error
 	var lastStatus int
+	attempts := 0
 	for i, wait := range backoffs {
 		if wait > 0 { time.Sleep(wait) }
+		attempts = i + 1
 		reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
 		if err != nil { cancel(); lastErr = err; continue }
@@ -123,22 +126,48 @@ func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body [
 		cancel()
 		if err != nil {
 			lastErr = err
-			slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "attempt", i+1, "err", err)
+			slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "attempt", attempts, "err", err)
 			continue
 		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
 		_ = resp.Body.Close()
 		lastStatus = resp.StatusCode
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			recordWebhookDelivery(sub, event, body, "success", attempts, lastStatus, nil)
 			return
 		}
 		lastErr = fmt.Errorf("status %d", resp.StatusCode)
-		slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "event", event, "attempt", i+1, "status", resp.StatusCode)
+		slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "event", event, "attempt", attempts, "status", resp.StatusCode)
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
 			break
 		}
 	}
 	slog.Error("[WebhookOut] 死信", "url", sub.URL, "event", event, "status", lastStatus, "err", lastErr)
+	recordWebhookDelivery(sub, event, body, "dead_letter", attempts, lastStatus, lastErr)
+}
+
+func recordWebhookDelivery(sub model.WebhookSubscription, event string, body []byte, status string, attempts, responseCode int, err error) {
+	db := dbstate.Get()
+	if db == nil {
+		return
+	}
+	rec := &model.WebhookDelivery{
+		TenantID:       sub.TenantID,
+		SubscriptionID: sub.ID,
+		Event:          event,
+		Payload:        string(body),
+		Status:         status,
+		Attempts:       attempts,
+		ResponseCode:   responseCode,
+	}
+	if err != nil {
+		rec.LastError = err.Error()
+	}
+	if status == "success" {
+		now := time.Now()
+		rec.DeliveredAt = &now
+	}
+	_ = db.Create(rec).Error
 }
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）

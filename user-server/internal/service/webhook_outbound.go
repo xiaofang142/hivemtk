@@ -11,6 +11,7 @@ import (
 
 	"regexp"
 	"sort"
+	"strconv"
 
 	"strings"
 
@@ -597,6 +598,36 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 	}
 }
 
+func (s *WebhookService) autoPickOutboundAccount(ctx context.Context, channel WebhookChannel, p *ParsedPayload, hubMsg *model.MessageHub) string {
+	if !bridgeOutboxCapable(channel) {
+		return ""
+	}
+	tenantID, _ := tenant.FromContext(ctx)
+	conversationID := ""
+	if hubMsg != nil {
+		if hubMsg.TenantID != 0 {
+			tenantID = hubMsg.TenantID
+		}
+		conversationID = hubMsg.ConversationID
+	}
+	if p != nil && conversationID == "" {
+		conversationID = p.ChatID
+	}
+	if tenantID == 0 || strings.TrimSpace(string(channel)) == "" {
+		return ""
+	}
+	pick, err := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{
+		TenantID:       tenantID,
+		Channel:        string(channel),
+		ConversationID: conversationID,
+	})
+	if err != nil || pick == nil || pick.AccountID == 0 {
+		return ""
+	}
+	logger.Ctx(ctx).Debug().Str("channel", string(channel)).Uint("tenant_id", tenantID).Uint("account_id", pick.AccountID).Str("reason", pick.Reason).Msg("auto-picked outbound account")
+	return strconv.FormatUint(uint64(pick.AccountID), 10)
+}
+
 // abandonReplay 把重放行收口为终态 failed，并给这条客户消息留最后一次补触发机会：
 // 重试通道放弃后，会话里仍是未回复的入站行，不能就此没人应答。
 func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutboundReply, reason string) {
@@ -619,6 +650,9 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
+	if accountID == "" {
+		accountID = s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
+	}
 	if err := authorizeOutboundSubmission(ctx, channel, accountID, hubMsg); err != nil {
 		recordOutboundSendFailed(channel, err)
 		return false, err

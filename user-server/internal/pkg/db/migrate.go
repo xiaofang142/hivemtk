@@ -98,6 +98,7 @@ func allModels() []any {
 		&model.RulePendingExecution{},
 		&model.HelpCenterTestRecord{},
 		&model.WebhookSubscription{},
+		&model.WebhookDelivery{},
 		&model.SavedView{},
 		&model.ReportSubscription{},
 		&model.RagEvalQuestion{},
