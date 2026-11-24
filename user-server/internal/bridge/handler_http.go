@@ -822,6 +822,13 @@ func _bridgeOutboxHubsForLog(hubs []*model.MessageHub) []map[string]any {
 func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
+	ctx, terr := bindBridgeTenant(c, channel, accountID)
+	if terr != nil {
+		bridgeOutboxError := func(errCode string) { metrics.GetBridge().IngestErrors.WithLabel(channel, errCode).Inc() }
+		bridgeOutboxError("tenant_unresolved")
+		writeBridgeTenantError(c, terr)
+		return
+	}
 	if ident, ok := BridgeIdentityFromContext(c); ok {
 		if channel == "" { channel = ident.Channel }
 		if accountID == "" { accountID = ident.AccountID }
@@ -844,16 +851,6 @@ func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 		bridgeOutboxError("channel_required")
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "channel required"})
 		return
-	}
-	ctx, terr := bindBridgeTenant(c, channel, accountID)
-	if terr != nil {
-		bridgeOutboxError("tenant_unresolved")
-		writeBridgeTenantError(c, terr)
-		return
-	}
-	if ident, ok := BridgeIdentityFromContext(c); ok {
-		if channel == "" { channel = ident.Channel }
-		if accountID == "" { accountID = ident.AccountID }
 	}
 	// 轮询本身就是「这个账号还在同步」的证据，必须刷在线位：长轮询模式下扩展不建 SSE 订阅，
 	// 不刷的话补投门（订阅 OR 最近同步）两个信号都读不到，延后出站会被逐轮跳过、永不补投。
