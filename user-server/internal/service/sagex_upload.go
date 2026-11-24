@@ -588,3 +588,31 @@ func isSageXIngressDuplicateReason(reason string) bool {
 	}
 	return false
 }
+
+func (s *SageXUploadService) BootstrapInstallation(ctx context.Context, installationID, identifyCode string) (*model.SageXInstallation, error) {
+	if s.resolver == nil {
+		return nil, ErrSageXUnauthorized
+	}
+	resolved, err := s.resolver.ResolveByIdentifyCode(ctx, identifyCode)
+	if err != nil || resolved == nil || resolved.TenantID == 0 {
+		return nil, ErrSageXUnauthorized
+	}
+	installationID = strings.TrimSpace(installationID)
+	if installationID == "" {
+		installationID = "inst_" + generateSageXToken()
+	}
+	if existing, err := s.instRepo.GetByInstallationID(ctx, installationID); err == nil && existing != nil {
+		return existing, nil
+	}
+	inst := &model.SageXInstallation{
+		Name:           "auto",
+		InstallationID: installationID,
+		AccountID:      strconv.FormatUint(uint64(resolved.AccountID), 10),
+		TenantID:       resolved.TenantID,
+		Status:         1,
+	}
+	if err := s.CreateInstallation(ctx, inst); err != nil {
+		return nil, err
+	}
+	return inst, nil
+}

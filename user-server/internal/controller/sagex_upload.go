@@ -198,6 +198,27 @@ func (c *SageXUploadController) UpdateInstallation(ctx *gin.Context) {
 	response.Success(ctx, existing, "ok")
 }
 
+func (c *SageXUploadController) Bootstrap(ctx *gin.Context) {
+	var req struct {
+		InstallationID string `json:"installation_id"`
+		IdentifyCode   string `json:"identify_code"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数无效")
+		return
+	}
+	if strings.TrimSpace(req.IdentifyCode) == "" {
+		response.Error(ctx, http.StatusBadRequest, "identify_code 不能为空")
+		return
+	}
+	inst, err := c.svc.BootstrapInstallation(ctx.Request.Context(), req.InstallationID, req.IdentifyCode)
+	if err != nil {
+		response.Error(ctx, http.StatusUnauthorized, "bootstrap 失败")
+		return
+	}
+	response.Success(ctx, gin.H{"installation": inst, "token": inst.Token}, "ok")
+}
+
 func extractBearerToken(authHeader string) string {
 	parts := strings.SplitN(strings.TrimSpace(authHeader), " ", 2)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {

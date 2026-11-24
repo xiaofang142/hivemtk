@@ -766,6 +766,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		sagexGroup := r.Group("/api")
 		sagexGroup.Use(middleware.InitGuard())
 		sagexGroup.POST("/integrations/sagex/upload", sagexCtrl.Upload)
+		sagexGroup.POST("/integrations/sagex/bootstrap", sagexCtrl.Bootstrap)
 
 		// MCP 工具调用入口单独一条门：它挂在桥接组里时，BRIDGE_INGEST_AUTH=off 这条
 		// 「内网扩展可不带凭证上报」的逃生阀会把**服务端工具调用**一起放开，
