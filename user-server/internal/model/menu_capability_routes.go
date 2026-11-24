@@ -30,7 +30,7 @@ type MenuCapability struct {
 	MenuKeys []string
 }
 
-// MenuCapabilities 生成件：共 335 条。
+// MenuCapabilities 生成件：共 354 条。
 var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/ai-insights/drafts", MenuKeys: []string{"aiInsightDraft"}},
 	{Pattern: "/api/ai-tools", MenuKeys: []string{"aiToolManagement"}},
@@ -56,13 +56,20 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/batch/tools", MenuKeys: []string{"batchOperation"}},
 	{Pattern: "/api/bridge/extension/package", MenuKeys: []string{"bridgeExtension"}},
 	{Pattern: "/api/business-account-auths", MenuKeys: []string{"businessAccountAuth"}},
+	{Pattern: "/api/capabilities", MenuKeys: []string{"capabilityDiagnostics", "capabilityMatrix", "kbImportConnectors"}},
+	{Pattern: "/api/channel-accounts", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
+	{Pattern: "/api/channel-accounts/*", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
+	{Pattern: "/api/channel-accounts/options", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
 	{Pattern: "/api/channel-agent-bindings", MenuKeys: []string{"dingtalkApp", "qqAccount", "telegramAccount", "wecomAccount", "whatsappCloud"}},
 	{Pattern: "/api/channel-agent-bindings/by-agent/*", MenuKeys: []string{"dingtalkApp", "qqAccount", "telegramAccount", "wecomAccount", "whatsappCloud"}},
+	{Pattern: "/api/channels", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
+	{Pattern: "/api/channels/*", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
 	{Pattern: "/api/community/groups", MenuKeys: []string{"community"}},
 	{Pattern: "/api/community/groups/*", MenuKeys: []string{"community"}},
 	{Pattern: "/api/community/members", MenuKeys: []string{"community"}},
 	{Pattern: "/api/community/messages", MenuKeys: []string{"community"}},
 	{Pattern: "/api/community/stats", MenuKeys: []string{"community"}},
+	{Pattern: "/api/conversation-context", MenuKeys: []string{"channelAccount", "channelIdentifyCode", "channelManage"}},
 	{Pattern: "/api/custom-tools", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/custom-tools/*", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/custom-tools/import", MenuKeys: []string{"aiCustomIntegration"}},
@@ -224,6 +231,18 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/identify-codes", MenuKeys: []string{"channelIdentifyCode"}},
 	{Pattern: "/api/identify-codes/*", MenuKeys: []string{"channelIdentifyCode"}},
 	{Pattern: "/api/identify-codes/*/rotate", MenuKeys: []string{"channelIdentifyCode"}},
+	{Pattern: "/api/kb/crawler/batches", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/batches/*/retry", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources/*", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources/*/pause", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources/*/resume", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources/*/sync", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/crawler/sources/*/verify", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/qa/candidates", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/qa/candidates/*/approve", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/qa/candidates/*/publish", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
+	{Pattern: "/api/kb/qa/candidates/*/reject", MenuKeys: []string{"knowledgeCrawlerSources", "knowledgeQaCandidates"}},
 	{Pattern: "/api/knowledge-merchant/batch/import", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},
 	{Pattern: "/api/knowledge-merchant/batch/upload", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},
 	{Pattern: "/api/knowledge-merchant/chunks/*", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},

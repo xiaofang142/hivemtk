@@ -553,7 +553,15 @@
     "businessAccountAuth": "业务账号授权",
     "customerImportJob": "客户导入任务",
     "aiInsightDraft": "AI洞察草稿",
-    "crossAccountSearch": "跨账号客户检索"
+    "crossAccountSearch": "跨账号客户检索",
+    "crmMaster": "客户主数据",
+    "leadGovernance": "线索治理",
+    "commerceOperations": "电商操作台",
+    "knowledgeCrawlerSources": "网站爬取",
+    "knowledgeQaCandidates": "QA 审核队列",
+    "capabilityMatrix": "能力矩阵",
+    "channelManage": "渠道管理",
+    "channelAccount": "渠道账号管理"
   },
   "保存": "保存",
   "提交": "提交",

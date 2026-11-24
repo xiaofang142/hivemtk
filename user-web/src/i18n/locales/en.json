@@ -553,7 +553,15 @@
     "businessAccountAuth": "Business Account Auth",
     "customerImportJob": "Customer Import Jobs",
     "aiInsightDraft": "AI Insight Drafts",
-    "crossAccountSearch": "Cross-Account Search"
+    "crossAccountSearch": "Cross-Account Search",
+    "crmMaster": "Customer Master Data",
+    "leadGovernance": "Lead Governance",
+    "commerceOperations": "Commerce Operations",
+    "knowledgeCrawlerSources": "Web Crawler Sources",
+    "knowledgeQaCandidates": "QA Review Queue",
+    "capabilityMatrix": "Capability Matrix",
+    "channelManage": "Channel Management",
+    "channelAccount": "Channel Account Management"
   },
   "保存": "Save",
   "提交": "Submit",

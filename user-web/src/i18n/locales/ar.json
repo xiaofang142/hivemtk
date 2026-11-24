@@ -511,7 +511,15 @@
     "businessAccountAuth": "Business Account Auth",
     "customerImportJob": "Customer Import Jobs",
     "aiInsightDraft": "AI Insight Drafts",
-    "crossAccountSearch": "Cross-Account Search"
+    "crossAccountSearch": "Cross-Account Search",
+    "crmMaster": "البيانات الرئيسية للعملاء",
+    "leadGovernance": "حوكمة العملاء المحتملين",
+    "commerceOperations": "عمليات التجارة الإلكترونية",
+    "knowledgeCrawlerSources": "مصادر زحف الويب",
+    "knowledgeQaCandidates": "قائمة مراجعة الجودة",
+    "capabilityMatrix": "مصفوفة القدرات",
+    "channelManage": "إدارة القنوات",
+    "channelAccount": "إدارة حسابات القنوات"
   },
   "保存": "حفظ",
   "提交": "إرسال",

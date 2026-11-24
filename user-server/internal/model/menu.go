@@ -78,6 +78,13 @@ var SystemMenuTree = []SystemMenuNode{
 			{Key: "customerEvent", Title: "客户事件", Icon: "Bell", Path: "/customerEvent/list"},
 			{Key: "tagSegmentation", Title: "标签分层", Icon: "PriceTag", Path: "/tagSegmentation/list", Roles: []string{"admin", "viewer"}},
 			{Key: "userSegment", Title: "用户分层 RFM", Icon: "PieChart", Path: "/userSegment/list", Roles: []string{"admin", "viewer"}},
+			// 2026-11-24 菜单重整：客户主数据（含去重/360/导入导出/联系人等实体子页）
+			// 与线索治理（规则/通知路由/证据/归档/权限视图）是今日新增的两个独立业务面，
+			// 原先只有深链、侧栏无入口 ⇒ 非超管无从进入，能力面守卫也没有 menu_key 可挂。
+			// 各自收敛为一个菜单入口 + 默认列表页：子页从列表内工作流进入，不铺平铺入口
+			//（沿用 2026-11-20「列表内完成表单操作」的审计口径）。
+			{Key: "crmMaster", Title: "客户主数据", Icon: "User", Path: "/crm/list", Roles: []string{"admin"}},
+			{Key: "leadGovernance", Title: "线索治理", Icon: "Aim", Path: "/leads/rules", Roles: []string{"admin"}},
 			// unifiedMessage（统一消息，/unifiedMessage/list）已于 2026-11-10 除名：
 			// 与「统一收件箱」用户视角重复（同一批渠道入站消息），且同一数据面
 			// 已有两个更精确的消费入口——收件箱按会话呈现、客户 360 按
@@ -183,6 +190,10 @@ var SystemMenuTree = []SystemMenuNode{
 		Key: "reach", Title: "触达运营", Icon: "Promotion",
 		Roles: []string{"admin", "viewer", "staff"},
 		Children: []SystemMenuNode{
+			// 2026-11-24 菜单重整：电商操作台是独立业务对象（平台店铺订单），
+			// 有独立的 /api/v1/commerce 操作→证据→复核闭环，不是任何页面的详情；
+			// 原先只有深链、侧栏无入口。归入触达运营顶级目录。
+			{Key: "commerceOperations", Title: "电商操作台", Icon: "Shop", Path: "/commerce/operations", Roles: []string{"admin"}},
 			{
 				Key: "emailReach", Title: "邮件触达", Icon: "Message",
 				Children: []SystemMenuNode{
@@ -312,6 +323,10 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "knowledgeRagEval", Title: "RAG 评测", Icon: "CircleCheck", Path: "/knowledge/rag-eval"},
 					{Key: "knowledgeOpenAPI", Title: "OpenAPI 集成", Icon: "Connection", Path: "/knowledge/openapi"},
 					{Key: "knowledgeConnectors", Title: "连接器配置", Icon: "Link", Path: "/knowledge/connectors"},
+					// 2026-11-24 菜单重整：网站爬取源与 QA 审核队列是知识入库/审核流水线
+					// 的两个独立对象（各自有独立 API 面），原先只有路由、侧栏无入口。
+					{Key: "knowledgeCrawlerSources", Title: "网站爬取", Icon: "Connection", Path: "/knowledge/crawler-sources", Roles: []string{"admin"}},
+					{Key: "knowledgeQaCandidates", Title: "QA 审核队列", Icon: "CircleCheck", Path: "/knowledge/qa-candidates", Roles: []string{"admin"}},
 					// 第三方知识库导入器（src/views/kb/Connectors.vue，把 IMA 等第三方
 					// 知识库文档拉进本地 RAG）。与上面 knowledgeConnectors（Notion/飞书/
 					// 钉钉凭据连接器）同组不同职：那个管凭据连通，这个管文档导入。
@@ -483,6 +498,10 @@ var SystemMenuTree = []SystemMenuNode{
 					// AI 全链路可观测性 + 渠道健康（D2+B2，specs/007）：只读聚合看板，
 					// 与 systemMonitor/systemTrace 同族但归属独立的 admin 页。
 					{Key: "observabilityDashboard", Title: "AI 观测与渠道健康", Icon: "Odometer", Path: "/observability-dashboard", Roles: []string{"admin"}},
+					// 2026-11-24 菜单重整：能力矩阵（注册表声明的渠道×能力）与上面的
+					// capabilityDiagnostics（运行态 implemented/configured/ready）是一对——
+					// 一个看"声明了什么"，一个看"真正能跑什么"。原先只有 /cap/matrix 深链。
+					{Key: "capabilityMatrix", Title: "能力矩阵", Icon: "Grid", Path: "/cap/matrix", Roles: []string{"admin"}},
 					// 功能模块市场：付费能力的**购买入口**。
 				},
 			},
@@ -503,6 +522,11 @@ var SystemMenuTree = []SystemMenuNode{
 					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
 					// T057/T063：旧「桥接凭证」入口已收敛到渠道识别码管理（一次性替换）。
 					{Key: "channelIdentifyCode", Title: "渠道识别码", Icon: "Key", Path: "/channels/identify-codes"},
+					// 2026-11-24 菜单重整：渠道统一治理（渠道预设 + 渠道账号）是今日新增的
+					// 数据表驱动管理面。与渠道识别码同属「渠道接入」这一摊，故同组补齐——
+					// 旧的散落账号配置入口已按 T057 收敛到渠道账号管理。
+					{Key: "channelManage", Title: "渠道管理", Icon: "SetUp", Path: "/channels/manage", Roles: []string{"admin"}},
+					{Key: "channelAccount", Title: "渠道账号管理", Icon: "Connection", Path: "/channels/accounts", Roles: []string{"admin"}},
 					// 桥接扩展安装包（浏览器扩展不上架商店，平台上传、租户下载）。
 					// 放在权限设置组下：它与桥接凭证同属"渠道接入"这一摊，
 					// 而非租户日常经营入口。

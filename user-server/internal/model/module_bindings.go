@@ -209,6 +209,9 @@ var ModuleMenuBindings = map[string][]string{
 		"teamGroup", "systemUser", "roleManage", "permissionManage",
 		// 权限设置
 		"permissionGroup", "platformAccount", "integration", "channelIdentifyCode",
+		// 2026-11-24：渠道统一治理（渠道预设 + 渠道账号）与识别码同属渠道接入这一摊，
+		// 归 core（与 T057「旧散落账号配置收敛到渠道账号管理」口径一致）。
+		"channelManage", "channelAccount",
 		// bridgeExtension（扩展安装包）与渠道接入同属「桥接」这一摊，
 		// 同为系统基座能力（core）。漏绑会让它落进 enabledForNode 的
 		// 「未绑定 ⇒ 永远放行」分支 —— 模块闸对它完全失效。
@@ -218,6 +221,8 @@ var ModuleMenuBindings = map[string][]string{
 		"observabilityDashboard",
 		// D01 能力运行诊断：读的是本二进制的执行路径与配置，属于部署级诊断能力。
 		"capabilityDiagnostics",
+		// 能力矩阵（注册表声明的渠道×能力）与诊断是一对：声明 vs 运行态，同归 core。
+		"capabilityMatrix",
 		// 备份（backupEnhanced 已除名：页面并入 backupList，见 menu.go 同日注释）
 		"backupList",
 		// 客服 Web Widget 渠道（embed-sdk 在客户网站上的凭据来源，见文件头原则 1）
@@ -230,7 +235,13 @@ var ModuleMenuBindings = map[string][]string{
 		// unifiedMessage 已除名（2026-11-10 内容重复菜单收口）：与统一收件箱
 		// 用户视角重复，数据面由客户 360 message_history 与收件箱承载。
 		"customer360", "customerConsents", "customerEvent", "tagSegmentation", "userSegment",
+		// 这 4 个叶子节点在注册表里已存在但从未绑定模块 ⇒ enabledForNode 一律放行
+		// （模块闸失效）。2026-11-24 菜单重整一并收口：都属于客户数据/权限面，
+		// 归 customer 模块，与 lead-mining 增量的菜单节点同批。
+		"aiInsightDraft", "businessAccountAuth", "crossAccountSearch", "customerImportJob",
 		"customerIdentity", "oneidList", "oneidConflicts", "oneidMergeRules",
+		// 2026-11-24：客户主数据 + 线索治理（今日新增的两个独立业务面，各一个菜单入口）。
+		"crmMaster", "leadGovernance",
 	},
 
 	// ========== inbox：会话工作台（12 节点）==========
@@ -250,6 +261,8 @@ var ModuleMenuBindings = map[string][]string{
 		// kbImportConnectors（第三方知识库导入器）：把 IMA 等第三方 KB 拉进本地 RAG，
 		// 与 knowledgeConnectors（外部凭据连接器）同组不同职，随 knowledge 开关。
 		"kbImportConnectors",
+		// 2026-11-24：网站爬取源 / QA 审核队列是知识入库与审核流水线的独立入口。
+		"knowledgeCrawlerSources", "knowledgeQaCandidates",
 		"ragProductConfig", "ragAccount", "ragProduct", "ragOverview",
 		"faqKb",
 	},
@@ -338,13 +351,15 @@ var ModuleMenuBindings = map[string][]string{
 		"emailSmtp", "emailInfo", "emailDeliverability", "emailGuide",
 	},
 
-	// ========== reach-social：社媒引流卡片（15 节点）==========
+	// ========== reach-social：社媒引流卡片（16 节点）==========
 	ModuleReachSocial: {
 		"douyin", "douyinCard", "douyinStats",
 		"kuaishou", "kuaishouCard", "kuaishouStats",
 		"xiaohongshu", "xiaohongshuCard", "xiaohongshuStats",
 		"xianyu", "xianyuCard", "xianyuStats",
 		"tiktok", "tiktokList", "tiktokStats",
+		// 2026-11-24：电商操作台（独立店铺订单操作/证据/复核闭环）。
+		"commerceOperations",
 	},
 
 	// ========== reach-link：短链活码（4 节点）==========

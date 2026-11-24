@@ -69,6 +69,40 @@ var MenuCapabilitySupplement = []MenuCapability{
 	// 匹配器只支持单段 *（无 **），正别名/连字别名各一条单段规则
 	{Pattern: "/api/churn/*", MenuKeys: []string{"churnPrediction"}},
 	{Pattern: "/api/churn-prediction/*", MenuKeys: []string{"churnPrediction"}},
+	// 2026-11-24 菜单重整：今日新增的 CRM / 线索治理 / 渠道统一 / 电商操作台
+	// 四个业务面此前只有前端路由、侧栏无入口，接口也因此没有 menu_key 可挂——
+	// 任何登录角色都能直调全租户主数据/规则/渠道凭据/店铺操作口。这里按新菜单
+	// 节点收口：非超管须被授予对应菜单才放行，与侧栏勾选一处生效。
+	// 只读口（注册在 auth 组）按能力位收；写口已有 AdminAuthMiddleware 的
+	//（/manage/leads、/manage/lead-mining-agents、/lead-mining）由仅超管表拦，
+	// 能力表不重复写它们，避免被 TestRouteGuardChain_CapabilityRulesAreNotDeadLines
+	// 判成全遮蔽死行。
+	// CRM 客户主数据（/customers、/dedupe/*、/merge/*、/360/*、实体 CRUD 等）
+	{Pattern: "/api/manage/crm/*", MenuKeys: []string{"crmMaster"}},
+	{Pattern: "/api/manage/crm/*/*", MenuKeys: []string{"crmMaster"}},
+	// 线索治理读口（规则/通知路由/权限内消息与客户/判定命中）
+	{Pattern: "/api/manage/leads/*", MenuKeys: []string{"leadGovernance"}},
+	{Pattern: "/api/manage/leads/*/*/*", MenuKeys: []string{"leadGovernance"}},
+	// 线索发现智能体读口 / 线索挖掘分析读口（同属线索治理菜单）
+	{Pattern: "/api/manage/lead-mining-agents", MenuKeys: []string{"leadGovernance"}},
+	{Pattern: "/api/manage/lead-mining-agents/*", MenuKeys: []string{"leadGovernance"}},
+	{Pattern: "/api/lead-mining/*", MenuKeys: []string{"leadGovernance"}},
+	{Pattern: "/api/lead-mining/*/*", MenuKeys: []string{"leadGovernance"}},
+	// 渠道统一治理（预设渠道/账号/共享上下文），归渠道账号管理菜单。
+	// /api/identify-codes* 归 channelIdentifyCode（生成件已有，不重复）。
+	{Pattern: "/api/channels", MenuKeys: []string{"channelManage", "channelAccount"}},
+	{Pattern: "/api/channels/*", MenuKeys: []string{"channelManage", "channelAccount"}},
+	{Pattern: "/api/channel-accounts", MenuKeys: []string{"channelAccount"}},
+	{Pattern: "/api/channel-accounts/*", MenuKeys: []string{"channelAccount"}},
+	{Pattern: "/api/conversation-context", MenuKeys: []string{"channelAccount"}},
+	// 二次审核补充：/api/channels/customer/:customer_id 是 4 段形状，上面的
+	// /api/channels/*（3 段）接不住；它读的是某客户的渠道列表，与渠道管理同族，
+	// 不收口就等于任何登录角色都能按 customer_id 枚举渠道绑定。
+	{Pattern: "/api/channels/customer/*", MenuKeys: []string{"channelManage", "channelAccount"}},
+	// 电商操作台（订单/操作/证据/复核全链），归 commerceOperations 菜单。
+	{Pattern: "/api/v1/commerce/*", MenuKeys: []string{"commerceOperations"}},
+	{Pattern: "/api/v1/commerce/*/*", MenuKeys: []string{"commerceOperations"}},
+	{Pattern: "/api/v1/commerce/*/*/*", MenuKeys: []string{"commerceOperations"}},
 }
 
 // AllMenuCapabilities 返回补充件 + 生成件。补充件在前：同名形状以补充件的

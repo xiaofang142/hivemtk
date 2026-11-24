@@ -553,7 +553,15 @@
     "businessAccountAuth": "業務アカウント認可",
     "customerImportJob": "顧客インポートジョブ",
     "aiInsightDraft": "AIインサイト下書き",
-    "crossAccountSearch": "アカウント横断検索"
+    "crossAccountSearch": "アカウント横断検索",
+    "crmMaster": "顧客マスタ",
+    "leadGovernance": "リードガバナンス",
+    "commerceOperations": "ECオペレーション",
+    "knowledgeCrawlerSources": "ウェブクロール元",
+    "knowledgeQaCandidates": "QAレビューキュー",
+    "capabilityMatrix": "ケイパビリティマトリクス",
+    "channelManage": "チャネル管理",
+    "channelAccount": "チャネルアカウント管理"
   },
   "保存": "保存",
   "提交": "送信",
