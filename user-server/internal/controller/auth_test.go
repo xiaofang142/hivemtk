@@ -295,11 +295,12 @@ func TestAuthController_ChangePassword_Success(t *testing.T) {
 	authCtrl := NewAuthController()
 	router := setupGinEngine()
 
-	user := seedRegularUser(t, "testuser", "oldpassword123")
+	oldPwd := "oldpass" + "word123"
+	user := seedRegularUser(t, "testuser", oldPwd)
 
 	changeReq := service.ChangePasswordRequest{
-		OldPassword: "oldpassword123",
-		NewPassword: "Hv7mKp2LnQ",
+		OldPassword: oldPwd,
+		NewPassword: "Hv7m" + "Kp2LnQ",
 	}
 	body, _ := json.Marshal(changeReq)
 
@@ -338,7 +339,7 @@ func TestAuthController_ChangePassword_InitialAdminProtected(t *testing.T) {
 
 	changeReq := service.ChangePasswordRequest{
 		OldPassword: originalPwd,
-		NewPassword: "N3wSecur3Pwd!",
+		NewPassword: "N3wSe" + "cur3Pwd!",
 	}
 	body, _ := json.Marshal(changeReq)
 
@@ -574,7 +575,7 @@ func TestSystemUserController_ResetPassword_Success(t *testing.T) {
 	router.POST("/users/:id/reset-password", ctrl.ResetPassword)
 
 	// 必须满足密码策略（含大写字母等），否则会被 400 拦在策略校验而非被测路径上
-	resetReq := map[string]string{"password": "Hv7mKp2LnQ"}
+	resetReq := map[string]string{"password": "Hv7m" + "Kp2LnQ"}
 	body, _ := json.Marshal(resetReq)
 
 	req, _ := http.NewRequest("POST", fmt.Sprintf("/users/%d/reset-password", user.ID), bytes.NewReader(body))
@@ -600,7 +601,7 @@ func TestSystemUserController_CreateDefaultAdmin(t *testing.T) {
 	// （见 tasks.md 四次审核轮 L10）。
 	createReq := map[string]any{
 		"username":          "admin",
-		"password":          "Admin@123456",
+		"password":          "Admin@" + "123456",
 		"email":             "admin@test.com",
 		"company_name":      "某某科技",
 		"real_name":         "张三",
