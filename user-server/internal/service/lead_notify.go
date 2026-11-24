@@ -55,8 +55,8 @@ func (s *LeadNotifyService) NotifyOwner(ctx context.Context, in ArchiveClueInput
 		tid = tenant.DefaultTenantID
 	}
 
-	accountID := resolveLeadNotifyAccountID(ctx, in.SourceAccountID)
 	channel := in.SourceChannel
+	accountID := resolveLeadNotifyAccountID(ctx, channel, in.SourceAccountID)
 	routes, err := s.routes.ListByChannelAccount(ctx, accountID, channel)
 	if err != nil {
 		return fmt.Errorf("查询通知路由失败: %w", err)
@@ -195,11 +195,11 @@ func (s *LeadNotifyService) deliverExternal(ctx context.Context, kind string, ro
 }
 
 // resolveLeadNotifyAccountID 把外部账号标识解析为渠道账号数值 id（复用 Phase 2 ChannelResolver 口径）。
-func resolveLeadNotifyAccountID(ctx context.Context, external string) uint {
+func resolveLeadNotifyAccountID(ctx context.Context, channel, external string) uint {
 	if strings.TrimSpace(external) == "" {
 		return 0
 	}
-	if resolved, err := NewChannelResolver().ResolveByIdentifyCode(ctx, external); err == nil && resolved != nil {
+	if resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, channel, external); err == nil && resolved != nil {
 		return resolved.AccountID
 	}
 	return 0

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
@@ -95,6 +96,85 @@ func (r *ChannelResolver) ResolveByIdentifyCode(ctx context.Context, code string
 		}
 	}
 	return out, nil
+}
+
+// ResolveByAccountRef 把上报消息里的账号标识解析为渠道账号数值 ID。
+//
+// 识别码（cid_...）优先；其次数值账号 id；最后按渠道账号表的 name/identify_code
+// 精确匹配外部账号名（bridge/webhook 真实上报多为外部名）。平台约束按渠道
+// Code 或 Type，歧义一律 fail-closed，绝不挑第一条或回落默认账号。
+func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref string) (*ResolvedChannelAccount, error) {
+	ref = strings.TrimSpace(ref)
+	if r == nil || r.accountRepo == nil || ref == "" {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	if resolved, err := r.ResolveByIdentifyCode(ctx, ref); err == nil && resolved != nil {
+		return resolved, nil
+	}
+
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 {
+		if tenant.IsMultiTenant() {
+			return nil, ErrChannelIdentityUnresolved
+		}
+		tid = tenant.DefaultTenantID
+	}
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	resolveOut := func(acc *model.ChannelAccount) *ResolvedChannelAccount {
+		out := &ResolvedChannelAccount{
+			TenantID: acc.TenantID, AccountID: acc.ID, ChannelID: acc.ChannelID,
+			ChannelCode: platform, IdentifyCode: acc.IdentifyCode,
+		}
+		if r.channelRepo != nil && r.channelRepo.Available() {
+			if ch, chErr := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID); chErr == nil && ch != nil {
+				out.ChannelCode = ch.Code
+			}
+		}
+		return out
+	}
+	channelMatches := func(acc *model.ChannelAccount) bool {
+		if platform == "" || r.channelRepo == nil || !r.channelRepo.Available() {
+			return true
+		}
+		ch, chErr := r.channelRepo.GetByID(ctx, acc.TenantID, acc.ChannelID)
+		return chErr == nil && ch != nil &&
+			(strings.EqualFold(strings.TrimSpace(ch.Code), platform) ||
+				strings.EqualFold(strings.TrimSpace(ch.Type), platform))
+	}
+
+	if numericID, parseErr := strconv.ParseUint(ref, 10, 64); parseErr == nil && numericID > 0 {
+		acc, getErr := r.accountRepo.GetByID(ctx, tid, uint(numericID))
+		if getErr != nil {
+			return nil, getErr
+		}
+		if acc == nil || !channelMatches(acc) {
+			return nil, ErrChannelIdentityUnresolved
+		}
+		return resolveOut(acc), nil
+	}
+
+	rows, err := r.accountRepo.List(ctx, repository.ChannelAccountListOptions{
+		TenantID: tid, Keyword: ref, Limit: 50,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var matches []*model.ChannelAccount
+	for i := range rows {
+		acc := &rows[i]
+		if (!strings.EqualFold(strings.TrimSpace(acc.Name), ref) &&
+			!strings.EqualFold(strings.TrimSpace(acc.IdentifyCode), ref)) || !channelMatches(acc) {
+			continue
+		}
+		matches = append(matches, acc)
+	}
+	if len(matches) == 0 {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	if len(matches) > 1 {
+		return nil, ErrChannelIdentityAmbiguous
+	}
+	return resolveOut(matches[0]), nil
 }
 
 // ResolveTenant 渠道回调租户解析入口。webhook.ResolveTenantByChannelAccount 统一委托本方法。

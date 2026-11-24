@@ -143,7 +143,7 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	}
 
 	target := LeadRuleTarget{}
-	if resolved, err := NewChannelResolver().ResolveByIdentifyCode(ctx, hub.AccountID); err != nil {
+	if resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, hub.Platform, hub.AccountID); err != nil {
 		logger.Ctx(ctx).Warn().Err(err).Str("account", hub.AccountID).Msg("[lead-mining] 渠道账号数值ID解析失败，回退 global 规则")
 	} else if resolved != nil {
 		target.ChannelAccountID = resolved.AccountID
