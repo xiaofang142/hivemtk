@@ -279,14 +279,17 @@ var SystemMenuTree = []SystemMenuNode{
 				},
 			},
 			{
-				Key: "qq", Title: "QQ 机器人", Icon: "ChatDotRound",
+				// 2026-11-25 菜单合并优化：单子分组自带 Path 指向唯一功能页，
+				// 点分组名直达，省掉一层空点击；key 保留（历史授权/模块绑定不变）。
+				Key: "qq", Title: "QQ 机器人", Icon: "ChatDotRound", Path: "/qq/account",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
 					{Key: "qqAccount", Title: "机器人账号", Icon: "Cpu", Path: "/qq/account"},
 				},
 			},
 			{
-				Key: "feishu", Title: "飞书", Icon: "ChatDotRound",
+				// 2026-11-25 菜单合并优化：同上，单子分组直达唯一功能页。
+				Key: "feishu", Title: "飞书", Icon: "ChatDotRound", Path: "/feishu/account",
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
 					{Key: "feishuAccount", Title: "飞书账号", Icon: "Cpu", Path: "/feishu/account"},
@@ -403,7 +406,7 @@ var SystemMenuTree = []SystemMenuNode{
 				Roles: []string{"admin"},
 				Children: []SystemMenuNode{
 					{
-						Key: "geoDiagnose", Title: "诊断", Icon: "Aim",
+						Key: "geoDiagnose", Title: "诊断", Icon: "Aim", Path: "/geo-tools/audit-center",
 						Children: []SystemMenuNode{
 							{Key: "geoAuditCenter", Title: "审计中心", Icon: "Aim", Path: "/geo-tools/audit-center"},
 						},
@@ -441,7 +444,7 @@ var SystemMenuTree = []SystemMenuNode{
 						},
 					},
 					{
-						Key: "geoCapture", Title: "承接", Icon: "ChatDotRound",
+						Key: "geoCapture", Title: "承接", Icon: "ChatDotRound", Path: "/geo-tools/capture-links",
 						Children: []SystemMenuNode{
 							{Key: "geoCaptureLinks", Title: "承接链接", Icon: "Link", Path: "/geo-tools/capture-links"},
 						},
