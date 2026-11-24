@@ -12,6 +12,7 @@ import (
 
 	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 )
 
@@ -98,17 +99,29 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	if identifyCode == "" {
 		return rctx, false, nil, ErrBridgeTenantUnresolved
 	}
+
 	resolved, err := service.NewChannelResolver().ResolveByIdentifyCode(rctx, identifyCode)
 	if err != nil || resolved == nil || resolved.TenantID == 0 {
-		return rctx, false, nil, ErrBridgeTenantUnresolved
+		// Fallback: channel-level identify code (channel_identify_codes table).
+		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode)
+		if err != nil || resolved == nil || resolved.TenantID == 0 {
+			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
 	}
+
 	resolvedChannel := NormalizeBridgeChannel(resolved.ChannelCode)
-	resolvedAccountID := strconv.FormatUint(uint64(resolved.AccountID), 10)
+	resolvedAccountID := ""
+	if resolved.AccountID > 0 {
+		resolvedAccountID = strconv.FormatUint(uint64(resolved.AccountID), 10)
+	}
 	if channel != "" && NormalizeBridgeChannel(channel) != resolvedChannel {
 		return rctx, false, nil, ErrBridgeTenantAmbiguous
 	}
-	if accountID != "" && accountID != resolvedAccountID {
+	if accountID != "" && resolvedAccountID != "" && accountID != resolvedAccountID {
 		return rctx, false, nil, ErrBridgeTenantAmbiguous
+	}
+	if accountID != "" {
+		resolvedAccountID = accountID
 	}
 	id := &BridgeResolvedIdentity{TenantID: resolved.TenantID, Channel: resolvedChannel, AccountID: resolvedAccountID, IdentifyCode: resolved.IdentifyCode}
 	if !tenant.IsMultiTenant() {
@@ -121,6 +134,43 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		return rctx, false, id, nil
 	}
 	return tenant.OnlyTenant(rctx, resolved.TenantID), true, id, nil
+}
+
+func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode string) (*service.ResolvedChannelAccount, error) {
+	codeRepo := repository.NewChannelIdentifyCodeRepository()
+	rec, err := codeRepo.GetByCode(rctx, identifyCode)
+	if err != nil || rec == nil || rec.TenantID == 0 || rec.ChannelID == 0 {
+		return nil, ErrBridgeTenantUnresolved
+	}
+	out := &service.ResolvedChannelAccount{
+		TenantID:     rec.TenantID,
+		ChannelID:    rec.ChannelID,
+		IdentifyCode: rec.Code,
+	}
+	if chRepo := repository.NewChannelRepository(); chRepo.Available() {
+		if ch, chErr := chRepo.GetByID(rctx, rec.TenantID, rec.ChannelID); chErr == nil && ch != nil {
+			out.ChannelCode = ch.Code
+		}
+	}
+	// Pick an active account for this channel if present.
+	accRepo := repository.NewChannelAccountRepository()
+	if accRepo != nil {
+		rows, listErr := accRepo.List(rctx, repository.ChannelAccountListOptions{
+			TenantID: rec.TenantID, ChannelID: rec.ChannelID, Limit: 20,
+		})
+		if listErr == nil {
+			for i := range rows {
+				if rows[i].Status == 1 {
+					out.AccountID = rows[i].ID
+					break
+				}
+			}
+			if out.AccountID == 0 && len(rows) > 0 {
+				out.AccountID = rows[0].ID
+			}
+		}
+	}
+	return out, nil
 }
 
 func resolveBridgeTenant(rctx context.Context, channel, accountID, codeHint string) (context.Context, bool, error) {
