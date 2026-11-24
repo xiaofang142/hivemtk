@@ -213,8 +213,6 @@ func allModels() []any {
 		&model.IntegrationAccount{},
 		&model.SageXInstallation{},
 		&model.SageXEventReceipt{},
-		&model.SageXActivationCode{},
-		&model.SageXHeartbeat{},
 		&model.MerchantConnection{},
 		&model.MerchantCallbackSubscription{},
 		&model.MerchantCallbackEvent{},
