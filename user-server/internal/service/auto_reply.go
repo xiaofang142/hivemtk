@@ -23,12 +23,15 @@ func resolveModuleChannelAccount(ctx context.Context, accountID string) (*model.
 	if repo == nil || !repo.Available() {
 		return nil, false
 	}
-	acc, err := repo.GetByIdentifyCode(ctx, code)
-	if err != nil {
+	// 统一解析器：识别码 / 数值账号 id / 外部账号名都能自证到同一渠道账号，
+	// 避免真实 bridge/webhook 上报的非识别码 account_id 让模块闸门恒关。
+	resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, "", code)
+	if err != nil || resolved == nil || resolved.AccountID == 0 {
 		logger.Warnf("[module-gate] 渠道账号解析失败 account=%s: %v", code, err)
 		return nil, false
 	}
-	if acc == nil || acc.ID == 0 {
+	acc, err := repo.GetByID(ctx, resolved.TenantID, resolved.AccountID)
+	if err != nil || acc == nil || acc.ID == 0 {
 		return nil, false
 	}
 	return acc, true
