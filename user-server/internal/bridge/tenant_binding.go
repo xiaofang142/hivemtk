@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -40,6 +41,37 @@ var (
 	ErrBridgeTenantCodeInvalid = errors.New("tenant_code 无效")
 )
 
+// BridgeResolvedIdentityKey gin context key：identify_code 解析出的统一身份。
+const BridgeResolvedIdentityKey = "bridge_resolved_identity"
+
+// BridgeResolvedIdentity 统一 identify_code 身份（路由 1 只保留 identify_code）。
+type BridgeResolvedIdentity struct {
+	TenantID     uint
+	Channel      string
+	AccountID    string
+	IdentifyCode string
+}
+
+func bridgeIdentifyHintFromRequest(r *http.Request) string {
+	if r == nil { return "" }
+	code := strings.TrimSpace(r.Header.Get("X-Channel-Identify-Code"))
+	if code == "" { code = strings.TrimSpace(r.URL.Query().Get("identify_code")) }
+	return code
+}
+
+func setBridgeIdentity(c *gin.Context, id *BridgeResolvedIdentity) {
+	if c != nil && id != nil { c.Set(BridgeResolvedIdentityKey, id) }
+}
+
+// BridgeIdentityFromContext 读取 identify_code 解析出的身份。
+func BridgeIdentityFromContext(c *gin.Context) (*BridgeResolvedIdentity, bool) {
+	if c == nil { return nil, false }
+	v, ok := c.Get(BridgeResolvedIdentityKey)
+	if !ok || v == nil { return nil, false }
+	id, ok := v.(*BridgeResolvedIdentity)
+	return id, ok && id != nil
+}
+
 // bridgeTenantHintFromRequest 读显式租户短码（query 优先，其次请求头）。
 //
 // 只从 *http.Request 读：gin 与 channelgw 的 WS 握手都拿得到它，
@@ -60,6 +92,37 @@ func bridgeTenantHintFromRequest(r *http.Request) string {
 //
 // changed=false 表示"没有新绑定"（off 模式直通、或上游中间件已经绑好），
 // 此时调用方保留原 ctx 即可，不该去改写 Request。
+// resolveBridgeIdentity 仅接受 identify_code（决策1：只保留 identify_code）。
+func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, identifyCode string) (context.Context, bool, *BridgeResolvedIdentity, error) {
+	identifyCode = strings.TrimSpace(identifyCode)
+	if identifyCode == "" {
+		return rctx, false, nil, ErrBridgeTenantUnresolved
+	}
+	resolved, err := service.NewChannelResolver().ResolveByIdentifyCode(rctx, identifyCode)
+	if err != nil || resolved == nil || resolved.TenantID == 0 {
+		return rctx, false, nil, ErrBridgeTenantUnresolved
+	}
+	resolvedChannel := NormalizeBridgeChannel(resolved.ChannelCode)
+	resolvedAccountID := strconv.FormatUint(uint64(resolved.AccountID), 10)
+	if channel != "" && NormalizeBridgeChannel(channel) != resolvedChannel {
+		return rctx, false, nil, ErrBridgeTenantAmbiguous
+	}
+	if accountID != "" && accountID != resolvedAccountID {
+		return rctx, false, nil, ErrBridgeTenantAmbiguous
+	}
+	id := &BridgeResolvedIdentity{TenantID: resolved.TenantID, Channel: resolvedChannel, AccountID: resolvedAccountID, IdentifyCode: resolved.IdentifyCode}
+	if !tenant.IsMultiTenant() {
+		return rctx, false, id, nil
+	}
+	if tid, bound := tenant.FromContext(rctx); bound && tid != 0 {
+		if tid != resolved.TenantID {
+			return rctx, false, nil, ErrBridgeTenantAmbiguous
+		}
+		return rctx, false, id, nil
+	}
+	return tenant.OnlyTenant(rctx, resolved.TenantID), true, id, nil
+}
+
 func resolveBridgeTenant(rctx context.Context, channel, accountID, codeHint string) (context.Context, bool, error) {
 	if !tenant.IsMultiTenant() {
 		return rctx, false, nil
@@ -101,12 +164,16 @@ func resolveBridgeTenant(rctx context.Context, channel, accountID, codeHint stri
 // 别名（douyin_web）会让自证查不到行，把已注册的账号误判成首次注册。
 func bindBridgeTenant(c *gin.Context, channel, accountID string) (context.Context, error) {
 	rctx := c.Request.Context()
-	bound, changed, err := resolveBridgeTenant(rctx, channel, accountID, bridgeTenantHintFromRequest(c.Request))
+	identifyCode := bridgeIdentifyHintFromRequest(c.Request)
+	bound, changed, identity, err := resolveBridgeIdentity(rctx, channel, accountID, bridgeTenantHintFromRequest(c.Request), identifyCode)
 	if err != nil {
 		return rctx, err
 	}
 	if changed {
 		c.Request = c.Request.WithContext(bound)
+	}
+	if identity != nil {
+		setBridgeIdentity(c, identity)
 	}
 	return bound, nil
 }
@@ -118,13 +185,17 @@ func bindBridgeTenant(c *gin.Context, channel, accountID string) (context.Contex
 // register 帧之后做；首次注册（库里还没有账号行）的租户短码走握手 URL：
 // `?tenant_code=xxx` 或握手请求头 `X-Tenant-Code`。
 func BridgeTenantForRequest(r *http.Request, channel, accountID string) (context.Context, error) {
-	bound, _, err := resolveBridgeTenant(r.Context(), channel, accountID, bridgeTenantHintFromRequest(r))
+	rctx := r.Context()
+	identifyCode := bridgeIdentifyHintFromRequest(r)
+	ctx2, _, identity, err := resolveBridgeIdentity(rctx, channel, accountID, bridgeTenantHintFromRequest(r), identifyCode)
 	if err != nil {
-		return nil, err
+		return rctx, err
 	}
-	return bound, nil
+	if identity != nil && identity.TenantID > 0 {
+		return ctx2, nil
+	}
+	return ctx2, nil
 }
-
 // bridgeAccountTenant 在系统作用域下反查账号行的归属租户。
 //
 // 走 dbstate 全局句柄而不是 GlobalBridgeAccountRepo：那个接口是"账号状态读写"的

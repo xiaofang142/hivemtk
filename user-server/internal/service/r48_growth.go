@@ -81,16 +81,17 @@ func (s *WebhookSubService) Delete(ctx context.Context, id uint) error {
 	return s.repo.Delete(ctx, id)
 }
 
-// PublishEvent 事件发布（fire-and-forget，失败仅日志，绝不阻塞主链路）
+// PublishEvent 统一出站 hook 投递（路由3）：签名 + 重试 + 死信日志，不阻塞主链路。
 func (s *WebhookSubService) PublishEvent(ctx context.Context, event string, payload map[string]any) {
 	subs, err := s.repo.ListEnabledByEvent(ctx, event)
 	if err != nil || len(subs) == 0 {
 		return
 	}
 	body, _ := json.Marshal(map[string]any{
-		"event":     event,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"data":      payload,
+		"schema_version": "hivemtk.hook.v1",
+		"event":          event,
+		"timestamp":      time.Now().Format(time.RFC3339),
+		"data":           payload,
 	})
 	for _, sub := range subs {
 		go func(sub model.WebhookSubscription, body []byte) {
@@ -99,28 +100,45 @@ func (s *WebhookSubService) PublishEvent(ctx context.Context, event string, payl
 					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
-			reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
-			defer cancel()
-			req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
-			if err != nil {
-				return
-			}
-			req.Header.Set("Content-Type", "application/json")
-			mac := hmac.New(sha256.New, []byte(sub.Secret))
-			mac.Write(body)
-			req.Header.Set("X-Hivemtk-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
-			resp, err := webhookOutClient.Do(req)
-			if err != nil {
-				slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "err", err)
-				return
-			}
-			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-			_ = resp.Body.Close()
-			if resp.StatusCode >= 400 {
-				slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "status", resp.StatusCode)
-			}
+			deliverWebhookWithRetry(sub, event, body)
 		}(sub, body)
 	}
+}
+
+func deliverWebhookWithRetry(sub model.WebhookSubscription, event string, body []byte) {
+	backoffs := []time.Duration{0, 2 * time.Second, 5 * time.Second}
+	var lastErr error
+	var lastStatus int
+	for i, wait := range backoffs {
+		if wait > 0 { time.Sleep(wait) }
+		reqCtx, cancel := context.WithTimeout(context.Background(), utils.ShortTimeout)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, sub.URL, strings.NewReader(string(body)))
+		if err != nil { cancel(); lastErr = err; continue }
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Hivemtk-Event", event)
+		mac := hmac.New(sha256.New, []byte(sub.Secret))
+		mac.Write(body)
+		req.Header.Set("X-Hivemtk-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+		resp, err := webhookOutClient.Do(req)
+		cancel()
+		if err != nil {
+			lastErr = err
+			slog.Warn("[WebhookOut] 投递失败", "url", sub.URL, "event", event, "attempt", i+1, "err", err)
+			continue
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_ = resp.Body.Close()
+		lastStatus = resp.StatusCode
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return
+		}
+		lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		slog.Warn("[WebhookOut] 远端非 2xx", "url", sub.URL, "event", event, "attempt", i+1, "status", resp.StatusCode)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != 429 {
+			break
+		}
+	}
+	slog.Error("[WebhookOut] 死信", "url", sub.URL, "event", event, "status", lastStatus, "err", lastErr)
 }
 
 // SetCustomAttributes 更新客户自定义属性（JSONB merge）

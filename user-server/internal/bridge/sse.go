@@ -620,28 +620,36 @@ func markBridgeAccountOffline(ctx context.Context, channel, accountID string) {
 }
 
 func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
-	// 渠道必须归一：ingest 侧写 bridge_accounts / 广播 SSE 都用规范渠道，
-	// 这里原样透传别名（douyin_web）会让订阅挂在另一个键上——既收不到广播，
-	// 在线位也刷新不到账号行，补投门再把这条明显在线的流判成离线。
 	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
+	if ident, ok := c.Get(BridgeResolvedIdentityKey); ok {
+		if id, ok2 := ident.(*BridgeResolvedIdentity); ok2 && id != nil {
+			if channel == "" { channel = id.Channel }
+			if accountID == "" { accountID = id.AccountID }
+		}
+	}
 	lastEventID := c.GetHeader("Last-Event-ID")
 	if lastEventID == "" {
 		lastEventID = c.Query("last_event_id")
 	}
 
-	// 入参校验必须发生在 WriteHeader 之前：这条流一旦发出 200，就只能一直发注释帧，
-	// 事后既补不上状态码也送不出错误体。ingest/outbox/ack 三个入口对同样的缺参各回 400，
-	// 只有这里曾把缺 channel、空 account_id、以及 wechat 这类「格式对但桥接不承载」的渠道
-	// 一并接受成一条永久空闲的流：扩展端 fetch 判的是 response.ok，日志印「SSE 已连接」，
-	// 而 SSE 是默认下形态（capabilities 报 sse_enabled 后轮询定时器根本不启动），
-	// 于是配置写错的客户看到的是「一条错误都没有、也一条回复都收不到」。
-	// 归一后的渠道名再判一次，别名（douyin_web）走同一条放行路径。
+	if accountID == "" || channel == "" {
+		// identify_code-only: bind first to resolve identity
+		reqCtx, terr := bindBridgeTenant(c, channel, accountID)
+		if terr != nil {
+			writeBridgeTenantError(c, terr)
+			return
+		}
+		c.Request = c.Request.WithContext(reqCtx)
+		if ident, ok := c.Get(BridgeResolvedIdentityKey); ok {
+			if id, ok2 := ident.(*BridgeResolvedIdentity); ok2 && id != nil {
+				if channel == "" { channel = id.Channel }
+				if accountID == "" { accountID = id.AccountID }
+			}
+		}
+	}
 	if accountID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"status":  "error",
-			"message": "account_id required (extension must capture account from DOM before opening the SSE stream)",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "account_id required (or provide X-Channel-Identify-Code)"})
 		return
 	}
 	if channel == "" {
@@ -652,9 +660,6 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unsupported bridge channel"})
 		return
 	}
-	// 绑定必须排在 WriteHeader 之前：这条流一旦发出 200 就再补不上状态码。
-	// 流里的每一次心跳刷新在线位、每一次补拉待投都吃这个 ctx，
-	// on 模式下没绑租户等于一条"看着连着、什么都收不到"的僵尸流。
 	reqCtx, terr := bindBridgeTenant(c, channel, accountID)
 	if terr != nil {
 		writeBridgeTenantError(c, terr)

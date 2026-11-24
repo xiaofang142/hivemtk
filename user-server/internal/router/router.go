@@ -743,6 +743,9 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		bridgeWS.POST("/bridge/ingest", bridgeHandler.HandleHTTPIngest)
 		bridgeWS.GET("/bridge/outbox", bridgeHandler.GetBridgeOutbox)
 		bridgeWS.POST("/bridge/outbox/ack", bridgeHandler.AckBridgeOutbox)
+		// 统一渠道网关（identify_code only）：同一地址上报/下发/ack
+		bridgeWS.POST("/bridge/gateway", bridgeHandler.HandleGateway)
+		bridgeWS.GET("/bridge/gateway", bridgeHandler.GetBridgeOutbox)
 
 		// B1-a：选择器健康上报。挂在桥接组里（只认实例级桥接凭证），与读判定结果
 		// 的 GET 分开——见 controller.BridgeSelectorHealthController 文件头。

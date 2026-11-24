@@ -199,7 +199,7 @@ func NewSageXUploadService(
 	return &SageXUploadService{instRepo: instRepo, receiptRepo: receiptRepo, ingress: ingress}
 }
 
-func (s *SageXUploadService) HandleUpload(ctx context.Context, token string, req *SageXUploadRequest, rawBodySize int) (*SageXUploadAckResponse, error) {
+func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode string, req *SageXUploadRequest, rawBodySize int) (*SageXUploadAckResponse, error) {
 	if req == nil {
 		return nil, ErrSageXInvalidEnvelope
 	}
@@ -219,43 +219,44 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, token string, req
 		return nil, ErrSageXTooManyEvents
 	}
 
-	inst, err := s.instRepo.GetByToken(ctx, strings.TrimSpace(token))
-	if err != nil {
-		return nil, err
+	code := strings.TrimSpace(identifyCode)
+	if code == "" {
+		code = strings.TrimSpace(req.IdentifyCode)
 	}
-	if inst == nil {
+	if code == "" {
 		return nil, ErrSageXUnauthorized
 	}
-	// T059：带识别码时由 ChannelResolver 全局唯一反查租户/账号，并与安装凭证归属
-	// 交叉校验；解析不出或分属不同租户一律拒绝（fail-closed，不回落默认租户）。
-	code := strings.TrimSpace(req.IdentifyCode)
-	if code != "" {
-		if s.resolver == nil {
-			return nil, ErrSageXUnauthorized
-		}
-		resolved, rerr := s.resolver.ResolveByIdentifyCode(ctx, code)
-		if rerr != nil || resolved == nil || resolved.TenantID == 0 || resolved.TenantID != inst.TenantID {
-			logger.Ctx(ctx).Warn().Msgf("[SageX] identify_code 解析失败或与安装凭证归属不一致 err=%v", rerr)
-			return nil, ErrSageXUnauthorized
-		}
+	resolver := s.resolver
+	if resolver == nil { resolver = NewChannelResolver() }
+	resolved, rerr := resolver.ResolveByIdentifyCode(ctx, code)
+	if rerr != nil || resolved == nil || resolved.TenantID == 0 {
+		return nil, ErrSageXUnauthorized
 	}
+
 	reqInstallationID := strings.TrimSpace(req.InstallationID)
-	// installation_id 不是授权依据；同一 token 可能被多个私用设备复用（如 QQ/微信分端），
-	// 以最后上报的 installation_id 作为展示/绑定值，不因不一致拒绝。
-	// installation_id 只在首次绑定时写入，之后保持稳定；不随每次请求覆盖。
-	// 否则多设备共用 token 会来回改写绑定值，导致 account_id/会话/receipt 命名空间漂移，
-	// 同一客户被拆成多个会话，甚至重试时查不到原 receipt 而重复入库。
-	if inst.InstallationID == "" && reqInstallationID != "" {
-		inst.InstallationID = reqInstallationID
-		if err := s.instRepo.Update(tenant.WithTenantID(ctx, inst.TenantID), inst); err != nil {
-			logger.Ctx(ctx).Warn().Msgf("[SageX] bind installation failed installation=%s err=%v", reqInstallationID, err)
+	if reqInstallationID == "" {
+		reqInstallationID = "sagex_" + sagexStableID(code)
+	}
+	tenantCtx := tenant.WithTenantID(ctx, resolved.TenantID)
+	inst, err := s.instRepo.GetByInstallationID(tenantCtx, reqInstallationID)
+	if err != nil { return nil, err }
+	if inst == nil {
+		tok := generateSageXToken()
+		inst = &model.SageXInstallation{
+			TenantID: resolved.TenantID, Name: "SageX " + resolved.ChannelCode,
+			InstallationID: reqInstallationID, Token: tok,
+			AccountID: strconv.FormatUint(uint64(resolved.AccountID), 10), Status: 1,
 		}
+		if err := s.instRepo.Create(tenantCtx, inst); err != nil { return nil, err }
+	} else {
+		changed := false
+		if inst.AccountID == "" && resolved.AccountID > 0 {
+			inst.AccountID = strconv.FormatUint(uint64(resolved.AccountID), 10); changed = true
+		}
+		if changed { _ = s.instRepo.Update(tenantCtx, inst) }
 	}
 	effectiveInstallationID := inst.InstallationID
-	if effectiveInstallationID == "" {
-		effectiveInstallationID = reqInstallationID
-	}
-	tenantCtx := tenant.WithTenantID(ctx, inst.TenantID)
+	if effectiveInstallationID == "" { effectiveInstallationID = reqInstallationID }
 	_ = s.instRepo.TouchLastSeen(tenantCtx, inst.ID, time.Now())
 
 	counts := make(map[string]int, len(req.Events))

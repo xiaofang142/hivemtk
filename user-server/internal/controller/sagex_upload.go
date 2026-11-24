@@ -23,13 +23,6 @@ func NewSageXUploadController(svc *service.SageXUploadService) *SageXUploadContr
 }
 
 func (c *SageXUploadController) Upload(ctx *gin.Context) {
-	// 先鉴权再读 body，避免匿名调用方强制服务端读取 1 MiB。
-	token := extractBearerToken(ctx.GetHeader("Authorization"))
-	if token == "" {
-		sagexWriteError(ctx, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
 	const maxBody = int64(service.SageXMaxRequestBytes + 4096)
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxBody)
 
@@ -53,8 +46,16 @@ func (c *SageXUploadController) Upload(ctx *gin.Context) {
 		sagexWriteError(ctx, http.StatusBadRequest, "invalid_json")
 		return
 	}
+	identifyCode := strings.TrimSpace(req.IdentifyCode)
+	if identifyCode == "" {
+		identifyCode = strings.TrimSpace(ctx.GetHeader("X-Channel-Identify-Code"))
+	}
+	if identifyCode == "" {
+		sagexWriteError(ctx, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
-	resp, err := c.svc.HandleUpload(ctx.Request.Context(), token, &req, len(raw))
+	resp, err := c.svc.HandleUpload(ctx.Request.Context(), identifyCode, &req, len(raw))
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSageXUnauthorized):
