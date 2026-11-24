@@ -120,7 +120,11 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	if channel != "" {
 		normReq := NormalizeBridgeChannel(channel)
 		if normReq != resolvedChannel && channel != strconv.FormatUint(uint64(resolved.ChannelID), 10) {
-			return rctx, false, nil, ErrBridgeTenantAmbiguous
+			// identify_code is authoritative; request channel may be a client hint (e.g. wechat/qq).
+			// Keep resolved channel to avoid misrouting, but don't reject a valid identify_code.
+			if resolvedChannel == "" {
+				resolvedChannel = normReq
+			}
 		}
 	}
 	if accountID != "" && resolvedAccountID != "" && accountID != resolvedAccountID {
