@@ -192,3 +192,17 @@
 - LEDGER_EXISTS；改动数：159（较心跳#28 的 155 +4，含外部会话 i18n 治理文件）
 - 无活跃子任务；所有 Phase + FIX 完成、全绿；无 background-result。
 - 判定：修复循环全部完成（FIX-1~4/6 + FIX-5 接受 6→0，build/vet/guard/门禁新增0 全过），改动清单已获用户「全部处理」+「全部纳入提交（含 _ic_debug.py）」确认。心跳转入执行阶段：主智能体正在执行 8204 重启（新构建 + AutoMigrate）→ ego-browser 逐元素点验 → T071 一次性提交双远端。不判停滞。
+
+### 心跳 #30 — 2026-11-24T05:40Z
+- 无活跃子任务（T068 UI 点验由主智能体 ego-browser 执行中）；改动数约 159+。
+- **T068 UI 逐元素点验进展**：8204 已重启为新构建（新路由生效、新表 AutoMigrate），代理 502 根因（Node localhost 解析 ::1 vs SERVER_HOST=127.0.0.1 仅 IPv4）已用 8212 vite + ipv4first 修复。空间 40 注入 hmtk_token Cookie 成功进入系统。三页点验全部通过：/channels/accounts（弹窗展示自他识别名称/数据授权/两类智能体独立开关）、/channels/manage（预设表驱动）、/channels/identify-codes。capabilities 接口层等价验证通过（无码503→建渠道→生成码→带码200→错码401）。
+- **缺陷1 已修**：9 语言 i18n 补 `menu.channelIdentifyCode`（页面菜单/面包屑曾显示 raw key），ego-browser 复验通过。
+- **缺陷2 派发修复中**：删除渠道不级联删识别码→旧码 fail-open（DELETE /api/channels/:id 后旧识别码仍能过 capabilities 鉴权 200）。根因 service/channel_master.go:115 Delete 无级联 + 识别码仓储无 DeleteByChannel。已派修复子任务 ses_df3f0bd85ffe2d2wRJHiYMKAx4（识别码/账号仓储加 DeleteByChannel + Delete 级联 + 单测），后台运行中。
+- T071 提交暂缓，等 fail-open 修复验证通过后一次性提交双远端。测试残留数据已清理（渠道表/识别码表恢复空）。
+
+### 心跳 #31 — 2026-11-24 13:35+0800（重大异常）
+- **外部会话（codex）抢先完成 T071**：改动数从 159 骤降到 7，经 git log 确认成果已被外部会话 commit 而非丢失：`74d69c48f feat(crm): complete CRM/lead/channel custom task (Phase 2-7) with audit gates green`（181 files, +14054/-574）+ `12fe0711b Merge remote-tracking branch 'upstream/master'`（当前 HEAD）。git ls-remote 确认 gitee-upstream/master 与 upstream/master 均已是 12fe0711b，与本地一致 → 已 push 双远端。绕过主智能体 T071 把关，且该提交不含 fail-open 安全修复。
+- 工作区残留 7 项：fail-open 修复子任务 ses_df3f0bd85ffe2d2wRJHiYMKAx4 的 5 文件（授权范围）+ 外部 codex 会话独立工作（platform/client.go +11 行、新增 pkg/edition/，不在授权范围、勿纳入我们的提交）+ 本台账。
+- **用户决策（@565@ 逐字「补交 fail-open 修复」）**：等 fail-open 修复子任务完成审查后，只把 5 个 fail-open 文件 + 台账单独 commit+push 双远端，不纳入外部 edition 改动。
+- 已带 sessionID 跟进修复子任务，要求确认修复完成/验证输出、未触碰 edition 文件、裸命名/五层/fail-visible。等 background-result。
+- 判定：异常已查清、决策已定、修复子任务跟进中；心跳转执行阶段，不判停滞。

@@ -24,6 +24,9 @@ type ChannelIdentifyCodeRepository interface {
 	// 跨租户系统作用域读（凭证闸门在租户解析之前运行），供 guard 候选源使用。
 	ValidCodes(ctx context.Context) ([]string, error)
 	Upsert(ctx context.Context, rec *model.ChannelIdentifyCode) error
+	// DeleteByChannel 按租户+渠道清除该渠道的全部识别码行（含重置在途旧码）。
+	// 渠道删除时必须级联调用，否则已删渠道的旧码仍会被 ValidCodes 视为有效。
+	DeleteByChannel(ctx context.Context, tenantID, channelID uint) error
 }
 
 type channelIdentifyCodeRepo struct {
@@ -134,4 +137,15 @@ func (r *channelIdentifyCodeRepo) Upsert(ctx context.Context, rec *model.Channel
 		Columns:   []clause.Column{{Name: "channel_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"code", "version", "prev_code", "prev_valid_until", "reset_at", "updated_at"}),
 	}).Create(rec).Error
+}
+
+// DeleteByChannel 硬删除该渠道的全部识别码行。两表模型均无 gorm.DeletedAt，
+// 口径与 ChannelAccountRepository.Delete 一致；缺 DB 句柄时 fail-closed。
+func (r *channelIdentifyCodeRepo) DeleteByChannel(ctx context.Context, tenantID, channelID uint) error {
+	if !r.Available() {
+		return ErrChannelStoreUnavailable
+	}
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID).
+		Delete(&model.ChannelIdentifyCode{}).Error
 }

@@ -21,17 +21,36 @@ type ChannelMasterService interface {
 }
 
 type channelMasterService struct {
-	repo repository.ChannelRepository
+	repo             repository.ChannelRepository
+	identifyCodeRepo repository.ChannelIdentifyCodeRepository
+	accountRepo      repository.ChannelAccountRepository
 }
 
 // NewChannelMasterService 创建渠道主数据服务。
 func NewChannelMasterService() ChannelMasterService {
-	return &channelMasterService{repo: repository.NewChannelRepository()}
+	return &channelMasterService{
+		repo:             repository.NewChannelRepository(),
+		identifyCodeRepo: repository.NewChannelIdentifyCodeRepository(),
+		accountRepo:      repository.NewChannelAccountRepository(),
+	}
 }
 
-// NewChannelMasterServiceWithRepo 用显式仓储构造。
+// NewChannelMasterServiceWithRepo 用显式渠道仓储构造（兼容既有调用，其余依赖内部装配）。
 func NewChannelMasterServiceWithRepo(repo repository.ChannelRepository) ChannelMasterService {
-	return &channelMasterService{repo: repo}
+	return &channelMasterService{
+		repo:             repo,
+		identifyCodeRepo: repository.NewChannelIdentifyCodeRepository(),
+		accountRepo:      repository.NewChannelAccountRepository(),
+	}
+}
+
+// NewChannelMasterServiceWithDeps 注入全部仓储依赖（测试用）。
+func NewChannelMasterServiceWithDeps(
+	repo repository.ChannelRepository,
+	identifyCodeRepo repository.ChannelIdentifyCodeRepository,
+	accountRepo repository.ChannelAccountRepository,
+) ChannelMasterService {
+	return &channelMasterService{repo: repo, identifyCodeRepo: identifyCodeRepo, accountRepo: accountRepo}
 }
 
 func toChannelOption(ch *model.Channel) dto.ChannelOption {
@@ -116,5 +135,13 @@ func (s *channelMasterService) Delete(ctx context.Context, tenantID, id uint) er
 	if tenantID == 0 || id == 0 {
 		return ErrChannelAccountInvalid
 	}
-	return s.repo.Delete(ctx, tenantID, id)
+	// 先删渠道，再级联清掉该渠道的识别码与账号：识别码表是 BridgeIngressGuard
+	// 的权威候选源，漏删会让已删渠道的旧码继续通过鉴权（fail-open）。
+	if err := s.repo.Delete(ctx, tenantID, id); err != nil {
+		return err
+	}
+	if err := s.identifyCodeRepo.DeleteByChannel(ctx, tenantID, id); err != nil {
+		return err
+	}
+	return s.accountRepo.DeleteByChannel(ctx, tenantID, id)
 }

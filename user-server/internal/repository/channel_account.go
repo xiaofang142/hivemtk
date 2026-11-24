@@ -26,6 +26,9 @@ type ChannelAccountRepository interface {
 	GetByIdentifyCode(ctx context.Context, code string) (*model.ChannelAccount, error)
 	Update(ctx context.Context, tenantID, id uint, updates map[string]any) error
 	Delete(ctx context.Context, tenantID, id uint) error
+	// DeleteByChannel 按租户+渠道删除该渠道下全部账号（含 identify_code 冗余列），
+	// 配合渠道删除收口「按码反查账号」的旧码入口。
+	DeleteByChannel(ctx context.Context, tenantID, channelID uint) error
 	// SetIdentifyCodeByChannel 双写识别码到渠道账号的冗余列（T016）。
 	SetIdentifyCodeByChannel(ctx context.Context, tenantID, channelID uint, code string) error
 }
@@ -194,6 +197,16 @@ func (r *channelAccountRepo) Delete(ctx context.Context, tenantID, id uint) erro
 	}
 	return r.db.WithContext(ctx).
 		Where("tenant_id = ? AND id = ?", tenantID, id).
+		Delete(&model.ChannelAccount{}).Error
+}
+
+// DeleteByChannel 硬删除该渠道下的全部账号行，口径与 Delete 一致。
+func (r *channelAccountRepo) DeleteByChannel(ctx context.Context, tenantID, channelID uint) error {
+	if !r.Available() {
+		return ErrChannelStoreUnavailable
+	}
+	return r.db.WithContext(ctx).
+		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID).
 		Delete(&model.ChannelAccount{}).Error
 }
 
