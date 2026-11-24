@@ -429,6 +429,8 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	s.lastJudge[debounceKey] = time.Now()
 	s.mu.Unlock()
 	s.recordLeadMiningJudgement(ctx, hub, jd, jctx)
+	// D8：判定成功后把结论写成会话历史摘要（compaction），供多轮/长会话复用。
+	saveCompactSummary(ctx, hub, jctx.ChannelAccountID, jd)
 	if !jd.IsLead || jd.IntentScore < gate.minIntentScore {
 		return
 	}
