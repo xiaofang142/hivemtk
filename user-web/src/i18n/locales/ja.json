@@ -456,6 +456,7 @@
     "emailTo": "[JA] Recipient",
     "knowledgeBase": "[JA] Knowledge Base Management",
     "permissionManage": "[JA] Permissions",
+    "channelIdentifyCode": "チャネル識別コード",
     "roleManage": "[JA] Roles",
     "sendEmail": "[JA] Send Email",
     "systemUser": "[JA] Personnel",

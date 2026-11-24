@@ -441,6 +441,7 @@
     "systemUser": "Personnel",
     "roleManage": "Roles",
     "permissionManage": "Permissions",
+    "channelIdentifyCode": "Códigos de identificação de canal",
     "permissionGroup": "Access Control",
     "assetBundle": "Asset Bundles",
     "assetBundleList": "Bundle Management",

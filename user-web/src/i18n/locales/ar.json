@@ -414,6 +414,7 @@
     "emailTo": "[AR] Recipient",
     "knowledgeBase": "[AR] Knowledge Base Management",
     "permissionManage": "[AR] Permissions",
+    "channelIdentifyCode": "رموز تحديد القنوات",
     "roleManage": "[AR] Roles",
     "sendEmail": "[AR] Send Email",
     "systemUser": "[AR] Personnel",
