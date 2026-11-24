@@ -116,11 +116,11 @@ func (r *SessionActionRepository) GetPlatformAccount(ctx context.Context, sessio
 }
 
 // EnqueueOutbound 以 system 名义向 message_hub 入队一条待发送文本（宏/规则引擎动作）。
-func (r *SessionActionRepository) EnqueueOutbound(ctx context.Context, sessionID, content string) error {
+func (r *SessionActionRepository) EnqueueOutbound(ctx context.Context, sessionID, content, accountID string) error {
 	if r == nil || r.db == nil {
 		return gorm.ErrInvalidDB
 	}
-	platform, account, err := r.GetPlatformAccount(ctx, sessionID)
+	platform, _, err := r.GetPlatformAccount(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func (r *SessionActionRepository) EnqueueOutbound(ctx context.Context, sessionID
 	rec := &model.MessageHub{
 		Platform:       platform,
 		MsgID:          fmt.Sprintf("macro_%s_%d", sessionID, now.UnixNano()),
-		AccountID:      account,
+		AccountID:      accountID,
 		Direction:      "outbound",
 		Status:         "pending",
 		MsgType:        "text",

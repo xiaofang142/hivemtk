@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"hivemtk-user/internal/model"
@@ -149,5 +150,21 @@ func (s *MacroService) enqueueOutbound(ctx context.Context, sessionID, content s
 	if strings.TrimSpace(content) == "" {
 		return fmt.Errorf("消息内容为空")
 	}
-	return s.sessOp.EnqueueOutbound(ctx, sessionID, content)
+	platform, account, err := s.sessOp.GetPlatformAccount(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	var preferred uint
+	if id, err := strconv.ParseUint(strings.TrimSpace(account), 10, 32); err == nil {
+		preferred = uint(id)
+	}
+	picked, pickErr := NewChannelDispatchService().PickAccount(ctx, DispatchPickInput{
+		Channel:            platform,
+		ConversationID:     sessionID,
+		PreferredAccountID: preferred,
+	})
+	if pickErr == nil && picked != nil && picked.AccountID > 0 {
+		account = strconv.FormatUint(uint64(picked.AccountID), 10)
+	}
+	return s.sessOp.EnqueueOutbound(ctx, sessionID, content, account)
 }
