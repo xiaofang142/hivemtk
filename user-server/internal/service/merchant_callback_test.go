@@ -608,11 +608,14 @@ func TestMerchantCallbackInbox_ServiceBoundaryFailClosed(t *testing.T) {
 	ctx := tenant.WithTenantID(t.Context(), f.bind.TenantID)
 	_, err = svc.ReadCompensationPage(ctx, f.bind.ID, 50)
 	require.ErrorIs(t, err, wantErr)
-	require.ErrorIs(t, svc.AcknowledgeCompensationPage(ctx, repository.MerchantCallbackCompensationPage{}, nil), wantErr)
+	// 传有效 page 才能越过 boundary check、走到 repo 委托点验证错误原样传播。
+	validPage := repository.MerchantCallbackCompensationPage{TenantID: f.bind.TenantID, SubscriptionID: f.bind.ID}
+	require.ErrorIs(t, svc.AcknowledgeCompensationPage(ctx, validPage, nil), wantErr)
 
 	// repo 未注入时 fail-closed，不 panic、不委托。
 	nilSvc := NewMerchantCallbackService(nil, repository.NewMerchantConnectionRepository(f.db), nil)
 	_, err = nilSvc.ReadCompensationPage(ctx, f.bind.ID, 50)
 	require.ErrorIs(t, err, repository.ErrMerchantCallbackStorage)
-	require.ErrorIs(t, nilSvc.AcknowledgeCompensationPage(ctx, repository.MerchantCallbackCompensationPage{}, nil), repository.ErrMerchantCallbackStorage)
+	// 同样要越过 boundary check 才能验证 repo 未装配时 fail-closed。
+	require.ErrorIs(t, nilSvc.AcknowledgeCompensationPage(ctx, validPage, nil), repository.ErrMerchantCallbackStorage)
 }

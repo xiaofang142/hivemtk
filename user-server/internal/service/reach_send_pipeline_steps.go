@@ -557,7 +557,12 @@ func (p *defaultSendPipeline) runRetry(ctx context.Context, req *ReachSendReques
 		}
 	}
 	resp.sendError = lastErr
-	resp.OutcomeUnknown = resp.ActualAttempts > 0 && !sendDefinitelyRejected(lastErr)
+	// 只有"分类不出来"才算结果未知：能按码/文案分类的失败（可重试网络错、
+	// 不可重试授权错）交给 settleQuota 的 default 分支按 Retryable 处置。
+	// 旧口径用 sendDefinitelyRejected 反推，把可分类错误也算成 unknown，
+	// 结果是不可重试失败不返额、可重试失败被挂起等人工核对。
+	ce := AsChannelError(lastErr)
+	resp.OutcomeUnknown = resp.ActualAttempts > 0 && (ce == nil || ce.Category == CategoryUnknown) && !sendDefinitelyRejected(lastErr)
 	if resp.OutcomeUnknown {
 		resp.DeliveryState = "outcome_unknown"
 	} else {

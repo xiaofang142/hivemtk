@@ -130,7 +130,17 @@
 
 ---
 
+## 十、UI 验证与回归（2026-11-25 A 轮补充）
+
+| 文档 | 用途 |
+|---|---|
+| [verification/ui-audit-playbook.md](verification/ui-audit-playbook.md) | 通用逐页点验流程（环境/判定/常见坑/go test 快测库） |
+| [verification/ui-audit-round-a-20261125.md](verification/ui-audit-round-a-20261125.md) | 280 条全量逐页重测实战补充：测试账号、ego-browser 两阶段法脚本模板、台账脚本、版本过滤回归要点、go test 4 个失败根因与修复、测试数据副作用与清理结果 |
+
+---
+
 *最后更新: 2026-10-24 · 009 收口：修正头句为双形态、挂入 architecture/operations/standards/specs 四层导航、补 SAAS_PRODUCTION_CONSTRAINTS 与 TENANT_MODE_REVIEW、补 005/006/009 规格施工源；三份主文档与 AI 功能清单基线口径不变*
+*2026-11-25 补充：第十节挂入 UI 全量逐页点验 playbook 与 A 轮实战补充*
 
 ---
 
