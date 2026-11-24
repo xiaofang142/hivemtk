@@ -636,6 +636,18 @@ func (s *Service) notifyLeadDiscovery(ctx context.Context, clue *model.Clue, jd 
 	if roleLabel == "" {
 		roleLabel = "待识别"
 	}
+	// FR-015：自动化发掘链路也要按配置路由推送负责人，而不是只发一条 user_id=0
+	// 的全局广播。手动归档端点（/api/manage/leads/archive）已走 LeadNotifyService；
+	// 这里补上同一出口，确保 account > channel > tenant 三级路由与送达记录都生效。
+	if err := NewLeadNotifyService().NotifyOwner(ctx, ArchiveClueInput{
+		ClueID:          clue.ID,
+		CustomerID:      clue.CustomerID,
+		SourceChannel:   clue.SourceChannel,
+		SourceAccountID: clue.SourceAccountID,
+		Summary:         clue.Summary,
+	}, clue.CustomerID); err != nil {
+		logger.Warnf("[lead-mining] 配置路由推送负责人失败 clue=%s: %v", clue.ID, err)
+	}
 	title := fmt.Sprintf("发现新线索：%s", clue.Name)
 	content := fmt.Sprintf("渠道=%s 角色=%s 意向=%d 摘要=%s", clue.SourceChannel, roleLabel, clue.IntentScore, clue.Summary)
 	if clue.FollowupSuggestion != "" {
