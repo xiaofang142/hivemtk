@@ -28,10 +28,29 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _safe_progress_path(name):
+    """把进度文件名约束在脚本目录内，拒绝 .. 与绝对路径（防止路径穿越）。"""
+    if not name or os.path.isabs(name) or ".." in name.split("/") or ".." in name.split("\\"):
+        raise ValueError("seq-progress 必须是脚本目录下的文件名，禁止路径穿越")
+    path = os.path.abspath(os.path.join(HERE, name))
+    if os.path.dirname(path) != HERE:
+        raise ValueError("seq-progress 越出脚本目录")
+    return path
+
+
+def _check_target_url(url):
+    """E2E/压测目标必须是绝对 http(s) URL（禁 userinfo/fragment）；配置面防护。"""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc or parts.username or parts.password or parts.fragment:
+        raise ValueError(f"非法目标 URL: {url!r}")
+    return url
 INTERACTIONS_FILE = os.path.join(HERE, "interactions.jsonl")
 
 # 降级判据只有一份：ai_quality.DEGRADED_MARKERS（与本文件同目录，靠 sys.path[0] 解析）。
@@ -87,6 +106,7 @@ def gen_visitor_id():
 # HTTP 客户端
 # ---------------------------------------------------------------------------
 def post_json(url, headers, payload, timeout):
+    _check_target_url(url)
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -359,7 +379,7 @@ def main():
     # 非守护：一次性跑 args.count 条
     # 顺序遍历模式：覆盖整个题库（按 idx 顺序逐条，不随机循环）+ 断点续跑
     if args.sequential:
-        prog_path = os.path.join(HERE, args.seq_progress)
+        prog_path = _safe_progress_path(args.seq_progress)
         start = 0
         if os.path.exists(prog_path):
             try:
@@ -410,7 +430,7 @@ def main():
         new_start = start + len(run_slice)
         if new_start >= len(questions):
             new_start = 0  # 全量覆盖完成，下一轮从头
-        with open(os.path.join(HERE, args.seq_progress), "w", encoding="utf-8") as pf:
+        with open(_safe_progress_path(args.seq_progress), "w", encoding="utf-8") as pf:
             pf.write(str(new_start))
     # 单次模式补充完整汇总
     print("\n" + "=" * 64)

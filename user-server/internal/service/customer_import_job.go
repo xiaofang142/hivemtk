@@ -14,14 +14,16 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 
 	"gorm.io/gorm"
 )
 
 type CustomerImportJobService struct {
-	repo     repository.CustomerImportJobRepository
-	custRepo repository.CustomerRepository
+	repo          repository.CustomerImportJobRepository
+	custRepo      repository.CustomerRepository
+	readCSVFileFn func(path string) ([][]string, error) // nil 用生产实现；测试注入故障出口
 }
 
 func NewCustomerImportJobService() *CustomerImportJobService {
@@ -51,17 +53,17 @@ type ImportPrecheckRowError struct {
 }
 
 type ImportPrecheckReport struct {
-	JobID          string                   `json:"job_id"`
-	EntityType     string                   `json:"entity_type"`
-	FileName       string                   `json:"file_name"`
-	TotalRows      int                      `json:"total_rows"`
-	ValidRows      int                      `json:"valid_rows"`
-	InvalidRows    int                      `json:"invalid_rows"`
-	DuplicateRows  int                      `json:"duplicate_rows"`
-	DedupStrategy  string                   `json:"dedup_strategy"`
-	Mapping        map[string]string        `json:"mapping"`
-	Errors         []ImportPrecheckRowError `json:"errors,omitempty"`
-	GeneratedAt    time.Time                `json:"generated_at"`
+	JobID         string                   `json:"job_id"`
+	EntityType    string                   `json:"entity_type"`
+	FileName      string                   `json:"file_name"`
+	TotalRows     int                      `json:"total_rows"`
+	ValidRows     int                      `json:"valid_rows"`
+	InvalidRows   int                      `json:"invalid_rows"`
+	DuplicateRows int                      `json:"duplicate_rows"`
+	DedupStrategy string                   `json:"dedup_strategy"`
+	Mapping       map[string]string        `json:"mapping"`
+	Errors        []ImportPrecheckRowError `json:"errors,omitempty"`
+	GeneratedAt   time.Time                `json:"generated_at"`
 }
 
 type ImportExecuteReport struct {
@@ -303,15 +305,26 @@ func (s *CustomerImportJobService) Execute(ctx context.Context, jobID string) (*
 
 	job.Status = "running"
 	job.ErrorReport = "[]"
-	_ = s.repo.Update(ctx, job)
+	if err := s.repo.Update(ctx, job); err != nil {
+		// 权威状态写失败即中止：否则作业停在旧状态，用户既拿不到结果也因旧状态无法重试。
+		return nil, fmt.Errorf("标记导入任务执行中失败: %w", err)
+	}
 
-	rows, err := readCSVFile(job.FilePath)
+	readCSV := readCSVFile
+	if s.readCSVFileFn != nil {
+		readCSV = s.readCSVFileFn
+	}
+	rows, err := readCSV(job.FilePath)
 	if err != nil {
-		_ = s.repo.UpdateStatus(ctx, jobID, "failed", job.TotalRows, 0, job.TotalRows, 0, 0, cjMustJSON([]ImportPrecheckRowError{{Row: 0, Message: "读取导入文件失败: " + err.Error()}}))
+		if statusErr := s.repo.UpdateStatus(ctx, jobID, "failed", job.TotalRows, 0, job.TotalRows, 0, 0, cjMustJSON([]ImportPrecheckRowError{{Row: 0, Message: "读取导入文件失败: " + err.Error()}})); statusErr != nil {
+			logger.Errorf("[ImportJob] job=%s 读取失败后标记 failed 失败: %v（原始错误: %v）", jobID, statusErr, err)
+		}
 		return nil, fmt.Errorf("读取导入文件失败: %w", err)
 	}
 	if len(rows) < 1 {
-		_ = s.repo.UpdateStatus(ctx, jobID, "failed", 0, 0, 0, 0, 0, cjMustJSON([]ImportPrecheckRowError{{Row: 0, Message: "CSV文件为空"}}))
+		if statusErr := s.repo.UpdateStatus(ctx, jobID, "failed", 0, 0, 0, 0, 0, cjMustJSON([]ImportPrecheckRowError{{Row: 0, Message: "CSV文件为空"}})); statusErr != nil {
+			logger.Errorf("[ImportJob] job=%s 空 CSV 后标记 failed 失败: %v", jobID, statusErr)
+		}
 		return nil, errors.New("CSV文件为空")
 	}
 	headers := normalizeHeaders(rows[0])
@@ -384,7 +397,11 @@ func (s *CustomerImportJobService) Execute(ctx context.Context, jobID string) (*
 	}
 	report.CompletedAt = time.Now()
 	errJSON := cjMustJSON(report.Errors)
-	_ = s.repo.UpdateStatus(ctx, jobID, report.Status, report.TotalRows, report.SuccessRows, report.FailedRows, report.SkippedRows, report.UpdatedRows, errJSON)
+	if err := s.repo.UpdateStatus(ctx, jobID, report.Status, report.TotalRows, report.SuccessRows, report.FailedRows, report.SkippedRows, report.UpdatedRows, errJSON); err != nil {
+		// 终态写失败不能伪装成成功：report 仍回给调用方参考，但错误必须显式返回。
+		logger.Errorf("[ImportJob] job=%s 写入执行结果失败: %v", jobID, err)
+		return report, fmt.Errorf("写入导入结果失败: %w", err)
+	}
 	return report, nil
 }
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -10,7 +11,17 @@ import (
 )
 
 type fakeCustomerImportJobRepo struct {
-	job *model.CustomerImportJob
+	job                *model.CustomerImportJob
+	failUpdate         error
+	failUpdateStatus   error
+	failUpdateStatusAt int // 第 N 次 UpdateStatus 调用失败（1-based，0=不注入）
+	updateStatusCalls  int
+}
+
+// 状态写失败按「第 nth 次调用」注入；调用方用独立指针断言 DB 侧状态未被改写。
+func (f *fakeCustomerImportJobRepo) failUpdateStatusOn(nth int, err error) {
+	f.failUpdateStatus = err
+	f.failUpdateStatusAt = nth
 }
 
 func (f *fakeCustomerImportJobRepo) Create(_ context.Context, j *model.CustomerImportJob) error {
@@ -30,6 +41,10 @@ func (f *fakeCustomerImportJobRepo) List(_ context.Context, _, _ int) ([]model.C
 	return []model.CustomerImportJob{*f.job}, 1, nil
 }
 func (f *fakeCustomerImportJobRepo) UpdateStatus(_ context.Context, _, status string, total, success, failed, skipped, updated int, errReport string) error {
+	f.updateStatusCalls++
+	if f.failUpdateStatus != nil && f.failUpdateStatusAt > 0 && f.updateStatusCalls == f.failUpdateStatusAt {
+		return f.failUpdateStatus
+	}
 	if f.job != nil {
 		f.job.Status = status
 		f.job.TotalRows = total
@@ -42,6 +57,9 @@ func (f *fakeCustomerImportJobRepo) UpdateStatus(_ context.Context, _, status st
 	return nil
 }
 func (f *fakeCustomerImportJobRepo) Update(_ context.Context, j *model.CustomerImportJob) error {
+	if f.failUpdate != nil {
+		return f.failUpdate
+	}
 	f.job = j
 	return nil
 }
@@ -150,5 +168,79 @@ func TestErrorReportCSV(t *testing.T) {
 	var errs []ImportPrecheckRowError
 	if err := json.Unmarshal([]byte(repo.job.ErrorReport), &errs); err != nil || len(errs) != 1 {
 		t.Fatalf("errs=%v err=%v", errs, err)
+	}
+}
+
+// Execute 权威状态写失败必须显式中止/报错，不静默吞错。
+func TestImportJobExecute_RunningStatusWriteFailureAborts(t *testing.T) {
+	dbErr := errors.New("db down")
+	repo := &fakeCustomerImportJobRepo{
+		job:        &model.CustomerImportJob{JobID: "imp_run_fail", Status: "pending", FilePath: "/no/such/file.csv"},
+		failUpdate: dbErr,
+	}
+	called := false
+	svc := &CustomerImportJobService{repo: repo, readCSVFileFn: func(string) ([][]string, error) {
+		called = true
+		return [][]string{{"phone"}, {"13800138000"}}, nil
+	}}
+	report, err := svc.Execute(context.Background(), "imp_run_fail")
+	if err == nil || !strings.Contains(err.Error(), "标记导入任务执行中失败") {
+		t.Fatalf("want running-status error, got report=%+v err=%v", report, err)
+	}
+	if called {
+		t.Fatal("CSV reading must not start when running-status write failed")
+	}
+	if report != nil {
+		t.Fatalf("no report should be returned when running-status write failed, got %+v", report)
+	}
+}
+
+func TestImportJobExecute_ReadFailureStatusWriteFailureKeepsRootError(t *testing.T) {
+	repo := &fakeCustomerImportJobRepo{
+		job: &model.CustomerImportJob{JobID: "imp_read_fail", Status: "pending", FilePath: "/no/such/file.csv", TotalRows: 7},
+	}
+	repo.failUpdateStatusOn(1, errors.New("status db down"))
+	svc := &CustomerImportJobService{repo: repo, readCSVFileFn: func(string) ([][]string, error) {
+		return nil, errors.New("csv open failed")
+	}}
+	_, err := svc.Execute(context.Background(), "imp_read_fail")
+	if err == nil || !strings.Contains(err.Error(), "读取导入文件失败") || !strings.Contains(err.Error(), "csv open failed") {
+		t.Fatalf("want root read error preserved, got %v", err)
+	}
+}
+
+func TestImportJobExecute_FinalStatusWriteFailureReturnsError(t *testing.T) {
+	repo := &fakeCustomerImportJobRepo{
+		job: &model.CustomerImportJob{JobID: "imp_final_fail", Status: "pending", FilePath: "in-memory", DedupStrategy: "skip"},
+	}
+	repo.failUpdateStatusOn(1, errors.New("final status db down")) // 唯一 UpdateStatus 调用 = 终态写
+	svc := &CustomerImportJobService{repo: repo, readCSVFileFn: func(string) ([][]string, error) {
+		return [][]string{{"phone"}}, nil // 仅表头：不触发客户查询，无需注入 custRepo
+	}}
+	report, err := svc.Execute(context.Background(), "imp_final_fail")
+	if err == nil || !strings.Contains(err.Error(), "写入导入结果失败") {
+		t.Fatalf("want final-status error, got report=%+v err=%v", report, err)
+	}
+	if report == nil || report.Status != "completed" {
+		t.Fatalf("report should still be returned for reference, got %+v", report)
+	}
+}
+
+func TestImportJobExecute_HappyPathStatusTransitions(t *testing.T) {
+	repo := &fakeCustomerImportJobRepo{
+		job: &model.CustomerImportJob{JobID: "imp_ok", Status: "pending", FilePath: "in-memory", DedupStrategy: "skip"},
+	}
+	svc := &CustomerImportJobService{repo: repo, readCSVFileFn: func(string) ([][]string, error) {
+		return [][]string{{"phone"}}, nil // 仅表头：无数据行，不触发客户查询
+	}}
+	report, err := svc.Execute(context.Background(), "imp_ok")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if report.Status != "completed" || repo.job.Status != "completed" {
+		t.Fatalf("report=%+v job.Status=%q", report, repo.job.Status)
+	}
+	if repo.updateStatusCalls != 1 {
+		t.Fatalf("UpdateStatus calls=%d want 1", repo.updateStatusCalls)
 	}
 }

@@ -9,8 +9,26 @@ import json
 import sys
 import os
 from datetime import datetime
+from urllib.parse import urlsplit
 
 BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8204")
+# E2E 报告固定落点（非用户可控路径；用常量避免动态拼接被判路径穿越）。
+REPORT_FILE = "/tmp/e2e_full_test_report.json"
+
+
+def safe_request(method, url, **kwargs):
+    """E2E 统一 HTTP 出口：只接受绝对 http(s) 目标，禁跟随重定向。
+
+    BASE_URL 来自 env（本机默认 127.0.0.1:8204），这里做的是配置面防护，
+    避免 endpoint 拼接意外打到非预期目标。
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(f"非法 E2E 目标 URL: {url!r}")
+    if parts.username or parts.password or parts.fragment:
+        raise ValueError(f"E2E 目标禁止 userinfo/fragment: {url!r}")
+    kwargs.setdefault("allow_redirects", False)
+    return requests.request(method, url, **kwargs)
 USERNAME = os.environ.get("USERNAME", "admin")
 PASSWORD = os.environ.get("PASSWORD", "TestPwd_2026!")
 
@@ -76,7 +94,7 @@ class TestResult:
 def get_token():
     """获取认证 Token"""
     try:
-        resp = requests.post(f"{BASE_URL}/api/auth/login", json={
+        resp = safe_request("POST", f"{BASE_URL}/api/auth/login", json={
             "username": USERNAME,
             "password": PASSWORD
         })
@@ -98,15 +116,15 @@ def test_endpoint(session, method, endpoint, result, expected_success=True, data
     
     try:
         if method == "GET":
-            resp = requests.get(url, headers=headers, timeout=10)
+            resp = safe_request("GET", url, headers=headers, timeout=10)
         elif method == "POST":
             headers["Content-Type"] = "application/json"
-            resp = requests.post(url, headers=headers, json=data or {}, timeout=10)
+            resp = safe_request("POST", url, headers=headers, json=data or {}, timeout=10)
         elif method == "PUT":
             headers["Content-Type"] = "application/json"
-            resp = requests.put(url, headers=headers, json=data or {}, timeout=10)
+            resp = safe_request("PUT", url, headers=headers, json=data or {}, timeout=10)
         elif method == "DELETE":
-            resp = requests.delete(url, headers=headers, timeout=10)
+            resp = safe_request("DELETE", url, headers=headers, timeout=10)
         else:
             result.add_skip(endpoint, method, f"不支持的方法: {method}")
             return
@@ -203,7 +221,7 @@ def run_tests():
     # 5. 客户管理
     print("\n[5] 客户管理测试...")
     # 创建测试客户
-    create_customer_resp = requests.post(
+    create_customer_resp = safe_request("POST",
         f"{BASE_URL}/api/customer",
         headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         json={"name": "e2e-test-full", "phone": "13600136000", "email": "e2e_full@test.com"}
@@ -243,7 +261,7 @@ def run_tests():
         test_endpoint(token, method, endpoint, result, expected_success=expected, data=data)
     
     # 获取备份 ID 用于删除
-    backup_list_resp = requests.get(
+    backup_list_resp = safe_request("GET",
         f"{BASE_URL}/api/backups",
         headers={"Authorization": f"Bearer {token}"}
     )
@@ -510,7 +528,7 @@ def print_report(result):
         print(f"   {status_icon} {module}: {stats['pass']}通过/{stats['fail']}失败/{stats['warn']}警告/{stats['skip']}跳过")
     
     # 保存详细结果到文件
-    report_file = "/tmp/e2e_full_test_report.json"
+    report_file = REPORT_FILE
     with open(report_file, "w") as f:
         json.dump({
             "timestamp": datetime.now().isoformat(),
