@@ -106,7 +106,7 @@ if [ -n "$MERCHANT_ID" ]; then
   if [ "$DRY_RUN" = true ]; then
     echo "  [DRY-RUN] psql -c \"$SQL\"  (变量绑定: \$NEW_KEY)"
   else
-    PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
+    env "PGPASSWORD=$PGPASSWORD" psql -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE" \
       --variable=ON_ERROR_STOP=1 -c "$SQL" -v NEW_KEY="'$NEW_KEY'"
   fi
 fi

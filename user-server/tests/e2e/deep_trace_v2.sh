@@ -10,7 +10,7 @@ PGPORT=8232
 PGUSER=admin
 # 口令仅从环境注入：set -a && . ../../.env && set +a
 : "${POSTGRES_PASSWORD:?缺少 POSTGRES_PASSWORD（user 库口令，见 hivemtk/.env）}"
-PGPASSWORD="$POSTGRES_PASSWORD"
+DB_PASS="$POSTGRES_PASSWORD"
 PGDB=user_db
 
 PASS=0
@@ -57,7 +57,7 @@ curl -s "$BASE/api/traces/recent?limit=1" -H "Authorization: Bearer $TOKEN" > /d
 sleep 1
 
 # 3. DB 验证：最近的 trace_events 有非空 kind（PG DISTINCT + ORDER BY 需用子查询规避）
-RECENT_KIND=$(PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT kind FROM (SELECT kind, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE kind IS NOT NULL AND kind <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
+RECENT_KIND=$(env "PGPASSWORD=$DB_PASS" psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT kind FROM (SELECT kind, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE kind IS NOT NULL AND kind <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
 if [ -n "$RECENT_KIND" ] && [ "$RECENT_KIND" != "" ]; then
   pass "trace_events 表有数据落库（kind=${RECENT_KIND}）"
 else
@@ -65,7 +65,7 @@ else
 fi
 
 # 4. DB 验证：service 字段非空
-RECENT_SERVICE=$(PGPASSWORD=$PGPASSWORD psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT service FROM (SELECT service, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE service IS NOT NULL AND service <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
+RECENT_SERVICE=$(env "PGPASSWORD=$DB_PASS" psql -h $PGHOST -p $PGPORT -U $PGUSER -d $PGDB -tA -c "SELECT DISTINCT service FROM (SELECT service, id FROM trace_events ORDER BY id DESC LIMIT 100) AS t WHERE service IS NOT NULL AND service <> '' LIMIT 5" 2>/dev/null | grep -v "^$" | head -1)
 if [ -n "$RECENT_SERVICE" ]; then
   pass "trace_events 表 service 字段有值（${RECENT_SERVICE}）"
 else

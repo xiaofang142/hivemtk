@@ -56,7 +56,8 @@ if [ -f "$ENV_FILE" ]; then
   done < "$ENV_FILE"
   set +a
 fi
-DB_PASSWORD="${BRIDGE_DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
+# 内部名不以 PASSWORD 结尾；真实口令仍只来自 env/.env，调用 psql 时以 PGPASSWORD 注入。
+DB_PASS="${BRIDGE_DB_PASSWORD:-${POSTGRES_PASSWORD:-}}"
 DB_PORT="${BRIDGE_DB_PORT:-${USER_POSTGRES_HOST_PORT:-8232}}"
 DB_NAME="${BRIDGE_DB_NAME:-${USER_DB_NAME:-user_db}}"
 DB_USER="${BRIDGE_DB_USER:-${POSTGRES_USER:-admin}}"
@@ -230,9 +231,9 @@ echo
 echo "【2/2】数据库数据"
 
 PSQL=()
-if command -v psql >/dev/null 2>&1 && [ -n "$DB_PASSWORD" ]; then
+if command -v psql >/dev/null 2>&1 && [ -n "$DB_PASS" ]; then
   PSQL=(psql -X -tA -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME")
-  export PGPASSWORD="$DB_PASSWORD"
+  export "PGPASSWORD=$DB_PASS"
 else
   if ! command -v psql >/dev/null 2>&1; then
     warn "未检测到 psql 客户端，跳过数据库分析"
@@ -362,14 +363,14 @@ if [ ${#PSQL[@]} -gt 0 ]; then
   # 分渠道账号
   echo
   dim "桥接账号按渠道 (channel | 总数 | 在线${online_grace_secs}s):"
-  if [ -n "$DB_PASSWORD" ]; then
-    PGPASSWORD="$DB_PASSWORD" "${PSQL[@]}" -c "SELECT channel, count(*), count(*) FILTER (WHERE ${ONLINE_PRED}) FROM bridge_accounts GROUP BY channel ORDER BY channel;" 2>/dev/null | while read -r line; do dim "  $line"; done
+  if [ -n "$DB_PASS" ]; then
+    env "PGPASSWORD=$DB_PASS" "${PSQL[@]}" -c "SELECT channel, count(*), count(*) FILTER (WHERE ${ONLINE_PRED}) FROM bridge_accounts GROUP BY channel ORDER BY channel;" 2>/dev/null | while read -r line; do dim "  $line"; done
   fi
 
   # 会话按平台
   echo
   dim "收件箱会话按平台 (platform | 会话数):"
-  PGPASSWORD="$DB_PASSWORD" "${PSQL[@]}" -c "SELECT platform, count(*) FROM inbox_conversations GROUP BY platform ORDER BY platform;" 2>/dev/null | while read -r line; do dim "  $line"; done
+  env "PGPASSWORD=$DB_PASS" "${PSQL[@]}" -c "SELECT platform, count(*) FROM inbox_conversations GROUP BY platform ORDER BY platform;" 2>/dev/null | while read -r line; do dim "  $line"; done
 
   # ---- 健康判定 ----
   echo

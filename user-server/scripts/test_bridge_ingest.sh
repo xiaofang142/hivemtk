@@ -45,6 +45,9 @@ XHS_ACCOUNT="69c730300000000034018cb2"
 XHS_CONV="63bd52380000000027029f4d"
 XHS_CUSTOMER="63bd52380000000027029f4d"
 
+# DB 口令仅来自环境（历史上的内网默认口令 :-hivemtk 不再兜底）。
+DB_PASS="${POSTGRES_PASSWORD:-}"
+
 now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }
 ts_min_ago() { local m=$1; echo $(( $(now_ms) - m * 60000 )); }
 
@@ -61,7 +64,7 @@ insert_outbound() {
   local content="$2"
   local acct="${3:-$XHS_ACCOUNT}"
   local msgid="ob-$(now_ms)-$RANDOM"
-  PGPASSWORD="${POSTGRES_PASSWORD:-hivemtk}" psql -h localhost -p 8232 -U admin -d user_db -c \
+  env "PGPASSWORD=$DB_PASS" psql -h localhost -p 8232 -U admin -d user_db -c \
     "INSERT INTO message_hub (platform, account_id, conversation_id, msg_id, sender_id, sender_name, direction, content, msg_type, is_ai_reply, sent_at, created_at) VALUES ('xiaohongshu', '$acct', '$conv', '$msgid', 'bot', 'AI助手', 'outbound', '$content', 'text', true, now(), now());" 2>&1
 }
 
@@ -160,7 +163,7 @@ RESP=$(post_ingest "$XHS_CHANNEL" "$XHS_ACCOUNT" "$CONV" \
   "{\"v\":2,\"channel\":\"$XHS_CHANNEL\",\"account_id\":\"$XHS_ACCOUNT\",\"conversation_id\":\"$CONV\",\"messages\":[{\"event_id\":\"$(gen_msg_id)\",\"content\":\"$LOOP_CONTENT\",\"sender_id\":\"cust-1\",\"sender_type\":\"customer\",\"msg_type\":\"text\",\"conversation_id\":\"$CONV\",\"timestamp\":$(now_ms)}]}")
 assert_ok "3.1 回环消息上报 ok=true" "$RESP"
 # 验证未触发新的 outbound（DB outbound 数量应仍为 1，即插入的那条平台回复）
-OUT_COUNT=$(PGPASSWORD="${POSTGRES_PASSWORD:-hivemtk}" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT COUNT(*) FROM message_hub WHERE conversation_id='$CONV' AND direction='outbound';" 2>/dev/null | xargs)
+OUT_COUNT=$(env "PGPASSWORD=$DB_PASS" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT COUNT(*) FROM message_hub WHERE conversation_id='$CONV' AND direction='outbound';" 2>/dev/null | xargs)
 if [ "${OUT_COUNT:-0}" = "1" ]; then
   echo -e "${GREEN}[PASS]${NC} 3.2 回环消息未触发新 AI（outbound 仍为 1）"
   PASS=$((PASS+1))
@@ -215,7 +218,7 @@ RESP=$(post_ingest "$XHS_CHANNEL" "$XHS_ACCOUNT" "$CONV" \
 assert_ok "7.1 客户新消息 ok=true" "$RESP"
 # 验证产生了新的 outbound（插入的 1 条 + 新 AI 1 条 = 2）
 sleep 2
-OUT_COUNT=$(PGPASSWORD="${POSTGRES_PASSWORD:-hivemtk}" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT COUNT(*) FROM message_hub WHERE conversation_id='$CONV' AND direction='outbound';" 2>/dev/null | xargs)
+OUT_COUNT=$(env "PGPASSWORD=$DB_PASS" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT COUNT(*) FROM message_hub WHERE conversation_id='$CONV' AND direction='outbound';" 2>/dev/null | xargs)
 if [ "${OUT_COUNT:-0}" = "2" ]; then
   echo -e "${GREEN}[PASS]${NC} 7.2 客户新消息触发了新 AI（outbound=2）"
   PASS=$((PASS+1))
@@ -420,7 +423,7 @@ echo ""
 
 # ---- 场景 22: DB 数据验证（查 1783 参考会话最新状态）----
 echo "=== 场景 22: DB 数据验证（1783 参考会话）==="
-DB_LAST=$(PGPASSWORD="${POSTGRES_PASSWORD:-hivemtk}" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT direction FROM message_hub WHERE conversation_id = '$XHS_CONV' ORDER BY sent_at DESC LIMIT 1;" 2>/dev/null | xargs)
+DB_LAST=$(env "PGPASSWORD=$DB_PASS" psql -h localhost -p 8232 -U admin -d user_db -t -c "SELECT direction FROM message_hub WHERE conversation_id = '$XHS_CONV' ORDER BY sent_at DESC LIMIT 1;" 2>/dev/null | xargs)
 if [ -n "$DB_LAST" ]; then
   echo -e "${GREEN}[PASS]${NC} 22.1 会话 1783 DB 最后一条方向: $DB_LAST"
   PASS=$((PASS+1))

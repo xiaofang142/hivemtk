@@ -114,16 +114,16 @@ api_plat() {
 # ---- 数据库查询 ----
 # dbq "SQL" -> 原始结果；dbqv "SQL" -> 单行单值
 dbq() {
-  env PGPASSWORD="$DB_PASS" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" -tAc "$1" 2>&1
+  env "PGPASSWORD=$DB_PASS" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" -tAc "$1" 2>&1
 }
 dbqv() {
-  env PGPASSWORD="$DB_PASS" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" -tAc "$1" 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+  env "PGPASSWORD=$DB_PASS" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDB" -tAc "$1" 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 dbq_plat() {
-  env PGPASSWORD="$PLAT_DB_PASS" psql -h 127.0.0.1 -p 8201 -U admin -d "$PLAT_PGDB" -tAc "$1" 2>&1
+  env "PGPASSWORD=$PLAT_DB_PASS" psql -h 127.0.0.1 -p 8201 -U admin -d "$PLAT_PGDB" -tAc "$1" 2>&1
 }
 dbqv_plat() {
-  env PGPASSWORD="$PLAT_DB_PASS" psql -h 127.0.0.1 -p 8201 -U admin -d "$PLAT_PGDB" -tAc "$1" 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+  env "PGPASSWORD=$PLAT_DB_PASS" psql -h 127.0.0.1 -p 8201 -U admin -d "$PLAT_PGDB" -tAc "$1" 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 # ---- 断言工具 ----

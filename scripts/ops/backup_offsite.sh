@@ -62,7 +62,7 @@ if command -v docker >/dev/null 2>&1 && docker compose -f "$COMPOSE_DIR/docker-c
   fi
 elif command -v pg_dump >/dev/null 2>&1; then
   log "形态=host：pg_dump ${DB_NAME} → ${DUMP_FILE}（⚠️ 无 docker 兜底形态，archive 版本须与恢复端匹配）"
-  if ! PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -Fc \
+  if ! env "PGPASSWORD=$POSTGRES_PASSWORD" pg_dump -h 127.0.0.1 -p "$DB_PORT" -U "$DB_USER" -Fc \
         -f "$DUMP_FILE" "$DB_NAME"; then
     err "pg_dump 失败（宿主机直连 127.0.0.1:${DB_PORT}）"
     exit 1

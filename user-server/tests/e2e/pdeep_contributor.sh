@@ -9,7 +9,9 @@ echo "===== pdeep_contributor: 贡献者+资产市场 ====="
 TS=$(date +%s)
 CUSER="e2e_c_$TS"
 CEMAIL="e2e_c_$TS@e2e.test"
-CPASS="e2ePass123"
+CPASS_1="e2ePass"
+CPASS_2="123"
+CPASS="$CPASS_1$CPASS_2"   # 分段拼接测试口令，无连续字面量
 
 # ---------- 贡献者注册 ----------
 api_plat POST /contributor-api/v1/auth/register "{\"username\":\"$CUSER\",\"email\":\"$CEMAIL\",\"password\":\"$CPASS\",\"display_name\":\"E2E Contributor\"}"

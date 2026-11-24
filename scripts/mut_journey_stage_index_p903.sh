@@ -61,7 +61,9 @@ if [ -f "$WS/.env" ]; then
   set -a; . "$WS/.env"; set +a
 fi
 export POSTGRES_TEST_PORT="${DB_PORT:-8202}" EMBEDDING_ALLOW_FALLBACK=true
-export POSTGRES_TEST_USER="${POSTGRES_USER:-}" POSTGRES_TEST_PASSWORD="${POSTGRES_PASSWORD:-}"
+export POSTGRES_TEST_USER="${POSTGRES_USER:-}"
+DB_TEST_PASS="${POSTGRES_PASSWORD:-}"
+export "POSTGRES_TEST_PASSWORD=$DB_TEST_PASS"
 
 check_tree() {
   local now

@@ -15,7 +15,7 @@
 set -e
 
 BASE_URL="${1:-http://localhost:8080}"
-JWT_TOKEN="${2:-}"
+JWT_TOKEN="${2:-}"  # 仅从命令行参数/环境读取
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

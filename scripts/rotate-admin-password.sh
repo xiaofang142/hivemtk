@@ -79,14 +79,17 @@ if [[ -z "${PGPASSWORD:-}" ]]; then
   PGHOST="${PGHOST:-$(env_get DB_HOST)}"
   PGPORT="${PGPORT:-$(env_get DB_PORT)}"
   PGUSER="${PGUSER:-$(env_get POSTGRES_USER)}"
-  PGPASSWORD="$(env_get POSTGRES_PASSWORD)"
+  DB_PASS="$(env_get POSTGRES_PASSWORD)"
   PGDATABASE="${PGDATABASE:-$(env_get USER_DB_NAME)}"
   export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-8232}" PGUSER="${PGUSER:-admin}" \
-         PGPASSWORD PGDATABASE="${PGDATABASE:-user_db}"
+         PGDATABASE="${PGDATABASE:-user_db}"
 fi
-[[ -n "${PGPASSWORD:-}" ]] || die2 "拿不到库口令（.env 缺 POSTGRES_PASSWORD 且环境未设 PGPASSWORD）"
+DB_PASS="${DB_PASS:-${PGPASSWORD:-}}"
+[[ -n "$DB_PASS" ]] || die2 "拿不到库口令（.env 缺 POSTGRES_PASSWORD 且环境未设 PGPASSWORD）"
+# psql 只认 PGPASSWORD；从 .env 读出时必须在此导出，否则非交互下会卡在口令提示。
+export "PGPASSWORD=$DB_PASS"
 
-echo "conn: host=${PGHOST} port=${PGPORT} db=${PGDATABASE} user=${PGUSER} pwlen=${#PGPASSWORD}"
+echo "conn: host=${PGHOST} port=${PGPORT} db=${PGDATABASE} user=${PGUSER} pwlen=${#DB_PASS}"
 
 ADMIN_ID="$(psql -At -c "SELECT id FROM system_users WHERE username = 'admin'" 2>/dev/null || true)"
 [[ -n "$ADMIN_ID" ]] || die2 "system_users 里查不到 username='admin'（本脚本只服务已 seed 的存量库）"

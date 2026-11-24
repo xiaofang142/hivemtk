@@ -38,7 +38,7 @@ if [ -z "$BRIDGE" ]; then
   # 不回显、不写盘、不进任何日志。
   pgpass="$(awk -F= '/^POSTGRES_PASSWORD=/{print $2; exit}' "$envfile" 2>/dev/null)"
   pgport="$(awk -F= '/^POSTGRES_PORT=/{print $2; exit}' "$envfile" 2>/dev/null)"
-  BRIDGE=$(PGPASSWORD="$pgpass" psql -h "${POSTGRES_HOST:-127.0.0.1}" -p "${pgport:-8232}" \
+  BRIDGE=$(env "PGPASSWORD=$pgpass" psql -h "${POSTGRES_HOST:-127.0.0.1}" -p "${pgport:-8232}" \
     -U "${POSTGRES_USER:-admin}" -d "${POSTGRES_DB:-user_db}" -Atc \
     "select code from channel_identify_codes where code <> '' limit 1" 2>/dev/null || true)
 fi

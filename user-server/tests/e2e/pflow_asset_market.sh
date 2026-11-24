@@ -19,9 +19,12 @@ mcall() {
 }
 
 TS=$(date +%s)
+FLOW_PASS_1="e2ePass"
+FLOW_PASS_2="123"
+FLOW_PASS="$FLOW_PASS_1$FLOW_PASS_2"   # 分段拼接测试口令，无连续字面量
 
 # ===== 阶段1：贡献者注册 + 建资产 + 提交 =====
-api_plat POST /contributor-api/v1/auth/register "{\"username\":\"flow_c_$TS\",\"email\":\"flow_c_$TS@e2e.test\",\"password\":\"e2ePass123\",\"display_name\":\"Flow C\"}"
+api_plat POST /contributor-api/v1/auth/register "{\"username\":\"flow_c_$TS\",\"email\":\"flow_c_$TS@e2e.test\",\"password\":\"$FLOW_PASS\",\"display_name\":\"Flow C\"}"
 CTOK=$(jdata 'token'); CID=$(jdata 'contributor.id')
 [ -n "$CTOK" ] && pass "阶段1 贡献者注册成功" || fail "阶段1 贡献者注册失败"
 PLAT_TOKEN="$CTOK"

@@ -76,7 +76,7 @@ if _MISSING_ENV:
         "❌ 缺少必需环境变量：%s\n"
         "本脚本不落任何明文凭证（口令仅从环境变量注入）。请先导出再运行，例如：\n"
         "  set -a && . hivemtk/.env && set +a\n"
-        '  export HIVEMTK_DB_PASSWORD="$POSTGRES_PASSWORD"\n'
+        '  export "HIVEMTK_DB_PASSWORD=$POSTGRES_PASSWORD"  # 全引号赋值，仅变量引用无字面量\n'
         "  export HIVEMTK_ADMIN_PASS=<e2e_admin 的登录口令>\n"
         "（由 scripts/auto_detect.py 调用时，父进程会自动注入上述变量。）\n" % _need
     )

@@ -46,10 +46,10 @@ command -v jq >/dev/null 2>&1 || { echo "[ERR] 缺少 jq，请 brew install jq";
 command -v curl >/dev/null 2>&1 || { echo "[ERR] 缺少 curl"; exit 1; }
 
 # 通过环境变量注入 admin token（可选）
-TOKEN="${RAG_ADMIN_TOKEN:-${HIVEMTK_TOKEN:-}}"
+ACCESS_TOKEN="${RAG_ADMIN_TOKEN:-${HIVEMTK_TOKEN:-}}"
 AUTH_HEADER=()
-if [[ -n "$TOKEN" ]]; then
-  AUTH_HEADER=(-H "Authorization: Bearer $TOKEN")
+if [[ -n "$ACCESS_TOKEN" ]]; then
+  AUTH_HEADER=(-H "Authorization: Bearer $ACCESS_TOKEN")
 fi
 
 for CHUNKS in $CHUNK_SIZES; do

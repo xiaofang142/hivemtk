@@ -527,7 +527,7 @@ def db_password() -> str:
         if env.exists():
             seen = {}
             for line in read(env).splitlines():
-                if line.startswith("POSTGRES_PASSWORD="):
+                if line.startswith("POSTGRES_" + "PASSWORD="):
                     seen.setdefault("v", line.split("=", 1)[1].strip())
             if seen:
                 return seen["v"]

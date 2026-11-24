@@ -15,7 +15,7 @@ sleep 2
 
 start() {
   local mode="$1" port="$2" log="$3"
-  env POSTGRES_PASSWORD="$DB_PW" MASTER_KEY="$MASTER_KEY" REDIS_PASSWORD="$REDIS_PW" \
+  env "POSTGRES_PASSWORD=$DB_PW" "MASTER_KEY=$MASTER_KEY" "REDIS_PASSWORD=$REDIS_PW" \
       DB_HOST=127.0.0.1 DB_PORT=8202 REDIS_HOST=127.0.0.1 REDIS_PORT=8203 \
       TENANT_MODE="$mode" PORT="$port" APP_ENV=development \
       nohup ./bin/user-server >"$log" 2>&1 &

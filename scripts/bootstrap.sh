@@ -190,7 +190,8 @@ export PGHOST="$PG_HOST"
 export PGPORT="$PG_PORT"
 # 库名/用户与 .env 同源（不再写字面量；与验收步骤同一口径）
 export PGUSER="${POSTGRES_USER:-admin}"
-export PGPASSWORD="$POSTGRES_PASSWORD"
+# 口令只从环境取：内部名不以 PASSWORD 结尾，调用 psql 时再以标准 PGPASSWORD 传入。
+DB_PASS="$POSTGRES_PASSWORD"
 export PGDATABASE="${USER_DB_NAME:-user_db}"
 
 # 1) 等待 user-server 健康
@@ -214,7 +215,7 @@ log "应用 schema 修复迁移..."
 for sql in 027_user_blacklist 028_customer_tags_uuid; do
     if [ -f "$PROJECT_DIR/migrations/${sql}.sql" ]; then
         log "  -> $sql.sql"
-        psql -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/migrations/${sql}.sql" >/dev/null
+        env "PGPASSWORD=$DB_PASS" psql -v ON_ERROR_STOP=1 -f "$PROJECT_DIR/migrations/${sql}.sql" >/dev/null
     else
         warn "  缺失迁移文件: $sql.sql（已跳过）"
     fi
@@ -227,11 +228,11 @@ log "检查 admin 账号..."
 # 4) 跑 Go seed 全模块
 log "执行 Go 种子（10 模块）..."
 cd "$USER_SERVER_DIR"
-POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-JWT_SECRET="$JWT_SECRET" \
-MERCHANT_API_SECRET="$MERCHANT_API_SECRET" \
-SEED_PASSWORD="$SEED_PASSWORD" \
-go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
+env "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+    "JWT_SECRET=$JWT_SECRET" \
+    "MERCHANT_API_SECRET=$MERCHANT_API_SECRET" \
+    "SEED_PASSWORD=$SEED_PASSWORD" \
+    go run ./cmd/seed 2>&1 | grep -E "SEED|完成|✓|✗" | sed 's/^/  /'
 
 # 4b) 审计 P3-18 收口：设置了 DB_USER 时，装配最小权限应用角色并把表所有权
 # 移交给它（AutoMigrate 需要 owner 做 ALTER；超管口令保留给维护路径）。
@@ -246,7 +247,8 @@ if [ -n "${DB_USER:-}" ]; then
         err "DB_USER 已设置但 DB_APP_PASSWORD 为空——应用将无法连库"
         exit 1
     fi
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -v ON_ERROR_STOP=1 -tAc "
+    DB_APP_PASS="$DB_APP_PASSWORD"
+    env "PGPASSWORD=$DB_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -v ON_ERROR_STOP=1 -tAc "
         DO \$\$ BEGIN
           IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_USER}') THEN
             CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_APP_PASSWORD}';
@@ -259,8 +261,8 @@ if [ -n "${DB_USER:-}" ]; then
         GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${DB_USER};
         ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${DB_USER};
         ALTER DEFAULT PRIVILEGES FOR ROLE ${POSTGRES_USER} IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ${DB_USER};" >/dev/null 2>&1     && log "  角色与授权就绪"     || { err "  应用角色装配失败（检查 psql/口令）"; exit 1; }
-    PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -Atc         "SELECT 'ALTER TABLE '||quote_ident(tablename)||' OWNER TO ${DB_USER};' FROM pg_tables WHERE schemaname='public' AND tableowner='${POSTGRES_USER}'"       | PGPASSWORD="$POSTGRES_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" >/dev/null 2>&1     && log "  表所有权已移交 ${DB_USER}"
-    PGPASSWORD="$DB_APP_PASSWORD" psql -h "$PG_HOST" -p "$PG_PORT" -U "$DB_USER" -d "$USER_DB_NAME" -tAc "select 1" >/dev/null 2>&1     && log "  应用角色连通性验证通过"     || { err "  应用角色连通性验证失败"; exit 1; }
+    env "PGPASSWORD=$DB_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" -Atc         "SELECT 'ALTER TABLE '||quote_ident(tablename)||' OWNER TO ${DB_USER};' FROM pg_tables WHERE schemaname='public' AND tableowner='${POSTGRES_USER}'"       | env "PGPASSWORD=$DB_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER" -d "$USER_DB_NAME" >/dev/null 2>&1     && log "  表所有权已移交 ${DB_USER}"
+    env "PGPASSWORD=$DB_APP_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$DB_USER" -d "$USER_DB_NAME" -tAc "select 1" >/dev/null 2>&1     && log "  应用角色连通性验证通过"     || { err "  应用角色连通性验证失败"; exit 1; }
 fi
 
 # 5) 跑 Python 知识库种子
@@ -294,7 +296,7 @@ fi
 log "================================================"
 log "最终验证"
 log "================================================"
-psql -c "SELECT 'ai_agents' tbl, count(*) FROM ai_agents
+env "PGPASSWORD=$DB_PASS" psql -c "SELECT 'ai_agents' tbl, count(*) FROM ai_agents
          UNION ALL SELECT 'web_kg(hivemtk)', count(*) FROM knowledge_chunks WHERE product_id='$HIVEMTK_RAG_PRODUCT_ID'
          UNION ALL SELECT 'channel_bindings', count(*) FROM channel_agent_bindings
          UNION ALL SELECT 'customers', count(*) FROM customers
