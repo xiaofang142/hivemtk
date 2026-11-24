@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/aiagent/agent/portcontract"
@@ -23,7 +24,9 @@ type AfterSaleExternalClient interface {
 	Configured() bool
 }
 
-// HTTPAfterSaleClient 标准售后回写 HTTP 客户端，实现 AfterSaleExternalClient
+// HTTPAfterSaleClient 标准售后回写 HTTP 客户端，实现 AfterSaleExternalClient。
+// 注意：当前为通用回调客户端（默认 POST {baseURL}/api/refund），不覆盖 EC-14 中的逆向物流、
+// 仓库验收/质检、换货发运等分步流程；其“成功/失败”语义仍需结合业务错误解析与外部对账。
 type HTTPAfterSaleClient struct {
 	baseURL    string
 	key        string
@@ -81,12 +84,89 @@ func (c *HTTPAfterSaleClient) Create(ctx context.Context, req *portcontract.Afte
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("aftersale api status %d", resp.StatusCode)
 	}
+	// EC-13 (M13): HTTP 200 仍需解析业务错误，避免“看似成功但实为失败”的泛化回写。
 	var out struct {
-		ExternalID string `json:"external_id"`
-		Status     string `json:"status"`
+		ExternalID  string      `json:"external_id"`
+		Status      string      `json:"status"`
+		Code        interface{} `json:"code"`
+		Success     *bool       `json:"success"`
+		Message     string      `json:"message"`
+		Error       string      `json:"error"`
+		ErrorMsg    string      `json:"error_msg"`
+		ErrMsg      string      `json:"errmsg"`
+		ErrCode     interface{} `json:"errcode"`
+		BusinessErr string      `json:"business_error"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
+	}
+<<<<<<< HEAD
+	// Heuristic business error detection (best-effort; keep backward compatible).
+	if out.Success != nil && !*out.Success {
+		msg := out.Message
+		if msg == "" {
+			msg = out.Error
+		}
+		if msg == "" {
+			msg = out.ErrorMsg
+		}
+		if msg == "" {
+			msg = out.ErrMsg
+		}
+		if msg == "" {
+			msg = out.BusinessErr
+		}
+		if msg == "" {
+			msg = "business error (success=false)"
+		}
+		return nil, fmt.Errorf("aftersale business error: %s", msg)
+	}
+	if out.BusinessErr != "" {
+		return nil, fmt.Errorf("aftersale business error: %s", out.BusinessErr)
+	}
+	if out.ErrCode != nil {
+		// Common in some platforms: errcode != 0 means error
+		switch v := out.ErrCode.(type) {
+		case float64:
+			if v != 0 {
+				return nil, fmt.Errorf("aftersale business error: errcode=%.0f %s", v, out.ErrMsg)
+			}
+		case int:
+			if v != 0 {
+				return nil, fmt.Errorf("aftersale business error: errcode=%d %s", v, out.ErrMsg)
+			}
+		case string:
+			if v != "" && v != "0" {
+				return nil, fmt.Errorf("aftersale business error: errcode=%s %s", v, out.ErrMsg)
+			}
+		}
+	}
+	if out.Code != nil {
+		switch v := out.Code.(type) {
+		case string:
+			vs := strings.ToUpper(strings.TrimSpace(v))
+			if vs != "" && vs != "0" && vs != "200" && vs != "SUCCESS" && vs != "OK" && vs != "TRUE" {
+				msg := out.Message
+				if msg == "" {
+					msg = out.Error
+				}
+				if msg == "" {
+					msg = out.ErrorMsg
+				}
+				if msg == "" {
+					msg = v
+				}
+				return nil, fmt.Errorf("aftersale business error: code=%s %s", v, msg)
+			}
+		case float64:
+			if v != 0 {
+				return nil, fmt.Errorf("aftersale business error: code=%.0f", v)
+			}
+		}
+	}
+	// Feature-branch parity: reject if no external reference.
+	if out.ExternalID == "" {
+		return nil, fmt.Errorf("aftersale provider rejected or missing external reference")
 	}
 	return &AfterSaleExternalResult{ExternalID: out.ExternalID, Status: out.Status}, nil
 }
