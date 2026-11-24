@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/repository"
 )
 
@@ -158,7 +159,7 @@ func (s *MacroService) enqueueOutbound(ctx context.Context, sessionID, content s
 	if id, err := strconv.ParseUint(strings.TrimSpace(account), 10, 32); err == nil {
 		preferred = uint(id)
 	}
-	picked, pickErr := NewChannelDispatchService().PickAccount(ctx, DispatchPickInput{
+	picked, pickErr := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{
 		Channel:            platform,
 		ConversationID:     sessionID,
 		PreferredAccountID: preferred,
