@@ -114,8 +114,14 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 	if resolved.AccountID > 0 {
 		resolvedAccountID = strconv.FormatUint(uint64(resolved.AccountID), 10)
 	}
-	if channel != "" && NormalizeBridgeChannel(channel) != resolvedChannel {
-		return rctx, false, nil, ErrBridgeTenantAmbiguous
+	if resolvedChannel == "" && resolved.ChannelID > 0 {
+		resolvedChannel = NormalizeBridgeChannel(fmt.Sprintf("channel-%d", resolved.ChannelID))
+	}
+	if channel != "" {
+		normReq := NormalizeBridgeChannel(channel)
+		if normReq != resolvedChannel && channel != strconv.FormatUint(uint64(resolved.ChannelID), 10) {
+			return rctx, false, nil, ErrBridgeTenantAmbiguous
+		}
 	}
 	if accountID != "" && resolvedAccountID != "" && accountID != resolvedAccountID {
 		return rctx, false, nil, ErrBridgeTenantAmbiguous
