@@ -10,6 +10,13 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
+// 补缺实体种类（与 Controller 的 kind 入参一致）。
+const (
+	CRMEntityContact         = 1
+	CRMEntitySupplier        = 2
+	CRMEntityServiceProvider = 3
+)
+
 // CRMCustomerSave 客户新增/编辑入参（Service 层，Controller DTO 在此收敛）。
 type CRMCustomerSave struct {
 	Name            string `json:"name"`
@@ -197,6 +204,183 @@ func (s *CRMCustomerService) CreateServiceProvider(ctx context.Context, scope Cu
 		return nil, err
 	}
 	return row, nil
+}
+
+// entityCustomerScoped 校验当前用户对实体所挂客户的读取权限（fail-closed）。
+func (s *CRMCustomerService) entityCustomerScoped(ctx context.Context, scope CustomerDataScope, customerID string) error {
+	_, err := s.permission.GetByIDScoped(ctx, scope, customerID)
+	return err
+}
+
+// ListEntities 按客户 + 权限读取补缺实体（联系人/供应商/服务商）。
+func (s *CRMCustomerService) ListEntities(ctx context.Context, scope CustomerDataScope, kind int, customerID string, page, pageSize int) (any, int64, error) {
+	if err := s.entityCustomerScoped(ctx, scope, customerID); err != nil {
+		return nil, 0, err
+	}
+	switch kind {
+	case CRMEntityContact:
+		return s.contacts.ListByCustomer(ctx, customerID, page, pageSize)
+	case CRMEntitySupplier:
+		return s.suppliers.ListByCustomer(ctx, customerID, page, pageSize)
+	case CRMEntityServiceProvider:
+		return s.providers.ListByCustomer(ctx, customerID, page, pageSize)
+	default:
+		return nil, 0, errors.New("未知实体类型")
+	}
+}
+
+// UpdateEntity 编辑补缺实体；同时校验旧客户与新客户的数据权限，避免越权改挂。
+func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDataScope, kind int, id int64, in CRMEntitySave) (any, error) {
+	var oldCustomerID string
+	switch kind {
+	case CRMEntityContact:
+		row, err := s.contacts.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("实体不存在")
+		}
+		oldCustomerID = row.CustomerID
+	case CRMEntitySupplier:
+		row, err := s.suppliers.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("实体不存在")
+		}
+		oldCustomerID = row.CustomerID
+	case CRMEntityServiceProvider:
+		row, err := s.providers.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if row == nil {
+			return nil, errors.New("实体不存在")
+		}
+		oldCustomerID = row.CustomerID
+	default:
+		return nil, errors.New("未知实体类型")
+	}
+	if err := s.entityCustomerScoped(ctx, scope, oldCustomerID); err != nil {
+		return nil, err
+	}
+	newCustomerID := in.CustomerID
+	if newCustomerID == "" {
+		newCustomerID = oldCustomerID
+	}
+	if newCustomerID != oldCustomerID {
+		if err := s.entityCustomerScoped(ctx, scope, newCustomerID); err != nil {
+			return nil, err
+		}
+	}
+	switch kind {
+	case CRMEntityContact:
+		row, _ := s.contacts.GetByID(ctx, id)
+		row.Name = in.Name
+		row.CustomerID = newCustomerID
+		if in.ChannelAccountID != nil {
+			row.ChannelAccountID = in.ChannelAccountID
+		}
+		row.ContactInfo = firstNonEmptyCRMValue(in.ContactInfo, row.ContactInfo)
+		row.Role = in.Role
+		row.Remark = in.Remark
+		row.Source = firstNonEmptyCRMValue(in.Source, row.Source)
+		row.SourceRef = firstNonEmptyCRMValue(in.SourceRef, row.SourceRef)
+		if err := s.contacts.Update(ctx, row); err != nil {
+			return nil, err
+		}
+		s.writeAudit(ctx, "crm_entity_update", newCustomerID, scope.UserID, fmt.Sprintf("contact:%d", id))
+		return row, nil
+	case CRMEntitySupplier:
+		row, _ := s.suppliers.GetByID(ctx, id)
+		row.Name = in.Name
+		row.CustomerID = newCustomerID
+		if in.ChannelAccountID != nil {
+			row.ChannelAccountID = in.ChannelAccountID
+		}
+		row.ContactInfo = firstNonEmptyCRMValue(in.ContactInfo, row.ContactInfo)
+		row.Role = in.Role
+		row.Remark = in.Remark
+		row.Source = firstNonEmptyCRMValue(in.Source, row.Source)
+		row.SourceRef = firstNonEmptyCRMValue(in.SourceRef, row.SourceRef)
+		if err := s.suppliers.Update(ctx, row); err != nil {
+			return nil, err
+		}
+		s.writeAudit(ctx, "crm_entity_update", newCustomerID, scope.UserID, fmt.Sprintf("supplier:%d", id))
+		return row, nil
+	default:
+		row, _ := s.providers.GetByID(ctx, id)
+		row.Name = in.Name
+		row.CustomerID = newCustomerID
+		if in.ChannelAccountID != nil {
+			row.ChannelAccountID = in.ChannelAccountID
+		}
+		row.ContactInfo = firstNonEmptyCRMValue(in.ContactInfo, row.ContactInfo)
+		row.Role = in.Role
+		row.Remark = in.Remark
+		row.Source = firstNonEmptyCRMValue(in.Source, row.Source)
+		row.SourceRef = firstNonEmptyCRMValue(in.SourceRef, row.SourceRef)
+		if err := s.providers.Update(ctx, row); err != nil {
+			return nil, err
+		}
+		s.writeAudit(ctx, "crm_entity_update", newCustomerID, scope.UserID, fmt.Sprintf("service_provider:%d", id))
+		return row, nil
+	}
+}
+
+// DeleteEntity 删除补缺实体；先按实体所属客户校验权限，再写操作审计。
+func (s *CRMCustomerService) DeleteEntity(ctx context.Context, scope CustomerDataScope, kind int, id int64) error {
+	var customerID, kindName string
+	switch kind {
+	case CRMEntityContact:
+		row, err := s.contacts.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return errors.New("实体不存在")
+		}
+		customerID, kindName = row.CustomerID, "contact"
+	case CRMEntitySupplier:
+		row, err := s.suppliers.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return errors.New("实体不存在")
+		}
+		customerID, kindName = row.CustomerID, "supplier"
+	case CRMEntityServiceProvider:
+		row, err := s.providers.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return errors.New("实体不存在")
+		}
+		customerID, kindName = row.CustomerID, "service_provider"
+	default:
+		return errors.New("未知实体类型")
+	}
+	if err := s.entityCustomerScoped(ctx, scope, customerID); err != nil {
+		return err
+	}
+	var err error
+	switch kind {
+	case CRMEntityContact:
+		err = s.contacts.Delete(ctx, id)
+	case CRMEntitySupplier:
+		err = s.suppliers.Delete(ctx, id)
+	default:
+		err = s.providers.Delete(ctx, id)
+	}
+	if err != nil {
+		return err
+	}
+	s.writeAudit(ctx, "crm_entity_delete", customerID, scope.UserID, fmt.Sprintf("%s:%d", kindName, id))
+	return nil
 }
 
 func (s *CRMCustomerService) writeAudit(ctx context.Context, action, customerID string, userID uint, detail string) {

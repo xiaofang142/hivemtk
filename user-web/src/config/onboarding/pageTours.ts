@@ -475,6 +475,13 @@ export function createPageTours(t: (key: string) => string): Record<string, Page
           description: t('setup.onboarding.page.common.overview'),
           side: 'bottom',
           align: 'center'
+        },
+        {
+          element: '.identify-code-manage .create-bar',
+          title: t('setup.onboarding.page.common.action'),
+          description: t('setup.onboarding.page.common.action'),
+          side: 'top',
+          align: 'center'
         }
       ]
     },

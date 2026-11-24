@@ -43,14 +43,41 @@ export const crmApi = {
   aiAnalyze(data) {
     return http.post(`${base}/ai/analyze`, data)
   },
+  listContacts(customerId, params = {}) {
+    return http.get(`${base}/contacts`, { customer_id: customerId, ...params })
+  },
   createContact(data) {
     return http.post(`${base}/contacts`, data)
+  },
+  updateContact(id, data) {
+    return http.put(`${base}/contacts/${id}`, data)
+  },
+  deleteContact(id) {
+    return http.delete(`${base}/contacts/${id}`)
+  },
+  listSuppliers(customerId, params = {}) {
+    return http.get(`${base}/suppliers`, { customer_id: customerId, ...params })
   },
   createSupplier(data) {
     return http.post(`${base}/suppliers`, data)
   },
+  updateSupplier(id, data) {
+    return http.put(`${base}/suppliers/${id}`, data)
+  },
+  deleteSupplier(id) {
+    return http.delete(`${base}/suppliers/${id}`)
+  },
+  listServiceProviders(customerId, params = {}) {
+    return http.get(`${base}/service-providers`, { customer_id: customerId, ...params })
+  },
   createServiceProvider(data) {
     return http.post(`${base}/service-providers`, data)
+  },
+  updateServiceProvider(id, data) {
+    return http.put(`${base}/service-providers/${id}`, data)
+  },
+  deleteServiceProvider(id) {
+    return http.delete(`${base}/service-providers/${id}`)
   },
   archiveClue(data) {
     return http.post(`${base}/clue/archive`, data)

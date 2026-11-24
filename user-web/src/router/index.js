@@ -99,6 +99,8 @@ const moduleNames = [
   "bridgeToken",
   "leadMining",
   "channels",
+  "crm",
+  "leads",
   "browserAutomation",
   "orderDraft",
   "commerce",

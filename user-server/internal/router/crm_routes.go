@@ -44,10 +44,19 @@ func setupCRMRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 		g.GET("/cross-industry", ctl.CrossIndustrySearch)
 		g.POST("/ai/analyze", ctl.AIAnalyze)
 
-		// 补缺实体
+		// 补缺实体（联系人/供应商/服务商 完整 CRUD）
+		g.GET("/contacts", ctl.ListContacts)
 		g.POST("/contacts", ctl.CreateContact)
+		g.PUT("/contacts/:id", ctl.UpdateContact)
+		g.DELETE("/contacts/:id", ctl.DeleteContact)
+		g.GET("/suppliers", ctl.ListSuppliers)
 		g.POST("/suppliers", ctl.CreateSupplier)
+		g.PUT("/suppliers/:id", ctl.UpdateSupplier)
+		g.DELETE("/suppliers/:id", ctl.DeleteSupplier)
+		g.GET("/service-providers", ctl.ListServiceProviders)
 		g.POST("/service-providers", ctl.CreateServiceProvider)
+		g.PUT("/service-providers/:id", ctl.UpdateServiceProvider)
+		g.DELETE("/service-providers/:id", ctl.DeleteServiceProvider)
 
 		// US2 T041 归档对接（客户侧关联 + 负责人推送，本任务只做桩）
 		g.POST("/clue/archive", ctl.ArchiveClue)

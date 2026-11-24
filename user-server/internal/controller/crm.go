@@ -365,6 +365,91 @@ func (c *CRMController) saveEntity(ctx *gin.Context, kind int) {
 	response.Success(ctx, row, "保存成功")
 }
 
+// ListContacts GET /api/manage/crm/contacts
+func (c *CRMController) ListContacts(ctx *gin.Context) { c.listEntities(ctx, 1) }
+
+// ListSuppliers GET /api/manage/crm/suppliers
+func (c *CRMController) ListSuppliers(ctx *gin.Context) { c.listEntities(ctx, 2) }
+
+// ListServiceProviders GET /api/manage/crm/service-providers
+func (c *CRMController) ListServiceProviders(ctx *gin.Context) { c.listEntities(ctx, 3) }
+
+func (c *CRMController) listEntities(ctx *gin.Context, kind int) {
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
+	customerID := ctx.Query("customer_id")
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(ctx.DefaultQuery("page_size", "20"))
+	rows, total, err := c.customers.ListEntities(ctx.Request.Context(), c.scope(ctx), kind, customerID, page, pageSize)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "读取失败")
+		return
+	}
+	response.SuccessWithList(ctx, rows, total)
+}
+
+// UpdateContact PUT /api/manage/crm/contacts/:id
+func (c *CRMController) UpdateContact(ctx *gin.Context) { c.updateEntity(ctx, 1) }
+
+// UpdateSupplier PUT /api/manage/crm/suppliers/:id
+func (c *CRMController) UpdateSupplier(ctx *gin.Context) { c.updateEntity(ctx, 2) }
+
+// UpdateServiceProvider PUT /api/manage/crm/service-providers/:id
+func (c *CRMController) UpdateServiceProvider(ctx *gin.Context) { c.updateEntity(ctx, 3) }
+
+func (c *CRMController) updateEntity(ctx *gin.Context, kind int) {
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "实体 ID 错误")
+		return
+	}
+	var in dto.CRMEntitySaveRequest
+	if err := ctx.ShouldBindJSON(&in); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误")
+		return
+	}
+	payload := service.CRMEntitySave{
+		Name: in.Name, CustomerID: in.CustomerID, ChannelAccountID: in.ChannelAccountID,
+		ContactInfo: in.ContactInfo, Role: in.Role, Remark: in.Remark,
+		Source: in.Source, SourceRef: in.SourceRef,
+	}
+	row, err := c.customers.UpdateEntity(ctx.Request.Context(), c.scope(ctx), kind, id, payload)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "更新失败")
+		return
+	}
+	response.Success(ctx, row, "更新成功")
+}
+
+// DeleteContact DELETE /api/manage/crm/contacts/:id
+func (c *CRMController) DeleteContact(ctx *gin.Context) { c.deleteEntity(ctx, 1) }
+
+// DeleteSupplier DELETE /api/manage/crm/suppliers/:id
+func (c *CRMController) DeleteSupplier(ctx *gin.Context) { c.deleteEntity(ctx, 2) }
+
+// DeleteServiceProvider DELETE /api/manage/crm/service-providers/:id
+func (c *CRMController) DeleteServiceProvider(ctx *gin.Context) { c.deleteEntity(ctx, 3) }
+
+func (c *CRMController) deleteEntity(ctx *gin.Context, kind int) {
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
+	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(ctx, http.StatusBadRequest, "实体 ID 错误")
+		return
+	}
+	if err := c.customers.DeleteEntity(ctx.Request.Context(), c.scope(ctx), kind, id); err != nil {
+		response.ErrorFromDB(ctx, err, "删除失败")
+		return
+	}
+	response.Success(ctx, nil, "删除成功")
+}
+
 // ArchiveClue POST /api/manage/crm/clue/archive
 // US2 T041 在归档成功后调用；线索模块内部不在本任务范围。
 func (c *CRMController) ArchiveClue(ctx *gin.Context) {

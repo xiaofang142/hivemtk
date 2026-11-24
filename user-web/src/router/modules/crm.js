@@ -22,5 +22,29 @@ export default [
     name: 'CrmImportExport',
     component: () => import('@/views/crm/ImportExport.vue'),
     meta: { title: '客户导入导出', group: 'customer', icon: 'Sort', requiresAuth: true }
+  },
+  {
+    path: '/crm/contacts',
+    name: 'CrmContacts',
+    component: () => import('@/views/crm/Entities.vue'),
+    meta: { title: '客户联系人', group: 'customer', icon: 'UserFilled', requiresAuth: true, entityType: 'contact' }
+  },
+  {
+    path: '/crm/suppliers',
+    name: 'CrmSuppliers',
+    component: () => import('@/views/crm/Entities.vue'),
+    meta: { title: '客户供应商', group: 'customer', icon: 'Goods', requiresAuth: true, entityType: 'supplier' }
+  },
+  {
+    path: '/crm/service-providers',
+    name: 'CrmServiceProviders',
+    component: () => import('@/views/crm/Entities.vue'),
+    meta: { title: '客户服务商', group: 'customer', icon: 'Tools', requiresAuth: true, entityType: 'serviceProvider' }
+  },
+  {
+    path: '/crm/companies',
+    name: 'CrmCompanies',
+    component: () => import('@/views/crm/Companies.vue'),
+    meta: { title: '公司主数据', group: 'customer', icon: 'OfficeBuilding', requiresAuth: true }
   }
 ]
