@@ -206,3 +206,12 @@
 - **用户决策（@565@ 逐字「补交 fail-open 修复」）**：等 fail-open 修复子任务完成审查后，只把 5 个 fail-open 文件 + 台账单独 commit+push 双远端，不纳入外部 edition 改动。
 - 已带 sessionID 跟进修复子任务，要求确认修复完成/验证输出、未触碰 edition 文件、裸命名/五层/fail-visible。等 background-result。
 - 判定：异常已查清、决策已定、修复子任务跟进中；心跳转执行阶段，不判停滞。
+
+### 心跳 #32 — 2026-11-24 13:50+0800（CLOSED）
+
+- **fail-open 修复审查**：子任务 ses_df3f0bd85ffe2d2wRJHiYMKAx4 完成 4 文件改动（channel_master.go + 2 repo + 新单测），验证全绿、未触碰 edition。审查发现 channel_master.go 混入外部 codex edition 改动 → 分离出干净版（HEAD 原版 + 仅 fail-open 级联），独立 worktree 验证 build/test 通过。
+- **补交完成**：干净版 channel_master.go 经 git hash-object -w + update-index --cacheinfo 暂存（工作区混合版保留外部 edition 工作），git add 3 fail-open 文件 + 本台账；暂存区核验仅 5 预期文件。commit `6ba2ac382 fix(channels): cascade-delete identify codes and accounts on channel removal`（5 files, 243+/5-）。
+- **push 双远端成功**：gitee-upstream / upstream 均 `12fe0711b..6ba2ac382`，两道 pre-push 密钥闸通过。
+- **最终一致确认**：local HEAD = gitee-upstream master = upstream master = `6ba2ac38281cffe589e6a058dd8dfba39481ca5e`。
+- 工作区残留（外部 codex edition 工作，不属本轮，保留）：platform/client.go(M)、service/channel.go(M)、channel_master.go 混合部分的 edition 部分、pkg/edition/(??)。
+- **台账状态：CLOSED**。全部任务完成：勘察✓/Phase2✓/Phase3✓/Phase4✓/Phase5✓/Phase6✓/Phase7 验证+FIX 全绿✓/T068 UI 三页点验+i18n 修复+capabilities 验证✓/fail-open 补交✓；主体 74d69c48f + fail-open 6ba2ac382 均在双远端。执行 automation 心跳可删除。
