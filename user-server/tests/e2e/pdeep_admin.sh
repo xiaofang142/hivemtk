@@ -4,7 +4,7 @@
 set +u
 source "$(dirname "$0")/deep_lib.sh"
 mtk_plat_login || { echo "PLAT LOGIN FAIL"; exit 1; }
-ADMIN_TOKEN="$PLAT_TOKEN"
+ADMIN_TOKEN="$PLAT_TOKEN"   # 仅变量引用，token 来自 deep_lib.sh 环境注入登录结果
 
 echo "===== pdeep_admin: 平台管理面 ====="
 
