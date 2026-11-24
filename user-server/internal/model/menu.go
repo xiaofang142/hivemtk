@@ -501,7 +501,8 @@ var SystemMenuTree = []SystemMenuNode{
 				Children: []SystemMenuNode{
 					{Key: "platformAccount", Title: "平台账号", Icon: "Platform", Path: "/platformAccount/list"},
 					{Key: "integration", Title: "第三方对接", Icon: "Connection", Path: "/integration/list"},
-					{Key: "bridgeToken", Title: "桥接凭证", Icon: "Key", Path: "/bridge/token"},
+					// T057/T063：旧「桥接凭证」入口已收敛到渠道识别码管理（一次性替换）。
+					{Key: "channelIdentifyCode", Title: "渠道识别码", Icon: "Key", Path: "/channels/identify-codes"},
 					// 桥接扩展安装包（浏览器扩展不上架商店，平台上传、租户下载）。
 					// 放在权限设置组下：它与桥接凭证同属"渠道接入"这一摊，
 					// 而非租户日常经营入口。

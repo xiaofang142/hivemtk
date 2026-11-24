@@ -464,6 +464,20 @@ export function createPageTours(t: (key: string) => string): Record<string, Page
         }
       ]
     },
+    // T062：渠道识别码管理页（旧 /bridge/token 入口已收敛至此）。
+    '/channels/identify-codes': {
+      route: '/channels/identify-codes',
+      pageKey: 'channelIdentifyCode',
+      steps: [
+        {
+          element: '.identify-code-manage .el-card',
+          title: t('setup.onboarding.page.common.overview'),
+          description: t('setup.onboarding.page.common.overview'),
+          side: 'bottom',
+          align: 'center'
+        }
+      ]
+    },
     '/browser-automation/tasks': {
       route: '/browser-automation/tasks',
       pageKey: 'browserAutomationList',

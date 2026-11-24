@@ -149,6 +149,8 @@ type BridgeIngestHandler struct {
 	leadMiner     func(ctx context.Context, ev *model.MessageEvent)
 	sseHandler    *SSEHandler
 	outboxFetcher *outboxDBFetcher
+	// inboundDispatcher 三路归一化投递收口（T015）；nil 时跳过，不改变既有行为。
+	inboundDispatcher service.InboundDispatcher
 }
 
 // NewBridgeIngestHandler 构造 HTTP ingest 处理器
@@ -395,6 +397,10 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	}
 
 	channelNorm := NormalizeBridgeChannel(channel)
+
+	// T015：三路入口之一——HTTP 入站在既有处理链之前做归一化投递收口。
+	// 投递器未装配或消息为空时是 no-op，既有入库/AI 链路语义完全不变。
+	h.deliverInbound(ctx0, channelNorm, accountID, conversationID, req.Messages)
 
 	bridgeHTTPIngestError := func(errCode string) {
 		// 标签必须用规范名：成功计数（IngestTotal/IngestDuration）都按 channelNorm 上报，

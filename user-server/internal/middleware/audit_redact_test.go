@@ -43,18 +43,20 @@ func (s *captureAuditEntries) all() []*AuditEntry {
 // 掩码同为 apiLogRedactedMask，两处不可能再次分化。
 func TestRedactQueryValues_SharedWithApiLogger(t *testing.T) {
 	q := url.Values{
-		"token":        {"abc123"},
-		"Token":        {"case-insensitive"},
-		"bridge_token": {"bt"},
-		"secret":       {"s3cr3t"},
-		"phone":        {"13812345678"},
-		"email":        {"a@b.com"},
-		"page":         {"2"},
-		"name":         {"alice"},
+		"token":                   {"abc123"},
+		"Token":                   {"case-insensitive"},
+		"bridge_token":            {"bt"},
+		"identify_code":           {"cid_secret"},
+		"x-channel-identify-code": {"cid_secret"},
+		"secret":                  {"s3cr3t"},
+		"phone":                   {"13812345678"},
+		"email":                   {"a@b.com"},
+		"page":                    {"2"},
+		"name":                    {"alice"},
 	}
 
 	got := redactQueryValues(q)
-	for _, k := range []string{"token", "Token", "bridge_token", "secret", "phone", "email"} {
+	for _, k := range []string{"token", "Token", "bridge_token", "identify_code", "x-channel-identify-code", "secret", "phone", "email"} {
 		require.Equal(t, []string{apiLogRedactedMask}, got[k], "键 %q 应脱敏", k)
 	}
 	require.Equal(t, []string{"2"}, got["page"], "非敏感键原样保留")

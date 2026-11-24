@@ -15,8 +15,6 @@ import (
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelbot/whatsapp"
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/dbstate"
-	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -99,6 +97,13 @@ type WebhookService struct {
 	clueRepo repository.ClueRepository
 
 	ingressSvc *InboxIngressService
+
+	// channelResolver 统一渠道解析（T011）。惰性构造，保证所有租户解析都经 resolver；
+	// resolverOnce 用 sync.Once 避免并发首次解析重复建仓储。
+	resolverOnce    sync.Once
+	channelResolver *ChannelResolver
+	// inboundDispatcher 三路入口归一化投递收口（T015）。
+	inboundDispatcher InboundDispatcher
 
 	// integrations 渠道 service 构造工厂（E-4：见 webhookIntegrations 注释）。
 	integrations webhookIntegrations
@@ -242,6 +247,43 @@ func NewWebhookService() *WebhookService {
 func (s *WebhookService) SetIngressSvc(ingress *InboxIngressService) {
 	if ingress != nil {
 		s.ingressSvc = ingress
+	}
+}
+
+// SetChannelResolver 注入统一渠道解析器（装配点用；未注入时惰性构造，仍走 resolver）。
+func (s *WebhookService) SetChannelResolver(r *ChannelResolver) {
+	if s != nil && r != nil {
+		s.resolverOnce.Do(func() { s.channelResolver = r })
+	}
+}
+
+// channelResolverFor 保证租户解析永远经 ChannelResolver（fail-closed 单一收口）。
+func (s *WebhookService) channelResolverFor() *ChannelResolver {
+	if s == nil {
+		return nil
+	}
+	s.resolverOnce.Do(func() {
+		if s.channelResolver == nil {
+			s.channelResolver = NewChannelResolver()
+		}
+	})
+	return s.channelResolver
+}
+
+// ResolveByIdentifyCode 供 TG hook / 三方上报按识别码解析租户与账号（FR-028）。
+// 解析失败（含歧义）一律由调用方 fail-closed，不回落默认租户。
+func (s *WebhookService) ResolveByIdentifyCode(ctx context.Context, code string) (*ResolvedChannelAccount, error) {
+	resolver := s.channelResolverFor()
+	if resolver == nil {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	return resolver.ResolveByIdentifyCode(ctx, code)
+}
+
+// SetInboundDispatcher 注入三路消息归一化投递器（T015）。
+func (s *WebhookService) SetInboundDispatcher(d InboundDispatcher) {
+	if s != nil && d != nil {
+		s.inboundDispatcher = d
 	}
 }
 
@@ -453,6 +495,7 @@ var webhookAccountTableByChannel = map[WebhookChannel]string{
 // 解析顺序与"处理器随后真正读的那张表"对齐，否则绑定的租户与取到密钥的租户不是
 // 同一个，on 模式下要么 fail-closed 丢消息，要么把回调落进别人的租户：
 //
+//	⓪ T011：account_id 先按全局唯一识别码解析（ChannelResolver），歧义直接拒绝。
 //	① account_id 是数值 ⇒ 按 (渠道账号表, id) 自证。主键全库唯一 ⇒ 命中即权威。
 //	② 退到 integration_accounts 按平台名自证（douyin/tiktok 等无专用表的渠道，
 //	   以及 account_id 传了渠道侧 ID 的历史配置）。多租户共用同一平台名 ⇒ 歧义，拒。
@@ -460,47 +503,20 @@ var webhookAccountTableByChannel = map[WebhookChannel]string{
 //	   同属一个租户"才敢定归属。
 //
 // 解析不出（或歧义）返回错误，控制器按 404 + 安全告警拒绝，绝不回落默认租户。
+// 整条链已下沉到 ChannelResolver.ResolveTenant，本方法只做委托。
 func (s *WebhookService) ResolveTenantByChannelAccount(ctx context.Context, channel WebhookChannel, accountID string) (uint, error) {
 	if s == nil {
 		return 0, fmt.Errorf("webhook service 未初始化")
 	}
-	// 组级中间件已按同一判据绑过时直接复用，省掉一次反查 SQL。
-	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 {
-		return tid, nil
+	// T011：解析链整体下沉到 ChannelResolver，webhook 只保留委托。
+	// 原有自证链（账号表主键 / integration_accounts / 全表单租户）连同
+	// 「歧义拒绝、失败 404、不回落默认租户」语义一并搬到 resolver，
+	// 并在此之上优先用唯一识别码解析。
+	resolver := s.channelResolverFor()
+	if resolver == nil {
+		return 0, ErrChannelTenantUnresolved
 	}
-	gdb := dbstate.Get()
-	if gdb == nil {
-		return 0, fmt.Errorf("db 未初始化")
-	}
-	table, hasTable := webhookAccountTableByChannel[channel]
-	if hasTable && accountID != "" {
-		if id, err := strconv.ParseUint(accountID, 10, 32); err == nil && id > 0 {
-			tid, err := tenant.SingleTenantByKey(ctx, gdb, table, "id = ?", uint(id))
-			if err != nil {
-				return 0, err
-			}
-			if tid != 0 {
-				return tid, nil
-			}
-		}
-	}
-	tid, err := tenant.SingleTenantByKey(ctx, gdb, "integration_accounts", "platform = ?", string(channel))
-	if err != nil {
-		return 0, err
-	}
-	if tid != 0 {
-		return tid, nil
-	}
-	if accountID == "" && hasTable {
-		tid, err = tenant.SingleTenantByKey(ctx, gdb, table, "id > ?", 0)
-		if err != nil {
-			return 0, err
-		}
-		if tid != 0 {
-			return tid, nil
-		}
-	}
-	return 0, fmt.Errorf("渠道账号未归属任何租户: channel=%s account=%s", channel, accountID)
+	return resolver.ResolveTenant(ctx, channel, accountID)
 }
 
 // ResolveWebhookAccountTenant 中间件用的字符串签名入口（WebhookChannel 是具名
@@ -550,6 +566,9 @@ func (s *WebhookService) Receive(ctx context.Context, req *ReceiveRequest) (*Rec
 	if payload.EventType == "" {
 		payload.EventType = "unknown"
 	}
+
+	// T015：三路入口之一——webhook 验签/解析后做归一化投递收口（骨架）。
+	s.deliverInbound(ctx, req, payload)
 
 	key := string(req.Channel) + ":" + req.AccountID
 	if !s.allowRate(ctx, key) {

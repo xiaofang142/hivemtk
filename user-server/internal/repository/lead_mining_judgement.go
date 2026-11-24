@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 )
@@ -16,6 +17,8 @@ type LeadMiningJudgementRepository interface {
 	GetByID(ctx context.Context, judgementID string) (*model.LeadMiningJudgement, error)
 	UpdateFeedback(ctx context.Context, judgementID, status, reason, by string) error
 	GetQualityStats(ctx context.Context, days int) (map[string]any, error)
+	// ListScoped 按配置人员可见的账号集合过滤判定记录（FR-010）；空集合返回空列表，不为全量。
+	ListScoped(ctx context.Context, accounts []string, page, limit int, platform, leadRole string, matched *bool) ([]model.LeadMiningJudgement, int64, error)
 }
 
 type leadMiningJudgementRepo struct {
@@ -57,6 +60,46 @@ func (r *leadMiningJudgementRepo) List(ctx context.Context, page, limit int, pla
 	}
 	if accountID != "" {
 		q = q.Where("account_id = ?", accountID)
+	}
+	if leadRole != "" {
+		q = q.Where("lead_role = ?", leadRole)
+	}
+	if matched != nil {
+		q = q.Where("matched = ?", *matched)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var items []model.LeadMiningJudgement
+	if err := q.Order("created_at DESC").Offset((page - 1) * limit).Limit(limit).Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func (r *leadMiningJudgementRepo) ListScoped(ctx context.Context, accounts []string, page, limit int, platform, leadRole string, matched *bool) ([]model.LeadMiningJudgement, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	empty := make([]model.LeadMiningJudgement, 0)
+	if len(accounts) == 0 {
+		return empty, 0, nil
+	}
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 {
+		if tenant.IsMultiTenant() {
+			return nil, 0, ErrLeadTenantRequired
+		}
+		tid = tenant.DefaultTenantID
+	}
+	q := r.db.WithContext(ctx).Model(&model.LeadMiningJudgement{}).
+		Where("tenant_id = ?", tid).Where("account_id IN ?", accounts)
+	if platform != "" {
+		q = q.Where("platform = ?", platform)
 	}
 	if leadRole != "" {
 		q = q.Where("lead_role = ?", leadRole)

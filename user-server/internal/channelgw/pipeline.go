@@ -38,6 +38,8 @@ type IngressPipeline interface {
 
 type ingressPipeline struct {
 	ingress *service.InboxIngressService
+	// inboundDispatcher 三路归一化投递收口（T015）；nil 时为空操作。
+	inboundDispatcher service.InboundDispatcher
 }
 
 // NewPipeline 构造包装 InboxIngressService 的入站管道。ingress 为 nil 时所有方法返回错误。
@@ -51,6 +53,8 @@ func (p *ingressPipeline) IngestBatch(ctx context.Context, events []*model.Messa
 	if p.ingress == nil {
 		return nil, errPipelineNotConfigured
 	}
+	// T015：channelgw 入口归一化投递收口（骨架，未装配时为 no-op）。
+	p.deliverInbound(ctx, events)
 	res, err := p.ingress.HandleIngressBatch(ctx, events)
 	if err != nil {
 		return nil, err

@@ -3,7 +3,7 @@
 # 解决：单元测试通过但路由未注册，curl 端到端才发现。
 #
 # 本脚本此前**一个凭证都不带**，而 /api/mcp 与 /api/bridge/outbox/sse 都在鉴权组里
-# （桥接凭证自 system_config_kv 起就是必填）。于是每条断言读到的都是 401 响应体：
+# （渠道识别码自 channel_identify_codes 起就是必填）。于是每条断言读到的都是 401 响应体：
 # MCP 那五条恒红，SSE 那几条恒红，第 9 条（拿 wc -c 当「Last-Event-ID 被接受」）
 # 反倒恒绿 —— 一份既报红又报绿的报告里，绿的那条恰恰是最没意义的那条。
 # 现在：先解析凭证，拿不到就按环境问题退出 2（不产出任何 PASS/FAIL 结论）。
@@ -25,29 +25,29 @@ if [ "$preflight" = "000" ] || [ -z "$preflight" ]; then
   exit 2
 fi
 
-# ---- 凭证解析：专用 MCP_TOKEN 优先，其次桥接凭证（env，再退到开发库 KV） ----
+# ---- 凭证解析：专用 MCP_TOKEN 优先，其次渠道识别码（env，再退到开发库 channel_identify_codes） ----
 MCP_HDR=()
 BRIDGE_HDR=()
 if [ -n "${MCP_TOKEN:-}" ]; then
   MCP_HDR=(-H "X-MCP-Token: ${MCP_TOKEN}")
 fi
-BRIDGE="${BRIDGE_INGEST_TOKEN:-}"
+BRIDGE="${IDENTIFY_CODE:-}"
 envfile="$(cd "$(dirname "$0")/../../.." && pwd)/.env"
 if [ -z "$BRIDGE" ]; then
-  # 开发态取值来源与中间件一致（system_config_kv.bridge_ingest_token）；口令只进变量，
+  # 开发态取值来源与 middleware/bridge_ingress_guard.go 一致（channel_identify_codes.code）；口令只进变量，
   # 不回显、不写盘、不进任何日志。
   pgpass="$(awk -F= '/^POSTGRES_PASSWORD=/{print $2; exit}' "$envfile" 2>/dev/null)"
   pgport="$(awk -F= '/^POSTGRES_PORT=/{print $2; exit}' "$envfile" 2>/dev/null)"
   BRIDGE=$(PGPASSWORD="$pgpass" psql -h "${POSTGRES_HOST:-127.0.0.1}" -p "${pgport:-8232}" \
     -U "${POSTGRES_USER:-admin}" -d "${POSTGRES_DB:-user_db}" -Atc \
-    "select value from system_config_kv where key='bridge_ingest_token' limit 1" 2>/dev/null || true)
+    "select code from channel_identify_codes where code <> '' limit 1" 2>/dev/null || true)
 fi
 if [ -n "$BRIDGE" ]; then
-  BRIDGE_HDR=(-H "X-Bridge-Token: ${BRIDGE}")
+  BRIDGE_HDR=(-H "X-Channel-Identify-Code: ${BRIDGE}")
   [ ${#MCP_HDR[@]} -eq 0 ] && MCP_HDR=("${BRIDGE_HDR[@]}")
 fi
 if [ ${#MCP_HDR[@]} -eq 0 ]; then
-  echo "ENV-BROKEN: 拿不到 MCP/桥接凭证（export MCP_TOKEN 或 BRIDGE_INGEST_TOKEN，或让 psql 能读到开发库 system_config_kv）" >&2
+  echo "ENV-BROKEN: 拿不到 MCP/渠道识别码凭证（export MCP_TOKEN 或 IDENTIFY_CODE，或让 psql 能读到开发库 channel_identify_codes）" >&2
   echo "本入口已改为必填鉴权，无凭证跑不出任何结论，不产出 PASS/FAIL。" >&2
   exit 2
 fi

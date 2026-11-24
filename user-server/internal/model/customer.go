@@ -62,13 +62,23 @@ type Customer struct {
 
 	OwnerAgentID *uint `gorm:"index;column:owner_agent_id" json:"owner_agent_id,omitempty"`
 	// D-02: 兼容缓存字段，主关系以 customer_company_relations 为准
-	CompanyID           *int64     `gorm:"index;column:company_id" json:"company_id,omitempty"`
-	SourceAccountID     string     `gorm:"type:varchar(64);index" json:"source_account_id,omitempty"`
-	SourceChannel       string     `gorm:"type:varchar(32);index" json:"source_channel,omitempty"`
-	SourceConversationID string    `gorm:"type:varchar(128);index" json:"source_conversation_id,omitempty"`
-	SourceMessageID     string     `gorm:"type:varchar(128)" json:"source_message_id,omitempty"`
-	FirstTouchAt        *time.Time `gorm:"index" json:"first_touch_at,omitempty"`
-	LastTouchAt         *time.Time `gorm:"index" json:"last_touch_at,omitempty"`
+	CompanyID            *int64     `gorm:"index;column:company_id" json:"company_id,omitempty"`
+	SourceAccountID      string     `gorm:"type:varchar(64);index" json:"source_account_id,omitempty"`
+	SourceChannel        string     `gorm:"type:varchar(32);index" json:"source_channel,omitempty"`
+	SourceConversationID string     `gorm:"type:varchar(128);index" json:"source_conversation_id,omitempty"`
+	SourceMessageID      string     `gorm:"type:varchar(128)" json:"source_message_id,omitempty"`
+	FirstTouchAt         *time.Time `gorm:"index" json:"first_touch_at,omitempty"`
+	LastTouchAt          *time.Time `gorm:"index" json:"last_touch_at,omitempty"`
+
+	// T018（US1 统一主数据）：仅补行业 / 负责人 / 合并字段。
+	// 来源字段（source_account_id/source_channel/source_conversation_id/source_message_id）
+	// 已由迁移 080 与本文件上方字段建模，禁止重复添加。
+	Industry string `gorm:"type:varchar(50);index" json:"industry,omitempty"`
+	// OwnerUserID 是数据权限（可见负责人范围）的过滤维度，与可见账号范围叠加。
+	OwnerUserID *uint `gorm:"index" json:"owner_user_id,omitempty"`
+	// MergedIntoID 非空表示本客户已合并进该主档（身份归一可追溯）。
+	// 与 customer_merges 审计表配套；空串表示独立客户。
+	MergedIntoID string `gorm:"type:varchar(36);index" json:"merged_into_id,omitempty"`
 
 	// 时间
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

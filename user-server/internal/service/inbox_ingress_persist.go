@@ -151,7 +151,12 @@ func (s *InboxIngressService) persistMessageWithLeadEligibility(ctx context.Cont
 					logger.Errorf("[panic-recover] %T: %v\n%s", r, r, string(debug.Stack()))
 				}
 			}()
-			if s.leadMiningSvc != nil {
+			// T049：线索发现模块独立启停闸门。按 channel_account.lead_mining_agent_id 判定；
+			// 关闭时只跳过线索发现，绝不触碰自动回复触发（两条腿互不调用）。
+			// 闸门未装配时回落到 legacy Enqueue，保持既有行为。
+			if s.leadDiscoverySvc != nil {
+				s.leadDiscoverySvc.Process(ctx, hub)
+			} else if s.leadMiningSvc != nil {
 				s.leadMiningSvc.Enqueue(hub)
 			}
 			if err := websocket.BroadcastToAgents(ctx, websocket.TypeNewMessage, map[string]any{

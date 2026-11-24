@@ -167,7 +167,7 @@ func scrubTraceValue(value any) any {
 // safeTraceText 对可能带凭证的非结构化文本保守摘要；不保存凭证片段。
 func safeTraceText(value string) string {
 	lower := strings.ToLower(value)
-	for _, marker := range []string{"bearer ", "authorization", "password", "cookie", "access_token", "api_key", "merchant_key", "x-bridge-token", "secret="} {
+	for _, marker := range []string{"bearer ", "authorization", "password", "cookie", "access_token", "api_key", "merchant_key", "x-bridge-token", "x-channel-identify-code", "identify_code", "secret="} {
 		if strings.Contains(lower, marker) {
 			return "[redacted credential-bearing text]"
 		}

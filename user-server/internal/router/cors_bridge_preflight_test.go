@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// /api/bridge/* 整组只认 X-Bridge-Token 这一枚凭证头（不认 Authorization），而浏览器发自定义头
+// /api/bridge/* 整组只认 X-Channel-Identify-Code 这一枚凭证头（不认 Authorization），而浏览器发自定义头
 // 之前必须先过预检。预检响应里没有这枚头，请求在预检阶段就被浏览器拦下，调用方拿到的报错与
 // 「凭证不对」长得完全不同，会被当成服务端故障。这条契约只有浏览器能观察到，所以钉在装配层。
 
@@ -32,7 +32,7 @@ func optionsProbe(t *testing.T, r *gin.Engine, target, origin string) preflight 
 		req.Header.Set("Origin", origin)
 	}
 	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
-	req.Header.Set("Access-Control-Request-Headers", "Content-Type,X-Bridge-Token")
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type,X-Channel-Identify-Code")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -77,23 +77,23 @@ func setupWithBridgeRoutes(t *testing.T) *gin.Engine {
 	return r
 }
 
-// TestCorsPreflightAdvertisesBridgeTokenHeader 预检必须把 X-Bridge-Token 列进允许头，
+// TestCorsPreflightAdvertisesIdentifyCodeHeader 预检必须把 X-Channel-Identify-Code 列进允许头，
 // 同时把既有那几枚（Content-Type/Authorization/Last-Event-ID）留着——扩展的 SSE 重连要带
 // Last-Event-ID，丢了它等于丢了断线续传。
-func TestCorsPreflightAdvertisesBridgeTokenHeader(t *testing.T) {
+func TestCorsPreflightAdvertisesIdentifyCodeHeader(t *testing.T) {
 	r := setupWithBridgeRoutes(t)
 
 	pf := optionsProbe(t, r, "http://localhost:8204/api/bridge/outbox", "http://other.example")
 	if pf.code != http.StatusNoContent {
 		t.Errorf("预检返回 %d，期望 204 ⇒ CORS 层没有在鉴权前接住 OPTIONS", pf.code)
 	}
-	for _, want := range []string{"X-Bridge-Token", "Content-Type", "Authorization", "Last-Event-ID"} {
+	for _, want := range []string{"X-Channel-Identify-Code", "Content-Type", "Authorization", "Last-Event-ID"} {
 		if !pf.allowHeaders[want] {
 			t.Errorf("允许头里没有 %s，浏览器会在预检阶段拦掉带这枚头的请求", want)
 		}
 	}
 	// 反向对账：成员判定不是「整串里含子串」，否则随便一个更长的名字也能把它判绿。
-	if pf.allowHeaders["X-Bridge-Token-Not-Advertised"] {
+	if pf.allowHeaders["X-Channel-Identify-Code-Not-Advertised"] {
 		t.Errorf("允许头集合里出现了没登记的哨兵头，拆开后的成员判定已经不可信")
 	}
 }
@@ -135,7 +135,7 @@ func TestCorsPreflightAnswersBeforeAuth(t *testing.T) {
 	req := httptest.NewRequest(http.MethodOptions, "http://localhost:8204/api/bridge/token/status", nil)
 	req.Header.Set("Origin", "http://other.example")
 	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
-	req.Header.Set("Access-Control-Request-Headers", "X-Bridge-Token")
+	req.Header.Set("Access-Control-Request-Headers", "X-Channel-Identify-Code")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -148,7 +148,7 @@ func TestCorsPreflightAnswersBeforeAuth(t *testing.T) {
 }
 
 // TestCorsPreflightEchoesAllowlistedOrigin 列入白名单的网页来源要被回显 Allow-Origin、带 Vary，
-// 且允许头里必须有 X-Bridge-Token——只回显来源却漏了这枚头，浏览器照样把请求拦在预检。
+// 且允许头里必须有 X-Channel-Identify-Code——只回显来源却漏了这枚头，浏览器照样把请求拦在预检。
 // 来源白名单是 init 时读 env 的包级变量，这里就地换掉并在 Cleanup 里成对还原。
 func TestCorsPreflightEchoesAllowlistedOrigin(t *testing.T) {
 	r := setupWithBridgeRoutes(t)
@@ -168,8 +168,8 @@ func TestCorsPreflightEchoesAllowlistedOrigin(t *testing.T) {
 	if !strings.Contains(pf.vary, "Origin") {
 		t.Errorf("回显了来源却没带 Vary: Origin（实际 %q），共享缓存会把一个来源的响应发给别的来源", pf.vary)
 	}
-	if !pf.allowHeaders["X-Bridge-Token"] {
-		t.Error("已放行来源却没允许 X-Bridge-Token，带凭证头的请求仍会被浏览器拦在预检")
+	if !pf.allowHeaders["X-Channel-Identify-Code"] {
+		t.Error("已放行来源却没允许 X-Channel-Identify-Code，带凭证头的请求仍会被浏览器拦在预检")
 	}
 
 	// 没列进来的来源不得回显：否则「任意来源 + 允许自定义凭证头」等于把桥接口开放给任何网页。

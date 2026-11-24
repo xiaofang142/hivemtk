@@ -9,7 +9,7 @@
 //
 // 使用 fetch + ReadableStream 的优势：
 //   1. 可以在 Content Script 中直接建立连接
-//   2. 支持自定义 Header（X-Bridge-Token / Authorization）
+//   2. 支持自定义 Header（X-Channel-Identify-Code / Authorization）
 //   3. 更好的错误处理和重连控制
 //   4. Content Script 生命周期与页面绑定，更稳定
 
@@ -120,7 +120,7 @@ const SSE_ERROR_BODY_MAX_CHARS = 512;
  * 把非 2xx 的响应转成带判据的错误对象。
  *
  * 为什么不能只报 HTTP 状态码：/api/bridge/outbox/sse 的 401 有两种截然不同的成因
- * （没带头 = `缺少 X-Bridge-Token`；带头但值不对 = `bridge token 无效`），
+ * （没带头 = `缺少 X-Channel-Identify-Code`；带头但值不对 = `渠道识别码无效`），
  * 400 也分「缺 channel/account_id」与「channel 不在白名单」。运维在扩展日志里只看到一个
  * 数字时无从下手，而服务端已经把答案写在响应体里了——丢掉它就是丢掉了唯一可执行的线索。
  *
@@ -222,9 +222,9 @@ export async function connectSSE(channel, accountId, opts = {}) {
     'Accept': 'text/event-stream',
   };
   if (token && token.trim()) {
-    // 服务端闸门只读 X-Bridge-Token（或 ?bridge_token=）；Bearer 在这条路由上无读取点。
+    // 服务端闸门只读 X-Channel-Identify-Code（或 ?identify_code=）；Bearer 无读取点。
     const t = token.trim();
-    headers['X-Bridge-Token'] = t;
+    headers['X-Channel-Identify-Code'] = t;
     headers['Authorization'] = `Bearer ${t}`;
   }
   if (lastEventId) {

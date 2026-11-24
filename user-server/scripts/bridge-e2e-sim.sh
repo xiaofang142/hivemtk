@@ -20,11 +20,11 @@
 set -uo pipefail
 
 BASE_URL="${BASE_URL:-http://localhost:8204}"
-# X-Bridge-Token 闸门（middleware/bridge_ingress_guard.go, code UNAUTHORIZED_2001）:
-# 闸门只读 X-Bridge-Token 头（SSE 另支持 ?bridge_token=），不读 Authorization / ?token=。
+# X-Channel-Identify-Code 闸门（middleware/bridge_ingress_guard.go, code UNAUTHORIZED_2001）:
+# 闸门只读 X-Channel-Identify-Code 头（SSE 另支持 ?identify_code=），不读 Authorization / ?token=。
 # 未带凭证时 ingest 全 401，且 GET outbox 的 401 会被误归因为"推理栈波动" WARN。
-# 默认自动从 DB 取当前生效凭证；显式指定用 BRIDGE_TOKEN=xxx bash 本脚本
-BRIDGE_TOKEN="${BRIDGE_TOKEN:-}"
+# 默认自动从 DB 取当前生效识别码；显式指定用 IDENTIFY_CODE=xxx bash 本脚本
+IDENTIFY_CODE="${IDENTIFY_CODE:-}"
 # 等 AI 回复落库的窗口（秒）。
 # 66–255s 那一档量的是手建的临时二进制（退避跑满），不是本仓的开发态：热重载实例
 # （make dev = air）上现测三次首条回复落库 = 6s / 6s / 7s（Embedding :8208 仍缺位，
@@ -50,17 +50,17 @@ psql_q() { PGPASSWORD="$PW" psql "${PG_CONN[@]}" -t -A -c "$1" 2>/dev/null; }
 # "/health=000000" 印进了结果面）。取码统一走这里，空值补 000。
 http_code() { local c; c=$(curl -s -m "${2:-5}" -o /dev/null -w "%{http_code}" "$1" 2>/dev/null); printf '%s' "${c:-000}"; }
 
-# 凭证未显式给出时从 DB 现取（闸门是 fail-closed：拿不到凭证就整批 401，
+# 识别码未显式给出时从 DB 现取（闸门是 fail-closed：拿不到识别码就整批 401，
 # 而 401 会被后面的用例误归因成环境波动 ⇒ 这里必须取不到就停，不能空着头往下跑）
-if [ -z "$BRIDGE_TOKEN" ]; then
-  BRIDGE_TOKEN="$(psql_q "SELECT value FROM system_config_kv WHERE key='bridge_ingest_token'")"
+if [ -z "$IDENTIFY_CODE" ]; then
+  IDENTIFY_CODE="$(psql_q "SELECT code FROM channel_identify_codes WHERE code <> '' ORDER BY id LIMIT 1")"
 fi
-if [ -z "$BRIDGE_TOKEN" ]; then
-  echo "FATAL: 取不到桥接凭证（环境变量 BRIDGE_TOKEN 未给，且 $DB_NAME.system_config_kv 无 bridge_ingest_token）。" >&2
-  echo "       后台「桥接凭证」页生成，或 BRIDGE_TOKEN=xxx bash $0" >&2
+if [ -z "$IDENTIFY_CODE" ]; then
+  echo "FATAL: 取不到渠道识别码（环境变量 IDENTIFY_CODE 未给，且 $DB_NAME.channel_identify_codes 无有效 code）。" >&2
+  echo "       后台「渠道识别码」页生成，或 IDENTIFY_CODE=xxx bash $0" >&2
   exit 2
 fi
-H_TOKEN=(-H "X-Bridge-Token: ${BRIDGE_TOKEN}")
+H_TOKEN=(-H "X-Channel-Identify-Code: ${IDENTIFY_CODE}")
 
 # mkack <msg_ids_csv> <status> → 生成 {"msg_ids":[...],"status":"..."}
 mkack() {

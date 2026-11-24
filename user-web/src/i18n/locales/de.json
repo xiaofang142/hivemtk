@@ -2099,7 +2099,7 @@
           "summary": "Die Seite für Brücken-Zugangsdaten behandelt „wie die Browser-Erweiterung zu Ihrem System zurückfindet“. Der Status oben zeigt, ob die Hauptdaten konfiguriert sind (aus der Datenbank oder aus einer Umgebungsvariable) und ob eine ältere noch in ihrer Schonfrist steckt. „Neue Zugangsdaten erzeugen (rotieren)“ liefert ein Token, dessen Klartext genau einmal erscheint – sofort in die Einstellungen jeder Erweiterung kopieren.",
           "step2": {
             "title": "Rotation und Schonfrist",
-            "description": "Die Erweiterung fügt das Token in ihre Einstellungen ein und sendet es als Header X-Bridge-Token; für SSE geht auch der Parameter ?bridge_token=. Nach einer Rotation bleibt die alte Zugangsberechtigung während der Schonfrist gültig, damit nicht aktualisierte Erweiterungen nicht alle auf einmal ausfallen – die Frist läuft aber ab: Alle Erweiterungen aktualisieren und erneut rotieren, um die vorherige Zugangsberechtigung zu entfernen."
+            "description": "Erzeugen oder prüfen Sie den Identifikationscode auf der Seite „Kanal-Identifikationscode\", fügen Sie ihn in den Einstellungen der Erweiterung ein und senden Sie ihn als Header X-Channel-Identify-Code; für SSE funktioniert auch der Parameter ?identify_code=. Aktualisieren Sie nach einer Rotation alle Erweiterungen umgehend auf den neuen Code – alte Codes werden nicht dauerhaft aufbewahrt."
           }
         },
         "browserAutomationList": {

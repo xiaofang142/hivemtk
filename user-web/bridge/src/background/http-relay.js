@@ -91,9 +91,9 @@ function configuredRequest(message, cfg, channel) {
   if ((url.searchParams.get('tenant_code') || '') !== (cfg.tenantCode || '')) throw new Error('租户配置不匹配');
   const headers = new Headers(message.options?.headers || {});
   const token = cfg.token.trim();
-  const bridgeToken = headers.get('X-Bridge-Token');
+  const identifyCode = headers.get('X-Channel-Identify-Code');
   const authorization = headers.get('Authorization');
-  if ((!bridgeToken && !authorization) || (bridgeToken && bridgeToken !== token)
+  if ((!identifyCode && !authorization) || (identifyCode && identifyCode !== token)
     || (authorization && authorization !== `Bearer ${token}`)) throw new Error('请求凭证已过期');
   let body;
   if (method === 'POST') {

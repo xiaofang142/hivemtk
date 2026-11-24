@@ -27,7 +27,7 @@
         :closable="false"
         show-icon
         class="mb-3"
-        title="扩展端在设置页粘贴 token，请求头携带 X-Bridge-Token；SSE 场景可用 ?bridge_token= 透传"
+        title="在「渠道识别码」页生成或查看识别码，扩展端填入设置页，请求头携带 X-Channel-Identify-Code；SSE 场景可用 ?identify_code= 透传。旧桥接凭证协议已退役，不再被服务端接受"
       />
 
       <el-form label-width="90px">

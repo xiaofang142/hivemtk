@@ -11,12 +11,11 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/response"
-	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 )
 
 type crossAccountSearchService interface {
-	SearchCustomers(ctx context.Context, tid uint, userID uint, keyword, industry string, page, pageSize int) ([]repository.CrossAccountSearchRow, int64, service.CrossAccountSearchScope, error)
+	SearchCustomers(ctx context.Context, tid uint, userID uint, keyword, industry string, page, pageSize int) ([]service.CrossAccountSearchRow, int64, service.CrossAccountSearchScope, error)
 }
 
 type crossAccountAuditFunc func(c *gin.Context, tid, uid uint, uname, keyword, industry string, page, pageSize int, total int64, scope service.CrossAccountSearchScope)

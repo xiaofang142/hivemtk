@@ -2099,7 +2099,7 @@
           "summary": "La page des identifiants du pont couvre « comment l'extension navigateur revient à votre système ». L'état en haut indique si l'identifiant principal est configuré (depuis la base ou une variable d'environnement) et si un ancien identifiant est encore dans sa fenêtre de grâce. « Générer un nouvel identifiant (rotation) » produit un token dont le texte en clair n'apparaît qu'une fois : copiez-le immédiatement dans les réglages de chaque extension.",
           "step2": {
             "title": "Rotation et fenêtre de grâce",
-            "description": "L'extension colle le token dans ses réglages et l'envoie dans l'en-tête X-Bridge-Token ; en SSE le paramètre ?bridge_token= convient aussi. Après une rotation, l'ancien identifiant reste valable pendant la fenêtre de grâce, pour que les extensions non mises à jour ne tombent pas toutes d'un coup — mais la fenêtre se referme : mettez à jour toutes les extensions puis rotatez à nouveau pour retirer l'identifiant précédent."
+            "description": "Générez ou consultez le code d'identification sur la page « Code d'identification du canal », collez-le dans les réglages de l'extension et envoyez-le dans l'en-tête X-Channel-Identify-Code ; en SSE le paramètre ?identify_code= convient aussi. Après une rotation, mettez à jour toutes les extensions avec le nouveau code rapidement : les anciens codes ne sont pas conservés indéfiniment."
           }
         },
         "browserAutomationList": {

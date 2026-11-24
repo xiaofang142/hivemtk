@@ -9,7 +9,11 @@ import (
 type LeadMiningConfig struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID             int64       `gorm:"column:id;primaryKey;autoIncrement:false" json:"id"`
+	ID int64 `gorm:"column:id;primaryKey;autoIncrement:false" json:"id"`
+	// Scope/ScopeID：T014 三粒度（global/channel/account）扩展。存量每租户一行
+	// 的主键仍是 tenant_id（不是全局 id=1），迁移 091 为每租户补一条 global 规则。
+	Scope          string      `gorm:"column:scope;type:varchar(16);default:'global'" json:"scope"`
+	ScopeID        uint        `gorm:"column:scope_id;default:0" json:"scope_id"`
 	Enabled        bool        `gorm:"column:enabled;default:false" json:"enabled"`
 	Keywords       JSONStrings `gorm:"column:keywords;type:text" json:"keywords"`
 	Tags           JSONStrings `gorm:"column:tags;type:text" json:"tags"`

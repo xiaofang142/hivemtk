@@ -39,11 +39,14 @@ var (
 )
 
 type SageXUploadRequest struct {
-	SchemaVersion  string           `json:"schema_version"`
-	BatchID        string           `json:"batch_id"`
-	SentAt         string           `json:"sent_at"`
-	InstallationID string           `json:"installation_id"`
-	Events         []SageXEventItem `json:"events"`
+	SchemaVersion  string `json:"schema_version"`
+	BatchID        string `json:"batch_id"`
+	SentAt         string `json:"sent_at"`
+	InstallationID string `json:"installation_id"`
+	// IdentifyCode 渠道唯一识别码（T059 / FR-028）：SageX 上报以此解析租户/账号，
+	// 与安装凭证（Authorization Bearer）双重校验；两者归属不一致时 fail-closed 拒绝。
+	IdentifyCode string           `json:"identify_code"`
+	Events       []SageXEventItem `json:"events"`
 }
 
 type SageXEventItem struct {
@@ -176,6 +179,16 @@ type SageXUploadService struct {
 	instRepo    SageXInstallationStore
 	receiptRepo SageXEventReceiptStore
 	ingress     SageXIngress
+	// resolver 可选：装配后 SageX 上报可用 identify_code 解析租户/账号（T059）。
+	// 未装配且请求带 identify_code 时 fail-closed 拒绝，不静默放行。
+	resolver *ChannelResolver
+}
+
+// SetChannelResolver 注入渠道识别码解析器（装配点用）。
+func (s *SageXUploadService) SetChannelResolver(r *ChannelResolver) {
+	if s != nil && r != nil {
+		s.resolver = r
+	}
 }
 
 func NewSageXUploadService(
@@ -212,6 +225,19 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, token string, req
 	}
 	if inst == nil {
 		return nil, ErrSageXUnauthorized
+	}
+	// T059：带识别码时由 ChannelResolver 全局唯一反查租户/账号，并与安装凭证归属
+	// 交叉校验；解析不出或分属不同租户一律拒绝（fail-closed，不回落默认租户）。
+	code := strings.TrimSpace(req.IdentifyCode)
+	if code != "" {
+		if s.resolver == nil {
+			return nil, ErrSageXUnauthorized
+		}
+		resolved, rerr := s.resolver.ResolveByIdentifyCode(ctx, code)
+		if rerr != nil || resolved == nil || resolved.TenantID == 0 || resolved.TenantID != inst.TenantID {
+			logger.Ctx(ctx).Warn().Msgf("[SageX] identify_code 解析失败或与安装凭证归属不一致 err=%v", rerr)
+			return nil, ErrSageXUnauthorized
+		}
 	}
 	reqInstallationID := strings.TrimSpace(req.InstallationID)
 	// installation_id 不是授权依据；同一 token 可能被多个私用设备复用（如 QQ/微信分端），

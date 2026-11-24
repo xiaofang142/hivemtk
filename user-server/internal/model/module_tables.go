@@ -91,6 +91,13 @@ var coreOwnedTables = []string{
 	"session_messages", "message_trace", "msg_hourly_summary",
 	"notifications", "notification_reads", "web_vital_records", "help_center_test_records",
 	"cron_job_leases", "account", "user", "order",
+	// 渠道接入基座（CRM/线索渠道改造新增）：读写方是桥接入站链路与凭证闸门，
+	// 与 bridge_accounts / channel_event_audits / channel_interactions 同口径随基座常在；
+	// channelIdentifyCode 菜单也绑在 core（见 ModuleMenuBindings），不随可售模块开关。
+	"channels", "channel_accounts", "channel_identify_codes", "channel_account_authorizations",
+	// 共享多轮对话上下文：auto_reply（inbox）与线索发掘共同读写，由 inbox_ingress 写入，
+	// 与 message_hub / session_messages 同属消息基座，不随某个可售模块停写。
+	"conversation_contexts",
 }
 
 // customer 模块独占
@@ -100,6 +107,12 @@ var customerOwnedTables = []string{
 	"customer_rfms", "rfm_rules", "customer_do_not_contact", "customer_long_term_memory",
 	"clues", "clue_scores", "clue_engagement_events",
 	"user_tags", "user_rfms", "smlist", "lead_mining_configs", "bridge_lead_tasks",
+	// CRM 联系人/供应商域与线索发掘数据面：与 customers / clues / lead_mining_configs
+	// 同属客户中心——leadMining 菜单绑在 customer，线索规则与命中结果随客户中心开关；
+	// contacts / customer_merges / service_providers / suppliers 是同一客户 360 视图下
+	// 的 CRM 实体，归口一致避免"关模块表仍被写"。
+	"contacts", "customer_merges", "service_providers", "suppliers",
+	"lead_mining_hits", "lead_mining_rules",
 }
 
 // inbox 模块独占

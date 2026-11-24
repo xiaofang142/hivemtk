@@ -31,7 +31,8 @@ var (
 	mcpTokenLookup = func(ctx context.Context, key string) (string, error) {
 		return repository.NewPlatformConfigKVRepository().Get(ctx, key)
 	}
-	bridgeCredentialCandidates = bridgeTokenCandidates
+	// bridgeCredentialCandidates（回落候选源）定义在 bridge_ingress_guard.go，
+	// 切换后真实来源是渠道识别码表，不再读旧 Bridge token KV。
 )
 
 // mcpDedicatedCandidates 读 MCP 入口的**专用**凭证：KV 优先，其次环境变量。
@@ -124,7 +125,7 @@ func MCPGuard(resolveTenant TenantCodeResolver) gin.HandlerFunc {
 			if dedicated {
 				response.Error(c, 401, "缺少 X-MCP-Token")
 			} else {
-				response.Error(c, 401, "缺少 X-MCP-Token（本入口未配置专用凭证时也可用 X-Bridge-Token）")
+				response.Error(c, 401, "缺少 X-MCP-Token（本入口未配置专用凭证时也可用 "+identifyCodeHeader+"）")
 			}
 			c.Abort()
 			return
@@ -150,9 +151,9 @@ func MCPGuard(resolveTenant TenantCodeResolver) gin.HandlerFunc {
 }
 
 // extractMCPToken 只负责**取**凭证，不负责判它算不算数：能不能过由上面的候选集合决定。
-// 三种携带形状都接受（X-MCP-Token / Authorization Bearer / X-Bridge-Token），因为隔离靠的是
-// 「配了专用凭证后，候选集合里就只有专用凭证」——桥接那枚值在专用分支里根本不在集合内，
-// 于是它从哪个头进来都换不到工具调用权限。反过来说：如果哪天想按头名再判一道，那才是多余的旋钮。
+// 三种携带形状都接受（X-MCP-Token / Authorization Bearer / X-Channel-Identify-Code），
+// 因为隔离靠的是「配了专用凭证后，候选集合里就只有专用凭证」——回落的那枚识别码在专用分支里
+// 根本不在集合内，于是它从哪个头进来都换不到工具调用权限。
 func extractMCPToken(c *gin.Context) string {
 	if v := strings.TrimSpace(c.GetHeader("X-MCP-Token")); v != "" {
 		return v
@@ -160,7 +161,7 @@ func extractMCPToken(c *gin.Context) string {
 	if v := c.GetHeader("Authorization"); len(v) > 7 && strings.EqualFold(v[:7], "bearer ") {
 		return strings.TrimSpace(v[7:])
 	}
-	return strings.TrimSpace(c.GetHeader("X-Bridge-Token"))
+	return strings.TrimSpace(c.GetHeader(identifyCodeHeader))
 }
 
 // =============================================================================

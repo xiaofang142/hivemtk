@@ -30,8 +30,9 @@ type MenuCapability struct {
 	MenuKeys []string
 }
 
-// MenuCapabilities 生成件：共 329 条。
+// MenuCapabilities 生成件：共 335 条。
 var MenuCapabilities = []MenuCapability{
+	{Pattern: "/api/ai-insights/drafts", MenuKeys: []string{"aiInsightDraft"}},
 	{Pattern: "/api/ai-tools", MenuKeys: []string{"aiToolManagement"}},
 	{Pattern: "/api/ai-tools/*", MenuKeys: []string{"aiToolManagement"}},
 	{Pattern: "/api/ai-tools/*/accounts", MenuKeys: []string{"aiToolManagement"}},
@@ -54,6 +55,7 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/batch/template", MenuKeys: []string{"batchOperation"}},
 	{Pattern: "/api/batch/tools", MenuKeys: []string{"batchOperation"}},
 	{Pattern: "/api/bridge/extension/package", MenuKeys: []string{"bridgeExtension"}},
+	{Pattern: "/api/business-account-auths", MenuKeys: []string{"businessAccountAuth"}},
 	{Pattern: "/api/channel-agent-bindings", MenuKeys: []string{"dingtalkApp", "qqAccount", "telegramAccount", "wecomAccount", "whatsappCloud"}},
 	{Pattern: "/api/channel-agent-bindings/by-agent/*", MenuKeys: []string{"dingtalkApp", "qqAccount", "telegramAccount", "wecomAccount", "whatsappCloud"}},
 	{Pattern: "/api/community/groups", MenuKeys: []string{"community"}},
@@ -64,6 +66,7 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/custom-tools", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/custom-tools/*", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/custom-tools/import", MenuKeys: []string{"aiCustomIntegration"}},
+	{Pattern: "/api/customer-import-jobs", MenuKeys: []string{"customerImportJob"}},
 	{Pattern: "/api/customer-oneid/*/identities", MenuKeys: []string{"oneidConflicts", "oneidList"}},
 	{Pattern: "/api/customer/oneid/conflicts", MenuKeys: []string{"oneidConflicts", "oneidList"}},
 	{Pattern: "/api/customer/oneid/conflicts/*/resolve", MenuKeys: []string{"oneidConflicts", "oneidList"}},
@@ -218,6 +221,9 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/i18n/stats/lang-dist", MenuKeys: []string{"i18nDashboard"}},
 	{Pattern: "/api/i18n/stats/latency", MenuKeys: []string{"i18nDashboard"}},
 	{Pattern: "/api/i18n/stats/quality", MenuKeys: []string{"i18nDashboard"}},
+	{Pattern: "/api/identify-codes", MenuKeys: []string{"channelIdentifyCode"}},
+	{Pattern: "/api/identify-codes/*", MenuKeys: []string{"channelIdentifyCode"}},
+	{Pattern: "/api/identify-codes/*/rotate", MenuKeys: []string{"channelIdentifyCode"}},
 	{Pattern: "/api/knowledge-merchant/batch/import", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},
 	{Pattern: "/api/knowledge-merchant/batch/upload", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},
 	{Pattern: "/api/knowledge-merchant/chunks/*", MenuKeys: []string{"knowledgeExternal", "knowledgeFeedbacks", "knowledgePlayground", "knowledgeTokens"}},

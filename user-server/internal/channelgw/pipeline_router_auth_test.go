@@ -29,10 +29,24 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
+
+// T058 后 BridgeIngressGuard 只认渠道识别码（候选源=channel_identify_codes 表，
+// 头=X-Channel-Identify-Code），不再读旧 BRIDGE_INGEST_TOKEN / X-Bridge-Token。
+const cs02IdentifyCode = "cs02-identify-code-e2e"
+
+func cs02SeedIdentifyCode(t *testing.T, code string) {
+	t.Helper()
+	if err := repository.NewChannelIdentifyCodeRepository().Upsert(context.Background(), &model.ChannelIdentifyCode{
+		TenantID: 1, ChannelID: 1, Code: code, Version: 1,
+	}); err != nil {
+		t.Fatalf("种子识别码写入失败: %v", err)
+	}
+}
 
 // cs02AuthTrigger 可计数 AI 触发 fake：断言「失败 0 触发 / 成功 1 触发且归属=服务端账号」。
 type cs02AuthTrigger struct {
@@ -67,7 +81,7 @@ func (f *cs02AuthTrigger) snapshot() map[string]string {
 // 真实 pipeline/服务 + 真库。返回 router、触发 fake、库句柄。
 func cs02AuthSetup(t *testing.T) (*gin.Engine, *cs02AuthTrigger) {
 	t.Helper()
-	database := testutil.NewTestDB(t, &model.MessageHub{})
+	database := testutil.NewTestDB(t, &model.MessageHub{}, &model.ChannelIdentifyCode{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
 
@@ -92,7 +106,7 @@ func cs02AuthPost(r *gin.Engine, body, token string) *httptest.ResponseRecorder 
 	req := httptest.NewRequest(http.MethodPost, "/api/bridge/ingest", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
-		req.Header.Set("X-Bridge-Token", token)
+		req.Header.Set("X-Channel-Identify-Code", token)
 	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -120,8 +134,8 @@ func cs02HubCount(t *testing.T) int64 {
 
 // TestCS02_BridgeRouterAuth_MissingTokenRejectedWithoutSideEffects 缺 token → 401，无副作用。
 func TestCS02_BridgeRouterAuth_MissingTokenRejectedWithoutSideEffects(t *testing.T) {
-	t.Setenv("BRIDGE_INGEST_TOKEN", "cs02-token-e2e")
 	r, tr := cs02AuthSetup(t)
+	cs02SeedIdentifyCode(t, cs02IdentifyCode)
 
 	w := cs02AuthPost(r, cs02MaliciousBody("cs02-evt-auth-1", "cs02-conv-auth-1", "cs02-openid-auth", "cs02-acc-a1", "evil-account"), "")
 	if w.Code != http.StatusUnauthorized {
@@ -137,10 +151,10 @@ func TestCS02_BridgeRouterAuth_MissingTokenRejectedWithoutSideEffects(t *testing
 
 // TestCS02_BridgeRouterAuth_WrongTokenRejectedWithoutSideEffects 错 token → 401，无副作用。
 func TestCS02_BridgeRouterAuth_WrongTokenRejectedWithoutSideEffects(t *testing.T) {
-	t.Setenv("BRIDGE_INGEST_TOKEN", "cs02-token-e2e")
 	r, tr := cs02AuthSetup(t)
+	cs02SeedIdentifyCode(t, cs02IdentifyCode)
 
-	w := cs02AuthPost(r, cs02MaliciousBody("cs02-evt-auth-2", "cs02-conv-auth-2", "cs02-openid-auth", "cs02-acc-a1", "evil-account"), "totally-wrong-token")
+	w := cs02AuthPost(r, cs02MaliciousBody("cs02-evt-auth-2", "cs02-conv-auth-2", "cs02-openid-auth", "cs02-acc-a1", "evil-account"), "totally-wrong-identify-code")
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("错 token 应 401，实际 %d body=%s", w.Code, w.Body.String())
 	}
@@ -155,10 +169,11 @@ func TestCS02_BridgeRouterAuth_WrongTokenRejectedWithoutSideEffects(t *testing.T
 // TestCS02_BridgeRouterAuth_FailClosedWhenTokenNotConfigured 未配置 token 且未显式
 // BRIDGE_INGEST_AUTH=off → 503 fail-closed（不允许静默退回无鉴权模式）。
 func TestCS02_BridgeRouterAuth_FailClosedWhenTokenNotConfigured(t *testing.T) {
-	t.Setenv("BRIDGE_INGEST_TOKEN", "")
+	// 不种子任何识别码：候选源为空且未显式 BRIDGE_INGEST_AUTH=off → 503 fail-closed。
+	t.Setenv("BRIDGE_INGEST_AUTH", "")
 	r, tr := cs02AuthSetup(t)
 
-	w := cs02AuthPost(r, cs02MaliciousBody("cs02-evt-auth-3", "cs02-conv-auth-3", "cs02-openid-auth", "cs02-acc-a1", "evil-account"), "any-token")
+	w := cs02AuthPost(r, cs02MaliciousBody("cs02-evt-auth-3", "cs02-conv-auth-3", "cs02-openid-auth", "cs02-acc-a1", "evil-account"), "any-identify-code")
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("未配置 token 应 503 fail-closed，实际 %d body=%s", w.Code, w.Body.String())
 	}
@@ -174,8 +189,8 @@ func TestCS02_BridgeRouterAuth_FailClosedWhenTokenNotConfigured(t *testing.T) {
 // 恶意 wire Extra.account_id：CH-37b 刀1 固定键防覆盖的**端到端**断言——
 // 伪造 account_id/sender_type 被丢弃并计数，落库行与 AI 触发元组的归属全部用服务端值。
 func TestCS02_BridgeRouterAuth_ValidToken_MaliciousExtraAccountIDDropped(t *testing.T) {
-	t.Setenv("BRIDGE_INGEST_TOKEN", "cs02-token-e2e")
 	r, tr := cs02AuthSetup(t)
+	cs02SeedIdentifyCode(t, cs02IdentifyCode)
 
 	const (
 		serverAccount = "cs02-acc-a1"
@@ -186,7 +201,7 @@ func TestCS02_BridgeRouterAuth_ValidToken_MaliciousExtraAccountIDDropped(t *test
 	)
 	droppedBefore := channelgw.IngestExtraDroppedKeys.Load()
 
-	w := cs02AuthPost(r, cs02MaliciousBody(evt, conv, cust, serverAccount, evilAccount), "cs02-token-e2e")
+	w := cs02AuthPost(r, cs02MaliciousBody(evt, conv, cust, serverAccount, evilAccount), cs02IdentifyCode)
 	if w.Code != http.StatusOK {
 		t.Fatalf("合法 token 应 200，实际 %d body=%s", w.Code, w.Body.String())
 	}

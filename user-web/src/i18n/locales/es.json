@@ -2099,7 +2099,7 @@
           "summary": "La página de credenciales del puente cubre «cómo vuelve la extensión del navegador a tu sistema». El estado de arriba indica si la credencial principal está configurada (desde la base de datos o desde una variable de entorno) y si una credencial anterior sigue dentro de su ventana de gracia. «Generar nueva credencial (rotar)» produce un token cuyo texto plano se muestra una sola vez: cópialo de inmediato a los ajustes de cada extensión.",
           "step2": {
             "title": "Rotación y ventana de gracia",
-            "description": "La extensión pega el token en sus ajustes y lo envía en la cabecera X-Bridge-Token; en escenarios SSE sirve también el parámetro ?bridge_token=. Tras una rotación la credencial anterior sigue valiendo durante la ventana de gracia, para que las extensiones sin actualizar no se caigan todas a la vez, pero la ventana se cierra: actualiza todas las extensiones y rota otra vez para retirar la credencial previa."
+            "description": "Genera o consulta el código de identificación en la página «Código de Identificación del Canal», pégalo en los ajustes de la extensión y envíalo en la cabecera X-Channel-Identify-Code; en SSE también sirve el parámetro ?identify_code=. Tras una rotación, actualiza todas las extensiones al nuevo código cuanto antes: los códigos antiguos no se conservan indefinidamente."
           }
         },
         "browserAutomationList": {

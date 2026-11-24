@@ -25,7 +25,9 @@ var apiLogSensitiveKeys = map[string]struct{}{
 	"password":                        {},
 	"passwd":                          {},
 	"token":                           {},
-	"bridge_token":                    {},
+	"bridge_token":                    {}, // 旧凭证（T063 退役）保留脱敏，防历史日志格式回归
+	"identify_code":                   {},
+	"x-channel-identify-code":         {},
 	"secret":                          {},
 	"authorization":                   {},
 	"access_token":                    {},

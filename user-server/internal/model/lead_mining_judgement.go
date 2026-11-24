@@ -26,6 +26,17 @@ type LeadMiningJudgement struct {
 	FeedbackBy     string     `gorm:"type:varchar(64);not null;default:''" json:"feedback_by"`
 	FeedbackAt     *time.Time `json:"feedback_at,omitempty"`
 	CreatedAt      time.Time  `gorm:"autoCreateTime" json:"created_at"`
+
+	// US2 T039 二次 LLM 汇总判断扩展。Matched 保留既有语义（是否命中线索），
+	// IsClue 是同一结论的显式别名，供归档/通知链路判读；两者由 Service 同步写入。
+	IsClue            bool        `gorm:"column:is_clue;not null;default:false" json:"is_clue"`
+	ClueType          string      `gorm:"column:clue_type;type:varchar(32);not null;default:''" json:"clue_type"`
+	Summary           string      `gorm:"column:summary;type:text;not null;default:''" json:"summary"`
+	ContextMessageIDs JSONStrings `gorm:"column:context_message_ids;type:jsonb;default:'[]'" json:"context_message_ids"`
+	SourceHitIDs      JSONStrings `gorm:"column:source_hit_ids;type:jsonb;default:'[]'" json:"source_hit_ids"`
+	EvidenceComplete  bool        `gorm:"column:evidence_complete;not null;default:true" json:"evidence_complete"`
+	Degraded          bool        `gorm:"column:degraded;not null;default:false" json:"degraded"`
+	ChannelAccountID  uint        `gorm:"column:channel_account_id;type:bigint;not null;default:0;index" json:"channel_account_id"`
 }
 
 func (LeadMiningJudgement) TableName() string { return "lead_mining_judgements" }
@@ -44,6 +55,17 @@ type LeadMiningNotifyRoute struct {
 	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt     time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt     *time.Time `gorm:"index" json:"deleted_at,omitempty"`
+
+	// T042 通知路由扩展：账号维护人 → 渠道维护人 → 租户默认的三级回退。
+	// Scope: account/channel/tenant；ChannelAccountID 关联渠道账号主键；
+	// NotifyUserIDs 为接收人（系统用户 id 字符串）；NotifyTypes 为站内/TG/飞书；
+	// DeliveryRecords 是每次送达的业务码结果数组（宪法 IV：判业务码不判 HTTP 码）。
+	ChannelAccountID uint        `gorm:"column:channel_account_id;type:bigint;not null;default:0;index" json:"channel_account_id"`
+	Scope            string      `gorm:"column:scope;type:varchar(16);not null;default:'tenant'" json:"scope"`
+	Priority         int         `gorm:"column:priority;not null;default:0" json:"priority"`
+	NotifyUserIDs    JSONStrings `gorm:"column:notify_user_ids;type:jsonb;default:'[]'" json:"notify_user_ids"`
+	NotifyTypes      JSONStrings `gorm:"column:notify_types;type:jsonb;default:'[]'" json:"notify_types"`
+	DeliveryRecords  string      `gorm:"column:delivery_records;type:jsonb;default:'[]'" json:"delivery_records"`
 }
 
 func (LeadMiningNotifyRoute) TableName() string { return "lead_mining_notify_routes" }

@@ -109,6 +109,21 @@ func (c *WebhookController) bindCallbackTenant(ctx *gin.Context, reqCtx context.
 	if !tenant.IsMultiTenant() || c.svc == nil {
 		return reqCtx, true
 	}
+	// T059：TG hook / 三方上报可在 query（或 X-Channel-Identify-Code 头）携带渠道识别码，
+	// 由 ChannelResolver 全局唯一反查租户/账号；歧义/未命中 fail-closed，不回落默认租户。
+	if code := strings.TrimSpace(ctx.Query("identify_code")); code != "" {
+		resolved, rerr := c.svc.ResolveByIdentifyCode(ctx.Request.Context(), code)
+		if rerr != nil || resolved == nil || resolved.TenantID == 0 {
+			if rerr == nil {
+				rerr = service.ErrChannelIdentityUnresolved
+			}
+			logger.Errorf("[SECURITY] webhook 识别码解析失败 code=%s channel=%s ip=%s: %v",
+				code, channel, ctx.ClientIP(), rerr)
+			response.Envelope(ctx, http.StatusNotFound, gin.H{"accepted": false, "reason": "unknown identify code"})
+			return reqCtx, false
+		}
+		return tenant.WithTenantID(reqCtx, resolved.TenantID), true
+	}
 	tid, terr := c.svc.ResolveTenantByChannelAccount(ctx.Request.Context(), channel, accountID)
 	if terr != nil {
 		logger.Errorf("[SECURITY] webhook 租户解析失败 channel=%s account=%s ip=%s: %v",

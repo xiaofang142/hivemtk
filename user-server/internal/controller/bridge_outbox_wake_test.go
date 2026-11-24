@@ -12,6 +12,7 @@ import (
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 )
 
@@ -56,17 +57,23 @@ func TestBridgeOutboxWakeController_RejectsScopeBefore200(t *testing.T) {
 }
 
 func TestBridgeOutboxWakeController_RealBridgeAuthentication(t *testing.T) {
-	testutil.NewTestDB(t, &model.PlatformConfigKV{})
-	t.Setenv("BRIDGE_INGEST_TOKEN", "synthetic-wake-test-token")
-	t.Setenv("BRIDGE_INGEST_TOKEN_PREV", "")
+	testutil.NewTestDB(t, &model.PlatformConfigKV{}, &model.ChannelIdentifyCode{})
+	// T058 后 BridgeIngressGuard 只认渠道识别码（头=X-Channel-Identify-Code，
+	// 候选源=channel_identify_codes 表），不再读旧 BRIDGE_INGEST_TOKEN。
+	const wakeIdentifyCode = "synthetic-wake-identify-code"
+	if err := repository.NewChannelIdentifyCodeRepository().Upsert(context.Background(), &model.ChannelIdentifyCode{
+		TenantID: 1, ChannelID: 1, Code: wakeIdentifyCode, Version: 1,
+	}); err != nil {
+		t.Fatalf("种子识别码写入失败: %v", err)
+	}
 	t.Setenv("BRIDGE_INGEST_AUTH", "")
 	for _, tc := range []struct {
 		name, token string
 		status      int
 	}{
 		{name: "缺少凭证不得开流", status: http.StatusUnauthorized},
-		{name: "错误凭证不得开流", token: "invalid", status: http.StatusUnauthorized},
-		{name: "有效凭证仍须明确租户", token: "synthetic-wake-test-token", status: http.StatusOK},
+		{name: "错误凭证不得开流", token: "invalid-identify-code", status: http.StatusUnauthorized},
+		{name: "有效凭证仍须明确租户", token: wakeIdentifyCode, status: http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			requestCtx, cancel := context.WithCancel(tenant.OnlyTenant(context.Background(), 18))
@@ -76,7 +83,7 @@ func TestBridgeOutboxWakeController_RealBridgeAuthentication(t *testing.T) {
 			router.Use(middleware.BridgeIngressGuard())
 			router.GET("/api/bridge/outbox/wake", NewBridgeOutboxWakeController(service.NewBridgeOutboxWakeBroker()).Stream)
 			request := httptest.NewRequest(http.MethodGet, "/api/bridge/outbox/wake?channel=douyin&account_id=account-a", nil).WithContext(requestCtx)
-			request.Header.Set("X-Bridge-Token", tc.token)
+			request.Header.Set("X-Channel-Identify-Code", tc.token)
 			router.ServeHTTP(writer, request)
 			if writer.Code != tc.status {
 				t.Fatalf("认证必须在事件流200之前生效：实际=%d，期望=%d", writer.Code, tc.status)

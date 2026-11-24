@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sort"
@@ -18,7 +19,15 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
+
+	"gorm.io/gorm"
 )
+
+// IsRecordNotFound reports whether err represents a "record not found" condition.
+// Controller 层通过此函数判断，避免直接引用 gorm 包（分层约束）。
+func IsRecordNotFound(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound)
+}
 
 const (
 	leadMiningQueueSize       = 8192
@@ -33,6 +42,7 @@ const (
 type LeadJudgement struct {
 	IsLead             bool     `json:"is_lead"`
 	IntentScore        int      `json:"intent_score"`
+	ClueType           string   `json:"clue_type"` // 需求/供货/资源/中介线索（T039 角色分类）
 	MatchedKeywords    []string `json:"matched_keywords"`
 	MatchedTags        []string `json:"matched_tags"`
 	Summary            string   `json:"summary"`
@@ -271,6 +281,16 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		return
 	}
 
+	// T040：复用 ai_debounce.go 的窗口配置做线索去重；无 dedup_hash 的测试/历史
+	// 消息不参与，避免把不同来源的消息误合并。
+	if hub.DedupHash != "" {
+		evt := &model.MessageEvent{Content: content, SessionID: hub.ConversationID}
+		if !LeadDebounce().TryClaim(ctx, evt, hub.Platform, hub.AccountID, hub.SenderID, hub.DedupHash) {
+			logger.Infof("[lead-mining] 防抖命中，跳过重复消息 msgID=%s hash=%s", hub.MsgID, hub.DedupHash)
+			return
+		}
+	}
+
 	cfg := s.loadConfig(ctx)
 	if cfg == nil || !cfg.Enabled {
 		return
@@ -301,7 +321,19 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		return
 	}
 
-	jd, err := s.judge.Judge(ctx, cfg, history)
+	// T039：组装多轮/历史 + 三路证据富上下文；fake judge（未实现可选方法）
+	// 仍走原 Judge 路径，不改变既有测试契约。
+	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
+	jctx := s.buildLeadJudgeContext(ctx, hub, history, judgementID)
+	var jd *LeadJudgement
+	var err error
+	if rich, ok := s.judge.(interface {
+		JudgeWithContext(context.Context, *LeadJudgeContext) (*LeadJudgement, error)
+	}); ok {
+		jd, err = rich.JudgeWithContext(ctx, jctx)
+	} else {
+		jd, err = s.judge.Judge(ctx, cfg, history)
+	}
 	if err != nil {
 		logger.Warnf("[lead-mining] 判定失败 account=%s: %v", account, err)
 		return
@@ -310,7 +342,7 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	s.mu.Lock()
 	s.lastJudge[debounceKey] = time.Now()
 	s.mu.Unlock()
-	s.recordLeadMiningJudgement(ctx, hub, jd)
+	s.recordLeadMiningJudgement(ctx, hub, jd, jctx)
 	if !jd.IsLead || jd.IntentScore < cfg.MinIntentScore {
 		return
 	}
@@ -545,9 +577,9 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		if existing2, gerr := s.clueRepo.FindByTypeAndAccount(ctx, clueType, account); gerr == nil && existing2 != nil {
 			nowJudged2 := time.Now().Unix()
 			if uerr := s.clueRepo.UpdateByID(ctx, existing2.ID, map[string]any{
-				"intent_score":        int64(jd.IntentScore),
-				"desc":                jd.Summary,
-				"last_judged_at":      nowJudged2,
+				"intent_score":   int64(jd.IntentScore),
+				"desc":           jd.Summary,
+				"last_judged_at": nowJudged2,
 			}); uerr != nil {
 				logger.Warnf("[lead-mining] TOCTOU 兜底更新线索失败 account=%s: %v", account, uerr)
 			}
@@ -825,7 +857,7 @@ func normalizeLeadRole(role string) string {
 	}
 }
 
-func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.MessageHub, jd *LeadJudgement) {
+func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.MessageHub, jd *LeadJudgement, jctxs ...*LeadJudgeContext) {
 	if hub == nil || jd == nil {
 		return
 	}
@@ -848,9 +880,13 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 		"conversation_id": hub.ConversationID, "is_group": hub.IsGroup, "group_id": hub.GroupID,
 		"platform": hub.Platform, "account_id": hub.AccountID, "sender_id": hub.SenderID,
 	})
+	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
+	if len(jctxs) > 0 && jctxs[0] != nil && jctxs[0].JudgementID != "" {
+		judgementID = jctxs[0].JudgementID
+	}
 	rec := &model.LeadMiningJudgement{
 		TenantID:       tid,
-		JudgementID:    fmt.Sprintf("lmj_%d", time.Now().UnixNano()),
+		JudgementID:    judgementID,
 		MessageID:      hub.MsgID,
 		ConversationID: hub.ConversationID,
 		Platform:       hub.Platform,
@@ -866,9 +902,40 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 		IntentScore:    jd.IntentScore,
 		Reason:         jd.Reason,
 	}
+	// T039：把二次汇总的角色分类、上下文引用与三路证据完整度一并落库，
+	// 供判定详情回放与归档/通知链路判读（证据不完整必须可见）。
+	rec.IsClue = jd.IsLead
+	rec.ClueType = jd.ClueType
+	rec.Summary = jd.Summary
+	if len(jctxs) > 0 && jctxs[0] != nil {
+		c := jctxs[0]
+		rec.ChannelAccountID = targetChannelAccountOf(c)
+		rec.ContextMessageIDs = make(model.JSONStrings, 0, len(c.Messages))
+		for _, m := range c.Messages {
+			if m.MessageID != "" {
+				rec.ContextMessageIDs = append(rec.ContextMessageIDs, m.MessageID)
+			}
+		}
+		rec.SourceHitIDs = make(model.JSONStrings, 0, len(c.Hits))
+		rec.EvidenceComplete = len(c.Hits) > 0
+		for _, h := range c.Hits {
+			rec.SourceHitIDs = append(rec.SourceHitIDs, strconv.FormatInt(h.ID, 10))
+			if !h.Complete || h.Degraded {
+				rec.EvidenceComplete = false
+				rec.Degraded = true
+			}
+		}
+	}
 	if err := judgementRepo.Create(ctx, rec); err != nil {
 		logger.Warnf("[lead-mining] 记录判定失败 msg=%s: %v", hub.MsgID, err)
 	}
+}
+
+func targetChannelAccountOf(c *LeadJudgeContext) uint {
+	if c == nil {
+		return 0
+	}
+	return c.ChannelAccountID
 }
 
 // GetLeadMiningJudgementDetail 返回判定记录回放详情（LM-PR6）。

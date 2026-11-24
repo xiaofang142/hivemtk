@@ -150,7 +150,8 @@ func corsMiddleware(c *gin.Context) {
 		c.Header("Access-Control-Allow-Credentials", "true")
 	}
 	c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-	// X-Bridge-Token 必须在允许头里：整组 /api/bridge/* 只认这一枚凭证头（不认 Authorization），
+	// X-Channel-Identify-Code 必须在允许头里（T058 一次性替换旧 X-Bridge-Token）：
+	// 整组 /api/bridge/* 只认这一枚渠道识别码头（不认 Authorization），
 	// 而浏览器对自定义头要先过预检——这里没列出它，跨源网页调用方就会在预检阶段被拦，
 	// 拿到的报错与「凭证不对」长得完全不同，很容易被当成服务端故障。
 	//
@@ -164,7 +165,7 @@ func corsMiddleware(c *gin.Context) {
 	// 反过来，机器对机器的签名/凭证头（X-Ingress-Secret、X-Webhook-Secret、X-API-KEY、
 	// 各渠道签名头、X-Knowledge-Token）一律不加：那些没有浏览器调用方，加进允许头只是把
 	// 凭证的可达面平白摊给任意被放行的源。
-	c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Bridge-Token,X-Chat-App-Key,X-Chat-Channel-Id,X-Chat-Visitor-Id,X-Chat-Visitor-Token")
+	c.Header("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Requested-With,X-Trace-Id,Last-Event-ID,Cache-Control,X-Channel-Identify-Code,X-Chat-App-Key,X-Chat-Channel-Id,X-Chat-Visitor-Id,X-Chat-Visitor-Token")
 	c.Header("Access-Control-Expose-Headers", "Last-Event-ID,X-Trace-Id")
 	if c.Request.Method == http.MethodOptions {
 		c.AbortWithStatus(http.StatusNoContent)
@@ -188,6 +189,10 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	var whatsappCloudSvc *service.WhatsAppCloudService
 	var webhookSvc *service.WebhookService
 	var dingtalkAppSvc *service.DingTalkAppService
+	// T015：三路消息入口共享的归一化投递器（bridge HTTP / channelgw WS / webhook）。
+	// T060：装配 ChannelResolver，归一化信封按识别码补全租户/账号归属。
+	inboundDispatcher := service.NewInboundMessageService()
+	service.AttachInboundResolver(inboundDispatcher, service.NewChannelResolver())
 
 	RegisterFilesRoute(r)
 
@@ -674,6 +679,11 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupWhatsAppCloudRoutes(auth, whatsappCloudSvc, gormDB)
 
 		webhookSvc = service.NewWebhookService()
+		// T011：租户解析统一走 ChannelResolver（识别码优先 + 旧自证链，歧义拒绝、
+		// 不回落默认租户）。显式注入保证所有 webhook 租户解析共用一个收口。
+		webhookSvc.SetChannelResolver(service.NewChannelResolver())
+		// T015：webhook 入口归一化投递收口。
+		webhookSvc.SetInboundDispatcher(inboundDispatcher)
 		webhookSvc.SetAgentBindingService(context.Background(), channelBindingSvcGlobal)
 		webhookSvc.SetSmartOrchestrator(context.Background(), orchestrator)
 		dingtalkAppSvc = service.NewDingTalkAppService(webhookSvc)
@@ -720,6 +730,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		}
 
 		bridgeHandler := app.WireBridgeGlobals(gormDB, bridgeIngressSvc)
+		// T015：bridge HTTP 入口归一化投递收口。
+		bridgeHandler.SetInboundDispatcher(inboundDispatcher)
 
 		bridgeIngressSvc.SetBridgeLeadProcessor(webhookSvc.ProcessBridgeLead)
 
@@ -748,6 +760,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			repository.NewSageXEventReceiptRepository(),
 			bridgeIngressSvc,
 		)
+		// T059：SageX 上报可用渠道识别码反查租户/账号（与安装凭证交叉校验）。
+		sagexUploadSvc.SetChannelResolver(service.NewChannelResolver())
 		sagexCtrl := controller.NewSageXUploadController(sagexUploadSvc)
 		sagexGroup := r.Group("/api")
 		sagexGroup.Use(middleware.InitGuard())
@@ -765,6 +779,8 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		mcpGroup.POST("/mcp", controller.NewMCPController().Handle)
 
 		channelPipeline := channelgw.NewPipeline(bridgeIngressSvc)
+		// T015：channelgw 入口归一化投递收口（不改 IngressPipeline 接口）。
+		channelgw.AttachInboundDispatcher(channelPipeline, inboundDispatcher)
 		channelWSTransport := channelgw.NewWSTransport(channelPipeline, channelgw.Default)
 		// 渠道 WS 的归属只能由 register 帧的 (channel, account_id) 自证；解析函数住在
 		// bridge 包，而 bridge 已经 import channelgw——反向依赖会成环，所以在这里接线。
@@ -795,8 +811,13 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		if bridgeIngressSvc != nil {
 			bridgeIngressSvc.SetInboxService(service.NewInboxService())
 			logger.Infof("[Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通）")
-			bridgeIngressSvc.SetLeadMining(service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB)))
-			logger.Infof("[Bridge] bridge LeadMining 已注入（线索发掘异步监听已连通）")
+			miningSvc := service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB))
+			bridgeIngressSvc.SetLeadMining(miningSvc)
+			// T048/T049 US3：两类智能体独立启停闸门。开关按 channel_account 的
+			// auto_reply_agent_id / lead_mining_agent_id 判定；两腿互不调用。
+			bridgeIngressSvc.SetAutoReplyGate(service.NewAutoReplyService())
+			bridgeIngressSvc.SetLeadDiscoveryGate(service.NewLeadDiscoveryService(miningSvc))
+			logger.Infof("[Bridge] bridge LeadMining + 自动回复/线索发现独立启停闸门已注入")
 			// M-6（2026-11-11）：新用户（非关注好友）首触登记 + 自动关注策略。
 			// 登记（观测）恒生效；关注动作另受参数中心 bridge/follow_user_enabled
 			// （默认 false）与 follow_user_channels 双闸控制，默认关闭不动任何现网行为。
@@ -825,6 +846,18 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		setupProactiveReachRoutes(auth, gormDB)
 
 		setupChannelOverviewRoutes(auth, gormDB)
+
+		// T012/T013：渠道主数据 / 渠道账号 / 识别码管理路由（仅映射，无内联闭包）。
+		setupChannelRoutes(auth)
+
+		// T028/T029：CRM 统一主数据路由（仅映射 + 装配，无内联闭包）。
+		setupCRMRoutes(auth, gormDB)
+
+		// T044 US2 线索规则/通知路由/判定证据/归档路由（仅映射 + setter 装配）。
+		setupLeadRoutes(auth)
+
+		// T047 US3 「线索发现智能体」独立注册（列表/新增/改/删，仅映射 + 构造注入）。
+		setupLeadMiningAgentRoutes(auth, gormDB)
 
 		setupReachDeferredRoutes(auth, gormDB)
 

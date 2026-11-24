@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"hivemtk-user/internal/pkg/utils/response"
@@ -44,8 +45,12 @@ func (c *BridgeTokenController) GetStatus(ctx *gin.Context) {
 func (c *BridgeTokenController) ResetBridgeToken(ctx *gin.Context) {
 	newTok, err := c.svc.Reset(ctx.Request.Context())
 	if err != nil {
-		response.Error(ctx, http.StatusInternalServerError, "持久化凭证失败")
+		if errors.Is(err, service.ErrLegacyBridgeTokenRetired) {
+			response.Error(ctx, http.StatusGone, service.ErrLegacyBridgeTokenRetired.Error())
+			return
+		}
+		response.Error(ctx, http.StatusInternalServerError, "凭证操作失败")
 		return
 	}
-	response.Success(ctx, gin.H{"token": newTok}, "轮换成功；旧凭据进入灰度窗口，请更新浏览器扩展后移除 PREV")
+	response.Success(ctx, gin.H{"token": newTok}, "轮换成功")
 }

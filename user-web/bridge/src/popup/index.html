@@ -125,9 +125,9 @@
     </div>
     <div class="hint">点一下即可填入。线上是云端 SaaS 的 user-server（默认推荐，租户从平台下载安装包后直接用）；本地用于本机自部署。默认端口由 <code>src/core/constants.js</code> 单源管理（见 docs/dev/DEVELOPMENT.md 端口对照表 / user-server 运行期环境变量 <code>PORT</code>）。</div>
 
-    <label for="token">通道凭证 Token</label>
-    <input id="token" placeholder="服务端配置了桥接凭证时必填，留空会被全部拒绝（401）" autocomplete="off" />
-    <div class="hint">请求以 <code>X-Bridge-Token</code> 头携带该凭证（同时作为 Bearer 透传）。服务端闸门是 fail-closed：一旦配置了凭证，未带凭证的上行/下发/ack 一律 401。凭证由管理员在 HiveMTK 网页端「桥接凭证」页（<code>/bridge/token</code>）点「生成新凭证」取得，只需粘贴一次；网页登录用的 JWT 与此不是同一个值。</div>
+    <label for="token">通道识别码</label>
+    <input id="token" placeholder="粘贴管理员为渠道生成的识别码，留空会被全部拒绝（401）" autocomplete="off" />
+    <div class="hint">请求以 <code>X-Channel-Identify-Code</code> 头携带该识别码（同时作为 Bearer 透传）。服务端闸门是 fail-closed：识别码未生成或无效时上行/下发/ack 一律 401。识别码由管理员在 HiveMTK 网页端「渠道识别码管理」页生成/重置后复制，只需粘贴一次；网页登录用的 JWT 与此不是同一个值。</div>
 
     <label for="tenantCode">租户短码 (tenant_code)</label>
     <input id="tenantCode" placeholder="SaaS 多租户模式必填，如 t42xk" autocomplete="off" />

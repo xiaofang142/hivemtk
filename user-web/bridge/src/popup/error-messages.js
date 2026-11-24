@@ -15,7 +15,7 @@ const ERROR_CATALOG = {
     title_en: 'Unauthorized',
     body_zh: 'user-server 的桥接闸门（fail-closed）拒绝了当前通道凭证：为空、拼错，或已在后台轮换过期。',
     body_en: 'The user-server bridge gate (fail-closed) rejected the channel token: empty, mistyped, or rotated out.',
-    action: '网页端「桥接凭证」页点「生成新凭证」→ 复制明文 → 粘贴到本扩展的「通道凭证 Token」→ 保存并重连（服务端只读 X-Bridge-Token，不是登录 JWT）。',
+    action: '网页端「渠道识别码管理」页为渠道生成/重置识别码 → 复制明文 → 粘贴到本扩展的「通道识别码」→ 保存并重连（服务端只读 X-Channel-Identify-Code，不是登录 JWT）。',
     docUrl: 'https://github.com/hivemtk/hivemtk/blob/master/hivemtk/user-web/bridge/bridge.md#token',
   },
   'http_403': {

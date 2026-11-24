@@ -160,6 +160,12 @@ func allModels() []any {
 		&model.SlackAccount{},
 		&model.WeCombBotAccount{},
 		&model.CustomAccount{},
+		// 渠道域地基（T005/T017）：顶层 migrations/088~090、092 是本仓 schema 契约；
+		// 运行期建表真值仍是本 allModels() 的 AutoMigrate，缺登记则新部署无表。
+		&model.Channel{},
+		&model.ChannelAccount{},
+		&model.ChannelIdentifyCode{},
+		&model.ChannelAccountAuthorization{},
 		&model.TelegramGroupGate{},
 		&model.TelegramGroupMember{},
 		&model.CronJobLease{},
@@ -175,6 +181,12 @@ func allModels() []any {
 		// CRM P0: 公司主数据与客户-公司关系（053建表+079 SaaS演进；D-02 双写过渡）
 		&model.Company{},
 		&model.CustomerCompanyRelation{},
+		// T019/T020（US1 统一主数据）：补缺实体 + 合并审计。
+		// 来源字段不在此新增（080 + customer.go + clue.go + companies 079 已建模）。
+		&model.Contact{},
+		&model.Supplier{},
+		&model.ServiceProvider{},
+		&model.CustomerMerge{},
 		// CRM PR-4/PR-5/PR-6/PR-7：跟进记录、业务账号授权、导入任务、AI洞察草稿
 		&model.FollowupRecord{},
 		&model.BusinessAccountAuthorization{},
@@ -183,6 +195,10 @@ func allModels() []any {
 		// LM-PR1/LM-PR4：线索发掘判定记录、通知路由
 		&model.LeadMiningJudgement{},
 		&model.LeadMiningNotifyRoute{},
+		// T032/T033 US2：三粒度规则、三路证据、共享对话上下文（094 建表真值）。
+		&model.LeadMiningRule{},
+		&model.LeadMiningHit{},
+		&model.ConversationContext{},
 		&model.CustomerTag{},
 		&model.CustomerTagAssignment{},
 		&model.CustomerDoNotContact{},

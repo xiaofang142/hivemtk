@@ -360,4 +360,21 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	register(NewCommerceExecutionMigration(db))
 	// v3.108.0：营销图版本、绝对等待与节点派发事实。
 	register(NewReachExecutionMigration(db))
+	// v3.109.0（T014 三粒度线索规则）：每租户一行的 lead_mining_configs 补
+	// scope/scope_id，并为每租户回填一条 global 规则（存量配置不丢）。
+	register(NewLeadRulesScopeMigration(db))
+	// v3.110.0（T021 CRM 统一主数据）：顶层 migrations/093 的 Go 注册入口。
+	// 只补三张新实体表 + 合并审计表 + 存量表扩展字段；不重建 companies，
+	// 不重复 080/customer.go/clue.go/companies 已建模的来源字段。
+	register(NewCRMEntitiesMigration(db))
+	// v3.111.0（T034 US2 线索全链路审计）：顶层 migrations/094 的 Go 注册入口。
+	// 三路证据 / 判定扩展 / 通知路由三级回退 / 共享上下文 / clues 归档字段。
+	register(NewLeadMiningMigration(db))
+	// v3.112.0（T063 三步切换收尾）：删除旧 Bridge token 的 KV 字段，
+	// 读路径已切渠道识别码（T058）、双写已停用（T061）。
+	register(NewDropBridgeTokenMigration(db))
+	// v3.113.0（FIX-5 Phase7 回归修复）：customer_id 全链路收敛 VARCHAR(64)。
+	// 幂等加宽 093/094 在 045 之后新建的 VARCHAR(36) customer_id 列（OneID JOIN 键，
+	// USING 安全转换防截断）；对应顶层 migrations/096_customer_id_widen_varchar64.sql。
+	register(NewCustomerIDWidenVarchar64Migration(db))
 }

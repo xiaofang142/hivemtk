@@ -139,13 +139,16 @@ type InboxIngressResult struct {
 }
 
 type InboxIngressService struct {
-	hubRepo             *repository.MessageHubRepository
-	feedbackRepo        *repository.FeedbackRecordRepository
-	cache               cache.Cache
-	triggerCh           chan string
-	aiTrigger           AITrigger
-	inboxSvc            *InboxService
-	leadMiningSvc       *Service
+	hubRepo       *repository.MessageHubRepository
+	feedbackRepo  *repository.FeedbackRecordRepository
+	cache         cache.Cache
+	triggerCh     chan string
+	aiTrigger     AITrigger
+	inboxSvc      *InboxService
+	leadMiningSvc *Service
+	// US3 解耦闸门（T048/T049）：为 nil 时（未装配/单测）保持既有行为。
+	autoReplySvc        *AutoReplyService
+	leadDiscoverySvc    *LeadDiscoveryService
 	bridgeLeadProcessor BridgeLeadProcessor
 	outboundAuthorizer  BridgeCapabilityAuthorizer
 
@@ -233,6 +236,20 @@ func (s *InboxIngressService) SetInboxService(svc *InboxService) {
 
 func (s *InboxIngressService) SetLeadMining(svc *Service) {
 	s.leadMiningSvc = svc
+}
+
+// SetAutoReplyGate 注入自动回复独立启停闸门（T048）。nil 等价于不设闸门（保持既有行为）。
+func (s *InboxIngressService) SetAutoReplyGate(svc *AutoReplyService) {
+	if s != nil {
+		s.autoReplySvc = svc
+	}
+}
+
+// SetLeadDiscoveryGate 注入线索发现独立启停闸门（T049）。nil 时回落到 legacy Enqueue。
+func (s *InboxIngressService) SetLeadDiscoveryGate(svc *LeadDiscoveryService) {
+	if s != nil {
+		s.leadDiscoverySvc = svc
+	}
 }
 
 // SetBridgeLeadProcessor 仅装配后台执行依赖，不在入站请求里调用。
@@ -779,6 +796,28 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 	if event.Extra != nil {
 		if v, ok := event.Extra["account_id"].(string); ok && v != "" {
 			accountID = v
+		}
+	}
+	// T048：自动回复模块独立启停闸门。按 channel_account.auto_reply_agent_id 判定；
+	// 关闭时只跳过自动回复触发，不影响落库与线索发现腿。
+	if s.autoReplySvc != nil && !s.autoReplySvc.Enabled(ctx, event.Channel, accountID) {
+		logger.Ctx(ctx).Info().
+			Str("channel", event.Channel).
+			Str("account_id", accountID).
+			Str("conv_id", event.ConversationID).
+			Msg("[Inbox] auto reply module disabled for channel account — skip AI trigger")
+		return
+	}
+	// T051：自动回复侧写/读交叉引用备注（共享 ConversationContext，不直调线索发现）。
+	// best-effort，失败只记 warn，不影响自动回复主链。
+	if s.autoReplySvc != nil && event.ConversationID != "" {
+		if acc, ok := resolveModuleChannelAccount(ctx, accountID); ok {
+			if notes := s.autoReplySvc.ReferLeadNotes(ctx, acc.ID, event.ConversationID); len(notes) > 0 {
+				logger.Infof("[auto-reply] 交叉引用线索发现备注 account=%d conv=%s notes=%v", acc.ID, event.ConversationID, notes)
+			}
+			if err := s.autoReplySvc.RecordNote(ctx, acc.ID, event.ConversationID, "自动回复链路已介入"); err != nil {
+				logger.Warnf("[auto-reply] 写交叉引用备注失败 account=%d conv=%s: %v", acc.ID, event.ConversationID, err)
+			}
 		}
 	}
 	if s.aiTrigger == nil {

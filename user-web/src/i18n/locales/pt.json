@@ -2099,7 +2099,7 @@
           "summary": "A página de credenciais da ponte cobre «como a extensão do navegador volta ao seu sistema». O estado no topo indica se a credencial principal está configurada (do banco de dados ou de uma variável de ambiente) e se uma credencial antiga ainda está na sua janela de tolerância. «Gerar nova credencial (rodar)» produz um token cujo texto simples aparece exatamente uma vez — copie-o de imediato para as definições de cada extensão.",
           "step2": {
             "title": "Rotação e janela de tolerância",
-            "description": "A extensão cola o token nas definições e envia-o no cabeçalho X-Bridge-Token; em SSE serve também o parâmetro ?bridge_token=. Após uma rotação a credencial antiga continua válida durante a janela de tolerância, para que as extensões não atualizadas não caiam todas de uma vez — mas a janela fecha: atualize todas as extensões e rode outra vez para retirar a credencial anterior."
+            "description": "Gere ou veja o código de identificação na página «Código de Identificação do Canal», cole-o nas definições da extensão e envie-o no cabeçalho X-Channel-Identify-Code; em SSE serve também o parâmetro ?identify_code=. Após uma rotação, atualize todas as extensões para o novo código o mais rápido possível — os códigos antigos não são mantidos indefinidamente."
           }
         },
         "browserAutomationList": {

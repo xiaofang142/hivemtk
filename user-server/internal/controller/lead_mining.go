@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 
@@ -10,7 +9,6 @@ import (
 	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type LeadMiningController struct{}
@@ -102,7 +100,7 @@ func (c *LeadMiningController) GetJudgementDetail(ctx *gin.Context) {
 	judgementID := strings.TrimSpace(ctx.Param("judgement_id"))
 	rec, err := service.GetLeadMiningJudgementDetail(ctx.Request.Context(), judgementID)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if service.IsRecordNotFound(err) {
 			response.Error(ctx, 404, "判定记录不存在")
 			return
 		}
@@ -133,7 +131,7 @@ func (c *LeadMiningController) SubmitJudgementFeedback(ctx *gin.Context) {
 		}
 	}
 	if err := service.SubmitLeadMiningJudgementFeedback(ctx.Request.Context(), judgementID, req.FeedbackStatus, req.FeedbackReason, by); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if service.IsRecordNotFound(err) {
 			response.Error(ctx, 404, "判定记录不存在")
 			return
 		}

@@ -71,7 +71,7 @@ func TestMCPGuard_DedicatedTokenLocksOutBridgeToken(t *testing.T) {
 		t.Errorf("Authorization Bearer 形状应等价放行，got code=%d reached=%v", code, ok)
 	}
 	// 本用例的主角：配了专用凭证后，扩展那份凭证换不到工具调用权限。
-	if code, ok := postMCP(t, r, map[string]string{"X-Bridge-Token": "bridge-1"}); ok || code != http.StatusUnauthorized {
+	if code, ok := postMCP(t, r, map[string]string{"X-Channel-Identify-Code": "bridge-1"}); ok || code != http.StatusUnauthorized {
 		t.Errorf("已配专用凭证时 X-Bridge-Token 仍被放行——拆分只是形式，got code=%d reached=%v", code, ok)
 	}
 	if code, ok := postMCP(t, r, map[string]string{"X-MCP-Token": "wrong"}); ok || code != http.StatusUnauthorized {
@@ -85,13 +85,13 @@ func TestMCPGuard_FallsBackToBridgeCredential(t *testing.T) {
 	withSeams(t, map[string]string{}, []string{"bridge-1"})
 	r := newMCPProbe()
 
-	if code, ok := postMCP(t, r, map[string]string{"X-Bridge-Token": "bridge-1"}); !ok || code != http.StatusOK {
+	if code, ok := postMCP(t, r, map[string]string{"X-Channel-Identify-Code": "bridge-1"}); !ok || code != http.StatusOK {
 		t.Errorf("未配专用凭证时应回落桥接凭证（存量部署不能当场 401），got code=%d reached=%v", code, ok)
 	}
 	if code, ok := postMCP(t, r, map[string]string{"X-MCP-Token": "bridge-1"}); !ok || code != http.StatusOK {
 		t.Errorf("回落分支下 X-MCP-Token 也应能带凭证，got code=%d reached=%v", code, ok)
 	}
-	if code, ok := postMCP(t, r, map[string]string{"X-Bridge-Token": "nope"}); ok || code != http.StatusUnauthorized {
+	if code, ok := postMCP(t, r, map[string]string{"X-Channel-Identify-Code": "nope"}); ok || code != http.StatusUnauthorized {
 		t.Errorf("回落分支下错值仍须 401，got code=%d reached=%v", code, ok)
 	}
 }

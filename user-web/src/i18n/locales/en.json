@@ -2099,7 +2099,7 @@
           "summary": "The bridge credential page covers \"how the browser extension reaches your system\". The status on top says whether the main credential is configured (from the database or from an environment variable) and whether an old credential is still inside its grace window. \"Generate new credential (rotate)\" produces a new token whose plaintext is shown exactly once — copy it straight into each extension's settings page.",
           "step2": {
             "title": "Rotation and the grace window",
-            "description": "The extension pastes the token into its settings and sends it as the X-Bridge-Token header; for SSE the ?bridge_token= query parameter works too. After a rotation the old credential keeps working during the grace window, so extensions that were not updated do not all break at once — but the window closes, so update every extension and rotate again to retire the previous credential."
+            "description": "Generate or view the identify code on the \"Channel Identify Code\" page, paste it into the extension's settings, and send it as the X-Channel-Identify-Code header; for SSE the ?identify_code= query parameter works too. After a rotation, update every extension to use the new code promptly — old codes are not kept around indefinitely."
           }
         },
         "browserAutomationList": {

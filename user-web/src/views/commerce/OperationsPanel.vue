@@ -139,7 +139,7 @@
           <el-form-item
             v-for="field in parameterFields"
             :key="field"
-            :label="t(`commerce.fields.${field}`)"
+            :label="t('commerce.fields.' + field)"
           >
             <el-input
               v-model.trim="parameters[field]"
@@ -251,7 +251,7 @@
           <el-descriptions-item
             v-for="field in detailFields"
             :key="field"
-            :label="t(`commerce.detail.${field}`)"
+            :label="t('commerce.detail.' + field)"
           >
             {{ selected[field] ?? '—' }}
           </el-descriptions-item>
@@ -275,7 +275,7 @@
             :disabled="!!acting"
             @click="transition(action)"
           >
-            {{ t(`commerce.transitions.${action}`) }}
+            {{ t('commerce.transitions.' + action) }}
           </el-button>
         </div>
         <el-divider />
@@ -420,7 +420,7 @@ async function create() {
 async function transition(action) {
   if (!selected.value) return
   if (['approve', 'submit', 'cancel'].includes(action)) {
-    try { await ElMessageBox.confirm(t('commerce.confirmTransition'), t(`commerce.transitions.${action}`), { type: 'warning' }) } catch { return }
+    try { await ElMessageBox.confirm(t('commerce.confirmTransition'), t('commerce.transitions.' + action), { type: 'warning' }) } catch { return }
   }
   const actions = { preflight: api.preflightCommerceOperation, approve: api.approveCommerceOperation, submit: api.submitCommerceOperation, observe: api.observeCommerceOperation, cancel: api.cancelCommerceOperation, claim: api.claimCommerceOperation }
   acting.value = action

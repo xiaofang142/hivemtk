@@ -2,78 +2,50 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
-	"os"
+	"errors"
 
 	"hivemtk-user/internal/repository"
 )
 
-const (
-	bridgeTokenKVKey     = "bridge_ingest_token"
-	bridgeTokenPrevKVKey = "bridge_ingest_token_prev"
-)
+// ErrLegacyBridgeTokenRetired 旧 Bridge 通道凭证已退役（T058/T063 一次性替换）。
+// 管理端旧页面调用 Reset 时收到本错误，应引导改用识别码管理页重置。
+var ErrLegacyBridgeTokenRetired = errors.New("旧 Bridge 通道凭证已退役，请在渠道识别码管理页重置识别码")
 
-// BridgeTokenService 桥接通道凭证服务
+// BridgeTokenService 旧 Bridge 通道凭证的只读退役提示器。
 //
-// GET  /api/bridge/token/status  —— 查询配置状态，并回显当前明文（便于管理员再次复制到新渠道）
-// POST /api/bridge/token/reset   —— 轮换：旧值转 PREV，生成新值返回明文
-//
-// 存储优先级：DB platform_config_kv（运行时可变）> 环境变量 BRIDGE_INGEST_TOKEN。
-// 桥接凭证属于实例级通道凭证（非租户业务配置），必须与租户上下文解耦：
-// 入口校验发生在租户解析之前，用租户 KV 在 on 模式下会 fail-closed。
+// T058 起凭证闸门只认渠道识别码表；T061 停用双写；T063 移除全部 KV 写入与键位。
+// 本类型仅保留以兼容既有管理端路由（/api/bridge/token/status|reset），不再写任何凭证，
+// 也不再持有 bridge_ingest_token / bridge_ingest_token_prev 这类旧字段。
 type BridgeTokenService struct {
-	kv repository.PlatformConfigKVRepository
+	codes repository.ChannelIdentifyCodeRepository
 }
 
-// NewBridgeTokenService 创建服务（全局 DB 装配）
+// NewBridgeTokenService 创建退役提示器（全局 DB 装配）。
 func NewBridgeTokenService() *BridgeTokenService {
-	return &BridgeTokenService{kv: repository.NewPlatformConfigKVRepository()}
+	return &BridgeTokenService{codes: repository.NewChannelIdentifyCodeRepository()}
 }
 
-func generateBridgeTokenValue() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-// Status 返回主/灰度 token 是否已配置，并回显当前明文（便于管理员再次复制到新渠道）
+// Status 返回退役状态：识别码数量 + 明确提示不再使用 Bridge token。
 func (s *BridgeTokenService) Status(ctx context.Context) map[string]any {
-	status := map[string]any{
-		"main_configured": false,
+	count := 0
+	if s != nil && s.codes != nil && s.codes.Available() {
+		codes, err := s.codes.ValidCodes(ctx)
+		if err == nil {
+			count = len(codes)
+		}
+	}
+	return map[string]any{
+		"retired":         true,
+		"identify_codes":  count,
+		"main_configured": count > 0,
 		"prev_configured": false,
-		"source":          "unset",
+		"source":          "channel_identify_codes",
 		"token":           "",
+		"message":         "旧 Bridge token 已退役，请使用渠道识别码",
 	}
-	if v, err := s.kv.Get(ctx, bridgeTokenKVKey); err == nil && v != "" {
-		status["main_configured"] = true
-		status["source"] = "db"
-		status["token"] = v
-	} else if envTok := os.Getenv("BRIDGE_INGEST_TOKEN"); envTok != "" {
-		status["main_configured"] = true
-		status["source"] = "env"
-		status["token"] = envTok
-	}
-	if v, err := s.kv.Get(ctx, bridgeTokenPrevKVKey); err == nil && v != "" {
-		status["prev_configured"] = true
-	}
-	return status
 }
 
-// Reset 轮换凭证：旧 token 转入灰度位（PREV），生成并返回新 token 明文
-func (s *BridgeTokenService) Reset(ctx context.Context) (string, error) {
-	newTok, err := generateBridgeTokenValue()
-	if err != nil {
-		return "", err
-	}
-
-	if cur, gerr := s.kv.Get(ctx, bridgeTokenKVKey); gerr == nil && cur != "" {
-		_, _ = s.kv.Upsert(ctx, bridgeTokenPrevKVKey, cur)
-	}
-	if _, uerr := s.kv.Upsert(ctx, bridgeTokenKVKey, newTok); uerr != nil {
-		return "", uerr
-	}
-	return newTok, nil
+// Reset 不再轮换/写入任何凭证——旧写入路径已在 T063 移除。
+func (s *BridgeTokenService) Reset(context.Context) (string, error) {
+	return "", ErrLegacyBridgeTokenRetired
 }

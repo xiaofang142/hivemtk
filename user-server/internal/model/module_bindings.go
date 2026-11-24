@@ -208,8 +208,8 @@ var ModuleMenuBindings = map[string][]string{
 		// 团队
 		"teamGroup", "systemUser", "roleManage", "permissionManage",
 		// 权限设置
-		"permissionGroup", "platformAccount", "integration", "bridgeToken",
-		// bridgeExtension（扩展安装包）与 bridgeToken 同属「桥接」这一摊，
+		"permissionGroup", "platformAccount", "integration", "channelIdentifyCode",
+		// bridgeExtension（扩展安装包）与渠道接入同属「桥接」这一摊，
 		// 同为系统基座能力（core）。漏绑会让它落进 enabledForNode 的
 		// 「未绑定 ⇒ 永远放行」分支 —— 模块闸对它完全失效。
 		"bridgeExtension",

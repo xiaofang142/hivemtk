@@ -251,14 +251,6 @@
             </el-button>
             <el-button
               link
-              type="info"
-              size="small"
-              @click="openBindingDialog(row)"
-            >
-              绑定关系
-            </el-button>
-            <el-button
-              link
               type="danger"
               size="small"
               @click="onDelete(row)"
@@ -436,102 +428,6 @@
         :image-size="80"
       />
     </el-dialog>
-
-    
-    <el-dialog
-      v-model="bindingDialogVisible"
-      title="智能体绑定关系"
-      width="720px"
-      top="6vh"
-    >
-      <template v-if="currentAgent">
-        <el-descriptions
-          :column="2"
-          border
-          size="small"
-        >
-          <el-descriptions-item label="智能体名称">
-            {{ currentAgent.name }}
-          </el-descriptions-item>
-          <el-descriptions-item label="编码">
-            {{ currentAgent.agent_code }}
-          </el-descriptions-item>
-        </el-descriptions>
-      </template>
-
-      <el-divider content-position="left">
-        渠道账号绑定
-      </el-divider>
-      <el-table
-        v-loading="bindingLoading"
-        :data="channelBindings"
-        stripe
-        size="small"
-        border
-      >
-        <el-table-column
-          prop="id"
-          label="ID"
-          width="70"
-          align="center"
-        />
-        <el-table-column
-          prop="channel_type"
-          label="渠道类型"
-          width="120"
-        />
-        <el-table-column
-          prop="account_id"
-          label="账号ID"
-          min-width="140"
-          show-overflow-tooltip
-        />
-        <el-table-column
-          label="主绑定"
-          width="90"
-          align="center"
-        >
-          <template #default="{ row }">
-            <el-tag
-              v-if="row.is_primary"
-              type="success"
-              size="small"
-            >
-              主
-            </el-tag>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="启用"
-          width="80"
-          align="center"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :type="row.enabled ? 'success' : 'info'"
-              size="small"
-            >
-              {{ row.enabled ? '是' : '否' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="创建时间"
-          width="160"
-        >
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty
-            description="暂无渠道绑定"
-            :image-size="60"
-          />
-        </template>
-      </el-table>
-    </el-dialog>
   </div>
 </template>
 
@@ -544,7 +440,6 @@ import { useListEditorRefresh } from '@/composables/useListEditor'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Search, User, VideoPlay } from '@element-plus/icons-vue'
 import { listAgents, deleteAgent, toggleAgent, testAgent } from '@/api/aiAgent.js'
-import { listBindingsByAgent } from '@/api/channelAgentBinding.js'
 import { getLanguageLabel } from '@/constants/languages'
 import { usePermissionStore } from '@/stores/permission'
 
@@ -569,14 +464,11 @@ const currentAgent = ref(null)
 const testForm = ref({ customer_id: '', message: '' })
 const testResult = ref(null)
 
-const bindingDialogVisible = ref(false);
-const bindingLoading = ref(false)
-const channelBindings = ref([])
-
 const typeMap = {
   sales: '销售智能体',
   customer_service: '客服智能体',
-  hybrid: '混合智能体'
+  hybrid: '混合智能体',
+  lead_mining: '线索发现智能体'
 };
 
 const getTypeLabel = (type) => typeMap[type] || type || '-'
@@ -711,21 +603,6 @@ const clearTestResult = () => {
   testResult.value = null
   testForm.value.message = ''
 }
-
-const openBindingDialog = async (row) => {
-  currentAgent.value = row
-  bindingDialogVisible.value = true
-  bindingLoading.value = true
-  channelBindings.value = []
-  try {
-    const res = await listBindingsByAgent(row.id)
-    channelBindings.value = res?.list || res || []
-  } catch (e) {
-    ElMessage.error('加载绑定关系失败：' + (e.message || '未知错误'))
-  } finally {
-    bindingLoading.value = false
-  }
-};
 
 onMounted(() => {
   loadList()

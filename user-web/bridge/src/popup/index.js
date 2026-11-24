@@ -302,13 +302,13 @@ async function readHealthVerdict(res) {
   };
 }
 
-// 凭证探测：GET /api/bridge/capabilities，带 X-Bridge-Token。
+// 凭证探测：GET /api/bridge/capabilities，带 X-Channel-Identify-Code。
 //
 // 为什么原本要补这一格：「测试连接」只打无鉴权的健康口，所以**凭证填错也照样报「✓ 服务端可达」**，
 // 用户下一步看到的就是"扩展连着、一条客户消息也不上来、一条回复也不下发"。
 // 选这个口是因为它是 bridge 五条路由里唯一"只读、无副作用、又与 ingest/outbox/ack/SSE 挂同一道
 // `BridgeIngressGuard`"的（`internal/router/router.go` 的 bridge group）——活实测三态互不混淆：
-//   不带凭证 ⇒ 401 `缺少 X-Bridge-Token`；带错 ⇒ 401 `bridge token 无效`；带对 ⇒ 200 + 能力读数。
+//   不带凭证 ⇒ 401 `缺少 X-Channel-Identify-Code`；带错 ⇒ 401 `渠道识别码无效`；带对 ⇒ 200 + 能力读数。
 // 反过来说 ingest/outbox/ack 会真写队列，不能拿来"测试"。
 // 返回体绝不回显凭证；服务端那句 message 是闸门自己写的固定文案，直接抄给用户比任何猜测准。
 const BRIDGE_CREDENTIAL_PROBE_PATH = '/api/bridge/capabilities';
@@ -324,7 +324,7 @@ async function probeBridgeCredential(serverUrl, token) {
   const headers = {};
   // 空凭证时不伪造空头：不发与发空串，服务端给的都是同一句 401，
   // 但"你压根没填"只有不发才判得出来（state==='missing'）。
-  if (creds) headers['X-Bridge-Token'] = creds;
+  if (creds) headers['X-Channel-Identify-Code'] = creds;
   try {
     const res = await fetch(url, { method: 'GET', headers, signal: ctl.signal, cache: 'no-store' });
     clearTimeout(t);
@@ -419,12 +419,12 @@ function buildConnectionVerdict(reach, cred) {
       title = '✗ 凭证被服务端拒绝';
       lines.push(`capabilities 返回 ${c.status}${c.serverMessage ? `：${c.serverMessage}` : ''}\n`
         + '上报/拉取/ack/SSE 五条路由挂的是同一道闸门，全都会被拦下 ⇒ 扩展会"连着"却一条也不同步。\n'
-        + '请核对这里填的凭证与服务端配置（环境变量 BRIDGE_INGEST_TOKEN，或系统配置项 bridge_ingest_token）是否一致。');
+        + '请核对这里填的识别码与服务端「渠道识别码」页当前生效的识别码是否一致，请求头用 X-Channel-Identify-Code（旧桥接凭证协议已退役，不再被接受）。');
       break;
     case 'missing':
       kind = 'error';
       title = '✗ 未填桥接凭证';
-      lines.push(`服务端要求 X-Bridge-Token（capabilities 返回 ${c.status}${c.serverMessage ? `：${c.serverMessage}` : ''}），而凭证栏是空的。\n不填的话每一条桥接请求都会 401。`);
+      lines.push(`服务端要求 X-Channel-Identify-Code（capabilities 返回 ${c.status}${c.serverMessage ? `：${c.serverMessage}` : ''}），而识别码栏是空的。\n不填的话每一条桥接请求都会 401。`);
       break;
     case 'no_probe_endpoint':
       if (kind === 'success') { kind = 'warn'; title = '⚠ 可达，但凭证没能校验'; }

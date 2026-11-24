@@ -7,7 +7,7 @@ type FollowupRecord struct {
 	TenantID       uint       `gorm:"not null;default:1;index" json:"tenant_id"`
 	ID             int64      `gorm:"primaryKey;autoIncrement" json:"id"`
 	RecordID       string     `gorm:"type:varchar(32);not null;index" json:"record_id"`
-	CustomerID     string     `gorm:"type:varchar(36);not null;default:'';index" json:"customer_id"`
+	CustomerID     string     `gorm:"type:varchar(64);not null;default:'';index" json:"customer_id"`
 	CompanyID      *int64     `gorm:"index" json:"company_id,omitempty"`
 	ContactID      *int64     `gorm:"index" json:"contact_id,omitempty"`
 	OpportunityID  *int64     `gorm:"index" json:"opportunity_id,omitempty"`

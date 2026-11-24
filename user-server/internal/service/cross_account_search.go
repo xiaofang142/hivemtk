@@ -7,6 +7,10 @@ import (
 	"hivemtk-user/internal/repository"
 )
 
+// CrossAccountSearchRow 是 repository 层的搜索行类型别名，供 controller 层使用，
+// 避免 controller 直接引用 repository 包（分层约束）。
+type CrossAccountSearchRow = repository.CrossAccountSearchRow
+
 type CrossAccountSearchScope struct {
 	AllAccounts            bool `json:"all_accounts"`
 	Restricted             bool `json:"restricted"`

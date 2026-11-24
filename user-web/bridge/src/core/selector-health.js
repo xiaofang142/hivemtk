@@ -210,9 +210,9 @@ function toHttpUrl(serverUrl) {
 /**
  * 构造上报请求（纯函数，便于用例断言 URL/头/体，不碰网络）。
  *
- * token 走 Header（X-Bridge-Token + Authorization），与 http-ingest.js 同一条铁律：
- * 服务端 `/api/bridge/*` 的守卫只认 X-Bridge-Token（或 bridge_token 查询参数），
- * 只发 Bearer 会被 401，而下行/上报都把 401 吞成一行日志——用户侧表现为「接上了但没数据」。
+ * 识别码走 Header（X-Channel-Identify-Code + Authorization），与 http-ingest.js 同一条铁律：
+ * 服务端 `/api/bridge/*` 的守卫只认 X-Channel-Identify-Code（或 identify_code 查询参数），
+ * 旧 X-Bridge-Token 已退役，只发 Bearer 会被 401，而下行/上报都把 401 吞成一行日志。
  */
 export function buildSelectorHealthRequest({
   serverUrl,

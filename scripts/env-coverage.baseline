@@ -75,3 +75,8 @@ MOCK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/bri
 PERF_PASSWORD	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 PERF_USERNAME	待补文档（第36轮登记为债）；读取点 user-server/cmd/perf/main.go
 QWEN_API_KEY	待补文档（第36轮登记为债）；读取点 user-server/cmd/geo-run/main.go
+CAPABILITY_PROOF_FAKE	待补文档（Phase7 FIX 登记）；读取点 user-server/internal/service/outbound_capability.go
+CAPABILITY_PROOF_FAKE_PROVENANCE	待补文档（Phase7 FIX 登记）；读取点 user-server/internal/service/outbound_capability.go
+CHANNEL_IDENTIFY_GRACE_SECONDS	待补文档（Phase7 FIX 登记）；读取点 user-server/internal/service/channel_identify.go
+LEAD_LLM_DETECT_TIMEOUT_MS	待补文档（Phase7 FIX 登记）；读取点 user-server/internal/service/lead_detector_llm.go
+MERCHANT_CONNECTION_FAKE	待补文档（Phase7 FIX 登记）；读取点 user-server/internal/router/merchant_connection_routes.go

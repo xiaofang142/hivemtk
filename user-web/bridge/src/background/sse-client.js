@@ -1,7 +1,7 @@
 // background/sse-client.js
 // Service Worker 中的 SSE 客户端：
 // 1. 监听 chrome.alarms keepalive（每 15s 唤醒 Worker）
-// 2. 经 core/sse-fetch-client（fetch 流式，X-Bridge-Token 头携带凭证）连接 /api/bridge/outbox/sse
+// 2. 经 core/sse-fetch-client（fetch 流式，X-Channel-Identify-Code 头携带识别码）连接 /api/bridge/outbox/sse
 // 3. 按 (channel, account_id) 路由消息到对应标签页的 Content Script
 // 4. 断线重连带 Last-Event-ID
 // 5. 持久化 Last-Event-ID 到 chrome.storage.local
@@ -117,10 +117,10 @@ if (chrome && chrome.runtime && chrome.runtime.onMessage) {
 
 // ---- SSE 连接管理（T7，2026-11-17：fetch 流式替代 EventSource）----
 //
-// 旧实现用 EventSource，它不支持自定义 Header，只能把 bridge_token 拼进 URL 查询参数
-// ——凭证会落进网关访问日志/代理日志/Referer。现在统一走 core/sse-fetch-client.js 的
-// connectSSE（downlink.js 下行主通道同款实现）：token 经 X-Bridge-Token 头发送，
-// URL 上只剩 channel/account_id/last_event_id/tenant_code，不再有任何 token 参数。
+// 旧实现用 EventSource，不支持自定义 Header，只能把凭证拼进 URL 查询参数（已退役）。
+// 现在统一走 core/sse-fetch-client.js 的 connectSSE（downlink.js 下行主通道同款实现）：
+// 识别码经 X-Channel-Identify-Code 头发送，URL 上只剩 channel/account_id/last_event_id/
+// tenant_code，不再有任何凭证参数。
 // 对外语义保持不变：onmessage（JSON 解析后路由到 tab）、onerror（日志 + 3s 重连）、
 // Last-Event-ID 持久化（内存缓存 + chrome.storage）、tenant_code 附加。
 
