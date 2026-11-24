@@ -628,6 +628,49 @@ func (s *WebhookService) autoPickOutboundAccount(ctx context.Context, channel We
 	return strconv.FormatUint(uint64(pick.AccountID), 10)
 }
 
+// normalizeOutboundAccount validates an explicit accountID for dispatch-capable channels.
+// Invalid/inactive/mismatched explicit accounts fall back to dispatch pick to avoid stale routing.
+func (s *WebhookService) normalizeOutboundAccount(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) string {
+	accountID = strings.TrimSpace(accountID)
+	if !bridgeOutboxCapable(channel) {
+		return accountID
+	}
+	if accountID == "" {
+		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
+	}
+	tenantID, _ := tenant.FromContext(ctx)
+	if hubMsg != nil && hubMsg.TenantID != 0 {
+		tenantID = hubMsg.TenantID
+	}
+	if tenantID == 0 {
+		return accountID
+	}
+	accID, err := strconv.ParseUint(accountID, 10, 32)
+	if err != nil {
+		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
+	}
+	var acc model.ChannelAccount
+	db := dbstate.Get()
+	if db == nil {
+		return accountID
+	}
+	q := db.WithContext(ctx).Where("tenant_id = ? AND id = ? AND status = ?", tenantID, uint(accID), 1)
+	if err := q.First(&acc).Error; err != nil {
+		logger.Ctx(ctx).Debug().Err(err).Str("channel", string(channel)).Uint("tenant_id", tenantID).Str("account_id", accountID).Msg("explicit outbound account invalid, fallback to dispatch")
+		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
+	}
+	if ch := strings.TrimSpace(string(channel)); ch != "" {
+		var chModel model.Channel
+		if err := db.WithContext(ctx).Select("id, code").Where("id = ? AND tenant_id = ?", acc.ChannelID, tenantID).First(&chModel).Error; err == nil {
+			if !strings.EqualFold(strings.TrimSpace(chModel.Code), ch) && strconv.FormatUint(uint64(acc.ChannelID), 10) != ch {
+				logger.Ctx(ctx).Debug().Str("channel", ch).Str("account_channel", chModel.Code).Uint("tenant_id", tenantID).Str("account_id", accountID).Msg("explicit outbound account channel mismatch, fallback to dispatch")
+				return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
+			}
+		}
+	}
+	return strconv.FormatUint(uint64(acc.ID), 10)
+}
+
 // abandonReplay 把重放行收口为终态 failed，并给这条客户消息留最后一次补触发机会：
 // 重试通道放弃后，会话里仍是未回复的入站行，不能就此没人应答。
 func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutboundReply, reason string) {
@@ -650,9 +693,7 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
-	if accountID == "" {
-		accountID = s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
-	}
+	accountID = s.normalizeOutboundAccount(ctx, channel, accountID, p, hubMsg)
 	if err := authorizeOutboundSubmission(ctx, channel, accountID, hubMsg); err != nil {
 		recordOutboundSendFailed(channel, err)
 		return false, err

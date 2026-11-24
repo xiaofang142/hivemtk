@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 	smssvc "hivemtk-user/internal/service/sms"
+	"strconv"
 	"strings"
 	"time"
 
 	"hivemtk-user/internal/cache"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/reach"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
@@ -664,6 +667,16 @@ func (s *ProactiveReachService) pickChannel(ctx context.Context, candidates []st
 			return ch, recipient, "", nil
 		}
 
+		tenantID, _ := tenant.FromContext(ctx)
+		pick, pickErr := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{
+			TenantID:       tenantID,
+			Channel:        ch,
+			ConversationID: ident.cust.UnifiedID,
+		})
+		if pickErr == nil && pick != nil && pick.AccountID != 0 {
+			return ch, recipient, strconv.FormatUint(uint64(pick.AccountID), 10), nil
+		}
+		// Fallback to legacy lookup for compatibility.
 		acc, err := s.accountLookup.FindActiveAccount(ctx, ch)
 		if err != nil {
 			logger.Warnf("[ProactiveReach] 查找 %s 账号失败: %v", ch, err)
