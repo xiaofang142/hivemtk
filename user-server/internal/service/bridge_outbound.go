@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -101,11 +102,22 @@ func DeliverBridgeOutboundWithReceipt(ctx context.Context, channel, accountID, c
 //   - 文本消息（msgType 空/text 或 mediaURL 空）与旧口径逐字节一致；
 //   - mediaURL 统一 TruncateMediaURL（F2 列宽收口）。
 func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, conversationID, msgType, content, mediaURL, eventID string) (hubID uint64, msgID string, err error) {
-	if channel == "" || accountID == "" || conversationID == "" {
-		return 0, "", fmt.Errorf("bridge outbound: channel/account_id/conversation_id required")
+	if channel == "" || conversationID == "" {
+		return 0, "", fmt.Errorf("bridge outbound: channel/conversation_id required")
 	}
 	if _, ok := bridgeChannels[channel]; !ok {
 		return 0, "", fmt.Errorf("bridge: 不支持的桥接渠道 %q", channel)
+	}
+	if accountID == "" {
+		tid, _ := tenant.FromContext(ctx)
+		pick, perr := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{TenantID: tid, Channel: channel, ConversationID: conversationID})
+		if perr != nil || pick == nil || pick.AccountID == 0 {
+			return 0, "", fmt.Errorf("bridge outbound: account_id required: %v", perr)
+		}
+		accountID = strconv.FormatUint(uint64(pick.AccountID), 10)
+	}
+	if accountID == "" {
+		return 0, "", fmt.Errorf("bridge outbound: channel/account_id/conversation_id required")
 	}
 	if undeliverable, reason := bridgeOutboundUndeliverable(accountID, conversationID); undeliverable {
 		logger.Ctx(ctx).Warn().
