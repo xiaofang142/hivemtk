@@ -1261,19 +1261,31 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 }
 
 func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedChannelGatewayRequest) {
-	ident, _ := BridgeIdentityFromContext(c)
 	channel := NormalizeBridgeChannel(req.Channel)
 	accountID := strings.TrimSpace(req.AccountID)
-	if ident != nil {
-		if channel == "" { channel = ident.Channel }
-		if accountID == "" { accountID = ident.AccountID }
+	if ident, ok := BridgeIdentityFromContext(c); ok {
+		if channel == "" {
+			channel = ident.Channel
+		}
+		if accountID == "" {
+			accountID = ident.AccountID
+		}
 	}
-	if channel == "" || accountID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"schema_version":"hivemtk.channel.v1","status":"error","message":"channel/account_id required (or identify_code)"})
-		return
-	}
+	// identify_code-only: resolve identity early to fill channel/account.
 	if _, err := bindBridgeTenant(c, channel, accountID); err != nil {
 		writeBridgeTenantError(c, err)
+		return
+	}
+	if ident, ok := BridgeIdentityFromContext(c); ok {
+		if channel == "" {
+			channel = ident.Channel
+		}
+		if accountID == "" {
+			accountID = ident.AccountID
+		}
+	}
+	if channel == "" || accountID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "channel/account_id required (or identify_code)"})
 		return
 	}
 
