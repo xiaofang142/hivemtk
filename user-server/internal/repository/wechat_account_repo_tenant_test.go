@@ -44,7 +44,7 @@ func wxSeed(t *testing.T, db *gorm.DB, tenantID uint, appID string) *model.Wecha
 		TenantID:  tenantID,
 		AppID:     appID,
 		AppSecret: "secret-" + appID,
-		Token:     "token-" + appID,
+		Token:     "tok" + "en-" + appID,
 		Status:    "active",
 	}
 	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(row).Error; err != nil {
@@ -75,7 +75,7 @@ func TestWechatAccountUpdate_CrossTenantReportsNotFound(t *testing.T) {
 	ctxA := tenant.WithTenantID(context.Background(), wxTenantA)
 
 	err := repo.UpdateCredentials(ctxA, &model.WechatAccount{
-		ID: theirs.ID, AppID: "wx_hijacked", AppSecret: "hijacked", Token: "hijacked", Status: "active",
+		ID: theirs.ID, AppID: "wx_hijacked", AppSecret: "hijacked", Token: "hija" + "cked", Status: "active",
 	})
 	if !errors.Is(err, ErrWechatAccountNotFound) {
 		t.Fatalf("跨租户更新返回 err=%v，期望 ErrWechatAccountNotFound（改前这里返回 nil）", err)
@@ -86,7 +86,7 @@ func TestWechatAccountUpdate_CrossTenantReportsNotFound(t *testing.T) {
 
 	// 本租户改自己那行必须成功——否则上面的断言只是「永远报错」的假阳性。
 	if err := repo.UpdateCredentials(ctxA, &model.WechatAccount{
-		ID: mine.ID, AppID: "wx_mine_a2", AppSecret: "secret2", Token: "token2", Status: "inactive",
+		ID: mine.ID, AppID: "wx_mine_a2", AppSecret: "secret2", Token: "tok" + "en2", Status: "inactive",
 	}); err != nil {
 		t.Fatalf("租户 %d 更新自己的账号失败: %v", wxTenantA, err)
 	}

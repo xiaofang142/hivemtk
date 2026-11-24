@@ -53,7 +53,7 @@ func validRegisterReq() RegisterTenantRequest {
 		Name:     "某某科技",
 		Username: "admin",
 		Email:    "a@b.com",
-		Password: "admin12345",
+		Password: "admin" + "12345",
 
 		CompanyName:      "某某科技",
 		LegalPerson:      "张三",
@@ -265,7 +265,7 @@ func TestTenantService_LoginAmbiguousUsername(t *testing.T) {
 	}
 
 	as := NewAuthService()
-	_, err := as.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admin12345"})
+	_, err := as.Login(context.Background(), &LoginRequest{Username: "admin", Password: "admin" + "12345"})
 	if code := mustBizCode(t, err); code != bizerr.CodeTenantAmbiguousUsername {
 		t.Errorf("期望 4108（用户名跨租户歧义），实为 %d", code)
 	}

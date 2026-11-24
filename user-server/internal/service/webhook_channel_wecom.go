@@ -397,7 +397,8 @@ func (s *WebhookService) dispatchWeCom(ctx context.Context, accountID string, p 
 	p.ChatID = chatID
 
 	if hubMsg != nil && content != "" && fromUser != "" && msgType != "event" {
-		MineUnifiedLead(ctx, s, hubMsg, WeComLeadAdapter{}, accountID, chatID, "", fromUser, fromName, "", content)
+		// P0-c：落 hub 成功后统一走发掘出口（LeadDiscoveryService.Process → Service.Enqueue）。
+		s.notifyLeadMined(ctx, hubMsg)
 	}
 	// 媒体消息转存（best-effort）：企微 media_id 仅 3 天有效，异步下载回填长期 URL
 	if mediaID != "" && hubMsg != nil && isWeComMediaMsgType(msgType) {

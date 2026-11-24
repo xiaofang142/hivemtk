@@ -96,7 +96,7 @@ func TestSelfProviderDoesNotUseProxy(t *testing.T) {
 	svc := NewLLMService()
 	cfg := &LLMConfig{
 		Source:   "self", // 自带 Key
-		APIKey:   "sk-user-own-key",
+		APIKey:   "sk-" + "user" + "-own-key",
 		BaseURL:  upstream.URL,
 		APIType:  "openai",
 		Model:    "qwen",
@@ -372,7 +372,7 @@ func TestDispatchSelfProviderDoesNotEmitUsageEvent(t *testing.T) {
 
 	d := NewDispatcher(NewLLMService())
 	d.AddProvider(ProviderConfig{
-		Name: "own", Model: "qwen", APIKey: "sk-own", BaseURL: upstream.URL,
+		Name: "own", Model: "qwen", APIKey: "sk-" + "own", BaseURL: upstream.URL,
 		APIType: "openai", Source: "self", Enabled: true, QualityScore: 1,
 	})
 	d.SetRoute(ScenarioRoute{

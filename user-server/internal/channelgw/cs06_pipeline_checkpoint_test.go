@@ -19,24 +19,29 @@
 package channelgw
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"hivemtk-user/internal/aiagent/llm"
+	"hivemtk-user/internal/cache"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/pkg/tracing"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
 
@@ -46,15 +51,16 @@ import (
 // —— CS-06 冻结字段（cs06- 前缀：内容窗口去重键/AI 处理标记都是进程级缓存，须与
 // CS-01～03 各样本隔离，也避免本文件内各场景互相污染） ————————————————————————
 const (
-	cg06Channel   = "douyin"
-	cg06TenantA   = uint(601)
-	cg06TenantB   = uint(602)
-	cg06AccountA1 = "cs06-acc-a1"
-	cg06AccountB1 = "cs06-acc-b1"
-	cg06ConvA     = "cs06-conv-a1-001"
-	cg06ConvB     = "cs06-conv-b1-001"
-	cg06CustA     = "cs06-openid-a-001"
-	cg06CustB     = "cs06-openid-b-001"
+	cg06Channel       = "douyin"
+	cg06TenantA       = uint(601)
+	cg06TenantB       = uint(602)
+	cg06FixtureTenant = uint(501)
+	cg06AccountA1     = "1"
+	cg06AccountB1     = "2"
+	cg06ConvA         = "cs06-conv-a1-001"
+	cg06ConvB         = "cs06-conv-b1-001"
+	cg06CustA         = "cs06-openid-a-001"
+	cg06CustB         = "cs06-openid-b-001"
 
 	// 样本①②：知识命中/低置信共用的问题与标准答案（真库 FAQ 行，CS-03 口径）。
 	cg06Question = "你们的标准版套餐多少钱？"
@@ -127,6 +133,69 @@ func cg06WaitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("等待超时: %s", what)
 }
 
+// cg06AIDrain 跟踪真实 TriggerInboundAI 触发的会话；AI 处理标记在触发器调用前设置，
+// 在 runAIGeneration defer 中释放，因此可确定性等待异步腿收尾后再关闭测试库。
+type cg06AIDrain struct {
+	mu     sync.Mutex
+	inner  service.AITrigger
+	active map[string]struct{}
+}
+
+func newCG06AIDrain(inner service.AITrigger) *cg06AIDrain {
+	return &cg06AIDrain{inner: inner, active: make(map[string]struct{})}
+}
+
+func (d *cg06AIDrain) TriggerInboundAI(ctx context.Context, channel, accountID, conversationID, customerID, content, eventID string, opts ...service.TriggerInboundOption) {
+	if conversationID != "" {
+		d.mu.Lock()
+		d.active[conversationID] = struct{}{}
+		d.mu.Unlock()
+	}
+	d.inner.TriggerInboundAI(ctx, channel, accountID, conversationID, customerID, content, eventID, opts...)
+}
+
+func (d *cg06AIDrain) Wait(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		d.mu.Lock()
+		convs := make([]string, 0, len(d.active))
+		for conv := range d.active {
+			convs = append(convs, conv)
+		}
+		d.mu.Unlock()
+		allClear := true
+		for _, conv := range convs {
+			exists, err := cache.GetGlobalCache().Exists(context.Background(), service.InboxAIProcessingKey+conv)
+			if err != nil {
+				t.Fatalf("读取 AI 处理标记失败 conv=%s: %v", conv, err)
+			}
+			if exists {
+				allClear = false
+				break
+			}
+		}
+		if allClear {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("等待 AI 异步腿收尾超时")
+}
+
+// cg06WaitForAIResult 等到真实安全出口落 ai_result 节点；随后 cg06AIDrain.Wait
+// 等待处理标记释放，避免测试 cleanup 先关闭 DB。
+func cg06WaitForAIResult(t *testing.T, d *gorm.DB, conv string) {
+	t.Helper()
+	cg06WaitFor(t, "AI 安全出口落库 conv="+conv, func() bool {
+		var n int64
+		if err := d.Model(&model.MessageTrace{}).Where("conversation_id = ? AND node = ?", conv, tracing.NodeAIResult).Count(&n).Error; err != nil {
+			t.Fatalf("读 ai_result 节点失败: %v", err)
+		}
+		return n > 0
+	})
+}
+
 // cg06LLMCounter 可计数模型 fake 的计数器（CS-03 同款）。
 var cg06LLMCalls int32
 
@@ -172,6 +241,32 @@ func cg06NewLLM(t *testing.T) *llm.Dispatcher {
 		disp.SetRoute(llm.ScenarioRoute{Scenario: sc, Provider: "fake-cs06", Fallbacks: []string{"fake-cs06"}})
 	}
 	return disp
+}
+
+// cg06SeedCanonicalAccounts 播种 canonical Channel/ChannelAccount；出站显式账号只认
+// 租户内启用账号的数值 ID，不再接受旧的外部字符串账号。
+func cg06SeedCanonicalAccounts(t *testing.T, d *gorm.DB, tenantID uint, accountIDs ...string) uint {
+	t.Helper()
+	ctx := tenant.WithSystemScope(context.Background())
+	channel := &model.Channel{TenantID: tenantID, Name: cg06Channel, Code: cg06Channel, Type: "dm", Enabled: true}
+	if err := d.WithContext(ctx).Create(channel).Error; err != nil {
+		t.Fatalf("灌 canonical 渠道失败: %v", err)
+	}
+	for _, rawID := range accountIDs {
+		id, err := strconv.ParseUint(rawID, 10, 32)
+		if err != nil || id == 0 {
+			t.Fatalf("CS06 canonical 账号 ID 必须为正数，实际 %q", rawID)
+		}
+		account := &model.ChannelAccount{
+			TenantID: tenantID, ID: uint(id), ChannelID: channel.ID,
+			Name: "cs06-account-" + rawID, IdentifyCode: fmt.Sprintf("cs06-identify-%d-%s", tenantID, rawID),
+			Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{},
+		}
+		if err := d.WithContext(ctx).Create(account).Error; err != nil {
+			t.Fatalf("灌 canonical 账号 %s 失败: %v", rawID, err)
+		}
+	}
+	return channel.ID
 }
 
 // cg06SeedAgentAndBinding 灌真智能体行 + 渠道绑定（loadAgentForChannel 的真路：
@@ -237,18 +332,21 @@ func cg06Frame(eventID, conv, sender, accountID, content string) *IngestMessage 
 //	→ 真 SmartCSOrchestrator（真身份服务 + 真绑定服务：agentCtx 从库加载）
 //	→ 真 SalesEngine（真 FAQService 读真库行）。intent 参数是模型背书的外部组件接缝
 //	（生产 NewIntentRecognizer(dispatcher)；样本②的低置信轮在此换件，CS-01 同口径）。
-func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressPipeline, *service.WebhookService, *service.InboxIngressService, *gorm.DB) {
+func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressPipeline, *service.WebhookService, *service.InboxIngressService, *gorm.DB, *cg06AIDrain) {
 	t.Helper()
 	previousMode := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(previousMode) })
+	previousEdition := edition.Current()
+	edition.ResetForTest(edition.TypeCustom)
+	t.Cleanup(func() { edition.ResetForTest(previousEdition) })
 	t.Cleanup(service.DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：helper 内 defer 会在 helper 返回时提前复位，AI 腿（异步）跑在 setup 之后——勿扰窗复活，23–7 点窗口内测试必红；改为挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	database := testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.DelayedOutboundReply{},
 		&model.CustomerSession{}, &model.SessionMessage{}, &model.AISuggestion{},
-		&model.AgentStatus{}, &model.Customer{},
-		&model.MessageTrace{},
+		&model.AgentStatus{}, &model.Customer{}, &model.FeedbackRecordORM{},
+		&model.MessageTrace{}, &model.Channel{}, &model.ChannelAccount{},
 		&model.AIAgent{}, &model.ChannelAgentBinding{}, &model.FAQEntry{},
 	)
 	db.SetTestDB(database)
@@ -273,7 +371,9 @@ func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressP
 	t.Cleanup(func() { ws.Stop(context.Background()) })
 	ws.SetSmartOrchestrator(context.Background(), orch)
 	// 生产 AITrigger 接线（router.go:780 同款）：AI 触发不再走 fake，走真 TriggerInboundAI。
-	ingress.SetAITrigger(ws)
+	drain := newCG06AIDrain(ws)
+	ingress.SetAITrigger(drain)
+	t.Cleanup(func() { drain.Wait(t) })
 	ws.SetIngressSvc(ingress)
 	// 生产 agent 绑定接线（router.go:634 同款）：agentCtx 从库加载（绑定→智能体行）。
 	ws.SetAgentBindingService(context.Background(), service.NewChannelAgentBindingServiceWithRepos(
@@ -283,8 +383,8 @@ func cg06Setup(t *testing.T, intent service.IntentRecognizerInterface) (IngressP
 	))
 
 	// 返回的只读夹具默认钉住样本租户；生产全局连接不携带固定租户。
-	fixtureDB := database.WithContext(tenant.OnlyTenant(context.Background(), 501))
-	return NewPipeline(ingress), ws, ingress, fixtureDB
+	fixtureDB := database.WithContext(tenant.OnlyTenant(context.Background(), cg06FixtureTenant))
+	return NewPipeline(ingress), ws, ingress, fixtureDB, drain
 }
 
 // cg06HubRowsByConv 按会话直读库行。
@@ -314,8 +414,9 @@ func cg06OutboundRows(t *testing.T, d *gorm.DB, conv string) []*model.MessageHub
 //	→ trace 对账：ingest/ai_dispatch/outbound_enqueue 三节点同 conv，
 //	  inbound 与 outbound 行 trace_id 相等（LinkInbound/LinkOutbound 同源派生）。
 func TestCS06_PipelineSampleA_KnowledgeHit_FullChainWithTraceReconciliation(t *testing.T) {
-	p, _, _, d := cg06Setup(t, cg06Intent{})
-	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 501), cg06Channel, cg06AccountA1)
+	p, _, _, d, drain := cg06Setup(t, cg06Intent{})
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), cg06FixtureTenant), cg06Channel, cg06AccountA1)
+	cg06SeedCanonicalAccounts(t, d, cg06FixtureTenant, cg06AccountA1)
 
 	cg06SeedAgentAndBinding(t, d, ctx, 6101, cg06AccountA1)
 	cg06SeedFAQ(t, d, ctx, 6101, cg06Question, cg06Answer)
@@ -333,6 +434,8 @@ func TestCS06_PipelineSampleA_KnowledgeHit_FullChainWithTraceReconciliation(t *t
 	cg06WaitFor(t, "样本① AI 腿出站落库", func() bool {
 		return len(cg06OutboundRows(t, d, cg06ConvA)) == 1
 	})
+	cg06WaitForAIResult(t, d, cg06ConvA)
+	drain.Wait(t)
 
 	// 契约①：身份/知识/决策——客户档案+会话（douyin open_id 真身份服务）。
 	var cust model.Customer
@@ -569,8 +672,9 @@ func cg06SeedOpp(t *testing.T, d *gorm.DB, id, oneID string) {
 // 低置信（无 FAQ 命中 + 无知识标记词）→ 转人工（waiting+human+原因可查）→
 // 唯一出站行=转接公告（handler_type=human），无模型文案泄漏；B 账号并行会话各自独立。
 func TestCS06_PipelineSampleB_LowConfidence_HandoffNoticeNotModelReply(t *testing.T) {
-	p, _, _, d := cg06Setup(t, cg06LowIntent{})
-	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 501), cg06Channel, cg06AccountA1)
+	p, _, _, d, drain := cg06Setup(t, cg06LowIntent{})
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), cg06FixtureTenant), cg06Channel, cg06AccountA1)
+	cg06SeedCanonicalAccounts(t, d, cg06FixtureTenant, cg06AccountA1, cg06AccountB1)
 
 	cg06SeedAgentAndBinding(t, d, ctx, 6102, cg06AccountA1)
 	// 检索无命中形态：不给本会话的问题可命中的 FAQ 行（真库查过但 0 命中）。
@@ -589,6 +693,8 @@ func TestCS06_PipelineSampleB_LowConfidence_HandoffNoticeNotModelReply(t *testin
 	cg06WaitFor(t, "样本② 转接公告落库", func() bool {
 		return len(cg06OutboundRows(t, d, conv)) == 1
 	})
+	cg06WaitForAIResult(t, d, conv)
+	drain.Wait(t)
 
 	// 契约①：会话转人工态可查。
 	var sess model.CustomerSession
@@ -637,6 +743,8 @@ func TestCS06_PipelineSampleB_LowConfidence_HandoffNoticeNotModelReply(t *testin
 	if nA != 1 {
 		t.Errorf("A 会话入站行应仍恰 1（B 同内容不得并入 A 会话），实际 %d", nA)
 	}
+	cg06WaitForAIResult(t, d, convB)
+	drain.Wait(t)
 }
 
 // TestCS06_PipelineSampleC_QuoteApprovalRejected_ZeroSenderCalls 样本③全链贯通：
@@ -757,11 +865,13 @@ func TestCS06_PipelineSampleC_QuoteApprovalRejected_ZeroSenderCalls(t *testing.T
 //
 //	① 重放：同 event_id 原帧重投 → 幂等回执、不重触 AI、reason 落明确重复词表
 //	   （词表=扩展侧"不重报"的唯一依据）；
-//	② 发送失败：占位账号（-unknown 后缀）出站 → 行标 failed + undeliverable_reason，
-//	   错误不冒充送达（不进 pending 出库队列）。
+//	② 发送失败：无效显式账号（-unknown 后缀）按 E3 fail-closed 拒绝，
+//	   不落 failed/pending outbox 行，也不冒充送达。
 func TestCS06_PipelineReplayAndSendFailure_Negatives(t *testing.T) {
-	p, _, _, d := cg06Setup(t, cg06Intent{})
-	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), 501), cg06Channel, cg06AccountA1)
+	p, _, _, d, drain := cg06Setup(t, cg06Intent{})
+	ctx := localBridgeSubmitContext(t, tenant.WithTenantID(context.Background(), cg06FixtureTenant), cg06Channel, cg06AccountA1)
+	cg06SeedCanonicalAccounts(t, d, cg06FixtureTenant, cg06AccountA1, cg06AccountB1)
+	cg06SeedAgentAndBinding(t, d, ctx, 6103, cg06AccountA1)
 
 	// —— ① 重放负例（专用 conv/content：内容窗口去重键在进程级缓存，须隔离） ——
 	const (
@@ -770,6 +880,7 @@ func TestCS06_PipelineReplayAndSendFailure_Negatives(t *testing.T) {
 		custR   = "cs06-openid-replay"
 		qReplay = "CS06重放负例专用：查物流"
 	)
+	cg06SeedFAQ(t, d, ctx, 6103, qReplay, "CS06-FAQ-REPLAY：重放样本标准答案。")
 	frame := cg06Frame(evt, convR, custR, cg06AccountA1, qReplay)
 	first, err := p.IngestBatch(ctx, []*model.MessageEvent{frame.ToEvent("ws")})
 	if err != nil {
@@ -778,6 +889,12 @@ func TestCS06_PipelineReplayAndSendFailure_Negatives(t *testing.T) {
 	if len(first.PerEvent) != 1 || !first.PerEvent[0].QueuedForAI {
 		t.Fatalf("首帧应 queued_for_ai: %+v", first.PerEvent)
 	}
+	cg06WaitFor(t, "重放样本首帧出站落库", func() bool {
+		return len(cg06OutboundRows(t, d, convR)) == 1
+	})
+	cg06WaitForAIResult(t, d, convR)
+	drain.Wait(t)
+
 	replay, err := p.IngestBatch(ctx, []*model.MessageEvent{frame.ToEvent("ws")})
 	if err != nil {
 		t.Fatalf("重放帧失败: %v", err)
@@ -795,32 +912,22 @@ func TestCS06_PipelineReplayAndSendFailure_Negatives(t *testing.T) {
 		t.Errorf("同 msg_id 库内行应仍 1 条，实际 %d", n)
 	}
 
-	// —— ② 发送失败负例：占位账号出站 → failed，不冒充送达 ——
-	cg06SeedAgentAndBinding(t, d, ctx, 6103, cg06AccountA1)
-	cg06SeedFAQ(t, d, ctx, 6103, "物流多久到", "CS06-FAQ-LOGI：下单后 48 小时内发货。")
+	// —— ② 发送失败负例：无效显式账号必须在出站前失败，零 outbox ——
 	const (
 		evtF  = "cs06-evt-fail"
 		convF = "cs06-conv-fail"
 		custF = "cs06-openid-fail"
 	)
-	failCtx := localBridgeSubmitContext(t, ctx, cg06Channel, cg06AccountA1+"-unknown")
-	if _, err := p.IngestBatch(failCtx, []*model.MessageEvent{cg06Frame(evtF, convF, custF, cg06AccountA1+"-unknown", "物流多久到").ToEvent("ws")}); err != nil {
+	failAccount := cg06AccountA1 + "-unknown"
+	failCtx := localBridgeSubmitContext(t, ctx, cg06Channel, failAccount)
+	if _, err := p.IngestBatch(failCtx, []*model.MessageEvent{cg06Frame(evtF, convF, custF, failAccount, "物流多久到").ToEvent("ws")}); err != nil {
 		t.Fatalf("失败负例入站失败: %v", err)
 	}
-	cg06WaitFor(t, "失败负例出站行落库", func() bool {
-		var n int64
-		d.Model(&model.MessageHub{}).Where("conversation_id = ? AND direction = ?", convF, "outbound").Count(&n)
-		return n == 1
-	})
-	var failRow model.MessageHub
-	if err := d.Where("conversation_id = ? AND direction = ?", convF, "outbound").First(&failRow).Error; err != nil {
-		t.Fatalf("读失败负例出站行: %v", err)
-	}
-	if failRow.Status != "failed" {
-		t.Errorf("占位账号出站应标 failed（错误不冒充送达），实际 %q", failRow.Status)
-	}
-	if reason, _ := failRow.Extra["undeliverable_reason"].(string); reason == "" {
-		t.Errorf("failed 行应带 undeliverable_reason（审计可对账），实际 extra=%v", failRow.Extra)
+	cg06WaitForAIResult(t, d, convF)
+	drain.Wait(t)
+	d.Model(&model.MessageHub{}).Where("conversation_id = ? AND direction = ?", convF, "outbound").Count(&n)
+	if n != 0 {
+		t.Errorf("无效显式账号应零 outbox（E3 fail-closed），实际 %d 条", n)
 	}
 }
 
@@ -832,10 +939,25 @@ func TestCS06_PipelineCrossTenantNegative_TenantBIsolated(t *testing.T) {
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(prev) })
 
-	p, _, ingress, d := cg06Setup(t, cg06Intent{})
+	p, _, ingress, d, drain := cg06Setup(t, cg06Intent{})
 
 	ctxA := tenant.WithTenantID(context.Background(), cg06TenantA)
 	ctxB := tenant.WithTenantID(context.Background(), cg06TenantB)
+	channelID := cg06SeedCanonicalAccounts(t, d, cg06TenantA, cg06AccountA1)
+	bID, err := strconv.ParseUint(cg06AccountB1, 10, 32)
+	if err != nil || bID == 0 {
+		t.Fatalf("CS06 B canonical 账号 ID 非法: %q", cg06AccountB1)
+	}
+	// channels.code 全局唯一，B 账号复用 A 的渠道主数据；本用例只验 B 入站隔离与认领不可见，
+	// 不把 B 账号当作可出站账号。
+	accountB := &model.ChannelAccount{
+		TenantID: cg06TenantB, ID: uint(bID), ChannelID: channelID,
+		Name: "cs06-account-b", IdentifyCode: "cs06-identify-602-b",
+		Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{},
+	}
+	if err := d.WithContext(tenant.WithSystemScope(context.Background())).Create(accountB).Error; err != nil {
+		t.Fatalf("灌 B canonical 账号失败: %v", err)
+	}
 
 	// A/B 各写各的（入站行 tenant_id 各归其主）。
 	if _, err := p.IngestBatch(ctxA, []*model.MessageEvent{cg06Frame("cs06-evt-a-xt", cg06ConvA, cg06CustA, cg06AccountA1, cg06Question).ToEvent("ws")}); err != nil {
@@ -854,6 +976,9 @@ func TestCS06_PipelineCrossTenantNegative_TenantBIsolated(t *testing.T) {
 	if rowA.TenantID != cg06TenantA || rowB.TenantID != cg06TenantB {
 		t.Errorf("入站行 tenant_id 应各归其主: A=%d B=%d", rowA.TenantID, rowB.TenantID)
 	}
+	cg06WaitForAIResult(t, d.WithContext(ctxA), cg06ConvA)
+	cg06WaitForAIResult(t, d.WithContext(ctxB), cg06ConvB)
+	drain.Wait(t)
 
 	// A 获准外发后，B 的桥认领 0 条（越租户不可见）⇒ B 0 外发。
 	ctxA = localBridgeSubmitContext(t, ctxA, cg06Channel, cg06AccountA1)

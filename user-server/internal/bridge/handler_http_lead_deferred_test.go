@@ -17,6 +17,8 @@ import (
 
 func TestHTTPIngest_DoesNotExecuteSynchronousLeadMiner(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "lead-account")
 	for _, reason := range []string{"", "self-echo", "duplicate"} {
 		t.Run("入站结果"+reason, func(t *testing.T) {
 			h := NewBridgeIngestHandlerWithMock(func(context.Context, *model.MessageEvent) (*service.InboxIngressResult, error) {
@@ -24,7 +26,7 @@ func TestHTTPIngest_DoesNotExecuteSynchronousLeadMiner(t *testing.T) {
 			}, nil)
 			calls := 0
 			h.SetLeadMiner(func(context.Context, *model.MessageEvent) { calls++ })
-			payload, err := json.Marshal(map[string]any{"channel": "douyin", "account_id": "lead-account", "conversation_id": "lead-conversation", "messages": []map[string]any{{"event_id": "lead-http-inbound", "sender_id": "customer-a", "sender_type": "customer", "content": "采购咨询", "timestamp": time.Now().UnixMilli()}}})
+			payload, err := json.Marshal(map[string]any{"channel": "douyin", "account_id": fixture.AccountID, "conversation_id": "lead-conversation", "messages": []map[string]any{{"event_id": "lead-http-inbound", "sender_id": "customer-a", "sender_type": "customer", "content": "采购咨询", "timestamp": time.Now().UnixMilli()}}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -32,6 +34,7 @@ func TestHTTPIngest_DoesNotExecuteSynchronousLeadMiner(t *testing.T) {
 			c, _ := gin.CreateTestContext(recorder)
 			c.Request = httptest.NewRequest(http.MethodPost, "/api/bridge/ingest", strings.NewReader(string(payload)))
 			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("X-Channel-Identify-Code", fixture.Code)
 			h.HandleHTTPIngest(c)
 			if recorder.Code != http.StatusOK {
 				t.Fatalf("入站正常响应不能改变：%d", recorder.Code)

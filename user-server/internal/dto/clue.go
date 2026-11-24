@@ -61,6 +61,12 @@ type GetClueRequest struct {
 	ConversationType string `form:"conversation_type"`
 }
 
+// GetClueStatisticsRequest 线索统计时间窗（unix 秒）；0 表示不设该侧边界。
+type GetClueStatisticsRequest struct {
+	Start int64 `form:"start"`
+	End   int64 `form:"end"`
+}
+
 type DeleteClueRequest struct {
 	ID string `uri:"id" binding:"required"`
 }

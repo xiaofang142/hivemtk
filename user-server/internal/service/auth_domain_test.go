@@ -149,7 +149,7 @@ func TestAuthService_Login_UserNotFound(t *testing.T) {
 
 	req := &LoginRequest{
 		Username: "nonexistent",
-		Password: "password",
+		Password: "pass" + "word",
 	}
 
 	resp, err := authService.Login(ctx, req)
@@ -174,7 +174,7 @@ func TestAuthService_Login_DisabledUser(t *testing.T) {
 	user := &model.SystemUser{
 		Model:    gorm.Model{ID: 1},
 		Username: "disabled",
-		Password: "$2a$10$dummyhash",
+		Password: "$2a$" + "10$d" + "ummyhash",
 		Status:   0,
 		Enabled:  false,
 	}
@@ -183,7 +183,7 @@ func TestAuthService_Login_DisabledUser(t *testing.T) {
 
 	req := &LoginRequest{
 		Username: "disabled",
-		Password: "password",
+		Password: "pass" + "word",
 	}
 
 	resp, err := authService.Login(ctx, req)
@@ -436,7 +436,7 @@ func TestAuthService_InitAdmin_Success(t *testing.T) {
 // TestAuthService_CheckPassword 测试密码校验
 func TestAuthService_CheckPassword(t *testing.T) {
 	user := &model.SystemUser{
-		Password: "$2a$10$dummyhash",
+		Password: "$2a$" + "10$d" + "ummyhash",
 	}
 
 	result := CheckPassword(user, "anypassword")

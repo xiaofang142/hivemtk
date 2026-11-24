@@ -51,7 +51,7 @@ func b3Rows() []model.MessageHub {
 		return model.MessageHub{
 			ID:             id,
 			Platform:       "douyin",
-			AccountID:      "acc_b3",
+			AccountID:      "1",
 			ConversationID: conv,
 			Direction:      "outbound",
 			Status:         "pending",
@@ -70,7 +70,7 @@ func TestOutboxDBFetcher_LastEventIDCursor(t *testing.T) {
 	f.SetQuerier(q)
 	ctx := context.Background()
 
-	events, newLastID, err := f.FetchOutboxSince(ctx, "douyin", "acc_b3", "1")
+	events, newLastID, err := f.FetchOutboxSince(ctx, "douyin", "1", "1")
 	if err != nil {
 		t.Fatalf("FetchOutboxSince: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestOutboxDBFetcher_CursorSemantics(t *testing.T) {
 	f.SetQuerier(q)
 	ctx := context.Background()
 
-	events, _, err := f.FetchOutboxSince(ctx, "douyin", "acc_b3", "")
+	events, _, err := f.FetchOutboxSince(ctx, "douyin", "1", "")
 	if err != nil {
 		t.Fatalf("no-cursor fetch: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestOutboxDBFetcher_CursorSemantics(t *testing.T) {
 	}
 
 	q.lastSinceID = 99 // 哨兵：非法游标下 querier 不应被触达
-	events, newID, err := f.FetchOutboxSince(ctx, "douyin", "acc_b3", "not-a-number")
+	events, newID, err := f.FetchOutboxSince(ctx, "douyin", "1", "not-a-number")
 	if err != nil {
 		t.Fatalf("invalid-cursor fetch: %v", err)
 	}
@@ -127,8 +127,11 @@ func TestOutboxDBFetcher_CursorSemantics(t *testing.T) {
 	}
 }
 
-func startB3SSEServer(q *fakeOutboxQuerier) *httptest.Server {
+func startB3SSEServer(t *testing.T, q *fakeOutboxQuerier) (*httptest.Server, string) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	fixture := seedCanonicalBridgeFixtureWithID(t, db, 1, "douyin", "b3", 1)
 	h := NewBridgeIngestHandler(nil)
 	h.SetOutboxQuerier(q)
 	h.sseHandler.SetHeartbeat(50 * time.Millisecond)
@@ -136,7 +139,7 @@ func startB3SSEServer(q *fakeOutboxQuerier) *httptest.Server {
 	r := gin.New()
 	r.GET("/api/bridge/outbox/sse", h.HandleOutboxSSE)
 	srv := httptest.NewServer(r)
-	return srv
+	return srv, fixture.Code
 }
 
 // TestHandleOutboxSSE_LastEventIDHeaderReplay 断线重连：携带 Last-Event-ID 头
@@ -144,11 +147,12 @@ func startB3SSEServer(q *fakeOutboxQuerier) *httptest.Server {
 func TestHandleOutboxSSE_LastEventIDHeaderReplay(t *testing.T) {
 	bus := withBus(t)
 	q := &fakeOutboxQuerier{rows: b3Rows()}
-	srv := startB3SSEServer(q)
+	srv, identifyCode := startB3SSEServer(t, q)
 	defer srv.Close()
 	bus.SetOutboundClaimer(&fakeClaimer{})
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=acc_b3", nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=1", nil)
+	req.Header.Set("X-Channel-Identify-Code", identifyCode)
 	req.Header.Set("Last-Event-ID", "1")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

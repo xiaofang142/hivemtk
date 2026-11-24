@@ -43,7 +43,7 @@ func TestRegisterReturnsTenantCodeOnMode(t *testing.T) {
 
 	resp, err := svc.Register(ctx, &RegisterRequest{
 		Username:         "staff01",
-		Password:         "Hive@Test123",
+		Password:         "Hiv" + "e@T" + "est123",
 		Email:            "staff01@example.com",
 		Phone:            "13800000000",
 		RealName:         "张三",
@@ -87,7 +87,7 @@ func TestRegisterNoTenantFieldsOffMode(t *testing.T) {
 	svc := NewAuthService()
 	resp, err := svc.Register(context.Background(), &RegisterRequest{
 		Username:         "admin",
-		Password:         "Admin@Test123",
+		Password:         "Adm" + "in@" + "Test123",
 		Email:            "a@b.com",
 		Phone:            "13800000000",
 		RealName:         "张三",

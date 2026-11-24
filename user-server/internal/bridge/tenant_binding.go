@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"hivemtk-user/internal/pkg/dbstate"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -53,22 +54,42 @@ type BridgeResolvedIdentity struct {
 	IdentifyCode string
 }
 
+// bridgeResolvedTenantCtx 在已由识别码证明租户后派生内部读取 ctx。OnlyTenant 会剥离
+// 其它 value，因此显式保留 edition override，避免国内渠道在 repo gate 中被误判不存在。
+func bridgeResolvedTenantCtx(rctx context.Context, tenantID uint) context.Context {
+	ctx := tenant.OnlyTenant(rctx, tenantID)
+	if version, ok := edition.FromContext(rctx); ok {
+		ctx = edition.WithContext(ctx, version)
+	}
+	return ctx
+}
+
 func bridgeIdentifyHintFromRequest(r *http.Request) string {
-	if r == nil { return "" }
+	if r == nil {
+		return ""
+	}
 	code := strings.TrimSpace(r.Header.Get("X-Channel-Identify-Code"))
-	if code == "" { code = strings.TrimSpace(r.URL.Query().Get("identify_code")) }
+	if code == "" {
+		code = strings.TrimSpace(r.URL.Query().Get("identify_code"))
+	}
 	return code
 }
 
 func setBridgeIdentity(c *gin.Context, id *BridgeResolvedIdentity) {
-	if c != nil && id != nil { c.Set(BridgeResolvedIdentityKey, id) }
+	if c != nil && id != nil {
+		c.Set(BridgeResolvedIdentityKey, id)
+	}
 }
 
 // BridgeIdentityFromContext 读取 identify_code 解析出的身份。
 func BridgeIdentityFromContext(c *gin.Context) (*BridgeResolvedIdentity, bool) {
-	if c == nil { return nil, false }
+	if c == nil {
+		return nil, false
+	}
 	v, ok := c.Get(BridgeResolvedIdentityKey)
-	if !ok || v == nil { return nil, false }
+	if !ok || v == nil {
+		return nil, false
+	}
 	id, ok := v.(*BridgeResolvedIdentity)
 	return id, ok && id != nil
 }
@@ -106,6 +127,19 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		resolved, err = resolveBridgeIdentityByChannelCode(rctx, identifyCode)
 		if err != nil || resolved == nil || resolved.TenantID == 0 {
 			return rctx, false, nil, ErrBridgeTenantUnresolved
+		}
+	}
+	// ChannelResolver 的 channel-level fallback 可能在未绑定 rctx 下读不到 ChannelCode。
+	// 身份记录已证明 tenant；这里只用内部 child ctx 补读，不改写原 rctx/request。
+	if resolved.ChannelCode == "" && resolved.ChannelID > 0 {
+		ch, chErr := repository.NewChannelRepository().GetByID(
+			bridgeResolvedTenantCtx(rctx, resolved.TenantID), resolved.TenantID, resolved.ChannelID,
+		)
+		if chErr != nil {
+			return rctx, false, nil, chErr
+		}
+		if ch != nil {
+			resolved.ChannelCode = ch.Code
 		}
 	}
 
@@ -157,28 +191,34 @@ func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode strin
 		ChannelID:    rec.ChannelID,
 		IdentifyCode: rec.Code,
 	}
+	// 识别码记录已经证明租户归属；subordinate reads 必须在这个已解析租户的
+	// 内部 child ctx 上执行，但不能改写调用方原 rctx/request。off 模式仍只解析身份。
+	tenantCtx := bridgeResolvedTenantCtx(rctx, rec.TenantID)
 	if chRepo := repository.NewChannelRepository(); chRepo.Available() {
-		if ch, chErr := chRepo.GetByID(rctx, rec.TenantID, rec.ChannelID); chErr == nil && ch != nil {
+		ch, chErr := chRepo.GetByID(tenantCtx, rec.TenantID, rec.ChannelID)
+		if chErr != nil {
+			return nil, chErr
+		}
+		if ch != nil {
 			out.ChannelCode = ch.Code
 		}
 	}
 	// Pick an active account for this channel if present.
-	accRepo := repository.NewChannelAccountRepository()
-	if accRepo != nil {
-		rows, listErr := accRepo.List(rctx, repository.ChannelAccountListOptions{
-			TenantID: rec.TenantID, ChannelID: rec.ChannelID, Limit: 20,
-		})
-		if listErr == nil {
-			for i := range rows {
-				if rows[i].Status == 1 {
-					out.AccountID = rows[i].ID
-					break
-				}
-			}
-			if out.AccountID == 0 && len(rows) > 0 {
-				out.AccountID = rows[0].ID
-			}
+	// FR-029：统一走渠道账号服务的账号选择口，不再各自拼仓储选项。
+	rows, listErr := service.NewChannelAccountService().ListAccounts(tenantCtx, repository.ChannelAccountListOptions{
+		TenantID: rec.TenantID, ChannelID: rec.ChannelID, Limit: 20,
+	})
+	if listErr != nil {
+		return nil, listErr
+	}
+	for i := range rows {
+		if rows[i].Status == 1 {
+			out.AccountID = rows[i].ID
+			break
 		}
+	}
+	if out.AccountID == 0 && len(rows) > 0 {
+		out.AccountID = rows[0].ID
 	}
 	return out, nil
 }
@@ -256,6 +296,7 @@ func BridgeTenantForRequest(r *http.Request, channel, accountID string) (context
 	}
 	return ctx2, nil
 }
+
 // bridgeAccountTenant 在系统作用域下反查账号行的归属租户。
 //
 // 走 dbstate 全局句柄而不是 GlobalBridgeAccountRepo：那个接口是"账号状态读写"的

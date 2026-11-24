@@ -89,7 +89,7 @@ describe('M2-P1 error-messages explainError', () => {
     expect(r.title).toContain('凭证');
     // 401 的判据不止"分类对"：闸门是 fail-closed 的，用户唯一出路是去后台重新生成凭证，
     // 指引丢了就等于把 401 说成"稍后再试"（本轮改文案的动机）。
-    expect(r.action).toContain('桥接凭证');
+    expect(r.action).toContain('通道识别码');
   });
 
   it('HTTP 5xx 错误码分类', async () => {

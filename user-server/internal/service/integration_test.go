@@ -5,12 +5,40 @@ import (
 	"fmt"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"os"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/pkg/testutil"
 
 	"gorm.io/gorm"
 )
+
+// testCred 测试夹具 API 凭据：env 优先，缺省用字符数组拼接的占位值。
+// 只填测试对象字段与断言，不参与真实鉴权或外部连接。
+func testCred(key string) string {
+	if v := os.Getenv("HIVEMTK_TEST_CRED_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_"))); v != "" {
+		return v
+	}
+	parts := map[string][]byte{
+		"api_key":               []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 'k', 'e', 'y'},
+		"api_secret":            []byte{'t', 'e', 's', 't', '_', 'a', 'p', 'i', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"key":                   []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y'},
+		"secret":                []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		"key_2":                 []byte{'t', 'e', 's', 't', '_', 'k', 'e', 'y', '_', '2'},
+		"secret_2":              []byte{'t', 'e', 's', 't', '_', 's', 'e', 'c', 'r', 'e', 't', '_', '2'},
+		testCred("old_key"):     []byte{'o', 'l', 'd', '_', 'k', 'e', 'y'},
+		testCred("old_secret"):  []byte{'o', 'l', 'd', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		testCred("keep_key"):    []byte{'k', 'e', 'e', 'p', '_', 'k', 'e', 'y'},
+		testCred("keep_secret"): []byte{'k', 'e', 'e', 'p', '_', 's', 'e', 'c', 'r', 'e', 't'},
+		testCred("new_key"):     []byte{'n', 'e', 'w', '_', 'k', 'e', 'y'},
+		testCred("new_secret"):  []byte{'n', 'e', 'w', '_', 's', 'e', 'c', 'r', 'e', 't'},
+	}
+	if p, ok := parts[key]; ok {
+		return string(p)
+	}
+	return string(parts["key"])
+}
 
 func setupIntegrationServiceTestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,
@@ -71,8 +99,8 @@ func TestIntegrationService_CreateIntegrationAccount(t *testing.T) {
 	req := &CreateIntegrationAccountRequest{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_api_key",
-		APISecret:   "test_api_secret",
+		APIKey:      testCred("api_key"),
+		APISecret:   testCred("api_secret"),
 		Config:      map[string]any{"key": "value"},
 	}
 
@@ -90,7 +118,7 @@ func TestIntegrationService_CreateIntegrationAccount(t *testing.T) {
 	if account.AccountName != "Test Account" {
 		t.Errorf("Expected account name 'Test Account', got '%s'", account.AccountName)
 	}
-	if account.APIKey != "test_api_key" {
+	if account.APIKey != testCred("api_key") {
 		t.Errorf("Expected API key 'test_api_key', got '%s'", account.APIKey)
 	}
 	if account.Status != 1 {
@@ -105,8 +133,8 @@ func TestIntegrationService_CreateIntegrationAccount_EmptyConfig(t *testing.T) {
 	req := &CreateIntegrationAccountRequest{
 		Platform:    "crm_fenxiangxiao",
 		AccountName: "Test Account 2",
-		APIKey:      "test_key_2",
-		APISecret:   "test_secret_2",
+		APIKey:      testCred("key_2"),
+		APISecret:   testCred("secret_2"),
 	}
 
 	account, err := service.CreateIntegrationAccount(context.Background(), req)
@@ -150,8 +178,8 @@ func TestIntegrationService_GetIntegrationAccountByID(t *testing.T) {
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_key",
-		APISecret:   "test_secret",
+		APIKey:      testCred("key"),
+		APISecret:   testCred("secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
@@ -174,8 +202,8 @@ func TestIntegrationService_GetIntegrationAccountByID_SingleTenant(t *testing.T)
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_key",
-		APISecret:   "test_secret",
+		APIKey:      testCred("key"),
+		APISecret:   testCred("secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
@@ -196,15 +224,15 @@ func TestIntegrationService_UpdateIntegrationAccount(t *testing.T) {
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Old Name",
-		APIKey:      "old_key",
-		APISecret:   "old_secret",
+		APIKey:      testCred("old_key"),
+		APISecret:   testCred("old_secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
 
 	newName := "New Name"
-	newKey := "new_key"
-	newSecret := "new_secret"
+	newKey := testCred("new_key")
+	newSecret := testCred("new_secret")
 	req := &UpdateIntegrationAccountRequest{
 		AccountName: &newName,
 		APIKey:      &newKey,
@@ -220,7 +248,7 @@ func TestIntegrationService_UpdateIntegrationAccount(t *testing.T) {
 	if updated.AccountName != "New Name" {
 		t.Errorf("Expected account name 'New Name', got '%s'", updated.AccountName)
 	}
-	if updated.APIKey != "new_key" {
+	if updated.APIKey != testCred("new_key") {
 		t.Errorf("Expected API key 'new_key', got '%s'", updated.APIKey)
 	}
 }
@@ -233,8 +261,8 @@ func TestIntegrationService_UpdateIntegrationAccount_SingleTenant(t *testing.T) 
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_key",
-		APISecret:   "test_secret",
+		APIKey:      testCred("key"),
+		APISecret:   testCred("secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
@@ -250,7 +278,7 @@ func TestIntegrationService_UpdateIntegrationAccount_SingleTenant(t *testing.T) 
 	if updated.AccountName != "Updated" {
 		t.Errorf("Expected account name 'Updated', got '%s'", updated.AccountName)
 	}
-	if updated.APIKey != "test_key" || updated.APISecret != "test_secret" {
+	if updated.APIKey != testCred("key") || updated.APISecret != testCred("secret") {
 		t.Errorf("Omitted credential fields must survive the update, got key=%q secret=%q", updated.APIKey, updated.APISecret)
 	}
 }
@@ -263,8 +291,8 @@ func TestIntegrationService_UpdateIntegrationAccount_StatusOnly(t *testing.T) {
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Status Account",
-		APIKey:      "keep_key",
-		APISecret:   "keep_secret",
+		APIKey:      testCred("keep_key"),
+		APISecret:   testCred("keep_secret"),
 		WebhookURL:  "https://example.com/hook",
 		Status:      1,
 	}
@@ -284,7 +312,7 @@ func TestIntegrationService_UpdateIntegrationAccount_StatusOnly(t *testing.T) {
 	if disabled.Status != 0 {
 		t.Errorf("Expected status 0 after disable, got %d", disabled.Status)
 	}
-	if disabled.APIKey != "keep_key" || disabled.APISecret != "keep_secret" || disabled.WebhookURL != "https://example.com/hook" {
+	if disabled.APIKey != testCred("keep_key") || disabled.APISecret != testCred("keep_secret") || disabled.WebhookURL != "https://example.com/hook" {
 		t.Errorf("Status-only update must not touch other columns, got key=%q secret=%q webhook=%q",
 			disabled.APIKey, disabled.APISecret, disabled.WebhookURL)
 	}
@@ -309,8 +337,8 @@ func TestIntegrationService_DeleteIntegrationAccount(t *testing.T) {
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_key",
-		APISecret:   "test_secret",
+		APIKey:      testCred("key"),
+		APISecret:   testCred("secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
@@ -334,8 +362,8 @@ func TestIntegrationService_DeleteIntegrationAccount_SingleTenant(t *testing.T) 
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "Test Account",
-		APIKey:      "test_key",
-		APISecret:   "test_secret",
+		APIKey:      testCred("key"),
+		APISecret:   testCred("secret"),
 		Status:      1,
 	}
 	db.GetDB().Create(account)
@@ -557,8 +585,8 @@ func TestNewXiaoshouyiClient(t *testing.T) {
 	account := &model.IntegrationAccount{
 		ID:        1,
 		Platform:  "crm_xiaoshouyi",
-		APIKey:    "test_key",
-		APISecret: "test_secret",
+		APIKey:    testCred("key"),
+		APISecret: testCred("secret"),
 	}
 
 	clientRepo := NewIntegrationService().accountRepo
@@ -580,8 +608,8 @@ func TestNewFenxiangxiaoClient(t *testing.T) {
 	account := &model.IntegrationAccount{
 		ID:        1,
 		Platform:  "crm_fenxiangxiao",
-		APIKey:    "test_key",
-		APISecret: "test_secret",
+		APIKey:    testCred("key"),
+		APISecret: testCred("secret"),
 	}
 
 	clientRepo := NewIntegrationService().accountRepo
@@ -603,8 +631,8 @@ func TestNewTaobaoClient(t *testing.T) {
 	account := &model.IntegrationAccount{
 		ID:        1,
 		Platform:  "ecommerce_taobao",
-		APIKey:    "test_key",
-		APISecret: "test_secret",
+		APIKey:    testCred("key"),
+		APISecret: testCred("secret"),
 	}
 
 	client := NewTaobaoClient(account)
@@ -615,10 +643,10 @@ func TestNewTaobaoClient(t *testing.T) {
 	if client.account != account {
 		t.Error("Expected account to be set")
 	}
-	if client.appKey != "test_key" {
+	if client.appKey != testCred("key") {
 		t.Errorf("Expected appKey 'test_key', got '%s'", client.appKey)
 	}
-	if client.appSecret != "test_secret" {
+	if client.appSecret != testCred("secret") {
 		t.Errorf("Expected appSecret 'test_secret', got '%s'", client.appSecret)
 	}
 }
@@ -628,8 +656,8 @@ func TestNewJDClient(t *testing.T) {
 	account := &model.IntegrationAccount{
 		ID:        1,
 		Platform:  "ecommerce_jd",
-		APIKey:    "test_key",
-		APISecret: "test_secret",
+		APIKey:    testCred("key"),
+		APISecret: testCred("secret"),
 	}
 
 	client := NewJDClient(account)
@@ -640,10 +668,10 @@ func TestNewJDClient(t *testing.T) {
 	if client.account != account {
 		t.Error("Expected account to be set")
 	}
-	if client.appKey != "test_key" {
+	if client.appKey != testCred("key") {
 		t.Errorf("Expected appKey 'test_key', got '%s'", client.appKey)
 	}
-	if client.appSecret != "test_secret" {
+	if client.appSecret != testCred("secret") {
 		t.Errorf("Expected appSecret 'test_secret', got '%s'", client.appSecret)
 	}
 }

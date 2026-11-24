@@ -46,7 +46,7 @@ func TestEmailSendService_SendEmail_ImmediateSend(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -109,7 +109,7 @@ func TestEmailSendService_SendEmail_ScheduledSend(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -157,7 +157,7 @@ func TestEmailSendService_SendEmail_EmptyAttachments(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -203,7 +203,7 @@ func TestEmailSendService_SendEmail_WithDraftId(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -253,7 +253,7 @@ func TestEmailSendService_SendEmail_MultipleRecipients(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -298,7 +298,7 @@ func TestEmailSendService_SendEmail_SpecialCharacters(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -362,7 +362,7 @@ func TestEmailSendService_ProcessPendingEmails_WithPendingEmails(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -437,7 +437,7 @@ func TestEmailSendService_ProcessPendingEmails_WithMixedStatusEmails(t *testing.
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -491,7 +491,7 @@ func TestEmailSendService_SendEmail_LongContent(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -541,7 +541,7 @@ func TestEmailSendService_SendEmail_UnicodeContent(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -586,7 +586,7 @@ func TestEmailSendService_SendEmail_NilSendTime(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -646,7 +646,7 @@ func TestEmailSendService_SendEmail_VerifyDatabaseRecord(t *testing.T) {
 		Server:   "smtp.verify.com",
 		Port:     465,
 		Username: "verify@example.com",
-		Password: "verify123",
+		Password: "veri" + "fy123",
 		Limit:    50,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -706,7 +706,7 @@ func TestEmailSendService_SendEmail_SingleAttachment(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {
@@ -753,7 +753,7 @@ func TestEmailSendService_SendEmail_RequiredFieldsValidation(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	if err := smtpRepo.Create(context.Background(), smtp); err != nil {

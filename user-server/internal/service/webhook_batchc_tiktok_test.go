@@ -5,8 +5,8 @@ package service
 // 时也会走错链路。这里要求：解析逻辑可以共用，**平台标记与幂等键必须按渠道分开**。
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/pkg/tenant"
 	"strings"
 	"testing"
@@ -132,16 +132,20 @@ func tikTokGroupBody(msgID, userID, nick, text string) []byte {
 		`","user_infos":[{"open_id":"` + userID + `","nick_name":"` + nick + `"}]}}`)
 }
 
-// TestDispatchDouyin_LeadRowKeepsPlatform 端到端：同一个客户名分别经抖音、TikTok 入站，
-// 线索表必须各落一行、类型分别为 douyin / tiktok。写死 DouyinLeadAdapter 时两行会并成一个类型。
+// TestDispatchDouyin_LeadRowKeepsPlatform（P0-c 改口径）：同一个客户名分别经抖音、TikTok
+// 入站，落 hub 后必须分别触发发掘 Enqueue，且 hub.Platform 按渠道分开（D-01）。
+// 线索库写入已统一由主 Service.process 承担，故本门只钉「落 hub → 发掘接线」这一跳。
 func TestDispatchDouyin_LeadRowKeepsPlatform(t *testing.T) {
-	db := testutil.NewTestDB(t,
+	testutil.NewTestDB(t,
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &model.Clue{},
 	)
 	svc := NewWebhookService()
 	ctx := tenant.WithTenantID(context.Background(), uint(501))
 	t.Cleanup(func() { svc.Stop(ctx) })
+
+	mining := &Service{queue: make(chan *model.MessageHub, 8)}
+	svc.SetLeadDiscovery(NewLeadDiscoveryService(mining))
 
 	if _, _, err := svc.dispatchDouyin(ctx, ChannelDouyin, "71001", &ParsedPayload{},
 		tikTokGroupBody("m_lead_dy", "u_lead_dy", "客户同步", "这个产品多少钱")); err != nil {
@@ -152,19 +156,19 @@ func TestDispatchDouyin_LeadRowKeepsPlatform(t *testing.T) {
 		t.Fatalf("tiktok dispatch: %v", err)
 	}
 
-	var clues []model.Clue
-	if err := db.Where("account = ?", "@客户同步").Order("type asc").Find(&clues).Error; err != nil {
-		t.Fatalf("读线索: %v", err)
+	got := map[string]bool{}
+	for i := 0; i < 2; i++ {
+		select {
+		case hub := <-mining.queue:
+			if hub != nil {
+				got[hub.Platform] = true
+			}
+		default:
+			t.Fatal("两平台入站各应触发一次发掘 Enqueue")
+		}
 	}
-	if len(clues) != 2 {
-		t.Fatalf("两平台应各出一条线索，实际 %d 条（%+v）", len(clues), clues)
-	}
-	got := map[int64]bool{}
-	for _, c := range clues {
-		got[c.Type] = true
-	}
-	if !got[ClueTypeDouyin] || !got[ClueTypeTikTok] {
-		t.Errorf("线索类型必须覆盖 douyin(%d)+tiktok(%d)，实际 %+v", ClueTypeDouyin, ClueTypeTikTok, got)
+	if !got["douyin"] || !got["tiktok"] {
+		t.Errorf("发掘入口必须保持平台分离（douyin/tiktok），实际 %+v", got)
 	}
 }
 
@@ -249,17 +253,14 @@ func TestDispatchToChannel_DouyinFamilyKeepsChannel(t *testing.T) {
 		t.Fatalf("抖音分发平台标记错误，got %+v", dyHub)
 	}
 
-	var ttClue, dyClue model.Clue
-	if err := db.Where("account = ?", "@客户甲").First(&ttClue).Error; err != nil {
-		t.Fatalf("tiktok 线索未入库: %v", err)
+	// P0-c：线索写入已从渠道 handler 的双轨 miner 迁到落 hub 后的统一 Enqueue。
+	// 本用例只验证「分发处保留渠道」——落库的 MessageHub.platform 必须分别是
+	// tiktok / douyin；线索入库由 lead_mining_channel_wiring_test.go 覆盖。
+	var ttHubRow, dyHubRow model.MessageHub
+	if err := db.Where("platform = ?", "tiktok").First(&ttHubRow).Error; err != nil {
+		t.Fatalf("tiktok 消息未按原渠道落 hub: %v", err)
 	}
-	if ttClue.Type != ClueTypeTikTok {
-		t.Errorf("经分发链路的 tiktok 线索类型应为 %d，got %d", ClueTypeTikTok, ttClue.Type)
-	}
-	if err := db.Where("account = ?", "@客户乙").First(&dyClue).Error; err != nil {
-		t.Fatalf("douyin 线索未入库: %v", err)
-	}
-	if dyClue.Type != ClueTypeDouyin {
-		t.Errorf("经分发链路的抖音线索类型应为 %d，got %d", ClueTypeDouyin, dyClue.Type)
+	if err := db.Where("platform = ?", "douyin").First(&dyHubRow).Error; err != nil {
+		t.Fatalf("douyin 消息未按原渠道落 hub: %v", err)
 	}
 }

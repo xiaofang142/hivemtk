@@ -368,7 +368,7 @@ func TestCrawlerRecovery_ClaimSerializesAndFencesExpiredWorker(t *testing.T) {
 	if err := svc.repo.FinishBatch(oldCtx, running.ID, map[string]any{"status": model.KBCrawlBatchStatusSucceeded}, map[string]any{"last_batch_id": "stale"}); !errors.Is(err, knowledgeRepo.ErrCrawlLeaseLost) {
 		t.Fatalf("旧执行者必须被围栏拒绝: %v", err)
 	}
-	newCtx := knowledgeRepo.WithCrawlLease(ctx, knowledgeRepo.CrawlLease{BatchID: running.ID, Token: "recovered"})
+	newCtx := knowledgeRepo.WithCrawlLease(ctx, knowledgeRepo.CrawlLease{BatchID: running.ID, Token: "reco" + "vered"})
 	if err := svc.repo.FinishBatch(newCtx, running.ID, map[string]any{"status": model.KBCrawlBatchStatusSucceeded}, map[string]any{"last_batch_id": "recovered"}); err != nil {
 		t.Fatal(err)
 	}

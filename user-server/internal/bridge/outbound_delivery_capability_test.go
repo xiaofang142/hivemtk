@@ -32,8 +32,9 @@ type cursorOnlyDelivery struct {
 }
 
 func TestOutboundDelivery_PollHTTPReturnsCommittedClaims(t *testing.T) {
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	const account = "partial-http"
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 501, "douyin_shop", "partial-http")
+	account := fixture.AccountID
 	ctx := localDeliveryContext(t, tenant.WithTenantID(context.Background(), 501), account, "text", "")
 	rows := make([]model.MessageHub, repository.OutboundDeliveryPageSize+1)
 	for i := range rows {
@@ -58,7 +59,9 @@ func TestOutboundDelivery_PollHTTPReturnsCommittedClaims(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/bridge/outbox?channel=douyin_shop&account_id="+account+"&limit=2", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/api/bridge/outbox?channel=douyin_shop&account_id="+account+"&limit=2", nil).WithContext(ctx)
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
+	c.Request = req
 	NewBridgeIngestHandler(service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)).GetBridgeOutbox(c)
 	var body struct {
 		Messages []struct {

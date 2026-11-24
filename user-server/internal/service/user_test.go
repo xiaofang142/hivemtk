@@ -35,7 +35,7 @@ func TestUserService_RegisterUser(t *testing.T) {
 
 	req := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -66,7 +66,7 @@ func TestUserService_RegisterUser_DuplicateUsername(t *testing.T) {
 
 	req := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -74,7 +74,7 @@ func TestUserService_RegisterUser_DuplicateUsername(t *testing.T) {
 
 	req2 := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password456",
+		Password: testCredential("password456"),
 		Email:    "test2@example.com",
 		Role:     "user",
 	}
@@ -96,7 +96,7 @@ func TestUserService_RegisterUser_DuplicateEmail(t *testing.T) {
 
 	req := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -104,7 +104,7 @@ func TestUserService_RegisterUser_DuplicateEmail(t *testing.T) {
 
 	req2 := &dto.CreateUserRequest{
 		Username: "testuser2",
-		Password: "password456",
+		Password: testCredential("password456"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -126,7 +126,7 @@ func TestUserService_GetUser(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -160,7 +160,7 @@ func TestUserService_GetUserByUsername(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -195,7 +195,7 @@ func TestUserService_GetUserList(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		req := &dto.CreateUserRequest{
 			Username: "user" + string(rune('0'+i)),
-			Password: "password123",
+			Password: testCredential("password123"),
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 		}
@@ -223,7 +223,7 @@ func TestUserService_DeleteUser(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -247,7 +247,7 @@ func TestUserService_UpdateUser(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -281,7 +281,7 @@ func TestUserService_UpdateUser_DuplicateUsername(t *testing.T) {
 
 	regReq1 := &dto.CreateUserRequest{
 		Username: "testuser1",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test1@example.com",
 		Role:     "user",
 	}
@@ -289,7 +289,7 @@ func TestUserService_UpdateUser_DuplicateUsername(t *testing.T) {
 
 	regReq2 := &dto.CreateUserRequest{
 		Username: "testuser2",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test2@example.com",
 		Role:     "user",
 	}
@@ -316,15 +316,15 @@ func TestUserService_UpdatePassword(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "oldpassword123",
+		Password: testCredential("oldpassword123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
 	regResp, _ := service.RegisterUser(context.Background(), regReq)
 
 	updateReq := &dto.UpdatePasswordRequest{
-		OldPassword: "oldpassword123",
-		NewPassword: "newpassword123",
+		OldPassword: testCredential("oldpassword123"),
+		NewPassword: testCredential("newpassword123"),
 	}
 
 	err := service.UpdatePassword(context.Background(), regResp.ID, updateReq)
@@ -334,7 +334,7 @@ func TestUserService_UpdatePassword(t *testing.T) {
 
 	loginReq := &dto.LoginRequest{
 		Username: "testuser",
-		Password: "newpassword123",
+		Password: testCredential("newpassword123"),
 	}
 	loginResp, err := service.Login(context.Background(), loginReq)
 	if err != nil {
@@ -353,15 +353,15 @@ func TestUserService_UpdatePassword_WrongOldPassword(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "correctpassword",
+		Password: testCredential("correctpassword"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
 	regResp, _ := service.RegisterUser(context.Background(), regReq)
 
 	updateReq := &dto.UpdatePasswordRequest{
-		OldPassword: "wrongpassword",
-		NewPassword: "newpassword",
+		OldPassword: testCredential("wrongpassword"),
+		NewPassword: testCredential("newpassword"),
 	}
 
 	err := service.UpdatePassword(context.Background(), regResp.ID, updateReq)
@@ -381,7 +381,7 @@ func TestUserService_Login(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -389,7 +389,7 @@ func TestUserService_Login(t *testing.T) {
 
 	loginReq := &dto.LoginRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 	}
 
 	loginResp, err := service.Login(context.Background(), loginReq)
@@ -417,7 +417,7 @@ func TestUserService_Login_WrongPassword(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -425,7 +425,7 @@ func TestUserService_Login_WrongPassword(t *testing.T) {
 
 	loginReq := &dto.LoginRequest{
 		Username: "testuser",
-		Password: "wrongpassword",
+		Password: testCredential("wrongpassword"),
 	}
 
 	_, err := service.Login(context.Background(), loginReq)
@@ -469,7 +469,7 @@ func TestUserService_Login_DisabledUser(t *testing.T) {
 
 	regReq := &dto.CreateUserRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 	}
@@ -479,7 +479,7 @@ func TestUserService_Login_DisabledUser(t *testing.T) {
 
 	loginReq := &dto.LoginRequest{
 		Username: "testuser",
-		Password: "password123",
+		Password: testCredential("password123"),
 	}
 
 	_, err := service.Login(context.Background(), loginReq)

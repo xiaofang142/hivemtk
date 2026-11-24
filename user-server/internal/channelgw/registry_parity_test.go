@@ -300,10 +300,11 @@ func assertNoBridgeChannelCaseList(t *testing.T) {
 // TestEveryRegisteredChannelInChannelCapsAndCapregistry 闸 5（2026-11-19 二次审核新增，
 // v3.92.0/v3.98.0 两次 ENUM 漂移与 channelcaps 缺口的防复发门）：
 // Default 注册表的每个渠道必须三面齐全——
-//  ① channelcaps.Known（缺 = RenderForChannel 直接报「出站不支持该渠道」，AI 回复静默失败；
-//  ② capregistry 有 DMReceive 条目（缺 = 能力运行视图/矩阵文档看不到该渠道）；
-//  ③ channel_type_enum 含该值（缺 = channel_agent_bindings 落库被 PG 拒写，v3.92.0/v3.98.0
-//     两次补枚举均由此触发）。
+//
+//	① channelcaps.Known（缺 = RenderForChannel 直接报「出站不支持该渠道」，AI 回复静默失败；
+//	② capregistry 有 DMReceive 条目（缺 = 能力运行视图/矩阵文档看不到该渠道）；
+//	③ channel_type_enum 含该值（缺 = channel_agent_bindings 落库被 PG 拒写，v3.92.0/v3.98.0
+//	   两次补枚举均由此触发）。
 //
 // 三面任一缺口的症状都是「注册了但链路某一段静默断」，且既有门禁（入站词表/parity/race）
 // 全部拦不住——本闸把注册表事实与三张面表锁死，新增渠道漏登记即红。
@@ -324,4 +325,68 @@ func TestEveryRegisteredChannelInChannelCapsAndCapregistry(t *testing.T) {
 	}
 	// ③ 枚举面（channel_type_enum 含每个注册渠道值）是 DB 事实，由 v3.92.0/v3.98.0
 	// 迁移及其测试承载；本闸与迁移测试共同构成「注册表↔面表」全链锁。
+}
+
+// TestMineModeChannelsParity P0-c 闸 6（D1/D7/D10）：
+// Default 中每个 MineMode != none 渠道必须四面齐全——
+//
+//	① channelcaps.Known（发掘产线渲染 manifest 存在）；
+//	② 有 LeadAdapter 工厂（LeadAdapterForPlatform 不返回空/默认空 channel）；
+//	③ service 侧发掘资格投影相等（SetLeadMiningChannels 装配未断链）；
+//	④ Bridge 侧投影（MineModeBridge 集合）与 service.LeadMiningChannels 交集一致。
+//
+// 任一缺口 = 「注册了但发掘静默跳过」，既有网关（入站词表/出站 parity）拦不住。
+func TestMineModeChannelsParity(t *testing.T) {
+	bridgeMining := map[string]bool{}
+	allMining := map[string]bool{}
+	for _, name := range Default.Names() {
+		mode := Default.MineModeOf(name)
+		if mode == MineModeNone {
+			continue
+		}
+		allMining[name] = true
+		if mode == MineModeBridge {
+			bridgeMining[name] = true
+		}
+		if !channelcaps.Known(name) {
+			t.Errorf("MineMode=%s 渠道 %s 未在 channelcaps 登记——发掘产线渲染会拒绝它", mode, name)
+		}
+		adapter := service.LeadAdapterForPlatform(name)
+		if adapter == nil || strings.TrimSpace(adapter.Channel()) == "" {
+			t.Errorf("MineMode=%s 渠道 %s 无 LeadAdapter 工厂——发掘无法产出渠道专属线索", mode, name)
+		}
+	}
+
+	if len(allMining) == 0 {
+		t.Fatal("Default 中没有任何渠道登记 MineMode != none（发掘资格能力位被整体拆除）")
+	}
+
+	// ③ 投影相等：service 侧资格集合 ⊇ 注册表发掘渠道（含直连 webhook 渠道的额外投影）。
+	projected := map[string]bool{}
+	for _, n := range service.LeadMiningChannels() {
+		projected[n] = true
+	}
+	for name := range allMining {
+		if !projected[name] {
+			t.Errorf("方向1红：渠道 %s MineMode=%s 已登记，但 service.LeadMiningChannels 未投影（装配断链）", name, Default.MineModeOf(name))
+		}
+	}
+
+	// ④ Bridge 侧投影：每个 bridge 渠道必须进入 service 投影；非 bridge 的注册渠道
+	// 若被误投影成 bridge 出站集合则视为双清单回潮。
+	for name := range bridgeMining {
+		if !projected[name] {
+			t.Errorf("Bridge 渠道 %s 未投影到 service 发掘资格集合", name)
+		}
+		if Default.OutboundPathOf(name) != OutboundPathBridgeOutbox {
+			t.Errorf("MineMode=bridge 渠道 %s 未登记 OutboundPath=bridge_outbox（入站/出站能力位漂移）", name)
+		}
+	}
+
+	// Direct 直连渠道（飞书/企微/TG/WA/QQ 等）投影校验：
+	for _, name := range DirectMineChannels {
+		if !projected[name] {
+			t.Errorf("直连渠道 %s 未投影到 service 发掘资格集合（P0-c 全渠道覆盖漏项）", name)
+		}
+	}
 }

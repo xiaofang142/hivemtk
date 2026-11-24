@@ -17,27 +17,13 @@ import (
 
 func TestAckBridgeOutbox_DetailedItems_P3D(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(
-		func(ctx context.Context, ev *model.MessageEvent) (*service.InboxIngressResult, error) {
-			return &service.InboxIngressResult{Accepted: true}, nil
-		},
-		func(ctx context.Context, ev *model.MessageEvent, direction string) error { return nil },
-	)
-	h.ingress = svc
-
+	db, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-p3d-1")
 	const (
-		// channel 走 HTTP 入参（别名），platform 是 message_hub 里唯一可能出现的形态（规范名）：
-		// 二者故意不同名 ⇒ 这一格同时锁住"ack 入口必须先把别名归一，否则一行都匹配不上"。
-		channel   = "douyin_web"
-		platform  = "douyin"
-		accountID = "acc_p3d_1"
-		conv      = "conv_p3d"
+		channel  = "douyin_web"
+		platform = "douyin"
+		conv     = "conv_p3d"
 	)
+	accountID := fixture.AccountID
 	for _, c := range []string{"msg_a content", "msg_b content", "msg_c content"} {
 		hub := &model.MessageHub{
 			Platform:       platform,
@@ -54,13 +40,14 @@ func TestAckBridgeOutbox_DetailedItems_P3D(t *testing.T) {
 		}
 	}
 
-	if n, err := svc.AckOutboundDelivered(context.Background(), platform, accountID, []string{"mh:msg_b content"}); err != nil || n != 1 {
+	if n, err := h.ingress.AckOutboundDelivered(context.Background(), platform, accountID, []string{"mh:msg_b content"}); err != nil || n != 1 {
 		t.Fatalf("首次 ack msg_b 应返回 1，实际 (%d, %v)", n, err)
 	}
 
 	body := `{"msg_ids":["mh:msg_a content","mh:msg_b content","mh:msg_c content","mh:msg_d content"],"status":"delivered"}`
 	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -97,21 +84,16 @@ func TestAckBridgeOutbox_DetailedItems_P3D(t *testing.T) {
 
 func TestAckBridgeOutbox_TooManyMsgIDs_P3D(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
+	_, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-too-many")
 
 	ids := make([]string, 501)
 	for i := range ids {
 		ids[i] = `mh:test`
 	}
 	body := `{"msg_ids":["` + strings.Join(ids, `","`) + `"],"status":"delivered"}`
-	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id=acc", strings.NewReader(body))
+	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id="+fixture.AccountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -357,18 +339,9 @@ func TestGetByMsgIDsInScope_OnlyOutbound_P4(t *testing.T) {
 // 这一格锁住两件事：整批在任何写入之前被 400 拒掉，且报错文案点名到底是哪个值不认。
 func TestAckBridgeOutbox_V2UnknownStatus_RejectsWholeBatchBeforeWrite_P3D(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
-
-	const (
-		channel   = "douyin"
-		accountID = "acc_v2_bad_status"
-	)
+	db, h, fixture := newCanonicalAckHandler(t, "douyin", "acc-v2-bad-status")
+	const channel = "douyin"
+	accountID := fixture.AccountID
 	seed := []struct{ msg, conv string }{
 		{"mh:v2bs_a", "conv_v2bs_1"},
 		{"mh:v2bs_b", "conv_v2bs_2"},
@@ -397,6 +370,7 @@ func TestAckBridgeOutbox_V2UnknownStatus_RejectsWholeBatchBeforeWrite_P3D(t *tes
 		`{"msg_id":"mh:v2bs_c","conversation_id":"conv_v2bs_1","status":"shipped"}]}`
 	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -428,6 +402,7 @@ func TestAckBridgeOutbox_V2UnknownStatus_RejectsWholeBatchBeforeWrite_P3D(t *tes
 	for i := 0; i < 20; i++ {
 		req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 		rr := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(rr)
 		c.Request = req

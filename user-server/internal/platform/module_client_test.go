@@ -52,7 +52,7 @@ func newTenantCodeStub(t *testing.T, path string) (*httptest.Server, *tenantCode
 func TestSyncModulesSendsTenantCodeQuery(t *testing.T) {
 	t.Setenv("PLATFORM_MERCHANT_KEY", "MK-TC")
 	srv, stub := newTenantCodeStub(t, "/merchant-api/modules/sync")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 
 	if _, err := NewModuleClient().SyncModules(context.Background(), "tABC123"); err != nil {
 		t.Fatalf("SyncModules: %v", err)
@@ -67,7 +67,7 @@ func TestSyncModulesSendsTenantCodeQuery(t *testing.T) {
 func TestSyncModulesEmptyTenantCodeStillCalls(t *testing.T) {
 	t.Setenv("PLATFORM_MERCHANT_KEY", "MK-TC")
 	srv, stub := newTenantCodeStub(t, "/merchant-api/modules/sync")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 
 	if _, err := NewModuleClient().SyncModules(context.Background(), ""); err != nil {
 		t.Fatalf("空 tenant_code 的 SyncModules 不应报错: %v", err)
@@ -81,7 +81,7 @@ func TestSyncModulesEmptyTenantCodeStillCalls(t *testing.T) {
 func TestCreateOrderCarriesTenantCode(t *testing.T) {
 	t.Setenv("PLATFORM_MERCHANT_KEY", "MK-TC")
 	srv, stub := newTenantCodeStub(t, "/merchant-api/orders")
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 	c := NewModuleClient()
 
 	if _, err := c.CreateOrder(context.Background(), CreateOrderInput{

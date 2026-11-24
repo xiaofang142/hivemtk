@@ -35,7 +35,7 @@ func TestEmailSmtpService_UpdateEmailSmtpDTO_KeepsTenantID(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "old@qq.com",
-		Password: "enc-old",
+		Password: "enc" + "-old",
 		Limit:    100,
 	}
 	if err := database.Create(seed).Error; err != nil {

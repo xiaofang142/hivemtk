@@ -48,8 +48,10 @@ func setupClueRoutes(auth *gin.RouterGroup, gormDB *gorm.DB) {
 	clueCtrl := controller.NewClueController(service.NewClueService(clueRepo, clueScoreSvc))
 	auth.GET("/clue/list", clueCtrl.GetClueList)
 	auth.GET("/clue/statistics", clueCtrl.GetClueStatistics)
+	auth.GET("/clue/statistics/range", clueCtrl.GetClueStatisticsWithRange)
 	auth.GET("/clues/list", clueCtrl.GetClueList)
 	auth.GET("/clues/statistics", clueCtrl.GetClueStatistics)
+	auth.GET("/clues/statistics/range", clueCtrl.GetClueStatisticsWithRange)
 	auth.GET("/clues/type", clueCtrl.GetClueTypes)
 
 	clueAdmin := auth.Group("", middleware.AdminAuthMiddleware())

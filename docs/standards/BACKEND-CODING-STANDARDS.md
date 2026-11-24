@@ -10,29 +10,33 @@
 ## 1. 分层与目录（不可协商）
 
 ```
-cmd/api/main.go          # L1 装配：中间件装载 + 路由注册 + 依赖注入
-internal/router/         # L1  路由表（112 文件）——只做 URL → Controller 映射
+cmd/api/main.go          # 应用入口：中间件装载 + 路由注册
+internal/router/         # L1  路由表：URL → Controller 映射 + 依赖装配
 internal/middleware/     # L1+ 鉴权 / JWT / 限流 / TraceID / metrics
-internal/controller/     # L2  Controller（324 文件）
-internal/service/        # L3  Service（893 文件）
-internal/repository/     # L4  Repository（394 文件）
-internal/model/          # L5  Model（258 文件）
-internal/dto/            # L5  DTO
+internal/controller/     # L2  Controller
+internal/service/        # L3  Service
+internal/repository/     # L4  Repository
+internal/model/          # L5  Model
+internal/dto/            # 辅助层 DTO（不是第六层）
 internal/pkg/            # 横向能力包（logger/metrics/trace/response…），不依赖任何业务层
 ```
 
-**实证事实（2026-11-13 清点）**：本仓**没有 `internal/handler/` 包**，`XxxHandler` 命名 0 命中；
-165 个控制器类型全叫 `XxxController`。写 `handler.go` / `XxxHandler` 就是错的。
+五层固定为 **Router → Controller → Service → Repository → Model**；Middleware、DTO、Pkg 是辅助/横切层。
+各层文件规模不在本文件硬编码维护；当前快照与计数口径见
+`../../../docs/architecture/FULL_FEATURE_INVENTORY.md` §3 I-19（Controller 类型计数另见 I-04）。
+
+**命名事实（2026-11-25）**：本仓**没有 `internal/handler/` 包**，`XxxHandler` struct 命名 0 命中；
+控制器类型统一为 `XxxController`。写 `handler.go` / `XxxHandler` 就是错的。
 
 ### 1.1 各层职责与禁止（来自架构文档 §二 + 门禁 [1/10]~[4/10]）
 
 | 层 | 必须做 | 禁止（CI 阻断） |
 |---|---|---|
-| Router | URL→Controller 映射；装载全局中间件 | 业务代码；**内联闭包处理器** `func(x *gin.Context)`（非 `_test.go`） |
+| Router | URL→Controller 映射 + 依赖装配；装载全局中间件 | 业务代码；**内联闭包处理器** `func(x *gin.Context)`（非 `_test.go`） |
 | Middleware | 鉴权/限流/TraceID；不依赖业务 service | 持有业务 service 做判断 |
 | Controller | 参数绑定 `c.ShouldBindJSON`；调 Service 编排；返回响应 | ① import repository ② `db.GetDB()` ③ import `gorm.io/gorm` ④ 直接调 `c.JSON`/`AbortWithStatusJSON`/`PureJSON`/… ⑤ 错误文案夹带 `err.Error()` ⑥ 业务判断 |
 | Service | 业务逻辑/事务/校验；组合多个 Repo；跨领域调用；异步触发 | ① 引用 controller/router ② 直连 db（`db.GetDB()` / `x.db.Raw/Exec/Create/…`）③ SQL 字符串拼接 `.Raw(.*+.*)` ④ 返回 ORM 原始 model（应返回 DTO） |
-| Repository | 封装 GORM CRUD；**唯一允许用 `*gorm.DB` 的层**；返回 model | ① 引用 service ② 引用 dto ③ 业务判断 ④ 跨表 join 业务 ⑤ 导出方法首参缺 `ctx context.Context` |
+| Repository | 封装 GORM CRUD；**唯一允许持有 `*gorm.DB` 的层**；返回 model | ① 引用 service ② 引用 dto ③ 业务判断 ④ 跨表 join 业务 ⑤ 导出方法首参缺 `ctx context.Context` |
 | Model | gorm tag + 字段 + `TableName` | 任何业务方法（只允许 GORM Hook：`TableName`/`Before*`/`After*`/`Value`/`Scan`） |
 | DTO | Controller 入参出参 | 引用 service/repository；调 db；业务方法 |
 
@@ -112,7 +116,7 @@ func (c *XxxController) GetXxx(ctx *gin.Context) {
 ### 1.7 写完后必须跑
 
 ```bash
-cd <仓库根>/hivemtk   # 嵌套仓库，真实代码在内层
+cd hivemtk-user   # 从工作区根进入平级产品仓；已在产品仓根时跳过
 bash scripts/check-architecture.sh        # 10 组架构门禁，违例即红
 bash user-server/scripts/check_naked_goroutine.sh
 bash user-server/scripts/check-gorm-only.sh
@@ -126,7 +130,7 @@ cd user-server && go build ./... && go vet ./... && go test ./internal/service/ 
 
 1. 新增文件前先想清楚落在哪一层；**不要新建 `internal/handler/`**。
 2. Controller 不 import repository、不 import gorm、不调 `c.JSON`。
-3. Service 不碰 `*gorm.DB`、不拼 SQL；需要新查询就下到 Repository。
+3. Service 不持有 `*gorm.DB`、不拼 SQL；`WithTransaction(func(tx *gorm.DB))` 属许可事务接缝；需要新查询就下到 Repository。
 4. Repository 方法第一个参数是 `ctx`，返回 model 不返回 DTO。
 5. Model 只放字段 + `TableName` + Hook；业务逻辑一律上 Service。
 6. 错误走 `response.Error` + `errors.go` 常量，不把 `err.Error()` 写给前端。

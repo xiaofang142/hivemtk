@@ -179,7 +179,13 @@ func (f *fakeClueRepo) Delete(context.Context, string) error { return nil }
 func (f *fakeClueRepo) GetClueStatistics(context.Context) ([]map[string]any, error) {
 	return nil, nil
 }
+func (f *fakeClueRepo) GetClueStatisticsWithRange(context.Context, int64, int64) ([]map[string]any, error) {
+	return nil, nil
+}
 func (f *fakeClueRepo) GetLeadMiningStats(context.Context) (map[string]any, error) {
+	return map[string]any{"total": 0, "by_lead_role": []map[string]any{}, "by_status": []map[string]any{}, "by_channel": []map[string]any{}, "by_conversation": []map[string]any{}}, nil
+}
+func (f *fakeClueRepo) GetLeadMiningStatsWithRange(context.Context, int64, int64) (map[string]any, error) {
 	return map[string]any{"total": 0, "by_lead_role": []map[string]any{}, "by_status": []map[string]any{}, "by_channel": []map[string]any{}, "by_conversation": []map[string]any{}}, nil
 }
 func (f *fakeClueRepo) GetClueAllList(context.Context, int64) ([]*model.Clue, int64, error) {
@@ -303,16 +309,22 @@ func TestMergeTags(t *testing.T) {
 }
 
 func TestChannelEnabled(t *testing.T) {
+	// P0-c：默认全纳入（Channels 空 = 不表达关闭），显式名单 = 关闭名单。
 	cfg := &model.LeadMiningConfig{}
-	if !channelEnabled(cfg, "douyin") {
-		t.Fatal("空渠道配置应放行全部渠道")
+	for _, platform := range []string{"douyin", "telegram", "wechat", "qq"} {
+		if !channelEnabled(cfg, platform) {
+			t.Fatalf("空渠道配置应放行全部渠道，实际拦截 %s", platform)
+		}
 	}
 	cfg2 := &model.LeadMiningConfig{Channels: []string{"telegram", "douyin"}}
-	if !channelEnabled(cfg2, "telegram") {
-		t.Fatal("telegram 应启用")
+	if channelEnabled(cfg2, "telegram") {
+		t.Fatal("telegram 在显式关闭名单内，应拦截")
 	}
-	if channelEnabled(cfg2, "wechat") {
-		t.Fatal("wechat 未启用应拦截")
+	if channelEnabled(cfg2, "douyin") {
+		t.Fatal("douyin 在显式关闭名单内，应拦截")
+	}
+	if !channelEnabled(cfg2, "wechat") {
+		t.Fatal("wechat 不在关闭名单内，应默认放行")
 	}
 }
 
@@ -347,7 +359,15 @@ func TestProcess_LeadDetected(t *testing.T) {
 	if j.calls != 1 {
 		t.Fatalf("期望判定 1 次，实际 %d", j.calls)
 	}
-	c := fcr.byUID["lm:telegram:u1"]
+	// 身份归一口径已演进：telegram 非数字 sender 走规范化 UnifiedID，
+	// 不再固定是 lm:platform:sender。按身份字段取一次，避免测试绑定旧键格式。
+	var c *model.Customer
+	for _, candidate := range fcr.byUID {
+		if candidate.SourceChannel == "telegram" && candidate.SourceAccountID == "u1" {
+			c = candidate
+			break
+		}
+	}
 	if c == nil {
 		t.Fatal("未创建/解析客户")
 	}
@@ -398,14 +418,15 @@ func TestProcess_NotLead(t *testing.T) {
 }
 
 func TestProcess_ChannelDisabled(t *testing.T) {
-	cfg := &model.LeadMiningConfig{Enabled: true, Channels: []string{"telegram"}, MinIntentScore: 50}
+	// P0-c：Channels 是显式关闭名单。douyin 被显式关闭 ⇒ 不触发判定。
+	cfg := &model.LeadMiningConfig{Enabled: true, Channels: []string{"douyin"}, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
 	s := newTestService(cfg, j)
 
 	s.process(context.Background(), sampleHub("douyin", "u4", "我想购买"))
 
 	if j.calls != 0 {
-		t.Fatalf("渠道未启用不应触发判定，实际判定 %d 次", j.calls)
+		t.Fatalf("显式关闭渠道不应触发判定，实际判定 %d 次", j.calls)
 	}
 }
 

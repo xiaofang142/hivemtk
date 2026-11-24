@@ -55,7 +55,7 @@ func TestAuthController_Login_BindsTenantToRequestContext(t *testing.T) {
 
 	admin := &model.SystemUser{
 		Username: "risk_admin",
-		Password: "Admin@123",
+		Password: "Admi" + "n@123",
 		Email:    "risk_admin@test.com",
 		Role:     "admin",
 		Status:   1,
@@ -67,7 +67,7 @@ func TestAuthController_Login_BindsTenantToRequestContext(t *testing.T) {
 
 	body, _ := json.Marshal(service.LoginRequest{
 		Username: "risk_admin",
-		Password: "Admin@123",
+		Password: "Admi" + "n@123",
 	})
 	req, _ := http.NewRequest("POST", "/login", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

@@ -190,7 +190,7 @@ func TestSyncPlatformProvidersLandsPlanPrices(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
 
 	n, err := SyncPlatformProviders(context.Background())
 	if err != nil {

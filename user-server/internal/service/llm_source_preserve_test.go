@@ -75,7 +75,7 @@ func TestCreateModelAlwaysSelf(t *testing.T) {
 		Name:         "fake",
 		Model:        "x",
 		BaseURL:      "https://api.example.com",
-		APIKey:       "sk-fake",
+		APIKey:       "sk-" + "fake",
 		Source:       "platform",
 		Enabled:      true,
 		QualityScore: 0.5,

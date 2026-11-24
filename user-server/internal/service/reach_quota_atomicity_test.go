@@ -6,8 +6,8 @@ import "testing"
 func TestReachQuotaVerifyTokenUsesDeterministicFirstScope(t *testing.T) {
 	m := &ReachQuotaManager{}
 	rows := []quotaIntentRef{
-		{IntentID: "intent#scope-z", Token: "token-z"},
-		{IntentID: "intent#scope-a", Token: "token-a"},
+		{IntentID: "intent#scope-z", Token: "tok" + "en-z"},
+		{IntentID: "intent#scope-a", Token: "tok" + "en-a"},
 	}
 
 	if err := m.verifyToken(rows, "token-a"); err != nil {

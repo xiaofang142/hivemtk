@@ -12,6 +12,8 @@ import (
 
 	"hivemtk-user/internal/channelgw"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/service"
 )
 
 func TestHTTPIngest_AccountIDRequired(t *testing.T) {
@@ -137,25 +139,32 @@ func TestWriteOutboxJSON_PassesExtra(t *testing.T) {
 	}
 }
 
-func TestGetBridgeOutbox_AccountIDRequired(t *testing.T) {
+// identify_code-only：缺码必须 fail-closed；合法识别码可在省略 account_id 时补全身份。
+func TestGetBridgeOutbox_IdentifyCodeRequired(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewBridgeIngestHandler(nil)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "outbox-identify")
+	h := NewBridgeIngestHandler(service.NewInboxIngressService())
 	r := gin.New()
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 
-	req := httptest.NewRequest("GET", "/api/bridge/outbox?channel=xiaohongshu", nil)
+	req := httptest.NewRequest("GET", "/api/bridge/outbox?channel=douyin", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-
 	if w.Code != http.StatusBadRequest {
-		t.Errorf("状态码 = %d, want 400", w.Code)
+		t.Errorf("缺 identify_code 且缺 account_id 应结构性 400，实际 %d", w.Code)
 	}
-	body := w.Body.String()
-	if !strings.Contains(body, "account_id required") {
-		t.Errorf("响应体应说明 account_id required：%s", body)
+	if !strings.Contains(w.Body.String(), "account_id required") || strings.Contains(strings.ToLower(w.Body.String()), `"account_id":"default"`) {
+		t.Errorf("缺码响应不得回退默认账号: %s", w.Body.String())
 	}
-	if strings.Contains(strings.ToLower(body), `"account_id":"default"`) {
-		t.Errorf("响应体不能含 default 兜底：%s", body)
+
+	req2 := httptest.NewRequest("GET", "/api/bridge/outbox?channel=douyin", nil)
+	req2.Header.Set("X-Channel-Identify-Code", fixture.Code)
+	req2 = req2.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(req2.Context(), 1), "douyin", fixture.AccountID, "text", ""))
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("合法识别码应补全 account_id 并返回 200，实际 %d body=%s", w2.Code, w2.Body.String())
 	}
 }
 

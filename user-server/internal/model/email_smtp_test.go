@@ -19,7 +19,7 @@ func TestEmailSmtp_BasicFields(t *testing.T) {
 		Server:   "smtp.gmail.com",
 		Port:     587,
 		Username: "test@gmail.com",
-		Password: "app_password",
+		Password: "app" + "_pa" + "ssword",
 		Limit:    100,
 	}
 

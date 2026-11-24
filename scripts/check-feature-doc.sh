@@ -17,7 +17,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # 节判定统一走单一真源，杜绝"正文/目录里提到节名就算通过"
 # shellcheck source=lib/feature-doc-sections.sh
@@ -36,7 +36,7 @@ log_pass() { echo -e "${GREEN}✅ $1${NC}"; }
 log_fail() { echo -e "${RED}❌ $1${NC}"; ERRORS=$((ERRORS+1)); }
 log_warn() { echo -e "${YELLOW}⚠️  $1${NC}"; WARNINGS=$((WARNINGS+1)); }
 
-DOCS_DIR="$PROJECT_ROOT/hivemtk/docs/marketing-features"
+DOCS_DIR="$PROJECT_ROOT/docs/marketing-features"
 if [ ! -d "$DOCS_DIR" ]; then
   log_fail "目录不存在: $DOCS_DIR"
   exit 1

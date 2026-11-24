@@ -2,8 +2,8 @@
 package bridge
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"hivemtk-user/internal/capregistry"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,9 +122,24 @@ func (f *recordingBridgeAccountRepo) IsOnline(_ context.Context, channel, accoun
 }
 
 // startOnlineSignalSSEServer 起一条短命 SSE 流：心跳 40ms、最长 240ms，跑完自行收尾。
-func startOnlineSignalSSEServer(t *testing.T) *httptest.Server {
+func startOnlineSignalSSEServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
-	return startSSEServerWithWindow(t, 40*time.Millisecond, 240*time.Millisecond)
+	return startSSEServerWithIdentifyCode(t, 40*time.Millisecond, 240*time.Millisecond)
+}
+
+func startSSEServerWithIdentifyCode(t *testing.T, heartbeat, maxDuration time.Duration) (*httptest.Server, string) {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	fixture := seedCanonicalBridgeFixtureWithID(t, db, 1, "douyin", "sse-online", 1)
+	h := NewBridgeIngestHandler(nil)
+	h.sseHandler.SetHeartbeat(heartbeat)
+	h.sseHandler.SetMaxDuration(maxDuration)
+	r := gin.New()
+	r.GET("/api/bridge/outbox/sse", h.HandleOutboxSSE)
+	srv := httptest.NewServer(r)
+	t.Cleanup(srv.Close)
+	return srv, fixture.Code
 }
 
 func startSSEServerWithWindow(t *testing.T, heartbeat, maxDuration time.Duration) *httptest.Server {
@@ -142,11 +157,13 @@ func startSSEServerWithWindow(t *testing.T, heartbeat, maxDuration time.Duration
 
 // openSSEStream 在后台 goroutine 里把流读完，返回「流已结束」的信号通道
 // （不在 goroutine 里调 t.Fatalf）。
-func openSSEStream(url string) chan struct{} {
+func openSSEStream(url, identifyCode string) chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		resp, err := http.Get(url)
+		req, _ := http.NewRequest(http.MethodGet, url, nil)
+		req.Header.Set("X-Channel-Identify-Code", identifyCode)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return
 		}
@@ -181,9 +198,11 @@ func waitFor(timeout time.Duration, cond func() bool) bool {
 }
 
 // drainSSEStream 打开流并读到服务端结束，返回收到的心跳帧数。
-func drainSSEStream(t *testing.T, url string) int {
+func drainSSEStream(t *testing.T, url, identifyCode string) int {
 	t.Helper()
-	resp, err := http.Get(url)
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("X-Channel-Identify-Code", identifyCode)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("SSE 请求失败: %v", err)
 	}
@@ -208,9 +227,9 @@ func useRecordingRepo(t *testing.T) *recordingBridgeAccountRepo {
 // 修之前 TouchLastSync 零调用 ⇒ 注册后 status 恒为 online，断开也读不出来。
 func TestHandleOutboxSSE_RefreshesOnlineOnConnectAndHeartbeat(t *testing.T) {
 	fake := useRecordingRepo(t)
-	srv := startOnlineSignalSSEServer(t)
+	srv, identifyCode := startOnlineSignalSSEServer(t)
 
-	pings := drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=acc-life")
+	pings := drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=1", identifyCode)
 	if pings == 0 {
 		t.Fatal("流里一个心跳帧都没有 ⇒ 用例没真跑到心跳分支，下面的计数不作数")
 	}
@@ -218,13 +237,13 @@ func TestHandleOutboxSSE_RefreshesOnlineOnConnectAndHeartbeat(t *testing.T) {
 		t.Fatalf("connect+heartbeat 应至少刷新 2 次在线位, got %d（pings=%d）", got, pings)
 	}
 	key := <-fake.touchKeys
-	if key != "douyin:acc-life" {
+	if key != "douyin:1" {
 		t.Errorf("在线位刷新写错账号: %q", key)
 	}
 	if got := fake.offlines.Load(); got != 1 {
 		t.Errorf("流结束应置离线 1 次, got %d", got)
 	}
-	if k := nextKey(t, fake.offlineKeys, 2*time.Second); k != "douyin:acc-life" {
+	if k := nextKey(t, fake.offlineKeys, 2*time.Second); k != "douyin:1" {
 		t.Errorf("离线置错账号: %q", k)
 	}
 }
@@ -233,11 +252,11 @@ func TestHandleOutboxSSE_RefreshesOnlineOnConnectAndHeartbeat(t *testing.T) {
 // 先结束的那条不得把整个账号判离线。
 func TestHandleOutboxSSE_KeepsOnlineWhileAnotherStreamLives(t *testing.T) {
 	fake := useRecordingRepo(t)
-	_, cancelOther := GlobalSSEBus.Subscribe("douyin", "acc-share")
+	_, cancelOther := GlobalSSEBus.Subscribe("douyin", "1")
 	t.Cleanup(cancelOther)
 
-	srv := startOnlineSignalSSEServer(t)
-	drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=acc-share")
+	srv, identifyCode := startOnlineSignalSSEServer(t)
+	drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=1", identifyCode)
 
 	if got := fake.offlines.Load(); got != 0 {
 		t.Errorf("另一条流仍在线却置了离线: %d 次", got)
@@ -254,8 +273,8 @@ func TestHandleOutboxSSE_SkipsAccountWritesWhenRepoMissing(t *testing.T) {
 	GlobalBridgeAccountRepo = nil
 	t.Cleanup(func() { GlobalBridgeAccountRepo = prev })
 
-	srv := startOnlineSignalSSEServer(t)
-	if pings := drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=acc-norepo"); pings == 0 {
+	srv, identifyCode := startOnlineSignalSSEServer(t)
+	if pings := drainSSEStream(t, srv.URL+"/api/bridge/outbox/sse?channel=douyin&account_id=1", identifyCode); pings == 0 {
 		t.Error("仓储未注入时流被提前中断")
 	}
 }
@@ -269,16 +288,16 @@ func TestHandleOutboxSSE_SkipsAccountWritesWhenRepoMissing(t *testing.T) {
 // 补投门按规范渠道问「谁在线」时，这个明显在线的扩展会被判离线、消息闷在待办里。
 func TestHandleOutboxSSE_QueryChannelAliasSharesCanonicalKey(t *testing.T) {
 	fake := useRecordingRepo(t)
-	srv := startSSEServerWithWindow(t, 40*time.Millisecond, time.Second)
+	srv, identifyCode := startSSEServerWithIdentifyCode(t, 40*time.Millisecond, time.Second)
 
-	done := openSSEStream(srv.URL + "/api/bridge/outbox/sse?channel=douyin_web&account_id=acc-alias")
+	done := openSSEStream(srv.URL+"/api/bridge/outbox/sse?channel=douyin_web&account_id=1", identifyCode)
 
 	if !waitFor(800*time.Millisecond, func() bool {
-		return GlobalSSEBus.HasSubscribers("douyin", "acc-alias")
+		return GlobalSSEBus.HasSubscribers("douyin", "1")
 	}) {
 		t.Error("别名建流后规范键上查不到订阅 ⇒ Publish 广播投不到该客户端")
 	}
-	if GlobalSSEBus.HasSubscribers("douyin_web", "acc-alias") {
+	if GlobalSSEBus.HasSubscribers("douyin_web", "1") {
 		t.Error("订阅仍挂在未归一的别名键上")
 	}
 
@@ -286,10 +305,10 @@ func TestHandleOutboxSSE_QueryChannelAliasSharesCanonicalKey(t *testing.T) {
 	if !waitFor(2*time.Second, func() bool { return fake.offlines.Load() == 1 }) {
 		t.Fatalf("流结束未置离线（touches=%d）", fake.touches.Load())
 	}
-	if k := nextKey(t, fake.touchKeys, 2*time.Second); k != "douyin:acc-alias" {
+	if k := nextKey(t, fake.touchKeys, 2*time.Second); k != "douyin:1" {
 		t.Errorf("在线位落在别名渠道上，bridge_accounts 无此行 ⇒ 刷新静默丢失: %q", k)
 	}
-	if k := nextKey(t, fake.offlineKeys, 2*time.Second); k != "douyin:acc-alias" {
+	if k := nextKey(t, fake.offlineKeys, 2*time.Second); k != "douyin:1" {
 		t.Errorf("离线位落在别名渠道上: %q", k)
 	}
 }
@@ -302,18 +321,21 @@ func TestHandleOutboxSSE_QueryChannelAliasSharesCanonicalKey(t *testing.T) {
 func TestGetBridgeOutbox_RefreshesOnlineSignal(t *testing.T) {
 	fake := useRecordingRepo(t)
 	gin.SetMode(gin.TestMode)
-	setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "poll-online")
+	accountID := fixture.AccountID
 	h := NewBridgeIngestHandler(service.NewInboxIngressService())
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 1))
+		c.Request.Header.Set("X-Channel-Identify-Code", fixture.Code)
 		c.Next()
 	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=acc-poll")
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=" + accountID)
 	if err != nil {
 		t.Fatalf("轮询请求失败: %v", err)
 	}
@@ -325,7 +347,7 @@ func TestGetBridgeOutbox_RefreshesOnlineSignal(t *testing.T) {
 	if got := fake.touches.Load(); got != 1 {
 		t.Fatalf("一次轮询应刷 1 次在线位, got %d", got)
 	}
-	if k := nextKey(t, fake.touchKeys, 2*time.Second); k != "douyin:acc-poll" {
+	if k := nextKey(t, fake.touchKeys, 2*time.Second); k != "douyin:"+accountID {
 		t.Errorf("轮询在线位落在别名渠道上（bridge_accounts 无此行 ⇒ 刷新静默丢失）: %q", k)
 	}
 }
@@ -336,11 +358,13 @@ func TestGetBridgeOutbox_RefreshesOnlineSignal(t *testing.T) {
 func TestGetBridgeOutbox_AliasChannelClaimsCanonicalOutbound(t *testing.T) {
 	useRecordingRepo(t)
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "alias-claim")
+	accountID := fixture.AccountID
 	hub := &model.MessageHub{
-		Platform: "douyin", AccountID: "acc-aliasclaim", ConversationID: "conv_alias_claim",
+		Platform: "douyin", AccountID: accountID, ConversationID: "conv_alias_claim",
 		MsgID: "mh:alias_claim_1", MsgType: "text", Content: "别名轮询该拿到的回复",
-		Direction: "outbound", Status: "pending", SenderID: "acc-aliasclaim", ReceiverID: "conv_alias_claim",
+		Direction: "outbound", Status: "pending", SenderID: accountID, ReceiverID: "conv_alias_claim",
 	}
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed: %v", err)
@@ -348,14 +372,15 @@ func TestGetBridgeOutbox_AliasChannelClaimsCanonicalOutbound(t *testing.T) {
 	h := NewBridgeIngestHandler(service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission))
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
-		c.Request = c.Request.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(c.Request.Context(), 1), "douyin", "acc-aliasclaim", "text", ""))
+		c.Request = c.Request.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(c.Request.Context(), 1), "douyin", accountID, "text", ""))
+		c.Request.Header.Set("X-Channel-Identify-Code", fixture.Code)
 		c.Next()
 	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=acc-aliasclaim")
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin_web&account_id=" + accountID)
 	if err != nil {
 		t.Fatalf("轮询请求失败: %v", err)
 	}
@@ -377,18 +402,21 @@ func TestGetBridgeOutbox_KeepsServingWhenRepoMissing(t *testing.T) {
 	t.Cleanup(func() { GlobalBridgeAccountRepo = prev })
 
 	gin.SetMode(gin.TestMode)
-	setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "poll-norepo")
+	accountID := fixture.AccountID
 	h := NewBridgeIngestHandler(service.NewInboxIngressService())
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 1))
+		c.Request.Header.Set("X-Channel-Identify-Code", fixture.Code)
 		c.Next()
 	})
 	r.GET("/api/bridge/outbox", h.GetBridgeOutbox)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin&account_id=acc-norepo")
+	resp, err := http.Get(srv.URL + "/api/bridge/outbox?channel=douyin&account_id=" + accountID)
 	if err != nil {
 		t.Fatalf("轮询请求失败: %v", err)
 	}

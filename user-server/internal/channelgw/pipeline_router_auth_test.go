@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -28,6 +29,8 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/edition"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 	"hivemtk-user/internal/service"
@@ -39,13 +42,27 @@ import (
 // 头=X-Channel-Identify-Code），不再读旧 BRIDGE_INGEST_TOKEN / X-Bridge-Token。
 const cs02IdentifyCode = "cs02-identify-code-e2e"
 
-func cs02SeedIdentifyCode(t *testing.T, code string) {
+func cs02SeedIdentifyCode(t *testing.T, code string) string {
 	t.Helper()
+	database := db.GetDB()
+	ctx := tenant.WithSystemScope(context.Background())
+	channel := &model.Channel{TenantID: 1, Name: "douyin", Code: "douyin", Type: "dm", Enabled: true}
+	if err := database.WithContext(ctx).Create(channel).Error; err != nil {
+		t.Fatalf("种子 canonical 渠道失败: %v", err)
+	}
+	account := &model.ChannelAccount{
+		TenantID: 1, ChannelID: channel.ID, Name: "cs02-account", IdentifyCode: code,
+		Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{},
+	}
+	if err := database.WithContext(ctx).Create(account).Error; err != nil {
+		t.Fatalf("种子 canonical 账号失败: %v", err)
+	}
 	if err := repository.NewChannelIdentifyCodeRepository().Upsert(context.Background(), &model.ChannelIdentifyCode{
-		TenantID: 1, ChannelID: 1, Code: code, Version: 1,
+		TenantID: 1, ChannelID: channel.ID, Code: code, Version: 1,
 	}); err != nil {
 		t.Fatalf("种子识别码写入失败: %v", err)
 	}
+	return strconv.FormatUint(uint64(account.ID), 10)
 }
 
 // cs02AuthTrigger 可计数 AI 触发 fake：断言「失败 0 触发 / 成功 1 触发且归属=服务端账号」。
@@ -81,9 +98,12 @@ func (f *cs02AuthTrigger) snapshot() map[string]string {
 // 真实 pipeline/服务 + 真库。返回 router、触发 fake、库句柄。
 func cs02AuthSetup(t *testing.T) (*gin.Engine, *cs02AuthTrigger) {
 	t.Helper()
-	database := testutil.NewTestDB(t, &model.MessageHub{}, &model.ChannelIdentifyCode{})
+	database := testutil.NewTestDB(t, &model.MessageHub{}, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	db.SetTestDB(database)
 	t.Cleanup(func() { db.SetTestDB(nil) })
+	previousEdition := edition.Current()
+	edition.ResetForTest(edition.TypeCustom)
+	t.Cleanup(func() { edition.ResetForTest(previousEdition) })
 
 	ingress := service.NewInboxIngressService()
 	tr := &cs02AuthTrigger{}
@@ -190,14 +210,13 @@ func TestCS02_BridgeRouterAuth_FailClosedWhenTokenNotConfigured(t *testing.T) {
 // 伪造 account_id/sender_type 被丢弃并计数，落库行与 AI 触发元组的归属全部用服务端值。
 func TestCS02_BridgeRouterAuth_ValidToken_MaliciousExtraAccountIDDropped(t *testing.T) {
 	r, tr := cs02AuthSetup(t)
-	cs02SeedIdentifyCode(t, cs02IdentifyCode)
+	serverAccount := cs02SeedIdentifyCode(t, cs02IdentifyCode)
 
 	const (
-		serverAccount = "cs02-acc-a1"
-		evilAccount   = "cs02-evil-account"
-		evt           = "cs02-evt-auth-4"
-		conv          = "cs02-conv-auth-4"
-		cust          = "cs02-openid-auth"
+		evilAccount = "cs02-evil-account"
+		evt         = "cs02-evt-auth-4"
+		conv        = "cs02-conv-auth-4"
+		cust        = "cs02-openid-auth"
 	)
 	droppedBefore := channelgw.IngestExtraDroppedKeys.Load()
 

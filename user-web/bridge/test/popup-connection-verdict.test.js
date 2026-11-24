@@ -85,7 +85,7 @@ function jsonResponse(body, status = 200) {
 }
 
 describe('凭证探测 probeBridgeCredential / 请求形状', () => {
-  it('带 X-Bridge-Token 打 capabilities，且凭证绝不进 URL', async () => {
+  it('带 X-Channel-Identify-Code 打 capabilities，且凭证绝不进 URL', async () => {
     const calls = [];
     const fetchMock = vi.fn(async (url, init = {}) => {
       calls.push({ url: String(url), init });
@@ -95,7 +95,7 @@ describe('凭证探测 probeBridgeCredential / 请求形状', () => {
     const r = await exported.probeBridgeCredential(SERVER, TOKEN);
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(SERVER + CAPS_PATH);
-    expect(calls[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(calls[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     // 凭证进 URL 就会落进访问日志与浏览器历史，这一条是硬约束
     expect(calls[0].url).not.toContain(TOKEN);
     expect(r.state).toBe('verified');
@@ -109,14 +109,14 @@ describe('凭证探测 probeBridgeCredential / 请求形状', () => {
     const calls = [];
     const fetchMock = vi.fn(async (url, init = {}) => {
       calls.push({ url: String(url), init });
-      return jsonResponse({ code: 'UNAUTHORIZED_2001', message: '缺少 X-Bridge-Token' }, 401);
+      return jsonResponse({ code: 'UNAUTHORIZED_2001', message: '缺少 X-Channel-Identify-Code' }, 401);
     });
     const { exported } = await loadPopup(fetchMock);
     const r = await exported.probeBridgeCredential(SERVER, '   ');
-    expect(calls[0].init.headers['X-Bridge-Token']).toBeUndefined();
+    expect(calls[0].init.headers['X-Channel-Identify-Code']).toBeUndefined();
     expect(r.state).toBe('missing');
     expect(r.status).toBe(401);
-    expect(r.serverMessage).toBe('缺少 X-Bridge-Token');
+    expect(r.serverMessage).toBe('缺少 X-Channel-Identify-Code');
   });
 
   it('带凭证却被拒 ⇒ rejected，并把闸门自己那句原因透传出来', async () => {
@@ -255,12 +255,12 @@ describe('banner 判词合成 buildConnectionVerdict / 用户可见文案', () =
     expect(v.body).toContain('一条也不同步');
   });
 
-  it('可达 + 未填凭证 ⇒ 红字点名"凭证栏是空的"', async () => {
+  it('可达 + 未填凭证 ⇒ 红字点名"识别码栏是空的"', async () => {
     const { exported } = await loadPopup();
     const v = exported.buildConnectionVerdict(reachOk, { state: 'missing', status: 401 });
     expect(v.kind).toBe('error');
     expect(v.title).toBe('✗ 未填桥接凭证');
-    expect(v.body).toContain('凭证栏是空的');
+    expect(v.body).toContain('识别码栏是空的');
   });
 
   it('凭证探测没通 ⇒ 黄字"凭证没能校验"，不冒充已验证', async () => {

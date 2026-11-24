@@ -169,7 +169,7 @@
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="filterForm.status" placeholder="全部" clearable style="width: 130px">
-            <el-option v-for="s in ['new','notified','following','converted','ignored','invalid']" :key="s" :label="s" :value="s" />
+            <el-option v-for="s in ['candidate','new','notified','following','converted','ignored','invalid']" :key="s" :label="statusLabel(s)" :value="s" />
           </el-select>
         </el-form-item>
         <el-form-item label="时间">
@@ -242,7 +242,7 @@
         </el-table-column>
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }">
-            <el-tag size="small" type="info">{{ row.status || '-' }}</el-tag>
+            <el-tag size="small" :type="row.status === 'candidate' ? 'warning' : 'info'">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="渠道账号" min-width="150" show-overflow-tooltip>
@@ -606,6 +606,8 @@ const dateRange = ref([])
 const getClueType = (type) => getClueTypeLabel(type)
 const leadRoleLabel = (v) => ({ demand: '需求方', supply: '供货方', resource: '资源方/上下游', broker: '中介', unknown: '未知' })[v] || v || '未知'
 const leadRoleTag = (v) => ({ demand: 'danger', supply: 'success', resource: 'warning', broker: '', unknown: 'info' })[v] || 'info'
+// D11 待审队列：candidate 线索不触发外部通知，人工确认或高分自动转正。
+const statusLabel = (v) => ({ candidate: '待审', new: '新线索', notified: '已通知', following: '跟进中', converted: '已转化', ignored: '已忽略', invalid: '无效' })[v] || v || '-'
 
 const handlePageChange = (val) => {
   if (cluepage.value === val) return

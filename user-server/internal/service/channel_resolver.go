@@ -153,7 +153,7 @@ func (r *ChannelResolver) ResolveByAccountRef(ctx context.Context, platform, ref
 		return resolveOut(acc), nil
 	}
 
-	rows, err := r.accountRepo.List(ctx, repository.ChannelAccountListOptions{
+	rows, err := listChannelAccounts(ctx, r.accountRepo, repository.ChannelAccountListOptions{
 		TenantID: tid, Keyword: ref, Limit: 50,
 	})
 	if err != nil {

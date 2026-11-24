@@ -175,6 +175,6 @@ describe('tenant_code / 四条链路都带上短码', () => {
       { v: 2, messages: [] }
     );
     expect(calls[0].url).not.toContain('secret-token');
-    expect(calls[0].opts.headers['X-Bridge-Token']).toBe('secret-token');
+    expect(calls[0].opts.headers['X-Channel-Identify-Code']).toBe('secret-token');
   });
 });

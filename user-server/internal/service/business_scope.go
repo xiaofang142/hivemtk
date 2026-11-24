@@ -6,8 +6,6 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-
-	"gorm.io/gorm"
 )
 
 // BusinessAccountScope describes which business accounts a user may access.
@@ -144,18 +142,4 @@ func (s BusinessAccountScope) CustomerSourceAccountClause() (clause string, args
 		anyIDs = append(anyIDs, id)
 	}
 	return "source_account_id IN ?", []any{anyIDs}, true
-}
-
-// ApplyCustomerSourceAccountScope applies business-account scope to a customer
-// query that has source_account_id/source_channel columns. It returns the query
-// and whether the scope allows any rows.
-func ApplyCustomerSourceAccountScope(q *gorm.DB, scope BusinessAccountScope) (*gorm.DB, bool) {
-	clause, args, restricted := scope.CustomerSourceAccountClause()
-	if !restricted {
-		return q, true
-	}
-	if clause == "1 = 0" {
-		return q.Where("1 = 0"), false
-	}
-	return q.Where(clause, args...), true
 }

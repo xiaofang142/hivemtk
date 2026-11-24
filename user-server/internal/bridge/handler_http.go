@@ -97,9 +97,19 @@ type httpRequestInfo struct {
 }
 
 func collectHTTPRequestInfo(c *gin.Context) httpRequestInfo {
+	info, _, _ := collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
+	return info
+}
+
+// collectHTTPRequestInfoWithLimit 最多读取 maxBodyBytes+1 字节；多读的 1 字节只用于
+// 判定超限，不再把整个超大 body 缓存在内存或日志预览里。
+func collectHTTPRequestInfoWithLimit(c *gin.Context, maxBodyBytes int) (httpRequestInfo, []byte, bool) {
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = HTTPIngestMaxBodySize
+	}
 	token := c.Query("token")
 	origContentLength := c.Request.ContentLength
-	fullBody, bodySize, bodyPreview, _ := readBodyForLog(c.Request.Body, 4096)
+	fullBody, bodySize, bodyPreview, tooLarge := readBodyForLog(c.Request.Body, 4096, maxBodyBytes)
 	if c.Request != nil && c.Request.Body != nil {
 		c.Request.Body = io.NopCloser(strings.NewReader(fullBody))
 		c.Request.ContentLength = int64(len(fullBody))
@@ -121,26 +131,33 @@ func collectHTTPRequestInfo(c *gin.Context) httpRequestInfo {
 		ParsedQuery:    describeUpstreamQuery(c.Request.URL.Query()),
 		BodyPreview:    bodyPreview,
 		BodySize:       bodySize,
-	}
+	}, []byte(fullBody), tooLarge
 }
 
-func readBodyForLog(rc io.ReadCloser, previewBytes int) (string, int, string, bool) {
+func readBodyForLog(rc io.ReadCloser, previewBytes, maxBodyBytes int) (string, int, string, bool) {
 	if rc == nil {
 		return "", 0, "", false
 	}
-	all, err := io.ReadAll(rc)
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = HTTPIngestMaxBodySize
+	}
+	all, err := io.ReadAll(io.LimitReader(rc, int64(maxBodyBytes)+1))
 	_ = rc.Close()
 	if err != nil {
 		msg := fmt.Sprintf("[read body failed: %v]", err)
 		return msg, 0, msg, false
 	}
+	tooLarge := len(all) > maxBodyBytes
+	if tooLarge {
+		all = all[:maxBodyBytes]
+	}
 	total := len(all)
 	full := string(all)
 	if total <= previewBytes {
-		return full, total, full, false
+		return full, total, full, tooLarge
 	}
 	preview := string(all[:previewBytes]) + fmt.Sprintf("... [truncated, total=%d bytes]", total)
-	return full, total, preview, true
+	return full, total, preview, tooLarge
 }
 
 type BridgeIngestHandler struct {
@@ -351,7 +368,35 @@ func (h *BridgeIngestHandler) callPersistHistory(ctx context.Context, ev *model.
 // @Tags      bridge-ingest-handler
 // @Router    /api/bridge/ingest [post]
 func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
-	info := collectHTTPRequestInfo(c)
+	maxBodySize := runtimeIngestMaxBodySize(c.Request.Context())
+	if maxBodySize <= 0 {
+		maxBodySize = HTTPIngestMaxBodySize
+	}
+	if c.Request.ContentLength > int64(maxBodySize) {
+		logger.Ctx(c.Request.Context()).Warn().
+			Str("module", "bridge").
+			Str("event", "http_ingest_body_too_large").
+			Str("full_url", c.Request.URL.String()).
+			Int64("content_length", c.Request.ContentLength).
+			Msg("[Bridge HTTP] body 超过上限")
+		c.JSON(http.StatusRequestEntityTooLarge, HTTPIngestResponse{
+			OK: false, Reason: fmt.Sprintf("body too large (max %d bytes)", maxBodySize),
+		})
+		return
+	}
+	info, rawBody, tooLarge := collectHTTPRequestInfoWithLimit(c, maxBodySize)
+	if tooLarge {
+		logger.Ctx(c.Request.Context()).Warn().
+			Str("module", "bridge").
+			Str("event", "http_ingest_body_too_large").
+			Str("full_url", info.FullURL).
+			Int("body_size", info.BodySize).
+			Msg("[Bridge HTTP] body 超过上限")
+		c.JSON(http.StatusRequestEntityTooLarge, HTTPIngestResponse{
+			OK: false, Reason: fmt.Sprintf("body too large (max %d bytes)", maxBodySize),
+		})
+		return
+	}
 	channel := info.Channel
 	accountID := info.AccountID
 	conversationID := info.ConversationID
@@ -360,11 +405,6 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 	bm := metrics.GetBridge()
 
 	var req HTTPIngestRequest
-	rawBody, _ := io.ReadAll(c.Request.Body)
-	if len(rawBody) > 0 {
-		// 回填 body：后续 collectHTTPRequestInfo 之外的日志/预览与 ShouldBindJSON 都要用
-		c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
-	}
 	bodyBindErr := json.Unmarshal(rawBody, &req)
 	if bodyBindErr == nil {
 		if channel == "" {
@@ -399,10 +439,6 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 
 	channelNorm := NormalizeBridgeChannel(channel)
 
-	// T015：三路入口之一——HTTP 入站在既有处理链之前做归一化投递收口。
-	// 投递器未装配或消息为空时是 no-op，既有入库/AI 链路语义完全不变。
-	h.deliverInbound(ctx0, channelNorm, accountID, conversationID, req.Messages)
-
 	bridgeHTTPIngestError := func(errCode string) {
 		// 标签必须用规范名：成功计数（IngestTotal/IngestDuration）都按 channelNorm 上报，
 		// 错误计数若按原始入参打标，同一个渠道的"抖音网页"会被拆成 douyin_web 与 douyin 两条曲线。
@@ -432,55 +468,39 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		Int("body_size", info.BodySize).
 		Msg("[Bridge HTTP] 收到 ingest 请求（完整 URL + 全部参数 + body 预览）")
 
-	if channel == "" {
+	if bodyBindErr != nil && len(rawBody) > 0 {
 		logger.Ctx(ctx0).Warn().
 			Str("module", "bridge").
-			Str("event", "http_ingest_missing_params").
+			Str("event", "http_ingest_bind_json_failed").
+			Err(bodyBindErr).
 			Str("full_url", info.FullURL).
-			Str("channel", channel).
-			Str("account_id", accountID).
-			Msg("[Bridge HTTP] 参数缺失：channel 为空")
-		bridgeHTTPIngestError("channel_required")
+			Msg("[Bridge HTTP] body JSON 解析失败")
 		c.JSON(http.StatusBadRequest, HTTPIngestResponse{
 			OK:     false,
-			Reason: "channel required",
-		})
-		return
-	}
-	if accountID == "" {
-		logger.Ctx(ctx0).Warn().
-			Str("module", "bridge").
-			Str("event", "http_ingest_missing_params").
-			Str("full_url", info.FullURL).
-			Str("channel", channel).
-			Str("account_id", accountID).
-			Msg("[Bridge HTTP] 参数缺失：account_id 为空（前端必须取到账号才能上报）")
-		bridgeHTTPIngestError("account_id_required")
-		c.JSON(http.StatusBadRequest, HTTPIngestResponse{
-			OK:     false,
-			Reason: "account_id required (extension must capture account from DOM before ingesting)",
-		})
-		return
-	}
-	if !IsBridgeChannel(channel) {
-		logger.Ctx(ctx0).Warn().
-			Str("module", "bridge").
-			Str("event", "http_ingest_unsupported_channel").
-			Str("full_url", info.FullURL).
-			Str("channel", channel).
-			Str("account_id", accountID).
-			Msg("[Bridge HTTP] 渠道不在白名单")
-		bridgeHTTPIngestError("unsupported_channel")
-		c.JSON(http.StatusBadRequest, HTTPIngestResponse{
-			OK:     false,
-			Reason: "unsupported bridge channel",
+			Reason: "invalid json body: " + bodyBindErr.Error(),
 		})
 		return
 	}
 
-	// 租户自证必须排在任何写之前：账号注册（异步 Upsert）与消息落库都打在租户表上，
-	// 判不清归属就放行 = 让 A 的私信落进 B 的收件箱并驱动 B 的 AI 回复。
-	// 渠道用归一后的名字：bridge_accounts 只存规范渠道，别名会被读成"没注册过的账号"。
+	identifyCode := bridgeIdentifyHintFromRequest(c.Request)
+	needsIdentity := channel == "" || accountID == ""
+	if needsIdentity && identifyCode == "" {
+		if channel == "" {
+			bridgeHTTPIngestError("channel_required")
+			c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "channel required"})
+			return
+		}
+		bridgeHTTPIngestError("account_id_required")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "account_id required (or provide X-Channel-Identify-Code)"})
+		return
+	}
+	if channel != "" && !IsBridgeChannel(channel) {
+		bridgeHTTPIngestError("unsupported_channel")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "unsupported bridge channel"})
+		return
+	}
+
+	// 租户自证必须排在任何写之前；缺省 channel/account 仅可由合法 identify_code 补全。
 	reqCtx, terr := bindBridgeTenant(c, channelNorm, accountID)
 	if terr != nil {
 		logger.Ctx(reqCtx).Warn().
@@ -496,39 +516,28 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		return
 	}
 	ctx0 = reqCtx
-
-	// 这里没有逐用户的归属校验：/api/bridge/* 只挂 InitGuard + BridgeIngressGuard，
-	// 不带 JWT 中间件；扩展把实例级桥接凭证同时塞进 X-Bridge-Token 与 Authorization，
-	// 从没有 user_id 可读。那段 "if uid != 0 { 归属校验 }" 因此恒不执行，
-	// 且它按原始渠道名（别名）查账号行、把查无此行当 500。租户归属由上面的
-	// bindBridgeTenant 自证，账号行以 user_id=0 记为租户资产。
-
-	maxBodySize := runtimeIngestMaxBodySize(ctx0)
-	if info.ContentLength > int64(maxBodySize) {
-		logger.Ctx(ctx0).Warn().
-			Str("module", "bridge").
-			Str("event", "http_ingest_body_too_large").
-			Str("full_url", info.FullURL).
-			Int64("content_length", info.ContentLength).
-			Msg("[Bridge HTTP] body 超过上限")
-		c.JSON(http.StatusRequestEntityTooLarge, HTTPIngestResponse{
-			OK:     false,
-			Reason: fmt.Sprintf("body too large (max %d bytes)", maxBodySize),
-		})
+	if ident, ok := BridgeIdentityFromContext(c); ok {
+		if channel == "" {
+			channel = ident.Channel
+		}
+		if accountID == "" {
+			accountID = ident.AccountID
+		}
+		channelNorm = NormalizeBridgeChannel(channel)
+	}
+	if channel == "" {
+		bridgeHTTPIngestError("channel_required")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "channel required"})
 		return
 	}
-
-	if bodyBindErr != nil && info.ContentLength > 0 {
-		logger.Ctx(ctx0).Warn().
-			Str("module", "bridge").
-			Str("event", "http_ingest_bind_json_failed").
-			Err(bodyBindErr).
-			Str("full_url", info.FullURL).
-			Msg("[Bridge HTTP] body JSON 解析失败")
-		c.JSON(http.StatusBadRequest, HTTPIngestResponse{
-			OK:     false,
-			Reason: "invalid json body: " + bodyBindErr.Error(),
-		})
+	if accountID == "" {
+		bridgeHTTPIngestError("account_id_required")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "account_id required (or provide X-Channel-Identify-Code)"})
+		return
+	}
+	if !IsBridgeChannel(channel) {
+		bridgeHTTPIngestError("unsupported_channel")
+		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: "unsupported bridge channel"})
 		return
 	}
 
@@ -538,6 +547,8 @@ func (h *BridgeIngestHandler) HandleHTTPIngest(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, HTTPIngestResponse{OK: false, Reason: err.Error()})
 		return
 	}
+	// T015：只有在结构、身份与 scope 全部通过后才允许进入归一化投递，拒绝路径零写入。
+	h.deliverInbound(ctx0, channelNorm, accountID, conversationID, req.Messages)
 	maxMessages := runtimeIngestMaxMessages(ctx0)
 	if len(req.Messages) > maxMessages {
 		logger.Ctx(ctx0).Warn().
@@ -773,22 +784,9 @@ func isIngestDuplicate(reason string) bool {
 	return channelgw.IsDuplicateReason(reason)
 }
 
-var leadMiningChannels = map[string]bool{
-	"douyin":      true,
-	"tiktok":      true,
-	"kuaishou":    true,
-	"xiaohongshu": true,
-	"xianyu":      true,
-}
-
-// AddLeadMiningChannel 动态扩展支持群聊线索挖掘的 Bridge 渠道（插件使用）。
-//
-//	使用约束：调用方必须先在 channelgw.Default 注册同名 ChannelSpec，
-//	且必须有对应的 Chrome 扩展 content script 与 Bridge 协议对齐，
-//	否则 ingest 会被 IsBridgeChannel 拒绝。
-func AddLeadMiningChannel(channel string) {
-	leadMiningChannels[strings.ToLower(channel)] = true
-}
+// P0-c：Bridge 侧硬编码 leadMiningChannels map 与 AddLeadMiningChannel 已删除，
+// 发掘渠道资格单源自 channelgw.Default 的 MineMode 投影（service.SetLeadMiningChannels）。
+// 新渠道只需在 channelgw.Default 注册带 MineMode 的 ChannelSpec 即自动纳入发掘。
 
 func _bridgeOutboxHubsForLog(hubs []*model.MessageHub) []map[string]any {
 	out := make([]map[string]any, 0, len(hubs))
@@ -822,22 +820,40 @@ func _bridgeOutboxHubsForLog(hubs []*model.MessageHub) []map[string]any {
 func (h *BridgeIngestHandler) GetBridgeOutbox(c *gin.Context) {
 	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
+	start := time.Now()
+	bm := metrics.GetBridge()
+	bridgeOutboxError := func(errCode string) {
+		bm.IngestErrors.WithLabel(channel, errCode).Inc()
+	}
+	identifyCode := bridgeIdentifyHintFromRequest(c.Request)
+	if (channel == "" || accountID == "") && identifyCode == "" {
+		if channel == "" {
+			bridgeOutboxError("channel_required")
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "channel required"})
+			return
+		}
+		bridgeOutboxError("account_id_required")
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "account_id required (or provide X-Channel-Identify-Code)"})
+		return
+	}
+	if channel != "" && !IsBridgeChannel(channel) {
+		bridgeOutboxError("unsupported_channel")
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unsupported bridge channel"})
+		return
+	}
 	ctx, terr := bindBridgeTenant(c, channel, accountID)
 	if terr != nil {
-		bridgeOutboxError := func(errCode string) { metrics.GetBridge().IngestErrors.WithLabel(channel, errCode).Inc() }
 		bridgeOutboxError("tenant_unresolved")
 		writeBridgeTenantError(c, terr)
 		return
 	}
 	if ident, ok := BridgeIdentityFromContext(c); ok {
-		if channel == "" { channel = ident.Channel }
-		if accountID == "" { accountID = ident.AccountID }
-	}
-	start := time.Now()
-	bm := metrics.GetBridge()
-
-	bridgeOutboxError := func(errCode string) {
-		bm.IngestErrors.WithLabel(channel, errCode).Inc()
+		if channel == "" {
+			channel = ident.Channel
+		}
+		if accountID == "" {
+			accountID = ident.AccountID
+		}
 	}
 	if accountID == "" {
 		bridgeOutboxError("account_id_required")
@@ -938,8 +954,12 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 	channel := NormalizeBridgeChannel(c.Query("channel"))
 	accountID := c.Query("account_id")
 	if ident, ok := BridgeIdentityFromContext(c); ok {
-		if channel == "" { channel = ident.Channel }
-		if accountID == "" { accountID = ident.AccountID }
+		if channel == "" {
+			channel = ident.Channel
+		}
+		if accountID == "" {
+			accountID = ident.AccountID
+		}
 	}
 	start := time.Now()
 	bm := metrics.GetBridge()
@@ -947,8 +967,12 @@ func (h *BridgeIngestHandler) AckBridgeOutbox(c *gin.Context) {
 		// bind to resolve identity_code
 		if _, terr := bindBridgeTenant(c, channel, accountID); terr == nil {
 			if ident, ok := BridgeIdentityFromContext(c); ok {
-				if channel == "" { channel = ident.Channel }
-				if accountID == "" { accountID = ident.AccountID }
+				if channel == "" {
+					channel = ident.Channel
+				}
+				if accountID == "" {
+					accountID = ident.AccountID
+				}
 			}
 		}
 	}
@@ -1182,17 +1206,16 @@ func boolToInt(b bool) int {
 var _ = url.Values{}
 var _ = bytes.NewBuffer
 
-
 // =================== 统一渠道网关（路由1：identify_code 唯一凭证） ===================
 
 type UnifiedChannelGatewayRequest struct {
-	Action       string                  `json:"action"` // report|ack|heartbeat
-	SchemaVersion string                 `json:"schema_version"`
-	Channel      string                  `json:"channel"`
-	AccountID    string                  `json:"account_id"`
-	ConversationID string                `json:"conversation_id"`
-	Messages     []UnifiedGatewayMessage `json:"messages"`
-	Items        []map[string]any        `json:"items"`
+	Action         string                  `json:"action"` // report|ack|heartbeat
+	SchemaVersion  string                  `json:"schema_version"`
+	Channel        string                  `json:"channel"`
+	AccountID      string                  `json:"account_id"`
+	ConversationID string                  `json:"conversation_id"`
+	Messages       []UnifiedGatewayMessage `json:"messages"`
+	Items          []map[string]any        `json:"items"`
 }
 
 type UnifiedGatewayMessage struct {
@@ -1239,21 +1262,25 @@ func (h *BridgeIngestHandler) HandleGateway(c *gin.Context) {
 		channel := NormalizeBridgeChannel(req.Channel)
 		accountID := strings.TrimSpace(req.AccountID)
 		if ident != nil {
-			if channel == "" { channel = ident.Channel }
-			if accountID == "" { accountID = ident.AccountID }
+			if channel == "" {
+				channel = ident.Channel
+			}
+			if accountID == "" {
+				accountID = ident.AccountID
+			}
 		}
 		if channel != "" && accountID != "" {
 			if _, err := bindBridgeTenant(c, channel, accountID); err == nil {
 				touchBridgeAccountOnline(c.Request.Context(), channel, accountID)
 			}
 		}
-		c.JSON(http.StatusOK, gin.H{"schema_version":"hivemtk.channel.v1","status":"ok","action":"heartbeat"})
+		c.JSON(http.StatusOK, gin.H{"schema_version": "hivemtk.channel.v1", "status": "ok", "action": "heartbeat"})
 		return
 	case "report":
 		h.handleGatewayReport(c, &req)
 		return
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"schema_version":"hivemtk.channel.v1","status":"error","message":"unsupported action"})
+		c.JSON(http.StatusBadRequest, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "unsupported action"})
 	}
 }
 
@@ -1291,7 +1318,9 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 		ing := HTTPIngestRequest{Channel: channel, AccountID: accountID, ConversationID: strings.TrimSpace(req.ConversationID)}
 		for _, m := range req.Messages {
 			conv := m.ConversationID
-			if conv == "" { conv = ing.ConversationID }
+			if conv == "" {
+				conv = ing.ConversationID
+			}
 			ing.Messages = append(ing.Messages, &HTTPIngestMessage{
 				EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderType: m.SenderType,
 				Content: m.Content, MsgType: m.MsgType, MediaURL: m.MediaURL, ConversationID: conv,
@@ -1307,7 +1336,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 	}
 
 	if h.ingress == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"schema_version":"hivemtk.channel.v1","status":"error","message":"ingress unavailable"})
+		c.JSON(http.StatusInternalServerError, gin.H{"schema_version": "hivemtk.channel.v1", "status": "error", "message": "ingress unavailable"})
 		return
 	}
 	tenantID, _ := tenant.FromContext(c.Request.Context())
@@ -1321,7 +1350,7 @@ func (h *BridgeIngestHandler) handleGatewayReport(c *gin.Context, req *UnifiedCh
 		}
 		acks = append(acks, map[string]any{"event_id": ev.EventID, "status": "accepted"})
 	}
-	c.JSON(http.StatusOK, gin.H{"schema_version":"hivemtk.channel.v1","status":"ok","acks":acks})
+	c.JSON(http.StatusOK, gin.H{"schema_version": "hivemtk.channel.v1", "status": "ok", "acks": acks})
 }
 
 func (h *BridgeIngestHandler) handleGatewayBridgeIngest(c *gin.Context, channel, accountID string, req *UnifiedChannelGatewayRequest) {
@@ -1329,7 +1358,9 @@ func (h *BridgeIngestHandler) handleGatewayBridgeIngest(c *gin.Context, channel,
 	ing := HTTPIngestRequest{Channel: channel, AccountID: accountID, ConversationID: strings.TrimSpace(req.ConversationID)}
 	for _, m := range req.Messages {
 		conv := m.ConversationID
-		if conv == "" { conv = ing.ConversationID }
+		if conv == "" {
+			conv = ing.ConversationID
+		}
 		ing.Messages = append(ing.Messages, &HTTPIngestMessage{
 			EventID: m.EventID, SenderID: m.SenderID, SenderName: m.SenderName, SenderType: m.SenderType,
 			Content: m.Content, MsgType: m.MsgType, MediaURL: m.MediaURL, ConversationID: conv,
@@ -1343,19 +1374,33 @@ func (h *BridgeIngestHandler) handleGatewayBridgeIngest(c *gin.Context, channel,
 
 func gatewayMessageToEvent(channel, accountID string, tenantID uint, m UnifiedGatewayMessage) *model.MessageEvent {
 	eventID := strings.TrimSpace(m.EventID)
-	if eventID == "" { eventID = uuid.NewString() }
+	if eventID == "" {
+		eventID = uuid.NewString()
+	}
 	ts := m.Timestamp
-	if ts == 0 { ts = time.Now().UnixMilli() }
+	if ts == 0 {
+		ts = time.Now().UnixMilli()
+	}
 	msgType := strings.TrimSpace(m.MsgType)
-	if msgType == "" { msgType = "text" }
+	if msgType == "" {
+		msgType = "text"
+	}
 	senderType := strings.TrimSpace(m.SenderType)
-	if senderType == "" { senderType = "customer" }
+	if senderType == "" {
+		senderType = "customer"
+	}
 	conv := strings.TrimSpace(m.ConversationID)
-	if conv == "" { conv = strings.TrimSpace(m.SenderID) }
+	if conv == "" {
+		conv = strings.TrimSpace(m.SenderID)
+	}
 	extra := map[string]any{"account_id": accountID}
-	for k, v := range m.Extra { extra[k] = v }
+	for k, v := range m.Extra {
+		extra[k] = v
+	}
 	receiver := m.ReceiverID
-	if receiver == "" { receiver = accountID }
+	if receiver == "" {
+		receiver = accountID
+	}
 	return &model.MessageEvent{
 		EventID: eventID, Channel: channel, SenderID: m.SenderID, SenderName: m.SenderName,
 		SenderType: senderType, ReceiverID: receiver, MsgType: msgType, Content: m.Content,

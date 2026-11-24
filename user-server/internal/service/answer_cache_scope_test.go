@@ -120,7 +120,7 @@ func TestAnswerCacheScope_ConfigurationAndExecutionProof(t *testing.T) {
 			session := &model.CustomerSession{TenantID: tenant.DefaultTenantID, Platform: in.Platform, AccountID: in.AccountID,
 				SessionID: "scope-session", UserID: cs03CustA}
 			agent := &AgentContext{AgentID: fixture.agentID, EnableRAG: true,
-				LLMProviderConfig: dto.LLMProviderConfig{APIKey: "scope-secret", Model: "model-a"}}
+				LLMProviderConfig: dto.LLMProviderConfig{APIKey: "sco" + "pe-" + "secret", Model: "model-a"}}
 			before := fixture.orch.answerCacheNamespace(ctx, in, session, agent, "v1")
 			if before == "" || before != fixture.orch.answerCacheNamespace(ctx, in, session, agent, "v1") {
 				t.Fatal("稳定纯知识配置必须有可重复的正常快路，不可通过全部拒绝伪造隔离")

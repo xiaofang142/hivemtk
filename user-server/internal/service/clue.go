@@ -99,6 +99,25 @@ func (s *ClueService) GetClueStatistics(ctx context.Context) ([]map[string]any, 
 	return s.repo.GetClueStatistics(ctx)
 }
 
+// GetClueStatisticsWithRange 按时间窗返回线索统计。
+// start/end 为 unix 秒，0 表示不设边界；start>end 属参数错误，由 Controller 映射为 400。
+// 返回六维聚合 + truncated=false（服务端全量聚合，不再依赖前端列表截断）。
+func (s *ClueService) GetClueStatisticsWithRange(ctx context.Context, start, end int64) (map[string]any, error) {
+	stats, err := s.repo.GetLeadMiningStatsWithRange(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	if stats == nil {
+		stats = map[string]any{
+			"total": 0, "truncated": false,
+			"by_type": []map[string]any{}, "by_lead_role": []map[string]any{},
+			"by_status": []map[string]any{}, "by_channel": []map[string]any{},
+			"by_conversation": []map[string]any{},
+		}
+	}
+	return stats, nil
+}
+
 func (s *ClueService) GetLeadMiningStats(ctx context.Context) (map[string]any, error) {
 	return s.repo.GetLeadMiningStats(ctx)
 }

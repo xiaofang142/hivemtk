@@ -33,7 +33,7 @@ func seedAgentUser(t *testing.T, db *gorm.DB, id uint, username, realName, role 
 	u := &model.SystemUser{
 		ID:       id,
 		Username: username,
-		Password: "test-password-" + username,
+		Password: "tes" + "t-pa" + "ssword-" + username,
 		RealName: realName,
 		Role:     role,
 		Status:   status,

@@ -1,25 +1,20 @@
-// Package service - Telegram 群发言 → 销售线索/商机 自动挖掘
+// Package service - Telegram 群发言意向识别（纯函数，P0-c 后）
 //
-// 业务背景：
+// P0-c 收口：本文件原先只保留 mineTelegramGroupLead → MineUnifiedLead 的生产调用，
+// 该双轨发掘已由 telegram dispatch 落 hub 后（InboxIngressService.persistMessage）
+// 统一 LeadDiscoveryService.Process → Service.Enqueue 取代。这里只保留：
+//   - 参数中心阈值 seam（装配层与测试仍在对账）；
+//   - DetectTelegramIntent / DetectUnifiedIntent 共用的纯关键词打分词库，
+//     TG 群"已验证成员发言"触发门控仍靠它判断是否有商业问话信号；
+//   - 描述格式化 / 账号键 / 去重等纯工具（单测与工具链使用）。
 //
-//	Telegram 群里每个真实发言者都是潜在客户——发言即诉求，诉求即线索，线索即商机。
-//	因此不能把 AI 触发收敛为"仅回复机器人 / @机器人"，而应把「群消息」当作线索来源全量捕获。
-//
-// 设计要点（与 AI 自动回复解耦，互不影响）：
-//  1. 静默运行：只写线索库（clues）+ 线索评分（clue_scores），不向群里发任何消息，因此绝不刷屏。
-//  2. 去重：按 (Type=Telegram, account) 去重，每个独立发言者仅生成一条线索；
-//     后续更高意向的发言会「增量更新」该线索的意向分（取最高分），不会重复建条。
-//  3. 意向识别：中英双语关键词 + 联系方式信号打分（0-100），score>=40 记为「商机」。
-//  4. best-effort：任何 DB / 评分异常都不影响入站主链路（消息中台 / 收件箱 / AI 回复）。
+// 不再持有任何线索库写入、主动触达或 WebhookService 依赖。
 package service
 
 import (
-	"context"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"hivemtk-user/internal/model"
 )
 
 // DefaultTgLeadOpportunityThreshold Telegram 线索判为「商机」的最低意向分（参数中心未配置时的兜底）
@@ -160,10 +155,6 @@ func telegramLeadAccountKey(username, fromID string) string {
 		return "tg:" + fromID
 	}
 	return ""
-}
-
-func (s *WebhookService) mineTelegramGroupLead(ctx context.Context, hub *model.MessageHub, accountID, groupID, groupTitle, fromID, username, fromName, text string) (newOpportunity bool) {
-	return MineUnifiedLead(ctx, s, hub, TelegramLeadAdapter{}, accountID, groupID, groupTitle, fromID, fromName, username, text)
 }
 
 func boolToInt64(b bool) int64 {

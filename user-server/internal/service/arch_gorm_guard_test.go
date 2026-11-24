@@ -30,7 +30,8 @@ import (
 // 现在分两档，各自"只许降"：
 //   - 句柄档（handle）：字段/形参里出现的 `*gorm.DB` —— §3.2 明令阻断的东西；
 //   - 事务档（txCallback）：`func(tx *gorm.DB) error` 这种事务回调 —— 架构允许，
-//     但**只许出现在 `X.Transaction(...)` 的实参位置**
+//     但**只许出现在 `X.Transaction(...)` / `X.Connection(...)` /
+//     `X.WithTransaction(...)` 的实参位置**
 //     （见 TestTxCallbacksAreInTransactionPosition；该测试 2026-11-07 AV-03 才
 //     真正落地——此前注释就引用了它，但源码里只有度量夹具，属于"把不存在的
 //     测试算现覆盖"，本轮订正）。
@@ -52,9 +53,9 @@ import (
 // 2) gorm.DB 判定改为**别名感知**：按 import 路径（gorm.io/gorm）解析本文件
 //    本地名，`orm "gorm.io/gorm"` 别名、点导入都能抓（旧版只认字面 `gorm.DB`
 //    拼写，别名一换就漏）。
-// 3) 事务档位置收紧：只有 `.Transaction(...)` / `.Connection(...)` **实参位置**
-//    的函数字面量才算事务档（这是 gorm 把句柄递进回调的两个接缝；仓储自带的
-//    Transaction/Connection 同形接缝一体适用，"合法事务例外不一律禁掉"）。
+// 3) 事务档位置收紧：只有 `.Transaction(...)` / `.Connection(...)` /
+//    `.WithTransaction(...)` **实参位置**的函数字面量才算事务档（GORM 的两个
+//    接缝，以及仓储自带的事务接缝一体适用；"合法事务例外不一律禁掉"）。
 //    回调之外的 *gorm.DB——局部 var、非事务位置的函数字面量、返回值——一律
 //    句柄档。旧度量把函数体内**任何** *gorm.DB 都记事务档，会让回调外的句柄
 //    冒充事务例外（实测样本：ops/service/dashboard_screen.go 的 scope 闭包）。
@@ -283,8 +284,8 @@ func gormGuardScanFile(path string) (gormGuardStat, []gormGuardFinding, error) {
 		return false
 	}
 
-	// 事务例外位置（预扫）：.Transaction(...) / .Connection(...) 实参位置的
-	// 函数字面量。这是 gorm 把句柄递进回调的接缝；仓储自带的同形接缝一体适用。
+	// 事务例外位置（预扫）：.Transaction(...) / .Connection(...) /
+	// .WithTransaction(...) 实参位置的函数字面量。这是 GORM/仓储把句柄递进回调的接缝。
 	sanctioned := map[*ast.FuncLit]bool{}
 	ast.Inspect(f, func(n ast.Node) bool {
 		ce, ok := n.(*ast.CallExpr)
@@ -295,7 +296,9 @@ func gormGuardScanFile(path string) (gormGuardStat, []gormGuardFinding, error) {
 		if !ok {
 			return true
 		}
-		if se.Sel.Name != "Transaction" && se.Sel.Name != "Connection" {
+		switch se.Sel.Name {
+		case "Transaction", "Connection", "WithTransaction":
+		default:
 			return true
 		}
 		for _, arg := range ce.Args {
@@ -396,7 +399,7 @@ func gormGuardScanFile(path string) (gormGuardStat, []gormGuardFinding, error) {
 						if here {
 							stat.tx += tx
 							if tx > 0 {
-								add("gorm_tx_callback", p.Pos(), "Transaction/Connection 实参位置的回调形参（事务档）")
+								add("gorm_tx_callback", p.Pos(), "Transaction/Connection/WithTransaction 实参位置的回调形参（事务档）")
 							}
 						} else {
 							stat.handles += h + tx
@@ -587,6 +590,11 @@ var gormGuardRatchet = map[string]gormGuardStat{
 	// db 字段/构造器 getdb/NewCustomReportServiceWithDB 形参改仓储注入构造
 	// NewCustomReportServiceWithRepos（四处装配/测试点同步）。回归见
 	// ops/service/custom_report_sink_test.go 与 ops/repository/custom_report_agg_test.go。
+	// I-02（2026-11-25）：ab_experiment 的两处回调直接传给仓储 WithTransaction，
+	// 是实验主记录+变体原子提交的合法事务接缝；只登记事务档，句柄/GetDB 仍为 0。
+	// 扫描器按精确方法名 WithTransaction 识别，回归见
+	// TestTxCallbacksAreInTransactionPosition 的第四个正例。
+	"user-server/internal/ops/service/ab_experiment.go": {tx: 2},
 	// ---- 根域 internal/service（0 句柄 / 1 事务 / 0 GetDB）----
 	// AV-04c 批次4（2026-11-07）：auth.go getdb 1 清零除名（开户赠送改
 	// NewStarterKitRepositoryDefault，repository/starter_kit.go）；feedback_loop/
@@ -874,11 +882,11 @@ type S2 struct {
 //
 // 旧版注释自 2026-10-24 起就引用本测试，但源码里从来没有它——只有度量夹具。
 // 本测试 2026-11-07（AV-03）补上：事务档只认 `.Transaction(...)` /
-// `.Connection(...)` 实参位置的函数字面量；同一形状出现在任何其他位置
-// （赋值、传给非事务方法、goroutine、返回值）都落句柄档——既不把合法事务
+// `.Connection(...)` / `.WithTransaction(...)` 实参位置的函数字面量；同一形状
+// 出现在任何其他位置（赋值、传给非事务方法、goroutine、返回值）都落句柄档——既不把合法事务
 // 例外一律禁掉，也不让回调之外的句柄冒充例外。
 func TestTxCallbacksAreInTransactionPosition(t *testing.T) {
-	// 正例：三种合法接缝位置（含仓储自带的同形 Transaction 接缝），全部落事务档，
+	// 正例：四种合法接缝位置（含仓储自带的 Transaction/WithTransaction 接缝），全部落事务档，
 	// 且**不许**溢出到句柄档。
 	posDir := t.TempDir()
 	posSrc := `package service
@@ -886,20 +894,21 @@ func TestTxCallbacksAreInTransactionPosition(t *testing.T) {
 import "gorm.io/gorm"
 
 func good() {
-	_ = dbHolder.Transaction(func(tx *gorm.DB) error { return nil })      // 事务档：Transaction 实参
-	_ = dbHolder.Connection(func(conn *gorm.DB) error { return nil })     // 事务档：Connection 实参
-	_ = repoSeam.Transaction(ctx, func(tx *gorm.DB) error { return nil }) // 事务档：仓储同形接缝
+	_ = dbHolder.Transaction(func(tx *gorm.DB) error { return nil })       // 事务档：Transaction 实参
+	_ = dbHolder.Connection(func(conn *gorm.DB) error { return nil })      // 事务档：Connection 实参
+	_ = repoSeam.Transaction(ctx, func(tx *gorm.DB) error { return nil })  // 事务档：仓储同形 Transaction 接缝
+	_ = repoSeam.WithTransaction(ctx, func(tx *gorm.DB) error { return nil }) // 事务档：仓储 WithTransaction 接缝
 }
 `
 	if err := os.WriteFile(filepath.Join(posDir, "fixture_pos.go"), []byte(posSrc), 0o644); err != nil {
 		t.Fatalf("写正例夹具失败: %v", err)
 	}
 	h, tx, getdb, _ := scanTreeForTest(t, posDir)
-	if tx != 3 || h != 0 || getdb != 0 {
-		t.Errorf("正例位置读数 = 句柄 %d / 事务 %d / GetDB %d，期望 0/3/0（合法事务例外不许被禁掉，也不许溢出成句柄）", h, tx, getdb)
+	if tx != 4 || h != 0 || getdb != 0 {
+		t.Errorf("正例位置读数 = 句柄 %d / 事务 %d / GetDB %d，期望 0/4/0（合法事务例外不许被禁掉，也不许溢出成句柄）", h, tx, getdb)
 	}
 
-	// 反例：同样形状离开 Transaction/Connection 实参位置，一律句柄档、事务档必须为 0。
+	// 反例：同样形状离开 Transaction/Connection/WithTransaction 实参位置，一律句柄档、事务档必须为 0。
 	negDir := t.TempDir()
 	negSrc := `package service
 

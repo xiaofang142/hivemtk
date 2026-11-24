@@ -8,7 +8,7 @@
 
 | # | 契约 | 自检方式 |
 |---|---|---|
-| A1 | 先用向上查找法定位应用根目录，确认 `deploy/deploy-api.sh` 存在（从外层仓启动时向上找不到，走 `git rev-parse --show-toplevel` + `/hivemtk` 兜底，见 `AGENTS.md` §0） | `APP=$PWD; while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done; [ -f "$APP/deploy/deploy-api.sh" ] \|\| { T=$(git rev-parse --show-toplevel 2>/dev/null); [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"; }` |
+| A1 | 先用向上查找法定位应用根目录，确认 `deploy/deploy-api.sh` 存在。工作区根是普通目录；从工作区根启动时先进入平级产品仓 `hivemtk-user/`，不再使用 git/show-toplevel 或旧内层目录兜底（见 `AGENTS.md` §0） | `APP=$PWD; while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done; [ -f "$APP/deploy/deploy-api.sh" ] \|\| { echo "未找到主代码目录；若从工作区根启动，请先 cd hivemtk-user"; exit 1; }` |
 | A2 | 读 `git status --short`，识别并行会话未提交文件，**只 stage 自己本轮改的文件** | 提交前 `git status --short` 复核 |
 | A3 | 涉及浏览器/页面验证先加载 skill `browser-debug-rule`，主方案 ego-browser | `ego-browser skill` 能输出完整指南 |
 

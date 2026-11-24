@@ -14,6 +14,14 @@ export const clueApi = {
   statistics: () => {
     return http.get(`/api/clues/statistics`)
   },
+  // 区间统计：服务端按 create_time 聚合角色/状态/渠道/单群聊六维，
+  // 替代前端拉列表自行聚合时的 10000 行静默截断。
+  statisticsRange: (start, end) => {
+    const q = new URLSearchParams()
+    if (start) q.set('start', String(start))
+    if (end) q.set('end', String(end))
+    return http.get(`/api/clues/statistics/range?${q}`)
+  },
   import: (data) => {
     return http.post(`/api/clues/import`,data)
   },

@@ -91,6 +91,7 @@ func TestBridgeOutboxChannels_EmptyInjectionIgnored(t *testing.T) {
 func TestSendOutbound_Bridge_UnknownChannelRejected(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
@@ -136,6 +137,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 	useLegacyBridgeFixture(t)
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
@@ -144,7 +146,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 
 	content := "好的，稍等，我核对一下库存再回复您。"
 	for _, ch := range BridgeOutboxChannels() {
-		account := "acct-b5-" + ch
+		account := seedCanonicalBridgeOutboundAccount(t, db, 1, ch, "b5-sender-"+ch)
 		conv := "conv-b5-" + ch
 		sender := "cust-b5-" + ch
 		hub := &model.MessageHub{
@@ -165,7 +167,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 		releaseReplyClaimForTest(t, eventID)
 		p := &ParsedPayload{EventID: eventID, Sender: sender, Content: "有推荐吗", ChatID: conv}
 
-		ctx := tenant.WithTenantID(context.Background(), hub.TenantID)
+		ctx := customEditionContext(tenant.WithTenantID(context.Background(), hub.TenantID))
 		if _, known := capregistry.FindCellDefinition(ch, "CN", "message.text.send", capregistry.ModeBridge); !known {
 			ctx = capregistry.WithSubmissionBinding(ctx, capregistry.SubmissionBinding{
 				Source: capregistry.SubmissionSourceBridge, Platform: ch, ResourceID: account,
@@ -179,7 +181,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 			}
 			continue
 		}
-		ctx = localBridgeSubmitContext(t, ctx, ch, account, "text")
+		ctx = localBridgeSubmitContextCustomEdition(t, ctx, ch, account, "text")
 		if _, err := svc.sendOutbound(ctx, WebhookChannel(ch), account, p, content, hub, nil); err != nil {
 			t.Fatalf("[%s] 正常出库不应报错: %v", ch, err)
 		}
@@ -226,6 +228,7 @@ func TestSendOutbound_Bridge_SenderIDEqualsAccountID_NineChannels(t *testing.T) 
 func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
@@ -234,10 +237,10 @@ func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 
 	const (
 		channel = ChannelDouyin
-		account = "acct-b5-replay"
 		conv    = "conv-b5-replay"
 		sender  = "cust-b5-replay"
 	)
+	account := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "b5-replay")
 	hub := &model.MessageHub{
 		MsgID:          "mh:in-b5-replay",
 		Platform:       "douyin",
@@ -257,7 +260,7 @@ func TestSendOutbound_Bridge_ReplayKeepsSender(t *testing.T) {
 	releaseReplyClaimForTest(t, "evt-b5-replay-first")
 	first := &ParsedPayload{EventID: "evt-b5-replay-first", Sender: sender, Content: "在吗", ChatID: conv}
 	useLegacyBridgeFixture(t)
-	ctx := localBridgeSubmitContext(t, context.Background(), string(channel), account, "text")
+	ctx := localBridgeSubmitContextCustomEdition(t, context.Background(), string(channel), account, "text")
 	if sent, err := svc.sendOutbound(ctx, channel, account, first, "首发回复", hub, nil); err != nil || !sent {
 		t.Fatalf("首发应成功: sent=%v err=%v", sent, err)
 	}
@@ -299,6 +302,7 @@ func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	setupBridgeWhitelistForTest(t, "douyin")
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
@@ -315,7 +319,7 @@ func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
 		t.Fatal("对照失效：StripMarkdownForDM 对该样例无变化，本用例无法区分 R5 前后行为，请补样例")
 	}
 
-	const account = "acct-b5-md"
+	account := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "b5-md")
 
 	// AI 路径：sendOutbound 桥接分支（douyin）
 	const convAI = "conv-b5-md-ai"
@@ -336,7 +340,7 @@ func TestSendOutbound_Bridge_MarkdownAlignedWithManualPath(t *testing.T) {
 	releaseReplyClaimForTest(t, "evt-b5-md-ai")
 	p := &ParsedPayload{EventID: "evt-b5-md-ai", Sender: hub.SenderID, Content: "有什么优惠", ChatID: convAI}
 	useLegacyBridgeFixture(t)
-	ctx := localBridgeSubmitContext(t, context.Background(), "douyin", account, "text")
+	ctx := localBridgeSubmitContextCustomEdition(t, context.Background(), "douyin", account, "text")
 	if sent, err := svc.sendOutbound(ctx, ChannelDouyin, account, p, md, hub, nil); err != nil || !sent {
 		t.Fatalf("AI 路径出库应成功: sent=%v err=%v", sent, err)
 	}

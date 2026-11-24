@@ -154,6 +154,7 @@ func (c *CRMController) DedupeScan(ctx *gin.Context) {
 	_ = ctx.ShouldBindJSON(&in)
 	rows, err := c.dedupe.FindDuplicates(ctx.Request.Context(), service.DedupeScanOptions{
 		MaxCustomers: in.MaxCustomers, NameThreshold: in.NameThreshold, SameAccountOnly: in.SameAccountOnly,
+		Scope: c.scope(ctx),
 	})
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "去重扫描失败")
@@ -177,7 +178,7 @@ func (c *CRMController) Merge(ctx *gin.Context) {
 		username, _ := ctx.Get("username")
 		operator, _ = username.(string)
 	}
-	row, err := c.dedupe.Merge(ctx.Request.Context(), in.PrimaryID, in.SecondaryID, operator, in.Reason, in.Source)
+	row, err := c.dedupe.Merge(ctx.Request.Context(), c.scope(ctx), in.PrimaryID, in.SecondaryID, operator, in.Reason, in.Source)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "合并客户失败")
 		return
@@ -195,7 +196,7 @@ func (c *CRMController) MergeAudit(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "customer_id 不能为空")
 		return
 	}
-	rows, err := c.dedupe.ListMergeAudit(ctx.Request.Context(), id)
+	rows, err := c.dedupe.ListMergeAudit(ctx.Request.Context(), c.scope(ctx), id)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "查询合并审计失败")
 		return

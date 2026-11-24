@@ -108,7 +108,9 @@ func (s *WebhookService) dispatchWhatsApp(ctx context.Context, accountID string,
 					s.persistWhatsAppMediaAsync(ctx, accountID, msg.ID, mediaID, mediaFilename)
 				}
 
-				MineUnifiedLead(ctx, s, hub, WhatsAppLeadAdapter{}, accountID, "", "", msg.From, name, "", content)
+				// P0-c：本渠道的 hub 落库由上方 waPayload.Ingress → InboxIngressService
+				// 统一出口完成，发掘由 persistMessage 内的 LeadDiscoveryService 触发。
+				// 本处不再 Enqueue（否则同一条 wamid 会被 worker 判两次）。
 
 				if firstHub == nil {
 					firstHub = hub

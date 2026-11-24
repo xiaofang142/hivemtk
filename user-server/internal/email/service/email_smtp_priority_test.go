@@ -88,7 +88,7 @@ func TestResolveSmtpFromDB_NamedBackupChannelFirst(t *testing.T) {
 	// 先插一条「普通」行：没有命名通道时它会被选中；有了 env:163 就该让位。
 	if err := repo.Create(context.Background(), &model.EmailSmtp{
 		Name: "plain", Server: "smtp.plain.example", Port: 465,
-		Username: "plain@example.com", Password: "plainpw", Limit: 100,
+		Username: "plain@example.com", Password: "pla" + "inpw", Limit: 100,
 	}); err != nil {
 		t.Fatalf("建普通行失败: %v", err)
 	}

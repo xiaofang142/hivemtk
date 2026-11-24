@@ -20,6 +20,7 @@ func newBridgeSentTestService(t *testing.T) (*WebhookService, context.Context) {
 	// 免打扰窗口会把出站改判为「次日首发」直接 return，与 sent 口径无关，显式关掉。
 	t.Cleanup(DisableAIQuietHoursForTest(true)) // 024 B1 收口勘误：helper 内 defer 会提前复位，挂到测试级 cleanup // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
@@ -101,9 +102,10 @@ func TestSendOutbound_Bridge_PersistFailureIsNotSent(t *testing.T) {
 	// （入站行只在内存里造，避免先撞同一个长度限制）；
 	// delayed_outbound_reply.conversation_id 是 varchar(128)，重试记录写得下。
 	longConv := "conv-d02-overflow-" + strings.Repeat("x", 110)
-	hub := bridgeInboundHub("douyin", "acct-d02-overflow", longConv, "cust-d02-overflow")
+	accountID := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "d02-overflow")
+	hub := bridgeInboundHub("douyin", accountID, longConv, "cust-d02-overflow")
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, "evt-d02-overflow")
 	p := &ParsedPayload{EventID: "evt-d02-overflow", Sender: hub.SenderID, Content: "在吗", ChatID: hub.ConversationID}
 
@@ -132,9 +134,10 @@ func TestSendOutbound_Bridge_QueuedIsSent(t *testing.T) {
 	defer svc.Stop(ctx)
 
 	db := svc.eventRepo.GetDB()
-	hub := bridgeInboundHub("douyin", "acct-d02-ok", "conv-d02-ok", "cust-d02-ok")
+	accountID := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "d02-ok")
+	hub := bridgeInboundHub("douyin", accountID, "conv-d02-ok", "cust-d02-ok")
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}

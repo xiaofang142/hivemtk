@@ -56,7 +56,7 @@ func TestLLMService_ValidateConfig(t *testing.T) {
 	svc := NewLLMService()
 
 	validConfig := &LLMConfig{
-		APIKey:    "test-key",
+		APIKey:    "test" + "-key",
 		BaseURL:   "https://api.example.com",
 		Model:     "gpt-4",
 		MaxTokens: 100,

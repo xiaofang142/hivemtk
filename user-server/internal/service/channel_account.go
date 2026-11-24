@@ -63,6 +63,9 @@ func toAccountDetail(acc *model.ChannelAccount) dto.ChannelAccountDetail {
 // ListOptions 是所有内部渠道账号选择（下拉、配置页、规则作用域选择、通知人配置等）
 // 的唯一入口（FR-029）——任何调用方不得自己拼 repository 选项或直查表。
 type ChannelAccountService interface {
+	// ListAccounts 是内部调用（解析器/分发/租户绑定）的统一账号选择口，
+	// 保留仓储选项的完整语义（含非启用账号），返回 model 行。
+	ListAccounts(ctx context.Context, opts repository.ChannelAccountListOptions) ([]model.ChannelAccount, error)
 	ListOptions(ctx context.Context, tenantID uint, q dto.ChannelAccountListQuery) ([]dto.ChannelAccountOption, error)
 	Get(ctx context.Context, tenantID, id uint) (*dto.ChannelAccountOption, error)
 	// GetDetail 返回全字段（含备注/负责人/数据授权），管理面编辑回填用。
@@ -100,11 +103,23 @@ func toAccountOption(acc *model.ChannelAccount) dto.ChannelAccountOption {
 	}
 }
 
-// ListOptions 统一下拉：默认只返回启用中的账号，避免停用的账号被继续选中。
-func (s *channelAccountService) ListOptions(ctx context.Context, tenantID uint, q dto.ChannelAccountListQuery) ([]dto.ChannelAccountOption, error) {
-	if s == nil || s.repo == nil || !s.repo.Available() {
+// ListAccounts 内部统一账号选择口：所有仓库级账号列表必须经此方法，
+// 避免各调用方自行拼选项造成口径漂移（FR-029/SC-006）。
+func (s *channelAccountService) ListAccounts(ctx context.Context, opts repository.ChannelAccountListOptions) ([]model.ChannelAccount, error) {
+	return listChannelAccounts(ctx, s.repo, opts)
+}
+
+// listChannelAccounts 是仓库级账号查询的唯一实现：解析器/分发/租户绑定/服务层
+// 都必须经此函数，避免各自拼 ChannelAccountListOptions 造成口径漂移。
+func listChannelAccounts(ctx context.Context, repo repository.ChannelAccountRepository, opts repository.ChannelAccountListOptions) ([]model.ChannelAccount, error) {
+	if repo == nil || !repo.Available() {
 		return nil, repository.ErrChannelStoreUnavailable
 	}
+	return repo.List(ctx, opts)
+}
+
+// ListOptions 统一下拉：默认只返回启用中的账号，避免停用的账号被继续选中。
+func (s *channelAccountService) ListOptions(ctx context.Context, tenantID uint, q dto.ChannelAccountListQuery) ([]dto.ChannelAccountOption, error) {
 	if tenantID == 0 {
 		return nil, ErrChannelAccountInvalid
 	}
@@ -113,7 +128,7 @@ func (s *channelAccountService) ListOptions(ctx context.Context, tenantID uint, 
 		on := 1
 		status = &on
 	}
-	rows, err := s.repo.List(ctx, repository.ChannelAccountListOptions{
+	rows, err := s.ListAccounts(ctx, repository.ChannelAccountListOptions{
 		TenantID:  tenantID,
 		ChannelID: q.ChannelID,
 		Status:    status,

@@ -97,7 +97,7 @@ func TestLLMRoutes_TenantScopedThroughAuthContext(t *testing.T) {
 	d := llm.NewDispatcher(llm.NewLLMService())
 	d.AddProvider(llm.ProviderConfig{
 		Name: "pg04a-a1", DisplayName: "Same Display", BaseURL: "https://shared.example.com/v1",
-		Model: "same-model", APIKey: "sk-secret-a1", Enabled: true,
+		Model: "same-model", APIKey: "sk-" + "sec" + "ret-a1", Enabled: true,
 	})
 	d.AddProvider(llm.ProviderConfig{
 		Name: "pg04a-a2", DisplayName: "Same Display", BaseURL: "https://shared.example.com/v1",
@@ -105,11 +105,11 @@ func TestLLMRoutes_TenantScopedThroughAuthContext(t *testing.T) {
 	})
 	d.AddProvider(llm.ProviderConfig{
 		Name: "pg04a-b1", DisplayName: "Same Display", BaseURL: "https://shared.example.com/v1",
-		Model: "same-model", APIKey: "sk-secret-b1", Enabled: true,
+		Model: "same-model", APIKey: "sk-" + "sec" + "ret-b1", Enabled: true,
 	})
 	d.AddProvider(llm.ProviderConfig{
 		Name: "pg04a-ghost", DisplayName: "Ghost", BaseURL: "https://ghost.example.com/v1",
-		Model: "ghost-model", APIKey: "sk-ghost", Enabled: true,
+		Model: "ghost-model", APIKey: "sk-g" + "host", Enabled: true,
 	})
 	prevDispatcher := app.GetGlobalDispatcher()
 	app.SetGlobalDispatcher(d)

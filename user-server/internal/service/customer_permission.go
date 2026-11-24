@@ -213,7 +213,10 @@ func (s *CustomerPermissionService) CanAccess(scope CustomerDataScope, c *model.
 	if len(scope.Industries) > 0 && !containsCRMString(scope.Industries, c.Industry) {
 		return false
 	}
-	if scope.OnlyOwned && c.OwnerUserID != nil && *c.OwnerUserID != scope.UserID {
+	// OnlyOwned：无负责人（OwnerUserID=nil）不算「我的客户」。
+	// 若放行 nil，owner 角色可通过详情/360/AI/合并等按 ID 读取的入口
+	// 越权访问未分配客户的资料（列表 SQL 的 owner_user_id=? 已经排除 nil）。
+	if scope.OnlyOwned && (c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID) {
 		return false
 	}
 	if scope.OwnerUserID > 0 && (c.OwnerUserID == nil || *c.OwnerUserID != scope.OwnerUserID) {

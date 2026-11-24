@@ -152,7 +152,12 @@ func (c *LeadController) GetJudgementHits(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "judgement_id 不能为空")
 		return
 	}
-	hits, err := c.evidence.Hits(ctx.Request.Context(), judgementID)
+	scope, err := c.scoped.ResolveScope(ctx.Request.Context(), getUserIDFromContext(ctx))
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "获取数据权限失败")
+		return
+	}
+	hits, err := c.evidence.HitsScoped(ctx.Request.Context(), judgementID, scope)
 	if err != nil {
 		response.ErrorFromDB(ctx, err, "获取判定证据失败")
 		return

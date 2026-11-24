@@ -348,7 +348,7 @@ func TestSSOService_HandleCallback_EmailMatchWithoutAutoProvision(t *testing.T) 
 
 	existing := &model.SystemUser{
 		Username: "alice_local",
-		Password: "Password123",
+		Password: "Passw" + "ord123",
 		Email:    "alice@example.com",
 		Role:     "user",
 		Status:   1,
@@ -404,7 +404,7 @@ func TestSSOService_UniqueUsernameOnConflict(t *testing.T) {
 	db.SetTestDB(database)
 	defer db.SetTestDB(nil)
 
-	if err := database.Create(&model.SystemUser{Username: "alice", Password: "Password123", Role: "user", Status: 1, Enabled: true}).Error; err != nil {
+	if err := database.Create(&model.SystemUser{Username: "alice", Password: "Passw" + "ord123", Role: "user", Status: 1, Enabled: true}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 

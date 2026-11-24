@@ -46,13 +46,15 @@ func bridgeCardsTestHub(platform, account, conv, sender string) *model.MessageHu
 func TestSendOutbound_Bridge_CardsFallbackRecordedOnRow(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
-	hub := bridgeCardsTestHub("douyin", "acct-r26-drop", "conv-r26-drop", "cust-r26-drop")
+	accountID := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "r26-drop")
+	hub := bridgeCardsTestHub("douyin", accountID, "conv-r26-drop", "cust-r26-drop")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
@@ -61,7 +63,7 @@ func TestSendOutbound_Bridge_CardsFallbackRecordedOnRow(t *testing.T) {
 
 	useLegacyBridgeFixture(t)
 
-	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	ctx := localBridgeSubmitContextCustomEdition(t, context.Background(), hub.Platform, hub.AccountID, "text")
 	if _, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "给你推荐两款", hub, bridgeCardsForTest(2)); err != nil {
 		t.Fatalf("正常出库不应报错: %v", err)
 	}
@@ -94,13 +96,15 @@ func TestSendOutbound_Bridge_CardsFallbackRecordedOnRow(t *testing.T) {
 func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
-	hub := bridgeCardsTestHub("douyin", "acct-r26-none", "conv-r26-none", "cust-r26-none")
+	accountID := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "r26-none")
+	hub := bridgeCardsTestHub("douyin", accountID, "conv-r26-none", "cust-r26-none")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
@@ -109,7 +113,7 @@ func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
 
 	useLegacyBridgeFixture(t)
 
-	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	ctx := localBridgeSubmitContextCustomEdition(t, context.Background(), hub.Platform, hub.AccountID, "text")
 	if _, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "稍等", hub, nil); err != nil {
 		t.Fatalf("正常出库不应报错: %v", err)
 	}
@@ -134,20 +138,22 @@ func TestSendOutbound_Bridge_NoCardsNoDroppedKey(t *testing.T) {
 func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
 	defer DisableAIQuietHoursForTest(true)() // DISABLE_AI_QUIET_HOURS env 已退役（B8），测试装配口顶掉勿扰窗
 	db := testutil.NewTestDB(t,
+		&model.Channel{}, &model.ChannelAccount{},
 		&model.MessageHub{}, &model.InboxConversation{}, &model.UnifiedMessage{},
 		&model.WebhookEvent{}, &model.IntegrationAccount{}, &DelayedOutboundReply{},
 	)
 	svc := NewWebhookService()
 	defer svc.Stop(context.Background())
 
-	hub := bridgeCardsTestHub("douyin", "acct-r26-warn", "conv-r26-warn", "cust-r26-warn")
+	accountID := seedCanonicalBridgeOutboundAccount(t, db, 1, "douyin", "r26-warn")
+	hub := bridgeCardsTestHub("douyin", accountID, "conv-r26-warn", "cust-r26-warn")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}
 	releaseReplyClaimForTest(t, "evt-r26-warn")
 	p := &ParsedPayload{EventID: "evt-r26-warn", Sender: hub.SenderID, Content: "有推荐吗", ChatID: hub.ConversationID}
 	useLegacyBridgeFixture(t)
-	ctx := localBridgeSubmitContext(t, context.Background(), hub.Platform, hub.AccountID, "text")
+	ctx := localBridgeSubmitContextCustomEdition(t, context.Background(), hub.Platform, hub.AccountID, "text")
 
 	oldOut := os.Stdout
 	r, w, err := os.Pipe()
@@ -192,7 +198,7 @@ func TestSendOutbound_Bridge_CardsFallbackLogsOnce(t *testing.T) {
 		`"channel":"douyin"`,
 		`"cards_fallback_count":3`,
 		`"conversation_id":"conv-r26-warn"`,
-		`"account_id":"acct-r26-warn"`,
+		`"account_id":"` + hub.AccountID + `"`,
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("丢弃日志缺字段 %s，实际该行：\n%s", want, line)

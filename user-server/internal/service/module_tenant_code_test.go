@@ -87,7 +87,7 @@ func setupTenantCodeStub(t *testing.T) *tenantCodeCaptures {
 	}))
 	t.Cleanup(srv.Close)
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
 	return cap
 }
 

@@ -50,6 +50,8 @@ type LeadJudgement struct {
 	Reason             string   `json:"reason"`
 	LeadRole           string   `json:"lead_role"`           // demand/supply/resource/broker/unknown
 	FollowupSuggestion string   `json:"followup_suggestion"` // 给维护人的跟进建议
+	// Degraded 表示二次 LLM 不可用，结论由关键词/语义命中确定性兜底得出。
+	Degraded bool `json:"degraded,omitempty"`
 }
 
 // LLMJudge 判定接口（便于测试注入 fake）
@@ -80,11 +82,69 @@ type Service struct {
 	cfgCache           map[uint]leadMiningConfigCacheEntry
 	cfgGeneration      map[uint]uint64
 	cfgCacheGeneration uint64
-	cancel             context.CancelFunc
-	wg                 sync.WaitGroup
+	// notifier 由 Router 装配点注入；单测构造 Service 时可不注入，此时
+	// notifyLeadDiscovery 只记日志跳过，不再在 Service 内部隐式造带 DB 的服务。
+	notifier CustomerOwnerNotifier
+	// ruleService 三粒度规则解析（P0-a：发掘开关/渠道/阈值的唯一来源）。
+	// 不注入时按全局 DB 构造；单测可注入替身。
+	ruleService *LeadRuleService
+	// ruleTargetFor 把消息解析为规则目标（account > channel > global）。
+	// 不注入时走 ChannelResolver.ResolveByAccountRef；单测可注入替身避免依赖 DB。
+	ruleTargetFor func(context.Context, *model.MessageHub) LeadRuleTarget
+	cancel        context.CancelFunc
+	wg            sync.WaitGroup
 }
 
 var singleton *Service
+
+// 线索发掘渠道资格集（P0-c）：由 channelgw.Default 注册表在 init() 经
+// SetLeadMiningChannels 一次性投影。只有 MineMode != none 的渠道才在默认准入集合内；
+// 这是发掘资格的唯一真值源，service.ValidPlatform 只做 MessageHub 落库兜底校验。
+var (
+	leadMiningMu              sync.RWMutex
+	leadMiningCapableChannels = map[string]struct{}{}
+)
+
+// SetLeadMiningChannels 由 channelgw.init() 注入发掘资格集合（仿 SetBridgeOutboxChannels）。
+// 空注入忽略（防误清空：装配时序异常时宁可维持上一份集合，也不悄悄断掉全渠道发掘）。
+func SetLeadMiningChannels(names []string) {
+	if len(names) == 0 {
+		logger.Errorf("[lead-mining] SetLeadMiningChannels called with empty names; keep previous set")
+		return
+	}
+	m := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if n != "" {
+			m[n] = struct{}{}
+		}
+	}
+	if len(m) == 0 {
+		return
+	}
+	leadMiningMu.Lock()
+	defer leadMiningMu.Unlock()
+	leadMiningCapableChannels = m
+}
+
+// LeadMiningChannels 返回当前发掘资格集合（排序副本；parity/诊断用）。
+func LeadMiningChannels() []string {
+	leadMiningMu.RLock()
+	defer leadMiningMu.RUnlock()
+	names := make([]string, 0, len(leadMiningCapableChannels))
+	for n := range leadMiningCapableChannels {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// leadMiningChannelCapable 渠道是否在注册表投影的发掘资格集合内。
+func leadMiningChannelCapable(platform string) bool {
+	leadMiningMu.RLock()
+	defer leadMiningMu.RUnlock()
+	_, ok := leadMiningCapableChannels[strings.ToLower(strings.TrimSpace(platform))]
+	return ok
+}
 
 // NewLeadMiningService 构造并启动线索发掘服务（后台 worker，非阻塞）。
 // db 用于线索仓储的显式注入（不摸全局句柄）。
@@ -98,6 +158,7 @@ func NewLeadMiningService(clueRepo repository.ClueRepository) *Service {
 		clueRepo:      clueRepo,
 		cfgRepo:       repository.NewLeadMiningConfigRepository(),
 		hubRepo:       repository.NewMessageHubRepository(),
+		ruleService:   NewLeadRuleService(),
 		lastJudge:     make(map[string]time.Time),
 		cfgCache:      make(map[uint]leadMiningConfigCacheEntry),
 		cfgGeneration: make(map[uint]uint64),
@@ -110,6 +171,13 @@ func NewLeadMiningService(clueRepo repository.ClueRepository) *Service {
 	}
 	logger.Infof("[lead-mining] 服务已启动，worker=%d queue=%d", s.workers, leadMiningQueueSize)
 	return s
+}
+
+// SetNotifier 注入线索负责人推送出口（Router 装配点调用，无内联闭包）。
+func (s *Service) SetNotifier(n CustomerOwnerNotifier) {
+	if s != nil && n != nil {
+		s.notifier = n
+	}
 }
 
 // ReloadConfigCache 热更新配置缓存（控制器保存配置后调用）
@@ -292,14 +360,25 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	}
 
 	cfg := s.loadConfig(ctx)
-	if cfg == nil || !cfg.Enabled {
-		return
+	// P0-a 配置源合并：三粒度规则是发掘开关/渠道准入/阈值的唯一权威源。
+	// legacy 单例配置退化为默认值与兼容读（关键词/标签/阈值），不再单独用
+	// cfg.Enabled / channelEnabled 阻断一条已启用的账号级规则（对抗审核 P0-1）。
+	rule, ruleErr := s.resolveProcessRule(ctx, hub)
+	gate := leadMiningGateFor(cfg, rule, hub.Platform)
+	if ruleErr != nil && !errors.Is(ruleErr, ErrLeadRuleNotFound) {
+		// 仓储未装配/不可用属于环境态，降级到 legacy 判据；用 Debug 避免刷屏。
+		logger.Debugf("[lead-mining] 三粒度规则解析失败，回退 legacy 判据 account=%s: %v", hub.AccountID, ruleErr)
 	}
-	if !channelEnabled(cfg, hub.Platform) {
+	if !gate.enabled {
 		return
 	}
 
+	// D5：群线索按「渠道账号 + 群」作用域去重，不再按发送人——否则群内不同人的
+	// 商机互相覆盖，与「群=客户」决策冲突。单聊沿用 platform:sender。
 	account := fmt.Sprintf("%s:%s", hub.Platform, hub.SenderID)
+	if hub.IsGroup && strings.TrimSpace(hub.GroupID) != "" {
+		account = fmt.Sprintf("%s:%s:%s", hub.Platform, hub.AccountID, hub.GroupID)
+	}
 	tenantID, ok := tenant.FromContext(ctx)
 	if !ok {
 		if tenant.IsMultiTenant() {
@@ -335,19 +414,147 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		jd, err = s.judge.Judge(ctx, cfg, history)
 	}
 	if err != nil {
-		logger.Warnf("[lead-mining] 判定失败 account=%s: %v", account, err)
-		return
+		logger.Warnf("[lead-mining] 二次 LLM 判定失败 account=%s: %v", account, err)
+		// FR-012/Edge Case：二次 LLM 不可用时不得静默丢弃。
+		// 用关键词/语义三路证据做确定性降级判定；无本地命中则确无信号，正常返回。
+		jd = buildDegradedJudgement(jctx, cfg, err)
+		if jd == nil {
+			return
+		}
+		logger.Warnf("[lead-mining] 已降级判定 account=%s score=%d（证据不完整，前端需显示 degraded）",
+			account, jd.IntentScore)
 	}
 	// 仅在判定成功后占用防抖窗口，避免失败消息阻塞后续判定（D-03）。
 	s.mu.Lock()
 	s.lastJudge[debounceKey] = time.Now()
 	s.mu.Unlock()
 	s.recordLeadMiningJudgement(ctx, hub, jd, jctx)
-	if !jd.IsLead || jd.IntentScore < cfg.MinIntentScore {
+	if !jd.IsLead || jd.IntentScore < gate.minIntentScore {
 		return
 	}
 
 	s.persistLead(ctx, cfg, hub, account, jd)
+}
+
+// leadMiningGate 发掘准入判据（P0-a）。rule 命中时为唯一权威源；
+// legacy 配置仅在无规则行时提供兼容判据与默认阈值。
+type leadMiningGate struct {
+	enabled        bool
+	minIntentScore int
+}
+
+// leadMiningGateFor 计算一条消息是否进入发掘链路。
+//
+// 三粒度规则存在 ⇒ rule.enabled 是开关（cfg.Enabled 不得单独阻断）；渠道默认全纳入，
+// legacy 的 channels 白名单不得误挡已启用规则（显式关闭语义随 P0-c 的 MineMode 落地）。
+// 规则表当前没有 min_intent_score/channels 列，阈值仍从 legacy 配置取默认值；
+// 无规则行 ⇒ 完全按 legacy enabled + channelEnabled 走，保证存量行为不变。
+func leadMiningGateFor(cfg *model.LeadMiningConfig, rule *model.LeadMiningRule, platform string) leadMiningGate {
+	score := 50
+	if cfg != nil && cfg.MinIntentScore > 0 {
+		score = cfg.MinIntentScore
+	}
+	if rule != nil {
+		return leadMiningGate{enabled: rule.Enabled, minIntentScore: score}
+	}
+	enabled := cfg != nil && cfg.Enabled && leadMiningEnabledFor(cfg, platform)
+	return leadMiningGate{enabled: enabled, minIntentScore: score}
+}
+
+// resolveProcessRule 用三粒度规则解析本条消息的发掘规则。
+// ruleTargetFor 是可注入的消息→规则目标解析通道（测试替身用）；生产走 ChannelResolver。
+func (s *Service) resolveProcessRule(ctx context.Context, hub *model.MessageHub) (*model.LeadMiningRule, error) {
+	rs := s.ruleService
+	if rs == nil {
+		rs = NewLeadRuleService()
+	}
+	return rs.Resolve(ctx, s.processRuleTarget(ctx, hub))
+}
+
+func (s *Service) processRuleTarget(ctx context.Context, hub *model.MessageHub) LeadRuleTarget {
+	if s.ruleTargetFor != nil {
+		return s.ruleTargetFor(ctx, hub)
+	}
+	var target LeadRuleTarget
+	if hub == nil {
+		return target
+	}
+	if resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, hub.Platform, hub.AccountID); err != nil {
+		logger.Debugf("[lead-mining] 渠道账号解析失败，回退 global 规则 account=%s: %v", hub.AccountID, err)
+	} else if resolved != nil {
+		target.ChannelAccountID = resolved.AccountID
+		target.ChannelID = resolved.ChannelID
+	}
+	return target
+}
+
+// buildDegradedJudgement 二次 LLM 不可用时的确定性降级判定。
+// 只认关键词/语义两路完整且确实命中的证据；LLM 未初始化/超时的 hit 不算正向信号。
+// 评分保守取 60（高于默认阈值 50 但低于高意向 70），并明确标注 Degraded/证据不完整。
+func buildDegradedJudgement(jctx *LeadJudgeContext, cfg *model.LeadMiningConfig, judgeErr error) *LeadJudgement {
+	if jctx == nil || cfg == nil {
+		return nil
+	}
+	signals := 0
+	keywords := make([]string, 0)
+	for _, h := range jctx.Hits {
+		if h.Type != "keyword" && h.Type != "semantic" {
+			continue
+		}
+		if !h.Complete || h.Degraded {
+			continue
+		}
+		if n, _ := h.Payload["match_count"].(int); n > 0 {
+			signals += n
+			if matched, ok := h.Payload["matched"].([]map[string]any); ok {
+				for _, m := range matched {
+					if kw, _ := m["keyword"].(string); kw != "" {
+						keywords = append(keywords, kw)
+					}
+				}
+			}
+		}
+	}
+	if signals == 0 {
+		return nil // 无本地正向证据：确无线索信号，不是被 LLM 故障吞掉
+	}
+	score := 60
+	if cfg.MinIntentScore > score {
+		score = cfg.MinIntentScore
+	}
+	if score > leadMiningHighOpportunity-1 {
+		score = leadMiningHighOpportunity - 1 // 降级判定不得自动进「高意向商机」
+	}
+	reason := "二次 LLM 不可用，基于关键词/语义命中降级判定；证据不完整，需人工复核"
+	if judgeErr != nil {
+		reason += fmt.Sprintf("（%v）", judgeErr)
+	}
+	return &LeadJudgement{
+		IsLead:          true,
+		IntentScore:     score,
+		ClueType:        "待分类",
+		MatchedKeywords: dedupeLeadStrings(keywords),
+		MatchedTags:     []string{"LLM降级判定"},
+		Summary:         "LLM 不可用时由本地命中生成的降级线索",
+		Confidence:      0.4,
+		Reason:          reason,
+		LeadRole:        "unknown",
+		Degraded:        true,
+	}
+}
+
+func dedupeLeadStrings(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 func leadMiningDebounceKey(tenantID uint, platform, conversationID, senderID string, isGroup bool) string {
@@ -491,7 +698,7 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		mu.Lock()
 		defer mu.Unlock()
 	}
-	customer, err := s.resolveCustomer(ctx, hub.Platform, hub.SenderID, hub.SenderName)
+	customer, err := s.resolveCustomerForHub(ctx, hub)
 	if err != nil || customer == nil {
 		logger.Warnf("[lead-mining] 解析客户失败 account=%s: %v", account, err)
 		return
@@ -531,7 +738,7 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		IsGroup:            hub.IsGroup,
 		GroupID:            hub.GroupID,
 		LeadRole:           leadRole,
-		Status:             "new",
+		Status:             classifyLeadStatus(jd, cfg), // D11/D12：低分/证据不完整进 candidate 待审
 		EvidenceJSON:       string(evidenceJSON),
 		Summary:            jd.Summary,
 		FollowupSuggestion: jd.FollowupSuggestion,
@@ -548,7 +755,9 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 			"message_id": hub.MsgID, "conversation_id": hub.ConversationID,
 			"sender_id": hub.SenderID, "platform": hub.Platform, "reason": jd.Reason,
 		}})
+		promoted := promoteStatus(existing.Status, jd, cfg) // D14：高分自动转正，只升不降
 		if err := s.clueRepo.UpdateByID(ctx, existing.ID, map[string]any{
+			"status":              promoted,
 			"intent_score":        int64(jd.IntentScore),
 			"desc":                jd.Summary,
 			"is_opportunity":      boolToInt(jd.IntentScore >= leadMiningHighOpportunity),
@@ -566,6 +775,11 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 			"conversation_type":   map[bool]string{true: "group", false: "private"}[hub.IsGroup],
 		}); err != nil {
 			logger.Warnf("[lead-mining] 更新线索失败 account=%s: %v", account, err)
+		}
+		// D14：candidate 被后续高分判定自动转正时补发通知（此前 candidate 被抑制）。
+		if existing.Status == "candidate" && promoted != "candidate" {
+			existing.Status = promoted
+			s.notifyLeadDiscovery(ctx, existing, jd)
 		}
 		// 更新分支到此为止没有 clueRepo.Create，线索号是查出来的那一条 ——
 		// 本分支的 return 早于新建那一支，是这条接缝最容易只接一半的地方（判据见用例）。
@@ -632,14 +846,17 @@ func (s *Service) notifyLeadDiscovery(ctx context.Context, clue *model.Clue, jd 
 	if clue == nil || jd == nil {
 		return
 	}
-	roleLabel := map[string]string{"demand": "需求方", "supply": "供货方", "resource": "资源方", "broker": "中介", "unknown": "待识别"}[clue.LeadRole]
-	if roleLabel == "" {
-		roleLabel = "待识别"
+	// D11/P3：candidate 待审线索不触发外部通知，避免骚扰；人工确认或高分自动转正后再通知。
+	if clue.Status == "candidate" {
+		logger.Debugf("[lead-mining] 待审线索 %s 跳过负责人通知", clue.ID)
+		return
 	}
 	// FR-015：自动化发掘链路也要按配置路由推送负责人，而不是只发一条 user_id=0
 	// 的全局广播。手动归档端点（/api/manage/leads/archive）已走 LeadNotifyService；
 	// 这里补上同一出口，确保 account > channel > tenant 三级路由与送达记录都生效。
-	if err := NewLeadNotifyService().NotifyOwner(ctx, ArchiveClueInput{
+	if s.notifier == nil {
+		logger.Debugf("[lead-mining] 通知出口未装配，线索 %s 跳过负责人推送", clue.ID)
+	} else if err := s.notifier.NotifyOwner(ctx, ArchiveClueInput{
 		ClueID:          clue.ID,
 		CustomerID:      clue.CustomerID,
 		SourceChannel:   clue.SourceChannel,
@@ -648,20 +865,8 @@ func (s *Service) notifyLeadDiscovery(ctx context.Context, clue *model.Clue, jd 
 	}, clue.CustomerID); err != nil {
 		logger.Warnf("[lead-mining] 配置路由推送负责人失败 clue=%s: %v", clue.ID, err)
 	}
-	title := fmt.Sprintf("发现新线索：%s", clue.Name)
-	content := fmt.Sprintf("渠道=%s 角色=%s 意向=%d 摘要=%s", clue.SourceChannel, roleLabel, clue.IntentScore, clue.Summary)
-	if clue.FollowupSuggestion != "" {
-		content += "\n建议：" + clue.FollowupSuggestion
-	}
-	_ = NotifyBusiness(ctx, &model.Notification{
-		UserID:  0,
-		Type:    model.NotificationTypeInfo,
-		Title:   title,
-		Content: content,
-		Link:    "/lead-mining",
-		Source:  model.NotificationSourceLocal,
-		Level:   model.NotificationLevelInfo,
-	})
+	// P5：去掉 user_id=0 全局广播，收敛为单一 NotifyOwner 出口（按账号→渠道→租户路由）。
+	// 文案（群名/角色/建议）由 ArchiveClueInput 承载，在下游统一构造。
 }
 
 func (s *Service) resolveCustomer(ctx context.Context, platform, senderID, name string) (*model.Customer, error) {
@@ -716,6 +921,12 @@ func applyLeadMiningIdentity(c *model.Customer, platform, senderID string) {
 	switch p {
 	case "wechat", "weixin", "individual_wechat":
 		c.WechatOpenID = id
+	case "personal_wx", "wx_personal", "wechat_personal":
+		// D15：个微独立身份列，同 sender 跨消息 OneID 稳定（不再回退随机 UUID）。
+		c.PersonalWXOpenID = id
+	case "qq":
+		// D15：QQ 独立身份列。
+		c.QQOpenID = id
 	case "wecom", "qywx", "wework":
 		c.WeComExternalID = id
 	case "feishu", "lark":
@@ -739,7 +950,7 @@ func applyLeadMiningIdentity(c *model.Customer, platform, senderID string) {
 	case "email":
 		c.Email = id
 	default:
-		// qq/sms/web/dingtalk 等暂无专用字段，回退 legacy lm: key
+		// sms/web/dingtalk 等暂无专用身份列，回退 legacy lm: key
 	}
 }
 
@@ -755,16 +966,32 @@ func (s *Service) tagCustomer(ctx context.Context, customer *model.Customer, new
 	return s.custRepo.Update(ctx, customer)
 }
 
+// channelEnabled 判一个渠道是否参与发掘（P0-c）。
+//
+// 语义改为**默认全纳入、显式关闭**：未配置 / Channels 为空 ⇒ 所有具备发掘能力
+// （channelgw 投影的 MineMode != none 集合）的渠道都参与；租户配置只表达显式关闭
+// 某渠道（cfg.Channels 作为关闭名单），不再把「名单非空但漏一个」解读成静默全关。
+// capability 集合为空（装配异常/单测）时不阻断——保留 legacy 行为，避免断链。
 func channelEnabled(cfg *model.LeadMiningConfig, platform string) bool {
-	if len(cfg.Channels) == 0 {
+	if cfg == nil || len(cfg.Channels) == 0 {
 		return true
 	}
 	for _, c := range cfg.Channels {
 		if strings.EqualFold(strings.TrimSpace(c), strings.TrimSpace(platform)) {
-			return true
+			return false // 显式关闭
 		}
 	}
-	return false
+	return true
+}
+
+// leadMiningEnabledFor 综合渠道资格与显式关闭判据（P0-c）。
+// capability 集合非空时必须命中注册表投影；为空（单测/装配异常）时不阻断，
+// 保持与 legacy channelEnabled 一致的兼容行为。
+func leadMiningEnabledFor(cfg *model.LeadMiningConfig, platform string) bool {
+	if len(LeadMiningChannels()) > 0 && !leadMiningChannelCapable(platform) {
+		return false
+	}
+	return channelEnabled(cfg, platform)
 }
 
 func mergeTags(a, b []string) []string {
@@ -937,6 +1164,11 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 				rec.Degraded = true
 			}
 		}
+	}
+	// 二次 LLM 降级判定必须让前端/回放看到 degraded，不能只藏在 reason 文本里。
+	if jd.Degraded {
+		rec.Degraded = true
+		rec.EvidenceComplete = false
 	}
 	if err := judgementRepo.Create(ctx, rec); err != nil {
 		logger.Warnf("[lead-mining] 记录判定失败 msg=%s: %v", hub.MsgID, err)

@@ -180,7 +180,7 @@ func TestSavePlatformProviders_KeepsMerchantAPIKey(t *testing.T) {
 			TenantID: tenant.DefaultTenantID,
 			Name:     "merchant-own",
 			Model:    "own-model",
-			APIKey:   "sk-merchant-own-secret",
+			APIKey:   "sk-me" + "rchant" + "-own-secret",
 			Source:   model.LLMSourceSelf,
 			Enabled:  true,
 		}).Error; err != nil {

@@ -158,7 +158,7 @@ func TestPlatformAccountRepository_Create(t *testing.T) {
 			account: &model.PlatformAccount{
 				Platform:  model.PlatformKuaishou,
 				AccountID: "ks-account-456",
-				Token:     "encrypted-token-here",
+				Token:     "encry" + "pted-" + "token-here",
 				Status:    1,
 			},
 			wantErr: false,

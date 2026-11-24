@@ -8,7 +8,7 @@ describe('background HTTP 中转生命周期', () => {
   let bootstrapTimers;
   const cfg = { serverUrl: 'https://example.invalid', token: 'stored-secret', tenantCode: 'tenant-a' };
   const sender = { id: 'test-extension', url: 'https://www.douyin.com/chat', tab: { id: 7 }, frameId: 0, documentId: 'document-1' };
-  const message = { type: 'bridgeFetch', requestId: 'request-1', url: 'https://example.invalid/api/bridge/outbox?channel=douyin&account_id=test-account&tenant_code=tenant-a', options: { method: 'GET', headers: { 'X-Bridge-Token': cfg.token } } };
+  const message = { type: 'bridgeFetch', requestId: 'request-1', url: 'https://example.invalid/api/bridge/outbox?channel=douyin&account_id=test-account&tenant_code=tenant-a', options: { method: 'GET', headers: { 'X-Channel-Identify-Code': cfg.token } } };
 
   function dispatch(msg, origin = sender) {
     return new Promise(resolve => {

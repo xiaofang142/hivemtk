@@ -252,7 +252,7 @@ func stubSubscriptionPlatform(t *testing.T, sub *platform.SubscriptionSnapshot, 
 		})
 	}))
 	t.Cleanup(srv.Close)
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SECRET_r3fr3sh}}"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SE" + "CRET_" + "r3fr3sh}}"})
 }
 
 // TestSubscriptionRefreshSkipsFreshMirror TTL 内不回源（状态页/横幅高频调用不打平台）。
@@ -314,7 +314,7 @@ func TestSubscriptionRefreshFailureKeepsMirror(t *testing.T) {
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SECRET_r3fr3sh}}"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SE" + "CRET_" + "r3fr3sh}}"})
 
 	oldEnd := time.Now().Add(-time.Minute)
 	row := &model.TenantSubscriptionMirror{

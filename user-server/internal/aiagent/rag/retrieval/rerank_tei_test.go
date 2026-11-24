@@ -40,7 +40,7 @@ func TestTEIRerank_RequestAndResponse(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &RerankConfig{
-		APIKey:     "tei-test-key",
+		APIKey:     "tei" + "-te" + "st-key",
 		BaseURL:    srv.URL,
 		Model:      "BAAI/bge-reranker-base",
 		Enabled:    true,

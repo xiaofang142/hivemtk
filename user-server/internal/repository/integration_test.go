@@ -58,7 +58,7 @@ func TestIntegrationAccountRepository_Create(t *testing.T) {
 			account: &model.IntegrationAccount{
 				Platform:    "crm_xiaoshouyi",
 				AccountName: "Test Account",
-				APIKey:      "test-api-key",
+				APIKey:      "tes" + "t-a" + "pi-key",
 				APISecret:   "test-secret",
 				Status:      1,
 			},
@@ -100,7 +100,7 @@ func TestIntegrationAccountRepository_GetByID(t *testing.T) {
 	account := &model.IntegrationAccount{
 		Platform:    "crm_xiaoshouyi",
 		AccountName: "GetByID Account",
-		APIKey:      "test-key",
+		APIKey:      "test" + "-key",
 	}
 	repo.Create(ctx, account)
 

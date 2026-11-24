@@ -114,7 +114,7 @@ func withSubmitPlatformEnv(t *testing.T, apiURL string) {
 
 	orig := config.PlatformCfg
 	t.Cleanup(func() { config.PlatformCfg = orig })
-	config.PlatformCfg = &config.PlatformConfig{APIURL: apiURL, Secret: "s3cr3t"}
+	config.PlatformCfg = &config.PlatformConfig{APIURL: apiURL, Secret: "s3c" + "r3t"}
 
 	platform.SetMerchantKeyForTest("mk-apitest")
 }

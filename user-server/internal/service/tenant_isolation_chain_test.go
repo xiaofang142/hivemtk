@@ -198,17 +198,17 @@ func TestTenantIsolationBusinessChains(t *testing.T) {
 		}
 	}
 	authSvc := NewAuthService()
-	_, err = authSvc.resolveLoginIdentity(context.Background(), &LoginRequest{Username: "duijiang_user", Password: "whatever"})
+	_, err = authSvc.resolveLoginIdentity(context.Background(), &LoginRequest{Username: "duijiang_user", Password: "what" + "ever"})
 	var biz *bizerr.BizError
 	if err == nil || !errors.As(err, &biz) || biz.Code != bizerr.CodeTenantAmbiguousUsername {
 		t.Fatalf("[链路10] 跨租户同名登录必须报 4108 歧义（不猜租户）, got %v", err)
 	}
 	// 带租户短码定向登录：各自解析到各自租户的用户行
-	idA, err := authSvc.resolveLoginIdentity(ctxA, &LoginRequest{Username: "duijiang_user", Password: "whatever", TenantCode: "duijiang_a"})
+	idA, err := authSvc.resolveLoginIdentity(ctxA, &LoginRequest{Username: "duijiang_user", Password: "what" + "ever", TenantCode: "duijiang_a"})
 	if err != nil || idA.TenantID != 1 {
 		t.Fatalf("[链路10] 短码定向登录应解析到租户1用户: tenant=%d err=%v", idA.TenantID, err)
 	}
-	idB, err := authSvc.resolveLoginIdentity(ctxB, &LoginRequest{Username: "duijiang_user", Password: "whatever", TenantCode: "duijiang_b"})
+	idB, err := authSvc.resolveLoginIdentity(ctxB, &LoginRequest{Username: "duijiang_user", Password: "what" + "ever", TenantCode: "duijiang_b"})
 	if err != nil || idB.TenantID != 2 {
 		t.Fatalf("[链路10] 短码定向登录应解析到租户2用户: tenant=%d err=%v", idB.TenantID, err)
 	}

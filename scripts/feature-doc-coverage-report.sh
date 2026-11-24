@@ -15,9 +15,9 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-DOCS_DIR="$PROJECT_ROOT/hivemtk/docs/marketing-features"
+DOCS_DIR="$PROJECT_ROOT/docs/marketing-features"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

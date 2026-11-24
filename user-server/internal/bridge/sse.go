@@ -624,8 +624,12 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 	accountID := c.Query("account_id")
 	if ident, ok := c.Get(BridgeResolvedIdentityKey); ok {
 		if id, ok2 := ident.(*BridgeResolvedIdentity); ok2 && id != nil {
-			if channel == "" { channel = id.Channel }
-			if accountID == "" { accountID = id.AccountID }
+			if channel == "" {
+				channel = id.Channel
+			}
+			if accountID == "" {
+				accountID = id.AccountID
+			}
 		}
 	}
 	lastEventID := c.GetHeader("Last-Event-ID")
@@ -633,18 +637,31 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 		lastEventID = c.Query("last_event_id")
 	}
 
-	if accountID == "" || channel == "" {
-		// identify_code-only: bind first to resolve identity
-		reqCtx, terr := bindBridgeTenant(c, channel, accountID)
-		if terr != nil {
-			writeBridgeTenantError(c, terr)
+	identifyCode := bridgeIdentifyHintFromRequest(c.Request)
+	if (channel == "" || accountID == "") && identifyCode == "" {
+		if channel == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "channel required"})
 			return
 		}
-		c.Request = c.Request.WithContext(reqCtx)
-		if ident, ok := c.Get(BridgeResolvedIdentityKey); ok {
-			if id, ok2 := ident.(*BridgeResolvedIdentity); ok2 && id != nil {
-				if channel == "" { channel = id.Channel }
-				if accountID == "" { accountID = id.AccountID }
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "account_id required (or provide X-Channel-Identify-Code)"})
+		return
+	}
+	if channel != "" && !IsBridgeChannel(channel) {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unsupported bridge channel"})
+		return
+	}
+	reqCtx, terr := bindBridgeTenant(c, channel, accountID)
+	if terr != nil {
+		writeBridgeTenantError(c, terr)
+		return
+	}
+	if ident, ok := c.Get(BridgeResolvedIdentityKey); ok {
+		if id, ok2 := ident.(*BridgeResolvedIdentity); ok2 && id != nil {
+			if channel == "" {
+				channel = id.Channel
+			}
+			if accountID == "" {
+				accountID = id.AccountID
 			}
 		}
 	}
@@ -658,11 +675,6 @@ func (h *SSEHandler) HandleOutboxSSE(c *gin.Context) {
 	}
 	if !IsBridgeChannel(channel) {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unsupported bridge channel"})
-		return
-	}
-	reqCtx, terr := bindBridgeTenant(c, channel, accountID)
-	if terr != nil {
-		writeBridgeTenantError(c, terr)
 		return
 	}
 	ctxReq := reqCtx

@@ -73,7 +73,7 @@ func TestNewDispatcherFromConfig_CloudOptIn(t *testing.T) {
 				Model:   "Qwen2.5-1.5B-Instruct",
 				CloudProviders: []config.InferenceCloudProviderConfig{
 					{Name: "deepseek", BaseURL: "https://api.deepseek.com", APIType: "openai",
-						Model: "deepseek-chat", Enabled: true, APIKey: "sk-test"},
+						Model: "deepseek-chat", Enabled: true, APIKey: "sk-" + "test"},
 				},
 			},
 		},

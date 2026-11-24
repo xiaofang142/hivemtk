@@ -69,6 +69,14 @@ func (s *LeadScopedListService) ListCustomers(ctx context.Context, userID uint, 
 	return s.customers.ListScoped(ctx, filter)
 }
 
+// ResolveScope 复用统一的 CRM 数据权限解析，供证据回放等接口收口口径。
+func (s *LeadScopedListService) ResolveScope(ctx context.Context, userID uint) (CustomerDataScope, error) {
+	if s == nil || s.perm == nil {
+		return CustomerDataScope{RestrictedAccounts: true}, ErrLeadNotInitialized
+	}
+	return s.perm.Resolve(ctx, userID)
+}
+
 // ErrLeadNotInitialized 权限/仓储未装配：fail-closed。
 var ErrLeadNotInitialized = errLeadNotInitialized("线索列表服务未装配")
 

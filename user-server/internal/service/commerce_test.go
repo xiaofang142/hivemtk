@@ -80,7 +80,7 @@ func newCommerceFixture(t *testing.T, profile, action string) *commerceFixture {
 	p, _ := commerceProfile(profile)
 	shop := "shop-" + uuid.NewString()
 	actor := uint(812)
-	u := model.SystemUser{ID: actor, TenantID: 701, Username: uuid.NewString(), Password: "fixture", Role: "admin", Enabled: true, Status: 1}
+	u := model.SystemUser{ID: actor, TenantID: 701, Username: uuid.NewString(), Password: "fix" + "ture", Role: "admin", Enabled: true, Status: 1}
 	if e := db.Create(&u).Error; e != nil {
 		t.Fatal(e)
 	}

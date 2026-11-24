@@ -1,11 +1,11 @@
 package bridge
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"hivemtk-user/internal/capregistry"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,17 +95,18 @@ func (f *fakeAIOutboundTrigger) currentTraceID() string {
 // trace_id 贯通、outbound 消息 AI 标记、message_trace 事件完整性。
 func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{}, &model.MessageTrace{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{}, &model.MessageTrace{})
 
 	db.Exec("DELETE FROM message_hub WHERE conversation_id LIKE 'e2e-chain-%'")
 	db.Exec("DELETE FROM message_trace WHERE conversation_id LIKE 'e2e-chain-%'")
 
 	const (
-		channel   = "douyin"
-		accountID = "e2e-test-acc"
-		convID    = "e2e-chain-001"
-		customer  = "e2e-cust-001"
+		channel  = "douyin"
+		convID   = "e2e-chain-001"
+		customer = "e2e-cust-001"
 	)
+	fixture := seedCanonicalBridgeFixture(t, db, 1, channel, "e2e-lifecycle")
+	accountID := fixture.AccountID
 
 	ingressSvc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
 	handler := NewBridgeIngestHandler(ingressSvc)
@@ -120,11 +121,12 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/bridge/ingest", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
 	c.Request.RemoteAddr = "127.0.0.1:12345"
-	c.Request.Header.Set("X-Bridge-Token", "test-token")
+	c.Request.Header.Set("X-Channel-Identify-Code", fixture.Code)
 
 	handler.HandleHTTPIngest(c)
 
@@ -228,7 +230,7 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 
 	w2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest("GET", fmt.Sprintf("/api/bridge/outbox?channel=%s&account_id=%s&limit=10", channel, accountID), nil)
-	req2.Header.Set("X-Bridge-Token", "test-token")
+	req2.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	req2 = req2.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(req2.Context(), 1), channel, accountID, "text", ""))
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = req2
@@ -255,7 +257,7 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 		fmt.Sprintf("/api/bridge/outbox/ack?channel=%s&account_id=%s", channel, accountID),
 		bytes.NewBufferString(ackBody))
 	req3.Header.Set("Content-Type", "application/json")
-	req3.Header.Set("X-Bridge-Token", "test-token")
+	req3.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	c3, _ := gin.CreateTestContext(w3)
 	c3.Request = req3
 
@@ -279,14 +281,15 @@ func TestBridgeE2EChain_FullLifecycle(t *testing.T) {
 // 发送两条相同 msg_id 的消息，第二条应 duplicate=true，DB 不应有重复记录。
 func TestBridgeE2EChain_DedupAndDuplicate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
 	db.Exec("DELETE FROM message_hub WHERE conversation_id LIKE 'e2e-dedup-%'")
 
 	const (
-		channel   = "douyin"
-		accountID = "dedup-acc"
-		convID    = "e2e-dedup-001"
+		channel = "douyin"
+		convID  = "e2e-dedup-001"
 	)
+	fixture := seedCanonicalBridgeFixture(t, db, 1, channel, "e2e-dedup")
+	accountID := fixture.AccountID
 
 	ingressSvc := service.NewInboxIngressService()
 	handler := NewBridgeIngestHandler(ingressSvc)
@@ -297,6 +300,7 @@ func TestBridgeE2EChain_DedupAndDuplicate(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/api/bridge/ingest", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = req
@@ -307,6 +311,7 @@ func TestBridgeE2EChain_DedupAndDuplicate(t *testing.T) {
 
 	req2 := httptest.NewRequest("POST", "/api/bridge/ingest", bytes.NewBufferString(body))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = req2
@@ -340,14 +345,15 @@ func TestBridgeE2EChain_DedupAndDuplicate(t *testing.T) {
 // 此处仅验证每条 inbound 消息都获得了 trace_id。
 func TestBridgeE2EChain_TraceConsistency(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
 	db.Exec("DELETE FROM message_hub WHERE conversation_id LIKE 'e2e-trace-%'")
 
 	const (
-		channel   = "xiaohongshu"
-		accountID = "trace-acc"
-		convID    = "e2e-trace-001"
+		channel = "xiaohongshu"
+		convID  = "e2e-trace-001"
 	)
+	fixture := seedCanonicalBridgeFixture(t, db, 1, channel, "e2e-trace")
+	accountID := fixture.AccountID
 
 	ingressSvc := service.NewInboxIngressService()
 	handler := NewBridgeIngestHandler(ingressSvc)
@@ -358,6 +364,7 @@ func TestBridgeE2EChain_TraceConsistency(t *testing.T) {
 		]}`, channel, accountID, convID, i, i)
 		req := httptest.NewRequest("POST", "/api/bridge/ingest", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = req
@@ -392,7 +399,9 @@ func TestBridgeE2EChain_TraceConsistency(t *testing.T) {
 // 不是只看 400/422，要检查错误消息有语义（如 "channel required"、"messages empty"）。
 func TestBridgeE2EChain_ValidationErrors(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "e2e-validation")
+	accountID := fixture.AccountID
 	ingressSvc := service.NewInboxIngressService()
 	handler := NewBridgeIngestHandler(ingressSvc)
 
@@ -404,16 +413,16 @@ func TestBridgeE2EChain_ValidationErrors(t *testing.T) {
 		wantOK      *bool
 	}{
 		{
-			name:        "缺失 channel",
-			body:        `{"v":1,"account_id":"a1","conversation_id":"c1","messages":[{"role":"customer","content":"hi"}]}`,
-			wantStatus:  http.StatusBadRequest,
-			wantKeyword: "channel",
+			name:       "缺失 channel/account 由识别码补全",
+			body:       `{"v":1,"conversation_id":"c1","messages":[{"role":"customer","content":"hi"}]}`,
+			wantStatus: http.StatusOK,
+			wantOK:     boolPtr(true),
 		},
 		{
-			name:        "缺失 account_id",
-			body:        `{"v":1,"channel":"douyin","conversation_id":"c1","messages":[{"role":"customer","content":"hi"}]}`,
-			wantStatus:  http.StatusBadRequest,
-			wantKeyword: "account_id",
+			name:       "缺失 account_id 由识别码补全",
+			body:       `{"v":1,"channel":"douyin","conversation_id":"c1","messages":[{"role":"customer","content":"hi"}]}`,
+			wantStatus: http.StatusOK,
+			wantOK:     boolPtr(true),
 		},
 		{
 			name:        "非法 JSON",
@@ -429,14 +438,14 @@ func TestBridgeE2EChain_ValidationErrors(t *testing.T) {
 		},
 		{
 			name:        "空 messages 数组（允许，返回 ok=true + ingested=[]）",
-			body:        `{"v":1,"channel":"douyin","account_id":"a1","conversation_id":"c1","messages":[]}`,
+			body:        fmt.Sprintf(`{"v":1,"channel":"douyin","account_id":"%s","conversation_id":"c1","messages":[]}`, accountID),
 			wantStatus:  http.StatusOK,
 			wantKeyword: "",
 			wantOK:      boolPtr(true),
 		},
 		{
 			name:        "超长 messages（201 条截断到 200，不报错）",
-			body:        makeHugeBody("douyin", "a1", "c1", 201),
+			body:        makeHugeBody("douyin", accountID, "c1", 201),
 			wantStatus:  http.StatusOK,
 			wantKeyword: "",
 			wantOK:      boolPtr(true),
@@ -447,6 +456,7 @@ func TestBridgeE2EChain_ValidationErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest("POST", "/api/bridge/ingest", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 			c.Request = req

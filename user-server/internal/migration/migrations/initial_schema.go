@@ -377,4 +377,7 @@ func RegisterMigrations(registry *migration.MigrationRegistry, db *gorm.DB) {
 	// 幂等加宽 093/094 在 045 之后新建的 VARCHAR(36) customer_id 列（OneID JOIN 键，
 	// USING 安全转换防截断）；对应顶层 migrations/096_customer_id_widen_varchar64.sql。
 	register(NewCustomerIDWidenVarchar64Migration(db))
+	// v3.114.0（待 Go 注册入口补齐）：合并目标列 merged_into_id 宽度对齐由顶层
+	// migrations/097_merged_into_id_widen_varchar64.sql 承载；其 Go 注册文件在
+	// 2026-11-25 工作树整理中丢失，暂不注册以保证 build 绿——补齐该文件后恢复本行。
 }

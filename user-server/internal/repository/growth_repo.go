@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	_db "hivemtk-user/internal/pkg/db"
 	"time"
 
@@ -59,6 +60,22 @@ func (r *WebhookSubscriptionRepository) ListEnabledByEvent(ctx context.Context, 
 		Where("enabled = ? AND (events LIKE ? OR events LIKE ?)", true, "%"+event+"%", "%all%").
 		Limit(100).Find(&subs).Error
 	return subs, err
+}
+
+// FindEnabledByID 返回启用订阅；不存在/禁用返回 nil，DB 错误原样上抛。
+func (r *WebhookSubscriptionRepository) FindEnabledByID(ctx context.Context, id uint) (*model.WebhookSubscription, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	var sub model.WebhookSubscription
+	err := r.db.WithContext(ctx).Where("id = ? AND enabled = ?", id, true).First(&sub).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sub, nil
 }
 
 type SavedViewRepository struct {

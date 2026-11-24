@@ -163,6 +163,7 @@ func IsCustom() bool { return Current() == TypeCustom }
 // 为兼容不同调用方，支持以下调用形式：
 //   - Allows(feature)：使用全局版本类型
 //   - Allows(ctx, feature) / Allows(feature, ctx)：使用 context 覆盖
+//
 // 未登记的功能默认允许（向后兼容），避免新增功能被意外屏蔽。
 func Allows(first interface{}, rest ...interface{}) bool {
 	var ctx context.Context
@@ -194,12 +195,23 @@ func Allows(first interface{}, rest ...interface{}) bool {
 	return true
 }
 
+var domesticChannelCodes = []string{
+	"douyin", "xiaohongshu", "kuaishou", "xianyu", "wecom", "qq", "feishu",
+}
+
+// DomesticChannelCodes 返回国内渠道码集合的副本，供 repository 构造参数化
+// 版本门。调用方修改返回值不得影响 edition 单一事实源。
+func DomesticChannelCodes() []string {
+	return append([]string(nil), domesticChannelCodes...)
+}
+
 // IsDomesticChannel 判断渠道码是否属于国内渠道（开源版需过滤）。
 func IsDomesticChannel(code string) bool {
-	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "douyin", "xiaohongshu", "kuaishou", "xianyu", "wecom", "qq", "feishu":
-		return true
-	default:
-		return false
+	code = strings.ToLower(strings.TrimSpace(code))
+	for _, domestic := range domesticChannelCodes {
+		if code == domestic {
+			return true
+		}
 	}
+	return false
 }

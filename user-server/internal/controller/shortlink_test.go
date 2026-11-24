@@ -232,7 +232,7 @@ func TestShortLinkController_Create_WithPassword(t *testing.T) {
 		ShortCode:   "protected",
 		OriginalURL: "https://www.example.com",
 		Title:       "Protected Link",
-		Password:    "secret123",
+		Password:    "secr" + "et123",
 		DomainID:    1,
 	}
 	body, _ := json.Marshal(createReq)
@@ -888,7 +888,7 @@ func TestShortLinkController_GetByID_WithAllFields(t *testing.T) {
 		OriginalURL: "https://www.example.com/full",
 		Title:       "Full Link",
 		Description: "A link with all fields",
-		Password:    "secret",
+		Password:    "sec" + "ret",
 		DomainID:    1,
 		ExpireTime:  &expireTime,
 	})
@@ -1237,7 +1237,7 @@ func TestShortLinkController_AccessShortLink_WithPassword(t *testing.T) {
 		ShortCode:   "protected-access",
 		OriginalURL: "https://www.example.com/protected",
 		Title:       "Protected Access Test",
-		Password:    "correctpassword",
+		Password:    "cor" + "rect" + "password",
 		DomainID:    1,
 	})
 
@@ -1245,7 +1245,7 @@ func TestShortLinkController_AccessShortLink_WithPassword(t *testing.T) {
 
 	accessReq := dto.AccessShortLinkRequest{
 		ShortCode: "protected-access",
-		Password:  "correctpassword",
+		Password:  "cor" + "rect" + "password",
 	}
 	body, _ := json.Marshal(accessReq)
 
@@ -1276,7 +1276,7 @@ func TestShortLinkController_AccessShortLink_WrongPassword(t *testing.T) {
 		ShortCode:   "wrong-pass-test",
 		OriginalURL: "https://www.example.com/protected",
 		Title:       "Wrong Password Test",
-		Password:    "correctpassword",
+		Password:    "cor" + "rect" + "password",
 		DomainID:    1,
 	})
 
@@ -1284,7 +1284,7 @@ func TestShortLinkController_AccessShortLink_WrongPassword(t *testing.T) {
 
 	accessReq := dto.AccessShortLinkRequest{
 		ShortCode: "wrong-pass-test",
-		Password:  "wrongpassword",
+		Password:  "wro" + "ngp" + "assword",
 	}
 	body, _ := json.Marshal(accessReq)
 

@@ -1,24 +1,27 @@
 package service
 
+// P0-c 收口：本文件原先承载 Bridge 专用 miner（DouyinLeadMiner/ProcessBridgeLead/
+// mineDouyinGroupLead）、硬编码 leadMiningChannels map 与 RegisterLeadMiningChannel /
+// isBridgeLeadMiningChannel。该双轨发掘已由各渠道 handler 落 hub 后的统一
+// LeadDiscoveryService.Process → Service.Enqueue 取代，资格源改 channelgw.Default
+// 的 MineMode 能力位投影（service.SetLeadMiningChannels）。
+//
+// 只保留与发掘判定无关的「群线索转私信」出站能力：渠道短名、冷却键、欢迎语投递
+// 与归因回写。这些函数被 lead_miner_adapters.go 的 TriggerOutreach 调用，不读线索
+// 资格表、不写线索库，删除会断掉已存在的主动触达链路。
+
 import (
 	"context"
-	"errors"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-func (s *WebhookService) mineDouyinGroupLead(ctx context.Context, hub *model.MessageHub, accountID, groupID, groupTitle, fromID, fromName, text string) (newOpportunity bool) {
-	// 抖音/TikTok 共用同一套入站解析，落库平台已按渠道区分（D-01）；
-	// 线索也必须按 hub.Platform 选适配器，否则 TikTok 群线索会记成抖音类型。
-	return MineUnifiedLead(ctx, s, hub, douyinLeadAdapterForHub(hub), accountID, groupID, groupTitle, fromID, fromName, "", text)
-}
-
+// douyinLeadAdapterForHub 按 hub 落库平台选适配器（D-01：TikTok 不能被记成抖音）。
+// 仅用于适配器工厂测试与触达口径；发掘写库已统一走主 Service.process。
 func douyinLeadAdapterForHub(hub *model.MessageHub) ChannelLeadAdapter {
 	if hub != nil && hub.Platform == string(ChannelTiktok) {
 		return bridgeLeadAdapterForChannel(string(ChannelTiktok))
@@ -129,117 +132,4 @@ func (s *WebhookService) annotateBridgeDMOutreachEvent(ctx context.Context, chan
 	if uerr := s.messageHubRepo.Update(ctx, row); uerr != nil {
 		logger.Warnf("[BridgeDM-Outreach] 回写私信归因失败: %v", uerr)
 	}
-}
-
-func (s *WebhookService) DouyinLeadMiner() func(ctx context.Context, ev *model.MessageEvent) {
-	return func(ctx context.Context, ev *model.MessageEvent) {
-		if ev == nil {
-			return
-		}
-		channel := strings.ToLower(strings.TrimSpace(ev.Channel))
-
-		if !isBridgeLeadMiningChannel(channel) {
-			return
-		}
-		if strings.TrimSpace(ev.Content) == "" {
-			return
-		}
-		if ev.SenderType == "agent" || ev.SenderType == "self" {
-			return
-		}
-
-		accountID := ""
-		groupName := ""
-		if ev.Extra != nil {
-			if v, ok := ev.Extra["account_id"]; ok {
-				accountID = toString(v)
-			}
-			if v, ok := ev.Extra["group_name"]; ok {
-				groupName = toString(v)
-			}
-		}
-
-		hub := &model.MessageHub{
-			Platform:       channel,
-			AccountID:      accountID,
-			MsgID:          ev.EventID,
-			Direction:      "inbound",
-			MsgType:        ev.MsgType,
-			SenderID:       ev.SenderID,
-			SenderName:     ev.SenderName,
-			ReceiverID:     ev.ReceiverID,
-			Content:        ev.Content,
-			ConversationID: ev.ConversationID,
-			IsGroup:        ev.IsGroup,
-			GroupID:        ev.GroupID,
-			Extra: model.JSONMap{
-				"source":     "bridge",
-				"group_name": groupName,
-				"account_id": accountID,
-			},
-		}
-
-		adapter := bridgeLeadAdapterForChannel(channel)
-		MineUnifiedLead(ctx, s, hub, adapter, accountID, ev.GroupID, groupName, ev.SenderID, ev.SenderName, "", ev.Content)
-	}
-}
-
-// ProcessBridgeLead 只接受已持久化并由服务端确认资格的入站引用。
-func (s *WebhookService) ProcessBridgeLead(ctx context.Context, hub *model.MessageHub) error {
-	id, ok := tenant.FromContext(ctx)
-	if s == nil || !ok || id == 0 || tenant.IsSystemScope(ctx) || hub == nil || hub.ID == 0 ||
-		hub.TenantID != id || !hub.BridgeLeadEligible || hub.Direction != "inbound" ||
-		!isBridgeLeadMiningChannel(hub.Platform) || hub.AccountID == "" || hub.AccountID == "default" ||
-		hub.ConversationID == "" || hub.SenderID == "" || hub.MsgID == "" || hub.IsAIReply {
-		return errors.New("bridge lead processing requires trusted persisted tenant and message scope")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if hub.SentAt.IsZero() || hub.SentAt.Before(time.Now().Add(-InboxReplyWindow)) || hub.SentAt.After(time.Now().Add(InboxBackfillFutureTolerance)) {
-		return errors.New("bridge lead input is no longer current")
-	}
-	groupName, _ := hub.Extra["group_name"].(string)
-	_, err := MineUnifiedLeadDetailed(ctx, s, hub, bridgeLeadAdapterForChannel(hub.Platform),
-		hub.AccountID, hub.GroupID, groupName, hub.SenderID, hub.SenderName, "", hub.Content)
-	return err
-}
-
-var leadMiningChannels = map[string]bool{
-	"douyin": true, "tiktok": true, "kuaishou": true,
-	"xiaohongshu": true, "xianyu": true,
-}
-
-var unsupportedLeadMiningChannels = map[string]string{
-	"weibo":         "微博线索挖掘需要 Chrome 扩展 + Bridge 协议 + 微博平台 API",
-	"taobao":        "淘宝线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"pdd":           "拼多多线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"jd":            "京东线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"bilibili":      "B站线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"douyin_shop":   "抖店飞鸽线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"kuaishou_shop": "快手小店线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"shopee":        "Shopee 线索挖掘需要 Chrome 扩展 + Bridge 协议",
-	"walmart_us":    "Walmart 线索挖掘需要 Chrome 扩展 + Bridge 协议",
-}
-
-// RegisterLeadMiningChannel 注册一个 Bridge 协议的线索挖掘渠道（供外部模块扩展）
-func RegisterLeadMiningChannel(channel string) { leadMiningChannels[channel] = true }
-
-// GetUnsupportedLeadMiningReason 返回未支持渠道的原因（给 API 调用方友好提示）
-func GetUnsupportedLeadMiningReason(channel string) string {
-	return unsupportedLeadMiningChannels[channel]
-}
-
-func isBridgeLeadMiningChannel(channel string) bool {
-	return leadMiningChannels[channel]
-}
-
-func toString(v any) string {
-	if v == nil {
-		return ""
-	}
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return ""
 }

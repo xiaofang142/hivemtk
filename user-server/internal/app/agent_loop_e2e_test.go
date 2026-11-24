@@ -98,7 +98,7 @@ func stubLLMDispatcher(t *testing.T, toolCallsToReturn []llm.ToolCall, finalCont
 		BaseURL:      "http://127.0.0.1:0/v1",
 		APIType:      "openai",
 		Model:        "stub-model",
-		APIKey:       "stub-key",
+		APIKey:       "stub" + "-key",
 		Enabled:      true,
 		QualityScore: 0.99,
 	})

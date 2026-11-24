@@ -2,7 +2,7 @@
 
 > **跨编辑器分工（2026-11-14 更新）**：本页是 Claude Code 的最高规则；其他编辑器读本仓根
 > `AGENTS.md`（摘要入口）→ `docs/standards/AI-EDITOR-CONTRACT.md`（可判定契约）。
-> 外层仓（`go/hivemtk`）根级 `AGENTS.md` 指向本仓约束体系；外层自有约定见外层根 `CLAUDE.md`。
+> 工作区根（`go/hivemtk`，普通目录、非 git 仓）的 `AGENTS.md` 指向本仓约束体系；工作区自有约定见其根 `CLAUDE.md`。
 > 本页只放「最高规则 + 必跑口径」；规则 3/4 的流程细节已**语义零变更**平移到
 > `docs/standards/SPEC-KIT-WORKFLOW.md`（上下文经济：指令跟随随篇幅退化，入口保持精炼）。
 
@@ -132,8 +132,10 @@ Router → Controller → Service → Repository → Model
 ```
 
 > 目录即层名：`internal/{router,controller,service,repository,model}`。**本仓库无 `handler` 包**：
-> `internal/controller/` 下控制器类型全为 `XxxController`（如 `CustomerController`），`XxxHandler` 零命中（实测 205:0）。
-> 新增业务域一律按 `controller` 落地，不引入 `handler` 同义词（避免双命名）。
+> `internal/controller/` 下控制器类型全为 `XxxController`（如 `CustomerController`）。
+> 2026-11-25 快照为 241 个顶层非测试 `.go`、231 个 `XxxController` struct 类型、`XxxHandler` struct 零命中；
+> 计数方法与最新快照以 `../docs/architecture/FULL_FEATURE_INVENTORY.md` §3 I-04 为准，
+> 不把数量当长期硬编码规则。新增业务域一律按 `controller` 落地，不引入 `handler` 同义词（避免双命名）。
 
 ### 各层职责
 

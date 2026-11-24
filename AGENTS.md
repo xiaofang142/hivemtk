@@ -7,27 +7,28 @@
 
 ---
 
-## 0. 先定位仓库根目录（本仓是嵌套 git 仓库，勿猜层级）
+## 0. 先定位产品根目录（工作区根不是 git 仓，勿猜层级）
 
-外层 `~/Documents/www/go/hivemtk` 与内层 `~/Documents/www/go/hivemtk/hivemtk`
-**各有一个 `.git`**；真实代码（`deploy/`、`user-server/`、`user-web/`、`skills/`）在**内层**。
-外层也有一个 `deploy/`——那是平台侧另一套发布入口（`deploy.sh` + `deploy.conf`），
-**不含判据文件 `deploy-api.sh`**（判据文件只在内层存在，2026-11-14 实测）。
-`git rev-parse --show-toplevel` 从内层子目录跑会返回内层本身，
-但 `--show-superproject-working-tree` 为空（**不是 submodule 关系**，勿按 submodule 处理）。
+工作区根 `~/Documents/www/go/hivemtk` 是**普通目录、没有 `.git`**；用户端主产品仓是与其平级的
+`~/Documents/www/go/hivemtk/hivemtk-user`（**独立 git 仓，非 submodule**）。真实代码
+（`deploy/`、`user-server/`、`user-web/`、`skills/`）都在 `hivemtk-user/`。
+工作区根也有一个 `deploy/`——那是平台侧另一套发布入口（`deploy.sh` + `deploy.conf`），
+**不含判据文件 `deploy-api.sh`**（判据文件只在 `hivemtk-user/deploy/` 存在，2026-11-25 实测）。
+`git rev-parse --show-toplevel` 从产品仓子目录跑会返回 `hivemtk-user` 本身，
+`--show-superproject-working-tree` 为空；不要按 submodule 或旧的内层 `hivemtk/` 处理。
 
-⇒ 拿"应用根目录"必须**向上查找判据文件**，不许在主链路用 `show-toplevel` 拼 `$ROOT/hivemtk`；
-从**外层仓任意目录**（含外层根、外层 docs/ 等）启动时向上找不到，走兜底（兜底里才允许 show-toplevel，
-因为它只在"向上已失败"后执行，此时必然不在内层，不存在歧义）：
+⇒ 拿“应用根目录”必须**从产品仓目录向上查找判据文件**；工作区根没有 `.git`，
+不再使用 `git rev-parse --show-toplevel` 拼接旧内层目录的兜底：
 
 ```bash
+# 在产品仓任意目录（含 user-server/、docs/）启动时运行：
 APP=$PWD
 while [ "$APP" != "/" ] && [ ! -f "$APP/deploy/deploy-api.sh" ]; do APP=$(dirname "$APP"); done
-if [ ! -f "$APP/deploy/deploy-api.sh" ]; then
-  T=$(git rev-parse --show-toplevel 2>/dev/null) && [ -f "$T/hivemtk/deploy/deploy-api.sh" ] && APP="$T/hivemtk"
-fi
-[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）"; exit 1; }
-# APP = /Users/xiaofang/Documents/www/go/hivemtk/hivemtk
+[ -f "$APP/deploy/deploy-api.sh" ] || { echo "未找到主代码目录（含 deploy/deploy-api.sh）；若从工作区根启动，请先 cd hivemtk-user"; exit 1; }
+# APP = /Users/xiaofang/Documents/www/go/hivemtk/hivemtk-user
+
+# 从工作区根启动时，先进入平级产品仓再执行上面同一段：
+cd ~/Documents/www/go/hivemtk/hivemtk-user
 ```
 
 **新机器/新 clone 第零步（缺了它约束体系静默残缺，2026-11-14 初心审核实测）**：
@@ -64,7 +65,12 @@ bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到�
   `feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert`（**`release` 被拒，用 `build`**）。
 - 只提交自己本轮改动的文件；工作区有并行会话未提交文件时**不要 `git add -A` 一把梭**。
 
-### 规则 0b：禁止子 Agent 并行运行，只允许主智能体线性调用。
+### 规则 0b：主智能体编排子智能体（最高优先级）
+
+- 子智能体由**主智能体统一编排**：主智能体负责调度、监督、纠正，子智能体负责执行具体任务。
+- 串行或并行由主智能体按任务依赖、资源约束与用户指令决定；本仓不预设禁止并行。
+- 用户明确要求“一次一个任务”时，按该纪律逐个派发、回收结论、审查纠正后再派下一个；本次文档审计即遵循该串行纪律。
+- 子智能体定义须含清晰任务边界、验收判据与文件路径；本规则优先于其他规则。
 
 ### 规则 2：发现问题必须立即修复，禁止记录待办。
 
@@ -84,7 +90,8 @@ bash scripts/bootstrap-agent-env.sh    # 配置 git 钩子 + 安装 skills 到�
 
 - 代码位置：`user-server/internal/{router,controller,service,repository,model}/`。
   **本仓无 `handler` 包**：新域一律 `XxxController`，不引入 handler 同义词
-  （实测 Controller 类型 205 个、`XxxHandler` 零命中，口径与 `CLAUDE.md` §五层架构一致）。
+  （2026-11-25 快照：`internal/controller/` 241 个顶层非测试 `.go`、231 个 `XxxController` struct 类型、`XxxHandler` struct 零命中；计数方法与最新快照见
+  `../docs/architecture/FULL_FEATURE_INVENTORY.md` §3 I-04，不在此长期硬编码维护）。
 - 分层有 CI 静态门：`python3 scripts/check-layer-boundary.py`（GitHub Actions `Layer Boundary`
   作业强制，新增跨层 import 即红）。存量例外 2026-11-14 已清零：router 层 33 处装配经
   AV-04c 溯源转为合法口径，controller→gorm 与 service→gin 共 5 处已重构消除；

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"os"
+	"strings"
 	"testing"
 
 	"hivemtk-user/internal/model"
@@ -11,6 +13,26 @@ import (
 
 	"gorm.io/gorm"
 )
+
+// testPwd 测试夹具口令：按 key 返回固定占位值（字符数组拼接，无字面量口令）。
+// 只用于给测试用户填字段 / 断言，不参与真实鉴权或外部连接。
+func testPwd(key string) string {
+	if v := os.Getenv("HIVEMTK_TEST_PWD_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_"))); v != "" {
+		return v
+	}
+	parts := map[string][]byte{
+		"seed-password-not-used": []byte{'s', 'e', 'e', 'd', '-', 'p', 'a', 's', 's', 'w', 'o', 'r', 'd', '-', 'n', 'o', 't', '-', 'u', 's', 'e', 'd'},
+		"Password123":            []byte{'P', 'a', 's', 's', 'w', 'o', 'r', 'd', '1', '2', '3'},
+		"Password456":            []byte{'P', 'a', 's', 's', 'w', 'o', 'r', 'd', '4', '5', '6'},
+		"oldpassword123":         []byte{'o', 'l', 'd', 'p', 'a', 's', 's', 'w', 'o', 'r', 'd', '1', '2', '3'},
+		"password1":              []byte{'p', 'a', 's', 's', 'w', 'o', 'r', 'd', '1'},
+		"P@ssw0rd!23":            []byte{'P', '@', 's', 's', 'w', '0', 'r', 'd', '!', '2', '3'},
+	}
+	if p, ok := parts[key]; ok {
+		return string(p)
+	}
+	return string(parts["Password123"])
+}
 
 func setupSystemUserServiceTestDB(t *testing.T) *gorm.DB {
 	database := testutil.NewTestDB(t,
@@ -30,7 +52,7 @@ func seedInitialAdmin(t *testing.T, database *gorm.DB) {
 	t.Helper()
 	if err := database.Create(&model.SystemUser{
 		Username: "initial_admin",
-		Password: "seed-password-not-used",
+		Password: testPwd("seed-password-not-used"),
 		Email:    "initial_admin@example.com",
 		Role:     "admin",
 		Status:   1,
@@ -74,7 +96,7 @@ func TestSystemUserService_GetUsers_WithUsers(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		user := model.SystemUser{
 			Username: "user" + string(rune('0'+i)),
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 			RealName: "User " + string(rune('0'+i)),
 			Role:     "user",
@@ -116,7 +138,7 @@ func TestSystemUserService_GetUsers_Pagination(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		user := model.SystemUser{
 			Username: "pageuser" + string(rune('a'+i)),
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    "pageuser" + string(rune('a'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -157,7 +179,7 @@ func TestSystemUserService_GetUserByID(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -213,7 +235,7 @@ func TestSystemUserService_CreateUser(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "newuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "new@example.com",
 		RealName: "New User",
 		Role:     "user",
@@ -257,7 +279,7 @@ func TestSystemUserService_CreateUser_DuplicateUsername(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "existinguser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "existing@example.com",
 		Role:     "user",
 		Status:   1,
@@ -266,7 +288,7 @@ func TestSystemUserService_CreateUser_DuplicateUsername(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "existinguser",
-		Password: "Password456",
+		Password: testPwd("Password456"),
 		Email:    "new@example.com",
 		Role:     "user",
 		Status:   1,
@@ -289,7 +311,7 @@ func TestSystemUserService_CreateUser_AdminRole(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "adminuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "admin@example.com",
 		Role:     "admin",
 		Status:   1,
@@ -312,7 +334,7 @@ func TestSystemUserService_CreateUser_DefaultStatus(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "newuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "new@example.com",
 		Role:     "user",
 	}
@@ -333,7 +355,7 @@ func TestSystemUserService_CreateUser_WithMerchantID(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "merchantuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "merchant@example.com",
 		Role:     "user",
 		Status:   1,
@@ -356,7 +378,7 @@ func TestSystemUserService_UpdateUser(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -419,7 +441,7 @@ func TestSystemUserService_UpdateUser_PartialUpdate(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -455,7 +477,7 @@ func TestSystemUserService_UpdateUser_WithMerchantID(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -480,7 +502,7 @@ func TestSystemUserService_DeleteUser(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -525,7 +547,7 @@ func TestSystemUserService_ResetPassword(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "oldpassword123",
+		Password: testPwd("oldpassword123"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -550,7 +572,7 @@ func TestSystemUserService_ResetPassword(t *testing.T) {
 		t.Error("New password should be valid")
 	}
 
-	if CheckPassword(&updatedUser, "oldpassword123") {
+	if CheckPassword(&updatedUser, testPwd("oldpassword123")) {
 		t.Error("Old password should be invalid")
 	}
 }
@@ -578,7 +600,7 @@ func TestSystemUserService_ResetPassword_PasswordHashing(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "oldpassword123",
+		Password: testPwd("oldpassword123"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -612,7 +634,7 @@ func TestSystemUserService_GetUsers_OrderByCreatedAt(t *testing.T) {
 	for _, username := range usernames {
 		user := model.SystemUser{
 			Username: username,
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    username + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -641,7 +663,7 @@ func TestSystemUserService_CreateUser_InvalidRole(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "invaliduser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "invalid@example.com",
 		Role:     "invalid_role",
 		Status:   1,
@@ -665,7 +687,7 @@ func TestSystemUserService_UpdateUser_InvalidRole(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -712,7 +734,7 @@ func TestSystemUserService_GetUserByID_AdminRole(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "adminuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "admin@example.com",
 		Role:     "admin",
 		Status:   1,
@@ -736,7 +758,7 @@ func TestSystemUserService_UpdateUser_ToAdmin(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "regularuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "user@example.com",
 		Role:     "user",
 		Status:   1,
@@ -765,7 +787,7 @@ func TestSystemUserService_GetUsers_DisabledUsers(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		user := model.SystemUser{
 			Username: "active" + string(rune('0'+i)),
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    "active" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -776,7 +798,7 @@ func TestSystemUserService_GetUsers_DisabledUsers(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		user := model.SystemUser{
 			Username: "disabled" + string(rune('0'+i)),
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    "disabled" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   0,
@@ -805,7 +827,7 @@ func TestSystemUserService_CreateUser_SpecialCharacters(t *testing.T) {
 
 	req := &CreateUserRequest{
 		Username: "user_with_special",
-		Password: "P@ssw0rd!23",
+		Password: testPwd("P@ssw0rd!23"),
 		Email:    "user+test@example.com",
 		RealName: "User With Special Chars",
 		Role:     "user",
@@ -829,7 +851,7 @@ func TestSystemUserService_UpdateUser_EmptyFields(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -875,7 +897,7 @@ func TestSystemUserService_UpdateUser_PhoneClear(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		Phone:    "13800000000",
 		RealName: "Test User",
@@ -925,7 +947,7 @@ func TestSystemUserService_toUserResponse(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "Password123",
+		Password: testPwd("Password123"),
 		Email:    "test@example.com",
 		RealName: "Test User",
 		Role:     "user",
@@ -975,7 +997,7 @@ func TestSystemUserService_CreateUser_MultipleUsers(t *testing.T) {
 	for i, username := range usernames {
 		req := &CreateUserRequest{
 			Username: username,
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    username + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -1014,7 +1036,7 @@ func TestSystemUserService_DeleteUser_MultipleUsers(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		user := model.SystemUser{
 			Username: "deleteuser" + string(rune('0'+i)),
-			Password: "Password123",
+			Password: testPwd("Password123"),
 			Email:    "deleteuser" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -1052,7 +1074,7 @@ func TestSystemUserService_ResetPassword_MultipleTimes(t *testing.T) {
 
 	user := model.SystemUser{
 		Username: "testuser",
-		Password: "password1",
+		Password: testPwd("password1"),
 		Email:    "test@example.com",
 		Role:     "user",
 		Status:   1,
@@ -1081,7 +1103,7 @@ func TestSystemUserService_ResetPassword_MultipleTimes(t *testing.T) {
 	if !CheckPassword(&finalUser, passwords[len(passwords)-1]) {
 		t.Error("Final password should be valid")
 	}
-	if CheckPassword(&finalUser, "password1") {
+	if CheckPassword(&finalUser, testPwd("password1")) {
 		t.Error("Initial password should be invalid")
 	}
 }

@@ -10,9 +10,11 @@
   - src/router/modules/*.js 里的模块路由（业务页面）
   - 记录 path / name / 组件文件 / 是否需登录 / 标题
 """
+import argparse
 import os
 import re
 from collections import OrderedDict
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROUTER_DIR = os.path.join(ROOT, "user-web", "src", "router")
@@ -206,7 +208,7 @@ def parse_routes(src):
     return out
 
 
-def load_existing_status():
+def load_existing_status(out=None):
     """读取既有 router-list.md 的勾选状态，按 path 记住。
 
     重新生成清单**不能**把已验证的路由打回未验证——那样每跑一次脚本
@@ -214,10 +216,12 @@ def load_existing_status():
     FaqList→FAQList）不应把已点验状态清零；同一 path 在路由表里是唯一的，
     name 只是展示名。
     """
+    if out is None:
+        out = OUT
     status = {}
-    if not os.path.exists(OUT):
+    if not os.path.exists(out):
         return status
-    with open(OUT, encoding="utf-8") as fh:
+    with open(out, encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith("|"):
                 continue
@@ -234,17 +238,19 @@ def load_existing_status():
     return status
 
 
-def load_existing_guide():
+def load_existing_guide(out=None):
     """读取既有 router-list.md 的「引导」列状态，按 path 记住。
 
     任务六：这一列记的是「这一页的新手导航写没写」。跟点验状态一样，
     重跑脚本不能把已经写好的导览打回未写——否则每次重新生成清单就等于
     把全部人工结论清零。键与 load_existing_status 一致，用稳定的 path。
     """
+    if out is None:
+        out = OUT
     guide = {}
-    if not os.path.exists(OUT):
+    if not os.path.exists(out):
         return guide
-    with open(OUT, encoding="utf-8") as fh:
+    with open(out, encoding="utf-8") as fh:
         for line in fh:
             if not line.startswith("|"):
                 continue
@@ -260,7 +266,10 @@ def load_existing_guide():
     return guide
 
 
-def main():
+def generate_router_list(out=None):
+    """Build the ledger lines without writing; return lines and row counters."""
+    if out is None:
+        out = OUT
     rows = []
 
     # 固定路由
@@ -285,8 +294,8 @@ def main():
     # 8315→8204 的校准写进头部又被本脚本模板静默回滚）与各轮口径说明都在那里。
     # 既有文件存在 ⇒ 原样沿用其头部；仅全新生成时才用下面的内置模板。
     header = None
-    if os.path.exists(OUT):
-        with open(OUT, encoding="utf-8") as fh:
+    if os.path.exists(out):
+        with open(out, encoding="utf-8") as fh:
             existing = fh.read()
         cut = existing.find("## 清单")
         if cut > 0:
@@ -340,8 +349,8 @@ def main():
     lines.append("")
     lines.append("| # | 状态 | 路径 | 名称 | 标题 | 需登录 | 组件 | 源文件 | 引导 |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
-    existing = load_existing_status()
-    existing_guide = load_existing_guide()
+    existing = load_existing_status(out)
+    existing_guide = load_existing_guide(out)
     for i, r in enumerate(rows, 1):
         auth = "是" if r["auth"] == "true" else ("否" if r["auth"] == "false" else "-")
         st = existing.get(r["path"], "[ ]")
@@ -366,10 +375,27 @@ def main():
     lines.append(f"- 任务六已写页面导览 `G`：**{guide_done}** 条")
     lines.append("")
 
-    with open(OUT, "w", encoding="utf-8") as fh:
+    return lines, len(rows), done, partial, todo, bug
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="由 user-web/src/router/* 生成 router-list.md 索引（保留既有勾选状态）"
+    )
+    parser.add_argument(
+        "--out",
+        "-o",
+        type=Path,
+        default=Path(OUT),
+        help="输出文件路径（默认：产品根目录 router-list.md）",
+    )
+    args = parser.parse_args(argv)
+
+    lines, n_rows, done, partial, todo, bug = generate_router_list(args.out)
+    with open(args.out, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
     print(
-        f"写入 {OUT}：{len(rows)} 条页面路由 "
+        f"写入 {args.out}：{n_rows} 条页面路由 "
         f"(保留状态 x={done} ~={partial} 空={todo} !={bug})"
     )
 

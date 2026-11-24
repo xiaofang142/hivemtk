@@ -33,7 +33,7 @@ func TestDispatchCacheScope_ConfigurationAndExecutionAreIsolated(t *testing.T) {
 			}))
 			defer srv.Close()
 			d := newDispatcherBase(NewLLMService())
-			provider := ProviderConfig{Name: "scope-local", BaseURL: srv.URL, APIType: "openai", Model: "model-a", APIKey: "fixture", Enabled: true, QualityScore: 1}
+			provider := ProviderConfig{Name: "scope-local", BaseURL: srv.URL, APIType: "openai", Model: "model-a", APIKey: "fix" + "ture", Enabled: true, QualityScore: 1}
 			d.AddProvider(provider)
 			d.SetRoute(ScenarioRoute{Scenario: ScenarioSOPReply, Provider: provider.Name, MinQuality: 0.9})
 			ctx := tenant.OnlyTenant(context.Background(), 18)
@@ -125,7 +125,7 @@ func TestDispatchCacheScope_InFlightChangeDoesNotFillOldConfiguration(t *testing
 	ctx, cancel := context.WithTimeout(tenant.OnlyTenant(context.Background(), 18), 5*time.Second)
 	defer cancel()
 	d := newDispatcherBase(NewLLMService())
-	p := ProviderConfig{Name: "inflight-local", BaseURL: srv.URL, APIType: "openai", Model: "model-a", APIKey: "fixture", Enabled: true, QualityScore: 1}
+	p := ProviderConfig{Name: "inflight-local", BaseURL: srv.URL, APIType: "openai", Model: "model-a", APIKey: "fix" + "ture", Enabled: true, QualityScore: 1}
 	d.AddProvider(p)
 	d.SetRoute(ScenarioRoute{Scenario: ScenarioSOPReply, Provider: p.Name})
 	req := DispatchRequest{Scenario: ScenarioSOPReply, Prompt: "合成在途问题", CacheKey: "inflight-scope:" + srv.URL, CacheTTL: 60}

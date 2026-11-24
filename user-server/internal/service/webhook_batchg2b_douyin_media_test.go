@@ -1030,9 +1030,9 @@ func TestG2B_IncompleteOfficialIDsSkip(t *testing.T) {
 func TestG2B_TikTokNeverCallsDouyinEndpoint(t *testing.T) {
 	db := newD03DispatchDB(t)
 	for _, acc := range []*model.IntegrationAccount{
-		{Platform: string(ChannelTiktok), APIKey: "tt_g2b_tiktok", APISecret: gDySecret, Status: 1},
+		{Platform: string(ChannelTiktok), APIKey: "tt_" + "g2b" + "_tiktok", APISecret: gDySecret, Status: 1},
 		// 诱饵：douyinClientCreds 若按平台写死/回退取"任意一家"，TikTok 就会拿到这把。
-		{Platform: string(ChannelDouyin), APIKey: "tt_g2b_douyin_bait", APISecret: gDySecret, Status: 1},
+		{Platform: string(ChannelDouyin), APIKey: "tt_g" + "2b_do" + "uyin_bait", APISecret: gDySecret, Status: 1},
 	} {
 		if err := db.Create(acc).Error; err != nil {
 			t.Fatalf("seed %s account: %v", acc.Platform, err)

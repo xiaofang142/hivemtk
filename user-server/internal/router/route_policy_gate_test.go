@@ -28,6 +28,7 @@ import (
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
 	dbutil "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/utils"
 
@@ -524,7 +525,12 @@ func TestRouteGuardChain_AnonymousCannotReadPrivilegedSurfaces(t *testing.T) {
 
 // TestRouteGuardChain_StaffRejectedOnAdminOnlyRoutes 仅超管表的行为证据：
 // staff 打表内口＝403 且是守卫那句；admin 打同一口＝不被守卫拦。
+//
+// 固定 OFF 模式：模块闸恒放行、订阅闸不挂，本用例专门验证 RoutePolicy 相对路由内
+// AdminAuthMiddleware 的优先级。ON 模式下 4301/4305 必须先于这里的 403，由
+// commercial_gate_order_test.go 的真实装配行为腿钉住。
 func TestRouteGuardChain_StaffRejectedOnAdminOnlyRoutes(t *testing.T) {
+	setTenantModeForTest(t, tenant.ModeOff)
 	engine := gateEngine(t)
 	staff, admin := gateTokens(t)
 
@@ -532,8 +538,9 @@ func TestRouteGuardChain_StaffRejectedOnAdminOnlyRoutes(t *testing.T) {
 		method, path, denyMsg string
 	}{
 		// 兼容别名：权威口在 admin 组，别名曾只要求登录。
-		// 这两条也进了仅超管表，所以先开口的是 RoutePolicyGuard（它在链上排在
-		// 路由自带的 AdminAuthMiddleware 之前），文案是超管那一句而不是管理员那一句。
+		// OFF 模式下商业闸放行后，这两条仍先命中仅超管表，所以先开口的是
+		// RoutePolicyGuard（它在链上排在路由自带的 AdminAuthMiddleware 之前），
+		// 文案是超管那一句而不是管理员那一句。
 		{"GET", "/api/feishu/accounts/list", policyDeniedMsg},
 		{"GET", "/api/telegram/accounts/list", policyDeniedMsg},
 		// 表内口（走 RoutePolicyGuard）：口令规则的写侧。

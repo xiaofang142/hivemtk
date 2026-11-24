@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
@@ -29,6 +30,92 @@ type LeadJudgeContext struct {
 	Platform         string
 	IsGroup          bool
 	GroupID          string
+	// GroupRoleCounts 群成员发言角色计数（由 AggregateGroupContext 聚合得到）。
+	// 仅群聊场景填充；单聊为 nil，提示中不输出群成员统计行。
+	GroupRoleCounts map[string]int
+	// GroupAggregateFailed 群聊聚合失败：提示里标注证据不完整，不静默降级。
+	GroupAggregateFailed bool
+	// ReactEvidence D18 ReAct 工具取证收集到的证据（只读取证，失败带降级标记）。
+	ReactEvidence []string
+	ReactDegraded bool
+}
+
+// leadReactHook 由装配点注入 ReAct 取证循环；未注入时判定走既有主链（向后兼容）。
+// 签名与 runLeadReactLoop 对齐，便于单测注入假实现。
+// 并发安全：Set 与判定读写经 RWMutex 保护（多次 -race 审计的无锁全局变量缺陷）。
+var (
+	leadReactHookMu sync.RWMutex
+	leadReactHook   func(context.Context, *LeadJudgeContext) ([]string, bool)
+)
+
+func getLeadReactHook() func(context.Context, *LeadJudgeContext) ([]string, bool) {
+	leadReactHookMu.RLock()
+	defer leadReactHookMu.RUnlock()
+	return leadReactHook
+}
+
+// mergeJudgeMessages 合并(MessageHub 权威历史, 共享上下文补充)为判定消息列表。
+//
+// 关键契约（P0-b 假聚合修复）：MessageHub 的 history 来自真实双向/多成员消息，是权威源；
+// 共享上下文只按真实 MessageID 补充缺失条目，绝不覆盖 history。旧实现用只含当前一条
+// 的共享缓存整体替换 history，导致群聊多成员与单聊双向历史丢失（对抗审核 P0-2）。
+// 伪造的 history_N 类 ID 不作为权威键——只有真实 hub.MsgID 才参与去重。
+func mergeJudgeMessages(history []DetectionMessage, shared model.ConversationMessages, current DetectionMessage) []DetectionMessage {
+	out := make([]DetectionMessage, 0, len(history)+len(shared)+1)
+	seen := make(map[string]bool, len(history)+len(shared)+1)
+	add := func(m DetectionMessage) {
+		key := strings.TrimSpace(m.MessageID)
+		if key == "" || strings.HasPrefix(key, "history_") {
+			// 空 ID / 合成 history_N 不作为去重权威键，仍保留消息内容
+			key = ""
+		}
+		if key != "" {
+			if seen[key] {
+				return
+			}
+			seen[key] = true
+		}
+		out = append(out, m)
+	}
+	for _, h := range history {
+		add(h)
+	}
+	for _, m := range shared {
+		if strings.TrimSpace(m.MessageID) == "" || strings.HasPrefix(m.MessageID, "history_") {
+			continue // 共享侧的合成 ID 只做补充内容，不参与权威去重
+		}
+		add(DetectionMessage{MessageID: m.MessageID, Content: m.Content, Role: m.Role, SenderID: m.SenderID})
+	}
+	add(current)
+	return out
+}
+
+// roleFromEnrichedContent 从 AggregateGroupContext 产出的 "[role:sender] content" 提取 role。
+func roleFromEnrichedContent(content string) string {
+	if !strings.HasPrefix(content, "[") {
+		return ""
+	}
+	end := strings.Index(content, ":")
+	if end <= 1 {
+		return ""
+	}
+	role := content[1:end]
+	switch role {
+	case "demand", "supply", "resource", "broker", "member", "unknown":
+		return role
+	}
+	return ""
+}
+
+// stripRolePrefix 去掉已有的 "[role:sender] " 前缀，避免重复标注叠加。
+func stripRolePrefix(content string) string {
+	if !strings.HasPrefix(content, "[") {
+		return content
+	}
+	if close := strings.Index(content, "] "); close > 0 {
+		return content[close+2:]
+	}
+	return content
 }
 
 // JudgeWithContext 二次 LLM 汇总判断：多轮 + 历史消息 + 三路证据 + 角色分类。
@@ -36,6 +123,13 @@ type LeadJudgeContext struct {
 func (j *dispatcherJudge) JudgeWithContext(ctx context.Context, jctx *LeadJudgeContext) (*LeadJudgement, error) {
 	if jctx == nil {
 		return nil, errors.New("二次判断上下文为空")
+	}
+	// D18：装配了 ReAct 取证钩子时先跑工具取证（只读、有步数上限、失败可见），
+	// 证据进入系统提示；钩子未装配时行为与既有主链完全一致（向后兼容）。
+	if hook := getLeadReactHook(); hook != nil {
+		ev, degraded := hook(ctx, jctx)
+		jctx.ReactEvidence = ev
+		jctx.ReactDegraded = degraded
 	}
 	dispatcher := llm.GetGlobalDispatcher()
 	if dispatcher == nil {
@@ -83,6 +177,12 @@ func buildLeadJudgeSystemPrompt(jctx *LeadJudgeContext) string {
 			b.WriteString("【语义关键词】" + strings.Join([]string(jctx.Rule.SemanticKeywords), "、") + "\n")
 		}
 	}
+	// P0-d / D8：历史摘要（ConversationContext.Summary）是 compaction 产物，
+	// 判定前必须读入提示，让模型在长会话里也能看到被裁剪掉的早期诉求与结论。
+	if jctx.Conversation != nil && strings.TrimSpace(jctx.Conversation.Summary) != "" {
+		b.WriteString("【会话历史摘要】" + strings.TrimSpace(jctx.Conversation.Summary) + "\n")
+		b.WriteString("以上为早期对话压缩摘要；与下方逐条消息冲突时以逐条消息为准。\n")
+	}
 	if jctx.Conversation != nil && len(jctx.Conversation.MemberRoles) > 0 {
 		roles := make([]string, 0, len(jctx.Conversation.MemberRoles))
 		for sender, role := range jctx.Conversation.MemberRoles {
@@ -90,8 +190,28 @@ func buildLeadJudgeSystemPrompt(jctx *LeadJudgeContext) string {
 		}
 		b.WriteString("【群成员角色分类】" + strings.Join(roles, "、") + "\n")
 	}
+	if len(jctx.ReactEvidence) > 0 {
+		b.WriteString("【ReAct 取证证据】\n")
+		for _, ev := range jctx.ReactEvidence {
+			b.WriteString("- " + ev + "\n")
+		}
+	}
+	if jctx.ReactDegraded {
+		b.WriteString("【证据不完整】ReAct 取证失败或降级，结论需人工复核。\n")
+	}
 	if jctx.IsGroup {
 		b.WriteString("【会话类型】群聊，群ID=" + jctx.GroupID + "\n")
+		if len(jctx.GroupRoleCounts) > 0 {
+			roles := make([]string, 0, len(jctx.GroupRoleCounts))
+			for role, count := range jctx.GroupRoleCounts {
+				roles = append(roles, fmt.Sprintf("%s=%d", role, count))
+			}
+			b.WriteString("【群成员发言统计】" + strings.Join(roles, "、") + "\n")
+			b.WriteString("群聊消息已按 [角色:发送者] 标注，请区分求购方/供货方/资源方/撮合方的发言。\n")
+		}
+		if jctx.GroupAggregateFailed {
+			b.WriteString("【证据不完整】群聊上下文聚合失败，角色标注不可用，不得据此确定成员角色。\n")
+		}
 	}
 	if len(jctx.Hits) > 0 {
 		b.WriteString("【三路检测证据】\n")
@@ -162,20 +282,20 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	}
 	jctx.Rule = rule
 
-	msgs := make([]DetectionMessage, 0, len(history)+1)
+	// P0-b：history（MessageHub 真实双向/多成员数据）是权威上下文。
+	// 注意 llm.ChatMessage 无 ID 字段，历史 ID 仍为合成键；mergeJudgeMessages
+	// 会跳过 history_N 作为去重键，保证内容不被共享缓存覆盖。真实 MsgID 的
+	// 证据引用改造需扩 fetchHistory 返回结构，列为后续独立任务。
+	histMsgs := make([]DetectionMessage, 0, len(history))
 	for i, h := range history {
-		msgs = append(msgs, DetectionMessage{
-			MessageID: fmt.Sprintf("history_%d", i),
-			Content:   h.Content,
-			Role:      h.Role,
+		histMsgs = append(histMsgs, DetectionMessage{
+			MessageID: fmt.Sprintf("history_%d", i), Content: h.Content, Role: h.Role,
 		})
 	}
-	msgs = append(msgs, DetectionMessage{
-		MessageID: hub.MsgID,
-		Content:   strings.TrimSpace(hub.Content),
-		Role:      "user",
-		SenderID:  hub.SenderID,
-	})
+	current := DetectionMessage{
+		MessageID: hub.MsgID, Content: strings.TrimSpace(hub.Content),
+		Role: "user", SenderID: hub.SenderID,
+	}
 
 	// 共享上下文：写入本轮消息并读取多轮历史 + 成员角色（T033/T039）。
 	ctxRepo := repository.NewConversationContextRepository()
@@ -192,18 +312,49 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		}
 		jctx.Conversation = conv
 	}
-	if jctx.Conversation != nil && len(jctx.Conversation.Messages) > 0 {
-		msgs = make([]DetectionMessage, 0, len(jctx.Conversation.Messages))
-		for _, m := range jctx.Conversation.Messages {
-			msgs = append(msgs, DetectionMessage{
-				MessageID: m.MessageID, Content: m.Content, Role: m.Role, SenderID: m.SenderID,
-			})
+	var shared model.ConversationMessages
+	if jctx.Conversation != nil {
+		shared = jctx.Conversation.Messages
+	}
+	// P0-b 核心：history 权威 + 共享上下文按真实 MsgID 补充，禁止整体覆盖。
+	jctx.Messages = mergeJudgeMessages(histMsgs, shared, current)
+
+	// 群聊富化：用 AggregateGroupContext 给每条历史消息补 [角色:发送者] 前缀，
+	// 并把成员角色计数写进判定提示，让「谁求购/谁供货」在证据里可辨。
+	// 失败时保留原始消息并标注证据不完整（fail-visible，不静默吞错）。
+	if hub.IsGroup && target.ChannelAccountID > 0 && hub.ConversationID != "" {
+		enriched, counts, aerr := NewConversationContextServiceWithRepo(ctxRepo).
+			AggregateGroupContext(ctx, target.ChannelAccountID, hub.ConversationID)
+		if aerr != nil {
+			jctx.GroupAggregateFailed = true
+			logger.Ctx(ctx).Warn().Err(aerr).Msg("[lead-mining] 群聊上下文聚合失败，判定提示标注证据不完整")
+		} else if len(enriched) > 0 {
+			// P0-b：只把角色标注应用到已合并的权威消息，不替换 jctx.Messages。
+			// 用 SenderID 而非 MessageID 匹配：历史消息的 ID 是合成 history_N，
+			// 与共享缓存的真实 MsgID 不同；按发送人匹配才能给真实多成员历史标注角色。
+			roleBySender := make(map[string]string, len(enriched))
+			for _, em := range enriched {
+				if r := roleFromEnrichedContent(em.Content); r != "" && em.SenderID != "" {
+					roleBySender[em.SenderID] = r
+				}
+			}
+			for i := range jctx.Messages {
+				sender := jctx.Messages[i].SenderID
+				if sender == "" {
+					continue
+				}
+				if role, ok := roleBySender[sender]; ok {
+					jctx.Messages[i].Content = fmt.Sprintf("[%s:%s] %s", role, sender, stripRolePrefix(jctx.Messages[i].Content))
+				}
+			}
+			jctx.GroupRoleCounts = counts
 		}
 	}
-	jctx.Messages = msgs
 
+	// 用富化后的 jctx.Messages 跑三路检测，保证关键词/语义/LLM 检测器
+	// 与二次判定看到同一份带 [角色:发送者] 的群聊上下文。
 	hits, derr := NewLeadDetectionService().Run(ctx, DetectionInput{
-		Rule: rule, Messages: msgs, JudgementID: judgementID,
+		Rule: rule, Messages: jctx.Messages, JudgementID: judgementID,
 	})
 	if derr != nil {
 		logger.Ctx(ctx).Warn().Err(derr).Msg("[lead-mining] 三路检测落库失败，二次判断标记证据不完整")

@@ -349,19 +349,20 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 	if err := tgPayload.Ingress(WithChannelOwnedAITrigger(ctx), s.ingressHandler(ctx), accountID); err != nil {
 		return nil, nil, err
 	}
+	// P0-c：hub 落库由上方 Ingress 统一出口完成，发掘由 persistMessage 内的
+	// LeadDiscoveryService 触发；本处不再 Enqueue/挖掘（避免同一条消息判两次）。
 	// 富媒体当场转存：官方 getFile 返回的 file_path 是「至少 1 小时有效」的临时链接，
 	// 且下载要带 bot token（不能像 QQ 那样把链接丢给工作台），故必须在入站侧完成。
 	// 放在 Ingress 之后：回填按 hubMsgID 找行，先落库再异步补，省掉一次「行还没建好」的竞态。
 	s.persistTelegramMediaAsync(ctx, accountID, hubMsgID, picked.media)
 	s.upsertInboxFromHub(ctx, hub, picked.fromName)
 
+	// P0-c：线索发掘已由上方 Ingress 落 hub 后统一 Enqueue，本处不再调 miner 写线索。
+	// newOpportunity 仍用于「商机」AI 触发门控（handleJob 据此决定是否回复），
+	// 改用纯关键词打分同步判定，不再依赖任何线索库写入。
 	newOpportunity := false
 	if picked.fromID != 0 && !picked.fromIsBot {
-		groupTitle := ""
-		if tgPayload.Message != nil && tgPayload.Message.Chat != nil {
-			groupTitle = tgPayload.Message.Chat.Title
-		}
-		// 门控互锁前置：未验证成员在门控群的发言不挖掘线索/商机（先于 mining，避免拦截前已入库）
+		// 门控互锁：未验证成员在门控群的发言不触发商机 AI（与发掘侧一致）。
 		interlocked := false
 		if picked.chatType == "group" || picked.chatType == "supergroup" {
 			accID, _ := strconv.ParseUint(accountID, 10, 64)
@@ -370,7 +371,7 @@ func (s *WebhookService) dispatchTelegram(ctx context.Context, accountID string,
 			}
 		}
 		if !interlocked {
-			newOpportunity = s.mineTelegramGroupLead(ctx, hub, accountID, chatIDStr, groupTitle, senderIDStr, picked.username, picked.fromName, picked.text)
+			_, _, newOpportunity = DetectUnifiedIntent(picked.text, nil, nil)
 		}
 	}
 

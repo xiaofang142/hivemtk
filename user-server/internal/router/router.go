@@ -464,26 +464,6 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 	auth.Use(middleware.TenantMiddleware())
 	// 租户/模块市场鉴权档由本文件下方（auth 组与 systemAdmin 组就绪处）挂载，
 	// 见 setupTenantRoutes(nil, auth, systemAdmin) / setupModuleRoutes(nil, auth, systemAdmin)。
-	// 仅超管能力面（备份/恢复/重启、全局配置写、LLM 与 MCP 凭据、功能开关放量、
-	// 代他人重置口令……）集中升档的那一道守卫，判据见 middleware.RoutePolicyGuard。
-	//
-	// 位置必须在 JWT 之后：守卫从 ctx 读 role，早于 JWT 就等于每条命中都走"无身份 ⇒ 401"。
-	// 也必须在任何 auth 路由注册之后、注册动作之前：gin 在注册时快照当时的 handler 链，
-	// 这一行之前注册的那两条 /api/bridge/token/* 带不到它，它们靠内联
-	// RequireAdminMiddleware 收口；任何在能力表里有归属的接口都不许注册在这一行之前。
-	// 能力面守卫的第二档判据要先有数据源：菜单授予来自库里的 role_menu_permissions，
-	// 装配期注一次，守卫内自带 60s 缓存与 stale-while-error。
-	// 漏这一行的后果是**拦**（守卫把"查不到授予"按无授予判），不是放行，
-	// 所以新增装配路径时必须一起带上它。
-	middleware.SetMenuGrantProvider(service.NewMenuService().GrantProvider)
-	auth.Use(middleware.RoutePolicyGuard())
-	// 行级数据隔离：判"这一行数据是不是你的"，与上一行的能力面守卫相互独立
-	// （能力面判角色有没有这个功能的门，这里判调用者有没有这一行的权限），两道都过才到 handler。
-	//
-	// 判据与登记表见 model.DataScopeRow；漏装配查询源（SetOwnerLookup）的后果是**拦**，
-	// 与上面的菜单授予源同一条 fail-closed 口径。
-	middleware.SetOwnerLookup(service.NewDataScopeService().LookupOwner)
-	auth.Use(middleware.DataScopeGuard())
 
 	// ============================================================
 	// 功能模块闸（.specify/002-modular-subscription · FR-5.4）
@@ -508,6 +488,27 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		auth.Use(middleware.GuardSubscriptionPath())
 	}
 	auth.Use(middleware.GuardModulePath())
+
+	// 仅超管能力面（备份/恢复/重启、全局配置写、LLM 与 MCP 凭据、功能开关放量、
+	// 代他人重置口令……）集中升档的那一道守卫，判据见 middleware.RoutePolicyGuard。
+	//
+	// 位置必须在 JWT 之后：守卫从 ctx 读 role，早于 JWT 就等于每条命中都走"无身份 ⇒ 401"。
+	// 也必须在任何 auth 路由注册之后、注册动作之前：gin 在注册时快照当时的 handler 链，
+	// 这一行之前注册的那两条 /api/bridge/token/* 带不到它，它们靠内联
+	// RequireAdminMiddleware 收口；任何在能力表里有归属的接口都不许注册在这一行之前。
+	// 能力面守卫的第二档判据要先有数据源：菜单授予来自库里的 role_menu_permissions，
+	// 装配期注一次，守卫内自带 60s 缓存与 stale-while-error。
+	// 漏这一行的后果是**拦**（守卫把"查不到授予"按无授予判），不是放行，
+	// 所以新增装配路径时必须一起带上它。
+	middleware.SetMenuGrantProvider(service.NewMenuService().GrantProvider)
+	auth.Use(middleware.RoutePolicyGuard())
+	// 行级数据隔离：判"这一行数据是不是你的"，与上一行的能力面守卫相互独立
+	// （能力面判角色有没有这个功能的门，这里判调用者有没有这一行的权限），两道都过才到 handler。
+	//
+	// 判据与登记表见 model.DataScopeRow；漏装配查询源（SetOwnerLookup）的后果是**拦**，
+	// 与上面的菜单授予源同一条 fail-closed 口径。
+	middleware.SetOwnerLookup(service.NewDataScopeService().LookupOwner)
+	auth.Use(middleware.DataScopeGuard())
 
 	{
 		// 业务链路监控 /api/monitor/*（health/anomalies/node-health/latency/
@@ -733,7 +734,7 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 		// T015：bridge HTTP 入口归一化投递收口。
 		bridgeHandler.SetInboundDispatcher(inboundDispatcher)
 
-		bridgeIngressSvc.SetBridgeLeadProcessor(webhookSvc.ProcessBridgeLead)
+		bridgeIngressSvc.SetBridgeLeadProcessor(bridgeIngressSvc.ProcessBridgeLead)
 
 		bridgeWS := r.Group("/api")
 		bridgeWS.Use(middleware.InitGuard())
@@ -816,11 +817,24 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			bridgeIngressSvc.SetInboxService(service.NewInboxService())
 			logger.Infof("[Bridge] bridge InboxService 已注入（统一收件箱会话同步已连通）")
 			miningSvc := service.NewLeadMiningService(repository.NewClueRepositoryWithDB(gormDB))
+			// FR-008/FR-015：发掘链路的负责人推送出口在装配点注入，
+			// Service 内部不再隐式构造依赖全局 DB 的通知服务。
+			miningSvc.SetNotifier(service.NewLeadNotifyService())
+			// D18：在装配点把 ReAct 取证循环接到全局 LLM dispatcher。
+			// resolver 暂不接具体仓储：工具返回「未装配」的 fail-visible 错误，
+			// 判定据此标证据不完整并走既有三路主链——不伪造证据、不编造数据访问。
+			service.InstallLeadReactDispatcher(service.LeadReactResolver{})
 			bridgeIngressSvc.SetLeadMining(miningSvc)
 			// T048/T049 US3：两类智能体独立启停闸门。开关按 channel_account 的
 			// auto_reply_agent_id / lead_mining_agent_id 判定；两腿互不调用。
 			bridgeIngressSvc.SetAutoReplyGate(service.NewAutoReplyService())
-			bridgeIngressSvc.SetLeadDiscoveryGate(service.NewLeadDiscoveryService(miningSvc))
+			leadDiscoverySvc := service.NewLeadDiscoveryService(miningSvc)
+			bridgeIngressSvc.SetLeadDiscoveryGate(leadDiscoverySvc)
+			// P0-c：webhook 渠道（飞书/企微/TG/WA/抖音）落 hub 后统一走同一发掘出口，
+			// 取代各渠道 handler 直接调 MineUnifiedLead 的双轨发掘。
+			if webhookSvc != nil {
+				webhookSvc.SetLeadDiscovery(leadDiscoverySvc)
+			}
 			logger.Infof("[Bridge] bridge LeadMining + 自动回复/线索发现独立启停闸门已注入")
 			// M-6（2026-11-11）：新用户（非关注好友）首触登记 + 自动关注策略。
 			// 登记（观测）恒生效；关注动作另受参数中心 bridge/follow_user_enabled

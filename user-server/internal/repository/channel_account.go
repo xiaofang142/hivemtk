@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
@@ -13,6 +14,10 @@ import (
 
 // ErrAmbiguousIdentifyCode 同一识别码命中多条渠道账号（歧义必须拒绝，不可任选一条）。
 var ErrAmbiguousIdentifyCode = errors.New("识别码命中多条渠道账号，拒绝解析")
+
+// ErrChannelAccountChannelUnavailable 账号引用的渠道不存在，或当前 edition
+// 不允许该渠道。写侧用于 fail-closed；读侧通过 gate 直接过滤，不返回该错误。
+var ErrChannelAccountChannelUnavailable = errors.New("渠道账号引用的渠道不存在或不可用")
 
 // ChannelAccountRepository 渠道账号仓储。
 type ChannelAccountRepository interface {
@@ -61,12 +66,58 @@ func NewChannelAccountRepositoryWithDB(gormDB *gorm.DB) ChannelAccountRepository
 
 func (r *channelAccountRepo) Available() bool { return r != nil && r.db != nil }
 
+// applyChannelEditionGate 是渠道账号所有读取/写入查询的统一版本门。
+// custom 原样放行；opensource/unknown 仅保留非国内渠道，并且自然排除孤儿账号。
+// 只使用 GORM 参数绑定，不把 edition 策略写成数据库方言 SQL。
+func applyChannelEditionGate(ctx context.Context, q *gorm.DB) *gorm.DB {
+	if edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return q
+	}
+	return q.Where("channel_id IN (SELECT id FROM channels WHERE code NOT IN ?)", edition.DomesticChannelCodes())
+}
+
+func (r *channelAccountRepo) validateChannelForAccount(ctx context.Context, channelID uint) error {
+	if channelID == 0 {
+		return ErrChannelAccountChannelUnavailable
+	}
+	q := r.db.WithContext(tenant.WithSystemScope(ctx)).Model(&model.Channel{}).Where("id = ?", channelID)
+	if !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		q = q.Where("code NOT IN ?", edition.DomesticChannelCodes())
+	}
+	var count int64
+	if err := q.Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		return ErrChannelAccountChannelUnavailable
+	}
+	return nil
+}
+
+func accountChannelID(value any) (uint, bool) {
+	switch id := value.(type) {
+	case uint:
+		return id, id > 0
+	case uint64:
+		return uint(id), id > 0 && uint64(uint(id)) == id
+	case int:
+		return uint(id), id > 0 && uint64(id) <= uint64(^uint(0))
+	case int64:
+		return uint(id), id > 0 && uint64(id) <= uint64(^uint(0))
+	default:
+		return 0, false
+	}
+}
+
 func (r *channelAccountRepo) Create(ctx context.Context, acc *model.ChannelAccount) error {
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
 	if acc == nil {
 		return errors.New("渠道账号为空")
+	}
+	if err := r.validateChannelForAccount(ctx, acc.ChannelID); err != nil {
+		return err
 	}
 	return r.db.WithContext(ctx).Create(acc).Error
 }
@@ -76,7 +127,8 @@ func (r *channelAccountRepo) GetByID(ctx context.Context, tenantID, id uint) (*m
 		return nil, ErrChannelStoreUnavailable
 	}
 	var acc model.ChannelAccount
-	err := r.db.WithContext(ctx).First(&acc, "tenant_id = ? AND id = ?", tenantID, id).Error
+	err := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id)).First(&acc).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -90,7 +142,8 @@ func (r *channelAccountRepo) List(ctx context.Context, opts ChannelAccountListOp
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
 	}
-	q := r.db.WithContext(ctx).Model(&model.ChannelAccount{}).Where("tenant_id = ?", opts.TenantID)
+	q := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ?", opts.TenantID))
 	if opts.ChannelID > 0 {
 		q = q.Where("channel_id = ?", opts.ChannelID)
 	}
@@ -124,16 +177,15 @@ func (r *channelAccountRepo) GetByIDs(ctx context.Context, tenantID uint, ids []
 		return nil, nil
 	}
 	var rows []model.ChannelAccount
-	if err := r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id IN ?", tenantID, ids).
-		Find(&rows).Error; err != nil {
+	if err := applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND id IN ?", tenantID, ids)).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil
 }
 
 // GetByIdentifyCode 解析顺序：先查账号上的冗余码，再查权威识别码表并按
-// (tenant_id, channel_id) 反查账号。两条都限制 2 行——命中 2 行即歧义拒绝。
+// (tenant_id, channel_id) 反查账号。两条路径都在 Limit(2)/歧义判断前应用 edition gate。
 func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string) (*model.ChannelAccount, error) {
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
@@ -144,7 +196,8 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 	sysCtx := tenant.WithSystemScope(ctx)
 
 	var byCode []model.ChannelAccount
-	if err := r.db.WithContext(sysCtx).Where("identify_code = ?", code).Limit(2).Find(&byCode).Error; err != nil {
+	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelAccount{}).
+		Where("identify_code = ?", code)).Limit(2).Find(&byCode).Error; err != nil {
 		return nil, err
 	}
 	if len(byCode) > 1 {
@@ -155,7 +208,8 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 	}
 
 	var codes []model.ChannelIdentifyCode
-	if err := r.db.WithContext(sysCtx).Where("code = ?", code).Limit(2).Find(&codes).Error; err != nil {
+	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelIdentifyCode{}).
+		Where("code = ?", code)).Limit(2).Find(&codes).Error; err != nil {
 		return nil, err
 	}
 	if len(codes) > 1 {
@@ -165,8 +219,8 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 		return nil, nil
 	}
 	var byChannel []model.ChannelAccount
-	if err := r.db.WithContext(sysCtx).
-		Where("tenant_id = ? AND channel_id = ?", codes[0].TenantID, codes[0].ChannelID).
+	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND channel_id = ?", codes[0].TenantID, codes[0].ChannelID)).
 		Limit(2).Find(&byChannel).Error; err != nil {
 		return nil, err
 	}
@@ -186,18 +240,25 @@ func (r *channelAccountRepo) Update(ctx context.Context, tenantID, id uint, upda
 	if len(updates) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Updates(updates).Error
+	if rawChannelID, ok := updates["channel_id"]; ok {
+		channelID, valid := accountChannelID(rawChannelID)
+		if !valid {
+			return ErrChannelAccountChannelUnavailable
+		}
+		if err := r.validateChannelForAccount(ctx, channelID); err != nil {
+			return err
+		}
+	}
+	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id)).Updates(updates).Error
 }
 
 func (r *channelAccountRepo) Delete(ctx context.Context, tenantID, id uint) error {
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND id = ?", tenantID, id).
-		Delete(&model.ChannelAccount{}).Error
+	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND id = ?", tenantID, id)).Delete(&model.ChannelAccount{}).Error
 }
 
 // DeleteByChannel 硬删除该渠道下的全部账号行，口径与 Delete 一致。
@@ -205,16 +266,14 @@ func (r *channelAccountRepo) DeleteByChannel(ctx context.Context, tenantID, chan
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return r.db.WithContext(ctx).
-		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID).
-		Delete(&model.ChannelAccount{}).Error
+	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID)).Delete(&model.ChannelAccount{}).Error
 }
 
 func (r *channelAccountRepo) SetIdentifyCodeByChannel(ctx context.Context, tenantID, channelID uint, code string) error {
 	if !r.Available() {
 		return ErrChannelStoreUnavailable
 	}
-	return r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
-		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID).
-		Update("identify_code", code).Error
+	return applyChannelEditionGate(ctx, r.db.WithContext(ctx).Model(&model.ChannelAccount{}).
+		Where("tenant_id = ? AND channel_id = ?", tenantID, channelID)).Update("identify_code", code).Error
 }

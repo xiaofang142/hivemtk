@@ -158,6 +158,39 @@ func (c *ClueController) GetClueStatistics(ctx *gin.Context) {
 	response.Success(ctx, statistics, "获取线索统计成功")
 }
 
+// GetClueStatisticsWithRange godoc
+// @Summary      获取线索统计（带时间窗与多维聚合）
+// @Description  返回 by_type / by_lead_role / by_status / by_channel / by_conversation 六维聚合，
+//
+//	服务端全量聚合不截断，替代前端拉列表自行聚合的 10000 行上限口径。
+//
+// @Tags         Clue
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        start query int false "创建时间下界（unix 秒，0=不限）"
+// @Param        end   query int false "创建时间上界（unix 秒，0=不限）"
+// @Success      200  {object}  response.Response  "成功"
+// @Failure      400  {object}  response.Response  "时间窗参数非法"
+// @Router       /api/clues/statistics/range [get]
+func (c *ClueController) GetClueStatisticsWithRange(ctx *gin.Context) {
+	var req dto.GetClueStatisticsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：start / end 必须是整数")
+		return
+	}
+	if req.Start < 0 || req.End < 0 || (req.Start > 0 && req.End > 0 && req.Start > req.End) {
+		response.Error(ctx, http.StatusBadRequest, "请求参数错误：时间窗无效（start 不得大于 end）")
+		return
+	}
+	stats, err := c.svc.GetClueStatisticsWithRange(ctx.Request.Context(), req.Start, req.End)
+	if err != nil {
+		response.ErrorFromDB(ctx, err, "获取线索统计失败")
+		return
+	}
+	response.Success(ctx, stats, "获取线索统计成功")
+}
+
 // @Summary POST /api/clues/import
 // @Tags      clue
 // @Router    /api/clues/import [post]

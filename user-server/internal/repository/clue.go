@@ -21,7 +21,9 @@ type ClueRepository interface {
 	GetClueList(ctx context.Context, page int, limit int) ([]*model.Clue, int64, error)
 	Delete(ctx context.Context, id string) error
 	GetClueStatistics(ctx context.Context) ([]map[string]any, error)
+	GetClueStatisticsWithRange(ctx context.Context, start, end int64) ([]map[string]any, error)
 	GetLeadMiningStats(ctx context.Context) (map[string]any, error)
+	GetLeadMiningStatsWithRange(ctx context.Context, start, end int64) (map[string]any, error)
 	GetClueAllList(ctx context.Context, clueType int64) ([]*model.Clue, int64, error)
 	GetWhatsappClues(ctx context.Context) ([]*model.Clue, int64, error)
 	ExistsByTypeAndAccount(ctx context.Context, clueType int64, account string) (bool, error)
@@ -222,8 +224,43 @@ func (r *clueRepo) GetClueStatistics(ctx context.Context) ([]map[string]any, err
 	return statistics, err
 }
 
+// GetClueStatisticsWithRange 按类型统计线索（带 create_time 时间窗）。
+// start/end 为 unix 秒；任一为 0 表示不设该侧边界，与原 GetClueStatistics 行为一致。
+// 服务端全量聚合，不设行数上限——避免前端拉列表自行聚合时的 10000 行静默截断。
+func (r *clueRepo) GetClueStatisticsWithRange(ctx context.Context, start, end int64) ([]map[string]any, error) {
+	var statistics []map[string]any
+	tx := r.db.WithContext(ctx).Model(&model.Clue{}).
+		Select("type AS type, COUNT(*) AS total, " +
+			"SUM(CASE WHEN COALESCE(is_verify,0) >= 1 THEN 1 ELSE 0 END) AS verify_total").
+		Where("deleted_at IS NULL")
+	if start > 0 {
+		tx = tx.Where("create_time >= ?", start)
+	}
+	if end > 0 {
+		tx = tx.Where("create_time <= ?", end)
+	}
+	err := tx.Group("type").Order("type").Scan(&statistics).Error
+	return statistics, err
+}
+
 func (r *clueRepo) GetLeadMiningStats(ctx context.Context) (map[string]any, error) {
+	return r.leadMiningStats(ctx, 0, 0)
+}
+
+// GetLeadMiningStatsWithRange 六维聚合 + create_time 时间窗（unix 秒，0=不设边界）。
+// 服务端全量聚合，替代前端拉列表自行聚合的 10000 行截断口径。
+func (r *clueRepo) GetLeadMiningStatsWithRange(ctx context.Context, start, end int64) (map[string]any, error) {
+	return r.leadMiningStats(ctx, start, end)
+}
+
+func (r *clueRepo) leadMiningStats(ctx context.Context, start, end int64) (map[string]any, error) {
 	db := r.db.WithContext(ctx).Model(&model.Clue{}).Where("deleted_at IS NULL")
+	if start > 0 {
+		db = db.Where("create_time >= ?", start)
+	}
+	if end > 0 {
+		db = db.Where("create_time <= ?", end)
+	}
 	var byRole []map[string]any
 	if err := db.Session(&gorm.Session{}).Select("COALESCE(NULLIF(lead_role,''),'unknown') AS lead_role, COUNT(*) AS total").
 		Group("COALESCE(NULLIF(lead_role,''),'unknown')").Scan(&byRole).Error; err != nil {
@@ -244,12 +281,20 @@ func (r *clueRepo) GetLeadMiningStats(ctx context.Context) (map[string]any, erro
 		Group("CASE WHEN is_group THEN 'group' ELSE 'private' END").Scan(&byConversation).Error; err != nil {
 		return nil, err
 	}
+	var byType []map[string]any
+	if err := db.Session(&gorm.Session{}).Select("type AS type, COUNT(*) AS total, " +
+		"SUM(CASE WHEN COALESCE(is_verify,0) >= 1 THEN 1 ELSE 0 END) AS verify_total").
+		Group("type").Order("type").Scan(&byType).Error; err != nil {
+		return nil, err
+	}
 	var total int64
 	if err := db.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, err
 	}
 	return map[string]any{
 		"total":           total,
+		"truncated":       false,
+		"by_type":         byType,
 		"by_lead_role":    byRole,
 		"by_status":       byStatus,
 		"by_channel":      byChannel,

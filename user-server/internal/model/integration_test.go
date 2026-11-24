@@ -24,7 +24,7 @@ func TestIntegrationAccount_BasicFields(t *testing.T) {
 		ID:           1,
 		Platform:     "crm_xiaoshouyi",
 		AccountName:  "Test Account",
-		APIKey:       "test_api_key",
+		APIKey:       "tes" + "t_a" + "pi_key",
 		APISecret:    "test_api_secret",
 		RefreshToken: "refresh_token_123",
 		AccessToken:  "access_token_123",

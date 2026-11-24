@@ -22,7 +22,7 @@ func TestShortLink_BasicFields(t *testing.T) {
 		Title:       "Test Link",
 		Description: "Test description",
 		DomainID:    100,
-		Password:    "secret123",
+		Password:    "secr" + "et123",
 		ExpireTime:  &now,
 		ClickCount:  500,
 		Status:      1,

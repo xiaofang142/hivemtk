@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,8 @@ import (
 // 用父消息把 inbound 历史改写成 outbound，会把客户的问题也塞进下行回放队列。
 func TestHTTPIngest_HistoryDirection_PreservesItemDirection(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "history-direction")
 
 	type rec struct {
 		eventID   string
@@ -34,20 +37,21 @@ func TestHTTPIngest_HistoryDirection_PreservesItemDirection(t *testing.T) {
 		},
 	)
 
-	body := `{
-		"channel":"douyin","account_id":"acc_hist_dir",
+	body := fmt.Sprintf(`{
+		"channel":"douyin","account_id":"%s",
 		"messages":[{
 			"event_id":"live-1","conversation_id":"conv_hist_dir","sender_type":"agent",
-			"sender_id":"acc_hist_dir","receiver_id":"conv_hist_dir","msg_type":"text",
+			"sender_id":"%s","receiver_id":"conv_hist_dir","msg_type":"text",
 			"content":"我们的最新回复","timestamp":1700000300000,
 			"history":[
 				{"event_id":"h-in-1","sender_type":"customer","content":"客户的问题","msg_type":"text","timestamp":1700000100000,"direction":"inbound"},
 				{"event_id":"h-out-1","sender_type":"agent","content":"我们先前的回复","msg_type":"text","timestamp":1700000200000,"direction":"outbound"}
 			]
 		}]
-	}`
-	req := httptest.NewRequest("POST", "/api/bridge/ingest?channel=douyin&account_id=acc_hist_dir", strings.NewReader(body))
+	}`, fixture.AccountID, fixture.AccountID)
+	req := httptest.NewRequest("POST", "/api/bridge/ingest?channel=douyin&account_id="+fixture.AccountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req

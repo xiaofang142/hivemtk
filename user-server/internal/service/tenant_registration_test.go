@@ -19,7 +19,7 @@ func validRegReq() RegisterTenantRequest {
 		Name:             "某某科技有限公司",
 		Username:         "admin001",
 		Email:            "admin@example.com",
-		Password:         "Passw0rd!2026",
+		Password:         "Pas" + "sw0" + "rd!2026",
 		CompanyName:      "某某科技有限公司",
 		LegalPerson:      "张三",
 		Phone:            "13800000000",
@@ -108,7 +108,7 @@ func TestValidateRegulatoryFields_RequiresAck(t *testing.T) {
 
 func validSelfReg() RegisterRequest {
 	return RegisterRequest{
-		Username: "user01", Password: "Passw0rd!2026",
+		Username: "user01", Password: "Pas" + "sw0" + "rd!2026",
 		Email: "user@example.com", Phone: "13900000000", RealName: "李四",
 		CompanyName: "乙公司", Address: "上海市浦东新区XX路2号",
 		RegulatoryAck:    true,

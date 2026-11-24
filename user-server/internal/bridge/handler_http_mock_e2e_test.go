@@ -145,13 +145,33 @@ func writeJSON(c *gin.Context, status int, v interface{}) {
 	c.JSON(status, v)
 }
 
-func startMockServer() (*mockIngestHandler, string, chan error, func()) {
+func startMockServer(t *testing.T) (*mockIngestHandler, string, map[string]string, chan error, func()) {
+	t.Helper()
 	errCh := make(chan error, 1)
 	gin.SetMode(gin.TestMode)
+	database := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	channels := []string{
+		ChannelDouyinWeb, ChannelXHSWeb, ChannelTikTok, ChannelKuaishouWeb, ChannelXianyuWeb,
+		ChannelJDWeb, ChannelBilibiliWeb, ChannelWeiboWeb, ChannelPersonalWX, ChannelPDDWeb,
+	}
+	accounts := make(map[string]string, len(channels)+1)
+	codes := make(map[string]string, len(channels))
+	for i, channel := range channels {
+		fixture := seedCanonicalBridgeFixtureWithID(t, database, 1, channel, "mock-"+channel, uint(i+1))
+		accounts[channel] = fixture.AccountID
+		codes[NormalizeBridgeChannel(channel)] = fixture.Code
+	}
+	other := seedCanonicalBridgeFixtureWithID(t, database, 1, ChannelDouyinWeb, "mock-other", uint(len(channels)+1))
+	accounts["douyin-other"] = other.AccountID
 	store := newOutboxStore()
 	m := newMockIngestHandler(store)
 	h := newMockIngestHandlerWith(m)
 	engine := gin.New()
+	engine.Use(func(c *gin.Context) {
+		if code := codes[NormalizeBridgeChannel(c.Query("channel"))]; code != "" {
+			c.Request.Header.Set("X-Channel-Identify-Code", code)
+		}
+	})
 
 	engine.POST("/api/bridge/ingest", h.HandleHTTPIngest)
 
@@ -175,7 +195,7 @@ func startMockServer() (*mockIngestHandler, string, chan error, func()) {
 
 	srv := httptest.NewServer(engine)
 	stop := func() { srv.Close() }
-	return m, srv.URL, errCh, stop
+	return m, srv.URL, accounts, errCh, stop
 }
 
 func doIngest(t *testing.T, base, channel, account, conv, eventID, senderType, content string) HTTPIngestResponse {
@@ -218,25 +238,25 @@ func doIngest(t *testing.T, base, channel, account, conv, eventID, senderType, c
 // 携带 content_hash=ob_<eventID>（与后端 ContentHashMsgID 同源），即便 event_id 不同，
 // 也应被幂等跳过，不二次触发 AI、不重复入下发队列。
 func TestBridgeHTTP_OutboundEcho_SkippedByContentHash(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
-	got := doIngest(t, base, ChannelDouyinWeb, "1", "c1", "evt-loop", "customer", "你好")
+	got := doIngest(t, base, ChannelDouyinWeb, accounts[ChannelDouyinWeb], "c1", "evt-loop", "customer", "你好")
 	if !got.Ingested[0].AIHandled {
 		t.Fatalf("用户消息应触发 AI")
 	}
-	if len(m.store.list(ChannelDouyinWeb, "1")) != 1 {
+	if len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])) != 1 {
 		t.Fatalf("AI 回复应进入下发队列")
 	}
 
 	req := HTTPIngestRequest{
 		Channel:        ChannelDouyinWeb,
-		AccountID:      "1",
+		AccountID:      accounts[ChannelDouyinWeb],
 		ConversationID: "c1",
 		Messages: []*HTTPIngestMessage{{
 			EventID:        "dom-echo-123",
 			Channel:        ChannelDouyinWeb,
-			AccountID:      "1",
+			AccountID:      accounts[ChannelDouyinWeb],
 			ConversationID: "c1",
 			SenderType:     "customer",
 			SenderID:       "u1",
@@ -248,7 +268,7 @@ func TestBridgeHTTP_OutboundEcho_SkippedByContentHash(t *testing.T) {
 		}},
 	}
 	body, _ := json.Marshal(req)
-	url := fmt.Sprintf("%s/api/bridge/ingest?channel=%s&account_id=%s&conversation_id=%s", base, ChannelDouyinWeb, "1", "c1")
+	url := fmt.Sprintf("%s/api/bridge/ingest?channel=%s&account_id=%s&conversation_id=%s", base, ChannelDouyinWeb, accounts[ChannelDouyinWeb], "c1")
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("echo ingest 失败: %v", err)
@@ -263,14 +283,14 @@ func TestBridgeHTTP_OutboundEcho_SkippedByContentHash(t *testing.T) {
 	if !strings.Contains(got2.Ingested[0].Reason, "content_hash") {
 		t.Fatalf("回显消息应被 content_hash 兜底跳过, 实际 reason=%s", got2.Ingested[0].Reason)
 	}
-	if len(m.store.list(ChannelDouyinWeb, "1")) != 1 {
-		t.Fatalf("回显不应重复入下发队列, 实际 %d", len(m.store.list(ChannelDouyinWeb, "1")))
+	if len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])) != 1 {
+		t.Fatalf("回显不应重复入下发队列, 实际 %d", len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])))
 	}
 }
 
 // 重构后：ingest 立即返回，不再同步长轮询 AI 回复；AI 回复进入下发队列（outbox）。
 func TestBridgeHTTP_ImmediateReturn_NoLongPoll(t *testing.T) {
-	m, base, errCh, stop := startMockServer()
+	m, base, accounts, errCh, stop := startMockServer(t)
 	defer stop()
 	select {
 	case e := <-errCh:
@@ -278,7 +298,7 @@ func TestBridgeHTTP_ImmediateReturn_NoLongPoll(t *testing.T) {
 	default:
 	}
 
-	got := doIngest(t, base, ChannelDouyinWeb, "1", "c1", "evt-1", "customer", "你好")
+	got := doIngest(t, base, ChannelDouyinWeb, accounts[ChannelDouyinWeb], "c1", "evt-1", "customer", "你好")
 
 	if len(got.Ingested) != 1 || !got.Ingested[0].Accepted {
 		t.Fatalf("未接受消息: %+v", got)
@@ -286,7 +306,7 @@ func TestBridgeHTTP_ImmediateReturn_NoLongPoll(t *testing.T) {
 	if !got.Ingested[0].AIHandled {
 		t.Fatalf("用户消息未触发 AI: %+v", got)
 	}
-	items := m.store.list(ChannelDouyinWeb, "1")
+	items := m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])
 	if len(items) != 1 {
 		t.Fatalf("AI 回复应进入下发队列, 实际: %d", len(items))
 	}
@@ -294,40 +314,40 @@ func TestBridgeHTTP_ImmediateReturn_NoLongPoll(t *testing.T) {
 
 // 自己发的消息不应触发 AI、也不应进入下发队列。
 func TestBridgeHTTP_SelfNoAI(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
-	got := doIngest(t, base, ChannelXHSWeb, "1", "c1", "evt-self", "self", "我刚发的")
+	got := doIngest(t, base, ChannelXHSWeb, accounts[ChannelXHSWeb], "c1", "evt-self", "self", "我刚发的")
 	if got.Ingested[0].AIHandled {
 		t.Fatalf("自己消息不应触发 AI")
 	}
-	if len(m.store.list(ChannelXHSWeb, "1")) != 0 {
+	if len(m.store.list(ChannelXHSWeb, accounts[ChannelXHSWeb])) != 0 {
 		t.Fatalf("自己消息不应进入下发队列")
 	}
 }
 
 // 事件级去重：同一 event_id 二次上报应判重，且不重复进入下发队列。
 func TestBridgeHTTP_Dedup(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
-	_ = doIngest(t, base, ChannelTikTok, "1", "c1", "evt-dup", "customer", "hello")
-	got2 := doIngest(t, base, ChannelTikTok, "1", "c1", "evt-dup", "customer", "hello")
+	_ = doIngest(t, base, ChannelTikTok, accounts[ChannelTikTok], "c1", "evt-dup", "customer", "hello")
+	got2 := doIngest(t, base, ChannelTikTok, accounts[ChannelTikTok], "c1", "evt-dup", "customer", "hello")
 	if len(got2.Ingested) != 1 || !got2.Ingested[0].Duplicate {
 		t.Fatalf("重复事件未判重: %+v", got2)
 	}
 	if !strings.Contains(got2.Ingested[0].Reason, "already exists") {
 		t.Fatalf("判重原因不符: %s", got2.Ingested[0].Reason)
 	}
-	if len(m.store.list(ChannelTikTok, "1")) != 1 {
-		t.Fatalf("去重后下发队列应为 1 条, 实际: %d", len(m.store.list(ChannelTikTok, "1")))
+	if len(m.store.list(ChannelTikTok, accounts[ChannelTikTok])) != 1 {
+		t.Fatalf("去重后下发队列应为 1 条, 实际: %d", len(m.store.list(ChannelTikTok, accounts[ChannelTikTok])))
 	}
 }
 
 // 注册表桥接渠道都能正常上报（2026-11-12 收口：从「五端」扩到注册表全量十渠道，
 // 微博/B站/京东/个人微信/拼多多同批纳入——渠道注册一处，mock e2e 全量覆盖）。
 func TestBridgeHTTP_MultiChannel(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
 	channels := []string{
@@ -335,7 +355,7 @@ func TestBridgeHTTP_MultiChannel(t *testing.T) {
 		ChannelJDWeb, ChannelBilibiliWeb, ChannelWeiboWeb, ChannelPersonalWX, ChannelPDDWeb,
 	}
 	for i, ch := range channels {
-		got := doIngest(t, base, ch, "1", fmt.Sprintf("c%d", i+1),
+		got := doIngest(t, base, ch, accounts[ch], fmt.Sprintf("c%d", i+1),
 			fmt.Sprintf("evt-ch-%d", i), "customer", "hi")
 		if len(got.Ingested) != 1 || !got.Ingested[0].Accepted {
 			t.Fatalf("渠道 %s 上报失败: %+v", ch, got)
@@ -348,7 +368,7 @@ func TestBridgeHTTP_MultiChannel(t *testing.T) {
 
 // 并发上报全部接受，不丢消息。
 func TestBridgeHTTP_Concurrent(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
 	const n = 12
@@ -358,7 +378,7 @@ func TestBridgeHTTP_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			got := doIngest(t, base, ChannelDouyinWeb, "1", "c1",
+			got := doIngest(t, base, ChannelDouyinWeb, accounts[ChannelDouyinWeb], "c1",
 				fmt.Sprintf("evt-conc-%d", i), "customer", fmt.Sprintf("m%d", i))
 			if len(got.Ingested) != 1 || !got.Ingested[0].Accepted {
 				errs <- fmt.Errorf("并发上报失败 idx=%d: %+v", i, got)
@@ -373,8 +393,8 @@ func TestBridgeHTTP_Concurrent(t *testing.T) {
 	if m.accepted != n {
 		t.Fatalf("并发应接受 %d 条, 实际 %d", n, m.accepted)
 	}
-	if len(m.store.list(ChannelDouyinWeb, "1")) != n {
-		t.Fatalf("并发应进入下发队列 %d 条, 实际 %d", n, len(m.store.list(ChannelDouyinWeb, "1")))
+	if len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])) != n {
+		t.Fatalf("并发应进入下发队列 %d 条, 实际 %d", n, len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])))
 	}
 }
 
@@ -383,11 +403,11 @@ func TestBridgeHTTP_Concurrent(t *testing.T) {
 func TestBridgeOutboxAck_RoundTrip(t *testing.T) {
 	for _, ch := range []string{ChannelDouyinWeb, ChannelWeiboWeb, ChannelBilibiliWeb} {
 		t.Run(ch, func(t *testing.T) {
-			_, base, _, stop := startMockServer()
+			_, base, accounts, _, stop := startMockServer(t)
 			defer stop()
 
-			_ = doIngest(t, base, ch, "1", "c1", "evt-rt-"+ch, "customer", "在吗")
-			resp, err := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=1")
+			_ = doIngest(t, base, ch, accounts[ch], "c1", "evt-rt-"+ch, "customer", "在吗")
+			resp, err := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=" + accounts[ch])
 			if err != nil {
 				t.Fatalf("GET outbox 失败: %v", err)
 			}
@@ -403,7 +423,7 @@ func TestBridgeOutboxAck_RoundTrip(t *testing.T) {
 			msgID := ob.Messages[0].MsgID
 
 			ackBody, _ := json.Marshal(map[string]interface{}{"msg_ids": []string{msgID}})
-			aresp, err := http.Post(base+"/api/bridge/outbox/ack?channel="+ch+"&account_id=1",
+			aresp, err := http.Post(base+"/api/bridge/outbox/ack?channel="+ch+"&account_id="+accounts[ch],
 				"application/json", bytes.NewReader(ackBody))
 			if err != nil {
 				t.Fatalf("POST ack 失败: %v", err)
@@ -418,7 +438,7 @@ func TestBridgeOutboxAck_RoundTrip(t *testing.T) {
 				t.Fatalf("ack 应标记 1 条, 实际 %d", ares.Acked)
 			}
 
-			resp2, _ := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=1")
+			resp2, _ := http.Get(base + "/api/bridge/outbox?channel=" + ch + "&account_id=" + accounts[ch])
 			var ob2 struct {
 				Messages []outboxItem `json:"messages"`
 			}
@@ -433,18 +453,18 @@ func TestBridgeOutboxAck_RoundTrip(t *testing.T) {
 
 // 越权 ack：标记非本账号 msg_id 不应生效（归属校验）。
 func TestBridgeOutboxAck_ScopeIsolation(t *testing.T) {
-	m, base, _, stop := startMockServer()
+	m, base, accounts, _, stop := startMockServer(t)
 	defer stop()
 
-	_ = doIngest(t, base, ChannelDouyinWeb, "1", "c1", "evt-iso", "customer", "hi")
-	items := m.store.list(ChannelDouyinWeb, "1")
+	_ = doIngest(t, base, ChannelDouyinWeb, accounts[ChannelDouyinWeb], "c1", "evt-iso", "customer", "hi")
+	items := m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])
 	if len(items) != 1 {
 		t.Fatalf("应进入下发队列 1 条, 实际 %d", len(items))
 	}
 	msgID := items[0].MsgID
 
 	ackBody, _ := json.Marshal(map[string]interface{}{"msg_ids": []string{msgID}})
-	aresp, _ := http.Post(base+"/api/bridge/outbox/ack?channel="+ChannelDouyinWeb+"&account_id=2",
+	aresp, _ := http.Post(base+"/api/bridge/outbox/ack?channel="+ChannelDouyinWeb+"&account_id="+accounts["douyin-other"],
 		"application/json", bytes.NewReader(ackBody))
 	var ares struct {
 		Acked int `json:"acked"`
@@ -454,7 +474,7 @@ func TestBridgeOutboxAck_ScopeIsolation(t *testing.T) {
 	if ares.Acked != 0 {
 		t.Fatalf("越权 ack 不应生效, 实际 %d", ares.Acked)
 	}
-	if len(m.store.list(ChannelDouyinWeb, "1")) != 1 {
+	if len(m.store.list(ChannelDouyinWeb, accounts[ChannelDouyinWeb])) != 1 {
 		t.Fatalf("越权 ack 不应清除原账号消息")
 	}
 }

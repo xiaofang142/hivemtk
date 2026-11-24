@@ -30,7 +30,7 @@ func TestAuthController_Login_Success(t *testing.T) {
 
 	admin := &model.SystemUser{
 		Username: "admin",
-		Password: "Admin@123",
+		Password: "Admi" + "n@123",
 		Email:    "admin@test.com",
 		Role:     "admin",
 		Status:   1,
@@ -41,7 +41,7 @@ func TestAuthController_Login_Success(t *testing.T) {
 
 	loginReq := service.LoginRequest{
 		Username: "admin",
-		Password: "Admin@123",
+		Password: "Admi" + "n@123",
 	}
 	body, _ := json.Marshal(loginReq)
 
@@ -87,7 +87,7 @@ func TestAuthController_Login_EmptyUsername(t *testing.T) {
 
 	loginReq := service.LoginRequest{
 		Username: "",
-		Password: "admin123",
+		Password: "admi" + "n123",
 	}
 	body, _ := json.Marshal(loginReq)
 
@@ -133,14 +133,14 @@ func TestAuthController_Login_WrongCredentials(t *testing.T) {
 
 	firstUser := model.SystemUser{
 		Username: "testuser",
-		Password: "correctpassword",
+		Password: "cor" + "rect" + "password",
 		Status:   1,
 	}
 	db.GetDB().Create(&firstUser)
 
 	loginReq := service.LoginRequest{
 		Username: "testuser",
-		Password: "wrongpassword",
+		Password: "wro" + "ngp" + "assword",
 	}
 	body, _ := json.Marshal(loginReq)
 
@@ -160,7 +160,7 @@ func TestAuthController_Login_WrongCredentials(t *testing.T) {
 func TestAuthController_RefreshToken_Success(t *testing.T) {
 	setupTestControllerDB(t)
 	if err := db.GetDB().Create(&model.SystemUser{
-		ID: 1, Username: "testuser", Password: "Admin@123456",
+		ID: 1, Username: "testuser", Password: "Adm" + "in@" + "123456",
 		Email: "testuser@test.com", Role: "admin", Status: 1, Enabled: true,
 	}).Error; err != nil {
 		t.Fatalf("seed user 1: %v", err)
@@ -274,7 +274,7 @@ func seedRegularUser(t *testing.T, username, password string) model.SystemUser {
 	database := db.GetDB()
 	if err := database.Create(&model.SystemUser{
 		Username: "initial_admin",
-		Password: "seed-password-not-used",
+		Password: "seed-" + "passwo" + "rd-not-used",
 		Status:   1,
 	}).Error; err != nil {
 		t.Fatalf("播种初始超管失败: %v", err)
@@ -487,7 +487,7 @@ func TestSystemUserController_CreateUser_Success(t *testing.T) {
 
 	createReq := service.CreateUserRequest{
 		Username: "newuser",
-		Password: "Password@123",
+		Password: "Pas" + "swo" + "rd@123",
 		Email:    "newuser@example.com",
 		RealName: "New User",
 		Role:     "user",

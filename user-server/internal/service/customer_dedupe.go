@@ -30,6 +30,8 @@ type DedupeScanOptions struct {
 	MaxCustomers    int  // 单次扫描最多读取客户数（0 用默认）
 	NameThreshold   int  // 名称相似度阈值 0-100（0 用默认 85）
 	SameAccountOnly bool // 仅在同一来源账号内比对（默认 true，缩小跨账号误合并面）
+	// Scope 由调用方传入的数据权限范围；管理员（AllAccounts）才扫描租户全量。
+	Scope CustomerDataScope
 }
 
 // CustomerDedupeService 客户去重合并（FR-003/005）。
@@ -39,18 +41,22 @@ type DedupeScanOptions struct {
 // CustomerService.MergeCustomers）。本服务不重建那套能力，而是复用其规则判定与合并
 // 执行，补齐「名称相似度」与「合并审计留痕」两块缺口，并对管理端暴露统一入口。
 type CustomerDedupeService struct {
-	customers repository.CustomerRepository
-	ruleSvc   *OneIDMergeRuleService
-	mergeRepo repository.CustomerMergeRepository
-	auditRepo repository.OperationLogRepository
+	customers  repository.CustomerRepository
+	scoped     repository.CRMCustomerRepository
+	permission *CustomerPermissionService
+	ruleSvc    *OneIDMergeRuleService
+	mergeRepo  repository.CustomerMergeRepository
+	auditRepo  repository.OperationLogRepository
 }
 
 func NewCustomerDedupeService() *CustomerDedupeService {
 	return &CustomerDedupeService{
-		customers: repository.NewCustomerRepository(),
-		ruleSvc:   NewOneIDMergeRuleService(),
-		mergeRepo: repository.NewCustomerMergeRepository(),
-		auditRepo: repository.NewOperationLogRepository(),
+		customers:  repository.NewCustomerRepository(),
+		scoped:     repository.NewCRMCustomerRepository(),
+		permission: NewCustomerPermissionService(),
+		ruleSvc:    NewOneIDMergeRuleService(),
+		mergeRepo:  repository.NewCustomerMergeRepository(),
+		auditRepo:  repository.NewOperationLogRepository(),
 	}
 }
 
@@ -75,10 +81,25 @@ func (s *CustomerDedupeService) FindDuplicates(ctx context.Context, opts DedupeS
 	if nameThreshold > 100 {
 		nameThreshold = 100
 	}
+	// 无登录身份（userID=0）不得扫描：避免零值 scope 绕过受限过滤读到全租户客户。
+	if !opts.Scope.AllAccounts && opts.Scope.UserID == 0 && (s.permission != nil || s.scoped != nil) {
+		return nil, ErrCRMCustomerForbidden
+	}
 
 	all := make([]*model.Customer, 0, dedupePageSize*2)
 	for page := 1; len(all) < maxCustomers; page++ {
-		batch, _, err := s.customers.List(ctx, page, dedupePageSize, "")
+		var batch []*model.Customer
+		var err error
+		if !opts.Scope.AllAccounts && s.permission != nil && s.scoped != nil {
+			// 数据权限收口：受限用户只能扫描自己范围内客户（FR-002/SC-002）。
+			// RestrictedAccounts=true 且账号集合为空时，ListScoped 会生成 1=0（fail-closed）。
+			filter := s.permission.ToFilter(opts.Scope, repository.CustomerScopeFilter{})
+			filter.Page = page
+			filter.PageSize = dedupePageSize
+			batch, _, err = s.scoped.ListScoped(ctx, filter)
+		} else {
+			batch, _, err = s.customers.List(ctx, page, dedupePageSize, "")
+		}
 		if err != nil {
 			return nil, fmt.Errorf("扫描客户失败 page=%d: %w", page, err)
 		}
@@ -176,7 +197,7 @@ func matchDedupeRules(set *MergeRuleSet, a, b map[string]string) (bool, string, 
 
 // Merge 执行合并并写审计（FR-005）。复用 CustomerService.MergeCustomers 保证
 // 身份/会话/同意关系的迁移语义与既有链路完全一致。
-func (s *CustomerDedupeService) Merge(ctx context.Context, primaryID, secondaryID, operatorName, reason, source string) (*model.Customer, error) {
+func (s *CustomerDedupeService) Merge(ctx context.Context, scope CustomerDataScope, primaryID, secondaryID, operatorName, reason, source string) (*model.Customer, error) {
 	if primaryID == "" || secondaryID == "" || primaryID == secondaryID {
 		return nil, errors.New("primary_id / secondary_id 必须不同且非空")
 	}
@@ -187,6 +208,12 @@ func (s *CustomerDedupeService) Merge(ctx context.Context, primaryID, secondaryI
 	secondary, err := s.customers.GetByID(ctx, secondaryID)
 	if err != nil || secondary == nil {
 		return nil, fmt.Errorf("次要客户不存在: %w", err)
+	}
+	// FR-002：合并两侧都必须落在调用方的数据权限范围内，禁止越权合并。
+	if s.permission != nil {
+		if !s.permission.CanAccess(scope, primary) || !s.permission.CanAccess(scope, secondary) {
+			return nil, ErrCRMCustomerForbidden
+		}
 	}
 
 	original, _ := json.Marshal(map[string]any{
@@ -222,7 +249,14 @@ func (s *CustomerDedupeService) Merge(ctx context.Context, primaryID, secondaryI
 }
 
 // ListMergeAudit 查询某客户的合并审计。
-func (s *CustomerDedupeService) ListMergeAudit(ctx context.Context, customerID string) ([]*model.CustomerMerge, error) {
+func (s *CustomerDedupeService) ListMergeAudit(ctx context.Context, scope CustomerDataScope, customerID string) ([]*model.CustomerMerge, error) {
+	// 审计泄露也是数据泄露：先校验目标客户是否在权限范围内。
+	if s.permission != nil {
+		cust, err := s.scoped.GetByIDScoped(ctx, customerID)
+		if err != nil || cust == nil || !s.permission.CanAccess(scope, cust) {
+			return nil, ErrCRMCustomerForbidden
+		}
+	}
 	return s.mergeRepo.ListByCustomer(ctx, customerID, 100)
 }
 

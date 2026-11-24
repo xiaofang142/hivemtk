@@ -11,7 +11,6 @@ import (
 
 	"regexp"
 	"sort"
-	"strconv"
 
 	"strings"
 
@@ -22,7 +21,6 @@ import (
 	"hivemtk-user/internal/model"
 
 	_db "hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -494,28 +492,37 @@ func (s *WebhookService) recoverStuckDelayedOutbound(ctx context.Context, now ti
 	}
 }
 
+// resolveDelayedReplayTenant 统一延迟重放租户仲裁：反查错误/歧义立即返回，绝不回退行值；
+// 只有反查未命中 (0, nil) 才允许使用 rec.TenantID。
+func (s *WebhookService) resolveDelayedReplayTenant(ctx context.Context, rec *DelayedOutboundReply) (context.Context, error) {
+	if tid, ok := tenant.FromContext(ctx); ok && tid != 0 {
+		return ctx, nil
+	}
+	if s == nil || s.bridgeAccountTenantRepo == nil {
+		return ctx, fmt.Errorf("bridge account tenant repository unavailable")
+	}
+	resolved, err := s.bridgeAccountTenantRepo.ResolveTenantID(ctx, string(rec.Platform), rec.AccountID)
+	if err != nil {
+		return ctx, fmt.Errorf("resolve replay tenant: %w", err)
+	}
+	if resolved != 0 {
+		return tenant.OnlyTenant(ctx, resolved), nil
+	}
+	if rec.TenantID != 0 {
+		return tenant.OnlyTenant(ctx, rec.TenantID), nil
+	}
+	return ctx, fmt.Errorf("replay tenant unresolved")
+}
+
 func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *DelayedOutboundReply) {
 	if s == nil || s.delayedRepo == nil || ctx == nil || ctx.Err() != nil || rec == nil {
 		return
 	}
-	// 租户收口（2026-11-14 4610 同源修复）：延迟重放 worker 的调度 ctx 是平台级
-	// （无租户/SystemScope），而重放落库与后续认领都打在租户表上。归属判定以
-	// **账号反查为权威**（bridge_accounts 行归属，与 DeliverBridgeOutboundMedia
-	// 收口同源）——存量队列里可能带着入队事故抄错的 rec.TenantID（=1 毒行），
-	// 盲信行值会把毒租户继续写下去；反查不到再退行值，行值也没有才 fail-closed
-	// abandon 出声。绝不静默写 default 租户孤儿。
-	if tid, ok := tenant.FromContext(ctx); !ok || tid == 0 {
-		resolved, rerr := tenant.SingleTenantByKey(ctx, dbstate.Get(), "bridge_accounts",
-			"channel = ? AND account_id = ?", string(rec.Platform), rec.AccountID)
-		switch {
-		case rerr == nil && resolved != 0:
-			ctx = tenant.OnlyTenant(ctx, resolved)
-		case rec.TenantID != 0:
-			ctx = tenant.OnlyTenant(ctx, rec.TenantID)
-		default:
-			s.abandonReplay(ctx, rec, "重放行缺租户归属（fail-closed，账号反查与行值均无）")
-			return
-		}
+	// 租户反查是权威；运行错误/歧义立即 abandon，不能借 rec.TenantID 掩盖反查故障。
+	ctx, err := s.resolveDelayedReplayTenant(ctx, rec)
+	if err != nil {
+		s.abandonReplay(ctx, rec, err.Error())
+		return
 	}
 	current, err := s.delayedRepo.ConfirmReplayLease(ctx, rec, time.Now())
 	if err != nil || current == nil {
@@ -598,79 +605,6 @@ func (s *WebhookService) replayDelayedOutbound(ctx context.Context, rec *Delayed
 	}
 }
 
-func (s *WebhookService) autoPickOutboundAccount(ctx context.Context, channel WebhookChannel, p *ParsedPayload, hubMsg *model.MessageHub) string {
-	if !bridgeOutboxCapable(channel) {
-		return ""
-	}
-	tenantID, _ := tenant.FromContext(ctx)
-	conversationID := ""
-	if hubMsg != nil {
-		if hubMsg.TenantID != 0 {
-			tenantID = hubMsg.TenantID
-		}
-		conversationID = hubMsg.ConversationID
-	}
-	if p != nil && conversationID == "" {
-		conversationID = p.ChatID
-	}
-	if tenantID == 0 || strings.TrimSpace(string(channel)) == "" {
-		return ""
-	}
-	pick, err := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{
-		TenantID:       tenantID,
-		Channel:        string(channel),
-		ConversationID: conversationID,
-	})
-	if err != nil || pick == nil || pick.AccountID == 0 {
-		return ""
-	}
-	logger.Ctx(ctx).Debug().Str("channel", string(channel)).Uint("tenant_id", tenantID).Uint("account_id", pick.AccountID).Str("reason", pick.Reason).Msg("auto-picked outbound account")
-	return strconv.FormatUint(uint64(pick.AccountID), 10)
-}
-
-// normalizeOutboundAccount validates an explicit accountID for dispatch-capable channels.
-// Invalid/inactive/mismatched explicit accounts fall back to dispatch pick to avoid stale routing.
-func (s *WebhookService) normalizeOutboundAccount(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, hubMsg *model.MessageHub) string {
-	accountID = strings.TrimSpace(accountID)
-	if !bridgeOutboxCapable(channel) {
-		return accountID
-	}
-	if accountID == "" {
-		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
-	}
-	tenantID, _ := tenant.FromContext(ctx)
-	if hubMsg != nil && hubMsg.TenantID != 0 {
-		tenantID = hubMsg.TenantID
-	}
-	if tenantID == 0 {
-		return accountID
-	}
-	accID, err := strconv.ParseUint(accountID, 10, 32)
-	if err != nil {
-		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
-	}
-	var acc model.ChannelAccount
-	db := dbstate.Get()
-	if db == nil {
-		return accountID
-	}
-	q := db.WithContext(ctx).Where("tenant_id = ? AND id = ? AND status = ?", tenantID, uint(accID), 1)
-	if err := q.First(&acc).Error; err != nil {
-		logger.Ctx(ctx).Debug().Err(err).Str("channel", string(channel)).Uint("tenant_id", tenantID).Str("account_id", accountID).Msg("explicit outbound account invalid, fallback to dispatch")
-		return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
-	}
-	if ch := strings.TrimSpace(string(channel)); ch != "" {
-		var chModel model.Channel
-		if err := db.WithContext(ctx).Select("id, code").Where("id = ? AND tenant_id = ?", acc.ChannelID, tenantID).First(&chModel).Error; err == nil {
-			if !strings.EqualFold(strings.TrimSpace(chModel.Code), ch) && strconv.FormatUint(uint64(acc.ChannelID), 10) != ch {
-				logger.Ctx(ctx).Debug().Str("channel", ch).Str("account_channel", chModel.Code).Uint("tenant_id", tenantID).Str("account_id", accountID).Msg("explicit outbound account channel mismatch, fallback to dispatch")
-				return s.autoPickOutboundAccount(ctx, channel, p, hubMsg)
-			}
-		}
-	}
-	return strconv.FormatUint(uint64(acc.ID), 10)
-}
-
 // abandonReplay 把重放行收口为终态 failed，并给这条客户消息留最后一次补触发机会：
 // 重试通道放弃后，会话里仍是未回复的入站行，不能就此没人应答。
 func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutboundReply, reason string) {
@@ -693,7 +627,17 @@ func (s *WebhookService) abandonReplay(ctx context.Context, rec *DelayedOutbound
 // 重放 worker 只能记一句"无渠道错误"，失败轨迹与类别就此丢失。
 // 调用方据 sendErr 决定是否进入持久化重试通道（只重试 Retryable 的那批）。
 func (s *WebhookService) sendOutbound(ctx context.Context, channel WebhookChannel, accountID string, p *ParsedPayload, content string, hubMsg *model.MessageHub, cards []model.RichCard) (sent bool, sendErr error) {
-	accountID = s.normalizeOutboundAccount(ctx, channel, accountID, p, hubMsg)
+	tenantID, _ := tenant.FromContext(ctx)
+	if hubMsg != nil && hubMsg.TenantID != 0 {
+		tenantID = hubMsg.TenantID
+	}
+	resolvedAccountID, resolveErr := resolveOutboundAccount(ctx, tenantID, channel, accountID)
+	if resolveErr != nil {
+		sendErr = preSendFailure(channel, CategoryBadRequest, resolveErr.Error())
+		recordOutboundSendFailed(channel, sendErr)
+		return false, sendErr
+	}
+	accountID = resolvedAccountID
 	if err := authorizeOutboundSubmission(ctx, channel, accountID, hubMsg); err != nil {
 		recordOutboundSendFailed(channel, err)
 		return false, err

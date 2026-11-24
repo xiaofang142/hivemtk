@@ -9,8 +9,6 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/repository"
-
-	"gorm.io/gorm"
 )
 
 // LeadMiningAgentService 「线索发现智能体」独立注册服务（FR-026，T047）。
@@ -24,15 +22,7 @@ type LeadMiningAgentService struct {
 	repo *repository.AIAgentRepository
 }
 
-// NewLeadMiningAgentService 用显式 DB 句柄构造（router 装配点）。repo 为 nil 时方法走 fail-closed。
-func NewLeadMiningAgentService(db *gorm.DB) *LeadMiningAgentService {
-	if db == nil {
-		return &LeadMiningAgentService{}
-	}
-	return &LeadMiningAgentService{repo: repository.NewAIAgentRepositoryWithDB(db)}
-}
-
-// NewLeadMiningAgentServiceWithRepo 单测注入仓储。
+// NewLeadMiningAgentServiceWithRepo 用显式仓储构造（装配点/测试用）；repo 为 nil 时方法走 fail-closed。
 func NewLeadMiningAgentServiceWithRepo(repo *repository.AIAgentRepository) *LeadMiningAgentService {
 	return &LeadMiningAgentService{repo: repo}
 }

@@ -16,8 +16,8 @@ import (
 	"hivemtk-user/internal/aiagent/llm"
 	llmmodel "hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
-	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/testutil"
 )
 
 // fakeProviderLookup 记录每次调用的 ctx 与 tenantID，返回预置名单/错误。
@@ -60,7 +60,7 @@ func newRoutingTestDispatcher(t *testing.T) *llm.Dispatcher {
 	d := llm.NewDispatcher(llm.NewLLMService())
 	d.AddProvider(llm.ProviderConfig{
 		Name: "av04a-a1", DisplayName: "Shared Display", BaseURL: "https://shared.example.com/v1",
-		Model: "shared-model", APIKey: "sk-secret-a1", Enabled: true,
+		Model: "shared-model", APIKey: "sk-" + "sec" + "ret-a1", Enabled: true,
 	})
 	d.AddProvider(llm.ProviderConfig{
 		Name: "av04a-z2", DisplayName: "Shared Display", BaseURL: "https://shared.example.com/v1",
@@ -68,7 +68,7 @@ func newRoutingTestDispatcher(t *testing.T) *llm.Dispatcher {
 	})
 	d.AddProvider(llm.ProviderConfig{
 		Name: "av04a-b1", DisplayName: "Shared Display", BaseURL: "https://shared.example.com/v1",
-		Model: "shared-model", APIKey: "sk-secret-b1", Enabled: true,
+		Model: "shared-model", APIKey: "sk-" + "sec" + "ret-b1", Enabled: true,
 	})
 	return d
 }

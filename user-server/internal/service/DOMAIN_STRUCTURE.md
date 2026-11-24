@@ -1,8 +1,15 @@
 # Service 层业务域结构（P0-2）
 
-> **状态**：业务域边界已定义；物理分子目录 deferred（环境约束：git lock + 热重载）  
+> **历史状态（2026-07-17）**：业务域边界已定义；物理分子目录 deferred（当时环境约束：git lock + 热重载）
 > **目标**：消除 service 层扁平化导致的业务域边界模糊，便于团队协作与代码定位  
 > **创建时间**：2026-07-17
+>
+> **当前快照（2026-11-25）**：`internal/service/` 有 **14 个生产子包**、**488 个顶层非测试 `.go` 文件**。
+> 生产子包为 `approval`、`audience`、`cards`、`churn`、`confidence`、`dnc`、`email`、
+> `feedback_loop`、`humanize`、`reflux`、`sms`、`sop`、`trace_learning`、`translation`。
+> 计数方法：直接子目录中只要含至少一个非 `_test.go` 的 `.go` 即计为一个生产子包；
+> 顶层文件只计 `internal/service/*.go` 且排除 `_test.go`，不递归子包。
+> 下文的 8 域文件表与“物理移动 Deferred 计划”是**历史蓝本**，不代表当前全部 deferred。
 >
 > **执行进度（2026-10-29，按域拆包刀序）**：蓝图不再全量 deferred，已按"一次一域、
 > git mv 保历史 + 根包兼容别名 + 引用点改子包"的配方逐刀落地：
@@ -19,7 +26,7 @@
 
 ## 背景
 
-`internal/service/` 目录原有 118 个非测试文件 + 89 个测试文件扁平堆放，销冠域、触达域、卡片域等
+`internal/service/` 目录在 2026-07-17 的历史基线为 118 个非测试文件 + 89 个测试文件扁平堆放，销冠域、触达域、卡片域等
 业务域物理混排，导致：
 - 团队协作易产生文件命名冲突
 - 包内可见性过宽，跨域私有方法可被直接调用
@@ -193,7 +200,7 @@ OneID 客户体系：身份合并→360 画像→旅程→会话→流失预测�
 | unified_message.go | 统一消息 |
 | knowledge_merchant.go | 知识库业务适配（跨 rag/system） |
 
-## 物理移动 Deferred 计划
+## 历史：物理移动 Deferred 计划（2026-07-17 蓝本，非当前待办）
 
 当前环境约束（Trae IDE git 扩展持续持有 index.lock + air 热重载监控）使物理移动 207 文件风险不可控
 （无法 commit 回滚 + 热重载风暴）。待环境稳定后执行：

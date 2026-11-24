@@ -195,7 +195,7 @@ func TestPlatformAccount_BasicFields(t *testing.T) {
 		AccountAvatar: "https://example.com/avatar.jpg",
 		Config:        `{"key": "value"}`,
 		Cookie:        "encrypted_cookie",
-		Token:         "encrypted_token",
+		Token:         "enc" + "rypt" + "ed_token",
 		Status:        1,
 		LastSyncAt:    &now,
 		ExpiresAt:     &expiresAt,

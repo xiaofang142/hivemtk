@@ -1,8 +1,9 @@
 package bridge
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
+	"fmt"
+	"hivemtk-user/internal/capregistry"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,6 +81,8 @@ func TestIngestMetrics_ValidationError(t *testing.T) {
 // TestIngestMetrics_Success 验证 ingest 成功时 IngestTotal 计数（channel + agent_id 维度）。
 func TestIngestMetrics_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	fixture := seedCanonicalBridgeFixture(t, db, 1, "douyin", "metrics-ingest")
 	h := NewBridgeIngestHandlerWithMock(
 		func(ctx context.Context, ev *model.MessageEvent) (*service.InboxIngressResult, error) {
 			return &service.InboxIngressResult{Accepted: true}, nil
@@ -93,9 +96,10 @@ func TestIngestMetrics_Success(t *testing.T) {
 	)
 	beforeTotal := metricCounterValue(t, "bridge_ingest_total", channel, agentID)
 
-	body := `{"channel":"douyin","account_id":"acc1","agent_id":7,"messages":[{"event_id":"e1","content":"hi","sender_type":"customer","timestamp":1234567890,"msg_type":"text"}]}`
-	req := httptest.NewRequest("POST", "/api/bridge/ingest?channel=douyin&account_id=acc1", strings.NewReader(body))
+	body := fmt.Sprintf(`{"channel":"douyin","account_id":"%s","agent_id":7,"messages":[{"event_id":"e1","content":"hi","sender_type":"customer","timestamp":1234567890,"msg_type":"text"}]}`, fixture.AccountID)
+	req := httptest.NewRequest("POST", "/api/bridge/ingest?channel=douyin&account_id="+fixture.AccountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -109,8 +113,9 @@ func TestIngestMetrics_Success(t *testing.T) {
 	}
 }
 
-// TestOutboxMetrics_ValidationError 验证 outbox 参数缺失时错误码计数。
-func TestOutboxMetrics_ValidationError(t *testing.T) {
+// TestOutboxMetrics_IdentifyCodeRequired 验证缺识别码且缺 account_id 的结构性 400
+// 使用 account_id_required 计数，不进入 tenant_unresolved 路径。
+func TestOutboxMetrics_IdentifyCodeRequired(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	h := NewBridgeIngestHandlerWithMock(nil, nil)
 
@@ -123,7 +128,7 @@ func TestOutboxMetrics_ValidationError(t *testing.T) {
 	h.GetBridgeOutbox(c)
 
 	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("期望 400，实际 %d", rr.Code)
+		t.Fatalf("缺识别码且缺 account_id 应 400，实际 %d", rr.Code)
 	}
 	if got := metricCounterValue(t, "bridge_ingest_errors_total", "douyin", "account_id_required"); got != beforeErr+1 {
 		t.Errorf("account_id_required 错误计数应 +1，实际 %d（before=%d）", got, beforeErr)
@@ -134,7 +139,7 @@ func TestOutboxMetrics_ValidationError(t *testing.T) {
 // 依赖真实 PG：seed 2 条 pending，GET outbox 后 OutboxFetched +2。
 func TestOutboxMetrics_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
 	if db == nil {
 		return
 	}
@@ -146,10 +151,11 @@ func TestOutboxMetrics_Success(t *testing.T) {
 	h.ingress = svc
 
 	const (
-		channel   = "douyin"
-		accountID = "acc_metrics_outbox"
-		conv      = "conv_metrics_outbox"
+		channel = "douyin"
+		conv    = "conv_metrics_outbox"
 	)
+	fixture := seedCanonicalBridgeFixture(t, db, 1, channel, "metrics-outbox")
+	accountID := fixture.AccountID
 	for i, content := range []string{"out_a", "out_b"} {
 		hub := &model.MessageHub{
 			Platform:       channel,
@@ -171,6 +177,7 @@ func TestOutboxMetrics_Success(t *testing.T) {
 	beforeFetched := metricCounterValue(t, "bridge_outbox_fetched_total", channel, accountID)
 
 	req := httptest.NewRequest("GET", "/api/bridge/outbox?channel="+channel+"&account_id="+accountID, nil)
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	req = req.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(req.Context(), 1), channel, accountID, "text", ""))
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
@@ -212,7 +219,7 @@ func TestAckMetrics_ValidationError(t *testing.T) {
 // 依赖真实 PG：seed 2 条 pending + 1 条 delivered，批量 ack 3 条 + 1 条不存在。
 func TestAckMetrics_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
+	db := setupBridgeTestDB(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.MessageHub{})
 	if db == nil {
 		return
 	}
@@ -224,10 +231,11 @@ func TestAckMetrics_Success(t *testing.T) {
 	h.ingress = svc
 
 	const (
-		channel   = "douyin"
-		accountID = "acc_metrics_ack"
-		conv      = "conv_metrics_ack"
+		channel = "douyin"
+		conv    = "conv_metrics_ack"
 	)
+	fixture := seedCanonicalBridgeFixture(t, db, 1, channel, "metrics-ack")
+	accountID := fixture.AccountID
 	seeds := []struct {
 		msgID  string
 		status string
@@ -260,6 +268,7 @@ func TestAckMetrics_Success(t *testing.T) {
 	body := `{"msg_ids":["mh:ack_pending_a","mh:ack_pending_b","mh:ack_delivered_c","mh:ack_missing_d"],"status":"delivered"}`
 	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req

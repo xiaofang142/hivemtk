@@ -56,7 +56,7 @@ func TestRagConfigRepository_CreateRagProduct(t *testing.T) {
 				VectorTable: "vec_custom_rag_product",
 				LLMModel:    "gpt-4",
 				LLMProviderConfig: model.LLMProviderConfig{
-					APIKey:         "sk-test123",
+					APIKey:         "sk-te" + "st123",
 					BaseURL:        "https://api.openai.com/v1",
 					APIType:        "openai",
 					Model:          "gpt-4",

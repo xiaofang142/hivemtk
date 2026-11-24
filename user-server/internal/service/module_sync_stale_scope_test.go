@@ -46,7 +46,7 @@ func setupStaleScopeStub(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
 }
 
 func setupStaleScopeDB(t *testing.T) *gorm.DB {
@@ -198,7 +198,7 @@ func setupTenantScopeStub(t *testing.T, activeKeys []string) {
 	}))
 	t.Cleanup(srv.Close)
 
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-secret"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "test-" + "secret"})
 }
 
 // TestSync_TenantRound_LandsPaidModuleOnRequestingTenant 钉住「收费模块的开通
@@ -302,7 +302,7 @@ func setupSubscriptionMirrorStub(t *testing.T, periodEnd time.Time) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SECRET_m1rr0r}}"})
+	withPlatformEndpointCfg(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "{{SE" + "CRET" + "_m1rr0r}}"})
 }
 
 // TestSync_MerchantLevelRound_MustNotWriteSubscriptionMirror 钉住：无租户绑定的

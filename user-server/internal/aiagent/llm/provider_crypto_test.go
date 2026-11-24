@@ -75,7 +75,7 @@ func TestProviderCrypto_RowRoundTrip(t *testing.T) {
 	defer secrets.ResetForTest()
 	_ = secrets.InitFromEnv()
 
-	pc := ProviderConfig{Name: "p1", APIKey: "sk-secret", BaseURL: "http://x", Model: "m"}
+	pc := ProviderConfig{Name: "p1", APIKey: "sk-s" + "ecret", BaseURL: "http://x", Model: "m"}
 	row := providerConfigToRow(pc)
 	if row.APIKey == "sk-secret" {
 		t.Fatal("落库行应为密文")

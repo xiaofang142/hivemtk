@@ -8,16 +8,17 @@ import (
 	"testing"
 
 	"hivemtk-user/internal/model"
-	"hivemtk-user/internal/pkg/dbstate"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
+	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// 桥接扩展只带一枚实例级凭证，归属只能由上报的 (channel, account_id) 自证。
-// 这组用例钉住五种结局的边界：行自证、首次注册、跨租户歧义、显式短码、反查故障。
+// identify_code-only 契约：所有模式都必须带合法识别码；on 模式绑定租户，off 模式只解析身份。
+// 旧 bridge_accounts 行自证、tenant_code 与 bartoken 双 authority 均不再成立。
 
 func bindingCtx(t *testing.T, rawQuery string, headers map[string]string) *gin.Context {
 	t.Helper()
@@ -31,265 +32,228 @@ func bindingCtx(t *testing.T, rawQuery string, headers map[string]string) *gin.C
 	return c
 }
 
-func seedBridgeAccount(t *testing.T, db *gorm.DB, tid uint, channel, accountID string) {
-	t.Helper()
-	// 写入用"只带租户、不带 SystemScope"的 ctx：带 SystemScope 时隔离 callback
-	// 跳过 Create 填列，行会落到列默认值 1，夹具就不是我以为的那个租户了。
-	if err := db.WithContext(tenant.WithTenantID(context.Background(), tid)).
-		Create(&model.BridgeAccount{Channel: channel, AccountID: accountID, UserID: 1}).Error; err != nil {
-		t.Fatalf("写入桥接账号夹具失败 tenant=%d %s/%s: %v", tid, channel, accountID, err)
-	}
-}
-
-// seedTenant 建一枚租户并返回其 ID（短码解析要读 tenants 表）。
-func seedTenant(t *testing.T, db *gorm.DB, code, name string, status int16) uint {
-	t.Helper()
-	tr := &model.Tenant{Code: code, Name: name, Status: status, CompanyName: name}
-	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(tr).Error; err != nil {
-		t.Fatalf("写入租户夹具失败 code=%s: %v", code, err)
-	}
-	return tr.ID
-}
-
 func modeOn(t *testing.T) {
 	t.Helper()
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
 }
 
-// off 模式必须逐字节等价于改造前：不解析、不绑租户、不改写 c.Request。
-// 这条是整个桥接改动的回归底线——离线单机部署上线的每一天都靠它。
-func TestBindBridgeTenant_OffModeUntouched(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_IdentifyCodeRequiredInAllModes(t *testing.T) {
+	for _, mode := range []tenant.Mode{tenant.ModeOff, tenant.ModeOn} {
+		t.Run(string(mode), func(t *testing.T) {
+			testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+			tenant.SetMode(mode)
+			t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
+			c := bindingCtx(t, "channel=douyin&account_id=1", nil)
+			if _, err := bindBridgeTenant(c, "douyin", "1"); !errors.Is(err, ErrBridgeTenantUnresolved) {
+				t.Fatalf("缺 identify_code 必须拒绝: %v", err)
+			}
+		})
+	}
+}
+
+func TestBindBridgeTenant_ValidIdentifyCodeBindsTenant(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
+
+	ctx, err := bindBridgeTenant(c, "douyin", fixture.AccountID)
+	if err != nil {
+		t.Fatalf("合法 identify_code 应解析成功: %v", err)
+	}
+	if id, bound := tenant.FromContext(ctx); !bound || id != 11 {
+		t.Fatalf("返回值 ctx 应绑到 11: bound=%v id=%d", bound, id)
+	}
+	if id, bound := tenant.FromContext(c.Request.Context()); !bound || id != 11 {
+		t.Fatalf("c.Request 应同步绑到 11: bound=%v id=%d", bound, id)
+	}
+	identity, ok := BridgeIdentityFromContext(c)
+	if !ok || identity.TenantID != 11 || identity.AccountID != fixture.AccountID || identity.IdentifyCode != fixture.AccountCode {
+		t.Fatalf("统一身份不完整: %+v ok=%v", identity, ok)
+	}
+}
+
+func TestBindBridgeTenant_OffModeResolvesWithoutBinding(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	tenant.SetMode(tenant.ModeOff)
 	t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
-
-	seedBridgeAccount(t, db, tenant.DefaultTenantID, "douyin", "acc-off")
-	c := bindingCtx(t, "channel=douyin&account_id=acc-off", nil)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "offline")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
 	before := c.Request
 
-	ctx, err := bindBridgeTenant(c, "douyin", "acc-off")
+	ctx, err := bindBridgeTenant(c, "douyin", fixture.AccountID)
 	if err != nil {
-		t.Fatalf("off 模式不该有任何失败: %v", err)
+		t.Fatalf("off 模式合法识别码不应失败: %v", err)
 	}
-	if ctx != before.Context() {
-		t.Errorf("off 模式应原样返回请求 ctx，实际换成了另一条 ctx")
+	if ctx != before.Context() || c.Request != before {
+		t.Fatal("off 模式不应改写请求 ctx")
 	}
-	if c.Request != before {
-		t.Errorf("off 模式不该改写 c.Request")
+	if _, bound := tenant.FromContext(ctx); bound {
+		t.Fatal("off 模式不应绑定租户")
 	}
-	if id, bound := tenant.FromContext(ctx); bound {
-		t.Errorf("off 模式不该绑进租户，实际 bound=%d", id)
+	if identity, ok := BridgeIdentityFromContext(c); !ok || identity.TenantID != 11 {
+		t.Fatalf("off 模式仍应解析统一身份: %+v ok=%v", identity, ok)
 	}
 }
 
-func TestBindBridgeTenant_RowSelfCertification(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_AccountMismatchRejected(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	seedBridgeAccount(t, db, 11, "douyin", "acc-own")
-	c := bindingCtx(t, "channel=douyin&account_id=acc-own", nil)
-
-	ctx, err := bindBridgeTenant(c, "douyin", "acc-own")
-	if err != nil {
-		t.Fatalf("已注册账号应自证成功: %v", err)
-	}
-	if id, bound := tenant.FromContext(ctx); !bound || id != 11 {
-		t.Errorf("返回值 ctx 应绑到 11，实际 bound=%v id=%d", bound, id)
-	}
-	// handler 里既有"用返回值"的链路，也有直接取 c.Request.Context() 的链路，
-	// 两处必须看到同一个租户，否则消息落进 A、在线位刷到 B。
-	if id, bound := tenant.FromContext(c.Request.Context()); !bound || id != 11 {
-		t.Errorf("c.Request 未同步改写（应绑到 11），实际 bound=%v id=%d", bound, id)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id=999999", fixture.Code)
+	if _, err := bindBridgeTenant(c, "douyin", "999999"); !errors.Is(err, ErrBridgeTenantAmbiguous) {
+		t.Fatalf("识别码与显式账号不一致必须拒绝: %v", err)
 	}
 }
 
-// 首次上报（库里还没有账号行）不带短码 ⇒ 拒。放行只会让后续每一次读写被
-// 隔离 callback 判错，而 ingest 仍回 200 —— 扩展看见成功，消息一条都没落库。
-func TestBindBridgeTenant_FirstReportWithoutCodeIsRejected(t *testing.T) {
-	testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_ChannelMismatchRejected(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	c := bindingCtx(t, "channel=douyin&account_id=brand-new", nil)
-	if _, err := bindBridgeTenant(c, "douyin", "brand-new"); !errors.Is(err, ErrBridgeTenantUnresolved) {
-		t.Errorf("期望 ErrBridgeTenantUnresolved，实际 %v", err)
-	}
-	if got := bridgeTenantHTTPStatus(ErrBridgeTenantUnresolved); got != http.StatusNotFound {
-		t.Errorf("首次注册缺归属应回 404（补上 tenant_code 就能重试），实际 %d", got)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	c := bindingCtxWithIdentifyCode(t, "channel=weibo&account_id="+fixture.AccountID, fixture.Code)
+	if _, err := bindBridgeTenant(c, "weibo", fixture.AccountID); !errors.Is(err, ErrBridgeTenantAmbiguous) {
+		t.Fatalf("识别码与请求渠道不一致必须拒绝: %v", err)
 	}
 }
 
-func TestBindBridgeTenant_AmbiguousKeyNeedsExplicitCode(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_InvalidIdentifyCodeRejected(t *testing.T) {
+	testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	seedBridgeAccount(t, db, 11, "douyin", "acc-both")
-	seedBridgeAccount(t, db, 22, "douyin", "acc-both")
-
-	c := bindingCtx(t, "channel=douyin&account_id=acc-both", nil)
-	if _, err := bindBridgeTenant(c, "douyin", "acc-both"); !errors.Is(err, ErrBridgeTenantAmbiguous) {
-		t.Errorf("跨租户同键应判歧义，实际 %v", err)
-	}
-
-	// 带短码后可判清：绑定的是短码指定的那一枚，不是"随便第一行"。
-	c2 := bindingCtx(t, "channel=douyin&account_id=acc-both&tenant_code=t22", nil)
-	tid := seedTenant(t, db, "t22", "二十三", model.TenantStatusActive)
-	ctx, err := bindBridgeTenant(c2, "douyin", "acc-both")
-	if err != nil {
-		t.Fatalf("歧义 + 有效短码应解析成功: %v", err)
-	}
-	if id, _ := tenant.FromContext(ctx); id != tid {
-		t.Errorf("期望绑到短码租户 %d，实际 %d", tid, id)
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id=1", "not-a-valid-code")
+	if _, err := bindBridgeTenant(c, "douyin", "1"); !errors.Is(err, ErrBridgeTenantUnresolved) {
+		t.Fatalf("无效 identify_code 必须拒绝: %v", err)
 	}
 }
 
-// 行自证优先于短码：否则任何一台持有实例凭证的机器，只要在 URL 上加一枚别人的
-// tenant_code，就能把上报写进别的租户。
-func TestBindBridgeTenant_RowCertificationBeatsTenantCode(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_AlreadyBoundSameTenantNoop(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
+	c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 11))
+	before := c.Request
+	ctx, err := bindBridgeTenant(c, "douyin", fixture.AccountID)
+	if err != nil || ctx != before.Context() || c.Request != before {
+		t.Fatalf("同租户已绑定应 noop: ctx_changed=%v request_changed=%v err=%v", ctx != before.Context(), c.Request != before, err)
+	}
+}
 
-	seedBridgeAccount(t, db, 11, "douyin", "acc-fixed")
-	other := seedTenant(t, db, "t-intruder", "越权租户", model.TenantStatusActive)
+func TestBindBridgeTenant_AlreadyBoundDifferentTenantRejected(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "owned")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
+	c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 99))
+	if _, err := bindBridgeTenant(c, "douyin", fixture.AccountID); !errors.Is(err, ErrBridgeTenantAmbiguous) {
+		t.Fatalf("跨租户 ctx 与识别码冲突必须拒绝: %v", err)
+	}
+}
 
-	c := bindingCtx(t, "channel=douyin&account_id=acc-fixed&tenant_code=t-intruder", nil)
-	ctx, err := bindBridgeTenant(c, "douyin", "acc-fixed")
+func TestBindBridgeTenant_AliasChannelMatchesCanonical(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "alias")
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin_web&account_id="+fixture.AccountID, fixture.Code)
+	ctx, err := bindBridgeTenant(c, "douyin_web", fixture.AccountID)
 	if err != nil {
-		t.Fatalf("已注册账号带短码不应失败: %v", err)
+		t.Fatalf("规范别名应匹配 canonical 渠道: %v", err)
 	}
 	if id, _ := tenant.FromContext(ctx); id != 11 {
-		t.Errorf("归属被短码改写了：期望 11，实际 %d（intruder 租户 %d）", id, other)
+		t.Fatalf("别名请求应绑到 11: %d", id)
 	}
 }
 
-func TestBindBridgeTenant_InvalidTenantCode(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_ChannelFallbackQueryErrorRejected(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	// 存在但已停用的租户：短码不能把停用租户变成可写入的归属
-	seedTenant(t, db, "t-suspended", "停用租户", model.TenantStatusSuspended)
-	c := bindingCtx(t, "channel=douyin&account_id=new-one&tenant_code=t-suspended", nil)
-	if _, err := bindBridgeTenant(c, "douyin", "new-one"); !errors.Is(err, ErrBridgeTenantCodeInvalid) {
-		t.Errorf("期望 ErrBridgeTenantCodeInvalid，实际 %v", err)
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "fallback-error")
+	queryErr := errors.New("fallback channel query failed")
+	const callback = "test:bridge-channel-fallback-query-error"
+	if err := db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+		if tx.Statement.Table == "channels" {
+			tx.AddError(queryErr)
+		}
+	}); err != nil {
+		t.Fatalf("注册渠道查询故障失败: %v", err)
 	}
-
-	c2 := bindingCtx(t, "channel=douyin&account_id=new-one&tenant_code=no-such-code", nil)
-	if _, err := bindBridgeTenant(c2, "douyin", "new-one"); !errors.Is(err, ErrBridgeTenantCodeInvalid) {
-		t.Errorf("查无此短码应判短码无效，实际 %v", err)
+	t.Cleanup(func() { _ = db.Callback().Query().Remove(callback) })
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin&account_id="+fixture.AccountID, fixture.Code)
+	if _, err := bindBridgeTenant(c, "douyin", fixture.AccountID); !errors.Is(err, queryErr) {
+		t.Fatalf("channel fallback 运行错误必须可见: %v", err)
 	}
 }
 
-// 上游中间件已经绑好时不得重复解析，也不得覆写既有归属。
-func TestBindBridgeTenant_AlreadyBoundIsNoop(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBindBridgeTenant_ChannelCodeDisabledAccountCannotSend(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	seedBridgeAccount(t, db, 11, "douyin", "acc-b11")
-	c := bindingCtx(t, "channel=douyin&account_id=acc-b11", nil)
-	c.Request = c.Request.WithContext(tenant.WithTenantID(c.Request.Context(), 99))
-
-	ctx, err := bindBridgeTenant(c, "douyin", "acc-b11")
+	channel := &model.Channel{TenantID: 11, Name: "douyin", Code: "douyin", Type: "dm", Enabled: true}
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(channel).Error; err != nil {
+		t.Fatalf("seed channel: %v", err)
+	}
+	account := &model.ChannelAccount{TenantID: 11, ChannelID: channel.ID, Name: "disabled-only", IdentifyCode: "disabled-account-code", Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{}}
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(account).Error; err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Model(&model.ChannelAccount{}).Where("id = ?", account.ID).Update("status", 0).Error; err != nil {
+		t.Fatalf("disable account: %v", err)
+	}
+	const identifyCode = "disabled-channel-code"
+	if err := db.WithContext(tenant.WithSystemScope(context.Background())).Create(&model.ChannelIdentifyCode{TenantID: 11, ChannelID: channel.ID, Code: identifyCode, Version: 1}).Error; err != nil {
+		t.Fatalf("seed identify code: %v", err)
+	}
+	c := bindingCtxWithIdentifyCode(t, "channel=douyin", identifyCode)
+	ctx, err := bindBridgeTenant(c, "douyin", "")
 	if err != nil {
-		t.Fatalf("已绑定应直通: %v", err)
+		t.Fatalf("channel-level code 应解析身份: %v", err)
 	}
-	if id, _ := tenant.FromContext(ctx); id != 99 {
-		t.Errorf("既有绑定被改写：期望 99，实际 %d", id)
+	identity, ok := BridgeIdentityFromContext(c)
+	if !ok || identity.AccountID == "" {
+		t.Fatalf("channel-level code 应补全账号: %+v", identity)
 	}
-}
-
-// 反查故障（库没起来）必须与"账号还没注册"分成两类：后者能靠补 tenant_code 自救，
-// 前者回 404 提示补短码只会把运维引到错误的方向上。
-func TestBindBridgeTenant_LookupFailureIsNotUnresolved(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
-	modeOn(t)
-	_ = db
-
-	dbstate.Set(nil)
-	t.Cleanup(func() { dbstate.Set(db) })
-
-	c := bindingCtx(t, "channel=douyin&account_id=acc-x", nil)
-	_, err := bindBridgeTenant(c, "douyin", "acc-x")
-	if err == nil {
-		t.Fatal("库未初始化的反查必须报错")
-	}
-	if errors.Is(err, ErrBridgeTenantUnresolved) {
-		t.Errorf("反查故障被误判成首次注册：%v", err)
-	}
-	if got := bridgeTenantHTTPStatus(err); got != http.StatusInternalServerError {
-		t.Errorf("反查故障应回 500（重试帮不上忙），实际 %d", got)
+	if _, err := service.NewChannelDispatchService().ResolveExplicitOutboundAccount(ctx, 11, "douyin", identity.AccountID); err == nil {
+		t.Fatal("disabled-only 账号不得通过显式出站校验")
 	}
 }
 
-// 渠道别名是这条链路上最容易静默失效的一处：bridge_accounts 只存规范名，
-// 传 douyin_web 会让自证查不到行，把已注册账号误判成首次注册。
-// 这条用例把该契约钉住——收口归一化之前，入口必须先 NormalizeBridgeChannel。
-func TestBindBridgeTenant_AliasChannelDoesNotSelfCertify(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBridgeTenantForRequest_IdentifyCode(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	modeOn(t)
-
-	seedBridgeAccount(t, db, 11, "douyin", "acc-alias")
-	c := bindingCtx(t, "channel=douyin_web&account_id=acc-alias", nil)
-	if _, err := bindBridgeTenant(c, "douyin_web", "acc-alias"); !errors.Is(err, ErrBridgeTenantUnresolved) {
-		t.Errorf("别名渠道应判无归属（提醒入口必须归一化），实际 %v", err)
-	}
-}
-
-// WS 传输口的同一份判定：channel/account_id 来自 register 帧，短码来自握手 URL。
-func TestBridgeTenantForRequest(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
-	modeOn(t)
-
-	seedBridgeAccount(t, db, 11, "douyin", "acc-ws")
-
-	newReq := func(rawQuery string) *http.Request {
-		return httptest.NewRequest(http.MethodGet, "/api/ws/channel?"+rawQuery, nil)
-	}
-
-	ctx, err := BridgeTenantForRequest(newReq(""), "douyin", "acc-ws")
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "ws")
+	req := httptest.NewRequest(http.MethodGet, "/api/ws/channel", nil)
+	req = req.WithContext(edition.WithContext(req.Context(), edition.TypeCustom))
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
+	ctx, err := BridgeTenantForRequest(req, "douyin", fixture.AccountID)
 	if err != nil {
-		t.Fatalf("已注册账号的 WS 握手应自证成功: %v", err)
+		t.Fatalf("WS 合法识别码应成功: %v", err)
 	}
 	if id, bound := tenant.FromContext(ctx); !bound || id != 11 {
-		t.Errorf("WS 基准 ctx 应绑到 11，实际 bound=%v id=%d", bound, id)
-	}
-
-	if _, err := BridgeTenantForRequest(newReq(""), "douyin", "acc-new"); !errors.Is(err, ErrBridgeTenantUnresolved) {
-		t.Errorf("首次 WS 注册无短码应拒绝，实际 %v", err)
-	}
-
-	wsTenant := seedTenant(t, db, "t-ws", "WS 租户", model.TenantStatusActive)
-	ctx, err = BridgeTenantForRequest(newReq("tenant_code=t-ws"), "douyin", "acc-new")
-	if err != nil {
-		t.Fatalf("首次 WS 注册带短码应成功: %v", err)
-	}
-	if id, _ := tenant.FromContext(ctx); id != wsTenant {
-		t.Errorf("期望绑到 %d，实际 %d", wsTenant, id)
-	}
-
-	// 短码走握手头与走 query 是同一件事
-	hdrReq := newReq("")
-	hdrReq.Header.Set("X-Tenant-Code", "t-ws")
-	ctx, err = BridgeTenantForRequest(hdrReq, "douyin", "acc-new-2")
-	if err != nil {
-		t.Fatalf("X-Tenant-Code 头应被识别: %v", err)
-	}
-	if id, _ := tenant.FromContext(ctx); id != wsTenant {
-		t.Errorf("头短码解析结果不符：期望 %d，实际 %d", wsTenant, id)
+		t.Fatalf("WS ctx 应绑到 11: bound=%v id=%d", bound, id)
 	}
 }
 
-func TestBridgeTenantForRequest_OffModePassesThrough(t *testing.T) {
-	db := testutil.NewTestDBOrSkip(t, &model.BridgeAccount{}, &model.Tenant{})
+func TestBridgeTenantForRequest_MissingCodeRejected(t *testing.T) {
+	testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
+	modeOn(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/ws/channel", nil)
+	if _, err := BridgeTenantForRequest(req, "douyin", "1"); !errors.Is(err, ErrBridgeTenantUnresolved) {
+		t.Fatalf("WS 缺识别码必须拒绝: %v", err)
+	}
+}
+
+func TestBridgeTenantForRequest_OffModePassesThroughWithoutBinding(t *testing.T) {
+	db := testutil.NewTestDBOrSkip(t, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{})
 	tenant.SetMode(tenant.ModeOff)
 	t.Cleanup(func() { tenant.SetMode(tenant.ModeOff) })
-	_ = db
-
+	fixture := seedCanonicalBridgeFixture(t, db, 11, "douyin", "ws-off")
 	req := httptest.NewRequest(http.MethodGet, "/api/ws/channel", nil)
-	ctx, err := BridgeTenantForRequest(req, "douyin", "acc-any")
-	if err != nil {
-		t.Fatalf("off 模式不该失败: %v", err)
+	req = req.WithContext(edition.WithContext(req.Context(), edition.TypeCustom))
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
+	ctx, err := BridgeTenantForRequest(req, "douyin", fixture.AccountID)
+	if err != nil || ctx != req.Context() {
+		t.Fatalf("off 模式应原样 ctx 且不失败: changed=%v err=%v", ctx != req.Context(), err)
 	}
-	if ctx != req.Context() {
-		t.Errorf("off 模式应原样返回请求 ctx（不绑定、不改写）")
+	if _, bound := tenant.FromContext(ctx); bound {
+		t.Fatal("off 模式不应绑定租户")
 	}
 }

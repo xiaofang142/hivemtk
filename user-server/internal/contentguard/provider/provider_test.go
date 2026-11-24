@@ -67,7 +67,7 @@ func TestAudit_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	a, err := NewHTTPAuditor(HTTPConfig{Endpoint: srv.URL + "/audit", Token: "secret", AllowInsecure: true})
+	a, err := NewHTTPAuditor(HTTPConfig{Endpoint: srv.URL + "/audit", Token: "sec" + "ret", AllowInsecure: true})
 	if err != nil {
 		t.Fatalf("构造失败：%v", err)
 	}

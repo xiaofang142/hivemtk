@@ -372,29 +372,20 @@ const fetchClueRows = async (filters) => {
 }
 
 /**
- * 选了日期区间时，用列表接口（支持 start/end，unix 秒）拉区间内线索，
- * 在前端按类型聚合成统计行。
- *
- * 为什么不能直接把区间传给 /api/clues/statistics：该接口只返回「按类型的
- * 全量汇总」，没有任何时间参数，传了也不会生效——旧实现用 el-select 假装
- * 是日期控件，下拉里只有「无数据」，筛不出任何东西（UI 审计实测）。
- * 这里走列表接口做真实聚合，保证控件与数据一致。
+ * 选了日期区间时，走服务端区间统计接口（/api/clues/statistics/range）。
+ * 服务端按 create_time 全量聚合角色/状态/渠道/单群聊六维，不再拉列表在前端
+ * 自行聚合——旧实现每页 500、最多 20 页，超过 10000 行会静默截断，统计偏小。
  */
 const fetchRangeStats = async ([startDay, endDay]) => {
   const start = Math.floor(new Date(`${startDay}T00:00:00`).getTime() / 1000)
   const end = Math.floor(new Date(`${endDay}T23:59:59`).getTime() / 1000)
-  const todayStart = Math.floor(new Date(new Date().setHours(0, 0, 0, 0)).getTime() / 1000)
-  const rows = await fetchClueRows({ start, end })
-  const byType = new Map()
-  for (const row of rows) {
-    const key = String(row.type)
-    const item = byType.get(key) || { type: row.type, total: 0, verify_total: 0, today: 0 }
-    item.total += 1
-    if (Number(row.is_verify) === 1) item.verify_total += 1
-    if (Number(row.create_time) >= todayStart) item.today += 1
-    byType.set(key, item)
+  const res = await clueApi.statisticsRange(start, end)
+  const data = res?.data?.data ?? res?.data ?? res
+  const stats = data || {}
+  return {
+    typeStats: Array.isArray(stats.by_type) ? stats.by_type : [],
+    lmStats: stats
   }
-  return [...byType.values()]
 }
 
 /**
@@ -423,18 +414,26 @@ const fetchAll = async () => {
   loading.value = true
   try {
     const hasRange = Array.isArray(dateRange.value) && dateRange.value.length === 2 && dateRange.value[0] && dateRange.value[1]
-    const [statsRes, lmStatsRes] = await Promise.all([
-      hasRange ? fetchRangeStats(dateRange.value) : clueApi.statistics(),
-      getLeadMiningClueStats().catch(() => null)
-    ])
-    const statsList = Array.isArray(statsRes) ? statsRes : (statsRes?.list || [])
+    let statsList
+    let lm
+    if (hasRange) {
+      const ranged = await fetchRangeStats(dateRange.value)
+      statsList = ranged.typeStats
+      lm = ranged.lmStats
+    } else {
+      const [statsRes, lmStatsRes] = await Promise.all([
+        clueApi.statistics(),
+        getLeadMiningClueStats().catch(() => null)
+      ])
+      statsList = Array.isArray(statsRes) ? statsRes : (statsRes?.list || [])
+      lm = lmStatsRes?.data?.data ?? lmStatsRes?.data ?? lmStatsRes
+    }
     typeStats.value = statsList.map((it) => ({
       type: it.type,
       total: it.total || 0,
       verify_total: it.verify_total || 0,
       today: it.today || 0
     }))
-    const lm = lmStatsRes?.data?.data ?? lmStatsRes?.data ?? lmStatsRes
     roleStats.value = Array.isArray(lm?.by_lead_role) ? lm.by_lead_role : []
     roleTotal.value = Number(lm?.total || 0)
 

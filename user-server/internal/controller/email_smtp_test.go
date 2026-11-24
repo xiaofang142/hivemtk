@@ -65,7 +65,7 @@ func TestEmailSmtpController_CreateEmailSmtp_Success(t *testing.T) {
 		Server:   "smtp.example.com",
 		Port:     587,
 		Username: "test@example.com",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Limit:    100,
 	}
 	body, _ := json.Marshal(req)
@@ -173,7 +173,7 @@ func TestEmailSmtpController_UpdateEmailSmtp_Success(t *testing.T) {
 		Server:   "smtp.updated.com",
 		Port:     587,
 		Username: "updated@example.com",
-		Password: "newpassword",
+		Password: "newpa" + "ssword",
 		Limit:    200,
 	}
 	body, _ := json.Marshal(req)

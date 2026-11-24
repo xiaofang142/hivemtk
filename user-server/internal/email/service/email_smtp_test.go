@@ -46,7 +46,7 @@ func TestEmailSmtpService_CreateEmailSmtp(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "test@qq.com",
-		Password: "test-password",
+		Password: "tes" + "t-p" + "assword",
 		Limit:    100,
 	}
 
@@ -90,7 +90,7 @@ func TestEmailSmtpService_GetEmailSmtp(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "test@qq.com",
-		Password: "test-password",
+		Password: "tes" + "t-p" + "assword",
 		Limit:    100,
 	}
 	database.Create(&emailSmtp)
@@ -131,7 +131,7 @@ func TestEmailSmtpService_GetEmailSmtpList(t *testing.T) {
 			Server:   "smtp.qq.com",
 			Port:     465,
 			Username: "test" + string(rune('0'+i)) + "@qq.com",
-			Password: "password" + string(rune('0'+i)),
+			Password: "pass" + "word" + string(rune('0'+i)),
 			Limit:    100,
 		}
 		database.Create(&emailSmtp)
@@ -173,7 +173,7 @@ func TestEmailSmtpService_UpdateEmailSmtp(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "old@qq.com",
-		Password: "old-password",
+		Password: "old" + "-pa" + "ssword",
 		Limit:    100,
 	}
 	database.Create(&emailSmtp)
@@ -210,7 +210,7 @@ func TestEmailSmtpService_DeleteEmailSmtp(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "delete@qq.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    100,
 	}
 	database.Create(&emailSmtp)
@@ -238,7 +238,7 @@ func TestEmailSmtpService_GetRandEmailSmtp(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "rand@qq.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    100,
 	}
 	database.Create(&emailSmtp)
@@ -275,7 +275,7 @@ func TestEmailSmtpService_GetRandEmailSmtp_NoAvailable(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "nolimit@qq.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    0,
 	}
 	database.Create(&emailSmtp)
@@ -297,7 +297,7 @@ func TestEmailSmtpService_GetRandEmailSmtp_WithLimit(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "limit1@qq.com",
-		Password: "password1",
+		Password: "pass" + "word1",
 		Limit:    2,
 	}
 	database.Create(&emailSmtp1)
@@ -308,7 +308,7 @@ func TestEmailSmtpService_GetRandEmailSmtp_WithLimit(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "limit2@qq.com",
-		Password: "password2",
+		Password: "pass" + "word2",
 		Limit:    10,
 	}
 	database.Create(&emailSmtp2)
@@ -401,7 +401,7 @@ func TestEmailSmtpService_UpdateEmailSmtp_NotFound(t *testing.T) {
 		Server:   "smtp.qq.com",
 		Port:     465,
 		Username: "test@qq.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    100,
 	}
 

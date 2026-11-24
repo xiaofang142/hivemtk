@@ -45,10 +45,11 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 	cfgRepo := repository.NewLeadMiningConfigRepository()
 
 	cfg := &model.LeadMiningConfig{
-		Enabled:        true,
-		Keywords:       model.JSONStrings{"购买", "代理", "报价", "合作"},
-		Tags:           model.JSONStrings{"高意向", "待跟进"},
-		Channels:       model.JSONStrings{"telegram", "douyin"},
+		Enabled:  true,
+		Keywords: model.JSONStrings{"购买", "代理", "报价", "合作"},
+		Tags:     model.JSONStrings{"高意向", "待跟进"},
+		// P0-c：Channels 现在是显式关闭名单；留空 = 全纳入（telegram 也参与）。
+		Channels:       model.JSONStrings{},
 		Requirement:    "客户明确表达购买意向或咨询代理/报价，即视为线索",
 		MinIntentScore: 50,
 	}

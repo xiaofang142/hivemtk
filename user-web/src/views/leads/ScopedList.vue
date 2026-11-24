@@ -168,6 +168,27 @@
               show-overflow-tooltip
             />
             <el-table-column
+              label="判定来源"
+              min-width="110"
+            >
+              <template #default="{ row }">
+                <el-tag
+                  v-if="row.degraded"
+                  size="small"
+                  type="warning"
+                >
+                  降级判定
+                </el-tag>
+                <el-tag
+                  v-else
+                  size="small"
+                  type="success"
+                >
+                  LLM
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column
               prop="created_at"
               label="时间"
               min-width="160"

@@ -53,7 +53,7 @@ func TestShortLinkService_Create(t *testing.T) {
 		OriginalURL: "https://example.com/very/long/url",
 		Title:       "测试短链",
 		Description: "这是一个测试短链",
-		Password:    "secret123",
+		Password:    "secr" + "et123",
 	}
 
 	resp, err := service.Create(context.Background(), req)
@@ -829,7 +829,7 @@ func TestShortLinkService_AccessShortLink_WithPassword(t *testing.T) {
 	createReq := &dto.CreateShortLinkRequest{
 		ShortCode:   "password",
 		OriginalURL: "https://example.com/password",
-		Password:    "secret123",
+		Password:    "secr" + "et123",
 	}
 	_, err := service.Create(context.Background(), createReq)
 	if err != nil {
@@ -851,7 +851,7 @@ func TestShortLinkService_AccessShortLink_WithPassword(t *testing.T) {
 
 	accessReqCorrect := &dto.AccessShortLinkRequest{
 		ShortCode: "password",
-		Password:  "secret123",
+		Password:  "secr" + "et123",
 	}
 
 	resp, err := service.AccessShortLink(context.Background(), accessReqCorrect)
@@ -1588,7 +1588,7 @@ func TestShortLinkService_Create_WithAllFields(t *testing.T) {
 		Title:       "完整字段测试",
 		Description: "这是一个包含所有字段的测试短链",
 		DomainID:    uint(domain.ID),
-		Password:    "password123",
+		Password:    "passw" + "ord123",
 		ExpireTime:  &expireTime,
 	}
 

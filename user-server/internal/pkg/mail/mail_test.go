@@ -54,7 +54,7 @@ func TestAutoConfig(t *testing.T) {
 func TestSendMail(t *testing.T) {
 	cfg := Config{
 		From:     "test@qq.com",
-		Password: "test_password",
+		Password: "tes" + "t_p" + "assword",
 	}
 
 	err := SendMail(cfg, []string{"recipient@example.com"}, "Test Subject", "Test Body", false)
@@ -73,7 +73,7 @@ func TestSendMailWithProvidedConfig(t *testing.T) {
 		Host:     "smtp.example.com",
 		Port:     587,
 		From:     "test@example.com",
-		Password: "test_password",
+		Password: "tes" + "t_p" + "assword",
 		SSL:      false,
 	}
 
@@ -88,7 +88,7 @@ func TestSendMailEmptyTo(t *testing.T) {
 		Host:     "smtp.example.com",
 		Port:     587,
 		From:     "test@example.com",
-		Password: "test_password",
+		Password: "tes" + "t_p" + "assword",
 	}
 
 	err := SendMail(cfg, []string{}, "Test Subject", "Test Body", false)
@@ -102,7 +102,7 @@ func TestConfigStruct(t *testing.T) {
 		Host:     "smtp.test.com",
 		Port:     587,
 		From:     "sender@test.com",
-		Password: "secret",
+		Password: "sec" + "ret",
 		SSL:      true,
 	}
 

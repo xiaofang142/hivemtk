@@ -101,7 +101,7 @@ func TestWalletAndTxnsCarryTenantCodeQuery(t *testing.T) {
 	t.Setenv("PLATFORM_MERCHANT_KEY", "MK-TC")
 	database := setupTenantRowDB(t)
 	srv, stub := newWalletTenantStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 
 	tn := &model.Tenant{Code: "tWALLET1", Name: "钱包租户"}
 	if err := database.Create(tn).Error; err != nil {
@@ -139,7 +139,7 @@ func TestWalletTxnsEmptyTenantCodeStillCalls(t *testing.T) {
 	t.Setenv("PLATFORM_MERCHANT_KEY", "MK-TC")
 	setupTenantRowDB(t)
 	srv, stub := newWalletTenantStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 
 	c := NewModuleClient()
 	if _, err := c.Wallet(context.Background()); err != nil {

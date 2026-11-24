@@ -37,7 +37,7 @@ describe('页面能力查询 / 后台中转与资源回收', () => {
     const request = chrome.runtime.sendMessage.mock.calls[0][0];
     expect(request.type).toBe('bridgeFetch');
     expect(new URL(request.url).searchParams.get('tenant_code')).toBe('tenant-test');
-    expect(request.options.headers['X-Bridge-Token']).toBe('bridge-test');
+    expect(request.options.headers['X-Channel-Identify-Code']).toBe('bridge-test');
     expect(request.options.headers.Authorization).toBe('Bearer bridge-test');
     expect(request.url).not.toContain('bridge-test');
     expect(vi.getTimerCount()).toBe(0);

@@ -22,6 +22,8 @@ const (
 	unifiedIDPrefixKuaishou    = "kuaishou:"
 	unifiedIDPrefixXiaohongshu = "xiaohongshu:"
 	unifiedIDPrefixXianyu      = "xianyu:"
+	unifiedIDPrefixQQ          = "qq:"
+	unifiedIDPrefixPersonalWX  = "personal_wx:"
 )
 
 // Customer 客户模型 - CDP 统一客户数据
@@ -54,6 +56,9 @@ type Customer struct {
 	KuaishouOpenID   string `gorm:"type:varchar(64);index;column:kuaishou_open_id" json:"kuaishou_open_id"`
 	XiaohongshuID    string `gorm:"type:varchar(64);index;column:xiaohongshu_id" json:"xiaohongshu_id"`
 	XianyuID         string `gorm:"type:varchar(64);index;column:xianyu_id" json:"xianyu_id"`
+	// D15：QQ / 个微身份列（migration 098），避免这些渠道回退随机 UUID 导致 OneID 不稳定。
+	QQOpenID         string `gorm:"type:varchar(64);index;column:qq_open_id" json:"qq_open_id,omitempty"`
+	PersonalWXOpenID string `gorm:"type:varchar(64);index;column:personal_wx_open_id" json:"personal_wx_open_id,omitempty"`
 
 	// 标签 + 评分
 	Tags      string `gorm:"type:text" json:"tags"`
@@ -78,7 +83,7 @@ type Customer struct {
 	OwnerUserID *uint `gorm:"index" json:"owner_user_id,omitempty"`
 	// MergedIntoID 非空表示本客户已合并进该主档（身份归一可追溯）。
 	// 与 customer_merges 审计表配套；空串表示独立客户。
-	MergedIntoID string `gorm:"type:varchar(36);index" json:"merged_into_id,omitempty"`
+	MergedIntoID string `gorm:"type:varchar(64);index" json:"merged_into_id,omitempty"`
 
 	// 时间
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -154,6 +159,12 @@ func GenerateCustomerUnifiedID(c *Customer) string {
 	}
 	if c.XianyuID != "" {
 		return unifiedIDPrefixXianyu + c.XianyuID
+	}
+	if c.QQOpenID != "" {
+		return unifiedIDPrefixQQ + c.QQOpenID
+	}
+	if c.PersonalWXOpenID != "" {
+		return unifiedIDPrefixPersonalWX + c.PersonalWXOpenID
 	}
 	return uuid.New().String()
 }

@@ -14,7 +14,6 @@
 package bridge
 
 import (
-	"hivemtk-user/internal/capregistry"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -24,7 +23,6 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
-	"hivemtk-user/internal/service"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -41,11 +39,12 @@ type outboxHTTPResult struct {
 }
 
 // pollOutbox 走真实 HTTP 入口取待下行（别名入参原样传，归不归一是被测量）。
-func pollOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID string) outboxHTTPResult {
+func pollOutbox(t *testing.T, h *BridgeIngestHandler, identifyCode, channel, accountID string) outboxHTTPResult {
 	t.Helper()
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("GET",
 		"/api/bridge/outbox?channel="+channel+"&account_id="+accountID+"&limit=50", nil)
+	req.Header.Set("X-Channel-Identify-Code", identifyCode)
 	req = req.WithContext(localBridgeDeliveryContext(t, tenant.WithTenantID(context.Background(), 1), NormalizeBridgeChannel(channel), accountID, "text", ""))
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -63,13 +62,14 @@ func pollOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID string)
 	return outboxHTTPResult{status: rr.Code, messages: parsed.Messages, body: rr.Body.String()}
 }
 
-func ackOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID, body string) outboxHTTPResult {
+func ackOutbox(t *testing.T, h *BridgeIngestHandler, identifyCode, channel, accountID, body string) outboxHTTPResult {
 	t.Helper()
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest("POST",
 		"/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID,
 		strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", identifyCode)
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
 	h.AckBridgeOutbox(c)
@@ -88,12 +88,10 @@ func ackOutbox(t *testing.T, h *BridgeIngestHandler, channel, accountID, body st
 }
 
 // ackLoopDB 建一条规范名入库的待下行，返回 handler 与句柄。
-func ackLoopDB(t *testing.T, channel, msgID, accountID string) (*BridgeIngestHandler, *gorm.DB) {
+func ackLoopDB(t *testing.T, channel, msgID, accountName string) (*BridgeIngestHandler, *gorm.DB, bridgeIdentifyFixture) {
 	t.Helper()
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
+	db, h, fixture := newCanonicalAckHandler(t, channel, accountName)
+	accountID := fixture.AccountID
 	// 在线位刷新会打到 bridge_accounts（本夹具不建这张表）；这里只测渠道身份，置空全局。
 	prevRepo := GlobalBridgeAccountRepo
 	GlobalBridgeAccountRepo = nil
@@ -112,24 +110,22 @@ func ackLoopDB(t *testing.T, channel, msgID, accountID string) (*BridgeIngestHan
 	}).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	svc := service.NewInboxIngressService(capregistry.AuthorizeBridgeSubmission)
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
-	return h, db
+	return h, db, fixture
 }
 
 func TestAckBridgeOutbox_AliasChannel_ClosesOutboxLoop(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const alias = "douyin_web" // 用已登记的候选格验证别名归一与 ACK 闭环。
-	h, db := ackLoopDB(t, model.ChannelDouyin, "mh:alias_ack_1", "acc_alias_ack")
+	h, db, fixture := ackLoopDB(t, model.ChannelDouyin, "mh:alias_ack_1", "acc_alias_ack")
+	accountID := fixture.AccountID
 
-	first := pollOutbox(t, h, alias, "acc_alias_ack")
+	first := pollOutbox(t, h, fixture.Code, alias, accountID)
 	if first.status != http.StatusOK || len(first.messages) != 1 {
 		t.Fatalf("别名轮询应拿到 1 条待下行，实际 status=%d n=%d body=%s",
 			first.status, len(first.messages), first.body)
 	}
 
-	res := ackOutbox(t, h, alias, "acc_alias_ack",
+	res := ackOutbox(t, h, fixture.Code, alias, accountID,
 		`{"msg_ids":["mh:alias_ack_1"],"status":"delivered"}`)
 	if res.status != http.StatusOK {
 		t.Fatalf("ack status=%d body=%s", res.status, res.body)
@@ -147,7 +143,7 @@ func TestAckBridgeOutbox_AliasChannel_ClosesOutboxLoop(t *testing.T) {
 		"mh:alias_ack_1").Error; err != nil {
 		t.Fatalf("模拟租约到期失败: %v", err)
 	}
-	second := pollOutbox(t, h, alias, "acc_alias_ack")
+	second := pollOutbox(t, h, fixture.Code, alias, accountID)
 	if len(second.messages) != 0 {
 		t.Errorf("租约到期后别名轮询又拿到 %d 条 ⇒ 客户会再收到同一条回复；body=%s",
 			len(second.messages), second.body)
@@ -165,9 +161,9 @@ func TestAckBridgeOutbox_AliasChannel_ClosesOutboxLoop(t *testing.T) {
 // v2 items[] 是另一条分支（按 conversation_id 分组后各自 ack），同样得吃到归一。
 func TestAckBridgeOutbox_AliasChannel_V2ItemsAlsoNormalized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h, _ := ackLoopDB(t, model.ChannelXHS, "mh:alias_ack_2", "acc_alias_ack_v2")
+	h, _, fixture := ackLoopDB(t, model.ChannelXHS, "mh:alias_ack_2", "acc_alias_ack_v2")
 
-	res := ackOutbox(t, h, "xiaohongshu_web", "acc_alias_ack_v2",
+	res := ackOutbox(t, h, fixture.Code, "xiaohongshu_web", fixture.AccountID,
 		`{"v":2,"items":[{"msg_id":"mh:alias_ack_2","conversation_id":"conv_alias_ack","status":"delivered"}]}`)
 	if res.ackedItemsCount != 1 {
 		t.Errorf("v2 分支别名 ack acked_items_count=%d 期望 1；body=%s", res.ackedItemsCount, res.body)

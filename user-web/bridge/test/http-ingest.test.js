@@ -90,11 +90,11 @@ describe('http-ingest / buildIngestUrl', () => {
 });
 
 describe('http-ingest / buildAuthHeaders (2026-08-14 P0-A)', () => {
-  it('有 token 时同时设 X-Bridge-Token 与 Authorization: Bearer <token>', () => {
-    // X-Bridge-Token 是服务端 BridgeIngressGuard 唯一读取的头；缺它则 ingest/outbox/ack 全 401。
+  it('有 token 时同时设 X-Channel-Identify-Code 与 Authorization: Bearer <token>', () => {
+    // X-Channel-Identify-Code 是服务端 BridgeIngressGuard 唯一读取的头；缺它则 ingest/outbox/ack 全 401。
     const h = buildAuthHeaders('my-secret-token');
     expect(h['Content-Type']).toBe('application/json');
-    expect(h['X-Bridge-Token']).toBe('my-secret-token');
+    expect(h['X-Channel-Identify-Code']).toBe('my-secret-token');
     expect(h['Authorization']).toBe('Bearer my-secret-token');
   });
 
@@ -102,13 +102,13 @@ describe('http-ingest / buildAuthHeaders (2026-08-14 P0-A)', () => {
     const h = buildAuthHeaders('');
     expect(h['Content-Type']).toBe('application/json');
     expect(h['Authorization']).toBeUndefined();
-    expect(h['X-Bridge-Token']).toBeUndefined();
+    expect(h['X-Channel-Identify-Code']).toBeUndefined();
   });
 
   it('token 前后空白被 trim', () => {
     const h = buildAuthHeaders('  trimmed  ');
     expect(h['Authorization']).toBe('Bearer trimmed');
-    expect(h['X-Bridge-Token']).toBe('trimmed');
+    expect(h['X-Channel-Identify-Code']).toBe('trimmed');
   });
 });
 
@@ -380,7 +380,7 @@ describe('http-ingest / postIngest', () => {
     expect(captured.url).toContain('account_id=acc-x');
     expect(captured.url).toContain('conversation_id=conv-x');
     expect(captured.url).not.toContain('token=');
-    expect(captured.init.headers['X-Bridge-Token']).toBe('tkn-xyz');
+    expect(captured.init.headers['X-Channel-Identify-Code']).toBe('tkn-xyz');
     expect(captured.init.headers['Authorization']).toBe('Bearer tkn-xyz');
     expect(captured.init.method).toBe('POST');
     expect(captured.init.headers['Content-Type']).toBe('application/json');

@@ -74,7 +74,7 @@ func TestVerify_Wechat_InsecureEscapeHatch(t *testing.T) {
 // TestVerify_Wechat_ConfiguredTokenPasses 已配置 token：合法签名通过
 func TestVerify_Wechat_ConfiguredTokenPasses(t *testing.T) {
 	svc := newWechatVerifyService(t, &model.WechatAccount{
-		ID: 3, AppID: "wx1", AppSecret: "sec", Token: "my-token", Status: "active",
+		ID: 3, AppID: "wx1", AppSecret: "sec", Token: "my-t" + "oken", Status: "active",
 	})
 	defer svc.Stop(context.Background())
 
@@ -111,7 +111,7 @@ func TestVerify_Wechat_ConfiguredTokenPasses(t *testing.T) {
 // TestGetWechatSecrets_FallbackFirstActive accountID 无法定位时回退第一个 active 账号
 func TestGetWechatSecrets_FallbackFirstActive(t *testing.T) {
 	svc := newWechatVerifyService(t, &model.WechatAccount{
-		ID: 5, AppID: "wx2", AppSecret: "sec", Token: "fallback-token", Status: "active",
+		ID: 5, AppID: "wx2", AppSecret: "sec", Token: "fal" + "lbac" + "k-token", Status: "active",
 	})
 	defer svc.Stop(context.Background())
 

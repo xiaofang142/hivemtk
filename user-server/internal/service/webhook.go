@@ -90,6 +90,8 @@ type WebhookService struct {
 	inboxConvRepo  *repository.InboxConversationRepository
 	unifiedMsgRepo repository.UnifiedMessageRepository
 	delayedRepo    *repository.DelayedOutboundRepository
+	// bridgeAccountTenantRepo 延迟重放反查 bridge_accounts 租户归属的只读 seam。
+	bridgeAccountTenantRepo repository.BridgeAccountTenantRepository
 
 	// cardInteractionRepo 卡片交互上下文（specs/024 T211）：发送成功登记 pending 行。
 	cardInteractionRepo *repository.ChannelInteractionRepository
@@ -97,6 +99,11 @@ type WebhookService struct {
 	clueRepo repository.ClueRepository
 
 	ingressSvc *InboxIngressService
+
+	// leadDiscoverySvc 线索发掘接线出口（P0-c）：渠道 handler 落 hub 成功后统一经此
+	// 触发主 Service.Enqueue，取代各渠道直接调 MineUnifiedLead 的双轨发掘。
+	// 由 router 装配点注入已构造的实例；单测可注入带 spy 的替身，nil 时安全跳过。
+	leadDiscoverySvc *LeadDiscoveryService
 
 	// channelResolver 统一渠道解析（T011）。惰性构造，保证所有租户解析都经 resolver；
 	// resolverOnce 用 sync.Once 避免并发首次解析重复建仓储。
@@ -185,32 +192,37 @@ func NewWebhookService() *WebhookService {
 	if repository.DBReady() {
 		unifiedMsgRepo = repository.NewUnifiedMessageRepository()
 	}
+	var bridgeAccountTenantRepo repository.BridgeAccountTenantRepository
+	if repository.DBReady() {
+		bridgeAccountTenantRepo = repository.NewBridgeAccountTenantRepository()
+	}
 	s := &WebhookService{
-		eventRepo:           eventRepo,
-		accountRepo:         accountRepo,
-		wecomRepo:           wecomRepo,
-		integration:         NewWeComIntegrationService(),
-		feishuIntegration:   NewFeishuIntegrationService(feishuRepo, feishuMsgRepo),
-		tgIntegration:       NewTelegramIntegrationService(telegramRepo),
-		waIntegration:       NewWhatsAppCloudIntegrationService(waRepo),
-		qqIntegration:       NewQQIntegrationService(),
-		wechatIntegration:   NewWechatService(),
-		telegramRepo:        telegramRepo,
-		qqRepo:              qqRepo,
-		tgGate:              NewTelegramGateService(),
-		feishuRepo:          feishuRepo,
-		waRepo:              waRepo,
-		wecomCSRepo:         repository.NewWeComCSAccountRepository(),
-		onebotRepo:          repository.NewOneBotAccountRepository(),
-		slackRepo:           repository.NewSlackAccountRepository(),
-		wecombotRepo:        repository.NewWeCombBotAccountRepository(),
-		customRepo:          repository.NewCustomAccountRepository(),
-		messageHubRepo:      messageHubRepo,
-		inboxConvRepo:       inboxConvRepo,
-		unifiedMsgRepo:      unifiedMsgRepo,
-		delayedRepo:         repository.NewDelayedOutboundRepositoryDefault(),
-		cardInteractionRepo: repository.NewChannelInteractionRepositoryDefault(),
-		ingressSvc:          NewInboxIngressService(),
+		eventRepo:               eventRepo,
+		accountRepo:             accountRepo,
+		wecomRepo:               wecomRepo,
+		integration:             NewWeComIntegrationService(),
+		feishuIntegration:       NewFeishuIntegrationService(feishuRepo, feishuMsgRepo),
+		tgIntegration:           NewTelegramIntegrationService(telegramRepo),
+		waIntegration:           NewWhatsAppCloudIntegrationService(waRepo),
+		qqIntegration:           NewQQIntegrationService(),
+		wechatIntegration:       NewWechatService(),
+		telegramRepo:            telegramRepo,
+		qqRepo:                  qqRepo,
+		tgGate:                  NewTelegramGateService(),
+		feishuRepo:              feishuRepo,
+		waRepo:                  waRepo,
+		wecomCSRepo:             repository.NewWeComCSAccountRepository(),
+		onebotRepo:              repository.NewOneBotAccountRepository(),
+		slackRepo:               repository.NewSlackAccountRepository(),
+		wecombotRepo:            repository.NewWeCombBotAccountRepository(),
+		customRepo:              repository.NewCustomAccountRepository(),
+		messageHubRepo:          messageHubRepo,
+		inboxConvRepo:           inboxConvRepo,
+		unifiedMsgRepo:          unifiedMsgRepo,
+		delayedRepo:             repository.NewDelayedOutboundRepositoryDefault(),
+		bridgeAccountTenantRepo: bridgeAccountTenantRepo,
+		cardInteractionRepo:     repository.NewChannelInteractionRepositoryDefault(),
+		ingressSvc:              NewInboxIngressService(),
 		integrations: webhookIntegrations{
 			feishu: func() *FeishuIntegrationService { return NewFeishuIntegrationService(feishuRepo, feishuMsgRepo) },
 			tg:     func() *TelegramIntegrationService { return NewTelegramIntegrationService(telegramRepo) },
@@ -247,6 +259,26 @@ func NewWebhookService() *WebhookService {
 func (s *WebhookService) SetIngressSvc(ingress *InboxIngressService) {
 	if ingress != nil {
 		s.ingressSvc = ingress
+	}
+}
+
+// SetLeadDiscovery 注入线索发掘出口（P0-c 装配点用；nil 视为不注入）。
+// 与 InboxIngressService.SetLeadDiscoveryGate 同一个实例：渠道 handler 落 hub 后
+// 调用 notifyLeadMined，统一经由 LeadDiscoveryService.Process → Service.Enqueue。
+func (s *WebhookService) SetLeadDiscovery(svc *LeadDiscoveryService) {
+	if s != nil && svc != nil {
+		s.leadDiscoverySvc = svc
+	}
+}
+
+// notifyLeadMined 在渠道 handler 成功落 hub 后调用，触发统一发掘入口。
+// 只走已注入的出口，绝不在 service 内隐式构造带 DB 的服务（五层架构）。
+func (s *WebhookService) notifyLeadMined(ctx context.Context, hub *model.MessageHub) {
+	if s == nil || hub == nil || hub.Direction != "inbound" || strings.TrimSpace(hub.Content) == "" {
+		return
+	}
+	if s.leadDiscoverySvc != nil {
+		s.leadDiscoverySvc.Process(ctx, hub)
 	}
 }
 

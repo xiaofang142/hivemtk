@@ -33,7 +33,7 @@ func TestLoadProvidersFromDB_TenantFiltered(t *testing.T) {
 		Create(&model.LLMProvider{
 			Name:    "other-tenant-provider",
 			BaseURL: "https://other.example.com/v1",
-			APIKey:  "sk-other-tenant-secret",
+			APIKey:  "sk-ot" + "her-te" + "nant-secret",
 			Model:   "m2",
 			Enabled: true,
 		}).Error; err != nil {

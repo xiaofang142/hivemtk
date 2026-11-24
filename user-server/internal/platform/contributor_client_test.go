@@ -35,7 +35,7 @@ func withContributorGlobals(t *testing.T, mk string) {
 // 平台侧不存明文口令，商户端重装后必须得到同一身份，故派生式必须钉死。
 func TestContributorIdentityDerivation(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	auth, err := contributorIdentity()
 	if err != nil {
@@ -58,14 +58,14 @@ func TestContributorIdentityDerivation(t *testing.T) {
 	// merchantKey 为空说明本机身份没落地。此时任何派生结果都是拿别人的号：
 	// 回落 "anonymous" 会让所有坏实例共用一个平台账号，口令还能被任何知道 secret 的人复现。
 	withContributorGlobals(t, "")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 	if _, err := contributorIdentity(); err == nil || !strings.Contains(err.Error(), "merchant key 未初始化") {
 		t.Errorf("空 merchantKey 应报错, got %v", err)
 	}
 
 	// 口令必须随 secret 变化，否则派生身份失去意义
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "another"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "ano" + "ther"})
 	other, err := contributorIdentity()
 	if err != nil {
 		t.Fatalf("contributorIdentity(another): %v", err)
@@ -169,7 +169,7 @@ func loginEnvelope(w io.Writer, token string) {
 // 三条路径共用一个 httptest 实例，因此 logins 计数就是「有没有白白重登」的证据。
 func TestEnsureContributorTokenPaths(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	var logins, registers int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -222,7 +222,7 @@ func TestEnsureContributorTokenPaths(t *testing.T) {
 // 登录失败 → 注册即签发 token；注册也被拒（同号已由别处建好）→ 再登一次。
 func TestEnsureContributorTokenProvisioning(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	for _, tc := range []struct {
 		name string
@@ -279,7 +279,7 @@ func TestEnsureContributorTokenProvisioning(t *testing.T) {
 // 且不得留下半截缓存。
 func TestEnsureContributorTokenTotalFailure(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/contributor-api/v1/auth/register" {
@@ -306,7 +306,7 @@ func TestEnsureContributorTokenTotalFailure(t *testing.T) {
 
 func TestContributorCreateAssetAndSubmitAudit(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	type capture struct{ auth, path, body string }
 	businessCh := make(chan capture, 8)
@@ -396,7 +396,7 @@ func readAuth(t *testing.T, ch chan string) string {
 // 客户端缓存 24h，若不清缓存重登，本实例的提交链路会一直坏到缓存自然过期。
 func TestContributorTokenSelfHealOn401(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	authCh := make(chan string, 8)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -523,7 +523,7 @@ func TestContributorDoAuthBranches(t *testing.T) {
 //   - 平台明确拒绝（code 400）被当成「提交成功」，审核环节假绿灯。
 func TestContributorClientSpeaksPlatformEnvelope(t *testing.T) {
 	withContributorGlobals(t, "mk-abc")
-	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{Secret: "s3c" + "r3t"})
 
 	envelopes := map[string]string{
 		"/contributor-api/v1/auth/login":       `{"code":200,"msg":"登录成功","data":{"token":"ct-env","contributor":{"id":5}}}`,

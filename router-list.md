@@ -1,7 +1,7 @@
 # 前端页面路由清单（任务四逐页点验 + 任务六新手引导文案）
 
 - 来源：`user-web/src/router/index.js` + `src/router/modules/*.js`（93 个模块文件）
-- 规模：**274 条页面路由**（2026-11-24 重生成；修复生成器只认 inline `import()` 导致 `component: loadX` / `components:{}` 路由被漏掉的缺陷，净增 16 条——新增 8 个模块 channels/crm/leads/commerce 等 + 找回 15 条被漏路由）
+- 规模：**280 条页面路由**（2026-11-25 独立复核；278 `[x]`、2 `[~]`；由当前 `user-web/src/router/index.js` + 93 个模块文件解析，既有逐页证据行保持不变）
 - 生成方式：`scripts/gen_router_list.py`（只做索引，不开浏览器；重跑保留既有勾选状态）
 - 校验口径：逐条路由**拟人点击**页面元素/表单/交互（每个元素显式指定，禁止枚举循环），
   比对**浏览器控制台报错**与 **Network 里的非 2xx API 响应**；发现错误即本地修复并回归

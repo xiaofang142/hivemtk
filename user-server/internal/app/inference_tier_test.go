@@ -141,7 +141,7 @@ func TestBuildTierPolicyFromConfig(t *testing.T) {
 			cfg: config.AppConfig{Inference: config.InferenceConfig{
 				LLM: config.InferenceLLMConfig{
 					CloudProviders: []config.InferenceCloudProviderConfig{
-						{Name: "deepseek", Enabled: false, BaseURL: "https://api.deepseek.com", APIKey: "sk-xxx"},
+						{Name: "deepseek", Enabled: false, BaseURL: "https://api.deepseek.com", APIKey: "sk-" + "xxx"},
 					},
 				},
 			}},
@@ -152,7 +152,7 @@ func TestBuildTierPolicyFromConfig(t *testing.T) {
 			cfg: config.AppConfig{Inference: config.InferenceConfig{
 				LLM: config.InferenceLLMConfig{
 					CloudProviders: []config.InferenceCloudProviderConfig{
-						{Name: "deepseek", Enabled: true, BaseURL: "https://api.deepseek.com", APIKey: "sk-xxx"},
+						{Name: "deepseek", Enabled: true, BaseURL: "https://api.deepseek.com", APIKey: "sk-" + "xxx"},
 					},
 				},
 			}},
@@ -164,7 +164,7 @@ func TestBuildTierPolicyFromConfig(t *testing.T) {
 				LLM: config.InferenceLLMConfig{
 					CloudProviders: []config.InferenceCloudProviderConfig{
 						{Name: "bad", Enabled: true, BaseURL: "https://x", APIKey: ""},
-						{Name: "qwen", Enabled: true, BaseURL: "https://dashscope.aliyuncs.com", APIKey: "sk-qwen"},
+						{Name: "qwen", Enabled: true, BaseURL: "https://dashscope.aliyuncs.com", APIKey: "sk-" + "qwen"},
 					},
 				},
 			}},

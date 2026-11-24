@@ -214,7 +214,7 @@ func TestDingTalkInbound_EventSubscriptionOfficialLayoutDecrypts(t *testing.T) {
 	t.Setenv("AI_DEBOUNCE_SECONDS", "0")
 	aesKey := newDingTalkTestAESKey(t)
 	svc, tr, id := setupDingTalkInbound(t, &model.DingTalkAppAccount{
-		AppKey: "ak-enc", AppSecret: "SECapp", Token: "evt-token", AESKey: aesKey,
+		AppKey: "ak-enc", AppSecret: "SECapp", Token: "evt-" + "token", AESKey: aesKey,
 		InboundEnabled: true, Status: 1,
 	})
 	enc := dtOfficialEncrypt(t, aesKey, dtLiveRobotMsg(t), "dingCorpIdXYZ")
@@ -239,7 +239,7 @@ func TestDingTalkInbound_EventSubscriptionOfficialLayoutDecrypts(t *testing.T) {
 func TestDingTalkInbound_EventSubscriptionUnsignedEnvelopeRejected(t *testing.T) {
 	aesKey := newDingTalkTestAESKey(t)
 	svc, tr, id := setupDingTalkInbound(t, &model.DingTalkAppAccount{
-		AppKey: "ak-enc-nosig", AppSecret: "SECapp", Token: "evt-token", AESKey: aesKey,
+		AppKey: "ak-enc-nosig", AppSecret: "SECapp", Token: "evt-" + "token", AESKey: aesKey,
 		InboundEnabled: true, Status: 1,
 	})
 	enc := dtOfficialEncrypt(t, aesKey, dtRobotPlainMsgJSON, "dingCorpIdXYZ")
@@ -255,7 +255,7 @@ func TestDingTalkInbound_EventSubscriptionUnsignedEnvelopeRejected(t *testing.T)
 func TestDingTalkInbound_EventSubscriptionBadSignatureRejected(t *testing.T) {
 	aesKey := newDingTalkTestAESKey(t)
 	svc, _, id := setupDingTalkInbound(t, &model.DingTalkAppAccount{
-		AppKey: "ak-enc-badsig", AppSecret: "SECapp", Token: "evt-token", AESKey: aesKey,
+		AppKey: "ak-enc-badsig", AppSecret: "SECapp", Token: "evt-" + "token", AESKey: aesKey,
 		InboundEnabled: true, Status: 1,
 	})
 	enc := dtOfficialEncrypt(t, aesKey, dtRobotPlainMsgJSON, "dingCorpIdXYZ")

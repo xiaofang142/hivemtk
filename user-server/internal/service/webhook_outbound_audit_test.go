@@ -15,11 +15,12 @@ func TestSendOutbound_Bridge_DuplicateAuditRemainsNonDeliverable(t *testing.T) {
 	ctx := tenant.WithTenantID(baseCtx, 18)
 	defer svc.Stop(ctx)
 	g := svc.eventRepo.GetDB()
-	hub := bridgeInboundHub("douyin", "audit-account", "audit-conversation", "audit-customer")
+	accountID := seedCanonicalBridgeOutboundAccount(t, g, 18, "douyin", "audit-account")
+	hub := bridgeInboundHub("douyin", accountID, "audit-conversation", "audit-customer")
 	hub.TenantID = 18
 	content := "这是一条已经送达的回复"
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	originalID := ContentHashMsgID("douyin", hub.ConversationID, content)
 	original := &model.MessageHub{
 		TenantID: 18, Platform: "douyin", AccountID: hub.AccountID,
@@ -57,11 +58,12 @@ func TestSendOutbound_Bridge_AuditSafetyKeepsRealDBFailureRetry(t *testing.T) {
 	ctx := tenant.WithTenantID(baseCtx, 18)
 	defer svc.Stop(ctx)
 	conv := "audit-db-error-" + strings.Repeat("x", 105)
-	hub := bridgeInboundHub("douyin", "audit-db-account", conv, "audit-db-customer")
+	accountID := seedCanonicalBridgeOutboundAccount(t, svc.eventRepo.GetDB(), 18, "douyin", "audit-db-account")
+	hub := bridgeInboundHub("douyin", accountID, conv, "audit-db-customer")
 	hub.TenantID = 18
 	eventID := "evt-audit-real-db-error"
 	useLegacyBridgeFixture(t)
-	ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")
+	ctx = localBridgeSubmitContextCustomEdition(t, ctx, hub.Platform, hub.AccountID, "text")
 	releaseReplyClaimForTest(t, eventID)
 	p := &ParsedPayload{EventID: eventID, Sender: hub.SenderID, Content: "合法客户问题", ChatID: conv}
 	sent, err := svc.sendOutbound(ctx, ChannelDouyin, hub.AccountID, p, "正确但暂时未能入库的回复", hub, nil)

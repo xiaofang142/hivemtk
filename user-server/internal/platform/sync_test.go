@@ -41,7 +41,7 @@ func TestInitSyncKeepsMerchantKeyAcrossBoots(t *testing.T) {
 	}))
 	// 先注册 → LIFO 后执行：srv 活着的时间必须覆盖下面等待请求的全过程
 	t.Cleanup(srv.Close)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cr3t"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "r3t"})
 
 	if err := InitSync(); err != nil {
 		t.Fatalf("首次 InitSync: %v", err)

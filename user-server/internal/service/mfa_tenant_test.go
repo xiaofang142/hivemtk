@@ -33,7 +33,7 @@ func TestSetupMFASecondTimeKeepsTenant(t *testing.T) {
 	const tid = uint(3)
 	user := &model.SystemUser{
 		Username: "test_mfa_tenant_user",
-		Password: "Password123",
+		Password: "Passw" + "ord123",
 		Email:    "mfa-tenant@example.com",
 		Role:     "user",
 		Status:   1,

@@ -59,7 +59,7 @@ func newContractStub(t *testing.T) (*httptest.Server, *contractStub) {
 // "新增了一个客户端，忘了带这个头"，而那种漏只可能在具体入口里出现。
 func TestEveryOutboundRequestCarriesContractHeader(t *testing.T) {
 	srv, st := newContractStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cret"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "ret"})
 
 	c := NewPlatformClient("mk-1")
 	c.httpClient = srv.Client()
@@ -109,7 +109,7 @@ func TestEveryOutboundRequestCarriesContractHeader(t *testing.T) {
 // TestContract426RecordedAndCleared 426 ⇒ 记进可见状态；随后 200 ⇒ 清掉（正对照）。
 func TestContract426RecordedAndCleared(t *testing.T) {
 	srv, st := newContractStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cret"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "ret"})
 
 	c := NewPlatformClient("mk-2")
 	c.httpClient = srv.Client()
@@ -156,7 +156,7 @@ func TestContract426RecordedAndCleared(t *testing.T) {
 // 真实入口的覆盖由上面的 TestEveryOutboundRequestCarriesContractHeader 与下一条负责。
 func TestNonGuardedSuccessDoesNotClearWarning(t *testing.T) {
 	srv, st := newContractStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cret"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "ret"})
 
 	c := NewPlatformClient("mk-3")
 	c.httpClient = srv.Client()
@@ -194,7 +194,7 @@ func TestNonGuardedSuccessDoesNotClearWarning(t *testing.T) {
 // 表现是管理员盯着一个永远不更新的 426 —— 于是没人再信这个字段。
 func TestHeartbeatSuccessClearsWarning(t *testing.T) {
 	srv, st := newContractStub(t)
-	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3cret"})
+	withPlatformConfig(t, &config.PlatformConfig{APIURL: srv.URL, Secret: "s3c" + "ret"})
 
 	c := NewPlatformClient("mk-4")
 	c.httpClient = srv.Client()

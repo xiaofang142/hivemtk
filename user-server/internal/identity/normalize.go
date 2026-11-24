@@ -32,11 +32,13 @@ func oneidSalt(kind string) string {
 
 // 渠道身份标识（不引入 service 包，避免循环依赖）
 type Identifiers struct {
-	Phone         string `json:"phone"`
-	Email         string `json:"email"`
-	WechatOpenID  string `json:"wechat_open_id"`
-	DouyinOpenID  string `json:"douyin_open_id"`
-	XiaohongshuID string `json:"xiaohongshu_id"`
+	Phone            string `json:"phone"`
+	Email            string `json:"email"`
+	WechatOpenID     string `json:"wechat_open_id"`
+	QQOpenID         string `json:"qq_open_id,omitempty"`
+	PersonalWXOpenID string `json:"personal_wx_open_id,omitempty"`
+	DouyinOpenID     string `json:"douyin_open_id"`
+	XiaohongshuID    string `json:"xiaohongshu_id"`
 }
 
 var (
@@ -127,11 +129,13 @@ func NormalizeOpenID(raw string) string {
 // Normalize 一次性规范化所有身份标识。
 func Normalize(in Identifiers) Identifiers {
 	return Identifiers{
-		Phone:         NormalizePhone(in.Phone),
-		Email:         NormalizeEmail(in.Email),
-		WechatOpenID:  NormalizeOpenID(in.WechatOpenID),
-		DouyinOpenID:  NormalizeOpenID(in.DouyinOpenID),
-		XiaohongshuID: NormalizeOpenID(in.XiaohongshuID),
+		Phone:            NormalizePhone(in.Phone),
+		Email:            NormalizeEmail(in.Email),
+		WechatOpenID:     NormalizeOpenID(in.WechatOpenID),
+		QQOpenID:         NormalizeOpenID(in.QQOpenID),
+		PersonalWXOpenID: NormalizeOpenID(in.PersonalWXOpenID),
+		DouyinOpenID:     NormalizeOpenID(in.DouyinOpenID),
+		XiaohongshuID:    NormalizeOpenID(in.XiaohongshuID),
 	}
 }
 
@@ -160,6 +164,8 @@ func HasAny(in Identifiers) bool {
 	return strings.TrimSpace(in.Phone) != "" ||
 		strings.TrimSpace(in.Email) != "" ||
 		strings.TrimSpace(in.WechatOpenID) != "" ||
+		strings.TrimSpace(in.QQOpenID) != "" ||
+		strings.TrimSpace(in.PersonalWXOpenID) != "" ||
 		strings.TrimSpace(in.DouyinOpenID) != "" ||
 		strings.TrimSpace(in.XiaohongshuID) != ""
 }

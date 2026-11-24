@@ -213,18 +213,9 @@ func TestAckOutboundDeliveredDetailed_ErrorField_P0_2(t *testing.T) {
 
 func TestAckBridgeOutbox_V2Protocol_P0_1(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
-
-	const (
-		channel   = "douyin_web"
-		accountID = "acc_v2"
-	)
+	db, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-v2")
+	const channel = "douyin_web"
+	accountID := fixture.AccountID
 	hub := &model.MessageHub{
 		Platform:       channel,
 		AccountID:      accountID,
@@ -241,6 +232,7 @@ func TestAckBridgeOutbox_V2Protocol_P0_1(t *testing.T) {
 	body := `{"v":2,"items":[{"msg_id":"mh:v2_test"}],"status":"delivered"}`
 	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -254,6 +246,7 @@ func TestAckBridgeOutbox_V2Protocol_P0_1(t *testing.T) {
 	body2 := `{"v":2,"items":[{"msg_id":"mh:v2_test","conversation_id":"conv_v2","status":"delivered"}]}`
 	req2 := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body2))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(rr2)
 	c2.Request = req2
@@ -281,18 +274,9 @@ func TestAckBridgeOutbox_V2Protocol_P0_1(t *testing.T) {
 
 func TestAckBridgeOutbox_FailedStatus_P0_3(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
-
-	const (
-		channel   = "douyin_web"
-		accountID = "acc_h_failed"
-	)
+	db, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-h-failed")
+	const channel = "douyin_web"
+	accountID := fixture.AccountID
 	hub := &model.MessageHub{
 		// 库里只可能是规范名（ingest 入口归一后才落 message_hub）；下面的 HTTP 请求仍带
 		// 别名 douyin_web ⇒ 这一格同时锁住"ack 入口必须把别名归一后才能匹配上行"。
@@ -311,6 +295,7 @@ func TestAckBridgeOutbox_FailedStatus_P0_3(t *testing.T) {
 	body := `{"msg_ids":["mh:h_failed"],"status":"failed"}`
 	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel="+channel+"&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -333,13 +318,11 @@ func TestAckBridgeOutbox_FailedStatus_P0_3(t *testing.T) {
 
 func TestAckBridgeOutbox_InvalidStatus_P0_3(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	setupBridgeTestDB(t, &model.MessageHub{})
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
+	_, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-invalid-status")
 	body := `{"msg_ids":["m1"],"status":"weird"}`
-	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id=acc", strings.NewReader(body))
+	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id="+fixture.AccountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req
@@ -430,13 +413,8 @@ func TestAckOutboundDeliveredDetailed_RealNotFound_NoLeak_P0_6(t *testing.T) {
 
 func TestAckBridgeOutbox_CrossAccountProbe_NotInScope_P0_6(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupBridgeTestDB(t, &model.MessageHub{})
-	if err := db.Exec("DELETE FROM message_hub").Error; err != nil {
-		t.Fatalf("清理失败: %v", err)
-	}
-	svc := service.NewInboxIngressService()
-	h := NewBridgeIngestHandlerWithMock(nil, nil)
-	h.ingress = svc
+	db, h, fixture := newCanonicalAckHandler(t, "douyin_web", "acc-A")
+	accountID := fixture.AccountID
 
 	if err := db.Create(&model.MessageHub{
 		// 规范名入库才是现实形态（ingest 入口把别名归一后才落 message_hub）。
@@ -454,8 +432,9 @@ func TestAckBridgeOutbox_CrossAccountProbe_NotInScope_P0_6(t *testing.T) {
 	}
 
 	body := `{"msg_ids":["m_probe_http"],"status":"delivered"}`
-	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id=acc_A", strings.NewReader(body))
+	req := httptest.NewRequest("POST", "/api/bridge/outbox/ack?channel=douyin_web&account_id="+accountID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Channel-Identify-Code", fixture.Code)
 	rr := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rr)
 	c.Request = req

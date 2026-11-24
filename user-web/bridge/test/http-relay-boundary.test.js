@@ -17,7 +17,7 @@ describe('HTTP 中转只允许已配置的桥接边界', () => {
     message = {
       requestId: 'boundary-1',
       url: 'https://service.example/base/api/bridge/outbox?channel=douyin&account_id=account-a&tenant_code=tenant-a',
-      options: { method: 'GET', headers: { 'X-Bridge-Token': 'stored-secret', 'X-Untrusted': 'do-not-forward' } },
+      options: { method: 'GET', headers: { 'X-Channel-Identify-Code': 'stored-secret', 'X-Untrusted': 'do-not-forward' } },
     };
     fetcher = vi.fn(async () => new Response('{"status":"ok"}', { headers: { 'content-type': 'application/json' } }));
     vi.stubGlobal('fetch', fetcher);
@@ -35,7 +35,7 @@ describe('HTTP 中转只允许已配置的桥接边界', () => {
     expect((await relay(message, sender)).status).toBe(200);
     const options = fetcher.mock.calls[0][1];
     const headers = new Headers(options.headers);
-    expect(headers.get('X-Bridge-Token')).toBe(cfg.token);
+    expect(headers.get('X-Channel-Identify-Code')).toBe(cfg.token);
     expect(headers.get('Authorization')).toBe(`Bearer ${cfg.token}`);
     expect(headers.has('X-Untrusted')).toBe(false);
     expect(options.redirect).toBe('error');
@@ -45,7 +45,7 @@ describe('HTTP 中转只允许已配置的桥接边界', () => {
 
   it.each([
     ['其它扩展', (m, s) => [m, { ...s, id: 'other-extension' }]],
-    ['过期凭证', (m, s) => [{ ...m, options: { ...m.options, headers: { 'X-Bridge-Token': 'stale-secret' } } }, s]],
+    ['过期凭证', (m, s) => [{ ...m, options: { ...m.options, headers: { 'X-Channel-Identify-Code': 'stale-secret' } } }, s]],
     ['子帧', (m, s) => [m, { ...s, frameId: 1 }]],
     ['不支持的页面', (m, s) => [m, { ...s, url: 'https://untrusted.example/' }]],
     ['跨目标源', (m, s) => [{ ...m, url: m.url.replace('service.example', 'other.example') }, s]],

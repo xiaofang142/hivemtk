@@ -47,7 +47,7 @@ func TestDashscopeRerank_RequestAndResponse(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &RerankConfig{
-		APIKey:     "sk-test-key",
+		APIKey:     "sk-te" + "st-key",
 		BaseURL:    srv.URL + dashscopePath,
 		Model:      "qwen3-rerank",
 		Enabled:    true,

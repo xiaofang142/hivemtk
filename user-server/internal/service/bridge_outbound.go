@@ -110,7 +110,7 @@ func DeliverBridgeOutboundMedia(ctx context.Context, channel, accountID, convers
 	}
 	if accountID == "" {
 		tid, _ := tenant.FromContext(ctx)
-		pick, perr := NewChannelDispatchService(dbstate.Get()).PickAccount(ctx, DispatchPickInput{TenantID: tid, Channel: channel, ConversationID: conversationID})
+		pick, perr := NewChannelDispatchService().PickAccount(ctx, DispatchPickInput{TenantID: tid, Channel: channel, ConversationID: conversationID})
 		if perr != nil || pick == nil || pick.AccountID == 0 {
 			return 0, "", fmt.Errorf("bridge outbound: account_id required: %v", perr)
 		}

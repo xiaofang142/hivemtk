@@ -1,6 +1,6 @@
 // 桥接凭证头契约测试（2026-09-28）
 //
-// 起因：服务端闸门 middleware.BridgeIngressGuard 只认 `X-Bridge-Token` 头或 `bridge_token`
+// 起因：服务端闸门 middleware.BridgeIngressGuard 只认 `X-Channel-Identify-Code` 头或 `bridge_token`
 // 查询参数（router.go 把它挂在 /api/bridge/ingest|outbox|outbox/ack|outbox/sse|capabilities 上），
 // 而扩展历史上只发 `Authorization: Bearer`。凭证在这五条路由上没有任何读取点 ⇒ 部署了通道凭证后
 // 每一次上行/下行/ack/SSE 都是 401，用户看到的是"扩展已连接却一条也不同步"。
@@ -38,9 +38,9 @@ function sseStream() {
 }
 
 describe('凭证头单源构造 buildAuthHeaders', () => {
-  it('X-Bridge-Token 与 Authorization 同值', () => {
+  it('X-Channel-Identify-Code 与 Authorization 同值', () => {
     const h = buildAuthHeaders(TOKEN);
-    expect(h['X-Bridge-Token']).toBe(TOKEN);
+    expect(h['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(h['Authorization']).toBe(`Bearer ${TOKEN}`);
   });
 });
@@ -77,7 +77,7 @@ describe('通道A/B/C 的 HTTP 请求带服务端可读凭证', () => {
     );
     expect(captured).toHaveLength(1);
     expect(captured[0].url).toContain('/api/bridge/ingest');
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     // 凭证绝不进 URL（会落进访问日志与浏览器历史）
     expect(captured[0].url).not.toContain(TOKEN);
   });
@@ -86,7 +86,7 @@ describe('通道A/B/C 的 HTTP 请求带服务端可读凭证', () => {
     stubFetch(() => new Response(JSON.stringify({ status: 'ok', messages: [] }), { status: 200 }));
     await getOutbox({ serverUrl: SERVER, channel: 'douyin', accountId: 'acc-1', token: TOKEN });
     expect(captured[0].url).toContain('/api/bridge/outbox');
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(captured[0].url).not.toContain(TOKEN);
   });
 
@@ -98,7 +98,7 @@ describe('通道A/B/C 的 HTTP 请求带服务端可读凭证', () => {
       { conversationId: 'conv-1' }
     );
     expect(captured[0].url).toContain('/api/bridge/outbox/ack');
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(captured[0].url).not.toContain(TOKEN);
     expect(JSON.parse(captured[0].init.body).items[0].conversation_id).toBe('conv-1');
   });
@@ -109,19 +109,19 @@ describe('通道A/B/C 的 HTTP 请求带服务端可读凭证', () => {
       ingestBody,
       { timeoutMs: 2000 }
     );
-    expect(captured[0].init.headers['X-Bridge-Token']).toBeUndefined();
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBeUndefined();
   });
 });
 
 describe('SSE 下行（fetch 版）带服务端可读凭证', () => {
   afterEach(() => delete globalThis.fetch);
 
-  it('GET /api/bridge/outbox/sse 走 X-Bridge-Token 头', async () => {
+  it('GET /api/bridge/outbox/sse 走 X-Channel-Identify-Code 头', async () => {
     stubFetch(sseStream);
     await connectSSE('tiktok', 'acc-1', { serverUrl: SERVER, token: TOKEN, onMessage: () => {} });
     expect(captured).toHaveLength(1);
     expect(captured[0].url).toContain('/api/bridge/outbox/sse');
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(captured[0].url).not.toContain(TOKEN);
   });
 });
@@ -129,12 +129,12 @@ describe('SSE 下行（fetch 版）带服务端可读凭证', () => {
 describe('能力探测（决定走 SSE 还是轮询）带服务端可读凭证', () => {
   afterEach(() => delete globalThis.fetch);
 
-  it('GET /api/bridge/capabilities 带 X-Bridge-Token，且 sse_enabled 透传', async () => {
+  it('GET /api/bridge/capabilities 带 X-Channel-Identify-Code，且 sse_enabled 透传', async () => {
     stubFetch(() =>
       new Response(JSON.stringify({ poll_interval_ms: 1200, sse_enabled: true, sse_heartbeat_ms: 15000 }), { status: 200 })
     );
     const caps = await getServerCapabilities({ serverUrl: SERVER, token: TOKEN });
-    expect(captured[0].init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(captured[0].init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(caps.sse_enabled).toBe(true);
     expect(caps.poll_interval_ms).toBe(1200);
   });
@@ -146,7 +146,7 @@ describe('能力探测（决定走 SSE 还是轮询）带服务端可读凭证',
   });
 });
 
-describe('background SSE（T7：fetch 流式替代 EventSource）凭证走 X-Bridge-Token 头，URL 不带 token', () => {
+describe('background SSE（T7：fetch 流式替代 EventSource）凭证走 X-Channel-Identify-Code 头，URL 不带 token', () => {
   const listeners = [];
 
   beforeEach(() => {
@@ -174,7 +174,7 @@ describe('background SSE（T7：fetch 流式替代 EventSource）凭证走 X-Bri
     await import('../src/background/sse-client.js');
   }
 
-  it('注册 tab 建立的 SSE 连接把凭证放 X-Bridge-Token 头，URL 不再出现 bridge_token=/token=', async () => {
+  it('注册 tab 建立的 SSE 连接把凭证放 X-Channel-Identify-Code 头，URL 不再出现 bridge_token=/token=', async () => {
     await loadBackgroundSSE();
     for (const fn of listeners) {
       fn({ type: 'BRIDGE_REGISTER_TAB', channel: 'xianyu', accountId: 'acc-1' }, { tab: { id: 1 } }, () => {});
@@ -188,11 +188,11 @@ describe('background SSE（T7：fetch 流式替代 EventSource）凭证走 X-Bri
     expect(url).not.toMatch(/[?&]bridge_token=/);
     expect(url).not.toMatch(/[?&]token=/);
     // 服务端闸门真正读取的凭证位（middleware/bridge_ingress_guard.go）
-    expect(sseCall.init.headers['X-Bridge-Token']).toBe(TOKEN);
+    expect(sseCall.init.headers['X-Channel-Identify-Code']).toBe(TOKEN);
     expect(sseCall.init.headers['Authorization']).toBe(`Bearer ${TOKEN}`);
   });
 
   // M-1（2026-11-11）：BRIDGE_SSE_ACK 处理器已删除（全仓无发送方的死路径），
-  // 其「SSE ack 回发带 X-Bridge-Token 头」用例一并移除；下发 ack 活链路由
+  // 其「SSE ack 回发带 X-Channel-Identify-Code 头」用例一并移除；下发 ack 活链路由
   // downlink → ackOutbox 承担（test/downlink-r23-sse-ack-drain.test.js）。
 });

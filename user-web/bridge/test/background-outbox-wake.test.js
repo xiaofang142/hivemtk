@@ -34,7 +34,7 @@ describe('后台非认领唤醒', () => {
     expect(url).toContain('/api/bridge/outbox/wake');
     expect(url).toContain('tenant_code=tenant-a');
     expect(url).not.toContain('wake-secret');
-    expect(options.headers['X-Bridge-Token']).toBe('wake-secret');
+    expect(options.headers['X-Channel-Identify-Code']).toBe('wake-secret');
     f.stream().enqueue(new TextEncoder().encode('event: outbox_ready\ndata: {}\n\n'));
     await vi.waitFor(() => expect(f.api.tabs.sendMessage).toHaveBeenCalledTimes(2));
     expect(f.api.tabs.sendMessage.mock.calls[0][1]).toEqual({ type: 'BRIDGE_OUTBOX_READY', channel: 'douyin', accountId: 'account-a', registrationId: 'registration-a' });
@@ -85,7 +85,7 @@ describe('后台非认领唤醒', () => {
       expect(oldSignal.aborted).toBe(true);
       f.cfg.token = 'new-wake-secret';
       expect(await f.runtime.register({ ...f.registration, registrationId: 'new-registration' }, f.sender)).toBe(true);
-      expect(f.fetcher.mock.calls[1][1].headers['X-Bridge-Token']).toBe('new-wake-secret');
+      expect(f.fetcher.mock.calls[1][1].headers['X-Channel-Identify-Code']).toBe('new-wake-secret');
       f.runtime.dispose();
       await vi.advanceTimersByTimeAsync(60000);
       expect(f.fetcher).toHaveBeenCalledTimes(2);

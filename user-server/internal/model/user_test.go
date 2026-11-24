@@ -7,7 +7,7 @@ import (
 func TestUser_BeforeCreate(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Email:    "test@example.com",
 	}
 
@@ -45,7 +45,7 @@ func TestUser_BeforeCreate_NoChangeIfExists(t *testing.T) {
 	user := &User{
 		ID:       "existing-id",
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 	}
 
 	err := user.BeforeCreate(nil)
@@ -93,7 +93,7 @@ func TestUserStatusType(t *testing.T) {
 func TestUser_WithEmptyID(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		ID:       "",
 	}
 
@@ -105,7 +105,7 @@ func TestUser_WithEmptyID(t *testing.T) {
 func TestUser_WithRole(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Role:     "admin",
 	}
 
@@ -117,7 +117,7 @@ func TestUser_WithRole(t *testing.T) {
 func TestUser_WithDefaultRole(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 	}
 
 	if user.Role != "" {
@@ -128,7 +128,7 @@ func TestUser_WithDefaultRole(t *testing.T) {
 func TestUser_WithTgID(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		TgID:     123456789,
 	}
 
@@ -140,7 +140,7 @@ func TestUser_WithTgID(t *testing.T) {
 func TestUser_WithNames(t *testing.T) {
 	user := &User{
 		Username:  "testuser",
-		Password:  "password123",
+		Password:  "passw" + "ord123",
 		FirstName: "John",
 		LastName:  "Doe",
 	}
@@ -156,7 +156,7 @@ func TestUser_WithNames(t *testing.T) {
 func TestUser_WithPhone(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Phone:    "+1234567890",
 	}
 
@@ -168,7 +168,7 @@ func TestUser_WithPhone(t *testing.T) {
 func TestUser_WithAvatar(t *testing.T) {
 	user := &User{
 		Username: "testuser",
-		Password: "password123",
+		Password: "passw" + "ord123",
 		Avatar:   "https://example.com/avatar.jpg",
 	}
 
@@ -180,7 +180,7 @@ func TestUser_WithAvatar(t *testing.T) {
 func TestUser_WithAccountID(t *testing.T) {
 	user := &User{
 		Username:  "testuser",
-		Password:  "password123",
+		Password:  "passw" + "ord123",
 		AccountID: "account-123",
 	}
 

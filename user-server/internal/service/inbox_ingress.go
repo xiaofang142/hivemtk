@@ -266,6 +266,28 @@ func (s *InboxIngressService) BridgeLeadProcessor() BridgeLeadProcessor {
 	return s.bridgeLeadProcessor
 }
 
+// ProcessBridgeLead 统一发掘出口的后台处理器（P0-c）：只接受已持久化、服务端
+// 确认资格的入站引用，经 LeadDiscoveryService → Service.Enqueue 进入主引擎。
+// 取代原先 douyin_lead_miner.go 中写线索库的 ProcessBridgeLead 双轨实现。
+func (s *InboxIngressService) ProcessBridgeLead(ctx context.Context, hub *model.MessageHub) error {
+	id, ok := tenant.FromContext(ctx)
+	if s == nil || !ok || id == 0 || tenant.IsSystemScope(ctx) || hub == nil || hub.ID == 0 ||
+		hub.TenantID != id || !hub.BridgeLeadEligible || hub.Direction != "inbound" ||
+		hub.AccountID == "" || hub.AccountID == "default" ||
+		hub.ConversationID == "" || hub.SenderID == "" || hub.MsgID == "" || hub.IsAIReply {
+		return errors.New("bridge lead processing requires trusted persisted tenant and message scope")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.leadDiscoverySvc != nil {
+		s.leadDiscoverySvc.Process(ctx, hub)
+	} else if s.leadMiningSvc != nil {
+		s.leadMiningSvc.Enqueue(hub)
+	}
+	return nil
+}
+
 // SetBridgeFollowService 注入新用户（非关注好友）登记与自动关注策略（M-6）。
 func (s *InboxIngressService) SetBridgeFollowService(svc *BridgeFollowService) {
 	if s == nil {

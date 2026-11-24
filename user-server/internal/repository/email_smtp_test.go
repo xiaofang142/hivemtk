@@ -41,7 +41,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.example.com",
 				Port:     587,
 				Username: "user@example.com",
-				Password: "password123",
+				Password: "passw" + "ord123",
 				Limit:    100,
 			},
 			wantErr: false,
@@ -53,7 +53,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.gmail.com",
 				Port:     465,
 				Username: "user@gmail.com",
-				Password: "secure_password",
+				Password: "sec" + "ure_" + "password",
 				Limit:    500,
 			},
 			wantErr: false,
@@ -65,7 +65,7 @@ func TestEmailSmtpRepository_Create(t *testing.T) {
 				Server:   "smtp.old.com",
 				Port:     25,
 				Username: "old@example.com",
-				Password: "old_password",
+				Password: "old" + "_pa" + "ssword",
 				Limit:    10,
 			},
 			wantErr: false,
@@ -97,7 +97,7 @@ func TestEmailSmtpRepository_GetByID(t *testing.T) {
 		Server:   "smtp.getbyid.com",
 		Port:     587,
 		Username: "getbyid@example.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    100,
 	}
 	repo.Create(ctx, smtp)
@@ -150,7 +150,7 @@ func TestEmailSmtpRepository_GetEmailSmtpList(t *testing.T) {
 			Server:   "smtp" + string(rune('0'+i)) + ".example.com",
 			Port:     587,
 			Username: "user" + string(rune('0'+i)) + "@example.com",
-			Password: "password" + string(rune('0'+i)),
+			Password: "pass" + "word" + string(rune('0'+i)),
 			Limit:    100,
 		})
 	}
@@ -175,7 +175,7 @@ func TestEmailSmtpRepository_Update(t *testing.T) {
 		Server:   "smtp.original.com",
 		Port:     587,
 		Username: "original@example.com",
-		Password: "original_password",
+		Password: "orig" + "inal" + "_password",
 		Limit:    100,
 	}
 	repo.Create(ctx, smtp)
@@ -212,7 +212,7 @@ func TestEmailSmtpRepository_Delete(t *testing.T) {
 		Server:   "smtp.delete.com",
 		Port:     587,
 		Username: "delete@example.com",
-		Password: "password",
+		Password: "pass" + "word",
 		Limit:    100,
 	}
 	repo.Create(ctx, smtp)

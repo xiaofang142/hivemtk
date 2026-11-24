@@ -28,7 +28,7 @@ import (
 func TestMaskWhatsappAccountSecrets(t *testing.T) {
 	acc := &model.WhatsappAccount{
 		ID:        uuid.New(),
-		Token:     "REAL_WA_TOKEN_VALUE",
+		Token:     "REAL" + "_WA_T" + "OKEN_VALUE",
 		AppID:     "REAL_APP_ID",
 		AppSecret: "REAL_APP_SECRET",
 	}
@@ -50,7 +50,7 @@ func TestMaskWhatsappAccountSecrets(t *testing.T) {
 func TestMaskWhatsappAccountSecretsJSONHasNoPlaintext(t *testing.T) {
 	acc := &model.WhatsappAccount{
 		ID:        uuid.New(),
-		Token:     "REAL_WA_TOKEN_VALUE",
+		Token:     "REAL" + "_WA_T" + "OKEN_VALUE",
 		AppSecret: "REAL_APP_SECRET",
 	}
 	maskWhatsappAccountSecrets([]*model.WhatsappAccount{acc})

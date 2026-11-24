@@ -97,8 +97,8 @@ func TestWeComCSAcceptanceSim(t *testing.T) {
 	})
 
 	acc := &model.WeComCSAccount{
-		AccountName: "cs-sim", CorpID: "corp-sim", Secret: "sec-sim",
-		OpenKfID: "kf-sim", Token: "cb-token", Status: 1,
+		AccountName: "cs-sim", CorpID: "corp-sim", Secret: "sec" + "-sim",
+		OpenKfID: "kf-sim", Token: "cb-t" + "oken", Status: 1,
 	}
 	if err := dbutil.GetDB().Create(acc).Error; err != nil {
 		t.Fatalf("种账号: %v", err)

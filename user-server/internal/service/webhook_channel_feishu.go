@@ -252,7 +252,8 @@ func (s *WebhookService) dispatchFeishu(ctx context.Context, accountID string, p
 	}
 	s.upsertInboxFromHub(ctx, hub, "")
 
-	MineUnifiedLead(ctx, s, hub, FeishuLeadAdapter{}, accountID, m.ChatID, "", senderID, "", "", content)
+	// P0-c：落 hub 成功后统一走发掘出口（LeadDiscoveryService.Process → Service.Enqueue）。
+	s.notifyLeadMined(ctx, hub)
 
 	p.Content = content
 	p.Sender = senderID

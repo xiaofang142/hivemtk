@@ -4,7 +4,7 @@
 //   ① 命中率必须同时用分母和分子算——只报命中数时「从未被调用」与「一直失败」同形；
 //   ② 样本不足判 warming 而不是 broken——否则新装扩展第一次打开页面就红；
 //   ③ 上报失败必须保留增量——丢了分母，命中率会偏高，恰好把问题掩盖掉；
-//   ④ URL/头与既有桥接通道同口径（X-Bridge-Token + tenant_code query）——
+//   ④ URL/头与既有桥接通道同口径（X-Channel-Identify-Code + tenant_code query）——
 //      只发 Bearer 会被服务端 401，而 401 在扩展侧表现为「接上了但没数据」；
 //   ⑤ 适配器真的在计数：getMessageItems 返回空与非空会让 attempts/hits 分开增长。
 
@@ -125,7 +125,7 @@ describe('selector-health · 增量合并与扣减', () => {
 });
 
 describe('selector-health · 请求形状', () => {
-  it('路径与 user-server 路由一致，token 走 X-Bridge-Token 头', () => {
+  it('路径与 user-server 路由一致，token 走 X-Channel-Identify-Code 头', () => {
     const req = buildSelectorHealthRequest({
       serverUrl: 'https://api.example.com',
       token: 'tk_123',
@@ -137,7 +137,7 @@ describe('selector-health · 请求形状', () => {
     const u = new URL(req.url);
     expect(u.pathname).toBe(SELECTOR_HEALTH_PATH);
     expect(u.searchParams.get('tenant_code')).toBe('t-acme');
-    expect(req.init.headers['X-Bridge-Token']).toBe('tk_123');
+    expect(req.init.headers['X-Channel-Identify-Code']).toBe('tk_123');
     expect(req.init.headers.Authorization).toBe('Bearer tk_123');
     expect(req.init.method).toBe('POST');
     expect(JSON.parse(req.init.body)).toEqual({

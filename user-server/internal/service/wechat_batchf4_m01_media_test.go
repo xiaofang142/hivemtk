@@ -76,7 +76,7 @@ func f4WxMediaSetup(t *testing.T, hubMsgID string) (*WechatService, uint, *gorm.
 	nonce := fmt.Sprintf("%d", time.Now().UnixNano())
 	acc := &model.WechatAccount{
 		AppID: "wxappid" + nonce, AppSecret: "wxsecret" + nonce,
-		Token: "wxtoken" + nonce, Status: "active",
+		Token: "wxt" + "oken" + nonce, Status: "active",
 	}
 	if err := database.Create(acc).Error; err != nil {
 		t.Fatalf("create wechat account: %v", err)

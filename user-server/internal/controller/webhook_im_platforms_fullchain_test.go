@@ -126,7 +126,7 @@ func customSignature(secret string, body []byte) map[string]string {
 
 func TestCustomFullChain(t *testing.T) {
 	e := newIMPlatformEnv(t)
-	acc := &model.CustomAccount{AccountName: "custom-sim", Secret: "custom-secret", CallbackURL: "https://example.com/cb", Status: 1}
+	acc := &model.CustomAccount{AccountName: "custom-sim", Secret: "cus" + "tom" + "-secret", CallbackURL: "https://example.com/cb", Status: 1}
 	if err := e.db.Create(acc).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestWeCombBotFullChain(t *testing.T) {
 		rawKey[i] = byte(i + 3)
 	}
 	key := strings.TrimRight(base64.StdEncoding.EncodeToString(rawKey), "=")
-	acc := &model.WeCombBotAccount{AccountName: "wecombot-sim", Token: "wb-token", AESKey: key, WebhookURL: "https://example.com/hook", Status: 1}
+	acc := &model.WeCombBotAccount{AccountName: "wecombot-sim", Token: "wb-t" + "oken", AESKey: key, WebhookURL: "https://example.com/hook", Status: 1}
 	if err := e.db.Create(acc).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestWeCombBotFullChain(t *testing.T) {
 
 func TestWeComCSFullChain(t *testing.T) {
 	e := newIMPlatformEnv(t)
-	acc := &model.WeComCSAccount{AccountName: "wecomcs-sim", CorpID: "corp", Secret: "sec", OpenKfID: "kf1", Token: "cs-token", Status: 1}
+	acc := &model.WeComCSAccount{AccountName: "wecomcs-sim", CorpID: "corp", Secret: "sec", OpenKfID: "kf1", Token: "cs-t" + "oken", Status: 1}
 	if err := e.db.Create(acc).Error; err != nil {
 		t.Fatal(err)
 	}

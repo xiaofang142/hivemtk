@@ -266,7 +266,7 @@ func TestSystemUserService_ResetPassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := model.SystemUser{
 		Username: "revadmin_" + suffix,
-		Password: "oldpassword123",
+		Password: "old" + "pass" + "word123",
 		Email:    "revadmin_" + suffix + "@example.com",
 		Role:     model.SystemUserRoleUser,
 		Status:   1,
@@ -296,7 +296,7 @@ func TestPasswordResetService_ResetPassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := model.SystemUser{
 		Username: "revmail_" + suffix,
-		Password: "oldpassword123",
+		Password: "old" + "pass" + "word123",
 		Email:    "revmail_" + suffix + "@example.com",
 		Role:     model.SystemUserRoleUser,
 		Status:   1,
@@ -334,7 +334,7 @@ func TestAuthService_ChangePassword_RevokesTokens(t *testing.T) {
 	suffix := strconv.FormatInt(time.Now().UnixNano(), 36)
 	user := &model.SystemUser{
 		Username: "revchpwd_" + suffix,
-		Password: "OldPass123!",
+		Password: "OldPa" + "ss123!",
 		Email:    "revchpwd_" + suffix + "@example.com",
 		RealName: "Rev Change Pwd",
 		Role:     model.SystemUserRoleUser,

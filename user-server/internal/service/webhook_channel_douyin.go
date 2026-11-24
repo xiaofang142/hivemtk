@@ -293,7 +293,6 @@ func (s *WebhookService) dispatchDouyin(ctx context.Context, channel WebhookChan
 
 	isGroup := douyinIsGroupEvent(env.Event)
 	groupID := ""
-	groupTitle := ""
 	if isGroup {
 		// 官方群事件没有单独的 group_id（群/单聊的区分全在事件名上），
 		// 会话 ID 就是这条群会话的短 ID。
@@ -380,15 +379,12 @@ func (s *WebhookService) dispatchDouyin(ctx context.Context, channel WebhookChan
 		})
 	}
 
-	newOpportunity := false
+	// P0-c：落 hub 成功后统一走发掘出口（LeadDiscoveryService.Process → Service.Enqueue）。
 	if inbound && !strings.HasPrefix(sender, "bot_") {
-		newOpportunity = s.mineDouyinGroupLead(ctx, hub, accountID, groupID, groupTitle, sender, senderName, p.Content)
-		if newOpportunity {
-			logger.Infof("[DouyinWebhook] 线索触发 account=%s user=%s content=%s", accountID, sender, p.Content)
-		}
+		s.notifyLeadMined(ctx, hub)
 	}
 
-	return hub, &tgDispatchExtra{NewOpportunity: newOpportunity}, nil
+	return hub, &tgDispatchExtra{NewOpportunity: false}, nil
 }
 
 // douyinPlatformKeyPrefix 返回 (落库平台名, 幂等键前缀)。
@@ -437,10 +433,8 @@ func (s *WebhookService) dispatchDouyinGeneric(ctx context.Context, channel Webh
 	}
 	s.upsertInboxFromHub(ctx, hub, p.Sender)
 
-	newOpportunity := false
-	if p.Sender != "" {
-		newOpportunity = s.mineDouyinGroupLead(ctx, hub, accountID, groupID, "", p.Sender, p.Sender, p.Content)
-	}
+	// P0-c：落 hub 成功后统一走发掘出口（LeadDiscoveryService.Process → Service.Enqueue）。
+	s.notifyLeadMined(ctx, hub)
 
-	return hub, &tgDispatchExtra{NewOpportunity: newOpportunity}, nil
+	return hub, &tgDispatchExtra{NewOpportunity: false}, nil
 }

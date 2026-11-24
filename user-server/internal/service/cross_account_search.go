@@ -17,23 +17,49 @@ type CrossAccountSearchScope struct {
 	AuthorizedAccountCount int  `json:"authorized_account_count"`
 }
 
+// CrossAccountPermissionResolver 由 CustomerPermissionService 实现；
+// 测试可用 no-op 桩避免真实 DB 依赖。
+type CrossAccountPermissionResolver interface {
+	Resolve(ctx context.Context, userID uint) (CustomerDataScope, error)
+}
+
+type allAccountsPermissionResolver struct{}
+
+func (allAccountsPermissionResolver) Resolve(context.Context, uint) (CustomerDataScope, error) {
+	return CustomerDataScope{AllAccounts: true}, nil
+}
+
 type CrossAccountSearchService struct {
 	repo     repository.CrossAccountSearchRepository
 	scopeSvc *BusinessScopeService
+	perm     CrossAccountPermissionResolver
 }
 
 func NewCrossAccountSearchService() *CrossAccountSearchService {
 	return &CrossAccountSearchService{
 		repo:     repository.NewCrossAccountSearchRepository(),
 		scopeSvc: NewBusinessScopeService(),
+		perm:     NewCustomerPermissionService(),
 	}
 }
 
+// NewCrossAccountSearchServiceWithRepo 兼容旧测试构造：不注入真实 Phase2 权限（no-op）。
 func NewCrossAccountSearchServiceWithRepo(repo repository.CrossAccountSearchRepository, scopeSvc *BusinessScopeService) *CrossAccountSearchService {
 	if scopeSvc == nil {
 		scopeSvc = NewBusinessScopeService()
 	}
-	return &CrossAccountSearchService{repo: repo, scopeSvc: scopeSvc}
+	return &CrossAccountSearchService{repo: repo, scopeSvc: scopeSvc, perm: allAccountsPermissionResolver{}}
+}
+
+// NewCrossAccountSearchServiceWithDeps 显式注入 Phase2 权限解析（生产/新测试）。
+func NewCrossAccountSearchServiceWithDeps(repo repository.CrossAccountSearchRepository, scopeSvc *BusinessScopeService, perm CrossAccountPermissionResolver) *CrossAccountSearchService {
+	if scopeSvc == nil {
+		scopeSvc = NewBusinessScopeService()
+	}
+	if perm == nil {
+		perm = allAccountsPermissionResolver{}
+	}
+	return &CrossAccountSearchService{repo: repo, scopeSvc: scopeSvc, perm: perm}
 }
 
 func (s *CrossAccountSearchService) SearchCustomers(ctx context.Context, tid uint, userID uint, keyword, industry string, page, pageSize int) ([]repository.CrossAccountSearchRow, int64, CrossAccountSearchScope, error) {
@@ -52,15 +78,55 @@ func (s *CrossAccountSearchService) SearchCustomers(ctx context.Context, tid uin
 		return nil, 0, scopeInfo, err
 	}
 	ids, restricted := scope.AllowedSourceAccountIDs()
+	// Phase2 数据授权（渠道账号/行业/负责人）与业务账号授权叠加，不可只取其一。
+	// 业务层已判定 all accounts（管理员）时不再叠加受限集合——Phase2 也不应反向收敛管理员。
+	var industries []string
+	var ownerUserID uint
+	if s.perm != nil && restricted {
+		phase2, perr := s.perm.Resolve(ctx, userID)
+		if perr != nil {
+			return nil, 0, scopeInfo, perr // fail-closed
+		}
+		if !phase2.AllAccounts {
+			restricted = true
+			if len(phase2.AccountIDs) > 0 {
+				ids = intersectCRMStrings(ids, phase2.AccountIDs)
+			}
+			industries = phase2.Industries
+			if phase2.OnlyOwned {
+				ownerUserID = phase2.UserID
+			} else {
+				ownerUserID = phase2.OwnerUserID
+			}
+		}
+	}
+	allAccounts := !restricted
 	scopeInfo = CrossAccountSearchScope{
-		AllAccounts:            !restricted,
+		AllAccounts:            allAccounts,
 		Restricted:             restricted,
 		AuthorizedAccountCount: len(ids),
 	}
 	if restricted && len(ids) == 0 {
 		return []repository.CrossAccountSearchRow{}, 0, scopeInfo, nil
 	}
-	rows, total, err := s.repo.SearchCustomers(ctx, tid, keyword, industry, ids, !restricted, page, pageSize)
+	var rows []repository.CrossAccountSearchRow
+	var total int64
+	if scopedRepo, ok := s.repo.(repository.CrossAccountScopedSearchRepository); ok {
+		// 用户输入的行业与授权行业取交集；授权为空时沿用用户输入。
+		if industry != "" && len(industries) > 0 {
+			allowed := intersectCRMStrings(industries, []string{industry})
+			if len(allowed) == 0 {
+				return []repository.CrossAccountSearchRow{}, 0, scopeInfo, nil
+			}
+			industries = allowed
+		} else if len(industries) == 0 && industry != "" {
+			industries = []string{industry}
+		}
+		rows, total, err = scopedRepo.SearchCustomersScoped(ctx, tid, keyword, ids, industries, ownerUserID, allAccounts, page, pageSize)
+	} else {
+		// 测试 fake 只实现旧接口：保持原调用，但行业已由仓储下推。
+		rows, total, err = s.repo.SearchCustomers(ctx, tid, keyword, industry, ids, !restricted, page, pageSize)
+	}
 	if err != nil {
 		return nil, 0, scopeInfo, err
 	}

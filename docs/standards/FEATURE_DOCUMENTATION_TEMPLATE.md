@@ -101,7 +101,7 @@
 
 ### §四 架构与模块关系（必填）
 
-- 指明代码落点（遵循五层架构：Router → Handler → Service → Repository → Model）。
+- 指明代码落点（遵循五层架构：Router → Controller → Service → Repository → Model）。
 - 画清上下游：谁调用它、它调用谁、跨域边界在哪。
 
 ### §五 数据模型（必填）

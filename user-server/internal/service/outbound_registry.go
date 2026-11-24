@@ -86,9 +86,19 @@ func outboundSenderFactoryOf(ch WebhookChannel) (OutboundSenderFactory, bool) {
 	return f, ok
 }
 
+// isBridgeOutboundChannel 是出站链路判断 bridge 能力的唯一 registry-owned 入口。
+func isBridgeOutboundChannel(ch WebhookChannel) bool {
+	return bridgeOutboxCapable(ch)
+}
+
+// resolveOutboundAccount 只负责把账号解析委托给 service；registry 文件不接触 DB/GORM。
+func resolveOutboundAccount(ctx context.Context, tenantID uint, ch WebhookChannel, accountID string) (string, error) {
+	return NewChannelDispatchService().ResolveExplicitOutboundAccount(ctx, tenantID, string(ch), accountID)
+}
+
 // 桥接集合仍由同一注册表查询驱动；提交裁决须在勿扰/重试队列前执行。
 func authorizeOutboundSubmission(ctx context.Context, ch WebhookChannel, accountID string, hub *model.MessageHub) error {
-	if bridgeOutboxCapable(ch) {
+	if isBridgeOutboundChannel(ch) {
 		return authorizeBridgeReplySubmit(ctx, ch, accountID, hub)
 	}
 	return nil
@@ -107,7 +117,7 @@ func (s *WebhookService) outboundSenderFor(ch WebhookChannel) (channelSender, bo
 	}
 	f, ok := outboundSenderFactoryOf(ch)
 	if !ok {
-		if !bridgeOutboxCapable(ch) {
+		if !isBridgeOutboundChannel(ch) {
 			return nil, false
 		}
 		snd := &bridgeOutboxSender{svc: s}

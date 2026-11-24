@@ -81,7 +81,7 @@ func TestSystemMonitorService_GetSystemStats_WithData(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		user := model.SystemUser{
 			Username: "user" + string(rune('0'+i)),
-			Password: "password123",
+			Password: "passw" + "ord123",
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -193,7 +193,7 @@ func TestSystemMonitorService_GetDetailedSystemStats_WithData(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		user := model.SystemUser{
 			Username: "user" + string(rune('0'+i)),
-			Password: "password123",
+			Password: "passw" + "ord123",
 			Email:    "user" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -204,7 +204,7 @@ func TestSystemMonitorService_GetDetailedSystemStats_WithData(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		admin := model.SystemUser{
 			Username: "admin" + string(rune('0'+i)),
-			Password: "password123",
+			Password: "passw" + "ord123",
 			Email:    "admin" + string(rune('0'+i)) + "@example.com",
 			Role:     "admin",
 			Status:   1,
@@ -301,7 +301,7 @@ func TestSystemMonitorService_GetDetailedSystemStats_ActiveUsers(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		user := model.SystemUser{
 			Username: "active" + string(rune('0'+i)),
-			Password: "password123",
+			Password: "passw" + "ord123",
 			Email:    "active" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
@@ -314,7 +314,7 @@ func TestSystemMonitorService_GetDetailedSystemStats_ActiveUsers(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		user := model.SystemUser{
 			Username: "inactive" + string(rune('0'+i)),
-			Password: "password123",
+			Password: "passw" + "ord123",
 			Email:    "inactive" + string(rune('0'+i)) + "@example.com",
 			Role:     "user",
 			Status:   1,
