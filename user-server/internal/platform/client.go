@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"hivemtk-user/internal/config"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"io"
 	"io/fs"
@@ -547,6 +548,9 @@ type ReportHeartbeatReq struct {
 	// 心跳是周期通道，用它持续刷新平台侧的形态认知，部署形态变更（off→on）后
 	// 最多一个心跳周期内平台即可感知。
 	DeployMode string `json:"deploy_mode,omitempty"`
+	// VersionType 本实例当前生效的版本类型：opensource | custom。
+	// 平台侧据此做漂移检测（与商户管理设置的 version_type 对比）。
+	VersionType string `json:"version_type,omitempty"`
 	// ClientMachine 商户正在使用的电脑设备快照（仅 SaaS 形态附带，见 client_machine.go）。
 	// 本地部署形态下 user-server 机即部署机，host_info 已是商户机器信息，不再附带。
 	ClientMachine json.RawMessage `json:"client_machine,omitempty"`
@@ -613,6 +617,16 @@ func (c *Client) ReportHeartbeat(req *ReportHeartbeatReq) error {
 	}
 	if perr := envelopeRefusal(raw); perr != nil {
 		return fmt.Errorf("上报心跳被拒: code=%d, msg=%s", perr.Resp.Code, perr.Resp.Msg)
+	}
+	// 平台侧下发的版本类型（商户管理设置）覆盖本地默认值，供渠道过滤等统一控制。
+	var env struct {
+		Code int `json:"code"`
+		Data struct {
+			VersionType string `json:"version_type"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &env); err == nil && env.Data.VersionType != "" {
+		edition.SetCurrent(env.Data.VersionType)
 	}
 	logger.Info("上报心跳成功")
 	return nil

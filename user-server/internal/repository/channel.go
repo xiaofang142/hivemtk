@@ -5,7 +5,8 @@ import (
 	"errors"
 
 	"hivemtk-user/internal/model"
-	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/edition"
 
 	"gorm.io/gorm"
 )
@@ -43,7 +44,7 @@ type channelRepo struct {
 
 // NewChannelRepository 创建渠道仓储（全局 DB 装配）。
 func NewChannelRepository() ChannelRepository {
-	return &channelRepo{db: _db.GetDB()}
+	return &channelRepo{db: db.GetDB()}
 }
 
 // NewChannelRepositoryWithDB 用显式句柄构造（装配点/测试用）。
@@ -75,6 +76,9 @@ func (r *channelRepo) GetByID(ctx context.Context, tenantID, id uint) (*model.Ch
 	if err != nil {
 		return nil, err
 	}
+	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return nil, nil
+	}
 	return &ch, nil
 }
 
@@ -89,6 +93,10 @@ func (r *channelRepo) GetByCode(ctx context.Context, code string) (*model.Channe
 	}
 	if err != nil {
 		return nil, err
+	}
+	// 版本类型控制：开源版下国内渠道视为不存在（fail-closed），避免旁路。
+	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return nil, nil
 	}
 	return &ch, nil
 }
@@ -113,6 +121,17 @@ func (r *channelRepo) List(ctx context.Context, opts ChannelListOptions) ([]mode
 	var rows []model.Channel
 	if err := q.Order("id ASC").Find(&rows).Error; err != nil {
 		return nil, err
+	}
+	// 版本类型控制：开源版下国内渠道不出现在任何列表（defense-in-depth）。
+	if !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		filtered := make([]model.Channel, 0, len(rows))
+		for i := range rows {
+			if edition.IsDomesticChannel(rows[i].Code) {
+				continue
+			}
+			filtered = append(filtered, rows[i])
+		}
+		rows = filtered
 	}
 	return rows, nil
 }

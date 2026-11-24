@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -121,6 +122,7 @@ func sendHeartbeat() {
 		Metrics:           metrics,
 		DeviceFingerprint: deviceFP,
 		DeployMode:        deployModeString(),
+		VersionType:       edition.Current(),
 		Timestamp:         time.Now(),
 	}
 	// 任务三：SaaS 形态下心跳要能回答"商户此刻用的是哪台电脑"——

@@ -5,6 +5,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/repository"
 )
 
@@ -73,6 +74,9 @@ func (s *channelMasterService) List(ctx context.Context, tenantID uint, q dto.Ch
 	}
 	out := make([]dto.ChannelOption, 0, len(rows))
 	for i := range rows {
+		if edition.IsDomesticChannel(rows[i].Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+			continue
+		}
 		out = append(out, toChannelOption(&rows[i]))
 	}
 	return out, nil
@@ -96,6 +100,10 @@ func (s *channelMasterService) Get(ctx context.Context, tenantID, id uint) (*dto
 func (s *channelMasterService) Create(ctx context.Context, tenantID uint, in *dto.ChannelSave) (*dto.ChannelOption, error) {
 	if in == nil || tenantID == 0 || in.Name == "" || in.Code == "" {
 		return nil, ErrChannelAccountInvalid
+	}
+	// 版本类型控制：开源版下禁止创建国内渠道（fail-closed）。
+	if edition.IsDomesticChannel(in.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return nil, ErrChannelCodeDisabled
 	}
 	enabled := true
 	if in.Enabled != nil {
@@ -123,6 +131,13 @@ func (s *channelMasterService) Update(ctx context.Context, tenantID, id uint, in
 	}
 	if ch == nil {
 		return ErrChannelNotFound
+	}
+	// 版本类型控制：开源版下禁止把渠道改为国内渠道或操作国内渠道。
+	if edition.IsDomesticChannel(in.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return ErrChannelCodeDisabled
+	}
+	if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+		return ErrChannelCodeDisabled
 	}
 	updates := map[string]any{"name": in.Name, "code": in.Code, "type": in.Type, "remark": in.Remark}
 	if in.Enabled != nil {

@@ -7,6 +7,7 @@ import (
 
 	"hivemtk-user/internal/dto"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/repository"
 )
 
@@ -15,20 +16,21 @@ import (
 // 新增预设渠道只需在数据表里插入一行（channels.code 全局唯一），全系统读同一张表；
 // 这里仅是启动期幂等播种的清单，不是运行期判据——运行期一律以 channels 表为准。
 var PresetChannelCodes = []struct {
-	Code string
-	Name string
-	Type string
+	Code     string
+	Name     string
+	Type     string
+	Domestic bool
 }{
-	{"douyin", "抖音", "dm"},
-	{"xiaohongshu", "小红书", "dm"},
-	{"kuaishou", "快手", "dm"},
-	{"xianyu", "闲鱼", "dm"},
-	{"tiktok", "TikTok", "dm"},
-	{"telegram", "Telegram", "group"},
-	{"whatsapp", "WhatsApp", "dm"},
-	{"feishu", "飞书", "group"},
-	{"wecom", "企业微信", "group"},
-	{"qq", "QQ", "dm"},
+	{"douyin", "抖音", "dm", true},
+	{"xiaohongshu", "小红书", "dm", true},
+	{"kuaishou", "快手", "dm", true},
+	{"xianyu", "闲鱼", "dm", true},
+	{"tiktok", "TikTok", "dm", false},
+	{"telegram", "Telegram", "group", false},
+	{"whatsapp", "WhatsApp", "dm", false},
+	{"feishu", "飞书", "group", true},
+	{"wecom", "企业微信", "group", true},
+	{"qq", "QQ", "dm", true},
 }
 
 // ErrChannelCodeDisabled 渠道码存在但被关闭（使用方据此 fail-closed 拒绝）。
@@ -76,6 +78,10 @@ func (s *channelService) EnsurePresets(ctx context.Context, tenantID uint) (int,
 		if code == "" {
 			continue
 		}
+		// 开源版过滤国内渠道：不播种、不暴露（减少传播风险）。
+		if edition.IsDomesticChannel(code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+			continue
+		}
 		existing, err := s.repo.GetByCode(ctx, code)
 		if err != nil {
 			return created, err
@@ -108,6 +114,9 @@ func (s *channelService) EnabledOptions(ctx context.Context, tenantID uint) ([]d
 	}
 	out := make([]dto.ChannelOption, 0, len(rows))
 	for i := range rows {
+		if edition.IsDomesticChannel(rows[i].Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+			continue
+		}
 		out = append(out, toChannelOption(&rows[i]))
 	}
 	return out, nil
@@ -119,6 +128,10 @@ func (s *channelService) IsEnabled(ctx context.Context, code string) (bool, erro
 	}
 	code = strings.ToLower(strings.TrimSpace(code))
 	if code == "" {
+		return false, nil
+	}
+	// 开源版：国内渠道一律视为未启用（fail-closed）。
+	if edition.IsDomesticChannel(code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
 		return false, nil
 	}
 	ch, err := s.repo.GetByCode(ctx, code)
@@ -142,6 +155,12 @@ func (s *channelService) RequireEnabled(ctx context.Context, code string) error 
 func (s *channelService) SetEnabled(ctx context.Context, tenantID, id uint, enabled bool) error {
 	if s == nil || s.repo == nil || !s.repo.Available() || tenantID == 0 || id == 0 {
 		return repository.ErrChannelStoreUnavailable
+	}
+	// 版本类型控制：开源版下不允许启用/操作国内渠道（fail-closed）。
+	if ch, err := s.repo.GetByID(ctx, tenantID, id); err == nil && ch != nil {
+		if edition.IsDomesticChannel(ch.Code) && !edition.AllowsContext(ctx, edition.FeatureDomesticChannels) {
+			return ErrChannelCodeDisabled
+		}
 	}
 	return s.repo.Update(ctx, tenantID, id, map[string]any{"enabled": enabled})
 }
