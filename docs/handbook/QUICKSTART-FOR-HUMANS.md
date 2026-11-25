@@ -587,7 +587,7 @@ flowchart TB
 - **解决什么问题**：最小权限——日常运营不该用超管；坐席只该看到自己该看的。
 - **如何配置 / 使用**：见第 7 节（角色体系 + 行级数据隔离 + fail-closed）。
 
-#### 3.7.3 权限设置组（admin，9 页）
+#### 3.7.3 权限设置组（admin，8 页）
 
 | 模块（路径） | 作用 / 解决什么问题 | 如何使用 |
 |------|------------------|---------|
@@ -723,8 +723,9 @@ curl http://localhost:8204/health       # 检查依赖探针；通过后仍需�
 
 - Bridge 扩展与服务端之间：上行（私信上报）有单批条数与大小上限；下行（AI 回复拉取）支持长连接推送；
   识别码在 [系统设置 → 权限设置 → 渠道识别码] 页生成/重置（详见 5.3）。
-- 服务端安全开关：`CORS_ALLOW_ORIGINS_USER` / `SSE_CORS_ALLOW_ORIGINS` / `ALLOWED_WS_ORIGINS`
-  配管理端与 API 域名（生产 .env，由 deploy.conf 派生）；桥接闸门 fail-closed，识别码无效一律 401。
+- 服务端安全开关：`.env` 的 `CORS_ALLOW_ORIGINS_USER` / `SSE_CORS_ALLOW_ORIGINS` / `ALLOWED_WS_ORIGINS`
+  配管理端与 API 域名（这三个是生产 .env 里的手工配置项，不在 deploy.conf 派生清单）；
+  桥接闸门 fail-closed，识别码无效一律 401。
 
 ### 4.7 验证闭环（不依赖真实客户的最短路径）
 
@@ -789,7 +790,7 @@ npm run build        # 产物在 dist/（esbuild 逐入口 IIFE）
 
 **识别码从哪来**：网页端 [系统设置 → 权限设置 → 渠道识别码]（`/channels/identify-codes`）→
 [生成/重置] → 复制明文 → 粘贴到扩展 popup「通道识别码」→ 保存并重连。请求以
-`X-Channel-Identify-Code` 头携带（同时作 Bearer 透传）；服务端 fail-closed：识别码无效时
+`X-Channel-Identify-Code` 头携带（同时附 `Authorization: Bearer` 以兼容既有反代，但闸门不读它）；服务端 fail-closed：识别码无效时
 上行/下发/ack 一律 401。**旧 `X-Bridge-Token` / Bridge Token 协议已退役，服务端不再接受**，
 不再是鉴权来源（见 [菜单决策](../architecture/USERWEB_MENU_DECISIONS_2026-11-24.md)）。
 重置后旧码仅在短暂在途窗口有效，请同步更新所有扩展/上报端，否则请求被 401 拒绝。

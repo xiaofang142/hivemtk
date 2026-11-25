@@ -51,7 +51,7 @@ const topMenusMap = {
 const subMenusMap = {
   messageHub: { parent: 'workspace', title: i18n.global.t('消息中台 MQ') },
   inbox: { parent: 'workspace', title: i18n.global.t('统一收件箱') },
-  wecomAccount: { parent: 'workspace', title: i18n.global.t('多账号聚合') },
+  wecomAccount: { parent: 'workspace', title: i18n.global.t('企微账号管理') },
   clue: { parent: 'customer', title: i18n.global.t('线索') },
   customer360: { parent: 'customer', title: i18n.global.t('客户') },
   customerEvent: { parent: 'customer', title: i18n.global.t('客户事件') },
