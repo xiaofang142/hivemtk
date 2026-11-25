@@ -7,12 +7,17 @@
         </h2>
         <span class="page-sub">按 account → channel → global 优先级匹配；列表按当前租户隔离</span>
       </div>
-      <el-button
-        type="primary"
-        @click="openCreate"
-      >
-        新增规则
-      </el-button>
+      <div class="page-actions">
+        <el-button @click="$router.push('/leads/mining-agents')">
+          线索发现智能体
+        </el-button>
+        <el-button
+          type="primary"
+          @click="openCreate"
+        >
+          新增规则
+        </el-button>
+      </div>
     </div>
 
     <el-card shadow="never">
@@ -275,6 +280,7 @@ onMounted(fetchList)
 <style scoped>
 .leads-page { padding: 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.page-actions { display: flex; align-items: center; gap: 8px; }
 .page-title { margin: 0; font-size: 18px; }
 .page-sub { color: #909399; font-size: 12px; }
 </style>
