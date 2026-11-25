@@ -19,7 +19,8 @@
 - **API 上线**：2026-11-25 20:05:31 +08:00 完成；二进制 SHA-256 `6109465ea202fd1dbbb118d74498c370975ffaf685e98d32154937ba893e7f89`；镜像 `sha256:666b93abe3698555b1c74625637a407cf710acf6433156d11ce0f250d0b9a0b9`；容器启动 `2026-11-25T12:05:21.265618715Z`。远端上传前后双端 sha256 一致，容器内与公网 `https://workapi.xapptool.cn` 健康均 code 0，公开 seed 口令探针 GREEN（401）。
 - **回滚点**：镜像 `mtk-user-server:rollback-20261125-200352`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261125-200352`。
 - **SPA 交付**：buildId `ad4d46165-1795608346958`，入口 `assets/index-BTKnZQFW.js`。备份 `/www/wwwroot/hivemtk/user-web.snapshot-20261125-200559.tgz`，rsync `--delete` 增量同步保留 `.user.ini`；公网 `https://work.xapptool.cn/` 回读资源名与本地一致。embed-sdk 无改动，未同步。
-- **范围与边界**：go test 门仅有 `test password is missing` DB 环境门禁（UNVERIFIED，不阻断）；链 B（bridge 扩展）、链 C（平台上链）本轮无改动未执行。发布后并行会话仍在写 `user-server` 源码，本次台账只登记已实际部署的 `ad4d46165`，不代表后续未提交改动已上线。
+- **范围与边界**：go test 门仅有 `test password is missing` DB 环境门禁（UNVERIFIED，不阻断）；链 B（bridge 扩展）、链 C（平台上链）本轮无改动未执行。
+- **同日续发（最终线上版本 fd0fa270b）**：并行会话补齐 Telegram/WhatsApp/Feishu 触达工具品牌范围传递并对齐唤醒流/端到端夹具，提交 `fd0fa270b806826f93a698f0d42074390054ad16` 已推双远端；2026-11-25 20:23:29 +08:00 再走链 A（首次 scp 连接断开、核验远端无残留后重试成功）。最终二进制 SHA-256 `084cd01d53821283…`，镜像 `sha256:1ffe170330aba3902a77af8523cf45a5d420c8b4d18ac053b20cbd87389b6bee`，容器启动 `2026-11-25T12:24:55.996354493Z`；回滚点镜像 `mtk-user-server:rollback-20261125-202329`、二进制 `user-server.bak-20261125-202329`。容器内与公网健康 code 0、公开 seed 口令探针 GREEN。SPA 无源码改动，未重发。
 
 ## 2026-11-20 · FA-14 客户合并保留同意事实（链 A 3cb645598）
 
