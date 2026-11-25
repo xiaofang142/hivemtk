@@ -37,6 +37,7 @@ func NewReachWhatsAppSendTool(deps ReachToolDeps) *ReachWhatsAppSendTool {
 						Properties:  map[string]ToolParam{},
 					},
 
+					"brand":       {Type: "string", Description: "同意记录对应的品牌范围（用于查询真实同意记录，不构成授权）"},
 					"customer_id": {Type: "string", Description: "客户 ID（用于客户轨迹和限流维度）"},
 					"operator_id": {Type: "string", Description: "操作员 ID（用于权限校验）"},
 				},

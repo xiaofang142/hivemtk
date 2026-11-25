@@ -1050,6 +1050,7 @@ func (t *ReachTelegramSendTool) Execute(ctx context.Context, args map[string]any
 		AccountID:   accountID,
 		RecipientID: chatID,
 		Content:     content,
+		Metadata:    map[string]string{"brand": getArgString(args, "brand")},
 	}
 	if custID, ok := args["customer_id"]; ok {
 		req.CustomerID, _ = custID.(string)
@@ -1094,6 +1095,7 @@ func (t *ReachWhatsAppSendTool) Execute(ctx context.Context, args map[string]any
 		Content:     content,
 		TemplateID:  templateID,
 		Params:      params,
+		Metadata:    map[string]string{"brand": getArgString(args, "brand")},
 	}
 	if custID, ok := args["customer_id"]; ok {
 		req.CustomerID, _ = custID.(string)
@@ -1140,6 +1142,7 @@ func (t *ReachFeishuSendTool) Execute(ctx context.Context, args map[string]any) 
 		RecipientID: openID,
 		MsgType:     msgType,
 		Content:     content,
+		Metadata:    map[string]string{"brand": getArgString(args, "brand")},
 	}
 	if custID, ok := args["customer_id"]; ok {
 		req.CustomerID, _ = custID.(string)

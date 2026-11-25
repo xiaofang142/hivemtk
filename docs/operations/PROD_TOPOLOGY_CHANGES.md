@@ -4,6 +4,23 @@
 > 否则换机 / 重建部署时会静默丢失（2026-11-04 二次审核发现：`deploy/` 目录
 > 不入库，上传卷与 nginx 分流改完只存在于当前机器）。
 
+## 2026-11-25 · 平台端 SageX 授权加固上线（platform 66f7e54，手工 Docker 发布）
+
+- **发布提交**：`hivemtk-platform` `66f7e5476bf936629e73b5690065992d12d76da6`，已推 `origin/master`。
+- **发布方式**：`scripts/deploy-platform.sh --api` 的默认值与实况不符（脚本按宿主机二进制 + `/www/wwwroot/hivemtk-platform` 布局，实况是 `/www/wwwroot/hivemtk/platform-server/` 下的 Docker Compose，`mtk-platform-server:latest` 由 Dockerfile COPY 二进制构建）。故按脚本语义手工执行：本地交叉编译 → scp 双端 sha256 校验（`223c10dcb9bf3af71469b1a7729daeff36304e727f6b23fb04cb7377e84e7df5`）→ 备份现役二进制 → `docker tag` 回滚镜像 → `bash migrate.sh` → `docker compose up -d --build platform-server`。
+- **迁移**：新增 `migrations/038_sagex_active_fingerprint_unique.sql`，执行前核查无重复 activated 指纹，迁移成功应用（唯一索引 `idx_sagex_active_fingerprint`，`schema_migrations` 已登记）；旧镜像回滚标签 `mtk-platform-server:rollback-20261125-201004`，旧二进制 `platform-server.prev-20261125-201004`。
+- **上线核验**：新镜像 `sha256:9a126cb22f136d2f9f9db37e30a21e1ce49e1f4e1d3d948bb87101d785f91418`，容器 `3b492fadb2ec` running（启动 `2026-11-25T12:10:39.136739841Z`）；远端 `127.0.0.1:8205/api/health` 与公网 `https://manage.xapptool.cn/api/health` 均返回 ready/200。
+- **边界**：平台前端、贡献者门户本轮无源码改动，未重发；平台脚本陈旧问题未在本轮修复，后续需单独适配。
+
+## 2026-11-25 · CRM/线索/渠道账号合并 + 发布门修复（链 A/D ad4d46165）
+
+- **发布提交**：`ad4d461657c418f234a7c64d8472a5592908c6b7`，已推 `gitee-upstream/master` + `upstream/master`。自上次发布基线 `17dc305a4` 起共 13 个 user-server 提交，含 4 个安全整改、CRM-14 画像建议草稿、线索判定写会话摘要、菜单合并及桥接租户绑定/发布门修复。
+- **修复的发布门回归**：bridge wake 在预绑定真实租户且无识别码时误返 400，已恢复直通并收紧系统作用域边界；跨端 wire 清单已重生且平台侧比对无漂移；`applyChannelEditionGate` 裸 SQL 子查询改 GORM 子查询以注入租户隔离；`deploy/deploy-api.sh` 的 RETURN trap 被 `source test_gate.sh` 提前触发、误删测试日志导致永远 BLOCK，已移除 trap。
+- **API 上线**：2026-11-25 20:05:31 +08:00 完成；二进制 SHA-256 `6109465ea202fd1dbbb118d74498c370975ffaf685e98d32154937ba893e7f89`；镜像 `sha256:666b93abe3698555b1c74625637a407cf710acf6433156d11ce0f250d0b9a0b9`；容器启动 `2026-11-25T12:05:21.265618715Z`。远端上传前后双端 sha256 一致，容器内与公网 `https://workapi.xapptool.cn` 健康均 code 0，公开 seed 口令探针 GREEN（401）。
+- **回滚点**：镜像 `mtk-user-server:rollback-20261125-200352`，二进制 `/www/wwwroot/hivemtk/user-server/user-server.bak-20261125-200352`。
+- **SPA 交付**：buildId `ad4d46165-1795608346958`，入口 `assets/index-BTKnZQFW.js`。备份 `/www/wwwroot/hivemtk/user-web.snapshot-20261125-200559.tgz`，rsync `--delete` 增量同步保留 `.user.ini`；公网 `https://work.xapptool.cn/` 回读资源名与本地一致。embed-sdk 无改动，未同步。
+- **范围与边界**：go test 门仅有 `test password is missing` DB 环境门禁（UNVERIFIED，不阻断）；链 B（bridge 扩展）、链 C（平台上链）本轮无改动未执行。发布后并行会话仍在写 `user-server` 源码，本次台账只登记已实际部署的 `ad4d46165`，不代表后续未提交改动已上线。
+
 ## 2026-11-20 · FA-14 客户合并保留同意事实（链 A 3cb645598）
 
 - **行为与门禁**：客户合并在原事务内追加租户隔离的身份关联，保留事件与偏好的原始身份；时间线、偏好和发送闸口解析同一关联组，跨身份按撤回优先、活动暂停次之、授权最后裁决。真实专用 PostgreSQL 验证渠道/目的隔离、链式与幂等关联、并发、事务故障回滚、跨租户及缺失上下文拒绝、既有 HTTP 接口与延迟发送；控制发送器计数为零。冻结 4677 份源码文件及 3 份验收报告无漂移；lint、audit、vet、build、test-go 均退出 0，`make test-go` 159 条包级通过记录、零 FAIL。完整证据见 `.specify/bugs/customer-consent-alias/`。

@@ -4,12 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"hivemtk-user/internal/middleware"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
@@ -57,32 +59,49 @@ func TestBridgeOutboxWakeController_RejectsScopeBefore200(t *testing.T) {
 }
 
 func TestBridgeOutboxWakeController_RealBridgeAuthentication(t *testing.T) {
-	testutil.NewTestDB(t, &model.PlatformConfigKV{}, &model.ChannelIdentifyCode{})
+	database := testutil.NewTestDB(t, &model.PlatformConfigKV{}, &model.ChannelIdentifyCode{}, &model.Channel{}, &model.ChannelAccount{})
+	priorMode := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOn)
+	t.Cleanup(func() { tenant.SetMode(priorMode) })
 	// T058 后 BridgeIngressGuard 只认渠道识别码（头=X-Channel-Identify-Code，
 	// 候选源=channel_identify_codes 表），不再读旧 BRIDGE_INGEST_TOKEN。
 	const wakeIdentifyCode = "synthetic-wake-identify-code"
-	if err := repository.NewChannelIdentifyCodeRepository().Upsert(context.Background(), &model.ChannelIdentifyCode{
-		TenantID: 1, ChannelID: 1, Code: wakeIdentifyCode, Version: 1,
+	seedCtx := tenant.WithSystemScope(context.Background())
+	channel := &model.Channel{TenantID: 18, Code: "douyin", Name: "Wake fixture", Type: "dm", Enabled: true}
+	if err := database.WithContext(seedCtx).Create(channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	account := &model.ChannelAccount{TenantID: 18, ChannelID: channel.ID, Name: "Wake fixture",
+		IdentifyCode: "synthetic-wake-account-code", Status: 1, DataScope: "{}", OwnerUserIDs: model.JSONStrings{}}
+	if err := database.WithContext(seedCtx).Create(account).Error; err != nil {
+		t.Fatal(err)
+	}
+	accountID := strconv.FormatUint(uint64(account.ID), 10)
+	if err := repository.NewChannelIdentifyCodeRepository().Upsert(seedCtx, &model.ChannelIdentifyCode{
+		TenantID: 18, ChannelID: channel.ID, Code: wakeIdentifyCode, Version: 1,
 	}); err != nil {
 		t.Fatalf("种子识别码写入失败: %v", err)
 	}
 	t.Setenv("BRIDGE_INGEST_AUTH", "")
 	for _, tc := range []struct {
-		name, token string
-		status      int
+		name, token, account string
+		tenantID             uint
+		status               int
 	}{
-		{name: "缺少凭证不得开流", status: http.StatusUnauthorized},
-		{name: "错误凭证不得开流", token: "invalid-identify-code", status: http.StatusUnauthorized},
-		{name: "有效凭证仍须明确租户", token: wakeIdentifyCode, status: http.StatusOK},
+		{name: "缺少凭证不得开流", tenantID: 18, account: accountID, status: http.StatusUnauthorized},
+		{name: "错误凭证不得开流", token: "invalid-identify-code", tenantID: 18, account: accountID, status: http.StatusUnauthorized},
+		{name: "有效凭证且租户账号一致", token: wakeIdentifyCode, tenantID: 18, account: accountID, status: http.StatusOK},
+		{name: "凭证租户不符不得开流", token: wakeIdentifyCode, tenantID: 19, account: accountID, status: http.StatusBadRequest},
+		{name: "凭证账号不符不得开流", token: wakeIdentifyCode, tenantID: 18, account: "other-account", status: http.StatusBadRequest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			requestCtx, cancel := context.WithCancel(tenant.OnlyTenant(context.Background(), 18))
+			requestCtx, cancel := context.WithCancel(edition.WithContext(tenant.OnlyTenant(context.Background(), tc.tenantID), edition.TypeCustom))
 			defer cancel()
 			writer := &wakeCancelWriter{ResponseRecorder: httptest.NewRecorder(), cancel: cancel}
 			router := gin.New()
 			router.Use(middleware.BridgeIngressGuard())
 			router.GET("/api/bridge/outbox/wake", NewBridgeOutboxWakeController(service.NewBridgeOutboxWakeBroker()).Stream)
-			request := httptest.NewRequest(http.MethodGet, "/api/bridge/outbox/wake?channel=douyin&account_id=account-a", nil).WithContext(requestCtx)
+			request := httptest.NewRequest(http.MethodGet, "/api/bridge/outbox/wake?channel=douyin&account_id="+tc.account, nil).WithContext(requestCtx)
 			request.Header.Set("X-Channel-Identify-Code", tc.token)
 			router.ServeHTTP(writer, request)
 			if writer.Code != tc.status {
