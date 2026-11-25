@@ -145,6 +145,8 @@ var anonymousAllowedRoutes = map[string]string{
 	"GET /api/sso/callback/:provider":                            "第三方 SSO 跳转与回调：身份由 provider 侧令牌带回",
 	"GET /api/sso/login/:provider":                               "第三方 SSO 跳转与回调：身份由 provider 侧令牌带回",
 	"GET /api/sso/providers":                                     "第三方 SSO 跳转与回调：身份由 provider 侧令牌带回",
+	"POST /api/integrations/sagex/upload":                        "SageX 上报：控制器校验 identify_code 并解析租户/账号，不使用用户 JWT",
+	"POST /api/integrations/sagex/bootstrap":                     "SageX bootstrap：服务校验 identify_code 并绑定安装记录租户/账号，不使用用户 JWT",
 	// 这一条是"字段裁剪型"公开口：链上只有 OptionalAuthMiddleware（认身份、不拦人），
 	// 匿名必须拿到 200，泄露面靠 handler 按 role 裁字段收口，判据在
 	// system_info_platform_test.go（匿名无机器画像 + 超管有）。
@@ -306,6 +308,55 @@ func TestRouteGuardChain_AnonymousSurfaceIsExactlyTheAllowlist(t *testing.T) {
 	}
 	t.Logf("链上带身份守卫 %d 条；匿名可达且已登记理由 %d 条；清单共 %d 行",
 		guarded, listed, len(anonymousAllowedRoutes))
+}
+
+// 外部身份凭证不是用户 JWT，也不应被菜单能力或仅超管档替代。
+func TestRouteGuardChain_ExternalCredentialRoutesKeepTheirOwnGuards(t *testing.T) {
+	chains := liveRouteGuardChains(t)
+	for _, key := range []string{
+		"POST /api/integrations/sagex/upload",
+		"POST /api/integrations/sagex/bootstrap",
+	} {
+		chain, ok := chains[key]
+		if !ok {
+			t.Errorf("SageX 外部身份路由不在 live 路由表里：%s", key)
+			continue
+		}
+		if middleware.IsAdminOnlyRoute(strings.SplitN(key, " ", 2)[0], strings.SplitN(key, " ", 2)[1]) {
+			t.Errorf("%s 不应命中用户超管策略；身份由 SageX identify_code 自证", key)
+		}
+		if chainHasAny(chain, identityGuards) {
+			t.Errorf("%s 不应依赖用户/JWT 或桥接中间件身份：%v", key, chain)
+		}
+		if _, listed := anonymousAllowedRoutes[key]; !listed {
+			t.Errorf("%s 缺少控制器 identify_code 身份校验的路由契约说明", key)
+		}
+		if got := routeGuardTier("POST", strings.SplitN(key, " ", 2)[1], chain); got != "external-credential" {
+			t.Errorf("%s 档位应为 external-credential，实得 %q", key, got)
+		}
+	}
+
+	const mcpKey = "POST /api/mcp"
+	chain, ok := chains[mcpKey]
+	if !ok {
+		t.Fatalf("MCP 外部凭证路由不在 live 路由表里：%s", mcpKey)
+	}
+	if !chainHasGuard(chain, guardMCP) {
+		t.Errorf("%s 必须保留专用 MCPGuard：%v", mcpKey, chain)
+	}
+	if chainHasGuard(chain, guardJWT) || middleware.IsAdminOnlyRoute(http.MethodPost, "/api/mcp") {
+		t.Errorf("%s 不应要求用户 JWT 或仅超管策略：%v", mcpKey, chain)
+	}
+	if owners := middleware.CapabilityOwnerKeysFor("/api/mcp"); len(owners) != 0 {
+		t.Errorf("%s 不应误命中用户菜单能力，实际归属=%v", mcpKey, owners)
+	}
+	if got := routeGuardTier(http.MethodPost, "/api/mcp", chain); got != "external-credential" {
+		t.Errorf("%s 档位应为 external-credential，实得 %q", mcpKey, got)
+	}
+
+	if !middleware.IsAdminOnlyRoute(http.MethodPost, "/api/integrations/1/test") {
+		t.Error("SageX carve-out 不应削弱集成账号管理的超管策略")
+	}
 }
 
 // TestRouteGuardChain_MonitorRoutesKeepJWT 单独点名那批历史缺陷口：它们必须仍在链上带

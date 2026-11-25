@@ -6,6 +6,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/edition"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
@@ -115,5 +116,49 @@ func TestEditionChannelAccountRepositoryMatrix(t *testing.T) {
 	}
 	if rows, err := accountRepo.GetByIDs(customCtx, 1, []uint{accounts[3].ID}); err != nil || len(rows) != 0 {
 		t.Errorf("跨租户 GetByIDs 泄漏: rows=%+v err=%v", rows, err)
+	}
+}
+
+func TestEditionChannelAccountGateDoesNotInheritAccountPredicates(t *testing.T) {
+	previousMode := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOff)
+	t.Cleanup(func() { tenant.SetMode(previousMode) })
+
+	database := testutil.NewTestDB(t, &model.Channel{}, &model.ChannelAccount{})
+	channelRepo := NewChannelRepositoryWithDB(database)
+	accountRepo := NewChannelAccountRepositoryWithDB(database)
+
+	channel := model.Channel{TenantID: 6201, Name: "Telegram", Code: "telegram", Type: "dm", Enabled: true}
+	if err := channelRepo.Create(context.Background(), &channel); err != nil {
+		t.Fatalf("seed channel: %v", err)
+	}
+	account := model.ChannelAccount{
+		TenantID:     6201,
+		ID:           620101,
+		ChannelID:    channel.ID,
+		Name:         "distinct-id-account",
+		IdentifyCode: "distinct-id-account-code",
+		Status:       1,
+		DataScope:    "{}",
+		OwnerUserIDs: model.JSONStrings{},
+	}
+	if err := database.Create(&account).Error; err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+
+	tenant.SetMode(tenant.ModeOn)
+	ctx := edition.WithContext(tenant.WithTenantID(context.Background(), account.TenantID), edition.TypeOpensource)
+	byID, err := accountRepo.GetByID(ctx, account.TenantID, account.ID)
+	if err != nil || byID == nil || byID.ID != account.ID {
+		t.Fatalf("foreign-edition account with an unrelated primary key must remain visible: got=%+v err=%v", byID, err)
+	}
+	identifyCtx := edition.WithContext(context.Background(), edition.TypeOpensource)
+	byCode, err := accountRepo.GetByIdentifyCode(identifyCtx, account.IdentifyCode)
+	if err != nil || byCode == nil || byCode.ID != account.ID {
+		t.Fatalf("identify-code lookup must use the channel row rather than account predicates: got=%+v err=%v", byCode, err)
+	}
+
+	if got, err := accountRepo.GetByID(ctx, 6202, account.ID); err != nil || got != nil {
+		t.Fatalf("cross-tenant lookup must remain isolated: got=%+v err=%v", got, err)
 	}
 }

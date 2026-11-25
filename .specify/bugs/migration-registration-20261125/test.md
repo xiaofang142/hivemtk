@@ -4,7 +4,7 @@
 - **Tested**: 2026-11-25
 - **Assessment**: [assessment.md](assessment.md)
 - **Fix**: [fix.md](fix.md)
-- **Result**: focused-pass; full-gates-pending
+- **Result**: focused-and-full-gates-pass
 
 ## Reproduction and Focused Verification
 
@@ -23,7 +23,10 @@ go test ./internal/migration/migrations -run '^(TestEveryImplementedMigrationIsR
 
 ## Full Gates
 
-当前代码的全量构建、vet、Go 测试、audit 和 lint 结果待最终汇总。
+最终完整 Go 门禁全部退出 0：`go build -p 1 ./...`、`make vet`、`make test-go`、
+`make audit`、`make lint` 和 CRM Python unittest。摘要及日志位于工作区
+`.planning/2026-11-25-workspace-commit/user-go-summary.json` 与 `user-go-{build,vet,tests,audit,lint,python}.log`；
+完整测试结果也汇总于[工作区门禁报告](../workspace-user-go-gates-20261125/test.md)。
 
 ## Scope and Limitations
 

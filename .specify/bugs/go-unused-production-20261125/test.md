@@ -4,11 +4,11 @@
 - **Tested**: 2026-11-25
 - **Assessment**: ./assessment.md
 - **Fix**: ./fix.md
-- **Result**: integrated-lint-pass; final-suite-pending
+- **Result**: integrated-full-gates-pass
 
 ## Summary
 
-The primary integration preserved the 23 original business prototypes and two archive predicates with precise unused explanations, removed the 16 obsolete declarations, and corrected the unrelated controller import and final formatting findings. The complete `make lint` run in `user-go-integration-fixed-lint.log` exited 0. Final whole-workspace verification remains pending; retained prototypes are not claimed as production integrations.
+The primary integration preserved the 23 original business prototypes and two archive predicates with precise unused explanations, removed the 16 obsolete declarations, and corrected the unrelated controller import and final formatting findings. The current complete Go gate, including `make test-go`, exited 0; retained prototypes are not claimed as production integrations.
 
 ## Historical Delegated Verification
 
@@ -101,3 +101,9 @@ exit 1
 ```
 
 The controller remains outside this delegated unused-file scope. The scoped lint evidence above is the available 25-finding inventory. Final extension-hook check still reads `hooks: {}`; no mandatory hooks are registered. No staging, commits, or pushes were performed.
+
+## Final Primary Integration Verification
+
+The historical failures above remain as evidence of the earlier stage. After the integration decision in [fix.md](fix.md), whole-server build, vet, repository audit, and layer checks exited 0. The first final lint attempt was refused because another lint process held the execution lock; an ordinary retry exited 0 with 0 issues, without changing the lint configuration or bypassing the lock.
+
+Final logs are in the workspace's `.planning/2026-11-25-workspace-commit/`. `user-go-summary.json` records exit 0 for `go build -p 1 ./...` (`user-go-build.log`), `make vet` (`user-go-vet.log`), `make test-go` (`user-go-tests.log`), `make audit` (`user-go-audit.log`), `make lint` (`user-go-lint.log`), and the CRM Python unittest (`user-go-python.log`). The required Graphify rebuild remains blocked by the missing Python package. The prototype and durability limitations above still apply.

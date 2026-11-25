@@ -59,6 +59,29 @@ func TestIsAdminOnlyRoute_MethodRestricted(t *testing.T) {
 	}
 }
 
+// SageX 的 upload/bootstrap 用 identify_code 在控制器/服务层完成外部身份绑定，
+// 只应从宽泛 integrations 规则中排除这两个端点，不能把后台集成账号管理一并放开。
+func TestIsAdminOnlyRoute_SageXExternalCredentialCarveOut(t *testing.T) {
+	for _, path := range []string{
+		"/api/integrations/sagex/upload",
+		"/api/integrations/sagex/bootstrap",
+	} {
+		if IsAdminOnlyRoute(http.MethodPost, path) {
+			t.Errorf("POST %s 不应命中仅超管表：SageX 由 identify_code 自证身份", path)
+		}
+	}
+
+	for _, path := range []string{
+		"/api/integrations",
+		"/api/integrations/42/test",
+		"/api/integrations/42/sync-customers",
+	} {
+		if !IsAdminOnlyRoute(http.MethodPost, path) {
+			t.Errorf("POST %s 仍应命中仅超管表：后台集成账号管理不能因 SageX carve-out 放开", path)
+		}
+	}
+}
+
 func runGuard(t *testing.T, method, path, role string) (int, string, bool) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)

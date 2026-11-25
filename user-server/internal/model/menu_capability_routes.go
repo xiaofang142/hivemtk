@@ -30,7 +30,7 @@ type MenuCapability struct {
 	MenuKeys []string
 }
 
-// MenuCapabilities 生成件：共 354 条。
+// MenuCapabilities 生成件：共 353 条。
 var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/ai-insights/drafts", MenuKeys: []string{"aiInsightDraft"}},
 	{Pattern: "/api/ai-tools", MenuKeys: []string{"aiToolManagement"}},
@@ -300,7 +300,6 @@ var MenuCapabilities = []MenuCapability{
 	{Pattern: "/api/material/selector", MenuKeys: []string{"systemMaterialLibrary"}},
 	{Pattern: "/api/material/stats", MenuKeys: []string{"systemMaterialLibrary"}},
 	{Pattern: "/api/material/upload", MenuKeys: []string{"systemMaterialLibrary"}},
-	{Pattern: "/api/mcp", MenuKeys: []string{"mcpCredentials"}},
 	{Pattern: "/api/mcp-servers", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/mcp-servers/*", MenuKeys: []string{"aiCustomIntegration"}},
 	{Pattern: "/api/mcp-servers/*/enabled", MenuKeys: []string{"aiCustomIntegration"}},

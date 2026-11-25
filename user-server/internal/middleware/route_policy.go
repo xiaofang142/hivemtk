@@ -36,9 +36,11 @@ import (
 //
 // Methods 为空表示任意方法；Pattern 按段匹配，`*` 吃掉恰好一段，`**` 只允许出现在
 // 末尾、吃掉零或多段（所以 `/api/kb-releases/**` 也含 `/api/kb-releases` 本身）。
+// ExceptPatterns 从宽泛规则中排除仍由独立外部凭证校验的路由。
 type adminRouteRule struct {
-	Methods []string
-	Pattern string
+	Methods        []string
+	Pattern        string
+	ExceptPatterns []string
 }
 
 // matchSegments 段级匹配。pattern 段数不足或超出都算不匹配，`**` 之外每段一一对应。
@@ -105,7 +107,11 @@ var adminOnlyRoutes = []adminRouteRule{
 	{Methods: []string{"PUT"}, Pattern: "/api/rag-config/accounts/**"},
 	// —— 2026-11-17 审计 P2-1：第三方对接账号（api_key/config 含 ERP 签名密钥）——
 	// 消费页 /integration/list 在前端 meta 声明 requiresAdmin，判据 2 成立。
-	{Pattern: "/api/integrations/**"},
+	// SageX upload/bootstrap 使用 identify_code 自证调用方，不能被用户超管策略截断。
+	{Pattern: "/api/integrations/**", ExceptPatterns: []string{
+		"/api/integrations/sagex/upload",
+		"/api/integrations/sagex/bootstrap",
+	}},
 
 	// —— 对象存储配置：回的是桶地址与凭据材料 ——
 	{Pattern: "/api/obs-configs/**"},
@@ -161,6 +167,16 @@ var adminOnlyRoutes = []adminRouteRule{
 func IsAdminOnlyRoute(method, path string) bool {
 	for _, r := range adminOnlyRoutes {
 		if !matchSegments(r.Pattern, path) {
+			continue
+		}
+		excluded := false
+		for _, pattern := range r.ExceptPatterns {
+			if matchSegments(pattern, path) {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
 			continue
 		}
 		if len(r.Methods) == 0 {

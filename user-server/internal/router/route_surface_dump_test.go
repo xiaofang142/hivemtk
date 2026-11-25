@@ -83,12 +83,13 @@ func TestDumpLiveRouteTable(t *testing.T) {
 // routeGuardDumpFileEnv 是守卫链导出路径的环境变量名：设为某个文件路径才导出，未设则跳过。
 const routeGuardDumpFileEnv = "ROUTE_GUARD_DUMP_FILE"
 
-// 档位名：非超管能不能走到 handler，只由这四个值区分。
+// 档位名：非超管能不能走到 handler，由五类授权来源区分。
 const (
-	tierAnonymous  = "anonymous"
-	tierIdentity   = "identity"
-	tierCapability = "capability"
-	tierSuperAdmin = "super-admin"
+	tierAnonymous          = "anonymous"
+	tierIdentity           = "identity"
+	tierCapability         = "capability"
+	tierSuperAdmin         = "super-admin"
+	tierExternalCredential = "external-credential"
 )
 
 // routeGuardTier 把一条 live 路由的守卫链折成"有效档位"。
@@ -107,12 +108,28 @@ func routeGuardTier(method, path string, chain []string) string {
 	switch {
 	case hasIdentity && (hardAdmin || policyAdmin):
 		return tierSuperAdmin
+	case chainHasGuard(chain, guardMCP) || isSageXExternalIdentityRoute(method, path):
+		return tierExternalCredential
 	case hasIdentity && len(middleware.CapabilityOwnerKeysFor(path)) > 0:
 		return tierCapability
 	case hasIdentity:
 		return tierIdentity
 	default:
 		return tierAnonymous
+	}
+}
+
+// isSageXExternalIdentityRoute covers the two routes whose identity is established by identify_code
+// in the controller/service chain rather than by a Gin identity middleware.
+func isSageXExternalIdentityRoute(method, path string) bool {
+	if method != "POST" {
+		return false
+	}
+	switch path {
+	case "/api/integrations/sagex/upload", "/api/integrations/sagex/bootstrap":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -191,12 +208,15 @@ func TestDumpLiveRouteGuardChains(t *testing.T) {
 		tierOf[p[0]+" "+p[1]] = p[2]
 	}
 	for key, want := range map[string]string{
-		"GET /health":                   "anonymous",
-		"GET /api/system/info":          "anonymous",
-		"GET /api/menus":                "identity",
-		"GET /api/llm/providers/policy": "super-admin",
-		"POST /api/customer-sessions":   "identity",
-		"GET /api/feature-flags":        "capability",
+		"GET /health":                            "anonymous",
+		"GET /api/system/info":                   "anonymous",
+		"GET /api/menus":                         "identity",
+		"GET /api/llm/providers/policy":          "super-admin",
+		"POST /api/customer-sessions":            "identity",
+		"GET /api/feature-flags":                 "capability",
+		"POST /api/integrations/sagex/upload":    "external-credential",
+		"POST /api/integrations/sagex/bootstrap": "external-credential",
+		"POST /api/mcp":                          "external-credential",
 	} {
 		if got := tierOf[key]; got != want {
 			t.Fatalf("正控制失效：%s 档位应为 %q，实得 %q（分档口径或路由表变了）", key, want, got)
@@ -210,12 +230,13 @@ func TestDumpLiveRouteGuardChains(t *testing.T) {
 	for _, r := range rows {
 		tierCount[strings.Split(r, "\t")[2]]++
 	}
-	for _, tierName := range []string{"anonymous", "identity", "capability", "super-admin"} {
+	for _, tierName := range []string{"anonymous", "identity", "capability", "super-admin", "external-credential"} {
 		if tierCount[tierName] == 0 {
 			t.Fatalf("导出件里 %q 一档为 0 条：这一档的判据没开火（守卫装配或生成表出了问题）", tierName)
 		}
 	}
 	t.Logf("档位分布：anonymous %d · identity %d · capability %d · super-admin %d",
 		tierCount["anonymous"], tierCount["identity"], tierCount["capability"], tierCount["super-admin"])
+	t.Logf("外部凭证档位 %d 条", tierCount["external-credential"])
 	t.Logf("导出 %d 行守卫档位到 %s", len(rows), target)
 }

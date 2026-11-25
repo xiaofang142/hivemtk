@@ -23,4 +23,25 @@
 
 ## Full Gates
 
-修正后的 Go 全量 build、vet、测试、audit 与 lint 结果待最终汇总，不以专项测试替代。
+| 检查 | 结果 | 证据日志 |
+|---|---|---|
+| `go build -p 1 ./...` | exit 0 | `user-go-build.log` |
+| `make vet` | exit 0 | `user-go-vet.log` |
+| `make audit` | exit 0 | `user-go-audit.log` |
+| `python3 scripts/check-layer-boundary.py` | exit 0 | `user-go-closeout-static-layer.log` |
+| `make lint` | exit 0 | `user-go-lint.log` |
+| `make test-go` | exit 0 | `user-go-tests.log` |
+| `python3 -m unittest scripts/test_api_verify_full_crm.py` | exit 0 | `user-go-python.log` |
+| Route guard focused regressions | exit 0 | `route-security-primary-final.log` |
+| Account repository + related service focused regressions | exit 0 | `closeout-repo-focused-final.log`, `closeout-service-focused-final.log` |
+| User-web full Vitest suite (`--maxWorkers=1`) | exit 0; 136 files / 1284 tests passed | `user-web-single-worker-tests.log` |
+| User-web lint / build | exit 0 / exit 0 | `user-web-final-lint.log`, `user-web-final-build.log` |
+
+完整门禁执行摘要为 `user-go-summary.json`（六项命令均 exit 0）。路由问题的 RED/GREEN
+与守卫表重生成证据见工作区 `route-security-results.md`；账号版本门回归的 RED/GREEN
+证据见 `.specify/bugs/channel-account-edition-subquery-20261125/` 对应报告。之前完整运行
+失败的历史日志保留为历史证据，不作为本轮最终结果。
+
+前端首次双 worker 全量运行受超时/断言失败影响（3 files、5 tests）；未改测试门槛或用例，随后单 worker 原超时配置重跑全绿，摘要为 `user-web-single-worker-summary.json`。该失败日志仍保留为历史证据。
+
+静态任务中的首次 lint 被另一 lint 进程的运行锁拒绝，原始退出 2 保存在 `user-go-closeout-static-lint.log`。正常重跑退出 0，未修改检查配置或绕过运行锁。完整测试结果单独记录，不以专项测试替代。
