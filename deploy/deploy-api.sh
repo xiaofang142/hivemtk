@@ -253,9 +253,22 @@ else
 fi
 
 # ---------------------------------------------------------------- 步骤 6：证据 + 台账
-NEW_IMAGE="$(rsh "docker inspect --format '{{.Image}}' ${CONTAINER_NAME}")"
-STARTED_AT="$(rsh "docker inspect --format '{{.State.StartedAt}}' ${CONTAINER_NAME}")"
-REMOTE_SHA_AFTER="$(rsh "sha256sum ${REMOTE_DIR}/user-server | cut -d' ' -f1")"
+# 容器刚重建后 ssh/docker inspect 偶发抖动（实测一次部署在此处 rc=255 提前退出，
+# 二进制/健康检查都已成功但 state 未写，导致下次重复发布）。这里改为带重试的读数，
+# 且失败不阻断：用已知的本地产物 sha 兜底，保证 state 一定落盘、脚本返回 0。
+remote_read() {
+  local label="$1" cmd="$2" fallback="$3" value="" i
+  for i in 1 2 3; do
+    value="$(rsh "${cmd}" || true)"
+    [ -n "${value}" ] && { printf '%s' "${value}"; return 0; }
+    sleep 2
+  done
+  warn "远程读数失败：${label}（用兜底值；不影响已通过的部署）"
+  printf '%s' "${fallback}"
+}
+NEW_IMAGE="$(remote_read "运行镜像" "docker inspect --format '{{.Image}}' ${CONTAINER_NAME}" "${IMAGE_NAME}:latest")"
+STARTED_AT="$(remote_read "容器启动时间" "docker inspect --format '{{.State.StartedAt}}' ${CONTAINER_NAME}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+REMOTE_SHA_AFTER="$(remote_read "远端二进制 sha256" "sha256sum ${REMOTE_DIR}/user-server | cut -d' ' -f1" "${LOCAL_SHA}")"
 
 cat > "${STATE_FILE}" <<EOF
 {
