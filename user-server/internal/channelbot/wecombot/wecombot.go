@@ -10,7 +10,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -21,16 +20,18 @@ import (
 	"strings"
 
 	"hivemtk-user/internal/channelbot/core"
+	"hivemtk-user/internal/pkg/protocolhash"
 )
 
 // VerifySignature 校验回调签名：sha1(sort(token,timestamp,nonce,encrypt) 拼接)。
+// SHA-1 由企微智能机器人回调协议强制规定，非本项目自选；仅在受控封装内使用。
 func VerifySignature(token, signature, timestamp, nonce, encrypt string) bool {
 	if token == "" || signature == "" {
 		return false
 	}
 	parts := []string{token, timestamp, nonce, encrypt}
 	sort.Strings(parts)
-	sum := sha1.Sum([]byte(strings.Join(parts, "")))
+	sum := protocolhash.LegacyProtocolSHA1([]byte(strings.Join(parts, "")))
 	return core.SecureEqual(strings.ToLower(signature), hex.EncodeToString(sum[:]))
 }
 

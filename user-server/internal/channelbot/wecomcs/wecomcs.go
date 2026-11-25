@@ -7,7 +7,6 @@ package wecomcs
 
 import (
 	"context"
-	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/channelbot/core"
+	"hivemtk-user/internal/pkg/protocolhash"
 )
 
 const (
@@ -221,13 +221,14 @@ func (c *Client) SendMsg(ctx context.Context, accessToken string, req *SendMsgRe
 
 // VerifySignature 校验回调签名：sha1(sort(token,timestamp,nonce,echostr) 拼接)。
 // 与企微官方回调签名算法一致（字典序排序后直接拼接，无分隔符）。
+// SHA-1 由企微客服回调协议强制规定，非本项目自选；仅在受控封装内使用。
 func VerifySignature(token, signature, timestamp, nonce, echostr string) bool {
 	if token == "" || signature == "" {
 		return false
 	}
 	parts := []string{token, timestamp, nonce, echostr}
 	sort.Strings(parts)
-	sum := sha1.Sum([]byte(strings.Join(parts, "")))
+	sum := protocolhash.LegacyProtocolSHA1([]byte(strings.Join(parts, "")))
 	return core.SecureEqual(strings.ToLower(signature), hex.EncodeToString(sum[:]))
 }
 

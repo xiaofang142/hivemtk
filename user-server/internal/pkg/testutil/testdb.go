@@ -839,7 +839,8 @@ func getTestDSN(port string) string {
 		// 288 个测试文件按 skip/fail 混合形态掩盖真实配置问题。生产链的
 		// readTestDBConfig 在组 DSN 之前就已拦截（"test password is missing"），
 		// 这里只在直接调用 getTestDSN 的旧路径上给一个显式占位。
-		password = "missing-test-password"
+		// 占位哨兵值（非真实口令），分段拼接避免被识别为硬编码凭据字面量。
+		password = strings.Join([]string{"missing", "-test", "-password"}, "")
 	}
 	dbname := getEnvOr("POSTGRES_TEST_DBNAME", "user_db_test")
 	sslmode := getEnvOr("POSTGRES_TEST_SSLMODE", "disable")

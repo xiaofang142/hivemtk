@@ -45,6 +45,17 @@ func gitDeployError(args []string, err error) error {
 	return fmt.Errorf("%v: %w", scrubGitCredentialURL(strings.Join(args, " ")), err)
 }
 
+// safeGitCommand 是静态站部署调用 git 的唯一安全出口（Mimosa command-injection 收敛）。
+// 固定可执行文件 "git"（不经 shell、无 sh -c 拼接串）；-C 的工作目录 hugoPath 已由
+// validateHugoPath 做租户根目录白名单 + 符号链接解析校验，且作为独立 argv 参数传入；
+// 其余子命令/参数由调用处固定模板提供，租户可配的只有 git_repo（只作 set-url 的位置参数）。
+func safeGitCommand(ctx context.Context, hugoPath string, subcmdArgs ...string) *exec.Cmd {
+	args := make([]string, 0, len(subcmdArgs)+2)
+	args = append(args, "-C", hugoPath)
+	args = append(args, subcmdArgs...)
+	return exec.CommandContext(ctx, "git", args...)
+}
+
 // ErrSiteConfigInvalid 站点配置不完整（未启用站点 / 目录不存在）。
 // 这类错误是用户在「静态站部署」页可以自行修正的配置问题，控制器应回 400，
 // 而不是 500「服务器内部错误」。
@@ -331,7 +342,7 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 	}
 	// 目录存在但不是 git 仓库时，git add 会以 128 退出；这是「静态站部署」配置问题，
 	// 不是服务端内部错误，提前判掉并给出可照做的提示。
-	if out, gitErr := exec.CommandContext(ctx, "git", "-C", hugoPath, "rev-parse", "--is-inside-work-tree").CombinedOutput(); gitErr != nil {
+	if out, gitErr := safeGitCommand(ctx, hugoPath, "rev-parse", "--is-inside-work-tree").CombinedOutput(); gitErr != nil {
 		_ = out
 		return "", fmt.Errorf("%w: 站点目录不是 git 仓库：%s（请先 git init 或填写正确的 Hugo 目录）", ErrSiteConfigInvalid, siteCfg.HugoPath)
 	}
@@ -340,16 +351,18 @@ func (s *SiteDeployService) TriggerDeploy(ctx context.Context) (string, error) {
 	// 没配置则沿用仓库里已有的 origin。GIT_TERMINAL_PROMPT=0 防止
 	// https 远端缺凭据时 git 卡在交互输入上把 goroutine 挂死。
 	deployEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	// 固定命令模板 + 位置参数：可执行文件恒为 "git"，hugoPath 经 validateHugoPath
+	// 白名单校验且作为 -C 的独立 argv 传入，不经 shell；子命令参数逐项传递。
 	cmds := [][]string{
-		{"git", "-C", hugoPath, "add", "."},
-		{"git", "-C", hugoPath, "commit", "-m", fmt.Sprintf("GEO deploy: %s", time.Now().Format("2006-01-02 15:04"))},
+		{"add", "."},
+		{"commit", "-m", fmt.Sprintf("GEO deploy: %s", time.Now().Format("2006-01-02 15:04"))},
 	}
 	if repo := strings.TrimSpace(siteCfg.GitRepo); repo != "" {
-		cmds = append(cmds, []string{"git", "-C", hugoPath, "remote", "set-url", "origin", repo})
+		cmds = append(cmds, []string{"remote", "set-url", "origin", repo})
 	}
-	cmds = append(cmds, []string{"git", "-C", hugoPath, "push", "origin", "main"})
+	cmds = append(cmds, []string{"push", "origin", "main"})
 	for _, args := range cmds {
-		c := exec.CommandContext(ctx, args[0], args[1:]...)
+		c := safeGitCommand(ctx, hugoPath, args...)
 		c.Env = deployEnv
 		out, err := c.CombinedOutput()
 		if len(out) > 0 {

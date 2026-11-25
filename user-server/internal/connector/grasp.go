@@ -19,13 +19,14 @@ package connector
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+
+	"hivemtk-user/internal/pkg/protocolhash"
 )
 
 // GraspDialect 管家婆 HMAC 方言（MD5 形态，sign_method 可配）。
@@ -65,8 +66,10 @@ func (GraspDialect) NormalizeResponse(body []byte, statusCode int) (map[string]a
 	return NormalizeJSON(body)
 }
 
+// md5Hex 生成管家婆 preset 的 MD5 签名：算法由对方 ERP 网关协议规定，非本项目自选，
+// 换 SHA-256 会 100% 验签失败；仅在 protocolhash 受控封装内使用。
 func md5Hex(s string) string {
-	sum := md5.Sum([]byte(s))
+	sum := protocolhash.LegacyProtocolMD5([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
 

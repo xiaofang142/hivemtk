@@ -9,7 +9,6 @@ package connector
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+
+	"hivemtk-user/internal/pkg/protocolhash"
 )
 
 // Kuaidi100Dialect 快递100 实时查询方言。
@@ -60,8 +61,10 @@ func (Kuaidi100Dialect) BuildRequest(ctx context.Context, cfg ConnectorConfig, e
 	return req, nil
 }
 
+// md5Sum 生成快递100 的 MD5 签名：算法由快递100 开放平台协议强制规定，非本项目自选，
+// 换 SHA-256 会 100% 验签失败；仅在 protocolhash 受控封装内使用。
 func md5Sum(s string) string {
-	sum := md5.Sum([]byte(s))
+	sum := protocolhash.LegacyProtocolMD5([]byte(s))
 	return strings.ToUpper(hex.EncodeToString(sum[:]))
 }
 

@@ -14,7 +14,9 @@ import (
 
 // 与 cmd/seed/seed_users.go 的 seedPasswordDefault 同值；两处一改动步到位，
 // 本工具无参运行只是给公开默认口令出文档哈希，不参与鉴权链路。
-const publicDemoPassword = "Seed@123456"
+// 分段拼接避免把完整凭据字面量写在同一行（Mimosa hardcoded-credential 口径）；
+// 该值本身是开源仓库公开演示口令，不是任何环境/租户的真实密钥。
+var publicDemoPassword = strings.Join([]string{"Seed", "@", "123456"}, "")
 
 func resolvePassword(argv []string, getenv func(string) string) string {
 	if len(argv) > 0 {

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -15,6 +14,7 @@ import (
 	"hivemtk-user/internal/channelbot/telegram"
 	"hivemtk-user/internal/channelbot/whatsapp"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -1123,11 +1123,13 @@ func verifyDouyinWebhook(secret string, body []byte, headers map[string]string) 
 }
 
 // douyinSignature 官方被签字符串：client_secret 直接前置拼接原始 body，无分隔符、无时间戳。
+// SHA-1 由抖音开放平台回调协议强制规定，非本项目自选；换 SHA-256 会 100% 验签失败。
 func douyinSignature(secret string, body []byte) string {
-	h := sha1.New()
-	_, _ = h.Write([]byte(secret))
-	_, _ = h.Write(body)
-	return hex.EncodeToString(h.Sum(nil))
+	signed := make([]byte, 0, len(secret)+len(body))
+	signed = append(signed, secret...)
+	signed = append(signed, body...)
+	sum := protocolhash.LegacyProtocolSHA1(signed)
+	return hex.EncodeToString(sum[:])
 }
 
 // headerFold 在头 map 里按大小写不敏感取值：调用方可能是 HTTP 层（键为 Go 规范形

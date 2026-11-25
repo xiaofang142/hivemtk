@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -86,7 +85,11 @@ try {
 		r.send(eventLine{Type: "runner", Execution: spec.ExecutionID, Payload: mustJSON(map[string]any{"ok": false, "action": "finish", "error": err.Error()})})
 		return
 	}
-	cmd := exec.CommandContext(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
+	cmd, err := safeEgoCommand(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
+	if err != nil {
+		r.send(eventLine{Type: "runner", Execution: spec.ExecutionID, Payload: mustJSON(map[string]any{"ok": false, "action": "finish", "error": "ego_bin 配置非法: " + err.Error()})})
+		return
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return

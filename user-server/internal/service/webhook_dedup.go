@@ -3,8 +3,6 @@ package service
 import (
 	"context"
 
-	"crypto/sha1"
-
 	"crypto/sha256"
 
 	"encoding/hex"
@@ -19,6 +17,7 @@ import (
 
 	"hivemtk-user/internal/model"
 
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 
@@ -84,8 +83,10 @@ func sortStrings(a []string) {
 	}
 }
 
+// sha1Hex 供企微/钉钉等第三方回调的 SHA-1 验签共用（算法由对方协议强制，
+// 非本项目自选，见 protocolhash 包注释）；禁止用作口令或令牌哈希。
 func sha1Hex(b []byte) string {
-	h := sha1.Sum(b)
+	h := protocolhash.LegacyProtocolSHA1(b)
 	return hex.EncodeToString(h[:])
 }
 

@@ -1,13 +1,14 @@
 package fingerprint
 
 import (
-	"crypto/md5"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
 	"runtime"
 	"strings"
+
+	"hivemtk-user/internal/pkg/protocolhash"
 )
 
 // FromClient 由请求侧 User-Agent 与来源 IP 计算设备指纹（sha256 hex）。
@@ -26,11 +27,13 @@ func HashHex(s string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// GenerateFingerprint 生成设备指纹
+// GenerateFingerprint 生成设备指纹。
+// MD5 沿用既有心跳上报指纹口径（非安全用途，不参与鉴权），通过受控封装标注用途；
+// 换算法会让同一台宿主机被识别为新设备，破坏心跳连续性。
 func GenerateFingerprint() (string, error) {
 	info := collectDeviceInfo()
 
-	hash := md5.Sum([]byte(info))
+	hash := protocolhash.LegacyProtocolMD5([]byte(info))
 	return hex.EncodeToString(hash[:]), nil
 }
 

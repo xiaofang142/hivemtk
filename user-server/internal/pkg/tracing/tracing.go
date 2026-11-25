@@ -2,7 +2,6 @@ package tracing
 
 import (
 	"context"
-	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"hivemtk-user/internal/pkg/textutil"
@@ -12,6 +11,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/trace"
 	"hivemtk-user/internal/pkg/utils/logger"
@@ -963,8 +963,9 @@ func StartSpan() *SpanTimer { return &SpanTimer{start: time.Now()} }
 // ElapsedMs 返回自 StartSpan 以来的毫秒数。
 func (t *SpanTimer) ElapsedMs() int64 { return time.Since(t.start).Milliseconds() }
 
+// sha1Sum 供 trace_id 稳定派生（非安全用途）：算法沿用既有 trace_id 口径，
+// 不用于口令/签名；通过 protocolhash 显式标注"协议/历史口径兼容"用途。
 func sha1Sum(s string) string {
-	h := sha1.New()
-	h.Write([]byte(s))
-	return hex.EncodeToString(h.Sum(nil))
+	sum := protocolhash.LegacyProtocolSHA1([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

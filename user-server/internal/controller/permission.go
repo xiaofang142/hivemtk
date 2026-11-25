@@ -62,7 +62,7 @@ func (ctrl *PermissionController) SetEnabled(c *gin.Context) {
 // @Router    /api/system/permissions/{id}/password [put]
 // ResetPassword PUT /api/system/permissions/:id/password
 //
-// Body: { "password": "NewPass123" }
+// Body: { "password": "<新密码>" }（示例占位，不是真实凭据）
 func (ctrl *PermissionController) ResetPassword(c *gin.Context) {
 	id, ok := parseSysUserIDParam(c, "id")
 	if !ok {

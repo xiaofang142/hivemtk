@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 	contentdto "hivemtk-user/internal/content/dto"
 	"hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/content/repository"
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/utils"
 	"hivemtk-user/internal/pkg/utils/logger"
 	userrepo "hivemtk-user/internal/repository"
@@ -375,7 +375,9 @@ func (s *materialService) UploadMaterial(ctx context.Context, file multipart.Fil
 		return nil, fmt.Errorf("不支持的素材格式（扩展名 %q 不在白名单内）", ext)
 	}
 
-	hash := md5.New()
+	// 内容指纹沿用历史 MD5 口径（见 protocolhash.NewLegacyMD5Writer 注释）：
+	// 仅作去重键，不参与口令/签名安全，切换算法会让历史素材重复上传。
+	hash := protocolhash.NewLegacyMD5Writer()
 	if _, err := io.Copy(hash, file); err != nil {
 		return nil, err
 	}

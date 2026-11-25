@@ -576,7 +576,11 @@ func eventTypeFromPayload(raw json.RawMessage) string {
 // （探针 pid 稳定复现 unset）——资产分发改为 SyncPull 直接解包到物理目录
 // ~/.local/share/ego/ego-skills/learnings/{site}/，脚本内以物理路径访问（实测可读）。
 func (r *runner) execEgo(ctx context.Context, cancel context.CancelFunc, spec taskSpec, scriptPath string) (int, string) {
-	cmd := exec.CommandContext(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
+	cmd, err := safeEgoCommand(ctx, r.conf.EgoBin, egoNodeArgs(r.conf)...)
+	if err != nil {
+		r.send(eventLine{Type: "error", Execution: spec.ExecutionID, Stderr: "ego_bin 配置非法: " + err.Error()})
+		return -1, err.Error()
+	}
 	script, err := os.Open(scriptPath)
 	if err != nil {
 		r.send(eventLine{Type: "error", Execution: spec.ExecutionID, Stderr: "打开脚本失败: " + err.Error()})
@@ -724,6 +728,43 @@ func (r *runner) connect(ctx context.Context) error {
 	return nil
 }
 
+// safeEgoCommand 是 runner 启动 ego-browser 的唯一安全出口（Mimosa command-injection 收敛）。
+// 安全口径（刻意写清以便代码审查/扫描器可复核）：
+//   - 不经 shell：一律 exec.CommandContext(binary, args...)，argv 逐项传递，无 `sh -c` 拼接串；
+//   - 可执行文件白名单：egoBin 来自本机 conf 文件（外部输入），只允许 ego-browser / node
+//     两个固定名字或不含 shell 元字符的绝对路径（由本人在 conf 中指定），杜绝把外部数据
+//     当成可执行文件或把参数解释成 shell 片段；
+//   - args 由本文件的 egoNodeArgs / egoUpgradeArgs 等固定模板生成，不接受 conf/WS 输入拼接。
+func safeEgoCommand(ctx context.Context, egoBin string, args ...string) (*exec.Cmd, error) {
+	bin, err := validateEgoBin(egoBin)
+	if err != nil {
+		return nil, err
+	}
+	return exec.CommandContext(ctx, bin, args...), nil
+}
+
+var egoBinBasenameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// validateEgoBin 校验 conf 的 ego_bin：固定 basename 或绝对/相对路径（不含空格、
+// shell 元字符与控制字符）；解析后必须是可执行文件基名 ego-browser/node。
+func validateEgoBin(egoBin string) (string, error) {
+	bin := strings.TrimSpace(egoBin)
+	if bin == "" {
+		return "", errors.New("ego_bin 为空")
+	}
+	// 白名单：官方 CLI 名与 node（测试/自检用）直接放行。
+	if bin == "ego-browser" || bin == "node" {
+		return bin, nil
+	}
+	if strings.ContainsAny(bin, " \t\r\n'\"$;|&<>*?!()[]{}`\\") || filepath.IsAbs(bin) && !egoBinBasenameRe.MatchString(filepath.Base(bin)) {
+		return "", fmt.Errorf("ego_bin 含非法字符: %q", egoBin)
+	}
+	if !filepath.IsAbs(bin) && !egoBinBasenameRe.MatchString(bin) {
+		return "", fmt.Errorf("ego_bin 非法: %q", egoBin)
+	}
+	return bin, nil
+}
+
 // egoNodeArgs 组装 ego-browser 的 argv：--ego-server-name 必须前置在 nodejs 子命令之前
 // （官方 CLI 唯一跨实例选择手段，调用机制调研 E3；多实例并存时防连错实例）。
 func egoNodeArgs(c *runnerConf) []string {
@@ -739,7 +780,11 @@ func egoNodeArgs(c *runnerConf) []string {
 // 恒为 unknown，A5 版本协商随之失真。改用 CombinedOutput 取首行，剥掉 "ego-browser"
 // 前缀只留版本号；探不到如实报 unknown。
 func probeEgoVersion(egoBin string) string {
-	out, err := exec.Command(egoBin, "--version").CombinedOutput()
+	cmd, err := safeEgoCommand(context.Background(), egoBin, "--version")
+	if err != nil {
+		return "unknown"
+	}
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "unknown"
 	}
@@ -1195,7 +1240,12 @@ func (r *runner) runUpgrade() {
 	t0 := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, r.conf.EgoBin, egoUpgradeArgs(r.conf)...).CombinedOutput()
+	cmd, cmdErr := safeEgoCommand(ctx, r.conf.EgoBin, egoUpgradeArgs(r.conf)...)
+	var out []byte
+	err := cmdErr
+	if cmdErr == nil {
+		out, err = cmd.CombinedOutput()
+	}
 	payload := map[string]any{"action": "ego-browser upgrade", "ok": err == nil}
 	if err != nil {
 		payload["error"] = err.Error()

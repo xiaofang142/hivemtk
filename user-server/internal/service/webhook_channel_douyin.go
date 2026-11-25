@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
@@ -180,11 +180,12 @@ func douyinBody(messageType, text string) string {
 // message_hub.msg_id 的 varchar(100)，而这里的 Create 错误是被吞掉的（只有 UNIQUE 之外的
 // 才打日志）⇒ 超列宽不是报错，是这条消息静静消失。取 sha1 前 16 位：定长、稳定、
 // 不与官方 ID 的字符集较劲；原文进 Extra.server_message_id 供按抖音侧 ID 回查。
+// SHA-1 仅作定长幂等键（非安全用途），沿用既有口径，通过受控封装标注用途。
 func douyinMsgKey(serverMessageID string) string {
 	if serverMessageID == "" {
 		return ""
 	}
-	sum := sha1.Sum([]byte(serverMessageID))
+	sum := protocolhash.LegacyProtocolSHA1([]byte(serverMessageID))
 	return hex.EncodeToString(sum[:])[:16]
 }
 

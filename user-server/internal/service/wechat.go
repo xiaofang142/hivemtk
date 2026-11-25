@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -20,6 +19,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/dbstate"
+	"hivemtk-user/internal/pkg/protocolhash"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
@@ -126,11 +126,12 @@ func (s *WechatService) DeleteAccount(ctx context.Context, id uint) error {
 }
 
 // VerifySignature 验证微信服务器签名
-// 微信服务器在配置 URL 时用 GET 请求带 signature/timestamp/nonce/echostr 参数
+// 微信服务器在配置 URL 时用 GET 请求带 signature/timestamp/nonce/echostr 参数。
+// SHA-1 由微信公众平台回调协议强制规定，非本项目自选；换 SHA-256 会验签失败。
 func (s *WechatService) VerifySignature(token, signature, timestamp, nonce string) bool {
 	parts := []string{token, timestamp, nonce}
 	sort.Strings(parts)
-	hash := sha1.Sum([]byte(strings.Join(parts, "")))
+	hash := protocolhash.LegacyProtocolSHA1([]byte(strings.Join(parts, "")))
 	expected := hex.EncodeToString(hash[:])
 	return subtle.ConstantTimeCompare([]byte(expected), []byte(signature)) == 1
 }
