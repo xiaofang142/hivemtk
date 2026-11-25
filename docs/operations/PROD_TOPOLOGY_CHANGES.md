@@ -871,3 +871,24 @@ follow_user_channels 扩为八渠道（生产库实值已更新）。链 B 从�
 **注意**：并行会话（另一台电脑）工作树有未提交改动正在回退 1.3.5 上行回声源头
 过滤（downlink 删 recordSentText/recentSentTexts 模块）——若其发布将削弱回声防线，
 已向用户报告。
+
+## 2026-11-26 00:05 租户 18（四川同咨）定制版与线索智能体入口恢复（链 D）
+
+**现象**：线上租户 18 反馈「独立线索发现智能体、渠道、渠道账号管理、渠道账号统一配置」看不到菜单/功能，且看不到国内渠道。逐项核对生产后确认两个独立根因：
+
+1. **国内渠道被版本门过滤**：生产心跳商户 `azbL6ptz…`（商户表登记名「深圳市魔术科技有限公司」，租户 18 的 `tenant_registrations` 归属该 key）`version_type` 为空 → 心跳不下发版本类型（`internal/platform/client.go:628`）→ user-server 保持默认 `opensource`（`internal/pkg/edition/edition.go:43`）→ 国内渠道码在 `internal/repository/channel.go` fail-closed 过滤。`/api/channels/options` 改前实测仅 4 项（tiktok/telegram/whatsapp/sagex-t18）。
+2. **线索发现智能体是孤儿页**：`/leads/mining-agents` 只有路由声明，侧栏菜单与线索治理页均无入口（`menu.go` 无独立菜单节点、`menuNavigation.js` 仅做面包屑归口、`Rules.vue` 无跳转按钮），只能手输 URL。渠道管理/渠道账号管理菜单此前已随 2026-11-25 23:25 模块同步恢复，非本次根因。
+
+**处置**：
+- 平台库：`UPDATE merchants SET version_type='custom'`（1 行，租户 18 所属商户）；心跳于 `2026-11-25T23:58:28+08:00` 日志实证 `[edition] version type changed: opensource -> custom`，并发心跳连续成功。注意该开关是商户/实例级，影响该部署全部租户。
+- 平台库：`module_menu_bindings` 按用户端 `ModuleMenuBindings` 补 22 个新键（幂等 INSERT，含 `channelAccount`/`channelManage`/`crmMaster`/`leadGovernance`）；平台仓两份 `module_catalog_seed.json` 由 228 键重生成至 250 键（24 模块/7 基础/17 收费），已 commit+push `2006946`。
+- 用户端仓：`user-web/src/views/leads/Rules.vue` 页头新增「线索发现智能体」按钮（跳转 `/leads/mining-agents`）+ 回归测试 `tests/unit/leads_mining_agent_entry.test.js`，commit `04205d398`，已 push `gitee-upstream`+`upstream`。
+- 链 D 前端发布：`user-web/dist` build（`assets/index-CrwA33-K.js`）→ 备份 `user-web.snapshot-20261126-000015.tgz` → rsync → 公网 index.html 资产 hash 与本地一致；`version.json` buildId `1e71d8f2c-1795621818330`。
+
+**线上真机验证（ego lite 复用登录态，逐元素）**：
+- `/api/channels/options` total 4→11，codes=`douyin,xiaohongshu,kuaishou,xianyu,tiktok,telegram,whatsapp,feishu,wecom,qq,sagex-t18`；渠道管理页表格可见抖音/小红书/快手/闲鱼/飞书/企业微信/QQ 七行；新增账号弹窗「所属渠道」下拉实测列出全部国内渠道。
+- `/api/menus` 返回 `channelAccount/channelManage/leadGovernance/crmMaster`；侧栏「系统设置 → 权限设置」可见「渠道管理 / 渠道账号管理」。
+- 客户中心 → 线索治理页按钮「线索发现智能体」点击后进入 `#/leads/mining-agents`，页标题与说明渲染正常。
+- 观察窗：edition 在 23:58/00:01/00:04 三次心跳保持 custom，无回摆；user_db `channels` 租户 18 共 11 行；公网 `/health` HTTP 200。
+
+**未做/边界**：未改 user-server Go 代码（链 A 不触发）；未发 bridge 扩展（链 B/C 不触发）；平台的测试口令安全门缺 `POSTGRES_TEST_PASSWORD`，`TestSeedIdempotent` 被 env 门拒绝（非代码失败），seed 覆盖用 JSON 直接核对 250/250 无重复；平台后台登录口令与 env `PLATFORM_ADMIN_PASSWORD` 不一致（登录 401），配置改走服务器本地 DB 直连；未对任何真实客户发消息。
