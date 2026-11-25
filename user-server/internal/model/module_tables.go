@@ -41,7 +41,7 @@ var coreOwnedTables = []string{
 	// 存储 / 素材 / 集成 / 平台账号
 	"obs_config", "platform_accounts", "platform_account_configs",
 	"integration_accounts", "integration_templates", "webhook_events",
-	"webhook_subscriptions", "bridge_accounts", "api_logs",
+	"webhook_subscriptions", "webhook_deliveries", "bridge_accounts", "api_logs",
 	// 商户授权与可信事件收件箱属于跨模块连接基座，停用业务模块后仍需修复和核验。
 	"merchant_connections", "merchant_callback_subscriptions", "merchant_callback_events",
 	"merchant_callback_compensation_cursors", "merchant_callback_resource_watermarks",
@@ -95,6 +95,9 @@ var coreOwnedTables = []string{
 	// 与 bridge_accounts / channel_event_audits / channel_interactions 同口径随基座常在；
 	// channelIdentifyCode 菜单也绑在 core（见 ModuleMenuBindings），不随可售模块开关。
 	"channels", "channel_accounts", "channel_identify_codes", "channel_account_authorizations",
+	// SageX installs report through the shared channel ingress and identify-code gate;
+	// delivery receipts remain available for operational replay when customer features are disabled.
+	"sagex_installations", "sagex_event_receipts",
 	// 共享多轮对话上下文：auto_reply（inbox）与线索发掘共同读写，由 inbox_ingress 写入，
 	// 与 message_hub / session_messages 同属消息基座，不随某个可售模块停写。
 	"conversation_contexts",
@@ -113,6 +116,10 @@ var customerOwnedTables = []string{
 	// 的 CRM 实体，归口一致避免"关模块表仍被写"。
 	"contacts", "customer_merges", "service_providers", "suppliers",
 	"lead_mining_hits", "lead_mining_rules",
+	// CRM 主数据、客户导入、授权配置与线索治理，均由 customer 模块页面管理。
+	"ai_insight_drafts", "business_account_authorizations", "companies",
+	"customer_company_relations", "customer_import_jobs",
+	"lead_mining_judgements", "lead_mining_notify_routes",
 }
 
 // inbox 模块独占
@@ -193,6 +200,8 @@ var aiSalesOwnedTables = []string{
 	"champion_dialogues", "champion_phrases",
 	"sop_agents", "sop_templates", "sop_executions", "sop_node_transitions",
 	"sop_state_memories", "sop_timers", "sop_outbox", "sop_exec_events",
+	// Persistent dispatch leases belong to the SOP execution service and its AI sales module.
+	"sop_dispatch_claims",
 	"confidence_signals", "confidence_calibrations", "humanize_scores",
 	"humanize_dimensions", "feedback_records", "feedback_signals",
 	"feedback_events", "learning_insights", "bandit_reflux_log",
@@ -277,6 +286,7 @@ var experimentOwnedTables = []string{
 var salesCRMOwnedTables = []string{
 	"opportunities", "quotes", "quote_line_items", "order_drafts",
 	"bills", "payments", "after_sales", "sales_events", "external_orders", "follow_up_reminders",
+	"followup_records",
 	"external_products",
 	"commerce_operations", "commerce_approvals", "commerce_attempts", "commerce_resources",
 	"commerce_outbox", "commerce_policies", "commerce_members", "commerce_evidences",

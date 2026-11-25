@@ -30,9 +30,9 @@ type AfterSale struct {
 	CustomerName  string    `gorm:"type:varchar(100)" json:"customer_name"`
 	Type          string    `gorm:"type:varchar(50)" json:"type"` // refund | return | exchange (agent tool contract); EC-14 will require finer reverse/exchange stage evidence elsewhere
 	Reason        string    `gorm:"type:text" json:"reason"`
-	Amount        int64     `gorm:"type:bigint;default:0" json:"amount"` // 最小货币单位（分）；币种需与订单/渠道一致（EC-13 待补充显式 currency 字段与校验）
+	Amount        int64     `gorm:"type:bigint;default:0" json:"amount"`              // 最小货币单位（分）；币种需与订单/渠道一致（EC-13 待补充显式 currency 字段与校验）
 	Status        string    `gorm:"type:varchar(50);default:'pending'" json:"status"` // 建议语义（EC-13 目标）：pending=本地立案(未确认远端受理)；accepted/processing/funded/failed/unknown=由远端回写或人工对账填充；当前为宽松字符串，尚未强制枚举
-	ExternalID    string    `gorm:"type:varchar(100)" json:"external_id"` // 远端平台售后/退款单号（有则表示远端已受理或已创建引用；无不等于成功）
+	ExternalID    string    `gorm:"type:varchar(100)" json:"external_id"`             // 远端平台售后/退款单号（有则表示远端已受理或已创建引用；无不等于成功）
 	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt     time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

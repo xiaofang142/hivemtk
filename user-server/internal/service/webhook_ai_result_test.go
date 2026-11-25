@@ -143,7 +143,8 @@ func TestWebhookAIResult_SafeExitBoundaries(t *testing.T) {
 			if tc.recreated != nil {
 				tc.recreated.SessionID = fmt.Sprintf("result-boundary-session-%d", index)
 			}
-			account, conv, eventID := "result-boundary-account", "result-boundary-conversation", fmt.Sprintf("result-boundary-%d", index)
+			conv, eventID := "result-boundary-conversation", fmt.Sprintf("result-boundary-%d", index)
+			account := seedCanonicalOutboundAccount(t, database, c01TenantA, "douyin", "result-boundary-account")
 			hub := bridgeInboundHub("douyin", account, conv, "result-boundary-customer")
 			hub.TenantID = c01TenantA
 			useLegacyBridgeFixture(t)

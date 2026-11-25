@@ -14,12 +14,23 @@ import (
 
 // CustomerDataScope 客户列表/导出/详情的数据权限范围。
 // 四个维度为 AND 叠加：可见账号 ∩ 可见行业 ∩ 负责人 ∩ 登录身份。
+// CustomerAccountRule 保留单条授权的账号 × 行业 × 角色配对关系。
+// 存在 AccountRules 时，判定以配对为准，禁止把不同账号的行业/角色组合成全局集合后交叉放行。
+type CustomerAccountRule struct {
+	AccountID   string   `json:"account_id"`
+	Industries  []string `json:"industries,omitempty"` // 空表示不限行业
+	Role        string   `json:"role,omitempty"`
+	OwnerUserID uint     `json:"owner_user_id,omitempty"` // >0 表示该账号仅查看此负责人
+}
+
 type CustomerDataScope struct {
 	UserID             uint     `json:"user_id"`
 	AllAccounts        bool     `json:"all_accounts"`
 	RestrictedAccounts bool     `json:"restricted_accounts"`
 	AccountIDs         []string `json:"account_ids"`
 	Industries         []string `json:"industries"`
+	// AccountRules 为逐账号授权配对；零值表示旧 scope（按全局集合语义兼容）。
+	AccountRules []CustomerAccountRule `json:"account_rules,omitempty"`
 	// OwnerUserID > 0 表示调用方只能查看该负责人名下的客户；0 表示不按负责人收敛。
 	OwnerUserID uint `json:"owner_user_id"`
 	// OnlyOwned 为 true 时强制按当前登录用户作为负责人过滤（授权角色 owner）。
@@ -82,16 +93,22 @@ func (s *CustomerPermissionService) Resolve(ctx context.Context, userID uint) (C
 		return scope, err
 	}
 	channelIDs := make([]uint, 0, len(auths))
+	ruleByAccount := make(map[string]CustomerAccountRule)
 	for _, a := range auths {
 		if a.Role == "owner" {
 			scope.OnlyOwned = true
 		}
-		for _, ind := range parseVisibleIndustries(a.VisibleIndustryScope) {
+		inds := parseVisibleIndustries(a.VisibleIndustryScope)
+		for _, ind := range inds {
 			industrySet[ind] = true
 		}
 		if a.ChannelAccountID > 0 {
 			channelIDs = append(channelIDs, a.ChannelAccountID)
-			phase2IDs = append(phase2IDs, strconv.FormatUint(uint64(a.ChannelAccountID), 10))
+			accountRef := strconv.FormatUint(uint64(a.ChannelAccountID), 10)
+			phase2IDs = append(phase2IDs, accountRef)
+			ruleByAccount[accountRef] = CustomerAccountRule{
+				AccountID: accountRef, Industries: inds, Role: a.Role,
+			}
 		}
 	}
 	// 渠道账号 numeric id 与 customers.source_account_id 的映射：
@@ -135,6 +152,9 @@ func (s *CustomerPermissionService) Resolve(ctx context.Context, userID uint) (C
 	for ind := range industrySet {
 		scope.Industries = append(scope.Industries, ind)
 	}
+	for _, rule := range ruleByAccount {
+		scope.AccountRules = append(scope.AccountRules, rule)
+	}
 	return scope, nil
 }
 
@@ -158,6 +178,9 @@ func parseVisibleIndustries(raw string) []string {
 
 // ToFilter 把权限范围叠加到调用方过滤条件上。
 func (s *CustomerPermissionService) ToFilter(scope CustomerDataScope, base repository.CustomerScopeFilter) repository.CustomerScopeFilter {
+	if base.DenyAll {
+		return base
+	}
 	if !scope.AllAccounts {
 		base.RestrictedAccounts = scope.RestrictedAccounts || base.RestrictedAccounts
 		if scope.RestrictedAccounts && len(base.SourceAccountIDs) == 0 {
@@ -166,7 +189,14 @@ func (s *CustomerPermissionService) ToFilter(scope CustomerDataScope, base repos
 			base.SourceAccountIDs = intersectCRMStrings(base.SourceAccountIDs, scope.AccountIDs)
 		}
 		if len(scope.Industries) > 0 {
-			base.Industries = intersectCRMStrings(base.Industries, scope.Industries)
+			if len(base.Industries) == 0 {
+				base.Industries = append([]string{}, scope.Industries...)
+			} else {
+				base.Industries = intersectCRMStrings(base.Industries, scope.Industries)
+				if len(base.Industries) == 0 {
+					base.DenyAll = true
+				}
+			}
 		}
 	}
 	if scope.OnlyOwned {
@@ -179,7 +209,40 @@ func (s *CustomerPermissionService) ToFilter(scope CustomerDataScope, base repos
 
 // ListScoped 按权限范围读取客户列表。
 func (s *CustomerPermissionService) ListScoped(ctx context.Context, scope CustomerDataScope, base repository.CustomerScopeFilter) ([]*model.Customer, int64, error) {
-	return s.customers.ListScoped(ctx, s.ToFilter(scope, base))
+	if len(scope.AccountRules) == 0 {
+		return s.customers.ListScoped(ctx, s.ToFilter(scope, base))
+	}
+	// 配对存在时逐行精判：SQL 的全局账号/行业集合可能比授权配对更宽。
+	// 先取全量范围内行，按配对过滤后再分页，确保 total 不泄露被拒记录。
+	probe := base
+	probe.Page, probe.PageSize = 1, 10000
+	rows, _, err := s.customers.ListScoped(ctx, s.ToFilter(scope, probe))
+	if err != nil {
+		return nil, 0, err
+	}
+	allowed := make([]*model.Customer, 0, len(rows))
+	for _, row := range rows {
+		if s.CanAccess(scope, row) {
+			allowed = append(allowed, row)
+		}
+	}
+	total := int64(len(allowed))
+	page, pageSize := base.Page, base.PageSize
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(allowed) {
+		return []*model.Customer{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(allowed) {
+		end = len(allowed)
+	}
+	return allowed[start:end], total, nil
 }
 
 // GetByIDScoped 读取单个客户并校验权限（越权返回 ErrCRMCustomerForbidden）。
@@ -221,6 +284,30 @@ func (s *CustomerPermissionService) CanAccess(scope CustomerDataScope, c *model.
 	}
 	if scope.OwnerUserID > 0 && (c.OwnerUserID == nil || *c.OwnerUserID != scope.OwnerUserID) {
 		return false
+	}
+	if len(scope.AccountRules) > 0 {
+		matched := false
+		for _, rule := range scope.AccountRules {
+			if rule.AccountID != c.SourceAccountID {
+				continue
+			}
+			if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, c.Industry) {
+				continue
+			}
+			if strings.EqualFold(rule.Role, "owner") {
+				if c.OwnerUserID == nil || *c.OwnerUserID != scope.UserID {
+					continue
+				}
+			}
+			if rule.OwnerUserID > 0 && (c.OwnerUserID == nil || *c.OwnerUserID != rule.OwnerUserID) {
+				continue
+			}
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
 	}
 	return true
 }

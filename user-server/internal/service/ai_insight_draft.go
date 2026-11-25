@@ -380,16 +380,16 @@ func (s *AIInsightDraftService) GenerateStub(ctx context.Context, req AIInsightG
 		if actionType == "add_customer_tags" && entityType == "customer" {
 			proposedAction = map[string]any{
 				"type": "add_customer_tags", "customer_id": entityID,
-				"tags": []string{"AI洞察-" + insightType},
+				"tags":   []string{"AI洞察-" + insightType},
 				"reason": "基于只读证据的草稿建议，确认后写回",
 			}
 		} else {
 			proposedAction = map[string]any{
 				"type": "followup_suggestion", "customer_id": entityID,
-				"title": "跟进AI洞察：" + entityID,
-				"content": "请根据证据复核后执行跟进",
+				"title":        "跟进AI洞察：" + entityID,
+				"content":      "请根据证据复核后执行跟进",
 				"due_in_hours": 24,
-				"reason": "基于只读证据的草稿建议，确认后写回",
+				"reason":       "基于只读证据的草稿建议，确认后写回",
 			}
 		}
 		content["action_policy"] = "evidence_required_before_apply"

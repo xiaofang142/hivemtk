@@ -39,7 +39,7 @@ func TestCollectHTTPRequestInfo(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = req
 
-		info := collectHTTPRequestInfo(c)
+		info, _, _ := collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
 
 		if info.Method != "POST" {
 			t.Errorf("Method = %q, want POST", info.Method)
@@ -99,7 +99,7 @@ func TestCollectHTTPRequestInfo(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = req
 
-		info := collectHTTPRequestInfo(c)
+		info, _, _ := collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
 
 		if !strings.Contains(info.BodyPreview, "truncated") {
 			t.Errorf("BodyPreview 应标记 truncated，实际 %q 前 100 字符", info.BodyPreview[:min(100, len(info.BodyPreview))])
@@ -120,7 +120,7 @@ func TestCollectHTTPRequestInfo(t *testing.T) {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = req
 
-		_ = collectHTTPRequestInfo(c)
+		_, _, _ = collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
 
 		var got HTTPIngestRequest
 		if err := c.ShouldBindJSON(&got); err != nil {

@@ -20,15 +20,6 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 )
 
-// douyinLeadAdapterForHub 按 hub 落库平台选适配器（D-01：TikTok 不能被记成抖音）。
-// 仅用于适配器工厂测试与触达口径；发掘写库已统一走主 Service.process。
-func douyinLeadAdapterForHub(hub *model.MessageHub) ChannelLeadAdapter {
-	if hub != nil && hub.Platform == string(ChannelTiktok) {
-		return bridgeLeadAdapterForChannel(string(ChannelTiktok))
-	}
-	return DouyinLeadAdapter{}
-}
-
 // bridgeDMKeyShort 私信冷却键 / 会话 ID / 幂等键里的渠道短名。
 // 抖音必须保持历史 "dy"，否则线上已写入的冷却键会失效（等于重置一次骚扰冷却）。
 func bridgeDMKeyShort(channel string) string {

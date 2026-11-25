@@ -19,7 +19,7 @@ type AIInsightDraftRepository interface {
 
 type aiInsightDraftRepository struct{}
 
-func NewAIInsightDraftRepository() AIInsightDraftRepository { return &aiInsightDraftRepository{} }
+func NewAIInsightDraftRepository() AIInsightDraftRepository         { return &aiInsightDraftRepository{} }
 func (r *aiInsightDraftRepository) db(ctx context.Context) *gorm.DB { return dbFromCtx(ctx) }
 
 func (r *aiInsightDraftRepository) Create(ctx context.Context, d *model.AIInsightDraft) error {

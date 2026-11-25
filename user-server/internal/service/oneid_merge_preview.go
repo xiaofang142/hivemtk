@@ -17,21 +17,21 @@ import (
 // {id, name, type, fields:[], threshold, priority, action, enabled}
 // 后端仅消费与合并判定相关的字段（fields/op/threshold/enabled）。
 type MergePreviewRule struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name"`
-	Type        string     `json:"type,omitempty"`
-	Fields      []string   `json:"fields"`
-	Field       string     `json:"field"`
-	Op          string     `json:"op"`
-	Value       string     `json:"value"`
-	Threshold   int        `json:"threshold"`
-	Priority    int        `json:"priority"`
-	Action      string     `json:"action,omitempty"`
-	Enabled     bool       `json:"enabled"`
-	BuiltIn     bool       `json:"built_in"`
-	Description string     `json:"description"`
-	Example     string     `json:"example"`
-	UpdatedAt   time.Time  `json:"updated_at,omitempty"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Type        string    `json:"type,omitempty"`
+	Fields      []string  `json:"fields"`
+	Field       string    `json:"field"`
+	Op          string    `json:"op"`
+	Value       string    `json:"value"`
+	Threshold   int       `json:"threshold"`
+	Priority    int       `json:"priority"`
+	Action      string    `json:"action,omitempty"`
+	Enabled     bool      `json:"enabled"`
+	BuiltIn     bool      `json:"built_in"`
+	Description string    `json:"description"`
+	Example     string    `json:"example"`
+	UpdatedAt   time.Time `json:"updated_at,omitempty"`
 }
 
 // MergePreviewSample 一条候选合并对样例。Rule/Action 让预览能说明
@@ -70,24 +70,6 @@ func previewSampleLimit() int {
 		return DefaultPreviewSampleLimit
 	}
 	return v
-}
-
-func identityFieldValue(c *model.Customer, field string) string {
-	switch field {
-	case "phone":
-		return c.Phone
-	case "email":
-		return c.Email
-	case "wechat_open_id", "openid":
-		return c.WechatOpenID
-	case "douyin_id", "douyin_open_id":
-		return c.DouyinOpenID
-	case "xiaohongshu_id":
-		return c.XiaohongshuID
-	default:
-
-		return ""
-	}
 }
 
 // PreviewMergeRules 预览「按当前规则会合并哪些身份」：

@@ -283,7 +283,7 @@ func (s *MarketingFlowService) TriggerFlow(ctx context.Context, flow *model.Mark
 	return execution, nil
 }
 
-func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model.FlowExecution, flow *model.MarketingFlow, data map[string]any) {
+func (s *MarketingFlowService) executeFlow(ctx context.Context, execution *model.FlowExecution, flow *model.MarketingFlow, data map[string]any) { //nolint:unused // 保留旧执行器行为测试；生产 TriggerFlow 使用 executeDurableFlow。
 	// FA-20：把执行中的流程挂上 ctx，发送型动作在发送时点据此复核流程状态——
 	// 流程在执行中途被暂停/停用时，后续发送动作零外发（不能只在触发入口拦一次）。
 	ctx = WithMarketingFlowRef(ctx, flow)

@@ -10,6 +10,7 @@ import (
 	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type SageXInstallationRepository struct {
@@ -30,6 +31,56 @@ func (r *SageXInstallationRepository) Create(ctx context.Context, inst *model.Sa
 	return r.db.WithContext(ctx).Create(inst).Error
 }
 
+// CreateIfAbsent atomically inserts a non-empty installation identity. The
+// partial unique index is the final concurrency guard; callers must re-read and
+// validate ownership/status when created is false.
+func (r *SageXInstallationRepository) CreateIfAbsent(ctx context.Context, inst *model.SageXInstallation) (bool, error) {
+	if r.db == nil {
+		return false, gorm.ErrInvalidDB
+	}
+	if inst == nil || inst.TenantID == 0 {
+		return false, errors.New("sagex installation tenant is required")
+	}
+	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "tenant_id"},
+			{Name: "installation_id"},
+		},
+		TargetWhere: clause.Where{Exprs: []clause.Expression{
+			clause.Neq{Column: clause.Column{Name: "installation_id"}, Value: ""},
+		}},
+		DoNothing: true,
+	}).Create(inst)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *SageXInstallationRepository) GetByTenantAndInstallationID(
+	ctx context.Context,
+	tenantID uint,
+	installationID string,
+) (*model.SageXInstallation, error) {
+	if r.db == nil {
+		return nil, gorm.ErrInvalidDB
+	}
+	if installationID == "" {
+		return nil, nil
+	}
+	var inst model.SageXInstallation
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND installation_id = ?", tenantID, installationID).
+		First(&inst).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
 func (r *SageXInstallationRepository) Update(ctx context.Context, inst *model.SageXInstallation) error {
 	return saveWholeRow(r.db.WithContext(ctx), inst)
 }
@@ -46,6 +97,8 @@ func (r *SageXInstallationRepository) GetByID(ctx context.Context, id uint) (*mo
 	return &inst, nil
 }
 
+// GetByToken is a deprecated compatibility lookup for legacy admin/bootstrap
+// metadata. SageX upload authentication uses identify_code only.
 func (r *SageXInstallationRepository) GetByToken(ctx context.Context, token string) (*model.SageXInstallation, error) {
 	if token == "" {
 		return nil, nil

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -61,6 +62,15 @@ func (ctrl *CompanyController) recordOp(c *gin.Context, action, resourceID, deta
 	})
 }
 
+// companyScopeError 把客户数据权限拒绝映射为 403，避免落到通用 500。
+func (ctrl *CompanyController) companyScopeError(c *gin.Context, err error, fallback string) bool {
+	if errors.Is(err, service.ErrCRMCustomerForbidden) {
+		response.Error(c, http.StatusForbidden, "无权访问该客户或公司")
+		return true
+	}
+	return false
+}
+
 func (ctrl *CompanyController) RegisterRoutes(router *gin.RouterGroup) {
 	g := router.Group("/companies")
 	{
@@ -104,8 +114,13 @@ func (ctrl *CompanyController) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	keyword := c.Query("keyword")
-	items, total, err := ctrl.svc.List(c.Request.Context(), keyword, page, pageSize)
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	items, total, err := ctrl.svc.ListScoped(c.Request.Context(), scope, keyword, page, pageSize)
 	if err != nil {
+		if ctrl.companyScopeError(c, err, "获取公司列表失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取公司列表失败")
 		return
 	}
@@ -118,8 +133,13 @@ func (ctrl *CompanyController) Get(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "id 无效")
 		return
 	}
-	item, err := ctrl.svc.GetByID(c.Request.Context(), id)
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	item, err := ctrl.svc.GetByIDScoped(c.Request.Context(), scope, id)
 	if err != nil {
+		if ctrl.companyScopeError(c, err, "获取公司失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取公司失败")
 		return
 	}
@@ -143,7 +163,8 @@ func (ctrl *CompanyController) Update(c *gin.Context) {
 	if uid > 0 {
 		req.UpdatedBy = &uid
 	}
-	if err := ctrl.svc.Update(c.Request.Context(), &req); err != nil {
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	if err := ctrl.svc.UpdateScoped(c.Request.Context(), scope, &req); err != nil {
 		response.ErrorFromDB(c, err, "更新公司失败")
 		return
 	}
@@ -157,7 +178,9 @@ func (ctrl *CompanyController) Delete(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "id 无效")
 		return
 	}
-	if err := ctrl.svc.Delete(c.Request.Context(), id); err != nil {
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	if err := ctrl.svc.DeleteScoped(c.Request.Context(), scope, id); err != nil {
 		response.ErrorFromDB(c, err, "删除公司失败")
 		return
 	}
@@ -167,8 +190,13 @@ func (ctrl *CompanyController) Delete(c *gin.Context) {
 
 func (ctrl *CompanyController) ListCustomerRelations(c *gin.Context) {
 	customerID := c.Param("id")
-	items, err := ctrl.svc.ListRelationsByCustomer(c.Request.Context(), customerID)
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	items, err := ctrl.svc.ListRelationsByCustomerScoped(c.Request.Context(), scope, customerID)
 	if err != nil {
+		if ctrl.companyScopeError(c, err, "获取客户公司关系失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取客户公司关系失败")
 		return
 	}
@@ -184,7 +212,12 @@ func (ctrl *CompanyController) UpsertCustomerRelation(c *gin.Context) {
 	}
 	req.CustomerID = customerID
 	req.TenantID = ctrl.tenantID(c)
-	if err := ctrl.svc.UpsertRelation(c.Request.Context(), &req); err != nil {
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	if err := ctrl.svc.UpsertRelationScoped(c.Request.Context(), scope, &req); err != nil {
+		if ctrl.companyScopeError(c, err, "保存客户公司关系失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "保存客户公司关系失败")
 		return
 	}
@@ -198,8 +231,13 @@ func (ctrl *CompanyController) ListCompanyRelations(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "id 无效")
 		return
 	}
-	items, err := ctrl.svc.ListRelationsByCompany(c.Request.Context(), id)
+	uid, _ := ctrl.actor(c)
+	scope := ctrl.svc.Scope(c.Request.Context(), uid)
+	items, err := ctrl.svc.ListRelationsByCompanyScoped(c.Request.Context(), scope, id)
 	if err != nil {
+		if ctrl.companyScopeError(c, err, "获取公司关系失败") {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取公司关系失败")
 		return
 	}

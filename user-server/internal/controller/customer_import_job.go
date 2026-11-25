@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/tenant"
+	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/pkg/utils/response"
 	"hivemtk-user/internal/service"
 )
@@ -77,6 +79,21 @@ func (ctrl *CustomerImportJobController) recordOp(c *gin.Context, action, resour
 	})
 }
 
+// importScope 从可信登录用户解析 CRM 数据范围。
+func (ctrl *CustomerImportJobController) importScope(c *gin.Context) (service.CustomerDataScope, uint) {
+	uid, _ := ctrl.actor(c)
+	return ctrl.svc.Scope(c.Request.Context(), uid), uid
+}
+
+// importScopeError 把导入作业权限错误映射为 403。
+func (ctrl *CustomerImportJobController) importScopeError(c *gin.Context, err error) bool {
+	if errors.Is(err, service.ErrImportJobForbidden) {
+		response.Error(c, http.StatusForbidden, "无权访问该导入作业")
+		return true
+	}
+	return false
+}
+
 func (ctrl *CustomerImportJobController) Template(c *gin.Context) {
 	entityType := c.DefaultQuery("entity_type", "customer")
 	data, filename, err := ctrl.svc.TemplateCSV(entityType)
@@ -100,13 +117,18 @@ func (ctrl *CustomerImportJobController) Precheck(c *gin.Context) {
 		response.Error(c, http.StatusBadRequest, "打开导入文件失败")
 		return
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Ctx(c.Request.Context()).Warn().Err(err).Msg("关闭导入预检文件失败")
+		}
+	}()
 
 	entityType := c.DefaultPostForm("entity_type", "customer")
 	dedupStrategy := c.DefaultPostForm("dedup_strategy", "skip")
 	mappingJSON := c.DefaultPostForm("mapping_json", "{}")
 
-	report, err := ctrl.svc.Precheck(c.Request.Context(), file.Filename, f, entityType, dedupStrategy, mappingJSON)
+	_, actorID := ctrl.importScope(c)
+	report, err := ctrl.svc.PrecheckScoped(c.Request.Context(), actorID, file.Filename, f, entityType, dedupStrategy, mappingJSON)
 	if err != nil {
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
@@ -117,8 +139,12 @@ func (ctrl *CustomerImportJobController) Precheck(c *gin.Context) {
 
 func (ctrl *CustomerImportJobController) Execute(c *gin.Context) {
 	jobID := c.Param("id")
-	report, err := ctrl.svc.Execute(c.Request.Context(), jobID)
+	scope, actorID := ctrl.importScope(c)
+	report, err := ctrl.svc.ExecuteScoped(c.Request.Context(), scope, actorID, jobID)
 	if err != nil {
+		if ctrl.importScopeError(c, err) {
+			return
+		}
 		response.Error(c, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -128,8 +154,12 @@ func (ctrl *CustomerImportJobController) Execute(c *gin.Context) {
 
 func (ctrl *CustomerImportJobController) Errors(c *gin.Context) {
 	jobID := c.Param("id")
-	errs, err := ctrl.svc.ErrorReport(c.Request.Context(), jobID)
+	scope, actorID := ctrl.importScope(c)
+	errs, err := ctrl.svc.ErrorReportScoped(c.Request.Context(), scope, actorID, jobID)
 	if err != nil {
+		if ctrl.importScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取导入错误报告失败")
 		return
 	}
@@ -138,8 +168,12 @@ func (ctrl *CustomerImportJobController) Errors(c *gin.Context) {
 
 func (ctrl *CustomerImportJobController) DownloadErrors(c *gin.Context) {
 	jobID := c.Param("id")
-	data, filename, err := ctrl.svc.ErrorReportCSV(c.Request.Context(), jobID)
+	scope, actorID := ctrl.importScope(c)
+	data, filename, err := ctrl.svc.ErrorReportCSVScoped(c.Request.Context(), scope, actorID, jobID)
 	if err != nil {
+		if ctrl.importScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "下载导入错误报告失败")
 		return
 	}
@@ -171,7 +205,8 @@ func (ctrl *CustomerImportJobController) Create(c *gin.Context) {
 func (ctrl *CustomerImportJobController) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	items, total, err := ctrl.svc.List(c.Request.Context(), page, pageSize)
+	scope, actorID := ctrl.importScope(c)
+	items, total, err := ctrl.svc.ListScoped(c.Request.Context(), scope, actorID, page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(c, err, "获取导入任务失败")
 		return
@@ -180,8 +215,12 @@ func (ctrl *CustomerImportJobController) List(c *gin.Context) {
 }
 
 func (ctrl *CustomerImportJobController) Get(c *gin.Context) {
-	item, err := ctrl.svc.Get(c.Request.Context(), c.Param("id"))
+	scope, actorID := ctrl.importScope(c)
+	item, err := ctrl.svc.GetScoped(c.Request.Context(), scope, actorID, c.Param("id"))
 	if err != nil {
+		if ctrl.importScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取导入任务失败")
 		return
 	}

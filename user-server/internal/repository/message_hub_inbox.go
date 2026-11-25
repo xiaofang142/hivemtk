@@ -2,10 +2,13 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"hivemtk-user/internal/model"
 	_db "hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 
 	"gorm.io/gorm"
 )
@@ -51,22 +54,6 @@ func (r *MessageHubRepository) Create(ctx context.Context, hub *model.MessageHub
 		return nil
 	}
 	return r.db.WithContext(ctx).Create(hub).Error
-}
-
-func (r *MessageHubRepository) ListRecentInboundBySender(ctx context.Context, platform, senderID string, limit int) ([]model.MessageHub, error) {
-	if r == nil || r.db == nil {
-		return nil, nil
-	}
-	var hubs []model.MessageHub
-	err := r.db.WithContext(ctx).
-		Where("platform = ? AND sender_id = ? AND direction = 'inbound'", platform, senderID).
-		Order("sent_at DESC").
-		Limit(limit).
-		Find(&hubs).Error
-	if err != nil {
-		return nil, err
-	}
-	return hubs, nil
 }
 
 func (r *MessageHubRepository) GetByID(ctx context.Context, id uint) (*model.MessageHub, error) {
@@ -356,36 +343,94 @@ func (r *MessageHubRepository) GetLastByConversation(ctx context.Context, conver
 	return &msg, nil
 }
 
-// ListRecentByConversation 获取同一会话最近消息（双向）。LM-PR1：单聊需结合两人历史。
-func (r *MessageHubRepository) ListRecentByConversation(ctx context.Context, conversationID string, limit int) ([]model.MessageHub, error) {
-	if r == nil || r.db == nil || conversationID == "" {
-		return nil, nil
+// MessageHubHistoryScope 的账号引用必须由调用方解析为同一真实账号；不得用客户关联扩大集合。
+type MessageHubHistoryScope struct {
+	Platform   string
+	AccountIDs []string
+	IsGroup    bool
+}
+
+var ErrMessageHubHistoryScope = errors.New("消息历史缺少明确租户、平台或账号作用域")
+
+// ListHistoryConversationRefs 为旧共享上下文 API 判定精确外部引用，不返回消息内容。
+// 只查已验证账号引用；不从客户跨账号关联扩大证据范围。
+func (r *MessageHubRepository) ListHistoryConversationRefs(ctx context.Context, scope MessageHubHistoryScope, conversationID string) ([]model.MessageHub, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, ErrMessageHubHistoryScope
+	}
+	if _, err := r.historyQuery(ctx, scope, 1); err != nil {
+		return nil, err
+	}
+	tid, _ := tenant.FromContext(ctx)
+	var rows []model.MessageHub
+	err := r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Select("platform, is_group, CASE WHEN is_group AND group_id <> '' THEN group_id ELSE conversation_id END AS conversation_id").Distinct().
+		Where("tenant_id = ? AND platform = ? AND account_id IN ?", tid, scope.Platform, scope.AccountIDs).
+		Where("conversation_id = ? OR (is_group = ? AND group_id = ?)", conversationID, true, conversationID).
+		Limit(2).Find(&rows).Error
+	return rows, err
+}
+
+func (r *MessageHubRepository) historyQuery(ctx context.Context, scope MessageHubHistoryScope, limit int) (*gorm.DB, error) {
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 || tenant.IsSystemScope(ctx) || strings.TrimSpace(scope.Platform) == "" || len(scope.AccountIDs) == 0 {
+		return nil, ErrMessageHubHistoryScope
+	}
+	for _, ref := range scope.AccountIDs {
+		if strings.TrimSpace(ref) == "" {
+			return nil, ErrMessageHubHistoryScope
+		}
+	}
+	if r == nil || r.db == nil {
+		return nil, gorm.ErrInvalidDB
 	}
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
+	return r.db.WithContext(ctx).Model(&model.MessageHub{}).
+		Where("tenant_id = ? AND platform = ? AND account_id IN ? AND is_group = ?", tid, scope.Platform, scope.AccountIDs, scope.IsGroup).
+		Order("sent_at DESC").Order("id DESC").Limit(limit), nil
+}
+
+// ListRecentByConversation 获取来源账号同一会话的双向消息，返回稳定倒序。
+func (r *MessageHubRepository) ListRecentByConversation(ctx context.Context, scope MessageHubHistoryScope, conversationID string, limit int) ([]model.MessageHub, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, ErrMessageHubHistoryScope
+	}
+	q, err := r.historyQuery(ctx, scope, limit)
+	if err != nil {
+		return nil, err
+	}
 	var hubs []model.MessageHub
-	err := r.db.WithContext(ctx).
-		Where("conversation_id = ?", conversationID).
-		Order("sent_at DESC").
-		Limit(limit).
-		Find(&hubs).Error
+	err = q.Where("conversation_id = ?", conversationID).Find(&hubs).Error
 	return hubs, err
 }
 
-// ListRecentByGroup 获取群聊最近消息（多成员）。LM-PR1：群聊需结合群内大家发言。
-func (r *MessageHubRepository) ListRecentByGroup(ctx context.Context, platform, groupID string, limit int) ([]model.MessageHub, error) {
-	if r == nil || r.db == nil || groupID == "" {
-		return nil, nil
+// ListRecentByGroup 同一来源账号、同群全部已采集成员，不按当前发送者收窄。
+func (r *MessageHubRepository) ListRecentByGroup(ctx context.Context, scope MessageHubHistoryScope, groupID string, limit int) ([]model.MessageHub, error) {
+	if !scope.IsGroup || strings.TrimSpace(groupID) == "" {
+		return nil, ErrMessageHubHistoryScope
 	}
-	if limit <= 0 || limit > 100 {
-		limit = 20
+	q, err := r.historyQuery(ctx, scope, limit)
+	if err != nil {
+		return nil, err
 	}
 	var hubs []model.MessageHub
-	q := r.db.WithContext(ctx).Where("group_id = ? AND is_group = ?", groupID, true)
-	if platform != "" {
-		q = q.Where("platform = ?", platform)
+	err = q.Where("group_id = ?", groupID).Find(&hubs).Error
+	return hubs, err
+}
+
+// ListRecentBySender 仅用于缺少会话ID的私聊；双向匹配对方，不能跨明确会话或群取证。
+func (r *MessageHubRepository) ListRecentBySender(ctx context.Context, scope MessageHubHistoryScope, senderID string, limit int) ([]model.MessageHub, error) {
+	if scope.IsGroup || strings.TrimSpace(senderID) == "" {
+		return nil, ErrMessageHubHistoryScope
 	}
-	err := q.Order("sent_at DESC").Limit(limit).Find(&hubs).Error
+	q, err := r.historyQuery(ctx, scope, limit)
+	if err != nil {
+		return nil, err
+	}
+	var hubs []model.MessageHub
+	err = q.Where("conversation_id = ? AND group_id = ?", "", "").
+		Where("sender_id = ? OR receiver_id = ?", senderID, senderID).Find(&hubs).Error
 	return hubs, err
 }

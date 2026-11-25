@@ -820,10 +820,18 @@ func Setup(r *gin.Engine, gormDB *gorm.DB) {
 			// FR-008/FR-015：发掘链路的负责人推送出口在装配点注入，
 			// Service 内部不再隐式构造依赖全局 DB 的通知服务。
 			miningSvc.SetNotifier(service.NewLeadNotifyService())
-			// D18：在装配点把 ReAct 取证循环接到全局 LLM dispatcher。
-			// resolver 暂不接具体仓储：工具返回「未装配」的 fail-visible 错误，
-			// 判定据此标证据不完整并走既有三路主链——不伪造证据、不编造数据访问。
-			service.InstallLeadReactDispatcher(service.LeadReactResolver{})
+			// D18：服务自有文本 ReAct 取证；生产 resolver 只绑定受限只读仓储。
+			// 缺少依赖时仍安装 fail-visible hook，并由 Router 记录装配错误。
+			resolver, resolveErr := service.NewLeadReactResolver(
+				repository.NewLeadMiningJudgementRepositoryWithDB(gormDB),
+				repository.NewCustomerSessionRepositoryWithDB(gormDB),
+			)
+			if resolveErr != nil {
+				logger.Errorf("[LeadMining] ReAct resolver 装配失败：%v", resolveErr)
+			}
+			if installErr := service.InstallLeadReactDispatcher(resolver); installErr != nil {
+				logger.Errorf("[LeadMining] ReAct dispatcher 装配失败：%v", installErr)
+			}
 			bridgeIngressSvc.SetLeadMining(miningSvc)
 			// T048/T049 US3：两类智能体独立启停闸门。开关按 channel_account 的
 			// auto_reply_agent_id / lead_mining_agent_id 判定；两腿互不调用。

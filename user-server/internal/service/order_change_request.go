@@ -62,6 +62,7 @@ var ErrCapabilityNotAvailable = fmt.Errorf("该平台执行通路未接入（凭
 //   - "taobao"/"tmall" 仅在此路由为 direct_api 且 Execute 显式拒绝；capregistry 未登记对应 commerce action
 //     cells（仅有桥接 DM 能力登记），无真实 Adapter/凭证闭环。
 //   - "pdd"(拼多多) 未在本表中，默认 manual；capregistry 仅桥接 DM，无 commerce action cells。
+//
 // 完成标准（见 docs/未来任务清单.md §7.1.8 EC-16）要求：每平台独立 scope/地区/状态测试；
 // PDD 赔付/取件、抖店买家确认、淘系限制分支全覆盖。本文件/本包不构成 EC-16 完成证据。
 //
@@ -93,6 +94,7 @@ var ErrCapabilityNotAvailable = fmt.Errorf("该平台执行通路未接入（凭
 //     且与「平台托管与卖家操作不混同」的 M19 规则、完整案件流程/证据/升级链条仍未落地。
 //   - 苏宁官方工作台：无平台键与执行闭环。
 //   - 即时零售分业态（部分退款/整单取消/配送中协商/医药专员等）：无平台键与分业态流程实现。
+//
 // 约束：退款与取消、平台托管与卖家操作不得混同；M19 需按 §7.3.5 每行给出可使用案件流程与真实证据（本注释不构成完成）。
 //
 // 外部事实来源见 docs/research/INTENT-TOOL-UNIFIED-BASE-DESIGN-2026-11.md §五。

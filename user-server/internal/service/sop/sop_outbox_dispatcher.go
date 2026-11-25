@@ -32,17 +32,17 @@ type SOPDispatchSender interface {
 // 并以 SkipWait 任务通知 dispatcher "已过期视为满足立即跳过"。
 // S1-5（Outbox 死信）：认领失败累计 claim_count≥5 → status=dead_letter + 告警日志。
 type SOPOutboxDispatcher struct {
-	timerRepo      *repository.SOPTimerRepository
-	eventRepo      *repository.SOPExecEventRepository
-	claimRepo      *repository.SOPDispatchClaimRepository
-	execDispatcher SOPDispatchSender
-	tickInterval   time.Duration
-	batchSize      int
-	stopCh         chan struct{}
-	wg             sync.WaitGroup
-	runMu          sync.Mutex
-	running        bool
-	dispatchLease  time.Duration
+	timerRepo           *repository.SOPTimerRepository
+	eventRepo           *repository.SOPExecEventRepository
+	claimRepo           *repository.SOPDispatchClaimRepository
+	execDispatcher      SOPDispatchSender
+	tickInterval        time.Duration
+	batchSize           int
+	stopCh              chan struct{}
+	wg                  sync.WaitGroup
+	runMu               sync.Mutex
+	running             bool
+	dispatchLease       time.Duration
 	maxDispatchAttempts int
 }
 
@@ -55,8 +55,8 @@ const (
 
 	// FA-45：认领租约与最大重派次数。失败立即释放租约，下一轮即可恢复；
 	// 超过上限把 claim 标 failed 并把 timer 转 dead_letter。
-	sopDispatchLease        = 30 * time.Second
-	sopMaxDispatchAttempts  = 5
+	sopDispatchLease       = 30 * time.Second
+	sopMaxDispatchAttempts = 5
 )
 
 // NewSOPOutboxDispatcher 创建 Outbox 调度器
@@ -64,14 +64,14 @@ const (
 // 句柄由 repository 自取全局库。
 func NewSOPOutboxDispatcher(execDispatcher SOPDispatchSender) *SOPOutboxDispatcher {
 	return &SOPOutboxDispatcher{
-		timerRepo:      repository.NewSOPTimerRepositoryDefault(),
-		eventRepo:      repository.NewSOPExecEventRepositoryDefault(),
-		claimRepo:      repository.NewSOPDispatchClaimRepositoryDefault(),
-		execDispatcher: execDispatcher,
-		tickInterval:   5 * time.Second,
-		batchSize:      100,
-		stopCh:         make(chan struct{}),
-		dispatchLease:  sopDispatchLease,
+		timerRepo:           repository.NewSOPTimerRepositoryDefault(),
+		eventRepo:           repository.NewSOPExecEventRepositoryDefault(),
+		claimRepo:           repository.NewSOPDispatchClaimRepositoryDefault(),
+		execDispatcher:      execDispatcher,
+		tickInterval:        5 * time.Second,
+		batchSize:           100,
+		stopCh:              make(chan struct{}),
+		dispatchLease:       sopDispatchLease,
 		maxDispatchAttempts: sopMaxDispatchAttempts,
 	}
 }

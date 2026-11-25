@@ -60,6 +60,14 @@ func (c *SageXUploadController) Upload(ctx *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrSageXUnauthorized):
 			sagexWriteError(ctx, http.StatusUnauthorized, "unauthorized")
+		case errors.Is(err, service.ErrSageXInvalidInstallationID):
+			sagexWriteError(ctx, http.StatusBadRequest, "invalid_installation_id")
+		case errors.Is(err, service.ErrSageXInstallationForbidden):
+			sagexWriteError(ctx, http.StatusForbidden, "installation_forbidden")
+		case errors.Is(err, service.ErrSageXInstallationDisabled):
+			sagexWriteError(ctx, http.StatusForbidden, "installation_disabled")
+		case errors.Is(err, service.ErrSageXInstallationConflict):
+			sagexWriteError(ctx, http.StatusConflict, "installation_conflict")
 		case errors.Is(err, service.ErrSageXUnsupportedSchema):
 			sagexWriteError(ctx, http.StatusBadRequest, "unsupported_schema")
 		case errors.Is(err, service.ErrSageXTooManyEvents), errors.Is(err, service.ErrSageXEmptyEvents), errors.Is(err, service.ErrSageXInvalidEnvelope):
@@ -206,27 +214,36 @@ func (c *SageXUploadController) Bootstrap(ctx *gin.Context) {
 		IdentifyCode   string `json:"identify_code"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		response.Error(ctx, http.StatusBadRequest, "请求参数无效")
+		sagexBootstrapError(ctx, http.StatusBadRequest, "invalid_request", "请求参数无效")
 		return
 	}
 	if strings.TrimSpace(req.IdentifyCode) == "" {
-		response.Error(ctx, http.StatusBadRequest, "identify_code 不能为空")
+		sagexBootstrapError(ctx, http.StatusBadRequest, "invalid_identify_code", "identify_code 不能为空")
 		return
 	}
 	inst, err := c.svc.BootstrapInstallation(ctx.Request.Context(), req.InstallationID, req.IdentifyCode)
 	if err != nil {
-		response.Error(ctx, http.StatusUnauthorized, "bootstrap 失败")
+		switch {
+		case errors.Is(err, service.ErrSageXInvalidInstallationID):
+			sagexBootstrapError(ctx, http.StatusBadRequest, "invalid_installation_id", "installation_id 无效")
+		case errors.Is(err, service.ErrSageXUnauthorized):
+			sagexBootstrapError(ctx, http.StatusUnauthorized, "unauthorized", "bootstrap 未授权")
+		case errors.Is(err, service.ErrSageXInstallationForbidden):
+			sagexBootstrapError(ctx, http.StatusForbidden, "installation_forbidden", "installation_id 不属于当前账号")
+		case errors.Is(err, service.ErrSageXInstallationDisabled):
+			sagexBootstrapError(ctx, http.StatusForbidden, "installation_disabled", "installation_id 已禁用")
+		case errors.Is(err, service.ErrSageXInstallationConflict):
+			sagexBootstrapError(ctx, http.StatusConflict, "installation_conflict", "installation_id 状态冲突")
+		default:
+			sagexBootstrapError(ctx, http.StatusInternalServerError, "internal_error", "bootstrap 服务暂不可用")
+		}
 		return
 	}
 	response.Success(ctx, gin.H{"installation": inst, "token": inst.Token}, "ok")
 }
 
-func extractBearerToken(authHeader string) string {
-	parts := strings.SplitN(strings.TrimSpace(authHeader), " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
+func sagexBootstrapError(ctx *gin.Context, status int, reason, message string) {
+	response.Error(ctx, status, message, gin.H{"reason": reason})
 }
 
 func sagexWriteError(ctx *gin.Context, status int, code string) {

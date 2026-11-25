@@ -21,19 +21,19 @@ const (
 //
 // 这样队列满/停机/标记后崩溃都有可复算的恢复路径，"dispatched" 日志只在确认后打。
 type SOPDispatchClaim struct {
-	TenantID    uint      `gorm:"not null;default:1;index" json:"tenant_id"`
-	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	TimerID     uint      `gorm:"uniqueIndex;not null" json:"timer_id"`
-	ExecutionID uint      `gorm:"index;not null" json:"execution_id"`
-	NodeID      string    `gorm:"type:varchar(120)" json:"node_id"`
-	Kind        string    `gorm:"type:varchar(16);not null" json:"kind"`
-	Status      string    `gorm:"type:varchar(16);not null;index" json:"status"`
-	LeaseUntil  time.Time `gorm:"index" json:"lease_until"`
-	Attempts    int       `gorm:"default:0" json:"attempts"`
-	WaitEvent   string    `gorm:"type:varchar(120)" json:"wait_event"`
-	WaitPayload JSONMap   `gorm:"type:jsonb" json:"wait_payload"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	TenantID    uint       `gorm:"not null;default:1;index" json:"tenant_id"`
+	ID          uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	TimerID     uint       `gorm:"uniqueIndex;not null" json:"timer_id"`
+	ExecutionID uint       `gorm:"index;not null" json:"execution_id"`
+	NodeID      string     `gorm:"type:varchar(120)" json:"node_id"`
+	Kind        string     `gorm:"type:varchar(16);not null" json:"kind"`
+	Status      string     `gorm:"type:varchar(16);not null;index" json:"status"`
+	LeaseUntil  time.Time  `gorm:"index" json:"lease_until"`
+	Attempts    int        `gorm:"default:0" json:"attempts"`
+	WaitEvent   string     `gorm:"type:varchar(120)" json:"wait_event"`
+	WaitPayload JSONMap    `gorm:"type:jsonb" json:"wait_payload"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 	ConfirmedAt *time.Time `json:"confirmed_at,omitempty"`
 }
 

@@ -182,21 +182,105 @@ func (r *ChannelResolver) ResolveTenant(ctx context.Context, channel WebhookChan
 	if r == nil {
 		return 0, ErrChannelTenantUnresolved
 	}
-	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 {
-		return tid, nil
-	}
-
-	// ① 识别码优先：命中歧义直接拒绝，不能退回旧逻辑"猜"一个租户。
+	// ① 识别码优先：命中后必须复核渠道码匹配，不能只换 tenant 后继续用路径账号落库。
 	if accountID != "" {
 		resolved, err := r.ResolveByIdentifyCode(ctx, accountID)
-		if err == nil {
+		if err == nil && resolved != nil {
+			if ctxTid, bound := tenant.FromContext(ctx); bound && ctxTid != 0 && ctxTid != resolved.TenantID {
+				return 0, ErrChannelIdentityAmbiguous // 可信 ctx 与识别码冲突，拒绝
+			}
+			if resolved.ChannelCode != "" && !channelMatchesWebhookCode(channel, resolved.ChannelCode) {
+				return 0, ErrChannelIdentityAmbiguous // 识别码渠道与请求渠道冲突
+			}
 			return resolved.TenantID, nil
 		}
 		if errors.Is(err, ErrChannelIdentityAmbiguous) {
 			return 0, err
 		}
 	}
+	// ② 已绑定租户仅在识别码不可用时作为 legacy 自证输入；path/query 冲突由
+	//    ResolveTrusted 统一复核。这里只返回租户，供旧 webhook 链继续工作。
+	if tid, bound := tenant.FromContext(ctx); bound && tid != 0 {
+		return tid, nil
+	}
 	return r.resolveTenantLegacy(ctx, channel, accountID)
+}
+
+// channelMatchesWebhookCode 比对 Webhook 渠道枚举与规范渠道码。
+// 旧平台别名（如 tg→telegram、wx→wechat）显式映射，未知组合一律拒绝。
+func channelMatchesWebhookCode(c WebhookChannel, code string) bool {
+	got := strings.ToLower(strings.TrimSpace(string(c)))
+	want := strings.ToLower(strings.TrimSpace(code))
+	if got == want {
+		return true
+	}
+	aliases := map[string]string{
+		"telegram": "telegram", "tg": "telegram",
+		"qq": "qq", "feishu": "feishu", "wecom": "wecom", "whatsapp": "whatsapp",
+	}
+	a, okA := aliases[got]
+	b, okB := aliases[want]
+	return okA && okB && a == b
+}
+
+// ResolveTrusted 统一可信账号身份（CH-07）。
+//
+// 识别码 + 平台账号映射 + 可信 ctx 联合校验后生成唯一身份：
+//   - 识别码必须能反查到单一账号，且渠道码与请求 platform 一致；
+//   - ctx 已绑定租户时，必须与识别码归属相同（冲突拒绝，不取首条/不换号）；
+//   - accountRef 若显式提供（路径/query/header），必须指向同一账号 ID；
+//   - 账号停用/渠道关闭一律拒绝（消费 CH-05 状态契约）。
+func (r *ChannelResolver) ResolveTrusted(ctx context.Context, identifyCode, platform, accountRef string) (*ResolvedChannelAccount, error) {
+	if r == nil || r.accountRepo == nil || strings.TrimSpace(identifyCode) == "" {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	resolved, err := r.ResolveByIdentifyCode(ctx, identifyCode)
+	if err != nil {
+		if errors.Is(err, repository.ErrAmbiguousIdentifyCode) {
+			return nil, ErrChannelIdentityAmbiguous
+		}
+		return nil, err
+	}
+	if resolved == nil || resolved.TenantID == 0 || resolved.AccountID == 0 {
+		return nil, ErrChannelIdentityUnresolved
+	}
+	if ctxTid, bound := tenant.FromContext(ctx); bound && ctxTid != 0 && ctxTid != resolved.TenantID {
+		return nil, ErrChannelIdentityAmbiguous
+	}
+	if strings.TrimSpace(platform) != "" && resolved.ChannelCode != "" && !channelMatchesWebhookCode(WebhookChannel(platform), resolved.ChannelCode) {
+		return nil, ErrChannelIdentityAmbiguous
+	}
+	// 显式账号引用必须指向同一规范账号（数值 ID 或外部别名解析后复核）。
+	if ref := strings.TrimSpace(accountRef); ref != "" {
+		if id, parseErr := strconv.ParseUint(ref, 10, 64); parseErr == nil {
+			if uint(id) != resolved.AccountID {
+				return nil, ErrChannelIdentityAmbiguous
+			}
+		} else if ref != resolved.IdentifyCode {
+			other, oerr := r.ResolveByAccountRef(ctx, platform, ref)
+			if oerr != nil || other == nil || other.AccountID != resolved.AccountID {
+				return nil, ErrChannelIdentityAmbiguous
+			}
+		}
+	}
+	// 渠道/账号状态：fail-closed（不重建 CH-05 服务，直接查仓储行状态）。
+	if r.channelRepo != nil && r.channelRepo.Available() {
+		ch, chErr := r.channelRepo.GetByID(ctx, resolved.TenantID, resolved.ChannelID)
+		if chErr != nil {
+			return nil, chErr
+		}
+		if ch == nil || !ch.Enabled {
+			return nil, ErrChannelDisabled
+		}
+	}
+	acc, accErr := r.accountRepo.GetByID(ctx, resolved.TenantID, resolved.AccountID)
+	if accErr != nil {
+		return nil, accErr
+	}
+	if acc == nil || acc.Status != 1 {
+		return nil, ErrChannelAccountDisabled
+	}
+	return resolved, nil
 }
 
 // resolveTenantLegacy 保留 webhook 历史自证链（表主键全库唯一 + 歧义拒绝），
@@ -264,30 +348,40 @@ func (r *ChannelResolver) Identify(ctx context.Context, tenantID, accountID uint
 	}
 	switch typ {
 	case "dm", "single", "direct", "private":
-		selfIDs := map[string]bool{
-			acc.IdentifyCode:                       acc.IdentifyCode != "",
-			acc.SelfIdentifyName:                   acc.SelfIdentifyName != "",
-			strconv.FormatUint(uint64(acc.ID), 10): true,
-		}
-		if out.SpeakerID != "" && selfIDs[out.SpeakerID] {
+		// 单聊 self 只认平台稳定用户 ID（selfPlatformID）与明确成员角色；
+		// 识别码是认证归属凭证、显示名可变、数据库账号 ID 是内部键，都不能当真人身份。
+		role := strings.ToLower(strings.TrimSpace(memberRole))
+		if isSelfRole(role) {
 			out.Self = true
-			out.Role = "owner"
+			out.Role = role
+		} else if role == "customer" || role == "member" || role == "guest" {
+			out.Role = role
 		} else {
-			out.Role = "customer"
+			out.Role = "unknown" // 缺稳定身份/角色：unknown，不猜 self
 		}
 	case "group", "group_chat", "chatroom":
 		role := strings.ToLower(strings.TrimSpace(memberRole))
-		switch role {
-		case "owner", "self", "agent", "operator":
+		switch {
+		case isSelfRole(role):
 			out.Self = true
 			out.Role = role
-		case "member", "customer", "guest":
+		case role == "member" || role == "customer" || role == "guest":
 			out.Role = role
 		default:
-			out.Role = "unknown"
+			out.Role = "unknown" // 同名/未知成员：不猜，不触发猜测自动回复
 		}
 	default:
 		return nil, ErrChannelIdentityUnresolved
 	}
 	return out, nil
+}
+
+// isSelfRole 明确表示"自己/员工/机器人自己"的成员角色集合。
+func isSelfRole(role string) bool {
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "owner", "self", "agent", "operator", "staff", "human":
+		return true
+	default:
+		return false
+	}
 }

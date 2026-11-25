@@ -76,6 +76,8 @@ func NewCustomerSessionRepositoryWithDB(db *gorm.DB) *CustomerSessionRepository 
 	}
 }
 
+func (r *CustomerSessionRepository) Available() bool { return r != nil && r.db != nil }
+
 // Create 创建会话
 func (r *CustomerSessionRepository) Create(ctx context.Context, session *model.CustomerSession) error {
 	return r.db.WithContext(ctx).Create(session).Error
@@ -324,6 +326,76 @@ func (r *CustomerSessionRepository) GetByUserID(ctx context.Context, userID stri
 		return nil, err
 	}
 	return sessions, nil
+}
+
+// ListRecentForReAct 只返回 tenant + platform + account + user 锁定的会话摘要候选。
+// 调用方只能看到白名单业务字段，不能借此读取消息正文、订单或线索。
+func (r *CustomerSessionRepository) ListRecentForReAct(ctx context.Context, platform model.Platform, accountIDs []string, userID string, limit int) ([]*model.CustomerSession, int64, error) {
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 || tenant.IsSystemScope(ctx) {
+		return nil, 0, ErrLeadTenantRequired
+	}
+	platform = model.Platform(strings.TrimSpace(string(platform)))
+	userID = strings.TrimSpace(userID)
+	aliases := make([]string, 0, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID = strings.TrimSpace(accountID); accountID != "" {
+			aliases = append(aliases, accountID)
+		}
+	}
+	if platform == "" || len(aliases) == 0 || userID == "" {
+		return nil, 0, errors.New("ReAct 客户360查询缺少可信范围")
+	}
+	if limit <= 0 || limit > 20 {
+		limit = 20
+	}
+	q := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Where("tenant_id = ? AND platform = ? AND account_id IN ? AND user_id = ?", tid, platform, aliases, userID)
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var sessions []*model.CustomerSession
+	if err := q.Select("session_id", "platform", "account_id", "user_id", "user_name", "status", "handler_type",
+		"last_message_at", "message_count", "ai_reply_count", "human_reply_count", "created_at").
+		Order("COALESCE(last_message_at, created_at) DESC, id DESC").Limit(limit).Find(&sessions).Error; err != nil {
+		return nil, 0, err
+	}
+	return sessions, total, nil
+}
+
+// CountByStatusForReAct 统计可信范围内的全部会话状态，不受最近列表 limit 影响。
+func (r *CustomerSessionRepository) CountByStatusForReAct(ctx context.Context, platform model.Platform, accountIDs []string, userID string) (map[model.SessionStatus]int64, error) {
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 || tenant.IsSystemScope(ctx) {
+		return nil, ErrLeadTenantRequired
+	}
+	platform = model.Platform(strings.TrimSpace(string(platform)))
+	userID = strings.TrimSpace(userID)
+	aliases := make([]string, 0, len(accountIDs))
+	for _, accountID := range accountIDs {
+		if accountID = strings.TrimSpace(accountID); accountID != "" {
+			aliases = append(aliases, accountID)
+		}
+	}
+	if platform == "" || len(aliases) == 0 || userID == "" {
+		return nil, errors.New("ReAct 客户360查询缺少可信范围")
+	}
+	var rows []struct {
+		Status model.SessionStatus
+		Count  int64
+	}
+	if err := r.db.WithContext(ctx).Model(&model.CustomerSession{}).
+		Select("status, COUNT(*) AS count").
+		Where("tenant_id = ? AND platform = ? AND account_id IN ? AND user_id = ?", tid, platform, aliases, userID).
+		Group("status").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[model.SessionStatus]int64, len(rows))
+	for _, row := range rows {
+		out[row.Status] = row.Count
+	}
+	return out, nil
 }
 
 // GetByOneID 按客户 OneID（unified_id）拉取该客户的所有会话。

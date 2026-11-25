@@ -2,7 +2,9 @@
   <div class="page">
     <div class="page-head">
       <div>
-        <h2 class="page-title">业务账号授权</h2>
+        <h2 class="page-title">
+          业务账号授权
+        </h2>
         <span class="page-sub">管理用户对业务账号的读/写/管理授权（PR-5）</span>
       </div>
       <div class="head-actions">
@@ -14,55 +16,161 @@
           @clear="load"
           @keyup.enter="load"
         />
-        <el-button :loading="loading" @click="load">刷新</el-button>
-        <el-button type="primary" @click="openCreate">新增授权</el-button>
+        <el-button
+          :loading="loading"
+          @click="load"
+        >
+          刷新
+        </el-button>
+        <el-button
+          type="primary"
+          @click="openCreate"
+        >
+          新增授权
+        </el-button>
       </div>
     </div>
 
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="rows" empty-text="暂无授权记录">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="user_id" label="用户ID" width="100" />
-        <el-table-column prop="channel" label="渠道" min-width="120" />
-        <el-table-column prop="account_id" label="账号ID" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="scope" label="权限" width="120">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        empty-text="暂无授权记录"
+      >
+        <el-table-column
+          prop="id"
+          label="ID"
+          width="80"
+        />
+        <el-table-column
+          prop="user_id"
+          label="用户ID"
+          width="100"
+        />
+        <el-table-column
+          prop="channel"
+          label="渠道"
+          min-width="120"
+        />
+        <el-table-column
+          prop="account_id"
+          label="账号ID"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="scope"
+          label="权限"
+          width="120"
+        >
           <template #default="{ row }">
-            <el-tag :type="scopeTag(row.scope)">{{ scopeLabel(row.scope) }}</el-tag>
+            <el-tag :type="scopeTag(row.scope)">
+              {{ scopeLabel(row.scope) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" min-width="170">
-          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column
+          prop="created_at"
+          label="创建时间"
+          min-width="170"
+        >
           <template #default="{ row }">
-            <el-button link type="danger" @click="confirmRemove(row)">删除</el-button>
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="操作"
+          width="120"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="danger"
+              @click="confirmRemove(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="新增/更新授权" width="520px" destroy-on-close>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="96px">
-        <el-form-item label="用户ID" prop="user_id">
-          <el-input-number v-model="form.user_id" :min="1" :controls="false" style="width: 100%" />
+    <el-dialog
+      v-model="dialogVisible"
+      title="新增/更新授权"
+      width="520px"
+      destroy-on-close
+    >
+      <el-form
+        ref="formRef"
+        :model="form"
+        :rules="rules"
+        label-width="96px"
+      >
+        <el-form-item
+          label="用户ID"
+          prop="user_id"
+        >
+          <el-input-number
+            v-model="form.user_id"
+            :min="1"
+            :controls="false"
+            style="width: 100%"
+          />
         </el-form-item>
-        <el-form-item label="渠道" prop="channel">
-          <el-input v-model="form.channel" placeholder="如 wechat / douyin / whatsapp" />
+        <el-form-item
+          label="渠道"
+          prop="channel"
+        >
+          <el-input
+            v-model="form.channel"
+            placeholder="如 wechat / douyin / whatsapp"
+          />
         </el-form-item>
-        <el-form-item label="账号ID" prop="account_id">
-          <el-input v-model="form.account_id" placeholder="业务账号ID" />
+        <el-form-item
+          label="账号ID"
+          prop="account_id"
+        >
+          <el-input
+            v-model="form.account_id"
+            placeholder="业务账号ID"
+          />
         </el-form-item>
-        <el-form-item label="权限范围" prop="scope">
-          <el-select v-model="form.scope" style="width: 100%">
-            <el-option label="只读 (read)" value="read" />
-            <el-option label="读写 (write)" value="write" />
-            <el-option label="管理 (manage)" value="manage" />
+        <el-form-item
+          label="权限范围"
+          prop="scope"
+        >
+          <el-select
+            v-model="form.scope"
+            style="width: 100%"
+          >
+            <el-option
+              label="只读 (read)"
+              value="read"
+            />
+            <el-option
+              label="读写 (write)"
+              value="write"
+            />
+            <el-option
+              label="管理 (manage)"
+              value="manage"
+            />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+        <el-button @click="dialogVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="saving"
+          @click="submit"
+        >
+          保存
+        </el-button>
       </template>
     </el-dialog>
   </div>

@@ -6,7 +6,7 @@ import (
 
 	contentmodel "hivemtk-user/internal/content/model"
 	"hivemtk-user/internal/migration"
- "hivemtk-user/internal/model"
+	"hivemtk-user/internal/model"
 
 	"gorm.io/gorm"
 )

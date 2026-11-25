@@ -78,7 +78,7 @@ type Customer360DTO struct {
 
 	InteractionStats *InteractionStats `json:"interaction_stats"`
 
-	UserProfile      *UserProfile                      `json:"user_profile"`
+	UserProfile      *UserProfile                  `json:"user_profile"`
 	CompanyRelations []*CustomerCompanyRelationDTO `json:"company_relations,omitempty"`
 }
 
@@ -872,13 +872,6 @@ func (s *Customer360Service) resolveCustomerForSessions(ctx context.Context, ses
 		return nil
 	}
 	return cust
-}
-
-func (s *Customer360Service) resolveCustomerIDForSessions(ctx context.Context, sessions []*model.CustomerSession) string {
-	if cust := s.resolveCustomerForSessions(ctx, sessions); cust != nil {
-		return cust.ID
-	}
-	return ""
 }
 
 func (s *Customer360Service) buildUserProfile(ctx context.Context, sessions []*model.CustomerSession, interactionStats *InteractionStats, orderInfo *OrderInfo, customerID string) *UserProfile {

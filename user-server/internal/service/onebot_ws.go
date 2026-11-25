@@ -41,7 +41,7 @@ type OneBotWSConn struct {
 	// FA-CHANNEL-02：echo → 平台响应回执通道，发送注册、读循环投递。
 	pendingMu   sync.Mutex
 	pending     map[string]chan oneBotWSReply
-	echoSeq     uint64 // pendingMu 保护，生成稳定唯一 echo
+	echoSeq     uint64        // pendingMu 保护，生成稳定唯一 echo
 	sendTimeout time.Duration // 0 = 默认 30s；测试可注入短超时
 }
 

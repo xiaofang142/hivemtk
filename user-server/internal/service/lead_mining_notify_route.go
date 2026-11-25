@@ -18,7 +18,9 @@ func NewLeadMiningNotifyRouteService() *LeadMiningNotifyRouteService {
 }
 
 func (s *LeadMiningNotifyRouteService) Create(ctx context.Context, m *model.LeadMiningNotifyRoute) error {
-	if m.RouteID == "" { m.RouteID = fmt.Sprintf("lnr_%d", time.Now().UnixNano()) }
+	if m.RouteID == "" {
+		m.RouteID = fmt.Sprintf("lnr_%d", time.Now().UnixNano())
+	}
 	return s.repo.Create(ctx, m)
 }
 

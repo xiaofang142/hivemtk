@@ -29,7 +29,6 @@ const (
 //     只追加新曝光，不能突破压力上限；
 //   - Summaries/MarkConversion 只消费真实回执，曝光/点击不冒充因果增长（EC-31）。
 
-
 // AbExposureBuffer 曝光异步落库缓冲容量
 const AbExposureBuffer = 1024
 

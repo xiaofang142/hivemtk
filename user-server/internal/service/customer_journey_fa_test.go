@@ -169,10 +169,29 @@ func TestFAJourney_CASConflictRejects(t *testing.T) {
 
 	// B 用旧版本做 CAS 应冲突
 	base.CurrentStage = StageQuoted
-	base.Version++ // 模拟本地推进
+	base.Version++                                        // 模拟本地推进
 	err = svcB.persistStateCAS(ctx, base, base.Version-1) // expected = 旧版本
 	if err != ErrJourneyVersionConflict {
 		t.Fatalf("CAS 冲突应返回 ErrJourneyVersionConflict, got %v", err)
+	}
+}
+
+func TestFAJourney_CASReadFaultDoesNotWrite(t *testing.T) {
+	ctx := context.Background()
+	c := newFAJourneyCache()
+	c.setReadFault(true)
+	svc := faNewSvc(c)
+
+	err := svc.persistStateCAS(ctx, &JourneyState{
+		CustomerID: "cust-read-fault", CurrentStage: StageLead, Version: 1,
+	}, 0)
+	if err != ErrJourneyCacheReadFault {
+		t.Fatalf("CAS 读故障应返回 ErrJourneyCacheReadFault, got %v", err)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, exists := c.data[journeyStateKey("cust-read-fault")]; exists {
+		t.Fatal("CAS 读故障不应写入新状态")
 	}
 }
 

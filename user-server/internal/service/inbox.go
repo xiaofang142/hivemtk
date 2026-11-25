@@ -838,8 +838,9 @@ func (s *InboxService) GetMessagesByConversation(ctx context.Context, conversati
 	}
 
 	var hubs []*model.MessageHub
+	hubQueryErr := error(nil)
 	if s.hubRepo != nil {
-		hubs, _ = s.hubRepo.ListByConversationContext(ctx, conv.Platform, conv.AccountID, conv.CustomerID)
+		hubs, hubQueryErr = s.hubRepo.ListByConversationContext(ctx, conv.Platform, conv.AccountID, conv.CustomerID)
 	}
 
 	var sms []*model.SessionMessage
@@ -870,8 +871,14 @@ func (s *InboxService) GetMessagesByConversation(ctx context.Context, conversati
 				"media_url":       h.MediaURL,
 				"is_ai_reply":     h.IsAIReply,
 				"is_read":         h.IsRead,
-				"sent_at":         h.SentAt,
-				"created_at":      h.CreatedAt,
+				// LM-16：方向/群信息直接透传，不让前端从 sender 推断。
+				"direction":    h.Direction,
+				"is_group":     h.IsGroup,
+				"group_id":     h.GroupID,
+				"sent_at":      h.SentAt,
+				"created_at":   h.CreatedAt,
+				"cursor":       inboxMessageCursor(h.SentAt, h.ID),
+				"source_state": inboxSourceState(hubQueryErr),
 			},
 		})
 	}
@@ -1077,6 +1084,19 @@ func firstNonEmpty(a, b string) string {
 //
 // 判据优先级：平台+账号必须一致；会话有 conversation_id 时以它为界
 // （群聊/多轮会话的权威键）；缺失时回落到"客户在收发双方之一"。
+// inboxMessageCursor 稳定游标：时间 + 自增 ID，避免同时间消息分页漂移。
+func inboxMessageCursor(at time.Time, id uint) string {
+	return fmt.Sprintf("%d:%010d", at.UnixNano(), id)
+}
+
+// inboxSourceState 来源查询失败与「确实没有消息」分开表达；缺失通知不等于对方未说话。
+func inboxSourceState(err error) string {
+	if err != nil {
+		return "unavailable"
+	}
+	return "complete"
+}
+
 func hubBelongsToConversation(msg *model.MessageHub, conv *model.InboxConversation) bool {
 	if msg == nil || conv == nil {
 		return false

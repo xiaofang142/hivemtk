@@ -24,10 +24,10 @@ func roundMoney(v float64) float64 {
 type DraftStatus string
 
 const (
-	DraftStatusPending     DraftStatus = "pending"
-	DraftStatusConfirmed   DraftStatus = "confirmed"
-	DraftStatusCancelled   DraftStatus = "cancelled"
-	DraftStatusExpired     DraftStatus = "expired"
+	DraftStatusPending   DraftStatus = "pending"
+	DraftStatusConfirmed DraftStatus = "confirmed"
+	DraftStatusCancelled DraftStatus = "cancelled"
+	DraftStatusExpired   DraftStatus = "expired"
 	// DraftStatusOrderFailed FA-ORDER-01：草稿已确认但建单/关联失败，保留可恢复的待重试状态。
 	// 不再让"已确认、无订单、不可再确认"的草稿成为死状态。
 	DraftStatusOrderFailed DraftStatus = "order_failed"
@@ -62,7 +62,7 @@ type OrderDraft struct {
 	CancelledAt  *time.Time     `json:"cancelled_at,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
 	// FA-ORDER-01：草稿级幂等建单凭据 + 失败原因。
-	IdempotencyKey   string `json:"idempotency_key,omitempty"`
+	IdempotencyKey    string `json:"idempotency_key,omitempty"`
 	OrderFailedReason string `json:"order_failed_reason,omitempty"`
 }
 

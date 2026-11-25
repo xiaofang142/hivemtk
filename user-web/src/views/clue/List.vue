@@ -159,17 +159,47 @@
           </el-select>
         </el-form-item>
         <el-form-item label="线索角色">
-          <el-select v-model="filterForm.lead_role" placeholder="全部" clearable style="width: 140px">
-            <el-option label="需求方" value="demand" />
-            <el-option label="供货方" value="supply" />
-            <el-option label="资源方/上下游" value="resource" />
-            <el-option label="中介" value="broker" />
-            <el-option label="未知" value="unknown" />
+          <el-select
+            v-model="filterForm.lead_role"
+            placeholder="全部"
+            clearable
+            style="width: 140px"
+          >
+            <el-option
+              label="需求方"
+              value="demand"
+            />
+            <el-option
+              label="供货方"
+              value="supply"
+            />
+            <el-option
+              label="资源方/上下游"
+              value="resource"
+            />
+            <el-option
+              label="中介"
+              value="broker"
+            />
+            <el-option
+              label="未知"
+              value="unknown"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filterForm.status" placeholder="全部" clearable style="width: 130px">
-            <el-option v-for="s in ['candidate','new','notified','following','converted','ignored','invalid']" :key="s" :label="statusLabel(s)" :value="s" />
+          <el-select
+            v-model="filterForm.status"
+            placeholder="全部"
+            clearable
+            style="width: 130px"
+          >
+            <el-option
+              v-for="s in ['candidate','new','notified','following','converted','ignored','invalid']"
+              :key="s"
+              :label="statusLabel(s)"
+              :value="s"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="时间">
@@ -235,25 +265,55 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="角色" min-width="110">
+        <el-table-column
+          label="角色"
+          min-width="110"
+        >
           <template #default="{ row }">
-            <el-tag size="small" :type="leadRoleTag(row.lead_role)">{{ leadRoleLabel(row.lead_role) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="leadRoleTag(row.lead_role)"
+            >
+              {{ leadRoleLabel(row.lead_role) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="100">
+        <el-table-column
+          label="状态"
+          min-width="100"
+        >
           <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 'candidate' ? 'warning' : 'info'">{{ statusLabel(row.status) }}</el-tag>
+            <el-tag
+              size="small"
+              :type="row.status === 'candidate' ? 'warning' : 'info'"
+            >
+              {{ statusLabel(row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="渠道账号" min-width="150" show-overflow-tooltip>
+        <el-table-column
+          label="渠道账号"
+          min-width="150"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">
             <div>{{ getChannelLabel(row.source_channel) || row.source_channel || '-' }}</div>
-            <div style="color:#909399;font-size:12px">{{ row.source_account_id || '-' }}</div>
+            <div style="color:#909399;font-size:12px">
+              {{ row.source_account_id || '-' }}
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="会话" width="90">
+        <el-table-column
+          label="会话"
+          width="90"
+        >
           <template #default="{ row }">
-            <el-tag size="small" :type="row.is_group ? 'warning' : 'info'">{{ row.is_group ? '群聊' : '单聊' }}</el-tag>
+            <el-tag
+              size="small"
+              :type="row.is_group ? 'warning' : 'info'"
+            >
+              {{ row.is_group ? '群聊' : '单聊' }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column

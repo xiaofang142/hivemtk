@@ -579,9 +579,9 @@ func (s *RestoreService) failRestoreRecord(ctx context.Context, record *model.Re
 // FA-BACKUP-02：解压资源边界——条目数、单文件声明/实际大小、累计展开量上限，
 // 防止压缩炸弹把私有恢复目录写爆。超限前 return error，defer RemoveAll 清理目录。
 const (
-	restoreMaxZipEntries    = 10000
-	restoreMaxEntryBytes    = 100 << 20 // 单文件 100MB
-	restoreMaxTotalBytes    = 500 << 20 // 累计展开 500MB
+	restoreMaxZipEntries = 10000
+	restoreMaxEntryBytes = 100 << 20 // 单文件 100MB
+	restoreMaxTotalBytes = 500 << 20 // 累计展开 500MB
 )
 
 // decompressBackup 把备份 zip 解到 destDir（FA-06：目录由调用方按任务给定，

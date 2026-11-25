@@ -151,6 +151,9 @@ type InboxIngressService struct {
 	leadDiscoverySvc    *LeadDiscoveryService
 	bridgeLeadProcessor BridgeLeadProcessor
 	outboundAuthorizer  BridgeCapabilityAuthorizer
+	// sharedBusinessForEvent LEAD-04：按事件所属账号/会话读取对方共享业务信息。
+	// 由 SetSharedBusinessProvider 注入；nil 时保持既有行为（单测/未装配）。
+	sharedBusinessForEvent func(context.Context, *model.MessageEvent) SharedBusinessInput
 
 	// bridgeFollow 新用户（非关注好友）事件登记与自动关注策略（M-6）。
 	// 为 nil 时（未装配/单测）识别信号不打扰任何既有路径，行为与接入前一致。
@@ -249,6 +252,14 @@ func (s *InboxIngressService) SetAutoReplyGate(svc *AutoReplyService) {
 func (s *InboxIngressService) SetLeadDiscoveryGate(svc *LeadDiscoveryService) {
 	if s != nil {
 		s.leadDiscoverySvc = svc
+	}
+}
+
+// SetSharedBusinessProvider 注入 LEAD-04 共享业务信息提供方（通常为线索侧读共享上下文）。
+// 提供方须自行按授权/长度预算过滤；nil 表示不注入（单测/未装配保持既有行为）。
+func (s *InboxIngressService) SetSharedBusinessProvider(provider func(context.Context, *model.MessageEvent) SharedBusinessInput) {
+	if s != nil {
+		s.sharedBusinessForEvent = provider
 	}
 }
 
@@ -832,14 +843,18 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 	}
 	// T051：自动回复侧写/读交叉引用备注（共享 ConversationContext，不直调线索发现）。
 	// best-effort，失败只记 warn，不影响自动回复主链。
-	if s.autoReplySvc != nil && event.ConversationID != "" {
-		if acc, ok := resolveModuleChannelAccount(ctx, accountID); ok {
-			if notes := s.autoReplySvc.ReferLeadNotes(ctx, acc.ID, event.ConversationID); len(notes) > 0 {
-				logger.Infof("[auto-reply] 交叉引用线索发现备注 account=%d conv=%s notes=%v", acc.ID, event.ConversationID, notes)
+	if s.autoReplySvc != nil && (event.ConversationID != "" || (event.IsGroup && event.GroupID != "")) {
+		sharedHub := &model.MessageHub{Platform: event.Channel, AccountID: accountID, ConversationID: event.ConversationID, IsGroup: event.IsGroup, GroupID: event.GroupID}
+		if account, err := (&Service{}).historyScope(ctx, sharedHub); err == nil && account.accountID > 0 {
+			scope := ConversationContextScope{Platform: event.Channel, IsGroup: event.IsGroup, GroupID: event.GroupID}
+			if notes := s.autoReplySvc.ReferLeadNotes(ctx, account.accountID, event.ConversationID, scope); len(notes) > 0 {
+				logger.Infof("[auto-reply] 交叉引用线索发现备注 account=%d conv=%s notes=%v", account.accountID, event.ConversationID, notes)
 			}
-			if err := s.autoReplySvc.RecordNote(ctx, acc.ID, event.ConversationID, "自动回复链路已介入"); err != nil {
-				logger.Warnf("[auto-reply] 写交叉引用备注失败 account=%d conv=%s: %v", acc.ID, event.ConversationID, err)
+			if err := s.autoReplySvc.RecordNote(ctx, account.accountID, event.ConversationID, "自动回复链路已介入", scope); err != nil {
+				logger.Warnf("[auto-reply] 写交叉引用备注失败 account=%d conv=%s: %v", account.accountID, event.ConversationID, err)
 			}
+		} else {
+			logger.Warnf("[auto-reply] 跳过未自证账号的共享上下文 account=%s: %v", accountID, err)
 		}
 	}
 	if s.aiTrigger == nil {
@@ -889,6 +904,14 @@ func (s *InboxIngressService) triggerAIForEvent(ctx context.Context, event *mode
 		// event.MsgType 已被上游（InboundHubMsgType/桥端词表）归一为中台词表类型；
 		// 文本消息此调用逐字节等价于旧口径 event.Content。
 		aiContent := AppendMediaContextToContent(event.Content, event.MsgType, event.MediaURL)
+		// LEAD-04：把共享上下文里对方刚写的标签/备注/摘要送入真实回复模型请求（用户消息输入）。
+		// 提供方由装配点注入；缺失时保持既有行为。建议属性在 PromptBlock 中显式标注，
+		// 不得被当作已发生事实。
+		if s.sharedBusinessForEvent != nil {
+			if shared := s.sharedBusinessForEvent(ctx, event); !shared.empty() {
+				aiContent = aiContent + "\n" + shared.PromptBlock()
+			}
+		}
 		logger.Ctx(ctx).Info().
 			Str("channel", event.Channel).
 			Str("account_id", accountID).

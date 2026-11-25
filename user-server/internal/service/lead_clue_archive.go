@@ -116,7 +116,7 @@ func (s *LeadClueArchiveService) Archive(ctx context.Context, in LeadClueArchive
 		EvidenceJSON:    in.EvidenceJSON,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("Phase 3 客户侧归档失败: %w", err)
+		return nil, fmt.Errorf("第三阶段客户侧归档失败: %w", err)
 	}
 
 	// 客户侧新建/识别出的 OneID 回写线索，保证双向可追溯。

@@ -21,6 +21,24 @@ func groupCustomerUnifiedID(tenantID uint, platform, accountID, groupID string) 
 		strings.TrimSpace(groupID))
 }
 
+// resolveGroupMemberRole 区分「群成员身份」与「业务角色」（LM-11）。
+// 业务角色（demand/supply/broker/resource）来自有证据的需求判定，普通发言
+// 只登记成员身份，不能把已证实的业务角色抹回 member；转述者不等于买家。
+func resolveGroupMemberRole(senderID, memberRole, businessRole string) string {
+	if strings.TrimSpace(senderID) == "" {
+		return "unknown"
+	}
+	switch strings.ToLower(strings.TrimSpace(businessRole)) {
+	case "demand", "supply", "broker", "resource":
+		return strings.ToLower(strings.TrimSpace(businessRole))
+	}
+	r := strings.ToLower(strings.TrimSpace(memberRole))
+	if r == "" {
+		return "member"
+	}
+	return r
+}
+
 // resolveCustomerForHub 按消息场景解析客户（D2/D5/D16）。
 // 群聊：以 tenant+platform+account_id+group_id 建群客户，customers.name=群名，
 // grp: 前缀保证群档与个人档隔离（OneID 合并口已排除）。
@@ -30,7 +48,7 @@ func (s *Service) resolveCustomerForHub(ctx context.Context, hub *model.MessageH
 		return nil, fmt.Errorf("无客户身份标识")
 	}
 	if !hub.IsGroup || strings.TrimSpace(hub.GroupID) == "" {
-		return s.resolveCustomer(ctx, hub.Platform, hub.SenderID, hub.SenderName)
+		return s.resolveCustomer(ctx, hub.Platform, hub.AccountID, hub.SenderID, hub.SenderName)
 	}
 	tid, ok := tenant.FromContext(ctx)
 	if !ok {

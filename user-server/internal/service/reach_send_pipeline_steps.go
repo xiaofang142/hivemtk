@@ -610,10 +610,6 @@ func (p *defaultSendPipeline) recheckDispatch(ctx context.Context, req *ReachSen
 	return ctx.Err()
 }
 
-func (p *defaultSendPipeline) executeSendWithFallback(ctx context.Context, req *ReachSendRequest) (string, error) {
-	return p.sendWithFallback(ctx, req, &SendResponse{})
-}
-
 func (p *defaultSendPipeline) sendWithFallback(ctx context.Context, req *ReachSendRequest, resp *SendResponse) (string, error) {
 	if p.config.Adapter == nil {
 		return "", ErrSendChannelNotConfig

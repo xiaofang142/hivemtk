@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/aiagent/llm"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
 
@@ -272,14 +273,20 @@ func cannedHistory() func(context.Context, *model.MessageHub) []llm.ChatMessage 
 	}
 }
 
-func newTestService(cfg *model.LeadMiningConfig, j *fakeJudge) *Service {
+func newTestService(t *testing.T, cfg *model.LeadMiningConfig, j *fakeJudge) *Service {
+	t.Helper()
+	setupLeadHistoryTest(t)
+	previous := tenant.CurrentMode()
+	tenant.SetMode(tenant.ModeOff)
+	t.Cleanup(func() { tenant.SetMode(previous) })
 	return &Service{
-		judge:          j,
-		historyFetcher: cannedHistory(),
-		custRepo:       newFakeCustRepo(),
-		clueRepo:       newFakeClueRepo(),
-		cfgRepo:        &fakeCfgRepo{cfg: cfg},
-		lastJudge:      map[string]time.Time{},
+		channelResolver: NewChannelResolverWithRepos(nil, nil),
+		judge:           j,
+		historyFetcher:  cannedHistory(),
+		custRepo:        newFakeCustRepo(),
+		clueRepo:        newFakeClueRepo(),
+		cfgRepo:         &fakeCfgRepo{cfg: cfg},
+		lastJudge:       map[string]time.Time{},
 	}
 }
 
@@ -287,6 +294,7 @@ func sampleHub(platform, senderID, content string) *model.MessageHub {
 	return &model.MessageHub{
 		ID:             1,
 		Platform:       platform,
+		AccountID:      "test-account",
 		SenderID:       senderID,
 		SenderName:     "张三",
 		Direction:      "inbound",
@@ -350,7 +358,7 @@ func TestProcess_LeadDetected(t *testing.T) {
 		MinIntentScore: 50,
 	}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 80, MatchedTags: []string{"AI兴趣"}}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 	fcr := s.custRepo.(*fakeCustRepo)
 	fkr := s.clueRepo.(*fakeClueRepo)
 
@@ -359,11 +367,11 @@ func TestProcess_LeadDetected(t *testing.T) {
 	if j.calls != 1 {
 		t.Fatalf("期望判定 1 次，实际 %d", j.calls)
 	}
-	// 身份归一口径已演进：telegram 非数字 sender 走规范化 UnifiedID，
-	// 不再固定是 lm:platform:sender。按身份字段取一次，避免测试绑定旧键格式。
+	// 身份归一口径已演进：telegram 非数字 sender 走规范化 UnifiedID；
+	// LM-04 起 SourceAccountID 写真实接入账号（hub.AccountID），不是联系人 sender。
 	var c *model.Customer
 	for _, candidate := range fcr.byUID {
-		if candidate.SourceChannel == "telegram" && candidate.SourceAccountID == "u1" {
+		if candidate.SourceChannel == "telegram" && candidate.SourceAccountID == "test-account" {
 			c = candidate
 			break
 		}
@@ -394,7 +402,7 @@ func TestProcess_LeadDetected(t *testing.T) {
 func TestProcess_BelowThreshold(t *testing.T) {
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 90}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 50}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 	fkr := s.clueRepo.(*fakeClueRepo)
 
 	s.process(context.Background(), sampleHub("telegram", "u2", "随便聊聊"))
@@ -407,7 +415,7 @@ func TestProcess_BelowThreshold(t *testing.T) {
 func TestProcess_NotLead(t *testing.T) {
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: false, IntentScore: 10}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 	fkr := s.clueRepo.(*fakeClueRepo)
 
 	s.process(context.Background(), sampleHub("telegram", "u3", "你好"))
@@ -421,7 +429,7 @@ func TestProcess_ChannelDisabled(t *testing.T) {
 	// P0-c：Channels 是显式关闭名单。douyin 被显式关闭 ⇒ 不触发判定。
 	cfg := &model.LeadMiningConfig{Enabled: true, Channels: []string{"douyin"}, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 
 	s.process(context.Background(), sampleHub("douyin", "u4", "我想购买"))
 
@@ -433,7 +441,7 @@ func TestProcess_ChannelDisabled(t *testing.T) {
 func TestProcess_Disabled(t *testing.T) {
 	cfg := &model.LeadMiningConfig{Enabled: false, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 90}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 
 	s.process(context.Background(), sampleHub("telegram", "u5", "我想购买"))
 
@@ -445,7 +453,7 @@ func TestProcess_Disabled(t *testing.T) {
 func TestProcess_Debounce(t *testing.T) {
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 80}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 	fkr := s.clueRepo.(*fakeClueRepo)
 
 	s.process(context.Background(), sampleHub("telegram", "u6", "在吗"))
@@ -462,12 +470,11 @@ func TestProcess_Debounce(t *testing.T) {
 func TestProcess_DedupAcrossTime(t *testing.T) {
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	j := &fakeJudge{resp: &LeadJudgement{IsLead: true, IntentScore: 80}}
-	s := newTestService(cfg, j)
+	s := newTestService(t, cfg, j)
 	fkr := s.clueRepo.(*fakeClueRepo)
 
-	account := "telegram:u7"
 	s.process(context.Background(), sampleHub("telegram", "u7", "第一次咨询"))
-	delete(s.lastJudge, account)
+	s.lastJudge = map[string]time.Time{}
 	s.process(context.Background(), sampleHub("telegram", "u7", "第二次咨询"))
 
 	if j.calls != 2 {

@@ -14,6 +14,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// ErrIdentifyVersionConflict 识别码版本冲突（并发重置时 CAS 失败，调用方须重试/拒绝）。
+var ErrIdentifyVersionConflict = errors.New("识别码版本冲突")
+
 // ChannelIdentifyCodeRepository 渠道识别码仓储（权威记录）。
 type ChannelIdentifyCodeRepository interface {
 	Available() bool
@@ -83,6 +86,33 @@ func (r *channelIdentifyCodeRepo) GetByCode(ctx context.Context, code string) (*
 	return &rows[0], nil
 }
 
+// findValidIdentifyCode 解析当前码或在途窗口内旧码：与 ValidCodes 同一时间判定，
+// 窗口过后的旧码一律返回 nil（fail-closed）。包级函数供账号仓储复用，
+// 不扩充 ChannelIdentifyCodeRepository 接口（避免破坏既有测试替身）。
+func findValidIdentifyCode(ctx context.Context, gdb *gorm.DB, code string) (*model.ChannelIdentifyCode, error) {
+	repo := &channelIdentifyCodeRepo{db: gdb}
+	rec, err := repo.GetByCode(ctx, code)
+	if err != nil || rec != nil {
+		return rec, err
+	}
+	if code == "" {
+		return nil, nil
+	}
+	var rows []model.ChannelIdentifyCode
+	if err := gdb.WithContext(tenant.WithSystemScope(ctx)).
+		Where("prev_code = ? AND prev_valid_until > ?", code, time.Now()).
+		Limit(2).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) > 1 {
+		return nil, ErrAmbiguousIdentifyCode
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
 func (r *channelIdentifyCodeRepo) ListByTenant(ctx context.Context, tenantID uint) ([]model.ChannelIdentifyCode, error) {
 	if !r.Available() {
 		return nil, ErrChannelStoreUnavailable
@@ -137,6 +167,31 @@ func (r *channelIdentifyCodeRepo) Upsert(ctx context.Context, rec *model.Channel
 		Columns:   []clause.Column{{Name: "channel_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"code", "version", "prev_code", "prev_valid_until", "reset_at", "updated_at"}),
 	}).Create(rec).Error
+}
+
+// RotateCAS 条件更新：WHERE tenant_id+channel_id+version=期望值，RowsAffected=0 即冲突。
+// 首次生成（expectVersion=0）走 OnConflict DoNothing，两个并发首建只有一个成功。
+func (r *channelIdentifyCodeRepo) RotateCAS(ctx context.Context, tenantID, channelID uint, expectVersion int, rec *model.ChannelIdentifyCode) error {
+	if !r.Available() || rec == nil {
+		return ErrChannelStoreUnavailable
+	}
+	if expectVersion <= 0 {
+		return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(rec).Error
+	}
+	res := r.db.WithContext(ctx).Model(&model.ChannelIdentifyCode{}).
+		Where("tenant_id = ? AND channel_id = ? AND version = ?", tenantID, channelID, expectVersion).
+		Updates(map[string]any{
+			"code": rec.Code, "version": rec.Version,
+			"prev_code": rec.PrevCode, "prev_valid_until": rec.PrevValidUntil,
+			"reset_at": rec.ResetAt, "updated_at": time.Now(),
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return ErrIdentifyVersionConflict
+	}
+	return nil
 }
 
 // DeleteByChannel 硬删除该渠道的全部识别码行。两表模型均无 gorm.DeletedAt，

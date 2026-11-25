@@ -10,6 +10,7 @@ import (
 
 	"hivemtk-user/internal/model"
 	"hivemtk-user/internal/pkg/db"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
 
@@ -18,8 +19,10 @@ import (
 
 func seedHub(platform, sender, name, content string, idx int) model.MessageHub {
 	return model.MessageHub{
+		TenantID:       tenant.DefaultTenantID,
 		MsgID:          fmt.Sprintf("seed-%s-%d", sender, idx),
 		Platform:       platform,
+		AccountID:      "integration-account",
 		SenderID:       sender,
 		SenderName:     name,
 		Direction:      "inbound",
@@ -30,18 +33,43 @@ func seedHub(platform, sender, name, content string, idx int) model.MessageHub {
 	}
 }
 
+// 集成夹具必须具备真实渠道账号归属；禁云与能力表恢复仅限本用例。
+func newLeadIntegrationDB(t *testing.T, platform string) *gorm.DB {
+	t.Helper()
+	setupLeadHistoryTest(t)
+	database := testutil.NewTestDB(t, &model.LeadMiningConfig{}, &model.MessageHub{},
+		&model.Customer{}, &model.Clue{}, &model.LeadMiningJudgement{}, &model.LeadMiningHit{},
+		&model.LeadMiningRule{}, &model.Channel{}, &model.ChannelAccount{}, &model.ChannelIdentifyCode{}, &model.ConversationContext{})
+	if err := database.Exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_conv_ctx_tenant_account_conv ON conversation_contexts (tenant_id, channel_account_id, external_conversation_id)").Error; err != nil {
+		t.Fatal(err)
+	}
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
+	channel := model.Channel{TenantID: tenant.DefaultTenantID, Code: platform, Type: platform, Name: platform}
+	if err := database.WithContext(ctx).Create(&channel).Error; err != nil {
+		t.Fatal(err)
+	}
+	account := model.ChannelAccount{TenantID: tenant.DefaultTenantID, ChannelID: channel.ID, Name: "integration-account", Status: 1, DataScope: "{}"}
+	if err := database.WithContext(ctx).Create(&account).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := &Service{channelResolver: NewChannelResolverWithRepos(repository.NewChannelAccountRepositoryWithDB(database), repository.NewChannelRepositoryWithDB(database))}
+	hub := seedHub(platform, "fixture-peer", "夹具", "消息", 1)
+	if scope, err := svc.historyScope(ctx, &hub); err != nil || scope.accountID != account.ID {
+		t.Fatalf("集成账号必须自证到真实账号：%+v err=%v", scope, err)
+	}
+	return database
+}
+
+func leadIntegrationResolver(database *gorm.DB) *ChannelResolver {
+	return NewChannelResolverWithRepos(repository.NewChannelAccountRepositoryWithDB(database), repository.NewChannelRepositoryWithDB(database))
+}
+
 // 真实管道构造：配置落库 + 多轮消息落库 + 真实 fetchHistoryDB + 真实写库
 func TestLeadMining_Integration_FullPipeline(t *testing.T) {
-	database := testutil.NewTestDB(t,
-		&model.LeadMiningConfig{},
-		&model.MessageHub{},
-		&model.Customer{},
-		&model.Clue{},
-		&model.LeadMiningJudgement{},
-	)
+	database := newLeadIntegrationDB(t, "telegram")
 	db.SetTestDB(database)
 
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 	cfgRepo := repository.NewLeadMiningConfigRepository()
 
 	cfg := &model.LeadMiningConfig{
@@ -94,12 +122,13 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 	hubRepo := repository.NewMessageHubRepository()
 	repository.SetMessageHubRepoDB(hubRepo, database)
 	s := &Service{
-		judge:     judge,
-		custRepo:  repository.NewCustomerRepository(),
-		clueRepo:  repository.NewClueRepositoryWithDB(database),
-		cfgRepo:   cfgRepo,
-		hubRepo:   hubRepo,
-		lastJudge: map[string]time.Time{},
+		judge:           judge,
+		channelResolver: leadIntegrationResolver(database),
+		custRepo:        repository.NewCustomerRepository(),
+		clueRepo:        repository.NewClueRepositoryWithDB(database),
+		cfgRepo:         cfgRepo,
+		hubRepo:         hubRepo,
+		lastJudge:       map[string]time.Time{},
 	}
 
 	last := msgs[len(msgs)-1]
@@ -136,7 +165,7 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 		t.Fatalf("客户标签缺失，实际: %v", tags)
 	}
 
-	delete(s.lastJudge, account)
+	s.lastJudge = map[string]time.Time{}
 	s.process(ctx, &last)
 	var cnt int64
 	database.Model(&model.Clue{}).Where("type = ? AND account = ?", ClueTypeLeadMining, account).Count(&cnt)
@@ -147,16 +176,10 @@ func TestLeadMining_Integration_FullPipeline(t *testing.T) {
 
 // 非线索场景：构造闲聊消息，判定为 false，不应写库
 func TestLeadMining_Integration_NotLead(t *testing.T) {
-	database := testutil.NewTestDB(t,
-		&model.LeadMiningConfig{},
-		&model.MessageHub{},
-		&model.Customer{},
-		&model.Clue{},
-		&model.LeadMiningJudgement{},
-	)
+	database := newLeadIntegrationDB(t, "telegram")
 	db.SetTestDB(database)
 
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 	cfgRepo := repository.NewLeadMiningConfigRepository()
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	if err := cfgRepo.Save(ctx, cfg); err != nil {
@@ -165,20 +188,25 @@ func TestLeadMining_Integration_NotLead(t *testing.T) {
 
 	sender := "integration_chat_002"
 	cleanupLeadMiningData(t, database, sender)
-	msg := seedHub("douyin", sender, "小李", "今天天气真不错", 1)
+	msg := seedHub("telegram", sender, "小李", "今天天气真不错", 1)
 	if err := database.Create(&msg).Error; err != nil {
 		t.Fatal(err)
 	}
 
 	judge := &fakeJudge{resp: &LeadJudgement{IsLead: false, IntentScore: 10}}
 	s := &Service{
-		judge:     judge,
-		custRepo:  repository.NewCustomerRepository(),
-		clueRepo:  repository.NewClueRepositoryWithDB(database),
-		cfgRepo:   cfgRepo,
-		lastJudge: map[string]time.Time{},
+		judge:           judge,
+		channelResolver: leadIntegrationResolver(database),
+		custRepo:        repository.NewCustomerRepository(),
+		clueRepo:        repository.NewClueRepositoryWithDB(database),
+		cfgRepo:         cfgRepo,
+		hubRepo:         repository.NewMessageHubRepositoryWithDB(database),
+		lastJudge:       map[string]time.Time{},
 	}
 	s.process(ctx, &msg)
+	if judge.calls != 1 {
+		t.Fatalf("非线索分支必须真实执行判定，实际 %d 次", judge.calls)
+	}
 
 	var cnt int64
 	database.Model(&model.Clue{}).Where("type = ?", ClueTypeLeadMining).Count(&cnt)
@@ -189,16 +217,10 @@ func TestLeadMining_Integration_NotLead(t *testing.T) {
 
 // 异步非阻塞路径：Enqueue 后由 worker 在真实 DB 中落地线索
 func TestLeadMining_Integration_AsyncEnqueue(t *testing.T) {
-	database := testutil.NewTestDB(t,
-		&model.LeadMiningConfig{},
-		&model.MessageHub{},
-		&model.Customer{},
-		&model.Clue{},
-		&model.LeadMiningJudgement{},
-	)
+	database := newLeadIntegrationDB(t, "telegram")
 	db.SetTestDB(database)
 
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 	cfgRepo := repository.NewLeadMiningConfigRepository()
 	cfg := &model.LeadMiningConfig{Enabled: true, Tags: model.JSONStrings{"高意向"}, MinIntentScore: 50}
 	if err := cfgRepo.Save(ctx, cfg); err != nil {
@@ -217,15 +239,16 @@ func TestLeadMining_Integration_AsyncEnqueue(t *testing.T) {
 	hubRepo := repository.NewMessageHubRepository()
 	repository.SetMessageHubRepoDB(hubRepo, database)
 	s := &Service{
-		queue:     make(chan *model.MessageHub, 16),
-		workers:   1,
-		judge:     judge,
-		custRepo:  repository.NewCustomerRepository(),
-		clueRepo:  repository.NewClueRepositoryWithDB(database),
-		cfgRepo:   cfgRepo,
-		hubRepo:   hubRepo,
-		cancel:    cancel,
-		lastJudge: map[string]time.Time{},
+		queue:           make(chan *model.MessageHub, 16),
+		workers:         1,
+		judge:           judge,
+		channelResolver: leadIntegrationResolver(database),
+		custRepo:        repository.NewCustomerRepository(),
+		clueRepo:        repository.NewClueRepositoryWithDB(database),
+		cfgRepo:         cfgRepo,
+		hubRepo:         hubRepo,
+		cancel:          cancel,
+		lastJudge:       map[string]time.Time{},
 	}
 	s.wg.Add(1)
 	go s.worker(ctxCancel)
@@ -253,16 +276,10 @@ func TestLeadMining_Integration_AsyncEnqueue(t *testing.T) {
 
 // 去抖：同客户窗口内多条消息只判定一次（真实管道）
 func TestLeadMining_Integration_Debounce(t *testing.T) {
-	database := testutil.NewTestDB(t,
-		&model.LeadMiningConfig{},
-		&model.MessageHub{},
-		&model.Customer{},
-		&model.Clue{},
-		&model.LeadMiningJudgement{},
-	)
+	database := newLeadIntegrationDB(t, "telegram")
 	db.SetTestDB(database)
 
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 	cfgRepo := repository.NewLeadMiningConfigRepository()
 	cfg := &model.LeadMiningConfig{Enabled: true, MinIntentScore: 50}
 	if err := cfgRepo.Save(ctx, cfg); err != nil {
@@ -282,12 +299,13 @@ func TestLeadMining_Integration_Debounce(t *testing.T) {
 	hubRepo := repository.NewMessageHubRepository()
 	repository.SetMessageHubRepoDB(hubRepo, database)
 	s := &Service{
-		judge:     judge,
-		custRepo:  repository.NewCustomerRepository(),
-		clueRepo:  repository.NewClueRepositoryWithDB(database),
-		cfgRepo:   cfgRepo,
-		hubRepo:   hubRepo,
-		lastJudge: map[string]time.Time{},
+		judge:           judge,
+		channelResolver: leadIntegrationResolver(database),
+		custRepo:        repository.NewCustomerRepository(),
+		clueRepo:        repository.NewClueRepositoryWithDB(database),
+		cfgRepo:         cfgRepo,
+		hubRepo:         hubRepo,
+		lastJudge:       map[string]time.Time{},
 	}
 	for i := 1; i <= 3; i++ {
 		var m model.MessageHub

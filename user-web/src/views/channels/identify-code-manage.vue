@@ -13,6 +13,15 @@
         </div>
       </template>
 
+      <el-alert
+        v-if="rotationError"
+        class="rotation-error"
+        type="error"
+        :closable="false"
+        show-icon
+        :title="rotationError"
+      />
+
       <el-table
         v-loading="loading"
         :data="rows"
@@ -69,6 +78,8 @@
               link
               type="warning"
               size="small"
+              :loading="rotating"
+              :disabled="rotating"
               @click="resetCode(row)"
             >
               重置
@@ -94,7 +105,8 @@
         <el-button
           type="primary"
           size="small"
-          :disabled="!newChannelId"
+          :loading="rotating"
+          :disabled="!newChannelId || rotating"
           @click="generateCode"
         >
           生成识别码
@@ -111,6 +123,8 @@ import channelAccountApi from '@/api/channelAccount.js'
 import channelIdentifyCodeApi from '@/api/channelIdentifyCode.js'
 
 const loading = ref(false)
+const rotating = ref(false)
+const rotationError = ref('')
 const rows = ref([])
 const channels = ref([])
 const newChannelId = ref(null)
@@ -151,10 +165,25 @@ async function copyCode(code) {
 }
 
 async function rotate(channelId) {
-  const res = await channelIdentifyCodeApi.rotate(channelId)
-  const code = res?.code || res?.data?.code || ''
-  ElMessage.success(code ? `已重置，新识别码：${code}` : '已重置识别码')
-  loadList()
+  if (rotating.value) return
+  rotating.value = true
+  rotationError.value = ''
+  try {
+    const res = await channelIdentifyCodeApi.rotate(channelId)
+    const code = res?.code || res?.data?.code || ''
+    ElMessage.success(code ? `已重置，新识别码：${code}` : '已重置识别码')
+    await loadList()
+  } catch (e) {
+    const message = e?.message || '未知错误'
+    rotationError.value = `识别码操作失败：${message}`
+    ElMessage.error(rotationError.value)
+  } finally {
+    rotating.value = false
+  }
+}
+
+function isConfirmCancel(error) {
+  return error === 'cancel' || error === 'close'
 }
 
 function resetCode(row) {
@@ -162,12 +191,20 @@ function resetCode(row) {
     `确认重置渠道「${channelName(row.channel_id)}」的识别码？旧码仅在短暂在途窗口内有效。`,
     '提示',
     { type: 'warning' }
-  ).then(() => rotate(row.channel_id)).catch(() => {})
+  ).then(() => rotate(row.channel_id)).catch((error) => {
+    if (!isConfirmCancel(error)) {
+      const message = error?.message || '未知错误'
+      rotationError.value = `识别码操作失败：${message}`
+      ElMessage.error(rotationError.value)
+    }
+  })
 }
 
-function generateCode() {
-  if (!newChannelId.value) return
-  rotate(newChannelId.value).finally(() => { newChannelId.value = null })
+async function generateCode() {
+  if (!newChannelId.value || rotating.value) return
+  const channelId = newChannelId.value
+  newChannelId.value = null
+  await rotate(channelId)
 }
 
 onMounted(loadList)

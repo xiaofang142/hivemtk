@@ -96,11 +96,6 @@ type httpRequestInfo struct {
 	BodySize       int
 }
 
-func collectHTTPRequestInfo(c *gin.Context) httpRequestInfo {
-	info, _, _ := collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
-	return info
-}
-
 // collectHTTPRequestInfoWithLimit 最多读取 maxBodyBytes+1 字节；多读的 1 字节只用于
 // 判定超限，不再把整个超大 body 缓存在内存或日志预览里。
 func collectHTTPRequestInfoWithLimit(c *gin.Context, maxBodyBytes int) (httpRequestInfo, []byte, bool) {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-api_verify_full.py — API 三端验收脚本（CLAUDE.md 验收标准实现）
+api_verify_full.py — API 四维验收脚本（CLAUDE.md 验收标准实现）
 
 每个端点验证四维:
   【入参】前端发送字段
@@ -11,22 +11,38 @@ api_verify_full.py — API 三端验收脚本（CLAUDE.md 验收标准实现）
 
 用法:
   python3 scripts/api_verify_full.py chain   # 核心业务链路: 消息入库→AI→出库→ack 全链
-  python3 scripts/api_verify_full.py api     # API 全量矩阵: 路由清单提取+契约探测+四维深测
+  python3 scripts/api_verify_full.py api     # API 全量矩阵: 路由清单提取+契约探测+四维深测(含 CRM)
+  python3 scripts/api_verify_full.py crm     # CRM scoped 四维验收(不触发真实渠道外发)
+  python3 scripts/api_verify_full.py sc001   # SC-001 100 对合成去重抽样(不触发真实渠道外发)
   python3 scripts/api_verify_full.py ltc     # LTC 全链路: 线索→商机→报价→审批→账单→回款→赢单→复购
   python3 scripts/api_verify_full.py billing # 003 计费二期新端点: edition/cloud_url·订阅状态·pay-status
   python3 scripts/api_verify_full.py chain --keep  # 保留测试数据便于排查
+
+注意: `all`/`chain` 仍包含旧 bridge token 与真实 AI/出站链路；identify_code-only
+验收或禁止真实外发的场景必须显式使用 `api`/`crm`/`sc001`，不得跑 `all`/`chain`。
 
 凭证（必填，脚本内无任何明文口令）:
   HIVEMTK_DB_PASSWORD   DB 口令（也可用 POSTGRES_PASSWORD 代替）
   HIVEMTK_ADMIN_PASS    e2e_admin 登录口令
   HIVEMTK_BRIDGE_TOKEN  可选；缺省时回退读 DB platform_config_kv.bridge_ingest_token
 缺失即以退出码 3 终止并打印所需变量名。
+
+隔离与安全:
+  HIVEMTK_DB_PORT       必须显式设为 8217；API 服务必须连接同一个 8217 测试库
+  HIVEMTK_BASE          指向该测试 API（默认 8204，但未证实同库前不得用于写验收）
+  HIVEMTK_EVIDENCE_DIR  SC-001 取证目录；缺省时创建系统临时目录
+  HIVEMTK_ALLOW_EXTERNAL_AI  默认不发起有效 AI 画像调用；仅在确认本地 mock/授权外发时设 1
 """
 import argparse
+import csv
+import hashlib
 import json
 import os
+import random
 import re
+import string
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -75,7 +91,7 @@ if _MISSING_ENV:
     sys.stderr.write(
         "❌ 缺少必需环境变量：%s\n"
         "本脚本不落任何明文凭证（口令仅从环境变量注入）。请先导出再运行，例如：\n"
-        "  set -a && . hivemtk/.env && set +a\n"
+        "  set -a && . ./.env && set +a\n"
         '  export "HIVEMTK_DB_PASSWORD=$POSTGRES_PASSWORD"  # 全引号赋值，仅变量引用无字面量\n'
         "  export HIVEMTK_ADMIN_PASS=<e2e_admin 的登录口令>\n"
         "（由 scripts/auto_detect.py 调用时，父进程会自动注入上述变量。）\n" % _need
@@ -163,6 +179,342 @@ def _mask(value, depth=0):
     if isinstance(value, list):
         return [_mask(v, depth + 1) for v in value]
     return value
+
+
+# ---------------------------------------------------------------------------
+# SC-001：本地合成客户对 + 冻结人工标签 + 候选分类评分（纯函数，不连 DB）
+# ---------------------------------------------------------------------------
+SC001_CATEGORY_COUNTS = (
+    ("P01", "duplicate", 15),   # 同手机号精确匹配，同账号
+    ("P02", "duplicate", 10),   # 同手机号精确匹配，跨账号
+    ("P03", "duplicate", 10),   # 同邮箱精确匹配，同账号
+    ("P04", "duplicate", 5),    # 同邮箱精确匹配，跨账号
+    ("P05", "duplicate", 5),    # 同外部 ID，同账号
+    ("P06", "duplicate", 5),    # 名称相似度正例，强标识不同
+    ("N01", "nonduplicate", 20),
+    ("N02", "nonduplicate", 5), # 同名不同人
+    ("N03", "nonduplicate", 15),
+    ("N04", "nonduplicate", 5), # 手机前缀相同、完整号码不同
+    ("N05", "nonduplicate", 5), # 邮箱近似但不同
+)
+
+
+def NameSimilarityScore(a, b):
+    """复刻 service.NameSimilarityScore 的归一化与编辑距离口径，仅供夹具自检。"""
+    def normalize(value):
+        return "".join(ch for ch in value.lower().strip() if ch not in " -_.,()")
+
+    left, right = normalize(a), normalize(b)
+    if not left or not right:
+        return 0
+    if left == right:
+        return 100
+    previous = list(range(len(right) + 1))
+    for i, lch in enumerate(left, 1):
+        current = [i]
+        for j, rch in enumerate(right, 1):
+            current.append(min(
+                current[-1] + 1,
+                previous[j] + 1,
+                previous[j - 1] + (lch != rch),
+            ))
+        previous = current
+    max_len = max(len(left), len(right))
+    return max(0, (max_len - previous[-1]) * 100 // max_len)
+
+
+def build_sc001_sample(run_id):
+    """生成 100 对 / 200 个合成客户规格；同一 run_id  deterministic。"""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", run_id):
+        raise ValueError("run_id 仅允许 1-32 位字母、数字、下划线或连字符")
+
+    rng = random.Random("sc001|" + run_id)
+    run_phone_tag = int(hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:4], 16)
+    pairs, customers = [], []
+    customer_serial = 0
+    pair_serial = 0
+
+    def token():
+        return "".join(rng.choice(string.ascii_lowercase) for _ in range(10))
+
+    for category, truth, count in SC001_CATEGORY_COUNTS:
+        for index in range(1, count + 1):
+            pair_serial += 1
+            pair_id = f"{category}-{index:03d}"
+            pair_token = token()
+            cross_account = category in ("P02", "P04")
+            accounts = ("a", "b") if cross_account else ("a", "a")
+
+            if category == "P06":
+                names = (
+                    f"Northstar Trading Limited {run_id} {pair_token}",
+                    f"Northstar Trading Ltd {run_id} {pair_token}",
+                )
+                expected_rule = "名称相似度"
+            elif category == "N02":
+                names = (
+                    f"John Smith {run_id} {pair_token}",
+                    f"John Smith {run_id} {pair_token}",
+                )
+                expected_rule = ""
+            elif category == "N03":
+                names = (
+                    f"Aurora Trading Limited {run_id} {pair_token}",
+                    f"Zenith Trading Limited {run_id} {pair_token}",
+                )
+                expected_rule = ""
+            else:
+                names = (
+                    f"Customer Alpha {run_id} {pair_token}",
+                    f"Customer Omega {run_id} {pair_token}",
+                )
+                expected_rule = ""
+
+            row_specs = []
+            for side_index, side in enumerate(("l", "r")):
+                initial_phone = f"190{run_phone_tag:04d}{customer_serial:04d}"
+                customer_serial += 1
+                phone = initial_phone
+                email = f"sc001-{run_id}-{pair_token}-{side}@example.invalid"
+                external_id = f"sc001-{run_id}-{pair_token}-{side}"
+
+                if category in ("P01", "P02"):
+                    phone = f"191{run_phone_tag:04d}{pair_serial:04d}"
+                    expected_rule = "同手机号合并"
+                elif category in ("P03", "P04"):
+                    email = f"sc001-{run_id}-{pair_token}@example.invalid"
+                    expected_rule = "同邮箱合并"
+                elif category == "P05":
+                    external_id = f"sc001-{run_id}-{pair_token}"
+                    expected_rule = "同外部 ID 合并"
+                elif category == "N04":
+                    phone = f"192{run_phone_tag % 1000:03d}{pair_serial:04d}{side_index}"
+                elif category == "N05":
+                    email = f"buyer{side_index + 1:02d}-{run_id}-{pair_token}@example.invalid"
+
+                key = f"{pair_id}-{side.upper()}"
+                row_specs.append({
+                    "key": key,
+                    "pair_id": pair_id,
+                    "side": side.upper(),
+                    "name": names[side_index],
+                    "initial_phone": initial_phone,
+                    "phone": phone,
+                    "email": email,
+                    "external_id": external_id,
+                    "source_account_id": f"sc001-{run_id}-{accounts[side_index]}",
+                    "source_channel": "douyin",
+                    "industry": "sc001",
+                    "tags": json.dumps(["sc001", run_id], ensure_ascii=False),
+                })
+
+            customers.extend(row_specs)
+            pairs.append({
+                "pair_id": pair_id,
+                "category": category,
+                "ground_truth": truth,
+                "left_key": row_specs[0]["key"],
+                "right_key": row_specs[1]["key"],
+                "expected_rule": expected_rule,
+            })
+
+    return {"run_id": run_id, "pairs": pairs, "customers": customers}
+
+
+def _candidate_pair_key(left_id, right_id):
+    return tuple(sorted((str(left_id), str(right_id))))
+
+
+def score_sc001(pairs, candidates, id_map=None):
+    """按冻结人工标签评分；review 与 auto 分别统计，不剔除任何样本。"""
+    if len(pairs) != 100:
+        raise ValueError("SC-001 必须恰好 100 对标签")
+
+    best = {}
+    for candidate in candidates:
+        action = candidate.get("action")
+        if action not in ("auto", "review"):
+            raise ValueError(f"非法去重 action: {action!r}")
+        key = _candidate_pair_key(candidate.get("left_id"), candidate.get("right_id"))
+        rank = (int(candidate.get("score") or 0), action == "auto")
+        if key not in best or rank > best[key][0]:
+            best[key] = (rank, candidate)
+
+    rows = []
+    tp = fp = tn = fn = 0
+    positive_total = sum(1 for pair in pairs if pair["ground_truth"] == "duplicate")
+    negative_total = len(pairs) - positive_total
+    metrics = {
+        "auto": {"tp": 0, "fp": 0, "fn": 0},
+        "review": {"tp": 0, "fp": 0, "fn": 0},
+    }
+
+    for pair in pairs:
+        truth = pair["ground_truth"]
+        if truth not in ("duplicate", "nonduplicate"):
+            raise ValueError(f"非法人工真值: {truth!r}")
+        left_id = id_map[pair["left_key"]] if id_map is not None else pair["left_key"]
+        right_id = id_map[pair["right_key"]] if id_map is not None else pair["right_key"]
+        found = best.get(_candidate_pair_key(left_id, right_id))
+        candidate = found[1] if found else None
+        predicted = candidate is not None
+
+        if predicted and truth == "duplicate":
+            result, tp = "tp", tp + 1
+        elif predicted and truth == "nonduplicate":
+            result, fp = "fp", fp + 1
+        elif not predicted and truth == "nonduplicate":
+            result, tn = "tn", tn + 1
+        else:
+            result, fn = "fn", fn + 1
+
+        action = candidate.get("action") if candidate else None
+        if action:
+            bucket = "tp" if truth == "duplicate" else "fp"
+            metrics[action][bucket] += 1
+        elif truth == "duplicate":
+            metrics["auto"]["fn"] += 1
+            metrics["review"]["fn"] += 1
+
+        rows.append({
+            "pair_id": pair["pair_id"],
+            "category": pair["category"],
+            "ground_truth": truth,
+            "left_id": left_id,
+            "right_id": right_id,
+            "predicted": predicted,
+            "action": action,
+            "rule": candidate.get("rule") if candidate else None,
+            "score": candidate.get("score") if candidate else None,
+            "result": result,
+        })
+
+    for action in ("auto", "review"):
+        item = metrics[action]
+        decided = item["tp"] + item["fp"]
+        item["precision"] = item["tp"] / decided if decided else None
+        item["recall"] = item["tp"] / positive_total if positive_total else None
+
+    return {
+        "rows": rows,
+        "total": len(pairs),
+        "positive_total": positive_total,
+        "negative_total": negative_total,
+        "tp": tp, "fp": fp, "tn": tn, "fn": fn,
+        "correct": tp + tn,
+        "accuracy": (tp + tn) / len(pairs),
+        "auto": metrics["auto"],
+        "review": metrics["review"],
+    }
+
+
+def _ratio_text(numerator, denominator):
+    return f"{numerator}/{denominator} = {numerator * 100 / denominator:.2f}%" if denominator else "0/0 = n/a"
+
+
+def format_sc001_summary(result):
+    return "\n".join((
+        f"SC-001 候选准确率: {_ratio_text(result['correct'], result['total'])} "
+        f"(TP={result['tp']}, FP={result['fp']}, TN={result['tn']}, FN={result['fn']})",
+        f"  auto: precision {_ratio_text(result['auto']['tp'], result['auto']['tp'] + result['auto']['fp'])}, "
+        f"recall {_ratio_text(result['auto']['tp'], result['positive_total'])}",
+        f"  review: precision {_ratio_text(result['review']['tp'], result['review']['tp'] + result['review']['fp'])}, "
+        f"recall {_ratio_text(result['review']['tp'], result['positive_total'])}",
+    ))
+
+
+def external_ai_calls_allowed():
+    """有效 AI 画像会调用 LLM provider；默认显式禁用，防止验收夹带真实外发。"""
+    return os.environ.get("HIVEMTK_ALLOW_EXTERNAL_AI", "").strip() == "1"
+
+
+def cleanup_crm_operation_logs(audit_floor, customer_ids, audit_ids, execute):
+    """只删本 run 捕获到的审计 ID/客户资源 ID，绝不按 action 广删。"""
+    clauses, params = [], []
+    if audit_ids:
+        clauses.append("id = ANY(%s)")
+        params.append(audit_ids)
+    if customer_ids:
+        clauses.append("(id > %s AND resource_id = ANY(%s))")
+        params.extend((audit_floor, customer_ids))
+    if clauses:
+        execute("DELETE FROM operation_logs WHERE " + " OR ".join(clauses), tuple(params))
+
+
+def _write_json(path, payload):
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+
+
+def write_sc001_evidence(evidence_dir, sample, id_map, scan_response, result, cleanup):
+    """把冻结夹具、100 行标签、原始扫描响应与清理结果落到临时取证目录。"""
+    os.makedirs(evidence_dir, exist_ok=True)
+    labels = result["rows"] if result else []
+    fields = (
+        "pair_id", "category", "ground_truth", "left_id", "right_id",
+        "predicted", "action", "rule", "score", "result",
+    )
+    with open(os.path.join(evidence_dir, "labels.csv"), "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(labels)
+
+    frozen = json.dumps(sample["pairs"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    summary = {key: value for key, value in (result or {}).items() if key != "rows"}
+    summary.update({
+        "run_id": sample["run_id"],
+        "label_sha256": hashlib.sha256(frozen.encode("utf-8")).hexdigest(),
+        "cleanup": cleanup,
+    })
+    _write_json(os.path.join(evidence_dir, "fixture.json"), sample)
+    _write_json(os.path.join(evidence_dir, "id-map.json"), id_map)
+    _write_json(os.path.join(evidence_dir, "labels.json"), labels)
+    _write_json(os.path.join(evidence_dir, "scan-response.json"), scan_response)
+    _write_json(os.path.join(evidence_dir, "summary.json"), summary)
+    return evidence_dir
+
+
+def crm_customer_create_payload(spec):
+    """Create 只发初始身份，确保重复对在扫描前拥有不同 UnifiedID。"""
+    return {
+        "name": spec["name"],
+        "phone": spec["initial_phone"],
+        "email": f"seed-{spec['key']}@example.invalid",
+        "industry": spec["industry"],
+        "source_account_id": spec["source_account_id"],
+        "source_channel": spec["source_channel"],
+        "tags": spec["tags"],
+    }
+
+
+def crm_customer_update_payload(spec):
+    """Update 再施加冻结的最终手机号/邮箱；UnifiedID 不会被 API DTO 改写。"""
+    return {
+        "name": spec["name"],
+        "phone": spec["phone"],
+        "email": spec["email"],
+        "industry": spec["industry"],
+        "source_account_id": spec["source_account_id"],
+        "source_channel": spec["source_channel"],
+        "tags": spec["tags"],
+    }
+
+
+def crm_entity_payload(customer_id, name, run_id):
+    return {
+        "name": name,
+        "customer_id": customer_id,
+        "contact_info": json.dumps({
+            "phone": "19000009999",
+            "email": f"{run_id}@example.invalid",
+            "source": "crm-e2e",
+        }, ensure_ascii=False),
+        "role": "采购",
+        "remark": "api_verify_full CRM 四维验收",
+        "source": "crm-e2e",
+        "source_ref": f"crm-e2e-{run_id}",
+    }
 
 
 class APIClient:
@@ -1138,6 +1490,108 @@ def run_api(keep=False):
     return finish(keep)
 
 
+def run_crm(keep=False):
+    """CRM scoped 四维验收；不触发 bridge/chain/真实渠道外发。"""
+    section("CRM 四维验收 · 入参 / 返回 / 预期 / DB")
+    token = login_admin()
+    _crm_deep(token)
+    return finish(keep)
+
+
+def run_sc001(keep=False):
+    """SC-001：100 对合成客户候选分类准确率；不触发真实渠道外发。"""
+    section("SC-001 · 100 对人工标签 / 候选准确率")
+    token = login_admin()
+    adm = APIClient(token=token)
+    run_id = uuid.uuid4().hex[:8]
+    sample = build_sc001_sample(run_id)
+    frozen = json.dumps(sample["pairs"], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    print(f"【冻结标签】run_id={run_id} pairs={len(sample['pairs'])} "
+          f"sha256={hashlib.sha256(frozen.encode('utf-8')).hexdigest()}")
+
+    id_map, customer_ids = {}, []
+    audit_floor = 0
+    floor_row = q1("SELECT COALESCE(MAX(id), 0) AS id FROM operation_logs")
+    audit_floor = int((floor_row or {}).get("id") or 0)
+
+    def cleanup():
+        if keep:
+            print(f"【保留】SC-001 run_id={run_id} customer_ids={customer_ids}")
+            return
+        try:
+            if customer_ids:
+                qexec("DELETE FROM operation_logs WHERE id > %s AND resource_id = ANY(%s)",
+                      (audit_floor, customer_ids))
+                qexec("DELETE FROM customers WHERE id = ANY(%s)", (customer_ids,))
+            check("SC001-CLEAN 【DB】合成客户清理完成", True, f"rows={len(customer_ids)}")
+        except Exception as exc:
+            check("SC001-CLEAN 【DB】合成客户清理完成", False, f"清理异常: {exc}")
+
+    def validate():
+        create_failures = []
+        for spec in sample["customers"]:
+            j, ok = adm.req("POST", "/api/manage/crm/customers",
+                            f"SC001 create {spec['key']}", expect_code=0,
+                            json=crm_customer_create_payload(spec))
+            customer_id = ((j or {}).get("data") or {}).get("id") if ok else None
+            if customer_id:
+                id_map[spec["key"]] = customer_id
+                customer_ids.append(customer_id)
+            else:
+                create_failures.append(spec["key"])
+        check("SC001-SEED 200 个客户全部创建", not create_failures and len(id_map) == 200,
+              f"created={len(id_map)} failures={create_failures[:10]}")
+        if len(id_map) != 200:
+            return
+
+        update_failures = []
+        for spec in sample["customers"]:
+            _, ok = adm.req("PUT", f"/api/manage/crm/customers/{id_map[spec['key']]}",
+                            f"SC001 finalize {spec['key']}", expect_code=0,
+                            json=crm_customer_update_payload(spec))
+            if not ok:
+                update_failures.append(spec["key"])
+        check("SC001-FINALIZE 200 个最终身份全部落库", not update_failures,
+              f"failures={update_failures[:10]}")
+        if update_failures:
+            return
+
+        external_failures = []
+        for spec in sample["customers"]:
+            try:
+                qexec("UPDATE customers SET we_com_external_id=%s WHERE id=%s",
+                      (spec["external_id"], id_map[spec["key"]]))
+            except Exception as exc:
+                external_failures.append(f"{spec['key']}:{exc}")
+        check("SC001-EXTERNAL 外部 ID 夹具补齐", not external_failures,
+              f"failures={external_failures[:3]}")
+        if external_failures:
+            return
+
+        j, ok = adm.req("POST", "/api/manage/crm/dedupe/scan", "SC001-SCAN 租户候选扫描",
+                        expect_code=0, json={
+                            "max_customers": 5000,
+                            "name_threshold": 85,
+                            "same_account_only": False,
+                        })
+        if not ok:
+            return
+        candidates = ((j or {}).get("data") or {}).get("list") or []
+        result = score_sc001(sample["pairs"], candidates, id_map=id_map)
+        for row in result["rows"]:
+            print("【逐行标签】" + json.dumps(row, ensure_ascii=False, sort_keys=True))
+        print(format_sc001_summary(result))
+        check("SC-001 候选分类准确率 >=95%", result["accuracy"] >= 0.95,
+              format_sc001_summary(result).replace("\n", " | "))
+        return None
+
+    try:
+        validate()
+    finally:
+        cleanup()
+    return finish(keep)
+
+
 def _api_deep(token):
     adm = APIClient(token=token)
     anon = APIClient()
@@ -1214,6 +1668,264 @@ def _api_deep(token):
         d = j.get("data")
         rules = d if isinstance(d, list) else ((d or {}).get("list") or [])
         check("M11.1 规则数 >= 7 (场景全覆盖)", len(rules) >= 7, f"n={len(rules)}")
+
+    # T066/SC-009：CRM 新增/修改 API 必须有入参/返回/预期/DB 四维证据；
+    # 通用路由契约探测不能替代这一段。
+    _crm_deep(token)
+
+
+def verify_crm_ai_profile(adm, customer_id):
+    """画像请求可能触发外部 LLM；只有显式授权时才调用。"""
+    if not external_ai_calls_allowed():
+        DEGRADED.append("C16 CRM AI 画像：未设置 HIVEMTK_ALLOW_EXTERNAL_AI=1，跳过外部 AI 请求")
+        return
+
+    j, ok = adm.req("POST", "/api/manage/crm/ai/analyze", "C16 AI画像(依赖不可用则降级)",
+                    ok_status=(200, 503), json={"customer_id": customer_id})
+    ai_data = (j or {}).get("data") if isinstance(j, dict) else None
+    if ok and isinstance(ai_data, dict) and "suggestions" in ai_data:
+        suggestions = ai_data.get("suggestions") or []
+        check("C16.1 每条 AI 建议均有 evidence", all(
+            isinstance(item, dict) and item.get("evidence") for item in suggestions),
+            f"suggestions={len(suggestions)} degraded={ai_data.get('degraded')}")
+    else:
+        DEGRADED.append("C16 CRM AI 画像：LLM dispatcher 不可用，端点返回 503；"
+                        "路由与鉴权已探测，但 AI 结论/evidence 未验证")
+
+
+def _crm_deep(token):
+    """CRM 四维深测：所有写操作带 DB 断言，finally 清理本 run 数据。"""
+    adm = APIClient(token=token)
+    anon = APIClient()
+    run = uuid.uuid4().hex[:8]
+    tag = f"CRM-E2E-{run}"
+    customer_ids, entity_ids, one_ids = [], [], []
+    audit_floor = 0
+
+    def remember_customer(customer_id):
+        if customer_id and customer_id not in customer_ids:
+            customer_ids.append(customer_id)
+
+    def create_customer(label, phone):
+        body = {
+            "name": f"{tag}-{label}",
+            "phone": phone,
+            "email": f"{run}-{label}@example.invalid",
+            "industry": "e2e",
+            "source_account_id": f"crm-e2e-{run}-{label.lower()}",
+            "source_channel": "douyin",
+            "tags": json.dumps(["crm-e2e", run], ensure_ascii=False),
+        }
+        j, ok = adm.req("POST", "/api/manage/crm/customers",
+                        f"C1 创建客户 {label}", expect_code=0, json=body)
+        customer_id = ((j or {}).get("data") or {}).get("id") if ok else None
+        check(f"C1.1 {label} 返回 data.id", customer_id is not None,
+              f"data={(j or {}).get('data')}")
+        if customer_id:
+            remember_customer(customer_id)
+        row = q1("SELECT id, name, phone FROM customers WHERE id=%s", (customer_id,)) if customer_id else None
+        check(f"C1.2 【DB】{label} 客户行存在", row is not None and row["phone"] == phone,
+              f"row={dict(row) if row else None}")
+        return customer_id
+
+    def cleanup():
+        try:
+            if customer_ids:
+                rows = qall("SELECT unified_id FROM customers WHERE id = ANY(%s)", (customer_ids,))
+                one_ids.extend(row["unified_id"] for row in rows if row.get("unified_id"))
+            if one_ids:
+                qexec("DELETE FROM contact_consent_identity_links "
+                      "WHERE left_one_id = ANY(%s) OR right_one_id = ANY(%s)",
+                      (one_ids, one_ids))
+            for table, entity_id in entity_ids:
+                qexec(f"DELETE FROM {table} WHERE id=%s", (entity_id,))
+            if customer_ids:
+                qexec("DELETE FROM customer_merges "
+                      "WHERE primary_id = ANY(%s) OR secondary_id = ANY(%s)",
+                      (customer_ids, customer_ids))
+                qexec("DELETE FROM customers WHERE id = ANY(%s)", (customer_ids,))
+            if audit_floor:
+                qexec("DELETE FROM operation_logs WHERE id > %s "
+                      "AND (action IN ('customer_import','customer_export','customer_merge','merge') "
+                      "OR resource_id = ANY(%s))", (audit_floor, customer_ids))
+            check("C99 【DB】本 run 合成数据清理完成", True, f"customers={len(customer_ids)} entities={len(entity_ids)}")
+        except Exception as exc:
+            check("C99 【DB】本 run 合成数据清理完成", False, f"清理异常: {exc}")
+
+    try:
+        floor_row = q1("SELECT COALESCE(MAX(id), 0) AS id FROM operation_logs")
+        audit_floor = int((floor_row or {}).get("id") or 0)
+
+        j, ok = anon.req("POST", "/api/manage/crm/customers", "C0 匿名创建客户(鉴权闸)",
+                         ok_status=(401,), json={})
+        check("C0.1 HTTP401 且未授权码", ok and isinstance(j, dict)
+              and j.get("code") in ("UNAUTHORIZED_2001", 401),
+              f"code={j.get('code') if isinstance(j, dict) else None}")
+
+        base = 19088000000 + (int(run, 16) % 100000)
+        primary_id = create_customer("A", str(base))
+        secondary_id = create_customer("B", str(base + 1))
+        if not primary_id or not secondary_id:
+            return
+
+        j, ok = adm.req("GET", "/api/manage/crm/customers", "C2 客户列表",
+                        expect_code=0, params={"keyword": tag, "page": 1, "page_size": 20})
+        listed = ((j or {}).get("data") or {}).get("list") or []
+        check("C2.1 列表含本 run 两客户", ok and {primary_id, secondary_id}.issubset(
+            {str(row.get("id")) for row in listed}), f"rows={len(listed)}")
+
+        j, ok = adm.req("GET", f"/api/manage/crm/customers/{primary_id}",
+                        "C3 客户详情", expect_code=0)
+        detail = (j or {}).get("data") or {}
+        check("C3.1 详情 ID/名称完整", ok and detail.get("id") == primary_id
+              and tag in str(detail.get("name")), f"data={str(detail)[:160]}")
+
+        update_body = {
+            "name": f"{tag}-A-updated", "phone": str(base), "email": f"{run}-a@example.invalid",
+            "industry": "e2e", "source_account_id": f"crm-e2e-{run}-a",
+            "source_channel": "douyin", "tags": json.dumps(["crm-e2e", run]),
+        }
+        j, ok = adm.req("PUT", f"/api/manage/crm/customers/{primary_id}",
+                        "C4 修改客户", expect_code=0, json=update_body)
+        row = q1("SELECT name FROM customers WHERE id=%s", (primary_id,))
+        check("C4.1 【DB】修改落库", ok and row and row["name"] == update_body["name"],
+              f"row={dict(row) if row else None}")
+
+        duplicate_body = dict(update_body)
+        duplicate_body.update({
+            "name": f"{tag}-B", "phone": str(base),
+            "email": f"{run}-b@example.invalid",
+            "source_account_id": f"crm-e2e-{run}-b",
+        })
+        adm.req("PUT", f"/api/manage/crm/customers/{secondary_id}",
+                "C5 构造同手机号重复档", expect_code=0, json=duplicate_body)
+        row = q1("SELECT phone, unified_id FROM customers WHERE id=%s", (secondary_id,))
+        primary_row = q1("SELECT unified_id FROM customers WHERE id=%s", (primary_id,))
+        check("C5.1 【DB】重复档手机号一致但 UnifiedID 仍独立",
+              row and primary_row and row["phone"] == str(base)
+              and row["unified_id"] != primary_row["unified_id"],
+              f"secondary={dict(row) if row else None}")
+
+        j, ok = adm.req("POST", "/api/manage/crm/dedupe/scan", "C6 去重扫描", expect_code=0,
+                        json={"max_customers": 5000, "name_threshold": 85, "same_account_only": False})
+        candidate_rows = ((j or {}).get("data") or {}).get("list") or []
+        pair_keys = {_candidate_pair_key(row.get("left_id"), row.get("right_id")) for row in candidate_rows}
+        check("C6.1 返回本 run 重复候选", ok and _candidate_pair_key(primary_id, secondary_id) in pair_keys,
+              f"candidates={len(candidate_rows)}")
+
+        j, ok = adm.req("POST", "/api/manage/crm/merge", "C7 合并客户", expect_code=0,
+                        json={"primary_id": primary_id, "secondary_id": secondary_id,
+                              "reason": "crm-e2e", "source": "api_verify_full"})
+        secondary_row = q1("SELECT deleted_at FROM customers WHERE id=%s", (secondary_id,))
+        merge_row = q1("SELECT merge_id, primary_id, secondary_id FROM customer_merges "
+                       "WHERE primary_id=%s AND secondary_id=%s ORDER BY id DESC LIMIT 1",
+                       (primary_id, secondary_id))
+        check("C7.1 【DB】次客户软删且合并审计存在", ok and secondary_row
+              and secondary_row["deleted_at"] is not None and merge_row is not None,
+              f"deleted_at={secondary_row['deleted_at'] if secondary_row else None} merge={dict(merge_row) if merge_row else None}")
+
+        j, ok = adm.req("GET", "/api/manage/crm/merge/audit", "C8 合并审计查询", expect_code=0,
+                        params={"customer_id": primary_id})
+        audits = ((j or {}).get("data") or {}).get("list") or []
+        check("C8.1 审计列表含本 run 合并", ok and any(
+            row.get("primary_id") == primary_id and row.get("secondary_id") == secondary_id
+            for row in audits), f"rows={len(audits)}")
+
+        entity_specs = (
+            ("contacts", "contacts", "联系人"),
+            ("suppliers", "suppliers", "供应商"),
+            ("service-providers", "service_providers", "服务商"),
+        )
+        for path, table, label in entity_specs:
+            body = crm_entity_payload(primary_id, f"{tag}-{label}", run)
+            j, ok = adm.req("POST", f"/api/manage/crm/{path}", f"C9 创建{label}",
+                            expect_code=0, json=body)
+            entity_id = ((j or {}).get("data") or {}).get("id") if ok else None
+            if entity_id:
+                entity_ids.append((table, entity_id))
+            row = q1(f"SELECT id, name FROM {table} WHERE id=%s", (entity_id,)) if entity_id else None
+            check(f"C9.1 【DB】{label}行存在", row is not None and row["name"] == body["name"],
+                  f"row={dict(row) if row else None}")
+
+            j, ok = adm.req("GET", f"/api/manage/crm/{path}", f"C10 {label}列表", expect_code=0,
+                            params={"customer_id": primary_id, "page": 1, "page_size": 20})
+            rows = ((j or {}).get("data") or {}).get("list") or []
+            check(f"C10.1 {label}列表含新行", ok and any(str(row.get("id")) == str(entity_id) for row in rows),
+                  f"rows={len(rows)}")
+
+            updated = dict(body)
+            updated["name"] = f"{tag}-{label}-updated"
+            adm.req("PUT", f"/api/manage/crm/{path}/{entity_id}", f"C11 修改{label}",
+                    expect_code=0, json=updated)
+            row = q1(f"SELECT name FROM {table} WHERE id=%s", (entity_id,))
+            check(f"C11.1 【DB】{label}修改落库", row and row["name"] == updated["name"],
+                  f"row={dict(row) if row else None}")
+
+        j, ok = adm.req("GET", f"/api/manage/crm/360/{primary_id}", "C12 客户360", expect_code=0)
+        view = (j or {}).get("data") or {}
+        check("C12.1 360 含三类实体与合并历史", ok
+              and len(view.get("contacts") or []) >= 1
+              and len(view.get("suppliers") or []) >= 1
+              and len(view.get("service_providers") or []) >= 1
+              and len(view.get("merge_history") or []) >= 1,
+              f"keys={sorted(view) if isinstance(view, dict) else type(view).__name__}")
+
+        j, ok = adm.req("GET", "/api/manage/crm/cross-industry", "C13 跨账号行业检索", expect_code=0,
+                        params={"keyword": tag, "industry": "e2e", "page": 1, "page_size": 20})
+        cross = (j or {}).get("data") or {}
+        check("C13.1 交叉检索含主客户", ok and any(
+            row.get("id") == primary_id for row in (cross.get("items") or [])),
+            f"total={cross.get('total')}")
+
+        import_phone = str(base + 2)
+        import_body = {"file_name": f"crm-e2e-{run}.json", "rows": [{
+            "name": f"{tag}-import", "phone": import_phone,
+            "email": f"{run}-import@example.invalid", "industry": "e2e",
+            "source_account_id": f"crm-e2e-{run}-import", "source_channel": "douyin",
+            "tags": json.dumps(["crm-e2e", run]),
+        }]}
+        j, ok = adm.req("POST", "/api/manage/crm/import", "C14 导入客户", expect_code=0, json=import_body)
+        imported = (j or {}).get("data") or {}
+        imported_row = q1("SELECT id FROM customers WHERE phone=%s", (import_phone,))
+        imported_id = imported_row["id"] if imported_row else None
+        if imported_id:
+            remember_customer(imported_id)
+        check("C14.1 【DB】导入 created=1 且行存在", ok and imported.get("created") == 1 and imported_id,
+              f"result={imported} id={imported_id}")
+
+        j, ok = adm.req("GET", "/api/manage/crm/export", "C15 导出客户", expect_code=0,
+                        params={"keyword": tag, "industry": "e2e"})
+        exported = (j or {}).get("data") or {}
+        check("C15.1 导出含导入客户", ok and any(
+            row.get("id") == imported_id for row in (exported.get("rows") or [])),
+            f"total={exported.get('total')}")
+
+        verify_crm_ai_profile(adm, primary_id)
+
+        for path, table, label in entity_specs:
+            entity_id = next((eid for tbl, eid in entity_ids if tbl == table), None)
+            if entity_id:
+                adm.req("DELETE", f"/api/manage/crm/{path}/{entity_id}", f"C17 删除{label}",
+                        expect_code=0)
+                row = q1(f"SELECT deleted_at FROM {table} WHERE id=%s", (entity_id,))
+                check(f"C17.1 【DB】{label}软删", row and row["deleted_at"] is not None,
+                      f"row={dict(row) if row else None}")
+
+        if imported_id:
+            adm.req("DELETE", f"/api/manage/crm/customers/{imported_id}", "C18 删除导入客户", expect_code=0)
+        adm.req("DELETE", f"/api/manage/crm/customers/{primary_id}", "C19 删除主客户", expect_code=0)
+
+        j, ok = adm.req("POST", "/api/manage/crm/merge", "C20 空合并体(参数校验)",
+                        ok_status=(400,), json={})
+        check("C20.1 HTTP400", ok, f"code={j.get('code') if isinstance(j, dict) else None}")
+        j, ok = adm.req("GET", "/api/manage/crm/merge/audit", "C21 缺 customer_id(参数校验)",
+                        ok_status=(400,))
+        check("C21.1 HTTP400", ok, f"code={j.get('code') if isinstance(j, dict) else None}")
+        j, ok = adm.req("POST", "/api/manage/crm/ai/analyze", "C22 缺 customer_id(参数校验)",
+                        ok_status=(400,), json={})
+        check("C22.1 HTTP400", ok, f"code={j.get('code') if isinstance(j, dict) else None}")
+    finally:
+        cleanup()
 
 
 # ---------------------------------------------------------------------------
@@ -1326,16 +2038,24 @@ def run_billing(keep=False):
     return finish(keep)
 
 
-def main():
+def build_arg_parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["chain", "api", "all", "ltc", "billing"])
+    ap.add_argument("cmd", choices=["chain", "api", "crm", "sc001", "all", "ltc", "billing"])
     ap.add_argument("--keep", action="store_true")
-    args = ap.parse_args()
+    return ap
+
+
+def main(argv=None):
+    args = build_arg_parser().parse_args(argv)
     rc = 0
     if args.cmd in ("chain", "all"):
         rc |= run_chain(keep=args.keep)
     if args.cmd in ("api", "all"):
         rc |= run_api(keep=args.keep)
+    if args.cmd == "crm":
+        rc |= run_crm(keep=args.keep)
+    if args.cmd == "sc001":
+        rc |= run_sc001(keep=args.keep)
     if args.cmd == "ltc":
         rc |= run_ltc(keep=args.keep)
     if args.cmd == "billing":

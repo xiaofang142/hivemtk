@@ -207,25 +207,24 @@ func (r *channelAccountRepo) GetByIdentifyCode(ctx context.Context, code string)
 		return &byCode[0], nil
 	}
 
-	var codes []model.ChannelIdentifyCode
-	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelIdentifyCode{}).
-		Where("code = ?", code)).Limit(2).Find(&codes).Error; err != nil {
+	// 权威码表：闸门与解析必须一致——当前码或在途窗口内旧码都接受，
+	// 窗口外旧码返回 nil（fail-closed）。渠道码只确定 tenant+channel，
+	// 多账号时由调用方用明确账号信息消歧，这里绝不取首条。
+	rec, err := findValidIdentifyCode(ctx, r.db, code)
+	if err != nil {
 		return nil, err
 	}
-	if len(codes) > 1 {
-		return nil, ErrAmbiguousIdentifyCode
-	}
-	if len(codes) == 0 {
+	if rec == nil {
 		return nil, nil
 	}
 	var byChannel []model.ChannelAccount
 	if err := applyChannelEditionGate(ctx, r.db.WithContext(sysCtx).Model(&model.ChannelAccount{}).
-		Where("tenant_id = ? AND channel_id = ?", codes[0].TenantID, codes[0].ChannelID)).
+		Where("tenant_id = ? AND channel_id = ?", rec.TenantID, rec.ChannelID)).
 		Limit(2).Find(&byChannel).Error; err != nil {
 		return nil, err
 	}
 	if len(byChannel) > 1 {
-		return nil, ErrAmbiguousIdentifyCode
+		return nil, ErrAmbiguousIdentifyCode // 缺消歧信息：拒绝，禁止取首条
 	}
 	if len(byChannel) == 0 {
 		return nil, nil

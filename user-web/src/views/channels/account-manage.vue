@@ -251,7 +251,7 @@
             v-model="form.dataScope"
             type="textarea"
             :rows="2"
-            placeholder='JSON 对象，如 {"visible_industries":[]}'
+            placeholder="JSON 对象，如 {&quot;visible_industries&quot;:[]}"
           />
         </el-form-item>
         <el-form-item label="账号状态">

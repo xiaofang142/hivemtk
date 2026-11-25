@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/repository"
 )
+
+const sageXUploadIdentifyCode = "identify-code-valid"
 
 type fakeSageXInstRepo struct {
 	byToken map[string]*model.SageXInstallation
@@ -19,6 +22,17 @@ func (f *fakeSageXInstRepo) Create(_ context.Context, inst *model.SageXInstallat
 	}
 	f.byToken[inst.Token] = inst
 	return nil
+}
+func (f *fakeSageXInstRepo) CreateIfAbsent(ctx context.Context, inst *model.SageXInstallation) (bool, error) {
+	for _, row := range f.byToken {
+		if row.TenantID == inst.TenantID && row.InstallationID == inst.InstallationID && inst.InstallationID != "" {
+			return false, nil
+		}
+	}
+	if err := f.Create(ctx, inst); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 func (f *fakeSageXInstRepo) Update(_ context.Context, inst *model.SageXInstallation) error {
 	if f.byToken == nil {
@@ -36,7 +50,26 @@ func (f *fakeSageXInstRepo) GetByToken(_ context.Context, token string) (*model.
 	}
 	return f.byToken[token], nil
 }
-func (f *fakeSageXInstRepo) GetByInstallationID(_ context.Context, _ string) (*model.SageXInstallation, error) {
+func (f *fakeSageXInstRepo) GetByInstallationID(_ context.Context, installationID string) (*model.SageXInstallation, error) {
+	for _, row := range f.byToken {
+		if row.InstallationID == installationID {
+			cp := *row
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+func (f *fakeSageXInstRepo) GetByTenantAndInstallationID(
+	_ context.Context,
+	tenantID uint,
+	installationID string,
+) (*model.SageXInstallation, error) {
+	for _, row := range f.byToken {
+		if row.TenantID == tenantID && row.InstallationID == installationID {
+			cp := *row
+			return &cp, nil
+		}
+	}
 	return nil, nil
 }
 func (f *fakeSageXInstRepo) TouchLastSeen(_ context.Context, _ uint, _ time.Time) error { return nil }
@@ -103,8 +136,37 @@ func (f *fakeSageXIngress) HandleIngressMessage(_ context.Context, event *model.
 	return &InboxIngressResult{Accepted: true}, f.err
 }
 
+type uploadIdentifyAccountRepo struct {
+	repository.ChannelAccountRepository
+	account *model.ChannelAccount
+}
+
+func (r *uploadIdentifyAccountRepo) GetByIdentifyCode(_ context.Context, code string) (*model.ChannelAccount, error) {
+	if r.account == nil || code != r.account.IdentifyCode {
+		return nil, nil
+	}
+	cp := *r.account
+	return &cp, nil
+}
+
+func newSageXUploadTestService(
+	instRepo SageXInstallationStore,
+	receiptRepo SageXEventReceiptStore,
+	ingress SageXIngress,
+) *SageXUploadService {
+	svc := NewSageXUploadService(instRepo, receiptRepo, ingress)
+	svc.SetChannelResolver(NewChannelResolverWithRepos(&uploadIdentifyAccountRepo{
+		account: &model.ChannelAccount{
+			TenantID:     1,
+			ID:           1,
+			IdentifyCode: sageXUploadIdentifyCode,
+		},
+	}, nil))
+	return svc
+}
+
 func TestSageXUpload_Unauthorized(t *testing.T) {
-	svc := NewSageXUploadService(&fakeSageXInstRepo{}, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
+	svc := newSageXUploadTestService(&fakeSageXInstRepo{}, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
 	_, err := svc.HandleUpload(context.Background(), "bad", &SageXUploadRequest{
 		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted"}},
@@ -116,12 +178,12 @@ func TestSageXUpload_Unauthorized(t *testing.T) {
 
 func TestSageXUpload_SchemaAndBatchValidation(t *testing.T) {
 	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1}}}
-	svc := NewSageXUploadService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
-	_, err := svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{SchemaVersion: "2.0", BatchID: "b1", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
+	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
+	_, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{SchemaVersion: "2.0", BatchID: "b1", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
 	if !errors.Is(err, ErrSageXUnsupportedSchema) {
 		t.Fatalf("expected schema error, got %v", err)
 	}
-	_, err = svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{SchemaVersion: SageXSchemaVersion, BatchID: "", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
+	_, err = svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{SchemaVersion: SageXSchemaVersion, BatchID: "", InstallationID: "i1", Events: []SageXEventItem{{EventID: "e1"}}}, 10)
 	if !errors.Is(err, ErrSageXInvalidEnvelope) {
 		t.Fatalf("expected invalid envelope, got %v", err)
 	}
@@ -130,8 +192,8 @@ func TestSageXUpload_SchemaAndBatchValidation(t *testing.T) {
 func TestSageXUpload_DuplicateInBatchNotAcked(t *testing.T) {
 	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1}}}
 	ingress := &fakeSageXIngress{}
-	svc := NewSageXUploadService(instRepo, &fakeSageXReceiptRepo{}, ingress)
-	resp, err := svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{
+	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
+	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
 		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{
 			{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "private", Title: "Alice"}, Message: SageXMessage{Text: "hi"}},
@@ -156,8 +218,8 @@ func TestSageXUpload_IdempotentReceiptReturnsDuplicate(t *testing.T) {
 		receiptKey(1, "i1", "e1"): {TenantID: 1, InstallationID: "i1", EventID: "e1", Status: SageXAckAccepted},
 	}}
 	ingress := &fakeSageXIngress{}
-	svc := NewSageXUploadService(instRepo, receiptRepo, ingress)
-	resp, err := svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{
+	svc := newSageXUploadTestService(instRepo, receiptRepo, ingress)
+	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
 		SchemaVersion: SageXSchemaVersion, BatchID: "b2", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "private", Title: "A"}, Message: SageXMessage{Text: "x"}}},
 	}, 10)
@@ -173,10 +235,10 @@ func TestSageXUpload_IdempotentReceiptReturnsDuplicate(t *testing.T) {
 }
 
 func TestSageXUpload_MapsQQAndWeChat(t *testing.T) {
-	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1, AccountID: "acct1"}}}
+	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1, AccountID: "1"}}}
 	ingress := &fakeSageXIngress{}
-	svc := NewSageXUploadService(instRepo, &fakeSageXReceiptRepo{}, ingress)
-	resp, err := svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{
+	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
+	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
 		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{
 			{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"}, Conversation: SageXConversation{Type: "direct", Title: "Alice"}, Message: SageXMessage{Sender: "Alice", Text: "hi", NotificationPostedAt: 1795435200000}, CapturedAt: "2026-11-23T10:00:01Z"},
@@ -195,7 +257,7 @@ func TestSageXUpload_MapsQQAndWeChat(t *testing.T) {
 	if ingress.calls[1].Channel != model.ChannelPersonalWX {
 		t.Fatalf("expected personal_wx, got %s", ingress.calls[1].Channel)
 	}
-	if ingress.calls[0].ReceiverID != "acct1" || ingress.calls[0].SenderType != "customer" {
+	if ingress.calls[0].ReceiverID != "1" || ingress.calls[0].SenderType != "customer" {
 		t.Fatalf("unexpected mapped event: %+v", ingress.calls[0])
 	}
 	if !ingress.calls[1].IsGroup || ingress.calls[1].GroupID == "" {
@@ -205,8 +267,8 @@ func TestSageXUpload_MapsQQAndWeChat(t *testing.T) {
 
 func TestSageXUpload_UnsupportedPackageRejected(t *testing.T) {
 	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1}}}
-	svc := NewSageXUploadService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
-	resp, err := svc.HandleUpload(context.Background(), "tok", &SageXUploadRequest{
+	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})
+	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
 		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
 		Events: []SageXEventItem{{EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.unknown.app"}, Conversation: SageXConversation{Type: "private", Title: "A"}, Message: SageXMessage{Text: "x"}}},
 	}, 10)

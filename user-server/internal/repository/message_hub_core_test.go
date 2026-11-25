@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 )
 
@@ -137,15 +138,16 @@ func TestMessageHubRepository_Create_NilDB(t *testing.T) {
 	}
 }
 
-func TestMessageHubRepository_ListRecentInboundBySender(t *testing.T) {
+func TestMessageHubRepository_ListRecentBySender(t *testing.T) {
 	db := setupMessageHubTestDB(t)
 	repo := &MessageHubRepository{db: db}
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 
 	for i := 1; i <= 3; i++ {
 		h := newHub("wechat", "acc_r1", fmt.Sprintf("m_in_%d", i), "inbound", "text",
 			fmt.Sprintf("入站消息%d", i), "delivered")
 		h.SenderID = "s_customer_a"
+		h.ConversationID = ""
 		h.SentAt = time.Now().Add(-time.Minute * time.Duration(i))
 		if err := db.Create(h).Error; err != nil {
 			t.Fatal(err)
@@ -155,17 +157,18 @@ func TestMessageHubRepository_ListRecentInboundBySender(t *testing.T) {
 		h := newHub("wechat", "acc_r1", fmt.Sprintf("m_out_%d", i), "outbound", "text",
 			fmt.Sprintf("出站消息%d", i), "pending")
 		h.SenderID = "s_customer_a"
+		h.ConversationID = ""
 		if err := db.Create(h).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	hubs, err := repo.ListRecentInboundBySender(ctx, "wechat", "s_customer_a", 10)
+	hubs, err := repo.ListRecentBySender(ctx, MessageHubHistoryScope{Platform: "wechat", AccountIDs: []string{"acc_r1"}}, "s_customer_a", 10)
 	if err != nil {
-		t.Fatalf("ListRecentInboundBySender 失败: %v", err)
+		t.Fatalf("ListRecentBySender 失败: %v", err)
 	}
-	if len(hubs) != 3 {
-		t.Fatalf("期望 3 条 inbound, 实际 %d", len(hubs))
+	if len(hubs) != 5 {
+		t.Fatalf("期望 5 条双向历史, 实际 %d", len(hubs))
 	}
 
 	for i := 1; i < len(hubs); i++ {
@@ -173,30 +176,25 @@ func TestMessageHubRepository_ListRecentInboundBySender(t *testing.T) {
 			t.Errorf("排序错误: hubs[%d].SentAt 应 >= hubs[%d].SentAt", i-1, i)
 		}
 	}
-
-	for _, h := range hubs {
-		if h.Direction != "inbound" {
-			t.Errorf("不应返回 outbound: msg_id=%s", h.MsgID)
-		}
-	}
 }
 
-func TestMessageHubRepository_ListRecentInboundBySender_Limit(t *testing.T) {
+func TestMessageHubRepository_ListRecentBySender_Limit(t *testing.T) {
 	db := setupMessageHubTestDB(t)
 	repo := &MessageHubRepository{db: db}
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 
 	for i := 1; i <= 5; i++ {
 		h := newHub("douyin_web", "acc_r2", fmt.Sprintf("m_lim_%d", i), "inbound", "text",
 			"lim", "pending")
 		h.SenderID = "s_lim"
+		h.ConversationID = ""
 		h.SentAt = time.Now().Add(-time.Minute * time.Duration(i))
 		if err := db.Create(h).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	hubs, err := repo.ListRecentInboundBySender(ctx, "douyin_web", "s_lim", 2)
+	hubs, err := repo.ListRecentBySender(ctx, MessageHubHistoryScope{Platform: "douyin_web", AccountIDs: []string{"acc_r2"}}, "s_lim", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,20 +203,21 @@ func TestMessageHubRepository_ListRecentInboundBySender_Limit(t *testing.T) {
 	}
 }
 
-func TestMessageHubRepository_ListRecentInboundBySender_PlatformIsolation(t *testing.T) {
+func TestMessageHubRepository_ListRecentBySender_PlatformIsolation(t *testing.T) {
 	db := setupMessageHubTestDB(t)
 	repo := &MessageHubRepository{db: db}
-	ctx := context.Background()
+	ctx := tenant.OnlyTenant(context.Background(), tenant.DefaultTenantID)
 
 	for _, plat := range []string{"wechat", "douyin_web", "xhs_web"} {
 		h := newHub(plat, "acc_iso", "m_"+plat, "inbound", "text", "iso", "pending")
 		h.SenderID = "s_multi_platform"
+		h.ConversationID = ""
 		if err := db.Create(h).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	hubs, err := repo.ListRecentInboundBySender(ctx, "wechat", "s_multi_platform", 10)
+	hubs, err := repo.ListRecentBySender(ctx, MessageHubHistoryScope{Platform: "wechat", AccountIDs: []string{"acc_iso"}}, "s_multi_platform", 10)
 	if err != nil {
 		t.Fatal(err)
 	}

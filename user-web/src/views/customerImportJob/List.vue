@@ -2,47 +2,101 @@
   <div class="page">
     <div class="page-head">
       <div>
-        <h2 class="page-title">客户导入任务</h2>
+        <h2 class="page-title">
+          客户导入任务
+        </h2>
         <span class="page-sub">上传 CSV → 预检 → 确认执行 → 查看错误报告（PR-6）</span>
       </div>
       <div class="head-actions">
-        <el-button :loading="loading" @click="load">刷新</el-button>
+        <el-button
+          :loading="loading"
+          @click="load"
+        >
+          刷新
+        </el-button>
       </div>
     </div>
 
-    <el-card shadow="never" class="block">
+    <el-card
+      shadow="never"
+      class="block"
+    >
       <template #header>
         <div class="card-head">
           <span>导入向导</span>
-          <el-tag size="small" type="info">1. 上传预检  2. 查看报告  3. 执行导入</el-tag>
+          <el-tag
+            size="small"
+            type="info"
+          >
+            1. 上传预检  2. 查看报告  3. 执行导入
+          </el-tag>
         </div>
       </template>
 
-      <el-steps :active="activeStep" finish-status="success" simple class="mb16">
+      <el-steps
+        :active="activeStep"
+        finish-status="success"
+        simple
+        class="mb16"
+      >
         <el-step title="上传预检" />
         <el-step title="确认报告" />
         <el-step title="执行结果" />
       </el-steps>
 
-      <el-form :model="uploadForm" label-width="100px" class="upload-form">
+      <el-form
+        :model="uploadForm"
+        label-width="100px"
+        class="upload-form"
+      >
         <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :md="8">
+          <el-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
             <el-form-item label="实体类型">
-              <el-select v-model="uploadForm.entity_type" style="width: 100%">
-                <el-option label="客户 customer" value="customer" />
+              <el-select
+                v-model="uploadForm.entity_type"
+                style="width: 100%"
+              >
+                <el-option
+                  label="客户 customer"
+                  value="customer"
+                />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
+          <el-col
+            :xs="24"
+            :sm="12"
+            :md="8"
+          >
             <el-form-item label="去重策略">
-              <el-select v-model="uploadForm.dedup_strategy" style="width: 100%">
-                <el-option label="跳过 skip（保留已有）" value="skip" />
-                <el-option label="更新 update（覆盖已有）" value="update" />
-                <el-option label="报错 error（重复即失败）" value="error" />
+              <el-select
+                v-model="uploadForm.dedup_strategy"
+                style="width: 100%"
+              >
+                <el-option
+                  label="跳过 skip（保留已有）"
+                  value="skip"
+                />
+                <el-option
+                  label="更新 update（覆盖已有）"
+                  value="update"
+                />
+                <el-option
+                  label="报错 error（重复即失败）"
+                  value="error"
+                />
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24" :sm="24" :md="8">
+          <el-col
+            :xs="24"
+            :sm="24"
+            :md="8"
+          >
             <el-form-item label="CSV 文件">
               <el-upload
                 ref="uploadRef"
@@ -53,7 +107,12 @@
                 :on-remove="onFileRemove"
                 style="width: 100%"
               >
-                <el-button type="primary" plain>选择文件</el-button>
+                <el-button
+                  type="primary"
+                  plain
+                >
+                  选择文件
+                </el-button>
               </el-upload>
             </el-form-item>
           </el-col>
@@ -64,16 +123,42 @@
             v-model="uploadForm.mapping_json"
             type="textarea"
             :rows="2"
-            placeholder='可选，JSON 格式，如 {"客户名":"name","手机号":"phone"}；留空使用模板表头'
+            placeholder="可选，JSON 格式，如 {&quot;客户名&quot;:&quot;name&quot;,&quot;手机号&quot;:&quot;phone&quot;}；留空使用模板表头"
           />
         </el-form-item>
 
         <el-form-item>
-          <el-button @click="downloadTemplate">下载模板</el-button>
-          <el-button type="primary" :loading="prechecking" :disabled="!selectedFile" @click="doPrecheck">预检</el-button>
-          <el-button v-if="currentJobId" type="success" :loading="executing" @click="doExecute(currentJobId)">执行导入</el-button>
-          <el-button v-if="currentJobId" @click="viewErrors(currentJobId)">查看错误报告</el-button>
-          <el-button v-if="currentJobId" @click="downloadErrors(currentJobId)">下载错误报告</el-button>
+          <el-button @click="downloadTemplate">
+            下载模板
+          </el-button>
+          <el-button
+            type="primary"
+            :loading="prechecking"
+            :disabled="!selectedFile"
+            @click="doPrecheck"
+          >
+            预检
+          </el-button>
+          <el-button
+            v-if="currentJobId"
+            type="success"
+            :loading="executing"
+            @click="doExecute(currentJobId)"
+          >
+            执行导入
+          </el-button>
+          <el-button
+            v-if="currentJobId"
+            @click="viewErrors(currentJobId)"
+          >
+            查看错误报告
+          </el-button>
+          <el-button
+            v-if="currentJobId"
+            @click="downloadErrors(currentJobId)"
+          >
+            下载错误报告
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -86,31 +171,87 @@
         class="mb12"
       />
 
-      <el-descriptions v-if="precheckReport" :column="4" border size="small" class="mb12">
-        <el-descriptions-item label="任务ID">{{ precheckReport.job_id || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusTag(precheckReport.status)">{{ precheckReport.status || 'prechecked' }}</el-tag>
+      <el-descriptions
+        v-if="precheckReport"
+        :column="4"
+        border
+        size="small"
+        class="mb12"
+      >
+        <el-descriptions-item label="任务ID">
+          {{ precheckReport.job_id || '-' }}
         </el-descriptions-item>
-        <el-descriptions-item label="总行数">{{ num(precheckReport.total_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="有效行">{{ num(precheckReport.valid_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="无效行">{{ num(precheckReport.invalid_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="重复行">{{ num(precheckReport.duplicate_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="成功">{{ num(precheckReport.success_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="失败">{{ num(precheckReport.failed_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="跳过">{{ num(precheckReport.skipped_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="更新">{{ num(precheckReport.updated_rows) }}</el-descriptions-item>
-        <el-descriptions-item label="去重策略">{{ precheckReport.dedup_strategy || uploadForm.dedup_strategy }}</el-descriptions-item>
-        <el-descriptions-item label="完成时间">{{ fmtTime(precheckReport.completed_at || precheckReport.generated_at) }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusTag(precheckReport.status)">
+            {{ precheckReport.status || 'prechecked' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="总行数">
+          {{ num(precheckReport.total_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="有效行">
+          {{ num(precheckReport.valid_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="无效行">
+          {{ num(precheckReport.invalid_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="重复行">
+          {{ num(precheckReport.duplicate_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="成功">
+          {{ num(precheckReport.success_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="失败">
+          {{ num(precheckReport.failed_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="跳过">
+          {{ num(precheckReport.skipped_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="更新">
+          {{ num(precheckReport.updated_rows) }}
+        </el-descriptions-item>
+        <el-descriptions-item label="去重策略">
+          {{ precheckReport.dedup_strategy || uploadForm.dedup_strategy }}
+        </el-descriptions-item>
+        <el-descriptions-item label="完成时间">
+          {{ fmtTime(precheckReport.completed_at || precheckReport.generated_at) }}
+        </el-descriptions-item>
       </el-descriptions>
 
-      <div v-if="reportErrors.length" class="mb12">
-        <div class="section-title">错误/预检明细（前 {{ reportErrorsPreview.length }} 条）</div>
-        <el-table :data="reportErrorsPreview" size="small" border max-height="260">
-          <el-table-column prop="row" label="行号" width="80" />
-          <el-table-column prop="field" label="字段" width="140" />
-          <el-table-column prop="message" label="说明" min-width="260" show-overflow-tooltip />
+      <div
+        v-if="reportErrors.length"
+        class="mb12"
+      >
+        <div class="section-title">
+          错误/预检明细（前 {{ reportErrorsPreview.length }} 条）
+        </div>
+        <el-table
+          :data="reportErrorsPreview"
+          size="small"
+          border
+          max-height="260"
+        >
+          <el-table-column
+            prop="row"
+            label="行号"
+            width="80"
+          />
+          <el-table-column
+            prop="field"
+            label="字段"
+            width="140"
+          />
+          <el-table-column
+            prop="message"
+            label="说明"
+            min-width="260"
+            show-overflow-tooltip
+          />
         </el-table>
-        <div v-if="reportErrors.length > reportErrorsPreview.length" class="muted mt8">
+        <div
+          v-if="reportErrors.length > reportErrorsPreview.length"
+          class="muted mt8"
+        >
           共 {{ reportErrors.length }} 条，已截断显示；可点击“下载错误报告”获取完整 CSV。
         </div>
       </div>
@@ -123,16 +264,43 @@
           <span class="muted">共 {{ total }} 条</span>
         </div>
       </template>
-      <el-table v-loading="loading" :data="rows" empty-text="暂无导入任务">
-        <el-table-column prop="job_id" label="任务ID" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="entity_type" label="实体" width="90" />
-        <el-table-column prop="file_name" label="文件名" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="status" label="状态" width="110">
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        empty-text="暂无导入任务"
+      >
+        <el-table-column
+          prop="job_id"
+          label="任务ID"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="entity_type"
+          label="实体"
+          width="90"
+        />
+        <el-table-column
+          prop="file_name"
+          label="文件名"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="status"
+          label="状态"
+          width="110"
+        >
           <template #default="{ row }">
-            <el-tag :type="statusTag(row.status)">{{ statusText(row.status) }}</el-tag>
+            <el-tag :type="statusTag(row.status)">
+              {{ statusText(row.status) }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="行数" min-width="220">
+        <el-table-column
+          label="行数"
+          min-width="220"
+        >
           <template #default="{ row }">
             <span class="stat">总 {{ num(row.total_rows) }}</span>
             <span class="stat ok">成 {{ num(row.success_rows) }}</span>
@@ -141,21 +309,53 @@
             <span class="stat">更 {{ num(row.updated_rows) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="dedup_strategy" label="去重策略" width="100" />
-        <el-table-column prop="created_at" label="创建时间" min-width="170">
-          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column
+          prop="dedup_strategy"
+          label="去重策略"
+          width="100"
+        />
+        <el-table-column
+          prop="created_at"
+          label="创建时间"
+          min-width="170"
+        >
           <template #default="{ row }">
-            <el-button link type="primary" @click="loadDetail(row.job_id)">详情</el-button>
+            {{ fmtTime(row.created_at) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="操作"
+          width="240"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              @click="loadDetail(row.job_id)"
+            >
+              详情
+            </el-button>
             <el-button
               link
               type="success"
               :disabled="row.status === 'completed' || row.status === 'running'"
               @click="doExecute(row.job_id)"
-            >执行</el-button>
-            <el-button link @click="viewErrors(row.job_id)">错误</el-button>
-            <el-button link @click="downloadErrors(row.job_id)">下载</el-button>
+            >
+              执行
+            </el-button>
+            <el-button
+              link
+              @click="viewErrors(row.job_id)"
+            >
+              错误
+            </el-button>
+            <el-button
+              link
+              @click="downloadErrors(row.job_id)"
+            >
+              下载
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -172,23 +372,57 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="detailVisible" title="任务详情" width="820px" destroy-on-close>
+    <el-dialog
+      v-model="detailVisible"
+      title="任务详情"
+      width="820px"
+      destroy-on-close
+    >
       <template v-if="detail">
-        <el-descriptions :column="3" border size="small" class="mb12">
-          <el-descriptions-item label="任务ID">{{ detail.job_id }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
-            <el-tag :type="statusTag(detail.status)">{{ statusText(detail.status) }}</el-tag>
+        <el-descriptions
+          :column="3"
+          border
+          size="small"
+          class="mb12"
+        >
+          <el-descriptions-item label="任务ID">
+            {{ detail.job_id }}
           </el-descriptions-item>
-          <el-descriptions-item label="实体">{{ detail.entity_type }}</el-descriptions-item>
-          <el-descriptions-item label="文件名">{{ detail.file_name || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="去重策略">{{ detail.dedup_strategy || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{ fmtTime(detail.created_at) }}</el-descriptions-item>
-          <el-descriptions-item label="总行数">{{ num(detail.total_rows) }}</el-descriptions-item>
-          <el-descriptions-item label="成功">{{ num(detail.success_rows) }}</el-descriptions-item>
-          <el-descriptions-item label="失败">{{ num(detail.failed_rows) }}</el-descriptions-item>
-          <el-descriptions-item label="跳过">{{ num(detail.skipped_rows) }}</el-descriptions-item>
-          <el-descriptions-item label="更新">{{ num(detail.updated_rows) }}</el-descriptions-item>
-          <el-descriptions-item label="更新时间">{{ fmtTime(detail.updated_at) }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusTag(detail.status)">
+              {{ statusText(detail.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="实体">
+            {{ detail.entity_type }}
+          </el-descriptions-item>
+          <el-descriptions-item label="文件名">
+            {{ detail.file_name || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="去重策略">
+            {{ detail.dedup_strategy || '-' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="创建时间">
+            {{ fmtTime(detail.created_at) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="总行数">
+            {{ num(detail.total_rows) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="成功">
+            {{ num(detail.success_rows) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="失败">
+            {{ num(detail.failed_rows) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="跳过">
+            {{ num(detail.skipped_rows) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="更新">
+            {{ num(detail.updated_rows) }}
+          </el-descriptions-item>
+          <el-descriptions-item label="更新时间">
+            {{ fmtTime(detail.updated_at) }}
+          </el-descriptions-item>
         </el-descriptions>
 
         <el-tabs>
@@ -197,12 +431,35 @@
           </el-tab-pane>
           <el-tab-pane label="错误报告">
             <div class="mb12">
-              <el-button size="small" @click="downloadErrors(detail.job_id)">下载错误 CSV</el-button>
+              <el-button
+                size="small"
+                @click="downloadErrors(detail.job_id)"
+              >
+                下载错误 CSV
+              </el-button>
             </div>
-            <el-table :data="parseErrors(detail.error_report)" size="small" border max-height="320">
-              <el-table-column prop="row" label="行号" width="80" />
-              <el-table-column prop="field" label="字段" width="140" />
-              <el-table-column prop="message" label="说明" min-width="260" show-overflow-tooltip />
+            <el-table
+              :data="parseErrors(detail.error_report)"
+              size="small"
+              border
+              max-height="320"
+            >
+              <el-table-column
+                prop="row"
+                label="行号"
+                width="80"
+              />
+              <el-table-column
+                prop="field"
+                label="字段"
+                width="140"
+              />
+              <el-table-column
+                prop="message"
+                label="说明"
+                min-width="260"
+                show-overflow-tooltip
+              />
             </el-table>
           </el-tab-pane>
           <el-tab-pane label="原始JSON">
@@ -212,15 +469,44 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="errorsVisible" title="错误报告" width="820px" destroy-on-close>
+    <el-dialog
+      v-model="errorsVisible"
+      title="错误报告"
+      width="820px"
+      destroy-on-close
+    >
       <div class="mb12 report-actions">
-        <el-button size="small" @click="downloadErrors(currentErrorJobId)">下载错误 CSV</el-button>
+        <el-button
+          size="small"
+          @click="downloadErrors(currentErrorJobId)"
+        >
+          下载错误 CSV
+        </el-button>
         <span class="muted">任务: {{ currentErrorJobId }}</span>
       </div>
-      <el-table :data="errorRows" size="small" border max-height="420" empty-text="无错误记录">
-        <el-table-column prop="row" label="行号" width="80" />
-        <el-table-column prop="field" label="字段" width="140" />
-        <el-table-column prop="message" label="说明" min-width="260" show-overflow-tooltip />
+      <el-table
+        :data="errorRows"
+        size="small"
+        border
+        max-height="420"
+        empty-text="无错误记录"
+      >
+        <el-table-column
+          prop="row"
+          label="行号"
+          width="80"
+        />
+        <el-table-column
+          prop="field"
+          label="字段"
+          width="140"
+        />
+        <el-table-column
+          prop="message"
+          label="说明"
+          min-width="260"
+          show-overflow-tooltip
+        />
       </el-table>
     </el-dialog>
   </div>
@@ -373,7 +659,7 @@ function validateMappingJson() {
     }
     return JSON.stringify(parsed)
   } catch (e) {
-    throw new Error(e?.message || 'mapping_json 格式错误')
+    throw new Error(e?.message || 'mapping_json 格式错误', { cause: e })
   }
 }
 

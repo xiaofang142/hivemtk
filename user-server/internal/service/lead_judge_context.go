@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -12,6 +13,145 @@ import (
 	"hivemtk-user/internal/pkg/utils/logger"
 	"hivemtk-user/internal/repository"
 )
+
+// ---- LEAD-04：共享业务标签/备注输入（双方实际模型请求消费） ----
+
+const (
+	// BusinessNoteFact 表示已发生事实（来自转人工/情感/线索判定的既成事件）。
+	BusinessNoteFact = "fact"
+	// BusinessNoteSuggestion 表示模型或坐席给出的建议，不得被当成已发生事实。
+	BusinessNoteSuggestion = "suggestion"
+	// sharedBusinessInputBudget 单侧共享业务信息进入模型请求的长度预算（runes）。
+	sharedBusinessInputBudget = 800
+)
+
+// BusinessNote 带来源/时间/属性的一条业务备注。
+// Source 取 ContextNoteNamespaceAutoReply / ContextNoteNamespaceLeadMining；
+// Attribute 取 BusinessNoteFact / BusinessNoteSuggestion。
+type BusinessNote struct {
+	Source    string `json:"source"`
+	At        int64  `json:"at,omitempty"`
+	Attribute string `json:"attribute"`
+	Text      string `json:"text"`
+}
+
+// SharedBusinessInput 一方从共享上下文读到、准备送入模型的业务信息。
+type SharedBusinessInput struct {
+	Notes   []BusinessNote `json:"notes,omitempty"`
+	Tags    []string       `json:"tags,omitempty"`
+	Summary string         `json:"summary,omitempty"`
+}
+
+// EncodeBusinessNote 把结构备注编码为 tags 列中的 note: 条目（不改 schema）。
+func EncodeBusinessNote(n BusinessNote) string {
+	attr := n.Attribute
+	if attr != BusinessNoteSuggestion {
+		attr = BusinessNoteFact
+	}
+	return contextNotePrefix + n.Source + ":" + attr + "|" + strconv.FormatInt(n.At, 10) + "|" + n.Text
+}
+
+// DecodeBusinessNote 解码备注；兼容存量 note:namespace:文本（视为事实）。
+func DecodeBusinessNote(tag string) (BusinessNote, bool) {
+	if !strings.HasPrefix(tag, contextNotePrefix) {
+		return BusinessNote{}, false
+	}
+	raw := strings.TrimPrefix(tag, contextNotePrefix)
+	idx := strings.Index(raw, ":")
+	if idx <= 0 {
+		return BusinessNote{}, false
+	}
+	note := BusinessNote{Source: raw[:idx]}
+	payload := raw[idx+1:]
+	if parts := strings.SplitN(payload, "|", 3); len(parts) == 3 {
+		at, err := strconv.ParseInt(parts[1], 10, 64)
+		if err == nil && (parts[0] == BusinessNoteFact || parts[0] == BusinessNoteSuggestion) {
+			note.Attribute, note.At, note.Text = parts[0], at, parts[2]
+			return note, note.Text != ""
+		}
+	}
+	note.Attribute, note.Text = BusinessNoteFact, payload
+	return note, note.Text != ""
+}
+
+// SharedBusinessInputFromContext 从共享上下文读取对方备注 + 纯业务标签 + 摘要。
+// 传自己的 namespace，跳过自己写的条目；按长度预算裁剪，避免超长备注放大模型请求。
+func SharedBusinessInputFromContext(conv *model.ConversationContext, ownNamespace string, budget int) SharedBusinessInput {
+	out := SharedBusinessInput{}
+	if conv == nil {
+		return out
+	}
+	out.Summary = strings.TrimSpace(conv.Summary)
+	for _, tag := range conv.Tags {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if strings.HasPrefix(tag, contextNotePrefix) {
+			note, ok := DecodeBusinessNote(tag)
+			if ok && note.Source != ownNamespace {
+				out.Notes = append(out.Notes, note)
+			}
+			continue
+		}
+		out.Tags = append(out.Tags, tag)
+	}
+	if budget <= 0 {
+		budget = sharedBusinessInputBudget
+	}
+	budgetRunes := []rune(strings.Join([]string{out.Summary, strings.Join(out.Tags, "")}, ""))
+	for i := range out.Notes {
+		budgetRunes = append(budgetRunes, []rune(out.Notes[i].Text)...)
+	}
+	if len(budgetRunes) > budget {
+		// 超预算时按备注倒序（最近写入优先）裁剪，再裁标签/摘要。
+		kept := make([]BusinessNote, 0, len(out.Notes))
+		used := len([]rune(out.Summary))
+		for i := len(out.Notes) - 1; i >= 0; i-- {
+			n := len([]rune(out.Notes[i].Text))
+			if used+n > budget {
+				continue
+			}
+			used += n
+			kept = append([]BusinessNote{out.Notes[i]}, kept...)
+		}
+		out.Notes = kept
+	}
+	return out
+}
+
+// PromptBlock 生成可直接放入双方模型请求的业务信息块。
+// 建议属性明确标注为建议，禁止被当成已发生事实。
+func (in SharedBusinessInput) PromptBlock() string {
+	if in.empty() {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("【共享业务信息（另一智能体写入）】\n")
+	if in.Summary != "" {
+		b.WriteString("- 会话摘要：" + in.Summary + "\n")
+	}
+	for _, tag := range in.Tags {
+		b.WriteString("- 业务标签：" + tag + "\n")
+	}
+	for _, note := range in.Notes {
+		attr := BusinessNoteFact
+		if note.Attribute == BusinessNoteSuggestion {
+			attr = BusinessNoteSuggestion
+		}
+		label := "既成事实"
+		if attr == BusinessNoteSuggestion {
+			label = "建议（非已发生事实，不得当作既成事实）"
+		}
+		b.WriteString(fmt.Sprintf("- 备注[来源=%s 时间=%d 属性=%s]：%s\n", note.Source, note.At, label, note.Text))
+	}
+	b.WriteString("以上仅为另一智能体写入的信息，不替代当前消息证据。\n")
+	return b.String()
+}
+
+func (in SharedBusinessInput) empty() bool {
+	return len(in.Notes) == 0 && len(in.Tags) == 0 && strings.TrimSpace(in.Summary) == ""
+}
 
 // LeadJudgeContext 二次 LLM 汇总判断的富上下文（FR-013）。
 //
@@ -38,6 +178,8 @@ type LeadJudgeContext struct {
 	// ReactEvidence D18 ReAct 工具取证收集到的证据（只读取证，失败带降级标记）。
 	ReactEvidence []string
 	ReactDegraded bool
+	// SharedBusiness LEAD-04：自动回复侧写入的标签/备注/摘要，进入判定模型请求。
+	SharedBusiness SharedBusinessInput
 }
 
 // leadReactHook 由装配点注入 ReAct 取证循环；未注入时判定走既有主链（向后兼容）。
@@ -183,6 +325,10 @@ func buildLeadJudgeSystemPrompt(jctx *LeadJudgeContext) string {
 		b.WriteString("【会话历史摘要】" + strings.TrimSpace(jctx.Conversation.Summary) + "\n")
 		b.WriteString("以上为早期对话压缩摘要；与下方逐条消息冲突时以逐条消息为准。\n")
 	}
+	// LEAD-04：对方刚写的业务备注/标签/摘要进入真实判定模型请求（不是日志）。
+	if block := jctx.SharedBusiness.PromptBlock(); block != "" {
+		b.WriteString(block)
+	}
 	if jctx.Conversation != nil && len(jctx.Conversation.MemberRoles) > 0 {
 		roles := make([]string, 0, len(jctx.Conversation.MemberRoles))
 		for sender, role := range jctx.Conversation.MemberRoles {
@@ -262,13 +408,7 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 		GroupID:     hub.GroupID,
 	}
 
-	target := LeadRuleTarget{}
-	if resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, hub.Platform, hub.AccountID); err != nil {
-		logger.Ctx(ctx).Warn().Err(err).Str("account", hub.AccountID).Msg("[lead-mining] 渠道账号数值ID解析失败，回退 global 规则")
-	} else if resolved != nil {
-		target.ChannelAccountID = resolved.AccountID
-		target.ChannelID = resolved.ChannelID
-	}
+	target := s.processRuleTarget(ctx, hub)
 	jctx.ChannelAccountID = target.ChannelAccountID
 	rule, err := NewLeadRuleService().Resolve(ctx, target)
 	if err != nil {
@@ -299,7 +439,8 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 
 	// 共享上下文：写入本轮消息并读取多轮历史 + 成员角色（T033/T039）。
 	ctxRepo := repository.NewConversationContextRepository()
-	if conv, cerr := ctxRepo.Get(ctx, target.ChannelAccountID, hub.ConversationID); cerr == nil && conv != nil {
+	conversationID := leadHistoryConversationID(hub)
+	if conv, cerr := leadScopedConversation(ctx, ctxRepo, target.ChannelAccountID, conversationID); cerr == nil && conv != nil {
 		conv.Messages = append(conv.Messages, model.ConversationMessage{
 			MessageID: hub.MsgID, Role: "user", SenderID: hub.SenderID,
 			Content: strings.TrimSpace(hub.Content),
@@ -322,9 +463,9 @@ func (s *Service) buildLeadJudgeContext(ctx context.Context, hub *model.MessageH
 	// 群聊富化：用 AggregateGroupContext 给每条历史消息补 [角色:发送者] 前缀，
 	// 并把成员角色计数写进判定提示，让「谁求购/谁供货」在证据里可辨。
 	// 失败时保留原始消息并标注证据不完整（fail-visible，不静默吞错）。
-	if hub.IsGroup && target.ChannelAccountID > 0 && hub.ConversationID != "" {
+	if hub.IsGroup && target.ChannelAccountID > 0 && conversationID != "" {
 		enriched, counts, aerr := NewConversationContextServiceWithRepo(ctxRepo).
-			AggregateGroupContext(ctx, target.ChannelAccountID, hub.ConversationID)
+			AggregateGroupContext(ctx, target.ChannelAccountID, hub.ConversationID, ConversationContextScope{Platform: hub.Platform, IsGroup: hub.IsGroup, GroupID: hub.GroupID})
 		if aerr != nil {
 			jctx.GroupAggregateFailed = true
 			logger.Ctx(ctx).Warn().Err(aerr).Msg("[lead-mining] 群聊上下文聚合失败，判定提示标注证据不完整")
@@ -388,4 +529,21 @@ func (s *Service) configRequirement(ctx context.Context) string {
 		return ""
 	}
 	return cfg.Requirement
+}
+
+// EvidenceComplete 判定快照的必需证据是否齐全：三路命中完整、群聚合成功且 ReAct 未降级。
+// 与 recordLeadMiningJudgement 的 EvidenceComplete 口径一致，供副作用准入闸复用。
+func (c *LeadJudgeContext) EvidenceComplete() bool {
+	if c == nil || len(c.Hits) == 0 || c.GroupAggregateFailed || c.ReactDegraded {
+		return false
+	}
+	// 必需证据 = 至少一路完整命中；LLM/语义等可选路降级不构成挡单。
+	// 与判定记录的 EvidenceComplete 口径一致：任一路上报 Complete=false 会在记录里留痕，
+	// 但只有「全部证据路都降级」才让副作用闸判定证据不足。
+	for _, h := range c.Hits {
+		if h.Complete && !h.Degraded {
+			return true
+		}
+	}
+	return false
 }

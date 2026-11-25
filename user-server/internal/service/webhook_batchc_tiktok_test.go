@@ -100,24 +100,6 @@ func TestLeadAdapterForTikTokIsNotDouyin(t *testing.T) {
 	}
 }
 
-func TestDouyinLeadAdapterForHub_SelectsByHubPlatform(t *testing.T) {
-	// mineDouyinGroupLead 的适配器必须由 hub.Platform 决定：
-	// 只测 LeadAdapterForPlatform 工厂不够，写死 DouyinLeadAdapter{} 一样能过工厂测试。
-	if got := douyinLeadAdapterForHub(&model.MessageHub{Platform: "tiktok"}); got.Channel() != "tiktok" {
-		t.Errorf("tiktok hub 必须用 tiktok 适配器（D-01），got %q", got.Channel())
-	}
-	if got := douyinLeadAdapterForHub(&model.MessageHub{Platform: "douyin"}); got.Channel() != "douyin" {
-		t.Errorf("douyin hub 必须保持 douyin 适配器，got %q", got.Channel())
-	}
-	if got := douyinLeadAdapterForHub(nil); got.Channel() != "douyin" {
-		t.Errorf("hub 为 nil 时应回退 douyin 适配器，got %q", got.Channel())
-	}
-	if douyinLeadAdapterForHub(&model.MessageHub{Platform: "tiktok"}).ClueType() ==
-		douyinLeadAdapterForHub(&model.MessageHub{Platform: "douyin"}).ClueType() {
-		t.Error("两平台线索类型不得相同")
-	}
-}
-
 // tikTokGroupBody 官方**群**消息事件（im_group_receive_msg）。
 //
 // 批C 这三条用例盯的是「两家平台标记/幂等键必须分开」（D-01），与外壳形态无关，

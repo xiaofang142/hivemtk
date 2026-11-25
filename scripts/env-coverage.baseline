@@ -68,7 +68,6 @@ HIVE_MTK_HOST_TOKEN	待补文档（第36轮登记为债）；读取点 user-serv
 HIVE_MTK_HOST_VERSION	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
 HIVE_MTK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
 HIVE_MTK_WS_URL	待补文档（第36轮登记为债）；读取点 user-server/cmd/nm-host/main.go
-K_TRACE_LLM_REFINE	待补文档（第36轮登记为债）；读取点 user-server/internal/service/lead_intent_llm.go
 MOCK_AI_DELAY_MS	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go
 MOCK_AI_REPLY	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go
 MOCK_PORT	待补文档（第36轮登记为债）；读取点 user-server/cmd/bridge-mock/main.go

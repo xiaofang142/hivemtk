@@ -10,19 +10,19 @@ import "time"
 type WorkflowVersion struct {
 	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
 
-	ID          uint      `gorm:"primaryKey;autoIncrement" json:"id"`
-	WorkflowID  string    `gorm:"type:varchar(64);not null;index:idx_workflow_versions_wf_id" json:"workflow_id"`
-	Version     int       `gorm:"not null" json:"version"`
-	Name        string    `gorm:"type:varchar(200);not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	Definition  JSONMap   `gorm:"type:jsonb;not null" json:"definition"`
-	Status      string    `gorm:"type:varchar(16);not null;default:'draft';index:idx_workflow_versions_status" json:"status"`
-	Changelog   string    `gorm:"type:text" json:"changelog"`
+	ID          uint    `gorm:"primaryKey;autoIncrement" json:"id"`
+	WorkflowID  string  `gorm:"type:varchar(64);not null;index:idx_workflow_versions_wf_id" json:"workflow_id"`
+	Version     int     `gorm:"not null" json:"version"`
+	Name        string  `gorm:"type:varchar(200);not null" json:"name"`
+	Description string  `gorm:"type:text" json:"description"`
+	Definition  JSONMap `gorm:"type:jsonb;not null" json:"definition"`
+	Status      string  `gorm:"type:varchar(16);not null;default:'draft';index:idx_workflow_versions_status" json:"status"`
+	Changelog   string  `gorm:"type:text" json:"changelog"`
 	// Revision FA-WF-07：乐观锁版本号，草稿每次改稿 +1，供 CAS 串行化并发更新/发布。
-	Revision    int       `gorm:"not null;default:0" json:"revision"`
-	CreatedBy   string    `gorm:"type:varchar(64)" json:"created_by"`
-	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	Revision  int       `gorm:"not null;default:0" json:"revision"`
+	CreatedBy string    `gorm:"type:varchar(64)" json:"created_by"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 // TableName 指定表名

@@ -10,11 +10,12 @@ GORM AutoMigrate + 已注册迁移，不是本目录的 `.sql` 文件**。
 | 类型 | 文件 | 说明 |
 |------|------|------|
 | **基础初始化** | `init-user-db.sql` | 启用扩展（pgvector / uuid-ossp）+ 核心表结构（知识库 / RAG 产品）；容器首次初始化时自动执行 |
-| **离线/人工增量 SQL** | 93 份编号 SQL（`002`–`098`，含 `034b`） | 按文件名编号顺序应用的离线对照/人工迁移；`019`–`023` 无文件，`028` 有文件 |
-| **运行期 schema 事实源** | `user-server/internal/pkg/db/migrate.go` + `user-server/internal/migration/migrations/` | AutoMigrate 建表/补列；147 个已注册 Go 迁移，最大版本 `v3.113.0`（2026-11-25 实算） |
+| **离线/人工增量 SQL** | 94 份编号 SQL（`002`–`099`，含 `034b`） | 按文件名编号顺序应用的离线对照/人工迁移；`019`–`023` 无文件，`028` 有文件 |
+| **运行期 schema 事实源** | `user-server/internal/pkg/db/migrate.go` + `user-server/internal/migration/migrations/` | AutoMigrate 建表/补列；148 个已注册 Go 迁移，最大版本 `v3.115.0`（2026-11-25 实算） |
 
-本目录共 94 份 `.sql`（1 份初始化 + 93 份编号增量）。`097_merged_into_id_widen_varchar64.sql`
+本目录共 95 份 `.sql`（1 份初始化 + 94 份编号增量）。`097_merged_into_id_widen_varchar64.sql`
 与 `098_customer_identity_qq_personal_wx.sql` 目前只有离线 SQL，**尚未进入 Go 注册表**；
+`099_sagex_installation_tenant_unique.sql` 已由 Go `v3.115.0` 注册迁移覆盖。
 不能因为服务重启就假设这两份已执行。
 
 ## 执行顺序

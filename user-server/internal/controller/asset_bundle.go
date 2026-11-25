@@ -187,11 +187,11 @@ func respondStalePlatformProjection(ctx *gin.Context, err error, message string)
 		return false
 	}
 	response.Accepted(ctx, gin.H{
-		"synced":                false,
-		"platform_asset_id":     stale.PlatformAssetID,
-		"platform_status":       stale.PlatformStatus,
-		"platform_review_note":  stale.PlatformReviewNote,
-		"local_status":          stale.LocalStatus,
+		"synced":               false,
+		"platform_asset_id":    stale.PlatformAssetID,
+		"platform_status":      stale.PlatformStatus,
+		"platform_review_note": stale.PlatformReviewNote,
+		"local_status":         stale.LocalStatus,
 	}, message)
 	return true
 }

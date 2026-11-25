@@ -13,6 +13,7 @@ import (
 	"hivemtk-user/internal/aiagent/agent/portcontract"
 	"hivemtk-user/internal/capregistry"
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/pkg/testutil"
 	"hivemtk-user/internal/repository"
@@ -172,7 +173,8 @@ func (tr *submitCountingTransport) RoundTrip(req *http.Request) (*http.Response,
 
 // 仓储已真实装配；统计 Create 尝试与最终记录，不能靠 nil 仓储制造假绿。
 func TestBridgeSubmit_CapabilityDenialsHaveNoOutboxOrRetry(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{})
+	db := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{}, &model.Channel{}, &model.ChannelAccount{})
+	localAccountID := seedCanonicalOutboundAccount(t, db, 501, "douyin_shop", "local-account")
 	setupBridgeWhitelistForTest(t, "douyin_shop")
 	setupBridgeOutboxForTest(t, "douyin_shop")
 	previous := GlobalInboxIngressService()
@@ -190,14 +192,14 @@ func TestBridgeSubmit_CapabilityDenialsHaveNoOutboxOrRetry(t *testing.T) {
 	useLegacyBridgeFixture(t)
 	for _, tc := range submitDenialCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", "local-account", "message.text.send", capregistry.ModeBridge)
+			binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", localAccountID, "message.text.send", capregistry.ModeBridge)
 			ctx := tc.context(binding, evidence)
-			_, _, err := DeliverBridgeOutboundMedia(ctx, "douyin_shop", "local-account", "local-conversation", "text", "blocked", "", "")
+			_, _, err := DeliverBridgeOutboundMedia(ctx, "douyin_shop", localAccountID, "local-conversation", "text", "blocked", "", "")
 			requireSubmitDenial(t, err, tc.reason)
 			for _, quiet := range []bool{false, true} {
 				previousQuiet := loadAIReplyQuietHoursFn()
 				storeAIReplyQuietHoursFn(func(time.Time) bool { return quiet })
-				sent, sendErr := svc.sendOutbound(ctx, "douyin_shop", "local-account", &ParsedPayload{EventID: "ec01-" + tc.name}, "blocked", &model.MessageHub{TenantID: 501, ConversationID: "local-conversation", SenderID: "buyer"}, nil)
+				sent, sendErr := svc.sendOutbound(ctx, "douyin_shop", localAccountID, &ParsedPayload{EventID: "ec01-" + tc.name}, "blocked", &model.MessageHub{TenantID: 501, ConversationID: "local-conversation", SenderID: "buyer"}, nil)
 				storeAIReplyQuietHoursFn(previousQuiet)
 				if sent {
 					t.Fatal("拒绝请求不得标记发送成功")
@@ -207,10 +209,10 @@ func TestBridgeSubmit_CapabilityDenialsHaveNoOutboxOrRetry(t *testing.T) {
 					t.Errorf("能力拒绝必须不可重试，实际 %+v", ce)
 				}
 				// 复用 worker 的错误分类检查：拒绝也不能被调用方再次放入重试队列。
-				svc.enqueueSendRetry(ctx, "douyin_shop", "local-account", &ParsedPayload{}, "blocked", &model.MessageHub{ConversationID: "local-conversation"}, nil, sendErr)
+				svc.enqueueSendRetry(ctx, "douyin_shop", localAccountID, &ParsedPayload{}, "blocked", &model.MessageHub{ConversationID: "local-conversation"}, nil, sendErr)
 			}
 			var directErr error
-			result := sender.Send(ctx, &OutboundRequest{Channel: "douyin_shop", AccountID: "local-account", Content: "blocked",
+			result := sender.Send(ctx, &OutboundRequest{Channel: "douyin_shop", AccountID: localAccountID, Content: "blocked",
 				Hub:           &model.MessageHub{TenantID: 501, ConversationID: "local-conversation", SenderID: "buyer"},
 				FailUntracked: func(err error) { directErr = err },
 			})
@@ -277,7 +279,7 @@ func TestAfterSaleSubmit_CapabilityDenialsHaveNoPersistenceOrHTTP(t *testing.T) 
 
 // 已识别的任何桥接渠道（包括未来新增渠道）都不因缺少 cell 而走旧放行路径。
 func TestBridgeSubmit_UnregisteredCellsDenyAtProductionBoundaries(t *testing.T) {
-	db := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{}, &model.CapabilitySourceBinding{}, &model.MerchantConnection{}, &model.CapabilityEvidence{})
+	db := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{}, &model.CapabilitySourceBinding{}, &model.MerchantConnection{}, &model.CapabilityEvidence{}, &model.Channel{}, &model.ChannelAccount{})
 	var writes atomic.Int32
 	if err := db.Callback().Create().Before("gorm:create").Register("ec01-count-unknown-cell", func(tx *gorm.DB) {
 		if tx.Statement.Schema == nil || (tx.Statement.Schema.Table != "message_hub" && tx.Statement.Schema.Table != (&model.DelayedOutboundReply{}).TableName()) {
@@ -303,9 +305,11 @@ func TestBridgeSubmit_UnregisteredCellsDenyAtProductionBoundaries(t *testing.T) 
 	setupBridgeOutboxForTest(t, channels...)
 	for _, channel := range channels {
 		t.Run(channel, func(t *testing.T) {
-			binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", "local-account", "message.text.send", capregistry.ModeBridge)
+			channelAccountID := seedCanonicalOutboundAccount(t, db, 501, channel, "local-account")
+			binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", channelAccountID, "message.text.send", capregistry.ModeBridge)
 			binding.Platform, binding.Key.Product, evidence.Product = channel, channel, channel
 			ctx := localSubmitContext(binding, evidence)
+			ctx = edition.WithContext(ctx, edition.TypeCustom) // 国内渠道账号在开源版 edition gate 下不可读
 			expires := time.Now().Add(time.Hour)
 			conn := model.MerchantConnection{TenantID: 501, Provider: channel, ShopID: binding.Key.ShopID, Version: 1, CredentialVersion: 1, ConsentVersion: 1, CredentialContract: "local-contract", ExpiresAt: &expires}
 			if err := db.WithContext(ctx).Create(&conn).Error; err != nil {
@@ -319,24 +323,24 @@ func TestBridgeSubmit_UnregisteredCellsDenyAtProductionBoundaries(t *testing.T) 
 			if _, known := capregistry.FindCellDefinition(channel, "CN", "message.text.send", capregistry.ModeBridge); known {
 				reason = "shop_evidence_missing"
 			}
-			_, _, err := DeliverBridgeOutboundMedia(ctx, channel, "local-account", "local-conversation", "text", "blocked", "", "")
+			_, _, err := DeliverBridgeOutboundMedia(ctx, channel, channelAccountID, "local-conversation", "text", "blocked", "", "")
 			requireSubmitDenial(t, err, reason)
 			svc := &WebhookService{delayedRepo: repository.NewDelayedOutboundRepository(db)}
 			for _, quiet := range []bool{false, true} {
 				storeAIReplyQuietHoursFn(func(time.Time) bool { return quiet })
-				sent, err := svc.sendOutbound(ctx, WebhookChannel(channel), "local-account", &ParsedPayload{}, "blocked", &model.MessageHub{TenantID: 501, ConversationID: "local-conversation"}, nil)
+				sent, err := svc.sendOutbound(ctx, WebhookChannel(channel), channelAccountID, &ParsedPayload{}, "blocked", &model.MessageHub{TenantID: 501, ConversationID: "local-conversation"}, nil)
 				requireSubmitDenial(t, err, reason)
 				if sent || AsChannelError(err).Retryable {
 					t.Fatal("缺失能力格或证据不得发送或重试")
 				}
-				svc.enqueueSendRetry(ctx, WebhookChannel(channel), "local-account", &ParsedPayload{}, "blocked", &model.MessageHub{ConversationID: "local-conversation"}, nil, err)
+				svc.enqueueSendRetry(ctx, WebhookChannel(channel), channelAccountID, &ParsedPayload{}, "blocked", &model.MessageHub{ConversationID: "local-conversation"}, nil, err)
 			}
 			sender, ok := svc.outboundSenderFor(WebhookChannel(channel))
 			if !ok {
 				t.Fatal("桥接能力集合中渠道必须走真实 bridge sender")
 			}
 			var directErr error
-			result := sender.Send(ctx, &OutboundRequest{Channel: WebhookChannel(channel), AccountID: "local-account", Hub: &model.MessageHub{TenantID: 501, ConversationID: "local-conversation"}, FailUntracked: func(err error) { directErr = err }})
+			result := sender.Send(ctx, &OutboundRequest{Channel: WebhookChannel(channel), AccountID: channelAccountID, Hub: &model.MessageHub{TenantID: 501, ConversationID: "local-conversation"}, FailUntracked: func(err error) { directErr = err }})
 			requireSubmitDenial(t, directErr, reason)
 			if result.Sent || writes.Load() != 0 {
 				t.Fatalf("任何桥接格拒绝须零 outbox/quiet-hours/retry 写入，sent=%v writes=%d", result.Sent, writes.Load())
@@ -353,18 +357,20 @@ func TestBridgeSubmit_UnregisteredCellsDenyAtProductionBoundaries(t *testing.T) 
 
 // 上下文授权不可被复用来给另一个租户的入站消息入队；正常工厂与直接 sender 都拒绝。
 func TestWebhookBridgeSubmit_HubTenantMismatchHasNoPersistence(t *testing.T) {
+	db := testutil.NewTestDB(t, &model.MessageHub{}, &model.DelayedOutboundReply{}, &model.Channel{}, &model.ChannelAccount{})
+	localAccountID := seedCanonicalOutboundAccount(t, db, 502, "douyin_shop", "local-account")
 	setupBridgeOutboxForTest(t, "douyin_shop")
-	binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", "local-account", "message.text.send", capregistry.ModeBridge)
+	binding, evidence := localSubmitFixture(t, capregistry.SubmissionSourceBridge, "douyin_shop", localAccountID, "message.text.send", capregistry.ModeBridge)
 	ctx := localSubmitContext(binding, evidence)
 	previous := loadAIReplyQuietHoursFn()
 	storeAIReplyQuietHoursFn(func(time.Time) bool { t.Fatal("跨租户请求必须在延迟策略前拒绝"); return false })
 	t.Cleanup(func() { storeAIReplyQuietHoursFn(previous) })
 	svc := &WebhookService{}
-	_, err := svc.sendOutbound(ctx, "douyin_shop", "local-account", &ParsedPayload{}, "blocked", &model.MessageHub{TenantID: 502}, nil)
+	_, err := svc.sendOutbound(ctx, "douyin_shop", localAccountID, &ParsedPayload{}, "blocked", &model.MessageHub{TenantID: 502}, nil)
 	requireSubmitDenial(t, err, "tenant_binding_mismatch")
 	sender, _ := svc.outboundSenderFor("douyin_shop")
 	var directErr error
-	sender.Send(ctx, &OutboundRequest{Channel: "douyin_shop", AccountID: "local-account", Hub: &model.MessageHub{TenantID: 502}, FailUntracked: func(err error) { directErr = err }})
+	sender.Send(ctx, &OutboundRequest{Channel: "douyin_shop", AccountID: localAccountID, Hub: &model.MessageHub{TenantID: 502}, FailUntracked: func(err error) { directErr = err }})
 	requireSubmitDenial(t, directErr, "tenant_binding_mismatch")
 }
 

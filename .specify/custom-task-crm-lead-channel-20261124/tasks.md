@@ -145,11 +145,11 @@
 
 - [x] T064 [P] 全量编译与静态检查：`go build ./...`、`go vet ./...`、`gofmt -l`（宪法 Quality Gates）
 - [x] T065 受影响包测试真实运行（显式 `export POSTGRES_TEST_PASSWORD=...`），贴输出；检查 `t.Skipf` 不把跳过当通过（宪法 III / 测试陷阱）
-- [x] T066 API 三端验证：`python3 scripts/api_verify_full.py`（入参/返回/预期/DB），全过（SC-009）
+- [ ] T066 API 三端验证：在确认本地 API 与 `127.0.0.1:8217` 专用测试库一致后，显式运行 `python3 scripts/api_verify_full.py api`（入参/返回/预期/DB）；外部 AI 默认跳过，未实跑不得标完成（SC-009）
 - [x] T067 更新架构文档：`docs/architecture/BRIDGE_TOKEN_PROTOCOL.md` 改为识别码协议；外层 `定制任务清单.md`、`线索发掘模块-完整方案.md` 标记已落地
 - [x] T068 UI 全页面逐元素 ego-browser 显式点验并留证据（快照/截图/接口码/toast，规则 -1）
 - [x] T069 权限与安全复查：所有新增列表接口强制数据范围过滤、平台调用业务码判成败、无硬编码密钥
-- [x] T070 按 quickstart.md 跑通端到端主线并贴证据
+- [ ] T070 按 quickstart.md 在隔离测试环境跑通端到端主线并贴证据；本轮未执行真实 API/DB/UI 流程
 - [x] T071 整体完成且验证全绿后一次性 `git add` + `commit` + `push` 双远端（gitee-upstream/upstream，不写死 origin；宪法提交纪律）
 
 ---

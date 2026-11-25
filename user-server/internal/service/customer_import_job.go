@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,12 +25,16 @@ type CustomerImportJobService struct {
 	repo          repository.CustomerImportJobRepository
 	custRepo      repository.CustomerRepository
 	readCSVFileFn func(path string) ([][]string, error) // nil 用生产实现；测试注入故障出口
+	permission    *CustomerPermissionService
+	rowScopeCheck func(rec map[string]string) error // scoped 执行时逐行校验写入权限
+	precheckActor uint                              // scoped 预检时记录创建者
 }
 
 func NewCustomerImportJobService() *CustomerImportJobService {
 	return &CustomerImportJobService{
-		repo:     repository.NewCustomerImportJobRepository(),
-		custRepo: repository.NewCustomerRepository(),
+		repo:       repository.NewCustomerImportJobRepository(),
+		custRepo:   repository.NewCustomerRepository(),
+		permission: NewCustomerPermissionService(),
 	}
 }
 
@@ -282,6 +287,9 @@ func (s *CustomerImportJobService) Precheck(ctx context.Context, fileName string
 		PrecheckReport: string(precheckJSON),
 		ErrorReport:    cjMustJSON(report.Errors),
 	}
+	if s.precheckActor > 0 {
+		job.CreatedBy = &s.precheckActor
+	}
 	if err := s.repo.Create(ctx, job); err != nil {
 		return nil, err
 	}
@@ -353,6 +361,13 @@ func (s *CustomerImportJobService) Execute(ctx context.Context, jobID string) (*
 				report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: msg})
 			}
 			continue
+		}
+		if s.rowScopeCheck != nil {
+			if err := s.rowScopeCheck(rec); err != nil {
+				report.FailedRows++
+				report.Errors = append(report.Errors, ImportPrecheckRowError{Row: rowNum, Message: "无权导入该客户的账号/行业/负责人"})
+				continue
+			}
 		}
 		existing, err := s.findExistingCustomer(ctx, rec)
 		if err != nil {
@@ -441,7 +456,7 @@ func (s *CustomerImportJobService) ErrorReportCSV(ctx context.Context, jobID str
 	return []byte(b.String()), filename, nil
 }
 
-func (s *CustomerImportJobService) saveImportFile(jobID, fileName string, rows [][]string) (string, error) {
+func (s *CustomerImportJobService) saveImportFile(jobID, fileName string, rows [][]string) (savedPath string, returnErr error) {
 	dir := os.Getenv("IMPORT_JOB_DIR")
 	if dir == "" {
 		dir = filepath.Join(".", "data", "customer_imports")
@@ -458,7 +473,12 @@ func (s *CustomerImportJobService) saveImportFile(jobID, fileName string, rows [
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("关闭导入文件失败: %w", err))
+			savedPath = ""
+		}
+	}()
 	w := csv.NewWriter(f)
 	for _, row := range rows {
 		if err := w.Write(row); err != nil {
@@ -488,12 +508,17 @@ func readCSV(r io.Reader) ([][]string, error) {
 	return cr.ReadAll()
 }
 
-func readCSVFile(path string) ([][]string, error) {
+func readCSVFile(path string) (rows [][]string, returnErr error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			returnErr = errors.Join(returnErr, fmt.Errorf("关闭导入文件失败: %w", err))
+			rows = nil
+		}
+	}()
 	return readCSV(f)
 }
 
@@ -737,4 +762,126 @@ func cjMustJSON(v any) string {
 		return "[]"
 	}
 	return string(b)
+}
+
+// ErrImportJobForbidden 当前员工无权访问该导入作业。
+var ErrImportJobForbidden = errors.New("无权访问该导入作业")
+
+// jobOwnedBy 校验作业归属：管理员可访问本租户全部作业，其他员工仅限自己创建的作业。
+func (s *CustomerImportJobService) jobOwnedBy(scope CustomerDataScope, j *model.CustomerImportJob, actorID uint) bool {
+	if j == nil {
+		return false
+	}
+	if scope.AllAccounts {
+		return true
+	}
+	return actorID > 0 && j.CreatedBy != nil && *j.CreatedBy == actorID
+}
+
+// GetScoped 按员工范围读取作业。
+func (s *CustomerImportJobService) GetScoped(ctx context.Context, scope CustomerDataScope, actorID uint, jobID string) (*model.CustomerImportJob, error) {
+	j, err := s.repo.GetByJobID(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if !s.jobOwnedBy(scope, j, actorID) {
+		return nil, ErrImportJobForbidden
+	}
+	return j, nil
+}
+
+// ListScoped 按员工范围列出作业：管理员全部，其他员工仅自己创建。
+func (s *CustomerImportJobService) ListScoped(ctx context.Context, scope CustomerDataScope, actorID uint, page, pageSize int) ([]model.CustomerImportJob, int64, error) {
+	all, _, err := s.repo.List(ctx, 1, 10000)
+	if err != nil {
+		return nil, 0, err
+	}
+	allowed := make([]model.CustomerImportJob, 0, len(all))
+	for _, j := range all {
+		if s.jobOwnedBy(scope, &j, actorID) {
+			allowed = append(allowed, j)
+		}
+	}
+	total := int64(len(allowed))
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
+	}
+	start := (page - 1) * pageSize
+	if start >= len(allowed) {
+		return []model.CustomerImportJob{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(allowed) {
+		end = len(allowed)
+	}
+	return allowed[start:end], total, nil
+}
+
+// ErrorReportScoped 按员工范围读取错误报告。
+func (s *CustomerImportJobService) ErrorReportScoped(ctx context.Context, scope CustomerDataScope, actorID uint, jobID string) ([]ImportPrecheckRowError, error) {
+	if _, err := s.GetScoped(ctx, scope, actorID, jobID); err != nil {
+		return nil, err
+	}
+	return s.ErrorReport(ctx, jobID)
+}
+
+// ErrorReportCSVScoped 按员工范围下载错误报告。
+func (s *CustomerImportJobService) ErrorReportCSVScoped(ctx context.Context, scope CustomerDataScope, actorID uint, jobID string) ([]byte, string, error) {
+	if _, err := s.GetScoped(ctx, scope, actorID, jobID); err != nil {
+		return nil, "", err
+	}
+	return s.ErrorReportCSV(ctx, jobID)
+}
+
+// ExecuteScoped 按员工范围执行作业：先校验作业归属，再逐行校验最终写入值权限；
+// 被拒行记为失败而不落库，权限在每行执行前重新读取（当前 scope 由调用方按最新状态构造）。
+func (s *CustomerImportJobService) ExecuteScoped(ctx context.Context, scope CustomerDataScope, actorID uint, jobID string) (*ImportExecuteReport, error) {
+	if _, err := s.GetScoped(ctx, scope, actorID, jobID); err != nil {
+		return nil, err
+	}
+	if scope.RestrictedAccounts && len(scope.AccountIDs) == 0 {
+		return nil, ErrImportJobForbidden
+	}
+	previous := s.rowScopeCheck
+	s.rowScopeCheck = func(rec map[string]string) error {
+		ownerID, _ := cjParseUint(rec["owner_user_id"])
+		if !s.permission.AllowsWrite(scope, rec["source_account_id"], rec["industry"], ownerID) {
+			return ErrImportJobForbidden
+		}
+		if scope.OnlyOwned && ownerID != scope.UserID {
+			return ErrImportJobForbidden
+		}
+		return nil
+	}
+	defer func() { s.rowScopeCheck = previous }()
+	return s.Execute(ctx, jobID)
+}
+
+func cjParseUint(v string) (uint, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 64)
+	return uint(n), err
+}
+
+// PrecheckScoped 按员工范围预检：记录作业创建者以便后续归属校验。
+func (s *CustomerImportJobService) PrecheckScoped(ctx context.Context, actorID uint, fileName string, reader io.Reader, entityType, dedupStrategy, mappingJSON string) (*ImportPrecheckReport, error) {
+	previous := s.precheckActor
+	s.precheckActor = actorID
+	defer func() { s.precheckActor = previous }()
+	return s.Precheck(ctx, fileName, reader, entityType, dedupStrategy, mappingJSON)
+}
+
+// Scope 从可信登录用户解析 CRM 数据范围。
+func (s *CustomerImportJobService) Scope(ctx context.Context, userID uint) CustomerDataScope {
+	if s.permission == nil {
+		s.permission = NewCustomerPermissionService()
+	}
+	scope, _ := s.permission.Resolve(ctx, userID)
+	return scope
 }

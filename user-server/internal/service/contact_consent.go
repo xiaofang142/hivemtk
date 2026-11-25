@@ -96,8 +96,9 @@ func ReachSendPurpose(req *ReachSendRequest) string {
 // 未明确勾选营销时不得调用本函数写入 marketing grant，公开采集线索默认无营销许可。
 //
 // EC-28 交叉引用（M28 旅程/实验编排）：实时撤回事实必须覆盖冻结快照——营销实验/旅程
-//   分支执行前须重查本同意事实；控制组/holdout 不得因 consent 缺失被静默当作已授权；
-//   撤回后未派发任务取消，已派发任务按 EC-31 回执/退订链路处理。
+//
+//	分支执行前须重查本同意事实；控制组/holdout 不得因 consent 缺失被静默当作已授权；
+//	撤回后未派发任务取消，已派发任务按 EC-31 回执/退订链路处理。
 func (s *ContactConsentService) Record(ctx context.Context, in ConsentRecordInput) error {
 	if s.repo == nil {
 		return errors.New("contact consent service not initialized")

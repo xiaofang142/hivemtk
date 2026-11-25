@@ -52,6 +52,8 @@ type LeadJudgement struct {
 	FollowupSuggestion string   `json:"followup_suggestion"` // 给维护人的跟进建议
 	// Degraded 表示二次 LLM 不可用，结论由关键词/语义命中确定性兜底得出。
 	Degraded bool `json:"degraded,omitempty"`
+	// ReactOutcome 是文本 ReAct 取证机器状态；只含工具观察与固定原因，不含模型思考。
+	ReactOutcome *LeadReactOutcome `json:"react_outcome,omitempty"`
 }
 
 // LLMJudge 判定接口（便于测试注入 fake）
@@ -76,6 +78,7 @@ type Service struct {
 	clueRepo           repository.ClueRepository
 	cfgRepo            repository.LeadMiningConfigRepository
 	hubRepo            *repository.MessageHubRepository
+	channelResolver    *ChannelResolver
 	mu                 sync.Mutex
 	lastJudge          map[string]time.Time
 	persistLocks       sync.Map
@@ -153,7 +156,7 @@ func NewLeadMiningService(clueRepo repository.ClueRepository) *Service {
 	s := &Service{
 		queue:         make(chan *model.MessageHub, leadMiningQueueSize),
 		workers:       leadMiningWorkers,
-		judge:         &dispatcherJudge{},
+		judge:         &leadReactDispatcherJudge{},
 		custRepo:      repository.NewCustomerRepository(),
 		clueRepo:      clueRepo,
 		cfgRepo:       repository.NewLeadMiningConfigRepository(),
@@ -331,12 +334,32 @@ func (s *Service) worker(ctx context.Context) {
 	}
 }
 
+// leadSideEffectsEligible 是业务副作用的统一准入闸：
+// 标签、线索、通知、自动商机必须共用同一判定。降级或必需证据不全的高分结论
+// 只能作为判定记录/候选保留，不得触发任何确定性业务副作用。
+func leadSideEffectsEligible(jd *LeadJudgement, evidenceComplete bool, minScore int) bool {
+	if jd == nil || !jd.IsLead || jd.IntentScore < minScore {
+		return false
+	}
+	if jd.Degraded || !evidenceComplete {
+		return false
+	}
+	if jd.ReactOutcome != nil && jd.ReactOutcome.Degraded {
+		return false
+	}
+	return true
+}
+
 func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	if hub == nil || hub.Direction != "inbound" {
 		return
 	}
 	if hub.TenantID == 0 && tenant.IsMultiTenant() {
 		logger.Warnf("[lead-mining] 拒绝无租户归属的消息 msgID=%s", hub.MsgID)
+		return
+	}
+	if tid, ok := tenant.FromContext(ctx); ok && hub.TenantID != 0 && tid != hub.TenantID {
+		logger.Warnf("[lead-mining] 拒绝上下文与消息租户不一致 msgID=%s", hub.MsgID)
 		return
 	}
 	if hub.TenantID != 0 {
@@ -348,12 +371,22 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	if content == "" {
 		return
 	}
+	scope, scopeErr := s.historyScope(ctx, hub)
+	if scopeErr != nil {
+		logger.Warnf("[lead-mining] 拒绝不明确的历史作用域 msgID=%s: %v", hub.MsgID, scopeErr)
+		return
+	}
+	ctx = context.WithValue(ctx, leadHistoryScopeKey{}, scope)
+	debounceKey := leadMiningDebounceKey(scope.tenantID, scope.Platform, scope.accountKey, hub.ConversationID, hub.GroupID, hub.SenderID, hub.IsGroup)
+	if debounceKey == "" {
+		return
+	}
 
 	// T040：复用 ai_debounce.go 的窗口配置做线索去重；无 dedup_hash 的测试/历史
 	// 消息不参与，避免把不同来源的消息误合并。
 	if hub.DedupHash != "" {
 		evt := &model.MessageEvent{Content: content, SessionID: hub.ConversationID}
-		if !LeadDebounce().TryClaim(ctx, evt, hub.Platform, hub.AccountID, hub.SenderID, hub.DedupHash) {
+		if !LeadDebounce().TryClaim(ctx, evt, debounceKey, hub.DedupHash) {
 			logger.Infof("[lead-mining] 防抖命中，跳过重复消息 msgID=%s hash=%s", hub.MsgID, hub.DedupHash)
 			return
 		}
@@ -373,21 +406,11 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 		return
 	}
 
-	// D5：群线索按「渠道账号 + 群」作用域去重，不再按发送人——否则群内不同人的
-	// 商机互相覆盖，与「群=客户」决策冲突。单聊沿用 platform:sender。
+	// 日志用粗粒度 account；LM-10 需求分桶键依赖 jd，在 persistLead 内计算。
 	account := fmt.Sprintf("%s:%s", hub.Platform, hub.SenderID)
 	if hub.IsGroup && strings.TrimSpace(hub.GroupID) != "" {
 		account = fmt.Sprintf("%s:%s:%s", hub.Platform, hub.AccountID, hub.GroupID)
 	}
-	tenantID, ok := tenant.FromContext(ctx)
-	if !ok {
-		if tenant.IsMultiTenant() {
-			logger.Warnf("[lead-mining] 拒绝无租户归属的消息 msgID=%s", hub.MsgID)
-			return
-		}
-		tenantID = tenant.DefaultTenantID
-	}
-	debounceKey := leadMiningDebounceKey(tenantID, hub.Platform, hub.ConversationID, hub.SenderID, hub.IsGroup)
 	s.mu.Lock()
 	if last, ok := s.lastJudge[debounceKey]; ok && time.Since(last) < leadMiningDebounce {
 		s.mu.Unlock()
@@ -404,6 +427,7 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	// 仍走原 Judge 路径，不改变既有测试契约。
 	judgementID := fmt.Sprintf("lmj_%d", time.Now().UnixNano())
 	jctx := s.buildLeadJudgeContext(ctx, hub, history, judgementID)
+	ctx = withLeadReactTask(ctx, buildLeadReactTask(ctx, hub, jctx, scope))
 	var jd *LeadJudgement
 	var err error
 	if rich, ok := s.judge.(interface {
@@ -431,7 +455,10 @@ func (s *Service) process(ctx context.Context, hub *model.MessageHub) {
 	s.recordLeadMiningJudgement(ctx, hub, jd, jctx)
 	// D8：判定成功后把结论写成会话历史摘要（compaction），供多轮/长会话复用。
 	saveCompactSummary(ctx, hub, jctx.ChannelAccountID, jd)
-	if !jd.IsLead || jd.IntentScore < gate.minIntentScore {
+	// 统一业务副作用准入：判定记录/候选已落库，判定自身降级（含 React 降级）不得触发标签/通知/商机。
+	// 三路证据完整性在判定记录里以 EvidenceComplete 标注、供候选/回放判读；
+	// 可选检测路（如 LLM）降级不构成挡单，避免正常判定被误拦。
+	if !leadSideEffectsEligible(jd, true, gate.minIntentScore) {
 		return
 	}
 
@@ -481,11 +508,9 @@ func (s *Service) processRuleTarget(ctx context.Context, hub *model.MessageHub) 
 	if hub == nil {
 		return target
 	}
-	if resolved, err := NewChannelResolver().ResolveByAccountRef(ctx, hub.Platform, hub.AccountID); err != nil {
-		logger.Debugf("[lead-mining] 渠道账号解析失败，回退 global 规则 account=%s: %v", hub.AccountID, err)
-	} else if resolved != nil {
-		target.ChannelAccountID = resolved.AccountID
-		target.ChannelID = resolved.ChannelID
+	if scope, err := s.historyScope(ctx, hub); err == nil {
+		target.ChannelAccountID = scope.accountID
+		target.ChannelID = scope.channelID
 	}
 	return target
 }
@@ -559,17 +584,6 @@ func dedupeLeadStrings(in []string) []string {
 	return out
 }
 
-func leadMiningDebounceKey(tenantID uint, platform, conversationID, senderID string, isGroup bool) string {
-	key := fmt.Sprintf("%s:%s", platform, senderID)
-	if isGroup && conversationID != "" {
-		key = fmt.Sprintf("%s:%s:%s", platform, conversationID, senderID)
-	}
-	if tenantID == tenant.DefaultTenantID {
-		return key
-	}
-	return fmt.Sprintf("%d:%s", tenantID, key)
-}
-
 func (s *Service) loadConfig(ctx context.Context) *model.LeadMiningConfig {
 	tenantID, ok := tenant.FromContext(ctx)
 	if !ok {
@@ -639,17 +653,22 @@ func (s *Service) fetchHistory(ctx context.Context, hub *model.MessageHub) []llm
 }
 
 func (s *Service) fetchHistoryDB(ctx context.Context, hub *model.MessageHub) []llm.ChatMessage {
+	scope, scopeErr := s.historyScope(ctx, hub)
+	if scopeErr != nil {
+		logger.Warnf("[lead-mining] 拒绝不明确的历史作用域: %v", scopeErr)
+		return nil
+	}
 	var (
 		hubs []model.MessageHub
 		err  error
 	)
 	// LM-PR1: 单聊结合两人历史（同 conversation 双向）；群聊结合群内大家发言。
 	if hub.IsGroup && hub.GroupID != "" {
-		hubs, err = s.hubRepo.ListRecentByGroup(ctx, hub.Platform, hub.GroupID, leadMiningHistorySize)
+		hubs, err = s.hubRepo.ListRecentByGroup(ctx, scope.MessageHubHistoryScope, hub.GroupID, leadMiningHistorySize)
 	} else if hub.ConversationID != "" {
-		hubs, err = s.hubRepo.ListRecentByConversation(ctx, hub.ConversationID, leadMiningHistorySize)
+		hubs, err = s.hubRepo.ListRecentByConversation(ctx, scope.MessageHubHistoryScope, hub.ConversationID, leadMiningHistorySize)
 	} else {
-		hubs, err = s.hubRepo.ListRecentInboundBySender(ctx, hub.Platform, hub.SenderID, leadMiningHistorySize)
+		hubs, err = s.hubRepo.ListRecentBySender(ctx, scope.MessageHubHistoryScope, hub.SenderID, leadMiningHistorySize)
 	}
 	if err != nil {
 		logger.Warnf("[lead-mining] 读取会话历史失败: %v", err)
@@ -694,7 +713,10 @@ func (s *Service) persistLead(ctx context.Context, cfg *model.LeadMiningConfig, 
 		}
 		tenantID = tenant.DefaultTenantID
 	}
-	lockKey := fmt.Sprintf("%d:%d:%s", tenantID, ClueTypeLeadMining, account)
+	// LM-10：分桶键用于并发锁隔离（同群不同主体/项目/方向互不阻塞）与后续去重升级；
+	// clue.Account 保留既有 "platform:sender" 语义，避免破坏下游查询与历史验收口径。
+	demandKey := leadDemandKeyFor(*hub, hub.SenderID, leadDemandProject(jd.Summary), leadRoleOf(jd))
+	lockKey := fmt.Sprintf("%d:%d:%s", tenantID, ClueTypeLeadMining, demandKey)
 	if v, _ := s.persistLocks.LoadOrStore(lockKey, &sync.Mutex{}); v != nil {
 		mu := v.(*sync.Mutex)
 		mu.Lock()
@@ -871,7 +893,37 @@ func (s *Service) notifyLeadDiscovery(ctx context.Context, clue *model.Clue, jd 
 	// 文案（群名/角色/建议）由 ArchiveClueInput 承载，在下游统一构造。
 }
 
-func (s *Service) resolveCustomer(ctx context.Context, platform, senderID, name string) (*model.Customer, error) {
+// leadMiningUnifiedIDFor 为线索入口生成稳定且带账号作用域的 OneID。
+// 有专用身份列的渠道使用 GenerateCustomerUnifiedID（按真实平台身份归一）；
+// 无专用列的渠道使用 tenant/account 作用域的确定性键，不再依赖随机 UUID。
+func leadMiningUnifiedIDFor(platform, sourceAccountID, senderID string) string {
+	p := strings.ToLower(strings.TrimSpace(platform))
+	id := strings.TrimSpace(senderID)
+	if p == "" || id == "" {
+		return ""
+	}
+	candidate := &model.Customer{Name: id}
+	applyLeadMiningIdentity(candidate, p, id)
+	// 只有写入了专用身份列才交给 OneID 归一；GenerateCustomerUnifiedID 对无身份列
+	// 渠道返回随机 UUID，不能作为稳定客户键。
+	hasDedicated := candidate.WechatOpenID != "" || candidate.PersonalWXOpenID != "" || candidate.QQOpenID != "" ||
+		candidate.WeComExternalID != "" || candidate.FeishuOpenID != "" || candidate.DouyinOpenID != "" ||
+		candidate.TikTokOpenID != "" || candidate.KuaishouOpenID != "" || candidate.XiaohongshuID != "" ||
+		candidate.XianyuID != "" || candidate.TelegramChatID != 0 || candidate.WhatsAppPhone != "" ||
+		candidate.Email != "" || candidate.Phone != ""
+	if hasDedicated {
+		if unified := model.GenerateCustomerUnifiedID(candidate); unified != "" {
+			return unified
+		}
+	}
+	scope := strings.TrimSpace(sourceAccountID)
+	if scope == "" {
+		scope = "unknown"
+	}
+	return fmt.Sprintf("lm:%s:%s:%s", p, scope, id)
+}
+
+func (s *Service) resolveCustomer(ctx context.Context, platform, sourceAccountID, senderID, name string) (*model.Customer, error) {
 	if platform == "" || senderID == "" {
 		return nil, fmt.Errorf("无客户身份标识")
 	}
@@ -886,7 +938,7 @@ func (s *Service) resolveCustomer(ctx context.Context, platform, senderID, name 
 	}
 	candidate := &model.Customer{Name: name}
 	applyLeadMiningIdentity(candidate, platform, senderID)
-	unifiedID := model.GenerateCustomerUnifiedID(candidate)
+	unifiedID := leadMiningUnifiedIDFor(platform, sourceAccountID, senderID)
 	if unifiedID == "" {
 		unifiedID = legacyKey
 	}
@@ -899,7 +951,7 @@ func (s *Service) resolveCustomer(ctx context.Context, platform, senderID, name 
 	}
 	candidate.UnifiedID = unifiedID
 	candidate.SourceChannel = platform
-	candidate.SourceAccountID = senderID
+	candidate.SourceAccountID = sourceAccountID
 	if cerr := s.custRepo.Create(ctx, candidate); cerr != nil {
 		if c2, g2 := s.custRepo.GetByUnifiedID(ctx, unifiedID); g2 == nil && c2 != nil {
 			return c2, nil
@@ -1172,6 +1224,10 @@ func (s *Service) recordLeadMiningJudgement(ctx context.Context, hub *model.Mess
 		rec.Degraded = true
 		rec.EvidenceComplete = false
 	}
+	if jd.ReactOutcome != nil && jd.ReactOutcome.Degraded {
+		rec.Degraded = true
+		rec.EvidenceComplete = false
+	}
 	if err := judgementRepo.Create(ctx, rec); err != nil {
 		logger.Warnf("[lead-mining] 记录判定失败 msg=%s: %v", hub.MsgID, err)
 	}
@@ -1207,4 +1263,10 @@ func SubmitLeadMiningJudgementFeedback(ctx context.Context, judgementID, status,
 // GetLeadMiningQualityStats 返回线索发掘质量看板统计（LM-PR6）。
 func GetLeadMiningQualityStats(ctx context.Context, days int) (map[string]any, error) {
 	return repository.NewLeadMiningJudgementRepository().GetQualityStats(ctx, days)
+}
+
+// GetLeadMiningQualityStatsScoped 按员工可见账号统计判定质量（LM-13）。
+// accounts=nil 表示管理员全量；空切片表示受限无账号，repository 会拒绝。
+func GetLeadMiningQualityStatsScoped(ctx context.Context, accounts []string, days int) (map[string]any, error) {
+	return repository.NewLeadMiningJudgementRepository().GetQualityStatsScoped(ctx, accounts, days)
 }

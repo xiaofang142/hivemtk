@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,7 +13,7 @@ import (
 )
 
 // ConversationContextController 共享对话上下文只读入口（T054 交叉引用展示数据源）。
-// 数据范围由 ConversationContextService 底层仓储按租户上下文强制过滤（缺租户 fail-closed）。
+// 员工授权在 Service 先于上下文读取校验；底层仓储继续强制租户隔离。
 type ConversationContextController struct {
 	svc *service.ConversationContextService
 }
@@ -22,6 +23,14 @@ func NewConversationContextController(svc *service.ConversationContextService) *
 }
 
 func (c *ConversationContextController) Get(ctx *gin.Context) {
+	userID := currentStaffUserID(ctx)
+	if userID == 0 {
+		response.Error(ctx, http.StatusUnauthorized, response.ErrUnauthorized)
+		return
+	}
+	if _, ok := channelTenantID(ctx); !ok {
+		return
+	}
 	accountID, err := strconv.ParseUint(ctx.Query("channel_account_id"), 10, 64)
 	if err != nil || accountID == 0 {
 		response.Error(ctx, http.StatusBadRequest, "channel_account_id 非法")
@@ -32,10 +41,27 @@ func (c *ConversationContextController) Get(ctx *gin.Context) {
 		response.Error(ctx, http.StatusBadRequest, "conversation_id 不能为空")
 		return
 	}
-	// 租户边界完全由 auth 组的 TenantMiddleware 上下文提供；不接受客户端自称 tenant_id，
-	// 缺失租户时底层仓储 fail-closed 拒绝（宪法原则 I / 多租户隔离）。
-	snap, err := c.svc.Snapshot(ctx.Request.Context(), uint(accountID), convID)
+	// 员工和租户只取认证上下文，不接受查询参数中的身份或角色。
+	var scopes []service.ConversationContextScope
+	platform, groupID, isGroup := ctx.Query("platform"), ctx.Query("group_id"), ctx.Query("is_group")
+	if platform != "" || groupID != "" || isGroup != "" {
+		group, parseErr := strconv.ParseBool(isGroup)
+		if platform == "" || parseErr != nil || (!group && groupID != "") {
+			response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams)
+			return
+		}
+		scopes = append(scopes, service.ConversationContextScope{Platform: platform, IsGroup: group, GroupID: groupID})
+	}
+	snap, err := c.svc.SnapshotForUser(ctx.Request.Context(), userID, uint(accountID), convID, scopes...)
 	if err != nil {
+		if errors.Is(err, service.ErrConversationContextForbidden) {
+			response.Error(ctx, http.StatusForbidden, response.ErrPermissionDenied)
+			return
+		}
+		if errors.Is(err, service.ErrConversationContextScope) {
+			response.Error(ctx, http.StatusBadRequest, response.ErrInvalidParams)
+			return
+		}
 		response.ErrorFromDB(ctx, err, "获取共享对话上下文失败")
 		return
 	}

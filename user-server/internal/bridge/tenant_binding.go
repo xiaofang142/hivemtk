@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"hivemtk-user/internal/pkg/dbstate"
 	"hivemtk-user/internal/pkg/edition"
 	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
@@ -223,37 +222,6 @@ func resolveBridgeIdentityByChannelCode(rctx context.Context, identifyCode strin
 	return out, nil
 }
 
-func resolveBridgeTenant(rctx context.Context, channel, accountID, codeHint string) (context.Context, bool, error) {
-	if !tenant.IsMultiTenant() {
-		return rctx, false, nil
-	}
-	if id, bound := tenant.FromContext(rctx); bound && id != 0 {
-		return rctx, false, nil
-	}
-
-	tid, lookupErr := bridgeAccountTenant(rctx, channel, accountID)
-	if lookupErr == nil && tid != 0 {
-		// OnlyTenant 而非 WithTenantID：归属由账号行/短码自证后必须钉死，
-		// 上游若带 SystemScope，隔离 callback 会放行跨租户读并跳过写入填列。
-		return tenant.OnlyTenant(rctx, tid), true, nil
-	}
-	if lookupErr != nil && !errors.Is(lookupErr, tenant.ErrAmbiguousTenantKey) {
-		// 反查本身坏了：不能当成"没有归属"放行，也不能瞎猜一个租户。
-		return rctx, false, lookupErr
-	}
-	if codeHint == "" {
-		if errors.Is(lookupErr, tenant.ErrAmbiguousTenantKey) {
-			return rctx, false, ErrBridgeTenantAmbiguous
-		}
-		return rctx, false, ErrBridgeTenantUnresolved
-	}
-	id, err := service.NewTenantService().ResolvePublicTenantID(rctx, codeHint)
-	if err != nil {
-		return rctx, false, fmt.Errorf("%w: %v", ErrBridgeTenantCodeInvalid, err)
-	}
-	return tenant.OnlyTenant(rctx, id), true, nil
-}
-
 // bindBridgeTenant 解析 (channel, accountID) 的归属租户并绑定进请求上下文。
 //
 // 返回的 ctx 与就地改写后的 c.Request 携带同一个租户：handler 里既有"用返回值"的
@@ -295,23 +263,6 @@ func BridgeTenantForRequest(r *http.Request, channel, accountID string) (context
 		return ctx2, nil
 	}
 	return ctx2, nil
-}
-
-// bridgeAccountTenant 在系统作用域下反查账号行的归属租户。
-//
-// 走 dbstate 全局句柄而不是 GlobalBridgeAccountRepo：那个接口是"账号状态读写"的
-// 契约（测试里有多枚桩实现），往里塞一个租户反查方法会把桩一起改掉；而这条查询
-// 本来就要求跨租户可见，与仓库的租户语义无关。
-func bridgeAccountTenant(ctx context.Context, channel, accountID string) (uint, error) {
-	gdb := dbstate.Get()
-	if gdb == nil {
-		return 0, errors.New("bridge 租户自证：db 未初始化")
-	}
-	if channel == "" || accountID == "" {
-		return 0, nil
-	}
-	return tenant.SingleTenantByKey(ctx, gdb, "bridge_accounts",
-		"channel = ? AND account_id = ?", channel, accountID)
 }
 
 // bridgeTenantHTTPStatus 租户判定失败 → 状态码：404 是"照着提示补 tenant_code 就能重试"，

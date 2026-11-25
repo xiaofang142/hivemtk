@@ -8,8 +8,12 @@ package service
 
 import (
 	"context"
+	"encoding/csv"
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"hivemtk-user/internal/model"
@@ -334,4 +338,248 @@ func (s *ReportService) ErrorReport(ctx context.Context, from, to time.Time, err
 	}
 	return map[string]any{"by_class": byClass, "total": total, "rows": failed,
 		"page": page, "page_size": pageSize}, nil
+}
+
+// ============================================================
+// CRM-26：按账号/行业/阶段受权导出的画像报告（仅新增部分，不改 LLMUsage 聚合）
+// ============================================================
+//
+// 与 11/12 的分工：那是客户/实体主数据导出，这里是 CRM-13 结构化画像/分层/商机/跟进结论 +
+// 可回查证据的报告。文件格式复用 CSV/真 xlsx、服务端脱敏、受限下载的同一口径；
+// 无引用结论只写 degraded，不伪装成已证实画像。
+
+// ProfileReportSource 一行报告的受权来源：客户主档 + 阶段 + CRM-13 分析结果。
+type ProfileReportSource struct {
+	Customer *model.Customer
+	Stage    string
+	Result   *CustomerAIResult
+}
+
+// ProfileReportInput 生成输入：筛选维度必须都来自调用方当前权限解析后的结果。
+type ProfileReportInput struct {
+	Accounts    []string
+	Industries  []string
+	Stages      []string
+	Sources     []ProfileReportSource
+	GeneratedAt time.Time
+	Version     string
+}
+
+// ProfileReportEntry 报告行：结论与证据同源，阶段口径随行记录。
+type ProfileReportEntry struct {
+	CustomerID       string       `json:"customer_id"`
+	SourceAccountID  string       `json:"source_account_id"`
+	Industry         string       `json:"industry"`
+	Stage            string       `json:"stage"`
+	Content          string       `json:"content"`
+	Confidence       float64      `json:"confidence"`
+	ConfidenceSource string       `json:"confidence_source,omitempty"`
+	RuleScore        float64      `json:"rule_score,omitempty"`
+	PromptVersion    string       `json:"prompt_version,omitempty"`
+	Evidence         []AIEvidence `json:"evidence"`
+	Degraded         bool         `json:"degraded,omitempty"`
+	DegradeReason    string       `json:"degrade_reason,omitempty"`
+}
+
+// ProfileReport 画像报告（结构化结果，文件由 ProfileReportCSV/XLSX 渲染）。
+type ProfileReport struct {
+	Version     string               `json:"version"`
+	GeneratedAt time.Time            `json:"generated_at"`
+	Filters     ProfileReportFilters `json:"filters"`
+	Count       int                  `json:"count"`
+	Entries     []ProfileReportEntry `json:"entries"`
+}
+
+type ProfileReportFilters struct {
+	Accounts   []string `json:"accounts,omitempty"`
+	Industries []string `json:"industries,omitempty"`
+	Stages     []string `json:"stages,omitempty"`
+}
+
+// BuildProfileReport 按三维度筛选（AND）并逐行保留证据/版本/降级状态。
+func BuildProfileReport(in ProfileReportInput) (*ProfileReport, error) {
+	report := &ProfileReport{
+		Version: in.Version, GeneratedAt: in.GeneratedAt,
+		Filters: ProfileReportFilters{Accounts: in.Accounts, Industries: in.Industries, Stages: in.Stages},
+		Entries: []ProfileReportEntry{},
+	}
+	if report.Version == "" {
+		report.Version = "v1"
+	}
+	if report.GeneratedAt.IsZero() {
+		report.GeneratedAt = time.Now()
+	}
+	for _, src := range in.Sources {
+		if src.Customer == nil || src.Result == nil {
+			continue
+		}
+		c := src.Customer
+		if len(in.Accounts) > 0 && !containsCRMString(in.Accounts, c.SourceAccountID) {
+			continue
+		}
+		if len(in.Industries) > 0 && !containsCRMString(in.Industries, c.Industry) {
+			continue
+		}
+		if len(in.Stages) > 0 && !containsCRMString(in.Stages, src.Stage) {
+			continue
+		}
+		for _, sug := range src.Result.Suggestions {
+			degraded := strings.HasSuffix(sug.Kind, "_degraded") || sug.DegradeReason != "" || len(sug.Evidence) == 0
+			report.Entries = append(report.Entries, ProfileReportEntry{
+				CustomerID: c.ID, SourceAccountID: c.SourceAccountID, Industry: c.Industry, Stage: src.Stage,
+				Content: sug.Content, Confidence: sug.Confidence, ConfidenceSource: sug.ConfidenceSource,
+				RuleScore: sug.RuleScore, PromptVersion: sug.PromptVersion, Evidence: sug.Evidence,
+				Degraded: degraded, DegradeReason: sug.DegradeReason,
+			})
+		}
+	}
+	report.Count = len(report.Entries)
+	return report, nil
+}
+
+// ProfileReportStore 报告快照存储（与 CRM-12 ExportJobStore 同口径的内存作业层，
+// 生产重启持久化由既有作业设施承接，见 fix.md 余项）。
+type ProfileReportStore struct {
+	mu        sync.Mutex
+	snapshots map[string]*ProfileReportSnapshot
+}
+
+type ProfileReportSaveInput struct {
+	Report     *ProfileReport
+	TenantID   uint
+	OperatorID uint
+	Scope      CustomerDataScope
+	ExpiresAt  time.Time
+}
+
+// ProfileReportSnapshot 保存筛选/操作者/权限范围/版本/脱敏策略，下载时重验当前权限。
+type ProfileReportSnapshot struct {
+	Key        string
+	TenantID   uint
+	OperatorID uint
+	Scope      CustomerDataScope
+	Version    string
+	ExpiresAt  time.Time
+	Content    []byte
+	Format     string
+	Masked     bool
+}
+
+var (
+	ErrProfileReportForbidden = errors.New("无权下载该画像报告")
+	ErrProfileReportExpired   = errors.New("画像报告已过期")
+)
+
+func NewProfileReportStore() *ProfileReportStore {
+	return &ProfileReportStore{snapshots: map[string]*ProfileReportSnapshot{}}
+}
+
+func (s *ProfileReportStore) Save(_ context.Context, in ProfileReportSaveInput) (*ProfileReportSnapshot, error) {
+	if in.Report == nil {
+		return nil, errors.New("报告内容为空")
+	}
+	masked := !in.Scope.AllAccounts
+	content, err := ProfileReportCSV(in.Report, masked)
+	if err != nil {
+		return nil, err
+	}
+	key := fmt.Sprintf("%d|%d|%s", in.TenantID, in.OperatorID, in.Report.Version)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snap := &ProfileReportSnapshot{
+		Key: key, TenantID: in.TenantID, OperatorID: in.OperatorID, Scope: in.Scope,
+		Version: in.Report.Version, ExpiresAt: in.ExpiresAt, Content: content,
+		Format: "csv", Masked: masked,
+	}
+	s.snapshots[key] = snap
+	return snap, nil
+}
+
+func (s *ProfileReportStore) Get(key string) (*ProfileReportSnapshot, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	snap, ok := s.snapshots[key]
+	return snap, ok
+}
+
+// ProfileReportDownloadInput 下载时的当前身份与当前可见账号集合。
+type ProfileReportDownloadInput struct {
+	Snapshot        *ProfileReportSnapshot
+	TenantID        uint
+	ActorID         uint
+	CurrentAccounts []string
+}
+
+// Download 重验：跨租户/非创建者/范围收窄/过期一律拒绝。
+func (s *ProfileReportStore) Download(_ context.Context, in ProfileReportDownloadInput) ([]byte, error) {
+	snap := in.Snapshot
+	if snap == nil || snap.TenantID != in.TenantID || snap.OperatorID != in.ActorID {
+		return nil, ErrProfileReportForbidden
+	}
+	if !time.Now().Before(snap.ExpiresAt) || len(snap.Content) == 0 {
+		return nil, ErrProfileReportExpired
+	}
+	if !snap.Scope.AllAccounts {
+		for _, acc := range snap.Scope.AccountIDs {
+			if !containsCRMString(in.CurrentAccounts, acc) {
+				return nil, ErrProfileReportForbidden
+			}
+		}
+	}
+	return snap.Content, nil
+}
+
+// ProfileReportCSV 复用 11/12 的 CSV 格式：BOM + 表头，含证据列，服务端脱敏。
+func ProfileReportCSV(report *ProfileReport, masked bool) ([]byte, error) {
+	if report == nil {
+		return nil, errors.New("报告为空")
+	}
+	var sb strings.Builder
+	sb.WriteString("\xEF\xBB\xBF")
+	cw := csv.NewWriter(&sb)
+	_ = cw.Write([]string{"customer_id", "source_account_id", "industry", "stage", "content", "confidence", "confidence_source", "rule_score", "evidence", "degraded", "version", "generated_at"})
+	for _, e := range report.Entries {
+		content := e.Content
+		if masked {
+			content = crmAuditDefaultMask(content)
+		}
+		refs := make([]string, 0, len(e.Evidence))
+		for _, ev := range e.Evidence {
+			refs = append(refs, fmt.Sprintf("%s:%s@%s", ev.Source, ev.Ref, ev.OccurredAt))
+		}
+		_ = cw.Write([]string{
+			e.CustomerID, e.SourceAccountID, e.Industry, e.Stage, content,
+			fmt.Sprintf("%.4f", e.Confidence), e.ConfidenceSource, fmt.Sprintf("%.4f", e.RuleScore),
+			strings.Join(refs, "|"), strconv.FormatBool(e.Degraded), report.Version,
+			report.GeneratedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	cw.Flush()
+	if err := cw.Error(); err != nil {
+		return nil, err
+	}
+	return []byte(sb.String()), nil
+}
+
+// ProfileReportXLSX 复用 11/12 的真 xlsx（OOXML）实现，列含证据与降级标记。
+func ProfileReportXLSX(report *ProfileReport, masked bool) ([]byte, error) {
+	if report == nil {
+		return nil, errors.New("报告为空")
+	}
+	rows := make([]CustomerExportRow, 0, len(report.Entries))
+	for _, e := range report.Entries {
+		content := e.Content
+		if masked {
+			content = crmAuditDefaultMask(content)
+		}
+		refs := make([]string, 0, len(e.Evidence))
+		for _, ev := range e.Evidence {
+			refs = append(refs, ev.Source+":"+ev.Ref)
+		}
+		rows = append(rows, CustomerExportRow{
+			ID: e.CustomerID, Name: content, Industry: e.Industry,
+			SourceAccountID: e.SourceAccountID, Tags: strings.Join(refs, "|"),
+		})
+	}
+	return ExportRowsXLSX(rows, []string{"id", "name", "industry", "source_account_id", "tags"}, false)
 }

@@ -360,22 +360,6 @@ func parseHHMM(s string) (int, int, error) {
 	return h, m, nil
 }
 
-func matchRule(a, b, op string) bool {
-	switch op {
-	case "eq":
-		return a == b
-	case "prefix":
-		plen := 7
-		if len(a) < plen || len(b) < plen {
-			return false
-		}
-		return a[:plen] == b[:plen]
-	case "like":
-		return containsSubstr(a, b) || containsSubstr(b, a)
-	}
-	return false
-}
-
 func containsSubstr(s, sub string) bool {
 	if len(sub) == 0 {
 		return true

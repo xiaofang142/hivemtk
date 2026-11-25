@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -31,20 +32,27 @@ const (
 )
 
 var (
-	ErrSageXUnauthorized      = errors.New("sagex: unauthorized")
-	ErrSageXInvalidEnvelope   = errors.New("sagex: invalid envelope")
-	ErrSageXUnsupportedSchema = errors.New("sagex: unsupported schema")
-	ErrSageXTooManyEvents     = errors.New("sagex: too many events")
-	ErrSageXEmptyEvents       = errors.New("sagex: empty events")
+	ErrSageXUnauthorized          = errors.New("sagex: unauthorized")
+	ErrSageXInvalidInstallationID = errors.New("sagex: invalid installation id")
+	ErrSageXInstallationForbidden = errors.New("sagex: installation ownership mismatch")
+	ErrSageXInstallationDisabled  = errors.New("sagex: installation disabled")
+	ErrSageXInstallationConflict  = errors.New("sagex: installation conflict")
+	ErrSageXInvalidEnvelope       = errors.New("sagex: invalid envelope")
+	ErrSageXUnsupportedSchema     = errors.New("sagex: unsupported schema")
+	ErrSageXTooManyEvents         = errors.New("sagex: too many events")
+	ErrSageXEmptyEvents           = errors.New("sagex: empty events")
 )
+
+// SageXMaxInstallationIDLength mirrors the installation_id varchar(100) schema contract.
+const SageXMaxInstallationIDLength = 100
 
 type SageXUploadRequest struct {
 	SchemaVersion  string `json:"schema_version"`
 	BatchID        string `json:"batch_id"`
 	SentAt         string `json:"sent_at"`
 	InstallationID string `json:"installation_id"`
-	// IdentifyCode 渠道唯一识别码（T059 / FR-028）：SageX 上报以此解析租户/账号，
-	// 与安装凭证（Authorization Bearer）双重校验；两者归属不一致时 fail-closed 拒绝。
+	// IdentifyCode 是 SageX 上报的唯一鉴权凭证（T059 / FR-028），用于解析租户/账号。
+	// installation_id 仅用于租户内幂等/展示，不作为鉴权依据。
 	IdentifyCode string           `json:"identify_code"`
 	Events       []SageXEventItem `json:"events"`
 }
@@ -158,10 +166,11 @@ type SageXAckItem struct {
 
 type SageXInstallationStore interface {
 	Create(ctx context.Context, inst *model.SageXInstallation) error
+	CreateIfAbsent(ctx context.Context, inst *model.SageXInstallation) (bool, error)
 	Update(ctx context.Context, inst *model.SageXInstallation) error
 	GetByID(ctx context.Context, id uint) (*model.SageXInstallation, error)
-	GetByToken(ctx context.Context, token string) (*model.SageXInstallation, error)
 	GetByInstallationID(ctx context.Context, installationID string) (*model.SageXInstallation, error)
+	GetByTenantAndInstallationID(ctx context.Context, tenantID uint, installationID string) (*model.SageXInstallation, error)
 	TouchLastSeen(ctx context.Context, id uint, at time.Time) error
 }
 
@@ -227,7 +236,9 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 		return nil, ErrSageXUnauthorized
 	}
 	resolver := s.resolver
-	if resolver == nil { resolver = NewChannelResolver() }
+	if resolver == nil {
+		resolver = NewChannelResolver()
+	}
 	resolved, rerr := resolver.ResolveByIdentifyCode(ctx, code)
 	if rerr != nil || resolved == nil || resolved.TenantID == 0 {
 		return nil, ErrSageXUnauthorized
@@ -237,27 +248,67 @@ func (s *SageXUploadService) HandleUpload(ctx context.Context, identifyCode stri
 	if reqInstallationID == "" {
 		reqInstallationID = "sagex_" + sagexStableID(code)
 	}
-	tenantCtx := tenant.WithTenantID(ctx, resolved.TenantID)
-	inst, err := s.instRepo.GetByInstallationID(tenantCtx, reqInstallationID)
-	if err != nil { return nil, err }
-	if inst == nil {
-		tok := generateSageXToken()
-		inst = &model.SageXInstallation{
-			TenantID: resolved.TenantID, Name: "SageX " + resolved.ChannelCode,
-			InstallationID: reqInstallationID, Token: tok,
-			AccountID: strconv.FormatUint(uint64(resolved.AccountID), 10), Status: 1,
-		}
-		if err := s.instRepo.Create(tenantCtx, inst); err != nil { return nil, err }
-	} else {
-		changed := false
-		if inst.AccountID == "" && resolved.AccountID > 0 {
-			inst.AccountID = strconv.FormatUint(uint64(resolved.AccountID), 10); changed = true
-		}
-		if changed { _ = s.instRepo.Update(tenantCtx, inst) }
+	if utf8.RuneCountInString(reqInstallationID) > SageXMaxInstallationIDLength {
+		return nil, ErrSageXInvalidInstallationID
 	}
+
+	tenantCtx := tenant.OnlyTenant(ctx, resolved.TenantID)
+	inst, err := s.instRepo.GetByTenantAndInstallationID(tenantCtx, resolved.TenantID, reqInstallationID)
+	if err != nil {
+		return nil, fmt.Errorf("sagex upload lookup installation: %w", err)
+	}
+	if inst == nil {
+		inst = &model.SageXInstallation{
+			TenantID:       resolved.TenantID,
+			Name:           "SageX " + resolved.ChannelCode,
+			InstallationID: reqInstallationID,
+			Token:          generateSageXToken(),
+			AccountID:      strconv.FormatUint(uint64(resolved.AccountID), 10),
+			Status:         1,
+		}
+		created, createErr := s.instRepo.CreateIfAbsent(tenantCtx, inst)
+		if createErr != nil && !isUniqueConflict(createErr) {
+			return nil, fmt.Errorf("sagex upload create installation: %w", createErr)
+		}
+		if createErr == nil && created {
+			// The atomic insert established this tenant/account/status tuple.
+		} else {
+			inst, err = s.instRepo.GetByTenantAndInstallationID(tenantCtx, resolved.TenantID, reqInstallationID)
+			if err != nil {
+				return nil, fmt.Errorf("sagex upload conflict reread: %w", err)
+			}
+			if inst == nil {
+				return nil, ErrSageXInstallationConflict
+			}
+		}
+		if inst == nil {
+			return nil, ErrSageXInstallationConflict
+		}
+	}
+
+	expectedAccountID := strconv.FormatUint(uint64(resolved.AccountID), 10)
+	if inst.TenantID != resolved.TenantID {
+		return nil, ErrSageXInstallationForbidden
+	}
+	if inst.Status != 1 {
+		return nil, ErrSageXInstallationDisabled
+	}
+	if inst.AccountID == "" {
+		inst.AccountID = expectedAccountID
+		if err := s.instRepo.Update(tenantCtx, inst); err != nil {
+			return nil, fmt.Errorf("sagex upload backfill installation account: %w", err)
+		}
+	} else if inst.AccountID != expectedAccountID {
+		return nil, ErrSageXInstallationForbidden
+	}
+	if err := s.instRepo.TouchLastSeen(tenantCtx, inst.ID, time.Now()); err != nil {
+		return nil, fmt.Errorf("sagex upload touch installation: %w", err)
+	}
+
 	effectiveInstallationID := inst.InstallationID
-	if effectiveInstallationID == "" { effectiveInstallationID = reqInstallationID }
-	_ = s.instRepo.TouchLastSeen(tenantCtx, inst.ID, time.Now())
+	if effectiveInstallationID == "" {
+		effectiveInstallationID = reqInstallationID
+	}
 
 	counts := make(map[string]int, len(req.Events))
 	for i := range req.Events {
@@ -602,18 +653,56 @@ func (s *SageXUploadService) BootstrapInstallation(ctx context.Context, installa
 	if installationID == "" {
 		installationID = "inst_" + generateSageXToken()
 	}
-	if existing, err := s.instRepo.GetByInstallationID(ctx, installationID); err == nil && existing != nil {
-		return existing, nil
+	if utf8.RuneCountInString(installationID) > SageXMaxInstallationIDLength {
+		return nil, ErrSageXInvalidInstallationID
 	}
+
+	tenantCtx := tenant.OnlyTenant(ctx, resolved.TenantID)
+	existing, err := s.instRepo.GetByTenantAndInstallationID(tenantCtx, resolved.TenantID, installationID)
+	if err != nil {
+		return nil, fmt.Errorf("sagex bootstrap lookup installation: %w", err)
+	}
+	if existing != nil {
+		return validateSageXBootstrapInstallation(existing, resolved)
+	}
+
 	inst := &model.SageXInstallation{
 		Name:           "auto",
 		InstallationID: installationID,
 		AccountID:      strconv.FormatUint(uint64(resolved.AccountID), 10),
 		TenantID:       resolved.TenantID,
+		Token:          generateSageXToken(),
 		Status:         1,
 	}
-	if err := s.CreateInstallation(ctx, inst); err != nil {
-		return nil, err
+	created, createErr := s.instRepo.CreateIfAbsent(tenantCtx, inst)
+	if createErr != nil {
+		if !isUniqueConflict(createErr) {
+			return nil, fmt.Errorf("sagex bootstrap create installation: %w", createErr)
+		}
+	} else if created {
+		return inst, nil
+	}
+
+	existing, readErr := s.instRepo.GetByTenantAndInstallationID(tenantCtx, resolved.TenantID, installationID)
+	if readErr != nil {
+		return nil, fmt.Errorf("sagex bootstrap conflict reread: %w", readErr)
+	}
+	if existing == nil {
+		return nil, ErrSageXInstallationConflict
+	}
+	return validateSageXBootstrapInstallation(existing, resolved)
+}
+
+func validateSageXBootstrapInstallation(inst *model.SageXInstallation, resolved *ResolvedChannelAccount) (*model.SageXInstallation, error) {
+	if inst == nil {
+		return nil, ErrSageXInstallationConflict
+	}
+	expectedAccountID := strconv.FormatUint(uint64(resolved.AccountID), 10)
+	if inst.TenantID != resolved.TenantID || inst.AccountID != expectedAccountID {
+		return nil, ErrSageXInstallationForbidden
+	}
+	if inst.Status != 1 {
+		return nil, ErrSageXInstallationDisabled
 	}
 	return inst, nil
 }

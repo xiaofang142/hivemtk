@@ -117,6 +117,11 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 				if err != nil {
 					return nil, fmt.Errorf("query sticky account: %w", err)
 				}
+				// 粘性命中必须同时校验渠道：错误渠道的粘性记录显式拒绝，
+				// 不跨渠道串发，也不静默换到别的账号（CH-10）。
+				if acc != nil && acc.ChannelID != in.ChannelID {
+					return nil, fmt.Errorf("sticky account %d belongs to channel %d, expected %d", aid, acc.ChannelID, in.ChannelID)
+				}
 				if acc != nil && acc.Status == 1 {
 					return &DispatchPickResult{AccountID: acc.ID, AccountName: acc.Name, IdentifyCode: acc.IdentifyCode, Reason: "sticky"}, nil
 				}
@@ -135,11 +140,22 @@ func (s *ChannelDispatchService) PickAccount(ctx context.Context, in DispatchPic
 		}
 	}
 
-	// 3) round-robin among active accounts
+	// 3) round-robin among active accounts（分页拉取全部候选，不漏第 500 条之后的账号）
 	status := 1
-	accs, err := s.accRepo.List(ctx, repository.ChannelAccountListOptions{TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status, Limit: 500})
-	if err != nil {
-		return nil, err
+	const pageSize = 500
+	var accs []model.ChannelAccount
+	for offset := 0; ; offset += pageSize {
+		page, err := s.accRepo.List(ctx, repository.ChannelAccountListOptions{
+			TenantID: in.TenantID, ChannelID: in.ChannelID, Status: &status,
+			Limit: pageSize, Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		accs = append(accs, page...)
+		if len(page) < pageSize {
+			break
+		}
 	}
 	if len(accs) == 0 {
 		return nil, fmt.Errorf("no active account")

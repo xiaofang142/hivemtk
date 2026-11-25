@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"hivemtk-user/internal/model"
+	"hivemtk-user/internal/pkg/tenant"
 	"hivemtk-user/internal/repository"
 )
 
@@ -50,6 +53,7 @@ type CRMCustomerService struct {
 	suppliers  repository.SupplierRepository
 	providers  repository.ServiceProviderRepository
 	auditRepo  repository.OperationLogRepository
+	accounts   repository.ChannelAccountRepository
 }
 
 func NewCRMCustomerService() *CRMCustomerService {
@@ -60,6 +64,7 @@ func NewCRMCustomerService() *CRMCustomerService {
 		suppliers:  repository.NewSupplierRepository(),
 		providers:  repository.NewServiceProviderRepository(),
 		auditRepo:  repository.NewOperationLogRepository(),
+		accounts:   repository.NewChannelAccountRepository(),
 	}
 }
 
@@ -77,7 +82,7 @@ func (s *CRMCustomerService) List(ctx context.Context, scope CustomerDataScope, 
 	return s.permission.ListScoped(ctx, scope, filter)
 }
 
-// Create 新建客户。
+// Create 新建客户。权限按最终写入值校验，避免空值绕过账号/行业/负责人边界。
 func (s *CRMCustomerService) Create(ctx context.Context, scope CustomerDataScope, in CRMCustomerSave) (*model.Customer, error) {
 	if !s.permission.AllowsWrite(scope, in.SourceAccountID, in.Industry, in.OwnerUserID) {
 		return nil, ErrCRMCustomerForbidden
@@ -98,32 +103,62 @@ func (s *CRMCustomerService) Create(ctx context.Context, scope CustomerDataScope
 }
 
 // Update 编辑客户（先做权限校验，再改字段）。
+// 校验使用归一后的最终写入值：显式清空账号/行业/负责人也必须过权限闸。
 func (s *CRMCustomerService) Update(ctx context.Context, scope CustomerDataScope, id string, in CRMCustomerSave) (*model.Customer, error) {
 	cust, err := s.permission.GetByIDScoped(ctx, scope, id)
 	if err != nil {
 		return nil, err
 	}
-	if !s.permission.AllowsWrite(scope, firstNonEmptyCRMValue(in.SourceAccountID, cust.SourceAccountID),
-		firstNonEmptyCRMValue(in.Industry, cust.Industry), custOwnerID(in.OwnerUserID, cust)) {
+	final := s.finalCustomerState(cust, in)
+	if !s.permission.AllowsWrite(scope, final.SourceAccountID, final.Industry, final.OwnerUserID) {
 		return nil, ErrCRMCustomerForbidden
 	}
-	cust.Name = in.Name
-	cust.Phone = in.Phone
-	cust.Email = in.Email
-	cust.Industry = in.Industry
-	cust.SourceAccountID = in.SourceAccountID
-	cust.SourceChannel = in.SourceChannel
-	if in.OwnerUserID > 0 {
-		cust.OwnerUserID = &in.OwnerUserID
+	cust.Name = final.Name
+	cust.Phone = final.Phone
+	cust.Email = final.Email
+	cust.Industry = final.Industry
+	cust.SourceAccountID = final.SourceAccountID
+	cust.SourceChannel = final.SourceChannel
+	if final.OwnerUserID > 0 {
+		cust.OwnerUserID = &final.OwnerUserID
+	} else {
+		cust.OwnerUserID = nil
 	}
-	if in.Tags != "" {
-		cust.Tags = in.Tags
-	}
+	cust.Tags = final.Tags
 	if err := s.customers.Update(ctx, cust); err != nil {
 		return nil, err
 	}
 	s.writeAudit(ctx, "customer_update", cust.ID, scope.UserID, "")
 	return cust, nil
+}
+
+// finalCustomerState 归一客户最终写入状态，供权限校验与落库共用同一份值。
+// 输入字段的零值区分「未提交」（沿用旧值）与「明确清空」（按空串落库）。
+func (s *CRMCustomerService) finalCustomerState(cust *model.Customer, in CRMCustomerSave) CRMCustomerSave {
+	out := in
+	if in.Name == "" {
+		out.Name = cust.Name
+	}
+	if in.Phone == "" {
+		out.Phone = cust.Phone
+	}
+	if in.Email == "" {
+		out.Email = cust.Email
+	}
+	if in.Industry == "" {
+		out.Industry = cust.Industry
+	}
+	if in.SourceAccountID == "" {
+		out.SourceAccountID = cust.SourceAccountID
+	}
+	if in.SourceChannel == "" {
+		out.SourceChannel = cust.SourceChannel
+	}
+	if in.Tags == "" {
+		out.Tags = cust.Tags
+	}
+	out.OwnerUserID = custOwnerID(in.OwnerUserID, cust)
+	return out
 }
 
 // Delete 删除客户（同样先做权限校验）。
@@ -149,12 +184,90 @@ func custOwnerID(input uint, c *model.Customer) uint {
 	return 0
 }
 
+// validateEntityAccount 校验实体新增/改挂的渠道账号：必须真实存在、属于当前租户且在操作者范围内。
+// 账号范围接受数字 ID 与识别码；识别码作为账号引用而非 ACL 凭据，须回查真实账号后校验。
+// 基础账号集合通过后仍须满足目标客户的账号×行业×角色配对，避免实体挂载绕过逐账号授权。
+func (s *CRMCustomerService) validateEntityAccount(ctx context.Context, scope CustomerDataScope, customer *model.Customer, accountID *uint) error {
+	if accountID == nil || *accountID == 0 {
+		return nil // 未提交账号指针：沿用旧值或不挂载，不视为越权。
+	}
+	if customer == nil {
+		return ErrCRMCustomerForbidden
+	}
+	if s.accounts == nil || !s.accounts.Available() {
+		return errors.New("渠道账号存储不可用")
+	}
+	tid, ok := tenant.FromContext(ctx)
+	if !ok || tid == 0 {
+		tid = tenant.WriteTenantID(ctx)
+	}
+	acc, err := s.accounts.GetByID(ctx, tid, *accountID)
+	if err != nil || acc == nil || acc.TenantID != tid {
+		return ErrCRMCustomerForbidden
+	}
+	if scope.AllAccounts {
+		return nil
+	}
+	accountRefs := []string{strconv.FormatUint(uint64(*accountID), 10)}
+	if acc.IdentifyCode != "" {
+		accountRefs = append(accountRefs, acc.IdentifyCode)
+	}
+	accountAllowed := false
+	for _, ref := range accountRefs {
+		if containsCRMString(scope.AccountIDs, ref) {
+			accountAllowed = true
+			break
+		}
+	}
+	if !accountAllowed {
+		return ErrCRMCustomerForbidden
+	}
+	if len(scope.AccountRules) == 0 {
+		return nil
+	}
+	if accountRulePairAllows(scope, accountRefs, customer.Industry, custOwnerID(0, customer)) {
+		return nil
+	}
+	return ErrCRMCustomerForbidden
+}
+
+// accountRulePairAllows 仅判断实体账号与目标客户的行业/负责人配对；基础账号集合由调用方先校验。
+func accountRulePairAllows(scope CustomerDataScope, accountRefs []string, industry string, ownerID uint) bool {
+	for _, rule := range scope.AccountRules {
+		matchedAccount := false
+		for _, ref := range accountRefs {
+			if rule.AccountID == ref {
+				matchedAccount = true
+				break
+			}
+		}
+		if !matchedAccount {
+			continue
+		}
+		if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, industry) {
+			continue
+		}
+		if strings.EqualFold(rule.Role, "owner") && ownerID != scope.UserID {
+			continue
+		}
+		if rule.OwnerUserID > 0 && ownerID != rule.OwnerUserID {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // CreateContact 新建联系人（客户必须在权限范围内）。
 func (s *CRMCustomerService) CreateContact(ctx context.Context, scope CustomerDataScope, in CRMEntitySave) (*model.Contact, error) {
 	if in.Name == "" {
 		return nil, errors.New("联系人名称不能为空")
 	}
-	if _, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID); err != nil {
+	cust, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEntityAccount(ctx, scope, cust, in.ChannelAccountID); err != nil {
 		return nil, err
 	}
 	row := &model.Contact{
@@ -173,7 +286,11 @@ func (s *CRMCustomerService) CreateSupplier(ctx context.Context, scope CustomerD
 	if in.Name == "" {
 		return nil, errors.New("供应商名称不能为空")
 	}
-	if _, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID); err != nil {
+	cust, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEntityAccount(ctx, scope, cust, in.ChannelAccountID); err != nil {
 		return nil, err
 	}
 	row := &model.Supplier{
@@ -192,7 +309,11 @@ func (s *CRMCustomerService) CreateServiceProvider(ctx context.Context, scope Cu
 	if in.Name == "" {
 		return nil, errors.New("服务商名称不能为空")
 	}
-	if _, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID); err != nil {
+	cust, err := s.permission.GetByIDScoped(ctx, scope, in.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEntityAccount(ctx, scope, cust, in.ChannelAccountID); err != nil {
 		return nil, err
 	}
 	row := &model.ServiceProvider{
@@ -270,10 +391,12 @@ func (s *CRMCustomerService) UpdateEntity(ctx context.Context, scope CustomerDat
 	if newCustomerID == "" {
 		newCustomerID = oldCustomerID
 	}
-	if newCustomerID != oldCustomerID {
-		if err := s.entityCustomerScoped(ctx, scope, newCustomerID); err != nil {
-			return nil, err
-		}
+	targetCustomer, err := s.permission.GetByIDScoped(ctx, scope, newCustomerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateEntityAccount(ctx, scope, targetCustomer, in.ChannelAccountID); err != nil {
+		return nil, err
 	}
 	switch kind {
 	case CRMEntityContact:
@@ -394,21 +517,44 @@ func (s *CRMCustomerService) writeAudit(ctx context.Context, action, customerID 
 }
 
 // AllowsWrite 写权限：账号范围 + 行业范围 + 负责人范围。
+// 空授权必须拒绝；owner 限定下 0 值不能绕过归属检查（最终写入值由调用方归一后传入）。
 func (s *CustomerPermissionService) AllowsWrite(scope CustomerDataScope, accountID, industry string, ownerID uint) bool {
 	if scope.AllAccounts {
 		return true
 	}
-	if scope.RestrictedAccounts && len(scope.AccountIDs) > 0 && !containsCRMString(scope.AccountIDs, accountID) {
+	if scope.RestrictedAccounts && (len(scope.AccountIDs) == 0 || !containsCRMString(scope.AccountIDs, accountID)) {
 		return false
 	}
 	if len(scope.Industries) > 0 && !containsCRMString(scope.Industries, industry) {
 		return false
 	}
-	if scope.OnlyOwned && ownerID > 0 && ownerID != scope.UserID {
+	if scope.OnlyOwned && ownerID != scope.UserID {
 		return false
 	}
-	if scope.OwnerUserID > 0 && ownerID > 0 && ownerID != scope.OwnerUserID {
+	if scope.OwnerUserID > 0 && ownerID != scope.OwnerUserID {
 		return false
+	}
+	if len(scope.AccountRules) > 0 {
+		matched := false
+		for _, rule := range scope.AccountRules {
+			if rule.AccountID != accountID {
+				continue
+			}
+			if len(rule.Industries) > 0 && !containsCRMString(rule.Industries, industry) {
+				continue
+			}
+			if strings.EqualFold(rule.Role, "owner") && ownerID != scope.UserID {
+				continue
+			}
+			if rule.OwnerUserID > 0 && ownerID != rule.OwnerUserID {
+				continue
+			}
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
 	}
 	return true
 }
@@ -420,5 +566,5 @@ func (s *CustomerPermissionService) DescribeScope(scope CustomerDataScope) strin
 		"account_count": len(scope.AccountIDs), "industries": scope.Industries,
 		"owner_user_id": scope.OwnerUserID, "only_owned": scope.OnlyOwned,
 	})
-	return fmt.Sprintf("%s", raw)
+	return string(raw)
 }

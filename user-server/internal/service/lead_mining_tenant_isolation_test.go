@@ -134,6 +134,7 @@ func newTenantScopedLeadMiningServiceWithRepos(repo *leadMiningTenantConfigRepo,
 }
 
 func TestLeadMiningTenant_ConfigCacheAndDebounceAreIsolated(t *testing.T) {
+	setupLeadHistoryTest(t)
 	previous := tenant.CurrentMode()
 	tenant.SetMode(tenant.ModeOn)
 	t.Cleanup(func() { tenant.SetMode(previous) })
@@ -258,12 +259,12 @@ func TestLeadMiningTenant_MissingTenantRejectedBeforeConfigRead(t *testing.T) {
 }
 
 func TestLeadMiningTenant_DebounceKeyIncludesTenant(t *testing.T) {
-	keyA := leadMiningDebounceKey(101, "douyin", "", "same-sender", false)
-	keyB := leadMiningDebounceKey(202, "douyin", "", "same-sender", false)
+	keyA := leadMiningDebounceKey(101, "douyin", "account", "", "", "same-sender", false)
+	keyB := leadMiningDebounceKey(202, "douyin", "account", "", "", "same-sender", false)
 	if keyA == keyB {
 		t.Fatalf("不同租户的相同平台/发送者必须得到不同去抖键: %q", keyA)
 	}
-	if got := leadMiningDebounceKey(tenant.DefaultTenantID, "douyin", "", "same-sender", false); got != "douyin:same-sender" {
-		t.Fatalf("默认租户应保持历史单租户键以兼容现有调用与测试，实际 %q", got)
+	if got := leadMiningDebounceKey(tenant.DefaultTenantID, "douyin", "account", "", "", "same-sender", false); got == "douyin:same-sender" || got == "" {
+		t.Fatalf("默认租户也必须包含账号和租户边界，实际 %q", got)
 	}
 }

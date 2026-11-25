@@ -348,6 +348,7 @@ func (s *CustomerService) RemoveTags(ctx context.Context, customerID string, tag
 //   - 合并后 CheckSendConsent 通过 LinkedOneIDs 遍历连通组，按最严格结果判定，
 //     任一原身份的 revoke/pause 都阻断发送；
 //   - 事务内任一步失败整体回滚，避免只关联不迁移或半合并。
+//
 // 合法必要服务（support/transactional）与营销（marketing）目的按 purpose 独立评估，
 // 营销撤回不会自动删除事务通知事实，也不会借"服务"夹带促销。
 func (s *CustomerService) MergeCustomers(ctx context.Context, primaryID, secondaryID string) error {

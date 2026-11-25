@@ -66,7 +66,7 @@ func TestHTTPIngestHandler_BodyLimitBeforeIdentity(t *testing.T) {
 		req.ContentLength = -1
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
 		c.Request = req
-		info := collectHTTPRequestInfo(c)
+		info, _, _ := collectHTTPRequestInfoWithLimit(c, HTTPIngestMaxBodySize)
 		if probe.exceeded {
 			t.Fatal("collectHTTPRequestInfo/readBodyForLog 发生了无上限读取")
 		}

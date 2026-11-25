@@ -2,13 +2,19 @@
   <div class="page">
     <div class="page-head">
       <div>
-        <h2 class="page-title">跨账号客户检索</h2>
+        <h2 class="page-title">
+          跨账号客户检索
+        </h2>
         <span class="page-sub">在授权账号范围内按关键词/行业检索客户（PR-8）</span>
       </div>
     </div>
 
     <el-card shadow="never">
-      <el-form inline label-width="70px" @submit.prevent>
+      <el-form
+        inline
+        label-width="70px"
+        @submit.prevent
+      >
         <el-form-item label="关键词">
           <el-input
             v-model="filters.keyword"
@@ -28,8 +34,16 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="loading" @click="page=1;search()">检索</el-button>
-          <el-button @click="reset">重置</el-button>
+          <el-button
+            type="primary"
+            :loading="loading"
+            @click="page=1;search()"
+          >
+            检索
+          </el-button>
+          <el-button @click="reset">
+            重置
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -51,15 +65,53 @@
         @close="errorMsg=''"
       />
 
-      <el-table v-loading="loading" :data="rows" empty-text="暂无结果">
-        <el-table-column prop="id" label="客户ID" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="name" label="姓名" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="phone" label="手机号" min-width="140" />
-        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="source_channel" label="来源渠道" width="120" />
-        <el-table-column prop="source_account_id" label="来源账号" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="company_id" label="公司ID" width="100">
-          <template #default="{ row }">{{ row.company_id ?? '-' }}</template>
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        empty-text="暂无结果"
+      >
+        <el-table-column
+          prop="id"
+          label="客户ID"
+          min-width="140"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="name"
+          label="姓名"
+          min-width="140"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="phone"
+          label="手机号"
+          min-width="140"
+        />
+        <el-table-column
+          prop="email"
+          label="邮箱"
+          min-width="180"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="source_channel"
+          label="来源渠道"
+          width="120"
+        />
+        <el-table-column
+          prop="source_account_id"
+          label="来源账号"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="company_id"
+          label="公司ID"
+          width="100"
+        >
+          <template #default="{ row }">
+            {{ row.company_id ?? '-' }}
+          </template>
         </el-table-column>
       </el-table>
 

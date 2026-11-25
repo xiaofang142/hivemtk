@@ -37,20 +37,24 @@ func NewConversationContextServiceWithRepo(repo repository.ConversationContextRe
 
 var errConversationContextUnavailable = errors.New("共享对话上下文存储不可用")
 
-func (s *ConversationContextService) get(ctx context.Context, accountID uint, convID string) (*model.ConversationContext, error) {
+func (s *ConversationContextService) get(ctx context.Context, accountID uint, convID string, scopes ...ConversationContextScope) (*model.ConversationContext, error) {
 	if s == nil || s.repo == nil {
 		return nil, errConversationContextUnavailable
 	}
 	convID = strings.TrimSpace(convID)
-	if accountID == 0 || convID == "" {
+	if accountID == 0 {
 		return nil, errors.New("渠道账号或会话ID为空")
 	}
-	return s.repo.Get(ctx, accountID, convID)
+	resolvedID, err := resolveConversationContextID(ctx, accountID, convID, scopes)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.Get(ctx, accountID, resolvedID)
 }
 
 // AppendMessage 追加一条共享消息（两模块共同写入同一份历史，FR-020）。
-func (s *ConversationContextService) AppendMessage(ctx context.Context, accountID uint, convID string, msg model.ConversationMessage) error {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) AppendMessage(ctx context.Context, accountID uint, convID string, msg model.ConversationMessage, scopes ...ConversationContextScope) error {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return err
 	}
@@ -61,9 +65,32 @@ func (s *ConversationContextService) AppendMessage(ctx context.Context, accountI
 	return s.repo.Upsert(ctx, c)
 }
 
+// AppendMessageAtomic 按源消息 ID 幂等地原子追加（LM-12）。
+// 双模块并发追加时，重复消息不放大证据；有界保留，防止旧水位覆盖新上下文。
+func (s *ConversationContextService) AppendMessageAtomic(ctx context.Context, accountID uint, convID string, msg model.ConversationMessage, bound int, scopes ...ConversationContextScope) error {
+	c, err := s.get(ctx, accountID, convID, scopes...)
+	if err != nil {
+		return err
+	}
+	id := strings.TrimSpace(msg.MessageID)
+	if id == "" || strings.HasPrefix(id, "history_") {
+		return errors.New("共享消息缺少真实源消息 ID")
+	}
+	for _, existing := range c.Messages {
+		if existing.MessageID == id {
+			return nil
+		}
+	}
+	c.Messages = append(c.Messages, msg)
+	if bound > 0 && len(c.Messages) > bound {
+		c.Messages = c.Messages[len(c.Messages)-bound:]
+	}
+	return s.repo.Upsert(ctx, c)
+}
+
 // Messages 读取共享消息历史（两模块共同读取，FR-020）。
-func (s *ConversationContextService) Messages(ctx context.Context, accountID uint, convID string) (model.ConversationMessages, error) {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) Messages(ctx context.Context, accountID uint, convID string, scopes ...ConversationContextScope) (model.ConversationMessages, error) {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +98,11 @@ func (s *ConversationContextService) Messages(ctx context.Context, accountID uin
 }
 
 // SetMemberRole 记录群聊成员角色（T052 / FR-021，MemberRoles）。
-func (s *ConversationContextService) SetMemberRole(ctx context.Context, accountID uint, convID, senderID, role string) error {
+func (s *ConversationContextService) SetMemberRole(ctx context.Context, accountID uint, convID, senderID, role string, scopes ...ConversationContextScope) error {
 	if strings.TrimSpace(senderID) == "" {
 		return nil
 	}
-	c, err := s.get(ctx, accountID, convID)
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return err
 	}
@@ -87,12 +114,12 @@ func (s *ConversationContextService) SetMemberRole(ctx context.Context, accountI
 }
 
 // AddTag 写入共享标签（两模块可交叉引用）。
-func (s *ConversationContextService) AddTag(ctx context.Context, accountID uint, convID, tag string) error {
+func (s *ConversationContextService) AddTag(ctx context.Context, accountID uint, convID, tag string, scopes ...ConversationContextScope) error {
 	tag = strings.TrimSpace(tag)
 	if tag == "" {
 		return nil
 	}
-	c, err := s.get(ctx, accountID, convID)
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return err
 	}
@@ -106,8 +133,8 @@ func (s *ConversationContextService) AddTag(ctx context.Context, accountID uint,
 }
 
 // SetSummary 写入共享摘要（两模块可交叉引用）。
-func (s *ConversationContextService) SetSummary(ctx context.Context, accountID uint, convID, summary string) error {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) SetSummary(ctx context.Context, accountID uint, convID, summary string, scopes ...ConversationContextScope) error {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return err
 	}
@@ -117,18 +144,18 @@ func (s *ConversationContextService) SetSummary(ctx context.Context, accountID u
 
 // AddNote 写入带命名空间的交叉引用备注（T051）。
 // namespace 取 ContextNoteNamespaceAutoReply / ContextNoteNamespaceLeadMining。
-func (s *ConversationContextService) AddNote(ctx context.Context, accountID uint, convID, namespace, note string) error {
+func (s *ConversationContextService) AddNote(ctx context.Context, accountID uint, convID, namespace, note string, scopes ...ConversationContextScope) error {
 	note = strings.TrimSpace(note)
 	if note == "" {
 		return nil
 	}
-	return s.AddTag(ctx, accountID, convID, contextNotePrefix+namespace+":"+note)
+	return s.AddTag(ctx, accountID, convID, contextNotePrefix+namespace+":"+note, scopes...)
 }
 
 // CrossReferenceNotes 读取「其他模块」写入的备注（T051，双向可用）。
 // 传入自己的 namespace，返回所有不属于该命名空间的 note 文本。
-func (s *ConversationContextService) CrossReferenceNotes(ctx context.Context, accountID uint, convID, ownNamespace string) ([]string, error) {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) CrossReferenceNotes(ctx context.Context, accountID uint, convID, ownNamespace string, scopes ...ConversationContextScope) ([]string, error) {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,8 +186,8 @@ type ConversationContextSnapshot struct {
 }
 
 // Snapshot 读取共享上下文全量视图 + 双向交叉引用备注（T054 前端展示数据源）。
-func (s *ConversationContextService) Snapshot(ctx context.Context, accountID uint, convID string) (*ConversationContextSnapshot, error) {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) Snapshot(ctx context.Context, accountID uint, convID string, scopes ...ConversationContextScope) (*ConversationContextSnapshot, error) {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return nil, err
 	}
@@ -189,8 +216,8 @@ func (s *ConversationContextService) Snapshot(ctx context.Context, accountID uin
 // AggregateGroupContext 群聊多成员上下文聚合（T052 / FR-021）。
 // 以 MemberRoles 为权威给每条消息补 [角色:发送者] 前缀，并按角色归并统计；
 // 角色未知时保留原始发送者，不猜测（fail-visible）。
-func (s *ConversationContextService) AggregateGroupContext(ctx context.Context, accountID uint, convID string) ([]model.ConversationMessage, map[string]int, error) {
-	c, err := s.get(ctx, accountID, convID)
+func (s *ConversationContextService) AggregateGroupContext(ctx context.Context, accountID uint, convID string, scopes ...ConversationContextScope) ([]model.ConversationMessage, map[string]int, error) {
+	c, err := s.get(ctx, accountID, convID, scopes...)
 	if err != nil {
 		return nil, nil, err
 	}

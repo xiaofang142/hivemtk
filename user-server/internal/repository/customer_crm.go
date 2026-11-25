@@ -16,11 +16,13 @@ type CustomerScopeFilter struct {
 	SourceAccountIDs   []string
 	RestrictedAccounts bool // true 且 SourceAccountIDs 为空 => 拒绝全部（fail-closed）
 	Industries         []string
-	OwnerUserID        uint
-	Keyword            string
-	ExcludeMerged      bool
-	Page               int
-	PageSize           int
+	// DenyAll 表示权限交集已明确为空；零值 false 保持“行业不受限”的既有语义。
+	DenyAll       bool
+	OwnerUserID   uint
+	Keyword       string
+	ExcludeMerged bool
+	Page          int
+	PageSize      int
 }
 
 // CRMCustomerRepository 仅承载 US1 新增的按数据权限范围读取客户的能力。
@@ -37,6 +39,9 @@ func NewCRMCustomerRepository() CRMCustomerRepository { return &crmCustomerRepos
 func (r *crmCustomerRepository) db(ctx context.Context) *gorm.DB { return dbFromCtx(ctx) }
 
 func applyCustomerScope(q *gorm.DB, f CustomerScopeFilter) *gorm.DB {
+	if f.DenyAll {
+		return q.Where("1 = 0")
+	}
 	if f.RestrictedAccounts {
 		if len(f.SourceAccountIDs) == 0 {
 			return q.Where("1 = 0")

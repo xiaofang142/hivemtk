@@ -106,7 +106,6 @@ func (s *merchantCallbackService) AcknowledgeCompensationPage(ctx context.Contex
 	return s.repo.AcknowledgeCompensationPage(tenant.OnlyTenant(ctx, id), page, appliedEventIDs)
 }
 
-
 type merchantCallbackService struct {
 	repo        repository.MerchantCallbackRepository
 	connections repository.MerchantConnectionRepository

@@ -14,11 +14,11 @@ import (
 
 // 投递状态：三段正常态 + 两种明确失败态。
 const (
-	InboxReplyAccepted         = "accepted"          // 仅本地落库
+	InboxReplyAccepted          = "accepted"           // 仅本地落库
 	InboxReplyPlatformConfirmed = "platform_confirmed" // 平台已受理但无 ACK 回执
-	InboxReplyDelivered        = "delivered"         // 平台确认且有回执 / web 本地 WS 已推
-	InboxReplyFailed           = "failed"            // 离线 / 拒收 / 本地写失败
-	InboxReplyNoRoute          = "no_route"          // 平台无出站发送器
+	InboxReplyDelivered         = "delivered"          // 平台确认且有回执 / web 本地 WS 已推
+	InboxReplyFailed            = "failed"             // 离线 / 拒收 / 本地写失败
+	InboxReplyNoRoute           = "no_route"           // 平台无出站发送器
 )
 
 // InboxReplyDelivery 是人工回复的投递事实，供 controller 原样回给前端。
@@ -31,12 +31,12 @@ type InboxReplyDelivery struct {
 
 // InboxReplyRequest 是统一出站的最小输入（controller 已做人工接管）。
 type InboxReplyRequest struct {
-	Platform    model.Platform
-	AccountID   string
-	SessionID   string
-	Content     string
-	AgentID     uint
-	SenderName  string
+	Platform   model.Platform
+	AccountID  string
+	SessionID  string
+	Content    string
+	AgentID    uint
+	SenderName string
 }
 
 // 可注入 seam：默认绑真实实现；测试注入 fake 计数/可配置回执，不依赖真实 HTTP/DB。

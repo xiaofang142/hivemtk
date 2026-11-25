@@ -63,7 +63,8 @@ func TestSendOutbound_Bridge_UndeliverableIsNotSent(t *testing.T) {
 	defer svc.Stop(ctx)
 
 	db := svc.eventRepo.GetDB()
-	hub := bridgeInboundHub("xiaohongshu", "xiaohongshu-unknown", "conv-d02-undel", "cust-d02-undel")
+	accountID := seedCanonicalOutboundAccount(t, db, c01TenantA, "xiaohongshu", "xiaohongshu-unknown")
+	hub := bridgeInboundHub("xiaohongshu", accountID, "conv-d02-undel", "cust-d02-undel")
 	if err := db.Create(hub).Error; err != nil {
 		t.Fatalf("seed inbound: %v", err)
 	}

@@ -23,7 +23,8 @@ func TestSendOutbound_CardlessPayloadPreservesCardFacts(t *testing.T) {
 			svc, baseCtx := newBridgeSentTestService(t)
 			t.Cleanup(func() { svc.Stop(baseCtx) })
 			ctx := tenant.WithTenantID(baseCtx, c01TenantA)
-			hub := bridgeInboundHub(string(tc.channel), "card-fallback-account", "card-fallback-conversation", "card-fallback-customer")
+			accountID := seedCanonicalOutboundAccount(t, svc.eventRepo.GetDB(), c01TenantA, string(tc.channel), "card-fallback-account")
+			hub := bridgeInboundHub(string(tc.channel), accountID, "card-fallback-conversation", "card-fallback-customer")
 			hub.TenantID = c01TenantA
 			useLegacyBridgeFixture(t)
 			ctx = localBridgeSubmitContext(t, ctx, hub.Platform, hub.AccountID, "text")

@@ -19,7 +19,9 @@ type CustomerImportJobRepository interface {
 
 type customerImportJobRepository struct{}
 
-func NewCustomerImportJobRepository() CustomerImportJobRepository { return &customerImportJobRepository{} }
+func NewCustomerImportJobRepository() CustomerImportJobRepository {
+	return &customerImportJobRepository{}
+}
 func (r *customerImportJobRepository) db(ctx context.Context) *gorm.DB { return dbFromCtx(ctx) }
 
 func (r *customerImportJobRepository) Create(ctx context.Context, j *model.CustomerImportJob) error {

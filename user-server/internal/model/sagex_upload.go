@@ -5,10 +5,10 @@ import "time"
 // SageXInstallation SageX 通知上报设备/安装实例绑定。
 //
 // SageX Android 端（sagex / qq-listener / wechat-listener）按 notification-upload-v1
-// 协议上报通知事件。服务端必须仅凭 Bearer Token 鉴权结果确定租户/设备绑定，
-// 不能信任 installation_id 做授权；installation_id 仅用于去重/展示。
+// 协议上报通知事件。上传鉴权唯一依赖 identify_code 解析出的租户/账号；
+// installation_id 仅用于租户内幂等/展示，不作为鉴权依据。
 type SageXInstallation struct {
-	TenantID uint `gorm:"not null;default:1;index" json:"tenant_id"`
+	TenantID uint `gorm:"not null;default:1;index;uniqueIndex:uq_sagex_installation_tenant_id,priority:1,where:installation_id <> ''" json:"tenant_id"`
 
 	ID uint `gorm:"primaryKey;autoIncrement" json:"id"`
 
@@ -17,10 +17,11 @@ type SageXInstallation struct {
 
 	// InstallationID SageX 客户端 installation_id（设备上同一 app 安装实例）。
 	// 非授权依据；可为空（首次上报前未绑定）。
-	InstallationID string `gorm:"type:varchar(100);index" json:"installation_id"`
+	InstallationID string `gorm:"type:varchar(100);index;uniqueIndex:uq_sagex_installation_tenant_id,priority:2,where:installation_id <> ''" json:"installation_id"`
 
-	// Token SageX 上报 Bearer Token。按协议该 token 由服务端签发并配置到客户端。
-	// 存储为明文以兼容现有 IntegrationAccount 密钥存储口径；日志/响应不得泄露。
+	// Token 旧安装凭证兼容字段：仅保留给历史 admin/bootstrap 元数据使用，
+	// 不参与 SageX upload 鉴权；新协议以 identify_code 为唯一上传凭证。
+	// 存储为明文以兼容既有 IntegrationAccount 密钥存储口径；日志/响应不得泄露。
 	Token string `gorm:"type:varchar(200);not null;uniqueIndex" json:"-"`
 
 	// AccountID 写入 HiveMTK 收件箱的账号标识（message_hub.account_id / inbox_conversations.account_id）。

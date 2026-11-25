@@ -155,13 +155,13 @@ func (s *SalesPersonaService) BuildReport(ctx context.Context, staffID uint) (*P
 	prev := s.collectPersonaSample(ctx, staffID, prevFrom, curFrom)
 
 	report := &PersonaReport{
-		StaffID:    staffID,
-		Items:      make([]PersonaItem, 0, 7),
+		StaffID:     staffID,
+		Items:       make([]PersonaItem, 0, 7),
 		GeneratedAt: now,
-		WindowDays: personaWindowDays,
-		WindowFrom: curFrom,
-		WindowTo:   now,
-		Errors:     make([]string, 0),
+		WindowDays:  personaWindowDays,
+		WindowFrom:  curFrom,
+		WindowTo:    now,
+		Errors:      make([]string, 0),
 	}
 	addErr := func(tag string, err error) {
 		if err != nil {

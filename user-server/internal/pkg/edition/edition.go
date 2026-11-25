@@ -12,10 +12,11 @@ package edition
 
 import (
 	"context"
-	"log"
 	"os"
 	"strings"
 	"sync"
+
+	"hivemtk-user/internal/pkg/utils/logger"
 )
 
 const (
@@ -88,7 +89,7 @@ func SetCurrent(v string) {
 	mu.Lock()
 	defer mu.Unlock()
 	if current != n {
-		log.Printf("[edition] version type changed: %s -> %s", current, n)
+		logger.Infof("[edition] version type changed: %s -> %s", current, n)
 	}
 	current = n
 }

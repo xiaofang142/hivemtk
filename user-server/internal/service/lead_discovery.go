@@ -27,14 +27,13 @@ func NewLeadDiscoveryServiceWithCtx(mining *Service, ctxSvc *ConversationContext
 
 // Enabled 判断该渠道账号是否启用线索发现模块。
 func (s *LeadDiscoveryService) Enabled(ctx context.Context, platform, accountID string) bool {
-	acc, bound := resolveModuleChannelAccount(ctx, accountID)
-	if !bound {
-		return true // 未绑定渠道账号主数据：维持既有行为（R8.4）
-	}
-	if acc.Status != 1 {
-		return false
-	}
-	return acc.LeadMiningAgentID != nil && *acc.LeadMiningAgentID > 0
+	decision := resolveModuleGateDecision(ctx, accountID, func(acc *model.ChannelAccount) uint {
+		if acc.LeadMiningAgentID == nil {
+			return 0
+		}
+		return *acc.LeadMiningAgentID
+	})
+	return decision.Enabled()
 }
 
 // Process ingest 后的线索发现入口：仅在模块启用时委托异步线索发掘。
@@ -50,22 +49,33 @@ func (s *LeadDiscoveryService) Process(ctx context.Context, hub *model.MessageHu
 
 	// 共享上下文：登记群成员角色（T052）并读取自动回复侧备注（T051 交叉引用）。
 	// 这些写读都是 best-effort，失败不阻断线索发现主链，但记 warn（fail-visible）。
-	accountID, bound := resolveModuleChannelAccount(ctx, hub.AccountID)
-	if bound && s.ctxSvc != nil && hub.ConversationID != "" {
+	mining := s.mining
+	if mining == nil {
+		mining = &Service{}
+	}
+	account, scopeErr := mining.historyScope(ctx, hub)
+	if scopeErr == nil && account.accountID > 0 && s.ctxSvc != nil && leadHistoryConversationID(hub) != "" {
+		accountID := account.accountID
+		scope := ConversationContextScope{Platform: hub.Platform, IsGroup: hub.IsGroup, GroupID: hub.GroupID}
 		if hub.IsGroup && hub.SenderID != "" {
-			if err := s.ctxSvc.SetMemberRole(ctx, accountID.ID, hub.ConversationID, hub.SenderID, "member"); err != nil {
-				logger.Warnf("[lead-discovery] 登记群成员角色失败 account=%d conv=%s: %v", accountID.ID, hub.ConversationID, err)
+			// LM-11：普通发言只登记群成员身份；有证据的业务角色由判定链写入，
+			// 这里不把已证实的 demand/supply/broker 覆盖回 member。
+			role := resolveGroupMemberRole(hub.SenderID, "member", "")
+			if err := s.ctxSvc.SetMemberRole(ctx, accountID, hub.ConversationID, hub.SenderID, role, scope); err != nil {
+				logger.Warnf("[lead-discovery] 登记群成员角色失败 account=%d conv=%s: %v", accountID, hub.ConversationID, err)
 			}
-			if _, _, err := s.ctxSvc.AggregateGroupContext(ctx, accountID.ID, hub.ConversationID); err != nil {
-				logger.Warnf("[lead-discovery] 群聊上下文聚合失败 account=%d conv=%s: %v", accountID.ID, hub.ConversationID, err)
+			if _, _, err := s.ctxSvc.AggregateGroupContext(ctx, accountID, hub.ConversationID, scope); err != nil {
+				logger.Warnf("[lead-discovery] 群聊上下文聚合失败 account=%d conv=%s: %v", accountID, hub.ConversationID, err)
 			}
 		}
-		if notes := s.ReferAutoReplyNotes(ctx, accountID.ID, hub.ConversationID); len(notes) > 0 {
-			logger.Infof("[lead-discovery] 交叉引用自动回复备注 account=%d conv=%s notes=%v", accountID.ID, hub.ConversationID, notes)
+		if notes := s.ReferAutoReplyNotes(ctx, accountID, hub.ConversationID, scope); len(notes) > 0 {
+			logger.Infof("[lead-discovery] 交叉引用自动回复备注 account=%d conv=%s notes=%v", accountID, hub.ConversationID, notes)
 		}
-		if err := s.RecordNote(ctx, accountID.ID, hub.ConversationID, "线索发现链路已介入"); err != nil {
-			logger.Warnf("[lead-discovery] 写交叉引用备注失败 account=%d conv=%s: %v", accountID.ID, hub.ConversationID, err)
+		if err := s.RecordNote(ctx, accountID, hub.ConversationID, "线索发现链路已介入", scope); err != nil {
+			logger.Warnf("[lead-discovery] 写交叉引用备注失败 account=%d conv=%s: %v", accountID, hub.ConversationID, err)
 		}
+	} else {
+		logger.Warnf("[lead-discovery] 跳过未自证账号的共享上下文 account=%s: %v", hub.AccountID, scopeErr)
 	}
 
 	if s.mining == nil {
@@ -75,19 +85,19 @@ func (s *LeadDiscoveryService) Process(ctx context.Context, hub *model.MessageHu
 }
 
 // RecordNote 写一条线索发现侧备注到共享上下文（T051）。
-func (s *LeadDiscoveryService) RecordNote(ctx context.Context, accountID uint, convID, note string) error {
+func (s *LeadDiscoveryService) RecordNote(ctx context.Context, accountID uint, convID, note string, scopes ...ConversationContextScope) error {
 	if s == nil || s.ctxSvc == nil {
 		return errConversationContextUnavailable
 	}
-	return s.ctxSvc.AddNote(ctx, accountID, convID, ContextNoteNamespaceLeadMining, note)
+	return s.ctxSvc.AddNote(ctx, accountID, convID, ContextNoteNamespaceLeadMining, note, scopes...)
 }
 
 // ReferAutoReplyNotes 读取自动回复智能体写入的备注（T051：被对方交叉引用）。
-func (s *LeadDiscoveryService) ReferAutoReplyNotes(ctx context.Context, accountID uint, convID string) []string {
+func (s *LeadDiscoveryService) ReferAutoReplyNotes(ctx context.Context, accountID uint, convID string, scopes ...ConversationContextScope) []string {
 	if s == nil || s.ctxSvc == nil {
 		return nil
 	}
-	notes, err := s.ctxSvc.CrossReferenceNotes(ctx, accountID, convID, ContextNoteNamespaceLeadMining)
+	notes, err := s.ctxSvc.CrossReferenceNotes(ctx, accountID, convID, ContextNoteNamespaceLeadMining, scopes...)
 	if err != nil {
 		logger.Warnf("[lead-discovery] 读取自动回复侧交叉引用失败 account=%d conv=%s: %v", accountID, convID, err)
 		return nil

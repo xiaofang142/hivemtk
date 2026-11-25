@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -64,6 +64,21 @@ func (ctrl *FollowupRecordController) recordOp(c *gin.Context, action, resourceI
 	})
 }
 
+// followupScope 从可信登录用户解析 CRM 数据范围。
+func (ctrl *FollowupRecordController) followupScope(c *gin.Context) service.CustomerDataScope {
+	uid, _ := ctrl.actor(c)
+	return ctrl.svc.Scope(c.Request.Context(), uid)
+}
+
+// followupScopeError 把数据范围拒绝映射为 403。
+func (ctrl *FollowupRecordController) followupScopeError(c *gin.Context, err error) bool {
+	if errors.Is(err, service.ErrFollowupForbidden) {
+		response.Error(c, http.StatusForbidden, "无权访问该跟进记录")
+		return true
+	}
+	return false
+}
+
 func (ctrl *FollowupRecordController) Create(c *gin.Context) {
 	var req model.FollowupRecord
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -78,11 +93,14 @@ func (ctrl *FollowupRecordController) Create(c *gin.Context) {
 	if req.CreatedBy == nil && uid > 0 {
 		req.CreatedBy = &uid
 	}
-	if err := ctrl.svc.Create(c.Request.Context(), &req); err != nil {
+	if err := ctrl.svc.CreateScoped(c.Request.Context(), ctrl.followupScope(c), &req); err != nil {
+		if ctrl.followupScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "创建跟进记录失败")
 		return
 	}
-	ctrl.recordOp(c, "create", fmt.Sprintf("%s", req.RecordID), "创建跟进记录")
+	ctrl.recordOp(c, "create", req.RecordID, "创建跟进记录")
 	response.Success(c, req, "创建成功")
 }
 
@@ -92,7 +110,7 @@ func (ctrl *FollowupRecordController) List(c *gin.Context) {
 	customerID := c.Query("customer_id")
 	reminderID := c.Query("reminder_id")
 	ownerID, _ := strconv.ParseUint(c.Query("owner_id"), 10, 64)
-	items, total, err := ctrl.svc.List(c.Request.Context(), customerID, reminderID, uint(ownerID), page, pageSize)
+	items, total, err := ctrl.svc.ListScoped(c.Request.Context(), ctrl.followupScope(c), customerID, reminderID, uint(ownerID), page, pageSize)
 	if err != nil {
 		response.ErrorFromDB(c, err, "获取跟进记录失败")
 		return
@@ -101,8 +119,11 @@ func (ctrl *FollowupRecordController) List(c *gin.Context) {
 }
 
 func (ctrl *FollowupRecordController) Get(c *gin.Context) {
-	rec, err := ctrl.svc.Get(c.Request.Context(), c.Param("id"))
+	rec, err := ctrl.svc.GetScoped(c.Request.Context(), ctrl.followupScope(c), c.Param("id"))
 	if err != nil {
+		if ctrl.followupScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "获取跟进记录失败")
 		return
 	}
@@ -121,7 +142,10 @@ func (ctrl *FollowupRecordController) Update(c *gin.Context) {
 	if uid > 0 {
 		req.UpdatedBy = &uid
 	}
-	if err := ctrl.svc.Update(c.Request.Context(), &req); err != nil {
+	if err := ctrl.svc.UpdateScoped(c.Request.Context(), ctrl.followupScope(c), &req); err != nil {
+		if ctrl.followupScopeError(c, err) {
+			return
+		}
 		response.ErrorFromDB(c, err, "更新跟进记录失败")
 		return
 	}

@@ -43,7 +43,7 @@ type AfterSaleRepositoryOps interface {
 // 赔付/取件、抖店买家确认、淘系限制分支等覆盖需按 M16 验收标准配套 live/simulated 测试与证据。
 //
 // EC-17 (M17, not implemented / not live-closed): jd_pop 在 capregistry 中声明 aftersale.write 为 official_ui
-//（merchant workflow in 京麦），系统不自动提交 API；但本服务/订单/案件/审批/执行证据与结果回告的端到端闭环
+// （merchant workflow in 京麦），系统不自动提交 API；但本服务/订单/案件/审批/执行证据与结果回告的端到端闭环
 // 仍未实现。xiaohongshu（千帆店）、kuaishou_shop、wechat_store、youzan 在代码库中无对应 commerce action cells
 // 与执行适配，属于缺失（非“已接入待验证”）。
 //
@@ -152,7 +152,7 @@ func (s *AfterSaleService) resolveClient(ctx context.Context) AfterSaleExternalC
 
 // applyRemoteWriteBack 持久化远端回写状态；持久化失败时回退本地状态，守住 EC-13「写失败不能吞为完成」。
 // 提取为独立方法使该不变量可被合成测试直接覆盖，不依赖 authorizeAfterSaleSubmit 硬闸门（legacy client 路径不可达）。
-func (s *AfterSaleService) applyRemoteWriteBack(ctx context.Context, as *model.AfterSale, res *AfterSaleExternalResult) {
+func (s *AfterSaleService) applyRemoteWriteBack(ctx context.Context, as *model.AfterSale, res *AfterSaleExternalResult) { //nolint:unused // 保留 EC-13 回写回退测试原型；Create 仍采用返回持久化错误的现有契约。
 	localStatus := as.Status
 	as.ExternalID = res.ExternalID
 	if res.Status != "" {

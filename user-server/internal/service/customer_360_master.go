@@ -113,15 +113,11 @@ func (s *CRM360Service) CrossIndustrySearch(ctx context.Context, tid uint, scope
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 20
 	}
-	filter := s.permission.ToFilter(scope, repository.CustomerScopeFilter{
+	filter := repository.CustomerScopeFilter{
 		Keyword: keyword, Page: page, PageSize: pageSize, ExcludeMerged: true,
-	})
+	}
 	if industry != "" {
-		if len(filter.Industries) == 0 {
-			filter.Industries = []string{industry}
-		} else {
-			filter.Industries = intersectCRMStrings(filter.Industries, []string{industry})
-		}
+		filter.Industries = []string{industry}
 	}
 	rows, total, err := s.permission.ListScoped(ctx, scope, filter)
 	if err != nil {

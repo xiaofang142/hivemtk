@@ -433,8 +433,10 @@ func (s *CustomerJourneyService) persistStateCAS(ctx context.Context, state *Jou
 		if current.Version != expectedVersion {
 			return ErrJourneyVersionConflict
 		}
-	} else if err != ErrJourneyCacheReadFault {
-		// 未命中（新客户）允许首次写入
+	} else if err == ErrJourneyCacheReadFault {
+		return err
+	} else {
+		// 未命中（新客户）允许首次写入。
 	}
 	return s.persistState(ctx, state)
 }
@@ -709,7 +711,9 @@ func (s *CustomerJourneyService) AutoDetectSleeping(ctx context.Context) []strin
 	}
 	s.mu.Unlock()
 	for i := range snapshots {
-		s.persistState(ctx, &snapshots[i])
+		if err := s.persistState(ctx, &snapshots[i]); err != nil {
+			logger.Warnf("journey.autoDetectSleeping(%s) 状态持久化失败: %v", snapshots[i].CustomerID, err)
+		}
 	}
 	return wokeUp
 }

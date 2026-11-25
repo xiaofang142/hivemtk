@@ -134,17 +134,6 @@ func trimRunes(s string, max int) string {
 	return string(r[:max]) + "…"
 }
 
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "duplicate key") ||
-		strings.Contains(msg, "unique constraint") ||
-		strings.Contains(msg, "23505") ||
-		strings.Contains(msg, "重复")
-}
-
 func telegramLeadAccountKey(username, fromID string) string {
 	username = strings.TrimSpace(username)
 	if username != "" {
@@ -155,13 +144,6 @@ func telegramLeadAccountKey(username, fromID string) string {
 		return "tg:" + fromID
 	}
 	return ""
-}
-
-func boolToInt64(b bool) int64 {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 // ProbeTgLeadOpportunityThreshold 暴露读取口当前值，供装配层测试断言接线确实生效。

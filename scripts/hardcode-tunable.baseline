@@ -452,22 +452,16 @@ ChainMaxSteps
 #   截断副作用（签名参数破坏→链接失效可观测）见 TruncateMediaURL 注释。
 MaxMediaURLLen
 
-<<<<<<< Updated upstream
 # ── B2（2026-11-18 清单整理收口轮）：观测数据协议版本 ──────────────────────────
 # TimingVersion（tracing/observation.go）——观测事件「形状版本」协议号：消费端按版本
 # 解读字段布局，单边升版＝对端解读错位，与 B1-a 同族（协议形状，非运维旋钮）。
 # 要调必须与全部消费方（落库 schema/巡检 SQL/看板）同步发版。
 TimingVersion
-=======
 # ── 2026-11-16 蜂桥契约审阅：精确名字登记，不扩大扫描器豁免 ──────────────
-# TimingVersion 是已持久化观测的协议版本（当前1），不是延迟、容量或风控旋钮。
-# 改版本需同步生产者、聚合器与页面对 unknown/实测值的解释，不允许运维单边改。
-TimingVersion
 # InboxOutboundEchoWindowShort 是 HEAD 已有的非桥接回声回看防线（2小时）；
 # 本轮未改值。与7天桥接窗口配套，不能作为运行时旋钮静默缩短以放过自回显。
 # 如业务需要变更，必须重新论证回声/客户同文边界并带回归整体发布。
 InboxOutboundEchoWindowShort
->>>>>>> Stashed changes
 
 # ── SageX 上传协议安全上界（2026-11-23 审计 T-07）──────────────────────────────
 # 三者是 SageX 协议的容量/安全上界，不是运营可调旋钮：
@@ -478,3 +472,9 @@ InboxOutboundEchoWindowShort
 SageXMaxEvents
 SageXMaxRequestBytes
 SageXMaxAckBytes
+
+# ── SageX 安装标识列宽契约（2026-11-25）─────────────────────────────────────
+# SageXMaxInstallationIDLength 与 sagex_installations / sagex_event_receipts 的
+# installation_id varchar(100) 列宽一致，按 Unicode 字符校验后才写入。
+# 改成运行时旋钮会允许请求越过数据库列宽；调整须同步 DDL 与上传协议，不能单边调参。
+SageXMaxInstallationIDLength

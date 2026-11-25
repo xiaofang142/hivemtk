@@ -16,52 +16,24 @@
             <span>导入客户</span>
           </template>
           <el-alert
-            title="CSV 列顺序：name,phone,email,industry,source_account_id,source_channel,owner_user_id,tags"
+            title="复用导入向导：上传 CSV/真实 xlsx → 预检（映射、非法行、重复、越权原因）→ 后台作业执行 → 下载完整失败报告"
             type="info"
             :closable="false"
             show-icon
           />
-          <el-input
-            v-model="csvText"
-            type="textarea"
-            :rows="10"
-            placeholder="可粘贴 CSV 内容（首行可为表头）"
-            style="margin-top: 12px"
-          />
           <el-button
             type="primary"
-            :loading="importing"
-            style="margin-top: 10px"
-            @click="doImport"
+            style="margin-top: 12px"
+            @click="goImportWizard"
           >
-            导入
+            前往导入向导
           </el-button>
           <div
-            v-if="importResult"
-            class="result"
+            class="muted"
+            style="margin-top: 8px"
           >
-            <el-tag>总计 {{ importResult.total }}</el-tag>
-            <el-tag type="success">
-              新建 {{ importResult.created }}
-            </el-tag>
-            <el-tag type="warning">
-              更新 {{ importResult.updated }}
-            </el-tag>
-            <el-tag type="danger">
-              越权 {{ importResult.denied }}
-            </el-tag>
+            支持 CSV（BOM/引号/换行）与真正的 xlsx；字段映射含行业/负责人/来源/公司，越权行在预检中逐行说明原因。
           </div>
-          <ul
-            v-if="importResult?.errors?.length"
-            class="errors"
-          >
-            <li
-              v-for="(e, i) in importResult.errors"
-              :key="i"
-            >
-              {{ e }}
-            </li>
-          </ul>
         </el-card>
       </el-col>
       <el-col :span="12">
@@ -86,6 +58,60 @@
                 style="width: 140px"
               />
             </el-form-item>
+            <el-form-item label="来源账号">
+              <el-input
+                v-model="exportFilters.source_account_id"
+                style="width: 140px"
+              />
+            </el-form-item>
+            <el-form-item label="负责人ID">
+              <el-input
+                v-model.number="exportFilters.owner_user_id"
+                style="width: 110px"
+              />
+            </el-form-item>
+            <el-form-item label="实体">
+              <el-select
+                v-model="exportFilters.entity_type"
+                style="width: 150px"
+              >
+                <el-option
+                  label="客户"
+                  value="customer"
+                />
+                <el-option
+                  label="联系人"
+                  value="contact"
+                />
+                <el-option
+                  label="公司"
+                  value="company"
+                />
+                <el-option
+                  label="供应商"
+                  value="supplier"
+                />
+                <el-option
+                  label="服务商"
+                  value="service_provider"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="字段">
+              <el-select
+                v-model="exportFilters.fields"
+                multiple
+                collapse-tags
+                style="width: 200px"
+              >
+                <el-option
+                  v-for="f in exportFieldOptions"
+                  :key="f"
+                  :label="f"
+                  :value="f"
+                />
+              </el-select>
+            </el-form-item>
           </el-form>
           <el-button
             :loading="exporting"
@@ -98,6 +124,12 @@
             @click="doExport('csv')"
           >
             导出 CSV
+          </el-button>
+          <el-button
+            :loading="exporting"
+            @click="doExport('xlsx')"
+          >
+            导出 Excel
           </el-button>
           <div
             v-if="exportResult"
@@ -119,89 +151,59 @@
 
 <script setup>
 import { reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { crmApi } from '@/api/crm'
 
-const csvText = ref('')
-const importing = ref(false)
+const router = useRouter()
+
+function goImportWizard() {
+  router.push('/customerImportJob/list')
+}
+
 const exporting = ref(false)
-const importResult = ref(null)
 const exportResult = ref(null)
-const exportFilters = reactive({ keyword: '', industry: '' })
+const exportFilters = reactive({
+  keyword: '', industry: '', source_account_id: '', owner_user_id: 0,
+  entity_type: 'customer', fields: [],
+})
+const exportFieldOptions = [
+  'id', 'name', 'phone', 'email', 'industry', 'source_account_id', 'owner_user_id', 'tags',
+]
 
-function parseCsvLine(line) {
-  const out = []
-  let cur = ''
-  let quoted = false
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i]
-    if (ch === '"') {
-      if (quoted && line[i + 1] === '"') { cur += '"'; i++ }
-      else quoted = !quoted
-    } else if (ch === ',' && !quoted) {
-      out.push(cur.trim()); cur = ''
-    } else {
-      cur += ch
-    }
+function exportParams(format) {
+  const params = {
+    keyword: exportFilters.keyword || undefined,
+    industry: exportFilters.industry || undefined,
+    source_account_id: exportFilters.source_account_id || undefined,
+    owner_user_id: exportFilters.owner_user_id || undefined,
+    entity_type: exportFilters.entity_type || 'customer',
+    fields: exportFilters.fields?.length ? exportFilters.fields.join(',') : undefined,
   }
-  out.push(cur.trim())
-  return out
-}
-
-function buildRows(text) {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim())
-  if (!lines.length) return []
-  const start = /^name/i.test(lines[0].split(',')[0] || '') ? 1 : 0
-  const keys = ['name', 'phone', 'email', 'industry', 'source_account_id', 'source_channel', 'owner_user_id', 'tags']
-  return lines.slice(start).map((line) => {
-    const cells = parseCsvLine(line)
-    const row = {}
-    keys.forEach((k, i) => { row[k] = cells[i] || '' })
-    row.owner_user_id = Number(row.owner_user_id || 0)
-    return row
-  })
-}
-
-async function doImport() {
-  const rows = buildRows(csvText.value)
-  if (!rows.length) {
-    ElMessage.warning('没有可导入的数据')
-    return
-  }
-  importing.value = true
-  try {
-    importResult.value = await crmApi.importRows({ rows, file_name: 'paste.csv' })
-    ElMessage.success('导入完成')
-  } catch (e) {
-    ElMessage.error(e?.message || '导入失败')
-  } finally {
-    importing.value = false
-  }
+  if (format) params.format = format
+  return params
 }
 
 async function doExport(format) {
   exporting.value = true
   try {
-    if (format === 'csv') {
-      const res = await crmApi.exportRows({
-        keyword: exportFilters.keyword || undefined,
-        industry: exportFilters.industry || undefined,
-        format: 'csv',
-      })
+    if (format === 'csv' || format === 'xlsx') {
+      const res = await crmApi.exportRows(exportParams(format))
       const blob = (typeof Blob !== 'undefined' && res instanceof Blob)
         ? res
-        : new Blob([typeof res === 'string' ? res : String(res?.data || '')], { type: 'text/csv;charset=utf-8' })
+        : new Blob([typeof res === 'string' ? res : String(res?.data || '')], {
+          type: format === 'xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'text/csv;charset=utf-8',
+        })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'crm-customers.csv'
+      a.download = format === 'xlsx' ? 'crm-customers.xlsx' : 'crm-customers.csv'
       a.click()
       URL.revokeObjectURL(url)
     } else {
-      exportResult.value = await crmApi.exportRows({
-        keyword: exportFilters.keyword || undefined,
-        industry: exportFilters.industry || undefined,
-      })
+      exportResult.value = await crmApi.exportRows(exportParams())
     }
   } catch (e) {
     ElMessage.error(e?.message || '导出失败')

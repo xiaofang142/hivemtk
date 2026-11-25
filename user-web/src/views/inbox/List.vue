@@ -225,10 +225,19 @@
               >
                 {{ getChannelLabel(conv.platform) || conv.platform }}
               </el-tag>
-              <el-tag size="small" :type="isGroupConv(conv) ? 'warning' : 'info'" effect="plain">
+              <el-tag
+                size="small"
+                :type="isGroupConv(conv) ? 'warning' : 'info'"
+                effect="plain"
+              >
                 {{ isGroupConv(conv) ? '群聊' : '单聊' }}
               </el-tag>
-              <el-tag v-if="conv.account_id" size="small" type="info" effect="plain">
+              <el-tag
+                v-if="conv.account_id"
+                size="small"
+                type="info"
+                effect="plain"
+              >
                 {{ conv.account_id }}
               </el-tag>
               <el-tag
@@ -313,7 +322,10 @@
                 <el-icon><User /></el-icon>
               </el-avatar>
               <span class="thread-name">{{ currentConv.customer_name || currentConv.customer_id || '-' }}</span>
-              <el-tag size="small" :type="isGroupConv(currentConv) ? 'warning' : 'info'">
+              <el-tag
+                size="small"
+                :type="isGroupConv(currentConv) ? 'warning' : 'info'"
+              >
                 {{ isGroupConv(currentConv) ? '群聊会话' : '单聊会话' }}
               </el-tag>
               <el-tag
@@ -322,7 +334,12 @@
               >
                 {{ getChannelLabel(currentConv.platform) || currentConv.platform }}
               </el-tag>
-              <el-tag v-if="currentConv.account_id" size="small" type="info" effect="plain">
+              <el-tag
+                v-if="currentConv.account_id"
+                size="small"
+                type="info"
+                effect="plain"
+              >
                 账号 {{ currentConv.account_id }}
               </el-tag>
               <el-tag
@@ -427,9 +444,15 @@
           class="thread-body"
           :class="{ 'group-chat': isGroupConv(currentConv) }"
         >
-          <div class="chat-mode-banner" :class="isGroupConv(currentConv) ? 'group' : 'single'">
+          <div
+            class="chat-mode-banner"
+            :class="isGroupConv(currentConv) ? 'group' : 'single'"
+          >
             <span>{{ isGroupConv(currentConv) ? '群聊模式：显示多成员消息' : '单聊模式：一对一聊天' }}</span>
-            <span v-if="currentConv.account_id" class="banner-account">渠道账号：{{ getChannelLabel(currentConv.platform) || currentConv.platform }} / {{ currentConv.account_id }}</span>
+            <span
+              v-if="currentConv.account_id"
+              class="banner-account"
+            >渠道账号：{{ getChannelLabel(currentConv.platform) || currentConv.platform }} / {{ currentConv.account_id }}</span>
           </div>
           <div
             v-for="msg in threadMessages"

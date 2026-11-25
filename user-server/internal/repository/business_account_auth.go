@@ -19,8 +19,10 @@ type BusinessAccountAuthRepository interface {
 
 type businessAccountAuthRepository struct{}
 
-func NewBusinessAccountAuthRepository() BusinessAccountAuthRepository { return &businessAccountAuthRepository{} }
-func (r *businessAccountAuthRepository) db(ctx context.Context) *gorm.DB    { return dbFromCtx(ctx) }
+func NewBusinessAccountAuthRepository() BusinessAccountAuthRepository {
+	return &businessAccountAuthRepository{}
+}
+func (r *businessAccountAuthRepository) db(ctx context.Context) *gorm.DB { return dbFromCtx(ctx) }
 
 func (r *businessAccountAuthRepository) Upsert(ctx context.Context, a *model.BusinessAccountAuthorization) error {
 	if a.TenantID == 0 {

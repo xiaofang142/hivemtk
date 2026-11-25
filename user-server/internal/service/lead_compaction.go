@@ -34,15 +34,22 @@ func compactSummary(jd *LeadJudgement) string {
 
 // saveCompactSummary 在判定成功后把摘要写回共享上下文（失败 fail-visible：记日志不中断）。
 func saveCompactSummary(ctx context.Context, hub *model.MessageHub, accountID uint, jd *LeadJudgement) {
-	if hub == nil || accountID == 0 || hub.ConversationID == "" {
+	conversationID := leadHistoryConversationID(hub)
+	if hub == nil || accountID == 0 || conversationID == "" {
 		return
 	}
 	summary := compactSummary(jd)
 	if summary == "" {
 		return
 	}
-	svc := NewConversationContextServiceWithRepo(repository.NewConversationContextRepository())
-	if err := svc.SetSummary(ctx, accountID, hub.ConversationID, summary); err != nil {
-		logger.Warnf("[lead-mining] 历史摘要写入失败 account=%d conv=%s: %v", accountID, hub.ConversationID, err)
+	repo := repository.NewConversationContextRepository()
+	conv, err := leadScopedConversation(ctx, repo, accountID, conversationID)
+	if err != nil {
+		logger.Warnf("[lead-mining] 历史摘要写入失败 account=%d conv=%s: %v", accountID, conversationID, err)
+		return
+	}
+	conv.Summary = summary
+	if err := repo.Upsert(ctx, conv); err != nil {
+		logger.Warnf("[lead-mining] 历史摘要写入失败 account=%d conv=%s: %v", accountID, conversationID, err)
 	}
 }

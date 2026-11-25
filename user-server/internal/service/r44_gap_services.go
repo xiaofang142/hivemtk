@@ -389,9 +389,9 @@ type CohortGapService struct {
 
 	// FA-COHORT-01：可注入的时间/计数 seam，用于冻结业务时区周起点并注入查询故障。
 	// nil 时使用真实 repo / time.Now（零行为变更）。
-	nowFn           func() time.Time
-	countCustomers  func(ctx context.Context, start, end time.Time) (int64, error)
-	countRetained   func(ctx context.Context, cohortStart, cohortEnd, weekStart, weekEnd time.Time) (int64, error)
+	nowFn          func() time.Time
+	countCustomers func(ctx context.Context, start, end time.Time) (int64, error)
+	countRetained  func(ctx context.Context, cohortStart, cohortEnd, weekStart, weekEnd time.Time) (int64, error)
 }
 
 // NewCohortGapService 构造（五层边界 §3.2：只持仓储；repo 为 nil 时查询类方法返回错误）
@@ -463,13 +463,13 @@ func (s *CohortGapService) Cohort(ctx context.Context, weeks int) (*CohortResult
 	now := s.now()
 	thisWeekStart := startOfBusinessWeek(now)
 	type cohort struct {
-		label      string
-		start      time.Time
-		end        time.Time
-		size       int64
-		sizeErr    error
-		retained   []int64
-		states     []string // per-cell 状态，与 retained 平行
+		label    string
+		start    time.Time
+		end      time.Time
+		size     int64
+		sizeErr  error
+		retained []int64
+		states   []string // per-cell 状态，与 retained 平行
 	}
 	cohorts := make([]cohort, 0, weeks)
 	periods := []string{}

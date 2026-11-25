@@ -42,6 +42,22 @@
             仅同账号内比对
           </el-checkbox>
         </el-form-item>
+        <el-form-item label="实体范围">
+          <el-select
+            v-model="options.entity_types"
+            multiple
+            collapse-tags
+            placeholder="联系人/供应商/服务商（默认仅客户）"
+            style="min-width:300px"
+          >
+            <el-option
+              v-for="item in entityOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
       </el-form>
 
       <el-table
@@ -74,6 +90,19 @@
           min-width="120"
         />
         <el-table-column
+          label="实体类型"
+          min-width="100"
+        >
+          <template #default="{ row }">
+            {{ row.entity_type || '客户' }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          prop="field"
+          label="命中字段"
+          min-width="100"
+        />
+        <el-table-column
           prop="rule"
           label="命中规则"
           min-width="130"
@@ -103,11 +132,15 @@
             <el-button
               link
               type="primary"
-              :disabled="row.action === 'review'"
+              :disabled="row.action === 'review' || !!row.entity_type"
               @click="openMerge(row)"
             >
               合并
             </el-button>
+            <span
+              v-if="row.action === 'unsupported'"
+              class="page-sub"
+            >规则未适配，需人工复核</span>
           </template>
         </el-table-column>
       </el-table>
@@ -219,7 +252,12 @@ const rows = ref([])
 const auditRows = ref([])
 const auditCustomerId = ref('')
 const mergeVisible = ref(false)
-const options = reactive({ max_customers: 5000, name_threshold: 85, same_account_only: true })
+const entityOptions = [
+  { value: 'Contact', label: '联系人' },
+  { value: 'Supplier', label: '供应商' },
+  { value: 'ServiceProvider', label: '服务商' },
+]
+const options = reactive({ max_customers: 5000, name_threshold: 85, same_account_only: true, entity_types: [] })
 const mergeForm = reactive({ primary_id: '', secondary_id: '', reason: '', source: 'crm/manual' })
 
 async function scan() {

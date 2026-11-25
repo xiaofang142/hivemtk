@@ -177,7 +177,7 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 		&model.AgentStatus{}, &model.Customer{}, &model.MessageTrace{},
 		&model.FeishuAccount{}, &model.FeishuMessage{}, &model.TelegramAccount{},
 		&model.WechatAccount{}, &model.WeComAccount{}, &model.QQAccount{},
-		&model.WhatsAppCloudAccount{},
+		&model.WhatsAppCloudAccount{}, &model.Channel{}, &model.ChannelAccount{},
 	)
 
 	// 渠道凭据行（固定主键，golden 里的账号 id 全部由此而来）。
@@ -189,6 +189,9 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 		&model.QQAccount{ID: 105, TenantID: 1, AppID: "qq-golden", AppSecret: "qq-sec-golden"},
 		&model.WhatsAppCloudAccount{ID: 106, TenantID: 1, AccountName: "golden-wa", PhoneNumberID: "phone-golden", AccessToken: "wa-tok-golden", Status: 1},
 	}
+	// E3 显式账号契约：bridge 出站账号必须是可解析的数值 ID。
+	canonicalAccountID := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-golden-q")
+	undeliverableAccountID := seedCanonicalOutboundAccount(t, database, 1, "douyin", "acct-golden-unknown")
 	for _, s := range seed {
 		if err := database.Create(s).Error; err != nil {
 			t.Fatalf("seed 渠道账号失败: %v", err)
@@ -420,9 +423,9 @@ func TestOutboundBehaviorFreezeGolden(t *testing.T) {
 					&ParsedPayload{EventID: "evt-golden-wa-" + tc.Sample, Sender: "8613800000000", Content: "在吗"},
 					"golden whatsapp 回复正文", hub, nil)
 			case "bridge":
-				accountID := "acct-golden-q"
+				accountID := canonicalAccountID
 				if tc.Sample == "undeliverable" {
-					accountID = "acct-golden-unknown"
+					accountID = undeliverableAccountID
 				}
 				hub := bridgeInboundHub("douyin", accountID, "cs-golden-bridge-"+tc.Sample, "cust-golden-bridge")
 				if err := database.Create(hub).Error; err != nil {

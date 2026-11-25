@@ -143,12 +143,28 @@
       </el-col>
     </el-row>
 
-    <el-card class="chart-card" shadow="never">
-      <template #header><span>线索角色分布（需求方/供货方/上下游）</span></template>
+    <el-card
+      class="chart-card"
+      shadow="never"
+    >
+      <template #header>
+        <span>线索角色分布（需求方/供货方/上下游）</span>
+      </template>
       <div class="role-grid">
-        <div v-for="r in roleDisplay" :key="r.key" class="role-item">
-          <div class="role-label">{{ r.label }}</div>
-          <div class="role-value" :style="{ color: r.color }">{{ r.total }}</div>
+        <div
+          v-for="r in roleDisplay"
+          :key="r.key"
+          class="role-item"
+        >
+          <div class="role-label">
+            {{ r.label }}
+          </div>
+          <div
+            class="role-value"
+            :style="{ color: r.color }"
+          >
+            {{ r.total }}
+          </div>
         </div>
       </div>
     </el-card>
