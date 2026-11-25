@@ -24,6 +24,8 @@
 
 整体验证期间另有会话补入两处修改，本轮保留并纳入最终门禁：桥接入站允许复用上游已绑定的非零租户，未绑定及 system-scope 仍拒绝；渠道账号 edition 过滤使用 GORM 子查询，使租户扫描和查询回调覆盖子查询。
 
+复核补充 `!tenant.IsSystemScope`，防止带租户值的 system scope 走缺识别码直通分支。HTTP 与 WS 共享回归覆盖普通绑定、无绑定、零租户、system scope 和 system scope 叠加租户值；修复前最后一项在两个入口均复现错误放行。
+
 ## Regression Coverage
 
 新增 `TestFAJourney_CASReadFaultDoesNotWrite`，断言缓存读取故障不触发 CAS 写入。

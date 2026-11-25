@@ -17,7 +17,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// identify_code-only 契约：所有模式都必须带合法识别码；on 模式绑定租户，off 模式只解析身份。
+// 未由上游绑定租户时，所有模式都必须带合法识别码；on 模式绑定租户，off 模式只解析身份。
 // 旧 bridge_accounts 行自证、tenant_code 与 bartoken 双 authority 均不再成立。
 
 func bindingCtx(t *testing.T, rawQuery string, headers map[string]string) *gin.Context {
@@ -47,6 +47,50 @@ func TestBindBridgeTenant_IdentifyCodeRequiredInAllModes(t *testing.T) {
 			c := bindingCtx(t, "channel=douyin&account_id=1", nil)
 			if _, err := bindBridgeTenant(c, "douyin", "1"); !errors.Is(err, ErrBridgeTenantUnresolved) {
 				t.Fatalf("缺 identify_code 必须拒绝: %v", err)
+			}
+		})
+	}
+}
+
+func TestBridgeTenant_PreboundContextWithoutIdentifyCode(t *testing.T) {
+	bound := tenant.WithTenantID(context.Background(), 11)
+	for _, tc := range []struct {
+		name    string
+		ctx     context.Context
+		allowed bool
+	}{
+		{name: "bound-tenant", ctx: bound, allowed: true},
+		{name: "unbound", ctx: context.Background()},
+		{name: "zero-tenant", ctx: tenant.WithTenantID(context.Background(), 0)},
+		{name: "system", ctx: tenant.WithSystemScope(context.Background())},
+		{name: "system-with-tenant", ctx: tenant.WithSystemScope(bound)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := bindingCtx(t, "channel=douyin&account_id=1", nil)
+			c.Request = c.Request.WithContext(tc.ctx)
+			before := c.Request
+			httpCtx, httpErr := bindBridgeTenant(c, "douyin", "1")
+			wsCtx, wsErr := BridgeTenantForRequest(before, "douyin", "1")
+			for _, result := range []struct {
+				entry string
+				ctx   context.Context
+				err   error
+			}{
+				{entry: "http", ctx: httpCtx, err: httpErr},
+				{entry: "ws", ctx: wsCtx, err: wsErr},
+			} {
+				if tc.allowed && result.err != nil {
+					t.Errorf("%s 已绑定租户应放行: %v", result.entry, result.err)
+				}
+				if !tc.allowed && !errors.Is(result.err, ErrBridgeTenantUnresolved) {
+					t.Errorf("%s 不安全上下文应拒绝: %v", result.entry, result.err)
+				}
+				if result.ctx != tc.ctx {
+					t.Errorf("%s 不应改写调用方上下文", result.entry)
+				}
+			}
+			if c.Request != before {
+				t.Fatal("不应改写原请求")
 			}
 		})
 	}

@@ -120,7 +120,7 @@ func resolveBridgeIdentity(rctx context.Context, channel, accountID, _codeHint, 
 		// 上游（bridge 入站中间件 / WS 握手）已显式钉死租户时直通：
 		// 这是与识别码、租户短码并列的合法归属来源（旧 resolveBridgeTenant 即如此）。
 		// 仅认非零的真实租户；system-scope / 未绑定仍 fail-closed。
-		if tid, bound := tenant.FromContext(rctx); bound && tid != 0 {
+		if tid, bound := tenant.FromContext(rctx); bound && tid != 0 && !tenant.IsSystemScope(rctx) {
 			return rctx, false, nil, nil
 		}
 		return rctx, false, nil, ErrBridgeTenantUnresolved
