@@ -136,8 +136,8 @@ if [ "${SKIP_TESTS}" = "0" ]; then
   log "本地预检：go test（DB 门禁类失败单独列出，不算阻断）"
   # FA-RELEASE-01：每次运行私有日志（并发预检不串证据），退出码用 PIPESTATUS 保留。
   TEST_LOG="$(mktemp "${TMPDIR:-/tmp}/gotest-deploy.XXXXXX")"
-  # shellcheck disable=SC2064
-  trap 'rm -f "${TEST_LOG}"' RETURN
+  # 不要用 trap ... RETURN：随后 source test_gate.sh 会在 sourced 脚本返回时触发
+  # RETURN trap，提前删掉 TEST_LOG，导致 gate_verdict 读不到日志而误判 BLOCK。
   set +e
   ( cd "${SERVER_DIR}" && go test ./internal/... ./cmd/... 2>&1 ) | tee "${TEST_LOG}" | tail -3
   TEST_RC="${PIPESTATUS[0]}"
@@ -159,7 +159,6 @@ if [ "${SKIP_TESTS}" = "0" ]; then
       ;;
   esac
   rm -f "${TEST_LOG}"
-  trap - RETURN
 fi
 
 log "交叉编译 CGO_ENABLED=0 GOOS=linux GOARCH=amd64"

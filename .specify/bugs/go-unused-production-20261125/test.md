@@ -1,14 +1,18 @@
-# Bug Verification: Go unused cleanup remains blocked by test-only business groups
+# Bug Verification: Go unused cleanup and integration evidence
 
 - **Slug**: go-unused-production-20261125
 - **Tested**: 2026-11-25
 - **Assessment**: ./assessment.md
 - **Fix**: ./fix.md
-- **Result**: failed
+- **Result**: integrated-lint-pass; final-suite-pending
 
 ## Summary
 
-All 16 removed declarations have disappeared from scoped unused lint, and the updated no-DB tests and affected production packages compile successfully. The original lint-gate failure still reproduces: 23 of the original findings remain pending the primary reviewer's business-behavior decision, plus 2 newly introduced findings outside the delegated scope. The overall bug is not verified or closed.
+The primary integration preserved the 23 original business prototypes and two archive predicates with precise unused explanations, removed the 16 obsolete declarations, and corrected the unrelated controller import and final formatting findings. The complete `make lint` run in `user-go-integration-fixed-lint.log` exited 0. Final whole-workspace verification remains pending; retained prototypes are not claimed as production integrations.
+
+## Historical Delegated Verification
+
+The following checks and failures describe the earlier delegated stage, before the primary integration decision in `fix.md`. At that point 23 original findings and two new archive findings still required review, and the controller import blocked whole-server build and lint. Their historical results are preserved below.
 
 ## Checks Performed
 
@@ -72,7 +76,7 @@ ModuleNotFoundError: No module named 'graphify'
 - Other agents are editing the shared worktree. Whole-server errors and newly introduced findings must be reconciled by the primary agent before the final workspace gate.
 - No source was edited during this verification stage; no staging, commits, or pushes were performed.
 
-## Recommendation
+## Historical Recommendation
 
 Keep the overall lint bug open. Review the four explicit behavior decisions in `fix.md`, preserve their assertions on the active production entry points, and then remove or implement the remaining declarations within the primary agent's authorized scope. Reassess those groups using this evidence; after the controller typecheck issue and new archive findings are resolved, rerun the full server build and lint gate. This report does not claim that all 39 findings have been resolved.
 
