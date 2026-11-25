@@ -265,6 +265,73 @@ func TestSageXUpload_MapsQQAndWeChat(t *testing.T) {
 	}
 }
 
+func TestSageXUpload_NonTextNotificationsRejected(t *testing.T) {
+	cases := []struct {
+		name        string
+		parseStatus string
+		text        string
+	}{
+		{"content unavailable", "content_unavailable", ""},
+		{"unrecognized", "unrecognized", ""},
+		{"image placeholder", "parsed", "[图片]"},
+		{"voice placeholder", "parsed", "【语音】"},
+		{"multi image placeholder", "parsed", "[3张图片]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1, AccountID: "1"}}}
+			receiptRepo := &fakeSageXReceiptRepo{}
+			ingress := &fakeSageXIngress{}
+			svc := newSageXUploadTestService(instRepo, receiptRepo, ingress)
+			resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
+				SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+				Events: []SageXEventItem{{
+					EventID: "e1", EventType: "notification.posted", CapturedAt: "2026-11-23T10:00:00Z",
+					Source: SageXSource{Platform: "android", Package: "com.tencent.mobileqq"},
+					ParseStatus: tc.parseStatus,
+					Conversation: SageXConversation{Type: "group", Title: "项目群"},
+					Message: SageXMessage{Sender: "张三", Text: tc.text},
+				}},
+			}, 10)
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if len(resp.Acks) != 1 || resp.Acks[0].Status != SageXAckRejected || resp.Acks[0].Code != "NO_TEXT_CONTENT" {
+				t.Fatalf("expected rejected/NO_TEXT_CONTENT, got %+v", resp.Acks)
+			}
+			if len(ingress.calls) != 0 {
+				t.Fatalf("non-text event must not reach inbox, got %d calls", len(ingress.calls))
+			}
+			receipt := receiptRepo.receipts[receiptKey(1, "i1", "e1")]
+			if receipt == nil || receipt.Status != SageXAckRejected {
+				t.Fatalf("expected terminal rejected receipt, got %+v", receipt)
+			}
+		})
+	}
+}
+
+func TestSageXUpload_UnknownParseStatusWithEmptyTextNotIngested(t *testing.T) {
+	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1, AccountID: "1"}}}
+	ingress := &fakeSageXIngress{}
+	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, ingress)
+	resp, err := svc.HandleUpload(context.Background(), sageXUploadIdentifyCode, &SageXUploadRequest{
+		SchemaVersion: SageXSchemaVersion, BatchID: "b1", InstallationID: "i1",
+		Events: []SageXEventItem{{
+			EventID: "e1", EventType: "notification.posted", Source: SageXSource{Package: "com.tencent.mm"},
+			ParseStatus: "some-future-status", Message: SageXMessage{Text: "  "},
+		}},
+	}, 10)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(resp.Acks) != 1 || resp.Acks[0].Status != SageXAckRetry || resp.Acks[0].Code != "BUILD_EVENT" {
+		t.Fatalf("expected retry/BUILD_EVENT for empty body, got %+v", resp.Acks)
+	}
+	if len(ingress.calls) != 0 {
+		t.Fatalf("empty body must never be fabricated into an inbox row")
+	}
+}
+
 func TestSageXUpload_UnsupportedPackageRejected(t *testing.T) {
 	instRepo := &fakeSageXInstRepo{byToken: map[string]*model.SageXInstallation{"tok": {TenantID: 1, ID: 1, InstallationID: "i1", Token: "tok", Status: 1}}}
 	svc := newSageXUploadTestService(instRepo, &fakeSageXReceiptRepo{}, &fakeSageXIngress{})

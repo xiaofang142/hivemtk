@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -368,6 +369,18 @@ func (s *SageXUploadService) processEvent(ctx context.Context, inst *model.SageX
 		return s.saveTerminalReceipt(ctx, inst, installationID, batchID, eventID, SageXAckRejected, 0, "UNSUPPORTED_PACKAGE")
 	}
 
+	// Non-text notifications (pure summaries, unrecognized payloads and media placeholder
+	// bodies) carry no chat text. Ack them terminally so the client stops retrying, but never
+	// fabricate a "[通知消息]" row in the inbox. Unknown parse_status values still pass through
+	// for forward compatibility with newer clients — only the known invalid ones are rejected.
+	switch strings.TrimSpace(ev.ParseStatus) {
+	case "content_unavailable", "unrecognized":
+		return s.saveTerminalReceipt(ctx, inst, installationID, batchID, eventID, SageXAckRejected, 0, "NO_TEXT_CONTENT")
+	}
+	if isNonTextPlaceholderText(ev.Message.Text) {
+		return s.saveTerminalReceipt(ctx, inst, installationID, batchID, eventID, SageXAckRejected, 0, "NO_TEXT_CONTENT")
+	}
+
 	msgEvent, buildErr := s.buildMessageEvent(inst, installationID, batchID, platform, ev)
 	if buildErr != nil {
 		logger.Ctx(ctx).Warn().Msgf("[SageX] build event failed installation=%s event=%s err=%v", installationID, eventID, buildErr)
@@ -469,9 +482,12 @@ func (s *SageXUploadService) buildMessageEvent(inst *model.SageXInstallation, in
 		ts = time.Now()
 	}
 
-	content := ev.Message.Text
-	if strings.TrimSpace(content) == "" {
-		content = "[通知消息]"
+	// An empty body is never a message. processEvent has already rejected known
+	// content-unavailable statuses; for unknown/legacy statuses we fail closed here
+	// instead of fabricating a placeholder row in the inbox.
+	content := strings.TrimSpace(ev.Message.Text)
+	if content == "" {
+		return nil, errors.New("sagex: empty message text")
 	}
 	content = sanitizeSageXText(content)
 
@@ -522,6 +538,18 @@ func (s *SageXUploadService) buildMessageEvent(inst *model.SageXInstallation, in
 		},
 	}
 	return msgEvent, nil
+}
+
+// sagexNonTextPlaceholder matches the bracketed media/attachment labels QQ and WeChat render
+// in notification previews. Pure emoticon names such as "[微笑]" are not message types and
+// are deliberately excluded.
+var sagexNonTextPlaceholder = regexp.MustCompile(
+	`^[\[【]\s*(?:\d+\s*[张个条段])?\s*(?:图片|照片|语音|视频|文件|表情|动图|动画表情|链接|网页|位置|名片|红包|转账|聊天记录|群公告|原消息|闪照)(?:\s*\d+)?\s*[\]】]$`,
+)
+
+// isNonTextPlaceholderText reports whether the only readable text is a media placeholder.
+func isNonTextPlaceholderText(text string) bool {
+	return sagexNonTextPlaceholder.MatchString(strings.TrimSpace(text))
 }
 
 func sagexPlatform(pkg string) (string, bool) {
