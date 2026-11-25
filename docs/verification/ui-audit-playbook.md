@@ -86,3 +86,49 @@ await page.cdp('Page.addScriptToEvaluateOnNewDocument', { source: COLLECTOR })
   go test ./internal/geo/service ./internal/service ./internal/controller -count=1
   ```
   （首次先跑 `go test ./internal/pkg/testutil -run '^TestTestDBAuthenticationPreflight$'` 建库）
+
+## 6. C 轮全量复测回归要点（2026-11-25）
+
+### 环境与账号
+- 本地 SaaS：`127.0.0.1:8321` → 后端 `127.0.0.1:8204`；登录态用 `go run ./cmd/minttoken` 铸本地 admin JWT（uid=26 / uit_admin），注入 cookie `hmtk_token` + localStorage `user_info`。**token 只经脚本内变量传递，不落盘、不打印。**
+- 线上 SaaS：`https://work.xapptool.cn/`，租户 18（tz3rmdj / admin），复用浏览器登录态；生产环境只做只读点验，零写入。
+- 路由权威台账：产品仓根 `router-list.md`（280 条，`scripts/gen_router_list.py --out router-list.md` 生成，`scripts/mark.py` 落证据）。
+
+### 单页采集模板（逐元素显式操作，禁止批量枚举点击）
+```js
+await p.events();                                  // 清空事件缓冲
+await p.goto(BASE + '/?a=' + Date.now() + '#' + R);
+await new Promise(r => setTimeout(r, 2000));       // out-in 过渡，2s 以上再读 DOM
+const info = await p.evaluate(() => ({ hash: location.hash,
+  txt: (document.body.innerText||'').replace(/\s+/g,' ').slice(0,150),
+  btns: [...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).map(x=>x.innerText.trim()).filter(Boolean).slice(0,6) }));
+// 点击目标由操作者阅读快照后逐个明确指定（刷新/查询/筛选/详情/重置），不写循环遍历
+const ev = await p.events();
+const cerr = ev.filter(e => e.method==='Runtime.exceptionThrown' ||
+  (e.method==='Runtime.consoleAPICalled' && e.params?.type==='error'));
+const bad = ev.filter(e => e.method==='Network.responseReceived' && e.params.response?.status>=400)
+  .map(e => e.params.response.status + ' ' + new URL(e.params.response.url).pathname);
+```
+
+### 已定性的设计内非 2xx（不要误判为缺陷）
+| 路由 | 非 2xx | 判定依据 |
+|---|---|---|
+| `/chat/embed/*` | 401 `/api/chat/public/*` | 公开页游客探针 |
+| `/asset-market` | 403 `/api/v1/asset-market/credits` | 平台集成未启用 |
+| `/bridge/extension` | 404 `/api/bridge/extension/package` | 扩展包未生成 fail-closed |
+| `/followups/today` | 503 `/api/followups/*` | 跟进服务未装配，页面有明示 |
+| `/backup/list`（线上） | 403 `/api/backups` | 平台运营权限，页面明示「仅平台运营方可执行」 |
+| `/ops-overview`（线上） | 403 `/api/system/stats` | 平台运营专属 |
+| `/aiAgent/edit/:id`、`/browser-automation/tasks/:id` | 404 | id 不存在，fail-closed 降级；查列表 API 取真实 id 复验 |
+| `/geo-tools/site-publish`、`/geo-tools/platform-publish` | — | 外部发布操作设计内拒绝，写操作从不执行（`[~]`） |
+
+### 路由行为校准
+- `/bridge`、`/token` 当前 redirect 到 `/channels/identify-codes`（源码 `bridgeToken.js` 明确定义），与历史台账写的 `/bridge/token` 不同；页面正常，非缺陷。
+- `/crm/import-export` 的 CSV 导出（`responseType: blob` 修复）本轮回归正常。
+
+### C 轮 go test 全量结果（2026-11-25 21:02）
+- 命令：`POSTGRES_TEST_*` 快测库 + `EMBEDDING_ALLOW_FALLBACK=true`，`go test ./... -count=1 -p 1 -timeout 1800s`（user-server 目录）。
+- 结果：156 包 ok、2 包 FAIL、8 个测试失败。失败与 `.planning/2026-11-25-workspace-commit/focused-failure-repro.log` / `user-go-isolated-final-tests.log` 历史记录一致，均位于本轮未改动的 Go 源码（本轮改动仅 Markdown）。
+- `internal/router`（3）：`TestRouteGuardChain_AnonymousSurfaceIsExactlyTheAllowlist`、`...AdminOnlyRoutesCarrySuperAdminGuard`、`...CapabilityRoutesCarryGuard`—`sagex/upload`、`sagex/bootstrap`、`POST /api/mcp` 注册在 `InitGuard` 组之外，缺身份/超管/能力守卫。
+- `internal/service`（5）：`TestChannelDispatchService_SelectionMatrix/preferred`、`TestCRMEntityWrite_AllowedAccountAndClear`、`TestCRMEntityWriteAccountRulePairIsApplied`（3 子用例）、`TestLeadHistory_CanonicalAccountAliases`、`TestSageXBootstrapInstallationCrossTenantUUIDWithRealRepository`—并行开发线的 CRM 账号规则/渠道分发/线索历史/sagex 认证问题，非 UI 测试引入。
+- 前端 `npx vite build --mode production` 通过（PWA 705 entries）。
